@@ -1,0 +1,53 @@
+.TH "FI_GETINFO" 3 "2013-11-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.SH NAME
+fi_getinfo / fi_freeinfo \- Obtain/free fabric interface information
+.SH SYNOPSIS
+.B "#include <rdma/fabric.h>"
+.P
+.B "int" fi_getinfo
+.BI "(char *" node ","
+.BI "char *" service ","
+.BI "struct fi_info *" hints ","
+.BI "struct fi_info **" info ");"
+.P
+.B "int" fi_freeinfo
+.BI "(struct fi_info *" info ");"
+.SH ARGUMENTS
+.IP "node" 12
+Optional, name or fabric address to resolve.
+.IP "service" 12
+Optional, service name or port number of address.
+.IP "hints" 12
+Reference to an fi_info structure containing hints about the type
+of service the caller supports.
+.IP "info" 12
+A pointer to a linked list of fi_info structures containing response
+information.
+.SH "DESCRIPTION"
+Resolves the destination node and service address and returns
+information needed to establish communication.  Provides the
+fabric interface functional equivalent to getaddrinfo.
+.SH "RETURN VALUE"
+Returns 0 on success, or errno on error.
+.SH "NOTES"
+Either node, service, or hints must be provided.  If hints are provided, the
+operation will be controlled by hints.ai_flags.  If FI_PASSIVE is
+specified, the call will resolve address information for use on the
+passive side of a connection.
+If node is provided, fi_getinfo will attempt to resolve the fabric address
+to the given node.  The hints parameter, if provided,
+may be used to control the resulting output as indicated below.
+If node is not given, fi_getinfo will attempt to resolve the fabric addressing
+information based on the provided hints.
+The caller must call fi_freeinfo to release fi_info structures returned
+by this call.
+.SH "fi_info"
+.IP "next" 12
+Pointer to the next fi_info structure in the list.  Will be NULL
+if no more structures exist.
+.IP "size" 12
+Size of the fi_info structure, used for compatibility.
+.IP "write more!!!" 12
+Details are left as an exercise for the reader.
+.SH "SEE ALSO"
+fi_open(3)
