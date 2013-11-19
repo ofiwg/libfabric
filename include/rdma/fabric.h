@@ -216,8 +216,6 @@ enum {
 enum fi_iov_format {
 	FI_IOV,			/* struct iovec */
 	FI_IOMV,		/* struct fi_iomv */
-	FI_IOTAGGED,		/* struct fi_iotagged */
-	FI_IOTAGGEDV,		/* struct fi_iotaggedv */
 };
 
 /*

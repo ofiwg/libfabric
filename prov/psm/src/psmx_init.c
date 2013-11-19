@@ -106,7 +106,7 @@ static int psmx_getinfo(char *node, char *service, struct fi_info *hints,
 	psmx_info->type = FID_RDM;
 	psmx_info->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
 	psmx_info->protocol_cap = FI_PROTO_CAP_TAGGED;
-	psmx_info->iov_format = FI_IOTAGGED; /* FIXME: or FI_IOTAGGEDV? */
+	psmx_info->iov_format = FI_IOV;
 	psmx_info->addr_format = FI_ADDR; 
 	psmx_info->info_addr_format = FI_ADDR;
 	psmx_info->src_addrlen = 0;

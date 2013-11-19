@@ -47,21 +47,6 @@ struct fi_iomv {
 	uint64_t		mem_desc;
 };
 
-/* TODO: Will this be used? */
-struct fi_iotagged {
-	uint64_t		itag_addr;
-	be64_t			itag_tag;
-	be64_t			itag_mask;
-};
-
-/* TODO: Will this be used? */
-struct fi_iotaggedv {
-	uint64_t		itag_addr;
-	be64_t			itag_tag;
-	be64_t			itag_mask;
-	uint64_t		itag_desc;
-};
-
 /*
  * AV = Address Vector
  * Maps and stores transport/network addresses.
