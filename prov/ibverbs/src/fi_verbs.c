@@ -122,13 +122,11 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
 //		rai->ai_flags |= RAI_FAMILY;
 
 //	rai->ai_family = fi->sa_family;
-	if (fi->type == FID_MSG || fi->protocol & FI_PROTO_RDMA ||
-	    ((fi->protocol & FI_PROTO_MASK) == FI_PROTO_IB_RC) ||
-	    ((fi->protocol & FI_PROTO_MASK) == FI_PROTO_IWARP)) {
+	if (fi->type == FID_MSG || fi->protocol_cap & FI_PROTO_CAP_RDMA ||
+	    fi->protocol == FI_PROTO_IB_RC || fi->protocol == FI_PROTO_IWARP) {
 		rai->ai_qp_type = IBV_QPT_RC;
 		rai->ai_port_space = RDMA_PS_TCP;
-	} else if (fi->type == FID_DGRAM ||
-		   ((fi->protocol & FI_PROTO_MASK) == FI_PROTO_IB_UD)) {
+	} else if (fi->type == FID_DGRAM || fi->protocol == FI_PROTO_IB_UD) {
 		rai->ai_qp_type = IBV_QPT_UD;
 		rai->ai_port_space = RDMA_PS_UDP;
 	}
@@ -161,11 +159,12 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
 
  //	fi->sa_family = rai->ai_family;
 	if (rai->ai_qp_type == IBV_QPT_RC || rai->ai_port_space == RDMA_PS_TCP) {
-		fi->protocol = FI_PROTO_MSG | FI_PROTO_RDMA;
+		fi->protocol_cap = FI_PROTO_CAP_MSG | FI_PROTO_CAP_RDMA;
 		fi->type = FID_MSG;
 	} else if (rai->ai_qp_type == IBV_QPT_UD ||
 		   rai->ai_port_space == RDMA_PS_UDP) {
-		fi->protocol = FI_PROTO_IB_UD | FI_PROTO_MSG;
+		fi->protocol = FI_PROTO_IB_UD;
+		fi->protocol_cap = FI_PROTO_CAP_MSG;
 		fi->type = FID_DGRAM;
 	}
 
@@ -607,10 +606,13 @@ static struct fi_info * ibv_ec_cm_getinfo(struct rdma_cm_event *event)
 
 	fi->size = sizeof *fi;
 	fi->type = FID_MSG;
-	if (event->id->verbs->device->transport_type == IBV_TRANSPORT_IWARP)
-		fi->protocol = FI_PROTO_IWARP | FI_PROTO_RDMA;
-	else
-		fi->protocol = FI_PROTO_IB_RC | FI_PROTO_RDMA;
+	if (event->id->verbs->device->transport_type == IBV_TRANSPORT_IWARP) {
+		fi->protocol = FI_PROTO_IWARP;
+		fi->protocol_cap = FI_PROTO_CAP_RDMA;
+	} else {
+		fi->protocol = FI_PROTO_IB_RC;
+		fi->protocol_cap = FI_PROTO_CAP_RDMA;
+	}
 //	fi->sa_family = rdma_get_local_addr(event->id)->sa_family;
 
 	fi->src_addrlen = rdma_addrlen(rdma_get_local_addr(event->id));

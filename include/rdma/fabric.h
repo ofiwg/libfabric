@@ -59,6 +59,12 @@ enum {
 	FI_VERSION_MAX		= 64
 };
 
+/*
+ * Vendor specific protocols/etc. are encoded as OUI, followed by vendor
+ * specific data.
+ */
+#define FI_OUI_SHIFT		48
+
 /* fi_info and operation flags - pass into socket ops calls.
  * A user may also set these on a socket by using fcntl, which has the
  * affect of applying them to all applicable operations.
@@ -235,6 +241,7 @@ struct fi_info {
 	uint64_t		flags;
 	uint64_t		type;
 	uint64_t		protocol;
+	uint64_t		protocol_cap;
 	enum fi_iov_format	iov_format;
 	enum fi_addr_format	addr_format;
 	enum fi_addr_format	info_addr_format;

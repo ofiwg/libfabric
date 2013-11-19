@@ -56,6 +56,10 @@ enum fid_type {
 
 #define FID_TYPE_MASK		0xFF
 
+/* fi_info protocol field.
+ * If two providers support the same protocol, then they shall interoperate
+ * when the protocol capabilities match.
+ */
 enum fi_proto {
 	FI_PROTO_UNSPEC,
 	FI_PROTO_IB_RC,
@@ -63,17 +67,16 @@ enum fi_proto {
 	FI_PROTO_IB_UC,
 	FI_PROTO_IB_UD,
 	FI_PROTO_IB_XRC,
-	FI_PROTO_RAW,
-	FI_PROTO_MAX
+	FI_PROTO_RAW
 };
 
-#define FI_PROTO_MASK		0xFF
-#define FI_PROTO_MSG		(1ULL << 8)
-#define FI_PROTO_RDMA		(1ULL << 9)
-#define FI_PROTO_TAGGED		(1ULL << 10)
-#define FI_PROTO_ATOMICS	(1ULL << 11)
-#define FI_PROTO_MULTICAST	(1ULL << 12)	/* multicast uses MSG ops */
-/*#define FI_PROTO_COLLECTIVES	(1ULL << 13)*/
+/* fi_info protocol capabilities */
+#define FI_PROTO_CAP_MSG	(1ULL << 0)
+#define FI_PROTO_CAP_RDMA	(1ULL << 1)
+#define FI_PROTO_CAP_TAGGED	(1ULL << 2)
+#define FI_PROTO_CAP_ATOMICS	(1ULL << 3)
+#define FI_PROTO_CAP_MULTICAST	(1ULL << 4)	/* multicast uses MSG ops */
+/*#define FI_PROTO_CAP_COLLECTIVES (1ULL << 5)*/
 
 struct fi_msg {
 	const void		*msg_iov;
