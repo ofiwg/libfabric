@@ -59,7 +59,7 @@ static int psmx_getinfo(char *node, char *service, struct fi_info *hints,
 	}
 
 	if (hints) {
-		switch (hints->type & FID_TYPE_MASK) {
+		switch (hints->type) {
 		case FID_UNSPEC:
 		case FID_RDM:
 			break;

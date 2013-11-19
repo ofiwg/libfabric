@@ -54,8 +54,6 @@ enum fid_type {
 	FID_MAX
 };
 
-#define FID_TYPE_MASK		0xFF
-
 /* fi_info protocol field.
  * If two providers support the same protocol, then they shall interoperate
  * when the protocol capabilities match.
