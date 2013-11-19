@@ -215,10 +215,6 @@ void __fi_freeinfo(struct fi_info *info)
 		free(info->src_addr);
 	if (info->dst_addr)
 		free(info->dst_addr);
-//	if (info->src_canonname)
-//		free(info->src_canonname);
-//	if (info->dst_canonname)
-//		free(info->dst_canonname);
 	if (info->domain_name)
 		free(info->domain_name);
 	if (info->data)

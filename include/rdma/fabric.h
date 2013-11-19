@@ -249,8 +249,6 @@ struct fi_info {
 	size_t			dst_addrlen;
 	void			*src_addr;
 	void			*dst_addr;
-	/*char			*src_canonname;*/
-	/*char			*dst_canonname;*/
 	/* Authorization key is intended to limit communication with only
 	 * those sockets sharing the same key.
 	 */

@@ -143,10 +143,6 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
 		memcpy(rai->ai_dst_addr, fi->dst_addr, fi->dst_addrlen);
 		rai->ai_dst_len = fi->dst_addrlen;
 	}
-//	if (fi->src_canonname)
-//		rai->ai_src_canonname = strdup(fi->src_canonname);
-//	if (fi->dst_canonname)
-//		rai->ai_dst_canonname = strdup(fi->dst_canonname);
 
 	return 0;
 }
@@ -180,10 +176,6 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
  		memcpy(fi->dst_addr, rai->ai_dst_addr, rai->ai_dst_len);
  		fi->dst_addrlen = rai->ai_dst_len;
  	}
- //	if (rai->ai_src_canonname)
- //		fi->src_canonname = strdup(rai->ai_src_canonname);
- //	if (rai->ai_dst_canonname)
- //		fi->dst_canonname = strdup(rai->ai_dst_canonname);
 
  	return 0;
  }
