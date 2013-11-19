@@ -173,6 +173,7 @@
 
 #define FI_EOTHER		256		/* Unspecified error */
 #define FI_ETOOSMALL		257		/* Provided buffer is too small */
+#define FI_EOPBADSTATE		258		/* Operation not permitted in current state */
 
 const char *fi_strerror(int errnum);
 

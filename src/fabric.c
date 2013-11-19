@@ -286,17 +286,20 @@ int fi_socket(struct fi_info *info, fid_t *fid, void *context)
 }
 
 #define FI_ERRNO_OFFSET	256
+#define FI_ERRNO_MAX	FI_EOPBADSTATE
 
 static const char *const errstr[] = {
 	[FI_EOTHER - FI_ERRNO_OFFSET] = "Unspecified error",
-	[FI_ETOOSMALL - FI_ERRNO_OFFSET] = "Provided buffer is too small"
-
+	[FI_ETOOSMALL - FI_ERRNO_OFFSET] = "Provided buffer is too small",
+	[FI_EOPBADSTATE - FI_ERRNO_OFFSET] = "Operation not permitted in current state"
 };
 
 const char *fi_strerror(int errnum)
 {
 	if (errnum < FI_ERRNO_OFFSET)
 		return strerror(errnum);
-	else
+	else if (errno < FI_ERRNO_MAX)
 		return errstr[errnum - FI_ERRNO_OFFSET];
+	else
+		return errstr[FI_EOTHER - FI_ERRNO_OFFSET];
 }

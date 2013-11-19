@@ -50,6 +50,7 @@
 #include <rdma/fi_prov.h>
 #include <rdma/fi_socket.h>
 #include <rdma/fi_rdma.h>
+#include <rdma/fi_errno.h>
 
 #include "ibverbs.h"
 
@@ -290,8 +291,9 @@ static int ibv_msg_socket_create_qp(struct ibv_msg_socket *sock)
 	attr.cap.max_recv_wr = atoi(def_recv_wr);
 	attr.cap.max_send_sge = atoi(def_send_sge);
 	attr.cap.max_recv_sge = atoi(def_recv_sge);
-	attr.cap.max_inline_data = atoi(def_inline_data);
-	sock->inline_size = attr.cap.max_inline_data;
+	if (!sock->inline_size)
+		sock->inline_size = atoi(def_inline_data);
+	attr.cap.max_inline_data = sock->inline_size;
 	attr.qp_context = sock;
 	attr.send_cq = sock->sec->cq;
 	attr.recv_cq = sock->rec->cq;
@@ -508,6 +510,63 @@ struct fi_ops_cm ibv_msg_socket_cm_ops = {
 	.shutdown = ibv_msg_socket_shutdown,
 };
 
+static int ibv_msg_socket_getopt(fid_t fid, int level, int optname,
+				 void *optval, size_t *optlen)
+{
+	struct ibv_msg_socket *sock;
+	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
+
+	switch (level) {
+	case FI_OPT_SOCKET:
+		switch (optname) {
+		case FI_OPT_MAX_BUFFERED_SEND:
+			if (*optlen < sizeof(size_t)) {
+				*optlen = sizeof(size_t);
+				return -FI_ETOOSMALL;
+			}
+			*((size_t *) optval) = (size_t) sock->inline_size;
+			*optlen = sizeof(size_t);
+			break;
+		default:
+			return -FI_ENOPROTOOPT;
+		}
+	default:
+		return -FI_ENOPROTOOPT;
+	}
+	return 0;
+}
+
+static int ibv_msg_socket_setopt(fid_t fid, int level, int optname,
+				 const void *optval, size_t optlen)
+{
+	struct ibv_msg_socket *sock;
+	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
+
+	switch (level) {
+	case FI_OPT_SOCKET:
+		switch (optname) {
+		case FI_OPT_MAX_BUFFERED_SEND:
+			if (optlen != sizeof(size_t))
+				return -FI_EINVAL;
+			if (sock->id->qp)
+				return -FI_EOPBADSTATE;
+			sock->inline_size = (uint32_t) *(size_t *) optval;
+			break;
+		default:
+			return -FI_ENOPROTOOPT;
+		}
+	default:
+		return -FI_ENOPROTOOPT;
+	}
+	return 0;
+}
+
+struct fi_ops_sock ibv_msg_socket_base_ops = {
+	.size = sizeof(struct fi_ops_sock),
+	.getopt = ibv_msg_socket_getopt,
+	.setopt = ibv_msg_socket_setopt,
+};
+
 static int ibv_msg_socket_close(fid_t fid)
 {
 	struct ibv_msg_socket *sock;
@@ -551,7 +610,7 @@ static int ibv_socket(struct fi_info *info, fid_t *fid, void *context)
 	sock->socket_fid.fid.size = sizeof(struct fid_socket);
 	sock->socket_fid.fid.context = context;
 	sock->socket_fid.fid.ops = &ibv_msg_socket_ops;
-	sock->socket_fid.ops = NULL;
+	sock->socket_fid.ops = &ibv_msg_socket_base_ops;
 	sock->socket_fid.msg = &ibv_msg_socket_msg_ops;
 	sock->socket_fid.cm = &ibv_msg_socket_cm_ops;
 	sock->socket_fid.rdma = &ibv_msg_socket_rdma_ops;
