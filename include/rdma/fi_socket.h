@@ -84,6 +84,16 @@ struct fi_msg {
 	uint64_t		data;
 };
 
+/* Socket option levels */
+enum {
+	FI_OPT_SOCKET
+};
+
+/* FI_OPT_SOCKET option names */
+enum {
+	FI_OPT_MAX_BUFFERED_SEND	/* size_t */
+};
+
 struct fi_ops_sock {
 	size_t	size;
 	ssize_t	(*cancel)(fid_t fid, struct fi_context *context);
