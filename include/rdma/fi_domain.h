@@ -66,7 +66,7 @@ enum {
 	FI_AV_ATTR_TYPE		= 1 << 0,
 	FI_AV_ATTR_ADDR_FORMAT	= 1 << 1,
 	FI_AV_ATTR_ADDRLEN	= 1 << 2,
-	FI_AV_ATTR_SIZE		= 1 << 3,
+	FI_AV_ATTR_COUNT	= 1 << 3,
 	FI_AV_ATTR_FLAGS	= 1 << 4,
 	FI_AV_ATTR_MASK_V1	= (FI_AV_ATTR_FLAGS << 1) - 1
 };
