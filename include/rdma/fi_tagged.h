@@ -49,6 +49,7 @@ struct fi_msg_tagged {
 	be64_t			mask;
 	void			*context;
 	uint64_t		data;
+	int			priority;
 };
 
 struct fi_ops_tagged {

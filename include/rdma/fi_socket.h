@@ -82,6 +82,7 @@ struct fi_msg {
 	const void		*addr;
 	void			*context;
 	uint64_t		data;
+	int			priority;
 };
 
 /* Socket option levels */
