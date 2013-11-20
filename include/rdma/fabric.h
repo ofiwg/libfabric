@@ -206,8 +206,7 @@ enum {
  * than through a separate error queue (see ERRQUEUE).
  */
 #define FI_ERRINLINE		(1ULL << 36)
-/* REMOTE - Indicates remote access
- */
+/* REMOTE - Used to indicate capabilities and permissions for remote processes */
 #define FI_REMOTE		(1ULL << 37)
 
 
