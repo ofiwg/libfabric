@@ -98,7 +98,6 @@ enum {
 struct fi_ops_sock {
 	size_t	size;
 	ssize_t	(*cancel)(fid_t fid, struct fi_context *context);
-	/* syncto? (fid_t fid, void *addr, uint64_t flags, void *context); */
 	int	(*getopt)(fid_t fid, int level, int optname,
 			  void *optval, size_t *optlen);
 	int	(*setopt)(fid_t fid, int level, int optname,
