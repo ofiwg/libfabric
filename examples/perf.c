@@ -140,6 +140,7 @@ static void init_latency_test(int size)
 	iterations = size_to_count(transfer_size);
 }
 
+/*
 static void init_bandwidth_test(int size)
 {
 	char sstr[5];
@@ -150,6 +151,7 @@ static void init_bandwidth_test(int size)
 	transfer_size = size;
 	transfer_count = size_to_count(transfer_size);
 }
+*/
 
 static int poll_all(void)
 {
@@ -346,7 +348,7 @@ static int alloc_res(struct fi_info *fi)
 		goto err2;
 	}
 
-	ret = fi_mr_reg(dom, buf, buffer_size, &mr, 0, NULL);
+	ret = fi_mr_reg(dom, buf, buffer_size, NULL, &mr, NULL);
 	if (ret) {
 		printf("fi_mr_reg %s\n", fi_strerror(-ret));
 		goto err3;

@@ -1186,8 +1186,8 @@ struct fi_ops ibv_mr_ops = {
 	.close = ibv_mr_close
 };
 
-static int ibv_mr_reg(fid_t fid, const void *buf, size_t len, fid_t *mr,
-		      uint64_t flags, void *context)
+static int ibv_mr_reg(fid_t fid, const void *buf, size_t len,
+		      struct fi_mr_attr *attr, fid_t *mr, void *context)
 {
 	struct ibv_mem_desc *md;
 	int access;
@@ -1203,10 +1203,12 @@ static int ibv_mr_reg(fid_t fid, const void *buf, size_t len, fid_t *mr,
 	md->mr_fid.fid.ops = &ibv_mr_ops;
 
 	access = IBV_ACCESS_LOCAL_WRITE;
-	if (flags & FI_READ)
-		access |= IBV_ACCESS_REMOTE_READ;
-	if (flags & FI_WRITE)
-		access |= IBV_ACCESS_REMOTE_WRITE;
+	if (attr) {
+		if (attr->access & FI_READ)
+			access |= IBV_ACCESS_REMOTE_READ;
+		if (attr->access & FI_WRITE)
+			access |= IBV_ACCESS_REMOTE_WRITE;
+	}
 	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, access);
 	if (!md->mr)
 		goto err;
