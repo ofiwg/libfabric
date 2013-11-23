@@ -33,7 +33,7 @@ extern "C" {
 
 #define PSMX_TIME_OUT	120
 
-#define PSMX_OUI_INTEL	0x0002b3
+#define PSMX_OUI_INTEL	0x0002b3L
 #define PSMX_PROTOCOL	0x0001
 
 struct psmx_fid_domain {

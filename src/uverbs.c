@@ -73,8 +73,7 @@ struct uv_dev *udev_head, *udev_tail;
 		(cmd)->response  = (uintptr_t) (out);		\
 	} while (0)
 
-static int uv_open(const char *name, struct fi_info *info, uint64_t flags,
-		   fid_t *fid, void *context);
+static int uv_open(const char *name, struct fi_info *info, fid_t *fid, void *context);
 
 static struct fi_ops_prov uv_prov_ops = {
 	.size = sizeof(struct fi_ops_prov),
@@ -671,8 +670,7 @@ static struct fi_ops ops_fi = {
 	.close = uv_close
 };
 
-static int uv_open(const char *name, struct fi_info *info, uint64_t flags,
-		   fid_t *fid, void *context)
+static int uv_open(const char *name, struct fi_info *info, fid_t *fid, void *context)
 {
 	struct fid_uverbs *uv;
 	char *dev_path;
