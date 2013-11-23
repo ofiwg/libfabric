@@ -245,7 +245,7 @@ cont:
 	}
 }
 
-int fi_open(char *name, struct fi_info *info, uint64_t flags, fid_t *fid, void *context)
+int fi_open(char *name, struct fi_info *info, fid_t *fid, void *context)
 {
 	struct fi_prov *prov;
 	int ret = -ENOSYS;
@@ -257,7 +257,7 @@ int fi_open(char *name, struct fi_info *info, uint64_t flags, fid_t *fid, void *
 		if (!prov->ops->open)
 			continue;
 
-		ret = prov->ops->open(name, info, flags, fid, context);
+		ret = prov->ops->open(name, info, fid, context);
 		if (!ret)
 			break;
 	}

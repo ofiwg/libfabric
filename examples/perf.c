@@ -296,7 +296,7 @@ static int alloc_lres(struct fi_info *fi)
 {
 	int ret;
 
-	ret = fi_open(NULL, fi, 0, &ldom, NULL);
+	ret = fi_open(NULL, fi, &ldom, NULL);
 	if (ret) {
 		printf("fi_open %s %s\n", fi->domain_name, fi_strerror(-ret));
 		return ret;
@@ -329,7 +329,7 @@ static int alloc_res(struct fi_info *fi)
 		return -1;
 	}
 
-	ret = fi_open(NULL, fi, 0, &dom, NULL);
+	ret = fi_open(NULL, fi, &dom, NULL);
 	if (ret) {
 		printf("fi_open %s %s\n", fi->domain_name, fi_strerror(-ret));
 		goto err1;

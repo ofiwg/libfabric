@@ -111,7 +111,7 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.mr_regv = psmx_mr_regv,
 };
 
-int psmx_domain_open(const char *name, struct fi_info *info, uint64_t flags,
+int psmx_domain_open(const char *name, struct fi_info *info,
 		     fid_t *fid, void *context)
 {
 	struct psmx_fid_domain *fid_domain;

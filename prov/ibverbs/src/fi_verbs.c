@@ -1272,7 +1272,7 @@ struct fi_ops_domain ibv_domain_ops = {
 	.ec_open = ibv_ec_open
 };
 
-static int ibv_open(const char *name, struct fi_info *info, uint64_t flags,
+static int ibv_open(const char *name, struct fi_info *info,
 		    fid_t *fid, void *context)
 {
 	struct ibv_domain *domain;
