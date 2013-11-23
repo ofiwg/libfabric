@@ -81,14 +81,14 @@ static int psmx_progress(fid_t fid)
 	return -ENOSYS;
 }
 
-static int psmx_mr_reg(fid_t fid, const void *buf, size_t len, fid_t *mr,
-		       uint64_t flags, void *context)
+static int psmx_mr_reg(fid_t fid, const void *buf, size_t len,
+		       struct fi_mr_attr *attr, fid_t *mr, void *context)
 {
 	return -ENOSYS;
 }
 
 static int psmx_mr_regv(fid_t fid, const struct iovec *iov, size_t count,
-			fid_t *mr, uint64_t flags, void *context)
+			struct fi_mr_attr *attr, fid_t *mr, void *context)
 {
 	return -ENOSYS;
 }

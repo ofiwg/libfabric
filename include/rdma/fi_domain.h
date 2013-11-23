@@ -248,6 +248,21 @@ struct fid_ec {
 };
 
 
+enum {
+	FI_MR_ATTR_ACCESS	= 1 << 0,
+	FI_MR_ATTR_FLAGS	= 1 << 1,
+	FI_MR_ATTR_KEY		= 1 << 2,
+	FI_MR_ATTR_MASK_V1	= (FI_MR_ATTR_KEY << 1) - 1
+};
+
+struct fi_mr_attr {
+	int			mr_mask;
+	uint64_t		access;
+	uint64_t		flags;
+	uint64_t		requested_key;
+};
+
+
 enum fi_progress {
 	FI_PROGRESS_AUTO,
 	FI_PROGRESS_INDIRECT,	/* progress possible through any domain call */
@@ -275,10 +290,10 @@ struct fi_ops_domain {
 			   void *context);
 	int	(*ec_open)(fid_t fid, struct fi_ec_attr *attr, fid_t *ec,
 			   void *context);
-	int	(*mr_reg)(fid_t fid, const void *buf, size_t len, fid_t *mr,
-			  uint64_t flags, void *context);
+	int	(*mr_reg)(fid_t fid, const void *buf, size_t len,
+			  struct fi_mr_attr *attr, fid_t *mr, void *context);
 	int	(*mr_regv)(fid_t fid, const struct iovec *iov, size_t count,
-			   fid_t *mr, uint64_t flags, void *context);
+			   struct fi_mr_attr *attr, fid_t *mr, void *context);
 };
 
 struct fid_domain {
@@ -344,13 +359,13 @@ static inline const char * fi_ec_strerror(fid_t fid, int prov_errno, void *prov_
 }
 
 static inline int fi_mr_reg(fid_t fid, const void *buf, size_t len,
-			    fid_t *mr, uint64_t flags, void *context)
+			    struct fi_mr_attr *attr, fid_t *mr, void *context)
 {
 	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_RESOURCE_DOMAIN);
 	FI_ASSERT_OPS(fid, struct fid_domain, ops);
 	FI_ASSERT_OP(domain->ops, struct fi_ops_domain, mr_reg);
-	return domain->ops->mr_reg(fid, buf, len, mr, flags, context);
+	return domain->ops->mr_reg(fid, buf, len, attr, mr, context);
 }
 
 static inline uint64_t fi_mr_desc(fid_t fid)
