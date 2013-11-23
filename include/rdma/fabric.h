@@ -312,8 +312,7 @@ int fi_getinfo(char *node, char *service, struct fi_info *hints,
 void fi_freeinfo(struct fi_info *info);
 
 /* Either name or info must be provided.  Providing both is allowed. */
-int fi_open(char *name, struct fi_info *info, uint64_t flags,
-	    fid_t *fid, void *context);
+int fi_open(char *name, struct fi_info *info, fid_t *fid, void *context);
 /*
  * Allocate a fabric socket.  A fabric socket is a software construct.
  */

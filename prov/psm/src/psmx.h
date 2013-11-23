@@ -74,7 +74,7 @@ extern struct fi_ops_tagged	psmx_tagged_ops;
 void	psmx_ini(void);
 void	psmx_fini(void);
 
-int	psmx_domain_open(const char *name, struct fi_info *info, uint64_t flags,
+int	psmx_domain_open(const char *name, struct fi_info *info,
 			 fid_t *fid, void *context);
 int	psmx_sock_open(struct fi_info *info, fid_t *fid, void *context);
 int	psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context);

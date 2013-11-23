@@ -55,7 +55,7 @@ struct fi_ops_prov {
 			   struct fi_info **info);
 	int	(*freeinfo)(struct fi_info *info);
 	int	(*socket)(struct fi_info *info, fid_t *fid, void *context);
-	int	(*open)(const char *name, struct fi_info *info, uint64_t flags,
+	int	(*open)(const char *name, struct fi_info *info,
 			fid_t *fid, void *context);
 };
 
