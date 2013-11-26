@@ -54,13 +54,82 @@ static ssize_t psmx_sock_cancel(fid_t fid, struct fi_context *context)
 static int psmx_sock_getopt(fid_t fid, int level, int optname,
 			void *optval, size_t *optlen)
 {
-	return -ENOSYS;
+	struct psmx_fid_socket *fid_socket;
+	uint32_t size;
+	int err;
+
+	fid_socket = container_of(fid, struct psmx_fid_socket, socket.fid);
+
+	if (level != FI_OPT_SOCKET)
+		return -ENOPROTOOPT;
+
+	switch (optname) {
+	case FI_OPT_MAX_BUFFERED_SEND:
+		if (!optval)
+			return 0;
+
+		if (!optlen || *optlen < sizeof(size_t))
+			return -EINVAL;
+
+		if (!fid_socket->domain)
+			return -EBADF;
+
+		/* FIXME:
+		 * PSM has different thresholds for fabric & shm data path. Just use
+		 * the value of the fabric path at this point.
+		 */
+		err = psm_mq_getopt(fid_socket->domain->psm_mq, PSM_MQ_RNDV_IPATH_SZ, &size);
+		if (err)
+			return psmx_errno(err);
+
+		*(size_t *)optval = size;
+		*optlen = sizeof(size_t);
+		break;
+
+	default:
+		return -ENOPROTOOPT;
+	}
+
+	return 0;
 }
 
 static int psmx_sock_setopt(fid_t fid, int level, int optname,
 			const void *optval, size_t optlen)
 {
-	return -ENOSYS;
+	struct psmx_fid_socket *fid_socket;
+	uint32_t size;
+	int err;
+
+	if (level != FI_OPT_SOCKET)
+		return -ENOPROTOOPT;
+
+	fid_socket = container_of(fid, struct psmx_fid_socket, socket.fid);
+	switch (optname) {
+	case FI_OPT_MAX_BUFFERED_SEND:
+		if (!optval)
+			return -EFAULT;
+
+		if (optlen != sizeof(size_t))
+			return -EINVAL;
+
+		if (!fid_socket->domain)
+			return -EBADF;
+
+		/* FIXME:
+		 * PSM has different thresholds for fabric & shm data path. Only set
+		 * the value of the fabric path at this point.
+		 */
+		size = *(size_t *)optval;
+		err = psm_mq_setopt(fid_socket->domain->psm_mq, PSM_MQ_RNDV_IPATH_SZ, &size);
+		if (err)
+			return psmx_errno(err);
+		break;
+
+	default:
+		return -ENOPROTOOPT;
+	}
+
+	return 0;
 }
 
 static int psmx_sock_close(fid_t fid)
