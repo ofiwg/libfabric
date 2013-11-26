@@ -32,10 +32,6 @@
 
 #include "psmx.h"
 
-#define PSM_SUPPORTED_FLAGS (FI_NONBLOCK | FI_ACK | FI_EXCL | FI_BUFFERED_SEND | \
-			     FI_BUFFERED_RECV | FI_CANCEL)
-#define PSM_DEFAULT_FLAGS   (FI_NONBLOCK)
-
 static int psmx_getinfo(char *node, char *service, struct fi_info *hints,
 			struct fi_info **info)
 {
@@ -81,7 +77,7 @@ static int psmx_getinfo(char *node, char *service, struct fi_info *hints,
 		}
 
 		flags = hints->flags;
-		if ((flags & PSM_SUPPORTED_FLAGS) != flags) {
+		if ((flags & PSMX_SUPPORTED_FLAGS) != flags) {
 			*info = NULL;
 			return -ENODATA;
 		}
@@ -102,7 +98,7 @@ static int psmx_getinfo(char *node, char *service, struct fi_info *hints,
 
 	psmx_info->next = NULL;
 	psmx_info->size = sizeof(*psmx_info);
-	psmx_info->flags = flags | PSM_DEFAULT_FLAGS;
+	psmx_info->flags = flags | PSMX_DEFAULT_FLAGS;
 	psmx_info->type = FID_RDM;
 	psmx_info->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
 	psmx_info->protocol_cap = FI_PROTO_CAP_TAGGED;

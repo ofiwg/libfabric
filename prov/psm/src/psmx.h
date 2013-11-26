@@ -32,6 +32,9 @@ extern "C" {
 #define PFX "libfabric:psm"
 
 #define PSMX_TIME_OUT	120
+#define PSMX_SUPPORTED_FLAGS (FI_NONBLOCK | FI_ACK | FI_EXCL | FI_BUFFERED_SEND | \
+			      FI_BUFFERED_RECV | FI_CANCEL)
+#define PSMX_DEFAULT_FLAGS   (FI_NONBLOCK)
 
 #define PSMX_OUI_INTEL	0x0002b3L
 #define PSMX_PROTOCOL	0x0001
