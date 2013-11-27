@@ -1272,15 +1272,12 @@ struct fi_ops_domain ibv_domain_ops = {
 	.ec_open = ibv_ec_open
 };
 
-static int ibv_open(const char *name, struct fi_info *info,
-		    fid_t *fid, void *context)
+static int ibv_domain(struct fi_info *info, fid_t *fid, void *context)
 {
 	struct ibv_domain *domain;
-	const char *domain_name;
 	int ret;
 
-	domain_name = name ? name : info->domain_name;
-	ret = ibv_check_domain(domain_name);
+	ret = ibv_check_domain(info->domain_name);
 	if (ret)
 		return ret;
 
@@ -1288,8 +1285,8 @@ static int ibv_open(const char *name, struct fi_info *info,
 	if (!domain)
 		return -ENOMEM;
 
-	if (strcmp(domain_name + sizeof(IBV_PREFIX), "local")) {
-		ret = ibv_open_device_by_name(domain, domain_name);
+	if (strcmp(info->domain_name + sizeof(IBV_PREFIX), "local")) {
+		ret = ibv_open_device_by_name(domain, info->domain_name);
 		if (ret)
 			goto err;
 
@@ -1300,7 +1297,7 @@ static int ibv_open(const char *name, struct fi_info *info,
 		}
 	}
 
-	domain->domain_fid.fid.fclass = FID_CLASS_RESOURCE_DOMAIN;
+	domain->domain_fid.fid.fclass = FID_CLASS_DOMAIN;
 	domain->domain_fid.fid.size = sizeof(struct fid_domain);
 	domain->domain_fid.fid.context = context;
 	domain->domain_fid.fid.ops = &ibv_fid_ops;
@@ -1317,8 +1314,9 @@ struct fi_ops_prov ibv_ops = {
 	.size = sizeof(struct fi_ops_prov),
 	.getinfo = ibv_getinfo,
 	.freeinfo = ibv_freeinfo,
+	.open = NULL,
+	.domain = ibv_domain,
 	.endpoint = ibv_open_ep,
-	.open = ibv_open
 };
 
 

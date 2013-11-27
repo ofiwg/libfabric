@@ -245,7 +245,7 @@ cont:
 	}
 }
 
-int fi_open(char *name, struct fi_info *info, fid_t *fid, void *context)
+int fi_open(const char *name, uint64_t flags, fid_t *fid, void *context)
 {
 	struct fi_prov *prov;
 	int ret = -ENOSYS;
@@ -257,7 +257,27 @@ int fi_open(char *name, struct fi_info *info, fid_t *fid, void *context)
 		if (!prov->ops->open)
 			continue;
 
-		ret = prov->ops->open(name, info, fid, context);
+		ret = prov->ops->open(name, flags, fid, context);
+		if (!ret)
+			break;
+	}
+
+	return ret;
+}
+
+int fi_domain(struct fi_info *info, fid_t *fid, void *context)
+{
+	struct fi_prov *prov;
+	int ret = -ENOSYS;
+
+	if (!init)
+		fi_init();
+
+	for (prov = prov_head; prov; prov = prov->next) {
+		if (!prov->ops->domain)
+			continue;
+
+		ret = prov->ops->domain(info, fid, context);
 		if (!ret)
 			break;
 	}

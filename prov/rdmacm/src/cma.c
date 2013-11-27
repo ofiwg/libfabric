@@ -291,7 +291,7 @@ struct rdma_event_channel *rdma_create_event_channel(void)
 	if (!channel)
 		return NULL;
 
-	ret = fi_open("ucma", NULL, &channel->fid, channel);
+	ret = fi_open("ucma", 0, &channel->fid, channel);
 	if (ret) {
 		fprintf(stderr, "rdmacm: fatal: unable to open /dev/infiniband/rdma_cm\n");
 		goto err;

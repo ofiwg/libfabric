@@ -73,14 +73,15 @@ do {						\
 	(req)->response = (uintptr_t) (resp);	\
 } while (0)
 
-static int ucma_open(const char *name, struct fi_info *info, fid_t *fid, void *context);
+static int ucma_open(const char *name, uint64_t flags, fid_t *fid, void *context);
 
 static struct fi_ops_prov ucma_prov_ops = {
 	.size = sizeof(struct fi_ops_prov),
 	.getinfo = NULL,
 	.freeinfo = NULL,
+	.open = ucma_open,
+	.domain = NULL,
 	.endpoint = NULL,
-	.open = ucma_open
 };
 
 
@@ -467,7 +468,7 @@ static struct fi_ops ops_fi = {
 	.close = ucma_close
 };
 
-static int ucma_open(const char *name, struct fi_info *info, fid_t *fid, void *context)
+static int ucma_open(const char *name, uint64_t flags, fid_t *fid, void *context)
 {
 	struct fid_ucma *ucma;
 

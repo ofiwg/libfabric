@@ -129,8 +129,9 @@ static struct fi_ops_prov psmx_ops = {
 	.size = sizeof(struct fi_ops_prov),
 	.getinfo = psmx_getinfo,
 	.freeinfo = NULL,
+	.open = NULL,
+	.domain = psmx_domain_open,
 	.endpoint = psmx_ep_open,
-	.open = psmx_domain_open
 };
 
 void psmx_ini(void)

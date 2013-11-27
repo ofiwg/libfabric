@@ -1,0 +1,27 @@
+.TH "FI_DOMAIN" 3 "2013-11-27" "libfabric" "Libfabric Programmer's Manual" libfabric
+.SH NAME
+fi_domain / fi_close \- Open/close a fabric interface
+.SH SYNOPSIS
+.B "#include <rdma/fabric.h>"
+.P
+.B "int" fi_domain
+.BI "(char *" name ","
+.BI WRITE ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+.BI "fid_t *" fid ");"
+.P
+.B "int" fi_close
+.BI "(fid_t " fid ");"
+.SH ARGUMENTS
+.IP "name" 12
+The name of the interface to open.
+.IP "fid" 12
+On success, points to the opened interface.
+.SH "DESCRIPTION"
+Opens a fabric interface.
+.SH "RETURN VALUE"
+Returns 0 on success, or errno on error.
+.SH "NOTES"
+Opens a fabric interface.  Users should call fi_close to release
+the interface.
+.SH "SEE ALSO"
+fi_getinfo(3)

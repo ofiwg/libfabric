@@ -156,7 +156,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *ress, int nress)
 		if (!ress[i].fid)
 			return -EINVAL;
 		switch (ress[i].fid->fclass) {
-		case FID_CLASS_RESOURCE_DOMAIN:
+		case FID_CLASS_DOMAIN:
 			domain = container_of(ress[i].fid,
 					struct psmx_fid_domain, domain.fid);
 			if (fid_ep->domain && fid_ep->domain != domain)

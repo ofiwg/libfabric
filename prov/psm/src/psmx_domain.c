@@ -111,14 +111,13 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.mr_regv = psmx_mr_regv,
 };
 
-int psmx_domain_open(const char *name, struct fi_info *info,
-		     fid_t *fid, void *context)
+int psmx_domain_open(struct fi_info *info, fid_t *fid, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
 	int err = -ENOMEM;
 	char *s;
 
-	if (name && strncmp(name, "psm", 3))
+	if (!info->domain_name || strncmp(info->domain_name, "psm", 3))
 		return -EINVAL;
 
 	fid_domain = (struct psmx_fid_domain *) calloc(1, sizeof *fid_domain);
@@ -126,7 +125,7 @@ int psmx_domain_open(const char *name, struct fi_info *info,
 		goto err_out;
 
 	fid_domain->domain.fid.size = sizeof(struct fid_domain);
-	fid_domain->domain.fid.fclass = FID_CLASS_RESOURCE_DOMAIN;
+	fid_domain->domain.fid.fclass = FID_CLASS_DOMAIN;
 	fid_domain->domain.fid.context = context;
 	fid_domain->domain.fid.ops = &psmx_fi_ops;
 	fid_domain->domain.ops = &psmx_domain_ops;

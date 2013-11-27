@@ -263,7 +263,7 @@ struct fi_info {
 enum {
 	FID_CLASS_UNSPEC,
 	FID_CLASS_EP,
-	FID_CLASS_RESOURCE_DOMAIN,
+	FID_CLASS_DOMAIN,
 	FID_CLASS_INTERFACE,
 	FID_CLASS_AV,
 	FID_CLASS_MR,
@@ -310,11 +310,8 @@ int fi_getinfo(char *node, char *service, struct fi_info *hints,
 	       struct fi_info **info);
 void fi_freeinfo(struct fi_info *info);
 
-/* Either name or info must be provided.  Providing both is allowed. */
-int fi_open(char *name, struct fi_info *info, fid_t *fid, void *context);
-/*
- * Allocate a fabric endpoint.  A fabric endpoint is a software construct.
- */
+int fi_open(const char *name, uint64_t flags, fid_t *fid, void *context);
+int fi_domain(struct fi_info *info, fid_t *fid, void *context);
 int fi_endpoint(struct fi_info *info, fid_t *fid, void *context);
 
 #define FI_ASSERT_CLASS(fid, f_class)   assert(fid->fclass == f_class)

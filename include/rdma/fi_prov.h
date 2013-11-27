@@ -54,9 +54,9 @@ struct fi_ops_prov {
 	int	(*getinfo)(char *node, char *service, struct fi_info *hints,
 			   struct fi_info **info);
 	int	(*freeinfo)(struct fi_info *info);
+	int	(*open)(const char *name, uint64_t flags, fid_t *fid, void *context);
+	int	(*domain)(struct fi_info *info, fid_t *fid, void *context);
 	int	(*endpoint)(struct fi_info *info, fid_t *fid, void *context);
-	int	(*open)(const char *name, struct fi_info *info,
-			fid_t *fid, void *context);
 };
 
 void fi_register(struct fi_ops_prov *ops);
