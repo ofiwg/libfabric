@@ -3,7 +3,7 @@ FABRIC_1.0 {
 		fi_getinfo;
 		fi_freeinfo;
 		fi_open;
-		fi_socket;
+		fi_endpoint;
 		fi_strerror;
                 rsocket;
                 rbind;

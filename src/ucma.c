@@ -79,7 +79,7 @@ static struct fi_ops_prov ucma_prov_ops = {
 	.size = sizeof(struct fi_ops_prov),
 	.getinfo = NULL,
 	.freeinfo = NULL,
-	.socket = NULL,
+	.endpoint = NULL,
 	.open = ucma_open
 };
 

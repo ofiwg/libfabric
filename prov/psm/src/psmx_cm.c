@@ -34,16 +34,16 @@
 
 static int psmx_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-	struct psmx_fid_socket *fid_socket;
+	struct psmx_fid_ep *fid_ep;
 
-	fid_socket = container_of(fid, struct psmx_fid_socket, socket.fid);
-	if (!fid_socket->domain)
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	if (!fid_ep->domain)
 		return -EBADF;
 
 	if (*addrlen < sizeof(psm_epid_t))
 		return -FI_ETOOSMALL;
 
-	*(psm_epid_t *)addr = fid_socket->domain->psm_epid;
+	*(psm_epid_t *)addr = fid_ep->domain->psm_epid;
 	*addrlen = sizeof(psm_epid_t);
 
 	return 0;

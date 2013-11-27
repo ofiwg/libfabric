@@ -33,7 +33,7 @@
 #ifndef _FI_CM_H_
 #define _FI_CM_H_
 
-#include <rdma/fi_socket.h>
+#include <rdma/fi_endpoint.h>
 
 
 #ifdef __cplusplus
@@ -57,57 +57,57 @@ struct fi_ops_cm {
 
 static inline int fi_getsockname(fid_t fid, void *addr, size_t *addrlen)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, cm);
-	FI_ASSERT_OP(sock->cm, struct fi_ops_cm, getname);
-	return sock->cm->getname(fid, addr, addrlen);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, cm);
+	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, getname);
+	return ep->cm->getname(fid, addr, addrlen);
 }
 
 static inline int fi_listen(fid_t fid)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, cm);
-	FI_ASSERT_OP(sock->cm, struct fi_ops_cm, listen);
-	return sock->cm->listen(fid);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, cm);
+	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, listen);
+	return ep->cm->listen(fid);
 }
 
 static inline int fi_connect(fid_t fid, const void *param, size_t paramlen)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, cm);
-	FI_ASSERT_OP(sock->cm, struct fi_ops_cm, connect);
-	return sock->cm->connect(fid, param, paramlen);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, cm);
+	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, connect);
+	return ep->cm->connect(fid, param, paramlen);
 }
 
 static inline int fi_accept(fid_t fid, const void *param, size_t paramlen)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, cm);
-	FI_ASSERT_OP(sock->cm, struct fi_ops_cm, accept);
-	return sock->cm->accept(fid, param, paramlen);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, cm);
+	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, accept);
+	return ep->cm->accept(fid, param, paramlen);
 }
 
 static inline int fi_reject(fid_t fid, struct fi_info *info,
 			    const void *param, size_t paramlen)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, cm);
-	FI_ASSERT_OP(sock->cm, struct fi_ops_cm, reject);
-	return sock->cm->reject(fid, info, param, paramlen);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, cm);
+	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, reject);
+	return ep->cm->reject(fid, info, param, paramlen);
 }
 
 static inline int fi_shutdown(fid_t fid, uint64_t flags)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, cm);
-	FI_ASSERT_OP(sock->cm, struct fi_ops_cm, shutdown);
-	return sock->cm->shutdown(fid, flags);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, cm);
+	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, shutdown);
+	return ep->cm->shutdown(fid, flags);
 }
 
 

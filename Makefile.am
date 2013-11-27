@@ -100,7 +100,7 @@ libfabricinclude_HEADERS = $(top_srcdir)/include/rdma/fabric.h \
 			   $(top_srcdir)/include/rdma/fi_domain.h \
 			   $(top_srcdir)/include/rdma/fi_prov.h \
 			   $(top_srcdir)/include/rdma/fi_rdma.h \
-			   $(top_srcdir)/include/rdma/fi_socket.h \
+			   $(top_srcdir)/include/rdma/fi_endpoint.h \
 			   $(top_srcdir)/include/rdma/fi_errno.h \
 			   $(top_srcdir)/include/rdma/fi_tagged.h \
 			   $(top_srcdir)/include/rdma/fi_ucma.h \
@@ -110,7 +110,7 @@ libfabricinclude_HEADERS = $(top_srcdir)/include/rdma/fabric.h \
 
 infinibandinclude_HEADERS = $(top_srcdir)/include/infiniband/ib.h
 
-man_MANS = man/fi_getinfo.3 man/fi_socket.3 man/fi_open.3
+man_MANS = man/fi_getinfo.3 man/fi_endpoint.3 man/fi_open.3
 
 EXTRA_DIST = include/fi.h src/libfabric.map libfabric.spec.in $(man_MANS) \
 	prov/ibverbs/include/infiniband/driver.h \

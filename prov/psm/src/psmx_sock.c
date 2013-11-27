@@ -32,13 +32,13 @@
 
 #include "psmx.h"
 
-static ssize_t psmx_sock_cancel(fid_t fid, struct fi_context *context)
+static ssize_t psmx_ep_cancel(fid_t fid, struct fi_context *context)
 {
-	struct psmx_fid_socket *fid_socket;
+	struct psmx_fid_ep *fid_ep;
 	int err;
 
-	fid_socket = container_of(fid, struct psmx_fid_socket, socket.fid);
-	if (!fid_socket->domain)
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	if (!fid_ep->domain)
 		return -EBADF;
 
 	if (!context)
@@ -51,16 +51,16 @@ static ssize_t psmx_sock_cancel(fid_t fid, struct fi_context *context)
 	return psmx_errno(err);
 }
 
-static int psmx_sock_getopt(fid_t fid, int level, int optname,
+static int psmx_ep_getopt(fid_t fid, int level, int optname,
 			void *optval, size_t *optlen)
 {
-	struct psmx_fid_socket *fid_socket;
+	struct psmx_fid_ep *fid_ep;
 	uint32_t size;
 	int err;
 
-	fid_socket = container_of(fid, struct psmx_fid_socket, socket.fid);
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
-	if (level != FI_OPT_SOCKET)
+	if (level != FI_OPT_ENDPOINT)
 		return -ENOPROTOOPT;
 
 	switch (optname) {
@@ -71,14 +71,14 @@ static int psmx_sock_getopt(fid_t fid, int level, int optname,
 		if (!optlen || *optlen < sizeof(size_t))
 			return -EINVAL;
 
-		if (!fid_socket->domain)
+		if (!fid_ep->domain)
 			return -EBADF;
 
 		/* FIXME:
 		 * PSM has different thresholds for fabric & shm data path. Just use
 		 * the value of the fabric path at this point.
 		 */
-		err = psm_mq_getopt(fid_socket->domain->psm_mq, PSM_MQ_RNDV_IPATH_SZ, &size);
+		err = psm_mq_getopt(fid_ep->domain->psm_mq, PSM_MQ_RNDV_IPATH_SZ, &size);
 		if (err)
 			return psmx_errno(err);
 
@@ -93,17 +93,17 @@ static int psmx_sock_getopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
-static int psmx_sock_setopt(fid_t fid, int level, int optname,
+static int psmx_ep_setopt(fid_t fid, int level, int optname,
 			const void *optval, size_t optlen)
 {
-	struct psmx_fid_socket *fid_socket;
+	struct psmx_fid_ep *fid_ep;
 	uint32_t size;
 	int err;
 
-	if (level != FI_OPT_SOCKET)
+	if (level != FI_OPT_ENDPOINT)
 		return -ENOPROTOOPT;
 
-	fid_socket = container_of(fid, struct psmx_fid_socket, socket.fid);
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	switch (optname) {
 	case FI_OPT_MAX_BUFFERED_SEND:
 		if (!optval)
@@ -112,7 +112,7 @@ static int psmx_sock_setopt(fid_t fid, int level, int optname,
 		if (optlen != sizeof(size_t))
 			return -EINVAL;
 
-		if (!fid_socket->domain)
+		if (!fid_ep->domain)
 			return -EBADF;
 
 		/* FIXME:
@@ -120,7 +120,7 @@ static int psmx_sock_setopt(fid_t fid, int level, int optname,
 		 * the value of the fabric path at this point.
 		 */
 		size = *(size_t *)optval;
-		err = psm_mq_setopt(fid_socket->domain->psm_mq, PSM_MQ_RNDV_IPATH_SZ, &size);
+		err = psm_mq_setopt(fid_ep->domain->psm_mq, PSM_MQ_RNDV_IPATH_SZ, &size);
 		if (err)
 			return psmx_errno(err);
 		break;
@@ -132,25 +132,25 @@ static int psmx_sock_setopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
-static int psmx_sock_close(fid_t fid)
+static int psmx_ep_close(fid_t fid)
 {
-	struct psmx_fid_socket *fid_socket;
+	struct psmx_fid_ep *fid_ep;
 
-	fid_socket = container_of(fid, struct psmx_fid_socket, socket.fid);
-	free(fid_socket);
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	free(fid_ep);
 
 	return 0;
 }
 
-static int psmx_sock_bind(fid_t fid, struct fi_resource *ress, int nress)
+static int psmx_ep_bind(fid_t fid, struct fi_resource *ress, int nress)
 {
 	int i;
-	struct psmx_fid_socket *fid_socket;
+	struct psmx_fid_ep *fid_ep;
 	struct psmx_fid_domain *domain;
 	struct psmx_fid_av *av;
 	struct psmx_fid_ec *ec;
 
-	fid_socket = container_of(fid, struct psmx_fid_socket, socket.fid);
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
 	for (i=0; i<nress; i++) {
 		if (!ress[i].fid)
@@ -159,32 +159,32 @@ static int psmx_sock_bind(fid_t fid, struct fi_resource *ress, int nress)
 		case FID_CLASS_RESOURCE_DOMAIN:
 			domain = container_of(ress[i].fid,
 					struct psmx_fid_domain, domain.fid);
-			if (fid_socket->domain && fid_socket->domain != domain)
+			if (fid_ep->domain && fid_ep->domain != domain)
 				return -EEXIST;
-			fid_socket->domain = domain;
+			fid_ep->domain = domain;
 			break;
 
 		case FID_CLASS_EC:
 			/* TODO: check ress flags for send/recv EQs */
 			ec = container_of(ress[i].fid,
 					struct psmx_fid_ec, ec.fid);
-			if (fid_socket->ec && fid_socket->ec != ec)
+			if (fid_ep->ec && fid_ep->ec != ec)
 				return -EEXIST;
-			if (fid_socket->domain && fid_socket->domain != ec->domain)
+			if (fid_ep->domain && fid_ep->domain != ec->domain)
 				return -EINVAL;
-			fid_socket->ec = ec;
-			fid_socket->domain = ec->domain;
+			fid_ep->ec = ec;
+			fid_ep->domain = ec->domain;
 			break;
 
 		case FID_CLASS_AV:
 			av = container_of(ress[i].fid,
 					struct psmx_fid_av, av.fid);
-			if (fid_socket->av && fid_socket->av != av)
+			if (fid_ep->av && fid_ep->av != av)
 				return -EEXIST;
-			if (fid_socket->domain && fid_socket->domain != av->domain)
+			if (fid_ep->domain && fid_ep->domain != av->domain)
 				return -EINVAL;
-			fid_socket->av = av;
-			fid_socket->domain = av->domain;
+			fid_ep->av = av;
+			fid_ep->domain = av->domain;
 			break;
 
 		default:
@@ -195,51 +195,51 @@ static int psmx_sock_bind(fid_t fid, struct fi_resource *ress, int nress)
 	return 0;
 }
 
-static int psmx_sock_sync(fid_t fid, uint64_t flags, void *context)
+static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
 {
 	return -ENOSYS;
 }
 
-static int psmx_sock_control(fid_t fid, int command, void *arg)
+static int psmx_ep_control(fid_t fid, int command, void *arg)
 {
 	return -ENOSYS;
 }
 
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = psmx_sock_close,
-	.bind = psmx_sock_bind,
-	.sync = psmx_sock_sync,
-	.control = psmx_sock_control,
+	.close = psmx_ep_close,
+	.bind = psmx_ep_bind,
+	.sync = psmx_ep_sync,
+	.control = psmx_ep_control,
 };
 
-static struct fi_ops_sock psmx_sock_ops = {
-	.size = sizeof(struct fi_ops_sock),
-	.cancel = psmx_sock_cancel,
-	.getopt = psmx_sock_getopt,
-	.setopt = psmx_sock_setopt,
+static struct fi_ops_ep psmx_ep_ops = {
+	.size = sizeof(struct fi_ops_ep),
+	.cancel = psmx_ep_cancel,
+	.getopt = psmx_ep_getopt,
+	.setopt = psmx_ep_setopt,
 };
 
-int psmx_sock_open(struct fi_info *info, fid_t *fid, void *context)
+int psmx_ep_open(struct fi_info *info, fid_t *fid, void *context)
 {
-	struct psmx_fid_socket *fid_socket;
+	struct psmx_fid_ep *fid_ep;
 
-	fid_socket = (struct psmx_fid_socket *) calloc(1, sizeof *fid_socket);
-	if (!fid_socket)
+	fid_ep = (struct psmx_fid_ep *) calloc(1, sizeof *fid_ep);
+	if (!fid_ep)
 		return -ENOMEM;
 
-	fid_socket->socket.fid.size = sizeof(struct fid_socket);
-	fid_socket->socket.fid.fclass = FID_CLASS_SOCKET;
-	fid_socket->socket.fid.context = context;
-	fid_socket->socket.fid.ops = &psmx_fi_ops;
-	fid_socket->socket.ops = &psmx_sock_ops;
-	fid_socket->socket.cm = &psmx_cm_ops;
-	fid_socket->socket.tagged = &psmx_tagged_ops;
+	fid_ep->ep.fid.size = sizeof(struct fid_ep);
+	fid_ep->ep.fid.fclass = FID_CLASS_EP;
+	fid_ep->ep.fid.context = context;
+	fid_ep->ep.fid.ops = &psmx_fi_ops;
+	fid_ep->ep.ops = &psmx_ep_ops;
+	fid_ep->ep.cm = &psmx_cm_ops;
+	fid_ep->ep.tagged = &psmx_tagged_ops;
 
 	if (info)
-		fid_socket->flags = info->flags;
+		fid_ep->flags = info->flags;
 
-	*fid = &fid_socket->socket.fid;
+	*fid = &fid_ep->ep.fid;
 
 	return 0;
 }

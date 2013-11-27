@@ -52,7 +52,7 @@
 #include <rdma/fi_domain.h>
 #include <rdma/fi_prov.h>
 #include <rdma/fi_rdma.h>
-#include <rdma/fi_socket.h>
+#include <rdma/fi_endpoint.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_ucma.h>
 #include <rdma/fi_umad.h>
@@ -265,7 +265,7 @@ int fi_open(char *name, struct fi_info *info, fid_t *fid, void *context)
 	return ret;
 }
 
-int fi_socket(struct fi_info *info, fid_t *fid, void *context)
+int fi_endpoint(struct fi_info *info, fid_t *fid, void *context)
 {
 	struct fi_prov *prov;
 	int ret = -ENOSYS;
@@ -274,10 +274,10 @@ int fi_socket(struct fi_info *info, fid_t *fid, void *context)
 		fi_init();
 
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (!prov->ops->socket)
+		if (!prov->ops->endpoint)
 			continue;
 
-		ret = prov->ops->socket(info, fid, context);
+		ret = prov->ops->endpoint(info, fid, context);
 		if (!ret)
 			break;
 	}

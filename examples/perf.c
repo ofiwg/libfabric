@@ -46,7 +46,7 @@
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_socket.h>
+#include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
 #include "shared.h"
 
@@ -90,7 +90,7 @@ static int size_option;
 static int iterations = 1;
 static int transfer_size = 1000;
 static int transfer_count = 1000;
-/* TODO: make max_credits dynamic based on user input or socket size */
+/* TODO: make max_credits dynamic based on user input or endpoint size */
 static int max_credits = 128;
 static int credits = 128;
 static char test_name[10] = "custom";
@@ -101,8 +101,8 @@ static size_t buffer_size;
 static struct fi_info hints;
 static char *dst_addr, *src_addr;
 static char *port = "9228";
-static fid_t lfs, ldom, lcm;
-static fid_t fs, dom, mr, cq;
+static fid_t lep, ldom, lcm;
+static fid_t ep, dom, mr, cq;
 
 
 static void show_perf(void)
@@ -189,7 +189,7 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_sendmem(fs, buf, size, fi_mr_desc(mr), SEND_CONTEXT);
+	ret = fi_sendmem(ep, buf, size, fi_mr_desc(mr), SEND_CONTEXT);
 	if (ret)
 		printf("fi_write %d (%s)\n", ret, fi_strerror(-ret));
 
@@ -214,7 +214,7 @@ static int recv_xfer(int size)
 		}
 	}
 
-	ret = fi_recvmem(fs, buf, buffer_size, fi_mr_desc(mr), buf);
+	ret = fi_recvmem(ep, buf, buffer_size, fi_mr_desc(mr), buf);
 	if (ret)
 		printf("fi_recvmem %d (%s)\n", ret, fi_strerror(-ret));
 
@@ -364,14 +364,14 @@ err1:
 	return ret;
 }
 
-static int bind_fid(fid_t sock, fid_t res, uint64_t flags)
+static int bind_fid(fid_t ep, fid_t res, uint64_t flags)
 {
 	struct fi_resource fr;
 	int ret;
 
 	fr.fid = res;
 	fr.flags = flags;
-	ret = fi_bind(sock, &fr, 1);
+	ret = fi_bind(ep, &fr, 1);
 	if (ret)
 		printf("fi_bind %s\n", fi_strerror(-ret));
 	return ret;
@@ -379,16 +379,16 @@ static int bind_fid(fid_t sock, fid_t res, uint64_t flags)
 
 static int bind_lres(void)
 {
-	return bind_fid(lfs, lcm, 0);
+	return bind_fid(lep, lcm, 0);
 }
 
 static int bind_res(void)
 {
 	int ret;
 
-	ret = bind_fid(fs, cq, FI_SEND | FI_RECV);
+	ret = bind_fid(ep, cq, FI_SEND | FI_RECV);
 	if (!ret) {
-		ret = fi_recvmem(fs, buf, buffer_size, fi_mr_desc(mr), buf);
+		ret = fi_recvmem(ep, buf, buffer_size, fi_mr_desc(mr), buf);
 		if (ret)
 			printf("fi_read %d (%s)\n", ret, fi_strerror(-ret));
 	}
@@ -407,9 +407,9 @@ static int server_listen(void)
 		return ret;
 	}
 
-	ret = fi_socket(fi, &lfs, NULL);
+	ret = fi_endpoint(fi, &lep, NULL);
 	if (ret) {
-		printf("fi_socket %s\n", fi_strerror(-ret));
+		printf("fi_endpoint %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 
@@ -421,7 +421,7 @@ static int server_listen(void)
 	if (ret)
 		goto err3;
 
-	ret = fi_listen(lfs);
+	ret = fi_listen(lep);
 	if (ret) {
 		printf("fi_listen %s\n", fi_strerror(-ret));
 		goto err3;
@@ -432,7 +432,7 @@ static int server_listen(void)
 err3:
 	free_lres();
 err2:
-	fi_close(lfs);
+	fi_close(lep);
 err1:
 	fi_freeinfo(fi);
 	return ret;
@@ -456,9 +456,9 @@ static int server_connect(void)
 		goto err1;
 	}
 
-	ret = fi_socket(entry.info, &fs, NULL);
+	ret = fi_endpoint(entry.info, &ep, NULL);
 	if (ret) {
-		printf("fi_socket for req %s\n", fi_strerror(-ret));
+		printf("fi_endpoint for req %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 
@@ -470,7 +470,7 @@ static int server_connect(void)
 	if (ret)
 		goto err3;
 
-	ret = fi_accept(fs, NULL, 0);
+	ret = fi_accept(ep, NULL, 0);
 	if (ret) {
 		printf("fi_accept %s\n", fi_strerror(-ret));
 		goto err3;
@@ -482,7 +482,7 @@ static int server_connect(void)
 err3:
 	free_res();
 err2:
-	fi_close(fs);
+	fi_close(ep);
 err1:
 	fi_freeinfo(entry.info);
 	return ret;
@@ -506,9 +506,9 @@ static int client_connect(void)
 		goto err1;
 	}
 
-	ret = fi_socket(fi, &fs, NULL);
+	ret = fi_endpoint(fi, &ep, NULL);
 	if (ret) {
-		printf("fi_socket %s\n", fi_strerror(-ret));
+		printf("fi_endpoint %s\n", fi_strerror(-ret));
 		goto err2;
 	}
 
@@ -520,7 +520,7 @@ static int client_connect(void)
 	if (ret)
 		goto err4;
 
-	ret = fi_connect(fs, NULL, 0);
+	ret = fi_connect(ep, NULL, 0);
 	if (ret) {
 		printf("fi_connect %s\n", fi_strerror(-ret));
 		goto err4;
@@ -534,7 +534,7 @@ static int client_connect(void)
 err4:
 	free_res();
 err3:
-	fi_close(fs);
+	fi_close(ep);
 err2:
 	fi_freeinfo(fi);
 err1:
@@ -571,9 +571,9 @@ static int run(void)
 		/*
 		 * disable bandwidth test until we have a correct flooding
 		 * message protocol
-		fi_shutdown(fs, 0);
+		fi_shutdown(ep, 0);
 		poll_all();
-		fi_close(fs);
+		fi_close(ep);
 		free_res();
 
 		optimization = opt_bandwidth;
@@ -598,8 +598,8 @@ static int run(void)
 
 	while (credits < max_credits)
 		poll_all();
-	fi_shutdown(fs, 0);
-	fi_close(fs);
+	fi_shutdown(ep, 0);
+	fi_close(ep);
 	free_res();
 	if (!dst_addr)
 		free_lres();

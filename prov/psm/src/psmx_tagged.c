@@ -48,19 +48,19 @@ static ssize_t psmx_tagged_recvfrom(fid_t fid, void *buf, size_t len,
 				    const void *src_addr,
 				    be64_t tag, be64_t mask, void *context)
 {
-	struct psmx_fid_socket *fid_socket;
+	struct psmx_fid_ep *fid_ep;
 	psm_mq_req_t psm_req;
 	int err;
 
-	fid_socket = container_of(fid, struct psmx_fid_socket, socket.fid);
-	assert(fid_socket->domain);
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	assert(fid_ep->domain);
 
-	err = psm_mq_irecv(fid_socket->domain->psm_mq, tag, ~mask, 0, /* flags */
+	err = psm_mq_irecv(fid_ep->domain->psm_mq, tag, ~mask, 0, /* flags */
 			   buf, len, context, &psm_req);
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	if (fid_socket->flags & (FI_BUFFERED_RECV | FI_CANCEL))
+	if (fid_ep->flags & (FI_BUFFERED_RECV | FI_CANCEL))
 		((struct fi_context *)context)->internal[0] = psm_req;
 
 	return 0;
@@ -88,7 +88,7 @@ static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
 				  const void *dest_addr,
 				  be64_t tag, void *context)
 {
-	struct psmx_fid_socket *fid_socket;
+	struct psmx_fid_ep *fid_ep;
 	int nonblocking;
 	int send_flag;
 	psm_epaddr_t psm_epaddr;
@@ -96,18 +96,18 @@ static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
 	int err;
 	int flags;
 
-	fid_socket = container_of(fid, struct psmx_fid_socket, socket.fid);
-	assert(fid_socket->domain);
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	assert(fid_ep->domain);
 
 	psm_epaddr = (psm_epaddr_t) dest_addr;
 
-	flags = fid_socket->flags;
+	flags = fid_ep->flags;
 
 	nonblocking = !!(flags & FI_NONBLOCK);
 	send_flag = (flags & FI_ACK) ? PSM_MQ_FLAG_SENDSYNC : 0;
 
 	if (nonblocking) {
-		err = psm_mq_isend(fid_socket->domain->psm_mq, psm_epaddr,
+		err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr,
 				   send_flag, tag, buf, len, context, &psm_req);
 
 		if (flags & (FI_BUFFERED_RECV | FI_CANCEL))
@@ -115,7 +115,7 @@ static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
 			 /* send cannot be canceled */
 		return 0;
 	} else {
-		err = psm_mq_send(fid_socket->domain->psm_mq, psm_epaddr,
+		err = psm_mq_send(fid_ep->domain->psm_mq, psm_epaddr,
 				  send_flag, tag, buf, len);
 		if (err == PSM_OK)
 			return len;
@@ -135,14 +135,14 @@ static ssize_t psmx_tagged_search(fid_t fid, be64_t *tag, be64_t mask,
 				  size_t *src_addrlen, size_t *len,
 				  void *context)
 {
-	struct psmx_fid_socket *fid_socket;
+	struct psmx_fid_ep *fid_ep;
 	psm_mq_status_t psm_status;
 	int err;
 
-	fid_socket = container_of(fid, struct psmx_fid_socket, socket.fid);
-	assert(fid_socket->domain);
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	assert(fid_ep->domain);
 
-	err = psm_mq_iprobe(fid_socket->domain->psm_mq, *tag, ~mask, &psm_status);
+	err = psm_mq_iprobe(fid_ep->domain->psm_mq, *tag, ~mask, &psm_status);
 	switch (err) {
 	case PSM_OK:
 		*tag = psm_status.msg_tag;

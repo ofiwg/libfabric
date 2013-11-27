@@ -34,7 +34,7 @@
 #define _FI_TAGGED_H_
 
 #include <assert.h>
-#include <rdma/fi_socket.h>
+#include <rdma/fi_endpoint.h>
 
 
 #ifdef __cplusplus
@@ -76,33 +76,33 @@ static inline ssize_t
 fi_tsendto(fid_t fid, const void *buf, size_t len,
 	   const void *dest_addr, be64_t tag, void *context)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, tagged);
-	FI_ASSERT_OP(sock->tagged, struct fi_ops_tagged, sendto);
-	return sock->tagged->sendto(fid, buf, len, dest_addr, tag, context);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, tagged);
+	FI_ASSERT_OP(ep->tagged, struct fi_ops_tagged, sendto);
+	return ep->tagged->sendto(fid, buf, len, dest_addr, tag, context);
 }
 
 static inline ssize_t
 fi_trecvfrom(fid_t fid, void *buf, size_t len, const void *src_addr,
 	     be64_t tag, be64_t mask, void *context)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, tagged);
-	FI_ASSERT_OP(sock->tagged, struct fi_ops_tagged, recvfrom);
-	return sock->tagged->recvfrom(fid, buf, len, src_addr, tag, mask, context);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, tagged);
+	FI_ASSERT_OP(ep->tagged, struct fi_ops_tagged, recvfrom);
+	return ep->tagged->recvfrom(fid, buf, len, src_addr, tag, mask, context);
 }
 
 static inline ssize_t
 fi_tsearch(fid_t fid, be64_t *tag, be64_t mask, uint64_t flags,
 	   void *src_addr, size_t *src_addrlen, size_t *len, void *context)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, tagged);
-	FI_ASSERT_OP(sock->tagged, struct fi_ops_tagged, search);
-	return sock->tagged->search(fid, tag, mask, flags, src_addr, src_addrlen, len, context);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, tagged);
+	FI_ASSERT_OP(ep->tagged, struct fi_ops_tagged, search);
+	return ep->tagged->search(fid, tag, mask, flags, src_addr, src_addrlen, len, context);
 }
 
 #ifdef __cplusplus

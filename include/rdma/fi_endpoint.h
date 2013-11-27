@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_SOCKET_H_
-#define _FI_SOCKET_H_
+#ifndef _FI_ENDPOINT_H_
+#define _FI_ENDPOINT_H_
 
 #include <sys/socket.h>
 #include <rdma/fabric.h>
@@ -85,17 +85,17 @@ struct fi_msg {
 	int			priority;
 };
 
-/* Socket option levels */
+/* Endpoint option levels */
 enum {
-	FI_OPT_SOCKET
+	FI_OPT_ENDPOINT
 };
 
-/* FI_OPT_SOCKET option names */
+/* FI_OPT_ENDPOINT option names */
 enum {
 	FI_OPT_MAX_BUFFERED_SEND	/* size_t */
 };
 
-struct fi_ops_sock {
+struct fi_ops_ep {
 	size_t	size;
 	ssize_t	(*cancel)(fid_t fid, struct fi_context *context);
 	int	(*getopt)(fid_t fid, int level, int optname,
@@ -133,17 +133,17 @@ struct fi_ops_tagged;
 /* struct fi_ops_collectives; */
 
 /*
- * Calls which modify the properties of a socket (control, setopt, bind, ...)
+ * Calls which modify the properties of a endpoint (control, setopt, bind, ...)
  * must be serialized against all other operations.  Those calls may modify the
- * operations referenced by a socket in order to optimize the data transfer code
+ * operations referenced by a endpoint in order to optimize the data transfer code
  * paths.
  *
  * A provider may allocate the minimal size structure needed to support the
  * ops requested by the user.
  */
-struct fid_socket {
+struct fid_ep {
 	struct fid		fid;
-	struct fi_ops_sock	*ops;
+	struct fi_ops_ep	*ops;
 	struct fi_ops_msg	*msg;
 	struct fi_ops_cm	*cm;
 	struct fi_ops_rdma	*rdma;
@@ -153,41 +153,41 @@ struct fid_socket {
 
 static inline ssize_t fi_cancel(fid_t fid, struct fi_context *context)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, ops);
-	FI_ASSERT_OP(sock->ops, struct fi_ops_sock, cancel);
-	return sock->ops->cancel(fid, context);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, ops);
+	FI_ASSERT_OP(ep->ops, struct fi_ops_ep, cancel);
+	return ep->ops->cancel(fid, context);
 }
 
-static inline ssize_t fi_setsockopt(fid_t fid, int level, int optname,
-				    const void *optval, size_t optlen)
+static inline ssize_t fi_setopt(fid_t fid, int level, int optname,
+				const void *optval, size_t optlen)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, ops);
-	FI_ASSERT_OP(sock->ops, struct fi_ops_sock, setopt);
-	return sock->ops->setopt(fid, level, optname, optval, optlen);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, ops);
+	FI_ASSERT_OP(ep->ops, struct fi_ops_ep, setopt);
+	return ep->ops->setopt(fid, level, optname, optval, optlen);
 }
 
 static inline ssize_t fi_recvmem(fid_t fid, void *buf, size_t len,
 				 uint64_t mem_desc, void *context)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, msg);
-	FI_ASSERT_OP(sock->msg, struct fi_ops_msg, recvmem);
-	return sock->msg->recvmem(fid, buf, len, mem_desc, context);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, msg);
+	FI_ASSERT_OP(ep->msg, struct fi_ops_msg, recvmem);
+	return ep->msg->recvmem(fid, buf, len, mem_desc, context);
 }
 
 static inline ssize_t fi_sendmem(fid_t fid, void *buf, size_t len,
 				 uint64_t mem_desc, void *context)
 {
-	struct fid_socket *sock = container_of(fid, struct fid_socket, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_SOCKET);
-	FI_ASSERT_OPS(fid, struct fid_socket, msg);
-	FI_ASSERT_OP(sock->msg, struct fi_ops_msg, sendmem);
-	return sock->msg->sendmem(fid, buf, len, mem_desc, context);
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, msg);
+	FI_ASSERT_OP(ep->msg, struct fi_ops_msg, sendmem);
+	return ep->msg->sendmem(fid, buf, len, mem_desc, context);
 }
 
 
@@ -195,4 +195,4 @@ static inline ssize_t fi_sendmem(fid_t fid, void *buf, size_t len,
 }
 #endif
 
-#endif /* _FI_SOCKET_H_ */
+#endif /* _FI_ENDPOINT_H_ */

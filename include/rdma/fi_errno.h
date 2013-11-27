@@ -127,7 +127,7 @@
 #define	FI_ENOTSOCK		ENOTSOCK	/* Socket operation on non-socket */
 #define	FI_EDESTADDRREQ		EDESTADDRREQ	/* Destination address required */
 #define	FI_EMSGSIZE		EMSGSIZE	/* Message too long */
-#define	FI_EPROTOTYPE		EPROTOTYPE	/* Protocol wrong type for socket */
+#define	FI_EPROTOTYPE		EPROTOTYPE	/* Protocol wrong type for endpoint */
 #define	FI_ENOPROTOOPT		ENOPROTOOPT	/* Protocol not available */
 #define	FI_EPROTONOSUPPORT	EPROTONOSUPPORT	/* Protocol not supported */
 #define	FI_ESOCKTNOSUPPORT	ESOCKTNOSUPPORT	/* Socket type not supported */

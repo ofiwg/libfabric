@@ -33,7 +33,7 @@
 #ifndef _FI_RDMA_H_
 #define _FI_RDMA_H_
 
-#include <rdma/fi_socket.h>
+#include <rdma/fi_endpoint.h>
 
 
 #ifdef __cplusplus

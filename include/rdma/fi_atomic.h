@@ -33,7 +33,7 @@
 #ifndef _FI_ATOMIC_H_
 #define _FI_ATOMIC_H_
 
-#include <rdma/fi_socket.h>
+#include <rdma/fi_endpoint.h>
 
 
 #ifdef __cplusplus

@@ -48,7 +48,7 @@
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_prov.h>
-#include <rdma/fi_socket.h>
+#include <rdma/fi_endpoint.h>
 #include <rdma/fi_rdma.h>
 #include <rdma/fi_errno.h>
 
@@ -88,8 +88,8 @@ struct ibv_mem_desc {
 	struct ibv_domain	*domain;
 };
 
-struct ibv_msg_socket {
-	struct fid_socket	socket_fid;
+struct ibv_msg_ep {
+	struct fid_ep		ep_fid;
 	struct rdma_cm_id	*id;
 	struct ibv_ec_cm	*cm_ec;
 	struct ibv_ec_comp	*rec;
@@ -271,7 +271,7 @@ static int ibv_freeinfo(struct fi_info *info)
 	return 0;
 }
 
-static int ibv_msg_socket_create_qp(struct ibv_msg_socket *sock)
+static int ibv_msg_ep_create_qp(struct ibv_msg_ep *ep)
 {
 	struct ibv_qp_init_attr attr;
 
@@ -291,51 +291,51 @@ static int ibv_msg_socket_create_qp(struct ibv_msg_socket *sock)
 	attr.cap.max_recv_wr = atoi(def_recv_wr);
 	attr.cap.max_send_sge = atoi(def_send_sge);
 	attr.cap.max_recv_sge = atoi(def_recv_sge);
-	if (!sock->inline_size)
-		sock->inline_size = atoi(def_inline_data);
-	attr.cap.max_inline_data = sock->inline_size;
-	attr.qp_context = sock;
-	attr.send_cq = sock->sec->cq;
-	attr.recv_cq = sock->rec->cq;
+	if (!ep->inline_size)
+		ep->inline_size = atoi(def_inline_data);
+	attr.cap.max_inline_data = ep->inline_size;
+	attr.qp_context = ep;
+	attr.send_cq = ep->sec->cq;
+	attr.recv_cq = ep->rec->cq;
 	attr.srq = NULL;
 	attr.qp_type = IBV_QPT_RC;
 	attr.sq_sig_all = 1;
 
-	return rdma_create_qp(sock->id, sock->rec->ec.domain->pd, &attr) ? -errno : 0;
+	return rdma_create_qp(ep->id, ep->rec->ec.domain->pd, &attr) ? -errno : 0;
 }
 
-static int ibv_msg_socket_bind(fid_t fid, struct fi_resource *fids, int nfids)
+static int ibv_msg_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
-	struct ibv_msg_socket *sock;
+	struct ibv_msg_ep *ep;
 	struct ibv_ec *ec;
 	int i, ret;
 
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
 	for (i = 0; i < nfids; i++) {
 		if (fids[i].fid->fclass != FID_CLASS_EC)
 			return -EINVAL;
 
 		ec = container_of(fids[i].fid, struct ibv_ec, fid.fid);
 		if (fids[i].flags & FI_RECV) {
-			if (sock->rec)
+			if (ep->rec)
 				return -EINVAL;
-			sock->rec = container_of(ec, struct ibv_ec_comp, ec);
+			ep->rec = container_of(ec, struct ibv_ec_comp, ec);
 		}
 		if (fids[i].flags & FI_SEND) {
-			if (sock->sec)
+			if (ep->sec)
 				return -EINVAL;
-			sock->sec = container_of(ec, struct ibv_ec_comp, ec);
+			ep->sec = container_of(ec, struct ibv_ec_comp, ec);
 		}
 		if (ec->ec_domain == FI_EC_DOMAIN_CM) {
-			sock->cm_ec = container_of(ec, struct ibv_ec_cm, ec);
-			ret = rdma_migrate_id(sock->id, sock->cm_ec->channel);
+			ep->cm_ec = container_of(ec, struct ibv_ec_cm, ec);
+			ret = rdma_migrate_id(ep->id, ep->cm_ec->channel);
 			if (ret)
 				return -errno;
 		}
 	}
 
-	if (sock->sec && sock->rec && !sock->id->qp) {
-		ret = ibv_msg_socket_create_qp(sock);
+	if (ep->sec && ep->rec && !ep->id->qp) {
+		ret = ibv_msg_ep_create_qp(ep);
 		if (ret)
 			return ret;
 	}
@@ -343,10 +343,10 @@ static int ibv_msg_socket_bind(fid_t fid, struct fi_resource *fids, int nfids)
 	return 0;
 }
 
-static ssize_t ibv_msg_socket_recvmem(fid_t fid, void *buf, size_t len,
-				      uint64_t mem_desc, void *context)
+static ssize_t ibv_msg_ep_recvmem(fid_t fid, void *buf, size_t len,
+				  uint64_t mem_desc, void *context)
 {
-	struct ibv_msg_socket *sock;
+	struct ibv_msg_ep *ep;
 	struct ibv_recv_wr wr, *bad;
 	struct ibv_sge sge;
 
@@ -359,18 +359,18 @@ static ssize_t ibv_msg_socket_recvmem(fid_t fid, void *buf, size_t len,
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
-	return -ibv_post_recv(sock->id->qp, &wr, &bad);
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
+	return -ibv_post_recv(ep->id->qp, &wr, &bad);
 }
 
-static ssize_t ibv_msg_socket_sendmem(fid_t fid, const void *buf, size_t len,
-				      uint64_t mem_desc, void *context)
+static ssize_t ibv_msg_ep_sendmem(fid_t fid, const void *buf, size_t len,
+				  uint64_t mem_desc, void *context)
 {
-	struct ibv_msg_socket *sock;
+	struct ibv_msg_ep *ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
 	sge.addr = (uintptr_t) buf;
 	sge.length = (uint32_t) len;
 	sge.lkey = (uint32_t) mem_desc;
@@ -380,25 +380,25 @@ static ssize_t ibv_msg_socket_sendmem(fid_t fid, const void *buf, size_t len,
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.opcode = IBV_WR_SEND;
-	wr.send_flags = (len <= sock->inline_size) ? IBV_SEND_INLINE : 0;
+	wr.send_flags = (len <= ep->inline_size) ? IBV_SEND_INLINE : 0;
 
-	return -ibv_post_send(sock->id->qp, &wr, &bad);
+	return -ibv_post_send(ep->id->qp, &wr, &bad);
 }
 
-static struct fi_ops_msg ibv_msg_socket_msg_ops = {
+static struct fi_ops_msg ibv_msg_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
-	.recvmem = ibv_msg_socket_recvmem,
-	.sendmem = ibv_msg_socket_sendmem,
+	.recvmem = ibv_msg_ep_recvmem,
+	.sendmem = ibv_msg_ep_sendmem,
 };
 
-static int ibv_msg_socket_rdma_writemem(fid_t fid, const void *buf, size_t len,
+static int ibv_msg_ep_rdma_writemem(fid_t fid, const void *buf, size_t len,
 	uint64_t mem_desc, uint64_t addr, be64_t tag, void *context)
 {
-	struct ibv_msg_socket *sock;
+	struct ibv_msg_ep *ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
 	sge.addr = (uintptr_t) buf;
 	sge.length = (uint32_t) len;
 	sge.lkey = (uint32_t) mem_desc;
@@ -408,17 +408,17 @@ static int ibv_msg_socket_rdma_writemem(fid_t fid, const void *buf, size_t len,
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.opcode = IBV_WR_RDMA_WRITE;
-	wr.send_flags = (len <= sock->inline_size) ? IBV_SEND_INLINE : 0;
+	wr.send_flags = (len <= ep->inline_size) ? IBV_SEND_INLINE : 0;
 	wr.wr.rdma.remote_addr = addr;
 	wr.wr.rdma.rkey = (uint32_t) tag;
 
-	return -ibv_post_send(sock->id->qp, &wr, &bad);
+	return -ibv_post_send(ep->id->qp, &wr, &bad);
 }
 
-static int ibv_msg_socket_rdma_readmem(fid_t fid, void *buf, size_t len,
+static int ibv_msg_ep_rdma_readmem(fid_t fid, void *buf, size_t len,
 	uint64_t mem_desc, uint64_t addr, be64_t tag, void *context)
 {
-	struct ibv_msg_socket *sock;
+	struct ibv_msg_ep *ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
@@ -435,22 +435,22 @@ static int ibv_msg_socket_rdma_readmem(fid_t fid, void *buf, size_t len,
 	wr.wr.rdma.remote_addr = addr;
 	wr.wr.rdma.rkey = (uint32_t) tag;
 
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
-	return -ibv_post_send(sock->id->qp, &wr, &bad);
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
+	return -ibv_post_send(ep->id->qp, &wr, &bad);
 }
 
-static struct fi_ops_rdma ibv_msg_socket_rdma_ops = {
+static struct fi_ops_rdma ibv_msg_ep_rdma_ops = {
 	.size = sizeof(struct fi_ops_rdma),
-	.writemem = ibv_msg_socket_rdma_writemem,
-	.readmem = ibv_msg_socket_rdma_readmem
+	.writemem = ibv_msg_ep_rdma_writemem,
+	.readmem = ibv_msg_ep_rdma_readmem
 };
 
-static int ibv_msg_socket_connect(fid_t fid, const void *param, size_t paramlen)
+static int ibv_msg_ep_connect(fid_t fid, const void *param, size_t paramlen)
 {
-	struct ibv_msg_socket *sock;
+	struct ibv_msg_ep *ep;
 	struct rdma_conn_param conn_param;
 
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
 	memset(&conn_param, 0, sizeof conn_param);
 	conn_param.private_data = param;
 	conn_param.private_data_len = paramlen;
@@ -460,23 +460,23 @@ static int ibv_msg_socket_connect(fid_t fid, const void *param, size_t paramlen)
 	conn_param.retry_count = 15;
 	conn_param.rnr_retry_count = 7;
 
-	return rdma_connect(sock->id, &conn_param) ? -errno : 0;
+	return rdma_connect(ep->id, &conn_param) ? -errno : 0;
 }
 
-static int ibv_msg_socket_listen(fid_t fid)
+static int ibv_msg_ep_listen(fid_t fid)
 {
-	struct ibv_msg_socket *sock;
+	struct ibv_msg_ep *ep;
 
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
-	return rdma_listen(sock->id, 0) ? -errno : 0;
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
+	return rdma_listen(ep->id, 0) ? -errno : 0;
 }
 
-static int ibv_msg_socket_accept(fid_t fid, const void *param, size_t paramlen)
+static int ibv_msg_ep_accept(fid_t fid, const void *param, size_t paramlen)
 {
-	struct ibv_msg_socket *sock;
+	struct ibv_msg_ep *ep;
 	struct rdma_conn_param conn_param;
 
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
 	memset(&conn_param, 0, sizeof conn_param);
 	conn_param.private_data = param;
 	conn_param.private_data_len = paramlen;
@@ -485,46 +485,46 @@ static int ibv_msg_socket_accept(fid_t fid, const void *param, size_t paramlen)
 	conn_param.flow_control = 1;
 	conn_param.rnr_retry_count = 7;
 
-	return rdma_accept(sock->id, &conn_param) ? -errno : 0;
+	return rdma_accept(ep->id, &conn_param) ? -errno : 0;
 }
 
-static int ibv_msg_socket_reject(fid_t fid, struct fi_info *info,
+static int ibv_msg_ep_reject(fid_t fid, struct fi_info *info,
 				 const void *param, size_t paramlen)
 {
 	return rdma_reject(info->data, param, (uint8_t) paramlen) ? -errno : 0;
 }
 
-static int ibv_msg_socket_shutdown(fid_t fid, uint64_t flags)
+static int ibv_msg_ep_shutdown(fid_t fid, uint64_t flags)
 {
-	struct ibv_msg_socket *sock;
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
-	return rdma_disconnect(sock->id) ? -errno : 0;
+	struct ibv_msg_ep *ep;
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
+	return rdma_disconnect(ep->id) ? -errno : 0;
 }
 
-struct fi_ops_cm ibv_msg_socket_cm_ops = {
+struct fi_ops_cm ibv_msg_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.connect = ibv_msg_socket_connect,
-	.listen = ibv_msg_socket_listen,
-	.accept = ibv_msg_socket_accept,
-	.reject = ibv_msg_socket_reject,
-	.shutdown = ibv_msg_socket_shutdown,
+	.connect = ibv_msg_ep_connect,
+	.listen = ibv_msg_ep_listen,
+	.accept = ibv_msg_ep_accept,
+	.reject = ibv_msg_ep_reject,
+	.shutdown = ibv_msg_ep_shutdown,
 };
 
-static int ibv_msg_socket_getopt(fid_t fid, int level, int optname,
+static int ibv_msg_ep_getopt(fid_t fid, int level, int optname,
 				 void *optval, size_t *optlen)
 {
-	struct ibv_msg_socket *sock;
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
+	struct ibv_msg_ep *ep;
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
 
 	switch (level) {
-	case FI_OPT_SOCKET:
+	case FI_OPT_ENDPOINT:
 		switch (optname) {
 		case FI_OPT_MAX_BUFFERED_SEND:
 			if (*optlen < sizeof(size_t)) {
 				*optlen = sizeof(size_t);
 				return -FI_ETOOSMALL;
 			}
-			*((size_t *) optval) = (size_t) sock->inline_size;
+			*((size_t *) optval) = (size_t) ep->inline_size;
 			*optlen = sizeof(size_t);
 			break;
 		default:
@@ -536,21 +536,21 @@ static int ibv_msg_socket_getopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
-static int ibv_msg_socket_setopt(fid_t fid, int level, int optname,
+static int ibv_msg_ep_setopt(fid_t fid, int level, int optname,
 				 const void *optval, size_t optlen)
 {
-	struct ibv_msg_socket *sock;
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
+	struct ibv_msg_ep *ep;
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
 
 	switch (level) {
-	case FI_OPT_SOCKET:
+	case FI_OPT_ENDPOINT:
 		switch (optname) {
 		case FI_OPT_MAX_BUFFERED_SEND:
 			if (optlen != sizeof(size_t))
 				return -FI_EINVAL;
-			if (sock->id->qp)
+			if (ep->id->qp)
 				return -FI_EOPBADSTATE;
-			sock->inline_size = (uint32_t) *(size_t *) optval;
+			ep->inline_size = (uint32_t) *(size_t *) optval;
 			break;
 		default:
 			return -FI_ENOPROTOOPT;
@@ -561,61 +561,61 @@ static int ibv_msg_socket_setopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
-struct fi_ops_sock ibv_msg_socket_base_ops = {
-	.size = sizeof(struct fi_ops_sock),
-	.getopt = ibv_msg_socket_getopt,
-	.setopt = ibv_msg_socket_setopt,
+struct fi_ops_ep ibv_msg_ep_base_ops = {
+	.size = sizeof(struct fi_ops_ep),
+	.getopt = ibv_msg_ep_getopt,
+	.setopt = ibv_msg_ep_setopt,
 };
 
-static int ibv_msg_socket_close(fid_t fid)
+static int ibv_msg_ep_close(fid_t fid)
 {
-	struct ibv_msg_socket *sock;
+	struct ibv_msg_ep *ep;
 
-	sock = container_of(fid, struct ibv_msg_socket, socket_fid.fid);
-	if (sock->id)
-		rdma_destroy_ep(sock->id);
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
+	if (ep->id)
+		rdma_destroy_ep(ep->id);
 
-	free(sock);
+	free(ep);
 	return 0;
 }
 
-struct fi_ops ibv_msg_socket_ops = {
+struct fi_ops ibv_msg_ep_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = ibv_msg_socket_close,
-	.bind = ibv_msg_socket_bind
+	.close = ibv_msg_ep_close,
+	.bind = ibv_msg_ep_bind
 };
 
-static int ibv_socket(struct fi_info *info, fid_t *fid, void *context)
+static int ibv_open_ep(struct fi_info *info, fid_t *fid, void *context)
 {
-	struct ibv_msg_socket *sock;
+	struct ibv_msg_ep *ep;
 	int ret;
 
 	ret = ibv_check_domain(info->domain_name);
 	if (ret)
 		return ret;
 
-	if (!info->data || info->datalen != sizeof(sock->id))
+	if (!info->data || info->datalen != sizeof(ep->id))
 		return -ENOSYS;
 
-	sock = calloc(1, sizeof *sock);
-	if (!sock)
+	ep = calloc(1, sizeof *ep);
+	if (!ep)
 		return -ENOMEM;
 
-	sock->id = info->data;
-	sock->id->context = &sock->socket_fid.fid;
+	ep->id = info->data;
+	ep->id->context = &ep->ep_fid.fid;
 	info->data = NULL;
 	info->datalen = 0;
 
-	sock->socket_fid.fid.fclass = FID_CLASS_SOCKET;
-	sock->socket_fid.fid.size = sizeof(struct fid_socket);
-	sock->socket_fid.fid.context = context;
-	sock->socket_fid.fid.ops = &ibv_msg_socket_ops;
-	sock->socket_fid.ops = &ibv_msg_socket_base_ops;
-	sock->socket_fid.msg = &ibv_msg_socket_msg_ops;
-	sock->socket_fid.cm = &ibv_msg_socket_cm_ops;
-	sock->socket_fid.rdma = &ibv_msg_socket_rdma_ops;
+	ep->ep_fid.fid.fclass = FID_CLASS_EP;
+	ep->ep_fid.fid.size = sizeof(struct fid_ep);
+	ep->ep_fid.fid.context = context;
+	ep->ep_fid.fid.ops = &ibv_msg_ep_ops;
+	ep->ep_fid.ops = &ibv_msg_ep_base_ops;
+	ep->ep_fid.msg = &ibv_msg_ep_msg_ops;
+	ep->ep_fid.cm = &ibv_msg_ep_cm_ops;
+	ep->ep_fid.rdma = &ibv_msg_ep_rdma_ops;
 
-	*fid = &sock->socket_fid.fid;
+	*fid = &ep->ep_fid.fid;
 	return 0;
 }
 
@@ -1317,7 +1317,7 @@ struct fi_ops_prov ibv_ops = {
 	.size = sizeof(struct fi_ops_prov),
 	.getinfo = ibv_getinfo,
 	.freeinfo = ibv_freeinfo,
-	.socket = ibv_socket,
+	.endpoint = ibv_open_ep,
 	.open = ibv_open
 };
 

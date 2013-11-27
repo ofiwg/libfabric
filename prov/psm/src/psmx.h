@@ -22,7 +22,7 @@ extern "C" {
 #include <rdma/fabric.h>
 #include <rdma/fi_prov.h>
 #include <rdma/fi_domain.h>
-#include <rdma/fi_socket.h>
+#include <rdma/fi_endpoint.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
@@ -63,8 +63,8 @@ struct psmx_fid_av {
 	size_t			addrlen;
 };
 
-struct psmx_fid_socket {
-	struct fid_socket	socket;
+struct psmx_fid_ep {
+	struct fid_ep		ep;
 	struct psmx_fid_domain	*domain;
 	struct psmx_fid_ec	*ec;
 	struct psmx_fid_av	*av;
@@ -79,7 +79,7 @@ void	psmx_fini(void);
 
 int	psmx_domain_open(const char *name, struct fi_info *info,
 			 fid_t *fid, void *context);
-int	psmx_sock_open(struct fi_info *info, fid_t *fid, void *context);
+int	psmx_ep_open(struct fi_info *info, fid_t *fid, void *context);
 int	psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context);
 int	psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context);
 

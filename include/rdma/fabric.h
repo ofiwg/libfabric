@@ -65,12 +65,12 @@ enum {
  */
 #define FI_OUI_SHIFT		48
 
-/* fi_info and operation flags - pass into socket ops calls.
- * A user may also set these on a socket by using fcntl, which has the
+/* fi_info and operation flags - pass into endpoint ops calls.
+ * A user may also set these on a endpoint by using fcntl, which has the
  * affect of applying them to all applicable operations.
  */
 
-/* PASSIVE - Indicates that the allocated socket will be used
+/* PASSIVE - Indicates that the allocated endpoint will be used
  * to listen for connection requests.
  * fi_info
  */
@@ -135,8 +135,8 @@ enum {
  * fi_info type, fi_open, fcntl, data transfer ops
  */
 #define FI_CANCEL		(1ULL << 12)
-/* SHARED_RECV - A socket created with this flag will share the same
- * receive queue as other sockets created on the same domain.
+/* SHARED_RECV - A endpoint created with this flag will share the same
+ * receive queue as other endpoints created on the same domain.
  * fi_info type, fi_open, fcntl
  */
 /* TODO: should shared be its own bit? */
@@ -247,7 +247,7 @@ struct fi_info {
 	void			*src_addr;
 	void			*dst_addr;
 	/* Authorization key is intended to limit communication with only
-	 * those sockets sharing the same key.
+	 * those endpoints sharing the same key.
 	 */
 	size_t			auth_keylen;
 	void			*auth_key;
@@ -263,7 +263,7 @@ struct fi_info {
 
 enum {
 	FID_CLASS_UNSPEC,
-	FID_CLASS_SOCKET,
+	FID_CLASS_EP,
 	FID_CLASS_RESOURCE_DOMAIN,
 	FID_CLASS_INTERFACE,
 	FID_CLASS_AV,
@@ -314,9 +314,9 @@ void fi_freeinfo(struct fi_info *info);
 /* Either name or info must be provided.  Providing both is allowed. */
 int fi_open(char *name, struct fi_info *info, fid_t *fid, void *context);
 /*
- * Allocate a fabric socket.  A fabric socket is a software construct.
+ * Allocate a fabric endpoint.  A fabric endpoint is a software construct.
  */
-int fi_socket(struct fi_info *info, fid_t *fid, void *context);
+int fi_endpoint(struct fi_info *info, fid_t *fid, void *context);
 
 #define FI_ASSERT_CLASS(fid, f_class)   assert(fid->fclass == f_class)
 #define FI_ASSERT_FIELD(ptr, ftype, field) assert(ptr->size > offsetof(ftype, field))

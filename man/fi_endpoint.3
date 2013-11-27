@@ -1,0 +1,30 @@
+.TH "FI_ENDPOINT" 3 "2013-11-27" "libfabric" "Libfabric Programmer's Manual" libfabric
+.SH NAME
+fi_endpoint / fi_close \- Allocate/close a fabric interface communication endpoint
+.SH SYNOPSIS
+.B "#include <rdma/fabric.h>"
+.P
+.B "int" fi_endpoint
+.BI "(struct fi_info *" info ","
+.BI "fid_t *" fid ","
+.BI "void *" context ");"
+.P
+.B "int" fi_close
+.BI "(fid_t " fid ");"
+.SH ARGUMENTS
+.IP "info" 12
+Details about the fabric interface endpoint to be opened. 
+.IP "fid" 12
+On success, points to the opened fabric endpoint.
+.IP "context" 12
+User specified context associated with the endpoint.
+.SH "DESCRIPTION"
+Opens a fabric interface endpoint.
+.SH "RETURN VALUE"
+Returns 0 on success, or errno on error.
+.SH "NOTES"
+Opens a fabric endpoint corresponding to the requested fabric interface
+information.  Users should call fi_close to release all resources allocated
+fo the fabric endpoint.
+.SH "SEE ALSO"
+fi_getinfo(3), fi_open(3)
