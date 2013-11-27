@@ -53,32 +53,9 @@ src_libfabric_la_LDFLAGS = -version-info 1 -export-dynamic \
 src_libfabric_la_DEPENDENCIES =  $(srcdir)/src/libfabric.map
 
 bin_PROGRAMS = \
-	prov/rdmacm/examples/rstream \
-	prov/rdmacm/examples/rcopy \
-	prov/rdmacm/examples/riostream \
-	prov/rdmacm/examples/udpong \
 	examples/fi_provinfo \
 	examples/fi_perf
 
-prov_rdmacm_examples_rstream_SOURCES = \
-	prov/rdmacm/examples/rstream.c \
-	prov/rdmacm/examples/common.c
-prov_rdmacm_examples_rstream_LDADD = \
-	$(top_builddir)/src/libfabric.la
-prov_rdmacm_examples_riostream_SOURCES = \
-	prov/rdmacm/examples/riostream.c \
-	prov/rdmacm/examples/common.c
-prov_rdmacm_examples_riostream_LDADD = \
-	$(top_builddir)/src/libfabric.la
-prov_rdmacm_examples_rcopy_SOURCES = \
-	prov/rdmacm/examples/rcopy.c
-prov_rdmacm_examples_rcopy_LDADD = \
-	$(top_builddir)/src/libfabric.la
-prov_rdmacm_examples_udpong_SOURCES = \
-	prov/rdmacm/examples/udpong.c \
-	prov/rdmacm/examples/common.c
-prov_rdmacm_examples_udpong_LDADD = \
-	$(top_builddir)/src/libfabric.la
 examples_fi_provinfo_SOURCES = \
 	examples/provinfo.c \
 	examples/shared.c
@@ -105,8 +82,7 @@ libfabricinclude_HEADERS = $(top_srcdir)/include/rdma/fabric.h \
 			   $(top_srcdir)/include/rdma/fi_tagged.h \
 			   $(top_srcdir)/include/rdma/fi_ucma.h \
 			   $(top_srcdir)/include/rdma/fi_umad.h \
-			   $(top_srcdir)/include/rdma/fi_uverbs.h \
-			   $(top_srcdir)/prov/rdmacm/include/rdma/rsocket.h
+			   $(top_srcdir)/include/rdma/fi_uverbs.h
 
 infinibandinclude_HEADERS = $(top_srcdir)/include/infiniband/ib.h
 
@@ -124,6 +100,7 @@ EXTRA_DIST = include/fi.h src/libfabric.map libfabric.spec.in $(man_MANS) \
 	prov/rdmacm/include/rdma/rdma_verbs.h \
 	prov/rdmacm/src/cma.h \
 	prov/rdmacm/src/indexer.h \
+	/prov/rdmacm/include/rdma/rsocket.h \
 	prov/mlx4/src/doorbell.h \
 	prov/mlx4/src/mlx4.h \
 	prov/mlx4/src/mlx4-abi.h \
