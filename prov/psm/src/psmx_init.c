@@ -37,9 +37,13 @@ static int psmx_getinfo(char *node, char *service, struct fi_info *hints,
 {
 	struct fi_info *psmx_info;
 	uint64_t flags = 0;
+	uint32_t cnt = 0;
 	void *dst_addr = NULL;
 	void *uuid;
 	char *s;
+
+	if (psm_ep_num_devunits(&cnt) || !cnt)
+		return -FI_ENODEV;
 
 	uuid = calloc(1, sizeof(psm_uuid_t));
 	if (!uuid) 
