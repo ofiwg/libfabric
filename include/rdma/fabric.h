@@ -69,34 +69,16 @@ enum {
  * affect of applying them to all applicable operations.
  */
 
-/* PASSIVE - Indicates that the allocated endpoint will be used
- * to listen for connection requests.
- * fi_info
+/*
+ * Flags
+ * The 64-bit flag field is divided as follows:
+ * bits		use
+ *  0 -  3	operation specific (used for a single call)
+ *  4 -  7	reserved
+ *  8 - 55	common (usable with multiple operations)
+ * 56 - 59	reserved
+ * 60 - 63	provider-domain specific
  */
-#define FI_PASSIVE		(1ULL << 0)
-/* NUMERICHOST - The node parameter passed into fi_getinfo is a
- * numeric IP address or GID.  When set, name resolution is not
- * performed.
- * fi_info
- */
-#define FI_NUMERICHOST		(1ULL << 1)
-/* FAMILY - If set, then the node parameter passed into fi_getinfo
- * is encoded address.  The format of the address is given by the
- * sa_family field in fi_info.  This flag is needed by providers
- * in order to determine if an address is an IPv6 or GID based
- * address.
- * fi_info
- */
-//#define FI_FAMILY		(1ULL << 2)
-
-/* AUTO_RESET - automatically resets the event queue to generate
- * a new wake-up event on the next entry.  Example use:
- * 1. wait on eq wait object -- poll(fd)
- * 2. wait object is ready -- fd is readable
- * 3. read eq to retrieve events
- * 4. continue reading until read returns 0
- */
-#define FI_AUTO_RESET		(1ULL << 7)
 
 /* fi_info type, fcntl, fi_open flags */
 
@@ -154,6 +136,14 @@ enum {
  */
 /* TODO: Use with buffered_send? */
 #define FI_SEND			(1ULL << 17)
+/* AUTO_RESET - automatically resets the event queue to generate
+ * a new wake-up event on the next entry.  Example use:
+ * 1. wait on eq wait object -- poll(fd)
+ * 2. wait object is ready -- fd is readable
+ * 3. read eq to retrieve events
+ * 4. continue reading until read returns 0
+ */
+#define FI_AUTO_RESET		(1ULL << 18)
 
 /* fcntl and data transfer ops */
 
@@ -305,6 +295,16 @@ struct fid {
 #define FI_PREFIX		"fi"
 #define FI_DOMAIN_NAMES		"domains"
 #define FI_UNBOUND_NAME		"local"
+
+/* PASSIVE - Indicates that the allocated endpoint will be used
+ * to listen for connection requests.
+ */
+#define FI_PASSIVE		(1ULL << 0)
+/* NUMERICHOST - The node parameter passed into fi_getinfo is a
+ * numeric IP address or GID.  When set, name resolution is not
+ * performed.
+ */
+#define FI_NUMERICHOST		(1ULL << 1)
 
 int fi_getinfo(char *node, char *service, struct fi_info *hints,
 	       struct fi_info **info);
