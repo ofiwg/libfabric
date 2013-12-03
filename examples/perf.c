@@ -273,7 +273,7 @@ static int alloc_cm_ec(fid_t dom, fid_t *cm_ec)
 	int ret;
 
 	memset(&cm_attr, 0, sizeof cm_attr);
-	cm_attr.ec_mask = FI_EC_ATTR_MASK_V1;
+	cm_attr.mask = FI_EC_ATTR_MASK_V1;
 	cm_attr.domain = FI_EC_DOMAIN_CM;
 	cm_attr.type = FI_EC_QUEUE;
 	cm_attr.format = FI_EC_FORMAT_CM;
@@ -336,7 +336,7 @@ static int alloc_res(struct fi_info *fi)
 	}
 
 	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.ec_mask = FI_EC_ATTR_MASK_V1;
+	cq_attr.mask = FI_EC_ATTR_MASK_V1;
 	cq_attr.domain = FI_EC_DOMAIN_COMP;
 	cq_attr.type = FI_EC_QUEUE;
 	cq_attr.format = FI_EC_FORMAT_CONTEXT;

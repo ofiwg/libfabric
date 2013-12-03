@@ -111,15 +111,15 @@ int psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context)
 	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
 
 	if (attr) {
-		if ((attr->av_mask & FI_AV_ATTR_TYPE) &&
+		if ((attr->mask & FI_AV_ATTR_TYPE) &&
 			attr->type != FI_AV_MAP)
 			return -ENOSYS;
 
-		if ((attr->av_mask & FI_AV_ATTR_ADDR_FORMAT) &&
+		if ((attr->mask & FI_AV_ATTR_ADDR_FORMAT) &&
 			attr->addr_format != FI_ADDR)
 			return -ENOSYS;
 
-		if ((attr->av_mask & FI_AV_ATTR_ADDRLEN) &&
+		if ((attr->mask & FI_AV_ATTR_ADDRLEN) &&
 			attr->addrlen != sizeof(psm_epaddr_t))
 			return -ENOSYS;
 	}

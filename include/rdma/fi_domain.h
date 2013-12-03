@@ -72,7 +72,7 @@ enum {
 };
 
 struct fi_av_attr {
-	int			av_mask;
+	int			mask;
 	enum fi_av_type		type;
 	enum fi_addr_format	addr_format;
 	size_t			addrlen;
@@ -158,7 +158,7 @@ enum {
 };
 
 struct fi_ec_attr {
-	int			ec_mask;
+	int			mask;
 	enum fi_ec_domain	domain;
 	enum fi_ec_type		type;
 	enum fi_ec_format	format;
@@ -256,7 +256,7 @@ enum {
 };
 
 struct fi_mr_attr {
-	int			mr_mask;
+	int			mask;
 	uint64_t		access;
 	uint64_t		flags;
 	uint64_t		requested_key;
