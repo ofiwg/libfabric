@@ -195,8 +195,11 @@ int fi_getinfo(char *node, char *service, struct fi_info *hints,
 			continue;
 
 		ret = prov->ops->getinfo(node, service, hints, &cur);
-		if (ret)
-			continue;
+		if (ret) {
+			if (ret == -FI_ENODATA)
+				continue;
+			break;
+		}
 
 		if (!*info)
 			*info = cur;
