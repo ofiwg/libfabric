@@ -1,5 +1,5 @@
 AM_CPPFLAGS = -I$(srcdir)/include -I$(srcdir)/prov/ibverbs/include \
-	-I$(srcdir)/prov/rdmacm/include
+	      -I$(srcdir)/prov/rdmacm/include
 
 lib_LTLIBRARIES = src/libfabric.la
 
@@ -82,9 +82,13 @@ libfabricinclude_HEADERS = $(top_srcdir)/include/rdma/fabric.h \
 			   $(top_srcdir)/include/rdma/fi_tagged.h \
 			   $(top_srcdir)/include/rdma/fi_ucma.h \
 			   $(top_srcdir)/include/rdma/fi_umad.h \
-			   $(top_srcdir)/include/rdma/fi_uverbs.h
+			   $(top_srcdir)/include/rdma/fi_uverbs.h \
+			   $(top_srcdir)/include/rdma/rdma_cma.h \
+			   $(top_srcdir)/include/rdma/rdma_verbs.h \
+			   $(top_srcdir)/include/rdma/rsocket.h
 
-infinibandinclude_HEADERS = $(top_srcdir)/include/infiniband/ib.h
+infinibandinclude_HEADERS = $(top_srcdir)/include/infiniband/ib.h \
+			   $(top_srcdir)/include/infiniband/verbs.h
 
 man_MANS = man/fi_getinfo.3 man/fi_endpoint.3 man/fi_open.3
 
@@ -92,15 +96,9 @@ EXTRA_DIST = include/fi.h libfabric.map libfabric.spec.in $(man_MANS) \
 	prov/ibverbs/include/infiniband/driver.h \
 	prov/ibverbs/include/infiniband/marshall.h \
 	prov/ibverbs/include/infiniband/opcode.h \
-	prov/ibverbs/include/infiniband/sa.h \
-	prov/ibverbs/include/infiniband/sa-kern-abi.h \
-	prov/ibverbs/include/infiniband/verbs.h \
 	prov/ibverbs/src/ibverbs.h \
-	prov/rdmacm/include/rdma/rdma_cma.h \
-	prov/rdmacm/include/rdma/rdma_verbs.h \
 	prov/rdmacm/src/cma.h \
 	prov/rdmacm/src/indexer.h \
-	/prov/rdmacm/include/rdma/rsocket.h \
 	prov/mlx4/src/doorbell.h \
 	prov/mlx4/src/mlx4.h \
 	prov/mlx4/src/mlx4-abi.h \
