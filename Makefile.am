@@ -9,7 +9,7 @@ AM_CFLAGS = -g -Wall -D_GNU_SOURCE
 src_libfabric_la_CFLAGS = $(AM_CFLAGS) -DSYSCONFDIR=\"$(sysconfdir)\" -DRDMADIR=\"@rdmadir@\"
 
 if HAVE_LD_VERSION_SCRIPT
-    libfabric_version_script = -Wl,--version-script=$(srcdir)/src/libfabric.map
+    libfabric_version_script = -Wl,--version-script=$(srcdir)/libfabric.map
 else
     libfabric_version_script =
 endif
@@ -50,7 +50,7 @@ endif
 src_libfabric_la_LDFLAGS = -version-info 1 -export-dynamic \
 			   $(libfabric_version_script)
 
-src_libfabric_la_DEPENDENCIES =  $(srcdir)/src/libfabric.map
+src_libfabric_la_DEPENDENCIES =  $(srcdir)/libfabric.map
 
 bin_PROGRAMS = \
 	examples/fi_provinfo \
@@ -88,7 +88,7 @@ infinibandinclude_HEADERS = $(top_srcdir)/include/infiniband/ib.h
 
 man_MANS = man/fi_getinfo.3 man/fi_endpoint.3 man/fi_open.3
 
-EXTRA_DIST = include/fi.h src/libfabric.map libfabric.spec.in $(man_MANS) \
+EXTRA_DIST = include/fi.h libfabric.map libfabric.spec.in $(man_MANS) \
 	prov/ibverbs/include/infiniband/driver.h \
 	prov/ibverbs/include/infiniband/marshall.h \
 	prov/ibverbs/include/infiniband/opcode.h \
