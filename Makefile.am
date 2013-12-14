@@ -4,7 +4,7 @@ AM_CPPFLAGS = -I$(srcdir)/include -I$(srcdir)/prov/ibverbs/include \
 lib_LTLIBRARIES = src/libfabric.la
 
 ACLOCAL_AMFLAGS = -I config
-AM_CFLAGS = -g -Wall -D_GNU_SOURCE
+AM_CFLAGS = -g -Wall -D_GNU_SOURCE -Wno-deprecated-declarations
 
 src_libfabric_la_CFLAGS = $(AM_CFLAGS) -DSYSCONFDIR=\"$(sysconfdir)\" -DRDMADIR=\"@rdmadir@\"
 

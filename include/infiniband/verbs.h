@@ -384,26 +384,26 @@ enum ibv_rate {
  * converted to 2, since 5 Gbit/sec is 2 * 2.5 Gbit/sec.
  * @rate: rate to convert.
  */
-int ibv_rate_to_mult(enum ibv_rate rate) __attribute__((const));
+int ibv_rate_to_mult(enum ibv_rate rate) __attribute__((const, deprecated));
 
 /**
  * mult_to_ibv_rate - Convert a multiple of 2.5 Gbit/sec to an IB rate enum.
  * @mult: multiple to convert.
  */
-enum ibv_rate mult_to_ibv_rate(int mult) __attribute__((const));
+enum ibv_rate mult_to_ibv_rate(int mult) __attribute__((const, deprecated));
 
 /**
  * ibv_rate_to_mbps - Convert the IB rate enum to Mbit/sec.
  * For example, IBV_RATE_5_GBPS will return the value 5000.
  * @rate: rate to convert.
  */
-int ibv_rate_to_mbps(enum ibv_rate rate) __attribute__((const));
+int ibv_rate_to_mbps(enum ibv_rate rate) __attribute__((const, deprecated));
 
 /**
  * mbps_to_ibv_rate - Convert a Mbit/sec value to an IB rate enum.
  * @mbps: value to convert.
  */
-enum ibv_rate mbps_to_ibv_rate(int mbps) __attribute__((const));
+enum ibv_rate mbps_to_ibv_rate(int mbps) __attribute__((const, deprecated));
 
 struct ibv_ah_attr {
 	struct ibv_global_route	grh;
@@ -747,7 +747,7 @@ struct ibv_context {
  * Return a NULL-terminated array of IB devices.  The array can be
  * released with ibv_free_device_list().
  */
-struct ibv_device **ibv_get_device_list(int *num_devices);
+struct ibv_device **ibv_get_device_list(int *num_devices) __attribute__((deprecated));
 
 /**
  * ibv_free_device_list - Free list from ibv_get_device_list()
@@ -757,27 +757,27 @@ struct ibv_device **ibv_get_device_list(int *num_devices);
  * ibv_open_device() are no longer valid.  Client code must open all
  * devices it intends to use before calling ibv_free_device_list().
  */
-void ibv_free_device_list(struct ibv_device **list);
+void ibv_free_device_list(struct ibv_device **list) __attribute__((deprecated));
 
 /**
  * ibv_get_device_name - Return kernel device name
  */
-const char *ibv_get_device_name(struct ibv_device *device);
+const char *ibv_get_device_name(struct ibv_device *device) __attribute__((deprecated));
 
 /**
  * ibv_get_device_guid - Return device's node GUID
  */
-uint64_t ibv_get_device_guid(struct ibv_device *device);
+uint64_t ibv_get_device_guid(struct ibv_device *device) __attribute__((deprecated));
 
 /**
  * ibv_open_device - Initialize device for use
  */
-struct ibv_context *ibv_open_device(struct ibv_device *device);
+struct ibv_context *ibv_open_device(struct ibv_device *device) __attribute__((deprecated));
 
 /**
  * ibv_close_device - Release device
  */
-int ibv_close_device(struct ibv_context *context);
+int ibv_close_device(struct ibv_context *context) __attribute__((deprecated));
 
 /**
  * ibv_get_async_event - Get next async event
@@ -787,7 +787,7 @@ int ibv_close_device(struct ibv_context *context);
  * be acknowledged with ibv_ack_async_event().
  */
 int ibv_get_async_event(struct ibv_context *context,
-			struct ibv_async_event *event);
+			struct ibv_async_event *event) __attribute__((deprecated));
 
 /**
  * ibv_ack_async_event - Acknowledge an async event
@@ -799,62 +799,63 @@ int ibv_get_async_event(struct ibv_context *context,
  * there should be a one-to-one correspondence between acks and
  * successful gets.
  */
-void ibv_ack_async_event(struct ibv_async_event *event);
+void ibv_ack_async_event(struct ibv_async_event *event) __attribute__((deprecated));
 
 /**
  * ibv_query_device - Get device properties
  */
 int ibv_query_device(struct ibv_context *context,
-		     struct ibv_device_attr *device_attr);
+		     struct ibv_device_attr *device_attr) __attribute__((deprecated));
 
 /**
  * ibv_query_port - Get port properties
  */
 int ibv_query_port(struct ibv_context *context, uint8_t port_num,
-		   struct ibv_port_attr *port_attr);
+		   struct ibv_port_attr *port_attr) __attribute__((deprecated));
 
 /**
  * ibv_query_gid - Get a GID table entry
  */
 int ibv_query_gid(struct ibv_context *context, uint8_t port_num,
-		  int index, union ibv_gid *gid);
+		  int index, union ibv_gid *gid) __attribute__((deprecated));
 
 /**
  * ibv_query_pkey - Get a P_Key table entry
  */
 int ibv_query_pkey(struct ibv_context *context, uint8_t port_num,
-		   int index, uint16_t *pkey);
+		   int index, uint16_t *pkey) __attribute__((deprecated));
 
 /**
  * ibv_alloc_pd - Allocate a protection domain
  */
-struct ibv_pd *ibv_alloc_pd(struct ibv_context *context);
+struct ibv_pd *ibv_alloc_pd(struct ibv_context *context) __attribute__((deprecated));
 
 /**
  * ibv_dealloc_pd - Free a protection domain
  */
-int ibv_dealloc_pd(struct ibv_pd *pd);
+int ibv_dealloc_pd(struct ibv_pd *pd) __attribute__((deprecated));
 
 /**
  * ibv_reg_mr - Register a memory region
  */
 struct ibv_mr *ibv_reg_mr(struct ibv_pd *pd, void *addr,
-			  size_t length, int access);
+			  size_t length, int access) __attribute__((deprecated));
 
 /**
  * ibv_dereg_mr - Deregister a memory region
  */
-int ibv_dereg_mr(struct ibv_mr *mr);
+int ibv_dereg_mr(struct ibv_mr *mr) __attribute__((deprecated));
 
 /**
  * ibv_create_comp_channel - Create a completion event channel
  */
-struct ibv_comp_channel *ibv_create_comp_channel(struct ibv_context *context);
+struct ibv_comp_channel *ibv_create_comp_channel(struct ibv_context *context)
+	__attribute__((deprecated));
 
 /**
  * ibv_destroy_comp_channel - Destroy a completion event channel
  */
-int ibv_destroy_comp_channel(struct ibv_comp_channel *channel);
+int ibv_destroy_comp_channel(struct ibv_comp_channel *channel) __attribute__((deprecated));
 
 /**
  * ibv_create_cq - Create a completion queue
@@ -869,7 +870,7 @@ int ibv_destroy_comp_channel(struct ibv_comp_channel *channel);
 struct ibv_cq *ibv_create_cq(struct ibv_context *context, int cqe,
 			     void *cq_context,
 			     struct ibv_comp_channel *channel,
-			     int comp_vector);
+			     int comp_vector) __attribute__((deprecated));
 
 /**
  * ibv_resize_cq - Modifies the capacity of the CQ.
@@ -878,12 +879,12 @@ struct ibv_cq *ibv_create_cq(struct ibv_context *context, int cqe,
  *
  * Users can examine the cq structure to determine the actual CQ size.
  */
-int ibv_resize_cq(struct ibv_cq *cq, int cqe);
+int ibv_resize_cq(struct ibv_cq *cq, int cqe) __attribute__((deprecated));
 
 /**
  * ibv_destroy_cq - Destroy a completion queue
  */
-int ibv_destroy_cq(struct ibv_cq *cq);
+int ibv_destroy_cq(struct ibv_cq *cq) __attribute__((deprecated));
 
 /**
  * ibv_get_cq_event - Read next CQ event
@@ -895,7 +896,7 @@ int ibv_destroy_cq(struct ibv_cq *cq);
  * eventually be acknowledged with ibv_ack_cq_events().
  */
 int ibv_get_cq_event(struct ibv_comp_channel *channel,
-		     struct ibv_cq **cq, void **cq_context);
+		     struct ibv_cq **cq, void **cq_context) __attribute__((deprecated));
 
 /**
  * ibv_ack_cq_events - Acknowledge CQ completion events
@@ -910,7 +911,7 @@ int ibv_get_cq_event(struct ibv_comp_channel *channel,
  * acknowledge them in a single call to ibv_ack_cq_events() by passing
  * the number of events to ack in @nevents.
  */
-void ibv_ack_cq_events(struct ibv_cq *cq, unsigned int nevents);
+void ibv_ack_cq_events(struct ibv_cq *cq, unsigned int nevents) __attribute__((deprecated));
 
 /**
  * ibv_poll_cq - Poll a CQ for work completions
@@ -956,7 +957,8 @@ static inline int ibv_req_notify_cq(struct ibv_cq *cq, int solicited_only)
  * will always be at least as large as the requested values.
  */
 struct ibv_srq *ibv_create_srq(struct ibv_pd *pd,
-			       struct ibv_srq_init_attr *srq_init_attr);
+			       struct ibv_srq_init_attr *srq_init_attr)
+			       __attribute__((deprecated));
 
 /**
  * ibv_modify_srq - Modifies the attributes for the specified SRQ.
@@ -972,7 +974,7 @@ struct ibv_srq *ibv_create_srq(struct ibv_pd *pd,
  */
 int ibv_modify_srq(struct ibv_srq *srq,
 		   struct ibv_srq_attr *srq_attr,
-		   int srq_attr_mask);
+		   int srq_attr_mask) __attribute__((deprecated));
 
 /**
  * ibv_query_srq - Returns the attribute list and current values for the
@@ -980,13 +982,14 @@ int ibv_modify_srq(struct ibv_srq *srq,
  * @srq: The SRQ to query.
  * @srq_attr: The attributes of the specified SRQ.
  */
-int ibv_query_srq(struct ibv_srq *srq, struct ibv_srq_attr *srq_attr);
+int ibv_query_srq(struct ibv_srq *srq, struct ibv_srq_attr *srq_attr)
+	__attribute__((deprecated));
 
 /**
  * ibv_destroy_srq - Destroys the specified SRQ.
  * @srq: The SRQ to destroy.
  */
-int ibv_destroy_srq(struct ibv_srq *srq);
+int ibv_destroy_srq(struct ibv_srq *srq) __attribute__((deprecated));
 
 /**
  * ibv_post_srq_recv - Posts a list of work requests to the specified SRQ.
@@ -1006,13 +1009,14 @@ static inline int ibv_post_srq_recv(struct ibv_srq *srq,
  * ibv_create_qp - Create a queue pair.
  */
 struct ibv_qp *ibv_create_qp(struct ibv_pd *pd,
-			     struct ibv_qp_init_attr *qp_init_attr);
+			     struct ibv_qp_init_attr *qp_init_attr)
+			     __attribute__((deprecated));
 
 /**
  * ibv_modify_qp - Modify a queue pair.
  */
 int ibv_modify_qp(struct ibv_qp *qp, struct ibv_qp_attr *attr,
-		  int attr_mask);
+		  int attr_mask) __attribute__((deprecated));
 
 /**
  * ibv_query_qp - Returns the attribute list and current values for the
@@ -1027,12 +1031,12 @@ int ibv_modify_qp(struct ibv_qp *qp, struct ibv_qp_attr *attr,
  */
 int ibv_query_qp(struct ibv_qp *qp, struct ibv_qp_attr *attr,
 		 int attr_mask,
-		 struct ibv_qp_init_attr *init_attr);
+		 struct ibv_qp_init_attr *init_attr) __attribute__((deprecated));
 
 /**
  * ibv_destroy_qp - Destroy a queue pair.
  */
-int ibv_destroy_qp(struct ibv_qp *qp);
+int ibv_destroy_qp(struct ibv_qp *qp) __attribute__((deprecated));
 
 /**
  * ibv_post_send - Post a list of work requests to a send queue.
@@ -1058,7 +1062,8 @@ static inline int ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
 /**
  * ibv_create_ah - Create an address handle.
  */
-struct ibv_ah *ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr);
+struct ibv_ah *ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
+	__attribute__((deprecated));
 
 /**
  * ibv_init_ah_from_wc - Initializes address handle attributes from a
@@ -1073,7 +1078,7 @@ struct ibv_ah *ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr);
  */
 int ibv_init_ah_from_wc(struct ibv_context *context, uint8_t port_num,
 			struct ibv_wc *wc, struct ibv_grh *grh,
-			struct ibv_ah_attr *ah_attr);
+			struct ibv_ah_attr *ah_attr) __attribute__((deprecated));
 
 /**
  * ibv_create_ah_from_wc - Creates an address handle associated with the
@@ -1088,12 +1093,13 @@ int ibv_init_ah_from_wc(struct ibv_context *context, uint8_t port_num,
  * in all UD QP post sends.
  */
 struct ibv_ah *ibv_create_ah_from_wc(struct ibv_pd *pd, struct ibv_wc *wc,
-				     struct ibv_grh *grh, uint8_t port_num);
+				     struct ibv_grh *grh, uint8_t port_num)
+				     __attribute__((deprecated));
 
 /**
  * ibv_destroy_ah - Destroy an address handle.
  */
-int ibv_destroy_ah(struct ibv_ah *ah);
+int ibv_destroy_ah(struct ibv_ah *ah) __attribute__((deprecated));
 
 /**
  * ibv_attach_mcast - Attaches the specified QP to a multicast group.
@@ -1106,7 +1112,8 @@ int ibv_destroy_ah(struct ibv_ah *ah);
  * the fabric appropriately.  The port associated with the specified
  * QP must also be a member of the multicast group.
  */
-int ibv_attach_mcast(struct ibv_qp *qp, const union ibv_gid *gid, uint16_t lid);
+int ibv_attach_mcast(struct ibv_qp *qp, const union ibv_gid *gid, uint16_t lid)
+	__attribute__((deprecated));
 
 /**
  * ibv_detach_mcast - Detaches the specified QP from a multicast group.
@@ -1114,7 +1121,8 @@ int ibv_attach_mcast(struct ibv_qp *qp, const union ibv_gid *gid, uint16_t lid);
  * @gid: Multicast group GID.
  * @lid: Multicast group LID in host byte order.
  */
-int ibv_detach_mcast(struct ibv_qp *qp, const union ibv_gid *gid, uint16_t lid);
+int ibv_detach_mcast(struct ibv_qp *qp, const union ibv_gid *gid, uint16_t lid)
+	__attribute__((deprecated));
 
 /**
  * ibv_fork_init - Prepare data structures so that fork() may be used
@@ -1122,22 +1130,22 @@ int ibv_detach_mcast(struct ibv_qp *qp, const union ibv_gid *gid, uint16_t lid);
  * status, then libibverbs data structures are not fork()-safe and the
  * effect of an application calling fork() is undefined.
  */
-int ibv_fork_init(void);
+int ibv_fork_init(void) __attribute__((deprecated));
 
 /**
  * ibv_node_type_str - Return string describing node_type enum value
  */
-const char *ibv_node_type_str(enum ibv_node_type node_type);
+const char *ibv_node_type_str(enum ibv_node_type node_type) __attribute__((deprecated));
 
 /**
  * ibv_port_state_str - Return string describing port_state enum value
  */
-const char *ibv_port_state_str(enum ibv_port_state port_state);
+const char *ibv_port_state_str(enum ibv_port_state port_state) __attribute__((deprecated));
 
 /**
  * ibv_event_type_str - Return string describing event_type enum value
  */
-const char *ibv_event_type_str(enum ibv_event_type event);
+const char *ibv_event_type_str(enum ibv_event_type event) __attribute__((deprecated));
 
 
 #ifdef __cplusplus

@@ -56,9 +56,9 @@ static inline int rdma_seterrno(int ret)
  * Shared receive queues.
  */
 int rdma_create_srq(struct rdma_cm_id *id, struct ibv_pd *pd,
-		    struct ibv_srq_init_attr *attr);
+		    struct ibv_srq_init_attr *attr) __attribute__((deprecated));
 
-void rdma_destroy_srq(struct rdma_cm_id *id);
+void rdma_destroy_srq(struct rdma_cm_id *id) __attribute__((deprecated));
 
 
 /*
