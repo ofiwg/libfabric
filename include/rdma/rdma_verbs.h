@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2011 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2010-2013 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#if !defined(RDMA_VERBS_H)
-#define RDMA_VERBS_H
+#ifndef _RDMA_VERBS_H_
+#define _RDMA_VERBS_H_
 
 #include <assert.h>
 #include <infiniband/verbs.h>
@@ -41,6 +41,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 
 static inline int rdma_seterrno(int ret)
 {
@@ -309,8 +310,9 @@ rdma_get_recv_comp(struct rdma_cm_id *id, struct ibv_wc *wc)
 	return (ret < 0) ? rdma_seterrno(ret) : ret;
 }
 
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* RDMA_CMA_H */
+#endif /* _RDMA_VERBS_H_ */

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2005 Voltaire Inc.  All rights reserved.
- * Copyright (c) 2005-2012 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2005-2013 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,14 +31,13 @@
  * SOFTWARE.
  */
 
-#if !defined(RDMA_CMA_H)
-#define RDMA_CMA_H
+#ifndef _RDMA_CMA_H_
+#define _RDMA_CMA_H_
 
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <infiniband/verbs.h>
 #include <rdma/fi_ucma.h>
-
 
 #ifdef __cplusplus
 extern "C" {
@@ -677,8 +676,9 @@ void rdma_freeaddrinfo(struct rdma_addrinfo *res);
 
 int rdma_addrlen(struct sockaddr *addr);
 
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* RDMA_CMA_H */
+#endif /* _RDMA_CMA_H_ */

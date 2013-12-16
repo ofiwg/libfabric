@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2004, 2005 Topspin Communications.  All rights reserved.
- * Copyright (c) 2004 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2004, 2013 Intel Corporation.  All rights reserved.
  * Copyright (c) 2005, 2006, 2007 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2005 PathScale, Inc.  All rights reserved.
  *
@@ -33,28 +33,17 @@
  * SOFTWARE.
  */
 
-#ifndef INFINIBAND_VERBS_H
-#define INFINIBAND_VERBS_H
+#ifndef _VERBS_H_
+#define _VERBS_H_
 
 #include <stdint.h>
 #include <pthread.h>
 #include <rdma/fabric.h>
 
 #ifdef __cplusplus
-#  define BEGIN_C_DECLS extern "C" {
-#  define END_C_DECLS   }
-#else /* !__cplusplus */
-#  define BEGIN_C_DECLS
-#  define END_C_DECLS
-#endif /* __cplusplus */
-
-#if __GNUC__ >= 3
-#  define __attribute_const __attribute__((const))
-#else
-#  define __attribute_const
+extern "C" {
 #endif
 
-BEGIN_C_DECLS
 
 union ibv_gid {
 	uint8_t			raw[16];
@@ -395,26 +384,26 @@ enum ibv_rate {
  * converted to 2, since 5 Gbit/sec is 2 * 2.5 Gbit/sec.
  * @rate: rate to convert.
  */
-int ibv_rate_to_mult(enum ibv_rate rate) __attribute_const;
+int ibv_rate_to_mult(enum ibv_rate rate) __attribute__((const));
 
 /**
  * mult_to_ibv_rate - Convert a multiple of 2.5 Gbit/sec to an IB rate enum.
  * @mult: multiple to convert.
  */
-enum ibv_rate mult_to_ibv_rate(int mult) __attribute_const;
+enum ibv_rate mult_to_ibv_rate(int mult) __attribute__((const));
 
 /**
  * ibv_rate_to_mbps - Convert the IB rate enum to Mbit/sec.
  * For example, IBV_RATE_5_GBPS will return the value 5000.
  * @rate: rate to convert.
  */
-int ibv_rate_to_mbps(enum ibv_rate rate) __attribute_const;
+int ibv_rate_to_mbps(enum ibv_rate rate) __attribute__((const));
 
 /**
  * mbps_to_ibv_rate - Convert a Mbit/sec value to an IB rate enum.
  * @mbps: value to convert.
  */
-enum ibv_rate mbps_to_ibv_rate(int mbps) __attribute_const;
+enum ibv_rate mbps_to_ibv_rate(int mbps) __attribute__((const));
 
 struct ibv_ah_attr {
 	struct ibv_global_route	grh;
@@ -1150,9 +1139,9 @@ const char *ibv_port_state_str(enum ibv_port_state port_state);
  */
 const char *ibv_event_type_str(enum ibv_event_type event);
 
-END_C_DECLS
 
-#  undef __attribute_const
+#ifdef __cplusplus
+}
+#endif
 
-
-#endif /* INFINIBAND_VERBS_H */
+#endif /* _VERBS_H_ */
