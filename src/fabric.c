@@ -179,7 +179,7 @@ static void __attribute__((destructor)) fi_fini(void)
 	uv_fini();
 }
 
-int fi_getinfo(char *node, char *service, struct fi_info *hints,
+int fi_getinfo(const char *node, const char *service, struct fi_info *hints,
 	       struct fi_info **info)
 {
 	struct fi_prov *prov;

@@ -32,7 +32,7 @@
 
 #include "psmx.h"
 
-void psmx_string_to_uuid(char *s, psm_uuid_t uuid)
+void psmx_string_to_uuid(const char *s, psm_uuid_t uuid)
 {
 	int n;
 
@@ -148,7 +148,7 @@ void *psmx_name_server(void *args)
 	return NULL;
 }
 
-void *psmx_resolve_name(char *servername, psm_uuid_t uuid)
+void *psmx_resolve_name(const char *servername, psm_uuid_t uuid)
 {
 	struct addrinfo hints = {
 		.ai_family   = AF_UNSPEC,

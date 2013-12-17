@@ -181,8 +181,8 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
  	return 0;
  }
 
-static int ibv_getinfo(char *node, char *service, struct fi_info *hints,
-		      struct fi_info **info)
+static int ibv_getinfo(const char *node, const char *service,
+		       struct fi_info *hints, struct fi_info **info)
 {
 	struct rdma_addrinfo rai_hints, *rai;
 	struct fi_info *fi;

@@ -51,8 +51,8 @@ extern "C" {
 
 struct fi_ops_prov {
 	size_t	size;
-	int	(*getinfo)(char *node, char *service, struct fi_info *hints,
-			   struct fi_info **info);
+	int	(*getinfo)(const char *node, const char *service,
+			   struct fi_info *hints, struct fi_info **info);
 	int	(*freeinfo)(struct fi_info *info);
 	int	(*open)(const char *name, uint64_t flags, fid_t *fid, void *context);
 	int	(*domain)(struct fi_info *info, fid_t *fid, void *context);

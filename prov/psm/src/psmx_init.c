@@ -32,8 +32,8 @@
 
 #include "psmx.h"
 
-static int psmx_getinfo(char *node, char *service, struct fi_info *hints,
-			struct fi_info **info)
+static int psmx_getinfo(const char *node, const char *service,
+			struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *psmx_info;
 	uint64_t flags = 0;

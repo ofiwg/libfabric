@@ -83,8 +83,8 @@ int	psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context);
 int	psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context);
 
 void 	*psmx_name_server(void *args);
-void	*psmx_resolve_name(char *servername, psm_uuid_t uuid);
-void	psmx_string_to_uuid(char *s, psm_uuid_t uuid);
+void	*psmx_resolve_name(const char *servername, psm_uuid_t uuid);
+void	psmx_string_to_uuid(const char *s, psm_uuid_t uuid);
 int	psmx_uuid_to_port(psm_uuid_t uuid);
 int	psmx_errno(int err);
 

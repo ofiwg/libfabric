@@ -220,7 +220,7 @@ static int ucma_convert_to_rai(struct rdma_addrinfo *rai,
 	return ret;
 }
 
-static int ucma_getaddrinfo(char *node, char *service,
+static int ucma_getaddrinfo(const char *node, const char *service,
 			    struct rdma_addrinfo *hints,
 			    struct rdma_addrinfo *rai)
 {
@@ -242,7 +242,7 @@ static int ucma_getaddrinfo(char *node, char *service,
 	return ret;
 }
 
-int rdma_getaddrinfo(char *node, char *service,
+int rdma_getaddrinfo(const char *node, const char *service,
 		     struct rdma_addrinfo *hints,
 		     struct rdma_addrinfo **res)
 {

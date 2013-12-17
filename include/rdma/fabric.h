@@ -306,7 +306,7 @@ struct fid {
  */
 #define FI_NUMERICHOST		(1ULL << 1)
 
-int fi_getinfo(char *node, char *service, struct fi_info *hints,
+int fi_getinfo(const char *node, const char *service, struct fi_info *hints,
 	       struct fi_info **info);
 void fi_freeinfo(struct fi_info *info);
 
