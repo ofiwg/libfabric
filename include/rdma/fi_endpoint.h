@@ -70,7 +70,7 @@ enum fi_proto {
 
 /* fi_info protocol capabilities */
 #define FI_PROTO_CAP_MSG	(1ULL << 0)
-#define FI_PROTO_CAP_RDMA	(1ULL << 1)
+#define FI_PROTO_CAP_RMA	(1ULL << 1)
 #define FI_PROTO_CAP_TAGGED	(1ULL << 2)
 #define FI_PROTO_CAP_ATOMICS	(1ULL << 3)
 #define FI_PROTO_CAP_MULTICAST	(1ULL << 4)	/* multicast uses MSG ops */
@@ -127,7 +127,7 @@ struct fi_ops_msg {
 };
 
 struct fi_ops_cm;
-struct fi_ops_rdma;
+struct fi_ops_rma;
 struct fi_ops_tagged;
 /* struct fi_ops_atomic; */
 /* struct fi_ops_collectives; */
@@ -146,7 +146,7 @@ struct fid_ep {
 	struct fi_ops_ep	*ops;
 	struct fi_ops_msg	*msg;
 	struct fi_ops_cm	*cm;
-	struct fi_ops_rdma	*rdma;
+	struct fi_ops_rma	*rma;
 	struct fi_ops_tagged	*tagged;
 	/* struct fi_ops_atomics	*atomic; */
 };

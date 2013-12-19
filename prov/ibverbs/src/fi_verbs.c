@@ -49,7 +49,7 @@
 #include <rdma/fi_domain.h>
 #include <rdma/fi_prov.h>
 #include <rdma/fi_endpoint.h>
-#include <rdma/fi_rdma.h>
+#include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
 
 #include "ibverbs.h"
@@ -123,7 +123,7 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
 //		rai->ai_flags |= RAI_FAMILY;
 
 //	rai->ai_family = fi->sa_family;
-	if (fi->type == FID_MSG || fi->protocol_cap & FI_PROTO_CAP_RDMA ||
+	if (fi->type == FID_MSG || fi->protocol_cap & FI_PROTO_CAP_RMA ||
 	    fi->protocol == FI_PROTO_IB_RC || fi->protocol == FI_PROTO_IWARP) {
 		rai->ai_qp_type = IBV_QPT_RC;
 		rai->ai_port_space = RDMA_PS_TCP;
@@ -156,7 +156,7 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
 
  //	fi->sa_family = rai->ai_family;
 	if (rai->ai_qp_type == IBV_QPT_RC || rai->ai_port_space == RDMA_PS_TCP) {
-		fi->protocol_cap = FI_PROTO_CAP_MSG | FI_PROTO_CAP_RDMA;
+		fi->protocol_cap = FI_PROTO_CAP_MSG | FI_PROTO_CAP_RMA;
 		fi->type = FID_MSG;
 	} else if (rai->ai_qp_type == IBV_QPT_UD ||
 		   rai->ai_port_space == RDMA_PS_UDP) {
@@ -391,7 +391,7 @@ static struct fi_ops_msg ibv_msg_ep_msg_ops = {
 	.sendmem = ibv_msg_ep_sendmem,
 };
 
-static int ibv_msg_ep_rdma_writemem(fid_t fid, const void *buf, size_t len,
+static int ibv_msg_ep_rma_writemem(fid_t fid, const void *buf, size_t len,
 	uint64_t mem_desc, uint64_t addr, uint64_t tag, void *context)
 {
 	struct ibv_msg_ep *ep;
@@ -415,7 +415,7 @@ static int ibv_msg_ep_rdma_writemem(fid_t fid, const void *buf, size_t len,
 	return -ibv_post_send(ep->id->qp, &wr, &bad);
 }
 
-static int ibv_msg_ep_rdma_readmem(fid_t fid, void *buf, size_t len,
+static int ibv_msg_ep_rma_readmem(fid_t fid, void *buf, size_t len,
 	uint64_t mem_desc, uint64_t addr, uint64_t tag, void *context)
 {
 	struct ibv_msg_ep *ep;
@@ -439,10 +439,10 @@ static int ibv_msg_ep_rdma_readmem(fid_t fid, void *buf, size_t len,
 	return -ibv_post_send(ep->id->qp, &wr, &bad);
 }
 
-static struct fi_ops_rdma ibv_msg_ep_rdma_ops = {
-	.size = sizeof(struct fi_ops_rdma),
-	.writemem = ibv_msg_ep_rdma_writemem,
-	.readmem = ibv_msg_ep_rdma_readmem
+static struct fi_ops_rma ibv_msg_ep_rma_ops = {
+	.size = sizeof(struct fi_ops_rma),
+	.writemem = ibv_msg_ep_rma_writemem,
+	.readmem = ibv_msg_ep_rma_readmem
 };
 
 static int ibv_msg_ep_connect(fid_t fid, const void *param, size_t paramlen)
@@ -613,7 +613,7 @@ static int ibv_open_ep(struct fi_info *info, fid_t *fid, void *context)
 	ep->ep_fid.ops = &ibv_msg_ep_base_ops;
 	ep->ep_fid.msg = &ibv_msg_ep_msg_ops;
 	ep->ep_fid.cm = &ibv_msg_ep_cm_ops;
-	ep->ep_fid.rdma = &ibv_msg_ep_rdma_ops;
+	ep->ep_fid.rma = &ibv_msg_ep_rma_ops;
 
 	*fid = &ep->ep_fid.fid;
 	return 0;
@@ -659,10 +659,10 @@ static struct fi_info * ibv_ec_cm_getinfo(struct rdma_cm_event *event)
 	fi->type = FID_MSG;
 	if (event->id->verbs->device->transport_type == IBV_TRANSPORT_IWARP) {
 		fi->protocol = FI_PROTO_IWARP;
-		fi->protocol_cap = FI_PROTO_CAP_RDMA;
+		fi->protocol_cap = FI_PROTO_CAP_RMA;
 	} else {
 		fi->protocol = FI_PROTO_IB_RC;
-		fi->protocol_cap = FI_PROTO_CAP_RDMA;
+		fi->protocol_cap = FI_PROTO_CAP_RMA;
 	}
 //	fi->sa_family = rdma_get_local_addr(event->id)->sa_family;
 

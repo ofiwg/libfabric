@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_RDMA_H_
-#define _FI_RDMA_H_
+#ifndef _FI_RMA_H_
+#define _FI_RMA_H_
 
 #include <rdma/fi_endpoint.h>
 
@@ -41,23 +41,23 @@ extern "C" {
 #endif
 
 
-struct fi_rdma_iov {
+struct fi_rma_iov {
 	uint64_t		addr;
 	size_t			len;
 	uint64_t		key;
 };
 
-struct fi_msg_rdma {
+struct fi_msg_rma {
 	const void		*msg_iov;
 	size_t			iov_count;
 	const void		*addr;
-	const struct fi_rdma_iov *rdma_iov;
-	size_t			rdma_iov_count;
+	const struct fi_rma_iov *rma_iov;
+	size_t			rma_iov_count;
 	void			*context;
 	uint64_t		data;
 };
 
-struct fi_ops_rdma {
+struct fi_ops_rma {
 	size_t	size;
 	int	(*read)(fid_t fid, void *buf, size_t len, uint64_t addr,
 			uint64_t key, void *context);
@@ -70,7 +70,7 @@ struct fi_ops_rdma {
 	int	(*readmemfrom)(fid_t fid, void *buf, size_t len, uint64_t mem_desc,
 			       const void *src_addr, uint64_t addr, uint64_t key,
 			       void *context);
-	int	(*readmsg)(fid_t fid, const struct fi_msg_rdma *msg, uint64_t flags);
+	int	(*readmsg)(fid_t fid, const struct fi_msg_rma *msg, uint64_t flags);
 	int	(*write)(fid_t fid, const void *buf, size_t len, uint64_t addr,
 			  uint64_t key, void *context);
 	int	(*writemem)(fid_t fid, const void *buf, size_t len, uint64_t mem_desc,
@@ -82,7 +82,7 @@ struct fi_ops_rdma {
 			      void *context);
 	int	(*writeto)(fid_t fid, const void *buf, size_t len, const void *dst_addr,
 			   uint64_t addr, uint64_t key, void *context);
-	int	(*writemsg)(fid_t fid, const struct fi_msg_rdma *msg, uint64_t flags);
+	int	(*writemsg)(fid_t fid, const struct fi_msg_rma *msg, uint64_t flags);
 };
 
 
@@ -90,4 +90,4 @@ struct fi_ops_rdma {
 }
 #endif
 
-#endif /* _FI_RDMA_H_ */
+#endif /* _FI_RMA_H_ */

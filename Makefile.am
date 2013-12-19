@@ -75,7 +75,7 @@ libfabricinclude_HEADERS = $(top_srcdir)/include/rdma/fabric.h \
 			   $(top_srcdir)/include/rdma/fi_cm.h \
 			   $(top_srcdir)/include/rdma/fi_domain.h \
 			   $(top_srcdir)/include/rdma/fi_prov.h \
-			   $(top_srcdir)/include/rdma/fi_rdma.h \
+			   $(top_srcdir)/include/rdma/fi_rma.h \
 			   $(top_srcdir)/include/rdma/fi_endpoint.h \
 			   $(top_srcdir)/include/rdma/fi_errno.h \
 			   $(top_srcdir)/include/rdma/fi_tagged.h \
