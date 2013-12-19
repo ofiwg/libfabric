@@ -45,6 +45,7 @@ struct fi_ops_cm {
 	size_t	size;
 	int	(*getname)(fid_t fid, void *addr, size_t *addrlen);
 	int	(*getpeer)(fid_t fid, void *addr, size_t *addrlen);
+		/* TODO: Add addr to connect for connectionless EPs */
 	int	(*connect)(fid_t fid, const void *param, size_t paramlen);
 	int	(*listen)(fid_t fid);
 	int	(*accept)(fid_t fid, const void *param, size_t paramlen);

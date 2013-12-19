@@ -1,0 +1,375 @@
+.TH "FI_EC" 3 "2014-01-08" "libfabric" "Libfabric Programmer's Manual" libfabric
+.SH NAME
+fi_ec \- Event collector operations
+.P
+fi_ec_open / fi_ec_close
+.RS
+Open/close an event collector
+.RE
+.P
+fi_ec_read / fi_ec_readfrom / fi_ec_readerr
+.RS
+Reads an event from an event collector
+.RE
+.P
+fi_ec_write
+.RS
+Writes an event to an event collector
+.RE
+.P
+fi_ec_condread / fi_ec_condreadfrom
+.RS
+Waits until the specified condition has been met before reading an event
+from an event collector.
+.RE
+.P
+fi_ec_strerror
+.RS
+Converts provider specific error information into a printable string
+.RE
+.SH SYNOPSIS
+.B #include <rdma/fi_domain.h>
+.HP
+.BI "int fi_ec_open(fid_t " fid ", struct fi_ec_attr *" attr ", fid_t *" ec ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_ec_close(fid_t " ec ");"
+.HP
+.BI "int fi_ec_control(fid_t " ec ", int " command ", void *" arg ");"
+.HP
+.BI "int fi_ec_read(fid_t " ec ", void *" buf ", size_t " len ");"
+.HP
+.BI "int fi_ec_readfrom(fid_t " ec ", void *" buf ", size_t " len ", "
+.BI "void *" src_addr ", size_t *" addrlen ");"
+.HP
+.BI "int fi_ec_readerr(fid_t " ec ", void *" buf ", size_t " len ", "
+.BI "uint64_t " flags ");"
+.HP
+.BI "int fi_ec_write(fid_t " ec ", const void *" buf ", size_t " len ");"
+.HP
+.BI "int fi_ec_reset(fid_t " ec ", const void *" cond ");"
+.HP
+.BI "int fi_ec_condread(fid_t " ec ", void *" buf ", size_t " len ", "
+.BI "const void *" cond ");"
+.HP
+.BI "int fi_ec_condreadfrom(fid_t " ec ", void *" buf ", size_t " len ","
+.BI "void *" src_addr ", size_t *" addrlen ", const void *" cond ");"
+.HP
+.BI "const char * fi_ec_strerror(fid_t " ec ", int " prov_errno ", "
+.BI "const void *" prov_data ", void *" buf ", size_t" len ");"
+.SH ARGUMENTS
+.IP "fid"
+Event collector 
+.IP "attr"
+Event collector attributes
+.IP "context"
+User specified context associated with the event collector.
+.IP "buf"
+For read calls, the data buffer to write events into.
+.br
+For write calls, an event to insert into the event collector.
+.br
+For fi_ec_strerror, an optional buffer that receives printable error information.
+.IP "len"
+Length of data buffer
+.IP "src_addr"
+Source address of a completed receive operation
+.IP "addrlen"
+Size of source address buffer
+.IP "flags"
+Additional flags to apply to the operation
+.IP "cond"
+Condition that must be met before an event is generated
+.IP "prov_errno"
+Provider specific error value
+.IP "prov_data"
+Provider specific data related to a completion
+.SH "DESCRIPTION"
+.SS "fi_ec_open"
+fi_ec_open allocates a new event collector.  The properties and behavior of
+the event collector are defined by struct fi_ec_attr.
+.P
+.nf
+struct fi_ec_attr {
+	int                  mask;      /* valid attr fields */
+	enum fi_ec_domain    domain;    /* events reported by EC */
+	enum fi_ec_type      type;      /* type of EC */
+	enum fi_ec_format    format;    /* event format */
+	enum fi_ec_wait_obj  wait_obj;  /* requested wait object */
+	enum fi_ec_wait_cond wait_cond; /* wait condition format */
+	size_t               size;      /* # entries for EC */
+	int                  signaling_vector; /* interrupt affinity */
+	uint64_t             flags;     /* operation flags */
+	void                *cond;      /* wait condition */
+};
+.fi
+.IP "mask"
+The mask field is used for forward and backward API compatibility.  It is
+used by the application to indicate which fields in the attribute structure
+have been set.  For this version of the API, mask should be set to
+FI_EC_ATTR_MASK_V1, indicating that all specified fields have been initialized.
+.IP "domain"
+An EC domain indicates the type of events which are to be reported through
+the event collector.  Valid values are:
+.RS
+.IP "FI_EC_DOMAIN_GENERAL"
+The EC is used to report asynchronous events that are unaffliated with an
+endpoint or address vector, such as port state changes, address changes,
+and so forth.
+.IP "FI_EC_DOMAIN_COMP"
+The EC is used to report asynchronous completions of data transfers.
+.IP "FI_EC_DOMAIN_CM"
+The EC will be used to report connection management events.
+.IP "FI_EC_DOMAIN_AV"
+The EC will report asynchronous operations associated with address vectors.
+.RE
+.IP "type"
+Indicates the generic mechanism that the EC will report events.
+.RS
+.IP "FI_EC_QUEUE"
+As events are reported to the EC, they will be placed into a queue.  The user
+will be able to read out queued events.  Event queues are useful for
+applications that require details on a completion or event.
+.IP "FI_EC_COUNTER"
+Counter EC's only maintain a count of the number of events that occur.  Full
+or parital event data is not maintained.  Event counters are useful for
+applications that only need to maintain how many completions or events
+have occurred, rather than details about the event itself.  This can be
+useful for tracking the number of available resources.
+.RE
+.IP "format"
+Event queues allow the application to select the amount of detail that it
+must store and report.  The format attribute allows the application to
+select one of several event formats, indicating the structure of the data
+that the event queue should return when read.  Supported formats and the
+structures that correspond to each are listed below.
+.RS
+.IP "FI_EC_FORMAT_UNSPEC"
+If an unspecified format is requested, then the EC will use the default
+format associated with the EC based on the selected domain and type.
+.IP "FI_EC_FORMAT_CONTEXT"
+Provides only user specified context that was associated with the event.
+.nf
+
+struct fi_ec_entry {
+	void *op_context; /* operation context */
+};
+.fi
+.IP "FI_EC_FORMAT_COMP"
+Provides minimal data for processing completions.
+.nf
+
+struct fi_ec_comp_entry {
+	void    *op_context; /* operation context */
+	uint64_t flags;      /* completion flags */
+	size_t   len;        /* size of received data */
+};
+.fi
+.IP "FI_EC_FORMAT_DATA"
+Provides data associated with a completion.
+.nf
+
+struct fi_ec_data_entry {
+	void    *op_context; /* operation context */
+	void    *buf;        /* receive data buffer */
+	uint64_t flags;      /* completion flags */
+	size_t   len;        /* size of received data */
+	uint64_t data;       /* completion data */
+};
+.fi
+.IP "FI_EC_FORMAT_TAGGED"
+Reports completion data when using fi_tagged operations.
+.nf
+
+struct fi_ec_tagged_entry {
+	void    *op_context; /* operation context */
+	void    *buf;        /* receive data buffer */
+	uint64_t flags;      /* completion flags */
+	size_t   len;        /* size of received data */
+	uint64_t data;       /* completion data */
+	uint64_t tag;        /* received tag */
+	size_t   olen;       /* overflow length */
+};
+.fi
+.IP "FI_EC_FORMAT_ERR"
+Reports information on an operation which completed in error.
+.nf
+
+struct fi_ec_err_entry {
+	void    *fid_context; /* endpoint context */
+	void    *op_context;  /* operation context */
+	uint64_t flags;       /* completion flags */
+	int      err;         /* error code */
+	int      prov_errno;  /* provider error code */
+	uint64_t data;        /* completion data */
+	void    *prov_data;   /* provider error data */
+};
+
+.fi
+The general reason for the error is provided through the err field.  Provider
+specific error information may also be available through the prov_errno
+and prov_data fields.  Users may call fi_ec_strerror to convert provider
+specific error information into a printable string for debugging purposes.
+.IP "FI_EC_FORMAT_CM"
+Provides information on connection management.
+.nf
+
+struct fi_ec_cm_entry {
+	void            *fid_context; /* endpoint context */
+	uint64_t         flags;       /* connection flags */
+	enum fi_cm_event event;       /* CM event */
+	struct fi_info *info;         /* endpoint info */
+	uint8_t         data[0];      /* user data */
+};
+
+.fi
+Available CM events are FI_CONNREQ, FI_CONNECTED, FI_SHUTDOWN.  For
+FI_CONNREQ, the info field will provide additional details on the request.
+Users must call fi_freeinfo on info to release the structure.
+.sp
+If the underlying connection protocol supports exchanging user data as
+part of the connection establish, the data field will contain any
+available user CM data.  ECs that report CM events return a single event
+per read request.
+.P
+If an EC has been configured as a counter, then reading from the EC will
+return a uint64_t that contains the current value of the counter.
+.RE
+.IP "wait_obj"
+EC's may be associated with a specific wait object.  Wait objects allow
+applications to block until the wait object is signaled, indicating that
+an event is available to be read.  Users may use fi_control to retrieve
+the underlying wait object associated with an EC, in order to use it in
+other system calls.  The following values may be used to specify the type
+of wait object associated with an EC: FI_EC_WAIT_NONE and FI_EC_WAIT_FD.
+.IP "wait_cond"
+By default, when an event is inserted into an EC, the corresponding wait
+object, if any, is signaled.  Users may specify a condition that must
+first be met before the wait is satisfied.  This field indicates how the
+provider should interpret the cond field, which describes the condition
+needed to signal the wait object.
+.sp
+If wait_cond is set to FI_EC_COND_NONE, then no additional conditions
+are applied to the signaling of the EC wait object.  If wait_cond is
+set to FI_EC_COND_THRESHOLD, then the cond field is interpreted as a size_t
+threshold value.  The threshold indicates the number of entries that must
+be added to an EC before the wait object is signaled.
+.sp
+This field is ignored if wait_obj is set to FI_EC_WAIT_NONE.
+.IP "size"
+Specifies the size of an event queue.
+.IP "signaling_vector"
+Indicates which processor core interrupts associated with the EC should
+target.
+.IP "flags"
+Flags that set the default operation of the EC.
+.RS
+.IP "FI_AUTO_RESET"
+Automatically resets the EC to signal the wait object after the EC has
+been read.  Once an EC has been signaled, it does not reset until all
+queued events have been read.  Once reset, the EC will trigger the wait
+object when a new entry is added, unless the EC has been configured with
+a wait condition.  In the latter case, the EC will be reset to signal
+again once the condition has been satisfied.
+.IP "FI_ERRINLINE"
+Indicates that all events, including operations which completed in error,
+should be reported to the user through the fi_ec_read, fi_ec_readfrom,
+fi_ec_condread, and fi_ec_condreadfrom calls.
+.sp
+If an EC is of type counter and has been set with FI_ERRINLINE, then
+reading the EC will result in the EC returning two counters.  The first
+represents the number of successful completions associated with the EC
+that has occurred.  The second indicates the number of completions that
+have completed in error.
+.RE
+.IP "cond"
+Points to a dataype or structure describing a wait condition that must be
+satisfied before the EC wait object is signaled.  The format of the data
+referenced by the cond field is determined by the value set by the wait_cond
+field.
+.SS "fi_ec_close"
+The fi_ec_close call releases all resources associated with an event
+collector.  The EC must not be bound to any other resources prior to
+being closed.  Any events which remain on the EC when it is closed are
+lost.
+.SS "fi_ec_control"
+The fi_ec_control call is used to access provider or implementation specific
+details of the event collector.  Access to the EC should be serialized
+across all calls when fi_ec_control is invoked, as it may redirect the
+implementation of EC operations.  The following control commands are usable
+with an EC.
+.IP "FI_GETOPSFLAG (uint64_t *)"
+Returns the current default operational flags associated with the EC.
+.IP "FI_SETOPSFLAG (uint64_t *)"
+Modifies the current default operational flags associated with the EC.
+Operational flags affected by fi_ec_control are: FI_AUTO_RESET and
+FI_ERRINLINE.
+.IP "FI_GETECWAIT (void **)"
+This command allows the user to retrieve the low-level wait object
+associated with the EC.  The format of the wait-object is specified during
+EC creation, through the EC attributes.  The fi_ec_control arg parameter
+should be an address where a pointer to the returned wait object
+will be written.
+.SS "fi_ec_read"
+The fi_ec_read, fi_ec_readfrom, fi_ec_condread, fi_ec_condreadfrom reads
+event data from the EC.  The format of the event data is based on the user
+specified options when the EC was opened.  Multiple events may be retrieved
+from an EC in a single call, provided that sufficient buffer space was
+provided.  The number of bytes successfully read from the EC is returned
+by the read call.
+.P
+The readfrom calls allow the EC to return source address information to
+the user for any received data.  The format and size of the source address
+is a property of the associated resource domain.  See the addr_format
+field of struct fi_into when calling fi_domain.  Note that returning source
+address information may require that the provider perform address
+translation and/or lookup in order to provide the requested data, which
+may adversely affect performance.
+.P
+The condread calls allow the user to specify and change the wait condition
+of an EC.  Otherwise, they behave similar to the read / readfrom calls.
+.P
+Reading non-error events from an EC will block if the EC has been configured
+with a wait object, and the wait object has been reset to the non-signaled
+state.
+.P
+ECs are optimized to report operations which have completed successfully.
+Unless an EC has been configured with FI_ERRINLINE, when an operation
+that completes with an unexpected error is inserted
+into an EC, it is placed into a temporary error queue.  Attempting to read
+from an EC while an item is in the error queue results in an FI_EAVAIL
+failure.  The error completion may be read using fi_ec_readerr.
+.P
+If an EC has not been configured with FI_AUTORESET, once the wait object
+of an EC has been signaled, it will not be signaled again until the EC
+has been rearmed.  The fi_ec_reset call is used to manually rearm the EC
+to signal its wait object when its wait condition has been met.
+.SH "RETURN VALUES"
+fi_ec_open / fi_ec_reset
+.RS
+Returns 0 on success.  On error, a negative value corresponding to
+fabric errno is returned.
+.RE
+.P
+fi_ec_read / fi_ec_readfrom / fi_ec_readerr
+.br
+fi_ec_condread / fi_ec_condreadfrom
+.br
+fi_ec_write
+.RS
+On success, returns the number of bytes read from or written to the event
+collector.  On error, a negative value corresponding to fabric errno
+is returned.
+.RE
+.P
+fi_ec_strerror
+.RS
+Returns a character string interpretation of the provider specific error
+returned with a completion.
+.RE
+.PP
+Fabric errno values are defined in
+.IR "rdma/fi_errno.h".
+.SH "NOTES"
+.SH "SEE ALSO"
+fi_getinfo(3), fi_endpoint(3), fi_domain(3)

@@ -1,30 +1,37 @@
-.TH "FI_ENDPOINT" 3 "2013-11-27" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ENDPOINT" 3 "2013-01-20" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
-fi_endpoint / fi_close \- Allocate/close a fabric interface communication endpoint
+fi_endpoint \- Allocate a fabric interface communication endpoint
 .SH SYNOPSIS
 .B "#include <rdma/fabric.h>"
-.P
-.B "int" fi_endpoint
-.BI "(struct fi_info *" info ","
-.BI "fid_t *" fid ","
+.B "#include <rdma/fi_endpoint.h>"
+.HP
+.B "int fi_endpoint(struct fi_info *" info ", fid_t **" fid ","
 .BI "void *" context ");"
-.P
-.B "int" fi_close
-.BI "(fid_t " fid ");"
 .SH ARGUMENTS
 .IP "info" 12
-Details about the fabric interface endpoint to be opened. 
+Details about the fabric interface endpoint to be opened, obtained from fi_getinfo.
 .IP "fid" 12
 On success, points to the opened fabric endpoint.
 .IP "context" 12
-User specified context associated with the endpoint.
+User specified context associated with the endpoint.  This context is returned as
+part of any asynchronous event associated with the endpoint.
 .SH "DESCRIPTION"
-Opens a fabric interface endpoint.
+Creates an unbound fabric interface endpoint.  A fabric endpoint typically
+refers to a transport level communication portal.  The returned endpoint must
+be bound to a fabric domain using fi_bind before being used in data transfer
+operations.
+.P
+The allocated endpoint is configured based on input values specified through
+the info parameter, as indicated below.  Note that the initial settings may
+also be modified through the endpoint's control interface fi_control,
+including specifying more refined values than are possible during creation.
+For full details on struct fi_info fields and values, see fi_getinfo.
 .SH "RETURN VALUE"
-Returns 0 on success, or errno on error.
+Returns 0 on success. On error, a negative value corresponding to fabric
+errno is returned. Fabric errno values are defined in 
+.IR "rdma/fi_errno.h".
 .SH "NOTES"
-Opens a fabric endpoint corresponding to the requested fabric interface
-information.  Users should call fi_close to release all resources allocated
-fo the fabric endpoint.
+Users should call fi_close to release all resources allocated fo the fabric
+endpoint.
 .SH "SEE ALSO"
-fi_getinfo(3), fi_open(3)
+fi_getinfo(3), fi_open(3), fi_domain(3), fi_msg(3), fi_tagged(3), fi_rma(3)

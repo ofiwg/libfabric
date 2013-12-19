@@ -74,8 +74,8 @@ enum {
 struct fi_av_attr {
 	int			mask;
 	enum fi_av_type		type;
-	enum fi_addr_format	addr_format;
-	size_t			addrlen;
+	enum fi_addr_format	addr_format; /* TODO: remove */
+	size_t			addrlen;     /* TODO: remove */
 	size_t			count;
 	uint64_t		flags;
 };
@@ -233,12 +233,12 @@ struct fi_ops_ec {
 	ssize_t	(*readfrom)(fid_t fid, void *buf, size_t len,
 			    void *src_addr, size_t *addrlen);
 	ssize_t	(*readerr)(fid_t fid, void *buf, size_t len, uint64_t flags);
-	ssize_t	(*write)(fid_t fid, void *buf, size_t len);
-	int	(*reset)(fid_t fid, void *cond);
-	ssize_t	(*condread)(fid_t fid, void *buf, size_t len, void *cond);
+	ssize_t	(*write)(fid_t fid, const void *buf, size_t len);
+	int	(*reset)(fid_t fid, const void *cond);
+	ssize_t	(*condread)(fid_t fid, void *buf, size_t len, const void *cond);
 	ssize_t	(*condreadfrom)(fid_t fid, void *buf, size_t len,
-				void *src_addr, size_t *addrlen, void *cond);
-	const char * (*strerror)(fid_t fid, int prov_errno, void *prov_data,
+				void *src_addr, size_t *addrlen, const void *cond);
+	const char * (*strerror)(fid_t fid, int prov_errno, const void *prov_data,
 			    void *buf, size_t len);
 };
 

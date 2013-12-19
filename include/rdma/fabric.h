@@ -145,22 +145,12 @@ enum {
 
 #define FI_DONTWAIT		FI_NONBLOCK
 #define FI_PEEK			(1ULL << 25)
-/* ERRQUEUE - A read operation should retrieve any queued error data.
- * In the case of a failure, a read operation may return an error code,
- * indicating that an operation has failed and extended error data is
- * available.  Queued error data must be read before additional
- * completions may be read.
- *
- * Added eq.readerr call, which should eliminate the need for this.
- */
-#define FI_ERRQUEUE		(1ULL << 26)
 /* TRUNC - Signals that received data has been truncated.
  */
 #define FI_TRUNC		(1ULL << 27)
 /* CTRUNC - Indicates that control data was truncated.  Use case?
  */
 #define FI_CTRUNC		(1ULL << 28)
-#define FI_ATRUNC		(1ULL << 29)
 /* IMM - Indicates that immediate data is available.  IMM data is
  * communicated to a receiver through completion data, rather than
  * appearing in targeted receive buffers.

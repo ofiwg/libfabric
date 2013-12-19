@@ -1,0 +1,221 @@
+.TH "FI_RMA" 3 "2014-01-07" "libfabric" "Libfabric Programmer's Manual" libfabric
+.SH NAME
+fi_rma - Remote memory access operations
+.P
+fi_read / fi_readmem / fi_readv
+.br
+fi_readfrom / fi_readmemfrom / fi_readmsg
+.RS
+Initiates a read from remote memory
+.RE
+.P
+fi_write / fi_writemem / fi_writev
+.br
+fi_writeto / fi_writememto / fi_writemsg
+.RS
+Initiate a write to remote memory
+.RE
+.SH SYNOPSIS
+.B #include <rdma/fi_endpoint.h>
+.HP
+.BI "int fi_read(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
+.HP
+.BI "int fi_readmem(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "uint64_t " mem_desc ", uint64_t " addr ", uint64_t " key ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_readv(fid_t " fid ", const void * " iov ", size_t " count ","
+.BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
+.HP
+.BI "int fi_readfrom(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "const void *" src_addr ", uint64_t " addr ", uint64_t " key ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_readmemfrom(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "uint64_t " mem_desc ", const void *" src_addr ","
+.BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
+.HP
+.BI "int fi_readmsg(fid_t " fid ", const struct fi_msg_rma * " msg ", uint64_t " flags ");"
+.HP
+.BI "int fi_write(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
+.HP
+.BI "int fi_writemem(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "uint64_t " mem_desc ", uint64_t " addr ", uint64_t " key ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_writev(fid_t " fid ", const void * " iov ", size_t " count ","
+.BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
+.HP
+.BI "int fi_writeto(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "const void *" dst_addr ", uint64_t " addr ", uint64_t " key ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_writememto(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "uint64_t " mem_desc ", const void *" dst_addr ","
+.BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
+.HP
+.BI "int fi_writemsg(fid_t " fid ", const struct fi_msg_rma * " msg ", uint64_t " flags ");"
+.SH ARGUMENTS
+.IP "fid"
+Fabric endpoint on which to initiate read or write operation. 
+.IP "buf"
+Local data buffer to read into (read target) or write from (write source)
+.IP "len"
+Length of data to read or write
+.IP "iov"
+Vectored data buffer.
+.IP "count"
+Count of vectored data entries.
+.IP "addr"
+Address of remote memory to access.
+.IP "key"
+Protection key associated with the remote memory.
+.IP "mem_desc"
+Memory descriptor associated with the local data buffer
+.IP "dst_addr"
+Destination address for connectionless write transfers
+.IP "src_addr"
+Source address to read from for connectionless transfers
+.IP "msg"
+Message descriptor for read and write operations.
+.IP "flags"
+Additional flags to apply for the read or write operation.
+.IP "context"
+User specified pointer to associate with the operation.
+.SH "DESCRIPTION"
+RMA (remote memory access) operations are used to transfer data directly
+between a local data buffer and a remote data buffer.  RMA transfers occur
+on a byte level granularity, and no message boundaries are maintained.
+.P
+The write functions -- fi_write, fi_writemem, fi_writev, fi_writeto,
+fi_writememto, fi_writemsg -- are used to transmit data into a remote
+memory buffer.  The main difference between write functions
+are the number and type of parameters that they accept as input.  Otherwise,
+they perform the same general function.
+.P
+The call fi_write transfers the data contained in the user-specified data
+buffer to a remote memory region.  The local endpoint must be connected to
+a remote endpoint or destination before fi_write is called.  Unless the
+endpoint has been configured differently, the data buffer passed into
+fi_write must not be touched by the application
+until the fi_write call completes asynchronously.
+.P
+The difference between fi_writemem and fi_write is that the data buffer
+passed into fi_writemem must be registered with the resource domain associated
+with the endpoint.  See fi_domain and fi_mr_reg for additional details on
+registering data buffers.
+.P
+The fi_writev call adds support for a scatter-gather list to fi_write and/or
+fi_writemem.  The fi_writev transfers the set of data buffers referenced by
+the iov parameter to the remote memory region.  The format of
+iov parameter is specified by the user when the endpoint is created.  See
+fi_getinfo for more details on iov formats.
+.P
+The fi_writeto and fi_writememto functions are equivalent to fi_write and
+fi_writemem, respectively, for unconnected endpoints.
+.P
+The fi_writemsg call supports data transfers over both connected and unconnected
+endpoints, with the ability to control the write operation per call through the
+use of flags.  The fi_writemsg function takes a struct fi_msg_rma as input.
+.P
+.nf
+struct fi_msg_rma {
+	const void *msg_iov;   /* local scatter-gather array */
+	size_t      iov_count; /* # elements in msg_iov */
+	const void *addr;      /* optional address */
+	const struct fi_rma_iov rma_iov; /* remote SGL */
+	size_t      rma_iov_count;       /* # elements in rma_iov */
+	void       *context;   /* user-defined context */
+	uint64_t    data;      /* optional immediate data */
+	int         priority;  /* message priority */
+};
+.fi
+.P
+The read functions -- fi_read, fi_readmem, fi_readv, fi_readfrom,
+fi_readmemfrom, fi_readmsg -- are used to transfer data from a remote
+memory region into local data buffer(s).  Similar to the write operations,
+read operations operate asynchronously.  Users should not touch the posted
+data buffer(s) until the read operation has completed.
+.P
+The fi_read call requests that the remote endpoint transfer data from the
+remote memory region into the local data buffer.  The local endpoint must
+be connected to a remote endpoint or destination before fi_read is called.
+.P
+The fi_readmem is similar to fi_read, but requires that the local buffer be
+registered with the resource domain associated with the endpoint.  The fi_readv
+allows the user to post a scatter-gather list of buffers to receive the
+remotely read data.
+.P
+The fi_readfrom and fi_readmemfrom calls are equivalent to fi_read and
+fi_readfrom, respectively, for unconnected endpoints.
+.P
+The fi_readmsg call supports data transfers over both connected and unconnected
+endpoints, with the ability to control the read operation per call through the
+use of flags.  The fi_readmsg function takes a struct fi_msg_rma as input.
+.P
+Completed RMA operations are reported to the user through one or more event
+collectors associated with the endpoint.  Users provide context which are
+associated with each operation, and is returned to the user
+as part of the event completion.  See fi_ec for completion event details.
+.P
+By default, the remote endpoint does not generate an event or notify the
+user when a memory region has been accessed by an RMA read or write operation.
+However, immediate data may be associated with an RMA write operation.
+RMA writes with immediate data will generate a completion entry at the
+remote endpoint, so that the immediate data may be delivered.
+.SH "FLAGS"
+The fi_readmsg and fi_writemsg calls allow the user to specify flags
+which can change the default data transfer operation.
+Flags specified with fi_readmsg / fi_writemsg override most flags
+previously configured with the endpoint, except where noted (see fi_control).
+The following list of flags are usable with fi_readmsg and/or fi_writemsg.
+.IP "FI_CANCEL"
+Indicates that the user wants the ability to cancel the operation if it does
+not complete first.  When set, the user must pass in struct fi_context as their
+per operation context (see discussion below).
+.IP "FI_IMM"
+Applies to fi_writemsg.  Indicates that immediate data is available and should
+be sent as part of the request.
+.IP "FI_NOCOMP"
+Indicates that no completion should be generated for the specified operation.
+When set the user must determine when a request has completed indirectly,
+usually based on the completion of a subsequent operation.  Use of this
+flag may improve performance by allowing the provider to avoid writing
+a completion entry.
+.IP "FI_MORE"
+Indicates that the user has additional requests that will immediately be
+posted after the current call returns.  Use of this flag may improve
+performance by enabling the provider to optimize its access to the fabric
+hardware.
+.IP "FI_SIGNAL"
+Indicates that a completion event should be generated for the given operation.
+.IP "FI_BUFFERED_SEND"
+Applies to fi_writemsg.  Indicates that the outbound data buffer should be
+returned to user immediately after the write call returns, even if the operation
+is handled asynchronously.  This may require that the underlying provider
+implementation copy the data into a local buffer and transfer out of that
+buffer.
+.IP "FI_ACK"
+Applies to fi_writemsg.  Indicates that a completion should not be generated
+until the operation has been explicitly acknowledged by the remote side.
+.SH "FI_CONTEXT"
+If an RMA operation has been called has the flag FI_CANCEL set,
+then the user context parameter is interpreted as struct fi_context.
+For performance reasons, this structure must be allocated by the user,
+but may be used by the fabric provider to track the operation.  Typically,
+users embed struct fi_context within their own context structure.
+The struct fi_context must remain valid until the corresponding operation
+completes or is successfully canceled.  Users should not update or interpret
+the fields in this structure.  The structure is specified in rdma/fabric.h.
+.SH "RETURN VALUE"
+Returns 0 on success. On error, a negative value corresponding to fabric
+errno is returned. Fabric errno values are defined in 
+.IR "rdma/fi_errno.h".
+.SH "ERRORS"
+.IP "Enter FI_ERRNO values here"
+write me
+.SH "NOTES"
+.SH "SEE ALSO"
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_ec(3)

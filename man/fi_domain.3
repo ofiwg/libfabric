@@ -1,27 +1,38 @@
-.TH "FI_DOMAIN" 3 "2013-11-27" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_DOMAIN" 3 "2013-01-20" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
-fi_domain / fi_close \- Open/close a fabric interface
+fi_domain \- Open a fabric resource domain
 .SH SYNOPSIS
 .B "#include <rdma/fabric.h>"
-.P
-.B "int" fi_domain
-.BI "(char *" name ","
-.BI WRITE ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-.BI "fid_t *" fid ");"
-.P
-.B "int" fi_close
-.BI "(fid_t " fid ");"
+.B "#include <rdma/fi_domain.h>"
+.HP
+.B "int fi_domain(struct fi_info *" info ", fid_t **" fid ","
+.BI "void *" context ");"
 .SH ARGUMENTS
-.IP "name" 12
-The name of the interface to open.
+.IP "info" 12
+Details about the fabric resource domain to be openeds, obtained from fi_getinfo.
 .IP "fid" 12
-On success, points to the opened interface.
+On success, points to the opened fabric domain.
+.IP "context" 12
+User specified context associated with the domain.  This context is returned as
+part of any asynchronous event associated with the domain.
 .SH "DESCRIPTION"
-Opens a fabric interface.
+Opens a fabric resource domain.  A fabric domain typically refers to a
+single NIC, HCA, or hardware port; however, a domain may span across
+multiple hardware components for fail-over or data striping purposes.
+A domain defines the boundary for associating different resources
+together.  Fabric resources belonging to the same domain may share
+resources.
+.P
+Fabric domains are identified by name.  Domain names are character strings.
+By convention, domain names appear similar to path names.  This helps to
+identify the specific software and hardware provider associated with a
+domain.
 .SH "RETURN VALUE"
-Returns 0 on success, or errno on error.
+Returns 0 on success. On error, a negative value corresponding to fabric
+errno is returned. Fabric errno values are defined in 
+.IR "rdma/fi_errno.h".
 .SH "NOTES"
-Opens a fabric interface.  Users should call fi_close to release
-the interface.
+Users should call fi_close to release all resources allocated fo the fabric
+domain.
 .SH "SEE ALSO"
-fi_getinfo(3)
+fi_getinfo(3), fi_open(3), fi_endpoint(3)

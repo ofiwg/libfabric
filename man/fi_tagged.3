@@ -1,0 +1,281 @@
+.TH "FI_TAGGED" 3 "2014-01-10" "libfabric" "Libfabric Programmer's Manual" libfabric
+.SH NAME
+fi_tagged \- Tagged data transfer operations
+.P
+fi_trecv / fi_recvv / fi_trecvfrom / fi_recvmsg
+.RS
+Post a buffer to receive an incoming message
+.RE
+.P
+fi_tsend / fi_tsendv / fi_tsendto / fi_tsendmsg
+.RS
+Initiate an operation to send a message
+.RE
+.P
+fi_tsearch
+.RS
+Initiate a search operation for a buffered receive matching a given tag
+.RE
+.SH SYNOPSIS
+.B "#include <rdma/fi_tagged.h>"
+.HP
+.BI "int fi_trecv(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "uint64_t " tag ", uint64_t " ignore ", void * " context ");"
+.HP
+.BI "int fi_trecvmem(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "uint64_t " tag ", uint64_t " ignore ", uint64_t " mem_desc ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_trecvv(fid_t " fid ", const void * " iov ", size_t " count ","
+.BI "uint64_t " tag ", uint4_t " ignore ", void * " context ");"
+.HP
+.BI "int fi_trecvfrom(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "const void * " src_addr ", uint64_t " tag ", uint64_t " ignore ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_trecvmemfrom(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "const void * " src_addr ", uint64_t " tag ", uint64_t " ignore ","
+.BI "uint64_t " mem_desc ", void * " context ");"
+.HP
+.BI "int fi_trecvmsg(fid_t " fid ", const struct fi_msg_tagged * " msg ","
+.BI "uint64_t " flags ");"
+.HP
+.BI "int fi_tsend(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "uint64_t " tag ", void * " context ");"
+.HP
+.BI "int fi_tsendmem(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "uint64_t " tag ", uint64_t " mem_desc ", void * " context ");"
+.HP
+.BI "int fi_tsendv(fid_t " fid ", const void * " iov ", size_t " count ","
+.BI "uint64_t " tag ", void * " context ");"
+.HP
+.BI "int fi_tsendto(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "const void * " dest_addr ", uint64_t " tag ", void * " context ");"
+.HP
+.BI "int fi_tsendmemto(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "const void * " dest_addr ", uint64_t " tag ", uint64_t "mem_desc ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_tsendmsg(fid_t " fid ", const struct fi_msg_tagged * " msg ","
+.BI "uint64_t " flags ");"
+.HP
+.BI "int fi_tsearch(fid_t " fid ", uint64_t *" tag ", uint64_t " ignore ","
+.BI "uint64_t " flags ", void * " src_addr ", size_t * " src_addrlen ","
+.BI "size_t * " len ", void * " context ");"
+.SH ARGUMENTS
+.IP "fid"
+Fabric endpoint on which to initiate tagged communication operation. 
+.IP "buf"
+Data buffer to send or receive.
+.IP "len"
+Length of data buffer to send or receive.
+.IP "iov"
+Vectored data buffer.
+.IP "count"
+Count of vectored data entries.
+.IP "tag"
+Tag associated with the message.
+.IP "ignore"
+Mask of bits to ignore applied to the tag for receive operations.
+.IP "mem_desc"
+Memory descriptor associated with the data buffer
+.IP "dest_addr"
+Destination address for connectionless transfers
+.IP "src_addr"
+Source address to receive from for connectionless transfers
+.IP "msg"
+Message descriptor for send and receive operations.
+.IP "flags"
+Additional flags to apply for the send or receive operation.
+.IP "context"
+User specified pointer to associate with the operation.
+.SH "DESCRIPTION"
+Tagged messages are data transfers which carry a key or tag with
+the message buffer.  The tag is used at the receiving endpoint to
+match the incoming message with a corresponding receive buffer.
+Message tags match when the receive buffer tag is the same as
+the send buffer tag with the ignored bits masked out.  This
+can be stated as:
+.P
+send_tag & ~ignore == recv_tag & ~ignore
+.P
+In general, message tags are checked against receive buffers in the order
+in which messages have been posted to the endpoint.  See the ordering
+discussion below for more details.
+.P
+The send functions -- fi_tsend, fi_tsendmem, fi_tsendv, fi_tsendto,
+fi_tsendmemto, fi_tsendmsg -- are used to transmit a tagged message
+from one endpoint to another endpoint.  The main difference between
+send functions are the number and type of parameters that they accept as input.
+Otherwise, they perform the same general function.
+.P
+The call fi_tsend transfers the data contained in the user-specified data
+buffer to a remote endpoint, with message boundaries being maintained.
+The local endpoint must be connected to a remote endpoint or destination
+before fi_tsend is called.  Unless the endpoint has been configured differently,
+the data buffer passed into fi_tsend must not be touched by the application
+until the fi_tsend call completes asynchronously.
+.P
+The difference between fi_tsendmem and fi_tsend is that the data buffer
+passed into fi_tsendmem must be registered with the resource domain associated
+with the endpoint.  See fi_domain and fi_mr_reg for additional details on
+registering data buffers.
+.P
+The fi_tsendv call adds support for a scatter-gather list to fi_tsend and/or
+fi_tsendmem.  The fi_sendv transfers the set of data buffers referenced by
+the iov parameter to a remote endpoint as a single message.  The format of
+iov parameter is specified by the user when the endpoint is created.  See
+fi_getinfo for more details on iov formats.
+.P
+The fi_tsendto and fi_tsendmemto functions are equivalent to fi_tsend and
+fi_tsendmem, respectively, for unconnected endpoints.
+.P
+The fi_tsendmsg call supports data transfers over both connected and unconnected
+endpoints, with the ability to control the send operation per call through the
+use of flags.  The fi_tsendmsg function takes a struct fi_msg_tagged as input.
+.P
+.nf
+struct fi_msg_tagged {
+	const void *msg_iov;   /* scatter-gather array */
+	size_t      iov_count; /* # elements in msg_iov */
+	const void *addr;      /* optional address */
+	uint64_t    tag;       /* tag associated with message */
+	uint64_t    ignore;    /* mask applied to tag for receives */
+	void       *context;   /* user-defined context */
+	uint64_t    data;      /* optional immediate data */
+	int         priority;  /* message priority */
+};
+.fi
+.P
+The receive functions -- fi_trecv, fi_trecvmem, fi_trecvv, fi_trecvfrom,
+fi_trecvmemfrom, fi_recvmsg -- post a data buffer to an endoint to receive
+inbound tagged messages.  Similar to the send operations, receive operations
+operate asynchronously.  Users should not touch the posted data buffer(s)
+until the receive operation has completed.  Posted receive buffers are
+matched with inbound send messages based on the tags associated with the
+send and receive buffers.
+.P
+The fi_trecv call posts a data buffer to the receive queue of the corresponding
+endpoint.  Posted receives are matched with inbound sends in the order in which
+they were posted.  Message boundaries are maintained.  The order
+in which the receives comlete is dependent on the endpoint type and protocol.
+.P
+The fi_trecvmem is similar to fi_trecv, but requires that the posted buffer be
+registered with the resource domain associated with the endpoint.  The fi_trecvv
+allows the user to post a scatter-gather list of buffers to receive a single
+inbound receive.  That is, the list of buffers match with one remote send.
+.P
+The fi_trecvfrom and fi_trecvmemfrom calls are equivalent to fi_trecv and
+fi_trecvfrom for unconnected endpoints.  These calls are used to indicate
+that a buffer should be posted to receive incoming data from a specific
+remote endpoint.
+.P
+The fi_trecvmsg call supports posting buffers over both connected and unconnected
+endpoints, with the ability to control the receive operation per call through the
+use of flags.  The fi_trecvmsg function takes a struct fi_msg_tagged as input.
+.P
+Completed message operations are reported to the user through one or more event
+collectors associated with the endpoint.  Users provide context which are
+associated with each operation, and is returned to the user
+as part of the event completion.  See fi_ec for completion event details.
+.SH "FLAGS"
+The fi_trecvmsg and fi_tsendmsg calls allow the user to specify flags
+which can change the default message handling of the endpoint.
+Flags specified with fi_trecvmsg / fi_tsendmsg override most flags
+previously configured with the endpoint, except where noted (see fi_control).
+The following list of flags are usable with fi_trecvmsg and/or fi_tsendmsg.
+.IP "FI_CANCEL"
+Indicates that the user wants the ability to cancel the operation if it does
+not complete first.  When set, the user must pass in struct fi_context as their
+per operation context (see discussion below).
+.IP "FI_IMM"
+Applies to fi_tsendmsg.  Indicates that immediate data is available and should
+be sent as part of the request.
+.IP "FI_NOCOMP"
+Indicates that no completion should be generated for the specified operation.
+When set the user must determine when a request has completed indirectly,
+usually based on the completion of a subsequent operation.  Use of this
+flag may improve performance by allowing the provider to avoid writing
+a completion entry.
+.IP "FI_MORE"
+Indicates that the user has additional requests that will immediately be
+posted after the current call returns.  Use of this flag may improve
+performance by enabling the provider to optimize its access to the fabric
+hardware.
+.IP "FI_SIGNAL"
+Indicates that a completion event should be generated for the given operation.
+.IP "FI_BUFFERED_SEND"
+Applies to fi_tsendmsg.  Indicates that the outbound data buffer should be
+returned to user immediately after the send call returns, even if the operation
+is handled asynchronously.  This may require that the underlying provider
+implementation copy the data into a local buffer and transfer out of that
+buffer.
+.IP "FI_ACK"
+Applies to fi_tsendmsg.  Indicates that a completion should not be generated
+until the operation has been explicitly acknowledged by the remote side.
+.P
+The following flags may be used with fi_tsearch.
+.IP "Need tsearch flags"
+write me
+.SH "FI_CONTEXT"
+If a tagged operation has been called has the flag FI_CANCEL set,
+then the user context parameter is interpreted as struct fi_context.
+For performance reasons, this structure must be allocated by the user,
+but may be used by the fabric provider to track the operation.  Typically,
+users embed struct fi_context within their own context structure.
+The struct fi_context must remain valid until the corresponding operation
+completes or is successfully canceled.  Users should not update or interpret
+the fields in this structure.  The structure is specified in rdma/fabric.h.
+.P
+The function fi_tsearch determines if a message with the specified
+tag with ignore mask from an optionally supplied source address has been
+received and is buffered by the provider.  The fi_tsearch call is only
+available on endpoints with FI_BUFFERED_RECV enabled.  The fi_tsearch
+operation may complete asynchronously or immediately, depending on the
+underlying provider implementation.
+.SH "RETURN VALUE"
+The tagged send and receive calls return 0 on success.
+On error, a negative value corresponding to fabric
+.I errno 
+is returned. Fabric errno values are defined in 
+.IR "fi_errno.h".
+.P
+The fi_tsearch calls returns 0 if the search was successfully
+initiated asynchronously.  In this case, the result of the search
+will be reported through the event collector associated with the endpoint.
+If the search completes immediately, fi_tsearch will return 1, with
+information about the matching receive returned through the len, tag,
+src_addr, and src_addrlen parameters.
+.SH "ERRORS"
+.IP "Enter FI_ERRNO values here"
+write me
+.IP "-FI_ENOMSG"
+Returned by fi_tsearch on an immediate completion, but no matching message
+was located.
+.IP "-FI_EAGAIN"
+Indicates that the underlying provider currently lacks the resources needed
+to initiate the requested operation.  This may be the result of insufficient
+internal buffering, in the case of FI_SEND_BUFFERED, or processing queues
+are full.  The operation may be retried after additional provider resources
+become available, usually through the completion of currently outstanding
+operations.
+.SH "NOTES"
+.SS Any source
+The function fi_trecvfrom() may be used to receive a message from a specific
+source address.  If the user wishes to receive a message from any source on
+an unconnected fabric endpoint the function fi_recv() may be used.
+.SS Ordering
+The order in which tags are matched is only defined for a pair of sending and
+receiving endpoints.  The ordering is defined by the underlying protocol.
+If a specific protocol is not selected for an endpoint, the libfabric
+implementation will choose a protocol that satisfies the following requirement
+from the MPI-3.0 specification (page 41, lines 1-5).
+.P
+\*(lqIf a sender sends two messages in succession to the same destination,
+and both match the same receive, then this operation cannot receive the
+second message if the first one is still pending.  If a receiver posts two
+receives in succession, and both match the same message, then the second
+receive operation cannot be satised by this message, if the first one is
+still pending.\*(rq
+.SH "SEE ALSO"
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_ec(3)

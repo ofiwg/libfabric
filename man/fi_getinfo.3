@@ -1,35 +1,30 @@
-.TH "FI_GETINFO" 3 "2013-11-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_GETINFO" 3 "2013-1-10" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
-fi_getinfo / fi_freeinfo \- Obtain/free fabric interface information
+fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 .SH SYNOPSIS
 .B "#include <rdma/fabric.h>"
-.P
-.B "int" fi_getinfo
-.BI "(char *" node ","
-.BI "char *" service ","
-.BI "struct fi_info *" hints ","
-.BI "struct fi_info **" info ");"
-.P
-.B "int" fi_freeinfo
-.BI "(struct fi_info *" info ");"
+.HP
+.BI "int fi_getinfo(const char *" node ", const char *" service ","
+.BI "struct fi_info *" hints ", struct fi_info **" info ");"
+.HP
+.BI "int fi_freeinfo(struct fi_info *" info ");"
 .SH ARGUMENTS
-.IP "node" 12
+.IP "node"
 Optional, name or fabric address to resolve.
-.IP "service" 12
+.IP "service"
 Optional, service name or port number of address.
-.IP "hints" 12
-Reference to an fi_info structure containing hints about the type
-of service the caller supports.
-.IP "info" 12
+.IP "hints"
+Reference to an fi_info structure that specifies criteria for selecting
+the returned fabric information.
+.IP "info"
 A pointer to a linked list of fi_info structures containing response
 information.
 .SH "DESCRIPTION"
-Resolves the destination node and service address and returns
-information needed to establish communication.  Provides the
-fabric interface functional equivalent to getaddrinfo.
-.SH "RETURN VALUE"
-Returns 0 on success, or errno on error.
-.SH "NOTES"
+Returns information about available fabric services for reaching the specified
+node or service, subject to any provided hints.  Callers must provide at least
+one of the node, service, or hints parameters.  If no matching fabric information
+is available, info will be set to NULL.
+.P
 Either node, service, or hints must be provided.  If hints are provided, the
 operation will be controlled by hints.ai_flags.  If FI_PASSIVE is
 specified, the call will resolve address information for use on the
@@ -39,15 +34,322 @@ to the given node.  The hints parameter, if provided,
 may be used to control the resulting output as indicated below.
 If node is not given, fi_getinfo will attempt to resolve the fabric addressing
 information based on the provided hints.
+.P
 The caller must call fi_freeinfo to release fi_info structures returned
 by this call.
-.SH "fi_info"
-.IP "next" 12
+.SH "FI_INFO"
+.nf
+struct fi_info {
+	struct fi_info     *next;
+	size_t              size;
+	uint64_t            flags;
+	uint64_t            type;
+	uint64_t            protocol;
+	uint64_t            protocol_cap;
+	enum fi_iov_format  iov_format;
+	enum fi_addr_format addr_format;
+	enum fi_addr_format info_addr_format;
+	size_t              src_addrlen;
+	size_t              dst_addrlen;
+	void               *src_addr;
+	void               *dst_addr;
+	size_t              auth_keylen;
+	void               *auth_key;
+	int                 shared_fd;
+	char               *domain_name;
+	size_t              datalen;
+	void               *data;
+};
+.fi
+.IP "next"
 Pointer to the next fi_info structure in the list.  Will be NULL
 if no more structures exist.
-.IP "size" 12
-Size of the fi_info structure, used for compatibility.
-.IP "write more!!!" 12
-Details are left as an exercise for the reader.
+.IP "size"
+Size of the fi_info structure, used for compatibility.  Callers should specify
+the size of any fi_info structure passed in as hints.  The size set on any fi_info
+structures returned from fi_getinfo indicates the size that was interpretted by
+the providers. 
+.IP "flags"
+Hint flags that control the operation.  Supported flags are listed in the 
+.B flags
+section below.
+.IP "type"
+If specified, indicates the type of fabric interface communication desired.
+Supported types are listed in the
+.B Socket types
+section below.
+.IP "protocol"
+If specified, indicates the desired communication protocol. Supported protocols
+are listed in the
+.B "Protocols"
+section below.
+.IP "protocol_cap"
+If specified, indicates the desired communication protocol capabilities. Supported
+capabilities are listed in the
+.B "Protocol capabilities"
+section below.
+.IP "iov_format"
+If specified, indicates the format used for vectored data communications. Supported
+formats are listed in the
+.B "Vectored data formats"
+section below.
+.IP "addr_format"
+If specified, indicates the format used for addressing in data transfer
+operations. Supported formats
+are listed in the
+.B "Addressing formats"
+section below.
+.IP "info_addr_format"
+If specified, indicates the format of addresses referenced by struct fi_info.
+Supported formats are listed in the
+.B "Addressing formats"
+section below.
+.IP "src_addrlen"
+Indicates the length of the source address (must be specified if
+.B src_addr
+is specified).
+.IP "dst_addrlen"
+Indicates the length of the destination address (must be specified if
+.B dst_addr
+is specified).
+.IP "src_addr"
+If specified, indicates the source address.
+.IP "dst_addr"
+If specified, indicates the destination address.
+.IP "auth_keylen"
+Indicates the size of the authentication key (must be specified if
+.B auth_key
+is specified).
+.IP "auth_key"
+Authorization key to limit communication among sockets that share
+the same key.
+.IP "shared_fd"
+If specified, is used to authenticate a domain to share resources with
+other processes on the same node that have access to the same shared_fd.
+.IP "domain_name"
+If specified, the name of the resource domain.
+.IP "datalen"
+Length of any additional data (must be specified if
+.B data
+is specified).
+.IP "data"
+Any additional data about communication interface being requested.  Data is
+provider specific.  It is primarily used as output from fi_getinfo, to be
+provided as input into fi_domain or fi_endpoint.
+.SH "FLAGS"
+.IP "FI_PASSIVE"
+Indicates that the fabric endpoint will be used to listen for connection
+requests.
+.IP "FI_NUMERICHOST"
+Indicates that the node name is a numeric address.  When set, name resolution
+is not performed.
+.IP "FI_NONBLOCK"
+Similar to O_NONBLOCK.  Indicates that a fabric resource should be set for
+nonblocking operation.  This only applies to interfaces which are not
+asynchronous.
+.IP "FI_SYNC"
+Specifies that an asynchronous operation should block until the operation
+completes.
+.IP "FI_EXCL"
+Specifies that a fabric resource domain should not share resource with another
+open domain.  By default, resources are shared across multiple open calls by
+the same process.
+.IP "FI_BUFFERED_RECV"
+If set, the communication interface implementation should attempt to queue inbound
+data that arrives before a receive buffer has been posted.  In the
+absence of this flag, any messages that arrive before a receive is
+posted are lost.
+When set, the user must use 
+.B struct fi_context 
+as their per operation context.
+.IP "FI_BUFFERED_SEND"
+If set, the outbound data buffer should be returned to user immediately after
+the call returns, even if the operation is handled asynchronously.  This may
+require that the communication interface implementation copy the data into a
+local buffer and transfer out of that buffer.
+.IP "FI_CANCEL"
+Indicates that the user wants the ability to cancel the operation if it does
+not complete first.  Providers use this to return a handle to the request,
+which the user may then cancel.  Also used by search to indicate that a request
+should be canceled.
+When set, the user must use 
+.B struct fi_context 
+as their per operation context.
+.IP "FI_SHARED_RECV"
+An endpoint created with this flag will share the same receive queue as other
+endpoints created on the same domain.
+.IP "FI_READ"
+Used to enable read access to data buffers.
+.IP "FI_WRITE"
+Used to enable write access to data buffers.
+.IP "FI_REMOTE"
+Used to enable access for remote processes. It is intended to be combined with
+.BR "FI_READ " or " FI_WRITE" 
+to specify remote read, remote write or remote read and write permissions.
+.IP "FI_RECV"
+Used to indicate that the fabric object will be used for receive operations.
+.IP "FI_SEND"
+Used to indicate that the fabric object will be used for send operations.
+.IP "FI_AUTO_RESET [not valid for fi_getinfo]"
+Automatically resets the event queue to generate a new wake-up event on the
+next entry.  Example use: 1. wait on eq wait object -- poll(fd) 2. wait object
+is ready -- fd is readable 3. read eq to retrieve events 4. continue reading
+until read returns 0
+.IP "FI_PEEK [not valid for fi_getinfo]"
+If used, indicates that if the application reads an event queue, the particular
+completion entry is not removed from the queue and is visible to subsequent reads.
+.IP "FI_ERRINLINE"
+Error events are reported inline with other events, rather than through a
+separate error queue (see FI_ERRQUEUE).
+.IP "FI_TRUNC [not valid for fi_getinfo]"
+Signals that received data has been truncated.
+.IP "FI_CTRUNC [not valid for fi_getinfo]"
+Indicates that control data was truncated.
+.IP "FI_IMM [not valid for fi_getinfo]"
+Indicates that immediate data is available.  Immediate data is communicated to a
+receiver through completion data, rather than appearing in targeted receive
+buffers.
+.IP "FI_NOCOMP [not valid for fi_getinfo]"
+Indicates that no completion should be generated for the specified operation.
+.IP "FI_MORE [not valid for fi_getinfo]"
+.I Write me
+.IP "FI_SIGNAL"
+Indicates if a completion event should be generated.
+.IP "FI_ACK"
+Indicates that a completion event is not generated until the operation
+initiated is acknowledged by the remote side.
+.SH "ENDPOINT TYPES"
+.IP "FID_UNSPEC"
+The type of endpoint is not specified.  This is usually provided as input, with
+other attributes of the endpoint or the provider selecting the type.
+.IP "FID_MSG"
+Provides reliable, in-order message based communication, with data transfers
+maintaining message boundaries. 
+.IP "FID_STREAM [not targeting 1.0 release]"
+Provides reliable, byte streaming communication.
+.IP "FID_DGRAM"
+Supports connectionless, unreliable datagram communication.
+.IP "FID_RAW [not targeting 1.0 release]"
+Provides raw link-level network access.
+.IP "FID_RDM"
+Provides reliable datagram communication without ordering guarantees.
+.IP "FID_PACKET [not targeting 1.0 release]"
+Provides raw network-level access.
+.SH "PROTOCOLS"
+.IP "FI_PROTO_UNSPEC"
+The protocol is not specified.  This is usually provided as input, with other
+attributes of the socket or the provider selecting the actual protocol.
+.IP "FI_PROTO_IB_RC"
+The protocol runs over Infiniband reliable-connected queue pairs.
+.IP "FI_PROTO_IWARP"
+The protocol runs over the Internet wide area RDMA protocol transport.
+.IP "FI_PROTO_IB_UC"
+The protocol runs over Infiniband unreliable-connected queue pairs.
+.IP "FI_PROTO_IB_UD"
+The protocol runs over Infiniband unreliable datagram queue pairs.
+.IP "FI_PROTO_IB_XRC [1.0 release TBD]"
+The protocol runs over Infiniband extended reliable-connected queue pairs.
+.IP "FI_PROTO_RAW [not targeting 1.0 release]"
+Indicates that a raw link-layer or network-layer protocol is in use.
+.SH "PROTOCOL CAPABILITIES"
+Protocol capabilities are obtained by OR-ing the following flags together.
+.IP "FI_PROTO_CAP_MSG"
+Specifies that the underlying protocol should support sending and receiving
+messages or datagrams.  Message capabilities imply support for send and/or
+receive queues.  Endpoints supporting this capability support operations
+defined by struct fi_ops_msg.
+.IP "FI_PROTO_CAP_RMA"
+Specifies that the underlying protocol should support RMA read and write
+operations.  Endpoints supporting this capability support operations
+defined by struct fi_rma_ops.
+.IP "FI_PROTO_CAP_TAGGED"
+Specifies that the underlying protocol should handle tagged message transfers.
+tagged message transfers associate a user-specified key or tag with each message
+that is used for matching purposes at the remote side.  Endpoints supporting
+this capability support operations defined by struct fi_tagged_ops.
+.IP "FI_PROTO_CAP_ATOMICS"
+Specifies that the underlying protocol supports some set of atomic operations.
+Endpoints supporting this capability support operations defined by struct
+fi_atomic_ops.
+.IP "FI_PROTO_CAP_MULTICAST"
+Indicates that the underlying protocol should support multicast data transfers.
+Endpoints supporting this capability support multicast operations defined by
+struct fi_msg_ops, when a multicast address is specified as the destination
+address.
+.SH "VECTORED DATA FORMATS"
+.IP "FI_IOV [not likely for 1.0 release]"
+Indicates that format is that of
+.IR "struct iovec".
+.nf
+
+struct iovec {
+	void  *iov_base;
+	size_t iov_len;
+};
+.fi
+.IP "FI_IOMV"
+Indicates that the format is that of
+.IR "struct fi_iomv".
+struct fi_iomv is used to specify memory buffers that are registered with the
+provider.
+.nf
+
+struct iomv {
+	void    *addr;
+	size_t   len;
+	uint64_t mem_desc;
+};
+.fi
+.SH "ADDRESSING FORMATS"
+Additional information on address formats is available under address vector .BR "fi_av(3)".
+.IP "FI_ADDR"
+Address is of type void *.
+.IP "FI_AV"
+Address is of type address vector, struct fi_av_addr.
+.IP "FI_ADDR_INDEX"
+Address is a size_t index into an address vector.
+.IP "FI_SOCKADDR"
+Address if of type sockaddr.
+.IP "FI_SOCKADDR_IN"
+Address is of type sockaddr_in (IPv4).
+.IP "FI_SOCKADDR_IN6"
+Address is of type sockaddr_in6 (IPv6).
+.IP "FI_SOCKADDR_IB"
+Address is of type sockaddr_ib (defined in Linux kernel source 
+.BR "include/rdma/ib.h").
+.SH "RETURN VALUE"
+Returns 0 on success. On error, a negative value corresponding to fabric
+errno is returned. Fabric errno values are defined in 
+.IR "rdma/fi_errno.h".
+.SH "ERRORS"
+.IP "FI_ENOMEM"
+Indicates that there was insufficient memory to complete the operation.
+.IP "FI_ENODATA"
+Indicates that no providers could be found which support the requested
+fabric information.
+.IP "FI_ENOSYS"
+No fabric providers were found.
+.SH "NOTES"
+If hints are provided, the
+operation will be controlled by the values that are supplied in the various
+fields (see section on
+.IR "fi_info").
+Applications that require specific communication interfaces, domains,
+capabilities or other requirements, can specify them using fields in
+.IR "hints".
+Libfabric returns a linked list in
+.I info
+that points to a list of matching interfaces.  
+.I info 
+is set to NULL if there are no communication interfaces or none match
+the input hints.
+.P 
+If node is provided, fi_getinfo will attempt to resolve the fabric address
+to the given node.  If node is not provided, fi_getinfo will attempt to resolve
+the fabric addressing information based on the provided hints.  The caller must
+call fi_freeinfo to release fi_info structures returned by fi_getinfo.
+.P
+If neither node, service or hints are provided, then fi_getinfo simply returns
+the list all available communication interfaces.
 .SH "SEE ALSO"
-fi_open(3)
+fi_open(3), fi_domain(3), fi_endpoint(3)

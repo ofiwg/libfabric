@@ -45,7 +45,7 @@ extern "C" {
 
 enum fid_type {
 	FID_UNSPEC,
-	FID_MSG,		/* pick a better name */
+	FID_MSG,
 	FID_STREAM,
 	FID_DGRAM,
 	FID_RAW,

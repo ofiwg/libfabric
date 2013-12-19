@@ -1,27 +1,62 @@
-.TH "FI_OPEN" 3 "2013-11-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_OPEN" 3 "2013-11-21" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
-fi_open / fi_close \- Open/close a fabric interface
+fi_open / fi_close \- Open / close a fabric interface domain
 .SH SYNOPSIS
 .B "#include <rdma/fabric.h>"
+.br
 .P
 .B "int" fi_open
 .BI "(char *" name ","
-.BI WRITE ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-.BI "fid_t *" fid ");"
+.BI "struct fi_info *" info ","
+.BI "uint64_t " flags ","
+.BI "fid_t *" fid ","
+.BI "void *" context ");"
+.br
 .P
 .B "int" fi_close
 .BI "(fid_t " fid ");"
 .SH ARGUMENTS
 .IP "name" 12
 The name of the interface to open.
+.IP "info" 12
+Fabric information obtained from 
+.BR fi_getinfo "."
+.IP "flags" 12
+Optional, extra features requested.
 .IP "fid" 12
 On success, points to the opened interface.
+.IP "context" 12
+Optional, user specified pointer to associate with the interface.
 .SH "DESCRIPTION"
-Opens a fabric interface.
+The function
+.BR "fi_open"()
+opens a fabric interface. Either the
+.IR "name" " or the " info " arguments must be provided."
+.br
+.P
+The function
+.BR "fi_close"()
+closes the specified domain and releases resources allocated to it. Users must
+call this for every opened domain.
 .SH "RETURN VALUE"
-Returns 0 on success, or errno on error.
+Returns 0 on success. On error, a negative value corresponding to fabric
+.I errno 
+is returned. Fabric errno values are defined in 
+.IR "fi_errno.h".
 .SH "NOTES"
-Opens a fabric interface.  Users should call fi_close to release
-the interface.
+Communication resources need to be allocated within a domain.
+Therefore, before any communication can take place a domain needs to be opened. 
+The domain name can be obtained from the list of providers returned by
+.BR fi_getinfo "." 
+The flag 
+.B FI_EXCL
+indicates that a new domain be created, otherwise any previously open domain
+belonging to the same process may be returned.  In order to share resources
+allocated within a domain with other processes on the same node, the field
+.B shared_fd
+may be used while obtaining the
+.I info
+parameter from
+.BR fi_getinfo "."
 .SH "SEE ALSO"
-fi_getinfo(3)
+fi_getinfo(3), fi_socket(3), fi_close(3), fi_bind(3), fi_sync(3), fi_control(3)

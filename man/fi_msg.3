@@ -1,0 +1,204 @@
+.TH "FI_MSG" 3 "2014-01-10" "libfabric" "Libfabric Programmer's Manual" libfabric
+.SH NAME
+fi_msg - Message data transfer operations
+.P
+fi_recv / fi_recvmem / fi_recvv
+.br
+fi_recvfrom / fi_recvmemfrom / fi_recvmsg
+.RS
+Post a buffer to receive an incoming message
+.RE
+.PP
+fi_send / fi_sendmem / fi_sendv
+.br
+fi_sendto / fi_sendmemto / fi_sendmsg
+.RS
+Initiate an operation to send a message
+.RE
+.SH SYNOPSIS
+.B #include <rdma/fi_endpoint.h>
+.HP
+.BI "int fi_recv(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_recvmem(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "uint64_t " mem_desc ", void * " context ");"
+.HP
+.BI "int fi_recvv(fid_t " fid ", const void * " iov ", size_t " count ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_recvfrom(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "const void *" src_addr ", void * " context ");"
+.HP
+.BI "int fi_recvmemfrom(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "uint64_t " mem_desc ", const void *" src_addr ", void * " context ");"
+.HP
+.BI "int fi_recvmsg(fid_t " fid ", const struct fi_msg * " msg ", uint64_t " flags ");"
+.P
+.HP
+.BI "int fi_send(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_sendmem(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "uint64_t " mem_desc ", void * " context ");"
+.HP
+.BI "int fi_sendv(fid_t " fid ", const void * " iov ", size_t " count ","
+.BI "void * " context ");"
+.HP
+.BI "int fi_sendto(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "const void *" dest_addr ", void * " context ");"
+.HP
+.BI "int fi_sendmemto(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "uint64_t " mem_desc ", const void *" dest_addr ", void * " context ");"
+.HP
+.BI "int fi_sendmsg(fid_t " fid ", const struct fi_msg * " msg ", uint64_t " flags ");"
+.SH ARGUMENTS
+.IP "fid"
+Fabric endpoint on which to initiate send or post receive buffer. 
+.IP "buf"
+Data buffer to send or receive.
+.IP "len"
+Length of data buffer to send or receive.
+.IP "iov"
+Vectored data buffer.
+.IP "count"
+Count of vectored data entries.
+.IP "mem_desc"
+Memory descriptor associated with the data buffer
+.IP "dest_addr"
+Destination address for connectionless transfers
+.IP "src_addr"
+Source address to receive from for connectionless transfers
+.IP "msg"
+Message descriptor for send and receive operations.
+.IP "flags"
+Additional flags to apply for the send or receive operation.
+.IP "context"
+User specified pointer to associate with the operation.
+.SH "DESCRIPTION"
+The send functions -- fi_send, fi_sendmem, fi_sendv, fi_sendto,
+fi_sendmemto, fi_sendmsg -- are used to transmit a message from one
+endpoint to another endpoint.  The main difference between send functions
+are the number and type of parameters that they accept as input.  Otherwise,
+they perform the same general function.  Messages sent using fi_msg operations
+are received by a remote endpoint into a buffer posted to receive such messages.
+.P
+The call fi_send transfers the data contained in the user-specified data
+buffer to a remote endpoint, with message boundaries being maintained.
+The local endpoint must be connected to a remote endpoint or destination
+before fi_send is called.  Unless the endpoint has been configured differently,
+the data buffer passed into fi_send must not be touched by the application
+until the fi_send call completes asynchronously.
+.P
+The difference between fi_sendmem and fi_send is that the data buffer
+passed into fi_sendmem must be registered with the resource domain associated
+with the endpoint.  See fi_domain and fi_mr_reg for additional details on
+registering data buffers.
+.P
+The fi_sendv call adds support for a scatter-gather list to fi_send and/or
+fi_sendmem.  The fi_sendv transfers the set of data buffers referenced by
+the iov parameter to a remote endpoint as a single message.  The format of
+iov parameter is specified by the user when the endpoint is created.  See
+fi_getinfo for more details on iov formats.
+.P
+The fi_sendto and fi_sendmemto functions are equivalent to fi_send and
+fi_sendmem, respectively, for unconnected endpoints.
+.P
+The fi_sendmsg call supports data transfers over both connected and unconnected
+endpoints, with the ability to control the send operation per call through the
+use of flags.  The fi_sendmsg function takes a struct fi_msg as input.
+.P
+.nf
+struct fi_msg {
+	const void *msg_iov;   /* scatter-gather array */
+	size_t      iov_count; /* # elements in msg_iov */
+	const void *addr;      /* optional address */
+	void       *context;   /* user-defined context */
+	uint64_t    data;      /* optional immediate data */
+	int         priority;  /* message priority */
+};
+.fi
+.P
+The receive functions -- fi_recv, fi_recvmem, fi_recvv, fi_recvfrom,
+fi_recvmemfrom, fi_recvmsg -- post a data buffer to an endoint to receive
+inbound messages.  Similar to the send operations, receive operations operate
+asynchronously.  Users should not touch the posted data buffer(s) until the
+receive operation has completed.
+.P
+The fi_recv call posts a data buffer to the receive queue of the corresponding
+endpoint.  Posted receives are matched with inbound sends in the order in which
+they were posted.  Message boundaries are maintained.  The order
+in which the receives comlete is dependent on the endpoint type and protocol.
+.P
+The fi_recvmem is similar to fi_recv, but requires that the posted buffer be
+registered with the resource domain associated with the endpoint.  The fi_recvv
+allows the user to post a scatter-gather list of buffers to receive a single
+inbound receive.  That is, the list of buffers match with one remote send.
+.P
+The fi_recvfrom and fi_recvmemfrom calls are equivalent to fi_recv and
+fi_recvfrom for unconnected endpoints.  These calls are used to indicate
+that a buffer should be posted to receive incoming data from a specific
+remote endpoint.
+.P
+The fi_recvmsg call supports posting buffers over both connected and unconnected
+endpoints, with the ability to control the receive operation per call through the
+use of flags.  The fi_recvmsg function takes a struct fi_msg as input.
+.P
+Completed message operations are reported to the user through one or more event
+collectors associated with the endpoint.  Users provide context which are
+associated with each operation, and is returned to the user
+as part of the event completion.  See fi_ec for completion event details.
+.SH "FLAGS"
+The fi_recvmsg and fi_sendmsg calls allow the user to specify flags
+which can change the default message handling of the endpoint.
+Flags specified with fi_recvmsg / fi_sendmsg override most flags
+previously configured with the endpoint, except where noted (see fi_control).
+The following list of flags are usable with fi_recvmsg and/or fi_sendmsg.
+.IP "FI_CANCEL"
+Indicates that the user wants the ability to cancel the operation if it does
+not complete first.  When set, the user must pass in struct fi_context as their
+per operation context (see discussion below).
+.IP "FI_IMM"
+Applies to fi_sendmsg.  Indicates that immediate data is available and should
+be sent as part of the request.
+.IP "FI_NOCOMP"
+Indicates that no completion should be generated for the specified operation.
+When set the user must determine when a request has completed indirectly,
+usually based on the completion of a subsequent operation.  Use of this
+flag may improve performance by allowing the provider to avoid writing
+a completion entry.
+.IP "FI_MORE"
+Indicates that the user has additional requests that will immediately be
+posted after the current call returns.  Use of this flag may improve
+performance by enabling the provider to optimize its access to the fabric
+hardware.
+.IP "FI_SIGNAL"
+Indicates that a completion event should be generated for the given operation.
+.IP "FI_BUFFERED_SEND"
+Applies to fi_sendmsg.  Indicates that the outbound data buffer should be
+returned to user immediately after the send call returns, even if the operation
+is handled asynchronously.  This may require that the underlying provider
+implementation copy the data into a local buffer and transfer out of that
+buffer.
+.IP "FI_ACK"
+Applies to fi_sendmsg.  Indicates that a completion should not be generated
+until the operation has been explicitly acknowledged by the remote side.
+.SH "FI_CONTEXT"
+If a message operation has been called has the flag FI_CANCEL set,
+then the user context parameter is interpreted as struct fi_context.
+For performance reasons, this structure must be allocated by the user,
+but may be used by the fabric provider to track the operation.  Typically,
+users embed struct fi_context within their own context structure.
+The struct fi_context must remain valid until the corresponding operation
+completes or is successfully canceled.  Users should not update or interpret
+the fields in this structure.  The structure is specified in rdma/fabric.h.
+.SH "RETURN VALUE"
+Returns 0 on success. On error, a negative value corresponding to fabric
+errno is returned. Fabric errno values are defined in 
+.IR "rdma/fi_errno.h".
+.SH "ERRORS"
+.IP "Enter FI_ERRNO values here"
+write me
+.SH "NOTES"
+.SH "SEE ALSO"
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_ec(3)
