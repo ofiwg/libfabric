@@ -71,7 +71,6 @@ libfabricincludedir = $(includedir)/rdma
 infinibandincludedir = $(includedir)/infiniband
 
 libfabricinclude_HEADERS = $(top_srcdir)/include/rdma/fabric.h \
-			   $(top_srcdir)/include/rdma/fi_arch.h \
 			   $(top_srcdir)/include/rdma/fi_atomic.h \
 			   $(top_srcdir)/include/rdma/fi_cm.h \
 			   $(top_srcdir)/include/rdma/fi_domain.h \
@@ -81,7 +80,6 @@ libfabricinclude_HEADERS = $(top_srcdir)/include/rdma/fabric.h \
 			   $(top_srcdir)/include/rdma/fi_errno.h \
 			   $(top_srcdir)/include/rdma/fi_tagged.h \
 			   $(top_srcdir)/include/rdma/fi_ucma.h \
-			   $(top_srcdir)/include/rdma/fi_umad.h \
 			   $(top_srcdir)/include/rdma/fi_uverbs.h \
 			   $(top_srcdir)/include/rdma/rdma_cma.h \
 			   $(top_srcdir)/include/rdma/rdma_verbs.h \

@@ -46,7 +46,6 @@
 #include <unistd.h>
 
 #include <rdma/fabric.h>
-#include <rdma/fi_arch.h>
 #include <rdma/fi_atomic.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
@@ -55,7 +54,6 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_ucma.h>
-#include <rdma/fi_umad.h>
 #include <rdma/fi_uverbs.h>
 #include <rdma/fi_errno.h>
 #include "fi.h"

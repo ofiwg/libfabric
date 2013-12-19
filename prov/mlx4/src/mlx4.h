@@ -38,8 +38,8 @@
 
 #include <fi.h>
 #include <infiniband/driver.h>
+#include <infiniband/arch.h>
 #include <rdma/fabric.h>
-#include <rdma/fi_arch.h>
 
 
 #define HIDDEN		__attribute__((visibility ("hidden")))

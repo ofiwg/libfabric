@@ -30,10 +30,13 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_ARCH_H_
-#define _FI_ARCH_H_
+#ifndef INFINIBAND_ARCH_H
+#define INFINIBAND_ARCH_H
 
 #include <stdint.h>
+#include <endian.h>
+#include <byteswap.h>
+#include "fi.h"
 
 /*
  * Architecture-specific defines.  Currently, an architecture is
@@ -114,4 +117,4 @@
 
 #endif
 
-#endif /* _FI_ARCH_H_ */
+#endif /* INFINIBAND_ARCH_H */
