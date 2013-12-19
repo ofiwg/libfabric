@@ -102,7 +102,7 @@ struct fid_av {
 struct fid_mr {
 	struct fid		fid;
 	uint64_t		mem_desc;
-	be64_t			key;
+	uint64_t		key;
 };
 
 
@@ -376,7 +376,7 @@ static inline uint64_t fi_mr_desc(fid_t fid)
 	return mr->mem_desc;
 }
 
-static inline be64_t fi_mr_key(fid_t fid)
+static inline uint64_t fi_mr_key(fid_t fid)
 {
 	struct fid_mr *mr = container_of(fid, struct fid_mr, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_MR);

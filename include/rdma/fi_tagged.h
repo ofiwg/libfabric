@@ -45,8 +45,8 @@ struct fi_msg_tagged {
 	const void		*msg_iov;
 	size_t			iov_count;
 	const void		*addr;
-	be64_t			tag;
-	be64_t			mask;
+	uint64_t		tag;
+	uint64_t		mask;
 	void			*context;
 	uint64_t		data;
 	int			priority;
@@ -55,26 +55,26 @@ struct fi_msg_tagged {
 struct fi_ops_tagged {
 	size_t	size;
 	ssize_t (*recv)(fid_t fid, void *buf, size_t len,
-			be64_t tag, be64_t mask, void *context);
+			uint64_t tag, uint64_t mask, void *context);
 	ssize_t (*recvv)(fid_t fid, const void *iov, size_t count,
-			be64_t tag, be64_t mask, void *context);
+			 uint64_t tag, uint64_t mask, void *context);
 	ssize_t (*recvfrom)(fid_t fid, void *buf, size_t len, const void *src_addr,
-			    be64_t tag, be64_t mask, void *context);
+			    uint64_t tag, uint64_t mask, void *context);
 	ssize_t (*recvmsg)(fid_t fid, const struct fi_msg_tagged *msg, uint64_t flags);
-	ssize_t (*send)(fid_t fid, const void *buf, size_t len, be64_t tag,
+	ssize_t (*send)(fid_t fid, const void *buf, size_t len, uint64_t tag,
 			void *context);
-	ssize_t (*sendv)(fid_t fid, const void *iov, size_t count, be64_t tag,
+	ssize_t (*sendv)(fid_t fid, const void *iov, size_t count, uint64_t tag,
 			 void *context);
 	ssize_t (*sendto)(fid_t fid, const void *buf, size_t len,
-			  const void *dest_addr, be64_t tag, void *context);
+			  const void *dest_addr, uint64_t tag, void *context);
 	ssize_t (*sendmsg)(fid_t fid, const struct fi_msg_tagged *msg, uint64_t flags);
-	ssize_t (*search)(fid_t fid, be64_t *tag, be64_t mask, uint64_t flags,
+	ssize_t (*search)(fid_t fid, uint64_t *tag, uint64_t mask, uint64_t flags,
 			  void *src_addr, size_t *src_addrlen, size_t *len, void *context);
 };
 
 static inline ssize_t
 fi_tsendto(fid_t fid, const void *buf, size_t len,
-	   const void *dest_addr, be64_t tag, void *context)
+	   const void *dest_addr, uint64_t tag, void *context)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
@@ -85,7 +85,7 @@ fi_tsendto(fid_t fid, const void *buf, size_t len,
 
 static inline ssize_t
 fi_trecvfrom(fid_t fid, void *buf, size_t len, const void *src_addr,
-	     be64_t tag, be64_t mask, void *context)
+	     uint64_t tag, uint64_t mask, void *context)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
@@ -95,7 +95,7 @@ fi_trecvfrom(fid_t fid, void *buf, size_t len, const void *src_addr,
 }
 
 static inline ssize_t
-fi_tsearch(fid_t fid, be64_t *tag, be64_t mask, uint64_t flags,
+fi_tsearch(fid_t fid, uint64_t *tag, uint64_t mask, uint64_t flags,
 	   void *src_addr, size_t *src_addrlen, size_t *len, void *context)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);

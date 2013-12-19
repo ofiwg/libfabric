@@ -392,7 +392,7 @@ static struct fi_ops_msg ibv_msg_ep_msg_ops = {
 };
 
 static int ibv_msg_ep_rdma_writemem(fid_t fid, const void *buf, size_t len,
-	uint64_t mem_desc, uint64_t addr, be64_t tag, void *context)
+	uint64_t mem_desc, uint64_t addr, uint64_t tag, void *context)
 {
 	struct ibv_msg_ep *ep;
 	struct ibv_send_wr wr, *bad;
@@ -416,7 +416,7 @@ static int ibv_msg_ep_rdma_writemem(fid_t fid, const void *buf, size_t len,
 }
 
 static int ibv_msg_ep_rdma_readmem(fid_t fid, void *buf, size_t len,
-	uint64_t mem_desc, uint64_t addr, be64_t tag, void *context)
+	uint64_t mem_desc, uint64_t addr, uint64_t tag, void *context)
 {
 	struct ibv_msg_ep *ep;
 	struct ibv_send_wr wr, *bad;

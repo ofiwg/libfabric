@@ -33,20 +33,20 @@
 #include "psmx.h"
 
 static ssize_t psmx_tagged_recv(fid_t fid, void *buf, size_t len,
-				be64_t tag, be64_t mask, void *context)
+				uint64_t tag, uint64_t mask, void *context)
 {
 	return -ENOSYS;
 }
 
 static ssize_t psmx_tagged_recvv(fid_t fid, const void *iov, size_t len,
-				 be64_t tag, be64_t mask, void *context)
+				 uint64_t tag, uint64_t mask, void *context)
 {
 	return -ENOSYS;
 }
 
 static ssize_t psmx_tagged_recvfrom(fid_t fid, void *buf, size_t len,
 				    const void *src_addr,
-				    be64_t tag, be64_t mask, void *context)
+				    uint64_t tag, uint64_t mask, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
 	psm_mq_req_t psm_req;
@@ -73,20 +73,20 @@ static ssize_t psmx_tagged_recvmsg(fid_t fid, const struct fi_msg_tagged *msg,
 }
 
 static ssize_t psmx_tagged_send(fid_t fid, const void *buf, size_t len,
-				be64_t tag, void *context)
+				uint64_t tag, void *context)
 {
 	return -ENOSYS;
 }
 
 static ssize_t psmx_tagged_sendv(fid_t fid, const void *iov, size_t len,
-				be64_t tag, void *context)
+				 uint64_t tag, void *context)
 {
 	return -ENOSYS;
 }
 
 static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
 				  const void *dest_addr,
-				  be64_t tag, void *context)
+				  uint64_t tag, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
 	int nonblocking;
@@ -130,7 +130,7 @@ static ssize_t psmx_tagged_sendmsg(fid_t fid, const struct fi_msg_tagged *msg,
 	return -ENOSYS;
 }
 
-static ssize_t psmx_tagged_search(fid_t fid, be64_t *tag, be64_t mask,
+static ssize_t psmx_tagged_search(fid_t fid, uint64_t *tag, uint64_t mask,
 				  uint64_t flags, void *src_addr, 
 				  size_t *src_addrlen, size_t *len,
 				  void *context)
