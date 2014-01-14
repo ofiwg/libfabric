@@ -218,6 +218,8 @@ void __fi_freeinfo(struct fi_info *info)
 		free(info->dst_addr);
 	if (info->domain_name)
 		free(info->domain_name);
+	if (info->auth_key)
+		free(info->auth_key);
 	if (info->data)
 		free(info->data);
 
