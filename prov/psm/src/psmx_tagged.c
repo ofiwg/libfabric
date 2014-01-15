@@ -33,20 +33,20 @@
 #include "psmx.h"
 
 static ssize_t psmx_tagged_recv(fid_t fid, void *buf, size_t len,
-				uint64_t tag, uint64_t mask, void *context)
+				uint64_t tag, uint64_t ignore, void *context)
 {
 	return -ENOSYS;
 }
 
 static ssize_t psmx_tagged_recvv(fid_t fid, const void *iov, size_t len,
-				 uint64_t tag, uint64_t mask, void *context)
+				 uint64_t tag, uint64_t ignore, void *context)
 {
 	return -ENOSYS;
 }
 
 static ssize_t psmx_tagged_recvfrom(fid_t fid, void *buf, size_t len,
 				    const void *src_addr,
-				    uint64_t tag, uint64_t mask, void *context)
+				    uint64_t tag, uint64_t ignore, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
 	psm_mq_req_t psm_req;
@@ -55,7 +55,7 @@ static ssize_t psmx_tagged_recvfrom(fid_t fid, void *buf, size_t len,
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	assert(fid_ep->domain);
 
-	err = psm_mq_irecv(fid_ep->domain->psm_mq, tag, ~mask, 0, /* flags */
+	err = psm_mq_irecv(fid_ep->domain->psm_mq, tag, ~ignore, 0, /* flags */
 			   buf, len, context, &psm_req);
 	if (err != PSM_OK)
 		return psmx_errno(err);
@@ -130,7 +130,7 @@ static ssize_t psmx_tagged_sendmsg(fid_t fid, const struct fi_msg_tagged *msg,
 	return -ENOSYS;
 }
 
-static ssize_t psmx_tagged_search(fid_t fid, uint64_t *tag, uint64_t mask,
+static ssize_t psmx_tagged_search(fid_t fid, uint64_t *tag, uint64_t ignore,
 				  uint64_t flags, void *src_addr, 
 				  size_t *src_addrlen, size_t *len,
 				  void *context)
@@ -142,7 +142,7 @@ static ssize_t psmx_tagged_search(fid_t fid, uint64_t *tag, uint64_t mask,
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	assert(fid_ep->domain);
 
-	err = psm_mq_iprobe(fid_ep->domain->psm_mq, *tag, ~mask, &psm_status);
+	err = psm_mq_iprobe(fid_ep->domain->psm_mq, *tag, ~ignore, &psm_status);
 	switch (err) {
 	case PSM_OK:
 		*tag = psm_status.msg_tag;
