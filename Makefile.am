@@ -88,7 +88,17 @@ libfabricinclude_HEADERS = $(top_srcdir)/include/rdma/fabric.h \
 infinibandinclude_HEADERS = $(top_srcdir)/include/infiniband/ib.h \
 			   $(top_srcdir)/include/infiniband/verbs.h
 
-man_MANS = man/fi_getinfo.3 man/fi_endpoint.3 man/fi_open.3
+man_MANS = \
+	man/fi_av.3 \
+	man/fi_cm.3 \
+	man/fi_domain.3 \
+	man/fi_ec.3 \
+	man/fi_endpoint.3 \
+	man/fi_getinfo.3 \
+	man/fi_msg.3 \
+	man/fi_open.3 \
+	man/fi_rma.3 \
+	man/fi_tagged.3
 
 EXTRA_DIST = include/fi.h libfabric.map libfabric.spec.in $(man_MANS) \
 	prov/ibverbs/include/infiniband/driver.h \
