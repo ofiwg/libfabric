@@ -33,6 +33,8 @@
 #ifndef _FI_RMA_H_
 #define _FI_RMA_H_
 
+#include <assert.h>
+#include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>
 
 

@@ -129,7 +129,7 @@ struct fi_ops_msg {
 struct fi_ops_cm;
 struct fi_ops_rma;
 struct fi_ops_tagged;
-/* struct fi_ops_atomic; */
+struct fi_ops_atomic;
 /* struct fi_ops_collectives; */
 
 /*
@@ -148,7 +148,7 @@ struct fid_ep {
 	struct fi_ops_cm	*cm;
 	struct fi_ops_rma	*rma;
 	struct fi_ops_tagged	*tagged;
-	/* struct fi_ops_atomics	*atomic; */
+	struct fi_ops_atomic	*atomic;
 };
 
 static inline ssize_t fi_cancel(fid_t fid, struct fi_context *context)

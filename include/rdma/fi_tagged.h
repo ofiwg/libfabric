@@ -34,6 +34,7 @@
 #define _FI_TAGGED_H_
 
 #include <assert.h>
+#include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>
 
 
