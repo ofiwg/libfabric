@@ -305,7 +305,7 @@ static inline int fi_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec,
 			    void *context)
 {
 	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_RESOURCE_DOMAIN);
+	FI_ASSERT_CLASS(fid, FID_CLASS_DOMAIN);
 	FI_ASSERT_OPS(fid, struct fid_domain, ops);
 	FI_ASSERT_OP(domain->ops, struct fi_ops_domain, ec_open);
 	return domain->ops->ec_open(fid, attr, ec, context);
@@ -362,7 +362,7 @@ static inline int fi_mr_reg(fid_t fid, const void *buf, size_t len,
 			    struct fi_mr_attr *attr, fid_t *mr, void *context)
 {
 	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_RESOURCE_DOMAIN);
+	FI_ASSERT_CLASS(fid, FID_CLASS_DOMAIN);
 	FI_ASSERT_OPS(fid, struct fid_domain, ops);
 	FI_ASSERT_OP(domain->ops, struct fi_ops_domain, mr_reg);
 	return domain->ops->mr_reg(fid, buf, len, attr, mr, context);
@@ -394,7 +394,7 @@ static inline int fi_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av,
 			     void *context)
 {
 	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_RESOURCE_DOMAIN);
+	FI_ASSERT_CLASS(fid, FID_CLASS_DOMAIN);
 	FI_ASSERT_OPS(fid, struct fid_domain, ops);
 	FI_ASSERT_OP(domain->ops, struct fi_ops_domain, av_open);
 	return domain->ops->av_open(fid, attr, av, context);
