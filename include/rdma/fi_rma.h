@@ -80,9 +80,9 @@ struct fi_ops_rma {
 	int	(*writev)(fid_t fid, const void *iov, size_t count, uint64_t addr,
 			  uint64_t key, void *context);
 	int	(*writememto)(fid_t fid, const void *buf, size_t len, uint64_t mem_desc,
-			      const void *dst_addr, uint64_t addr, uint64_t key,
+			      const void *dest_addr, uint64_t addr, uint64_t key,
 			      void *context);
-	int	(*writeto)(fid_t fid, const void *buf, size_t len, const void *dst_addr,
+	int	(*writeto)(fid_t fid, const void *buf, size_t len, const void *dest_addr,
 			   uint64_t addr, uint64_t key, void *context);
 	int	(*writemsg)(fid_t fid, const struct fi_msg_rma *msg, uint64_t flags);
 };

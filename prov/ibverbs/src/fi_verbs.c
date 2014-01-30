@@ -138,11 +138,11 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
 		memcpy(rai->ai_src_addr, fi->src_addr, fi->src_addrlen);
 		rai->ai_src_len = fi->src_addrlen;
 	}
-	if (fi->dst_addrlen) {
-		if (!(rai->ai_dst_addr = malloc(fi->dst_addrlen)))
+	if (fi->dest_addrlen) {
+		if (!(rai->ai_dst_addr = malloc(fi->dest_addrlen)))
 			return ENOMEM;
-		memcpy(rai->ai_dst_addr, fi->dst_addr, fi->dst_addrlen);
-		rai->ai_dst_len = fi->dst_addrlen;
+		memcpy(rai->ai_dst_addr, fi->dest_addr, fi->dest_addrlen);
+		rai->ai_dst_len = fi->dest_addrlen;
 	}
 
 	return 0;
@@ -172,10 +172,10 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
  		fi->src_addrlen = rai->ai_src_len;
  	}
  	if (rai->ai_dst_len) {
- 		if (!(fi->dst_addr = malloc(rai->ai_dst_len)))
+ 		if (!(fi->dest_addr = malloc(rai->ai_dst_len)))
  			return ENOMEM;
- 		memcpy(fi->dst_addr, rai->ai_dst_addr, rai->ai_dst_len);
- 		fi->dst_addrlen = rai->ai_dst_len;
+ 		memcpy(fi->dest_addr, rai->ai_dst_addr, rai->ai_dst_len);
+ 		fi->dest_addrlen = rai->ai_dst_len;
  	}
 
  	return 0;
@@ -671,10 +671,10 @@ static struct fi_info * ibv_ec_cm_getinfo(struct rdma_cm_event *event)
 		goto err;
 	memcpy(fi->src_addr, rdma_get_local_addr(event->id), fi->src_addrlen);
 
-	fi->dst_addrlen = rdma_addrlen(rdma_get_peer_addr(event->id));
-	if (!(fi->dst_addr = malloc(fi->dst_addrlen)))
+	fi->dest_addrlen = rdma_addrlen(rdma_get_peer_addr(event->id));
+	if (!(fi->dest_addr = malloc(fi->dest_addrlen)))
 		goto err;
-	memcpy(fi->dst_addr, rdma_get_peer_addr(event->id), fi->dst_addrlen);
+	memcpy(fi->dest_addr, rdma_get_peer_addr(event->id), fi->dest_addrlen);
 
 	if (!(fi->domain_name = malloc(FI_NAME_MAX)))
 		goto err;

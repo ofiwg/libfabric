@@ -74,7 +74,7 @@ static void psmx_name_server_cleanup(void *args)
  * applications. The server side has to run first. The client
  * side then passes the server name as the first parameter
  * of fi_getinfo call and the resulting provider info should
- * have the transport address of the server in the dst_addr
+ * have the transport address of the server in the dest_addr
  * field. Both side has to use the same UUID.
  *************************************************************/
 void *psmx_name_server(void *args)
@@ -156,7 +156,7 @@ void *psmx_resolve_name(const char *servername, psm_uuid_t uuid)
 	};
 	struct addrinfo *res, *p;
 	char *service;
-	void *dst_addr;
+	void *dest_addr;
 	int sockfd = -1;
 	int port;
 	int n;
@@ -191,22 +191,22 @@ void *psmx_resolve_name(const char *servername, psm_uuid_t uuid)
 		return NULL;
 	}
 
-	dst_addr = calloc(1,sizeof(*dst_addr));
-	if (!dst_addr) {
+	dest_addr = calloc(1,sizeof(*dest_addr));
+	if (!dest_addr) {
 		close(sockfd);
 		return NULL;
 	}
 
-	if (read(sockfd, dst_addr, sizeof(psm_epid_t)) != sizeof(psm_epid_t)) {
+	if (read(sockfd, dest_addr, sizeof(psm_epid_t)) != sizeof(psm_epid_t)) {
 		perror(__func__);
-		free(dst_addr);
+		free(dest_addr);
 		close(sockfd);
 		return NULL;
 	}
 
 	close(sockfd);
 
-	return dst_addr;
+	return dest_addr;
 }
 
 static int psmx_errno_table[PSM_ERROR_LAST] = {

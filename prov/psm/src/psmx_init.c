@@ -38,7 +38,7 @@ static int psmx_getinfo(const char *node, const char *service,
 	struct fi_info *psmx_info;
 	uint64_t flags = 0;
 	uint32_t cnt = 0;
-	void *dst_addr = NULL;
+	void *dest_addr = NULL;
 	void *uuid;
 	char *s;
 
@@ -54,7 +54,7 @@ static int psmx_getinfo(const char *node, const char *service,
 		psmx_string_to_uuid(s, uuid);
 
 	if (node)
-		dst_addr = psmx_resolve_name(node, uuid);
+		dest_addr = psmx_resolve_name(node, uuid);
 
 	if (service) {
 		/* FIXME: check service */
@@ -110,9 +110,9 @@ static int psmx_getinfo(const char *node, const char *service,
 	psmx_info->addr_format = FI_ADDR; 
 	psmx_info->info_addr_format = FI_ADDR;
 	psmx_info->src_addrlen = 0;
-	psmx_info->dst_addrlen = sizeof(psm_epid_t);
+	psmx_info->dest_addrlen = sizeof(psm_epid_t);
 	psmx_info->src_addr = NULL;
-	psmx_info->dst_addr = dst_addr;
+	psmx_info->dest_addr = dest_addr;
 	psmx_info->auth_keylen = sizeof(psm_uuid_t);
 	psmx_info->auth_key = uuid;
 	psmx_info->shared_fd = -1;

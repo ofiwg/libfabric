@@ -218,9 +218,9 @@ struct fi_info {
 	enum fi_addr_format	addr_format;
 	enum fi_addr_format	info_addr_format;
 	size_t			src_addrlen;
-	size_t			dst_addrlen;
+	size_t			dest_addrlen;
 	void			*src_addr;
-	void			*dst_addr;
+	void			*dest_addr;
 	/* Authorization key is intended to limit communication with only
 	 * those endpoints sharing the same key.
 	 */

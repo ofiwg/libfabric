@@ -214,8 +214,8 @@ void __fi_freeinfo(struct fi_info *info)
 {
 	if (info->src_addr)
 		free(info->src_addr);
-	if (info->dst_addr)
-		free(info->dst_addr);
+	if (info->dest_addr)
+		free(info->dest_addr);
 	if (info->domain_name)
 		free(info->domain_name);
 	if (info->auth_key)
