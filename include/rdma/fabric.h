@@ -273,7 +273,7 @@ struct fi_ops {
 /* All fabric interface descriptors must start with this structure */
 struct fid {
 	int			fclass;
-	int			size;
+	unsigned int		size;
 	void			*context;
 	struct fi_ops		*ops;
 };
