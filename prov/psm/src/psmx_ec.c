@@ -99,28 +99,28 @@ static ssize_t psmx_ec_readerr(fid_t fid, void *buf, size_t len, uint64_t flags)
 	return 0;
 }
 
-static ssize_t psmx_ec_write(fid_t fid, void *buf, size_t len)
+static ssize_t psmx_ec_write(fid_t fid, const void *buf, size_t len)
 {
 	return -ENOSYS;
 }
 
-static int psmx_ec_reset(fid_t fid, void *cond)
+static int psmx_ec_reset(fid_t fid, const void *cond)
 {
 	return -ENOSYS;
 }
 
-static ssize_t psmx_ec_condread(fid_t fid, void *buf, size_t len, void *cond)
+static ssize_t psmx_ec_condread(fid_t fid, void *buf, size_t len, const void *cond)
 {
 	return -ENOSYS;
 }
 
 static ssize_t psmx_ec_condreadfrom(fid_t fid, void *buf, size_t len,
-				    void *src_addr, size_t *addrlen, void *cond)
+				    void *src_addr, size_t *addrlen, const void *cond)
 {
 	return -ENOSYS;
 }
 
-static const char *psmx_ec_strerror(fid_t fid, int prov_errno, void *prov_data,
+static const char *psmx_ec_strerror(fid_t fid, int prov_errno, const void *prov_data,
 				    void *buf, size_t len)
 {
 	return psm_error_get_string(prov_errno);

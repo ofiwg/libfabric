@@ -792,8 +792,8 @@ static ssize_t ibv_ec_cm_read_data(fid_t fid, void *buf, size_t len)
 	return (left < len) ? len - left : ret;
 }
 
-static const char * ibv_ec_cm_strerror(fid_t fid, int prov_errno, void *prov_data,
-					 void *buf, size_t len)
+static const char * ibv_ec_cm_strerror(fid_t fid, int prov_errno, const void *prov_data,
+				       void *buf, size_t len)
 {
 	if (buf && len)
 		strncpy(buf, strerror(prov_errno), len);
@@ -880,7 +880,7 @@ err1:
 	return ret;
 }
 
-static int ibv_ec_comp_reset(fid_t fid, void *cond)
+static int ibv_ec_comp_reset(fid_t fid, const void *cond)
 {
 	struct ibv_ec_comp *ec;
 	struct ibv_cq *cq;
@@ -1016,7 +1016,7 @@ static ssize_t ibv_ec_comp_read_data(fid_t fid, void *buf, size_t len)
 	return (left < len) ? len - left : ret;
 }
 
-static const char * ibv_ec_comp_strerror(fid_t fid, int prov_errno, void *prov_data,
+static const char * ibv_ec_comp_strerror(fid_t fid, int prov_errno, const void *prov_data,
 					 void *buf, size_t len)
 {
 	if (buf && len)
