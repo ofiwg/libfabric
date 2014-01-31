@@ -96,45 +96,105 @@ struct fi_msg_atomic {
 
 struct fi_ops_atomic {
 	size_t	size;
-	int	(*write)(fid_t fid, const void *buf, size_t len,
+	int	(*write)(fid_t fid,
+			const void *buf, size_t len,
 			uint64_t addr, uint64_t key,
 			int datatype, int op, void *context);
-	int	(*writemem)(fid_t fid, const void *buf, size_t len,
-			uint64_t mem_desc, uint64_t addr, uint64_t key,
+	int	(*writemem)(fid_t fid,
+			const void *buf, size_t len, uint64_t mem_desc,
+			uint64_t addr, uint64_t key,
 			int datatype, int op, void *context);
-	int	(*writev)(fid_t fid, const void *iov, size_t count,
-			uint64_t addr, uint64_t key, int datatype, int op,
-			void *context);
-	int	(*writeto)(fid_t fid, const void *buf, size_t len,
-			const void *dest_addr, uint64_t addr, uint64_t key,
+	int	(*writev)(fid_t fid,
+			const void *iov, size_t count,
+			uint64_t addr, uint64_t key,
 			int datatype, int op, void *context);
-	int	(*writememto)(fid_t fid, const void *buf, size_t len,
-			uint64_t mem_desc, const void *dest_addr, uint64_t addr,
-			uint64_t key, int datatype, int op, void *context);
-	int	(*writemsg)(fid_t fid, const struct fi_msg_atomic *msg,
-			uint64_t flags);
-	int	(*readwrite)(fid_t fid, const void *buf, size_t len,
-			void *result, uint64_t addr, uint64_t key,
+	int	(*writeto)(fid_t fid,
+			const void *buf, size_t len,
+			const void *dest_addr,
+			uint64_t addr, uint64_t key,
 			int datatype, int op, void *context);
-	int	(*readwritemem)(fid_t fid, const void *buf, size_t len,
-			uint64_t mem_desc, void *result, uint64_t result_mem_desc,
-			uint64_t addr, uint64_t key, int datatype, int op,
-			void *context);
-	int	(*readwritev)(fid_t fid, const void *iov, size_t count,
+	int	(*writememto)(fid_t fid,
+			const void *buf, size_t len, uint64_t mem_desc,
+			const void *dest_addr,
+			uint64_t addr, uint64_t key,
+			int datatype, int op, void *context);
+	int	(*writemsg)(fid_t fid,
+			const struct fi_msg_atomic *msg, uint64_t flags);
+
+	int	(*readwrite)(fid_t fid,
+			const void *buf, size_t len,
+			void *result,
+			uint64_t addr, uint64_t key,
+			int datatype, int op, void *context);
+	int	(*readwritemem)(fid_t fid,
+			const void *buf, size_t len, uint64_t mem_desc,
+			void *result, uint64_t result_mem_desc,
+			uint64_t addr, uint64_t key,
+			int datatype, int op, void *context);
+	int	(*readwritev)(fid_t fid,
+			const void *iov, size_t count,
 			void *resultv, size_t result_count,
-			uint64_t addr, uint64_t key, int datatype, int op,
-			void *context);
-	int	(*readwriteto)(fid_t fid, const void *buf, size_t len,
-			void *result, const void *dest_addr, uint64_t addr,
-			uint64_t key, int datatype, int op, void *context);
-	int	(*readwritememto)(fid_t fid, const void *buf, size_t len,
-			uint64_t mem_desc, void *result, uint64_t result_mem_desc,
-			const void *dest_addr, uint64_t addr, uint64_t key,
+			uint64_t addr, uint64_t key,
 			int datatype, int op, void *context);
-	int	(*readwritemsg)(fid_t fid, const struct fi_msg_atomic *msg,
-			void *resultv, size_t result_count, uint64_t flags);
+	int	(*readwriteto)(fid_t fid,
+			const void *buf, size_t len,
+			void *result,
+			const void *dest_addr,
+			uint64_t addr, uint64_t key,
+			int datatype, int op, void *context);
+	int	(*readwritememto)(fid_t fid,
+			const void *buf, size_t len, uint64_t mem_desc,
+			void *result, uint64_t result_mem_desc,
+			const void *dest_addr,
+			uint64_t addr, uint64_t key,
+			int datatype, int op, void *context);
+	int	(*readwritemsg)(fid_t fid,
+			const struct fi_msg_atomic *msg,
+			void *resultv, size_t result_count,
+			uint64_t flags);
+
+	int	(*compwrite)(fid_t fid,
+			const void *buf, size_t len,
+			const void *compare,
+			void *result,
+			uint64_t addr, uint64_t key,
+			int datatype, int op, void *context);
+	int	(*compwritemem)(fid_t fid,
+			const void *buf, size_t len, uint64_t mem_desc,
+			const void *compare, uint64_t compare_mem_desc,
+			void *result, uint64_t result_mem_desc,
+			uint64_t addr, uint64_t key,
+			int datatype, int op, void *context);
+	int	(*compwritev)(fid_t fid,
+			const void *iov, size_t count,
+			const void *comparev, size_t compare_count,
+			void *resultv, size_t result_count,
+			uint64_t addr, uint64_t key,
+			int datatype, int op, void *context);
+	int	(*compwriteto)(fid_t fid,
+			const void *buf, size_t len,
+			const void *compare,
+			void *result,
+			const void *dest_addr,
+			uint64_t addr, uint64_t key,
+			int datatype, int op, void *context);
+	int	(*compwritememto)(fid_t fid,
+			const void *buf, size_t len, uint64_t mem_desc,
+			const void *compare, uint64_t compare_mem_desc,
+			void *result, uint64_t result_mem_desc,
+			const void *dest_addr,
+			uint64_t addr, uint64_t key,
+			int datatype, int op, void *context);
+	int	(*compwritemsg)(fid_t fid,
+			const struct fi_msg_atomic *msg,
+			const void *comparev, size_t compare_count,
+			void *resultv, size_t result_count,
+			uint64_t flags);
+
+	// TODO: Add size_t count fields
 	int	(*writevalid)(fid_t fid, int datatype, int op);
 	int	(*readwritevalid)(fid_t fid, int datatype, int op);
+	int	(*compwritevalid)(fid_t fid, int datatype, int op, size_t *count);
 };
 
 

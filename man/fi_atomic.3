@@ -1,0 +1,459 @@
+.TH "FI_ATOMIC" 3 "2014-01-31" "libfabric" "Libfabric Programmer's Manual" libfabric
+.SH NAME
+fi_atomic - Remote atomic functions
+.P
+fi_atomic / fi_atomicmem / fi_atomicv
+.br
+fi_atomicto / fi_atomicmemto / fi_atomicmsg
+.RS
+Initiates an atomic operation to remote memory
+.RE
+.P
+fi_fetch_atomic / fi_fetch_atomicmem / fi_fetch_atomicv
+.br
+fi_fetch_atomicto / fi_fetch_atomicmemto / fi_fetch_atomicmsg
+.RS
+Initiates an atomic operation to remote memory, retrieving the initial
+value.
+.RE
+.P
+fi_compare_atomic / fi_compare_atomicmem / fi_compare_atomicv
+.br
+fi_compare_atomicto / fi_compare_atomicmemto / fi_compare_atomicmsg
+.RS
+Initiates an atomic compare-operation to remote memory, retrieving the initial
+value.
+.RE
+.P
+fi_atomic_valid / fi_fetch_atomic_valid / fi_compare_atomic_valid
+.RS
+Indicates if a provider supports a specific atomic operation
+.RE
+.SH SYNOPSIS
+.B #include <rdma/fi_atomic.h>
+.HP
+.BI "int fi_atomic(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_atomicmem(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_atomicv(fid_t " fid ","
+.BI "const void * " iov ", size_t " count ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_atomicto(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ","
+.BI "const void *" dest_addr ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_atomicmemto(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
+.BI "const void *" dest_addr ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_atomicmsg(fid_t " fid ","
+.BI "const struct fi_msg_atomic * " msg ","
+.BI "uint64_t " flags ");"
+.HP
+.BI "int fi_fetch_atomic(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ","
+.BI "void * " result ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_fetch_atomicmem(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
+.BI "void * " result ", uint64_t " result_mem_desc ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_fetch_atomicv(fid_t " fid ","
+.BI "const void * " iov ", size_t " count ","
+.BI "void * " resultv ", size_t " result_count ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_fetch_atomicto(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ","
+.BI "void * " result ","
+.BI "const void *" dest_addr ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_fetch_atomicmemto(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
+.BI "void * " result ", uint64_t " result_mem_desc ","
+.BI "const void *" dest_addr ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_fetch_atomicmsg(fid_t " fid ","
+.BI "const struct fi_msg_atomic * " msg ","
+.BI "void * " resultv ", size_t " result_count ","
+.BI "uint64_t " flags ");"
+.HP
+.BI "int fi_compare_atomic(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ","
+.BI "const void * " compare ","
+.BI "void * " result ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_compare_atomicmem(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
+.BI "const void * " compare ", uint64_t " compare_mem_desc ","
+.BI "void * " result ", uint64_t " result_mem_desc ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_compare_atomicv(fid_t " fid ","
+.BI "const void * " iov ", size_t " count ","
+.BI "const void * " comparev ", size_t " compare_count ","
+.BI "void * " resultv ", size_t " result_count ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_compare_atomicto(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ","
+.BI "const void * " compare ","
+.BI "void * " result ","
+.BI "const void *" dest_addr ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_compare_atomicmemto(fid_t " fid ","
+.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
+.BI "const void * " compare ", uint64_t " compare_mem_desc ","
+.BI "void * " result ", uint64_t " result_mem_desc ","
+.BI "const void *" dest_addr ","
+.BI "uint64_t " addr ", uint64_t " key ","
+.BI "int " datatype ", int " op ", void * " context ");"
+.HP
+.BI "int fi_compare_atomicmsg(fid_t " fid ","
+.BI "const struct fi_msg_atomic * " msg ","
+.BI "const void * " comparev ", size_t " compare_count ","
+.BI "void * " resultv ", size_t " result_count ","
+.BI "uint64_t " flags ");"
+.HP
+.BI "int fi_atomicvalid(fid_t " fid ", int " datatype ", int " op ","
+.BI "size_t *" count ");"
+.HP
+.BI "int fi_fetch_atomnicvalid(fid_t " fid ", int " datatype ", int " op ","
+.BI "size_t *" count ");"
+.HP
+.BI "int fi_compare_atomnicvalid(fid_t " fid ", int " datatype ", int " op ","
+.BI "size_t *" count ");"
+.SH ARGUMENTS
+.IP "fid"
+Fabric endpoint on which to initiate atomic operation. 
+.IP "buf"
+Local data buffer that specifies first operand of atomic operation
+.IP "len"
+Length of data buffer
+.IP "iov / comparev / resultv"
+Vectored data buffer(s).
+.IP "count / compare_count / result_count"
+Count of vectored data entries.
+.IP "addr"
+Address of remote memory to access.
+.IP "key"
+Protection key associated with the remote memory.
+.IP "datatype"
+Datatype associated with atomic operands
+.IP "op"
+Atomic operation to perform
+.IP "compare"
+Local compare buffer, containing comparison data.
+.IP "result"
+Local data buffer to store initial value of remote buffer
+.IP "mem_desc / compare_desc / result_desc"
+Memory descriptor associated with the local data buffer, local compare buffer,
+and local result buffer, respectively.
+.IP "dest_addr"
+Destination address for connectionless atomic operations
+.IP "msg"
+Message descriptor for atomic operations
+.IP "flags"
+Additional flags to apply for the atomic operation
+.IP "context"
+User specified pointer to associate with the operation.
+.SH "DESCRIPTION"
+Atomic transfers are used to read and update data located in remote memory
+regions in an atomic fashion.  Conceptually, they are similar to local
+atomic operations of a similar nature (e.g. atomic increment, compare and
+swap, etc.).  Updates to remote data involve one of several operations on
+the data, and act on specific types of data, as listed below.  As such,
+atomic transfers have knowledge of the format of the data being
+accessed.  A single atomic function may operate across an array of data
+applying an atomic operation to each entry, but the atomicity of an
+operation is limited to a single datatype or entry.
+.P
+Atomic functions may operate on one of the following identified datatypes.
+A given atomic function may support any datatype, subject to provider
+implementation constraints.
+.IP "FI_INT8"
+Signed 8-bit integer.
+.IP "FI_UINT8"
+Unsigned 8-bit integer.
+.IP "FI_INT16"
+Signed 16-bit integer.
+.IP "FI_UINT16"
+Unsigned 16-bit integer.
+.IP "FI_INT32"
+Signed 32-bit integer.
+.IP "FI_UINT32"
+Unsigned 32-bit integer.
+.IP "FI_INT64"
+Signed 64-bit integer.
+.IP "FI_UINT64"
+Unsigned 64-bit integer.
+.IP "FI_FLOAT"
+A single-precision floating point value (IEEE 754).
+.IP "FI_DOUBLE"
+A double-precision floating point value (IEEE 754).
+.IP "FI_FLOAT_COMPLEX"
+An ordered pair of single-precision floating point values (IEEE 754),
+with the first value representing the real portion of a complex
+number and the second representing the imaginary portion. 
+.IP "FI_DOUBLE_COMPLEX"
+An ordered pair of double-precision floating point values (IEEE 754),
+with the first value representing the real portion of a complex
+number and the second representing the imaginary portion. 
+.IP "FI_LONG_DOUBLE"
+A double-extended precision floating point value (IEEE 754).
+.IP "FI_LONG_DOUBLE_COMPLEX"
+An ordered pair of double-extended precision floating point values (IEEE 754),
+with the first value representing the real portion of a complex
+number and the second representing the imaginary portion. 
+.P
+The following atomic operations are defined.  An atomic operation often acts
+against a target value in the remote memory buffer and source value provided
+with the atomic function.  It may also carry source data to replace the
+target value in compare and swap operations.  A conceptual description of
+each operation is provided.
+.IP "FI_MIN"
+Minimum
+.nf
+if (buf[i] < addr[i])
+    addr[i] = buf[i]
+.fi
+.IP "FI_MAX"
+Maximum
+.nf
+if (buf[i] > addr[i])
+    addr[i] = buf[i]
+.fi
+.IP "FI_SUM"
+Sum
+.nf
+addr[i] = addr[i] + buf[i]
+.fi
+.IP "FI_PROD"
+Product
+.nf
+addr[i] = addr[i] * buf[i]
+.fi
+.IP "FI_LOR"
+Logical OR
+.nf
+addr[i] = (addr[i] || buf[i])
+.fi
+.IP "FI_LAND"
+Logical AN
+.nf
+addr[i] = (addr[i] && buf[i])
+.fi
+.IP "FI_BOR"
+Bitwise OR
+.nf
+addr[i] = addr[i] | buf[i]
+.fi
+.IP "FI_BAND"
+Bitwise AND
+.nf
+addr[i] = addr[i] & buf[i]
+.fi
+.IP "FI_LXOR"
+Logical exclusive-OR (XOR)
+.nf
+addr[i] = ((addr[i] && !buf[i]) || (!addr[i] && buf[i])) 
+.fi
+.IP "FI_BXOR"
+Bitwise exclusive-OR (XOR)
+.nf
+addr[i] = addr[i] ^ buf[i]
+.fi
+.IP "FI_SWAP / FI_REPLACE"
+Swap or replace data
+.nf
+addr[i] = buf[i]
+.fi
+.IP "FI_CSWAP"
+Compare values and if equal swap with data
+.nf
+if (addr[i] == compare[i])
+    addr[i] = buf[i]
+.fi
+.IP "FI_CSWAP_NE"
+Compare values and if not equal swap with data
+.nf
+if (addr[i] != compare[i])
+    addr[i] = buf[i]
+.fi
+.IP "FI_CSWAP_LE"
+Compare values and if less than or equal swap with data
+.nf
+if (addr[i] <= compare[i])
+    addr[i] = buf[i]
+.fi
+.IP "FI_CSWAP_LT"
+Compare values and if less than swap with data
+.nf
+if (addr[i] < compare[i])
+    addr[i] = buf[i]
+.fi
+.IP "FI_CSWAP_GE"
+Compare values and if greater than or equal swap with data
+.nf
+if (addr[i] >= compare[i])
+    addr[i] = buf[i]
+.fi
+.IP "FI_CSWAP_GT"
+Compare values and if greater than swap with data
+.nf
+if (addr[i] > compare[i])
+    addr[i] = buf[i]
+.fi
+.IP "FI_MSWAP"
+Swap masked bits with data
+.nf
+addr[i] = (buf[i] & compare[i]) | (addr[i] & ~compare[i])
+.fi
+.P
+The base atomic functions -- fi_atomic, fi_atomicmem, fi_atomicv, fi_atomicto,
+fi_atomicmemto, fi_atomicmsg -- are used to transmit data to a remote node,
+where the specified atomic operation is performed against the target data.
+The result of a base atomic function is stored at the remote memory region.
+The main difference between atomic functions are the number and type of
+parameters that they accept as input.  Otherwise, they perform the same
+general function.
+.P
+The call fi_atomic transfers the data contained in the user-specified data
+buffer to a remote node.  The local endpoint must be connected to
+a remote endpoint or destination before fi_atomic is called.  Unless the
+endpoint has been configured differently, the data buffer passed into
+fi_atomic must not be touched by the application
+until the fi_atomic call completes asynchronously.
+.P
+The difference between fi_atomicmem and fi_atomic is that the data buffer
+passed into fi_atomicmem must be registered with the resource domain associated
+with the endpoint.  See fi_domain and fi_mr_reg for additional details on
+registering data buffers.
+.P
+The fi_atomicv call adds support for a scatter-gather list to fi_atomic and/or
+fi_atomicmem.  The fi_atomicv transfers the set of data buffers referenced by
+the iov parameter to the remote node for processing.  The format of
+iov parameter is specified by the user when the endpoint is created.  See
+fi_getinfo for more details on iov formats.
+.P
+The fi_atomicto and fi_atomicmemto functions are equivalent to fi_atomic and
+fi_atomicmem, respectively, for unconnected endpoints.
+.P
+The fi_atomicmsg call supports atomic functions over both connected and unconnected
+endpoints, with the ability to control the atomic operation per call through the
+use of flags.  The fi_atomicmsg function takes a struct fi_msg_atomic as input.
+.P
+.nf
+struct fi_msg_atomic {
+	const void   *msg_iov;  /* local scatter-gather array */
+	size_t       iov_count; /* # elements in msg_iov */
+	const void   *addr;     /* optional address */
+	const struct fi_rma_iov *rma_iov; /* remote SGL */
+	size_t       rma_iov_count;       /* # elements in rma_iov */
+	int          datatype;  /* operand datatype */
+	int          op;        /* atomic operation */
+	void         *context;  /* user-defined context */
+	uint64_t     data;      /* optional data */
+};
+.fi
+.P
+The fetch atomic functions -- fi_fetch_atomic, fi_fetch_atomicmem,
+fi_fetch_atomicv, fi_fetch_atomicto, fi_fetch_atomicmemto, and
+fi_fetch atomicmsg -- behave similar to the equivalent base atomic function.
+The difference between the fetch and base atomic calls are the fetch
+atomic routines return the initial value that was stored at the target
+to the user.  The initial value is read into the user provided result
+buffer.
+.P
+The following list of atomic operations are usable with both the base
+atomic and fetch atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
+FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR, and FI_SWAP /
+FI_REPLACE.
+.P
+The compare atomic functions -- fi_compare_atomic, fi_compare_atomicmem,
+fi_compare_atomicv, fi_compare_atomicto, fi_compare_atomicmemto, and
+fi_compare atomicmsg -- are used for operations that require comparing
+the target data against a value before performing a swap operation.
+The compare atomic functions support: FI_CSWAP, FI_CSWAP_NE, FI_CSWAP_LE,
+FI_CSWAP_LT, FI_CSWAP_GE, FI_CSWAP_GT, and FI_MSWAP.
+.P
+Completed atomic operations are reported to the user through one or more event
+collectors associated with the endpoint.  Users provide context which are
+associated with each operation, and is returned to the user
+as part of the event completion.  See fi_ec for completion event details.
+.SH "FLAGS"
+The fi_atomicmsg, fi_fetch_atomicmsg, and fi_compare_atomicmsg calls allow
+the user to specify flags which can change the default data transfer operation.
+Flags specified with atomic message operations override most flags
+previously configured with the endpoint, except where noted (see fi_control).
+The following list of flags are usable with atomic message calls.
+.IP "FI_CANCEL"
+Indicates that the user wants the ability to cancel the operation if it does
+not complete first.  When set, the user must pass in struct fi_context as their
+per operation context (see discussion below).
+.IP "FI_NOCOMP"
+Indicates that no completion should be generated for the specified operation.
+When set the user must determine when a request has completed indirectly,
+usually based on the completion of a subsequent operation.  Use of this
+flag may improve performance by allowing the provider to avoid writing
+a completion entry.
+.IP "FI_MORE"
+Indicates that the user has additional requests that will immediately be
+posted after the current call returns.  Use of this flag may improve
+performance by enabling the provider to optimize its access to the fabric
+hardware.
+.IP "FI_SIGNAL"
+Indicates that a completion event should be generated for the given operation.
+.IP "FI_BUFFERED_SEND"
+Indicates that the outbound non-const data buffers (buf and compare parameters)
+should be returned to user immediately after the call returns, even if the
+operation is handled asynchronously.  This may require that the underlying
+provider implementation copy the data into a local buffer and transfer out of
+that buffer.  The use of output result buffers are not affected by this flag.
+.SH "FI_CONTEXT"
+If an atomic operation has been called has the flag FI_CANCEL set,
+then the user context parameter is interpreted as struct fi_context.
+For performance reasons, this structure must be allocated by the user,
+but may be used by the fabric provider to track the operation.  Typically,
+users embed struct fi_context within their own context structure.
+The struct fi_context must remain valid until the corresponding operation
+completes or is successfully canceled.  Users should not update or interpret
+the fields in this structure.  The structure is specified in rdma/fabric.h.
+.SH "RETURN VALUE"
+Returns 0 on success. On error, a negative value corresponding to fabric
+errno is returned. Fabric errno values are defined in 
+.IR "rdma/fi_errno.h".
+.SH "ERRORS"
+.IP "Enter FI_ERRNO values here"
+write me
+.SH "NOTES"
+.SH "SEE ALSO"
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_ec(3)
