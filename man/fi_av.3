@@ -115,7 +115,7 @@ the AV.  The provider uses this to optimize resource allocations.
 .IP "flags"
 Flags that set the default operation of the AV.
 .RS
-.IP "FI_SYNC"
+.IP "FI_BLOCK"
 Insertions into the address vector should be processed synchronously.
 If an AV is set for synchronous operation, fi_av_insert will block
 until all mapping translations have completed.
@@ -190,11 +190,11 @@ posted to the bound event collector.  Receipt of the event indicates
 that all addresses that were inserted into the AV prior to fi_av_sync
 being invoked have been mapped, and that returned addresses are now
 usable.  The fi_av_sync call can be converted into a synchronous call
-using the FI_SYNC flag.  
+using the FI_BLOCK flag.  
 .SH "FLAGS"
 The following flags are usable with fi_av_insert, fi_av_remove, and
 fi_av_sync.
-.IP "FI_SYNC"
+.IP "FI_BLOCK"
 Insertions or removals from an address vector should be processed
 synchronously.  The calls should block until the operations either
 complete successfully or fail.

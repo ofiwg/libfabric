@@ -85,7 +85,7 @@ enum {
 /* Reserve lower 8-bits for type selection
  * fi_info type, fi_open, fcntl
  */
-#define FI_SYNC			(1ULL << 9)
+#define FI_BLOCK		(1ULL << 9)
 /* EXCL - Indicates that the specified domain should not share
  * resources with another opened domain.  By default, resources
  * associated with a resource domain are shared across all open

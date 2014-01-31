@@ -135,7 +135,7 @@ be larger than the input value.
 fi_join and fi_leave are use to associate or deassociate an endpoint with
 a multicast group.  A fabric address is returned from fi_join.  This
 address must be used when issuing data transfer operations with the
-multicast group.  Join requests complete asynchronously unless the FI_SYNC
+multicast group.  Join requests complete asynchronously unless the FI_BLOCK
 flag is specified.  The result of an asynchronous join operation will be
 reported through the event queue associated with the endpoint.  An
 FI_CONNECTED event referencing the multicast address indicates that the
@@ -144,7 +144,7 @@ result in an error event being reported.
 .SH "FLAGS"
 The fi_join call allows the user to specify flags requesting the type of
 join operation being requested.  Flags for fi_leave must be 0.
-.IP "FI_SYNC"
+.IP "FI_BLOCK"
 Indicates that the fi_join call should block until the join operation has
 completed.
 .IP "FI_SEND"
