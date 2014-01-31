@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -111,6 +111,12 @@ struct fid_mr {
  * Used to report various events and the completion of asynchronous
  * operations.
  */
+#define FI_ERRINLINE		(1ULL << 1)
+#define FI_AUTO_RESET		(1ULL << 2)
+
+/* #define FI_TRUNC		(1ULL << 1) */
+/* #define FI_CTRUNC		(1ULL << 2) */
+
 enum fi_ec_domain {
 	FI_EC_DOMAIN_GENERAL,
 	FI_EC_DOMAIN_COMP,
