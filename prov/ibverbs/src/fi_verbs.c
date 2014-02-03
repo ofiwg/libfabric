@@ -109,6 +109,35 @@ static int ibv_check_domain(const char *name)
 		0 : -ENODATA;
 }
 
+static int ibv_check_hints(struct fi_info *hints)
+{
+	switch (hints->type) {
+	case FID_UNSPEC:
+	case FID_MSG:
+	case FID_DGRAM:
+		break;
+	default:
+		return -ENODATA;
+	}
+
+	switch (hints->protocol) {
+	case FI_PROTO_UNSPEC:
+	case FI_PROTO_IB_RC:
+	case FI_PROTO_IWARP:
+	case FI_PROTO_IB_UC:
+	case FI_PROTO_IB_UD:
+		break;
+	default:
+		return -ENODATA;
+	}
+
+	if ((hints->protocol_cap & (FI_PROTO_CAP_MSG | FI_PROTO_CAP_RMA)) !=
+	    hints->protocol_cap)
+		return -ENODATA;
+
+	return ibv_check_domain(hints->domain_name);
+}
+
 /*
  * TODO: this is not the full set of checks which are needed
  */
@@ -190,7 +219,7 @@ static int ibv_getinfo(const char *node, const char *service,
 	int ret;
 
 	if (hints) {
-		ret = ibv_check_domain(hints->domain_name);
+		ret = ibv_check_hints(hints);
 		if (ret)
 			return ret;
 
