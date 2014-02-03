@@ -72,6 +72,7 @@ enum fi_op {
 	FI_LXOR,
 	FI_BXOR,
 	FI_SWAP,
+	FI_REPLACE = FI_SWAP,
 	FI_CSWAP,
 	FI_CSWAP_NE,
 	FI_CSWAP_LE,
