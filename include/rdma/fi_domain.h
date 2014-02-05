@@ -307,6 +307,9 @@ struct fid_domain {
 	struct fi_ops_domain	*ops;
 };
 
+
+#ifndef FABRIC_DIRECT
+
 static inline int fi_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec,
 			    void *context)
 {
@@ -432,6 +435,10 @@ static inline int fi_av_sync(fid_t fid, uint64_t flags, void *context)
 	return fi_sync(fid, flags, context);
 }
 
+
+#else // FABRIC_DIRECT
+#include <rdma/fi_direct_domain.h>
+#endif
 
 #ifdef __cplusplus
 }

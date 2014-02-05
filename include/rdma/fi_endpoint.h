@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -151,6 +151,9 @@ struct fid_ep {
 	struct fi_ops_atomic	*atomic;
 };
 
+
+#ifndef FABRIC_DIRECT
+
 static inline ssize_t fi_cancel(fid_t fid, struct fi_context *context)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
@@ -190,6 +193,10 @@ static inline ssize_t fi_sendmem(fid_t fid, void *buf, size_t len,
 	return ep->msg->sendmem(fid, buf, len, mem_desc, context);
 }
 
+
+#else // FABRIC_DIRECT
+#include <rdma/fi_direct_endpoint.h>
+#endif
 
 #ifdef __cplusplus
 }

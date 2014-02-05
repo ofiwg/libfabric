@@ -142,5 +142,18 @@ AS_IF([test x"$enable_psm" = x"yes"],
 
 AM_CONDITIONAL([HAVE_PSM], [test x"$enable_psm" = x"yes"])
 
+AC_ARG_ENABLE([direct],
+	[AS_HELP_STRING([--enable-direct=@<:@provider@:>@],
+		[Enable direct calls to a fabric provider @<:@defaul=no@:>@])
+	],
+	[AS_CASE([$enable_direct],
+		[mlx4], [AC_DEFINE([HAVE_MLX4_DIRECT], [1],
+			[Define if mlx4 direct provider is enabled])],
+		[])
+	],
+        [enable_direct=no])
+
+AM_CONDITIONAL([HAVE_MLX4_DIRECT], [test x"$enable_direct" = x"mlx4"])
+
 AC_CONFIG_FILES([Makefile libfabric.spec])
 AC_OUTPUT

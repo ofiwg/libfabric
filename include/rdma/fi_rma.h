@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -87,6 +87,11 @@ struct fi_ops_rma {
 	int	(*writemsg)(fid_t fid, const struct fi_msg_rma *msg, uint64_t flags);
 };
 
+
+#ifndef FABRIC_DIRECT
+#else // FABRIC_DIRECT
+#include <rdma/fi_direct_rma.h>
+#endif
 
 #ifdef __cplusplus
 }

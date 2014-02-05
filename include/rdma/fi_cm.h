@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -56,6 +56,9 @@ struct fi_ops_cm {
 	int	(*leave)(fid_t fid, void *addr, void *fi_addr, uint64_t flags);
 };
 
+
+#ifndef FABRIC_DIRECT
+
 static inline int fi_getsockname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
@@ -111,6 +114,10 @@ static inline int fi_shutdown(fid_t fid, uint64_t flags)
 	return ep->cm->shutdown(fid, flags);
 }
 
+
+#else // FABRIC_DIRECT
+#include <rdma/fi_direct_cm.h>
+#endif
 
 #ifdef __cplusplus
 }

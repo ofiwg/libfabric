@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -73,6 +73,9 @@ struct fi_ops_tagged {
 			  void *src_addr, size_t *src_addrlen, size_t *len, void *context);
 };
 
+
+#ifndef FABRIC_DIRECT
+
 static inline ssize_t
 fi_tsendto(fid_t fid, const void *buf, size_t len,
 	   const void *dest_addr, uint64_t tag, void *context)
@@ -105,6 +108,11 @@ fi_tsearch(fid_t fid, uint64_t *tag, uint64_t ignore, uint64_t flags,
 	FI_ASSERT_OP(ep->tagged, struct fi_ops_tagged, search);
 	return ep->tagged->search(fid, tag, ignore, flags, src_addr, src_addrlen, len, context);
 }
+
+
+#else // FABRIC_DIRECT
+#include <rdma/fi_direct_tagged.h>
+#endif
 
 #ifdef __cplusplus
 }

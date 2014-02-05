@@ -277,6 +277,10 @@ static inline int fi_control(fid_t fid, int command, void *arg)
 }
 
 
+#ifdef FABRIC_DIRECT
+#include <rdma/fi_direct.h>
+#endif
+
 #ifdef __cplusplus
 }
 #endif

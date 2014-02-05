@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -198,6 +198,8 @@ struct fi_ops_atomic {
 };
 
 
+#ifndef FABRIC_DIRECT
+
 static inline int
 fi_atomic(fid_t fid, const void *buf, size_t len, uint64_t addr,
 	  uint64_t key, int datatype, int op, void *context)
@@ -286,6 +288,10 @@ fi_fetch_atomicmemto(fid_t fid, const void *buf, size_t len,
 					  key, datatype, op, context);
 }
 
+
+#else // FABRIC_DIRECT
+#include <rdma/fi_direct_atomic.h>
+#endif
 
 #ifdef __cplusplus
 }
