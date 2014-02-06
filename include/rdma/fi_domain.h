@@ -269,17 +269,20 @@ struct fid_ec {
 
 
 enum {
-	FI_MR_ATTR_ACCESS	= 1 << 0,
-	FI_MR_ATTR_FLAGS	= 1 << 1,
+	FI_MR_ATTR_IOV		= 1 << 0,
+	FI_MR_ATTR_ACCESS	= 1 << 1,
 	FI_MR_ATTR_KEY		= 1 << 2,
-	FI_MR_ATTR_MASK_V1	= (FI_MR_ATTR_KEY << 1) - 1
+	FI_MR_ATTR_CONTEXT	= 1 << 3,
+	FI_MR_ATTR_MASK_V1	= (FI_MR_ATTR_CONTEXT << 1) - 1
 };
 
 struct fi_mr_attr {
 	int			mask;
+	const struct iovec	*mr_iov;
+	size_t			iov_count;
 	uint64_t		access;
-	uint64_t		flags;
 	uint64_t		requested_key;
+	void			*context;
 };
 
 
@@ -307,13 +310,17 @@ struct fi_ops_domain {
 	int	(*progress)(fid_t fid);
 	int	(*query)(fid_t fid, struct fi_domain_attr *attr, size_t *attrlen);
 	int	(*av_open)(fid_t fid, struct fi_av_attr *attr, fid_t *av,
-			   void *context);
+			void *context);
 	int	(*ec_open)(fid_t fid, struct fi_ec_attr *attr, fid_t *ec,
-			   void *context);
+			void *context);
 	int	(*mr_reg)(fid_t fid, const void *buf, size_t len,
-			  struct fi_mr_attr *attr, fid_t *mr, void *context);
+			uint64_t access, uint64_t requested_key,
+			uint64_t flags, fid_t *mr, void *context);
 	int	(*mr_regv)(fid_t fid, const struct iovec *iov, size_t count,
-			   struct fi_mr_attr *attr, fid_t *mr, void *context);
+			uint64_t access, uint64_t requested_key,
+			uint64_t flags, fid_t *mr, void *context);
+	int	(*mr_regattr)(fid_t fid, const struct fi_mr_attr *attr,
+			uint64_t flags, fid_t *mr);
 };
 
 struct fid_domain {
@@ -382,13 +389,15 @@ static inline const char * fi_ec_strerror(fid_t fid, int prov_errno, void *prov_
 }
 
 static inline int fi_mr_reg(fid_t fid, const void *buf, size_t len,
-			    struct fi_mr_attr *attr, fid_t *mr, void *context)
+	uint64_t access, uint64_t requested_key,
+	uint64_t flags, fid_t *mr, void *context)
 {
 	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_DOMAIN);
 	FI_ASSERT_OPS(fid, struct fid_domain, ops);
 	FI_ASSERT_OP(domain->ops, struct fi_ops_domain, mr_reg);
-	return domain->ops->mr_reg(fid, buf, len, attr, mr, context);
+	return domain->ops->mr_reg(fid, buf, len, access, requested_key,
+			flags, mr, context);
 }
 
 static inline uint64_t fi_mr_desc(fid_t fid)

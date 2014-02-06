@@ -34,9 +34,9 @@ Initiate a synchronize operation.
 .HP
 .BI "int fi_av_close(fid_t " av ");"
 .HP
-.BI "int fi_av_bind(fid_t " av ", " fid_t " ec ");"
+.BI "int fi_av_bind(fid_t " av ", " fid_t " ec ", uint64_t " flags ");"
 .HP
-.BI "int fi_ec_control(fid_t " av ", int " command ", void *" arg ");"
+.BI "int fi_av_control(fid_t " av ", int " command ", void *" arg ");"
 .HP
 .BI "int fi_av_insert(fid_t " av ", void *" addr ", size_t " count ", "
 .BI "void **" fi_addr ", uint64_t " flags ");"

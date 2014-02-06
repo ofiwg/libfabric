@@ -81,18 +81,6 @@ static int psmx_progress(fid_t fid)
 	return -ENOSYS;
 }
 
-static int psmx_mr_reg(fid_t fid, const void *buf, size_t len,
-		       struct fi_mr_attr *attr, fid_t *mr, void *context)
-{
-	return -ENOSYS;
-}
-
-static int psmx_mr_regv(fid_t fid, const struct iovec *iov, size_t count,
-			struct fi_mr_attr *attr, fid_t *mr, void *context)
-{
-	return -ENOSYS;
-}
-
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_domain_close,
@@ -107,8 +95,6 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.query = psmx_domain_query,
 	.av_open = psmx_av_open,
 	.ec_open = psmx_ec_open,
-	.mr_reg = psmx_mr_reg,
-	.mr_regv = psmx_mr_regv,
 };
 
 int psmx_domain_open(struct fi_info *info, fid_t *fid, void *context)

@@ -89,12 +89,14 @@ infinibandinclude_HEADERS = $(top_srcdir)/include/infiniband/ib.h \
 			   $(top_srcdir)/include/infiniband/verbs.h
 
 man_MANS = \
+	man/fi_atomic.3 \
 	man/fi_av.3 \
 	man/fi_cm.3 \
 	man/fi_domain.3 \
 	man/fi_ec.3 \
 	man/fi_endpoint.3 \
 	man/fi_getinfo.3 \
+	man/fi_mr.3 \
 	man/fi_msg.3 \
 	man/fi_open.3 \
 	man/fi_rma.3 \

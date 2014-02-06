@@ -314,7 +314,9 @@ int fi_endpoint(struct fi_info *info, fid_t *fid, void *context)
 static const char *const errstr[] = {
 	[FI_EOTHER - FI_ERRNO_OFFSET] = "Unspecified error",
 	[FI_ETOOSMALL - FI_ERRNO_OFFSET] = "Provided buffer is too small",
-	[FI_EOPBADSTATE - FI_ERRNO_OFFSET] = "Operation not permitted in current state"
+	[FI_EOPBADSTATE - FI_ERRNO_OFFSET] = "Operation not permitted in current state",
+	[FI_EAVAIL - FI_ERRNO_OFFSET]  = "Error available",
+	[FI_EBADFLAGS - FI_ERRNO_OFFSET] = "Flags not supported"
 };
 
 const char *fi_strerror(int errnum)

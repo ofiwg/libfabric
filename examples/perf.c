@@ -348,7 +348,7 @@ static int alloc_res(struct fi_info *fi)
 		goto err2;
 	}
 
-	ret = fi_mr_reg(dom, buf, buffer_size, NULL, &mr, NULL);
+	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, FI_BLOCK, &mr, NULL);
 	if (ret) {
 		printf("fi_mr_reg %s\n", fi_strerror(-ret));
 		goto err3;

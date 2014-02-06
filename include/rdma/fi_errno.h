@@ -166,10 +166,10 @@ extern "C" {
 //#define	FI_ENOMEDIUM		ENOMEDIUM	/* No medium found */
 //#define	FI_EMEDIUMTYPE		EMEDIUMTYPE	/* Wrong medium type */
 #define	FI_ECANCELED		ECANCELED	/* Operation Canceled */
-//#define	FI_ENOKEY		ENOKEY		/* Required key not available */
+#define	FI_ENOKEY		ENOKEY		/* Required key not available */
 //#define	FI_EKEYEXPIRED		EKEYEXPIRED	/* Key has expired */
 //#define	FI_EKEYREVOKED		EKEYREVOKED	/* Key has been revoked */
-//#define	FI_EKEYREJECTED		EKEYREJECTED	/* Key was rejected by service */
+#define	FI_EKEYREJECTED		EKEYREJECTED	/* Key was rejected by service */
 //#define	FI_EOWNERDEAD		EOWNERDEAD	/* Owner died */
 //#define	FI_ENOTRECOVERABLE	ENOTRECOVERABLE	/* State not recoverable */
 
@@ -179,6 +179,7 @@ extern "C" {
 #define FI_ETOOSMALL		257		/* Provided buffer is too small */
 #define FI_EOPBADSTATE		258		/* Operation not permitted in current state */
 #define FI_EAVAIL		259		/* Error available */
+#define FI_EBADFLAGS		260		/* Flags not supported */
 
 const char *fi_strerror(int errnum);
 

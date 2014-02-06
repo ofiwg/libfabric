@@ -1214,15 +1214,31 @@ struct fi_ops ibv_mr_ops = {
 	.close = ibv_mr_close
 };
 
+static int ibv_mr_check_reg(uint64_t access, uint64_t requested_key, uint64_t flags)
+{
+	if (!(flags & FI_BLOCK))
+		return -FI_EBADFLAGS;
+
+	if (requested_key)
+		return -FI_ENOSYS;
+
+	return 0;
+}
+
 static int ibv_mr_reg(fid_t fid, const void *buf, size_t len,
-		      struct fi_mr_attr *attr, fid_t *mr, void *context)
+		uint64_t access, uint64_t requested_key,
+		uint64_t flags, fid_t *mr, void *context)
 {
 	struct ibv_mem_desc *md;
-	int access;
+	int ibv_access, ret;
+
+	ret = ibv_mr_check_reg(access, requested_key, flags);
+	if (ret)
+		return ret;
 
 	md = calloc(1, sizeof *md);
 	if (!md)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	md->domain = container_of(fid, struct ibv_domain, domain_fid.fid);
 	md->mr_fid.fid.fclass = FID_CLASS_MR;
@@ -1230,14 +1246,15 @@ static int ibv_mr_reg(fid_t fid, const void *buf, size_t len,
 	md->mr_fid.fid.context = context;
 	md->mr_fid.fid.ops = &ibv_mr_ops;
 
-	access = IBV_ACCESS_LOCAL_WRITE;
-	if (attr) {
-		if (attr->access & FI_READ)
-			access |= IBV_ACCESS_REMOTE_READ;
-		if (attr->access & FI_WRITE)
-			access |= IBV_ACCESS_REMOTE_WRITE;
+	ibv_access = IBV_ACCESS_LOCAL_WRITE;
+	if (access & FI_REMOTE) {
+		if (access & FI_READ)
+			ibv_access |= IBV_ACCESS_REMOTE_READ;
+		if (access & FI_WRITE)
+			ibv_access |= IBV_ACCESS_REMOTE_WRITE;
 	}
-	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, access);
+
+	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, ibv_access);
 	if (!md->mr)
 		goto err;
 
