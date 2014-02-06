@@ -520,7 +520,7 @@ static int client_connect(void)
 	if (ret)
 		goto err4;
 
-	ret = fi_connect(ep, NULL, 0);
+	ret = fi_connect(ep, fi->dest_addr, NULL, 0);
 	if (ret) {
 		printf("fi_connect %s\n", fi_strerror(-ret));
 		goto err4;

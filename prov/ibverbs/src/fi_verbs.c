@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -474,7 +474,8 @@ static struct fi_ops_rma ibv_msg_ep_rma_ops = {
 	.readmem = ibv_msg_ep_rma_readmem
 };
 
-static int ibv_msg_ep_connect(fid_t fid, const void *param, size_t paramlen)
+static int ibv_msg_ep_connect(fid_t fid, const void *addr,
+			      const void *param, size_t paramlen)
 {
 	struct ibv_msg_ep *ep;
 	struct rdma_conn_param conn_param;

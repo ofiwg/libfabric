@@ -46,11 +46,12 @@ struct fi_ops_cm {
 	int	(*getname)(fid_t fid, void *addr, size_t *addrlen);
 	int	(*getpeer)(fid_t fid, void *addr, size_t *addrlen);
 		/* TODO: Add addr to connect for connectionless EPs */
-	int	(*connect)(fid_t fid, const void *param, size_t paramlen);
+	int	(*connect)(fid_t fid, const void *addr,
+			const void *param, size_t paramlen);
 	int	(*listen)(fid_t fid);
 	int	(*accept)(fid_t fid, const void *param, size_t paramlen);
 	int	(*reject)(fid_t fid, struct fi_info *info,
-			  const void *param, size_t paramlen);
+			const void *param, size_t paramlen);
 	int	(*shutdown)(fid_t fid, uint64_t flags);
 	int	(*join)(fid_t fid, void *addr, void **fi_addr, uint64_t flags);
 	int	(*leave)(fid_t fid, void *addr, void *fi_addr, uint64_t flags);
@@ -77,13 +78,14 @@ static inline int fi_listen(fid_t fid)
 	return ep->cm->listen(fid);
 }
 
-static inline int fi_connect(fid_t fid, const void *param, size_t paramlen)
+static inline int fi_connect(fid_t fid, const void *addr,
+			     const void *param, size_t paramlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
 	FI_ASSERT_OPS(fid, struct fid_ep, cm);
 	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, connect);
-	return ep->cm->connect(fid, param, paramlen);
+	return ep->cm->connect(fid, addr, param, paramlen);
 }
 
 static inline int fi_accept(fid_t fid, const void *param, size_t paramlen)
