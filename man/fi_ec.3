@@ -37,22 +37,28 @@ Converts provider specific error information into a printable string
 .HP
 .BI "int fi_ec_control(fid_t " ec ", int " command ", void *" arg ");"
 .HP
-.BI "int fi_ec_read(fid_t " ec ", void *" buf ", size_t " len ");"
+.BI "int fi_ec_read(fid_t " ec ","
+.BI "void *" buf ", size_t " len ");"
 .HP
-.BI "int fi_ec_readfrom(fid_t " ec ", void *" buf ", size_t " len ", "
+.BI "int fi_ec_readfrom(fid_t " ec ","
+.BI "void *" buf ", size_t " len ", "
 .BI "void *" src_addr ", size_t *" addrlen ");"
 .HP
-.BI "int fi_ec_readerr(fid_t " ec ", void *" buf ", size_t " len ", "
+.BI "int fi_ec_readerr(fid_t " ec ","
+.BI "struct fi_ec_err_entry *" buf ", size_t " len ", "
 .BI "uint64_t " flags ");"
 .HP
-.BI "int fi_ec_write(fid_t " ec ", const void *" buf ", size_t " len ");"
+.BI "int fi_ec_write(fid_t " ec ","
+.BI "const void *" buf ", size_t " len ");"
 .HP
 .BI "int fi_ec_reset(fid_t " ec ", const void *" cond ");"
 .HP
-.BI "int fi_ec_condread(fid_t " ec ", void *" buf ", size_t " len ", "
+.BI "int fi_ec_condread(fid_t " ec ","
+.BI "void *" buf ", size_t " len ", "
 .BI "const void *" cond ");"
 .HP
-.BI "int fi_ec_condreadfrom(fid_t " ec ", void *" buf ", size_t " len ","
+.BI "int fi_ec_condreadfrom(fid_t " ec ","
+.BI "void *" buf ", size_t " len ","
 .BI "void *" src_addr ", size_t *" addrlen ", const void *" cond ");"
 .HP
 .BI "const char * fi_ec_strerror(fid_t " ec ", int " prov_errno ", "
@@ -192,16 +198,21 @@ struct fi_ec_tagged_entry {
 };
 .fi
 .IP "FI_EC_FORMAT_ERR"
-Reports information on an operation which completed in error.
+Reports minimal information on an operation which complete successfully,
+and detailed information in the case of errors.
 .nf
 
 struct fi_ec_err_entry {
-	void    *fid_context; /* endpoint context */
 	void    *op_context;  /* operation context */
+	union {
+		void *fid_context;/* endpoint context */
+		void *buf;        /* receive data buffer */
+	};
 	uint64_t flags;       /* completion flags */
+	size_t   len;         /* size of received data */
+	uint64_t data;        /* completion data */
 	int      err;         /* error code */
 	int      prov_errno;  /* provider error code */
-	uint64_t data;        /* completion data */
 	void    *prov_data;   /* provider error data */
 };
 
@@ -210,6 +221,32 @@ The general reason for the error is provided through the err field.  Provider
 specific error information may also be available through the prov_errno
 and prov_data fields.  Users may call fi_ec_strerror to convert provider
 specific error information into a printable string for debugging purposes.
+.sp
+For successful completions, only the op_context field is valid.
+.IP "FI_EC_FORMAT_COMP_ERR"
+Reports minimal data for processing completions for operations which complete
+successfully and detailed information in the case of errors.  This format uses
+struct fi_ec_err_entry.  For successful completions, the op_context, flags,
+and len fields are valid. 
+.IP "FI_EC_FORMAT_DATA_ERR"
+Reports data for processing completions for operations which complete
+successfully and detailed information in the case of errors.  This format uses
+struct fi_ec_err_entry.  For successful completions, the op_context, buf, flags,
+len, and data fields are valid.
+.IP "FI_EC_FORMAT_TAGGED_ERR"
+Reports completion data for successful fi_tagged operations and detailed
+information in the case of errors.
+.nf
+
+struct fi_ec_tagged_err_entry {
+	int      status;                      /* result of operation */
+	union {
+		struct fi_ec_tagged_entry tagged; /* success data */
+		struct fi_ec_err_entry    err;    /* error data */
+	};
+};
+
+.fi
 .IP "FI_EC_FORMAT_CM"
 Provides information on connection management.
 .nf
@@ -271,16 +308,6 @@ queued events have been read.  Once reset, the EC will trigger the wait
 object when a new entry is added, unless the EC has been configured with
 a wait condition.  In the latter case, the EC will be reset to signal
 again once the condition has been satisfied.
-.IP "FI_ERRINLINE"
-Indicates that all events, including operations which completed in error,
-should be reported to the user through the fi_ec_read, fi_ec_readfrom,
-fi_ec_condread, and fi_ec_condreadfrom calls.
-.sp
-If an EC is of type counter and has been set with FI_ERRINLINE, then
-reading the EC will result in the EC returning two counters.  The first
-represents the number of successful completions associated with the EC
-that has occurred.  The second indicates the number of completions that
-have completed in error.
 .RE
 .IP "cond"
 Points to a dataype or structure describing a wait condition that must be
@@ -302,8 +329,7 @@ with an EC.
 Returns the current default operational flags associated with the EC.
 .IP "FI_SETOPSFLAG (uint64_t *)"
 Modifies the current default operational flags associated with the EC.
-Operational flags affected by fi_ec_control are: FI_AUTO_RESET and
-FI_ERRINLINE.
+Operational flags affected by fi_ec_control are: FI_AUTO_RESET.
 .IP "FI_GETECWAIT (void **)"
 This command allows the user to retrieve the low-level wait object
 associated with the EC.  The format of the wait-object is specified during
@@ -330,15 +356,18 @@ The condread calls allow the user to specify and change the wait condition
 of an EC.  Otherwise, they behave similar to the read / readfrom calls.
 .P
 Reading non-error events from an EC will block if the EC has been configured
-with a wait object, and the wait object has been reset to the non-signaled
-state.
+with FI_BLOCK, a wait object is associated with the EC, and the wait object
+has been reset to the non-signaled state.
 .P
-ECs are optimized to report operations which have completed successfully.
-Unless an EC has been configured with FI_ERRINLINE, when an operation
+ECs may be optimized to report operations which have completed successfully.
+If the specified format of EC is not of type ending with "ERR", then
+operations which fail are reported 'out of band'.  Such operations are
+retrieved using the fi_ec_readerr function.  When an operation
 that completes with an unexpected error is inserted
 into an EC, it is placed into a temporary error queue.  Attempting to read
 from an EC while an item is in the error queue results in an FI_EAVAIL
-failure.  The error completion may be read using fi_ec_readerr.
+failure.  Applications may use this return code to determine when to
+call fi_ec_readerr.
 .P
 If an EC has not been configured with FI_AUTORESET, once the wait object
 of an EC has been signaled, it will not be signaled again until the EC

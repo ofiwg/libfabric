@@ -111,8 +111,7 @@ struct fid_mr {
  * Used to report various events and the completion of asynchronous
  * operations.
  */
-#define FI_ERRINLINE		(1ULL << 1)
-#define FI_AUTO_RESET		(1ULL << 2)
+#define FI_AUTO_RESET		(1ULL << 1)
 
 /* #define FI_TRUNC		(1ULL << 1) */
 /* #define FI_CTRUNC		(1ULL << 2) */
@@ -136,6 +135,9 @@ enum fi_ec_format {
 	FI_EC_FORMAT_DATA,
 	FI_EC_FORMAT_TAGGED,
 	FI_EC_FORMAT_ERR,
+	FI_EC_FORMAT_COMP_ERR,
+	FI_EC_FORMAT_DATA_ERR,
+	FI_EC_FORMAT_TAGGED_ERR,
 	FI_EC_FORMAT_CM
 };
 
@@ -207,14 +209,26 @@ struct fi_ec_tagged_entry {
 };
 
 struct fi_ec_err_entry {
-	void			*fid_context;
 	void			*op_context;
+	union {
+		void		*fid_context;
+		void		*buf;
+	};
 	uint64_t		flags;
+	size_t			len;
+	uint64_t		data;
 	int			err;
 	int			prov_errno;
-	uint64_t		data;
 	/* prov_data is available until the next time the EQ is read */
 	void			*prov_data;
+};
+
+struct fi_ec_tagged_err_entry {
+	int			status;
+	union {
+		struct fi_ec_tagged_entry	tagged;
+		struct fi_ec_err_entry		err;
+	};
 };
 
 enum fi_cm_event {
