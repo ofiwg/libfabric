@@ -809,7 +809,7 @@ static ssize_t ibv_ec_cm_read_data(fid_t fid, void *buf, size_t len)
 			if (left < len)
 				return len - left;
 
-			if (ec->flags & FI_NONBLOCK)
+			if (!(ec->flags & FI_BLOCK))
 				return 0;
 
 			ibv_poll_fd(ec->channel->fd);
@@ -887,7 +887,6 @@ static int ibv_ec_cm_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *c
 		}
 		break;
 	case FI_EC_WAIT_NONE:
-		vec->flags = O_NONBLOCK;
 		break;
 	default:
 		return -ENOSYS;
@@ -983,7 +982,7 @@ static ssize_t ibv_ec_comp_read(fid_t fid, void *buf, size_t len)
 				continue;
 			}
 
-			if (ec->flags & FI_NONBLOCK)
+			if (!(ec->flags & FI_BLOCK))
 				return 0;
 
 			ibv_poll_fd(ec->channel->fd);
@@ -1034,7 +1033,7 @@ static ssize_t ibv_ec_comp_read_data(fid_t fid, void *buf, size_t len)
 				continue;
 			}
 
-			if (ec->flags & FI_NONBLOCK)
+			if (!(ec->flags & FI_BLOCK))
 				return 0;
 
 			ibv_poll_fd(ec->channel->fd);
@@ -1124,7 +1123,6 @@ static int ibv_ec_comp_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void 
 		}
 		break;
 	case FI_EC_WAIT_NONE:
-		vec->flags = FI_NONBLOCK;
 		break;
 	default:
 		return -ENOSYS;

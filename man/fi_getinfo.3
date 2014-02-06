@@ -143,13 +143,9 @@ requests.
 .IP "FI_NUMERICHOST"
 Indicates that the node name is a numeric address.  When set, name resolution
 is not performed.
-.IP "FI_NONBLOCK"
-Similar to O_NONBLOCK.  Indicates that a fabric resource should be set for
-nonblocking operation.  This only applies to interfaces which are not
-asynchronous.
 .IP "FI_BLOCK"
-Specifies that an asynchronous operation should block until the operation
-completes.
+Specifies that an asynchronous or nonblocking operation should block until
+the operation completes.
 .IP "FI_EXCL"
 Specifies that a fabric resource domain should not share resource with another
 open domain.  By default, resources are shared across multiple open calls by

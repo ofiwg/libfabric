@@ -76,8 +76,6 @@ enum {
  * 60 - 63	provider-domain specific
  */
 
-#define FI_NONBLOCK		(1ULL << 8)
-#define FI_DONTWAIT		FI_NONBLOCK
 #define FI_BLOCK		(1ULL << 9)
 #define FI_BUFFERED_RECV	(1ULL << 10)	/* BUFFERED? */
 #define FI_BUFFERED_SEND	(1ULL << 11)	/* BUFFERED? */
