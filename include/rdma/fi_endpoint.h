@@ -82,7 +82,7 @@ struct fi_msg {
 	const void		*addr;
 	void			*context;
 	uint64_t		data;
-	int			priority;
+	int			flow;
 };
 
 /* Endpoint option levels */

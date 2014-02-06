@@ -50,7 +50,7 @@ struct fi_msg_tagged {
 	uint64_t		ignore;
 	void			*context;
 	uint64_t		data;
-	int			priority;
+	int			flow;
 };
 
 struct fi_ops_tagged {
