@@ -1,28 +1,28 @@
-.TH "FI_EC" 3 "2014-01-08" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_EC" 3 "2014-02-08" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_ec \- Event collector operations
-.P
+.PP
 fi_ec_open / fi_ec_close
 .RS
 Open/close an event collector
 .RE
-.P
+.PP
 fi_ec_read / fi_ec_readfrom / fi_ec_readerr
 .RS
 Reads an event from an event collector
 .RE
-.P
+.PP
 fi_ec_write
 .RS
 Writes an event to an event collector
 .RE
-.P
+.PP
 fi_ec_condread / fi_ec_condreadfrom
 .RS
 Waits until the specified condition has been met before reading an event
 from an event collector.
 .RE
-.P
+.PP
 fi_ec_strerror
 .RS
 Converts provider specific error information into a printable string
@@ -36,6 +36,7 @@ Converts provider specific error information into a printable string
 .BI "int fi_ec_close(fid_t " ec ");"
 .HP
 .BI "int fi_ec_control(fid_t " ec ", int " command ", void *" arg ");"
+.PP
 .HP
 .BI "int fi_ec_read(fid_t " ec ","
 .BI "void *" buf ", size_t " len ");"
@@ -47,9 +48,11 @@ Converts provider specific error information into a printable string
 .BI "int fi_ec_readerr(fid_t " ec ","
 .BI "struct fi_ec_err_entry *" buf ", size_t " len ", "
 .BI "uint64_t " flags ");"
+.PP
 .HP
 .BI "int fi_ec_write(fid_t " ec ","
 .BI "const void *" buf ", size_t " len ");"
+.PP
 .HP
 .BI "int fi_ec_reset(fid_t " ec ", const void *" cond ");"
 .HP
@@ -60,6 +63,7 @@ Converts provider specific error information into a printable string
 .BI "int fi_ec_condreadfrom(fid_t " ec ","
 .BI "void *" buf ", size_t " len ","
 .BI "void *" src_addr ", size_t *" addrlen ", const void *" cond ");"
+.PP
 .HP
 .BI "const char * fi_ec_strerror(fid_t " ec ", int " prov_errno ", "
 .BI "const void *" prov_data ", void *" buf ", size_t" len ");"
@@ -94,7 +98,7 @@ Provider specific data related to a completion
 .SS "fi_ec_open"
 fi_ec_open allocates a new event collector.  The properties and behavior of
 the event collector are defined by struct fi_ec_attr.
-.P
+.PP
 .nf
 struct fi_ec_attr {
 	int                  mask;      /* valid attr fields */
@@ -268,7 +272,7 @@ If the underlying connection protocol supports exchanging user data as
 part of the connection establish, the data field will contain any
 available user CM data.  ECs that report CM events return a single event
 per read request.
-.P
+.Pzp
 If an EC has been configured as a counter, then reading from the EC will
 return a uint64_t that contains the current value of the counter.
 .RE
@@ -343,7 +347,7 @@ specified options when the EC was opened.  Multiple events may be retrieved
 from an EC in a single call, provided that sufficient buffer space was
 provided.  The number of bytes successfully read from the EC is returned
 by the read call.
-.P
+.PP
 The readfrom calls allow the EC to return source address information to
 the user for any received data.  The format and size of the source address
 is a property of the associated resource domain.  See the addr_format
@@ -351,14 +355,14 @@ field of struct fi_into when calling fi_domain.  Note that returning source
 address information may require that the provider perform address
 translation and/or lookup in order to provide the requested data, which
 may adversely affect performance.
-.P
+.PP
 The condread calls allow the user to specify and change the wait condition
 of an EC.  Otherwise, they behave similar to the read / readfrom calls.
-.P
+.PP
 Reading non-error events from an EC will block if the EC has been configured
 with FI_BLOCK, a wait object is associated with the EC, and the wait object
 has been reset to the non-signaled state.
-.P
+.PP
 ECs may be optimized to report operations which have completed successfully.
 If the specified format of EC is not of type ending with "ERR", then
 operations which fail are reported 'out of band'.  Such operations are
@@ -368,7 +372,7 @@ into an EC, it is placed into a temporary error queue.  Attempting to read
 from an EC while an item is in the error queue results in an FI_EAVAIL
 failure.  Applications may use this return code to determine when to
 call fi_ec_readerr.
-.P
+.PP
 If an EC has not been configured with FI_AUTORESET, once the wait object
 of an EC has been signaled, it will not be signaled again until the EC
 has been rearmed.  The fi_ec_reset call is used to manually rearm the EC
@@ -379,7 +383,7 @@ fi_ec_open / fi_ec_reset
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.
 .RE
-.P
+.PP
 fi_ec_read / fi_ec_readfrom / fi_ec_readerr
 .br
 fi_ec_condread / fi_ec_condreadfrom
@@ -390,7 +394,7 @@ On success, returns the number of bytes read from or written to the event
 collector.  On error, a negative value corresponding to fabric errno
 is returned.
 .RE
-.P
+.PP
 fi_ec_strerror
 .RS
 Returns a character string interpretation of the provider specific error

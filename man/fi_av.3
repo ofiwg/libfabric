@@ -1,27 +1,27 @@
 .TH "FI_AV" 3 "2014-01-20" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_av \- Address vector operations
-.P
+.PP
 fi_av_open / fi_av_close
 .RS
 Open or close an address vector
 .RE
-.P
+.PP
 fi_av_bind
 .RS
 Associate an address vector with an event queue.
 .RE
-.P
+.PP
 fi_av_control
 .RS
 Control the address vector operation.
 .RE
-.P
+.PP
 fi_av_insert / fi_av_remove
 .RS
 Insert/remove an address into/from the address vector.
 .RE
-.P
+.PP
 fi_av_sync
 .RS
 Initiate a synchronize operation.
@@ -33,10 +33,13 @@ Initiate a synchronize operation.
 .BI "void * " context ");"
 .HP
 .BI "int fi_av_close(fid_t " av ");"
+.PP
 .HP
 .BI "int fi_av_bind(fid_t " av ", " fid_t " ec ", uint64_t " flags ");"
+.PP
 .HP
 .BI "int fi_av_control(fid_t " av ", int " command ", void *" arg ");"
+.PP
 .HP
 .BI "int fi_av_insert(fid_t " av ", void *" addr ", size_t " count ", "
 .BI "void **" fi_addr ", uint64_t " flags ");"
@@ -76,7 +79,7 @@ are asynchronous by default, but may be set to operate synchronously.
 .SS "fi_av_open"
 fi_av_open allocates a new address vector.  The properties and behavior of
 the address vector are defined by struct fi_av_attr.
-.P
+.PP
 .nf
 struct fi_av_attr {
 	int                  mask;      /* valid attr fields */
@@ -152,21 +155,21 @@ of addresses is specified through the count parameter.  The addr parameter
 references an array of addresses to insert into the AV.  Addresses
 inserted into an address vector must be in the same format as specified
 in struct fi_info:info_addr_format for the corresponding domain.
-.P
+.PP
 For AV's of type FI_AV_MAP, once inserted addresses have been mapped,
 the mapped values are written into the buffer referenced by fi_addr.
 Addresses written to fi_addr use the format as specified in struct
 fi_info:addr_format.  The fi_addr buffer must remain valid until the
 AV insertion has completed and an event has been generated
 to an associated event queue.
-.P
+.PP
 For AV's of type FI_AV_TABLE, addresses are placed into the table in
 order.  That is, the first address inserted may be referenced at
 index 0.  The fi_addr parameter may be NULL in this case.  Otherwise,
 fi_addr must reference an array of structures defined by struct fi_info:
 addr_format, and the buffer must remain valid until the insertion
 operation completes.
-.P
+.PP
 Applications indicate that all addresses have been inserted into an
 AV and that the provider should begin processing the AV by calling
 fi_sync on the AV fid.  The context specified through fi_sync will be
@@ -183,7 +186,7 @@ have been inserted and/or removed from the AV, and that it should
 begin processing any addresses in the AV.  This allows the provider
 to batch address processing in order to improve the performance and
 efficiency of address mapping mechanisms.
-.P
+.PP
 The fi_av_sync call operates asynchronously by default.  The caller is
 notified upon completion of the fi_av_sync call through an event
 posted to the bound event collector.  Receipt of the event indicates

@@ -4,7 +4,7 @@ fi_open / fi_close \- Open / close a fabric interface domain
 .SH SYNOPSIS
 .B "#include <rdma/fabric.h>"
 .br
-.P
+.PP
 .B "int" fi_open
 .BI "(char *" name ","
 .BI "struct fi_info *" info ","
@@ -12,7 +12,7 @@ fi_open / fi_close \- Open / close a fabric interface domain
 .BI "fid_t *" fid ","
 .BI "void *" context ");"
 .br
-.P
+.PP
 .B "int" fi_close
 .BI "(fid_t " fid ");"
 .SH ARGUMENTS
@@ -33,7 +33,7 @@ The function
 opens a fabric interface. Either the
 .IR "name" " or the " info " arguments must be provided."
 .br
-.P
+.PP
 The function
 .BR "fi_close"()
 closes the specified domain and releases resources allocated to it. Users must

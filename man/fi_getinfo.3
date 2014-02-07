@@ -24,7 +24,7 @@ Returns information about available fabric services for reaching the specified
 node or service, subject to any provided hints.  Callers must provide at least
 one of the node, service, or hints parameters.  If no matching fabric information
 is available, info will be set to NULL.
-.P
+.PP
 Either node, service, or hints must be provided.  If hints are provided, the
 operation will be controlled by hints.ai_flags.  If FI_PASSIVE is
 specified, the call will resolve address information for use on the
@@ -34,7 +34,7 @@ to the given node.  The hints parameter, if provided,
 may be used to control the resulting output as indicated below.
 If node is not given, fi_getinfo will attempt to resolve the fabric addressing
 information based on the provided hints.
-.P
+.PP
 The caller must call fi_freeinfo to release fi_info structures returned
 by this call.
 .SH "FI_INFO"
@@ -339,12 +339,12 @@ that points to a list of matching interfaces.
 .I info 
 is set to NULL if there are no communication interfaces or none match
 the input hints.
-.P 
+.PP
 If node is provided, fi_getinfo will attempt to resolve the fabric address
 to the given node.  If node is not provided, fi_getinfo will attempt to resolve
 the fabric addressing information based on the provided hints.  The caller must
 call fi_freeinfo to release fi_info structures returned by fi_getinfo.
-.P
+.PP
 If neither node, service or hints are provided, then fi_getinfo simply returns
 the list all available communication interfaces.
 .SH "SEE ALSO"

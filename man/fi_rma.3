@@ -1,14 +1,14 @@
 .TH "FI_RMA" 3 "2014-01-07" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_rma - Remote memory access operations
-.P
+.PP
 fi_read / fi_readmem / fi_readv
 .br
 fi_readfrom / fi_readmemfrom / fi_readmsg
 .RS
 Initiates a read from remote memory
 .RE
-.P
+.PP
 fi_write / fi_writemem / fi_writev
 .br
 fi_writeto / fi_writememto / fi_writemsg
@@ -37,6 +37,7 @@ Initiate a write to remote memory
 .BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
 .HP
 .BI "int fi_readmsg(fid_t " fid ", const struct fi_msg_rma * " msg ", uint64_t " flags ");"
+.PP
 .HP
 .BI "int fi_write(fid_t " fid ", const void * " buf ", size_t " len ","
 .BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
@@ -88,38 +89,55 @@ User specified pointer to associate with the operation.
 RMA (remote memory access) operations are used to transfer data directly
 between a local data buffer and a remote data buffer.  RMA transfers occur
 on a byte level granularity, and no message boundaries are maintained.
-.P
+.PP
 The write functions -- fi_write, fi_writemem, fi_writev, fi_writeto,
 fi_writememto, fi_writemsg -- are used to transmit data into a remote
 memory buffer.  The main difference between write functions
 are the number and type of parameters that they accept as input.  Otherwise,
 they perform the same general function.
-.P
+.PP
+The read functions -- fi_read, fi_readmem, fi_readv, fi_readfrom,
+fi_readmemfrom, fi_readmsg -- are used to transfer data from a remote
+memory region into local data buffer(s).  Similar to the write operations,
+read operations operate asynchronously.  Users should not touch the posted
+data buffer(s) until the read operation has completed.
+.PP
+Completed RMA operations are reported to the user through one or more event
+collectors associated with the endpoint.  Users provide context which are
+associated with each operation, and is returned to the user
+as part of the event completion.  See fi_ec for completion event details.
+.PP
+By default, the remote endpoint does not generate an event or notify the
+user when a memory region has been accessed by an RMA read or write operation.
+However, immediate data may be associated with an RMA write operation.
+RMA writes with immediate data will generate a completion entry at the
+remote endpoint, so that the immediate data may be delivered.
+.SS "fi_write"
 The call fi_write transfers the data contained in the user-specified data
 buffer to a remote memory region.  The local endpoint must be connected to
 a remote endpoint or destination before fi_write is called.  Unless the
 endpoint has been configured differently, the data buffer passed into
 fi_write must not be touched by the application
 until the fi_write call completes asynchronously.
-.P
+.SS "fi_writemem"
 The difference between fi_writemem and fi_write is that the data buffer
 passed into fi_writemem must be registered with the resource domain associated
 with the endpoint.  See fi_domain and fi_mr for additional details on
 registering data buffers.
-.P
+.SS "fi_writev"
 The fi_writev call adds support for a scatter-gather list to fi_write and/or
 fi_writemem.  The fi_writev transfers the set of data buffers referenced by
 the iov parameter to the remote memory region.  The format of
 iov parameter is specified by the user when the endpoint is created.  See
 fi_getinfo for more details on iov formats.
-.P
+.SS "fi_writeto / fi_writememto"
 The fi_writeto and fi_writememto functions are equivalent to fi_write and
 fi_writemem, respectively, for unconnected endpoints.
-.P
+.SS "fi_writemsg"
 The fi_writemsg call supports data transfers over both connected and unconnected
 endpoints, with the ability to control the write operation per call through the
 use of flags.  The fi_writemsg function takes a struct fi_msg_rma as input.
-.P
+.PP
 .nf
 struct fi_msg_rma {
 	const void *msg_iov;   /* local scatter-gather array */
@@ -132,39 +150,22 @@ struct fi_msg_rma {
 	int         flow;      /* message steering */
 };
 .fi
-.P
-The read functions -- fi_read, fi_readmem, fi_readv, fi_readfrom,
-fi_readmemfrom, fi_readmsg -- are used to transfer data from a remote
-memory region into local data buffer(s).  Similar to the write operations,
-read operations operate asynchronously.  Users should not touch the posted
-data buffer(s) until the read operation has completed.
-.P
+.SS "fi_read"
 The fi_read call requests that the remote endpoint transfer data from the
 remote memory region into the local data buffer.  The local endpoint must
 be connected to a remote endpoint or destination before fi_read is called.
-.P
+.SS "fi_readmem"
 The fi_readmem is similar to fi_read, but requires that the local buffer be
 registered with the resource domain associated with the endpoint.  The fi_readv
 allows the user to post a scatter-gather list of buffers to receive the
 remotely read data.
-.P
+.SS "fi_readfrom / fi_readmemfrom"
 The fi_readfrom and fi_readmemfrom calls are equivalent to fi_read and
 fi_readfrom, respectively, for unconnected endpoints.
-.P
+.SS "fi_readmsg"
 The fi_readmsg call supports data transfers over both connected and unconnected
 endpoints, with the ability to control the read operation per call through the
 use of flags.  The fi_readmsg function takes a struct fi_msg_rma as input.
-.P
-Completed RMA operations are reported to the user through one or more event
-collectors associated with the endpoint.  Users provide context which are
-associated with each operation, and is returned to the user
-as part of the event completion.  See fi_ec for completion event details.
-.P
-By default, the remote endpoint does not generate an event or notify the
-user when a memory region has been accessed by an RMA read or write operation.
-However, immediate data may be associated with an RMA write operation.
-RMA writes with immediate data will generate a completion entry at the
-remote endpoint, so that the immediate data may be delivered.
 .SH "FLAGS"
 The fi_readmsg and fi_writemsg calls allow the user to specify flags
 which can change the default data transfer operation.

@@ -1,7 +1,7 @@
 .TH "FI_ATOMIC" 3 "2014-01-31" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_atomic - Remote atomic functions
-.P
+.PP
 fi_atomic / fi_atomicmem / fi_atomicv
 .br
 fi_atomicto / fi_atomicmemto / fi_atomicmsg
@@ -62,6 +62,7 @@ Indicates if a provider supports a specific atomic operation
 .BI "int fi_atomicmsg(fid_t " fid ","
 .BI "const struct fi_msg_atomic * " msg ","
 .BI "uint64_t " flags ");"
+.PP
 .HP
 .BI "int fi_fetch_atomic(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ","
@@ -99,6 +100,7 @@ Indicates if a provider supports a specific atomic operation
 .BI "const struct fi_msg_atomic * " msg ","
 .BI "void * " resultv ", size_t " result_count ","
 .BI "uint64_t " flags ");"
+.PP
 .HP
 .BI "int fi_compare_atomic(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ","
@@ -142,14 +144,15 @@ Indicates if a provider supports a specific atomic operation
 .BI "const void * " comparev ", size_t " compare_count ","
 .BI "void * " resultv ", size_t " result_count ","
 .BI "uint64_t " flags ");"
+.PP
 .HP
 .BI "int fi_atomicvalid(fid_t " fid ", int " datatype ", int " op ","
 .BI "size_t *" count ");"
 .HP
-.BI "int fi_fetch_atomnicvalid(fid_t " fid ", int " datatype ", int " op ","
+.BI "int fi_fetch_atomicvalid(fid_t " fid ", int " datatype ", int " op ","
 .BI "size_t *" count ");"
 .HP
-.BI "int fi_compare_atomnicvalid(fid_t " fid ", int " datatype ", int " op ","
+.BI "int fi_compare_atomicvalid(fid_t " fid ", int " datatype ", int " op ","
 .BI "size_t *" count ");"
 .SH ARGUMENTS
 .IP "fid"
@@ -195,7 +198,7 @@ atomic transfers have knowledge of the format of the data being
 accessed.  A single atomic function may operate across an array of data
 applying an atomic operation to each entry, but the atomicity of an
 operation is limited to a single datatype or entry.
-.P
+.SS "Atomic Datatypes"
 Atomic functions may operate on one of the following identified datatypes.
 A given atomic function may support any datatype, subject to provider
 implementation constraints.
@@ -233,7 +236,7 @@ A double-extended precision floating point value (IEEE 754).
 An ordered pair of double-extended precision floating point values (IEEE 754),
 with the first value representing the real portion of a complex
 number and the second representing the imaginary portion. 
-.P
+.SS "Atomic Operations"
 The following atomic operations are defined.  An atomic operation often acts
 against a target value in the remote memory buffer and source value provided
 with the atomic function.  It may also carry source data to replace the
@@ -337,7 +340,7 @@ Swap masked bits with data
 .nf
 addr[i] = (buf[i] & compare[i]) | (addr[i] & ~compare[i])
 .fi
-.P
+.SS "Base Atomic Functions"
 The base atomic functions -- fi_atomic, fi_atomicmem, fi_atomicv, fi_atomicto,
 fi_atomicmemto, fi_atomicmsg -- are used to transmit data to a remote node,
 where the specified atomic operation is performed against the target data.
@@ -345,32 +348,32 @@ The result of a base atomic function is stored at the remote memory region.
 The main difference between atomic functions are the number and type of
 parameters that they accept as input.  Otherwise, they perform the same
 general function.
-.P
+.PP
 The call fi_atomic transfers the data contained in the user-specified data
 buffer to a remote node.  The local endpoint must be connected to
 a remote endpoint or destination before fi_atomic is called.  Unless the
 endpoint has been configured differently, the data buffer passed into
 fi_atomic must not be touched by the application
 until the fi_atomic call completes asynchronously.
-.P
+.PP
 The difference between fi_atomicmem and fi_atomic is that the data buffer
 passed into fi_atomicmem must be registered with the resource domain associated
 with the endpoint.  See fi_domain and fi_mr for additional details on
 registering data buffers.
-.P
+.PP
 The fi_atomicv call adds support for a scatter-gather list to fi_atomic and/or
 fi_atomicmem.  The fi_atomicv transfers the set of data buffers referenced by
 the iov parameter to the remote node for processing.  The format of
 iov parameter is specified by the user when the endpoint is created.  See
 fi_getinfo for more details on iov formats.
-.P
+.PP
 The fi_atomicto and fi_atomicmemto functions are equivalent to fi_atomic and
 fi_atomicmem, respectively, for unconnected endpoints.
-.P
+.PP
 The fi_atomicmsg call supports atomic functions over both connected and unconnected
 endpoints, with the ability to control the atomic operation per call through the
 use of flags.  The fi_atomicmsg function takes a struct fi_msg_atomic as input.
-.P
+.PP
 .nf
 struct fi_msg_atomic {
 	const void   *msg_iov;  /* local scatter-gather array */
@@ -384,7 +387,7 @@ struct fi_msg_atomic {
 	uint64_t     data;      /* optional data */
 };
 .fi
-.P
+.SS "Fetch-Atomic Functions"
 The fetch atomic functions -- fi_fetch_atomic, fi_fetch_atomicmem,
 fi_fetch_atomicv, fi_fetch_atomicto, fi_fetch_atomicmemto, and
 fi_fetch atomicmsg -- behave similar to the equivalent base atomic function.
@@ -392,19 +395,19 @@ The difference between the fetch and base atomic calls are the fetch
 atomic routines return the initial value that was stored at the target
 to the user.  The initial value is read into the user provided result
 buffer.
-.P
+.PP
 The following list of atomic operations are usable with both the base
 atomic and fetch atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
 FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR, and FI_SWAP /
 FI_REPLACE.
-.P
+.SS "Compare-Atomic Functions"
 The compare atomic functions -- fi_compare_atomic, fi_compare_atomicmem,
 fi_compare_atomicv, fi_compare_atomicto, fi_compare_atomicmemto, and
 fi_compare atomicmsg -- are used for operations that require comparing
 the target data against a value before performing a swap operation.
 The compare atomic functions support: FI_CSWAP, FI_CSWAP_NE, FI_CSWAP_LE,
 FI_CSWAP_LT, FI_CSWAP_GE, FI_CSWAP_GT, and FI_MSWAP.
-.P
+.SS "Completions"
 Completed atomic operations are reported to the user through one or more event
 collectors associated with the endpoint.  Users provide context which are
 associated with each operation, and is returned to the user
@@ -452,8 +455,11 @@ Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 
 .IR "rdma/fi_errno.h".
 .SH "ERRORS"
-.IP "Enter FI_ERRNO values here"
-write me
+.IP "-FI_EOPNOTSUPP"
+The requested atomic operation is not supported on this endpoint.
+.IP "-FI_EMSGSIZE"
+The number of atomic operations in a single request exceeds that supported
+by the underlying provider.
 .SH "NOTES"
 .SH "SEE ALSO"
 fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_ec(3)
