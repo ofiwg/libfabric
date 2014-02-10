@@ -1,0 +1,41 @@
+.TH "FI_FABRIC" 3 "2013-02-13" "libfabric" "Libfabric Programmer's Manual" libfabric
+.SH NAME
+fi_fabric \- Open a fabric domain
+.SH SYNOPSIS
+.BI "#include <rdma/fabric.h>"
+.HP
+.BI "int fi_fabric(const char *" name ", uint64_t " flags ","
+.BI "fid_t **" fid ", void *" context ");"
+.SH ARGUMENTS
+.IP "name" 12
+Name associated with the fabric.
+.IP "flags" 12
+Control flags for opening the fabric.
+.IP "fid" 12
+On success, points to the opened fabric domain.
+.IP "context" 12
+User specified context associated with the domain.  This context is
+returned as part of any asynchronous event associated with the domain.
+.SH "DESCRIPTION"
+Opens a fabric resource domain.  A fabric domain represents a
+collection of hardware and software resources that access a single
+physical or virtual network.  All network ports on a
+system that can communicate with each other through their attached
+networks belong to the same fabric domain.  A fabric domain shares
+network addresses and can span multiple providers.
+.PP
+Fabric domains are identified by a character strings.  The format of
+the fabric name is not defined by libfabric, but includes numeric
+identifiers and administrator assigned description or name.
+.SH "RETURN VALUE"
+Returns 0 on success. On error, a negative value corresponding to fabric
+errno is returned. Fabric errno values are defined in 
+.IR "rdma/fi_errno.h".
+.SH "NOTES"
+Users should call fi_close to release all resources allocated to the fabric
+domain.
+.PP
+The following resources are associated with fabric domains: access domains,
+passive endpoints, and CM event queues.
+.SH "SEE ALSO"
+fabric(7), fi_getinfo(3), fi_domain(3), fi_ec(3), fi_endpoint(3)

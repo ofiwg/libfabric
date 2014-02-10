@@ -316,7 +316,9 @@ static const char *const errstr[] = {
 	[FI_ETOOSMALL - FI_ERRNO_OFFSET] = "Provided buffer is too small",
 	[FI_EOPBADSTATE - FI_ERRNO_OFFSET] = "Operation not permitted in current state",
 	[FI_EAVAIL - FI_ERRNO_OFFSET]  = "Error available",
-	[FI_EBADFLAGS - FI_ERRNO_OFFSET] = "Flags not supported"
+	[FI_EBADFLAGS - FI_ERRNO_OFFSET] = "Flags not supported",
+	[FI_ENOEC - FI_ERRNO_OFFSET] = "Missing or unavailable EC",
+	[FI_EDOMAIN - FI_ERRNO_OFFSET] = "Invalid resource domain",
 };
 
 const char *fi_strerror(int errnum)

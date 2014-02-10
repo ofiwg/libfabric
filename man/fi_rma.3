@@ -50,11 +50,11 @@ Initiate a write to remote memory
 .BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
 .HP
 .BI "int fi_writeto(fid_t " fid ", const void * " buf ", size_t " len ","
-.BI "const void *" dst_addr ", uint64_t " addr ", uint64_t " key ","
+.BI "const void *" dest_addr ", uint64_t " addr ", uint64_t " key ","
 .BI "void * " context ");"
 .HP
 .BI "int fi_writememto(fid_t " fid ", const void * " buf ", size_t " len ","
-.BI "uint64_t " mem_desc ", const void *" dst_addr ","
+.BI "uint64_t " mem_desc ", const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
 .HP
 .BI "int fi_writemsg(fid_t " fid ", const struct fi_msg_rma * " msg ", uint64_t " flags ");"
@@ -75,7 +75,7 @@ Address of remote memory to access.
 Protection key associated with the remote memory.
 .IP "mem_desc"
 Memory descriptor associated with the local data buffer
-.IP "dst_addr"
+.IP "dest_addr"
 Destination address for connectionless write transfers
 .IP "src_addr"
 Source address to read from for connectionless transfers

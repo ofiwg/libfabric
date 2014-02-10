@@ -112,7 +112,6 @@ enum fi_addr_format {
 	FI_ADDR,		/* void * fi_addr */
 	FI_AV,			/* struct fi_av_addr */
 	FI_ADDR_INDEX,		/* size_t fi_addr */
-	FI_INFO_ADDR,		/* struct fi_info_addr */
 	FI_SOCKADDR,		/* struct sockaddr */
 	FI_SOCKADDR_IN,		/* struct sockaddr_in */
 	FI_SOCKADDR_IN6,	/* struct sockaddr_in6 */

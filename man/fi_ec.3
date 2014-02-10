@@ -123,7 +123,7 @@ An EC domain indicates the type of events which are to be reported through
 the event collector.  Valid values are:
 .RS
 .IP "FI_EC_DOMAIN_GENERAL"
-The EC is used to report asynchronous events that are unaffliated with an
+The EC is used to report asynchronous events that are unaffiliated with an
 endpoint or address vector, such as port state changes, address changes,
 and so forth.
 .IP "FI_EC_DOMAIN_COMP"
@@ -142,7 +142,7 @@ will be able to read out queued events.  Event queues are useful for
 applications that require details on a completion or event.
 .IP "FI_EC_COUNTER"
 Counter EC's only maintain a count of the number of events that occur.  Full
-or parital event data is not maintained.  Event counters are useful for
+or partial event data is not maintained.  Event counters are useful for
 applications that only need to maintain how many completions or events
 have occurred, rather than details about the event itself.  This can be
 useful for tracking the number of available resources.
@@ -314,7 +314,7 @@ a wait condition.  In the latter case, the EC will be reset to signal
 again once the condition has been satisfied.
 .RE
 .IP "cond"
-Points to a dataype or structure describing a wait condition that must be
+Points to a datatype or structure describing a wait condition that must be
 satisfied before the EC wait object is signaled.  The format of the data
 referenced by the cond field is determined by the value set by the wait_cond
 field.
@@ -353,7 +353,7 @@ the user for any received data.  The format and size of the source address
 is a property of the associated resource domain.  See the addr_format
 field of struct fi_into when calling fi_domain.  Note that returning source
 address information may require that the provider perform address
-translation and/or lookup in order to provide the requested data, which
+translation and/or look-up in order to provide the requested data, which
 may adversely affect performance.
 .PP
 The condread calls allow the user to specify and change the wait condition

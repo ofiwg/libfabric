@@ -73,7 +73,7 @@ endpoint (for connection-oriented endpoints).
 The fi_listen call indicates that the specified endpoint should be
 transitioned into a passive connection state, allowing it to accept
 incoming connection requests.  Connection requests against a listening
-endpoint are reported asychronously to the user through a bound CM
+endpoint are reported asynchronously to the user through a bound CM
 event queue using the FI_CONNREQ event type.  The number of outstanding
 connection requests that can be queued at an endpoint is limited by the
 listening endpoint's backlog parameter.  The backlog is initialized
@@ -109,7 +109,7 @@ endpoint until an FI_CONNECTED event has been generated.  However, receive
 buffers may be associated with an endpoint anytime.
 .PP
 For connection-oriented endpoints, the param buffer will be sent as
-part of the connection request or response, subject to the contraints of
+part of the connection request or response, subject to the constraints of
 the underlying connection protocol.  Applications may use fi_control
 to determine the size of application data that may be exchanged as
 part of a connection request or response.  The fi_connect, fi_accept, and
@@ -131,10 +131,10 @@ The fi_getname and fi_getpeer calls may be used to retrieve the local or
 peer endpoint address, respectively.  On input, the addrlen parameter should
 indicate the size of the addr buffer.  If the actual address is larger than
 what can fit into the buffer, it will be truncated.  On output, addrlen
-is set to the size o fthe buffer needed to store the address, which may
+is set to the size of the buffer needed to store the address, which may
 be larger than the input value.
 .SS "fi_join / fi_leave"
-fi_join and fi_leave are use to associate or deassociate an endpoint with
+fi_join and fi_leave are use to associate or dissociate an endpoint with
 a multicast group.  A fabric address is returned from fi_join.  This
 address must be used when issuing data transfer operations with the
 multicast group.  Join requests complete asynchronously unless the FI_BLOCK

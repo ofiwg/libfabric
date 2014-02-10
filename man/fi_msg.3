@@ -84,7 +84,7 @@ they perform the same general function.  Messages sent using fi_msg operations
 are received by a remote endpoint into a buffer posted to receive such messages.
 .PP
 The receive functions -- fi_recv, fi_recvmem, fi_recvv, fi_recvfrom,
-fi_recvmemfrom, fi_recvmsg -- post a data buffer to an endoint to receive
+fi_recvmemfrom, fi_recvmsg -- post a data buffer to an endpoint to receive
 inbound messages.  Similar to the send operations, receive operations operate
 asynchronously.  Users should not touch the posted data buffer(s) until the
 receive operation has completed.
@@ -133,7 +133,7 @@ struct fi_msg {
 The fi_recv call posts a data buffer to the receive queue of the corresponding
 endpoint.  Posted receives are matched with inbound sends in the order in which
 they were posted.  Message boundaries are maintained.  The order
-in which the receives comlete is dependent on the endpoint type and protocol.
+in which the receives complete is dependent on the endpoint type and protocol.
 .SS "fi_recvmem"
 The fi_recvmem is similar to fi_recv, but requires that the posted buffer be
 registered with the resource domain associated with the endpoint.  The fi_recvv

@@ -1,37 +1,257 @@
-.TH "FI_ENDPOINT" 3 "2013-01-20" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ENDPOINT" 3 "2013-02-12" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
-fi_endpoint \- Allocate a fabric interface communication endpoint
+fi_endpoint \- Fabric endpoint operations
+.PP
+fi_endpoint \ fi_pendpoint \ fi_close
+.RS
+Allocate or close an endpoint.
+.RE
+.PP
+fi_ep_bind
+.RS
+Associate an endpoint with an event queue, address vector, or
+memory region
+.RE
+.PP
+fi_enable
+.RS
+Transitions an endpoint into an active state.
+.RE
+.PP
+fi_cancel
+.RS
+Cancel a pending asynchronous data transfer
+.RE
+.PP
+fi_ep_control
+.RS
+Control endpoint operation.
+.RE
+.PP
+fi_getopt / fi_setopt
+.RS
+Get or set endpoint options.
+.RE
 .SH SYNOPSIS
 .B "#include <rdma/fabric.h>"
+.br
 .B "#include <rdma/fi_endpoint.h>"
-.HP
-.B "int fi_endpoint(struct fi_info *" info ", fid_t **" fid ","
-.BI "void *" context ");"
-.SH ARGUMENTS
-.IP "info" 12
-Details about the fabric interface endpoint to be opened, obtained from fi_getinfo.
-.IP "fid" 12
-On success, points to the opened fabric endpoint.
-.IP "context" 12
-User specified context associated with the endpoint.  This context is returned as
-part of any asynchronous event associated with the endpoint.
-.SH "DESCRIPTION"
-Creates an unbound fabric interface endpoint.  A fabric endpoint typically
-refers to a transport level communication portal.  The returned endpoint must
-be bound to a fabric domain using fi_bind before being used in data transfer
-operations.
 .PP
-The allocated endpoint is configured based on input values specified through
-the info parameter, as indicated below.  Note that the initial settings may
-also be modified through the endpoint's control interface fi_control,
-including specifying more refined values than are possible during creation.
-For full details on struct fi_info fields and values, see fi_getinfo.
+.HP
+.BI "int fi_endpoint(fid_t " fid ", struct fi_info *" info ", fid_t **" ep ","
+.BI "void *" context ");"
+.HP
+.BI "int fi_pendpoint(fid_t " fid ", struct fi_info *" info ", fid_t **" ep ","
+.BI "void *" context ");"
+.HP
+.BI "int fi_close(fid_t " ep ");"
+.PP
+.HP
+.BI "int fi_ep_bind(fid_t " ep ", " fid_t " fid ", uint64_t " flags ");"
+.PP
+.HP
+.BI "int fi_enable(fid_t " ep ");"
+.PP
+.HP
+.BI "int fi_cancel(fid_t " ep ", struct fi_context *" context ");"
+.PP
+.HP
+.BI "int fi_ep_control(fid_t " ep ", int " command ", void *" arg ");"
+.PP
+.HP
+.BI "int fi_getopt(fid_t " ep ", int " level ", int " optname ","
+.BI "void *" optval ", size_t *" optlen ");"
+.HP
+.BI "int fi_setopt(fid_t " ep ", int " level ", int " optname ","
+.BI "const void *" optval ", size_t " optlen ");"
+.SH ARGUMENTS
+.IP "fid" 12
+On creation, specifies a fabric or access domain.  On bind, identifies the
+event queue or address vector to bind to the endpoint.
+.IP "info" 12
+Details about the fabric interface endpoint to be opened, obtained from
+fi_getinfo.
+.IP "ep" 12
+A fabric endpoint.
+.IP "fid" 12
+Fabric identifier of an associated resource.
+.IP "context" 12
+Context associated with the endpoint or asynchronous operation.
+.IP "flags" 12
+Additional flags to apply to the operation.
+.IP "command" 12
+Command of control operation to perform on endpoint.
+.IP "arg" 12
+Optional control argument
+.IP "level" 12
+Protocol level at which the desired option resides.
+.IP "optname" 12
+The protocol option to read or set.
+.IP "optval" 12
+The option value that was read or to set.
+.IP "optlen" 12
+The size of the optval buffer.
+.SH "DESCRIPTION"
+Endpoints are transport level communication portals.  There are two types
+of endpoints: active and passive.  Passive endpoints belong to a fabric
+domain and are used to listen for incoming connection requests.  Active
+endpoints belong to access domains and can perform data transfers.
+.PP
+Data transfer interfaces are bound to active endpoints.  Active endpoints
+may be connection-oriented or connectionless, and may provide data
+reliability.
+.PP
+Active endpoints are created in the disabled state.  They must transition into
+an enabled state before being used to connect to a remote destination
+or transfer data.  The fi_enable call is used to transition an endpoint into
+an active state.
+.PP
+In order to transition an endpoint into an enabled state, it must be
+bound to one or more fabric resources.  An endpoint that
+will generate asynchronous events, either through data transfer operations
+or communication establishment events, must be bound to the appropriate
+event collectors before being enabled.
+.PP
+Once an endpoint has been activated, it may be associated with memory
+regions and address vectors.  Receive buffers may be posted to it, and
+calls may be made to connection establishment routines.
+Connectionless endpoints may also perform data transfers. 
+.PP
+The behavior of an endpoint may be adjusted by setting its control
+data and protocol options.  This allows the underlying provider to
+redirect function calls to implementations optimized to meet the
+desired application behavior.
+.SS "fi_endpoint"
+fi_endpoint allocates a new active endpoint.  The properties and behavior
+of the endpoint are defined based on the provided struct fi_info.  See
+fi_getinfo for additional details on fi_info.  fi_info flags that control
+the operation of an endpoint are defined below.
+.SS "fi_pendpoint"
+Allocates a new passive endpoint with basic properties defined by struct
+fi_info.
+.SS "fi_close"
+Closes an endpoint and release all resources associated with it.
+.SS "fi_ep_bind"
+fi_ep_bind is used to associate an endpoint with hardware resources.
+The common use of fi_ep_bind is to direct asynchronous operations
+associated with an endpoint to an event queue.  An endpoint must be
+bound with ECs capable of reporting completions for any asynchronous
+operation initiated on the endpoint.  For connection-oriented
+endpoints, this requires binding the endpoint with an EC that supports
+the communication management (CM) domain.
+.PP
+An active endpoint may direct asynchronous completions to different ECs, based
+on the type of operation.  This is specified using fi_ep_bind flags.  The
+following flags may be used separately or OR'ed together when binding
+an endpoint to a completion domain EC.
+.RS
+.IP "FI_SEND"
+Directs the completion of outbound data transfer requests to the
+specified event queue.  This includes send message, RMA, and atomic
+operations.
+.IP "FI_RECV"  
+Directs the notification of inbound data transfers to the
+specified event queue.  This includes received messages.
+.RE
+.PP
+Active endpoints that are configured to use index based addressing --
+FI_ADDR_INDEX -- must be bound to a single AV.  AV binding can occur
+before or after an endpoint has been enabled.
+.SS "fi_enable"
+This call transitions the endpoint into an enabled state.  An endpoint
+must be enabled before attempting to connect it or perform data transfers
+on it.  Enabling an endpoint typically results in hardware resources
+being assigned to it.
+.SS "fi_cancel"
+fi_cancel attempts to cancel an outstanding asynchronous operation.
+The endpoint must have been configured to support cancelable operations,
+or the operation itself must have been marked as cancelable in order
+for this call to succeed.  Canceling an operation causes the fabric
+provider to search for the operation and, if it is still pending, complete
+it immediately as having been canceled.
+.PP
+Use of the fi_cancel call is paired with the FI_CANCEL flag.  Operations
+which are cancelable must use struct fi_context as their user context. 
+For performance reasons, this structure must be allocated by the user,
+but may be used by the fabric provider to track the operation.  Typically,
+users embed struct fi_context within their own context structure.
+The struct fi_context must remain valid until the corresponding operation
+completes or is successfully canceled.  Users should not update or interpret
+the fields in this structure.  The structure is specified in
+<rdma/fabric.h>.
+.SS "fi_ep_control"
+The control operation is used to adjust the default behavior of an
+endpoint.  It allows the underlying provider to redirect function
+calls to implementations optimized to meet the desired application
+behavior.  As a result, calls to fi_ep_control must be serialized
+against all other calls to an endpoint.
+.PP
+The base operation of an endpoint is selected during creation using
+struct fi_info.  The following control commands and arguments may be
+assigned to an endpoint.
+.IP "FI_GETOPSFLAG -- uint64_t *flags"
+Used to retrieve the current value of flags associated with data transfer
+operations initiated on the endpoint.  See below for a list of control
+flags.
+.IP "FI_SETOPSFLAG -- uint64_t *flags"
+Used to change the data transfer operation flags associated with an
+endpoint. Valid control flags are defined below.
+.SS "fi_getopt / fi_setopt"
+Endpoint protocol operations may be retrieved using fi_getopt or set
+using fi_setopt.  Applications specify the level that a desired option
+exists, identify the option, and provide input/output buffers to
+get or set the option.  fi_setopt provides an application a way to
+adjust low-level protocol and implementation specific details of an
+endpoint.
+.PP
+The following option levels and option names and parameters are defined.
+.IP "FI_OPT_ENDPOINT"
+.RS
+.IP "FI_OPT_MAX_BUFFERED_SEND - size_t"
+Defines the maximum buffered send operation (see the FI_BUFFERED_SEND
+flag) that the endpoint currently supports.
+.RE
+.SH "CONTROL FLAGS"
+The following flags may be set to control the operation of data transfers
+initiated on an endpoint.  See fi_getinfo for additional descriptions of
+the flags.
+.IP "FI_BUFFERED_SEND"
+Indicates that all outbound data buffer should be returned to the user's
+control immediately after a data transfer call returns, even if the
+operation is handled asynchronously.  This may require that the
+provider copy the data into a local buffer and transfer out of that buffer.
+.IP "FI_NOCOMP"
+Indicates that the endpoint should, by default, not generate completion
+entries for any data transfer operations.
+.IP "FI_SIGNAL"
+Indicates that the endpoint should, by default, generate completion
+entries for data transfer operations.
+.IP "FI_ACK"
+Indicates that a completion event, when requested, should not be generated
+until the operation has been acknowledged by the remote side.
+.IP "FI_CANCEL"
+Indicates that the user wants the ability to cancel all data transfer
+operations.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 
 .IR "rdma/fi_errno.h".
 .SH "NOTES"
-Users should call fi_close to release all resources allocated fo the fabric
+Users should call fi_close to release all resources allocated to the fabric
 endpoint.
+.SH "RETURN VALUES"
+Returns 0 on success.  On error, a negative value corresponding to
+fabric errno is returned.
+.PP
+Fabric errno values are defined in
+.IR "rdma/fi_errno.h".
+.SH "ERRORS"
+.IP "-FI_EDOMAIN"
+A resource domain was not bound to the endpoint or an attempt was made to
+bind multiple domains.
+.IP "-FI_ENOEC"
+The endpoint has not been configured with necessary event collectors.
+.IP "FI_EOPBADSTATE"
+The endpoint's state does not permit the requested operation.
 .SH "SEE ALSO"
 fi_getinfo(3), fi_open(3), fi_domain(3), fi_msg(3), fi_tagged(3), fi_rma(3)

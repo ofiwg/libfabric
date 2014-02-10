@@ -50,12 +50,13 @@ struct fi_info {
 	enum fi_addr_format addr_format;
 	enum fi_addr_format info_addr_format;
 	size_t              src_addrlen;
-	size_t              dst_addrlen;
+	size_t              dest_addrlen;
 	void               *src_addr;
-	void               *dst_addr;
+	void               *dest_addr;
 	size_t              auth_keylen;
 	void               *auth_key;
 	int                 shared_fd;
+	char               *fabric_name;
 	char               *domain_name;
 	size_t              datalen;
 	void               *data;
@@ -67,7 +68,7 @@ if no more structures exist.
 .IP "size"
 Size of the fi_info structure, used for compatibility.  Callers should specify
 the size of any fi_info structure passed in as hints.  The size set on any fi_info
-structures returned from fi_getinfo indicates the size that was interpretted by
+structures returned from fi_getinfo indicates the size that was interpreted by
 the providers. 
 .IP "flags"
 Hint flags that control the operation.  Supported flags are listed in the 
@@ -108,13 +109,13 @@ section below.
 Indicates the length of the source address (must be specified if
 .B src_addr
 is specified).
-.IP "dst_addrlen"
+.IP "dest_addrlen"
 Indicates the length of the destination address (must be specified if
 .B dst_addr
 is specified).
 .IP "src_addr"
 If specified, indicates the source address.
-.IP "dst_addr"
+.IP "dest_addr"
 If specified, indicates the destination address.
 .IP "auth_keylen"
 Indicates the size of the authentication key (must be specified if
@@ -126,8 +127,10 @@ the same key.
 .IP "shared_fd"
 If specified, is used to authenticate a domain to share resources with
 other processes on the same node that have access to the same shared_fd.
+.IP "fabric_name"
+If specified, the name of the fabric domain.
 .IP "domain_name"
-If specified, the name of the resource domain.
+If specified, the name of the access domain.
 .IP "datalen"
 Length of any additional data (must be specified if
 .B data
@@ -144,7 +147,7 @@ requests.
 Indicates that the node name is a numeric address.  When set, name resolution
 is not performed.
 .IP "FI_BLOCK"
-Specifies that an asynchronous or nonblocking operation should block until
+Specifies that an asynchronous or non-blocking operation should block until
 the operation completes.
 .IP "FI_EXCL"
 Specifies that a fabric resource domain should not share resource with another
@@ -194,13 +197,6 @@ until read returns 0
 .IP "FI_PEEK [not valid for fi_getinfo]"
 If used, indicates that if the application reads an event queue, the particular
 completion entry is not removed from the queue and is visible to subsequent reads.
-.IP "FI_ERRINLINE"
-Error events are reported inline with other events, rather than through a
-separate error queue (see FI_ERRQUEUE).
-.IP "FI_TRUNC [not valid for fi_getinfo]"
-Signals that received data has been truncated.
-.IP "FI_CTRUNC [not valid for fi_getinfo]"
-Indicates that control data was truncated.
 .IP "FI_IMM [not valid for fi_getinfo]"
 Indicates that immediate data is available.  Immediate data is communicated to a
 receiver through completion data, rather than appearing in targeted receive
@@ -213,7 +209,9 @@ Indicates that no completion should be generated for the specified operation.
 Indicates if a completion event should be generated.
 .IP "FI_ACK"
 Indicates that a completion event is not generated until the operation
-initiated is acknowledged by the remote side.
+initiated is acknowledged by the remote side.  This ususally implies that
+the transfered data has been successfully placed into memory on the remote
+system.
 .SH "ENDPOINT TYPES"
 .IP "FID_UNSPEC"
 The type of endpoint is not specified.  This is usually provided as input, with

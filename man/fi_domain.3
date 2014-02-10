@@ -1,23 +1,26 @@
 .TH "FI_DOMAIN" 3 "2013-01-20" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
-fi_domain \- Open a fabric resource domain
+fi_domain \- Open a fabric access domain
 .SH SYNOPSIS
 .B "#include <rdma/fabric.h>"
+.br
 .B "#include <rdma/fi_domain.h>"
 .HP
-.B "int fi_domain(struct fi_info *" info ", fid_t **" fid ","
+.B "int fi_domain(fid_t " fid ", struct fi_info *" info ", fid_t **" dom ","
 .BI "void *" context ");"
 .SH ARGUMENTS
-.IP "info" 12
-Details about the fabric resource domain to be openeds, obtained from fi_getinfo.
 .IP "fid" 12
-On success, points to the opened fabric domain.
+Fabric domain
+.IP "info" 12
+Details about the access domain to be opened, obtained from fi_getinfo.
+.IP "dom" 12
+On success, points to the opened access domain.
 .IP "context" 12
 User specified context associated with the domain.  This context is returned as
 part of any asynchronous event associated with the domain.
 .SH "DESCRIPTION"
-Opens a fabric resource domain.  A fabric domain typically refers to a
-single NIC, HCA, or hardware port; however, a domain may span across
+Opens a fabric access domain.  An access domain typically refers to a
+physical or virtual NIC or hardware port; however, a domain may span across
 multiple hardware components for fail-over or data striping purposes.
 A domain defines the boundary for associating different resources
 together.  Fabric resources belonging to the same domain may share
@@ -32,7 +35,11 @@ Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 
 .IR "rdma/fi_errno.h".
 .SH "NOTES"
-Users should call fi_close to release all resources allocated fo the fabric
+Users should call fi_close to release all resources allocated to the fabric
 domain.
+.PP
+The following fabric resources are associated with access domains:
+active endpoints, memory regions, completion event queues, and address
+vectors.
 .SH "SEE ALSO"
-fi_getinfo(3), fi_open(3), fi_endpoint(3)
+fi_getinfo(3), fi_endpoint(3), fi_ec(3), fi_av(3), fi_mr(3)
