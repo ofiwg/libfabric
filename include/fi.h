@@ -80,6 +80,7 @@ struct uv_dev {
 	char			dev_path[FI_PATH_MAX];
 };
 
+extern fid_t fabric;
 extern int uv_abi_ver;
 extern struct uv_dev *udev_head, *udev_tail;
 
@@ -113,8 +114,8 @@ void psmx_fini(void);
 const char *fi_sysfs_path(void);
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
 void __fi_freeinfo(struct fi_info *info);
+int fi_poll_fd(int fd);
 
-#define IBV_PREFIX "ibv"
 #ifndef SYSCONFDIR
 #define SYSCONFDIR "/etc"
 #endif

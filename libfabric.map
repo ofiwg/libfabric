@@ -2,9 +2,7 @@ FABRIC_1.0 {
 	global:
 		fi_getinfo;
 		fi_freeinfo;
-		fi_open;
-		fi_domain;
-		fi_endpoint;
+		fi_fabric;
 		fi_strerror;
 
 		ibv_get_device_list;

@@ -58,19 +58,19 @@ struct fi_ops_tagged {
 	ssize_t (*recv)(fid_t fid, void *buf, size_t len,
 			uint64_t tag, uint64_t ignore, void *context);
 	ssize_t (*recvv)(fid_t fid, const void *iov, size_t count,
-			 uint64_t tag, uint64_t ignore, void *context);
+			uint64_t tag, uint64_t ignore, void *context);
 	ssize_t (*recvfrom)(fid_t fid, void *buf, size_t len, const void *src_addr,
-			    uint64_t tag, uint64_t ignore, void *context);
+			uint64_t tag, uint64_t ignore, void *context);
 	ssize_t (*recvmsg)(fid_t fid, const struct fi_msg_tagged *msg, uint64_t flags);
 	ssize_t (*send)(fid_t fid, const void *buf, size_t len, uint64_t tag,
 			void *context);
 	ssize_t (*sendv)(fid_t fid, const void *iov, size_t count, uint64_t tag,
-			 void *context);
+			void *context);
 	ssize_t (*sendto)(fid_t fid, const void *buf, size_t len,
-			  const void *dest_addr, uint64_t tag, void *context);
+			const void *dest_addr, uint64_t tag, void *context);
 	ssize_t (*sendmsg)(fid_t fid, const struct fi_msg_tagged *msg, uint64_t flags);
 	ssize_t (*search)(fid_t fid, uint64_t *tag, uint64_t ignore, uint64_t flags,
-			  void *src_addr, size_t *src_addrlen, size_t *len, void *context);
+			void *src_addr, size_t *src_addrlen, size_t *len, void *context);
 };
 
 

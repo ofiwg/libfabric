@@ -142,6 +142,7 @@ struct fi_info {
 	 * shared_fd.  Based on XRC work.
 	 */
 	int			shared_fd;
+	char			*fabric_name;
 	char			*domain_name;
 	size_t			datalen;
 	void			*data;
@@ -149,8 +150,10 @@ struct fi_info {
 
 enum {
 	FID_CLASS_UNSPEC,
-	FID_CLASS_EP,
+	FID_CLASS_FABRIC,
 	FID_CLASS_DOMAIN,
+	FID_CLASS_EP,
+	FID_CLASS_PEP,
 	FID_CLASS_INTERFACE,
 	FID_CLASS_AV,
 	FID_CLASS_MR,
@@ -164,6 +167,7 @@ struct fi_context {
 
 struct fid;
 typedef struct fid *fid_t;
+struct fi_ec_attr;
 
 struct fi_resource {
 	fid_t			fid;
@@ -173,11 +177,8 @@ struct fi_resource {
 struct fi_ops {
 	size_t	size;
 	int	(*close)(fid_t fid);
-	/* Associate resources with this object */
 	int	(*bind)(fid_t fid, struct fi_resource *fids, int nfids);
-	/* Operation that completes after all previous async requests complete */
 	int	(*sync)(fid_t fid, uint64_t flags, void *context);
-	/* low-level control - similar to fcntl & ioctl operations */
 	int	(*control)(fid_t fid, int command, void *arg);
 };
 
@@ -189,32 +190,47 @@ struct fid {
 	struct fi_ops		*ops;
 };
 
-#define FI_PREFIX		"fi"
-#define FI_DOMAIN_NAMES		"domains"
-#define FI_UNBOUND_NAME		"local"
-
-/* PASSIVE - Indicates that the allocated endpoint will be used
- * to listen for connection requests.
- */
 #define FI_PASSIVE		(1ULL << 0)
-/* NUMERICHOST - The node parameter passed into fi_getinfo is a
- * numeric IP address or GID.  When set, name resolution is not
- * performed.
- */
 #define FI_NUMERICHOST		(1ULL << 1)
 
 int fi_getinfo(const char *node, const char *service, struct fi_info *hints,
 	       struct fi_info **info);
 void fi_freeinfo(struct fi_info *info);
 
-int fi_open(const char *name, uint64_t flags, fid_t *fid, void *context);
-int fi_domain(struct fi_info *info, fid_t *fid, void *context);
-int fi_endpoint(struct fi_info *info, fid_t *fid, void *context);
+struct fi_ops_fabric {
+	size_t	size;
+	int	(*domain)(fid_t fid, struct fi_info *info, fid_t *dom,
+			void *context);
+	int	(*endpoint)(fid_t fid, struct fi_info *info, fid_t *pep,
+			void *context);
+	int	(*ec_open)(fid_t fid, const struct fi_ec_attr *attr, fid_t *ec,
+			void *context);
+	int	(*if_open)(fid_t fid, const char *name, uint64_t flags,
+			fid_t *fif, void *context);
+};
+
+struct fid_fabric {
+	struct fid		fid;
+	struct fi_ops_fabric	*ops;
+};
+
+int fi_fabric(const char *name, uint64_t flags, fid_t *fid, void *context);
+
 
 #define FI_ASSERT_CLASS(fid, f_class)   assert(fid->fclass == f_class)
 #define FI_ASSERT_FIELD(ptr, ftype, field) assert(ptr->size > offsetof(ftype, field))
 #define FI_ASSERT_OPS(fid, ftype, ops) FI_ASSERT_FIELD(fid, ftype, ops)
 #define FI_ASSERT_OP(ops, otype, op)   FI_ASSERT_FIELD(ops, otype, op)
+
+static inline int
+fi_fopen(fid_t fid, const char *name, uint64_t flags, fid_t *fif, void *context)
+{
+	struct fid_fabric *fab = container_of(fid, struct fid_fabric, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_FABRIC);
+	FI_ASSERT_OPS(fid, struct fid_fabric, ops);
+	FI_ASSERT_OP(fab->ops, struct fid_fabric, if_open);
+	return fab->ops->if_open(fid, name, flags, fif, context);
+}
 
 static inline int fi_close(fid_t fid)
 {

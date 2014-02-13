@@ -73,15 +73,12 @@ do {						\
 	(req)->response = (uintptr_t) (resp);	\
 } while (0)
 
-static int ucma_open(const char *name, uint64_t flags, fid_t *fid, void *context);
+static int ucma_open(const char *res_name, const char *if_name,
+	uint64_t flags, fid_t *fif, void *context);
 
 static struct fi_ops_prov ucma_prov_ops = {
 	.size = sizeof(struct fi_ops_prov),
-	.getinfo = NULL,
-	.freeinfo = NULL,
-	.open = ucma_open,
-	.domain = NULL,
-	.endpoint = NULL,
+	.if_open = ucma_open,
 };
 
 
@@ -468,11 +465,12 @@ static struct fi_ops ops_fi = {
 	.close = ucma_close
 };
 
-static int ucma_open(const char *name, uint64_t flags, fid_t *fid, void *context)
+static int ucma_open(const char *res_name, const char *if_name,
+	uint64_t flags, fid_t *fid, void *context)
 {
 	struct fid_ucma *ucma;
 
-	if (!name || strcmp(FI_UCMA_INTERFACE, name))
+	if (!if_name || strcmp(FI_UCMA_INTERFACE, if_name))
 		return -ENOSYS;
 
  	ucma = calloc(1, sizeof(*ucma));

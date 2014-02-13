@@ -129,7 +129,7 @@ struct ibv_context *ibv_open_device(struct ibv_device *device)
 	if (asprintf(&uv_name, "uverbs/%s", device->dev_name) < 0)
 		return NULL;
 
-	ret = fi_open(uv_name, 0, &uv_fid, NULL);
+	ret = fi_fopen(fabric, uv_name, 0, &uv_fid, NULL);
 	free(uv_name);
 	if (ret)
 		return NULL;

@@ -64,26 +64,26 @@ struct fi_ops_rma {
 	int	(*read)(fid_t fid, void *buf, size_t len, uint64_t addr,
 			uint64_t key, void *context);
 	int	(*readmem)(fid_t fid, void *buf, size_t len, uint64_t mem_desc,
-			   uint64_t addr, uint64_t key, void *context);
+			uint64_t addr, uint64_t key, void *context);
 	int	(*readv)(fid_t fid, const void *iov, size_t count, uint64_t addr,
-			 uint64_t key, void *context);
+			uint64_t key, void *context);
 	int	(*readfrom)(fid_t fid, void *buf, size_t len, const void *src_addr,
-			    uint64_t addr, uint64_t key, void *context);
+			uint64_t addr, uint64_t key, void *context);
 	int	(*readmemfrom)(fid_t fid, void *buf, size_t len, uint64_t mem_desc,
-			       const void *src_addr, uint64_t addr, uint64_t key,
-			       void *context);
+			const void *src_addr, uint64_t addr, uint64_t key,
+			void *context);
 	int	(*readmsg)(fid_t fid, const struct fi_msg_rma *msg, uint64_t flags);
 	int	(*write)(fid_t fid, const void *buf, size_t len, uint64_t addr,
-			  uint64_t key, void *context);
+			uint64_t key, void *context);
 	int	(*writemem)(fid_t fid, const void *buf, size_t len, uint64_t mem_desc,
-			    uint64_t addr, uint64_t key, void *context);
+			uint64_t addr, uint64_t key, void *context);
 	int	(*writev)(fid_t fid, const void *iov, size_t count, uint64_t addr,
-			  uint64_t key, void *context);
+			uint64_t key, void *context);
 	int	(*writememto)(fid_t fid, const void *buf, size_t len, uint64_t mem_desc,
-			      const void *dest_addr, uint64_t addr, uint64_t key,
-			      void *context);
+			const void *dest_addr, uint64_t addr, uint64_t key,
+			void *context);
 	int	(*writeto)(fid_t fid, const void *buf, size_t len, const void *dest_addr,
-			   uint64_t addr, uint64_t key, void *context);
+			uint64_t addr, uint64_t key, void *context);
 	int	(*writemsg)(fid_t fid, const struct fi_msg_rma *msg, uint64_t flags);
 };
 

@@ -123,9 +123,8 @@ An EC domain indicates the type of events which are to be reported through
 the event collector.  Valid values are:
 .RS
 .IP "FI_EC_DOMAIN_GENERAL"
-The EC is used to report asynchronous events that are unaffiliated with an
-endpoint or address vector, such as port state changes, address changes,
-and so forth.
+The EC is used to report asynchronous events affiliated with a fabric
+or access domain.
 .IP "FI_EC_DOMAIN_COMP"
 The EC is used to report asynchronous completions of data transfers.
 .IP "FI_EC_DOMAIN_CM"

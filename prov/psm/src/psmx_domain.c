@@ -112,9 +112,11 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.query = psmx_domain_query,
 	.av_open = psmx_av_open,
 	.ec_open = psmx_ec_open,
+	.endpoint = psmx_ep_open,
+
 };
 
-int psmx_domain_open(struct fi_info *info, fid_t *fid, void *context)
+int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
 	int err = -ENOMEM;

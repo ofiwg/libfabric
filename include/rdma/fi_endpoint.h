@@ -35,6 +35,7 @@
 
 #include <sys/socket.h>
 #include <rdma/fabric.h>
+#include <rdma/fi_domain.h>
 #include <stddef.h>
 
 
@@ -111,18 +112,18 @@ struct fi_ops_msg {
 			  void *context);
 	ssize_t (*recvv)(fid_t fid, const void *iov, size_t count, void *context);
 	ssize_t (*recvfrom)(fid_t fid, void *buf, size_t len,
-			    const void *src_addr, void *context);
+			  const void *src_addr, void *context);
 	ssize_t (*recvmemfrom)(fid_t fid, void *buf, size_t len, uint64_t mem_desc,
-			       const void *src_addr, void *context);
+			  const void *src_addr, void *context);
 	ssize_t (*recvmsg)(fid_t fid, const struct fi_msg *msg, uint64_t flags);
 	ssize_t (*send)(fid_t fid, const void *buf, size_t len, void *context);
 	ssize_t (*sendmem)(fid_t fid, const void *buf, size_t len,
-			   uint64_t mem_desc, void *context);
+			  uint64_t mem_desc, void *context);
 	ssize_t (*sendv)(fid_t fid, const void *iov, size_t count, void *context);
 	ssize_t (*sendto)(fid_t fid, const void *buf, size_t len,
 			  const void *dest_addr, void *context);
 	ssize_t (*sendmemto)(fid_t fid, const void *buf, size_t len, uint64_t mem_desc,
-			     const void *dest_addr, void *context);
+			  const void *dest_addr, void *context);
 	ssize_t (*sendmsg)(fid_t fid, const struct fi_msg *msg, uint64_t flags);
 };
 
@@ -144,15 +145,40 @@ struct fi_ops_atomic;
 struct fid_ep {
 	struct fid		fid;
 	struct fi_ops_ep	*ops;
-	struct fi_ops_msg	*msg;
 	struct fi_ops_cm	*cm;
+	struct fi_ops_msg	*msg;
 	struct fi_ops_rma	*rma;
 	struct fi_ops_tagged	*tagged;
 	struct fi_ops_atomic	*atomic;
 };
 
+struct fid_pep {
+	struct fid		fid;
+	struct fi_ops_ep	*ops;
+	struct fi_ops_cm	*cm;
+};
 
 #ifndef FABRIC_DIRECT
+
+static inline int
+fi_fendpoint(fid_t fid, struct fi_info *info, fid_t *pep, void *context)
+{
+	struct fid_fabric *fab = container_of(fid, struct fid_fabric, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_FABRIC);
+	FI_ASSERT_OPS(fid, struct fid_fabric, ops);
+	FI_ASSERT_OP(fab->ops, struct fid_fabric, endpoint);
+	return fab->ops->endpoint(fid, info, pep, context);
+}
+
+static inline int
+fi_endpoint(fid_t fid, struct fi_info *info, fid_t *ep, void *context)
+{
+	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_DOMAIN);
+	FI_ASSERT_OPS(fid, struct fid_domain, ops);
+	FI_ASSERT_OP(domain->ops, struct fi_ops_domain, endpoint);
+	return domain->ops->endpoint(fid, info, ep, context);
+}
 
 static inline ssize_t fi_cancel(fid_t fid, struct fi_context *context)
 {

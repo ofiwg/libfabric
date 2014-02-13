@@ -73,15 +73,12 @@ struct uv_dev *udev_head, *udev_tail;
 		(cmd)->response  = (uintptr_t) (out);		\
 	} while (0)
 
-static int uv_open(const char *name, uint64_t flags, fid_t *fid, void *context);
+static int uv_open(const char *res_name, const char *if_name,
+	uint64_t flags, fid_t *fif, void *context);
 
 static struct fi_ops_prov uv_prov_ops = {
 	.size = sizeof(struct fi_ops_prov),
-	.getinfo = NULL,
-	.freeinfo = NULL,
-	.open = uv_open,
-	.domain = NULL,
-	.endpoint = NULL,
+	.if_open = uv_open
 };
 
 static int uv_abi_version(void)
@@ -671,16 +668,17 @@ static struct fi_ops ops_fi = {
 	.close = uv_close
 };
 
-static int uv_open(const char *name, uint64_t flags, fid_t *fid, void *context)
+static int uv_open(const char *res_name, const char *if_name,
+	uint64_t flags, fid_t *fid, void *context)
 {
 	struct fid_uverbs *uv;
 	char *dev_path;
 	int ret = 0;
 
-	if (!name || strncmp(FI_UVERBS_INTERFACE "/", name, 7))
+	if (!if_name || strncmp(FI_UVERBS_INTERFACE "/", if_name, 7))
 		return -ENOSYS;
 
-	if (asprintf(&dev_path, "/dev/infiniband%s", strstr(name, "/")) < 0)
+	if (asprintf(&dev_path, "/dev/infiniband%s", strstr(if_name, "/")) < 0)
 		return -ENOMEM;
 
  	uv = calloc(1, sizeof(*uv));

@@ -101,8 +101,8 @@ static size_t buffer_size;
 static struct fi_info hints;
 static char *dst_addr, *src_addr;
 static char *port = "9228";
-static fid_t lep, ldom, lcm;
-static fid_t ep, dom, mr, cq;
+static fid_t lep, lcm;
+static fid_t fab, ep, dom, mr, rcq, scq;
 
 
 static void show_perf(void)
@@ -153,16 +153,15 @@ static void init_bandwidth_test(int size)
 }
 */
 
-static int poll_all(void)
+static int poll_all_sends(void)
 {
 	struct fi_ec_entry comp;
 	int ret;
 
 	do {
-		ret = fi_ec_read(cq, &comp, sizeof comp);
+		ret = fi_ec_read(scq, &comp, sizeof comp);
 		if (ret > 0) {
-			if (comp.op_context == SEND_CONTEXT)
-				credits++;
+			credits++;
 		} else if (ret < 0) {
 			printf("Completion queue read %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
@@ -177,10 +176,9 @@ static int send_xfer(int size)
 	int ret;
 
 	while (!credits) {
-		ret = fi_ec_read(cq, &comp, sizeof comp);
+		ret = fi_ec_read(scq, &comp, sizeof comp);
 		if (ret > 0) {
-			if (comp.op_context == SEND_CONTEXT)
-				goto post;
+			goto post;
 		} else if (ret < 0) {
 			printf("Completion queue read %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
@@ -201,18 +199,13 @@ static int recv_xfer(int size)
 	struct fi_ec_entry comp;
 	int ret;
 
-	while (1) {
-		ret = fi_ec_read(cq, &comp, sizeof comp);
-		if (ret > 0) {
-			if (comp.op_context == SEND_CONTEXT)
-				credits++;
-			else
-				break;
-		} else if (ret < 0) {
+	do {
+		ret = fi_ec_read(rcq, &comp, sizeof comp);
+		if (ret < 0) {
 			printf("Completion queue read %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
 		}
-	}
+	} while (!ret);
 
 	ret = fi_recvmem(ep, buf, buffer_size, fi_mr_desc(mr), buf);
 	if (ret)
@@ -226,7 +219,7 @@ static int sync_test(void)
 	int ret;
 
 	while (credits < max_credits)
-		poll_all();
+		poll_all_sends();
 
 	ret = dst_addr ? send_xfer(16) : recv_xfer(16);
 	if (ret)
@@ -267,7 +260,12 @@ out:
 	return ret;
 }
 
-static int alloc_cm_ec(fid_t dom, fid_t *cm_ec)
+static void free_lres(void)
+{
+	fi_close(lcm);
+}
+
+static int alloc_lres(struct fi_info *fi)
 {
 	struct fi_ec_attr cm_attr;
 	int ret;
@@ -278,46 +276,23 @@ static int alloc_cm_ec(fid_t dom, fid_t *cm_ec)
 	cm_attr.type = FI_EC_QUEUE;
 	cm_attr.format = FI_EC_FORMAT_CM;
 	cm_attr.wait_obj = FI_EC_WAIT_FD;
-	cm_attr.flags = FI_AUTO_RESET;
-	ret = fi_ec_open(dom, &cm_attr, cm_ec, NULL);
+	cm_attr.flags = FI_AUTO_RESET | FI_BLOCK;
+	ret = fi_fec_open(fab, &cm_attr, &lcm, NULL);
 	if (ret)
 		printf("fi_ec_open cm %s\n", fi_strerror(-ret));
 
 	return ret;
 }
 
-static void free_lres(void)
-{
-	fi_close(lcm);
-	fi_close(ldom);
-}
-
-static int alloc_lres(struct fi_info *fi)
-{
-	int ret;
-
-	ret = fi_domain(fi, &ldom, NULL);
-	if (ret) {
-		printf("fi_domain %s %s\n", fi->domain_name, fi_strerror(-ret));
-		return ret;
-	}
-
-	ret = alloc_cm_ec(ldom, &lcm);
-	if (ret)
-		fi_close(ldom);
-
-	return ret;
-}
-
-static void free_res(void)
+static void free_ep_res(void)
 {
 	fi_mr_unreg(mr);
-	fi_close(cq);
-	fi_close(dom);
+	fi_close(rcq);
+	fi_close(scq);
 	free(buf);
 }
 
-static int alloc_res(struct fi_info *fi)
+static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_ec_attr cq_attr;
 	int ret;
@@ -329,12 +304,6 @@ static int alloc_res(struct fi_info *fi)
 		return -1;
 	}
 
-	ret = fi_domain(fi, &dom, NULL);
-	if (ret) {
-		printf("fi_domain %s %s\n", fi->domain_name, fi_strerror(-ret));
-		goto err1;
-	}
-
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.mask = FI_EC_ATTR_MASK_V1;
 	cq_attr.domain = FI_EC_DOMAIN_COMP;
@@ -342,9 +311,15 @@ static int alloc_res(struct fi_info *fi)
 	cq_attr.format = FI_EC_FORMAT_CONTEXT;
 	cq_attr.wait_obj = FI_EC_WAIT_NONE;
 	cq_attr.size = max_credits << 1;
-	ret = fi_ec_open(dom, &cq_attr, &cq, NULL);
+	ret = fi_ec_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		printf("fi_eq_open comp %s\n", fi_strerror(-ret));
+		printf("fi_eq_open send comp %s\n", fi_strerror(-ret));
+		goto err1;
+	}
+
+	ret = fi_ec_open(dom, &cq_attr, &rcq, NULL);
+	if (ret) {
+		printf("fi_eq_open recv comp %s\n", fi_strerror(-ret));
 		goto err2;
 	}
 
@@ -356,9 +331,9 @@ static int alloc_res(struct fi_info *fi)
 	return 0;
 
 err3:
-	fi_close(cq);
+	fi_close(rcq);
 err2:
-	fi_close(dom);
+	fi_close(scq);
 err1:
 	free(buf);
 	return ret;
@@ -382,11 +357,13 @@ static int bind_lres(void)
 	return bind_fid(lep, lcm, 0);
 }
 
-static int bind_res(void)
+static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = bind_fid(ep, cq, FI_SEND | FI_RECV);
+	ret = bind_fid(ep, scq, FI_SEND);
+	if (!ret)
+		ret = bind_fid(ep, rcq, FI_RECV);
 	if (!ret) {
 		ret = fi_recvmem(ep, buf, buffer_size, fi_mr_desc(mr), buf);
 		if (ret)
@@ -407,7 +384,13 @@ static int server_listen(void)
 		return ret;
 	}
 
-	ret = fi_endpoint(fi, &lep, NULL);
+	ret = fi_fabric(fi->fabric_name, 0, &fab, NULL);
+	if (ret) {
+		printf("fi_fabric %s\n", fi_strerror(-ret));
+		goto err0;
+	}
+
+	ret = fi_fendpoint(fab, fi, &lep, NULL);
 	if (ret) {
 		printf("fi_endpoint %s\n", fi_strerror(-ret));
 		goto err1;
@@ -434,6 +417,8 @@ err3:
 err2:
 	fi_close(lep);
 err1:
+	fi_close(fab);
+err0:
 	fi_freeinfo(fi);
 	return ret;
 }
@@ -456,17 +441,23 @@ static int server_connect(void)
 		goto err1;
 	}
 
-	ret = fi_endpoint(entry.info, &ep, NULL);
+	ret = fi_fdomain(fab, entry.info, &dom, NULL);
+	if (ret) {
+		printf("fi_fdomain %s\n", fi_strerror(-ret));
+		goto err1;
+	}
+
+	ret = fi_endpoint(dom, entry.info, &ep, NULL);
 	if (ret) {
 		printf("fi_endpoint for req %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 
-	ret = alloc_res(entry.info);
+	ret = alloc_ep_res(entry.info);
 	if (ret)
 		 goto err2;
 
-	ret = bind_res();
+	ret = bind_ep_res();
 	if (ret)
 		goto err3;
 
@@ -480,7 +471,7 @@ static int server_connect(void)
 	return 0;
 
 err3:
-	free_res();
+	free_ep_res();
 err2:
 	fi_close(ep);
 err1:
@@ -503,27 +494,39 @@ static int client_connect(void)
 	ret = fi_getinfo(dst_addr, port, &hints, &fi);
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
+		goto err0;
+	}
+
+	ret = fi_fabric(fi->fabric_name, 0, &fab, NULL);
+	if (ret) {
+		printf("fi_fabric %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 
-	ret = fi_endpoint(fi, &ep, NULL);
+	ret = fi_fdomain(fab, fi, &dom, NULL);
 	if (ret) {
-		printf("fi_endpoint %s\n", fi_strerror(-ret));
+		printf("fi_fdomain %s %s\n", fi_strerror(-ret), fi->domain_name);
 		goto err2;
 	}
 
-	ret = alloc_res(fi);
-	if (ret)
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	if (ret) {
+		printf("fi_endpoint %s\n", fi_strerror(-ret));
 		goto err3;
+	}
 
-	ret = bind_res();
+	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err4;
+
+	ret = bind_ep_res();
+	if (ret)
+		goto err5;
 
 	ret = fi_connect(ep, fi->dest_addr, NULL, 0);
 	if (ret) {
 		printf("fi_connect %s\n", fi_strerror(-ret));
-		goto err4;
+		goto err5;
 	}
 
 	if (hints.src_addr)
@@ -531,13 +534,17 @@ static int client_connect(void)
 	fi_freeinfo(fi);
 	return 0;
 
+err5:
+	free_ep_res();
 err4:
-	free_res();
-err3:
 	fi_close(ep);
+err3:
+	fi_close(dom);
 err2:
-	fi_freeinfo(fi);
+	fi_close(fab);
 err1:
+	fi_freeinfo(fi);
+err0:
 	if (hints.src_addr)
 		free(hints.src_addr);
 	return ret;
@@ -597,12 +604,14 @@ static int run(void)
 	}
 
 	while (credits < max_credits)
-		poll_all();
+		poll_all_sends();
 	fi_shutdown(ep, 0);
 	fi_close(ep);
-	free_res();
+	free_ep_res();
 	if (!dst_addr)
 		free_lres();
+	fi_close(dom);
+	fi_close(fab);
 	return ret;
 }
 
