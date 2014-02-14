@@ -58,7 +58,24 @@ static int psmx_domain_close(fid_t fid)
 
 static int psmx_domain_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
-	return -ENOSYS;
+	struct fi_resource ress;
+	int i;
+
+	for (i=0; i<nfids; i++) {
+		if (!fids[i].fid)
+			return -EINVAL;
+		switch (fids[i].fid->fclass) {
+		case FID_CLASS_EP:
+			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
+				return -EINVAL;
+			ress.fid = fid;
+			ress.flags = fids[i].flags;
+			return fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+		default:
+			return -ENOSYS;
+		}
+	}
+	return 0;
 }
 
 static int psmx_domain_sync(fid_t fid, uint64_t flags, void *context)
@@ -145,8 +162,24 @@ int psmx_domain_open(struct fi_info *info, fid_t *fid, void *context)
 	if (err)
 		fid_domain->ns_thread = 0;
 
+	if (info->protocol_cap & FI_PROTO_CAP_MSG)
+		fid_domain->reserved_tag_bits = PSMX_NONMATCH_BIT;
+
+	if (info->protocol_cap & FI_PROTO_CAP_RMA) {
+		err = psmx_am_init(fid_domain->psm_ep);
+		if (err) 
+			goto err_out_fini_mq;
+	}
+
 	*fid = &fid_domain->domain.fid;
 	return 0;
+
+err_out_fini_mq:
+	if (fid_domain->ns_thread) {
+		pthread_cancel(fid_domain->ns_thread);
+		pthread_join(fid_domain->ns_thread, NULL);
+	}
+	psm_mq_finalize(fid_domain->psm_mq);
 
 err_out_close_ep:
 	if (psm_ep_close(fid_domain->psm_ep, PSM_EP_CLOSE_GRACEFUL,

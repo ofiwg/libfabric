@@ -32,12 +32,34 @@
 
 #include "psmx.h"
 
+int psmx_epid_to_epaddr(psm_ep_t ep, psm_epid_t epid, psm_epaddr_t *epaddr)
+{
+        int err;
+        psm_error_t errors;
+	psm_epconn_t epconn;
+
+	err = psm_ep_epid_lookup(epid, &epconn);
+	if (err == PSM_OK) {
+		*epaddr = epconn.addr;
+		return 0;
+	}
+
+        err = psm_ep_connect(ep, 1, &epid, NULL, &errors, epaddr, 30*1e9);
+        if (err != PSM_OK)
+                return psmx_errno(err);
+
+	psm_epaddr_setctxt(*epaddr, (void *)epid);
+        return 0;
+}
+
 static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 			  void **fi_addr, uint64_t flags)
 {
 	struct psmx_fid_av *fid_av;
 	psm_error_t *errors;
+	int *mask;
 	int err;
+	int i;
 
 	fid_av = container_of(fid, struct psmx_fid_av, av.fid);
 
@@ -45,10 +67,34 @@ static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 	if (!errors)
 		return -ENOMEM;
 
+	mask = (int *) calloc(count, sizeof *mask);
+	if (!mask) {
+		free(errors);
+		return -ENOMEM;
+	}
+
+	/* prevent connecting to the same ep twice, which is fatal in PSM */
+	for (i=0; i<count; i++) {
+		psm_epconn_t epconn;
+		if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK)
+			((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
+		else
+			mask[i] = 1;
+	}
+
 	err = psm_ep_connect(fid_av->domain->psm_ep, count, 
-			(psm_epid_t *) addr, NULL, errors,
+			(psm_epid_t *) addr, mask, errors,
 			(psm_epaddr_t *) fi_addr, 30*1e9);
 
+	for (i=0; i<count; i++){
+		if (mask[i] && errors[i] == PSM_OK) {
+			psm_epaddr_setctxt(
+				((psm_epaddr_t *) fi_addr)[i],
+				(void *)((psm_epid_t *) addr)[i]);
+		}
+	}
+
+	free(mask);
 	free(errors);
 
 	return psmx_errno(err);
@@ -60,7 +106,6 @@ static int psmx_av_remove(fid_t fid, void *fi_addr, size_t count,
 	struct psmx_fid_av *fid_av;
 	int err = PSM_OK;
 	fid_av = container_of(fid, struct psmx_fid_av, av.fid);
-
 	return psmx_errno(err);
 }
 
@@ -74,7 +119,23 @@ static int psmx_av_close(fid_t fid)
 
 static int psmx_av_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
-	/* no need to bind an EQ since insert/remove is synchronous */
+	struct fi_resource ress;
+	int i;
+
+	for (i=0; i<nfids; i++) {
+		if (!fids[i].fid)
+			return -EINVAL;
+		switch (fids[i].fid->fclass) {
+		case FID_CLASS_EP:
+			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
+				return -EINVAL;
+			ress.fid = fid;
+			ress.flags = fids[i].flags;
+			return fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+		default:
+			return -ENOSYS;
+		}
+	}
 	return 0;
 }
 

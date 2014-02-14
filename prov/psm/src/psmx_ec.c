@@ -35,6 +35,71 @@
 static struct fi_ec_err_entry error_ece;
 static int error_state = 0;
 
+struct fi_ec_tagged_entry *psmx_ec_alloc_entry(struct psmx_fid_ec *fid_ec)
+{
+	struct psmx_ec_entry *entry;
+
+	if (fid_ec->free_head) {
+		entry = fid_ec->free_head;
+		fid_ec->free_head = fid_ec->free_head->next;
+		if (!fid_ec->free_head)
+			fid_ec->free_tail = NULL;
+		entry->next = NULL;
+	}
+	else {
+		entry = calloc(1, sizeof(*entry));
+		if (!entry)
+			return NULL;
+	}
+
+	return &entry->ece;
+}
+
+int psmx_ec_enqueue_entry(struct psmx_fid_ec *fid_ec, struct fi_ec_tagged_entry *ece)
+{
+	struct psmx_ec_entry *entry;
+
+	entry = container_of(ece, struct psmx_ec_entry, ece);
+
+	if (fid_ec->queue_tail)
+		fid_ec->queue_tail->next = entry;
+
+	fid_ec->queue_tail = entry;
+	if (!fid_ec->queue_head)
+		fid_ec->queue_head = fid_ec->queue_tail;
+
+	return 0;
+}
+
+struct fi_ec_tagged_entry *psmx_ec_dequeue_entry(struct psmx_fid_ec *fid_ec)
+{
+	struct psmx_ec_entry *entry;
+
+	entry = fid_ec->queue_head;
+	if (!entry)
+		return NULL;
+
+	fid_ec->queue_head = fid_ec->queue_head->next;
+	if (!fid_ec->queue_head)
+		fid_ec->queue_tail = NULL;
+
+	return &entry->ece;
+}
+
+int psmx_ec_free_entry(struct psmx_fid_ec *fid_ec, struct fi_ec_tagged_entry *ece)
+{
+	struct psmx_ec_entry *entry;
+
+	entry = container_of(ece, struct psmx_ec_entry, ece);
+	if (fid_ec->free_tail)
+		fid_ec->free_tail->next = entry;
+	fid_ec->free_tail = entry;
+	if (!fid_ec->free_head)
+		fid_ec->free_head = fid_ec->free_tail;
+	
+	return 0;
+}
+
 static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
 				void *src_addr, size_t *addrlen)
 {
@@ -50,6 +115,16 @@ static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
 
 	if (len < sizeof *ece)
 		return -FI_ETOOSMALL;
+
+	fid_ec->queue_priority = !fid_ec->queue_priority;
+	if (fid_ec->queue_priority) {
+		ece = psmx_ec_dequeue_entry(fid_ec);
+		if (ece) {
+			*(struct fi_ec_tagged_entry *)buf = *ece;
+			psmx_ec_free_entry(fid_ec, ece);
+			return 1;
+		}
+	}
 
 	err = psm_mq_ipeek(fid_ec->domain->psm_mq, &psm_req, NULL);
 	if (err == PSM_OK) {
@@ -75,8 +150,25 @@ static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
 		ece->tag = psm_status.msg_tag;
 		ece->olen = psm_status.msg_length;
 
+		if (src_addr) {
+			if ((fid_ec->domain->reserved_tag_bits & PSMX_NONMATCH_BIT) &&
+				psm_status.msg_tag & PSMX_NONMATCH_BIT) {
+				err = psmx_epid_to_epaddr(
+					fid_ec->domain->psm_ep,
+					psm_status.msg_tag & ~PSMX_NONMATCH_BIT,
+					src_addr);
+			}
+		}
 		return 1;
 	} else if (err == PSM_MQ_NO_COMPLETIONS) {
+		if (!fid_ec->queue_priority) {
+			ece = psmx_ec_dequeue_entry(fid_ec);
+			if (ece) {
+				*(struct fi_ec_tagged_entry *)buf = *ece;
+				psmx_ec_free_entry(fid_ec, ece);
+				return 1;
+			}
+		}
 		return 0;
 	} else {
 		return -1;
@@ -138,7 +230,24 @@ static int psmx_ec_close(fid_t fid)
 
 static int psmx_ec_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
-	return -ENOSYS;
+	struct fi_resource ress;
+	int i;
+
+	for (i=0; i<nfids; i++) {
+		if (!fids[i].fid)
+			return -EINVAL;
+		switch (fids[i].fid->fclass) {
+		case FID_CLASS_EP:
+			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
+				return -EINVAL;
+			ress.fid = fid;
+			ress.flags = fids[i].flags;
+			return fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+		default:
+			return -ENOSYS;
+		}
+	}
+	return 0;
 }
 
 static int psmx_ec_sync(fid_t fid, uint64_t flags, void *context)

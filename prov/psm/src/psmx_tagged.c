@@ -32,30 +32,23 @@
 
 #include "psmx.h"
 
-static ssize_t psmx_tagged_recv(fid_t fid, void *buf, size_t len,
-				uint64_t tag, uint64_t ignore, void *context)
-{
-	return -ENOSYS;
-}
-
-static ssize_t psmx_tagged_recvv(fid_t fid, const void *iov, size_t len,
-				 uint64_t tag, uint64_t ignore, void *context)
-{
-	return -ENOSYS;
-}
-
 static ssize_t psmx_tagged_recvfrom(fid_t fid, void *buf, size_t len,
 				    const void *src_addr,
 				    uint64_t tag, uint64_t ignore, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
 	psm_mq_req_t psm_req;
+	uint64_t psm_tag, psm_tagsel;
 	int err;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	assert(fid_ep->domain);
 
-	err = psm_mq_irecv(fid_ep->domain->psm_mq, tag, ~ignore, 0, /* flags */
+	psm_tag = tag & (~fid_ep->domain->reserved_tag_bits);
+	psm_tagsel = (~ignore) | fid_ep->domain->reserved_tag_bits;
+
+	err = psm_mq_irecv(fid_ep->domain->psm_mq,
+			   psm_tag, psm_tagsel, 0, /* flags */
 			   buf, len, context, &psm_req);
 	if (err != PSM_OK)
 		return psmx_errno(err);
@@ -69,19 +62,49 @@ static ssize_t psmx_tagged_recvfrom(fid_t fid, void *buf, size_t len,
 static ssize_t psmx_tagged_recvmsg(fid_t fid, const struct fi_msg_tagged *msg,
 				   uint64_t flags)
 {
-	return -ENOSYS;
+	struct iovec *iov;
+
+	/* FIXME: allow iov_count == 0? */
+	/* FIXME: allow iov_count > 1 */
+	if (!msg || msg->iov_count != 1)
+		return -EINVAL;
+
+	/* FIXME: check flags */
+	/* FIXME: check iov format */
+	iov = (struct iovec *)msg->msg_iov;
+	return psmx_tagged_recvfrom(fid, iov[0].iov_base, iov[0].iov_len,
+					msg->addr, msg->tag, msg->ignore,
+					msg->context);
 }
 
-static ssize_t psmx_tagged_send(fid_t fid, const void *buf, size_t len,
-				uint64_t tag, void *context)
+static ssize_t psmx_tagged_recv(fid_t fid, void *buf, size_t len,
+				uint64_t tag, uint64_t ignore, void *context)
 {
-	return -ENOSYS;
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	assert(fid_ep->domain);
+
+	if (fid_ep->connected)
+		return psmx_tagged_recvfrom(fid, buf, len, fid_ep->peer_psm_epaddr,
+						tag, ignore, context);
+	else
+		return psmx_tagged_recvfrom(fid, buf, len, NULL, tag, ignore, context);
 }
 
-static ssize_t psmx_tagged_sendv(fid_t fid, const void *iov, size_t len,
-				 uint64_t tag, void *context)
+static ssize_t psmx_tagged_recvv(fid_t fid, const void *iov, size_t count,
+				 uint64_t tag, uint64_t ignore, void *context)
 {
-	return -ENOSYS;
+	struct iovec *iov0;
+
+	/* FIXME: allow count == 0? */
+	/* FIXME: allow iov_count > 1 */
+	if (!iov || count != 1)
+		return -EINVAL;
+
+	/* FIXME: check iov format */
+	iov0 = (struct iovec *)iov;
+	return psmx_tagged_recv(fid, iov0->iov_base, iov0->iov_len, tag, ignore, context);
 }
 
 static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
@@ -92,6 +115,7 @@ static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
 	int send_flag;
 	psm_epaddr_t psm_epaddr;
 	psm_mq_req_t psm_req;
+	uint64_t psm_tag;
 	int err;
 	int flags;
 
@@ -103,10 +127,11 @@ static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
 	flags = fid_ep->flags;
 
 	send_flag = (flags & FI_ACK) ? PSM_MQ_FLAG_SENDSYNC : 0;
+	psm_tag = tag & (~fid_ep->domain->reserved_tag_bits);
 
 	if (!(flags & FI_BLOCK)) {
 		err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr,
-				   send_flag, tag, buf, len, context, &psm_req);
+				   send_flag, psm_tag, buf, len, context, &psm_req);
 
 		if (flags & (FI_BUFFERED_RECV | FI_CANCEL))
 			((struct fi_context *)context)->internal[0] = NULL;
@@ -114,7 +139,7 @@ static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
 		return 0;
 	} else {
 		err = psm_mq_send(fid_ep->domain->psm_mq, psm_epaddr,
-				  send_flag, tag, buf, len);
+				  send_flag, psm_tag, buf, len);
 		if (err == PSM_OK)
 			return len;
 		else
@@ -125,7 +150,48 @@ static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
 static ssize_t psmx_tagged_sendmsg(fid_t fid, const struct fi_msg_tagged *msg,
 				   uint64_t flags)
 {
-	return -ENOSYS;
+	struct iovec *iov;
+
+	/* FIXME: allow iov_count == 0? */
+	/* FIXME: allow iov_count > 1 */
+	if (!msg || msg->iov_count != 1)
+		return -EINVAL;
+
+	/* FIXME: check flags */
+	/* FIXME: check iov format */
+	iov = (struct iovec *)msg->msg_iov;
+	return psmx_tagged_sendto(fid, iov[0].iov_base, iov[0].iov_len,
+					msg->addr, msg->tag, msg->context);
+}
+
+static ssize_t psmx_tagged_send(fid_t fid, const void *buf, size_t len,
+				uint64_t tag, void *context)
+{
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	assert(fid_ep->domain);
+
+	if (!fid_ep->connected)
+		return -ENOTCONN;
+
+	return psmx_tagged_sendto(fid, buf, len, fid_ep->peer_psm_epaddr,
+					tag, context);
+}
+
+static ssize_t psmx_tagged_sendv(fid_t fid, const void *iov, size_t count,
+				uint64_t tag, void *context)
+{
+	struct iovec *iov0;
+
+	/* FIXME: allow iov_count == 0? */
+	/* FIXME: allow iov_count > 1 */
+	if (!iov || count != 1)
+		return -EINVAL;
+
+	/* FIXME: check iov format */
+	iov0 = (struct iovec *)iov;
+	return psmx_tagged_send(fid, iov0->iov_base, iov0->iov_len, tag, context);
 }
 
 static ssize_t psmx_tagged_search(fid_t fid, uint64_t *tag, uint64_t ignore,
@@ -135,12 +201,17 @@ static ssize_t psmx_tagged_search(fid_t fid, uint64_t *tag, uint64_t ignore,
 {
 	struct psmx_fid_ep *fid_ep;
 	psm_mq_status_t psm_status;
+	uint64_t psm_tag, psm_tagsel;
 	int err;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	assert(fid_ep->domain);
 
-	err = psm_mq_iprobe(fid_ep->domain->psm_mq, *tag, ~ignore, &psm_status);
+	psm_tag = *tag & (~fid_ep->domain->reserved_tag_bits);
+	psm_tagsel = (~ignore) | fid_ep->domain->reserved_tag_bits;
+
+	err = psm_mq_iprobe(fid_ep->domain->psm_mq, psm_tag, psm_tagsel,
+			    &psm_status);
 	switch (err) {
 	case PSM_OK:
 		*tag = psm_status.msg_tag;

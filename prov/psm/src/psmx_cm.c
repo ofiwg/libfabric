@@ -51,12 +51,45 @@ static int psmx_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 
 static int psmx_cm_getpeer(fid_t fid, void *addr, size_t *addrlen)
 {
-	return -ENOSYS;
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	if (!fid_ep->domain)
+		return -EBADF;
+
+	if (!fid_ep->connected)
+		return -ENOTCONN;
+
+	if (*addrlen < sizeof(psm_epid_t))
+		return -FI_ETOOSMALL;
+
+	*(psm_epid_t *)addr = fid_ep->peer_psm_epid;
+	*addrlen = sizeof(psm_epid_t);
+
+	return 0;
 }
 
-static int psmx_cm_connect(fid_t fid, const void *param, size_t paramlen)
+static int psmx_cm_connect(fid_t fid, const void *addr, const void *param, size_t paramlen)
 {
-	return -ENOSYS;
+	struct psmx_fid_ep *fid_ep;
+	psm_epid_t epid;
+	psm_epaddr_t epaddr;
+	int err;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	if (!fid_ep->domain)
+		return -EBADF;
+
+	epid = (psm_epid_t)addr;
+	err = psmx_epid_to_epaddr(fid_ep->domain->psm_ep, epid, &epaddr);
+	if (err)
+		return err;
+
+	fid_ep->connected = 1;
+	fid_ep->peer_psm_epid = epid;
+	fid_ep->peer_psm_epaddr = epaddr;
+
+	return 0;
 }
 
 static int psmx_cm_listen(fid_t fid)
@@ -77,7 +110,20 @@ static int psmx_cm_reject(fid_t fid, struct fi_info *info, const void *param,
 
 static int psmx_cm_shutdown(fid_t fid, uint64_t flags)
 {
-	return -ENOSYS;
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	if (!fid_ep->domain)
+		return -EBADF;
+
+	if (!fid_ep->connected)
+		return -ENOTCONN;
+
+	fid_ep->connected = 0;
+	fid_ep->peer_psm_epid = 0;
+	fid_ep->peer_psm_epaddr = 0;
+
+	return 0;
 }
 
 static int psmx_cm_join(fid_t fid, void *addr, void **fi_addr, uint64_t flags)
