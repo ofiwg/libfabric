@@ -1222,12 +1222,10 @@ static int ibv_mr_reg(fid_t fid, const void *buf, size_t len,
 	md->mr_fid.fid.ops = &ibv_mr_ops;
 
 	ibv_access = IBV_ACCESS_LOCAL_WRITE;
-	if (access & FI_REMOTE) {
-		if (access & FI_READ)
-			ibv_access |= IBV_ACCESS_REMOTE_READ;
-		if (access & FI_WRITE)
-			ibv_access |= IBV_ACCESS_REMOTE_WRITE;
-	}
+	if (access & FI_REMOTE_READ)
+		ibv_access |= IBV_ACCESS_REMOTE_READ;
+	if (access & FI_REMOTE_WRITE)
+		ibv_access |= IBV_ACCESS_REMOTE_WRITE;
 
 	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, ibv_access);
 	if (!md->mr)

@@ -113,16 +113,16 @@ The memory buffer may be used to receive inbound message transfers.
 This includes fi_msg and fi_tagged operations.
 .IP "FI_READ"
 The memory buffer may be used as the result buffer for RMA read
-and atomic operations on the initiator side.  If FI_REMOTE is set as well,
-then the memory buffer may also be used as the source of an RMA read
-operation on the target side.
+and atomic operations on the initiator side.
 .IP "FI_WRITE"
 The memory buffer may be used as the source buffer for RMA write
-and atomic operations on the initiator side.  If FI_REMOTE is set as well,
-then the memory buffer may also be used as the target of an RMA write
+and atomic operations on the initiator side.
+.IP "FI_REMOTE_READ"
+The memory buffer may be used as the source buffer of an RMA read
+operation on the target side.
+.IP "FI_REMOTE_WRITE"
+The memory buffer may be used as the target buffer of an RMA write
 or atomic operation.
-.IP "FI_REMOTE"
-The memory buffer may be the target of a remote RMA or atomic operation.
 .PP
 Registered memory is associated with a local memory descriptor and,
 optionally, a remote memory key.  A memory descriptor is a provider

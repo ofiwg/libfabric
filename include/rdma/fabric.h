@@ -86,7 +86,8 @@ enum {
 #define FI_WRITE		(1ULL << 18)
 #define FI_RECV			(1ULL << 19)
 #define FI_SEND			(1ULL << 20)
-#define FI_REMOTE		(1ULL << 21)
+#define FI_REMOTE_READ		(1ULL << 21)
+#define FI_REMOTE_WRITE		(1ULL << 22)
 
 #define FI_IMM			(1ULL << 24)
 #define FI_NOCOMP		(1ULL << 25)
