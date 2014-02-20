@@ -815,6 +815,28 @@ static struct fi_ops_ec ibv_ec_cm_data_ops = {
 	.strerror = ibv_ec_cm_strerror
 };
 
+static int ibv_ec_cm_control(fid_t fid, int command, void *arg)
+{
+	struct ibv_ec_cm *ec;
+	int ret = 0;
+
+	ec = container_of(fid, struct ibv_ec_cm, ec.fid.fid);
+	switch(command) {
+	case FI_GETECWAIT:
+		if (!ec->channel) {
+			ret = -FI_ENODATA;
+			break;
+		}
+		*(void **) arg = &ec->channel->fd;
+		break;
+	default:
+		ret = -FI_ENOSYS;
+		break;
+	}
+
+	return ret;
+}
+
 static int ibv_ec_cm_close(fid_t fid)
 {
 	struct ibv_ec_cm *ec;
@@ -830,6 +852,7 @@ static int ibv_ec_cm_close(fid_t fid)
 static struct fi_ops ibv_ec_cm_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = ibv_ec_cm_close,
+	.control = ibv_ec_cm_control,
 };
 
 static int ibv_ec_cm_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context)
@@ -1044,6 +1067,28 @@ static struct fi_ops_ec ibv_ec_comp_data_ops = {
 	.strerror = ibv_ec_comp_strerror
 };
 
+static int ibv_ec_comp_control(fid_t fid, int command, void *arg)
+{
+	struct ibv_ec_comp *ec;
+	int ret = 0;
+
+	ec = container_of(fid, struct ibv_ec_comp, ec.fid.fid);
+	switch(command) {
+	case FI_GETECWAIT:
+		if (!ec->channel) {
+			ret = -FI_ENODATA;
+			break;
+		}
+		*(void **) arg = &ec->channel->fd;
+		break;
+	default:
+		ret = -FI_ENOSYS;
+		break;
+	}
+
+	return ret;
+}
+
 static int ibv_ec_comp_close(fid_t fid)
 {
 	struct ibv_ec_comp *ec;
@@ -1066,6 +1111,7 @@ static int ibv_ec_comp_close(fid_t fid)
 static struct fi_ops ibv_ec_comp_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = ibv_ec_comp_close,
+	.control = ibv_ec_comp_control,
 };
 
 static int ibv_ec_comp_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context)
