@@ -54,21 +54,6 @@ src_libfabric_la_LDFLAGS = -version-info 1 -export-dynamic \
 
 src_libfabric_la_DEPENDENCIES =  $(srcdir)/libfabric.map
 
-bin_PROGRAMS = \
-	examples/fi_provinfo \
-	examples/fi_perf
-
-examples_fi_provinfo_SOURCES = \
-	examples/provinfo.c \
-	examples/shared.c
-examples_fi_provinfo_LDADD = \
-	$(top_builddir)/src/libfabric.la
-examples_fi_perf_SOURCES = \
-	examples/perf.c \
-	examples/shared.c
-examples_fi_perf_LDADD = \
-	$(top_builddir)/src/libfabric.la
-
 libfabricincludedir = $(includedir)/rdma
 infinibandincludedir = $(includedir)/infiniband
 
@@ -117,8 +102,7 @@ EXTRA_DIST = include/fi.h libfabric.map libfabric.spec.in $(man_MANS) \
 	prov/mlx4/src/doorbell.h \
 	prov/mlx4/src/mlx4.h \
 	prov/mlx4/src/mlx4-abi.h \
-	prov/mlx4/wqe.h \
-	examples/shared.h
+	prov/mlx4/wqe.h
 
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
