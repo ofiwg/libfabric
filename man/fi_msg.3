@@ -180,6 +180,16 @@ returned to user immediately after the send call returns, even if the operation
 is handled asynchronously.  This may require that the underlying provider
 implementation copy the data into a local buffer and transfer out of that
 buffer.
+.IP "FI_MULTI_RECV"
+Applies to posted receive operations.  This flag allows the user to post a
+single buffer that will receive multiple incoming messages.  Received
+messages will be packed into the receive buffer until the buffer has been
+consumed.  Use of this flag may cause a single posted receive operation
+to generate multiple events as messages are placed into the buffer.
+The placement of received data into the buffer may be subjected to
+provider specific alignment restrictions.  The buffer will be freed from
+the endpoint when a message is received that cannot fit into the remaining
+free buffer space.
 .IP "FI_ACK"
 Applies to fi_sendmsg.  Indicates that a completion should not be generated
 until the operation has been explicitly acknowledged by the remote side.

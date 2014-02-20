@@ -79,7 +79,8 @@ enum {
 #define FI_BLOCK		(1ULL << 9)
 #define FI_BUFFERED_RECV	(1ULL << 10)	/* BUFFERED? */
 #define FI_BUFFERED_SEND	(1ULL << 11)	/* BUFFERED? */
-/* #define FI_SHARED_RECV		(1ULL << 12) */
+#define FI_MULTI_RECV		(1ULL << 12)
+/* #define FI_SHARED_RECV		(1ULL << XX) */
 
 #define FI_EXCL			(1ULL << 16)
 #define FI_READ			(1ULL << 17)
