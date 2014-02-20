@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the OpenIB.org BSD license
  * below:
@@ -77,20 +77,10 @@ static struct test_size_param test_size[] = {
 };
 #define TEST_CNT (sizeof test_size / sizeof test_size[0])
 
-enum perf_optimization {
-	opt_latency,
-	opt_bandwidth
-};
-
-#define SEND_CONTEXT	NULL
-
 static int custom;
-static enum perf_optimization optimization;
 static int size_option;
-static int iterations = 1;
+static int iterations = 1000;
 static int transfer_size = 1000;
-static int transfer_count = 1000;
-/* TODO: make max_credits dynamic based on user input or endpoint size */
 static int max_credits = 128;
 static int credits = 128;
 static char test_name[10] = "custom";
@@ -112,13 +102,13 @@ static void show_perf(void)
 	long long bytes;
 
 	usec = (end.tv_sec - start.tv_sec) * 1000000 + (end.tv_usec - start.tv_usec);
-	bytes = (long long) iterations * transfer_count * transfer_size * 2;
+	bytes = (long long) iterations * transfer_size * 2;
 
 	/* name size transfers iterations bytes seconds Gb/sec usec/xfer */
 	printf("%-10s", test_name);
 	size_str(str, sizeof str, transfer_size);
 	printf("%-8s", str);
-	cnt_str(str, sizeof str, transfer_count);
+	cnt_str(str, sizeof str, 1);
 	printf("%-8s", str);
 	cnt_str(str, sizeof str, iterations);
 	printf("%-8s", str);
@@ -126,32 +116,18 @@ static void show_perf(void)
 	printf("%-8s", str);
 	printf("%8.2fs%10.2f%11.2f\n",
 		usec / 1000000., (bytes * 8) / (1000. * usec),
-		(usec / iterations) / (transfer_count * 2));
+		(usec / iterations) / 2);
 }
 
-static void init_latency_test(int size)
+static void init_test(int size)
 {
 	char sstr[5];
 
 	size_str(sstr, sizeof sstr, size);
 	snprintf(test_name, sizeof test_name, "%s_lat", sstr);
-	transfer_count = 1;
 	transfer_size = size;
 	iterations = size_to_count(transfer_size);
 }
-
-/*
-static void init_bandwidth_test(int size)
-{
-	char sstr[5];
-
-	size_str(sstr, sizeof sstr, size);
-	snprintf(test_name, sizeof test_name, "%s_bw", sstr);
-	iterations = 1;
-	transfer_size = size;
-	transfer_count = size_to_count(transfer_size);
-}
-*/
 
 static int poll_all_sends(void)
 {
@@ -187,7 +163,7 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_sendmem(ep, buf, size, fi_mr_desc(mr), SEND_CONTEXT);
+	ret = fi_sendmem(ep, buf, size, fi_mr_desc(mr), NULL);
 	if (ret)
 		printf("fi_write %d (%s)\n", ret, fi_strerror(-ret));
 
@@ -230,7 +206,7 @@ static int sync_test(void)
 
 static int run_test(void)
 {
-	int ret, i, t;
+	int ret, i;
 
 	ret = sync_test();
 	if (ret)
@@ -238,19 +214,15 @@ static int run_test(void)
 
 	gettimeofday(&start, NULL);
 	for (i = 0; i < iterations; i++) {
-		for (t = 0; t < transfer_count; t++) {
-			ret = dst_addr ? send_xfer(transfer_size) :
-					 recv_xfer(transfer_size);
-			if (ret)
-				goto out;
-		}
+		ret = dst_addr ? send_xfer(transfer_size) :
+				 recv_xfer(transfer_size);
+		if (ret)
+			goto out;
 
-		for (t = 0; t < transfer_count; t++) {
-			ret = dst_addr ? recv_xfer(transfer_size) :
-					 send_xfer(transfer_size);
-			if (ret)
-				goto out;
-		}
+		ret = dst_addr ? recv_xfer(transfer_size) :
+				 send_xfer(transfer_size);
+		if (ret)
+			goto out;
 	}
 	gettimeofday(&end, NULL);
 	show_perf();
@@ -562,43 +534,19 @@ static int run(void)
 
 	printf("%-10s%-8s%-8s%-8s%-8s%8s %10s%13s\n",
 	       "name", "bytes", "xfers", "iters", "total", "time", "Gb/sec", "usec/xfer");
+
+	ret = dst_addr ? client_connect() : server_connect();
+	if (ret)
+		return ret;
+
 	if (!custom) {
-		optimization = opt_latency;
-		ret = dst_addr ? client_connect() : server_connect();
-		if (ret)
-			return ret;
-
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > size_option)
 				continue;
-			init_latency_test(test_size[i].size);
+			init_test(test_size[i].size);
 			run_test();
 		}
-
-		/*
-		 * disable bandwidth test until we have a correct flooding
-		 * message protocol
-		fi_shutdown(ep, 0);
-		poll_all();
-		fi_close(ep);
-		free_res();
-
-		optimization = opt_bandwidth;
-		ret = dst_addr ? client_connect() : server_connect();
-		if (ret)
-			return ret;
-
-		for (i = 0; i < TEST_CNT; i++) {
-			if (test_size[i].option > size_option)
-				continue;
-			init_bandwidth_test(test_size[i].size);
-			run_test();
-		}
-		*/
 	} else {
-		ret = dst_addr ? client_connect() : server_connect();
-		if (ret)
-			return ret;
 
 		ret = run_test();
 	}
@@ -633,10 +581,6 @@ int main(int argc, char **argv)
 		case 's':
 			src_addr = optarg;
 			break;
-		case 'C':
-			custom = 1;
-			transfer_count = atoi(optarg);
-			break;
 		case 'I':
 			custom = 1;
 			iterations = atoi(optarg);
@@ -655,7 +599,6 @@ int main(int argc, char **argv)
 			printf("\t[-n domain_name]\n");
 			printf("\t[-p port_number]\n");
 			printf("\t[-s source_address]\n");
-			printf("\t[-C transfer_count]\n");
 			printf("\t[-I iterations]\n");
 			printf("\t[-S transfer_size or 'all']\n");
 			exit(1);
