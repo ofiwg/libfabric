@@ -250,6 +250,25 @@ struct fi_ec_tagged_err_entry {
 };
 
 .fi
+.IP "FI_EC_FORMAT_COUNTER"
+Provides a count of successful events that occur on the EC.
+.nf
+
+struct fi_ec_counter_entry {
+	uint64_t events;  /* number of successful events */
+};
+
+.fi
+.IP "FI_EC_FORMAT_COUNTER_ERR"
+Provides a count of successful and error events that occur on the EC.
+.nf
+
+struct fi_ec_counter_err_entry {
+	uint64_t events;  /* number of successful events */
+	uint64_t errors;  /* number of error events */
+};
+
+.fi
 .IP "FI_EC_FORMAT_CM"
 Provides information on connection management.
 .nf

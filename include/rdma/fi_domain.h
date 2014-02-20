@@ -138,7 +138,9 @@ enum fi_ec_format {
 	FI_EC_FORMAT_COMP_ERR,
 	FI_EC_FORMAT_DATA_ERR,
 	FI_EC_FORMAT_TAGGED_ERR,
-	FI_EC_FORMAT_CM
+	FI_EC_FORMAT_CM,
+	FI_EC_FORMAT_COUNTER,
+	FI_EC_FORMAT_COUNTER_ERR,
 };
 
 /* Use fi_control GETECWAIT to get underlying wait object */
@@ -229,6 +231,15 @@ struct fi_ec_tagged_err_entry {
 		struct fi_ec_tagged_entry	tagged;
 		struct fi_ec_err_entry		err;
 	};
+};
+
+struct fi_ec_counter_entry {
+	uint64_t		events;
+};
+
+struct fi_ec_counter_err_entry {
+	uint64_t		events;
+	uint64_t		errors;
 };
 
 enum fi_cm_event {
