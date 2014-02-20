@@ -59,7 +59,7 @@ struct fi_ops_cm {
 
 #ifndef FABRIC_DIRECT
 
-static inline int fi_getsockname(fid_t fid, void *addr, size_t *addrlen)
+static inline int fi_getepname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
