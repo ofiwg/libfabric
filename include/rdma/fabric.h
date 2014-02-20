@@ -229,7 +229,7 @@ fi_fopen(fid_t fid, const char *name, uint64_t flags, fid_t *fif, void *context)
 	struct fid_fabric *fab = container_of(fid, struct fid_fabric, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_FABRIC);
 	FI_ASSERT_OPS(fid, struct fid_fabric, ops);
-	FI_ASSERT_OP(fab->ops, struct fid_fabric, if_open);
+	FI_ASSERT_OP(fab->ops, struct fi_ops_fabric, if_open);
 	return fab->ops->if_open(fid, name, flags, fif, context);
 }
 

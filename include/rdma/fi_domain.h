@@ -346,7 +346,7 @@ fi_fdomain(fid_t fid, struct fi_info *info, fid_t *dom, void *context)
 	struct fid_fabric *fab = container_of(fid, struct fid_fabric, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_FABRIC);
 	FI_ASSERT_OPS(fid, struct fid_fabric, ops);
-	FI_ASSERT_OP(fab->ops, struct fid_fabric, domain);
+	FI_ASSERT_OP(fab->ops, struct fi_ops_fabric, domain);
 	return fab->ops->domain(fid, info, dom, context);
 }
 
@@ -356,7 +356,7 @@ fi_fec_open(fid_t fid, const struct fi_ec_attr *attr, fid_t *ec, void *context)
 	struct fid_fabric *fab = container_of(fid, struct fid_fabric, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_FABRIC);
 	FI_ASSERT_OPS(fid, struct fid_fabric, ops);
-	FI_ASSERT_OP(fab->ops, struct fid_fabric, ec_open);
+	FI_ASSERT_OP(fab->ops, struct fi_ops_fabric, ec_open);
 	return fab->ops->ec_open(fid, attr, ec, context);
 }
 

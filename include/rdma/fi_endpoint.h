@@ -166,7 +166,7 @@ fi_fendpoint(fid_t fid, struct fi_info *info, fid_t *pep, void *context)
 	struct fid_fabric *fab = container_of(fid, struct fid_fabric, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_FABRIC);
 	FI_ASSERT_OPS(fid, struct fid_fabric, ops);
-	FI_ASSERT_OP(fab->ops, struct fid_fabric, endpoint);
+	FI_ASSERT_OP(fab->ops, struct fi_ops_fabric, endpoint);
 	return fab->ops->endpoint(fid, info, pep, context);
 }
 
