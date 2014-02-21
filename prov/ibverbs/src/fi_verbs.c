@@ -578,8 +578,14 @@ static int ibv_msg_ep_setopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
+static int ibv_msg_ep_enable(fid_t fid)
+{
+	return 0;
+}
+
 static struct fi_ops_ep ibv_msg_ep_base_ops = {
 	.size = sizeof(struct fi_ops_ep),
+	.enable = ibv_msg_ep_enable,
 	.getopt = ibv_msg_ep_getopt,
 	.setopt = ibv_msg_ep_setopt,
 };

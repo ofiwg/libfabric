@@ -159,9 +159,12 @@ FI_ADDR_INDEX -- must be bound to a single AV.  AV binding can occur
 before or after an endpoint has been enabled.
 .SS "fi_enable"
 This call transitions the endpoint into an enabled state.  An endpoint
-must be enabled before attempting to connect it or perform data transfers
-on it.  Enabling an endpoint typically results in hardware resources
-being assigned to it.
+must be enabled before it may be used to perform data transfers.
+Enabling an endpoint typically results in hardware resources being
+assigned to it.
+.PP
+Calling connect or accept on an endpoint will implicitly enable an
+endpoint if it has not already been enabled. 
 .SS "fi_cancel"
 fi_cancel attempts to cancel an outstanding asynchronous operation.
 The endpoint must have been configured to support cancelable operations,
