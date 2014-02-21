@@ -477,9 +477,32 @@ static int __fi_ec_cm_close(fid_t fid)
 	return 0;
 }
 
+static int __fi_ec_cm_control(fid_t fid, int command, void *arg)
+{
+	struct __fid_ec_cm *ec;
+	int ret = 0;
+
+	ec = container_of(fid, struct __fid_ec_cm, ec_fid.fid);
+	switch(command) {
+	case FI_GETECWAIT:
+		if (!ec->channel) {
+			ret = -FI_ENODATA;
+			break;
+		}
+		*(void **) arg = &ec->channel->fd;
+		break;
+	default:
+		ret = -FI_ENOSYS;
+		break;
+	}
+
+	return ret;
+}
+
 struct fi_ops __fi_ec_cm_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = __fi_ec_cm_close,
+	.control = __fi_ec_cm_control,
 };
 
 static int
