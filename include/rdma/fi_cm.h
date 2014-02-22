@@ -71,7 +71,7 @@ static inline int fi_getepname(fid_t fid, void *addr, size_t *addrlen)
 static inline int fi_listen(fid_t fid)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_CLASS(fid, FID_CLASS_PEP);
 	FI_ASSERT_OPS(fid, struct fid_ep, cm);
 	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, listen);
 	return ep->cm->listen(fid);
