@@ -410,10 +410,50 @@ static ssize_t ibv_msg_ep_sendmem(fid_t fid, const void *buf, size_t len,
 	return -ibv_post_send(ep->id->qp, &wr, &bad);
 }
 
+static ssize_t ibv_msg_ep_sendmsg(fid_t fid, const struct fi_msg *msg,
+				  uint64_t flags)
+{
+	struct ibv_msg_ep *ep;
+	struct ibv_send_wr wr, *bad;
+	struct ibv_sge *sge;
+	struct fi_iomv *iov;
+	size_t i, len;
+
+	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
+	wr.num_sge = msg->iov_count;
+	if (msg->iov_count) {
+		sge = alloca(sizeof(*sge) * msg->iov_count);
+		iov = (struct fi_iomv *) msg->msg_iov;
+		for (len = 0, i = 0; i < msg->iov_count; i++) {
+			sge[i].addr = (uintptr_t) iov[i].addr;
+			sge[i].length = (uint32_t) iov[i].len;
+			sge[i].lkey = (uint32_t) iov[i].mem_desc;
+			len += sge[i].length;
+		}
+
+		wr.sg_list = sge;
+		wr.send_flags = (len <= ep->inline_size) ? IBV_SEND_INLINE : 0;
+	} else {
+		wr.send_flags = 0;
+	}
+
+	wr.wr_id = (uintptr_t) msg->context;
+	wr.next = NULL;
+	if (flags & FI_IMM) {
+		wr.opcode = IBV_WR_SEND_WITH_IMM;
+		wr.imm_data = (uint32_t) msg->data;
+	} else {
+		wr.opcode = IBV_WR_SEND;
+	}
+
+	return -ibv_post_send(ep->id->qp, &wr, &bad);
+}
+
 static struct fi_ops_msg ibv_msg_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recvmem = ibv_msg_ep_recvmem,
 	.sendmem = ibv_msg_ep_sendmem,
+	.sendmsg = ibv_msg_ep_sendmsg,
 };
 
 static int ibv_msg_ep_rma_writemem(fid_t fid, const void *buf, size_t len,

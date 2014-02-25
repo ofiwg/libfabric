@@ -229,6 +229,16 @@ static inline ssize_t fi_sendmem(fid_t fid, void *buf, size_t len,
 	return ep->msg->sendmem(fid, buf, len, mem_desc, context);
 }
 
+static inline ssize_t
+fi_sendmsg(fid_t fid, const struct fi_msg *msg, uint64_t flags)
+{
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, msg);
+	FI_ASSERT_OP(ep->msg, struct fi_ops_msg, sendmsg);
+	return ep->msg->sendmsg(fid, msg, flags);
+}
+
 
 #else // FABRIC_DIRECT
 #include <rdma/fi_direct_endpoint.h>
