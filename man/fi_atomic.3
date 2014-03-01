@@ -294,8 +294,13 @@ Bitwise exclusive-OR (XOR)
 .nf
 addr[i] = addr[i] ^ buf[i]
 .fi
-.IP "FI_SWAP / FI_REPLACE"
-Swap or replace data
+.IP "FI_ATOMIC_READ"
+Read data atomically
+.nf
+buf[i] = addr[i]
+.fi
+.IP "FI_ATOMIC_WRITE"
+Write data atomically
 .nf
 addr[i] = buf[i]
 .fi
@@ -353,8 +358,9 @@ The call fi_atomic transfers the data contained in the user-specified data
 buffer to a remote node.  The local endpoint must be connected to
 a remote endpoint or destination before fi_atomic is called.  Unless the
 endpoint has been configured differently, the data buffer passed into
-fi_atomic must not be touched by the application
-until the fi_atomic call completes asynchronously.
+fi_atomic must not be touched by the application until the fi_atomic
+call completes asynchronously.  The target buffer of a base atomic
+operation must allow for remote read an/or write access, as appropriate.
 .PP
 The difference between fi_atomicmem and fi_atomic is that the data buffer
 passed into fi_atomicmem must be registered with the resource domain associated
@@ -394,12 +400,13 @@ fi_fetch atomicmsg -- behave similar to the equivalent base atomic function.
 The difference between the fetch and base atomic calls are the fetch
 atomic routines return the initial value that was stored at the target
 to the user.  The initial value is read into the user provided result
-buffer.
+buffer.  The target buffer of fetch-atomic operations must be enabled
+for remote read access.
 .PP
 The following list of atomic operations are usable with both the base
 atomic and fetch atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
-FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR, and FI_SWAP /
-FI_REPLACE.
+FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR, FI_ATOMIC_READ,
+and FI_ATOMIC_WRITE.
 .SS "Compare-Atomic Functions"
 The compare atomic functions -- fi_compare_atomic, fi_compare_atomicmem,
 fi_compare_atomicv, fi_compare_atomicto, fi_compare_atomicmemto, and
@@ -412,6 +419,14 @@ Completed atomic operations are reported to the user through one or more event
 collectors associated with the endpoint.  Users provide context which are
 associated with each operation, and is returned to the user
 as part of the event completion.  See fi_ec for completion event details.
+.PP
+Updates to the target buffer of an atomic operation are visible to
+processes running on the target system either after a completion has been
+generated, or after the completion of an operation initiated after the
+atomic call with a fencing operation occurring in between.  For example,
+the target process may be notified by the initiator sending a message
+after the atomic call completes, or sending a fenced message immediately
+after initiating the atomic operation.
 .SH "FLAGS"
 The fi_atomicmsg, fi_fetch_atomicmsg, and fi_compare_atomicmsg calls allow
 the user to specify flags which can change the default data transfer operation.

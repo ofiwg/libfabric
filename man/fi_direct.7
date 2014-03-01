@@ -16,8 +16,9 @@ The use of fabric direct is intended only for applications that require
 the absolute minimum software latency, and are willing to re-compile
 for specific fabric hardware.  Providers that support fabric direct
 implement their own versions of the static inline calls which are define
-in the libfabric header files.  Applications can then code against the
-standard libfabric calls, but link directly against the provider calls by
+in the libfabric header files, define selected enum values, and provide
+defines for compile-time optimizations.  Applications can then code against
+the standard libfabric calls, but link directly against the provider calls by
 defining FABRIC_DIRECT as part of their build.
 .PP
 In general, the use of fabric direct does not require application source
