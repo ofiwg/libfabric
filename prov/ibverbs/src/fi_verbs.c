@@ -965,7 +965,7 @@ static int ibv_ec_comp_reset(fid_t fid, const void *cond)
 	if (!ret)
 		ibv_ack_cq_events(cq, 1);
 
-	return -ibv_req_notify_cq(ec->cq, (ec->flags & FI_SIGNAL) ? 1 : 0);
+	return -ibv_req_notify_cq(ec->cq, (ec->flags & FI_REMOTE_SIGNAL) ? 1 : 0);
 }
 
 static ssize_t ibv_ec_comp_readerr(fid_t fid, void *buf, size_t len, uint64_t flags)

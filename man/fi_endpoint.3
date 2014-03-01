@@ -240,14 +240,13 @@ posted are lost.
 When set, the user must use 
 .B struct fi_context 
 as their per operation context.
-.IP "FI_NOCOMP"
-Indicates that the endpoint should, by default, not generate completion
-entries for any data transfer operations.
-.IP "FI_SIGNAL"
-Indicates that the endpoint should, by default, generate completion
-entries for data transfer operations.  This flag may not be used in
-conjunction with FI_NOCOMP.  In the absence of either flag being set, an
-endpoint will generate completion entries for all data transfer operations.
+.IP "FI_EVENT"
+Indicates that the endpoint should, by default, only generate completion
+entries for data transfer operations that have the FI_EVENT flag set.
+When set the user must determine when a request that does NOT have
+FI_EVENT set has completed indirectly, usually based on the completion
+of a subsequent operation.  Use of this flag may improve performance by
+allowing the provider to avoid writing a completion entry for every operation.
 .IP "FI_ACK"
 Indicates that a completion event, when requested, should not be generated
 until the operation has been acknowledged by the remote side.
