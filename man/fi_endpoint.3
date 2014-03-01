@@ -211,7 +211,14 @@ The following option levels and option names and parameters are defined.
 .RS
 .IP "FI_OPT_MAX_BUFFERED_SEND - size_t"
 Defines the maximum buffered send operation (see the FI_BUFFERED_SEND
-flag) that the endpoint currently supports.
+flag) that the endpoint currently supports.  This value applies per send
+operation.
+.IP "FI_OPT_TOTAL_BUFFERED_SEND - size_t"
+Defines the total available space allocated to buffer send operations (see
+the FI_BUFFERED_SEND flag) that the endpoint currently supports.
+.IP "FI_OPT_TOTAL_BUFFERED_RECV - size_t"
+Defines the total available space allocated to buffer received messages
+(see the FI_BUFFERED_RECV flag) that the endpoint currently supports.
 .RE
 .SH "CONTROL FLAGS"
 The following flags may be set to control the operation of data transfers
@@ -222,18 +229,53 @@ Indicates that all outbound data buffer should be returned to the user's
 control immediately after a data transfer call returns, even if the
 operation is handled asynchronously.  This may require that the
 provider copy the data into a local buffer and transfer out of that buffer.
+A provider may limit the total amount of send data that may be buffered
+and/or the size of a single send.  Applications may discover and modify these
+limits using the endpoint's getopt and setopt interfaces.
+.IP "FI_BUFFERED_RECV"
+If set, the communication interface implementation should attempt to queue inbound
+data that arrives before a receive buffer has been posted.  In the
+absence of this flag, any messages that arrive before a receive is
+posted are lost.
+When set, the user must use 
+.B struct fi_context 
+as their per operation context.
 .IP "FI_NOCOMP"
 Indicates that the endpoint should, by default, not generate completion
 entries for any data transfer operations.
 .IP "FI_SIGNAL"
 Indicates that the endpoint should, by default, generate completion
-entries for data transfer operations.
+entries for data transfer operations.  This flag may not be used in
+conjunction with FI_NOCOMP.  In the absence of either flag being set, an
+endpoint will generate completion entries for all data transfer operations.
 .IP "FI_ACK"
 Indicates that a completion event, when requested, should not be generated
 until the operation has been acknowledged by the remote side.
 .IP "FI_CANCEL"
 Indicates that the user wants the ability to cancel all data transfer
 operations.
+.IP "FI_READ"
+Indicates that the user wants to initiate reads against remote memory
+regions.  Remote reads include some RMA and atomic operations.
+.IP "FI_WRITE"
+Indicates that the user wants to initiate writes against remote memory
+regions.  Remote writes include some RMA and most atomic operations.
+.IP "FI_SEND"
+Indicates that the endpoint will be used to send message data transfers.
+Message transfers include base message operations as well as tagged message
+functionality.
+.IP "FI_RECV"
+Indicates that the endpoint will be used to receive message data transfers.
+Message transfers include base message operations as well as tagged message
+functionality.
+.IP "FI_REMOTE_READ"
+Indicates that the endpoint should allow remote endpoints to read memory
+regions exposed by this endpoint.  Remote read operations include some RMA
+and atomic operations.
+.IP "FI_REMOTE_WRITE"
+Indicates that the endpoint should allow remote endpoints to write to memory
+regions exposed by this endpoint.  Remote write operations include some RMA
+operations and most atomic operations.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 
