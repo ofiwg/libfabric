@@ -180,6 +180,20 @@ remote endpoint.
 The fi_trecvmsg call supports posting buffers over both connected and unconnected
 endpoints, with the ability to control the receive operation per call through the
 use of flags.  The fi_trecvmsg function takes a struct fi_msg_tagged as input.
+.SS "fi_tsearch"
+The function fi_tsearch determines if a message with the specified
+tag with ignore mask from an optionally supplied source address has been
+received and is buffered by the provider.  The fi_tsearch call is only
+available on endpoints with FI_BUFFERED_RECV enabled.  The fi_tsearch
+operation may complete asynchronously or immediately, depending on the
+underlying provider implementation.
+.PP
+By default, a single message may be matched by multiple search operations.
+The user can restrict a message to matching with a single fi_tsearch call
+by using the FI_CLAIM flag to control the search.  When set, FI_CLAIM
+indicates that when a search successfully finds a matching message, the
+message is claimed by caller. Subsequent searches cannot find the same
+message, although they may match other messages that have the same tag.
 .SH "FLAGS"
 The fi_trecvmsg and fi_tsendmsg calls allow the user to specify flags
 which can change the default message handling of the endpoint.
@@ -228,13 +242,6 @@ users embed struct fi_context within their own context structure.
 The struct fi_context must remain valid until the corresponding operation
 completes or is successfully canceled.  Users should not update or interpret
 the fields in this structure.  The structure is specified in rdma/fabric.h.
-.PP
-The function fi_tsearch determines if a message with the specified
-tag with ignore mask from an optionally supplied source address has been
-received and is buffered by the provider.  The fi_tsearch call is only
-available on endpoints with FI_BUFFERED_RECV enabled.  The fi_tsearch
-operation may complete asynchronously or immediately, depending on the
-underlying provider implementation.
 .SH "RETURN VALUE"
 The tagged send and receive calls return 0 on success.
 On error, a negative value corresponding to fabric
