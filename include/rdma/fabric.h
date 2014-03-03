@@ -127,6 +127,7 @@ struct fi_info {
 	uint64_t		type;
 	uint64_t		protocol;
 	uint64_t		protocol_cap;
+	uint64_t		domain_cap;
 	enum fi_iov_format	iov_format;
 	enum fi_addr_format	addr_format;
 	enum fi_addr_format	info_addr_format;

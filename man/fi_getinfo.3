@@ -46,6 +46,7 @@ struct fi_info {
 	uint64_t            type;
 	uint64_t            protocol;
 	uint64_t            protocol_cap;
+	uint64_t            domain_cap;
 	enum fi_iov_format  iov_format;
 	enum fi_addr_format addr_format;
 	enum fi_addr_format info_addr_format;
@@ -89,6 +90,11 @@ If specified, indicates the desired communication protocol capabilities. Support
 capabilities are listed in the
 .B "Protocol capabilities"
 section below.
+.IP "domain_cap"
+If specified, indicates the desired domain capabilities.  Supported capabilities
+are listed in the
+.B "Domain capabilities"
+section below. 
 .IP "iov_format"
 If specified, indicates the format used for vectored data communications. Supported
 formats are listed in the
@@ -275,6 +281,34 @@ struct fi_msg_ops, when a multicast address is specified as the destination
 address.  In the absence of any relevant flags, FI_PROTO_CAP_MULTICAST implies
 the ability to send and receive messages.  Applications can use the FI_SEND and
 FI_RECV flags to optimize an endpoint as send-only or receive-only.
+.SH "DOMAIN CAPABILITIES"
+Domain capabilities are obtained by OR-ing the following flags together.
+.IP "FI_WRITE_COHERENT"
+Specifies that remote writes, including atomic operations, to the underlying
+access domain are coherent with the local processing domain.  Domain-level
+write coherency indicates that changes to local memory are visible to the
+local process immediately upon completion of a remote write operation.  The
+absence of this flag allows the NIC or memory subsystem to cache the results
+of remote write or atomic operations in non-coherent memory.
+.PP
+The behavior of a domain with and without FI_WRITE_COHERENT is illustrated
+below.
+.nf
+
+Process 1            Process 2
+                     Register BUF
+RMA write X to BUF
+Notify process 2
+                     Receive notification
+                     if not FI_WRITE_COHERENT
+                          Sync with remote writes
+                     assert(BUF == X)
+
+.fi
+.PP
+This flag is set on input hints to fi_getinfo, with the provider clearing the
+flag on output if it does not provide write coherency.  See the endpoint
+fi_ep_sync call for handling non-coherent writes.
 .SH "VECTORED DATA FORMATS"
 .IP "FI_IOV [not likely for 1.0 release]"
 Indicates that format is that of

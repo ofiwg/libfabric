@@ -55,6 +55,9 @@ Get or set endpoint options.
 .BI "int fi_cancel(fid_t " ep ", struct fi_context *" context ");"
 .PP
 .HP
+.BI "int fi_ep_sync(fid_t " ep ", uint64_t " flags ", void *" context ");"
+.PP
+.HP
 .BI "int fi_ep_control(fid_t " ep ", int " command ", void *" arg ");"
 .PP
 .HP
@@ -181,6 +184,37 @@ The struct fi_context must remain valid until the corresponding operation
 completes or is successfully canceled.  Users should not update or interpret
 the fields in this structure.  The structure is specified in
 <rdma/fabric.h>.
+.SS "fi_ep_sync"
+The sync function is used to indicate that all previously identified
+operations have completed, with their results flushed from any intermediate
+caches.  In this regard, it acts as a fencing operation.  When an fi_ep_sync
+call completes, it indicates that all prior operations, as indicated by the
+fi_ep_sync flags, submitted before fi_ep_sync call have also completed.
+By default (flags are 0), fi_ep_sync completes only after all outbound
+operations have completed.  This includes message sends, RMA reads and writes,
+and atomic operations.
+.PP
+The behavior of fi_ep_sync may be adjusted by specifying one or more of the
+following flags.
+.IP "FI_READ"
+The sync call will not complete until all outstanding RMA or atomic read
+data transfers have completed.  The sync is not ordered with respect
+to non-read operations.
+.IP "FI_WRITE"
+The sync call will not complete until all outstanding RMA or atomic write
+data transfers have completed.  The sync is not ordered with respect to
+non-write operations.
+.IP "FI_SEND"
+The sync call will not complete until all outstanding message send
+data transfers have completed.  The sync is not ordered with respect to
+non-send operations.
+.IP "FI_REMOTE_WRITE"
+The FI_REMOTE_WRITE flag is used in conjunction with access domains that
+do NOT support FI_WRITE_COHERENT.  The fi_ep_sync with FI_REMOTE_WRITE is
+issued on the target side of an RMA or atomic data transfer.  It ensures
+that the view of memory of the local process is consistent with memory
+updates from the network.  See fi_getinfo for additional details on
+FI_WRITE_COHERENT.
 .SS "fi_ep_control"
 The control operation is used to adjust the default behavior of an
 endpoint.  It allows the underlying provider to redirect function
@@ -294,7 +328,7 @@ A resource domain was not bound to the endpoint or an attempt was made to
 bind multiple domains.
 .IP "-FI_ENOEC"
 The endpoint has not been configured with necessary event collectors.
-.IP "FI_EOPBADSTATE"
+.IP "-FI_EOPBADSTATE"
 The endpoint's state does not permit the requested operation.
 .SH "SEE ALSO"
 fi_getinfo(3), fi_open(3), fi_domain(3), fi_msg(3), fi_tagged(3), fi_rma(3)

@@ -297,6 +297,10 @@ struct fi_mr_attr {
 };
 
 
+/* fi_info domain capabilities */
+#define FI_WRITE_COHERENT	(1ULL << 0)
+
+
 enum fi_progress {
 	FI_PROGRESS_AUTO,
 	FI_PROGRESS_INDIRECT,	/* progress possible through any domain call */
