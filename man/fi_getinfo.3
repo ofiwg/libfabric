@@ -162,24 +162,21 @@ absence of this flag, any messages that arrive before a receive is
 posted are lost.
 When set, the user must use 
 .B struct fi_context 
-as their per operation context.  This flag is set on input hints to
+as their per operation context.  This flag may be set on input hints to
 fi_getinfo, with the provider clearing the flag on output if it does not
 provide receive buffering.
 .IP "FI_BUFFERED_SEND"
 If set, the outbound data buffer should be returned to user immediately after
 the call returns, even if the operation is handled asynchronously.  This may
 require that the communication interface implementation copy the data into a
-local buffer and transfer out of that buffer.  This flag is set on input
+local buffer and transfer out of that buffer.  This flag may be set on input
 hints to fi_getinfo, with the provider clearing the flag on output if it
 does not provide send buffering.
 .IP "FI_CANCEL"
-Indicates that the user wants the ability to cancel the operation if it does
-not complete first.  Providers use this to return a handle to the request,
-which the user may then cancel.  Also used by search to indicate that a request
-should be canceled.
-When set, the user must use 
-.B struct fi_context 
-as their per operation context.
+Indicates that the user wants the ability to cancel operations posted to
+an endpoint if they do not complete first.  This flag may be set on input hints
+to fi_getinfo, with the provider clearing the flag on output if it does
+not support canceling operations.
 .IP "FI_READ"
 Indicates that the user requires an endpoint capable of initiating reads
 against remote memory regions.  Remote reads include some RMA and atomic
@@ -306,8 +303,8 @@ Notify process 2
 
 .fi
 .PP
-This flag is set on input hints to fi_getinfo, with the provider clearing the
-flag on output if it does not provide write coherency.  See the endpoint
+This flag may be set on input hints to fi_getinfo, with the provider clearing
+the flag on output if it does not provide write coherency.  See the endpoint
 fi_ep_sync call for handling non-coherent writes.
 .SH "VECTORED DATA FORMATS"
 .IP "FI_IOV [not likely for 1.0 release]"

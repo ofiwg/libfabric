@@ -172,10 +172,6 @@ which can change the default data transfer operation.
 Flags specified with fi_readmsg / fi_writemsg override most flags
 previously configured with the endpoint, except where noted (see fi_control).
 The following list of flags are usable with fi_readmsg and/or fi_writemsg.
-.IP "FI_CANCEL"
-Indicates that the user wants the ability to cancel the operation if it does
-not complete first.  When set, the user must pass in struct fi_context as their
-per operation context (see discussion below).
 .IP "FI_IMM"
 Applies to fi_writemsg.  Indicates that immediate data is available and should
 be sent as part of the request.
@@ -201,15 +197,6 @@ buffer.
 .IP "FI_ACK"
 Applies to fi_writemsg.  Indicates that a completion should not be generated
 until the operation has been explicitly acknowledged by the remote side.
-.SH "FI_CONTEXT"
-If an RMA operation has been called has the flag FI_CANCEL set,
-then the user context parameter is interpreted as struct fi_context.
-For performance reasons, this structure must be allocated by the user,
-but may be used by the fabric provider to track the operation.  Typically,
-users embed struct fi_context within their own context structure.
-The struct fi_context must remain valid until the corresponding operation
-completes or is successfully canceled.  Users should not update or interpret
-the fields in this structure.  The structure is specified in rdma/fabric.h.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 

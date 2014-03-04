@@ -433,10 +433,6 @@ the user to specify flags which can change the default data transfer operation.
 Flags specified with atomic message operations override most flags
 previously configured with the endpoint, except where noted (see fi_control).
 The following list of flags are usable with atomic message calls.
-.IP "FI_CANCEL"
-Indicates that the user wants the ability to cancel the operation if it does
-not complete first.  When set, the user must pass in struct fi_context as their
-per operation context (see discussion below).
 .IP "FI_EVENT"
 Indicates that a completion entry should be generated for the specified
 operation.  The endpoint must be configured with FI_EVENT, or this flag
@@ -456,15 +452,6 @@ should be returned to user immediately after the call returns, even if the
 operation is handled asynchronously.  This may require that the underlying
 provider implementation copy the data into a local buffer and transfer out of
 that buffer.  The use of output result buffers are not affected by this flag.
-.SH "FI_CONTEXT"
-If an atomic operation has been called has the flag FI_CANCEL set,
-then the user context parameter is interpreted as struct fi_context.
-For performance reasons, this structure must be allocated by the user,
-but may be used by the fabric provider to track the operation.  Typically,
-users embed struct fi_context within their own context structure.
-The struct fi_context must remain valid until the corresponding operation
-completes or is successfully canceled.  Users should not update or interpret
-the fields in this structure.  The structure is specified in rdma/fabric.h.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 

@@ -101,7 +101,7 @@ enum {
 struct fi_ops_ep {
 	size_t	size;
 	int	(*enable)(fid_t fid);
-	ssize_t	(*cancel)(fid_t fid, struct fi_context *context);
+	ssize_t	(*cancel)(fid_t fid, void *context);
 	int	(*getopt)(fid_t fid, int level, int optname,
 			  void *optval, size_t *optlen);
 	int	(*setopt)(fid_t fid, int level, int optname,
@@ -192,7 +192,7 @@ static inline ssize_t fi_enable(fid_t fid)
 	return ep->ops->enable(fid);
 }
 
-static inline ssize_t fi_cancel(fid_t fid, struct fi_context *context)
+static inline ssize_t fi_cancel(fid_t fid, void *context)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
