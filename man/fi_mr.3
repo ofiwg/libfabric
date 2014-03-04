@@ -93,7 +93,8 @@ applications, notably those which manage their own network buffers.
 In order to support as broad range of applications as possible, without
 unduly affecting their performance, applications that wish to manage
 their own local memory registrations may do so by using the memory
-registration calls.
+registration calls.  Applications may use the FI_LOCAL_MR domain
+capability bit as a guide.
 .PP
 The registrations functions -- fi_mr_reg, fi_mr_regv, and fi_mr_regattr --
 are used to register one or more memory buffers with fabric resources.
@@ -134,9 +135,10 @@ must provide the key associated with the registration.
 .PP
 Because MR keys must be provided by a remote process, an application
 can use the requested_key parameter to indicate that a specific key
-value be returned.  A requested_key value of 0 indicates that the
-provider can select any appropriate key.  Support for user requested keys
-is provider specific.
+value be returned.  Support for user requested keys is provider specific.
+An access domain must be opened with the FI_USER_MR_KEY capability set
+in order to enable support for application selectable MR keys.  Otherwise,
+the requested_key parameter is ignored.
 .PP
 By default, memory registration is an asynchronous operation.  The result
 of a registration request will be reported to the user through an event

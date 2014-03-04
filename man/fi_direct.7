@@ -37,9 +37,21 @@ direct provider may define zero of more of the following capability
 definitions.  Applications can check for these capabilities in order to
 optimize code paths at compile time, versus relying on run-time checks.
 .SH "CAPABILITY DEFINITIONS"
+In order that application code may be optimized during compile time, direct
+providers must provide definitions for various capabilities, if those
+capabilities are supported.  The following #define values may be used
+by an application to test for provider support of supported features.
+.IP "FI_DIRECT_WRITE_COHERENT"
+The provider sets FI_WRITE_COHERENT for fi_info:domain_cap.  See fi_getinfo
+for additional details.
+.IP "FI_DIRECT_CONTEXT"
+The provider sets FI_CONTEXT for fi_info:domain_cap.  See fi_getinfo
+for additional details.
 .IP "FI_DIRECT_LOCAL_MR"
-The provider requires memory registration for locally accessed data
-buffers.  Data buffers used in send and receive operations must be
-registered by the application.
+The provider sets FI_LOCAL_MR for fi_info:domain_cap.  See fi_getinfo
+for additional details.
+.IP "FI_DIRECT_USER_MR_KEY"
+The provider sets FI_USER_MR_KEY for fi_info:domain_cap.  See fi_getinfo
+for additional details.
 .SH "SEE ALSO"
 fi_getinfo(3), fi_endpoint(3), fi_domain(3)

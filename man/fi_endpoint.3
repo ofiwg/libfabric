@@ -261,9 +261,6 @@ If set, the communication interface implementation should attempt to queue inbou
 data that arrives before a receive buffer has been posted.  In the
 absence of this flag, any messages that arrive before a receive is
 posted are lost.
-When set, the user must use 
-.B struct fi_context 
-as their per operation context.  See Notes below.
 .IP "FI_EVENT"
 Indicates that the endpoint should, by default, only generate completion
 entries for data transfer operations that have the FI_EVENT flag set.
@@ -276,10 +273,7 @@ Indicates that a completion event, when requested, should not be generated
 until the operation has been acknowledged by the remote side.
 .IP "FI_CANCEL"
 Indicates that the user wants the ability to cancel an operation posted
-to the endpoint, if it does not complete first.  When set, the user must
-pass in
-.B struct fi_context
-as their per operation context.  See Notes below.
+to the endpoint, if it does not complete first.
 .IP "FI_READ"
 Indicates that the user wants to initiate reads against remote memory
 regions.  Remote reads include some RMA and atomic operations.
@@ -309,16 +303,6 @@ errno is returned. Fabric errno values are defined in
 .SH "NOTES"
 Users should call fi_close to release all resources allocated to the fabric
 endpoint.
-.PP
-Providers may require that applications provide struct fi_context as their
-per operation context parameter.  This structure should be treated as
-opaque to the application.  For performance reasons, this structure must be
-allocated by the user, but may be used by the fabric provider to track the
-operation.  Typically, users embed struct fi_context within their own
-context structure.  The struct fi_context must remain valid until the
-corresponding operation completes or is successfully canceled.  Users should
-not update or interpret the fields in this structure.  The structure is
-specified in rdma/fabric.h.
 .SH "RETURN VALUES"
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.

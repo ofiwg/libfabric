@@ -160,11 +160,6 @@ Requests that the communication endpoint should attempt to queue
 inbound data that arrives before a receive buffer has been posted.  In the
 absence of this flag, any messages that arrive before a receive is
 posted are lost.
-When set, the user must use 
-.B struct fi_context 
-as their per operation context.  This flag may be set on input hints to
-fi_getinfo, with the provider clearing the flag on output if it does not
-provide receive buffering.
 .IP "FI_BUFFERED_SEND"
 If set, the outbound data buffer should be returned to user immediately after
 the call returns, even if the operation is handled asynchronously.  This may
@@ -280,6 +275,13 @@ the ability to send and receive messages.  Applications can use the FI_SEND and
 FI_RECV flags to optimize an endpoint as send-only or receive-only.
 .SH "DOMAIN CAPABILITIES"
 Domain capabilities are obtained by OR-ing the following flags together.
+Domain capabilities are most often used as output information from fi_getinfo,
+allowing applications to adjust their behavior based on the provider's
+hardware or software abilities.  However,specific capabilities may be
+requested through the hints parameter, with the actual supported capabilities
+returned by the provider.  Applications must check domain capabilities to
+ensure that all provider requirements for using resources associated with
+the access domain are met.
 .IP "FI_WRITE_COHERENT"
 Specifies that remote writes, including atomic operations, to the underlying
 access domain are coherent with the local processing domain.  Domain-level
@@ -306,6 +308,25 @@ Notify process 2
 This flag may be set on input hints to fi_getinfo, with the provider clearing
 the flag on output if it does not provide write coherency.  See the endpoint
 fi_ep_sync call for handling non-coherent writes.
+.IP "FI_CONTEXT"
+Specifies that the provider requires that applications use struct fi_context
+as their per operation context parameter.  This structure should be treated as
+opaque to the application.  For performance reasons, this structure must be
+allocated by the user, but may be used by the fabric provider to track the
+operation.  Typically, users embed struct fi_context within their own
+context structure.  The struct fi_context must remain valid until the
+corresponding operation completes or is successfully canceled.  Users should
+not update or interpret the fields in this structure.  The structure is
+specified in rdma/fabric.h.
+.IP "FI_LOCAL_MR"
+The provider is optimized around having applications register memory
+for locally accessed data buffers.  Data buffers used in send and receive
+operations and as the source buffer for RMA and atomic operations must be
+registered by the application for access domains opened with this capability.
+.IP "FI_USER_MR_KEY"
+The provider supports user requested memory registration keys.  Providers
+that set this capability honor the requested_key parameter for memory
+registration calls.
 .SH "VECTORED DATA FORMATS"
 .IP "FI_IOV [not likely for 1.0 release]"
 Indicates that format is that of
