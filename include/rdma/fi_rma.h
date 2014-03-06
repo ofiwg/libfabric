@@ -89,6 +89,31 @@ struct fi_ops_rma {
 
 
 #ifndef FABRIC_DIRECT
+
+static inline ssize_t
+fi_readmem(fid_t fid, void *buf, size_t len, uint64_t mem_desc,
+	   uint64_t addr, uint64_t key, void *context)
+{
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, rma);
+	FI_ASSERT_OP(ep->rma, struct fi_ops_rma, readmem);
+	return ep->rma->readmem(fid, buf, len, mem_desc,
+				addr, key, context);
+}
+
+static inline ssize_t
+fi_writemem(fid_t fid, const void *buf, size_t len, uint64_t mem_desc,
+	    uint64_t addr, uint64_t key, void *context)
+{
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, rma);
+	FI_ASSERT_OP(ep->rma, struct fi_ops_rma, writemem);
+	return ep->rma->writemem(fid, buf, len, mem_desc,
+				 addr, key, context);
+}
+
 #else // FABRIC_DIRECT
 #include <rdma/fi_direct_rma.h>
 #endif
