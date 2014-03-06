@@ -194,8 +194,12 @@ Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 
 .IR "rdma/fi_errno.h".
 .SH "ERRORS"
-.IP "Enter FI_ERRNO values here"
-write me
-.SH "NOTES"
+.IP "-FI_EAGAIN"
+Indicates that the underlying provider currently lacks the resources needed
+to initiate the requested operation.  This may be the result of insufficient
+internal buffering, in the case of FI_SEND_BUFFERED, or processing queues
+are full.  The operation may be retried after additional provider resources
+become available, usually through the completion of currently outstanding
+operations.
 .SH "SEE ALSO"
 fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_ec(3)
