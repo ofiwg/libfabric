@@ -186,9 +186,9 @@ The placement of received data into the buffer may be subjected to
 provider specific alignment restrictions.  The buffer will be freed from
 the endpoint when a message is received that cannot fit into the remaining
 free buffer space.
-.IP "FI_ACK"
+.IP "FI_REMOTE_COMPLETE"
 Applies to fi_sendmsg.  Indicates that a completion should not be generated
-until the operation has been explicitly acknowledged by the remote side.
+until the operation has completed on the remote side.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 

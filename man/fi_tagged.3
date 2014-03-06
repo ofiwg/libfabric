@@ -222,9 +222,9 @@ returned to user immediately after the send call returns, even if the operation
 is handled asynchronously.  This may require that the underlying provider
 implementation copy the data into a local buffer and transfer out of that
 buffer.
-.IP "FI_ACK"
+.IP "FI_REMOTE_COMPLETE"
 Applies to fi_tsendmsg.  Indicates that a completion should not be generated
-until the operation has been explicitly acknowledged by the remote side.
+until the operation has completed on the remote side.
 .PP
 The following flags may be used with fi_tsearch.
 .IP "Need tsearch flags"

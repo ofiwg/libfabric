@@ -194,9 +194,9 @@ returned to user immediately after the write call returns, even if the operation
 is handled asynchronously.  This may require that the underlying provider
 implementation copy the data into a local buffer and transfer out of that
 buffer.
-.IP "FI_ACK"
+.IP "FI_REMOTE_COMPLETE"
 Applies to fi_writemsg.  Indicates that a completion should not be generated
-until the operation has been explicitly acknowledged by the remote side.
+until the operation has completed on the remote side.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 

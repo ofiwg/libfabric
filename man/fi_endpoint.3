@@ -268,9 +268,9 @@ When set the user must determine when a request that does NOT have
 FI_EVENT set has completed indirectly, usually based on the completion
 of a subsequent operation.  Use of this flag may improve performance by
 allowing the provider to avoid writing a completion entry for every operation.
-.IP "FI_ACK"
-Indicates that a completion event, when requested, should not be generated
-until the operation has been acknowledged by the remote side.
+.IP "FI_REMOTE_COMPLETE"
+Indicates that local completions should not be generated
+until the operation has completed on the remote side.
 .IP "FI_CANCEL"
 Indicates that the user wants the ability to cancel an operation posted
 to the endpoint, if it does not complete first.
