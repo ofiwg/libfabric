@@ -60,6 +60,7 @@ enum fi_datatype {
 	FI_DOUBLE_COMPLEX,
 	FI_LONG_DOUBLE,
 	FI_LONG_DOUBLE_COMPLEX,
+	FI_DATATYPE_LAST
 };
 
 enum fi_op {
@@ -82,6 +83,7 @@ enum fi_op {
 	FI_CSWAP_GE,
 	FI_CSWAP_GT,
 	FI_MSWAP,
+	FI_ATOMIC_OP_LAST
 };
 
 #endif /* FABRIC_DIRECT */
