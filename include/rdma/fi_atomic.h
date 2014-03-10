@@ -43,6 +43,8 @@
 extern "C" {
 #endif
 
+#ifndef FABRIC_DIRECT
+
 enum fi_datatype {
 	FI_INT8,
 	FI_UINT8,
@@ -71,8 +73,8 @@ enum fi_op {
 	FI_BAND,
 	FI_LXOR,
 	FI_BXOR,
-	FI_SWAP,
-	FI_REPLACE = FI_SWAP,
+	FI_ATOMIC_READ,
+	FI_ATOMIC_WRITE,
 	FI_CSWAP,
 	FI_CSWAP_NE,
 	FI_CSWAP_LE,
@@ -81,6 +83,8 @@ enum fi_op {
 	FI_CSWAP_GT,
 	FI_MSWAP,
 };
+
+#endif /* FABRIC_DIRECT */
 
 struct fi_msg_atomic {
 	const void		*msg_iov;
@@ -191,9 +195,8 @@ struct fi_ops_atomic {
 			void *resultv, size_t result_count,
 			uint64_t flags);
 
-	// TODO: Add size_t count fields
-	int	(*writevalid)(fid_t fid, int datatype, int op);
-	int	(*readwritevalid)(fid_t fid, int datatype, int op);
+	int	(*writevalid)(fid_t fid, int datatype, int op, size_t *count);
+	int	(*readwritevalid)(fid_t fid, int datatype, int op, size_t *count);
 	int	(*compwritevalid)(fid_t fid, int datatype, int op, size_t *count);
 };
 
@@ -288,6 +291,35 @@ fi_fetch_atomicmemto(fid_t fid, const void *buf, size_t len,
 					  key, datatype, op, context);
 }
 
+static inline int
+fi_atomicvalid(fid_t fid, int datatype, int op, size_t *count)
+{
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, atomic);
+	FI_ASSERT_OP(ep->atomic, struct fi_ops_atomic, writevalid);
+	return ep->atomic->writevalid(fid, datatype, op, count);
+}
+
+static inline int
+fi_fetch_atomicvalid(fid_t fid, int datatype, int op, size_t *count)
+{
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, atomic);
+	FI_ASSERT_OP(ep->atomic, struct fi_ops_atomic, readwritevalid);
+	return ep->atomic->readwritevalid(fid, datatype, op, count);
+}
+
+static inline int
+fi_compare_atomicvalid(fid_t fid, int datatype, int op, size_t *count)
+{
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, atomic);
+	FI_ASSERT_OP(ep->atomic, struct fi_ops_atomic, compwritevalid);
+	return ep->atomic->compwritevalid(fid, datatype, op, count);
+}
 
 #else // FABRIC_DIRECT
 #include <rdma/fi_direct_atomic.h>

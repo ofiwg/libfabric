@@ -16,8 +16,9 @@ The use of fabric direct is intended only for applications that require
 the absolute minimum software latency, and are willing to re-compile
 for specific fabric hardware.  Providers that support fabric direct
 implement their own versions of the static inline calls which are define
-in the libfabric header files.  Applications can then code against the
-standard libfabric calls, but link directly against the provider calls by
+in the libfabric header files, define selected enum values, and provide
+defines for compile-time optimizations.  Applications can then code against
+the standard libfabric calls, but link directly against the provider calls by
 defining FABRIC_DIRECT as part of their build.
 .PP
 In general, the use of fabric direct does not require application source
@@ -36,9 +37,21 @@ direct provider may define zero of more of the following capability
 definitions.  Applications can check for these capabilities in order to
 optimize code paths at compile time, versus relying on run-time checks.
 .SH "CAPABILITY DEFINITIONS"
+In order that application code may be optimized during compile time, direct
+providers must provide definitions for various capabilities, if those
+capabilities are supported.  The following #define values may be used
+by an application to test for provider support of supported features.
+.IP "FI_DIRECT_WRITE_COHERENT"
+The provider sets FI_WRITE_COHERENT for fi_info:domain_cap.  See fi_getinfo
+for additional details.
+.IP "FI_DIRECT_CONTEXT"
+The provider sets FI_CONTEXT for fi_info:domain_cap.  See fi_getinfo
+for additional details.
 .IP "FI_DIRECT_LOCAL_MR"
-The provider requires memory registration for locally accessed data
-buffers.  Data buffers used in send and receive operations must be
-registered by the application.
+The provider sets FI_LOCAL_MR for fi_info:domain_cap.  See fi_getinfo
+for additional details.
+.IP "FI_DIRECT_USER_MR_KEY"
+The provider sets FI_USER_MR_KEY for fi_info:domain_cap.  See fi_getinfo
+for additional details.
 .SH "SEE ALSO"
 fi_getinfo(3), fi_endpoint(3), fi_domain(3)

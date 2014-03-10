@@ -42,6 +42,8 @@
 extern "C" {
 #endif
 
+#define FI_CLAIM		(1ULL << 0)
+
 struct fi_msg_tagged {
 	const void		*msg_iov;
 	size_t			iov_count;

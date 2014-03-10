@@ -330,6 +330,12 @@ queued events have been read.  Once reset, the EC will trigger the wait
 object when a new entry is added, unless the EC has been configured with
 a wait condition.  In the latter case, the EC will be reset to signal
 again once the condition has been satisfied.
+.IP "FI_REMOTE_SIGNAL"
+If specified, this indicates that the EC will only signal its wait object
+upon receiving a remote operation with FI_REMOTE_SIGNAL set, provided that all
+other wait conditions have been met.  The use of FI_REMOTE_SIGNAL may
+improve system utilization by deferring processing of an EC until a remote
+endpoint has completed all necessary operations.
 .RE
 .IP "cond"
 Points to a datatype or structure describing a wait condition that must be

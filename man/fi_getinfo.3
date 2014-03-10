@@ -46,6 +46,7 @@ struct fi_info {
 	uint64_t            type;
 	uint64_t            protocol;
 	uint64_t            protocol_cap;
+	uint64_t            domain_cap;
 	enum fi_iov_format  iov_format;
 	enum fi_addr_format addr_format;
 	enum fi_addr_format info_addr_format;
@@ -89,6 +90,11 @@ If specified, indicates the desired communication protocol capabilities. Support
 capabilities are listed in the
 .B "Protocol capabilities"
 section below.
+.IP "domain_cap"
+If specified, indicates the desired domain capabilities.  Supported capabilities
+are listed in the
+.B "Domain capabilities"
+section below. 
 .IP "iov_format"
 If specified, indicates the format used for vectored data communications. Supported
 formats are listed in the
@@ -140,78 +146,52 @@ Any additional data about communication interface being requested.  Data is
 provider specific.  It is primarily used as output from fi_getinfo, to be
 provided as input into fi_domain or fi_endpoint.
 .SH "FLAGS"
+The following flags are used to control the operation of fi_getinfo.  In
+additional, the flags may also indicate or restrict the required capabilities
+of an endpoint associated with the fi_info structure.
 .IP "FI_PASSIVE"
 Indicates that the fabric endpoint will be used to listen for connection
 requests.
 .IP "FI_NUMERICHOST"
-Indicates that the node name is a numeric address.  When set, name resolution
-is not performed.
-.IP "FI_BLOCK"
-Specifies that an asynchronous or non-blocking operation should block until
-the operation completes.
-.IP "FI_EXCL"
-Specifies that a fabric resource domain should not share resource with another
-open domain.  By default, resources are shared across multiple open calls by
-the same process.
+On input, this indicates that the node name is a numeric address.  When
+set, name resolution is not performed.
 .IP "FI_BUFFERED_RECV"
-If set, the communication interface implementation should attempt to queue inbound
-data that arrives before a receive buffer has been posted.  In the
+Requests that the communication endpoint should attempt to queue
+inbound data that arrives before a receive buffer has been posted.  In the
 absence of this flag, any messages that arrive before a receive is
 posted are lost.
-When set, the user must use 
-.B struct fi_context 
-as their per operation context.
 .IP "FI_BUFFERED_SEND"
-If set, the outbound data buffer should be returned to user immediately after
+If set, all outbound data buffers should be returned to user immediately after
 the call returns, even if the operation is handled asynchronously.  This may
 require that the communication interface implementation copy the data into a
 local buffer and transfer out of that buffer.
 .IP "FI_CANCEL"
-Indicates that the user wants the ability to cancel the operation if it does
-not complete first.  Providers use this to return a handle to the request,
-which the user may then cancel.  Also used by search to indicate that a request
-should be canceled.
-When set, the user must use 
-.B struct fi_context 
-as their per operation context.
-.IP "FI_SHARED_RECV"
-An endpoint created with this flag will share the same receive queue as other
-endpoints created on the same domain.
+Indicates that the user wants the ability to cancel operations posted to
+an endpoint if they do not complete first.
 .IP "FI_READ"
-Used to enable read access to data buffers.
+Indicates that the user requires an endpoint capable of initiating reads
+against remote memory regions.  Remote reads include some RMA and atomic
+operations.
 .IP "FI_WRITE"
-Used to enable write access to data buffers.
-.IP "FI_REMOTE_READ"
-Used to specify remote read permission.
-.IP "FI_REMOTE_WRITE"
-Used to specify remote write or atomic permissions.
-.IP "FI_RECV"
-Used to indicate that the fabric object will be used for receive operations.
+Indicates that the user requires an endpoint capable of initiating writes
+against remote memory regions.  Remote writes include some RMA and most
+atomic operations.
 .IP "FI_SEND"
-Used to indicate that the fabric object will be used for send operations.
-.IP "FI_AUTO_RESET [not valid for fi_getinfo]"
-Automatically resets the event queue to generate a new wake-up event on the
-next entry.  Example use: 1. wait on eq wait object -- poll(fd) 2. wait object
-is ready -- fd is readable 3. read eq to retrieve events 4. continue reading
-until read returns 0
-.IP "FI_PEEK [not valid for fi_getinfo]"
-If used, indicates that if the application reads an event queue, the particular
-completion entry is not removed from the queue and is visible to subsequent reads.
-.IP "FI_IMM [not valid for fi_getinfo]"
-Indicates that immediate data is available.  Immediate data is communicated to a
-receiver through completion data, rather than appearing in targeted receive
-buffers.
-.IP "FI_NOCOMP [not valid for fi_getinfo]"
-Indicates that no completion should be generated for the specified operation.
-.IP "FI_MORE [not valid for fi_getinfo]"
-.I Write me
-.IP "FI_SIGNAL"
-Indicates if a completion event should be generated.
-.IP "FI_ACK"
-Indicates that a completion event is not generated until the operation
-initiated is acknowledged by the remote side.  This ususally implies that
-the transfered data has been successfully placed into memory on the remote
-system.
+Indicates that the user requires an endpoint capable of sending message data
+transfers.  Message transfers include base message operations as well as
+tagged message functionality.
+.IP "FI_RECV"
+Indicates that the user requires an endpoint capable of receiving message
+data transfers.  Message transfers include base message operations as well
+as tagged message functionality.
+.IP "FI_REMOTE_READ"
+Indicates that the user requires an endpoint capable of receiving read memory
+operations from remote endpoints.  Remote read operations include some RMA
+and atomic operations.
+.IP "FI_REMOTE_WRITE"
+Indicates that the user requires an endpoint capable of receiving write memory
+operations from remote endpoints.  Remote write operations include some RMA
+operations and most atomic operations.
 .SH "ENDPOINT TYPES"
 .IP "FID_UNSPEC"
 The type of endpoint is not specified.  This is usually provided as input, with
@@ -252,24 +232,97 @@ Specifies that the underlying protocol should support sending and receiving
 messages or datagrams.  Message capabilities imply support for send and/or
 receive queues.  Endpoints supporting this capability support operations
 defined by struct fi_ops_msg.
+.PP
+The fi_info flags may be used to specify or restrict the type of messaging
+operations that are supported.  In the absence of any relevant flags,
+FI_PROTO_CAP_MSG implies the ability to send and receive messages.
+Applications can use the FI_SEND and FI_RECV flags to optimize an endpoint
+as send-only or receive-only.
 .IP "FI_PROTO_CAP_RMA"
 Specifies that the underlying protocol should support RMA read and write
 operations.  Endpoints supporting this capability support operations
-defined by struct fi_rma_ops.
+defined by struct fi_rma_ops.  In the absence of any relevant flags,
+FI_PROTO_CAP_RMA implies the ability to initiate and be the target of
+remote memory reads and writes.  Applications can use the FI_READ, FI_WRITE,
+FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the types of RMA
+operations supported by an endpoint.
 .IP "FI_PROTO_CAP_TAGGED"
 Specifies that the underlying protocol should handle tagged message transfers.
 tagged message transfers associate a user-specified key or tag with each message
 that is used for matching purposes at the remote side.  Endpoints supporting
 this capability support operations defined by struct fi_tagged_ops.
+In the absence of any relevant flags, FI_PROTO_CAP_TAGGED implies the ability
+to send and receive tagged messages.  Applications can use the FI_SEND and
+FI_RECV flags to optimize an endpoint as send-only or receive-only.
 .IP "FI_PROTO_CAP_ATOMICS"
 Specifies that the underlying protocol supports some set of atomic operations.
 Endpoints supporting this capability support operations defined by struct
-fi_atomic_ops.
+fi_atomic_ops.  In the absence of any relevant flags, FI_PROTO_CAP_ATOMICS
+implies the ability to initiate and be the target of
+remote atomic reads and writes.  Applications can use the FI_READ, FI_WRITE,
+FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the types of
+atomic operations supported by an endpoint.
 .IP "FI_PROTO_CAP_MULTICAST"
 Indicates that the underlying protocol should support multicast data transfers.
 Endpoints supporting this capability support multicast operations defined by
 struct fi_msg_ops, when a multicast address is specified as the destination
-address.
+address.  In the absence of any relevant flags, FI_PROTO_CAP_MULTICAST implies
+the ability to send and receive messages.  Applications can use the FI_SEND and
+FI_RECV flags to optimize an endpoint as send-only or receive-only.
+.SH "DOMAIN CAPABILITIES"
+Domain capabilities are obtained by OR-ing the following flags together.
+Domain capabilities are most often used as output information from fi_getinfo,
+allowing applications to adjust their behavior based on the provider's
+hardware or software abilities.  However,specific capabilities may be
+requested through the hints parameter, with the actual supported capabilities
+returned by the provider.  Applications must check domain capabilities to
+ensure that all provider requirements for using resources associated with
+the access domain are met.
+.IP "FI_WRITE_COHERENT"
+Specifies that remote writes, including atomic operations, to the underlying
+access domain are coherent with the local processing domain.  Domain-level
+write coherency indicates that changes to local memory are visible to the
+local process immediately upon completion of a remote write operation.  The
+absence of this flag allows the NIC or memory subsystem to cache the results
+of remote write or atomic operations in non-coherent memory.
+.PP
+The behavior of a domain with and without FI_WRITE_COHERENT is illustrated
+below.
+.nf
+
+Process 1            Process 2
+                     Register BUF
+RMA write X to BUF
+Notify process 2
+                     Receive notification
+                     if not FI_WRITE_COHERENT
+                          Sync with remote writes
+                     assert(BUF == X)
+
+.fi
+.PP
+This flag may be set on input hints to fi_getinfo, with the provider clearing
+the flag on output if it does not provide write coherency.  See the endpoint
+fi_ep_sync call for handling non-coherent writes.
+.IP "FI_CONTEXT"
+Specifies that the provider requires that applications use struct fi_context
+as their per operation context parameter.  This structure should be treated as
+opaque to the application.  For performance reasons, this structure must be
+allocated by the user, but may be used by the fabric provider to track the
+operation.  Typically, users embed struct fi_context within their own
+context structure.  The struct fi_context must remain valid until the
+corresponding operation completes or is successfully canceled.  Users should
+not update or interpret the fields in this structure.  The structure is
+specified in rdma/fabric.h.
+.IP "FI_LOCAL_MR"
+The provider is optimized around having applications register memory
+for locally accessed data buffers.  Data buffers used in send and receive
+operations and as the source buffer for RMA and atomic operations must be
+registered by the application for access domains opened with this capability.
+.IP "FI_USER_MR_KEY"
+The provider supports user requested memory registration keys.  Providers
+that set this capability honor the requested_key parameter for memory
+registration calls.
 .SH "VECTORED DATA FORMATS"
 .IP "FI_IOV [not likely for 1.0 release]"
 Indicates that format is that of

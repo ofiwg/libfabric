@@ -294,8 +294,13 @@ Bitwise exclusive-OR (XOR)
 .nf
 addr[i] = addr[i] ^ buf[i]
 .fi
-.IP "FI_SWAP / FI_REPLACE"
-Swap or replace data
+.IP "FI_ATOMIC_READ"
+Read data atomically
+.nf
+buf[i] = addr[i]
+.fi
+.IP "FI_ATOMIC_WRITE"
+Write data atomically
 .nf
 addr[i] = buf[i]
 .fi
@@ -353,8 +358,9 @@ The call fi_atomic transfers the data contained in the user-specified data
 buffer to a remote node.  The local endpoint must be connected to
 a remote endpoint or destination before fi_atomic is called.  Unless the
 endpoint has been configured differently, the data buffer passed into
-fi_atomic must not be touched by the application
-until the fi_atomic call completes asynchronously.
+fi_atomic must not be touched by the application until the fi_atomic
+call completes asynchronously.  The target buffer of a base atomic
+operation must allow for remote read an/or write access, as appropriate.
 .PP
 The difference between fi_atomicmem and fi_atomic is that the data buffer
 passed into fi_atomicmem must be registered with the resource domain associated
@@ -394,12 +400,13 @@ fi_fetch atomicmsg -- behave similar to the equivalent base atomic function.
 The difference between the fetch and base atomic calls are the fetch
 atomic routines return the initial value that was stored at the target
 to the user.  The initial value is read into the user provided result
-buffer.
+buffer.  The target buffer of fetch-atomic operations must be enabled
+for remote read access.
 .PP
 The following list of atomic operations are usable with both the base
 atomic and fetch atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
-FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR, and FI_SWAP /
-FI_REPLACE.
+FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR, FI_ATOMIC_READ,
+and FI_ATOMIC_WRITE.
 .SS "Compare-Atomic Functions"
 The compare atomic functions -- fi_compare_atomic, fi_compare_atomicmem,
 fi_compare_atomicv, fi_compare_atomicto, fi_compare_atomicmemto, and
@@ -412,44 +419,39 @@ Completed atomic operations are reported to the user through one or more event
 collectors associated with the endpoint.  Users provide context which are
 associated with each operation, and is returned to the user
 as part of the event completion.  See fi_ec for completion event details.
+.PP
+Updates to the target buffer of an atomic operation are visible to
+processes running on the target system either after a completion has been
+generated, or after the completion of an operation initiated after the
+atomic call with a fencing operation occurring in between.  For example,
+the target process may be notified by the initiator sending a message
+after the atomic call completes, or sending a fenced message immediately
+after initiating the atomic operation.
 .SH "FLAGS"
 The fi_atomicmsg, fi_fetch_atomicmsg, and fi_compare_atomicmsg calls allow
 the user to specify flags which can change the default data transfer operation.
 Flags specified with atomic message operations override most flags
 previously configured with the endpoint, except where noted (see fi_control).
 The following list of flags are usable with atomic message calls.
-.IP "FI_CANCEL"
-Indicates that the user wants the ability to cancel the operation if it does
-not complete first.  When set, the user must pass in struct fi_context as their
-per operation context (see discussion below).
-.IP "FI_NOCOMP"
-Indicates that no completion should be generated for the specified operation.
-When set the user must determine when a request has completed indirectly,
-usually based on the completion of a subsequent operation.  Use of this
-flag may improve performance by allowing the provider to avoid writing
-a completion entry.
+.IP "FI_EVENT"
+Indicates that a completion entry should be generated for the specified
+operation.  The endpoint must be configured with FI_EVENT, or this flag
+is ignored.
 .IP "FI_MORE"
 Indicates that the user has additional requests that will immediately be
 posted after the current call returns.  Use of this flag may improve
 performance by enabling the provider to optimize its access to the fabric
 hardware.
-.IP "FI_SIGNAL"
-Indicates that a completion event should be generated for the given operation.
+.IP "FI_REMOTE_SIGNAL"
+Indicates that a completion event at the target process should be generated
+for the given operation.  The remote endpoint must be configured with
+FI_REMOTE_SIGNAL, or this flag will be ignored by the target.
 .IP "FI_BUFFERED_SEND"
 Indicates that the outbound non-const data buffers (buf and compare parameters)
 should be returned to user immediately after the call returns, even if the
 operation is handled asynchronously.  This may require that the underlying
 provider implementation copy the data into a local buffer and transfer out of
 that buffer.  The use of output result buffers are not affected by this flag.
-.SH "FI_CONTEXT"
-If an atomic operation has been called has the flag FI_CANCEL set,
-then the user context parameter is interpreted as struct fi_context.
-For performance reasons, this structure must be allocated by the user,
-but may be used by the fabric provider to track the operation.  Typically,
-users embed struct fi_context within their own context structure.
-The struct fi_context must remain valid until the corresponding operation
-completes or is successfully canceled.  Users should not update or interpret
-the fields in this structure.  The structure is specified in rdma/fabric.h.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 

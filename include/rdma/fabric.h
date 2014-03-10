@@ -77,8 +77,8 @@ enum {
  */
 
 #define FI_BLOCK		(1ULL << 9)
-#define FI_BUFFERED_RECV	(1ULL << 10)	/* BUFFERED? */
-#define FI_BUFFERED_SEND	(1ULL << 11)	/* BUFFERED? */
+#define FI_BUFFERED_RECV	(1ULL << 10)
+#define FI_BUFFERED_SEND	(1ULL << 11)
 #define FI_MULTI_RECV		(1ULL << 12)
 /* #define FI_SHARED_RECV		(1ULL << XX) */
 
@@ -91,9 +91,9 @@ enum {
 #define FI_REMOTE_WRITE		(1ULL << 22)
 
 #define FI_IMM			(1ULL << 24)
-#define FI_NOCOMP		(1ULL << 25)
-#define FI_SIGNAL		(1ULL << 26)
-#define FI_ACK			(1ULL << 27)
+#define FI_EVENT		(1ULL << 25)
+#define FI_REMOTE_SIGNAL	(1ULL << 26)
+#define FI_REMOTE_COMPLETE	(1ULL << 27)
 #define FI_CANCEL		(1ULL << 28)
 #define FI_MORE			(1ULL << 29)
 #define FI_PEEK			(1ULL << 30)
@@ -127,6 +127,7 @@ struct fi_info {
 	uint64_t		type;
 	uint64_t		protocol;
 	uint64_t		protocol_cap;
+	uint64_t		domain_cap;
 	enum fi_iov_format	iov_format;
 	enum fi_addr_format	addr_format;
 	enum fi_addr_format	info_addr_format;

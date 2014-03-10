@@ -180,61 +180,55 @@ remote endpoint.
 The fi_trecvmsg call supports posting buffers over both connected and unconnected
 endpoints, with the ability to control the receive operation per call through the
 use of flags.  The fi_trecvmsg function takes a struct fi_msg_tagged as input.
-.SH "FLAGS"
-The fi_trecvmsg and fi_tsendmsg calls allow the user to specify flags
-which can change the default message handling of the endpoint.
-Flags specified with fi_trecvmsg / fi_tsendmsg override most flags
-previously configured with the endpoint, except where noted (see fi_control).
-The following list of flags are usable with fi_trecvmsg and/or fi_tsendmsg.
-.IP "FI_CANCEL"
-Indicates that the user wants the ability to cancel the operation if it does
-not complete first.  When set, the user must pass in struct fi_context as their
-per operation context (see discussion below).
-.IP "FI_IMM"
-Applies to fi_tsendmsg.  Indicates that immediate data is available and should
-be sent as part of the request.
-.IP "FI_NOCOMP"
-Indicates that no completion should be generated for the specified operation.
-When set the user must determine when a request has completed indirectly,
-usually based on the completion of a subsequent operation.  Use of this
-flag may improve performance by allowing the provider to avoid writing
-a completion entry.
-.IP "FI_MORE"
-Indicates that the user has additional requests that will immediately be
-posted after the current call returns.  Use of this flag may improve
-performance by enabling the provider to optimize its access to the fabric
-hardware.
-.IP "FI_SIGNAL"
-Indicates that a completion event should be generated for the given operation.
-.IP "FI_BUFFERED_SEND"
-Applies to fi_tsendmsg.  Indicates that the outbound data buffer should be
-returned to user immediately after the send call returns, even if the operation
-is handled asynchronously.  This may require that the underlying provider
-implementation copy the data into a local buffer and transfer out of that
-buffer.
-.IP "FI_ACK"
-Applies to fi_tsendmsg.  Indicates that a completion should not be generated
-until the operation has been explicitly acknowledged by the remote side.
-.PP
-The following flags may be used with fi_tsearch.
-.IP "Need tsearch flags"
-write me
-.SH "FI_CONTEXT"
-If a tagged operation has been called has the flag FI_CANCEL set,
-then the user context parameter is interpreted as struct fi_context.
-For performance reasons, this structure must be allocated by the user,
-but may be used by the fabric provider to track the operation.  Typically,
-users embed struct fi_context within their own context structure.
-The struct fi_context must remain valid until the corresponding operation
-completes or is successfully canceled.  Users should not update or interpret
-the fields in this structure.  The structure is specified in rdma/fabric.h.
-.PP
+.SS "fi_tsearch"
 The function fi_tsearch determines if a message with the specified
 tag with ignore mask from an optionally supplied source address has been
 received and is buffered by the provider.  The fi_tsearch call is only
 available on endpoints with FI_BUFFERED_RECV enabled.  The fi_tsearch
 operation may complete asynchronously or immediately, depending on the
 underlying provider implementation.
+.PP
+By default, a single message may be matched by multiple search operations.
+The user can restrict a message to matching with a single fi_tsearch call
+by using the FI_CLAIM flag to control the search.  When set, FI_CLAIM
+indicates that when a search successfully finds a matching message, the
+message is claimed by caller. Subsequent searches cannot find the same
+message, although they may match other messages that have the same tag.
+.SH "FLAGS"
+The fi_trecvmsg and fi_tsendmsg calls allow the user to specify flags
+which can change the default message handling of the endpoint.
+Flags specified with fi_trecvmsg / fi_tsendmsg override most flags
+previously configured with the endpoint, except where noted (see fi_control).
+The following list of flags are usable with fi_trecvmsg and/or fi_tsendmsg.
+.IP "FI_IMM"
+Applies to fi_tsendmsg.  Indicates that immediate data is available and should
+be sent as part of the request.
+.IP "FI_EVENT"
+Indicates that a completion entry should be generated for the specified
+operation.  The endpoint must be configured with FI_EVENT, or this flag
+is ignored.
+.IP "FI_MORE"
+Indicates that the user has additional requests that will immediately be
+posted after the current call returns.  Use of this flag may improve
+performance by enabling the provider to optimize its access to the fabric
+hardware.
+.IP "FI_REMOTE_SIGNAL"
+Indicates that a completion event at the target process should be generated
+for the given operation.  The remote endpoint must be configured with
+FI_REMOTE_SIGNAL, or this flag will be ignored by the target.
+.IP "FI_BUFFERED_SEND"
+Applies to fi_tsendmsg.  Indicates that the outbound data buffer should be
+returned to user immediately after the send call returns, even if the operation
+is handled asynchronously.  This may require that the underlying provider
+implementation copy the data into a local buffer and transfer out of that
+buffer.
+.IP "FI_REMOTE_COMPLETE"
+Applies to fi_tsendmsg.  Indicates that a completion should not be generated
+until the operation has completed on the remote side.
+.PP
+The following flags may be used with fi_tsearch.
+.IP "Need tsearch flags"
+write me
 .SH "RETURN VALUE"
 The tagged send and receive calls return 0 on success.
 On error, a negative value corresponding to fabric
