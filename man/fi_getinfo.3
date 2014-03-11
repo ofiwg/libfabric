@@ -350,11 +350,29 @@ struct iomv {
 .SH "ADDRESSING FORMATS"
 Additional information on address formats is available under address vector .BR "fi_av(3)".
 .IP "FI_ADDR"
-Address is of type void *.
+Address is of type void *.  Addresses of type FI_ADDR are returned when
+inserting addresses into address vector maps.  An FI_ADDR points to a
+opaque, provider specific mapping of a transport address, which can avoid
+the need to translate higher-level addresses into provider specific addresses
+needed for data transfer operations.
 .IP "FI_AV"
-Address is of type address vector, struct fi_av_addr.
+Address is of type address vector, struct fi_av_addr.  FI_AV is used
+to reference an entry stored in a specific address vector.  Use of FI_AV
+enables an endpoint to reference addresses stored in different AVs.
+Endpoints which are bound to a specific AV may use the FI_ADDR or
+FI_ADDR_INDEX formats, which would be more efficient.
 .IP "FI_ADDR_INDEX"
-Address is a size_t index into an address vector.
+Address is a size_t index into an address vector.  Addresses of type
+FI_ADDR_INDEX are returned when inserting addresses into address vector tables.
+An FI_ADDR_INDEX is an index into an AV table, which can avoid
+the need to translate higher-level addresses into provider specific addresses
+needed for data transfer operations.
+.IP "FI_ADDR_PROTO"
+FI_ADDR_PROTO indicates that a protocol specific address format should be
+used.  Protocol specific addresses are treated as opaque by applications,
+and they target applications which make use of an out of band address exchange.
+Applications which use FI_ADDR_PROTO may use fi_getname() to obtain the
+protocol specific address assigned to an allocated endpoint.
 .IP "FI_SOCKADDR"
 Address if of type sockaddr.
 .IP "FI_SOCKADDR_IN"
