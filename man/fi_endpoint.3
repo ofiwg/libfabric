@@ -23,6 +23,11 @@ fi_cancel
 Cancel a pending asynchronous data transfer
 .RE
 .PP
+fi_alias
+.RS
+Create an alias to the endpoint
+.RE
+.PP
 fi_ep_control
 .RS
 Control endpoint operation.
@@ -56,6 +61,9 @@ Get or set endpoint options.
 .PP
 .HP
 .BI "int fi_ep_sync(fid_t " ep ", uint64_t " flags ", void *" context ");"
+.PP
+.HP
+.BI "int fi_alias(fid_t " ep ", uint64_t " flags ");"
 .PP
 .HP
 .BI "int fi_ep_control(fid_t " ep ", int " command ", void *" arg ");"
@@ -205,6 +213,15 @@ issued on the target side of an RMA or atomic data transfer.  It ensures
 that the view of memory of the local process is consistent with memory
 updates from the network.  See fi_getinfo for additional details on
 FI_WRITE_COHERENT.
+.SS "fi_alias"
+This call creates an alias to the specified endpoint.  Conceptually, an
+endpoint alias provides an alternate software path from the
+application to the underlying provider hardware.  Applications can
+configure an alias endpoint with different data transfer flags than those
+assigned to the actual endpoint.  The alias mechanism allows a single
+endpoint to have multiple optimized software interfaces.  All
+allocated aliases must be closed for the underlying endpoint to be
+released.
 .SS "fi_ep_control"
 The control operation is used to adjust the default behavior of an
 endpoint.  It allows the underlying provider to redirect function
