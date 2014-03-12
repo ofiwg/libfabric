@@ -126,6 +126,18 @@ until all mapping translations have completed.
 Indicates that the address vector should be opened in exclusive mode, and
 that the provider should not attempt to share AV resources with other
 processes or domains.
+.IP "FI_RANGE"
+FI_RANGE allows for multiple addresses to be inserted into an AV by
+specifying only the starting and ending addresses, inclusive, for a
+range of given addresses.  When multiple addresses are inserted into
+the AV with FI_RANGE enabled, the provided addresses are processed in pairs.
+Each pair indicates the first and last address of a range of addresses that
+the AV should store.  If an odd number of addresses are inserted into
+the AV, the final address is treated as a single address.
+.PP
+When FI_RANGE is in use, the AV will return one mapped address for
+every address that is inserted, including those address specified
+indirectly as part of a given range.
 .RE
 .SS "fi_av_close"
 The fi_av_close call is used to release all resources associated with an
@@ -175,6 +187,10 @@ AV and that the provider should begin processing the AV by calling
 fi_sync on the AV fid.  The context specified through fi_sync will be
 returned to the user through an event queue that has been bound with
 the AV.
+.PP
+The FI_RANGE flag may be used with fi_av_insert to indicate that a range
+of addresses should be inserted.  For details on the use of FI_RANGE, see
+the FI_RANGE flag discussion for fi_av_open.
 .SS "fi_av_remove"
 fi_av_remove removes a set of addresses from an address vector.  All
 resources associated with the indicated addresses are released, and
