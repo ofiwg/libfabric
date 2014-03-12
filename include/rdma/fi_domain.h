@@ -52,6 +52,8 @@ struct fi_iomv {
  * Maps and stores transport/network addresses.
  */
 
+#define FI_RANGE		(1ULL << 0)
+
 struct fi_av_addr {
 	fid_t			av;
 	uint64_t		av_index;

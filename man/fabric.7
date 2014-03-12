@@ -121,6 +121,70 @@ Atomic operations can perform one of several operations on a remote
 memory region.  Atomic operations include well-known functionality, such
 as atomic-add and compare-and-swap, plus several other pre-defined calls.
 Unlike other data transfer interfaces, atomic operations are aware of the
-data formatting at the target memory region. 
+data formatting at the target memory region.
+.SH "PROVIDER REQUIREMENTS"
+Libfabric provides a general framework for supporting multiple types of
+fabric objects and their related interfaces.  Fabric providers have a large
+amount of flexibility in selecting which components they are able and
+willing to support, based on specific hardware constraints.  To assist in
+the development of applications, libfabric specifies the following
+requirements that must be met by any fabric provider, if requested by an
+application.  (Note that the instantiation of a specific fabric object is
+subject to application configuration parameters and need not meet these
+requirements).
+.PP
+A fabric provider must support at least one endpoint type.
+.PP
+All endpoints must support the message queue data transfer interface.
+.PP
+An endpoint that advertises support for a specific protocol capability
+must support the corresponding data transfer interface.
+.PP
+Endpoints must support operations to send and receive data for any data
+transfer operations that they support. 
+.PP
+Connectionless endpoints must support all relevant 'to/from' data transfer
+routines. (sendto / recvfrom / writeto / readfrom / etc.)
+.PP
+Connectionless endpoints must support the CM interfaces for getname, getpeer,
+and connect.
+.PP
+Connectionless endpoints that support multicat operations must support the
+CM interfaces join and leave.
+.PP
+Connection-oriented interfaces must support the CM interfaces getname, getpeer,
+connect, listen, accept, reject, and shutdown.
+.PP
+All endpoints must support all relevant 'msg' data transfer routines.
+(sendmsg / recvmsg / writemsg / readmsg / etc.)
+.PP
+Endpoints belonging to domains with the FI_LOCAL_MR capability must support
+the relevant 'mem' data transfer operations. (recvmem / sendmem / readmem /
+writemem / etc.)
+.PP
+Endpoints belonging to domains that do not require the FI_LOCAL_MR capability
+must support the relevant non-'mem' data transfer operations.  (send / recv /
+read / write / etc.)
+.PP
+Access domains must support opening address vector maps and tables.
+.PP
+Address vectors must support the FI_ADDR_PROTO input formats.
+.PP
+Address vectors associated with domains that may be identified using IP
+addresses must support FI_SOCKADDR_IN and FI_SOCKADDR_IN6 input formats.
+.PP
+Address vectors must support FI_ADDR, FI_ADDR_INDEX, and FI_AV output formats.
+.PP
+Access domains must support opening event queues and counters.
+.PP
+Event queues must support the FI_EC_FORMAT_CONTEXT format.
+.PP
+Event queues associated with data transfer completions must support the
+FI_EC_FORMAT_DATA format.
+.PP
+Event queues associated with tagged message transfers must support the
+FI_EC_FORMAT_TAGGED format.
+.PP
+Event counters must support the FI_EC_FORMAT_COUNTER format.
 .SH "SEE ALSO"
 fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_av(3), fi_ec(3), fi_mr(3)
