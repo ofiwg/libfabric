@@ -63,7 +63,7 @@ Get or set endpoint options.
 .BI "int fi_ep_sync(fid_t " ep ", uint64_t " flags ", void *" context ");"
 .PP
 .HP
-.BI "int fi_alias(fid_t " ep ", uint64_t " flags ");"
+.BI "int fi_alias(fid_t " ep ", fid_t * " alias_ep ", uint64_t " flags ");"
 .PP
 .HP
 .BI "int fi_ep_control(fid_t " ep ", int " command ", void *" arg ");"
@@ -216,10 +216,11 @@ FI_WRITE_COHERENT.
 .SS "fi_alias"
 This call creates an alias to the specified endpoint.  Conceptually, an
 endpoint alias provides an alternate software path from the
-application to the underlying provider hardware.  Applications can
-configure an alias endpoint with different data transfer flags than those
-assigned to the actual endpoint.  The alias mechanism allows a single
-endpoint to have multiple optimized software interfaces.  All
+application to the underlying provider hardware.  Applications
+configure an alias endpoint with data transfer flags, specified through
+the fi_alias call.  Typically, the data transfer flags will be different
+than those assigned to the actual endpoint.  The alias mechanism allows a
+single endpoint to have multiple optimized software interfaces.  All
 allocated aliases must be closed for the underlying endpoint to be
 released.
 .SS "fi_ep_control"
