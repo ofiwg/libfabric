@@ -96,6 +96,7 @@ enum {
 #define FI_CANCEL		(1ULL << 28)
 #define FI_MORE			(1ULL << 29)
 #define FI_PEEK			(1ULL << 30)
+#define FI_TRIGGER		(1ULL << 31)
 
 
 /*
@@ -163,7 +164,6 @@ enum {
 	FID_CLASS_EC
 };
 
-/* See FI_BUFFERED_RECV, FI_CANCEL */
 struct fi_context {
 	void			*internal[4];
 };
