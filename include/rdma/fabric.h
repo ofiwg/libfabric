@@ -258,6 +258,11 @@ static inline int fi_sync(fid_t fid, uint64_t flags, void *context)
 	return fid->ops->sync(fid, flags, context);
 }
 
+struct fi_alias {
+	fid_t			*fid;
+	uint64_t		flags;
+};
+
 /* control commands */
 enum {
 	FI_GETFIDFLAG,		/* uint64_t flags */
@@ -269,7 +274,7 @@ enum {
 	 * HW resource.  Each fid may reference functions that are optimized
 	 * for different use cases.
 	 */
-	FI_DUPFID,		/* fid_t * */
+	FI_ALIAS,		/* struct fi_alias * */
 	FI_GETECWAIT,		/* void * wait object */
 
 	/* Start/stop an internal progress thread.  This is only needed if the
@@ -291,6 +296,14 @@ static inline int fi_control(fid_t fid, int command, void *arg)
 	FI_ASSERT_OPS(fid, struct fid, ops);
 	FI_ASSERT_OP(fid->ops, struct fi_ops, control);
 	return fid->ops->control(fid, command, arg);
+}
+
+static inline int fi_alias(fid_t fid, fid_t *alias_fid, uint64_t flags)
+{
+	struct fi_alias alias;
+	alias.fid = alias_fid;
+	alias.flags = flags;
+	return fi_control(fid, FI_ALIAS, &alias);
 }
 
 
