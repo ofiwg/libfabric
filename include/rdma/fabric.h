@@ -80,7 +80,6 @@ enum {
 #define FI_BUFFERED_RECV	(1ULL << 10)
 #define FI_BUFFERED_SEND	(1ULL << 11)
 #define FI_MULTI_RECV		(1ULL << 12)
-/* #define FI_SHARED_RECV		(1ULL << XX) */
 
 #define FI_EXCL			(1ULL << 16)
 #define FI_READ			(1ULL << 17)
@@ -97,6 +96,7 @@ enum {
 #define FI_CANCEL		(1ULL << 28)
 #define FI_MORE			(1ULL << 29)
 #define FI_PEEK			(1ULL << 30)
+#define FI_TRIGGER		(1ULL << 31)
 
 
 /*
@@ -164,7 +164,6 @@ enum {
 	FID_CLASS_EC
 };
 
-/* See FI_BUFFERED_RECV, FI_CANCEL */
 struct fi_context {
 	void			*internal[4];
 };
