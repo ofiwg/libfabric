@@ -221,7 +221,7 @@ static inline ssize_t fi_recvmem(fid_t fid, void *buf, size_t len,
 	return ep->msg->recvmem(fid, buf, len, mem_desc, context);
 }
 
-static inline ssize_t fi_sendmem(fid_t fid, void *buf, size_t len,
+static inline ssize_t fi_sendmem(fid_t fid, const void *buf, size_t len,
 				 uint64_t mem_desc, void *context)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
