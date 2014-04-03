@@ -39,6 +39,9 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <rdma/fabric.h>
+#include <rdma/fi_endpoint.h>
+#include <rdma/fi_domain.h>
+#include <rdma/fi_rma.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -310,6 +313,7 @@ enum ibv_access_flags {
 struct ibv_pd {
 	struct ibv_context     *context;
 	uint32_t		handle;
+	struct fid_domain	domain;
 };
 
 enum ibv_rereg_mr_flags {
@@ -327,6 +331,7 @@ struct ibv_mr {
 	uint32_t		handle;
 	uint32_t		lkey;
 	uint32_t		rkey;
+	struct fid_mr		mr;
 };
 
 enum ibv_mw_type {
@@ -599,6 +604,7 @@ struct ibv_srq {
 	pthread_mutex_t		mutex;
 	pthread_cond_t		cond;
 	uint32_t		events_completed;
+	struct fid_ep		ep;
 };
 
 struct ibv_qp {
@@ -616,6 +622,7 @@ struct ibv_qp {
 	pthread_mutex_t		mutex;
 	pthread_cond_t		cond;
 	uint32_t		events_completed;
+	struct fid_ep		ep;
 };
 
 struct ibv_comp_channel {
@@ -635,6 +642,7 @@ struct ibv_cq {
 	pthread_cond_t		cond;
 	uint32_t		comp_events_completed;
 	uint32_t		async_events_completed;
+	struct fid_ec		eq;
 };
 
 struct ibv_ah {
@@ -1005,6 +1013,13 @@ static inline int ibv_post_srq_recv(struct ibv_srq *srq,
 	return srq->context->ops.post_srq_recv(srq, recv_wr, bad_recv_wr);
 }
 
+static inline int
+ibv_post_srq(struct ibv_srq *srq, void *addr, uint32_t length, uint32_t lkey,
+		void *wr_id)
+{
+	return fi_recvmem(&srq->ep.fid, addr, length, lkey, wr_id);
+}
+
 /**
  * ibv_create_qp - Create a queue pair.
  */
@@ -1050,6 +1065,27 @@ static inline int ibv_post_send(struct ibv_qp *qp, struct ibv_send_wr *wr,
 	return qp->context->ops.post_send(qp, wr, bad_wr);
 }
 
+static inline int
+ibv_post_smsg(struct ibv_qp *qp, const void *addr, uint32_t length, uint32_t lkey,
+		void *wr_id)
+{
+	return fi_sendmem(&qp->ep.fid, addr, length, lkey, wr_id);
+}
+
+static inline int
+ibv_post_write(struct ibv_qp *qp, const void *addr, uint32_t length, uint32_t lkey,
+		uint64_t remote_addr, uint32_t rkey, void *wr_id)
+{
+	return fi_writemem(&qp->ep.fid, addr, length, lkey, remote_addr, rkey, wr_id);
+}
+
+static inline int
+ibv_post_read(struct ibv_qp *qp, void *addr, uint32_t length, uint32_t lkey,
+		uint64_t remote_addr, uint32_t rkey, void *wr_id)
+{
+	return fi_readmem(&qp->ep.fid, addr, length, lkey, remote_addr, rkey, wr_id);
+}
+
 /**
  * ibv_post_recv - Post a list of work requests to a receive queue.
  */
@@ -1057,6 +1093,13 @@ static inline int ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
 				struct ibv_recv_wr **bad_wr)
 {
 	return qp->context->ops.post_recv(qp, wr, bad_wr);
+}
+
+static inline int
+ibv_post_rmsg(struct ibv_qp *qp, void *addr, uint32_t length, uint32_t lkey,
+		void *wr_id)
+{
+	return fi_recvmem(&qp->ep.fid, addr, length, lkey, wr_id);
 }
 
 /**
