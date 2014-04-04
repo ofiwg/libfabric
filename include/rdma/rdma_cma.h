@@ -211,7 +211,7 @@ struct rdma_addrinfo {
  * See also:
  *   rdma_get_cm_event, rdma_destroy_event_channel
  */
-struct rdma_event_channel *rdma_create_event_channel(void) __attribute__((deprecated));
+struct rdma_event_channel *rdma_create_event_channel(void);
 
 /**
  * rdma_destroy_event_channel - Close an event communication channel.
@@ -225,8 +225,7 @@ struct rdma_event_channel *rdma_create_event_channel(void) __attribute__((deprec
  * See also:
  *  rdma_create_event_channel, rdma_get_cm_event, rdma_ack_cm_event
  */
-void rdma_destroy_event_channel(struct rdma_event_channel *channel)
-	__attribute__((deprecated));
+void rdma_destroy_event_channel(struct rdma_event_channel *channel);
 
 /**
  * rdma_create_id - Allocate a communication identifier.
@@ -251,7 +250,7 @@ void rdma_destroy_event_channel(struct rdma_event_channel *channel)
  */
 int rdma_create_id(struct rdma_event_channel *channel,
 		   struct rdma_cm_id **id, void *context,
-		   enum rdma_port_space ps) __attribute__((deprecated));
+		   enum rdma_port_space ps);
 
 /**
  * rdma_create_ep - Allocate a communication identifier and qp.
@@ -277,8 +276,7 @@ int rdma_create_id(struct rdma_event_channel *channel,
  *   rdma_listen
  */
 int rdma_create_ep(struct rdma_cm_id **id, struct rdma_addrinfo *res,
-		   struct ibv_pd *pd, struct ibv_qp_init_attr *qp_init_attr)
-		   __attribute__((deprecated));
+		   struct ibv_pd *pd, struct ibv_qp_init_attr *qp_init_attr);
 
 /**
  * rdma_destroy_ep - Deallocates a communication identifier and qp.
@@ -289,7 +287,7 @@ int rdma_create_ep(struct rdma_cm_id **id, struct rdma_addrinfo *res,
  * See also:
  *   rdma_create_ep
  */
-void rdma_destroy_ep(struct rdma_cm_id *id) __attribute__((deprecated));
+void rdma_destroy_ep(struct rdma_cm_id *id);
 
 /**
  * rdma_destroy_id - Release a communication identifier.
@@ -303,7 +301,7 @@ void rdma_destroy_ep(struct rdma_cm_id *id) __attribute__((deprecated));
  * See also:
  *   rdma_create_id, rdma_destroy_qp, rdma_ack_cm_event
  */
-int rdma_destroy_id(struct rdma_cm_id *id) __attribute__((deprecated));
+int rdma_destroy_id(struct rdma_cm_id *id);
 
 /**
  * rdma_bind_addr - Bind an RDMA identifier to a source address.
@@ -321,8 +319,7 @@ int rdma_destroy_id(struct rdma_cm_id *id) __attribute__((deprecated));
  * See also:
  *   rdma_create_id, rdma_listen, rdma_resolve_addr, rdma_create_qp
  */
-int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr)
-	__attribute__((deprecated));
+int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr);
 
 /**
  * rdma_resolve_addr - Resolve destination and optional source addresses.
@@ -348,8 +345,7 @@ int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr)
  *   rdma_get_cm_event, rdma_bind_addr
  */
 int rdma_resolve_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
-		      struct sockaddr *dst_addr, int timeout_ms)
-		      __attribute__((deprecated));
+		      struct sockaddr *dst_addr, int timeout_ms);
 
 /**
  * rdma_resolve_route - Resolve the route information needed to establish a connection.
@@ -365,7 +361,7 @@ int rdma_resolve_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
  * See also:
  *   rdma_resolve_addr, rdma_connect, rdma_get_cm_event
  */
-int rdma_resolve_route(struct rdma_cm_id *id, int timeout_ms) __attribute__((deprecated));
+int rdma_resolve_route(struct rdma_cm_id *id, int timeout_ms);
 
 /**
  * rdma_create_qp - Allocate a QP.
@@ -389,7 +385,7 @@ int rdma_resolve_route(struct rdma_cm_id *id, int timeout_ms) __attribute__((dep
  *   ibv_modify_qp
  */
 int rdma_create_qp(struct rdma_cm_id *id, struct ibv_pd *pd,
-		   struct ibv_qp_init_attr *qp_init_attr) __attribute__((deprecated));
+		   struct ibv_qp_init_attr *qp_init_attr);
 
 /**
  * rdma_destroy_qp - Deallocate a QP.
@@ -402,7 +398,7 @@ int rdma_create_qp(struct rdma_cm_id *id, struct ibv_pd *pd,
  * See also:
  *   rdma_create_qp, rdma_destroy_id, ibv_destroy_qp
  */
-void rdma_destroy_qp(struct rdma_cm_id *id) __attribute__((deprecated));
+void rdma_destroy_qp(struct rdma_cm_id *id);
 
 /**
  * rdma_connect - Initiate an active connection request.
@@ -420,8 +416,7 @@ void rdma_destroy_qp(struct rdma_cm_id *id) __attribute__((deprecated));
  * See also:
  *   rdma_resolve_route, rdma_disconnect, rdma_listen, rdma_get_cm_event
  */
-int rdma_connect(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
-	__attribute__((deprecated));
+int rdma_connect(struct rdma_cm_id *id, struct rdma_conn_param *conn_param);
 
 /**
  * rdma_listen - Listen for incoming connection requests.
@@ -441,13 +436,12 @@ int rdma_connect(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
  * See also:
  *   rdma_bind_addr, rdma_connect, rdma_accept, rdma_reject, rdma_get_cm_event
  */
-int rdma_listen(struct rdma_cm_id *id, int backlog) __attribute__((deprecated));
+int rdma_listen(struct rdma_cm_id *id, int backlog);
 
 /**
  * rdma_get_request
  */
-int rdma_get_request(struct rdma_cm_id *listen, struct rdma_cm_id **id)
-	__attribute__((deprecated));
+int rdma_get_request(struct rdma_cm_id *listen, struct rdma_cm_id **id);
 
 /**
  * rdma_accept - Called to accept a connection request.
@@ -468,8 +462,7 @@ int rdma_get_request(struct rdma_cm_id *listen, struct rdma_cm_id **id)
  * See also:
  *   rdma_listen, rdma_reject, rdma_get_cm_event
  */
-int rdma_accept(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
-	__attribute__((deprecated));
+int rdma_accept(struct rdma_cm_id *id, struct rdma_conn_param *conn_param);
 
 /**
  * rdma_reject - Called to reject a connection request.
@@ -488,7 +481,7 @@ int rdma_accept(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
  *   rdma_listen, rdma_accept, rdma_get_cm_event
  */
 int rdma_reject(struct rdma_cm_id *id, const void *private_data,
-		uint8_t private_data_len) __attribute__((deprecated));
+		uint8_t private_data_len);
 
 /**
  * rdma_notify - Notifies the librdmacm of an asynchronous event.
@@ -510,8 +503,7 @@ int rdma_reject(struct rdma_cm_id *id, const void *private_data,
  * See also:
  *   rdma_connect, rdma_accept, rdma_listen
  */
-int rdma_notify(struct rdma_cm_id *id, enum ibv_event_type event)
-	__attribute__((deprecated));
+int rdma_notify(struct rdma_cm_id *id, enum ibv_event_type event);
 
 /**
  * rdma_disconnect - This function disconnects a connection.
@@ -522,7 +514,7 @@ int rdma_notify(struct rdma_cm_id *id, enum ibv_event_type event)
  * See also:
  *   rdma_connect, rdma_listen, rdma_accept
  */
-int rdma_disconnect(struct rdma_cm_id *id) __attribute__((deprecated));
+int rdma_disconnect(struct rdma_cm_id *id);
 
 /**
  * rdma_join_multicast - Joins a multicast group.
@@ -543,7 +535,7 @@ int rdma_disconnect(struct rdma_cm_id *id) __attribute__((deprecated));
  *   rdma_leave_multicast, rdma_bind_addr, rdma_resolve_addr, rdma_create_qp
  */
 int rdma_join_multicast(struct rdma_cm_id *id, struct sockaddr *addr,
-			void *context) __attribute__((deprecated));
+			void *context);
 
 /**
  * rdma_leave_multicast - Leaves a multicast group.
@@ -560,8 +552,7 @@ int rdma_join_multicast(struct rdma_cm_id *id, struct sockaddr *addr,
  * See also:
  *   rdma_join_multicast, rdma_destroy_qp
  */
-int rdma_leave_multicast(struct rdma_cm_id *id, struct sockaddr *addr)
-	__attribute__((deprecated));
+int rdma_leave_multicast(struct rdma_cm_id *id, struct sockaddr *addr);
 
 /**
  * rdma_get_cm_event - Retrieves the next pending communication event.
@@ -580,7 +571,7 @@ int rdma_leave_multicast(struct rdma_cm_id *id, struct sockaddr *addr)
  *   rdma_ack_cm_event, rdma_create_event_channel, rdma_event_str
  */
 int rdma_get_cm_event(struct rdma_event_channel *channel,
-		      struct rdma_cm_event **event) __attribute__((deprecated));
+		      struct rdma_cm_event **event);
 
 /**
  * rdma_ack_cm_event - Free a communication event.
@@ -592,10 +583,10 @@ int rdma_get_cm_event(struct rdma_event_channel *channel,
  * See also:
  *   rdma_get_cm_event, rdma_destroy_id
  */
-int rdma_ack_cm_event(struct rdma_cm_event *event) __attribute__((deprecated));
+int rdma_ack_cm_event(struct rdma_cm_event *event);
 
-uint16_t rdma_get_src_port(struct rdma_cm_id *id) __attribute__((deprecated));
-uint16_t rdma_get_dst_port(struct rdma_cm_id *id) __attribute__((deprecated));
+uint16_t rdma_get_src_port(struct rdma_cm_id *id);
+uint16_t rdma_get_dst_port(struct rdma_cm_id *id);
 
 static inline struct sockaddr *rdma_get_local_addr(struct rdma_cm_id *id)
 {
@@ -620,7 +611,7 @@ static inline struct sockaddr *rdma_get_peer_addr(struct rdma_cm_id *id)
  * See also:
  *   rdma_free_devices
  */
-struct ibv_context **rdma_get_devices(int *num_devices) __attribute__((deprecated));
+struct ibv_context **rdma_get_devices(int *num_devices);
 
 /**
  * rdma_free_devices - Frees the list of devices returned by rdma_get_devices.
@@ -630,7 +621,7 @@ struct ibv_context **rdma_get_devices(int *num_devices) __attribute__((deprecate
  * See also:
  *   rdma_get_devices
  */
-void rdma_free_devices(struct ibv_context **list) __attribute__((deprecated));
+void rdma_free_devices(struct ibv_context **list);
 
 /**
  * rdma_event_str - Returns a string representation of an rdma cm event.
@@ -640,8 +631,7 @@ void rdma_free_devices(struct ibv_context **list) __attribute__((deprecated));
  * See also:
  *   rdma_get_cm_event
  */
-const char *rdma_event_str(enum rdma_cm_event_type event)
-	__attribute__((const, deprecated));
+const char *rdma_event_str(enum rdma_cm_event_type event);
 
 /* Option levels */
 enum {
@@ -666,26 +656,25 @@ enum {
  * @optlen: The size of the %optval buffer.
  */
 int rdma_set_option(struct rdma_cm_id *id, int level, int optname,
-		    void *optval, size_t optlen) __attribute__((deprecated));
+		    void *optval, size_t optlen);
 
 /**
  * rdma_migrate_id - Move an rdma_cm_id to a new event channel.
  * @id: Communication identifier to migrate.
  * @channel: New event channel for rdma_cm_id events.
  */
-int rdma_migrate_id(struct rdma_cm_id *id, struct rdma_event_channel *channel)
-	__attribute__((deprecated));
+int rdma_migrate_id(struct rdma_cm_id *id, struct rdma_event_channel *channel);
 
 /**
  * rdma_getaddrinfo - RDMA address and route resolution service.
  */
 int rdma_getaddrinfo(const char *node, const char *service,
 		     struct rdma_addrinfo *hints,
-		     struct rdma_addrinfo **res) __attribute__((deprecated));
+		     struct rdma_addrinfo **res);
 
-void rdma_freeaddrinfo(struct rdma_addrinfo *res) __attribute__((deprecated));
+void rdma_freeaddrinfo(struct rdma_addrinfo *res);
 
-int rdma_addrlen(struct sockaddr *addr) __attribute__((deprecated));
+int rdma_addrlen(struct sockaddr *addr);
 
 
 #ifdef __cplusplus
