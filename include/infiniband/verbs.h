@@ -389,26 +389,26 @@ enum ibv_rate {
  * converted to 2, since 5 Gbit/sec is 2 * 2.5 Gbit/sec.
  * @rate: rate to convert.
  */
-int ibv_rate_to_mult(enum ibv_rate rate);
+int ibv_rate_to_mult(enum ibv_rate rate) __attribute((const));
 
 /**
  * mult_to_ibv_rate - Convert a multiple of 2.5 Gbit/sec to an IB rate enum.
  * @mult: multiple to convert.
  */
-enum ibv_rate mult_to_ibv_rate(int mult);
+enum ibv_rate mult_to_ibv_rate(int mult) __attribute((const));
 
 /**
  * ibv_rate_to_mbps - Convert the IB rate enum to Mbit/sec.
  * For example, IBV_RATE_5_GBPS will return the value 5000.
  * @rate: rate to convert.
  */
-int ibv_rate_to_mbps(enum ibv_rate rate);
+int ibv_rate_to_mbps(enum ibv_rate rate) __attribute((const));
 
 /**
  * mbps_to_ibv_rate - Convert a Mbit/sec value to an IB rate enum.
  * @mbps: value to convert.
  */
-enum ibv_rate mbps_to_ibv_rate(int mbps);
+enum ibv_rate mbps_to_ibv_rate(int mbps) __attribute((const));
 
 struct ibv_ah_attr {
 	struct ibv_global_route	grh;
