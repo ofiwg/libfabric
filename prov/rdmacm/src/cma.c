@@ -589,8 +589,8 @@ static void ucma_convert_path(struct ibv_path_data *path_data,
 {
 	uint32_t fl_hop;
 
-	memcpy(&sa_path->dgid, path_data->path.dgid, 16);
-	memcpy(&sa_path->sgid, path_data->path.sgid, 16);
+	memcpy(&sa_path->dgid, &path_data->path.dgid, 16);
+	memcpy(&sa_path->sgid, &path_data->path.sgid, 16);
 	sa_path->dlid = path_data->path.dlid;
 	sa_path->slid = path_data->path.slid;
 	sa_path->raw_traffic = 0;

@@ -47,6 +47,32 @@ dnl Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
 AC_CHECK_SIZEOF(long)
 
+AC_CHECK_HEADERS([fcntl.h sys/socket.h])
+AC_CHECK_DECLS([O_CLOEXEC],,[AC_DEFINE([O_CLOEXEC],[0],
+	[Defined to 0 if not provided])],
+	[[
+		#ifdef HAVE_FCNTL_H
+		#include <fcntl.h>
+		#endif
+	]])
+AC_CHECK_DECLS([SOCK_CLOEXEC],,[AC_DEFINE([SOCK_CLOEXEC],[0],
+	[Defined to 0 if not provided])],
+	[[
+		#ifdef HAVE_SYS_SOCKET_H
+		#include <sys/socket.h>
+		#endif
+	]])
+
+AC_CACHE_CHECK(for close on exec modifier for fopen(),
+	ac_cv_feature_stream_cloexec_flag,
+	[if test $ac_cv_have_decl_O_CLOEXEC = yes ; then
+		if test $ac_cv_have_decl_SOCK_CLOEXEC = yes ; then
+			ac_cv_feature_stream_cloexec_flag="e"
+		fi
+	fi])
+AC_DEFINE_UNQUOTED([STREAM_CLOEXEC], "$ac_cv_feature_stream_cloexec_flag",
+	[fopen() modifier for setting close on exec flag])
+
 dnl Checks for libraries
 AC_CHECK_LIB(dl, dlsym, [],
     AC_MSG_ERROR([dlsym() not found.  libfabric requires libdl.]))
@@ -154,6 +180,16 @@ AC_ARG_ENABLE([direct],
         [enable_direct=no])
 
 AM_CONDITIONAL([HAVE_MLX4_DIRECT], [test x"$enable_direct" = x"mlx4"])
+
+AC_CACHE_CHECK(for .symver assembler support, ac_cv_asm_symver_support,
+	[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]],
+		[[asm("symbol:\n.symver symbol, api@ABI\n");]])],
+		[ac_cv_asm_symver_support=yes],
+		[ac_cv_asm_symver_support=no])])
+
+if test $ac_cv_asm_symver_support = yes; then
+	AC_DEFINE([HAVE_SYMVER_SUPPORT], 1, [assembler has .symver support])
+fi
 
 AC_CONFIG_FILES([Makefile libfabric.spec])
 AC_OUTPUT

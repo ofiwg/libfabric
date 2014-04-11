@@ -30,35 +30,36 @@
  * SOFTWARE.
  */
 
-#ifndef INFINIBAND_MARSHALL_H
-#define INFINIBAND_MARSHALL_H
+#ifndef INFINIBAND_SA_KERN_ABI_H
+#define INFINIBAND_SA_KERN_ABI_H
 
-#include <infiniband/verbs.h>
-#include <rdma/fi_uverbs.h>
-#include <rdma/fi_ucma.h>
+#include <linux/types.h>
 
-#ifdef __cplusplus
-#  define BEGIN_C_DECLS extern "C" {
-#  define END_C_DECLS   }
-#else /* !__cplusplus */
-#  define BEGIN_C_DECLS
-#  define END_C_DECLS
-#endif /* __cplusplus */
+/*
+ * Obsolete, deprecated names.  Will be removed in libibverbs 1.1.
+ */
+#define ib_kern_path_rec	ibv_kern_path_rec
 
-BEGIN_C_DECLS
+struct ibv_kern_path_rec {
+	__u8  dgid[16];
+	__u8  sgid[16];
+	__u16 dlid;
+	__u16 slid;
+	__u32 raw_traffic;
+	__u32 flow_label;
+	__u32 reversible;
+	__u32 mtu;
+	__u16 pkey;
+	__u8  hop_limit;
+	__u8  traffic_class;
+	__u8  numb_path;
+	__u8  sl;
+	__u8  mtu_selector;
+	__u8  rate_selector;
+	__u8  rate;
+	__u8  packet_life_time_selector;
+	__u8  packet_life_time;
+	__u8  preference;
+};
 
-void ibv_copy_qp_attr_from_kern(struct ibv_qp_attr *dst,
-				struct ibv_kern_qp_attr *src);
-
-void ibv_copy_ah_attr_from_kern(struct ibv_ah_attr *dst,
-				struct ibv_kern_ah_attr *src);
-
-void ibv_copy_path_rec_from_kern(struct ibv_sa_path_rec *dst,
-				 struct ibv_kern_path_rec *src);
-
-void ibv_copy_path_rec_to_kern(struct ibv_kern_path_rec *dst,
-			       struct ibv_sa_path_rec *src);
-
-END_C_DECLS
-
-#endif /* INFINIBAND_MARSHALL_H */
+#endif /* INFINIBAND_SA_KERN_ABI_H */
