@@ -51,8 +51,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
-
-#include "ibverbs.h"
+#include "fi.h"
 
 
 struct ibv_domain {

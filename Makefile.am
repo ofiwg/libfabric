@@ -34,7 +34,7 @@ libibverbs_libibverbs_la_DEPENDENCIES =\
 
 src_libfabric_la_SOURCES = src/fabric.c \
 	src/ucma.c \
-	prov/ibverbs/src/fi_verbs.c \
+	prov/ibverbs/fi_verbs.c \
 	prov/rdmacm/src/acm.c \
 	prov/rdmacm/src/addrinfo.c \
 	prov/rdmacm/src/cma.c \
