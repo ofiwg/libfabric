@@ -60,6 +60,7 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 #include <rdma/rdma_cma.h>
+#include <infiniband/ib.h>
 
 struct __fid_fabric {
 	struct fid_fabric	fabric_fid;
@@ -180,9 +181,9 @@ int fi_init()
 //	if (ret)
 //		goto out;
 
-	ret = ucma_init();
-	if (ret)
-		goto out;
+//	ret = ucma_init();
+//	if (ret)
+//		goto out;
 
 	init = 1;
 
@@ -200,8 +201,8 @@ static void __attribute__((constructor)) fi_ini(void)
 {
 //	uv_ini();
 	ibv_ini();
-	ucma_ini();
-	rdma_cm_ini();
+//	ucma_ini();
+//	rdma_cm_ini();
 	psmx_ini();
 //	mlx4_ini();
 }
@@ -210,8 +211,8 @@ static void __attribute__((destructor)) fi_fini(void)
 {
 //	mlx4_fini();
 	psmx_fini();
-	rdma_cm_fini();
-	ucma_fini();
+//	rdma_cm_fini();
+//	ucma_fini();
 	ibv_fini();
 //	uv_fini();
 }
@@ -311,6 +312,23 @@ static int __fi_domain(fid_t fid, struct fi_info *info, fid_t *dom, void *contex
 	return ret;
 }
 
+int fi_sockaddr_len(struct sockaddr *addr)
+{
+	if (!addr)
+		return 0;
+
+	switch (addr->sa_family) {
+	case AF_INET:
+		return sizeof(struct sockaddr_in);
+	case AF_INET6:
+		return sizeof(struct sockaddr_in6);
+	case AF_IB:
+		return sizeof(struct sockaddr_ib);
+	default:
+		return 0;
+	}
+}
+
 static ssize_t __fi_ec_cm_readerr(fid_t fid, void *buf, size_t len, uint64_t flags)
 {
 	struct __fid_ec_cm *ec;
@@ -348,12 +366,12 @@ __fi_ec_cm_getinfo(struct __fid_fabric *fab, struct rdma_cm_event *event)
 	}
 	fi->protocol_cap = FI_PROTO_CAP_MSG | FI_PROTO_CAP_RMA;
 
-	fi->src_addrlen = rdma_addrlen(rdma_get_local_addr(event->id));
+	fi->src_addrlen = fi_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!(fi->src_addr = malloc(fi->src_addrlen)))
 		goto err;
 	memcpy(fi->src_addr, rdma_get_local_addr(event->id), fi->src_addrlen);
 
-	fi->dest_addrlen = rdma_addrlen(rdma_get_peer_addr(event->id));
+	fi->dest_addrlen = fi_sockaddr_len(rdma_get_peer_addr(event->id));
 	if (!(fi->dest_addr = malloc(fi->dest_addrlen)))
 		goto err;
 	memcpy(fi->dest_addr, rdma_get_peer_addr(event->id), fi->dest_addrlen);

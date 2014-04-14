@@ -223,9 +223,11 @@ static int ibv_getinfo(const char *node, const char *service,
 		if (ret)
 			return ret;
 
-		ret = rdma_getaddrinfo(node, service, &rai_hints, &rai);
+		ret = rdma_getaddrinfo((char *) node, (char *) service,
+					&rai_hints, &rai);
 	} else {
-		ret = rdma_getaddrinfo(node, service, NULL, &rai);
+		ret = rdma_getaddrinfo((char *) node, (char *) service,
+					NULL, &rai);
 	}
 	if (ret)
 		return -errno;
@@ -247,7 +249,7 @@ static int ibv_getinfo(const char *node, const char *service,
 	rdma_freeaddrinfo(rai);
 
 	if (!fi->src_addr) {
-		fi->src_addrlen = rdma_addrlen(rdma_get_local_addr(id));
+		fi->src_addrlen = fi_sockaddr_len(rdma_get_local_addr(id));
 		if (!(fi->src_addr = malloc(fi->src_addrlen))) {
 			ret = -FI_ENOMEM;
 			goto err3;
@@ -719,12 +721,12 @@ static struct fi_info * ibv_ec_cm_getinfo(struct rdma_cm_event *event)
 	}
 //	fi->sa_family = rdma_get_local_addr(event->id)->sa_family;
 
-	fi->src_addrlen = rdma_addrlen(rdma_get_local_addr(event->id));
+	fi->src_addrlen = fi_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!(fi->src_addr = malloc(fi->src_addrlen)))
 		goto err;
 	memcpy(fi->src_addr, rdma_get_local_addr(event->id), fi->src_addrlen);
 
-	fi->dest_addrlen = rdma_addrlen(rdma_get_peer_addr(event->id));
+	fi->dest_addrlen = fi_sockaddr_len(rdma_get_peer_addr(event->id));
 	if (!(fi->dest_addr = malloc(fi->dest_addrlen)))
 		goto err;
 	memcpy(fi->dest_addr, rdma_get_peer_addr(event->id), fi->dest_addrlen);
