@@ -176,9 +176,9 @@ int fi_init()
 	if (init)
 		goto out;
 
-	ret = uv_init();
-	if (ret)
-		goto out;
+//	ret = uv_init();
+//	if (ret)
+//		goto out;
 
 	ret = ucma_init();
 	if (ret)
@@ -198,22 +198,22 @@ out:
 
 static void __attribute__((constructor)) fi_ini(void)
 {
-	uv_ini();
+//	uv_ini();
 	ibv_ini();
 	ucma_ini();
 	rdma_cm_ini();
 	psmx_ini();
-	mlx4_ini();
+//	mlx4_ini();
 }
 
 static void __attribute__((destructor)) fi_fini(void)
 {
-	mlx4_fini();
+//	mlx4_fini();
 	psmx_fini();
 	rdma_cm_fini();
 	ucma_fini();
 	ibv_fini();
-	uv_fini();
+//	uv_fini();
 }
 
 int fi_getinfo(const char *node, const char *service, struct fi_info *hints,

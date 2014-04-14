@@ -39,68 +39,13 @@
 
 #include <rdma/fabric.h>
 #include <rdma/fi_uverbs.h>
+#include <infiniband/sa.h>
+#include <infiniband/sa-kern-abi.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-
-struct ibv_kern_path_rec {
-	__u8  dgid[16];
-	__u8  sgid[16];
-	__u16 dlid;
-	__u16 slid;
-	__u32 raw_traffic;
-	__u32 flow_label;
-	__u32 reversible;
-	__u32 mtu;
-	__u16 pkey;
-	__u8  hop_limit;
-	__u8  traffic_class;
-	__u8  numb_path;
-	__u8  sl;
-	__u8  mtu_selector;
-	__u8  rate_selector;
-	__u8  rate;
-	__u8  packet_life_time_selector;
-	__u8  packet_life_time;
-	__u8  preference;
-};
-
-#define IBV_PATH_RECORD_REVERSIBLE 0x80
-
-struct ibv_path_record {
-	uint64_t service_id;
-	uint8_t  dgid[16];
-	uint8_t  sgid[16];
-	uint16_t dlid;
-	uint16_t slid;
-	uint32_t flowlabel_hoplimit; /* resv-31:28 flow label-27:8 hop limit-7:0*/
-	uint8_t  tclass;
-	uint8_t  reversible_numpath; /* reversible-7:7 num path-6:0 */
-	uint16_t pkey;
-	uint16_t qosclass_sl;	    /* qos class-15:4 sl-3:0 */
-	uint8_t  mtu;		    /* mtu selector-7:6 mtu-5:0 */
-	uint8_t  rate;		    /* rate selector-7:6 rate-5:0 */
-	uint8_t  packetlifetime;	    /* lifetime selector-7:6 lifetime-5:0 */
-	uint8_t  preference;
-	uint8_t  reserved[6];
-};
-
-#define IBV_PATH_FLAG_GMP		(1<<0)
-#define IBV_PATH_FLAG_PRIMARY		(1<<1)
-#define IBV_PATH_FLAG_ALTERNATE		(1<<2)
-#define IBV_PATH_FLAG_OUTBOUND		(1<<3)
-#define IBV_PATH_FLAG_INBOUND		(1<<4)
-#define IBV_PATH_FLAG_INBOUND_REVERSE	(1<<5)
-#define IBV_PATH_FLAG_BIDIRECTIONAL	(IBV_PATH_FLAG_OUTBOUND |     \
-					 IBV_PATH_FLAG_INBOUND_REVERSE)
-
-struct ibv_path_data {
-	uint32_t		flags;
-	uint32_t		reserved;
-	struct ibv_path_record	path;
-};
 
 
 /*
