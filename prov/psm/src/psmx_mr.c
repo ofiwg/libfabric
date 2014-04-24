@@ -293,8 +293,8 @@ static int psmx_mr_regattr(fid_t fid, const struct fi_mr_attr *attr,
 
 struct fi_ops_mr psmx_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
-	.mr_reg = psmx_mr_reg,
-	.mr_regv = psmx_mr_regv,
-	.mr_regattr = psmx_mr_regattr,
+	.reg = psmx_mr_reg,
+	.regv = psmx_mr_regv,
+	.regattr = psmx_mr_regattr,
 };
 

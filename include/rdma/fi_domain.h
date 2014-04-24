@@ -340,13 +340,13 @@ struct fi_ops_domain {
 
 struct fi_ops_mr {
 	size_t	size;
-	int	(*mr_reg)(fid_t fid, const void *buf, size_t len,
+	int	(*reg)(fid_t fid, const void *buf, size_t len,
 			uint64_t access, uint64_t requested_key,
 			uint64_t flags, fid_t *mr, void *context);
-	int	(*mr_regv)(fid_t fid, const struct iovec *iov, size_t count,
+	int	(*regv)(fid_t fid, const struct iovec *iov, size_t count,
 			uint64_t access, uint64_t requested_key,
 			uint64_t flags, fid_t *mr, void *context);
-	int	(*mr_regattr)(fid_t fid, const struct fi_mr_attr *attr,
+	int	(*regattr)(fid_t fid, const struct fi_mr_attr *attr,
 			uint64_t flags, fid_t *mr);
 };
 
@@ -443,8 +443,8 @@ static inline int fi_mr_reg(fid_t fid, const void *buf, size_t len,
 	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_DOMAIN);
 	FI_ASSERT_OPS(fid, struct fid_domain, ops);
-	FI_ASSERT_OP(domain->mr, struct fi_ops_mr, mr_reg);
-	return domain->mr->mr_reg(fid, buf, len, access, requested_key,
+	FI_ASSERT_OP(domain->mr, struct fi_ops_mr, reg);
+	return domain->mr->reg(fid, buf, len, access, requested_key,
 			flags, mr, context);
 }
 

@@ -1378,7 +1378,7 @@ static struct fi_ops ibv_fid_ops = {
 
 static struct fi_ops_mr ibv_domain_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
-	.mr_reg = ibv_mr_reg,
+	.reg = ibv_mr_reg,
 };
 
 static struct fi_ops_domain ibv_domain_ops = {
