@@ -1,25 +1,25 @@
-.TH "FI_ATOMIC" 3 "2014-01-31" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ATOMIC" 3 "2014-04-25" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_atomic - Remote atomic functions
 .PP
-fi_atomic / fi_atomicmem / fi_atomicv
+fi_atomic / fi_atomicv
 .br
-fi_atomicto / fi_atomicmemto / fi_atomicmsg
+fi_atomicto / fi_atomicmsg
 .RS
 Initiates an atomic operation to remote memory
 .RE
 .P
-fi_fetch_atomic / fi_fetch_atomicmem / fi_fetch_atomicv
+fi_fetch_atomic / fi_fetch_atomicv
 .br
-fi_fetch_atomicto / fi_fetch_atomicmemto / fi_fetch_atomicmsg
+fi_fetch_atomicto / fi_fetch_atomicmsg
 .RS
 Initiates an atomic operation to remote memory, retrieving the initial
 value.
 .RE
 .P
-fi_compare_atomic / fi_compare_atomicmem / fi_compare_atomicv
+fi_compare_atomic / fi_compare_atomicv
 .br
-fi_compare_atomicto / fi_compare_atomicmemto / fi_compare_atomicmsg
+fi_compare_atomicto / fi_compare_atomicmsg
 .RS
 Initiates an atomic compare-operation to remote memory, retrieving the initial
 value.
@@ -33,28 +33,17 @@ Indicates if a provider supports a specific atomic operation
 .B #include <rdma/fi_atomic.h>
 .HP
 .BI "int fi_atomic(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ","
-.BI "uint64_t " addr ", uint64_t " key ","
-.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
-.HP
-.BI "int fi_atomicmem(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
+.BI "const void * " buf ", size_t " count ", void *" desc ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_atomicv(fid_t " fid ","
-.BI "const struct fi_ioc * " iov ", size_t " count ","
+.BI "const struct fi_ioc * " iov ", void *" desc ", size_t " count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_atomicto(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ","
-.BI "const void *" dest_addr ","
-.BI "uint64_t " addr ", uint64_t " key ","
-.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
-.HP
-.BI "int fi_atomicmemto(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
+.BI "const void * " buf ", size_t " count ", void *" desc ","
 .BI "const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
@@ -65,84 +54,56 @@ Indicates if a provider supports a specific atomic operation
 .PP
 .HP
 .BI "int fi_fetch_atomic(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ","
-.BI "void * " result ","
-.BI "uint64_t " addr ", uint64_t " key ","
-.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
-.HP
-.BI "int fi_fetch_atomicmem(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
-.BI "void * " result ", uint64_t " result_mem_desc ","
+.BI "const void * " buf ", size_t " count ", void *" desc ","
+.BI "void * " result ", void *" result_desc ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_fetch_atomicv(fid_t " fid ","
-.BI "const struct fi_ioc * " iov ", size_t " count ","
-.BI "struct fi_ioc * " resultv ", size_t " result_count ","
+.BI "const struct fi_ioc * " iov ", void *" desc ", size_t " count ","
+.BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_fetch_atomicto(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ","
-.BI "void * " result ","
-.BI "const void *" dest_addr ","
-.BI "uint64_t " addr ", uint64_t " key ","
-.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
-.HP
-.BI "int fi_fetch_atomicmemto(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
-.BI "void * " result ", uint64_t " result_mem_desc ","
+.BI "const void * " buf ", size_t " count ", void *" desc ","
+.BI "void * " result ", void *" result_desc ","
 .BI "const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_fetch_atomicmsg(fid_t " fid ","
 .BI "const struct fi_msg_atomic * " msg ","
-.BI "struct fi_ioc * " resultv ", size_t " result_count ","
+.BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","
 .BI "uint64_t " flags ");"
 .PP
 .HP
 .BI "int fi_compare_atomic(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ","
-.BI "const void * " compare ","
-.BI "void * " result ","
-.BI "uint64_t " addr ", uint64_t " key ","
-.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
-.HP
-.BI "int fi_compare_atomicmem(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
-.BI "const void * " compare ", uint64_t " compare_mem_desc ","
-.BI "void * " result ", uint64_t " result_mem_desc ","
+.BI "const void * " buf ", size_t " count ", void *" desc ","
+.BI "const void * " compare ", void *" compare_desc ","
+.BI "void * " result ", void *" result_desc ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_compare_atomicv(fid_t " fid ","
-.BI "const struct fi_ioc * " iov ", size_t " count ","
-.BI "const struct fi_ioc * " comparev ", size_t " compare_count ","
-.BI "struct fi_ioc * " resultv ", size_t " result_count ","
+.BI "const struct fi_ioc * " iov ", void *" desc ", size_t " count ","
+.BI "const struct fi_ioc * " comparev ", void *" compare_desc ", size_t " compare_count ","
+.BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_compare_atomicto(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ","
-.BI "const void * " compare ","
-.BI "void * " result ","
-.BI "const void *" dest_addr ","
-.BI "uint64_t " addr ", uint64_t " key ","
-.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
-.HP
-.BI "int fi_compare_atomicmemto(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
-.BI "const void * " compare ", uint64_t " compare_mem_desc ","
-.BI "void * " result ", uint64_t " result_mem_desc ","
+.BI "const void * " buf ", size_t " count ", void *" desc ","
+.BI "const void * " compare ", void *" compare_desc ","
+.BI "void * " result ", void *" result_desc ","
 .BI "const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_compare_atomicmsg(fid_t " fid ","
 .BI "const struct fi_msg_atomic * " msg ","
-.BI "const struct fi_ioc * " comparev ", size_t " compare_count ","
-.BI "struct fi_ioc * " resultv ", size_t " result_count ","
+.BI "const struct fi_ioc * " comparev ", void *" compare_desc ", size_t " compare_count ","
+.BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","
 .BI "uint64_t " flags ");"
 .PP
 .HP
@@ -159,8 +120,6 @@ Indicates if a provider supports a specific atomic operation
 Fabric endpoint on which to initiate atomic operation. 
 .IP "buf"
 Local data buffer that specifies first operand of atomic operation
-.IP "len"
-Length of data buffer
 .IP "iov / comparev / resultv"
 Vectored data buffer(s).
 .IP "count / compare_count / result_count"
@@ -177,8 +136,8 @@ Atomic operation to perform
 Local compare buffer, containing comparison data.
 .IP "result"
 Local data buffer to store initial value of remote buffer
-.IP "mem_desc / compare_desc / result_desc"
-Memory descriptor associated with the local data buffer, local compare buffer,
+.IP "desc / compare_desc / result_desc"
+Data descriptor associated with the local data buffer, local compare buffer,
 and local result buffer, respectively.
 .IP "dest_addr"
 Destination address for connectionless atomic operations
@@ -346,8 +305,8 @@ Swap masked bits with data
 addr[i] = (buf[i] & compare[i]) | (addr[i] & ~compare[i])
 .fi
 .SS "Base Atomic Functions"
-The base atomic functions -- fi_atomic, fi_atomicmem, fi_atomicv, fi_atomicto,
-fi_atomicmemto, fi_atomicmsg -- are used to transmit data to a remote node,
+The base atomic functions -- fi_atomic, fi_atomicv, fi_atomicto,
+fi_atomicmsg -- are used to transmit data to a remote node,
 where the specified atomic operation is performed against the target data.
 The result of a base atomic function is stored at the remote memory region.
 The main difference between atomic functions are the number and type of
@@ -362,17 +321,11 @@ fi_atomic must not be touched by the application until the fi_atomic
 call completes asynchronously.  The target buffer of a base atomic
 operation must allow for remote read an/or write access, as appropriate.
 .PP
-The difference between fi_atomicmem and fi_atomic is that the data buffer
-passed into fi_atomicmem must be registered with the resource domain associated
-with the endpoint.  See fi_domain and fi_mr for additional details on
-registering data buffers.
-.PP
 The fi_atomicv call adds support for a scatter-gather list to fi_atomic and/or
 fi_atomicmem.  The fi_atomicv transfers the set of data buffers referenced by
 the ioc parameter to the remote node for processing.
 .PP
-The fi_atomicto and fi_atomicmemto functions are equivalent to fi_atomic and
-fi_atomicmem, respectively, for unconnected endpoints.
+The fi_atomicto function is equivalent to fi_atomic for unconnected endpoints.
 .PP
 The fi_atomicmsg call supports atomic functions over both connected and unconnected
 endpoints, with the ability to control the atomic operation per call through the
@@ -391,12 +344,13 @@ struct fi_msg_atomic {
 	enum fi_op          op;       /* atomic operation */
 	void                *context; /* user-defined context */
 	uint64_t            data;     /* optional data */
+	int                 flow;     /* message steering */
 };
 
 .fi
 .SS "Fetch-Atomic Functions"
-The fetch atomic functions -- fi_fetch_atomic, fi_fetch_atomicmem,
-fi_fetch_atomicv, fi_fetch_atomicto, fi_fetch_atomicmemto, and
+The fetch atomic functions -- fi_fetch_atomic,
+fi_fetch_atomicv, fi_fetch_atomicto, and
 fi_fetch atomicmsg -- behave similar to the equivalent base atomic function.
 The difference between the fetch and base atomic calls are the fetch
 atomic routines return the initial value that was stored at the target
@@ -409,8 +363,8 @@ atomic and fetch atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
 FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR, FI_ATOMIC_READ,
 and FI_ATOMIC_WRITE.
 .SS "Compare-Atomic Functions"
-The compare atomic functions -- fi_compare_atomic, fi_compare_atomicmem,
-fi_compare_atomicv, fi_compare_atomicto, fi_compare_atomicmemto, and
+The compare atomic functions -- fi_compare_atomic,
+fi_compare_atomicv, fi_compare_atomicto, and
 fi_compare atomicmsg -- are used for operations that require comparing
 the target data against a value before performing a swap operation.
 The compare atomic functions support: FI_CSWAP, FI_CSWAP_NE, FI_CSWAP_LE,
