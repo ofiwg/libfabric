@@ -35,29 +35,29 @@ Indicates if a provider supports a specific atomic operation
 .BI "int fi_atomic(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_atomicmem(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_atomicv(fid_t " fid ","
 .BI "const void * " iov ", size_t " count ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_atomicto(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ","
 .BI "const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_atomicmemto(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
 .BI "const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_atomicmsg(fid_t " fid ","
 .BI "const struct fi_msg_atomic * " msg ","
@@ -68,33 +68,33 @@ Indicates if a provider supports a specific atomic operation
 .BI "const void * " buf ", size_t " len ","
 .BI "void * " result ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_fetch_atomicmem(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
 .BI "void * " result ", uint64_t " result_mem_desc ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_fetch_atomicv(fid_t " fid ","
 .BI "const void * " iov ", size_t " count ","
 .BI "void * " resultv ", size_t " result_count ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_fetch_atomicto(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ","
 .BI "void * " result ","
 .BI "const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_fetch_atomicmemto(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
 .BI "void * " result ", uint64_t " result_mem_desc ","
 .BI "const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_fetch_atomicmsg(fid_t " fid ","
 .BI "const struct fi_msg_atomic * " msg ","
@@ -107,21 +107,21 @@ Indicates if a provider supports a specific atomic operation
 .BI "const void * " compare ","
 .BI "void * " result ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_compare_atomicmem(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
 .BI "const void * " compare ", uint64_t " compare_mem_desc ","
 .BI "void * " result ", uint64_t " result_mem_desc ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_compare_atomicv(fid_t " fid ","
 .BI "const void * " iov ", size_t " count ","
 .BI "const void * " comparev ", size_t " compare_count ","
 .BI "void * " resultv ", size_t " result_count ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_compare_atomicto(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ","
@@ -129,7 +129,7 @@ Indicates if a provider supports a specific atomic operation
 .BI "void * " result ","
 .BI "const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_compare_atomicmemto(fid_t " fid ","
 .BI "const void * " buf ", size_t " len ", uint64_t " mem_desc ","
@@ -137,7 +137,7 @@ Indicates if a provider supports a specific atomic operation
 .BI "void * " result ", uint64_t " result_mem_desc ","
 .BI "const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
-.BI "int " datatype ", int " op ", void * " context ");"
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_compare_atomicmsg(fid_t " fid ","
 .BI "const struct fi_msg_atomic * " msg ","
@@ -146,14 +146,14 @@ Indicates if a provider supports a specific atomic operation
 .BI "uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_atomicvalid(fid_t " fid ", int " datatype ", int " op ","
-.BI "size_t *" count ");"
+.BI "int fi_atomicvalid(fid_t " fid ","
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", size_t " count ");"
 .HP
-.BI "int fi_fetch_atomicvalid(fid_t " fid ", int " datatype ", int " op ","
-.BI "size_t *" count ");"
+.BI "int fi_fetch_atomicvalid(fid_t " fid ","
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", size_t " count ");"
 .HP
-.BI "int fi_compare_atomicvalid(fid_t " fid ", int " datatype ", int " op ","
-.BI "size_t *" count ");"
+.BI "int fi_compare_atomicvalid(fid_t " fid ","
+.BI "enum fi_datatype " datatype ", enum fi_op " op ", size_t " count ");"
 .SH ARGUMENTS
 .IP "fid"
 Fabric endpoint on which to initiate atomic operation. 
