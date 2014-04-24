@@ -103,7 +103,7 @@ struct fid_av {
  */
 struct fid_mr {
 	struct fid		fid;
-	uint64_t		mem_desc;
+	void			*mem_desc;
 	uint64_t		key;
 };
 
@@ -321,6 +321,7 @@ struct fi_domain_attr {
 	/* Note to providers: set prov_attr to static struct */
 	size_t			prov_attr_size;
 	void			*prov_attr;
+	size_t			mem_desc_size;
 	enum fi_progress	progress;
 };
 
@@ -448,7 +449,7 @@ static inline int fi_mr_reg(fid_t fid, const void *buf, size_t len,
 			flags, mr, context);
 }
 
-static inline uint64_t fi_mr_desc(fid_t fid)
+static inline void *fi_mr_desc(fid_t fid)
 {
 	struct fid_mr *mr = container_of(fid, struct fid_mr, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_MR);

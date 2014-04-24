@@ -1322,7 +1322,7 @@ static int ibv_mr_reg(fid_t fid, const void *buf, size_t len,
 	if (!md->mr)
 		goto err;
 
-	md->mr_fid.mem_desc = md->mr->lkey;
+	md->mr_fid.mem_desc = (void *) (uintptr_t) md->mr->lkey;
 	md->mr_fid.key = md->mr->rkey;
 	*mr = &md->mr_fid.fid;
 	return 0;
