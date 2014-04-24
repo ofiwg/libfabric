@@ -56,7 +56,6 @@ struct fi_info {
 	void               *dest_addr;
 	size_t              auth_keylen;
 	void               *auth_key;
-	int                 shared_fd;
 	char               *fabric_name;
 	char               *domain_name;
 	size_t              datalen;
@@ -128,11 +127,9 @@ Indicates the size of the authentication key (must be specified if
 .B auth_key
 is specified).
 .IP "auth_key"
-Authorization key to limit communication among sockets that share
-the same key.
-.IP "shared_fd"
-If specified, is used to authenticate a domain to share resources with
-other processes on the same node that have access to the same shared_fd.
+Authorization key to limit communication among endpoints that share
+the same key.  Also defines permission for sharing resources with
+other processes on the same node.
 .IP "fabric_name"
 If specified, the name of the fabric domain.
 .IP "domain_name"

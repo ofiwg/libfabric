@@ -137,15 +137,11 @@ struct fi_info {
 	void			*src_addr;
 	void			*dest_addr;
 	/* Authorization key is intended to limit communication with only
-	 * those endpoints sharing the same key.
+	 * those endpoints sharing the same key and allows sharing of
+	 * data with local processes.
 	 */
 	size_t			auth_keylen;
 	void			*auth_key;
-	/* A shared_fd is intended to allow a domain to share resources
-	 * and data with other processes that have access to the same
-	 * shared_fd.  Based on XRC work.
-	 */
-	int			shared_fd;
 	char			*fabric_name;
 	char			*domain_name;
 	size_t			datalen;

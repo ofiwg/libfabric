@@ -321,7 +321,6 @@ struct fi_domain_attr {
 	/* Note to providers: set prov_attr to static struct */
 	size_t			prov_attr_size;
 	void			*prov_attr;
-	size_t			max_auth_key_size;
 	enum fi_progress	progress;
 };
 
