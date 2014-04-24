@@ -78,7 +78,8 @@ enum fi_proto {
 /*#define FI_PROTO_CAP_COLLECTIVES (1ULL << 5)*/
 
 struct fi_msg {
-	const void		*msg_iov;
+	const struct iovec	*msg_iov;
+	void			*desc;
 	size_t			iov_count;
 	const void		*addr;
 	void			*context;

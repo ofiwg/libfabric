@@ -417,18 +417,16 @@ static ssize_t ibv_msg_ep_sendmsg(fid_t fid, const struct fi_msg *msg,
 	struct ibv_msg_ep *ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge *sge;
-	struct fi_iomv *iov;
 	size_t i, len;
 
 	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
 	wr.num_sge = msg->iov_count;
 	if (msg->iov_count) {
 		sge = alloca(sizeof(*sge) * msg->iov_count);
-		iov = (struct fi_iomv *) msg->msg_iov;
 		for (len = 0, i = 0; i < msg->iov_count; i++) {
-			sge[i].addr = (uintptr_t) iov[i].addr;
-			sge[i].length = (uint32_t) iov[i].len;
-			sge[i].lkey = (uint32_t) iov[i].mem_desc;
+			sge[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
+			sge[i].length = (uint32_t) msg->msg_iov[i].iov_len;
+			sge[i].lkey = (uint32_t) (uintptr_t) (msg->desc + i);
 			len += sge[i].length;
 		}
 
