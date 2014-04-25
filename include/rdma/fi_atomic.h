@@ -89,10 +89,12 @@ enum fi_op {
 #endif /* FABRIC_DIRECT */
 
 struct fi_msg_atomic {
-	const void		*msg_iov;
+	const struct fi_ioc	*msg_iov;
+	void			*desc;
 	size_t			iov_count;
 	const void		*addr;
-	const struct fi_rma_iov *rma_iov;
+	const struct fi_ioc	*rma_iov;
+	uint64_t		*key;
 	size_t			rma_iov_count;
 	enum fi_datatype	datatype;
 	enum fi_op		op;
@@ -111,7 +113,7 @@ struct fi_ops_atomic {
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	int	(*writev)(fid_t fid,
-			const void *iov, size_t count,
+			const struct fi_ioc *iov, size_t count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	int	(*writeto)(fid_t fid,
@@ -138,8 +140,8 @@ struct fi_ops_atomic {
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	int	(*readwritev)(fid_t fid,
-			const void *iov, size_t count,
-			void *resultv, size_t result_count,
+			const struct fi_ioc *iov, size_t count,
+			struct fi_ioc *resultv, size_t result_count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	int	(*readwriteto)(fid_t fid,
@@ -156,7 +158,7 @@ struct fi_ops_atomic {
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	int	(*readwritemsg)(fid_t fid,
 			const struct fi_msg_atomic *msg,
-			void *resultv, size_t result_count,
+			struct fi_ioc *resultv, size_t result_count,
 			uint64_t flags);
 
 	int	(*compwrite)(fid_t fid,
@@ -172,9 +174,9 @@ struct fi_ops_atomic {
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	int	(*compwritev)(fid_t fid,
-			const void *iov, size_t count,
-			const void *comparev, size_t compare_count,
-			void *resultv, size_t result_count,
+			const struct fi_ioc *iov, size_t count,
+			const struct fi_ioc *comparev, size_t compare_count,
+			struct fi_ioc *resultv, size_t result_count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	int	(*compwriteto)(fid_t fid,
@@ -193,8 +195,8 @@ struct fi_ops_atomic {
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	int	(*compwritemsg)(fid_t fid,
 			const struct fi_msg_atomic *msg,
-			const void *comparev, size_t compare_count,
-			void *resultv, size_t result_count,
+			const struct fi_ioc *comparev, size_t compare_count,
+			struct fi_ioc *resultv, size_t result_count,
 			uint64_t flags);
 
 	int	(*writevalid)(fid_t fid,

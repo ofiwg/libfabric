@@ -99,6 +99,11 @@ enum {
 #define FI_TRIGGER		(1ULL << 31)
 
 
+struct fi_ioc {
+	void			*addr;
+	size_t			count;
+};
+
 /*
  * Format for 'vectored' data transfer calls: sendv, writev, etc.
  */

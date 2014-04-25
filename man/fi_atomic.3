@@ -43,7 +43,7 @@ Indicates if a provider supports a specific atomic operation
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_atomicv(fid_t " fid ","
-.BI "const void * " iov ", size_t " count ","
+.BI "const struct fi_ioc * " iov ", size_t " count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
@@ -77,8 +77,8 @@ Indicates if a provider supports a specific atomic operation
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_fetch_atomicv(fid_t " fid ","
-.BI "const void * " iov ", size_t " count ","
-.BI "void * " resultv ", size_t " result_count ","
+.BI "const struct fi_ioc * " iov ", size_t " count ","
+.BI "struct fi_ioc * " resultv ", size_t " result_count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
@@ -98,7 +98,7 @@ Indicates if a provider supports a specific atomic operation
 .HP
 .BI "int fi_fetch_atomicmsg(fid_t " fid ","
 .BI "const struct fi_msg_atomic * " msg ","
-.BI "void * " resultv ", size_t " result_count ","
+.BI "struct fi_ioc * " resultv ", size_t " result_count ","
 .BI "uint64_t " flags ");"
 .PP
 .HP
@@ -117,9 +117,9 @@ Indicates if a provider supports a specific atomic operation
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "int fi_compare_atomicv(fid_t " fid ","
-.BI "const void * " iov ", size_t " count ","
-.BI "const void * " comparev ", size_t " compare_count ","
-.BI "void * " resultv ", size_t " result_count ","
+.BI "const struct fi_ioc * " iov ", size_t " count ","
+.BI "const struct fi_ioc * " comparev ", size_t " compare_count ","
+.BI "struct fi_ioc * " resultv ", size_t " result_count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
@@ -141,8 +141,8 @@ Indicates if a provider supports a specific atomic operation
 .HP
 .BI "int fi_compare_atomicmsg(fid_t " fid ","
 .BI "const struct fi_msg_atomic * " msg ","
-.BI "const void * " comparev ", size_t " compare_count ","
-.BI "void * " resultv ", size_t " result_count ","
+.BI "const struct fi_ioc * " comparev ", size_t " compare_count ","
+.BI "struct fi_ioc * " resultv ", size_t " result_count ","
 .BI "uint64_t " flags ");"
 .PP
 .HP
@@ -369,9 +369,7 @@ registering data buffers.
 .PP
 The fi_atomicv call adds support for a scatter-gather list to fi_atomic and/or
 fi_atomicmem.  The fi_atomicv transfers the set of data buffers referenced by
-the iov parameter to the remote node for processing.  The format of
-iov parameter is specified by the user when the endpoint is created.  See
-fi_getinfo for more details on iov formats.
+the ioc parameter to the remote node for processing.
 .PP
 The fi_atomicto and fi_atomicmemto functions are equivalent to fi_atomic and
 fi_atomicmem, respectively, for unconnected endpoints.
@@ -382,16 +380,19 @@ use of flags.  The fi_atomicmsg function takes a struct fi_msg_atomic as input.
 .PP
 .nf
 struct fi_msg_atomic {
-	const void   *msg_iov;  /* local scatter-gather array */
-	size_t       iov_count; /* # elements in msg_iov */
-	const void   *addr;     /* optional address */
-	const struct fi_rma_iov *rma_iov; /* remote SGL */
-	size_t       rma_iov_count;       /* # elements in rma_iov */
-	int          datatype;  /* operand datatype */
-	int          op;        /* atomic operation */
-	void         *context;  /* user-defined context */
-	uint64_t     data;      /* optional data */
+	const struct fi_ioc *msg_iov; /* local scatter-gather array */
+	void                *desc;    /* local access descriptors */
+	size_t              iov_count;/* # elements in ioc */
+	const void          *addr;    /* optional endpoint address */
+	const struct fi_ioc *rma_iov; /* remote SGL */
+	uint64_t            *key;     /* access keys to remote SGEs */
+	size_t              rma_iov_count;/* # elements in remote SGL */
+	enum fi_datatype    datatype; /* operand datatype */
+	enum fi_op          op;       /* atomic operation */
+	void                *context; /* user-defined context */
+	uint64_t            data;     /* optional data */
 };
+
 .fi
 .SS "Fetch-Atomic Functions"
 The fetch atomic functions -- fi_fetch_atomic, fi_fetch_atomicmem,
