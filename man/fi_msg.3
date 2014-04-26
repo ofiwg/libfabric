@@ -1,17 +1,17 @@
-.TH "FI_MSG" 3 "2014-01-10" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_MSG" 3 "2014-04-25" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_msg - Message data transfer operations
 .PP
-fi_recv / fi_recvmem / fi_recvv
+fi_recv / fi_recvv
 .br
-fi_recvfrom / fi_recvmemfrom / fi_recvmsg
+fi_recvfrom / fi_recvmsg
 .RS
 Post a buffer to receive an incoming message
 .RE
 .PP
-fi_send / fi_sendmem / fi_sendv
+fi_send / fi_sendv
 .br
-fi_sendto / fi_sendmemto / fi_sendmsg
+fi_sendto / fi_sendmsg
 .RS
 Initiate an operation to send a message
 .RE
@@ -19,37 +19,25 @@ Initiate an operation to send a message
 .B #include <rdma/fi_endpoint.h>
 .HP
 .BI "int fi_recv(fid_t " fid ", void * " buf ", size_t " len ","
-.BI "void * " context ");"
+.BI "void *" desc ", void * " context ");"
 .HP
-.BI "int fi_recvmem(fid_t " fid ", void * " buf ", size_t " len ","
-.BI "uint64_t " mem_desc ", void * " context ");"
-.HP
-.BI "int fi_recvv(fid_t " fid ", const void * " iov ", size_t " count ","
-.BI "void * " context ");"
+.BI "int fi_recvv(fid_t " fid ", const struct iovec * " iov ", void *" desc ","
+.BI "size_t " count ", void * " context ");"
 .HP
 .BI "int fi_recvfrom(fid_t " fid ", void * " buf ", size_t " len ","
-.BI "const void *" src_addr ", void * " context ");"
-.HP
-.BI "int fi_recvmemfrom(fid_t " fid ", void * " buf ", size_t " len ","
-.BI "uint64_t " mem_desc ", const void *" src_addr ", void * " context ");"
+.BI "void *" desc ", const void *" src_addr ", void * " context ");"
 .HP
 .BI "int fi_recvmsg(fid_t " fid ", const struct fi_msg * " msg ", uint64_t " flags ");"
 .PP
 .HP
 .BI "int fi_send(fid_t " fid ", void * " buf ", size_t " len ","
-.BI "void * " context ");"
+.BI "void *" desc ", void * " context ");"
 .HP
-.BI "int fi_sendmem(fid_t " fid ", void * " buf ", size_t " len ","
-.BI "uint64_t " mem_desc ", void * " context ");"
-.HP
-.BI "int fi_sendv(fid_t " fid ", const void * " iov ", size_t " count ","
-.BI "void * " context ");"
+.BI "int fi_sendv(fid_t " fid ", const void * " iov ", void *" desc ","
+.BI "size_t " count ", void * " context ");"
 .HP
 .BI "int fi_sendto(fid_t " fid ", void * " buf ", size_t " len ","
-.BI "const void *" dest_addr ", void * " context ");"
-.HP
-.BI "int fi_sendmemto(fid_t " fid ", void * " buf ", size_t " len ","
-.BI "uint64_t " mem_desc ", const void *" dest_addr ", void * " context ");"
+.BI "void *" mem_desc ", const void *" dest_addr ", void * " context ");"
 .HP
 .BI "int fi_sendmsg(fid_t " fid ", const struct fi_msg * " msg ", uint64_t " flags ");"
 .SH ARGUMENTS
@@ -63,8 +51,8 @@ Length of data buffer to send or receive.
 Vectored data buffer.
 .IP "count"
 Count of vectored data entries.
-.IP "mem_desc"
-Memory descriptor associated with the data buffer
+.IP "desc"
+Descriptor associated with the data buffer
 .IP "dest_addr"
 Destination address for connectionless transfers
 .IP "src_addr"
@@ -76,15 +64,15 @@ Additional flags to apply for the send or receive operation.
 .IP "context"
 User specified pointer to associate with the operation.
 .SH "DESCRIPTION"
-The send functions -- fi_send, fi_sendmem, fi_sendv, fi_sendto,
-fi_sendmemto, fi_sendmsg -- are used to transmit a message from one
+The send functions -- fi_send, fi_sendv, fi_sendto,
+fi_sendmsg -- are used to transmit a message from one
 endpoint to another endpoint.  The main difference between send functions
 are the number and type of parameters that they accept as input.  Otherwise,
 they perform the same general function.  Messages sent using fi_msg operations
 are received by a remote endpoint into a buffer posted to receive such messages.
 .PP
-The receive functions -- fi_recv, fi_recvmem, fi_recvv, fi_recvfrom,
-fi_recvmemfrom, fi_recvmsg -- post a data buffer to an endpoint to receive
+The receive functions -- fi_recv, fi_recvv, fi_recvfrom,
+fi_recvmsg -- post a data buffer to an endpoint to receive
 inbound messages.  Similar to the send operations, receive operations operate
 asynchronously.  Users should not touch the posted data buffer(s) until the
 receive operation has completed.
@@ -100,20 +88,14 @@ The local endpoint must be connected to a remote endpoint or destination
 before fi_send is called.  Unless the endpoint has been configured differently,
 the data buffer passed into fi_send must not be touched by the application
 until the fi_send call completes asynchronously.
-.SS "fi_sendmem"
-The difference between fi_sendmem and fi_send is that the data buffer
-passed into fi_sendmem must be registered with the resource domain associated
-with the endpoint.  See fi_domain and fi_mr for additional details on
-registering data buffers.
 .SS "fi_sendv"
 The fi_sendv call adds support for a scatter-gather list to fi_send and/or
 fi_sendmem.  The fi_sendv transfers the set of data buffers referenced by
 the iov parameter to a remote endpoint as a single message.  The format of
 iov parameter is specified by the user when the endpoint is created.  See
 fi_getinfo for more details on iov formats.
-.SS "fi_sendto / fi_sendmemto"
-The fi_sendto and fi_sendmemto functions are equivalent to fi_send and
-fi_sendmem, respectively, for unconnected endpoints.
+.SS "fi_sendto"
+The fi_sendto function is equivalent to fi_send for unconnected endpoints.
 .SS "fi_sendmsg"
 The fi_sendmsg call supports data transfers over both connected and unconnected
 endpoints, with the ability to control the send operation per call through the
@@ -135,14 +117,9 @@ The fi_recv call posts a data buffer to the receive queue of the corresponding
 endpoint.  Posted receives are matched with inbound sends in the order in which
 they were posted.  Message boundaries are maintained.  The order
 in which the receives complete is dependent on the endpoint type and protocol.
-.SS "fi_recvmem"
-The fi_recvmem is similar to fi_recv, but requires that the posted buffer be
-registered with the resource domain associated with the endpoint.  The fi_recvv
-allows the user to post a scatter-gather list of buffers to receive a single
-inbound receive.  That is, the list of buffers match with one remote send.
-.SS "fi_recvfrom / fi_recvmemfrom"
-The fi_recvfrom and fi_recvmemfrom calls are equivalent to fi_recv and
-fi_recvfrom for unconnected endpoints.  These calls are used to indicate
+.SS "fi_recvfrom"
+The fi_recvfrom call is equivalent to fi_recv
+for unconnected endpoints.  These calls are used to indicate
 that a buffer should be posted to receive incoming data from a specific
 remote endpoint.
 .SS "fi_recvmsg"

@@ -112,23 +112,19 @@ struct fi_ops_ep {
 
 struct fi_ops_msg {
 	size_t	size;
-	ssize_t (*recv)(fid_t fid, void *buf, size_t len, void *context);
-	ssize_t (*recvmem)(fid_t fid, void *buf, size_t len, uint64_t mem_desc,
-			  void *context);
-	ssize_t (*recvv)(fid_t fid, const void *iov, size_t count, void *context);
-	ssize_t (*recvfrom)(fid_t fid, void *buf, size_t len,
-			  const void *src_addr, void *context);
-	ssize_t (*recvmemfrom)(fid_t fid, void *buf, size_t len, uint64_t mem_desc,
-			  const void *src_addr, void *context);
+	ssize_t (*recv)(fid_t fid, void *buf, size_t len, void *desc,
+			void *context);
+	ssize_t (*recvv)(fid_t fid, const struct iovec *iov, void *desc,
+			size_t count, void *context);
+	ssize_t (*recvfrom)(fid_t fid, void *buf, size_t len, void *desc,
+			const void *src_addr, void *context);
 	ssize_t (*recvmsg)(fid_t fid, const struct fi_msg *msg, uint64_t flags);
-	ssize_t (*send)(fid_t fid, const void *buf, size_t len, void *context);
-	ssize_t (*sendmem)(fid_t fid, const void *buf, size_t len,
-			  uint64_t mem_desc, void *context);
-	ssize_t (*sendv)(fid_t fid, const void *iov, size_t count, void *context);
-	ssize_t (*sendto)(fid_t fid, const void *buf, size_t len,
-			  const void *dest_addr, void *context);
-	ssize_t (*sendmemto)(fid_t fid, const void *buf, size_t len, uint64_t mem_desc,
-			  const void *dest_addr, void *context);
+	ssize_t (*send)(fid_t fid, const void *buf, size_t len, void *desc,
+			void *context);
+	ssize_t (*sendv)(fid_t fid, const struct iovec *iov, void *desc,
+			size_t count, void *context);
+	ssize_t (*sendto)(fid_t fid, const void *buf, size_t len, void *desc,
+			const void *dest_addr, void *context);
 	ssize_t (*sendmsg)(fid_t fid, const struct fi_msg *msg, uint64_t flags);
 };
 
@@ -213,24 +209,24 @@ static inline ssize_t fi_setopt(fid_t fid, int level, int optname,
 	return ep->ops->setopt(fid, level, optname, optval, optlen);
 }
 
-static inline ssize_t fi_recvmem(fid_t fid, void *buf, size_t len,
-				 uint64_t mem_desc, void *context)
+static inline ssize_t fi_recv(fid_t fid, void *buf, size_t len, void *desc,
+			      void *context)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
 	FI_ASSERT_OPS(fid, struct fid_ep, msg);
-	FI_ASSERT_OP(ep->msg, struct fi_ops_msg, recvmem);
-	return ep->msg->recvmem(fid, buf, len, mem_desc, context);
+	FI_ASSERT_OP(ep->msg, struct fi_ops_msg, recv);
+	return ep->msg->recv(fid, buf, len, desc, context);
 }
 
-static inline ssize_t fi_sendmem(fid_t fid, const void *buf, size_t len,
-				 uint64_t mem_desc, void *context)
+static inline ssize_t fi_send(fid_t fid, const void *buf, size_t len,
+			      void *desc, void *context)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
 	FI_ASSERT_OPS(fid, struct fid_ep, msg);
-	FI_ASSERT_OP(ep->msg, struct fi_ops_msg, sendmem);
-	return ep->msg->sendmem(fid, buf, len, mem_desc, context);
+	FI_ASSERT_OP(ep->msg, struct fi_ops_msg, send);
+	return ep->msg->send(fid, buf, len, desc, context);
 }
 
 static inline ssize_t

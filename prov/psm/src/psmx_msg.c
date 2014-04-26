@@ -33,8 +33,8 @@
 #include "psmx.h"
 
 static inline ssize_t _psmx_recvfrom(fid_t fid, void *buf, size_t len,
-					const void *src_addr, void *context,
-					uint64_t flags)
+			void *desc, const void *src_addr, void *context,
+			uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
 	psm_mq_req_t psm_req;
@@ -84,36 +84,25 @@ static inline ssize_t _psmx_recvfrom(fid_t fid, void *buf, size_t len,
 	return 0;
 }
 
-static ssize_t psmx_recvfrom(fid_t fid, void *buf, size_t len,
-				const void *src_addr, void *context)
+static ssize_t psmx_recvfrom(fid_t fid, void *buf, size_t len, void *desc,
+			     const void *src_addr, void *context)
 {
-	return _psmx_recvfrom(fid, buf, len, src_addr, context, 0);
+	return _psmx_recvfrom(fid, buf, len, desc, src_addr, context, 0);
 }
 
-static ssize_t psmx_recvmemfrom(fid_t fid, void *buf, size_t len,
-				uint64_t mem_desc, const void *src_addr,
-				void *context)
+static ssize_t psmx_recvmsg(fid_t fid, const struct fi_msg *msg, uint64_t flags)
 {
-	return -ENOSYS;
-}
-
-static ssize_t psmx_recvmsg(fid_t fid, const struct fi_msg *msg,
-				uint64_t flags)
-{
-	struct iovec *iov;
-
 	/* FIXME: allow iov_count == 0? */
 	/* FIXME: allow iov_count > 1 */
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
-	/* FIXME: check iov format */
-	iov = (struct iovec *)msg->msg_iov;
-	return _psmx_recvfrom(fid, iov[0].iov_base, iov[0].iov_len,
-					msg->addr, msg->context, flags);
+	return _psmx_recvfrom(fid, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+			     msg->desc, msg->addr, msg->context, flags);
 }
 
-static ssize_t psmx_recv(fid_t fid, void *buf, size_t len, void *context)
+static ssize_t psmx_recv(fid_t fid, void *buf, size_t len, void *desc,
+			 void *context)
 {
 	struct psmx_fid_ep *fid_ep;
 
@@ -121,35 +110,26 @@ static ssize_t psmx_recv(fid_t fid, void *buf, size_t len, void *context)
 	assert(fid_ep->domain);
 
 	if (fid_ep->connected)
-		return psmx_recvfrom(fid, buf, len, fid_ep->peer_psm_epaddr, context);
+		return psmx_recvfrom(fid, buf, len, desc,
+				     fid_ep->peer_psm_epaddr, context);
 	else
-		return psmx_recvfrom(fid, buf, len, NULL, context);
+		return psmx_recvfrom(fid, buf, len, desc, NULL, context);
 }
 
-static ssize_t psmx_recvmem(fid_t fid, void *buf, size_t len,
-				uint64_t mem_desc, void *context)
+static ssize_t psmx_recvv(fid_t fid, const struct iovec *iov, void *desc,
+			  size_t count, void *context)
 {
-	return -ENOSYS;
-}
-
-static ssize_t psmx_recvv(fid_t fid, const void *iov, size_t count,
-				void *context)
-{
-	struct iovec *iov0;
-
 	/* FIXME: allow iov_count == 0? */
 	/* FIXME: allow iov_count > 1 */
 	if (!iov || count != 1)
 		return -EINVAL;
 
-	/* FIXME: check iov format */
-	iov0 = (struct iovec *)iov;
-	return psmx_recv(fid, iov0->iov_base, iov0->iov_len, context);
+	return psmx_recv(fid, iov->iov_base, iov->iov_len, desc, context);
 }
 
 static inline ssize_t _psmx_sendto(fid_t fid, const void *buf, size_t len,
-				const void *dest_addr, void *context,
-				uint64_t flags)
+			void *desc, const void *dest_addr, void *context,
+			uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
 	int send_flag = 0;
@@ -200,36 +180,24 @@ static inline ssize_t _psmx_sendto(fid_t fid, const void *buf, size_t len,
 }
 
 static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
-				  const void *dest_addr, void *context)
+			   void *desc, const void *dest_addr, void *context)
 {
-	return _psmx_sendto(fid, buf, len, dest_addr, context, 0);
+	return _psmx_sendto(fid, buf, len, desc, dest_addr, context, 0);
 }
 
-static ssize_t psmx_sendmemto(fid_t fid, const void *buf, size_t len,
-				uint64_t mem_desc, const void *dest_addr,
-				void *context)
+static ssize_t psmx_sendmsg(fid_t fid, const struct fi_msg *msg, uint64_t flags)
 {
-	return -ENOSYS;
-}
-
-static ssize_t psmx_sendmsg(fid_t fid, const struct fi_msg *msg,
-				uint64_t flags)
-{
-	struct iovec *iov;
-
 	/* FIXME: allow iov_count == 0? */
 	/* FIXME: allow iov_count > 1 */
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
-	/* FIXME: check iov format */
-	iov = (struct iovec *)msg->msg_iov;
-	return _psmx_sendto(fid, iov[0].iov_base, iov[0].iov_len,
-					msg->addr, msg->context, flags);
+	return _psmx_sendto(fid, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+			    msg->desc, msg->addr, msg->context, flags);
 }
 
-static ssize_t psmx_send(fid_t fid, const void *buf, size_t len,
-				void *context)
+static ssize_t psmx_send(fid_t fid, const void *buf, size_t len, void *desc,
+			 void *context)
 {
 	struct psmx_fid_ep *fid_ep;
 
@@ -239,43 +207,29 @@ static ssize_t psmx_send(fid_t fid, const void *buf, size_t len,
 	if (!fid_ep->connected)
 		return -ENOTCONN;
 
-	return psmx_sendto(fid, buf, len, fid_ep->peer_psm_epaddr, context);
+	return psmx_sendto(fid, buf, len, desc, fid_ep->peer_psm_epaddr, context);
 }
 
-static ssize_t psmx_sendmem(fid_t fid, const void *buf, size_t len,
-				uint64_t mem_desc, void *context)
+static ssize_t psmx_sendv(fid_t fid, const struct iovec *iov, void *desc,
+			  size_t count, void *context)
 {
-	return -ENOSYS;
-}
-
-static ssize_t psmx_sendv(fid_t fid, const void *iov, size_t count,
-				void *context)
-{
-	struct iovec *iov0;
-
 	/* FIXME: allow iov_count == 0? */
 	/* FIXME: allow iov_count > 1 */
 	if (!iov || count != 1)
 		return -EINVAL;
 
-	/* FIXME: check iov format */
-	iov0 = (struct iovec *)iov;
-	return psmx_send(fid, iov0->iov_base, iov0->iov_len, context);
+	return psmx_send(fid, iov->iov_base, iov->iov_len, desc, context);
 }
 
 struct fi_ops_msg psmx_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = psmx_recv,
-	.recvmem = psmx_recvmem,
 	.recvv = psmx_recvv,
 	.recvfrom = psmx_recvfrom,
-	.recvmemfrom = psmx_recvmemfrom,
 	.recvmsg = psmx_recvmsg,
 	.send = psmx_send,
-	.sendmem = psmx_sendmem,
 	.sendv = psmx_sendv,
 	.sendto = psmx_sendto,
-	.sendmemto = psmx_sendmemto,
 	.sendmsg = psmx_sendmsg,
 };
 

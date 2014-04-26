@@ -369,8 +369,8 @@ static int ibv_msg_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 	return 0;
 }
 
-static ssize_t ibv_msg_ep_recvmem(fid_t fid, void *buf, size_t len,
-				  uint64_t mem_desc, void *context)
+static ssize_t ibv_msg_ep_recv(fid_t fid, void *buf, size_t len,
+				void *desc, void *context)
 {
 	struct ibv_msg_ep *ep;
 	struct ibv_recv_wr wr, *bad;
@@ -378,7 +378,7 @@ static ssize_t ibv_msg_ep_recvmem(fid_t fid, void *buf, size_t len,
 
 	sge.addr = (uintptr_t) buf;
 	sge.length = (uint32_t) len;
-	sge.lkey = (uint32_t) mem_desc;
+	sge.lkey = (uint32_t) (uintptr_t) desc;
 
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
@@ -389,8 +389,8 @@ static ssize_t ibv_msg_ep_recvmem(fid_t fid, void *buf, size_t len,
 	return -ibv_post_recv(ep->id->qp, &wr, &bad);
 }
 
-static ssize_t ibv_msg_ep_sendmem(fid_t fid, const void *buf, size_t len,
-				  uint64_t mem_desc, void *context)
+static ssize_t ibv_msg_ep_send(fid_t fid, const void *buf, size_t len,
+				void *desc, void *context)
 {
 	struct ibv_msg_ep *ep;
 	struct ibv_send_wr wr, *bad;
@@ -399,7 +399,7 @@ static ssize_t ibv_msg_ep_sendmem(fid_t fid, const void *buf, size_t len,
 	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
 	sge.addr = (uintptr_t) buf;
 	sge.length = (uint32_t) len;
-	sge.lkey = (uint32_t) mem_desc;
+	sge.lkey = (uint32_t) (uintptr_t) desc;
 
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
@@ -450,8 +450,8 @@ static ssize_t ibv_msg_ep_sendmsg(fid_t fid, const struct fi_msg *msg,
 
 static struct fi_ops_msg ibv_msg_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
-	.recvmem = ibv_msg_ep_recvmem,
-	.sendmem = ibv_msg_ep_sendmem,
+	.recv = ibv_msg_ep_recv,
+	.send = ibv_msg_ep_send,
 	.sendmsg = ibv_msg_ep_sendmsg,
 };
 
