@@ -455,8 +455,8 @@ static struct fi_ops_msg ibv_msg_ep_msg_ops = {
 	.sendmsg = ibv_msg_ep_sendmsg,
 };
 
-static int ibv_msg_ep_rma_writemem(fid_t fid, const void *buf, size_t len,
-	uint64_t mem_desc, uint64_t addr, uint64_t tag, void *context)
+static int ibv_msg_ep_rma_write(fid_t fid, const void *buf, size_t len,
+	void *desc, uint64_t addr, uint64_t tag, void *context)
 {
 	struct ibv_msg_ep *ep;
 	struct ibv_send_wr wr, *bad;
@@ -465,7 +465,7 @@ static int ibv_msg_ep_rma_writemem(fid_t fid, const void *buf, size_t len,
 	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
 	sge.addr = (uintptr_t) buf;
 	sge.length = (uint32_t) len;
-	sge.lkey = (uint32_t) mem_desc;
+	sge.lkey = (uint32_t) (uintptr_t) desc;
 
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
@@ -479,8 +479,8 @@ static int ibv_msg_ep_rma_writemem(fid_t fid, const void *buf, size_t len,
 	return -ibv_post_send(ep->id->qp, &wr, &bad);
 }
 
-static int ibv_msg_ep_rma_readmem(fid_t fid, void *buf, size_t len,
-	uint64_t mem_desc, uint64_t addr, uint64_t tag, void *context)
+static int ibv_msg_ep_rma_read(fid_t fid, void *buf, size_t len,
+	void *desc, uint64_t addr, uint64_t tag, void *context)
 {
 	struct ibv_msg_ep *ep;
 	struct ibv_send_wr wr, *bad;
@@ -488,7 +488,7 @@ static int ibv_msg_ep_rma_readmem(fid_t fid, void *buf, size_t len,
 
 	sge.addr = (uintptr_t) buf;
 	sge.length = (uint32_t) len;
-	sge.lkey = (uint32_t) mem_desc;
+	sge.lkey = (uint32_t) (uintptr_t) desc;
 
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
@@ -505,8 +505,8 @@ static int ibv_msg_ep_rma_readmem(fid_t fid, void *buf, size_t len,
 
 static struct fi_ops_rma ibv_msg_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
-	.writemem = ibv_msg_ep_rma_writemem,
-	.readmem = ibv_msg_ep_rma_readmem
+	.write = ibv_msg_ep_rma_write,
+	.read = ibv_msg_ep_rma_read
 };
 
 static int ibv_msg_ep_connect(fid_t fid, const void *addr,
