@@ -1,13 +1,13 @@
-.TH "FI_TAGGED" 3 "2014-01-10" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_TAGGED" 3 "2014-04-25" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_tagged \- Tagged data transfer operations
 .PP
-fi_trecv / fi_trecvmem / fi_trecvv / fi_trecvfrom / fi_trecvmemfrom / fi_trecvmsg
+fi_trecv / fi_trecvv / fi_trecvfrom / fi_trecvmsg
 .RS
 Post a buffer to receive an incoming message
 .RE
 .PP
-fi_tsend / fi_tsendmem / fi_tsendv / fi_tsendto / fi_tsendmemto / fi_tsendmsg
+fi_tsend / fi_tsendv / fi_tsendto / fi_tsendmsg
 .RS
 Initiate an operation to send a message
 .RE
@@ -19,43 +19,33 @@ Initiate a search operation for a buffered receive matching a given tag
 .SH SYNOPSIS
 .B "#include <rdma/fi_tagged.h>"
 .HP
-.BI "int fi_trecv(fid_t " fid ", void * " buf ", size_t " len ","
+.BI "int fi_trecv(fid_t " fid ", void * " buf ", size_t " len ", void *" desc ","
 .BI "uint64_t " tag ", uint64_t " ignore ", void * " context ");"
 .HP
-.BI "int fi_trecvmem(fid_t " fid ", void * " buf ", size_t " len ","
-.BI "uint64_t " tag ", uint64_t " ignore ", uint64_t " mem_desc ","
-.BI "void * " context ");"
-.HP
-.BI "int fi_trecvv(fid_t " fid ", const void * " iov ", size_t " count ","
+.BI "int fi_trecvv(fid_t " fid ", const struct iovec * " iov ", void *" desc ","
+.BI "size_t " count ","
 .BI "uint64_t " tag ", uint4_t " ignore ", void * " context ");"
 .HP
 .BI "int fi_trecvfrom(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "void *" desc ","
 .BI "const void * " src_addr ", uint64_t " tag ", uint64_t " ignore ","
 .BI "void * " context ");"
-.HP
-.BI "int fi_trecvmemfrom(fid_t " fid ", const void * " buf ", size_t " len ","
-.BI "const void * " src_addr ", uint64_t " tag ", uint64_t " ignore ","
-.BI "uint64_t " mem_desc ", void * " context ");"
 .HP
 .BI "int fi_trecvmsg(fid_t " fid ", const struct fi_msg_tagged * " msg ","
 .BI "uint64_t " flags ");"
 .PP
 .HP
 .BI "int fi_tsend(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "void *" desc ","
 .BI "uint64_t " tag ", void * " context ");"
 .HP
-.BI "int fi_tsendmem(fid_t " fid ", const void * " buf ", size_t " len ","
-.BI "uint64_t " tag ", uint64_t " mem_desc ", void * " context ");"
-.HP
-.BI "int fi_tsendv(fid_t " fid ", const void * " iov ", size_t " count ","
+.BI "int fi_tsendv(fid_t " fid ", const struct iovec * " iov ","
+.BI "void *" desc ", size_t " count ","
 .BI "uint64_t " tag ", void * " context ");"
 .HP
 .BI "int fi_tsendto(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "void *" desc ","
 .BI "const void * " dest_addr ", uint64_t " tag ", void * " context ");"
-.HP
-.BI "int fi_tsendmemto(fid_t " fid ", const void * " buf ", size_t " len ","
-.BI "const void * " dest_addr ", uint64_t " tag ", uint64_t "mem_desc ","
-.BI "void * " context ");"
 .HP
 .BI "int fi_tsendmsg(fid_t " fid ", const struct fi_msg_tagged * " msg ","
 .BI "uint64_t " flags ");"
@@ -79,7 +69,7 @@ Count of vectored data entries.
 Tag associated with the message.
 .IP "ignore"
 Mask of bits to ignore applied to the tag for receive operations.
-.IP "mem_desc"
+.IP "desc"
 Memory descriptor associated with the data buffer
 .IP "dest_addr"
 Destination address for connectionless transfers
@@ -105,14 +95,14 @@ In general, message tags are checked against receive buffers in the order
 in which messages have been posted to the endpoint.  See the ordering
 discussion below for more details.
 .PP
-The send functions -- fi_tsend, fi_tsendmem, fi_tsendv, fi_tsendto,
-fi_tsendmemto, fi_tsendmsg -- are used to transmit a tagged message
+The send functions -- fi_tsend, fi_tsendv, fi_tsendto,
+fi_tsendmsg -- are used to transmit a tagged message
 from one endpoint to another endpoint.  The main difference between
 send functions are the number and type of parameters that they accept as input.
 Otherwise, they perform the same general function.
 .PP
-The receive functions -- fi_trecv, fi_trecvmem, fi_trecvv, fi_trecvfrom,
-fi_trecvmemfrom, fi_recvmsg -- post a data buffer to an endpoint to receive
+The receive functions -- fi_trecv, fi_trecvv, fi_trecvfrom,
+fi_recvmsg -- post a data buffer to an endpoint to receive
 inbound tagged messages.  Similar to the send operations, receive operations
 operate asynchronously.  Users should not touch the posted data buffer(s)
 until the receive operation has completed.  Posted receive buffers are
@@ -130,20 +120,14 @@ The local endpoint must be connected to a remote endpoint or destination
 before fi_tsend is called.  Unless the endpoint has been configured differently,
 the data buffer passed into fi_tsend must not be touched by the application
 until the fi_tsend call completes asynchronously.
-.SS "fi_tsendmem"
-The difference between fi_tsendmem and fi_tsend is that the data buffer
-passed into fi_tsendmem must be registered with the resource domain associated
-with the endpoint.  See fi_domain and fi_mr for additional details on
-registering data buffers.
 .SS "fi_tsendv"
 The fi_tsendv call adds support for a scatter-gather list to fi_tsend and/or
 fi_tsendmem.  The fi_sendv transfers the set of data buffers referenced by
 the iov parameter to a remote endpoint as a single message.  The format of
 iov parameter is specified by the user when the endpoint is created.  See
 fi_getinfo for more details on iov formats.
-.SS "fi_tsendto / fi_tsendmemto"
-The fi_tsendto and fi_tsendmemto functions are equivalent to fi_tsend and
-fi_tsendmem, respectively, for unconnected endpoints.
+.SS "fi_tsendto"
+The fi_tsendto function is equivalent to fi_tsend for unconnected endpoints.
 .SS "fi_tsendmsg"
 The fi_tsendmsg call supports data transfers over both connected and unconnected
 endpoints, with the ability to control the send operation per call through the
@@ -151,14 +135,15 @@ use of flags.  The fi_tsendmsg function takes a struct fi_msg_tagged as input.
 .PP
 .nf
 struct fi_msg_tagged {
-	const void *msg_iov;   /* scatter-gather array */
-	size_t      iov_count; /* # elements in msg_iov */
-	const void *addr;      /* optional address */
-	uint64_t    tag;       /* tag associated with message */
-	uint64_t    ignore;    /* mask applied to tag for receives */
-	void       *context;   /* user-defined context */
-	uint64_t    data;      /* optional immediate data */
-	int         flow;      /* message steering */
+	const struct iovec *msg_iov; /* scatter-gather array */
+	void               *desc;    /* data descriptor */
+	size_t             iov_count;/* # elements in msg_iov *
+	const void         *addr;    /* optional endpoint address */
+	uint64_t           tag;      /* tag associated with message */
+	uint64_t           ignore;   /* mask applied to tag for receives */
+	void               *context; /* user-defined context */
+	uint64_t           data;     /* optional immediate data */
+	int                flow;     /* message steering */
 };
 .fi
 .SS "fi_trecv"
@@ -166,16 +151,10 @@ The fi_trecv call posts a data buffer to the receive queue of the corresponding
 endpoint.  Posted receives are matched with inbound sends in the order in which
 they were posted.  Message boundaries are maintained.  The order
 in which the receives complete is dependent on the endpoint type and protocol.
-.SS "fi_trecvmem"
-The fi_trecvmem is similar to fi_trecv, but requires that the posted buffer be
-registered with the resource domain associated with the endpoint.  The fi_trecvv
-allows the user to post a scatter-gather list of buffers to receive a single
-inbound receive.  That is, the list of buffers match with one remote send.
-.SS "f_trecvfrom / fi_trecvmemfrom"
-The fi_trecvfrom and fi_trecvmemfrom calls are equivalent to fi_trecv and
-fi_trecvfrom for unconnected endpoints.  These calls are used to indicate
-that a buffer should be posted to receive incoming data from a specific
-remote endpoint.
+.SS "f_trecvfrom"
+The fi_trecvfrom call is  equivalent to fi_trecv for unconnected endpoints.
+It is used to indicate that a buffer should be posted to receive incoming data
+from a specific remote endpoint.
 .SS "fi_trecvmsg"
 The fi_trecvmsg call supports posting buffers over both connected and unconnected
 endpoints, with the ability to control the receive operation per call through the
