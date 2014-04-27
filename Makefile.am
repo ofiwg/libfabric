@@ -61,7 +61,6 @@ librdmacm_librspreload_la_LIBADD = \
 	$(top_builddir)/librdmacm/librdmacm.la
 
 src_libfabric_la_SOURCES = src/fabric.c \
-	src/ucma.c \
 	prov/ibverbs/src/fi_verbs.c
 
 if HAVE_PSM
