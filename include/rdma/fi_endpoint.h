@@ -96,6 +96,7 @@ enum {
 	FI_OPT_MAX_BUFFERED_SEND,	/* size_t */
 	FI_OPT_TOTAL_BUFFERED_SEND,	/* size_t */
 	FI_OPT_TOTAL_BUFFERED_RECV,	/* size_t */
+	FI_OPT_MAX_MESSAGE_SIZE,	/* size_t */
 };
 
 struct fi_ops_ep {
