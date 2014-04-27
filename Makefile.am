@@ -62,7 +62,7 @@ librdmacm_librspreload_la_LIBADD = \
 
 src_libfabric_la_SOURCES = src/fabric.c \
 	src/ucma.c \
-	prov/ibverbs/fi_verbs.c
+	prov/ibverbs/src/fi_verbs.c
 
 if HAVE_PSM
 src_libfabric_la_SOURCES += prov/psm/src/psmx_init.c \
