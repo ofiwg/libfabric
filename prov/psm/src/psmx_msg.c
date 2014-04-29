@@ -142,7 +142,7 @@ static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
 
 	flags = fid_ep->flags;
 
-	send_flag = (flags & FI_ACK) ? PSM_MQ_FLAG_SENDSYNC : 0;
+	send_flag = 0;
 	psm_tag = fid_ep->domain->psm_epid | PSMX_NONMATCH_BIT;
 
 	if (!(flags & FI_BLOCK)) {

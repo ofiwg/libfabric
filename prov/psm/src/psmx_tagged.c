@@ -127,7 +127,7 @@ static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
 
 	flags = fid_ep->flags;
 
-	send_flag = (flags & FI_ACK) ? PSM_MQ_FLAG_SENDSYNC : 0;
+	send_flag = 0;
 	psm_tag = tag & (~fid_ep->domain->reserved_tag_bits);
 
 	if (!(flags & FI_BLOCK)) {
