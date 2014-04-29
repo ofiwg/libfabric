@@ -182,10 +182,18 @@ int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *conte
 		fid_domain->ns_thread = 0;
 
 	if (info->protocol_cap & FI_PROTO_CAP_MSG)
-		fid_domain->reserved_tag_bits = PSMX_MSG_BIT;
+		fid_domain->reserved_tag_bits |= PSMX_MSG_BIT;
 
 	*fid = &fid_domain->domain.fid;
+
 	return 0;
+
+err_out_fini_mq:
+	if (fid_domain->ns_thread) {
+		pthread_cancel(fid_domain->ns_thread);
+		pthread_join(fid_domain->ns_thread, NULL);
+	}
+	psm_mq_finalize(fid_domain->psm_mq);
 
 err_out_close_ep:
 	if (psm_ep_close(fid_domain->psm_ep, PSM_EP_CLOSE_GRACEFUL,

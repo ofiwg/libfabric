@@ -39,6 +39,7 @@ static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
 				void *src_addr, size_t *addrlen)
 {
 	struct psmx_fid_ec *fid_ec;
+	struct psmx_fid_domain *fid_domain;
 	psm_mq_req_t psm_req;
 	psm_mq_status_t psm_status;
 	struct fi_ec_tagged_entry *ece;
@@ -51,6 +52,8 @@ static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
 
 	if (len < sizeof *ece)
 		return -FI_ETOOSMALL;
+
+	fid_domain = fid_ec->domain;
 
 again:
 	err = psm_mq_ipeek(fid_ec->domain->psm_mq, &psm_req, NULL);
@@ -94,7 +97,6 @@ again:
 					src_addr);
 			}
 		}
-
 		return 1;
 	} else if (err == PSM_MQ_NO_COMPLETIONS) {
 		return 0;

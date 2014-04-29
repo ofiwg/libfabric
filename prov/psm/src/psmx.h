@@ -33,18 +33,21 @@ extern "C" {
 
 #define PFX "libfabric:psm"
 
+#ifndef MIN
+#define MIN(x,y) ((x)<(y)?(x):(y))
+#endif
+
 #define PSMX_MR_SIGNATURE (0x05F109530F1D03B0ULL) /* "SFI PSM FID MR" */
 #define PSMX_TIME_OUT	120
 #define PSMX_SUPPORTED_FLAGS (FI_BLOCK | FI_EXCL | \
 			      FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
 			      FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			      FI_BUFFERED_SEND | FI_BUFFERED_RECV | \
-			      FI_MULTI_RECV | FI_SYNC | FI_REMOTE_COMPLETE \
+			      FI_MULTI_RECV | FI_SYNC | FI_REMOTE_COMPLETE | \
 			      FI_EVENT | FI_REMOTE_SIGNAL | FI_CANCEL)
 #define PSMX_DEFAULT_FLAGS   (0)
-#define PSMX_PROTO_CAPS	     (FI_PROTO_CAP_TAGGED | FI_PROTO_CAP_MSG | \
-			      FI_PROTO_CAP_ATOMICS | \
-			      FI_PROTO_CAP_RMA)
+
+#define PSMX_PROTO_CAPS	     (FI_PROTO_CAP_TAGGED | FI_PROTO_CAP_MSG)
 
 #define PSMX_OUI_INTEL	0x0002b3L
 #define PSMX_PROTOCOL	0x0001
@@ -55,6 +58,16 @@ extern "C" {
 
 #define PSMX_MSG_BIT		(0x8000000000000000ULL)
 #define PSMX_NOCOMP_CONTEXT	((void *)0xFFFF0000FFFF0000ULL)
+
+struct psmx_event {
+	struct fi_ec_tagged_entry ece;
+	struct psmx_event *next;
+};
+
+struct psmx_event_queue {
+	struct psmx_event	*head;
+	struct psmx_event	*tail;
+};
 
 struct psmx_fid_domain {
 	struct fid_domain	domain;
@@ -68,7 +81,7 @@ struct psmx_fid_domain {
 	 * purpose. The tag-matching functions automatically treat these bits
 	 * as 0. This field is a bit mask, with reserved bits valued as "1".
 	 */
-	uint64_t		reserved_tag_bits;
+	uint64_t		reserved_tag_bits; 
 };
 
 struct psmx_fid_ec {
@@ -110,11 +123,10 @@ struct psmx_fid_mr {
 	struct iovec		iov[0];	/* must be the last field */
 };
 
+extern struct fi_ops_mr		psmx_mr_ops;
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
 extern struct fi_ops_msg	psmx_msg_ops;
-extern struct fi_ops_rma	psmx_rma_ops;
-extern struct fi_ops_mr		psmx_mr_ops;
 
 void	psmx_ini(void);
 void	psmx_fini(void);

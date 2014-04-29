@@ -335,10 +335,9 @@ int psmx_ep_open(fid_t domain, struct fi_info *info, fid_t *fid, void *context)
 
 	if (info) {
 		fid_ep->flags = info->flags;
-		if (info->protocol_cap & FI_PROTO_CAP_MSG)
+		if (info->protocol_cap & FI_PROTO_CAP_MSG) {
 			fid_ep->ep.msg = &psmx_msg_ops;
-		if (info->protocol_cap & FI_PROTO_CAP_RMA)
-			fid_ep->ep.rma = &psmx_rma_ops;
+		}
 	}
 
 	psmx_ep_check_flags(fid_ep);
