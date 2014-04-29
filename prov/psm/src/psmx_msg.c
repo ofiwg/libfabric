@@ -39,9 +39,9 @@ static inline ssize_t _psmx_recvfrom(fid_t fid, void *buf, size_t len,
 	struct psmx_fid_ep *fid_ep;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag, psm_tagsel;
+	struct fi_context *fi_context;
 	int err;
 	int recv_flag = 0;
-	void *ctxt;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	assert(fid_ep->domain);
@@ -56,19 +56,27 @@ static inline ssize_t _psmx_recvfrom(fid_t fid, void *buf, size_t len,
 		psm_tagsel = PSMX_MSG_BIT;
 	}
 
+	if (fid_ep->use_fi_context) {
+		if (!context)
+			return -EINVAL;
 
-	ctxt = ((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT)) ?
-			PSMX_NOCOMP_CONTEXT : context;
+		fi_context = context;
+		fi_context->internal[1] =
+			((fid_ep->completion_mask | (flags & FI_EVENT)) == PSMX_COMP_ON) ?
+			0 : PSMX_NOCOMP_CONTEXT;
+	}
+	else {
+		fi_context = NULL;
+	}
 
 	err = psm_mq_irecv(fid_ep->domain->psm_mq,
 			   psm_tag, psm_tagsel, recv_flag,
-			   buf, len, ctxt, &psm_req);
-
+			   buf, len, (void *)fi_context, &psm_req);
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	if (context)
-		((struct fi_context *)context)->internal[0] = psm_req;
+	if (fi_context)
+		fi_context->internal[0] = psm_req;
 
 	return 0;
 }
@@ -145,8 +153,8 @@ static inline ssize_t _psmx_sendto(fid_t fid, const void *buf, size_t len,
 	psm_epaddr_t psm_epaddr;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag;
+	struct fi_context * fi_context;
 	int err;
-	void *ctxt;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	assert(fid_ep->domain);
@@ -162,17 +170,27 @@ static inline ssize_t _psmx_sendto(fid_t fid, const void *buf, size_t len,
 		else
 			return psmx_errno(err);
 	}
-	else {
-		ctxt = ((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT)) ?
-				PSMX_NOCOMP_CONTEXT : context;
-		err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr,
-				   send_flag, psm_tag, buf, len, ctxt, &psm_req);
 
-		if (context)
-			((struct fi_context *)context)->internal[0] = psm_req;
+	if (fid_ep->use_fi_context) {
+		if (!context)
+			return -EINVAL;
 
-		return 0;
+		fi_context = context;
+		fi_context->internal[1] =
+			((fid_ep->completion_mask | (flags & FI_EVENT)) == PSMX_COMP_ON) ?
+			0 : PSMX_NOCOMP_CONTEXT;
 	}
+	else {
+		fi_context = NULL;
+	}
+
+	err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr, send_flag,
+				psm_tag, buf, len, (void *)fi_context, &psm_req);
+
+	if (fi_context)
+		fi_context->internal[0] = psm_req;
+
+	return 0;
 }
 
 static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,

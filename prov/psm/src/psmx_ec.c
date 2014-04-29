@@ -42,6 +42,7 @@ static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
 	psm_mq_req_t psm_req;
 	psm_mq_status_t psm_status;
 	struct fi_ec_tagged_entry *ece;
+	struct fi_context *fi_context;
 	int err;
 
 	fid_ec = container_of(fid, struct psmx_fid_ec, ec.fid);
@@ -56,7 +57,12 @@ again:
 	if (err == PSM_OK) {
 		err = psm_mq_test(&psm_req, &psm_status);
 
-		if (psm_status.context == PSMX_NOCOMP_CONTEXT)
+		fi_context = psm_status.context;
+
+		if (!fi_context) /* only possible when FI_SYNC is set */
+			goto again;
+
+		if (fi_context->internal[1] == PSMX_NOCOMP_CONTEXT)
 			goto again;
 
 		if (psm_status.error_code) {

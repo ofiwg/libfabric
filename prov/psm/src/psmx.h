@@ -49,8 +49,12 @@ extern "C" {
 #define PSMX_OUI_INTEL	0x0002b3L
 #define PSMX_PROTOCOL	0x0001
 
-#define PSMX_MSG_BIT (0x8000000000000000ULL)
-#define PSMX_NOCOMP_CONTEXT ((void *)0xFFFF0000FFFF0000ULL)
+#define PSMX_COMP_ON		(-1ULL)
+#define PSMX_COMP_OFF		(0)
+#define PSMX_COMP_EVENT		(~FI_EVENT)
+
+#define PSMX_MSG_BIT		(0x8000000000000000ULL)
+#define PSMX_NOCOMP_CONTEXT	((void *)0xFFFF0000FFFF0000ULL)
 
 struct psmx_fid_domain {
 	struct fid_domain	domain;
@@ -88,9 +92,11 @@ struct psmx_fid_ep {
 	struct psmx_fid_ec	*ec;
 	struct psmx_fid_av	*av;
 	uint64_t		flags;
+	uint64_t		completion_mask;
+	int			use_fi_context;
+	int			connected;
 	psm_epid_t		peer_psm_epid;
 	psm_epaddr_t		peer_psm_epaddr;
-	int			connected;
 };
 
 struct psmx_fid_mr {
