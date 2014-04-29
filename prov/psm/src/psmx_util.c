@@ -268,3 +268,29 @@ int psmx_errno(int err)
 		return -FI_EOTHER;
 }
 
+/*
+ * PSM context sharing requires some information from the MPI process manager.
+ * Try to get the needed information from the environment.
+ */
+void psmx_query_mpi(void)
+{
+	char *s;
+	char env[32];
+	int local_size = -1;
+	int local_rank = -1;
+
+	/* Check Open MPI */
+	if ((s = getenv("OMPI_COMM_WORLD_LOCAL_SIZE"))) {
+		local_size = atoi(s);
+		if ((s = getenv("OMPI_COMM_WORLD_LOCAL_RANK")))
+			local_rank = atoi(s);
+		snprintf(env, sizeof(env), "%d", local_size);
+		setenv("MPI_LOCALNRANKS", env, 0);
+		snprintf(env, sizeof(env), "%d", local_rank);
+		setenv("MPI_LOCALRANKID", env, 0);
+		return;
+	}
+
+	/* TODO: check other MPI */
+}
+

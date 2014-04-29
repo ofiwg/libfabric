@@ -137,6 +137,8 @@ int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *conte
 	if (!info->domain_name || strncmp(info->domain_name, "psm", 3))
 		return -EINVAL;
 
+	psmx_query_mpi();
+
 	fid_domain = (struct psmx_fid_domain *) calloc(1, sizeof *fid_domain);
 	if (!fid_domain)
 		goto err_out;
