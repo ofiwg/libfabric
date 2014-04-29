@@ -59,6 +59,7 @@ static int psmx_domain_close(fid_t fid)
 static int psmx_domain_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
 	struct fi_resource ress;
+	int err;
 	int i;
 
 	for (i=0; i<nfids; i++) {
@@ -70,7 +71,11 @@ static int psmx_domain_bind(fid_t fid, struct fi_resource *fids, int nfids)
 				return -EINVAL;
 			ress.fid = fid;
 			ress.flags = fids[i].flags;
-			return fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+			err = fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+			if (err)
+				return err;
+			break;
+
 		default:
 			return -ENOSYS;
 		}
@@ -95,6 +100,17 @@ static int psmx_domain_query(fid_t fid, struct fi_domain_attr *attr, size_t *att
 
 static int psmx_progress(fid_t fid)
 {
+	struct psmx_fid_domain *fid_domain;
+
+	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
+	psm_poll(fid_domain->psm_ep);
+
+	return 0;
+}
+
+static int psmx_if_open(fid_t fid, const char *name, uint64_t flags,
+			fid_t *fif, void *context)
+{
 	return -ENOSYS;
 }
 
@@ -113,17 +129,22 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.av_open = psmx_av_open,
 	.ec_open = psmx_ec_open,
 	.endpoint = psmx_ep_open,
-
+	.if_open = psmx_if_open,
 };
 
 int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
+	struct psm_ep_open_opts opts;
 	int err = -ENOMEM;
 	char *s;
 
+	psmx_debug("%s\n", __func__);
+
 	if (!info->domain_name || strncmp(info->domain_name, "psm", 3))
 		return -EINVAL;
+
+	psmx_query_mpi();
 
 	fid_domain = (struct psmx_fid_domain *) calloc(1, sizeof *fid_domain);
 	if (!fid_domain)
@@ -134,8 +155,11 @@ int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *conte
 	fid_domain->domain.fid.context = context;
 	fid_domain->domain.fid.ops = &psmx_fi_ops;
 	fid_domain->domain.ops = &psmx_domain_ops;
+	fid_domain->domain.mr = &psmx_mr_ops;
 
-	err = psm_ep_open(info->auth_key, NULL,
+	psm_ep_open_opts_get_defaults(&opts);
+
+	err = psm_ep_open(info->auth_key, &opts,
 			  &fid_domain->psm_ep, &fid_domain->psm_epid);
 	if (err != PSM_OK) {
 		fprintf(stderr, "%s: psm_ep_open returns %d, errno=%d\n",
@@ -165,15 +189,10 @@ int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *conte
 		fid_domain->ns_thread = 0;
 
 	if (info->protocol_cap & FI_PROTO_CAP_MSG)
-		fid_domain->reserved_tag_bits = PSMX_NONMATCH_BIT;
-
-	if (info->protocol_cap & FI_PROTO_CAP_RMA) {
-		err = psmx_am_init(fid_domain->psm_ep);
-		if (err) 
-			goto err_out_fini_mq;
-	}
+		fid_domain->reserved_tag_bits |= PSMX_MSG_BIT;
 
 	*fid = &fid_domain->domain.fid;
+
 	return 0;
 
 err_out_fini_mq:

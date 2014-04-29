@@ -11,6 +11,7 @@ extern "C" {
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -32,18 +33,38 @@ extern "C" {
 
 #define PFX "libfabric:psm"
 
+#ifndef MIN
+#define MIN(x,y) ((x)<(y)?(x):(y))
+#endif
+
+#define FI_SYNC	0
+
+#define PSMX_MR_SIGNATURE (0x05F109530F1D03B0ULL) /* "SFI PSM FID MR" */
 #define PSMX_TIME_OUT	120
 #define PSMX_SUPPORTED_FLAGS (FI_BLOCK | FI_EXCL | \
+			      FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
+			      FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			      FI_BUFFERED_SEND | FI_BUFFERED_RECV | \
-			      FI_EVENT | FI_CANCEL)
+			      FI_MULTI_RECV | FI_SYNC | FI_REMOTE_COMPLETE | \
+			      FI_EVENT | FI_REMOTE_SIGNAL | FI_CANCEL)
 #define PSMX_DEFAULT_FLAGS   (0)
-#define PSMX_PROTO_CAPS	     (FI_PROTO_CAP_TAGGED | FI_PROTO_CAP_MSG | \
-			      FI_PROTO_CAP_RMA)
+
+#define PSMX_PROTO_CAPS	     (FI_PROTO_CAP_TAGGED | FI_PROTO_CAP_MSG)
 
 #define PSMX_OUI_INTEL	0x0002b3L
 #define PSMX_PROTOCOL	0x0001
 
-#define PSMX_NONMATCH_BIT (0x8000000000000000ULL)
+#define PSMX_COMP_ON		(-1ULL)
+#define PSMX_COMP_OFF		(0)
+#define PSMX_COMP_EVENT		(~FI_EVENT)
+
+#define PSMX_MSG_BIT		(0x8000000000000000ULL)
+#define PSMX_NOCOMP_CONTEXT	((void *)0xFFFF0000FFFF0000ULL)
+
+#define PSMX_CTXT_REQ(fi_context)	((fi_context)->internal[0])
+#define PSMX_CTXT_TYPE(fi_context)	((fi_context)->internal[1])
+#define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
+#define PSMX_CTXT_EC(fi_context)	((fi_context)->internal[3])
 
 struct psmx_fid_domain {
 	struct fid_domain	domain;
@@ -60,9 +81,26 @@ struct psmx_fid_domain {
 	uint64_t		reserved_tag_bits; 
 };
 
-struct psmx_ec_entry {
-	struct fi_ec_tagged_entry ece;
-	struct psmx_ec_entry *next;
+struct psmx_event {
+	union {
+		struct fi_ec_entry		context;
+		struct fi_ec_comp_entry		comp;
+		struct fi_ec_data_entry		data;
+		struct fi_ec_tagged_entry	tagged;
+		struct fi_ec_err_entry		err;
+		struct fi_ec_tagged_err_entry	tagged_err;
+		struct fi_ec_cm_entry		cm;
+		struct fi_ec_counter_entry	counter;
+		struct fi_ec_counter_err_entry	counter_err;
+	} ece;
+	int format;
+	uint64_t source;
+	struct psmx_event *next;
+};
+
+struct psmx_event_queue {
+	struct psmx_event	*head;
+	struct psmx_event	*tail;
 };
 
 struct psmx_fid_ec {
@@ -70,11 +108,13 @@ struct psmx_fid_ec {
 	struct psmx_fid_domain	*domain;
 	int			type;
 	int 			format;
-	struct psmx_ec_entry	*queue_head;
-	struct psmx_ec_entry	*queue_tail;
-	struct psmx_ec_entry	*free_head;
-	struct psmx_ec_entry	*free_tail;
-	int			queue_priority;
+	int			entry_size;
+	struct psmx_event_queue	event_queue;
+	int			err_format;
+	int			err_entry_size;
+	struct psmx_event	*pending_error;
+	uint64_t		num_events;
+	uint64_t		num_errors;
 };
 
 struct psmx_fid_av {
@@ -91,19 +131,29 @@ struct psmx_fid_ep {
 	struct psmx_fid_ec	*ec;
 	struct psmx_fid_av	*av;
 	uint64_t		flags;
+	uint64_t		completion_mask;
+	int			use_fi_context;
+	int			connected;
 	psm_epid_t		peer_psm_epid;
 	psm_epaddr_t		peer_psm_epaddr;
-	int			connected;
 };
 
 struct psmx_fid_mr {
 	struct fid_mr		mr;
+	struct psmx_fid_domain	*domain;
+	struct psmx_fid_ep	*ep;
+	struct psmx_fid_ec	*ec;
+	uint64_t		signature;
+	uint64_t		access;
+	uint64_t		flags;
+	size_t			iov_count;
+	struct iovec		iov[0];	/* must be the last field */
 };
 
+extern struct fi_ops_mr		psmx_mr_ops;
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
 extern struct fi_ops_msg	psmx_msg_ops;
-extern struct fi_ops_rma	psmx_rma_ops;
 
 void	psmx_ini(void);
 void	psmx_fini(void);
@@ -113,24 +163,21 @@ int	psmx_ep_open(fid_t domain, struct fi_info *info, fid_t *fid, void *context);
 int	psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context);
 int	psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context);
 
-int	psmx_mr_reg(fid_t fid, const void *buf, size_t len,
-		       struct fi_mr_attr *attr, fid_t *mr, void *context);
-int	psmx_mr_regv(fid_t fid, const struct iovec *iov, size_t count,
-			struct fi_mr_attr *attr, fid_t *mr, void *context);
-
-struct fi_ec_tagged_entry *psmx_ec_alloc_entry(struct psmx_fid_ec *fid_ec);
-int	psmx_ec_enqueue_entry(struct psmx_fid_ec *fid_ec, struct fi_ec_tagged_entry *ece);
-struct fi_ec_tagged_entry *psmx_ec_dequeue_entry(struct psmx_fid_ec *fid_ec);
-int	psmx_ec_free_entry(struct psmx_fid_ec *fid_ec, struct fi_ec_tagged_entry *ece);
-
 void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername, psm_uuid_t uuid);
 void	psmx_string_to_uuid(const char *s, psm_uuid_t uuid);
 int	psmx_uuid_to_port(psm_uuid_t uuid);
 int	psmx_errno(int err);
 int	psmx_epid_to_epaddr(psm_ep_t ep, psm_epid_t epid, psm_epaddr_t *epaddr);
+void	psmx_query_mpi(void);
+void	psmx_debug(char *fmt, ...);
 
-int	psmx_am_init(psm_ep_t psm_ep);
+void	psmx_ec_enqueue_event(struct psmx_fid_ec *fid_ec, struct psmx_event *event);
+struct	psmx_event *psmx_ec_create_event(struct psmx_fid_ec *fid_ec,
+					void *op_context, void *buf,
+					uint64_t flags, size_t len,
+					uint64_t data, uint64_t tag,
+					size_t olen, int err);
 
 #ifdef __cplusplus
 }

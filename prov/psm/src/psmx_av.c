@@ -106,6 +106,7 @@ static int psmx_av_remove(fid_t fid, void *fi_addr, size_t count,
 	struct psmx_fid_av *fid_av;
 	int err = PSM_OK;
 	fid_av = container_of(fid, struct psmx_fid_av, av.fid);
+
 	return psmx_errno(err);
 }
 
@@ -120,6 +121,7 @@ static int psmx_av_close(fid_t fid)
 static int psmx_av_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
 	struct fi_resource ress;
+	int err;
 	int i;
 
 	for (i=0; i<nfids; i++) {
@@ -131,7 +133,11 @@ static int psmx_av_bind(fid_t fid, struct fi_resource *fids, int nfids)
 				return -EINVAL;
 			ress.fid = fid;
 			ress.flags = fids[i].flags;
-			return fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+			err = fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+			if (err)
+				return err;
+			break;
+
 		default:
 			return -ENOSYS;
 		}
@@ -173,12 +179,16 @@ int psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context)
 
 	if (attr) {
 		if ((attr->mask & FI_AV_ATTR_TYPE) &&
-			attr->type != FI_AV_MAP)
+			attr->type != FI_AV_MAP) {
+			psmx_debug("%s: attr->type=%d, supported=%d\n", __func__, attr->type, FI_AV_MAP);
 			return -ENOSYS;
+		}
 
 		if ((attr->mask & FI_AV_ATTR_ADDR_FORMAT) &&
-			attr->addr_format != FI_ADDR)
+			attr->addr_format != FI_ADDR) {
+			psmx_debug("%s: attr->addr_format=%d, supported=%d\n", __func__, attr->addr_format, FI_ADDR);
 			return -ENOSYS;
+		}
 
 		if ((attr->mask & FI_AV_ATTR_ADDRLEN) &&
 			attr->addrlen != sizeof(psm_epaddr_t))

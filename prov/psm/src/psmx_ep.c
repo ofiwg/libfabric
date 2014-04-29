@@ -32,22 +32,41 @@
 
 #include "psmx.h"
 
-static ssize_t psmx_ep_cancel(fid_t fid, struct fi_context *context)
+static int psmx_ep_check_flags(struct psmx_fid_ep *ep)
+{
+	ep->use_fi_context = 1;
+	ep->completion_mask = PSMX_COMP_ON;
+
+	if (ep->flags & FI_SYNC) {
+		ep->completion_mask = PSMX_COMP_OFF;
+		if (!(ep->flags & FI_CANCEL))
+			ep->use_fi_context = 0;
+	}
+	else if (ep->flags & FI_EVENT) {
+		ep->completion_mask = PSMX_COMP_EVENT;
+	}
+
+	return 0;
+}
+
+static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
+	psm_mq_status_t status;
+	struct fi_context *fi_context = context;
 	int err;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	if (!fid_ep->domain)
 		return -EBADF;
 
-	if (!context)
+	if (!fi_context)
 		return -EINVAL;
 
-	if (context->internal[0] == NULL)
-		return 0;
+	err = psm_mq_cancel((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context));
+	if (err == PSM_OK)
+		err = psm_mq_test((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context), &status);
 
-	err = psm_mq_cancel((psm_mq_req_t *)&context->internal[0]);
 	return psmx_errno(err);
 }
 
@@ -86,6 +105,43 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 		*optlen = sizeof(size_t);
 		break;
 
+	case FI_OPT_MAX_MESSAGE_SIZE:
+		if (!optval)
+			return 0;
+
+		if (!optlen || *optlen < sizeof(size_t))
+			return -EINVAL;
+
+		if (!fid_ep->domain)
+			return -EBADF;
+
+		/* PSM message len is uint32_t. */
+		*(size_t *)optval = 0xFFFFFFFF;
+		*optlen = sizeof(size_t);
+		break;
+
+	case FI_OPT_TOTAL_BUFFERED_RECV:
+		if (!optval)
+			return 0;
+
+		if (!optlen || *optlen < sizeof(size_t))
+			return -EINVAL;
+
+		if (!fid_ep->domain)
+			return -EBADF;
+
+		err = psm_mq_getopt(fid_ep->domain->psm_mq, PSM_MQ_MAX_SYSBUF_MBYTES, &size);
+		if (err)
+			return psmx_errno(err);
+
+		*(size_t *)optval = size * 1048576;
+		*optlen = sizeof(size_t);
+		break;
+
+		break;
+
+	case FI_OPT_TOTAL_BUFFERED_SEND:
+		/* fall through for now */
 	default:
 		return -ENOPROTOOPT;
 	}
@@ -132,6 +188,11 @@ static int psmx_ep_setopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
+static int psmx_ep_enable(fid_t fid)
+{
+	return 0;
+}
+
 static int psmx_ep_close(fid_t fid)
 {
 	struct psmx_fid_ep *fid_ep;
@@ -142,22 +203,24 @@ static int psmx_ep_close(fid_t fid)
 	return 0;
 }
 
-static int psmx_ep_bind(fid_t fid, struct fi_resource *ress, int nress)
+static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
 	int i;
 	struct psmx_fid_ep *fid_ep;
 	struct psmx_fid_domain *domain;
 	struct psmx_fid_av *av;
 	struct psmx_fid_ec *ec;
+	struct fi_resource ress;
+	int err;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
-	for (i=0; i<nress; i++) {
-		if (!ress[i].fid)
+	for (i=0; i<nfids; i++) {
+		if (!fids[i].fid)
 			return -EINVAL;
-		switch (ress[i].fid->fclass) {
+		switch (fids[i].fid->fclass) {
 		case FID_CLASS_DOMAIN:
-			domain = container_of(ress[i].fid,
+			domain = container_of(fids[i].fid,
 					struct psmx_fid_domain, domain.fid);
 			if (fid_ep->domain && fid_ep->domain != domain)
 				return -EEXIST;
@@ -166,7 +229,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *ress, int nress)
 
 		case FID_CLASS_EC:
 			/* TODO: check ress flags for send/recv EQs */
-			ec = container_of(ress[i].fid,
+			ec = container_of(fids[i].fid,
 					struct psmx_fid_ec, ec.fid);
 			if (fid_ep->ec && fid_ep->ec != ec)
 				return -EEXIST;
@@ -177,7 +240,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *ress, int nress)
 			break;
 
 		case FID_CLASS_AV:
-			av = container_of(ress[i].fid,
+			av = container_of(fids[i].fid,
 					struct psmx_fid_av, av.fid);
 			if (fid_ep->av && fid_ep->av != av)
 				return -EEXIST;
@@ -185,6 +248,16 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *ress, int nress)
 				return -EINVAL;
 			fid_ep->av = av;
 			fid_ep->domain = av->domain;
+			break;
+
+		case FID_CLASS_MR:
+			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
+				return -EINVAL;
+                        ress.fid = fid;
+                        ress.flags = fids[i].flags;
+                        err = fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+			if (err)
+				return err;
 			break;
 
 		default:
@@ -197,11 +270,13 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *ress, int nress)
 
 static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
 {
-	return -ENOSYS;
+	/* FIXME: perform the real sync operation */
+	return 0;
 }
 
 static int psmx_ep_control(fid_t fid, int command, void *arg)
 {
+	struct fi_alias *alias;
 	struct psmx_fid_ep *fid_ep, *new_fid_ep;
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
@@ -210,12 +285,16 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 		new_fid_ep = (struct psmx_fid_ep *) calloc(1, sizeof *fid_ep);
 		if (!new_fid_ep)
 			return -ENOMEM;
+		alias = arg;
 		*new_fid_ep = *fid_ep;
-		*(fid_t *)arg = &new_fid_ep->ep.fid;
+		new_fid_ep->flags = alias->flags;
+		psmx_ep_check_flags(new_fid_ep);
+		*alias->fid = &new_fid_ep->ep.fid;
 		break;
 
 	case FI_SETFIDFLAG:
 		fid_ep->flags = *(uint64_t *)arg;
+		psmx_ep_check_flags(fid_ep);
 		break;
 
 	case FI_GETFIDFLAG:
@@ -244,6 +323,7 @@ static struct fi_ops_ep psmx_ep_ops = {
 	.cancel = psmx_ep_cancel,
 	.getopt = psmx_ep_getopt,
 	.setopt = psmx_ep_setopt,
+	.enable = psmx_ep_enable,
 };
 
 int psmx_ep_open(fid_t domain, struct fi_info *info, fid_t *fid, void *context)
@@ -264,12 +344,12 @@ int psmx_ep_open(fid_t domain, struct fi_info *info, fid_t *fid, void *context)
 
 	if (info) {
 		fid_ep->flags = info->flags;
-		if (info->protocol_cap & FI_PROTO_CAP_MSG)
+		if (info->protocol_cap & FI_PROTO_CAP_MSG) {
 			fid_ep->ep.msg = &psmx_msg_ops;
-		if (info->protocol_cap & FI_PROTO_CAP_RMA)
-			fid_ep->ep.rma = &psmx_rma_ops;
+		}
 	}
 
+	psmx_ep_check_flags(fid_ep);
 	*fid = &fid_ep->ep.fid;
 
 	return 0;

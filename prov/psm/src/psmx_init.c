@@ -43,8 +43,10 @@ static int psmx_getinfo(const char *node, const char *service,
 	char *s;
 	int type = FID_RDM;
 
-	if (psm_ep_num_devunits(&cnt) || !cnt)
+	if (psm_ep_num_devunits(&cnt) || !cnt) {
+		psmx_debug("%s: no PSM device is found.\n", __func__);
 		return -FI_ENODATA;
+	}
 
 	uuid = calloc(1, sizeof(psm_uuid_t));
 	if (!uuid) 
@@ -70,27 +72,40 @@ static int psmx_getinfo(const char *node, const char *service,
 			type = FID_MSG;
 			break;
 		default:
+			psmx_debug("%s: hints->type=%d, supported=%d,%d,%d.\n",
+					__func__, hints->type, FID_UNSPEC, FID_RDM, FID_MSG);
 			*info = NULL;
 			return -ENODATA;
 		}
 
 		switch (hints->protocol) {
 		case FI_PROTO_UNSPEC:
-			  if ((hints->protocol_cap & PSMX_PROTO_CAPS) == hints->protocol_cap)
-				  break;
+			if ((hints->protocol_cap & PSMX_PROTO_CAPS) == hints->protocol_cap)
+				break;
+
+			psmx_debug("%s: hints->protocol_cap=0x%llx, supported=0x%llx\n",
+					__func__, hints->protocol_cap, PSMX_PROTO_CAPS);
+
 		/* fall through */
 		default:
+			psmx_debug("%s: hints->protocol=%d, supported=%d\n",
+					__func__, hints->protocol, FI_PROTO_UNSPEC);
 			*info = NULL;
 			return -ENODATA;
 		}
 
 		flags = hints->flags;
 		if ((flags & PSMX_SUPPORTED_FLAGS) != flags) {
+			psmx_debug("%s: hints->flags=0x%llx, supported=0x%llx\n",
+					__func__, hints->flags, PSMX_SUPPORTED_FLAGS);
 			*info = NULL;
 			return -ENODATA;
 		}
 
 		if (hints->domain_name && strncmp(hints->domain_name, "psm", 3)) {
+			psmx_debug("%s: hints->domain_name=%s, supported=psm\n",
+					__func__, hints->domain_name);
+
 			*info = NULL;
 			return -ENODATA;
 		}
@@ -124,6 +139,7 @@ static int psmx_getinfo(const char *node, const char *service,
 	psmx_info->auth_keylen = sizeof(psm_uuid_t);
 	psmx_info->auth_key = uuid;
 	psmx_info->shared_fd = -1;
+	psmx_info->fabric_name = strdup("psm");
 	psmx_info->domain_name = strdup("psm");
 	psmx_info->datalen = 0;
 	psmx_info->data = NULL;
