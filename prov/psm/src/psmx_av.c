@@ -57,6 +57,7 @@ static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 {
 	struct psmx_fid_av *fid_av;
 	psm_error_t *errors;
+	int *mask;
 	int err;
 	int i;
 
@@ -66,20 +67,32 @@ static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 	if (!errors)
 		return -ENOMEM;
 
-	/* FIXME: check for existing connections and set the mask accordingly */
+	mask = (int *) calloc(count, sizeof *mask);
+	if (!mask) {
+		free(errors);
+		return -ENOMEM;
+	}
+
+	/* prevent connecting to the same ep twice, which is fatal in PSM */
+	for (i=0; i<count; i++) {
+		psm_epconn_t epconn;
+		if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK)
+			mask[i] = 1;
+	}
 
 	err = psm_ep_connect(fid_av->domain->psm_ep, count, 
-			(psm_epid_t *) addr, NULL, errors,
+			(psm_epid_t *) addr, mask, errors,
 			(psm_epaddr_t *) fi_addr, 30*1e9);
 
 	for (i=0; i<count; i++){
-		if (errors[i] == PSM_OK) {
+		if (!mask[i] && errors[i] == PSM_OK) {
 			psm_epaddr_setctxt(
 				((psm_epaddr_t *) fi_addr)[i],
 				(void *)((psm_epid_t *) addr)[i]);
 		}
 	}
 
+	free(mask);
 	free(errors);
 
 	return psmx_errno(err);
