@@ -77,6 +77,8 @@ static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 	for (i=0; i<count; i++) {
 		psm_epconn_t epconn;
 		if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK)
+			((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
+		else
 			mask[i] = 1;
 	}
 
@@ -85,7 +87,7 @@ static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 			(psm_epaddr_t *) fi_addr, 30*1e9);
 
 	for (i=0; i<count; i++){
-		if (!mask[i] && errors[i] == PSM_OK) {
+		if (mask[i] && errors[i] == PSM_OK) {
 			psm_epaddr_setctxt(
 				((psm_epaddr_t *) fi_addr)[i],
 				(void *)((psm_epid_t *) addr)[i]);
