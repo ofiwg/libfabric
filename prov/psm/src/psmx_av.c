@@ -38,6 +38,7 @@ static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 	struct psmx_fid_av *fid_av;
 	psm_error_t *errors;
 	int err;
+	int i;
 
 	fid_av = container_of(fid, struct psmx_fid_av, av.fid);
 
@@ -48,6 +49,14 @@ static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 	err = psm_ep_connect(fid_av->domain->psm_ep, count, 
 			(psm_epid_t *) addr, NULL, errors,
 			(psm_epaddr_t *) fi_addr, 30*1e9);
+
+	for (i=0; i<count; i++){
+		if (errors[i] == PSM_OK) {
+			psm_epaddr_setctxt(
+				((psm_epaddr_t *) fi_addr)[i],
+				(void *)((psm_epid_t *) addr)[i]);
+		}
+	}
 
 	free(errors);
 
