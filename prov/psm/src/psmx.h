@@ -34,6 +34,8 @@ extern "C" {
 
 #define PSMX_TIME_OUT	120
 #define PSMX_SUPPORTED_FLAGS (FI_BLOCK | FI_EXCL | \
+			      FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
+			      FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			      FI_BUFFERED_SEND | FI_BUFFERED_RECV | \
 			      FI_NOCOMP | FI_SIGNAL | FI_ACK | FI_CANCEL)
 #define PSMX_DEFAULT_FLAGS   (0)
