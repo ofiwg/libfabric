@@ -202,7 +202,33 @@ static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
 
 static int psmx_ep_control(fid_t fid, int command, void *arg)
 {
-	return -ENOSYS;
+	struct psmx_fid_ep *fid_ep, *new_fid_ep;
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+
+	switch (command) {
+	case FI_DUPFID:
+		new_fid_ep = (struct psmx_fid_ep *) calloc(1, sizeof *fid_ep);
+		if (!new_fid_ep)
+			return -ENOMEM;
+		*new_fid_ep = *fid_ep;
+		*(fid_t *)arg = &new_fid_ep->ep.fid;
+		break;
+
+	case FI_SETFIDFLAG:
+		fid_ep->flags = *(uint64_t *)arg;
+		break;
+
+	case FI_GETFIDFLAG:
+		if (!arg)
+			return -EINVAL;
+		*(uint64_t *)arg = fid_ep->flags;
+		break;
+
+	default:
+		return -ENOSYS;
+	}
+
+	return 0;
 }
 
 static struct fi_ops psmx_fi_ops = {
