@@ -139,6 +139,8 @@ int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *conte
 	int err = -ENOMEM;
 	char *s;
 
+	psmx_debug("%s\n", __func__);
+
 	if (!info->domain_name || strncmp(info->domain_name, "psm", 3))
 		return -EINVAL;
 
