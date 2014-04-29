@@ -211,6 +211,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 	struct psmx_fid_av *av;
 	struct psmx_fid_ec *ec;
 	struct fi_resource ress;
+	int err;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
@@ -254,7 +255,10 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 				return -EINVAL;
                         ress.fid = fid;
                         ress.flags = fids[i].flags;
-                        return fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+                        err = fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+			if (err)
+				return err;
+			break;
 
 		default:
 			return -ENOSYS;

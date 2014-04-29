@@ -464,6 +464,7 @@ static int psmx_ec_close(fid_t fid)
 static int psmx_ec_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
 	struct fi_resource ress;
+	int err;
 	int i;
 
 	for (i=0; i<nfids; i++) {
@@ -476,7 +477,11 @@ static int psmx_ec_bind(fid_t fid, struct fi_resource *fids, int nfids)
 				return -EINVAL;
 			ress.fid = fid;
 			ress.flags = fids[i].flags;
-			return fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+			err = fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+			if (err)
+				return err;
+			break;
+
 		default:
 			return -ENOSYS;
 		}
