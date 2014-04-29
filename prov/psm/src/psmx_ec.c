@@ -551,9 +551,9 @@ int psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context)
 	switch (attr->format) {
 	case FI_EC_FORMAT_UNSPEC:
 		format = FI_EC_FORMAT_TAGGED;
-		err_format = FI_EC_FORMAT_TAGGED_ERR;
+		err_format = FI_EC_FORMAT_ERR;
 		entry_size = sizeof(struct fi_ec_tagged_entry);
-		err_entry_size = sizeof(struct fi_ec_tagged_err_entry);
+		err_entry_size = sizeof(struct fi_ec_err_entry);
 		break;
 
 	case FI_EC_FORMAT_CONTEXT:
@@ -565,23 +565,23 @@ int psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context)
 
 	case FI_EC_FORMAT_COMP:
 		format = attr->format;
-		err_format = FI_EC_FORMAT_COMP_ERR;
+		err_format = FI_EC_FORMAT_ERR;
 		entry_size = sizeof(struct fi_ec_comp_entry);
 		err_entry_size = sizeof(struct fi_ec_err_entry);
 		break;
 
 	case FI_EC_FORMAT_DATA:
 		format = attr->format;
-		err_format = FI_EC_FORMAT_DATA_ERR;
+		err_format = FI_EC_FORMAT_ERR;
 		entry_size = sizeof(struct fi_ec_data_entry);
 		err_entry_size = sizeof(struct fi_ec_err_entry);
 		break;
 
 	case FI_EC_FORMAT_TAGGED:
 		format = attr->format;
-		err_format = FI_EC_FORMAT_TAGGED_ERR;
+		err_format = FI_EC_FORMAT_ERR;
 		entry_size = sizeof(struct fi_ec_tagged_entry);
-		err_entry_size = sizeof(struct fi_ec_tagged_err_entry);
+		err_entry_size = sizeof(struct fi_ec_err_entry);
 		break;
 
 	case FI_EC_FORMAT_ERR:
