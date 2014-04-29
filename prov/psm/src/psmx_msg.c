@@ -146,7 +146,7 @@ static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
 	psm_tag = fid_ep->domain->psm_epid | PSMX_NONMATCH_BIT;
 
 	if (!(flags & FI_BLOCK)) {
-		ctxt = (flags & FI_NOCOMP) ? PSMX_NOCOMP_CONTEXT : context;
+		ctxt = (flags & FI_EVENT) ? PSMX_NOCOMP_CONTEXT : context;
 		err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr,
 				   send_flag, psm_tag, buf, len, ctxt, &psm_req);
 

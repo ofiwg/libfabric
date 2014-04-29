@@ -32,25 +32,26 @@
 
 #include "psmx.h"
 
-static ssize_t psmx_ep_cancel(fid_t fid, struct fi_context *context)
+static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
 	psm_mq_status_t status;
+	struct fi_context *fi_context = context;
 	int err;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	if (!fid_ep->domain)
 		return -EBADF;
 
-	if (!context)
+	if (!fi_context)
 		return -EINVAL;
 
-	if (context->internal[0] == NULL)
+	if (fi_context->internal[0] == NULL)
 		return 0;
 
-	err = psm_mq_cancel((psm_mq_req_t *)&context->internal[0]);
+	err = psm_mq_cancel((psm_mq_req_t *)&fi_context->internal[0]);
 	if (err == PSM_OK)
-		err = psm_mq_test((psm_mq_req_t *)&context->internal[0], &status);
+		err = psm_mq_test((psm_mq_req_t *)&fi_context->internal[0], &status);
 
 	return psmx_errno(err);
 }
@@ -215,7 +216,7 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
 	switch (command) {
-	case FI_DUPFID:
+	case FI_ALIAS:
 		new_fid_ep = (struct psmx_fid_ep *) calloc(1, sizeof *fid_ep);
 		if (!new_fid_ep)
 			return -ENOMEM;
