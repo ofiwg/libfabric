@@ -239,7 +239,9 @@ operations initiated on the endpoint.  See below for a list of control
 flags.
 .IP "FI_SETOPSFLAG -- uint64_t *flags"
 Used to change the data transfer operation flags associated with an
-endpoint. Valid control flags are defined below.
+endpoint.  The FI_READ, FI_WRITE, FI_SEND, FI_RECV flags indicate the
+type of data transfer that the flags should apply to, with other flags
+OR'ed in.  Valid control flags are defined below.
 .SS "fi_getopt / fi_setopt"
 Endpoint protocol operations may be retrieved using fi_getopt or set
 using fi_setopt.  Applications specify the level that a desired option

@@ -276,12 +276,6 @@ enum {
 	FI_STOPPROGRESS		/* NULL - flags? */
 };
 
-/*
- * fi_control may be used to set the flags for data transfer operations.  This
- * is done using the FI_SETOPSFLAG command with arg a uint64_t flags value.  The
- * FI_READ, FI_WRITE, FI_SEND, FI_RECV flags indicate the type of data transfer
- * that the flags should apply to, with other flags OR'ed in.
- */
 static inline int fi_control(fid_t fid, int command, void *arg)
 {
 	FI_ASSERT_OPS(fid, struct fid, ops);
