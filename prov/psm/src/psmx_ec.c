@@ -166,6 +166,7 @@ static int psmx_ec_bind(fid_t fid, struct fi_resource *fids, int nfids)
 			return -EINVAL;
 		switch (fids[i].fid->fclass) {
 		case FID_CLASS_EP:
+		case FID_CLASS_MR:
 			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
 				return -EINVAL;
 			ress.fid = fid;

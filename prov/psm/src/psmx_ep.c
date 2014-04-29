@@ -203,22 +203,23 @@ static int psmx_ep_close(fid_t fid)
 	return 0;
 }
 
-static int psmx_ep_bind(fid_t fid, struct fi_resource *ress, int nress)
+static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
 	int i;
 	struct psmx_fid_ep *fid_ep;
 	struct psmx_fid_domain *domain;
 	struct psmx_fid_av *av;
 	struct psmx_fid_ec *ec;
+	struct fi_resource ress;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
-	for (i=0; i<nress; i++) {
-		if (!ress[i].fid)
+	for (i=0; i<nfids; i++) {
+		if (!fids[i].fid)
 			return -EINVAL;
-		switch (ress[i].fid->fclass) {
+		switch (fids[i].fid->fclass) {
 		case FID_CLASS_DOMAIN:
-			domain = container_of(ress[i].fid,
+			domain = container_of(fids[i].fid,
 					struct psmx_fid_domain, domain.fid);
 			if (fid_ep->domain && fid_ep->domain != domain)
 				return -EEXIST;
@@ -227,7 +228,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *ress, int nress)
 
 		case FID_CLASS_EC:
 			/* TODO: check ress flags for send/recv EQs */
-			ec = container_of(ress[i].fid,
+			ec = container_of(fids[i].fid,
 					struct psmx_fid_ec, ec.fid);
 			if (fid_ep->ec && fid_ep->ec != ec)
 				return -EEXIST;
@@ -238,7 +239,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *ress, int nress)
 			break;
 
 		case FID_CLASS_AV:
-			av = container_of(ress[i].fid,
+			av = container_of(fids[i].fid,
 					struct psmx_fid_av, av.fid);
 			if (fid_ep->av && fid_ep->av != av)
 				return -EEXIST;
@@ -247,6 +248,13 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *ress, int nress)
 			fid_ep->av = av;
 			fid_ep->domain = av->domain;
 			break;
+
+		case FID_CLASS_MR:
+			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
+				return -EINVAL;
+                        ress.fid = fid;
+                        ress.flags = fids[i].flags;
+                        return fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
 
 		default:
 			return -ENOSYS;

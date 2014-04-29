@@ -101,6 +101,8 @@ struct psmx_fid_ep {
 
 struct psmx_fid_mr {
 	struct fid_mr		mr;
+	struct psmx_fid_domain	*domain;
+	struct psmx_fid_ec	*ec;
 	uint64_t		signature;
 	uint64_t		access;
 	uint64_t		flags;

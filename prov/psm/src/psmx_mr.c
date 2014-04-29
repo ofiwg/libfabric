@@ -46,7 +46,43 @@ static int psmx_mr_close(fid_t fid)
 
 static int psmx_mr_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
-	return -ENOSYS;
+	int i;
+	struct psmx_fid_mr *fid_mr;
+	struct psmx_fid_domain *domain;
+	struct psmx_fid_ec *ec;
+
+	fid_mr = container_of(fid, struct psmx_fid_mr, mr.fid);
+
+	for (i=0; i<nfids; i++) {
+		if (!fids[i].fid)
+			return -EINVAL;
+		switch (fids[i].fid->fclass) {
+                case FID_CLASS_DOMAIN:
+                        domain = container_of(fids[i].fid,
+                                        struct psmx_fid_domain, domain.fid);
+                        if (fid_mr->domain && fid_mr->domain != domain)
+                                return -EEXIST;
+                        fid_mr->domain = domain;
+                        break;
+
+		case FID_CLASS_EC:
+			/* TODO: check ress flags for send/recv EQs */
+			ec = container_of(fids[i].fid,
+					struct psmx_fid_ec, ec.fid);
+			if (fid_mr->ec && fid_mr->ec != ec)
+				return -EEXIST;
+                        if (fid_mr->domain && fid_mr->domain != ec->domain)
+                                return -EINVAL;
+			fid_mr->ec = ec;
+			fid_mr->domain = ec->domain;
+			break;
+
+		default:
+			return -ENOSYS;
+		}
+	}
+
+	return 0;
 }
 
 static int psmx_mr_sync(fid_t fid, uint64_t flags, void *context)
