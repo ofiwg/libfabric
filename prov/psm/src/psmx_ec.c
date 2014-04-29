@@ -32,77 +32,372 @@
 
 #include "psmx.h"
 
-static struct fi_ec_err_entry error_ece;
-static int error_state = 0;
+void psmx_ec_enqueue_event(struct psmx_fid_ec *ec,
+				struct psmx_event *event)
+{
+	if (ec->event_queue.tail)
+		ec->event_queue.tail->next = event;
+	else
+		ec->event_queue.head = ec->event_queue.tail = event;
+}
+
+static struct psmx_event *psmx_ec_dequeue_event(struct psmx_fid_ec *ec)
+{
+	struct psmx_event *event;
+
+	if (!ec->event_queue.head)
+		return NULL;
+
+	event = ec->event_queue.head;
+	ec->event_queue.head = event->next;
+	if (!ec->event_queue.head)
+		ec->event_queue.tail = NULL;
+
+	event->next = NULL;
+	return event;
+}
+
+struct psmx_event *psmx_ec_create_event(struct psmx_fid_ec *ec,
+					void *op_context, void *buf,
+					uint64_t flags, size_t len,
+					uint64_t data, uint64_t tag,
+					size_t olen, int err)
+{
+	struct psmx_event *event;
+
+	event = calloc(1, sizeof(*event));
+	if (!event) {
+		fprintf(stderr, "%s: out of memory\n", __func__);
+		return NULL;
+	}
+
+	if (err) {
+		event->format = ec->err_format;
+		ec->num_errors++;
+	}
+	else {
+		event->format = ec->format;
+		ec->num_events++;
+	}
+
+	switch (event->format) {
+	case FI_EC_FORMAT_CONTEXT:
+		event->ece.context.op_context = op_context;
+		break;
+
+	case FI_EC_FORMAT_COMP:
+		event->ece.comp.op_context = op_context;
+		event->ece.comp.flags = flags;
+		event->ece.comp.len = len;
+		break;
+
+	case FI_EC_FORMAT_DATA:
+		event->ece.data.op_context = op_context;
+		event->ece.data.buf = buf;
+		event->ece.data.flags = flags;
+		event->ece.data.len = len;
+		event->ece.data.data = data;
+		break;
+
+	case FI_EC_FORMAT_TAGGED:
+		event->ece.tagged.op_context = op_context;
+		event->ece.tagged.buf = buf;
+		event->ece.tagged.flags = flags;
+		event->ece.tagged.len = len;
+		event->ece.tagged.data = data;
+		event->ece.tagged.tag = tag;
+		event->ece.tagged.olen = olen;
+		break;
+
+	case FI_EC_FORMAT_ERR:
+		event->ece.err.op_context = op_context;
+		event->ece.err.err = err;
+		event->ece.err.prov_errno = 0;
+		event->ece.err.prov_data = NULL;
+		break;
+
+	case FI_EC_FORMAT_COMP_ERR:
+		event->ece.err.op_context = op_context;
+		event->ece.err.flags = flags;
+		event->ece.err.len = len;
+		event->ece.err.err = err;
+		event->ece.err.prov_errno = 0;
+		event->ece.err.prov_data = NULL;
+		break;
+
+	case FI_EC_FORMAT_DATA_ERR:
+		event->ece.err.op_context = op_context;
+		event->ece.err.buf = buf;
+		event->ece.err.flags = flags;
+		event->ece.err.len = len;
+		event->ece.err.data = data;
+		event->ece.err.err = err;
+		event->ece.err.prov_errno = 0;
+		event->ece.err.prov_data = NULL;
+		break;
+
+	case FI_EC_FORMAT_TAGGED_ERR:
+		if (err) {
+			event->ece.tagged_err.status = err;
+			event->ece.tagged_err.err.op_context = op_context;
+			event->ece.tagged_err.err.fid_context = ec->ec.fid.context;
+			event->ece.tagged_err.err.flags = flags;
+			event->ece.tagged_err.err.len = len;
+			event->ece.tagged_err.err.data = data;
+			event->ece.tagged_err.err.err = err;
+			event->ece.tagged_err.err.prov_errno = 0;
+			event->ece.tagged_err.err.prov_data = NULL;
+		}
+		else {
+			event->ece.tagged_err.status = 0;
+			event->ece.tagged_err.tagged.op_context = op_context;
+			event->ece.tagged_err.tagged.buf = buf;
+			event->ece.tagged_err.tagged.flags = flags;
+			event->ece.tagged_err.tagged.len = len;
+			event->ece.tagged_err.tagged.data = data;
+			event->ece.tagged_err.tagged.tag = tag;
+			event->ece.tagged_err.tagged.olen = olen;
+		}
+		break;
+
+	case FI_EC_FORMAT_COUNTER:
+		event->ece.counter.events = ec->num_events;
+		break;
+
+	case FI_EC_FORMAT_COUNTER_ERR:
+		event->ece.counter_err.events = ec->num_events;
+		event->ece.counter_err.errors = ec->num_errors;
+		break;
+
+	case FI_EC_FORMAT_CM:
+	default:
+		fprintf(stderr, "%s: unsupported EC format %d\n", __func__, event->format);
+		return NULL;
+	}
+
+	return event;
+}
+
+static struct psmx_event *psmx_ec_create_event_from_status(
+				struct psmx_fid_ec *ec,
+				psm_mq_status_t *psm_status)
+{
+	struct psmx_event *event;
+	struct fi_context *fi_context = psm_status->context;
+	int err;
+
+	event = calloc(1, sizeof(*event));
+	if (!event) {
+		fprintf(stderr, "%s: out of memory\n", __func__);
+		return NULL;
+	}
+
+	if (psm_status->error_code) {
+		event->format = ec->err_format;
+		ec->num_errors++;
+	}
+	else {
+		event->format = ec->format;
+		ec->num_events++;
+	}
+
+	switch (event->format) {
+	case FI_EC_FORMAT_CONTEXT:
+		event->ece.context.op_context = PSMX_CTXT_USER(fi_context);
+		break;
+
+	case FI_EC_FORMAT_COMP:
+		event->ece.comp.op_context = PSMX_CTXT_USER(fi_context);
+		//event->ece.comp.flags = 0; /* FIXME */
+		event->ece.comp.len = psm_status->nbytes;
+		break;
+
+	case FI_EC_FORMAT_DATA:
+		event->ece.data.op_context = PSMX_CTXT_USER(fi_context);
+		//event->ece.data.buf = NULL; /* FIXME */
+		//event->ece.data.flags = 0; /* FIXME */
+		event->ece.data.len = psm_status->nbytes;
+		//event->ece.data.data = 0; /* FIXME */
+		break;
+
+	case FI_EC_FORMAT_TAGGED:
+		event->ece.tagged.op_context = PSMX_CTXT_USER(fi_context);
+		//event->ece.tagged.buf = NULL; /* FIXME */
+		//event->ece.tagged.flags = 0; /* FIXME */
+		event->ece.tagged.len = psm_status->nbytes;
+		//event->ece.tagged.data = 0; /* FIXME */
+		event->ece.tagged.tag = psm_status->msg_tag;
+		event->ece.tagged.olen = psm_status->msg_length - psm_status->nbytes;
+		break;
+
+	case FI_EC_FORMAT_ERR:
+		event->ece.err.op_context = PSMX_CTXT_USER(fi_context);
+		event->ece.err.err = psmx_errno(psm_status->error_code);
+		event->ece.err.prov_errno = psm_status->error_code;
+		//event->ece.err.prov_data = NULL; /* FIXME */
+		break;
+
+	case FI_EC_FORMAT_COMP_ERR:
+		event->ece.err.op_context = PSMX_CTXT_USER(fi_context);
+		//event->ece.err.flags = 0; /* FIXME */
+		event->ece.err.len = psm_status->nbytes;
+		event->ece.err.err = psmx_errno(psm_status->error_code);
+		event->ece.err.prov_errno = psm_status->error_code;
+		//event->ece.err.prov_data = NULL; /* FIXME */
+		break;
+
+	case FI_EC_FORMAT_DATA_ERR:
+		event->ece.err.op_context = PSMX_CTXT_USER(fi_context);
+		//event->ece.err.buf = NULL; /* FIXME */
+		//event->ece.err.flags = 0; /* FIXME */
+		event->ece.err.len = psm_status->nbytes;
+		//event->ece.err.data = 0; /* FIXME */
+		event->ece.err.err = psmx_errno(psm_status->error_code);
+		event->ece.err.prov_errno = psm_status->error_code;
+		//event->ece.err.prov_data = NULL; /* FIXME */
+		break;
+
+	case FI_EC_FORMAT_TAGGED_ERR:
+		err = psmx_errno(psm_status->error_code);
+		if (err) {
+			event->ece.tagged_err.status = err;
+			event->ece.tagged_err.err.op_context = PSMX_CTXT_USER(fi_context);
+			event->ece.tagged_err.err.fid_context = ec->ec.fid.context;
+			//event->ece.tagged_err.err.flags = 0; /* FIXME */
+			event->ece.tagged_err.err.len = psm_status->nbytes;
+			//event->ece.tagged_err.err.data = 0; /* FIXME */
+			event->ece.tagged_err.err.err = err;
+			event->ece.tagged_err.err.prov_errno = psm_status->error_code;
+			//event->ece.tagged_err.err.prov_data = NULL; /* FIXME */
+		}
+		else {
+			event->ece.tagged_err.status = 0;
+			event->ece.tagged_err.tagged.op_context = PSMX_CTXT_USER(fi_context);
+			//event->ece.tagged_err.tagged.buf = NULL; /* FIXME */
+			//event->ece.tagged_err.tagged.flags = 0; /* FIXME */
+			event->ece.tagged_err.tagged.len = psm_status->nbytes;
+			//event->ece.tagged_err.tagged.data = 0; /* FIXME */
+			event->ece.tagged_err.tagged.tag = psm_status->msg_tag;
+			event->ece.tagged_err.tagged.olen = psm_status->msg_length -
+								psm_status->nbytes;
+		}
+		break;
+
+	case FI_EC_FORMAT_COUNTER:
+		event->ece.counter.events = ec->num_events;
+		break;
+
+	case FI_EC_FORMAT_COUNTER_ERR:
+		event->ece.counter_err.events = ec->num_events;
+		event->ece.counter_err.errors = ec->num_errors;
+		break;
+
+	case FI_EC_FORMAT_CM:
+	default:
+		fprintf(stderr, "%s: unsupported EC format %d %d %d\n", __func__, event->format, ec->format, ec->err_format);
+		return NULL;
+	}
+
+	event->source = psm_status->msg_tag;
+
+	return event;
+}
+
+static int psmx_ec_get_event_src_addr(struct psmx_fid_ec *fid_ec,
+					struct psmx_event *event,
+					void *src_addr, size_t *addrlen)
+{
+	int err;
+
+	if (!src_addr)
+		return 0;
+
+	if ((fid_ec->domain->reserved_tag_bits & PSMX_MSG_BIT) &&
+		(event->source & PSMX_MSG_BIT)) {
+		err = psmx_epid_to_epaddr(
+			fid_ec->domain->psm_ep,
+			event->source & ~PSMX_MSG_BIT,
+			src_addr);
+		*addrlen = sizeof(psm_epaddr_t);
+	}
+
+	return 0;
+}
+
+static int psmx_ec_poll_mq(struct psmx_fid_ec *ec)
+{
+	psm_mq_req_t psm_req;
+	psm_mq_status_t psm_status;
+	struct fi_context *fi_context;
+	struct psmx_fid_ec *tmp_ec;
+	struct psmx_event *event;
+	int err;
+
+	while (1) {
+		err = psm_mq_ipeek(ec->domain->psm_mq, &psm_req, NULL);
+
+		if (err == PSM_OK) {
+			err = psm_mq_test(&psm_req, &psm_status);
+
+			fi_context = psm_status.context;
+
+			if (!fi_context) /* only possible with FI_SYNC set */
+				continue;
+
+			if (PSMX_CTXT_TYPE(fi_context) == PSMX_NOCOMP_CONTEXT)
+				continue;
+
+			tmp_ec = PSMX_CTXT_EC(fi_context);
+			event = psmx_ec_create_event_from_status(tmp_ec, &psm_status);
+			if (!event)
+				return -ENOMEM;
+
+			psmx_ec_enqueue_event(tmp_ec, event);
+
+			if (tmp_ec == ec)
+				return 1;
+		}
+		else if (err == PSM_MQ_NO_COMPLETIONS) {
+			return 0;
+		}
+		else {
+			return psmx_errno(err);
+		}
+	}
+}
 
 static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
 				void *src_addr, size_t *addrlen)
 {
 	struct psmx_fid_ec *fid_ec;
-	struct psmx_fid_domain *fid_domain;
-	psm_mq_req_t psm_req;
-	psm_mq_status_t psm_status;
-	struct fi_ec_tagged_entry *ece;
-	struct fi_context *fi_context;
-	int err;
+	struct psmx_event *event;
 
 	fid_ec = container_of(fid, struct psmx_fid_ec, ec.fid);
 	assert(fid_ec->domain);
-	assert(fid_ec->format == FI_EC_FORMAT_TAGGED);
 
-	if (len < sizeof *ece)
+	if (len < fid_ec->entry_size)
 		return -FI_ETOOSMALL;
 
-	fid_domain = fid_ec->domain;
+	psmx_ec_poll_mq(fid_ec);
 
-again:
-	err = psm_mq_ipeek(fid_ec->domain->psm_mq, &psm_req, NULL);
-	if (err == PSM_OK) {
-		err = psm_mq_test(&psm_req, &psm_status);
+	if (fid_ec->pending_error)
+		return -FI_EAVAIL;
 
-		fi_context = psm_status.context;
-
-		if (!fi_context) /* only possible when FI_SYNC is set */
-			goto again;
-
-		if (fi_context->internal[1] == PSMX_NOCOMP_CONTEXT)
-			goto again;
-
-		if (psm_status.error_code) {
-			error_ece.fid_context = fid_ec->ec.fid.context;
-			error_ece.op_context = psm_status.context;
-			error_ece.flags = 0;
-			error_ece.err = psmx_errno(psm_status.error_code);
-			error_ece.prov_errno = psm_status.error_code;
-			error_ece.data = 0;
-			error_ece.prov_data = NULL;
-			error_state = 1;
-			return error_ece.err;
+	event = psmx_ec_dequeue_event(fid_ec);
+	if (event) {
+		if (event->format == fid_ec->format) {
+			memcpy(buf, (void *)&event->ece, fid_ec->entry_size);
+			psmx_ec_get_event_src_addr(fid_ec, event, src_addr, addrlen);
+			free(event);
+			return fid_ec->entry_size;
 		}
-
-		ece = (struct fi_ec_tagged_entry *) buf;
-		ece->op_context = psm_status.context;
-		ece->flags = 0;
-		ece->len = psm_status.nbytes;
-		ece->data = 0;
-		ece->tag = psm_status.msg_tag;
-		ece->olen = psm_status.msg_length;
-
-		if (src_addr) {
-			if ((fid_ec->domain->reserved_tag_bits & PSMX_MSG_BIT) &&
-				psm_status.msg_tag & PSMX_MSG_BIT) {
-				err = psmx_epid_to_epaddr(
-					fid_ec->domain->psm_ep,
-					psm_status.msg_tag & ~PSMX_MSG_BIT,
-					src_addr);
-			}
+		else {
+			fid_ec->pending_error = event;
+			return -FI_EAVAIL;
 		}
-		return 1;
-	} else if (err == PSM_MQ_NO_COMPLETIONS) {
-		return 0;
-	} else {
-		return -1;
 	}
+
+	return 0;
 }
 
 static ssize_t psmx_ec_read(fid_t fid, void *buf, size_t len)
@@ -112,11 +407,19 @@ static ssize_t psmx_ec_read(fid_t fid, void *buf, size_t len)
 
 static ssize_t psmx_ec_readerr(fid_t fid, void *buf, size_t len, uint64_t flags)
 {
-	if (len < sizeof(error_ece))
+	struct psmx_fid_ec *fid_ec;
+
+	fid_ec = container_of(fid, struct psmx_fid_ec, ec.fid);
+
+	if (len < fid_ec->err_entry_size)
 		return -FI_ETOOSMALL;
 
-	*(struct fi_ec_err_entry *)buf = error_ece;
-	error_state = 0;
+	if (fid_ec->pending_error) {
+		memcpy(buf, &fid_ec->pending_error->ece, fid_ec->err_entry_size);
+		free(fid_ec->pending_error);
+		fid_ec->pending_error = NULL;
+		return fid_ec->err_entry_size;
+	}
 
 	return 0;
 }
@@ -215,22 +518,100 @@ int psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_ec *fid_ec;
+	int format, err_format;
+	int entry_size, err_entry_size;
 
-	if (attr->domain != FI_EC_DOMAIN_GENERAL && attr->domain != FI_EC_DOMAIN_COMP) {
+	switch (attr->domain) {
+	case FI_EC_DOMAIN_GENERAL:
+	case FI_EC_DOMAIN_COMP:
+		break;
+
+	default:
 		psmx_debug("%s: attr->domain=%d, supported=%d,%d\n", __func__, attr->domain,
 				FI_EC_DOMAIN_GENERAL, FI_EC_DOMAIN_COMP);
 		return -ENOSYS;
 	}
 
-	if (attr->type != FI_EC_QUEUE) {
-		psmx_debug("%s: attr->type=%d, supported=%d\n", __func__, attr->type, FI_EC_QUEUE);
-		return -ENOSYS;
+	switch (attr->type) {
+	case FI_EC_QUEUE:
+	case FI_EC_COUNTER:
+		break;
+
+	default:
+		psmx_debug("%s: attr->type=%d, supported=%d,%d\n", __func__, attr->type,
+				FI_EC_QUEUE, FI_EC_COUNTER);
+		return -EINVAL;
 	}
 
-	if (attr->format != FI_EC_FORMAT_TAGGED && attr->format != FI_EC_FORMAT_UNSPEC) {
-		psmx_debug("%s: attr->format=%d, supported=%d,%d\n", __func__, attr->format,
-				FI_EC_FORMAT_TAGGED, FI_EC_FORMAT_UNSPEC);
-		return -ENOSYS;
+	switch (attr->format) {
+	case FI_EC_FORMAT_UNSPEC:
+		format = FI_EC_FORMAT_TAGGED;
+		err_format = FI_EC_FORMAT_TAGGED_ERR;
+		entry_size = sizeof(struct fi_ec_tagged_entry);
+		err_entry_size = sizeof(struct fi_ec_tagged_err_entry);
+		break;
+
+	case FI_EC_FORMAT_CONTEXT:
+		format = attr->format;
+		err_format = FI_EC_FORMAT_ERR;
+		entry_size = sizeof(struct fi_ec_entry);
+		err_entry_size = sizeof(struct fi_ec_err_entry);
+		break;
+
+	case FI_EC_FORMAT_COMP:
+		format = attr->format;
+		err_format = FI_EC_FORMAT_COMP_ERR;
+		entry_size = sizeof(struct fi_ec_comp_entry);
+		err_entry_size = sizeof(struct fi_ec_err_entry);
+		break;
+
+	case FI_EC_FORMAT_DATA:
+		format = attr->format;
+		err_format = FI_EC_FORMAT_DATA_ERR;
+		entry_size = sizeof(struct fi_ec_data_entry);
+		err_entry_size = sizeof(struct fi_ec_err_entry);
+		break;
+
+	case FI_EC_FORMAT_TAGGED:
+		format = attr->format;
+		err_format = FI_EC_FORMAT_TAGGED_ERR;
+		entry_size = sizeof(struct fi_ec_tagged_entry);
+		err_entry_size = sizeof(struct fi_ec_tagged_err_entry);
+		break;
+
+	case FI_EC_FORMAT_ERR:
+	case FI_EC_FORMAT_COMP_ERR:
+	case FI_EC_FORMAT_DATA_ERR:
+		format = err_format = attr->format;
+		entry_size = err_entry_size = sizeof(struct fi_ec_err_entry);
+		break;
+
+	case FI_EC_FORMAT_TAGGED_ERR:
+		format = err_format = attr->format;
+		entry_size = err_entry_size = sizeof(struct fi_ec_tagged_err_entry);
+		break;
+
+	case FI_EC_FORMAT_CM:
+		format = err_format = attr->format;
+		entry_size = err_entry_size = sizeof(struct fi_ec_cm_entry);
+		break;
+
+	case FI_EC_FORMAT_COUNTER:
+		format = attr->format;
+		err_format = FI_EC_FORMAT_COUNTER_ERR;
+		entry_size = sizeof(struct fi_ec_counter_entry);
+		err_entry_size = sizeof(struct fi_ec_counter_err_entry);
+		break;
+
+	case FI_EC_FORMAT_COUNTER_ERR:
+		format = err_format = attr->format;
+		entry_size = err_entry_size = sizeof(struct fi_ec_counter_err_entry);
+		break;
+
+	default:
+		psmx_debug("%s: attr->format=%d, supported=%d...%d\n", __func__, attr->format,
+				FI_EC_FORMAT_UNSPEC, FI_EC_FORMAT_COUNTER_ERR);
+		return -EINVAL;
 	}
 
 	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
@@ -239,8 +620,11 @@ int psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context)
 		return -ENOMEM;
 
 	fid_ec->domain = fid_domain;
-	fid_ec->type = FI_EC_QUEUE;
-	fid_ec->format = FI_EC_FORMAT_TAGGED;
+	fid_ec->type = attr->type;
+	fid_ec->format = format;
+	fid_ec->err_format = err_format;
+	fid_ec->entry_size = entry_size;
+	fid_ec->err_entry_size = err_entry_size;
 	fid_ec->ec.fid.size = sizeof(struct fid_ec);
 	fid_ec->ec.fid.fclass = FID_CLASS_EC;
 	fid_ec->ec.fid.context = context;

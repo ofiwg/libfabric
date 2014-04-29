@@ -59,15 +59,10 @@ extern "C" {
 #define PSMX_MSG_BIT		(0x8000000000000000ULL)
 #define PSMX_NOCOMP_CONTEXT	((void *)0xFFFF0000FFFF0000ULL)
 
-struct psmx_event {
-	struct fi_ec_tagged_entry ece;
-	struct psmx_event *next;
-};
-
-struct psmx_event_queue {
-	struct psmx_event	*head;
-	struct psmx_event	*tail;
-};
+#define PSMX_CTXT_REQ(fi_context)	((fi_context)->internal[0])
+#define PSMX_CTXT_TYPE(fi_context)	((fi_context)->internal[1])
+#define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
+#define PSMX_CTXT_EC(fi_context)	((fi_context)->internal[3])
 
 struct psmx_fid_domain {
 	struct fid_domain	domain;
@@ -84,11 +79,40 @@ struct psmx_fid_domain {
 	uint64_t		reserved_tag_bits; 
 };
 
+struct psmx_event {
+	union {
+		struct fi_ec_entry		context;
+		struct fi_ec_comp_entry		comp;
+		struct fi_ec_data_entry		data;
+		struct fi_ec_tagged_entry	tagged;
+		struct fi_ec_err_entry		err;
+		struct fi_ec_tagged_err_entry	tagged_err;
+		struct fi_ec_cm_entry		cm;
+		struct fi_ec_counter_entry	counter;
+		struct fi_ec_counter_err_entry	counter_err;
+	} ece;
+	int format;
+	uint64_t source;
+	struct psmx_event *next;
+};
+
+struct psmx_event_queue {
+	struct psmx_event	*head;
+	struct psmx_event	*tail;
+};
+
 struct psmx_fid_ec {
 	struct fid_ec		ec;
 	struct psmx_fid_domain	*domain;
 	int			type;
 	int 			format;
+	int			entry_size;
+	struct psmx_event_queue	event_queue;
+	int			err_format;
+	int			err_entry_size;
+	struct psmx_event	*pending_error;
+	uint64_t		num_events;
+	uint64_t		num_errors;
 };
 
 struct psmx_fid_av {
@@ -144,6 +168,13 @@ int	psmx_errno(int err);
 int	psmx_epid_to_epaddr(psm_ep_t ep, psm_epid_t epid, psm_epaddr_t *epaddr);
 void	psmx_query_mpi(void);
 void	psmx_debug(char *fmt, ...);
+
+void	psmx_ec_enqueue_event(struct psmx_fid_ec *fid_ec, struct psmx_event *event);
+struct	psmx_event *psmx_ec_create_event(struct psmx_fid_ec *fid_ec,
+					void *op_context, void *buf,
+					uint64_t flags, size_t len,
+					uint64_t data, uint64_t tag,
+					size_t olen, int err);
 
 #ifdef __cplusplus
 }

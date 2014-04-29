@@ -54,9 +54,12 @@ static inline ssize_t _psmx_tagged_recvfrom(fid_t fid, void *buf, size_t len,
 			return -EINVAL;
 
 		fi_context = context;
-		fi_context->internal[1] =
+		PSMX_CTXT_TYPE(fi_context) =
 			((fid_ep->completion_mask | (flags & FI_EVENT)) == PSMX_COMP_ON) ?
 			0 : PSMX_NOCOMP_CONTEXT;
+
+		PSMX_CTXT_USER(fi_context) = fi_context;
+		PSMX_CTXT_EC(fi_context) = fid_ep->ec;
 	}
 	else {
 		fi_context = NULL;
@@ -69,7 +72,7 @@ static inline ssize_t _psmx_tagged_recvfrom(fid_t fid, void *buf, size_t len,
 		return psmx_errno(err);
 
 	if (fi_context)
-		fi_context->internal[0] = psm_req;
+		PSMX_CTXT_REQ(fi_context) = psm_req;
 
 	return 0;
 }
@@ -161,9 +164,12 @@ static inline ssize_t _psmx_tagged_sendto(fid_t fid, const void *buf, size_t len
 			return -EINVAL;
 
 		fi_context = context;
-		fi_context->internal[1] =
+		PSMX_CTXT_TYPE(fi_context) =
 			((fid_ep->completion_mask | (flags & FI_EVENT)) == PSMX_COMP_ON) ?
 			0 : PSMX_NOCOMP_CONTEXT;
+
+		PSMX_CTXT_USER(fi_context) = fi_context;
+		PSMX_CTXT_EC(fi_context) = fid_ep->ec;
 	}
 	else {
 		fi_context = NULL;
@@ -173,7 +179,7 @@ static inline ssize_t _psmx_tagged_sendto(fid_t fid, const void *buf, size_t len
 				psm_tag, buf, len, (void*)fi_context, &psm_req);
 
 	if (fi_context)
-		fi_context->internal[0] = psm_req;
+		PSMX_CTXT_REQ(fi_context) = psm_req;
 
 	return 0;
 }

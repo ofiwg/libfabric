@@ -63,9 +63,9 @@ static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 	if (!fi_context)
 		return -EINVAL;
 
-	err = psm_mq_cancel((psm_mq_req_t *)&fi_context->internal[0]);
+	err = psm_mq_cancel((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context));
 	if (err == PSM_OK)
-		err = psm_mq_test((psm_mq_req_t *)&fi_context->internal[0], &status);
+		err = psm_mq_test((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context), &status);
 
 	return psmx_errno(err);
 }
