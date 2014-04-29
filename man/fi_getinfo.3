@@ -47,7 +47,6 @@ struct fi_info {
 	uint64_t            protocol;
 	uint64_t            protocol_cap;
 	uint64_t            domain_cap;
-	enum fi_iov_format  iov_format;
 	enum fi_addr_format addr_format;
 	enum fi_addr_format info_addr_format;
 	size_t              src_addrlen;
@@ -94,11 +93,6 @@ If specified, indicates the desired domain capabilities.  Supported capabilities
 are listed in the
 .B "Domain capabilities"
 section below. 
-.IP "iov_format"
-If specified, indicates the format used for vectored data communications. Supported
-formats are listed in the
-.B "Vectored data formats"
-section below.
 .IP "addr_format"
 If specified, indicates the format used for addressing in data transfer
 operations. Supported formats
@@ -320,30 +314,6 @@ registered by the application for access domains opened with this capability.
 The provider supports user requested memory registration keys.  Providers
 that set this capability honor the requested_key parameter for memory
 registration calls.
-.SH "VECTORED DATA FORMATS"
-.IP "FI_IOV [not likely for 1.0 release]"
-Indicates that format is that of
-.IR "struct iovec".
-.nf
-
-struct iovec {
-	void  *iov_base;
-	size_t iov_len;
-};
-.fi
-.IP "FI_IOMV"
-Indicates that the format is that of
-.IR "struct fi_iomv".
-struct fi_iomv is used to specify memory buffers that are registered with the
-provider.
-.nf
-
-struct iomv {
-	void    *addr;
-	size_t   len;
-	uint64_t mem_desc;
-};
-.fi
 .SH "ADDRESSING FORMATS"
 Additional information on address formats is available under address vector .BR "fi_av(3)".
 .IP "FI_ADDR"

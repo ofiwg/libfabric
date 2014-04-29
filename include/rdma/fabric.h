@@ -105,14 +105,6 @@ struct fi_ioc {
 };
 
 /*
- * Format for 'vectored' data transfer calls: sendv, writev, etc.
- */
-enum fi_iov_format {
-	FI_IOV,			/* struct iovec */
-	FI_IOMV,		/* struct fi_iomv */
-};
-
-/*
  * Format for transport addresses: sendto, writeto, etc.
  */
 enum fi_addr_format {
@@ -134,7 +126,6 @@ struct fi_info {
 	uint64_t		protocol;
 	uint64_t		protocol_cap;
 	uint64_t		domain_cap;
-	enum fi_iov_format	iov_format;
 	enum fi_addr_format	addr_format;
 	enum fi_addr_format	info_addr_format;
 	size_t			src_addrlen;

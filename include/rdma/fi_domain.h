@@ -41,12 +41,6 @@ extern "C" {
 #endif
 
 
-struct fi_iomv {
-	void			*addr;
-	size_t			len;
-	uint64_t		mem_desc;
-};
-
 /*
  * AV = Address Vector
  * Maps and stores transport/network addresses.

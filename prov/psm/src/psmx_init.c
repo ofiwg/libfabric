@@ -129,7 +129,6 @@ static int psmx_getinfo(const char *node, const char *service,
 	else
 		psmx_info->protocol_cap = FI_PROTO_CAP_TAGGED;
 	psmx_info->domain_cap = FI_WRITE_COHERENT | FI_CONTEXT;
-	psmx_info->iov_format = FI_IOV;
 	psmx_info->addr_format = FI_ADDR; 
 	psmx_info->info_addr_format = FI_ADDR;
 	psmx_info->src_addrlen = 0;
