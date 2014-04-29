@@ -207,14 +207,22 @@ int psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context)
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_ec *fid_ec;
 
-	if (attr->domain != FI_EC_DOMAIN_GENERAL && attr->domain != FI_EC_DOMAIN_COMP)
+	if (attr->domain != FI_EC_DOMAIN_GENERAL && attr->domain != FI_EC_DOMAIN_COMP) {
+		psmx_debug("%s: attr->domain=%d, supported=%d,%d\n", __func__, attr->domain,
+				FI_EC_DOMAIN_GENERAL, FI_EC_DOMAIN_COMP);
 		return -ENOSYS;
+	}
 
-	if (attr->type != FI_EC_QUEUE)
+	if (attr->type != FI_EC_QUEUE) {
+		psmx_debug("%s: attr->type=%d, supported=%d\n", __func__, attr->type, FI_EC_QUEUE);
 		return -ENOSYS;
+	}
 
-	if (attr->format != FI_EC_FORMAT_TAGGED && attr->format != FI_EC_FORMAT_UNSPEC)
+	if (attr->format != FI_EC_FORMAT_TAGGED && attr->format != FI_EC_FORMAT_UNSPEC) {
+		psmx_debug("%s: attr->format=%d, supported=%d,%d\n", __func__, attr->format,
+				FI_EC_FORMAT_TAGGED, FI_EC_FORMAT_UNSPEC);
 		return -ENOSYS;
+	}
 
 	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
 	fid_ec = (struct psmx_fid_ec *) calloc(1, sizeof *fid_ec);
