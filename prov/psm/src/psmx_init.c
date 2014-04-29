@@ -41,6 +41,7 @@ static int psmx_getinfo(const char *node, const char *service,
 	void *dest_addr = NULL;
 	void *uuid;
 	char *s;
+	int type = FID_RDM;
 
 	if (psm_ep_num_devunits(&cnt) || !cnt)
 		return -FI_ENODATA;
@@ -64,6 +65,9 @@ static int psmx_getinfo(const char *node, const char *service,
 		switch (hints->type) {
 		case FID_UNSPEC:
 		case FID_RDM:
+			break;
+		case FID_MSG:
+			type = FID_MSG;
 			break;
 		default:
 			*info = NULL;
@@ -103,7 +107,7 @@ static int psmx_getinfo(const char *node, const char *service,
 	psmx_info->next = NULL;
 	psmx_info->size = sizeof(*psmx_info);
 	psmx_info->flags = flags | PSMX_DEFAULT_FLAGS;
-	psmx_info->type = FID_RDM;
+	psmx_info->type = type;
 	psmx_info->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
 	if (hints->protocol_cap)
 		psmx_info->protocol_cap = hints->protocol_cap & PSMX_PROTO_CAPS;
