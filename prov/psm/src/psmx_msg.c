@@ -32,23 +32,6 @@
 
 #include "psmx.h"
 
-static ssize_t psmx_recv(fid_t fid, void *buf, size_t len, void *context)
-{
-	return -ENOSYS;
-}
-
-static ssize_t psmx_recvmem(fid_t fid, void *buf, size_t len,
-				uint64_t mem_desc, void *context)
-{
-	return -ENOSYS;
-}
-
-static ssize_t psmx_recvv(fid_t fid, const void *iov, size_t count,
-				void *context)
-{
-	return -ENOSYS;
-}
-
 static ssize_t psmx_recvfrom(fid_t fid, void *buf, size_t len,
 				const void *src_addr, void *context)
 {
@@ -95,19 +78,26 @@ static ssize_t psmx_recvmsg(fid_t fid, const struct fi_msg *msg,
 	return -ENOSYS;
 }
 
-static ssize_t psmx_send(fid_t fid, const void *buf, size_t len,
-				void *context)
+static ssize_t psmx_recv(fid_t fid, void *buf, size_t len, void *context)
 {
-	return -ENOSYS;
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	assert(fid_ep->domain);
+
+	if (fid_ep->connected)
+		return psmx_recvfrom(fid, buf, len, fid_ep->peer_psm_epaddr, context);
+	else
+		return psmx_recvfrom(fid, buf, len, NULL, context);
 }
 
-static ssize_t psmx_sendmem(fid_t fid, const void *buf, size_t len,
+static ssize_t psmx_recvmem(fid_t fid, void *buf, size_t len,
 				uint64_t mem_desc, void *context)
 {
 	return -ENOSYS;
 }
 
-static ssize_t psmx_sendv(fid_t fid, const void *iov, size_t count,
+static ssize_t psmx_recvv(fid_t fid, const void *iov, size_t count,
 				void *context)
 {
 	return -ENOSYS;
@@ -163,6 +153,32 @@ static ssize_t psmx_sendmemto(fid_t fid, const void *buf, size_t len,
 
 static ssize_t psmx_sendmsg(fid_t fid, const struct fi_msg *msg,
 				uint64_t flags)
+{
+	return -ENOSYS;
+}
+
+static ssize_t psmx_send(fid_t fid, const void *buf, size_t len,
+				void *context)
+{
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	assert(fid_ep->domain);
+
+	if (!fid_ep->connected)
+		return -ENOTCONN;
+
+	return psmx_sendto(fid, buf, len, fid_ep->peer_psm_epaddr, context);
+}
+
+static ssize_t psmx_sendmem(fid_t fid, const void *buf, size_t len,
+				uint64_t mem_desc, void *context)
+{
+	return -ENOSYS;
+}
+
+static ssize_t psmx_sendv(fid_t fid, const void *iov, size_t count,
+				void *context)
 {
 	return -ENOSYS;
 }
