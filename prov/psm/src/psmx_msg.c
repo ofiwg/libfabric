@@ -65,7 +65,7 @@ static ssize_t psmx_recvfrom(fid_t fid, void *buf, size_t len,
 		psm_tagsel = -1ULL;
 	}
 	else {
-		psm_tag = 0;
+		psm_tag = PSMX_NONMATCH_BIT;
 		psm_tagsel = PSMX_NONMATCH_BIT;
 	}
 

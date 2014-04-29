@@ -76,7 +76,8 @@ static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
 		ece->olen = psm_status.msg_length;
 
 		if (src_addr) {
-			if (fid_ec->domain->reserved_tag_bits & PSMX_NONMATCH_BIT) {
+			if ((fid_ec->domain->reserved_tag_bits & PSMX_NONMATCH_BIT) &&
+				psm_status.msg_tag & PSMX_NONMATCH_BIT) {
 				psm_epid_t src_epid = psm_status.msg_tag & ~PSMX_NONMATCH_BIT;
 				psm_error_t error;
 
