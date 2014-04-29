@@ -35,10 +35,13 @@
 void psmx_ec_enqueue_event(struct psmx_fid_ec *ec,
 				struct psmx_event *event)
 {
-	if (ec->event_queue.tail)
+	if (ec->event_queue.tail) {
 		ec->event_queue.tail->next = event;
-	else
+		ec->event_queue.tail = event;
+	}
+	else {
 		ec->event_queue.head = ec->event_queue.tail = event;
+	}
 }
 
 static struct psmx_event *psmx_ec_dequeue_event(struct psmx_fid_ec *ec)
