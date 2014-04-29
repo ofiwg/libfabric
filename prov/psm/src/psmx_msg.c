@@ -32,35 +32,62 @@
 
 #include "psmx.h"
 
-static ssize_t psmx_recvfrom(fid_t fid, void *buf, size_t len,
-				const void *src_addr, void *context)
+static inline ssize_t _psmx_recvfrom(fid_t fid, void *buf, size_t len,
+					const void *src_addr, void *context,
+					uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag, psm_tagsel;
+	struct fi_context *fi_context;
 	int err;
+	int recv_flag = 0;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	assert(fid_ep->domain);
 
-	if (src_addr && *(uint64_t *)src_addr) {
-		psm_tag = ((uint64_t)(uintptr_t)psm_epaddr_getctxt((void *)src_addr)) | PSMX_NONMATCH_BIT;
+	if (src_addr) {
+		psm_tag = ((uint64_t)(uintptr_t)psm_epaddr_getctxt((void *)src_addr))
+				| PSMX_MSG_BIT;
 		psm_tagsel = -1ULL;
 	}
 	else {
-		psm_tag = PSMX_NONMATCH_BIT;
-		psm_tagsel = PSMX_NONMATCH_BIT;
+		psm_tag = PSMX_MSG_BIT;
+		psm_tagsel = PSMX_MSG_BIT;
 	}
+
+	if (fid_ep->use_fi_context) {
+		if (!context)
+			return -EINVAL;
+
+		fi_context = context;
+		PSMX_CTXT_TYPE(fi_context) =
+			((fid_ep->completion_mask | (flags & FI_EVENT)) == PSMX_COMP_ON) ?
+			0 : PSMX_NOCOMP_CONTEXT;
+
+		PSMX_CTXT_USER(fi_context) = fi_context;
+		PSMX_CTXT_EC(fi_context) = fid_ep->ec;
+	}
+	else {
+		fi_context = NULL;
+	}
+
 	err = psm_mq_irecv(fid_ep->domain->psm_mq,
-			   psm_tag, psm_tagsel, 0, /* flags */
-			   buf, len, context, &psm_req);
+			   psm_tag, psm_tagsel, recv_flag,
+			   buf, len, (void *)fi_context, &psm_req);
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	if (fid_ep->flags & (FI_BUFFERED_RECV | FI_CANCEL))
-		((struct fi_context *)context)->internal[0] = psm_req;
+	if (fi_context)
+		PSMX_CTXT_REQ(fi_context) = psm_req;
 
 	return 0;
+}
+
+static ssize_t psmx_recvfrom(fid_t fid, void *buf, size_t len,
+				const void *src_addr, void *context)
+{
+	return _psmx_recvfrom(fid, buf, len, src_addr, context, 0);
 }
 
 static ssize_t psmx_recvmemfrom(fid_t fid, void *buf, size_t len,
@@ -80,11 +107,10 @@ static ssize_t psmx_recvmsg(fid_t fid, const struct fi_msg *msg,
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
-	/* FIXME: check flags */
 	/* FIXME: check iov format */
 	iov = (struct iovec *)msg->msg_iov;
-	return psmx_recvfrom(fid, iov[0].iov_base, iov[0].iov_len,
-					msg->addr, msg->context);
+	return _psmx_recvfrom(fid, iov[0].iov_base, iov[0].iov_len,
+					msg->addr, msg->context, flags);
 }
 
 static ssize_t psmx_recv(fid_t fid, void *buf, size_t len, void *context)
@@ -121,41 +147,62 @@ static ssize_t psmx_recvv(fid_t fid, const void *iov, size_t count,
 	return psmx_recv(fid, iov0->iov_base, iov0->iov_len, context);
 }
 
-static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
-				  const void *dest_addr, void *context)
+static inline ssize_t _psmx_sendto(fid_t fid, const void *buf, size_t len,
+				const void *dest_addr, void *context,
+				uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
+	int send_flag = 0;
 	psm_epaddr_t psm_epaddr;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag;
+	struct fi_context * fi_context;
 	int err;
-	int flags;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	assert(fid_ep->domain);
 
 	psm_epaddr = (psm_epaddr_t) dest_addr;
+	psm_tag = fid_ep->domain->psm_epid | PSMX_MSG_BIT;
 
-	flags = fid_ep->flags;
-
-	psm_tag = fid_ep->domain->psm_epid | PSMX_NONMATCH_BIT;
-
-	if (!(flags & FI_BLOCK)) {
-		err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr,
-				   0, psm_tag, buf, len, context, &psm_req);
-
-		if (flags & (FI_BUFFERED_RECV | FI_CANCEL))
-			((struct fi_context *)context)->internal[0] = NULL;
-			 /* send cannot be canceled */
-		return 0;
-	} else {
+	if ((fid_ep->flags | flags) & FI_BLOCK) {
 		err = psm_mq_send(fid_ep->domain->psm_mq, psm_epaddr,
-				  0, psm_tag, buf, len);
+				  send_flag, psm_tag, buf, len);
 		if (err == PSM_OK)
 			return len;
 		else
 			return psmx_errno(err);
 	}
+
+	if (fid_ep->use_fi_context) {
+		if (!context)
+			return -EINVAL;
+
+		fi_context = context;
+		PSMX_CTXT_TYPE(fi_context) =
+			((fid_ep->completion_mask | (flags & FI_EVENT)) == PSMX_COMP_ON) ?
+			0 : PSMX_NOCOMP_CONTEXT;
+
+		PSMX_CTXT_USER(fi_context) = fi_context;
+		PSMX_CTXT_EC(fi_context) = fid_ep->ec;
+	}
+	else {
+		fi_context = NULL;
+	}
+
+	err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr, send_flag,
+				psm_tag, buf, len, (void *)fi_context, &psm_req);
+
+	if (fi_context)
+		PSMX_CTXT_REQ(fi_context) = psm_req;
+
+	return 0;
+}
+
+static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
+				  const void *dest_addr, void *context)
+{
+	return _psmx_sendto(fid, buf, len, dest_addr, context, 0);
 }
 
 static ssize_t psmx_sendmemto(fid_t fid, const void *buf, size_t len,
@@ -175,11 +222,10 @@ static ssize_t psmx_sendmsg(fid_t fid, const struct fi_msg *msg,
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
-	/* FIXME: check flags */
 	/* FIXME: check iov format */
 	iov = (struct iovec *)msg->msg_iov;
-	return psmx_sendto(fid, iov[0].iov_base, iov[0].iov_len,
-					msg->addr, msg->context);
+	return _psmx_sendto(fid, iov[0].iov_base, iov[0].iov_len,
+					msg->addr, msg->context, flags);
 }
 
 static ssize_t psmx_send(fid_t fid, const void *buf, size_t len,
