@@ -37,6 +37,7 @@ static int psmx_mr_close(fid_t fid)
 	struct psmx_fid_mr *fid_mr;
 
 	fid_mr = container_of(fid, struct psmx_fid_mr, mr.fid);
+	fid_mr->signature = 0;
 
 	free(fid_mr);
 
@@ -66,14 +67,13 @@ static struct fi_ops psmx_fi_ops = {
 	.control = psmx_mr_control,
 };
 
-static uint64_t mr_key;
-
-int psmx_mr_reg(fid_t fid, const void *buf, size_t len,
-		       struct fi_mr_attr *attr, fid_t *mr, void *context)
+static int psmx_mr_reg(fid_t fid, const void *buf, size_t len,
+			uint64_t access, uint64_t requested_key,
+			uint64_t flags, fid_t *mr, void *context)
 {
 	struct psmx_fid_mr *fid_mr;
 
-	fid_mr = (struct psmx_fid_mr *) calloc(1, sizeof *fid_mr);
+	fid_mr = (struct psmx_fid_mr *) calloc(1, sizeof(*fid_mr) + sizeof(struct iovec));
 	if (!fid_mr)
 		return -ENOMEM;
 
@@ -81,20 +81,33 @@ int psmx_mr_reg(fid_t fid, const void *buf, size_t len,
 	fid_mr->mr.fid.fclass = FID_CLASS_MR;
 	fid_mr->mr.fid.context = context;
 	fid_mr->mr.fid.ops = &psmx_fi_ops;
-	fid_mr->mr.mem_desc = 0x5F109530; /* dummy value "sfi psm" */
-	fid_mr->mr.key = ++mr_key;
+	fid_mr->mr.mem_desc = (uint64_t)(uintptr_t)fid_mr;
+	fid_mr->mr.key = (uint64_t)(uintptr_t)fid_mr; /* requested_key is ignored */
+	fid_mr->signature = PSMX_MR_SIGNATURE;
+	fid_mr->access = access;
+	fid_mr->flags = flags;
+	fid_mr->iov_count = 1;
+	fid_mr->iov[0].iov_base = (void *)buf;
+	fid_mr->iov[0].iov_len = len;
 
 	*mr = &fid_mr->mr.fid;
 
 	return 0;
 }
 
-int psmx_mr_regv(fid_t fid, const struct iovec *iov, size_t count,
-			struct fi_mr_attr *attr, fid_t *mr, void *context)
+static int psmx_mr_regv(fid_t fid, const struct iovec *iov, size_t count,
+			uint64_t access, uint64_t requested_key,
+			uint64_t flags, fid_t *mr, void *context)
 {
 	struct psmx_fid_mr *fid_mr;
+	int i;
 
-	fid_mr = (struct psmx_fid_mr *) calloc(1, sizeof *fid_mr);
+	if (count == 0 || iov == NULL)
+		return -EINVAL;
+
+	fid_mr = (struct psmx_fid_mr *)
+			calloc(1, sizeof(*fid_mr) +
+				  sizeof(struct iovec) * count);
 	if (!fid_mr)
 		return -ENOMEM;
 
@@ -102,10 +115,69 @@ int psmx_mr_regv(fid_t fid, const struct iovec *iov, size_t count,
 	fid_mr->mr.fid.fclass = FID_CLASS_MR;
 	fid_mr->mr.fid.context = context;
 	fid_mr->mr.fid.ops = &psmx_fi_ops;
-	fid_mr->mr.mem_desc = 0x5F109530; /* dummy value "sfi psm" */
-	fid_mr->mr.key = ++mr_key;
+	fid_mr->mr.mem_desc = (uint64_t)(uintptr_t)fid_mr;
+	fid_mr->mr.key = (uint64_t)(uintptr_t)fid_mr; /* requested_key is ignored */
+	fid_mr->signature = PSMX_MR_SIGNATURE;
+	fid_mr->access = access;
+	fid_mr->flags = flags;
+	fid_mr->iov_count = count;
+	for (i=0; i<count; i++)
+		fid_mr->iov[i] = iov[i];
 
 	*mr = &fid_mr->mr.fid;
 	return 0;
 }
+
+static int psmx_mr_regattr(fid_t fid, const struct fi_mr_attr *attr,
+			uint64_t flags, fid_t *mr)
+{
+	struct psmx_fid_mr *fid_mr;
+	int i;
+
+	if (!attr)
+		return -EINVAL;
+
+	if (!(attr->mask & FI_MR_ATTR_IOV))
+		return -EINVAL;
+
+	if (attr->iov_count == 0 || attr->mr_iov == NULL)
+		return -EINVAL;
+
+	fid_mr = (struct psmx_fid_mr *)
+			calloc(1, sizeof(*fid_mr) +
+				  sizeof(struct iovec) * attr->iov_count);
+	if (!fid_mr)
+		return -ENOMEM;
+
+	fid_mr->mr.fid.size = sizeof(struct fid_mr);
+	fid_mr->mr.fid.fclass = FID_CLASS_MR;
+	fid_mr->mr.fid.ops = &psmx_fi_ops;
+	fid_mr->mr.mem_desc = (uint64_t)(uintptr_t)fid_mr;
+	fid_mr->mr.key = (uint64_t)(uintptr_t)fid_mr;
+	fid_mr->signature = PSMX_MR_SIGNATURE;
+	fid_mr->access = FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
+	fid_mr->flags = flags;
+	fid_mr->iov_count = attr->iov_count;
+	for (i=0; i<attr->iov_count; i++)
+		fid_mr->iov[i] = attr->mr_iov[i];
+
+	if (attr->mask & FI_MR_ATTR_CONTEXT)
+		fid_mr->mr.fid.context = attr->context;
+
+	if (attr->mask & FI_MR_ATTR_ACCESS)
+		fid_mr->access = attr->access;
+
+	if (attr->mask & FI_MR_ATTR_KEY)
+		; /* request_key is ignored */
+
+	*mr = &fid_mr->mr.fid;
+	return 0;
+}
+
+struct fi_ops_mr psmx_mr_ops = {
+	.size = sizeof(struct fi_ops_mr),
+	.mr_reg = psmx_mr_reg,
+	.mr_regv = psmx_mr_regv,
+	.mr_regattr = psmx_mr_regattr,
+};
 

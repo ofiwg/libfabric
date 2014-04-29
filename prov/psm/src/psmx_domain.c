@@ -138,6 +138,7 @@ int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *conte
 	fid_domain->domain.fid.context = context;
 	fid_domain->domain.fid.ops = &psmx_fi_ops;
 	fid_domain->domain.ops = &psmx_domain_ops;
+	fid_domain->domain.mr = &psmx_mr_ops;
 
 	err = psm_ep_open(info->auth_key, NULL,
 			  &fid_domain->psm_ep, &fid_domain->psm_epid);

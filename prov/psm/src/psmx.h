@@ -32,6 +32,7 @@ extern "C" {
 
 #define PFX "libfabric:psm"
 
+#define PSMX_MR_SIGNATURE (0x05F109530F1D03B0ULL) /* "SFI PSM FID MR" */
 #define PSMX_TIME_OUT	120
 #define PSMX_SUPPORTED_FLAGS (FI_BLOCK | FI_EXCL | \
 			      FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
@@ -91,12 +92,18 @@ struct psmx_fid_ep {
 
 struct psmx_fid_mr {
 	struct fid_mr		mr;
+	uint64_t		signature;
+	uint64_t		access;
+	uint64_t		flags;
+	size_t			iov_count;
+	struct iovec		iov[0];	/* must be the last field */
 };
 
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
 extern struct fi_ops_msg	psmx_msg_ops;
 extern struct fi_ops_rma	psmx_rma_ops;
+extern struct fi_ops_mr		psmx_mr_ops;
 
 void	psmx_ini(void);
 void	psmx_fini(void);
@@ -105,11 +112,6 @@ int	psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *conte
 int	psmx_ep_open(fid_t domain, struct fi_info *info, fid_t *fid, void *context);
 int	psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context);
 int	psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context);
-
-int	psmx_mr_reg(fid_t fid, const void *buf, size_t len,
-		       struct fi_mr_attr *attr, fid_t *mr, void *context);
-int	psmx_mr_regv(fid_t fid, const struct iovec *iov, size_t count,
-			struct fi_mr_attr *attr, fid_t *mr, void *context);
 
 void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername, psm_uuid_t uuid);
