@@ -39,6 +39,8 @@ extern "C" {
 #define PSMX_OUI_INTEL	0x0002b3L
 #define PSMX_PROTOCOL	0x0001
 
+#define PSMX_NONMATCH_BIT (0x8000000000000000ULL)
+
 struct psmx_fid_domain {
 	struct fid_domain	domain;
 	psm_ep_t		psm_ep;
@@ -46,6 +48,12 @@ struct psmx_fid_domain {
 	psm_mq_t		psm_mq;
 	pthread_t		ns_thread;
 	int			ns_port;
+
+	/* certain bits in the tag space can be reserved for non tag-matching
+	 * purpose. The tag-matching functions automatically treat these bits
+	 * as 0. This field is a bit mask, with reserved bits valued as "1".
+	 */
+	uint64_t		reserved_tag_bits;
 };
 
 struct psmx_fid_ec {
@@ -73,6 +81,7 @@ struct psmx_fid_ep {
 
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
+extern struct fi_ops_msg	psmx_msg_ops;
 
 void	psmx_ini(void);
 void	psmx_fini(void);

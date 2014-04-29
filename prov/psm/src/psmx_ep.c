@@ -236,8 +236,11 @@ int psmx_ep_open(struct fi_info *info, fid_t *fid, void *context)
 	fid_ep->ep.cm = &psmx_cm_ops;
 	fid_ep->ep.tagged = &psmx_tagged_ops;
 
-	if (info)
+	if (info) {
 		fid_ep->flags = info->flags;
+		if (info->protocol_cap & FI_PROTO_CAP_MSG)
+			fid_ep->ep.msg = &psmx_msg_ops;
+	}
 
 	*fid = &fid_ep->ep.fid;
 
