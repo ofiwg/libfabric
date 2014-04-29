@@ -11,6 +11,7 @@ extern "C" {
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -120,6 +121,7 @@ int	psmx_uuid_to_port(psm_uuid_t uuid);
 int	psmx_errno(int err);
 int	psmx_epid_to_epaddr(psm_ep_t ep, psm_epid_t epid, psm_epaddr_t *epaddr);
 void	psmx_query_mpi(void);
+void	psmx_debug(char *fmt, ...);
 
 #ifdef __cplusplus
 }

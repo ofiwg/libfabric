@@ -294,3 +294,24 @@ void psmx_query_mpi(void)
 	/* TODO: check other MPI */
 }
 
+void psmx_debug(char *fmt, ...)
+{
+	static int debug = -1;
+	char *env;
+	va_list ap;
+
+	if (debug == -1) {
+		env = getenv("SFI_PSM_DEBUG");
+		if (env)
+			debug = atoi(env);
+		else
+			debug = 0;
+	}
+
+	if (debug) {
+		va_start(ap, fmt);
+		vfprintf(stderr, fmt, ap);
+		va_end(ap);
+	}
+}
+
