@@ -101,7 +101,7 @@ enum {
 
 struct fi_ops_ep {
 	size_t	size;
-	int	(*enable)(fid_t fid);
+	int	(*enable)(struct fid_ep *ep);
 	ssize_t	(*cancel)(fid_t fid, void *context);
 	int	(*getopt)(fid_t fid, int level, int optname,
 			  void *optval, size_t *optlen);
@@ -111,20 +111,22 @@ struct fi_ops_ep {
 
 struct fi_ops_msg {
 	size_t	size;
-	ssize_t (*recv)(fid_t fid, void *buf, size_t len, void *desc,
+	ssize_t (*recv)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			void *context);
-	ssize_t (*recvv)(fid_t fid, const struct iovec *iov, void *desc,
+	ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void *desc,
 			size_t count, void *context);
-	ssize_t (*recvfrom)(fid_t fid, void *buf, size_t len, void *desc,
+	ssize_t (*recvfrom)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			const void *src_addr, void *context);
-	ssize_t (*recvmsg)(fid_t fid, const struct fi_msg *msg, uint64_t flags);
-	ssize_t (*send)(fid_t fid, const void *buf, size_t len, void *desc,
+	ssize_t (*recvmsg)(struct fid_ep *ep, const struct fi_msg *msg,
+			uint64_t flags);
+	ssize_t (*send)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			void *context);
-	ssize_t (*sendv)(fid_t fid, const struct iovec *iov, void *desc,
+	ssize_t (*sendv)(struct fid_ep *ep, const struct iovec *iov, void *desc,
 			size_t count, void *context);
-	ssize_t (*sendto)(fid_t fid, const void *buf, size_t len, void *desc,
+	ssize_t (*sendto)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			const void *dest_addr, void *context);
-	ssize_t (*sendmsg)(fid_t fid, const struct fi_msg *msg, uint64_t flags);
+	ssize_t (*sendmsg)(struct fid_ep *ep, const struct fi_msg *msg,
+			uint64_t flags);
 };
 
 struct fi_ops_cm;
@@ -161,32 +163,22 @@ struct fid_pep {
 #ifndef FABRIC_DIRECT
 
 static inline int
-fi_fendpoint(fid_t fid, struct fi_info *info, fid_t *pep, void *context)
+fi_fendpoint(struct fid_fabric *fabric, struct fi_info *info,
+	     struct fid_pep **pep, void *context)
 {
-	struct fid_fabric *fab = container_of(fid, struct fid_fabric, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_FABRIC);
-	FI_ASSERT_OPS(fid, struct fid_fabric, ops);
-	FI_ASSERT_OP(fab->ops, struct fi_ops_fabric, endpoint);
-	return fab->ops->endpoint(fid, info, pep, context);
+	return fabric->ops->endpoint(fabric, info, pep, context);
 }
 
 static inline int
-fi_endpoint(fid_t fid, struct fi_info *info, fid_t *ep, void *context)
+fi_endpoint(struct fid_domain *domain, struct fi_info *info,
+	    struct fid_ep **ep, void *context)
 {
-	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_DOMAIN);
-	FI_ASSERT_OPS(fid, struct fid_domain, ops);
-	FI_ASSERT_OP(domain->ops, struct fi_ops_domain, endpoint);
-	return domain->ops->endpoint(fid, info, ep, context);
+	return domain->ops->endpoint(domain, info, ep, context);
 }
 
-static inline ssize_t fi_enable(fid_t fid)
+static inline ssize_t fi_enable(struct fid_ep *ep)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, ops);
-	FI_ASSERT_OP(ep->ops, struct fi_ops_ep, enable);
-	return ep->ops->enable(fid);
+	return ep->ops->enable(ep);
 }
 
 static inline ssize_t fi_cancel(fid_t fid, void *context)
@@ -208,34 +200,22 @@ static inline ssize_t fi_setopt(fid_t fid, int level, int optname,
 	return ep->ops->setopt(fid, level, optname, optval, optlen);
 }
 
-static inline ssize_t fi_recv(fid_t fid, void *buf, size_t len, void *desc,
-			      void *context)
+static inline ssize_t
+fi_recv(struct fid_ep *ep, void *buf, size_t len, void *desc, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, msg);
-	FI_ASSERT_OP(ep->msg, struct fi_ops_msg, recv);
-	return ep->msg->recv(fid, buf, len, desc, context);
-}
-
-static inline ssize_t fi_send(fid_t fid, const void *buf, size_t len,
-			      void *desc, void *context)
-{
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, msg);
-	FI_ASSERT_OP(ep->msg, struct fi_ops_msg, send);
-	return ep->msg->send(fid, buf, len, desc, context);
+	return ep->msg->recv(ep, buf, len, desc, context);
 }
 
 static inline ssize_t
-fi_sendmsg(fid_t fid, const struct fi_msg *msg, uint64_t flags)
+fi_send(struct fid_ep *ep, const void *buf, size_t len, void *desc, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, msg);
-	FI_ASSERT_OP(ep->msg, struct fi_ops_msg, sendmsg);
-	return ep->msg->sendmsg(fid, msg, flags);
+	return ep->msg->send(ep, buf, len, desc, context);
+}
+
+static inline ssize_t
+fi_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+{
+	return ep->msg->sendmsg(ep, msg, flags);
 }
 
 

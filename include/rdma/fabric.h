@@ -161,20 +161,28 @@ struct fi_context {
 };
 
 struct fid;
+struct fid_fabric;
+struct fid_domain;
+struct fid_av;
+struct fid_ec;
+struct fid_ep;
+struct fid_pep;
+struct fid_mr;
+
 typedef struct fid *fid_t;
 struct fi_ec_attr;
 
 struct fi_resource {
-	fid_t			fid;
+	struct fid		*fid;
 	uint64_t		flags;
 };
 
 struct fi_ops {
 	size_t	size;
-	int	(*close)(fid_t fid);
-	int	(*bind)(fid_t fid, struct fi_resource *fids, int nfids);
-	int	(*sync)(fid_t fid, uint64_t flags, void *context);
-	int	(*control)(fid_t fid, int command, void *arg);
+	int	(*close)(struct fid *fid);
+	int	(*bind)(struct fid *fid, struct fi_resource *fids, int nfids);
+	int	(*sync)(struct fid *fid, uint64_t flags, void *context);
+	int	(*control)(struct fid *fid, int command, void *arg);
 };
 
 /* All fabric interface descriptors must start with this structure */
@@ -194,14 +202,14 @@ void fi_freeinfo(struct fi_info *info);
 
 struct fi_ops_fabric {
 	size_t	size;
-	int	(*domain)(fid_t fid, struct fi_info *info, fid_t *dom,
-			void *context);
-	int	(*endpoint)(fid_t fid, struct fi_info *info, fid_t *pep,
-			void *context);
-	int	(*ec_open)(fid_t fid, const struct fi_ec_attr *attr, fid_t *ec,
-			void *context);
-	int	(*if_open)(fid_t fid, const char *name, uint64_t flags,
-			fid_t *fif, void *context);
+	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
+			struct fid_domain **dom, void *context);
+	int	(*endpoint)(struct fid_fabric *fabric, struct fi_info *info,
+			struct fid_pep **pep, void *context);
+	int	(*ec_open)(struct fid_fabric *fabric, const struct fi_ec_attr *attr,
+			struct fid_ec **ec, void *context);
+	int	(*if_open)(struct fid_fabric *fabric, const char *name,
+			uint64_t flags, struct fid **fif, void *context);
 };
 
 struct fid_fabric {
@@ -209,7 +217,8 @@ struct fid_fabric {
 	struct fi_ops_fabric	*ops;
 };
 
-int fi_fabric(const char *name, uint64_t flags, fid_t *fid, void *context);
+int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
+	      void *context);
 
 
 #define FI_ASSERT_CLASS(fid, f_class)   assert(fid->fclass == f_class)
@@ -218,39 +227,30 @@ int fi_fabric(const char *name, uint64_t flags, fid_t *fid, void *context);
 #define FI_ASSERT_OP(ops, otype, op)   FI_ASSERT_FIELD(ops, otype, op)
 
 static inline int
-fi_fopen(fid_t fid, const char *name, uint64_t flags, fid_t *fif, void *context)
+fi_fopen(struct fid_fabric *fabric, const char *name, uint64_t flags,
+	 struct fid **fif, void *context)
 {
-	struct fid_fabric *fab = container_of(fid, struct fid_fabric, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_FABRIC);
-	FI_ASSERT_OPS(fid, struct fid_fabric, ops);
-	FI_ASSERT_OP(fab->ops, struct fi_ops_fabric, if_open);
-	return fab->ops->if_open(fid, name, flags, fif, context);
+	return fabric->ops->if_open(fabric, name, flags, fif, context);
 }
 
-static inline int fi_close(fid_t fid)
+static inline int fi_close(struct fid *fid)
 {
-	FI_ASSERT_OPS(fid, struct fid, ops);
-	FI_ASSERT_OP(fid->ops, struct fi_ops, close);
 	return fid->ops->close(fid);
 }
 #define fi_destroy(fid) fi_close(fid)
 
-static inline int fi_bind(fid_t fid, struct fi_resource *fids, int nfids)
+static inline int fi_bind(struct fid *fid, struct fi_resource *fids, int nfids)
 {
-	FI_ASSERT_OPS(fid, struct fid, ops);
-	FI_ASSERT_OP(fid->ops, struct fi_ops, bind);
 	return fid->ops->bind(fid, fids, nfids);
 }
 
-static inline int fi_sync(fid_t fid, uint64_t flags, void *context)
+static inline int fi_sync(struct fid *fid, uint64_t flags, void *context)
 {
-	FI_ASSERT_OPS(fid, struct fid, ops);
-	FI_ASSERT_OP(fid->ops, struct fi_ops, sync);
 	return fid->ops->sync(fid, flags, context);
 }
 
 struct fi_alias {
-	fid_t			*fid;
+	struct fid 		**fid;
 	uint64_t		flags;
 };
 
@@ -276,14 +276,12 @@ enum {
 	FI_STOPPROGRESS		/* NULL - flags? */
 };
 
-static inline int fi_control(fid_t fid, int command, void *arg)
+static inline int fi_control(struct fid *fid, int command, void *arg)
 {
-	FI_ASSERT_OPS(fid, struct fid, ops);
-	FI_ASSERT_OP(fid->ops, struct fi_ops, control);
 	return fid->ops->control(fid, command, arg);
 }
 
-static inline int fi_alias(fid_t fid, fid_t *alias_fid, uint64_t flags)
+static inline int fi_alias(struct fid *fid, struct fid **alias_fid, uint64_t flags)
 {
 	struct fi_alias alias;
 	alias.fid = alias_fid;

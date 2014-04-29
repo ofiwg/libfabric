@@ -49,7 +49,7 @@ extern "C" {
 #define FI_RANGE		(1ULL << 0)
 
 struct fi_av_addr {
-	fid_t			av;
+	struct fid_av		*av;
 	uint64_t		av_index;
 };
 
@@ -78,9 +78,9 @@ struct fi_av_attr {
 
 struct fi_ops_av {
 	size_t	size;
-	int	(*insert)(fid_t fid, const void *addr, size_t count,
+	int	(*insert)(struct fid_av *av, const void *addr, size_t count,
 			void **fi_addr, uint64_t flags);
-	int	(*remove)(fid_t fid, void *fi_addr, size_t count,
+	int	(*remove)(struct fid_av *av, void *fi_addr, size_t count,
 			uint64_t flags);
 };
 
@@ -256,17 +256,19 @@ struct fi_ec_cm_entry {
 
 struct fi_ops_ec {
 	size_t	size;
-	ssize_t	(*read)(fid_t fid, void *buf, size_t len);
-	ssize_t	(*readfrom)(fid_t fid, void *buf, size_t len,
+	ssize_t	(*read)(struct fid_ec *ec, void *buf, size_t len);
+	ssize_t	(*readfrom)(struct fid_ec *ec, void *buf, size_t len,
 			void *src_addr, size_t *addrlen);
-	ssize_t	(*readerr)(fid_t fid, void *buf, size_t len, uint64_t flags);
-	ssize_t	(*write)(fid_t fid, const void *buf, size_t len);
-	int	(*reset)(fid_t fid, const void *cond);
-	ssize_t	(*condread)(fid_t fid, void *buf, size_t len, const void *cond);
-	ssize_t	(*condreadfrom)(fid_t fid, void *buf, size_t len,
+	ssize_t	(*readerr)(struct fid_ec *ec, void *buf, size_t len,
+			uint64_t flags);
+	ssize_t	(*write)(struct fid_ec *ec, const void *buf, size_t len);
+	int	(*reset)(struct fid_ec *ec, const void *cond);
+	ssize_t	(*condread)(struct fid_ec *ec, void *buf, size_t len,
+			const void *cond);
+	ssize_t	(*condreadfrom)(struct fid_ec *ec, void *buf, size_t len,
 			void *src_addr, size_t *addrlen, const void *cond);
-	const char * (*strerror)(fid_t fid, int prov_errno, const void *prov_data,
-			void *buf, size_t len);
+	const char * (*strerror)(struct fid_ec *ec, int prov_errno,
+			const void *prov_data, void *buf, size_t len);
 };
 
 struct fid_ec {
@@ -321,28 +323,29 @@ struct fi_domain_attr {
 
 struct fi_ops_domain {
 	size_t	size;
-	int	(*progress)(fid_t fid);
-	int	(*query)(fid_t fid, struct fi_domain_attr *attr, size_t *attrlen);
-	int	(*av_open)(fid_t fid, struct fi_av_attr *attr, fid_t *av,
-			void *context);
-	int	(*ec_open)(fid_t fid, struct fi_ec_attr *attr, fid_t *ec,
-			void *context);
-	int	(*endpoint)(fid_t fid, struct fi_info *info, fid_t *ep,
-			void *context);
-	int	(*if_open)(fid_t fid, const char *name, uint64_t flags,
-			fid_t *fif, void *context);
+	int	(*progress)(struct fid_domain *domain);
+	int	(*query)(struct fid_domain *domain, struct fi_domain_attr *attr,
+			size_t *attrlen);
+	int	(*av_open)(struct fid_domain *domain, struct fi_av_attr *attr,
+			struct fid_av **av, void *context);
+	int	(*ec_open)(struct fid_domain *domain, struct fi_ec_attr *attr,
+			struct fid_ec **ec, void *context);
+	int	(*endpoint)(struct fid_domain *domain, struct fi_info *info,
+			struct fid_ep **ep, void *context);
+	int	(*if_open)(struct fid_domain *domain, const char *name,
+			uint64_t flags, struct fid **fif, void *context);
 };
 
 struct fi_ops_mr {
 	size_t	size;
-	int	(*reg)(fid_t fid, const void *buf, size_t len,
+	int	(*reg)(struct fid_domain *domain, const void *buf, size_t len,
 			uint64_t access, uint64_t requested_key,
-			uint64_t flags, fid_t *mr, void *context);
-	int	(*regv)(fid_t fid, const struct iovec *iov, size_t count,
-			uint64_t access, uint64_t requested_key,
-			uint64_t flags, fid_t *mr, void *context);
-	int	(*regattr)(fid_t fid, const struct fi_mr_attr *attr,
-			uint64_t flags, fid_t *mr);
+			uint64_t flags, struct fid_mr **mr, void *context);
+	int	(*regv)(struct fid_domain *domain, const struct iovec *iov,
+			size_t count, uint64_t access, uint64_t requested_key,
+			uint64_t flags, struct fid_mr **mr, void *context);
+	int	(*regattr)(struct fid_domain *domain, const struct fi_mr_attr *attr,
+			uint64_t flags, struct fid_mr **mr);
 };
 
 struct fid_domain {
@@ -355,150 +358,103 @@ struct fid_domain {
 #ifndef FABRIC_DIRECT
 
 static inline int
-fi_fdomain(fid_t fid, struct fi_info *info, fid_t *dom, void *context)
+fi_fdomain(struct fid_fabric *fabric, struct fi_info *info,
+	   struct fid_domain **domain, void *context)
 {
-	struct fid_fabric *fab = container_of(fid, struct fid_fabric, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_FABRIC);
-	FI_ASSERT_OPS(fid, struct fid_fabric, ops);
-	FI_ASSERT_OP(fab->ops, struct fi_ops_fabric, domain);
-	return fab->ops->domain(fid, info, dom, context);
+	return fabric->ops->domain(fabric, info, domain, context);
 }
 
 static inline int
-fi_fec_open(fid_t fid, const struct fi_ec_attr *attr, fid_t *ec, void *context)
+fi_fec_open(struct fid_fabric *fabric, const struct fi_ec_attr *attr,
+	    struct fid_ec **ec, void *context)
 {
-	struct fid_fabric *fab = container_of(fid, struct fid_fabric, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_FABRIC);
-	FI_ASSERT_OPS(fid, struct fid_fabric, ops);
-	FI_ASSERT_OP(fab->ops, struct fi_ops_fabric, ec_open);
-	return fab->ops->ec_open(fid, attr, ec, context);
+	return fabric->ops->ec_open(fabric, attr, ec, context);
 }
 
 static inline int
-fi_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context)
+fi_ec_open(struct fid_domain *domain, struct fi_ec_attr *attr,
+	   struct fid_ec **ec, void *context)
 {
-	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_DOMAIN);
-	FI_ASSERT_OPS(fid, struct fid_domain, ops);
-	FI_ASSERT_OP(domain->ops, struct fi_ops_domain, ec_open);
-	return domain->ops->ec_open(fid, attr, ec, context);
+	return domain->ops->ec_open(domain, attr, ec, context);
 }
 
-static inline ssize_t fi_ec_read(fid_t fid, void *buf, size_t len)
+static inline ssize_t fi_ec_read(struct fid_ec *ec, void *buf, size_t len)
 {
-	struct fid_ec *ec = container_of(fid, struct fid_ec, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EC);
-	FI_ASSERT_OPS(fid, struct fid_ec, ops);
-	FI_ASSERT_OP(ec->ops, struct fi_ops_ec, read);
-	return ec->ops->read(fid, buf, len);
+	return ec->ops->read(ec, buf, len);
 }
 
-static inline ssize_t fi_ec_readfrom(fid_t fid, void *buf, size_t len,
-				     void *src_addr, size_t *addrlen)
+static inline ssize_t
+fi_ec_readfrom(struct fid_ec *ec, void *buf, size_t len,
+	       void *src_addr, size_t *addrlen)
 {
-	struct fid_ec *ec = container_of(fid, struct fid_ec, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EC);
-	FI_ASSERT_OPS(fid, struct fid_ec, ops);
-	FI_ASSERT_OP(ec->ops, struct fi_ops_ec, readfrom);
-	return ec->ops->readfrom(fid, buf, len, src_addr, addrlen);
+	return ec->ops->readfrom(ec, buf, len, src_addr, addrlen);
 }
 
-static inline ssize_t fi_ec_readerr(fid_t fid, void *buf, size_t len, uint64_t flags)
+static inline ssize_t
+fi_ec_readerr(struct fid_ec *ec, void *buf, size_t len, uint64_t flags)
 {
-	struct fid_ec *ec = container_of(fid, struct fid_ec, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EC);
-	FI_ASSERT_OPS(fid, struct fid_ec, ops);
-	FI_ASSERT_OP(ec->ops, struct fi_ops_ec, readerr);
-	return ec->ops->readerr(fid, buf, len, flags);
+	return ec->ops->readerr(ec, buf, len, flags);
 }
 
-static inline int fi_ec_reset(fid_t fid, void *cond)
+static inline int fi_ec_reset(struct fid_ec *ec, void *cond)
 {
-	struct fid_ec *ec = container_of(fid, struct fid_ec, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EC);
-	FI_ASSERT_OPS(fid, struct fid_ec, ops);
-	FI_ASSERT_OP(ec->ops, struct fi_ops_ec, reset);
-	return ec->ops->reset(fid, cond);
+	return ec->ops->reset(ec, cond);
 }
 
-static inline const char * fi_ec_strerror(fid_t fid, int prov_errno, void *prov_data,
-	void *buf, size_t len)
+static inline const char *
+fi_ec_strerror(struct fid_ec *ec, int prov_errno, void *prov_data,
+	       void *buf, size_t len)
 {
-	struct fid_ec *ec = container_of(fid, struct fid_ec, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EC);
-	FI_ASSERT_OPS(fid, struct fid_ec, ops);
-	FI_ASSERT_OP(ec->ops, struct fi_ops_ec, strerror);
-	return ec->ops->strerror(fid, prov_errno, prov_data, buf, len);
+	return ec->ops->strerror(ec, prov_errno, prov_data, buf, len);
 }
 
-static inline int fi_mr_reg(fid_t fid, const void *buf, size_t len,
-	uint64_t access, uint64_t requested_key,
-	uint64_t flags, fid_t *mr, void *context)
+static inline int
+fi_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
+	  uint64_t access, uint64_t requested_key,
+	  uint64_t flags, struct fid_mr **mr, void *context)
 {
-	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_DOMAIN);
-	FI_ASSERT_OPS(fid, struct fid_domain, ops);
-	FI_ASSERT_OP(domain->mr, struct fi_ops_mr, reg);
-	return domain->mr->reg(fid, buf, len, access, requested_key,
-			flags, mr, context);
+	return domain->mr->reg(domain, buf, len, access, requested_key,
+			       flags, mr, context);
 }
 
-static inline void *fi_mr_desc(fid_t fid)
+static inline void *fi_mr_desc(struct fid_mr *mr)
 {
-	struct fid_mr *mr = container_of(fid, struct fid_mr, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_MR);
-	FI_ASSERT_FIELD(fid, struct fid_mr, mem_desc);
 	return mr->mem_desc;
 }
 
-static inline uint64_t fi_mr_key(fid_t fid)
+static inline uint64_t fi_mr_key(struct fid_mr *mr)
 {
-	struct fid_mr *mr = container_of(fid, struct fid_mr, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_MR);
-	FI_ASSERT_FIELD(fid, struct fid_mr, key);
 	return mr->key;
 }
 
-static inline int fi_mr_unreg(fid_t fid)
+static inline int fi_mr_unreg(struct fid_mr *mr)
 {
-	FI_ASSERT_CLASS(fid, FID_CLASS_MR);
-	return fi_close(fid);
+	return fi_close(&mr->fid);
 }
 
-static inline int fi_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av,
-			     void *context)
+static inline int
+fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+	   struct fid_av **av, void *context)
 {
-	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_DOMAIN);
-	FI_ASSERT_OPS(fid, struct fid_domain, ops);
-	FI_ASSERT_OP(domain->ops, struct fi_ops_domain, av_open);
-	return domain->ops->av_open(fid, attr, av, context);
+	return domain->ops->av_open(domain, attr, av, context);
 }
 
-static inline int fi_av_map(fid_t fid, const void *addr, size_t count,
-			    void **fi_addr, uint64_t flags)
+static inline int
+fi_av_map(struct fid_av *av, const void *addr, size_t count,
+	  void **fi_addr, uint64_t flags)
 {
-	struct fid_av *av = container_of(fid, struct fid_av, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_AV);
-	FI_ASSERT_OPS(fid, struct fid_av, ops);
-	FI_ASSERT_OP(av->ops, struct fi_ops_av, insert);
-	return av->ops->insert(fid, addr, count, fi_addr, flags);
+	return av->ops->insert(av, addr, count, fi_addr, flags);
 }
 
-static inline int fi_av_unmap(fid_t fid, void *fi_addr, size_t count,
-			      uint64_t flags)
+static inline int
+fi_av_unmap(struct fid_av *av, void *fi_addr, size_t count, uint64_t flags)
 {
-	struct fid_av *av = container_of(fid, struct fid_av, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_AV);
-	FI_ASSERT_OPS(fid, struct fid_av, ops);
-	FI_ASSERT_OP(av->ops, struct fi_ops_av, remove);
-	return av->ops->remove(fid, fi_addr, count, flags);
+	return av->ops->remove(av, fi_addr, count, flags);
 }
 
-static inline int fi_av_sync(fid_t fid, uint64_t flags, void *context)
+static inline int fi_av_sync(struct fid_av *av, uint64_t flags, void *context)
 {
-	FI_ASSERT_CLASS(fid, FID_CLASS_AV);
-	return fi_sync(fid, flags, context);
+	return fi_sync(&av->fid, flags, context);
 }
 
 

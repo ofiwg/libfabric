@@ -369,13 +369,13 @@ static int psmx_ec_poll_mq(struct psmx_fid_ec *ec)
 	}
 }
 
-static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
+static ssize_t psmx_ec_readfrom(struct fid_ec *ec, void *buf, size_t len,
 				void *src_addr, size_t *addrlen)
 {
 	struct psmx_fid_ec *fid_ec;
 	struct psmx_event *event;
 
-	fid_ec = container_of(fid, struct psmx_fid_ec, ec.fid);
+	fid_ec = container_of(ec, struct psmx_fid_ec, ec);
 	assert(fid_ec->domain);
 
 	if (len < fid_ec->entry_size)
@@ -403,16 +403,16 @@ static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
 	return 0;
 }
 
-static ssize_t psmx_ec_read(fid_t fid, void *buf, size_t len)
+static ssize_t psmx_ec_read(struct fid_ec *ec, void *buf, size_t len)
 {
-	return psmx_ec_readfrom(fid, buf, len, NULL, NULL);
+	return psmx_ec_readfrom(ec, buf, len, NULL, NULL);
 }
 
-static ssize_t psmx_ec_readerr(fid_t fid, void *buf, size_t len, uint64_t flags)
+static ssize_t psmx_ec_readerr(struct fid_ec *ec, void *buf, size_t len, uint64_t flags)
 {
 	struct psmx_fid_ec *fid_ec;
 
-	fid_ec = container_of(fid, struct psmx_fid_ec, ec.fid);
+	fid_ec = container_of(ec, struct psmx_fid_ec, ec);
 
 	if (len < fid_ec->err_entry_size)
 		return -FI_ETOOSMALL;
@@ -427,28 +427,28 @@ static ssize_t psmx_ec_readerr(fid_t fid, void *buf, size_t len, uint64_t flags)
 	return 0;
 }
 
-static ssize_t psmx_ec_write(fid_t fid, const void *buf, size_t len)
+static ssize_t psmx_ec_write(struct fid_ec *ec, const void *buf, size_t len)
 {
 	return -ENOSYS;
 }
 
-static int psmx_ec_reset(fid_t fid, const void *cond)
+static int psmx_ec_reset(struct fid_ec *ec, const void *cond)
 {
 	return -ENOSYS;
 }
 
-static ssize_t psmx_ec_condread(fid_t fid, void *buf, size_t len, const void *cond)
+static ssize_t psmx_ec_condread(struct fid_ec *ec, void *buf, size_t len, const void *cond)
 {
 	return -ENOSYS;
 }
 
-static ssize_t psmx_ec_condreadfrom(fid_t fid, void *buf, size_t len,
+static ssize_t psmx_ec_condreadfrom(struct fid_ec *ec, void *buf, size_t len,
 				    void *src_addr, size_t *addrlen, const void *cond)
 {
 	return -ENOSYS;
 }
 
-static const char *psmx_ec_strerror(fid_t fid, int prov_errno, const void *prov_data,
+static const char *psmx_ec_strerror(struct fid_ec *ec, int prov_errno, const void *prov_data,
 				    void *buf, size_t len)
 {
 	return psm_error_get_string(prov_errno);
@@ -522,7 +522,8 @@ static struct fi_ops_ec psmx_ec_ops = {
 	.strerror = psmx_ec_strerror,
 };
 
-int psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context)
+int psmx_ec_open(struct fid_domain *domain, struct fi_ec_attr *attr,
+		struct fid_ec **ec, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_ec *fid_ec;
@@ -622,7 +623,7 @@ int psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context)
 		return -EINVAL;
 	}
 
-	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
+	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
 	fid_ec = (struct psmx_fid_ec *) calloc(1, sizeof *fid_ec);
 	if (!fid_ec)
 		return -ENOMEM;
@@ -639,7 +640,7 @@ int psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context)
 	fid_ec->ec.fid.ops = &psmx_fi_ops;
 	fid_ec->ec.ops = &psmx_ec_ops;
 
-	*ec = &fid_ec->ec.fid;
+	*ec = &fid_ec->ec;
 	return 0;
 }
 

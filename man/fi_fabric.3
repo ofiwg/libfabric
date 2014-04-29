@@ -15,19 +15,19 @@ Open / close a fabric specific interface
 .B "#include <rdma/fabric.h>"
 .HP
 .BI "int fi_fabric(const char *" name ", uint64_t " flags ","
-.BI "fid_t **" fid ", void *" context ");"
+.BI "struct fid_fabric **" fabric ", void *" context ");"
 .HP
-.BI "int fi_close(fid_t " fid ");"
+.BI "int fi_close(struct fid *" fabric ");"
 .PP
 .HP
-.BI "int fi_fabric(fid_t " fid ", const char *" name ", uint64_t " flags ","
-.BI "fid_t **" fif ", void *" context ");"
+.BI "int fi_fopen(struct fid_fabric *" fabric ", const char *" name ", uint64_t " flags ","
+.BI "struct fid **" fif ", void *" context ");"
 .SH ARGUMENTS
 .IP "name" 12
 Name associated with the fabric or interface.
 .IP "flags" 12
 Control flags
-.IP "fid" 12
+.IP "fabric" 12
 Fabric domain
 .IP "fif" 12
 Fabric interface

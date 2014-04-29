@@ -49,11 +49,11 @@ static int psmx_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	return 0;
 }
 
-static int psmx_cm_getpeer(fid_t fid, void *addr, size_t *addrlen)
+static int psmx_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 {
 	struct psmx_fid_ep *fid_ep;
 
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 	if (!fid_ep->domain)
 		return -EBADF;
 
@@ -69,14 +69,15 @@ static int psmx_cm_getpeer(fid_t fid, void *addr, size_t *addrlen)
 	return 0;
 }
 
-static int psmx_cm_connect(fid_t fid, const void *addr, const void *param, size_t paramlen)
+static int psmx_cm_connect(struct fid_ep *ep, const void *addr,
+			   const void *param, size_t paramlen)
 {
 	struct psmx_fid_ep *fid_ep;
 	psm_epid_t epid;
 	psm_epaddr_t epaddr;
 	int err;
 
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 	if (!fid_ep->domain)
 		return -EBADF;
 
@@ -92,27 +93,27 @@ static int psmx_cm_connect(fid_t fid, const void *addr, const void *param, size_
 	return 0;
 }
 
-static int psmx_cm_listen(fid_t fid)
+static int psmx_cm_listen(struct fid_pep *pep)
 {
 	return -ENOSYS;
 }
 
-static int psmx_cm_accept(fid_t fid, const void *param, size_t paramlen)
+static int psmx_cm_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	return -ENOSYS;
 }
 
-static int psmx_cm_reject(fid_t fid, struct fi_info *info, const void *param,
-			size_t paramlen)
+static int psmx_cm_reject(struct fid_pep *pep, struct fi_info *info,
+			const void *param, size_t paramlen)
 {
 	return -ENOSYS;
 }
 
-static int psmx_cm_shutdown(fid_t fid, uint64_t flags)
+static int psmx_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
 
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 	if (!fid_ep->domain)
 		return -EBADF;
 
@@ -126,12 +127,12 @@ static int psmx_cm_shutdown(fid_t fid, uint64_t flags)
 	return 0;
 }
 
-static int psmx_cm_join(fid_t fid, void *addr, void **fi_addr, uint64_t flags)
+static int psmx_cm_join(struct fid_ep *ep, void *addr, void **fi_addr, uint64_t flags)
 {
 	return -ENOSYS;
 }
 
-static int psmx_cm_leave(fid_t fid, void *addr, void *fi_addr, uint64_t flags)
+static int psmx_cm_leave(struct fid_ep *ep, void *addr, void *fi_addr, uint64_t flags)
 {
 	return -ENOSYS;
 }

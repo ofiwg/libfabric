@@ -105,73 +105,73 @@ struct fi_msg_atomic {
 
 struct fi_ops_atomic {
 	size_t	size;
-	int	(*write)(fid_t fid,
+	int	(*write)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*writev)(fid_t fid,
+	int	(*writev)(struct fid_ep *ep,
 			const struct fi_ioc *iov, void *desc, size_t count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*writeto)(fid_t fid,
+	int	(*writeto)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			const void *dest_addr,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*writemsg)(fid_t fid,
+	int	(*writemsg)(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg, uint64_t flags);
 
-	int	(*readwrite)(fid_t fid,
+	int	(*readwrite)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			void *result, void *result_desc,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*readwritev)(fid_t fid,
+	int	(*readwritev)(struct fid_ep *ep,
 			const struct fi_ioc *iov, void *desc, size_t count,
 			struct fi_ioc *resultv, void *result_desc, size_t result_count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*readwriteto)(fid_t fid,
+	int	(*readwriteto)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			void *result, void *result_desc,
 			const void *dest_addr,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*readwritemsg)(fid_t fid,
+	int	(*readwritemsg)(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg,
 			struct fi_ioc *resultv, void *result_desc, size_t result_count,
 			uint64_t flags);
 
-	int	(*compwrite)(fid_t fid,
+	int	(*compwrite)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			const void *compare, void *compare_desc,
 			void *result, void *result_desc,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*compwritev)(fid_t fid,
+	int	(*compwritev)(struct fid_ep *ep,
 			const struct fi_ioc *iov, void *desc, size_t count,
 			const struct fi_ioc *comparev, void *compare_desc, size_t compare_count,
 			struct fi_ioc *resultv, void *result_desc, size_t result_count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*compwriteto)(fid_t fid,
+	int	(*compwriteto)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			const void *compare, void *compare_desc,
 			void *result, void *result_desc,
 			const void *dest_addr,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*compwritemsg)(fid_t fid,
+	int	(*compwritemsg)(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg,
 			const struct fi_ioc *comparev, void *compare_desc, size_t compare_count,
 			struct fi_ioc *resultv, void *result_desc, size_t result_count,
 			uint64_t flags);
 
-	int	(*writevalid)(fid_t fid,
+	int	(*writevalid)(struct fid_ep *ep,
 			enum fi_datatype datatype, enum fi_op op, size_t *count);
-	int	(*readwritevalid)(fid_t fid,
+	int	(*readwritevalid)(struct fid_ep *ep,
 			enum fi_datatype datatype, enum fi_op op, size_t *count);
-	int	(*compwritevalid)(fid_t fid,
+	int	(*compwritevalid)(struct fid_ep *ep,
 			enum fi_datatype datatype, enum fi_op op, size_t *count);
 };
 
@@ -179,97 +179,69 @@ struct fi_ops_atomic {
 #ifndef FABRIC_DIRECT
 
 static inline int
-fi_atomic(fid_t fid,
-	const void *buf, size_t count, void *desc,
-	uint64_t addr, uint64_t key,
-	enum fi_datatype datatype, enum fi_op op, void *context)
+fi_atomic(struct fid_ep *ep,
+	  const void *buf, size_t count, void *desc,
+	  uint64_t addr, uint64_t key,
+	  enum fi_datatype datatype, enum fi_op op, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, atomic);
-	FI_ASSERT_OP(ep->atomic, struct fi_ops_atomic, write);
-	return ep->atomic->write(fid, buf, count, desc, addr, key,
+	return ep->atomic->write(ep, buf, count, desc, addr, key,
 				 datatype, op, context);
 }
 
 static inline int
-fi_atomicto(fid_t fid,
-	const void *buf, size_t count, void *desc,
-	const void *dest_addr,
-	uint64_t addr, uint64_t key,
-	enum fi_datatype datatype, enum fi_op op, void *context)
+fi_atomicto(struct fid_ep *ep,
+	    const void *buf, size_t count, void *desc,
+	    const void *dest_addr,
+	    uint64_t addr, uint64_t key,
+	    enum fi_datatype datatype, enum fi_op op, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, atomic);
-	FI_ASSERT_OP(ep->atomic, struct fi_ops_atomic, writeto);
-	return ep->atomic->writeto(fid, buf, count, desc, dest_addr,
+	return ep->atomic->writeto(ep, buf, count, desc, dest_addr,
 				   addr, key, datatype, op, context);
 }
 
 static inline int
-fi_fetch_atomic(fid_t fid,
-	const void *buf, size_t count, void *desc,
-	void *result, void *result_desc,
-	uint64_t addr, uint64_t key,
-	enum fi_datatype datatype, enum fi_op op, void *context)
+fi_fetch_atomic(struct fid_ep *ep,
+		const void *buf, size_t count, void *desc,
+		void *result, void *result_desc,
+		uint64_t addr, uint64_t key,
+		enum fi_datatype datatype, enum fi_op op, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, atomic);
-	FI_ASSERT_OP(ep->atomic, struct fi_ops_atomic, readwrite);
-	return ep->atomic->readwrite(fid, buf, count, desc, result, result_desc,
+	return ep->atomic->readwrite(ep, buf, count, desc, result, result_desc,
 				     addr, key, datatype, op, context);
 }
 
 static inline int
-fi_fetch_atomicto(fid_t fid,
-	const void *buf, size_t count, void *desc,
-	void *result, void *result_desc,
-	const void *dest_addr,
-	uint64_t addr, uint64_t key,
-	enum fi_datatype datatype, enum fi_op op, void *context)
+fi_fetch_atomicto(struct fid_ep *ep,
+		  const void *buf, size_t count, void *desc,
+		  void *result, void *result_desc,
+		  const void *dest_addr,
+		  uint64_t addr, uint64_t key,
+		  enum fi_datatype datatype, enum fi_op op, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, atomic);
-	FI_ASSERT_OP(ep->atomic, struct fi_ops_atomic, readwriteto);
-	return ep->atomic->readwriteto(fid, buf, count, desc, result,
+	return ep->atomic->readwriteto(ep, buf, count, desc, result,
 					result_desc, dest_addr, addr,
 					key, datatype, op, context);
 }
 
 static inline int
-fi_atomicvalid(fid_t fid,
-	enum fi_datatype datatype, enum fi_op op, size_t *count)
+fi_atomicvalid(struct fid_ep *ep,
+	       enum fi_datatype datatype, enum fi_op op, size_t *count)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, atomic);
-	FI_ASSERT_OP(ep->atomic, struct fi_ops_atomic, writevalid);
-	return ep->atomic->writevalid(fid, datatype, op, count);
+	return ep->atomic->writevalid(ep, datatype, op, count);
 }
 
 static inline int
-fi_fetch_atomicvalid(fid_t fid,
-	enum fi_datatype datatype, enum fi_op op, size_t *count)
+fi_fetch_atomicvalid(struct fid_ep *ep,
+		     enum fi_datatype datatype, enum fi_op op, size_t *count)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, atomic);
-	FI_ASSERT_OP(ep->atomic, struct fi_ops_atomic, readwritevalid);
-	return ep->atomic->readwritevalid(fid, datatype, op, count);
+	return ep->atomic->readwritevalid(ep, datatype, op, count);
 }
 
 static inline int
-fi_compare_atomicvalid(fid_t fid,
-	enum fi_datatype datatype, enum fi_op op, size_t *count)
+fi_compare_atomicvalid(struct fid_ep *ep,
+		       enum fi_datatype datatype, enum fi_op op, size_t *count)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, atomic);
-	FI_ASSERT_OP(ep->atomic, struct fi_ops_atomic, compwritevalid);
-	return ep->atomic->compwritevalid(fid, datatype, op, count);
+	return ep->atomic->compwritevalid(ep, datatype, op, count);
 }
 
 #else // FABRIC_DIRECT

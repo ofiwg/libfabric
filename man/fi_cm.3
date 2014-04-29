@@ -1,4 +1,4 @@
-.TH "FI_CM" 3 "2014-01-10" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_CM" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_cm - Connection management operations
 .PP
@@ -19,32 +19,32 @@ Have an endpoint join or leave a multicast group.
 .SH SYNOPSIS
 .B #include <rdma/fi_cm.h>
 .HP
-.BI "int fi_connect(fid_t " fid ", const void *" addr ","
+.BI "int fi_connect(struct fid_ep *" ep ", const void *" addr ","
 .BI "const void * " param ", size_t " paramlen ");"
 .HP
-.BI "int fi_listen(fid_t " fid ");"
+.BI "int fi_listen(struct fid_pep *" pep ");"
 .HP
-.BI "int fi_accept(fid_t " fid ", const void *" param ","
+.BI "int fi_accept(struct fid_ep *" ep ", const void *" param ","
 .BI "size_t " paramlen ");"
 .HP
-.BI "int fi_reject(fid_t " fid ", struct fi_info *" info ","
+.BI "int fi_reject(struct fid_pep *" pep ", struct fi_info *" info ","
 .BI "const void *" param ", size_t " paramlen ");"
 .HP
-.BI "int fi_shutdown(fid_t " fid ", uint64_t " flags ");"
+.BI "int fi_shutdown(struct fid_ep *" ep ", uint64_t " flags ");"
 .PP
 .HP
 .BI "int fi_getname(fid_t " fid ", void *" addr ", size_t *" addrlen ");"
 .HP
-.BI "int fi_getpeer(fid_t " fid ", void *" addr ", size_t *" addrlen ");"
+.BI "int fi_getpeer(struct fid_ep *" ep ", void *" addr ", size_t *" addrlen ");"
 .PP
 .HP
-.BI "int fi_join(fid_t " fid ", void *" addr ", void **" fi_addr ","
+.BI "int fi_join(struct fid_ep *" ep ", void *" addr ", void **" fi_addr ","
 .BI "uint64_t " flags ");"
 .HP
-.BI "int fi_leave(fid_t " fid ", void *" addr ", void *" fi_addr ","
+.BI "int fi_leave(struct fid_ep *" ep ", void *" addr ", void *" fi_addr ","
 .BI "uint64_t " flags ");"
 .SH ARGUMENTS
-.IP "fid"
+.IP "ep / pep"
 Fabric endpoint on which to change connection state.
 .IP "addr"
 Buffer to store queried address (get), or address to connect/join/leave.

@@ -63,47 +63,41 @@ struct fi_msg_rma {
 
 struct fi_ops_rma {
 	size_t	size;
-	int	(*read)(fid_t fid, void *buf, size_t len, void *desc,
+	int	(*read)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			uint64_t addr, uint64_t key, void *context);
-	int	(*readv)(fid_t fid, const struct iovec *iov, void *desc,
+	int	(*readv)(struct fid_ep *ep, const struct iovec *iov, void *desc,
 			size_t count, uint64_t addr, uint64_t key, void *context);
-	int	(*readfrom)(fid_t fid, void *buf, size_t len, void *desc,
+	int	(*readfrom)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			const void *src_addr, uint64_t addr, uint64_t key,
 			void *context);
-	int	(*readmsg)(fid_t fid, const struct fi_msg_rma *msg, uint64_t flags);
-	int	(*write)(fid_t fid, const void *buf, size_t len, void *desc,
+	int	(*readmsg)(struct fid_ep *ep, const struct fi_msg_rma *msg,
+			uint64_t flags);
+	int	(*write)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			uint64_t addr, uint64_t key, void *context);
-	int	(*writev)(fid_t fid, const struct iovec *iov, void *desc,
+	int	(*writev)(struct fid_ep *ep, const struct iovec *iov, void *desc,
 			size_t count, uint64_t addr, uint64_t key, void *context);
-	int	(*writeto)(fid_t fid, const void *buf, size_t len, void *desc,
+	int	(*writeto)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			const void *dest_addr, uint64_t addr, uint64_t key,
 			void *context);
-	int	(*writemsg)(fid_t fid, const struct fi_msg_rma *msg, uint64_t flags);
+	int	(*writemsg)(struct fid_ep *ep, const struct fi_msg_rma *msg,
+			uint64_t flags);
 };
 
 
 #ifndef FABRIC_DIRECT
 
 static inline ssize_t
-fi_read(fid_t fid, void *buf, size_t len, void *desc,
+fi_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	uint64_t addr, uint64_t key, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, rma);
-	FI_ASSERT_OP(ep->rma, struct fi_ops_rma, read);
-	return ep->rma->read(fid, buf, len, desc, addr, key, context);
+	return ep->rma->read(ep, buf, len, desc, addr, key, context);
 }
 
 static inline ssize_t
-fi_write(fid_t fid, const void *buf, size_t len, void *desc,
+fi_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	 uint64_t addr, uint64_t key, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, rma);
-	FI_ASSERT_OP(ep->rma, struct fi_ops_rma, write);
-	return ep->rma->write(fid, buf, len, desc, addr, key, context);
+	return ep->rma->write(ep, buf, len, desc, addr, key, context);
 }
 
 #else // FABRIC_DIRECT

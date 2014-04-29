@@ -1,4 +1,4 @@
-.TH "FI_MR" 3 "2014-02-06" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_MR" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_mr \- Memory region operations
 .PP
@@ -29,32 +29,33 @@ Associate a registered memory region with an event collector.
 .SH SYNOPSIS
 .B #include <rdma/fi_domain.h>
 .HP
-.BI "int fi_mr_reg(fid_t " fid ","
-.BI "const void * " buf ", size_t " len ","
-.BI	"uint64_t " access ", uint64_t " requested_key ","
-.BI "uint64_t " flags ", fid_t *" mr ", void *" context ");"
+.BI "int fi_mr_reg(struct fid_domain *" domain ", "
+.BI "const void * " buf ", size_t " len ", "
+.BI	"uint64_t " access ", uint64_t " requested_key ", "
+.BI "uint64_t " flags ", struct fid_mr **" mr ", void *" context ");"
 .HP
-.BI "int fi_mr_regv(fid_t " fid ","
-.BI "const struct iovec * " iov ", size_t " count ","
-.BI	"uint64_t " access ", uint64_t " requested_key ","
-.BI "uint64_t " flags ", fid_t *" mr ", void *" context ");"
+.BI "int fi_mr_regv(struct fid_domain *" domain ", "
+.BI "const struct iovec * " iov ", size_t " count ", "
+.BI	"uint64_t " access ", uint64_t " requested_key ", "
+.BI "uint64_t " flags ", struct fid_mr **" mr ", void *" context ");"
 .HP
-.BI "int fi_mr_regattr(fid_t " fid ","
+.BI "int fi_mr_regattr(struct fid_domain *" domain ", "
 .BI "const struct fi_mr_attr * " attr ","
-.BI "uint64_t " flags ", fid_t *" mr ");"
+.BI "uint64_t " flags ", struct fid_mr **" mr ");"
 .PP
 .HP
-.BI "int fi_mr_unreg(fid_t " mr ");"
+.BI "int fi_mr_unreg(struct fid_mr *" mr ");"
 .PP
 .HP
-.BI "void * fi_mr_desc(fid_t " mr ");"
+.BI "void * fi_mr_desc(struct fid_mr *" mr ");"
 .HP
-.BI "uint64_t fi_mr_key(fid_t " mr ");"
+.BI "uint64_t fi_mr_key(struct fid_mr *" mr ");"
 .PP
 .HP
-.BI "int fi_mr_bind(fid_t " mr ", " fid_t " ec ", uint64_t " flags ");"
+.BI "int fi_mr_bind(struct fid_mr *" mr ", " struct fid_ec *" ec ", "
+.BI "uint64_t " flags ");"
 .SH ARGUMENTS
-.IP "fid"
+.IP "domain"
 Resource domain
 .IP "mr"
 Memory region 

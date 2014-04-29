@@ -188,7 +188,7 @@ static int psmx_ep_setopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
-static int psmx_ep_enable(fid_t fid)
+static int psmx_ep_enable(struct fid_ep *ep)
 {
 	return 0;
 }
@@ -326,7 +326,8 @@ static struct fi_ops_ep psmx_ep_ops = {
 	.enable = psmx_ep_enable,
 };
 
-int psmx_ep_open(fid_t domain, struct fi_info *info, fid_t *fid, void *context)
+int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
+		struct fid_ep **ep, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
 
@@ -350,7 +351,7 @@ int psmx_ep_open(fid_t domain, struct fi_info *info, fid_t *fid, void *context)
 	}
 
 	psmx_ep_check_flags(fid_ep);
-	*fid = &fid_ep->ep.fid;
+	*ep = &fid_ep->ep;
 
 	return 0;
 }

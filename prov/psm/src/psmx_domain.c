@@ -93,23 +93,24 @@ static int psmx_domain_control(fid_t fid, int command, void *arg)
 	return -ENOSYS;
 }
 
-static int psmx_domain_query(fid_t fid, struct fi_domain_attr *attr, size_t *attrlen)
+static int psmx_domain_query(struct fid_domain *domain,
+			     struct fi_domain_attr *attr, size_t *attrlen)
 {
 	return -ENOSYS;
 }
 
-static int psmx_progress(fid_t fid)
+static int psmx_progress(struct fid_domain *domain)
 {
 	struct psmx_fid_domain *fid_domain;
 
-	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
+	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
 	psm_poll(fid_domain->psm_ep);
 
 	return 0;
 }
 
-static int psmx_if_open(fid_t fid, const char *name, uint64_t flags,
-			fid_t *fif, void *context)
+static int psmx_if_open(struct fid_domain *domain, const char *name, uint64_t flags,
+			struct fid **fif, void *context)
 {
 	return -ENOSYS;
 }
@@ -132,7 +133,8 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.if_open = psmx_if_open,
 };
 
-int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *context)
+int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+		     struct fid_domain **domain, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
 	struct psm_ep_open_opts opts;
@@ -191,7 +193,7 @@ int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *conte
 	if (info->protocol_cap & FI_PROTO_CAP_MSG)
 		fid_domain->reserved_tag_bits |= PSMX_MSG_BIT;
 
-	*fid = &fid_domain->domain.fid;
+	*domain = &fid_domain->domain;
 
 	return 0;
 

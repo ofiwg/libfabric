@@ -52,7 +52,7 @@ int psmx_epid_to_epaddr(psm_ep_t ep, psm_epid_t epid, psm_epaddr_t *epaddr)
         return 0;
 }
 
-static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
+static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			  void **fi_addr, uint64_t flags)
 {
 	struct psmx_fid_av *fid_av;
@@ -61,7 +61,7 @@ static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 	int err;
 	int i;
 
-	fid_av = container_of(fid, struct psmx_fid_av, av.fid);
+	fid_av = container_of(av, struct psmx_fid_av, av);
 
 	errors = (psm_error_t *) calloc(count, sizeof *errors);
 	if (!errors)
@@ -100,12 +100,12 @@ static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 	return psmx_errno(err);
 }
 
-static int psmx_av_remove(fid_t fid, void *fi_addr, size_t count,
+static int psmx_av_remove(struct fid_av *av, void *fi_addr, size_t count,
 			  uint64_t flags)
 {
 	struct psmx_fid_av *fid_av;
 	int err = PSM_OK;
-	fid_av = container_of(fid, struct psmx_fid_av, av.fid);
+	fid_av = container_of(av, struct psmx_fid_av, av);
 
 	return psmx_errno(err);
 }
@@ -170,12 +170,13 @@ static struct fi_ops_av psmx_av_ops = {
 	.remove = psmx_av_remove,
 };
 
-int psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context)
+int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+		 struct fid_av **av, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_av *fid_av;
 
-	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
+	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
 
 	if (attr) {
 		if ((attr->mask & FI_AV_ATTR_TYPE) &&
@@ -210,7 +211,7 @@ int psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context)
 	fid_av->av.fid.ops = &psmx_fi_ops;
 	fid_av->av.ops = &psmx_av_ops;
 
-	*av = &fid_av->av.fid;
+	*av = &fid_av->av;
 	return 0;
 }
 

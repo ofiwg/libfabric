@@ -166,14 +166,14 @@ static void psmx_mr_normalize_iov(struct iovec *iov, size_t *count)
 	*count = i;
 }
 
-static int psmx_mr_reg(fid_t fid, const void *buf, size_t len,
+static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 			uint64_t access, uint64_t requested_key,
-			uint64_t flags, fid_t *mr, void *context)
+			uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_mr *fid_mr;
 
-	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
+	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
 
 	fid_mr = (struct psmx_fid_mr *) calloc(1, sizeof(*fid_mr) + sizeof(struct iovec));
 	if (!fid_mr)
@@ -193,20 +193,21 @@ static int psmx_mr_reg(fid_t fid, const void *buf, size_t len,
 	fid_mr->iov[0].iov_base = (void *)buf;
 	fid_mr->iov[0].iov_len = len;
 
-	*mr = &fid_mr->mr.fid;
+	*mr = &fid_mr->mr;
 
 	return 0;
 }
 
-static int psmx_mr_regv(fid_t fid, const struct iovec *iov, size_t count,
+static int psmx_mr_regv(struct fid_domain *domain,
+			const struct iovec *iov, size_t count,
 			uint64_t access, uint64_t requested_key,
-			uint64_t flags, fid_t *mr, void *context)
+			uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_mr *fid_mr;
 	int i;
 
-	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
+	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
 
 	if (count == 0 || iov == NULL)
 		return -EINVAL;
@@ -233,19 +234,19 @@ static int psmx_mr_regv(fid_t fid, const struct iovec *iov, size_t count,
 
 	psmx_mr_normalize_iov(fid_mr->iov, &fid_mr->iov_count);
 
-	*mr = &fid_mr->mr.fid;
+	*mr = &fid_mr->mr;
 
 	return 0;
 }
 
-static int psmx_mr_regattr(fid_t fid, const struct fi_mr_attr *attr,
-			uint64_t flags, fid_t *mr)
+static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr,
+			uint64_t flags, struct fid_mr **mr)
 {
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_mr *fid_mr;
 	int i;
 
-	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
+	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
 
 	if (!attr)
 		return -EINVAL;
@@ -286,7 +287,7 @@ static int psmx_mr_regattr(fid_t fid, const struct fi_mr_attr *attr,
 
 	psmx_mr_normalize_iov(fid_mr->iov, &fid_mr->iov_count);
 
-	*mr = &fid_mr->mr.fid;
+	*mr = &fid_mr->mr;
 
 	return 0;
 }

@@ -58,59 +58,51 @@ struct fi_msg_tagged {
 
 struct fi_ops_tagged {
 	size_t	size;
-	ssize_t (*recv)(fid_t fid, void *buf, size_t len, void *desc,
+	ssize_t (*recv)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			uint64_t tag, uint64_t ignore, void *context);
-	ssize_t (*recvv)(fid_t fid, const struct iovec *iov, void *desc, size_t count,
-			uint64_t tag, uint64_t ignore, void *context);
-	ssize_t (*recvfrom)(fid_t fid, void *buf, size_t len, void *desc,
+	ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void *desc,
+			size_t count, uint64_t tag, uint64_t ignore, void *context);
+	ssize_t (*recvfrom)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			const void *src_addr,
 			uint64_t tag, uint64_t ignore, void *context);
-	ssize_t (*recvmsg)(fid_t fid, const struct fi_msg_tagged *msg, uint64_t flags);
-	ssize_t (*send)(fid_t fid, const void *buf, size_t len, void *desc,
+	ssize_t (*recvmsg)(struct fid_ep *ep, const struct fi_msg_tagged *msg,
+			uint64_t flags);
+	ssize_t (*send)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			uint64_t tag, void *context);
-	ssize_t (*sendv)(fid_t fid, const struct iovec *iov, void *desc, size_t count,
-			uint64_t tag, void *context);
-	ssize_t (*sendto)(fid_t fid, const void *buf, size_t len, void *desc,
+	ssize_t (*sendv)(struct fid_ep *ep, const struct iovec *iov, void *desc,
+			size_t count, uint64_t tag, void *context);
+	ssize_t (*sendto)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			const void *dest_addr, uint64_t tag, void *context);
-	ssize_t (*sendmsg)(fid_t fid, const struct fi_msg_tagged *msg, uint64_t flags);
-	ssize_t (*search)(fid_t fid, uint64_t *tag, uint64_t ignore, uint64_t flags,
-			void *src_addr, size_t *src_addrlen, size_t *len, void *context);
+	ssize_t (*sendmsg)(struct fid_ep *ep, const struct fi_msg_tagged *msg,
+			uint64_t flags);
+	ssize_t (*search)(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
+			uint64_t flags, void *src_addr, size_t *src_addrlen,
+			size_t *len, void *context);
 };
 
 
 #ifndef FABRIC_DIRECT
 
 static inline ssize_t
-fi_tsendto(fid_t fid, const void *buf, size_t len, void *desc,
+fi_tsendto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	   const void *dest_addr, uint64_t tag, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, tagged);
-	FI_ASSERT_OP(ep->tagged, struct fi_ops_tagged, sendto);
-	return ep->tagged->sendto(fid, buf, len, desc, dest_addr, tag, context);
+	return ep->tagged->sendto(ep, buf, len, desc, dest_addr, tag, context);
 }
 
 static inline ssize_t
-fi_trecvfrom(fid_t fid, void *buf, size_t len, void *desc, const void *src_addr,
-	     uint64_t tag, uint64_t ignore, void *context)
+fi_trecvfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
+	     const void *src_addr, uint64_t tag, uint64_t ignore, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, tagged);
-	FI_ASSERT_OP(ep->tagged, struct fi_ops_tagged, recvfrom);
-	return ep->tagged->recvfrom(fid, buf, len, desc, src_addr, tag, ignore, context);
+	return ep->tagged->recvfrom(ep, buf, len, desc, src_addr, tag, ignore,
+				    context);
 }
 
 static inline ssize_t
-fi_tsearch(fid_t fid, uint64_t *tag, uint64_t ignore, uint64_t flags,
+fi_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore, uint64_t flags,
 	   void *src_addr, size_t *src_addrlen, size_t *len, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, tagged);
-	FI_ASSERT_OP(ep->tagged, struct fi_ops_tagged, search);
-	return ep->tagged->search(fid, tag, ignore, flags, src_addr, src_addrlen,
+	return ep->tagged->search(ep, tag, ignore, flags, src_addr, src_addrlen,
 				  len, context);
 }
 

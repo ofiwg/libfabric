@@ -81,7 +81,7 @@ struct uv_dev {
 	char			dev_path[FI_PATH_MAX];
 };
 
-extern fid_t fabric;
+extern struct fid_fabric *g_fabric;
 extern int uv_abi_ver;
 extern struct uv_dev *udev_head, *udev_tail;
 

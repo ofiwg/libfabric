@@ -1,4 +1,4 @@
-.TH "FI_ENDPOINT" 3 "2013-02-12" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ENDPOINT" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_endpoint \- Fabric endpoint operations
 .PP
@@ -42,37 +42,37 @@ Get or set endpoint options.
 .br
 .B "#include <rdma/fi_endpoint.h>"
 .HP
-.BI "int fi_endpoint(fid_t " fid ", struct fi_info *" info ", fid_t **" ep ","
-.BI "void *" context ");"
+.BI "int fi_endpoint(struct fid_domain *" domain ", struct fi_info *" info ", "
+.BI "struct fid_ep **" ep ", void *" context ");"
 .HP
-.BI "int fi_pendpoint(fid_t " fid ", struct fi_info *" info ", fid_t **" ep ","
-.BI "void *" context ");"
+.BI "int fi_pendpoint(struct fi_fabric *" fabric ", struct fi_info *" info ", "
+.BI "struct fid_pep **" pep ", void *" context ");"
 .HP
-.BI "int fi_close(fid_t " ep ");"
+.BI "int fi_close(struct fid_ep *" ep ");"
 .PP
 .HP
-.BI "int fi_ep_bind(fid_t " ep ", " fid_t " fid ", uint64_t " flags ");"
+.BI "int fi_ep_bind(struct fid *" ep ", " fid_t " fid ", uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_enable(fid_t " ep ");"
+.BI "int fi_enable(struct fid_ep *" ep ");"
 .PP
 .HP
-.BI "int fi_cancel(fid_t " ep ", void *" context ");"
+.BI "int fi_cancel(struct fid_ep *" ep ", void *" context ");"
 .PP
 .HP
-.BI "int fi_ep_sync(fid_t " ep ", uint64_t " flags ", void *" context ");"
+.BI "int fi_ep_sync(struct fid_ep *" ep ", uint64_t " flags ", void *" context ");"
 .PP
 .HP
-.BI "int fi_alias(fid_t " ep ", fid_t * " alias_ep ", uint64_t " flags ");"
+.BI "int fi_alias(struct fid_ep *" ep ", fid_t * " alias_ep ", uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_ep_control(fid_t " ep ", int " command ", void *" arg ");"
+.BI "int fi_ep_control(struct fid *" ep ", int " command ", void *" arg ");"
 .PP
 .HP
-.BI "int fi_getopt(fid_t " ep ", int " level ", int " optname ","
+.BI "int fi_getopt(struct fid_ *" ep ", int " level ", int " optname ","
 .BI "void *" optval ", size_t *" optlen ");"
 .HP
-.BI "int fi_setopt(fid_t " ep ", int " level ", int " optname ","
+.BI "int fi_setopt(struct fid *" ep ", int " level ", int " optname ","
 .BI "const void *" optval ", size_t " optlen ");"
 .SH ARGUMENTS
 .IP "fid" 12

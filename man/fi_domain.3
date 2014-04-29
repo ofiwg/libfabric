@@ -1,4 +1,4 @@
-.TH "FI_DOMAIN" 3 "2013-01-20" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_DOMAIN" 3 "2013-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_domain \- Open a fabric access domain
 .SH SYNOPSIS
@@ -6,14 +6,14 @@ fi_domain \- Open a fabric access domain
 .br
 .B "#include <rdma/fi_domain.h>"
 .HP
-.B "int fi_fdomain(fid_t " fid ", struct fi_info *" info ", fid_t **" dom ","
-.BI "void *" context ");"
+.BI "int fi_fdomain(struct fid_fabric *" fabric ", struct fi_info *" info ", "
+.BI "struct fid_domain **" domain ", void *" context ");"
 .SH ARGUMENTS
-.IP "fid" 12
+.IP "fabric" 12
 Fabric domain
 .IP "info" 12
 Details about the access domain to be opened, obtained from fi_getinfo.
-.IP "dom" 12
+.IP "domain" 12
 On success, points to the opened access domain.
 .IP "context" 12
 User specified context associated with the domain.  This context is returned as

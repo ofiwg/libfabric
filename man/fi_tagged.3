@@ -1,4 +1,4 @@
-.TH "FI_TAGGED" 3 "2014-04-25" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_TAGGED" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_tagged \- Tagged data transfer operations
 .PP
@@ -19,39 +19,39 @@ Initiate a search operation for a buffered receive matching a given tag
 .SH SYNOPSIS
 .B "#include <rdma/fi_tagged.h>"
 .HP
-.BI "int fi_trecv(fid_t " fid ", void * " buf ", size_t " len ", void *" desc ","
+.BI "int fi_trecv(struct fid_ep *" ep ", void * " buf ", size_t " len ", void *" desc ","
 .BI "uint64_t " tag ", uint64_t " ignore ", void * " context ");"
 .HP
-.BI "int fi_trecvv(fid_t " fid ", const struct iovec * " iov ", void *" desc ","
+.BI "int fi_trecvv(struct fid_ep *" ep ", const struct iovec * " iov ", void *" desc ","
 .BI "size_t " count ","
 .BI "uint64_t " tag ", uint4_t " ignore ", void * " context ");"
 .HP
-.BI "int fi_trecvfrom(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "int fi_trecvfrom(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "void *" desc ","
 .BI "const void * " src_addr ", uint64_t " tag ", uint64_t " ignore ","
 .BI "void * " context ");"
 .HP
-.BI "int fi_trecvmsg(fid_t " fid ", const struct fi_msg_tagged * " msg ","
+.BI "int fi_trecvmsg(struct fid_ep *" ep ", const struct fi_msg_tagged * " msg ","
 .BI "uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_tsend(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "int fi_tsend(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "void *" desc ","
 .BI "uint64_t " tag ", void * " context ");"
 .HP
-.BI "int fi_tsendv(fid_t " fid ", const struct iovec * " iov ","
+.BI "int fi_tsendv(struct fid_ep *" ep ", const struct iovec * " iov ","
 .BI "void *" desc ", size_t " count ","
 .BI "uint64_t " tag ", void * " context ");"
 .HP
-.BI "int fi_tsendto(fid_t " fid ", const void * " buf ", size_t " len ","
+.BI "int fi_tsendto(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "void *" desc ","
 .BI "const void * " dest_addr ", uint64_t " tag ", void * " context ");"
 .HP
-.BI "int fi_tsendmsg(fid_t " fid ", const struct fi_msg_tagged * " msg ","
+.BI "int fi_tsendmsg(struct fid_ep *" ep ", const struct fi_msg_tagged * " msg ","
 .BI "uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_tsearch(fid_t " fid ", uint64_t *" tag ", uint64_t " ignore ","
+.BI "int fi_tsearch(struct fid_ep *" ep ", uint64_t *" tag ", uint64_t " ignore ","
 .BI "uint64_t " flags ", void * " src_addr ", size_t * " src_addrlen ","
 .BI "size_t * " len ", void * " context ");"
 .SH ARGUMENTS

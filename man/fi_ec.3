@@ -1,4 +1,4 @@
-.TH "FI_EC" 3 "2014-02-08" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_EC" 3 "2014-01-01" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_ec \- Event collector operations
 .PP
@@ -30,45 +30,45 @@ Converts provider specific error information into a printable string
 .SH SYNOPSIS
 .B #include <rdma/fi_domain.h>
 .HP
-.BI "int fi_ec_open(fid_t " fid ", struct fi_ec_attr *" attr ", fid_t *" ec ","
-.BI "void * " context ");"
+.BI "int fi_ec_open(struct fid_domain *" domain ", struct fi_ec_attr *" attr ", "
+.BI "struct fid_ec **" ec ", void * " context ");"
 .HP
-.BI "int fi_ec_close(fid_t " ec ");"
+.BI "int fi_ec_close(struct fid_ec *" ec ");"
 .HP
-.BI "int fi_ec_control(fid_t " ec ", int " command ", void *" arg ");"
+.BI "int fi_ec_control(struct fid_ec *" ec ", int " command ", void *" arg ");"
 .PP
 .HP
-.BI "int fi_ec_read(fid_t " ec ","
+.BI "int fi_ec_read(struct fid_ec *" ec ","
 .BI "void *" buf ", size_t " len ");"
 .HP
-.BI "int fi_ec_readfrom(fid_t " ec ","
+.BI "int fi_ec_readfrom(struct fid_ec *" ec ","
 .BI "void *" buf ", size_t " len ", "
 .BI "void *" src_addr ", size_t *" addrlen ");"
 .HP
-.BI "int fi_ec_readerr(fid_t " ec ","
+.BI "int fi_ec_readerr(struct fid_ec *" ec ","
 .BI "struct fi_ec_err_entry *" buf ", size_t " len ", "
 .BI "uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_ec_write(fid_t " ec ","
+.BI "int fi_ec_write(struct fid_ec *" ec ","
 .BI "const void *" buf ", size_t " len ");"
 .PP
 .HP
-.BI "int fi_ec_reset(fid_t " ec ", const void *" cond ");"
+.BI "int fi_ec_reset(struct fid_ec *" ec ", const void *" cond ");"
 .HP
-.BI "int fi_ec_condread(fid_t " ec ","
+.BI "int fi_ec_condread(struct fid_ec *" ec ","
 .BI "void *" buf ", size_t " len ", "
 .BI "const void *" cond ");"
 .HP
-.BI "int fi_ec_condreadfrom(fid_t " ec ","
+.BI "int fi_ec_condreadfrom(struct fid_ec *" ec ","
 .BI "void *" buf ", size_t " len ","
 .BI "void *" src_addr ", size_t *" addrlen ", const void *" cond ");"
 .PP
 .HP
-.BI "const char * fi_ec_strerror(fid_t " ec ", int " prov_errno ", "
+.BI "const char * fi_ec_strerror(struct fid_ec *" ec ", int " prov_errno ", "
 .BI "const void *" prov_data ", void *" buf ", size_t" len ");"
 .SH ARGUMENTS
-.IP "fid"
+.IP "ec"
 Event collector 
 .IP "attr"
 Event collector attributes

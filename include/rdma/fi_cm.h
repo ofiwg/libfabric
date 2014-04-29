@@ -44,16 +44,16 @@ extern "C" {
 struct fi_ops_cm {
 	size_t	size;
 	int	(*getname)(fid_t fid, void *addr, size_t *addrlen);
-	int	(*getpeer)(fid_t fid, void *addr, size_t *addrlen);
-	int	(*connect)(fid_t fid, const void *addr,
+	int	(*getpeer)(struct fid_ep *ep, void *addr, size_t *addrlen);
+	int	(*connect)(struct fid_ep *ep, const void *addr,
 			const void *param, size_t paramlen);
-	int	(*listen)(fid_t fid);
-	int	(*accept)(fid_t fid, const void *param, size_t paramlen);
-	int	(*reject)(fid_t fid, struct fi_info *info,
+	int	(*listen)(struct fid_pep *pep);
+	int	(*accept)(struct fid_ep *ep, const void *param, size_t paramlen);
+	int	(*reject)(struct fid_pep *pep, struct fi_info *info,
 			const void *param, size_t paramlen);
-	int	(*shutdown)(fid_t fid, uint64_t flags);
-	int	(*join)(fid_t fid, void *addr, void **fi_addr, uint64_t flags);
-	int	(*leave)(fid_t fid, void *addr, void *fi_addr, uint64_t flags);
+	int	(*shutdown)(struct fid_ep *ep, uint64_t flags);
+	int	(*join)(struct fid_ep *ep, void *addr, void **fi_addr, uint64_t flags);
+	int	(*leave)(struct fid_ep *ep, void *addr, void *fi_addr, uint64_t flags);
 };
 
 
@@ -68,51 +68,34 @@ static inline int fi_getepname(fid_t fid, void *addr, size_t *addrlen)
 	return ep->cm->getname(fid, addr, addrlen);
 }
 
-static inline int fi_listen(fid_t fid)
+static inline int fi_listen(struct fid_pep *pep)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_PEP);
-	FI_ASSERT_OPS(fid, struct fid_ep, cm);
-	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, listen);
-	return ep->cm->listen(fid);
+	return pep->cm->listen(pep);
 }
 
-static inline int fi_connect(fid_t fid, const void *addr,
-			     const void *param, size_t paramlen)
+static inline int
+fi_connect(struct fid_ep *ep, const void *addr,
+	   const void *param, size_t paramlen)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, cm);
-	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, connect);
-	return ep->cm->connect(fid, addr, param, paramlen);
+	return ep->cm->connect(ep, addr, param, paramlen);
 }
 
-static inline int fi_accept(fid_t fid, const void *param, size_t paramlen)
+static inline int
+fi_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, cm);
-	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, accept);
-	return ep->cm->accept(fid, param, paramlen);
+	return ep->cm->accept(ep, param, paramlen);
 }
 
-static inline int fi_reject(fid_t fid, struct fi_info *info,
-			    const void *param, size_t paramlen)
+static inline int
+fi_reject(struct fid_pep *pep, struct fi_info *info,
+	  const void *param, size_t paramlen)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, cm);
-	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, reject);
-	return ep->cm->reject(fid, info, param, paramlen);
+	return pep->cm->reject(pep, info, param, paramlen);
 }
 
-static inline int fi_shutdown(fid_t fid, uint64_t flags)
+static inline int fi_shutdown(struct fid_ep *ep, uint64_t flags)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, cm);
-	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, shutdown);
-	return ep->cm->shutdown(fid, flags);
+	return ep->cm->shutdown(ep, flags);
 }
 
 

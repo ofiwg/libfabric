@@ -86,7 +86,7 @@ struct __fid_pep {
 static pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 static int init;
 static struct fi_prov *prov_head, *prov_tail;
-fid_t fabric;
+struct fid_fabric *g_fabric;
 
 
 const char *fi_sysfs_path(void)
@@ -187,7 +187,7 @@ int fi_init()
 
 	init = 1;
 
-	ret = fi_fabric("RDMA", 0, &fabric, NULL);
+	ret = fi_fabric("RDMA", 0, &g_fabric, NULL);
 	if (ret) {
 		fprintf(stderr, "fi_init: fatal: unable to open fabric\n");
 		return  -ENODEV;
@@ -290,13 +290,15 @@ cont:
 	}
 }
 
-static int __fi_domain(fid_t fid, struct fi_info *info, fid_t *dom, void *context)
+static int
+__fi_domain(struct fid_fabric *fabric, struct fi_info *info,
+	    struct fid_domain **dom, void *context)
 {
 	struct __fid_fabric *fab;
 	struct fi_prov *prov;
 	int ret = -FI_ENOSYS;
 
-	fab = container_of(fid, struct __fid_fabric, fabric_fid.fid);
+	fab = container_of(fabric, struct __fid_fabric, fabric_fid);
 	if (strcmp(fab->name, info->fabric_name))
 		return -FI_EINVAL;
 
@@ -304,7 +306,7 @@ static int __fi_domain(fid_t fid, struct fi_info *info, fid_t *dom, void *contex
 		if (!prov->ops->domain)
 			continue;
 
-		ret = prov->ops->domain(fid, info, dom, context);
+		ret = prov->ops->domain(fabric, info, dom, context);
 		if (!ret)
 			break;
 	}
@@ -329,22 +331,23 @@ int fi_sockaddr_len(struct sockaddr *addr)
 	}
 }
 
-static ssize_t __fi_ec_cm_readerr(fid_t fid, void *buf, size_t len, uint64_t flags)
+static ssize_t
+__fi_ec_cm_readerr(struct fid_ec *ec, void *buf, size_t len, uint64_t flags)
 {
-	struct __fid_ec_cm *ec;
+	struct __fid_ec_cm *_ec;
 	struct fi_ec_err_entry *entry;
 
-	ec = container_of(fid, struct __fid_ec_cm, ec_fid.fid);
-	if (!ec->err.err)
+	_ec = container_of(ec, struct __fid_ec_cm, ec_fid);
+	if (!_ec->err.err)
 		return 0;
 
 	if (len < sizeof(*entry))
 		return -EINVAL;
 
 	entry = (struct fi_ec_err_entry *) buf;
-	*entry = ec->err;
-	ec->err.err = 0;
-	ec->err.prov_errno = 0;
+	*entry = _ec->err;
+	_ec->err.err = 0;
+	_ec->err.prov_errno = 0;
 	return sizeof(*entry);
 }
 
@@ -427,23 +430,23 @@ static ssize_t __fi_ec_cm_process_event(struct __fid_ec_cm *ec,
 	return sizeof(*entry) + datalen;
 }
 
-static ssize_t __fi_ec_cm_read_data(fid_t fid, void *buf, size_t len)
+static ssize_t __fi_ec_cm_read_data(struct fid_ec *ec, void *buf, size_t len)
 {
-	struct __fid_ec_cm *ec;
+	struct __fid_ec_cm *_ec;
 	struct fi_ec_cm_entry *entry;
 	struct rdma_cm_event *event;
 	size_t left;
 	ssize_t ret = -FI_EINVAL;
 
-	ec = container_of(fid, struct __fid_ec_cm, ec_fid.fid);
+	_ec = container_of(ec, struct __fid_ec_cm, ec_fid);
 	entry = (struct fi_ec_cm_entry *) buf;
-	if (ec->err.err)
+	if (_ec->err.err)
 		return -FI_EAVAIL;
 
 	for (left = len; left >= sizeof(*entry); ) {
-		ret = rdma_get_cm_event(ec->channel, &event);
+		ret = rdma_get_cm_event(_ec->channel, &event);
 		if (!ret) {
-			ret = __fi_ec_cm_process_event(ec, event, entry, left);
+			ret = __fi_ec_cm_process_event(_ec, event, entry, left);
 			rdma_ack_cm_event(event);
 			if (ret < 0)
 				break;
@@ -456,10 +459,10 @@ static ssize_t __fi_ec_cm_read_data(fid_t fid, void *buf, size_t len)
 			if (left < len)
 				return len - left;
 
-			if (!(ec->flags & FI_BLOCK))
+			if (!(_ec->flags & FI_BLOCK))
 				return 0;
 
-			fi_poll_fd(ec->channel->fd);
+			fi_poll_fd(_ec->channel->fd);
 		} else {
 			ret = -errno;
 			break;
@@ -469,8 +472,9 @@ static ssize_t __fi_ec_cm_read_data(fid_t fid, void *buf, size_t len)
 	return (left < len) ? len - left : ret;
 }
 
-static const char * __fi_ec_cm_strerror(fid_t fid, int prov_errno, const void *prov_data,
-				       void *buf, size_t len)
+static const char *
+__fi_ec_cm_strerror(struct fid_ec *ec, int prov_errno, const void *prov_data,
+		    void *buf, size_t len)
 {
 	if (buf && len)
 		strncpy(buf, strerror(prov_errno), len);
@@ -525,30 +529,31 @@ struct fi_ops __fi_ec_cm_ops = {
 };
 
 static int
-__fi_ec_open(fid_t fid, const struct fi_ec_attr *attr, fid_t *ec, void *context)
+__fi_ec_open(struct fid_fabric *fabric, const struct fi_ec_attr *attr,
+	     struct fid_ec **ec, void *context)
 {
-	struct __fid_ec_cm *xec;
+	struct __fid_ec_cm *_ec;
 	long flags = 0;
 	int ret;
 
 	if (attr->type != FI_EC_QUEUE || attr->format != FI_EC_FORMAT_CM)
 		return -FI_ENOSYS;
 
-	xec = calloc(1, sizeof *xec);
-	if (!xec)
+	_ec = calloc(1, sizeof *_ec);
+	if (!_ec)
 		return -FI_ENOMEM;
 
-	xec->fab = container_of(fid, struct __fid_fabric, fabric_fid.fid);
+	_ec->fab = container_of(fabric, struct __fid_fabric, fabric_fid);
 
 	switch (attr->wait_obj) {
 	case FI_EC_WAIT_FD:
-		xec->channel = rdma_create_event_channel();
-		if (!xec->channel) {
+		_ec->channel = rdma_create_event_channel();
+		if (!_ec->channel) {
 			ret = -errno;
 			goto err1;
 		}
-		fcntl(xec->channel->fd, F_GETFL, &flags);
-		ret = fcntl(xec->channel->fd, F_SETFL, flags | O_NONBLOCK);
+		fcntl(_ec->channel->fd, F_GETFL, &flags);
+		ret = fcntl(_ec->channel->fd, F_SETFL, flags | O_NONBLOCK);
 		if (ret) {
 			ret = -errno;
 			goto err2;
@@ -560,29 +565,29 @@ __fi_ec_open(fid_t fid, const struct fi_ec_attr *attr, fid_t *ec, void *context)
 		return -FI_ENOSYS;
 	}
 
-	xec->flags = attr->flags;
-	xec->ec_fid.fid.fclass = FID_CLASS_EC;
-	xec->ec_fid.fid.size = sizeof(struct fid_ec);
-	xec->ec_fid.fid.context = context;
-	xec->ec_fid.fid.ops = &__fi_ec_cm_ops;
-	xec->ec_fid.ops = &__fi_ec_cm_data_ops;
+	_ec->flags = attr->flags;
+	_ec->ec_fid.fid.fclass = FID_CLASS_EC;
+	_ec->ec_fid.fid.size = sizeof(struct fid_ec);
+	_ec->ec_fid.fid.context = context;
+	_ec->ec_fid.fid.ops = &__fi_ec_cm_ops;
+	_ec->ec_fid.ops = &__fi_ec_cm_data_ops;
 
-	*ec = &xec->ec_fid.fid;
+	*ec = &_ec->ec_fid;
 	return 0;
 err2:
-	if (xec->channel)
-		rdma_destroy_event_channel(xec->channel);
+	if (_ec->channel)
+		rdma_destroy_event_channel(_ec->channel);
 err1:
-	free(xec);
+	free(_ec);
 	return ret;
 }
 
-static int __fi_pep_listen(fid_t fid)
+static int __fi_pep_listen(struct fid_pep *pep)
 {
-	struct __fid_pep *pep;
+	struct __fid_pep *_pep;
 
-	pep = container_of(fid, struct __fid_pep, pep_fid.fid);
-	return rdma_listen(pep->id, 0) ? -errno : 0;
+	_pep = container_of(pep, struct __fid_pep, pep_fid);
+	return rdma_listen(_pep->id, 0) ? -errno : 0;
 }
 
 static struct fi_ops_cm __fi_pep_cm_ops = {
@@ -627,34 +632,36 @@ static struct fi_ops __fi_pep_ops = {
 	.bind = __fi_pep_bind
 };
 
-static int __fi_endpoint(fid_t fid, struct fi_info *info, fid_t *pep, void *context)
+static int
+__fi_endpoint(struct fid_fabric *fabric, struct fi_info *info,
+	      struct fid_pep **pep, void *context)
 {
 	struct __fid_fabric *fab;
-	struct __fid_pep *xpep;
+	struct __fid_pep *_pep;
 
-	fab = container_of(fid, struct __fid_fabric, fabric_fid.fid);
+	fab = container_of(fabric, struct __fid_fabric, fabric_fid);
 	if (strcmp(fab->name, info->fabric_name))
 		return -FI_EINVAL;
 
-	if (!info->data || info->datalen != sizeof(xpep->id))
+	if (!info->data || info->datalen != sizeof(_pep->id))
 		return -FI_ENOSYS;
 
-	xpep = calloc(1, sizeof *xpep);
-	if (!xpep)
+	_pep = calloc(1, sizeof *_pep);
+	if (!_pep)
 		return -FI_ENOMEM;
 
-	xpep->id = info->data;
-	xpep->id->context = &xpep->pep_fid.fid;
+	_pep->id = info->data;
+	_pep->id->context = &_pep->pep_fid.fid;
 	info->data = NULL;
 	info->datalen = 0;
 
-	xpep->pep_fid.fid.fclass = FID_CLASS_PEP;
-	xpep->pep_fid.fid.size = sizeof(struct fid_pep);
-	xpep->pep_fid.fid.context = context;
-	xpep->pep_fid.fid.ops = &__fi_pep_ops;
-	xpep->pep_fid.cm = &__fi_pep_cm_ops;
+	_pep->pep_fid.fid.fclass = FID_CLASS_PEP;
+	_pep->pep_fid.fid.size = sizeof(struct fid_pep);
+	_pep->pep_fid.fid.context = context;
+	_pep->pep_fid.fid.ops = &__fi_pep_ops;
+	_pep->pep_fid.cm = &__fi_pep_cm_ops;
 
-	*pep = &xpep->pep_fid.fid;
+	*pep = &_pep->pep_fid;
 	return 0;
 }
 
@@ -669,14 +676,15 @@ static struct fi_ops __fi_ops = {
 	.close = __fi_fabric_close,
 };
 
-static int __fi_open(fid_t fid, const char *name, uint64_t flags,
-	fid_t *fif, void *context)
+static int
+__fi_open(struct fid_fabric *fabric, const char *name, uint64_t flags,
+	  struct fid **fif, void *context)
 {
 	struct __fid_fabric *fab;
 	struct fi_prov *prov;
 	int ret = -FI_ENOSYS;
 
-	fab = container_of(fid, struct __fid_fabric, fabric_fid.fid);
+	fab = container_of(fabric, struct __fid_fabric, fabric_fid);
 	for (prov = prov_head; prov; prov = prov->next) {
 		if (!prov->ops->if_open)
 			continue;
@@ -697,7 +705,8 @@ static struct fi_ops_fabric __fi_ops_fabric = {
 	.if_open = __fi_open
 };
 
-int fi_fabric(const char *name, uint64_t flags, fid_t *fid, void *context)
+int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
+	      void *context)
 {
 	struct __fid_fabric *fab;
 
@@ -715,7 +724,7 @@ int fi_fabric(const char *name, uint64_t flags, fid_t *fid, void *context)
 	fab->fabric_fid.ops = &__fi_ops_fabric;
 	strncpy(fab->name, name, FI_NAME_MAX);
 	fab->flags = flags;
-	*fid = &fab->fabric_fid.fid;
+	*fabric = &fab->fabric_fid;
 	return 0;
 }
 

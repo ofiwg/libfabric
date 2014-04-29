@@ -158,10 +158,14 @@ extern struct fi_ops_msg	psmx_msg_ops;
 void	psmx_ini(void);
 void	psmx_fini(void);
 
-int	psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *context);
-int	psmx_ep_open(fid_t domain, struct fi_info *info, fid_t *fid, void *context);
-int	psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context);
-int	psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context);
+int	psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+			 struct fid_domain **fid, void *context);
+int	psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
+		     struct fid_ep **fid, void *context);
+int	psmx_ec_open(struct fid_domain *domain, struct fi_ec_attr *attr,
+		     struct fid_ec **ec, void *context);
+int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+		     struct fid_av **av, void *context);
 
 void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername, psm_uuid_t uuid);

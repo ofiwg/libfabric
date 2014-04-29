@@ -54,8 +54,8 @@ threshold is specified using struct fi_trigger_threshold:
 .nf
 
 struct fi_trigger_threshold {
-	fid_t  ec;        /* event counter to check */
-	size_t threshold; /* threshold value */
+	struct fid_ec *ec; /* event counter to check */
+	size_t threshold;  /* threshold value */
 };
 
 .fi
