@@ -35,6 +35,7 @@
 static ssize_t psmx_ep_cancel(fid_t fid, struct fi_context *context)
 {
 	struct psmx_fid_ep *fid_ep;
+	psm_mq_status_t status;
 	int err;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
@@ -48,6 +49,9 @@ static ssize_t psmx_ep_cancel(fid_t fid, struct fi_context *context)
 		return 0;
 
 	err = psm_mq_cancel((psm_mq_req_t *)&context->internal[0]);
+	if (err == PSM_OK)
+		err = psm_mq_test((psm_mq_req_t *)&context->internal[0], &status);
+
 	return psmx_errno(err);
 }
 
