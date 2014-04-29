@@ -58,7 +58,24 @@ static int psmx_domain_close(fid_t fid)
 
 static int psmx_domain_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
-	return -ENOSYS;
+	struct fi_resource ress;
+	int i;
+
+	for (i=0; i<nfids; i++) {
+		if (!fids[i].fid)
+			return -EINVAL;
+		switch (fids[i].fid->fclass) {
+		case FID_CLASS_EP:
+			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
+				return -EINVAL;
+			ress.fid = fid;
+			ress.flags = fids[i].flags;
+			return fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+		default:
+			return -ENOSYS;
+		}
+	}
+	return 0;
 }
 
 static int psmx_domain_sync(fid_t fid, uint64_t flags, void *context)
