@@ -97,6 +97,7 @@ void	*psmx_resolve_name(const char *servername, psm_uuid_t uuid);
 void	psmx_string_to_uuid(const char *s, psm_uuid_t uuid);
 int	psmx_uuid_to_port(psm_uuid_t uuid);
 int	psmx_errno(int err);
+int	psmx_epid_to_epaddr(psm_ep_t ep, psm_epid_t epid, psm_epaddr_t *epaddr);
 
 #ifdef __cplusplus
 }
