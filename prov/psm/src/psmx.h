@@ -24,6 +24,7 @@ extern "C" {
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_tagged.h>
+#include <rdma/fi_rdma.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
 #include <psm.h>
@@ -35,7 +36,8 @@ extern "C" {
 #define PSMX_SUPPORTED_FLAGS (FI_BLOCK | FI_ACK | FI_EXCL | FI_BUFFERED_SEND | \
 			      FI_BUFFERED_RECV | FI_CANCEL)
 #define PSMX_DEFAULT_FLAGS   (0)
-#define PSMX_PROTO_CAPS	     (FI_PROTO_CAP_TAGGED | FI_PROTO_CAP_MSG)
+#define PSMX_PROTO_CAPS	     (FI_PROTO_CAP_TAGGED | FI_PROTO_CAP_MSG | \
+			      FI_PROTO_CAP_RDMA)
 
 #define PSMX_OUI_INTEL	0x0002b3L
 #define PSMX_PROTOCOL	0x0001
@@ -86,6 +88,7 @@ struct psmx_fid_ep {
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
 extern struct fi_ops_msg	psmx_msg_ops;
+extern struct fi_ops_rdma	psmx_rdma_ops;
 
 void	psmx_ini(void);
 void	psmx_fini(void);

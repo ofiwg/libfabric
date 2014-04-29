@@ -240,6 +240,8 @@ int psmx_ep_open(struct fi_info *info, fid_t *fid, void *context)
 		fid_ep->flags = info->flags;
 		if (info->protocol_cap & FI_PROTO_CAP_MSG)
 			fid_ep->ep.msg = &psmx_msg_ops;
+		if (info->protocol_cap & FI_PROTO_CAP_RDMA)
+			fid_ep->ep.rdma = &psmx_rdma_ops;
 	}
 
 	*fid = &fid_ep->ep.fid;
