@@ -51,7 +51,7 @@ static int psmx_readmemfrom(fid_t fid, void *buf, size_t len,
 	return -ENOSYS;
 }
 
-static int psmx_readmsg(fid_t fid, const struct fi_msg_rdma *msg,
+static int psmx_readmsg(fid_t fid, const struct fi_msg_rma *msg,
 				uint64_t flags)
 {
 	return -ENOSYS;
@@ -110,7 +110,7 @@ static int psmx_writememto(fid_t fid, const void *buf, size_t len,
 	return -ENOSYS;
 }
 
-static int psmx_writemsg(fid_t fid, const struct fi_msg_rdma *msg,
+static int psmx_writemsg(fid_t fid, const struct fi_msg_rma *msg,
 				uint64_t flags)
 {
 	return -ENOSYS;
@@ -144,8 +144,8 @@ static int psmx_writev(fid_t fid, const void *iov, size_t count,
 	return -ENOSYS;
 }
 
-struct fi_ops_rdma psmx_rdma_ops = {
-	.size = sizeof(struct fi_ops_rdma),
+struct fi_ops_rma psmx_rma_ops = {
+	.size = sizeof(struct fi_ops_rma),
 	.read = psmx_read,
 	.readmem = psmx_readmem,
 	.readv = psmx_readv,
