@@ -75,7 +75,6 @@ enum fi_proto {
 #define FI_PROTO_CAP_TAGGED	(1ULL << 2)
 #define FI_PROTO_CAP_ATOMICS	(1ULL << 3)
 #define FI_PROTO_CAP_MULTICAST	(1ULL << 4)	/* multicast uses MSG ops */
-/*#define FI_PROTO_CAP_COLLECTIVES (1ULL << 5)*/
 
 struct fi_msg {
 	const struct iovec	*msg_iov;
