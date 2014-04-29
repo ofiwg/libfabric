@@ -144,7 +144,7 @@ static int psmx_writev(fid_t fid, const void *iov, size_t count,
 	return -ENOSYS;
 }
 
-struct fi_ops_rma psmx_rdma_ops = {
+struct fi_ops_rma psmx_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = psmx_read,
 	.readmem = psmx_readmem,
