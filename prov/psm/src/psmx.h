@@ -78,6 +78,9 @@ struct psmx_fid_ep {
 	struct psmx_fid_ec	*ec;
 	struct psmx_fid_av	*av;
 	uint64_t		flags;
+	psm_epid_t		peer_psm_epid;
+	psm_epaddr_t		peer_psm_epaddr;
+	int			connected;
 };
 
 extern struct fi_ops_cm		psmx_cm_ops;
