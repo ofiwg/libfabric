@@ -91,6 +91,43 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 		*optlen = sizeof(size_t);
 		break;
 
+	case FI_OPT_MAX_MESSAGE_SIZE:
+		if (!optval)
+			return 0;
+
+		if (!optlen || *optlen < sizeof(size_t))
+			return -EINVAL;
+
+		if (!fid_ep->domain)
+			return -EBADF;
+
+		/* PSM message len is uint32_t. */
+		*(size_t *)optval = 0xFFFFFFFF;
+		*optlen = sizeof(size_t);
+		break;
+
+	case FI_OPT_TOTAL_BUFFERED_RECV:
+		if (!optval)
+			return 0;
+
+		if (!optlen || *optlen < sizeof(size_t))
+			return -EINVAL;
+
+		if (!fid_ep->domain)
+			return -EBADF;
+
+		err = psm_mq_getopt(fid_ep->domain->psm_mq, PSM_MQ_MAX_SYSBUF_MBYTES, &size);
+		if (err)
+			return psmx_errno(err);
+
+		*(size_t *)optval = size * 1048576;
+		*optlen = sizeof(size_t);
+		break;
+
+		break;
+
+	case FI_OPT_TOTAL_BUFFERED_SEND:
+		/* fall through for now */
 	default:
 		return -ENOPROTOOPT;
 	}
