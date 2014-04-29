@@ -252,7 +252,7 @@ static struct fi_ops_ep psmx_ep_ops = {
 	.enable = psmx_ep_enable,
 };
 
-int psmx_ep_open(struct fi_info *info, fid_t *fid, void *context)
+int psmx_ep_open(fid_t domain, struct fi_info *info, fid_t *fid, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
 
