@@ -59,7 +59,7 @@ static ssize_t psmx_recvfrom(fid_t fid, void *buf, size_t len,
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	if (fid_ep->flags & (FI_BUFFERED_RECV | FI_CANCEL))
+	if (context && (fid_ep->flags & (FI_BUFFERED_RECV | FI_CANCEL)))
 		((struct fi_context *)context)->internal[0] = psm_req;
 
 	return 0;
@@ -150,7 +150,7 @@ static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
 		err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr,
 				   send_flag, psm_tag, buf, len, ctxt, &psm_req);
 
-		if (flags & (FI_BUFFERED_RECV | FI_CANCEL))
+		if (context && (flags & (FI_BUFFERED_RECV | FI_CANCEL)))
 			((struct fi_context *)context)->internal[0] = NULL;
 			 /* send cannot be canceled */
 		return 0;
