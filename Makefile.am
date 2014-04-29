@@ -45,7 +45,6 @@ src_libfabric_la_SOURCES += prov/psm/src/psmx_init.c \
 	prov/psm/src/psmx_cm.c \
 	prov/psm/src/psmx_tagged.c \
 	prov/psm/src/psmx_msg.c \
-	prov/psm/src/psmx_rma.c \
 	prov/psm/src/psmx_mr.c \
 	prov/psm/src/psmx_util.c
 endif
