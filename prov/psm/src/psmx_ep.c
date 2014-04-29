@@ -271,6 +271,7 @@ static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
 
 static int psmx_ep_control(fid_t fid, int command, void *arg)
 {
+	struct fi_alias *alias;
 	struct psmx_fid_ep *fid_ep, *new_fid_ep;
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
@@ -279,8 +280,11 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 		new_fid_ep = (struct psmx_fid_ep *) calloc(1, sizeof *fid_ep);
 		if (!new_fid_ep)
 			return -ENOMEM;
+		alias = arg;
 		*new_fid_ep = *fid_ep;
-		*(fid_t *)arg = &new_fid_ep->ep.fid;
+		new_fid_ep->flags = alias->flags;
+		psmx_ep_check_flags(new_fid_ep);
+		*alias->fid = &new_fid_ep->ep.fid;
 		break;
 
 	case FI_SETFIDFLAG:
