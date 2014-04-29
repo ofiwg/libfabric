@@ -75,6 +75,17 @@ static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
 		ece->tag = psm_status.msg_tag;
 		ece->olen = psm_status.msg_length;
 
+		if (src_addr) {
+			if (fid_ec->domain->reserved_tag_bits & PSMX_NONMATCH_BIT) {
+				psm_epid_t src_epid = psm_status.msg_tag & ~PSMX_NONMATCH_BIT;
+				psm_error_t error;
+
+				/* FIXME: need a faster way for epid->epaddr conversion */
+				err = psm_ep_connect(fid_ec->domain->psm_ep, 1, &src_epid, NULL,
+						&error, src_addr, 1e9/*nano seconds*/);
+			}
+		}
+
 		return 1;
 	} else if (err == PSM_MQ_NO_COMPLETIONS) {
 		return 0;

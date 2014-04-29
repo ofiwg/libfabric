@@ -72,7 +72,7 @@ static int psmx_getinfo(const char *node, const char *service,
 
 		switch (hints->protocol) {
 		case FI_PROTO_UNSPEC:
-			  if (hints->protocol_cap & FI_PROTO_CAP_TAGGED)
+			  if ((hints->protocol_cap & PSMX_PROTO_CAPS) == hints->protocol_cap)
 				  break;
 		/* fall through */
 		default:
@@ -105,7 +105,10 @@ static int psmx_getinfo(const char *node, const char *service,
 	psmx_info->flags = flags | PSMX_DEFAULT_FLAGS;
 	psmx_info->type = FID_RDM;
 	psmx_info->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
-	psmx_info->protocol_cap = FI_PROTO_CAP_TAGGED;
+	if (hints->protocol_cap)
+		psmx_info->protocol_cap = hints->protocol_cap & PSMX_PROTO_CAPS;
+	else
+		psmx_info->protocol_cap = FI_PROTO_CAP_TAGGED;
 	psmx_info->iov_format = FI_IOV;
 	psmx_info->addr_format = FI_ADDR; 
 	psmx_info->info_addr_format = FI_ADDR;

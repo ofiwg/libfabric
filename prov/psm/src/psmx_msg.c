@@ -52,7 +52,34 @@ static ssize_t psmx_recvv(fid_t fid, const void *iov, size_t count,
 static ssize_t psmx_recvfrom(fid_t fid, void *buf, size_t len,
 				const void *src_addr, void *context)
 {
-	return -ENOSYS;
+	struct psmx_fid_ep *fid_ep;
+	psm_mq_req_t psm_req;
+	uint64_t psm_tag, psm_tagsel;
+	int err;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	assert(fid_ep->domain);
+
+	if (src_addr && *(uint64_t *)src_addr) {
+		psm_tag = ((uint64_t)(uintptr_t)psm_epaddr_getctxt((void *)src_addr)) | PSMX_NONMATCH_BIT;
+		psm_tagsel = -1ULL;
+	}
+	else {
+		psm_tag = 0;
+		psm_tagsel = PSMX_NONMATCH_BIT;
+	}
+
+	err = psm_mq_irecv(fid_ep->domain->psm_mq,
+			   psm_tag, psm_tagsel, 0, /* flags */
+			   buf, len, context, &psm_req);
+
+	if (err != PSM_OK)
+		return psmx_errno(err);
+
+	if (fid_ep->flags & (FI_BUFFERED_RECV | FI_CANCEL))
+		((struct fi_context *)context)->internal[0] = psm_req;
+
+	return 0;
 }
 
 static ssize_t psmx_recvmemfrom(fid_t fid, void *buf, size_t len,
@@ -89,7 +116,42 @@ static ssize_t psmx_sendv(fid_t fid, const void *iov, size_t count,
 static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
 				  const void *dest_addr, void *context)
 {
-	return -ENOSYS;
+	struct psmx_fid_ep *fid_ep;
+	int nonblocking;
+	int send_flag;
+	psm_epaddr_t psm_epaddr;
+	psm_mq_req_t psm_req;
+	uint64_t psm_tag;
+	int err;
+	int flags;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	assert(fid_ep->domain);
+
+	psm_epaddr = (psm_epaddr_t) dest_addr;
+
+	flags = fid_ep->flags;
+
+	nonblocking = !!(flags & FI_NONBLOCK);
+	send_flag = (flags & FI_ACK) ? PSM_MQ_FLAG_SENDSYNC : 0;
+	psm_tag = fid_ep->domain->psm_epid | PSMX_NONMATCH_BIT;
+
+	if (nonblocking) {
+		err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr,
+				   send_flag, psm_tag, buf, len, context, &psm_req);
+
+		if (flags & (FI_BUFFERED_RECV | FI_CANCEL))
+			((struct fi_context *)context)->internal[0] = NULL;
+			 /* send cannot be canceled */
+		return 0;
+	} else {
+		err = psm_mq_send(fid_ep->domain->psm_mq, psm_epaddr,
+				  send_flag, psm_tag, buf, len);
+		if (err == PSM_OK)
+			return len;
+		else
+			return psmx_errno(err);
+	}
 }
 
 static ssize_t psmx_sendmemto(fid_t fid, const void *buf, size_t len,
