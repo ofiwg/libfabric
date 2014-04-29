@@ -127,7 +127,6 @@ static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
 				  const void *dest_addr, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
-	int nonblocking;
 	int send_flag;
 	psm_epaddr_t psm_epaddr;
 	psm_mq_req_t psm_req;
@@ -142,11 +141,10 @@ static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
 
 	flags = fid_ep->flags;
 
-	nonblocking = !!(flags & FI_NONBLOCK);
 	send_flag = (flags & FI_ACK) ? PSM_MQ_FLAG_SENDSYNC : 0;
 	psm_tag = fid_ep->domain->psm_epid | PSMX_NONMATCH_BIT;
 
-	if (nonblocking) {
+	if (!(flags & FI_BLOCK)) {
 		err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr,
 				   send_flag, psm_tag, buf, len, context, &psm_req);
 
