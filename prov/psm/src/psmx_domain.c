@@ -103,6 +103,12 @@ static int psmx_progress(fid_t fid)
 	return 0;
 }
 
+static int psmx_if_open(fid_t fid, const char *name, uint64_t flags,
+			fid_t *fif, void *context)
+{
+	return -ENOSYS;
+}
+
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_domain_close,
@@ -118,6 +124,7 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.av_open = psmx_av_open,
 	.ec_open = psmx_ec_open,
 	.endpoint = psmx_ep_open,
+	.if_open = psmx_if_open,
 };
 
 int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *context)
