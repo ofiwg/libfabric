@@ -80,11 +80,11 @@ again:
 		ece->olen = psm_status.msg_length;
 
 		if (src_addr) {
-			if ((fid_ec->domain->reserved_tag_bits & PSMX_NONMATCH_BIT) &&
-				psm_status.msg_tag & PSMX_NONMATCH_BIT) {
+			if ((fid_ec->domain->reserved_tag_bits & PSMX_MSG_BIT) &&
+				psm_status.msg_tag & PSMX_MSG_BIT) {
 				err = psmx_epid_to_epaddr(
 					fid_ec->domain->psm_ep,
-					psm_status.msg_tag & ~PSMX_NONMATCH_BIT,
+					psm_status.msg_tag & ~PSMX_MSG_BIT,
 					src_addr);
 			}
 		}

@@ -182,7 +182,7 @@ int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *conte
 		fid_domain->ns_thread = 0;
 
 	if (info->protocol_cap & FI_PROTO_CAP_MSG)
-		fid_domain->reserved_tag_bits = PSMX_NONMATCH_BIT;
+		fid_domain->reserved_tag_bits = PSMX_MSG_BIT;
 
 	*fid = &fid_domain->domain.fid;
 	return 0;

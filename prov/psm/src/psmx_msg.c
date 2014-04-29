@@ -44,12 +44,12 @@ static ssize_t psmx_recvfrom(fid_t fid, void *buf, size_t len,
 	assert(fid_ep->domain);
 
 	if (src_addr) {
-		psm_tag = ((uint64_t)(uintptr_t)psm_epaddr_getctxt((void *)src_addr)) | PSMX_NONMATCH_BIT;
+		psm_tag = ((uint64_t)(uintptr_t)psm_epaddr_getctxt((void *)src_addr)) | PSMX_MSG_BIT;
 		psm_tagsel = -1ULL;
 	}
 	else {
-		psm_tag = PSMX_NONMATCH_BIT;
-		psm_tagsel = PSMX_NONMATCH_BIT;
+		psm_tag = PSMX_MSG_BIT;
+		psm_tagsel = PSMX_MSG_BIT;
 	}
 
 	err = psm_mq_irecv(fid_ep->domain->psm_mq,
@@ -143,7 +143,7 @@ static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
 	flags = fid_ep->flags;
 
 	send_flag = 0;
-	psm_tag = fid_ep->domain->psm_epid | PSMX_NONMATCH_BIT;
+	psm_tag = fid_ep->domain->psm_epid | PSMX_MSG_BIT;
 
 	if (!(flags & FI_BLOCK)) {
 		ctxt = (flags & FI_EVENT) ? PSMX_NOCOMP_CONTEXT : context;
