@@ -136,8 +136,8 @@ static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
 				   send_flag, psm_tag, buf, len, ctxt, &psm_req);
 
 		if (context)
-			((struct fi_context *)context)->internal[0] = NULL;
-			 /* send cannot be canceled */
+			((struct fi_context *)context)->internal[0] = psm_req;
+
 		return 0;
 	} else {
 		err = psm_mq_send(fid_ep->domain->psm_mq, psm_epaddr,

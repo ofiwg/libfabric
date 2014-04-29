@@ -46,9 +46,6 @@ static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 	if (!fi_context)
 		return -EINVAL;
 
-	if (fi_context->internal[0] == NULL)
-		return 0;
-
 	err = psm_mq_cancel((psm_mq_req_t *)&fi_context->internal[0]);
 	if (err == PSM_OK)
 		err = psm_mq_test((psm_mq_req_t *)&fi_context->internal[0], &status);
