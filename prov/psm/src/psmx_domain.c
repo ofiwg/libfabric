@@ -95,7 +95,12 @@ static int psmx_domain_query(fid_t fid, struct fi_domain_attr *attr, size_t *att
 
 static int psmx_progress(fid_t fid)
 {
-	return -ENOSYS;
+	struct psmx_fid_domain *fid_domain;
+
+	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
+	psm_poll(fid_domain->psm_ep);
+
+	return 0;
 }
 
 static struct fi_ops psmx_fi_ops = {
