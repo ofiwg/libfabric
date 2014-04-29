@@ -43,7 +43,7 @@ static ssize_t psmx_recvfrom(fid_t fid, void *buf, size_t len,
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	assert(fid_ep->domain);
 
-	if (src_addr && *(uint64_t *)src_addr) {
+	if (src_addr) {
 		psm_tag = ((uint64_t)(uintptr_t)psm_epaddr_getctxt((void *)src_addr)) | PSMX_NONMATCH_BIT;
 		psm_tagsel = -1ULL;
 	}
