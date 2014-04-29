@@ -130,6 +130,7 @@ static struct fi_ops_domain psmx_domain_ops = {
 int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
+	struct psm_ep_open_opts opts;
 	int err = -ENOMEM;
 	char *s;
 
@@ -147,7 +148,9 @@ int psmx_domain_open(fid_t fabric, struct fi_info *info, fid_t *fid, void *conte
 	fid_domain->domain.ops = &psmx_domain_ops;
 	fid_domain->domain.mr = &psmx_mr_ops;
 
-	err = psm_ep_open(info->auth_key, NULL,
+	psm_ep_open_opts_get_defaults(&opts);
+
+	err = psm_ep_open(info->auth_key, &opts,
 			  &fid_domain->psm_ep, &fid_domain->psm_epid);
 	if (err != PSM_OK) {
 		fprintf(stderr, "%s: psm_ep_open returns %d, errno=%d\n",
