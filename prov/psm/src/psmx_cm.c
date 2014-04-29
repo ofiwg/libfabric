@@ -69,7 +69,7 @@ static int psmx_cm_getpeer(fid_t fid, void *addr, size_t *addrlen)
 	return 0;
 }
 
-static int psmx_cm_connect(fid_t fid, const void *param, size_t paramlen)
+static int psmx_cm_connect(fid_t fid, const void *addr, const void *param, size_t paramlen)
 {
 	struct psmx_fid_ep *fid_ep;
 	psm_epid_t epid;
@@ -80,10 +80,7 @@ static int psmx_cm_connect(fid_t fid, const void *param, size_t paramlen)
 	if (!fid_ep->domain)
 		return -EBADF;
 
-	if (paramlen < sizeof(psm_epid_t))
-		return -FI_ETOOSMALL;
-
-	epid = *(psm_epid_t *)param;
+	epid = (psm_epid_t)addr;
 	err = psmx_epid_to_epaddr(fid_ep->domain->psm_ep, epid, &epaddr);
 	if (err)
 		return err;
