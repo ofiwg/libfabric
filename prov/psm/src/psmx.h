@@ -44,6 +44,7 @@ extern "C" {
 #define PSMX_PROTOCOL	0x0001
 
 #define PSMX_NONMATCH_BIT (0x8000000000000000ULL)
+#define PSMX_NOCOMP_CONTEXT ((void *)0xFFFF0000FFFF0000ULL)
 
 struct psmx_fid_domain {
 	struct fid_domain	domain;

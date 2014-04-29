@@ -51,9 +51,13 @@ static ssize_t psmx_ec_readfrom(fid_t fid, void *buf, size_t len,
 	if (len < sizeof *ece)
 		return -FI_ETOOSMALL;
 
+again:
 	err = psm_mq_ipeek(fid_ec->domain->psm_mq, &psm_req, NULL);
 	if (err == PSM_OK) {
 		err = psm_mq_test(&psm_req, &psm_status);
+
+		if (psm_status.context == PSMX_NOCOMP_CONTEXT)
+			goto again;
 
 		if (psm_status.error_code) {
 			error_ece.fid_context = fid_ec->ec.fid.context;

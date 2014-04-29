@@ -133,6 +133,7 @@ static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
 	uint64_t psm_tag;
 	int err;
 	int flags;
+	void *ctxt;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	assert(fid_ep->domain);
@@ -145,8 +146,9 @@ static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
 	psm_tag = fid_ep->domain->psm_epid | PSMX_NONMATCH_BIT;
 
 	if (!(flags & FI_BLOCK)) {
+		ctxt = (flags & FI_NOCOMP) ? PSMX_NOCOMP_CONTEXT : context;
 		err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr,
-				   send_flag, psm_tag, buf, len, context, &psm_req);
+				   send_flag, psm_tag, buf, len, ctxt, &psm_req);
 
 		if (flags & (FI_BUFFERED_RECV | FI_CANCEL))
 			((struct fi_context *)context)->internal[0] = NULL;
