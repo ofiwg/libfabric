@@ -31,55 +31,24 @@
  */
 
 #include "psmx.h"
-#include "uthash.h"
 
-static struct psmx_hash {
-        psm_epid_t      epid;
-        psm_epaddr_t    epaddr;
-        UT_hash_handle  hh;
-} *psmx_addr_hash = NULL;
-
-#define PSMX_HASH_ADD_ADDR(_epid, _epaddr) do { \
-                struct psmx_hash *s; \
-                s = (struct psmx_hash *)malloc(sizeof(*s)); \
-                if (!s) return -1; \
-                s->epid = (_epid); \
-                s->epaddr = (_epaddr); \
-                HASH_ADD(hh, psmx_addr_hash, epid, sizeof(psm_epid_t), s); \
-        } while (0)
-
-#define PSMX_HASH_GET_ADDR(_epid, _epaddr) do { \
-                struct psmx_hash *s; \
-                HASH_FIND(hh, psmx_addr_hash, &(_epid), sizeof(psm_epid_t), s); \
-                if (s) (_epaddr) = s->epaddr; \
-        } while (0)
-
-#define PSMX_HASH_DEL_ADDR(_epid) do { \
-                struct psmx_hash *s; \
-                HASH_FIND(hh, psmx_addr_hash, &(_epid), sizeof(psm_epid_t), s); \
-                if (s) {HASH_DELETE(hh, psmx_addr_hash, s); } \
-        } while (0)
-
-/* This funciton is a special case of psmx_av_insert_with_hash, in that it
- * handles only one address, and doesn't need the AV fid as input. When making
- * changes to either of them, make sure the two functions are compatible.
- */
 int psmx_epid_to_epaddr(psm_ep_t ep, psm_epid_t epid, psm_epaddr_t *epaddr)
 {
         int err;
         psm_error_t errors;
+	psm_epconn_t epconn;
 
-        *epaddr = 0;
-        PSMX_HASH_GET_ADDR(epid, *epaddr);
-        if (*epaddr)
-                return 0;
+	err = psm_ep_epid_lookup(epid, &epconn);
+	if (err == PSM_OK) {
+		*epaddr = epconn.addr;
+		return 0;
+	}
 
         err = psm_ep_connect(ep, 1, &epid, NULL, &errors, epaddr, 30*1e9);
         if (err != PSM_OK)
                 return psmx_errno(err);
 
 	psm_epaddr_setctxt(*epaddr, (void *)epid);
-        PSMX_HASH_ADD_ADDR(epid, *epaddr);
         return 0;
 }
 
@@ -96,6 +65,8 @@ static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 	errors = (psm_error_t *) calloc(count, sizeof *errors);
 	if (!errors)
 		return -ENOMEM;
+
+	/* FIXME: check for existing connections and set the mask accordingly */
 
 	err = psm_ep_connect(fid_av->domain->psm_ep, count, 
 			(psm_epid_t *) addr, NULL, errors,
@@ -114,63 +85,7 @@ static int psmx_av_insert(fid_t fid, const void *addr, size_t count,
 	return psmx_errno(err);
 }
 
-static int psmx_av_insert_with_hash(fid_t fid, const void *addr, size_t count,
-			  void **fi_addr, uint64_t flags)
-{
-	struct psmx_fid_av *fid_av;
-	int *mask;
-	psm_error_t *errors;
-	int err;
-	int i;
-	psm_epid_t *epid = (psm_epid_t *)addr;
-	psm_epaddr_t *epaddr = (psm_epaddr_t *)fi_addr;
-
-	fid_av = container_of(fid, struct psmx_fid_av, av.fid);
-
-	mask = (int *) calloc(count, sizeof *mask);
-	if (!mask)
-		return -ENOMEM;
-
-	errors = (psm_error_t *) calloc(count, sizeof *errors);
-	if (!errors) {
-		free(mask);
-		return -ENOMEM;
-	}
-
-	for (i=0; i<count; i++) {
-		epaddr[i] = 0;
-		PSMX_HASH_GET_ADDR(epid[i], epaddr[i]);
-		if (epaddr[i] == 0)
-			mask[i] = 1;
-	}
-
-	err = psm_ep_connect(fid_av->domain->psm_ep, count, 
-			epid, mask, errors, epaddr, 30*1e9);
-
-	for (i=0; i<count; i++) {
-		if (mask[i] && errors[i] == PSM_OK) {
-			psm_epaddr_setctxt(epaddr[i], (void *)epid[i]);
-			PSMX_HASH_ADD_ADDR(epid[i], epaddr[i]);
-		}
-	}
-
-	free(errors);
-	free(mask);
-
-	return psmx_errno(err);
-}
-
 static int psmx_av_remove(fid_t fid, void *fi_addr, size_t count,
-			  uint64_t flags)
-{
-	struct psmx_fid_av *fid_av;
-	int err = PSM_OK;
-	fid_av = container_of(fid, struct psmx_fid_av, av.fid);
-
-	return psmx_errno(err);
-}
-
-static int psmx_av_remove_with_hash(fid_t fid, void *fi_addr, size_t count,
 			  uint64_t flags)
 {
 	struct psmx_fid_av *fid_av;
@@ -219,12 +134,6 @@ static struct fi_ops_av psmx_av_ops = {
 	.remove = psmx_av_remove,
 };
 
-static struct fi_ops_av psmx_av_ops_with_hash = {
-	.size = sizeof(struct fi_ops_av),
-	.insert = psmx_av_insert_with_hash,
-	.remove = psmx_av_remove_with_hash,
-};
-
 int psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
@@ -259,11 +168,7 @@ int psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context)
 	fid_av->av.fid.fclass = FID_CLASS_AV;
 	fid_av->av.fid.context = context;
 	fid_av->av.fid.ops = &psmx_fi_ops;
-
-	if (fid_domain->reserved_tag_bits & PSMX_NONMATCH_BIT)
-		fid_av->av.ops = &psmx_av_ops_with_hash;
-	else
-		fid_av->av.ops = &psmx_av_ops;
+	fid_av->av.ops = &psmx_av_ops;
 
 	*av = &fid_av->av.fid;
 	return 0;
