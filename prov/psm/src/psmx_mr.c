@@ -67,6 +67,66 @@ static struct fi_ops psmx_fi_ops = {
 	.control = psmx_mr_control,
 };
 
+static void psmx_mr_normalize_iov(struct iovec *iov, size_t *count)
+{
+	struct iovec tmp_iov;
+	int i, j, n, new_len;
+
+	n = *count;
+
+	if (!n)
+		return;
+
+	/* sort segments by base address */
+	for (i = 0; i < n - 1; i++) {
+		for (j = i + 1; j < n; j++) {
+			if (iov[i].iov_base > iov[j].iov_base) {
+				tmp_iov = iov[i];
+				iov[i] = iov[j];
+				iov[j] = tmp_iov;
+			}
+		}
+	}
+
+	/* merge overlapping segments */
+	for (i = 0; i < n - 1; i++) {
+		if (iov[i].iov_len == 0)
+			continue;
+
+		for (j = i + 1; j < n; j++) {
+			if (iov[j].iov_len == 0)
+				continue;
+
+			if (iov[i].iov_base + iov[i].iov_len >= iov[j].iov_base) {
+				new_len = iov[j].iov_base + iov[j].iov_len - iov[i].iov_base;
+				if (new_len > iov[i].iov_len)
+					iov[i].iov_len = new_len;
+				iov[j].iov_len = 0;
+			}
+			else {
+				break;
+			}
+		}
+	}
+
+	/* remove empty segments */
+	for (i = 0, j = 1; i < n; i++, j++) {
+		if (iov[i].iov_len)
+			continue;
+
+		while (j < n && iov[j].iov_len == 0)
+			j++;
+
+		if (j >= n)
+			break;
+
+		iov[i] = iov[j];
+		iov[j].iov_len = 0;
+	}
+
+	*count = i;
+}
+
 static int psmx_mr_reg(fid_t fid, const void *buf, size_t len,
 			uint64_t access, uint64_t requested_key,
 			uint64_t flags, fid_t *mr, void *context)
@@ -124,7 +184,10 @@ static int psmx_mr_regv(fid_t fid, const struct iovec *iov, size_t count,
 	for (i=0; i<count; i++)
 		fid_mr->iov[i] = iov[i];
 
+	psmx_mr_normalize_iov(fid_mr->iov, &fid_mr->iov_count);
+
 	*mr = &fid_mr->mr.fid;
+
 	return 0;
 }
 
@@ -168,9 +231,12 @@ static int psmx_mr_regattr(fid_t fid, const struct fi_mr_attr *attr,
 		fid_mr->access = attr->access;
 
 	if (attr->mask & FI_MR_ATTR_KEY)
-		; /* request_key is ignored */
+		; /* requested_key is ignored */
+
+	psmx_mr_normalize_iov(fid_mr->iov, &fid_mr->iov_count);
 
 	*mr = &fid_mr->mr.fid;
+
 	return 0;
 }
 
