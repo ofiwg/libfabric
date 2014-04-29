@@ -32,18 +32,6 @@
 
 #include "psmx.h"
 
-static ssize_t psmx_tagged_recv(fid_t fid, void *buf, size_t len,
-				uint64_t tag, uint64_t ignore, void *context)
-{
-	return -ENOSYS;
-}
-
-static ssize_t psmx_tagged_recvv(fid_t fid, const void *iov, size_t count,
-				 uint64_t tag, uint64_t ignore, void *context)
-{
-	return -ENOSYS;
-}
-
 static ssize_t psmx_tagged_recvfrom(fid_t fid, void *buf, size_t len,
 				    const void *src_addr,
 				    uint64_t tag, uint64_t ignore, void *context)
@@ -77,14 +65,23 @@ static ssize_t psmx_tagged_recvmsg(fid_t fid, const struct fi_msg_tagged *msg,
 	return -ENOSYS;
 }
 
-static ssize_t psmx_tagged_send(fid_t fid, const void *buf, size_t len,
-				uint64_t tag, void *context)
+static ssize_t psmx_tagged_recv(fid_t fid, void *buf, size_t len,
+				uint64_t tag, uint64_t ignore, void *context)
 {
-	return -ENOSYS;
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	assert(fid_ep->domain);
+
+	if (fid_ep->connected)
+		return psmx_tagged_recvfrom(fid, buf, len, fid_ep->peer_psm_epaddr,
+						tag, ignore, context);
+	else
+		return psmx_tagged_recvfrom(fid, buf, len, NULL, tag, ignore, context);
 }
 
-static ssize_t psmx_tagged_sendv(fid_t fid, const void *iov, size_t count,
-				 uint64_t tag, void *context)
+static ssize_t psmx_tagged_recvv(fid_t fid, const void *iov, size_t count,
+				 uint64_t tag, uint64_t ignore, void *context)
 {
 	return -ENOSYS;
 }
@@ -131,6 +128,27 @@ static ssize_t psmx_tagged_sendto(fid_t fid, const void *buf, size_t len,
 
 static ssize_t psmx_tagged_sendmsg(fid_t fid, const struct fi_msg_tagged *msg,
 				   uint64_t flags)
+{
+	return -ENOSYS;
+}
+
+static ssize_t psmx_tagged_send(fid_t fid, const void *buf, size_t len,
+				uint64_t tag, void *context)
+{
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	assert(fid_ep->domain);
+
+	if (!fid_ep->connected)
+		return -ENOTCONN;
+
+	return psmx_tagged_sendto(fid, buf, len, fid_ep->peer_psm_epaddr,
+					tag, context);
+}
+
+static ssize_t psmx_tagged_sendv(fid_t fid, const void *iov, size_t count,
+				uint64_t tag, void *context)
 {
 	return -ENOSYS;
 }
