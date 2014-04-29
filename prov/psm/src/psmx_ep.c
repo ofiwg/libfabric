@@ -270,7 +270,8 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 
 static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
 {
-	return -ENOSYS;
+	/* FIXME: perform the real sync operation */
+	return 0;
 }
 
 static int psmx_ep_control(fid_t fid, int command, void *arg)
