@@ -105,7 +105,23 @@ static int psmx_av_close(fid_t fid)
 
 static int psmx_av_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
-	/* no need to bind an EQ since insert/remove is synchronous */
+	struct fi_resource ress;
+	int i;
+
+	for (i=0; i<nfids; i++) {
+		if (!fids[i].fid)
+			return -EINVAL;
+		switch (fids[i].fid->fclass) {
+		case FID_CLASS_EP:
+			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
+				return -EINVAL;
+			ress.fid = fid;
+			ress.flags = fids[i].flags;
+			return fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+		default:
+			return -ENOSYS;
+		}
+	}
 	return 0;
 }
 
