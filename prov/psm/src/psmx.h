@@ -85,6 +85,10 @@ struct psmx_fid_ep {
 	int			connected;
 };
 
+struct psmx_fid_mr {
+	struct fid_mr		mr;
+};
+
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
 extern struct fi_ops_msg	psmx_msg_ops;
@@ -97,6 +101,11 @@ int	psmx_domain_open(struct fi_info *info, fid_t *fid, void *context);
 int	psmx_ep_open(struct fi_info *info, fid_t *fid, void *context);
 int	psmx_ec_open(fid_t fid, struct fi_ec_attr *attr, fid_t *ec, void *context);
 int	psmx_av_open(fid_t fid, struct fi_av_attr *attr, fid_t *av, void *context);
+
+int	psmx_mr_reg(fid_t fid, const void *buf, size_t len,
+		       struct fi_mr_attr *attr, fid_t *mr, void *context);
+int	psmx_mr_regv(fid_t fid, const struct iovec *iov, size_t count,
+			struct fi_mr_attr *attr, fid_t *mr, void *context);
 
 void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername, psm_uuid_t uuid);
