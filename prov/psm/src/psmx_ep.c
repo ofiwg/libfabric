@@ -132,6 +132,11 @@ static int psmx_ep_setopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
+static int psmx_ep_enable(fid_t fid)
+{
+	return 0;
+}
+
 static int psmx_ep_close(fid_t fid)
 {
 	struct psmx_fid_ep *fid_ep;
@@ -244,6 +249,7 @@ static struct fi_ops_ep psmx_ep_ops = {
 	.cancel = psmx_ep_cancel,
 	.getopt = psmx_ep_getopt,
 	.setopt = psmx_ep_setopt,
+	.enable = psmx_ep_enable,
 };
 
 int psmx_ep_open(struct fi_info *info, fid_t *fid, void *context)
