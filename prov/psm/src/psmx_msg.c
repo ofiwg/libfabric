@@ -75,7 +75,18 @@ static ssize_t psmx_recvmemfrom(fid_t fid, void *buf, size_t len,
 static ssize_t psmx_recvmsg(fid_t fid, const struct fi_msg *msg,
 				uint64_t flags)
 {
-	return -ENOSYS;
+	struct iovec *iov;
+
+	/* FIXME: allow iov_count == 0? */
+	/* FIXME: allow iov_count > 1 */
+	if (!msg || msg->iov_count != 1)
+		return -EINVAL;
+
+	/* FIXME: check flags */
+	/* FIXME: check iov format */
+	iov = (struct iovec *)msg->msg_iov;
+	return psmx_recvfrom(fid, iov[0].iov_base, iov[0].iov_len,
+					msg->addr, msg->context);
 }
 
 static ssize_t psmx_recv(fid_t fid, void *buf, size_t len, void *context)
@@ -100,7 +111,16 @@ static ssize_t psmx_recvmem(fid_t fid, void *buf, size_t len,
 static ssize_t psmx_recvv(fid_t fid, const void *iov, size_t count,
 				void *context)
 {
-	return -ENOSYS;
+	struct iovec *iov0;
+
+	/* FIXME: allow iov_count == 0? */
+	/* FIXME: allow iov_count > 1 */
+	if (!iov || count != 1)
+		return -EINVAL;
+
+	/* FIXME: check iov format */
+	iov0 = (struct iovec *)iov;
+	return psmx_recv(fid, iov0->iov_base, iov0->iov_len, context);
 }
 
 static ssize_t psmx_sendto(fid_t fid, const void *buf, size_t len,
@@ -154,7 +174,18 @@ static ssize_t psmx_sendmemto(fid_t fid, const void *buf, size_t len,
 static ssize_t psmx_sendmsg(fid_t fid, const struct fi_msg *msg,
 				uint64_t flags)
 {
-	return -ENOSYS;
+	struct iovec *iov;
+
+	/* FIXME: allow iov_count == 0? */
+	/* FIXME: allow iov_count > 1 */
+	if (!msg || msg->iov_count != 1)
+		return -EINVAL;
+
+	/* FIXME: check flags */
+	/* FIXME: check iov format */
+	iov = (struct iovec *)msg->msg_iov;
+	return psmx_sendto(fid, iov[0].iov_base, iov[0].iov_len,
+					msg->addr, msg->context);
 }
 
 static ssize_t psmx_send(fid_t fid, const void *buf, size_t len,
@@ -180,7 +211,16 @@ static ssize_t psmx_sendmem(fid_t fid, const void *buf, size_t len,
 static ssize_t psmx_sendv(fid_t fid, const void *iov, size_t count,
 				void *context)
 {
-	return -ENOSYS;
+	struct iovec *iov0;
+
+	/* FIXME: allow iov_count == 0? */
+	/* FIXME: allow iov_count > 1 */
+	if (!iov || count != 1)
+		return -EINVAL;
+
+	/* FIXME: check iov format */
+	iov0 = (struct iovec *)iov;
+	return psmx_send(fid, iov0->iov_base, iov0->iov_len, context);
 }
 
 struct fi_ops_msg psmx_msg_ops = {
