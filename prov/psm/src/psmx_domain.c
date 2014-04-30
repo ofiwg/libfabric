@@ -197,13 +197,6 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	return 0;
 
-err_out_fini_mq:
-	if (fid_domain->ns_thread) {
-		pthread_cancel(fid_domain->ns_thread);
-		pthread_join(fid_domain->ns_thread, NULL);
-	}
-	psm_mq_finalize(fid_domain->psm_mq);
-
 err_out_close_ep:
 	if (psm_ep_close(fid_domain->psm_ep, PSM_EP_CLOSE_GRACEFUL,
 			 (int64_t) PSMX_TIME_OUT * 1000000000LL) != PSM_OK)
