@@ -156,10 +156,6 @@ enum {
 	FID_CLASS_EC
 };
 
-struct fi_context {
-	void			*internal[4];
-};
-
 struct fid;
 struct fid_fabric;
 struct fid_domain;
@@ -290,7 +286,13 @@ static inline int fi_alias(struct fid *fid, struct fid **alias_fid, uint64_t fla
 }
 
 
-#ifdef FABRIC_DIRECT
+#ifndef FABRIC_DIRECT
+
+struct fi_context {
+	void			*internal[4];
+};
+
+#else // FABRIC_DIRECT
 #include <rdma/fi_direct.h>
 #endif
 
