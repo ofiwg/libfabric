@@ -60,18 +60,14 @@ enum fi_av_type {
 
 enum {
 	FI_AV_ATTR_TYPE		= 1 << 0,
-	FI_AV_ATTR_ADDR_FORMAT	= 1 << 1,
-	FI_AV_ATTR_ADDRLEN	= 1 << 2,
-	FI_AV_ATTR_COUNT	= 1 << 3,
-	FI_AV_ATTR_FLAGS	= 1 << 4,
+	FI_AV_ATTR_COUNT	= 1 << 1,
+	FI_AV_ATTR_FLAGS	= 1 << 2,
 	FI_AV_ATTR_MASK_V1	= (FI_AV_ATTR_FLAGS << 1) - 1
 };
 
 struct fi_av_attr {
 	int			mask;
 	enum fi_av_type		type;
-	enum fi_addr_format	addr_format; /* TODO: remove */
-	size_t			addrlen;     /* TODO: remove */
 	size_t			count;
 	uint64_t		flags;
 };
@@ -82,6 +78,10 @@ struct fi_ops_av {
 			void **fi_addr, uint64_t flags);
 	int	(*remove)(struct fid_av *av, void *fi_addr, size_t count,
 			uint64_t flags);
+	int	(*lookup)(struct fid_av *av, const void *fi_addr, void *addr,
+			size_t *addrlen);
+	const char * (*straddr)(struct fid_av *av, const void *addr,
+			char *buf, size_t *len);
 };
 
 struct fid_av {

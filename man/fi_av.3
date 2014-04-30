@@ -22,9 +22,19 @@ fi_av_insert / fi_av_remove
 Insert/remove an address into/from the address vector.
 .RE
 .PP
+fi_av_lookup
+.RS
+Retrieve an address stored in the address vector.
+.RE
+.PP
 fi_av_sync
 .RS
 Initiate a synchronize operation.
+.RE
+.PP
+fi_av_straddr
+.RS
+Convert an address into a printable string.
 .RE
 .SH SYNOPSIS
 .B #include <rdma/fi_domain.h>
@@ -47,9 +57,15 @@ Initiate a synchronize operation.
 .BI "int fi_av_remove(struct fid_av *" av ", void *" fi_addr ", size_t " count ", "
 .BI "uint64_t " flags ");"
 .HP
+.BI "int fi_av_lookup(struct fid_av *" av" , const void *" fi_addr ", "
+.BI "void *" addr ", size_t *" addrlen ");"
+.HP
 .BI "int fi_av_sync(struct fid_av *" av ");"
+.HP
+.BI "const char * fi_av_straddr(struct fid_av *" av ", const void *" addr ", "
+.BI "void *" buf ", size_t " len ");"
 .SH ARGUMENTS
-.IP "fid"
+.IP "domain"
 Resource domain
 .IP "av"
 Address vector 
@@ -61,6 +77,9 @@ Address vector attributes
 User specified context associated with the address vector.
 .IP "addr"
 Buffer containing one or more addresses to insert into address vector.
+.IP "addrlen"
+On input, specifies size of addr buffer.  On output, stores number of bytes
+written to addr buffer.
 .IP "fi_addr"
 For insert, a reference to an array where returned fabric addresses
 will be written.
@@ -196,6 +215,14 @@ fi_av_remove removes a set of addresses from an address vector.  All
 resources associated with the indicated addresses are released, and
 no future references to either the mapped address (in the case of
 FI_AV_MAP) or index (FI_AV_TABLE) are allowed.
+.SS "fi_av_lookup"
+This call returns the address stored in the address vector that corresponds
+to the given fi_addr.  The returned address is the same format as those
+stored by the AV.  On input, the addrlen parameter should
+indicate the size of the addr buffer.  If the actual address is larger than
+what can fit into the buffer, it will be truncated.  On output, addrlen
+is set to the size of the buffer needed to store the address, which may
+be larger than the input value.
 .SS "fi_av_sync"
 The fi_av_sync call is used to signal to the provider that all addresses
 have been inserted and/or removed from the AV, and that it should
@@ -209,7 +236,16 @@ posted to the bound event collector.  Receipt of the event indicates
 that all addresses that were inserted into the AV prior to fi_av_sync
 being invoked have been mapped, and that returned addresses are now
 usable.  The fi_av_sync call can be converted into a synchronous call
-using the FI_BLOCK flag.  
+using the FI_BLOCK flag.
+.SS "fi_av_straddr"
+The fi_av_straddr function converts the provided address into a printable
+string.  The specified address must be of the same format as those
+stored by the AV, though the address itself is not required to have been
+inserted.  On input, the len parameter should specify the size of the buffer
+referenced by buf.  On output, the actual size needed to write the entire
+string will be returned.  This size may be larger than the input len.  If
+the provided buffer is too small, the results will be truncated.  fi_av_straddr
+returns a pointer to buf.
 .SH "FLAGS"
 The following flags are usable with fi_av_insert, fi_av_remove, and
 fi_av_sync.

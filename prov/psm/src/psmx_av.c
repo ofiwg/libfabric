@@ -184,16 +184,6 @@ int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			psmx_debug("%s: attr->type=%d, supported=%d\n", __func__, attr->type, FI_AV_MAP);
 			return -ENOSYS;
 		}
-
-		if ((attr->mask & FI_AV_ATTR_ADDR_FORMAT) &&
-			attr->addr_format != FI_ADDR) {
-			psmx_debug("%s: attr->addr_format=%d, supported=%d\n", __func__, attr->addr_format, FI_ADDR);
-			return -ENOSYS;
-		}
-
-		if ((attr->mask & FI_AV_ATTR_ADDRLEN) &&
-			attr->addrlen != sizeof(psm_epaddr_t))
-			return -ENOSYS;
 	}
 
 	fid_av = (struct psmx_fid_av *) calloc(1, sizeof *fid_av);
