@@ -163,15 +163,6 @@ struct psmx_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
 		}
 		break;
 
-	case FI_EQ_FORMAT_COUNTER:
-		event->eqe.counter.events = eq->num_events;
-		break;
-
-	case FI_EQ_FORMAT_COUNTER_ERR:
-		event->eqe.counter_err.events = eq->num_events;
-		event->eqe.counter_err.errors = eq->num_errors;
-		break;
-
 	case FI_EQ_FORMAT_CM:
 	default:
 		fprintf(stderr, "%s: unsupported EC format %d\n", __func__, event->format);
@@ -284,15 +275,6 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 			event->eqe.tagged_err.tagged.olen = psm_status->msg_length -
 								psm_status->nbytes;
 		}
-		break;
-
-	case FI_EQ_FORMAT_COUNTER:
-		event->eqe.counter.events = eq->num_events;
-		break;
-
-	case FI_EQ_FORMAT_COUNTER_ERR:
-		event->eqe.counter_err.events = eq->num_events;
-		event->eqe.counter_err.errors = eq->num_errors;
 		break;
 
 	case FI_EQ_FORMAT_CM:
@@ -541,17 +523,6 @@ int psmx_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 		return -ENOSYS;
 	}
 
-	switch (attr->type) {
-	case FI_EQ_QUEUE:
-	case FI_EQ_COUNTER:
-		break;
-
-	default:
-		psmx_debug("%s: attr->type=%d, supported=%d,%d\n", __func__, attr->type,
-				FI_EQ_QUEUE, FI_EQ_COUNTER);
-		return -EINVAL;
-	}
-
 	switch (attr->format) {
 	case FI_EQ_FORMAT_UNSPEC:
 		format = FI_EQ_FORMAT_TAGGED;
@@ -605,21 +576,9 @@ int psmx_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 		entry_size = err_entry_size = sizeof(struct fi_eq_cm_entry);
 		break;
 
-	case FI_EQ_FORMAT_COUNTER:
-		format = attr->format;
-		err_format = FI_EQ_FORMAT_COUNTER_ERR;
-		entry_size = sizeof(struct fi_eq_counter_entry);
-		err_entry_size = sizeof(struct fi_eq_counter_err_entry);
-		break;
-
-	case FI_EQ_FORMAT_COUNTER_ERR:
-		format = err_format = attr->format;
-		entry_size = err_entry_size = sizeof(struct fi_eq_counter_err_entry);
-		break;
-
 	default:
 		psmx_debug("%s: attr->format=%d, supported=%d...%d\n", __func__, attr->format,
-				FI_EQ_FORMAT_UNSPEC, FI_EQ_FORMAT_COUNTER_ERR);
+				FI_EQ_FORMAT_UNSPEC, FI_EQ_FORMAT_CM);
 		return -EINVAL;
 	}
 
@@ -629,7 +588,6 @@ int psmx_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 		return -ENOMEM;
 
 	fid_eq->domain = fid_domain;
-	fid_eq->type = attr->type;
 	fid_eq->format = format;
 	fid_eq->err_format = err_format;
 	fid_eq->entry_size = entry_size;

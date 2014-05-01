@@ -118,6 +118,7 @@ man_MANS = \
 	man/fi_atomic.3 \
 	man/fi_av.3 \
 	man/fi_cm.3 \
+	man/fi_cntr.3 \
 	man/fi_direct.7 \
 	man/fi_domain.3 \
 	man/fi_eq.3 \

@@ -119,11 +119,6 @@ enum fi_eq_domain {
 	FI_EQ_DOMAIN_AV
 };
 
-enum fi_eq_type {
-	FI_EQ_QUEUE,
-	FI_EQ_COUNTER
-};
-
 enum fi_eq_format {
 	FI_EQ_FORMAT_UNSPEC,
 	FI_EQ_FORMAT_CONTEXT,
@@ -135,8 +130,6 @@ enum fi_eq_format {
 	FI_EQ_FORMAT_DATA_ERR,
 	FI_EQ_FORMAT_TAGGED_ERR,
 	FI_EQ_FORMAT_CM,
-	FI_EQ_FORMAT_COUNTER,
-	FI_EQ_FORMAT_COUNTER_ERR,
 };
 
 /* Use fi_control GETWAIT to get underlying wait object */
@@ -152,21 +145,19 @@ enum fi_eq_wait_cond {
 
 enum {
 	FI_EQ_ATTR_DOMAIN	= 1 << 0,
-	FI_EQ_ATTR_TYPE		= 1 << 1,
-	FI_EQ_ATTR_FORMAT	= 1 << 2,
-	FI_EQ_ATTR_WAIT_OBJ	= 1 << 3,
-	FI_EQ_ATTR_WAIT_COND	= 1 << 4,
-	FI_EQ_ATTR_SIZE		= 1 << 5,
-	FI_EQ_ATTR_VECTOR	= 1 << 6,
-	FI_EQ_ATTR_FLAGS	= 1 << 7,
-	FI_EQ_ATTR_COND		= 1 << 8,
+	FI_EQ_ATTR_FORMAT	= 1 << 1,
+	FI_EQ_ATTR_WAIT_OBJ	= 1 << 2,
+	FI_EQ_ATTR_WAIT_COND	= 1 << 3,
+	FI_EQ_ATTR_SIZE		= 1 << 4,
+	FI_EQ_ATTR_VECTOR	= 1 << 5,
+	FI_EQ_ATTR_FLAGS	= 1 << 6,
+	FI_EQ_ATTR_COND		= 1 << 7,
 	FI_EQ_ATTR_MASK_V1	= (FI_EQ_ATTR_COND << 1) - 1
 };
 
 struct fi_eq_attr {
 	int			mask;
 	enum fi_eq_domain	domain;
-	enum fi_eq_type		type;
 	enum fi_eq_format	format;
 	enum fi_eq_wait_obj	wait_obj;
 	enum fi_eq_wait_cond	wait_cond;
@@ -229,15 +220,6 @@ struct fi_eq_tagged_err_entry {
 	};
 };
 
-struct fi_eq_counter_entry {
-	uint64_t		events;
-};
-
-struct fi_eq_counter_err_entry {
-	uint64_t		events;
-	uint64_t		errors;
-};
-
 enum fi_cm_event {
 	FI_CONNREQ,
 	FI_CONNECTED,
@@ -274,6 +256,43 @@ struct fi_ops_eq {
 struct fid_eq {
 	struct fid		fid;
 	struct fi_ops_eq	*ops;
+};
+
+enum fi_cntr_events {
+	FI_CNTR_EVENTS_COMP
+};
+
+/* Use fi_control GETWAIT to get underlying wait object */
+enum fi_cntr_wait_obj {
+	FI_CNTR_WAIT_NONE,
+	FI_CNTR_WAIT_MUT_COND /* pthread mutex & cond */
+};
+
+enum {
+	FI_CNTR_ATTR_EVENTS	= 1 << 0,
+	FI_CNTR_ATTR_WAIT_OBJ	= 1 << 1,
+	FI_CNTR_ATTR_FLAGS	= 1 << 2,
+	FI_CNTR_ATTR_MASK_V1	= (FI_CNTR_ATTR_FLAGS << 1) - 1
+};
+
+struct fi_cntr_attr {
+	int			mask;
+	enum fi_cntr_events	events;
+	enum fi_cntr_wait_obj	wait_obj;
+	uint64_t		flags;
+};
+
+struct fi_ops_cntr {
+	size_t	size;
+	uint64_t (*read)(struct fid_cntr *cntr);
+	int	(*add)(struct fid_cntr *cntr, uint64_t value);
+	int	(*set)(struct fid_cntr *cntr, uint64_t value);
+	int	(*wait)(struct fid_cntr *cntr, uint64_t threshold);
+};
+
+struct fid_cntr {
+	struct fid		fid;
+	struct fi_ops_cntr	*ops;
 };
 
 
@@ -334,6 +353,8 @@ struct fi_ops_domain {
 			struct fid_ep **ep, void *context);
 	int	(*if_open)(struct fid_domain *domain, const char *name,
 			uint64_t flags, struct fid **fif, void *context);
+	int	(*cntr_alloc)(struct fid_domain *domain, struct fi_cntr_attr *attr,
+			struct fid_cntr **cntr, void *context);
 };
 
 struct fi_ops_mr {
@@ -406,6 +427,33 @@ fi_eq_strerror(struct fid_eq *eq, int prov_errno, void *prov_data,
 	       void *buf, size_t len)
 {
 	return eq->ops->strerror(eq, prov_errno, prov_data, buf, len);
+}
+
+static inline int
+fi_cntr_alloc(struct fid_domain *domain, struct fi_cntr_attr *attr,
+	      struct fid_cntr **cntr, void *context)
+{
+	return domain->ops->cntr_alloc(domain, attr, cntr, context);
+}
+
+static inline uint64_t fi_cntr_read(struct fid_cntr *cntr)
+{
+	return cntr->ops->read(cntr);
+}
+
+static inline int fi_cntr_add(struct fid_cntr *cntr, uint64_t value)
+{
+	return cntr->ops->add(cntr, value);
+}
+
+static inline int fi_cntr_set(struct fid_cntr *cntr, uint64_t value)
+{
+	return cntr->ops->set(cntr, value);
+}
+
+static inline int fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
+{
+	return cntr->ops->wait(cntr, threshold);
 }
 
 static inline int

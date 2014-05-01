@@ -507,7 +507,7 @@ static int __fi_eq_cm_control(fid_t fid, int command, void *arg)
 
 	eq = container_of(fid, struct __fid_eq_cm, eq_fid.fid);
 	switch(command) {
-	case FI_GETECWAIT:
+	case FI_GETWAIT:
 		if (!eq->channel) {
 			ret = -FI_ENODATA;
 			break;
@@ -536,7 +536,7 @@ __fi_eq_open(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
 	long flags = 0;
 	int ret;
 
-	if (attr->type != FI_EQ_QUEUE || attr->format != FI_EQ_FORMAT_CM)
+	if (attr->format != FI_EQ_FORMAT_CM)
 		return -FI_ENOSYS;
 
 	_eq = calloc(1, sizeof *_eq);

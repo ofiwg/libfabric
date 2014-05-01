@@ -90,8 +90,6 @@ struct psmx_event {
 		struct fi_eq_err_entry		err;
 		struct fi_eq_tagged_err_entry	tagged_err;
 		struct fi_eq_cm_entry		cm;
-		struct fi_eq_counter_entry	counter;
-		struct fi_eq_counter_err_entry	counter_err;
 	} eqe;
 	int format;
 	uint64_t source;
@@ -106,7 +104,6 @@ struct psmx_event_queue {
 struct psmx_fid_eq {
 	struct fid_eq		eq;
 	struct psmx_fid_domain	*domain;
-	int			type;
 	int 			format;
 	int			entry_size;
 	struct psmx_event_queue	event_queue;

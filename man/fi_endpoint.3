@@ -145,15 +145,15 @@ Closes an endpoint and release all resources associated with it.
 fi_ep_bind is used to associate an endpoint with hardware resources.
 The common use of fi_ep_bind is to direct asynchronous operations
 associated with an endpoint to an event queue.  An endpoint must be
-bound with ECs capable of reporting completions for any asynchronous
+bound with EQs capable of reporting completions for any asynchronous
 operation initiated on the endpoint.  For connection-oriented
-endpoints, this requires binding the endpoint with an EC that supports
+endpoints, this requires binding the endpoint with an EQ that supports
 the communication management (CM) domain.
 .PP
-An active endpoint may direct asynchronous completions to different ECs, based
+An active endpoint may direct asynchronous completions to different EQs, based
 on the type of operation.  This is specified using fi_ep_bind flags.  The
 following flags may be used separately or OR'ed together when binding
-an endpoint to a completion domain EC.
+an endpoint to a completion domain EQ.
 .RS
 .IP "FI_SEND"
 Directs the completion of outbound data transfer requests to the
@@ -163,6 +163,8 @@ operations.
 Directs the notification of inbound data transfers to the
 specified event queue.  This includes received messages.
 .RE
+.PP
+An endpoint may also, or instead, be bound to a fabric counter.
 .PP
 Active endpoints that are configured to use index based addressing --
 FI_ADDR_INDEX -- must be bound to a single AV.  AV binding can occur

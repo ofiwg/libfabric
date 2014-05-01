@@ -922,7 +922,7 @@ ibv_eq_cm_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 	long flags = 0;
 	int ret;
 
-	if (attr->type != FI_EQ_QUEUE || attr->format != FI_EQ_FORMAT_CM)
+	if (attr->format != FI_EQ_FORMAT_CM)
 		return -ENOSYS;
 
 	_eq = calloc(1, sizeof *_eq);
@@ -1185,7 +1185,7 @@ ibv_eq_comp_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 	long flags = 0;
 	int ret;
 
-	if (attr->type != FI_EQ_QUEUE || attr->wait_cond != FI_EQ_COND_NONE)
+	if (attr->wait_cond != FI_EQ_COND_NONE)
 		return -ENOSYS;
 
 	_eq = calloc(1, sizeof *_eq);

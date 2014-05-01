@@ -103,7 +103,6 @@ the event queue are defined by struct fi_eq_attr.
 struct fi_eq_attr {
 	int                  mask;      /* valid attr fields */
 	enum fi_eq_domain    domain;    /* events reported by EQ */
-	enum fi_eq_type      type;      /* type of EQ */
 	enum fi_eq_format    format;    /* event format */
 	enum fi_eq_wait_obj  wait_obj;  /* requested wait object */
 	enum fi_eq_wait_cond wait_cond; /* wait condition format */
@@ -131,20 +130,6 @@ The EQ is used to report asynchronous completions of data transfers.
 The EQ will be used to report connection management events.
 .IP "FI_EQ_DOMAIN_AV"
 The EQ will report asynchronous operations associated with address vectors.
-.RE
-.IP "type"
-Indicates the generic mechanism that the EQ will report events.
-.RS
-.IP "FI_EQ_QUEUE"
-As events are reported to the EQ, they will be placed into a queue.  The user
-will be able to read out queued events.  Event queues are useful for
-applications that require details on a completion or event.
-.IP "FI_EQ_COUNTER"
-Counter EQ's only maintain a count of the number of events that occur.  Full
-or partial event data is not maintained.  Event counters are useful for
-applications that only need to maintain how many completions or events
-have occurred, rather than details about the event itself.  This can be
-useful for tracking the number of available resources.
 .RE
 .IP "format"
 Event queues allow the application to select the amount of detail that it
@@ -250,25 +235,6 @@ struct fi_eq_tagged_err_entry {
 };
 
 .fi
-.IP "FI_EQ_FORMAT_COUNTER"
-Provides a count of successful events that occur on the EQ.
-.nf
-
-struct fi_eq_counter_entry {
-	uint64_t events;  /* number of successful events */
-};
-
-.fi
-.IP "FI_EQ_FORMAT_COUNTER_ERR"
-Provides a count of successful and error events that occur on the EQ.
-.nf
-
-struct fi_eq_counter_err_entry {
-	uint64_t events;  /* number of successful events */
-	uint64_t errors;  /* number of error events */
-};
-
-.fi
 .IP "FI_EQ_FORMAT_CM"
 Provides information on connection management.
 .nf
@@ -290,9 +256,6 @@ If the underlying connection protocol supports exchanging user data as
 part of the connection establish, the data field will contain any
 available user CM data.  ECs that report CM events return a single event
 per read request.
-.Pzp
-If an EQ has been configured as a counter, then reading from the EQ will
-return a uint64_t that contains the current value of the counter.
 .RE
 .IP "wait_obj"
 EQ's may be associated with a specific wait object.  Wait objects allow
@@ -429,4 +392,4 @@ Fabric errno values are defined in
 .IR "rdma/fi_errno.h".
 .SH "NOTES"
 .SH "SEE ALSO"
-fi_getinfo(3), fi_endpoint(3), fi_domain(3)
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_cntr(3)

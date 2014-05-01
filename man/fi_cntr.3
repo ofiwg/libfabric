@@ -1,0 +1,156 @@
+.TH "FI_CNTR" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.SH NAME
+fi_cntr \- Completion and event counter operations
+.PP
+fi_cntr_alloc / fi_cntr_free
+.RS
+Allocate/free a counter
+.RE
+.PP
+fi_cntr_read
+.RS
+Read the current value of a counter
+.RE
+.PP
+fi_cntr_add
+.RS
+Increment a counter by a specified value
+.RE
+.PP
+fi_cntr_set
+.RS
+Set a counter to a specified value
+.RE
+.PP
+fi_cntr_wait
+.RS
+Wait for a counter to be greater or equal to a threshold value
+.RE
+.SH SYNOPSIS
+.B #include <rdma/fi_domain.h>
+.HP
+.BI "int fi_cntr_alloc(struct fid_domain *" domain ", struct fi_cntr_attr *" attr ", "
+.BI "struct fid_cntr **" cntr ", void * " context ");"
+.HP
+.BI "int fi_cntr_destroy(struct fid_cntr *" cntr ");"
+.PP
+.HP
+.BI "uint64_t fi_cntr_read(struct fid_cntr *" cntr ");"
+.HP
+.BI "int fi_cntr_add(struct fid_cntr *" cntr ", uint64_t " value ");"
+.HP
+.BI "int fi_cntr_set(struct fid_cntr *" cntr ", uint64_t " value ");"
+.PP
+.HP
+.BI "int fi_cntr_wait(struct fid_cntr *" cntr ", uint64_t " threshold ");"
+.SH ARGUMENTS
+.IP "domain"
+Fabric domain
+.IP "cntr"
+Fabric counter 
+.IP "attr"
+Counter attributes
+.IP "context"
+User specified context associated with the counter
+.IP "value"
+Value to increment or set counter
+.IP "threshold"
+Value to compare counter against
+.SH "DESCRIPTION"
+.SS "fi_cntr_alloc"
+fi_cntr_alloc allocates a new fabric counter.  The properties and behavior of
+the counter are defined by struct fi_cntr_attr.
+.PP
+.nf
+struct fi_cntr_attr {
+	int                  mask;      /* valid attr fields */
+	enum fi_cntr_events  events;    /* type of events to count */
+	enum fi_eq_wait_obj  wait_obj;  /* requested wait object */
+	uint64_t             flags;     /* operation flags */
+};
+.fi
+.IP "mask"
+The mask field is used for forward and backward API compatibility.  It is
+used by the application to indicate which fields in the attribute structure
+have been set.  For this version of the API, mask should be set to
+FI_CNTR_ATTR_MASK_V1, indicating that all specified fields have been initialized.
+.IP "events"
+A counter captures different types of events.  The specific type which is to
+counted are one of the following:
+.RS
+.IP "FI_CNTR_EVENTS_COMP"
+The counter increments for every successful completion that occurs on an
+associated bound endpoint.  The type of completions -- sends and/or receives --
+which are counted may be restricted using control flags when binding
+the counter an the endpoint.  Counters increment on all successful completions,
+separately from whether the operation generates an entry in an event queue.
+.RE
+.IP "wait_obj"
+Counters may be associated with a specific wait object.  Wait objects allow
+applications to block until the wait object is signaled, indicating that
+a counter has reached a specific threshold.  Users may use fi_control to
+retrieve the underlying wait object associated with a counter, in order to
+use it in other system calls.  The following values may be used to specify
+the type of wait object associated with a counter: FI_CNTR_WAIT_NONE and
+FI_CNTR_WAIT_MUT_COND.
+.IP "flags"
+Flags that set the default operation of the counter.
+.RS
+.IP "FI_SEND"
+Specifies that the counter will be used to count complete send operations.
+Sends include message sends, RMA, and atomic write operations.  This
+flag will automatically be used when binding the counter to an endpoint.
+.IP "FI_RECV"
+Specifies that the counter will be used to count complete receive operations.
+This flag will automatically be used when binding the counter to an endpoint.
+.RE
+.SS "fi_cntr_free"
+The fi_cntr_free call releases all resources associated with a counter.
+The counter must not be bound to any other resources prior to being freed.
+.SS "fi_cntr_control"
+The fi_cntr_control call is used to access provider or implementation specific
+details of the counter.  Access to the counter should be serialized
+across all calls when fi_cntr_control is invoked, as it may redirect the
+implementation of counter operations.  The following control commands are usable
+with a counter:
+.IP "FI_GETOPSFLAG (uint64_t *)"
+Returns the current default operational flags associated with the counter.
+.IP "FI_SETOPSFLAG (uint64_t *)"
+Modifies the current default operational flags associated with the counter.
+Operational flags affected by fi_eq_control are: FI_AUTO_RESET.
+.IP "FI_GETWAIT (void **)"
+This command allows the user to retrieve the low-level wait object
+associated with the counter.  The format of the wait-object is specified during
+counter creation, through the counter attributes.  The fi_cntr_control arg
+parameter should be an address where a pointer to the returned wait object
+will be written.
+.RS
+.IP "FI_CNTR_WAIT_MUT_COND"
+The counter wait is implemented using a pthread_mutex_t and pthread_cond_t.
+FI_GETWAIT will return two pointers, a reference to pthread_mutex_t * and
+pthread_cond_t *, respectively.
+.RE
+.SS "fi_cntr_read"
+The fi_cntr_read call returns the current value of the counter.
+.SS "fi_cntr_add"
+This adds the user-specified value to the counter.
+.SS "fi_cntr_set"
+This sets the counter to the specified value.
+.SS "fi_cntr_wait"
+This call may be used to wait until the counter reaches the specified
+threshold.  Upon successful return from this call, the counter will be
+greater than or equal to the input threshold value.
+.SH "RETURN VALUES"
+Returns 0 on success.  On error, a negative value corresponding to
+fabric errno is returned.
+.PP
+fi_cntr_read
+.RS
+Returns the current value of the counter.
+.RE
+.PP
+Fabric errno values are defined in
+.IR "rdma/fi_errno.h".
+.SH "NOTES"
+.SH "SEE ALSO"
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_eq(3)

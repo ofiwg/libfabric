@@ -153,7 +153,8 @@ enum {
 	FID_CLASS_INTERFACE,
 	FID_CLASS_AV,
 	FID_CLASS_MR,
-	FID_CLASS_EQ
+	FID_CLASS_EQ,
+	FID_CLASS_CNTR
 };
 
 struct fid;
@@ -161,6 +162,7 @@ struct fid_fabric;
 struct fid_domain;
 struct fid_av;
 struct fid_eq;
+struct fid_cntr;
 struct fid_ep;
 struct fid_pep;
 struct fid_mr;
