@@ -48,7 +48,7 @@ static int psmx_mr_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
 	int i;
 	struct psmx_fid_mr *fid_mr;
-	struct psmx_fid_ec *ec;
+	struct psmx_fid_eq *eq;
 	struct psmx_fid_ep *ep;
 
 	fid_mr = container_of(fid, struct psmx_fid_mr, mr.fid);
@@ -65,19 +65,19 @@ static int psmx_mr_bind(fid_t fid, struct fi_resource *fids, int nfids)
                         if (fid_mr->domain != ep->domain)
                                 return -EINVAL;
 			fid_mr->ep = ep;
-			if (ep->ec)
-				fid_mr->ec = ep->ec;
+			if (ep->eq)
+				fid_mr->eq = ep->eq;
 			break;
 
-		case FID_CLASS_EC:
+		case FID_CLASS_EQ:
 			/* TODO: check ress flags for send/recv EQs */
-			ec = container_of(fids[i].fid,
-					struct psmx_fid_ec, ec.fid);
-			if (fid_mr->ec && fid_mr->ec != ec)
+			eq = container_of(fids[i].fid,
+					struct psmx_fid_eq, eq.fid);
+			if (fid_mr->eq && fid_mr->eq != eq)
 				return -EEXIST;
-                        if (fid_mr->domain != ec->domain)
+                        if (fid_mr->domain != eq->domain)
                                 return -EINVAL;
-			fid_mr->ec = ec;
+			fid_mr->eq = eq;
 			break;
 
 		default:

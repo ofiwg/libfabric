@@ -153,20 +153,20 @@ enum {
 	FID_CLASS_INTERFACE,
 	FID_CLASS_AV,
 	FID_CLASS_MR,
-	FID_CLASS_EC
+	FID_CLASS_EQ
 };
 
 struct fid;
 struct fid_fabric;
 struct fid_domain;
 struct fid_av;
-struct fid_ec;
+struct fid_eq;
 struct fid_ep;
 struct fid_pep;
 struct fid_mr;
 
 typedef struct fid *fid_t;
-struct fi_ec_attr;
+struct fi_eq_attr;
 
 struct fi_resource {
 	struct fid		*fid;
@@ -202,8 +202,8 @@ struct fi_ops_fabric {
 			struct fid_domain **dom, void *context);
 	int	(*endpoint)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
-	int	(*ec_open)(struct fid_fabric *fabric, const struct fi_ec_attr *attr,
-			struct fid_ec **ec, void *context);
+	int	(*eq_open)(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
+			struct fid_eq **eq, void *context);
 	int	(*if_open)(struct fid_fabric *fabric, const char *name,
 			uint64_t flags, struct fid **fif, void *context);
 };
@@ -262,7 +262,7 @@ enum {
 	 * for different use cases.
 	 */
 	FI_ALIAS,		/* struct fi_alias * */
-	FI_GETECWAIT,		/* void * wait object */
+	FI_GETWAIT,		/* void * wait object */
 
 	/* Start/stop an internal progress thread.  This is only needed if the
 	 * provider does not support active_progress, and the app does not

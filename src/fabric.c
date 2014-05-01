@@ -68,17 +68,17 @@ struct __fid_fabric {
 	char			name[FI_NAME_MAX];
 };
 
-struct __fid_ec_cm {
-	struct fid_ec		ec_fid;
+struct __fid_eq_cm {
+	struct fid_eq		eq_fid;
 	struct __fid_fabric	*fab;
 	struct rdma_event_channel *channel;
 	uint64_t		flags;
-	struct fi_ec_err_entry	err;
+	struct fi_eq_err_entry	err;
 };
 
 struct __fid_pep {
 	struct fid_pep		pep_fid;
-	struct __fid_ec_cm	*cm_ec;
+	struct __fid_eq_cm	*cm_eq;
 	struct rdma_cm_id	*id;
 };
 
@@ -332,27 +332,27 @@ int fi_sockaddr_len(struct sockaddr *addr)
 }
 
 static ssize_t
-__fi_ec_cm_readerr(struct fid_ec *ec, void *buf, size_t len, uint64_t flags)
+__fi_eq_cm_readerr(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 {
-	struct __fid_ec_cm *_ec;
-	struct fi_ec_err_entry *entry;
+	struct __fid_eq_cm *_eq;
+	struct fi_eq_err_entry *entry;
 
-	_ec = container_of(ec, struct __fid_ec_cm, ec_fid);
-	if (!_ec->err.err)
+	_eq = container_of(eq, struct __fid_eq_cm, eq_fid);
+	if (!_eq->err.err)
 		return 0;
 
 	if (len < sizeof(*entry))
 		return -EINVAL;
 
-	entry = (struct fi_ec_err_entry *) buf;
-	*entry = _ec->err;
-	_ec->err.err = 0;
-	_ec->err.prov_errno = 0;
+	entry = (struct fi_eq_err_entry *) buf;
+	*entry = _eq->err;
+	_eq->err.err = 0;
+	_eq->err.prov_errno = 0;
 	return sizeof(*entry);
 }
 
 static struct fi_info *
-__fi_ec_cm_getinfo(struct __fid_fabric *fab, struct rdma_cm_event *event)
+__fi_eq_cm_getinfo(struct __fid_fabric *fab, struct rdma_cm_event *event)
 {
 	struct fi_info *fi;
 
@@ -393,8 +393,8 @@ err:
 	return NULL;
 }
 
-static ssize_t __fi_ec_cm_process_event(struct __fid_ec_cm *ec,
-	struct rdma_cm_event *event, struct fi_ec_cm_entry *entry, size_t len)
+static ssize_t __fi_eq_cm_process_event(struct __fid_eq_cm *eq,
+	struct rdma_cm_event *event, struct fi_eq_cm_entry *entry, size_t len)
 {
 	fid_t fid;
 	size_t datalen;
@@ -404,19 +404,19 @@ static ssize_t __fi_ec_cm_process_event(struct __fid_ec_cm *ec,
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		rdma_migrate_id(event->id, NULL);
 		entry->event = FI_CONNREQ;
-		entry->info = __fi_ec_cm_getinfo(ec->fab, event);
+		entry->info = __fi_eq_cm_getinfo(eq->fab, event);
 		if (!entry->info) {
 			rdma_destroy_id(event->id);
 			return 0;
 		}
 		break;
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
-		ec->err.fid_context = fid->context;
-		ec->err.err = ENODEV;
+		eq->err.fid_context = fid->context;
+		eq->err.err = ENODEV;
 		return -FI_EAVAIL;
 	case RDMA_CM_EVENT_ADDR_CHANGE:
-		ec->err.fid_context = fid->context;
-		ec->err.err = EADDRNOTAVAIL;
+		eq->err.fid_context = fid->context;
+		eq->err.err = EADDRNOTAVAIL;
 		return -FI_EAVAIL;
 	default:
 		return 0;
@@ -430,23 +430,23 @@ static ssize_t __fi_ec_cm_process_event(struct __fid_ec_cm *ec,
 	return sizeof(*entry) + datalen;
 }
 
-static ssize_t __fi_ec_cm_read_data(struct fid_ec *ec, void *buf, size_t len)
+static ssize_t __fi_eq_cm_read_data(struct fid_eq *eq, void *buf, size_t len)
 {
-	struct __fid_ec_cm *_ec;
-	struct fi_ec_cm_entry *entry;
+	struct __fid_eq_cm *_eq;
+	struct fi_eq_cm_entry *entry;
 	struct rdma_cm_event *event;
 	size_t left;
 	ssize_t ret = -FI_EINVAL;
 
-	_ec = container_of(ec, struct __fid_ec_cm, ec_fid);
-	entry = (struct fi_ec_cm_entry *) buf;
-	if (_ec->err.err)
+	_eq = container_of(eq, struct __fid_eq_cm, eq_fid);
+	entry = (struct fi_eq_cm_entry *) buf;
+	if (_eq->err.err)
 		return -FI_EAVAIL;
 
 	for (left = len; left >= sizeof(*entry); ) {
-		ret = rdma_get_cm_event(_ec->channel, &event);
+		ret = rdma_get_cm_event(_eq->channel, &event);
 		if (!ret) {
-			ret = __fi_ec_cm_process_event(_ec, event, entry, left);
+			ret = __fi_eq_cm_process_event(_eq, event, entry, left);
 			rdma_ack_cm_event(event);
 			if (ret < 0)
 				break;
@@ -459,10 +459,10 @@ static ssize_t __fi_ec_cm_read_data(struct fid_ec *ec, void *buf, size_t len)
 			if (left < len)
 				return len - left;
 
-			if (!(_ec->flags & FI_BLOCK))
+			if (!(_eq->flags & FI_BLOCK))
 				return 0;
 
-			fi_poll_fd(_ec->channel->fd);
+			fi_poll_fd(_eq->channel->fd);
 		} else {
 			ret = -errno;
 			break;
@@ -473,7 +473,7 @@ static ssize_t __fi_ec_cm_read_data(struct fid_ec *ec, void *buf, size_t len)
 }
 
 static const char *
-__fi_ec_cm_strerror(struct fid_ec *ec, int prov_errno, const void *prov_data,
+__fi_eq_cm_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 		    void *buf, size_t len)
 {
 	if (buf && len)
@@ -481,38 +481,38 @@ __fi_ec_cm_strerror(struct fid_ec *ec, int prov_errno, const void *prov_data,
 	return strerror(prov_errno);
 }
 
-struct fi_ops_ec __fi_ec_cm_data_ops = {
-	.size = sizeof(struct fi_ops_ec),
-	.read = __fi_ec_cm_read_data,
-	.readerr = __fi_ec_cm_readerr,
-	.strerror = __fi_ec_cm_strerror
+struct fi_ops_eq __fi_eq_cm_data_ops = {
+	.size = sizeof(struct fi_ops_eq),
+	.read = __fi_eq_cm_read_data,
+	.readerr = __fi_eq_cm_readerr,
+	.strerror = __fi_eq_cm_strerror
 };
 
-static int __fi_ec_cm_close(fid_t fid)
+static int __fi_eq_cm_close(fid_t fid)
 {
-	struct __fid_ec_cm *ec;
+	struct __fid_eq_cm *eq;
 
-	ec = container_of(fid, struct __fid_ec_cm, ec_fid.fid);
-	if (ec->channel)
-		rdma_destroy_event_channel(ec->channel);
+	eq = container_of(fid, struct __fid_eq_cm, eq_fid.fid);
+	if (eq->channel)
+		rdma_destroy_event_channel(eq->channel);
 
-	free(ec);
+	free(eq);
 	return 0;
 }
 
-static int __fi_ec_cm_control(fid_t fid, int command, void *arg)
+static int __fi_eq_cm_control(fid_t fid, int command, void *arg)
 {
-	struct __fid_ec_cm *ec;
+	struct __fid_eq_cm *eq;
 	int ret = 0;
 
-	ec = container_of(fid, struct __fid_ec_cm, ec_fid.fid);
+	eq = container_of(fid, struct __fid_eq_cm, eq_fid.fid);
 	switch(command) {
 	case FI_GETECWAIT:
-		if (!ec->channel) {
+		if (!eq->channel) {
 			ret = -FI_ENODATA;
 			break;
 		}
-		*(void **) arg = &ec->channel->fd;
+		*(void **) arg = &eq->channel->fd;
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -522,63 +522,63 @@ static int __fi_ec_cm_control(fid_t fid, int command, void *arg)
 	return ret;
 }
 
-struct fi_ops __fi_ec_cm_ops = {
+struct fi_ops __fi_eq_cm_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = __fi_ec_cm_close,
-	.control = __fi_ec_cm_control,
+	.close = __fi_eq_cm_close,
+	.control = __fi_eq_cm_control,
 };
 
 static int
-__fi_ec_open(struct fid_fabric *fabric, const struct fi_ec_attr *attr,
-	     struct fid_ec **ec, void *context)
+__fi_eq_open(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
+	     struct fid_eq **eq, void *context)
 {
-	struct __fid_ec_cm *_ec;
+	struct __fid_eq_cm *_eq;
 	long flags = 0;
 	int ret;
 
-	if (attr->type != FI_EC_QUEUE || attr->format != FI_EC_FORMAT_CM)
+	if (attr->type != FI_EQ_QUEUE || attr->format != FI_EQ_FORMAT_CM)
 		return -FI_ENOSYS;
 
-	_ec = calloc(1, sizeof *_ec);
-	if (!_ec)
+	_eq = calloc(1, sizeof *_eq);
+	if (!_eq)
 		return -FI_ENOMEM;
 
-	_ec->fab = container_of(fabric, struct __fid_fabric, fabric_fid);
+	_eq->fab = container_of(fabric, struct __fid_fabric, fabric_fid);
 
 	switch (attr->wait_obj) {
-	case FI_EC_WAIT_FD:
-		_ec->channel = rdma_create_event_channel();
-		if (!_ec->channel) {
+	case FI_EQ_WAIT_FD:
+		_eq->channel = rdma_create_event_channel();
+		if (!_eq->channel) {
 			ret = -errno;
 			goto err1;
 		}
-		fcntl(_ec->channel->fd, F_GETFL, &flags);
-		ret = fcntl(_ec->channel->fd, F_SETFL, flags | O_NONBLOCK);
+		fcntl(_eq->channel->fd, F_GETFL, &flags);
+		ret = fcntl(_eq->channel->fd, F_SETFL, flags | O_NONBLOCK);
 		if (ret) {
 			ret = -errno;
 			goto err2;
 		}
 		break;
-	case FI_EC_WAIT_NONE:
+	case FI_EQ_WAIT_NONE:
 		break;
 	default:
 		return -FI_ENOSYS;
 	}
 
-	_ec->flags = attr->flags;
-	_ec->ec_fid.fid.fclass = FID_CLASS_EC;
-	_ec->ec_fid.fid.size = sizeof(struct fid_ec);
-	_ec->ec_fid.fid.context = context;
-	_ec->ec_fid.fid.ops = &__fi_ec_cm_ops;
-	_ec->ec_fid.ops = &__fi_ec_cm_data_ops;
+	_eq->flags = attr->flags;
+	_eq->eq_fid.fid.fclass = FID_CLASS_EQ;
+	_eq->eq_fid.fid.size = sizeof(struct fid_eq);
+	_eq->eq_fid.fid.context = context;
+	_eq->eq_fid.fid.ops = &__fi_eq_cm_ops;
+	_eq->eq_fid.ops = &__fi_eq_cm_data_ops;
 
-	*ec = &_ec->ec_fid;
+	*eq = &_eq->eq_fid;
 	return 0;
 err2:
-	if (_ec->channel)
-		rdma_destroy_event_channel(_ec->channel);
+	if (_eq->channel)
+		rdma_destroy_event_channel(_eq->channel);
 err1:
-	free(_ec);
+	free(_eq);
 	return ret;
 }
 
@@ -598,16 +598,16 @@ static struct fi_ops_cm __fi_pep_cm_ops = {
 static int __fi_pep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
 	struct __fid_pep *pep;
-	struct __fid_ec_cm *ec;
+	struct __fid_eq_cm *eq;
 	int ret;
 
 	pep = container_of(fid, struct __fid_pep, pep_fid.fid);
-	if ((nfids != 1) || (fids[0].fid->fclass != FID_CLASS_EC))
+	if ((nfids != 1) || (fids[0].fid->fclass != FID_CLASS_EQ))
 		return -FI_EINVAL;
 
-	ec = container_of(fids[0].fid, struct __fid_ec_cm, ec_fid.fid);
-	pep->cm_ec = ec;
-	ret = rdma_migrate_id(pep->id, pep->cm_ec->channel);
+	eq = container_of(fids[0].fid, struct __fid_eq_cm, eq_fid.fid);
+	pep->cm_eq = eq;
+	ret = rdma_migrate_id(pep->id, pep->cm_eq->channel);
 	if (ret)
 		return -errno;
 
@@ -701,7 +701,7 @@ static struct fi_ops_fabric __fi_ops_fabric = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = __fi_domain,
 	.endpoint = __fi_endpoint,
-	.ec_open = __fi_ec_open,
+	.eq_open = __fi_eq_open,
 	.if_open = __fi_open
 };
 

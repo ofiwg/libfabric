@@ -65,7 +65,7 @@ static inline ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 			0 : PSMX_NOCOMP_CONTEXT;
 
 		PSMX_CTXT_USER(fi_context) = fi_context;
-		PSMX_CTXT_EC(fi_context) = fid_ep->ec;
+		PSMX_CTXT_EC(fi_context) = fid_ep->eq;
 	}
 	else {
 		fi_context = NULL;
@@ -162,7 +162,7 @@ static inline ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t le
 			0 : PSMX_NOCOMP_CONTEXT;
 
 		PSMX_CTXT_USER(fi_context) = fi_context;
-		PSMX_CTXT_EC(fi_context) = fid_ep->ec;
+		PSMX_CTXT_EC(fi_context) = fid_ep->eq;
 	}
 	else {
 		fi_context = NULL;

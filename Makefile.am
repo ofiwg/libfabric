@@ -120,7 +120,7 @@ man_MANS = \
 	man/fi_cm.3 \
 	man/fi_direct.7 \
 	man/fi_domain.3 \
-	man/fi_ec.3 \
+	man/fi_eq.3 \
 	man/fi_endpoint.3 \
 	man/fi_fabric.3 \
 	man/fi_getinfo.3 \

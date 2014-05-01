@@ -103,7 +103,7 @@ struct fid_mr {
 
 
 /*
- * EC = Event Collector
+ * EQ = Event Queue
  * Used to report various events and the completion of asynchronous
  * operations.
  */
@@ -112,64 +112,64 @@ struct fid_mr {
 /* #define FI_TRUNC		(1ULL << 1) */
 /* #define FI_CTRUNC		(1ULL << 2) */
 
-enum fi_ec_domain {
-	FI_EC_DOMAIN_GENERAL,
-	FI_EC_DOMAIN_COMP,
-	FI_EC_DOMAIN_CM,
-	FI_EC_DOMAIN_AV
+enum fi_eq_domain {
+	FI_EQ_DOMAIN_GENERAL,
+	FI_EQ_DOMAIN_COMP,
+	FI_EQ_DOMAIN_CM,
+	FI_EQ_DOMAIN_AV
 };
 
-enum fi_ec_type {
-	FI_EC_QUEUE,
-	FI_EC_COUNTER
+enum fi_eq_type {
+	FI_EQ_QUEUE,
+	FI_EQ_COUNTER
 };
 
-enum fi_ec_format {
-	FI_EC_FORMAT_UNSPEC,
-	FI_EC_FORMAT_CONTEXT,
-	FI_EC_FORMAT_COMP,
-	FI_EC_FORMAT_DATA,
-	FI_EC_FORMAT_TAGGED,
-	FI_EC_FORMAT_ERR,
-	FI_EC_FORMAT_COMP_ERR,
-	FI_EC_FORMAT_DATA_ERR,
-	FI_EC_FORMAT_TAGGED_ERR,
-	FI_EC_FORMAT_CM,
-	FI_EC_FORMAT_COUNTER,
-	FI_EC_FORMAT_COUNTER_ERR,
+enum fi_eq_format {
+	FI_EQ_FORMAT_UNSPEC,
+	FI_EQ_FORMAT_CONTEXT,
+	FI_EQ_FORMAT_COMP,
+	FI_EQ_FORMAT_DATA,
+	FI_EQ_FORMAT_TAGGED,
+	FI_EQ_FORMAT_ERR,
+	FI_EQ_FORMAT_COMP_ERR,
+	FI_EQ_FORMAT_DATA_ERR,
+	FI_EQ_FORMAT_TAGGED_ERR,
+	FI_EQ_FORMAT_CM,
+	FI_EQ_FORMAT_COUNTER,
+	FI_EQ_FORMAT_COUNTER_ERR,
 };
 
-/* Use fi_control GETECWAIT to get underlying wait object */
-enum fi_ec_wait_obj {
-	FI_EC_WAIT_NONE,
-	FI_EC_WAIT_FD
+/* Use fi_control GETWAIT to get underlying wait object */
+enum fi_eq_wait_obj {
+	FI_EQ_WAIT_NONE,
+	FI_EQ_WAIT_FD
 };
 
-enum fi_ec_wait_cond {
-	FI_EC_COND_NONE,
-	FI_EC_COND_THRESHOLD	/* size_t threshold */
+enum fi_eq_wait_cond {
+	FI_EQ_COND_NONE,
+	FI_EQ_COND_THRESHOLD	/* size_t threshold */
 };
 
 enum {
-	FI_EC_ATTR_DOMAIN	= 1 << 0,
-	FI_EC_ATTR_TYPE		= 1 << 1,
-	FI_EC_ATTR_FORMAT	= 1 << 2,
-	FI_EC_ATTR_WAIT_OBJ	= 1 << 3,
-	FI_EC_ATTR_WAIT_COND	= 1 << 4,
-	FI_EC_ATTR_SIZE		= 1 << 5,
-	FI_EC_ATTR_VECTOR	= 1 << 6,
-	FI_EC_ATTR_FLAGS	= 1 << 7,
-	FI_EC_ATTR_COND		= 1 << 8,
-	FI_EC_ATTR_MASK_V1	= (FI_EC_ATTR_COND << 1) - 1
+	FI_EQ_ATTR_DOMAIN	= 1 << 0,
+	FI_EQ_ATTR_TYPE		= 1 << 1,
+	FI_EQ_ATTR_FORMAT	= 1 << 2,
+	FI_EQ_ATTR_WAIT_OBJ	= 1 << 3,
+	FI_EQ_ATTR_WAIT_COND	= 1 << 4,
+	FI_EQ_ATTR_SIZE		= 1 << 5,
+	FI_EQ_ATTR_VECTOR	= 1 << 6,
+	FI_EQ_ATTR_FLAGS	= 1 << 7,
+	FI_EQ_ATTR_COND		= 1 << 8,
+	FI_EQ_ATTR_MASK_V1	= (FI_EQ_ATTR_COND << 1) - 1
 };
 
-struct fi_ec_attr {
+struct fi_eq_attr {
 	int			mask;
-	enum fi_ec_domain	domain;
-	enum fi_ec_type		type;
-	enum fi_ec_format	format;
-	enum fi_ec_wait_obj	wait_obj;
-	enum fi_ec_wait_cond	wait_cond;
+	enum fi_eq_domain	domain;
+	enum fi_eq_type		type;
+	enum fi_eq_format	format;
+	enum fi_eq_wait_obj	wait_obj;
+	enum fi_eq_wait_cond	wait_cond;
 	size_t			size;
 	int			signaling_vector;
 	uint64_t		flags;
@@ -177,17 +177,17 @@ struct fi_ec_attr {
 	void			*cond;
 };
 
-struct fi_ec_entry {
+struct fi_eq_entry {
 	void			*op_context;
 };
 
-struct fi_ec_comp_entry {
+struct fi_eq_comp_entry {
 	void			*op_context;
 	uint64_t		flags;
 	size_t			len;
 };
 
-struct fi_ec_data_entry {
+struct fi_eq_data_entry {
 	void			*op_context;
 	void			*buf;
 	uint64_t		flags;
@@ -196,7 +196,7 @@ struct fi_ec_data_entry {
 	uint64_t		data;
 };
 
-struct fi_ec_tagged_entry {
+struct fi_eq_tagged_entry {
 	void			*op_context;
 	void			*buf;
 	uint64_t		flags;
@@ -206,7 +206,7 @@ struct fi_ec_tagged_entry {
 	size_t			olen;
 };
 
-struct fi_ec_err_entry {
+struct fi_eq_err_entry {
 	void			*op_context;
 	union {
 		void		*fid_context;
@@ -221,19 +221,19 @@ struct fi_ec_err_entry {
 	void			*prov_data;
 };
 
-struct fi_ec_tagged_err_entry {
+struct fi_eq_tagged_err_entry {
 	int			status;
 	union {
-		struct fi_ec_tagged_entry	tagged;
-		struct fi_ec_err_entry		err;
+		struct fi_eq_tagged_entry	tagged;
+		struct fi_eq_err_entry		err;
 	};
 };
 
-struct fi_ec_counter_entry {
+struct fi_eq_counter_entry {
 	uint64_t		events;
 };
 
-struct fi_ec_counter_err_entry {
+struct fi_eq_counter_err_entry {
 	uint64_t		events;
 	uint64_t		errors;
 };
@@ -244,7 +244,7 @@ enum fi_cm_event {
 	FI_SHUTDOWN
 };
 
-struct fi_ec_cm_entry {
+struct fi_eq_cm_entry {
 	void			*fid_context;
 	uint64_t		flags;
 	enum fi_cm_event	event;
@@ -254,26 +254,26 @@ struct fi_ec_cm_entry {
 	uint8_t			data[0];
 };
 
-struct fi_ops_ec {
+struct fi_ops_eq {
 	size_t	size;
-	ssize_t	(*read)(struct fid_ec *ec, void *buf, size_t len);
-	ssize_t	(*readfrom)(struct fid_ec *ec, void *buf, size_t len,
+	ssize_t	(*read)(struct fid_eq *eq, void *buf, size_t len);
+	ssize_t	(*readfrom)(struct fid_eq *eq, void *buf, size_t len,
 			void *src_addr, size_t *addrlen);
-	ssize_t	(*readerr)(struct fid_ec *ec, void *buf, size_t len,
+	ssize_t	(*readerr)(struct fid_eq *eq, void *buf, size_t len,
 			uint64_t flags);
-	ssize_t	(*write)(struct fid_ec *ec, const void *buf, size_t len);
-	int	(*reset)(struct fid_ec *ec, const void *cond);
-	ssize_t	(*condread)(struct fid_ec *ec, void *buf, size_t len,
+	ssize_t	(*write)(struct fid_eq *eq, const void *buf, size_t len);
+	int	(*reset)(struct fid_eq *eq, const void *cond);
+	ssize_t	(*condread)(struct fid_eq *eq, void *buf, size_t len,
 			const void *cond);
-	ssize_t	(*condreadfrom)(struct fid_ec *ec, void *buf, size_t len,
+	ssize_t	(*condreadfrom)(struct fid_eq *eq, void *buf, size_t len,
 			void *src_addr, size_t *addrlen, const void *cond);
-	const char * (*strerror)(struct fid_ec *ec, int prov_errno,
+	const char * (*strerror)(struct fid_eq *eq, int prov_errno,
 			const void *prov_data, void *buf, size_t len);
 };
 
-struct fid_ec {
+struct fid_eq {
 	struct fid		fid;
-	struct fi_ops_ec	*ops;
+	struct fi_ops_eq	*ops;
 };
 
 
@@ -328,8 +328,8 @@ struct fi_ops_domain {
 			size_t *attrlen);
 	int	(*av_open)(struct fid_domain *domain, struct fi_av_attr *attr,
 			struct fid_av **av, void *context);
-	int	(*ec_open)(struct fid_domain *domain, struct fi_ec_attr *attr,
-			struct fid_ec **ec, void *context);
+	int	(*eq_open)(struct fid_domain *domain, struct fi_eq_attr *attr,
+			struct fid_eq **eq, void *context);
 	int	(*endpoint)(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context);
 	int	(*if_open)(struct fid_domain *domain, const char *name,
@@ -365,47 +365,47 @@ fi_fdomain(struct fid_fabric *fabric, struct fi_info *info,
 }
 
 static inline int
-fi_fec_open(struct fid_fabric *fabric, const struct fi_ec_attr *attr,
-	    struct fid_ec **ec, void *context)
+fi_fec_open(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
+	    struct fid_eq **eq, void *context)
 {
-	return fabric->ops->ec_open(fabric, attr, ec, context);
+	return fabric->ops->eq_open(fabric, attr, eq, context);
 }
 
 static inline int
-fi_ec_open(struct fid_domain *domain, struct fi_ec_attr *attr,
-	   struct fid_ec **ec, void *context)
+fi_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
+	   struct fid_eq **eq, void *context)
 {
-	return domain->ops->ec_open(domain, attr, ec, context);
+	return domain->ops->eq_open(domain, attr, eq, context);
 }
 
-static inline ssize_t fi_ec_read(struct fid_ec *ec, void *buf, size_t len)
+static inline ssize_t fi_eq_read(struct fid_eq *eq, void *buf, size_t len)
 {
-	return ec->ops->read(ec, buf, len);
+	return eq->ops->read(eq, buf, len);
 }
 
 static inline ssize_t
-fi_ec_readfrom(struct fid_ec *ec, void *buf, size_t len,
+fi_eq_readfrom(struct fid_eq *eq, void *buf, size_t len,
 	       void *src_addr, size_t *addrlen)
 {
-	return ec->ops->readfrom(ec, buf, len, src_addr, addrlen);
+	return eq->ops->readfrom(eq, buf, len, src_addr, addrlen);
 }
 
 static inline ssize_t
-fi_ec_readerr(struct fid_ec *ec, void *buf, size_t len, uint64_t flags)
+fi_eq_readerr(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 {
-	return ec->ops->readerr(ec, buf, len, flags);
+	return eq->ops->readerr(eq, buf, len, flags);
 }
 
-static inline int fi_ec_reset(struct fid_ec *ec, void *cond)
+static inline int fi_eq_reset(struct fid_eq *eq, void *cond)
 {
-	return ec->ops->reset(ec, cond);
+	return eq->ops->reset(eq, cond);
 }
 
 static inline const char *
-fi_ec_strerror(struct fid_ec *ec, int prov_errno, void *prov_data,
+fi_eq_strerror(struct fid_eq *eq, int prov_errno, void *prov_data,
 	       void *buf, size_t len)
 {
-	return ec->ops->strerror(ec, prov_errno, prov_data, buf, len);
+	return eq->ops->strerror(eq, prov_errno, prov_data, buf, len);
 }
 
 static inline int

@@ -76,8 +76,8 @@ active or passive.  Passive endpoints are used to listen for connection
 requests.  Active endpoints can perform data transfers.  Endpoints are
 configured with specific communication capabilities and data transfer
 interfaces.
-.IP "fi_ec - Event Collector" 12
-Event collectors, often referred to as event queues, are used to collect
+.IP "fi_eq - Event Queue" 12
+Event queues, are used to collect
 and report the completion of asynchronous operations.  For example, the
 completion of a data transfer operation submitted over a fabric endpoint
 may write an event to an event queue associated with the endpoint.
@@ -177,14 +177,14 @@ Address vectors must support FI_ADDR, FI_ADDR_INDEX, and FI_AV output formats.
 .PP
 Access domains must support opening event queues and counters.
 .PP
-Event queues must support the FI_EC_FORMAT_CONTEXT format.
+Event queues must support the FI_EQ_FORMAT_CONTEXT format.
 .PP
 Event queues associated with data transfer completions must support the
-FI_EC_FORMAT_DATA format.
+FI_EQ_FORMAT_DATA format.
 .PP
 Event queues associated with tagged message transfers must support the
-FI_EC_FORMAT_TAGGED format.
+FI_EQ_FORMAT_TAGGED format.
 .PP
-Event counters must support the FI_EC_FORMAT_COUNTER format.
+Event counters must support the FI_EQ_FORMAT_COUNTER format.
 .SH "SEE ALSO"
-fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_av(3), fi_ec(3), fi_mr(3)
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_av(3), fi_eq(3), fi_mr(3)

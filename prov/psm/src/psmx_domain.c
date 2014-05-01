@@ -128,7 +128,7 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.progress = psmx_progress,
 	.query = psmx_domain_query,
 	.av_open = psmx_av_open,
-	.ec_open = psmx_ec_open,
+	.eq_open = psmx_eq_open,
 	.endpoint = psmx_ep_open,
 	.if_open = psmx_if_open,
 };
