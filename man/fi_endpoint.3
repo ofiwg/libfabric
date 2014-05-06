@@ -295,7 +295,12 @@ of a subsequent operation.  Use of this flag may improve performance by
 allowing the provider to avoid writing a completion entry for every operation.
 .IP "FI_REMOTE_COMPLETE"
 Indicates that local completions should not be generated
-until the operation has completed on the remote side.
+until the operation has completed on the remote side.  When set, if the
+target endpoint experiences an error receiving the transfered data, that
+error will be reported back to the initiator of the request.  This includes
+errors which may not normally be reported to the initiator.  For example,
+if the receive data is truncated at the target because the provided receive
+buffer is too small, the initiator will be notified of the truncation.
 .IP "FI_CANCEL"
 Indicates that the user wants the ability to cancel an operation posted
 to the endpoint, if it does not complete first.
