@@ -127,6 +127,9 @@ struct fi_ops_msg {
 			const void *dest_addr, void *context);
 	ssize_t (*sendmsg)(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags);
+	size_t	(*sendimm)(struct fid_ep *ep, const void *buf, size_t len);
+	size_t	(*sendimmto)(struct fid_ep *ep, const void *buf, size_t len,
+			const void *dest_addr);
 };
 
 struct fi_ops_cm;

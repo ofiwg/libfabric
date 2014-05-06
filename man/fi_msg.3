@@ -12,6 +12,8 @@ Post a buffer to receive an incoming message
 fi_send / fi_sendv
 .br
 fi_sendto / fi_sendmsg
+.br
+fi_sendimm / fi_sendimmto
 .RS
 Initiate an operation to send a message
 .RE
@@ -40,6 +42,11 @@ Initiate an operation to send a message
 .BI "void *" mem_desc ", const void *" dest_addr ", void * " context ");"
 .HP
 .BI "int fi_sendmsg(struct fid_ep *" ep ", const struct fi_msg * " msg ", uint64_t " flags ");"
+.HP
+.BI "int fi_sendimm(struct fid_ep *" ep ", void * " buf ", size_t " len ");"
+.HP
+.BI "int fi_sendimmto(struct fid_ep *" ep ", void * " buf ", size_t " len ","
+.BI "const void *" dest_addr ");"
 .SH ARGUMENTS
 .IP "ep"
 Fabric endpoint on which to initiate send or post receive buffer. 
@@ -65,7 +72,7 @@ Additional flags to apply for the send or receive operation.
 User specified pointer to associate with the operation.
 .SH "DESCRIPTION"
 The send functions -- fi_send, fi_sendv, fi_sendto,
-fi_sendmsg -- are used to transmit a message from one
+fi_sendmsg, fi_sendimm, fi_sendimmto -- are used to transmit a message from one
 endpoint to another endpoint.  The main difference between send functions
 are the number and type of parameters that they accept as input.  Otherwise,
 they perform the same general function.  Messages sent using fi_msg operations
@@ -112,6 +119,16 @@ struct fi_msg {
 	int                flow;    /* message steering */
 };
 .fi
+.SS "fi_sendimm"
+The send immediate call is an optimized version of fi_send.  The fi_sendimm
+function behaves as if the FI_BUFFERED_SEND transfer flag were set, and
+FI_EVENT were not.  That is, the data buffer is available for reuse
+immediately on returning from from fi_sendimm, and no completion event will
+be generated for this send.  The completion event will be supressed even if
+the endpoint has not been configured with FI_EVENT.  See the flags
+discussion below for more details.
+.SS "fi_sendimmto"
+This call is similar to fi_sendimm, but for unconnected endpoints.
 .SS "fi_recv"
 The fi_recv call posts a data buffer to the receive queue of the corresponding
 endpoint.  Posted receives are matched with inbound sends in the order in which
