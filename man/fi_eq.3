@@ -182,7 +182,6 @@ struct fi_eq_tagged_entry {
 	size_t   len;        /* size of received data */
 	uint64_t data;       /* completion data */
 	uint64_t tag;        /* received tag */
-	size_t   olen;       /* overflow length */
 };
 .fi
 .IP "FI_EQ_FORMAT_ERR"
@@ -198,6 +197,7 @@ struct fi_eq_err_entry {
 	};
 	uint64_t flags;       /* completion flags */
 	size_t   len;         /* size of received data */
+	size_t   olen;       /* overflow length */
 	uint64_t data;        /* completion data */
 	int      err;         /* error code */
 	int      prov_errno;  /* provider error code */

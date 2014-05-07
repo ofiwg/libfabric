@@ -109,7 +109,6 @@ struct psmx_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
 		event->eqe.tagged.len = len;
 		event->eqe.tagged.data = data;
 		event->eqe.tagged.tag = tag;
-		event->eqe.tagged.olen = olen;
 		break;
 
 	case FI_EQ_FORMAT_ERR:
@@ -139,7 +138,6 @@ struct psmx_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
 			event->eqe.tagged_err.tagged.len = len;
 			event->eqe.tagged_err.tagged.data = data;
 			event->eqe.tagged_err.tagged.tag = tag;
-			event->eqe.tagged_err.tagged.olen = olen;
 		}
 		break;
 
@@ -201,13 +199,13 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 		event->eqe.tagged.len = psm_status->nbytes;
 		//event->eqe.tagged.data = 0; /* FIXME */
 		event->eqe.tagged.tag = psm_status->msg_tag;
-		event->eqe.tagged.olen = psm_status->msg_length - psm_status->nbytes;
 		break;
 
 	case FI_EQ_FORMAT_ERR:
 		event->eqe.err.op_context = PSMX_CTXT_USER(fi_context);
 		event->eqe.err.err = psmx_errno(psm_status->error_code);
 		event->eqe.err.prov_errno = psm_status->error_code;
+		event->eqe.err.olen = psm_status->msg_length - psm_status->nbytes;
 		//event->eqe.err.prov_data = NULL; /* FIXME */
 		break;
 
@@ -219,6 +217,8 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 			event->eqe.tagged_err.err.fid_context = eq->eq.fid.context;
 			//event->eqe.tagged_err.err.flags = 0; /* FIXME */
 			event->eqe.tagged_err.err.len = psm_status->nbytes;
+			event->eqe.tagged_err.err.olen = psm_status->msg_length -
+							 psm_status->nbytes;
 			//event->eqe.tagged_err.err.data = 0; /* FIXME */
 			event->eqe.tagged_err.err.err = err;
 			event->eqe.tagged_err.err.prov_errno = psm_status->error_code;
@@ -232,8 +232,6 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 			event->eqe.tagged_err.tagged.len = psm_status->nbytes;
 			//event->eqe.tagged_err.tagged.data = 0; /* FIXME */
 			event->eqe.tagged_err.tagged.tag = psm_status->msg_tag;
-			event->eqe.tagged_err.tagged.olen = psm_status->msg_length -
-								psm_status->nbytes;
 		}
 		break;
 

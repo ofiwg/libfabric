@@ -192,7 +192,6 @@ struct fi_eq_tagged_entry {
 	size_t			len;
 	uint64_t		data;
 	uint64_t		tag;
-	size_t			olen;
 };
 
 struct fi_eq_err_entry {
@@ -203,6 +202,7 @@ struct fi_eq_err_entry {
 	};
 	uint64_t		flags;
 	size_t			len;
+	size_t			olen;
 	uint64_t		data;
 	int			err;
 	int			prov_errno;
