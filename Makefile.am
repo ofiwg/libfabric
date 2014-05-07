@@ -67,6 +67,7 @@ if HAVE_PSM
 src_libfabric_la_SOURCES += prov/psm/src/psmx_init.c \
 	prov/psm/src/psmx_domain.c \
 	prov/psm/src/psmx_ec.c \
+	prov/psm/src/psmx_cntr.c \
 	prov/psm/src/psmx_av.c \
 	prov/psm/src/psmx_ep.c \
 	prov/psm/src/psmx_cm.c \

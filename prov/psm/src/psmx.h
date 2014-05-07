@@ -112,6 +112,14 @@ struct psmx_fid_eq {
 	uint64_t		num_errors;
 };
 
+struct psmx_fid_cntr {
+	struct fid_cntr		cntr;
+	struct psmx_fid_domain	*domain;
+	int			events;
+	int			wait_obj;
+	uint64_t		flags;
+};
+
 struct psmx_fid_av {
 	struct fid_av		av;
 	struct psmx_fid_domain	*domain;
@@ -161,6 +169,8 @@ int	psmx_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 		     struct fid_eq **eq, void *context);
 int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		     struct fid_av **av, void *context);
+int	psmx_cntr_alloc(struct fid_domain *domain, struct fi_cntr_attr *attr,
+			struct fid_cntr **cntr, void *context);
 
 void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername, psm_uuid_t uuid);
