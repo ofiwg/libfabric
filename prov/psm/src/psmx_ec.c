@@ -119,26 +119,6 @@ struct psmx_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
 		event->eqe.err.prov_data = NULL;
 		break;
 
-	case FI_EQ_FORMAT_COMP_ERR:
-		event->eqe.err.op_context = op_context;
-		event->eqe.err.flags = flags;
-		event->eqe.err.len = len;
-		event->eqe.err.err = err;
-		event->eqe.err.prov_errno = 0;
-		event->eqe.err.prov_data = NULL;
-		break;
-
-	case FI_EQ_FORMAT_DATA_ERR:
-		event->eqe.err.op_context = op_context;
-		event->eqe.err.buf = buf;
-		event->eqe.err.flags = flags;
-		event->eqe.err.len = len;
-		event->eqe.err.data = data;
-		event->eqe.err.err = err;
-		event->eqe.err.prov_errno = 0;
-		event->eqe.err.prov_data = NULL;
-		break;
-
 	case FI_EQ_FORMAT_TAGGED_ERR:
 		if (err) {
 			event->eqe.tagged_err.status = err;
@@ -226,26 +206,6 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 
 	case FI_EQ_FORMAT_ERR:
 		event->eqe.err.op_context = PSMX_CTXT_USER(fi_context);
-		event->eqe.err.err = psmx_errno(psm_status->error_code);
-		event->eqe.err.prov_errno = psm_status->error_code;
-		//event->eqe.err.prov_data = NULL; /* FIXME */
-		break;
-
-	case FI_EQ_FORMAT_COMP_ERR:
-		event->eqe.err.op_context = PSMX_CTXT_USER(fi_context);
-		//event->eqe.err.flags = 0; /* FIXME */
-		event->eqe.err.len = psm_status->nbytes;
-		event->eqe.err.err = psmx_errno(psm_status->error_code);
-		event->eqe.err.prov_errno = psm_status->error_code;
-		//event->eqe.err.prov_data = NULL; /* FIXME */
-		break;
-
-	case FI_EQ_FORMAT_DATA_ERR:
-		event->eqe.err.op_context = PSMX_CTXT_USER(fi_context);
-		//event->eqe.err.buf = NULL; /* FIXME */
-		//event->eqe.err.flags = 0; /* FIXME */
-		event->eqe.err.len = psm_status->nbytes;
-		//event->eqe.err.data = 0; /* FIXME */
 		event->eqe.err.err = psmx_errno(psm_status->error_code);
 		event->eqe.err.prov_errno = psm_status->error_code;
 		//event->eqe.err.prov_data = NULL; /* FIXME */
@@ -560,8 +520,6 @@ int psmx_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 		break;
 
 	case FI_EQ_FORMAT_ERR:
-	case FI_EQ_FORMAT_COMP_ERR:
-	case FI_EQ_FORMAT_DATA_ERR:
 		format = err_format = attr->format;
 		entry_size = err_entry_size = sizeof(struct fi_eq_err_entry);
 		break;
