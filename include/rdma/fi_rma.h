@@ -81,6 +81,10 @@ struct fi_ops_rma {
 			void *context);
 	int	(*writemsg)(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			uint64_t flags);
+	size_t	(*writeimm)(struct fid_ep *ep, const void *buf, size_t len,
+			uint64_t addr, uint64_t key);
+	size_t	(*writeimmto)(struct fid_ep *ep, const void *buf, size_t len,
+			const void *dest_addr, uint64_t addr, uint64_t key);
 };
 
 

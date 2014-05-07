@@ -293,6 +293,12 @@ When set the user must determine when a request that does NOT have
 FI_EVENT set has completed indirectly, usually based on the completion
 of a subsequent operation.  Use of this flag may improve performance by
 allowing the provider to avoid writing a completion entry for every operation.
+.P
+The use of FI_EVENT is often paired with the call fi_sync.  FI_EVENT
+allows the user to suppress completions from being generated.  In order
+for the application to ensure that all previous operations have
+completed, the application may call fi_sync.  The successful completion
+of fi_sync indicates that all prior operations have completed successfully.
 .IP "FI_REMOTE_COMPLETE"
 Indicates that local completions should not be generated
 until the operation has completed on the remote side.  When set, if the

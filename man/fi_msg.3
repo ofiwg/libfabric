@@ -124,7 +124,7 @@ The send immediate call is an optimized version of fi_send.  The fi_sendimm
 function behaves as if the FI_BUFFERED_SEND transfer flag were set, and
 FI_EVENT were not.  That is, the data buffer is available for reuse
 immediately on returning from from fi_sendimm, and no completion event will
-be generated for this send.  The completion event will be supressed even if
+be generated for this send.  The completion event will be suppressed even if
 the endpoint has not been configured with FI_EVENT.  See the flags
 discussion below for more details.
 .SS "fi_sendimmto"
