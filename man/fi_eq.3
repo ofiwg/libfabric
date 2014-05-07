@@ -1,4 +1,4 @@
-.TH "FI_EQ" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_EQ" 3 "2014-05-07" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_eq \- Event queue operations
 .PP
@@ -184,57 +184,6 @@ struct fi_eq_tagged_entry {
 	uint64_t tag;        /* received tag */
 };
 .fi
-.IP "FI_EQ_FORMAT_ERR"
-Reports minimal information on an operation which complete successfully,
-and detailed information in the case of errors.
-.nf
-
-struct fi_eq_err_entry {
-	void    *op_context;  /* operation context */
-	union {
-		void *fid_context;/* endpoint context */
-		void *buf;        /* receive data buffer */
-	};
-	uint64_t flags;       /* completion flags */
-	size_t   len;         /* size of received data */
-	size_t   olen;       /* overflow length */
-	uint64_t data;        /* completion data */
-	int      err;         /* error code */
-	int      prov_errno;  /* provider error code */
-	void    *prov_data;   /* provider error data */
-};
-
-.fi
-The general reason for the error is provided through the err field.  Provider
-specific error information may also be available through the prov_errno
-and prov_data fields.  Users may call fi_eq_strerror to convert provider
-specific error information into a printable string for debugging purposes.
-.sp
-For successful completions, only the op_context field is valid.
-.IP "FI_EQ_FORMAT_COMP_ERR"
-Reports minimal data for processing completions for operations which complete
-successfully and detailed information in the case of errors.  This format uses
-struct fi_eq_err_entry.  For successful completions, the op_context, flags,
-and len fields are valid. 
-.IP "FI_EQ_FORMAT_DATA_ERR"
-Reports data for processing completions for operations which complete
-successfully and detailed information in the case of errors.  This format uses
-struct fi_eq_err_entry.  For successful completions, the op_context, buf, flags,
-len, and data fields are valid.
-.IP "FI_EQ_FORMAT_TAGGED_ERR"
-Reports completion data for successful fi_tagged operations and detailed
-information in the case of errors.
-.nf
-
-struct fi_eq_tagged_err_entry {
-	int      status;                      /* result of operation */
-	union {
-		struct fi_eq_tagged_entry tagged; /* success data */
-		struct fi_eq_err_entry    err;    /* error data */
-	};
-};
-
-.fi
 .IP "FI_EQ_FORMAT_CM"
 Provides information on connection management.
 .nf
@@ -350,9 +299,8 @@ Reading non-error events from an EQ will block if the EQ has been configured
 with FI_BLOCK, a wait object is associated with the EQ, and the wait object
 has been reset to the non-signaled state.
 .PP
-ECs may be optimized to report operations which have completed successfully.
-If the specified format of EQ is not of type ending with "ERR", then
-operations which fail are reported 'out of band'.  Such operations are
+EQs are optimized to report operations which have completed successfully.
+Operations which fail are reported 'out of band'.  Such operations are
 retrieved using the fi_eq_readerr function.  When an operation
 that completes with an unexpected error is inserted
 into an EQ, it is placed into a temporary error queue.  Attempting to read
@@ -364,6 +312,36 @@ If an EQ has not been configured with FI_AUTORESET, once the wait object
 of an EQ has been signaled, it will not be signaled again until the EQ
 has been rearmed.  The fi_eq_reset call is used to manually rearm the EQ
 to signal its wait object when its wait condition has been met.
+.SS "fi_eq_readerr"
+The read error function, fi_eq_readerr, retrieves information regarding
+any asynchronous operation which has completed with an unexpected error.
+fi_eq_readerr is a non-blocking call, returning immediately whether an
+error completion was found or not.
+.PP
+Error information is reported to the user through struct fi_eq_err_entry.
+The format of this structure is defined below.
+.nf
+
+struct fi_eq_err_entry {
+	void    *op_context;  /* operation context */
+	union {
+		void *fid_context;/* endpoint context */
+		void *buf;        /* receive data buffer */
+	};
+	uint64_t flags;       /* completion flags */
+	size_t   len;         /* size of received data */
+	size_t   olen;        /* overflow length */
+	uint64_t data;        /* completion data */
+	int      err;         /* error code */
+	int      prov_errno;  /* provider error code */
+	void    *prov_data;   /* provider error data */
+};
+
+.fi
+The general reason for the error is provided through the err field.  Provider
+specific error information may also be available through the prov_errno
+and prov_data fields.  Users may call fi_eq_strerror to convert provider
+specific error information into a printable string for debugging purposes.
 .SH "RETURN VALUES"
 fi_eq_open / fi_eq_reset
 .RS

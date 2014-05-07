@@ -332,10 +332,10 @@ int fi_sockaddr_len(struct sockaddr *addr)
 }
 
 static ssize_t
-__fi_eq_cm_readerr(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
+__fi_eq_cm_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
+		   size_t len, uint64_t flags)
 {
 	struct __fid_eq_cm *_eq;
-	struct fi_eq_err_entry *entry;
 
 	_eq = container_of(eq, struct __fid_eq_cm, eq_fid);
 	if (!_eq->err.err)
@@ -344,7 +344,6 @@ __fi_eq_cm_readerr(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 	if (len < sizeof(*entry))
 		return -EINVAL;
 
-	entry = (struct fi_eq_err_entry *) buf;
 	*entry = _eq->err;
 	_eq->err.err = 0;
 	_eq->err.prov_errno = 0;

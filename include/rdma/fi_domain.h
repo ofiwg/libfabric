@@ -125,8 +125,6 @@ enum fi_eq_format {
 	FI_EQ_FORMAT_COMP,
 	FI_EQ_FORMAT_DATA,
 	FI_EQ_FORMAT_TAGGED,
-	FI_EQ_FORMAT_ERR,
-	FI_EQ_FORMAT_TAGGED_ERR,
 	FI_EQ_FORMAT_CM,
 };
 
@@ -210,14 +208,6 @@ struct fi_eq_err_entry {
 	void			*prov_data;
 };
 
-struct fi_eq_tagged_err_entry {
-	int			status;
-	union {
-		struct fi_eq_tagged_entry	tagged;
-		struct fi_eq_err_entry		err;
-	};
-};
-
 enum fi_cm_event {
 	FI_CONNREQ,
 	FI_CONNECTED,
@@ -239,8 +229,8 @@ struct fi_ops_eq {
 	ssize_t	(*read)(struct fid_eq *eq, void *buf, size_t len);
 	ssize_t	(*readfrom)(struct fid_eq *eq, void *buf, size_t len,
 			void *src_addr, size_t *addrlen);
-	ssize_t	(*readerr)(struct fid_eq *eq, void *buf, size_t len,
-			uint64_t flags);
+	ssize_t	(*readerr)(struct fid_eq *eq, struct fi_eq_err_entry *buf,
+			size_t len, uint64_t flags);
 	ssize_t	(*write)(struct fid_eq *eq, const void *buf, size_t len);
 	int	(*reset)(struct fid_eq *eq, const void *cond);
 	ssize_t	(*condread)(struct fid_eq *eq, void *buf, size_t len,
@@ -410,7 +400,8 @@ fi_eq_readfrom(struct fid_eq *eq, void *buf, size_t len,
 }
 
 static inline ssize_t
-fi_eq_readerr(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
+fi_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf, size_t len,
+	      uint64_t flags)
 {
 	return eq->ops->readerr(eq, buf, len, flags);
 }

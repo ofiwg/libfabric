@@ -694,10 +694,10 @@ ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 }
 
 static ssize_t
-ibv_eq_cm_readerr(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
+ibv_eq_cm_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry, size_t len,
+		  uint64_t flags)
 {
 	struct ibv_eq_cm *_eq;
-	struct fi_eq_err_entry *entry;
 
 	_eq = container_of(eq, struct ibv_eq_cm, eq.fid);
 	if (!_eq->err.err)
@@ -706,7 +706,6 @@ ibv_eq_cm_readerr(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 	if (len < sizeof(*entry))
 		return -FI_EINVAL;
 
-	entry = (struct fi_eq_err_entry *) buf;
 	*entry = _eq->err;
 	_eq->err.err = 0;
 	_eq->err.prov_errno = 0;
@@ -984,10 +983,10 @@ static int ibv_eq_comp_reset(struct fid_eq *eq, const void *cond)
 }
 
 static ssize_t
-ibv_eq_comp_readerr(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
+ibv_eq_comp_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
+		    size_t len, uint64_t flags)
 {
 	struct ibv_eq_comp *_eq;
-	struct fi_eq_err_entry *entry;
 
 	_eq = container_of(eq, struct ibv_eq_comp, eq.fid);
 	if (!_eq->wc.status)
@@ -996,7 +995,6 @@ ibv_eq_comp_readerr(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 	if (len < sizeof(*entry))
 		return -EINVAL;
 
-	entry = (struct fi_eq_err_entry *) buf;
 	entry->fid_context = NULL;	/* TODO: return qp context from wc */
 	entry->op_context = (void *) (uintptr_t) _eq->wc.wr_id;
 	entry->flags = 0;

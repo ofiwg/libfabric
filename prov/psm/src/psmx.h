@@ -88,10 +88,9 @@ struct psmx_event {
 		struct fi_eq_data_entry		data;
 		struct fi_eq_tagged_entry	tagged;
 		struct fi_eq_err_entry		err;
-		struct fi_eq_tagged_err_entry	tagged_err;
 		struct fi_eq_cm_entry		cm;
 	} eqe;
-	int format;
+	int error;
 	uint64_t source;
 	struct psmx_event *next;
 };
@@ -108,7 +107,6 @@ struct psmx_fid_eq {
 	int			entry_size;
 	struct psmx_event_queue	event_queue;
 	int			err_format;
-	int			err_entry_size;
 	struct psmx_event	*pending_error;
 	uint64_t		num_events;
 	uint64_t		num_errors;
