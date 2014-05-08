@@ -1,4 +1,4 @@
-.TH "FI_GETINFO" 3 "2013-1-10" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_GETINFO" 3 "2014-05-07" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 .SH SYNOPSIS
@@ -55,6 +55,8 @@ struct fi_info {
 	void               *dest_addr;
 	size_t              auth_keylen;
 	void               *auth_key;
+	enum fi_progress    control_progress;
+	enum fi_progress    data_progress;
 	char               *fabric_name;
 	char               *domain_name;
 	size_t              datalen;
@@ -124,6 +126,16 @@ is specified).
 Authorization key to limit communication among endpoints that share
 the same key.  Also defines permission for sharing resources with
 other processes on the same node.
+.IP "control_progress"
+This field indicates the method that the provider uses to make progress
+on asynchronous control operations.  Control operations are function
+which do not directly involve the transfer of application data between
+endpoints.  They include address vector, memory registration, and
+connection management routines.  See additional details below.
+.IP "data_progress"
+This field indicates the method that the provider uses to make progress on
+data transfer operations.  This includes message queue, RMA, tagged messaging,
+and atomic operations.  See below for additional details.
 .IP "fabric_name"
 If specified, the name of the fabric domain.
 .IP "domain_name"
@@ -315,7 +327,8 @@ The provider supports user requested memory registration keys.  Providers
 that set this capability honor the requested_key parameter for memory
 registration calls.
 .SH "ADDRESSING FORMATS"
-Additional information on address formats is available under address vector .BR "fi_av(3)".
+Additional information on address formats is available under address vector
+.BR "fi_av(3)".
 .IP "FI_ADDR"
 Address is of type void *.  Addresses of type FI_ADDR are returned when
 inserting addresses into address vector maps.  An FI_ADDR points to a
@@ -349,6 +362,38 @@ Address is of type sockaddr_in6 (IPv6).
 .IP "FI_SOCKADDR_IB"
 Address is of type sockaddr_ib (defined in Linux kernel source 
 .BR "include/rdma/ib.h").
+.SH "PROGRESS"
+Progress is the ability of the underlying implementation to complete
+processing of an asynchronous request.  In many cases, the processing of
+an asynchronous request requires the use of the host processor.  For example,
+a received message may need to be matched with the correct buffer, or a timed
+out request may need to be retransmitted.  For performance reasons, it may be
+undesirable for the provider to allocate a thread for this purpose, which
+will compete with the application threads.
+.PP
+To balance between performane and ease of use, two progress models are
+defined.
+.IP "FI_PROGRESS_AUTO"
+This progress model indicates that the provider will make forward progress
+on an asynchronous operation without further intervention by the application.
+When FI_PROGRESS_AUTO is provided as output to fi_getinfo in the absence of
+any progress hints, it often indicates that the desired functionality is
+implemented by the provider hardware or is a standard service of
+the operating system.
+.PP
+All providers are required to support FI_PROGRESS_AUTO.  However, if a
+provider does not natively support automatic progress, forcing the use of
+FI_PROGRESS_AUTO may result in threads being allocated below the fabric
+interfaces.
+.IP "FI_PROGRESS_IMPLICIT"
+This progress model indicates that the provider requires the use of an
+application thread to complete an asynchronous request.  When implicit
+progress is set, the provider will attempt to advance an asynchronous
+operation forward when the application invokes any event queue read or
+wait operation where the completion will be reported.  Only wait operations
+defined by the fabric interface will result in an operation progressing.
+Operating system or external wait functions, such as select, poll, or pthread 
+routines, cannot.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 

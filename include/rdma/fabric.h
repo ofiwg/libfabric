@@ -118,6 +118,13 @@ enum fi_addr_format {
 	FI_SOCKADDR_IB,		/* struct sockaddr_ib */
 };
 
+enum fi_progress {
+	FI_PROGRESS_UNSPEC,
+	FI_PROGRESS_AUTO,
+	FI_PROGRESS_IMPLICIT
+};
+
+
 struct fi_info {
 	struct fi_info		*next;
 	size_t			size;
@@ -138,6 +145,8 @@ struct fi_info {
 	 */
 	size_t			auth_keylen;
 	void			*auth_key;
+	enum fi_progress	control_progress;
+	enum fi_progress	data_progress;
 	char			*fabric_name;
 	char			*domain_name;
 	size_t			datalen;
@@ -265,13 +274,6 @@ enum {
 	 */
 	FI_ALIAS,		/* struct fi_alias * */
 	FI_GETWAIT,		/* void * wait object */
-
-	/* Start/stop an internal progress thread.  This is only needed if the
-	 * provider does not support active_progress, and the app does not
-	 * want to poll for progress.
-	 */
-	FI_STARTPROGRESS,	/* NULL - flags? */
-	FI_STOPPROGRESS		/* NULL - flags? */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)

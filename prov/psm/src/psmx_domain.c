@@ -99,16 +99,6 @@ static int psmx_domain_query(struct fid_domain *domain,
 	return -ENOSYS;
 }
 
-static int psmx_progress(struct fid_domain *domain)
-{
-	struct psmx_fid_domain *fid_domain;
-
-	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
-	psm_poll(fid_domain->psm_ep);
-
-	return 0;
-}
-
 static int psmx_if_open(struct fid_domain *domain, const char *name, uint64_t flags,
 			struct fid **fif, void *context)
 {
@@ -125,7 +115,6 @@ static struct fi_ops psmx_fi_ops = {
 
 static struct fi_ops_domain psmx_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.progress = psmx_progress,
 	.query = psmx_domain_query,
 	.av_open = psmx_av_open,
 	.eq_open = psmx_eq_open,

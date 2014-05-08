@@ -309,12 +309,6 @@ struct fi_mr_attr {
 #define FI_USER_MR_KEY		(1ULL << 3)
 
 
-enum fi_progress {
-	FI_PROGRESS_AUTO,
-	FI_PROGRESS_INDIRECT,	/* progress possible through any domain call */
-	FI_PROGRESS_EXPLICIT	/* user must explicitly request progress */
-};
-
 /*
  * The thought is that domain attributes should be relative to what it can
  * provide to the applications, and is not intended as a set of available
@@ -325,12 +319,10 @@ struct fi_domain_attr {
 	size_t			prov_attr_size;
 	void			*prov_attr;
 	size_t			mem_desc_size;
-	enum fi_progress	progress;
 };
 
 struct fi_ops_domain {
 	size_t	size;
-	int	(*progress)(struct fid_domain *domain);
 	int	(*query)(struct fid_domain *domain, struct fi_domain_attr *attr,
 			size_t *attrlen);
 	int	(*av_open)(struct fid_domain *domain, struct fi_av_attr *attr,
