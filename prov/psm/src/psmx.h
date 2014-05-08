@@ -118,6 +118,9 @@ struct psmx_fid_cntr {
 	int			events;
 	int			wait_obj;
 	uint64_t		flags;
+	volatile uint64_t	counter;
+	pthread_mutex_t		mutex;
+	pthread_cond_t		cond;
 };
 
 struct psmx_fid_av {
@@ -132,6 +135,7 @@ struct psmx_fid_ep {
 	struct fid_ep		ep;
 	struct psmx_fid_domain	*domain;
 	struct psmx_fid_eq	*eq;
+	struct psmx_fid_cntr	*cntr;
 	struct psmx_fid_av	*av;
 	uint64_t		flags;
 	uint64_t		completion_mask;

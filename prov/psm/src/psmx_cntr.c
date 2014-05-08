@@ -34,22 +34,63 @@
 
 static uint64_t psmx_cntr_read(struct fid_cntr *cntr)
 {
-	return -ENOSYS;
+	struct psmx_fid_cntr *fid_cntr;
+
+	fid_cntr = container_of(cntr, struct psmx_fid_cntr, cntr);
+
+	return fid_cntr->counter;
 }
 
 static int psmx_cntr_add(struct fid_cntr *cntr, uint64_t value)
 {
-	return -ENOSYS;
+	struct psmx_fid_cntr *fid_cntr;
+
+	fid_cntr = container_of(cntr, struct psmx_fid_cntr, cntr);
+	fid_cntr->counter += value;
+
+	if (fid_cntr->wait_obj == FI_CNTR_WAIT_MUT_COND)
+		pthread_cond_signal(&fid_cntr->cond);
+
+	return 0;
 }
 
 static int psmx_cntr_set(struct fid_cntr *cntr, uint64_t value)
 {
-	return -ENOSYS;
+	struct psmx_fid_cntr *fid_cntr;
+
+	fid_cntr = container_of(cntr, struct psmx_fid_cntr, cntr);
+	fid_cntr->counter = value;
+
+	if (fid_cntr->wait_obj == FI_CNTR_WAIT_MUT_COND)
+		pthread_cond_signal(&fid_cntr->cond);
+
+	return 0;
 }
 
 static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
 {
-	return -ENOSYS;
+	struct psmx_fid_cntr *fid_cntr;
+
+	fid_cntr = container_of(cntr, struct psmx_fid_cntr, cntr);
+
+	switch (fid_cntr->wait_obj) {
+	case FI_CNTR_WAIT_NONE:
+		while (fid_cntr->counter < threshold)
+			sched_yield();
+		break;
+
+	case FI_CNTR_WAIT_MUT_COND:
+		pthread_mutex_lock(&fid_cntr->mutex);
+		while (fid_cntr->counter < threshold)
+			pthread_cond_wait(&fid_cntr->cond, &fid_cntr->mutex);
+		pthread_mutex_unlock(&fid_cntr->mutex);
+		break;
+
+	default:
+		return -EBADF;
+	}
+
+	return 0;
 }
 
 static int psmx_cntr_close(fid_t fid)
@@ -97,7 +138,33 @@ static int psmx_cntr_sync(fid_t fid, uint64_t flags, void *context)
 
 static int psmx_cntr_control(fid_t fid, int command, void *arg)
 {
-	return -ENOSYS;
+	struct psmx_fid_cntr *fid_cntr;
+
+	fid_cntr = container_of(fid, struct psmx_fid_cntr, cntr.fid);
+
+	switch (command) {
+	case FI_SETOPSFLAG:
+		fid_cntr->flags = *(uint64_t *)arg;
+		break;
+
+	case FI_GETOPSFLAG:
+		if (!arg)
+			return -EINVAL;
+		*(uint64_t *)arg = fid_cntr->flags;
+		break;
+
+	case FI_GETWAIT:
+		if (!arg)
+			return -EINVAL;
+		((void **)arg)[0] = &fid_cntr->mutex;
+		((void **)arg)[1] = &fid_cntr->cond;
+		break;
+
+	default:
+		return -ENOSYS;
+	}
+
+	return 0;
 }
 
 static struct fi_ops psmx_fi_ops = {
@@ -169,6 +236,11 @@ int psmx_cntr_alloc(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	fid_cntr->cntr.fid.context = context;
 	fid_cntr->cntr.fid.ops = &psmx_fi_ops;
 	fid_cntr->cntr.ops = &psmx_cntr_ops;
+
+	if (wait_obj == FI_CNTR_WAIT_MUT_COND) {
+		pthread_mutex_init(&fid_cntr->mutex, NULL);
+		pthread_cond_init(&fid_cntr->cond, NULL);
+	}
 
 	*cntr = &fid_cntr->cntr;
 	return 0;

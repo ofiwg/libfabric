@@ -210,6 +210,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 	struct psmx_fid_domain *domain;
 	struct psmx_fid_av *av;
 	struct psmx_fid_eq *eq;
+	struct psmx_fid_cntr *cntr;
 	struct fi_resource ress;
 	int err;
 
@@ -237,6 +238,17 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 				return -EINVAL;
 			fid_ep->eq = eq;
 			fid_ep->domain = eq->domain;
+			break;
+
+		case FID_CLASS_CNTR:
+			cntr = container_of(fids[i].fid,
+					struct psmx_fid_cntr, cntr.fid);
+			if (fid_ep->cntr && fid_ep->cntr != cntr)
+				return -EEXIST;
+			if (fid_ep->domain && fid_ep->domain != cntr->domain)
+				return -EINVAL;
+			fid_ep->cntr = cntr;
+			fid_ep->domain = cntr->domain;
 			break;
 
 		case FID_CLASS_AV:
