@@ -218,6 +218,25 @@ static ssize_t psmx_sendv(struct fid_ep *ep, const struct iovec *iov, void *desc
 	return psmx_send(ep, iov->iov_base, iov->iov_len, desc, context);
 }
 
+static size_t psmx_sendimmto(struct fid_ep *ep, const void *buf, size_t len,
+				const void *dest_addr)
+{
+	/* FIXME: optimize it & guarantee buffered */
+	return _psmx_sendto(ep, buf, len, NULL, dest_addr, NULL, 0);
+}
+
+static size_t psmx_sendimm(struct fid_ep *ep, const void *buf, size_t len)
+{
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+
+	if (!fid_ep->connected)
+		return -ENOTCONN;
+
+	return psmx_sendimmto(ep, buf, len, fid_ep->peer_psm_epaddr);
+}
+
 struct fi_ops_msg psmx_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = psmx_recv,
@@ -228,5 +247,7 @@ struct fi_ops_msg psmx_msg_ops = {
 	.sendv = psmx_sendv,
 	.sendto = psmx_sendto,
 	.sendmsg = psmx_sendmsg,
+	.sendimm = psmx_sendimm,
+	.sendimmto = psmx_sendimmto,
 };
 
