@@ -86,6 +86,8 @@ enum fi_op {
 	FI_ATOMIC_OP_LAST
 };
 
+#else
+#include <rdma/fi_direct_atomic_def.h>
 #endif /* FABRIC_DIRECT */
 
 struct fi_msg_atomic {
