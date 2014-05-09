@@ -137,6 +137,8 @@ static int psmx_getinfo(const char *node, const char *service,
 	psmx_info->dest_addr = dest_addr;
 	psmx_info->auth_keylen = sizeof(psm_uuid_t);
 	psmx_info->auth_key = uuid;
+	psmx_info->control_progress = FI_PROGRESS_IMPLICIT;
+	psmx_info->data_progress = FI_PROGRESS_IMPLICIT;
 	psmx_info->fabric_name = strdup("psm");
 	psmx_info->domain_name = strdup("psm");
 	psmx_info->datalen = 0;
