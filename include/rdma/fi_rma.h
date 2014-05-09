@@ -97,11 +97,65 @@ fi_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	return ep->rma->read(ep, buf, len, desc, addr, key, context);
 }
 
+static inline int
+fi_readv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+	 size_t count, uint64_t addr, uint64_t key, void *context)
+{
+	return ep->rma->readv(ep, iov, desc, count, addr, key, context);
+}
+
+static inline int
+fi_readfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
+		const void *src_addr, uint64_t addr, uint64_t key, void *context)
+{
+	return ep->rma->readfrom(ep, buf, len, desc, src_addr, addr, key, context);
+}
+
+static inline int
+fi_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
+{
+	return ep->rma->readmsg(ep, msg, flags);
+}
+
 static inline ssize_t
 fi_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	 uint64_t addr, uint64_t key, void *context)
 {
 	return ep->rma->write(ep, buf, len, desc, addr, key, context);
+}
+
+static inline int
+fi_writev(struct fid_ep *ep, const struct iovec *iov, void *desc,
+	 size_t count, uint64_t addr, uint64_t key, void *context)
+{
+	return ep->rma->writev(ep, iov, desc, count, addr, key, context);
+}
+
+static inline int
+fi_writeto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+	   const void *dst_addr, uint64_t addr, uint64_t key, void *context)
+{
+	return ep->rma->writeto(ep, buf, len, desc, dst_addr, addr, key, context);
+}
+
+static inline int
+fi_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
+{
+	return ep->rma->writemsg(ep, msg, flags);
+}
+
+static inline size_t
+fi_writeimm(struct fid_ep *ep, const void *buf, size_t len,
+	    uint64_t addr, uint64_t key)
+{
+	return ep->rma->writeimm(ep, buf, len, addr, key);
+}
+
+static inline size_t
+fi_writeimmto(struct fid_ep *ep, const void *buf, size_t len,
+	      const void *dest_addr, uint64_t addr, uint64_t key)
+{
+	return ep->rma->writeimmto(ep, buf, len, dest_addr, addr, key);
 }
 
 #else // FABRIC_DIRECT

@@ -203,10 +203,40 @@ static inline ssize_t fi_setopt(fid_t fid, int level, int optname,
 	return ep->ops->setopt(fid, level, optname, optval, optlen);
 }
 
+static inline ssize_t fi_getopt(fid_t fid, int level, int optname,
+				void *optval, size_t *optlen)
+{
+	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
+	FI_ASSERT_OPS(fid, struct fid_ep, ops);
+	FI_ASSERT_OP(ep->ops, struct fi_ops_ep, getopt);
+	return ep->ops->getopt(fid, level, optname, optval, optlen);
+}
+
 static inline ssize_t
 fi_recv(struct fid_ep *ep, void *buf, size_t len, void *desc, void *context)
 {
 	return ep->msg->recv(ep, buf, len, desc, context);
+}
+
+static inline ssize_t
+fi_recvv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+	 size_t count, void *context)
+{
+	return ep->msg->recvv(ep, iov, desc, count, context);
+}
+
+static inline ssize_t
+fi_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
+	    const void *src_addr, void *context)
+{
+	return ep->msg->recvfrom(ep, buf, len, desc, src_addr, context);
+}
+
+static inline ssize_t
+fi_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+{
+	return ep->msg->recvmsg(ep, msg, flags);
 }
 
 static inline ssize_t
@@ -216,11 +246,36 @@ fi_send(struct fid_ep *ep, const void *buf, size_t len, void *desc, void *contex
 }
 
 static inline ssize_t
+fi_sendv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+	 size_t count, void *context)
+{
+	return ep->msg->sendv(ep, iov, desc, count, context);
+}
+
+static inline ssize_t
+fi_sendto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+	  const void *dest_addr, void *context)
+{
+	return ep->msg->sendto(ep, buf, len, desc, dest_addr, context);
+}
+
+static inline ssize_t
 fi_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	return ep->msg->sendmsg(ep, msg, flags);
 }
 
+static inline size_t
+fi_sendimm(struct fid_ep *ep, const void *buf, size_t len)
+{
+	return ep->msg->sendimm(ep, buf, len);
+}
+
+static inline size_t
+fi_sendimmto(struct fid_ep *ep, const void *buf, size_t len, const void *dest_addr)
+{
+	return ep->msg->sendimmto(ep, buf, len, dest_addr);
+}
 
 #else // FABRIC_DIRECT
 #include <rdma/fi_direct_endpoint.h>

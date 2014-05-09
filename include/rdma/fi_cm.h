@@ -59,13 +59,18 @@ struct fi_ops_cm {
 
 #ifndef FABRIC_DIRECT
 
-static inline int fi_getepname(fid_t fid, void *addr, size_t *addrlen)
+static inline int fi_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
 	FI_ASSERT_OPS(fid, struct fid_ep, cm);
 	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, getname);
 	return ep->cm->getname(fid, addr, addrlen);
+}
+
+static inline int fi_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
+{
+	return ep->cm->getpeer(ep, addr, addrlen);
 }
 
 static inline int fi_listen(struct fid_pep *pep)
@@ -98,6 +103,17 @@ static inline int fi_shutdown(struct fid_ep *ep, uint64_t flags)
 	return ep->cm->shutdown(ep, flags);
 }
 
+static inline int
+fi_join(struct fid_ep *ep, void *addr, void **fi_addr, uint64_t flags)
+{
+	return ep->cm->join(ep, addr, fi_addr, flags);
+}
+
+static inline int
+fi_leave(struct fid_ep *ep, void *addr, void *fi_addr, uint64_t flags)
+{
+	return ep->cm->leave(ep, addr, fi_addr, flags);
+}
 
 #else // FABRIC_DIRECT
 #include <rdma/fi_direct_cm.h>

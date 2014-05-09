@@ -226,6 +226,22 @@ fi_fetch_atomicto(struct fid_ep *ep,
 }
 
 static inline int
+fi_compare_atomicto(struct fid_ep *ep,
+		    const void *buf, size_t count, void *desc,
+		    const void *compare, void *compare_desc,
+		    void *result, void *result_desc,
+		    const void *dest_addr,
+		    uint64_t addr, uint64_t key,
+		    enum fi_datatype datatype, enum fi_op op, void *context)
+{
+	return ep->atomic->compwriteto(ep, buf, count, desc,
+				       compare, compare_desc,
+				       result, result_desc,
+				       dest_addr, addr, key,
+				       datatype, op, context);
+}
+
+static inline int
 fi_atomicvalid(struct fid_ep *ep,
 	       enum fi_datatype datatype, enum fi_op op, size_t *count)
 {
