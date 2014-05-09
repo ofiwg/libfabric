@@ -55,21 +55,16 @@ static inline ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 		psm_tagsel = PSMX_MSG_BIT;
 	}
 
-	if (fid_ep->use_fi_context) {
-		if (!context)
-			return -EINVAL;
+	if (!context)
+		return -EINVAL;
 
-		fi_context = context;
-		PSMX_CTXT_TYPE(fi_context) =
-			((fid_ep->completion_mask | (flags & FI_EVENT)) == PSMX_COMP_ON) ?
-			0 : PSMX_NOCOMP_CONTEXT;
+	fi_context = context;
+	PSMX_CTXT_TYPE(fi_context) =
+		((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT)) ?
+		PSMX_NOCOMP_CONTEXT : 0;
 
-		PSMX_CTXT_USER(fi_context) = fi_context;
-		PSMX_CTXT_EC(fi_context) = fid_ep->eq;
-	}
-	else {
-		fi_context = NULL;
-	}
+	PSMX_CTXT_USER(fi_context) = fi_context;
+	PSMX_CTXT_EC(fi_context) = fid_ep->eq;
 
 	err = psm_mq_irecv(fid_ep->domain->psm_mq,
 			   psm_tag, psm_tagsel, recv_flag,
@@ -152,21 +147,16 @@ static inline ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t le
 			return psmx_errno(err);
 	}
 
-	if (fid_ep->use_fi_context) {
-		if (!context)
-			return -EINVAL;
+	if (!context)
+		return -EINVAL;
 
-		fi_context = context;
-		PSMX_CTXT_TYPE(fi_context) =
-			((fid_ep->completion_mask | (flags & FI_EVENT)) == PSMX_COMP_ON) ?
-			0 : PSMX_NOCOMP_CONTEXT;
+	fi_context = context;
+	PSMX_CTXT_TYPE(fi_context) =
+		((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT)) ?
+		PSMX_NOCOMP_CONTEXT : 0;
 
-		PSMX_CTXT_USER(fi_context) = fi_context;
-		PSMX_CTXT_EC(fi_context) = fid_ep->eq;
-	}
-	else {
-		fi_context = NULL;
-	}
+	PSMX_CTXT_USER(fi_context) = fi_context;
+	PSMX_CTXT_EC(fi_context) = fid_ep->eq;
 
 	err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr, send_flag,
 				psm_tag, buf, len, (void *)fi_context, &psm_req);

@@ -32,23 +32,6 @@
 
 #include "psmx.h"
 
-static int psmx_ep_check_flags(struct psmx_fid_ep *ep)
-{
-	ep->use_fi_context = 1;
-	ep->completion_mask = PSMX_COMP_ON;
-
-	if (ep->flags & FI_SYNC) {
-		ep->completion_mask = PSMX_COMP_OFF;
-		if (!(ep->flags & FI_CANCEL))
-			ep->use_fi_context = 0;
-	}
-	else if (ep->flags & FI_EVENT) {
-		ep->completion_mask = PSMX_COMP_EVENT;
-	}
-
-	return 0;
-}
-
 static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
@@ -300,13 +283,11 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 		alias = arg;
 		*new_fid_ep = *fid_ep;
 		new_fid_ep->flags = alias->flags;
-		psmx_ep_check_flags(new_fid_ep);
 		*alias->fid = &new_fid_ep->ep.fid;
 		break;
 
 	case FI_SETFIDFLAG:
 		fid_ep->flags = *(uint64_t *)arg;
-		psmx_ep_check_flags(fid_ep);
 		break;
 
 	case FI_GETFIDFLAG:
@@ -362,7 +343,6 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		}
 	}
 
-	psmx_ep_check_flags(fid_ep);
 	*ep = &fid_ep->ep;
 
 	return 0;

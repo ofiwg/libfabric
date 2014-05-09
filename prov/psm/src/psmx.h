@@ -138,8 +138,6 @@ struct psmx_fid_ep {
 	struct psmx_fid_cntr	*cntr;
 	struct psmx_fid_av	*av;
 	uint64_t		flags;
-	uint64_t		completion_mask;
-	int			use_fi_context;
 	int			connected;
 	psm_epid_t		peer_psm_epid;
 	psm_epaddr_t		peer_psm_epaddr;
