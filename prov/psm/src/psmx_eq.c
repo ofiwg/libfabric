@@ -79,11 +79,9 @@ struct psmx_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
 		event->eqe.err.err = err;
 		event->eqe.err.prov_errno = 0;
 		event->eqe.err.prov_data = NULL;
-		eq->num_errors++;
 		goto out;
 	}
 
-	eq->num_events++;
 	switch (eq->format) {
 	case FI_EQ_FORMAT_CONTEXT:
 		event->eqe.context.op_context = op_context;
@@ -141,11 +139,9 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 		event->eqe.err.prov_errno = psm_status->error_code;
 		event->eqe.err.olen = psm_status->msg_length - psm_status->nbytes;
 		//event->eqe.err.prov_data = NULL; /* FIXME */
-		eq->num_errors++;
 		goto out;
 	}
 
-	eq->num_events++;
 	switch (eq->format) {
 	case FI_EQ_FORMAT_CONTEXT:
 		event->eqe.context.op_context = PSMX_CTXT_USER(fi_context);

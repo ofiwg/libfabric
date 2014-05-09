@@ -54,10 +54,6 @@ extern "C" {
 #define PSMX_OUI_INTEL	0x0002b3L
 #define PSMX_PROTOCOL	0x0001
 
-#define PSMX_COMP_ON		(-1ULL)
-#define PSMX_COMP_OFF		(0)
-#define PSMX_COMP_EVENT		(~FI_EVENT)
-
 #define PSMX_MSG_BIT		(0x8000000000000000ULL)
 #define PSMX_NOCOMP_CONTEXT	((void *)0xFFFF0000FFFF0000ULL)
 #define PSMX_IMM_CONTEXT	((void *)0xF0F0F0F0F0F0F0F0ULL)
@@ -107,10 +103,7 @@ struct psmx_fid_eq {
 	int 			format;
 	int			entry_size;
 	struct psmx_event_queue	event_queue;
-	int			err_format;
 	struct psmx_event	*pending_error;
-	uint64_t		num_events;
-	uint64_t		num_errors;
 };
 
 struct psmx_fid_cntr {
