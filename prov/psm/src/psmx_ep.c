@@ -335,6 +335,8 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	fid_ep->ep.ops = &psmx_ep_ops;
 	fid_ep->ep.cm = &psmx_cm_ops;
 	fid_ep->ep.tagged = &psmx_tagged_ops;
+	PSMX_CTXT_TYPE(&fid_ep->imm_context) = PSMX_IMM_CONTEXT;
+	PSMX_CTXT_EP(&fid_ep->imm_context) = fid_ep;
 
 	if (info) {
 		fid_ep->flags = info->flags;

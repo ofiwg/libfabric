@@ -60,11 +60,12 @@ extern "C" {
 
 #define PSMX_MSG_BIT		(0x8000000000000000ULL)
 #define PSMX_NOCOMP_CONTEXT	((void *)0xFFFF0000FFFF0000ULL)
+#define PSMX_IMM_CONTEXT	((void *)0xF0F0F0F0F0F0F0F0ULL)
 
 #define PSMX_CTXT_REQ(fi_context)	((fi_context)->internal[0])
 #define PSMX_CTXT_TYPE(fi_context)	((fi_context)->internal[1])
 #define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
-#define PSMX_CTXT_EC(fi_context)	((fi_context)->internal[3])
+#define PSMX_CTXT_EP(fi_context)	((fi_context)->internal[3])
 
 struct psmx_fid_domain {
 	struct fid_domain	domain;
@@ -141,6 +142,7 @@ struct psmx_fid_ep {
 	int			connected;
 	psm_epid_t		peer_psm_epid;
 	psm_epaddr_t		peer_psm_epaddr;
+	struct fi_context	imm_context;
 };
 
 struct psmx_fid_mr {

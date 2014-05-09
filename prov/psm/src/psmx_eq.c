@@ -212,7 +212,7 @@ static int psmx_eq_poll_mq(struct psmx_fid_eq *eq)
 	psm_mq_req_t psm_req;
 	psm_mq_status_t psm_status;
 	struct fi_context *fi_context;
-	struct psmx_fid_eq *tmp_ec;
+	struct psmx_fid_ep *tmp_ep;
 	struct psmx_event *event;
 	int err;
 
@@ -230,14 +230,14 @@ static int psmx_eq_poll_mq(struct psmx_fid_eq *eq)
 			if (PSMX_CTXT_TYPE(fi_context) == PSMX_NOCOMP_CONTEXT)
 				continue;
 
-			tmp_ec = PSMX_CTXT_EC(fi_context);
-			event = psmx_eq_create_event_from_status(tmp_ec, &psm_status);
+			tmp_ep = PSMX_CTXT_EP(fi_context);
+			event = psmx_eq_create_event_from_status(tmp_ep->eq, &psm_status);
 			if (!event)
 				return -ENOMEM;
 
-			psmx_eq_enqueue_event(tmp_ec, event);
+			psmx_eq_enqueue_event(tmp_ep->eq, event);
 
-			if (tmp_ec == eq)
+			if (tmp_ep->eq == eq)
 				return 1;
 		}
 		else if (err == PSM_MQ_NO_COMPLETIONS) {
