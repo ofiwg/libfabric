@@ -110,6 +110,43 @@ static int psmx_av_remove(struct fid_av *av, void *fi_addr, size_t count,
 	return psmx_errno(err);
 }
 
+static int psmx_av_lookup(struct fid_av *av, const void *fi_addr, void *addr,
+			  size_t *addrlen)
+{
+	struct psmx_fid_av *fid_av;
+	psm_epid_t epid;
+
+	if (!addr || !addrlen)
+		return -EINVAL;
+
+	fid_av = container_of(av, struct psmx_fid_av, av);
+
+	epid = (psm_epid_t)(uintptr_t)psm_epaddr_getctxt((void *)fi_addr);
+	if (*addrlen >= sizeof(epid))
+		*(psm_epid_t *)addr = epid;
+	else
+		memcpy(addr, &epid, *addrlen);
+	*addrlen = sizeof(epid);
+
+	return 0;
+}
+
+static const char *psmx_av_straddr(struct fid_av *av, const void *addr,
+				   char *buf, size_t *len)
+{
+	int n;
+
+	if (!buf || !len)
+		return NULL;
+
+	n = snprintf(buf, *len, "%lx", (uint64_t)(uintptr_t)addr);
+	if (n < 0)
+		return NULL;
+
+	*len = n + 1;
+	return buf;
+}
+
 static int psmx_av_close(fid_t fid)
 {
 	struct psmx_fid_av *fid_av;
@@ -168,6 +205,8 @@ static struct fi_ops_av psmx_av_ops = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = psmx_av_insert,
 	.remove = psmx_av_remove,
+	.lookup = psmx_av_lookup,
+	.straddr = psmx_av_straddr,
 };
 
 int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
