@@ -52,10 +52,10 @@ static inline ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
 		return -EINVAL;
 
 	fi_context = context;
+
 	PSMX_CTXT_TYPE(fi_context) =
 		((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT)) ?
-		PSMX_NOCOMP_CONTEXT : 0;
-
+		PSMX_NOCOMP_CONTEXT : PSMX_RECV_CONTEXT;
 	PSMX_CTXT_USER(fi_context) = fi_context;
 	PSMX_CTXT_EP(fi_context) = fid_ep;
 
@@ -153,13 +153,17 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 	fi_context = context;
 	PSMX_CTXT_TYPE(fi_context) =
 		((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT)) ?
-		PSMX_NOCOMP_CONTEXT : 0;
-
+		PSMX_NOCOMP_CONTEXT : PSMX_SEND_CONTEXT;
 	PSMX_CTXT_USER(fi_context) = fi_context;
 	PSMX_CTXT_EP(fi_context) = fid_ep;
 
 	err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr, send_flag,
 				psm_tag, buf, len, (void*)fi_context, &psm_req);
+
+	if (err != PSM_OK)
+		return psmx_errno(err);
+
+	fid_ep->pending_sends++;
 
 	if (fi_context)
 		PSMX_CTXT_REQ(fi_context) = psm_req;

@@ -54,12 +54,21 @@ extern "C" {
 #define PSMX_OUI_INTEL	0x0002b3L
 #define PSMX_PROTOCOL	0x0001
 
-#define PSMX_MSG_BIT		(0x8000000000000000ULL)
-#define PSMX_NOCOMP_CONTEXT	((void *)0xFFFF0000FFFF0000ULL)
-#define PSMX_IMM_CONTEXT	((void *)0xF0F0F0F0F0F0F0F0ULL)
+#define PSMX_MSG_BIT		(0x1ULL << 63)
+
+enum psmx_context_type {
+	PSMX_NOCOMP_CONTEXT = 1,
+	PSMX_SEND_CONTEXT,
+	PSMX_RECV_CONTEXT,
+	PSMX_WRITE_CONTEXT,
+	PSMX_READ_CONTEXT,
+	PSMX_SENDIMM_CONTEXT,
+	PSMX_WRITEIMM_CONTEXT,
+	PSMX_ATOMIC_CONTEXT,
+};
 
 #define PSMX_CTXT_REQ(fi_context)	((fi_context)->internal[0])
-#define PSMX_CTXT_TYPE(fi_context)	((fi_context)->internal[1])
+#define PSMX_CTXT_TYPE(fi_context)	(*(int *)&(fi_context)->internal[1])
 #define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX_CTXT_EP(fi_context)	((fi_context)->internal[3])
 
@@ -135,7 +144,12 @@ struct psmx_fid_ep {
 	int			connected;
 	psm_epid_t		peer_psm_epid;
 	psm_epaddr_t		peer_psm_epaddr;
-	struct fi_context	imm_context;
+	struct fi_context	sendimm_context;
+	struct fi_context	writeimm_context;
+	uint64_t		pending_sends;
+	uint64_t		pending_writes;
+	uint64_t		pending_reads;
+	uint64_t		pending_atomics;
 };
 
 struct psmx_fid_mr {
@@ -184,6 +198,8 @@ struct	psmx_event *psmx_eq_create_event(struct psmx_fid_eq *fid_eq,
 					uint64_t flags, size_t len,
 					uint64_t data, uint64_t tag,
 					size_t olen, int err);
+int	psmx_eq_poll_mq(struct psmx_fid_eq *eq,
+			struct psmx_fid_domain *domain_if_null_eq);
 
 #ifdef __cplusplus
 }

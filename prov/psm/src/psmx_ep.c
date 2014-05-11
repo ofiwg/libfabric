@@ -263,9 +263,37 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 	return 0;
 }
 
+static inline int psmx_ep_progress(struct psmx_fid_ep *fid_ep)
+{
+	return psmx_eq_poll_mq(fid_ep->eq, fid_ep->domain);
+}
+
 static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
 {
-	/* FIXME: perform the real sync operation */
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+
+	if (!flags || (flags & FI_SEND)) {
+		while (fid_ep->pending_sends)
+			psmx_ep_progress(fid_ep);
+	}
+
+	if (!flags || (flags & FI_WRITE)) {
+		while (fid_ep->pending_writes)
+			psmx_ep_progress(fid_ep);
+	}
+
+	if (!flags || (flags & FI_READ)) {
+		while (fid_ep->pending_reads)
+			psmx_ep_progress(fid_ep);
+	}
+
+	if (!flags) {
+		while (fid_ep->pending_atomics)
+			psmx_ep_progress(fid_ep);
+	}
+
 	return 0;
 }
 
@@ -335,8 +363,10 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	fid_ep->ep.ops = &psmx_ep_ops;
 	fid_ep->ep.cm = &psmx_cm_ops;
 	fid_ep->ep.tagged = &psmx_tagged_ops;
-	PSMX_CTXT_TYPE(&fid_ep->imm_context) = PSMX_IMM_CONTEXT;
-	PSMX_CTXT_EP(&fid_ep->imm_context) = fid_ep;
+	PSMX_CTXT_TYPE(&fid_ep->sendimm_context) = PSMX_SENDIMM_CONTEXT;
+	PSMX_CTXT_EP(&fid_ep->sendimm_context) = fid_ep;
+	PSMX_CTXT_TYPE(&fid_ep->writeimm_context) = PSMX_SENDIMM_CONTEXT;
+	PSMX_CTXT_EP(&fid_ep->writeimm_context) = fid_ep;
 
 	if (info) {
 		fid_ep->flags = info->flags;
