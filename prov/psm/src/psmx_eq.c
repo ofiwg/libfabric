@@ -226,9 +226,6 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 
 			fi_context = psm_status.context;
 
-			if (!fi_context) /* only possible with FI_SYNC set */
-				continue;
-
 			tmp_ep = PSMX_CTXT_EP(fi_context);
 
 			switch (PSMX_CTXT_TYPE(fi_context)) {

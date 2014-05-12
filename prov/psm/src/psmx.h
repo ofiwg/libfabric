@@ -37,15 +37,13 @@ extern "C" {
 #define MIN(x,y) ((x)<(y)?(x):(y))
 #endif
 
-#define FI_SYNC	0
-
 #define PSMX_MR_SIGNATURE (0x05F109530F1D03B0ULL) /* "SFI PSM FID MR" */
 #define PSMX_TIME_OUT	120
 #define PSMX_SUPPORTED_FLAGS (FI_BLOCK | FI_EXCL | \
 			      FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
 			      FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			      FI_BUFFERED_SEND | FI_BUFFERED_RECV | \
-			      FI_MULTI_RECV | FI_SYNC | FI_REMOTE_COMPLETE | \
+			      FI_MULTI_RECV | FI_REMOTE_COMPLETE | \
 			      FI_EVENT | FI_REMOTE_SIGNAL | FI_CANCEL)
 #define PSMX_DEFAULT_FLAGS   (0)
 
