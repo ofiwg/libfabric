@@ -366,7 +366,7 @@ fi_fdomain(struct fid_fabric *fabric, struct fi_info *info,
 }
 
 static inline int
-fi_fec_open(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
+fi_feq_open(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
 	    struct fid_eq **eq, void *context)
 {
 	return fabric->ops->eq_open(fabric, attr, eq, context);
