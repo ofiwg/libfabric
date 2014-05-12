@@ -1,13 +1,17 @@
-.TH "FI_TAGGED" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_TAGGED" 3 "2014-05-12" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_tagged \- Tagged data transfer operations
 .PP
-fi_trecv / fi_trecvv / fi_trecvfrom / fi_trecvmsg
+fi_trecv / fi_trecvv
+.br
+fi_trecvfrom / fi_trecvmsg
 .RS
 Post a buffer to receive an incoming message
 .RE
 .PP
-fi_tsend / fi_tsendv / fi_tsendto / fi_tsendmsg
+fi_tsend / fi_tsendimm / fi_tsendv
+.br
+fi_tsendto / fi_tsendimmto / fi_tsendmsg
 .RS
 Initiate an operation to send a message
 .RE
@@ -39,6 +43,9 @@ Initiate a search operation for a buffered receive matching a given tag
 .BI "void *" desc ","
 .BI "uint64_t " tag ", void * " context ");"
 .HP
+.BI "int fi_tsendimm(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
+.BI "uint64_t " tag ");"
+.HP
 .BI "int fi_tsendv(struct fid_ep *" ep ", const struct iovec * " iov ","
 .BI "void *" desc ", size_t " count ","
 .BI "uint64_t " tag ", void * " context ");"
@@ -46,6 +53,9 @@ Initiate a search operation for a buffered receive matching a given tag
 .BI "int fi_tsendto(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "void *" desc ","
 .BI "const void * " dest_addr ", uint64_t " tag ", void * " context ");"
+.HP
+.BI "int fi_tsendimmto(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
+.BI "const void * " dest_addr ", uint64_t " tag ");"
 .HP
 .BI "int fi_tsendmsg(struct fid_ep *" ep ", const struct fi_msg_tagged * " msg ","
 .BI "uint64_t " flags ");"
@@ -95,8 +105,8 @@ In general, message tags are checked against receive buffers in the order
 in which messages have been posted to the endpoint.  See the ordering
 discussion below for more details.
 .PP
-The send functions -- fi_tsend, fi_tsendv, fi_tsendto,
-fi_tsendmsg -- are used to transmit a tagged message
+The send functions -- fi_tsend, fi_tsendimm, fi_tsendv, fi_tsendto,
+fi_tsendimmto, fi_tsendmsg -- are used to transmit a tagged message
 from one endpoint to another endpoint.  The main difference between
 send functions are the number and type of parameters that they accept as input.
 Otherwise, they perform the same general function.
@@ -120,6 +130,14 @@ The local endpoint must be connected to a remote endpoint or destination
 before fi_tsend is called.  Unless the endpoint has been configured differently,
 the data buffer passed into fi_tsend must not be touched by the application
 until the fi_tsend call completes asynchronously.
+.SS "fi_tsendimm"
+The tagged send immediate call is an optimized version of fi_tsend.  The
+fi_tsendimm function behaves as if the FI_BUFFERED_SEND transfer flag were
+set, and FI_EVENT were not.  That is, the data buffer is available for reuse
+immediately on returning from from fi_tsendimm, and no completion event will
+be generated for this send.  The completion event will be suppressed even if
+the endpoint has not been configured with FI_EVENT.  See the flags
+discussion below for more details.
 .SS "fi_tsendv"
 The fi_tsendv call adds support for a scatter-gather list to fi_tsend and/or
 fi_tsendmem.  The fi_sendv transfers the set of data buffers referenced by
@@ -128,6 +146,8 @@ iov parameter is specified by the user when the endpoint is created.  See
 fi_getinfo for more details on iov formats.
 .SS "fi_tsendto"
 The fi_tsendto function is equivalent to fi_tsend for unconnected endpoints.
+.SS "fi_tsendimmto"
+This call is similar to fi_tsendimm, but for unconnected endpoints.
 .SS "fi_tsendmsg"
 The fi_tsendmsg call supports data transfers over both connected and unconnected
 endpoints, with the ability to control the send operation per call through the
