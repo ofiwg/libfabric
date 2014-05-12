@@ -155,6 +155,7 @@ struct psmx_fid_mr {
 	struct psmx_fid_domain	*domain;
 	struct psmx_fid_ep	*ep;
 	struct psmx_fid_eq	*eq;
+	struct psmx_fid_cntr	*cntr;
 	uint64_t		signature;
 	uint64_t		access;
 	uint64_t		flags;
