@@ -20,12 +20,14 @@ extern "C" {
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <complex.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_prov.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_rma.h>
+#include <rdma/fi_atomic.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
 #include <psm.h>
