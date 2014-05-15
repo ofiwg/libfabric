@@ -229,7 +229,11 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 			tmp_ep = PSMX_CTXT_EP(fi_context);
 
 			switch (PSMX_CTXT_TYPE(fi_context)) {
-			case PSMX_NOCOMP_CONTEXT:
+			case PSMX_NOCOMP_SEND_CONTEXT:
+				tmp_ep->pending_sends--;
+				continue;
+
+			case PSMX_NOCOMP_RECV_CONTEXT:
 				continue;
 
 			case PSMX_SENDIMM_CONTEXT:

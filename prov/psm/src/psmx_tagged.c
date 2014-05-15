@@ -55,7 +55,7 @@ static inline ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
 
 	PSMX_CTXT_TYPE(fi_context) =
 		((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT)) ?
-		PSMX_NOCOMP_CONTEXT : PSMX_RECV_CONTEXT;
+		PSMX_NOCOMP_RECV_CONTEXT : PSMX_RECV_CONTEXT;
 	PSMX_CTXT_USER(fi_context) = fi_context;
 	PSMX_CTXT_EP(fi_context) = fid_ep;
 
@@ -153,7 +153,7 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 	fi_context = context;
 	PSMX_CTXT_TYPE(fi_context) =
 		((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT)) ?
-		PSMX_NOCOMP_CONTEXT : PSMX_SEND_CONTEXT;
+		PSMX_NOCOMP_SEND_CONTEXT : PSMX_SEND_CONTEXT;
 	PSMX_CTXT_USER(fi_context) = fi_context;
 	PSMX_CTXT_EP(fi_context) = fid_ep;
 
