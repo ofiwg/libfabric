@@ -211,6 +211,7 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 	struct psmx_fid_domain *domain;
 	struct psmx_fid_ep *tmp_ep;
 	struct psmx_event *event;
+	int event_flag;
 	int err;
 
 	if (eq)
@@ -227,44 +228,50 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 			fi_context = psm_status.context;
 
 			tmp_ep = PSMX_CTXT_EP(fi_context);
+			event_flag = 0;
 
 			switch (PSMX_CTXT_TYPE(fi_context)) {
 			case PSMX_NOCOMP_SEND_CONTEXT:
 				tmp_ep->pending_sends--;
-				continue;
+				break;
 
 			case PSMX_NOCOMP_RECV_CONTEXT:
-				continue;
+				break;
 
 			case PSMX_SENDIMM_CONTEXT:
 				tmp_ep->pending_sends--;
-				continue;
+				break;
 
 			case PSMX_WRITEIMM_CONTEXT:
 				tmp_ep->pending_writes--;
-				continue;
+				break;
 
 			case PSMX_SEND_CONTEXT:
 				tmp_ep->pending_sends--;
+				event_flag = 1;
 				break;
 
 			case PSMX_RECV_CONTEXT:
+				event_flag = 1;
 				break;
 
 			case PSMX_READ_CONTEXT:
 				tmp_ep->pending_reads--;
+				event_flag = 1;
 				break;
 
 			case PSMX_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
+				event_flag = 1;
 				break;
 
 			case PSMX_ATOMIC_CONTEXT:
 				tmp_ep->pending_atomics--;
+				event_flag = 1;
 				break;
 			}
 
-			if (tmp_ep->eq) {
+			if (tmp_ep->eq && event_flag) {
 				event = psmx_eq_create_event_from_status(tmp_ep->eq, &psm_status);
 				if (!event)
 					return -ENOMEM;

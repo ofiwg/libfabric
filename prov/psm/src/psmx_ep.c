@@ -363,6 +363,10 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	fid_ep->ep.ops = &psmx_ep_ops;
 	fid_ep->ep.cm = &psmx_cm_ops;
 	fid_ep->ep.tagged = &psmx_tagged_ops;
+	PSMX_CTXT_TYPE(&fid_ep->nocomp_send_context) = PSMX_NOCOMP_SEND_CONTEXT;
+	PSMX_CTXT_EP(&fid_ep->nocomp_send_context) = fid_ep;
+	PSMX_CTXT_TYPE(&fid_ep->nocomp_recv_context) = PSMX_NOCOMP_RECV_CONTEXT;
+	PSMX_CTXT_EP(&fid_ep->nocomp_recv_context) = fid_ep;
 	PSMX_CTXT_TYPE(&fid_ep->sendimm_context) = PSMX_SENDIMM_CONTEXT;
 	PSMX_CTXT_EP(&fid_ep->sendimm_context) = fid_ep;
 	PSMX_CTXT_TYPE(&fid_ep->writeimm_context) = PSMX_SENDIMM_CONTEXT;

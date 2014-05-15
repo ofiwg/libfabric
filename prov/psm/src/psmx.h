@@ -145,6 +145,8 @@ struct psmx_fid_ep {
 	int			connected;
 	psm_epid_t		peer_psm_epid;
 	psm_epaddr_t		peer_psm_epaddr;
+	struct fi_context	nocomp_send_context;
+	struct fi_context	nocomp_recv_context;
 	struct fi_context	sendimm_context;
 	struct fi_context	writeimm_context;
 	uint64_t		pending_sends;

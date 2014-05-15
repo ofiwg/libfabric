@@ -41,6 +41,7 @@ static inline ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag, psm_tagsel;
 	struct fi_context *fi_context;
+	int user_fi_context = 0;
 	int err;
 
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
@@ -48,16 +49,19 @@ static inline ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
 	psm_tag = tag & (~fid_ep->domain->reserved_tag_bits);
 	psm_tagsel = (~ignore) | fid_ep->domain->reserved_tag_bits;
 
-	if (!context)
-		return -EINVAL;
+	if ((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT) && !context) {
+		fi_context = &fid_ep->nocomp_recv_context;
+	}
+	else {
+		if (!context)
+			return -EINVAL;
 
-	fi_context = context;
-
-	PSMX_CTXT_TYPE(fi_context) =
-		((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT)) ?
-		PSMX_NOCOMP_RECV_CONTEXT : PSMX_RECV_CONTEXT;
-	PSMX_CTXT_USER(fi_context) = fi_context;
-	PSMX_CTXT_EP(fi_context) = fid_ep;
+		fi_context = context;
+		user_fi_context= 1;
+		PSMX_CTXT_TYPE(fi_context) = PSMX_RECV_CONTEXT;
+		PSMX_CTXT_USER(fi_context) = fi_context;
+		PSMX_CTXT_EP(fi_context) = fid_ep;
+	}
 
 	err = psm_mq_irecv(fid_ep->domain->psm_mq,
 			   psm_tag, psm_tagsel, 0, /* flags */
@@ -65,7 +69,7 @@ static inline ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	if (fi_context)
+	if (user_fi_context)
 		PSMX_CTXT_REQ(fi_context) = psm_req;
 
 	return 0;
@@ -131,6 +135,7 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag;
 	struct fi_context *fi_context;
+	int user_fi_context = 0;
 	int err;
 
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
@@ -147,15 +152,19 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 			return psmx_errno(err);
 	}
 
-	if (!context)
-		return -EINVAL;
+	if ((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT) && !context) {
+		fi_context = &fid_ep->nocomp_send_context;
+	}
+	else {
+		if (!context)
+			return -EINVAL;
 
-	fi_context = context;
-	PSMX_CTXT_TYPE(fi_context) =
-		((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT)) ?
-		PSMX_NOCOMP_SEND_CONTEXT : PSMX_SEND_CONTEXT;
-	PSMX_CTXT_USER(fi_context) = fi_context;
-	PSMX_CTXT_EP(fi_context) = fid_ep;
+		fi_context = context;
+		user_fi_context = 1;
+		PSMX_CTXT_TYPE(fi_context) = PSMX_SEND_CONTEXT;
+		PSMX_CTXT_USER(fi_context) = fi_context;
+		PSMX_CTXT_EP(fi_context) = fid_ep;
+	}
 
 	err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr, send_flag,
 				psm_tag, buf, len, (void*)fi_context, &psm_req);
@@ -165,7 +174,7 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 
 	fid_ep->pending_sends++;
 
-	if (fi_context)
+	if (user_fi_context)
 		PSMX_CTXT_REQ(fi_context) = psm_req;
 
 	return 0;
