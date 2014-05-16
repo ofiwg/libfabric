@@ -76,7 +76,7 @@ struct psmx_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
 
 	if ((event->error = !!err)) {
 		event->eqe.err.op_context = op_context;
-		event->eqe.err.err = err;
+		event->eqe.err.err = -err;
 		event->eqe.err.prov_errno = 0;
 		event->eqe.err.prov_data = NULL;
 		goto out;
@@ -135,7 +135,7 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 
 	if ((event->error = !!psm_status->error_code)) {
 		event->eqe.err.op_context = PSMX_CTXT_USER(fi_context);
-		event->eqe.err.err = psmx_errno(psm_status->error_code);
+		event->eqe.err.err = -psmx_errno(psm_status->error_code);
 		event->eqe.err.prov_errno = psm_status->error_code;
 		event->eqe.err.olen = psm_status->msg_length - psm_status->nbytes;
 		//event->eqe.err.prov_data = NULL; /* FIXME */
