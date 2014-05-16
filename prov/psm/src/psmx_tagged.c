@@ -160,10 +160,12 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 			return -EINVAL;
 
 		fi_context = context;
-		user_fi_context = 1;
-		PSMX_CTXT_TYPE(fi_context) = PSMX_SEND_CONTEXT;
-		PSMX_CTXT_USER(fi_context) = fi_context;
-		PSMX_CTXT_EP(fi_context) = fid_ep;
+		if (fi_context != &fid_ep->sendimm_context) {
+			user_fi_context = 1;
+			PSMX_CTXT_TYPE(fi_context) = PSMX_SEND_CONTEXT;
+			PSMX_CTXT_USER(fi_context) = fi_context;
+			PSMX_CTXT_EP(fi_context) = fid_ep;
+		}
 	}
 
 	err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr, send_flag,
