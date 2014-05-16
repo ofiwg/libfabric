@@ -314,13 +314,16 @@ static ssize_t psmx_eq_readfrom(struct fid_eq *eq, void *buf, size_t len,
 	fid_eq = container_of(eq, struct psmx_fid_eq, eq);
 	assert(fid_eq->domain);
 
-	if (len < fid_eq->entry_size)
-		return -FI_ETOOSMALL;
-
 	psmx_eq_poll_mq(fid_eq, fid_eq->domain);
 
 	if (fid_eq->pending_error)
 		return -FI_EAVAIL;
+
+	if (len < fid_eq->entry_size)
+		return -FI_ETOOSMALL;
+
+	if (!buf)
+		return -EINVAL;
 
 	event = psmx_eq_dequeue_event(fid_eq);
 	if (event) {
