@@ -238,6 +238,14 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 			case PSMX_NOCOMP_RECV_CONTEXT:
 				break;
 
+			case PSMX_NOCOMP_WRITE_CONTEXT:
+				tmp_ep->pending_writes--;
+				break;
+
+			case PSMX_NOCOMP_READ_CONTEXT:
+				tmp_ep->pending_reads--;
+				break;
+
 			case PSMX_SENDIMM_CONTEXT:
 				tmp_ep->pending_sends--;
 				break;
