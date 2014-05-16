@@ -37,6 +37,7 @@ static inline ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 			uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
+	struct psmx_epaddr_context *epaddr_context;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag, psm_tagsel;
 	struct fi_context *fi_context;
@@ -47,8 +48,8 @@ static inline ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
 	if (src_addr) {
-		psm_tag = ((uint64_t)(uintptr_t)psm_epaddr_getctxt((void *)src_addr))
-				| PSMX_MSG_BIT;
+		epaddr_context = psm_epaddr_getctxt((void *)src_addr);
+		psm_tag = epaddr_context->epid | PSMX_MSG_BIT;
 		psm_tagsel = -1ULL;
 	}
 	else {

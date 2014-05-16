@@ -193,10 +193,9 @@ static int psmx_eq_get_event_src_addr(struct psmx_fid_eq *fid_eq,
 
 	if ((fid_eq->domain->reserved_tag_bits & PSMX_MSG_BIT) &&
 		(event->source & PSMX_MSG_BIT)) {
-		err = psmx_epid_to_epaddr(
-			fid_eq->domain->psm_ep,
-			event->source & ~PSMX_MSG_BIT,
-			src_addr);
+		err = psmx_epid_to_epaddr(fid_eq->domain,
+					  event->source & ~PSMX_MSG_BIT,
+					  src_addr);
 		*addrlen = sizeof(psm_epaddr_t);
 	}
 

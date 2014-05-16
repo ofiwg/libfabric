@@ -32,7 +32,35 @@
 
 #include "psmx.h"
 
-int psmx_epid_to_epaddr(psm_ep_t ep, psm_epid_t epid, psm_epaddr_t *epaddr)
+static void psmx_set_epaddr_context(struct psmx_fid_domain *domain,
+				    psm_epid_t epid, psm_epaddr_t epaddr)
+{
+	struct psmx_epaddr_context *context;
+
+	context = (void *)psm_epaddr_getctxt(epaddr);
+	if (context) {
+		if (context->domain != domain || context->epid != epid) {
+			fprintf(stderr, "%s: domain or epid doesn't match\n", __func__);
+			context = NULL;
+		}
+	}
+
+	if (context)
+		return;
+
+	context = malloc(sizeof *context);
+	if (!context) {
+		fprintf(stderr, "%s: cannot allocate context\n", __func__);
+		return;
+	}
+
+	context->domain = domain;
+	context->epid = epid;
+	psm_epaddr_setctxt(epaddr, context);
+}
+
+int psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
+			psm_epid_t epid, psm_epaddr_t *epaddr)
 {
         int err;
         psm_error_t errors;
@@ -41,14 +69,16 @@ int psmx_epid_to_epaddr(psm_ep_t ep, psm_epid_t epid, psm_epaddr_t *epaddr)
 	err = psm_ep_epid_lookup(epid, &epconn);
 	if (err == PSM_OK) {
 		*epaddr = epconn.addr;
+		psmx_set_epaddr_context(domain,epid,*epaddr);
 		return 0;
 	}
 
-        err = psm_ep_connect(ep, 1, &epid, NULL, &errors, epaddr, 30*1e9);
+        err = psm_ep_connect(domain->psm_ep, 1, &epid, NULL, &errors, epaddr, 30*1e9);
         if (err != PSM_OK)
                 return psmx_errno(err);
 
-	psm_epaddr_setctxt(*epaddr, (void *)epid);
+	psmx_set_epaddr_context(domain,epid,*epaddr);
+
         return 0;
 }
 
@@ -88,9 +118,9 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 
 	for (i=0; i<count; i++){
 		if (mask[i] && errors[i] == PSM_OK) {
-			psm_epaddr_setctxt(
-				((psm_epaddr_t *) fi_addr)[i],
-				(void *)((psm_epid_t *) addr)[i]);
+			psmx_set_epaddr_context(fid_av->domain,
+						((psm_epid_t *) addr)[i],
+						((psm_epaddr_t *) fi_addr)[i]);
 		}
 	}
 
@@ -114,19 +144,19 @@ static int psmx_av_lookup(struct fid_av *av, const void *fi_addr, void *addr,
 			  size_t *addrlen)
 {
 	struct psmx_fid_av *fid_av;
-	psm_epid_t epid;
+	struct psmx_epaddr_context *context;
 
 	if (!addr || !addrlen)
 		return -EINVAL;
 
 	fid_av = container_of(av, struct psmx_fid_av, av);
 
-	epid = (psm_epid_t)(uintptr_t)psm_epaddr_getctxt((void *)fi_addr);
-	if (*addrlen >= sizeof(epid))
-		*(psm_epid_t *)addr = epid;
+	context = psm_epaddr_getctxt((void *)fi_addr);
+	if (*addrlen >= sizeof(context->epid))
+		*(psm_epid_t *)addr = context->epid;
 	else
-		memcpy(addr, &epid, *addrlen);
-	*addrlen = sizeof(epid);
+		memcpy(addr, &context->epid, *addrlen);
+	*addrlen = sizeof(context->epid);
 
 	return 0;
 }

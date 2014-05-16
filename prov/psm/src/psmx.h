@@ -170,6 +170,11 @@ struct psmx_fid_mr {
 	struct iovec		iov[0];	/* must be the last field */
 };
 
+struct psmx_epaddr_context {
+	struct psmx_fid_domain	*domain;
+	psm_epid_t		epid;
+};
+
 extern struct fi_ops_mr		psmx_mr_ops;
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
@@ -194,7 +199,8 @@ void	*psmx_resolve_name(const char *servername, psm_uuid_t uuid);
 void	psmx_string_to_uuid(const char *s, psm_uuid_t uuid);
 int	psmx_uuid_to_port(psm_uuid_t uuid);
 int	psmx_errno(int err);
-int	psmx_epid_to_epaddr(psm_ep_t ep, psm_epid_t epid, psm_epaddr_t *epaddr);
+int	psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
+			    psm_epid_t epid, psm_epaddr_t *epaddr);
 void	psmx_query_mpi(void);
 void	psmx_debug(char *fmt, ...);
 

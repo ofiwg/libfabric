@@ -82,7 +82,7 @@ static int psmx_cm_connect(struct fid_ep *ep, const void *addr,
 		return -EBADF;
 
 	epid = (psm_epid_t)addr;
-	err = psmx_epid_to_epaddr(fid_ep->domain->psm_ep, epid, &epaddr);
+	err = psmx_epid_to_epaddr(fid_ep->domain, epid, &epaddr);
 	if (err)
 		return err;
 
