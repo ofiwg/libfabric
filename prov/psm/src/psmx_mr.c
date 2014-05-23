@@ -32,11 +32,100 @@
 
 #include "psmx.h"
 
+#define PSMX_MR_AUTO_KEY	(-1ULL)
+#define PSMX_MR_HASH_SIZE	103
+#define PSMX_MR_HASH(x)		((x) % PSMX_MR_HASH_SIZE)
+
+static struct psmx_mr_hash_entry {
+	struct psmx_fid_mr *mr;
+	struct psmx_mr_hash_entry *next;
+} psmx_mr_hash[PSMX_MR_HASH_SIZE];
+
+static int psmx_mr_hash_add(struct psmx_fid_mr *mr)
+{
+	int idx;
+	struct psmx_mr_hash_entry *head;
+	struct psmx_mr_hash_entry *entry;
+
+	idx = PSMX_MR_HASH(mr->mr.key);
+	head = &psmx_mr_hash[idx];
+	if (!head->mr) {
+		head->mr = mr;
+		head->next = NULL;
+		return 0;
+	}
+
+	entry = calloc(1, sizeof(*entry));
+	if (!entry)
+		return -ENOMEM;
+
+	entry->mr = mr;
+	entry->next = head->next;
+	head->next = entry;
+	return 0;
+}
+
+static int psmx_mr_hash_del(struct psmx_fid_mr *mr)
+{
+	int idx;
+	struct psmx_mr_hash_entry *head;
+	struct psmx_mr_hash_entry *entry;
+	struct psmx_mr_hash_entry *prev;
+
+	idx = PSMX_MR_HASH(mr->mr.key);
+	head = &psmx_mr_hash[idx];
+
+	if (head->mr == mr) {
+		entry = head->next;
+		if (entry) {
+			head->mr = entry->mr;
+			head->next = entry->next;
+			free(entry);
+		}
+		else {
+			head->mr = NULL;
+		}
+		return 0;
+	}
+
+	prev = head;
+	entry = head->next;
+	while (entry) {
+		if (entry->mr == mr) {
+			prev->next = entry->next;
+			free(entry);
+			return 0;
+		}
+		prev = entry;
+		entry = entry->next;
+	}
+
+	return -ENOENT;
+}
+
+struct psmx_fid_mr *psmx_mr_hash_get(uint64_t key)
+{
+	int idx;
+	struct psmx_mr_hash_entry *entry;
+
+	idx = PSMX_MR_HASH(key);
+	entry = &psmx_mr_hash[idx];
+
+	while (entry) {
+		if (entry->mr && entry->mr->mr.key == key)
+			return entry->mr;
+		entry = entry->next;
+	}
+
+	return NULL;
+}
+
 static int psmx_mr_close(fid_t fid)
 {
 	struct psmx_fid_mr *fid_mr;
 
 	fid_mr = container_of(fid, struct psmx_fid_mr, mr.fid);
+	psmx_mr_hash_del(fid_mr);
 	fid_mr->signature = 0;
 
 	free(fid_mr);
@@ -172,6 +261,10 @@ static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 {
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_mr *fid_mr;
+	uint64_t key;
+
+	if (requested_key != PSMX_MR_AUTO_KEY && psmx_mr_hash_get(requested_key))
+			return -EEXIST;
 
 	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
 
@@ -184,7 +277,15 @@ static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	fid_mr->mr.fid.context = context;
 	fid_mr->mr.fid.ops = &psmx_fi_ops;
 	fid_mr->mr.mem_desc = fid_mr;
-	fid_mr->mr.key = (uint64_t)(uintptr_t)fid_mr; /* requested_key is ignored */
+	if (requested_key != PSMX_MR_AUTO_KEY) {
+		key = requested_key;
+	}
+	else {
+		key = (uint64_t)(uintptr_t)fid_mr;
+		while (psmx_mr_hash_get(key))
+			key++;
+	}
+	fid_mr->mr.key = key;
 	fid_mr->domain = fid_domain;
 	fid_mr->signature = PSMX_MR_SIGNATURE;
 	fid_mr->access = access;
@@ -192,6 +293,8 @@ static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	fid_mr->iov_count = 1;
 	fid_mr->iov[0].iov_base = (void *)buf;
 	fid_mr->iov[0].iov_len = len;
+
+	psmx_mr_hash_add(fid_mr);
 
 	*mr = &fid_mr->mr;
 
@@ -206,6 +309,10 @@ static int psmx_mr_regv(struct fid_domain *domain,
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_mr *fid_mr;
 	int i;
+	uint64_t key;
+
+	if (requested_key != PSMX_MR_AUTO_KEY && psmx_mr_hash_get(requested_key))
+			return -EEXIST;
 
 	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
 
@@ -223,7 +330,15 @@ static int psmx_mr_regv(struct fid_domain *domain,
 	fid_mr->mr.fid.context = context;
 	fid_mr->mr.fid.ops = &psmx_fi_ops;
 	fid_mr->mr.mem_desc = fid_mr;
-	fid_mr->mr.key = (uint64_t)(uintptr_t)fid_mr; /* requested_key is ignored */
+	if (requested_key != PSMX_MR_AUTO_KEY) {
+		key = requested_key;
+	}
+	else {
+		key = (uint64_t)(uintptr_t)fid_mr;
+		while (psmx_mr_hash_get(key))
+			key++;
+	}
+	fid_mr->mr.key = key;
 	fid_mr->domain = fid_domain;
 	fid_mr->signature = PSMX_MR_SIGNATURE;
 	fid_mr->access = access;
@@ -233,6 +348,7 @@ static int psmx_mr_regv(struct fid_domain *domain,
 		fid_mr->iov[i] = iov[i];
 
 	psmx_mr_normalize_iov(fid_mr->iov, &fid_mr->iov_count);
+	psmx_mr_hash_add(fid_mr);
 
 	*mr = &fid_mr->mr;
 
@@ -245,6 +361,10 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_mr *fid_mr;
 	int i;
+	uint64_t key;
+
+	if (attr->requested_key != PSMX_MR_AUTO_KEY && psmx_mr_hash_get(attr->requested_key))
+			return -EEXIST;
 
 	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
 
@@ -267,7 +387,15 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 	fid_mr->mr.fid.fclass = FID_CLASS_MR;
 	fid_mr->mr.fid.ops = &psmx_fi_ops;
 	fid_mr->mr.mem_desc = fid_mr;
-	fid_mr->mr.key = (uint64_t)(uintptr_t)fid_mr;
+	if (attr->requested_key != PSMX_MR_AUTO_KEY) {
+		key = attr->requested_key;
+	}
+	else {
+		key = (uint64_t)(uintptr_t)fid_mr;
+		while (psmx_mr_hash_get(key))
+			key++;
+	}
+	fid_mr->mr.key = key;
 	fid_mr->domain = fid_domain;
 	fid_mr->signature = PSMX_MR_SIGNATURE;
 	fid_mr->access = FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
@@ -286,6 +414,7 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 		; /* requested_key is ignored */
 
 	psmx_mr_normalize_iov(fid_mr->iov, &fid_mr->iov_count);
+	psmx_mr_hash_add(fid_mr);
 
 	*mr = &fid_mr->mr;
 

@@ -212,6 +212,7 @@ struct	psmx_event *psmx_eq_create_event(struct psmx_fid_eq *fid_eq,
 					size_t olen, int err);
 int	psmx_eq_poll_mq(struct psmx_fid_eq *eq,
 			struct psmx_fid_domain *domain_if_null_eq);
+struct	psmx_fid_mr *psmx_mr_hash_get(uint64_t key);
 
 #ifdef __cplusplus
 }
