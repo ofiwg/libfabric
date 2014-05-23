@@ -154,8 +154,6 @@ static int psmx_mr_bind(fid_t fid, struct fi_resource *fids, int nfids)
                         if (fid_mr->domain != ep->domain)
                                 return -EINVAL;
 			fid_mr->ep = ep;
-			if (ep->eq)
-				fid_mr->eq = ep->eq;
 			break;
 
 		case FID_CLASS_EQ:
