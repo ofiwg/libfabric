@@ -146,9 +146,12 @@ fi_ep_bind is used to associate an endpoint with hardware resources.
 The common use of fi_ep_bind is to direct asynchronous operations
 associated with an endpoint to an event queue.  An endpoint must be
 bound with EQs capable of reporting completions for any asynchronous
-operation initiated on the endpoint.  For connection-oriented
-endpoints, this requires binding the endpoint with an EQ that supports
-the communication management (CM) domain.
+operation initiated on the endpoint.  This is true even for endpoints
+which are configured to suppress successful completions, in order
+that operations that complete in error may be reported to the
+user.  For connection-oriented endpoints, this requires binding the
+endpoint with an EQ that supports the communication management (CM)
+domain.
 .PP
 An active endpoint may direct asynchronous completions to different EQs, based
 on the type of operation.  This is specified using fi_ep_bind flags.  The
