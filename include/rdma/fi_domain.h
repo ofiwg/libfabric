@@ -469,14 +469,16 @@ fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 }
 
 static inline int
-fi_av_map(struct fid_av *av, const void *addr, size_t count,
+fi_av_insert(struct fid_av *av, const void *addr, size_t count,
 	  void **fi_addr, uint64_t flags)
 {
 	return av->ops->insert(av, addr, count, fi_addr, flags);
 }
+#define fi_av_map(av, addr, count, fi_addr, flags) \
+	fi_av_insert(av, addr, count, fi_addr, flags)
 
 static inline int
-fi_av_unmap(struct fid_av *av, void *fi_addr, size_t count, uint64_t flags)
+fi_av_remove(struct fid_av *av, void *fi_addr, size_t count, uint64_t flags)
 {
 	return av->ops->remove(av, fi_addr, count, flags);
 }
