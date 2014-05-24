@@ -228,8 +228,8 @@ static ssize_t psmx_tagged_sendv(struct fid_ep *ep, const struct iovec *iov, voi
 				tag, context);
 }
 
-static ssize_t psmx_tagged_sendimmto(struct fid_ep *ep, const void *buf, size_t len,
-				     const void *dest_addr, uint64_t tag)
+static ssize_t psmx_tagged_injectto(struct fid_ep *ep, const void *buf, size_t len,
+				    const void *dest_addr, uint64_t tag)
 {
 	struct psmx_fid_ep *fid_ep;
 
@@ -240,8 +240,8 @@ static ssize_t psmx_tagged_sendimmto(struct fid_ep *ep, const void *buf, size_t 
 				   &fid_ep->sendimm_context, 0);
 }
 
-static ssize_t psmx_tagged_sendimm(struct fid_ep *ep, const void *buf, size_t len,
-				   uint64_t tag)
+static ssize_t psmx_tagged_inject(struct fid_ep *ep, const void *buf, size_t len,
+				  uint64_t tag)
 {
 	struct psmx_fid_ep *fid_ep;
 
@@ -250,7 +250,7 @@ static ssize_t psmx_tagged_sendimm(struct fid_ep *ep, const void *buf, size_t le
 	if (!fid_ep->connected)
 		return -ENOTCONN;
 
-	return psmx_tagged_sendimmto(ep, buf, len, fid_ep->peer_psm_epaddr, tag);
+	return psmx_tagged_injectto(ep, buf, len, fid_ep->peer_psm_epaddr, tag);
 }
 
 static ssize_t psmx_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
@@ -292,10 +292,10 @@ struct fi_ops_tagged psmx_tagged_ops = {
 	.recvfrom = psmx_tagged_recvfrom,
 	.recvmsg = psmx_tagged_recvmsg,
 	.send = psmx_tagged_send,
-	.sendimm = psmx_tagged_sendimm,
+	.inject = psmx_tagged_inject,
 	.sendv = psmx_tagged_sendv,
 	.sendto = psmx_tagged_sendto,
-	.sendimmto = psmx_tagged_sendimmto,
+	.injectto = psmx_tagged_injectto,
 	.sendmsg = psmx_tagged_sendmsg,
 	.search = psmx_tagged_search,
 };

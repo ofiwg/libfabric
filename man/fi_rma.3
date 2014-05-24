@@ -13,7 +13,7 @@ fi_write / fi_writev
 .br
 fi_writeto / fi_writemsg
 .br
-fi_writeimm / fi_writeimmto
+fi_inject_write / fi_inject_writeto
 .RS
 Initiate a write to remote memory
 .RE
@@ -45,10 +45,10 @@ Initiate a write to remote memory
 .HP
 .BI "ssize_t fi_writemsg(struct fid_ep *" ep ", const struct fi_msg_rma * " msg ", uint64_t " flags ");"
 .HP
-.BI "ssize_t fi_writeimm(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
+.BI "ssize_t fi_inject_write(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "uint64_t " addr ", uint64_t " key ");"
 .HP
-.BI "ssize_t fi_writeimmto(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
+.BI "ssize_t fi_inject_writeto(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "const void *" dest_addr ", uint64_t " addr ", uint64_t " key ");"
 .SH ARGUMENTS
 .IP "ep"
@@ -83,7 +83,7 @@ between a local data buffer and a remote data buffer.  RMA transfers occur
 on a byte level granularity, and no message boundaries are maintained.
 .PP
 The write functions -- fi_write, fi_writev, fi_writeto,
-fi_writemsg, fi_writeimm, fi_writeimmto -- are used to transmit data into a remote
+fi_writemsg, fi_inject_write, fi_inject_writeto -- are used to transmit data into a remote
 memory buffer.  The main difference between write functions
 are the number and type of parameters that they accept as input.  Otherwise,
 they perform the same general function.
@@ -137,16 +137,16 @@ struct fi_msg_rma {
 	int                flow;         /* message steering */
 };
 .fi
-.SS "fi_writeimm"
-The write immediate call is an optimized version of fi_write.  The fi_writeimm
+.SS "fi_inject_write"
+The write immediate call is an optimized version of fi_write.  The fi_inject_write
 function behaves as if the FI_BUFFERED_SEND transfer flag were set, and
 FI_EVENT were not.  That is, the data buffer is available for reuse
-immediately on returning from from fi_writeimm, and no completion event will
+immediately on returning from from fi_inject_write, and no completion event will
 be generated for this write.  The completion event will be suppressed even if
 the endpoint has not been configured with FI_EVENT.  See the flags
 discussion below for more details.
-.SS "fi_writeimmto"
-This call is similar to fi_writeimm, but for unconnected endpoints.
+.SS "fi_inject_writeto"
+This call is similar to fi_inject_write, but for unconnected endpoints.
 .SS "fi_read"
 The fi_read call requests that the remote endpoint transfer data from the
 remote memory region into the local data buffer.  The local endpoint must

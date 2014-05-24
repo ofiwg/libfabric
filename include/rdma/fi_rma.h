@@ -81,9 +81,9 @@ struct fi_ops_rma {
 			void *context);
 	ssize_t	(*writemsg)(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			uint64_t flags);
-	ssize_t	(*writeimm)(struct fid_ep *ep, const void *buf, size_t len,
+	ssize_t	(*inject)(struct fid_ep *ep, const void *buf, size_t len,
 			uint64_t addr, uint64_t key);
-	ssize_t	(*writeimmto)(struct fid_ep *ep, const void *buf, size_t len,
+	ssize_t	(*injectto)(struct fid_ep *ep, const void *buf, size_t len,
 			const void *dest_addr, uint64_t addr, uint64_t key);
 };
 
@@ -145,17 +145,17 @@ fi_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
 }
 
 static inline ssize_t
-fi_writeimm(struct fid_ep *ep, const void *buf, size_t len,
-	    uint64_t addr, uint64_t key)
+fi_inject_write(struct fid_ep *ep, const void *buf, size_t len,
+		uint64_t addr, uint64_t key)
 {
-	return ep->rma->writeimm(ep, buf, len, addr, key);
+	return ep->rma->inject(ep, buf, len, addr, key);
 }
 
 static inline ssize_t
-fi_writeimmto(struct fid_ep *ep, const void *buf, size_t len,
-	      const void *dest_addr, uint64_t addr, uint64_t key)
+fi_inject_writeto(struct fid_ep *ep, const void *buf, size_t len,
+		  const void *dest_addr, uint64_t addr, uint64_t key)
 {
-	return ep->rma->writeimmto(ep, buf, len, dest_addr, addr, key);
+	return ep->rma->injectto(ep, buf, len, dest_addr, addr, key);
 }
 
 #else // FABRIC_DIRECT
