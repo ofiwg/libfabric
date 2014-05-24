@@ -59,7 +59,7 @@ static inline ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
 		fi_context = context;
 		user_fi_context= 1;
 		PSMX_CTXT_TYPE(fi_context) = PSMX_RECV_CONTEXT;
-		PSMX_CTXT_USER(fi_context) = fi_context;
+		PSMX_CTXT_USER(fi_context) = buf;
 		PSMX_CTXT_EP(fi_context) = fid_ep;
 	}
 
@@ -163,7 +163,7 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 		if (fi_context != &fid_ep->sendimm_context) {
 			user_fi_context = 1;
 			PSMX_CTXT_TYPE(fi_context) = PSMX_SEND_CONTEXT;
-			PSMX_CTXT_USER(fi_context) = fi_context;
+			PSMX_CTXT_USER(fi_context) = (void *)buf;
 			PSMX_CTXT_EP(fi_context) = fid_ep;
 		}
 	}

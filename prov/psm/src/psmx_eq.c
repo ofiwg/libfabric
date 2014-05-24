@@ -126,6 +126,7 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 {
 	struct psmx_event *event;
 	struct fi_context *fi_context = psm_status->context;
+	void *op_context, *buf;
 
 	event = calloc(1, sizeof(*event));
 	if (!event) {
@@ -133,8 +134,20 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 		return NULL;
 	}
 
+	switch(PSMX_CTXT_TYPE(fi_context)) {
+	case PSMX_SEND_CONTEXT:
+	case PSMX_RECV_CONTEXT:
+		op_context = fi_context;
+		buf = PSMX_CTXT_USER(fi_context);
+		break;
+	default:
+		op_context = PSMX_CTXT_USER(fi_context);
+		buf = NULL;
+		break;
+	}
+
 	if ((event->error = !!psm_status->error_code)) {
-		event->eqe.err.op_context = PSMX_CTXT_USER(fi_context);
+		event->eqe.err.op_context = op_context;
 		event->eqe.err.err = -psmx_errno(psm_status->error_code);
 		event->eqe.err.prov_errno = psm_status->error_code;
 		event->eqe.err.olen = psm_status->msg_length - psm_status->nbytes;
@@ -144,26 +157,26 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 
 	switch (eq->format) {
 	case FI_EQ_FORMAT_CONTEXT:
-		event->eqe.context.op_context = PSMX_CTXT_USER(fi_context);
+		event->eqe.context.op_context = op_context;
 		break;
 
 	case FI_EQ_FORMAT_COMP:
-		event->eqe.comp.op_context = PSMX_CTXT_USER(fi_context);
+		event->eqe.comp.op_context = op_context;
 		//event->eqe.comp.flags = 0; /* FIXME */
 		event->eqe.comp.len = psm_status->nbytes;
 		break;
 
 	case FI_EQ_FORMAT_DATA:
-		event->eqe.data.op_context = PSMX_CTXT_USER(fi_context);
-		//event->eqe.data.buf = NULL; /* FIXME */
+		event->eqe.data.op_context = op_context;
+		event->eqe.data.buf = buf;
 		//event->eqe.data.flags = 0; /* FIXME */
 		event->eqe.data.len = psm_status->nbytes;
 		//event->eqe.data.data = 0; /* FIXME */
 		break;
 
 	case FI_EQ_FORMAT_TAGGED:
-		event->eqe.tagged.op_context = PSMX_CTXT_USER(fi_context);
-		//event->eqe.tagged.buf = NULL; /* FIXME */
+		event->eqe.tagged.op_context = op_context;
+		event->eqe.tagged.buf = buf;
 		//event->eqe.tagged.flags = 0; /* FIXME */
 		event->eqe.tagged.len = psm_status->nbytes;
 		//event->eqe.tagged.data = 0; /* FIXME */
