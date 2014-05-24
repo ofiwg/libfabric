@@ -215,6 +215,15 @@ int fi_getinfo(const char *node, const char *service, struct fi_info *hints,
 	       struct fi_info **info);
 void fi_freeinfo(struct fi_info *info);
 
+struct fi_attr {
+	uint64_t		version;
+	uint64_t		prov_version;
+	uint64_t		hw_version;
+	uint32_t		oui;
+};
+
+void fi_query(const struct fi_info *info, struct fi_attr *attr, size_t *attrlen);
+
 struct fi_ops_fabric {
 	size_t	size;
 	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
