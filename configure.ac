@@ -16,6 +16,28 @@ AC_ARG_ENABLE([debug],
 	      [CFLAGS="$CFLAGS -g -O0 -Wall"],
 	      [enable_debug=no])
 
+AC_ARG_ENABLE([threads],
+	[AS_HELP_STRING([--enable-threads=level],
+		[Specify multi-level threading support.
+		 single - single-threaded application.
+		 funneled - only main thread calls library.
+		 serialized - user serializes calls into library.
+		 multiple - fully multi-threaded (default).])
+	],,[enable_threads=default])
+if test "$enable_threads" = "yes"; then
+	AC_DEFINE([THREADING_MULTIPLE], 1, [multi-threaded support])
+elif test "$enable_threads" = "no"; then
+	AC_DEFINE([THREADING_SINGLE], 1, [single-threaded app])
+elif test "$enable_threads" = single; then
+	AC_DEFINE([THREADING_SINGLE], 1, [single-threaded app])
+elif test "$enable_threads" = funneled; then
+	AC_DEFINE([THREADING_FUNNELED], 1, [called by main thread])
+elif test "$enable_threads" = serialized; then
+	AC_DEFINE([THREADING_SERIALIZED], 1, [serialized calls])
+else
+	AC_DEFINE([THREADING_MULTIPLE], 1, [multi-threaded support])
+fi
+
 dnl Fix autoconf's habit of adding -g -O2 by default
 AS_IF([test -z "$CFLAGS"],
       [CFLAGS='-O2 -DNDEBUG -Wall'])

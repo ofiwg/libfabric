@@ -124,6 +124,13 @@ enum fi_progress {
 	FI_PROGRESS_IMPLICIT
 };
 
+enum fi_threading {
+	FI_THREAD_MULTIPLE,
+	FI_THREAD_SINGLE,
+	FI_THREAD_FUNNELED,
+	FI_THREAD_SERIALIZED
+};
+
 
 struct fi_info {
 	struct fi_info		*next;
@@ -145,6 +152,7 @@ struct fi_info {
 	 */
 	size_t			auth_keylen;
 	void			*auth_key;
+	enum fi_threading	threading;
 	enum fi_progress	control_progress;
 	enum fi_progress	data_progress;
 	char			*fabric_name;
