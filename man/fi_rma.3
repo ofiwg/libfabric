@@ -20,35 +20,35 @@ Initiate a write to remote memory
 .SH SYNOPSIS
 .B #include <rdma/fi_endpoint.h>
 .HP
-.BI "int fi_read(struct fid_ep *" ep ", void * " buf ", size_t " len ", void *" desc ","
+.BI "ssize_t fi_read(struct fid_ep *" ep ", void * " buf ", size_t " len ", void *" desc ","
 .BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
 .HP
-.BI "int fi_readv(struct fid_ep *" ep ", const struct iovec * " iov ", void *" desc ","
+.BI "ssize_t fi_readv(struct fid_ep *" ep ", const struct iovec * " iov ", void *" desc ","
 .BI "size_t " count ", uint64_t " addr ", uint64_t " key ", void * " context ");"
 .HP
-.BI "int fi_readfrom(struct fid_ep *" ep ", void * " buf ", size_t " len ", void *" desc ","
+.BI "ssize_t fi_readfrom(struct fid_ep *" ep ", void * " buf ", size_t " len ", void *" desc ","
 .BI "const void *" src_addr ", uint64_t " addr ", uint64_t " key ","
 .BI "void * " context ");"
 .HP
-.BI "int fi_readmsg(struct fid_ep *" ep ", const struct fi_msg_rma * " msg ", uint64_t " flags ");"
+.BI "ssize_t fi_readmsg(struct fid_ep *" ep ", const struct fi_msg_rma * " msg ", uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_write(struct fid_ep *" ep ", const void * " buf ", size_t " len ", void *" desc ","
+.BI "ssize_t fi_write(struct fid_ep *" ep ", const void * " buf ", size_t " len ", void *" desc ","
 .BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
 .HP
-.BI "int fi_writev(struct fid_ep *" ep ", const struct iovec * " iov ", void *" desc ","
+.BI "ssize_t fi_writev(struct fid_ep *" ep ", const struct iovec * " iov ", void *" desc ","
 .BI "size_t " count ", uint64_t " addr ", uint64_t " key ", void * " context ");"
 .HP
-.BI "int fi_writeto(struct fid_ep *" ep ", const void * " buf ", size_t " len ", void *" desc ","
+.BI "ssize_t fi_writeto(struct fid_ep *" ep ", const void * " buf ", size_t " len ", void *" desc ","
 .BI "const void *" dest_addr ", uint64_t " addr ", uint64_t " key ","
 .BI "void * " context ");"
 .HP
-.BI "int fi_writemsg(struct fid_ep *" ep ", const struct fi_msg_rma * " msg ", uint64_t " flags ");"
+.BI "ssize_t fi_writemsg(struct fid_ep *" ep ", const struct fi_msg_rma * " msg ", uint64_t " flags ");"
 .HP
-.BI "int fi_writeimm(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
+.BI "ssize_t fi_writeimm(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "uint64_t " addr ", uint64_t " key ");"
 .HP
-.BI "int fi_writeimmto(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
+.BI "ssize_t fi_writeimmto(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "const void *" dest_addr ", uint64_t " addr ", uint64_t " key ");"
 .SH ARGUMENTS
 .IP "ep"

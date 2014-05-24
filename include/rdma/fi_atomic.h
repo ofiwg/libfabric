@@ -107,63 +107,63 @@ struct fi_msg_atomic {
 
 struct fi_ops_atomic {
 	size_t	size;
-	int	(*write)(struct fid_ep *ep,
+	ssize_t	(*write)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*writev)(struct fid_ep *ep,
+	ssize_t	(*writev)(struct fid_ep *ep,
 			const struct fi_ioc *iov, void *desc, size_t count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*writeto)(struct fid_ep *ep,
+	ssize_t	(*writeto)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			const void *dest_addr,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*writemsg)(struct fid_ep *ep,
+	ssize_t	(*writemsg)(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg, uint64_t flags);
 
-	int	(*readwrite)(struct fid_ep *ep,
+	ssize_t	(*readwrite)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			void *result, void *result_desc,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*readwritev)(struct fid_ep *ep,
+	ssize_t	(*readwritev)(struct fid_ep *ep,
 			const struct fi_ioc *iov, void *desc, size_t count,
 			struct fi_ioc *resultv, void *result_desc, size_t result_count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*readwriteto)(struct fid_ep *ep,
+	ssize_t	(*readwriteto)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			void *result, void *result_desc,
 			const void *dest_addr,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*readwritemsg)(struct fid_ep *ep,
+	ssize_t	(*readwritemsg)(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg,
 			struct fi_ioc *resultv, void *result_desc, size_t result_count,
 			uint64_t flags);
 
-	int	(*compwrite)(struct fid_ep *ep,
+	ssize_t	(*compwrite)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			const void *compare, void *compare_desc,
 			void *result, void *result_desc,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*compwritev)(struct fid_ep *ep,
+	ssize_t	(*compwritev)(struct fid_ep *ep,
 			const struct fi_ioc *iov, void *desc, size_t count,
 			const struct fi_ioc *comparev, void *compare_desc, size_t compare_count,
 			struct fi_ioc *resultv, void *result_desc, size_t result_count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*compwriteto)(struct fid_ep *ep,
+	ssize_t	(*compwriteto)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			const void *compare, void *compare_desc,
 			void *result, void *result_desc,
 			const void *dest_addr,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
-	int	(*compwritemsg)(struct fid_ep *ep,
+	ssize_t	(*compwritemsg)(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg,
 			const struct fi_ioc *comparev, void *compare_desc, size_t compare_count,
 			struct fi_ioc *resultv, void *result_desc, size_t result_count,
@@ -180,7 +180,7 @@ struct fi_ops_atomic {
 
 #ifndef FABRIC_DIRECT
 
-static inline int
+static inline ssize_t
 fi_atomic(struct fid_ep *ep,
 	  const void *buf, size_t count, void *desc,
 	  uint64_t addr, uint64_t key,
@@ -190,7 +190,7 @@ fi_atomic(struct fid_ep *ep,
 				 datatype, op, context);
 }
 
-static inline int
+static inline ssize_t
 fi_atomicto(struct fid_ep *ep,
 	    const void *buf, size_t count, void *desc,
 	    const void *dest_addr,
@@ -201,7 +201,7 @@ fi_atomicto(struct fid_ep *ep,
 				   addr, key, datatype, op, context);
 }
 
-static inline int
+static inline ssize_t
 fi_fetch_atomic(struct fid_ep *ep,
 		const void *buf, size_t count, void *desc,
 		void *result, void *result_desc,
@@ -212,7 +212,7 @@ fi_fetch_atomic(struct fid_ep *ep,
 				     addr, key, datatype, op, context);
 }
 
-static inline int
+static inline ssize_t
 fi_fetch_atomicto(struct fid_ep *ep,
 		  const void *buf, size_t count, void *desc,
 		  void *result, void *result_desc,
@@ -225,7 +225,7 @@ fi_fetch_atomicto(struct fid_ep *ep,
 					key, datatype, op, context);
 }
 
-static inline int
+static inline ssize_t
 fi_compare_atomicto(struct fid_ep *ep,
 		    const void *buf, size_t count, void *desc,
 		    const void *compare, void *compare_desc,

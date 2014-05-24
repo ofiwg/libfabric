@@ -32,67 +32,67 @@ Indicates if a provider supports a specific atomic operation
 .SH SYNOPSIS
 .B #include <rdma/fi_atomic.h>
 .HP
-.BI "int fi_atomic(struct fid_ep *" ep ","
+.BI "ssize_t fi_atomic(struct fid_ep *" ep ","
 .BI "const void * " buf ", size_t " count ", void *" desc ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
-.BI "int fi_atomicv(struct fid_ep *" ep ","
+.BI "ssize_t fi_atomicv(struct fid_ep *" ep ","
 .BI "const struct fi_ioc * " iov ", void *" desc ", size_t " count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
-.BI "int fi_atomicto(struct fid_ep *" ep ","
+.BI "ssize_t fi_atomicto(struct fid_ep *" ep ","
 .BI "const void * " buf ", size_t " count ", void *" desc ","
 .BI "const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
-.BI "int fi_atomicmsg(struct fid_ep *" ep ","
+.BI "ssize_t fi_atomicmsg(struct fid_ep *" ep ","
 .BI "const struct fi_msg_atomic * " msg ","
 .BI "uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_fetch_atomic(struct fid_ep *" ep ","
+.BI "ssize_t fi_fetch_atomic(struct fid_ep *" ep ","
 .BI "const void * " buf ", size_t " count ", void *" desc ","
 .BI "void * " result ", void *" result_desc ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
-.BI "int fi_fetch_atomicv(struct fid_ep *" ep ","
+.BI "ssize_t fi_fetch_atomicv(struct fid_ep *" ep ","
 .BI "const struct fi_ioc * " iov ", void *" desc ", size_t " count ","
 .BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
-.BI "int fi_fetch_atomicto(struct fid_ep *" ep ","
+.BI "ssize_t fi_fetch_atomicto(struct fid_ep *" ep ","
 .BI "const void * " buf ", size_t " count ", void *" desc ","
 .BI "void * " result ", void *" result_desc ","
 .BI "const void *" dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
-.BI "int fi_fetch_atomicmsg(struct fid_ep *" ep ","
+.BI "ssize_t fi_fetch_atomicmsg(struct fid_ep *" ep ","
 .BI "const struct fi_msg_atomic * " msg ","
 .BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","
 .BI "uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_compare_atomic(struct fid_ep *" ep ","
+.BI "ssize_t fi_compare_atomic(struct fid_ep *" ep ","
 .BI "const void * " buf ", size_t " count ", void *" desc ","
 .BI "const void * " compare ", void *" compare_desc ","
 .BI "void * " result ", void *" result_desc ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
-.BI "int fi_compare_atomicv(struct fid_ep *" ep ","
+.BI "ssize_t fi_compare_atomicv(struct fid_ep *" ep ","
 .BI "const struct fi_ioc * " iov ", void *" desc ", size_t " count ","
 .BI "const struct fi_ioc * " comparev ", void *" compare_desc ", size_t " compare_count ","
 .BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
-.BI "int fi_compare_atomicto(struct fid_ep *" ep ","
+.BI "ssize_t fi_compare_atomicto(struct fid_ep *" ep ","
 .BI "const void * " buf ", size_t " count ", void *" desc ","
 .BI "const void * " compare ", void *" compare_desc ","
 .BI "void * " result ", void *" result_desc ","
@@ -100,7 +100,7 @@ Indicates if a provider supports a specific atomic operation
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
-.BI "int fi_compare_atomicmsg(struct fid_ep *" ep ","
+.BI "ssize_t fi_compare_atomicmsg(struct fid_ep *" ep ","
 .BI "const struct fi_msg_atomic * " msg ","
 .BI "const struct fi_ioc * " comparev ", void *" compare_desc ", size_t " compare_count ","
 .BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","

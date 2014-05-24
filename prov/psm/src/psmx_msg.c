@@ -224,7 +224,7 @@ static ssize_t psmx_sendv(struct fid_ep *ep, const struct iovec *iov, void *desc
 	return psmx_send(ep, iov->iov_base, iov->iov_len, desc, context);
 }
 
-static size_t psmx_sendimmto(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t psmx_sendimmto(struct fid_ep *ep, const void *buf, size_t len,
 				const void *dest_addr)
 {
 	struct psmx_fid_ep *fid_ep;
@@ -235,7 +235,7 @@ static size_t psmx_sendimmto(struct fid_ep *ep, const void *buf, size_t len,
 	return _psmx_sendto(ep, buf, len, NULL, dest_addr, &fid_ep->sendimm_context, 0);
 }
 
-static size_t psmx_sendimm(struct fid_ep *ep, const void *buf, size_t len)
+static ssize_t psmx_sendimm(struct fid_ep *ep, const void *buf, size_t len)
 {
 	struct psmx_fid_ep *fid_ep;
 

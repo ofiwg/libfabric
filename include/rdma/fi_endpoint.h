@@ -121,12 +121,12 @@ struct fi_ops_msg {
 			uint64_t flags);
 	ssize_t (*send)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			void *context);
-	size_t	(*sendimm)(struct fid_ep *ep, const void *buf, size_t len);
+	ssize_t	(*sendimm)(struct fid_ep *ep, const void *buf, size_t len);
 	ssize_t (*sendv)(struct fid_ep *ep, const struct iovec *iov, void *desc,
 			size_t count, void *context);
 	ssize_t (*sendto)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			const void *dest_addr, void *context);
-	size_t	(*sendimmto)(struct fid_ep *ep, const void *buf, size_t len,
+	ssize_t	(*sendimmto)(struct fid_ep *ep, const void *buf, size_t len,
 			const void *dest_addr);
 	ssize_t (*sendmsg)(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags);
@@ -245,7 +245,7 @@ fi_send(struct fid_ep *ep, const void *buf, size_t len, void *desc, void *contex
 	return ep->msg->send(ep, buf, len, desc, context);
 }
 
-static inline size_t
+static inline ssize_t
 fi_sendimm(struct fid_ep *ep, const void *buf, size_t len)
 {
 	return ep->msg->sendimm(ep, buf, len);
@@ -265,7 +265,7 @@ fi_sendto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	return ep->msg->sendto(ep, buf, len, desc, dest_addr, context);
 }
 
-static inline size_t
+static inline ssize_t
 fi_sendimmto(struct fid_ep *ep, const void *buf, size_t len, const void *dest_addr)
 {
 	return ep->msg->sendimmto(ep, buf, len, dest_addr);

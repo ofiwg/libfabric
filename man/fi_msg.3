@@ -18,33 +18,33 @@ Initiate an operation to send a message
 .SH SYNOPSIS
 .B #include <rdma/fi_endpoint.h>
 .HP
-.BI "int fi_recv(struct fid_ep *" ep ", void * " buf ", size_t " len ","
+.BI "ssize_t fi_recv(struct fid_ep *" ep ", void * " buf ", size_t " len ","
 .BI "void *" desc ", void * " context ");"
 .HP
-.BI "int fi_recvv(struct fid_ep *" ep ", const struct iovec * " iov ", void *" desc ","
+.BI "ssize_t fi_recvv(struct fid_ep *" ep ", const struct iovec * " iov ", void *" desc ","
 .BI "size_t " count ", void * " context ");"
 .HP
-.BI "int fi_recvfrom(struct fid_ep *" ep ", void * " buf ", size_t " len ","
+.BI "ssize_t fi_recvfrom(struct fid_ep *" ep ", void * " buf ", size_t " len ","
 .BI "void *" desc ", const void *" src_addr ", void * " context ");"
 .HP
-.BI "int fi_recvmsg(struct fid_ep *" ep ", const struct fi_msg * " msg ", uint64_t " flags ");"
+.BI "ssize_t fi_recvmsg(struct fid_ep *" ep ", const struct fi_msg * " msg ", uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_send(struct fid_ep *" ep ", void * " buf ", size_t " len ","
+.BI "ssize_t fi_send(struct fid_ep *" ep ", void * " buf ", size_t " len ","
 .BI "void *" desc ", void * " context ");"
 .HP
-.BI "int fi_sendimm(struct fid_ep *" ep ", void * " buf ", size_t " len ");"
+.BI "ssize_t fi_sendimm(struct fid_ep *" ep ", void * " buf ", size_t " len ");"
 .HP
-.BI "int fi_sendv(struct fid_ep *" ep ", const void * " iov ", void *" desc ","
+.BI "ssize_t fi_sendv(struct fid_ep *" ep ", const void * " iov ", void *" desc ","
 .BI "size_t " count ", void * " context ");"
 .HP
-.BI "int fi_sendto(struct fid_ep *" ep ", void * " buf ", size_t " len ","
+.BI "ssize_t fi_sendto(struct fid_ep *" ep ", void * " buf ", size_t " len ","
 .BI "void *" mem_desc ", const void *" dest_addr ", void * " context ");"
 .HP
-.BI "int fi_sendimmto(struct fid_ep *" ep ", void * " buf ", size_t " len ","
+.BI "ssize_t fi_sendimmto(struct fid_ep *" ep ", void * " buf ", size_t " len ","
 .BI "const void *" dest_addr ");"
 .HP
-.BI "int fi_sendmsg(struct fid_ep *" ep ", const struct fi_msg * " msg ", uint64_t " flags ");"
+.BI "ssize_t fi_sendmsg(struct fid_ep *" ep ", const struct fi_msg * " msg ", uint64_t " flags ");"
 .SH ARGUMENTS
 .IP "ep"
 Fabric endpoint on which to initiate send or post receive buffer. 

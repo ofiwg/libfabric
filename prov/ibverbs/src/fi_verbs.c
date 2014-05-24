@@ -457,7 +457,7 @@ static struct fi_ops_msg ibv_msg_ep_msg_ops = {
 	.sendmsg = ibv_msg_ep_sendmsg,
 };
 
-static int
+static ssize_t
 ibv_msg_ep_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 		     void *desc, uint64_t addr, uint64_t tag, void *context)
 {
@@ -482,7 +482,7 @@ ibv_msg_ep_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
-static int
+static ssize_t
 ibv_msg_ep_rma_read(struct fid_ep *ep, void *buf, size_t len,
 		    void *desc, uint64_t addr, uint64_t tag, void *context)
 {
