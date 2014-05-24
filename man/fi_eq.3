@@ -332,7 +332,7 @@ struct fi_eq_err_entry {
 	size_t   len;         /* size of received data */
 	size_t   olen;        /* overflow length */
 	uint64_t data;        /* completion data */
-	int      err;         /* error code */
+	int      err;         /* positive error code */
 	int      prov_errno;  /* provider error code */
 	void    *prov_data;   /* provider error data */
 };
