@@ -212,25 +212,42 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 			break;
 
 		case FID_CLASS_EQ:
-			/* TODO: check ress flags for send/recv EQs */
 			eq = container_of(fids[i].fid,
 					struct psmx_fid_eq, eq.fid);
-			if (fid_ep->eq && fid_ep->eq != eq)
-				return -EEXIST;
+			if (fids[i].flags & FI_SEND) {
+				if (fid_ep->send_eq && fid_ep->send_eq != eq)
+					return -EEXIST;
+			}
+			if (fids[i].flags & FI_RECV) {
+				if (fid_ep->recv_eq && fid_ep->recv_eq != eq)
+					return -EEXIST;
+			}
 			if (fid_ep->domain && fid_ep->domain != eq->domain)
 				return -EINVAL;
-			fid_ep->eq = eq;
+			if (fids[i].flags & FI_SEND)
+				fid_ep->send_eq = eq;
+			if (fids[i].flags & FI_RECV)
+				fid_ep->recv_eq = eq;
 			fid_ep->domain = eq->domain;
 			break;
 
 		case FID_CLASS_CNTR:
 			cntr = container_of(fids[i].fid,
 					struct psmx_fid_cntr, cntr.fid);
-			if (fid_ep->cntr && fid_ep->cntr != cntr)
-				return -EEXIST;
+			if (fids[i].flags & FI_SEND) {
+				if (fid_ep->send_cntr && fid_ep->send_cntr != cntr)
+					return -EEXIST;
+			}
+			if (fids[i].flags & FI_RECV) {
+				if (fid_ep->recv_cntr && fid_ep->recv_cntr != cntr)
+					return -EEXIST;
+			}
 			if (fid_ep->domain && fid_ep->domain != cntr->domain)
 				return -EINVAL;
-			fid_ep->cntr = cntr;
+			if (fids[i].flags & FI_SEND)
+				fid_ep->send_cntr = cntr;
+			if (fids[i].flags & FI_RECV)
+				fid_ep->recv_cntr = cntr;
 			fid_ep->domain = cntr->domain;
 			break;
 
@@ -265,7 +282,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 
 static inline int psmx_ep_progress(struct psmx_fid_ep *fid_ep)
 {
-	return psmx_eq_poll_mq(fid_ep->eq, fid_ep->domain);
+	return psmx_eq_poll_mq(NULL, fid_ep->domain);
 }
 
 static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)

@@ -222,8 +222,9 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 	struct fi_context *fi_context;
 	struct psmx_fid_domain *domain;
 	struct psmx_fid_ep *tmp_ep;
+	struct psmx_fid_eq *tmp_eq;
+	struct psmx_fid_cntr *tmp_cntr;
 	struct psmx_event *event;
-	int event_flag;
 	int err;
 
 	if (eq)
@@ -240,72 +241,84 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 			fi_context = psm_status.context;
 
 			tmp_ep = PSMX_CTXT_EP(fi_context);
-			event_flag = 0;
+			tmp_eq = NULL;
+			tmp_cntr = NULL;
 
 			switch (PSMX_CTXT_TYPE(fi_context)) {
 			case PSMX_NOCOMP_SEND_CONTEXT:
 				tmp_ep->pending_sends--;
+				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_NOCOMP_RECV_CONTEXT:
+				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
 			case PSMX_NOCOMP_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
+				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_NOCOMP_READ_CONTEXT:
 				tmp_ep->pending_reads--;
+				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_SENDIMM_CONTEXT:
 				tmp_ep->pending_sends--;
+				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_WRITEIMM_CONTEXT:
 				tmp_ep->pending_writes--;
+				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_SEND_CONTEXT:
 				tmp_ep->pending_sends--;
-				event_flag = 1;
+				tmp_eq = tmp_ep->send_eq;
+				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_RECV_CONTEXT:
-				event_flag = 1;
+				tmp_eq = tmp_ep->recv_eq;
+				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
 			case PSMX_READ_CONTEXT:
 				tmp_ep->pending_reads--;
-				event_flag = 1;
+				tmp_eq = tmp_ep->send_eq;
+				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
-				event_flag = 1;
+				tmp_eq = tmp_ep->send_eq;
+				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_ATOMIC_CONTEXT:
 				tmp_ep->pending_atomics--;
-				event_flag = 1;
+				tmp_eq = tmp_ep->send_eq;
+				tmp_cntr = tmp_ep->send_cntr;
 				break;
 			}
 
-			if (tmp_ep->eq && event_flag) {
-				event = psmx_eq_create_event_from_status(tmp_ep->eq, &psm_status);
+			if (tmp_eq) {
+				event = psmx_eq_create_event_from_status(tmp_eq, &psm_status);
 				if (!event)
 					return -ENOMEM;
 
-				psmx_eq_enqueue_event(tmp_ep->eq, event);
+				psmx_eq_enqueue_event(tmp_eq, event);
 			}
 
-			if (tmp_ep->cntr) {
-				tmp_ep->cntr->counter++;
-				if (tmp_ep->cntr->wait_obj == FI_CNTR_WAIT_MUT_COND)
-					pthread_cond_signal(&tmp_ep->cntr->cond);
+			if (tmp_cntr) {
+				tmp_cntr->counter++;
+				if (tmp_cntr->wait_obj == FI_CNTR_WAIT_MUT_COND)
+					pthread_cond_signal(&tmp_cntr->cond);
 			}
 
-			if (!eq || tmp_ep->eq == eq)
+			if (!eq || tmp_eq == eq)
 				return 1;
 		}
 		else if (err == PSM_MQ_NO_COMPLETIONS) {
