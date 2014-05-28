@@ -1,4 +1,4 @@
-.TH "FI_GETINFO" 3 "2014-05-07" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_GETINFO" 3 "2014-05-27" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 .SH SYNOPSIS
@@ -163,7 +163,7 @@ Requests that the communication endpoint should attempt to queue
 inbound data that arrives before a receive buffer has been posted.  In the
 absence of this flag, any messages that arrive before a receive is
 posted are lost.
-.IP "FI_BUFFERED_SEND"
+.IP "FI_INJECT"
 If set, all outbound data buffers should be returned to user immediately after
 the call returns, even if the operation is handled asynchronously.  This may
 require that the communication interface implementation copy the data into a

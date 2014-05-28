@@ -1,4 +1,4 @@
-.TH "FI_ATOMIC" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ATOMIC" 3 "2014-05-27" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_atomic - Remote atomic functions
 .PP
@@ -401,7 +401,7 @@ hardware.
 Indicates that a completion event at the target process should be generated
 for the given operation.  The remote endpoint must be configured with
 FI_REMOTE_SIGNAL, or this flag will be ignored by the target.
-.IP "FI_BUFFERED_SEND"
+.IP "FI_INJECT"
 Indicates that the outbound non-const data buffers (buf and compare parameters)
 should be returned to user immediately after the call returns, even if the
 operation is handled asynchronously.  This may require that the underlying

@@ -1,4 +1,4 @@
-.TH "FI_ENDPOINT" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ENDPOINT" 3 "2014-05-27" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_endpoint \- Fabric endpoint operations
 .PP
@@ -281,13 +281,13 @@ endpoint.
 The following option levels and option names and parameters are defined.
 .IP "FI_OPT_ENDPOINT"
 .RS
-.IP "FI_OPT_MAX_BUFFERED_SEND - size_t"
-Defines the maximum buffered send operation (see the FI_BUFFERED_SEND
+.IP "FI_OPT_MAX_INJECTED_SEND - size_t"
+Defines the maximum buffered send operation (see the FI_INJECT
 flag) that the endpoint currently supports.  This value applies per send
 operation.
-.IP "FI_OPT_TOTAL_BUFFERED_SEND - size_t"
+.IP "FI_OPT_TOTAL_INJECTED_SEND - size_t"
 Defines the total available space allocated to buffer send operations (see
-the FI_BUFFERED_SEND flag) that the endpoint currently supports.
+the FI_INJECT flag) that the endpoint currently supports.
 .IP "FI_OPT_TOTAL_BUFFERED_RECV - size_t"
 Defines the total available space allocated to buffer received messages
 (see the FI_BUFFERED_RECV flag) that the endpoint currently supports.
@@ -299,7 +299,7 @@ single operation.
 The following flags may be set to control the operation of data transfers
 initiated on an endpoint.  See fi_getinfo for additional descriptions of
 the flags.
-.IP "FI_BUFFERED_SEND"
+.IP "FI_INJECT"
 Indicates that all outbound data buffer should be returned to the user's
 control immediately after a data transfer call returns, even if the
 operation is handled asynchronously.  This may require that the

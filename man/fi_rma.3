@@ -1,4 +1,4 @@
-.TH "FI_RMA" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_RMA" 3 "2014-05-27" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_rma - Remote memory access operations
 .PP
@@ -139,7 +139,7 @@ struct fi_msg_rma {
 .fi
 .SS "fi_inject_write"
 The write immediate call is an optimized version of fi_write.  The fi_inject_write
-function behaves as if the FI_BUFFERED_SEND transfer flag were set, and
+function behaves as if the FI_INJECT transfer flag were set, and
 FI_EVENT were not.  That is, the data buffer is available for reuse
 immediately on returning from from fi_inject_write, and no completion event will
 be generated for this write.  The completion event will be suppressed even if
@@ -179,7 +179,7 @@ hardware.
 Indicates that a completion event at the target process should be generated
 for the given operation.  The remote endpoint must be configured with
 FI_REMOTE_SIGNAL, or this flag will be ignored by the target.
-.IP "FI_BUFFERED_SEND"
+.IP "FI_INJECT"
 Applies to fi_writemsg.  Indicates that the outbound data buffer should be
 returned to user immediately after the write call returns, even if the operation
 is handled asynchronously.  This may require that the underlying provider

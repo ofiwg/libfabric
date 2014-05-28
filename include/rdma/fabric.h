@@ -78,7 +78,7 @@ enum {
 
 #define FI_BLOCK		(1ULL << 9)
 #define FI_BUFFERED_RECV	(1ULL << 10)
-#define FI_BUFFERED_SEND	(1ULL << 11)
+#define FI_INJECT		(1ULL << 11)
 #define FI_MULTI_RECV		(1ULL << 12)
 
 #define FI_EXCL			(1ULL << 16)
