@@ -200,8 +200,9 @@ struct fi_eq_err_entry {
 	};
 	uint64_t		flags;
 	size_t			len;
-	size_t			olen;
 	uint64_t		data;
+	uint64_t		tag;
+	size_t			olen;
 	int			err;
 	int			prov_errno;
 	/* prov_data is available until the next time the EQ is read */

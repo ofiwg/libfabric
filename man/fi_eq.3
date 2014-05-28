@@ -330,8 +330,9 @@ struct fi_eq_err_entry {
 	};
 	uint64_t flags;       /* completion flags */
 	size_t   len;         /* size of received data */
-	size_t   olen;        /* overflow length */
 	uint64_t data;        /* completion data */
+	uint64_t tag;         /* message tag */
+	size_t   olen;        /* overflow length */
 	int      err;         /* positive error code */
 	int      prov_errno;  /* provider error code */
 	void    *prov_data;   /* provider error data */
