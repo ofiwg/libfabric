@@ -165,6 +165,22 @@ operations.
 .IP "FI_RECV"  
 Directs the notification of inbound data transfers to the
 specified event queue.  This includes received messages.
+.IP "FI_EVENT"
+If FI_EVENT is specified, the indicated data transfer operations
+won't generate entries for successful completions in the
+event queue unless FI_EVENT is set for that specific operation.
+FI_EVENT must be OR'ed with FI_SEND and/or FI_RECV flags.
+.PP
+When set the user must determine when a request that does NOT have
+FI_EVENT set has completed indirectly, usually based on the completion
+of a subsequent operation.  Use of this flag may improve performance by
+allowing the provider to avoid writing a completion entry for every operation.
+.PP
+The use of FI_EVENT is often paired with the call fi_sync.  FI_EVENT
+allows the user to suppress completions from being generated.  In order
+for the application to ensure that all previous operations have
+completed, the application may call fi_sync.  The successful completion
+of fi_sync indicates that all prior operations have completed successfully.
 .RE
 .PP
 An endpoint may also, or instead, be bound to a fabric counter.
@@ -296,19 +312,6 @@ If set, the communication interface implementation should attempt to queue inbou
 data that arrives before a receive buffer has been posted.  In the
 absence of this flag, any messages that arrive before a receive is
 posted are lost.
-.IP "FI_EVENT"
-Indicates that the endpoint should, by default, only generate completion
-entries for data transfer operations that have the FI_EVENT flag set.
-When set the user must determine when a request that does NOT have
-FI_EVENT set has completed indirectly, usually based on the completion
-of a subsequent operation.  Use of this flag may improve performance by
-allowing the provider to avoid writing a completion entry for every operation.
-.P
-The use of FI_EVENT is often paired with the call fi_sync.  FI_EVENT
-allows the user to suppress completions from being generated.  In order
-for the application to ensure that all previous operations have
-completed, the application may call fi_sync.  The successful completion
-of fi_sync indicates that all prior operations have completed successfully.
 .IP "FI_REMOTE_COMPLETE"
 Indicates that local completions should not be generated
 until the operation has completed on the remote side.  When set, if the
