@@ -352,6 +352,18 @@ errno is returned. Fabric errno values are defined in
 .SH "NOTES"
 Users should call fi_close to release all resources allocated to the fabric
 endpoint.
+.PP
+Endpoints allocated with the domain capability FI_CONTEXT set must
+typically provide struct fi_context as their per operation context
+parameter.  (See fi_getinfo.3 for details.)  However, when FI_EVENT is
+enabled to suppress completion events, and an operation is initiated without
+FI_EVENT flag set, then the context parameter is ignored.  An
+application does not need to pass in a valid struct fi_context into
+such data transfers.
+.PP
+Operations that complete in error that are not associated with valid
+operational context will use the endpoint context in any error reporting
+structures.
 .SH "RETURN VALUES"
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.
