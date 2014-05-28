@@ -314,7 +314,9 @@ opaque to the application.  For performance reasons, this structure must be
 allocated by the user, but may be used by the fabric provider to track the
 operation.  Typically, users embed struct fi_context within their own
 context structure.  The struct fi_context must remain valid until the
-corresponding operation completes or is successfully canceled.  Users should
+corresponding operation completes or is successfully canceled.  As such,
+fi_context should NOT be allocated on the stack.  Doing so is likely to
+result in stack corruption that will be difficult to debug.  Users should
 not update or interpret the fields in this structure.  The structure is
 specified in rdma/fabric.h.
 .IP "FI_LOCAL_MR"
