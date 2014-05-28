@@ -183,7 +183,7 @@ static struct fi_ops_cntr psmx_cntr_ops = {
 	.wait = psmx_cntr_wait,
 };
 
-int psmx_cntr_alloc(struct fid_domain *domain, struct fi_cntr_attr *attr,
+int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct fid_cntr **cntr, void *context)
 {
 	struct psmx_fid_domain *fid_domain;

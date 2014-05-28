@@ -191,8 +191,8 @@ int	psmx_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 		     struct fid_eq **eq, void *context);
 int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		     struct fid_av **av, void *context);
-int	psmx_cntr_alloc(struct fid_domain *domain, struct fi_cntr_attr *attr,
-			struct fid_cntr **cntr, void *context);
+int	psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+		       struct fid_cntr **cntr, void *context);
 
 void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername, psm_uuid_t uuid);

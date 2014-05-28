@@ -120,7 +120,7 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.eq_open = psmx_eq_open,
 	.endpoint = psmx_ep_open,
 	.if_open = psmx_if_open,
-	.cntr_alloc = psmx_cntr_alloc,
+	.cntr_open = psmx_cntr_open,
 };
 
 int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,

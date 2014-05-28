@@ -1,8 +1,8 @@
-.TH "FI_CNTR" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_CNTR" 3 "2014-05-27" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_cntr \- Completion and event counter operations
 .PP
-fi_cntr_alloc / fi_cntr_free
+fi_cntr_open / fi_cntr_close
 .RS
 Allocate/free a counter
 .RE
@@ -29,10 +29,10 @@ Wait for a counter to be greater or equal to a threshold value
 .SH SYNOPSIS
 .B #include <rdma/fi_domain.h>
 .HP
-.BI "int fi_cntr_alloc(struct fid_domain *" domain ", struct fi_cntr_attr *" attr ", "
+.BI "int fi_cntr_open(struct fid_domain *" domain ", struct fi_cntr_attr *" attr ", "
 .BI "struct fid_cntr **" cntr ", void * " context ");"
 .HP
-.BI "int fi_cntr_destroy(struct fid_cntr *" cntr ");"
+.BI "int fi_cntr_close(struct fid_cntr *" cntr ");"
 .PP
 .HP
 .BI "uint64_t fi_cntr_read(struct fid_cntr *" cntr ");"
@@ -57,8 +57,8 @@ Value to increment or set counter
 .IP "threshold"
 Value to compare counter against
 .SH "DESCRIPTION"
-.SS "fi_cntr_alloc"
-fi_cntr_alloc allocates a new fabric counter.  The properties and behavior of
+.SS "fi_cntr_open"
+fi_cntr_open allocates a new fabric counter.  The properties and behavior of
 the counter are defined by struct fi_cntr_attr.
 .PP
 .nf
@@ -104,8 +104,8 @@ flag will automatically be used when binding the counter to an endpoint.
 Specifies that the counter will be used to count complete receive operations.
 This flag will automatically be used when binding the counter to an endpoint.
 .RE
-.SS "fi_cntr_free"
-The fi_cntr_free call releases all resources associated with a counter.
+.SS "fi_cntr_close"
+The fi_cntr_close call releases all resources associated with a counter.
 The counter must not be bound to any other resources prior to being freed.
 .SS "fi_cntr_control"
 The fi_cntr_control call is used to access provider or implementation specific

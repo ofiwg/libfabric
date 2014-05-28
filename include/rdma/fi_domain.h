@@ -334,7 +334,7 @@ struct fi_ops_domain {
 			struct fid_ep **ep, void *context);
 	int	(*if_open)(struct fid_domain *domain, const char *name,
 			uint64_t flags, struct fid **fif, void *context);
-	int	(*cntr_alloc)(struct fid_domain *domain, struct fi_cntr_attr *attr,
+	int	(*cntr_open)(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct fid_cntr **cntr, void *context);
 };
 
@@ -412,10 +412,10 @@ fi_eq_strerror(struct fid_eq *eq, int prov_errno, void *prov_data,
 }
 
 static inline int
-fi_cntr_alloc(struct fid_domain *domain, struct fi_cntr_attr *attr,
+fi_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	      struct fid_cntr **cntr, void *context)
 {
-	return domain->ops->cntr_alloc(domain, attr, cntr, context);
+	return domain->ops->cntr_open(domain, attr, cntr, context);
 }
 
 static inline uint64_t fi_cntr_read(struct fid_cntr *cntr)
