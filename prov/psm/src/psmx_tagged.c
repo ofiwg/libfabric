@@ -49,7 +49,7 @@ static inline ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
 	psm_tag = tag & (~fid_ep->domain->reserved_tag_bits);
 	psm_tagsel = (~ignore) | fid_ep->domain->reserved_tag_bits;
 
-	if ((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT) && !context) {
+	if (fid_ep->recv_eq_event_flag && !(flags & FI_EVENT) && !context) {
 		fi_context = &fid_ep->nocomp_recv_context;
 	}
 	else {
@@ -152,7 +152,7 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 			return psmx_errno(err);
 	}
 
-	if ((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT) && !context) {
+	if (fid_ep->send_eq_event_flag && !(flags & FI_EVENT) && !context) {
 		fi_context = &fid_ep->nocomp_send_context;
 	}
 	else {

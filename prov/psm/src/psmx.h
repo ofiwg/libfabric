@@ -140,11 +140,15 @@ struct psmx_fid_av {
 struct psmx_fid_ep {
 	struct fid_ep		ep;
 	struct psmx_fid_domain	*domain;
+	struct psmx_fid_av	*av;
 	struct psmx_fid_eq	*send_eq;
 	struct psmx_fid_eq	*recv_eq;
 	struct psmx_fid_cntr	*send_cntr;
 	struct psmx_fid_cntr	*recv_cntr;
-	struct psmx_fid_av	*av;
+	int			send_eq_event_flag:1;
+	int			recv_eq_event_flag:1;
+	int			send_cntr_event_flag:1;
+	int			recv_cntr_event_flag:1;
 	uint64_t		flags;
 	int			connected;
 	psm_epid_t		peer_psm_epid;

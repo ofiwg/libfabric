@@ -224,10 +224,16 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 			}
 			if (fid_ep->domain && fid_ep->domain != eq->domain)
 				return -EINVAL;
-			if (fids[i].flags & FI_SEND)
+			if (fids[i].flags & FI_SEND) {
 				fid_ep->send_eq = eq;
-			if (fids[i].flags & FI_RECV)
+				if (fids[i].flags & FI_EVENT)
+					fid_ep->send_eq_event_flag = 1;
+			}
+			if (fids[i].flags & FI_RECV) {
 				fid_ep->recv_eq = eq;
+				if (fids[i].flags & FI_EVENT)
+					fid_ep->recv_eq_event_flag = 1;
+			}
 			fid_ep->domain = eq->domain;
 			break;
 
@@ -244,10 +250,16 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 			}
 			if (fid_ep->domain && fid_ep->domain != cntr->domain)
 				return -EINVAL;
-			if (fids[i].flags & FI_SEND)
+			if (fids[i].flags & FI_SEND) {
 				fid_ep->send_cntr = cntr;
-			if (fids[i].flags & FI_RECV)
+				if (fids[i].flags & FI_EVENT)
+					fid_ep->send_cntr_event_flag = 1;
+			}
+			if (fids[i].flags & FI_RECV){
 				fid_ep->recv_cntr = cntr;
+				if (fids[i].flags & FI_EVENT)
+					fid_ep->recv_cntr_event_flag = 1;
+			}
 			fid_ep->domain = cntr->domain;
 			break;
 

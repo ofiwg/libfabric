@@ -247,31 +247,37 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 			switch (PSMX_CTXT_TYPE(fi_context)) {
 			case PSMX_NOCOMP_SEND_CONTEXT:
 				tmp_ep->pending_sends--;
-				tmp_cntr = tmp_ep->send_cntr;
+				if (!tmp_ep->send_cntr_event_flag)
+					tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_NOCOMP_RECV_CONTEXT:
-				tmp_cntr = tmp_ep->recv_cntr;
+				if (!tmp_ep->recv_cntr_event_flag)
+					tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
 			case PSMX_NOCOMP_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
-				tmp_cntr = tmp_ep->send_cntr;
+				if (!tmp_ep->send_cntr_event_flag)
+					tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_NOCOMP_READ_CONTEXT:
 				tmp_ep->pending_reads--;
-				tmp_cntr = tmp_ep->send_cntr;
+				if (!tmp_ep->send_cntr_event_flag)
+					tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_SENDIMM_CONTEXT:
 				tmp_ep->pending_sends--;
-				tmp_cntr = tmp_ep->send_cntr;
+				if (!tmp_ep->send_cntr_event_flag)
+					tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_WRITEIMM_CONTEXT:
 				tmp_ep->pending_writes--;
-				tmp_cntr = tmp_ep->send_cntr;
+				if (!tmp_ep->send_cntr_event_flag)
+					tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_SEND_CONTEXT:

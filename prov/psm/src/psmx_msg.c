@@ -57,7 +57,7 @@ static inline ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 		psm_tagsel = PSMX_MSG_BIT;
 	}
 
-	if ((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT) && !context) {
+	if (fid_ep->recv_eq_event_flag && !(flags & FI_EVENT) && !context) {
 		fi_context = &fid_ep->nocomp_recv_context;
 	}
 	else {
@@ -153,7 +153,7 @@ static inline ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t le
 			return psmx_errno(err);
 	}
 
-	if ((fid_ep->flags & FI_EVENT) && !(flags & FI_EVENT) && !context) {
+	if (fid_ep->send_eq_event_flag && !(flags & FI_EVENT) && !context) {
 		fi_context = &fid_ep->nocomp_send_context;
 	}
 	else {
