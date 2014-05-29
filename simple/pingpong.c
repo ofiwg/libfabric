@@ -241,7 +241,7 @@ out:
 
 static void free_lres(void)
 {
-	fi_close( &lcm->fid );
+	fi_close(&lcm->fid);
 }
 
 static int alloc_lres(struct fi_info *fi)
@@ -265,8 +265,8 @@ static int alloc_lres(struct fi_info *fi)
 static void free_ep_res(void)
 {
 	fi_mr_unreg(mr);
-	fi_close( &rcq->fid );
-	fi_close( &scq->fid );
+	fi_close(&rcq->fid);
+	fi_close(&scq->fid);
 	free(buf);
 }
 
@@ -309,9 +309,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	return 0;
 
 err3:
-	fi_close( &rcq->fid );
+	fi_close(&rcq->fid);
 err2:
-	fi_close( &scq->fid );
+	fi_close(&scq->fid);
 err1:
 	free(buf);
 	return ret;
@@ -393,9 +393,9 @@ static int server_listen(void)
 err3:
 	free_lres();
 err2:
-	fi_close( &lep->fid );
+	fi_close(&lep->fid);
 err1:
-	fi_close( &fab->fid );
+	fi_close(&fab->fid);
 err0:
 	fi_freeinfo(fi);
 	return ret;
@@ -451,7 +451,7 @@ static int server_connect(void)
 err3:
 	free_ep_res();
 err2:
-	fi_close( &ep->fid );
+	fi_close(&ep->fid);
 err1:
 	fi_freeinfo(entry.info);
 	return ret;
@@ -474,6 +474,7 @@ static int client_connect(void)
 		printf("fi_getinfo %s\n", strerror(-ret));
 		goto err0;
 	}
+
 	ret = fi_fabric(fi->fabric_name, 0, &fab, NULL);
 	if (ret) {
 		printf("fi_fabric %s\n", fi_strerror(-ret));
@@ -516,9 +517,9 @@ err5:
 err4:
 	fi_close(&ep->fid);
 err3:
-	fi_close( &dom->fid );
+	fi_close(&dom->fid);
 err2:
-	fi_close( &fab->fid );
+	fi_close(&fab->fid);
 err1:
 	fi_freeinfo(fi);
 err0:
@@ -558,13 +559,14 @@ static int run(void)
 
 	while (credits < max_credits)
 		poll_all_sends();
+
 	fi_shutdown(ep, 0);
-	fi_close( &ep->fid );
+	fi_close(&ep->fid);
 	free_ep_res();
 	if (!dst_addr)
 		free_lres();
-	fi_close( &dom->fid );
-	fi_close( &fab->fid );
+	fi_close(&dom->fid);
+	fi_close(&fab->fid);
 	return ret;
 }
 
