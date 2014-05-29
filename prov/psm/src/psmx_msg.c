@@ -66,8 +66,28 @@ static inline ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 
 		fi_context = context;
 		user_fi_context = 1;
-		PSMX_CTXT_TYPE(fi_context) = PSMX_RECV_CONTEXT;
-		PSMX_CTXT_USER(fi_context) = buf;
+		if (flags & FI_MULTI_RECV) {
+			struct psmx_multi_recv *req;
+
+			req = calloc(1, sizeof(*req));
+			if (!req)
+				return -ENOMEM;
+
+			req->tag = psm_tag;
+			req->tagsel = psm_tagsel;
+			req->flag = recv_flag;
+			req->buf = buf;
+			req->len = len;
+			req->offset = 0;
+			req->min_buf_size = 0; /* FIXME: user controllable */
+			req->context = fi_context; 
+			PSMX_CTXT_TYPE(fi_context) = PSMX_MULTI_RECV_CONTEXT;
+			PSMX_CTXT_USER(fi_context) = req;
+		}
+		else {
+			PSMX_CTXT_TYPE(fi_context) = PSMX_RECV_CONTEXT;
+			PSMX_CTXT_USER(fi_context) = buf;
+		}
 		PSMX_CTXT_EP(fi_context) = fid_ep;
 	}
 

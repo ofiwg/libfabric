@@ -125,6 +125,7 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 				psm_mq_status_t *psm_status)
 {
 	struct psmx_event *event;
+	struct psmx_multi_recv *req;
 	struct fi_context *fi_context = psm_status->context;
 	void *op_context, *buf;
 
@@ -139,6 +140,11 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 	case PSMX_RECV_CONTEXT:
 		op_context = fi_context;
 		buf = PSMX_CTXT_USER(fi_context);
+		break;
+	case PSMX_MULTI_RECV_CONTEXT:
+		op_context = fi_context;
+		req = PSMX_CTXT_USER(fi_context);
+		buf = req->buf + req->offset;
 		break;
 	default:
 		op_context = PSMX_CTXT_USER(fi_context);
@@ -287,6 +293,7 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 				break;
 
 			case PSMX_RECV_CONTEXT:
+			case PSMX_MULTI_RECV_CONTEXT:
 				tmp_eq = tmp_ep->recv_eq;
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
@@ -322,6 +329,28 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 				tmp_cntr->counter++;
 				if (tmp_cntr->wait_obj == FI_CNTR_WAIT_MUT_COND)
 					pthread_cond_signal(&tmp_cntr->cond);
+			}
+
+			if (PSMX_CTXT_TYPE(fi_context) == PSMX_MULTI_RECV_CONTEXT) {
+				struct psmx_multi_recv *req;
+				psm_mq_req_t psm_req;
+
+				req = PSMX_CTXT_USER(fi_context);
+				req->offset += psm_status.nbytes;
+				if (req->offset + req->min_buf_size < req->len) {
+					err = psm_mq_irecv(tmp_ep->domain->psm_mq,
+							   req->tag, req->tagsel, req->flag,
+							   req->buf + req->offset, 
+							   req->len - req->offset,
+							   (void *)fi_context, &psm_req);
+					if (err != PSM_OK)
+						return psmx_errno(err);
+
+					PSMX_CTXT_REQ(fi_context) = psm_req;
+				}
+				else {
+					/* FIXME: generate event */
+				}
 			}
 
 			if (!eq || tmp_eq == eq)

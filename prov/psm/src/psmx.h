@@ -63,6 +63,7 @@ enum psmx_context_type {
 	PSMX_NOCOMP_READ_CONTEXT,
 	PSMX_SEND_CONTEXT,
 	PSMX_RECV_CONTEXT,
+	PSMX_MULTI_RECV_CONTEXT,
 	PSMX_WRITE_CONTEXT,
 	PSMX_READ_CONTEXT,
 	PSMX_SENDIMM_CONTEXT,
@@ -74,6 +75,17 @@ enum psmx_context_type {
 #define PSMX_CTXT_TYPE(fi_context)	(*(int *)&(fi_context)->internal[1])
 #define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX_CTXT_EP(fi_context)	((fi_context)->internal[3])
+
+struct psmx_multi_recv {
+	uint64_t	tag;
+	uint64_t	tagsel;
+	void		*buf;
+	size_t		len;
+	size_t		offset;
+	int		min_buf_size;
+	int		flag;
+	void		*context;
+};
 
 struct psmx_fid_domain {
 	struct fid_domain	domain;
