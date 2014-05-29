@@ -1190,7 +1190,7 @@ ibv_eq_comp_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 	if (!_eq)
 		return -ENOMEM;
 
-	_eq->eq.domain = container_of(eq, struct ibv_domain, domain_fid);
+	_eq->eq.domain = container_of(domain, struct ibv_domain, domain_fid);
 
 	switch (attr->wait_obj) {
 	case FI_EQ_WAIT_FD:
