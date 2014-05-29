@@ -214,7 +214,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 		case FID_CLASS_EQ:
 			eq = container_of(fids[i].fid,
 					struct psmx_fid_eq, eq.fid);
-			if (fids[i].flags & FI_SEND) {
+			if (fids[i].flags & (FI_SEND | FI_READ | FI_WRITE)) {
 				if (fid_ep->send_eq && fid_ep->send_eq != eq)
 					return -EEXIST;
 			}
@@ -224,7 +224,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 			}
 			if (fid_ep->domain && fid_ep->domain != eq->domain)
 				return -EINVAL;
-			if (fids[i].flags & FI_SEND) {
+			if (fids[i].flags & (FI_SEND | FI_READ | FI_WRITE)) {
 				fid_ep->send_eq = eq;
 				if (fids[i].flags & FI_EVENT)
 					fid_ep->send_eq_event_flag = 1;
@@ -240,7 +240,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 		case FID_CLASS_CNTR:
 			cntr = container_of(fids[i].fid,
 					struct psmx_fid_cntr, cntr.fid);
-			if (fids[i].flags & FI_SEND) {
+			if (fids[i].flags & (FI_SEND | FI_READ | FI_WRITE)) {
 				if (fid_ep->send_cntr && fid_ep->send_cntr != cntr)
 					return -EEXIST;
 			}
@@ -250,7 +250,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 			}
 			if (fid_ep->domain && fid_ep->domain != cntr->domain)
 				return -EINVAL;
-			if (fids[i].flags & FI_SEND) {
+			if (fids[i].flags & (FI_SEND | FI_READ | FI_WRITE)) {
 				fid_ep->send_cntr = cntr;
 				if (fids[i].flags & FI_EVENT)
 					fid_ep->send_cntr_event_flag = 1;
