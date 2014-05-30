@@ -46,6 +46,12 @@ static inline ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
 
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
+	if (tag & fid_ep->domain->reserved_tag_bits) {
+		fprintf(stderr, "%s: warning: using reserved tag bits."
+			"tag=%lx. reserved_bits=%lx.\n", __func__, tag,
+			fid_ep->domain->reserved_tag_bits);
+	}
+
 	psm_tag = tag & (~fid_ep->domain->reserved_tag_bits);
 	psm_tagsel = (~ignore) | fid_ep->domain->reserved_tag_bits;
 
@@ -139,6 +145,12 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 	int err;
 
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+
+	if (tag & fid_ep->domain->reserved_tag_bits) {
+		fprintf(stderr, "%s: warning: using reserved tag bits."
+			"tag=%lx. reserved_bits=%lx.\n", __func__, tag,
+			fid_ep->domain->reserved_tag_bits);
+	}
 
 	psm_epaddr = (psm_epaddr_t) dest_addr;
 	psm_tag = tag & (~fid_ep->domain->reserved_tag_bits);
@@ -264,6 +276,12 @@ static ssize_t psmx_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ign
 	int err;
 
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+
+	if ((*tag) & fid_ep->domain->reserved_tag_bits) {
+		fprintf(stderr, "%s: warning: using reserved tag bits."
+			"tag=%lx. reserved_bits=%lx.\n", __func__, *tag,
+			fid_ep->domain->reserved_tag_bits);
+	}
 
 	psm_tag = *tag & (~fid_ep->domain->reserved_tag_bits);
 	psm_tagsel = (~ignore) | fid_ep->domain->reserved_tag_bits;
