@@ -274,13 +274,13 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 					tmp_cntr = tmp_ep->send_cntr;
 				break;
 
-			case PSMX_SENDIMM_CONTEXT:
+			case PSMX_INJECT_CONTEXT:
 				tmp_ep->pending_sends--;
 				if (!tmp_ep->send_cntr_event_flag)
 					tmp_cntr = tmp_ep->send_cntr;
 				break;
 
-			case PSMX_WRITEIMM_CONTEXT:
+			case PSMX_INJECT_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
 				if (!tmp_ep->send_cntr_event_flag)
 					tmp_cntr = tmp_ep->send_cntr;

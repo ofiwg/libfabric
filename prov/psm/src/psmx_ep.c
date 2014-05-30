@@ -396,9 +396,9 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	PSMX_CTXT_EP(&fid_ep->nocomp_send_context) = fid_ep;
 	PSMX_CTXT_TYPE(&fid_ep->nocomp_recv_context) = PSMX_NOCOMP_RECV_CONTEXT;
 	PSMX_CTXT_EP(&fid_ep->nocomp_recv_context) = fid_ep;
-	PSMX_CTXT_TYPE(&fid_ep->sendimm_context) = PSMX_SENDIMM_CONTEXT;
+	PSMX_CTXT_TYPE(&fid_ep->sendimm_context) = PSMX_INJECT_CONTEXT;
 	PSMX_CTXT_EP(&fid_ep->sendimm_context) = fid_ep;
-	PSMX_CTXT_TYPE(&fid_ep->writeimm_context) = PSMX_SENDIMM_CONTEXT;
+	PSMX_CTXT_TYPE(&fid_ep->writeimm_context) = PSMX_INJECT_WRITE_CONTEXT;
 	PSMX_CTXT_EP(&fid_ep->writeimm_context) = fid_ep;
 
 	if (info) {
