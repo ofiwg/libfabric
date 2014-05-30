@@ -346,7 +346,7 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 
 				req = PSMX_CTXT_USER(fi_context);
 				req->offset += psm_status.nbytes;
-				if (req->offset + req->min_buf_size < req->len) {
+				if (req->offset + req->min_buf_size <= req->len) {
 					err = psm_mq_irecv(tmp_ep->domain->psm_mq,
 							   req->tag, req->tagsel, req->flag,
 							   req->buf + req->offset, 
@@ -358,7 +358,24 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 					PSMX_CTXT_REQ(fi_context) = psm_req;
 				}
 				else {
-					/* FIXME: generate event */
+					if (tmp_eq) {
+						event = psmx_eq_create_event(
+								tmp_eq,
+								req->context,
+								req->buf,
+								FI_MULTI_RECV,
+								req->len,
+								req->len - req->offset, /* data */
+								0,	/* tag */
+								0,	/* olen */
+								0);	/* err */
+						if (!event)
+							return -ENOMEM;
+
+						psmx_eq_enqueue_event(tmp_eq, event);
+					}
+
+					free(req);
 				}
 			}
 
