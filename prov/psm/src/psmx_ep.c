@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -402,8 +402,8 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	PSMX_CTXT_EP(&fid_ep->writeimm_context) = fid_ep;
 
 	if (info) {
-		fid_ep->flags = info->flags;
-		if (info->protocol_cap & FI_PROTO_CAP_MSG) {
+		fid_ep->flags = info->op_flags;
+		if (info->ep_cap & FI_MSG) {
 			fid_ep->ep.msg = &psmx_msg_ops;
 		}
 	}

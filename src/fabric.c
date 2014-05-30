@@ -366,7 +366,7 @@ __fi_eq_cm_getinfo(struct __fid_fabric *fab, struct rdma_cm_event *event)
 	} else {
 		fi->protocol = FI_PROTO_IB_RC;
 	}
-	fi->protocol_cap = FI_PROTO_CAP_MSG | FI_PROTO_CAP_RMA;
+	fi->ep_cap = FI_MSG | FI_RMA;
 
 	fi->src_addrlen = fi_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!(fi->src_addr = malloc(fi->src_addrlen)))

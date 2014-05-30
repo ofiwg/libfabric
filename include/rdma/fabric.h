@@ -69,24 +69,22 @@ enum {
  * Flags
  * The 64-bit flag field is divided as follows:
  * bits		use
- *  0 -  3	operation specific (used for a single call)
- *  4 -  7	reserved
- *  8 - 55	common (usable with multiple operations)
+ *  0 -  9	operation specific (used for a single call)
+ * 10 - 55	common (usable with multiple operations)
  * 56 - 59	reserved
  * 60 - 63	provider-domain specific
  */
 
-#define FI_BLOCK		(1ULL << 9)
-#define FI_BUFFERED_RECV	(1ULL << 10)
+#define FI_BLOCK		(1ULL << 10)
 #define FI_INJECT		(1ULL << 11)
 #define FI_MULTI_RECV		(1ULL << 12)
 
-#define FI_READ			(1ULL << 17)
-#define FI_WRITE		(1ULL << 18)
-#define FI_RECV			(1ULL << 19)
-#define FI_SEND			(1ULL << 20)
-#define FI_REMOTE_READ		(1ULL << 21)
-#define FI_REMOTE_WRITE		(1ULL << 22)
+#define FI_READ			(1ULL << 16)
+#define FI_WRITE		(1ULL << 17)
+#define FI_RECV			(1ULL << 18)
+#define FI_SEND			(1ULL << 19)
+#define FI_REMOTE_READ		(1ULL << 20)
+#define FI_REMOTE_WRITE		(1ULL << 21)
 
 #define FI_IMM			(1ULL << 24)
 #define FI_EVENT		(1ULL << 25)
@@ -134,10 +132,10 @@ enum fi_threading {
 struct fi_info {
 	struct fi_info		*next;
 	size_t			size;
-	uint64_t		flags;
 	uint64_t		type;
 	uint64_t		protocol;
-	uint64_t		protocol_cap;
+	uint64_t		ep_cap;
+	uint64_t		op_flags;
 	uint64_t		domain_cap;
 	enum fi_addr_format	addr_format;
 	enum fi_addr_format	info_addr_format;
@@ -207,7 +205,6 @@ struct fid {
 	struct fi_ops		*ops;
 };
 
-#define FI_PASSIVE		(1ULL << 0)
 #define FI_NUMERICHOST		(1ULL << 1)
 
 int fi_getinfo(const char *node, const char *service, struct fi_info *hints,

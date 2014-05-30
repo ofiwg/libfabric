@@ -124,8 +124,7 @@ static int ibv_check_hints(struct fi_info *hints)
 		return -FI_ENODATA;
 	}
 
-	if ((hints->protocol_cap & (FI_PROTO_CAP_MSG | FI_PROTO_CAP_RMA)) !=
-	    hints->protocol_cap)
+	if ((hints->ep_cap & (FI_MSG | FI_RMA)) != hints->ep_cap)
 		return -FI_ENODATA;
 
 	if (hints->fabric_name && !strcmp(hints->fabric_name, "RDMA"))
@@ -140,15 +139,15 @@ static int ibv_check_hints(struct fi_info *hints)
 static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
 {
 	memset(rai, 0, sizeof *rai);
-	if (fi->flags & FI_PASSIVE)
+	if (fi->ep_cap & FI_PASSIVE)
 		rai->ai_flags = RAI_PASSIVE;
-	if (fi->flags & FI_NUMERICHOST)
+	if (fi->op_flags & FI_NUMERICHOST)
 		rai->ai_flags |= RAI_NUMERICHOST;
 //	if (fi->flags & FI_FAMILY)
 //		rai->ai_flags |= RAI_FAMILY;
 
 //	rai->ai_family = fi->sa_family;
-	if (fi->type == FID_MSG || fi->protocol_cap & FI_PROTO_CAP_RMA ||
+	if (fi->type == FID_MSG || fi->ep_cap & FI_RMA ||
 	    fi->protocol == FI_PROTO_IB_RC || fi->protocol == FI_PROTO_IWARP) {
 		rai->ai_qp_type = IBV_QPT_RC;
 		rai->ai_port_space = RDMA_PS_TCP;
@@ -177,16 +176,16 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
  {
  	memset(fi, 0, sizeof *fi);
  	if (rai->ai_flags & RAI_PASSIVE)
- 		fi->flags = RAI_PASSIVE;
+ 		fi->ep_cap = FI_PASSIVE;
 
  //	fi->sa_family = rai->ai_family;
 	if (rai->ai_qp_type == IBV_QPT_RC || rai->ai_port_space == RDMA_PS_TCP) {
-		fi->protocol_cap = FI_PROTO_CAP_MSG | FI_PROTO_CAP_RMA;
+		fi->ep_cap = FI_MSG | FI_RMA;
 		fi->type = FID_MSG;
 	} else if (rai->ai_qp_type == IBV_QPT_UD ||
 		   rai->ai_port_space == RDMA_PS_UDP) {
 		fi->protocol = FI_PROTO_IB_UD;
-		fi->protocol_cap = FI_PROTO_CAP_MSG;
+		fi->ep_cap = FI_MSG;
 		fi->type = FID_DGRAM;
 	}
 
@@ -850,7 +849,7 @@ static struct fi_info * ibv_eq_cm_getinfo(struct rdma_cm_event *event)
 
 	fi->size = sizeof *fi;
 	fi->type = FID_MSG;
-	fi->protocol_cap  = FI_PROTO_CAP_MSG | FI_PROTO_CAP_RMA;
+	fi->ep_cap  = FI_MSG | FI_RMA;
 	if (event->id->verbs->device->transport_type == IBV_TRANSPORT_IWARP) {
 		fi->protocol = FI_PROTO_IWARP;
 	} else {

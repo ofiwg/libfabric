@@ -42,10 +42,10 @@ by this call.
 struct fi_info {
 	struct fi_info     *next;
 	size_t              size;
-	uint64_t            flags;
 	uint64_t            type;
 	uint64_t            protocol;
-	uint64_t            protocol_cap;
+	uint64_t            ep_cap;
+	uint64_t            op_flags;
 	uint64_t            domain_cap;
 	enum fi_addr_format addr_format;
 	enum fi_addr_format info_addr_format;
@@ -70,11 +70,7 @@ if no more structures exist.
 Size of the fi_info structure, used for compatibility.  Callers should specify
 the size of any fi_info structure passed in as hints.  The size set on any fi_info
 structures returned from fi_getinfo indicates the size that was interpreted by
-the providers. 
-.IP "flags"
-Hint flags that control the operation.  Supported flags are listed in the 
-.B flags
-section below.
+the providers.
 .IP "type"
 If specified, indicates the type of fabric interface communication desired.
 Supported types are listed in the
@@ -85,10 +81,15 @@ If specified, indicates the desired communication protocol. Supported protocols
 are listed in the
 .B "Protocols"
 section below.
-.IP "protocol_cap"
-If specified, indicates the desired communication protocol capabilities. Supported
+.IP "ep_cap"
+If specified, indicates the desired endpoint communication capabilities. Supported
 capabilities are listed in the
-.B "Protocol capabilities"
+.B "Endpoint capabilities"
+section below.
+.IP "op_flags"
+Flags that control the operation of endpoints and other objects opened
+using the returned fi_info structure.  Supported op_flags are listed in the 
+.B "Op flags"
 section below.
 .IP "domain_cap"
 If specified, indicates the desired domain capabilities.  Supported capabilities
@@ -148,29 +149,76 @@ is specified).
 Any additional data about communication interface being requested.  Data is
 provider specific.  It is primarily used as output from fi_getinfo, to be
 provided as input into fi_domain or fi_endpoint.
-.SH "FLAGS"
-The following flags are used to control the operation of fi_getinfo.  In
-additional, the flags may also indicate or restrict the required capabilities
-of an endpoint associated with the fi_info structure.
+.SH "ENDPOINT CAPABILITIES"
+Endpoint capabilities are obtained by OR-ing the following flags together.
+If endpoint capabilities in the hint parameter are set to 0, the underlying
+provider will return the set of capabilities which are supported.  Otherwise,
+providers will only return endpoints matching the specified set of
+capabilities.
 .IP "FI_PASSIVE"
 Indicates that the fabric endpoint will be used to listen for connection
 requests.
-.IP "FI_NUMERICHOST"
-On input, this indicates that the node name is a numeric address.  When
-set, name resolution is not performed.
+.IP "FI_MSG"
+Specifies that an endpoint should support sending and receiving
+messages or datagrams.  Message capabilities imply support for send and/or
+receive queues.  Endpoints supporting this capability support operations
+defined by struct fi_ops_msg.
+.PP
+The ep_cap may be used to specify or restrict the type of messaging
+operations that are supported.  In the absence of any relevant flags,
+FI_MSG implies the ability to send and receive messages.
+Applications can use the FI_SEND and FI_RECV flags to optimize an endpoint
+as send-only or receive-only.
+.IP "FI_RMA"
+Specifies that the endpoint should support RMA read and write
+operations.  Endpoints supporting this capability support operations
+defined by struct fi_rma_ops.  In the absence of any relevant flags,
+FI_RMA implies the ability to initiate and be the target of
+remote memory reads and writes.  Applications can use the FI_READ, FI_WRITE,
+FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the types of RMA
+operations supported by an endpoint.
+.IP "FI_TAGGED"
+Specifies that the endpoint should handle tagged message transfers.
+tagged message transfers associate a user-specified key or tag with each message
+that is used for matching purposes at the remote side.  Endpoints supporting
+this capability support operations defined by struct fi_tagged_ops.
+In the absence of any relevant flags, FI_TAGGED implies the ability
+to send and receive tagged messages.  Applications can use the FI_SEND and
+FI_RECV flags to optimize an endpoint as send-only or receive-only.
+.IP "FI_ATOMICS"
+Specifies that the endpoint supports some set of atomic operations.
+Endpoints supporting this capability support operations defined by struct
+fi_atomic_ops.  In the absence of any relevant flags, FI_ATOMICS
+implies the ability to initiate and be the target of
+remote atomic reads and writes.  Applications can use the FI_READ, FI_WRITE,
+FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the types of
+atomic operations supported by an endpoint.
+.IP "FI_MULTICAST"
+Indicates that the endpoint should support multicast data transfers.
+Endpoints supporting this capability support multicast operations defined by
+struct fi_msg_ops, when a multicast address is specified as the destination
+address.  In the absence of any relevant flags, FI_MULTICAST implies
+the ability to send and receive messages.  Applications can use the FI_SEND and
+FI_RECV flags to optimize an endpoint as send-only or receive-only.
+.IP "FI_TRIGGER"
+Indicates that the endpoint should support triggered operations.  Endpoints
+support this capability must meet the usage model as described by
+fi_trigger.3. 
 .IP "FI_BUFFERED_RECV"
 Requests that the communication endpoint should attempt to queue
 inbound data that arrives before a receive buffer has been posted.  In the
 absence of this flag, any messages that arrive before a receive is
-posted are lost.
+posted are lost.  Applications may access endpoint options (getopt/setopt)
+to determine the size of available buffered receive space.
 .IP "FI_INJECT"
-If set, all outbound data buffers should be returned to user immediately after
-the call returns, even if the operation is handled asynchronously.  This may
-require that the communication interface implementation copy the data into a
-local buffer and transfer out of that buffer.
-.IP "FI_CANCEL"
-Indicates that the user wants the ability to cancel operations posted to
-an endpoint if they do not complete first.
+Indicates that the endpoint be able to support the FI_INJECT flag on
+data transfer operations and the 'inject' data transfer calls.  The
+minimum supported size of an inject operation that an endpoint 
+with this capability must support is 8-bytes.  Applications may access
+endpoint options (getopt/setopt) to determine injected transfer limits.
+.IP "FI_MULTI_RECV"
+Specifies that the endpoint must support the FI_MULTI_RECV flag when
+posting receive buffers.
 .IP "FI_READ"
 Indicates that the user requires an endpoint capable of initiating reads
 against remote memory regions.  Remote reads include some RMA and atomic
@@ -195,6 +243,62 @@ and atomic operations.
 Indicates that the user requires an endpoint capable of receiving write memory
 operations from remote endpoints.  Remote write operations include some RMA
 operations and most atomic operations.
+.IP "FI_IMM"
+Indicates that the endpoint be able to support the FI_IMM flag on
+data transfer operations.  The minimum supported size of for
+immediate data that an endpoint with this capability must support
+is 4-bytes.  Applications may access endpoint options (getopt/setopt)
+to determine immediate data limits.
+.IP "FI_REMOTE_SIGNAL"
+Indicates that the endpoint support the FI_REMOTE_SIGNAL flag on
+data transfer operations.  Support requires marking outbound data
+transfers as signaled and handling incoming transfers appropriately. 
+.IP "FI_REMOTE_COMPLETE"
+Indicates that the endpoint support the FI_REMOTE_COMPLETE flag on
+data transfer operations.  Support requires marking outbound data
+transfers as using remote completions and responding to incoming transfers
+appropriately.
+.SH "OP FLAGS"
+Operation flags are obtained by OR-ing the following flags together.
+Operation flags define the default flags applied to an endpoint's data
+transfer operations, where a flags parameter is not available.  Data transfer
+operations that take flags as input override the op_flags value of an
+endpoint.
+.IP "FI_INJECT"
+If set, all data buffers used with outbound transfers return to the user's
+control immediately after the call returns.  This is true even if the
+operation is handled asynchronously.  This may require that the communication
+interface implementation copy the data into a local buffer or inject the data
+directly into the outbound transfer queue.
+.IP "FI_MULTI_RECV"
+Applies to posted receive operations.  This flag allows the user to post a
+single buffer that will receive multiple incoming messages.  Received
+messages will be packed into the receive buffer until the buffer has been
+consumed.  Use of this flag may cause a single posted receive operation
+to generate multiple events as messages are placed into the buffer.
+The placement of received data into the buffer may be subjected to
+provider specific alignment restrictions.  The buffer will be freed from
+the endpoint when a message is received that cannot fit into the remaining
+free buffer space.
+.IP "FI_EVENT"
+Indicates that a completion entry should be generated for data transfer
+operations.
+.IP "FI_REMOTE_SIGNAL"
+Indicates that a completion event at the target process should be generated
+for the given operation.  The remote endpoint must be configured with
+FI_REMOTE_SIGNAL, or this flag will be ignored by the target.  The local
+endpoint must be configured with the FI_REMOTE_SIGNAL capability in order
+to specify this flag.
+.IP "FI_REMOTE_COMPLETE"
+Indicates that a completion should not be generated for a data transfer
+operation until the operation has completed on the remote side.  The remote
+endpoint must be configured with FI_REMOTE_COMPLETE for correct operation.
+The local endpoint must be configured with the FI_REMOTE_COMPLETE capability
+in order to specify this flag.
+.IP "FI_CANCEL"
+Indicates that the user desires the ability to cancel any outstanding data
+transfer operation.  If FI_CANCEL is not set, a provider may optimize code
+paths with the assumption that fi_cancel will not be used by the application.
 .SH "ENDPOINT TYPES"
 .IP "FID_UNSPEC"
 The type of endpoint is not specified.  This is usually provided as input, with
@@ -228,50 +332,6 @@ The protocol runs over Infiniband unreliable datagram queue pairs.
 The protocol runs over Infiniband extended reliable-connected queue pairs.
 .IP "FI_PROTO_RAW [not targeting 1.0 release]"
 Indicates that a raw link-layer or network-layer protocol is in use.
-.SH "PROTOCOL CAPABILITIES"
-Protocol capabilities are obtained by OR-ing the following flags together.
-.IP "FI_PROTO_CAP_MSG"
-Specifies that the underlying protocol should support sending and receiving
-messages or datagrams.  Message capabilities imply support for send and/or
-receive queues.  Endpoints supporting this capability support operations
-defined by struct fi_ops_msg.
-.PP
-The fi_info flags may be used to specify or restrict the type of messaging
-operations that are supported.  In the absence of any relevant flags,
-FI_PROTO_CAP_MSG implies the ability to send and receive messages.
-Applications can use the FI_SEND and FI_RECV flags to optimize an endpoint
-as send-only or receive-only.
-.IP "FI_PROTO_CAP_RMA"
-Specifies that the underlying protocol should support RMA read and write
-operations.  Endpoints supporting this capability support operations
-defined by struct fi_rma_ops.  In the absence of any relevant flags,
-FI_PROTO_CAP_RMA implies the ability to initiate and be the target of
-remote memory reads and writes.  Applications can use the FI_READ, FI_WRITE,
-FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the types of RMA
-operations supported by an endpoint.
-.IP "FI_PROTO_CAP_TAGGED"
-Specifies that the underlying protocol should handle tagged message transfers.
-tagged message transfers associate a user-specified key or tag with each message
-that is used for matching purposes at the remote side.  Endpoints supporting
-this capability support operations defined by struct fi_tagged_ops.
-In the absence of any relevant flags, FI_PROTO_CAP_TAGGED implies the ability
-to send and receive tagged messages.  Applications can use the FI_SEND and
-FI_RECV flags to optimize an endpoint as send-only or receive-only.
-.IP "FI_PROTO_CAP_ATOMICS"
-Specifies that the underlying protocol supports some set of atomic operations.
-Endpoints supporting this capability support operations defined by struct
-fi_atomic_ops.  In the absence of any relevant flags, FI_PROTO_CAP_ATOMICS
-implies the ability to initiate and be the target of
-remote atomic reads and writes.  Applications can use the FI_READ, FI_WRITE,
-FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the types of
-atomic operations supported by an endpoint.
-.IP "FI_PROTO_CAP_MULTICAST"
-Indicates that the underlying protocol should support multicast data transfers.
-Endpoints supporting this capability support multicast operations defined by
-struct fi_msg_ops, when a multicast address is specified as the destination
-address.  In the absence of any relevant flags, FI_PROTO_CAP_MULTICAST implies
-the ability to send and receive messages.  Applications can use the FI_SEND and
-FI_RECV flags to optimize an endpoint as send-only or receive-only.
 .SH "DOMAIN CAPABILITIES"
 Domain capabilities are obtained by OR-ing the following flags together.
 Domain capabilities are most often used as output information from fi_getinfo,
@@ -401,6 +461,8 @@ Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 
 .IR "rdma/fi_errno.h".
 .SH "ERRORS"
+.IP "FI_EBADFLAGS"
+The specified endpoint or domain capability or operation flags are invalid. 
 .IP "FI_ENOMEM"
 Indicates that there was insufficient memory to complete the operation.
 .IP "FI_ENODATA"

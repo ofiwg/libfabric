@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -180,7 +180,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (err)
 		fid_domain->ns_thread = 0;
 
-	if (info->protocol_cap & FI_PROTO_CAP_MSG)
+	if (info->ep_cap & FI_MSG)
 		fid_domain->reserved_tag_bits |= PSMX_MSG_BIT;
 
 	*domain = &fid_domain->domain;
