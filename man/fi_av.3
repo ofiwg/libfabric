@@ -141,10 +141,6 @@ Flags that set the default operation of the AV.
 Insertions into the address vector should be processed synchronously.
 If an AV is set for synchronous operation, fi_av_insert will block
 until all mapping translations have completed.
-.IP "FI_EXCL"
-Indicates that the address vector should be opened in exclusive mode, and
-that the provider should not attempt to share AV resources with other
-processes or domains.
 .IP "FI_RANGE"
 FI_RANGE allows for multiple addresses to be inserted into an AV by
 specifying only the starting and ending addresses, inclusive, for a
