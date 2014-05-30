@@ -106,7 +106,11 @@ static inline ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 static ssize_t psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			     const void *src_addr, void *context)
 {
-	return _psmx_recvfrom(ep, buf, len, desc, src_addr, context, 0);
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+
+	return _psmx_recvfrom(ep, buf, len, desc, src_addr, context, fid_ep->flags);
 }
 
 static ssize_t psmx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
@@ -164,7 +168,7 @@ static inline ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t le
 	psm_epaddr = (psm_epaddr_t) dest_addr;
 	psm_tag = fid_ep->domain->psm_epid | PSMX_MSG_BIT;
 
-	if ((fid_ep->flags | flags) & FI_BLOCK) {
+	if (flags & FI_BLOCK) {
 		err = psm_mq_send(fid_ep->domain->psm_mq, psm_epaddr,
 				  send_flag, psm_tag, buf, len);
 		if (err == PSM_OK)
@@ -206,7 +210,11 @@ static inline ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t le
 static ssize_t psmx_sendto(struct fid_ep *ep, const void *buf, size_t len,
 			   void *desc, const void *dest_addr, void *context)
 {
-	return _psmx_sendto(ep, buf, len, desc, dest_addr, context, 0);
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+
+	return _psmx_sendto(ep, buf, len, desc, dest_addr, context, fid_ep->flags);
 }
 
 static ssize_t psmx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
@@ -252,7 +260,7 @@ static ssize_t psmx_injectto(struct fid_ep *ep, const void *buf, size_t len,
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
 	/* FIXME: optimize it & guarantee buffered */
-	return _psmx_sendto(ep, buf, len, NULL, dest_addr, &fid_ep->sendimm_context, 0);
+	return _psmx_sendto(ep, buf, len, NULL, dest_addr, &fid_ep->sendimm_context, fid_ep->flags);
 }
 
 static ssize_t psmx_inject(struct fid_ep *ep, const void *buf, size_t len)

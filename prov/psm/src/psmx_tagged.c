@@ -85,8 +85,12 @@ static ssize_t psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len, vo
 				    const void *src_addr,
 				    uint64_t tag, uint64_t ignore, void *context)
 {
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+
 	return _psmx_tagged_recvfrom(ep, buf, len, desc, src_addr, tag, ignore,
-					context, 0);
+					context, fid_ep->flags);
 }
 
 static ssize_t psmx_tagged_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
@@ -155,7 +159,7 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 	psm_epaddr = (psm_epaddr_t) dest_addr;
 	psm_tag = tag & (~fid_ep->domain->reserved_tag_bits);
 
-	if ((fid_ep->flags | flags) & FI_BLOCK) {
+	if (flags & FI_BLOCK) {
 		err = psm_mq_send(fid_ep->domain->psm_mq, psm_epaddr,
 				  send_flag, psm_tag, buf, len);
 		if (err == PSM_OK)
@@ -198,7 +202,11 @@ static ssize_t psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len
 				  void *desc, const void *dest_addr,
 				  uint64_t tag, void *context)
 {
-	return _psmx_tagged_sendto(ep, buf, len, desc, dest_addr, tag, context, 0);
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+
+	return _psmx_tagged_sendto(ep, buf, len, desc, dest_addr, tag, context, fid_ep->flags);
 }
 
 static ssize_t psmx_tagged_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
@@ -249,7 +257,7 @@ static ssize_t psmx_tagged_injectto(struct fid_ep *ep, const void *buf, size_t l
 
 	/* FIXME: optimize it & guarantee buffered */
 	return _psmx_tagged_sendto(ep, buf, len, NULL, dest_addr, tag,
-				   &fid_ep->sendimm_context, 0);
+				   &fid_ep->sendimm_context, fid_ep->flags);
 }
 
 static ssize_t psmx_tagged_inject(struct fid_ep *ep, const void *buf, size_t len,
