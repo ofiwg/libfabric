@@ -231,6 +231,7 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 	struct psmx_fid_eq *tmp_eq;
 	struct psmx_fid_cntr *tmp_cntr;
 	struct psmx_event *event;
+	int multi_recv;
 	int err;
 
 	if (eq)
@@ -249,6 +250,7 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 			tmp_ep = PSMX_CTXT_EP(fi_context);
 			tmp_eq = NULL;
 			tmp_cntr = NULL;
+			multi_recv = 0;
 
 			switch (PSMX_CTXT_TYPE(fi_context)) {
 			case PSMX_NOCOMP_SEND_CONTEXT:
@@ -278,12 +280,14 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 				tmp_ep->pending_sends--;
 				if (!tmp_ep->send_cntr_event_flag)
 					tmp_cntr = tmp_ep->send_cntr;
+				free(fi_context);
 				break;
 
 			case PSMX_INJECT_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
 				if (!tmp_ep->send_cntr_event_flag)
 					tmp_cntr = tmp_ep->send_cntr;
+				free(fi_context);
 				break;
 
 			case PSMX_SEND_CONTEXT:
@@ -293,7 +297,12 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 				break;
 
 			case PSMX_RECV_CONTEXT:
+				tmp_eq = tmp_ep->recv_eq;
+				tmp_cntr = tmp_ep->recv_cntr;
+				break;
+
 			case PSMX_MULTI_RECV_CONTEXT:
+				multi_recv = 1;
 				tmp_eq = tmp_ep->recv_eq;
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
@@ -331,7 +340,7 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 					pthread_cond_signal(&tmp_cntr->cond);
 			}
 
-			if (PSMX_CTXT_TYPE(fi_context) == PSMX_MULTI_RECV_CONTEXT) {
+			if (multi_recv) {
 				struct psmx_multi_recv *req;
 				psm_mq_req_t psm_req;
 

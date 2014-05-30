@@ -168,7 +168,18 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 			return psmx_errno(err);
 	}
 
-	if (fid_ep->send_eq_event_flag && !(flags & FI_EVENT) && !context) {
+	if (flags & FI_INJECT) {
+		fi_context = malloc(sizeof(*fi_context) + len);
+		if (!fi_context)
+			return -ENOMEM;
+
+		memcpy((void *)fi_context + sizeof(*fi_context), buf, len);
+		buf = (void *)fi_context + sizeof(*fi_context);
+
+		PSMX_CTXT_TYPE(fi_context) = PSMX_INJECT_CONTEXT;
+		PSMX_CTXT_EP(fi_context) = fid_ep;
+	}
+	else if (fid_ep->send_eq_event_flag && !(flags & FI_EVENT) && !context) {
 		fi_context = &fid_ep->nocomp_send_context;
 	}
 	else {
@@ -255,9 +266,8 @@ static ssize_t psmx_tagged_injectto(struct fid_ep *ep, const void *buf, size_t l
 
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
-	/* FIXME: optimize it & guarantee buffered */
-	return _psmx_tagged_sendto(ep, buf, len, NULL, dest_addr, tag,
-				   &fid_ep->sendimm_context, fid_ep->flags);
+	return _psmx_tagged_sendto(ep, buf, len, NULL, dest_addr, tag, NULL,
+				   fid_ep->flags | FI_INJECT);
 }
 
 static ssize_t psmx_tagged_inject(struct fid_ep *ep, const void *buf, size_t len,
