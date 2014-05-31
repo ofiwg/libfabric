@@ -76,7 +76,7 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
 	switch (fid_cntr->wait_obj) {
 	case FI_CNTR_WAIT_NONE:
 		while (fid_cntr->counter < threshold)
-			sched_yield();
+			psmx_eq_poll_mq(NULL, fid_cntr->domain);
 		break;
 
 	case FI_CNTR_WAIT_MUT_COND:
