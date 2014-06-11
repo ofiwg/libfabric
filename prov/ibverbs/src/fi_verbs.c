@@ -1007,7 +1007,7 @@ ibv_eq_comp_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 	return sizeof(*entry);
 }
 
-static ssize_t ibv_eq_comp_read(struct fid_eq *eq, void *buf, size_t len)
+static ssize_t ibv_eq_comp_read_context(struct fid_eq *eq, void *buf, size_t len)
 {
 	struct ibv_eq_comp *_eq;
 	struct fi_eq_entry *entry;
@@ -1028,6 +1028,53 @@ static ssize_t ibv_eq_comp_read(struct fid_eq *eq, void *buf, size_t len)
 			}
 
 			entry->op_context = (void *) (uintptr_t) _eq->wc.wr_id;
+			left -= sizeof(*entry);
+			entry = entry + 1;
+		} else if (ret == 0) {
+			if (left < len)
+				return len - left;
+
+			if (reset && (_eq->flags & FI_AUTO_RESET)) {
+				ibv_eq_comp_reset(eq, NULL);
+				reset = 0;
+				continue;
+			}
+
+			if (!(_eq->flags & FI_BLOCK))
+				return 0;
+
+			fi_poll_fd(_eq->channel->fd);
+		} else {
+			break;
+		}
+	}
+
+	return (left < len) ? len - left : ret;
+}
+
+static ssize_t ibv_eq_comp_read_comp(struct fid_eq *eq, void *buf, size_t len)
+{
+	struct ibv_eq_comp *_eq;
+	struct fi_eq_comp_entry *entry;
+	size_t left;
+	int reset = 1, ret = -EINVAL;
+
+	_eq = container_of(eq, struct ibv_eq_comp, eq.fid);
+	entry = (struct fi_eq_comp_entry *) buf;
+	if (_eq->wc.status)
+		return -EIO;
+
+	for (left = len; left >= sizeof(*entry); ) {
+		ret = ibv_poll_cq(_eq->cq, 1, &_eq->wc);
+		if (ret > 0) {
+			if (_eq->wc.status) {
+				ret = -EIO;
+				break;
+			}
+
+			entry->op_context = (void *) (uintptr_t) _eq->wc.wr_id;
+			entry->flags = (uint64_t) _eq->wc.wc_flags;
+			entry->len = (uint64_t) _eq->wc.byte_len;
 			left -= sizeof(*entry);
 			entry = entry + 1;
 		} else if (ret == 0) {
@@ -1114,7 +1161,15 @@ ibv_eq_comp_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 
 static struct fi_ops_eq ibv_eq_comp_context_ops = {
 	.size = sizeof(struct fi_ops_eq),
-	.read = ibv_eq_comp_read,
+	.read = ibv_eq_comp_read_context,
+	.readerr = ibv_eq_comp_readerr,
+	.reset = ibv_eq_comp_reset,
+	.strerror = ibv_eq_comp_strerror
+};
+
+static struct fi_ops_eq ibv_eq_comp_comp_ops = {
+	.size = sizeof(struct fi_ops_eq),
+	.read = ibv_eq_comp_read_comp,
 	.readerr = ibv_eq_comp_readerr,
 	.reset = ibv_eq_comp_reset,
 	.strerror = ibv_eq_comp_strerror
@@ -1228,6 +1283,9 @@ ibv_eq_comp_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 	switch (attr->format) {
 	case FI_EQ_FORMAT_CONTEXT:
 		_eq->eq.fid.ops = &ibv_eq_comp_context_ops;
+		break;
+	case FI_EQ_FORMAT_COMP:
+		_eq->eq.fid.ops = &ibv_eq_comp_comp_ops;
 		break;
 	case FI_EQ_FORMAT_DATA:
 		_eq->eq.fid.ops = &ibv_eq_comp_data_ops;
