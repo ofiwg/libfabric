@@ -136,12 +136,12 @@ static int ibv_check_hints(struct fi_info *hints)
 /*
  * TODO: this is not the full set of checks which are needed
  */
-static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
+static int ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinfo *rai)
 {
 	memset(rai, 0, sizeof *rai);
-	if (fi->ep_cap & FI_PASSIVE)
+	if ((fi->ep_cap & FI_PASSIVE) || (flags & FI_SOURCE))
 		rai->ai_flags = RAI_PASSIVE;
-	if (fi->op_flags & FI_NUMERICHOST)
+	if (flags & FI_NUMERICHOST)
 		rai->ai_flags |= RAI_NUMERICHOST;
 //	if (fi->flags & FI_FAMILY)
 //		rai->ai_flags |= RAI_FAMILY;
@@ -172,10 +172,11 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
 	return 0;
 }
 
- static int ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
+ static int ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
+		 	  struct fi_info *fi)
  {
  	memset(fi, 0, sizeof *fi);
- 	if (rai->ai_flags & RAI_PASSIVE)
+ 	if ((hints->ep_cap & FI_PASSIVE) && (rai->ai_flags & RAI_PASSIVE))
  		fi->ep_cap = FI_PASSIVE;
 
  //	fi->sa_family = rai->ai_family;
@@ -205,7 +206,7 @@ static int ibv_fi_to_rai(struct fi_info *fi, struct rdma_addrinfo *rai)
  	return 0;
  }
 
-static int ibv_getinfo(const char *node, const char *service,
+static int ibv_getinfo(const char *node, const char *service, uint64_t flags,
 		       struct fi_info *hints, struct fi_info **info)
 {
 	struct rdma_addrinfo rai_hints, *rai;
@@ -218,7 +219,7 @@ static int ibv_getinfo(const char *node, const char *service,
 		if (ret)
 			return ret;
 
-		ret = ibv_fi_to_rai(hints, &rai_hints);
+		ret = ibv_fi_to_rai(hints, flags, &rai_hints);
 		if (ret)
 			return ret;
 
@@ -236,7 +237,7 @@ static int ibv_getinfo(const char *node, const char *service,
 		goto err1;
 	}
 
-	ret = ibv_rai_to_fi(rai, fi);
+	ret = ibv_rai_to_fi(rai, hints, fi);
 	if (ret)
 		goto err2;
 

@@ -78,6 +78,7 @@ enum {
 #define FI_BLOCK		(1ULL << 10)
 #define FI_INJECT		(1ULL << 11)
 #define FI_MULTI_RECV		(1ULL << 12)
+#define FI_SOURCE		(1ULL << 13)
 
 #define FI_READ			(1ULL << 16)
 #define FI_WRITE		(1ULL << 17)
@@ -207,8 +208,8 @@ struct fid {
 
 #define FI_NUMERICHOST		(1ULL << 1)
 
-int fi_getinfo(const char *node, const char *service, struct fi_info *hints,
-	       struct fi_info **info);
+int fi_getinfo(const char *node, const char *service, uint64_t flags,
+	       struct fi_info *hints, struct fi_info **info);
 void fi_freeinfo(struct fi_info *info);
 
 struct fi_attr {

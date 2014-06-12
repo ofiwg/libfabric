@@ -32,11 +32,10 @@
 
 #include "psmx.h"
 
-static int psmx_getinfo(const char *node, const char *service,
+static int psmx_getinfo(const char *node, const char *service, uint64_t flags,
 			struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *psmx_info;
-	uint64_t flags = 0;
 	uint32_t cnt = 0;
 	void *dest_addr = NULL;
 	void *uuid;
@@ -94,8 +93,7 @@ static int psmx_getinfo(const char *node, const char *service,
 			return -ENODATA;
 		}
 
-		flags = hints->op_flags;
-		if ((flags & PSMX_SUPPORTED_FLAGS) != flags) {
+		if ((hints->op_flags & PSMX_SUPPORTED_FLAGS) != hints->op_flags) {
 			psmx_debug("%s: hints->flags=0x%llx, supported=0x%llx\n",
 					__func__, hints->op_flags, PSMX_SUPPORTED_FLAGS);
 			*info = NULL;
@@ -121,10 +119,10 @@ static int psmx_getinfo(const char *node, const char *service,
 
 	psmx_info->next = NULL;
 	psmx_info->size = sizeof(*psmx_info);
-	psmx_info->op_flags = flags | PSMX_DEFAULT_FLAGS;
+	psmx_info->op_flags = hints ? hints->op_flags : 0;
 	psmx_info->type = type;
 	psmx_info->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
-	if (hints->ep_cap)
+	if (hints && hints->ep_cap)
 		psmx_info->ep_cap = hints->ep_cap & PSMX_EP_CAPS;
 	else
 		psmx_info->ep_cap = FI_TAGGED;

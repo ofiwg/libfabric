@@ -217,8 +217,8 @@ static void __attribute__((destructor)) fi_fini(void)
 //	uv_fini();
 }
 
-int fi_getinfo(const char *node, const char *service, struct fi_info *hints,
-	       struct fi_info **info)
+int fi_getinfo(const char *node, const char *service, uint64_t flags,
+	       struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_prov *prov;
 	struct fi_info *tail, *cur;
@@ -232,7 +232,7 @@ int fi_getinfo(const char *node, const char *service, struct fi_info *hints,
 		if (!prov->ops->getinfo)
 			continue;
 
-		ret = prov->ops->getinfo(node, service, hints, &cur);
+		ret = prov->ops->getinfo(node, service, flags, hints, &cur);
 		if (ret) {
 			if (ret == -FI_ENODATA)
 				continue;

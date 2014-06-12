@@ -51,7 +51,7 @@ extern "C" {
 
 struct fi_ops_prov {
 	size_t	size;
-	int	(*getinfo)(const char *node, const char *service,
+	int	(*getinfo)(const char *node, const char *service, uint64_t flags,
 			struct fi_info *hints, struct fi_info **info);
 	int	(*freeinfo)(struct fi_info *info);
 	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,

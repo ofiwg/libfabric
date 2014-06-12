@@ -5,7 +5,7 @@ fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 .B "#include <rdma/fabric.h>"
 .HP
 .BI "int fi_getinfo(const char *" node ", const char *" service ","
-.BI "struct fi_info *" hints ", struct fi_info **" info ");"
+.BI "uint64_t " flags ", struct fi_info *" hints ", struct fi_info **" info ");"
 .HP
 .BI "int fi_freeinfo(struct fi_info *" info ");"
 .SH ARGUMENTS
@@ -13,6 +13,8 @@ fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 Optional, name or fabric address to resolve.
 .IP "service"
 Optional, service name or port number of address.
+.IP "flags"
+Operation flags for the fi_getinfo call.
 .IP "hints"
 Reference to an fi_info structure that specifies criteria for selecting
 the returned fabric information.
@@ -157,7 +159,8 @@ providers will only return endpoints matching the specified set of
 capabilities.
 .IP "FI_PASSIVE"
 Indicates that the fabric endpoint will be used to listen for connection
-requests.
+requests.  Use of this capability implies the use of the fi_getinfo flag
+FI_SOURCE. 
 .IP "FI_MSG"
 Specifies that an endpoint should support sending and receiving
 messages or datagrams.  Message capabilities imply support for send and/or
@@ -457,6 +460,16 @@ wait operation where the completion will be reported.  Only wait operations
 defined by the fabric interface will result in an operation progressing.
 Operating system or external wait functions, such as select, poll, or pthread 
 routines, cannot.
+.SH "FLAGS"
+The operation of the fi_getinfo call may be controlled through the use of
+input flags.  Valid flags include the following.
+.IP "FI_NUMERICHOST"
+Indicates that the node parameter is a numeric string representation of a
+fabric address, such as a dotted decimal IP address.  Use of this flag will
+suppress any lengthy name resolution protocol.
+.IP "FI_SOURCE"
+Indicates that the node and service parameters specify the local source
+address to associate with an endpoint.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 
