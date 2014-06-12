@@ -355,8 +355,7 @@ static int server_listen(void)
 	struct fi_info *fi;
 	int ret;
 
-	hints.flags = FI_PASSIVE;
-	ret = fi_getinfo(src_addr, port, &hints, &fi);
+	ret = fi_getinfo(src_addr, port, FI_PASSIVE, &hints, &fi);
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
 		return ret;
@@ -469,7 +468,7 @@ static int client_connect(void)
 			printf("source address error %s\n", gai_strerror(ret));
 	}
 
-	ret = fi_getinfo(dst_addr, port, &hints, &fi);
+	ret = fi_getinfo(dst_addr, port, 0, &hints, &fi);
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
 		goto err0;
