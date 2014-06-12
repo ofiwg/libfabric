@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,11 +32,10 @@
 
 #include "psmx.h"
 
-static int psmx_getinfo(const char *node, const char *service,
+static int psmx_getinfo(const char *node, const char *service, uint64_t flags,
 			struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *psmx_info;
-	uint64_t flags = 0;
 	uint32_t cnt = 0;
 	void *dest_addr = NULL;
 	void *uuid;
@@ -80,11 +79,11 @@ static int psmx_getinfo(const char *node, const char *service,
 
 		switch (hints->protocol) {
 		case FI_PROTO_UNSPEC:
-			if ((hints->protocol_cap & PSMX_PROTO_CAPS) == hints->protocol_cap)
+			if ((hints->ep_cap & PSMX_EP_CAPS) == hints->ep_cap)
 				break;
 
-			psmx_debug("%s: hints->protocol_cap=0x%llx, supported=0x%llx\n",
-					__func__, hints->protocol_cap, PSMX_PROTO_CAPS);
+			psmx_debug("%s: hints->ep_cap=0x%llx, supported=0x%llx\n",
+					__func__, hints->ep_cap, PSMX_EP_CAPS);
 
 		/* fall through */
 		default:
@@ -94,10 +93,9 @@ static int psmx_getinfo(const char *node, const char *service,
 			return -ENODATA;
 		}
 
-		flags = hints->flags;
-		if ((flags & PSMX_SUPPORTED_FLAGS) != flags) {
+		if ((hints->op_flags & PSMX_SUPPORTED_FLAGS) != hints->op_flags) {
 			psmx_debug("%s: hints->flags=0x%llx, supported=0x%llx\n",
-					__func__, hints->flags, PSMX_SUPPORTED_FLAGS);
+					__func__, hints->op_flags, PSMX_SUPPORTED_FLAGS);
 			*info = NULL;
 			return -ENODATA;
 		}
@@ -121,13 +119,13 @@ static int psmx_getinfo(const char *node, const char *service,
 
 	psmx_info->next = NULL;
 	psmx_info->size = sizeof(*psmx_info);
-	psmx_info->flags = flags | PSMX_DEFAULT_FLAGS;
+	psmx_info->op_flags = hints ? hints->op_flags : 0;
 	psmx_info->type = type;
 	psmx_info->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
-	if (hints->protocol_cap)
-		psmx_info->protocol_cap = hints->protocol_cap & PSMX_PROTO_CAPS;
+	if (hints && hints->ep_cap)
+		psmx_info->ep_cap = hints->ep_cap & PSMX_EP_CAPS;
 	else
-		psmx_info->protocol_cap = FI_PROTO_CAP_TAGGED;
+		psmx_info->ep_cap = FI_TAGGED;
 	psmx_info->domain_cap = FI_WRITE_COHERENT | FI_CONTEXT | FI_USER_MR_KEY;
 	psmx_info->addr_format = FI_ADDR; 
 	psmx_info->info_addr_format = FI_ADDR;

@@ -217,8 +217,8 @@ static void __attribute__((destructor)) fi_fini(void)
 //	uv_fini();
 }
 
-int fi_getinfo(const char *node, const char *service, struct fi_info *hints,
-	       struct fi_info **info)
+int fi_getinfo(const char *node, const char *service, uint64_t flags,
+	       struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_prov *prov;
 	struct fi_info *tail, *cur;
@@ -232,7 +232,7 @@ int fi_getinfo(const char *node, const char *service, struct fi_info *hints,
 		if (!prov->ops->getinfo)
 			continue;
 
-		ret = prov->ops->getinfo(node, service, hints, &cur);
+		ret = prov->ops->getinfo(node, service, flags, hints, &cur);
 		if (ret) {
 			if (ret == -FI_ENODATA)
 				continue;
@@ -366,7 +366,7 @@ __fi_eq_cm_getinfo(struct __fid_fabric *fab, struct rdma_cm_event *event)
 	} else {
 		fi->protocol = FI_PROTO_IB_RC;
 	}
-	fi->protocol_cap = FI_PROTO_CAP_MSG | FI_PROTO_CAP_RMA;
+	fi->ep_cap = FI_MSG | FI_RMA;
 
 	fi->src_addrlen = fi_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!(fi->src_addr = malloc(fi->src_addrlen)))
