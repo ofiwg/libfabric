@@ -81,7 +81,7 @@ src_libfabric_la_LDFLAGS = -version-info 1 -export-dynamic \
 			   $(libfabric_version_script)
 src_libfabric_la_DEPENDENCIES =  $(srcdir)/libfabric.map
 src_libfabric_la_LIBADD = \
-	$(top_builddir)/libibverbs/libibverbs.la
+	$(top_builddir)/libibverbs/libibverbs.la \
 	$(top_builddir)/librdmacm/librdmacm.la
 
 rdmaincludedir = $(includedir)/rdma
