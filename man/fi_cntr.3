@@ -65,7 +65,7 @@ the counter are defined by struct fi_cntr_attr.
 struct fi_cntr_attr {
 	int                  mask;      /* valid attr fields */
 	enum fi_cntr_events  events;    /* type of events to count */
-	enum fi_eq_wait_obj  wait_obj;  /* requested wait object */
+	enum fi_wait_obj     wait_obj;  /* requested wait object */
 	uint64_t             flags;     /* operation flags */
 };
 .fi
@@ -91,8 +91,27 @@ applications to block until the wait object is signaled, indicating that
 a counter has reached a specific threshold.  Users may use fi_control to
 retrieve the underlying wait object associated with a counter, in order to
 use it in other system calls.  The following values may be used to specify
-the type of wait object associated with a counter: FI_CNTR_WAIT_NONE and
-FI_CNTR_WAIT_MUT_COND.
+the type of wait object associated with a counter: FI_WAIT_NONE,
+FI_WAIT_UNSPECIFIED, FI_WAIT_FD, and FI_WAIT_MUT_COND.
+.RS
+.IP "FI_WAIT_NONE"
+Used to indicate that the user will not block (wait) for events on the counter.
+.IP "FI_WAIT_UNSPECIFIED"
+Specifies that the user will only wait on the counter using fabric interface
+calls, such as fi_cntr_readcond.  In this case, the underlying provider may
+select the most appropriate or highest performing wait object available,
+including custom wait mechanisms.  Applications that select
+FI_WAIT_UNSPECIFIED are not guaranteed to retrieve the underlying wait
+object.
+.IP "FI_WAIT_FD"
+Indicates that the counter should use a file descriptor as its wait mechanism.
+A file descriptor wait object must be usable in select, poll, and epoll
+routines.  However, a provider may signal an FD wait object by marking it
+as readable, writable, or with an error.
+.IP "FI_WAIT_MUT_COND"
+Specifies that the counter should use a pthread mutex and cond variable as a
+wait object.
+.RE
 .IP "flags"
 Flags that set the default operation of the counter.
 .RS

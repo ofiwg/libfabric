@@ -545,7 +545,7 @@ __fi_eq_open(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
 	_eq->fab = container_of(fabric, struct __fid_fabric, fabric_fid);
 
 	switch (attr->wait_obj) {
-	case FI_EQ_WAIT_FD:
+	case FI_WAIT_FD:
 		_eq->channel = rdma_create_event_channel();
 		if (!_eq->channel) {
 			ret = -errno;
@@ -558,7 +558,7 @@ __fi_eq_open(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
 			goto err2;
 		}
 		break;
-	case FI_EQ_WAIT_NONE:
+	case FI_WAIT_NONE:
 		break;
 	default:
 		return -FI_ENOSYS;
