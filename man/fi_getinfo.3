@@ -395,6 +395,12 @@ registered by the application for access domains opened with this capability.
 The provider supports user requested memory registration keys.  Providers
 that set this capability honor the requested_key parameter for memory
 registration calls.
+.IP "FI_DYNAMIC_MR"
+The provider supports applications registering any range of addresses
+in their virtual address space, whether or not those addresses are
+back by physical pages or have been allocated to the app.
+Providers that lack this capability require that registered memory
+regions be backed by allocated memory pages.
 .SH "ADDRESSING FORMATS"
 Additional information on address formats is available under address vector
 .BR "fi_av(3)".
