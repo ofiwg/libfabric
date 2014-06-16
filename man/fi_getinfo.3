@@ -264,6 +264,10 @@ Indicates that the endpoint support the FI_REMOTE_COMPLETE flag on
 data transfer operations.  Support requires marking outbound data
 transfers as using remote completions and responding to incoming transfers
 appropriately.
+.IP "FI_CANCEL"
+Indicates that the user desires the ability to cancel outstanding data
+transfer operations.  If FI_CANCEL is not set, a provider may optimize code
+paths with the assumption that fi_cancel will not be used by the application.
 .SH "OP FLAGS"
 Operation flags are obtained by OR-ing the following flags together.
 Operation flags define the default flags applied to an endpoint's data
@@ -301,10 +305,6 @@ operation until the operation has completed on the remote side.  The remote
 endpoint must be configured with FI_REMOTE_COMPLETE for correct operation.
 The local endpoint must be configured with the FI_REMOTE_COMPLETE capability
 in order to specify this flag.
-.IP "FI_CANCEL"
-Indicates that the user desires the ability to cancel any outstanding data
-transfer operation.  If FI_CANCEL is not set, a provider may optimize code
-paths with the assumption that fi_cancel will not be used by the application.
 .SH "ENDPOINT TYPES"
 .IP "FID_UNSPEC"
 The type of endpoint is not specified.  This is usually provided as input, with
