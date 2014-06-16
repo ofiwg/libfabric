@@ -498,7 +498,7 @@ ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 
 	wr.wr_id = (uintptr_t) msg->context;
 	wr.next = NULL;
-	if (flags & FI_IMM) {
+	if (flags & FI_REMOTE_EQ_DATA) {
 		wr.opcode = IBV_WR_SEND_WITH_IMM;
 		wr.imm_data = (uint32_t) msg->data;
 	} else {
@@ -1249,7 +1249,7 @@ static ssize_t ibv_eq_comp_read_data(struct fid_eq *eq, void *buf, size_t len)
 
 			entry->op_context = (void *) (uintptr_t) _eq->wc.wr_id;
 			if (_eq->wc.wc_flags & IBV_WC_WITH_IMM) {
-				entry->flags = FI_IMM;
+				entry->flags = FI_REMOTE_EQ_DATA;
 				entry->data = _eq->wc.imm_data;
 			}
 			if (_eq->wc.opcode & IBV_WC_RECV)

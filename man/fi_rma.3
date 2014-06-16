@@ -163,8 +163,8 @@ which can change the default data transfer operation.
 Flags specified with fi_readmsg / fi_writemsg override most flags
 previously configured with the endpoint, except where noted (see fi_control).
 The following list of flags are usable with fi_readmsg and/or fi_writemsg.
-.IP "FI_IMM"
-Applies to fi_writemsg.  Indicates that immediate data is available and should
+.IP "FI_REMOTE_EQ_DATA"
+Applies to fi_writemsg.  Indicates that remote EQ data is available and should
 be sent as part of the request.
 .IP "FI_EVENT"
 Indicates that a completion entry should be generated for the specified

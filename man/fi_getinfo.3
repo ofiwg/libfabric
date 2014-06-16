@@ -246,12 +246,15 @@ and atomic operations.
 Indicates that the user requires an endpoint capable of receiving write memory
 operations from remote endpoints.  Remote write operations include some RMA
 operations and most atomic operations.
-.IP "FI_IMM"
-Indicates that the endpoint be able to support the FI_IMM flag on
-data transfer operations.  The minimum supported size of for
-immediate data that an endpoint with this capability must support
+.IP "FI_REMOTE_EQ_DATA"
+Applications may include a small message with a data transfer that is
+placed directly into a remote event queue as part of a completion event.
+This is refered to as remote EQ data (sometimes referred to as immediate data).
+The FI_REMOTE_EQ_DATA indicates that an endpoint must support the
+FI_REMOTE_EQ_DATA flag on data transfer operations.  The minimum supported size
+of remote EQ data that an endpoint with this capability must support
 is 4-bytes.  Applications may access endpoint options (getopt/setopt)
-to determine immediate data limits.
+to determine remote EQ data limits.
 .IP "FI_REMOTE_SIGNAL"
 Indicates that the endpoint support the FI_REMOTE_SIGNAL flag on
 data transfer operations.  Support requires marking outbound data
