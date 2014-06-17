@@ -176,6 +176,7 @@ struct fid;
 struct fid_fabric;
 struct fid_domain;
 struct fid_av;
+struct fid_wait;
 struct fid_eq;
 struct fid_cntr;
 struct fid_ep;

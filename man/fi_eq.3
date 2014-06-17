@@ -1,4 +1,4 @@
-.TH "FI_EQ" 3 "2014-05-27" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_EQ" 3 "2014-06-18" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_eq \- Event queue operations
 .PP
@@ -109,6 +109,7 @@ struct fi_eq_attr {
 	size_t               size;      /* # entries for EQ */
 	int                  signaling_vector; /* interrupt affinity */
 	uint64_t             flags;     /* operation flags */
+	struct fid_wait     *wait_set;  /* optional wait set */
 	void                *cond;      /* wait condition */
 };
 .fi
@@ -213,7 +214,7 @@ an event is available to be read.  Users may use fi_control to retrieve
 the underlying wait object associated with an EQ, in order to use it in
 other system calls.  The following values may be used to specify the type
 of wait object associated with an EQ: FI_WAIT_NONE, FI_WAIT_UNSPECIFIED,
-FI_WAIT_FD, and FI_WAIT_MUT_COND.
+FI_WAIT_SET, FI_WAIT_FD, and FI_WAIT_MUT_COND.
 .RS
 .IP "FI_WAIT_NONE"
 Used to indicate that the user will not block (wait) for events on the EQ.
@@ -224,6 +225,10 @@ select the most appropriate or highest performing wait object available,
 including custom wait mechanisms.  Applications that select
 FI_WAIT_UNSPECIFIED are not guaranteed to retrieve the underlying wait
 object.
+.IP "FI_WAIT_SET"
+Indicates that the event queue should use a wait set object to wait
+for events.  If specified, the wait_set field must reference an existing
+wait set object.
 .IP "FI_WAIT_FD"
 Indicates that the EQ should use a file descriptor as its wait mechanism.
 A file descriptor wait object must be usable in select, poll, and epoll
@@ -269,6 +274,13 @@ other wait conditions have been met.  The use of FI_REMOTE_SIGNAL may
 improve system utilization by deferring processing of an EQ until a remote
 endpoint has completed all necessary operations.
 .RE
+.IP "wait_set"
+If wait_obj is FI_WAIT_SET, this field references a wait object to which the
+event queue should attach.  When an event is inserted into the event queue,
+the corresponding wait set will be signaled if all necessary conditions are
+met.  The use of a wait_set enables an optimized method of waiting for events
+across multiple event queues.  This field is ignored if wait_obj is not
+FI_WAIT_SET. 
 .IP "cond"
 Points to a datatype or structure describing a wait condition that must be
 satisfied before the EQ wait object is signaled.  The format of the data
@@ -391,4 +403,4 @@ Fabric errno values are defined in
 .IR "rdma/fi_errno.h".
 .SH "NOTES"
 .SH "SEE ALSO"
-fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_cntr(3)
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_cntr(3), fi_poll(3)

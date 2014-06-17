@@ -104,12 +104,46 @@ struct fid_mr {
 };
 
 
-/* Use fi_control GETWAIT to get underlying wait object */
+/*
+ * Wait Set
+ * Allows associating multiple EQs and counters with a single wait object.
+ */
+
+/* Use fi_control GETWAIT to get underlying wait object(s) */
 enum fi_wait_obj {
 	FI_WAIT_NONE,
 	FI_WAIT_UNSPECIFIED,
+	FI_WAIT_SET,
 	FI_WAIT_FD,
 	FI_WAIT_MUT_COND,	/* pthread mutex & cond */
+};
+
+enum {
+	FI_WAIT_ATTR_WAIT_OBJ	= 1 << 0,
+	FI_WAIT_ATTR_FLAGS	= 1 << 1,
+	FI_WAIT_ATTR_MASK_V1	= (FI_WAIT_ATTR_FLAGS << 1) - 1
+};
+
+struct fi_wait_attr {
+	int			mask;
+	enum fi_wait_obj	wait_obj;
+	uint64_t		flags;
+};
+
+struct fi_ops_wait {
+	size_t	size;
+	int	(*wait)(struct fid_wait *waitset, int timeout);
+};
+
+struct fid_wait {
+	struct fid		fid;
+	struct fi_ops_wait	*ops;
+};
+
+struct fi_wait_obj_set {
+	size_t			count;
+	enum fi_wait_obj	wait_obj;
+	void			*obj;
 };
 
 /*
@@ -151,7 +185,8 @@ enum {
 	FI_EQ_ATTR_SIZE		= 1 << 4,
 	FI_EQ_ATTR_VECTOR	= 1 << 5,
 	FI_EQ_ATTR_FLAGS	= 1 << 6,
-	FI_EQ_ATTR_COND		= 1 << 7,
+	FI_EQ_ATTR_WAIT_SET	= 1 << 7,
+	FI_EQ_ATTR_COND		= 1 << 8,
 	FI_EQ_ATTR_MASK_V1	= (FI_EQ_ATTR_COND << 1) - 1
 };
 
@@ -164,6 +199,7 @@ struct fi_eq_attr {
 	size_t			size;
 	int			signaling_vector;
 	uint64_t		flags;
+	struct fid_wait		*wait_set;
 	/* If AUTO_RESET is enabled, and wait_cond is not NONE */
 	void			*cond;
 };
@@ -258,7 +294,8 @@ enum fi_cntr_events {
 enum {
 	FI_CNTR_ATTR_EVENTS	= 1 << 0,
 	FI_CNTR_ATTR_WAIT_OBJ	= 1 << 1,
-	FI_CNTR_ATTR_FLAGS	= 1 << 2,
+	FI_CNTR_ATTR_WAIT_SET	= 1 << 2,
+	FI_CNTR_ATTR_FLAGS	= 1 << 3,
 	FI_CNTR_ATTR_MASK_V1	= (FI_CNTR_ATTR_FLAGS << 1) - 1
 };
 
@@ -266,6 +303,7 @@ struct fi_cntr_attr {
 	int			mask;
 	enum fi_cntr_events	events;
 	enum fi_wait_obj	wait_obj;
+	struct fid_wait		*wait_set;
 	uint64_t		flags;
 };
 
@@ -335,6 +373,8 @@ struct fi_ops_domain {
 			uint64_t flags, struct fid **fif, void *context);
 	int	(*cntr_open)(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct fid_cntr **cntr, void *context);
+	int	(*wait_open)(struct fid_domain *domain, struct fi_wait_attr *attr,
+			struct fid_wait **waitset);
 };
 
 struct fi_ops_mr {

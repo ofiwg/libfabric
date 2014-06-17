@@ -1,4 +1,4 @@
-.TH "FI_CNTR" 3 "2014-05-27" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_CNTR" 3 "2014-06-18" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_cntr \- Completion and event counter operations
 .PP
@@ -66,6 +66,7 @@ struct fi_cntr_attr {
 	int                  mask;      /* valid attr fields */
 	enum fi_cntr_events  events;    /* type of events to count */
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
+	struct fid_wait     *wait_set;  /* optional wait set */
 	uint64_t             flags;     /* operation flags */
 };
 .fi
@@ -92,7 +93,7 @@ a counter has reached a specific threshold.  Users may use fi_control to
 retrieve the underlying wait object associated with a counter, in order to
 use it in other system calls.  The following values may be used to specify
 the type of wait object associated with a counter: FI_WAIT_NONE,
-FI_WAIT_UNSPECIFIED, FI_WAIT_FD, and FI_WAIT_MUT_COND.
+FI_WAIT_UNSPECIFIED, FI_WAIT_SET, FI_WAIT_FD, and FI_WAIT_MUT_COND.
 .RS
 .IP "FI_WAIT_NONE"
 Used to indicate that the user will not block (wait) for events on the counter.
@@ -103,6 +104,10 @@ select the most appropriate or highest performing wait object available,
 including custom wait mechanisms.  Applications that select
 FI_WAIT_UNSPECIFIED are not guaranteed to retrieve the underlying wait
 object.
+.IP "FI_WAIT_SET"
+Indicates that the event counter should use a wait set object to wait
+for events.  If specified, the wait_set field must reference an existing
+wait set object.
 .IP "FI_WAIT_FD"
 Indicates that the counter should use a file descriptor as its wait mechanism.
 A file descriptor wait object must be usable in select, poll, and epoll
@@ -112,6 +117,13 @@ as readable, writable, or with an error.
 Specifies that the counter should use a pthread mutex and cond variable as a
 wait object.
 .RE
+.IP "wait_set"
+If wait_obj is FI_WAIT_SET, this field references a wait object to which the
+event counter should attach.  When an event is added to the event counter,
+the corresponding wait set will be signaled if all necessary conditions are
+met.  The use of a wait_set enables an optimized method of waiting for events
+across multiple event counters.  This field is ignored if wait_obj is not
+FI_WAIT_SET.
 .IP "flags"
 Flags that set the default operation of the counter.
 .RS
@@ -172,4 +184,4 @@ Fabric errno values are defined in
 .IR "rdma/fi_errno.h".
 .SH "NOTES"
 .SH "SEE ALSO"
-fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_eq(3)
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_eq(3), fi_poll(3)

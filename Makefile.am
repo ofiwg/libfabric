@@ -128,6 +128,7 @@ man_MANS = \
 	man/fi_getinfo.3 \
 	man/fi_mr.3 \
 	man/fi_msg.3 \
+	man/fi_poll.3 \
 	man/fi_rma.3 \
 	man/fi_tagged.3
 
