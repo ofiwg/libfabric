@@ -61,7 +61,8 @@ enum fi_av_type {
 enum {
 	FI_AV_ATTR_TYPE		= 1 << 0,
 	FI_AV_ATTR_COUNT	= 1 << 1,
-	FI_AV_ATTR_FLAGS	= 1 << 2,
+	FI_AV_ATTR_NAME		= 1 << 2,
+	FI_AV_ATTR_FLAGS	= 1 << 3,
 	FI_AV_ATTR_MASK_V1	= (FI_AV_ATTR_FLAGS << 1) - 1
 };
 
@@ -69,6 +70,7 @@ struct fi_av_attr {
 	int			mask;
 	enum fi_av_type		type;
 	size_t			count;
+	const char		*name;
 	uint64_t		flags;
 };
 

@@ -96,7 +96,7 @@ The mapping of addresses is fabric and provider specific, but may involve
 lengthy address resolution and fabric management protocols.  AV operations
 are asynchronous by default, but may be set to operate synchronously.
 .SS "fi_av_open"
-fi_av_open allocates a new address vector.  The properties and behavior of
+fi_av_open allocates or opens an address vector.  The properties and behavior of
 the address vector are defined by struct fi_av_attr.
 .PP
 .nf
@@ -104,6 +104,7 @@ struct fi_av_attr {
 	int                  mask;      /* valid attr fields */
 	enum fi_av_type      type;      /* type of AV */
 	size_t               count;     /* # entries for AV */
+	const char          *name;      /* system name of AV */
 	uint64_t             flags;     /* operation flags */
 };
 .fi
@@ -134,9 +135,20 @@ FI_AV_TABLE is often used with address formats FI_AV and FI_ADDR_INDEX.
 .IP "count"
 Indicates the expected number of addresses that will be inserted into
 the AV.  The provider uses this to optimize resource allocations.
+.IP "name"
+An optional system name associated with the address vector to create or open.
+Address vectors may be shared across multiple processes which access
+the same named domain on the same node.  The name field allows the
+underlying provider to identify a shared AV.
+.PP
+Unless an AV is opened with read-only access, a named AV will be created, if
+it does not already exist.
 .IP "flags"
 Flags that set the default operation of the AV.
 .RS
+.IP "FI_READ"
+Opens an AV for read-only access.  An AV opened for read-only access
+must be named (name attribute specified), and the AV must exist.
 .IP "FI_BLOCK"
 Insertions into the address vector should be processed synchronously.
 If an AV is set for synchronous operation, fi_av_insert will block
