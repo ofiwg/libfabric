@@ -146,6 +146,33 @@ struct fi_wait_obj_set {
 	void			*obj;
 };
 
+
+/*
+ * Poll Set
+ * Allows polling multiple event queues and counters for progress
+ */
+
+enum {
+	FI_POLL_ATTR_FLAGS	= 1 << 0,
+	FI_POLL_ATTR_MASK_V1	= (FI_POLL_ATTR_FLAGS << 1) - 1
+};
+
+struct fi_poll_attr {
+	int			mask;
+	uint64_t		flags;
+};
+
+struct fi_ops_poll {
+	size_t	size;
+	int	(*poll)(struct fid_poll *pollset, void **context, int count);
+};
+
+struct fi_poll {
+	struct fid		fid;
+	struct fi_ops_poll	*ops;
+};
+
+
 /*
  * EQ = Event Queue
  * Used to report various events and the completion of asynchronous
@@ -375,6 +402,8 @@ struct fi_ops_domain {
 			struct fid_cntr **cntr, void *context);
 	int	(*wait_open)(struct fid_domain *domain, struct fi_wait_attr *attr,
 			struct fid_wait **waitset);
+	int	(*poll_open)(struct fid_domain *domain, struct fi_poll_attr *attr,
+			struct fid_poll **pollset);
 };
 
 struct fi_ops_mr {

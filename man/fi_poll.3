@@ -2,6 +2,21 @@
 .SH NAME
 fi_poll \- Polling and wait set operations
 .PP
+fi_poll_open / fi_poll_close
+.RS
+Open/close a polling set
+.RE
+.PP
+fi_poll_add / fi_poll_del
+.RS
+Add/remove an event queue or counter to/from a poll set.
+.RE
+.PP
+fi_poll
+.RS
+Poll for progress and events across multiple event queues.
+.RE
+.PP
 fi_wait_open / fi_wait_close
 .RS
 Open/close a wait set
@@ -13,6 +28,20 @@ Waits for one or more wait objects in a set to be signaled.
 .RE
 .SH SYNOPSIS
 .B #include <rdma/fi_domain.h>
+.HP
+.BI "int fi_poll_open(struct fid_domain *" domain ", struct fi_poll_attr *" attr ", "
+.BI "struct fid_poll **" pollset ");"
+.HP
+.BI "int fi_poll_close(struct fid_poll *" pollset ");"
+.HP
+.BI "int fi_poll_add(struct fid_poll *" pollset ", struct fid *" event_fid ", "
+.BI "uint64_t " flags ");"
+.HP
+.BI "int fi_poll_del(struct fid_poll *" pollset ", struct fid *" event_fid ", "
+.BI "uint64_t " flags ");"
+.HP
+.BI "int fi_poll(struct fid_poll *" pollset ", void **" context ", "
+.BI "int " count ");"
 .HP
 .BI "int fi_wait_open(struct fid_domain *" domain ", struct fi_wait_attr *" attr ", "
 .BI "struct fid_wait **" waitset ");"
@@ -26,13 +55,54 @@ Waits for one or more wait objects in a set to be signaled.
 .SH ARGUMENTS
 .IP "domain"
 Resource domain
+.IP "pollset"
+Event poll set
 .IP "waitset"
 Wait object set
 .IP "attr"
-Wait set attributes
+Poll or wait set attributes
+.IP "context"
+On success, an array of user context values associated with an event
+queue or counter.
+.IP "count"
+Number of entries in context array.
 .IP "timeout"
 Time to wait for a signal, in milliseconds.
 .SH "DESCRIPTION"
+.SS "fi_poll_open"
+fi_poll_open creates a new polling set.  A poll set enables an optimized
+method for progressing asynchronous operations across multiple event
+queues and counters and checking for their completions.
+.PP
+A poll set is defined with the following attributes.
+.PP
+.nf
+struct fi_poll_attr {
+	int                  mask;      /* valid attr fields */
+	uint64_t             flags;     /* operation flags */
+};
+.fi
+.IP "mask"
+The mask field is used for forward and backward API compatibility.  It is
+used by the application to indicate which fields in the attribute structure
+have been set.  For this version of the API, mask should be set to
+FI_POLL_ATTR_MASK_V1, indicating that all specified fields have been initialized.
+.IP "flags"
+Flags that set the default operation of the poll set.  The use of this field
+is reserved and must be set to 0 by the caller.
+.SS "fi_poll_close"
+The fi_poll_close call releases all resources associated with a poll set.
+The poll set must not be associated with any other resources prior to
+being closed.
+.SS "fi_poll_add"
+Associates an event queue or counter with a poll set.
+.SS "fi_poll_del"
+Removes an event queue or counter from a poll set.
+.SS "fi_poll"
+Progresses all event queues and counters associated with a poll set and
+checks for events.  If events has occurred, contexts associated with
+the event queues and/or counters are returned.  The number of contexts is
+limited to the size of the context array, indicated by the count parameter.
 .SS "fi_wait_open"
 fi_wait_open allocates a new wait set.  A wait set enables an optimized method
 of waiting for events across multiple event queues and counters.  Where
@@ -120,6 +190,11 @@ fabric errno is returned.
 .PP
 Fabric errno values are defined in
 .IR "rdma/fi_errno.h".
+.PP
+fi_poll
+.RS
+On success, if events are available, returns the number of entries written
+to the context array.
 .SH "NOTES"
 .SH "SEE ALSO"
 fi_getinfo(3), fi_domain(3), fi_cntr(3), fi_eq(3)
