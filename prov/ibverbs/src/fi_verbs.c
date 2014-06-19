@@ -1266,7 +1266,7 @@ static ssize_t ibv_eq_comp_read_data(struct fid_eq *eq, void *buf, size_t len)
 
 				entry->op_context = (void *) (uintptr_t) wc->wr_id;
 				if (wc->wc_flags & IBV_WC_WITH_IMM) {
-					entry->flags = FI_IMM;
+					entry->flags = FI_REMOTE_EQ_DATA;
 					entry->data = wc->imm_data;
 				}
 				if (wc->opcode & IBV_WC_RECV)
