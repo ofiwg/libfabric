@@ -187,7 +187,17 @@ fi_atomic(struct fid_ep *ep,
 	  enum fi_datatype datatype, enum fi_op op, void *context)
 {
 	return ep->atomic->write(ep, buf, count, desc, addr, key,
-				 datatype, op, context);
+			datatype, op, context);
+}
+
+static inline ssize_t
+fi_atomicv(struct fid_ep *ep,
+	   const struct fi_ioc *iov, void *desc, size_t count,
+	   uint64_t addr, uint64_t key,
+	   enum fi_datatype datatype, enum fi_op op, void *context)
+{
+	return ep->atomic->writev(ep, iov, desc, count, addr, key, datatype,
+			op, context);
 }
 
 static inline ssize_t
@@ -198,7 +208,14 @@ fi_atomicto(struct fid_ep *ep,
 	    enum fi_datatype datatype, enum fi_op op, void *context)
 {
 	return ep->atomic->writeto(ep, buf, count, desc, dest_addr,
-				   addr, key, datatype, op, context);
+			addr, key, datatype, op, context);
+}
+
+static inline ssize_t
+fi_atomicmsg(struct fid_ep *ep,
+	     const struct fi_msg_atomic *msg, uint64_t flags)
+{
+	return ep->atomic->writemsg(ep, msg, flags);
 }
 
 static inline ssize_t
@@ -209,7 +226,19 @@ fi_fetch_atomic(struct fid_ep *ep,
 		enum fi_datatype datatype, enum fi_op op, void *context)
 {
 	return ep->atomic->readwrite(ep, buf, count, desc, result, result_desc,
-				     addr, key, datatype, op, context);
+			addr, key, datatype, op, context);
+}
+
+static inline ssize_t
+fi_fetch_atomicv(struct fid_ep *ep,
+		 const struct fi_ioc *iov, void *desc, size_t count,
+		 struct fi_ioc *resultv, void *result_desc, size_t result_count,
+		 uint64_t addr, uint64_t key,
+		 enum fi_datatype datatype, enum fi_op op, void *context)
+{
+	return ep->atomic->readwritev(ep, iov, desc, count,
+			resultv, result_desc, result_count,
+			addr, key, datatype, op, context);
 }
 
 static inline ssize_t
@@ -221,8 +250,46 @@ fi_fetch_atomicto(struct fid_ep *ep,
 		  enum fi_datatype datatype, enum fi_op op, void *context)
 {
 	return ep->atomic->readwriteto(ep, buf, count, desc, result,
-					result_desc, dest_addr, addr,
-					key, datatype, op, context);
+			result_desc, dest_addr, addr,
+			key, datatype, op, context);
+}
+
+static inline ssize_t
+fi_fetch_atomicmsg(struct fid_ep *ep,
+		   const struct fi_msg_atomic *msg,
+		   struct fi_ioc *resultv, void *result_desc, size_t result_count,
+		   uint64_t flags)
+{
+	return ep->atomic->readwritemsg(ep, msg, resultv, result_desc,
+			result_count, flags);
+}
+
+static inline ssize_t
+fi_compare_atomic(struct fid_ep *ep,
+		  const void *buf, size_t count, void *desc,
+		  const void *compare, void *compare_desc,
+		  void *result, void *result_desc,
+		  uint64_t addr, uint64_t key,
+		  enum fi_datatype datatype, enum fi_op op, void *context)
+{
+	return ep->atomic->compwrite(ep, buf, count,
+			desc,compare, compare_desc,
+			result, result_desc, addr, key,
+			datatype, op, context);
+}
+
+static inline ssize_t
+fi_compare_atomicv(struct fid_ep *ep,
+		   const struct fi_ioc *iov, void *desc, size_t count,
+		   const struct fi_ioc *comparev, void *compare_desc, size_t compare_count,
+		   struct fi_ioc *resultv, void *result_desc, size_t result_count,
+		   uint64_t addr, uint64_t key,
+		   enum fi_datatype datatype, enum fi_op op, void *context)
+{
+	return ep->atomic->compwritev(ep, iov, desc, count,
+			comparev, compare_desc, compare_count,
+			resultv, result_desc, result_count,
+			addr, key, datatype, op, context);
 }
 
 static inline ssize_t
@@ -235,10 +302,20 @@ fi_compare_atomicto(struct fid_ep *ep,
 		    enum fi_datatype datatype, enum fi_op op, void *context)
 {
 	return ep->atomic->compwriteto(ep, buf, count, desc,
-				       compare, compare_desc,
-				       result, result_desc,
-				       dest_addr, addr, key,
-				       datatype, op, context);
+			compare, compare_desc, result, result_desc,
+			dest_addr, addr, key, datatype, op, context);
+}
+
+static inline ssize_t
+fi_compare_atomicmsg(struct fid_ep *ep,
+		     const struct fi_msg_atomic *msg,
+		     const struct fi_ioc *comparev, void *compare_desc, size_t compare_count,
+		     struct fi_ioc *resultv, void *result_desc, size_t result_count,
+		     uint64_t flags)
+{
+	return ep->atomic->compwritemsg(ep, msg,
+			comparev, compare_desc, compare_count,
+			resultv, result_desc, result_count, flags);
 }
 
 static inline int
