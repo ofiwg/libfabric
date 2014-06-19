@@ -87,7 +87,7 @@ enum {
 #define FI_REMOTE_READ		(1ULL << 20)
 #define FI_REMOTE_WRITE		(1ULL << 21)
 
-#define FI_IMM			(1ULL << 24)
+#define FI_REMOTE_EQ_DATA	(1ULL << 24)
 #define FI_EVENT		(1ULL << 25)
 #define FI_REMOTE_SIGNAL	(1ULL << 26)
 #define FI_REMOTE_COMPLETE	(1ULL << 27)

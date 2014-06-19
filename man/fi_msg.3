@@ -147,8 +147,8 @@ which can change the default message handling of the endpoint.
 Flags specified with fi_recvmsg / fi_sendmsg override most flags
 previously configured with the endpoint, except where noted (see fi_control).
 The following list of flags are usable with fi_recvmsg and/or fi_sendmsg.
-.IP "FI_IMM"
-Applies to fi_sendmsg.  Indicates that immediate data is available and should
+.IP "FI_REMOTE_EQ_DATA"
+Applies to fi_sendmsg.  Indicates that remote EQ data is available and should
 be sent as part of the request.
 .IP "FI_EVENT"
 Indicates that a completion entry should be generated for the specified

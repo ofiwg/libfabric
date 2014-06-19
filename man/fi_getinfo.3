@@ -246,12 +246,15 @@ and atomic operations.
 Indicates that the user requires an endpoint capable of receiving write memory
 operations from remote endpoints.  Remote write operations include some RMA
 operations and most atomic operations.
-.IP "FI_IMM"
-Indicates that the endpoint be able to support the FI_IMM flag on
-data transfer operations.  The minimum supported size of for
-immediate data that an endpoint with this capability must support
+.IP "FI_REMOTE_EQ_DATA"
+Applications may include a small message with a data transfer that is
+placed directly into a remote event queue as part of a completion event.
+This is refered to as remote EQ data (sometimes referred to as immediate data).
+The FI_REMOTE_EQ_DATA indicates that an endpoint must support the
+FI_REMOTE_EQ_DATA flag on data transfer operations.  The minimum supported size
+of remote EQ data that an endpoint with this capability must support
 is 4-bytes.  Applications may access endpoint options (getopt/setopt)
-to determine immediate data limits.
+to determine remote EQ data limits.
 .IP "FI_REMOTE_SIGNAL"
 Indicates that the endpoint support the FI_REMOTE_SIGNAL flag on
 data transfer operations.  Support requires marking outbound data
@@ -261,6 +264,10 @@ Indicates that the endpoint support the FI_REMOTE_COMPLETE flag on
 data transfer operations.  Support requires marking outbound data
 transfers as using remote completions and responding to incoming transfers
 appropriately.
+.IP "FI_CANCEL"
+Indicates that the user desires the ability to cancel outstanding data
+transfer operations.  If FI_CANCEL is not set, a provider may optimize code
+paths with the assumption that fi_cancel will not be used by the application.
 .SH "OP FLAGS"
 Operation flags are obtained by OR-ing the following flags together.
 Operation flags define the default flags applied to an endpoint's data
@@ -298,25 +305,24 @@ operation until the operation has completed on the remote side.  The remote
 endpoint must be configured with FI_REMOTE_COMPLETE for correct operation.
 The local endpoint must be configured with the FI_REMOTE_COMPLETE capability
 in order to specify this flag.
-.IP "FI_CANCEL"
-Indicates that the user desires the ability to cancel any outstanding data
-transfer operation.  If FI_CANCEL is not set, a provider may optimize code
-paths with the assumption that fi_cancel will not be used by the application.
 .SH "ENDPOINT TYPES"
 .IP "FID_UNSPEC"
 The type of endpoint is not specified.  This is usually provided as input, with
 other attributes of the endpoint or the provider selecting the type.
 .IP "FID_MSG"
-Provides reliable, in-order message based communication, with data transfers
-maintaining message boundaries. 
+Provides a reliable, connection-oriented data transfer service with flow
+control that maintains message boundaries.
 .IP "FID_STREAM [not targeting 1.0 release]"
 Provides reliable, byte streaming communication.
 .IP "FID_DGRAM"
-Supports connectionless, unreliable datagram communication.
+Supports a connectionless, unreliable datagram communication.  Message
+boundaries are maintained, but the maximum message size may be limited to
+the fabric MTU.  Flow control is not guaranteed.
 .IP "FID_RAW [not targeting 1.0 release]"
 Provides raw link-level network access.
 .IP "FID_RDM"
-Provides reliable datagram communication without ordering guarantees.
+Reliable datagram message.  Provides a reliable, unconnected data transfer
+service with flow control that maintains message boundaries.
 .IP "FID_PACKET [not targeting 1.0 release]"
 Provides raw network-level access.
 .SH "PROTOCOLS"
@@ -392,6 +398,12 @@ registered by the application for access domains opened with this capability.
 The provider supports user requested memory registration keys.  Providers
 that set this capability honor the requested_key parameter for memory
 registration calls.
+.IP "FI_DYNAMIC_MR"
+The provider supports applications registering any range of addresses
+in their virtual address space, whether or not those addresses are
+back by physical pages or have been allocated to the app.
+Providers that lack this capability require that registered memory
+regions be backed by allocated memory pages.
 .SH "ADDRESSING FORMATS"
 Additional information on address formats is available under address vector
 .BR "fi_av(3)".

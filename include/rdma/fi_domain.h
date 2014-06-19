@@ -61,7 +61,8 @@ enum fi_av_type {
 enum {
 	FI_AV_ATTR_TYPE		= 1 << 0,
 	FI_AV_ATTR_COUNT	= 1 << 1,
-	FI_AV_ATTR_FLAGS	= 1 << 2,
+	FI_AV_ATTR_NAME		= 1 << 2,
+	FI_AV_ATTR_FLAGS	= 1 << 3,
 	FI_AV_ATTR_MASK_V1	= (FI_AV_ATTR_FLAGS << 1) - 1
 };
 
@@ -69,6 +70,7 @@ struct fi_av_attr {
 	int			mask;
 	enum fi_av_type		type;
 	size_t			count;
+	const char		*name;
 	uint64_t		flags;
 };
 
@@ -102,6 +104,14 @@ struct fid_mr {
 };
 
 
+/* Use fi_control GETWAIT to get underlying wait object */
+enum fi_wait_obj {
+	FI_WAIT_NONE,
+	FI_WAIT_UNSPECIFIED,
+	FI_WAIT_FD,
+	FI_WAIT_MUT_COND,	/* pthread mutex & cond */
+};
+
 /*
  * EQ = Event Queue
  * Used to report various events and the completion of asynchronous
@@ -128,12 +138,6 @@ enum fi_eq_format {
 	FI_EQ_FORMAT_CM,
 };
 
-/* Use fi_control GETWAIT to get underlying wait object */
-enum fi_eq_wait_obj {
-	FI_EQ_WAIT_NONE,
-	FI_EQ_WAIT_FD
-};
-
 enum fi_eq_wait_cond {
 	FI_EQ_COND_NONE,
 	FI_EQ_COND_THRESHOLD	/* size_t threshold */
@@ -155,7 +159,7 @@ struct fi_eq_attr {
 	int			mask;
 	enum fi_eq_domain	domain;
 	enum fi_eq_format	format;
-	enum fi_eq_wait_obj	wait_obj;
+	enum fi_wait_obj	wait_obj;
 	enum fi_eq_wait_cond	wait_cond;
 	size_t			size;
 	int			signaling_vector;
@@ -251,12 +255,6 @@ enum fi_cntr_events {
 	FI_CNTR_EVENTS_COMP
 };
 
-/* Use fi_control GETWAIT to get underlying wait object */
-enum fi_cntr_wait_obj {
-	FI_CNTR_WAIT_NONE,
-	FI_CNTR_WAIT_MUT_COND /* pthread mutex & cond */
-};
-
 enum {
 	FI_CNTR_ATTR_EVENTS	= 1 << 0,
 	FI_CNTR_ATTR_WAIT_OBJ	= 1 << 1,
@@ -267,7 +265,7 @@ enum {
 struct fi_cntr_attr {
 	int			mask;
 	enum fi_cntr_events	events;
-	enum fi_cntr_wait_obj	wait_obj;
+	enum fi_wait_obj	wait_obj;
 	uint64_t		flags;
 };
 
@@ -308,6 +306,7 @@ struct fi_mr_attr {
 #define FI_CONTEXT		(1ULL << 1)
 #define FI_LOCAL_MR		(1ULL << 2)
 #define FI_USER_MR_KEY		(1ULL << 3)
+#define FI_DYNAMIC_MR		(1ULL << 4)
 
 
 /*

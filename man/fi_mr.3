@@ -97,6 +97,13 @@ their own local memory registrations may do so by using the memory
 registration calls.  Applications may use the FI_LOCAL_MR domain
 capability bit as a guide.
 .PP
+Providers may support applications registering any range of addresses
+in their virtual address space, whether or not those addresses are
+back by physical pages or have been allocated to the app.  Support for
+this ability is specified through the FI_DYNAMIC_MR capability flag.
+Providers that lack this capability require that registered memory
+regions be backed by allocated memory pages.
+.PP
 The registrations functions -- fi_mr_reg, fi_mr_regv, and fi_mr_regattr --
 are used to register one or more memory buffers with fabric resources.
 The main difference between registration functions are the number

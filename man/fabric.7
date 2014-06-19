@@ -81,8 +81,13 @@ Event queues, are used to collect
 and report the completion of asynchronous operations.  For example, the
 completion of a data transfer operation submitted over a fabric endpoint
 may write an event to an event queue associated with the endpoint.
-There are multiple types of event collectors, and the format of the events
+There are multiple types of event queues, and the format of the events
 that they report are controlled by applications.
+.IP "fi_cntr - Event Counters" 12
+Event counters are used to report the number of completed asynchronous
+operations.  Event counters are considered light-weight, in that a
+completion simply increments a counter, rather than placing an entry into
+an event queue.
 .IP "fi_mr - Memory Region" 12
 Memory regions describe application local memory buffers.  In order for
 fabric resources to access application memory, the application must first
@@ -137,7 +142,7 @@ A fabric provider must support at least one endpoint type.
 .PP
 All endpoints must support the message queue data transfer interface.
 .PP
-An endpoint that advertises support for a specific protocol capability
+An endpoint that advertises support for a specific endpoint capability
 must support the corresponding data transfer interface.
 .PP
 Endpoints must support operations to send and receive data for any data
@@ -157,14 +162,6 @@ connect, listen, accept, reject, and shutdown.
 .PP
 All endpoints must support all relevant 'msg' data transfer routines.
 (sendmsg / recvmsg / writemsg / readmsg / etc.)
-.PP
-Endpoints belonging to domains with the FI_LOCAL_MR capability must support
-the relevant 'mem' data transfer operations. (recvmem / sendmem / readmem /
-writemem / etc.)
-.PP
-Endpoints belonging to domains that do not require the FI_LOCAL_MR capability
-must support the relevant non-'mem' data transfer operations.  (send / recv /
-read / write / etc.)
 .PP
 Access domains must support opening address vector maps and tables.
 .PP

@@ -336,7 +336,7 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 
 			if (tmp_cntr) {
 				tmp_cntr->counter++;
-				if (tmp_cntr->wait_obj == FI_CNTR_WAIT_MUT_COND)
+				if (tmp_cntr->wait_obj == FI_WAIT_MUT_COND)
 					pthread_cond_signal(&tmp_cntr->cond);
 			}
 

@@ -48,7 +48,7 @@ static int psmx_cntr_add(struct fid_cntr *cntr, uint64_t value)
 	fid_cntr = container_of(cntr, struct psmx_fid_cntr, cntr);
 	fid_cntr->counter += value;
 
-	if (fid_cntr->wait_obj == FI_CNTR_WAIT_MUT_COND)
+	if (fid_cntr->wait_obj == FI_WAIT_MUT_COND)
 		pthread_cond_signal(&fid_cntr->cond);
 
 	return 0;
@@ -61,7 +61,7 @@ static int psmx_cntr_set(struct fid_cntr *cntr, uint64_t value)
 	fid_cntr = container_of(cntr, struct psmx_fid_cntr, cntr);
 	fid_cntr->counter = value;
 
-	if (fid_cntr->wait_obj == FI_CNTR_WAIT_MUT_COND)
+	if (fid_cntr->wait_obj == FI_WAIT_MUT_COND)
 		pthread_cond_signal(&fid_cntr->cond);
 
 	return 0;
@@ -74,12 +74,12 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
 	fid_cntr = container_of(cntr, struct psmx_fid_cntr, cntr);
 
 	switch (fid_cntr->wait_obj) {
-	case FI_CNTR_WAIT_NONE:
+	case FI_WAIT_NONE:
 		while (fid_cntr->counter < threshold)
 			psmx_eq_poll_mq(NULL, fid_cntr->domain);
 		break;
 
-	case FI_CNTR_WAIT_MUT_COND:
+	case FI_WAIT_MUT_COND:
 		pthread_mutex_lock(&fid_cntr->mutex);
 		while (fid_cntr->counter < threshold)
 			pthread_cond_wait(&fid_cntr->cond, &fid_cntr->mutex);
@@ -192,7 +192,7 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	uint64_t flags;
 
 	events = FI_CNTR_EVENTS_COMP;
-	wait_obj = FI_CNTR_WAIT_NONE;
+	wait_obj = FI_WAIT_NONE;
 	flags = 0;
 
 	if (attr->mask & FI_CNTR_ATTR_EVENTS) {
@@ -210,14 +210,14 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	if (attr->mask & FI_CNTR_ATTR_WAIT_OBJ) {
 		switch (attr->wait_obj) {
-		case FI_CNTR_WAIT_NONE:
-		case FI_CNTR_WAIT_MUT_COND:
+		case FI_WAIT_NONE:
+		case FI_WAIT_MUT_COND:
 			wait_obj = attr->wait_obj;
 			break;
 
 		default:
 			psmx_debug("%s: attr->wait_obj=%d, supported=%d,%d\n", __func__,
-					attr->wait_obj, FI_CNTR_WAIT_NONE, FI_CNTR_WAIT_MUT_COND);
+					attr->wait_obj, FI_WAIT_NONE, FI_WAIT_MUT_COND);
 			return -EINVAL;
 		}
 	}
@@ -237,7 +237,7 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	fid_cntr->cntr.fid.ops = &psmx_fi_ops;
 	fid_cntr->cntr.ops = &psmx_cntr_ops;
 
-	if (wait_obj == FI_CNTR_WAIT_MUT_COND) {
+	if (wait_obj == FI_WAIT_MUT_COND) {
 		pthread_mutex_init(&fid_cntr->mutex, NULL);
 		pthread_cond_init(&fid_cntr->cond, NULL);
 	}
