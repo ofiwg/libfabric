@@ -310,16 +310,19 @@ in order to specify this flag.
 The type of endpoint is not specified.  This is usually provided as input, with
 other attributes of the endpoint or the provider selecting the type.
 .IP "FID_MSG"
-Provides reliable, in-order message based communication, with data transfers
-maintaining message boundaries. 
+Provides a reliable, connection-oriented data transfer service with flow
+control that maintains message boundaries.
 .IP "FID_STREAM [not targeting 1.0 release]"
 Provides reliable, byte streaming communication.
 .IP "FID_DGRAM"
-Supports connectionless, unreliable datagram communication.
+Supports a connectionless, unreliable datagram communication.  Message
+boundaries are maintained, but the maximum message size may be limited to
+the fabric MTU.  Flow control is not guaranteed.
 .IP "FID_RAW [not targeting 1.0 release]"
 Provides raw link-level network access.
 .IP "FID_RDM"
-Provides reliable datagram communication without ordering guarantees.
+Reliable datagram message.  Provides a reliable, unconnected data transfer
+service with flow control that maintains message boundaries.
 .IP "FID_PACKET [not targeting 1.0 release]"
 Provides raw network-level access.
 .SH "PROTOCOLS"
