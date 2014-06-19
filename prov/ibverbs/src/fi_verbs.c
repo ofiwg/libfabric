@@ -124,7 +124,7 @@ static int ibv_check_hints(struct fi_info *hints)
 		return -FI_ENODATA;
 	}
 
-	if ((hints->ep_cap & (FI_MSG | FI_RMA)) != hints->ep_cap)
+	if ( !(hints->ep_cap & (FI_MSG | FI_RMA)) )
 		return -FI_ENODATA;
 
 	if (hints->fabric_name && !strcmp(hints->fabric_name, "RDMA"))
