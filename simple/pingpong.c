@@ -172,7 +172,7 @@ static int send_xfer(int size)
 post:
 	ret = fi_send(ep, buf, (size_t)size, fi_mr_desc(mr), NULL);
 	if (ret)
-		printf("fi_write %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_send %d (%s)\n", ret, fi_strerror(-ret));
 
 	return ret;
 }
@@ -192,7 +192,7 @@ static int recv_xfer(int size)
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), buf);
 	if (ret)
-		printf("fi_read %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
 
 	return ret;
 }
@@ -612,6 +612,9 @@ int main(int argc, char **argv)
 	}
 
 	hints.type = FID_MSG;
+	hints.protocol = FI_PROTO_IB_RC;
+	hints.ep_cap = FI_MSG;
+
 	ret = run();
 	return ret;
 }
