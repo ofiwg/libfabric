@@ -66,7 +66,7 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 		return -ENOPROTOOPT;
 
 	switch (optname) {
-	case FI_OPT_MAX_BUFFERED_SEND:
+	case FI_OPT_MAX_INJECTED_SEND:
 		if (!optval)
 			return 0;
 
@@ -123,8 +123,6 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 
 		break;
 
-	case FI_OPT_TOTAL_BUFFERED_SEND:
-		/* fall through for now */
 	default:
 		return -ENOPROTOOPT;
 	}
@@ -144,7 +142,7 @@ static int psmx_ep_setopt(fid_t fid, int level, int optname,
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 	switch (optname) {
-	case FI_OPT_MAX_BUFFERED_SEND:
+	case FI_OPT_MAX_INJECTED_SEND:
 		if (!optval)
 			return -EFAULT;
 

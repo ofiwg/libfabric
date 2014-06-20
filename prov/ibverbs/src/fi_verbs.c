@@ -711,7 +711,7 @@ ibv_msg_ep_getopt(fid_t fid, int level, int optname,
 	switch (level) {
 	case FI_OPT_ENDPOINT:
 		switch (optname) {
-		case FI_OPT_MAX_BUFFERED_SEND:
+		case FI_OPT_MAX_INJECTED_SEND:
 			if (*optlen < sizeof(size_t)) {
 				*optlen = sizeof(size_t);
 				return -FI_ETOOSMALL;
@@ -738,7 +738,7 @@ ibv_msg_ep_setopt(fid_t fid, int level, int optname,
 	switch (level) {
 	case FI_OPT_ENDPOINT:
 		switch (optname) {
-		case FI_OPT_MAX_BUFFERED_SEND:
+		case FI_OPT_MAX_INJECTED_SEND:
 			if (optlen != sizeof(size_t))
 				return -FI_EINVAL;
 			if (ep->id->qp)
