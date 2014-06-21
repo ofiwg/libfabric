@@ -71,6 +71,7 @@ struct fi_av_attr {
 	enum fi_av_type		type;
 	size_t			count;
 	const char		*name;
+	void			*map_addr;
 	uint64_t		flags;
 };
 
