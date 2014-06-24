@@ -81,7 +81,7 @@ enum fi_proto {
 
 struct fi_msg {
 	const struct iovec	*msg_iov;
-	void			*desc;
+	void			**desc;
 	size_t			iov_count;
 	const void		*addr;
 	void			*context;
@@ -116,7 +116,7 @@ struct fi_ops_msg {
 	size_t	size;
 	ssize_t (*recv)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			void *context);
-	ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void *desc,
+	ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			size_t count, void *context);
 	ssize_t (*recvfrom)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			const void *src_addr, void *context);
@@ -125,7 +125,7 @@ struct fi_ops_msg {
 	ssize_t (*send)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			void *context);
 	ssize_t	(*inject)(struct fid_ep *ep, const void *buf, size_t len);
-	ssize_t (*sendv)(struct fid_ep *ep, const struct iovec *iov, void *desc,
+	ssize_t (*sendv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			size_t count, void *context);
 	ssize_t (*sendto)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			const void *dest_addr, void *context);
@@ -223,7 +223,7 @@ fi_recv(struct fid_ep *ep, void *buf, size_t len, void *desc, void *context)
 }
 
 static inline ssize_t
-fi_recvv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+fi_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	 size_t count, void *context)
 {
 	return ep->msg->recvv(ep, iov, desc, count, context);
@@ -255,7 +255,7 @@ fi_inject(struct fid_ep *ep, const void *buf, size_t len)
 }
 
 static inline ssize_t
-fi_sendv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+fi_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	 size_t count, void *context)
 {
 	return ep->msg->sendv(ep, iov, desc, count, context);

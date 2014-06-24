@@ -391,7 +391,7 @@ ibv_msg_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 }
 
 static ssize_t
-ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
                  size_t count, void *context)
 {
 	struct ibv_msg_ep *_ep;
@@ -411,7 +411,7 @@ ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void *desc,
 	for (i = 0; i < count; i++) {
 		sge[i].addr = (uintptr_t) iov[i].iov_base;
 		sge[i].length = (uint32_t) iov[i].iov_len;
-		sge[i].lkey = (uint32_t) (uintptr_t) desc;
+		sge[i].lkey = (uint32_t) (uintptr_t) desc[count];
 	}
 
 	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
@@ -442,7 +442,7 @@ ibv_msg_ep_send(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t
-ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
                  size_t count, void *context)
 {
 	struct ibv_msg_ep *_ep;
@@ -464,7 +464,7 @@ ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void *desc,
 		sge[i].addr = (uintptr_t) iov[i].iov_base;
 		sge[i].length = (uint32_t) iov[i].iov_len;
 		bytes += iov[i].iov_len;
-		sge[i].lkey = (uint32_t) (uintptr_t) desc;
+		sge[i].lkey = (uint32_t) (uintptr_t) desc[count];
 	}
 	wr.send_flags = (bytes <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
 
@@ -486,7 +486,7 @@ ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 		for (len = 0, i = 0; i < msg->iov_count; i++) {
 			sge[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
 			sge[i].length = (uint32_t) msg->msg_iov[i].iov_len;
-			sge[i].lkey = (uint32_t) (uintptr_t) (msg->desc + i);
+			sge[i].lkey = (uint32_t) (uintptr_t) (msg->desc[i]);
 			len += sge[i].length;
 		}
 
@@ -543,7 +543,7 @@ ibv_msg_ep_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t
-ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void *desc,
+ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		      size_t count, uint64_t addr, uint64_t tag, void *context)
 {
 	struct ibv_msg_ep *_ep;
@@ -569,7 +569,7 @@ ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void *desc,
 		sge[i].addr = (uintptr_t) iov[i].iov_base;
 		sge[i].length = (uint32_t) iov[i].iov_len;
 		bytes += iov[i].iov_len;
-		sge[i].lkey = (uint32_t) (uintptr_t) desc;
+		sge[i].lkey = (uint32_t) (uintptr_t) desc[i];
 	}
 	wr.send_flags = (bytes <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
 
@@ -602,7 +602,7 @@ ibv_msg_ep_rma_read(struct fid_ep *ep, void *buf, size_t len,
 }
 
 static ssize_t
-ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		     size_t count, uint64_t addr, uint64_t tag, void *context)
 {
 	struct ibv_msg_ep *_ep;
@@ -626,7 +626,7 @@ ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void *desc,
 	for (i = 0; i < count; i++) {
 		sge[i].addr = (uintptr_t) iov[i].iov_base;
 		sge[i].length = (uint32_t) iov[i].iov_len;
-		sge[i].lkey = (uint32_t) (uintptr_t) desc;
+		sge[i].lkey = (uint32_t) (uintptr_t) desc[i];
 	}
 
 	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);

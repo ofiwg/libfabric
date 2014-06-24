@@ -46,7 +46,7 @@ extern "C" {
 
 struct fi_msg_tagged {
 	const struct iovec	*msg_iov;
-	void			*desc;
+	void			**desc;
 	size_t			iov_count;
 	const void		*addr;
 	uint64_t		tag;
@@ -60,7 +60,7 @@ struct fi_ops_tagged {
 	size_t	size;
 	ssize_t (*recv)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			uint64_t tag, uint64_t ignore, void *context);
-	ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void *desc,
+	ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			size_t count, uint64_t tag, uint64_t ignore, void *context);
 	ssize_t (*recvfrom)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			const void *src_addr,
@@ -71,7 +71,7 @@ struct fi_ops_tagged {
 			uint64_t tag, void *context);
 	ssize_t	(*inject)(struct fid_ep *ep, const void *buf, size_t len,
 			uint64_t tag);
-	ssize_t (*sendv)(struct fid_ep *ep, const struct iovec *iov, void *desc,
+	ssize_t (*sendv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			size_t count, uint64_t tag, void *context);
 	ssize_t (*sendto)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			const void *dest_addr, uint64_t tag, void *context);
@@ -95,7 +95,7 @@ fi_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 }
 
 static inline ssize_t
-fi_trecvv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+fi_trecvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	  size_t count, uint64_t tag, uint64_t ignore, void *context)
 {
 	return ep->tagged->recvv(ep, iov, desc, count, tag, ignore, context);
@@ -129,7 +129,7 @@ fi_tinject(struct fid_ep *ep, const void *buf, size_t len, uint64_t tag)
 }
 
 static inline ssize_t
-fi_tsendv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+fi_tsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	  size_t count, uint64_t tag, void *context)
 {
 	return ep->tagged->sendv(ep, iov, desc, count, tag, context);

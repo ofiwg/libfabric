@@ -51,7 +51,7 @@ struct fi_rma_iov {
 
 struct fi_msg_rma {
 	const struct iovec	*msg_iov;
-	void			*desc;
+	void			**desc;
 	size_t			iov_count;
 	const void		*addr;
 	const struct fi_rma_iov *rma_iov;
@@ -65,7 +65,7 @@ struct fi_ops_rma {
 	size_t	size;
 	ssize_t	(*read)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			uint64_t addr, uint64_t key, void *context);
-	ssize_t	(*readv)(struct fid_ep *ep, const struct iovec *iov, void *desc,
+	ssize_t	(*readv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			size_t count, uint64_t addr, uint64_t key, void *context);
 	ssize_t	(*readfrom)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			const void *src_addr, uint64_t addr, uint64_t key,
@@ -74,7 +74,7 @@ struct fi_ops_rma {
 			uint64_t flags);
 	ssize_t	(*write)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			uint64_t addr, uint64_t key, void *context);
-	ssize_t	(*writev)(struct fid_ep *ep, const struct iovec *iov, void *desc,
+	ssize_t	(*writev)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			size_t count, uint64_t addr, uint64_t key, void *context);
 	ssize_t	(*writeto)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			const void *dest_addr, uint64_t addr, uint64_t key,
@@ -98,7 +98,7 @@ fi_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 }
 
 static inline ssize_t
-fi_readv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+fi_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	 size_t count, uint64_t addr, uint64_t key, void *context)
 {
 	return ep->rma->readv(ep, iov, desc, count, addr, key, context);
@@ -125,7 +125,7 @@ fi_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 }
 
 static inline ssize_t
-fi_writev(struct fid_ep *ep, const struct iovec *iov, void *desc,
+fi_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	 size_t count, uint64_t addr, uint64_t key, void *context)
 {
 	return ep->rma->writev(ep, iov, desc, count, addr, key, context);

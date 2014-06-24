@@ -102,7 +102,8 @@ static ssize_t psmx_tagged_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged
 		return -EINVAL;
 
 	return _psmx_tagged_recvfrom(ep, msg->msg_iov[0].iov_base,
-				     msg->msg_iov[0].iov_len, msg->desc,
+				     msg->msg_iov[0].iov_len,
+				     msg->desc ? msg->desc[0] : NULL,
 				     msg->addr, msg->tag, msg->ignore,
 				     msg->context, flags);
 }
@@ -122,7 +123,7 @@ static ssize_t psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len, void *
 					    tag, ignore, context);
 }
 
-static ssize_t psmx_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+static ssize_t psmx_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 				 size_t count, uint64_t tag, uint64_t ignore,
 				 void *context)
 {
@@ -131,8 +132,8 @@ static ssize_t psmx_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, voi
 	if (!iov || count != 1)
 		return -EINVAL;
 
-	return psmx_tagged_recv(ep, iov->iov_base, iov->iov_len, desc,
-				tag, ignore, context);
+	return psmx_tagged_recv(ep, iov->iov_base, iov->iov_len,
+				desc ? desc[0] : NULL, tag, ignore, context);
 }
 
 static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
@@ -230,7 +231,8 @@ static ssize_t psmx_tagged_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged
 		return -EINVAL;
 
 	return _psmx_tagged_sendto(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
-				   msg->desc, msg->addr, msg->tag, msg->context, flags);
+				   msg->desc ? msg->desc[0] : NULL, msg->addr,
+				   msg->tag, msg->context, flags);
 }
 
 static ssize_t psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
@@ -248,7 +250,7 @@ static ssize_t psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len, 
 				  tag, context);
 }
 
-static ssize_t psmx_tagged_sendv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+static ssize_t psmx_tagged_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 				 size_t count, uint64_t tag, void *context)
 {
 	/* FIXME: allow iov_count == 0? */
@@ -256,8 +258,8 @@ static ssize_t psmx_tagged_sendv(struct fid_ep *ep, const struct iovec *iov, voi
 	if (!iov || count != 1)
 		return -EINVAL;
 
-	return psmx_tagged_send(ep, iov->iov_base, iov->iov_len, desc,
-				tag, context);
+	return psmx_tagged_send(ep, iov->iov_base, iov->iov_len,
+				desc ? desc[0] : NULL, tag, context);
 }
 
 static ssize_t psmx_tagged_injectto(struct fid_ep *ep, const void *buf, size_t len,
