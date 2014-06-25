@@ -400,9 +400,6 @@ ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	size_t i;
 
 	sge = alloca(count * sizeof(struct ibv_sge));
-	if (!sge)
-		return -ENOMEM;
-
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
 	wr.sg_list = sge;
@@ -451,8 +448,6 @@ ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	size_t bytes = 0, i;
 
 	sge = alloca(count * sizeof(struct ibv_sge));
-	if (!sge)
-		return -ENOMEM;
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
 	wr.sg_list = sge;
@@ -551,11 +546,8 @@ ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	struct ibv_sge *sge;
 	size_t bytes = 0, i;
 
-	sge = alloca(count * sizeof(struct ibv_sge));
-	if (!sge)
-		return -ENOMEM;
-
 	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	sge = alloca(count * sizeof(struct ibv_sge));
 
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
@@ -611,9 +603,6 @@ ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	size_t i;
 
 	sge = alloca(count * sizeof(struct ibv_sge));
-	if (!sge)
-		return -ENOMEM;
-
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
 	wr.sg_list = sge;
