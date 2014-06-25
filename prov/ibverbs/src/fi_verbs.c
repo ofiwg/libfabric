@@ -408,7 +408,7 @@ ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	for (i = 0; i < count; i++) {
 		sge[i].addr = (uintptr_t) iov[i].iov_base;
 		sge[i].length = (uint32_t) iov[i].iov_len;
-		sge[i].lkey = (uint32_t) (uintptr_t) desc[count];
+		sge[i].lkey = (uint32_t) (uintptr_t) desc[i];
 	}
 
 	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
@@ -459,7 +459,7 @@ ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		sge[i].addr = (uintptr_t) iov[i].iov_base;
 		sge[i].length = (uint32_t) iov[i].iov_len;
 		bytes += iov[i].iov_len;
-		sge[i].lkey = (uint32_t) (uintptr_t) desc[count];
+		sge[i].lkey = (uint32_t) (uintptr_t) desc[i];
 	}
 	wr.send_flags = (bytes <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
 
