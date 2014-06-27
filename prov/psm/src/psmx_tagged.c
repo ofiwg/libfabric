@@ -141,6 +141,7 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 					void *context, uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_av *fid_av;
 	int send_flag = 0;
 	psm_epaddr_t psm_epaddr;
 	psm_mq_req_t psm_req;
@@ -148,6 +149,7 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 	struct fi_context *fi_context;
 	int user_fi_context = 0;
 	int err;
+	size_t idx;
 
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
@@ -157,7 +159,18 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 			fid_ep->domain->reserved_tag_bits);
 	}
 
-	psm_epaddr = (psm_epaddr_t) dest_addr;
+	fid_av = fid_ep->av;
+	if (fid_av && fid_av->type == FI_AV_TABLE) {
+		idx = (size_t)dest_addr;
+		if (idx >= fid_av->last)
+			return -EINVAL;
+
+		psm_epaddr = fid_av->psm_epaddrs[idx];
+	}
+	else  {
+		psm_epaddr = (psm_epaddr_t) dest_addr;
+	}
+
 	psm_tag = tag & (~fid_ep->domain->reserved_tag_bits);
 
 	if (flags & FI_BLOCK) {
