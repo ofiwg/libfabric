@@ -147,6 +147,10 @@ struct psmx_fid_av {
 	int			type;
 	int			format;
 	size_t			addrlen;
+	size_t			count;
+	size_t			last;
+	psm_epid_t		*psm_epids;
+	psm_epaddr_t		*psm_epaddrs;
 };
 
 struct psmx_fid_ep {
