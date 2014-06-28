@@ -238,7 +238,7 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 		case FID_CLASS_CNTR:
 			cntr = container_of(fids[i].fid,
 					struct psmx_fid_cntr, cntr.fid);
-			if (fids[i].flags & (FI_SEND | FI_READ | FI_WRITE)) {
+			if (fids[i].flags & (FI_SEND)) {
 				if (fid_ep->send_cntr && fid_ep->send_cntr != cntr)
 					return -EEXIST;
 			}
@@ -246,9 +246,21 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 				if (fid_ep->recv_cntr && fid_ep->recv_cntr != cntr)
 					return -EEXIST;
 			}
+			if (fids[i].flags & FI_WRITE) {
+				if (fid_ep->write_cntr && fid_ep->write_cntr != cntr)
+					return -EEXIST;
+			}
+			if (fids[i].flags & FI_READ) {
+				if (fid_ep->read_cntr && fid_ep->read_cntr != cntr)
+					return -EEXIST;
+			}
+			if (fids[i].flags & FI_ATOMICS) {
+				if (fid_ep->atomics_cntr && fid_ep->atomics_cntr != cntr)
+					return -EEXIST;
+			}
 			if (fid_ep->domain && fid_ep->domain != cntr->domain)
 				return -EINVAL;
-			if (fids[i].flags & (FI_SEND | FI_READ | FI_WRITE)) {
+			if (fids[i].flags & FI_SEND) {
 				fid_ep->send_cntr = cntr;
 				if (fids[i].flags & FI_EVENT)
 					fid_ep->send_cntr_event_flag = 1;
@@ -257,6 +269,21 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 				fid_ep->recv_cntr = cntr;
 				if (fids[i].flags & FI_EVENT)
 					fid_ep->recv_cntr_event_flag = 1;
+			}
+			if (fids[i].flags & FI_WRITE) {
+				fid_ep->write_cntr = cntr;
+				if (fids[i].flags & FI_EVENT)
+					fid_ep->write_cntr_event_flag = 1;
+			}
+			if (fids[i].flags & FI_READ){
+				fid_ep->read_cntr = cntr;
+				if (fids[i].flags & FI_EVENT)
+					fid_ep->read_cntr_event_flag = 1;
+			}
+			if (fids[i].flags & FI_ATOMICS){
+				fid_ep->atomics_cntr = cntr;
+				if (fids[i].flags & FI_EVENT)
+					fid_ep->atomics_cntr_event_flag = 1;
 			}
 			fid_ep->domain = cntr->domain;
 			break;

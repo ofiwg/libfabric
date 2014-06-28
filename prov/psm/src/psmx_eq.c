@@ -266,14 +266,14 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 
 			case PSMX_NOCOMP_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
-				if (!tmp_ep->send_cntr_event_flag)
-					tmp_cntr = tmp_ep->send_cntr;
+				if (!tmp_ep->write_cntr_event_flag)
+					tmp_cntr = tmp_ep->write_cntr;
 				break;
 
 			case PSMX_NOCOMP_READ_CONTEXT:
 				tmp_ep->pending_reads--;
-				if (!tmp_ep->send_cntr_event_flag)
-					tmp_cntr = tmp_ep->send_cntr;
+				if (!tmp_ep->read_cntr_event_flag)
+					tmp_cntr = tmp_ep->read_cntr;
 				break;
 
 			case PSMX_INJECT_CONTEXT:
@@ -285,8 +285,8 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 
 			case PSMX_INJECT_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
-				if (!tmp_ep->send_cntr_event_flag)
-					tmp_cntr = tmp_ep->send_cntr;
+				if (!tmp_ep->write_cntr_event_flag)
+					tmp_cntr = tmp_ep->write_cntr;
 				free(fi_context);
 				break;
 
@@ -310,19 +310,19 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 			case PSMX_READ_CONTEXT:
 				tmp_ep->pending_reads--;
 				tmp_eq = tmp_ep->send_eq;
-				tmp_cntr = tmp_ep->send_cntr;
+				tmp_cntr = tmp_ep->read_cntr;
 				break;
 
 			case PSMX_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
 				tmp_eq = tmp_ep->send_eq;
-				tmp_cntr = tmp_ep->send_cntr;
+				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
 			case PSMX_ATOMIC_CONTEXT:
 				tmp_ep->pending_atomics--;
 				tmp_eq = tmp_ep->send_eq;
-				tmp_cntr = tmp_ep->send_cntr;
+				tmp_cntr = tmp_ep->atomics_cntr;
 				break;
 			}
 
