@@ -133,11 +133,14 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	}
 
 	if (fid_av->type == FI_AV_TABLE) {
-		if (!psmx_av_check_table_size(fid_av, count)) {
+		if (psmx_av_check_table_size(fid_av, count)) {
 			free(mask);
 			free(errors);
 			return -ENOMEM;
 		}
+
+		for (i=0; i<count; i++)
+			fid_av->psm_epids[fid_av->last + i] = ((psm_epid_t *)addr)[i];
 
 		result = fi_addr;
 		addr = (const void *)(fid_av->psm_epids + fid_av->last);
