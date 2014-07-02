@@ -254,10 +254,6 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 				if (fid_ep->read_cntr && fid_ep->read_cntr != cntr)
 					return -EEXIST;
 			}
-			if (fids[i].flags & FI_ATOMICS) {
-				if (fid_ep->atomics_cntr && fid_ep->atomics_cntr != cntr)
-					return -EEXIST;
-			}
 			if (fid_ep->domain && fid_ep->domain != cntr->domain)
 				return -EINVAL;
 			if (fids[i].flags & FI_SEND) {
@@ -279,11 +275,6 @@ static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
 				fid_ep->read_cntr = cntr;
 				if (fids[i].flags & FI_EVENT)
 					fid_ep->read_cntr_event_flag = 1;
-			}
-			if (fids[i].flags & FI_ATOMICS){
-				fid_ep->atomics_cntr = cntr;
-				if (fids[i].flags & FI_EVENT)
-					fid_ep->atomics_cntr_event_flag = 1;
 			}
 			fid_ep->domain = cntr->domain;
 			break;

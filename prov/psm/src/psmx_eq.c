@@ -318,12 +318,6 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 				tmp_eq = tmp_ep->send_eq;
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
-
-			case PSMX_ATOMIC_CONTEXT:
-				tmp_ep->pending_atomics--;
-				tmp_eq = tmp_ep->send_eq;
-				tmp_cntr = tmp_ep->atomics_cntr;
-				break;
 			}
 
 			if (tmp_eq) {

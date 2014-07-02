@@ -68,7 +68,6 @@ enum psmx_context_type {
 	PSMX_READ_CONTEXT,
 	PSMX_INJECT_CONTEXT,
 	PSMX_INJECT_WRITE_CONTEXT,
-	PSMX_ATOMIC_CONTEXT,
 };
 
 #define PSMX_CTXT_REQ(fi_context)	((fi_context)->internal[0])
@@ -163,14 +162,12 @@ struct psmx_fid_ep {
 	struct psmx_fid_cntr	*recv_cntr;
 	struct psmx_fid_cntr	*write_cntr;
 	struct psmx_fid_cntr	*read_cntr;
-	struct psmx_fid_cntr	*atomics_cntr;
 	int			send_eq_event_flag:1;
 	int			recv_eq_event_flag:1;
 	int			send_cntr_event_flag:1;
 	int			recv_cntr_event_flag:1;
 	int			write_cntr_event_flag:1;
 	int			read_cntr_event_flag:1;
-	int			atomics_cntr_event_flag:1;
 	uint64_t		flags;
 	int			connected;
 	psm_epid_t		peer_psm_epid;
