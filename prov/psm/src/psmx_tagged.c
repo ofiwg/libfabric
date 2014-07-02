@@ -90,7 +90,7 @@ static ssize_t psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len, vo
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_tagged_recvfrom(ep, buf, len, desc, src_addr, tag, ignore,
-					context, 0/*fid_ep->flags*/);
+					context, fid_ep->flags);
 }
 
 static ssize_t psmx_tagged_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
@@ -232,7 +232,7 @@ static ssize_t psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_tagged_sendto(ep, buf, len, desc, dest_addr, tag, context,
-				   0/*fid_ep->flags*/);
+				   fid_ep->flags);
 }
 
 static ssize_t psmx_tagged_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
@@ -283,7 +283,7 @@ static ssize_t psmx_tagged_injectto(struct fid_ep *ep, const void *buf, size_t l
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_tagged_sendto(ep, buf, len, NULL, dest_addr, tag, NULL,
-				   /*fid_ep->flags |*/FI_INJECT);
+				   fid_ep->flags | FI_INJECT);
 }
 
 static ssize_t psmx_tagged_inject(struct fid_ep *ep, const void *buf, size_t len,

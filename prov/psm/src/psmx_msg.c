@@ -110,7 +110,7 @@ static ssize_t psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *des
 
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
-	return _psmx_recvfrom(ep, buf, len, desc, src_addr, context, 0/*fid_ep->flags*/, 0);
+	return _psmx_recvfrom(ep, buf, len, desc, src_addr, context, fid_ep->flags, 0);
 }
 
 static ssize_t psmx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
@@ -239,7 +239,7 @@ static ssize_t psmx_sendto(struct fid_ep *ep, const void *buf, size_t len,
 
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
-	return _psmx_sendto(ep, buf, len, desc, dest_addr, context, 0/*fid_ep->flags*/);
+	return _psmx_sendto(ep, buf, len, desc, dest_addr, context, fid_ep->flags);
 }
 
 static ssize_t psmx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
@@ -287,7 +287,7 @@ static ssize_t psmx_injectto(struct fid_ep *ep, const void *buf, size_t len,
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_sendto(ep, buf, len, NULL, dest_addr, NULL,
-			    /*fid_ep->flags |*/FI_INJECT);
+			    fid_ep->flags | FI_INJECT);
 }
 
 static ssize_t psmx_inject(struct fid_ep *ep, const void *buf, size_t len)
