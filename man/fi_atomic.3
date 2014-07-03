@@ -369,6 +369,19 @@ fi_compare atomicmsg -- are used for operations that require comparing
 the target data against a value before performing a swap operation.
 The compare atomic functions support: FI_CSWAP, FI_CSWAP_NE, FI_CSWAP_LE,
 FI_CSWAP_LT, FI_CSWAP_GE, FI_CSWAP_GT, and FI_MSWAP.
+.SS "Atomic Valid Functions"
+The atomic valid functions -- fi_atomicvalid, fi_fetch_atomicvalid,
+and fi_compare_atomicvalid --indicate which operations the local provider
+supports.  Needed operatations not supported by the provider must be emulated
+by the application.  Each valid call corresponds to a set of atomic functions.
+fi_atomicvalid checks whether a provider supports a specific base atomic
+operation for a given datatype and operation.  fi_fetch_atomicvalid indicates
+if a provider supports a specific fetch-atomic operation for a given datatype
+and operation.  And fi_compare_atomicvalid checks if a provider supports a
+specified compare-atomic operation for a given datatype and operation.
+.PP
+If an operation is supported, an atomic valid call will return 0, along with
+a count of atomic data units that a single function call will operate on.
 .SS "Completions"
 Completed atomic operations are reported to the user through one or more event
 collectors associated with the endpoint.  Users provide context which are
