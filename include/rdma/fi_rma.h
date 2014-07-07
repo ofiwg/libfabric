@@ -49,6 +49,12 @@ struct fi_rma_iov {
 	uint64_t		key;
 };
 
+struct fi_rma_ioc {
+	uint64_t		addr;
+	size_t			count;
+	uint64_t		key;
+};
+
 struct fi_msg_rma {
 	const struct iovec	*msg_iov;
 	void			**desc;

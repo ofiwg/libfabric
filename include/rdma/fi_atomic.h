@@ -92,11 +92,10 @@ enum fi_op {
 
 struct fi_msg_atomic {
 	const struct fi_ioc	*msg_iov;
-	void			*desc;
+	void			**desc;
 	size_t			iov_count;
 	const void		*addr;
-	const struct fi_ioc	*rma_iov;
-	uint64_t		*key;
+	const struct fi_rma_ioc	*rma_iov;
 	size_t			rma_iov_count;
 	enum fi_datatype	datatype;
 	enum fi_op		op;
@@ -112,7 +111,7 @@ struct fi_ops_atomic {
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	ssize_t	(*writev)(struct fid_ep *ep,
-			const struct fi_ioc *iov, void *desc, size_t count,
+			const struct fi_ioc *iov, void **desc, size_t count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	ssize_t	(*writeto)(struct fid_ep *ep,
@@ -129,8 +128,8 @@ struct fi_ops_atomic {
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	ssize_t	(*readwritev)(struct fid_ep *ep,
-			const struct fi_ioc *iov, void *desc, size_t count,
-			struct fi_ioc *resultv, void *result_desc, size_t result_count,
+			const struct fi_ioc *iov, void **desc, size_t count,
+			struct fi_ioc *resultv, void **result_desc, size_t result_count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	ssize_t	(*readwriteto)(struct fid_ep *ep,
@@ -141,7 +140,7 @@ struct fi_ops_atomic {
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	ssize_t	(*readwritemsg)(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg,
-			struct fi_ioc *resultv, void *result_desc, size_t result_count,
+			struct fi_ioc *resultv, void **result_desc, size_t result_count,
 			uint64_t flags);
 
 	ssize_t	(*compwrite)(struct fid_ep *ep,
@@ -151,9 +150,9 @@ struct fi_ops_atomic {
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	ssize_t	(*compwritev)(struct fid_ep *ep,
-			const struct fi_ioc *iov, void *desc, size_t count,
-			const struct fi_ioc *comparev, void *compare_desc, size_t compare_count,
-			struct fi_ioc *resultv, void *result_desc, size_t result_count,
+			const struct fi_ioc *iov, void **desc, size_t count,
+			const struct fi_ioc *comparev, void **compare_desc, size_t compare_count,
+			struct fi_ioc *resultv, void **result_desc, size_t result_count,
 			uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	ssize_t	(*compwriteto)(struct fid_ep *ep,
@@ -165,8 +164,8 @@ struct fi_ops_atomic {
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	ssize_t	(*compwritemsg)(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg,
-			const struct fi_ioc *comparev, void *compare_desc, size_t compare_count,
-			struct fi_ioc *resultv, void *result_desc, size_t result_count,
+			const struct fi_ioc *comparev, void **compare_desc, size_t compare_count,
+			struct fi_ioc *resultv, void **result_desc, size_t result_count,
 			uint64_t flags);
 
 	int	(*writevalid)(struct fid_ep *ep,
