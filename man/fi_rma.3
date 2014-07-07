@@ -23,7 +23,7 @@ Initiate a write to remote memory
 .BI "ssize_t fi_read(struct fid_ep *" ep ", void * " buf ", size_t " len ", void *" desc ","
 .BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
 .HP
-.BI "ssize_t fi_readv(struct fid_ep *" ep ", const struct iovec * " iov ", void *" desc ","
+.BI "ssize_t fi_readv(struct fid_ep *" ep ", const struct iovec * " iov ", void **" desc ","
 .BI "size_t " count ", uint64_t " addr ", uint64_t " key ", void * " context ");"
 .HP
 .BI "ssize_t fi_readfrom(struct fid_ep *" ep ", void * " buf ", size_t " len ", void *" desc ","
@@ -36,7 +36,7 @@ Initiate a write to remote memory
 .BI "ssize_t fi_write(struct fid_ep *" ep ", const void * " buf ", size_t " len ", void *" desc ","
 .BI "uint64_t " addr ", uint64_t " key ", void * " context ");"
 .HP
-.BI "ssize_t fi_writev(struct fid_ep *" ep ", const struct iovec * " iov ", void *" desc ","
+.BI "ssize_t fi_writev(struct fid_ep *" ep ", const struct iovec * " iov ", void **" desc ","
 .BI "size_t " count ", uint64_t " addr ", uint64_t " key ", void * " context ");"
 .HP
 .BI "ssize_t fi_writeto(struct fid_ep *" ep ", const void * " buf ", size_t " len ", void *" desc ","
@@ -127,7 +127,7 @@ use of flags.  The fi_writemsg function takes a struct fi_msg_rma as input.
 .nf
 struct fi_msg_rma {
 	const struct iovec *msg_iov;     /* local scatter-gather array */
-	void               *desc;        /* operation descriptor */
+	void               **desc;       /* operation descriptor */
 	size_t             iov_count;    /* # elements in msg_iov */
 	const void         *addr;        /* optional endpoint address */
 	const struct fi_rma_iov rma_iov; /* remote SGL */
@@ -135,6 +135,12 @@ struct fi_msg_rma {
 	void               *context;     /* user-defined context */
 	uint64_t           data;         /* optional immediate data */
 	int                flow;         /* message steering */
+};
+
+struct fi_rma_iov {
+    uint64_t           addr;         /* target RMA address */
+    size_t             len;          /* size of target buffer */
+    uint64_t           key;          /* access key */
 };
 .fi
 .SS "fi_inject_write"
@@ -201,4 +207,4 @@ are full.  The operation may be retried after additional provider resources
 become available, usually through the completion of currently outstanding
 operations.
 .SH "SEE ALSO"
-fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_ec(3)
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_eq(3)
