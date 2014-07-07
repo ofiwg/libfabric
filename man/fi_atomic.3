@@ -38,7 +38,7 @@ Indicates if a provider supports a specific atomic operation
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "ssize_t fi_atomicv(struct fid_ep *" ep ","
-.BI "const struct fi_ioc * " iov ", void *" desc ", size_t " count ","
+.BI "const struct fi_ioc * " iov ", void **" desc ", size_t " count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
@@ -60,8 +60,8 @@ Indicates if a provider supports a specific atomic operation
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "ssize_t fi_fetch_atomicv(struct fid_ep *" ep ","
-.BI "const struct fi_ioc * " iov ", void *" desc ", size_t " count ","
-.BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","
+.BI "const struct fi_ioc * " iov ", void **" desc ", size_t " count ","
+.BI "struct fi_ioc * " resultv ", void **" result_desc ", size_t " result_count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
@@ -74,7 +74,7 @@ Indicates if a provider supports a specific atomic operation
 .HP
 .BI "ssize_t fi_fetch_atomicmsg(struct fid_ep *" ep ","
 .BI "const struct fi_msg_atomic * " msg ","
-.BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","
+.BI "struct fi_ioc * " resultv ", void **" result_desc ", size_t " result_count ","
 .BI "uint64_t " flags ");"
 .PP
 .HP
@@ -86,9 +86,9 @@ Indicates if a provider supports a specific atomic operation
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
 .BI "ssize_t fi_compare_atomicv(struct fid_ep *" ep ","
-.BI "const struct fi_ioc * " iov ", void *" desc ", size_t " count ","
-.BI "const struct fi_ioc * " comparev ", void *" compare_desc ", size_t " compare_count ","
-.BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","
+.BI "const struct fi_ioc * " iov ", void **" desc ", size_t " count ","
+.BI "const struct fi_ioc * " comparev ", void **" compare_desc ", size_t " compare_count ","
+.BI "struct fi_ioc * " resultv ", void **" result_desc ", size_t " result_count ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
@@ -102,8 +102,8 @@ Indicates if a provider supports a specific atomic operation
 .HP
 .BI "ssize_t fi_compare_atomicmsg(struct fid_ep *" ep ","
 .BI "const struct fi_msg_atomic * " msg ","
-.BI "const struct fi_ioc * " comparev ", void *" compare_desc ", size_t " compare_count ","
-.BI "struct fi_ioc * " resultv ", void *" result_desc ", size_t " result_count ","
+.BI "const struct fi_ioc * " comparev ", void **" compare_desc ", size_t " compare_count ","
+.BI "struct fi_ioc * " resultv ", void **" result_desc ", size_t " result_count ","
 .BI "uint64_t " flags ");"
 .PP
 .HP
@@ -334,11 +334,10 @@ use of flags.  The fi_atomicmsg function takes a struct fi_msg_atomic as input.
 .nf
 struct fi_msg_atomic {
 	const struct fi_ioc *msg_iov; /* local scatter-gather array */
-	void                *desc;    /* local access descriptors */
+	void                **desc;   /* local access descriptors */
 	size_t              iov_count;/* # elements in ioc */
 	const void          *addr;    /* optional endpoint address */
-	const struct fi_ioc *rma_iov; /* remote SGL */
-	uint64_t            *key;     /* access keys to remote SGEs */
+	const struct fi_rma_ioc *rma_iov; /* remote SGL */
 	size_t              rma_iov_count;/* # elements in remote SGL */
 	enum fi_datatype    datatype; /* operand datatype */
 	enum fi_op          op;       /* atomic operation */
@@ -347,6 +346,11 @@ struct fi_msg_atomic {
 	int                 flow;     /* message steering */
 };
 
+struct fi_rma_ioc {
+    uint64_t           addr;         /* target address */
+    size_t             count;        /* # target operands */
+    uint64_t           key;          /* access key */
+};
 .fi
 .SS "Fetch-Atomic Functions"
 The fetch atomic functions -- fi_fetch_atomic,
@@ -369,6 +373,19 @@ fi_compare atomicmsg -- are used for operations that require comparing
 the target data against a value before performing a swap operation.
 The compare atomic functions support: FI_CSWAP, FI_CSWAP_NE, FI_CSWAP_LE,
 FI_CSWAP_LT, FI_CSWAP_GE, FI_CSWAP_GT, and FI_MSWAP.
+.SS "Atomic Valid Functions"
+The atomic valid functions -- fi_atomicvalid, fi_fetch_atomicvalid,
+and fi_compare_atomicvalid --indicate which operations the local provider
+supports.  Needed operatations not supported by the provider must be emulated
+by the application.  Each valid call corresponds to a set of atomic functions.
+fi_atomicvalid checks whether a provider supports a specific base atomic
+operation for a given datatype and operation.  fi_fetch_atomicvalid indicates
+if a provider supports a specific fetch-atomic operation for a given datatype
+and operation.  And fi_compare_atomicvalid checks if a provider supports a
+specified compare-atomic operation for a given datatype and operation.
+.PP
+If an operation is supported, an atomic valid call will return 0, along with
+a count of atomic data units that a single function call will operate on.
 .SS "Completions"
 Completed atomic operations are reported to the user through one or more event
 collectors associated with the endpoint.  Users provide context which are
@@ -419,4 +436,4 @@ The number of atomic operations in a single request exceeds that supported
 by the underlying provider.
 .SH "NOTES"
 .SH "SEE ALSO"
-fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_ec(3)
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_eq(3), fi_rma(3)
