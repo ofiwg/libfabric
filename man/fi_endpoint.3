@@ -183,7 +183,30 @@ completed, the application may call fi_sync.  The successful completion
 of fi_sync indicates that all prior operations have completed successfully.
 .RE
 .PP
-An endpoint may also, or instead, be bound to a fabric counter.
+An endpoint may also, or instead, be bound to a fabric counter.  When
+binding an endpoint to a counter, the following flags may be specified.  
+.RS
+.IP "FI_SEND"
+Increments the specified counter whenever a successful message is transfered
+over the endpoint.  Sent messages include both tagged and normal message
+operations.
+.IP "FI_RECV"
+Increments the specified counter whenever a successful message is received
+over the endpoint.  Received messages include both tagged and normal message
+operations.
+.IP "FI_READ"
+Increments the specified counter whenever a successful RMA read or atomic fetch
+operation is initiated from the endpoint.
+.IP "FI_WRITE"
+Increments the specified counter whenever a successful RMA write or atomic
+operation is initiated from the endpoint.
+.IP "FI_REMOTE_READ"
+Increments the specified counter whenever a successful RMA read or atomic fetch
+operation is initiated from a remote endpoint that targets the given endpoint.
+.IP "FI_REMOTE_WRITE"
+Increments the specified counter whenever a successful RMA write or atomic
+operation is initiated from a remote endpoint that targets the given endpoint.
+.RE
 .PP
 Active endpoints that are configured to use index based addressing --
 FI_ADDR_INDEX -- must be bound to a single AV.  AV binding can occur
