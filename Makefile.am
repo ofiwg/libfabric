@@ -49,7 +49,8 @@ librdmacm_librdmacm_la_SOURCES = \
 librdmacm_librdmacm_la_LDFLAGS = -version-info 1 -export-dynamic \
                            $(librdmacm_version_script)
 librdmacm_librdmacm_la_DEPENDENCIES = \
-	$(srcdir)/librdmacm/src/librdmacm.map
+	$(srcdir)/librdmacm/src/librdmacm.map \
+	$(top_builddir)/libibverbs/libibverbs.la
 librdmacm_librdmacm_la_LIBADD = \
 	$(top_builddir)/libibverbs/libibverbs.la
 
@@ -58,6 +59,8 @@ librdmacm_librspreload_la_SOURCES = \
 	librdmacm/src/indexer.c
 librdmacm_librspreload_la_LDFLAGS = -version-info 1 -export-dynamic
 librdmacm_librspreload_la_LIBADD = \
+	$(top_builddir)/librdmacm/librdmacm.la
+librdmacm_librspreload_la_DEPENDENCIES = \
 	$(top_builddir)/librdmacm/librdmacm.la
 
 src_libfabric_la_SOURCES = src/fabric.c \
@@ -79,10 +82,13 @@ endif
 
 src_libfabric_la_LDFLAGS = -version-info 1 -export-dynamic \
 			   $(libfabric_version_script)
-src_libfabric_la_DEPENDENCIES =  $(srcdir)/libfabric.map
+src_libfabric_la_DEPENDENCIES = \
+	$(srcdir)/libfabric.map \
+	$(top_builddir)/librdmacm/librdmacm.la \
+	$(top_builddir)/libibverbs/libibverbs.la
 src_libfabric_la_LIBADD = \
-	$(top_builddir)/libibverbs/libibverbs.la \
-	$(top_builddir)/librdmacm/librdmacm.la
+	$(top_builddir)/librdmacm/librdmacm.la \
+	$(top_builddir)/libibverbs/libibverbs.la
 
 rdmaincludedir = $(includedir)/rdma
 infinibandincludedir = $(includedir)/infiniband
