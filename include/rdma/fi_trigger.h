@@ -47,7 +47,7 @@ enum fi_trigger_event {
 };
 
 struct fi_trigger_threshold {
-	struct fid_ec		*ec;
+	struct fid_cntr		*cntr;
 	size_t			threshold;
 };
 

@@ -1,4 +1,4 @@
-.TH "FI_TAGGED" 3 "2014-05-27" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_TAGGED" 3 "2014-07-08" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_tagged \- Tagged data transfer operations
 .PP
@@ -122,7 +122,7 @@ send and receive buffers.
 Completed message operations are reported to the user through one or more event
 collectors associated with the endpoint.  Users provide context which are
 associated with each operation, and is returned to the user
-as part of the event completion.  See fi_ec for completion event details.
+as part of the event completion.  See fi_eq for completion event details.
 .SS "fi_tsend"
 The call fi_tsend transfers the data contained in the user-specified data
 buffer to a remote endpoint, with message boundaries being maintained.
@@ -274,4 +274,4 @@ receives in succession, and both match the same message, then the second
 receive operation cannot be satisfied by this message, if the first one is
 still pending.\*(rq
 .SH "SEE ALSO"
-fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_ec(3)
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_eq(3)

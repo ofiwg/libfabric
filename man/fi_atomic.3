@@ -1,4 +1,4 @@
-.TH "FI_ATOMIC" 3 "2014-05-27" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ATOMIC" 3 "2014-07-08" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_atomic - Remote atomic functions
 .PP
@@ -390,7 +390,7 @@ a count of atomic data units that a single function call will operate on.
 Completed atomic operations are reported to the user through one or more event
 collectors associated with the endpoint.  Users provide context which are
 associated with each operation, and is returned to the user
-as part of the event completion.  See fi_ec for completion event details.
+as part of the event completion.  See fi_eq for completion event details.
 .PP
 Updates to the target buffer of an atomic operation are visible to
 processes running on the target system either after a completion has been

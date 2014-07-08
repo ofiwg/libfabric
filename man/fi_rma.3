@@ -1,4 +1,4 @@
-.TH "FI_RMA" 3 "2014-05-27" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_RMA" 3 "2014-07-08" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_rma - Remote memory access operations
 .PP
@@ -97,7 +97,7 @@ data buffer(s) until the read operation has completed.
 Completed RMA operations are reported to the user through one or more event
 collectors associated with the endpoint.  Users provide context which are
 associated with each operation, and is returned to the user
-as part of the event completion.  See fi_ec for completion event details.
+as part of the event completion.  See fi_eq for completion event details.
 .PP
 By default, the remote endpoint does not generate an event or notify the
 user when a memory region has been accessed by an RMA read or write operation.

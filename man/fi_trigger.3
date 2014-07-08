@@ -1,4 +1,4 @@
-.TH "FI_TRIGGER" 3 "2014-03-17" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_TRIGGER" 3 "2014-07-08" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_trigger - Triggered operations
 .SH SYNOPSIS
@@ -54,8 +54,8 @@ threshold is specified using struct fi_trigger_threshold:
 .nf
 
 struct fi_trigger_threshold {
-	struct fid_ec *ec; /* event counter to check */
-	size_t threshold;  /* threshold value */
+	struct fid_cntr *cntr; /* event counter to check */
+	size_t threshold;      /* threshold value */
 };
 
 .fi
@@ -64,4 +64,4 @@ This is true even if the counter increments by a value greater than 1.  If
 two triggered operations have the same threshold, they will be triggered in
 the order in which they were submitted to the endpoint.
 .SH "SEE ALSO"
-fi_getinfo(3), fi_endpoint(3), fi_alias(3), fi_control(3), fi_ec(3)
+fi_getinfo(3), fi_endpoint(3), fi_alias(3), fi_control(3), fi_cntr(3)
