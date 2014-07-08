@@ -174,7 +174,8 @@ Applies to fi_writemsg.  Indicates that remote EQ data is available and should
 be sent as part of the request.
 .IP "FI_EVENT"
 Indicates that a completion entry should be generated for the specified
-operation.  The endpoint must be configured with FI_EVENT, or this flag
+operation.  The endpoint must be bound to an event queue
+with FI_EVENT that corresponds to the specified operation, or this flag
 is ignored.
 .IP "FI_MORE"
 Indicates that the user has additional requests that will immediately be

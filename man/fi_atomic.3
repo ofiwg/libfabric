@@ -407,7 +407,8 @@ previously configured with the endpoint, except where noted (see fi_control).
 The following list of flags are usable with atomic message calls.
 .IP "FI_EVENT"
 Indicates that a completion entry should be generated for the specified
-operation.  The endpoint must be configured with FI_EVENT, or this flag
+operation.  The endpoint must be bound to an event queue
+with FI_EVENT that corresponds to the specified operation, or this flag
 is ignored.
 .IP "FI_MORE"
 Indicates that the user has additional requests that will immediately be
