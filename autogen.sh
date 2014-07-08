@@ -1,9 +1,10 @@
 #! /bin/sh
 
+if test ! -d .git && test ! -f src/fabric.c; then
+    echo You really need to run this script in the top-level libfabric directory
+    exit 1
+fi
+
 set -x
-test -d ./config || mkdir ./config
-aclocal -I config
-libtoolize --force --copy
-autoheader
-automake --foreign --add-missing --copy
-autoconf
+
+autoreconf -ivf
