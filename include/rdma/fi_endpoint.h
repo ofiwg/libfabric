@@ -133,6 +133,10 @@ struct fi_ops_msg {
 	ssize_t	(*inject)(struct fid_ep *ep, const void *buf, size_t len);
 	ssize_t	(*injectto)(struct fid_ep *ep, const void *buf, size_t len,
 			const void *dest_addr);
+	ssize_t (*senddata)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+			uint64_t data, void *context);
+	ssize_t (*senddatato)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+			uint64_t data, const void *dest_addr, void *context);
 };
 
 struct fi_ops_cm;
@@ -278,6 +282,20 @@ static inline ssize_t
 fi_injectto(struct fid_ep *ep, const void *buf, size_t len, const void *dest_addr)
 {
 	return ep->msg->injectto(ep, buf, len, dest_addr);
+}
+
+static inline ssize_t
+fi_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+	    uint64_t data, void *context)
+{
+	return ep->msg->senddata(ep, buf, len, desc, data, context);
+}
+
+static inline ssize_t
+fi_senddatato(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+	      uint64_t data, const void *dest_addr, void *context)
+{
+	return ep->msg->senddatato(ep, buf, len, desc, data, dest_addr, context);
 }
 
 #else // FABRIC_DIRECT

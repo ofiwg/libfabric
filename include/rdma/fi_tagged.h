@@ -79,6 +79,10 @@ struct fi_ops_tagged {
 			uint64_t tag);
 	ssize_t	(*injectto)(struct fid_ep *ep, const void *buf, size_t len,
 			const void *dest_addr, uint64_t tag);
+	ssize_t (*senddata)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+			uint64_t data, uint64_t tag, void *context);
+	ssize_t (*senddatato)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+			uint64_t data, const void *dest_addr, uint64_t tag, void *context);
 	ssize_t (*search)(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
 			uint64_t flags, void *src_addr, size_t *src_addrlen,
 			size_t *len, void *context);
@@ -153,6 +157,21 @@ fi_tinjectto(struct fid_ep *ep, const void *buf, size_t len,
 	     const void *dest_addr, uint64_t tag)
 {
 	return ep->tagged->injectto(ep, buf, len, dest_addr, tag);
+}
+
+static inline ssize_t
+fi_tsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+	     uint64_t data, uint64_t tag, void *context)
+{
+	return ep->tagged->senddata(ep, buf, len, desc, data, tag, context);
+}
+
+static inline ssize_t
+fi_tsenddatato(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+	       uint64_t data, const void *dest_addr, uint64_t tag, void *context)
+{
+	return ep->tagged->senddatato(ep, buf, len, desc, data,
+				      dest_addr, tag, context);
 }
 
 static inline ssize_t

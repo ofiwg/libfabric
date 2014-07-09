@@ -1,4 +1,4 @@
-.TH "FI_RMA" 3 "2014-07-08" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_RMA" 3 "2014-07-09" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_rma - Remote memory access operations
 .PP
@@ -14,6 +14,8 @@ fi_write / fi_writev
 fi_writeto / fi_writemsg
 .br
 fi_inject_write / fi_inject_writeto
+.br
+fi_writedata / fi_writedatato
 .RS
 Initiate a write to remote memory
 .RE
@@ -50,6 +52,13 @@ Initiate a write to remote memory
 .HP
 .BI "ssize_t fi_inject_writeto(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "const void *" dest_addr ", uint64_t " addr ", uint64_t " key ");"
+.HP
+.BI "ssize_t fi_writedata(struct fid_ep *" ep ", const void * " buf ", size_t " len ", void *" desc ","
+.BI "uint64_t " data ", uint64_t " addr ", uint64_t " key ", void * " context ");"
+.HP
+.BI "ssize_t fi_writedatato(struct fid_ep *" ep ", const void * " buf ", size_t " len ", void *" desc ","
+.BI "uint64_t " data ", const void *" dest_addr ", uint64_t " addr ", uint64_t " key ","
+.BI "void * " context ");"
 .SH ARGUMENTS
 .IP "ep"
 Fabric endpoint on which to initiate read or write operation. 
@@ -67,6 +76,8 @@ Address of remote memory to access.
 Protection key associated with the remote memory.
 .IP "desc"
 Descriptor associated with the local data buffer
+.IP "data"
+Remote EQ data to transfer with the operation.
 .IP "dest_addr"
 Destination address for connectionless write transfers
 .IP "src_addr"
@@ -83,7 +94,8 @@ between a local data buffer and a remote data buffer.  RMA transfers occur
 on a byte level granularity, and no message boundaries are maintained.
 .PP
 The write functions -- fi_write, fi_writev, fi_writeto,
-fi_writemsg, fi_inject_write, fi_inject_writeto -- are used to transmit data into a remote
+fi_writemsg, fi_inject_write, fi_inject_writeto, fi_writedata, and fi_writedatato --
+are used to transmit data into a remote
 memory buffer.  The main difference between write functions
 are the number and type of parameters that they accept as input.  Otherwise,
 they perform the same general function.
@@ -144,7 +156,7 @@ struct fi_rma_iov {
 };
 .fi
 .SS "fi_inject_write"
-The write immediate call is an optimized version of fi_write.  The fi_inject_write
+The write inject call is an optimized version of fi_write.  The fi_inject_write
 function behaves as if the FI_INJECT transfer flag were set, and
 FI_EVENT were not.  That is, the data buffer is available for reuse
 immediately on returning from from fi_inject_write, and no completion event will
@@ -153,6 +165,11 @@ the endpoint has not been configured with FI_EVENT.  See the flags
 discussion below for more details.
 .SS "fi_inject_writeto"
 This call is similar to fi_inject_write, but for unconnected endpoints.
+.SS "fi_writedata"
+The write data call is similar to fi_write, but allows for the sending of
+remote EQ data (see FI_REMOTE_EQ_DATA flag) as part of the transfer.
+.SS "fi_writedatato"
+This call is similar to fi_writedata, but for unconnected endpoints.
 .SS "fi_read"
 The fi_read call requests that the remote endpoint transfer data from the
 remote memory region into the local data buffer.  The local endpoint must
@@ -170,8 +187,10 @@ Flags specified with fi_readmsg / fi_writemsg override most flags
 previously configured with the endpoint, except where noted (see fi_control).
 The following list of flags are usable with fi_readmsg and/or fi_writemsg.
 .IP "FI_REMOTE_EQ_DATA"
-Applies to fi_writemsg.  Indicates that remote EQ data is available and should
-be sent as part of the request.
+Applies to fi_writemsg, fi_writedata, and fi_writedatato.  Indicates that
+remote EQ data is available and should
+be sent as part of the request.  See fi_getinfo
+for additional details on FI_REMOTE_EQ_DATA.
 .IP "FI_EVENT"
 Indicates that a completion entry should be generated for the specified
 operation.  The endpoint must be bound to an event queue
