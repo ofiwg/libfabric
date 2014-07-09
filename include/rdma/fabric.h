@@ -119,7 +119,7 @@ enum fi_addr_format {
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
 	FI_PROGRESS_AUTO,
-	FI_PROGRESS_IMPLICIT
+	FI_PROGRESS_MANUAL
 };
 
 enum fi_threading {
