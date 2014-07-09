@@ -69,16 +69,16 @@ struct fi_ops_tagged {
 			uint64_t flags);
 	ssize_t (*send)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			uint64_t tag, void *context);
-	ssize_t	(*inject)(struct fid_ep *ep, const void *buf, size_t len,
-			uint64_t tag);
 	ssize_t (*sendv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			size_t count, uint64_t tag, void *context);
 	ssize_t (*sendto)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			const void *dest_addr, uint64_t tag, void *context);
-	ssize_t	(*injectto)(struct fid_ep *ep, const void *buf, size_t len,
-			const void *dest_addr, uint64_t tag);
 	ssize_t (*sendmsg)(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 			uint64_t flags);
+	ssize_t	(*inject)(struct fid_ep *ep, const void *buf, size_t len,
+			uint64_t tag);
+	ssize_t	(*injectto)(struct fid_ep *ep, const void *buf, size_t len,
+			const void *dest_addr, uint64_t tag);
 	ssize_t (*search)(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
 			uint64_t flags, void *src_addr, size_t *src_addrlen,
 			size_t *len, void *context);
@@ -123,12 +123,6 @@ fi_tsend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 }
 
 static inline ssize_t
-fi_tinject(struct fid_ep *ep, const void *buf, size_t len, uint64_t tag)
-{
-	return ep->tagged->inject(ep, buf, len, tag);
-}
-
-static inline ssize_t
 fi_tsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	  size_t count, uint64_t tag, void *context)
 {
@@ -143,16 +137,22 @@ fi_tsendto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 }
 
 static inline ssize_t
+fi_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint64_t flags)
+{
+	return ep->tagged->sendmsg(ep, msg, flags);
+}
+
+static inline ssize_t
+fi_tinject(struct fid_ep *ep, const void *buf, size_t len, uint64_t tag)
+{
+	return ep->tagged->inject(ep, buf, len, tag);
+}
+
+static inline ssize_t
 fi_tinjectto(struct fid_ep *ep, const void *buf, size_t len,
 	     const void *dest_addr, uint64_t tag)
 {
 	return ep->tagged->injectto(ep, buf, len, dest_addr, tag);
-}
-
-static inline ssize_t
-fi_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint64_t flags)
-{
-	return ep->tagged->sendmsg(ep, msg, flags);
 }
 
 static inline ssize_t
