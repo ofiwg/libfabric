@@ -57,6 +57,7 @@ struct fi_info {
 	void               *dest_addr;
 	size_t              auth_keylen;
 	void               *auth_key;
+	enum fi_threading   threading;
 	enum fi_progress    control_progress;
 	enum fi_progress    data_progress;
 	char               *fabric_name;
@@ -129,6 +130,10 @@ is specified).
 Authorization key to limit communication among endpoints that share
 the same key.  Also defines permission for sharing resources with
 other processes on the same node.
+.IP "threading"
+This indicates the threading serialization model that the application and
+provider will adhere to.  The treading model only applies to data operations.
+(See the data_progress field for details.)
 .IP "control_progress"
 This field indicates the method that the provider uses to make progress
 on asynchronous control operations.  Control operations are function
@@ -138,7 +143,8 @@ connection management routines.  See additional details below.
 .IP "data_progress"
 This field indicates the method that the provider uses to make progress on
 data transfer operations.  This includes message queue, RMA, tagged messaging,
-and atomic operations.  See below for additional details.
+and atomic operations, along with their completion processing.
+See below for additional details.
 .IP "fabric_name"
 If specified, the name of the fabric domain.
 .IP "domain_name"
@@ -440,6 +446,39 @@ Address is of type sockaddr_in6 (IPv6).
 .IP "FI_SOCKADDR_IB"
 Address is of type sockaddr_ib (defined in Linux kernel source 
 .BR "include/rdma/ib.h").
+.SH "THREAD SERIALIZATION"
+The threading model specifies the level of serialization required of an
+application when using the libfabric data transfer interfaces.  Control
+interfaces are always considered thread safe, and may be accessed by
+multiple threads.  Applications which can guarantee serialization in their
+access of provider allocated resources and interfaces enables a provider
+to eliminate lower-level locks.
+.IP "FI_THREAD_UNSPEC"
+This value indicates that no threading model has been defined.  It may be
+used on input hints to the fi_getinfo call.
+.IP "FI_THREAD_SAFE"
+A thread safe serialization model allows a multi-threaded application to
+access any allocated resources through any interface without restriction.
+All providers are required to support FI_THREAD_SAFE.
+.IP "FI_THREAD_PROGRESS"
+A progress serialization model requires applications to serialize access
+to provider resources and interfaces based on the progress model.  For
+providers with automatic progress, access to each endpoint must be serialized,
+and access to each event queue, counter, wait or poll set must be serialized.
+Serialization is required only by threads accessing the same object.  For
+example, one thread may be initiating a data transfer on an endpoint, while
+another thread reads from an event queue associated with the endpoint.
+Serialization to endpoint access is further limited to different endpoint
+data flows, if available.  Multiple threads may initiate transfers on the
+same endpoint if they reference different data flows.
+.PP
+For providers with manual progress, applications must serialize their access
+to any object that is part of a single progress domain.  A progress domain
+is any set of associated endpoints, event queues, counters, wait sets, and
+poll sets.  For instance, endpoints that share the same event queue or poll
+set belong to the same progress domain.  Applications that can allocate
+endpoint resources to specific threads can reduce provider locking by
+using FI_THREAD_PROGRESS.
 .SH "PROGRESS"
 Progress is the ability of the underlying implementation to complete
 processing of an asynchronous request.  In many cases, the processing of
@@ -451,6 +490,9 @@ will compete with the application threads.
 .PP
 To balance between performane and ease of use, two progress models are
 defined.
+.IP "FI_PROGRESS_UNSPEC"
+This value indicates that no progress model has been defined.  It may be
+used on input hints to the fi_getinfo call.
 .IP "FI_PROGRESS_AUTO"
 This progress model indicates that the provider will make forward progress
 on an asynchronous operation without further intervention by the application.
