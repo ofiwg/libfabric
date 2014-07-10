@@ -125,16 +125,7 @@ met.  The use of a wait_set enables an optimized method of waiting for events
 across multiple event counters.  This field is ignored if wait_obj is not
 FI_WAIT_SET.
 .IP "flags"
-Flags that set the default operation of the counter.
-.RS
-.IP "FI_SEND"
-Specifies that the counter will be used to count complete send operations.
-Sends include message sends, RMA, and atomic write operations.  This
-flag will automatically be used when binding the counter to an endpoint.
-.IP "FI_RECV"
-Specifies that the counter will be used to count complete receive operations.
-This flag will automatically be used when binding the counter to an endpoint.
-.RE
+Flags are reserved for future use, and must be set to 0.
 .SS "fi_cntr_close"
 The fi_cntr_close call releases all resources associated with a counter.
 The counter must not be bound to any other resources prior to being freed.
