@@ -159,6 +159,7 @@ struct fi_info {
 	 */
 	size_t			auth_keylen;
 	void			*auth_key;
+	uint64_t		msg_order;
 	enum fi_threading	threading;
 	enum fi_progress	control_progress;
 	enum fi_progress	data_progress;
