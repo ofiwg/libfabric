@@ -98,8 +98,7 @@ enum {
 enum {
 	FI_OPT_MAX_INJECTED_SEND,	/* size_t */
 	FI_OPT_TOTAL_BUFFERED_RECV,	/* size_t */
-	FI_OPT_MAX_MESSAGE_SIZE,	/* size_t */
-	FI_OPT_MAX_EQ_DATA_SIZE,	/* size_t */
+	FI_OPT_MAX_MSG_SIZE,		/* size_t */
 };
 
 struct fi_ops_ep {

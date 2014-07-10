@@ -308,13 +308,10 @@ The following option levels and option names and parameters are defined.
 Defines the maximum buffered send operation (see the FI_INJECT
 flag) that the endpoint currently supports.  This value applies per send
 operation.
-.IP "FI_OPT_TOTAL_INJECTED_SEND - size_t"
-Defines the total available space allocated to buffer send operations (see
-the FI_INJECT flag) that the endpoint currently supports.
 .IP "FI_OPT_TOTAL_BUFFERED_RECV - size_t"
 Defines the total available space allocated to buffer received messages
 (see the FI_BUFFERED_RECV flag) that the endpoint currently supports.
-.IP "FI_OPT_MAX_MESSAGE_SIZE - size_t"
+.IP "FI_OPT_MAX_MSG_SIZE - size_t"
 Defines the maximum size for an application data transfer as a
 single operation.
 .RE

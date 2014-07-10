@@ -138,6 +138,27 @@ enum fi_threading {
 #define FI_ORDER_SAW		(1 << 7)
 #define FI_ORDER_SAS		(1 << 8)
 
+enum {
+	FI_EP_ATTR_MSG_SIZE	= 1 << 0,
+	FI_EP_ATTR_INJECT_SIZE	= 1 << 1,
+	FI_EP_ATTR_BUFFER_RECV	= 1 << 2,
+	FI_EP_ATTR_RAW_SIZE	= 1 << 3,
+	FI_EP_ATTR_WAR_SIZE	= 1 << 4,
+	FI_EP_ATTR_WAW_SIZE	= 1 << 5,
+	FI_EP_ATTR_TAG		= 1 << 6,
+	FI_EP_ATTR_MASK_V1	= (FI_EP_ATTR_TAG << 1) - 1
+};
+
+struct fi_ep_attr {
+	int			mask;
+	size_t			max_msg_size;
+	size_t			inject_size;
+	size_t			total_buffered_recv;
+	size_t			max_order_raw_size;
+	size_t			max_order_war_size;
+	size_t			max_order_waw_size;
+	uint64_t		max_tag_value;
+};
 
 struct fi_info {
 	struct fi_info		*next;
@@ -159,6 +180,7 @@ struct fi_info {
 	 */
 	size_t			auth_keylen;
 	void			*auth_key;
+	struct fi_ep_attr	*ep_attr;
 	uint64_t		msg_order;
 	enum fi_threading	threading;
 	enum fi_progress	control_progress;

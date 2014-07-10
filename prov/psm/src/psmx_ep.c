@@ -88,7 +88,7 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 		*optlen = sizeof(size_t);
 		break;
 
-	case FI_OPT_MAX_MESSAGE_SIZE:
+	case FI_OPT_MAX_MSG_SIZE:
 		if (!optval)
 			return 0;
 

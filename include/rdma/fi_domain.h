@@ -375,16 +375,12 @@ struct fi_mr_attr {
 #define FI_DYNAMIC_MR		(1ULL << 4)
 
 
-/*
- * The thought is that domain attributes should be relative to what it can
- * provide to the applications, and is not intended as a set of available
- * hardware limits.
- */
 struct fi_domain_attr {
 	/* Note to providers: set prov_attr to static struct */
 	size_t			prov_attr_size;
 	void			*prov_attr;
 	size_t			mem_desc_size;
+	size_t			eq_data_size;
 };
 
 struct fi_ops_domain {
