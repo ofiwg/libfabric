@@ -503,11 +503,38 @@ ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
+static ssize_t
+ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+{
+	struct ibv_msg_ep *_ep;
+	struct ibv_recv_wr wr, *bad;
+	struct ibv_sge *sge=NULL;
+	size_t i;
+
+	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	wr.wr_id = (uintptr_t) msg->context;
+	wr.next = NULL;
+	if (msg->iov_count) {
+		sge = alloca(sizeof(*sge) * msg->iov_count);
+		for (i = 0; i < msg->iov_count; i++) {
+			sge[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
+			sge[i].length = (uint32_t) msg->msg_iov[i].iov_len;
+			sge[i].lkey = (uint32_t) (uintptr_t) (msg->desc[i]);
+		}
+
+	}
+	wr.sg_list = sge;
+	wr.num_sge = msg->iov_count;
+
+	return -ibv_post_recv(_ep->id->qp, &wr, &bad);
+}
+
 static struct fi_ops_msg ibv_msg_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = ibv_msg_ep_recv,
 	.send = ibv_msg_ep_send,
 	.sendmsg = ibv_msg_ep_sendmsg,
+	.recvmsg = ibv_msg_ep_recvmsg,
 	.recvv = ibv_msg_ep_recvv,
 	.sendv = ibv_msg_ep_sendv,
 };
@@ -569,6 +596,45 @@ ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 }
 
 static ssize_t
+ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
+			uint64_t flags)
+{
+	struct ibv_msg_ep *_ep;
+	struct ibv_send_wr wr, *bad;
+	struct ibv_sge *sge=NULL;
+	size_t i, len;
+
+	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	wr.wr_id = (uintptr_t) msg->context;
+	wr.next = NULL;
+	wr.num_sge = msg->iov_count;
+	wr.send_flags = 0;
+	if (msg->iov_count) {
+		sge = alloca(sizeof(*sge) * msg->iov_count);
+		for (len = 0, i = 0; i < msg->iov_count; i++) {
+			sge[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
+			sge[i].length = (uint32_t) msg->msg_iov[i].iov_len;
+			sge[i].lkey = (uint32_t) (uintptr_t) (msg->desc[i]);
+			len += sge[i].length;
+		}
+
+		wr.send_flags = (len <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
+	}
+	wr.sg_list = sge;
+
+	wr.opcode = IBV_WR_RDMA_WRITE;
+	if (flags & FI_REMOTE_EQ_DATA) {
+		wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+		wr.imm_data = (uint32_t) msg->data;
+	}
+
+	wr.wr.rdma.remote_addr = msg->rma_iov->addr;
+	wr.wr.rdma.rkey = (uint32_t) msg->rma_iov->key;
+
+	return -ibv_post_send(_ep->id->qp, &wr, &bad);
+}
+
+static ssize_t
 ibv_msg_ep_rma_read(struct fid_ep *ep, void *buf, size_t len,
 		    void *desc, uint64_t addr, uint64_t tag, void *context)
 {
@@ -622,12 +688,46 @@ ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
+static ssize_t
+ibv_msg_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
+			uint64_t flags)
+{
+	struct ibv_msg_ep *_ep;
+	struct ibv_send_wr wr, *bad;
+	struct ibv_sge *sge;
+	size_t i;
+
+	wr.wr_id = (uintptr_t) msg->context;
+	wr.next = NULL;
+	wr.sg_list = NULL;
+	if (msg->iov_count) {
+		sge = alloca(sizeof(*sge) * msg->iov_count);
+		for (i = 0; i < msg->iov_count; i++) {
+			sge[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
+			sge[i].length = (uint32_t) msg->msg_iov[i].iov_len;
+			sge[i].lkey = (uint32_t) (uintptr_t) (msg->desc[i]);
+		}
+		wr.sg_list = sge;
+	}
+	wr.num_sge = msg->iov_count;
+	wr.opcode = IBV_WR_RDMA_READ;
+	wr.send_flags = 0;
+
+	wr.wr.rdma.remote_addr = msg->rma_iov->addr;
+	wr.wr.rdma.rkey = (uint32_t) msg->rma_iov->key;
+
+	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	return -ibv_post_send(_ep->id->qp, &wr, &bad);
+}
+
 static struct fi_ops_rma ibv_msg_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.write = ibv_msg_ep_rma_write,
 	.read = ibv_msg_ep_rma_read,
 	.readv = ibv_msg_ep_rma_readv,
-	.writev = ibv_msg_ep_rma_writev
+	.writev = ibv_msg_ep_rma_writev,
+	.writemsg = ibv_msg_ep_rma_writemsg,
+	.readmsg = ibv_msg_ep_rma_readmsg
 };
 
 static int
@@ -1254,11 +1354,14 @@ static ssize_t ibv_eq_comp_read_data(struct fid_eq *eq, void *buf, size_t len)
 				}
 
 				entry->op_context = (void *) (uintptr_t) wc->wr_id;
+				entry->flags = 0;
+				entry->data = 0;
 				if (wc->wc_flags & IBV_WC_WITH_IMM) {
 					entry->flags = FI_REMOTE_EQ_DATA;
 					entry->data = wc->imm_data;
 				}
-				if (wc->opcode & IBV_WC_RECV)
+				entry->len = 0;
+				if (wc->opcode & (IBV_WC_RECV | IBV_WC_RECV_RDMA_WITH_IMM))
 					entry->len = wc->byte_len;
 				left -= sizeof(*entry);
 				entry = entry + 1;
