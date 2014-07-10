@@ -410,7 +410,10 @@ nroff:
 	    config/md2nroff.pl --source=$$file.md; \
 	done
 
-EXTRA_DIST = libfabric.map libfabric.spec.in config/distscript.pl $(man_MANS)
+EXTRA_DIST = libfabric.map libfabric.pc.in libfabric.spec.in config/distscript.pl $(man_MANS)
+
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = libfabric.pc
 
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
