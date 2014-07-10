@@ -128,6 +128,16 @@ enum fi_threading {
 	FI_THREAD_PROGRESS
 };
 
+#define FI_ORDER_RAR		(1 << 0)
+#define FI_ORDER_RAW		(1 << 1)
+#define FI_ORDER_RAS		(1 << 2)
+#define FI_ORDER_WAR		(1 << 3)
+#define FI_ORDER_WAW		(1 << 4)
+#define FI_ORDER_WAS		(1 << 5)
+#define FI_ORDER_SAR		(1 << 6)
+#define FI_ORDER_SAW		(1 << 7)
+#define FI_ORDER_SAS		(1 << 8)
+
 
 struct fi_info {
 	struct fi_info		*next;

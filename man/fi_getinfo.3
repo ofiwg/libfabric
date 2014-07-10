@@ -57,6 +57,7 @@ struct fi_info {
 	void               *dest_addr;
 	size_t              auth_keylen;
 	void               *auth_key;
+	uint64_t            msg_order;
 	enum fi_threading   threading;
 	enum fi_progress    control_progress;
 	enum fi_progress    data_progress;
@@ -130,6 +131,8 @@ is specified).
 Authorization key to limit communication among endpoints that share
 the same key.  Also defines permission for sharing resources with
 other processes on the same node.
+.IP "msg_order"
+Specifies the order in which the transport protocol processes headers.
 .IP "threading"
 This indicates the threading serialization model that the application and
 provider will adhere to.  The treading model only applies to data operations.
@@ -446,6 +449,59 @@ Address is of type sockaddr_in6 (IPv6).
 .IP "FI_SOCKADDR_IB"
 Address is of type sockaddr_ib (defined in Linux kernel source 
 .BR "include/rdma/ib.h").
+.SH "Message Ordering"
+Message ordering refers to the order in which transport layer headers (as
+viewed by the application) are processed.  Relaxed message order enables
+data transfers to be sent and received out of order, which may improve
+performance by utilizing multiple paths through the fabric from the initiating
+endpoint to a target endpoint.  Message order applies only between a single
+source and destination endpoint pair.  Ordering between different target
+endpoints is not defined.
+.PP
+Message order is determined using a set of ordering bits.  Each set bit
+indicates that ordering is maintained between data transfers of the specified
+type.  Message order is defined for [read | write | send] operations submittted
+by an application after [read | write | send] operations.
+.PP
+Message ordering only applies to the processing of transport headers.  Message
+ordering is necessary, but does not guarantee the order in which data is
+sent or received by the transport layer.
+.IP "FI_ORDER_RAR"
+Read after read.  If set, RMA and atomic read operations are processed in the
+order submitted relative to other RMA and atomic read operations.  If not
+set, RMA and atomic reads may be processed out of order from their submission.
+.IP "FI_ORDER_RAW"
+Read after write.  If set, RMA and atomic read operations are processed in the
+order submitted relative to RMA and atomic write operations.  If not
+set, RMA and atomic reads may be processed ahead of RMA and atomic writes.
+.IP "FI_ORDER_RAS"
+Read after send.  If set, RMA and atomic read operations are processed in the
+order submitted relative to message send operations, including tagged sends.
+If not set, RMA and atomic reads may be processed ahead of sends.
+.IP "FI_ORDER_WAR"
+Write after read.  If set, RMA and atomic write operations are processed in the
+order submitted relative to RMA and atomic read operations.  If not
+set, RMA and atomic writes may be processed ahead of RMA and atomic reads.
+.IP "FI_ORDER_WAW"
+Write after write.  If set, RMA and atomic write operations are processed in the
+order submitted relative to other RMA and atomic write operations.  If not
+set, RMA and atomic writes may be processed out of order from their submission.
+.IP "FI_ORDER_WAS"
+Write after send.  If set, RMA and atomic write operations are processed in the
+order submitted relative to message send operations, including tagged sends.
+If not set, RMA and atomic writes may be processed ahead of sends.
+.IP "FI_ORDER_SAR"
+Send after read.  If set, message send operations, including tagged sends,
+are processed in order submitted relative to RMA and atomic read operations.
+If not set, message sends may be processed ahead of RMA and atomic reads.
+.IP "FI_ORDER_SAW"
+Send after write.  If set, message send operations, including tagged sends,
+are processed in order submitted relative to RMA and atomic write operations.
+If not set, message sends may be processed ahead of RMA and atomic writes.
+.IP "FI_ORDER_SAS"
+Send after send.  If set, message send operations, including tagged sends,
+are processed in the order submitted relative to other message send.
+If not set, message sends may be processed out of order from their submission.
 .SH "THREAD SERIALIZATION"
 The threading model specifies the level of serialization required of an
 application when using the libfabric data transfer interfaces.  Control
