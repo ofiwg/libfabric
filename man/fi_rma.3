@@ -1,4 +1,4 @@
-.TH "FI_RMA" 3 "2014-07-09" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_RMA" 3 "2014-07-11" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_rma - Remote memory access operations
 .PP
@@ -65,7 +65,8 @@ Fabric endpoint on which to initiate read or write operation.
 .IP "buf"
 Local data buffer to read into (read target) or write from (write source)
 .IP "len"
-Length of data to read or write
+Length of data to read or write, specified in bytes.  Valid transfers
+are from 0 bytes up to the endpoint's max_msg_size.
 .IP "iov"
 Vectored data buffer.
 .IP "count"

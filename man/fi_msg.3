@@ -1,4 +1,4 @@
-.TH "FI_MSG" 3 "2014-07-09" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_MSG" 3 "2014-07-11" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_msg - Message data transfer operations
 .PP
@@ -61,7 +61,8 @@ Fabric endpoint on which to initiate send or post receive buffer.
 .IP "buf"
 Data buffer to send or receive.
 .IP "len"
-Length of data buffer to send or receive.
+Length of data buffer to send or receive, specified in bytes.  Valid transfers
+are from 0 bytes up to the endpoint's max_msg_size.
 .IP "iov"
 Vectored data buffer.
 .IP "count"
