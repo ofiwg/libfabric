@@ -352,8 +352,9 @@ struct fid_cntr {
 enum {
 	FI_MR_ATTR_IOV		= 1 << 0,
 	FI_MR_ATTR_ACCESS	= 1 << 1,
-	FI_MR_ATTR_KEY		= 1 << 2,
-	FI_MR_ATTR_CONTEXT	= 1 << 3,
+	FI_MR_ATTR_OFFSET	= 1 << 2,
+	FI_MR_ATTR_KEY		= 1 << 3,
+	FI_MR_ATTR_CONTEXT	= 1 << 4,
 	FI_MR_ATTR_MASK_V1	= (FI_MR_ATTR_CONTEXT << 1) - 1
 };
 
@@ -362,6 +363,7 @@ struct fi_mr_attr {
 	const struct iovec	*mr_iov;
 	size_t			iov_count;
 	uint64_t		access;
+	uint64_t		offset;
 	uint64_t		requested_key;
 	void			*context;
 };
@@ -403,13 +405,19 @@ struct fi_ops_domain {
 			struct fid_poll **pollset);
 };
 
+
+/* Memory registration flags */
+#define FI_MR_OFFSET		(1ULL << 0)
+#define FI_MR_KEY		(1ULL << 3)	/* FI_USER_MR_KEY */
+
 struct fi_ops_mr {
 	size_t	size;
 	int	(*reg)(struct fid_domain *domain, const void *buf, size_t len,
-			uint64_t access, uint64_t requested_key,
+			uint64_t access, uint64_t offset, uint64_t requested_key,
 			uint64_t flags, struct fid_mr **mr, void *context);
 	int	(*regv)(struct fid_domain *domain, const struct iovec *iov,
-			size_t count, uint64_t access, uint64_t requested_key,
+			size_t count, uint64_t access,
+			uint64_t offset, uint64_t requested_key,
 			uint64_t flags, struct fid_mr **mr, void *context);
 	int	(*regattr)(struct fid_domain *domain, const struct fi_mr_attr *attr,
 			uint64_t flags, struct fid_mr **mr);
@@ -505,11 +513,11 @@ static inline int fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
 
 static inline int
 fi_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
-	  uint64_t access, uint64_t requested_key,
+	  uint64_t access, uint64_t offset, uint64_t requested_key,
 	  uint64_t flags, struct fid_mr **mr, void *context)
 {
-	return domain->mr->reg(domain, buf, len, access, requested_key,
-			       flags, mr, context);
+	return domain->mr->reg(domain, buf, len, access, offset,
+			       requested_key, flags, mr, context);
 }
 
 static inline void *fi_mr_desc(struct fid_mr *mr)

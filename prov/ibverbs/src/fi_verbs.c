@@ -1611,7 +1611,7 @@ ibv_mr_check_reg(uint64_t access, uint64_t requested_key, uint64_t flags)
 
 static int
 ibv_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
-	   uint64_t access, uint64_t requested_key,
+	   uint64_t access, uint64_t offset, uint64_t requested_key,
 	   uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct ibv_mem_desc *md;

@@ -31,12 +31,12 @@ Associate a registered memory region with an event collector.
 .HP
 .BI "int fi_mr_reg(struct fid_domain *" domain ", "
 .BI "const void * " buf ", size_t " len ", "
-.BI	"uint64_t " access ", uint64_t " requested_key ", "
+.BI	"uint64_t " access ", uint64_t " offset ", uint64_t " requested_key ", "
 .BI "uint64_t " flags ", struct fid_mr **" mr ", void *" context ");"
 .HP
 .BI "int fi_mr_regv(struct fid_domain *" domain ", "
 .BI "const struct iovec * " iov ", size_t " count ", "
-.BI	"uint64_t " access ", uint64_t " requested_key ", "
+.BI	"uint64_t " access ", uint64_t " offset ", uint64_t " requested_key ", "
 .BI "uint64_t " flags ", struct fid_mr **" mr ", void *" context ");"
 .HP
 .BI "int fi_mr_regattr(struct fid_domain *" domain ", "
@@ -73,8 +73,10 @@ Vectored memory buffer.
 Count of vectored buffer entries.
 .IP "access"
 Memory access permissions associated with registration
+.IP "offset"
+Optional specified offset for accessing specified registered buffers.
 .IP "requested_key"
-Requested remote key associated with registered buffers
+Optional requested remote key associated with registered buffers.
 .IP "attr"
 Memory region attributes
 .IP "flags"
@@ -145,8 +147,24 @@ Because MR keys must be provided by a remote process, an application
 can use the requested_key parameter to indicate that a specific key
 value be returned.  Support for user requested keys is provider specific.
 An access domain must be opened with the FI_USER_MR_KEY capability set
-in order to enable support for application selectable MR keys.  Otherwise,
-the requested_key parameter is ignored.
+in order to enable support for application selectable MR keys.  An
+application indicates that a requested_key has been provided by setting
+the FI_MR_KEY flag in the registration call, otherwise, the requested_key
+parameter is ignored.
+.PP
+Remote RMA and atomic operations indicate the location within a registered
+memory region by specifying an address.  By default, the RMA target address
+is a virtual address between the registered buf address and the end of the
+registered memory region (buf + len).  Typically, the starting virtual
+address and length are provided to the RMA initiator, either during connection
+setup or through separate communication messages.
+.PP
+In order to reduce the amount of state information an application must
+maintain regarding target RMA buffers, the memory registration calls allow
+a buffer to be associated with a specific target offset.  This offset is
+used on the initiator side in lieu of the virtual address.  To associate
+a memory region with a specific offset, the FI_MR_OFFSET flag must be
+used when registering the memory.
 .PP
 By default, memory registration is an asynchronous operation.  The result
 of a registration request will be reported to the user through an event
@@ -202,6 +220,14 @@ The following flags are usable with fi_mr_reg, fi_mr_regv, fi_mr_regattr.
 .IP "FI_BLOCK"
 Indicates that the memory registration call should operate synchronously.
 If set, the call will block until the registration completes.
+.IP "FI_MR_KEY"
+Indicates that the registered memory region should be associated with the
+specified requested_key.  If this flag is not provided, the requested_key
+parameter is ignored.
+.IP "FI_MR_OFFSET"
+Associates the registered memory region with the specified offset as its
+base target address.  If this flag is not provided, the offset parameter
+is ignored.  When set, any overlapping registration is replaced.
 .SH "RETURN VALUES"
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.

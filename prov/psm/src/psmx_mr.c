@@ -266,7 +266,7 @@ static void psmx_mr_normalize_iov(struct iovec *iov, size_t *count)
 }
 
 static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
-			uint64_t access, uint64_t requested_key,
+			uint64_t access, uint64_t offset, uint64_t requested_key,
 			uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
@@ -313,7 +313,7 @@ static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 
 static int psmx_mr_regv(struct fid_domain *domain,
 			const struct iovec *iov, size_t count,
-			uint64_t access, uint64_t requested_key,
+			uint64_t access, uint64_t offset, uint64_t requested_key,
 			uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
