@@ -596,6 +596,14 @@ ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 }
 
 static ssize_t
+ibv_msg_ep_rma_writeto(struct fid_ep *ep, const void *buf, size_t len,
+			void *desc, const void *dest_addr, uint64_t addr,
+			uint64_t key, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+static ssize_t
 ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			uint64_t flags)
 {
@@ -689,6 +697,14 @@ ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 }
 
 static ssize_t
+ibv_msg_ep_rma_readfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
+			const void *src_addr, uint64_t addr, uint64_t key,
+			void *context)
+{
+	return -FI_ENOSYS;
+}
+
+static ssize_t
 ibv_msg_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			uint64_t flags)
 {
@@ -720,14 +736,71 @@ ibv_msg_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
+static ssize_t
+ibv_msg_ep_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
+			uint64_t addr, uint64_t key)
+{
+	return -FI_ENOSYS;
+}
+
+static ssize_t
+ibv_msg_ep_rma_injectto(struct fid_ep *ep, const void *buf, size_t len,
+                        const void *dest_addr, uint64_t addr, uint64_t key)
+{
+	return -FI_ENOSYS;
+}
+
+static ssize_t
+ibv_msg_ep_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
+			void *desc, uint64_t data, uint64_t addr, uint64_t key,
+			void *context)
+{
+	struct ibv_msg_ep *_ep;
+	struct ibv_send_wr wr, *bad;
+	struct ibv_sge sge;
+
+	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	sge.addr = (uintptr_t) buf;
+	sge.length = (uint32_t) len;
+	sge.lkey = (uint32_t) (uintptr_t) desc;
+
+	wr.wr_id = (uintptr_t) context;
+	wr.next = NULL;
+	wr.sg_list = &sge;
+	wr.num_sge = 1;
+	wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+	wr.send_flags = (len <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
+	wr.imm_data = (uint32_t) data;
+
+	wr.wr.rdma.remote_addr = addr;
+	wr.wr.rdma.rkey = (uint32_t) key;
+
+	return -ibv_post_send(_ep->id->qp, &wr, &bad);
+}
+
+static ssize_t
+ibv_msg_ep_rma_writedatato(struct fid_ep *ep, const void *buf, size_t len,
+			void *desc, uint64_t data, const void *dest_addr,
+			uint64_t addr, uint64_t key, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+
 static struct fi_ops_rma ibv_msg_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
-	.write = ibv_msg_ep_rma_write,
 	.read = ibv_msg_ep_rma_read,
 	.readv = ibv_msg_ep_rma_readv,
+	.readfrom = ibv_msg_ep_rma_readfrom,
+	.readmsg = ibv_msg_ep_rma_readmsg,
+	.write = ibv_msg_ep_rma_write,
 	.writev = ibv_msg_ep_rma_writev,
+	.writeto = ibv_msg_ep_rma_writeto,
 	.writemsg = ibv_msg_ep_rma_writemsg,
-	.readmsg = ibv_msg_ep_rma_readmsg
+	.inject = ibv_msg_ep_rma_inject,
+	.injectto = ibv_msg_ep_rma_injectto,
+	.writedata = ibv_msg_ep_rma_writedata,
+	.writedatato = ibv_msg_ep_rma_writedatato
 };
 
 static int
