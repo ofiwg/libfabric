@@ -463,6 +463,7 @@ or equal to requested input values.
 .nf
 struct fi_ep_attr {
 	int       mask;
+	int       data_flow_cnt;
 	size_t    max_msg_size;
 	size_t    inject_size;
 	size_t    total_buffered_recv;
@@ -475,9 +476,17 @@ struct fi_ep_attr {
 .IP "Mask"
 The mask field is used to indicate which endpoint attribute values have been
 specified.  The following flags are defined, which correspond to fi_ep_attr
-fields of a similar name: FI_EP_ATTR_MSG_SIZE, FI_EP_ATTR_INJECT_SIZE,
-FI_EP_ATTR_BUFFER_RECV, FI_EP_ATTR_RAW_SIZE, FI_EP_ATTR_WAR_SIZE,
-FI_EP_ATTR_WAW_SIZE, FI_EP_ATTR_TAG.
+fields of a similar name: FI_EP_ATTR_FLOW, FI_EP_ATTR_MSG_SIZE,
+FI_EP_ATTR_INJECT_SIZE, FI_EP_ATTR_BUFFER_RECV, FI_EP_ATTR_RAW_SIZE,
+FI_EP_ATTR_WAR_SIZE, FI_EP_ATTR_WAW_SIZE, FI_EP_ATTR_TAG.
+.IP "Data Flow Count"
+Specifies the number of independent data flows to associate with the endpoint.
+A data flow conceptually represents indepdent hardware queues or paths
+through the fabric.  Data flows may be mapped to different command queues
+or fabric quality of service levels.  Data transfers may be associated with
+a specific data flow as part of the operation.  If a data flow is not
+specified, a data transfers will use the default flow associated with an
+endpoint.  
 .IP "Max Message Size"
 Defines the maximum size for an application data transfer as a
 single operation.

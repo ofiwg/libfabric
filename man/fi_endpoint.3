@@ -314,6 +314,9 @@ Defines the total available space allocated to buffer received messages
 .IP "FI_OPT_MAX_MSG_SIZE - size_t"
 Defines the maximum size for an application data transfer as a
 single operation.
+.IP "FI_OPT_DATA_FLOW - int"
+Sets the default data flow associated with an endpoint or alias.  Data
+flows are referenced by index, from 0 to the endpoint attribute data_flow_cnt.
 .RE
 .SH "CONTROL FLAGS"
 The following flags may be set to control the operation of data transfers
