@@ -47,7 +47,7 @@ extern "C" {
 //#define	FI_EINTR		EINTR		/* Interrupted system call */
 #define	FI_EIO		 	EIO		/* I/O error */
 //#define	FI_ENXIO		ENXIO		/* No such device or address */
-//#define	FI_E2BIG		E2BIG		/* Argument list too long */
+#define	FI_E2BIG		E2BIG		/* Argument list too long */
 //#define	FI_ENOEXEC		ENOEXEC		/* Exec format error */
 #define	FI_EBADF		EBADF		/* Bad file number */
 //#define	FI_ECHILD		ECHILD		/* No child processes */
