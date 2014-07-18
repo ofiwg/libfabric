@@ -1,4 +1,4 @@
-.TH "FI_MR" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_MR" 3 "2014-07-17" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_mr \- Memory region operations
 .PP
@@ -52,7 +52,7 @@ Associate a registered memory region with an event collector.
 .BI "uint64_t fi_mr_key(struct fid_mr *" mr ");"
 .PP
 .HP
-.BI "int fi_mr_bind(struct fid_mr *" mr ", " struct fid_ec *" ec ", "
+.BI "int fi_mr_bind(struct fid_mr *" mr ", " struct fid *" ec ", "
 .BI "uint64_t " flags ");"
 .SH ARGUMENTS
 .IP "domain"
@@ -60,7 +60,7 @@ Resource domain
 .IP "mr"
 Memory region 
 .IP "ec"
-Event collector
+Event queue or counter
 .IP "context"
 User specified context associated with the memory region.
 .IP "buf"
@@ -208,9 +208,9 @@ MR may be obtained by calling fi_mr_desc and fi_mr_key, respectively.
 The memory registration must have completed successfully before invoking
 these calls.
 ."fi_mr_bind"
-The fi_mr_bind function associates a memory region with an event collector,
-for providers that support the generation of events based on fabric
-operations.  The type of events tracked against the memory region is
+The fi_mr_bind function associates a memory region with an event counter
+or queue, for providers that support the generation of events based on
+fabric operations.  The type of events tracked against the memory region is
 based on the bitwise OR of the following flags.
 .IP "FI_WRITE"
 Generates an event whenever a remote RMA write or atomic operation modify
