@@ -173,7 +173,7 @@ struct fid_pep {
 #ifndef FABRIC_DIRECT
 
 static inline int
-fi_fendpoint(struct fid_fabric *fabric, struct fi_info *info,
+fi_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 	     struct fid_pep **pep, void *context)
 {
 	return fabric->ops->endpoint(fabric, info, pep, context);
