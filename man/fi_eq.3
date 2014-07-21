@@ -1,8 +1,8 @@
-.TH "FI_EQ" 3 "2014-06-18" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_EQ" 3 "2014-07-21" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_eq \- Event queue operations
 .PP
-fi_eq_open / fi_eq_close
+fi_feq_open / fi_eq_open / fi_eq_close
 .RS
 Open/close an event queue
 .RE
@@ -29,6 +29,9 @@ Converts provider specific error information into a printable string
 .RE
 .SH SYNOPSIS
 .B #include <rdma/fi_domain.h>
+.HP
+.BI "int fi_feq_open(struct fid_fabric *" fabric ", struct fi_eq_attr *" attr ", "
+.BI "struct fid_eq **" eq ", void * " context ");"
 .HP
 .BI "int fi_eq_open(struct fid_domain *" domain ", struct fi_eq_attr *" attr ", "
 .BI "struct fid_eq **" eq ", void * " context ");"
@@ -68,6 +71,10 @@ Converts provider specific error information into a printable string
 .BI "const char * fi_eq_strerror(struct fid_eq *" eq ", int " prov_errno ", "
 .BI "const void *" prov_data ", void *" buf ", size_t" len ");"
 .SH ARGUMENTS
+.IP "fabric"
+Opened fabric descriptor
+.IP "domain"
+Open resource domain
 .IP "eq"
 Event queue 
 .IP "attr"
@@ -95,9 +102,17 @@ Provider specific error value
 .IP "prov_data"
 Provider specific data related to a completion
 .SH "DESCRIPTION"
-.SS "fi_eq_open"
-fi_eq_open allocates a new event queue.  The properties and behavior of
-the event queue are defined by struct fi_eq_attr.
+.SS "fi_feq_open / fi_eq_open"
+fi_feq_open and fi_eq_open allocate a new event queue.  fi_feq_open opens
+an event queue associated with a fabric domain.  Fabric event queues
+are software constructs which are not associated with hardware resources.
+They are most often used with passive endpoints that listen for connections
+across multiple resource domains.  fi_eq_open allocates an event queue and
+associates it with a specific hardware domain.  A resource domain event
+queue may be implemented in a hardware NIC, and is often associated with
+an active endopint.
+.PP 
+The properties and behavior of an event queue are defined by struct fi_eq_attr.
 .PP
 .nf
 struct fi_eq_attr {
@@ -273,6 +288,10 @@ upon receiving a remote operation with FI_REMOTE_SIGNAL set, provided that all
 other wait conditions have been met.  The use of FI_REMOTE_SIGNAL may
 improve system utilization by deferring processing of an EQ until a remote
 endpoint has completed all necessary operations.
+.IP "FI_BLOCK"
+If an EQ has been configured with FI_BLOCK, reading from an EQ will block
+if a wait object is associated with the EQ and the wait object has been
+reset to the non-signaled state.
 .RE
 .IP "wait_set"
 If wait_obj is FI_WAIT_SET, this field references a wait object to which the
