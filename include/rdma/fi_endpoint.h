@@ -186,6 +186,8 @@ fi_endpoint(struct fid_domain *domain, struct fi_info *info,
 	return domain->ops->endpoint(domain, info, ep, context);
 }
 
+#define fi_ep_bind(ep, fid, flags) fi_bind(ep, fid, flags)
+
 static inline ssize_t fi_enable(struct fid_ep *ep)
 {
 	return ep->ops->enable(ep);
