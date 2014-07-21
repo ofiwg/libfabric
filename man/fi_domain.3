@@ -1,4 +1,4 @@
-.TH "FI_DOMAIN" 3 "2013-07-08" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_DOMAIN" 3 "2014-07-21" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_domain \- Open a fabric access domain
 .SH SYNOPSIS
@@ -8,6 +8,12 @@ fi_domain \- Open a fabric access domain
 .HP
 .BI "int fi_fdomain(struct fid_fabric *" fabric ", struct fi_info *" info ", "
 .BI "struct fid_domain **" domain ", void *" context ");"
+.HP
+.BI "int fi_close(struct fid *" domain ");"
+.PP
+.HP
+.BI "int fi_open(struct fid_domain *" domain ", const char *" name ", uint64_t " flags ","
+.BI "struct fid **" fif ", void *" context ");"
 .SH ARGUMENTS
 .IP "fabric" 12
 Fabric domain
@@ -18,18 +24,34 @@ On success, points to the opened access domain.
 .IP "context" 12
 User specified context associated with the domain.  This context is returned as
 part of any asynchronous event associated with the domain.
+.IP "name" 12
+Name associated with an interface.
+.IP "fif" 12
+Fabric interface
 .SH "DESCRIPTION"
-Opens a fabric access domain.  An access domain typically refers to a
+An access domain typically refers to a
 physical or virtual NIC or hardware port; however, a domain may span across
 multiple hardware components for fail-over or data striping purposes.
 A domain defines the boundary for associating different resources
 together.  Fabric resources belonging to the same domain may share
 resources.
-.PP
-Fabric domains are identified by name.  Domain names are character strings.
-By convention, domain names appear similar to path names.  This helps to
-identify the specific software and hardware provider associated with a
-domain.
+.SS "fi_fdomain"
+Opens a fabric access domain, also referred to as a resource domain.
+Fabric domains are identified by name.  Domain names are character
+strings. By convention, domain names appear similar to path names.
+This helps to identify the specific software
+and hardware provider associated with a domain.  The properties of
+the opened domain are specified using the fi_info structure.  See fi_getinfo
+for additional details.
+.SS "fi_open"
+fi_open is used to open provider specific interfaces.
+Provider interfaces may be used to access low-level resources and operations
+that are specific to the opened resource domain.  The details of domain
+interfaces are outside the scope of this documentation.
+.SS "fi_close"
+The fi_close call is used to release all resources associated with a domain
+or interface.  All items associated with the opened domain must
+be released prior to calling fi_close.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 
