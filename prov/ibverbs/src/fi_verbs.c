@@ -1492,9 +1492,15 @@ static int ibv_msg_ep_enable(struct fid_ep *ep)
 	return 0;
 }
 
+static ssize_t ibv_msg_ep_cancel(fid_t fid, void *context)
+{
+	return 0;
+}
+
 static struct fi_ops_ep ibv_msg_ep_base_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.enable = ibv_msg_ep_enable,
+	.cancel = ibv_msg_ep_cancel,
 	.getopt = ibv_msg_ep_getopt,
 	.setopt = ibv_msg_ep_setopt,
 };
