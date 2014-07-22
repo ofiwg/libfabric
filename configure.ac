@@ -45,6 +45,8 @@ AC_CHECK_LIB([fabric], fi_getinfo, [],
 
 dnl Checks for header files.
 AC_HEADER_STDC
+AC_CHECK_HEADER([rdma/fabric.h], [],
+    [AC_MSG_ERROR([<rdma/fabric.h> not found.  fabtests requires libfabric.])])
 
 if test "$disable_libcheck" != "yes"; then
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
