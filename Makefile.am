@@ -139,7 +139,6 @@ man_MANS = \
 	man/fi_tagged.3
 
 EXTRA_DIST = include/fi.h libfabric.map libfabric.spec.in $(man_MANS) \
-	prov/ibverbs/src/ibverbs.h \
 	librdmacm/src/cma.h \
 	librdmacm/src/indexer.h \
 	librdmacm/src/librdmacm.map \
