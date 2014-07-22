@@ -417,6 +417,13 @@ ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 }
 
 static ssize_t
+ibv_msg_ep_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
+		    const void *src_addr, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+static ssize_t
 ibv_msg_ep_send(struct fid_ep *ep, const void *buf, size_t len,
 		void *desc, void *context)
 {
@@ -435,6 +442,30 @@ ibv_msg_ep_send(struct fid_ep *ep, const void *buf, size_t len,
 	wr.num_sge = 1;
 	wr.opcode = IBV_WR_SEND;
 	wr.send_flags = (len <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
+
+	return -ibv_post_send(_ep->id->qp, &wr, &bad);
+}
+
+static ssize_t
+ibv_msg_ep_senddata(struct fid_ep *ep, const void *buf, size_t len,
+		    void *desc, uint64_t data, void *context)
+{
+	struct ibv_msg_ep *_ep;
+	struct ibv_send_wr wr, *bad;
+	struct ibv_sge sge;
+
+	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	sge.addr = (uintptr_t) buf;
+	sge.length = (uint32_t) len;
+	sge.lkey = (uint32_t) (uintptr_t) desc;
+
+	wr.wr_id = (uintptr_t) context;
+	wr.next = NULL;
+	wr.sg_list = &sge;
+	wr.num_sge = 1;
+	wr.opcode = IBV_WR_SEND_WITH_IMM;
+	wr.send_flags = (len <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
+	wr.imm_data = (uint32_t) data;
 
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
@@ -465,6 +496,13 @@ ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	wr.send_flags = (bytes <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
 
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
+}
+
+static ssize_t
+ibv_msg_ep_sendto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+		  const void *dest_addr, void *context)
+{
+	return -FI_ENOSYS;
 }
 
 static ssize_t
@@ -505,6 +543,27 @@ ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 }
 
 static ssize_t
+ibv_msg_ep_inject(struct fid_ep *ep, const void *buf, size_t len)
+{
+	return -FI_ENOSYS;
+}
+
+static ssize_t
+ibv_msg_ep_injectto(struct fid_ep *ep, const void *buf, size_t len,
+		    const void *dest_addr)
+{
+	return -FI_ENOSYS;
+}
+
+static ssize_t
+ibv_msg_ep_senddatato(struct fid_ep *ep, const void *buf, size_t len,
+		      void *desc, uint64_t data, const void *dest_addr,
+		      void *context)
+{
+	return -FI_ENOSYS;
+}
+
+static ssize_t
 ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	struct ibv_msg_ep *_ep;
@@ -533,11 +592,17 @@ ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 static struct fi_ops_msg ibv_msg_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = ibv_msg_ep_recv,
-	.send = ibv_msg_ep_send,
-	.sendmsg = ibv_msg_ep_sendmsg,
-	.recvmsg = ibv_msg_ep_recvmsg,
 	.recvv = ibv_msg_ep_recvv,
+	.recvfrom = ibv_msg_ep_recvfrom,
+	.recvmsg = ibv_msg_ep_recvmsg,
+	.send = ibv_msg_ep_send,
 	.sendv = ibv_msg_ep_sendv,
+	.sendto = ibv_msg_ep_sendto,
+	.sendmsg = ibv_msg_ep_sendmsg,
+	.inject = ibv_msg_ep_inject,
+	.injectto = ibv_msg_ep_injectto,
+	.senddata = ibv_msg_ep_senddata,
+	.senddatato = ibv_msg_ep_senddatato
 };
 
 static ssize_t
