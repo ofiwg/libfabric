@@ -168,7 +168,7 @@ struct fi_ops_poll {
 	int	(*poll)(struct fid_poll *pollset, void **context, int count);
 };
 
-struct fi_poll {
+struct fid_poll {
 	struct fid		fid;
 	struct fi_ops_poll	*ops;
 };
