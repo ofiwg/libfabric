@@ -199,22 +199,22 @@ out:
 
 static void __attribute__((constructor)) fi_ini(void)
 {
+	sock_ini();
 //	uv_ini();
 	ibv_ini();
 //	ucma_ini();
 //	rdma_cm_ini();
 	psmx_ini();
-//	mlx4_ini();
 }
 
 static void __attribute__((destructor)) fi_fini(void)
 {
-//	mlx4_fini();
 	psmx_fini();
 //	rdma_cm_fini();
 //	ucma_fini();
 	ibv_fini();
 //	uv_fini();
+	sock_fini();
 }
 
 int fi_getinfo(const char *node, const char *service, uint64_t flags,

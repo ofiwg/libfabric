@@ -1,0 +1,27 @@
+This file describes at a high-level the current implementation level
+of the socket provider against the defined interfaces.
+
+
+	Atomic	CM	Msg	RMA	Tagged	Trigger
+EP-Dgrm
+EP-Msg
+EP-Pkt
+EP-Raw
+EP-RDM
+
+	Map	Table
+AV
+
+	Sync	Async
+MR	1
+
+	General	Comp	CM	AV	MR
+EQ
+
+Cntr     
+
+	FD	MutCond
+WaitSet
+
+PollSet
+

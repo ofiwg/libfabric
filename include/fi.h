@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,8 +33,9 @@
 #ifndef _FI_H_
 #define _FI_H_
 
-#include <endian.h>
 #include <byteswap.h>
+#include <endian.h>
+#include <semaphore.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_prov.h>
 #include <rdma/fi_atomic.h>
@@ -68,6 +69,72 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 #define max(a, b) ((a) > (b) ? a : b)
 #define min(a, b) ((a) < (b) ? a : b)
 
+
+#if DEFINE_ATOMICS
+#define fastlock_t pthread_mutex_t
+#define fastlock_init(lock) pthread_mutex_init(lock, NULL)
+#define fastlock_destroy(lock) pthread_mutex_destroy(lock)
+#define fastlock_acquire(lock) pthread_mutex_lock(lock)
+#define fastlock_release(lock) pthread_mutex_unlock(lock)
+
+typedef struct { pthread_mutex_t mut; int val; } atomic_t;
+static inline int atomic_inc(atomic_t *atomic)
+{
+	int v;
+
+	pthread_mutex_lock(&atomic->mut);
+	v = ++(atomic->val);
+	pthread_mutex_unlock(&atomic->mut);
+	return v;
+}
+static inline int atomic_dec(atomic_t *atomic)
+{
+	int v;
+
+	pthread_mutex_lock(&atomic->mut);
+	v = --(atomic->val);
+	pthread_mutex_unlock(&atomic->mut);
+	return v;
+}
+static inline void atomic_init(atomic_t *atomic)
+{
+	pthread_mutex_init(&atomic->mut, NULL);
+	atomic->val = 0;
+}
+#else
+typedef struct {
+	sem_t sem;
+	volatile int cnt;
+} fastlock_t;
+static inline void fastlock_init(fastlock_t *lock)
+{
+	sem_init(&lock->sem, 0, 0);
+	lock->cnt = 0;
+}
+static inline void fastlock_destroy(fastlock_t *lock)
+{
+	sem_destroy(&lock->sem);
+}
+static inline void fastlock_acquire(fastlock_t *lock)
+{
+	if (__sync_add_and_fetch(&lock->cnt, 1) > 1)
+		sem_wait(&lock->sem);
+}
+static inline void fastlock_release(fastlock_t *lock)
+{
+	if (__sync_sub_and_fetch(&lock->cnt, 1) > 0)
+		sem_post(&lock->sem);
+}
+
+typedef struct { volatile int val; } atomic_t;
+#define atomic_inc(v) (__sync_add_and_fetch(&(v)->val, 1))
+#define atomic_dec(v) (__sync_sub_and_fetch(&(v)->val, 1))
+#define atomic_init(v) ((v)->val = 0)
+#endif /* DEFINE_ATOMICS */
+#define atomic_get(v) ((v)->val)
+#define atomic_set(v, s) ((v)->val = s)
+
+
 struct fi_prov {
 	struct fi_prov		*next;
 	struct fi_ops_prov	*ops;
@@ -90,6 +157,9 @@ int  fi_init(void);
 void uv_ini(void);
 void uv_fini(void);
 int  uv_init(void);
+
+void sock_ini(void);
+void sock_fini(void);
 
 void ibv_ini(void);
 void ibv_fini(void);

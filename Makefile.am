@@ -64,7 +64,13 @@ librdmacm_librspreload_la_DEPENDENCIES = \
 	$(top_builddir)/librdmacm/librdmacm.la
 
 src_libfabric_la_SOURCES = src/fabric.c \
-	prov/ibverbs/src/fi_verbs.c
+	prov/ibverbs/src/fi_verbs.c \
+	prov/sockets/src/sock_av.c \
+	prov/sockets/src/sock_dom.c \
+	prov/sockets/src/sock_eq.c \
+	prov/sockets/src/sock_poll.c \
+	prov/sockets/src/sock_rdm.c \
+	prov/sockets/src/sock.c
 
 if HAVE_PSM
 src_libfabric_la_SOURCES += prov/psm/src/psmx_init.c \
@@ -143,7 +149,8 @@ EXTRA_DIST = include/fi.h libfabric.map libfabric.spec.in $(man_MANS) \
 	librdmacm/src/indexer.h \
 	librdmacm/src/librdmacm.map \
 	libibverbs/src/ibverbs.h \
-	libibverbs/src/libibverbs.map
+	libibverbs/src/libibverbs.map \
+	prov/sockets/src/sock.h
 
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
