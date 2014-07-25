@@ -1,4 +1,4 @@
-.TH "FI_MR" 3 "2014-07-17" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_MR" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_mr \- Memory region operations
 .PP
@@ -111,6 +111,11 @@ are used to register one or more memory buffers with fabric resources.
 The main difference between registration functions are the number
 and type of parameters that they accept as input.  Otherwise,
 they perform the same general function.
+.PP
+By default, memory registration completes synchronously.  I.e. the
+registration call will not return until the registration has completed.
+Memory registration can complete asynchronous by binding the resource
+domain to an event queue.  See fi_domain_bind.
 .SS "fi_mr_reg"
 The fi_mr_reg call registers the user-specified memory buffer with
 the resource domain.  The buffer is enabled for access by the fabric
@@ -217,9 +222,6 @@ Generates an event whenever a remote RMA write or atomic operation modify
 the memory region.
 .SH "FLAGS"
 The following flags are usable with fi_mr_reg, fi_mr_regv, fi_mr_regattr.
-.IP "FI_BLOCK"
-Indicates that the memory registration call should operate synchronously.
-If set, the call will block until the registration completes.
 .IP "FI_MR_KEY"
 Indicates that the registered memory region should be associated with the
 specified requested_key.  If this flag is not provided, the requested_key

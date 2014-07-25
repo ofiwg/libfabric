@@ -423,6 +423,9 @@ struct fi_ops_mr {
 			uint64_t flags, struct fid_mr **mr);
 };
 
+/* Domain bind flags */
+#define FI_REG_MR		(1ULL << 0)
+
 struct fid_domain {
 	struct fid		fid;
 	struct fi_ops_domain	*ops;

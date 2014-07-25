@@ -2249,28 +2249,15 @@ static struct fi_ops ibv_mr_ops = {
 };
 
 static int
-ibv_mr_check_reg(uint64_t access, uint64_t requested_key, uint64_t flags)
-{
-	if (!(flags & FI_BLOCK))
-		return -FI_EBADFLAGS;
-
-	if (requested_key)
-		return -FI_ENOSYS;
-
-	return 0;
-}
-
-static int
 ibv_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	   uint64_t access, uint64_t offset, uint64_t requested_key,
 	   uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct ibv_mem_desc *md;
-	int ibv_access, ret;
+	int ibv_access;
 
-	ret = ibv_mr_check_reg(access, requested_key, flags);
-	if (ret)
-		return ret;
+	if (flags)
+		return -FI_ENOSYS;
 
 	md = calloc(1, sizeof *md);
 	if (!md)

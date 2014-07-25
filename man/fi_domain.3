@@ -16,6 +16,9 @@ fi_domain \- Open a fabric access domain
 .BI "struct fi_domain_attr *" attr ", size_t *" attrlen ");"
 .PP
 .HP
+.BI "int fi_domain_bind(struct fid_domain *" domain ", " struct fid *" eq ", "
+.BI "uint64_t " flags ");"
+.HP
 .BI "int fi_open(struct fid_domain *" domain ", const char *" name ", uint64_t " flags ","
 .BI "struct fid **" fif ", void *" context ");"
 .SH ARGUMENTS
@@ -24,7 +27,7 @@ Fabric domain
 .IP "info" 12
 Details about the access domain to be opened, obtained from fi_getinfo.
 .IP "domain" 12
-On success, points to the opened access domain.
+An opened access domain.
 .IP "context" 12
 User specified context associated with the domain.  This context is returned as
 part of any asynchronous event associated with the domain.
@@ -33,6 +36,8 @@ Pointer to write domain attributes.
 .IP "attrlen" 12
 On input, specifies the size of the attribute buffer.  On output, the number of
 bytes written.
+.IP "eq" 12
+Event queue for asynchronous operations initiated on the domain.
 .IP "name" 12
 Name associated with an interface.
 .IP "fif" 12
@@ -80,6 +85,12 @@ this value.
 .IP "eq_data_size"
 The number of bytes that the provider supports for remote EQ data.  See
 the FI_REMOTE_EQ_DATA flag (fi_getinfo) for the use of remote EQ data. 
+.SS "fi_domain_bind"
+Associates an event queue with the domain.  Binding an event queue to a
+domain with the FI_REG_MR flag indicates that the provider should perform
+all memory registration operations asynchronously, with the completion
+reported through the event queue.  If an event queue is not bound to the
+domain, then memory registration requests behave synchronously.
 .SS "fi_close"
 The fi_close call is used to release all resources associated with a domain
 or interface.  All items associated with the opened domain must

@@ -1,4 +1,4 @@
-.TH "FI_AV" 3 "2014-05-01" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_AV" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_av \- Address vector operations
 .PP
@@ -12,11 +12,6 @@ fi_av_bind
 Associate an address vector with an event queue.
 .RE
 .PP
-fi_av_control
-.RS
-Control the address vector operation.
-.RE
-.PP
 fi_av_insert / fi_av_remove
 .RS
 Insert/remove an address into/from the address vector.
@@ -25,11 +20,6 @@ Insert/remove an address into/from the address vector.
 fi_av_lookup
 .RS
 Retrieve an address stored in the address vector.
-.RE
-.PP
-fi_av_sync
-.RS
-Initiate a synchronize operation.
 .RE
 .PP
 fi_av_straddr
@@ -45,10 +35,7 @@ Convert an address into a printable string.
 .BI "int fi_av_close(struct fid_av *" av ");"
 .PP
 .HP
-.BI "int fi_av_bind(struct fid_av *" av ", " fid_t " ec ", uint64_t " flags ");"
-.PP
-.HP
-.BI "int fi_av_control(struct fid_av *" av ", int " command ", void *" arg ");"
+.BI "int fi_av_bind(struct fid_av *" av ", " fid_t " eq ", uint64_t " flags ");"
 .PP
 .HP
 .BI "int fi_av_insert(struct fid_av *" av ", void *" addr ", size_t " count ", "
@@ -60,8 +47,6 @@ Convert an address into a printable string.
 .BI "int fi_av_lookup(struct fid_av *" av" , const void *" fi_addr ", "
 .BI "void *" addr ", size_t *" addrlen ");"
 .HP
-.BI "int fi_av_sync(struct fid_av *" av ");"
-.HP
 .BI "const char * fi_av_straddr(struct fid_av *" av ", const void *" addr ", "
 .BI "void *" buf ", size_t " len ");"
 .SH ARGUMENTS
@@ -69,8 +54,8 @@ Convert an address into a printable string.
 Resource domain
 .IP "av"
 Address vector 
-.IP "ec"
-Event collector
+.IP "eq"
+Event queue
 .IP "attr"
 Address vector attributes
 .IP "context"
@@ -94,7 +79,8 @@ Address vectors are used to map higher level addresses, which may be
 more natural for an application to use, into fabric specific addresses.
 The mapping of addresses is fabric and provider specific, but may involve
 lengthy address resolution and fabric management protocols.  AV operations
-are asynchronous by default, but may be set to operate synchronously.
+are synchronous by default, but may be set to operate asynchronously by
+associating the AV with an event queue.
 .SS "fi_av_open"
 fi_av_open allocates or opens an address vector.  The properties and behavior of
 the address vector are defined by struct fi_av_attr.
@@ -161,27 +147,11 @@ is not defined.
 If name is non-NULL and map_addr is 0, then the map_addr used by the
 provider will be returned through the attribute structure.
 .IP "flags"
-Flags that set the default operation of the AV.
+The following flags may be used when opening an AV.
 .RS
 .IP "FI_READ"
 Opens an AV for read-only access.  An AV opened for read-only access
 must be named (name attribute specified), and the AV must exist.
-.IP "FI_BLOCK"
-Insertions into the address vector should be processed synchronously.
-If an AV is set for synchronous operation, fi_av_insert will block
-until all mapping translations have completed.
-.IP "FI_RANGE"
-FI_RANGE allows for multiple addresses to be inserted into an AV by
-specifying only the starting and ending addresses, inclusive, for a
-range of given addresses.  When multiple addresses are inserted into
-the AV with FI_RANGE enabled, the provided addresses are processed in pairs.
-Each pair indicates the first and last address of a range of addresses that
-the AV should store.  If an odd number of addresses are inserted into
-the AV, the final address is treated as a single address.
-.PP
-When FI_RANGE is in use, the AV will return one mapped address for
-every address that is inserted, including those address specified
-indirectly as part of a given range.
 .RE
 .SS "fi_av_close"
 The fi_av_close call is used to release all resources associated with an
@@ -192,19 +162,11 @@ events associated with the AV before closing it.
 An AV is associated with an event collector using the fi_av_bind call. An
 AV must be associated with an event collector before an asynchronously
 may be initiated. 
-.SS "fi_av_control"
-The fi_av_control call is used to change the operation of the AV.
-Access to the AV should be serialized across all calls when fi_av_control
-is invoked, as it may redirect the implementation of AV operations. The
-following control commands are usable with an AV.
-.IP "FI_GETOPSFLAG (uint64_t *)"
-Returns the current default operational flags associated with the AV.  The
-operational flags are those applicable to the insert and removal calls,
-as defined under FLAGS.
-.IP "FI_SETOPSFLAG (uint64_t *)"
-Modifies the current default operational flags associated with the AV.  The
-operational flags are those applicable to the insert and removal calls,
-as defined under FLAGS.
+
+Associates an event queue with the AV.  Binding an event queue to an
+AV indicates that the provider should perform all insertions asynchronously,
+with the completions reported through the event queue.  If an event queue
+is not bound to the AV, then insertion requests behave synchronously.
 .SS "fi_av_insert"
 The fi_av_insert call inserts one or more addresses into an AV.  The number
 of addresses is specified through the count parameter.  The addr parameter
@@ -228,20 +190,19 @@ fi_addr must reference an array of structures defined by struct fi_info:
 addr_format, and the buffer must remain valid until the insertion
 operation completes.
 .PP
-Applications indicate that all addresses have been inserted into an
-AV and that the provider should begin processing the AV by calling
-fi_sync on the AV fid.  The context specified through fi_sync will be
-returned to the user through an event queue that has been bound with
-the AV.
-.PP
 The FI_RANGE flag may be used with fi_av_insert to indicate that a range
-of addresses should be inserted.  For details on the use of FI_RANGE, see
-the FI_RANGE flag discussion for fi_av_open.
+of addresses should be inserted.  See the flags discussion below.
 .SS "fi_av_remove"
 fi_av_remove removes a set of addresses from an address vector.  All
 resources associated with the indicated addresses are released, and
 no future references to either the mapped address (in the case of
 FI_AV_MAP) or index (FI_AV_TABLE) are allowed.
+.PP
+The use of fi_av_remove is an optimization that applications may use
+to free memory allocated with addresses that will no longer be accessed.
+Inserted addresses are not required to be removed.  fi_av_close will
+automatically cleanup any resources associated with addresses remaining
+in the AV when it is invoked. 
 .SS "fi_av_lookup"
 This call returns the address stored in the address vector that corresponds
 to the given fi_addr.  The returned address is the same format as those
@@ -250,20 +211,6 @@ indicate the size of the addr buffer.  If the actual address is larger than
 what can fit into the buffer, it will be truncated.  On output, addrlen
 is set to the size of the buffer needed to store the address, which may
 be larger than the input value.
-.SS "fi_av_sync"
-The fi_av_sync call is used to signal to the provider that all addresses
-have been inserted and/or removed from the AV, and that it should
-begin processing any addresses in the AV.  This allows the provider
-to batch address processing in order to improve the performance and
-efficiency of address mapping mechanisms.
-.PP
-The fi_av_sync call operates asynchronously by default.  The caller is
-notified upon completion of the fi_av_sync call through an event
-posted to the bound event collector.  Receipt of the event indicates
-that all addresses that were inserted into the AV prior to fi_av_sync
-being invoked have been mapped, and that returned addresses are now
-usable.  The fi_av_sync call can be converted into a synchronous call
-using the FI_BLOCK flag.
 .SS "fi_av_straddr"
 The fi_av_straddr function converts the provided address into a printable
 string.  The specified address must be of the same format as those
@@ -274,16 +221,23 @@ string will be returned.  This size may be larger than the input len.  If
 the provided buffer is too small, the results will be truncated.  fi_av_straddr
 returns a pointer to buf.
 .SH "FLAGS"
-The following flags are usable with fi_av_insert, fi_av_remove, and
-fi_av_sync.
-.IP "FI_BLOCK"
-Insertions or removals from an address vector should be processed
-synchronously.  The calls should block until the operations either
-complete successfully or fail.
+The following flags are usable with fi_av_insert.
+.IP "FI_RANGE"
+FI_RANGE allows for multiple addresses to be inserted into an AV by
+specifying only the starting and ending addresses, inclusive, for a
+range of given addresses.  When multiple addresses are inserted into
+the AV with FI_RANGE enabled, the provided addresses are processed in pairs.
+Each pair indicates the first and last address of a range of addresses that
+the AV should store.  If an odd number of addresses are inserted into
+the AV, the final address is treated as a single address.
+.PP
+When FI_RANGE is in use, the AV will return one mapped address for
+every address that is inserted, including those address specified
+indirectly as part of a given range.
 .SH "NOTES"
 Providers may implement AV's using a variety of mechanisms.  Specifically,
 a provider may begin resolving inserted addresses as soon as they have
-been added to an AV, and need not wait until fi_sync has been called.
+been added to an AV, even if asynchronous operation has been specified.
 Similarly, a provider may lazily release resources from removed entries. 
 .SH "RETURN VALUES"
 Returns 0 on success.  On error, a negative value corresponding to

@@ -255,50 +255,39 @@ static int psmx_av_close(fid_t fid)
 	return 0;
 }
 
+/* Currently only support synchronous insertions */
 static int psmx_av_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
-	struct fi_resource ress;
-	int err;
-	int i;
-
-	for (i=0; i<nfids; i++) {
-		if (!fids[i].fid)
-			return -EINVAL;
-		switch (fids[i].fid->fclass) {
-		case FID_CLASS_EP:
-			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
-				return -EINVAL;
-			ress.fid = fid;
-			ress.flags = fids[i].flags;
-			err = fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
-			if (err)
-				return err;
-			break;
-
-		default:
-			return -ENOSYS;
-		}
-	}
-	return 0;
-}
-
-static int psmx_av_sync(fid_t fid, uint64_t flags, void *context)
-{
-	/* no-op since insert/remove is synchronous */
-	return 0;
-}
-
-static int psmx_av_control(fid_t fid, int command, void *arg)
-{
-	return -ENOSYS;
+//	struct fi_resource ress;
+//	int err;
+//	int i;
+//
+//	for (i=0; i<nfids; i++) {
+//		if (!fids[i].fid)
+//			return -EINVAL;
+//		switch (fids[i].fid->fclass) {
+//		case FID_CLASS_EP:
+//			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
+//				return -EINVAL;
+//			ress.fid = fid;
+//			ress.flags = fids[i].flags;
+//			err = fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
+//			if (err)
+//				return err;
+//			break;
+//
+//		default:
+//			return -FI_ENOSYS;
+//		}
+//	}
+//	return 0;
+	return -FI_ENOSYS;
 }
 
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_av_close,
 	.bind = psmx_av_bind,
-	.sync = psmx_av_sync,
-	.control = psmx_av_control,
 };
 
 static struct fi_ops_av psmx_av_ops = {
