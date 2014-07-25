@@ -381,7 +381,7 @@ struct fi_domain_attr {
 	/* Note to providers: set prov_attr to static struct */
 	size_t			prov_attr_size;
 	void			*prov_attr;
-	size_t			mem_desc_size;
+	size_t			mr_key_size;
 	size_t			eq_data_size;
 };
 

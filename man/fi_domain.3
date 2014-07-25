@@ -1,4 +1,4 @@
-.TH "FI_DOMAIN" 3 "2014-07-21" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_DOMAIN" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_domain \- Open a fabric access domain
 .SH SYNOPSIS
@@ -10,6 +10,10 @@ fi_domain \- Open a fabric access domain
 .BI "struct fid_domain **" domain ", void *" context ");"
 .HP
 .BI "int fi_close(struct fid *" domain ");"
+.PP
+.HP
+.BI "int fi_domain_query(struct fid_domain *" domain ", "
+.BI "struct fi_domain_attr *" attr ", size_t *" attrlen ");"
 .PP
 .HP
 .BI "int fi_open(struct fid_domain *" domain ", const char *" name ", uint64_t " flags ","
@@ -24,6 +28,11 @@ On success, points to the opened access domain.
 .IP "context" 12
 User specified context associated with the domain.  This context is returned as
 part of any asynchronous event associated with the domain.
+.IP "attr" 12
+Pointer to write domain attributes.
+.IP "attrlen" 12
+On input, specifies the size of the attribute buffer.  On output, the number of
+bytes written.
 .IP "name" 12
 Name associated with an interface.
 .IP "fif" 12
@@ -48,6 +57,29 @@ fi_open is used to open provider specific interfaces.
 Provider interfaces may be used to access low-level resources and operations
 that are specific to the opened resource domain.  The details of domain
 interfaces are outside the scope of this documentation.
+.SS "fi_domain_query"
+Query the attributes of an opened domain.
+.nf
+struct fi_domain_attr {
+	/* Note to providers: set prov_attr to static struct */
+	size_t			prov_attr_size;
+	void			*prov_attr;
+	size_t			mr_key_size;
+	size_t			eq_data_size;
+};
+.fi
+.IP "prov_attr_size"
+Size of provider specific attribute structure.
+.IP "prov_attr"
+Pointer to a provider specific attribute structure.  The format and contents
+of this structure is outside the scope of this interface.
+.IP "mr_key_size"
+Size of the memory region remote access key, in bytes.  Applications that
+request their own MR key must select a value within the range specified by
+this value.
+.IP "eq_data_size"
+The number of bytes that the provider supports for remote EQ data.  See
+the FI_REMOTE_EQ_DATA flag (fi_getinfo) for the use of remote EQ data. 
 .SS "fi_close"
 The fi_close call is used to release all resources associated with a domain
 or interface.  All items associated with the opened domain must
