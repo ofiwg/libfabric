@@ -150,7 +150,8 @@ EXTRA_DIST = include/fi.h libfabric.map libfabric.spec.in $(man_MANS) \
 	librdmacm/src/librdmacm.map \
 	libibverbs/src/ibverbs.h \
 	libibverbs/src/libibverbs.map \
-	prov/sockets/src/sock.h
+	prov/sockets/src/sock.h \
+	prov/psm/src/psmx.h
 
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
