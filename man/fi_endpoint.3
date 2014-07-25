@@ -131,14 +131,16 @@ The behavior of an endpoint may be adjusted by setting its control
 data and protocol options.  This allows the underlying provider to
 redirect function calls to implementations optimized to meet the
 desired application behavior.
-.SS "fi_endpoint"
-fi_endpoint allocates a new active endpoint.  The properties and behavior
+.SS "fi_endpoint / fi_pendpoint"
+fi_endpoint allocates a new active endpoint.  fi_pendpoint allocates a
+new passive endpoint.  The properties and behavior
 of the endpoint are defined based on the provided struct fi_info.  See
 fi_getinfo for additional details on fi_info.  fi_info flags that control
 the operation of an endpoint are defined below.
-.SS "fi_pendpoint"
-Allocates a new passive endpoint with basic properties defined by struct
-fi_info.
+.PP
+A single struct fi_info may only be used to allocate a single endpoint.
+If multiple endpoints are to be allocated, each should be preceded by a
+separate call to fi_getinfo.
 .SS "fi_close"
 Closes an endpoint and release all resources associated with it.
 .SS "fi_ep_bind"
