@@ -1,4 +1,4 @@
-.TH "FI_ATOMIC" 3 "2014-07-08" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ATOMIC" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_atomic - Remote atomic functions
 .PP
@@ -321,8 +321,8 @@ fi_atomic must not be touched by the application until the fi_atomic
 call completes asynchronously.  The target buffer of a base atomic
 operation must allow for remote read an/or write access, as appropriate.
 .PP
-The fi_atomicv call adds support for a scatter-gather list to fi_atomic and/or
-fi_atomicmem.  The fi_atomicv transfers the set of data buffers referenced by
+The fi_atomicv call adds support for a scatter-gather list to fi_atomic.
+The fi_atomicv transfers the set of data buffers referenced by
 the ioc parameter to the remote node for processing.
 .PP
 The fi_atomicto function is equivalent to fi_atomic for unconnected endpoints.
@@ -376,7 +376,7 @@ FI_CSWAP_LT, FI_CSWAP_GE, FI_CSWAP_GT, and FI_MSWAP.
 .SS "Atomic Valid Functions"
 The atomic valid functions -- fi_atomicvalid, fi_fetch_atomicvalid,
 and fi_compare_atomicvalid --indicate which operations the local provider
-supports.  Needed operatations not supported by the provider must be emulated
+supports.  Needed operations not supported by the provider must be emulated
 by the application.  Each valid call corresponds to a set of atomic functions.
 fi_atomicvalid checks whether a provider supports a specific base atomic
 operation for a given datatype and operation.  fi_fetch_atomicvalid indicates

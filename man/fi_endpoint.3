@@ -1,4 +1,4 @@
-.TH "FI_ENDPOINT" 3 "2014-07-08" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ENDPOINT" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_endpoint \- Fabric endpoint operations
 .PP
@@ -172,12 +172,12 @@ If FI_EVENT is specified, the indicated data transfer operations
 won't generate entries for successful completions in the
 event queue unless FI_EVENT is set for that specific operation.
 FI_EVENT must be OR'ed with FI_SEND and/or FI_RECV flags.
-.PP
+.sp
 When set the user must determine when a request that does NOT have
 FI_EVENT set has completed indirectly, usually based on the completion
 of a subsequent operation.  Use of this flag may improve performance by
 allowing the provider to avoid writing a completion entry for every operation.
-.PP
+.sp
 The use of FI_EVENT is often paired with the call fi_sync.  FI_EVENT
 allows the user to suppress completions from being generated.  In order
 for the application to ensure that all previous operations have
@@ -340,7 +340,7 @@ posted are lost.
 .IP "FI_REMOTE_COMPLETE"
 Indicates that local completions should not be generated
 until the operation has completed on the remote side.  When set, if the
-target endpoint experiences an error receiving the transfered data, that
+target endpoint experiences an error receiving the transferred data, that
 error will be reported back to the initiator of the request.  This includes
 errors which may not normally be reported to the initiator.  For example,
 if the receive data is truncated at the target because the provided receive
