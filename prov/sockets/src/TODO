@@ -1,27 +1,31 @@
 This file describes at a high-level the current implementation level
 of the socket provider against the defined interfaces.
 
+[ ] - not done
+[X] - functional
+[*] - not applicable
 
 	Atomic	CM	Msg	RMA	Tagged	Trigger
-EP-Dgrm
-EP-Msg
-EP-Pkt
-EP-Raw
-EP-RDM
+EP-Dgrm [*]	[ ]	[ ]	[*]	[*]	[*]
+EP-Msg	[ ]	[ ]	[ ]	[ ]	[ ]	[ ]
+EP-Pkt	[*]	[*]	[ ]	[*]	[*]	[*]
+EP-Raw	[*]	[*]	[ ]	[*]	[*]	[*]
+EP-RDM	[ ]	[ ]	[ ]	[ ]	[ ]	[ ]
 
 	Map	Table
-AV
+AV	[ ]	[ ]
 
 	Sync	Async
-MR	1
+MR	[X]	[ ]
 
 	General	Comp	CM	AV	MR
-EQ
+EQ	[ ]	[ ]	[ ]	[ ]	[ ]
+Cntr    [*]	[X]	[*]	[*]	[*]
 
-Cntr     
+	FD	MutCond	WaitSet
+WaitSet	[ ]	[ ]	[*]
+EQ	[ ]	[ ]	[ ]
+Cntr	[ ]	[X]	[ ]
 
-	FD	MutCond
-WaitSet
-
-PollSet
+PollSet	[ ]
 

@@ -40,6 +40,7 @@
 //#include <netinet/in.h>
 //#include <netinet/tcp.h>
 //#include <poll.h>
+#include <pthread.h>
 //#include <stdarg.h>
 //#include <stddef.h>
 //#include <stdio.h>
@@ -79,6 +80,9 @@ struct sock_cntr {
 	struct fid_cntr		cntr_fid;
 	struct sock_domain	*dom;
 	uint64_t		value;
+	uint64_t		threshold;
+	pthread_cond_t		cond;
+	pthread_mutex_t		mut;
 };
 
 struct sock_eq {
