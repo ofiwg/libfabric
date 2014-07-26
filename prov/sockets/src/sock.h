@@ -107,6 +107,8 @@ struct sock_mr {
 struct sock_av {
 	struct fid_av		av_fid;
 	struct sock_domain	*dom;
+	atomic_t		ref;
+	struct fi_av_attr	attr;
 };
 
 struct sock_poll {

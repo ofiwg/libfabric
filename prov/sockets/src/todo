@@ -2,7 +2,7 @@ This file describes at a high-level the current implementation level
 of the socket provider against the defined interfaces.
 
 [ ] - not done
-[X] - functional
+[X] - functionality coded
 [*] - not applicable
 
 	Atomic	CM	Msg	RMA	Tagged	Trigger
@@ -13,10 +13,11 @@ EP-Raw	[*]	[*]	[ ]	[*]	[*]	[*]
 EP-RDM	[ ]	[ ]	[ ]	[ ]	[ ]	[ ]
 
 	Map	Table
-AV	[ ]	[ ]
+AV	[X]	[ ]
+AV-SHM	[ ]	[ ]
 
-	Sync	Async
-MR	[X]	[ ]
+	Sync
+MR	[X]
 
 	General	Comp	CM	AV	MR
 EQ	[ ]	[ ]	[ ]	[ ]	[ ]
