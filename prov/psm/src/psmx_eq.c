@@ -486,30 +486,7 @@ static int psmx_eq_close(fid_t fid)
 
 static int psmx_eq_bind(fid_t fid, struct fi_resource *fids, int nfids)
 {
-	struct fi_resource ress;
-	int err;
-	int i;
-
-	for (i=0; i<nfids; i++) {
-		if (!fids[i].fid)
-			return -EINVAL;
-		switch (fids[i].fid->fclass) {
-		case FID_CLASS_EP:
-		case FID_CLASS_MR:
-			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
-				return -EINVAL;
-			ress.fid = fid;
-			ress.flags = fids[i].flags;
-			err = fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
-			if (err)
-				return err;
-			break;
-
-		default:
-			return -ENOSYS;
-		}
-	}
-	return 0;
+	return -ENOSYS;
 }
 
 static int psmx_eq_sync(fid_t fid, uint64_t flags, void *context)
