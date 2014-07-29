@@ -184,125 +184,116 @@ static int psmx_ep_close(fid_t fid)
 	return 0;
 }
 
-static int psmx_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
+static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	int i;
 	struct psmx_fid_ep *fid_ep;
 	struct psmx_fid_domain *domain;
 	struct psmx_fid_av *av;
 	struct psmx_fid_eq *eq;
 	struct psmx_fid_cntr *cntr;
-	struct fi_resource ress;
 	int err;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
-	for (i=0; i<nfids; i++) {
-		if (!fids[i].fid)
-			return -EINVAL;
-		switch (fids[i].fid->fclass) {
-		case FID_CLASS_DOMAIN:
-			domain = container_of(fids[i].fid,
-					struct psmx_fid_domain, domain.fid);
-			if (fid_ep->domain && fid_ep->domain != domain)
+	if (!bfid)
+		return -EINVAL;
+	switch (bfid->fclass) {
+	case FID_CLASS_DOMAIN:
+		domain = container_of(bfid, struct psmx_fid_domain, domain.fid);
+		if (fid_ep->domain && fid_ep->domain != domain)
+			return -EEXIST;
+		fid_ep->domain = domain;
+		break;
+
+	case FID_CLASS_EQ:
+		eq = container_of(bfid, struct psmx_fid_eq, eq.fid);
+		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
+			if (fid_ep->send_eq && fid_ep->send_eq != eq)
 				return -EEXIST;
-			fid_ep->domain = domain;
-			break;
-
-		case FID_CLASS_EQ:
-			eq = container_of(fids[i].fid,
-					struct psmx_fid_eq, eq.fid);
-			if (fids[i].flags & (FI_SEND | FI_READ | FI_WRITE)) {
-				if (fid_ep->send_eq && fid_ep->send_eq != eq)
-					return -EEXIST;
-			}
-			if (fids[i].flags & FI_RECV) {
-				if (fid_ep->recv_eq && fid_ep->recv_eq != eq)
-					return -EEXIST;
-			}
-			if (fid_ep->domain && fid_ep->domain != eq->domain)
-				return -EINVAL;
-			if (fids[i].flags & (FI_SEND | FI_READ | FI_WRITE)) {
-				fid_ep->send_eq = eq;
-				if (fids[i].flags & FI_EVENT)
-					fid_ep->send_eq_event_flag = 1;
-			}
-			if (fids[i].flags & FI_RECV) {
-				fid_ep->recv_eq = eq;
-				if (fids[i].flags & FI_EVENT)
-					fid_ep->recv_eq_event_flag = 1;
-			}
-			fid_ep->domain = eq->domain;
-			break;
-
-		case FID_CLASS_CNTR:
-			cntr = container_of(fids[i].fid,
-					struct psmx_fid_cntr, cntr.fid);
-			if (fids[i].flags & (FI_SEND)) {
-				if (fid_ep->send_cntr && fid_ep->send_cntr != cntr)
-					return -EEXIST;
-			}
-			if (fids[i].flags & FI_RECV) {
-				if (fid_ep->recv_cntr && fid_ep->recv_cntr != cntr)
-					return -EEXIST;
-			}
-			if (fids[i].flags & FI_WRITE) {
-				if (fid_ep->write_cntr && fid_ep->write_cntr != cntr)
-					return -EEXIST;
-			}
-			if (fids[i].flags & FI_READ) {
-				if (fid_ep->read_cntr && fid_ep->read_cntr != cntr)
-					return -EEXIST;
-			}
-			if (fid_ep->domain && fid_ep->domain != cntr->domain)
-				return -EINVAL;
-			if (fids[i].flags & FI_SEND) {
-				fid_ep->send_cntr = cntr;
-				if (fids[i].flags & FI_EVENT)
-					fid_ep->send_cntr_event_flag = 1;
-			}
-			if (fids[i].flags & FI_RECV){
-				fid_ep->recv_cntr = cntr;
-				if (fids[i].flags & FI_EVENT)
-					fid_ep->recv_cntr_event_flag = 1;
-			}
-			if (fids[i].flags & FI_WRITE) {
-				fid_ep->write_cntr = cntr;
-				if (fids[i].flags & FI_EVENT)
-					fid_ep->write_cntr_event_flag = 1;
-			}
-			if (fids[i].flags & FI_READ){
-				fid_ep->read_cntr = cntr;
-				if (fids[i].flags & FI_EVENT)
-					fid_ep->read_cntr_event_flag = 1;
-			}
-			fid_ep->domain = cntr->domain;
-			break;
-
-		case FID_CLASS_AV:
-			av = container_of(fids[i].fid,
-					struct psmx_fid_av, av.fid);
-			if (fid_ep->av && fid_ep->av != av)
-				return -EEXIST;
-			if (fid_ep->domain && fid_ep->domain != av->domain)
-				return -EINVAL;
-			fid_ep->av = av;
-			fid_ep->domain = av->domain;
-			break;
-
-		case FID_CLASS_MR:
-			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
-				return -EINVAL;
-                        ress.fid = fid;
-                        ress.flags = fids[i].flags;
-                        err = fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
-			if (err)
-				return err;
-			break;
-
-		default:
-			return -ENOSYS;
 		}
+		if (flags & FI_RECV) {
+			if (fid_ep->recv_eq && fid_ep->recv_eq != eq)
+				return -EEXIST;
+		}
+		if (fid_ep->domain && fid_ep->domain != eq->domain)
+			return -EINVAL;
+		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
+			fid_ep->send_eq = eq;
+			if (flags & FI_EVENT)
+				fid_ep->send_eq_event_flag = 1;
+		}
+		if (flags & FI_RECV) {
+			fid_ep->recv_eq = eq;
+			if (flags & FI_EVENT)
+				fid_ep->recv_eq_event_flag = 1;
+		}
+		fid_ep->domain = eq->domain;
+		break;
+
+	case FID_CLASS_CNTR:
+		cntr = container_of(bfid, struct psmx_fid_cntr, cntr.fid);
+		if (flags & (FI_SEND)) {
+			if (fid_ep->send_cntr && fid_ep->send_cntr != cntr)
+				return -EEXIST;
+		}
+		if (flags & FI_RECV) {
+			if (fid_ep->recv_cntr && fid_ep->recv_cntr != cntr)
+				return -EEXIST;
+		}
+		if (flags & FI_WRITE) {
+			if (fid_ep->write_cntr && fid_ep->write_cntr != cntr)
+				return -EEXIST;
+		}
+		if (flags & FI_READ) {
+			if (fid_ep->read_cntr && fid_ep->read_cntr != cntr)
+				return -EEXIST;
+		}
+		if (fid_ep->domain && fid_ep->domain != cntr->domain)
+			return -EINVAL;
+		if (flags & FI_SEND) {
+			fid_ep->send_cntr = cntr;
+			if (flags & FI_EVENT)
+				fid_ep->send_cntr_event_flag = 1;
+		}
+		if (flags & FI_RECV){
+			fid_ep->recv_cntr = cntr;
+			if (flags & FI_EVENT)
+				fid_ep->recv_cntr_event_flag = 1;
+		}
+		if (flags & FI_WRITE) {
+			fid_ep->write_cntr = cntr;
+			if (flags & FI_EVENT)
+				fid_ep->write_cntr_event_flag = 1;
+		}
+		if (flags & FI_READ){
+			fid_ep->read_cntr = cntr;
+			if (flags & FI_EVENT)
+				fid_ep->read_cntr_event_flag = 1;
+		}
+		fid_ep->domain = cntr->domain;
+		break;
+
+	case FID_CLASS_AV:
+		av = container_of(bfid,
+				struct psmx_fid_av, av.fid);
+		if (fid_ep->av && fid_ep->av != av)
+			return -EEXIST;
+		if (fid_ep->domain && fid_ep->domain != av->domain)
+			return -EINVAL;
+		fid_ep->av = av;
+		fid_ep->domain = av->domain;
+		break;
+
+	case FID_CLASS_MR:
+		if (!bfid->ops || !bfid->ops->bind)
+			return -EINVAL;
+		err = bfid->ops->bind(bfid, fid, flags);
+		if (err)
+			return err;
+		break;
+
+	default:
+		return -ENOSYS;
 	}
 
 	return 0;

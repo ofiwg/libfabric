@@ -220,15 +220,10 @@ struct fid_mr;
 typedef struct fid *fid_t;
 struct fi_eq_attr;
 
-struct fi_resource {
-	struct fid		*fid;
-	uint64_t		flags;
-};
-
 struct fi_ops {
 	size_t	size;
 	int	(*close)(struct fid *fid);
-	int	(*bind)(struct fid *fid, struct fi_resource *fids, int nfids);
+	int	(*bind)(struct fid *fid, struct fid *bfid, uint64_t flags);
 	int	(*sync)(struct fid *fid, uint64_t flags, void *context);
 	int	(*control)(struct fid *fid, int command, void *arg);
 };
@@ -295,9 +290,9 @@ static inline int fi_close(struct fid *fid)
 }
 #define fi_destroy(fid) fi_close(fid)
 
-static inline int fi_bind(struct fid *fid, struct fi_resource *fids, int nfids)
+static inline int fi_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	return fid->ops->bind(fid, fids, nfids);
+	return fid->ops->bind(fid, bfid, flags);
 }
 
 static inline int fi_sync(struct fid *fid, uint64_t flags, void *context)

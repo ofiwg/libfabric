@@ -103,7 +103,7 @@ static int psmx_cntr_close(fid_t fid)
 	return 0;
 }
 
-static int psmx_cntr_bind(fid_t fid, struct fi_resource *fids, int nfids)
+static int psmx_cntr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	return -ENOSYS;
 }

@@ -256,7 +256,7 @@ static int psmx_av_close(fid_t fid)
 }
 
 /* Currently only support synchronous insertions */
-static int psmx_av_bind(fid_t fid, struct fi_resource *fids, int nfids)
+static int psmx_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	return -FI_ENOSYS;
 }

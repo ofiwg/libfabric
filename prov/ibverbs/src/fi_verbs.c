@@ -331,34 +331,32 @@ static int ibv_msg_ep_create_qp(struct ibv_msg_ep *ep)
 	return rdma_create_qp(ep->id, ep->req->eq.domain->pd, &attr) ? -errno : 0;
 }
 
-static int ibv_msg_ep_bind(fid_t fid, struct fi_resource *fids, int nfids)
+static int ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct ibv_msg_ep *ep;
 	struct ibv_eq *eq;
-	int i, ret;
+	int ret;
 
 	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
-	for (i = 0; i < nfids; i++) {
-		if (fids[i].fid->fclass != FID_CLASS_EQ)
-			return -EINVAL;
+	if (bfid->fclass != FID_CLASS_EQ)
+		return -EINVAL;
 
-		eq = container_of(fids[i].fid, struct ibv_eq, fid.fid);
-		if (fids[i].flags & FI_RECV) {
-			if (ep->req)
-				return -EINVAL;
-			ep->req = container_of(eq, struct ibv_eq_comp, eq);
-		}
-		if (fids[i].flags & FI_SEND) {
-			if (ep->seq)
-				return -EINVAL;
-			ep->seq = container_of(eq, struct ibv_eq_comp, eq);
-		}
-		if (eq->eq_domain == FI_EQ_DOMAIN_CM) {
-			ep->cm_eq = container_of(eq, struct ibv_eq_cm, eq);
-			ret = rdma_migrate_id(ep->id, ep->cm_eq->channel);
-			if (ret)
-				return -errno;
-		}
+	eq = container_of(bfid, struct ibv_eq, fid.fid);
+	if (flags & FI_RECV) {
+		if (ep->req)
+			return -EINVAL;
+		ep->req = container_of(eq, struct ibv_eq_comp, eq);
+	}
+	if (flags & FI_SEND) {
+		if (ep->seq)
+			return -EINVAL;
+		ep->seq = container_of(eq, struct ibv_eq_comp, eq);
+	}
+	if (eq->eq_domain == FI_EQ_DOMAIN_CM) {
+		ep->cm_eq = container_of(eq, struct ibv_eq_cm, eq);
+		ret = rdma_migrate_id(ep->id, ep->cm_eq->channel);
+		if (ret)
+			return -errno;
 	}
 
 	if (ep->seq && ep->req && !ep->id->qp) {

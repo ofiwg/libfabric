@@ -109,7 +109,7 @@ static int sock_mr_close(struct fid *fid)
 	return 0;
 }
 
-static int sock_mr_bind(struct fid *fid, struct fi_resource *fids, int nfids)
+static int sock_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	return -FI_ENOSYS;
 }

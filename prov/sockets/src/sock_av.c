@@ -92,7 +92,7 @@ static const char * sock_am_straddr(struct fid_av *av, const void *addr,
 	return buf;
 }
 
-static int sock_av_bind(struct fid *fid, struct fi_resource *fids, int nfids)
+static int sock_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	return -FI_ENOSYS;
 }

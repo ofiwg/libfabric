@@ -484,7 +484,7 @@ static int psmx_eq_close(fid_t fid)
 	return 0;
 }
 
-static int psmx_eq_bind(fid_t fid, struct fi_resource *fids, int nfids)
+static int psmx_eq_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	return -ENOSYS;
 }

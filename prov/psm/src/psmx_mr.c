@@ -133,9 +133,8 @@ static int psmx_mr_close(fid_t fid)
 	return 0;
 }
 
-static int psmx_mr_bind(fid_t fid, struct fi_resource *fids, int nfids)
+static int psmx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	int i;
 	struct psmx_fid_mr *fid_mr;
 	struct psmx_fid_eq *eq;
 	struct psmx_fid_ep *ep;
@@ -143,45 +142,40 @@ static int psmx_mr_bind(fid_t fid, struct fi_resource *fids, int nfids)
 
 	fid_mr = container_of(fid, struct psmx_fid_mr, mr.fid);
 
-	for (i=0; i<nfids; i++) {
-		if (!fids[i].fid)
+	if (!bfid)
+		return -EINVAL;
+	switch (bfid->fclass) {
+	case FID_CLASS_EP:
+		ep = container_of(bfid, struct psmx_fid_ep, ep.fid);
+		if (fid_mr->ep && fid_mr->ep != ep)
+			return -EEXIST;
+		if (fid_mr->domain != ep->domain)
 			return -EINVAL;
-		switch (fids[i].fid->fclass) {
-		case FID_CLASS_EP:
-			ep = container_of(fids[i].fid,
-					struct psmx_fid_ep, ep.fid);
-			if (fid_mr->ep && fid_mr->ep != ep)
-				return -EEXIST;
-                        if (fid_mr->domain != ep->domain)
-                                return -EINVAL;
-			fid_mr->ep = ep;
-			break;
+		fid_mr->ep = ep;
+		break;
 
-		case FID_CLASS_EQ:
-			/* TODO: check ress flags for send/recv EQs */
-			eq = container_of(fids[i].fid,
-					struct psmx_fid_eq, eq.fid);
-			if (fid_mr->eq && fid_mr->eq != eq)
-				return -EEXIST;
-                        if (fid_mr->domain != eq->domain)
-                                return -EINVAL;
-			fid_mr->eq = eq;
-			break;
+	case FID_CLASS_EQ:
+		/* TODO: check flags for send/recv EQs */
+		eq = container_of(bfid, struct psmx_fid_eq, eq.fid);
+		if (fid_mr->eq && fid_mr->eq != eq)
+			return -EEXIST;
+		if (fid_mr->domain != eq->domain)
+			return -EINVAL;
+		fid_mr->eq = eq;
+		break;
 
-		case FID_CLASS_CNTR:
-			/* TODO: check ress flags */
-			cntr = container_of(fids[i].fid,
-					struct psmx_fid_cntr, cntr.fid);
-			if (fid_mr->cntr && fid_mr->cntr != cntr)
-				return -EEXIST;
-                        if (fid_mr->domain != cntr->domain)
-                                return -EINVAL;
-			fid_mr->cntr = cntr;
-			break;
+	case FID_CLASS_CNTR:
+		/* TODO: check flags */
+		cntr = container_of(bfid, struct psmx_fid_cntr, cntr.fid);
+		if (fid_mr->cntr && fid_mr->cntr != cntr)
+			return -EEXIST;
+		if (fid_mr->domain != cntr->domain)
+			return -EINVAL;
+		fid_mr->cntr = cntr;
+		break;
 
-		default:
-			return -ENOSYS;
-		}
+	default:
+		return -ENOSYS;
 	}
 
 	return 0;

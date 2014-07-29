@@ -56,30 +56,27 @@ static int psmx_domain_close(fid_t fid)
 	return 0;
 }
 
-static int psmx_domain_bind(fid_t fid, struct fi_resource *fids, int nfids)
+/* TODO: check on this call, an active EP should be bound to a domain on creation? */
+static int psmx_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	struct fi_resource ress;
 	int err;
-	int i;
 
-	for (i=0; i<nfids; i++) {
-		if (!fids[i].fid)
+	if (!bfid)
+		return -EINVAL;
+
+	switch (bfid->fclass) {
+	case FID_CLASS_EP:
+		if (!bfid->ops || !bfid->ops->bind)
 			return -EINVAL;
-		switch (fids[i].fid->fclass) {
-		case FID_CLASS_EP:
-			if (!fids[i].fid->ops || !fids[i].fid->ops->bind)
-				return -EINVAL;
-			ress.fid = fid;
-			ress.flags = fids[i].flags;
-			err = fids[i].fid->ops->bind(fids[i].fid, &ress, 1);
-			if (err)
-				return err;
-			break;
+		err = bfid->ops->bind(bfid, fid, flags);
+		if (err)
+			return err;
+		break;
 
-		default:
-			return -ENOSYS;
-		}
+	default:
+		return -ENOSYS;
 	}
+
 	return 0;
 }
 

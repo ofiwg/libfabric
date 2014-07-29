@@ -35,7 +35,7 @@ Convert an address into a printable string.
 .BI "int fi_av_close(struct fid_av *" av ");"
 .PP
 .HP
-.BI "int fi_av_bind(struct fid_av *" av ", " fid_t " eq ", uint64_t " flags ");"
+.BI "int fi_av_bind(struct fid_av *" av ", " struct fid *" eq ", uint64_t " flags ");"
 .PP
 .HP
 .BI "int fi_av_insert(struct fid_av *" av ", void *" addr ", size_t " count ", "

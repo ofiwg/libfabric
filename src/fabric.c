@@ -594,17 +594,17 @@ static struct fi_ops_cm __fi_pep_cm_ops = {
 	.listen = __fi_pep_listen,
 };
 
-static int __fi_pep_bind(fid_t fid, struct fi_resource *fids, int nfids)
+static int __fi_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 {
 	struct __fid_pep *pep;
 	struct __fid_eq_cm *eq;
 	int ret;
 
 	pep = container_of(fid, struct __fid_pep, pep_fid.fid);
-	if ((nfids != 1) || (fids[0].fid->fclass != FID_CLASS_EQ))
+	if (bfid->fclass != FID_CLASS_EQ)
 		return -FI_EINVAL;
 
-	eq = container_of(fids[0].fid, struct __fid_eq_cm, eq_fid.fid);
+	eq = container_of(bfid, struct __fid_eq_cm, eq_fid.fid);
 	pep->cm_eq = eq;
 	ret = rdma_migrate_id(pep->id, pep->cm_eq->channel);
 	if (ret)
