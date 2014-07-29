@@ -107,7 +107,6 @@ struct fi_ioc {
  */
 enum fi_addr_format {
 	FI_ADDR,		/* void * fi_addr */
-	FI_AV,			/* struct fi_av_addr */
 	FI_ADDR_INDEX,		/* size_t fi_addr */
 	FI_ADDR_PROTO,		/* void * proto_addr */
 	FI_SOCKADDR,		/* struct sockaddr */

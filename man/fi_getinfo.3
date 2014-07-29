@@ -425,12 +425,6 @@ inserting addresses into address vector maps.  An FI_ADDR points to a
 opaque, provider specific mapping of a transport address, which can avoid
 the need to translate higher-level addresses into provider specific addresses
 needed for data transfer operations.
-.IP "FI_AV"
-Address is of type address vector, struct fi_av_addr.  FI_AV is used
-to reference an entry stored in a specific address vector.  Use of FI_AV
-enables an endpoint to reference addresses stored in different AVs.
-Endpoints which are bound to a specific AV may use the FI_ADDR or
-FI_ADDR_INDEX formats, which would be more efficient.
 .IP "FI_ADDR_INDEX"
 Address is a size_t index into an address vector.  Addresses of type
 FI_ADDR_INDEX are returned when inserting addresses into address vector tables.

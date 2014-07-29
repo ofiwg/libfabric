@@ -48,11 +48,6 @@ extern "C" {
 
 #define FI_RANGE		(1ULL << 0)
 
-struct fi_av_addr {
-	struct fid_av		*av;
-	uint64_t		av_index;
-};
-
 enum fi_av_type {
 	FI_AV_MAP,
 	FI_AV_TABLE
