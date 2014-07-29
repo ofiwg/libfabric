@@ -1,4 +1,4 @@
-.TH "FI_AV" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_AV" 3 "2014-07-28" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_av \- Address vector operations
 .PP
@@ -145,7 +145,8 @@ value.  The relationship between the map_addr and any returned FI_ADDR
 is not defined.
 .sp
 If name is non-NULL and map_addr is 0, then the map_addr used by the
-provider will be returned through the attribute structure.
+provider will be returned through the attribute structure.  The map_addr
+field is ignored if name is NULL.
 .IP "flags"
 The following flags may be used when opening an AV.
 .RS
