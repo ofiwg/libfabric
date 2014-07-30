@@ -77,7 +77,6 @@ static int ucma_open(const char *res_name, const char *if_name,
 	uint64_t flags, fid_t *fif, void *context);
 
 static struct fi_ops_prov ucma_prov_ops = {
-	.size = sizeof(struct fi_ops_prov),
 	.if_open = ucma_open,
 };
 
@@ -425,7 +424,6 @@ static int __ucma_migrate_id(fid_t fid,
 
 
 static struct fi_ops_ucma ops_ucma = {
-	.size = sizeof(struct fi_ops_ucma),
 	.create_id = __ucma_create_id,
 	.destroy_id = __ucma_destroy_id,
 	.bind_ip = __ucma_bind_ip,
@@ -461,7 +459,6 @@ static int ucma_close(fid_t fid)
 }
 
 static struct fi_ops ops_fi = {
-	.size = sizeof(struct fi_ops),
 	.close = ucma_close
 };
 

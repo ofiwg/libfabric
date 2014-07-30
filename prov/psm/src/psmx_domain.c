@@ -103,7 +103,6 @@ static int psmx_if_open(struct fid_domain *domain, const char *name, uint64_t fl
 }
 
 static struct fi_ops psmx_fi_ops = {
-	.size = sizeof(struct fi_ops),
 	.close = psmx_domain_close,
 	.bind = psmx_domain_bind,
 	.sync = psmx_domain_sync,
@@ -111,7 +110,6 @@ static struct fi_ops psmx_fi_ops = {
 };
 
 static struct fi_ops_domain psmx_domain_ops = {
-	.size = sizeof(struct fi_ops_domain),
 	.query = psmx_domain_query,
 	.av_open = psmx_av_open,
 	.eq_open = psmx_eq_open,

@@ -144,13 +144,16 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 	return len;
 }
 
-void fi_register(struct fi_ops_prov *ops)
+int fi_version_register(int maj_ver, int min_ver, struct fi_ops_prov *ops)
 {
 	struct fi_prov *prov;
 
+	if (maj_ver != FI_MAJOR_VERSION || min_ver < FI_MINOR_VERSION)
+		return -FI_ENOSYS;
+
 	prov = calloc(sizeof *prov, 1);
 	if (!prov)
-		return;
+		return -FI_ENOMEM;
 
 	prov->ops = ops;
 	if (prov_tail)
@@ -481,7 +484,6 @@ __fi_eq_cm_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 }
 
 struct fi_ops_eq __fi_eq_cm_data_ops = {
-	.size = sizeof(struct fi_ops_eq),
 	.read = __fi_eq_cm_read_data,
 	.readerr = __fi_eq_cm_readerr,
 	.strerror = __fi_eq_cm_strerror
@@ -522,7 +524,6 @@ static int __fi_eq_cm_control(fid_t fid, int command, void *arg)
 }
 
 struct fi_ops __fi_eq_cm_ops = {
-	.size = sizeof(struct fi_ops),
 	.close = __fi_eq_cm_close,
 	.control = __fi_eq_cm_control,
 };
@@ -590,7 +591,6 @@ static int __fi_pep_listen(struct fid_pep *pep)
 }
 
 static struct fi_ops_cm __fi_pep_cm_ops = {
-	.size = sizeof(struct fi_ops_cm),
 	.listen = __fi_pep_listen,
 };
 
@@ -626,7 +626,6 @@ static int __fi_pep_close(fid_t fid)
 }
 
 static struct fi_ops __fi_pep_ops = {
-	.size = sizeof(struct fi_ops),
 	.close = __fi_pep_close,
 	.bind = __fi_pep_bind
 };
@@ -671,7 +670,6 @@ static int __fi_fabric_close(fid_t fid)
 }
 
 static struct fi_ops __fi_ops = {
-	.size = sizeof(struct fi_ops),
 	.close = __fi_fabric_close,
 };
 
@@ -697,7 +695,6 @@ __fi_open(struct fid_fabric *fabric, const char *name, uint64_t flags,
 }
 
 static struct fi_ops_fabric __fi_ops_fabric = {
-	.size = sizeof(struct fi_ops_fabric),
 	.domain = __fi_domain,
 	.endpoint = __fi_endpoint,
 	.eq_open = __fi_eq_open,

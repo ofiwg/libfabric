@@ -48,7 +48,6 @@ extern "C" {
 
 
 struct fi_ops_uverbs {
-	size_t	size;
 	int	(*get_context)(fid_t fid,
 				struct ibv_get_context *cmd, size_t cmd_size,
 				struct ibv_get_context_resp *resp, size_t resp_size);

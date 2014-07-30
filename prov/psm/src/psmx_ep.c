@@ -368,7 +368,6 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 }
 
 static struct fi_ops psmx_fi_ops = {
-	.size = sizeof(struct fi_ops),
 	.close = psmx_ep_close,
 	.bind = psmx_ep_bind,
 	.sync = psmx_ep_sync,
@@ -376,7 +375,6 @@ static struct fi_ops psmx_fi_ops = {
 };
 
 static struct fi_ops_ep psmx_ep_ops = {
-	.size = sizeof(struct fi_ops_ep),
 	.cancel = psmx_ep_cancel,
 	.getopt = psmx_ep_getopt,
 	.setopt = psmx_ep_setopt,

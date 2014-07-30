@@ -42,7 +42,6 @@ extern "C" {
 
 
 struct fi_ops_cm {
-	size_t	size;
 	int	(*getname)(fid_t fid, void *addr, size_t *addrlen);
 	int	(*getpeer)(struct fid_ep *ep, void *addr, size_t *addrlen);
 	int	(*connect)(struct fid_ep *ep, const void *addr,

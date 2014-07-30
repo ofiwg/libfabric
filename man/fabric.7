@@ -182,5 +182,10 @@ FI_EQ_FORMAT_DATA format.
 .IP \(bu
 Event queues associated with tagged message transfers must support the
 FI_EQ_FORMAT_TAGGED format.
+.IP \(bu
+A provider is expected to be forward compatible, and must be able to be
+compiled against expanded fi_xxx_ops structures that define new functions
+added after the provider was written.  Any unknown functions must be set
+to NULL.
 .SH "SEE ALSO"
 fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_av(3), fi_eq(3), fi_mr(3)

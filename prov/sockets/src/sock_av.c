@@ -111,13 +111,11 @@ static int sock_av_close(struct fid *fid)
 }
 
 static struct fi_ops sock_av_fi_ops = {
-	.size = sizeof(struct fi_ops),
 	.close = sock_av_close,
 	.bind = sock_av_bind,
 };
 
 static struct fi_ops_av sock_am_ops = {
-	.size = sizeof(struct fi_ops_av),
 	.insert = sock_am_insert,
 	.remove = sock_am_remove,
 	.lookup = sock_am_lookup,
@@ -125,7 +123,6 @@ static struct fi_ops_av sock_am_ops = {
 };
 
 //static struct fi_ops_av sock_av_ops = {
-//	.size = sizeof(struct fi_ops_av),
 //	.insert = sock_av_insert,
 //	.remove = sock_av_remove,
 //	.lookup = sock_av_lookup,

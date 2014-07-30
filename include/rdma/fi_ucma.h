@@ -360,7 +360,6 @@ struct ucma_abi_migrate_resp {
 
 
 struct fi_ops_ucma {
-	size_t	size;
 	int	(*create_id)(fid_t fid,
 				struct ucma_abi_create_id *cmd, size_t cmd_size,
 				struct ucma_abi_create_id_resp *resp, size_t resp_size);

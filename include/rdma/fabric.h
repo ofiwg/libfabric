@@ -49,6 +49,8 @@ extern "C" {
 #endif
 
 enum {
+	FI_MAJOR_VERSION	= 1,
+	FI_MINOR_VERSION	= 0,
 	FI_PATH_MAX		= 256,
 	FI_NAME_MAX		= 64,
 	FI_VERSION_MAX		= 64
@@ -221,7 +223,6 @@ typedef struct fid *fid_t;
 struct fi_eq_attr;
 
 struct fi_ops {
-	size_t	size;
 	int	(*close)(struct fid *fid);
 	int	(*bind)(struct fid *fid, struct fid *bfid, uint64_t flags);
 	int	(*sync)(struct fid *fid, uint64_t flags, void *context);
@@ -252,7 +253,6 @@ struct fi_attr {
 void fi_query(const struct fi_info *info, struct fi_attr *attr, size_t *attrlen);
 
 struct fi_ops_fabric {
-	size_t	size;
 	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_domain **dom, void *context);
 	int	(*endpoint)(struct fid_fabric *fabric, struct fi_info *info,

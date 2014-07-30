@@ -50,7 +50,6 @@ extern "C" {
 #define FI_LIB_EXTENSION fi
 
 struct fi_ops_prov {
-	size_t	size;
 	int	(*getinfo)(const char *node, const char *service, uint64_t flags,
 			struct fi_info *hints, struct fi_info **info);
 	int	(*freeinfo)(struct fi_info *info);
@@ -60,12 +59,17 @@ struct fi_ops_prov {
 			uint64_t flags, struct fid **fid, void *context);
 };
 
-void fi_register(struct fi_ops_prov *ops);
+int fi_version_register(int maj_ver, int min_ver, struct fi_ops_prov *ops);
+static inline int fi_register(struct fi_ops_prov *ops)
+{
+	return fi_version_register(FI_MAJOR_VERSION, FI_MINOR_VERSION, ops);
+}
+
+
 
 #define FI_LIB_CLASS_NAME	"libfabric"
 
 struct fi_ops_lib {
-	size_t		size;
 	size_t		(*context_size)(void);
 	const char *	(*sysfs_path)(void);
 	int		(*read_file)(const char *dir, const char *file,

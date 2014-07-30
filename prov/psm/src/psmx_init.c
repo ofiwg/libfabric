@@ -148,7 +148,6 @@ static int psmx_getinfo(const char *node, const char *service, uint64_t flags,
 }
 
 static struct fi_ops_prov psmx_ops = {
-	.size = sizeof(struct fi_ops_prov),
 	.getinfo = psmx_getinfo,
 	.domain = psmx_domain_open,
 };
@@ -176,7 +175,7 @@ void psmx_ini(void)
 		return;
 	}
 
-	fi_register(&psmx_ops);
+	(void) fi_register(&psmx_ops);
 }
 
 void psmx_fini(void)

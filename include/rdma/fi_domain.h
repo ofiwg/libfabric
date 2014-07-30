@@ -71,7 +71,6 @@ struct fi_av_attr {
 };
 
 struct fi_ops_av {
-	size_t	size;
 	int	(*insert)(struct fid_av *av, const void *addr, size_t count,
 			void **fi_addr, uint64_t flags);
 	int	(*remove)(struct fid_av *av, void *fi_addr, size_t count,
@@ -127,7 +126,6 @@ struct fi_wait_attr {
 };
 
 struct fi_ops_wait {
-	size_t	size;
 	int	(*wait)(struct fid_wait *waitset, int timeout);
 };
 
@@ -159,7 +157,6 @@ struct fi_poll_attr {
 };
 
 struct fi_ops_poll {
-	size_t	size;
 	int	(*poll)(struct fid_poll *pollset, void **context, int count);
 };
 
@@ -289,7 +286,6 @@ struct fi_eq_cm_entry {
 };
 
 struct fi_ops_eq {
-	size_t	size;
 	ssize_t	(*read)(struct fid_eq *eq, void *buf, size_t len);
 	ssize_t	(*readfrom)(struct fid_eq *eq, void *buf, size_t len,
 			void *src_addr, size_t *addrlen);
@@ -331,7 +327,6 @@ struct fi_cntr_attr {
 };
 
 struct fi_ops_cntr {
-	size_t	size;
 	uint64_t (*read)(struct fid_cntr *cntr);
 	int	(*add)(struct fid_cntr *cntr, uint64_t value);
 	int	(*set)(struct fid_cntr *cntr, uint64_t value);
@@ -381,7 +376,6 @@ struct fi_domain_attr {
 };
 
 struct fi_ops_domain {
-	size_t	size;
 	int	(*query)(struct fid_domain *domain, struct fi_domain_attr *attr,
 			size_t *attrlen);
 	int	(*av_open)(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -406,7 +400,6 @@ struct fi_ops_domain {
 #define FI_MR_KEY		(1ULL << 3)	/* FI_USER_MR_KEY */
 
 struct fi_ops_mr {
-	size_t	size;
 	int	(*reg)(struct fid_domain *domain, const void *buf, size_t len,
 			uint64_t access, uint64_t offset, uint64_t requested_key,
 			uint64_t flags, struct fid_mr **mr, void *context);

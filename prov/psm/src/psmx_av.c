@@ -262,13 +262,11 @@ static int psmx_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 }
 
 static struct fi_ops psmx_fi_ops = {
-	.size = sizeof(struct fi_ops),
 	.close = psmx_av_close,
 	.bind = psmx_av_bind,
 };
 
 static struct fi_ops_av psmx_av_ops = {
-	.size = sizeof(struct fi_ops_av),
 	.insert = psmx_av_insert,
 	.remove = psmx_av_remove,
 	.lookup = psmx_av_lookup,

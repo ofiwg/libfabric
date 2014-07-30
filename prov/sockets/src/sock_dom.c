@@ -115,7 +115,6 @@ static int sock_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 }
 
 static struct fi_ops sock_mr_fi_ops = {
-	.size = sizeof(struct fi_ops),
 	.close = sock_mr_close,
 	.bind = sock_mr_bind,
 };
@@ -198,12 +197,10 @@ static int sock_reg(struct fid_domain *domain, const void *buf, size_t len,
 }
 
 static struct fi_ops sock_dom_fi_ops = {
-	.size = sizeof(struct fi_ops),
 	.close = sock_dom_close,
 };
 
 static struct fi_ops_domain sock_dom_ops = {
-	.size = sizeof(struct fi_ops_domain),
 	.query = sock_dom_query,
 	.av_open = sock_av_open,
 	.eq_open = sock_eq_open,
@@ -214,7 +211,6 @@ static struct fi_ops_domain sock_dom_ops = {
 };
 
 static struct fi_ops_mr sock_dom_mr_ops = {
-	.size = sizeof(struct fi_ops_mr),
 	.reg = sock_reg,
 	.regv = sock_regv,
 	.regattr = sock_regattr,

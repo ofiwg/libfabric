@@ -77,7 +77,6 @@ static int uv_open(const char *res_name, const char *if_name,
 	uint64_t flags, fid_t *fif, void *context);
 
 static struct fi_ops_prov uv_prov_ops = {
-	.size = sizeof(struct fi_ops_prov),
 	.if_open = uv_open
 };
 
@@ -619,7 +618,6 @@ static int __uv_detach_mcast(fid_t fid,
 }
 
 static struct fi_ops_uverbs ops_uv = {
-	.size = sizeof(struct fi_ops_uverbs),
 	.get_context = __uv_get_context,
 	.query_device = __uv_query_device,
 	.query_port = __uv_query_port,
@@ -664,7 +662,6 @@ static int uv_close(fid_t fid)
 }
 
 static struct fi_ops ops_fi = {
-	.size = sizeof(struct fi_ops),
 	.close = uv_close
 };
 

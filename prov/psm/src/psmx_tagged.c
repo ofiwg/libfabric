@@ -338,7 +338,6 @@ static ssize_t psmx_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ign
 }
 
 struct fi_ops_tagged psmx_tagged_ops = {
-	.size = sizeof(struct fi_ops_tagged),
 	.recv = psmx_tagged_recv,
 	.recvv = psmx_tagged_recvv,
 	.recvfrom = psmx_tagged_recvfrom,
