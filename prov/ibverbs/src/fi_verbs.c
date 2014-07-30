@@ -2238,7 +2238,7 @@ ibv_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	int ibv_access;
 
 	if (flags)
-		return -FI_ENOSYS;
+		return -FI_EBADFLAGS;
 
 	md = calloc(1, sizeof *md);
 	if (!md)

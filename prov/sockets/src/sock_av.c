@@ -52,7 +52,9 @@ static int sock_am_insert(struct fid_av *av, const void *addr, size_t count,
 	struct sockaddr_in *fin;
 	int i;
 
-	if (flags || (sizeof(void *) != sizeof(*sin)))
+	if (flags)
+		return -FI_EBADFLAGS;
+	if (sizeof(void *) != sizeof(*sin))
 		return -FI_ENOSYS;
 
 	sin = addr;
