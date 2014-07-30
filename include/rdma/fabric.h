@@ -165,7 +165,6 @@ struct fi_ep_attr {
 
 struct fi_info {
 	struct fi_info		*next;
-	size_t			size;
 	uint64_t		type;
 	uint64_t		protocol;
 	uint64_t		ep_cap;

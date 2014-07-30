@@ -362,7 +362,6 @@ __fi_eq_cm_getinfo(struct __fid_fabric *fab, struct rdma_cm_event *event)
 	if (!fi)
 		return NULL;
 
-	fi->size = sizeof *fi;
 	fi->type = FID_MSG;
 	if (event->id->verbs->device->transport_type == IBV_TRANSPORT_IWARP) {
 		fi->protocol = FI_PROTO_IWARP;

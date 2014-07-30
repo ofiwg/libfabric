@@ -118,7 +118,6 @@ static int psmx_getinfo(const char *node, const char *service, uint64_t flags,
 	}
 
 	psmx_info->next = NULL;
-	psmx_info->size = sizeof(*psmx_info);
 	psmx_info->op_flags = hints ? hints->op_flags : 0;
 	psmx_info->type = type;
 	psmx_info->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;

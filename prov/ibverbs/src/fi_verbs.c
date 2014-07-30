@@ -1579,7 +1579,6 @@ static struct fi_info * ibv_eq_cm_getinfo(struct rdma_cm_event *event)
 	if (!fi)
 		return NULL;
 
-	fi->size = sizeof *fi;
 	fi->type = FID_MSG;
 	fi->ep_cap  = FI_MSG | FI_RMA;
 	if (event->id->verbs->device->transport_type == IBV_TRANSPORT_IWARP) {
