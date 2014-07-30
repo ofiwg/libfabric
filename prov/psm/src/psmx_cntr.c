@@ -206,7 +206,6 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	fid_cntr->events = events;
 	fid_cntr->wait_obj = wait_obj;
 	fid_cntr->flags = flags;
-	fid_cntr->cntr.fid.size = sizeof(struct fid_cntr);
 	fid_cntr->cntr.fid.fclass = FID_CLASS_CNTR;
 	fid_cntr->cntr.fid.context = context;
 	fid_cntr->cntr.fid.ops = &psmx_fi_ops;

@@ -275,7 +275,6 @@ static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	if (!fid_mr)
 		return -ENOMEM;
 
-	fid_mr->mr.fid.size = sizeof(struct fid_mr);
 	fid_mr->mr.fid.fclass = FID_CLASS_MR;
 	fid_mr->mr.fid.context = context;
 	fid_mr->mr.fid.ops = &psmx_fi_ops;
@@ -328,7 +327,6 @@ static int psmx_mr_regv(struct fid_domain *domain,
 	if (!fid_mr)
 		return -ENOMEM;
 
-	fid_mr->mr.fid.size = sizeof(struct fid_mr);
 	fid_mr->mr.fid.fclass = FID_CLASS_MR;
 	fid_mr->mr.fid.context = context;
 	fid_mr->mr.fid.ops = &psmx_fi_ops;
@@ -386,7 +384,6 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 	if (!fid_mr)
 		return -ENOMEM;
 
-	fid_mr->mr.fid.size = sizeof(struct fid_mr);
 	fid_mr->mr.fid.fclass = FID_CLASS_MR;
 	fid_mr->mr.fid.ops = &psmx_fi_ops;
 	fid_mr->mr.mem_desc = fid_mr;

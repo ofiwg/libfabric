@@ -481,7 +481,6 @@ static int ucma_open(const char *res_name, const char *if_name,
 	}
 
 	ucma->fid.fclass = FID_CLASS_INTERFACE;
-	ucma->fid.size = sizeof(*ucma);
 	ucma->fid.ops = &ops_fi;
 	ucma->fid.context = context;
 	ucma->ops = &ops_ucma;

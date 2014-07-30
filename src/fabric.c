@@ -567,7 +567,6 @@ __fi_eq_open(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
 
 	_eq->flags = attr->flags;
 	_eq->eq_fid.fid.fclass = FID_CLASS_EQ;
-	_eq->eq_fid.fid.size = sizeof(struct fid_eq);
 	_eq->eq_fid.fid.context = context;
 	_eq->eq_fid.fid.ops = &__fi_eq_cm_ops;
 	_eq->eq_fid.ops = &__fi_eq_cm_data_ops;
@@ -654,7 +653,6 @@ __fi_endpoint(struct fid_fabric *fabric, struct fi_info *info,
 	info->datalen = 0;
 
 	_pep->pep_fid.fid.fclass = FID_CLASS_PEP;
-	_pep->pep_fid.fid.size = sizeof(struct fid_pep);
 	_pep->pep_fid.fid.context = context;
 	_pep->pep_fid.fid.ops = &__fi_pep_ops;
 	_pep->pep_fid.cm = &__fi_pep_cm_ops;
@@ -714,7 +712,6 @@ int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 		return -FI_ENOMEM;
 
 	fab->fabric_fid.fid.fclass = FID_CLASS_FABRIC;
-	fab->fabric_fid.fid.size = sizeof(struct fid_fabric);
 	fab->fabric_fid.fid.context = context;
 	fab->fabric_fid.fid.ops = &__fi_ops;
 	fab->fabric_fid.ops = &__fi_ops_fabric;

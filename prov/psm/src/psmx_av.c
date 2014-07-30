@@ -312,7 +312,6 @@ int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	fid_av->addrlen = sizeof(psm_epaddr_t);
 	fid_av->count = count;
 
-	fid_av->av.fid.size = sizeof(struct fid_av);
 	fid_av->av.fid.fclass = FID_CLASS_AV;
 	fid_av->av.fid.context = context;
 	fid_av->av.fid.ops = &psmx_fi_ops;

@@ -692,7 +692,6 @@ static int uv_open(const char *res_name, const char *if_name,
 	}
 
 	uv->fid.fclass = FID_CLASS_INTERFACE;
-	uv->fid.size = sizeof(*uv);
 	uv->fid.ops = &ops_fi;
 	uv->fid.context = context;
 	uv->ops = &ops_uv;

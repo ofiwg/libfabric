@@ -1540,7 +1540,6 @@ ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	info->datalen = 0;
 
 	_ep->ep_fid.fid.fclass = FID_CLASS_EP;
-	_ep->ep_fid.fid.size = sizeof(struct fid_ep);
 	_ep->ep_fid.fid.context = context;
 	_ep->ep_fid.fid.ops = &ibv_msg_ep_ops;
 	_ep->ep_fid.ops = &ibv_msg_ep_base_ops;
@@ -1810,7 +1809,6 @@ ibv_eq_cm_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 
 	_eq->flags = attr->flags;
 	_eq->eq.fid.fid.fclass = FID_CLASS_EQ;
-	_eq->eq.fid.fid.size = sizeof(struct fid_eq);
 	_eq->eq.fid.fid.context = context;
 	_eq->eq.fid.fid.ops = &ibv_eq_cm_ops;
 	_eq->eq.fid.ops = &ibv_eq_cm_data_ops;
@@ -2152,7 +2150,6 @@ ibv_eq_comp_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 
 	_eq->flags |= attr->flags;
 	_eq->eq.fid.fid.fclass = FID_CLASS_EQ;
-	_eq->eq.fid.fid.size = sizeof(struct fid_eq);
 	_eq->eq.fid.fid.context = context;
 	_eq->eq.fid.fid.ops = &ibv_eq_comp_ops;
 
@@ -2250,7 +2247,6 @@ ibv_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 
 	md->domain = container_of(domain, struct ibv_domain, domain_fid);
 	md->mr_fid.fid.fclass = FID_CLASS_MR;
-	md->mr_fid.fid.size = sizeof(struct fid_mr);
 	md->mr_fid.fid.context = context;
 	md->mr_fid.fid.ops = &ibv_mr_ops;
 
@@ -2351,7 +2347,6 @@ ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	_domain->domain_fid.fid.fclass = FID_CLASS_DOMAIN;
-	_domain->domain_fid.fid.size = sizeof(struct fid_domain);
 	_domain->domain_fid.fid.context = context;
 	_domain->domain_fid.fid.ops = &ibv_fid_ops;
 	_domain->domain_fid.ops = &ibv_domain_ops;

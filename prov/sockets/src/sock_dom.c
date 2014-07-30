@@ -136,7 +136,6 @@ static int sock_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr
 		return -FI_ENOMEM;
 
 	_mr->mr_fid.fid.fclass = FID_CLASS_MR;
-	_mr->mr_fid.fid.size = sizeof(struct fid_mr);
 	_mr->mr_fid.fid.context = attr->context;
 	_mr->mr_fid.fid.ops = &sock_mr_fi_ops;
 
@@ -232,7 +231,6 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	atomic_init(&_dom->ref);
 
 	_dom->dom_fid.fid.fclass = FID_CLASS_DOMAIN;
-	_dom->dom_fid.fid.size = sizeof(struct fid_domain);
 	_dom->dom_fid.fid.context = context;
 	_dom->dom_fid.fid.ops = &sock_dom_fi_ops;
 	_dom->dom_fid.ops = &sock_dom_ops;

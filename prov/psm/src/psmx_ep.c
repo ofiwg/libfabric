@@ -390,7 +390,6 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (!fid_ep)
 		return -ENOMEM;
 
-	fid_ep->ep.fid.size = sizeof(struct fid_ep);
 	fid_ep->ep.fid.fclass = FID_CLASS_EP;
 	fid_ep->ep.fid.context = context;
 	fid_ep->ep.fid.ops = &psmx_fi_ops;

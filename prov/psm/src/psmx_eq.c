@@ -581,7 +581,6 @@ int psmx_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 	fid_eq->domain = fid_domain;
 	fid_eq->format = format;
 	fid_eq->entry_size = entry_size;
-	fid_eq->eq.fid.size = sizeof(struct fid_eq);
 	fid_eq->eq.fid.fclass = FID_CLASS_EQ;
 	fid_eq->eq.fid.context = context;
 	fid_eq->eq.fid.ops = &psmx_fi_ops;

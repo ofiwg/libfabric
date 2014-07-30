@@ -144,7 +144,6 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		goto err2;
 
 	_cntr->cntr_fid.fid.fclass = FID_CLASS_CNTR;
-	_cntr->cntr_fid.fid.size = sizeof(struct fid_cntr);
 	_cntr->cntr_fid.fid.context = context;
 	_cntr->cntr_fid.fid.ops = &sock_cntr_fi_ops;
 	_cntr->cntr_fid.ops = &sock_cntr_ops;
