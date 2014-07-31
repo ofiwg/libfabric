@@ -161,6 +161,7 @@ int fi_version_register(int maj_ver, int min_ver, struct fi_ops_prov *ops)
 	else
 		prov_head = prov;
 	prov_tail = prov;
+	return 0;
 }
 
 int fi_poll_fd(int fd)
