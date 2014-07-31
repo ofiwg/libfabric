@@ -269,12 +269,6 @@ struct fid_fabric {
 int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	      void *context);
 
-
-#define FI_ASSERT_CLASS(fid, f_class)   assert(fid->fclass == f_class)
-#define FI_ASSERT_FIELD(ptr, ftype, field) assert(ptr->size > offsetof(ftype, field))
-#define FI_ASSERT_OPS(fid, ftype, ops) FI_ASSERT_FIELD(fid, ftype, ops)
-#define FI_ASSERT_OP(ops, otype, op)   FI_ASSERT_FIELD(ops, otype, op)
-
 static inline int
 fi_fopen(struct fid_fabric *fabric, const char *name, uint64_t flags,
 	 struct fid **fif, void *context)

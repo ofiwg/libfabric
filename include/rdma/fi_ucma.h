@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005-2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2005-2014 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -430,9 +430,6 @@ static inline int ucma_create_id(fid_t fid,
 			struct ucma_abi_create_id_resp *resp, size_t resp_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, create_id);
 	return ucma->ops->create_id(fid, cmd, cmd_size, resp, resp_size);
 }
 
@@ -441,9 +438,6 @@ static inline int ucma_destroy_id(fid_t fid,
 			struct ucma_abi_destroy_id_resp *resp, size_t resp_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, destroy_id);
 	return ucma->ops->destroy_id(fid, cmd, cmd_size, resp, resp_size);
 }
 
@@ -451,9 +445,6 @@ static inline int ucma_bind_ip(fid_t fid,
 			struct ucma_abi_bind_ip *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, bind_ip);
 	return ucma->ops->bind_ip(fid, cmd, cmd_size);
 }
 
@@ -461,9 +452,6 @@ static inline int ucma_bind(fid_t fid,
 			struct ucma_abi_bind *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, bind);
 	return ucma->ops->bind(fid, cmd, cmd_size);
 }
 
@@ -471,9 +459,6 @@ static inline int ucma_resolve_ip(fid_t fid,
 			struct ucma_abi_resolve_ip *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, resolve_ip);
 	return ucma->ops->resolve_ip(fid, cmd, cmd_size);
 }
 
@@ -481,9 +466,6 @@ static inline int ucma_resolve_addr(fid_t fid,
 			struct ucma_abi_resolve_addr *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, resolve_addr);
 	return ucma->ops->resolve_addr(fid, cmd, cmd_size);
 }
 
@@ -491,9 +473,6 @@ static inline int ucma_resolve_route(fid_t fid,
 			struct ucma_abi_resolve_route *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, resolve_route);
 	return ucma->ops->resolve_route(fid, cmd, cmd_size);
 }
 
@@ -502,9 +481,6 @@ static inline int ucma_query_route(fid_t fid,
 			struct ucma_abi_query_route_resp *resp, size_t resp_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, query_route);
 	return ucma->ops->query_route(fid, cmd, cmd_size, resp, resp_size);
 }
 
@@ -513,9 +489,6 @@ static inline int ucma_query(fid_t fid,
 			void *resp, size_t resp_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, query);
 	return ucma->ops->query(fid, cmd, cmd_size, resp, resp_size);
 }
 
@@ -523,9 +496,6 @@ static inline int ucma_connect(fid_t fid,
 			struct ucma_abi_connect *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, connect);
 	return ucma->ops->connect(fid, cmd, cmd_size);
 }
 
@@ -533,9 +503,6 @@ static inline int ucma_listen(fid_t fid,
 			struct ucma_abi_listen *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, listen);
 	return ucma->ops->listen(fid, cmd, cmd_size);
 }
 
@@ -543,9 +510,6 @@ static inline int ucma_accept(fid_t fid,
 			struct ucma_abi_accept *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, accept);
 	return ucma->ops->accept(fid, cmd, cmd_size);
 }
 
@@ -553,9 +517,6 @@ static inline int ucma_reject(fid_t fid,
 			struct ucma_abi_reject *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, reject);
 	return ucma->ops->reject(fid, cmd, cmd_size);
 }
 
@@ -563,9 +524,6 @@ static inline int ucma_disconnect(fid_t fid,
 			struct ucma_abi_disconnect *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, disconnect);
 	return ucma->ops->disconnect(fid, cmd, cmd_size);
 }
 
@@ -574,9 +532,6 @@ static inline int ucma_init_qp_attr(fid_t fid,
 			struct ibv_kern_qp_attr *resp, size_t resp_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, init_qp_attr);
 	return ucma->ops->init_qp_attr(fid, cmd, cmd_size, resp, resp_size);
 }
 
@@ -585,9 +540,6 @@ static inline int ucma_get_event(fid_t fid,
 			struct ucma_abi_event_resp *resp, size_t resp_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, get_event);
 	return ucma->ops->get_event(fid, cmd, cmd_size, resp, resp_size);
 }
 
@@ -595,9 +547,6 @@ static inline int ucma_set_option(fid_t fid,
 			struct ucma_abi_set_option *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, set_option);
 	return ucma->ops->set_option(fid, cmd, cmd_size);
 }
 
@@ -605,9 +554,6 @@ static inline int ucma_notify(fid_t fid,
 			struct ucma_abi_notify *cmd, size_t cmd_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, notify);
 	return ucma->ops->notify(fid, cmd, cmd_size);
 }
 
@@ -616,9 +562,6 @@ static inline int ucma_join_ip_mcast(fid_t fid,
 			struct ucma_abi_create_id_resp *resp, size_t resp_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, join_ip_mcast);
 	return ucma->ops->join_ip_mcast(fid, cmd, cmd_size, resp, resp_size);
 }
 
@@ -627,9 +570,6 @@ static inline int ucma_join_mcast(fid_t fid,
 			struct ucma_abi_create_id_resp *resp, size_t resp_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, join_mcast);
 	return ucma->ops->join_mcast(fid, cmd, cmd_size, resp, resp_size);
 }
 
@@ -638,9 +578,6 @@ static inline int ucma_leave_mcast(fid_t fid,
 			struct ucma_abi_destroy_id_resp *resp, size_t resp_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, leave_mcast);
 	return ucma->ops->leave_mcast(fid, cmd, cmd_size, resp, resp_size);
 }
 
@@ -649,9 +586,6 @@ static inline int ucma_migrate_id(fid_t fid,
 			struct ucma_abi_migrate_resp *resp, size_t resp_size)
 {
 	struct fid_ucma *ucma = container_of(fid, struct fid_ucma, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_INTERFACE);
-	FI_ASSERT_OPS(fid, struct fid_ucma, ops);
-	FI_ASSERT_OP(ucma->ops, struct fi_ops_ucma, migrate_id);
 	return ucma->ops->migrate_id(fid, cmd, cmd_size, resp, resp_size);
 }
 

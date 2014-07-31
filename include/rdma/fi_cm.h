@@ -61,9 +61,6 @@ struct fi_ops_cm {
 static inline int fi_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
-	FI_ASSERT_CLASS(fid, FID_CLASS_EP);
-	FI_ASSERT_OPS(fid, struct fid_ep, cm);
-	FI_ASSERT_OP(ep->cm, struct fi_ops_cm, getname);
 	return ep->cm->getname(fid, addr, addrlen);
 }
 
