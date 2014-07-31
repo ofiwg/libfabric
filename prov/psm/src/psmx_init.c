@@ -155,6 +155,12 @@ void psmx_ini(void)
 {
 	int major, minor;
 	int err;
+	char *s;
+	int check_version = 1;
+
+	s = getenv("SFI_PSM_VERSION_CHECK");
+	if (s)
+		check_version = atoi(s);
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
 
@@ -168,9 +174,10 @@ void psmx_ini(void)
 		return;
 	}
 
-	if (major > PSM_VERNO_MAJOR) {
-		fprintf(stderr, "%s: PSM loaded an unexpected/unsupported version %d.%d\n",
-			__func__, major, minor);
+	if (check_version && major != PSM_VERNO_MAJOR) {
+		fprintf(stderr, "%s: PSM version mismatch: header %d.%d, library %d.%d.\n",
+			__func__, PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
+		fprintf(stderr, "\tSet envar SFI_PSM_VERSION_CHECK=0 to bypass version check.\n");
 		return;
 	}
 
