@@ -76,15 +76,7 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 		if (!fid_ep->domain)
 			return -EBADF;
 
-		/* FIXME:
-		 * PSM has different thresholds for fabric & shm data path. Just use
-		 * the value of the fabric path at this point.
-		 */
-		err = psm_mq_getopt(fid_ep->domain->psm_mq, PSM_MQ_RNDV_IPATH_SZ, &size);
-		if (err)
-			return psmx_errno(err);
-
-		*(size_t *)optval = size;
+		*(size_t *)optval = 64;
 		*optlen = sizeof(size_t);
 		break;
 
@@ -133,40 +125,7 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 static int psmx_ep_setopt(fid_t fid, int level, int optname,
 			const void *optval, size_t optlen)
 {
-	struct psmx_fid_ep *fid_ep;
-	uint32_t size;
-	int err;
-
-	if (level != FI_OPT_ENDPOINT)
-		return -ENOPROTOOPT;
-
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
-	switch (optname) {
-	case FI_OPT_MAX_INJECTED_SEND:
-		if (!optval)
-			return -EFAULT;
-
-		if (optlen != sizeof(size_t))
-			return -EINVAL;
-
-		if (!fid_ep->domain)
-			return -EBADF;
-
-		/* FIXME:
-		 * PSM has different thresholds for fabric & shm data path. Only set
-		 * the value of the fabric path at this point.
-		 */
-		size = *(size_t *)optval;
-		err = psm_mq_setopt(fid_ep->domain->psm_mq, PSM_MQ_RNDV_IPATH_SZ, &size);
-		if (err)
-			return psmx_errno(err);
-		break;
-
-	default:
-		return -ENOPROTOOPT;
-	}
-
-	return 0;
+	return -ENOPROTOOPT;
 }
 
 static int psmx_ep_enable(struct fid_ep *ep)
