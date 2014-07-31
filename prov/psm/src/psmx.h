@@ -39,7 +39,6 @@ extern "C" {
 #define MIN(x,y) ((x)<(y)?(x):(y))
 #endif
 
-#define PSMX_MR_SIGNATURE (0x05F109530F1D03B0ULL) /* "SFI PSM FID MR" */
 #define PSMX_TIME_OUT	120
 #define PSMX_SUPPORTED_FLAGS (FI_BLOCK | \
 			      FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
@@ -188,7 +187,6 @@ struct psmx_fid_mr {
 	struct psmx_fid_ep	*ep;
 	struct psmx_fid_eq	*eq;
 	struct psmx_fid_cntr	*cntr;
-	uint64_t		signature;
 	uint64_t		access;
 	uint64_t		flags;
 	size_t			iov_count;

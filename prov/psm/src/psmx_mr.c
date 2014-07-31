@@ -126,8 +126,6 @@ static int psmx_mr_close(fid_t fid)
 
 	fid_mr = container_of(fid, struct psmx_fid_mr, mr.fid);
 	psmx_mr_hash_del(fid_mr);
-	fid_mr->signature = 0;
-
 	free(fid_mr);
 
 	return 0;
@@ -289,7 +287,6 @@ static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	}
 	fid_mr->mr.key = key;
 	fid_mr->domain = fid_domain;
-	fid_mr->signature = PSMX_MR_SIGNATURE;
 	fid_mr->access = access;
 	fid_mr->flags = flags;
 	fid_mr->iov_count = 1;
@@ -341,7 +338,6 @@ static int psmx_mr_regv(struct fid_domain *domain,
 	}
 	fid_mr->mr.key = key;
 	fid_mr->domain = fid_domain;
-	fid_mr->signature = PSMX_MR_SIGNATURE;
 	fid_mr->access = access;
 	fid_mr->flags = flags;
 	fid_mr->iov_count = count;
@@ -397,7 +393,6 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 	}
 	fid_mr->mr.key = key;
 	fid_mr->domain = fid_domain;
-	fid_mr->signature = PSMX_MR_SIGNATURE;
 	fid_mr->access = FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
 	fid_mr->flags = flags;
 	fid_mr->iov_count = attr->iov_count;
