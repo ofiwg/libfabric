@@ -128,6 +128,7 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 	struct psmx_multi_recv *req;
 	struct fi_context *fi_context = psm_status->context;
 	void *op_context, *buf;
+	int is_recv = 0;
 
 	event = calloc(1, sizeof(*event));
 	if (!event) {
@@ -137,14 +138,19 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 
 	switch(PSMX_CTXT_TYPE(fi_context)) {
 	case PSMX_SEND_CONTEXT:
+		op_context = fi_context;
+		buf = PSMX_CTXT_USER(fi_context);
+		break;
 	case PSMX_RECV_CONTEXT:
 		op_context = fi_context;
 		buf = PSMX_CTXT_USER(fi_context);
+		is_recv = 1;
 		break;
 	case PSMX_MULTI_RECV_CONTEXT:
 		op_context = fi_context;
 		req = PSMX_CTXT_USER(fi_context);
 		buf = req->buf + req->offset;
+		is_recv = 1;
 		break;
 	default:
 		op_context = PSMX_CTXT_USER(fi_context);
@@ -196,7 +202,8 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 	}
 
 out:
-	event->source = psm_status->msg_tag;
+	if (is_recv)
+		event->source = psm_status->msg_tag;
 
 	return event;
 }
