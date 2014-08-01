@@ -171,8 +171,8 @@ used on the initiator side in lieu of the virtual address.  To associate
 a memory region with a specific offset, the FI_MR_OFFSET flag must be
 used when registering the memory.
 .PP
-By default, memory registration is an asynchronous operation.  The result
-of a registration request will be reported to the user through an event
+For asynchronous memory registration requests, the result
+will be reported to the user through an event
 queue associated with the resource domain.  If successful, the allocated
 memory region structure will be returned to the user through the mr
 parameter.  The mr address must remain valid until the registration
