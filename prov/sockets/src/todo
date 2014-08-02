@@ -5,28 +5,30 @@ of the socket provider against the defined interfaces.
 [X] - functionality coded
 [*] - not applicable
 
-	Atomic	CM	Msg	RMA	Tagged	Trigger
-EP-Dgrm [*]	[ ]	[ ]	[*]	[*]	[*]
-EP-Msg	[ ]	[ ]	[ ]	[ ]	[ ]	[ ]
-EP-Pkt	[*]	[*]	[ ]	[*]	[*]	[*]
-EP-Raw	[*]	[*]	[ ]	[*]	[*]	[*]
-EP-RDM	[ ]	[ ]	[ ]	[ ]	[ ]	[ ]
+GetInfo [ ]
 
-	Map	Table
-AV	[X]	[ ]
-AV-SHM	[ ]	[ ]
+        Atomic  CM      Msg     RMA     Tagged  Trigger
+EP-Dgrm [*]     [ ]     [ ]     [*]     [*]     [*]
+EP-Msg  [ ]     [ ]     [ ]     [ ]     [ ]     [ ]
+EP-Pkt  [*]     [*]     [ ]     [*]     [*]     [*]
+EP-Raw  [*]     [*]     [ ]     [*]     [*]     [*]
+EP-RDM  [ ]     [ ]     [ ]     [ ]     [ ]     [ ]
 
-	Sync
-MR	[X]
+        Map     Table
+AV      [X]     [ ]
+AV-SHM  [ ]     [ ]
 
-	General	Comp	CM	AV	MR
-EQ	[ ]	[ ]	[ ]	[ ]	[ ]
-Cntr    [*]	[X]	[*]	[*]	[*]
+        Sync    Async
+MR      [X]     [ ]
 
-	FD	MutCond	WaitSet
-WaitSet	[ ]	[ ]	[*]
-EQ	[ ]	[ ]	[ ]
-Cntr	[ ]	[X]	[ ]
+        General Comp    CM      AV      MR
+EQ      [ ]     [ ]     [ ]     [ ]     [ ]
+Cntr    [*]     [X]     [*]     [*]     [*]
 
-PollSet	[ ]
+        FD      MutCond WaitSet
+WaitSet [ ]     [ ]     [*]
+EQ      [ ]     [ ]     [ ]
+Cntr    [ ]     [X]     [ ]
+
+PollSet [ ]
 
