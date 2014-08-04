@@ -1822,21 +1822,6 @@ err1:
 	return ret;
 }
 
-static int ibv_eq_comp_reset(struct fid_eq *eq, const void *cond)
-{
-	struct ibv_eq_comp *_eq;
-	struct ibv_cq *cq;
-	void *context;
-	int ret;
-
-	_eq = container_of(eq, struct ibv_eq_comp, eq.fid);
-	ret = ibv_get_cq_event(_eq->channel, &cq, &context);
-	if (!ret)
-		ibv_ack_cq_events(cq, 1);
-
-	return -ibv_req_notify_cq(_eq->cq, (_eq->flags & FI_REMOTE_SIGNAL) ? 1 : 0);
-}
-
 static ssize_t
 ibv_eq_comp_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 		    size_t len, uint64_t flags)
@@ -1867,46 +1852,30 @@ static ssize_t ibv_eq_comp_read_context(struct fid_eq *eq, void *buf, size_t len
 	struct ibv_eq_comp *_eq;
 	struct fi_eq_entry *entry;
 	size_t left;
-	int reset = 1, ret = -EINVAL;
+	int ret = -FI_EINVAL;
 	struct ibv_wc *wc, *wc_base;
 	int num_wc = len / sizeof(*entry);
 
 	_eq = container_of(eq, struct ibv_eq_comp, eq.fid);
 	entry = (struct fi_eq_entry *) buf;
 	if (_eq->wc.status)
-		return -EIO;
+		return -FI_EAVAIL;
 
 	wc_base = alloca(num_wc * sizeof(struct ibv_wc));
 
 	for (left = len; left >= sizeof(*entry); ) {
 		ret = ibv_poll_cq(_eq->cq, num_wc, wc_base);
-		if (ret > 0) {
-			for (wc = wc_base; wc < wc_base + ret; wc++) {
-				if (wc->status) {
-					_eq->wc = *wc;
-					return (left < len) ? len - left : -EIO;
-				}
-				entry->op_context = (void *) (uintptr_t) wc->wr_id;
-				left -= sizeof(*entry);
-				entry = entry + 1;
-			}
-		} else if (ret == 0) {
-			if (left < len)
-				return len - left;
-
-			if (reset && (_eq->flags & FI_AUTO_RESET)) {
-				ibv_eq_comp_reset(eq, NULL);
-				reset = 0;
-				continue;
-			}
-
-			if (!(_eq->flags & FI_BLOCK))
-				return 0;
-
-			fi_poll_fd(_eq->channel->fd);
-		} else {
-			_eq->wc = *wc_base;
+		if (ret <= 0)
 			break;
+
+		for (wc = wc_base; wc < wc_base + ret; wc++) {
+			if (wc->status) {
+				_eq->wc = *wc;
+				return (left < len) ? len - left : -FI_EAVAIL;
+			}
+			entry->op_context = (void *) (uintptr_t) wc->wr_id;
+			left -= sizeof(*entry);
+			entry = entry + 1;
 		}
 	}
 
@@ -1918,48 +1887,32 @@ static ssize_t ibv_eq_comp_read_comp(struct fid_eq *eq, void *buf, size_t len)
 	struct ibv_eq_comp *_eq;
 	struct fi_eq_comp_entry *entry;
 	size_t left;
-	int reset = 1, ret = -EINVAL;
+	int ret = -FI_EINVAL;
 	struct ibv_wc *wc, *wc_base;
 	int num_wc = len / sizeof(*entry);
 
 	_eq = container_of(eq, struct ibv_eq_comp, eq.fid);
 	entry = (struct fi_eq_comp_entry *) buf;
 	if (_eq->wc.status)
-		return -EIO;
+		return -FI_EAVAIL;
 
 	wc_base = alloca(num_wc * sizeof(struct ibv_wc));
 
 	for (left = len; left >= sizeof(*entry); ) {
 		ret = ibv_poll_cq(_eq->cq, num_wc, wc_base);
-		if (ret > 0) {
-			for (wc = wc_base; wc < wc_base + ret; wc++) {
-				if (wc->status) {
-					_eq->wc = *wc;
-					return (left < len) ? len - left : -EIO;
-				}
-				entry->op_context = (void *) (uintptr_t) wc->wr_id;
-				entry->flags = (uint64_t) wc->wc_flags;
-				entry->len = (uint64_t) wc->byte_len;
-				left -= sizeof(*entry);
-				entry = entry + 1;
-			}
-		} else if (ret == 0) {
-			if (left < len)
-				return len - left;
-
-			if (reset && (_eq->flags & FI_AUTO_RESET)) {
-				ibv_eq_comp_reset(eq, NULL);
-				reset = 0;
-				continue;
-			}
-
-			if (!(_eq->flags & FI_BLOCK))
-				return 0;
-
-			fi_poll_fd(_eq->channel->fd);
-		} else {
-			_eq->wc = *wc_base;
+		if (ret <= 0)
 			break;
+
+		for (wc = wc_base; wc < wc_base + ret; wc++) {
+			if (wc->status) {
+				_eq->wc = *wc;
+				return (left < len) ? len - left : -FI_EAVAIL;
+			}
+			entry->op_context = (void *) (uintptr_t) wc->wr_id;
+			entry->flags = (uint64_t) wc->wc_flags;
+			entry->len = (uint64_t) wc->byte_len;
+			left -= sizeof(*entry);
+			entry = entry + 1;
 		}
 	}
 
@@ -1971,56 +1924,40 @@ static ssize_t ibv_eq_comp_read_data(struct fid_eq *eq, void *buf, size_t len)
 	struct ibv_eq_comp *_eq;
 	struct fi_eq_data_entry *entry;
 	size_t left;
-	int reset = 1, ret = -EINVAL;
+	int ret = -FI_EINVAL;
 	struct ibv_wc *wc, *wc_base;
 	int num_wc = len / sizeof(*entry);
 
 	_eq = container_of(eq, struct ibv_eq_comp, eq.fid);
 	entry = (struct fi_eq_data_entry *) buf;
 	if (_eq->wc.status)
-		return -EIO;
+		return -FI_EAVAIL;
 
 	wc_base = alloca(num_wc * sizeof(struct ibv_wc));
 
 	for (left = len; left >= sizeof(*entry); ) {
 		ret = ibv_poll_cq(_eq->cq, num_wc, wc_base);
-		if (ret > 0) {
-			for (wc = wc_base; wc < wc_base + ret; wc++) {
-				if (wc->status) {
-					_eq->wc = *wc;
-					return (left < len) ? len - left : -EIO;
-				}
-
-				entry->op_context = (void *) (uintptr_t) wc->wr_id;
-				entry->flags = 0;
-				entry->data = 0;
-				if (wc->wc_flags & IBV_WC_WITH_IMM) {
-					entry->flags = FI_REMOTE_EQ_DATA;
-					entry->data = wc->imm_data;
-				}
-				entry->len = 0;
-				if (wc->opcode & (IBV_WC_RECV | IBV_WC_RECV_RDMA_WITH_IMM))
-					entry->len = wc->byte_len;
-				left -= sizeof(*entry);
-				entry = entry + 1;
-			}
-		} else if (ret == 0) {
-			if (left < len)
-				return len - left;
-
-			if (reset && (_eq->flags & FI_AUTO_RESET)) {
-				ibv_eq_comp_reset(eq, NULL);
-				reset = 0;
-				continue;
-			}
-
-			if (!(_eq->flags & FI_BLOCK))
-				return 0;
-
-			fi_poll_fd(_eq->channel->fd);
-		} else {
-			_eq->wc = *wc_base;
+		if (ret <= 0)
 			break;
+
+		for (wc = wc_base; wc < wc_base + ret; wc++) {
+			if (wc->status) {
+				_eq->wc = *wc;
+				return (left < len) ? len - left : -FI_EAVAIL;
+			}
+
+			entry->op_context = (void *) (uintptr_t) wc->wr_id;
+			entry->flags = 0;
+			entry->data = 0;
+			if (wc->wc_flags & IBV_WC_WITH_IMM) {
+				entry->flags = FI_REMOTE_EQ_DATA;
+				entry->data = wc->imm_data;
+			}
+			entry->len = 0;
+			if (wc->opcode & (IBV_WC_RECV | IBV_WC_RECV_RDMA_WITH_IMM))
+				entry->len = wc->byte_len;
+			left -= sizeof(*entry);
+			entry = entry + 1;
 		}
 	}
 
@@ -2039,21 +1976,18 @@ ibv_eq_comp_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 static struct fi_ops_eq ibv_eq_comp_context_ops = {
 	.read = ibv_eq_comp_read_context,
 	.readerr = ibv_eq_comp_readerr,
-	.reset = ibv_eq_comp_reset,
 	.strerror = ibv_eq_comp_strerror
 };
 
 static struct fi_ops_eq ibv_eq_comp_comp_ops = {
 	.read = ibv_eq_comp_read_comp,
 	.readerr = ibv_eq_comp_readerr,
-	.reset = ibv_eq_comp_reset,
 	.strerror = ibv_eq_comp_strerror
 };
 
 static struct fi_ops_eq ibv_eq_comp_data_ops = {
 	.read = ibv_eq_comp_read_data,
 	.readerr = ibv_eq_comp_readerr,
-	.reset = ibv_eq_comp_reset,
 	.strerror = ibv_eq_comp_strerror
 };
 
@@ -2111,12 +2045,13 @@ ibv_eq_comp_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 	long flags = 0;
 	int ret;
 
-	if (attr->wait_cond != FI_EQ_COND_NONE)
-		return -ENOSYS;
+	if ((attr->wait_cond != FI_EQ_COND_NONE) ||
+	    (attr->flags & FI_WRITE))
+		return -FI_ENOSYS;
 
 	_eq = calloc(1, sizeof *_eq);
 	if (!_eq)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	_eq->eq.domain = container_of(domain, struct ibv_domain, domain_fid);
 
@@ -2137,7 +2072,7 @@ ibv_eq_comp_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 	case FI_WAIT_NONE:
 		break;
 	default:
-		return -ENOSYS;
+		return -FI_ENOSYS;
 	}
 
 	_eq->cq = ibv_create_cq(_eq->eq.domain->verbs, attr->size, _eq,
@@ -2163,7 +2098,7 @@ ibv_eq_comp_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 		_eq->eq.fid.ops = &ibv_eq_comp_data_ops;
 		break;
 	default:
-		ret = -ENOSYS;
+		ret = -FI_ENOSYS;
 		goto err3;
 	}
 
@@ -2206,10 +2141,6 @@ ibv_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 
 	_eq = container_of(*eq, struct ibv_eq, fid);
 	_eq->eq_domain = attr->domain;
-
-	if (attr->flags & FI_AUTO_RESET && _eq->fid.ops->reset)
-		fi_eq_reset(*eq, attr->cond);
-
 	return 0;
 }
 

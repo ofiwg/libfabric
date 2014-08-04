@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -459,11 +459,6 @@ static ssize_t psmx_eq_write(struct fid_eq *eq, const void *buf, size_t len)
 	return -ENOSYS;
 }
 
-static int psmx_eq_reset(struct fid_eq *eq, const void *cond)
-{
-	return -ENOSYS;
-}
-
 static ssize_t psmx_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond)
 {
 	return -ENOSYS;
@@ -518,7 +513,6 @@ static struct fi_ops_eq psmx_eq_ops = {
 	.readfrom = psmx_eq_readfrom,
 	.readerr = psmx_eq_readerr,
 	.write = psmx_eq_write,
-	.reset = psmx_eq_reset,
 	.condread = psmx_eq_condread,
 	.condreadfrom = psmx_eq_condreadfrom,
 	.strerror = psmx_eq_strerror,
@@ -531,6 +525,10 @@ int psmx_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 	struct psmx_fid_eq *fid_eq;
 	int format;
 	int entry_size;
+
+	if ((attr->wait_cond != FI_EQ_COND_NONE) ||
+	    (attr->flags & FI_WRITE))
+		return -ENOSYS;
 
 	switch (attr->domain) {
 	case FI_EQ_DOMAIN_GENERAL:

@@ -171,8 +171,6 @@ struct fid_poll {
  * Used to report various events and the completion of asynchronous
  * operations.
  */
-#define FI_AUTO_RESET		(1ULL << 1)
-
 /* #define FI_TRUNC		(1ULL << 1) */
 /* #define FI_CTRUNC		(1ULL << 2) */
 
@@ -292,7 +290,6 @@ struct fi_ops_eq {
 	ssize_t	(*readerr)(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 			size_t len, uint64_t flags);
 	ssize_t	(*write)(struct fid_eq *eq, const void *buf, size_t len);
-	int	(*reset)(struct fid_eq *eq, const void *cond);
 	ssize_t	(*condread)(struct fid_eq *eq, void *buf, size_t len,
 			const void *cond);
 	ssize_t	(*condreadfrom)(struct fid_eq *eq, void *buf, size_t len,
@@ -461,11 +458,6 @@ fi_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf, size_t len,
 	      uint64_t flags)
 {
 	return eq->ops->readerr(eq, buf, len, flags);
-}
-
-static inline int fi_eq_reset(struct fid_eq *eq, void *cond)
-{
-	return eq->ops->reset(eq, cond);
 }
 
 static inline const char *

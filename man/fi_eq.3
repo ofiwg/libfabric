@@ -9,7 +9,7 @@ Open/close an event queue
 .PP
 fi_eq_read / fi_eq_readfrom / fi_eq_readerr
 .RS
-Reads an event from an event queue
+Read an event from an event queue
 .RE
 .PP
 fi_eq_write
@@ -56,8 +56,6 @@ Converts provider specific error information into a printable string
 .BI "int fi_eq_write(struct fid_eq *" eq ","
 .BI "const void *" buf ", size_t " len ");"
 .PP
-.HP
-.BI "int fi_eq_reset(struct fid_eq *" eq ", const void *" cond ");"
 .HP
 .BI "int fi_eq_condread(struct fid_eq *" eq ","
 .BI "void *" buf ", size_t " len ", "
@@ -254,11 +252,17 @@ Specifies that the EQ should use a pthread mutex and cond variable as a
 wait object.
 .RE
 .IP "wait_cond"
-By default, when an event is inserted into an EQ, the corresponding wait
-object, if any, is signaled.  Users may specify a condition that must
+By default, when an event is inserted into an EQ that supports blocking
+reads (fi_eq_condread/fi_eq_condreadfrom), the corresponding wait
+object is signaled.  Users may specify a condition that must
 first be met before the wait is satisfied.  This field indicates how the
 provider should interpret the cond field, which describes the condition
 needed to signal the wait object.
+.sp
+A wait condition should be treated as an optimization.  Providers are
+not required to meet the requirements of the condition before signaling
+the wait object.  Applications should not rely on the condition
+necessarily being true when a blocking read call returns.
 .sp
 If wait_cond is set to FI_EQ_COND_NONE, then no additional conditions
 are applied to the signaling of the EQ wait object.  If wait_cond is
@@ -275,23 +279,20 @@ target.
 .IP "flags"
 Flags that set the default operation of the EQ.
 .RS
-.IP "FI_AUTO_RESET"
-Automatically resets the EQ to signal the wait object after the EQ has
-been read.  Once an EQ has been signaled, it does not reset until all
-queued events have been read.  Once reset, the EQ will trigger the wait
-object when a new entry is added, unless the EQ has been configured with
-a wait condition.  In the latter case, the EQ will be reset to signal
-again once the condition has been satisfied.
 .IP "FI_REMOTE_SIGNAL"
-If specified, this indicates that the EQ will only signal its wait object
+If specified, this indicates that the EQ should only signal its wait object
 upon receiving a remote operation with FI_REMOTE_SIGNAL set, provided that all
 other wait conditions have been met.  The use of FI_REMOTE_SIGNAL may
 improve system utilization by deferring processing of an EQ until a remote
-endpoint has completed all necessary operations.
-.IP "FI_BLOCK"
-If an EQ has been configured with FI_BLOCK, reading from an EQ will block
-if a wait object is associated with the EQ and the wait object has been
-reset to the non-signaled state.
+endpoint has completed all necessary operations.  FI_REMOTE_SIGNAL should be
+treated as an optimization.  Providers are not required to wait until a
+remote operation with FI_REMOTE_SIGNAL is received before signaling a wait
+object associated with an EQ.
+.IP "FI_WRITE"
+Indicates that the application requires support for inserting user events
+into the EQ.  If this flag is set, then the fi_eq_write operation must be
+supported by the provider.  If the FI_WRITE flag is not set, then the
+application may not invoke fi_eq_write. 
 .RE
 .IP "wait_set"
 If wait_obj is FI_WAIT_SET, this field references a wait object to which the
@@ -318,37 +319,27 @@ implementation of EQ operations.  The following control commands are usable
 with an EQ.
 .IP "FI_GETOPSFLAG (uint64_t *)"
 Returns the current default operational flags associated with the EQ.
-.IP "FI_SETOPSFLAG (uint64_t *)"
-Modifies the current default operational flags associated with the EQ.
-Operational flags affected by fi_eq_control are: FI_AUTO_RESET.
 .IP "FI_GETWAIT (void **)"
 This command allows the user to retrieve the low-level wait object
 associated with the EQ.  The format of the wait-object is specified during
 EQ creation, through the EQ attributes.  The fi_eq_control arg parameter
 should be an address where a pointer to the returned wait object
 will be written.
-.SS "fi_eq_read"
-The fi_eq_read, fi_eq_readfrom, fi_eq_condread, fi_eq_condreadfrom reads
+.SS "fi_eq_read / fi_eq_readfrom"
+The fi_eq_read and fi_eq_readfrom operations perform a non-blocking read of
 event data from the EQ.  The format of the event data is based on the user
 specified options when the EQ was opened.  Multiple events may be retrieved
 from an EQ in a single call, provided that sufficient buffer space was
 provided.  The number of bytes successfully read from the EQ is returned
-by the read call.
+by the calls.
 .PP
 The readfrom calls allow the EQ to return source address information to
 the user for any received data.  The format and size of the source address
 is a property of the associated resource domain.  See the addr_format
-field of struct fi_into when calling fi_domain.  Note that returning source
+field of struct fi_info when calling fi_domain.  Note that returning source
 address information may require that the provider perform address
-translation and/or look-up in order to provide the requested data, which
-may adversely affect performance.
-.PP
-The condread calls allow the user to specify and change the wait condition
-of an EQ.  Otherwise, they behave similar to the read / readfrom calls.
-.PP
-Reading non-error events from an EQ will block if the EQ has been configured
-with FI_BLOCK, a wait object is associated with the EQ, and the wait object
-has been reset to the non-signaled state.
+translation  and/or look-up based on data available in the underlying protocol
+in order to provide the requested data, which may adversely affect performance.
 .PP
 EQs are optimized to report operations which have completed successfully.
 Operations which fail are reported 'out of band'.  Such operations are
@@ -358,16 +349,25 @@ into an EQ, it is placed into a temporary error queue.  Attempting to read
 from an EQ while an item is in the error queue results in an FI_EAVAIL
 failure.  Applications may use this return code to determine when to
 call fi_eq_readerr.
-.PP
-If an EQ has not been configured with FI_AUTORESET, once the wait object
-of an EQ has been signaled, it will not be signaled again until the EQ
-has been rearmed.  The fi_eq_reset call is used to manually rearm the EQ
-to signal its wait object when its wait condition has been met.
+.SS "fi_eq_condread / fi_eq_condreadfrom"
+The fi_eq_condread and fi_eq_condreadfrom calls are the blocking equivalent
+operations to fi_eq_read and fi_eq_readfrom.  Their behavior is similar to
+the non-blocking calls, with the exception that the calls will not return
+until either an event has been read from the EQ or an error occurs.
 .SS "fi_eq_readerr"
 The read error function, fi_eq_readerr, retrieves information regarding
 any asynchronous operation which has completed with an unexpected error.
 fi_eq_readerr is a non-blocking call, returning immediately whether an
 error completion was found or not.
+.PP
+EQs are optimized to report operations which have completed successfully.
+Operations which fail are reported 'out of band'.  Such operations are
+retrieved using the fi_eq_readerr function.  When an operation
+that completes with an unexpected error is inserted
+into an EQ, it is placed into a temporary error queue.  Attempting to read
+from an EQ while an item is in the error queue results in an FI_EAVAIL
+failure.  Applications may use this return code to determine when to
+call fi_eq_readerr.
 .PP
 Error information is reported to the user through struct fi_eq_err_entry.
 The format of this structure is defined below.
@@ -395,7 +395,7 @@ specific error information may also be available through the prov_errno
 and prov_data fields.  Users may call fi_eq_strerror to convert provider
 specific error information into a printable string for debugging purposes.
 .SH "RETURN VALUES"
-fi_eq_open / fi_eq_reset
+fi_eq_open 
 .RS
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.
