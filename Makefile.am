@@ -70,7 +70,8 @@ src_libfabric_la_SOURCES = src/fabric.c \
 	prov/sockets/src/sock_eq.c \
 	prov/sockets/src/sock_poll.c \
 	prov/sockets/src/sock_rdm.c \
-	prov/sockets/src/sock.c
+	prov/sockets/src/sock.c \
+	prov/sockets/src/indexer.c
 
 if HAVE_PSM
 src_libfabric_la_SOURCES += prov/psm/src/psmx_init.c \
