@@ -76,7 +76,7 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 		if (!fid_ep->domain)
 			return -EBADF;
 
-		*(size_t *)optval = 64;
+		*(size_t *)optval = PSMX_INJECT_SIZE;
 		*optlen = sizeof(size_t);
 		break;
 
@@ -90,8 +90,7 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 		if (!fid_ep->domain)
 			return -EBADF;
 
-		/* PSM message len is uint32_t. */
-		*(size_t *)optval = 0xFFFFFFFF;
+		*(size_t *)optval = PSMX_MAX_MSG_SIZE;
 		*optlen = sizeof(size_t);
 		break;
 
