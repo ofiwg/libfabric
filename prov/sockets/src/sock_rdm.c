@@ -62,7 +62,7 @@
 int sock_rdm_getinfo(const char *node, const char *service, uint64_t flags,
 		     struct fi_info *hints, struct fi_info **info)
 {
-	return -FI_ENOSYS;
+	return -FI_ENODATA;
 }
 
 int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
