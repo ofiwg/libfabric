@@ -474,6 +474,36 @@ static ssize_t __fi_eq_cm_read_data(struct fid_eq *eq, void *buf, size_t len)
 	return (left < len) ? len - left : ret;
 }
 
+static ssize_t
+__fi_eq_cm_condread_data(struct fid_eq *eq, void *buf, size_t len, const void *cond)
+{
+	ssize_t rc, cur, left;
+	ssize_t  threshold;
+	struct __fid_eq_cm *_eq;
+	struct fi_eq_cm_entry *entry = (struct fi_eq_cm_entry *) buf;
+
+	_eq = container_of(eq, struct __fid_eq_cm, eq_fid);
+	threshold = (_eq->flags & FI_EQ_ATTR_COND) ? (long) cond : sizeof(*entry);
+
+	for(cur = 0, left = len; cur < threshold && left > 0; ) {
+		rc = __fi_eq_cm_read_data(eq, (void*)entry, left);
+		if (rc < 0)
+			return rc;
+		if (rc > 0) {
+			left -= rc;
+			entry += (rc / sizeof(*entry));
+			cur += rc;
+		}
+
+		if (cur >= threshold || left <= 0)
+			break;
+
+		fi_poll_fd(_eq->channel->fd);
+	}
+	
+	return cur;
+}
+
 static const char *
 __fi_eq_cm_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 		    void *buf, size_t len)
@@ -485,6 +515,7 @@ __fi_eq_cm_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 
 struct fi_ops_eq __fi_eq_cm_data_ops = {
 	.read = __fi_eq_cm_read_data,
+	.condread = __fi_eq_cm_condread_data,
 	.readerr = __fi_eq_cm_readerr,
 	.strerror = __fi_eq_cm_strerror
 };

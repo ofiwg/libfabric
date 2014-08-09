@@ -460,6 +460,24 @@ fi_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf, size_t len,
 	return eq->ops->readerr(eq, buf, len, flags);
 }
 
+static inline ssize_t fi_eq_write(struct fid_eq *eq, void *buf, size_t len)
+{
+	return eq->ops->write(eq, buf, len);
+}
+
+static inline ssize_t
+fi_eq_condread(struct fid_eq *eq, void *buf, size_t len, void *cond)
+{
+	return eq->ops->condread(eq, buf, len, cond);
+}
+
+static inline ssize_t
+fi_eq_condreadfrom(struct fid_eq *eq, void *buf, size_t len,
+		   void *src_addr, size_t *addrlen, const void *cond)
+{
+	return eq->ops->condreadfrom(eq, buf, len, src_addr, addrlen, cond);
+}
+
 static inline const char *
 fi_eq_strerror(struct fid_eq *eq, int prov_errno, void *prov_data,
 	       void *buf, size_t len)
