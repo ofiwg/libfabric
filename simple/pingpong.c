@@ -252,7 +252,6 @@ static int alloc_lres(struct fi_info *fi)
 	cm_attr.domain = FI_EQ_DOMAIN_CM;
 	cm_attr.format = FI_EQ_FORMAT_CM;
 	cm_attr.wait_obj = FI_WAIT_FD;
-	cm_attr.flags = FI_AUTO_RESET | FI_BLOCK;
 	ret = fi_feq_open(fab, &cm_attr, &cmeq, NULL);
 	if (ret)
 		printf("fi_eq_open cm %s\n", fi_strerror(-ret));
@@ -298,7 +297,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err2;
 	}
 
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, FI_BLOCK, &mr, NULL);
+	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		printf("fi_mr_reg %s\n", fi_strerror(-ret));
 		goto err3;
@@ -316,12 +315,9 @@ err1:
 
 static int bind_fid( fid_t ep, fid_t res, uint64_t flags)
 {
-	struct fi_resource fr;
 	int ret;
 
-	fr.fid = res;
-	fr.flags = flags;
-	ret = fi_bind(ep, &fr, 1);
+	ret = fi_bind(ep, res, flags);
 	if (ret)
 		printf("fi_bind %s\n", fi_strerror(-ret));
 	return ret;
@@ -352,8 +348,8 @@ static int server_listen(void)
 	struct fi_info *fi;
 	int ret;
 
-	hints.ep_cap = FI_PASSIVE;
-	ret = fi_getinfo(src_addr, port, 0, &hints, &fi);
+	hints.ep_cap |= FI_PASSIVE;
+	ret = fi_getinfo(src_addr, port, FI_EVENT, &hints, &fi);
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
 		return ret;
@@ -404,7 +400,7 @@ static int server_connect(void)
 	ssize_t rd;
 	int ret;
 
-	rd = fi_eq_read(cmeq, &entry, sizeof entry);
+	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL);
 	if (rd != sizeof entry) {
 		printf("fi_eq_read %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
@@ -612,6 +608,8 @@ int main(int argc, char **argv)
 	hints.type = FID_MSG;
 	hints.protocol = FI_PROTO_IB_RC;
 	hints.ep_cap = FI_MSG;
+	hints.domain_cap = FI_LOCAL_MR;
+	hints.addr_format = FI_SOCKADDR;
 
 	ret = run();
 	return ret;
