@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.63])
-AC_INIT([librdmacm],[1.0.18],[linux-rdma@vger.kernel.org])
+AC_INIT([librdmacm],[1.0.19-1],[linux-rdma@vger.kernel.org])
 AC_CONFIG_SRCDIR([src/cma.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
@@ -40,13 +40,9 @@ dnl Checks for libraries
 AC_CHECK_LIB(pthread, pthread_mutex_init, [],
     AC_MSG_ERROR([pthread_mutex_init() not found.  librdmacm requires libpthread.]))
 if test "$disable_libcheck" != "yes"; then
-AC_CHECK_LIB(ibverbs, ibv_get_device_list, [],
-    AC_MSG_ERROR([ibv_get_device_list() not found.  librdmacm requires libibverbs.]))
+AC_CHECK_LIB(ibverbs, ibv_cmd_open_xrcd, [],
+    AC_MSG_ERROR([ibv_cmd_open_xrcd() not found.  librdmacm requires libibverbs 1.1.8 or later.]))
 fi
-
-AC_CHECK_MEMBER(struct ibv_path_record.service_id, [],
-    AC_DEFINE(DEFINE_PATH_RECORD, 1, [adding path record definition]),
-    [#include <infiniband/sa.h>])
 
 dnl Check for gcc atomic intrinsics
 AC_MSG_CHECKING(compiler support for atomics)
