@@ -335,11 +335,8 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 				psmx_eq_enqueue_event(tmp_eq, event);
 			}
 
-			if (tmp_cntr) {
-				tmp_cntr->counter++;
-				if (tmp_cntr->wait_obj == FI_WAIT_MUT_COND)
-					pthread_cond_signal(&tmp_cntr->cond);
-			}
+			if (tmp_cntr)
+				tmp_cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
 
 			if (multi_recv) {
 				struct psmx_multi_recv *req;

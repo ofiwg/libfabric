@@ -32,10 +32,10 @@
 
 #include "psmx.h"
 
-static inline ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
-					void *desc, const void *src_addr,
-					uint64_t tag, uint64_t ignore,
-					void *context, uint64_t flags)
+ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
+			      void *desc, const void *src_addr,
+			      uint64_t tag, uint64_t ignore,
+			      void *context, uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
 	psm_mq_req_t psm_req;
@@ -44,6 +44,33 @@ static inline ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
 	int user_fi_context = 0;
 	int err;
 
+	if (flags & FI_TRIGGER) {
+		struct psmx_trigger *trigger;
+		struct fi_triggered_context *ctxt = context;
+
+		trigger = calloc(1, sizeof(*trigger));
+		if (!trigger)
+			return -ENOMEM;
+
+		trigger->op = PSMX_TRIGGERED_TRECV;
+		trigger->cntr = container_of(ctxt->threshold.cntr,
+					     struct psmx_fid_cntr, cntr);
+		trigger->threshold = ctxt->threshold.threshold;
+		trigger->trecv.ep = ep;
+		trigger->trecv.buf = buf;
+		trigger->trecv.len = len;
+		trigger->trecv.desc = desc;
+		trigger->trecv.src_addr = src_addr;
+		trigger->trecv.tag = tag;
+		trigger->trecv.ignore = ignore;
+		trigger->trecv.context = context;
+		trigger->trecv.flags = flags & ~FI_TRIGGER;
+
+		psmx_cntr_add_trigger(trigger->cntr, trigger);
+		return 0;
+	}
+
+	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
 	if (tag & fid_ep->domain->reserved_tag_bits) {
@@ -136,9 +163,9 @@ static ssize_t psmx_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, voi
 				desc ? desc[0] : NULL, tag, ignore, context);
 }
 
-static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
-					void *desc, const void *dest_addr, uint64_t tag,
-					void *context, uint64_t flags)
+ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
+			    void *desc, const void *dest_addr, uint64_t tag,
+			    void *context, uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
 	struct psmx_fid_av *fid_av;
@@ -150,6 +177,31 @@ static inline ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, si
 	int user_fi_context = 0;
 	int err;
 	size_t idx;
+
+	if (flags & FI_TRIGGER) {
+		struct psmx_trigger *trigger;
+		struct fi_triggered_context *ctxt = context;
+
+		trigger = calloc(1, sizeof(*trigger));
+		if (!trigger)
+			return -ENOMEM;
+
+		trigger->op = PSMX_TRIGGERED_TSEND;
+		trigger->cntr = container_of(ctxt->threshold.cntr,
+					     struct psmx_fid_cntr, cntr);
+		trigger->threshold = ctxt->threshold.threshold;
+		trigger->tsend.ep = ep;
+		trigger->tsend.buf = buf;
+		trigger->tsend.len = len;
+		trigger->tsend.desc = desc;
+		trigger->tsend.dest_addr = dest_addr;
+		trigger->tsend.tag = tag;
+		trigger->tsend.context = context;
+		trigger->tsend.flags = flags & ~FI_TRIGGER;
+
+		psmx_cntr_add_trigger(trigger->cntr, trigger);
+		return 0;
+	}
 
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 

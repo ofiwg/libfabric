@@ -28,6 +28,7 @@ extern "C" {
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_atomic.h>
+#include <rdma/fi_trigger.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
 #include <psm.h>
@@ -134,6 +135,62 @@ struct psmx_fid_eq {
 	struct psmx_event	*pending_error;
 };
 
+enum psmx_triggered_op {
+	PSMX_TRIGGERED_SEND,
+	PSMX_TRIGGERED_RECV,
+	PSMX_TRIGGERED_TSEND,
+	PSMX_TRIGGERED_TRECV,
+};
+
+struct psmx_trigger {
+	enum psmx_triggered_op	op;
+	struct psmx_fid_cntr	*cntr;
+	size_t			threshold;
+	union {
+		struct {
+			struct fid_ep	*ep;
+			const void	*buf;
+			size_t		len;
+			void		*desc;
+			const void	*dest_addr;
+			void		*context;
+			uint64_t	flags;
+		} send;
+		struct {
+			struct fid_ep	*ep;
+			void		*buf;
+			size_t		len;
+			void		*desc;
+			const void	*src_addr;
+			void		*context;
+			uint64_t	flags;
+			uint64_t	data;
+		} recv;
+		struct {
+			struct fid_ep	*ep;
+			const void	*buf;
+			size_t		len;
+			void		*desc;
+			const void	*dest_addr;
+			uint64_t	tag;
+			void		*context;
+			uint64_t	flags;
+		} tsend;
+		struct {
+			struct fid_ep	*ep;
+			void		*buf;
+			size_t		len;
+			void		*desc;
+			const void	*src_addr;
+			uint64_t	tag;
+			uint64_t	ignore;
+			void		*context;
+			uint64_t	flags;
+		} trecv;
+	};
+	struct psmx_trigger *next;
+};
+
 struct psmx_fid_cntr {
 	struct fid_cntr		cntr;
 	struct psmx_fid_domain	*domain;
@@ -143,6 +200,7 @@ struct psmx_fid_cntr {
 	volatile uint64_t	counter;
 	pthread_mutex_t		mutex;
 	pthread_cond_t		cond;
+	struct psmx_trigger	*trigger;
 };
 
 struct psmx_fid_av {
@@ -243,6 +301,21 @@ int	psmx_eq_poll_mq(struct psmx_fid_eq *eq,
 			struct psmx_fid_domain *domain_if_null_eq);
 struct	psmx_fid_mr *psmx_mr_hash_get(uint64_t key);
 int	psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access);
+void	psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr);
+void	psmx_cntr_add_trigger(struct psmx_fid_cntr *cntr, struct psmx_trigger *trigger);
+
+ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t len,
+		     void *desc, const void *dest_addr, void *context,
+		     uint64_t flags);
+ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
+		       void *desc, const void *src_addr, void *context,
+		       uint64_t flags, uint64_t data);
+ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
+			    void *desc, const void *dest_addr, uint64_t tag,
+			    void *context, uint64_t flags);
+ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
+			      void *desc, const void *src_addr, uint64_t tag,
+			      uint64_t ignore, void *context, uint64_t flags);
 
 #ifdef __cplusplus
 }
