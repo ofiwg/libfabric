@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 #include <asm/types.h>
 
 #include <infiniband/verbs.h>
@@ -128,7 +129,7 @@ static int ibv_check_hints(struct fi_info *hints)
 	if ( !(hints->ep_cap & (FI_MSG | FI_RMA)) )
 		return -FI_ENODATA;
 
-	if (hints->fabric_name && !strcmp(hints->fabric_name, "RDMA"))
+	if (hints->fabric_name && strcmp(hints->fabric_name, "RDMA"))
 		return -FI_ENODATA;
 
 	return 0;
@@ -287,7 +288,7 @@ err1:
 
 static int ibv_freeinfo(struct fi_info *info)
 {
-	if (!strcmp(info->fabric_name, "RDMA"))
+	if (info->fabric_name && strcmp(info->fabric_name, "RDMA"))
 		return -FI_ENODATA;
 
 	if (info->data) {
@@ -1702,7 +1703,7 @@ static ssize_t ibv_eq_cm_read_data(struct fid_eq *eq, void *buf, size_t len)
 			if (left < len)
 				return len - left;
 
-			if (!(_eq->flags & FI_BLOCK))
+			if (_eq->channel == NULL)
 				return 0;
 
 			fi_poll_fd(_eq->channel->fd);
@@ -1713,6 +1714,36 @@ static ssize_t ibv_eq_cm_read_data(struct fid_eq *eq, void *buf, size_t len)
 	}
 
 	return (left < len) ? len - left : ret;
+}
+
+static ssize_t
+ibv_eq_cm_condread_data(struct fid_eq *eq, void *buf, size_t len, const void *cond)
+{
+	ssize_t rc, cur, left;
+	ssize_t  threshold;
+	struct ibv_eq_cm *_eq;
+	struct fi_eq_cm_entry *entry = (struct fi_eq_cm_entry *) buf;
+
+	_eq = container_of(eq, struct ibv_eq_cm, eq.fid);
+	threshold = (_eq->flags & FI_EQ_ATTR_COND) ? (long) cond : sizeof(*entry);
+
+	for (cur = 0, left = len; cur < threshold && left > 0; ) {
+		rc = ibv_eq_cm_read_data(eq, (void*)entry, left);
+		if (rc < 0)
+			return rc;
+		if (rc > 0) {
+			left -= rc;
+			entry += (rc / sizeof(*entry));
+			cur += rc;
+		}
+
+		if (cur >= threshold || left <= 0)
+			break;
+
+		fi_poll_fd(_eq->channel->fd);
+	}
+	
+	return cur;
 }
 
 static const char *
@@ -1727,6 +1758,7 @@ ibv_eq_cm_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 static struct fi_ops_eq ibv_eq_cm_data_ops = {
 	.read = ibv_eq_cm_read_data,
 	.readerr = ibv_eq_cm_readerr,
+	.condread = ibv_eq_cm_condread_data,
 	.strerror = ibv_eq_cm_strerror
 };
 
@@ -1847,6 +1879,62 @@ ibv_eq_comp_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 	return sizeof(*entry);
 }
 
+static int ibv_eq_comp_reset(struct fid_eq *eq, const void *cond)
+{
+        struct ibv_eq_comp *_eq;
+        struct ibv_cq *cq;
+        void *context;
+        int ret;
+
+        _eq = container_of(eq, struct ibv_eq_comp, eq.fid);
+        ret = ibv_get_cq_event(_eq->channel, &cq, &context);
+        if (!ret)
+                ibv_ack_cq_events(cq, 1);
+
+        return -ibv_req_notify_cq(_eq->cq, (_eq->flags & FI_REMOTE_SIGNAL) ? 1:0);
+}
+
+static ssize_t
+ibv_eq_comp_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
+		     size_t entry_len)
+{
+	ssize_t rc, cur, left;
+	ssize_t  threshold;
+	int reset=1;
+	struct ibv_eq_comp *_eq;
+	char *entry = (char *) buf;
+
+	_eq = container_of(eq, struct ibv_eq_comp, eq.fid);
+
+	threshold = (_eq->flags & FI_EQ_ATTR_COND) ? (ssize_t) cond : entry_len;
+
+	for (cur = 0, left = len; cur < threshold && left > 0; ) {
+		rc = _eq->eq.fid.ops->read(eq, (void*)entry, left);
+		if (rc < 0)
+			return rc;
+
+		if (rc > 0) {
+			left -= rc;
+			entry += rc;
+			cur += rc;
+		}
+
+		if (cur >= threshold || left <= 0)
+			break;
+
+		if (_eq->channel == NULL)
+			return cur;	// .wait_obj = FI_WAIT_NONE
+
+		if (reset) {
+			ibv_eq_comp_reset(eq, NULL);
+			reset = 0;
+			continue;
+		}
+		fi_poll_fd(_eq->channel->fd);
+	}
+	return cur;
+}
+
 static ssize_t ibv_eq_comp_read_context(struct fid_eq *eq, void *buf, size_t len)
 {
 	struct ibv_eq_comp *_eq;
@@ -1880,6 +1968,12 @@ static ssize_t ibv_eq_comp_read_context(struct fid_eq *eq, void *buf, size_t len
 	}
 
 	return (left < len) ? len - left : ret;
+}
+
+static ssize_t
+ibv_eq_comp_condread_context(struct fid_eq *eq, void *buf, size_t len, const void *cond)
+{
+	return ibv_eq_comp_condread(eq, buf, len, cond, sizeof( struct fi_eq_entry));
 }
 
 static ssize_t ibv_eq_comp_read_comp(struct fid_eq *eq, void *buf, size_t len)
@@ -1917,6 +2011,12 @@ static ssize_t ibv_eq_comp_read_comp(struct fid_eq *eq, void *buf, size_t len)
 	}
 
 	return (left < len) ? len - left : ret;
+}
+
+static ssize_t
+ibv_eq_comp_condread_comp(struct fid_eq *eq, void *buf, size_t len, const void *cond)
+{
+	return ibv_eq_comp_condread(eq, buf, len, cond, sizeof(struct fi_eq_comp_entry));
 }
 
 static ssize_t ibv_eq_comp_read_data(struct fid_eq *eq, void *buf, size_t len)
@@ -1964,6 +2064,12 @@ static ssize_t ibv_eq_comp_read_data(struct fid_eq *eq, void *buf, size_t len)
 	return (left < len) ? len - left : ret;
 }
 
+static ssize_t
+ibv_eq_comp_condread_data(struct fid_eq *eq, void *buf, size_t len, const void *cond)
+{
+	return ibv_eq_comp_condread(eq, buf, len, cond, sizeof(struct fi_eq_data_entry));
+}
+
 static const char *
 ibv_eq_comp_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 		     void *buf, size_t len)
@@ -1975,18 +2081,21 @@ ibv_eq_comp_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 
 static struct fi_ops_eq ibv_eq_comp_context_ops = {
 	.read = ibv_eq_comp_read_context,
+	.condread = ibv_eq_comp_condread_context,
 	.readerr = ibv_eq_comp_readerr,
 	.strerror = ibv_eq_comp_strerror
 };
 
 static struct fi_ops_eq ibv_eq_comp_comp_ops = {
 	.read = ibv_eq_comp_read_comp,
+	.condread = ibv_eq_comp_condread_comp,
 	.readerr = ibv_eq_comp_readerr,
 	.strerror = ibv_eq_comp_strerror
 };
 
 static struct fi_ops_eq ibv_eq_comp_data_ops = {
 	.read = ibv_eq_comp_read_data,
+	.condread = ibv_eq_comp_condread_data,
 	.readerr = ibv_eq_comp_readerr,
 	.strerror = ibv_eq_comp_strerror
 };
@@ -2045,10 +2154,6 @@ ibv_eq_comp_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 	long flags = 0;
 	int ret;
 
-	if ((attr->wait_cond != FI_EQ_COND_NONE) ||
-	    (attr->flags & FI_WRITE))
-		return -FI_ENOSYS;
-
 	_eq = calloc(1, sizeof *_eq);
 	if (!_eq)
 		return -FI_ENOMEM;
@@ -2074,6 +2179,9 @@ ibv_eq_comp_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 	default:
 		return -FI_ENOSYS;
 	}
+
+	if (attr->wait_cond == FI_EQ_COND_THRESHOLD)
+		_eq->flags |= FI_EQ_ATTR_COND;
 
 	_eq->cq = ibv_create_cq(_eq->eq.domain->verbs, attr->size, _eq,
 				_eq->channel, attr->signaling_vector);

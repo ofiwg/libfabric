@@ -59,8 +59,9 @@
 #define RS_OLAP_START_SIZE 2048
 #define RS_MAX_TRANSFER 65536
 #define RS_SNDLOWAT 2048
+#define RS_QP_MIN_SIZE 16
 #define RS_QP_MAX_SIZE 0xFFFE
-#define RS_QP_CTRL_SIZE 4
+#define RS_QP_CTRL_SIZE 4	/* must be power of 2 */
 #define RS_CONN_RETRIES 6
 #define RS_SGL_SIZE 2
 static struct index_map idm;
@@ -155,6 +156,7 @@ enum {
 
 enum {
 	RS_CTRL_DISCONNECT,
+	RS_CTRL_KEEPALIVE,
 	RS_CTRL_SHUTDOWN
 };
 
@@ -194,7 +196,7 @@ struct rs_iomap_mr {
 	int index;	/* -1 if mapping is local and not in iomap_list */
 };
 
-#define RS_MIN_INLINE      (sizeof(struct rs_sge))
+#define RS_MAX_CTRL_MSG    (sizeof(struct rs_sge))
 #define rs_host_is_net()   (1 == htonl(1))
 #define RS_CONN_FLAG_NET   (1 << 0)
 #define RS_CONN_FLAG_IOMAP (1 << 1)
@@ -307,7 +309,8 @@ struct rsocket {
 			uint64_t	  tcp_opts;
 			unsigned int	  keepalive_time;
 
-			int		  ctrl_avail;
+			unsigned int	  ctrl_seqno;
+			unsigned int	  ctrl_max_seqno;
 			uint16_t	  sseq_no;
 			uint16_t	  sseq_comp;
 			uint16_t	  rseq_no;
@@ -504,9 +507,6 @@ void rs_configure(void)
 	if ((f = fopen(RS_CONF_DIR "/inline_default", "r"))) {
 		(void) fscanf(f, "%hu", &def_inline);
 		fclose(f);
-
-		if (def_inline < RS_MIN_INLINE)
-			def_inline = RS_MIN_INLINE;
 	}
 
 	if ((f = fopen(RS_CONF_DIR "/sqsize_default", "r"))) {
@@ -562,6 +562,7 @@ static void rs_remove(struct rsocket *rs)
 	pthread_mutex_unlock(&mut);
 }
 
+/* We only inherit from listening sockets */
 static struct rsocket *rs_alloc(struct rsocket *inherited_rs, int type)
 {
 	struct rsocket *rs;
@@ -584,7 +585,7 @@ static struct rsocket *rs_alloc(struct rsocket *inherited_rs, int type)
 		rs->sq_size = inherited_rs->sq_size;
 		rs->rq_size = inherited_rs->rq_size;
 		if (type == SOCK_STREAM) {
-			rs->ctrl_avail = inherited_rs->ctrl_avail;
+			rs->ctrl_max_seqno = inherited_rs->ctrl_max_seqno;
 			rs->target_iomap_size = inherited_rs->target_iomap_size;
 		}
 	} else {
@@ -594,7 +595,7 @@ static struct rsocket *rs_alloc(struct rsocket *inherited_rs, int type)
 		rs->sq_size = def_sqsize;
 		rs->rq_size = def_rqsize;
 		if (type == SOCK_STREAM) {
-			rs->ctrl_avail = RS_QP_CTRL_SIZE;
+			rs->ctrl_max_seqno = RS_QP_CTRL_SIZE;
 			rs->target_iomap_size = def_iomap_size;
 		}
 	}
@@ -642,15 +643,13 @@ static void rs_set_qp_size(struct rsocket *rs)
 
 	if (rs->sq_size > max_size)
 		rs->sq_size = max_size;
-	else if (rs->sq_size < 4)
-		rs->sq_size = 4;
-	if (rs->sq_size <= (RS_QP_CTRL_SIZE << 2))
-		rs->ctrl_avail = 2;
+	else if (rs->sq_size < RS_QP_MIN_SIZE)
+		rs->sq_size = RS_QP_MIN_SIZE;
 
 	if (rs->rq_size > max_size)
 		rs->rq_size = max_size;
-	else if (rs->rq_size < 4)
-		rs->rq_size = 4;
+	else if (rs->rq_size < RS_QP_MIN_SIZE)
+		rs->rq_size = RS_QP_MIN_SIZE;
 }
 
 static void ds_set_qp_size(struct rsocket *rs)
@@ -677,18 +676,21 @@ static void ds_set_qp_size(struct rsocket *rs)
 
 static int rs_init_bufs(struct rsocket *rs)
 {
-	uint32_t rbuf_msg_size;
+	uint32_t total_rbuf_size, total_sbuf_size;
 	size_t len;
 
 	rs->rmsg = calloc(rs->rq_size + 1, sizeof(*rs->rmsg));
 	if (!rs->rmsg)
 		return ERR(ENOMEM);
 
-	rs->sbuf = calloc(rs->sbuf_size, sizeof(*rs->sbuf));
+	total_sbuf_size = rs->sbuf_size;
+	if (rs->sq_inline < RS_MAX_CTRL_MSG)
+		total_sbuf_size += RS_MAX_CTRL_MSG * RS_QP_CTRL_SIZE;
+	rs->sbuf = calloc(total_sbuf_size, 1);
 	if (!rs->sbuf)
 		return ERR(ENOMEM);
 
-	rs->smr = rdma_reg_msgs(rs->cm_id, rs->sbuf, rs->sbuf_size);
+	rs->smr = rdma_reg_msgs(rs->cm_id, rs->sbuf, total_sbuf_size);
 	if (!rs->smr)
 		return -1;
 
@@ -707,14 +709,14 @@ static int rs_init_bufs(struct rsocket *rs)
 	if (rs->target_iomap_size)
 		rs->target_iomap = (struct rs_iomap *) (rs->target_sgl + RS_SGL_SIZE);
 
-	rbuf_msg_size = rs->rbuf_size;
+	total_rbuf_size = rs->rbuf_size;
 	if (rs->opts & RS_OPT_MSG_SEND)
-		rbuf_msg_size += rs->rq_size * RS_MSG_SIZE;
-	rs->rbuf = calloc(rbuf_msg_size, 1);
+		total_rbuf_size += rs->rq_size * RS_MSG_SIZE;
+	rs->rbuf = calloc(total_rbuf_size, 1);
 	if (!rs->rbuf)
 		return ERR(ENOMEM);
 
-	rs->rmr = rdma_reg_write(rs->cm_id, rs->rbuf, rbuf_msg_size);
+	rs->rmr = rdma_reg_write(rs->cm_id, rs->rbuf, total_rbuf_size);
 	if (!rs->rmr)
 		return -1;
 
@@ -724,7 +726,7 @@ static int rs_init_bufs(struct rsocket *rs)
 
 	rs->rbuf_free_offset = rs->rbuf_size >> 1;
 	rs->rbuf_bytes_avail = rs->rbuf_size >> 1;
-	rs->sqe_avail = rs->sq_size - rs->ctrl_avail;
+	rs->sqe_avail = rs->sq_size - rs->ctrl_max_seqno;
 	rs->rseq_comp = rs->rq_size >> 1;
 	return 0;
 }
@@ -859,6 +861,10 @@ static int rs_create_ep(struct rsocket *rs)
 	ret = rdma_create_qp(rs->cm_id, NULL, &qp_attr);
 	if (ret)
 		return ret;
+
+	rs->sq_inline = qp_attr.cap.max_inline_data;
+	if ((rs->opts & RS_OPT_MSG_SEND) && (rs->sq_inline < RS_MSG_SIZE))
+		return ERR(ENOTSUP);
 
 	for (i = 0; i < rs->rq_size; i++) {
 		ret = rs_post_recv(rs);
@@ -1491,6 +1497,7 @@ static int ds_create_qp(struct rsocket *rs, union socket_addr *src_addr,
 	if (ret)
 		goto err;
 
+	rs->sq_inline = qp_attr.cap.max_inline_data;
 	ret = ds_add_qp_dest(qp, src_addr, addrlen);
 	if (ret)
 		goto err;
@@ -1600,6 +1607,12 @@ int rconnect(int socket, const struct sockaddr *addr, socklen_t addrlen)
 		fastlock_release(&rs->slock);
 	}
 	return ret;
+}
+
+static void *rs_get_ctrl_buf(struct rsocket *rs)
+{
+	return rs->sbuf + rs->sbuf_size +
+		RS_MAX_CTRL_MSG * (rs->ctrl_seqno & (RS_QP_CTRL_SIZE - 1));
 }
 
 static int rs_post_msg(struct rsocket *rs, uint32_t msg)
@@ -1763,7 +1776,7 @@ static int rs_write_iomap(struct rsocket *rs, struct rs_iomap_mr *iomr,
 
 	addr = rs->remote_iomap.addr + iomr->index * sizeof(struct rs_iomap);
 	return rs_post_write_msg(rs, sgl, nsge, rs_msg_set(RS_OP_IOMAP_SGL, iomr->index),
-			         flags, addr, rs->remote_iomap.key);
+				 flags, addr, rs->remote_iomap.key);
 }
 
 static uint32_t rs_sbuf_left(struct rsocket *rs)
@@ -1775,13 +1788,14 @@ static uint32_t rs_sbuf_left(struct rsocket *rs)
 static void rs_send_credits(struct rsocket *rs)
 {
 	struct ibv_sge ibsge;
-	struct rs_sge sge;
+	struct rs_sge sge, *sge_buf;
+	int flags;
 
-	rs->ctrl_avail--;
+	rs->ctrl_seqno++;
 	rs->rseq_comp = rs->rseq_no + (rs->rq_size >> 1);
 	if (rs->rbuf_bytes_avail >= (rs->rbuf_size >> 1)) {
 		if (rs->opts & RS_OPT_MSG_SEND)
-			rs->ctrl_avail--;
+			rs->ctrl_seqno++;
 
 		if (!(rs->opts & RS_OPT_SWAP_SGL)) {
 			sge.addr = (uintptr_t) &rs->rbuf[rs->rbuf_free_offset];
@@ -1793,16 +1807,23 @@ static void rs_send_credits(struct rsocket *rs)
 			sge.length = bswap_32(rs->rbuf_size >> 1);
 		}
 
-		ibsge.addr = (uintptr_t) &sge;
-		ibsge.lkey = 0;
+		if (rs->sq_inline < sizeof sge) {
+			sge_buf = rs_get_ctrl_buf(rs);
+			memcpy(sge_buf, &sge, sizeof sge);
+			ibsge.addr = (uintptr_t) sge_buf;
+			ibsge.lkey = rs->smr->lkey;
+			flags = 0;
+		} else {
+			ibsge.addr = (uintptr_t) &sge;
+			ibsge.lkey = 0;
+			flags = IBV_SEND_INLINE;
+		}
 		ibsge.length = sizeof(sge);
 
 		rs_post_write_msg(rs, &ibsge, 1,
-				  rs_msg_set(RS_OP_SGL, rs->rseq_no + rs->rq_size),
-				  IBV_SEND_INLINE,
-				  rs->remote_sgl.addr +
-				  rs->remote_sge * sizeof(struct rs_sge),
-				  rs->remote_sgl.key);
+			rs_msg_set(RS_OP_SGL, rs->rseq_no + rs->rq_size), flags,
+			rs->remote_sgl.addr + rs->remote_sge * sizeof(struct rs_sge),
+			rs->remote_sgl.key);
 
 		rs->rbuf_bytes_avail -= rs->rbuf_size >> 1;
 		rs->rbuf_free_offset += rs->rbuf_size >> 1;
@@ -1815,16 +1836,27 @@ static void rs_send_credits(struct rsocket *rs)
 	}
 }
 
+static inline int rs_ctrl_avail(struct rsocket *rs)
+{
+	return rs->ctrl_seqno != rs->ctrl_max_seqno;
+}
+
+/* Protocols that do not support RDMA write with immediate may require 2 msgs */
+static inline int rs_2ctrl_avail(struct rsocket *rs)
+{
+	return (int)((rs->ctrl_seqno + 1) - rs->ctrl_max_seqno) < 0;
+}
+
 static int rs_give_credits(struct rsocket *rs)
 {
 	if (!(rs->opts & RS_OPT_MSG_SEND)) {
 		return ((rs->rbuf_bytes_avail >= (rs->rbuf_size >> 1)) ||
 			((short) ((short) rs->rseq_no - (short) rs->rseq_comp) >= 0)) &&
-		       rs->ctrl_avail && (rs->state & rs_connected);
+		       rs_ctrl_avail(rs) && (rs->state & rs_connected);
 	} else {
 		return ((rs->rbuf_bytes_avail >= (rs->rbuf_size >> 1)) ||
 			((short) ((short) rs->rseq_no - (short) rs->rseq_comp) >= 0)) &&
-		       (rs->ctrl_avail > 1) && (rs->state & rs_connected);
+		       rs_2ctrl_avail(rs) && (rs->state & rs_connected);
 	}
 }
 
@@ -1886,10 +1918,10 @@ static int rs_poll_cq(struct rsocket *rs)
 		} else {
 			switch  (rs_msg_op(rs_wr_data(wc.wr_id))) {
 			case RS_OP_SGL:
-				rs->ctrl_avail++;
+				rs->ctrl_max_seqno++;
 				break;
 			case RS_OP_CTRL:
-				rs->ctrl_avail++;
+				rs->ctrl_max_seqno++;
 				if (rs_msg_data(rs_wr_data(wc.wr_id)) == RS_CTRL_DISCONNECT)
 					rs->state = rs_disconnected;
 				break;
@@ -2228,7 +2260,7 @@ static int rs_conn_can_send(struct rsocket *rs)
 
 static int rs_conn_can_send_ctrl(struct rsocket *rs)
 {
-	return rs->ctrl_avail || !(rs->state & rs_connected);
+	return rs_ctrl_avail(rs) || !(rs->state & rs_connected);
 }
 
 static int rs_have_rdata(struct rsocket *rs)
@@ -2243,7 +2275,8 @@ static int rs_conn_have_rdata(struct rsocket *rs)
 
 static int rs_conn_all_sends_done(struct rsocket *rs)
 {
-	return ((rs->sqe_avail + rs->ctrl_avail) == rs->sq_size) ||
+	return ((((int) rs->ctrl_max_seqno) - ((int) rs->ctrl_seqno)) +
+		rs->sqe_avail == rs->sq_size) ||
 	       !(rs->state & rs_connected);
 }
 
@@ -3180,14 +3213,14 @@ int rshutdown(int socket, int how)
 				goto out;
 			ctrl = RS_CTRL_DISCONNECT;
 		}
-		if (!rs->ctrl_avail) {
+		if (!rs_ctrl_avail(rs)) {
 			ret = rs_process_cq(rs, 0, rs_conn_can_send_ctrl);
 			if (ret)
 				goto out;
 		}
 
-		if ((rs->state & rs_connected) && rs->ctrl_avail) {
-			rs->ctrl_avail--;
+		if ((rs->state & rs_connected) && rs_ctrl_avail(rs)) {
+			rs->ctrl_seqno++;
 			ret = rs_post_msg(rs, rs_msg_set(RS_OP_CTRL, ctrl));
 		}
 	}
@@ -3233,6 +3266,8 @@ int rclose(int socket)
 	if (rs->type == SOCK_STREAM) {
 		if (rs->state & rs_connected)
 			rshutdown(socket, SHUT_RDWR);
+		else if (rs->opts & RS_OPT_SVC_ACTIVE)
+			rs_notify_svc(&tcp_svc, rs, RS_SVC_REM_KEEPALIVE);
 	} else {
 		ds_shutdown(rs);
 	}
@@ -3433,8 +3468,6 @@ int rsetsockopt(int socket, int level, int optname,
 			break;
 		case RDMA_INLINE:
 			rs->sq_inline = min(*(uint32_t *) optval, RS_QP_MAX_SIZE);
-			if (rs->sq_inline < RS_MIN_INLINE)
-				rs->sq_inline = RS_MIN_INLINE;
 			ret = 0;
 			break;
 		case RDMA_IOMAPSIZE:
@@ -3443,7 +3476,7 @@ int rsetsockopt(int socket, int level, int optname,
 			ret = 0;
 			break;
 		case RDMA_ROUTE:
-			if ((rs->optval = calloc(optlen, 1))) {
+			if ((rs->optval = malloc(optlen))) {
 				memcpy(rs->optval, optval, optlen);
 				rs->optlen = optlen;
 				ret = 0;
@@ -3469,11 +3502,38 @@ int rsetsockopt(int socket, int level, int optname,
 	return ret;
 }
 
+static void rs_convert_sa_path(struct ibv_sa_path_rec *sa_path,
+			       struct ibv_path_data *path_data)
+{
+	uint32_t fl_hop;
+
+	memset(path_data, 0, sizeof(*path_data));
+	path_data->path.dgid = sa_path->dgid;
+	path_data->path.sgid = sa_path->sgid;
+	path_data->path.dlid = sa_path->dlid;
+	path_data->path.slid = sa_path->slid;
+	fl_hop = ntohl(sa_path->flow_label) << 8;
+	path_data->path.flowlabel_hoplimit = htonl(fl_hop) | sa_path->hop_limit;
+	path_data->path.tclass = sa_path->traffic_class;
+	path_data->path.reversible_numpath = sa_path->reversible << 7 | 1;
+	path_data->path.pkey = sa_path->pkey;
+	path_data->path.qosclass_sl = sa_path->sl;
+	path_data->path.mtu = sa_path->mtu | 2 << 6;	/* exactly */
+	path_data->path.rate = sa_path->rate | 2 << 6;
+	path_data->path.packetlifetime = sa_path->packet_life_time | 2 << 6;
+	path_data->flags= sa_path->preference;
+}
+
 int rgetsockopt(int socket, int level, int optname,
 		void *optval, socklen_t *optlen)
 {
 	struct rsocket *rs;
+	void *opt;
+	struct ibv_sa_path_rec *path_rec;
+	struct ibv_path_data path_data;
+	socklen_t len;
 	int ret = 0;
+	int num_paths;
 
 	rs = idm_lookup(&idm, socket);
 	if (!rs)
@@ -3565,6 +3625,36 @@ int rgetsockopt(int socket, int level, int optname,
 		case RDMA_IOMAPSIZE:
 			*((int *) optval) = rs->target_iomap_size;
 			*optlen = sizeof(int);
+			break;
+		case RDMA_ROUTE:
+			if (rs->optval) {
+				if (*optlen < rs->optlen) {
+					ret = EINVAL;
+				} else {
+					memcpy(rs->optval, optval, rs->optlen);
+					*optlen = rs->optlen;
+				}
+			} else {
+				if (*optlen < sizeof(path_data)) {
+					ret = EINVAL;
+				} else {
+					len = 0;
+					opt = optval;
+					path_rec = rs->cm_id->route.path_rec;
+					num_paths = 0;
+					while (len + sizeof(path_data) <= *optlen &&
+					       num_paths < rs->cm_id->route.num_paths) {
+						rs_convert_sa_path(path_rec, &path_data);
+						memcpy(opt, &path_data, sizeof(path_data));
+						len += sizeof(path_data);
+						opt += sizeof(path_data);
+						path_rec++;
+						num_paths++;
+					}
+					*optlen = len;
+					ret = 0;
+				}
+			}
 			break;
 		default:
 			ret = ENOTSUP;
@@ -3825,8 +3915,8 @@ static int rs_svc_grow_sets(struct rs_svc *svc, int grow_size)
 	rss = set;
 	contexts = set + sizeof(*rss) * svc->size;
 	if (svc->cnt) {
-		memcpy(rss, svc->rss, sizeof(*rss) * svc->cnt);
-		memcpy(contexts, svc->contexts, svc->context_size * svc->cnt);
+		memcpy(rss, svc->rss, sizeof(*rss) * (svc->cnt + 1));
+		memcpy(contexts, svc->contexts, svc->context_size * (svc->cnt + 1));
 	}
 
 	free(svc->rss);
@@ -3852,19 +3942,28 @@ static int rs_svc_add_rs(struct rs_svc *svc, struct rsocket *rs)
 	return 0;
 }
 
-static int rs_svc_rm_rs(struct rs_svc *svc, struct rsocket *rs)
+static int rs_svc_index(struct rs_svc *svc, struct rsocket *rs)
 {
 	int i;
 
 	for (i = 1; i <= svc->cnt; i++) {
-		if (svc->rss[i] == rs) {
-			svc->cnt--;
-			svc->rss[i] = svc->rss[svc->cnt];
-			memcpy(svc->contexts + i * svc->context_size,
-			       svc->contexts + svc->cnt * svc->context_size,
-			       svc->context_size);
-			return 0;
-		}
+		if (svc->rss[i] == rs)
+			return i;
+	}
+	return -1;
+}
+
+static int rs_svc_rm_rs(struct rs_svc *svc, struct rsocket *rs)
+{
+	int i;
+
+	if ((i = rs_svc_index(svc, rs)) >= 0) {
+		svc->rss[i] = svc->rss[svc->cnt];
+		memcpy(svc->contexts + i * svc->context_size,
+		       svc->contexts + svc->cnt * svc->context_size,
+		       svc->context_size);
+		svc->cnt--;
+		return 0;
 	}
 	return EBADF;
 }
@@ -4108,6 +4207,7 @@ static uint32_t rs_get_time(void)
 static void tcp_svc_process_sock(struct rs_svc *svc)
 {
 	struct rs_svc_msg msg;
+	int i;
 
 	read(svc->sock[1], &msg, sizeof msg);
 	switch (msg.cmd) {
@@ -4126,8 +4226,13 @@ static void tcp_svc_process_sock(struct rs_svc *svc)
 			msg.rs->opts &= ~RS_OPT_SVC_ACTIVE;
 		break;
 	case RS_SVC_MOD_KEEPALIVE:
-		tcp_svc_timeouts[svc->cnt] = rs_get_time() + msg.rs->keepalive_time;
-		msg.status = 0;
+		i = rs_svc_index(svc, msg.rs);
+		if (i >= 0) {
+			tcp_svc_timeouts[i] = rs_get_time() + msg.rs->keepalive_time;
+			msg.status = 0;
+		} else {
+			msg.status = EBADF;
+		}
 		break;
 	case RS_SVC_NOOP:
 		msg.status = 0;
@@ -4139,18 +4244,17 @@ static void tcp_svc_process_sock(struct rs_svc *svc)
 }
 
 /*
- * Send a credit update as the keep-alive message.  We may or may not have
- * any credits, but if we do, then we require a minimum of 2 control credits
- * for protocols that do not support RDMA write with immediate data.  There's
- * no need to send a keep-alive message if we have any messages outstanding,
- * and we start with a minimum of 2 credits.  For simplicity, we just check
- * that both credits are available before sending the keep-alive.
+ * Send a 0 byte RDMA write with immediate as keep-alive message.
+ * This avoids the need for the receive side to do any acknowledgment.
  */
 static void tcp_svc_send_keepalive(struct rsocket *rs)
 {
 	fastlock_acquire(&rs->cq_lock);
-	if ((rs->ctrl_avail > 1) && (rs->state & rs_connected))
-		rs_send_credits(rs);
+	if (rs_ctrl_avail(rs) && (rs->state & rs_connected)) {
+		rs->ctrl_seqno++;
+		rs_post_write(rs, NULL, 0, rs_msg_set(RS_OP_CTRL, RS_CTRL_KEEPALIVE),
+			      0, (uint64_t) NULL, (uint64_t) NULL);
+	}
 	fastlock_release(&rs->cq_lock);
 }	
 
