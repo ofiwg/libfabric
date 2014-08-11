@@ -114,6 +114,7 @@ void psmx_cntr_add_trigger(struct psmx_fid_cntr *cntr, struct psmx_trigger *trig
 	else
 		cntr->trigger = trigger;
 	trigger->next = p;
+
 	psmx_cntr_check_trigger(cntr);
 }
 
