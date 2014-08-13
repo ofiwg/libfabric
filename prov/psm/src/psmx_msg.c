@@ -34,7 +34,7 @@
 
 ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 		       void *desc, const void *src_addr, void *context,
-		       uint64_t flags, uint64_t data)
+		       uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
 	struct psmx_epaddr_context *epaddr_context;
@@ -64,7 +64,6 @@ ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 		trigger->recv.src_addr = src_addr;
 		trigger->recv.context = context;
 		trigger->recv.flags = flags & ~FI_TRIGGER;
-		trigger->recv.data = data;
 
 		psmx_cntr_add_trigger(trigger->cntr, trigger);
 		return 0;
@@ -104,7 +103,7 @@ ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 			req->buf = buf;
 			req->len = len;
 			req->offset = 0;
-			req->min_buf_size = data;
+			req->min_buf_size = fid_ep->min_multi_recv;
 			req->context = fi_context; 
 			PSMX_CTXT_TYPE(fi_context) = PSMX_MULTI_RECV_CONTEXT;
 			PSMX_CTXT_USER(fi_context) = req;
@@ -135,7 +134,7 @@ static ssize_t psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *des
 
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
-	return _psmx_recvfrom(ep, buf, len, desc, src_addr, context, fid_ep->flags, 0);
+	return _psmx_recvfrom(ep, buf, len, desc, src_addr, context, fid_ep->flags);
 }
 
 static ssize_t psmx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
@@ -147,7 +146,7 @@ static ssize_t psmx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_
 
 	return _psmx_recvfrom(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
 			      msg->desc ? msg->desc[0] : NULL, msg->addr,
-			      msg->context, flags, msg->data);
+			      msg->context, flags);
 }
 
 static ssize_t psmx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,

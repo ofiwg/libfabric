@@ -164,7 +164,6 @@ struct psmx_trigger {
 			const void	*src_addr;
 			void		*context;
 			uint64_t	flags;
-			uint64_t	data;
 		} recv;
 		struct {
 			struct fid_ep	*ep;
@@ -243,6 +242,7 @@ struct psmx_fid_ep {
 	uint64_t		pending_writes;
 	uint64_t		pending_reads;
 	uint64_t		pending_atomics;
+	size_t			min_multi_recv;
 };
 
 struct psmx_fid_mr {
@@ -309,7 +309,7 @@ ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t len,
 		     uint64_t flags);
 ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 		       void *desc, const void *src_addr, void *context,
-		       uint64_t flags, uint64_t data);
+		       uint64_t flags);
 ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
 			    void *desc, const void *dest_addr, uint64_t tag,
 			    void *context, uint64_t flags);

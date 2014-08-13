@@ -64,8 +64,7 @@ void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
 				       trigger->recv.desc,
 				       trigger->recv.src_addr,
 				       trigger->recv.context,
-				       trigger->recv.flags,
-				       trigger->recv.data);
+				       trigger->recv.flags);
 			break;
 		case PSMX_TRIGGERED_TSEND:
 			_psmx_tagged_sendto(trigger->tsend.ep,
