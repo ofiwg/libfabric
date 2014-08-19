@@ -6,5 +6,7 @@ if test ! -d .git && test ! -f src/fabric.c; then
 fi
 
 set -x
-
+if test ! -d config; then
+    mkdir config
+fi
 autoreconf -ivf
