@@ -53,16 +53,7 @@ enum fi_av_type {
 	FI_AV_TABLE
 };
 
-enum {
-	FI_AV_ATTR_TYPE		= 1 << 0,
-	FI_AV_ATTR_COUNT	= 1 << 1,
-	FI_AV_ATTR_NAME		= 1 << 2,
-	FI_AV_ATTR_FLAGS	= 1 << 3,
-	FI_AV_ATTR_MASK_V1	= (FI_AV_ATTR_FLAGS << 1) - 1
-};
-
 struct fi_av_attr {
-	int			mask;
 	enum fi_av_type		type;
 	size_t			count;
 	const char		*name;
@@ -114,14 +105,7 @@ enum fi_wait_obj {
 	FI_WAIT_MUT_COND,	/* pthread mutex & cond */
 };
 
-enum {
-	FI_WAIT_ATTR_WAIT_OBJ	= 1 << 0,
-	FI_WAIT_ATTR_FLAGS	= 1 << 1,
-	FI_WAIT_ATTR_MASK_V1	= (FI_WAIT_ATTR_FLAGS << 1) - 1
-};
-
 struct fi_wait_attr {
-	int			mask;
 	enum fi_wait_obj	wait_obj;
 	uint64_t		flags;
 };
@@ -148,13 +132,7 @@ struct fi_wait_obj_set {
  * Allows polling multiple event queues and counters for progress
  */
 
-enum {
-	FI_POLL_ATTR_FLAGS	= 1 << 0,
-	FI_POLL_ATTR_MASK_V1	= (FI_POLL_ATTR_FLAGS << 1) - 1
-};
-
 struct fi_poll_attr {
-	int			mask;
 	uint64_t		flags;
 };
 
@@ -198,21 +176,7 @@ enum fi_eq_wait_cond {
 	FI_EQ_COND_THRESHOLD	/* size_t threshold */
 };
 
-enum {
-	FI_EQ_ATTR_DOMAIN	= 1 << 0,
-	FI_EQ_ATTR_FORMAT	= 1 << 1,
-	FI_EQ_ATTR_WAIT_OBJ	= 1 << 2,
-	FI_EQ_ATTR_WAIT_COND	= 1 << 3,
-	FI_EQ_ATTR_SIZE		= 1 << 4,
-	FI_EQ_ATTR_VECTOR	= 1 << 5,
-	FI_EQ_ATTR_FLAGS	= 1 << 6,
-	FI_EQ_ATTR_WAIT_SET	= 1 << 7,
-	FI_EQ_ATTR_COND		= 1 << 8,
-	FI_EQ_ATTR_MASK_V1	= (FI_EQ_ATTR_COND << 1) - 1
-};
-
 struct fi_eq_attr {
-	int			mask;
 	enum fi_eq_domain	domain;
 	enum fi_eq_format	format;
 	enum fi_wait_obj	wait_obj;
@@ -311,16 +275,7 @@ enum fi_cntr_events {
 	FI_CNTR_EVENTS_COMP
 };
 
-enum {
-	FI_CNTR_ATTR_EVENTS	= 1 << 0,
-	FI_CNTR_ATTR_WAIT_OBJ	= 1 << 1,
-	FI_CNTR_ATTR_WAIT_SET	= 1 << 2,
-	FI_CNTR_ATTR_FLAGS	= 1 << 3,
-	FI_CNTR_ATTR_MASK_V1	= (FI_CNTR_ATTR_FLAGS << 1) - 1
-};
-
 struct fi_cntr_attr {
-	int			mask;
 	enum fi_cntr_events	events;
 	enum fi_wait_obj	wait_obj;
 	struct fid_wait		*wait_set;
@@ -341,17 +296,7 @@ struct fid_cntr {
 };
 
 
-enum {
-	FI_MR_ATTR_IOV		= 1 << 0,
-	FI_MR_ATTR_ACCESS	= 1 << 1,
-	FI_MR_ATTR_OFFSET	= 1 << 2,
-	FI_MR_ATTR_KEY		= 1 << 3,
-	FI_MR_ATTR_CONTEXT	= 1 << 4,
-	FI_MR_ATTR_MASK_V1	= (FI_MR_ATTR_CONTEXT << 1) - 1
-};
-
 struct fi_mr_attr {
-	int			mask;
 	const struct iovec	*mr_iov;
 	size_t			iov_count;
 	uint64_t		access;
