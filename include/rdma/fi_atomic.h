@@ -101,7 +101,6 @@ struct fi_msg_atomic {
 	enum fi_op		op;
 	void			*context;
 	uint64_t		data;
-	int			flow;
 };
 
 struct fi_ops_atomic {

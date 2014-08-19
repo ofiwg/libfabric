@@ -167,7 +167,6 @@ struct fi_msg_tagged {
 	uint64_t           ignore;   /* mask applied to tag for receives */
 	void               *context; /* user-defined context */
 	uint64_t           data;     /* optional immediate data */
-	int                flow;     /* message steering */
 };
 .fi
 .SS "fi_tinject"

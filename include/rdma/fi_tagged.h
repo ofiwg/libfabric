@@ -53,7 +53,6 @@ struct fi_msg_tagged {
 	uint64_t		ignore;
 	void			*context;
 	uint64_t		data;
-	int			flow;
 };
 
 struct fi_ops_tagged {

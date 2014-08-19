@@ -156,12 +156,6 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 		}
 
 		if (hints->ep_attr) {
-			if (hints->ep_attr->data_flow_cnt > 1) {
-				psmx_debug("%s: hints->ep_attr->data_flow_cnt=%d,"
-						"supported=1.\n", __func__,
-						hints->ep_attr->data_flow_cnt);
-				goto err_out;
-			}
 			if (hints->ep_attr->max_msg_size > PSMX_MAX_MSG_SIZE) {
 				psmx_debug("%s: hints->ep_attr->max_msg_size=%ld,"
 						"supported=%ld.\n", __func__,
@@ -194,7 +188,6 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	}
 
 	psmx_info->ep_attr->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
-	psmx_info->ep_attr->data_flow_cnt = 1;
 	psmx_info->ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
 	psmx_info->ep_attr->inject_size = PSMX_INJECT_SIZE;
 	psmx_info->ep_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
