@@ -87,7 +87,6 @@ the address vector are defined by struct fi_av_attr.
 .PP
 .nf
 struct fi_av_attr {
-	int                  mask;      /* valid attr fields */
 	enum fi_av_type      type;      /* type of AV */
 	size_t               count;     /* # entries for AV */
 	const char          *name;      /* system name of AV */
@@ -95,12 +94,6 @@ struct fi_av_attr {
 	uint64_t             flags;     /* operation flags */
 };
 .fi
-.IP "mask"
-The mask field is used for forward and backward API compatibility.  It is
-used by the application to indicate which fields in the attribute structure
-have been set.  For this version of the API, mask should be set to
-FI_AV_ATTR_MASK_V1, indicating that all specified fields have been
-initialized.
 .IP "type"
 An AV type corresponds to a conceptual implementation of an address vector.
 The type specifies how an application views data stored in the AV,

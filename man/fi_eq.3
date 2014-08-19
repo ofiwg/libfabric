@@ -114,7 +114,6 @@ The properties and behavior of an event queue are defined by struct fi_eq_attr.
 .PP
 .nf
 struct fi_eq_attr {
-	int                  mask;      /* valid attr fields */
 	enum fi_eq_domain    domain;    /* events reported by EQ */
 	enum fi_eq_format    format;    /* event format */
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
@@ -126,11 +125,6 @@ struct fi_eq_attr {
 	void                *cond;      /* wait condition */
 };
 .fi
-.IP "mask"
-The mask field is used for forward and backward API compatibility.  It is
-used by the application to indicate which fields in the attribute structure
-have been set.  For this version of the API, mask should be set to
-FI_EQ_ATTR_MASK_V1, indicating that all specified fields have been initialized.
 .IP "domain"
 An EQ domain indicates the type of events which are to be reported through
 the event queue.  Valid values are:

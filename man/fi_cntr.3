@@ -63,18 +63,12 @@ the counter are defined by struct fi_cntr_attr.
 .PP
 .nf
 struct fi_cntr_attr {
-	int                  mask;      /* valid attr fields */
 	enum fi_cntr_events  events;    /* type of events to count */
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
 	struct fid_wait     *wait_set;  /* optional wait set */
 	uint64_t             flags;     /* operation flags */
 };
 .fi
-.IP "mask"
-The mask field is used for forward and backward API compatibility.  It is
-used by the application to indicate which fields in the attribute structure
-have been set.  For this version of the API, mask should be set to
-FI_CNTR_ATTR_MASK_V1, indicating that all specified fields have been initialized.
 .IP "events"
 A counter captures different types of events.  The specific type which is to
 counted are one of the following:

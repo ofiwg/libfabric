@@ -189,7 +189,6 @@ fi_mr_attr.
 .PP
 .nf
 struct fi_mr_attr {
-	int                mask;          /* mask of valid fields */
 	const struct iovec *mr_iov;       /* scatter-gather array */
 	size_t             iov_count;     /* # elements in mr_iov */
 	uint64_t           access;        /* access permission flags */
