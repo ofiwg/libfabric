@@ -64,10 +64,10 @@ struct fi_av_attr {
 struct fi_ops_av {
 	size_t	size;
 	int	(*insert)(struct fid_av *av, const void *addr, size_t count,
-			void **fi_addr, uint64_t flags);
-	int	(*remove)(struct fid_av *av, void *fi_addr, size_t count,
+			fi_addr_t *fi_addr, uint64_t flags);
+	int	(*remove)(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			uint64_t flags);
-	int	(*lookup)(struct fid_av *av, const void *fi_addr, void *addr,
+	int	(*lookup)(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			size_t *addrlen);
 	const char * (*straddr)(struct fid_av *av, const void *addr,
 			char *buf, size_t *len);
@@ -492,7 +492,7 @@ fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 static inline int
 fi_av_insert(struct fid_av *av, const void *addr, size_t count,
-	  void **fi_addr, uint64_t flags)
+	     fi_addr_t *fi_addr, uint64_t flags)
 {
 	return av->ops->insert(av, addr, count, fi_addr, flags);
 }
@@ -500,7 +500,7 @@ fi_av_insert(struct fid_av *av, const void *addr, size_t count,
 	fi_av_insert(av, addr, count, fi_addr, flags)
 
 static inline int
-fi_av_remove(struct fid_av *av, void *fi_addr, size_t count, uint64_t flags)
+fi_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count, uint64_t flags)
 {
 	return av->ops->remove(av, fi_addr, count, flags);
 }
