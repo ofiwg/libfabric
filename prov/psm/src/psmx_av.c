@@ -154,10 +154,15 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	/* prevent connecting to the same ep twice, which is fatal in PSM */
 	for (i=0; i<count; i++) {
 		psm_epconn_t epconn;
-		if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK)
+		if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
 			((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
-		else
+			psmx_set_epaddr_context(fid_av->domain,
+						((psm_epid_t *) addr)[i],
+						((psm_epaddr_t *) fi_addr)[i]);
+		}
+		else {
 			mask[i] = 1;
+		}
 	}
 
 	err = psm_ep_connect(fid_av->domain->psm_ep, count, 
