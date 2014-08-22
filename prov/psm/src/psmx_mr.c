@@ -120,6 +120,22 @@ struct psmx_fid_mr *psmx_mr_hash_get(uint64_t key)
 	return NULL;
 }
 
+int psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access)
+{
+	int i;
+
+	if ((access & mr->access) != access)
+		return -EACCES;
+
+	for (i = 0; i < mr->iov_count; i++) {
+		if ((uint64_t)mr->iov[i].iov_base <= addr &&
+		    (uint64_t)mr->iov[i].iov_base + mr->iov[i].iov_len >= addr + len)
+			return 0;
+	}
+
+	return -EACCES;
+}
+
 static int psmx_mr_close(fid_t fid)
 {
 	struct psmx_fid_mr *fid_mr;

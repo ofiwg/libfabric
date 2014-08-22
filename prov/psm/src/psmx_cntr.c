@@ -32,6 +32,91 @@
 
 #include "psmx.h"
 
+void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
+{
+	struct psmx_trigger *trigger;
+
+	/* TODO: protect the trigger list with mutex */
+
+	if (!cntr->trigger)
+		return;
+
+	trigger = cntr->trigger;
+	while (trigger) {
+		if (cntr->counter < trigger->threshold)
+			break;
+
+		cntr->trigger = trigger->next;
+		switch (trigger->op) {
+		case PSMX_TRIGGERED_SEND:
+			_psmx_sendto(trigger->send.ep,
+				     trigger->send.buf,
+				     trigger->send.len,
+				     trigger->send.desc,
+				     trigger->send.dest_addr,
+				     trigger->send.context,
+				     trigger->send.flags);
+			break;
+		case PSMX_TRIGGERED_RECV:
+			_psmx_recvfrom(trigger->recv.ep,
+				       trigger->recv.buf,
+				       trigger->recv.len,
+				       trigger->recv.desc,
+				       trigger->recv.src_addr,
+				       trigger->recv.context,
+				       trigger->recv.flags);
+			break;
+		case PSMX_TRIGGERED_TSEND:
+			_psmx_tagged_sendto(trigger->tsend.ep,
+					    trigger->tsend.buf,
+					    trigger->tsend.len,
+					    trigger->tsend.desc,
+					    trigger->tsend.dest_addr,
+					    trigger->tsend.tag,
+					    trigger->tsend.context,
+					    trigger->tsend.flags);
+			break;
+		case PSMX_TRIGGERED_TRECV:
+			_psmx_tagged_recvfrom(trigger->trecv.ep,
+					      trigger->trecv.buf,
+					      trigger->trecv.len,
+					      trigger->trecv.desc,
+					      trigger->trecv.src_addr,
+					      trigger->trecv.tag,
+					      trigger->trecv.ignore,
+					      trigger->trecv.context,
+					      trigger->trecv.flags);
+			break;
+		default:
+			psmx_debug("%s: %d unsupported op\n", __func__, trigger->op);
+			break;
+		}
+
+		free(trigger);
+	}
+}
+
+void psmx_cntr_add_trigger(struct psmx_fid_cntr *cntr, struct psmx_trigger *trigger)
+{
+	struct psmx_trigger *p, *q;
+
+	/* TODO: protect the trigger list with mutex */
+
+	q = NULL;
+	p = cntr->trigger;
+	while (p && p->threshold <= trigger->threshold) {
+		q = p;
+		p = p->next;
+	}
+	if (q)
+		q->next = trigger;
+	else
+		cntr->trigger = trigger;
+	trigger->next = p;
+
+	psmx_cntr_check_trigger(cntr);
+}
+
 static uint64_t psmx_cntr_read(struct fid_cntr *cntr)
 {
 	struct psmx_fid_cntr *fid_cntr;
@@ -48,6 +133,8 @@ static int psmx_cntr_add(struct fid_cntr *cntr, uint64_t value)
 	fid_cntr = container_of(cntr, struct psmx_fid_cntr, cntr);
 	fid_cntr->counter += value;
 
+	psmx_cntr_check_trigger(fid_cntr);
+
 	if (fid_cntr->wait_obj == FI_WAIT_MUT_COND)
 		pthread_cond_signal(&fid_cntr->cond);
 
@@ -60,6 +147,8 @@ static int psmx_cntr_set(struct fid_cntr *cntr, uint64_t value)
 
 	fid_cntr = container_of(cntr, struct psmx_fid_cntr, cntr);
 	fid_cntr->counter = value;
+
+	psmx_cntr_check_trigger(fid_cntr);
 
 	if (fid_cntr->wait_obj == FI_WAIT_MUT_COND)
 		pthread_cond_signal(&fid_cntr->cond);

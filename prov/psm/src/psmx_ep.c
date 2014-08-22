@@ -76,7 +76,7 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 		if (!fid_ep->domain)
 			return -EBADF;
 
-		*(size_t *)optval = 64;
+		*(size_t *)optval = PSMX_INJECT_SIZE;
 		*optlen = sizeof(size_t);
 		break;
 
@@ -90,8 +90,7 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 		if (!fid_ep->domain)
 			return -EBADF;
 
-		/* PSM message len is uint32_t. */
-		*(size_t *)optval = 0xFFFFFFFF;
+		*(size_t *)optval = PSMX_MAX_MSG_SIZE;
 		*optlen = sizeof(size_t);
 		break;
 
@@ -113,6 +112,9 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 		*optlen = sizeof(size_t);
 		break;
 
+	case FI_OPT_MIN_MULTI_RECV:
+		*(size_t *)optval = fid_ep->min_multi_recv;
+		*optlen = sizeof(size_t);
 		break;
 
 	default:
@@ -125,7 +127,23 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 static int psmx_ep_setopt(fid_t fid, int level, int optname,
 			const void *optval, size_t optlen)
 {
-	return -ENOPROTOOPT;
+	struct psmx_fid_ep *fid_ep;
+
+	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+
+	if (level != FI_OPT_ENDPOINT)
+		return -ENOPROTOOPT;
+
+	switch (optname) {
+	case FI_OPT_MIN_MULTI_RECV:
+		fid_ep->min_multi_recv = *(size_t *)optval;
+		break;
+
+	default:
+		return -ENOPROTOOPT;
+	}
+
+	return 0;
 }
 
 static int psmx_ep_enable(struct fid_ep *ep)

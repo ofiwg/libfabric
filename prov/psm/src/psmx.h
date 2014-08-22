@@ -28,6 +28,7 @@ extern "C" {
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_atomic.h>
+#include <rdma/fi_trigger.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
 #include <psm.h>
@@ -40,18 +41,24 @@ extern "C" {
 #endif
 
 #define PSMX_TIME_OUT	120
-#define PSMX_SUPPORTED_FLAGS (FI_BLOCK | \
-			      FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
-			      FI_REMOTE_READ | FI_REMOTE_WRITE | \
-			      FI_INJECT | FI_BUFFERED_RECV | \
-			      FI_MULTI_RECV | FI_REMOTE_COMPLETE | \
-			      FI_EVENT | FI_REMOTE_SIGNAL | FI_CANCEL)
-#define PSMX_DEFAULT_FLAGS   (0)
 
-#define PSMX_EP_CAPS	     (FI_TAGGED | FI_MSG)
+#define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_EVENT | FI_TRIGGER)
+
+#define PSMX_EP_CAP_BASE (FI_TAGGED | FI_INJECT | FI_TRIGGER | \
+			 FI_BUFFERED_RECV | FI_MULTI_RECV | \
+			 FI_SEND | FI_RECV | FI_CANCEL)
+#define PSMX_EP_CAP_OPT1 (FI_MSG)
+#define PSMX_EP_CAP_OPT2 (0)
+#define PSMX_EP_CAP	(PSMX_EP_CAP_BASE | PSMX_EP_CAP_OPT1 | PSMX_EP_CAP_OPT2)
+
+#define PSMX_DOMAIN_CAP (FI_WRITE_COHERENT | FI_CONTEXT | \
+			 FI_USER_MR_KEY | FI_DYNAMIC_MR)
 
 #define PSMX_OUI_INTEL	0x0002b3L
 #define PSMX_PROTOCOL	0x0001
+
+#define PSMX_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
+#define PSMX_INJECT_SIZE	(64)
 
 #define PSMX_MSG_BIT		(0x1ULL << 63)
 
@@ -128,6 +135,61 @@ struct psmx_fid_eq {
 	struct psmx_event	*pending_error;
 };
 
+enum psmx_triggered_op {
+	PSMX_TRIGGERED_SEND,
+	PSMX_TRIGGERED_RECV,
+	PSMX_TRIGGERED_TSEND,
+	PSMX_TRIGGERED_TRECV,
+};
+
+struct psmx_trigger {
+	enum psmx_triggered_op	op;
+	struct psmx_fid_cntr	*cntr;
+	size_t			threshold;
+	union {
+		struct {
+			struct fid_ep	*ep;
+			const void	*buf;
+			size_t		len;
+			void		*desc;
+			const void	*dest_addr;
+			void		*context;
+			uint64_t	flags;
+		} send;
+		struct {
+			struct fid_ep	*ep;
+			void		*buf;
+			size_t		len;
+			void		*desc;
+			const void	*src_addr;
+			void		*context;
+			uint64_t	flags;
+		} recv;
+		struct {
+			struct fid_ep	*ep;
+			const void	*buf;
+			size_t		len;
+			void		*desc;
+			const void	*dest_addr;
+			uint64_t	tag;
+			void		*context;
+			uint64_t	flags;
+		} tsend;
+		struct {
+			struct fid_ep	*ep;
+			void		*buf;
+			size_t		len;
+			void		*desc;
+			const void	*src_addr;
+			uint64_t	tag;
+			uint64_t	ignore;
+			void		*context;
+			uint64_t	flags;
+		} trecv;
+	};
+	struct psmx_trigger *next;
+};
+
 struct psmx_fid_cntr {
 	struct fid_cntr		cntr;
 	struct psmx_fid_domain	*domain;
@@ -137,6 +199,7 @@ struct psmx_fid_cntr {
 	volatile uint64_t	counter;
 	pthread_mutex_t		mutex;
 	pthread_cond_t		cond;
+	struct psmx_trigger	*trigger;
 };
 
 struct psmx_fid_av {
@@ -179,6 +242,7 @@ struct psmx_fid_ep {
 	uint64_t		pending_writes;
 	uint64_t		pending_reads;
 	uint64_t		pending_atomics;
+	size_t			min_multi_recv;
 };
 
 struct psmx_fid_mr {
@@ -236,6 +300,22 @@ struct	psmx_event *psmx_eq_create_event(struct psmx_fid_eq *fid_eq,
 int	psmx_eq_poll_mq(struct psmx_fid_eq *eq,
 			struct psmx_fid_domain *domain_if_null_eq);
 struct	psmx_fid_mr *psmx_mr_hash_get(uint64_t key);
+int	psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access);
+void	psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr);
+void	psmx_cntr_add_trigger(struct psmx_fid_cntr *cntr, struct psmx_trigger *trigger);
+
+ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t len,
+		     void *desc, const void *dest_addr, void *context,
+		     uint64_t flags);
+ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
+		       void *desc, const void *src_addr, void *context,
+		       uint64_t flags);
+ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
+			    void *desc, const void *dest_addr, uint64_t tag,
+			    void *context, uint64_t flags);
+ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
+			      void *desc, const void *src_addr, uint64_t tag,
+			      uint64_t ignore, void *context, uint64_t flags);
 
 #ifdef __cplusplus
 }
