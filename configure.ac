@@ -73,6 +73,10 @@ dnl Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
 AC_CHECK_SIZEOF(long)
 
+dnl Only build on Linux
+AC_CHECK_HEADER([linux/types.h], [],
+	[AC_MSG_ERROR([libfabric only builds on Linux])])
+
 AC_CHECK_HEADERS([fcntl.h sys/socket.h])
 AC_CHECK_DECLS([O_CLOEXEC],,[AC_DEFINE([O_CLOEXEC],[0],
 	[Defined to 0 if not provided])],
