@@ -164,7 +164,6 @@ static int psmx_ep_close(fid_t fid)
 static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
-	struct psmx_fid_domain *domain;
 	struct psmx_fid_av *av;
 	struct psmx_fid_eq *eq;
 	struct psmx_fid_cntr *cntr;
@@ -175,13 +174,6 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	if (!bfid)
 		return -EINVAL;
 	switch (bfid->fclass) {
-	case FID_CLASS_DOMAIN:
-		domain = container_of(bfid, struct psmx_fid_domain, domain.fid);
-		if (fid_ep->domain && fid_ep->domain != domain)
-			return -EEXIST;
-		fid_ep->domain = domain;
-		break;
-
 	case FID_CLASS_EQ:
 		eq = container_of(bfid, struct psmx_fid_eq, eq.fid);
 		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
@@ -192,7 +184,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (fid_ep->recv_eq && fid_ep->recv_eq != eq)
 				return -EEXIST;
 		}
-		if (fid_ep->domain && fid_ep->domain != eq->domain)
+		if (fid_ep->domain != eq->domain)
 			return -EINVAL;
 		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
 			fid_ep->send_eq = eq;
@@ -204,7 +196,6 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (flags & FI_EVENT)
 				fid_ep->recv_eq_event_flag = 1;
 		}
-		fid_ep->domain = eq->domain;
 		break;
 
 	case FID_CLASS_CNTR:
@@ -225,7 +216,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (fid_ep->read_cntr && fid_ep->read_cntr != cntr)
 				return -EEXIST;
 		}
-		if (fid_ep->domain && fid_ep->domain != cntr->domain)
+		if (fid_ep->domain != cntr->domain)
 			return -EINVAL;
 		if (flags & FI_SEND) {
 			fid_ep->send_cntr = cntr;
@@ -247,7 +238,6 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (flags & FI_EVENT)
 				fid_ep->read_cntr_event_flag = 1;
 		}
-		fid_ep->domain = cntr->domain;
 		break;
 
 	case FID_CLASS_AV:
@@ -255,10 +245,9 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				struct psmx_fid_av, av.fid);
 		if (fid_ep->av && fid_ep->av != av)
 			return -EEXIST;
-		if (fid_ep->domain && fid_ep->domain != av->domain)
+		if (fid_ep->domain != av->domain)
 			return -EINVAL;
 		fid_ep->av = av;
-		fid_ep->domain = av->domain;
 		break;
 
 	case FID_CLASS_MR:
@@ -361,7 +350,12 @@ static struct fi_ops_ep psmx_ep_ops = {
 int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context)
 {
+	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_ep *fid_ep;
+
+	fid_domain = container_of(domain, struct psmx_fid_domain, domain.fid);
+	if (!fid_domain)
+		return -EINVAL;
 
 	fid_ep = (struct psmx_fid_ep *) calloc(1, sizeof *fid_ep);
 	if (!fid_ep)
@@ -373,6 +367,8 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	fid_ep->ep.ops = &psmx_ep_ops;
 	fid_ep->ep.cm = &psmx_cm_ops;
 	fid_ep->ep.tagged = &psmx_tagged_ops;
+	fid_ep->domain = fid_domain;
+
 	PSMX_CTXT_TYPE(&fid_ep->nocomp_send_context) = PSMX_NOCOMP_SEND_CONTEXT;
 	PSMX_CTXT_EP(&fid_ep->nocomp_send_context) = fid_ep;
 	PSMX_CTXT_TYPE(&fid_ep->nocomp_recv_context) = PSMX_NOCOMP_RECV_CONTEXT;
