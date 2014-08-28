@@ -198,8 +198,8 @@ consumed.  Use of this flag may cause a single posted receive operation
 to generate multiple events as messages are placed into the buffer.
 The placement of received data into the buffer may be subjected to
 provider specific alignment restrictions.  The buffer will be freed from
-the endpoint when a message is received that cannot fit into the remaining
-free buffer space.
+the endpoint when the available buffer space falls below the network's
+MTU size (see FI_OPT_MIN_MULTI_RECV).
 .IP "FI_REMOTE_COMPLETE"
 Applies to fi_sendmsg.  Indicates that a completion should not be generated
 until the operation has completed on the remote side.
