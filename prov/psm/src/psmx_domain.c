@@ -177,6 +177,8 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (info->ep_cap & FI_MSG)
 		fid_domain->reserved_tag_bits |= PSMX_MSG_BIT;
 
+	fid_domain->ep_cap = info->ep_cap;
+
 	*domain = &fid_domain->domain;
 
 	return 0;

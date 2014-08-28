@@ -348,6 +348,9 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (!fid_domain)
 		return -EINVAL;
 
+	if (info && ((info->ep_cap & fid_domain->ep_cap) != info->ep_cap))
+		return -EINVAL;
+
 	fid_ep = (struct psmx_fid_ep *) calloc(1, sizeof *fid_ep);
 	if (!fid_ep)
 		return -ENOMEM;
