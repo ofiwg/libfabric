@@ -709,5 +709,8 @@ call fi_freeinfo to release fi_info structures returned by fi_getinfo.
 .PP
 If neither node, service or hints are provided, then fi_getinfo simply returns
 the list all available communication interfaces.
+.PP
+Multiple threads may call 
+.BR fi_getinfo " simultaneously, without any requirement for serialization."
 .SH "SEE ALSO"
 fi_open(3), fi_domain(3), fi_endpoint(3)
