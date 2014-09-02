@@ -226,8 +226,8 @@ fi_cancel attempts to cancel an outstanding asynchronous operation.
 The endpoint must have been configured to support cancelable operations --
 see FI_CANCEL flag -- in order for this call to succeed.  Canceling
 an operation causes the fabric provider to search for the operation
-and, if it is still pending, complete it immediately as having been
-canceled.
+and, if it is still pending, complete it as having been canceled.
+Cancel should return within a bounded period of time.
 .SS "fi_ep_sync"
 The sync function is used to indicate that all previously identified
 operations submitted on the specified endpoint or endpoint alias
