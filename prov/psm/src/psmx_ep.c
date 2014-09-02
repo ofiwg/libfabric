@@ -167,6 +167,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct psmx_fid_av *av;
 	struct psmx_fid_eq *eq;
 	struct psmx_fid_cntr *cntr;
+	int err;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
@@ -247,6 +248,14 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (fid_ep->domain != av->domain)
 			return -EINVAL;
 		fid_ep->av = av;
+		break;
+
+	case FID_CLASS_MR:
+		if (!bfid->ops || !bfid->ops->bind)
+			return -EINVAL;
+		err = bfid->ops->bind(bfid, fid, flags);
+		if (err)
+			return err;
 		break;
 
 	default:
