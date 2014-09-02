@@ -161,11 +161,8 @@ static int psmx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	switch (bfid->fclass) {
 	case FID_CLASS_EP:
 		ep = container_of(bfid, struct psmx_fid_ep, ep.fid);
-		if (fid_mr->ep && fid_mr->ep != ep)
-			return -EEXIST;
 		if (fid_mr->domain != ep->domain)
 			return -EINVAL;
-		fid_mr->ep = ep;
 		break;
 
 	case FID_CLASS_EQ:
