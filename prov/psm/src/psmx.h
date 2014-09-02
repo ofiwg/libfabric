@@ -249,7 +249,6 @@ struct psmx_fid_ep {
 struct psmx_fid_mr {
 	struct fid_mr		mr;
 	struct psmx_fid_domain	*domain;
-	struct psmx_fid_ep	*ep;
 	struct psmx_fid_eq	*eq;
 	struct psmx_fid_cntr	*cntr;
 	uint64_t		access;
