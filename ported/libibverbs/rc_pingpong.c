@@ -128,7 +128,7 @@ static int pp_eq_create(struct pingpong_context *ctx)
 		cq_attr.wait_obj 	= FI_WAIT_NONE;
 	}
 	cq_attr.wait_cond 	= FI_EQ_COND_NONE;
-	cq_attr.size 		= ctx->rx_depth;
+	cq_attr.size 		= ctx->rx_depth + 1;
 
 	rc = fi_eq_open(ctx->dom, &cq_attr, &ctx->cq, NULL);
 	if (rc) {
