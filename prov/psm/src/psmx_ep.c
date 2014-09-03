@@ -297,7 +297,7 @@ static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
 			psmx_ep_progress(fid_ep);
 	}
 
-	if (!flags) {
+	if (!flags || (flags & FI_WRITE) || (flags & FI_WRITE)) {
 		while (fid_ep->pending_atomics)
 			psmx_ep_progress(fid_ep);
 	}
