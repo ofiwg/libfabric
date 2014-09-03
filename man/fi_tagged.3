@@ -248,8 +248,10 @@ Applies to fi_tsendmsg.  Indicates that a completion should not be generated
 until the operation has completed on the remote side.
 .PP
 The following flags may be used with fi_tsearch.
-.IP "Need tsearch flags"
-write me
+.IP "FI_CLAIM"
+Indicates that when a search successfully finds a matching message, the
+message is claimed by caller. Subsequent searches cannot find the same
+message, although they may match other messages that have the same tag.
 .SH "RETURN VALUE"
 The tagged send and receive calls return 0 on success.
 On error, a negative value corresponding to fabric
@@ -264,8 +266,6 @@ If the search completes immediately, fi_tsearch will return 1, with
 information about the matching receive returned through the len, tag,
 src_addr, and src_addrlen parameters.
 .SH "ERRORS"
-.IP "Enter FI_ERRNO values here"
-write me
 .IP "-FI_ENOMSG"
 Returned by fi_tsearch on an immediate completion, but no matching message
 was located.
@@ -276,6 +276,10 @@ internal buffering, in the case of FI_SEND_BUFFERED, or processing queues
 are full.  The operation may be retried after additional provider resources
 become available, usually through the completion of currently outstanding
 operations.
+.IP "-FI_EINVAL"
+Indicates that an invalid argument was supplied by the user.
+.IP "-FI_EOTHER"
+Indicates that an unspecified error occurred.
 .SH "NOTES"
 .SS Any source
 The function fi_trecvfrom() may be used to receive a message from a specific
