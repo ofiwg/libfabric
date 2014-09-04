@@ -36,16 +36,19 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <complex.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <pthread.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
 #include <poll.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <complex.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
@@ -55,12 +58,14 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_tagged.h>
-#include <rdma/fi_ucma.h>
-#include <rdma/fi_uverbs.h>
 #include <rdma/fi_errno.h>
 #include "fi.h"
+
+// TODO: Move all HAVE_VERBS functionality
+#ifdef HAVE_VERBS
 #include <rdma/rdma_cma.h>
 #include <infiniband/ib.h>
+#endif
 
 struct __fid_fabric {
 	struct fid_fabric	fabric_fid;
@@ -68,6 +73,7 @@ struct __fid_fabric {
 	char			name[FI_NAME_MAX];
 };
 
+#ifdef HAVE_VERBS
 struct __fid_eq_cm {
 	struct fid_eq		eq_fid;
 	struct __fid_fabric	*fab;
@@ -81,7 +87,7 @@ struct __fid_pep {
 	struct __fid_eq_cm	*cm_eq;
 	struct rdma_cm_id	*id;
 };
-
+#endif // HAVE_VERBS
 
 static pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 static int init;
@@ -181,21 +187,15 @@ int fi_init()
 	if (init)
 		goto out;
 
-//	ret = uv_init();
-//	if (ret)
-//		goto out;
-
-//	ret = ucma_init();
-//	if (ret)
-//		goto out;
-
 	init = 1;
 
+#ifdef HAVE_VERBS
 	ret = fi_fabric("RDMA", 0, &g_fabric, NULL);
 	if (ret) {
 		fprintf(stderr, "fi_init: fatal: unable to open fabric\n");
 		return  -ENODEV;
 	}
+#endif // HAVE_VERBS
 out:
 	pthread_mutex_unlock(&mut);
 	return ret;
@@ -204,20 +204,14 @@ out:
 static void __attribute__((constructor)) fi_ini(void)
 {
 	sock_ini();
-//	uv_ini();
 	ibv_ini();
-//	ucma_ini();
-//	rdma_cm_ini();
 	psmx_ini();
 }
 
 static void __attribute__((destructor)) fi_fini(void)
 {
 	psmx_fini();
-//	rdma_cm_fini();
-//	ucma_fini();
 	ibv_fini();
-//	uv_fini();
 	sock_fini();
 }
 
@@ -330,13 +324,16 @@ int fi_sockaddr_len(struct sockaddr *addr)
 		return sizeof(struct sockaddr_in);
 	case AF_INET6:
 		return sizeof(struct sockaddr_in6);
+#ifdef HAVE_VERBS
 	case AF_IB:
 		return sizeof(struct sockaddr_ib);
+#endif // HAVE_VERBS
 	default:
 		return 0;
 	}
 }
 
+#ifdef HAVE_VERBS
 static ssize_t
 __fi_eq_cm_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 		   size_t len, uint64_t flags)
@@ -693,6 +690,21 @@ __fi_endpoint(struct fid_fabric *fabric, struct fi_info *info,
 	*pep = &_pep->pep_fid;
 	return 0;
 }
+#else // HAVE_VERBS
+static int
+__fi_eq_open(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
+	     struct fid_eq **eq, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+static int
+__fi_endpoint(struct fid_fabric *fabric, struct fi_info *info,
+	      struct fid_pep **pep, void *context)
+{
+	return -FI_ENOSYS;
+}
+#endif // HAVE_VERBS
 
 static int __fi_fabric_close(fid_t fid)
 {

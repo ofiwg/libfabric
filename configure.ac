@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-AC_INIT([libfabric], [0.0.1], [linux-rdma@vger.kernel.org])
+AC_INIT([libfabric], [0.0.2], [linux-rdma@vger.kernel.org])
 AC_CONFIG_SRCDIR([src/fabric.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
@@ -137,6 +137,45 @@ AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,
     fi)
 
 AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
+
+AC_ARG_ENABLE([verbs],
+	      [AS_HELP_STRING([--enable-verbs],
+			      [Enable verbs provider @<:@default=auto@:>@])
+	      ],
+	      [],
+	      [enable_verbs=auto])
+
+AS_CASE([$enable_verbs],
+	[auto], [AC_CHECK_LIB(rdmacm, rsocket,
+			[AC_CHECK_LIB(ibverbs, ibv_open_device,
+				[enable_verbs=yes],
+				[enable_verbs=no])
+			],
+			[enable_verbs=no])
+		],
+	[yes],  [AC_CHECK_LIB(rdmacm, rsocket,
+			[AC_CHECK_LIB(ibverbs, ibv_open_device, [],
+				[AC_MSG_ERROR(libfabric requires libibverbs)])
+			],
+			[AC_MSG_ERROR(libfabric requires librdmacm 1.0.16 or greater)])
+		],
+	[no],   [],
+	[])
+
+AS_IF([test x"$enable_verbs" = x"yes"],
+	[AC_DEFINE([HAVE_VERBS], [1],
+		[Define if verbs provider is enabled])
+	],
+	[AC_MSG_NOTICE(Verbs provider not enabled)])
+
+if test x"$enable_verbs" = x"yes"; then
+	AC_CHECK_LIB(rdmacm, rsocket, [],
+		[AC_MSG_ERROR(libfabric requires librdmacm 1.0.16 or greater)])
+	AC_CHECK_LIB(ibverbs, ibv_open_device, [],
+		[AC_MSG_ERROR(libfabric requires libibverbs)])
+fi
+
+AM_CONDITIONAL([HAVE_VERBS], [test x"$enable_verbs" = x"yes"])
 
 AC_ARG_ENABLE([psm],
 	      [AS_HELP_STRING([--enable-psm],

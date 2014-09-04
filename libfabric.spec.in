@@ -1,13 +1,13 @@
 %define ver @VERSION@
 
 Name: libfabric
-Version: 0.0.1
+Version: 0.0.2
 Release: 1%{?dist}
 Summary: Userspace RDMA Fabric Interfaces
 
 Group: System Environment/Libraries
 License: GPLv2 or BSD
-Url: http://www.openfabrics.org/
+Url: http://www.github.com/ofiwg/libfabric
 Source: http://www.openfabrics.org/downloads/fabrics/%{name}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 

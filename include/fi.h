@@ -154,25 +154,16 @@ extern struct uv_dev *udev_head, *udev_tail;
 
 int  fi_init(void);
 
-void uv_ini(void);
-void uv_fini(void);
-int  uv_init(void);
-
 void sock_ini(void);
 void sock_fini(void);
 
+#ifdef HAVE_VERBS
 void ibv_ini(void);
 void ibv_fini(void);
-
-void ucma_ini(void);
-void ucma_fini(void);
-int  ucma_init(void);
-
-void rdma_cm_ini(void);
-void rdma_cm_fini(void);
-
-void mlx4_ini(void);
-void mlx4_fini(void);
+#else
+#define ibv_ini()
+#define ibv_fini()
+#endif
 
 #ifdef HAVE_PSM
 void psmx_ini(void);
