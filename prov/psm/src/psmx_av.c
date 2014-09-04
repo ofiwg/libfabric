@@ -65,12 +65,15 @@ int psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
         int err;
         psm_error_t errors;
 	psm_epconn_t epconn;
+	struct psmx_epaddr_context *context;
 
 	err = psm_ep_epid_lookup(epid, &epconn);
 	if (err == PSM_OK) {
-		*epaddr = epconn.addr;
-		psmx_set_epaddr_context(domain,epid,*epaddr);
-		return 0;
+		context = psm_epaddr_getctxt(epconn.addr);
+		if (context && context->epid  == epid) {
+			*epaddr = epconn.addr;
+			return 0;
+		}
 	}
 
         err = psm_ep_connect(domain->psm_ep, 1, &epid, NULL, &errors, epaddr, 30*1e9);
@@ -119,6 +122,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	int err;
 	int i;
 	void **result = NULL;
+	struct psmx_epaddr_context *context;
 
 	fid_av = container_of(av, struct psmx_fid_av, av);
 
@@ -155,10 +159,11 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	for (i=0; i<count; i++) {
 		psm_epconn_t epconn;
 		if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
-			((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
-			psmx_set_epaddr_context(fid_av->domain,
-						((psm_epid_t *) addr)[i],
-						((psm_epaddr_t *) fi_addr)[i]);
+			context = psm_epaddr_getctxt(epconn.addr);
+			if (context && context->epid  == ((psm_epid_t *) addr)[i])
+				((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
+			else
+				mask[i] = 1;
 		}
 		else {
 			mask[i] = 1;
