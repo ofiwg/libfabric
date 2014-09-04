@@ -44,10 +44,8 @@ ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 	int user_fi_context = 0;
 	int err;
 
-	if (src_addr) {
-		fprintf(stderr, "%s: error: non-NULL src_addr is not supported.", __func__);
-		return -EINVAL;
-	}
+	if (src_addr)
+		psmx_debug("%s: warning: src_addr is currently ignored.", __func__);
 
 	if (flags & FI_TRIGGER) {
 		struct psmx_trigger *trigger;

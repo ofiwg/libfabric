@@ -176,6 +176,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	switch (bfid->fclass) {
 	case FID_CLASS_EQ:
 		eq = container_of(bfid, struct psmx_fid_eq, eq.fid);
+#if 0
 		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
 			if (fid_ep->send_eq && fid_ep->send_eq != eq)
 				return -EEXIST;
@@ -184,6 +185,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (fid_ep->recv_eq && fid_ep->recv_eq != eq)
 				return -EEXIST;
 		}
+#endif
 		if (fid_ep->domain != eq->domain)
 			return -EINVAL;
 		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
@@ -200,6 +202,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	case FID_CLASS_CNTR:
 		cntr = container_of(bfid, struct psmx_fid_cntr, cntr.fid);
+#if 0
 		if (flags & (FI_SEND)) {
 			if (fid_ep->send_cntr && fid_ep->send_cntr != cntr)
 				return -EEXIST;
@@ -216,6 +219,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (fid_ep->read_cntr && fid_ep->read_cntr != cntr)
 				return -EEXIST;
 		}
+#endif
 		if (fid_ep->domain != cntr->domain)
 			return -EINVAL;
 		if (flags & FI_SEND) {
@@ -243,8 +247,10 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FID_CLASS_AV:
 		av = container_of(bfid,
 				struct psmx_fid_av, av.fid);
+#if 0
 		if (fid_ep->av && fid_ep->av != av)
 			return -EEXIST;
+#endif
 		if (fid_ep->domain != av->domain)
 			return -EINVAL;
 		fid_ep->av = av;
@@ -291,7 +297,7 @@ static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
 			psmx_ep_progress(fid_ep);
 	}
 
-	if (!flags) {
+	if (!flags || (flags & FI_WRITE) || (flags & FI_WRITE)) {
 		while (fid_ep->pending_atomics)
 			psmx_ep_progress(fid_ep);
 	}
