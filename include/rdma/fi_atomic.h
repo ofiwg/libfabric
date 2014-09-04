@@ -120,6 +120,12 @@ struct fi_ops_atomic {
 			enum fi_datatype datatype, enum fi_op op, void *context);
 	ssize_t	(*writemsg)(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg, uint64_t flags);
+	ssize_t	(*inject)(struct fid_ep *ep, const void *buf, size_t count,
+			uint64_t addr, uint64_t key, enum fi_datatype datatype,
+			enum fi_op op);
+	ssize_t	(*injectto)(struct fid_ep *ep, const void *buf, size_t count,
+			const void *dest_addr, uint64_t addr, uint64_t key,
+			enum fi_datatype datatype, enum fi_op op);
 
 	ssize_t	(*readwrite)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
@@ -214,6 +220,24 @@ fi_atomicmsg(struct fid_ep *ep,
 	     const struct fi_msg_atomic *msg, uint64_t flags)
 {
 	return ep->atomic->writemsg(ep, msg, flags);
+}
+
+static inline ssize_t
+fi_inject_atomic(struct fid_ep *ep, const void *buf, size_t count,
+		uint64_t addr, uint64_t key, enum fi_datatype datatype,
+		enum fi_op op)
+{
+	return ep->atomic->inject(ep, buf, count, addr, key,
+			datatype, op);
+}
+
+static inline ssize_t
+fi_inject_atomicto(struct fid_ep *ep, const void *buf, size_t count,
+		const void *dest_addr, uint64_t addr, uint64_t key,
+		enum fi_datatype datatype, enum fi_op op)
+{
+	return ep->atomic->injectto(ep, buf, count, dest_addr, addr,
+			key, datatype, op);
 }
 
 static inline ssize_t

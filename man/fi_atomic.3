@@ -51,6 +51,23 @@ Indicates if a provider supports a specific atomic operation
 .BI "ssize_t fi_atomicmsg(struct fid_ep *" ep ","
 .BI "const struct fi_msg_atomic * " msg ","
 .BI "uint64_t " flags ");"
+.HP
+.BI "ssize_t fi_inject_atomic(struct fid_ep *" ep ","
+.BI "const void *" buf ","
+.BI "size_t " count ","
+.BI "uint64_t " addr ","
+.BI "uint64_t " key ","
+.BI "enum fi_datatype " datatype ","
+.BI "enum fi_op " op ");"
+.HP
+.BI "ssize_t fi_inject_atomicto(struct fid_ep *" ep ","
+.BI "const void *" buf ","
+.BI "size_t " count ","
+.BI "const void *" dest_addr ","
+.BI "uint64_t " addr ","
+.BI "uint64_t " key ","
+.BI "enum fi_datatype " datatype ","
+.BI "enum fi_op " op ");"
 .PP
 .HP
 .BI "ssize_t fi_fetch_atomic(struct fid_ep *" ep ","
@@ -326,6 +343,16 @@ The fi_atomicv transfers the set of data buffers referenced by
 the ioc parameter to the remote node for processing.
 .PP
 The fi_atomicto function is equivalent to fi_atomic for unconnected endpoints.
+.PP
+The  fi_inject_atomic call is an optimized version of fi_atomic.  The
+fi_inject_atomic function behaves as if the FI_INJECT transfer flag were set,
+and FI_EVENT were not.  That is, the data buffer is available for reuse
+immediately on returning from from fi_inject_atomic, and no completion event
+will be generated for this atomic.  The completion event will be  suppressed
+even  if  the endpoint has not been configured with FI_EVENT.  See the flags
+discussion below for more details.
+.PP
+The fi_inject_atomicto is  equivalent to fi_inject_atomic for unconnected endpoints.
 .PP
 The fi_atomicmsg call supports atomic functions over both connected and unconnected
 endpoints, with the ability to control the atomic operation per call through the
