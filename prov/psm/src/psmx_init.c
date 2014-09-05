@@ -269,6 +269,7 @@ err_out:
 }
 
 static struct fi_ops_prov psmx_ops = {
+	.size = sizeof(struct fi_ops_prov),
 	.getinfo = psmx_getinfo,
 	.domain = psmx_domain_open,
 };

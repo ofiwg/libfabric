@@ -68,6 +68,7 @@ struct fi_msg_rma {
 };
 
 struct fi_ops_rma {
+	size_t	size;
 	ssize_t	(*read)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			uint64_t addr, uint64_t key, void *context);
 	ssize_t	(*readv)(struct fid_ep *ep, const struct iovec *iov, void **desc,

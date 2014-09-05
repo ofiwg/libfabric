@@ -351,6 +351,7 @@ static ssize_t psmx_inject(struct fid_ep *ep, const void *buf, size_t len)
 }
 
 struct fi_ops_msg psmx_msg_ops = {
+	.size = sizeof(struct fi_ops_msg),
 	.recv = psmx_recv,
 	.recvv = psmx_recvv,
 	.recvfrom = psmx_recvfrom,

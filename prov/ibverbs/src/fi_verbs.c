@@ -589,6 +589,7 @@ ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 }
 
 static struct fi_ops_msg ibv_msg_ep_msg_ops = {
+	.size = sizeof(struct fi_ops_msg),
 	.recv = ibv_msg_ep_recv,
 	.recvv = ibv_msg_ep_recvv,
 	.recvfrom = ibv_msg_ep_recvfrom,
@@ -852,6 +853,7 @@ ibv_msg_ep_rma_writedatato(struct fid_ep *ep, const void *buf, size_t len,
 
 
 static struct fi_ops_rma ibv_msg_ep_rma_ops = {
+	.size = sizeof(struct fi_ops_rma),
 	.read = ibv_msg_ep_rma_read,
 	.readv = ibv_msg_ep_rma_readv,
 	.readfrom = ibv_msg_ep_rma_readfrom,
@@ -1353,6 +1355,7 @@ ibv_msg_ep_atomic_compwritevalid(struct fid_ep *ep, enum fi_datatype datatype,
 
 
 static struct fi_ops_atomic ibv_msg_ep_atomic_ops = {
+	.size		= sizeof(struct fi_ops_atomic),
 	.write		= ibv_msg_ep_atomic_write,
 	.writev		= ibv_msg_ep_atomic_writev,
 	.writeto	= ibv_msg_ep_atomic_writeto,
@@ -1423,6 +1426,7 @@ static int ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 }
 
 static struct fi_ops_cm ibv_msg_ep_cm_ops = {
+	.size = sizeof(struct fi_ops_cm),
 	.connect = ibv_msg_ep_connect,
 	.accept = ibv_msg_ep_accept,
 	.reject = ibv_msg_ep_reject,
@@ -1493,6 +1497,7 @@ static ssize_t ibv_msg_ep_cancel(fid_t fid, void *context)
 }
 
 static struct fi_ops_ep ibv_msg_ep_base_ops = {
+	.size = sizeof(struct fi_ops_ep),
 	.enable = ibv_msg_ep_enable,
 	.cancel = ibv_msg_ep_cancel,
 	.getopt = ibv_msg_ep_getopt,
@@ -1512,6 +1517,7 @@ static int ibv_msg_ep_close(fid_t fid)
 }
 
 static struct fi_ops ibv_msg_ep_ops = {
+	.size = sizeof(struct fi_ops),
 	.close = ibv_msg_ep_close,
 	.bind = ibv_msg_ep_bind
 };
@@ -1756,6 +1762,7 @@ ibv_eq_cm_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 }
 
 static struct fi_ops_eq ibv_eq_cm_data_ops = {
+	.size = sizeof(struct fi_ops_eq),
 	.read = ibv_eq_cm_read_data,
 	.readerr = ibv_eq_cm_readerr,
 	.condread = ibv_eq_cm_condread_data,
@@ -1797,6 +1804,7 @@ static int ibv_eq_cm_close(fid_t fid)
 }
 
 static struct fi_ops ibv_eq_cm_ops = {
+	.size = sizeof(struct fi_ops),
 	.close = ibv_eq_cm_close,
 	.control = ibv_eq_cm_control,
 };
@@ -2080,6 +2088,7 @@ ibv_eq_comp_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 }
 
 static struct fi_ops_eq ibv_eq_comp_context_ops = {
+	.size = sizeof(struct fi_ops_eq),
 	.read = ibv_eq_comp_read_context,
 	.condread = ibv_eq_comp_condread_context,
 	.readerr = ibv_eq_comp_readerr,
@@ -2087,6 +2096,7 @@ static struct fi_ops_eq ibv_eq_comp_context_ops = {
 };
 
 static struct fi_ops_eq ibv_eq_comp_comp_ops = {
+	.size = sizeof(struct fi_ops_eq),
 	.read = ibv_eq_comp_read_comp,
 	.condread = ibv_eq_comp_condread_comp,
 	.readerr = ibv_eq_comp_readerr,
@@ -2094,6 +2104,7 @@ static struct fi_ops_eq ibv_eq_comp_comp_ops = {
 };
 
 static struct fi_ops_eq ibv_eq_comp_data_ops = {
+	.size = sizeof(struct fi_ops_eq),
 	.read = ibv_eq_comp_read_data,
 	.condread = ibv_eq_comp_condread_data,
 	.readerr = ibv_eq_comp_readerr,
@@ -2142,6 +2153,7 @@ static int ibv_eq_comp_close(fid_t fid)
 }
 
 static struct fi_ops ibv_eq_comp_ops = {
+	.size = sizeof(struct fi_ops),
 	.close = ibv_eq_comp_close,
 	.control = ibv_eq_comp_control,
 };
@@ -2265,6 +2277,7 @@ static int ibv_mr_close(fid_t fid)
 }
 
 static struct fi_ops ibv_mr_ops = {
+	.size = sizeof(struct fi_ops),
 	.close = ibv_mr_close
 };
 
@@ -2348,14 +2361,17 @@ static int ibv_open_device_by_name(struct ibv_domain *domain, const char *name)
 }
 
 static struct fi_ops ibv_fid_ops = {
+	.size = sizeof(struct fi_ops),
 	.close = ibv_close,
 };
 
 static struct fi_ops_mr ibv_domain_mr_ops = {
+	.size = sizeof(struct fi_ops_mr),
 	.reg = ibv_mr_reg,
 };
 
 static struct fi_ops_domain ibv_domain_ops = {
+	.size = sizeof(struct fi_ops_domain),
 	.eq_open = ibv_eq_open,
 	.endpoint = ibv_open_ep,
 };
@@ -2398,6 +2414,7 @@ err:
 }
 
 static struct fi_ops_prov ibv_ops = {
+	.size = sizeof(struct fi_ops_prov),
 	.getinfo = ibv_getinfo,
 	.freeinfo = ibv_freeinfo,
 	.domain = ibv_domain,

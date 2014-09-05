@@ -41,10 +41,12 @@
 
 
 //static struct fi_ops sock_wait_fi_ops = {
+//	.size = sizeof(struct fi_ops),
 //	.close = sock_wait_close,
 //};
 //
 //static struct fi_ops sock_poll_fi_ops = {
+//	.size = sizeof(struct fi_ops),
 //	.close = sock_poll_close,
 //};
 

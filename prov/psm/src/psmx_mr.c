@@ -203,6 +203,7 @@ static int psmx_mr_control(fid_t fid, int command, void *arg)
 }
 
 static struct fi_ops psmx_fi_ops = {
+	.size = sizeof(struct fi_ops),
 	.close = psmx_mr_close,
 	.bind = psmx_mr_bind,
 	.sync = psmx_mr_sync,
@@ -430,6 +431,7 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 }
 
 struct fi_ops_mr psmx_mr_ops = {
+	.size = sizeof(struct fi_ops_mr),
 	.reg = psmx_mr_reg,
 	.regv = psmx_mr_regv,
 	.regattr = psmx_mr_regattr,

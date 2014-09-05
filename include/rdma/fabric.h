@@ -222,6 +222,7 @@ typedef struct fid *fid_t;
 struct fi_eq_attr;
 
 struct fi_ops {
+	size_t	size;
 	int	(*close)(struct fid *fid);
 	int	(*bind)(struct fid *fid, struct fid *bfid, uint64_t flags);
 	int	(*sync)(struct fid *fid, uint64_t flags, void *context);
@@ -251,6 +252,7 @@ struct fi_attr {
 void fi_query(const struct fi_info *info, struct fi_attr *attr, size_t *attrlen);
 
 struct fi_ops_fabric {
+	size_t	size;
 	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_domain **dom, void *context);
 	int	(*endpoint)(struct fid_fabric *fabric, struct fi_info *info,
@@ -268,6 +270,9 @@ struct fid_fabric {
 
 int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	      void *context);
+
+#define FI_CHECK_OP(ops, opstype, op) \
+	((ops->size > offsetof(opstype, op)) && ops->ops)
 
 static inline int
 fi_fopen(struct fid_fabric *fabric, const char *name, uint64_t flags,

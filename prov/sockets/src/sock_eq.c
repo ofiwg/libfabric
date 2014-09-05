@@ -41,6 +41,7 @@
 
 
 //static struct fi_ops sock_eq_fi_ops = {
+//	.size = sizeof(struct fi_ops),
 //	.close = sock_eq_close,
 //};
 
@@ -110,6 +111,7 @@ static int sock_cntr_close(struct fid *fid)
 }
 
 static struct fi_ops_cntr sock_cntr_ops = {
+	.size = sizeof(struct fi_ops_cntr),
 	.read = sock_cntr_read,
 	.add = sock_cntr_add,
 	.set = sock_cntr_set,
@@ -117,6 +119,7 @@ static struct fi_ops_cntr sock_cntr_ops = {
 };
 
 static struct fi_ops sock_cntr_fi_ops = {
+	.size = sizeof(struct fi_ops),
 	.close = sock_cntr_close,
 };
 
