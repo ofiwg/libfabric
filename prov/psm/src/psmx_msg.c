@@ -328,7 +328,7 @@ static ssize_t psmx_sendv(struct fid_ep *ep, const struct iovec *iov, void **des
 }
 
 static ssize_t psmx_injectto(struct fid_ep *ep, const void *buf, size_t len,
-				const void *dest_addr)
+			     const void *dest_addr)
 {
 	struct psmx_fid_ep *fid_ep;
 

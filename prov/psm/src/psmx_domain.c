@@ -39,11 +39,22 @@ static int psmx_domain_close(fid_t fid)
 
 	fid_domain = container_of(fid, struct psmx_fid_domain, domain.fid);
 
+#if PSMX_USE_AM
+	psmx_am_fini(fid_domain);
+#endif
+
 	if (fid_domain->ns_thread) {
 		pthread_cancel(fid_domain->ns_thread);
 		pthread_join(fid_domain->ns_thread, NULL);
 	}
 
+#if PSMX_USE_AM
+	/* AM messages could arrive after MQ is finalized, causing segfault
+	 * when trying to dereference the MQ pointer. There is no mechanism
+	 * to properly shutdown AM. The workaround is to keep MQ valid.
+	 */
+	if (0)
+#endif
 	psm_mq_finalize(fid_domain->psm_mq);
 
 	err = psm_ep_close(fid_domain->psm_ep, PSM_EP_CLOSE_GRACEFUL,
@@ -160,10 +171,38 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (info->ep_cap & FI_MSG)
 		fid_domain->reserved_tag_bits |= PSMX_MSG_BIT;
 
+#if PSMX_USE_AM
+	s = getenv("SFI_PSM_AM_MSG");
+	if (s && (!strcasecmp(s, "yes") || !strcasecmp(s, "on") || !strcmp(s, "1")))
+		psmx_am_msg_enabled = 1;
+
+	s = getenv("SFI_PSM_TAGGED_RMA");
+	if (s && (!strcasecmp(s, "yes") || !strcasecmp(s, "on") || !strcmp(s, "1")))
+		psmx_am_tagged_rma = 1;
+
+	if (psmx_am_msg_enabled)
+		fid_domain->reserved_tag_bits &= ~PSMX_MSG_BIT;
+
+	if ((info->ep_cap & FI_RMA) && psmx_am_tagged_rma)
+		fid_domain->reserved_tag_bits |= PSMX_RMA_BIT;
+
+	if ((info->ep_cap & FI_RMA) ||
+	    (info->ep_cap & FI_ATOMICS) ||
+	    psmx_am_msg_enabled) {
+		err = psmx_am_init(fid_domain);
+		if (err) {
+			if (fid_domain->ns_thread) {
+				pthread_cancel(fid_domain->ns_thread);
+				pthread_join(fid_domain->ns_thread, NULL);
+			}
+			psm_mq_finalize(fid_domain->psm_mq);
+			goto err_out_close_ep;
+		}
+	}
+#endif
 	fid_domain->ep_cap = info->ep_cap;
 
 	*domain = &fid_domain->domain;
-
 	return 0;
 
 err_out_close_ep:

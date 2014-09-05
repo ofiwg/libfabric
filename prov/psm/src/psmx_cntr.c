@@ -87,6 +87,79 @@ void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
 					      trigger->trecv.context,
 					      trigger->trecv.flags);
 			break;
+#if PSMX_USE_AM
+		case PSMX_TRIGGERED_WRITE:
+			_psmx_writeto(trigger->write.ep,
+				      trigger->write.buf,
+				      trigger->write.len,
+				      trigger->write.desc,
+				      trigger->write.dest_addr,
+				      trigger->write.addr,
+				      trigger->write.key,
+				      trigger->write.context,
+				      trigger->write.flags);
+			break;
+
+		case PSMX_TRIGGERED_READ:
+			_psmx_readfrom(trigger->read.ep,
+				       trigger->read.buf,
+				       trigger->read.len,
+				       trigger->read.desc,
+				       trigger->read.src_addr,
+				       trigger->read.addr,
+				       trigger->read.key,
+				       trigger->read.context,
+				       trigger->read.flags);
+			break;
+
+		case PSMX_TRIGGERED_ATOMIC_WRITE:
+			_psmx_atomic_writeto(trigger->atomic_write.ep,
+					     trigger->atomic_write.buf,
+					     trigger->atomic_write.count,
+					     trigger->atomic_write.desc,
+					     trigger->atomic_write.dest_addr,
+					     trigger->atomic_write.addr,
+					     trigger->atomic_write.key,
+					     trigger->atomic_write.datatype,
+					     trigger->atomic_write.atomic_op,
+					     trigger->atomic_write.context,
+					     trigger->atomic_write.flags);
+			break;
+
+		case PSMX_TRIGGERED_ATOMIC_READWRITE:
+			_psmx_atomic_readwriteto(trigger->atomic_readwrite.ep,
+						 trigger->atomic_readwrite.buf,
+						 trigger->atomic_readwrite.count,
+						 trigger->atomic_readwrite.desc,
+						 trigger->atomic_readwrite.result,
+						 trigger->atomic_readwrite.result_desc,
+						 trigger->atomic_readwrite.dest_addr,
+						 trigger->atomic_readwrite.addr,
+						 trigger->atomic_readwrite.key,
+						 trigger->atomic_readwrite.datatype,
+						 trigger->atomic_readwrite.atomic_op,
+						 trigger->atomic_readwrite.context,
+						 trigger->atomic_readwrite.flags);
+			break;
+
+		case PSMX_TRIGGERED_ATOMIC_COMPWRITE:
+			_psmx_atomic_compwriteto(trigger->atomic_compwrite.ep,
+						 trigger->atomic_compwrite.buf,
+						 trigger->atomic_compwrite.count,
+						 trigger->atomic_compwrite.desc,
+						 trigger->atomic_compwrite.compare,
+						 trigger->atomic_compwrite.compare_desc,
+						 trigger->atomic_compwrite.result,
+						 trigger->atomic_compwrite.result_desc,
+						 trigger->atomic_compwrite.dest_addr,
+						 trigger->atomic_compwrite.addr,
+						 trigger->atomic_compwrite.key,
+						 trigger->atomic_compwrite.datatype,
+						 trigger->atomic_compwrite.atomic_op,
+						 trigger->atomic_compwrite.context,
+						 trigger->atomic_compwrite.flags);
+			break;
+#endif
 		default:
 			psmx_debug("%s: %d unsupported op\n", __func__, trigger->op);
 			break;
@@ -164,8 +237,12 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
 
 	switch (fid_cntr->wait_obj) {
 	case FI_WAIT_NONE:
-		while (fid_cntr->counter < threshold)
+		while (fid_cntr->counter < threshold) {
 			psmx_eq_poll_mq(NULL, fid_cntr->domain);
+#if PSMX_USE_AM
+			psmx_am_progress(fid_cntr->domain);
+#endif
+		}
 		break;
 
 	case FI_WAIT_MUT_COND:

@@ -319,6 +319,22 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 		alias = arg;
 		*new_fid_ep = *fid_ep;
 		new_fid_ep->flags = alias->flags;
+		/* REMOVE ME: [ temporary fix for backward compatibility */
+		if (new_fid_ep->flags & FI_EVENT) {
+			if (!getenv("SFI_PSM_NO_WARNING")) {
+			    printf("WARNING: deprecated FI_EVENT flag in fi_alias().\n"
+				"\tThe flag passed to fi_alias should only mean op flags.\n"
+				"\tHere temporary backward compatibility is provided, but\n"
+				"\tthis may go away at any time. The proper way to create\n"
+				"\tan alias that doesn't automatically generate events is:\n"
+				"\t(1) call fi_alias() to create the new EP\n"
+				"\t(2) bind the new EP to the EQ with FI_EVENT flag\n"
+				"\tSet SFI_PSM_NO_WARNING to suppress this message.\n");
+			}
+			new_fid_ep->send_eq_event_flag = new_fid_ep->recv_eq_event_flag = 1;
+			new_fid_ep->flags &= ~FI_EVENT;
+		}
+		/* REMOVE ME: ] */
 		*alias->fid = &new_fid_ep->ep.fid;
 		break;
 
@@ -394,6 +410,14 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		if (info->ep_cap & FI_MSG) {
 			fid_ep->ep.msg = &psmx_msg_ops;
 		}
+#if PSMX_USE_AM
+		if ((info->ep_cap & FI_MSG) && psmx_am_msg_enabled)
+			fid_ep->ep.msg = &psmx_msg2_ops;
+		if (info->ep_cap & FI_RMA)
+			fid_ep->ep.rma = &psmx_rma_ops;
+		if (info->ep_cap & FI_ATOMICS)
+			fid_ep->ep.atomic = &psmx_atomic_ops;
+#endif
 	}
 
 	*ep = &fid_ep->ep;

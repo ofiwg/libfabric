@@ -77,6 +77,9 @@ struct psmx_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
 	if ((event->error = !!err)) {
 		event->eqe.err.op_context = op_context;
 		event->eqe.err.err = -err;
+		event->eqe.err.data = data;
+		event->eqe.err.tag = tag;
+		event->eqe.err.olen = olen;
 		event->eqe.err.prov_errno = 0;
 		event->eqe.err.prov_data = NULL;
 		goto out;
@@ -162,6 +165,7 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 		event->eqe.err.op_context = op_context;
 		event->eqe.err.err = -psmx_errno(psm_status->error_code);
 		event->eqe.err.prov_errno = psm_status->error_code;
+		event->eqe.err.tag = psm_status->msg_tag;
 		event->eqe.err.olen = psm_status->msg_length - psm_status->nbytes;
 		//event->eqe.err.prov_data = NULL; /* FIXME */
 		goto out;
@@ -325,6 +329,28 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 				tmp_eq = tmp_ep->send_eq;
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
+
+#if PSMX_USE_AM
+			case PSMX_REMOTE_WRITE_CONTEXT:
+			case PSMX_REMOTE_READ_CONTEXT:
+				{
+				  struct fi_context *fi_context = psm_status.context;
+				  struct psmx_fid_mr *mr;
+				  mr = PSMX_CTXT_USER(fi_context);
+				  if (mr->eq) {
+					event = psmx_eq_create_event_from_status(
+							mr->eq, &psm_status);
+					if (!event)
+						return -ENOMEM;
+					psmx_eq_enqueue_event(mr->eq, event);
+				  }
+				  if (mr->cntr)
+					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
+				  if (!eq || mr->eq == eq)
+					return 1;
+				  continue;
+				}
+#endif
 			}
 
 			if (tmp_eq) {
@@ -398,7 +424,18 @@ static ssize_t psmx_eq_readfrom(struct fid_eq *eq, void *buf, size_t len,
 	fid_eq = container_of(eq, struct psmx_fid_eq, eq);
 	assert(fid_eq->domain);
 
+#if PSMX_USE_AM
+	fid_eq->poll_am_before_mq = !fid_eq->poll_am_before_mq;
+	if (fid_eq->poll_am_before_mq)
+		psmx_am_progress(fid_eq->domain);
+#endif
+
 	psmx_eq_poll_mq(fid_eq, fid_eq->domain);
+
+#if PSMX_USE_AM
+	if (!fid_eq->poll_am_before_mq)
+		psmx_am_progress(fid_eq->domain);
+#endif
 
 	if (fid_eq->pending_error)
 		return -FI_EAVAIL;
