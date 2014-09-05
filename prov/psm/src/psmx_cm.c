@@ -138,6 +138,7 @@ static int psmx_cm_leave(struct fid_ep *ep, void *addr, void *fi_addr, uint64_t 
 }
 
 struct fi_ops_cm psmx_cm_ops = {
+	.size = sizeof(struct fi_ops_cm),
 	.getname = psmx_cm_getname,
 	.getpeer = psmx_cm_getpeer,
 	.connect = psmx_cm_connect,

@@ -105,6 +105,7 @@ struct fi_msg_atomic {
 };
 
 struct fi_ops_atomic {
+	size_t	size;
 	ssize_t	(*write)(struct fid_ep *ep,
 			const void *buf, size_t count, void *desc,
 			uint64_t addr, uint64_t key,

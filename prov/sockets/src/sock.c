@@ -57,6 +57,7 @@ static int sock_getinfo(const char *node, const char *service, uint64_t flags,
 
 
 static struct fi_ops_prov sock_ops = {
+	.size = sizeof(struct fi_ops_prov),
 	.getinfo = sock_getinfo,
 	.freeinfo = NULL, /* use default */
 	.domain = sock_domain,

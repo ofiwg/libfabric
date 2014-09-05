@@ -513,6 +513,7 @@ __fi_eq_cm_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
 }
 
 struct fi_ops_eq __fi_eq_cm_data_ops = {
+	.size = sizeof(struct fi_ops_eq),
 	.read = __fi_eq_cm_read_data,
 	.condread = __fi_eq_cm_condread_data,
 	.readerr = __fi_eq_cm_readerr,
@@ -554,6 +555,7 @@ static int __fi_eq_cm_control(fid_t fid, int command, void *arg)
 }
 
 struct fi_ops __fi_eq_cm_ops = {
+	.size = sizeof(struct fi_ops),
 	.close = __fi_eq_cm_close,
 	.control = __fi_eq_cm_control,
 };
@@ -620,6 +622,7 @@ static int __fi_pep_listen(struct fid_pep *pep)
 }
 
 static struct fi_ops_cm __fi_pep_cm_ops = {
+	.size = sizeof(struct fi_ops_cm),
 	.listen = __fi_pep_listen,
 };
 
@@ -655,6 +658,7 @@ static int __fi_pep_close(fid_t fid)
 }
 
 static struct fi_ops __fi_pep_ops = {
+	.size = sizeof(struct fi_ops),
 	.close = __fi_pep_close,
 	.bind = __fi_pep_bind
 };
@@ -713,6 +717,7 @@ static int __fi_fabric_close(fid_t fid)
 }
 
 static struct fi_ops __fi_ops = {
+	.size = sizeof(struct fi_ops),
 	.close = __fi_fabric_close,
 };
 
@@ -738,6 +743,7 @@ __fi_open(struct fid_fabric *fabric, const char *name, uint64_t flags,
 }
 
 static struct fi_ops_fabric __fi_ops_fabric = {
+	.size = sizeof(struct fi_ops_fabric),
 	.domain = __fi_domain,
 	.endpoint = __fi_endpoint,
 	.eq_open = __fi_eq_open,

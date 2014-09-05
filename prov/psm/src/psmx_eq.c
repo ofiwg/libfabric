@@ -499,6 +499,7 @@ static int psmx_eq_control(fid_t fid, int command, void *arg)
 }
 
 static struct fi_ops psmx_fi_ops = {
+	.size = sizeof(struct fi_ops),
 	.close = psmx_eq_close,
 	.bind = psmx_eq_bind,
 	.sync = psmx_eq_sync,
@@ -506,6 +507,7 @@ static struct fi_ops psmx_fi_ops = {
 };
 
 static struct fi_ops_eq psmx_eq_ops = {
+	.size = sizeof(struct fi_ops_eq),
 	.read = psmx_eq_read,
 	.readfrom = psmx_eq_readfrom,
 	.readerr = psmx_eq_readerr,

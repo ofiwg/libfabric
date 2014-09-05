@@ -57,6 +57,7 @@ struct fi_msg_tagged {
 };
 
 struct fi_ops_tagged {
+	size_t	size;
 	ssize_t (*recv)(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			uint64_t tag, uint64_t ignore, void *context);
 	ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
