@@ -248,7 +248,6 @@ static int alloc_lres(struct fi_info *fi)
 	int ret;
 
 	memset(&cm_attr, 0, sizeof cm_attr);
-	cm_attr.mask = FI_EQ_ATTR_MASK_V1;
 	cm_attr.domain = FI_EQ_DOMAIN_CM;
 	cm_attr.format = FI_EQ_FORMAT_CM;
 	cm_attr.wait_obj = FI_WAIT_FD;
@@ -280,7 +279,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.mask = FI_EQ_ATTR_MASK_V1;
 	cq_attr.domain = FI_EQ_DOMAIN_COMP;
 	cq_attr.format = FI_EQ_FORMAT_CONTEXT;
 	cq_attr.wait_obj = FI_WAIT_NONE;
