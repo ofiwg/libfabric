@@ -2,7 +2,7 @@
 .SH NAME
 fi_eq \- Event queue operations
 .PP
-fi_feq_open / fi_eq_open / fi_eq_close
+fi_feq_open / fi_eq_open / fi_close
 .RS
 Open/close an event queue
 .RE
@@ -36,7 +36,7 @@ Converts provider specific error information into a printable string
 .BI "int fi_eq_open(struct fid_domain *" domain ", struct fi_eq_attr *" attr ", "
 .BI "struct fid_eq **" eq ", void * " context ");"
 .HP
-.BI "int fi_eq_close(struct fid_eq *" eq ");"
+.BI "int fi_close(struct fid *" eq ");"
 .HP
 .BI "int fi_eq_control(struct fid_eq *" eq ", int " command ", void *" arg ");"
 .PP
@@ -300,8 +300,8 @@ Points to a datatype or structure describing a wait condition that must be
 satisfied before the EQ wait object is signaled.  The format of the data
 referenced by the cond field is determined by the value set by the wait_cond
 field.
-.SS "fi_eq_close"
-The fi_eq_close call releases all resources associated with an event
+.SS "fi_close"
+The fi_close call releases all resources associated with an event
 queue.  The EQ must not be bound to any other resources prior to
 being closed.  Any events which remain on the EQ when it is closed are
 lost.

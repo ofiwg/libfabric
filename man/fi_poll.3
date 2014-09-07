@@ -2,7 +2,7 @@
 .SH NAME
 fi_poll \- Polling and wait set operations
 .PP
-fi_poll_open / fi_poll_close
+fi_poll_open / fi_close
 .RS
 Open/close a polling set
 .RE
@@ -17,7 +17,7 @@ fi_poll
 Poll for progress and events across multiple event queues.
 .RE
 .PP
-fi_wait_open / fi_wait_close
+fi_wait_open / fi_close
 .RS
 Open/close a wait set
 .RE
@@ -32,7 +32,7 @@ Waits for one or more wait objects in a set to be signaled.
 .BI "int fi_poll_open(struct fid_domain *" domain ", struct fi_poll_attr *" attr ", "
 .BI "struct fid_poll **" pollset ");"
 .HP
-.BI "int fi_poll_close(struct fid_poll *" pollset ");"
+.BI "int fi_close(struct fid *" pollset ");"
 .HP
 .BI "int fi_poll_add(struct fid_poll *" pollset ", struct fid *" event_fid ", "
 .BI "uint64_t " flags ");"
@@ -46,7 +46,7 @@ Waits for one or more wait objects in a set to be signaled.
 .BI "int fi_wait_open(struct fid_domain *" domain ", struct fi_wait_attr *" attr ", "
 .BI "struct fid_wait **" waitset ");"
 .HP
-.BI "int fi_wait_close(struct fid_wait *" waitset ");"
+.BI "int fi_close(struct fid *" waitset ");"
 .HP
 .BI "int fi_wait_control(struct fid_wait *" waitset ", int " command ", "
 .BI "void *" arg ");"
@@ -90,8 +90,8 @@ FI_POLL_ATTR_MASK_V1, indicating that all specified fields have been initialized
 .IP "flags"
 Flags that set the default operation of the poll set.  The use of this field
 is reserved and must be set to 0 by the caller.
-.SS "fi_poll_close"
-The fi_poll_close call releases all resources associated with a poll set.
+.SS "fi_close"
+The fi_close call releases all resources associated with a poll set.
 The poll set must not be associated with any other resources prior to
 being closed.
 .SS "fi_poll_add"
@@ -151,8 +151,8 @@ wait object.
 .IP "flags"
 Flags that set the default operation of the wait set.  The use of this field
 is reserved and must be set to 0 by the caller.
-.SS "fi_wait_close"
-The fi_wait_close call releases all resources associated with a wait set.
+.SS "fi_close"
+The fi_close call releases all resources associated with a wait set.
 The wait set must not be bound to any other opened resources prior to
 being closed.
 .SS "fi_wait_control"

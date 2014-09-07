@@ -2,7 +2,7 @@
 .SH NAME
 fi_av \- Address vector operations
 .PP
-fi_av_open / fi_av_close
+fi_av_open / fi_close
 .RS
 Open or close an address vector
 .RE
@@ -32,7 +32,7 @@ Convert an address into a printable string.
 .BI "int fi_av_open(struct fid_domain *" domain ", struct fi_av_attr *" attr ", "
 .BI "struct fid_av **" av ", void * " context ");"
 .HP
-.BI "int fi_av_close(struct fid_av *" av ");"
+.BI "int fi_close(struct fid *" av ");"
 .PP
 .HP
 .BI "int fi_av_bind(struct fid_av *" av ", struct fid *" eq ", uint64_t " flags ");"
@@ -147,8 +147,8 @@ The following flags may be used when opening an AV.
 Opens an AV for read-only access.  An AV opened for read-only access
 must be named (name attribute specified), and the AV must exist.
 .RE
-.SS "fi_av_close"
-The fi_av_close call is used to release all resources associated with an
+.SS "fi_close"
+The fi_close call is used to release all resources associated with an
 address vector.  Note that any events queued on an event queue referencing
 the AV are left untouched.  It is recommended that callers retrieve all
 events associated with the AV before closing it.
