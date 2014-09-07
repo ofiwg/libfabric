@@ -449,14 +449,11 @@ Address is of type sockaddr_ib (defined in Linux kernel source
 .SH "Endpoint Attributes"
 Endpoint attributes may be specified and returned as part of fi_getinfo.
 When provided as hints, requested values of struct fi_ep_attr should be
-set along with a mask flag indicating that a desired value has been
-specified.  Values corresponding to a mask flag bit that has not been
-set will be ignored on input.  On output, the actual endpoint attributes
+set.  On output, the actual endpoint attributes
 that can be provided will be returned.  Output values will be greater than
 or equal to requested input values.
 .nf
 struct fi_ep_attr {
-	int       mask;
 	int       data_flow_cnt;
 	size_t    max_msg_size;
 	size_t    inject_size;
@@ -467,12 +464,6 @@ struct fi_ep_attr {
 	uint64_t  max_tag_value;
 };
 .fi
-.IP "Mask"
-The mask field is used to indicate which endpoint attribute values have been
-specified.  The following flags are defined, which correspond to fi_ep_attr
-fields of a similar name: FI_EP_ATTR_FLOW, FI_EP_ATTR_MSG_SIZE,
-FI_EP_ATTR_INJECT_SIZE, FI_EP_ATTR_BUFFER_RECV, FI_EP_ATTR_RAW_SIZE,
-FI_EP_ATTR_WAR_SIZE, FI_EP_ATTR_WAW_SIZE, FI_EP_ATTR_TAG.
 .IP "Data Flow Count"
 Specifies the number of independent data flows to associate with the endpoint.
 A data flow conceptually represents independent hardware queues or paths
@@ -487,9 +478,7 @@ single operation.
 .IP "Inject Size"
 Defines the default inject operation size (see the FI_INJECT
 flag) that an endpoint will support.  This value applies per send
-operation.  If an inject_size is not specified as a hint, the
-provider should set the inject_size to an optimal value based on
-the underlying implementation.
+operation.
 .IP "Total Buffered Receive"
 Defines the total available space allocated by the provider to buffer received
 messages (see the FI_BUFFERED_RECV flag).

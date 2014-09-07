@@ -2,7 +2,7 @@
 .SH NAME
 fi_cntr \- Completion and event counter operations
 .PP
-fi_cntr_open / fi_cntr_close
+fi_cntr_open / fi_close
 .RS
 Allocate/free a counter
 .RE
@@ -32,7 +32,7 @@ Wait for a counter to be greater or equal to a threshold value
 .BI "int fi_cntr_open(struct fid_domain *" domain ", struct fi_cntr_attr *" attr ", "
 .BI "struct fid_cntr **" cntr ", void * " context ");"
 .HP
-.BI "int fi_cntr_close(struct fid_cntr *" cntr ");"
+.BI "int fi_close(struct fid *" cntr ");"
 .PP
 .HP
 .BI "uint64_t fi_cntr_read(struct fid_cntr *" cntr ");"
@@ -63,18 +63,12 @@ the counter are defined by struct fi_cntr_attr.
 .PP
 .nf
 struct fi_cntr_attr {
-	int                  mask;      /* valid attr fields */
 	enum fi_cntr_events  events;    /* type of events to count */
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
 	struct fid_wait     *wait_set;  /* optional wait set */
 	uint64_t             flags;     /* operation flags */
 };
 .fi
-.IP "mask"
-The mask field is used for forward and backward API compatibility.  It is
-used by the application to indicate which fields in the attribute structure
-have been set.  For this version of the API, mask should be set to
-FI_CNTR_ATTR_MASK_V1, indicating that all specified fields have been initialized.
 .IP "events"
 A counter captures different types of events.  The specific type which is to
 counted are one of the following:
@@ -126,8 +120,8 @@ across multiple event counters.  This field is ignored if wait_obj is not
 FI_WAIT_SET.
 .IP "flags"
 Flags are reserved for future use, and must be set to 0.
-.SS "fi_cntr_close"
-The fi_cntr_close call releases all resources associated with a counter.
+.SS "fi_close"
+The fi_close call releases all resources associated with a counter.
 The counter must not be bound to any other resources prior to being freed.
 .SS "fi_cntr_control"
 The fi_cntr_control call is used to access provider or implementation specific

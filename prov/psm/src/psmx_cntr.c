@@ -261,31 +261,27 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	wait_obj = FI_WAIT_NONE;
 	flags = 0;
 
-	if (attr->mask & FI_CNTR_ATTR_EVENTS) {
-		switch (attr->events) {
-		case FI_CNTR_EVENTS_COMP:
-			events = attr->events;
-			break;
+	switch (attr->events) {
+	case FI_CNTR_EVENTS_COMP:
+		events = attr->events;
+		break;
 
-		default:
-			psmx_debug("%s: attr->events=%d, supported=%d\n", __func__,
-					attr->events, FI_CNTR_EVENTS_COMP);
-			return -EINVAL;
-		}
+	default:
+		psmx_debug("%s: attr->events=%d, supported=%d\n", __func__,
+				attr->events, FI_CNTR_EVENTS_COMP);
+		return -EINVAL;
 	}
 
-	if (attr->mask & FI_CNTR_ATTR_WAIT_OBJ) {
-		switch (attr->wait_obj) {
-		case FI_WAIT_NONE:
-		case FI_WAIT_MUT_COND:
-			wait_obj = attr->wait_obj;
-			break;
+	switch (attr->wait_obj) {
+	case FI_WAIT_NONE:
+	case FI_WAIT_MUT_COND:
+		wait_obj = attr->wait_obj;
+		break;
 
-		default:
-			psmx_debug("%s: attr->wait_obj=%d, supported=%d,%d\n", __func__,
-					attr->wait_obj, FI_WAIT_NONE, FI_WAIT_MUT_COND);
-			return -EINVAL;
-		}
+	default:
+		psmx_debug("%s: attr->wait_obj=%d, supported=%d,%d\n", __func__,
+				attr->wait_obj, FI_WAIT_NONE, FI_WAIT_MUT_COND);
+		return -EINVAL;
 	}
 
 	fid_domain = container_of(domain, struct psmx_fid_domain, domain);

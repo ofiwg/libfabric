@@ -139,20 +139,7 @@ enum fi_threading {
 #define FI_ORDER_SAW		(1 << 7)
 #define FI_ORDER_SAS		(1 << 8)
 
-enum {
-	FI_EP_ATTR_MSG_FLOW	= 1 << 0,
-	FI_EP_ATTR_MSG_SIZE	= 1 << 1,
-	FI_EP_ATTR_INJECT_SIZE	= 1 << 2,
-	FI_EP_ATTR_BUFFER_RECV	= 1 << 3,
-	FI_EP_ATTR_RAW_SIZE	= 1 << 4,
-	FI_EP_ATTR_WAR_SIZE	= 1 << 5,
-	FI_EP_ATTR_WAW_SIZE	= 1 << 6,
-	FI_EP_ATTR_TAG		= 1 << 7,
-	FI_EP_ATTR_MASK_V1	= (FI_EP_ATTR_TAG << 1) - 1
-};
-
 struct fi_ep_attr {
-	int			mask;
 	int			data_flow_cnt;
 	size_t			max_msg_size;
 	size_t			inject_size;
@@ -285,7 +272,6 @@ static inline int fi_close(struct fid *fid)
 {
 	return fid->ops->close(fid);
 }
-#define fi_destroy(fid) fi_close(fid)
 
 static inline int fi_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {

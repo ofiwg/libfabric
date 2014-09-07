@@ -174,7 +174,6 @@ static int sock_regv(struct fid_domain *domain, const struct iovec *iov,
 {
 	struct fi_mr_attr attr;
 
-	attr.mask = FI_MR_ATTR_MASK_V1;
 	attr.mr_iov = iov;
 	attr.iov_count = count;
 	attr.access = access;

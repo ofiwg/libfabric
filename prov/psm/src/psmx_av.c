@@ -300,22 +300,18 @@ int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
 
 	if (attr) {
-		if (attr->mask & FI_AV_ATTR_TYPE) {
-			switch (attr->type) {
-			case FI_AV_MAP:
-			case FI_AV_TABLE:
-				type = attr->type;
-				break;
-			default:
-				psmx_debug("%s: attr->type=%d, supported=%d %d\n",
-					__func__, attr->type, FI_AV_MAP, FI_AV_TABLE);
-				return -EINVAL;
-			}
+		switch (attr->type) {
+		case FI_AV_MAP:
+		case FI_AV_TABLE:
+			type = attr->type;
+			break;
+		default:
+			psmx_debug("%s: attr->type=%d, supported=%d %d\n",
+				__func__, attr->type, FI_AV_MAP, FI_AV_TABLE);
+			return -EINVAL;
 		}
 
-		if (attr->mask & FI_AV_ATTR_COUNT) {
-			count = attr->count;
-		}
+		count = attr->count;
 	}
 
 	fid_av = (struct psmx_fid_av *) calloc(1, sizeof *fid_av);

@@ -482,7 +482,7 @@ __fi_eq_cm_condread_data(struct fid_eq *eq, void *buf, size_t len, const void *c
 	struct fi_eq_cm_entry *entry = (struct fi_eq_cm_entry *) buf;
 
 	_eq = container_of(eq, struct __fid_eq_cm, eq_fid);
-	threshold = (_eq->flags & FI_EQ_ATTR_COND) ? (long) cond : sizeof(*entry);
+	threshold = cond ? (long) cond : sizeof(*entry);
 
 	for(cur = 0, left = len; cur < threshold && left > 0; ) {
 		rc = __fi_eq_cm_read_data(eq, (void*)entry, left);

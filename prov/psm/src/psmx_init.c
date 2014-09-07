@@ -173,35 +173,27 @@ static int psmx_getinfo(const char *node, const char *service, uint64_t flags,
 		}
 
 		if (hints->ep_attr) {
-			if (hints->ep_attr->mask & FI_EP_ATTR_MSG_FLOW) {
-				if (hints->ep_attr->data_flow_cnt > 1) {
-					psmx_debug("%s: hints->ep_attr->data_flow_cnt=%d,"
-							"supported=1.\n", __func__,
-							hints->ep_attr->data_flow_cnt);
-					goto err_out;
-				}
+			if (hints->ep_attr->data_flow_cnt > 1) {
+				psmx_debug("%s: hints->ep_attr->data_flow_cnt=%d,"
+						"supported=1.\n", __func__,
+						hints->ep_attr->data_flow_cnt);
+				goto err_out;
 			}
-			if (hints->ep_attr->mask & FI_EP_ATTR_MSG_SIZE) {
-				if (hints->ep_attr->max_msg_size > PSMX_MAX_MSG_SIZE) {
-					psmx_debug("%s: hints->ep_attr->max_msg_size=%ld,"
-							"supported=%ld.\n", __func__,
-							hints->ep_attr->max_msg_size,
-							PSMX_MAX_MSG_SIZE);
-					goto err_out;
-				}
+			if (hints->ep_attr->max_msg_size > PSMX_MAX_MSG_SIZE) {
+				psmx_debug("%s: hints->ep_attr->max_msg_size=%ld,"
+						"supported=%ld.\n", __func__,
+						hints->ep_attr->max_msg_size,
+						PSMX_MAX_MSG_SIZE);
+				goto err_out;
 			}
-			if (hints->ep_attr->mask & FI_EP_ATTR_INJECT_SIZE) {
-				if (hints->ep_attr->inject_size > PSMX_INJECT_SIZE) {
-					psmx_debug("%s: hints->ep_attr->inject_size=%ld,"
-							"supported=%ld.\n", __func__,
-							hints->ep_attr->inject_size,
-							PSMX_INJECT_SIZE);
-					goto err_out;
-				}
+			if (hints->ep_attr->inject_size > PSMX_INJECT_SIZE) {
+				psmx_debug("%s: hints->ep_attr->inject_size=%ld,"
+						"supported=%ld.\n", __func__,
+						hints->ep_attr->inject_size,
+						PSMX_INJECT_SIZE);
+				goto err_out;
 			}
-			if (hints->ep_attr->mask & FI_EP_ATTR_TAG) {
-				max_tag_value = hints->ep_attr->max_tag_value;
-			}
+			max_tag_value = hints->ep_attr->max_tag_value;
 		}
 
 		ep_cap = hints->ep_cap;
@@ -217,10 +209,6 @@ static int psmx_getinfo(const char *node, const char *service, uint64_t flags,
 		err = -ENOMEM;
 		goto err_out;
 	}
-
-	ep_attr->mask = FI_EP_ATTR_MSG_FLOW | FI_EP_ATTR_MSG_SIZE |
-			FI_EP_ATTR_INJECT_SIZE | FI_EP_ATTR_BUFFER_RECV |
-			FI_EP_ATTR_TAG;
 
 	ep_attr->data_flow_cnt = 1;
 	ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;

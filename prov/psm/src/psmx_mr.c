@@ -382,9 +382,6 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 	if (!attr)
 		return -EINVAL;
 
-	if (!(attr->mask & FI_MR_ATTR_IOV))
-		return -EINVAL;
-
 	if (attr->iov_count == 0 || attr->mr_iov == NULL)
 		return -EINVAL;
 
@@ -413,14 +410,8 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 	for (i=0; i<attr->iov_count; i++)
 		fid_mr->iov[i] = attr->mr_iov[i];
 
-	if (attr->mask & FI_MR_ATTR_CONTEXT)
-		fid_mr->mr.fid.context = attr->context;
-
-	if (attr->mask & FI_MR_ATTR_ACCESS)
-		fid_mr->access = attr->access;
-
-	if (attr->mask & FI_MR_ATTR_KEY)
-		; /* requested_key is ignored */
+	fid_mr->mr.fid.context = attr->context;
+	fid_mr->access = attr->access;
 
 	psmx_mr_normalize_iov(fid_mr->iov, &fid_mr->iov_count);
 	psmx_mr_hash_add(fid_mr);

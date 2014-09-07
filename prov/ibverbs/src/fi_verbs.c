@@ -1731,7 +1731,7 @@ ibv_eq_cm_condread_data(struct fid_eq *eq, void *buf, size_t len, const void *co
 	struct fi_eq_cm_entry *entry = (struct fi_eq_cm_entry *) buf;
 
 	_eq = container_of(eq, struct ibv_eq_cm, eq.fid);
-	threshold = (_eq->flags & FI_EQ_ATTR_COND) ? (long) cond : sizeof(*entry);
+	threshold = cond ? (long) cond : sizeof(*entry);
 
 	for (cur = 0, left = len; cur < threshold && left > 0; ) {
 		rc = ibv_eq_cm_read_data(eq, (void*)entry, left);
@@ -1914,7 +1914,7 @@ ibv_eq_comp_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
 
 	_eq = container_of(eq, struct ibv_eq_comp, eq.fid);
 
-	threshold = (_eq->flags & FI_EQ_ATTR_COND) ? (ssize_t) cond : entry_len;
+	threshold = cond ? (ssize_t) cond : entry_len;
 
 	for (cur = 0, left = len; cur < threshold && left > 0; ) {
 		rc = _eq->eq.fid.ops->read(eq, (void*)entry, left);
@@ -2191,9 +2191,6 @@ ibv_eq_comp_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 	default:
 		return -FI_ENOSYS;
 	}
-
-	if (attr->wait_cond == FI_EQ_COND_THRESHOLD)
-		_eq->flags |= FI_EQ_ATTR_COND;
 
 	_eq->cq = ibv_create_cq(_eq->eq.domain->verbs, attr->size, _eq,
 				_eq->channel, attr->signaling_vector);
