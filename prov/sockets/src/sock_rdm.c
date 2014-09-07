@@ -59,8 +59,8 @@
 //static char def_recv_sge[16] = "4";
 //static char def_inline_data[16] = "64";
 
-int sock_rdm_getinfo(const char *node, const char *service, uint64_t flags,
-		     struct fi_info *hints, struct fi_info **info)
+int sock_rdm_getinfo(int version, const char *node, const char *service,
+		     uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	return -FI_ENODATA;
 }

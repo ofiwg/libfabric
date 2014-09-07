@@ -4,11 +4,13 @@ fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 .SH SYNOPSIS
 .B "#include <rdma/fabric.h>"
 .HP
-.BI "int fi_getinfo(const char *" node ", const char *" service ","
+.BI "int fi_getinfo(int " version ", const char *" node ", const char *" service ","
 .BI "uint64_t " flags ", struct fi_info *" hints ", struct fi_info **" info ");"
 .HP
 .BI "int fi_freeinfo(struct fi_info *" info ");"
 .SH ARGUMENTS
+.IP "version"
+Interface version requested by application.
 .IP "node"
 Optional, name or fabric address to resolve.
 .IP "service"
@@ -26,6 +28,19 @@ Returns information about available fabric services for reaching the specified
 node or service, subject to any provided hints.  Callers must provide at least
 one of the node, service, or hints parameters.  If no matching fabric information
 is available, info will be set to NULL.
+.PP
+The version parameter is used by the application to request the desired
+version of the interfaces.  The version determines the format of all data
+structures used by any of the fabric interfaces.  Applications should use the
+FI_VERSION(major, minor) macro to indicate the version, with hard-coded integer
+values for the major and minor values.  The FI_MAJOR_VERSION and FI_MINOR_VERSION
+enum values defined in fabric.h specify the latest version of the installed
+library.  However, it is recommended that the integer values for FI_MAJOR_VERSION
+and FI_MINOR_VERSION be used, rather than referencing the enum types in order
+to ensure compatibiliy with future versions of the library.  This protects
+against the application being built from source against a newer version of the
+library that introduces new fields to data structures, which would not be
+initialized by the application.
 .PP
 Either node, service, or hints must be provided.  If hints are provided, the
 operation will be controlled by hints.ai_flags.  If FI_PASSIVE is
