@@ -51,8 +51,8 @@ extern "C" {
 
 struct fi_ops_prov {
 	size_t	size;
-	int	(*getinfo)(const char *node, const char *service, uint64_t flags,
-			struct fi_info *hints, struct fi_info **info);
+	int	(*getinfo)(int version, const char *node, const char *service,
+			uint64_t flags, struct fi_info *hints, struct fi_info **info);
 	int	(*freeinfo)(struct fi_info *info);
 	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_domain **dom, void *context);
@@ -60,10 +60,10 @@ struct fi_ops_prov {
 			uint64_t flags, struct fid **fid, void *context);
 };
 
-int fi_version_register(int maj_ver, int min_ver, struct fi_ops_prov *ops);
+int fi_version_register(int version, struct fi_ops_prov *ops);
 static inline int fi_register(struct fi_ops_prov *ops)
 {
-	return fi_version_register(FI_MAJOR_VERSION, FI_MINOR_VERSION, ops);
+	return fi_version_register(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), ops);
 }
 
 

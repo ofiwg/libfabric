@@ -126,20 +126,20 @@ struct sock_ep {
 	struct sock_domain	*dom;
 };
 
-int sock_rdm_getinfo(const char *node, const char *service, uint64_t flags,
-		     struct fi_info *hints, struct fi_info **info);
+int sock_rdm_getinfo(int version, const char *node, const char *service,
+		uint64_t flags, struct fi_info *hints, struct fi_info **info);
 int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-		 struct fid_av **av, void *context);
+		struct fid_av **av, void *context);
 int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
-		   struct fid_cntr **cntr, void *context);
+		struct fid_cntr **cntr, void *context);
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context);
 int sock_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
-		 struct fid_eq **eq, void *context);
+		struct fid_eq **eq, void *context);
 int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int sock_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
-		   struct fid_poll **pollset);
+		struct fid_poll **pollset);
 int sock_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
-		   struct fid_wait **waitset);
+		struct fid_wait **waitset);
 

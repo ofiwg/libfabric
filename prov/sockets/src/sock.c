@@ -37,19 +37,21 @@
 #include "sock.h"
 
 
-static int sock_getinfo(const char *node, const char *service, uint64_t flags,
-			struct fi_info *hints, struct fi_info **info)
+static int sock_getinfo(int version, const char *node, const char *service,
+			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	if (hints) {
 		switch (hints->type) {
 		case FID_RDM:
-			return sock_rdm_getinfo(node, service, flags, hints, info);
+			return sock_rdm_getinfo(version, node, service, flags,
+						hints, info);
 		default:
 			return -FI_ENODATA;
 		}
 	} else {
 		/* Call all socket endpoint providers. */
-		return sock_rdm_getinfo(node, service, flags, hints, info);
+		return sock_rdm_getinfo(version, node, service, flags,
+					hints, info);
 	}
 
 	return -FI_ENODATA;

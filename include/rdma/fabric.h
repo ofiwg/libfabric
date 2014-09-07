@@ -56,6 +56,10 @@ enum {
 	FI_VERSION_MAX		= 64
 };
 
+#define FI_VERSION(major, minor) ((major << 16) | (minor))
+#define FI_MAJOR(version)	(version >> 16)
+#define FI_MINOR(version)	(version & 0xFFFF)
+
 /*
  * Vendor specific protocols/etc. are encoded as OUI, followed by vendor
  * specific data.
@@ -225,8 +229,8 @@ struct fid {
 
 #define FI_NUMERICHOST		(1ULL << 1)
 
-int fi_getinfo(const char *node, const char *service, uint64_t flags,
-	       struct fi_info *hints, struct fi_info **info);
+int fi_getinfo(int version, const char *node, const char *service,
+	       uint64_t flags, struct fi_info *hints, struct fi_info **info);
 void fi_freeinfo(struct fi_info *info);
 
 struct fi_attr {
