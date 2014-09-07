@@ -150,11 +150,12 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 	return len;
 }
 
-int fi_version_register(int maj_ver, int min_ver, struct fi_ops_prov *ops)
+int fi_version_register(int version, struct fi_ops_prov *ops)
 {
 	struct fi_prov *prov;
 
-	if (maj_ver != FI_MAJOR_VERSION || min_ver < FI_MINOR_VERSION)
+	if (FI_MAJOR(version) != FI_MAJOR_VERSION ||
+	    FI_MINOR(version) > FI_MINOR_VERSION)
 		return -FI_ENOSYS;
 
 	prov = calloc(sizeof *prov, 1);
@@ -215,8 +216,8 @@ static void __attribute__((destructor)) fi_fini(void)
 	sock_fini();
 }
 
-int fi_getinfo(const char *node, const char *service, uint64_t flags,
-	       struct fi_info *hints, struct fi_info **info)
+int fi_getinfo(int version, const char *node, const char *service,
+	       uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_prov *prov;
 	struct fi_info *tail, *cur;
@@ -230,7 +231,8 @@ int fi_getinfo(const char *node, const char *service, uint64_t flags,
 		if (!prov->ops->getinfo)
 			continue;
 
-		ret = prov->ops->getinfo(node, service, flags, hints, &cur);
+		ret = prov->ops->getinfo(version, node, service, flags,
+					 hints, &cur);
 		if (ret) {
 			if (ret == -FI_ENODATA)
 				continue;
