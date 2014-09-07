@@ -347,7 +347,7 @@ static int server_listen(void)
 	int ret;
 
 	hints.ep_cap |= FI_PASSIVE;
-	ret = fi_getinfo(src_addr, port, FI_EVENT, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), src_addr, port, FI_EVENT, &hints, &fi);
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
 		return ret;
@@ -460,7 +460,7 @@ static int client_connect(void)
 			printf("source address error %s\n", gai_strerror(ret));
 	}
 
-	ret = fi_getinfo(dst_addr, port, 0, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, &hints, &fi);
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
 		goto err0;
