@@ -248,7 +248,6 @@ static int alloc_lres(struct fi_info *fi)
 	int ret;
 
 	memset(&cm_attr, 0, sizeof cm_attr);
-	cm_attr.mask = FI_EQ_ATTR_MASK_V1;
 	cm_attr.domain = FI_EQ_DOMAIN_CM;
 	cm_attr.format = FI_EQ_FORMAT_CM;
 	cm_attr.wait_obj = FI_WAIT_FD;
@@ -280,7 +279,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.mask = FI_EQ_ATTR_MASK_V1;
 	cq_attr.domain = FI_EQ_DOMAIN_COMP;
 	cq_attr.format = FI_EQ_FORMAT_CONTEXT;
 	cq_attr.wait_obj = FI_WAIT_NONE;
@@ -349,7 +347,7 @@ static int server_listen(void)
 	int ret;
 
 	hints.ep_cap |= FI_PASSIVE;
-	ret = fi_getinfo(src_addr, port, FI_EVENT, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), src_addr, port, FI_EVENT, &hints, &fi);
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
 		return ret;
@@ -462,7 +460,7 @@ static int client_connect(void)
 			printf("source address error %s\n", gai_strerror(ret));
 	}
 
-	ret = fi_getinfo(dst_addr, port, 0, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, &hints, &fi);
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
 		goto err0;
