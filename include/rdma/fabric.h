@@ -272,7 +272,6 @@ static inline int fi_close(struct fid *fid)
 {
 	return fid->ops->close(fid);
 }
-#define fi_destroy(fid) fi_close(fid)
 
 static inline int fi_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
