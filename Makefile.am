@@ -70,7 +70,6 @@ man_MANS = \
 	man/fi_atomic_valid.3 \
 	man/fi_av.3 \
 	man/fi_av_bind.3 \
-	man/fi_av_close.3 \
 	man/fi_av_insert.3 \
 	man/fi_av_lookup.3 \
 	man/fi_av_open.3 \
@@ -87,7 +86,6 @@ man_MANS = \
 	man/fi_connect.3 \
 	man/fi_cntr.3 \
 	man/fi_cntr_open.3 \
-	man/fi_cntr_close.3 \
 	man/fi_cntr_read.3 \
 	man/fi_cntr_add.3 \
 	man/fi_cntr_set.3 \
@@ -101,7 +99,6 @@ man_MANS = \
 	man/fi_ep_sync.3 \
 	man/fi_eq.3 \
 	man/fi_eq_open.3 \
-	man/fi_eq_close.3 \
 	man/fi_eq_control.3 \
 	man/fi_eq_read.3 \
 	man/fi_eq_readfrom.3 \
@@ -142,7 +139,6 @@ man_MANS = \
 	man/fi_pendpoint.3 \
 	man/fi_poll.3 \
 	man/fi_poll_add.3 \
-	man/fi_poll_close.3 \
 	man/fi_poll_del.3 \
 	man/fi_poll_open.3 \
 	man/fi_recv.3 \
@@ -175,7 +171,6 @@ man_MANS = \
 	man/fi_tsendto.3 \
 	man/fi_tsendmsg.3 \
 	man/fi_wait.3 \
-	man/fi_wait_close.3 \
 	man/fi_wait_control.3 \
 	man/fi_wait_open.3
 
