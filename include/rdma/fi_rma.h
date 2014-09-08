@@ -161,6 +161,8 @@ fi_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 {
 	return ep->rma->inject(ep, buf, len, addr, key);
 }
+#define FI_INJECT_WRITE(ep) \
+	FI_CHECK_OP(ep->rma, struct fi_ops_rma, inject)
 
 static inline ssize_t
 fi_inject_writeto(struct fid_ep *ep, const void *buf, size_t len,
@@ -168,6 +170,8 @@ fi_inject_writeto(struct fid_ep *ep, const void *buf, size_t len,
 {
 	return ep->rma->injectto(ep, buf, len, dest_addr, addr, key);
 }
+#define FI_INJECT_WRITETO(ep) \
+	FI_CHECK_OP(ep->rma, struct fi_ops_rma, injectto)
 
 static inline ssize_t
 fi_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,

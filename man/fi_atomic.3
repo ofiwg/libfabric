@@ -350,9 +350,14 @@ and FI_EVENT were not.  That is, the data buffer is available for reuse
 immediately on returning from from fi_inject_atomic, and no completion event
 will be generated for this atomic.  The completion event will be  suppressed
 even  if  the endpoint has not been configured with FI_EVENT.  See the flags
-discussion below for more details.
+discussion below for more details.  fi_inject_atomic is an optional function.
+The availability of fi_inject_atomic for an endpoint should be checked using the macro
+FI_INJECT_ATOMIC with the endpoint as the parameter. If the function is
+available, the macro evaluates to 1, if not it evaluates to 0.
 .PP
-The fi_inject_atomicto is  equivalent to fi_inject_atomic for unconnected endpoints.
+The fi_inject_atomicto is  equivalent to fi_inject_atomic for unconnected
+endpoints.  The macro FI_INJECT_ATOMICTO must be used in a similar manner to
+FI_INJECT_ATOMIC to determine the availability of this function.
 .PP
 The fi_atomicmsg call supports atomic functions over both connected and unconnected
 endpoints, with the ability to control the atomic operation per call through the

@@ -404,6 +404,8 @@ fi_eq_readfrom(struct fid_eq *eq, void *buf, size_t len,
 {
 	return eq->ops->readfrom(eq, buf, len, src_addr, addrlen);
 }
+#define FI_EQ_READFROM(eq) \
+	FI_CHECK_OP(eq->ops, struct fi_ops_domain, readfrom)
 
 static inline ssize_t
 fi_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf, size_t len,
@@ -429,6 +431,8 @@ fi_eq_condreadfrom(struct fid_eq *eq, void *buf, size_t len,
 {
 	return eq->ops->condreadfrom(eq, buf, len, src_addr, addrlen, cond);
 }
+#define FI_EQ_CONDREADFROM(eq) \
+	FI_CHECK_OP(eq->ops, struct fi_ops_domain, condreadfrom)
 
 static inline const char *
 fi_eq_strerror(struct fid_eq *eq, int prov_errno, void *prov_data,

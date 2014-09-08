@@ -138,9 +138,14 @@ FI_EVENT were not.  That is, the data buffer is available for reuse
 immediately on returning from from fi_inject, and no completion event will
 be generated for this send.  The completion event will be suppressed even if
 the endpoint has not been configured with FI_EVENT.  See the flags
-discussion below for more details.
+discussion below for more details. fi_inject is an optional function.
+The availability of fi_inject for an endpoint should be checked using the macro
+FI_INJECT_MSG with the endpoint as the parameter. If the function is
+available, the macro evaluates to 1, if not it evaluates to 0.
 .SS "fi_injectto"
-This call is similar to fi_inject, but for unconnected endpoints.
+This call is similar to fi_inject, but for unconnected endpoints. The macro
+FI_INJECT_MSGTO must be used in a similar manner to FI_INJECT_MSG to determine
+the availability of this function.
 .SS "fi_senddata"
 The send data call is similar to fi_send, but allows for the sending of
 remote EQ data (see FI_REMOTE_EQ_DATA flag) as part of the transfer.
