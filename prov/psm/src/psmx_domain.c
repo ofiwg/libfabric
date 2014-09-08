@@ -122,7 +122,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	psmx_debug("%s\n", __func__);
 
-	if (!info->domain_name || strncmp(info->domain_name, "psm", 3))
+	if (!info->domain_attr->name || strncmp(info->domain_attr->name, "psm", 3))
 		return -EINVAL;
 
 	psmx_query_mpi();

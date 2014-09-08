@@ -60,10 +60,8 @@ struct fi_info {
 	struct fi_info     *next;
 	size_t              size;
 	uint64_t            type;
-	uint64_t            protocol;
 	uint64_t            ep_cap;
 	uint64_t            op_flags;
-	uint64_t            domain_cap;
 	enum fi_addr_format addr_format;
 	enum fi_addr_format info_addr_format;
 	size_t              src_addrlen;
@@ -73,12 +71,7 @@ struct fi_info {
 	size_t              auth_keylen;
 	void               *auth_key;
 	struct fi_ep_attr  *ep_attr;
-	uint64_t            msg_order;
-	enum fi_threading   threading;
-	enum fi_progress    control_progress;
-	enum fi_progress    data_progress;
 	char               *fabric_name;
-	char               *domain_name;
 	size_t              datalen;
 	void               *data;
 };
@@ -94,12 +87,7 @@ the providers.
 .IP "type"
 If specified, indicates the type of fabric interface communication desired.
 Supported types are listed in the
-.B Socket types
-section below.
-.IP "protocol"
-If specified, indicates the desired communication protocol. Supported protocols
-are listed in the
-.B "Protocols"
+.B "Endpoint types"
 section below.
 .IP "ep_cap"
 If specified, indicates the desired endpoint communication capabilities. Supported
@@ -111,11 +99,6 @@ Flags that control the operation of endpoints and other objects opened
 using the returned fi_info structure.  Supported op_flags are listed in the 
 .B "Op flags"
 section below.
-.IP "domain_cap"
-If specified, indicates the desired domain capabilities.  Supported capabilities
-are listed in the
-.B "Domain capabilities"
-section below. 
 .IP "addr_format"
 If specified, indicates the format used for addressing in data transfer
 operations. Supported formats
@@ -149,27 +132,22 @@ the same key.  Also defines permission for sharing resources with
 other processes on the same node.
 .IP "ep_attr"
 Optionally supplied endpoint attributes.
-.IP "msg_order"
-Specifies the order in which the transport protocol processes headers.
-.IP "threading"
-This indicates the threading serialization model that the application and
-provider will adhere to.  The treading model only applies to data transfer operations.
-(See the data_progress field for details.)
-.IP "control_progress"
-This field indicates the method that the provider uses to make progress
-on asynchronous control operations.  Control operations are function
-which do not directly involve the transfer of application data between
-endpoints.  They include address vector, memory registration, and
-connection management routines.  See additional details below.
-.IP "data_progress"
-This field indicates the method that the provider uses to make progress on
-data transfer operations.  This includes message queue, RMA, tagged messaging,
-and atomic operations, along with their completion processing.
-See below for additional details.
+Endpoint attributes may be specified and returned as part of fi_getinfo.
+When provided as hints, requested values of struct fi_ep_attr should be
+set.  On output, the actual endpoint attributes
+that can be provided will be returned.  Output values will be greater than
+or equal to requested input values.
+See fi_endpoint(3) for details.
+.IP "domain_attr"
+Optionally supplied domain attributes.
+Domain attributes may be specified and returned as part of fi_getinfo.
+When provided as hints, requested values of struct fi_domain_attr should be
+set.  On output, the actual domain attributes
+that can be provided will be returned.  Output values will be greater than
+or equal to requested input values.
+See fi_domain(3) for details.
 .IP "fabric_name"
 If specified, the name of the fabric domain.
-.IP "domain_name"
-If specified, the name of the access domain.
 .IP "datalen"
 Length of any additional data (must be specified if
 .B data
@@ -352,85 +330,6 @@ Reliable datagram message.  Provides a reliable, unconnected data transfer
 service with flow control that maintains message boundaries.
 .IP "FID_PACKET [not targeting 1.0 release]"
 Provides raw network-level access.
-.SH "PROTOCOLS"
-.IP "FI_PROTO_UNSPEC"
-The protocol is not specified.  This is usually provided as input, with other
-attributes of the socket or the provider selecting the actual protocol.
-.IP "FI_PROTO_IB_RC"
-The protocol runs over Infiniband reliable-connected queue pairs.
-.IP "FI_PROTO_IWARP"
-The protocol runs over the Internet wide area RDMA protocol transport.
-.IP "FI_PROTO_IB_UC"
-The protocol runs over Infiniband unreliable-connected queue pairs.
-.IP "FI_PROTO_IB_UD"
-The protocol runs over Infiniband unreliable datagram queue pairs.
-.IP "FI_PROTO_IB_XRC [1.0 release TBD]"
-The protocol runs over Infiniband extended reliable-connected queue pairs.
-.IP "FI_PROTO_RAW [not targeting 1.0 release]"
-Indicates that a raw link-layer or network-layer protocol is in use.
-.SH "DOMAIN CAPABILITIES"
-Domain capabilities are obtained by OR-ing the following flags together.
-Domain capabilities are most often used as output information from fi_getinfo,
-allowing applications to adjust their behavior based on the provider's
-hardware or software abilities.  However,specific capabilities may be
-requested through the hints parameter, with the actual supported capabilities
-returned by the provider.  Applications must check domain capabilities to
-ensure that all provider requirements for using resources associated with
-the access domain are met.
-.IP "FI_WRITE_COHERENT"
-Specifies that remote writes, including atomic operations, to the underlying
-access domain are coherent with the local processing domain.  Domain-level
-write coherency indicates that changes to local memory are visible to the
-local process immediately upon completion of a remote write operation.  The
-absence of this flag allows the NIC or memory subsystem to cache the results
-of remote write or atomic operations in non-coherent memory.
-.sp
-The behavior of a domain with and without FI_WRITE_COHERENT is illustrated
-below.
-.nf
-
-      Process 1            Process 2
-                           Register BUF
-      RMA write X to BUF
-      Notify process 2
-                           Receive notification
-                           if not FI_WRITE_COHERENT
-                                Sync with remote writes
-                           assert(BUF == X)
-
-.fi
-.sp
-This flag may be set on input hints to fi_getinfo, with the provider clearing
-the flag on output if it does not provide write coherency.  See the endpoint
-fi_ep_sync call for handling non-coherent writes.
-.IP "FI_CONTEXT"
-Specifies that the provider requires that applications use struct fi_context
-as their per operation context parameter.  This structure should be treated as
-opaque to the application.  For performance reasons, this structure must be
-allocated by the user, but may be used by the fabric provider to track the
-operation.  Typically, users embed struct fi_context within their own
-context structure.  The struct fi_context must remain valid until the
-corresponding operation completes or is successfully canceled.  As such,
-fi_context should NOT be allocated on the stack.  Doing so is likely to
-result in stack corruption that will be difficult to debug.  Users should
-not update or interpret the fields in this structure, or reuse it until
-the original operation has completed.  The structure is
-specified in rdma/fabric.h.
-.IP "FI_LOCAL_MR"
-The provider is optimized around having applications register memory
-for locally accessed data buffers.  Data buffers used in send and receive
-operations and as the source buffer for RMA and atomic operations must be
-registered by the application for access domains opened with this capability.
-.IP "FI_USER_MR_KEY"
-The provider supports user requested memory registration keys.  Providers
-that set this capability honor the requested_key parameter for memory
-registration calls.
-.IP "FI_DYNAMIC_MR"
-The provider supports applications registering any range of addresses
-in their virtual address space, whether or not those addresses are
-back by physical pages or have been allocated to the app.
-Providers that lack this capability require that registered memory
-regions be backed by allocated memory pages.
 .SH "ADDRESSING FORMATS"
 Additional information on address formats is available under address vector
 .BR "fi_av(3)".
@@ -461,212 +360,6 @@ Address is of type sockaddr_in6 (IPv6).
 .IP "FI_SOCKADDR_IB"
 Address is of type sockaddr_ib (defined in Linux kernel source 
 .BR "include/rdma/ib.h").
-.SH "Endpoint Attributes"
-Endpoint attributes may be specified and returned as part of fi_getinfo.
-When provided as hints, requested values of struct fi_ep_attr should be
-set.  On output, the actual endpoint attributes
-that can be provided will be returned.  Output values will be greater than
-or equal to requested input values.
-.nf
-struct fi_ep_attr {
-	int       data_flow_cnt;
-	size_t    max_msg_size;
-	size_t    inject_size;
-	size_t    total_buffered_recv;
-	size_t    max_order_raw_size;
-	size_t    max_order_war_size;
-	size_t    max_order_waw_size;
-	uint64_t  max_tag_value;
-};
-.fi
-.IP "Data Flow Count"
-Specifies the number of independent data flows to associate with the endpoint.
-A data flow conceptually represents independent hardware queues or paths
-through the fabric.  Data flows may be mapped to different command queues
-or fabric quality of service levels.  Data transfers may be associated with
-a specific data flow as part of the operation.  If a data flow is not
-specified, a data transfers will use the default flow associated with an
-endpoint.  
-.IP "Max Message Size"
-Defines the maximum size for an application data transfer as a
-single operation.
-.IP "Inject Size"
-Defines the default inject operation size (see the FI_INJECT
-flag) that an endpoint will support.  This value applies per send
-operation.
-.IP "Total Buffered Receive"
-Defines the total available space allocated by the provider to buffer received
-messages (see the FI_BUFFERED_RECV flag).
-.IP "Max RMA Ordered Size"
-The maximum ordered size specifies the delivery order of transport data
-into target memory for RMA and atomic operations.  Data ordering is separate,
-but dependent on message ordering (defined below).  Data ordering
-is unspecified where message order is not defined.
-.sp
-Data ordering refers to the access of target memory by subsequent operations.
-When back to back RMA read or write operations access the same registered
-memory location, data ordering indicates whether the second operation reads
-or writes the target memory after the first operation has completed.  Because
-RMA ordering applies between two operations, and not within a single data
-transfer, ordering is defined per byte-addressable memory location.  I.e.
-ordering specifies whether location X is accessed by the second operation
-after the first operation.  Nothing is implied about the completion of the
-first operation before the second operation is initiated. 
-.sp
-In order to support large data transfers being broken into multiple packets
-and sent using multiple paths through the fabric, data ordering may be
-limited to transfers of a specific size or less.  Providers specify when
-data ordering is maintained through the following values.  Note that even
-if data ordering is not maintained, message ordering may be.
-.RS
-.IP "max_order_raw_size"
-Read after write size.  If set, an RMA or atomic read operation issued after
-an RMA or atomic write operation, both of which are smaller than the size,
-will be ordered.  The RMA or atomic read operation will see the results of
-the previous RMA or atomic write.
-.IP "max_order_war_size"
-Write after read size.  If set, an RMA or atomic write operation issued after
-an RMA or atomic read operation, both of which are smaller than the size,
-will be ordered.  The RMA or atomic read operation will see the initial value
-of the target memory region before a subsequent RMA or atomic write updates
-the value.
-.IP "max_order_waw_size"
-Write after write size.  If set, an RMA or atomic write operation issued after
-an RMA or atomic write operation, both of which are smaller than the size,
-will be ordered.  The target memory region will reflect the results of the
-second RMA or atomic write.
-.RE
-.sp
-An order size value of 0 indicates that ordering is not guaranteed.  A value
-of -1 guarantees ordering for any data size.
-.IP "max_tag_value"
-The maximum tag value is the largest application tag value supported by a
-provider over an endpoint.  A provider will ignore any tag bits or values
-larger than the max_tag_value.  This field only applies to endpoints that
-support the tagged message interfaces.
-.SH "Message Ordering"
-Message ordering refers to the order in which transport layer headers (as
-viewed by the application) are processed.  Relaxed message order enables
-data transfers to be sent and received out of order, which may improve
-performance by utilizing multiple paths through the fabric from the initiating
-endpoint to a target endpoint.  Message order applies only between a single
-source and destination endpoint pair.  Ordering between different target
-endpoints is not defined.
-.PP
-Message order is determined using a set of ordering bits.  Each set bit
-indicates that ordering is maintained between data transfers of the specified
-type.  Message order is defined for [read | write | send] operations submitted
-by an application after [read | write | send] operations.
-.PP
-Message ordering only applies to the processing of transport headers.  Message
-ordering is necessary, but does not guarantee the order in which data is
-sent or received by the transport layer.
-.IP "FI_ORDER_RAR"
-Read after read.  If set, RMA and atomic read operations are processed in the
-order submitted relative to other RMA and atomic read operations.  If not
-set, RMA and atomic reads may be processed out of order from their submission.
-.IP "FI_ORDER_RAW"
-Read after write.  If set, RMA and atomic read operations are processed in the
-order submitted relative to RMA and atomic write operations.  If not
-set, RMA and atomic reads may be processed ahead of RMA and atomic writes.
-.IP "FI_ORDER_RAS"
-Read after send.  If set, RMA and atomic read operations are processed in the
-order submitted relative to message send operations, including tagged sends.
-If not set, RMA and atomic reads may be processed ahead of sends.
-.IP "FI_ORDER_WAR"
-Write after read.  If set, RMA and atomic write operations are processed in the
-order submitted relative to RMA and atomic read operations.  If not
-set, RMA and atomic writes may be processed ahead of RMA and atomic reads.
-.IP "FI_ORDER_WAW"
-Write after write.  If set, RMA and atomic write operations are processed in the
-order submitted relative to other RMA and atomic write operations.  If not
-set, RMA and atomic writes may be processed out of order from their submission.
-.IP "FI_ORDER_WAS"
-Write after send.  If set, RMA and atomic write operations are processed in the
-order submitted relative to message send operations, including tagged sends.
-If not set, RMA and atomic writes may be processed ahead of sends.
-.IP "FI_ORDER_SAR"
-Send after read.  If set, message send operations, including tagged sends,
-are processed in order submitted relative to RMA and atomic read operations.
-If not set, message sends may be processed ahead of RMA and atomic reads.
-.IP "FI_ORDER_SAW"
-Send after write.  If set, message send operations, including tagged sends,
-are processed in order submitted relative to RMA and atomic write operations.
-If not set, message sends may be processed ahead of RMA and atomic writes.
-.IP "FI_ORDER_SAS"
-Send after send.  If set, message send operations, including tagged sends,
-are processed in the order submitted relative to other message send.
-If not set, message sends may be processed out of order from their submission.
-.SH "THREAD SERIALIZATION"
-The threading model specifies the level of serialization required of an
-application when using the libfabric data transfer interfaces.  Control
-interfaces are always considered thread safe, and may be accessed by
-multiple threads.  Applications which can guarantee serialization in their
-access of provider allocated resources and interfaces enables a provider
-to eliminate lower-level locks.
-.IP "FI_THREAD_UNSPEC"
-This value indicates that no threading model has been defined.  It may be
-used on input hints to the fi_getinfo call.
-.IP "FI_THREAD_SAFE"
-A thread safe serialization model allows a multi-threaded application to
-access any allocated resources through any interface without restriction.
-All providers are required to support FI_THREAD_SAFE.
-.IP "FI_THREAD_PROGRESS"
-A progress serialization model requires applications to serialize access
-to provider resources and interfaces based on the progress model.  For
-providers with automatic progress, access to each endpoint must be serialized,
-and access to each event queue, counter, wait or poll set must be serialized.
-Serialization is required only by threads accessing the same object.  For
-example, one thread may be initiating a data transfer on an endpoint, while
-another thread reads from an event queue associated with the endpoint.
-Serialization to endpoint access is further limited to different endpoint
-data flows, if available.  Multiple threads may initiate transfers on the
-same endpoint if they reference different data flows.
-.sp
-For providers with manual progress, applications must serialize their access
-to any object that is part of a single progress domain.  A progress domain
-is any set of associated endpoints, event queues, counters, wait sets, and
-poll sets.  For instance, endpoints that share the same event queue or poll
-set belong to the same progress domain.  Applications that can allocate
-endpoint resources to specific threads can reduce provider locking by
-using FI_THREAD_PROGRESS.
-.SH "PROGRESS"
-Progress is the ability of the underlying implementation to complete
-processing of an asynchronous request.  In many cases, the processing of
-an asynchronous request requires the use of the host processor.  For example,
-a received message may need to be matched with the correct buffer, or a timed
-out request may need to be retransmitted.  For performance reasons, it may be
-undesirable for the provider to allocate a thread for this purpose, which
-will compete with the application threads.
-.PP
-To balance between performance and ease of use, two progress models are
-defined.
-.IP "FI_PROGRESS_UNSPEC"
-This value indicates that no progress model has been defined.  It may be
-used on input hints to the fi_getinfo call.
-.IP "FI_PROGRESS_AUTO"
-This progress model indicates that the provider will make forward progress
-on an asynchronous operation without further intervention by the application.
-When FI_PROGRESS_AUTO is provided as output to fi_getinfo in the absence of
-any progress hints, it often indicates that the desired functionality is
-implemented by the provider hardware or is a standard service of
-the operating system.
-.sp
-All providers are required to support FI_PROGRESS_AUTO.  However, if a
-provider does not natively support automatic progress, forcing the use of
-FI_PROGRESS_AUTO may result in threads being allocated below the fabric
-interfaces.
-.IP "FI_PROGRESS_MANUAL"
-This progress model indicates that the provider requires the use of an
-application thread to complete an asynchronous request.  When manual
-progress is set, the provider will attempt to advance an asynchronous
-operation forward when the application invokes any event queue read or
-wait operation where the completion will be reported.  Progress also
-occurs when the application processes a poll or wait set.
-.sp
-Only wait operations defined by the fabric interface will result in an
-operation progressing.  Operating system or external wait functions,
-such as select, poll, or pthread routines, cannot.
 .SH "FLAGS"
 The operation of the fi_getinfo call may be controlled through the use of
 input flags.  Valid flags include the following.

@@ -314,14 +314,6 @@ struct fi_mr_attr {
 #define FI_DYNAMIC_MR		(1ULL << 4)
 
 
-struct fi_domain_attr {
-	/* Note to providers: set prov_attr to static struct */
-	size_t			prov_attr_size;
-	void			*prov_attr;
-	size_t			mr_key_size;
-	size_t			eq_data_size;
-};
-
 struct fi_ops_domain {
 	size_t	size;
 	int	(*query)(struct fid_domain *domain, struct fi_domain_attr *attr,

@@ -195,6 +195,28 @@ int fi_getinfo(int version, const char *node, const char *service,
 	return *info ? 0 : ret;
 }
 
+struct fi_info *__fi_allocinfo(void)
+{
+	struct fi_info *info;
+
+	info = calloc(1, sizeof(*info));
+	if (!info)
+		return NULL;
+
+	info->ep_attr = calloc(1, sizeof(*info->ep_attr));
+	if (!info->ep_attr)
+		goto err;
+
+	info->domain_attr = calloc(1, sizeof(*info->domain_attr));
+	if (!info->domain_attr)
+		goto err;
+
+	return info;
+err:
+	__fi_freeinfo(info);
+	return NULL;
+}
+
 void __fi_freeinfo(struct fi_info *info)
 {
 	if (info->src_addr)
@@ -203,12 +225,15 @@ void __fi_freeinfo(struct fi_info *info)
 		free(info->dest_addr);
 	if (info->fabric_name)
 		free(info->fabric_name);
-	if (info->domain_name)
-		free(info->domain_name);
 	if (info->auth_key)
 		free(info->auth_key);
 	if (info->ep_attr)
 		free(info->ep_attr);
+	if (info->domain_attr) {
+		if (info->domain_attr->name)
+			free(info->domain_attr->name);
+		free(info->domain_attr);
+	}
 	if (info->data)
 		free(info->data);
 

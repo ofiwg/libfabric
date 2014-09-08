@@ -177,6 +177,7 @@ int __fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	void *context);
 const char *fi_sysfs_path(void);
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
+struct fi_info *__fi_allocinfo(void);
 void __fi_freeinfo(struct fi_info *info);
 int fi_poll_fd(int fd);
 int fi_sockaddr_len(struct sockaddr *addr);

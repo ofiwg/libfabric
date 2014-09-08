@@ -1,4 +1,4 @@
-.TH "FI_ENDPOINT" 3 "2014-07-28" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ENDPOINT" 3 "2014-09-09" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_endpoint \- Fabric endpoint operations
 .PP
@@ -323,6 +323,158 @@ flows are referenced by index, from 0 to the endpoint attribute data_flow_cnt.
 Defines the minimum receive buffer space available when the receive buffer
 is automatically freed (see FI_MULTI_RECV).
 .RE
+.SH "ENDPOINT ATTRIBUTES"
+The fi_ep_attr structure defines the set of attributes associated with an
+endpoint.
+.sp
+.nf
+struct fi_ep_attr {
+	uint64_t  protocol;
+	int       data_flow_cnt;
+	size_t    max_msg_size;
+	size_t    inject_size;
+	size_t    total_buffered_recv;
+	size_t    max_order_raw_size;
+	size_t    max_order_war_size;
+	size_t    max_order_waw_size;
+	uint64_t  max_tag_value;
+	uint64_t  msg_order;
+};
+.fi
+.SS "Protocol"
+Specifies the low-level end to end protocol employed by the provider.  A
+matching protocol must be used by communicating endpoints to ensure
+interoperability.  The following protocol values are defined.  Provider
+specific protocols are also allowed.  Provider specific protocols will be
+indicated by having the upper 3 bytes of the protocol value set to the
+vendor OUI.
+.IP "FI_PROTO_UNSPEC"
+The protocol is not specified.  This is usually provided as input, with other
+attributes of the socket or the provider selecting the actual protocol.
+.IP "FI_PROTO_IB_RC"
+The protocol runs over Infiniband reliable-connected queue pairs.
+.IP "FI_PROTO_IWARP"
+The protocol runs over the Internet wide area RDMA protocol transport.
+.IP "FI_PROTO_IB_UC"
+The protocol runs over Infiniband unreliable-connected queue pairs.
+.IP "FI_PROTO_IB_UD"
+The protocol runs over Infiniband unreliable datagram queue pairs.
+.SS "Data Flow Count"
+Specifies the number of independent data flows to associate with the endpoint.
+A data flow conceptually represents independent hardware queues or paths
+through the fabric.  Data flows may be mapped to different command queues
+or fabric quality of service levels.  Data transfers may be associated with
+a specific data flow as part of the operation.  If a data flow is not
+specified, a data transfers will use the default flow associated with an
+endpoint.  
+.SS "Max Message Size"
+Defines the maximum size for an application data transfer as a
+single operation.
+.SS "Inject Size"
+Defines the default inject operation size (see the FI_INJECT
+flag) that an endpoint will support.  This value applies per send
+operation.
+.SS "Total Buffered Receive"
+Defines the total available space allocated by the provider to buffer received
+messages (see the FI_BUFFERED_RECV flag).
+.SS "Max RMA Ordered Size"
+The maximum ordered size specifies the delivery order of transport data
+into target memory for RMA and atomic operations.  Data ordering is separate,
+but dependent on message ordering (defined below).  Data ordering
+is unspecified where message order is not defined.
+.sp
+Data ordering refers to the access of target memory by subsequent operations.
+When back to back RMA read or write operations access the same registered
+memory location, data ordering indicates whether the second operation reads
+or writes the target memory after the first operation has completed.  Because
+RMA ordering applies between two operations, and not within a single data
+transfer, ordering is defined per byte-addressable memory location.  I.e.
+ordering specifies whether location X is accessed by the second operation
+after the first operation.  Nothing is implied about the completion of the
+first operation before the second operation is initiated. 
+.sp
+In order to support large data transfers being broken into multiple packets
+and sent using multiple paths through the fabric, data ordering may be
+limited to transfers of a specific size or less.  Providers specify when
+data ordering is maintained through the following values.  Note that even
+if data ordering is not maintained, message ordering may be.
+.IP "max_order_raw_size"
+Read after write size.  If set, an RMA or atomic read operation issued after
+an RMA or atomic write operation, both of which are smaller than the size,
+will be ordered.  The RMA or atomic read operation will see the results of
+the previous RMA or atomic write.
+.IP "max_order_war_size"
+Write after read size.  If set, an RMA or atomic write operation issued after
+an RMA or atomic read operation, both of which are smaller than the size,
+will be ordered.  The RMA or atomic read operation will see the initial value
+of the target memory region before a subsequent RMA or atomic write updates
+the value.
+.IP "max_order_waw_size"
+Write after write size.  If set, an RMA or atomic write operation issued after
+an RMA or atomic write operation, both of which are smaller than the size,
+will be ordered.  The target memory region will reflect the results of the
+second RMA or atomic write.
+.PP
+An order size value of 0 indicates that ordering is not guaranteed.  A value
+of -1 guarantees ordering for any data size.
+.SS "Maximum Tag Value"
+The maximum tag value is the largest application tag value supported by a
+provider over an endpoint.  A provider will ignore any tag bits or values
+larger than the max_tag_value.  This field only applies to endpoints that
+support the tagged message interfaces.
+.SS "Message Ordering"
+Message ordering refers to the order in which transport layer headers (as
+viewed by the application) are processed.  Relaxed message order enables
+data transfers to be sent and received out of order, which may improve
+performance by utilizing multiple paths through the fabric from the initiating
+endpoint to a target endpoint.  Message order applies only between a single
+source and destination endpoint pair.  Ordering between different target
+endpoints is not defined.
+.sp
+Message order is determined using a set of ordering bits.  Each set bit
+indicates that ordering is maintained between data transfers of the specified
+type.  Message order is defined for [read | write | send] operations submitted
+by an application after [read | write | send] operations.
+.sp
+Message ordering only applies to the processing of transport headers.  Message
+ordering is necessary, but does not guarantee the order in which data is
+sent or received by the transport layer.
+.IP "FI_ORDER_RAR"
+Read after read.  If set, RMA and atomic read operations are processed in the
+order submitted relative to other RMA and atomic read operations.  If not
+set, RMA and atomic reads may be processed out of order from their submission.
+.IP "FI_ORDER_RAW"
+Read after write.  If set, RMA and atomic read operations are processed in the
+order submitted relative to RMA and atomic write operations.  If not
+set, RMA and atomic reads may be processed ahead of RMA and atomic writes.
+.IP "FI_ORDER_RAS"
+Read after send.  If set, RMA and atomic read operations are processed in the
+order submitted relative to message send operations, including tagged sends.
+If not set, RMA and atomic reads may be processed ahead of sends.
+.IP "FI_ORDER_WAR"
+Write after read.  If set, RMA and atomic write operations are processed in the
+order submitted relative to RMA and atomic read operations.  If not
+set, RMA and atomic writes may be processed ahead of RMA and atomic reads.
+.IP "FI_ORDER_WAW"
+Write after write.  If set, RMA and atomic write operations are processed in the
+order submitted relative to other RMA and atomic write operations.  If not
+set, RMA and atomic writes may be processed out of order from their submission.
+.IP "FI_ORDER_WAS"
+Write after send.  If set, RMA and atomic write operations are processed in the
+order submitted relative to message send operations, including tagged sends.
+If not set, RMA and atomic writes may be processed ahead of sends.
+.IP "FI_ORDER_SAR"
+Send after read.  If set, message send operations, including tagged sends,
+are processed in order submitted relative to RMA and atomic read operations.
+If not set, message sends may be processed ahead of RMA and atomic reads.
+.IP "FI_ORDER_SAW"
+Send after write.  If set, message send operations, including tagged sends,
+are processed in order submitted relative to RMA and atomic write operations.
+If not set, message sends may be processed ahead of RMA and atomic writes.
+.IP "FI_ORDER_SAS"
+Send after send.  If set, message send operations, including tagged sends,
+are processed in the order submitted relative to other message send.
+If not set, message sends may be processed out of order from their submission.
 .SH "CONTROL FLAGS"
 The following flags may be set to control the operation of data transfers
 initiated on an endpoint.  See fi_getinfo for additional descriptions of

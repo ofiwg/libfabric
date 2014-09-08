@@ -64,8 +64,6 @@ static int sock_dom_query(struct fid_domain *domain, struct fi_domain_attr *attr
 		return -FI_ETOOSMALL;
 	}
 
-	attr->prov_attr_size = 0;
-	attr->prov_attr = NULL;
 	attr->mr_key_size = 2; /* IDX_MAX_INDEX bits */
 	attr->eq_data_size = sizeof(uint64_t);
 	*attrlen = sizeof(*attr);

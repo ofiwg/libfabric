@@ -156,15 +156,17 @@ static int ibv_check_hints(struct fi_info *hints)
 		return -FI_ENODATA;
 	}
 
-	switch (hints->protocol) {
-	case FI_PROTO_UNSPEC:
-	case FI_PROTO_IB_RC:
-	case FI_PROTO_IWARP:
-	case FI_PROTO_IB_UC:
-	case FI_PROTO_IB_UD:
-		break;
-	default:
-		return -FI_ENODATA;
+	if (hints->ep_attr) {
+		switch (hints->ep_attr->protocol) {
+		case FI_PROTO_UNSPEC:
+		case FI_PROTO_IB_RC:
+		case FI_PROTO_IWARP:
+		case FI_PROTO_IB_UC:
+		case FI_PROTO_IB_UD:
+			break;
+		default:
+			return -FI_ENODATA;
+		}
 	}
 
 	if ( !(hints->ep_cap & (FI_MSG | FI_RMA)) )
@@ -190,11 +192,13 @@ static int ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinf
 //		rai->ai_flags |= RAI_FAMILY;
 
 //	rai->ai_family = fi->sa_family;
-	if (fi->type == FID_MSG || fi->ep_cap & FI_RMA ||
-	    fi->protocol == FI_PROTO_IB_RC || fi->protocol == FI_PROTO_IWARP) {
+	if (fi->type == FID_MSG || fi->ep_cap & FI_RMA || (fi->ep_attr &&
+	    (fi->ep_attr->protocol == FI_PROTO_IB_RC ||
+	     fi->ep_attr->protocol == FI_PROTO_IWARP))) {
 		rai->ai_qp_type = IBV_QPT_RC;
 		rai->ai_port_space = RDMA_PS_TCP;
-	} else if (fi->type == FID_DGRAM || fi->protocol == FI_PROTO_IB_UD) {
+	} else if (fi->type == FID_DGRAM || (fi->ep_attr &&
+		   fi->ep_attr->protocol == FI_PROTO_IB_UD)) {
 		rai->ai_qp_type = IBV_QPT_UD;
 		rai->ai_port_space = RDMA_PS_UDP;
 	}
@@ -218,7 +222,6 @@ static int ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinf
  static int ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
 		 	  struct fi_info *fi)
  {
- 	memset(fi, 0, sizeof *fi);
  	if ((hints->ep_cap & FI_PASSIVE) && (rai->ai_flags & RAI_PASSIVE))
  		fi->ep_cap = FI_PASSIVE;
 
@@ -228,7 +231,7 @@ static int ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinf
 		fi->type = FID_MSG;
 	} else if (rai->ai_qp_type == IBV_QPT_UD ||
 		   rai->ai_port_space == RDMA_PS_UDP) {
-		fi->protocol = FI_PROTO_IB_UD;
+		fi->ep_attr->protocol = FI_PROTO_IB_UD;
 		fi->ep_cap = FI_MSG;
 		fi->type = FID_DGRAM;
 	}
@@ -275,7 +278,7 @@ static int ibv_getinfo(int version, const char *node, const char *service,
 	if (ret)
 		return -errno;
 
-	if (!(fi = malloc(sizeof *fi))) {
+	if (!(fi = __fi_allocinfo())) {
 		ret = FI_ENOMEM;
 		goto err1;
 	}
@@ -301,7 +304,7 @@ static int ibv_getinfo(int version, const char *node, const char *service,
 	}
 
 	if (id->verbs) {
-		if (!(fi->domain_name = strdup(id->verbs->device->name))) {
+		if (!(fi->domain_attr->name = strdup(id->verbs->device->name))) {
 			ret = -FI_ENOMEM;
 			goto err3;
 		}
@@ -1572,7 +1575,7 @@ ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	_domain = container_of(domain, struct ibv_domain, domain_fid);
 	if (strcmp(info->fabric_name, "RDMA") ||
-	    strcmp(_domain->verbs->device->name, info->domain_name))
+	    strcmp(_domain->verbs->device->name, info->domain_attr->name))
 		return -FI_EINVAL;
 
 	if (!info->data || info->datalen != sizeof(_ep->id))
@@ -1623,16 +1626,16 @@ static struct fi_info * ibv_eq_cm_getinfo(struct rdma_cm_event *event)
 {
 	struct fi_info *fi;
 
-	fi = calloc(1, sizeof *fi);
+	fi = __fi_allocinfo();
 	if (!fi)
 		return NULL;
 
 	fi->type = FID_MSG;
 	fi->ep_cap  = FI_MSG | FI_RMA;
 	if (event->id->verbs->device->transport_type == IBV_TRANSPORT_IWARP) {
-		fi->protocol = FI_PROTO_IWARP;
+		fi->ep_attr->protocol = FI_PROTO_IWARP;
 	} else {
-		fi->protocol = FI_PROTO_IB_RC;
+		fi->ep_attr->protocol = FI_PROTO_IB_RC;
 	}
 //	fi->sa_family = rdma_get_local_addr(event->id)->sa_family;
 
@@ -1648,7 +1651,7 @@ static struct fi_info * ibv_eq_cm_getinfo(struct rdma_cm_event *event)
 
 	if (!(fi->fabric_name = strdup("RDMA")))
 		goto err;
-	if (!(fi->domain_name = strdup(event->id->verbs->device->name)))
+	if (!(fi->domain_attr->name = strdup(event->id->verbs->device->name)))
 		goto err;
 
 	fi->datalen = sizeof event->id;
@@ -2428,7 +2431,7 @@ ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!_domain)
 		return -FI_ENOMEM;
 
-	ret = ibv_open_device_by_name(_domain, info->domain_name);
+	ret = ibv_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)
 		goto err;
 
@@ -2475,15 +2478,15 @@ ibv_feq_cm_getinfo(struct ibv_fabric *fab, struct rdma_cm_event *event)
 {
 	struct fi_info *fi;
 
-	fi = calloc(1, sizeof *fi);
+	fi = __fi_allocinfo();
 	if (!fi)
 		return NULL;
 
 	fi->type = FID_MSG;
 	if (event->id->verbs->device->transport_type == IBV_TRANSPORT_IWARP) {
-		fi->protocol = FI_PROTO_IWARP;
+		fi->ep_attr->protocol = FI_PROTO_IWARP;
 	} else {
-		fi->protocol = FI_PROTO_IB_RC;
+		fi->ep_attr->protocol = FI_PROTO_IB_RC;
 	}
 	fi->ep_cap = FI_MSG | FI_RMA;
 
@@ -2500,7 +2503,7 @@ ibv_feq_cm_getinfo(struct ibv_fabric *fab, struct rdma_cm_event *event)
 	if (!(fi->fabric_name = strdup(fab->name)))
 		goto err;
 
-	if (!(fi->domain_name = strdup(event->id->verbs->device->name)))
+	if (!(fi->domain_attr->name = strdup(event->id->verbs->device->name)))
 		goto err;
 
 	fi->datalen = sizeof event->id;

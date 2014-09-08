@@ -144,6 +144,7 @@ enum fi_threading {
 #define FI_ORDER_SAS		(1 << 8)
 
 struct fi_ep_attr {
+	uint64_t		protocol;
 	int			data_flow_cnt;
 	size_t			max_msg_size;
 	size_t			inject_size;
@@ -152,15 +153,24 @@ struct fi_ep_attr {
 	size_t			max_order_war_size;
 	size_t			max_order_waw_size;
 	uint64_t		max_tag_value;
+	uint64_t		msg_order;
+};
+
+struct fi_domain_attr {
+	char			*name;
+	uint64_t		caps;
+	enum fi_threading	threading;
+	enum fi_progress	control_progress;
+	enum fi_progress	data_progress;
+	size_t			mr_key_size;
+	size_t			eq_data_size;
 };
 
 struct fi_info {
 	struct fi_info		*next;
 	uint64_t		type;
-	uint64_t		protocol;
 	uint64_t		ep_cap;
 	uint64_t		op_flags;
-	uint64_t		domain_cap;
 	enum fi_addr_format	addr_format;
 	enum fi_addr_format	info_addr_format;
 	size_t			src_addrlen;
@@ -174,12 +184,8 @@ struct fi_info {
 	size_t			auth_keylen;
 	void			*auth_key;
 	struct fi_ep_attr	*ep_attr;
-	uint64_t		msg_order;
-	enum fi_threading	threading;
-	enum fi_progress	control_progress;
-	enum fi_progress	data_progress;
+	struct fi_domain_attr	*domain_attr;
 	char			*fabric_name;
-	char			*domain_name;
 	size_t			datalen;
 	void			*data;
 };

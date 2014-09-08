@@ -74,7 +74,6 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *psmx_info;
-	struct fi_ep_attr *ep_attr;
 	uint32_t cnt = 0;
 	void *dest_addr = NULL;
 	void *uuid;
@@ -122,13 +121,15 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 			goto err_out;
 		}
 
-		switch (hints->protocol) {
-		case FI_PROTO_UNSPEC:
-			break;
-		default:
-			psmx_debug("%s: hints->protocol=%d, supported=%d\n",
-					__func__, hints->protocol, FI_PROTO_UNSPEC);
-			goto err_out;
+		if (hints->ep_attr) {
+			switch (hints->ep_attr->protocol) {
+			case FI_PROTO_UNSPEC:
+				break;
+			default:
+				psmx_debug("%s: hints->protocol=%d, supported=%d\n",
+						__func__, hints->ep_attr->protocol, FI_PROTO_UNSPEC);
+				goto err_out;
+			}
 		}
 
 		if ((hints->ep_cap & PSMX_EP_CAP) != hints->ep_cap) {
@@ -143,9 +144,11 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 			goto err_out;
 		}
 
-		if ((hints->domain_cap & PSMX_DOMAIN_CAP) != hints->domain_cap) {
+		if (hints->domain_attr &&
+		    ((hints->domain_attr->caps & PSMX_DOMAIN_CAP) !=
+		      hints->domain_attr->caps)) {
 			psmx_debug("%s: hints->domain_cap=0x%llx, supported=0x%llx\n",
-					__func__, hints->domain_cap, PSMX_DOMAIN_CAP);
+					__func__, hints->domain_attr->caps, PSMX_DOMAIN_CAP);
 			goto err_out;
 		}
 
@@ -155,9 +158,10 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 			goto err_out;
 		}
 
-		if (hints->domain_name && strncmp(hints->domain_name, "psm", 3)) {
+		if (hints->domain_attr && hints->domain_attr->name &&
+		    strncmp(hints->domain_attr->name, "psm", 3)) {
 			psmx_debug("%s: hints->domain_name=%s, supported=psm\n",
-					__func__, hints->domain_name);
+					__func__, hints->domain_attr->name);
 			goto err_out;
 		}
 
@@ -205,32 +209,32 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	if (psmx_reserve_tag_bits(&ep_cap, &max_tag_value) < 0)
 		goto err_out;
 
-	ep_attr = calloc(1, sizeof(*ep_attr));
-	if (!ep_attr) {
-		err = -ENOMEM;
-		goto err_out;
-	}
-
-	ep_attr->data_flow_cnt = 1;
-	ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
-	ep_attr->inject_size = PSMX_INJECT_SIZE;
-	ep_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
-	ep_attr->max_tag_value = max_tag_value;
-
-	psmx_info = calloc(1, sizeof *psmx_info);
+	psmx_info = __fi_allocinfo();
 	if (!psmx_info) {
-		free(ep_attr);
 		err = -ENOMEM;
 		goto err_out;
 	}
+
+	psmx_info->ep_attr->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
+	psmx_info->ep_attr->data_flow_cnt = 1;
+	psmx_info->ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
+	psmx_info->ep_attr->inject_size = PSMX_INJECT_SIZE;
+	psmx_info->ep_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
+	psmx_info->ep_attr->max_tag_value = max_tag_value;
+	psmx_info->ep_attr->msg_order = FI_ORDER_SAS;
+
+	psmx_info->domain_attr->threading = FI_THREAD_PROGRESS;
+	psmx_info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
+	psmx_info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	psmx_info->domain_attr->caps = (hints && hints->domain_attr &&
+					hints->domain_attr->caps) ?
+					hints->domain_attr->caps : PSMX_DOMAIN_CAP;
+	psmx_info->domain_attr->name = strdup("psm");
 
 	psmx_info->next = NULL;
 	psmx_info->type = type;
-	psmx_info->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
 	psmx_info->ep_cap = (hints && hints->ep_cap) ? hints->ep_cap : ep_cap;
 	psmx_info->op_flags = hints ? hints->op_flags : 0;
-	psmx_info->domain_cap = (hints && hints->domain_cap) ?
-					hints->domain_cap : PSMX_DOMAIN_CAP;
 	psmx_info->addr_format = addr_format;
 	psmx_info->info_addr_format = FI_ADDR;
 	psmx_info->src_addrlen = 0;
@@ -239,13 +243,7 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	psmx_info->dest_addr = dest_addr;
 	psmx_info->auth_keylen = sizeof(psm_uuid_t);
 	psmx_info->auth_key = uuid;
-	psmx_info->ep_attr = ep_attr;
-	psmx_info->msg_order = FI_ORDER_SAS;
-	psmx_info->threading = FI_THREAD_PROGRESS;
-	psmx_info->control_progress = FI_PROGRESS_MANUAL;
-	psmx_info->data_progress = FI_PROGRESS_MANUAL;
 	psmx_info->fabric_name = strdup("psm");
-	psmx_info->domain_name = strdup("psm");
 	psmx_info->datalen = 0;
 	psmx_info->data = NULL;
 
