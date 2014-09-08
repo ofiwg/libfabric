@@ -218,6 +218,8 @@ struct fi_ops {
 	int	(*bind)(struct fid *fid, struct fid *bfid, uint64_t flags);
 	int	(*sync)(struct fid *fid, uint64_t flags, void *context);
 	int	(*control)(struct fid *fid, int command, void *arg);
+	int	(*openif)(struct fid *fid, const char *name,
+			uint64_t flags, struct fid **fif, void *context);
 };
 
 /* All fabric interface descriptors must start with this structure */
@@ -250,8 +252,6 @@ struct fi_ops_fabric {
 			struct fid_pep **pep, void *context);
 	int	(*eq_open)(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
 			struct fid_eq **eq, void *context);
-	int	(*if_open)(struct fid_fabric *fabric, const char *name,
-			uint64_t flags, struct fid **fif, void *context);
 };
 
 struct fid_fabric {
@@ -264,13 +264,6 @@ int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 
 #define FI_CHECK_OP(ops, opstype, op) \
 	((ops->size > offsetof(opstype, op)) && ops->ops)
-
-static inline int
-fi_fopen(struct fid_fabric *fabric, const char *name, uint64_t flags,
-	 struct fid **fif, void *context)
-{
-	return fabric->ops->if_open(fabric, name, flags, fif, context);
-}
 
 static inline int fi_close(struct fid *fid)
 {
@@ -318,6 +311,13 @@ static inline int fi_alias(struct fid *fid, struct fid **alias_fid, uint64_t fla
 	alias.fid = alias_fid;
 	alias.flags = flags;
 	return fi_control(fid, FI_ALIAS, &alias);
+}
+
+static inline int
+fi_open(struct fid *fid, const char *name, uint64_t flags,
+	struct fid **fif, void *context)
+{
+	return fid->ops->openif(fid, name, flags, fif, context);
 }
 
 

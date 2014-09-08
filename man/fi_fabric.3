@@ -6,11 +6,6 @@ fi_fabric / fi_close
 .RS
 Open / close a fabric domain
 .RE
-.PP
-fi_fopen / fi_close
-.RS
-Open / close a fabric specific interface
-.RE
 .SH SYNOPSIS
 .B "#include <rdma/fabric.h>"
 .HP
@@ -18,19 +13,13 @@ Open / close a fabric specific interface
 .BI "struct fid_fabric **" fabric ", void *" context ");"
 .HP
 .BI "int fi_close(struct fid *" fabric ");"
-.PP
-.HP
-.BI "int fi_fopen(struct fid_fabric *" fabric ", const char *" name ", uint64_t " flags ","
-.BI "struct fid **" fif ", void *" context ");"
 .SH ARGUMENTS
 .IP "name" 12
-Name associated with the fabric or interface.
+Name associated with the fabric.
 .IP "flags" 12
 Control flags
 .IP "fabric" 12
 Fabric domain
-.IP "fif" 12
-Fabric interface
 .IP "context" 12
 User specified context associated with the opened object.  This context is
 returned as part of any associated asynchronous event.
@@ -49,11 +38,6 @@ current system are returned as part of the fi_getinfo call.
 .PP
 The fi_fabric call takes an operational flags parameter as input.  This
 is reserved for future extensions and must be set to 0.
-.SS "fi_fopen"
-fi_fopen is used to open any available fabric specific interfaces.
-Fabric interfaces may be used to access low-level resources and operations
-that are specific to the connected fabric network.  The details of fabric
-interfaces are outside the scope of this documentation.
 .SS "fi_close"
 The fi_close call is used to release all resources associated with a fabric
 domain or interface.  All items associated with the opened fabric must
