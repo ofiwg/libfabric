@@ -263,7 +263,7 @@ int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	      void *context);
 
 #define FI_CHECK_OP(ops, opstype, op) \
-	((ops->size > offsetof(opstype, op)) && ops->ops)
+	((ops->size > offsetof(opstype, op)) && ops->op)
 
 static inline int
 fi_fopen(struct fid_fabric *fabric, const char *name, uint64_t flags,
