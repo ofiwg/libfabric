@@ -34,6 +34,14 @@ extern "C" {
 #include <psm.h>
 #include <psm_mq.h>
 
+#ifndef PSMX_USE_AM
+#define PSMX_USE_AM		1
+#endif
+
+#if PSMX_USE_AM
+#include "psm_am.h"
+#endif
+
 #define PFX "libfabric:psm"
 
 #ifndef MIN
@@ -42,13 +50,33 @@ extern "C" {
 
 #define PSMX_TIME_OUT	120
 
-#define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_EVENT | FI_TRIGGER)
+#define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_EVENT | \
+			 FI_TRIGGER | FI_REMOTE_SIGNAL | FI_REMOTE_COMPLETE)
 
+#define PSMX_EP_CAP_EXT	(0)
+
+#if PSMX_USE_AM
+/* FI_MSG and FI_RMA appear in both BASE and OPT because they can be
+ * supported w/ or w/o reserved tag bits
+ */
+#define PSMX_EP_CAP_BASE (FI_TAGGED | FI_MSG | FI_ATOMICS | FI_INJECT | \
+			 FI_RMA | FI_BUFFERED_RECV | FI_MULTI_RECV | \
+                         FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
+                         FI_REMOTE_READ | FI_REMOTE_WRITE | \
+                         FI_REMOTE_COMPLETE | FI_REMOTE_SIGNAL | \
+			 FI_CANCEL | FI_TRIGGER | \
+			 PSMX_EP_CAP_EXT)
+#define PSMX_EP_CAP_OPT1 (FI_MSG)
+#define PSMX_EP_CAP_OPT2 (FI_RMA)
+#else
 #define PSMX_EP_CAP_BASE (FI_TAGGED | FI_INJECT | FI_TRIGGER | \
 			 FI_BUFFERED_RECV | FI_MULTI_RECV | \
-			 FI_SEND | FI_RECV | FI_CANCEL)
+			 FI_SEND | FI_RECV | FI_CANCEL | \
+			 PSMX_EP_CAP_EXT)
 #define PSMX_EP_CAP_OPT1 (FI_MSG)
 #define PSMX_EP_CAP_OPT2 (0)
+#endif
+
 #define PSMX_EP_CAP	(PSMX_EP_CAP_BASE | PSMX_EP_CAP_OPT1 | PSMX_EP_CAP_OPT2)
 
 #define PSMX_DOMAIN_CAP (FI_WRITE_COHERENT | FI_CONTEXT | \
@@ -74,12 +102,119 @@ enum psmx_context_type {
 	PSMX_READ_CONTEXT,
 	PSMX_INJECT_CONTEXT,
 	PSMX_INJECT_WRITE_CONTEXT,
+#if PSMX_USE_AM
+	PSMX_REMOTE_WRITE_CONTEXT,
+	PSMX_REMOTE_READ_CONTEXT,
+#endif
 };
 
 #define PSMX_CTXT_REQ(fi_context)	((fi_context)->internal[0])
 #define PSMX_CTXT_TYPE(fi_context)	(*(int *)&(fi_context)->internal[1])
 #define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX_CTXT_EP(fi_context)	((fi_context)->internal[3])
+
+#if PSMX_USE_AM
+
+#define PSMX_RMA_BIT		(0x1ULL << 62)
+
+#define PSMX_AM_RMA_HANDLER	0
+#define PSMX_AM_MSG_HANDLER	1
+#define PSMX_AM_ATOMIC_HANDLER	2
+#define PSMX_AM_CHUNK_SIZE	2032	/* The maximum that's actually working:
+					 * 2032 for inter-node, 2072 for intra-node.
+					 */
+
+#define PSMX_AM_OP_MASK		0x0000FFFF
+#define PSMX_AM_FLAG_MASK	0xFFFF0000
+#define PSMX_AM_EOM		0x40000000
+
+#ifndef PSMX_AM_USE_SEND_QUEUE
+#define PSMX_AM_USE_SEND_QUEUE	0
+#endif
+
+enum {
+	PSMX_AM_REQ_WRITE = 1,
+	PSMX_AM_REQ_WRITE_LONG,
+	PSMX_AM_REP_WRITE,
+	PSMX_AM_REQ_READ,
+	PSMX_AM_REQ_READ_LONG,
+	PSMX_AM_REP_READ,
+	PSMX_AM_REQ_SEND,
+	PSMX_AM_REP_SEND,
+	PSMX_AM_REQ_ATOMIC_WRITE,
+	PSMX_AM_REP_ATOMIC_WRITE,
+	PSMX_AM_REQ_ATOMIC_READWRITE,
+	PSMX_AM_REP_ATOMIC_READWRITE,
+	PSMX_AM_REQ_ATOMIC_COMPWRITE,
+	PSMX_AM_REP_ATOMIC_COMPWRITE,
+};
+
+enum {
+	PSMX_AM_STATE_NEW,
+	PSMX_AM_STATE_QUEUED,
+	PSMX_AM_STATE_PROCESSED,
+	PSMX_AM_STATE_DONE
+};
+
+struct psmx_am_request {
+	int op;
+	union {
+		struct {
+			void	*buf;
+			size_t	len;
+			uint64_t addr;
+			uint64_t key;
+			void	*context;
+		} write;
+		struct {
+			void	*buf;
+			size_t	len;
+			uint64_t addr;
+			uint64_t key;
+			void	*context;
+			void	*peer_addr;
+			size_t	len_read;
+		} read;
+		struct {
+			void	*buf;
+			size_t	len;
+			void	*context;
+			void	*peer_context;
+			volatile int peer_ready;
+			void	*dest_addr;
+			size_t	len_sent;
+		} send;
+		struct {
+			void	*buf;
+			size_t	len;
+			void	*context;
+			void	*src_addr;
+			size_t  len_received;
+		} recv;
+		struct {
+			void	*buf;
+			size_t	len;
+			uint64_t addr;
+			uint64_t key;
+			void	*context;
+			void 	*result;
+		} atomic;
+	};
+	struct fi_context fi_context;
+	struct psmx_fid_ep *ep;
+	struct psmx_am_request *next;
+	int state;
+	int no_event;
+	int error;
+};
+
+struct psmx_req_queue {
+	pthread_mutex_t		lock;
+	struct psmx_am_request	*head;
+	struct psmx_am_request	*tail;
+};
+
+#endif /* PSMX_USE_AM */
 
 struct psmx_multi_recv {
 	uint64_t	tag;
@@ -100,6 +235,28 @@ struct psmx_fid_domain {
 	pthread_t		ns_thread;
 	int			ns_port;
 	uint64_t		ep_cap;
+
+#if PSMX_USE_AM
+
+#if PSMX_AM_USE_SEND_QUEUE
+	pthread_cond_t		progress_cond;
+	pthread_mutex_t		progress_mutex;
+	pthread_t		progress_thread;
+#endif
+
+	/* incoming req queue for AM based RMA request. */
+	struct psmx_req_queue	rma_queue;
+
+#if PSMX_AM_USE_SEND_QUEUE
+	/* send queue for AM based messages. */
+	struct psmx_req_queue	send_queue;
+#endif
+
+	/* recv queue for AM based messages. */
+	struct psmx_req_queue	recv_queue;
+	struct psmx_req_queue	unexp_queue;
+
+#endif /* PSMX_USE_AM */
 
 	/* certain bits in the tag space can be reserved for non tag-matching
 	 * purpose. The tag-matching functions automatically treat these bits
@@ -134,6 +291,9 @@ struct psmx_fid_eq {
 	int			entry_size;
 	struct psmx_event_queue	event_queue;
 	struct psmx_event	*pending_error;
+#if PSMX_USE_AM
+	int			poll_am_before_mq;
+#endif
 };
 
 enum psmx_triggered_op {
@@ -141,6 +301,13 @@ enum psmx_triggered_op {
 	PSMX_TRIGGERED_RECV,
 	PSMX_TRIGGERED_TSEND,
 	PSMX_TRIGGERED_TRECV,
+#if PSMX_USE_AM
+	PSMX_TRIGGERED_WRITE,
+	PSMX_TRIGGERED_READ,
+	PSMX_TRIGGERED_ATOMIC_WRITE,
+	PSMX_TRIGGERED_ATOMIC_READWRITE,
+	PSMX_TRIGGERED_ATOMIC_COMPWRITE,
+#endif
 };
 
 struct psmx_trigger {
@@ -187,6 +354,75 @@ struct psmx_trigger {
 			void		*context;
 			uint64_t	flags;
 		} trecv;
+#if PSMX_USE_AM
+		struct {
+			struct fid_ep	*ep;
+			const void	*buf;
+			size_t		len;
+			void		*desc;
+			const void	*dest_addr;
+			uint64_t	addr;
+			uint64_t	key;
+			void		*context;
+			uint64_t	flags;
+		} write;
+		struct {
+			struct fid_ep	*ep;
+			void		*buf;
+			size_t		len;
+			void		*desc;
+			const void	*src_addr;
+			uint64_t	addr;
+			uint64_t	key;
+			void		*context;
+			uint64_t	flags;
+		} read;
+		struct {
+			struct fid_ep	*ep;
+			const void	*buf;
+			size_t		count;
+			void		*desc;
+			const void	*dest_addr;
+			uint64_t	addr;
+			uint64_t	key;
+			enum fi_datatype datatype;
+			enum fi_op	atomic_op;
+			void		*context;
+			uint64_t	flags;
+		} atomic_write;
+		struct {
+			struct fid_ep	*ep;
+			const void	*buf;
+			size_t		count;
+			void		*desc;
+			void		*result;
+			void		*result_desc;
+			const void	*dest_addr;
+			uint64_t	addr;
+			uint64_t	key;
+			enum fi_datatype datatype;
+			enum fi_op	atomic_op;
+			void		*context;
+			uint64_t	flags;
+		} atomic_readwrite;
+		struct {
+			struct fid_ep	*ep;
+			const void	*buf;
+			size_t		count;
+			void		*desc;
+			const void	*compare;
+			void		*compare_desc;
+			void		*result;
+			void		*result_desc;
+			const void	*dest_addr;
+			uint64_t	addr;
+			uint64_t	key;
+			enum fi_datatype datatype;
+			enum fi_op	atomic_op;
+			void		*context;
+			uint64_t	flags;
+		} atomic_compwrite;
+#endif
 	};
 	struct psmx_trigger *next;
 };
@@ -266,6 +502,14 @@ extern struct fi_ops_mr		psmx_mr_ops;
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
 extern struct fi_ops_msg	psmx_msg_ops;
+#if PSMX_USE_AM
+extern struct fi_ops_msg	psmx_msg2_ops;
+extern struct fi_ops_rma	psmx_rma_ops;
+extern struct fi_ops_atomic	psmx_atomic_ops;
+extern struct psm_am_parameters psmx_am_param;
+extern int			psmx_am_msg_enabled;
+extern int			psmx_am_tagged_rma;
+#endif
 
 void	psmx_ini(void);
 void	psmx_fini(void);
@@ -297,6 +541,33 @@ struct	psmx_event *psmx_eq_create_event(struct psmx_fid_eq *fid_eq,
 					uint64_t flags, size_t len,
 					uint64_t data, uint64_t tag,
 					size_t olen, int err);
+#if PSMX_USE_AM
+int	psmx_am_init(struct psmx_fid_domain *fid_domain);
+int	psmx_am_fini(struct psmx_fid_domain *fid_domain);
+int	psmx_am_enqueue_recv(struct psmx_fid_domain *fid_domain,
+				struct psmx_am_request *req);
+struct psmx_am_request *
+	psmx_am_search_and_dequeue_recv(struct psmx_fid_domain *fid_domain,
+					const void *src_addr);
+#if PSMX_AM_USE_SEND_QUEUE
+int	psmx_am_enqueue_send(struct psmx_fid_domain *fid_domain,
+				  struct psmx_am_request *req);
+#endif
+int	psmx_am_enqueue_rma(struct psmx_fid_domain *fid_domain,
+				  struct psmx_am_request *req);
+int	psmx_am_progress(struct psmx_fid_domain *fid_domain);
+int	psmx_am_process_send(struct psmx_fid_domain *fid_domain,
+				struct psmx_am_request *req);
+int	psmx_am_process_rma(struct psmx_fid_domain *fid_domain,
+				struct psmx_am_request *req);
+int	psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
+				psm_amarg_t *args, int nargs, void *src, uint32_t len);
+int	psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
+				psm_amarg_t *args, int nargs, void *src, uint32_t len);
+int	psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
+				psm_amarg_t *args, int nargs, void *src, uint32_t len);
+#endif /* PSMX_USE_AM */
+
 int	psmx_eq_poll_mq(struct psmx_fid_eq *eq,
 			struct psmx_fid_domain *domain_if_null_eq);
 struct	psmx_fid_mr *psmx_mr_hash_get(uint64_t key);
@@ -316,6 +587,43 @@ ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
 ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 			      void *desc, const void *src_addr, uint64_t tag,
 			      uint64_t ignore, void *context, uint64_t flags);
+#if PSMX_USE_AM
+ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
+		      void *desc, const void *dest_addr,
+		      uint64_t addr, uint64_t key, void *context,
+		      uint64_t flags);
+ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
+		       void *desc, const void *src_addr,
+		       uint64_t addr, uint64_t key, void *context,
+		       uint64_t flags);
+ssize_t _psmx_atomic_writeto(struct fid_ep *ep,
+			     const void *buf,
+			     size_t count, void *desc,
+			     const void *dest_addr,
+			     uint64_t addr, uint64_t key,
+			     enum fi_datatype datatype,
+			     enum fi_op op, void *context,
+			     uint64_t flags);
+ssize_t _psmx_atomic_readwriteto(struct fid_ep *ep,
+				 const void *buf,
+				 size_t count, void *desc,
+				 void *result, void *result_desc,
+				 const void *dest_addr,
+				 uint64_t addr, uint64_t key,
+				 enum fi_datatype datatype,
+				 enum fi_op op, void *context,
+				 uint64_t flags);
+ssize_t _psmx_atomic_compwriteto(struct fid_ep *ep,
+				 const void *buf,
+				 size_t count, void *desc,
+				 const void *compare, void *compare_desc,
+				 void *result, void *result_desc,
+				 const void *dest_addr,
+				 uint64_t addr, uint64_t key,
+				 enum fi_datatype datatype,
+				 enum fi_op op, void *context,
+				 uint64_t flags);
+#endif /* PSMX_USE_AM */
 
 #ifdef __cplusplus
 }
