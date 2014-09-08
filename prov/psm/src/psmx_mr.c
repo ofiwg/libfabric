@@ -124,6 +124,9 @@ int psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t
 {
 	int i;
 
+	if (!addr)
+		return -EINVAL;
+
 	if ((access & mr->access) != access)
 		return -EACCES;
 
