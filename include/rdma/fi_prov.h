@@ -56,8 +56,6 @@ struct fi_ops_prov {
 	int	(*freeinfo)(struct fi_info *info);
 	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_domain **dom, void *context);
-	int	(*if_open)(const char *res_name, const char *if_name,
-			uint64_t flags, struct fid **fid, void *context);
 };
 
 int fi_version_register(int version, struct fi_ops_prov *ops);

@@ -723,33 +723,11 @@ static struct fi_ops __fi_ops = {
 	.close = __fi_fabric_close,
 };
 
-static int
-__fi_open(struct fid_fabric *fabric, const char *name, uint64_t flags,
-	  struct fid **fif, void *context)
-{
-	struct __fid_fabric *fab;
-	struct fi_prov *prov;
-	int ret = -FI_ENOSYS;
-
-	fab = container_of(fabric, struct __fid_fabric, fabric_fid);
-	for (prov = prov_head; prov; prov = prov->next) {
-		if (!prov->ops->if_open)
-			continue;
-
-		ret = prov->ops->if_open(fab->name, name, flags, fif, context);
-		if (!ret)
-			break;
-	}
-
-	return ret;
-}
-
 static struct fi_ops_fabric __fi_ops_fabric = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = __fi_domain,
 	.endpoint = __fi_endpoint,
 	.eq_open = __fi_eq_open,
-	.if_open = __fi_open
 };
 
 int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
