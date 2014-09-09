@@ -138,7 +138,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
 int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		struct fid_cntr **cntr, void *context);
-int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
+int sock_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 		struct fid_domain **dom, void *context);
 int sock_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
 		struct fid_eq **eq, void *context);

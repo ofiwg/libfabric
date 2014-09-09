@@ -33,6 +33,8 @@
 #include "psmx.h"
 #include "fi.h"
 
+uint64_t psmx_ep_cap;
+
 static int psmx_reserve_tag_bits(int *ep_cap, uint64_t *max_tag_value)
 {
 	int reserved_bits = 0;
@@ -76,8 +78,6 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	struct fi_info *psmx_info;
 	uint32_t cnt = 0;
 	void *dest_addr = NULL;
-	void *uuid;
-	char *s;
 	int type = FID_RDM;
 	int addr_format = FI_ADDR;
 	int ep_cap = 0;
@@ -91,19 +91,12 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 		return -FI_ENODATA;
 	}
 
-	uuid = calloc(1, sizeof(psm_uuid_t));
-	if (!uuid) 
-		return -ENOMEM;
-
-	s = getenv("SFI_PSM_UUID");
-	if (s)
-		psmx_string_to_uuid(s, uuid);
-
 	if (node)
-		dest_addr = psmx_resolve_name(node, uuid);
+		dest_addr = psmx_resolve_name(node);
 
 	if (service) {
 		/* FIXME: check service */
+		/* Can service be used as the port number needed by psmx_resolve_name? */
 	}
 
 	if (hints) {
@@ -241,17 +234,17 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);
 	psmx_info->src_addr = NULL;
 	psmx_info->dest_addr = dest_addr;
-	psmx_info->auth_keylen = sizeof(psm_uuid_t);
-	psmx_info->auth_key = uuid;
+	psmx_info->auth_keylen = 0;
+	psmx_info->auth_key = NULL;
 	psmx_info->fabric_name = strdup("psm");
 	psmx_info->datalen = 0;
 	psmx_info->data = NULL;
 
+	psmx_ep_cap = psmx_info->ep_cap;
 	*info = psmx_info;
 	return 0;
 
 err_out:
-	free(uuid);
 	return err;
 }
 

@@ -2418,20 +2418,17 @@ static struct fi_ops_domain ibv_domain_ops = {
 };
 
 static int
-ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
+ibv_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 	   struct fid_domain **domain, void *context)
 {
 	struct ibv_domain *_domain;
 	int ret;
 
-	if (strcmp(info->fabric_name, "RDMA"))
-		return -FI_EINVAL;
-
 	_domain = calloc(1, sizeof *_domain);
 	if (!_domain)
 		return -FI_ENOMEM;
 
-	ret = ibv_open_device_by_name(_domain, info->domain_attr->name);
+	ret = ibv_open_device_by_name(_domain, attr->name);
 	if (ret)
 		goto err;
 

@@ -252,7 +252,7 @@ void fi_query(const struct fi_info *info, struct fi_attr *attr, size_t *attrlen)
 
 struct fi_ops_fabric {
 	size_t	size;
-	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
+	int	(*domain)(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 			struct fid_domain **dom, void *context);
 	int	(*endpoint)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
