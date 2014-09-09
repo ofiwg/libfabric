@@ -140,11 +140,11 @@ be generated for this send.  The completion event will be suppressed even if
 the endpoint has not been configured with FI_EVENT.  See the flags
 discussion below for more details. fi_inject is an optional function.
 The availability of fi_inject for an endpoint should be checked using the macro
-FI_INJECT_MSG with the endpoint as the parameter. If the function is
+FI_OP_INJECT with the endpoint as the parameter. If the function is
 available, the macro evaluates to 1, if not it evaluates to 0.
 .SS "fi_injectto"
 This call is similar to fi_inject, but for unconnected endpoints. The macro
-FI_INJECT_MSGTO must be used in a similar manner to FI_INJECT_MSG to determine
+FI_OP_INJECTTO must be used in a similar manner to FI_OP_INJECT to determine
 the availability of this function.
 .SS "fi_senddata"
 The send data call is similar to fi_send, but allows for the sending of

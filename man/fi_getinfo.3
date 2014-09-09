@@ -246,6 +246,11 @@ data transfer operations and the 'inject' data transfer calls.  The
 minimum supported size of an inject operation that an endpoint 
 with this capability must support is 8-bytes.  Applications may access
 endpoint options (getopt/setopt) to determine injected transfer limits.
+An endpoint may not be able to support inject calls for all types of
+operations. Applications should use appropriate macros FI_OP_INJECT,
+FI_OP_INJECTTO, FI_OP_TINJECT, FI_OP_TINJECTO, FI_OP_WRITE, FI_OP_WRITETO,
+FI_OP_ATOMIC, FI_OP_ATOMICTO to determine if inject calls
+are supported for those operations.
 .IP "FI_MULTI_RECV"
 Specifies that the endpoint must support the FI_MULTI_RECV flag when
 posting receive buffers.
