@@ -151,6 +151,8 @@ fi_tinject(struct fid_ep *ep, const void *buf, size_t len, uint64_t tag)
 {
 	return ep->tagged->inject(ep, buf, len, tag);
 }
+#define FI_TINJECT(ep) \
+	FI_CHECK_OP(ep->tagged, struct fi_ops_tagged, inject)
 
 static inline ssize_t
 fi_tinjectto(struct fid_ep *ep, const void *buf, size_t len,
@@ -158,6 +160,8 @@ fi_tinjectto(struct fid_ep *ep, const void *buf, size_t len,
 {
 	return ep->tagged->injectto(ep, buf, len, dest_addr, tag);
 }
+#define FI_TINJECTTO(ep) \
+	FI_CHECK_OP(ep->tagged, struct fi_ops_tagged, injectto)
 
 static inline ssize_t
 fi_tsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,

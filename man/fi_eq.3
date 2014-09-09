@@ -325,7 +325,10 @@ event data from the EQ.  The format of the event data is based on the user
 specified options when the EQ was opened.  Multiple events may be retrieved
 from an EQ in a single call, provided that sufficient buffer space was
 provided.  The number of bytes successfully read from the EQ is returned
-by the calls.
+by the calls.  fi_eq_readfrom is an optional function.
+The availability of fi_eq_readfrom for an endpoint should be checked using the macro
+FI_EQ_READFROM with the event queue as the parameter. If the function is
+available, the macro evaluates to 1, if not it evaluates to 0.
 .PP
 The readfrom calls allow the EQ to return source address information to
 the user for any received data.  The format and size of the source address
@@ -348,6 +351,9 @@ The fi_eq_condread and fi_eq_condreadfrom calls are the blocking equivalent
 operations to fi_eq_read and fi_eq_readfrom.  Their behavior is similar to
 the non-blocking calls, with the exception that the calls will not return
 until either an event has been read from the EQ or an error occurs.
+fi_eq_condreadfrom is an optional function.
+The macro FI_EQ_CONDREADFROM must be used in a similar manner to 
+FI_EQ_READFROM to determine the availability of this function.
 .SS "fi_eq_readerr"
 The read error function, fi_eq_readerr, retrieves information regarding
 any asynchronous operation which has completed with an unexpected error.
