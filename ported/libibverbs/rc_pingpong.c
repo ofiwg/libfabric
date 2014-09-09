@@ -98,7 +98,6 @@ static int pp_leq_create(struct pingpong_context *ctx)
 
 	memset(&cm_attr, 0, sizeof cm_attr);
 
-	cm_attr.mask 		= FI_EQ_ATTR_MASK_V1;
 	cm_attr.domain 		= FI_EQ_DOMAIN_CM;
 	cm_attr.format 		= FI_EQ_FORMAT_CM;
 	cm_attr.wait_obj 	= FI_WAIT_FD;				
@@ -118,7 +117,6 @@ static int pp_eq_create(struct pingpong_context *ctx)
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 
-	cq_attr.mask 		= FI_EQ_ATTR_MASK_V1;
 	cq_attr.domain 		= FI_EQ_DOMAIN_COMP;
 	cq_attr.format 		= FI_EQ_FORMAT_CONTEXT;
 	if (ctx->use_event) {
@@ -545,7 +543,7 @@ int main(int argc, char *argv[])
 		node = servername;
 	}
 	
-	rc = fi_getinfo(node, service, flags, &hints, &prov_list);
+	rc = fi_getinfo(FI_VERSION(1, 0), node, service, flags, &hints, &prov_list);
 	if (rc) {
 		FI_ERR_LOG("fi_getinfo", rc);
 		return 1;

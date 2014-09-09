@@ -89,6 +89,8 @@ static void *buf;
 static size_t buffer_size;
 
 static struct fi_info hints;
+static struct fi_domain_attr domain_hints;
+static struct fi_ep_attr ep_hints;
 static char *dst_addr, *src_addr;
 static char *port = "9228";
 
@@ -474,7 +476,8 @@ static int client_connect(void)
 
 	ret = fi_fdomain(fab, fi, &dom, NULL);
 	if (ret) {
-		printf("fi_fdomain %s %s\n", fi_strerror(-ret), fi->domain_name);
+		printf("fi_fdomain %s %s\n", fi_strerror(-ret),
+			fi->domain_attr->name);
 		goto err2;
 	}
 
@@ -571,7 +574,7 @@ int main(int argc, char **argv)
 			dst_addr = optarg;
 			break;
 		case 'n':
-			hints.domain_name = optarg;
+			domain_hints.name = optarg;
 			break;
 		case 'p':
 			port = optarg;
@@ -603,10 +606,11 @@ int main(int argc, char **argv)
 		}
 	}
 
+	hints.domain_attr = &domain_hints;
+	hints.ep_attr = &ep_hints;
 	hints.type = FID_MSG;
-	hints.protocol = FI_PROTO_IB_RC;
 	hints.ep_cap = FI_MSG;
-	hints.domain_cap = FI_LOCAL_MR;
+	domain_hints.caps = FI_LOCAL_MR;
 	hints.addr_format = FI_SOCKADDR;
 
 	ret = run();
