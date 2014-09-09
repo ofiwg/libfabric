@@ -42,7 +42,7 @@ extern "C" {
 #include "psm_am.h"
 #endif
 
-#define PFX "libfabric:psm"
+#define PSM_PFX "libfabric:psm"
 
 #ifndef MIN
 #define MIN(x,y) ((x)<(y)?(x):(y))
