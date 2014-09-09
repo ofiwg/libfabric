@@ -83,7 +83,7 @@ static int psmx_domain_control(fid_t fid, int command, void *arg)
 }
 
 static int psmx_domain_query(struct fid_domain *domain,
-			     struct fi_domain_attr *attr, size_t *attrlen)
+			     struct fi_domain_attr *attr)
 {
 	return -ENOSYS;
 }
