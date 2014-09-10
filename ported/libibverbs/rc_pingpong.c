@@ -192,7 +192,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rc = fi_fdomain(ctx->fabric, entry.info, &ctx->dom, NULL);
+	rc = fi_fdomain(ctx->fabric, entry.info->domain_attr, &ctx->dom, NULL);
 	if (rc) {
 		FI_ERR_LOG("fi_fdomain", rc);
 		goto err;
@@ -247,7 +247,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 	int rc = 0;
 
 	/* Open domain */
-	rc = fi_fdomain(ctx->fabric, ctx->prov, &ctx->dom, NULL);
+	rc = fi_fdomain(ctx->fabric, ctx->prov->domain_attr, &ctx->dom, NULL);
 	if (rc) {
 		FI_ERR_LOG("fi_fdomain", -rc);
 		goto err;

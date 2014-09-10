@@ -412,7 +412,7 @@ static int server_connect(void)
 		goto err1;
 	}
 
-	ret = fi_fdomain(fab, entry.info, &dom, NULL);
+	ret = fi_fdomain(fab, entry.info->domain_attr, &dom, NULL);
 	if (ret) {
 		printf("fi_fdomain %s\n", fi_strerror(-ret));
 		goto err1;
@@ -474,7 +474,7 @@ static int client_connect(void)
 		goto err1;
 	}
 
-	ret = fi_fdomain(fab, fi, &dom, NULL);
+	ret = fi_fdomain(fab, fi->domain_attr, &dom, NULL);
 	if (ret) {
 		printf("fi_fdomain %s %s\n", fi_strerror(-ret),
 			fi->domain_attr->name);
