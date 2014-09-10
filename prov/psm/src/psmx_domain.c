@@ -83,7 +83,7 @@ static int psmx_domain_control(fid_t fid, int command, void *arg)
 }
 
 static int psmx_domain_query(struct fid_domain *domain,
-			     struct fi_domain_attr *attr, size_t *attrlen)
+			     struct fi_domain_attr *attr)
 {
 	return -ENOSYS;
 }
@@ -112,17 +112,18 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.cntr_open = psmx_cntr_open,
 };
 
-int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+int psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 		     struct fid_domain **domain, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
 	struct psm_ep_open_opts opts;
+	psm_uuid_t uuid;
 	int err = -ENOMEM;
 	char *s;
 
 	psmx_debug("%s\n", __func__);
 
-	if (!info->domain_name || strncmp(info->domain_name, "psm", 3))
+	if (!attr->name || strncmp(attr->name, "psm", 3))
 		return -EINVAL;
 
 	psmx_query_mpi();
@@ -139,7 +140,8 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	psm_ep_open_opts_get_defaults(&opts);
 
-	err = psm_ep_open(info->auth_key, &opts,
+	psmx_get_uuid(uuid);
+	err = psm_ep_open(uuid, &opts,
 			  &fid_domain->psm_ep, &fid_domain->psm_epid);
 	if (err != PSM_OK) {
 		fprintf(stderr, "%s: psm_ep_open returns %d, errno=%d\n",
@@ -157,7 +159,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err_out_close_ep;
 	}
 
-	fid_domain->ns_port = psmx_uuid_to_port(info->auth_key);
+	fid_domain->ns_port = psmx_uuid_to_port(uuid);
 
 	s = getenv("SFI_PSM_NAME_SERVER");
 	if (s && (!strcasecmp(s, "yes") || !strcasecmp(s, "on") || !strcmp(s, "1")))
@@ -168,7 +170,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (err)
 		fid_domain->ns_thread = 0;
 
-	if (info->ep_cap & FI_MSG)
+	if (psmx_ep_cap & FI_MSG)
 		fid_domain->reserved_tag_bits |= PSMX_MSG_BIT;
 
 #if PSMX_USE_AM
@@ -183,11 +185,11 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (psmx_am_msg_enabled)
 		fid_domain->reserved_tag_bits &= ~PSMX_MSG_BIT;
 
-	if ((info->ep_cap & FI_RMA) && psmx_am_tagged_rma)
+	if ((psmx_ep_cap & FI_RMA) && psmx_am_tagged_rma)
 		fid_domain->reserved_tag_bits |= PSMX_RMA_BIT;
 
-	if ((info->ep_cap & FI_RMA) ||
-	    (info->ep_cap & FI_ATOMICS) ||
+	if ((psmx_ep_cap & FI_RMA) ||
+	    (psmx_ep_cap & FI_ATOMICS) ||
 	    psmx_am_msg_enabled) {
 		err = psmx_am_init(fid_domain);
 		if (err) {
@@ -200,7 +202,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		}
 	}
 #endif
-	fid_domain->ep_cap = info->ep_cap;
+	fid_domain->ep_cap = psmx_ep_cap;
 
 	*domain = &fid_domain->domain;
 	return 0;

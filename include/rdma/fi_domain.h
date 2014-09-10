@@ -314,18 +314,9 @@ struct fi_mr_attr {
 #define FI_DYNAMIC_MR		(1ULL << 4)
 
 
-struct fi_domain_attr {
-	/* Note to providers: set prov_attr to static struct */
-	size_t			prov_attr_size;
-	void			*prov_attr;
-	size_t			mr_key_size;
-	size_t			eq_data_size;
-};
-
 struct fi_ops_domain {
 	size_t	size;
-	int	(*query)(struct fid_domain *domain, struct fi_domain_attr *attr,
-			size_t *attrlen);
+	int	(*query)(struct fid_domain *domain, struct fi_domain_attr *attr);
 	int	(*av_open)(struct fid_domain *domain, struct fi_av_attr *attr,
 			struct fid_av **av, void *context);
 	int	(*eq_open)(struct fid_domain *domain, struct fi_eq_attr *attr,
@@ -373,10 +364,10 @@ struct fid_domain {
 #ifndef FABRIC_DIRECT
 
 static inline int
-fi_fdomain(struct fid_fabric *fabric, struct fi_info *info,
+fi_fdomain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 	   struct fid_domain **domain, void *context)
 {
-	return fabric->ops->domain(fabric, info, domain, context);
+	return fabric->ops->domain(fabric, attr, domain, context);
 }
 
 static inline int

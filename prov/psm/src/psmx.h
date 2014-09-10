@@ -42,7 +42,7 @@ extern "C" {
 #include "psm_am.h"
 #endif
 
-#define PFX "libfabric:psm"
+#define PSM_PFX "libfabric:psm"
 
 #ifndef MIN
 #define MIN(x,y) ((x)<(y)?(x):(y))
@@ -225,6 +225,10 @@ struct psmx_multi_recv {
 	int		min_buf_size;
 	int		flag;
 	void		*context;
+};
+
+struct psmx_fid_fabric {
+	struct fid_fabric	fabric;
 };
 
 struct psmx_fid_domain {
@@ -510,11 +514,13 @@ extern struct psm_am_parameters psmx_am_param;
 extern int			psmx_am_msg_enabled;
 extern int			psmx_am_tagged_rma;
 #endif
+// TODO: Do something sane in place of using this variable
+extern uint64_t			psmx_ep_cap;
 
 void	psmx_ini(void);
 void	psmx_fini(void);
 
-int	psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+int	psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 			 struct fid_domain **fid, void *context);
 int	psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		     struct fid_ep **fid, void *context);
@@ -526,8 +532,8 @@ int	psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		       struct fid_cntr **cntr, void *context);
 
 void 	*psmx_name_server(void *args);
-void	*psmx_resolve_name(const char *servername, psm_uuid_t uuid);
-void	psmx_string_to_uuid(const char *s, psm_uuid_t uuid);
+void	*psmx_resolve_name(const char *servername);
+void	psmx_get_uuid(psm_uuid_t uuid);
 int	psmx_uuid_to_port(psm_uuid_t uuid);
 int	psmx_errno(int err);
 int	psmx_epid_to_epaddr(struct psmx_fid_domain *domain,

@@ -1,4 +1,4 @@
-.TH "FI_DOMAIN" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_DOMAIN" 3 "2014-09-09" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_domain \- Open a fabric access domain
 .SH SYNOPSIS
@@ -13,7 +13,7 @@ fi_domain \- Open a fabric access domain
 .PP
 .HP
 .BI "int fi_domain_query(struct fid_domain *" domain ", "
-.BI "struct fi_domain_attr *" attr ", size_t *" attrlen ");"
+.BI "struct fi_domain_attr *" attr);"
 .PP
 .HP
 .BI "int fi_domain_bind(struct fid_domain *" domain ", struct fid *" eq ", "
@@ -32,10 +32,7 @@ An opened access domain.
 User specified context associated with the domain.  This context is returned as
 part of any asynchronous event associated with the domain.
 .IP "attr" 12
-Pointer to write domain attributes.
-.IP "attrlen" 12
-On input, specifies the size of the attribute buffer.  On output, the number of
-bytes written.
+Pointer to domain attributes.
 .IP "eq" 12
 Event queue for asynchronous operations initiated on the domain.
 .IP "name" 12
@@ -64,27 +61,6 @@ that are specific to the opened resource domain.  The details of domain
 interfaces are outside the scope of this documentation.
 .SS "fi_domain_query"
 Query the attributes of an opened domain.
-.nf
-struct fi_domain_attr {
-	/* Note to providers: set prov_attr to static struct */
-	size_t			prov_attr_size;
-	void			*prov_attr;
-	size_t			mr_key_size;
-	size_t			eq_data_size;
-};
-.fi
-.IP "prov_attr_size"
-Size of provider specific attribute structure.
-.IP "prov_attr"
-Pointer to a provider specific attribute structure.  The format and contents
-of this structure is outside the scope of this interface.
-.IP "mr_key_size"
-Size of the memory region remote access key, in bytes.  Applications that
-request their own MR key must select a value within the range specified by
-this value.
-.IP "eq_data_size"
-The number of bytes that the provider supports for remote EQ data.  See
-the FI_REMOTE_EQ_DATA flag (fi_getinfo) for the use of remote EQ data. 
 .SS "fi_domain_bind"
 Associates an event queue with the domain.  Binding an event queue to a
 domain with the FI_REG_MR flag indicates that the provider should perform
@@ -95,6 +71,173 @@ domain, then memory registration requests behave synchronously.
 The fi_close call is used to release all resources associated with a domain
 or interface.  All items associated with the opened domain must
 be released prior to calling fi_close.
+.SH "DOMAIN ATTRIBUTES"
+The fi_domain_attr structure defines the set of attributes associated with a
+domain.
+.sp
+.nf
+struct fi_domain_attr {
+	char              *name
+	uint64_t          caps;
+	enum fi_threading threading;
+	enum fi_progress  control_progress;
+	enum fi_progress  data_progress;
+	size_t            mr_key_size;
+	size_t            eq_data_size;
+};
+.fi
+.SS "Name"
+The name of the access domain.
+.SS "Capabilities"
+Domain capabilities are obtained by OR-ing the following flags together.
+Domain capabilities are most often used as output information from fi_getinfo,
+allowing applications to adjust their behavior based on the provider's
+hardware or software abilities.  However,specific capabilities may be
+requested through the hints parameter, with the actual supported capabilities
+returned by the provider.  Applications must check domain capabilities to
+ensure that all provider requirements for using resources associated with
+the access domain are met.
+.IP "FI_WRITE_COHERENT"
+Specifies that remote writes, including atomic operations, to the underlying
+access domain are coherent with the local processing domain.  Domain-level
+write coherency indicates that changes to local memory are visible to the
+local process immediately upon completion of a remote write operation.  The
+absence of this flag allows the NIC or memory subsystem to cache the results
+of remote write or atomic operations in non-coherent memory.
+.sp
+The behavior of a domain with and without FI_WRITE_COHERENT is illustrated
+below.
+.nf
+
+      Process 1            Process 2
+                           Register BUF
+      RMA write X to BUF
+      Notify process 2
+                           Receive notification
+                           if not FI_WRITE_COHERENT
+                                Sync with remote writes
+                           assert(BUF == X)
+
+.fi
+.sp
+This flag may be set on input hints to fi_getinfo, with the provider clearing
+the flag on output if it does not provide write coherency.  See the endpoint
+fi_ep_sync call for handling non-coherent writes.
+.IP "FI_CONTEXT"
+Specifies that the provider requires that applications use struct fi_context
+as their per operation context parameter.  This structure should be treated as
+opaque to the application.  For performance reasons, this structure must be
+allocated by the user, but may be used by the fabric provider to track the
+operation.  Typically, users embed struct fi_context within their own
+context structure.  The struct fi_context must remain valid until the
+corresponding operation completes or is successfully canceled.  As such,
+fi_context should NOT be allocated on the stack.  Doing so is likely to
+result in stack corruption that will be difficult to debug.  Users should
+not update or interpret the fields in this structure, or reuse it until
+the original operation has completed.  The structure is
+specified in rdma/fabric.h.
+.IP "FI_LOCAL_MR"
+The provider is optimized around having applications register memory
+for locally accessed data buffers.  Data buffers used in send and receive
+operations and as the source buffer for RMA and atomic operations must be
+registered by the application for access domains opened with this capability.
+.IP "FI_USER_MR_KEY"
+The provider supports user requested memory registration keys.  Providers
+that set this capability honor the requested_key parameter for memory
+registration calls.
+.IP "FI_DYNAMIC_MR"
+The provider supports applications registering any range of addresses
+in their virtual address space, whether or not those addresses are
+back by physical pages or have been allocated to the app.
+Providers that lack this capability require that registered memory
+regions be backed by allocated memory pages.
+.SS "Multi-threading Support"
+The threading model specifies the level of serialization required of an
+application when using the libfabric data transfer interfaces.  Control
+interfaces are always considered thread safe, and may be accessed by
+multiple threads.  Applications which can guarantee serialization in their
+access of provider allocated resources and interfaces enables a provider
+to eliminate lower-level locks.
+.IP "FI_THREAD_UNSPEC"
+This value indicates that no threading model has been defined.  It may be
+used on input hints to the fi_getinfo call.
+.IP "FI_THREAD_SAFE"
+A thread safe serialization model allows a multi-threaded application to
+access any allocated resources through any interface without restriction.
+All providers are required to support FI_THREAD_SAFE.
+.IP "FI_THREAD_PROGRESS"
+A progress serialization model requires applications to serialize access
+to provider resources and interfaces based on the progress model.  For
+providers with automatic progress, access to each endpoint must be serialized,
+and access to each event queue, counter, wait or poll set must be serialized.
+Serialization is required only by threads accessing the same object.  For
+example, one thread may be initiating a data transfer on an endpoint, while
+another thread reads from an event queue associated with the endpoint.
+Serialization to endpoint access is further limited to different endpoint
+data flows, if available.  Multiple threads may initiate transfers on the
+same endpoint if they reference different data flows.
+.sp
+For providers with manual progress, applications must serialize their access
+to any object that is part of a single progress domain.  A progress domain
+is any set of associated endpoints, event queues, counters, wait sets, and
+poll sets.  For instance, endpoints that share the same event queue or poll
+set belong to the same progress domain.  Applications that can allocate
+endpoint resources to specific threads can reduce provider locking by
+using FI_THREAD_PROGRESS.
+.SS "Progress Models"
+Progress is the ability of the underlying implementation to complete
+processing of an asynchronous request.  In many cases, the processing of
+an asynchronous request requires the use of the host processor.  For example,
+a received message may need to be matched with the correct buffer, or a timed
+out request may need to be retransmitted.  For performance reasons, it may be
+undesirable for the provider to allocate a thread for this purpose, which
+will compete with the application threads.
+.sp
+Control progress indicates the method that the provider uses to make progress
+on asynchronous control operations.  Control operations are function
+which do not directly involve the transfer of application data between
+endpoints.  They include address vector, memory registration, and
+connection management routines.
+.sp
+Data progress indicates the method that the provider uses to make progress on
+data transfer operations.  This includes message queue, RMA, tagged messaging,
+and atomic operations, along with their completion processing.
+.sp
+To balance between performance and ease of use, two progress models are
+defined.
+.IP "FI_PROGRESS_UNSPEC"
+This value indicates that no progress model has been defined.  It may be
+used on input hints to the fi_getinfo call.
+.IP "FI_PROGRESS_AUTO"
+This progress model indicates that the provider will make forward progress
+on an asynchronous operation without further intervention by the application.
+When FI_PROGRESS_AUTO is provided as output to fi_getinfo in the absence of
+any progress hints, it often indicates that the desired functionality is
+implemented by the provider hardware or is a standard service of
+the operating system.
+.sp
+All providers are required to support FI_PROGRESS_AUTO.  However, if a
+provider does not natively support automatic progress, forcing the use of
+FI_PROGRESS_AUTO may result in threads being allocated below the fabric
+interfaces.
+.IP "FI_PROGRESS_MANUAL"
+This progress model indicates that the provider requires the use of an
+application thread to complete an asynchronous request.  When manual
+progress is set, the provider will attempt to advance an asynchronous
+operation forward when the application invokes any event queue read or
+wait operation where the completion will be reported.  Progress also
+occurs when the application processes a poll or wait set.
+.sp
+Only wait operations defined by the fabric interface will result in an
+operation progressing.  Operating system or external wait functions,
+such as select, poll, or pthread routines, cannot.
+.SS "MR Key Size"
+Size of the memory region remote access key, in bytes.  Applications that
+request their own MR key must select a value within the range specified by
+this value.
+.SS "EQ Data Size"
+The number of bytes that the provider supports for remote EQ data.  See
+the FI_REMOTE_EQ_DATA flag (fi_getinfo) for the use of remote EQ data. 
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 

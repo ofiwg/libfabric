@@ -54,8 +54,8 @@ struct fi_ops_prov {
 	int	(*getinfo)(int version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info);
 	int	(*freeinfo)(struct fi_info *info);
-	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
-			struct fid_domain **dom, void *context);
+	int	(*fabric)(const char *name, uint64_t flags, struct fid_fabric **fabric,
+			void *context);
 };
 
 int fi_version_register(int version, struct fi_ops_prov *ops);

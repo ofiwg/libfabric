@@ -53,22 +53,10 @@ static int sock_dom_close(struct fid *fid)
 	return 0;
 }
 
-static int sock_dom_query(struct fid_domain *domain, struct fi_domain_attr *attr,
-			  size_t *attrlen)
+static int sock_dom_query(struct fid_domain *domain, struct fi_domain_attr *attr)
 {
-	if (!attrlen)
-		return -FI_EINVAL;
-
-	if (*attrlen < sizeof(*attr)) {
-		*attrlen = sizeof(*attr);
-		return -FI_ETOOSMALL;
-	}
-
-	attr->prov_attr_size = 0;
-	attr->prov_attr = NULL;
 	attr->mr_key_size = 2; /* IDX_MAX_INDEX bits */
 	attr->eq_data_size = sizeof(uint64_t);
-	*attrlen = sizeof(*attr);
 	return 0;
 }
 
@@ -218,13 +206,10 @@ static struct fi_ops_mr sock_dom_mr_ops = {
 	.regattr = sock_regattr,
 };
 
-int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
+int sock_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 		struct fid_domain **dom, void *context)
 {
 	struct sock_domain *_dom;
-
-	if (strcmp(info->fabric_name, fab_name))
-		return -FI_EINVAL;
 
 	_dom = calloc(1, sizeof *_dom);
 	if (!_dom)

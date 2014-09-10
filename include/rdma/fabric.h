@@ -60,6 +60,8 @@ enum {
 #define FI_MAJOR(version)	(version >> 16)
 #define FI_MINOR(version)	(version & 0xFFFF)
 
+uint32_t fi_version(void);
+
 /*
  * Vendor specific protocols/etc. are encoded as OUI, followed by vendor
  * specific data.
@@ -144,6 +146,7 @@ enum fi_threading {
 #define FI_ORDER_SAS		(1 << 8)
 
 struct fi_ep_attr {
+	uint64_t		protocol;
 	int			data_flow_cnt;
 	size_t			max_msg_size;
 	size_t			inject_size;
@@ -152,15 +155,24 @@ struct fi_ep_attr {
 	size_t			max_order_war_size;
 	size_t			max_order_waw_size;
 	uint64_t		max_tag_value;
+	uint64_t		msg_order;
+};
+
+struct fi_domain_attr {
+	char			*name;
+	uint64_t		caps;
+	enum fi_threading	threading;
+	enum fi_progress	control_progress;
+	enum fi_progress	data_progress;
+	size_t			mr_key_size;
+	size_t			eq_data_size;
 };
 
 struct fi_info {
 	struct fi_info		*next;
 	uint64_t		type;
-	uint64_t		protocol;
 	uint64_t		ep_cap;
 	uint64_t		op_flags;
-	uint64_t		domain_cap;
 	enum fi_addr_format	addr_format;
 	enum fi_addr_format	info_addr_format;
 	size_t			src_addrlen;
@@ -174,12 +186,8 @@ struct fi_info {
 	size_t			auth_keylen;
 	void			*auth_key;
 	struct fi_ep_attr	*ep_attr;
-	uint64_t		msg_order;
-	enum fi_threading	threading;
-	enum fi_progress	control_progress;
-	enum fi_progress	data_progress;
+	struct fi_domain_attr	*domain_attr;
 	char			*fabric_name;
-	char			*domain_name;
 	size_t			datalen;
 	void			*data;
 };
@@ -235,18 +243,9 @@ int fi_getinfo(int version, const char *node, const char *service,
 	       uint64_t flags, struct fi_info *hints, struct fi_info **info);
 void fi_freeinfo(struct fi_info *info);
 
-struct fi_attr {
-	uint64_t		version;
-	uint64_t		prov_version;
-	uint64_t		hw_version;
-	uint32_t		oui;
-};
-
-void fi_query(const struct fi_info *info, struct fi_attr *attr, size_t *attrlen);
-
 struct fi_ops_fabric {
 	size_t	size;
-	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
+	int	(*domain)(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 			struct fid_domain **dom, void *context);
 	int	(*endpoint)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);

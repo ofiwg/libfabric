@@ -174,6 +174,7 @@ man_MANS = \
 	man/fi_tsendv.3 \
 	man/fi_tsendto.3 \
 	man/fi_tsendmsg.3 \
+	man/fi_version.3 \
 	man/fi_wait.3 \
 	man/fi_wait_control.3 \
 	man/fi_wait_open.3

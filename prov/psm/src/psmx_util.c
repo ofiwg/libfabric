@@ -32,9 +32,14 @@
 
 #include "psmx.h"
 
-void psmx_string_to_uuid(const char *s, psm_uuid_t uuid)
+static void psmx_string_to_uuid(const char *s, psm_uuid_t uuid)
 {
 	int n;
+
+	if (!s) {
+		memset(uuid, 0, sizeof(psm_uuid_t));
+		return;
+	}
 
 	n = sscanf(s,
 		"%2hhx%2hhx%2hhx%2hhx-"
@@ -50,6 +55,11 @@ void psmx_string_to_uuid(const char *s, psm_uuid_t uuid)
 			"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\n",
 			__func__);
 	}
+}
+
+void psmx_get_uuid(psm_uuid_t uuid)
+{
+	psmx_string_to_uuid(getenv("SFI_PSM_UUID"), uuid);
 }
 
 int psmx_uuid_to_port(psm_uuid_t uuid)
@@ -148,19 +158,21 @@ void *psmx_name_server(void *args)
 	return NULL;
 }
 
-void *psmx_resolve_name(const char *servername, psm_uuid_t uuid)
+void *psmx_resolve_name(const char *servername)
 {
 	struct addrinfo hints = {
 		.ai_family   = AF_UNSPEC,
 		.ai_socktype = SOCK_STREAM
 	};
 	struct addrinfo *res, *p;
+	psm_uuid_t uuid;
 	char *service;
 	void *dest_addr;
 	int sockfd = -1;
 	int port;
 	int n;
 
+	psmx_get_uuid(uuid);
 	port = psmx_uuid_to_port(uuid);
 
 	if (asprintf(&service, "%d", port) < 0)

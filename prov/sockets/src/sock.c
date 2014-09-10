@@ -34,8 +34,48 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "sock.h"
 
+
+static int sock_fabric_close(fid_t fid)
+{
+	free(fid);
+	return 0;
+}
+
+static struct fi_ops sock_fab_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = sock_fabric_close,
+};
+
+static struct fi_ops_fabric sock_fab_ops = {
+	.size = sizeof(struct fi_ops_fabric),
+	.domain = sock_domain,
+};
+
+static int sock_fabric(const char *name, uint64_t flags,
+		       struct fid_fabric **fabric, void *context)
+{
+	struct sock_fabric *fab;
+
+	if (!name || strcmp(name, fab_name))
+		return -FI_ENODATA;
+
+	fab = calloc(1, sizeof(*fab));
+	if (!fab)
+		return -FI_ENOMEM;
+
+	fab->fab_fid.fid.fclass = FID_CLASS_FABRIC;
+	fab->fab_fid.fid.context = context;
+	fab->fab_fid.fid.ops = &sock_fab_fi_ops;
+	fab->fab_fid.ops = &sock_fab_ops;
+	fab->flags = flags;
+	*fabric = &fab->fab_fid;
+	return 0;
+}
 
 static int sock_getinfo(int version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
@@ -62,7 +102,7 @@ static struct fi_ops_prov sock_ops = {
 	.size = sizeof(struct fi_ops_prov),
 	.getinfo = sock_getinfo,
 	.freeinfo = NULL, /* use default */
-	.domain = sock_domain,
+	.fabric = sock_fabric,
 };
 
 void sock_ini(void)
