@@ -93,22 +93,6 @@ static int psmx_cm_connect(struct fid_ep *ep, const void *addr,
 	return 0;
 }
 
-static int psmx_cm_listen(struct fid_pep *pep)
-{
-	return -ENOSYS;
-}
-
-static int psmx_cm_accept(struct fid_ep *ep, const void *param, size_t paramlen)
-{
-	return -ENOSYS;
-}
-
-static int psmx_cm_reject(struct fid_pep *pep, struct fi_info *info,
-			const void *param, size_t paramlen)
-{
-	return -ENOSYS;
-}
-
 static int psmx_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
@@ -127,6 +111,23 @@ static int psmx_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 	return 0;
 }
 
+#if 0
+static int psmx_cm_listen(struct fid_pep *pep)
+{
+	return -ENOSYS;
+}
+
+static int psmx_cm_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+{
+	return -ENOSYS;
+}
+
+static int psmx_cm_reject(struct fid_pep *pep, struct fi_info *info,
+			const void *param, size_t paramlen)
+{
+	return -ENOSYS;
+}
+
 static int psmx_cm_join(struct fid_ep *ep, void *addr, void **fi_addr, uint64_t flags)
 {
 	return -ENOSYS;
@@ -136,17 +137,18 @@ static int psmx_cm_leave(struct fid_ep *ep, void *addr, void *fi_addr, uint64_t 
 {
 	return -ENOSYS;
 }
+#endif
 
 struct fi_ops_cm psmx_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.getname = psmx_cm_getname,
 	.getpeer = psmx_cm_getpeer,
 	.connect = psmx_cm_connect,
-	.listen = psmx_cm_listen,
-	.accept = psmx_cm_accept,
-	.reject = psmx_cm_reject,
+//	.listen = psmx_cm_listen,
+//	.accept = psmx_cm_accept,
+//	.reject = psmx_cm_reject,
 	.shutdown = psmx_cm_shutdown,
-	.join = psmx_cm_join,
-	.leave = psmx_cm_leave,
+//	.join = psmx_cm_join,
+//	.leave = psmx_cm_leave,
 };
 

@@ -493,15 +493,15 @@ static ssize_t psmx_eq_write(struct fid_eq *eq, const void *buf, size_t len)
 	return -ENOSYS;
 }
 
-static ssize_t psmx_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond)
-{
-	return -ENOSYS;
-}
-
 static ssize_t psmx_eq_condreadfrom(struct fid_eq *eq, void *buf, size_t len,
 				    void *src_addr, size_t *addrlen, const void *cond)
 {
 	return -ENOSYS;
+}
+
+static ssize_t psmx_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond)
+{
+	return psmx_eq_condreadfrom(eq, buf, len, NULL, NULL, cond);
 }
 
 static const char *psmx_eq_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
@@ -546,11 +546,11 @@ static struct fi_ops psmx_fi_ops = {
 static struct fi_ops_eq psmx_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = psmx_eq_read,
-	.readfrom = psmx_eq_readfrom,
+//	.readfrom = psmx_eq_readfrom,
 	.readerr = psmx_eq_readerr,
 	.write = psmx_eq_write,
 	.condread = psmx_eq_condread,
-	.condreadfrom = psmx_eq_condreadfrom,
+//	.condreadfrom = psmx_eq_condreadfrom,
 	.strerror = psmx_eq_strerror,
 };
 
