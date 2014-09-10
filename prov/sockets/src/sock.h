@@ -69,8 +69,14 @@ static const char const fab_name[] = "IP";
 static const char const dom_name[] = "sockets";
 
 
+struct sock_fabric {
+	struct fid_fabric	fab_fid;
+	uint64_t		flags;
+};
+
 struct sock_domain {
 	struct fid_domain	dom_fid;
+	struct sock_fabric	*fab;
 	fastlock_t		lock;
 	atomic_t		ref;
 	struct index_map	mr_idm;

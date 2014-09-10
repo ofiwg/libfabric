@@ -223,9 +223,6 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 {
 	struct sock_domain *_dom;
 
-	if (strcmp(info->fabric_name, fab_name))
-		return -FI_EINVAL;
-
 	_dom = calloc(1, sizeof *_dom);
 	if (!_dom)
 		return -FI_ENOMEM;

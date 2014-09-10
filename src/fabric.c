@@ -770,7 +770,6 @@ int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	return ret;
 }
 
-
 #define FI_ERRNO_OFFSET	256
 #define FI_ERRNO_MAX	FI_EOPBADSTATE
 
