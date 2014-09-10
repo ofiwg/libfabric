@@ -2,10 +2,14 @@ AM_CPPFLAGS = -I$(srcdir)/include
 
 lib_LTLIBRARIES = src/libfabric.la
 
+pkglib_LTLIBRARIES =
+
 ACLOCAL_AMFLAGS = -I config
 AM_CFLAGS = -g -Wall -D_GNU_SOURCE 
 
-src_libfabric_la_CFLAGS = $(AM_CFLAGS) -DSYSCONFDIR=\"$(sysconfdir)\" -DRDMADIR=\"@rdmadir@\"
+src_libfabric_la_CFLAGS = $(AM_CFLAGS) -DSYSCONFDIR=\"$(sysconfdir)\" \
+				       -DRDMADIR=\"@rdmadir@\" \
+				       -DEXTDIR=\"$(libdir)/libfabric\"
 
 if HAVE_LD_VERSION_SCRIPT
     libfabric_version_script = -Wl,--version-script=$(srcdir)/libfabric.map
@@ -15,6 +19,10 @@ endif
 
 src_libfabric_la_SOURCES = \
 	src/fabric.c \
+	src/common.c
+
+if HAVE_SOCKETS
+_sockets_files = \
 	prov/sockets/src/sock_av.c \
 	prov/sockets/src/sock_dom.c \
 	prov/sockets/src/sock_eq.c \
@@ -23,12 +31,31 @@ src_libfabric_la_SOURCES = \
 	prov/sockets/src/sock.c \
 	prov/sockets/src/indexer.c
 
-if HAVE_VERBS
-src_libfabric_la_SOURCES += prov/verbs/src/fi_verbs.c
+if HAVE_SOCKETS_DL
+pkglib_LTLIBRARIES += libsockets-fi.la
+libsockets_fi_la_SOURCES = $(_sockets_files) src/common.c
+libsockets_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+else
+src_libfabric_la_SOURCES += $(_sockets_files)
 endif
 
+endif #HAVE_SOCKETS
+
+if HAVE_VERBS
+_verbs_files = prov/verbs/src/fi_verbs.c
+
+if HAVE_VERBS_DL
+pkglib_LTLIBRARIES += libibverbs-fi.la
+libibverbs_fi_la_SOURCES = $(_verbs_files) src/common.c
+libibverbs_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic -libverbs -lrdmacm
+else
+src_libfabric_la_SOURCES += $(_verbs_files)
+endif
+
+endif #HAVE_VERBS
+
 if HAVE_PSM
-src_libfabric_la_SOURCES += \
+_psm_files = \
 	prov/psm/src/psmx_init.c \
 	prov/psm/src/psmx_domain.c \
 	prov/psm/src/psmx_cq.c \
@@ -44,7 +71,16 @@ src_libfabric_la_SOURCES += \
 	prov/psm/src/psmx_am.c \
 	prov/psm/src/psmx_mr.c \
 	prov/psm/src/psmx_util.c
+
+if HAVE_PSM_DL
+pkglib_LTLIBRARIES += libpsmx-fi.la
+libpsmx_fi_la_SOURCES = $(_psm_files) src/common.c
+libpsmx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic -libverbs -lrdmacm
+else
+src_libfabric_la_SOURCES += $(_psm_files)
 endif
+
+endif #HAVE_PSM
 
 src_libfabric_la_LDFLAGS = -version-info 1 -export-dynamic \
 			   $(libfabric_version_script)
