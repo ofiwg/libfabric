@@ -296,7 +296,6 @@ static int psmx_fabric(const char *name, uint64_t flags,
 static struct fi_ops_prov psmx_ops = {
 	.size = sizeof(struct fi_ops_prov),
 	.getinfo = psmx_getinfo,
-	.domain = psmx_domain_open,
 	.fabric = psmx_fabric,
 };
 

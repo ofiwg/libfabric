@@ -2844,7 +2844,6 @@ static struct fi_ops_prov ibv_ops = {
 	.size = sizeof(struct fi_ops_prov),
 	.getinfo = ibv_getinfo,
 	.freeinfo = ibv_freeinfo,
-	.domain = ibv_domain,
 	.fabric = ibv_fabric,
 };
 
