@@ -280,6 +280,11 @@ int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	return ret;
 }
 
+uint32_t fi_version(void)
+{
+	return FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION);
+}
+
 #define FI_ERRNO_OFFSET	256
 #define FI_ERRNO_MAX	FI_EOPBADSTATE
 

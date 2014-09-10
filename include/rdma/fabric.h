@@ -60,6 +60,8 @@ enum {
 #define FI_MAJOR(version)	(version >> 16)
 #define FI_MINOR(version)	(version & 0xFFFF)
 
+uint32_t fi_version(void);
+
 /*
  * Vendor specific protocols/etc. are encoded as OUI, followed by vendor
  * specific data.
@@ -240,15 +242,6 @@ struct fid {
 int fi_getinfo(int version, const char *node, const char *service,
 	       uint64_t flags, struct fi_info *hints, struct fi_info **info);
 void fi_freeinfo(struct fi_info *info);
-
-struct fi_attr {
-	uint64_t		version;
-	uint64_t		prov_version;
-	uint64_t		hw_version;
-	uint32_t		oui;
-};
-
-void fi_query(const struct fi_info *info, struct fi_attr *attr, size_t *attrlen);
 
 struct fi_ops_fabric {
 	size_t	size;
