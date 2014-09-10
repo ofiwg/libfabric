@@ -257,11 +257,47 @@ err_out:
 	return err;
 }
 
+static int psmx_fabric_close(fid_t fid)
+{
+	free(fid);
+	return 0;
+}
+
+static struct fi_ops psmx_fabric_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = psmx_fabric_close,
+};
+
+static struct fi_ops_fabric psmx_fabric_ops = {
+	.size = sizeof(struct fi_ops_fabric),
+	.domain = psmx_domain_open,
+};
+
+static int psmx_fabric(const char *name, uint64_t flags,
+		       struct fid_fabric **fabric, void *context)
+{
+	struct psmx_fid_fabric *fid_fabric;
+
+	if (!name || strncmp(name, "psm", 3))
+		return -FI_ENODATA;
+
+	fid_fabric = calloc(1, sizeof(*fid_fabric));
+	if (!fid_fabric)
+		return -FI_ENOMEM;
+
+	fid_fabric->fabric.fid.fclass = FID_CLASS_FABRIC;
+	fid_fabric->fabric.fid.context = context;
+	fid_fabric->fabric.fid.ops = &psmx_fabric_fi_ops;
+	fid_fabric->fabric.ops = &psmx_fabric_ops;
+	*fabric = &fid_fabric->fabric;
+	return 0;
+}
+
 static struct fi_ops_prov psmx_ops = {
 	.size = sizeof(struct fi_ops_prov),
 	.getinfo = psmx_getinfo,
 	.domain = psmx_domain_open,
-	.fabric = __fi_fabric,
+	.fabric = psmx_fabric,
 };
 
 void psmx_ini(void)
