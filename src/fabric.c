@@ -730,7 +730,7 @@ static struct fi_ops_fabric __fi_ops_fabric = {
 	.eq_open = __fi_eq_open,
 };
 
-int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
+int __fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	      void *context)
 {
 	struct __fid_fabric *fab;
@@ -750,6 +750,24 @@ int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	fab->flags = flags;
 	*fabric = &fab->fabric_fid;
 	return 0;
+}
+
+int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
+	      void *context)
+{
+	struct fi_prov *prov;
+	int ret = -FI_ENOSYS;
+
+	for (prov = prov_head; prov; prov = prov->next) {
+		if (!prov->ops->fabric)
+			continue;
+
+		ret = prov->ops->fabric(name, flags, fabric, context);
+		if (!ret)
+			break;
+	}
+
+	return ret;
 }
 
 

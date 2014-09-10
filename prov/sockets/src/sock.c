@@ -63,6 +63,7 @@ static struct fi_ops_prov sock_ops = {
 	.getinfo = sock_getinfo,
 	.freeinfo = NULL, /* use default */
 	.domain = sock_domain,
+	.fabric = __fi_fabric,
 };
 
 void sock_ini(void)

@@ -173,6 +173,8 @@ void psmx_fini(void);
 #define psmx_fini()
 #endif
 
+int __fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
+	void *context);
 const char *fi_sysfs_path(void);
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
 void __fi_freeinfo(struct fi_info *info);

@@ -31,6 +31,7 @@
  */
 
 #include "psmx.h"
+#include "fi.h"
 
 static int psmx_reserve_tag_bits(int *ep_cap, uint64_t *max_tag_value)
 {
@@ -260,6 +261,7 @@ static struct fi_ops_prov psmx_ops = {
 	.size = sizeof(struct fi_ops_prov),
 	.getinfo = psmx_getinfo,
 	.domain = psmx_domain_open,
+	.fabric = __fi_fabric,
 };
 
 void psmx_ini(void)

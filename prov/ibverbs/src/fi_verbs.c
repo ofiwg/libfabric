@@ -2415,6 +2415,7 @@ static struct fi_ops_prov ibv_ops = {
 	.getinfo = ibv_getinfo,
 	.freeinfo = ibv_freeinfo,
 	.domain = ibv_domain,
+	.fabric = __fi_fabric,
 };
 
 
