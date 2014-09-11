@@ -33,8 +33,6 @@
 #include "psmx.h"
 #include "fi.h"
 
-uint64_t psmx_ep_cap;
-
 static int psmx_reserve_tag_bits(int *ep_cap, uint64_t *max_tag_value)
 {
 	int reserved_bits = 0;
@@ -240,7 +238,6 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	psmx_info->datalen = 0;
 	psmx_info->data = NULL;
 
-	psmx_ep_cap = psmx_info->ep_cap;
 	*info = psmx_info;
 	return 0;
 

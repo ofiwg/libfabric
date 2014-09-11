@@ -50,8 +50,6 @@
  *	args[2].u64	recv_req
  */
 
-int psmx_am_msg_enabled = 0;
-
 struct psmx_unexp {
 	psm_epaddr_t	sender_addr;
 	uint64_t	sender_context;

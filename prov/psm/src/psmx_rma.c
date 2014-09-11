@@ -64,8 +64,6 @@
  *	args[2].u64	offset
  */
 
-int psmx_am_tagged_rma = 0;
-
 int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			psm_amarg_t *args, int nargs, void *src, uint32_t len)
 {
@@ -546,7 +544,7 @@ ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
 
 	chunk_size = MIN(PSMX_AM_CHUNK_SIZE, psmx_am_param.max_reply_short);
 
-	if (psmx_am_tagged_rma && len > chunk_size) {
+	if (fid_ep->domain->use_tagged_rma && len > chunk_size) {
 		psm_tag = PSMX_RMA_BIT | fid_ep->domain->psm_epid;
 		err = psm_mq_irecv(fid_ep->domain->psm_mq, psm_tag, -1ULL,
 			0, buf, len, (void *)&req->fi_context, &psm_req);
@@ -752,7 +750,7 @@ ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 
 	chunk_size = MIN(PSMX_AM_CHUNK_SIZE, psmx_am_param.max_request_short);
 
-	if (psmx_am_tagged_rma && len > chunk_size) {
+	if (fid_ep->domain->use_tagged_rma && len > chunk_size) {
 		psm_tag = PSMX_RMA_BIT | fid_ep->domain->psm_epid;
 		args[0].u32w0 = PSMX_AM_REQ_WRITE_LONG;
 		args[0].u32w1 = len;
