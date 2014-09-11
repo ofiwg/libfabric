@@ -210,9 +210,7 @@ Increments the specified counter whenever a successful RMA write or atomic
 operation is initiated from a remote endpoint that targets the given endpoint.
 .RE
 .PP
-Active endpoints that are configured to use index based addressing --
-FI_ADDR_INDEX -- must be bound to a single AV.  AV binding can occur
-before or after an endpoint has been enabled.
+Connectionless endpoints must be bound to a single address vector.
 .SS "fi_enable"
 This call transitions the endpoint into an enabled state.  An endpoint
 must be enabled before it may be used to perform data transfers.

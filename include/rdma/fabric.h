@@ -121,6 +121,7 @@ enum fi_addr_format {
 	FI_SOCKADDR_IB,		/* struct sockaddr_ib */
 };
 
+#define FI_ADDR_UNSPEC		UINT64_MAX
 typedef uint64_t		fi_addr_t;
 
 enum fi_progress {

@@ -46,7 +46,7 @@ Converts provider specific error information into a printable string
 .HP
 .BI "int fi_eq_readfrom(struct fid_eq *" eq ","
 .BI "void *" buf ", size_t " len ", "
-.BI "void *" src_addr ", size_t *" addrlen ");"
+.BI "fi_addr_t *" src_addr ");"
 .HP
 .BI "int fi_eq_readerr(struct fid_eq *" eq ","
 .BI "struct fi_eq_err_entry *" buf ", size_t " len ", "
@@ -63,7 +63,7 @@ Converts provider specific error information into a printable string
 .HP
 .BI "int fi_eq_condreadfrom(struct fid_eq *" eq ","
 .BI "void *" buf ", size_t " len ","
-.BI "void *" src_addr ", size_t *" addrlen ", const void *" cond ");"
+.BI "fi_addr_t *" src_addr ", const void *" cond ");"
 .PP
 .HP
 .BI "const char * fi_eq_strerror(struct fid_eq *" eq ", int " prov_errno ", "
@@ -89,8 +89,6 @@ For fi_eq_strerror, an optional buffer that receives printable error information
 Length of data buffer
 .IP "src_addr"
 Source address of a completed receive operation
-.IP "addrlen"
-Size of source address buffer
 .IP "flags"
 Additional flags to apply to the operation
 .IP "cond"
@@ -325,18 +323,13 @@ event data from the EQ.  The format of the event data is based on the user
 specified options when the EQ was opened.  Multiple events may be retrieved
 from an EQ in a single call, provided that sufficient buffer space was
 provided.  The number of bytes successfully read from the EQ is returned
-by the calls.  fi_eq_readfrom is an optional function.
-The availability of fi_eq_readfrom for an endpoint should be checked using the macro
-FI_EQ_READFROM with the event queue as the parameter. If the function is
-available, the macro evaluates to 1, if not it evaluates to 0.
+by the calls.
 .PP
-The readfrom calls allow the EQ to return source address information to
-the user for any received data.  The format and size of the source address
-is a property of the associated resource domain.  See the addr_format
-field of struct fi_info when calling fi_domain.  Note that returning source
-address information may require that the provider perform address
-translation  and/or look-up based on data available in the underlying protocol
-in order to provide the requested data, which may adversely affect performance.
+The fi_eq_readfrom call allows the EQ to return source address information to
+the user for any received data.  Source address data is only available for
+those endpoints configured with FI_SOURCE capability.  If fi_eq_readfrom is
+called on an endpoint for which source addressing data is not available, the
+source address will be set to FI_ADDR_UNSPEC.
 .PP
 EQs are optimized to report operations which have completed successfully.
 Operations which fail are reported 'out of band'.  Such operations are

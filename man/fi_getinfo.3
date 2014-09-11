@@ -161,7 +161,11 @@ Endpoint capabilities are obtained by OR-ing the following flags together.
 If endpoint capabilities in the hint parameter are set to 0, the underlying
 provider will return the set of capabilities which are supported.  Otherwise,
 providers will only return endpoints matching the specified set of
-capabilities.
+capabilities.  Providers may indicate that an endpoint supports capabilities
+beyond those requested when the use of expanded capabilities will not
+adversely affect performance.  Applications may use this feature to request a
+minimal set of requirements, then check the returned capabilities to enable
+additional optimizations.
 .IP "FI_PASSIVE"
 Indicates that the fabric endpoint will be used to listen for connection
 requests.  Use of this capability implies the use of the fi_getinfo flag
@@ -227,6 +231,13 @@ endpoint options (getopt/setopt) to determine injected transfer limits.
 .IP "FI_MULTI_RECV"
 Specifies that the endpoint must support the FI_MULTI_RECV flag when
 posting receive buffers.
+.IP "FI_SOURCE"
+Requests that the endpoint return source addressing data as part of its
+completion data.  This capability only applies to connectionless endpoints.
+Note that returning source
+address information may require that the provider perform address
+translation  and/or look-up based on data available in the underlying protocol
+in order to provide the requested data, which may adversely affect performance.
 .IP "FI_READ"
 Indicates that the user requires an endpoint capable of initiating reads
 against remote memory regions.  Remote reads include some RMA and atomic
