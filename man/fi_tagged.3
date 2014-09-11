@@ -1,4 +1,4 @@
-.TH "FI_TAGGED" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_TAGGED" 3 "2014-09-11" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_tagged \- Tagged data transfer operations
 .PP
@@ -36,7 +36,7 @@ Initiate a search operation for a buffered receive matching a given tag
 .HP
 .BI "ssize_t fi_trecvfrom(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "void *" desc ","
-.BI "const void * " src_addr ", uint64_t " tag ", uint64_t " ignore ","
+.BI "fi_addr_t " src_addr ", uint64_t " tag ", uint64_t " ignore ","
 .BI "void * " context ");"
 .HP
 .BI "ssize_t fi_trecvmsg(struct fid_ep *" ep ", const struct fi_msg_tagged * " msg ","
@@ -53,7 +53,7 @@ Initiate a search operation for a buffered receive matching a given tag
 .HP
 .BI "ssize_t fi_tsendto(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "void *" desc ","
-.BI "const void * " dest_addr ", uint64_t " tag ", void * " context ");"
+.BI "fi_addr_t " dest_addr ", uint64_t " tag ", void * " context ");"
 .HP
 .BI "ssize_t fi_tsendmsg(struct fid_ep *" ep ", const struct fi_msg_tagged * " msg ","
 .BI "uint64_t " flags ");"
@@ -62,7 +62,7 @@ Initiate a search operation for a buffered receive matching a given tag
 .BI "uint64_t " tag ");"
 .HP
 .BI "ssize_t fi_tinjectto(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
-.BI "const void * " dest_addr ", uint64_t " tag ");"
+.BI "fi_addr_t " dest_addr ", uint64_t " tag ");"
 .HP
 .BI "ssize_t fi_tsenddata(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "void *" desc ", uint64_t " data ","
@@ -70,7 +70,7 @@ Initiate a search operation for a buffered receive matching a given tag
 .HP
 .BI "ssize_t fi_tsenddatato(struct fid_ep *" ep ", const void * " buf ", size_t " len ","
 .BI "void *" desc ", uint64_t " data ","
-.BI "const void * " dest_addr ", uint64_t " tag ", void * " context ");"
+.BI "fi_addr_t " dest_addr ", uint64_t " tag ", void * " context ");"
 .HP
 .BI "ssize_t fi_tsearch(struct fid_ep *" ep ", uint64_t *" tag ", uint64_t " ignore ","
 .BI "uint64_t " flags ", void * " src_addr ", size_t * " src_addrlen ","

@@ -1,4 +1,4 @@
-.TH "FI_ATOMIC" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ATOMIC" 3 "2014-09-11" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_atomic - Remote atomic functions
 .PP
@@ -44,7 +44,7 @@ Indicates if a provider supports a specific atomic operation
 .HP
 .BI "ssize_t fi_atomicto(struct fid_ep *" ep ","
 .BI "const void * " buf ", size_t " count ", void *" desc ","
-.BI "const void *" dest_addr ","
+.BI "fi_addr_t " dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
@@ -63,7 +63,7 @@ Indicates if a provider supports a specific atomic operation
 .BI "ssize_t fi_inject_atomicto(struct fid_ep *" ep ","
 .BI "const void *" buf ","
 .BI "size_t " count ","
-.BI "const void *" dest_addr ","
+.BI "fi_addr_t " dest_addr ","
 .BI "uint64_t " addr ","
 .BI "uint64_t " key ","
 .BI "enum fi_datatype " datatype ","
@@ -85,7 +85,7 @@ Indicates if a provider supports a specific atomic operation
 .BI "ssize_t fi_fetch_atomicto(struct fid_ep *" ep ","
 .BI "const void * " buf ", size_t " count ", void *" desc ","
 .BI "void * " result ", void *" result_desc ","
-.BI "const void *" dest_addr ","
+.BI "fi_addr_t " dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP
@@ -113,7 +113,7 @@ Indicates if a provider supports a specific atomic operation
 .BI "const void * " buf ", size_t " count ", void *" desc ","
 .BI "const void * " compare ", void *" compare_desc ","
 .BI "void * " result ", void *" result_desc ","
-.BI "const void *" dest_addr ","
+.BI "fi_addr_t " dest_addr ","
 .BI "uint64_t " addr ", uint64_t " key ","
 .BI "enum fi_datatype " datatype ", enum fi_op " op ", void * " context ");"
 .HP

@@ -1,4 +1,4 @@
-.TH "FI_GETINFO" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_GETINFO" 3 "2014-09-11" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 .SH SYNOPSIS
@@ -333,18 +333,6 @@ Provides raw network-level access.
 .SH "ADDRESSING FORMATS"
 Additional information on address formats is available under address vector
 .BR "fi_av(3)".
-.IP "FI_ADDR"
-Address is of type void *.  Addresses of type FI_ADDR are returned when
-inserting addresses into address vector maps.  An FI_ADDR points to a
-opaque, provider specific mapping of a transport address, which can avoid
-the need to translate higher-level addresses into provider specific addresses
-needed for data transfer operations.
-.IP "FI_ADDR_INDEX"
-Address is a size_t index into an address vector.  Addresses of type
-FI_ADDR_INDEX are returned when inserting addresses into address vector tables.
-An FI_ADDR_INDEX is an index into an AV table, which can avoid
-the need to translate higher-level addresses into provider specific addresses
-needed for data transfer operations.
 .IP "FI_ADDR_PROTO"
 FI_ADDR_PROTO indicates that a protocol specific address format should be
 used.  Protocol specific addresses are treated as opaque by applications,
