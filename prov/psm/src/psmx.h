@@ -238,9 +238,12 @@ struct psmx_fid_domain {
 	psm_mq_t		psm_mq;
 	pthread_t		ns_thread;
 	int			ns_port;
-	uint64_t		ep_cap;
 
 #if PSMX_USE_AM
+
+	int			use_am_msg;
+	int			use_tagged_rma;
+	int			am_initialized;
 
 #if PSMX_AM_USE_SEND_QUEUE
 	pthread_cond_t		progress_cond;
@@ -511,11 +514,7 @@ extern struct fi_ops_msg	psmx_msg2_ops;
 extern struct fi_ops_rma	psmx_rma_ops;
 extern struct fi_ops_atomic	psmx_atomic_ops;
 extern struct psm_am_parameters psmx_am_param;
-extern int			psmx_am_msg_enabled;
-extern int			psmx_am_tagged_rma;
 #endif
-// TODO: Do something sane in place of using this variable
-extern uint64_t			psmx_ep_cap;
 
 void	psmx_ini(void);
 void	psmx_fini(void);
@@ -531,6 +530,7 @@ int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 int	psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		       struct fid_cntr **cntr, void *context);
 
+int	psmx_domain_enable_features(struct psmx_fid_domain *fid_domain, int ep_cap);
 void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername);
 void	psmx_get_uuid(psm_uuid_t uuid);

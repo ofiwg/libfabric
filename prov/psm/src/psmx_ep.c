@@ -376,12 +376,13 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 {
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_ep *fid_ep;
+	int err;
+
+	if (info && ((info->ep_cap & PSMX_EP_CAP) != info->ep_cap))
+		return -EINVAL;
 
 	fid_domain = container_of(domain, struct psmx_fid_domain, domain.fid);
 	if (!fid_domain)
-		return -EINVAL;
-
-	if (info && ((info->ep_cap & fid_domain->ep_cap) != info->ep_cap))
 		return -EINVAL;
 
 	fid_ep = (struct psmx_fid_ep *) calloc(1, sizeof *fid_ep);
@@ -411,13 +412,19 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 			fid_ep->ep.msg = &psmx_msg_ops;
 		}
 #if PSMX_USE_AM
-		if ((info->ep_cap & FI_MSG) && psmx_am_msg_enabled)
+		if ((info->ep_cap & FI_MSG) && fid_domain->use_am_msg)
 			fid_ep->ep.msg = &psmx_msg2_ops;
 		if (info->ep_cap & FI_RMA)
 			fid_ep->ep.rma = &psmx_rma_ops;
 		if (info->ep_cap & FI_ATOMICS)
 			fid_ep->ep.atomic = &psmx_atomic_ops;
 #endif
+	}
+
+	err = psmx_domain_enable_features(fid_domain, info->ep_cap);
+	if (err) {
+		free(fid_ep);
+		return err;
 	}
 
 	*ep = &fid_ep->ep;

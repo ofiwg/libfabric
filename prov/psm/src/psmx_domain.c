@@ -170,39 +170,24 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 	if (err)
 		fid_domain->ns_thread = 0;
 
-	if (psmx_ep_cap & FI_MSG)
-		fid_domain->reserved_tag_bits |= PSMX_MSG_BIT;
-
 #if PSMX_USE_AM
 	s = getenv("SFI_PSM_AM_MSG");
 	if (s && (!strcasecmp(s, "yes") || !strcasecmp(s, "on") || !strcmp(s, "1")))
-		psmx_am_msg_enabled = 1;
+		fid_domain->use_am_msg = 1;
 
 	s = getenv("SFI_PSM_TAGGED_RMA");
 	if (s && (!strcasecmp(s, "yes") || !strcasecmp(s, "on") || !strcmp(s, "1")))
-		psmx_am_tagged_rma = 1;
-
-	if (psmx_am_msg_enabled)
-		fid_domain->reserved_tag_bits &= ~PSMX_MSG_BIT;
-
-	if ((psmx_ep_cap & FI_RMA) && psmx_am_tagged_rma)
-		fid_domain->reserved_tag_bits |= PSMX_RMA_BIT;
-
-	if ((psmx_ep_cap & FI_RMA) ||
-	    (psmx_ep_cap & FI_ATOMICS) ||
-	    psmx_am_msg_enabled) {
-		err = psmx_am_init(fid_domain);
-		if (err) {
-			if (fid_domain->ns_thread) {
-				pthread_cancel(fid_domain->ns_thread);
-				pthread_join(fid_domain->ns_thread, NULL);
-			}
-			psm_mq_finalize(fid_domain->psm_mq);
-			goto err_out_close_ep;
-		}
-	}
+		fid_domain->use_tagged_rma = 1;
 #endif
-	fid_domain->ep_cap = psmx_ep_cap;
+
+	if (psmx_domain_enable_features(fid_domain, 0) < 0) {
+		if (fid_domain->ns_thread) {
+			pthread_cancel(fid_domain->ns_thread);
+			pthread_join(fid_domain->ns_thread, NULL);
+		}
+		psm_mq_finalize(fid_domain->psm_mq);
+		goto err_out_close_ep;
+	}
 
 	*domain = &fid_domain->domain;
 	return 0;
@@ -216,6 +201,31 @@ err_out_free_domain:
 	free(fid_domain);
 
 err_out:
+	return err;
+}
+
+int psmx_domain_enable_features(struct psmx_fid_domain *fid_domain, int ep_cap)
+{
+	int err = 0;
+
+	if (ep_cap & FI_MSG)
+		fid_domain->reserved_tag_bits |= PSMX_MSG_BIT;
+
+#if PSMX_USE_AM
+	if (fid_domain->use_am_msg)
+		fid_domain->reserved_tag_bits &= ~PSMX_MSG_BIT;
+
+	if ((ep_cap & FI_RMA) && fid_domain->use_tagged_rma)
+		fid_domain->reserved_tag_bits |= PSMX_RMA_BIT;
+
+	if (((ep_cap & FI_RMA) || (ep_cap & FI_ATOMICS) || fid_domain->use_am_msg) &&
+	    !fid_domain->am_initialized) {
+		err = psmx_am_init(fid_domain);
+		if (!err)
+			fid_domain->am_initialized = 1;
+	}
+#endif
+
 	return err;
 }
 
