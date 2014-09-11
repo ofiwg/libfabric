@@ -214,7 +214,6 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	psmx_info->ep_cap = (hints && hints->ep_cap) ? hints->ep_cap : ep_cap;
 	psmx_info->op_flags = hints ? hints->op_flags : 0;
 	psmx_info->addr_format = FI_ADDR_PROTO;
-	psmx_info->info_addr_format = FI_ADDR_PROTO;
 	psmx_info->src_addrlen = 0;
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);
 	psmx_info->src_addr = NULL;

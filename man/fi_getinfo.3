@@ -63,7 +63,6 @@ struct fi_info {
 	uint64_t            ep_cap;
 	uint64_t            op_flags;
 	enum fi_addr_format addr_format;
-	enum fi_addr_format info_addr_format;
 	size_t              src_addrlen;
 	size_t              dest_addrlen;
 	void               *src_addr;
@@ -100,14 +99,8 @@ using the returned fi_info structure.  Supported op_flags are listed in the
 .B "Op flags"
 section below.
 .IP "addr_format"
-If specified, indicates the format used for addressing in data transfer
-operations. Supported formats
-are listed in the
-.B "Addressing formats"
-section below.
-.IP "info_addr_format"
-If specified, indicates the format of addresses referenced by struct fi_info.
-Supported formats are listed in the
+If specified, indicates the format of addresses referenced by the fabric
+interfaces and data structures.  Supported formats are listed in the
 .B "Addressing formats"
 section below.
 .IP "src_addrlen"
@@ -342,16 +335,26 @@ service with flow control that maintains message boundaries.
 .IP "FID_PACKET [not targeting 1.0 release]"
 Provides raw network-level access.
 .SH "ADDRESSING FORMATS"
-Additional information on address formats is available under address vector
+Multiple fabric interfaces take as input either a source or destination
+address parameter.  This includes struct fi_info (src_addr and dest_addr),
+CM calls (getname, getpeer, connect, join, and leave), and AV calls (insert,
+lookup, and straddr).  The fi_info addr_format field indicates the expected
+address format for these operations.
+.PP
+A provider may support one or more of the following addressing formats.  In
+some cases, a selected addressing format may need to be translated or mapped
+into into an address which is native to the fabric.
 .BR "fi_av(3)".
 .IP "FI_ADDR_PROTO"
-FI_ADDR_PROTO indicates that a protocol specific address format should be
-used.  Protocol specific addresses are treated as opaque by applications,
-and they target applications which make use of an out of band address exchange.
+FI_ADDR_PROTO indicates that a native, protocol specific address format should
+be used.  Protocol specific addresses are intended to be treated as opaque
+by applications, and they target apps which make use of an out of band
+address exchange.
 Applications which use FI_ADDR_PROTO may use fi_getname() to obtain the
 protocol specific address assigned to an allocated endpoint.
 .IP "FI_SOCKADDR"
-Address if of type sockaddr.
+Address is of type sockaddr.  The specific socket address format will be
+determined at run time by interfaces examining the sa_family field.
 .IP "FI_SOCKADDR_IN"
 Address is of type sockaddr_in (IPv4).
 .IP "FI_SOCKADDR_IN6"

@@ -175,7 +175,6 @@ struct fi_info {
 	uint64_t		ep_cap;
 	uint64_t		op_flags;
 	enum fi_addr_format	addr_format;
-	enum fi_addr_format	info_addr_format;
 	size_t			src_addrlen;
 	size_t			dest_addrlen;
 	void			*src_addr;
