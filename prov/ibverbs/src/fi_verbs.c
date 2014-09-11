@@ -461,7 +461,7 @@ ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 static ssize_t
 ibv_msg_ep_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
-		    const void *src_addr, void *context)
+		    fi_addr_t src_addr, void *context)
 {
 	return -FI_ENOSYS;
 }
@@ -543,7 +543,7 @@ ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 static ssize_t
 ibv_msg_ep_sendto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		  const void *dest_addr, void *context)
+		  fi_addr_t dest_addr, void *context)
 {
 	return -FI_ENOSYS;
 }
@@ -593,14 +593,14 @@ ibv_msg_ep_inject(struct fid_ep *ep, const void *buf, size_t len)
 
 static ssize_t
 ibv_msg_ep_injectto(struct fid_ep *ep, const void *buf, size_t len,
-		    const void *dest_addr)
+		    fi_addr_t dest_addr)
 {
 	return -FI_ENOSYS;
 }
 
 static ssize_t
 ibv_msg_ep_senddatato(struct fid_ep *ep, const void *buf, size_t len,
-		      void *desc, uint64_t data, const void *dest_addr,
+		      void *desc, uint64_t data, fi_addr_t dest_addr,
 		      void *context)
 {
 	return -FI_ENOSYS;
@@ -706,7 +706,7 @@ ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 static ssize_t
 ibv_msg_ep_rma_writeto(struct fid_ep *ep, const void *buf, size_t len,
-			void *desc, const void *dest_addr, uint64_t addr,
+			void *desc, fi_addr_t dest_addr, uint64_t addr,
 			uint64_t key, void *context)
 {
 	return -FI_ENOSYS;
@@ -807,7 +807,7 @@ ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 static ssize_t
 ibv_msg_ep_rma_readfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
-			const void *src_addr, uint64_t addr, uint64_t key,
+			fi_addr_t src_addr, uint64_t addr, uint64_t key,
 			void *context)
 {
 	return -FI_ENOSYS;
@@ -854,7 +854,7 @@ ibv_msg_ep_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
 
 static ssize_t
 ibv_msg_ep_rma_injectto(struct fid_ep *ep, const void *buf, size_t len,
-                        const void *dest_addr, uint64_t addr, uint64_t key)
+			fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	return -FI_ENOSYS;
 }
@@ -889,7 +889,7 @@ ibv_msg_ep_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 
 static ssize_t
 ibv_msg_ep_rma_writedatato(struct fid_ep *ep, const void *buf, size_t len,
-			void *desc, uint64_t data, const void *dest_addr,
+			void *desc, uint64_t data, fi_addr_t dest_addr,
 			uint64_t addr, uint64_t key, void *context)
 {
 	return -FI_ENOSYS;
@@ -977,7 +977,7 @@ ibv_msg_ep_atomic_writev(struct fid_ep *ep,
 static ssize_t
 ibv_msg_ep_atomic_writeto(struct fid_ep *ep,
                         const void *buf, size_t count, void *desc,
-                        const void *dest_addr,
+                        fi_addr_t dest_addr,
                         uint64_t addr, uint64_t key,
                         enum fi_datatype datatype, enum fi_op op, void *context)
 {
@@ -1114,7 +1114,7 @@ static ssize_t
 ibv_msg_ep_atomic_readwriteto(struct fid_ep *ep,
                         const void *buf, size_t count, void *desc,
                         void *result, void *result_desc,
-                        const void *dest_addr,
+                        fi_addr_t dest_addr,
                         uint64_t addr, uint64_t key,
                         enum fi_datatype datatype, enum fi_op op, void *context)
 {
@@ -1254,7 +1254,7 @@ static ssize_t
 ibv_msg_ep_atomic_compwriteto(struct fid_ep *ep, const void *buf, size_t count,
 				void *desc, const void *compare,
 				void *compare_desc, void *result,
-				void *result_desc, const void *dest_addr,
+				void *result_desc, fi_addr_t dest_addr,
                         	uint64_t addr, uint64_t key,
                         	enum fi_datatype datatype,
 				enum fi_op op, void *context)

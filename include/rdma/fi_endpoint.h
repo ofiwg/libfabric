@@ -83,7 +83,7 @@ struct fi_msg {
 	const struct iovec	*msg_iov;
 	void			**desc;
 	size_t			iov_count;
-	const void		*addr;
+	fi_addr_t		addr;
 	void			*context;
 	uint64_t		data;
 	int			flow;
@@ -120,7 +120,7 @@ struct fi_ops_msg {
 	ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			size_t count, void *context);
 	ssize_t (*recvfrom)(struct fid_ep *ep, void *buf, size_t len, void *desc,
-			const void *src_addr, void *context);
+			fi_addr_t src_addr, void *context);
 	ssize_t (*recvmsg)(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags);
 	ssize_t (*send)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
@@ -128,16 +128,16 @@ struct fi_ops_msg {
 	ssize_t (*sendv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			size_t count, void *context);
 	ssize_t (*sendto)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-			const void *dest_addr, void *context);
+			fi_addr_t dest_addr, void *context);
 	ssize_t (*sendmsg)(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags);
 	ssize_t	(*inject)(struct fid_ep *ep, const void *buf, size_t len);
 	ssize_t	(*injectto)(struct fid_ep *ep, const void *buf, size_t len,
-			const void *dest_addr);
+			fi_addr_t dest_addr);
 	ssize_t (*senddata)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			uint64_t data, void *context);
 	ssize_t (*senddatato)(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-			uint64_t data, const void *dest_addr, void *context);
+			uint64_t data, fi_addr_t dest_addr, void *context);
 };
 
 struct fi_ops_cm;
@@ -229,7 +229,7 @@ fi_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 static inline ssize_t
 fi_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
-	    const void *src_addr, void *context)
+	    fi_addr_t src_addr, void *context)
 {
 	return ep->msg->recvfrom(ep, buf, len, desc, src_addr, context);
 }
@@ -255,7 +255,7 @@ fi_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 static inline ssize_t
 fi_sendto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-	  const void *dest_addr, void *context)
+	  fi_addr_t dest_addr, void *context)
 {
 	return ep->msg->sendto(ep, buf, len, desc, dest_addr, context);
 }
@@ -275,7 +275,7 @@ fi_inject(struct fid_ep *ep, const void *buf, size_t len)
 	(FI_CHECK_OP(ep->msg, struct fi_ops_msg, inject))
 
 static inline ssize_t
-fi_injectto(struct fid_ep *ep, const void *buf, size_t len, const void *dest_addr)
+fi_injectto(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr)
 {
 	return ep->msg->injectto(ep, buf, len, dest_addr);
 }
@@ -291,7 +291,7 @@ fi_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 
 static inline ssize_t
 fi_senddatato(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-	      uint64_t data, const void *dest_addr, void *context)
+	      uint64_t data, fi_addr_t dest_addr, void *context)
 {
 	return ep->msg->senddatato(ep, buf, len, desc, data, dest_addr, context);
 }

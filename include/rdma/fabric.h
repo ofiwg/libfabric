@@ -114,14 +114,15 @@ struct fi_ioc {
  * Format for transport addresses: sendto, writeto, etc.
  */
 enum fi_addr_format {
-	FI_ADDR,		/* void * fi_addr */
-	FI_ADDR_INDEX,		/* size_t fi_addr */
 	FI_ADDR_PROTO,		/* void * proto_addr */
 	FI_SOCKADDR,		/* struct sockaddr */
 	FI_SOCKADDR_IN,		/* struct sockaddr_in */
 	FI_SOCKADDR_IN6,	/* struct sockaddr_in6 */
 	FI_SOCKADDR_IB,		/* struct sockaddr_ib */
 };
+
+#define FI_ADDR_UNSPEC		UINT64_MAX
+typedef uint64_t		fi_addr_t;
 
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
@@ -174,7 +175,6 @@ struct fi_info {
 	uint64_t		ep_cap;
 	uint64_t		op_flags;
 	enum fi_addr_format	addr_format;
-	enum fi_addr_format	info_addr_format;
 	size_t			src_addrlen;
 	size_t			dest_addrlen;
 	void			*src_addr;

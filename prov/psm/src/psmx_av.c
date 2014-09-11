@@ -114,14 +114,14 @@ static int psmx_av_check_table_size(struct psmx_fid_av *fid_av, size_t count)
 }
 
 static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
-			  void **fi_addr, uint64_t flags)
+			  fi_addr_t *fi_addr, uint64_t flags)
 {
 	struct psmx_fid_av *fid_av;
 	psm_error_t *errors;
 	int *mask;
 	int err;
 	int i;
-	void **result = NULL;
+	fi_addr_t *result = NULL;
 	struct psmx_epaddr_context *context;
 
 	fid_av = container_of(av, struct psmx_fid_av, av);
@@ -152,7 +152,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 
 		result = fi_addr;
 		addr = (const void *)(fid_av->psm_epids + fid_av->last);
-		fi_addr = (void **)(fid_av->psm_epaddrs + fid_av->last);
+		fi_addr = (fi_addr_t *)(fid_av->psm_epaddrs + fid_av->last);
 	}
 
 	/* prevent connecting to the same ep twice, which is fatal in PSM */
@@ -188,7 +188,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	if (fid_av->type == FI_AV_TABLE) {
 		if (result) {
 			for (i=0; i<count; i++)
-				((uint64_t *)result)[i] = fid_av->last + i;
+				result[i] = fid_av->last + i;
 		}
 		fid_av->last += count;
 	}
@@ -196,7 +196,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	return psmx_errno(err);
 }
 
-static int psmx_av_remove(struct fid_av *av, void *fi_addr, size_t count,
+static int psmx_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			  uint64_t flags)
 {
 	struct psmx_fid_av *fid_av;
@@ -207,7 +207,7 @@ static int psmx_av_remove(struct fid_av *av, void *fi_addr, size_t count,
 	return psmx_errno(err);
 }
 
-static int psmx_av_lookup(struct fid_av *av, const void *fi_addr, void *addr,
+static int psmx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			  size_t *addrlen)
 {
 	struct psmx_fid_av *fid_av;
@@ -320,7 +320,6 @@ int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	fid_av->domain = fid_domain;
 	fid_av->type = type;
-	fid_av->format = FI_ADDR;
 	fid_av->addrlen = sizeof(psm_epaddr_t);
 	fid_av->count = count;
 

@@ -46,7 +46,7 @@
 
 
 static int sock_am_insert(struct fid_av *av, const void *addr, size_t count,
-			  void **fi_addr, uint64_t flags)
+			  fi_addr_t *fi_addr, uint64_t flags)
 {
 	const struct sockaddr_in *sin;
 	struct sockaddr_in *fin;
@@ -58,23 +58,23 @@ static int sock_am_insert(struct fid_av *av, const void *addr, size_t count,
 		return -FI_ENOSYS;
 
 	sin = addr;
-	fin = *fi_addr;
+	fin = (struct sockaddr_in *) fi_addr;
 	for (i = 0; i < count; i++)
 		memcpy(&fin[i], &sin[i], sizeof(*sin));
 
 	return 0;
 }
 
-static int sock_am_remove(struct fid_av *av, void *fi_addr, size_t count,
+static int sock_am_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			  uint64_t flags)
 {
 	return 0;
 }
 
-static int sock_am_lookup(struct fid_av *av, const void *fi_addr, void *addr,
+static int sock_am_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			  size_t *addrlen)
 {
-	memcpy(addr, fi_addr, min(*addrlen, sizeof(struct sockaddr_in)));
+	memcpy(addr, &fi_addr, min(*addrlen, sizeof(struct sockaddr_in)));
 	*addrlen = sizeof(struct sockaddr_in);
 	return 0;
 }

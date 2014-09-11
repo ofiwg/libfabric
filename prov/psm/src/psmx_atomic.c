@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -759,7 +759,7 @@ gen_local_event:
 ssize_t _psmx_atomic_writeto(struct fid_ep *ep,
 			     const void *buf,
 			     size_t count, void *desc,
-			     const void *dest_addr,
+			     fi_addr_t dest_addr,
 			     uint64_t addr, uint64_t key,
 			     enum fi_datatype datatype,
 			     enum fi_op op, void *context,
@@ -817,11 +817,11 @@ ssize_t _psmx_atomic_writeto(struct fid_ep *ep,
 
 	fid_av = fid_ep->av;
 	if (fid_av && fid_av->type == FI_AV_TABLE) {
-		idx = (size_t)dest_addr;
+		idx = dest_addr;
 		if (idx >= fid_av->last)
 			return -EINVAL;
 
-		dest_addr = (void *)fid_av->psm_epaddrs[idx];
+		dest_addr = (fi_addr_t) fid_av->psm_epaddrs[idx];
 	}
 	else if (!dest_addr) {
 		return -EINVAL;
@@ -883,7 +883,7 @@ ssize_t _psmx_atomic_writeto(struct fid_ep *ep,
 static ssize_t psmx_atomic_writeto(struct fid_ep *ep,
 			       const void *buf,
 			       size_t count, void *desc,
-			       const void *dest_addr,
+			       fi_addr_t dest_addr,
 			       uint64_t addr, uint64_t key,
 			       enum fi_datatype datatype,
 			       enum fi_op op, void *context)
@@ -929,7 +929,7 @@ static ssize_t psmx_atomic_write(struct fid_ep *ep,
 		return -ENOTCONN;
 
 	return psmx_atomic_writeto(ep, buf, count, desc,
-				   fid_ep->peer_psm_epaddr, addr, key,
+				   (fi_addr_t) fid_ep->peer_psm_epaddr, addr, key,
 				   datatype, op, context);
 }
 
@@ -953,7 +953,7 @@ static ssize_t psmx_atomic_writev(struct fid_ep *ep,
 static ssize_t psmx_atomic_injectto(struct fid_ep *ep,
 			       const void *buf,
 			       size_t count, /*void *desc,*/
-			       const void *dest_addr,
+			       fi_addr_t dest_addr,
 			       uint64_t addr, uint64_t key,
 			       enum fi_datatype datatype,
 			       enum fi_op op)
@@ -982,7 +982,7 @@ static ssize_t psmx_atomic_inject(struct fid_ep *ep,
 		return -ENOTCONN;
 
 	return psmx_atomic_injectto(ep, buf, count, /*desc,*/
-				   fid_ep->peer_psm_epaddr, addr, key,
+				    (fi_addr_t) fid_ep->peer_psm_epaddr, addr, key,
 				   datatype, op);
 }
 
@@ -990,7 +990,7 @@ ssize_t _psmx_atomic_readwriteto(struct fid_ep *ep,
 				 const void *buf,
 				 size_t count, void *desc,
 				 void *result, void *result_desc,
-				 const void *dest_addr,
+				 fi_addr_t dest_addr,
 				 uint64_t addr, uint64_t key,
 				 enum fi_datatype datatype,
 				 enum fi_op op, void *context,
@@ -1050,11 +1050,11 @@ ssize_t _psmx_atomic_readwriteto(struct fid_ep *ep,
 
 	fid_av = fid_ep->av;
 	if (fid_av && fid_av->type == FI_AV_TABLE) {
-		idx = (size_t)dest_addr;
+		idx = dest_addr;
 		if (idx >= fid_av->last)
 			return -EINVAL;
 
-		dest_addr = (void *)fid_av->psm_epaddrs[idx];
+		dest_addr = (fi_addr_t) fid_av->psm_epaddrs[idx];
 	}
 	else if (!dest_addr) {
 		return -EINVAL;
@@ -1118,7 +1118,7 @@ static ssize_t psmx_atomic_readwriteto(struct fid_ep *ep,
 				   const void *buf,
 				   size_t count, void *desc,
 				   void *result, void *result_desc,
-				   const void *dest_addr,
+				   fi_addr_t dest_addr,
 				   uint64_t addr, uint64_t key,
 				   enum fi_datatype datatype,
 				   enum fi_op op, void *context)
@@ -1172,7 +1172,7 @@ static ssize_t psmx_atomic_readwrite(struct fid_ep *ep,
 
 	return psmx_atomic_readwriteto(ep, buf, count, desc,
 				       result, result_desc,
-				       fid_ep->peer_psm_epaddr,
+				       (fi_addr_t) fid_ep->peer_psm_epaddr,
 				       addr, key, datatype, op,
 				       context);
 }
@@ -1203,7 +1203,7 @@ ssize_t _psmx_atomic_compwriteto(struct fid_ep *ep,
 				 size_t count, void *desc,
 				 const void *compare, void *compare_desc,
 				 void *result, void *result_desc,
-				 const void *dest_addr,
+				 fi_addr_t dest_addr,
 				 uint64_t addr, uint64_t key,
 				 enum fi_datatype datatype,
 				 enum fi_op op, void *context,
@@ -1266,11 +1266,11 @@ ssize_t _psmx_atomic_compwriteto(struct fid_ep *ep,
 
 	fid_av = fid_ep->av;
 	if (fid_av && fid_av->type == FI_AV_TABLE) {
-		idx = (size_t)dest_addr;
+		idx = dest_addr;
 		if (idx >= fid_av->last)
 			return -EINVAL;
 
-		dest_addr = (void *)fid_av->psm_epaddrs[idx];
+		dest_addr = (fi_addr_t) fid_av->psm_epaddrs[idx];
 	}
 	else if (!dest_addr) {
 		return -EINVAL;
@@ -1349,7 +1349,7 @@ static ssize_t psmx_atomic_compwriteto(struct fid_ep *ep,
 				   size_t count, void *desc,
 				   const void *compare, void *compare_desc,
 				   void *result, void *result_desc,
-				   const void *dest_addr,
+				   fi_addr_t dest_addr,
 				   uint64_t addr, uint64_t key,
 				   enum fi_datatype datatype,
 				   enum fi_op op, void *context)
@@ -1411,7 +1411,7 @@ static ssize_t psmx_atomic_compwrite(struct fid_ep *ep,
 	return psmx_atomic_compwriteto(ep, buf, count, desc,
 				       compare, compare_desc,
 				       result, result_desc,
-				       fid_ep->peer_psm_epaddr,
+				       (fi_addr_t) fid_ep->peer_psm_epaddr,
 				       addr, key, datatype, op,
 				       context);
 }

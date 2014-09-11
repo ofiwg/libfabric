@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,7 +33,7 @@
 #include "psmx.h"
 
 ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
-			      void *desc, const void *src_addr,
+			      void *desc, fi_addr_t src_addr,
 			      uint64_t tag, uint64_t ignore,
 			      void *context, uint64_t flags)
 {
@@ -112,7 +112,7 @@ ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 }
 
 static ssize_t psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
-				    const void *src_addr,
+				    fi_addr_t src_addr,
 				    uint64_t tag, uint64_t ignore, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
@@ -146,10 +146,11 @@ static ssize_t psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len, void *
 	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
 
 	if (fid_ep->connected)
-		return psmx_tagged_recvfrom(ep, buf, len, desc, fid_ep->peer_psm_epaddr,
+		return psmx_tagged_recvfrom(ep, buf, len, desc,
+					    (fi_addr_t) fid_ep->peer_psm_epaddr,
 					    tag, ignore, context);
 	else
-		return psmx_tagged_recvfrom(ep, buf, len, desc, NULL,
+		return psmx_tagged_recvfrom(ep, buf, len, desc, 0,
 					    tag, ignore, context);
 }
 
@@ -167,7 +168,7 @@ static ssize_t psmx_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, voi
 }
 
 ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
-			    void *desc, const void *dest_addr, uint64_t tag,
+			    void *desc, fi_addr_t dest_addr, uint64_t tag,
 			    void *context, uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
@@ -279,7 +280,7 @@ ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
-				  void *desc, const void *dest_addr,
+				  void *desc, fi_addr_t dest_addr,
 				  uint64_t tag, void *context)
 {
 	struct psmx_fid_ep *fid_ep;
@@ -314,7 +315,7 @@ static ssize_t psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len, 
 	if (!fid_ep->connected)
 		return -ENOTCONN;
 
-	return psmx_tagged_sendto(ep, buf, len, desc, fid_ep->peer_psm_epaddr,
+	return psmx_tagged_sendto(ep, buf, len, desc, (fi_addr_t) fid_ep->peer_psm_epaddr,
 				  tag, context);
 }
 
@@ -331,7 +332,7 @@ static ssize_t psmx_tagged_sendv(struct fid_ep *ep, const struct iovec *iov, voi
 }
 
 static ssize_t psmx_tagged_injectto(struct fid_ep *ep, const void *buf, size_t len,
-				    const void *dest_addr, uint64_t tag)
+				    fi_addr_t dest_addr, uint64_t tag)
 {
 	struct psmx_fid_ep *fid_ep;
 
@@ -351,11 +352,11 @@ static ssize_t psmx_tagged_inject(struct fid_ep *ep, const void *buf, size_t len
 	if (!fid_ep->connected)
 		return -ENOTCONN;
 
-	return psmx_tagged_injectto(ep, buf, len, fid_ep->peer_psm_epaddr, tag);
+	return psmx_tagged_injectto(ep, buf, len, (fi_addr_t) fid_ep->peer_psm_epaddr, tag);
 }
 
 static ssize_t psmx_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
-				  uint64_t flags, void *src_addr, 
+				  uint64_t flags, fi_addr_t src_addr,
 				  size_t *src_addrlen, size_t *len,
 				  void *context)
 {

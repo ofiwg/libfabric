@@ -77,7 +77,6 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	uint32_t cnt = 0;
 	void *dest_addr = NULL;
 	int type = FID_RDM;
-	int addr_format = FI_ADDR;
 	int ep_cap = 0;
 	uint64_t max_tag_value = 0;
 	int err = -ENODATA;
@@ -156,18 +155,6 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 			goto err_out;
 		}
 
-		switch (hints->addr_format) {
-		case FI_ADDR:
-		case FI_ADDR_INDEX:
-			addr_format = hints->addr_format;
-			break;
-		default:
-			psmx_debug("%s: hints->addr_format=%d, supported=%d,%d.\n",
-					__func__, hints->addr_format, FI_ADDR,
-					FI_ADDR_INDEX);
-			goto err_out;
-		}
-
 		if (hints->ep_attr) {
 			if (hints->ep_attr->data_flow_cnt > 1) {
 				psmx_debug("%s: hints->ep_attr->data_flow_cnt=%d,"
@@ -226,8 +213,7 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	psmx_info->type = type;
 	psmx_info->ep_cap = (hints && hints->ep_cap) ? hints->ep_cap : ep_cap;
 	psmx_info->op_flags = hints ? hints->op_flags : 0;
-	psmx_info->addr_format = addr_format;
-	psmx_info->info_addr_format = FI_ADDR;
+	psmx_info->addr_format = FI_ADDR_PROTO;
 	psmx_info->src_addrlen = 0;
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);
 	psmx_info->src_addr = NULL;

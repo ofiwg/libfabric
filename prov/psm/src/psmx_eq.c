@@ -214,7 +214,7 @@ out:
 
 static int psmx_eq_get_event_src_addr(struct psmx_fid_eq *fid_eq,
 					struct psmx_event *event,
-					void *src_addr, size_t *addrlen)
+					fi_addr_t *src_addr)
 {
 	int err;
 
@@ -225,8 +225,7 @@ static int psmx_eq_get_event_src_addr(struct psmx_fid_eq *fid_eq,
 		(event->source & PSMX_MSG_BIT)) {
 		err = psmx_epid_to_epaddr(fid_eq->domain,
 					  event->source & ~PSMX_MSG_BIT,
-					  src_addr);
-		*addrlen = sizeof(psm_epaddr_t);
+					  (psm_epaddr_t *) src_addr);
 	}
 
 	return 0;
@@ -416,7 +415,7 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 }
 
 static ssize_t psmx_eq_readfrom(struct fid_eq *eq, void *buf, size_t len,
-				void *src_addr, size_t *addrlen)
+				fi_addr_t *src_addr)
 {
 	struct psmx_fid_eq *fid_eq;
 	struct psmx_event *event;
@@ -450,7 +449,7 @@ static ssize_t psmx_eq_readfrom(struct fid_eq *eq, void *buf, size_t len,
 	if (event) {
 		if (!event->error) {
 			memcpy(buf, (void *)&event->eqe, fid_eq->entry_size);
-			psmx_eq_get_event_src_addr(fid_eq, event, src_addr, addrlen);
+			psmx_eq_get_event_src_addr(fid_eq, event, src_addr);
 			free(event);
 			return fid_eq->entry_size;
 		}
@@ -465,7 +464,7 @@ static ssize_t psmx_eq_readfrom(struct fid_eq *eq, void *buf, size_t len,
 
 static ssize_t psmx_eq_read(struct fid_eq *eq, void *buf, size_t len)
 {
-	return psmx_eq_readfrom(eq, buf, len, NULL, NULL);
+	return psmx_eq_readfrom(eq, buf, len, NULL);
 }
 
 static ssize_t psmx_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
@@ -494,14 +493,14 @@ static ssize_t psmx_eq_write(struct fid_eq *eq, const void *buf, size_t len)
 }
 
 static ssize_t psmx_eq_condreadfrom(struct fid_eq *eq, void *buf, size_t len,
-				    void *src_addr, size_t *addrlen, const void *cond)
+				    fi_addr_t *src_addr, const void *cond)
 {
 	return -ENOSYS;
 }
 
 static ssize_t psmx_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond)
 {
-	return psmx_eq_condreadfrom(eq, buf, len, NULL, NULL, cond);
+	return psmx_eq_condreadfrom(eq, buf, len, NULL, cond);
 }
 
 static const char *psmx_eq_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,

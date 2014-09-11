@@ -332,7 +332,7 @@ struct psmx_trigger {
 			const void	*buf;
 			size_t		len;
 			void		*desc;
-			const void	*dest_addr;
+			fi_addr_t	dest_addr;
 			void		*context;
 			uint64_t	flags;
 		} send;
@@ -341,7 +341,7 @@ struct psmx_trigger {
 			void		*buf;
 			size_t		len;
 			void		*desc;
-			const void	*src_addr;
+			fi_addr_t	src_addr;
 			void		*context;
 			uint64_t	flags;
 		} recv;
@@ -350,7 +350,7 @@ struct psmx_trigger {
 			const void	*buf;
 			size_t		len;
 			void		*desc;
-			const void	*dest_addr;
+			fi_addr_t	dest_addr;
 			uint64_t	tag;
 			void		*context;
 			uint64_t	flags;
@@ -360,7 +360,7 @@ struct psmx_trigger {
 			void		*buf;
 			size_t		len;
 			void		*desc;
-			const void	*src_addr;
+			fi_addr_t	src_addr;
 			uint64_t	tag;
 			uint64_t	ignore;
 			void		*context;
@@ -372,7 +372,7 @@ struct psmx_trigger {
 			const void	*buf;
 			size_t		len;
 			void		*desc;
-			const void	*dest_addr;
+			fi_addr_t	dest_addr;
 			uint64_t	addr;
 			uint64_t	key;
 			void		*context;
@@ -383,7 +383,7 @@ struct psmx_trigger {
 			void		*buf;
 			size_t		len;
 			void		*desc;
-			const void	*src_addr;
+			fi_addr_t	src_addr;
 			uint64_t	addr;
 			uint64_t	key;
 			void		*context;
@@ -394,7 +394,7 @@ struct psmx_trigger {
 			const void	*buf;
 			size_t		count;
 			void		*desc;
-			const void	*dest_addr;
+			fi_addr_t	dest_addr;
 			uint64_t	addr;
 			uint64_t	key;
 			enum fi_datatype datatype;
@@ -409,7 +409,7 @@ struct psmx_trigger {
 			void		*desc;
 			void		*result;
 			void		*result_desc;
-			const void	*dest_addr;
+			fi_addr_t	dest_addr;
 			uint64_t	addr;
 			uint64_t	key;
 			enum fi_datatype datatype;
@@ -426,7 +426,7 @@ struct psmx_trigger {
 			void		*compare_desc;
 			void		*result;
 			void		*result_desc;
-			const void	*dest_addr;
+			fi_addr_t	dest_addr;
 			uint64_t	addr;
 			uint64_t	key;
 			enum fi_datatype datatype;
@@ -455,7 +455,6 @@ struct psmx_fid_av {
 	struct fid_av		av;
 	struct psmx_fid_domain	*domain;
 	int			type;
-	int			format;
 	size_t			addrlen;
 	size_t			count;
 	size_t			last;
@@ -588,30 +587,30 @@ void	psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr);
 void	psmx_cntr_add_trigger(struct psmx_fid_cntr *cntr, struct psmx_trigger *trigger);
 
 ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t len,
-		     void *desc, const void *dest_addr, void *context,
+		     void *desc, fi_addr_t dest_addr, void *context,
 		     uint64_t flags);
 ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
-		       void *desc, const void *src_addr, void *context,
+		       void *desc, fi_addr_t src_addr, void *context,
 		       uint64_t flags);
 ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
-			    void *desc, const void *dest_addr, uint64_t tag,
+			    void *desc, fi_addr_t dest_addr, uint64_t tag,
 			    void *context, uint64_t flags);
 ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
-			      void *desc, const void *src_addr, uint64_t tag,
+			      void *desc, fi_addr_t src_addr, uint64_t tag,
 			      uint64_t ignore, void *context, uint64_t flags);
 #if PSMX_USE_AM
 ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
-		      void *desc, const void *dest_addr,
+		      void *desc, fi_addr_t dest_addr,
 		      uint64_t addr, uint64_t key, void *context,
 		      uint64_t flags);
 ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
-		       void *desc, const void *src_addr,
+		       void *desc, fi_addr_t src_addr,
 		       uint64_t addr, uint64_t key, void *context,
 		       uint64_t flags);
 ssize_t _psmx_atomic_writeto(struct fid_ep *ep,
 			     const void *buf,
 			     size_t count, void *desc,
-			     const void *dest_addr,
+			     fi_addr_t dest_addr,
 			     uint64_t addr, uint64_t key,
 			     enum fi_datatype datatype,
 			     enum fi_op op, void *context,
@@ -620,7 +619,7 @@ ssize_t _psmx_atomic_readwriteto(struct fid_ep *ep,
 				 const void *buf,
 				 size_t count, void *desc,
 				 void *result, void *result_desc,
-				 const void *dest_addr,
+				 fi_addr_t dest_addr,
 				 uint64_t addr, uint64_t key,
 				 enum fi_datatype datatype,
 				 enum fi_op op, void *context,
@@ -630,7 +629,7 @@ ssize_t _psmx_atomic_compwriteto(struct fid_ep *ep,
 				 size_t count, void *desc,
 				 const void *compare, void *compare_desc,
 				 void *result, void *result_desc,
-				 const void *dest_addr,
+				 fi_addr_t dest_addr,
 				 uint64_t addr, uint64_t key,
 				 enum fi_datatype datatype,
 				 enum fi_op op, void *context,
