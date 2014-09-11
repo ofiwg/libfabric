@@ -69,6 +69,7 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 #define max(a, b) ((a) > (b) ? a : b)
 #define min(a, b) ((a) < (b) ? a : b)
 
+#define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
 
 #if DEFINE_ATOMICS
 #define fastlock_t pthread_mutex_t
@@ -168,6 +169,8 @@ void __fi_freeinfo(struct fi_info *info);
 
 int fi_sockaddr_len(struct sockaddr *addr);
 size_t fi_datatype_size(enum fi_datatype datatype);
+uint64_t fi_tag_bits(uint64_t mem_tag_format);
+uint64_t fi_tag_format(uint64_t tag_bits);
 
 #ifndef SYSCONFDIR
 #define SYSCONFDIR "/etc"

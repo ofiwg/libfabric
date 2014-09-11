@@ -176,7 +176,7 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 						PSMX_INJECT_SIZE);
 				goto err_out;
 			}
-			max_tag_value = hints->ep_attr->max_tag_value;
+			max_tag_value = fi_tag_bits(hints->ep_attr->mem_tag_format);
 		}
 
 		ep_cap = hints->ep_cap;
@@ -198,7 +198,7 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	psmx_info->ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
 	psmx_info->ep_attr->inject_size = PSMX_INJECT_SIZE;
 	psmx_info->ep_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
-	psmx_info->ep_attr->max_tag_value = max_tag_value;
+	psmx_info->ep_attr->mem_tag_format = fi_tag_format(max_tag_value);
 	psmx_info->ep_attr->msg_order = FI_ORDER_SAS;
 
 	psmx_info->domain_attr->threading = FI_THREAD_PROGRESS;
