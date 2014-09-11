@@ -204,10 +204,30 @@ err_out:
 	return err;
 }
 
+int psmx_domain_check_features(struct psmx_fid_domain *fid_domain, int ep_cap)
+{
+	if ((ep_cap & PSMX_EP_CAP) != ep_cap)
+		return -EINVAL;
+
+	if ((ep_cap & FI_TAGGED) && fid_domain->tagged_used)
+		return -EBUSY;
+
+	if ((ep_cap & FI_MSG) && fid_domain->msg_used)
+		return -EBUSY;
+
+#if PSMX_USE_AM
+	if ((ep_cap & FI_RMA) && fid_domain->rma_used)
+		return -EBUSY;
+
+	if ((ep_cap & FI_ATOMICS) && fid_domain->atomics_used)
+		return -EBUSY;
+#endif
+
+	return 0;
+}
+
 int psmx_domain_enable_features(struct psmx_fid_domain *fid_domain, int ep_cap)
 {
-	int err = 0;
-
 	if (ep_cap & FI_MSG)
 		fid_domain->reserved_tag_bits |= PSMX_MSG_BIT;
 
@@ -220,12 +240,26 @@ int psmx_domain_enable_features(struct psmx_fid_domain *fid_domain, int ep_cap)
 
 	if (((ep_cap & FI_RMA) || (ep_cap & FI_ATOMICS) || fid_domain->use_am_msg) &&
 	    !fid_domain->am_initialized) {
-		err = psmx_am_init(fid_domain);
-		if (!err)
-			fid_domain->am_initialized = 1;
+		int err = psmx_am_init(fid_domain);
+		if (err)
+			return err;
+
+		fid_domain->am_initialized = 1;
 	}
+
+	if (ep_cap & FI_RMA)
+		fid_domain->rma_used = 1;
+
+	if (ep_cap & FI_ATOMICS)
+		fid_domain->atomics_used = 1;
 #endif
 
-	return err;
+	if (ep_cap & FI_TAGGED)
+		fid_domain->tagged_used = 1;
+
+	if (ep_cap & FI_MSG)
+		fid_domain->msg_used = 1;
+
+	return 0;
 }
 

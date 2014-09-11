@@ -238,8 +238,13 @@ struct psmx_fid_domain {
 	psm_mq_t		psm_mq;
 	pthread_t		ns_thread;
 	int			ns_port;
+	int			tagged_used:1;
+	int			msg_used:1;
 
 #if PSMX_USE_AM
+
+	int			rma_used:1;
+	int			atomics_used:1;
 
 	int			use_am_msg;
 	int			use_tagged_rma;
@@ -530,6 +535,7 @@ int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 int	psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		       struct fid_cntr **cntr, void *context);
 
+int	psmx_domain_check_features(struct psmx_fid_domain *fid_domain, int ep_cap);
 int	psmx_domain_enable_features(struct psmx_fid_domain *fid_domain, int ep_cap);
 void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername);

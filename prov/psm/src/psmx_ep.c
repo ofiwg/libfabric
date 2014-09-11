@@ -377,13 +377,20 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	struct psmx_fid_domain *fid_domain;
 	struct psmx_fid_ep *fid_ep;
 	int err;
+	uint64_t ep_cap;
 
-	if (info && ((info->ep_cap & PSMX_EP_CAP) != info->ep_cap))
-		return -EINVAL;
+	if (info)
+		ep_cap = info->ep_cap;
+	else
+		ep_cap = FI_TAGGED;
 
 	fid_domain = container_of(domain, struct psmx_fid_domain, domain.fid);
 	if (!fid_domain)
 		return -EINVAL;
+
+	err = psmx_domain_check_features(fid_domain, ep_cap);
+	if (err)
+		return err; 
 
 	fid_ep = (struct psmx_fid_ep *) calloc(1, sizeof *fid_ep);
 	if (!fid_ep)
@@ -394,7 +401,6 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	fid_ep->ep.fid.ops = &psmx_fi_ops;
 	fid_ep->ep.ops = &psmx_ep_ops;
 	fid_ep->ep.cm = &psmx_cm_ops;
-	fid_ep->ep.tagged = &psmx_tagged_ops;
 	fid_ep->domain = fid_domain;
 
 	PSMX_CTXT_TYPE(&fid_ep->nocomp_send_context) = PSMX_NOCOMP_SEND_CONTEXT;
@@ -406,26 +412,27 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	PSMX_CTXT_TYPE(&fid_ep->writeimm_context) = PSMX_INJECT_WRITE_CONTEXT;
 	PSMX_CTXT_EP(&fid_ep->writeimm_context) = fid_ep;
 
-	if (info) {
-		fid_ep->flags = info->op_flags;
-		if (info->ep_cap & FI_MSG) {
-			fid_ep->ep.msg = &psmx_msg_ops;
-		}
+	if (ep_cap & FI_TAGGED)
+		fid_ep->ep.tagged = &psmx_tagged_ops;
+	if (ep_cap & FI_MSG)
+		fid_ep->ep.msg = &psmx_msg_ops;
 #if PSMX_USE_AM
-		if ((info->ep_cap & FI_MSG) && fid_domain->use_am_msg)
-			fid_ep->ep.msg = &psmx_msg2_ops;
-		if (info->ep_cap & FI_RMA)
-			fid_ep->ep.rma = &psmx_rma_ops;
-		if (info->ep_cap & FI_ATOMICS)
-			fid_ep->ep.atomic = &psmx_atomic_ops;
+	if ((ep_cap & FI_MSG) && fid_domain->use_am_msg)
+		fid_ep->ep.msg = &psmx_msg2_ops;
+	if (ep_cap & FI_RMA)
+		fid_ep->ep.rma = &psmx_rma_ops;
+	if (ep_cap & FI_ATOMICS)
+		fid_ep->ep.atomic = &psmx_atomic_ops;
 #endif
-	}
 
 	err = psmx_domain_enable_features(fid_domain, info->ep_cap);
 	if (err) {
 		free(fid_ep);
 		return err;
 	}
+
+	if (info)
+		fid_ep->flags = info->op_flags;
 
 	*ep = &fid_ep->ep;
 
