@@ -226,9 +226,13 @@ static int psmx_eq_get_event_src_addr(struct psmx_fid_eq *fid_eq,
 		err = psmx_epid_to_epaddr(fid_eq->domain,
 					  event->source & ~PSMX_MSG_BIT,
 					  (psm_epaddr_t *) src_addr);
+		if (err)
+			return err;
+
+		return 0;
 	}
 
-	return 0;
+	return -ENODATA;
 }
 
 int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_null_eq)
@@ -449,7 +453,8 @@ static ssize_t psmx_eq_readfrom(struct fid_eq *eq, void *buf, size_t len,
 	if (event) {
 		if (!event->error) {
 			memcpy(buf, (void *)&event->eqe, fid_eq->entry_size);
-			psmx_eq_get_event_src_addr(fid_eq, event, src_addr);
+			if (psmx_eq_get_event_src_addr(fid_eq, event, src_addr))
+				*src_addr = FI_ADDR_UNSPEC;
 			free(event);
 			return fid_eq->entry_size;
 		}
@@ -545,11 +550,11 @@ static struct fi_ops psmx_fi_ops = {
 static struct fi_ops_eq psmx_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = psmx_eq_read,
-//	.readfrom = psmx_eq_readfrom,
+	.readfrom = psmx_eq_readfrom,
 	.readerr = psmx_eq_readerr,
 	.write = psmx_eq_write,
 	.condread = psmx_eq_condread,
-//	.condreadfrom = psmx_eq_condreadfrom,
+	.condreadfrom = psmx_eq_condreadfrom,
 	.strerror = psmx_eq_strerror,
 };
 
