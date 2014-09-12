@@ -134,23 +134,10 @@ typedef struct { volatile int val; } atomic_t;
 #define atomic_get(v) ((v)->val)
 #define atomic_set(v, s) ((v)->val = s)
 
-
 struct fi_prov {
 	struct fi_prov		*next;
 	struct fi_ops_prov	*ops;
 };
-
-struct uv_dev {
-	struct uv_dev		*next;
-	char			sysfs_name[FI_NAME_MAX];
-	char			dev_name[FI_NAME_MAX];
-	char			sysfs_path[FI_PATH_MAX];
-	char			dev_path[FI_PATH_MAX];
-};
-
-extern struct fid_fabric *g_fabric;
-extern int uv_abi_ver;
-extern struct uv_dev *udev_head, *udev_tail;
 
 int  fi_init(void);
 
@@ -173,13 +160,12 @@ void psmx_fini(void);
 #define psmx_fini()
 #endif
 
-int __fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
-	void *context);
-const char *fi_sysfs_path(void);
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
+int fi_poll_fd(int fd);
+
 struct fi_info *__fi_allocinfo(void);
 void __fi_freeinfo(struct fi_info *info);
-int fi_poll_fd(int fd);
+
 int fi_sockaddr_len(struct sockaddr *addr);
 size_t fi_datatype_size(enum fi_datatype datatype);
 

@@ -65,37 +65,6 @@
 static struct fi_prov *prov_head, *prov_tail;
 
 
-const char *fi_sysfs_path(void)
-{
-	static char *sysfs_path;
-	char *env = NULL;
-
-	if (sysfs_path)
-		return sysfs_path;
-
-	/*
-	 * Only follow path passed in through the calling user's
-	 * environment if we're not running SUID.
-	 */
-	if (getuid() == geteuid())
-		env = getenv("SYSFS_PATH");
-
-	if (env) {
-		int len;
-
-		sysfs_path = strndup(env, FI_PATH_MAX);
-		len = strlen(sysfs_path);
-		while (len > 0 && sysfs_path[len - 1] == '/') {
-			--len;
-			sysfs_path[len] = '\0';
-		}
-	} else {
-		sysfs_path = "/sys";
-	}
-
-	return sysfs_path;
-}
-
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 {
 	char *path;
