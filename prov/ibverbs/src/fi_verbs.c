@@ -2826,6 +2826,9 @@ int ibv_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 {
 	struct ibv_fabric *fab;
 
+	if (!name || strcmp(name, "RDMA"))
+		return -FI_ENODATA;
+
 	fab = calloc(1, sizeof(*fab));
 	if (!fab)
 		return -FI_ENOMEM;
