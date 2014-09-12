@@ -500,6 +500,12 @@ fi_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count, uint64_t flags
 	return av->ops->remove(av, fi_addr, count, flags);
 }
 
+static inline int
+fi_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr, size_t *addrlen)
+{
+        return av->ops->lookup(av, fi_addr, addr, addrlen);
+}
+
 static inline int fi_av_sync(struct fid_av *av, uint64_t flags, void *context)
 {
 	return fi_sync(&av->fid, flags, context);
