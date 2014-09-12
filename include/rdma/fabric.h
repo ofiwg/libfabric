@@ -155,7 +155,7 @@ struct fi_ep_attr {
 	size_t			max_order_raw_size;
 	size_t			max_order_war_size;
 	size_t			max_order_waw_size;
-	uint64_t		max_tag_value;
+	uint64_t		mem_tag_format;
 	uint64_t		msg_order;
 };
 

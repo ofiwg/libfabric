@@ -1,4 +1,4 @@
-.TH "FI_ENDPOINT" 3 "2014-09-09" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ENDPOINT" 3 "2014-09-11" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_endpoint \- Fabric endpoint operations
 .PP
@@ -335,7 +335,7 @@ struct fi_ep_attr {
 	size_t    max_order_raw_size;
 	size_t    max_order_war_size;
 	size_t    max_order_waw_size;
-	uint64_t  max_tag_value;
+	uint64_t  mem_tag_format;
 	uint64_t  msg_order;
 };
 .fi
@@ -415,11 +415,35 @@ second RMA or atomic write.
 .PP
 An order size value of 0 indicates that ordering is not guaranteed.  A value
 of -1 guarantees ordering for any data size.
-.SS "Maximum Tag Value"
-The maximum tag value is the largest application tag value supported by a
-provider over an endpoint.  A provider will ignore any tag bits or values
-larger than the max_tag_value.  This field only applies to endpoints that
-support the tagged message interfaces.
+.SS "Memory Tag Format"
+The memory tag format is a bit array used to convey the number of tagged bits
+supported by a provider.  Additionally, it may be used to divide the bit array
+into separate fields.  The mem_tag_format optionally begins with a series of
+bits set to 0, to signify bits which are ignored by the provider.  Following
+the initial prefix of ignored bits, the array will consist of alternating
+groups of bits set to all 1's or all 0's.  Each group of bits corresponds to a
+tagged field.  The implication of defining a tagged field is that when a mask
+is applied to the tagged bit array, all bits belonging to a single field will
+either be set to 1 or 0, collectively.
+.sp
+For example, a mem_tag_format of 0x30FF indicates support for 14 tagged bits,
+separated into 3 fields.  The first field consists of 2-bits, the second
+field 4-bits, and the final field 8-bits.  Valid masks for such a tagged field
+would be a bitwise OR'ing of zero or more of the following values:
+0x3000, 0x0F00, and 0x00FF.
+.sp
+By identifying fields within a tag, a provider may be able to optimize their
+search routines.  An application which requests tag fields must provide tag
+masks that either set all mask bits corresponding to a field to all 0 or all 1.
+When negotiating tag fields, an application can request a specific number of
+fields of a given size.  A provider must return a tag format that supports
+the requested number of fields, with each field being at least the size
+requested, or fail the request.  A provider may increase the size of the
+fields.
+.sp
+It is recommended that field sizes be ordered from smallest to largest.  A
+generic, unstructured tag and mask can be achieved by requesting a bit
+array consisting of alternating 1's and 0's. 
 .SS "Message Ordering"
 Message ordering refers to the order in which transport layer headers (as
 viewed by the application) are processed.  Relaxed message order enables

@@ -254,6 +254,17 @@ uint32_t fi_version(void)
 	return FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION);
 }
 
+uint64_t fi_tag_bits(uint64_t mem_tag_format)
+{
+	return UINT64_MAX >> (ffsll(htonll(mem_tag_format)) -1);
+}
+
+uint64_t fi_tag_format(uint64_t tag_bits)
+{
+	return FI_TAG_GENERIC >> (ffsll(htonll(tag_bits)) - 1);
+}
+
+
 #define FI_ERRNO_OFFSET	256
 #define FI_ERRNO_MAX	FI_EOPBADSTATE
 
