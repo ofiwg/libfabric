@@ -96,10 +96,10 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			memcpy(rma_addr, src, len);
 
 		if (eom) {
-			if (mr->eq) {
+			if (mr->cq) {
 				/* FIXME: report the addr/len of the whole write */
-				event = psmx_eq_create_event(
-						mr->eq,
+				event = psmx_cq_create_event(
+						mr->cq->format,
 						0, /* context */
 						rma_addr,
 						0, /* flags */
@@ -110,7 +110,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0);
 
 				if (event)
-					psmx_eq_enqueue_event(mr->eq, event);
+					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
 				else
 					err = -ENOMEM;
 			}
@@ -187,10 +187,10 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				rep_args, 3, rma_addr, rma_len, 0,
 				NULL, NULL );
 		if (eom) {
-			if (mr->eq) {
+			if (mr->cq) {
 				/* FIXME: report the addr/len of the whole read */
-				event = psmx_eq_create_event(
-						mr->eq,
+				event = psmx_cq_create_event(
+						mr->cq->format,
 						0, /* context */
 						rma_addr,
 						0, /* flags */
@@ -201,7 +201,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0);
 
 				if (event)
-					psmx_eq_enqueue_event(mr->eq, event);
+					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
 				else
 					err = -ENOMEM;
 			}
@@ -255,9 +255,9 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (!req->error)
 			req->error = op_error;
 		if (eom) {
-			if (req->ep->send_eq && !req->no_event) {
-				event = psmx_eq_create_event(
-						req->ep->send_eq,
+			if (req->ep->send_cq && !req->no_event) {
+				event = psmx_cq_create_event(
+						req->ep->send_cq->format,
 						req->write.context,
 						req->write.buf,
 						0, /* flags */
@@ -267,7 +267,8 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0, /* olen */
 						req->error);
 				if (event)
-					psmx_eq_enqueue_event(req->ep->send_eq, event);
+					psmx_eq_enqueue_event(&req->ep->send_cq->event_queue,
+							      event);
 				else
 					err = -ENOMEM;
 			}
@@ -296,9 +297,9 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			req->read.len_read += len;
 		}
 		if (eom) {
-			if (req->ep->send_eq && !req->no_event) {
-				event = psmx_eq_create_event(
-						req->ep->send_eq,
+			if (req->ep->send_cq && !req->no_event) {
+				event = psmx_cq_create_event(
+						req->ep->send_cq->format,
 						req->read.context,
 						req->read.buf,
 						0, /* flags */
@@ -308,7 +309,8 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						req->read.len - req->read.len_read,
 						req->error);
 				if (event)
-					psmx_eq_enqueue_event(req->ep->send_eq, event);
+					psmx_eq_enqueue_event(&req->ep->send_cq->event_queue,
+							      event);
 				else
 					err = -ENOMEM;
 			}
@@ -367,9 +369,9 @@ static ssize_t psmx_rma_self(int am_cmd,
 
 	if (!op_error) {
 		memcpy(dst, src, len);
-		if (mr->eq) {
-			event = psmx_eq_create_event(
-					mr->eq,
+		if (mr->cq) {
+			event = psmx_cq_create_event(
+					mr->cq->format,
 					0, /* context */
 					(void *)addr,
 					0, /* flags */
@@ -380,7 +382,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 					0 /* err */);
 
 			if (event)
-				psmx_eq_enqueue_event(mr->eq, event);
+				psmx_eq_enqueue_event(&mr->cq->event_queue, event);
 			else
 				err = -ENOMEM;
 		}
@@ -394,9 +396,9 @@ static ssize_t psmx_rma_self(int am_cmd,
 	no_event = (flags & FI_INJECT) ||
 		   (fid_ep->send_eq_event_flag && !(flags & FI_EVENT));
 
-	if (fid_ep->send_eq && !no_event) {
-		event = psmx_eq_create_event(
-				fid_ep->send_eq,
+	if (fid_ep->send_cq && !no_event) {
+		event = psmx_cq_create_event(
+				fid_ep->send_cq->format,
 				context,
 				(void *)buf,
 				0, /* flags */
@@ -406,7 +408,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 				0, /* olen */
 				op_error);
 		if (event)
-			psmx_eq_enqueue_event(fid_ep->send_eq, event);
+			psmx_eq_enqueue_event(&fid_ep->send_cq->event_queue, event);
 		else
 			err = -ENOMEM;
 	}

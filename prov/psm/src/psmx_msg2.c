@@ -173,9 +173,9 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		}
 
 		if (eom && req) {
-			if (req->ep->recv_eq && !req->no_event) {
-				event = psmx_eq_create_event(
-						req->ep->recv_eq,
+			if (req->ep->recv_cq && !req->no_event) {
+				event = psmx_cq_create_event(
+						req->ep->recv_cq->format,
 						req->recv.context,
 						req->recv.buf,
 						0, /* flags */
@@ -185,7 +185,8 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						req->recv.len - req->recv.len_received,
 						0 /* err */);
 				if (event)
-					psmx_eq_enqueue_event(req->ep->recv_eq, event);
+					psmx_eq_enqueue_event(&req->ep->recv_cq->event_queue,
+							      event);
 				else
 					err = -ENOMEM;
 			}
@@ -231,9 +232,9 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 #endif
 		}
 		else { /* done */
-			if (req->ep->send_eq && !req->no_event) {
-				event = psmx_eq_create_event(
-						req->ep->send_eq,
+			if (req->ep->send_cq && !req->no_event) {
+				event = psmx_cq_create_event(
+						req->ep->send_cq->format,
 						req->send.context,
 						req->send.buf,
 						0, /* flags */
@@ -243,7 +244,8 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0, /* olen */
 						op_error);
 				if (event)
-					psmx_eq_enqueue_event(req->ep->send_eq, event);
+					psmx_eq_enqueue_event(&req->ep->send_cq->event_queue,
+							      event);
 				else
 					err = -ENOMEM;
 			}
@@ -378,9 +380,9 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 	free(unexp);
 
 	if (recv_done) {
-		if (req->ep->recv_eq && !req->no_event) {
-			event = psmx_eq_create_event(
-					req->ep->recv_eq,
+		if (req->ep->recv_cq && !req->no_event) {
+			event = psmx_cq_create_event(
+					req->ep->recv_cq->format,
 					req->recv.context,
 					req->recv.buf,
 					0, /* flags */
@@ -390,7 +392,7 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 					req->recv.len - req->recv.len_received,
 					0 /* err */);
 			if (event)
-				psmx_eq_enqueue_event(req->ep->recv_eq, event);
+				psmx_eq_enqueue_event(&req->ep->recv_cq->event_queue, event);
 			else
 				err = -ENOMEM;
 		}

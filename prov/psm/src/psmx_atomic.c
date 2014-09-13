@@ -416,9 +416,9 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 		if (!op_error) {
 			psmx_atomic_do_write(addr, src, datatype, op, count);
-			if (mr->eq) {
-				event = psmx_eq_create_event(
-						mr->eq,
+			if (mr->cq) {
+				event = psmx_cq_create_event(
+						mr->cq->format,
 						0, /* context */
 						addr,
 						0, /* flags */
@@ -429,7 +429,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_eq_enqueue_event(mr->eq, event);
+					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
 				else
 					err = -ENOMEM;
 			}
@@ -468,10 +468,9 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 							 datatype, op, count);
 			else
 				err = -ENOMEM;
-
-			if (mr->eq) {
-				event = psmx_eq_create_event(
-						mr->eq,
+			if (mr->cq) {
+				event = psmx_cq_create_event(
+						mr->cq->format,
 						0, /* context */
 						addr,
 						0, /* flags */
@@ -482,7 +481,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_eq_enqueue_event(mr->eq, event);
+					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
 				else
 					err = -ENOMEM;
 			}
@@ -525,10 +524,9 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 							 tmp_buf, datatype, op, count);
 			else
 				err = -ENOMEM;
-
-			if (mr->eq) {
-				event = psmx_eq_create_event(
-						mr->eq,
+			if (mr->cq) {
+				event = psmx_cq_create_event(
+						mr->cq->format,
 						0, /* context */
 						addr,
 						0, /* flags */
@@ -539,7 +537,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_eq_enqueue_event(mr->eq, event);
+					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
 				else
 					err = -ENOMEM;
 			}
@@ -565,9 +563,9 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		req = (struct psmx_am_request *)(uintptr_t)args[1].u64;
 		op_error = (int)args[0].u32w1;
 		assert(req->op == PSMX_AM_REQ_ATOMIC_WRITE);
-		if (req->ep->send_eq && !req->no_event) {
-			event = psmx_eq_create_event(
-					req->ep->send_eq,
+		if (req->ep->send_cq && !req->no_event) {
+			event = psmx_cq_create_event(
+					req->ep->send_cq->format,
 					req->atomic.context,
 					req->atomic.buf,
 					0, /* flags */
@@ -577,7 +575,8 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					0, /* olen */
 					op_error);
 			if (event)
-				psmx_eq_enqueue_event(req->ep->send_eq, event);
+				psmx_eq_enqueue_event(&req->ep->send_cq->event_queue,
+						      event);
 			else
 				err = -ENOMEM;
 		}
@@ -602,9 +601,9 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (!op_error)
 			memcpy(req->atomic.result, src, len);
 
-		if (req->ep->send_eq && !req->no_event) {
-			event = psmx_eq_create_event(
-					req->ep->send_eq,
+		if (req->ep->send_cq && !req->no_event) {
+			event = psmx_cq_create_event(
+					req->ep->send_cq->format,
 					req->atomic.context,
 					req->atomic.buf,
 					0, /* flags */
@@ -614,7 +613,8 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					0, /* olen */
 					op_error);
 			if (event)
-				psmx_eq_enqueue_event(req->ep->send_eq, event);
+				psmx_eq_enqueue_event(&req->ep->send_cq->event_queue,
+						      event);
 			else
 				err = -ENOMEM;
 		}
@@ -687,10 +687,9 @@ static int psmx_atomic_self(int am_cmd,
 					       (int)datatype, (int)op, (int)count);
 		break;
 	}
-
-	if (mr->eq) {
-		event = psmx_eq_create_event(
-				mr->eq,
+	if (mr->cq) {
+		event = psmx_cq_create_event(
+				mr->cq->format,
 				0, /* context */
 				(void *)addr,
 				0, /* flags */
@@ -701,7 +700,7 @@ static int psmx_atomic_self(int am_cmd,
 				0 /* err */);
 
 		if (event)
-			psmx_eq_enqueue_event(mr->eq, event);
+			psmx_eq_enqueue_event(&mr->cq->event_queue, event);
 		else
 			err = -ENOMEM;
 	}
@@ -714,9 +713,9 @@ static int psmx_atomic_self(int am_cmd,
 gen_local_event:
 	no_event = ((flags & FI_INJECT) ||
 		    (fid_ep->send_eq_event_flag && !(flags & FI_EVENT)));
-	if (fid_ep->send_eq && !no_event) {
-		event = psmx_eq_create_event(
-				fid_ep->send_eq,
+	if (fid_ep->send_cq && !no_event) {
+		event = psmx_cq_create_event(
+				fid_ep->send_cq->format,
 				context,
 				(void *)buf,
 				0, /* flags */
@@ -726,7 +725,7 @@ gen_local_event:
 				0, /* olen */
 				op_error);
 		if (event)
-			psmx_eq_enqueue_event(fid_ep->send_eq, event);
+			psmx_eq_enqueue_event(&fid_ep->send_cq->event_queue, event);
 		else
 			err = -ENOMEM;
 	}

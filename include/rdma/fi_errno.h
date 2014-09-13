@@ -180,7 +180,7 @@ extern "C" {
 #define FI_EOPBADSTATE		258		/* Operation not permitted in current state */
 #define FI_EAVAIL		259		/* Error available */
 #define FI_EBADFLAGS		260		/* Flags not supported */
-#define FI_ENOEC		261		/* Missing or unavailable EC */
+#define FI_ENOEQ		261		/* Missing or unavailable event queue */
 #define FI_EDOMAIN		262		/* Invalid resource domain */
 
 const char *fi_strerror(int errnum);

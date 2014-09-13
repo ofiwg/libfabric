@@ -56,6 +56,7 @@
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
+#include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_prov.h>
 #include <rdma/fi_rma.h>
@@ -140,8 +141,10 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		struct fid_cntr **cntr, void *context);
 int sock_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 		struct fid_domain **dom, void *context);
-int sock_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
+int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		struct fid_eq **eq, void *context);
+int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+		 struct fid_cq **cq, void *context);
 int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int sock_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,

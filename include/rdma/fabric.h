@@ -64,9 +64,11 @@ uint32_t fi_version(void);
 
 /*
  * Vendor specific protocols/etc. are encoded as OUI, followed by vendor
- * specific data.
+ * specific data.  Vendor specific enum values are indicated by setting the
+ * high-order bit.
  */
 #define FI_OUI_SHIFT		48
+#define FI_PROV_ENUM		(1 << 31)
 
 /* fi_info and operation flags - pass into endpoint ops calls.
  * A user may also set these on a endpoint by using fcntl, which has the
@@ -202,6 +204,7 @@ enum {
 	FID_CLASS_AV,
 	FID_CLASS_MR,
 	FID_CLASS_EQ,
+	FID_CLASS_CQ,
 	FID_CLASS_CNTR
 };
 
@@ -212,6 +215,7 @@ struct fid_av;
 struct fid_wait;
 struct fid_poll;
 struct fid_eq;
+struct fid_cq;
 struct fid_cntr;
 struct fid_ep;
 struct fid_pep;
@@ -249,7 +253,7 @@ struct fi_ops_fabric {
 			struct fid_domain **dom, void *context);
 	int	(*endpoint)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
-	int	(*eq_open)(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
+	int	(*eq_open)(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 			struct fid_eq **eq, void *context);
 };
 
