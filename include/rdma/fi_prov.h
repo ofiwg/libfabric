@@ -65,16 +65,6 @@ static inline int fi_register(struct fi_ops_prov *ops)
 }
 
 
-#define FI_LIB_CLASS_NAME	"libfabric"
-
-struct fi_ops_lib {
-	size_t		size;
-	size_t		(*context_size)(void);
-	const char *	(*sysfs_path)(void);
-	int		(*read_file)(const char *dir, const char *file,
-				     char *buf, size_t size);
-};
-
 #ifdef __cplusplus
 }
 #endif
