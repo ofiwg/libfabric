@@ -79,8 +79,8 @@ struct pingpong_context {
 	struct fid_mr		*mr;
 	struct fid_pep		*lep;
 	struct fid_ep		*ep;
-	struct fid_eq		*leq;
-	struct fid_eq		*cq;
+	struct fid_eq		*eq;
+	struct fid_cq		*cq;
 	void			*buf;
 	int			 size;
 	int			 send_flags;
@@ -91,46 +91,35 @@ struct pingpong_context {
 
 int pp_close_ctx(struct pingpong_context *ctx);
 
-static int pp_leq_create(struct pingpong_context *ctx)
+static int pp_eq_create(struct pingpong_context *ctx)
 {
 	struct fi_eq_attr cm_attr;
 	int rc;
 
 	memset(&cm_attr, 0, sizeof cm_attr);
-
-	cm_attr.mask 		= FI_EQ_ATTR_MASK_V1;
-	cm_attr.domain 		= FI_EQ_DOMAIN_CM;
-	cm_attr.format 		= FI_EQ_FORMAT_CM;
 	cm_attr.wait_obj 	= FI_WAIT_FD;				
-	cm_attr.flags 		= FI_BLOCK;	/* Do a blocking read */	
 
-	rc = fi_feq_open(ctx->fabric, &cm_attr, &ctx->leq, NULL);
+	rc = fi_eq_open(ctx->fabric, &cm_attr, &ctx->eq, NULL);
 	if (rc)
 		FI_ERR_LOG("fi_eq_open cm", rc);
 
 	return rc;
 }
 
-static int pp_eq_create(struct pingpong_context *ctx)
+static int pp_cq_create(struct pingpong_context *ctx)
 {
-	struct fi_eq_attr cq_attr;
+	struct fi_cq_attr cq_attr;
 	int rc = 0;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
-
-	cq_attr.mask 		= FI_EQ_ATTR_MASK_V1;
-	cq_attr.domain 		= FI_EQ_DOMAIN_COMP;
-	cq_attr.format 		= FI_EQ_FORMAT_CONTEXT;
-	if (ctx->use_event) {
-		cq_attr.wait_obj 	= FI_WAIT_FD;				
-		cq_attr.flags 		= FI_BLOCK;	/* Do a blocking read */	
-	} else {
-		cq_attr.wait_obj 	= FI_WAIT_NONE;
-	}
-	cq_attr.wait_cond 	= FI_EQ_COND_NONE;
+	cq_attr.format 		= FI_CQ_FORMAT_CONTEXT;
+	if (ctx->use_event)
+		cq_attr.wait_obj = FI_WAIT_FD;				
+	else
+		cq_attr.wait_obj = FI_WAIT_NONE;
 	cq_attr.size 		= ctx->rx_depth + 1;
 
-	rc = fi_eq_open(ctx->dom, &cq_attr, &ctx->cq, NULL);
+	rc = fi_cq_open(ctx->dom, &cq_attr, &ctx->cq, NULL);
 	if (rc) {
 		FI_ERR_LOG("fi_eq_open", rc);
 		return 1;
@@ -151,13 +140,13 @@ static int pp_listen_ctx(struct pingpong_context *ctx)
 	}
 
 	/* Create listener EQ */
-	rc = pp_leq_create(ctx);
+	rc = pp_eq_create(ctx);
 	if (rc) {
 		fprintf(stderr, "Unable to allocate listener resources\n");
 		goto err;
 	}
 
-	rc = fi_bind(&ctx->lep->fid, &ctx->leq->fid, 0);
+	rc = fi_bind(&ctx->lep->fid, &ctx->eq->fid, 0);
 	if (rc) {
 		FI_ERR_LOG("Unable to bind listener resources", -rc);
 		goto err;
@@ -183,9 +172,9 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 	int rc = 0;
 	int rd = 0;
 
-	rd = fi_eq_read(ctx->leq, &entry, sizeof entry);
+	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, 0);
 	if (rd != sizeof entry) {
-		FI_ERR_LOG("fi_eq_read %s", -rd);
+		FI_ERR_LOG("fi_eq_condread %s", -rd);
 		goto err;
 	}
 
@@ -194,7 +183,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rc = fi_fdomain(ctx->fabric, entry.info, &ctx->dom, NULL);
+	rc = fi_fdomain(ctx->fabric, entry.info->domain_attr, &ctx->dom, NULL);
 	if (rc) {
 		FI_ERR_LOG("fi_fdomain", rc);
 		goto err;
@@ -217,12 +206,18 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 	}
 
 	/* Create event queue */
-	if (pp_eq_create(ctx)) {
+	if (pp_cq_create(ctx)) {
 		fprintf(stderr, "Unable to create event queue\n");
 		goto err;
 	}
 
 	rc = fi_bind(&ctx->ep->fid, &ctx->cq->fid, FI_SEND | FI_RECV);
+	if (rc) {
+		FI_ERR_LOG("fi_bind", rc);
+		goto err;
+	}
+
+	rc = fi_bind(&ctx->ep->fid, &ctx->eq->fid, 0);
 	if (rc) {
 		FI_ERR_LOG("fi_bind", rc);
 		goto err;
@@ -234,7 +229,17 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	printf("Connection accpeted\n");
+	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, 0);
+	if (rd != sizeof entry) {
+		FI_ERR_LOG("fi_eq_condread %s", -rd);
+		goto err;
+	}
+
+	if (entry.event != FI_COMPLETE) {
+		fprintf(stderr, "Unexpected CM event %d\n", entry.event);
+		goto err;
+	}
+	printf("Connection accepted\n");
 
 	fi_freeinfo(entry.info);
 	return 0;
@@ -246,12 +251,18 @@ err:
 
 static int pp_connect_ctx(struct pingpong_context *ctx)
 {
+	struct fi_eq_cm_entry entry;
 	int rc = 0;
 
 	/* Open domain */
-	rc = fi_fdomain(ctx->fabric, ctx->prov, &ctx->dom, NULL);
+	rc = fi_fdomain(ctx->fabric, ctx->prov->domain_attr, &ctx->dom, NULL);
 	if (rc) {
 		FI_ERR_LOG("fi_fdomain", -rc);
+		goto err;
+	}
+
+	if (pp_eq_create(ctx)) {
+		fprintf(stderr, "Unable to create event queue\n");
 		goto err;
 	}
 	
@@ -273,7 +284,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 	}
 	
 	/* Create event queue */
-	if (pp_eq_create(ctx)) {
+	if (pp_cq_create(ctx)) {
 		fprintf(stderr, "Unable to create event queue\n");
 		goto err;
 	}
@@ -285,11 +296,27 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 		goto err;
 	}	
 
+	rc = fi_bind(&ctx->ep->fid, &ctx->eq->fid, 0);
+	if (rc) {
+		FI_ERR_LOG("fi_bind", rc);
+		goto err;
+	}
+
 	printf("Connecting to server\n");
-	/* Connect to server */
 	rc = fi_connect(ctx->ep, ctx->prov->dest_addr, NULL, 0);
 	if (rc) {
 		FI_ERR_LOG("Unable to connect to destination", rc);
+		goto err;
+	}
+
+	rc = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, 0);
+	if (rc != sizeof entry) {
+		FI_ERR_LOG("fi_eq_condread %s", -rc);
+		goto err;
+	}
+
+	if (entry.event != FI_COMPLETE) {
+		fprintf(stderr, "Unexpected CM event %d\n", entry.event);
 		goto err;
 	}
 
@@ -347,7 +374,7 @@ int pp_close_ctx(struct pingpong_context *ctx)
 
 	FI_CLOSE(ctx->ep, "Couldn't destroy EP\n");
 
-	FI_CLOSE(ctx->leq, "Couldn't destroy listener EQ\n");
+	FI_CLOSE(ctx->eq, "Couldn't destroy EQ\n");
 
 	FI_CLOSE(ctx->cq, "Couldn't destroy CQ\n");
 
@@ -533,10 +560,10 @@ int main(int argc, char *argv[])
 
 	memset(&hints, 0, sizeof(hints));
 	
-    /* Infiniband provider */
-    hints.type              = FID_MSG;
-    hints.ep_cap            = FI_MSG;
-    hints.addr_format       = FI_SOCKADDR;
+	/* Infiniband provider */
+	hints.type              = FID_MSG;
+	hints.ep_cap            = FI_MSG;
+	hints.addr_format       = FI_SOCKADDR;
 
 	asprintf(&service, "%d", port);
 	if (!servername) {
@@ -545,7 +572,7 @@ int main(int argc, char *argv[])
 		node = servername;
 	}
 	
-	rc = fi_getinfo(node, service, flags, &hints, &prov_list);
+	rc = fi_getinfo(FI_VERSION(1, 0), node, service, flags, &hints, &prov_list);
 	if (rc) {
 		FI_ERR_LOG("fi_getinfo", rc);
 		return 1;
@@ -610,64 +637,59 @@ int main(int argc, char *argv[])
 
 	rcnt = scnt = 0;
 	while (rcnt < iters || scnt < iters) {
-		struct fi_eq_entry 		wc[2];
-		struct fi_eq_err_entry 	eq_err;
-		int ne, i, rd = 0;
+		struct fi_cq_entry wc;
+		struct fi_cq_err_entry cq_err;
+		int rd;
 
 		if (use_event) {
 			/* Blocking read */
-			rd = fi_eq_condread(ctx->cq, wc, sizeof wc, NULL);
+			rd = fi_cq_condread(ctx->cq, &wc, sizeof wc, NULL);
 		} else {
 			do {
-				rd = fi_eq_read(ctx->cq, wc, sizeof wc);
+				rd = fi_cq_read(ctx->cq, &wc, sizeof wc);
 			} while (rd == 0);
 		}
 
 		if (rd < 0) {
-			fi_eq_readerr(ctx->cq, &eq_err, sizeof(eq_err), 0);
+			fi_cq_readerr(ctx->cq, &cq_err, sizeof(cq_err), 0);
 			fprintf(stderr, "cq fi_eq_readerr() %s (%d)\n", 
-				fi_eq_strerror(ctx->cq, eq_err.err, eq_err.prov_data, NULL, 0),
-				eq_err.err);
+				fi_cq_strerror(ctx->cq, cq_err.err, cq_err.err_data, NULL, 0),
+				cq_err.err);
 			return 1;
 		}
 
-		ne = rd / sizeof(struct fi_eq_entry);
+		switch ((int) (uintptr_t) wc.op_context) {
+		case PINGPONG_SEND_WCID:
+			++scnt;
+			break;
 
-		for (i = 0; i < ne; ++i) {
-			switch ((int)(uintptr_t)wc[i].op_context) {
-			case PINGPONG_SEND_WCID:
-				++scnt;
-				break;
-
-			case PINGPONG_RECV_WCID:
-				if (--routs <= 1) {
-					routs += pp_post_recv(ctx, ctx->rx_depth - routs);
-					if (routs < ctx->rx_depth) {
-						fprintf(stderr,
-							"Couldn't post receive (%d)\n",
-							routs);
-						return 1;
-					}
-				}
-
-				++rcnt;
-				break;
-
-			default:
-				fprintf(stderr, "Completion for unknown wc_id %d\n",
-					(int)(uintptr_t)wc[i].op_context);
-				return 1;
-			}
-
-			ctx->pending &= ~(int)(uintptr_t)wc[i].op_context;
-			if (scnt < iters && !ctx->pending) {
-				if (pp_post_send(ctx)) {
-					fprintf(stderr, "Couldn't post send\n");
+		case PINGPONG_RECV_WCID:
+			if (--routs <= 1) {
+				routs += pp_post_recv(ctx, ctx->rx_depth - routs);
+				if (routs < ctx->rx_depth) {
+					fprintf(stderr,
+						"Couldn't post receive (%d)\n",
+						routs);
 					return 1;
 				}
-				ctx->pending = PINGPONG_RECV_WCID |
-						   PINGPONG_SEND_WCID;
 			}
+
+			++rcnt;
+			break;
+
+		default:
+			fprintf(stderr, "Completion for unknown wc_id %d\n",
+				(int) (uintptr_t) wc.op_context);
+			return 1;
+		}
+
+		ctx->pending &= ~(int) (uintptr_t) wc.op_context;
+		if (scnt < iters && !ctx->pending) {
+			if (pp_post_send(ctx)) {
+				fprintf(stderr, "Couldn't post send\n");
+				return 1;
+			}
+			ctx->pending = PINGPONG_RECV_WCID | PINGPONG_SEND_WCID;
 		}
 	}
 

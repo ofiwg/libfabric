@@ -45,6 +45,7 @@
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
+#include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
@@ -89,6 +90,8 @@ static void *buf;
 static size_t buffer_size;
 
 static struct fi_info hints;
+static struct fi_domain_attr domain_hints;
+static struct fi_ep_attr ep_hints;
 static char *dst_addr, *src_addr;
 static char *port = "9228";
 
@@ -96,7 +99,8 @@ static struct fid_fabric *fab;
 static struct fid_pep *pep;
 static struct fid_domain *dom;
 static struct fid_ep *ep;
-static struct fid_eq *cmeq, *rcq, *scq;
+static struct fid_eq *cmeq;
+static struct fid_cq *rcq, *scq;
 static struct fid_mr *mr;
 
 
@@ -136,11 +140,11 @@ static void init_test(int size)
 
 static int poll_all_sends(void)
 {
-	struct fi_eq_entry comp;
+	struct fi_cq_entry comp;
 	int ret;
 
 	do {
-		ret = fi_eq_read(scq, &comp, sizeof comp);
+		ret = fi_cq_read(scq, &comp, sizeof comp);
 		if (ret > 0) {
 			credits++;
 		} else if (ret < 0) {
@@ -153,11 +157,11 @@ static int poll_all_sends(void)
 
 static int send_xfer(int size)
 {
-	struct fi_eq_entry comp;
+	struct fi_cq_entry comp;
 	int ret;
 
 	while (!credits) {
-		ret = fi_eq_read(scq, &comp, sizeof comp);
+		ret = fi_cq_read(scq, &comp, sizeof comp);
 		if (ret > 0) {
 			goto post;
 		} else if (ret < 0) {
@@ -177,11 +181,11 @@ post:
 
 static int recv_xfer(int size)
 {
-	struct fi_eq_entry comp;
+	struct fi_cq_entry comp;
 	int ret;
 
 	do {
-		ret = fi_eq_read(rcq, &comp, sizeof comp);
+		ret = fi_cq_read(rcq, &comp, sizeof comp);
 		if (ret < 0) {
 			printf("Event queue read %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
@@ -242,16 +246,14 @@ static void free_lres(void)
 	fi_close(&cmeq->fid);
 }
 
-static int alloc_lres(struct fi_info *fi)
+static int alloc_cm_res(void)
 {
 	struct fi_eq_attr cm_attr;
 	int ret;
 
 	memset(&cm_attr, 0, sizeof cm_attr);
-	cm_attr.domain = FI_EQ_DOMAIN_CM;
-	cm_attr.format = FI_EQ_FORMAT_CM;
 	cm_attr.wait_obj = FI_WAIT_FD;
-	ret = fi_feq_open(fab, &cm_attr, &cmeq, NULL);
+	ret = fi_eq_open(fab, &cm_attr, &cmeq, NULL);
 	if (ret)
 		printf("fi_eq_open cm %s\n", fi_strerror(-ret));
 
@@ -268,7 +270,7 @@ static void free_ep_res(void)
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_eq_attr cq_attr;
+	struct fi_cq_attr cq_attr;
 	int ret;
 
 	buffer_size = !custom ? test_size[TEST_CNT - 1].size : transfer_size;
@@ -279,17 +281,16 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.domain = FI_EQ_DOMAIN_COMP;
-	cq_attr.format = FI_EQ_FORMAT_CONTEXT;
+	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 	cq_attr.size = max_credits << 1;
-	ret = fi_eq_open(dom, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
 		printf("fi_eq_open send comp %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 
-	ret = fi_eq_open(dom, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
 		printf("fi_eq_open recv comp %s\n", fi_strerror(-ret));
 		goto err2;
@@ -300,8 +301,17 @@ static int alloc_ep_res(struct fi_info *fi)
 		printf("fi_mr_reg %s\n", fi_strerror(-ret));
 		goto err3;
 	}
+
+	if (!cmeq) {
+		ret = alloc_cm_res();
+		if (ret)
+			goto err4;
+	}
+
 	return 0;
 
+err4:
+	fi_close(&mr->fid);
 err3:
 	fi_close(&rcq->fid);
 err2:
@@ -321,23 +331,30 @@ static int bind_fid( fid_t ep, fid_t res, uint64_t flags)
 	return ret;
 }
 
-static int bind_lres(void)
-{
-	return bind_fid(&pep->fid, &cmeq->fid, 0);
-}
-
 static int bind_ep_res(void)
 {
 	int ret;
 
+	ret = bind_fid(&ep->fid, &cmeq->fid, 0);
+	if (ret)
+		return ret;
+
 	ret = bind_fid(&ep->fid, &scq->fid, FI_SEND);
-	if (!ret)
-		ret = bind_fid(&ep->fid, &rcq->fid, FI_RECV);
-	if (!ret) {
-		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), buf);
-		if (ret)
-			printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
-	}
+	if (ret)
+		return ret;
+
+	ret = bind_fid(&ep->fid, &rcq->fid, FI_RECV);
+	if (ret)
+		return ret;
+
+	ret = fi_enable(ep);
+	if (ret)
+		return ret;
+
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), buf);
+	if (ret)
+		printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
+
 	return ret;
 }
 
@@ -365,11 +382,11 @@ static int server_listen(void)
 		goto err1;
 	}
 
-	ret = alloc_lres(fi);
+	ret = alloc_cm_res();
 	if (ret)
 		goto err2;
 
-	ret = bind_lres();
+	ret = bind_fid(&pep->fid, &cmeq->fid, 0);
 	if (ret)
 		goto err3;
 
@@ -398,9 +415,9 @@ static int server_connect(void)
 	ssize_t rd;
 	int ret;
 
-	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL);
+	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, 0);
 	if (rd != sizeof entry) {
-		printf("fi_eq_read %zd %s\n", rd, fi_strerror((int) -rd));
+		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 
@@ -410,7 +427,7 @@ static int server_connect(void)
 		goto err1;
 	}
 
-	ret = fi_fdomain(fab, entry.info, &dom, NULL);
+	ret = fi_fdomain(fab, entry.info->domain_attr, &dom, NULL);
 	if (ret) {
 		printf("fi_fdomain %s\n", fi_strerror(-ret));
 		goto err1;
@@ -436,6 +453,19 @@ static int server_connect(void)
 		goto err3;
 	}
 
+	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, 0);
+	if (rd != sizeof entry) {
+		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
+		return (int) rd;
+	}
+
+	if (entry.event != FI_COMPLETE || entry.fid != &ep->fid) {
+		printf("Unexpected CM event %d fid %p (ep %p)\n",
+			entry.event, entry.fid, ep);
+		ret = -FI_EOTHER;
+		goto err1;
+	}
+
 	fi_freeinfo(entry.info);
 	return 0;
 
@@ -450,7 +480,9 @@ err1:
 
 static int client_connect(void)
 {
+	struct fi_eq_cm_entry entry;
 	struct fi_info *fi;
+	ssize_t rd;
 	int ret;
 
 	if (src_addr) {
@@ -472,9 +504,10 @@ static int client_connect(void)
 		goto err1;
 	}
 
-	ret = fi_fdomain(fab, fi, &dom, NULL);
+	ret = fi_fdomain(fab, fi->domain_attr, &dom, NULL);
 	if (ret) {
-		printf("fi_fdomain %s %s\n", fi_strerror(-ret), fi->domain_name);
+		printf("fi_fdomain %s %s\n", fi_strerror(-ret),
+			fi->domain_attr->name);
 		goto err2;
 	}
 
@@ -496,6 +529,19 @@ static int client_connect(void)
 	if (ret) {
 		printf("fi_connect %s\n", fi_strerror(-ret));
 		goto err5;
+	}
+
+	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, 0);
+	if (rd != sizeof entry) {
+		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
+		return (int) rd;
+	}
+
+	if (entry.event != FI_COMPLETE || entry.fid != &ep->fid) {
+		printf("Unexpected CM event %d fid %p (ep %p)\n",
+			entry.event, entry.fid, ep);
+		ret = -FI_EOTHER;
+		goto err1;
 	}
 
 	if (hints.src_addr)
@@ -571,7 +617,7 @@ int main(int argc, char **argv)
 			dst_addr = optarg;
 			break;
 		case 'n':
-			hints.domain_name = optarg;
+			domain_hints.name = optarg;
 			break;
 		case 'p':
 			port = optarg;
@@ -603,10 +649,11 @@ int main(int argc, char **argv)
 		}
 	}
 
+	hints.domain_attr = &domain_hints;
+	hints.ep_attr = &ep_hints;
 	hints.type = FID_MSG;
-	hints.protocol = FI_PROTO_IB_RC;
 	hints.ep_cap = FI_MSG;
-	hints.domain_cap = FI_LOCAL_MR;
+	domain_hints.caps = FI_LOCAL_MR;
 	hints.addr_format = FI_SOCKADDR;
 
 	ret = run();
