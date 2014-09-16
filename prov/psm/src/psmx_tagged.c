@@ -356,8 +356,7 @@ static ssize_t psmx_tagged_inject(struct fid_ep *ep, const void *buf, size_t len
 }
 
 static ssize_t psmx_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
-				  uint64_t flags, fi_addr_t src_addr,
-				  size_t *src_addrlen, size_t *len,
+				  uint64_t flags, fi_addr_t *src_addr, size_t *len,
 				  void *context)
 {
 	struct psmx_fid_ep *fid_ep;
@@ -376,13 +375,16 @@ static ssize_t psmx_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ign
 	psm_tag = *tag & (~fid_ep->domain->reserved_tag_bits);
 	psm_tagsel = (~ignore) | fid_ep->domain->reserved_tag_bits;
 
+	if (flags & FI_CLAIM)
+		return -FI_EOPNOTSUPP;
+
 	err = psm_mq_iprobe(fid_ep->domain->psm_mq, psm_tag, psm_tagsel,
 			    &psm_status);
 	switch (err) {
 	case PSM_OK:
 		*tag = psm_status.msg_tag;
 		*len = psm_status.msg_length;
-		/* FIXME: fill in src_addr and src_addrlen */
+		*src_addr = FI_ADDR_UNSPEC;
 		return 1;
 
 	case PSM_MQ_NO_COMPLETIONS:
