@@ -34,6 +34,7 @@
 #define _FI_DOMAIN_H_
 
 #include <rdma/fabric.h>
+#include <rdma/fi_eq.h>
 
 
 #ifdef __cplusplus
@@ -90,212 +91,6 @@ struct fid_mr {
 	uint64_t		key;
 };
 
-
-/*
- * Wait Set
- * Allows associating multiple EQs and counters with a single wait object.
- */
-
-/* Use fi_control GETWAIT to get underlying wait object(s) */
-enum fi_wait_obj {
-	FI_WAIT_NONE,
-	FI_WAIT_UNSPECIFIED,
-	FI_WAIT_SET,
-	FI_WAIT_FD,
-	FI_WAIT_MUT_COND,	/* pthread mutex & cond */
-};
-
-struct fi_wait_attr {
-	enum fi_wait_obj	wait_obj;
-	uint64_t		flags;
-};
-
-struct fi_ops_wait {
-	size_t	size;
-	int	(*wait)(struct fid_wait *waitset, int timeout);
-};
-
-struct fid_wait {
-	struct fid		fid;
-	struct fi_ops_wait	*ops;
-};
-
-struct fi_wait_obj_set {
-	size_t			count;
-	enum fi_wait_obj	wait_obj;
-	void			*obj;
-};
-
-
-/*
- * Poll Set
- * Allows polling multiple event queues and counters for progress
- */
-
-struct fi_poll_attr {
-	uint64_t		flags;
-};
-
-struct fi_ops_poll {
-	size_t	size;
-	int	(*poll)(struct fid_poll *pollset, void **context, int count);
-};
-
-struct fid_poll {
-	struct fid		fid;
-	struct fi_ops_poll	*ops;
-};
-
-
-/*
- * EQ = Event Queue
- * Used to report various events and the completion of asynchronous
- * operations.
- */
-/* #define FI_TRUNC		(1ULL << 1) */
-/* #define FI_CTRUNC		(1ULL << 2) */
-
-enum fi_eq_domain {
-	FI_EQ_DOMAIN_GENERAL,
-	FI_EQ_DOMAIN_COMP,
-	FI_EQ_DOMAIN_CM,
-	FI_EQ_DOMAIN_AV
-};
-
-enum fi_eq_format {
-	FI_EQ_FORMAT_UNSPEC,
-	FI_EQ_FORMAT_CONTEXT,
-	FI_EQ_FORMAT_COMP,
-	FI_EQ_FORMAT_DATA,
-	FI_EQ_FORMAT_TAGGED,
-	FI_EQ_FORMAT_CM,
-};
-
-enum fi_eq_wait_cond {
-	FI_EQ_COND_NONE,
-	FI_EQ_COND_THRESHOLD	/* size_t threshold */
-};
-
-struct fi_eq_attr {
-	enum fi_eq_domain	domain;
-	enum fi_eq_format	format;
-	enum fi_wait_obj	wait_obj;
-	enum fi_eq_wait_cond	wait_cond;
-	size_t			size;
-	int			signaling_vector;
-	uint64_t		flags;
-	struct fid_wait		*wait_set;
-	/* If AUTO_RESET is enabled, and wait_cond is not NONE */
-	void			*cond;
-};
-
-struct fi_eq_entry {
-	void			*op_context;
-};
-
-struct fi_eq_comp_entry {
-	void			*op_context;
-	uint64_t		flags;
-	size_t			len;
-};
-
-struct fi_eq_data_entry {
-	void			*op_context;
-	void			*buf;
-	uint64_t		flags;
-	size_t			len;
-	/* data depends on operation and/or flags - e.g. immediate data */
-	uint64_t		data;
-};
-
-struct fi_eq_tagged_entry {
-	void			*op_context;
-	void			*buf;
-	uint64_t		flags;
-	size_t			len;
-	uint64_t		data;
-	uint64_t		tag;
-};
-
-struct fi_eq_err_entry {
-	void			*op_context;
-	union {
-		void		*fid_context;
-		void		*buf;
-	};
-	uint64_t		flags;
-	size_t			len;
-	uint64_t		data;
-	uint64_t		tag;
-	size_t			olen;
-	int			err;
-	int			prov_errno;
-	/* prov_data is available until the next time the EQ is read */
-	void			*prov_data;
-};
-
-enum fi_cm_event {
-	FI_CONNREQ,
-	FI_CONNECTED,
-	FI_SHUTDOWN
-};
-
-struct fi_eq_cm_entry {
-	void			*fid_context;
-	uint64_t		flags;
-	enum fi_cm_event	event;
-	/* user must call fi_freeinfo to release info */
-	struct fi_info		*info;
-	/* connection data placed here, up to space provided */
-	uint8_t			data[0];
-};
-
-struct fi_ops_eq {
-	size_t	size;
-	ssize_t	(*read)(struct fid_eq *eq, void *buf, size_t len);
-	ssize_t	(*readfrom)(struct fid_eq *eq, void *buf, size_t len,
-			fi_addr_t *src_addr);
-	ssize_t	(*readerr)(struct fid_eq *eq, struct fi_eq_err_entry *buf,
-			size_t len, uint64_t flags);
-	ssize_t	(*write)(struct fid_eq *eq, const void *buf, size_t len);
-	ssize_t	(*condread)(struct fid_eq *eq, void *buf, size_t len,
-			const void *cond);
-	ssize_t	(*condreadfrom)(struct fid_eq *eq, void *buf, size_t len,
-			fi_addr_t *src_addr, const void *cond);
-	const char * (*strerror)(struct fid_eq *eq, int prov_errno,
-			const void *prov_data, void *buf, size_t len);
-};
-
-struct fid_eq {
-	struct fid		fid;
-	struct fi_ops_eq	*ops;
-};
-
-enum fi_cntr_events {
-	FI_CNTR_EVENTS_COMP
-};
-
-struct fi_cntr_attr {
-	enum fi_cntr_events	events;
-	enum fi_wait_obj	wait_obj;
-	struct fid_wait		*wait_set;
-	uint64_t		flags;
-};
-
-struct fi_ops_cntr {
-	size_t	size;
-	uint64_t (*read)(struct fid_cntr *cntr);
-	int	(*add)(struct fid_cntr *cntr, uint64_t value);
-	int	(*set)(struct fid_cntr *cntr, uint64_t value);
-	int	(*wait)(struct fid_cntr *cntr, uint64_t threshold);
-};
-
-struct fid_cntr {
-	struct fid		fid;
-	struct fi_ops_cntr	*ops;
-};
-
-
 struct fi_mr_attr {
 	const struct iovec	*mr_iov;
 	size_t			iov_count;
@@ -304,6 +99,10 @@ struct fi_mr_attr {
 	uint64_t		requested_key;
 	void			*context;
 };
+
+
+struct fi_cq_attr;
+struct fi_cntr_attr;
 
 
 /* fi_info domain capabilities */
@@ -319,8 +118,8 @@ struct fi_ops_domain {
 	int	(*query)(struct fid_domain *domain, struct fi_domain_attr *attr);
 	int	(*av_open)(struct fid_domain *domain, struct fi_av_attr *attr,
 			struct fid_av **av, void *context);
-	int	(*eq_open)(struct fid_domain *domain, struct fi_eq_attr *attr,
-			struct fid_eq **eq, void *context);
+	int	(*cq_open)(struct fid_domain *domain, struct fi_cq_attr *attr,
+			struct fid_cq **cq, void *context);
 	int	(*endpoint)(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context);
 	int	(*if_open)(struct fid_domain *domain, const char *name,
@@ -371,60 +170,10 @@ fi_fdomain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 }
 
 static inline int
-fi_feq_open(struct fid_fabric *fabric, const struct fi_eq_attr *attr,
-	    struct fid_eq **eq, void *context)
+fi_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+	   struct fid_cq **cq, void *context)
 {
-	return fabric->ops->eq_open(fabric, attr, eq, context);
-}
-
-static inline int
-fi_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
-	   struct fid_eq **eq, void *context)
-{
-	return domain->ops->eq_open(domain, attr, eq, context);
-}
-
-static inline ssize_t fi_eq_read(struct fid_eq *eq, void *buf, size_t len)
-{
-	return eq->ops->read(eq, buf, len);
-}
-
-static inline ssize_t
-fi_eq_readfrom(struct fid_eq *eq, void *buf, size_t len, fi_addr_t *src_addr)
-{
-	return eq->ops->readfrom(eq, buf, len, src_addr);
-}
-
-static inline ssize_t
-fi_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf, size_t len,
-	      uint64_t flags)
-{
-	return eq->ops->readerr(eq, buf, len, flags);
-}
-
-static inline ssize_t fi_eq_write(struct fid_eq *eq, void *buf, size_t len)
-{
-	return eq->ops->write(eq, buf, len);
-}
-
-static inline ssize_t
-fi_eq_condread(struct fid_eq *eq, void *buf, size_t len, void *cond)
-{
-	return eq->ops->condread(eq, buf, len, cond);
-}
-
-static inline ssize_t
-fi_eq_condreadfrom(struct fid_eq *eq, void *buf, size_t len,
-		   fi_addr_t *src_addr, const void *cond)
-{
-	return eq->ops->condreadfrom(eq, buf, len, src_addr, cond);
-}
-
-static inline const char *
-fi_eq_strerror(struct fid_eq *eq, int prov_errno, void *prov_data,
-	       void *buf, size_t len)
-{
-	return eq->ops->strerror(eq, prov_errno, prov_data, buf, len);
+	return domain->ops->cq_open(domain, attr, cq, context);
 }
 
 static inline int
@@ -432,26 +181,6 @@ fi_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	      struct fid_cntr **cntr, void *context)
 {
 	return domain->ops->cntr_open(domain, attr, cntr, context);
-}
-
-static inline uint64_t fi_cntr_read(struct fid_cntr *cntr)
-{
-	return cntr->ops->read(cntr);
-}
-
-static inline int fi_cntr_add(struct fid_cntr *cntr, uint64_t value)
-{
-	return cntr->ops->add(cntr, value);
-}
-
-static inline int fi_cntr_set(struct fid_cntr *cntr, uint64_t value)
-{
-	return cntr->ops->set(cntr, value);
-}
-
-static inline int fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
-{
-	return cntr->ops->wait(cntr, threshold);
 }
 
 static inline int

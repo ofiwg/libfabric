@@ -32,35 +32,35 @@
 
 #include "psmx.h"
 
-void psmx_eq_enqueue_event(struct psmx_fid_eq *eq,
+void psmx_eq_enqueue_event(struct psmx_event_queue *eq,
 				struct psmx_event *event)
 {
-	if (eq->event_queue.tail) {
-		eq->event_queue.tail->next = event;
-		eq->event_queue.tail = event;
+	if (eq->tail) {
+		eq->tail->next = event;
+		eq->tail = event;
 	}
 	else {
-		eq->event_queue.head = eq->event_queue.tail = event;
+		eq->head = eq->tail = event;
 	}
 }
 
-static struct psmx_event *psmx_eq_dequeue_event(struct psmx_fid_eq *eq)
+static struct psmx_event *psmx_eq_dequeue_event(struct psmx_event_queue *eq)
 {
 	struct psmx_event *event;
 
-	if (!eq->event_queue.head)
+	if (!eq->head)
 		return NULL;
 
-	event = eq->event_queue.head;
-	eq->event_queue.head = event->next;
-	if (!eq->event_queue.head)
-		eq->event_queue.tail = NULL;
+	event = eq->head;
+	eq->head = event->next;
+	if (!eq->head)
+		eq->tail = NULL;
 
 	event->next = NULL;
 	return event;
 }
 
-struct psmx_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
+struct psmx_event *psmx_cq_create_event(enum fi_cq_format format,
 					void *op_context, void *buf,
 					uint64_t flags, size_t len,
 					uint64_t data, uint64_t tag,
@@ -81,22 +81,21 @@ struct psmx_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
 		event->eqe.err.tag = tag;
 		event->eqe.err.olen = olen;
 		event->eqe.err.prov_errno = 0;
-		event->eqe.err.prov_data = NULL;
 		goto out;
 	}
 
-	switch (eq->format) {
-	case FI_EQ_FORMAT_CONTEXT:
+	switch (format) {
+	case FI_CQ_FORMAT_CONTEXT:
 		event->eqe.context.op_context = op_context;
 		break;
 
-	case FI_EQ_FORMAT_COMP:
-		event->eqe.comp.op_context = op_context;
-		event->eqe.comp.flags = flags;
-		event->eqe.comp.len = len;
+	case FI_CQ_FORMAT_MSG:
+		event->eqe.msg.op_context = op_context;
+		event->eqe.msg.flags = flags;
+		event->eqe.msg.len = len;
 		break;
 
-	case FI_EQ_FORMAT_DATA:
+	case FI_CQ_FORMAT_DATA:
 		event->eqe.data.op_context = op_context;
 		event->eqe.data.buf = buf;
 		event->eqe.data.flags = flags;
@@ -104,7 +103,7 @@ struct psmx_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
 		event->eqe.data.data = data;
 		break;
 
-	case FI_EQ_FORMAT_TAGGED:
+	case FI_CQ_FORMAT_TAGGED:
 		event->eqe.tagged.op_context = op_context;
 		event->eqe.tagged.buf = buf;
 		event->eqe.tagged.flags = flags;
@@ -113,9 +112,8 @@ struct psmx_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
 		event->eqe.tagged.tag = tag;
 		break;
 
-	case FI_EQ_FORMAT_CM:
 	default:
-		fprintf(stderr, "%s: unsupported EC format %d\n", __func__, eq->format);
+		fprintf(stderr, "%s: unsupported CC format %d\n", __func__, format);
 		return NULL;
 	}
 
@@ -123,8 +121,8 @@ out:
 	return event;
 }
 
-static struct psmx_event *psmx_eq_create_event_from_status(
-				struct psmx_fid_eq *eq,
+static struct psmx_event *psmx_cq_create_event_from_status(
+				struct psmx_fid_cq *cq,
 				psm_mq_status_t *psm_status)
 {
 	struct psmx_event *event;
@@ -171,18 +169,18 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 		goto out;
 	}
 
-	switch (eq->format) {
-	case FI_EQ_FORMAT_CONTEXT:
+	switch (cq->format) {
+	case FI_CQ_FORMAT_CONTEXT:
 		event->eqe.context.op_context = op_context;
 		break;
 
-	case FI_EQ_FORMAT_COMP:
-		event->eqe.comp.op_context = op_context;
-		//event->eqe.comp.flags = 0; /* FIXME */
-		event->eqe.comp.len = psm_status->nbytes;
+	case FI_CQ_FORMAT_MSG:
+		event->eqe.msg.op_context = op_context;
+		//event->eqe.msg.flags = 0; /* FIXME */
+		event->eqe.msg.len = psm_status->nbytes;
 		break;
 
-	case FI_EQ_FORMAT_DATA:
+	case FI_CQ_FORMAT_DATA:
 		event->eqe.data.op_context = op_context;
 		event->eqe.data.buf = buf;
 		//event->eqe.data.flags = 0; /* FIXME */
@@ -190,7 +188,7 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 		//event->eqe.data.data = 0; /* FIXME */
 		break;
 
-	case FI_EQ_FORMAT_TAGGED:
+	case FI_CQ_FORMAT_TAGGED:
 		event->eqe.tagged.op_context = op_context;
 		event->eqe.tagged.buf = buf;
 		//event->eqe.tagged.flags = 0; /* FIXME */
@@ -199,9 +197,8 @@ static struct psmx_event *psmx_eq_create_event_from_status(
 		event->eqe.tagged.tag = psm_status->msg_tag;
 		break;
 
-	case FI_EQ_FORMAT_CM:
 	default:
-		fprintf(stderr, "%s: unsupported EQ format %d\n", __func__, eq->format);
+		fprintf(stderr, "%s: unsupported EQ format %d\n", __func__, cq->format);
 		return NULL;
 	}
 
@@ -212,7 +209,7 @@ out:
 	return event;
 }
 
-static int psmx_eq_get_event_src_addr(struct psmx_fid_eq *fid_eq,
+static int psmx_cq_get_event_src_addr(struct psmx_fid_cq *cq,
 					struct psmx_event *event,
 					fi_addr_t *src_addr)
 {
@@ -221,9 +218,9 @@ static int psmx_eq_get_event_src_addr(struct psmx_fid_eq *fid_eq,
 	if (!src_addr)
 		return 0;
 
-	if ((fid_eq->domain->reserved_tag_bits & PSMX_MSG_BIT) &&
+	if ((cq->domain->reserved_tag_bits & PSMX_MSG_BIT) &&
 		(event->source & PSMX_MSG_BIT)) {
-		err = psmx_epid_to_epaddr(fid_eq->domain,
+		err = psmx_epid_to_epaddr(cq->domain,
 					  event->source & ~PSMX_MSG_BIT,
 					  (psm_epaddr_t *) src_addr);
 		if (err)
@@ -235,23 +232,17 @@ static int psmx_eq_get_event_src_addr(struct psmx_fid_eq *fid_eq,
 	return -ENODATA;
 }
 
-int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_null_eq)
+int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 {
 	psm_mq_req_t psm_req;
 	psm_mq_status_t psm_status;
 	struct fi_context *fi_context;
-	struct psmx_fid_domain *domain;
 	struct psmx_fid_ep *tmp_ep;
-	struct psmx_fid_eq *tmp_eq;
+	struct psmx_fid_cq *tmp_cq;
 	struct psmx_fid_cntr *tmp_cntr;
 	struct psmx_event *event;
 	int multi_recv;
 	int err;
-
-	if (eq)
-		domain = eq->domain;
-	else
-		domain = domain_if_null_eq;
 
 	while (1) {
 		err = psm_mq_ipeek(domain->psm_mq, &psm_req, NULL);
@@ -262,7 +253,7 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 			fi_context = psm_status.context;
 
 			tmp_ep = PSMX_CTXT_EP(fi_context);
-			tmp_eq = NULL;
+			tmp_cq = NULL;
 			tmp_cntr = NULL;
 			multi_recv = 0;
 
@@ -306,30 +297,30 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 
 			case PSMX_SEND_CONTEXT:
 				tmp_ep->pending_sends--;
-				tmp_eq = tmp_ep->send_eq;
+				tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_RECV_CONTEXT:
-				tmp_eq = tmp_ep->recv_eq;
+				tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
 			case PSMX_MULTI_RECV_CONTEXT:
 				multi_recv = 1;
-				tmp_eq = tmp_ep->recv_eq;
+				tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
 			case PSMX_READ_CONTEXT:
 				tmp_ep->pending_reads--;
-				tmp_eq = tmp_ep->send_eq;
+				tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->read_cntr;
 				break;
 
 			case PSMX_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
-				tmp_eq = tmp_ep->send_eq;
+				tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
@@ -340,28 +331,30 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 				  struct fi_context *fi_context = psm_status.context;
 				  struct psmx_fid_mr *mr;
 				  mr = PSMX_CTXT_USER(fi_context);
-				  if (mr->eq) {
-					event = psmx_eq_create_event_from_status(
-							mr->eq, &psm_status);
-					if (!event)
-						return -ENOMEM;
-					psmx_eq_enqueue_event(mr->eq, event);
-				  }
+//FIXME
+//				  if (mr->eq) {
+//					event = psmx_cq_create_event_from_status(
+//							mr->eq, &psm_status);
+//					if (!event)
+//						return -ENOMEM;
+//					psmx_eq_enqueue_event(&mr->eq->event_queue, event);
+//				  }
 				  if (mr->cntr)
 					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
-				  if (!eq || mr->eq == eq)
-					return 1;
+//FIXME
+//				  if (!cq || mr->cq == cq)
+//					return 1;
 				  continue;
 				}
 #endif
 			}
 
-			if (tmp_eq) {
-				event = psmx_eq_create_event_from_status(tmp_eq, &psm_status);
+			if (tmp_cq) {
+				event = psmx_cq_create_event_from_status(tmp_cq, &psm_status);
 				if (!event)
 					return -ENOMEM;
 
-				psmx_eq_enqueue_event(tmp_eq, event);
+				psmx_eq_enqueue_event(&tmp_cq->event_queue, event);
 			}
 
 			if (tmp_cntr)
@@ -385,9 +378,9 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 					PSMX_CTXT_REQ(fi_context) = psm_req;
 				}
 				else {
-					if (tmp_eq) {
-						event = psmx_eq_create_event(
-								tmp_eq,
+					if (tmp_cq) {
+						event = psmx_cq_create_event(
+								tmp_cq->format,
 								req->context,
 								req->buf,
 								FI_MULTI_RECV,
@@ -399,14 +392,14 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 						if (!event)
 							return -ENOMEM;
 
-						psmx_eq_enqueue_event(tmp_eq, event);
+						psmx_eq_enqueue_event(&tmp_cq->event_queue, event);
 					}
 
 					free(req);
 				}
 			}
 
-			if (!eq || tmp_eq == eq)
+			if (!cq || tmp_cq == cq)
 				return 1;
 		}
 		else if (err == PSM_MQ_NO_COMPLETIONS) {
@@ -418,48 +411,48 @@ int psmx_eq_poll_mq(struct psmx_fid_eq *eq, struct psmx_fid_domain *domain_if_nu
 	}
 }
 
-static ssize_t psmx_eq_readfrom(struct fid_eq *eq, void *buf, size_t len,
+static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 				fi_addr_t *src_addr)
 {
-	struct psmx_fid_eq *fid_eq;
+	struct psmx_fid_cq *fid_cq;
 	struct psmx_event *event;
 
-	fid_eq = container_of(eq, struct psmx_fid_eq, eq);
-	assert(fid_eq->domain);
+	fid_cq = container_of(cq, struct psmx_fid_cq, cq);
+	assert(fid_cq->domain);
 
 #if PSMX_USE_AM
-	fid_eq->poll_am_before_mq = !fid_eq->poll_am_before_mq;
-	if (fid_eq->poll_am_before_mq)
-		psmx_am_progress(fid_eq->domain);
+	fid_cq->poll_am_before_mq = !fid_cq->poll_am_before_mq;
+	if (fid_cq->poll_am_before_mq)
+		psmx_am_progress(fid_cq->domain);
 #endif
 
-	psmx_eq_poll_mq(fid_eq, fid_eq->domain);
+	psmx_cq_poll_mq(fid_cq, fid_cq->domain);
 
 #if PSMX_USE_AM
-	if (!fid_eq->poll_am_before_mq)
-		psmx_am_progress(fid_eq->domain);
+	if (!fid_cq->poll_am_before_mq)
+		psmx_am_progress(fid_cq->domain);
 #endif
 
-	if (fid_eq->pending_error)
+	if (fid_cq->pending_error)
 		return -FI_EAVAIL;
 
-	if (len < fid_eq->entry_size)
+	if (len < fid_cq->entry_size)
 		return -FI_ETOOSMALL;
 
 	if (!buf)
-		return -EINVAL;
+		return -FI_EINVAL;
 
-	event = psmx_eq_dequeue_event(fid_eq);
+	event = psmx_eq_dequeue_event(&fid_cq->event_queue);
 	if (event) {
 		if (!event->error) {
-			memcpy(buf, (void *)&event->eqe, fid_eq->entry_size);
-			if (psmx_eq_get_event_src_addr(fid_eq, event, src_addr))
+			memcpy(buf, (void *)&event->eqe, fid_cq->entry_size);
+			if (psmx_cq_get_event_src_addr(fid_cq, event, src_addr))
 				*src_addr = FI_ADDR_UNSPEC;
 			free(event);
-			return fid_eq->entry_size;
+			return fid_cq->entry_size;
 		}
 		else {
-			fid_eq->pending_error = event;
+			fid_cq->pending_error = event;
 			return -FI_EAVAIL;
 		}
 	}
@@ -467,171 +460,149 @@ static ssize_t psmx_eq_readfrom(struct fid_eq *eq, void *buf, size_t len,
 	return 0;
 }
 
-static ssize_t psmx_eq_read(struct fid_eq *eq, void *buf, size_t len)
+static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t len)
 {
-	return psmx_eq_readfrom(eq, buf, len, NULL);
+	return psmx_cq_readfrom(cq, buf, len, NULL);
 }
 
-static ssize_t psmx_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
+static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 				size_t len, uint64_t flags)
 {
-	struct psmx_fid_eq *fid_eq;
+	struct psmx_fid_cq *fid_cq;
 
-	fid_eq = container_of(eq, struct psmx_fid_eq, eq);
+	fid_cq = container_of(cq, struct psmx_fid_cq, cq);
 
 	if (len < sizeof *buf)
 		return -FI_ETOOSMALL;
 
-	if (fid_eq->pending_error) {
-		memcpy(buf, &fid_eq->pending_error->eqe, sizeof *buf);
-		free(fid_eq->pending_error);
-		fid_eq->pending_error = NULL;
+	if (fid_cq->pending_error) {
+		memcpy(buf, &fid_cq->pending_error->eqe, sizeof *buf);
+		free(fid_cq->pending_error);
+		fid_cq->pending_error = NULL;
 		return sizeof *buf;
 	}
 
 	return 0;
 }
 
-static ssize_t psmx_eq_write(struct fid_eq *eq, const void *buf, size_t len)
+static ssize_t psmx_cq_write(struct fid_cq *cq, const void *buf, size_t len)
 {
-	return -ENOSYS;
+	return -FI_ENOSYS;
 }
 
-static ssize_t psmx_eq_condreadfrom(struct fid_eq *eq, void *buf, size_t len,
+static ssize_t psmx_cq_condreadfrom(struct fid_cq *cq, void *buf, size_t len,
 				    fi_addr_t *src_addr, const void *cond)
 {
-	return -ENOSYS;
+	return -FI_ENOSYS;
 }
 
-static ssize_t psmx_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond)
+static ssize_t psmx_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond)
 {
-	return psmx_eq_condreadfrom(eq, buf, len, NULL, cond);
+	return psmx_cq_condreadfrom(cq, buf, len, NULL, cond);
 }
 
-static const char *psmx_eq_strerror(struct fid_eq *eq, int prov_errno, const void *prov_data,
+static const char *psmx_cq_strerror(struct fid_cq *cq, int prov_errno, const void *prov_data,
 				    void *buf, size_t len)
 {
 	return psm_error_get_string(prov_errno);
 }
 
-static int psmx_eq_close(fid_t fid)
+static int psmx_cq_close(fid_t fid)
 {
-	struct psmx_fid_eq *fid_eq;
+	struct psmx_fid_cq *fid_cq;
 
-	fid_eq = container_of(fid, struct psmx_fid_eq, eq.fid);
-	free(fid_eq);
+	fid_cq = container_of(fid, struct psmx_fid_cq, cq.fid);
+	free(fid_cq);
 
 	return 0;
 }
 
-static int psmx_eq_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+static int psmx_cq_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	return -ENOSYS;
+	return -FI_ENOSYS;
 }
 
-static int psmx_eq_sync(fid_t fid, uint64_t flags, void *context)
+static int psmx_cq_sync(fid_t fid, uint64_t flags, void *context)
 {
-	return -ENOSYS;
+	return -FI_ENOSYS;
 }
 
-static int psmx_eq_control(fid_t fid, int command, void *arg)
+static int psmx_cq_control(fid_t fid, int command, void *arg)
 {
-	return -ENOSYS;
+	return -FI_ENOSYS;
 }
 
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = psmx_eq_close,
-	.bind = psmx_eq_bind,
-	.sync = psmx_eq_sync,
-	.control = psmx_eq_control,
+	.close = psmx_cq_close,
+	.bind = psmx_cq_bind,
+	.sync = psmx_cq_sync,
+	.control = psmx_cq_control,
 };
 
-static struct fi_ops_eq psmx_eq_ops = {
-	.size = sizeof(struct fi_ops_eq),
-	.read = psmx_eq_read,
-	.readfrom = psmx_eq_readfrom,
-	.readerr = psmx_eq_readerr,
-	.write = psmx_eq_write,
-	.condread = psmx_eq_condread,
-	.condreadfrom = psmx_eq_condreadfrom,
-	.strerror = psmx_eq_strerror,
+static struct fi_ops_cq psmx_cq_ops = {
+	.size = sizeof(struct fi_ops_cq),
+	.read = psmx_cq_read,
+	.readfrom = psmx_cq_readfrom,
+	.readerr = psmx_cq_readerr,
+	.write = psmx_cq_write,
+	.condread = psmx_cq_condread,
+	.condreadfrom = psmx_cq_condreadfrom,
+	.strerror = psmx_cq_strerror,
 };
 
-int psmx_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
-		struct fid_eq **eq, void *context)
+int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+		struct fid_cq **cq, void *context)
 {
 	struct psmx_fid_domain *fid_domain;
-	struct psmx_fid_eq *fid_eq;
-	int format;
+	struct psmx_fid_cq *fid_cq;
 	int entry_size;
 
-	if ((attr->wait_cond != FI_EQ_COND_NONE) ||
-	    (attr->flags & FI_WRITE))
-		return -ENOSYS;
-
-	switch (attr->domain) {
-	case FI_EQ_DOMAIN_GENERAL:
-	case FI_EQ_DOMAIN_COMP:
-		break;
-
-	default:
-		psmx_debug("%s: attr->domain=%d, supported=%d,%d\n", __func__, attr->domain,
-				FI_EQ_DOMAIN_GENERAL, FI_EQ_DOMAIN_COMP);
-		return -ENOSYS;
-	}
+	if (attr->flags & FI_WRITE)
+		return -FI_ENOSYS;
 
 	switch (attr->format) {
-	case FI_EQ_FORMAT_UNSPEC:
-		format = FI_EQ_FORMAT_TAGGED;
-		entry_size = sizeof(struct fi_eq_tagged_entry);
+	case FI_CQ_FORMAT_UNSPEC:
+		attr->format = FI_CQ_FORMAT_TAGGED;
+		entry_size = sizeof(struct fi_cq_tagged_entry);
 		break;
 
-	case FI_EQ_FORMAT_CONTEXT:
-		format = attr->format;
-		entry_size = sizeof(struct fi_eq_entry);
+	case FI_CQ_FORMAT_CONTEXT:
+		entry_size = sizeof(struct fi_cq_entry);
 		break;
 
-	case FI_EQ_FORMAT_COMP:
-		format = attr->format;
-		entry_size = sizeof(struct fi_eq_comp_entry);
+	case FI_CQ_FORMAT_MSG:
+		entry_size = sizeof(struct fi_cq_msg_entry);
 		break;
 
-	case FI_EQ_FORMAT_DATA:
-		format = attr->format;
-		entry_size = sizeof(struct fi_eq_data_entry);
+	case FI_CQ_FORMAT_DATA:
+		entry_size = sizeof(struct fi_cq_data_entry);
 		break;
 
-	case FI_EQ_FORMAT_TAGGED:
-		format = attr->format;
-		entry_size = sizeof(struct fi_eq_tagged_entry);
-		break;
-
-	case FI_EQ_FORMAT_CM:
-		format = attr->format;
-		entry_size = sizeof(struct fi_eq_cm_entry);
+	case FI_CQ_FORMAT_TAGGED:
+		entry_size = sizeof(struct fi_cq_tagged_entry);
 		break;
 
 	default:
 		psmx_debug("%s: attr->format=%d, supported=%d...%d\n", __func__, attr->format,
-				FI_EQ_FORMAT_UNSPEC, FI_EQ_FORMAT_CM);
-		return -EINVAL;
+				FI_CQ_FORMAT_UNSPEC, FI_CQ_FORMAT_TAGGED);
+		return -FI_EINVAL;
 	}
 
 	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
-	fid_eq = (struct psmx_fid_eq *) calloc(1, sizeof *fid_eq);
-	if (!fid_eq)
-		return -ENOMEM;
+	fid_cq = (struct psmx_fid_cq *) calloc(1, sizeof *fid_cq);
+	if (!fid_cq)
+		return -FI_ENOMEM;
 
-	fid_eq->domain = fid_domain;
-	fid_eq->format = format;
-	fid_eq->entry_size = entry_size;
-	fid_eq->eq.fid.fclass = FID_CLASS_EQ;
-	fid_eq->eq.fid.context = context;
-	fid_eq->eq.fid.ops = &psmx_fi_ops;
-	fid_eq->eq.ops = &psmx_eq_ops;
+	fid_cq->domain = fid_domain;
+	fid_cq->format = attr->format;
+	fid_cq->entry_size = entry_size;
+	fid_cq->cq.fid.fclass = FID_CLASS_CQ;
+	fid_cq->cq.fid.context = context;
+	fid_cq->cq.fid.ops = &psmx_fi_ops;
+	fid_cq->cq.ops = &psmx_cq_ops;
 
-	*eq = &fid_eq->eq;
+	*cq = &fid_cq->cq;
 	return 0;
 }
 

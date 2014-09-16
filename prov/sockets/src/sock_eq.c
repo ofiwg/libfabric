@@ -45,8 +45,14 @@
 //	.close = sock_eq_close,
 //};
 
-int sock_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
+int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context)
+{
+	return -FI_ENOSYS; /* TODO */
+}
+
+int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+		 struct fid_cq **cq, void *context)
 {
 	return -FI_ENOSYS; /* TODO */
 }

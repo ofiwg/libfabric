@@ -279,12 +279,11 @@ struct psmx_fid_domain {
 
 struct psmx_event {
 	union {
-		struct fi_eq_entry		context;
-		struct fi_eq_comp_entry		comp;
-		struct fi_eq_data_entry		data;
-		struct fi_eq_tagged_entry	tagged;
-		struct fi_eq_err_entry		err;
-		struct fi_eq_cm_entry		cm;
+		struct fi_cq_entry		context;
+		struct fi_cq_msg_entry		msg;
+		struct fi_cq_data_entry		data;
+		struct fi_cq_tagged_entry	tagged;
+		struct fi_cq_err_entry		err;
 	} eqe;
 	int error;
 	uint64_t source;
@@ -296,8 +295,8 @@ struct psmx_event_queue {
 	struct psmx_event	*tail;
 };
 
-struct psmx_fid_eq {
-	struct fid_eq		eq;
+struct psmx_fid_cq {
+	struct fid_cq		cq;
 	struct psmx_fid_domain	*domain;
 	int 			format;
 	int			entry_size;
@@ -466,8 +465,8 @@ struct psmx_fid_ep {
 	struct fid_ep		ep;
 	struct psmx_fid_domain	*domain;
 	struct psmx_fid_av	*av;
-	struct psmx_fid_eq	*send_eq;
-	struct psmx_fid_eq	*recv_eq;
+	struct psmx_fid_cq	*send_cq;
+	struct psmx_fid_cq	*recv_cq;
 	struct psmx_fid_cntr	*send_cntr;
 	struct psmx_fid_cntr	*recv_cntr;
 	struct psmx_fid_cntr	*write_cntr;
@@ -496,7 +495,7 @@ struct psmx_fid_ep {
 struct psmx_fid_mr {
 	struct fid_mr		mr;
 	struct psmx_fid_domain	*domain;
-	struct psmx_fid_eq	*eq;
+	struct psmx_fid_cq	*cq;
 	struct psmx_fid_cntr	*cntr;
 	uint64_t		access;
 	uint64_t		flags;
@@ -527,8 +526,8 @@ int	psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 			 struct fid_domain **fid, void *context);
 int	psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		     struct fid_ep **fid, void *context);
-int	psmx_eq_open(struct fid_domain *domain, struct fi_eq_attr *attr,
-		     struct fid_eq **eq, void *context);
+int	psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+		     struct fid_cq **cq, void *context);
 int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		     struct fid_av **av, void *context);
 int	psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
@@ -546,8 +545,8 @@ int	psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 void	psmx_query_mpi(void);
 void	psmx_debug(char *fmt, ...);
 
-void	psmx_eq_enqueue_event(struct psmx_fid_eq *fid_eq, struct psmx_event *event);
-struct	psmx_event *psmx_eq_create_event(struct psmx_fid_eq *fid_eq,
+void	psmx_eq_enqueue_event(struct psmx_event_queue *eq, struct psmx_event *event);
+struct	psmx_event *psmx_cq_create_event(enum fi_cq_format format,
 					void *op_context, void *buf,
 					uint64_t flags, size_t len,
 					uint64_t data, uint64_t tag,
@@ -579,8 +578,8 @@ int	psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
 #endif /* PSMX_USE_AM */
 
-int	psmx_eq_poll_mq(struct psmx_fid_eq *eq,
-			struct psmx_fid_domain *domain_if_null_eq);
+int	psmx_cq_poll_mq(struct psmx_fid_cq *cq,
+			struct psmx_fid_domain *domain);
 struct	psmx_fid_mr *psmx_mr_hash_get(uint64_t key);
 int	psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access);
 void	psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr);

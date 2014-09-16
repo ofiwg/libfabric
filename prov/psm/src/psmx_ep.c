@@ -165,7 +165,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct psmx_fid_ep *fid_ep;
 	struct psmx_fid_av *av;
-	struct psmx_fid_eq *eq;
+	struct psmx_fid_cq *cq;
 	struct psmx_fid_cntr *cntr;
 	int err;
 
@@ -175,26 +175,29 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return -EINVAL;
 	switch (bfid->fclass) {
 	case FID_CLASS_EQ:
-		eq = container_of(bfid, struct psmx_fid_eq, eq.fid);
+		return -FI_ENOSYS;
+
+	case FID_CLASS_CQ:
+		cq = container_of(bfid, struct psmx_fid_cq, cq.fid);
 #if 0
 		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
-			if (fid_ep->send_eq && fid_ep->send_eq != eq)
+			if (fid_ep->send_cq && fid_ep->send_cq != eq)
 				return -EEXIST;
 		}
 		if (flags & FI_RECV) {
-			if (fid_ep->recv_eq && fid_ep->recv_eq != eq)
+			if (fid_ep->recv_cq && fid_ep->recv_cq != eq)
 				return -EEXIST;
 		}
 #endif
-		if (fid_ep->domain != eq->domain)
+		if (fid_ep->domain != cq->domain)
 			return -EINVAL;
 		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
-			fid_ep->send_eq = eq;
+			fid_ep->send_cq = cq;
 			if (flags & FI_EVENT)
 				fid_ep->send_eq_event_flag = 1;
 		}
 		if (flags & FI_RECV) {
-			fid_ep->recv_eq = eq;
+			fid_ep->recv_cq = cq;
 			if (flags & FI_EVENT)
 				fid_ep->recv_eq_event_flag = 1;
 		}
@@ -273,7 +276,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 static inline int psmx_ep_progress(struct psmx_fid_ep *fid_ep)
 {
-	return psmx_eq_poll_mq(NULL, fid_ep->domain);
+	return psmx_cq_poll_mq(NULL, fid_ep->domain);
 }
 
 static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
