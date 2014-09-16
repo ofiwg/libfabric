@@ -356,8 +356,7 @@ static ssize_t psmx_tagged_inject(struct fid_ep *ep, const void *buf, size_t len
 }
 
 static ssize_t psmx_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
-				  uint64_t flags, fi_addr_t src_addr,
-				  size_t *src_addrlen, size_t *len,
+				  uint64_t flags, fi_addr_t *src_addr, size_t *len,
 				  void *context)
 {
 	struct psmx_fid_ep *fid_ep;
