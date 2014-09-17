@@ -150,7 +150,6 @@ enum fi_threading {
 
 struct fi_ep_attr {
 	uint64_t		protocol;
-	int			data_flow_cnt;
 	size_t			max_msg_size;
 	size_t			inject_size;
 	size_t			total_buffered_recv;

@@ -64,7 +64,6 @@ struct fi_msg_rma {
 	size_t			rma_iov_count;
 	void			*context;
 	uint64_t		data;
-	int			flow;
 };
 
 struct fi_ops_rma {

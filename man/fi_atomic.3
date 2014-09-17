@@ -375,7 +375,6 @@ struct fi_msg_atomic {
 	enum fi_op          op;       /* atomic operation */
 	void                *context; /* user-defined context */
 	uint64_t            data;     /* optional data */
-	int                 flow;     /* message steering */
 };
 
 struct fi_rma_ioc {

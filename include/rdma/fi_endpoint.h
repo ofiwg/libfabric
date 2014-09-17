@@ -86,7 +86,6 @@ struct fi_msg {
 	fi_addr_t		addr;
 	void			*context;
 	uint64_t		data;
-	int			flow;
 };
 
 /* Endpoint option levels */
