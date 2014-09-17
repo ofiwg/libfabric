@@ -180,12 +180,6 @@ struct fi_info {
 	size_t			dest_addrlen;
 	void			*src_addr;
 	void			*dest_addr;
-	/* Authorization key is intended to limit communication with only
-	 * those endpoints sharing the same key and allows sharing of
-	 * data with local processes.
-	 */
-	size_t			auth_keylen;
-	void			*auth_key;
 	struct fi_ep_attr	*ep_attr;
 	struct fi_domain_attr	*domain_attr;
 	char			*fabric_name;

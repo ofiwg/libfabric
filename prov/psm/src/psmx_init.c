@@ -211,8 +211,6 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);
 	psmx_info->src_addr = NULL;
 	psmx_info->dest_addr = dest_addr;
-	psmx_info->auth_keylen = 0;
-	psmx_info->auth_key = NULL;
 	psmx_info->fabric_name = strdup("psm");
 	psmx_info->datalen = 0;
 	psmx_info->data = NULL;

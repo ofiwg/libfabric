@@ -67,8 +67,6 @@ struct fi_info {
 	size_t              dest_addrlen;
 	void               *src_addr;
 	void               *dest_addr;
-	size_t              auth_keylen;
-	void               *auth_key;
 	struct fi_ep_attr  *ep_attr;
 	char               *fabric_name;
 	size_t              datalen;
@@ -115,14 +113,6 @@ is specified).
 If specified, indicates the source address.
 .IP "dest_addr"
 If specified, indicates the destination address.
-.IP "auth_keylen"
-Indicates the size of the authentication key (must be specified if
-.B auth_key
-is specified).
-.IP "auth_key"
-Authorization key to limit communication among endpoints that share
-the same key.  Also defines permission for sharing resources with
-other processes on the same node.
 .IP "ep_attr"
 Optionally supplied endpoint attributes.
 Endpoint attributes may be specified and returned as part of fi_getinfo.
