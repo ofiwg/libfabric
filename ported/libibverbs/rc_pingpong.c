@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2005 Topspin Communications.  All rights reserved.
+ * Copyright (c) 2014 Intel Corp.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -550,7 +551,7 @@ int main(int argc, char *argv[])
 	memset(&hints, 0, sizeof(hints));
 	
 	/* Infiniband provider */
-	hints.type              = FID_MSG;
+	hints.type              = FI_EP_MSG;
 	hints.ep_cap            = FI_MSG;
 	hints.addr_format       = FI_SOCKADDR;
 
