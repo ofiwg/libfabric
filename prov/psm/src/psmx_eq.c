@@ -122,7 +122,7 @@ out:
 }
 
 static struct psmx_event *psmx_cq_create_event_from_status(
-				struct psmx_fid_cq *cq,
+				enum fi_cq_format format,
 				psm_mq_status_t *psm_status)
 {
 	struct psmx_event *event;
@@ -169,7 +169,7 @@ static struct psmx_event *psmx_cq_create_event_from_status(
 		goto out;
 	}
 
-	switch (cq->format) {
+	switch (format) {
 	case FI_CQ_FORMAT_CONTEXT:
 		event->eqe.context.op_context = op_context;
 		break;
@@ -198,7 +198,7 @@ static struct psmx_event *psmx_cq_create_event_from_status(
 		break;
 
 	default:
-		fprintf(stderr, "%s: unsupported EQ format %d\n", __func__, cq->format);
+		fprintf(stderr, "%s: unsupported EQ format %d\n", __func__, format);
 		return NULL;
 	}
 
@@ -331,26 +331,24 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				  struct fi_context *fi_context = psm_status.context;
 				  struct psmx_fid_mr *mr;
 				  mr = PSMX_CTXT_USER(fi_context);
-//FIXME
-//				  if (mr->eq) {
-//					event = psmx_cq_create_event_from_status(
-//							mr->eq, &psm_status);
-//					if (!event)
-//						return -ENOMEM;
-//					psmx_eq_enqueue_event(&mr->eq->event_queue, event);
-//				  }
+				  if (mr->cq) {
+					event = psmx_cq_create_event_from_status(
+							mr->cq->format, &psm_status);
+					if (!event)
+						return -ENOMEM;
+					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
+				  }
 				  if (mr->cntr)
 					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
-//FIXME
-//				  if (!cq || mr->cq == cq)
-//					return 1;
+				  if (!cq || mr->cq == cq)
+					return 1;
 				  continue;
 				}
 #endif
 			}
 
 			if (tmp_cq) {
-				event = psmx_cq_create_event_from_status(tmp_cq, &psm_status);
+				event = psmx_cq_create_event_from_status(tmp_cq->format, &psm_status);
 				if (!event)
 					return -ENOMEM;
 
