@@ -1,4 +1,4 @@
-.TH "FI_CNTR" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_CNTR" 3 "2014-09-17" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_cntr \- Completion and event counter operations
 .PP
@@ -10,6 +10,11 @@ Allocate/free a counter
 fi_cntr_read
 .RS
 Read the current value of a counter
+.RE
+.PP
+fi_cntr_readerr
+.RS
+Reads the number of operations which have completed in error.
 .RE
 .PP
 fi_cntr_add
@@ -37,6 +42,8 @@ Wait for a counter to be greater or equal to a threshold value
 .HP
 .BI "uint64_t fi_cntr_read(struct fid_cntr *" cntr ");"
 .HP
+.BI "uint64_t fi_cntr_readerr(struct fid_cntr *" cntr ");"
+.HP
 .BI "int fi_cntr_add(struct fid_cntr *" cntr ", uint64_t " value ");"
 .HP
 .BI "int fi_cntr_set(struct fid_cntr *" cntr ", uint64_t " value ");"
@@ -57,10 +64,20 @@ Value to increment or set counter
 .IP "threshold"
 Value to compare counter against
 .SH "DESCRIPTION"
+Counters record the number of requested operations that have completed.
+Counters can provide a light-weight completion mechanism by suppressing
+the generation of a full completion event.  They are useful for applications
+that only need to know the number of requests that have completed, and not
+details about each request.  For example, counters may be useful for
+implementing credit based flow control or tracking the number of remote
+processes which have responded to a request.
+.PP
+Counters typically only count successful completions.  However, if an
+operation completes in error, it may increment an associated error value.
 .SS "fi_cntr_open"
 fi_cntr_open allocates a new fabric counter.  The properties and behavior of
 the counter are defined by struct fi_cntr_attr.
-.PP
+.sp
 .nf
 struct fi_cntr_attr {
 	enum fi_cntr_events  events;    /* type of events to count */
@@ -133,7 +150,6 @@ with a counter:
 Returns the current default operational flags associated with the counter.
 .IP "FI_SETOPSFLAG (uint64_t *)"
 Modifies the current default operational flags associated with the counter.
-Operational flags affected by fi_eq_control are: FI_AUTO_RESET.
 .IP "FI_GETWAIT (void **)"
 This command allows the user to retrieve the low-level wait object
 associated with the counter.  The format of the wait-object is specified during
@@ -148,19 +164,26 @@ pthread_cond_t *, respectively.
 .RE
 .SS "fi_cntr_read"
 The fi_cntr_read call returns the current value of the counter.
+.SS "fi_cntr_readerr"
+The read error call returns the number of operations that completed in error
+and were unable to update the counter.
 .SS "fi_cntr_add"
 This adds the user-specified value to the counter.
 .SS "fi_cntr_set"
 This sets the counter to the specified value.
 .SS "fi_cntr_wait"
 This call may be used to wait until the counter reaches the specified
-threshold.  Upon successful return from this call, the counter will be
-greater than or equal to the input threshold value.
+threshold, or until an error occurs.  Upon successful return from this call,
+the counter will be greater than or equal to the input threshold value.
+.sp
+If an operation associated with the counter encounters an error, it will
+increment the error value associated with the counter.  Any change in a
+counter's error value will unblock any thread inside fi_cntr_wait. 
 .SH "RETURN VALUES"
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.
 .PP
-fi_cntr_read
+fi_cntr_read /  fi_cntr_readerr
 .RS
 Returns the current value of the counter.
 .RE

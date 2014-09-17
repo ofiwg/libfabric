@@ -115,7 +115,13 @@ they perform the same general function.
 By default, memory registration completes synchronously.  I.e. the
 registration call will not return until the registration has completed.
 Memory registration can complete asynchronous by binding the resource
-domain to an event queue.  See fi_domain_bind.
+domain to an event queue using the FI_REG_MR flag.  See fi_domain_bind.
+When memory registration is asynchronous, in order to avoid a race condition
+between the registration call returning and the corresponding reading
+of the event from the EQ, the mr output parameter will
+be written before any event associated with the operation may be read by
+the application.  An asynchronous event will not be generated unless the
+registration call returns success (0).
 .SS "fi_mr_reg"
 The fi_mr_reg call registers the user-specified memory buffer with
 the resource domain.  The buffer is enabled for access by the fabric

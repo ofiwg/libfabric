@@ -1,13 +1,13 @@
-.TH "FI_EQ" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_EQ" 3 "2014-09-18" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_eq \- Event queue operations
 .PP
-fi_feq_open / fi_eq_open / fi_close
+fi_eq_open / fi_close
 .RS
 Open/close an event queue
 .RE
 .PP
-fi_eq_read / fi_eq_readfrom / fi_eq_readerr
+fi_eq_read / fi_eq_readerr
 .RS
 Read an event from an event queue
 .RE
@@ -17,7 +17,7 @@ fi_eq_write
 Writes an event to an event queue
 .RE
 .PP
-fi_eq_condread / fi_eq_condreadfrom
+fi_eq_condread
 .RS
 Waits until the specified condition has been met before reading an event
 from an event queue.
@@ -30,10 +30,7 @@ Converts provider specific error information into a printable string
 .SH SYNOPSIS
 .B #include <rdma/fi_domain.h>
 .HP
-.BI "int fi_feq_open(struct fid_fabric *" fabric ", struct fi_eq_attr *" attr ", "
-.BI "struct fid_eq **" eq ", void * " context ");"
-.HP
-.BI "int fi_eq_open(struct fid_domain *" domain ", struct fi_eq_attr *" attr ", "
+.BI "int fi_eq_open(struct fid_fabric *" fabric ", struct fi_eq_attr *" attr ", "
 .BI "struct fid_eq **" eq ", void * " context ");"
 .HP
 .BI "int fi_close(struct fid *" eq ");"
@@ -42,11 +39,7 @@ Converts provider specific error information into a printable string
 .PP
 .HP
 .BI "int fi_eq_read(struct fid_eq *" eq ","
-.BI "void *" buf ", size_t " len ");"
-.HP
-.BI "int fi_eq_readfrom(struct fid_eq *" eq ","
-.BI "void *" buf ", size_t " len ", "
-.BI "fi_addr_t *" src_addr ");"
+.BI "void *" buf ", size_t " len ", uint64_t " flags ");"
 .HP
 .BI "int fi_eq_readerr(struct fid_eq *" eq ","
 .BI "struct fi_eq_err_entry *" buf ", size_t " len ", "
@@ -54,20 +47,16 @@ Converts provider specific error information into a printable string
 .PP
 .HP
 .BI "int fi_eq_write(struct fid_eq *" eq ","
-.BI "const void *" buf ", size_t " len ");"
+.BI "const void *" buf ", size_t " len ", uint64_t " flags ");"
 .PP
 .HP
 .BI "int fi_eq_condread(struct fid_eq *" eq ","
 .BI "void *" buf ", size_t " len ", "
-.BI "const void *" cond ");"
-.HP
-.BI "int fi_eq_condreadfrom(struct fid_eq *" eq ","
-.BI "void *" buf ", size_t " len ","
-.BI "fi_addr_t *" src_addr ", const void *" cond ");"
+.BI "const void *" cond ", uint64_t " flags ");"
 .PP
 .HP
 .BI "const char * fi_eq_strerror(struct fid_eq *" eq ", int " prov_errno ", "
-.BI "const void *" prov_data ", void *" buf ", size_t" len ");"
+.BI "const void *" err_data ", void *" buf ", size_t" len ");"
 .SH ARGUMENTS
 .IP "fabric"
 Opened fabric descriptor
@@ -95,122 +84,38 @@ Additional flags to apply to the operation
 Condition that must be met before an event is generated
 .IP "prov_errno"
 Provider specific error value
-.IP "prov_data"
-Provider specific data related to a completion
+.IP "err_data"
+Provider specific error data related to a completion
 .SH "DESCRIPTION"
-.SS "fi_feq_open / fi_eq_open"
-fi_feq_open and fi_eq_open allocate a new event queue.  fi_feq_open opens
-an event queue associated with a fabric domain.  Fabric event queues
-are software constructs which are not associated with hardware resources.
-They are most often used with passive endpoints that listen for connections
-across multiple resource domains.  fi_eq_open allocates an event queue and
-associates it with a specific hardware domain.  A resource domain event
-queue may be implemented in a hardware NIC, and is often associated with
-an active endpoint.
+Event queues are used to report events associated with control operations.
+They are associated with memory registration, address vectors, connection
+management, and fabric and domain level events.  Reported events are
+either associated with a requested operation or affiliated with a
+call that registers for specific
+types of events, such as listening for connection requests.
+.SS "fi_eq_open"
+fi_eq_open allocates a new event queue.
 .PP 
 The properties and behavior of an event queue are defined by struct fi_eq_attr.
 .PP
 .nf
 struct fi_eq_attr {
-	enum fi_eq_domain    domain;    /* events reported by EQ */
-	enum fi_eq_format    format;    /* event format */
-	enum fi_wait_obj     wait_obj;  /* requested wait object */
-	enum fi_eq_wait_cond wait_cond; /* wait condition format */
 	size_t               size;      /* # entries for EQ */
-	int                  signaling_vector; /* interrupt affinity */
 	uint64_t             flags;     /* operation flags */
+	enum fi_wait_obj     wait_obj;  /* requested wait object */
+	int                  signaling_vector; /* interrupt affinity */
 	struct fid_wait     *wait_set;  /* optional wait set */
-	void                *cond;      /* wait condition */
 };
-.fi
-.IP "domain"
-An EQ domain indicates the type of events which are to be reported through
-the event queue.  Valid values are:
+.IP "size"
+Specifies the minimum size of an event queue.
+.IP "flags"
+Flags that control the configuration of the EQ.
 .RS
-.IP "FI_EQ_DOMAIN_GENERAL"
-The EQ is used to report asynchronous events affiliated with a fabric
-or access domain.
-.IP "FI_EQ_DOMAIN_COMP"
-The EQ is used to report asynchronous completions of data transfers.
-.IP "FI_EQ_DOMAIN_CM"
-The EQ will be used to report connection management events.
-.IP "FI_EQ_DOMAIN_AV"
-The EQ will report asynchronous operations associated with address vectors.
-.RE
-.IP "format"
-Event queues allow the application to select the amount of detail that it
-must store and report.  The format attribute allows the application to
-select one of several event formats, indicating the structure of the data
-that the event queue should return when read.  Supported formats and the
-structures that correspond to each are listed below.
-.RS
-.IP "FI_EQ_FORMAT_UNSPEC"
-If an unspecified format is requested, then the EQ will use the default
-format associated with the EQ based on the selected domain and type.
-.IP "FI_EQ_FORMAT_CONTEXT"
-Provides only user specified context that was associated with the event.
-.nf
-
-struct fi_eq_entry {
-	void *op_context; /* operation context */
-};
-.fi
-.IP "FI_EQ_FORMAT_COMP"
-Provides minimal data for processing completions.
-.nf
-
-struct fi_eq_comp_entry {
-	void    *op_context; /* operation context */
-	uint64_t flags;      /* completion flags */
-	size_t   len;        /* size of received data */
-};
-.fi
-.IP "FI_EQ_FORMAT_DATA"
-Provides data associated with a completion.
-.nf
-
-struct fi_eq_data_entry {
-	void    *op_context; /* operation context */
-	void    *buf;        /* receive data buffer */
-	uint64_t flags;      /* completion flags */
-	size_t   len;        /* size of received data */
-	uint64_t data;       /* completion data */
-};
-.fi
-.IP "FI_EQ_FORMAT_TAGGED"
-Reports completion data when using fi_tagged operations.
-.nf
-
-struct fi_eq_tagged_entry {
-	void    *op_context; /* operation context */
-	void    *buf;        /* receive data buffer */
-	uint64_t flags;      /* completion flags */
-	size_t   len;        /* size of received data */
-	uint64_t data;       /* completion data */
-	uint64_t tag;        /* received tag */
-};
-.fi
-.IP "FI_EQ_FORMAT_CM"
-Provides information on connection management.
-.nf
-
-struct fi_eq_cm_entry {
-	void            *fid_context; /* endpoint context */
-	uint64_t         flags;       /* connection flags */
-	enum fi_cm_event event;       /* CM event */
-	struct fi_info *info;         /* endpoint info */
-	uint8_t         data[0];      /* user data */
-};
-
-.fi
-Available CM events are FI_CONNREQ, FI_CONNECTED, FI_SHUTDOWN.  For
-FI_CONNREQ, the info field will provide additional details on the request.
-Users must call fi_freeinfo on info to release the structure.
-.sp
-If the underlying connection protocol supports exchanging user data as
-part of the connection establish, the data field will contain any
-available user CM data.  ECs that report CM events return a single event
-per read request.
+.IP "FI_WRITE"
+Indicates that the application requires support for inserting user events
+into the EQ.  If this flag is set, then the fi_eq_write operation must be
+supported by the provider.  If the FI_WRITE flag is not set, then the
+application may not invoke fi_eq_write. 
 .RE
 .IP "wait_obj"
 EQ's may be associated with a specific wait object.  Wait objects allow
@@ -218,14 +123,14 @@ applications to block until the wait object is signaled, indicating that
 an event is available to be read.  Users may use fi_control to retrieve
 the underlying wait object associated with an EQ, in order to use it in
 other system calls.  The following values may be used to specify the type
-of wait object associated with an EQ: FI_WAIT_NONE, FI_WAIT_UNSPECIFIED,
-FI_WAIT_SET, FI_WAIT_FD, and FI_WAIT_MUT_COND.
+of wait object associated with an EQ:
 .RS
 .IP "FI_WAIT_NONE"
 Used to indicate that the user will not block (wait) for events on the EQ.
+When FI_WAIT_NONE is specified, the application may not call fi_eq_condread.
 .IP "FI_WAIT_UNSPECIFIED"
 Specifies that the user will only wait on the EQ using fabric interface
-calls, such as fi_eq_readcond.  In this case, the underlying provider may
+calls, such as fi_eq_condread.  In this case, the underlying provider may
 select the most appropriate or highest performing wait object available,
 including custom wait mechanisms.  Applications that select
 FI_WAIT_UNSPECIFIED are not guaranteed to retrieve the underlying wait
@@ -243,49 +148,9 @@ as readable, writable, or with an error.
 Specifies that the EQ should use a pthread mutex and cond variable as a
 wait object.
 .RE
-.IP "wait_cond"
-By default, when an event is inserted into an EQ that supports blocking
-reads (fi_eq_condread/fi_eq_condreadfrom), the corresponding wait
-object is signaled.  Users may specify a condition that must
-first be met before the wait is satisfied.  This field indicates how the
-provider should interpret the cond field, which describes the condition
-needed to signal the wait object.
-.sp
-A wait condition should be treated as an optimization.  Providers are
-not required to meet the requirements of the condition before signaling
-the wait object.  Applications should not rely on the condition
-necessarily being true when a blocking read call returns.
-.sp
-If wait_cond is set to FI_EQ_COND_NONE, then no additional conditions
-are applied to the signaling of the EQ wait object.  If wait_cond is
-set to FI_EQ_COND_THRESHOLD, then the cond field is interpreted as a size_t
-threshold value.  The threshold indicates the number of entries that must
-be added to an EQ before the wait object is signaled.
-.sp
-This field is ignored if wait_obj is set to FI_WAIT_NONE.
-.IP "size"
-Specifies the size of an event queue.
 .IP "signaling_vector"
 Indicates which processor core interrupts associated with the EQ should
 target.
-.IP "flags"
-Flags that set the default operation of the EQ.
-.RS
-.IP "FI_REMOTE_SIGNAL"
-If specified, this indicates that the EQ should only signal its wait object
-upon receiving a remote operation with FI_REMOTE_SIGNAL set, provided that all
-other wait conditions have been met.  The use of FI_REMOTE_SIGNAL may
-improve system utilization by deferring processing of an EQ until a remote
-endpoint has completed all necessary operations.  FI_REMOTE_SIGNAL should be
-treated as an optimization.  Providers are not required to wait until a
-remote operation with FI_REMOTE_SIGNAL is received before signaling a wait
-object associated with an EQ.
-.IP "FI_WRITE"
-Indicates that the application requires support for inserting user events
-into the EQ.  If this flag is set, then the fi_eq_write operation must be
-supported by the provider.  If the FI_WRITE flag is not set, then the
-application may not invoke fi_eq_write. 
-.RE
 .IP "wait_set"
 If wait_obj is FI_WAIT_SET, this field references a wait object to which the
 event queue should attach.  When an event is inserted into the event queue,
@@ -293,11 +158,6 @@ the corresponding wait set will be signaled if all necessary conditions are
 met.  The use of a wait_set enables an optimized method of waiting for events
 across multiple event queues.  This field is ignored if wait_obj is not
 FI_WAIT_SET. 
-.IP "cond"
-Points to a datatype or structure describing a wait condition that must be
-satisfied before the EQ wait object is signaled.  The format of the data
-referenced by the cond field is determined by the value set by the wait_cond
-field.
 .SS "fi_close"
 The fi_close call releases all resources associated with an event
 queue.  The EQ must not be bound to any other resources prior to
@@ -309,44 +169,82 @@ details of the event queue.  Access to the EQ should be serialized
 across all calls when fi_eq_control is invoked, as it may redirect the
 implementation of EQ operations.  The following control commands are usable
 with an EQ.
-.IP "FI_GETOPSFLAG (uint64_t *)"
-Returns the current default operational flags associated with the EQ.
 .IP "FI_GETWAIT (void **)"
 This command allows the user to retrieve the low-level wait object
 associated with the EQ.  The format of the wait-object is specified during
 EQ creation, through the EQ attributes.  The fi_eq_control arg parameter
 should be an address where a pointer to the returned wait object
 will be written.
-.SS "fi_eq_read / fi_eq_readfrom"
-The fi_eq_read and fi_eq_readfrom operations perform a non-blocking read of
-event data from the EQ.  The format of the event data is based on the user
-specified options when the EQ was opened.  Multiple events may be retrieved
-from an EQ in a single call, provided that sufficient buffer space was
-provided.  The number of bytes successfully read from the EQ is returned
-by the calls.
+.SS "fi_eq_read"
+The fi_eq_read operations performs a non-blocking read of
+event data from the EQ.  The format of the event data is based on the type
+of event retrieved from the EQ, with all events starting with a
+struct fi_eq_entry header.  At most one event will be returned per EQ read
+operation.  The number of bytes successfully read from the EQ is returned
+from the read.  The FI_PEEK flag may be used to indicate that event
+data should be read from the EQ without being consumed.  A subsequent
+read without the FI_PEEK flag would then remove the event from the EQ.
 .PP
-The fi_eq_readfrom call allows the EQ to return source address information to
-the user for any received data.  Source address data is only available for
-those endpoints configured with FI_SOURCE capability.  If fi_eq_readfrom is
-called on an endpoint for which source addressing data is not available, the
-source address will be set to FI_ADDR_UNSPEC.
-.PP
-EQs are optimized to report operations which have completed successfully.
-Operations which fail are reported 'out of band'.  Such operations are
-retrieved using the fi_eq_readerr function.  When an operation
-that completes with an unexpected error is inserted
-into an EQ, it is placed into a temporary error queue.  Attempting to read
-from an EQ while an item is in the error queue results in an FI_EAVAIL
-failure.  Applications may use this return code to determine when to
-call fi_eq_readerr.
-.SS "fi_eq_condread / fi_eq_condreadfrom"
-The fi_eq_condread and fi_eq_condreadfrom calls are the blocking equivalent
-operations to fi_eq_read and fi_eq_readfrom.  Their behavior is similar to
-the non-blocking calls, with the exception that the calls will not return
+The following types of events may be reported to an EQ, along with
+information regarding the format associated with each event.
+.IP "Asynchronous Control Operations"
+Asynchronous control operations are basic requests that simply need to
+generate an event to indicate that they have completed.  These include
+the following types of events: memory registration, address vector resolution,
+connection established, and multicast join.
+.sp
+Control requests report their completion by inserting a struct fi_eq_entry
+into the EQ.  The format of this structure is:
+.nf
+
+struct fi_eq_entry {
+	enum fi_eq_event event;      /* event type */
+	fid_t            fid;        /* fid associated with request */
+	void            *context;    /* operation context */
+};
+
+.fi
+For the completion of basic asynchronous control operations, the event
+type will be set to FI_COMPLETE.  The fid will reference the fabric descriptor
+associated with the event.  For memory registration, this will be the fid_mr,
+address resolution will reference a fid_av, and CM events will refer to a
+fid_ep.  The context field will be set to the context specified as part of
+the operation.
+.IP "Connection Request Notification"
+Connection requests are unsolicited notifications that a remote endpoint
+wishes to establish a new connection to a listening passive endpoint.
+Connection requests are reported using struct fi_eq_cm_entry:
+.nf
+
+struct fi_eq_cm_entry {
+	enum fi_eq_event event;      /* event type */
+	fid_t            fid;        /* fid associated with request */
+	fi_connreq_t     context;    /* connection context */
+	struct fi_info  *info;       /* endpoint information */
+	uint8_t         data[0];     /* app connection data */
+};
+
+.fi
+Connection request events are of type FI_CONNREQ.  The fid is the passive
+endpoint.  The context field is a connection request specific value that
+allows the provider to associate the accept or reject call with a specific
+request.  Information regarding the requested endpoint's capabilities and
+attributes are available from the info field.
+Any application data exchanged as part of the connection
+request is placed beyond the fi_eq_cm_entry structure.  The amount of data
+available is application dependent and limited to the buffer space provided
+by the application when fi_eq_read is called.  The amount of returned data
+may be calculated using the return value to fi_eq_read.
+.IP "Connection Shutdown Notification"
+Notification that a remote peer has disconnected from an active endpoint is
+done through the FI_SHUTDOWN event.  Shutdown notification uses struct
+fi_eq_entry as declared above.  The fid field for a shutdown notification
+refers to the active endpoint's fid_ep.  The context field is set to NULL.
+.SS "fi_eq_condread"
+The fi_eq_condread call is the blocking equivalent to fi_eq_read.
+It behaves is similar to
+the non-blocking call, with the exception that the calls will not return
 until either an event has been read from the EQ or an error occurs.
-fi_eq_condreadfrom is an optional function.
-The macro FI_EQ_CONDREADFROM must be used in a similar manner to 
-FI_EQ_READFROM to determine the availability of this function.
 .SS "fi_eq_readerr"
 The read error function, fi_eq_readerr, retrieves information regarding
 any asynchronous operation which has completed with an unexpected error.
@@ -367,25 +265,25 @@ The format of this structure is defined below.
 .nf
 
 struct fi_eq_err_entry {
-	void    *op_context;  /* operation context */
-	union {
-		void *fid_context;/* endpoint context */
-		void *buf;        /* receive data buffer */
-	};
-	uint64_t flags;       /* completion flags */
-	size_t   len;         /* size of received data */
-	uint64_t data;        /* completion data */
-	uint64_t tag;         /* message tag */
-	size_t   olen;        /* overflow length */
-	int      err;         /* positive error code */
-	int      prov_errno;  /* provider error code */
-	void    *prov_data;   /* provider error data */
+	enum fi_eq_event event;      /* event type */
+	fid_t            fid;        /* fid associated with error */
+	void            *context;    /* operation context */
+	int              err;        /* positive error code */
+	int              prov_errno; /* provider error code */
+	void            *err_data;   /* additional error data */
 };
 
 .fi
+Error events will set the event field to FI_ERROR.
+The fid will reference the fabric descriptor
+associated with the event.  For memory registration, this will be the fid_mr,
+address resolution will reference a fid_av, and CM events will refer to a
+fid_ep.  The context field will be set to the context specified as part of
+the operation.
+.sp
 The general reason for the error is provided through the err field.  Provider
 specific error information may also be available through the prov_errno
-and prov_data fields.  Users may call fi_eq_strerror to convert provider
+and err_data fields.  Users may call fi_eq_strerror to convert provider
 specific error information into a printable string for debugging purposes.
 .SH "RETURN VALUES"
 fi_eq_open 
@@ -394,9 +292,9 @@ Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.
 .RE
 .PP
-fi_eq_read / fi_eq_readfrom / fi_eq_readerr
+fi_eq_read / fi_eq_readerr
 .br
-fi_eq_condread / fi_eq_condreadfrom
+fi_eq_condread
 .br
 fi_eq_write
 .RS
@@ -413,6 +311,5 @@ returned with a completion.
 .PP
 Fabric errno values are defined in
 .IR "rdma/fi_errno.h".
-.SH "NOTES"
 .SH "SEE ALSO"
 fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_cntr(3), fi_poll(3)
