@@ -122,8 +122,6 @@ struct fi_ops_domain {
 			struct fid_cq **cq, void *context);
 	int	(*endpoint)(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context);
-	int	(*if_open)(struct fid_domain *domain, const char *name,
-			uint64_t flags, struct fid **fif, void *context);
 	int	(*cntr_open)(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct fid_cntr **cntr, void *context);
 	int	(*wait_open)(struct fid_domain *domain, struct fi_wait_attr *attr,

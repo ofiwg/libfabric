@@ -143,7 +143,7 @@ static int sock_open_am(struct sock_domain *dom, struct fi_av_attr *attr,
 	if (!_av)
 		return -FI_ENOMEM;
 
-	_av->av_fid.fid.fclass = FID_CLASS_AV;
+	_av->av_fid.fid.fclass = FI_CLASS_AV;
 	_av->av_fid.fid.context = context;
 	_av->av_fid.fid.ops = &sock_av_fi_ops;
 	_av->av_fid.ops = &sock_am_ops;

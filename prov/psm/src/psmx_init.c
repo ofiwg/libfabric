@@ -76,7 +76,7 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	struct fi_info *psmx_info;
 	uint32_t cnt = 0;
 	void *dest_addr = NULL;
-	int type = FID_RDM;
+	int type = FI_EP_RDM;
 	int ep_cap = 0;
 	uint64_t max_tag_value = 0;
 	int err = -ENODATA;
@@ -98,16 +98,16 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 
 	if (hints) {
 		switch (hints->type) {
-		case FID_UNSPEC:
-		case FID_RDM:
+		case FI_EP_UNSPEC:
+		case FI_EP_RDM:
 			break;
-		case FID_MSG:
-			type = FID_MSG;
+		case FI_EP_MSG:
+			type = FI_EP_MSG;
 			break;
 		default:
 			psmx_debug("%s: hints->type=%d, supported=%d,%d,%d.\n",
-					__func__, hints->type, FID_UNSPEC,
-					FID_RDM, FID_MSG);
+					__func__, hints->type, FI_EP_UNSPEC,
+					FI_EP_RDM, FI_EP_MSG);
 			goto err_out;
 		}
 
@@ -211,8 +211,6 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);
 	psmx_info->src_addr = NULL;
 	psmx_info->dest_addr = dest_addr;
-	psmx_info->auth_keylen = 0;
-	psmx_info->auth_key = NULL;
 	psmx_info->fabric_name = strdup("psm");
 	psmx_info->datalen = 0;
 	psmx_info->data = NULL;
@@ -252,7 +250,7 @@ static int psmx_fabric(const char *name, uint64_t flags,
 	if (!fid_fabric)
 		return -FI_ENOMEM;
 
-	fid_fabric->fabric.fid.fclass = FID_CLASS_FABRIC;
+	fid_fabric->fabric.fid.fclass = FI_CLASS_FABRIC;
 	fid_fabric->fabric.fid.context = context;
 	fid_fabric->fabric.fid.ops = &psmx_fabric_fi_ops;
 	fid_fabric->fabric.ops = &psmx_fabric_ops;

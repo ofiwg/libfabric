@@ -194,8 +194,6 @@ void __fi_freeinfo(struct fi_info *info)
 		free(info->dest_addr);
 	if (info->fabric_name)
 		free(info->fabric_name);
-	if (info->auth_key)
-		free(info->auth_key);
 	if (info->ep_attr)
 		free(info->ep_attr);
 	if (info->domain_attr) {

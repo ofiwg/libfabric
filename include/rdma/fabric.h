@@ -180,12 +180,6 @@ struct fi_info {
 	size_t			dest_addrlen;
 	void			*src_addr;
 	void			*dest_addr;
-	/* Authorization key is intended to limit communication with only
-	 * those endpoints sharing the same key and allows sharing of
-	 * data with local processes.
-	 */
-	size_t			auth_keylen;
-	void			*auth_key;
 	struct fi_ep_attr	*ep_attr;
 	struct fi_domain_attr	*domain_attr;
 	char			*fabric_name;
@@ -194,17 +188,17 @@ struct fi_info {
 };
 
 enum {
-	FID_CLASS_UNSPEC,
-	FID_CLASS_FABRIC,
-	FID_CLASS_DOMAIN,
-	FID_CLASS_EP,
-	FID_CLASS_PEP,
-	FID_CLASS_INTERFACE,
-	FID_CLASS_AV,
-	FID_CLASS_MR,
-	FID_CLASS_EQ,
-	FID_CLASS_CQ,
-	FID_CLASS_CNTR
+	FI_CLASS_UNSPEC,
+	FI_CLASS_FABRIC,
+	FI_CLASS_DOMAIN,
+	FI_CLASS_EP,
+	FI_CLASS_PEP,
+	FI_CLASS_INTERFACE,
+	FI_CLASS_AV,
+	FI_CLASS_MR,
+	FI_CLASS_EQ,
+	FI_CLASS_CQ,
+	FI_CLASS_CNTR
 };
 
 struct fid;
@@ -229,8 +223,8 @@ struct fi_ops {
 	int	(*bind)(struct fid *fid, struct fid *bfid, uint64_t flags);
 	int	(*sync)(struct fid *fid, uint64_t flags, void *context);
 	int	(*control)(struct fid *fid, int command, void *arg);
-	int	(*openif)(struct fid *fid, const char *name,
-			uint64_t flags, struct fid **fif, void *context);
+	int	(*ops_open)(struct fid *fid, const char *name,
+			uint64_t flags, void **ops, void *context);
 };
 
 /* All fabric interface descriptors must start with this structure */
@@ -316,10 +310,10 @@ static inline int fi_alias(struct fid *fid, struct fid **alias_fid, uint64_t fla
 }
 
 static inline int
-fi_open(struct fid *fid, const char *name, uint64_t flags,
-	struct fid **fif, void *context)
+fi_open_ops(struct fid *fid, const char *name, uint64_t flags,
+	    void **ops, void *context)
 {
-	return fid->ops->openif(fid, name, flags, fif, context);
+	return fid->ops->ops_open(fid, name, flags, ops, context);
 }
 
 

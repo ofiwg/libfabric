@@ -136,9 +136,9 @@ static int ibv_sockaddr_len(struct sockaddr *addr)
 static int ibv_check_hints(struct fi_info *hints)
 {
 	switch (hints->type) {
-	case FID_UNSPEC:
-	case FID_MSG:
-	case FID_DGRAM:
+	case FI_EP_UNSPEC:
+	case FI_EP_MSG:
+	case FI_EP_DGRAM:
 		break;
 	default:
 		return -FI_ENODATA;
@@ -180,12 +180,12 @@ static int ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinf
 //		rai->ai_flags |= RAI_FAMILY;
 
 //	rai->ai_family = fi->sa_family;
-	if (fi->type == FID_MSG || fi->ep_cap & FI_RMA || (fi->ep_attr &&
+	if (fi->type == FI_EP_MSG || fi->ep_cap & FI_RMA || (fi->ep_attr &&
 	    (fi->ep_attr->protocol == FI_PROTO_IB_RC ||
 	     fi->ep_attr->protocol == FI_PROTO_IWARP))) {
 		rai->ai_qp_type = IBV_QPT_RC;
 		rai->ai_port_space = RDMA_PS_TCP;
-	} else if (fi->type == FID_DGRAM || (fi->ep_attr &&
+	} else if (fi->type == FI_EP_DGRAM || (fi->ep_attr &&
 		   fi->ep_attr->protocol == FI_PROTO_IB_UD)) {
 		rai->ai_qp_type = IBV_QPT_UD;
 		rai->ai_port_space = RDMA_PS_UDP;
@@ -216,12 +216,12 @@ static int ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinf
  //	fi->sa_family = rai->ai_family;
 	if (rai->ai_qp_type == IBV_QPT_RC || rai->ai_port_space == RDMA_PS_TCP) {
 		fi->ep_cap = FI_MSG | FI_RMA;
-		fi->type = FID_MSG;
+		fi->type = FI_EP_MSG;
 	} else if (rai->ai_qp_type == IBV_QPT_UD ||
 		   rai->ai_port_space == RDMA_PS_UDP) {
 		fi->ep_attr->protocol = FI_PROTO_IB_UD;
 		fi->ep_cap = FI_MSG;
-		fi->type = FID_DGRAM;
+		fi->type = FI_EP_DGRAM;
 	}
 
  	if (rai->ai_src_len) {
@@ -371,7 +371,7 @@ static int ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
 
 	switch (bfid->fclass) {
-	case FID_CLASS_CQ:
+	case FI_CLASS_CQ:
 		if (flags & FI_RECV) {
 			if (ep->rcq)
 				return -EINVAL;
@@ -383,7 +383,7 @@ static int ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			ep->scq = container_of(bfid, struct __ibv_cq, cq_fid.fid);
 		}
 		break;
-	case FID_CLASS_EQ:
+	case FI_CLASS_EQ:
 		ep->eq = container_of(bfid, struct ibv_eq, eq_fid.fid);
 		ret = rdma_migrate_id(ep->id, ep->eq->channel);
 		if (ret)
@@ -1572,7 +1572,7 @@ ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	info->data = NULL;
 	info->datalen = 0;
 
-	_ep->ep_fid.fid.fclass = FID_CLASS_EP;
+	_ep->ep_fid.fid.fclass = FI_CLASS_EP;
 	_ep->ep_fid.fid.context = context;
 	_ep->ep_fid.fid.ops = &ibv_msg_ep_ops;
 	_ep->ep_fid.ops = &ibv_msg_ep_base_ops;
@@ -1613,7 +1613,7 @@ ibv_eq_cm_getinfo(struct ibv_fabric *fab, struct rdma_cm_event *event)
 	if (!fi)
 		return NULL;
 
-	fi->type = FID_MSG;
+	fi->type = FI_EP_MSG;
 	fi->ep_cap  = FI_MSG | FI_RMA;
 	if (event->id->verbs->device->transport_type == IBV_TRANSPORT_IWARP) {
 		fi->ep_attr->protocol = FI_PROTO_IWARP;
@@ -1839,7 +1839,7 @@ ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	}
 
 	_eq->flags = attr->flags;
-	_eq->eq_fid.fid.fclass = FID_CLASS_EQ;
+	_eq->eq_fid.fid.fclass = FI_CLASS_EQ;
 	_eq->eq_fid.fid.context = context;
 	_eq->eq_fid.fid.ops = &ibv_eq_fi_ops;
 	_eq->eq_fid.ops = &ibv_eq_ops;
@@ -2138,7 +2138,7 @@ ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	}
 
 	_cq->flags |= attr->flags;
-	_cq->cq_fid.fid.fclass = FID_CLASS_CQ;
+	_cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	_cq->cq_fid.fid.context = context;
 	_cq->cq_fid.fid.ops = &ibv_cq_fi_ops;
 
@@ -2203,7 +2203,7 @@ ibv_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 		return -FI_ENOMEM;
 
 	md->domain = container_of(domain, struct ibv_domain, domain_fid);
-	md->mr_fid.fid.fclass = FID_CLASS_MR;
+	md->mr_fid.fid.fclass = FI_CLASS_MR;
 	md->mr_fid.fid.context = context;
 	md->mr_fid.fid.ops = &ibv_mr_ops;
 
@@ -2303,7 +2303,7 @@ ibv_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 		goto err;
 	}
 
-	_domain->domain_fid.fid.fclass = FID_CLASS_DOMAIN;
+	_domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->domain_fid.fid.context = context;
 	_domain->domain_fid.fid.ops = &ibv_fid_ops;
 	_domain->domain_fid.ops = &ibv_domain_ops;
@@ -2335,7 +2335,7 @@ static int ibv_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	int ret;
 
 	pep = container_of(fid, struct ibv_pep, pep_fid.fid);
-	if (bfid->fclass != FID_CLASS_EQ)
+	if (bfid->fclass != FI_CLASS_EQ)
 		return -FI_EINVAL;
 
 	pep->eq = container_of(bfid, struct ibv_eq, eq_fid.fid);
@@ -2387,7 +2387,7 @@ ibv_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 	info->data = NULL;
 	info->datalen = 0;
 
-	_pep->pep_fid.fid.fclass = FID_CLASS_PEP;
+	_pep->pep_fid.fid.fclass = FI_CLASS_PEP;
 	_pep->pep_fid.fid.context = context;
 	_pep->pep_fid.fid.ops = &ibv_pep_ops;
 	_pep->pep_fid.cm = &ibv_pep_cm_ops;
@@ -2426,7 +2426,7 @@ int ibv_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	if (!fab)
 		return -FI_ENOMEM;
 
-	fab->fabric_fid.fid.fclass = FID_CLASS_FABRIC;
+	fab->fabric_fid.fid.fclass = FI_CLASS_FABRIC;
 	fab->fabric_fid.fid.context = context;
 	fab->fabric_fid.fid.ops = &ibv_fi_ops;
 	fab->fabric_fid.ops = &ibv_ops_fabric;

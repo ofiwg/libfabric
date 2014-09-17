@@ -19,8 +19,8 @@ fi_domain \- Open a fabric access domain
 .BI "int fi_domain_bind(struct fid_domain *" domain ", struct fid *" eq ", "
 .BI "uint64_t " flags ");"
 .HP
-.BI "int fi_open(struct fid *" domain ", const char *" name ", uint64_t " flags ","
-.BI "struct fid **" fif ", void *" context ");"
+.BI "int fi_open_ops(struct fid *" domain ", const char *" name ", uint64_t " flags ","
+.BI "void **" ops ", void *" context ");"
 .SH ARGUMENTS
 .IP "fabric" 12
 Fabric domain
@@ -37,8 +37,8 @@ Pointer to domain attributes.
 Event queue for asynchronous operations initiated on the domain.
 .IP "name" 12
 Name associated with an interface.
-.IP "fif" 12
-Fabric interface
+.IP "ops" 12
+Fabric interface operations.
 .SH "DESCRIPTION"
 An access domain typically refers to a
 physical or virtual NIC or hardware port; however, a domain may span across
@@ -54,8 +54,8 @@ This helps to identify the specific software
 and hardware provider associated with a domain.  The properties of
 the opened domain are specified using the fi_info structure.  See fi_getinfo
 for additional details.
-.SS "fi_open"
-fi_open is used to open provider specific interfaces.
+.SS "fi_open_ops"
+fi_open_ops is used to open provider specific interfaces.
 Provider interfaces may be used to access low-level resources and operations
 that are specific to the opened resource domain.  The details of domain
 interfaces are outside the scope of this documentation.

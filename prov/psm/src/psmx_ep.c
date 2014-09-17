@@ -126,10 +126,10 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	if (!bfid)
 		return -EINVAL;
 	switch (bfid->fclass) {
-	case FID_CLASS_EQ:
+	case FI_CLASS_EQ:
 		return -FI_ENOSYS;
 
-	case FID_CLASS_CQ:
+	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct psmx_fid_cq, cq.fid);
 #if 0
 		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
@@ -155,7 +155,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		}
 		break;
 
-	case FID_CLASS_CNTR:
+	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct psmx_fid_cntr, cntr.fid);
 #if 0
 		if (flags & (FI_SEND)) {
@@ -199,7 +199,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		}
 		break;
 
-	case FID_CLASS_AV:
+	case FI_CLASS_AV:
 		av = container_of(bfid,
 				struct psmx_fid_av, av.fid);
 #if 0
@@ -211,7 +211,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		fid_ep->av = av;
 		break;
 
-	case FID_CLASS_MR:
+	case FI_CLASS_MR:
 		if (!bfid->ops || !bfid->ops->bind)
 			return -EINVAL;
 		err = bfid->ops->bind(bfid, fid, flags);
@@ -351,7 +351,7 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (!fid_ep)
 		return -ENOMEM;
 
-	fid_ep->ep.fid.fclass = FID_CLASS_EP;
+	fid_ep->ep.fid.fclass = FI_CLASS_EP;
 	fid_ep->ep.fid.context = context;
 	fid_ep->ep.fid.ops = &psmx_fi_ops;
 	fid_ep->ep.ops = &psmx_ep_ops;

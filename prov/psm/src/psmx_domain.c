@@ -88,12 +88,6 @@ static int psmx_domain_query(struct fid_domain *domain,
 	return -ENOSYS;
 }
 
-static int psmx_if_open(struct fid_domain *domain, const char *name, uint64_t flags,
-			struct fid **fif, void *context)
-{
-	return -ENOSYS;
-}
-
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_domain_close,
@@ -108,7 +102,6 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.av_open = psmx_av_open,
 	.cq_open = psmx_cq_open,
 	.endpoint = psmx_ep_open,
-	.if_open = psmx_if_open,
 	.cntr_open = psmx_cntr_open,
 };
 
@@ -132,7 +125,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 	if (!fid_domain)
 		goto err_out;
 
-	fid_domain->domain.fid.fclass = FID_CLASS_DOMAIN;
+	fid_domain->domain.fid.fclass = FI_CLASS_DOMAIN;
 	fid_domain->domain.fid.context = context;
 	fid_domain->domain.fid.ops = &psmx_fi_ops;
 	fid_domain->domain.ops = &psmx_domain_ops;
