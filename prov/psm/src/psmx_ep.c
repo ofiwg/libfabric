@@ -57,8 +57,6 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 			void *optval, size_t *optlen)
 {
 	struct psmx_fid_ep *fid_ep;
-	uint32_t size;
-	int err;
 
 	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
@@ -66,52 +64,6 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 		return -ENOPROTOOPT;
 
 	switch (optname) {
-	case FI_OPT_MAX_INJECTED_SEND:
-		if (!optval)
-			return 0;
-
-		if (!optlen || *optlen < sizeof(size_t))
-			return -EINVAL;
-
-		if (!fid_ep->domain)
-			return -EBADF;
-
-		*(size_t *)optval = PSMX_INJECT_SIZE;
-		*optlen = sizeof(size_t);
-		break;
-
-	case FI_OPT_MAX_MSG_SIZE:
-		if (!optval)
-			return 0;
-
-		if (!optlen || *optlen < sizeof(size_t))
-			return -EINVAL;
-
-		if (!fid_ep->domain)
-			return -EBADF;
-
-		*(size_t *)optval = PSMX_MAX_MSG_SIZE;
-		*optlen = sizeof(size_t);
-		break;
-
-	case FI_OPT_TOTAL_BUFFERED_RECV:
-		if (!optval)
-			return 0;
-
-		if (!optlen || *optlen < sizeof(size_t))
-			return -EINVAL;
-
-		if (!fid_ep->domain)
-			return -EBADF;
-
-		err = psm_mq_getopt(fid_ep->domain->psm_mq, PSM_MQ_MAX_SYSBUF_MBYTES, &size);
-		if (err)
-			return psmx_errno(err);
-
-		*(size_t *)optval = size * 1048576;
-		*optlen = sizeof(size_t);
-		break;
-
 	case FI_OPT_MIN_MULTI_RECV:
 		*(size_t *)optval = fid_ep->min_multi_recv;
 		*optlen = sizeof(size_t);

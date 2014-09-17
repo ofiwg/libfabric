@@ -304,16 +304,6 @@ endpoint.
 The following option levels and option names and parameters are defined.
 .IP "FI_OPT_ENDPOINT"
 .RS
-.IP "FI_OPT_MAX_INJECTED_SEND - size_t"
-Defines the maximum buffered send operation (see the FI_INJECT
-flag) that the endpoint currently supports.  This value applies per send
-operation.
-.IP "FI_OPT_TOTAL_BUFFERED_RECV - size_t"
-Defines the total available space allocated to buffer received messages
-(see the FI_BUFFERED_RECV flag) that the endpoint currently supports.
-.IP "FI_OPT_MAX_MSG_SIZE - size_t"
-Defines the maximum size for an application data transfer as a
-single operation.
 .IP "FI_OPT_MIN_MULTI_RECV - size_t"
 Defines the minimum receive buffer space available when the receive buffer
 is automatically freed (see FI_MULTI_RECV).
@@ -325,7 +315,6 @@ endpoint.
 .nf
 struct fi_ep_attr {
 	uint64_t  protocol;
-	int       data_flow_cnt;
 	size_t    max_msg_size;
 	size_t    inject_size;
 	size_t    total_buffered_recv;
@@ -354,14 +343,6 @@ The protocol runs over the Internet wide area RDMA protocol transport.
 The protocol runs over Infiniband unreliable-connected queue pairs.
 .IP "FI_PROTO_IB_UD"
 The protocol runs over Infiniband unreliable datagram queue pairs.
-.SS "Data Flow Count"
-Specifies the number of independent data flows to associate with the endpoint.
-A data flow conceptually represents independent hardware queues or paths
-through the fabric.  Data flows may be mapped to different command queues
-or fabric quality of service levels.  Data transfers may be associated with
-a specific data flow as part of the operation.  If a data flow is not
-specified, a data transfers will use the default flow associated with an
-endpoint.  
 .SS "Max Message Size"
 Defines the maximum size for an application data transfer as a
 single operation.
