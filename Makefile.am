@@ -135,7 +135,6 @@ man_MANS = \
 	man/fi_mr_reg.3 \
 	man/fi_mr_regv.3 \
 	man/fi_mr_regattr.3 \
-	man/fi_mr_unreg.3 \
 	man/fi_mr_desc.3 \
 	man/fi_mr_key.3 \
 	man/fi_mr_bind.3 \
