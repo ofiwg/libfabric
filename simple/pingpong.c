@@ -262,7 +262,7 @@ static int alloc_cm_res(void)
 
 static void free_ep_res(void)
 {
-	fi_mr_unreg(mr);
+	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
 	fi_close(&scq->fid);
 	free(buf);
