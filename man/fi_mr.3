@@ -7,7 +7,7 @@ fi_mr_reg / fi_mr_regv / fi_mr_regattr
 Register local memory buffers for direct fabric access
 .RE
 .PP
-fi_mr_unreg
+fi_close
 .RS
 Deregister registered memory buffers.
 .RE
@@ -44,7 +44,7 @@ Associate a registered memory region with an event collector.
 .BI "uint64_t " flags ", struct fid_mr **" mr ");"
 .PP
 .HP
-.BI "int fi_mr_unreg(struct fid_mr *" mr ");"
+.BI "int fi_close(struct fid *" mr ");"
 .PP
 .HP
 .BI "void * fi_mr_desc(struct fid_mr *" mr ");"
@@ -196,14 +196,14 @@ struct fi_mr_attr {
 	void               *context;      /* user-defined context */
 };
 .fi
-.SS "fi_mr_unreg"
-The fi_mr_unreg call is used to release all resources associated with a
+.SS "fi_close"
+Fi_close may be used to release all resources associated with a
 registering a memory region.  Once unregistered, further access to the
 registered memory is not guaranteed.  For performance reasons,
 unregistration processing may be done asynchronously or lazily.  To force
 all queued unregistration requests to complete, applications may call
-fi_domain_sync.  Upon completion of an fi_domain_sync call, all memory
-regions unregistered before fi_domain_sync was invoked will have completed,
+fi_sync on the domain.  Upon completion of a domain fi_sync call, all memory
+regions unregistered before fi_sync was invoked will have completed,
 and no further access to the registered region, either locally or remotely,
 via fabric resources will be possible. 
 .SS "fi_mr_desc / fi_mr_key"

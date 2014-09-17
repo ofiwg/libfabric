@@ -202,11 +202,6 @@ static inline uint64_t fi_mr_key(struct fid_mr *mr)
 	return mr->key;
 }
 
-static inline int fi_mr_unreg(struct fid_mr *mr)
-{
-	return fi_close(&mr->fid);
-}
-
 static inline int
 fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	   struct fid_av **av, void *context)
