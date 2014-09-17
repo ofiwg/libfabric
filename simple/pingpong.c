@@ -651,7 +651,7 @@ int main(int argc, char **argv)
 
 	hints.domain_attr = &domain_hints;
 	hints.ep_attr = &ep_hints;
-	hints.type = FID_MSG;
+	hints.type = FI_EP_MSG;
 	hints.ep_cap = FI_MSG;
 	domain_hints.caps = FI_LOCAL_MR;
 	hints.addr_format = FI_SOCKADDR;
