@@ -351,8 +351,7 @@ static int ibv_msg_ep_create_qp(struct ibv_msg_ep *ep)
 	attr.cap.max_recv_wr = atoi(def_recv_wr);
 	attr.cap.max_send_sge = atoi(def_send_sge);
 	attr.cap.max_recv_sge = atoi(def_recv_sge);
-	if (!ep->inline_size)
-		ep->inline_size = atoi(def_inline_data);
+	ep->inline_size = atoi(def_inline_data);
 	attr.cap.max_inline_data = ep->inline_size;
 	attr.qp_context = ep;
 	attr.send_cq = ep->scq->cq;
@@ -1484,18 +1483,7 @@ ibv_msg_ep_getopt(fid_t fid, int level, int optname,
 
 	switch (level) {
 	case FI_OPT_ENDPOINT:
-		switch (optname) {
-		case FI_OPT_MAX_INJECTED_SEND:
-			if (*optlen < sizeof(size_t)) {
-				*optlen = sizeof(size_t);
-				return -FI_ETOOSMALL;
-			}
-			*((size_t *) optval) = (size_t) ep->inline_size;
-			*optlen = sizeof(size_t);
-			break;
-		default:
-			return -FI_ENOPROTOOPT;
-		}
+		return -FI_ENOPROTOOPT;
 	default:
 		return -FI_ENOPROTOOPT;
 	}
@@ -1511,17 +1499,7 @@ ibv_msg_ep_setopt(fid_t fid, int level, int optname,
 
 	switch (level) {
 	case FI_OPT_ENDPOINT:
-		switch (optname) {
-		case FI_OPT_MAX_INJECTED_SEND:
-			if (optlen != sizeof(size_t))
-				return -FI_EINVAL;
-			if (ep->id->qp)
-				return -FI_EOPBADSTATE;
-			ep->inline_size = (uint32_t) *(size_t *) optval;
-			break;
-		default:
-			return -FI_ENOPROTOOPT;
-		}
+		return -FI_ENOPROTOOPT;
 	default:
 		return -FI_ENOPROTOOPT;
 	}
