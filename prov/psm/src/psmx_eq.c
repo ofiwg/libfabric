@@ -331,19 +331,17 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				  struct fi_context *fi_context = psm_status.context;
 				  struct psmx_fid_mr *mr;
 				  mr = PSMX_CTXT_USER(fi_context);
-//FIXME
-//				  if (mr->eq) {
-//					event = psmx_cq_create_event_from_status(
-//							mr->eq, &psm_status);
-//					if (!event)
-//						return -ENOMEM;
-//					psmx_eq_enqueue_event(&mr->eq->event_queue, event);
-//				  }
+				  if (mr->cq) {
+					event = psmx_cq_create_event_from_status(
+							mr->cq, &psm_status);
+					if (!event)
+						return -ENOMEM;
+					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
+				  }
 				  if (mr->cntr)
 					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
-//FIXME
-//				  if (!cq || mr->cq == cq)
-//					return 1;
+				  if (!cq || mr->cq == cq)
+					return 1;
 				  continue;
 				}
 #endif
