@@ -56,41 +56,5 @@ for additional details.
 .IP "FI_DIRECT_DYNAMIC_MR"
 The provider sets FI_DYNAMIC_MR for fi_info:domain_cap.  See fi_getinfo
 for additional details.
-.SH "OPTIONAL FUNCTIONS"
-The checks for the availability of following optional functions are made
-using macros. The provider is required to define in such a manner that they
-evaluate to either 0 or 1 at compile time. When the function is available,
-the macro evaluates to 1, and when the function is not available, the macro
-evaluates to 0.
-.IP "FI_INJECT_MSG"
-Indicates that the provider supports the inject functions for message 
-data transfers for connected mode endpoints. See fi_msg for additional 
-details.
-.IP "FI_INJECT_MSGTO"
-Similar to FI_INJECT_MSG, but for unconnected endpoints.
-.IP "FI_TINJECT"
-Indicates that the provider supports the inject functions for tagged message 
-data transfers for connected mode endpoints.
-See fi_tagged for additional details.
-.IP "FI_TINJECTTO"
-Similar to FI_TINJECT, but for unconnected endpoints.
-.IP "FI_INJECT_WRITE"
-Indicates that the provider supports the inject functions for RMA 
-data transfers for connected mode endpoints.
-See fi_rma for additional details.
-.IP "FI_INJECT_WRITETO"
-Similar to FI_INJECT_WRITE, but for unconnected endpoints.
-.IP "FI_INJECT_ATOMIC"
-Indicates that the provider supports the inject functions for atomic
-data transfers for connected mode endpoints.
-See fi_atomic for additional details.
-.IP "FI_INJECT_ATOMICTO"
-Similar to FI_INJECT_ATOMIC, but for unconnected endpoints.
-.IP "FI_EQ_READFROM"
-Indicates that the provider supports the fi_eq_readfrom function on 
-event queues.  See fi_eq for additional details.
-.IP "FI_EQ_CONDREADFROM"
-Indicates that the provider supports the fi_eq_condreadfrom function 
-on event queues.  See fi_eq for additional details.
 .SH "SEE ALSO"
 fi_getinfo(3), fi_endpoint(3), fi_domain(3)
