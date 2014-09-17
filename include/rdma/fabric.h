@@ -223,8 +223,8 @@ struct fi_ops {
 	int	(*bind)(struct fid *fid, struct fid *bfid, uint64_t flags);
 	int	(*sync)(struct fid *fid, uint64_t flags, void *context);
 	int	(*control)(struct fid *fid, int command, void *arg);
-	int	(*openif)(struct fid *fid, const char *name,
-			uint64_t flags, struct fid **fif, void *context);
+	int	(*ops_open)(struct fid *fid, const char *name,
+			uint64_t flags, void **ops, void *context);
 };
 
 /* All fabric interface descriptors must start with this structure */
@@ -310,10 +310,10 @@ static inline int fi_alias(struct fid *fid, struct fid **alias_fid, uint64_t fla
 }
 
 static inline int
-fi_open(struct fid *fid, const char *name, uint64_t flags,
-	struct fid **fif, void *context)
+fi_open_ops(struct fid *fid, const char *name, uint64_t flags,
+	    void **ops, void *context)
 {
-	return fid->ops->openif(fid, name, flags, fif, context);
+	return fid->ops->ops_open(fid, name, flags, ops, context);
 }
 
 
