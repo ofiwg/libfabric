@@ -371,22 +371,11 @@ clean_ctx:
 int pp_close_ctx(struct pingpong_context *ctx)
 {
 	FI_CLOSE(ctx->lep, "Couldn't destroy listener EP\n");
-
 	FI_CLOSE(ctx->ep, "Couldn't destroy EP\n");
-
 	FI_CLOSE(ctx->eq, "Couldn't destroy EQ\n");
-
 	FI_CLOSE(ctx->cq, "Couldn't destroy CQ\n");
-
-	if (ctx->mr) {
-		if (fi_mr_unreg(ctx->mr)) {
-			fprintf(stderr, "Couldn't deregister MR\n");
-			return 1;
-		}
-	}
-
+	FI_CLOSE(ctx->mr, "Couldn't destroy MR\n");
 	FI_CLOSE(ctx->dom, "Couldn't deallocate Domain\n");
-
 	FI_CLOSE(ctx->fabric, "Couldn't close fabric\n");
 
 	if (ctx->buf)
