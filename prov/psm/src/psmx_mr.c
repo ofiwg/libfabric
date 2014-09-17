@@ -162,13 +162,13 @@ static int psmx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	if (!bfid)
 		return -EINVAL;
 	switch (bfid->fclass) {
-	case FID_CLASS_EP:
+	case FI_CLASS_EP:
 		ep = container_of(bfid, struct psmx_fid_ep, ep.fid);
 		if (fid_mr->domain != ep->domain)
 			return -EINVAL;
 		break;
 
-	case FID_CLASS_CQ:
+	case FI_CLASS_CQ:
 		/* TODO: check flags for send/recv CQs */
 		cq = container_of(bfid, struct psmx_fid_cq, cq.fid);
 		if (fid_mr->cq && fid_mr->cq != cq)
@@ -179,7 +179,7 @@ static int psmx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return -FI_ENOSYS;
 		break;
 
-	case FID_CLASS_CNTR:
+	case FI_CLASS_CNTR:
 		/* TODO: check flags */
 		cntr = container_of(bfid, struct psmx_fid_cntr, cntr.fid);
 		if (fid_mr->cntr && fid_mr->cntr != cntr)
@@ -291,7 +291,7 @@ static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	if (!fid_mr)
 		return -ENOMEM;
 
-	fid_mr->mr.fid.fclass = FID_CLASS_MR;
+	fid_mr->mr.fid.fclass = FI_CLASS_MR;
 	fid_mr->mr.fid.context = context;
 	fid_mr->mr.fid.ops = &psmx_fi_ops;
 	fid_mr->mr.mem_desc = fid_mr;
@@ -342,7 +342,7 @@ static int psmx_mr_regv(struct fid_domain *domain,
 	if (!fid_mr)
 		return -ENOMEM;
 
-	fid_mr->mr.fid.fclass = FID_CLASS_MR;
+	fid_mr->mr.fid.fclass = FI_CLASS_MR;
 	fid_mr->mr.fid.context = context;
 	fid_mr->mr.fid.ops = &psmx_fi_ops;
 	fid_mr->mr.mem_desc = fid_mr;
@@ -395,7 +395,7 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 	if (!fid_mr)
 		return -ENOMEM;
 
-	fid_mr->mr.fid.fclass = FID_CLASS_MR;
+	fid_mr->mr.fid.fclass = FI_CLASS_MR;
 	fid_mr->mr.fid.ops = &psmx_fi_ops;
 	fid_mr->mr.mem_desc = fid_mr;
 	if (attr->requested_key != PSMX_MR_AUTO_KEY) {

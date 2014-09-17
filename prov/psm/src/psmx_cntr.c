@@ -370,7 +370,7 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	fid_cntr->events = events;
 	fid_cntr->wait_obj = wait_obj;
 	fid_cntr->flags = flags;
-	fid_cntr->cntr.fid.fclass = FID_CLASS_CNTR;
+	fid_cntr->cntr.fid.fclass = FI_CLASS_CNTR;
 	fid_cntr->cntr.fid.context = context;
 	fid_cntr->cntr.fid.ops = &psmx_fi_ops;
 	fid_cntr->cntr.ops = &psmx_cntr_ops;

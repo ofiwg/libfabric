@@ -305,25 +305,19 @@ endpoint must be configured with FI_REMOTE_COMPLETE for correct operation.
 The local endpoint must be configured with the FI_REMOTE_COMPLETE capability
 in order to specify this flag.
 .SH "ENDPOINT TYPES"
-.IP "FID_UNSPEC"
+.IP "FI_EP_UNSPEC"
 The type of endpoint is not specified.  This is usually provided as input, with
 other attributes of the endpoint or the provider selecting the type.
-.IP "FID_MSG"
+.IP "FI_EP_MSG"
 Provides a reliable, connection-oriented data transfer service with flow
 control that maintains message boundaries.
-.IP "FID_STREAM [not targeting 1.0 release]"
-Provides reliable, byte streaming communication.
-.IP "FID_DGRAM"
+.IP "FI_EP_DGRAM"
 Supports a connectionless, unreliable datagram communication.  Message
 boundaries are maintained, but the maximum message size may be limited to
 the fabric MTU.  Flow control is not guaranteed.
-.IP "FID_RAW [not targeting 1.0 release]"
-Provides raw link-level network access.
-.IP "FID_RDM"
+.IP "FI_EP_RDM"
 Reliable datagram message.  Provides a reliable, unconnected data transfer
 service with flow control that maintains message boundaries.
-.IP "FID_PACKET [not targeting 1.0 release]"
-Provides raw network-level access.
 .SH "ADDRESSING FORMATS"
 Multiple fabric interfaces take as input either a source or destination
 address parameter.  This includes struct fi_info (src_addr and dest_addr),

@@ -597,7 +597,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	fid_cq->domain = fid_domain;
 	fid_cq->format = attr->format;
 	fid_cq->entry_size = entry_size;
-	fid_cq->cq.fid.fclass = FID_CLASS_CQ;
+	fid_cq->cq.fid.fclass = FI_CLASS_CQ;
 	fid_cq->cq.fid.context = context;
 	fid_cq->cq.fid.ops = &psmx_fi_ops;
 	fid_cq->cq.ops = &psmx_cq_ops;

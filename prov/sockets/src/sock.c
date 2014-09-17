@@ -68,7 +68,7 @@ static int sock_fabric(const char *name, uint64_t flags,
 	if (!fab)
 		return -FI_ENOMEM;
 
-	fab->fab_fid.fid.fclass = FID_CLASS_FABRIC;
+	fab->fab_fid.fid.fclass = FI_CLASS_FABRIC;
 	fab->fab_fid.fid.context = context;
 	fab->fab_fid.fid.ops = &sock_fab_fi_ops;
 	fab->fab_fid.ops = &sock_fab_ops;
@@ -82,7 +82,7 @@ static int sock_getinfo(int version, const char *node, const char *service,
 {
 	if (hints) {
 		switch (hints->type) {
-		case FID_RDM:
+		case FI_EP_RDM:
 			return sock_rdm_getinfo(version, node, service, flags,
 						hints, info);
 		default:

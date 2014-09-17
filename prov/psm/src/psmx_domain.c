@@ -132,7 +132,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 	if (!fid_domain)
 		goto err_out;
 
-	fid_domain->domain.fid.fclass = FID_CLASS_DOMAIN;
+	fid_domain->domain.fid.fclass = FI_CLASS_DOMAIN;
 	fid_domain->domain.fid.context = context;
 	fid_domain->domain.fid.ops = &psmx_fi_ops;
 	fid_domain->domain.ops = &psmx_domain_ops;

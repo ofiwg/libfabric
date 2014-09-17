@@ -44,15 +44,14 @@ extern "C" {
 #endif
 
 
-enum fid_type {
-	FID_UNSPEC,
-	FID_MSG,
-	FID_STREAM,
-	FID_DGRAM,
-	FID_RAW,
-	FID_RDM,
-	FID_PACKET,
-	FID_MAX
+enum fi_ep_type {
+	FI_EP_UNSPEC,
+	FI_EP_MSG,
+	FI_EP_DGRAM,
+	FI_EP_RDM,
+	/* FI_EP_RAW, */
+	/* FI_EP_PACKET, */
+	FI_EP_MAX
 };
 
 /* fi_info protocol field.
