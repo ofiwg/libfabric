@@ -412,45 +412,45 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 				fi_addr_t *src_addr)
 {
-	struct psmx_fid_cq *fid_cq;
+	struct psmx_fid_cq *cq_priv;
 	struct psmx_event *event;
 
-	fid_cq = container_of(cq, struct psmx_fid_cq, cq);
-	assert(fid_cq->domain);
+	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
+	assert(cq_priv->domain);
 
 #if PSMX_USE_AM
-	fid_cq->poll_am_before_mq = !fid_cq->poll_am_before_mq;
-	if (fid_cq->poll_am_before_mq)
-		psmx_am_progress(fid_cq->domain);
+	cq_priv->poll_am_before_mq = !cq_priv->poll_am_before_mq;
+	if (cq_priv->poll_am_before_mq)
+		psmx_am_progress(cq_priv->domain);
 #endif
 
-	psmx_cq_poll_mq(fid_cq, fid_cq->domain);
+	psmx_cq_poll_mq(cq_priv, cq_priv->domain);
 
 #if PSMX_USE_AM
-	if (!fid_cq->poll_am_before_mq)
-		psmx_am_progress(fid_cq->domain);
+	if (!cq_priv->poll_am_before_mq)
+		psmx_am_progress(cq_priv->domain);
 #endif
 
-	if (fid_cq->pending_error)
+	if (cq_priv->pending_error)
 		return -FI_EAVAIL;
 
-	if (len < fid_cq->entry_size)
+	if (len < cq_priv->entry_size)
 		return -FI_ETOOSMALL;
 
 	if (!buf)
 		return -FI_EINVAL;
 
-	event = psmx_eq_dequeue_event(&fid_cq->event_queue);
+	event = psmx_eq_dequeue_event(&cq_priv->event_queue);
 	if (event) {
 		if (!event->error) {
-			memcpy(buf, (void *)&event->eqe, fid_cq->entry_size);
-			if (psmx_cq_get_event_src_addr(fid_cq, event, src_addr))
+			memcpy(buf, (void *)&event->eqe, cq_priv->entry_size);
+			if (psmx_cq_get_event_src_addr(cq_priv, event, src_addr))
 				*src_addr = FI_ADDR_UNSPEC;
 			free(event);
-			return fid_cq->entry_size;
+			return cq_priv->entry_size;
 		}
 		else {
-			fid_cq->pending_error = event;
+			cq_priv->pending_error = event;
 			return -FI_EAVAIL;
 		}
 	}
@@ -466,17 +466,17 @@ static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t len)
 static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 				size_t len, uint64_t flags)
 {
-	struct psmx_fid_cq *fid_cq;
+	struct psmx_fid_cq *cq_priv;
 
-	fid_cq = container_of(cq, struct psmx_fid_cq, cq);
+	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 
 	if (len < sizeof *buf)
 		return -FI_ETOOSMALL;
 
-	if (fid_cq->pending_error) {
-		memcpy(buf, &fid_cq->pending_error->eqe, sizeof *buf);
-		free(fid_cq->pending_error);
-		fid_cq->pending_error = NULL;
+	if (cq_priv->pending_error) {
+		memcpy(buf, &cq_priv->pending_error->eqe, sizeof *buf);
+		free(cq_priv->pending_error);
+		cq_priv->pending_error = NULL;
 		return sizeof *buf;
 	}
 
@@ -507,10 +507,10 @@ static const char *psmx_cq_strerror(struct fid_cq *cq, int prov_errno, const voi
 
 static int psmx_cq_close(fid_t fid)
 {
-	struct psmx_fid_cq *fid_cq;
+	struct psmx_fid_cq *cq;
 
-	fid_cq = container_of(fid, struct psmx_fid_cq, cq.fid);
-	free(fid_cq);
+	cq = container_of(fid, struct psmx_fid_cq, cq.fid);
+	free(cq);
 
 	return 0;
 }
@@ -552,8 +552,8 @@ static struct fi_ops_cq psmx_cq_ops = {
 int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq, void *context)
 {
-	struct psmx_fid_domain *fid_domain;
-	struct psmx_fid_cq *fid_cq;
+	struct psmx_fid_domain *domain_priv;
+	struct psmx_fid_cq *cq_priv;
 	int entry_size;
 
 	if (attr->flags & FI_WRITE)
@@ -587,20 +587,20 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_EINVAL;
 	}
 
-	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
-	fid_cq = (struct psmx_fid_cq *) calloc(1, sizeof *fid_cq);
-	if (!fid_cq)
+	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
+	cq_priv = (struct psmx_fid_cq *) calloc(1, sizeof *cq_priv);
+	if (!cq_priv)
 		return -FI_ENOMEM;
 
-	fid_cq->domain = fid_domain;
-	fid_cq->format = attr->format;
-	fid_cq->entry_size = entry_size;
-	fid_cq->cq.fid.fclass = FI_CLASS_CQ;
-	fid_cq->cq.fid.context = context;
-	fid_cq->cq.fid.ops = &psmx_fi_ops;
-	fid_cq->cq.ops = &psmx_cq_ops;
+	cq_priv->domain = domain_priv;
+	cq_priv->format = attr->format;
+	cq_priv->entry_size = entry_size;
+	cq_priv->cq.fid.fclass = FI_CLASS_CQ;
+	cq_priv->cq.fid.context = context;
+	cq_priv->cq.fid.ops = &psmx_fi_ops;
+	cq_priv->cq.ops = &psmx_cq_ops;
 
-	*cq = &fid_cq->cq;
+	*cq = &cq_priv->cq;
 	return 0;
 }
 

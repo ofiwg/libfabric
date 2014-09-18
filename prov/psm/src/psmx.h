@@ -523,9 +523,9 @@ void	psmx_ini(void);
 void	psmx_fini(void);
 
 int	psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
-			 struct fid_domain **fid, void *context);
+			 struct fid_domain **domain, void *context);
 int	psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
-		     struct fid_ep **fid, void *context);
+		     struct fid_ep **ep, void *context);
 int	psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		     struct fid_cq **cq, void *context);
 int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -533,8 +533,8 @@ int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 int	psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		       struct fid_cntr **cntr, void *context);
 
-int	psmx_domain_check_features(struct psmx_fid_domain *fid_domain, int ep_cap);
-int	psmx_domain_enable_features(struct psmx_fid_domain *fid_domain, int ep_cap);
+int	psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap);
+int	psmx_domain_enable_features(struct psmx_fid_domain *domain, int ep_cap);
 void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername);
 void	psmx_get_uuid(psm_uuid_t uuid);
@@ -552,23 +552,23 @@ struct	psmx_event *psmx_cq_create_event(enum fi_cq_format format,
 					uint64_t data, uint64_t tag,
 					size_t olen, int err);
 #if PSMX_USE_AM
-int	psmx_am_init(struct psmx_fid_domain *fid_domain);
-int	psmx_am_fini(struct psmx_fid_domain *fid_domain);
-int	psmx_am_enqueue_recv(struct psmx_fid_domain *fid_domain,
+int	psmx_am_init(struct psmx_fid_domain *domain);
+int	psmx_am_fini(struct psmx_fid_domain *domain);
+int	psmx_am_enqueue_recv(struct psmx_fid_domain *domain,
 				struct psmx_am_request *req);
 struct psmx_am_request *
-	psmx_am_search_and_dequeue_recv(struct psmx_fid_domain *fid_domain,
+	psmx_am_search_and_dequeue_recv(struct psmx_fid_domain *domain,
 					const void *src_addr);
 #if PSMX_AM_USE_SEND_QUEUE
-int	psmx_am_enqueue_send(struct psmx_fid_domain *fid_domain,
+int	psmx_am_enqueue_send(struct psmx_fid_domain *domain,
 				  struct psmx_am_request *req);
 #endif
-int	psmx_am_enqueue_rma(struct psmx_fid_domain *fid_domain,
+int	psmx_am_enqueue_rma(struct psmx_fid_domain *domain,
 				  struct psmx_am_request *req);
-int	psmx_am_progress(struct psmx_fid_domain *fid_domain);
-int	psmx_am_process_send(struct psmx_fid_domain *fid_domain,
+int	psmx_am_progress(struct psmx_fid_domain *domain);
+int	psmx_am_process_send(struct psmx_fid_domain *domain,
 				struct psmx_am_request *req);
-int	psmx_am_process_rma(struct psmx_fid_domain *fid_domain,
+int	psmx_am_process_rma(struct psmx_fid_domain *domain,
 				struct psmx_am_request *req);
 int	psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);

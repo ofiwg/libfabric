@@ -34,16 +34,16 @@
 
 static int psmx_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep;
 
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
-	if (!fid_ep->domain)
+	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	if (!ep->domain)
 		return -EBADF;
 
 	if (*addrlen < sizeof(psm_epid_t))
 		return -FI_ETOOSMALL;
 
-	*(psm_epid_t *)addr = fid_ep->domain->psm_epid;
+	*(psm_epid_t *)addr = ep->domain->psm_epid;
 	*addrlen = sizeof(psm_epid_t);
 
 	return 0;
@@ -51,19 +51,19 @@ static int psmx_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 
 static int psmx_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
-	if (!fid_ep->domain)
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	if (!ep_priv->domain)
 		return -EBADF;
 
-	if (!fid_ep->connected)
+	if (!ep_priv->connected)
 		return -ENOTCONN;
 
 	if (*addrlen < sizeof(psm_epid_t))
 		return -FI_ETOOSMALL;
 
-	*(psm_epid_t *)addr = fid_ep->peer_psm_epid;
+	*(psm_epid_t *)addr = ep_priv->peer_psm_epid;
 	*addrlen = sizeof(psm_epid_t);
 
 	return 0;
@@ -72,41 +72,41 @@ static int psmx_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 static int psmx_cm_connect(struct fid_ep *ep, const void *addr,
 			   const void *param, size_t paramlen)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 	psm_epid_t epid;
 	psm_epaddr_t epaddr;
 	int err;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
-	if (!fid_ep->domain)
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	if (!ep_priv->domain)
 		return -EBADF;
 
 	epid = (psm_epid_t)addr;
-	err = psmx_epid_to_epaddr(fid_ep->domain, epid, &epaddr);
+	err = psmx_epid_to_epaddr(ep_priv->domain, epid, &epaddr);
 	if (err)
 		return err;
 
-	fid_ep->connected = 1;
-	fid_ep->peer_psm_epid = epid;
-	fid_ep->peer_psm_epaddr = epaddr;
+	ep_priv->connected = 1;
+	ep_priv->peer_psm_epid = epid;
+	ep_priv->peer_psm_epaddr = epaddr;
 
 	return 0;
 }
 
 static int psmx_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
-	if (!fid_ep->domain)
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	if (!ep_priv->domain)
 		return -EBADF;
 
-	if (!fid_ep->connected)
+	if (!ep_priv->connected)
 		return -ENOTCONN;
 
-	fid_ep->connected = 0;
-	fid_ep->peer_psm_epid = 0;
-	fid_ep->peer_psm_epaddr = 0;
+	ep_priv->connected = 0;
+	ep_priv->peer_psm_epid = 0;
+	ep_priv->peer_psm_epaddr = 0;
 
 	return 0;
 }

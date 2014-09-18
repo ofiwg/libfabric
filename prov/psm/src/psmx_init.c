@@ -241,20 +241,20 @@ static struct fi_ops_fabric psmx_fabric_ops = {
 static int psmx_fabric(const char *name, uint64_t flags,
 		       struct fid_fabric **fabric, void *context)
 {
-	struct psmx_fid_fabric *fid_fabric;
+	struct psmx_fid_fabric *fabric_priv;
 
 	if (!name || strncmp(name, "psm", 3))
 		return -FI_ENODATA;
 
-	fid_fabric = calloc(1, sizeof(*fid_fabric));
-	if (!fid_fabric)
+	fabric_priv = calloc(1, sizeof(*fabric_priv));
+	if (!fabric_priv)
 		return -FI_ENOMEM;
 
-	fid_fabric->fabric.fid.fclass = FI_CLASS_FABRIC;
-	fid_fabric->fabric.fid.context = context;
-	fid_fabric->fabric.fid.ops = &psmx_fabric_fi_ops;
-	fid_fabric->fabric.ops = &psmx_fabric_ops;
-	*fabric = &fid_fabric->fabric;
+	fabric_priv->fabric.fid.fclass = FI_CLASS_FABRIC;
+	fabric_priv->fabric.fid.context = context;
+	fabric_priv->fabric.fid.ops = &psmx_fabric_fi_ops;
+	fabric_priv->fabric.ops = &psmx_fabric_ops;
+	*fabric = &fabric_priv->fabric;
 	return 0;
 }
 

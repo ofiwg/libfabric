@@ -273,7 +273,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	return err;
 }
 
-int psmx_am_process_send(struct psmx_fid_domain *fid_domain, struct psmx_am_request *req)
+int psmx_am_process_send(struct psmx_fid_domain *domain, struct psmx_am_request *req)
 {
 	psm_amarg_t args[8];
 	int am_flags = PSM_AM_FLAG_ASYNC;
@@ -327,15 +327,15 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 			       void *context, uint64_t flags)
 {
 	psm_amarg_t args[8];
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 	struct psmx_am_request *req;
 	struct psmx_unexp *unexp;
 	struct psmx_event *event;
 	int recv_done;
 	int err = 0;
 
-        fid_ep = container_of(ep, struct psmx_fid_ep, ep);
-        assert(fid_ep->domain);
+        ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+        assert(ep_priv->domain);
 
 	req = calloc(1, sizeof(*req));
 	if (!req)
@@ -346,15 +346,15 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 	req->recv.len = len;
 	req->recv.context = context;
 	req->recv.src_addr = (void *)src_addr;
-	req->ep = fid_ep;
+	req->ep = ep_priv;
 
-	if (fid_ep->recv_eq_event_flag && !(flags & FI_EVENT))
+	if (ep_priv->recv_eq_event_flag && !(flags & FI_EVENT))
 		req->no_event = 1;
 
 	/* FIXME: match src_addr */
 	unexp = psmx_unexp_dequeue();
 	if (!unexp) {
-		psmx_am_enqueue_recv(fid_ep->domain, req);
+		psmx_am_enqueue_recv(ep_priv->domain, req);
 		return 0;
 	}
 
@@ -414,10 +414,10 @@ static ssize_t psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 			      void *desc, fi_addr_t src_addr,
 			      void *context)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-        fid_ep = container_of(ep, struct psmx_fid_ep, ep);
-	return _psmx_recvfrom2(ep, buf, len, desc, src_addr, context, fid_ep->flags);
+        ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	return _psmx_recvfrom2(ep, buf, len, desc, src_addr, context, ep_priv->flags);
 }
 
 static ssize_t psmx_recvmsg2(struct fid_ep *ep, const struct fi_msg *msg,
@@ -439,14 +439,14 @@ static ssize_t psmx_recvmsg2(struct fid_ep *ep, const struct fi_msg *msg,
 static ssize_t psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 			  void *desc, void *context)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
-	assert(fid_ep->domain);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	assert(ep_priv->domain);
 
-	if (fid_ep->connected)
+	if (ep_priv->connected)
 		return psmx_recvfrom2(ep, buf, len, desc,
-				      (fi_addr_t) fid_ep->peer_psm_epaddr, context);
+				      (fi_addr_t) ep_priv->peer_psm_epaddr, context);
 	else
 		return psmx_recvfrom2(ep, buf, len, desc, 0, context);
 }
@@ -466,8 +466,8 @@ static ssize_t _psmx_sendto2(struct fid_ep *ep, const void *buf, size_t len,
 			     void *desc, fi_addr_t dest_addr,
 			     void *context, uint64_t flags)
 {
-	struct psmx_fid_ep *fid_ep;
-	struct psmx_fid_av *fid_av;
+	struct psmx_fid_ep *ep_priv;
+	struct psmx_fid_av *av;
 	struct psmx_am_request *req;
 	psm_amarg_t args[8];
 	int am_flags = PSM_AM_FLAG_ASYNC;
@@ -475,19 +475,19 @@ static ssize_t _psmx_sendto2(struct fid_ep *ep, const void *buf, size_t len,
 	int chunk_size, msg_size;
 	size_t idx;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
-	assert(fid_ep->domain);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	assert(ep_priv->domain);
 
 	if (!buf)
 		return -EINVAL;
 
-	fid_av = fid_ep->av;
-	if (fid_av && fid_av->type == FI_AV_TABLE) {
+	av = ep_priv->av;
+	if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
-		if (idx >= fid_av->last)
+		if (idx >= av->last)
 			return -EINVAL;
 
-		dest_addr = (fi_addr_t) fid_av->psm_epaddrs[idx];
+		dest_addr = (fi_addr_t) av->psm_epaddrs[idx];
 	}
 	else if (!dest_addr) {
 		return -EINVAL;
@@ -506,10 +506,10 @@ static ssize_t _psmx_sendto2(struct fid_ep *ep, const void *buf, size_t len,
 	req->send.context = context;
 	req->send.len_sent = msg_size;
 	req->send.dest_addr = (void *)dest_addr;
-	req->ep = fid_ep;
+	req->ep = ep_priv;
 
-	if ((fid_ep->send_eq_event_flag && !(flags & FI_EVENT)) ||
-	     (context == &fid_ep->sendimm_context))
+	if ((ep_priv->send_eq_event_flag && !(flags & FI_EVENT)) ||
+	     (context == &ep_priv->sendimm_context))
 		req->no_event = 1;
 
 	args[0].u32w0 = PSMX_AM_REQ_SEND | (msg_size == len ? PSMX_AM_EOM : 0);
@@ -522,14 +522,14 @@ static ssize_t _psmx_sendto2(struct fid_ep *ep, const void *buf, size_t len,
 				PSMX_AM_MSG_HANDLER, args, 4,
 				(void *)buf, msg_size, am_flags, NULL, NULL);
 
-	fid_ep->pending_sends++;
+	ep_priv->pending_sends++;
 
 #if ! PSMX_AM_USE_SEND_QUEUE
 	if (len > msg_size) {
 		while (!req->send.peer_ready)
-			psm_poll(fid_ep->domain->psm_ep);
+			psm_poll(ep_priv->domain->psm_ep);
 
-		psmx_am_process_send(fid_ep->domain, req);
+		psmx_am_process_send(ep_priv->domain, req);
 	}
 #endif
 
@@ -541,10 +541,10 @@ static ssize_t psmx_sendto2(struct fid_ep *ep, const void *buf,
 			    size_t len, void *desc,
 			    fi_addr_t dest_addr, void *context)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-        fid_ep = container_of(ep, struct psmx_fid_ep, ep);
-	return _psmx_sendto2(ep, buf, len, desc, dest_addr, context, fid_ep->flags);
+        ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	return _psmx_sendto2(ep, buf, len, desc, dest_addr, context, ep_priv->flags);
 }
 
 static ssize_t psmx_sendmsg2(struct fid_ep *ep, const struct fi_msg *msg,
@@ -566,15 +566,15 @@ static ssize_t psmx_sendmsg2(struct fid_ep *ep, const struct fi_msg *msg,
 static ssize_t psmx_send2(struct fid_ep *ep, const void *buf, size_t len,
 			  void *desc, void *context)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
-	assert(fid_ep->domain);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	assert(ep_priv->domain);
 
-	if (!fid_ep->connected)
+	if (!ep_priv->connected)
 		return -ENOTCONN;
 
-	return psmx_sendto2(ep, buf, len, desc, (fi_addr_t) fid_ep->peer_psm_epaddr, context);
+	return psmx_sendto2(ep, buf, len, desc, (fi_addr_t) ep_priv->peer_psm_epaddr, context);
 }
 
 static ssize_t psmx_sendv2(struct fid_ep *ep, const struct iovec *iov,
@@ -591,25 +591,25 @@ static ssize_t psmx_sendv2(struct fid_ep *ep, const struct iovec *iov,
 static ssize_t psmx_injectto2(struct fid_ep *ep, const void *buf, size_t len,
 			      fi_addr_t dest_addr)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	/* FIXME: optimize it & guarantee buffered */
-	return _psmx_sendto2(ep, buf, len, NULL, dest_addr, &fid_ep->sendimm_context,
-			     fid_ep->flags | FI_INJECT);
+	return _psmx_sendto2(ep, buf, len, NULL, dest_addr, &ep_priv->sendimm_context,
+			     ep_priv->flags | FI_INJECT);
 }
 
 static ssize_t psmx_inject2(struct fid_ep *ep, const void *buf, size_t len)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	if (!fid_ep->connected)
+	if (!ep_priv->connected)
 		return -ENOTCONN;
 
-	return psmx_injectto2(ep, buf, len, (fi_addr_t) fid_ep->peer_psm_epaddr);
+	return psmx_injectto2(ep, buf, len, (fi_addr_t) ep_priv->peer_psm_epaddr);
 }
 
 struct fi_ops_msg psmx_msg2_ops = {
