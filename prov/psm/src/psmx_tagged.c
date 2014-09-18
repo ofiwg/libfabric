@@ -37,7 +37,7 @@ ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 			      uint64_t tag, uint64_t ignore,
 			      void *context, uint64_t flags)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag, psm_tagsel;
 	struct fi_context *fi_context;
@@ -73,20 +73,19 @@ ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 		return 0;
 	}
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	if (tag & fid_ep->domain->reserved_tag_bits) {
+	if (tag & ep_priv->domain->reserved_tag_bits) {
 		fprintf(stderr, "%s: warning: using reserved tag bits."
 			"tag=%lx. reserved_bits=%lx.\n", __func__, tag,
-			fid_ep->domain->reserved_tag_bits);
+			ep_priv->domain->reserved_tag_bits);
 	}
 
-	psm_tag = tag & (~fid_ep->domain->reserved_tag_bits);
-	psm_tagsel = (~ignore) | fid_ep->domain->reserved_tag_bits;
+	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
+	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;
 
-	if (fid_ep->recv_eq_event_flag && !(flags & FI_EVENT) && !context) {
-		fi_context = &fid_ep->nocomp_recv_context;
+	if (ep_priv->recv_eq_event_flag && !(flags & FI_EVENT) && !context) {
+		fi_context = &ep_priv->nocomp_recv_context;
 	}
 	else {
 		if (!context)
@@ -96,10 +95,10 @@ ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 		user_fi_context= 1;
 		PSMX_CTXT_TYPE(fi_context) = PSMX_RECV_CONTEXT;
 		PSMX_CTXT_USER(fi_context) = buf;
-		PSMX_CTXT_EP(fi_context) = fid_ep;
+		PSMX_CTXT_EP(fi_context) = ep_priv;
 	}
 
-	err = psm_mq_irecv(fid_ep->domain->psm_mq,
+	err = psm_mq_irecv(ep_priv->domain->psm_mq,
 			   psm_tag, psm_tagsel, 0, /* flags */
 			   buf, len, (void *)fi_context, &psm_req);
 	if (err != PSM_OK)
@@ -115,12 +114,12 @@ static ssize_t psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len, vo
 				    fi_addr_t src_addr,
 				    uint64_t tag, uint64_t ignore, void *context)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_tagged_recvfrom(ep, buf, len, desc, src_addr, tag, ignore,
-					context, fid_ep->flags);
+					context, ep_priv->flags);
 }
 
 static ssize_t psmx_tagged_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
@@ -141,13 +140,13 @@ static ssize_t psmx_tagged_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged
 static ssize_t psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 				uint64_t tag, uint64_t ignore, void *context)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	if (fid_ep->connected)
+	if (ep_priv->connected)
 		return psmx_tagged_recvfrom(ep, buf, len, desc,
-					    (fi_addr_t) fid_ep->peer_psm_epaddr,
+					    (fi_addr_t) ep_priv->peer_psm_epaddr,
 					    tag, ignore, context);
 	else
 		return psmx_tagged_recvfrom(ep, buf, len, desc, 0,
@@ -171,8 +170,8 @@ ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
 			    void *desc, fi_addr_t dest_addr, uint64_t tag,
 			    void *context, uint64_t flags)
 {
-	struct psmx_fid_ep *fid_ep;
-	struct psmx_fid_av *fid_av;
+	struct psmx_fid_ep *ep_priv;
+	struct psmx_fid_av *av;
 	int send_flag = 0;
 	psm_epaddr_t psm_epaddr;
 	psm_mq_req_t psm_req;
@@ -207,30 +206,30 @@ ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
 		return 0;
 	}
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	if (tag & fid_ep->domain->reserved_tag_bits) {
+	if (tag & ep_priv->domain->reserved_tag_bits) {
 		fprintf(stderr, "%s: warning: using reserved tag bits."
 			"tag=%lx. reserved_bits=%lx.\n", __func__, tag,
-			fid_ep->domain->reserved_tag_bits);
+			ep_priv->domain->reserved_tag_bits);
 	}
 
-	fid_av = fid_ep->av;
-	if (fid_av && fid_av->type == FI_AV_TABLE) {
+	av = ep_priv->av;
+	if (av && av->type == FI_AV_TABLE) {
 		idx = (size_t)dest_addr;
-		if (idx >= fid_av->last)
+		if (idx >= av->last)
 			return -EINVAL;
 
-		psm_epaddr = fid_av->psm_epaddrs[idx];
+		psm_epaddr = av->psm_epaddrs[idx];
 	}
 	else  {
 		psm_epaddr = (psm_epaddr_t) dest_addr;
 	}
 
-	psm_tag = tag & (~fid_ep->domain->reserved_tag_bits);
+	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 
 	if (flags & FI_BLOCK) {
-		err = psm_mq_send(fid_ep->domain->psm_mq, psm_epaddr,
+		err = psm_mq_send(ep_priv->domain->psm_mq, psm_epaddr,
 				  send_flag, psm_tag, buf, len);
 		if (err == PSM_OK)
 			return len;
@@ -247,31 +246,31 @@ ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
 		buf = (void *)fi_context + sizeof(*fi_context);
 
 		PSMX_CTXT_TYPE(fi_context) = PSMX_INJECT_CONTEXT;
-		PSMX_CTXT_EP(fi_context) = fid_ep;
+		PSMX_CTXT_EP(fi_context) = ep_priv;
 	}
-	else if (fid_ep->send_eq_event_flag && !(flags & FI_EVENT) && !context) {
-		fi_context = &fid_ep->nocomp_send_context;
+	else if (ep_priv->send_eq_event_flag && !(flags & FI_EVENT) && !context) {
+		fi_context = &ep_priv->nocomp_send_context;
 	}
 	else {
 		if (!context)
 			return -EINVAL;
 
 		fi_context = context;
-		if (fi_context != &fid_ep->sendimm_context) {
+		if (fi_context != &ep_priv->sendimm_context) {
 			user_fi_context = 1;
 			PSMX_CTXT_TYPE(fi_context) = PSMX_SEND_CONTEXT;
 			PSMX_CTXT_USER(fi_context) = (void *)buf;
-			PSMX_CTXT_EP(fi_context) = fid_ep;
+			PSMX_CTXT_EP(fi_context) = ep_priv;
 		}
 	}
 
-	err = psm_mq_isend(fid_ep->domain->psm_mq, psm_epaddr, send_flag,
+	err = psm_mq_isend(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
 				psm_tag, buf, len, (void*)fi_context, &psm_req);
 
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	fid_ep->pending_sends++;
+	ep_priv->pending_sends++;
 
 	if (user_fi_context)
 		PSMX_CTXT_REQ(fi_context) = psm_req;
@@ -283,12 +282,12 @@ static ssize_t psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len
 				  void *desc, fi_addr_t dest_addr,
 				  uint64_t tag, void *context)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_tagged_sendto(ep, buf, len, desc, dest_addr, tag, context,
-				   fid_ep->flags);
+				   ep_priv->flags);
 }
 
 static ssize_t psmx_tagged_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
@@ -307,15 +306,15 @@ static ssize_t psmx_tagged_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged
 static ssize_t psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 				uint64_t tag, void *context)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
-	assert(fid_ep->domain);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	assert(ep_priv->domain);
 
-	if (!fid_ep->connected)
+	if (!ep_priv->connected)
 		return -ENOTCONN;
 
-	return psmx_tagged_sendto(ep, buf, len, desc, (fi_addr_t) fid_ep->peer_psm_epaddr,
+	return psmx_tagged_sendto(ep, buf, len, desc, (fi_addr_t) ep_priv->peer_psm_epaddr,
 				  tag, context);
 }
 
@@ -334,51 +333,51 @@ static ssize_t psmx_tagged_sendv(struct fid_ep *ep, const struct iovec *iov, voi
 static ssize_t psmx_tagged_injectto(struct fid_ep *ep, const void *buf, size_t len,
 				    fi_addr_t dest_addr, uint64_t tag)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_tagged_sendto(ep, buf, len, NULL, dest_addr, tag, NULL,
-				   fid_ep->flags | FI_INJECT);
+				   ep_priv->flags | FI_INJECT);
 }
 
 static ssize_t psmx_tagged_inject(struct fid_ep *ep, const void *buf, size_t len,
 				  uint64_t tag)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	if (!fid_ep->connected)
+	if (!ep_priv->connected)
 		return -ENOTCONN;
 
-	return psmx_tagged_injectto(ep, buf, len, (fi_addr_t) fid_ep->peer_psm_epaddr, tag);
+	return psmx_tagged_injectto(ep, buf, len, (fi_addr_t) ep_priv->peer_psm_epaddr, tag);
 }
 
 static ssize_t psmx_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
 				  uint64_t flags, fi_addr_t *src_addr, size_t *len,
 				  void *context)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep_priv;
 	psm_mq_status_t psm_status;
 	uint64_t psm_tag, psm_tagsel;
 	int err;
 
-	fid_ep = container_of(ep, struct psmx_fid_ep, ep);
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	if ((*tag) & fid_ep->domain->reserved_tag_bits) {
+	if ((*tag) & ep_priv->domain->reserved_tag_bits) {
 		fprintf(stderr, "%s: warning: using reserved tag bits."
 			"tag=%lx. reserved_bits=%lx.\n", __func__, *tag,
-			fid_ep->domain->reserved_tag_bits);
+			ep_priv->domain->reserved_tag_bits);
 	}
 
-	psm_tag = *tag & (~fid_ep->domain->reserved_tag_bits);
-	psm_tagsel = (~ignore) | fid_ep->domain->reserved_tag_bits;
+	psm_tag = *tag & (~ep_priv->domain->reserved_tag_bits);
+	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;
 
 	if (flags & FI_CLAIM)
 		return -FI_EOPNOTSUPP;
 
-	err = psm_mq_iprobe(fid_ep->domain->psm_mq, psm_tag, psm_tagsel,
+	err = psm_mq_iprobe(ep_priv->domain->psm_mq, psm_tag, psm_tagsel,
 			    &psm_status);
 	switch (err) {
 	case PSM_OK:

@@ -34,13 +34,13 @@
 
 static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep;
 	psm_mq_status_t status;
 	struct fi_context *fi_context = context;
 	int err;
 
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
-	if (!fid_ep->domain)
+	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	if (!ep->domain)
 		return -EBADF;
 
 	if (!fi_context)
@@ -56,16 +56,16 @@ static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 static int psmx_ep_getopt(fid_t fid, int level, int optname,
 			void *optval, size_t *optlen)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep;
 
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -ENOPROTOOPT;
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
-		*(size_t *)optval = fid_ep->min_multi_recv;
+		*(size_t *)optval = ep->min_multi_recv;
 		*optlen = sizeof(size_t);
 		break;
 
@@ -79,16 +79,16 @@ static int psmx_ep_getopt(fid_t fid, int level, int optname,
 static int psmx_ep_setopt(fid_t fid, int level, int optname,
 			const void *optval, size_t optlen)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep;
 
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -ENOPROTOOPT;
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
-		fid_ep->min_multi_recv = *(size_t *)optval;
+		ep->min_multi_recv = *(size_t *)optval;
 		break;
 
 	default:
@@ -105,23 +105,23 @@ static int psmx_ep_enable(struct fid_ep *ep)
 
 static int psmx_ep_close(fid_t fid)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep;
 
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
-	free(fid_ep);
+	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	free(ep);
 
 	return 0;
 }
 
 static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep;
 	struct psmx_fid_av *av;
 	struct psmx_fid_cq *cq;
 	struct psmx_fid_cntr *cntr;
 	int err;
 
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
 	if (!bfid)
 		return -EINVAL;
@@ -131,84 +131,52 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct psmx_fid_cq, cq.fid);
-#if 0
-		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
-			if (fid_ep->send_cq && fid_ep->send_cq != eq)
-				return -EEXIST;
-		}
-		if (flags & FI_RECV) {
-			if (fid_ep->recv_cq && fid_ep->recv_cq != eq)
-				return -EEXIST;
-		}
-#endif
-		if (fid_ep->domain != cq->domain)
+		if (ep->domain != cq->domain)
 			return -EINVAL;
 		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
-			fid_ep->send_cq = cq;
+			ep->send_cq = cq;
 			if (flags & FI_EVENT)
-				fid_ep->send_eq_event_flag = 1;
+				ep->send_eq_event_flag = 1;
 		}
 		if (flags & FI_RECV) {
-			fid_ep->recv_cq = cq;
+			ep->recv_cq = cq;
 			if (flags & FI_EVENT)
-				fid_ep->recv_eq_event_flag = 1;
+				ep->recv_eq_event_flag = 1;
 		}
 		break;
 
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct psmx_fid_cntr, cntr.fid);
-#if 0
-		if (flags & (FI_SEND)) {
-			if (fid_ep->send_cntr && fid_ep->send_cntr != cntr)
-				return -EEXIST;
-		}
-		if (flags & FI_RECV) {
-			if (fid_ep->recv_cntr && fid_ep->recv_cntr != cntr)
-				return -EEXIST;
-		}
-		if (flags & FI_WRITE) {
-			if (fid_ep->write_cntr && fid_ep->write_cntr != cntr)
-				return -EEXIST;
-		}
-		if (flags & FI_READ) {
-			if (fid_ep->read_cntr && fid_ep->read_cntr != cntr)
-				return -EEXIST;
-		}
-#endif
-		if (fid_ep->domain != cntr->domain)
+		if (ep->domain != cntr->domain)
 			return -EINVAL;
 		if (flags & FI_SEND) {
-			fid_ep->send_cntr = cntr;
+			ep->send_cntr = cntr;
 			if (flags & FI_EVENT)
-				fid_ep->send_cntr_event_flag = 1;
+				ep->send_cntr_event_flag = 1;
 		}
 		if (flags & FI_RECV){
-			fid_ep->recv_cntr = cntr;
+			ep->recv_cntr = cntr;
 			if (flags & FI_EVENT)
-				fid_ep->recv_cntr_event_flag = 1;
+				ep->recv_cntr_event_flag = 1;
 		}
 		if (flags & FI_WRITE) {
-			fid_ep->write_cntr = cntr;
+			ep->write_cntr = cntr;
 			if (flags & FI_EVENT)
-				fid_ep->write_cntr_event_flag = 1;
+				ep->write_cntr_event_flag = 1;
 		}
 		if (flags & FI_READ){
-			fid_ep->read_cntr = cntr;
+			ep->read_cntr = cntr;
 			if (flags & FI_EVENT)
-				fid_ep->read_cntr_event_flag = 1;
+				ep->read_cntr_event_flag = 1;
 		}
 		break;
 
 	case FI_CLASS_AV:
 		av = container_of(bfid,
 				struct psmx_fid_av, av.fid);
-#if 0
-		if (fid_ep->av && fid_ep->av != av)
-			return -EEXIST;
-#endif
-		if (fid_ep->domain != av->domain)
+		if (ep->domain != av->domain)
 			return -EINVAL;
-		fid_ep->av = av;
+		ep->av = av;
 		break;
 
 	case FI_CLASS_MR:
@@ -226,35 +194,35 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
-static inline int psmx_ep_progress(struct psmx_fid_ep *fid_ep)
+static inline int psmx_ep_progress(struct psmx_fid_ep *ep)
 {
-	return psmx_cq_poll_mq(NULL, fid_ep->domain);
+	return psmx_cq_poll_mq(NULL, ep->domain);
 }
 
 static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
 {
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_ep *ep;
 
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
 	if (!flags || (flags & FI_SEND)) {
-		while (fid_ep->pending_sends)
-			psmx_ep_progress(fid_ep);
+		while (ep->pending_sends)
+			psmx_ep_progress(ep);
 	}
 
 	if (!flags || (flags & FI_WRITE)) {
-		while (fid_ep->pending_writes)
-			psmx_ep_progress(fid_ep);
+		while (ep->pending_writes)
+			psmx_ep_progress(ep);
 	}
 
 	if (!flags || (flags & FI_READ)) {
-		while (fid_ep->pending_reads)
-			psmx_ep_progress(fid_ep);
+		while (ep->pending_reads)
+			psmx_ep_progress(ep);
 	}
 
 	if (!flags || (flags & FI_WRITE) || (flags & FI_WRITE)) {
-		while (fid_ep->pending_atomics)
-			psmx_ep_progress(fid_ep);
+		while (ep->pending_atomics)
+			psmx_ep_progress(ep);
 	}
 
 	return 0;
@@ -263,19 +231,19 @@ static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
 static int psmx_ep_control(fid_t fid, int command, void *arg)
 {
 	struct fi_alias *alias;
-	struct psmx_fid_ep *fid_ep, *new_fid_ep;
-	fid_ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+	struct psmx_fid_ep *ep, *new_ep;
+	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
 	switch (command) {
 	case FI_ALIAS:
-		new_fid_ep = (struct psmx_fid_ep *) calloc(1, sizeof *fid_ep);
-		if (!new_fid_ep)
+		new_ep = (struct psmx_fid_ep *) calloc(1, sizeof *ep);
+		if (!new_ep)
 			return -ENOMEM;
 		alias = arg;
-		*new_fid_ep = *fid_ep;
-		new_fid_ep->flags = alias->flags;
+		*new_ep = *ep;
+		new_ep->flags = alias->flags;
 		/* REMOVE ME: [ temporary fix for backward compatibility */
-		if (new_fid_ep->flags & FI_EVENT) {
+		if (new_ep->flags & FI_EVENT) {
 			if (!getenv("SFI_PSM_NO_WARNING")) {
 			    printf("WARNING: deprecated FI_EVENT flag in fi_alias().\n"
 				"\tThe flag passed to fi_alias should only mean op flags.\n"
@@ -286,21 +254,21 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 				"\t(2) bind the new EP to the EQ with FI_EVENT flag\n"
 				"\tSet SFI_PSM_NO_WARNING to suppress this message.\n");
 			}
-			new_fid_ep->send_eq_event_flag = new_fid_ep->recv_eq_event_flag = 1;
-			new_fid_ep->flags &= ~FI_EVENT;
+			new_ep->send_eq_event_flag = new_ep->recv_eq_event_flag = 1;
+			new_ep->flags &= ~FI_EVENT;
 		}
 		/* REMOVE ME: ] */
-		*alias->fid = &new_fid_ep->ep.fid;
+		*alias->fid = &new_ep->ep.fid;
 		break;
 
 	case FI_SETFIDFLAG:
-		fid_ep->flags = *(uint64_t *)arg;
+		ep->flags = *(uint64_t *)arg;
 		break;
 
 	case FI_GETFIDFLAG:
 		if (!arg)
 			return -EINVAL;
-		*(uint64_t *)arg = fid_ep->flags;
+		*(uint64_t *)arg = ep->flags;
 		break;
 
 	default:
@@ -329,8 +297,8 @@ static struct fi_ops_ep psmx_ep_ops = {
 int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context)
 {
-	struct psmx_fid_domain *fid_domain;
-	struct psmx_fid_ep *fid_ep;
+	struct psmx_fid_domain *domain_priv;
+	struct psmx_fid_ep *ep_priv;
 	int err;
 	uint64_t ep_cap;
 
@@ -339,57 +307,57 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	else
 		ep_cap = FI_TAGGED;
 
-	fid_domain = container_of(domain, struct psmx_fid_domain, domain.fid);
-	if (!fid_domain)
+	domain_priv = container_of(domain, struct psmx_fid_domain, domain.fid);
+	if (!domain_priv)
 		return -EINVAL;
 
-	err = psmx_domain_check_features(fid_domain, ep_cap);
+	err = psmx_domain_check_features(domain_priv, ep_cap);
 	if (err)
 		return err; 
 
-	fid_ep = (struct psmx_fid_ep *) calloc(1, sizeof *fid_ep);
-	if (!fid_ep)
+	ep_priv = (struct psmx_fid_ep *) calloc(1, sizeof *ep_priv);
+	if (!ep_priv)
 		return -ENOMEM;
 
-	fid_ep->ep.fid.fclass = FI_CLASS_EP;
-	fid_ep->ep.fid.context = context;
-	fid_ep->ep.fid.ops = &psmx_fi_ops;
-	fid_ep->ep.ops = &psmx_ep_ops;
-	fid_ep->ep.cm = &psmx_cm_ops;
-	fid_ep->domain = fid_domain;
+	ep_priv->ep.fid.fclass = FI_CLASS_EP;
+	ep_priv->ep.fid.context = context;
+	ep_priv->ep.fid.ops = &psmx_fi_ops;
+	ep_priv->ep.ops = &psmx_ep_ops;
+	ep_priv->ep.cm = &psmx_cm_ops;
+	ep_priv->domain = domain_priv;
 
-	PSMX_CTXT_TYPE(&fid_ep->nocomp_send_context) = PSMX_NOCOMP_SEND_CONTEXT;
-	PSMX_CTXT_EP(&fid_ep->nocomp_send_context) = fid_ep;
-	PSMX_CTXT_TYPE(&fid_ep->nocomp_recv_context) = PSMX_NOCOMP_RECV_CONTEXT;
-	PSMX_CTXT_EP(&fid_ep->nocomp_recv_context) = fid_ep;
-	PSMX_CTXT_TYPE(&fid_ep->sendimm_context) = PSMX_INJECT_CONTEXT;
-	PSMX_CTXT_EP(&fid_ep->sendimm_context) = fid_ep;
-	PSMX_CTXT_TYPE(&fid_ep->writeimm_context) = PSMX_INJECT_WRITE_CONTEXT;
-	PSMX_CTXT_EP(&fid_ep->writeimm_context) = fid_ep;
+	PSMX_CTXT_TYPE(&ep_priv->nocomp_send_context) = PSMX_NOCOMP_SEND_CONTEXT;
+	PSMX_CTXT_EP(&ep_priv->nocomp_send_context) = ep_priv;
+	PSMX_CTXT_TYPE(&ep_priv->nocomp_recv_context) = PSMX_NOCOMP_RECV_CONTEXT;
+	PSMX_CTXT_EP(&ep_priv->nocomp_recv_context) = ep_priv;
+	PSMX_CTXT_TYPE(&ep_priv->sendimm_context) = PSMX_INJECT_CONTEXT;
+	PSMX_CTXT_EP(&ep_priv->sendimm_context) = ep_priv;
+	PSMX_CTXT_TYPE(&ep_priv->writeimm_context) = PSMX_INJECT_WRITE_CONTEXT;
+	PSMX_CTXT_EP(&ep_priv->writeimm_context) = ep_priv;
 
 	if (ep_cap & FI_TAGGED)
-		fid_ep->ep.tagged = &psmx_tagged_ops;
+		ep_priv->ep.tagged = &psmx_tagged_ops;
 	if (ep_cap & FI_MSG)
-		fid_ep->ep.msg = &psmx_msg_ops;
+		ep_priv->ep.msg = &psmx_msg_ops;
 #if PSMX_USE_AM
-	if ((ep_cap & FI_MSG) && fid_domain->use_am_msg)
-		fid_ep->ep.msg = &psmx_msg2_ops;
+	if ((ep_cap & FI_MSG) && domain_priv->use_am_msg)
+		ep_priv->ep.msg = &psmx_msg2_ops;
 	if (ep_cap & FI_RMA)
-		fid_ep->ep.rma = &psmx_rma_ops;
+		ep_priv->ep.rma = &psmx_rma_ops;
 	if (ep_cap & FI_ATOMICS)
-		fid_ep->ep.atomic = &psmx_atomic_ops;
+		ep_priv->ep.atomic = &psmx_atomic_ops;
 #endif
 
-	err = psmx_domain_enable_features(fid_domain, info->ep_cap);
+	err = psmx_domain_enable_features(domain_priv, info->ep_cap);
 	if (err) {
-		free(fid_ep);
+		free(ep_priv);
 		return err;
 	}
 
 	if (info)
-		fid_ep->flags = info->op_flags;
+		ep_priv->flags = info->op_flags;
 
-	*ep = &fid_ep->ep;
+	*ep = &ep_priv->ep;
 
 	return 0;
 }

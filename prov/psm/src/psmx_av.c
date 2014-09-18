@@ -85,38 +85,38 @@ int psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
         return 0;
 }
 
-static int psmx_av_check_table_size(struct psmx_fid_av *fid_av, size_t count)
+static int psmx_av_check_table_size(struct psmx_fid_av *av, size_t count)
 {
 	size_t new_count;
 	psm_epid_t *new_psm_epids;
 	psm_epaddr_t *new_psm_epaddrs;
 
-	new_count = fid_av->count;
-	while (new_count < fid_av->last + count)
+	new_count = av->count;
+	while (new_count < av->last + count)
 		new_count = new_count * 2 + 1;
 
-	if ((new_count <= fid_av->count) && fid_av->psm_epids)
+	if ((new_count <= av->count) && av->psm_epids)
 		return 0;
 
-	new_psm_epids = realloc(fid_av->psm_epids, new_count * sizeof(*new_psm_epids));
+	new_psm_epids = realloc(av->psm_epids, new_count * sizeof(*new_psm_epids));
 	if (!new_psm_epids)
 		return -ENOMEM;
 
-	fid_av->psm_epids = new_psm_epids;
+	av->psm_epids = new_psm_epids;
 
-	new_psm_epaddrs = realloc(fid_av->psm_epaddrs, new_count * sizeof(*new_psm_epaddrs));
+	new_psm_epaddrs = realloc(av->psm_epaddrs, new_count * sizeof(*new_psm_epaddrs));
 	if (!new_psm_epaddrs)
 		return -ENOMEM;
 
-	fid_av->psm_epaddrs = new_psm_epaddrs;
-	fid_av->count = new_count;
+	av->psm_epaddrs = new_psm_epaddrs;
+	av->count = new_count;
 	return 0;
 }
 
 static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			  fi_addr_t *fi_addr, uint64_t flags)
 {
-	struct psmx_fid_av *fid_av;
+	struct psmx_fid_av *av_priv;
 	psm_error_t *errors;
 	int *mask;
 	int err;
@@ -124,7 +124,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	fi_addr_t *result = NULL;
 	struct psmx_epaddr_context *context;
 
-	fid_av = container_of(av, struct psmx_fid_av, av);
+	av_priv = container_of(av, struct psmx_fid_av, av);
 
 	/* TODO: support the FI_RANGE flag */
 	if (flags)
@@ -140,19 +140,19 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		return -ENOMEM;
 	}
 
-	if (fid_av->type == FI_AV_TABLE) {
-		if (psmx_av_check_table_size(fid_av, count)) {
+	if (av_priv->type == FI_AV_TABLE) {
+		if (psmx_av_check_table_size(av_priv, count)) {
 			free(mask);
 			free(errors);
 			return -ENOMEM;
 		}
 
 		for (i=0; i<count; i++)
-			fid_av->psm_epids[fid_av->last + i] = ((psm_epid_t *)addr)[i];
+			av_priv->psm_epids[av_priv->last + i] = ((psm_epid_t *)addr)[i];
 
 		result = fi_addr;
-		addr = (const void *)(fid_av->psm_epids + fid_av->last);
-		fi_addr = (fi_addr_t *)(fid_av->psm_epaddrs + fid_av->last);
+		addr = (const void *)(av_priv->psm_epids + av_priv->last);
+		fi_addr = (fi_addr_t *)(av_priv->psm_epaddrs + av_priv->last);
 	}
 
 	/* prevent connecting to the same ep twice, which is fatal in PSM */
@@ -170,13 +170,13 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		}
 	}
 
-	err = psm_ep_connect(fid_av->domain->psm_ep, count, 
+	err = psm_ep_connect(av_priv->domain->psm_ep, count, 
 			(psm_epid_t *) addr, mask, errors,
 			(psm_epaddr_t *) fi_addr, 30*1e9);
 
 	for (i=0; i<count; i++){
 		if (mask[i] && errors[i] == PSM_OK) {
-			psmx_set_epaddr_context(fid_av->domain,
+			psmx_set_epaddr_context(av_priv->domain,
 						((psm_epid_t *) addr)[i],
 						((psm_epaddr_t *) fi_addr)[i]);
 		}
@@ -185,12 +185,12 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	free(mask);
 	free(errors);
 
-	if (fid_av->type == FI_AV_TABLE) {
+	if (av_priv->type == FI_AV_TABLE) {
 		if (result) {
 			for (i=0; i<count; i++)
-				result[i] = fid_av->last + i;
+				result[i] = av_priv->last + i;
 		}
-		fid_av->last += count;
+		av_priv->last += count;
 	}
 
 	return psmx_errno(err);
@@ -199,10 +199,10 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 static int psmx_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			  uint64_t flags)
 {
-	struct psmx_fid_av *fid_av;
+	struct psmx_fid_av *av_priv;
 	int err = PSM_OK;
 
-	fid_av = container_of(av, struct psmx_fid_av, av);
+	av_priv = container_of(av, struct psmx_fid_av, av);
 
 	return psmx_errno(err);
 }
@@ -210,7 +210,7 @@ static int psmx_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 static int psmx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			  size_t *addrlen)
 {
-	struct psmx_fid_av *fid_av;
+	struct psmx_fid_av *av_priv;
 	struct psmx_epaddr_context *context;
 	psm_epid_t epid;
 	int idx;
@@ -218,14 +218,14 @@ static int psmx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	if (!addr || !addrlen)
 		return -EINVAL;
 
-	fid_av = container_of(av, struct psmx_fid_av, av);
+	av_priv = container_of(av, struct psmx_fid_av, av);
 
-	if (fid_av->type == FI_AV_TABLE) {
+	if (av_priv->type == FI_AV_TABLE) {
 		idx = (int)(int64_t)fi_addr;
-		if (idx >= fid_av->last)
+		if (idx >= av_priv->last)
 			return -EINVAL;
 
-		epid = fid_av->psm_epids[idx];
+		epid = av_priv->psm_epids[idx];
 	}
 	else {
 		context = psm_epaddr_getctxt((void *)fi_addr);
@@ -259,13 +259,13 @@ static const char *psmx_av_straddr(struct fid_av *av, const void *addr,
 
 static int psmx_av_close(fid_t fid)
 {
-	struct psmx_fid_av *fid_av;
-	fid_av = container_of(fid, struct psmx_fid_av, av.fid);
-	if (fid_av->psm_epids)
-		free(fid_av->psm_epids);
-	if (fid_av->psm_epaddrs)
-		free(fid_av->psm_epaddrs);
-	free(fid_av);
+	struct psmx_fid_av *av;
+	av = container_of(fid, struct psmx_fid_av, av.fid);
+	if (av->psm_epids)
+		free(av->psm_epids);
+	if (av->psm_epaddrs)
+		free(av->psm_epaddrs);
+	free(av);
 	return 0;
 }
 
@@ -292,12 +292,12 @@ static struct fi_ops_av psmx_av_ops = {
 int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context)
 {
-	struct psmx_fid_domain *fid_domain;
-	struct psmx_fid_av *fid_av;
+	struct psmx_fid_domain *domain_priv;
+	struct psmx_fid_av *av_priv;
 	int type = FI_AV_MAP;
 	size_t count = 64;
 
-	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
+	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
 
 	if (attr) {
 		switch (attr->type) {
@@ -314,21 +314,21 @@ int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		count = attr->count;
 	}
 
-	fid_av = (struct psmx_fid_av *) calloc(1, sizeof *fid_av);
-	if (!fid_av)
+	av_priv = (struct psmx_fid_av *) calloc(1, sizeof *av_priv);
+	if (!av_priv)
 		return -ENOMEM;
 
-	fid_av->domain = fid_domain;
-	fid_av->type = type;
-	fid_av->addrlen = sizeof(psm_epaddr_t);
-	fid_av->count = count;
+	av_priv->domain = domain_priv;
+	av_priv->type = type;
+	av_priv->addrlen = sizeof(psm_epaddr_t);
+	av_priv->count = count;
 
-	fid_av->av.fid.fclass = FI_CLASS_AV;
-	fid_av->av.fid.context = context;
-	fid_av->av.fid.ops = &psmx_fi_ops;
-	fid_av->av.ops = &psmx_av_ops;
+	av_priv->av.fid.fclass = FI_CLASS_AV;
+	av_priv->av.fid.context = context;
+	av_priv->av.fid.ops = &psmx_fi_ops;
+	av_priv->av.ops = &psmx_av_ops;
 
-	*av = &fid_av->av;
+	*av = &av_priv->av;
 	return 0;
 }
 

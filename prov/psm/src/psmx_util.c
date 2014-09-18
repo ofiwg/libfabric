@@ -89,7 +89,7 @@ static void psmx_name_server_cleanup(void *args)
  *************************************************************/
 void *psmx_name_server(void *args)
 {
-	struct psmx_fid_domain *fid_domain;
+	struct psmx_fid_domain *domain;
 	struct addrinfo hints = {
 		.ai_flags = AI_PASSIVE,
 		.ai_family = AF_UNSPEC,
@@ -101,8 +101,8 @@ void *psmx_name_server(void *args)
 	int port;
 	int n;
 
-	fid_domain = args;
-	port = fid_domain->ns_port;
+	domain = args;
+	port = domain->ns_port;
 
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
@@ -147,7 +147,7 @@ void *psmx_name_server(void *args)
 			connfd = accept(listenfd, NULL, 0);
 			if (connfd >= 0) {
 				pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-				write(connfd, &fid_domain->psm_epid, sizeof(psm_epid_t));
+				write(connfd, &domain->psm_epid, sizeof(psm_epid_t));
 				close(connfd);
 				pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 			}

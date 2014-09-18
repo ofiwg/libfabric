@@ -141,52 +141,52 @@ int psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t
 
 static int psmx_mr_close(fid_t fid)
 {
-	struct psmx_fid_mr *fid_mr;
+	struct psmx_fid_mr *mr;
 
-	fid_mr = container_of(fid, struct psmx_fid_mr, mr.fid);
-	psmx_mr_hash_del(fid_mr);
-	free(fid_mr);
+	mr = container_of(fid, struct psmx_fid_mr, mr.fid);
+	psmx_mr_hash_del(mr);
+	free(mr);
 
 	return 0;
 }
 
 static int psmx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	struct psmx_fid_mr *fid_mr;
+	struct psmx_fid_mr *mr;
 	struct psmx_fid_cq *cq;
 	struct psmx_fid_ep *ep;
 	struct psmx_fid_cntr *cntr;
 
-	fid_mr = container_of(fid, struct psmx_fid_mr, mr.fid);
+	mr = container_of(fid, struct psmx_fid_mr, mr.fid);
 
 	if (!bfid)
 		return -EINVAL;
 	switch (bfid->fclass) {
 	case FI_CLASS_EP:
 		ep = container_of(bfid, struct psmx_fid_ep, ep.fid);
-		if (fid_mr->domain != ep->domain)
+		if (mr->domain != ep->domain)
 			return -EINVAL;
 		break;
 
 	case FI_CLASS_CQ:
 		/* TODO: check flags for send/recv CQs */
 		cq = container_of(bfid, struct psmx_fid_cq, cq.fid);
-		if (fid_mr->cq && fid_mr->cq != cq)
+		if (mr->cq && mr->cq != cq)
 			return -EEXIST;
-		if (fid_mr->domain != cq->domain)
+		if (mr->domain != cq->domain)
 			return -EINVAL;
-		fid_mr->cq = cq;
+		mr->cq = cq;
 		return -FI_ENOSYS;
 		break;
 
 	case FI_CLASS_CNTR:
 		/* TODO: check flags */
 		cntr = container_of(bfid, struct psmx_fid_cntr, cntr.fid);
-		if (fid_mr->cntr && fid_mr->cntr != cntr)
+		if (mr->cntr && mr->cntr != cntr)
 			return -EEXIST;
-		if (fid_mr->domain != cntr->domain)
+		if (mr->domain != cntr->domain)
 			return -EINVAL;
-		fid_mr->cntr = cntr;
+		mr->cntr = cntr;
 		break;
 
 	default:
@@ -278,42 +278,42 @@ static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 			uint64_t access, uint64_t offset, uint64_t requested_key,
 			uint64_t flags, struct fid_mr **mr, void *context)
 {
-	struct psmx_fid_domain *fid_domain;
-	struct psmx_fid_mr *fid_mr;
+	struct psmx_fid_domain *domain_priv;
+	struct psmx_fid_mr *mr_priv;
 	uint64_t key;
 
 	if (requested_key != PSMX_MR_AUTO_KEY && psmx_mr_hash_get(requested_key))
 			return -EEXIST;
 
-	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
+	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
 
-	fid_mr = (struct psmx_fid_mr *) calloc(1, sizeof(*fid_mr) + sizeof(struct iovec));
-	if (!fid_mr)
+	mr_priv = (struct psmx_fid_mr *) calloc(1, sizeof(*mr_priv) + sizeof(struct iovec));
+	if (!mr_priv)
 		return -ENOMEM;
 
-	fid_mr->mr.fid.fclass = FI_CLASS_MR;
-	fid_mr->mr.fid.context = context;
-	fid_mr->mr.fid.ops = &psmx_fi_ops;
-	fid_mr->mr.mem_desc = fid_mr;
+	mr_priv->mr.fid.fclass = FI_CLASS_MR;
+	mr_priv->mr.fid.context = context;
+	mr_priv->mr.fid.ops = &psmx_fi_ops;
+	mr_priv->mr.mem_desc = mr_priv;
 	if (requested_key != PSMX_MR_AUTO_KEY) {
 		key = requested_key;
 	}
 	else {
-		key = (uint64_t)(uintptr_t)fid_mr;
+		key = (uint64_t)(uintptr_t)mr_priv;
 		while (psmx_mr_hash_get(key))
 			key++;
 	}
-	fid_mr->mr.key = key;
-	fid_mr->domain = fid_domain;
-	fid_mr->access = access;
-	fid_mr->flags = flags;
-	fid_mr->iov_count = 1;
-	fid_mr->iov[0].iov_base = (void *)buf;
-	fid_mr->iov[0].iov_len = len;
+	mr_priv->mr.key = key;
+	mr_priv->domain = domain_priv;
+	mr_priv->access = access;
+	mr_priv->flags = flags;
+	mr_priv->iov_count = 1;
+	mr_priv->iov[0].iov_base = (void *)buf;
+	mr_priv->iov[0].iov_len = len;
 
-	psmx_mr_hash_add(fid_mr);
+	psmx_mr_hash_add(mr_priv);
 
-	*mr = &fid_mr->mr;
+	*mr = &mr_priv->mr;
 
 	return 0;
 }
@@ -323,49 +323,49 @@ static int psmx_mr_regv(struct fid_domain *domain,
 			uint64_t access, uint64_t offset, uint64_t requested_key,
 			uint64_t flags, struct fid_mr **mr, void *context)
 {
-	struct psmx_fid_domain *fid_domain;
-	struct psmx_fid_mr *fid_mr;
+	struct psmx_fid_domain *domain_priv;
+	struct psmx_fid_mr *mr_priv;
 	int i;
 	uint64_t key;
 
 	if (requested_key != PSMX_MR_AUTO_KEY && psmx_mr_hash_get(requested_key))
 			return -EEXIST;
 
-	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
+	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
 
 	if (count == 0 || iov == NULL)
 		return -EINVAL;
 
-	fid_mr = (struct psmx_fid_mr *)
-			calloc(1, sizeof(*fid_mr) +
+	mr_priv = (struct psmx_fid_mr *)
+			calloc(1, sizeof(*mr_priv) +
 				  sizeof(struct iovec) * count);
-	if (!fid_mr)
+	if (!mr_priv)
 		return -ENOMEM;
 
-	fid_mr->mr.fid.fclass = FI_CLASS_MR;
-	fid_mr->mr.fid.context = context;
-	fid_mr->mr.fid.ops = &psmx_fi_ops;
-	fid_mr->mr.mem_desc = fid_mr;
+	mr_priv->mr.fid.fclass = FI_CLASS_MR;
+	mr_priv->mr.fid.context = context;
+	mr_priv->mr.fid.ops = &psmx_fi_ops;
+	mr_priv->mr.mem_desc = mr_priv;
 	if (requested_key != PSMX_MR_AUTO_KEY) {
 		key = requested_key;
 	}
 	else {
-		key = (uint64_t)(uintptr_t)fid_mr;
+		key = (uint64_t)(uintptr_t)mr_priv;
 		while (psmx_mr_hash_get(key))
 			key++;
 	}
-	fid_mr->mr.key = key;
-	fid_mr->domain = fid_domain;
-	fid_mr->access = access;
-	fid_mr->flags = flags;
-	fid_mr->iov_count = count;
+	mr_priv->mr.key = key;
+	mr_priv->domain = domain_priv;
+	mr_priv->access = access;
+	mr_priv->flags = flags;
+	mr_priv->iov_count = count;
 	for (i=0; i<count; i++)
-		fid_mr->iov[i] = iov[i];
+		mr_priv->iov[i] = iov[i];
 
-	psmx_mr_normalize_iov(fid_mr->iov, &fid_mr->iov_count);
-	psmx_mr_hash_add(fid_mr);
+	psmx_mr_normalize_iov(mr_priv->iov, &mr_priv->iov_count);
+	psmx_mr_hash_add(mr_priv);
 
-	*mr = &fid_mr->mr;
+	*mr = &mr_priv->mr;
 
 	return 0;
 }
@@ -373,15 +373,15 @@ static int psmx_mr_regv(struct fid_domain *domain,
 static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr,
 			uint64_t flags, struct fid_mr **mr)
 {
-	struct psmx_fid_domain *fid_domain;
-	struct psmx_fid_mr *fid_mr;
+	struct psmx_fid_domain *domain_priv;
+	struct psmx_fid_mr *mr_priv;
 	int i;
 	uint64_t key;
 
 	if (attr->requested_key != PSMX_MR_AUTO_KEY && psmx_mr_hash_get(attr->requested_key))
 			return -EEXIST;
 
-	fid_domain = container_of(domain, struct psmx_fid_domain, domain);
+	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
 
 	if (!attr)
 		return -EINVAL;
@@ -389,38 +389,38 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 	if (attr->iov_count == 0 || attr->mr_iov == NULL)
 		return -EINVAL;
 
-	fid_mr = (struct psmx_fid_mr *)
-			calloc(1, sizeof(*fid_mr) +
+	mr_priv = (struct psmx_fid_mr *)
+			calloc(1, sizeof(*mr_priv) +
 				  sizeof(struct iovec) * attr->iov_count);
-	if (!fid_mr)
+	if (!mr_priv)
 		return -ENOMEM;
 
-	fid_mr->mr.fid.fclass = FI_CLASS_MR;
-	fid_mr->mr.fid.ops = &psmx_fi_ops;
-	fid_mr->mr.mem_desc = fid_mr;
+	mr_priv->mr.fid.fclass = FI_CLASS_MR;
+	mr_priv->mr.fid.ops = &psmx_fi_ops;
+	mr_priv->mr.mem_desc = mr_priv;
 	if (attr->requested_key != PSMX_MR_AUTO_KEY) {
 		key = attr->requested_key;
 	}
 	else {
-		key = (uint64_t)(uintptr_t)fid_mr;
+		key = (uint64_t)(uintptr_t)mr_priv;
 		while (psmx_mr_hash_get(key))
 			key++;
 	}
-	fid_mr->mr.key = key;
-	fid_mr->domain = fid_domain;
-	fid_mr->access = FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
-	fid_mr->flags = flags;
-	fid_mr->iov_count = attr->iov_count;
+	mr_priv->mr.key = key;
+	mr_priv->domain = domain_priv;
+	mr_priv->access = FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
+	mr_priv->flags = flags;
+	mr_priv->iov_count = attr->iov_count;
 	for (i=0; i<attr->iov_count; i++)
-		fid_mr->iov[i] = attr->mr_iov[i];
+		mr_priv->iov[i] = attr->mr_iov[i];
 
-	fid_mr->mr.fid.context = attr->context;
-	fid_mr->access = attr->access;
+	mr_priv->mr.fid.context = attr->context;
+	mr_priv->access = attr->access;
 
-	psmx_mr_normalize_iov(fid_mr->iov, &fid_mr->iov_count);
-	psmx_mr_hash_add(fid_mr);
+	psmx_mr_normalize_iov(mr_priv->iov, &mr_priv->iov_count);
+	psmx_mr_hash_add(mr_priv);
 
-	*mr = &fid_mr->mr;
+	*mr = &mr_priv->mr;
 
 	return 0;
 }
