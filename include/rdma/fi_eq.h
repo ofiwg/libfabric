@@ -114,17 +114,20 @@ struct fi_eq_attr {
 enum fi_eq_event {
 	FI_COMPLETE,
 	FI_CONNREQ,
-	FI_SHUTDOWN
+	FI_SHUTDOWN,
+	FI_ERROR
 };
 
 struct fi_eq_entry {
 	enum fi_eq_event	event;
 	fid_t			fid;
+	void			*context;
 };
 
 struct fi_eq_err_entry {
 	enum fi_eq_event	event;
 	fid_t			fid;
+	void			*context;
 	int			err;
 	int			prov_errno;
 	/* err_data is available until the next time the CQ is read */
@@ -134,6 +137,7 @@ struct fi_eq_err_entry {
 struct fi_eq_cm_entry {
 	enum fi_eq_event	event;
 	fid_t			fid;
+	void			*context;
 	/* user must call fi_freeinfo to release info */
 	struct fi_info		*info;
 	/* connection data placed here, up to space provided */
@@ -146,7 +150,8 @@ struct fi_ops_eq {
 			uint64_t flags);
 	ssize_t	(*readerr)(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 			size_t len, uint64_t flags);
-	ssize_t	(*write)(struct fid_eq *eq, const void *buf, size_t len);
+	ssize_t	(*write)(struct fid_eq *eq, const void *buf, size_t len,
+			uint64_t flags);
 	ssize_t	(*condread)(struct fid_eq *eq, void *buf, size_t len,
 			const void *cond, uint64_t flags);
 	const char * (*strerror)(struct fid_eq *eq, int prov_errno,
@@ -184,27 +189,27 @@ struct fi_cq_msg_entry {
 
 struct fi_cq_data_entry {
 	void			*op_context;
-	void			*buf;
 	uint64_t		flags;
 	size_t			len;
+	void			*buf;
 	/* data depends on operation and/or flags - e.g. remote EQ data */
 	uint64_t		data;
 };
 
 struct fi_cq_tagged_entry {
 	void			*op_context;
-	void			*buf;
 	uint64_t		flags;
 	size_t			len;
+	void			*buf;
 	uint64_t		data;
 	uint64_t		tag;
 };
 
 struct fi_cq_err_entry {
 	void			*op_context;
-	void			*buf;
 	uint64_t		flags;
 	size_t			len;
+	void			*buf;
 	uint64_t		data;
 	uint64_t		tag;
 	size_t			olen;
@@ -317,9 +322,10 @@ fi_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf, size_t len,
 	return eq->ops->readerr(eq, buf, len, flags);
 }
 
-static inline ssize_t fi_eq_write(struct fid_eq *eq, void *buf, size_t len)
+static inline ssize_t
+fi_eq_write(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 {
-	return eq->ops->write(eq, buf, len);
+	return eq->ops->write(eq, buf, len, flags);
 }
 
 static inline ssize_t

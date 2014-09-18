@@ -95,6 +95,16 @@ man_MANS = \
 	man/fi_cntr_add.3 \
 	man/fi_cntr_set.3 \
 	man/fi_cntr_wait.3 \
+	man/fi_cq.3 \
+	man/fi_cq_open.3 \
+	man/fi_cq_control.3 \
+	man/fi_cq_read.3 \
+	man/fi_cq_readfrom.3 \
+	man/fi_cq_readerr.3 \
+	man/fi_cq_write.3 \
+	man/fi_cq_condread.3 \
+	man/fi_cq_condreadfrom.3 \
+	man/fi_cq_strerror.3 \
 	man/fi_direct.7 \
 	man/fi_domain.3 \
 	man/fi_domain_query.3 \
@@ -106,16 +116,13 @@ man_MANS = \
 	man/fi_eq_open.3 \
 	man/fi_eq_control.3 \
 	man/fi_eq_read.3 \
-	man/fi_eq_readfrom.3 \
 	man/fi_eq_readerr.3 \
 	man/fi_eq_write.3 \
 	man/fi_eq_condread.3 \
-	man/fi_eq_condreadfrom.3 \
 	man/fi_eq_strerror.3 \
 	man/fi_enable.3 \
 	man/fi_endpoint.3 \
 	man/fi_fabric.3 \
-	man/fi_feq_open.3 \
 	man/fi_fetch_atomic.3 \
 	man/fi_fetch_atomicv.3 \
 	man/fi_fetch_atomicto.3 \

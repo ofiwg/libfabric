@@ -62,11 +62,18 @@ interfaces are outside the scope of this documentation.
 .SS "fi_domain_query"
 Query the attributes of an opened domain.
 .SS "fi_domain_bind"
-Associates an event queue with the domain.  Binding an event queue to a
+Associates an event queue with the domain.  An event queue bound to a
+domain will be the default EQ associated with
+asynchronous control events that occur on the domain or active endpoints
+allocated on a domain.  This includes CM events.  Endpoints may direct their
+control events to alternate EQs by binding directly with the EQ.
+.sp
+Binding an event queue to a
 domain with the FI_REG_MR flag indicates that the provider should perform
 all memory registration operations asynchronously, with the completion
 reported through the event queue.  If an event queue is not bound to the
-domain, then memory registration requests behave synchronously.
+domain with the FI_REG_MR flag, then memory registration requests
+complete synchronously. 
 .SS "fi_close"
 The fi_close call is used to release all resources associated with a domain
 or interface.  All items associated with the opened domain must
