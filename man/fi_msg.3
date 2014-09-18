@@ -163,7 +163,7 @@ use of flags.  The fi_recvmsg function takes a struct fi_msg as input.
 The fi_recvmsg and fi_sendmsg calls allow the user to specify flags
 which can change the default message handling of the endpoint.
 Flags specified with fi_recvmsg / fi_sendmsg override most flags
-previously configured with the endpoint, except where noted (see fi_control).
+previously configured with the endpoint, except where noted (see fi_endpoint).
 The following list of flags are usable with fi_recvmsg and/or fi_sendmsg.
 .IP "FI_REMOTE_EQ_DATA"
 Applies to fi_sendmsg, fi_senddata, and fi_senddatato.  Indicates that remote
@@ -215,4 +215,4 @@ are full.  The operation may be retried after additional provider resources
 become available, usually through the completion of currently outstanding
 operations.
 .SH "SEE ALSO"
-fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_eq(3)
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_eq(3)

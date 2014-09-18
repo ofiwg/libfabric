@@ -35,7 +35,7 @@ Converts provider specific error information into a printable string
 .HP
 .BI "int fi_close(struct fid *" eq ");"
 .HP
-.BI "int fi_eq_control(struct fid_eq *" eq ", int " command ", void *" arg ");"
+.BI "int fi_control(struct fid *" eq ", int " command ", void *" arg ");"
 .PP
 .HP
 .BI "int fi_eq_read(struct fid_eq *" eq ","
@@ -163,16 +163,16 @@ The fi_close call releases all resources associated with an event
 queue.  The EQ must not be bound to any other resources prior to
 being closed.  Any events which remain on the EQ when it is closed are
 lost.
-.SS "fi_eq_control"
-The fi_eq_control call is used to access provider or implementation specific
+.SS "fi_control"
+The fi_control call is used to access provider or implementation specific
 details of the event queue.  Access to the EQ should be serialized
-across all calls when fi_eq_control is invoked, as it may redirect the
+across all calls when fi_control is invoked, as it may redirect the
 implementation of EQ operations.  The following control commands are usable
 with an EQ.
 .IP "FI_GETWAIT (void **)"
 This command allows the user to retrieve the low-level wait object
 associated with the EQ.  The format of the wait-object is specified during
-EQ creation, through the EQ attributes.  The fi_eq_control arg parameter
+EQ creation, through the EQ attributes.  The fi_control arg parameter
 should be an address where a pointer to the returned wait object
 will be written.
 .SS "fi_eq_read"

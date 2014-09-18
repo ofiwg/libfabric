@@ -48,7 +48,7 @@ Waits for one or more wait objects in a set to be signaled.
 .HP
 .BI "int fi_close(struct fid *" waitset ");"
 .HP
-.BI "int fi_wait_control(struct fid_wait *" waitset ", int " command ", "
+.BI "int fi_control(struct fid *" waitset ", int " command ", "
 .BI "void *" arg ");"
 .HP
 .BI "int fi_wait(struct fid_wait *" waitset ", int " timeout ");"
@@ -155,16 +155,16 @@ is reserved and must be set to 0 by the caller.
 The fi_close call releases all resources associated with a wait set.
 The wait set must not be bound to any other opened resources prior to
 being closed.
-.SS "fi_wait_control"
-The fi_wait_control call is used to access provider or implementation specific
+.SS "fi_control"
+The fi_control call is used to access provider or implementation specific
 details of the wait set.  Access to the wait set should be serialized
-across all calls when fi_wait_control is invoked, as it may redirect the
+across all calls when fi_control is invoked, as it may redirect the
 implementation of wait set operations.  The following control commands are usable
 with a wait set.
 .IP "FI_GETWAIT (void **)"
 This command allows the user to retrieve the low-level wait object(s)
 associated with the wait set.  The format of the wait-object is specified during
-wait set creation, through the wait set attributes.  The fi_wait_control arg
+wait set creation, through the wait set attributes.  The fi_control arg
 parameter should be an address to a struct fi_wait_obj_set.
 .PP
 .nf
