@@ -265,16 +265,12 @@ fi_inject(struct fid_ep *ep, const void *buf, size_t len)
 {
 	return ep->msg->inject(ep, buf, len);
 }
-#define FI_INJECT_MSG(ep) \
-	(FI_CHECK_OP(ep->msg, struct fi_ops_msg, inject))
 
 static inline ssize_t
 fi_injectto(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr)
 {
 	return ep->msg->injectto(ep, buf, len, dest_addr);
 }
-#define FI_INJECT_MSGTO(ep) \
-	FI_CHECK_OP(ep->msg, struct fi_ops_msg, injectto)
 
 static inline ssize_t
 fi_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,

@@ -230,8 +230,6 @@ fi_inject_atomic(struct fid_ep *ep, const void *buf, size_t count,
 	return ep->atomic->inject(ep, buf, count, addr, key,
 			datatype, op);
 }
-#define FI_INJECT_ATOMIC(ep) \
-	FI_CHECK_OP(ep->atomic, struct fi_ops_atomic, inject)
 
 static inline ssize_t
 fi_inject_atomicto(struct fid_ep *ep, const void *buf, size_t count,
@@ -241,8 +239,6 @@ fi_inject_atomicto(struct fid_ep *ep, const void *buf, size_t count,
 	return ep->atomic->injectto(ep, buf, count, dest_addr, addr,
 			key, datatype, op);
 }
-#define FI_INJECT_ATOMICTO(ep) \
-	FI_CHECK_OP(ep->atomic, struct fi_ops_atomic, injectto)
 
 static inline ssize_t
 fi_fetch_atomic(struct fid_ep *ep,
