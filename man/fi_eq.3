@@ -219,22 +219,29 @@ Connection requests are reported using struct fi_eq_cm_entry:
 struct fi_eq_cm_entry {
 	enum fi_eq_event event;      /* event type */
 	fid_t            fid;        /* fid associated with request */
-	fi_connreq_t     context;    /* connection context */
+	fi_connreq_t     connreq;    /* connection context */
 	struct fi_info  *info;       /* endpoint information */
 	uint8_t         data[0];     /* app connection data */
 };
 
 .fi
 Connection request events are of type FI_CONNREQ.  The fid is the passive
-endpoint.  The context field is a connection request specific value that
-allows the provider to associate the accept or reject call with a specific
-request.  Information regarding the requested endpoint's capabilities and
-attributes are available from the info field.
+endpoint.  The connreq field is used to identify the connection request
+associated with a specific event.  The value of this field must be
+passed into either fi_accept or fi_reject.
+Information regarding the requested endpoint's capabilities and
+attributes are available from the info field.  The application is
+responsible for freeing this structure by calling fi_freeinfo when it
+is no longer needed.
+.sp
 Any application data exchanged as part of the connection
 request is placed beyond the fi_eq_cm_entry structure.  The amount of data
 available is application dependent and limited to the buffer space provided
 by the application when fi_eq_read is called.  The amount of returned data
 may be calculated using the return value to fi_eq_read.
+.sp
+The connreq field is used to identify a specific connection request.  The
+value of this field must be passed into either fi_accept or fi_reject.
 .IP "Connection Shutdown Notification"
 Notification that a remote peer has disconnected from an active endpoint is
 done through the FI_SHUTDOWN event.  Shutdown notification uses struct

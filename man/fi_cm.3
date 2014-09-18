@@ -1,4 +1,4 @@
-.TH "FI_CM" 3 "2014-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_CM" 3 "2014-09-18" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_cm - Connection management operations
 .PP
@@ -24,10 +24,10 @@ Have an endpoint join or leave a multicast group.
 .HP
 .BI "int fi_listen(struct fid_pep *" pep ");"
 .HP
-.BI "int fi_accept(struct fid_ep *" ep ", const void *" param ","
-.BI "size_t " paramlen ");"
+.BI "int fi_accept(struct fid_ep *" ep ", fi_connreq_t " connreq ","
+.BI "const void *" param ", size_t " paramlen ");"
 .HP
-.BI "int fi_reject(struct fid_pep *" pep ", struct fi_info *" info ","
+.BI "int fi_reject(struct fid_pep *" pep ", fi_connreq_t " connreq ","
 .BI "const void *" param ", size_t " paramlen ");"
 .HP
 .BI "int fi_shutdown(struct fid_ep *" ep ", uint64_t " flags ");"
@@ -93,8 +93,8 @@ waits for a connection request event.  After receiving such an event, it
 allocates a new endpoint to accept the connection.  fi_accept is invoked
 with the newly allocated endpoint passed in as the fid parameter.  If
 the listening application wishes to reject a connection request, it calls
-fi_reject with the listening endpoint passed in as the fid and the fabric
-information associated with the request passed in as info.
+fi_reject with the listening endpoint passed in as the fid.  Both accept
+and reject take a reference to the connection request as an input parameter.
 .PP
 A successfully accepted connection request will result in the active
 (connecting) endpoint seeing an FI_CONNECTED event on its associated
