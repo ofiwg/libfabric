@@ -176,7 +176,6 @@ static int psmx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (mr->domain != cq->domain)
 			return -EINVAL;
 		mr->cq = cq;
-		return -FI_ENOSYS;
 		break;
 
 	case FI_CLASS_CNTR:
