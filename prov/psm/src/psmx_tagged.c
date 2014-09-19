@@ -157,7 +157,7 @@ static ssize_t psmx_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, voi
 				 size_t count, uint64_t tag, uint64_t ignore,
 				 void *context)
 {
-	/* FIXME: allow count == 0? */
+	/* FIXME: allow iov_count == 0? */
 	/* FIXME: allow iov_count > 1 */
 	if (!iov || count != 1)
 		return -EINVAL;

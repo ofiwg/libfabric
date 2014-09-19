@@ -169,7 +169,6 @@ static int psmx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	case FI_CLASS_CQ:
-		/* TODO: check flags for send/recv CQs */
 		cq = container_of(bfid, struct psmx_fid_cq, cq.fid);
 		if (mr->cq && mr->cq != cq)
 			return -EEXIST;
@@ -179,7 +178,6 @@ static int psmx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	case FI_CLASS_CNTR:
-		/* TODO: check flags */
 		cntr = container_of(bfid, struct psmx_fid_cntr, cntr.fid);
 		if (mr->cntr && mr->cntr != cntr)
 			return -EEXIST;
