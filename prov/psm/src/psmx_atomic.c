@@ -394,7 +394,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	int err = 0;
 	int op_error = 0;
 	struct psmx_am_request *req;
-	struct psmx_event *event;
+	struct psmx_cq_event *event;
 	struct psmx_fid_mr *mr;
 	void *tmp_buf;
 
@@ -427,7 +427,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
 				else
 					err = -ENOMEM;
 			}
@@ -479,7 +479,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
 				else
 					err = -ENOMEM;
 			}
@@ -535,7 +535,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
 				else
 					err = -ENOMEM;
 			}
@@ -573,7 +573,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					0, /* olen */
 					op_error);
 			if (event)
-				psmx_eq_enqueue_event(&req->ep->send_cq->event_queue,
+				psmx_cq_enqueue_event(&req->ep->send_cq->event_queue,
 						      event);
 			else
 				err = -ENOMEM;
@@ -611,7 +611,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					0, /* olen */
 					op_error);
 			if (event)
-				psmx_eq_enqueue_event(&req->ep->send_cq->event_queue,
+				psmx_cq_enqueue_event(&req->ep->send_cq->event_queue,
 						      event);
 			else
 				err = -ENOMEM;
@@ -646,7 +646,7 @@ static int psmx_atomic_self(int am_cmd,
 			    uint64_t flags)
 {
 	struct psmx_fid_mr *mr;
-	struct psmx_event *event;
+	struct psmx_cq_event *event;
 	size_t len;
 	int no_event;
 	int err = 0;
@@ -698,7 +698,7 @@ static int psmx_atomic_self(int am_cmd,
 				0 /* err */);
 
 		if (event)
-			psmx_eq_enqueue_event(&mr->cq->event_queue, event);
+			psmx_cq_enqueue_event(&mr->cq->event_queue, event);
 		else
 			err = -ENOMEM;
 	}
@@ -710,7 +710,7 @@ static int psmx_atomic_self(int am_cmd,
 
 gen_local_event:
 	no_event = ((flags & FI_INJECT) ||
-		    (ep->send_eq_event_flag && !(flags & FI_EVENT)));
+		    (ep->send_cq_event_flag && !(flags & FI_EVENT)));
 	if (ep->send_cq && !no_event) {
 		event = psmx_cq_create_event(
 				ep->send_cq->format,
@@ -723,7 +723,7 @@ gen_local_event:
 				0, /* olen */
 				op_error);
 		if (event)
-			psmx_eq_enqueue_event(&ep->send_cq->event_queue, event);
+			psmx_cq_enqueue_event(&ep->send_cq->event_queue, event);
 		else
 			err = -ENOMEM;
 	}
@@ -849,7 +849,7 @@ ssize_t _psmx_atomic_writeto(struct fid_ep *ep,
 		if (!req)
 			return -ENOMEM;
 
-		if (ep_priv->send_eq_event_flag && !(flags & FI_EVENT))
+		if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT))
 			req->no_event = 1;
 	}
 
@@ -1082,7 +1082,7 @@ ssize_t _psmx_atomic_readwriteto(struct fid_ep *ep,
 		if (!req)
 			return -ENOMEM;
 
-		if (ep_priv->send_eq_event_flag && !(flags & FI_EVENT))
+		if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT))
 			req->no_event = 1;
 	}
 
@@ -1301,7 +1301,7 @@ ssize_t _psmx_atomic_compwriteto(struct fid_ep *ep,
 		if (!req)
 			return -ENOMEM;
 
-		if (ep_priv->send_eq_event_flag && !(flags & FI_EVENT))
+		if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT))
 			req->no_event = 1;
 
 		if (compare != buf + len) {

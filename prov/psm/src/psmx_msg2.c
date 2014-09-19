@@ -90,7 +90,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 {
         psm_amarg_t rep_args[8];
         struct psmx_am_request *req;
-        struct psmx_event *event;
+        struct psmx_cq_event *event;
 	struct psmx_epaddr_context *epaddr_context;
 	struct psmx_fid_domain *domain;
 	int msg_len;
@@ -183,7 +183,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						req->recv.len - req->recv.len_received,
 						0 /* err */);
 				if (event)
-					psmx_eq_enqueue_event(&req->ep->recv_cq->event_queue,
+					psmx_cq_enqueue_event(&req->ep->recv_cq->event_queue,
 							      event);
 				else
 					err = -ENOMEM;
@@ -242,7 +242,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0, /* olen */
 						op_error);
 				if (event)
-					psmx_eq_enqueue_event(&req->ep->send_cq->event_queue,
+					psmx_cq_enqueue_event(&req->ep->send_cq->event_queue,
 							      event);
 				else
 					err = -ENOMEM;
@@ -328,7 +328,7 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 	struct psmx_fid_ep *ep_priv;
 	struct psmx_am_request *req;
 	struct psmx_unexp *unexp;
-	struct psmx_event *event;
+	struct psmx_cq_event *event;
 	int recv_done;
 	int err = 0;
 
@@ -346,7 +346,7 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 	req->recv.src_addr = (void *)src_addr;
 	req->ep = ep_priv;
 
-	if (ep_priv->recv_eq_event_flag && !(flags & FI_EVENT))
+	if (ep_priv->recv_cq_event_flag && !(flags & FI_EVENT))
 		req->no_event = 1;
 
 	/* FIXME: match src_addr */
@@ -390,7 +390,7 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 					req->recv.len - req->recv.len_received,
 					0 /* err */);
 			if (event)
-				psmx_eq_enqueue_event(&req->ep->recv_cq->event_queue, event);
+				psmx_cq_enqueue_event(&req->ep->recv_cq->event_queue, event);
 			else
 				err = -ENOMEM;
 		}
@@ -502,7 +502,7 @@ static ssize_t _psmx_sendto2(struct fid_ep *ep, const void *buf, size_t len,
 	req->send.dest_addr = (void *)dest_addr;
 	req->ep = ep_priv;
 
-	if ((ep_priv->send_eq_event_flag && !(flags & FI_EVENT)) ||
+	if ((ep_priv->send_cq_event_flag && !(flags & FI_EVENT)) ||
 	     (context == &ep_priv->sendimm_context))
 		req->no_event = 1;
 
