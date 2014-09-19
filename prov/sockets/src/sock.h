@@ -72,7 +72,6 @@ static const char const dom_name[] = "sockets";
 
 struct sock_fabric {
 	struct fid_fabric	fab_fid;
-	uint64_t		flags;
 };
 
 struct sock_domain {

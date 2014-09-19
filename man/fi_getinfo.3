@@ -57,20 +57,20 @@ by this call.
 .SH "FI_INFO"
 .nf
 struct fi_info {
-	struct fi_info     *next;
-	size_t              size;
-	uint64_t            type;
-	uint64_t            ep_cap;
-	uint64_t            op_flags;
-	enum fi_addr_format addr_format;
-	size_t              src_addrlen;
-	size_t              dest_addrlen;
-	void               *src_addr;
-	void               *dest_addr;
-	struct fi_ep_attr  *ep_attr;
-	char               *fabric_name;
-	size_t              datalen;
-	void               *data;
+	struct fi_info        *next;
+	size_t                size;
+	uint64_t              ep_cap;
+	uint64_t              op_flags;
+	enum fi_addr_format   addr_format;
+	size_t                src_addrlen;
+	size_t                dest_addrlen;
+	void                  *src_addr;
+	void                  *dest_addr;
+	struct fi_ep_attr     *ep_attr;
+	struct fi_domain_attr *domain_attr;
+	struct fi_fabric_attr *fabric_attr;
+	size_t                datalen;
+	void                  *data;
 };
 .fi
 .IP "next"
@@ -129,8 +129,13 @@ set.  On output, the actual domain attributes
 that can be provided will be returned.  Output values will be greater than
 or equal to requested input values.
 See fi_domain(3) for details.
-.IP "fabric_name"
-If specified, the name of the fabric domain.
+.IP "fabric_attr"
+Optionally supplied fabric attributes.
+Fabric attributes may be specified and returned as part of fi_getinfo.
+When provided as hints, requested values of struct fi_fabric_attr should be
+set.  On output, the actual fabric attributes
+that can be provided will be returned.
+See fi_fabric(3) for details.
 .IP "datalen"
 Length of any additional data (must be specified if
 .B data

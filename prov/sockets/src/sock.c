@@ -56,12 +56,12 @@ static struct fi_ops_fabric sock_fab_ops = {
 	.domain = sock_domain,
 };
 
-static int sock_fabric(const char *name, uint64_t flags,
+static int sock_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric, void *context)
 {
 	struct sock_fabric *fab;
 
-	if (!name || strcmp(name, fab_name))
+	if (strcmp(attr->name, fab_name))
 		return -FI_ENODATA;
 
 	fab = calloc(1, sizeof(*fab));
@@ -72,7 +72,6 @@ static int sock_fabric(const char *name, uint64_t flags,
 	fab->fab_fid.fid.context = context;
 	fab->fab_fid.fid.ops = &sock_fab_fi_ops;
 	fab->fab_fid.ops = &sock_fab_ops;
-	fab->flags = flags;
 	*fabric = &fab->fab_fid;
 	return 0;
 }

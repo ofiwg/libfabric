@@ -55,7 +55,7 @@ struct fi_provider {
 	int	(*getinfo)(int version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info);
 	int	(*freeinfo)(struct fi_info *info);
-	int	(*fabric)(const char *name, uint64_t flags, struct fid_fabric **fabric,
+	int	(*fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
 };
 

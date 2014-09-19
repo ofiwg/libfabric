@@ -142,9 +142,10 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 			goto err_out;
 		}
 
-		if (hints->fabric_name && strncmp(hints->fabric_name, "psm", 3)) {
+		if (hints->fabric_attr && hints->fabric_attr->name &&
+		    strncmp(hints->fabric_attr->name, "psm", 3)) {
 			psmx_debug("%s: hints->fabric_name=%s, supported=psm\n",
-					__func__, hints->fabric_name);
+					__func__, hints->fabric_attr->name);
 			goto err_out;
 		}
 
@@ -211,7 +212,7 @@ static int psmx_getinfo(int version, const char *node, const char *service,
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);
 	psmx_info->src_addr = NULL;
 	psmx_info->dest_addr = dest_addr;
-	psmx_info->fabric_name = strdup("psm");
+	psmx_info->fabric_attr->name = strdup("psm");
 	psmx_info->datalen = 0;
 	psmx_info->data = NULL;
 
@@ -238,12 +239,12 @@ static struct fi_ops_fabric psmx_fabric_ops = {
 	.domain = psmx_domain_open,
 };
 
-static int psmx_fabric(const char *name, uint64_t flags,
+static int psmx_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric, void *context)
 {
 	struct psmx_fid_fabric *fabric_priv;
 
-	if (!name || strncmp(name, "psm", 3))
+	if (strncmp(attr->name, "psm", 3))
 		return -FI_ENODATA;
 
 	fabric_priv = calloc(1, sizeof(*fabric_priv));
