@@ -165,7 +165,6 @@ static struct psmx_event *psmx_cq_create_event_from_status(
 		event->eqe.err.prov_errno = psm_status->error_code;
 		event->eqe.err.tag = psm_status->msg_tag;
 		event->eqe.err.olen = psm_status->msg_length - psm_status->nbytes;
-		//event->eqe.err.prov_data = NULL; /* FIXME */
 		goto out;
 	}
 
@@ -176,24 +175,19 @@ static struct psmx_event *psmx_cq_create_event_from_status(
 
 	case FI_CQ_FORMAT_MSG:
 		event->eqe.msg.op_context = op_context;
-		//event->eqe.msg.flags = 0; /* FIXME */
 		event->eqe.msg.len = psm_status->nbytes;
 		break;
 
 	case FI_CQ_FORMAT_DATA:
 		event->eqe.data.op_context = op_context;
 		event->eqe.data.buf = buf;
-		//event->eqe.data.flags = 0; /* FIXME */
 		event->eqe.data.len = psm_status->nbytes;
-		//event->eqe.data.data = 0; /* FIXME */
 		break;
 
 	case FI_CQ_FORMAT_TAGGED:
 		event->eqe.tagged.op_context = op_context;
 		event->eqe.tagged.buf = buf;
-		//event->eqe.tagged.flags = 0; /* FIXME */
 		event->eqe.tagged.len = psm_status->nbytes;
-		//event->eqe.tagged.data = 0; /* FIXME */
 		event->eqe.tagged.tag = psm_status->msg_tag;
 		break;
 
@@ -324,7 +318,6 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
-#if PSMX_USE_AM
 			case PSMX_REMOTE_WRITE_CONTEXT:
 			case PSMX_REMOTE_READ_CONTEXT:
 				{
@@ -344,7 +337,6 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 					return 1;
 				  continue;
 				}
-#endif
 			}
 
 			if (tmp_cq) {
@@ -418,18 +410,14 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 	assert(cq_priv->domain);
 
-#if PSMX_USE_AM
 	cq_priv->poll_am_before_mq = !cq_priv->poll_am_before_mq;
 	if (cq_priv->poll_am_before_mq)
 		psmx_am_progress(cq_priv->domain);
-#endif
 
 	psmx_cq_poll_mq(cq_priv, cq_priv->domain);
 
-#if PSMX_USE_AM
 	if (!cq_priv->poll_am_before_mq)
 		psmx_am_progress(cq_priv->domain);
-#endif
 
 	if (cq_priv->pending_error)
 		return -FI_EAVAIL;

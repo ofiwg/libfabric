@@ -87,7 +87,6 @@ void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
 					      trigger->trecv.context,
 					      trigger->trecv.flags);
 			break;
-#if PSMX_USE_AM
 		case PSMX_TRIGGERED_WRITE:
 			_psmx_writeto(trigger->write.ep,
 				      trigger->write.buf,
@@ -159,7 +158,6 @@ void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
 						 trigger->atomic_compwrite.context,
 						 trigger->atomic_compwrite.flags);
 			break;
-#endif
 		default:
 			psmx_debug("%s: %d unsupported op\n", __func__, trigger->op);
 			break;
@@ -239,9 +237,7 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
 	case FI_WAIT_NONE:
 		while (cntr_priv->counter < threshold) {
 			psmx_cq_poll_mq(NULL, cntr_priv->domain);
-#if PSMX_USE_AM
 			psmx_am_progress(cntr_priv->domain);
-#endif
 		}
 		break;
 

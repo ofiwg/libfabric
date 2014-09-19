@@ -32,8 +32,6 @@
 
 #include "psmx.h"
 
-#if PSMX_USE_AM
-
 /* Message protocol:
  *
  * Send REQ:
@@ -423,16 +421,12 @@ static ssize_t psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 static ssize_t psmx_recvmsg2(struct fid_ep *ep, const struct fi_msg *msg,
 			     uint64_t flags)
 {
-	struct iovec *iov;
-
 	/* FIXME: allow iov_count == 0? */
 	/* FIXME: allow iov_count > 1 */
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
-	/* FIXME: check iov format */
-	iov = (struct iovec *)msg->msg_iov;
-	return _psmx_recvfrom2(ep, iov[0].iov_base, iov[0].iov_len,
+	return _psmx_recvfrom2(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
 			       msg->desc, msg->addr, msg->context, flags);
 }
 
@@ -550,16 +544,12 @@ static ssize_t psmx_sendto2(struct fid_ep *ep, const void *buf,
 static ssize_t psmx_sendmsg2(struct fid_ep *ep, const struct fi_msg *msg,
 			     uint64_t flags)
 {
-	struct iovec *iov;
-
 	/* FIXME: allow iov_count == 0? */
 	/* FIXME: allow iov_count > 1 */
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
-	/* FIXME: check iov format */
-	iov = (struct iovec *)msg->msg_iov;
-	return _psmx_sendto2(ep, iov[0].iov_base, iov[0].iov_len,
+	return _psmx_sendto2(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
 			     msg->desc, msg->addr, msg->context, flags);
 }
 
@@ -626,4 +616,3 @@ struct fi_ops_msg psmx_msg2_ops = {
 	.injectto = psmx_injectto2,
 };
 
-#endif /* PSMX_USE_AM */

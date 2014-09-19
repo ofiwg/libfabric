@@ -339,14 +339,12 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		ep_priv->ep.tagged = &psmx_tagged_ops;
 	if (ep_cap & FI_MSG)
 		ep_priv->ep.msg = &psmx_msg_ops;
-#if PSMX_USE_AM
 	if ((ep_cap & FI_MSG) && domain_priv->use_am_msg)
 		ep_priv->ep.msg = &psmx_msg2_ops;
 	if (ep_cap & FI_RMA)
 		ep_priv->ep.rma = &psmx_rma_ops;
 	if (ep_cap & FI_ATOMICS)
 		ep_priv->ep.atomic = &psmx_atomic_ops;
-#endif
 
 	err = psmx_domain_enable_features(domain_priv, info->ep_cap);
 	if (err) {

@@ -32,8 +32,6 @@
 
 #include "psmx.h"
 
-#if PSMX_USE_AM
-
 /* Atomics protocol:
  *
  * Atomics REQ:
@@ -1579,6 +1577,4 @@ struct fi_ops_atomic psmx_atomic_ops = {
 	.readwritevalid = psmx_atomic_readwritevalid,
 	.compwritevalid = psmx_atomic_compwritevalid,
 };
-
-#endif /* PSMX_USE_AM */
 

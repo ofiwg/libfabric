@@ -33,14 +33,7 @@ extern "C" {
 #include <rdma/fi_errno.h>
 #include <psm.h>
 #include <psm_mq.h>
-
-#ifndef PSMX_USE_AM
-#define PSMX_USE_AM		1
-#endif
-
-#if PSMX_USE_AM
 #include "psm_am.h"
-#endif
 
 #define PSM_PFX "libfabric:psm"
 
@@ -55,7 +48,6 @@ extern "C" {
 
 #define PSMX_EP_CAP_EXT	(0)
 
-#if PSMX_USE_AM
 /* FI_MSG and FI_RMA appear in both BASE and OPT because they can be
  * supported w/ or w/o reserved tag bits
  */
@@ -68,14 +60,6 @@ extern "C" {
 			 PSMX_EP_CAP_EXT)
 #define PSMX_EP_CAP_OPT1 (FI_MSG)
 #define PSMX_EP_CAP_OPT2 (FI_RMA)
-#else
-#define PSMX_EP_CAP_BASE (FI_TAGGED | FI_INJECT | FI_TRIGGER | \
-			 FI_BUFFERED_RECV | FI_MULTI_RECV | \
-			 FI_SEND | FI_RECV | FI_CANCEL | \
-			 PSMX_EP_CAP_EXT)
-#define PSMX_EP_CAP_OPT1 (FI_MSG)
-#define PSMX_EP_CAP_OPT2 (0)
-#endif
 
 #define PSMX_EP_CAP	(PSMX_EP_CAP_BASE | PSMX_EP_CAP_OPT1 | PSMX_EP_CAP_OPT2)
 
@@ -102,18 +86,14 @@ enum psmx_context_type {
 	PSMX_READ_CONTEXT,
 	PSMX_INJECT_CONTEXT,
 	PSMX_INJECT_WRITE_CONTEXT,
-#if PSMX_USE_AM
 	PSMX_REMOTE_WRITE_CONTEXT,
 	PSMX_REMOTE_READ_CONTEXT,
-#endif
 };
 
 #define PSMX_CTXT_REQ(fi_context)	((fi_context)->internal[0])
 #define PSMX_CTXT_TYPE(fi_context)	(*(int *)&(fi_context)->internal[1])
 #define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX_CTXT_EP(fi_context)	((fi_context)->internal[3])
-
-#if PSMX_USE_AM
 
 #define PSMX_RMA_BIT		(0x1ULL << 62)
 
@@ -214,8 +194,6 @@ struct psmx_req_queue {
 	struct psmx_am_request	*tail;
 };
 
-#endif /* PSMX_USE_AM */
-
 struct psmx_multi_recv {
 	uint64_t	tag;
 	uint64_t	tagsel;
@@ -240,9 +218,6 @@ struct psmx_fid_domain {
 	int			ns_port;
 	int			tagged_used:1;
 	int			msg_used:1;
-
-#if PSMX_USE_AM
-
 	int			rma_used:1;
 	int			atomics_used:1;
 
@@ -267,8 +242,6 @@ struct psmx_fid_domain {
 	/* recv queue for AM based messages. */
 	struct psmx_req_queue	recv_queue;
 	struct psmx_req_queue	unexp_queue;
-
-#endif /* PSMX_USE_AM */
 
 	/* certain bits in the tag space can be reserved for non tag-matching
 	 * purpose. The tag-matching functions automatically treat these bits
@@ -302,9 +275,7 @@ struct psmx_fid_cq {
 	int			entry_size;
 	struct psmx_event_queue	event_queue;
 	struct psmx_event	*pending_error;
-#if PSMX_USE_AM
 	int			poll_am_before_mq;
-#endif
 };
 
 enum psmx_triggered_op {
@@ -312,13 +283,11 @@ enum psmx_triggered_op {
 	PSMX_TRIGGERED_RECV,
 	PSMX_TRIGGERED_TSEND,
 	PSMX_TRIGGERED_TRECV,
-#if PSMX_USE_AM
 	PSMX_TRIGGERED_WRITE,
 	PSMX_TRIGGERED_READ,
 	PSMX_TRIGGERED_ATOMIC_WRITE,
 	PSMX_TRIGGERED_ATOMIC_READWRITE,
 	PSMX_TRIGGERED_ATOMIC_COMPWRITE,
-#endif
 };
 
 struct psmx_trigger {
@@ -365,7 +334,6 @@ struct psmx_trigger {
 			void		*context;
 			uint64_t	flags;
 		} trecv;
-#if PSMX_USE_AM
 		struct {
 			struct fid_ep	*ep;
 			const void	*buf;
@@ -433,7 +401,6 @@ struct psmx_trigger {
 			void		*context;
 			uint64_t	flags;
 		} atomic_compwrite;
-#endif
 	};
 	struct psmx_trigger *next;
 };
@@ -512,12 +479,10 @@ extern struct fi_ops_mr		psmx_mr_ops;
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
 extern struct fi_ops_msg	psmx_msg_ops;
-#if PSMX_USE_AM
 extern struct fi_ops_msg	psmx_msg2_ops;
 extern struct fi_ops_rma	psmx_rma_ops;
 extern struct fi_ops_atomic	psmx_atomic_ops;
 extern struct psm_am_parameters psmx_am_param;
-#endif
 
 void	psmx_ini(void);
 void	psmx_fini(void);
@@ -551,7 +516,6 @@ struct	psmx_event *psmx_cq_create_event(enum fi_cq_format format,
 					uint64_t flags, size_t len,
 					uint64_t data, uint64_t tag,
 					size_t olen, int err);
-#if PSMX_USE_AM
 int	psmx_am_init(struct psmx_fid_domain *domain);
 int	psmx_am_fini(struct psmx_fid_domain *domain);
 int	psmx_am_enqueue_recv(struct psmx_fid_domain *domain,
@@ -576,7 +540,6 @@ int	psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
 int	psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
-#endif /* PSMX_USE_AM */
 
 int	psmx_cq_poll_mq(struct psmx_fid_cq *cq,
 			struct psmx_fid_domain *domain);
@@ -597,7 +560,6 @@ ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
 ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 			      void *desc, fi_addr_t src_addr, uint64_t tag,
 			      uint64_t ignore, void *context, uint64_t flags);
-#if PSMX_USE_AM
 ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 		      void *desc, fi_addr_t dest_addr,
 		      uint64_t addr, uint64_t key, void *context,
@@ -633,7 +595,6 @@ ssize_t _psmx_atomic_compwriteto(struct fid_ep *ep,
 				 enum fi_datatype datatype,
 				 enum fi_op op, void *context,
 				 uint64_t flags);
-#endif /* PSMX_USE_AM */
 
 #ifdef __cplusplus
 }
