@@ -52,7 +52,7 @@ Converts provider specific error information into a printable string
 .HP
 .BI "int fi_eq_condread(struct fid_eq *" eq ","
 .BI "void *" buf ", size_t " len ", "
-.BI "const void *" cond ", uint64_t " flags ");"
+.BI "const void *" cond ", int " timeout ", uint64_t " flags ");"
 .PP
 .HP
 .BI "const char * fi_eq_strerror(struct fid_eq *" eq ", int " prov_errno ", "
@@ -251,7 +251,7 @@ refers to the active endpoint's fid_ep.  The context field is set to NULL.
 The fi_eq_condread call is the blocking equivalent to fi_eq_read.
 It behaves is similar to
 the non-blocking call, with the exception that the calls will not return
-until either an event has been read from the EQ or an error occurs.
+until either an event has been read from the EQ or an error or timeout occurs.
 .SS "fi_eq_readerr"
 The read error function, fi_eq_readerr, retrieves information regarding
 any asynchronous operation which has completed with an unexpected error.

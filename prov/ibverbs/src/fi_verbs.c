@@ -1731,7 +1731,7 @@ ibv_eq_read(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 
 static ssize_t
 ibv_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
-		uint64_t flags)
+		int timeout, uint64_t flags)
 {
 	struct ibv_eq *_eq;
 	ssize_t ret;
@@ -1743,7 +1743,7 @@ ibv_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
 		if (ret)
 			break;
 
-		ret = fi_poll_fd(_eq->channel->fd);
+		ret = fi_poll_fd(_eq->channel->fd, timeout);
 	} while (!ret);
 	
 	return ret;
@@ -1896,7 +1896,8 @@ static int ibv_cq_reset(struct fid_cq *cq, const void *cond)
 }
 
 static ssize_t
-ibv_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond)
+ibv_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond,
+		int timeout)
 {
 	ssize_t ret = 0, cur, left;
 	ssize_t  threshold;
@@ -1925,7 +1926,7 @@ ibv_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond)
 			reset = 0;
 			continue;
 		}
-		fi_poll_fd(_cq->channel->fd);
+		fi_poll_fd(_cq->channel->fd, timeout);
 	}
 
 	return (left < len) ? len - left : ret;

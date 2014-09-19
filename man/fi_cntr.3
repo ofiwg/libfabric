@@ -49,7 +49,8 @@ Wait for a counter to be greater or equal to a threshold value
 .BI "int fi_cntr_set(struct fid_cntr *" cntr ", uint64_t " value ");"
 .PP
 .HP
-.BI "int fi_cntr_wait(struct fid_cntr *" cntr ", uint64_t " threshold ");"
+.BI "int fi_cntr_wait(struct fid_cntr *" cntr ", uint64_t " threshold ", "
+.BI "int " timeout ");"
 .SH ARGUMENTS
 .IP "domain"
 Fabric domain
@@ -63,6 +64,8 @@ User specified context associated with the counter
 Value to increment or set counter
 .IP "threshold"
 Value to compare counter against
+.IP "timeout"
+Time in milliseconds to wait.  A negative value indicates infinite timeout.
 .SH "DESCRIPTION"
 Counters record the number of requested operations that have completed.
 Counters can provide a light-weight completion mechanism by suppressing
@@ -173,7 +176,8 @@ This adds the user-specified value to the counter.
 This sets the counter to the specified value.
 .SS "fi_cntr_wait"
 This call may be used to wait until the counter reaches the specified
-threshold, or until an error occurs.  Upon successful return from this call,
+threshold, or until an error or timeout occurs.
+Upon successful return from this call,
 the counter will be greater than or equal to the input threshold value.
 .sp
 If an operation associated with the counter encounters an error, it will

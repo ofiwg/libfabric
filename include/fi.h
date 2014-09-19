@@ -162,7 +162,8 @@ void psmx_fini(void);
 #endif
 
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
-int fi_poll_fd(int fd);
+int fi_poll_fd(int fd, int timeout);
+int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout);
 
 struct fi_info *__fi_allocinfo(void);
 void __fi_freeinfo(struct fi_info *info);

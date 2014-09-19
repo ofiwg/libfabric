@@ -90,18 +90,19 @@ static int sock_cntr_set(struct fid_cntr *cntr, uint64_t value)
 	return 0;
 }
 
-static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
+static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 {
 	struct sock_cntr *_cntr;
+	int ret = 0;
 
 	_cntr = container_of(cntr, struct sock_cntr, cntr_fid);
 	pthread_mutex_lock(&_cntr->mut);
 	_cntr->threshold = threshold;
-	while (_cntr->value < _cntr->threshold)
-		pthread_cond_wait(&_cntr->cond, &_cntr->mut);
+	while (_cntr->value < _cntr->threshold && !ret)
+		ret = fi_wait_cond(&_cntr->cond, &_cntr->mut, timeout);
 	_cntr->threshold = ~0;
 	pthread_mutex_unlock(&_cntr->mut);
-	return 0;
+	return ret;
 }
 
 static int sock_cntr_close(struct fid *fid)

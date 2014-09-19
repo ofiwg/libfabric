@@ -34,6 +34,7 @@ extern "C" {
 #include <psm.h>
 #include <psm_mq.h>
 #include "psm_am.h"
+#include "fi.h"
 
 #define PSM_PFX "libfabric:psm"
 

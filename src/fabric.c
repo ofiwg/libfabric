@@ -110,13 +110,26 @@ int fi_version_register(int version, struct fi_ops_prov *ops)
 	return 0;
 }
 
-int fi_poll_fd(int fd)
+int fi_poll_fd(int fd, int timeout)
 {
 	struct pollfd fds;
 
 	fds.fd = fd;
 	fds.events = POLLIN;
-	return poll(&fds, 1, -1) < 0 ? -errno : 0;
+	return poll(&fds, 1, timeout) < 0 ? -errno : 0;
+}
+
+int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
+{
+	struct timespec ts;
+
+	if (timeout < 0)
+		return pthread_cond_wait(cond, mut);
+
+	clock_gettime(CLOCK_REALTIME, &ts);
+	ts.tv_sec += timeout / 1000;
+	ts.tv_nsec += (timeout % 1000) * 1000000;
+	return pthread_cond_timedwait(cond, mut, &ts);
 }
 
 static void __attribute__((constructor)) fi_ini(void)
