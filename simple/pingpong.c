@@ -447,7 +447,8 @@ static int server_connect(void)
 	if (ret)
 		goto err3;
 
-	ret = fi_accept(ep, NULL, 0);
+	ret = fi_accept(ep, entry.connreq, NULL, 0);
+	entry.connreq = NULL;
 	if (ret) {
 		printf("fi_accept %s\n", fi_strerror(-ret));
 		goto err3;
@@ -474,6 +475,8 @@ err3:
 err2:
 	fi_close(&ep->fid);
 err1:
+	if (entry.connreq)
+		fi_reject(pep, entry.connreq, NULL, 0);
 	fi_freeinfo(entry.info);
 	return ret;
 }

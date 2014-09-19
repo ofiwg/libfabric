@@ -224,7 +224,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rc = fi_accept(ctx->ep, NULL, 0);
+	rc = fi_accept(ctx->ep, entry.connreq, NULL, 0);
 	if (rc) {
 		FI_ERR_LOG("fi_accept", rc);
 		goto err;
