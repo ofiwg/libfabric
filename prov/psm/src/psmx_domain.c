@@ -39,23 +39,20 @@ static int psmx_domain_close(fid_t fid)
 
 	domain = container_of(fid, struct psmx_fid_domain, domain.fid);
 
-#if PSMX_USE_AM
 	psmx_am_fini(domain);
-#endif
 
 	if (domain->ns_thread) {
 		pthread_cancel(domain->ns_thread);
 		pthread_join(domain->ns_thread, NULL);
 	}
 
-#if PSMX_USE_AM
+#if 0
 	/* AM messages could arrive after MQ is finalized, causing segfault
 	 * when trying to dereference the MQ pointer. There is no mechanism
 	 * to properly shutdown AM. The workaround is to keep MQ valid.
 	 */
-	if (0)
-#endif
 	psm_mq_finalize(domain->psm_mq);
+#endif
 
 	err = psm_ep_close(domain->psm_ep, PSM_EP_CLOSE_GRACEFUL,
 			   (int64_t) PSMX_TIME_OUT * 1000000000LL);
@@ -163,7 +160,6 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 	if (err)
 		domain_priv->ns_thread = 0;
 
-#if PSMX_USE_AM
 	s = getenv("SFI_PSM_AM_MSG");
 	if (s && (!strcasecmp(s, "yes") || !strcasecmp(s, "on") || !strcmp(s, "1")))
 		domain_priv->use_am_msg = 1;
@@ -171,7 +167,6 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 	s = getenv("SFI_PSM_TAGGED_RMA");
 	if (s && (!strcasecmp(s, "yes") || !strcasecmp(s, "on") || !strcmp(s, "1")))
 		domain_priv->use_tagged_rma = 1;
-#endif
 
 	if (psmx_domain_enable_features(domain_priv, 0) < 0) {
 		if (domain_priv->ns_thread) {
@@ -208,13 +203,11 @@ int psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap)
 	if ((ep_cap & FI_MSG) && domain->msg_used)
 		return -EBUSY;
 
-#if PSMX_USE_AM
 	if ((ep_cap & FI_RMA) && domain->rma_used)
 		return -EBUSY;
 
 	if ((ep_cap & FI_ATOMICS) && domain->atomics_used)
 		return -EBUSY;
-#endif
 
 	return 0;
 }
@@ -224,7 +217,6 @@ int psmx_domain_enable_features(struct psmx_fid_domain *domain, int ep_cap)
 	if (ep_cap & FI_MSG)
 		domain->reserved_tag_bits |= PSMX_MSG_BIT;
 
-#if PSMX_USE_AM
 	if (domain->use_am_msg)
 		domain->reserved_tag_bits &= ~PSMX_MSG_BIT;
 
@@ -245,7 +237,6 @@ int psmx_domain_enable_features(struct psmx_fid_domain *domain, int ep_cap)
 
 	if (ep_cap & FI_ATOMICS)
 		domain->atomics_used = 1;
-#endif
 
 	if (ep_cap & FI_TAGGED)
 		domain->tagged_used = 1;

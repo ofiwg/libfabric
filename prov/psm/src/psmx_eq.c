@@ -318,7 +318,6 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
-#if PSMX_USE_AM
 			case PSMX_REMOTE_WRITE_CONTEXT:
 			case PSMX_REMOTE_READ_CONTEXT:
 				{
@@ -338,7 +337,6 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 					return 1;
 				  continue;
 				}
-#endif
 			}
 
 			if (tmp_cq) {
@@ -412,18 +410,14 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 	assert(cq_priv->domain);
 
-#if PSMX_USE_AM
 	cq_priv->poll_am_before_mq = !cq_priv->poll_am_before_mq;
 	if (cq_priv->poll_am_before_mq)
 		psmx_am_progress(cq_priv->domain);
-#endif
 
 	psmx_cq_poll_mq(cq_priv, cq_priv->domain);
 
-#if PSMX_USE_AM
 	if (!cq_priv->poll_am_before_mq)
 		psmx_am_progress(cq_priv->domain);
-#endif
 
 	if (cq_priv->pending_error)
 		return -FI_EAVAIL;

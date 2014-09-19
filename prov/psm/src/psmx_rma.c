@@ -32,8 +32,6 @@
 
 #include "psmx.h"
 
-#if PSMX_USE_AM
-
 /* RMA protocol:
  *
  * Write REQ:
@@ -893,6 +891,4 @@ struct fi_ops_rma psmx_rma_ops = {
 	.inject = psmx_inject,
 	.injectto = psmx_injectto,
 };
-
-#endif /* PSMX_USE_AM */
 

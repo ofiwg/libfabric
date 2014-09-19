@@ -32,8 +32,6 @@
 
 #include "psmx.h"
 
-#if PSMX_USE_AM
-
 /* Message protocol:
  *
  * Send REQ:
@@ -618,4 +616,3 @@ struct fi_ops_msg psmx_msg2_ops = {
 	.injectto = psmx_injectto2,
 };
 
-#endif /* PSMX_USE_AM */

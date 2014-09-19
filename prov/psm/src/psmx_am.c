@@ -32,8 +32,6 @@
 
 #include "psmx.h"
 
-#if PSMX_USE_AM
-
 struct psm_am_parameters psmx_am_param;
 
 static psm_am_handler_fn_t psmx_am_handlers[3] = {
@@ -234,6 +232,4 @@ int psmx_am_enqueue_rma(struct psmx_fid_domain *domain,
 
 	return 0;
 }
-
-#endif /* PSMX_USE_AM */
 
