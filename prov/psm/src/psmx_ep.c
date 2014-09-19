@@ -136,12 +136,12 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
 			ep->send_cq = cq;
 			if (flags & FI_EVENT)
-				ep->send_eq_event_flag = 1;
+				ep->send_cq_event_flag = 1;
 		}
 		if (flags & FI_RECV) {
 			ep->recv_cq = cq;
 			if (flags & FI_EVENT)
-				ep->recv_eq_event_flag = 1;
+				ep->recv_cq_event_flag = 1;
 		}
 		break;
 
@@ -254,7 +254,7 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 				"\t(2) bind the new EP to the EQ with FI_EVENT flag\n"
 				"\tSet SFI_PSM_NO_WARNING to suppress this message.\n");
 			}
-			new_ep->send_eq_event_flag = new_ep->recv_eq_event_flag = 1;
+			new_ep->send_cq_event_flag = new_ep->recv_cq_event_flag = 1;
 			new_ep->flags &= ~FI_EVENT;
 		}
 		/* REMOVE ME: ] */

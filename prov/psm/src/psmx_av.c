@@ -158,6 +158,9 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	/* prevent connecting to the same ep twice, which is fatal in PSM */
 	for (i=0; i<count; i++) {
 		psm_epconn_t epconn;
+		if (((psm_epid_t *) addr)[i] == 0) { /* "any source" address */
+			fi_addr[i] = 0;
+		}
 		if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
 			context = psm_epaddr_getctxt(epconn.addr);
 			if (context && context->epid  == ((psm_epid_t *) addr)[i])

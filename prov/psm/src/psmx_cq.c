@@ -32,41 +32,41 @@
 
 #include "psmx.h"
 
-void psmx_eq_enqueue_event(struct psmx_event_queue *eq,
-				struct psmx_event *event)
+void psmx_cq_enqueue_event(struct psmx_cq_event_queue *ceq,
+			   struct psmx_cq_event *event)
 {
-	if (eq->tail) {
-		eq->tail->next = event;
-		eq->tail = event;
+	if (ceq->tail) {
+		ceq->tail->next = event;
+		ceq->tail = event;
 	}
 	else {
-		eq->head = eq->tail = event;
+		ceq->head = ceq->tail = event;
 	}
 }
 
-static struct psmx_event *psmx_eq_dequeue_event(struct psmx_event_queue *eq)
+static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_cq_event_queue *ceq)
 {
-	struct psmx_event *event;
+	struct psmx_cq_event *event;
 
-	if (!eq->head)
+	if (!ceq->head)
 		return NULL;
 
-	event = eq->head;
-	eq->head = event->next;
-	if (!eq->head)
-		eq->tail = NULL;
+	event = ceq->head;
+	ceq->head = event->next;
+	if (!ceq->head)
+		ceq->tail = NULL;
 
 	event->next = NULL;
 	return event;
 }
 
-struct psmx_event *psmx_cq_create_event(enum fi_cq_format format,
-					void *op_context, void *buf,
-					uint64_t flags, size_t len,
-					uint64_t data, uint64_t tag,
-					size_t olen, int err)
+struct psmx_cq_event *psmx_cq_create_event(enum fi_cq_format format,
+					   void *op_context, void *buf,
+					   uint64_t flags, size_t len,
+					   uint64_t data, uint64_t tag,
+					   size_t olen, int err)
 {
-	struct psmx_event *event;
+	struct psmx_cq_event *event;
 
 	event = calloc(1, sizeof(*event));
 	if (!event) {
@@ -75,41 +75,41 @@ struct psmx_event *psmx_cq_create_event(enum fi_cq_format format,
 	}
 
 	if ((event->error = !!err)) {
-		event->eqe.err.op_context = op_context;
-		event->eqe.err.err = -err;
-		event->eqe.err.data = data;
-		event->eqe.err.tag = tag;
-		event->eqe.err.olen = olen;
-		event->eqe.err.prov_errno = 0;
+		event->cqe.err.op_context = op_context;
+		event->cqe.err.err = -err;
+		event->cqe.err.data = data;
+		event->cqe.err.tag = tag;
+		event->cqe.err.olen = olen;
+		event->cqe.err.prov_errno = 0;
 		goto out;
 	}
 
 	switch (format) {
 	case FI_CQ_FORMAT_CONTEXT:
-		event->eqe.context.op_context = op_context;
+		event->cqe.context.op_context = op_context;
 		break;
 
 	case FI_CQ_FORMAT_MSG:
-		event->eqe.msg.op_context = op_context;
-		event->eqe.msg.flags = flags;
-		event->eqe.msg.len = len;
+		event->cqe.msg.op_context = op_context;
+		event->cqe.msg.flags = flags;
+		event->cqe.msg.len = len;
 		break;
 
 	case FI_CQ_FORMAT_DATA:
-		event->eqe.data.op_context = op_context;
-		event->eqe.data.buf = buf;
-		event->eqe.data.flags = flags;
-		event->eqe.data.len = len;
-		event->eqe.data.data = data;
+		event->cqe.data.op_context = op_context;
+		event->cqe.data.buf = buf;
+		event->cqe.data.flags = flags;
+		event->cqe.data.len = len;
+		event->cqe.data.data = data;
 		break;
 
 	case FI_CQ_FORMAT_TAGGED:
-		event->eqe.tagged.op_context = op_context;
-		event->eqe.tagged.buf = buf;
-		event->eqe.tagged.flags = flags;
-		event->eqe.tagged.len = len;
-		event->eqe.tagged.data = data;
-		event->eqe.tagged.tag = tag;
+		event->cqe.tagged.op_context = op_context;
+		event->cqe.tagged.buf = buf;
+		event->cqe.tagged.flags = flags;
+		event->cqe.tagged.len = len;
+		event->cqe.tagged.data = data;
+		event->cqe.tagged.tag = tag;
 		break;
 
 	default:
@@ -121,11 +121,11 @@ out:
 	return event;
 }
 
-static struct psmx_event *psmx_cq_create_event_from_status(
+static struct psmx_cq_event *psmx_cq_create_event_from_status(
 				enum fi_cq_format format,
 				psm_mq_status_t *psm_status)
 {
-	struct psmx_event *event;
+	struct psmx_cq_event *event;
 	struct psmx_multi_recv *req;
 	struct fi_context *fi_context = psm_status->context;
 	void *op_context, *buf;
@@ -160,35 +160,35 @@ static struct psmx_event *psmx_cq_create_event_from_status(
 	}
 
 	if ((event->error = !!psm_status->error_code)) {
-		event->eqe.err.op_context = op_context;
-		event->eqe.err.err = -psmx_errno(psm_status->error_code);
-		event->eqe.err.prov_errno = psm_status->error_code;
-		event->eqe.err.tag = psm_status->msg_tag;
-		event->eqe.err.olen = psm_status->msg_length - psm_status->nbytes;
+		event->cqe.err.op_context = op_context;
+		event->cqe.err.err = -psmx_errno(psm_status->error_code);
+		event->cqe.err.prov_errno = psm_status->error_code;
+		event->cqe.err.tag = psm_status->msg_tag;
+		event->cqe.err.olen = psm_status->msg_length - psm_status->nbytes;
 		goto out;
 	}
 
 	switch (format) {
 	case FI_CQ_FORMAT_CONTEXT:
-		event->eqe.context.op_context = op_context;
+		event->cqe.context.op_context = op_context;
 		break;
 
 	case FI_CQ_FORMAT_MSG:
-		event->eqe.msg.op_context = op_context;
-		event->eqe.msg.len = psm_status->nbytes;
+		event->cqe.msg.op_context = op_context;
+		event->cqe.msg.len = psm_status->nbytes;
 		break;
 
 	case FI_CQ_FORMAT_DATA:
-		event->eqe.data.op_context = op_context;
-		event->eqe.data.buf = buf;
-		event->eqe.data.len = psm_status->nbytes;
+		event->cqe.data.op_context = op_context;
+		event->cqe.data.buf = buf;
+		event->cqe.data.len = psm_status->nbytes;
 		break;
 
 	case FI_CQ_FORMAT_TAGGED:
-		event->eqe.tagged.op_context = op_context;
-		event->eqe.tagged.buf = buf;
-		event->eqe.tagged.len = psm_status->nbytes;
-		event->eqe.tagged.tag = psm_status->msg_tag;
+		event->cqe.tagged.op_context = op_context;
+		event->cqe.tagged.buf = buf;
+		event->cqe.tagged.len = psm_status->nbytes;
+		event->cqe.tagged.tag = psm_status->msg_tag;
 		break;
 
 	default:
@@ -204,8 +204,8 @@ out:
 }
 
 static int psmx_cq_get_event_src_addr(struct psmx_fid_cq *cq,
-					struct psmx_event *event,
-					fi_addr_t *src_addr)
+				      struct psmx_cq_event *event,
+				      fi_addr_t *src_addr)
 {
 	int err;
 
@@ -234,7 +234,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 	struct psmx_fid_ep *tmp_ep;
 	struct psmx_fid_cq *tmp_cq;
 	struct psmx_fid_cntr *tmp_cntr;
-	struct psmx_event *event;
+	struct psmx_cq_event *event;
 	int multi_recv;
 	int err;
 
@@ -329,7 +329,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 							mr->cq->format, &psm_status);
 					if (!event)
 						return -ENOMEM;
-					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
 				  }
 				  if (mr->cntr)
 					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
@@ -344,7 +344,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				if (!event)
 					return -ENOMEM;
 
-				psmx_eq_enqueue_event(&tmp_cq->event_queue, event);
+				psmx_cq_enqueue_event(&tmp_cq->event_queue, event);
 			}
 
 			if (tmp_cntr)
@@ -382,7 +382,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 						if (!event)
 							return -ENOMEM;
 
-						psmx_eq_enqueue_event(&tmp_cq->event_queue, event);
+						psmx_cq_enqueue_event(&tmp_cq->event_queue, event);
 					}
 
 					free(req);
@@ -405,7 +405,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 				fi_addr_t *src_addr)
 {
 	struct psmx_fid_cq *cq_priv;
-	struct psmx_event *event;
+	struct psmx_cq_event *event;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 	assert(cq_priv->domain);
@@ -428,10 +428,10 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 	if (!buf)
 		return -FI_EINVAL;
 
-	event = psmx_eq_dequeue_event(&cq_priv->event_queue);
+	event = psmx_cq_dequeue_event(&cq_priv->event_queue);
 	if (event) {
 		if (!event->error) {
-			memcpy(buf, (void *)&event->eqe, cq_priv->entry_size);
+			memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
 			if (psmx_cq_get_event_src_addr(cq_priv, event, src_addr))
 				*src_addr = FI_ADDR_UNSPEC;
 			free(event);
@@ -452,7 +452,7 @@ static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t len)
 }
 
 static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
-				size_t len, uint64_t flags)
+			       size_t len, uint64_t flags)
 {
 	struct psmx_fid_cq *cq_priv;
 
@@ -462,7 +462,7 @@ static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 		return -FI_ETOOSMALL;
 
 	if (cq_priv->pending_error) {
-		memcpy(buf, &cq_priv->pending_error->eqe, sizeof *buf);
+		memcpy(buf, &cq_priv->pending_error->cqe, sizeof *buf);
 		free(cq_priv->pending_error);
 		cq_priv->pending_error = NULL;
 		return sizeof *buf;
@@ -538,7 +538,7 @@ static struct fi_ops_cq psmx_cq_ops = {
 };
 
 int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		struct fid_cq **cq, void *context)
+		 struct fid_cq **cq, void *context)
 {
 	struct psmx_fid_domain *domain_priv;
 	struct psmx_fid_cq *cq_priv;

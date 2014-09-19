@@ -250,32 +250,32 @@ struct psmx_fid_domain {
 	uint64_t		reserved_tag_bits; 
 };
 
-struct psmx_event {
+struct psmx_cq_event {
 	union {
 		struct fi_cq_entry		context;
 		struct fi_cq_msg_entry		msg;
 		struct fi_cq_data_entry		data;
 		struct fi_cq_tagged_entry	tagged;
 		struct fi_cq_err_entry		err;
-	} eqe;
+	} cqe;
 	int error;
 	uint64_t source;
-	struct psmx_event *next;
+	struct psmx_cq_event *next;
 };
 
-struct psmx_event_queue {
-	struct psmx_event	*head;
-	struct psmx_event	*tail;
+struct psmx_cq_event_queue {
+	struct psmx_cq_event	*head;
+	struct psmx_cq_event	*tail;
 };
 
 struct psmx_fid_cq {
-	struct fid_cq		cq;
-	struct psmx_fid_domain	*domain;
-	int 			format;
-	int			entry_size;
-	struct psmx_event_queue	event_queue;
-	struct psmx_event	*pending_error;
-	int			poll_am_before_mq;
+	struct fid_cq			cq;
+	struct psmx_fid_domain		*domain;
+	int 				format;
+	int				entry_size;
+	struct psmx_cq_event_queue	event_queue;
+	struct psmx_cq_event		*pending_error;
+	int				poll_am_before_mq;
 };
 
 enum psmx_triggered_op {
@@ -438,8 +438,8 @@ struct psmx_fid_ep {
 	struct psmx_fid_cntr	*recv_cntr;
 	struct psmx_fid_cntr	*write_cntr;
 	struct psmx_fid_cntr	*read_cntr;
-	int			send_eq_event_flag:1;
-	int			recv_eq_event_flag:1;
+	int			send_cq_event_flag:1;
+	int			recv_cq_event_flag:1;
 	int			send_cntr_event_flag:1;
 	int			recv_cntr_event_flag:1;
 	int			write_cntr_event_flag:1;
@@ -510,8 +510,9 @@ int	psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 void	psmx_query_mpi(void);
 void	psmx_debug(char *fmt, ...);
 
-void	psmx_eq_enqueue_event(struct psmx_event_queue *eq, struct psmx_event *event);
-struct	psmx_event *psmx_cq_create_event(enum fi_cq_format format,
+void	psmx_cq_enqueue_event(struct psmx_cq_event_queue *eq,
+			      struct psmx_cq_event *event);
+struct	psmx_cq_event *psmx_cq_create_event(enum fi_cq_format format,
 					void *op_context, void *buf,
 					uint64_t flags, size_t len,
 					uint64_t data, uint64_t tag,

@@ -73,7 +73,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	int op_error = 0;
 	int cmd, eom;
 	struct psmx_am_request *req;
-	struct psmx_event *event;
+	struct psmx_cq_event *event;
 	int chunk_size;
 	uint64_t offset;
 	struct psmx_fid_mr *mr;
@@ -108,7 +108,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0);
 
 				if (event)
-					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
 				else
 					err = -ENOMEM;
 			}
@@ -199,7 +199,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0);
 
 				if (event)
-					psmx_eq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
 				else
 					err = -ENOMEM;
 			}
@@ -265,7 +265,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0, /* olen */
 						req->error);
 				if (event)
-					psmx_eq_enqueue_event(&req->ep->send_cq->event_queue,
+					psmx_cq_enqueue_event(&req->ep->send_cq->event_queue,
 							      event);
 				else
 					err = -ENOMEM;
@@ -307,7 +307,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						req->read.len - req->read.len_read,
 						req->error);
 				if (event)
-					psmx_eq_enqueue_event(&req->ep->send_cq->event_queue,
+					psmx_cq_enqueue_event(&req->ep->send_cq->event_queue,
 							      event);
 				else
 					err = -ENOMEM;
@@ -338,7 +338,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 			     void *context, uint64_t flags)
 {
 	struct psmx_fid_mr *mr;
-	struct psmx_event *event;
+	struct psmx_cq_event *event;
 	int no_event;
 	int err = 0;
 	int op_error = 0;
@@ -380,7 +380,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 					0 /* err */);
 
 			if (event)
-				psmx_eq_enqueue_event(&mr->cq->event_queue, event);
+				psmx_cq_enqueue_event(&mr->cq->event_queue, event);
 			else
 				err = -ENOMEM;
 		}
@@ -392,7 +392,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 	}
 
 	no_event = (flags & FI_INJECT) ||
-		   (ep->send_eq_event_flag && !(flags & FI_EVENT));
+		   (ep->send_cq_event_flag && !(flags & FI_EVENT));
 
 	if (ep->send_cq && !no_event) {
 		event = psmx_cq_create_event(
@@ -406,7 +406,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 				0, /* olen */
 				op_error);
 		if (event)
-			psmx_eq_enqueue_event(&ep->send_cq->event_queue, event);
+			psmx_cq_enqueue_event(&ep->send_cq->event_queue, event);
 		else
 			err = -ENOMEM;
 	}
@@ -537,7 +537,7 @@ ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
 	PSMX_CTXT_TYPE(&req->fi_context) = PSMX_READ_CONTEXT;
 	PSMX_CTXT_USER(&req->fi_context) = context;
 
-	if (ep_priv->send_eq_event_flag && !(flags & FI_EVENT)) {
+	if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT)) {
 		PSMX_CTXT_TYPE(&req->fi_context) = PSMX_NOCOMP_READ_CONTEXT;
 		req->no_event = 1;
 	}
@@ -730,7 +730,7 @@ ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 		if (!req)
 			return -ENOMEM;
 
-		if (ep_priv->send_eq_event_flag && !(flags & FI_EVENT)) {
+		if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT)) {
 			PSMX_CTXT_TYPE(&req->fi_context) = PSMX_NOCOMP_WRITE_CONTEXT;
 			req->no_event = 1;
 		}
