@@ -215,7 +215,7 @@ message, although they may match other messages that have the same tag.
 The fi_trecvmsg and fi_tsendmsg calls allow the user to specify flags
 which can change the default message handling of the endpoint.
 Flags specified with fi_trecvmsg / fi_tsendmsg override most flags
-previously configured with the endpoint, except where noted (see fi_control).
+previously configured with the endpoint, except where noted (see fi_endpoint).
 The following list of flags are usable with fi_trecvmsg and/or fi_tsendmsg.
 .IP "FI_REMOTE_EQ_DATA"
 Applies to fi_tsendmsg, fi_tsenddata, and fi_tsenddatato.
@@ -298,4 +298,4 @@ receives in succession, and both match the same message, then the second
 receive operation cannot be satisfied by this message, if the first one is
 still pending.\*(rq
 .SH "SEE ALSO"
-fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_control(3), fi_eq(3)
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_eq(3)

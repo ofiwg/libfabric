@@ -1428,7 +1428,8 @@ ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
 }
 
 static int
-ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+ibv_msg_ep_accept(struct fid_ep *ep, fi_connreq_t connreq,
+		  const void *param, size_t paramlen)
 {
 	struct ibv_msg_ep *_ep;
 	struct rdma_conn_param conn_param;
@@ -1453,10 +1454,10 @@ ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 }
 
 static int
-ibv_msg_ep_reject(struct fid_pep *pep, struct fi_info *info,
+ibv_msg_ep_reject(struct fid_pep *pep, fi_connreq_t connreq,
 		  const void *param, size_t paramlen)
 {
-	return rdma_reject(info->data, param, (uint8_t) paramlen) ? -errno : 0;
+	return rdma_reject(connreq, param, (uint8_t) paramlen) ? -errno : 0;
 }
 
 static int ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
@@ -1660,6 +1661,7 @@ ibv_eq_cm_process_event(struct ibv_eq *eq, struct rdma_cm_event *event,
 //		return 0;
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		entry->event = FI_CONNREQ;
+		entry->connreq = event->id;
 		entry->info = ibv_eq_cm_getinfo(eq->fab, event);
 		if (!entry->info) {
 			rdma_destroy_id(event->id);
