@@ -49,8 +49,9 @@ extern "C" {
  */
 #define FI_LIB_EXTENSION fi
 
-struct fi_ops_prov {
-	size_t	size;
+struct fi_provider {
+	const char *name;
+	uint32_t version;
 	int	(*getinfo)(int version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info);
 	int	(*freeinfo)(struct fi_info *info);
@@ -58,10 +59,11 @@ struct fi_ops_prov {
 			void *context);
 };
 
-int fi_version_register(int version, struct fi_ops_prov *ops);
-static inline int fi_register(struct fi_ops_prov *ops)
+int fi_version_register(int version, struct fi_provider *provider);
+static inline int fi_register(struct fi_provider *provider)
 {
-	return fi_version_register(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), ops);
+	return fi_version_register(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+				   provider);
 }
 
 

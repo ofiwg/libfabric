@@ -98,8 +98,9 @@ static int sock_getinfo(int version, const char *node, const char *service,
 }
 
 
-static struct fi_ops_prov sock_ops = {
-	.size = sizeof(struct fi_ops_prov),
+static struct fi_provider sock_prov = {
+	.name = "sockets",
+	.version = FI_VERSION(0, 2),
 	.getinfo = sock_getinfo,
 	.freeinfo = NULL, /* use default */
 	.fabric = sock_fabric,
@@ -107,7 +108,7 @@ static struct fi_ops_prov sock_ops = {
 
 void sock_ini(void)
 {
-	(void) fi_register(&sock_ops);
+	(void) fi_register(&sock_prov);
 }
 
 void sock_fini(void)

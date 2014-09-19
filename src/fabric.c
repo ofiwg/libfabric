@@ -62,6 +62,11 @@
 #include "fi.h"
 
 
+struct fi_prov {
+	struct fi_prov		*next;
+	struct fi_provider	*provider;
+};
+
 static struct fi_prov *prov_head, *prov_tail;
 
 
@@ -89,7 +94,7 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 	return len;
 }
 
-int fi_version_register(int version, struct fi_ops_prov *ops)
+int fi_version_register(int version, struct fi_provider *provider)
 {
 	struct fi_prov *prov;
 
@@ -101,7 +106,7 @@ int fi_version_register(int version, struct fi_ops_prov *ops)
 	if (!prov)
 		return -FI_ENOMEM;
 
-	prov->ops = ops;
+	prov->provider = provider;
 	if (prov_tail)
 		prov_tail->next = prov;
 	else
@@ -155,11 +160,11 @@ int fi_getinfo(int version, const char *node, const char *service,
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (!prov->ops->getinfo)
+		if (!prov->provider->getinfo)
 			continue;
 
-		ret = prov->ops->getinfo(version, node, service, flags,
-					 hints, &cur);
+		ret = prov->provider->getinfo(version, node, service, flags,
+					      hints, &cur);
 		if (ret) {
 			if (ret == -FI_ENODATA)
 				continue;
@@ -229,10 +234,10 @@ void fi_freeinfo(struct fi_info *info)
 	while (info) {
 		next = info->next;
 		for (prov = prov_head; prov && info; prov = prov->next) {
-			if (!prov->ops->freeinfo)
+			if (!prov->provider->freeinfo)
 				continue;
 
-			ret = prov->ops->freeinfo(info);
+			ret = prov->provider->freeinfo(info);
 			if (!ret)
 				goto cont;
 		}
@@ -249,10 +254,10 @@ int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	int ret = -FI_ENOSYS;
 
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (!prov->ops->fabric)
+		if (!prov->provider->fabric)
 			continue;
 
-		ret = prov->ops->fabric(name, flags, fabric, context);
+		ret = prov->provider->fabric(name, flags, fabric, context);
 		if (!ret)
 			break;
 	}

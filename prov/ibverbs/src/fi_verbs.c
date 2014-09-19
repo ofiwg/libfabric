@@ -2439,8 +2439,9 @@ int ibv_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	return 0;
 }
 
-static struct fi_ops_prov ibv_ops = {
-	.size = sizeof(struct fi_ops_prov),
+static struct fi_provider ibv_prov = {
+	.name = "ibverbs",
+	.version = FI_VERSION(0, 7),
 	.getinfo = ibv_getinfo,
 	.freeinfo = ibv_freeinfo,
 	.fabric = ibv_fabric,
@@ -2448,7 +2449,7 @@ static struct fi_ops_prov ibv_ops = {
 
 void ibv_ini(void)
 {
-	(void) fi_register(&ibv_ops);
+	(void) fi_register(&ibv_prov);
 }
 
 void ibv_fini(void)

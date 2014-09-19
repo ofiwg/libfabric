@@ -135,11 +135,6 @@ typedef struct { volatile int val; } atomic_t;
 #define atomic_get(v) ((v)->val)
 #define atomic_set(v, s) ((v)->val = s)
 
-struct fi_prov {
-	struct fi_prov		*next;
-	struct fi_ops_prov	*ops;
-};
-
 int  fi_init(void);
 
 void sock_ini(void);

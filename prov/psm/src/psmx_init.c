@@ -258,8 +258,9 @@ static int psmx_fabric(const char *name, uint64_t flags,
 	return 0;
 }
 
-static struct fi_ops_prov psmx_ops = {
-	.size = sizeof(struct fi_ops_prov),
+static struct fi_provider psmx_prov = {
+	.name = "PSM",
+	.version = FI_VERSION(0, 9),
 	.getinfo = psmx_getinfo,
 	.fabric = psmx_fabric,
 };
@@ -294,7 +295,7 @@ void psmx_ini(void)
 		return;
 	}
 
-	(void) fi_register(&psmx_ops);
+	(void) fi_register(&psmx_prov);
 }
 
 void psmx_fini(void)
