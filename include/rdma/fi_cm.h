@@ -48,12 +48,15 @@ struct fi_ops_cm {
 	int	(*connect)(struct fid_ep *ep, const void *addr,
 			const void *param, size_t paramlen);
 	int	(*listen)(struct fid_pep *pep);
-	int	(*accept)(struct fid_ep *ep, const void *param, size_t paramlen);
-	int	(*reject)(struct fid_pep *pep, struct fi_info *info,
+	int	(*accept)(struct fid_ep *ep, fi_connreq_t connreq,
+			const void *param, size_t paramlen);
+	int	(*reject)(struct fid_pep *pep, fi_connreq_t connreq,
 			const void *param, size_t paramlen);
 	int	(*shutdown)(struct fid_ep *ep, uint64_t flags);
-	int	(*join)(struct fid_ep *ep, void *addr, void **fi_addr, uint64_t flags);
-	int	(*leave)(struct fid_ep *ep, void *addr, void *fi_addr, uint64_t flags);
+	int	(*join)(struct fid_ep *ep, void *addr, fi_addr_t *fi_addr,
+			uint64_t flags, void *context);
+	int	(*leave)(struct fid_ep *ep, void *addr, fi_addr_t fi_addr,
+			uint64_t flags);
 };
 
 
@@ -83,16 +86,17 @@ fi_connect(struct fid_ep *ep, const void *addr,
 }
 
 static inline int
-fi_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+fi_accept(struct fid_ep *ep, fi_connreq_t connreq,
+	  const void *param, size_t paramlen)
 {
-	return ep->cm->accept(ep, param, paramlen);
+	return ep->cm->accept(ep, connreq, param, paramlen);
 }
 
 static inline int
-fi_reject(struct fid_pep *pep, struct fi_info *info,
+fi_reject(struct fid_pep *pep, fi_connreq_t connreq,
 	  const void *param, size_t paramlen)
 {
-	return pep->cm->reject(pep, info, param, paramlen);
+	return pep->cm->reject(pep, connreq, param, paramlen);
 }
 
 static inline int fi_shutdown(struct fid_ep *ep, uint64_t flags)
@@ -101,13 +105,14 @@ static inline int fi_shutdown(struct fid_ep *ep, uint64_t flags)
 }
 
 static inline int
-fi_join(struct fid_ep *ep, void *addr, void **fi_addr, uint64_t flags)
+fi_join(struct fid_ep *ep, void *addr, fi_addr_t *fi_addr, uint64_t flags,
+	void *context)
 {
-	return ep->cm->join(ep, addr, fi_addr, flags);
+	return ep->cm->join(ep, addr, fi_addr, flags, context);
 }
 
 static inline int
-fi_leave(struct fid_ep *ep, void *addr, void *fi_addr, uint64_t flags)
+fi_leave(struct fid_ep *ep, void *addr, fi_addr_t fi_addr, uint64_t flags)
 {
 	return ep->cm->leave(ep, addr, fi_addr, flags);
 }

@@ -62,7 +62,8 @@ rdmainclude_HEADERS = \
 	$(top_srcdir)/include/rdma/fi_rma.h \
 	$(top_srcdir)/include/rdma/fi_endpoint.h \
 	$(top_srcdir)/include/rdma/fi_errno.h \
-	$(top_srcdir)/include/rdma/fi_tagged.h
+	$(top_srcdir)/include/rdma/fi_tagged.h \
+	$(top_srcdir)/include/rdma/fi_trigger.h
 
 man_MANS = \
 	man/fabric.7 \
@@ -97,7 +98,6 @@ man_MANS = \
 	man/fi_cntr_wait.3 \
 	man/fi_cq.3 \
 	man/fi_cq_open.3 \
-	man/fi_cq_control.3 \
 	man/fi_cq_read.3 \
 	man/fi_cq_readfrom.3 \
 	man/fi_cq_readerr.3 \
@@ -110,11 +110,9 @@ man_MANS = \
 	man/fi_domain_query.3 \
 	man/fi_domain_bind.3 \
 	man/fi_ep_bind.3 \
-	man/fi_ep_control.3 \
 	man/fi_ep_sync.3 \
 	man/fi_eq.3 \
 	man/fi_eq_open.3 \
-	man/fi_eq_control.3 \
 	man/fi_eq_read.3 \
 	man/fi_eq_readerr.3 \
 	man/fi_eq_write.3 \
@@ -183,7 +181,6 @@ man_MANS = \
 	man/fi_tsendmsg.3 \
 	man/fi_version.3 \
 	man/fi_wait.3 \
-	man/fi_wait_control.3 \
 	man/fi_wait_open.3
 
 EXTRA_DIST = libfabric.map libfabric.spec.in $(man_MANS) \

@@ -28,7 +28,7 @@ fi_alias
 Create an alias to the endpoint
 .RE
 .PP
-fi_ep_control
+fi_control
 .RS
 Control endpoint operation.
 .RE
@@ -66,7 +66,7 @@ Get or set endpoint options.
 .BI "int fi_alias(struct fid_ep *" ep ", fid_t * " alias_ep ", uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_ep_control(struct fid *" ep ", int " command ", void *" arg ");"
+.BI "int fi_control(struct fid *" ep ", int " command ", void *" arg ");"
 .PP
 .HP
 .BI "int fi_getopt(struct fid_ *" ep ", int " level ", int " optname ","
@@ -274,7 +274,7 @@ than those assigned to the actual endpoint.  The alias mechanism allows a
 single endpoint to have multiple optimized software interfaces.  All
 allocated aliases must be closed for the underlying endpoint to be
 released.
-.SS "fi_ep_control"
+.SS "fi_control"
 The control operation is used to adjust the default behavior of an
 endpoint.  It allows the underlying provider to redirect function
 calls to implementations optimized to meet the desired application

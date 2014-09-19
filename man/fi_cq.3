@@ -35,7 +35,7 @@ Converts provider specific error information into a printable string
 .HP
 .BI "int fi_close(struct fid *" cq ");"
 .HP
-.BI "int fi_cq_control(struct fid_cq *" cq ", int " command ", void *" arg ");"
+.BI "int fi_control(struct fid *" cq ", int " command ", void *" arg ");"
 .PP
 .HP
 .BI "int fi_cq_read(struct fid_cq *" cq ","
@@ -262,16 +262,16 @@ The fi_close call releases all resources associated with a completion
 queue.  The CQ must not be bound to any other resources prior to
 being closed.  Any completions which remain on the CQ when it is closed are
 lost.
-.SS "fi_cq_control"
-The fi_cq_control call is used to access provider or implementation specific
+.SS "fi_control"
+The fi_control call is used to access provider or implementation specific
 details of the completion queue.  Access to the CQ should be serialized
-across all calls when fi_cq_control is invoked, as it may redirect the
+across all calls when fi_control is invoked, as it may redirect the
 implementation of CQ operations.  The following control commands are usable
 with an CQ.
 .IP "FI_GETWAIT (void **)"
 This command allows the user to retrieve the low-level wait object
 associated with the CQ.  The format of the wait-object is specified during
-CQ creation, through the CQ attributes.  The fi_cq_control arg parameter
+CQ creation, through the CQ attributes.  The fi_control arg parameter
 should be an address where a pointer to the returned wait object
 will be written.
 .SS "fi_cq_read / fi_cq_readfrom"

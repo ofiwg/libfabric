@@ -35,7 +35,7 @@ Converts provider specific error information into a printable string
 .HP
 .BI "int fi_close(struct fid *" eq ");"
 .HP
-.BI "int fi_eq_control(struct fid_eq *" eq ", int " command ", void *" arg ");"
+.BI "int fi_control(struct fid *" eq ", int " command ", void *" arg ");"
 .PP
 .HP
 .BI "int fi_eq_read(struct fid_eq *" eq ","
@@ -163,16 +163,16 @@ The fi_close call releases all resources associated with an event
 queue.  The EQ must not be bound to any other resources prior to
 being closed.  Any events which remain on the EQ when it is closed are
 lost.
-.SS "fi_eq_control"
-The fi_eq_control call is used to access provider or implementation specific
+.SS "fi_control"
+The fi_control call is used to access provider or implementation specific
 details of the event queue.  Access to the EQ should be serialized
-across all calls when fi_eq_control is invoked, as it may redirect the
+across all calls when fi_control is invoked, as it may redirect the
 implementation of EQ operations.  The following control commands are usable
 with an EQ.
 .IP "FI_GETWAIT (void **)"
 This command allows the user to retrieve the low-level wait object
 associated with the EQ.  The format of the wait-object is specified during
-EQ creation, through the EQ attributes.  The fi_eq_control arg parameter
+EQ creation, through the EQ attributes.  The fi_control arg parameter
 should be an address where a pointer to the returned wait object
 will be written.
 .SS "fi_eq_read"
@@ -219,22 +219,29 @@ Connection requests are reported using struct fi_eq_cm_entry:
 struct fi_eq_cm_entry {
 	enum fi_eq_event event;      /* event type */
 	fid_t            fid;        /* fid associated with request */
-	fi_connreq_t     context;    /* connection context */
+	fi_connreq_t     connreq;    /* connection context */
 	struct fi_info  *info;       /* endpoint information */
 	uint8_t         data[0];     /* app connection data */
 };
 
 .fi
 Connection request events are of type FI_CONNREQ.  The fid is the passive
-endpoint.  The context field is a connection request specific value that
-allows the provider to associate the accept or reject call with a specific
-request.  Information regarding the requested endpoint's capabilities and
-attributes are available from the info field.
+endpoint.  The connreq field is used to identify the connection request
+associated with a specific event.  The value of this field must be
+passed into either fi_accept or fi_reject.
+Information regarding the requested endpoint's capabilities and
+attributes are available from the info field.  The application is
+responsible for freeing this structure by calling fi_freeinfo when it
+is no longer needed.
+.sp
 Any application data exchanged as part of the connection
 request is placed beyond the fi_eq_cm_entry structure.  The amount of data
 available is application dependent and limited to the buffer space provided
 by the application when fi_eq_read is called.  The amount of returned data
 may be calculated using the return value to fi_eq_read.
+.sp
+The connreq field is used to identify a specific connection request.  The
+value of this field must be passed into either fi_accept or fi_reject.
 .IP "Connection Shutdown Notification"
 Notification that a remote peer has disconnected from an active endpoint is
 done through the FI_SHUTDOWN event.  Shutdown notification uses struct
