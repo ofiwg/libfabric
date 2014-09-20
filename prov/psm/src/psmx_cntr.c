@@ -227,9 +227,10 @@ static int psmx_cntr_set(struct fid_cntr *cntr, uint64_t value)
 	return 0;
 }
 
-static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
+static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 {
 	struct psmx_fid_cntr *cntr_priv;
+	int ret = 0;
 
 	cntr_priv = container_of(cntr, struct psmx_fid_cntr, cntr);
 
@@ -245,6 +246,7 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
 		pthread_mutex_lock(&cntr_priv->mutex);
 		while (cntr_priv->counter < threshold)
 			pthread_cond_wait(&cntr_priv->cond, &cntr_priv->mutex);
+			ret = fi_wait_cond(&cntr_priv->cond, &cntr_priv->mutex, timeout);
 		pthread_mutex_unlock(&cntr_priv->mutex);
 		break;
 

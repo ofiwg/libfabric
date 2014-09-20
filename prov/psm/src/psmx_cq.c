@@ -477,14 +477,16 @@ static ssize_t psmx_cq_write(struct fid_cq *cq, const void *buf, size_t len)
 }
 
 static ssize_t psmx_cq_condreadfrom(struct fid_cq *cq, void *buf, size_t len,
-				    fi_addr_t *src_addr, const void *cond)
+				    fi_addr_t *src_addr, const void *cond,
+				    int timeout)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t psmx_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond)
+static ssize_t psmx_cq_condread(struct fid_cq *cq, void *buf, size_t len,
+				const void *cond, int timeout)
 {
-	return psmx_cq_condreadfrom(cq, buf, len, NULL, cond);
+	return psmx_cq_condreadfrom(cq, buf, len, NULL, cond, timeout);
 }
 
 static const char *psmx_cq_strerror(struct fid_cq *cq, int prov_errno, const void *prov_data,

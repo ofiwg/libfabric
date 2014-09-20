@@ -56,12 +56,12 @@ static struct fi_ops_fabric sock_fab_ops = {
 	.domain = sock_domain,
 };
 
-static int sock_fabric(const char *name, uint64_t flags,
+static int sock_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric, void *context)
 {
 	struct sock_fabric *fab;
 
-	if (!name || strcmp(name, fab_name))
+	if (strcmp(attr->name, fab_name))
 		return -FI_ENODATA;
 
 	fab = calloc(1, sizeof(*fab));
@@ -72,12 +72,11 @@ static int sock_fabric(const char *name, uint64_t flags,
 	fab->fab_fid.fid.context = context;
 	fab->fab_fid.fid.ops = &sock_fab_fi_ops;
 	fab->fab_fid.ops = &sock_fab_ops;
-	fab->flags = flags;
 	*fabric = &fab->fab_fid;
 	return 0;
 }
 
-static int sock_getinfo(int version, const char *node, const char *service,
+static int sock_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	if (hints) {
@@ -98,18 +97,19 @@ static int sock_getinfo(int version, const char *node, const char *service,
 }
 
 
-static struct fi_ops_prov sock_ops = {
-	.size = sizeof(struct fi_ops_prov),
+static struct fi_provider sock_prov = {
+	.name = "sockets",
+	.version = FI_VERSION(0, 2),
 	.getinfo = sock_getinfo,
 	.freeinfo = NULL, /* use default */
 	.fabric = sock_fabric,
 };
 
-void sock_ini(void)
+static void __attribute__((constructor)) sock_ini(void)
 {
-	(void) fi_register(&sock_ops);
+	(void) fi_register(&sock_prov);
 }
 
-void sock_fini(void)
+static void __attribute__((destructor)) sock_fini(void)
 {
 }

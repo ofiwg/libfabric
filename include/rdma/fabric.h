@@ -170,6 +170,12 @@ struct fi_domain_attr {
 	size_t			eq_data_size;
 };
 
+struct fi_fabric_attr {
+	char			*name;
+	char			*prov_name;
+	uint32_t		prov_version;
+};
+
 struct fi_info {
 	struct fi_info		*next;
 	uint64_t		type;
@@ -182,7 +188,7 @@ struct fi_info {
 	void			*dest_addr;
 	struct fi_ep_attr	*ep_attr;
 	struct fi_domain_attr	*domain_attr;
-	char			*fabric_name;
+	struct fi_fabric_attr	*fabric_attr;
 	size_t			datalen;
 	void			*data;
 };
@@ -236,7 +242,7 @@ struct fid {
 
 #define FI_NUMERICHOST		(1ULL << 1)
 
-int fi_getinfo(int version, const char *node, const char *service,
+int fi_getinfo(uint32_t version, const char *node, const char *service,
 	       uint64_t flags, struct fi_info *hints, struct fi_info **info);
 void fi_freeinfo(struct fi_info *info);
 
@@ -255,8 +261,7 @@ struct fid_fabric {
 	struct fi_ops_fabric	*ops;
 };
 
-int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
-	      void *context);
+int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context);
 
 #define FI_CHECK_OP(ops, opstype, op) \
 	((ops->size > offsetof(opstype, op)) && ops->op)

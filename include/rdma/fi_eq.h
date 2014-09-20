@@ -155,7 +155,7 @@ struct fi_ops_eq {
 	ssize_t	(*write)(struct fid_eq *eq, const void *buf, size_t len,
 			uint64_t flags);
 	ssize_t	(*condread)(struct fid_eq *eq, void *buf, size_t len,
-			const void *cond, uint64_t flags);
+			const void *cond, int timeout, uint64_t flags);
 	const char * (*strerror)(struct fid_eq *eq, int prov_errno,
 			const void *err_data, void *buf, size_t len);
 };
@@ -245,9 +245,9 @@ struct fi_ops_cq {
 			size_t len, uint64_t flags);
 	ssize_t	(*write)(struct fid_cq *cq, const void *buf, size_t len);
 	ssize_t	(*condread)(struct fid_cq *cq, void *buf, size_t len,
-			const void *cond);
+			const void *cond, int timeout);
 	ssize_t	(*condreadfrom)(struct fid_cq *cq, void *buf, size_t len,
-			fi_addr_t *src_addr, const void *cond);
+			fi_addr_t *src_addr, const void *cond, int timeout);
 	const char * (*strerror)(struct fid_cq *cq, int prov_errno,
 			const void *err_data, void *buf, size_t len);
 };
@@ -280,7 +280,7 @@ struct fi_ops_cntr {
 	uint64_t (*readerr)(struct fid_cntr *cntr);
 	int	(*add)(struct fid_cntr *cntr, uint64_t value);
 	int	(*set)(struct fid_cntr *cntr, uint64_t value);
-	int	(*wait)(struct fid_cntr *cntr, uint64_t threshold);
+	int	(*wait)(struct fid_cntr *cntr, uint64_t threshold, int timeout);
 };
 
 struct fid_cntr {
@@ -332,9 +332,9 @@ fi_eq_write(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 
 static inline ssize_t
 fi_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
-		uint64_t flags)
+	       int timeout, uint64_t flags)
 {
-	return eq->ops->condread(eq, buf, len, cond, flags);
+	return eq->ops->condread(eq, buf, len, cond, timeout, flags);
 }
 
 static inline const char *
@@ -369,16 +369,16 @@ static inline ssize_t fi_cq_write(struct fid_cq *cq, void *buf, size_t len)
 }
 
 static inline ssize_t
-fi_cq_condread(struct fid_cq *cq, void *buf, size_t len, void *cond)
+fi_cq_condread(struct fid_cq *cq, void *buf, size_t len, void *cond, int timeout)
 {
-	return cq->ops->condread(cq, buf, len, cond);
+	return cq->ops->condread(cq, buf, len, cond, timeout);
 }
 
 static inline ssize_t
 fi_cq_condreadfrom(struct fid_cq *cq, void *buf, size_t len,
-		   fi_addr_t *src_addr, const void *cond)
+		   fi_addr_t *src_addr, const void *cond, int timeout)
 {
-	return cq->ops->condreadfrom(cq, buf, len, src_addr, cond);
+	return cq->ops->condreadfrom(cq, buf, len, src_addr, cond, timeout);
 }
 
 static inline const char *
@@ -409,9 +409,10 @@ static inline int fi_cntr_set(struct fid_cntr *cntr, uint64_t value)
 	return cntr->ops->set(cntr, value);
 }
 
-static inline int fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold)
+static inline int
+fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 {
-	return cntr->ops->wait(cntr, threshold);
+	return cntr->ops->wait(cntr, threshold, timeout);
 }
 
 

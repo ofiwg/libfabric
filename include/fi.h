@@ -135,34 +135,11 @@ typedef struct { volatile int val; } atomic_t;
 #define atomic_get(v) ((v)->val)
 #define atomic_set(v, s) ((v)->val = s)
 
-struct fi_prov {
-	struct fi_prov		*next;
-	struct fi_ops_prov	*ops;
-};
-
 int  fi_init(void);
 
-void sock_ini(void);
-void sock_fini(void);
-
-#ifdef HAVE_VERBS
-void ibv_ini(void);
-void ibv_fini(void);
-#else
-#define ibv_ini()
-#define ibv_fini()
-#endif
-
-#ifdef HAVE_PSM
-void psmx_ini(void);
-void psmx_fini(void);
-#else
-#define psmx_ini()
-#define psmx_fini()
-#endif
-
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
-int fi_poll_fd(int fd);
+int fi_poll_fd(int fd, int timeout);
+int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout);
 
 struct fi_info *__fi_allocinfo(void);
 void __fi_freeinfo(struct fi_info *info);

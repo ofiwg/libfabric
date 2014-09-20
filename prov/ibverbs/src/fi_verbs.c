@@ -60,8 +60,6 @@
 
 struct ibv_fabric {
 	struct fid_fabric	fabric_fid;
-	uint64_t		flags;
-	char			name[FI_NAME_MAX];
 };
 
 struct ibv_eq {
@@ -160,7 +158,8 @@ static int ibv_check_hints(struct fi_info *hints)
 	if ( !(hints->ep_cap & (FI_MSG | FI_RMA)) )
 		return -FI_ENODATA;
 
-	if (hints->fabric_name && strcmp(hints->fabric_name, "RDMA"))
+	if (hints->fabric_attr && hints->fabric_attr->name &&
+	    strcmp(hints->fabric_attr->name, "RDMA"))
 		return -FI_ENODATA;
 
 	return 0;
@@ -240,7 +239,7 @@ static int ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinf
  	return 0;
  }
 
-static int ibv_getinfo(int version, const char *node, const char *service,
+static int ibv_getinfo(uint32_t version, const char *node, const char *service,
 		       uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct rdma_addrinfo rai_hints, *rai;
@@ -299,7 +298,7 @@ static int ibv_getinfo(int version, const char *node, const char *service,
 	}
 
 	// TODO: Get a real name here
-	if (!(fi->fabric_name = strdup("RDMA"))) {
+	if (!(fi->fabric_attr->name = strdup("RDMA"))) {
 		ret = -FI_ENOMEM;
 		goto err3;
 	}
@@ -320,9 +319,6 @@ err1:
 
 static int ibv_freeinfo(struct fi_info *info)
 {
-	if (info->fabric_name && strcmp(info->fabric_name, "RDMA"))
-		return -FI_ENODATA;
-
 	if (info->data) {
 		rdma_destroy_ep(info->data);
 		info->data = NULL;
@@ -1557,7 +1553,7 @@ ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	struct ibv_msg_ep *_ep;
 
 	_domain = container_of(domain, struct ibv_domain, domain_fid);
-	if (strcmp(info->fabric_name, "RDMA") ||
+	if (strcmp(info->fabric_attr->name, "RDMA") ||
 	    strcmp(_domain->verbs->device->name, info->domain_attr->name))
 		return -FI_EINVAL;
 
@@ -1633,7 +1629,7 @@ ibv_eq_cm_getinfo(struct ibv_fabric *fab, struct rdma_cm_event *event)
 		goto err;
 	memcpy(fi->dest_addr, rdma_get_peer_addr(event->id), fi->dest_addrlen);
 
-	if (!(fi->fabric_name = strdup(fab->name)))
+	if (!(fi->fabric_attr->name = strdup("RDMA")))
 		goto err;
 	if (!(fi->domain_attr->name = strdup(event->id->verbs->device->name)))
 		goto err;
@@ -1731,7 +1727,7 @@ ibv_eq_read(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 
 static ssize_t
 ibv_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
-		uint64_t flags)
+		int timeout, uint64_t flags)
 {
 	struct ibv_eq *_eq;
 	ssize_t ret;
@@ -1743,7 +1739,7 @@ ibv_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
 		if (ret)
 			break;
 
-		ret = fi_poll_fd(_eq->channel->fd);
+		ret = fi_poll_fd(_eq->channel->fd, timeout);
 	} while (!ret);
 	
 	return ret;
@@ -1896,7 +1892,8 @@ static int ibv_cq_reset(struct fid_cq *cq, const void *cond)
 }
 
 static ssize_t
-ibv_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond)
+ibv_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond,
+		int timeout)
 {
 	ssize_t ret = 0, cur, left;
 	ssize_t  threshold;
@@ -1925,7 +1922,7 @@ ibv_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond)
 			reset = 0;
 			continue;
 		}
-		fi_poll_fd(_cq->channel->fd);
+		fi_poll_fd(_cq->channel->fd, timeout);
 	}
 
 	return (left < len) ? len - left : ret;
@@ -2374,8 +2371,8 @@ ibv_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 	struct ibv_pep *_pep;
 
 	fab = container_of(fabric, struct ibv_fabric, fabric_fid);
-	if (strcmp(fab->name, info->fabric_name))
-		return -FI_EINVAL;
+	if (strcmp(info->fabric_attr->name, "RDMA"))
+		return -FI_ENODEV;
 
 	if (!info->data || info->datalen != sizeof(_pep->id))
 		return -FI_ENOSYS;
@@ -2416,12 +2413,11 @@ static struct fi_ops_fabric ibv_ops_fabric = {
 	.eq_open = ibv_eq_open,
 };
 
-int ibv_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
-	       void *context)
+int ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)
 {
 	struct ibv_fabric *fab;
 
-	if (!name || strcmp(name, "RDMA"))
+	if (strcmp(attr->name, "RDMA"))
 		return -FI_ENODATA;
 
 	fab = calloc(1, sizeof(*fab));
@@ -2432,24 +2428,25 @@ int ibv_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
 	fab->fabric_fid.fid.context = context;
 	fab->fabric_fid.fid.ops = &ibv_fi_ops;
 	fab->fabric_fid.ops = &ibv_ops_fabric;
-	strncpy(fab->name, name, FI_NAME_MAX);
-	fab->flags = flags;
 	*fabric = &fab->fabric_fid;
 	return 0;
 }
 
-static struct fi_ops_prov ibv_ops = {
-	.size = sizeof(struct fi_ops_prov),
+static struct fi_provider ibv_prov = {
+	.name = "ibverbs",
+	.version = FI_VERSION(0, 7),
 	.getinfo = ibv_getinfo,
 	.freeinfo = ibv_freeinfo,
 	.fabric = ibv_fabric,
 };
 
-void ibv_ini(void)
+#if HAVE_VERBS
+static void __attribute__((constructor)) ibv_ini(void)
 {
-	(void) fi_register(&ibv_ops);
+	(void) fi_register(&ibv_prov);
 }
 
-void ibv_fini(void)
+static void __attribute__((destructor)) ibv_fini(void)
 {
 }
+#endif /* HAVE_VERBS */

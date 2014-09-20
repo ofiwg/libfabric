@@ -56,11 +56,11 @@ Converts provider specific error information into a printable string
 .HP
 .BI "int fi_cq_condread(struct fid_cq *" cq ","
 .BI "void *" buf ", size_t " len ", "
-.BI "const void *" cond ");"
+.BI "const void *" cond ", int " timeout ");"
 .HP
 .BI "int fi_cq_condreadfrom(struct fid_cq *" cq ","
 .BI "void *" buf ", size_t " len ","
-.BI "fi_addr_t *" src_addr ", const void *" cond ");"
+.BI "fi_addr_t *" src_addr ", const void *" cond ", int " timeout ");"
 .PP
 .HP
 .BI "const char * fi_cq_strerror(struct fid_cq *" cq ", int " prov_errno ", "
@@ -88,6 +88,8 @@ Source address of a completed receive operation
 Additional flags to apply to the operation
 .IP "cond"
 Condition that must be met before a completion is generated
+.IP "timeout"
+Time in milliseconds to wait.  A negative value indicates infinite timeout.
 .IP "prov_errno"
 Provider specific error value
 .IP "err_data"
@@ -300,7 +302,7 @@ call fi_cq_readerr.
 The fi_cq_condread and fi_cq_condreadfrom calls are the blocking equivalent
 operations to fi_cq_read and fi_cq_readfrom.  Their behavior is similar to
 the non-blocking calls, with the exception that the calls will not return
-until either a completion has been read from the CQ or an error occurs.
+until either a completion has been read from the CQ or an error or timeout occurs.
 .SS "fi_cq_readerr"
 The read error function, fi_cq_readerr, retrieves information regarding
 any asynchronous operation which has completed with an unexpected error.

@@ -62,6 +62,11 @@
 #include "fi.h"
 
 
+struct fi_prov {
+	struct fi_prov		*next;
+	struct fi_provider	*provider;
+};
+
 static struct fi_prov *prov_head, *prov_tail;
 
 
@@ -89,7 +94,7 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 	return len;
 }
 
-int fi_version_register(int version, struct fi_ops_prov *ops)
+int fi_version_register(uint32_t version, struct fi_provider *provider)
 {
 	struct fi_prov *prov;
 
@@ -101,7 +106,7 @@ int fi_version_register(int version, struct fi_ops_prov *ops)
 	if (!prov)
 		return -FI_ENOMEM;
 
-	prov->ops = ops;
+	prov->provider = provider;
 	if (prov_tail)
 		prov_tail->next = prov;
 	else
@@ -110,30 +115,49 @@ int fi_version_register(int version, struct fi_ops_prov *ops)
 	return 0;
 }
 
-int fi_poll_fd(int fd)
+int fi_poll_fd(int fd, int timeout)
 {
 	struct pollfd fds;
 
 	fds.fd = fd;
 	fds.events = POLLIN;
-	return poll(&fds, 1, -1) < 0 ? -errno : 0;
+	return poll(&fds, 1, timeout) < 0 ? -errno : 0;
+}
+
+int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
+{
+	struct timespec ts;
+
+	if (timeout < 0)
+		return pthread_cond_wait(cond, mut);
+
+	clock_gettime(CLOCK_REALTIME, &ts);
+	ts.tv_sec += timeout / 1000;
+	ts.tv_nsec += (timeout % 1000) * 1000000;
+	return pthread_cond_timedwait(cond, mut, &ts);
 }
 
 static void __attribute__((constructor)) fi_ini(void)
 {
-	sock_ini();
-	ibv_ini();
-	psmx_ini();
 }
 
 static void __attribute__((destructor)) fi_fini(void)
 {
-	psmx_fini();
-	ibv_fini();
-	sock_fini();
 }
 
-int fi_getinfo(int version, const char *node, const char *service,
+static struct fi_prov *fi_getprov(const char *prov_name)
+{
+	struct fi_prov *prov;
+
+	for (prov = prov_head; prov; prov = prov->next) {
+		if (!strcmp(prov_name, prov->provider->name))
+			return prov;
+	}
+
+	return NULL;
+}
+
+int fi_getinfo(uint32_t version, const char *node, const char *service,
 	       uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_prov *prov;
@@ -142,11 +166,11 @@ int fi_getinfo(int version, const char *node, const char *service,
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (!prov->ops->getinfo)
+		if (!prov->provider->getinfo)
 			continue;
 
-		ret = prov->ops->getinfo(version, node, service, flags,
-					 hints, &cur);
+		ret = prov->provider->getinfo(version, node, service, flags,
+					      hints, &cur);
 		if (ret) {
 			if (ret == -FI_ENODATA)
 				continue;
@@ -157,8 +181,12 @@ int fi_getinfo(int version, const char *node, const char *service,
 			*info = cur;
 		else
 			tail->next = cur;
-		for (tail = cur; tail->next; tail = tail->next)
-			;
+		for (tail = cur; tail->next; tail = tail->next) {
+			tail->fabric_attr->prov_name = strdup(prov->provider->name);
+			tail->fabric_attr->prov_version = prov->provider->version;
+		}
+		tail->fabric_attr->prov_name = strdup(prov->provider->name);
+		tail->fabric_attr->prov_version = prov->provider->version;
 	}
 
 	return *info ? 0 : ret;
@@ -173,11 +201,9 @@ struct fi_info *__fi_allocinfo(void)
 		return NULL;
 
 	info->ep_attr = calloc(1, sizeof(*info->ep_attr));
-	if (!info->ep_attr)
-		goto err;
-
 	info->domain_attr = calloc(1, sizeof(*info->domain_attr));
-	if (!info->domain_attr)
+	info->fabric_attr = calloc(1, sizeof(*info->fabric_attr));
+	if (!info->ep_attr || !info->domain_attr || !info->fabric_attr)
 		goto err;
 
 	return info;
@@ -188,22 +214,19 @@ err:
 
 void __fi_freeinfo(struct fi_info *info)
 {
-	if (info->src_addr)
-		free(info->src_addr);
-	if (info->dest_addr)
-		free(info->dest_addr);
-	if (info->fabric_name)
-		free(info->fabric_name);
-	if (info->ep_attr)
-		free(info->ep_attr);
+	free(info->src_addr);
+	free(info->dest_addr);
+	free(info->ep_attr);
 	if (info->domain_attr) {
-		if (info->domain_attr->name)
-			free(info->domain_attr->name);
+		free(info->domain_attr->name);
 		free(info->domain_attr);
 	}
-	if (info->data)
-		free(info->data);
-
+	if (info->fabric_attr) {
+		free(info->fabric_attr->name);
+		free(info->fabric_attr->prov_name);
+		free(info->fabric_attr);
+	}
+	free(info->data);
 	free(info);
 }
 
@@ -211,40 +234,31 @@ void fi_freeinfo(struct fi_info *info)
 {
 	struct fi_prov *prov;
 	struct fi_info *next;
-	int ret;
 
-	while (info) {
+	for (; info; info = next) {
 		next = info->next;
-		for (prov = prov_head; prov && info; prov = prov->next) {
-			if (!prov->ops->freeinfo)
-				continue;
+		prov = info->fabric_attr ?
+		       fi_getprov(info->fabric_attr->prov_name) : NULL;
 
-			ret = prov->ops->freeinfo(info);
-			if (!ret)
-				goto cont;
-		}
-		__fi_freeinfo(info);
-cont:
-		info = next;
+		if (prov && prov->provider->freeinfo)
+			prov->provider->freeinfo(info);
+		else
+			__fi_freeinfo(info);
 	}
 }
 
-int fi_fabric(const char *name, uint64_t flags, struct fid_fabric **fabric,
-	      void *context)
+int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)
 {
 	struct fi_prov *prov;
-	int ret = -FI_ENOSYS;
 
-	for (prov = prov_head; prov; prov = prov->next) {
-		if (!prov->ops->fabric)
-			continue;
+	if (!attr || !attr->prov_name || !attr->name)
+		return -FI_EINVAL;
 
-		ret = prov->ops->fabric(name, flags, fabric, context);
-		if (!ret)
-			break;
-	}
+	prov = fi_getprov(attr->prov_name);
+	if (!prov || !prov->provider->fabric)
+		return -FI_ENODEV;
 
-	return ret;
+	return prov->provider->fabric(attr, fabric, context);
 }
 
 uint32_t fi_version(void)
