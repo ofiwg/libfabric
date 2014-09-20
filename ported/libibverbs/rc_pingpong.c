@@ -173,7 +173,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 	int rc = 0;
 	int rd = 0;
 
-	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, 0);
+	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, -1, 0);
 	if (rd != sizeof entry) {
 		FI_ERR_LOG("fi_eq_condread %s", -rd);
 		goto err;
@@ -230,7 +230,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, 0);
+	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, -1, 0);
 	if (rd != sizeof entry) {
 		FI_ERR_LOG("fi_eq_condread %s", -rd);
 		goto err;
@@ -310,7 +310,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rc = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, 0);
+	rc = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, -1, 0);
 	if (rc != sizeof entry) {
 		FI_ERR_LOG("fi_eq_condread %s", -rc);
 		goto err;
@@ -353,9 +353,8 @@ static struct pingpong_context *pp_init_ctx(struct fi_info *prov, int size,
 	/* FIXME memset(ctx->buf, 0, size); */
 	memset(ctx->buf, 0x7b, size);
 
-
 	/* Open the fabric */
-	rc = fi_fabric(prov->fabric_name, 0, &ctx->fabric, NULL);
+	rc = fi_fabric(prov->fabric_attr, &ctx->fabric, NULL);
 	if (rc) {
 		FI_ERR_LOG("Couldn't open fabric", rc);
 		return NULL;
@@ -582,7 +581,7 @@ int main(int argc, char *argv[])
 		}
 	} else {
 		for (prov = prov_list; prov; prov = prov->next)
-			if (!strcmp(prov->fabric_name, prov_name))
+			if (!strcmp(prov->fabric_attr->prov_name, prov_name))
 				break;
 		if (!prov) {
 			fprintf(stderr, "Provider %s not found\n", prov_name);
@@ -633,7 +632,7 @@ int main(int argc, char *argv[])
 
 		if (use_event) {
 			/* Blocking read */
-			rd = fi_cq_condread(ctx->cq, &wc, sizeof wc, NULL);
+			rd = fi_cq_condread(ctx->cq, &wc, sizeof wc, NULL, -1);
 		} else {
 			do {
 				rd = fi_cq_read(ctx->cq, &wc, sizeof wc);

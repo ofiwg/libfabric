@@ -370,7 +370,7 @@ static int server_listen(void)
 		return ret;
 	}
 
-	ret = fi_fabric(fi->fabric_name, 0, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
 		printf("fi_fabric %s\n", fi_strerror(-ret));
 		goto err0;
@@ -415,7 +415,7 @@ static int server_connect(void)
 	ssize_t rd;
 	int ret;
 
-	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, 0);
+	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, -1, 0);
 	if (rd != sizeof entry) {
 		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
@@ -454,7 +454,7 @@ static int server_connect(void)
 		goto err3;
 	}
 
-	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, 0);
+	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, -1, 0);
 	if (rd != sizeof entry) {
 		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
@@ -501,7 +501,7 @@ static int client_connect(void)
 		goto err0;
 	}
 
-	ret = fi_fabric(fi->fabric_name, 0, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
 		printf("fi_fabric %s\n", fi_strerror(-ret));
 		goto err1;
@@ -534,7 +534,7 @@ static int client_connect(void)
 		goto err5;
 	}
 
-	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, 0);
+	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, -1, 0);
 	if (rd != sizeof entry) {
 		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
