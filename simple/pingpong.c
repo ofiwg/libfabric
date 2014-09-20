@@ -415,7 +415,7 @@ static int server_connect(void)
 	ssize_t rd;
 	int ret;
 
-	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, 0);
+	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, -1, 0);
 	if (rd != sizeof entry) {
 		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
@@ -454,7 +454,7 @@ static int server_connect(void)
 		goto err3;
 	}
 
-	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, 0);
+	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, -1, 0);
 	if (rd != sizeof entry) {
 		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
@@ -534,7 +534,7 @@ static int client_connect(void)
 		goto err5;
 	}
 
-	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, 0);
+	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, -1, 0);
 	if (rd != sizeof entry) {
 		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;

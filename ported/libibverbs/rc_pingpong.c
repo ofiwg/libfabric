@@ -173,7 +173,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 	int rc = 0;
 	int rd = 0;
 
-	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, 0);
+	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, -1, 0);
 	if (rd != sizeof entry) {
 		FI_ERR_LOG("fi_eq_condread %s", -rd);
 		goto err;
@@ -230,7 +230,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, 0);
+	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, -1, 0);
 	if (rd != sizeof entry) {
 		FI_ERR_LOG("fi_eq_condread %s", -rd);
 		goto err;
@@ -310,7 +310,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rc = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, 0);
+	rc = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, -1, 0);
 	if (rc != sizeof entry) {
 		FI_ERR_LOG("fi_eq_condread %s", -rc);
 		goto err;
@@ -633,7 +633,7 @@ int main(int argc, char *argv[])
 
 		if (use_event) {
 			/* Blocking read */
-			rd = fi_cq_condread(ctx->cq, &wc, sizeof wc, NULL);
+			rd = fi_cq_condread(ctx->cq, &wc, sizeof wc, NULL, -1);
 		} else {
 			do {
 				rd = fi_cq_read(ctx->cq, &wc, sizeof wc);
