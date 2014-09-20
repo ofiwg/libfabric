@@ -239,7 +239,7 @@ static int ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinf
  	return 0;
  }
 
-static int ibv_getinfo(int version, const char *node, const char *service,
+static int ibv_getinfo(uint32_t version, const char *node, const char *service,
 		       uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct rdma_addrinfo rai_hints, *rai;

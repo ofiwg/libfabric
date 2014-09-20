@@ -52,14 +52,14 @@ extern "C" {
 struct fi_provider {
 	const char *name;
 	uint32_t version;
-	int	(*getinfo)(int version, const char *node, const char *service,
+	int	(*getinfo)(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info);
 	int	(*freeinfo)(struct fi_info *info);
 	int	(*fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
 };
 
-int fi_version_register(int version, struct fi_provider *provider);
+int fi_version_register(uint32_t version, struct fi_provider *provider);
 static inline int fi_register(struct fi_provider *provider)
 {
 	return fi_version_register(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),

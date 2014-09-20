@@ -94,7 +94,7 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 	return len;
 }
 
-int fi_version_register(int version, struct fi_provider *provider)
+int fi_version_register(uint32_t version, struct fi_provider *provider)
 {
 	struct fi_prov *prov;
 
@@ -163,7 +163,7 @@ static struct fi_prov *fi_getprov(const char *prov_name)
 	return NULL;
 }
 
-int fi_getinfo(int version, const char *node, const char *service,
+int fi_getinfo(uint32_t version, const char *node, const char *service,
 	       uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_prov *prov;

@@ -76,7 +76,7 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	return 0;
 }
 
-static int sock_getinfo(int version, const char *node, const char *service,
+static int sock_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	if (hints) {

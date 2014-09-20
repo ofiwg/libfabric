@@ -242,7 +242,7 @@ struct fid {
 
 #define FI_NUMERICHOST		(1ULL << 1)
 
-int fi_getinfo(int version, const char *node, const char *service,
+int fi_getinfo(uint32_t version, const char *node, const char *service,
 	       uint64_t flags, struct fi_info *hints, struct fi_info **info);
 void fi_freeinfo(struct fi_info *info);
 

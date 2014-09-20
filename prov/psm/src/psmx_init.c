@@ -70,7 +70,7 @@ static int psmx_reserve_tag_bits(int *ep_cap, uint64_t *max_tag_value)
 	return 0;
 }
 
-static int psmx_getinfo(int version, const char *node, const char *service,
+static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *psmx_info;

@@ -132,7 +132,7 @@ struct sock_ep {
 	struct sock_domain	*dom;
 };
 
-int sock_rdm_getinfo(int version, const char *node, const char *service,
+int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 		uint64_t flags, struct fi_info *hints, struct fi_info **info);
 int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
