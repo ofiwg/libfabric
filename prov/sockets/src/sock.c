@@ -105,11 +105,11 @@ static struct fi_provider sock_prov = {
 	.fabric = sock_fabric,
 };
 
-void sock_ini(void)
+static void __attribute__((constructor)) sock_ini(void)
 {
 	(void) fi_register(&sock_prov);
 }
 
-void sock_fini(void)
+static void __attribute__((destructor)) sock_fini(void)
 {
 }

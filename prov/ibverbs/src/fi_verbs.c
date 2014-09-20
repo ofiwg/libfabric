@@ -2440,11 +2440,13 @@ static struct fi_provider ibv_prov = {
 	.fabric = ibv_fabric,
 };
 
-void ibv_ini(void)
+#if HAVE_VERBS
+static void __attribute__((constructor)) ibv_ini(void)
 {
 	(void) fi_register(&ibv_prov);
 }
 
-void ibv_fini(void)
+static void __attribute__((destructor)) ibv_fini(void)
 {
 }
+#endif /* HAVE_VERBS */

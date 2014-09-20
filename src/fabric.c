@@ -139,16 +139,10 @@ int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
 
 static void __attribute__((constructor)) fi_ini(void)
 {
-	sock_ini();
-	ibv_ini();
-	psmx_ini();
 }
 
 static void __attribute__((destructor)) fi_fini(void)
 {
-	psmx_fini();
-	ibv_fini();
-	sock_fini();
 }
 
 static struct fi_prov *fi_getprov(const char *prov_name)
