@@ -370,7 +370,7 @@ static int server_listen(void)
 		return ret;
 	}
 
-	ret = fi_fabric(fi->fabric_name, 0, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
 		printf("fi_fabric %s\n", fi_strerror(-ret));
 		goto err0;
@@ -501,7 +501,7 @@ static int client_connect(void)
 		goto err0;
 	}
 
-	ret = fi_fabric(fi->fabric_name, 0, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
 		printf("fi_fabric %s\n", fi_strerror(-ret));
 		goto err1;

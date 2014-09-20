@@ -353,9 +353,8 @@ static struct pingpong_context *pp_init_ctx(struct fi_info *prov, int size,
 	/* FIXME memset(ctx->buf, 0, size); */
 	memset(ctx->buf, 0x7b, size);
 
-
 	/* Open the fabric */
-	rc = fi_fabric(prov->fabric_name, 0, &ctx->fabric, NULL);
+	rc = fi_fabric(prov->fabric_attr, &ctx->fabric, NULL);
 	if (rc) {
 		FI_ERR_LOG("Couldn't open fabric", rc);
 		return NULL;
@@ -582,7 +581,7 @@ int main(int argc, char *argv[])
 		}
 	} else {
 		for (prov = prov_list; prov; prov = prov->next)
-			if (!strcmp(prov->fabric_name, prov_name))
+			if (!strcmp(prov->fabric_attr->prov_name, prov_name))
 				break;
 		if (!prov) {
 			fprintf(stderr, "Provider %s not found\n", prov_name);
