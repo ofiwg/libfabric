@@ -38,12 +38,6 @@ if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 	fi
 fi
 
-AC_ARG_ENABLE(libcheck, [  --disable-libcheck      do not test for presence of libraries],
-[       if test "$enableval" = "no"; then
-                disable_libcheck=yes
-        fi
-])
-
 dnl Checks for programs
 AC_PROG_CC
 
@@ -100,11 +94,9 @@ AC_TRY_LINK([int i = 0;],
 dnl Checks for header files.
 AC_HEADER_STDC
 
-if test "$disable_libcheck" != "yes"; then
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 AC_CHECK_HEADER(valgrind/memcheck.h, [],
     AC_MSG_ERROR([valgrind requested but <valgrind/memcheck.h> not found.]))
-fi
 fi
 
 AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,
