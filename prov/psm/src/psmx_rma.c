@@ -93,7 +93,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (!op_error)
 			memcpy(rma_addr, src, len);
 
-		if (eom) {
+		if (eom && !op_error) {
 			if (mr->cq) {
 				/* FIXME: report the addr/len of the whole write */
 				event = psmx_cq_create_event(
@@ -184,7 +184,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		err = psm_am_reply_short(token, PSMX_AM_RMA_HANDLER,
 				rep_args, 3, rma_addr, rma_len, 0,
 				NULL, NULL );
-		if (eom) {
+		if (eom && !op_error) {
 			if (mr->cq) {
 				/* FIXME: report the addr/len of the whole read */
 				event = psmx_cq_create_event(
