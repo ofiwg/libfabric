@@ -417,7 +417,7 @@ fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 
 
 #else // FABRIC_DIRECT
-#include <rdma/fi_direct_eq_domain.h>
+#include <rdma/fi_direct_eq.h>
 #endif
 
 #ifdef __cplusplus
