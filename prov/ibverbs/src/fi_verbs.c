@@ -58,51 +58,51 @@
 #include "fi.h"
 
 
-struct ibv_fabric {
+struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
 };
 
-struct ibv_eq {
+struct fi_ibv_eq {
 	struct fid_eq		eq_fid;
-	struct ibv_fabric	*fab;
+	struct fi_ibv_fabric	*fab;
 	struct rdma_event_channel *channel;
 	uint64_t		flags;
 	struct fi_eq_err_entry	err;
 };
 
-struct ibv_pep {
+struct fi_ibv_pep {
 	struct fid_pep		pep_fid;
-	struct ibv_eq		*eq;
+	struct fi_ibv_eq	*eq;
 	struct rdma_cm_id	*id;
 };
 
-struct ibv_domain {
+struct fi_ibv_domain {
 	struct fid_domain	domain_fid;
 	struct ibv_context	*verbs;
 	struct ibv_pd		*pd;
 };
 
-struct __ibv_cq {
+struct fi_ibv_cq {
 	struct fid_cq		cq_fid;
-	struct ibv_domain	*domain;
+	struct fi_ibv_domain	*domain;
 	struct ibv_comp_channel	*channel;
 	struct ibv_cq		*cq;
 	uint64_t		flags;
 	struct ibv_wc		wc;
 };
 
-struct ibv_mem_desc {
+struct fi_ibv_mem_desc {
 	struct fid_mr		mr_fid;
 	struct ibv_mr		*mr;
-	struct ibv_domain	*domain;
+	struct fi_ibv_domain	*domain;
 };
 
-struct ibv_msg_ep {
+struct fi_ibv_msg_ep {
 	struct fid_ep		ep_fid;
 	struct rdma_cm_id	*id;
-	struct ibv_eq		*eq;
-	struct __ibv_cq		*rcq;
-	struct __ibv_cq		*scq;
+	struct fi_ibv_eq	*eq;
+	struct fi_ibv_cq	*rcq;
+	struct fi_ibv_cq	*scq;
 	uint32_t		inline_size;
 };
 
@@ -112,7 +112,7 @@ static char def_send_sge[16] = "4";
 static char def_recv_sge[16] = "4";
 static char def_inline_data[16] = "64";
 
-static int ibv_sockaddr_len(struct sockaddr *addr)
+static int fi_ibv_sockaddr_len(struct sockaddr *addr)
 {
 	if (!addr)
 		return 0;
@@ -131,7 +131,7 @@ static int ibv_sockaddr_len(struct sockaddr *addr)
 	}
 }
 
-static int ibv_check_hints(struct fi_info *hints)
+static int fi_ibv_check_hints(struct fi_info *hints)
 {
 	switch (hints->type) {
 	case FI_EP_UNSPEC:
@@ -168,7 +168,7 @@ static int ibv_check_hints(struct fi_info *hints)
 /*
  * TODO: this is not the full set of checks which are needed
  */
-static int ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinfo *rai)
+static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinfo *rai)
 {
 	memset(rai, 0, sizeof *rai);
 	if ((fi->ep_cap & FI_PASSIVE) || (flags & FI_SOURCE))
@@ -206,7 +206,7 @@ static int ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinf
 	return 0;
 }
 
- static int ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
+ static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
 		 	  struct fi_info *fi)
  {
  	if ((hints->ep_cap & FI_PASSIVE) && (rai->ai_flags & RAI_PASSIVE))
@@ -239,7 +239,7 @@ static int ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinf
  	return 0;
  }
 
-static int ibv_getinfo(uint32_t version, const char *node, const char *service,
+static int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		       uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct rdma_addrinfo rai_hints, *rai;
@@ -248,11 +248,11 @@ static int ibv_getinfo(uint32_t version, const char *node, const char *service,
 	int ret;
 
 	if (hints) {
-		ret = ibv_check_hints(hints);
+		ret = fi_ibv_check_hints(hints);
 		if (ret)
 			return ret;
 
-		ret = ibv_fi_to_rai(hints, flags, &rai_hints);
+		ret = fi_ibv_fi_to_rai(hints, flags, &rai_hints);
 		if (ret)
 			return ret;
 
@@ -270,7 +270,7 @@ static int ibv_getinfo(uint32_t version, const char *node, const char *service,
 		goto err1;
 	}
 
-	ret = ibv_rai_to_fi(rai, hints, fi);
+	ret = fi_ibv_rai_to_fi(rai, hints, fi);
 	if (ret)
 		goto err2;
 
@@ -282,7 +282,7 @@ static int ibv_getinfo(uint32_t version, const char *node, const char *service,
 	rdma_freeaddrinfo(rai);
 
 	if (!fi->src_addr) {
-		fi->src_addrlen = ibv_sockaddr_len(rdma_get_local_addr(id));
+		fi->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(id));
 		if (!(fi->src_addr = malloc(fi->src_addrlen))) {
 			ret = -FI_ENOMEM;
 			goto err3;
@@ -317,7 +317,7 @@ err1:
 	return ret;
 }
 
-static int ibv_freeinfo(struct fi_info *info)
+static int fi_ibv_freeinfo(struct fi_info *info)
 {
 	if (info->data) {
 		rdma_destroy_ep(info->data);
@@ -327,7 +327,7 @@ static int ibv_freeinfo(struct fi_info *info)
 	return 0;
 }
 
-static int ibv_msg_ep_create_qp(struct ibv_msg_ep *ep)
+static int fi_ibv_msg_ep_create_qp(struct fi_ibv_msg_ep *ep)
 {
 	struct ibv_qp_init_attr attr;
 
@@ -359,28 +359,28 @@ static int ibv_msg_ep_create_qp(struct ibv_msg_ep *ep)
 	return rdma_create_qp(ep->id, ep->rcq->domain->pd, &attr) ? -errno : 0;
 }
 
-static int ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	struct ibv_msg_ep *ep;
+	struct fi_ibv_msg_ep *ep;
 	int ret;
 
-	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
+	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
 		if (flags & FI_RECV) {
 			if (ep->rcq)
 				return -EINVAL;
-			ep->rcq = container_of(bfid, struct __ibv_cq, cq_fid.fid);
+			ep->rcq = container_of(bfid, struct fi_ibv_cq, cq_fid.fid);
 		}
 		if (flags & FI_SEND) {
 			if (ep->scq)
 				return -EINVAL;
-			ep->scq = container_of(bfid, struct __ibv_cq, cq_fid.fid);
+			ep->scq = container_of(bfid, struct fi_ibv_cq, cq_fid.fid);
 		}
 		break;
 	case FI_CLASS_EQ:
-		ep->eq = container_of(bfid, struct ibv_eq, eq_fid.fid);
+		ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
 		ret = rdma_migrate_id(ep->id, ep->eq->channel);
 		if (ret)
 			return -errno;
@@ -393,10 +393,10 @@ static int ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 }
 
 static ssize_t
-ibv_msg_ep_recv(struct fid_ep *ep, void *buf, size_t len,
+fi_ibv_msg_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 		void *desc, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_recv_wr wr, *bad;
 	struct ibv_sge sge;
 
@@ -409,15 +409,15 @@ ibv_msg_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	return -ibv_post_recv(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
-ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fi_ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
                  size_t count, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_recv_wr wr, *bad;
 	struct ibv_sge *sge;
 	size_t i;
@@ -434,26 +434,26 @@ ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		sge[i].lkey = (uint32_t) (uintptr_t) desc[i];
 	}
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	return -ibv_post_recv(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
-ibv_msg_ep_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
+fi_ibv_msg_ep_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
 		    fi_addr_t src_addr, void *context)
 {
 	return -FI_ENOSYS;
 }
 
 static ssize_t
-ibv_msg_ep_send(struct fid_ep *ep, const void *buf, size_t len,
+fi_ibv_msg_ep_send(struct fid_ep *ep, const void *buf, size_t len,
 		void *desc, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	sge.addr = (uintptr_t) buf;
 	sge.length = (uint32_t) len;
 	sge.lkey = (uint32_t) (uintptr_t) desc;
@@ -469,14 +469,14 @@ ibv_msg_ep_send(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t
-ibv_msg_ep_senddata(struct fid_ep *ep, const void *buf, size_t len,
+fi_ibv_msg_ep_senddata(struct fid_ep *ep, const void *buf, size_t len,
 		    void *desc, uint64_t data, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	sge.addr = (uintptr_t) buf;
 	sge.length = (uint32_t) len;
 	sge.lkey = (uint32_t) (uintptr_t) desc;
@@ -493,10 +493,10 @@ ibv_msg_ep_senddata(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t
-ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fi_ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
                  size_t count, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge *sge;
 	size_t bytes = 0, i;
@@ -508,7 +508,7 @@ ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	wr.num_sge = (int) count;
 	wr.opcode = IBV_WR_SEND;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	for (i = 0; i < count; i++) {
 		sge[i].addr = (uintptr_t) iov[i].iov_base;
 		sge[i].length = (uint32_t) iov[i].iov_len;
@@ -521,21 +521,21 @@ ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 }
 
 static ssize_t
-ibv_msg_ep_sendto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+fi_ibv_msg_ep_sendto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		  fi_addr_t dest_addr, void *context)
 {
 	return -FI_ENOSYS;
 }
 
 static ssize_t
-ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge *sge;
 	size_t i, len;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	wr.num_sge = msg->iov_count;
 	if (msg->iov_count) {
 		sge = alloca(sizeof(*sge) * msg->iov_count);
@@ -565,20 +565,20 @@ ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 }
 
 static ssize_t
-ibv_msg_ep_inject(struct fid_ep *ep, const void *buf, size_t len)
+fi_ibv_msg_ep_inject(struct fid_ep *ep, const void *buf, size_t len)
 {
 	return -FI_ENOSYS;
 }
 
 static ssize_t
-ibv_msg_ep_injectto(struct fid_ep *ep, const void *buf, size_t len,
+fi_ibv_msg_ep_injectto(struct fid_ep *ep, const void *buf, size_t len,
 		    fi_addr_t dest_addr)
 {
 	return -FI_ENOSYS;
 }
 
 static ssize_t
-ibv_msg_ep_senddatato(struct fid_ep *ep, const void *buf, size_t len,
+fi_ibv_msg_ep_senddatato(struct fid_ep *ep, const void *buf, size_t len,
 		      void *desc, uint64_t data, fi_addr_t dest_addr,
 		      void *context)
 {
@@ -586,14 +586,14 @@ ibv_msg_ep_senddatato(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t
-ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+fi_ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_recv_wr wr, *bad;
 	struct ibv_sge *sge=NULL;
 	size_t i;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	wr.wr_id = (uintptr_t) msg->context;
 	wr.next = NULL;
 	if (msg->iov_count) {
@@ -611,31 +611,31 @@ ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 	return -ibv_post_recv(_ep->id->qp, &wr, &bad);
 }
 
-static struct fi_ops_msg ibv_msg_ep_msg_ops = {
+static struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
-	.recv = ibv_msg_ep_recv,
-	.recvv = ibv_msg_ep_recvv,
-	.recvfrom = ibv_msg_ep_recvfrom,
-	.recvmsg = ibv_msg_ep_recvmsg,
-	.send = ibv_msg_ep_send,
-	.sendv = ibv_msg_ep_sendv,
-	.sendto = ibv_msg_ep_sendto,
-	.sendmsg = ibv_msg_ep_sendmsg,
-	.inject = ibv_msg_ep_inject,
-	.injectto = ibv_msg_ep_injectto,
-	.senddata = ibv_msg_ep_senddata,
-	.senddatato = ibv_msg_ep_senddatato
+	.recv = fi_ibv_msg_ep_recv,
+	.recvv = fi_ibv_msg_ep_recvv,
+	.recvfrom = fi_ibv_msg_ep_recvfrom,
+	.recvmsg = fi_ibv_msg_ep_recvmsg,
+	.send = fi_ibv_msg_ep_send,
+	.sendv = fi_ibv_msg_ep_sendv,
+	.sendto = fi_ibv_msg_ep_sendto,
+	.sendmsg = fi_ibv_msg_ep_sendmsg,
+	.inject = fi_ibv_msg_ep_inject,
+	.injectto = fi_ibv_msg_ep_injectto,
+	.senddata = fi_ibv_msg_ep_senddata,
+	.senddatato = fi_ibv_msg_ep_senddatato
 };
 
 static ssize_t
-ibv_msg_ep_rma_write(struct fid_ep *ep, const void *buf, size_t len,
+fi_ibv_msg_ep_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 		     void *desc, uint64_t addr, uint64_t tag, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	sge.addr = (uintptr_t) buf;
 	sge.length = (uint32_t) len;
 	sge.lkey = (uint32_t) (uintptr_t) desc;
@@ -653,15 +653,15 @@ ibv_msg_ep_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t
-ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fi_ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		      size_t count, uint64_t addr, uint64_t tag, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge *sge;
 	size_t bytes = 0, i;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	sge = alloca(count * sizeof(struct ibv_sge));
 
 	wr.wr_id = (uintptr_t) context;
@@ -684,7 +684,7 @@ ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 }
 
 static ssize_t
-ibv_msg_ep_rma_writeto(struct fid_ep *ep, const void *buf, size_t len,
+fi_ibv_msg_ep_rma_writeto(struct fid_ep *ep, const void *buf, size_t len,
 			void *desc, fi_addr_t dest_addr, uint64_t addr,
 			uint64_t key, void *context)
 {
@@ -692,15 +692,15 @@ ibv_msg_ep_rma_writeto(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t
-ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
+fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			uint64_t flags)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge *sge=NULL;
 	size_t i, len;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	wr.wr_id = (uintptr_t) msg->context;
 	wr.next = NULL;
 	wr.num_sge = msg->iov_count;
@@ -731,10 +731,10 @@ ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 }
 
 static ssize_t
-ibv_msg_ep_rma_read(struct fid_ep *ep, void *buf, size_t len,
+fi_ibv_msg_ep_rma_read(struct fid_ep *ep, void *buf, size_t len,
 		    void *desc, uint64_t addr, uint64_t tag, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
@@ -751,15 +751,15 @@ ibv_msg_ep_rma_read(struct fid_ep *ep, void *buf, size_t len,
 	wr.wr.rdma.remote_addr = addr;
 	wr.wr.rdma.rkey = (uint32_t) tag;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
-ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fi_ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		     size_t count, uint64_t addr, uint64_t tag, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge *sge;
 	size_t i;
@@ -780,12 +780,12 @@ ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		sge[i].lkey = (uint32_t) (uintptr_t) desc[i];
 	}
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
-ibv_msg_ep_rma_readfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
+fi_ibv_msg_ep_rma_readfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			fi_addr_t src_addr, uint64_t addr, uint64_t key,
 			void *context)
 {
@@ -793,10 +793,10 @@ ibv_msg_ep_rma_readfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
 }
 
 static ssize_t
-ibv_msg_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
+fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			uint64_t flags)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge *sge;
 	size_t i;
@@ -820,34 +820,34 @@ ibv_msg_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	wr.wr.rdma.remote_addr = msg->rma_iov->addr;
 	wr.wr.rdma.rkey = (uint32_t) msg->rma_iov->key;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
-ibv_msg_ep_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
+fi_ibv_msg_ep_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
 			uint64_t addr, uint64_t key)
 {
 	return -FI_ENOSYS;
 }
 
 static ssize_t
-ibv_msg_ep_rma_injectto(struct fid_ep *ep, const void *buf, size_t len,
+fi_ibv_msg_ep_rma_injectto(struct fid_ep *ep, const void *buf, size_t len,
 			fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	return -FI_ENOSYS;
 }
 
 static ssize_t
-ibv_msg_ep_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
+fi_ibv_msg_ep_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 			void *desc, uint64_t data, uint64_t addr, uint64_t key,
 			void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	sge.addr = (uintptr_t) buf;
 	sge.length = (uint32_t) len;
 	sge.lkey = (uint32_t) (uintptr_t) desc;
@@ -867,7 +867,7 @@ ibv_msg_ep_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t
-ibv_msg_ep_rma_writedatato(struct fid_ep *ep, const void *buf, size_t len,
+fi_ibv_msg_ep_rma_writedatato(struct fid_ep *ep, const void *buf, size_t len,
 			void *desc, uint64_t data, fi_addr_t dest_addr,
 			uint64_t addr, uint64_t key, void *context)
 {
@@ -875,28 +875,28 @@ ibv_msg_ep_rma_writedatato(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 
-static struct fi_ops_rma ibv_msg_ep_rma_ops = {
+static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
-	.read = ibv_msg_ep_rma_read,
-	.readv = ibv_msg_ep_rma_readv,
-	.readfrom = ibv_msg_ep_rma_readfrom,
-	.readmsg = ibv_msg_ep_rma_readmsg,
-	.write = ibv_msg_ep_rma_write,
-	.writev = ibv_msg_ep_rma_writev,
-	.writeto = ibv_msg_ep_rma_writeto,
-	.writemsg = ibv_msg_ep_rma_writemsg,
-	.inject = ibv_msg_ep_rma_inject,
-	.injectto = ibv_msg_ep_rma_injectto,
-	.writedata = ibv_msg_ep_rma_writedata,
-	.writedatato = ibv_msg_ep_rma_writedatato
+	.read = fi_ibv_msg_ep_rma_read,
+	.readv = fi_ibv_msg_ep_rma_readv,
+	.readfrom = fi_ibv_msg_ep_rma_readfrom,
+	.readmsg = fi_ibv_msg_ep_rma_readmsg,
+	.write = fi_ibv_msg_ep_rma_write,
+	.writev = fi_ibv_msg_ep_rma_writev,
+	.writeto = fi_ibv_msg_ep_rma_writeto,
+	.writemsg = fi_ibv_msg_ep_rma_writemsg,
+	.inject = fi_ibv_msg_ep_rma_inject,
+	.injectto = fi_ibv_msg_ep_rma_injectto,
+	.writedata = fi_ibv_msg_ep_rma_writedata,
+	.writedatato = fi_ibv_msg_ep_rma_writedatato
 };
 
 static ssize_t
-ibv_msg_ep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
+fi_ibv_msg_ep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
 			void *desc, uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
@@ -924,7 +924,7 @@ ibv_msg_ep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
 	default:
 		return -ENOSYS;
 	}
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 
 	sge.addr = (uintptr_t) buf;
 	sge.length = (uint32_t) sizeof(uint64_t);
@@ -941,7 +941,7 @@ ibv_msg_ep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
 }
 
 static ssize_t
-ibv_msg_ep_atomic_writev(struct fid_ep *ep,
+fi_ibv_msg_ep_atomic_writev(struct fid_ep *ep,
                         const struct fi_ioc *iov, void **desc, size_t count,
                         uint64_t addr, uint64_t key,
                         enum fi_datatype datatype, enum fi_op op, void *context)
@@ -949,12 +949,12 @@ ibv_msg_ep_atomic_writev(struct fid_ep *ep,
 	if (iov->count != 1)
 		return -FI_E2BIG;
 
-	return ibv_msg_ep_atomic_write(ep, iov->addr, count, desc[0], addr,
+	return fi_ibv_msg_ep_atomic_write(ep, iov->addr, count, desc[0], addr,
 					key, datatype, op, context);
 }
 
 static ssize_t
-ibv_msg_ep_atomic_writeto(struct fid_ep *ep,
+fi_ibv_msg_ep_atomic_writeto(struct fid_ep *ep,
                         const void *buf, size_t count, void *desc,
                         fi_addr_t dest_addr,
                         uint64_t addr, uint64_t key,
@@ -964,10 +964,10 @@ ibv_msg_ep_atomic_writeto(struct fid_ep *ep,
 }
 
 static ssize_t
-ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
+fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
                         const struct fi_msg_atomic *msg, uint64_t flags)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
@@ -1000,7 +1000,7 @@ ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
 	default:
 		return -ENOSYS;
 	}
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 
 	sge.addr = (uintptr_t) msg->msg_iov->addr;
 	sge.length = (uint32_t) sizeof(uint64_t);
@@ -1017,12 +1017,12 @@ ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
 }
 
 static ssize_t
-ibv_msg_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
+fi_ibv_msg_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 			void *desc, void *result, void *result_desc,
 			uint64_t addr, uint64_t key, enum fi_datatype datatype,
 			enum fi_op op, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
@@ -1062,7 +1062,7 @@ ibv_msg_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 	sge.length = (uint32_t) sizeof(uint64_t);
 	sge.lkey = (uint32_t) (uintptr_t) result_desc;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
@@ -1074,7 +1074,7 @@ ibv_msg_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 }
 
 static ssize_t
-ibv_msg_ep_atomic_readwritev(struct fid_ep *ep, const struct fi_ioc *iov,
+fi_ibv_msg_ep_atomic_readwritev(struct fid_ep *ep, const struct fi_ioc *iov,
 			void **desc, size_t count,
 			struct fi_ioc *resultv, void **result_desc,
 			size_t result_count, uint64_t addr,
@@ -1084,13 +1084,13 @@ ibv_msg_ep_atomic_readwritev(struct fid_ep *ep, const struct fi_ioc *iov,
 	if (iov->count != 1)
 		return -FI_E2BIG;
 
-        return ibv_msg_ep_atomic_readwrite(ep, iov->addr, count,
+        return fi_ibv_msg_ep_atomic_readwrite(ep, iov->addr, count,
 			desc[0], resultv->addr, result_desc[0],
 			addr, key, datatype, op, context);
 }
 
 static ssize_t
-ibv_msg_ep_atomic_readwriteto(struct fid_ep *ep,
+fi_ibv_msg_ep_atomic_readwriteto(struct fid_ep *ep,
                         const void *buf, size_t count, void *desc,
                         void *result, void *result_desc,
                         fi_addr_t dest_addr,
@@ -1101,12 +1101,12 @@ ibv_msg_ep_atomic_readwriteto(struct fid_ep *ep,
 }
 
 static ssize_t
-ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
+fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 				const struct fi_msg_atomic *msg,
 				struct fi_ioc *resultv, void **result_desc,
 				size_t result_count, uint64_t flags)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
@@ -1146,7 +1146,7 @@ ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 	sge.length = (uint32_t) sizeof(uint64_t);
 	sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 
 	wr.wr_id = (uintptr_t) msg->context;
 	wr.next = NULL;
@@ -1160,14 +1160,14 @@ ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 }
 
 static ssize_t
-ibv_msg_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
+fi_ibv_msg_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 			void *desc, const void *compare,
 			void *compare_desc, void *result,
 			void *result_desc, uint64_t addr, uint64_t key,
 			enum fi_datatype datatype,
 			enum fi_op op, void *context)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
@@ -1199,7 +1199,7 @@ ibv_msg_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 	sge.length = (uint32_t) sizeof(uint64_t);
 	sge.lkey = (uint32_t) (uintptr_t) result_desc;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
@@ -1211,7 +1211,7 @@ ibv_msg_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 }
 
 static ssize_t
-ibv_msg_ep_atomic_compwritev(struct fid_ep *ep, const struct fi_ioc *iov,
+fi_ibv_msg_ep_atomic_compwritev(struct fid_ep *ep, const struct fi_ioc *iov,
 				void **desc, size_t count,
 				const struct fi_ioc *comparev,
 				void **compare_desc, size_t compare_count,
@@ -1223,14 +1223,14 @@ ibv_msg_ep_atomic_compwritev(struct fid_ep *ep, const struct fi_ioc *iov,
 	if (iov->count != 1)
 		return -FI_E2BIG;
 
-	return ibv_msg_ep_atomic_compwrite(ep, iov->addr, count, desc[0],
+	return fi_ibv_msg_ep_atomic_compwrite(ep, iov->addr, count, desc[0],
 				comparev->addr, compare_desc[0], resultv->addr,
 				result_desc[0], addr, key,
                         	datatype, op, context);
 }
 
 static ssize_t
-ibv_msg_ep_atomic_compwriteto(struct fid_ep *ep, const void *buf, size_t count,
+fi_ibv_msg_ep_atomic_compwriteto(struct fid_ep *ep, const void *buf, size_t count,
 				void *desc, const void *compare,
 				void *compare_desc, void *result,
 				void *result_desc, fi_addr_t dest_addr,
@@ -1242,7 +1242,7 @@ ibv_msg_ep_atomic_compwriteto(struct fid_ep *ep, const void *buf, size_t count,
 }
 
 static ssize_t
-ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
+fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 				const struct fi_msg_atomic *msg,
 				const struct fi_ioc *comparev,
 				void **compare_desc, size_t compare_count,
@@ -1250,7 +1250,7 @@ ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 				void **result_desc, size_t result_count,
 				uint64_t flags)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
@@ -1282,7 +1282,7 @@ ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 	sge.length = (uint32_t) sizeof(uint64_t);
 	sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 
 	wr.wr_id = (uintptr_t) msg->context;
 	wr.next = NULL;
@@ -1296,7 +1296,7 @@ ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 }
 
 static int
-ibv_msg_ep_atomic_writevalid(struct fid_ep *ep, enum fi_datatype datatype,
+fi_ibv_msg_ep_atomic_writevalid(struct fid_ep *ep, enum fi_datatype datatype,
 				enum fi_op op, size_t *count)
 {
 	switch (op) {
@@ -1324,7 +1324,7 @@ ibv_msg_ep_atomic_writevalid(struct fid_ep *ep, enum fi_datatype datatype,
 }
 
 static int
-ibv_msg_ep_atomic_readwritevalid(struct fid_ep *ep, enum fi_datatype datatype,
+fi_ibv_msg_ep_atomic_readwritevalid(struct fid_ep *ep, enum fi_datatype datatype,
 				enum fi_op op, size_t *count)
 {
 	switch (op) {
@@ -1353,7 +1353,7 @@ ibv_msg_ep_atomic_readwritevalid(struct fid_ep *ep, enum fi_datatype datatype,
 }
 
 static int
-ibv_msg_ep_atomic_compwritevalid(struct fid_ep *ep, enum fi_datatype datatype,
+fi_ibv_msg_ep_atomic_compwritevalid(struct fid_ep *ep, enum fi_datatype datatype,
 				enum fi_op op, size_t *count)
 {
 	if (op != FI_CSWAP)
@@ -1377,34 +1377,34 @@ ibv_msg_ep_atomic_compwritevalid(struct fid_ep *ep, enum fi_datatype datatype,
 }
 
 
-static struct fi_ops_atomic ibv_msg_ep_atomic_ops = {
+static struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops = {
 	.size		= sizeof(struct fi_ops_atomic),
-	.write		= ibv_msg_ep_atomic_write,
-	.writev		= ibv_msg_ep_atomic_writev,
-	.writeto	= ibv_msg_ep_atomic_writeto,
-	.writemsg	= ibv_msg_ep_atomic_writemsg,
-	.readwrite	= ibv_msg_ep_atomic_readwrite,
-	.readwritev	= ibv_msg_ep_atomic_readwritev,
-	.readwriteto	= ibv_msg_ep_atomic_readwriteto,
-	.readwritemsg	= ibv_msg_ep_atomic_readwritemsg,
-	.compwrite	= ibv_msg_ep_atomic_compwrite,
-	.compwritev	= ibv_msg_ep_atomic_compwritev,
-	.compwriteto	= ibv_msg_ep_atomic_compwriteto,
-	.compwritemsg	= ibv_msg_ep_atomic_compwritemsg,
-	.writevalid	= ibv_msg_ep_atomic_writevalid,
-	.readwritevalid	= ibv_msg_ep_atomic_readwritevalid,
-	.compwritevalid = ibv_msg_ep_atomic_compwritevalid
+	.write		= fi_ibv_msg_ep_atomic_write,
+	.writev		= fi_ibv_msg_ep_atomic_writev,
+	.writeto	= fi_ibv_msg_ep_atomic_writeto,
+	.writemsg	= fi_ibv_msg_ep_atomic_writemsg,
+	.readwrite	= fi_ibv_msg_ep_atomic_readwrite,
+	.readwritev	= fi_ibv_msg_ep_atomic_readwritev,
+	.readwriteto	= fi_ibv_msg_ep_atomic_readwriteto,
+	.readwritemsg	= fi_ibv_msg_ep_atomic_readwritemsg,
+	.compwrite	= fi_ibv_msg_ep_atomic_compwrite,
+	.compwritev	= fi_ibv_msg_ep_atomic_compwritev,
+	.compwriteto	= fi_ibv_msg_ep_atomic_compwriteto,
+	.compwritemsg	= fi_ibv_msg_ep_atomic_compwritemsg,
+	.writevalid	= fi_ibv_msg_ep_atomic_writevalid,
+	.readwritevalid	= fi_ibv_msg_ep_atomic_readwritevalid,
+	.compwritevalid = fi_ibv_msg_ep_atomic_compwritevalid
 };
 
 static int
-ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
+fi_ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
 		   const void *param, size_t paramlen)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct rdma_conn_param conn_param;
 	int ret;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	if (!_ep->id->qp) {
 		ret = ep->ops->enable(ep);
 		if (ret)
@@ -1424,14 +1424,14 @@ ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
 }
 
 static int
-ibv_msg_ep_accept(struct fid_ep *ep, fi_connreq_t connreq,
+fi_ibv_msg_ep_accept(struct fid_ep *ep, fi_connreq_t connreq,
 		  const void *param, size_t paramlen)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 	struct rdma_conn_param conn_param;
 	int ret;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	if (!_ep->id->qp) {
 		ret = ep->ops->enable(ep);
 		if (ret)
@@ -1450,33 +1450,33 @@ ibv_msg_ep_accept(struct fid_ep *ep, fi_connreq_t connreq,
 }
 
 static int
-ibv_msg_ep_reject(struct fid_pep *pep, fi_connreq_t connreq,
+fi_ibv_msg_ep_reject(struct fid_pep *pep, fi_connreq_t connreq,
 		  const void *param, size_t paramlen)
 {
 	return rdma_reject(connreq, param, (uint8_t) paramlen) ? -errno : 0;
 }
 
-static int ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
+static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 {
-	struct ibv_msg_ep *_ep;
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	struct fi_ibv_msg_ep *_ep;
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	return rdma_disconnect(_ep->id) ? -errno : 0;
 }
 
-static struct fi_ops_cm ibv_msg_ep_cm_ops = {
+static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.connect = ibv_msg_ep_connect,
-	.accept = ibv_msg_ep_accept,
-	.reject = ibv_msg_ep_reject,
-	.shutdown = ibv_msg_ep_shutdown,
+	.connect = fi_ibv_msg_ep_connect,
+	.accept = fi_ibv_msg_ep_accept,
+	.reject = fi_ibv_msg_ep_reject,
+	.shutdown = fi_ibv_msg_ep_shutdown,
 };
 
 static int
-ibv_msg_ep_getopt(fid_t fid, int level, int optname,
+fi_ibv_msg_ep_getopt(fid_t fid, int level, int optname,
 		  void *optval, size_t *optlen)
 {
-	struct ibv_msg_ep *ep;
-	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
+	struct fi_ibv_msg_ep *ep;
+	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
 
 	switch (level) {
 	case FI_OPT_ENDPOINT:
@@ -1488,11 +1488,11 @@ ibv_msg_ep_getopt(fid_t fid, int level, int optname,
 }
 
 static int
-ibv_msg_ep_setopt(fid_t fid, int level, int optname,
+fi_ibv_msg_ep_setopt(fid_t fid, int level, int optname,
 		  const void *optval, size_t optlen)
 {
-	struct ibv_msg_ep *ep;
-	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
+	struct fi_ibv_msg_ep *ep;
+	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
 
 	switch (level) {
 	case FI_OPT_ENDPOINT:
@@ -1503,35 +1503,35 @@ ibv_msg_ep_setopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
-static int ibv_msg_ep_enable(struct fid_ep *ep)
+static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 {
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_msg_ep *_ep;
 
-	_ep = container_of(ep, struct ibv_msg_ep, ep_fid);
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	if (!_ep->eq)
 		return -FI_ENOEQ;
 
-	return ibv_msg_ep_create_qp(_ep);
+	return fi_ibv_msg_ep_create_qp(_ep);
 }
 
-static ssize_t ibv_msg_ep_cancel(fid_t fid, void *context)
+static ssize_t fi_ibv_msg_ep_cancel(fid_t fid, void *context)
 {
 	return 0;
 }
 
-static struct fi_ops_ep ibv_msg_ep_base_ops = {
+static struct fi_ops_ep fi_ibv_msg_ep_base_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.enable = ibv_msg_ep_enable,
-	.cancel = ibv_msg_ep_cancel,
-	.getopt = ibv_msg_ep_getopt,
-	.setopt = ibv_msg_ep_setopt,
+	.enable = fi_ibv_msg_ep_enable,
+	.cancel = fi_ibv_msg_ep_cancel,
+	.getopt = fi_ibv_msg_ep_getopt,
+	.setopt = fi_ibv_msg_ep_setopt,
 };
 
-static int ibv_msg_ep_close(fid_t fid)
+static int fi_ibv_msg_ep_close(fid_t fid)
 {
-	struct ibv_msg_ep *ep;
+	struct fi_ibv_msg_ep *ep;
 
-	ep = container_of(fid, struct ibv_msg_ep, ep_fid.fid);
+	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
 	if (ep->id)
 		rdma_destroy_ep(ep->id);
 
@@ -1539,20 +1539,20 @@ static int ibv_msg_ep_close(fid_t fid)
 	return 0;
 }
 
-static struct fi_ops ibv_msg_ep_ops = {
+static struct fi_ops fi_ibv_msg_ep_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = ibv_msg_ep_close,
-	.bind = ibv_msg_ep_bind
+	.close = fi_ibv_msg_ep_close,
+	.bind = fi_ibv_msg_ep_bind
 };
 
 static int
-ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
+fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	    struct fid_ep **ep, void *context)
 {
-	struct ibv_domain *_domain;
-	struct ibv_msg_ep *_ep;
+	struct fi_ibv_domain *_domain;
+	struct fi_ibv_msg_ep *_ep;
 
-	_domain = container_of(domain, struct ibv_domain, domain_fid);
+	_domain = container_of(domain, struct fi_ibv_domain, domain_fid);
 	if (strcmp(info->fabric_attr->name, "RDMA") ||
 	    strcmp(_domain->verbs->device->name, info->domain_attr->name))
 		return -FI_EINVAL;
@@ -1571,24 +1571,24 @@ ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	_ep->ep_fid.fid.fclass = FI_CLASS_EP;
 	_ep->ep_fid.fid.context = context;
-	_ep->ep_fid.fid.ops = &ibv_msg_ep_ops;
-	_ep->ep_fid.ops = &ibv_msg_ep_base_ops;
-	_ep->ep_fid.msg = &ibv_msg_ep_msg_ops;
-	_ep->ep_fid.cm = &ibv_msg_ep_cm_ops;
-	_ep->ep_fid.rma = &ibv_msg_ep_rma_ops;
-	_ep->ep_fid.atomic = &ibv_msg_ep_atomic_ops;
+	_ep->ep_fid.fid.ops = &fi_ibv_msg_ep_ops;
+	_ep->ep_fid.ops = &fi_ibv_msg_ep_base_ops;
+	_ep->ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
+	_ep->ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
+	_ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
+	_ep->ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
 
 	*ep = &_ep->ep_fid;
 	return 0;
 }
 
 static ssize_t
-ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry, size_t len,
+fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry, size_t len,
 	       uint64_t flags)
 {
-	struct ibv_eq *_eq;
+	struct fi_ibv_eq *_eq;
 
-	_eq = container_of(eq, struct ibv_eq, eq_fid.fid);
+	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
 	if (!_eq->err.err)
 		return 0;
 
@@ -1602,7 +1602,7 @@ ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry, size_t len,
 }
 
 static struct fi_info *
-ibv_eq_cm_getinfo(struct ibv_fabric *fab, struct rdma_cm_event *event)
+fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 {
 	struct fi_info *fi;
 
@@ -1619,12 +1619,12 @@ ibv_eq_cm_getinfo(struct ibv_fabric *fab, struct rdma_cm_event *event)
 	}
 	fi->ep_cap = FI_MSG | FI_RMA;
 
-	fi->src_addrlen = ibv_sockaddr_len(rdma_get_local_addr(event->id));
+	fi->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!(fi->src_addr = malloc(fi->src_addrlen)))
 		goto err;
 	memcpy(fi->src_addr, rdma_get_local_addr(event->id), fi->src_addrlen);
 
-	fi->dest_addrlen = ibv_sockaddr_len(rdma_get_peer_addr(event->id));
+	fi->dest_addrlen = fi_ibv_sockaddr_len(rdma_get_peer_addr(event->id));
 	if (!(fi->dest_addr = malloc(fi->dest_addrlen)))
 		goto err;
 	memcpy(fi->dest_addr, rdma_get_peer_addr(event->id), fi->dest_addrlen);
@@ -1643,7 +1643,7 @@ err:
 }
 
 static ssize_t
-ibv_eq_cm_process_event(struct ibv_eq *eq, struct rdma_cm_event *event,
+fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *event,
 			struct fi_eq_cm_entry *entry, size_t len)
 {
 	fid_t fid;
@@ -1658,7 +1658,7 @@ ibv_eq_cm_process_event(struct ibv_eq *eq, struct rdma_cm_event *event,
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		entry->event = FI_CONNREQ;
 		entry->connreq = event->id;
-		entry->info = ibv_eq_cm_getinfo(eq->fab, event);
+		entry->info = fi_ibv_eq_cm_getinfo(eq->fab, event);
 		if (!entry->info) {
 			rdma_destroy_id(event->id);
 			return 0;
@@ -1704,14 +1704,14 @@ ibv_eq_cm_process_event(struct ibv_eq *eq, struct rdma_cm_event *event,
 }
 
 static ssize_t
-ibv_eq_read(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
+fi_ibv_eq_read(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 {
-	struct ibv_eq *_eq;
+	struct fi_ibv_eq *_eq;
 	struct fi_eq_cm_entry *entry;
 	struct rdma_cm_event *event;
 	ssize_t ret = 0;
 
-	_eq = container_of(eq, struct ibv_eq, eq_fid.fid);
+	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
 	entry = (struct fi_eq_cm_entry *) buf;
 	if (_eq->err.err)
 		return -FI_EIO;
@@ -1720,22 +1720,22 @@ ibv_eq_read(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 	if (ret)
 		return (errno == EAGAIN) ? 0 : -errno;
 
-	ret = ibv_eq_cm_process_event(_eq, event, entry, len);
+	ret = fi_ibv_eq_cm_process_event(_eq, event, entry, len);
 	rdma_ack_cm_event(event);
 	return ret;
 }
 
 static ssize_t
-ibv_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
+fi_ibv_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
 		int timeout, uint64_t flags)
 {
-	struct ibv_eq *_eq;
+	struct fi_ibv_eq *_eq;
 	ssize_t ret;
 
-	_eq = container_of(eq, struct ibv_eq, eq_fid.fid);
+	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
 
 	do {
-		ret = ibv_eq_read(eq, buf, len, flags);
+		ret = fi_ibv_eq_read(eq, buf, len, flags);
 		if (ret)
 			break;
 
@@ -1746,7 +1746,7 @@ ibv_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
 }
 
 static const char *
-ibv_eq_strerror(struct fid_eq *eq, int prov_errno, const void *err_data,
+fi_ibv_eq_strerror(struct fid_eq *eq, int prov_errno, const void *err_data,
 		void *buf, size_t len)
 {
 	if (buf && len)
@@ -1754,20 +1754,20 @@ ibv_eq_strerror(struct fid_eq *eq, int prov_errno, const void *err_data,
 	return strerror(prov_errno);
 }
 
-static struct fi_ops_eq ibv_eq_ops = {
+static struct fi_ops_eq fi_ibv_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
-	.read = ibv_eq_read,
-	.readerr = ibv_eq_readerr,
-	.condread = ibv_eq_condread,
-	.strerror = ibv_eq_strerror
+	.read = fi_ibv_eq_read,
+	.readerr = fi_ibv_eq_readerr,
+	.condread = fi_ibv_eq_condread,
+	.strerror = fi_ibv_eq_strerror
 };
 
-static int ibv_eq_control(fid_t fid, int command, void *arg)
+static int fi_ibv_eq_control(fid_t fid, int command, void *arg)
 {
-	struct ibv_eq *eq;
+	struct fi_ibv_eq *eq;
 	int ret = 0;
 
-	eq = container_of(fid, struct ibv_eq, eq_fid.fid);
+	eq = container_of(fid, struct fi_ibv_eq, eq_fid.fid);
 	switch (command) {
 	case FI_GETWAIT:
 		if (!eq->channel) {
@@ -1784,11 +1784,11 @@ static int ibv_eq_control(fid_t fid, int command, void *arg)
 	return ret;
 }
 
-static int ibv_eq_close(fid_t fid)
+static int fi_ibv_eq_close(fid_t fid)
 {
-	struct ibv_eq *eq;
+	struct fi_ibv_eq *eq;
 
-	eq = container_of(fid, struct ibv_eq, eq_fid.fid);
+	eq = container_of(fid, struct fi_ibv_eq, eq_fid.fid);
 	if (eq->channel)
 		rdma_destroy_event_channel(eq->channel);
 
@@ -1796,17 +1796,17 @@ static int ibv_eq_close(fid_t fid)
 	return 0;
 }
 
-static struct fi_ops ibv_eq_fi_ops = {
+static struct fi_ops fi_ibv_eq_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = ibv_eq_close,
-	.control = ibv_eq_control,
+	.close = fi_ibv_eq_close,
+	.control = fi_ibv_eq_control,
 };
 
 static int
-ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	       struct fid_eq **eq, void *context)
 {
-	struct ibv_eq *_eq;
+	struct fi_ibv_eq *_eq;
 	long flags = 0;
 	int ret;
 
@@ -1814,7 +1814,7 @@ ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	if (!_eq)
 		return -ENOMEM;
 
-	_eq->fab = container_of(fabric, struct ibv_fabric, fabric_fid);
+	_eq->fab = container_of(fabric, struct fi_ibv_fabric, fabric_fid);
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_FD:
@@ -1839,8 +1839,8 @@ ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	_eq->flags = attr->flags;
 	_eq->eq_fid.fid.fclass = FI_CLASS_EQ;
 	_eq->eq_fid.fid.context = context;
-	_eq->eq_fid.fid.ops = &ibv_eq_fi_ops;
-	_eq->eq_fid.ops = &ibv_eq_ops;
+	_eq->eq_fid.fid.ops = &fi_ibv_eq_fi_ops;
+	_eq->eq_fid.ops = &fi_ibv_eq_ops;
 
 	*eq = &_eq->eq_fid;
 	return 0;
@@ -1853,12 +1853,12 @@ err1:
 }
 
 static ssize_t
-ibv_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
+fi_ibv_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
 	       size_t len, uint64_t flags)
 {
-	struct __ibv_cq *_cq;
+	struct fi_ibv_cq *_cq;
 
-	_cq = container_of(cq, struct __ibv_cq, cq_fid);
+	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 	if (!_cq->wc.status)
 		return 0;
 
@@ -1876,14 +1876,14 @@ ibv_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
 	return sizeof(*entry);
 }
 
-static int ibv_cq_reset(struct fid_cq *cq, const void *cond)
+static int fi_ibv_cq_reset(struct fid_cq *cq, const void *cond)
 {
-        struct __ibv_cq *_cq;
+        struct fi_ibv_cq *_cq;
         struct ibv_cq *ibcq;
         void *context;
         int ret;
 
-        _cq = container_of(cq, struct __ibv_cq, cq_fid);
+        _cq = container_of(cq, struct fi_ibv_cq, cq_fid);
         ret = ibv_get_cq_event(_cq->channel, &ibcq, &context);
         if (!ret)
                 ibv_ack_cq_events(ibcq, 1);
@@ -1892,15 +1892,15 @@ static int ibv_cq_reset(struct fid_cq *cq, const void *cond)
 }
 
 static ssize_t
-ibv_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond,
+fi_ibv_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond,
 		int timeout)
 {
 	ssize_t ret = 0, cur, left;
 	ssize_t  threshold;
 	int reset = 1;
-	struct __ibv_cq *_cq;
+	struct fi_ibv_cq *_cq;
 
-	_cq = container_of(cq, struct __ibv_cq, cq_fid);
+	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 	threshold = (ssize_t) cond;
 
 	for (cur = 0, left = len; cur < threshold && left > 0; ) {
@@ -1918,7 +1918,7 @@ ibv_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond,
 			break;
 
 		if (reset) {
-			ibv_cq_reset(cq, NULL);
+			fi_ibv_cq_reset(cq, NULL);
 			reset = 0;
 			continue;
 		}
@@ -1928,14 +1928,14 @@ ibv_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond,
 	return (left < len) ? len - left : ret;
 }
 
-static ssize_t ibv_cq_read_context(struct fid_cq *cq, void *buf, size_t len)
+static ssize_t fi_ibv_cq_read_context(struct fid_cq *cq, void *buf, size_t len)
 {
-	struct __ibv_cq *_cq;
+	struct fi_ibv_cq *_cq;
 	struct fi_cq_entry *entry = buf;
 	ssize_t ret = 0;
 	size_t left = len;
 
-	_cq = container_of(cq, struct __ibv_cq, cq_fid);
+	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 	if (_cq->wc.status)
 		return -FI_EAVAIL;
 
@@ -1952,14 +1952,14 @@ static ssize_t ibv_cq_read_context(struct fid_cq *cq, void *buf, size_t len)
 	return (left < len) ? len - left : ret;
 }
 
-static ssize_t ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t len)
+static ssize_t fi_ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t len)
 {
-	struct __ibv_cq *_cq;
+	struct fi_ibv_cq *_cq;
 	struct fi_cq_msg_entry *entry = buf;
 	ssize_t ret = 0;
 	size_t left = len;
 
-	_cq = container_of(cq, struct __ibv_cq, cq_fid);
+	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 	if (_cq->wc.status)
 		return -FI_EAVAIL;
 
@@ -1978,14 +1978,14 @@ static ssize_t ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t len)
 	return (left < len) ? len - left : ret;
 }
 
-static ssize_t ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t len)
+static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t len)
 {
-	struct __ibv_cq *_cq;
+	struct fi_ibv_cq *_cq;
 	struct fi_cq_data_entry *entry = buf;
 	ssize_t ret = 0;
 	size_t left = len;
 
-	_cq = container_of(cq, struct __ibv_cq, cq_fid);
+	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 	if (_cq->wc.status)
 		return -FI_EAVAIL;
 
@@ -2015,7 +2015,7 @@ static ssize_t ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t len)
 }
 
 static const char *
-ibv_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
+fi_ibv_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 		void *buf, size_t len)
 {
 	if (buf && len)
@@ -2023,36 +2023,36 @@ ibv_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 	return ibv_wc_status_str(prov_errno);
 }
 
-static struct fi_ops_cq ibv_cq_context_ops = {
+static struct fi_ops_cq fi_ibv_cq_context_ops = {
 	.size = sizeof(struct fi_ops_cq),
-	.read = ibv_cq_read_context,
-	.condread = ibv_cq_condread,
-	.readerr = ibv_cq_readerr,
-	.strerror = ibv_cq_strerror
+	.read = fi_ibv_cq_read_context,
+	.condread = fi_ibv_cq_condread,
+	.readerr = fi_ibv_cq_readerr,
+	.strerror = fi_ibv_cq_strerror
 };
 
-static struct fi_ops_cq ibv_cq_msg_ops = {
+static struct fi_ops_cq fi_ibv_cq_msg_ops = {
 	.size = sizeof(struct fi_ops_cq),
-	.read = ibv_cq_read_msg,
-	.condread = ibv_cq_condread,
-	.readerr = ibv_cq_readerr,
-	.strerror = ibv_cq_strerror
+	.read = fi_ibv_cq_read_msg,
+	.condread = fi_ibv_cq_condread,
+	.readerr = fi_ibv_cq_readerr,
+	.strerror = fi_ibv_cq_strerror
 };
 
-static struct fi_ops_cq ibv_cq_data_ops = {
+static struct fi_ops_cq fi_ibv_cq_data_ops = {
 	.size = sizeof(struct fi_ops_cq),
-	.read = ibv_cq_read_data,
-	.condread = ibv_cq_condread,
-	.readerr = ibv_cq_readerr,
-	.strerror = ibv_cq_strerror
+	.read = fi_ibv_cq_read_data,
+	.condread = fi_ibv_cq_condread,
+	.readerr = fi_ibv_cq_readerr,
+	.strerror = fi_ibv_cq_strerror
 };
 
-static int ibv_cq_control(fid_t fid, int command, void *arg)
+static int fi_ibv_cq_control(fid_t fid, int command, void *arg)
 {
-	struct __ibv_cq *cq;
+	struct fi_ibv_cq *cq;
 	int ret = 0;
 
-	cq = container_of(fid, struct __ibv_cq, cq_fid.fid);
+	cq = container_of(fid, struct fi_ibv_cq, cq_fid.fid);
 	switch(command) {
 	case FI_GETWAIT:
 		if (!cq->channel) {
@@ -2069,12 +2069,12 @@ static int ibv_cq_control(fid_t fid, int command, void *arg)
 	return ret;
 }
 
-static int ibv_cq_close(fid_t fid)
+static int fi_ibv_cq_close(fid_t fid)
 {
-	struct __ibv_cq *cq;
+	struct fi_ibv_cq *cq;
 	int ret;
 
-	cq = container_of(fid, struct __ibv_cq, cq_fid.fid);
+	cq = container_of(fid, struct fi_ibv_cq, cq_fid.fid);
 	if (cq->cq) {
 		ret = ibv_destroy_cq(cq->cq);
 		if (ret)
@@ -2088,17 +2088,17 @@ static int ibv_cq_close(fid_t fid)
 	return 0;
 }
 
-static struct fi_ops ibv_cq_fi_ops = {
+static struct fi_ops fi_ibv_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = ibv_cq_close,
-	.control = ibv_cq_control,
+	.close = fi_ibv_cq_close,
+	.control = fi_ibv_cq_control,
 };
 
 static int
-ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	    struct fid_cq **cq, void *context)
 {
-	struct __ibv_cq *_cq;
+	struct fi_ibv_cq *_cq;
 	long flags = 0;
 	int ret;
 
@@ -2106,7 +2106,7 @@ ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!_cq)
 		return -FI_ENOMEM;
 
-	_cq->domain = container_of(domain, struct ibv_domain, domain_fid);
+	_cq->domain = container_of(domain, struct fi_ibv_domain, domain_fid);
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_FD:
@@ -2139,17 +2139,17 @@ ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	_cq->flags |= attr->flags;
 	_cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	_cq->cq_fid.fid.context = context;
-	_cq->cq_fid.fid.ops = &ibv_cq_fi_ops;
+	_cq->cq_fid.fid.ops = &fi_ibv_cq_fi_ops;
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_CONTEXT:
-		_cq->cq_fid.ops = &ibv_cq_context_ops;
+		_cq->cq_fid.ops = &fi_ibv_cq_context_ops;
 		break;
 	case FI_CQ_FORMAT_MSG:
-		_cq->cq_fid.ops = &ibv_cq_msg_ops;
+		_cq->cq_fid.ops = &fi_ibv_cq_msg_ops;
 		break;
 	case FI_CQ_FORMAT_DATA:
-		_cq->cq_fid.ops = &ibv_cq_data_ops;
+		_cq->cq_fid.ops = &fi_ibv_cq_data_ops;
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -2169,30 +2169,30 @@ err1:
 	return ret;
 }
 
-static int ibv_mr_close(fid_t fid)
+static int fi_ibv_mr_close(fid_t fid)
 {
-	struct ibv_mem_desc *mr;
+	struct fi_ibv_mem_desc *mr;
 	int ret;
 
-	mr = container_of(fid, struct ibv_mem_desc, mr_fid.fid);
+	mr = container_of(fid, struct fi_ibv_mem_desc, mr_fid.fid);
 	ret = -ibv_dereg_mr(mr->mr);
 	if (!ret)
 		free(mr);
 	return ret;
 }
 
-static struct fi_ops ibv_mr_ops = {
+static struct fi_ops fi_ibv_mr_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = ibv_mr_close
+	.close = fi_ibv_mr_close
 };
 
 static int
-ibv_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
+fi_ibv_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	   uint64_t access, uint64_t offset, uint64_t requested_key,
 	   uint64_t flags, struct fid_mr **mr, void *context)
 {
-	struct ibv_mem_desc *md;
-	int ibv_access;
+	struct fi_ibv_mem_desc *md;
+	int fi_ibv_access;
 
 	if (flags)
 		return -FI_EBADFLAGS;
@@ -2201,20 +2201,20 @@ ibv_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	if (!md)
 		return -FI_ENOMEM;
 
-	md->domain = container_of(domain, struct ibv_domain, domain_fid);
+	md->domain = container_of(domain, struct fi_ibv_domain, domain_fid);
 	md->mr_fid.fid.fclass = FI_CLASS_MR;
 	md->mr_fid.fid.context = context;
-	md->mr_fid.fid.ops = &ibv_mr_ops;
+	md->mr_fid.fid.ops = &fi_ibv_mr_ops;
 
-	ibv_access = IBV_ACCESS_LOCAL_WRITE;
+	fi_ibv_access = IBV_ACCESS_LOCAL_WRITE;
 	if (access & FI_REMOTE_READ)
-		ibv_access |= IBV_ACCESS_REMOTE_READ;
+		fi_ibv_access |= IBV_ACCESS_REMOTE_READ;
 	if (access & FI_REMOTE_WRITE)
-		ibv_access |= IBV_ACCESS_REMOTE_WRITE;
+		fi_ibv_access |= IBV_ACCESS_REMOTE_WRITE;
 	if ((access & FI_READ) || (access & FI_WRITE))
-		ibv_access |= IBV_ACCESS_REMOTE_ATOMIC;
+		fi_ibv_access |= IBV_ACCESS_REMOTE_ATOMIC;
 
-	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, ibv_access);
+	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, fi_ibv_access);
 	if (!md->mr)
 		goto err;
 
@@ -2228,12 +2228,12 @@ err:
 	return -errno;
 }
 
-static int ibv_close(fid_t fid)
+static int fi_ibv_close(fid_t fid)
 {
-	struct ibv_domain *domain;
+	struct fi_ibv_domain *domain;
 	int ret;
 
-	domain = container_of(fid, struct ibv_domain, domain_fid.fid);
+	domain = container_of(fid, struct fi_ibv_domain, domain_fid.fid);
 	if (domain->pd) {
 		ret = ibv_dealloc_pd(domain->pd);
 		if (ret)
@@ -2245,7 +2245,7 @@ static int ibv_close(fid_t fid)
 	return 0;
 }
 
-static int ibv_open_device_by_name(struct ibv_domain *domain, const char *name)
+static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *name)
 {
 	struct ibv_context **dev_list;
 	int i, ret = -FI_ENODEV;
@@ -2265,34 +2265,34 @@ static int ibv_open_device_by_name(struct ibv_domain *domain, const char *name)
 	return ret;
 }
 
-static struct fi_ops ibv_fid_ops = {
+static struct fi_ops fi_ibv_fid_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = ibv_close,
+	.close = fi_ibv_close,
 };
 
-static struct fi_ops_mr ibv_domain_mr_ops = {
+static struct fi_ops_mr fi_ibv_domain_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
-	.reg = ibv_mr_reg,
+	.reg = fi_ibv_mr_reg,
 };
 
-static struct fi_ops_domain ibv_domain_ops = {
+static struct fi_ops_domain fi_ibv_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.cq_open = ibv_cq_open,
-	.endpoint = ibv_open_ep,
+	.cq_open = fi_ibv_cq_open,
+	.endpoint = fi_ibv_open_ep,
 };
 
 static int
-ibv_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
+fi_ibv_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 	   struct fid_domain **domain, void *context)
 {
-	struct ibv_domain *_domain;
+	struct fi_ibv_domain *_domain;
 	int ret;
 
 	_domain = calloc(1, sizeof *_domain);
 	if (!_domain)
 		return -FI_ENOMEM;
 
-	ret = ibv_open_device_by_name(_domain, attr->name);
+	ret = fi_ibv_open_device_by_name(_domain, attr->name);
 	if (ret)
 		goto err;
 
@@ -2304,9 +2304,9 @@ ibv_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 
 	_domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->domain_fid.fid.context = context;
-	_domain->domain_fid.fid.ops = &ibv_fid_ops;
-	_domain->domain_fid.ops = &ibv_domain_ops;
-	_domain->domain_fid.mr = &ibv_domain_mr_ops;
+	_domain->domain_fid.fid.ops = &fi_ibv_fid_ops;
+	_domain->domain_fid.ops = &fi_ibv_domain_ops;
+	_domain->domain_fid.mr = &fi_ibv_domain_mr_ops;
 
 	*domain = &_domain->domain_fid;
 	return 0;
@@ -2315,29 +2315,29 @@ err:
 	return ret;
 }
 
-static int ibv_pep_listen(struct fid_pep *pep)
+static int fi_ibv_pep_listen(struct fid_pep *pep)
 {
-	struct ibv_pep *_pep;
+	struct fi_ibv_pep *_pep;
 
-	_pep = container_of(pep, struct ibv_pep, pep_fid);
+	_pep = container_of(pep, struct fi_ibv_pep, pep_fid);
 	return rdma_listen(_pep->id, 0) ? -errno : 0;
 }
 
-static struct fi_ops_cm ibv_pep_cm_ops = {
+static struct fi_ops_cm fi_ibv_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.listen = ibv_pep_listen,
+	.listen = fi_ibv_pep_listen,
 };
 
-static int ibv_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
+static int fi_ibv_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 {
-	struct ibv_pep *pep;
+	struct fi_ibv_pep *pep;
 	int ret;
 
-	pep = container_of(fid, struct ibv_pep, pep_fid.fid);
+	pep = container_of(fid, struct fi_ibv_pep, pep_fid.fid);
 	if (bfid->fclass != FI_CLASS_EQ)
 		return -FI_EINVAL;
 
-	pep->eq = container_of(bfid, struct ibv_eq, eq_fid.fid);
+	pep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);
 	ret = rdma_migrate_id(pep->id, pep->eq->channel);
 	if (ret)
 		return -errno;
@@ -2345,11 +2345,11 @@ static int ibv_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
-static int ibv_pep_close(fid_t fid)
+static int fi_ibv_pep_close(fid_t fid)
 {
-	struct ibv_pep *pep;
+	struct fi_ibv_pep *pep;
 
-	pep = container_of(fid, struct ibv_pep, pep_fid.fid);
+	pep = container_of(fid, struct fi_ibv_pep, pep_fid.fid);
 	if (pep->id)
 		rdma_destroy_ep(pep->id);
 
@@ -2357,20 +2357,20 @@ static int ibv_pep_close(fid_t fid)
 	return 0;
 }
 
-static struct fi_ops ibv_pep_ops = {
+static struct fi_ops fi_ibv_pep_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = ibv_pep_close,
-	.bind = ibv_pep_bind
+	.close = fi_ibv_pep_close,
+	.bind = fi_ibv_pep_bind
 };
 
 static int
-ibv_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
+fi_ibv_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_pep **pep, void *context)
 {
-	struct ibv_fabric *fab;
-	struct ibv_pep *_pep;
+	struct fi_ibv_fabric *fab;
+	struct fi_ibv_pep *_pep;
 
-	fab = container_of(fabric, struct ibv_fabric, fabric_fid);
+	fab = container_of(fabric, struct fi_ibv_fabric, fabric_fid);
 	if (strcmp(info->fabric_attr->name, "RDMA"))
 		return -FI_ENODEV;
 
@@ -2388,34 +2388,34 @@ ibv_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 
 	_pep->pep_fid.fid.fclass = FI_CLASS_PEP;
 	_pep->pep_fid.fid.context = context;
-	_pep->pep_fid.fid.ops = &ibv_pep_ops;
-	_pep->pep_fid.cm = &ibv_pep_cm_ops;
+	_pep->pep_fid.fid.ops = &fi_ibv_pep_ops;
+	_pep->pep_fid.cm = &fi_ibv_pep_cm_ops;
 
 	*pep = &_pep->pep_fid;
 	return 0;
 }
 
-static int ibv_fabric_close(fid_t fid)
+static int fi_ibv_fabric_close(fid_t fid)
 {
 	free(fid);
 	return 0;
 }
 
-static struct fi_ops ibv_fi_ops = {
+static struct fi_ops fi_ibv_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = ibv_fabric_close,
+	.close = fi_ibv_fabric_close,
 };
 
-static struct fi_ops_fabric ibv_ops_fabric = {
+static struct fi_ops_fabric fi_ibv_ops_fabric = {
 	.size = sizeof(struct fi_ops_fabric),
-	.domain = ibv_domain,
-	.endpoint = ibv_pendpoint,
-	.eq_open = ibv_eq_open,
+	.domain = fi_ibv_domain,
+	.endpoint = fi_ibv_pendpoint,
+	.eq_open = fi_ibv_eq_open,
 };
 
-int ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)
+int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)
 {
-	struct ibv_fabric *fab;
+	struct fi_ibv_fabric *fab;
 
 	if (strcmp(attr->name, "RDMA"))
 		return -FI_ENODATA;
@@ -2426,27 +2426,27 @@ int ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *co
 
 	fab->fabric_fid.fid.fclass = FI_CLASS_FABRIC;
 	fab->fabric_fid.fid.context = context;
-	fab->fabric_fid.fid.ops = &ibv_fi_ops;
-	fab->fabric_fid.ops = &ibv_ops_fabric;
+	fab->fabric_fid.fid.ops = &fi_ibv_fi_ops;
+	fab->fabric_fid.ops = &fi_ibv_ops_fabric;
 	*fabric = &fab->fabric_fid;
 	return 0;
 }
 
-static struct fi_provider ibv_prov = {
+static struct fi_provider fi_ibv_prov = {
 	.name = "ibverbs",
 	.version = FI_VERSION(0, 7),
-	.getinfo = ibv_getinfo,
-	.freeinfo = ibv_freeinfo,
-	.fabric = ibv_fabric,
+	.getinfo = fi_ibv_getinfo,
+	.freeinfo = fi_ibv_freeinfo,
+	.fabric = fi_ibv_fabric,
 };
 
 #if HAVE_VERBS
-static void __attribute__((constructor)) ibv_ini(void)
+static void __attribute__((constructor)) fi_ibv_ini(void)
 {
-	(void) fi_register(&ibv_prov);
+	(void) fi_register(&fi_ibv_prov);
 }
 
-static void __attribute__((destructor)) ibv_fini(void)
+static void __attribute__((destructor)) fi_ibv_fini(void)
 {
 }
 #endif /* HAVE_VERBS */
