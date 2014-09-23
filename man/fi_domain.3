@@ -6,7 +6,7 @@ fi_domain \- Open a fabric access domain
 .br
 .B "#include <rdma/fi_domain.h>"
 .HP
-.BI "int fi_fdomain(struct fid_fabric *" fabric ", struct fi_info *" info ", "
+.BI "int fi_fdomain(struct fid_fabric *" fabric ", struct fi_domain_attr *" attr ", "
 .BI "struct fid_domain **" domain ", void *" context ");"
 .HP
 .BI "int fi_close(struct fid *" domain ");"
@@ -24,15 +24,13 @@ fi_domain \- Open a fabric access domain
 .SH ARGUMENTS
 .IP "fabric" 12
 Fabric domain
-.IP "info" 12
-Details about the access domain to be opened, obtained from fi_getinfo.
+.IP "attr" 12
+Attributes of the access domain.
 .IP "domain" 12
 An opened access domain.
 .IP "context" 12
 User specified context associated with the domain.  This context is returned as
 part of any asynchronous event associated with the domain.
-.IP "attr" 12
-Pointer to domain attributes.
 .IP "eq" 12
 Event queue for asynchronous operations initiated on the domain.
 .IP "name" 12
@@ -48,12 +46,8 @@ together.  Fabric resources belonging to the same domain may share
 resources.
 .SS "fi_fdomain"
 Opens a fabric access domain, also referred to as a resource domain.
-Fabric domains are identified by name.  Domain names are character
-strings. By convention, domain names appear similar to path names.
-This helps to identify the specific software
-and hardware provider associated with a domain.  The properties of
-the opened domain are specified using the fi_info structure.  See fi_getinfo
-for additional details.
+Fabric domains are identified by a name.  The properties of
+the opened domain are specified using the attr parameter.
 .SS "fi_open_ops"
 fi_open_ops is used to open provider specific interfaces.
 Provider interfaces may be used to access low-level resources and operations
