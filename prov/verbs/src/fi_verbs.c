@@ -2433,7 +2433,7 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void 
 }
 
 static struct fi_provider fi_ibv_prov = {
-	.name = "ibverbs",
+	.name = "verbs",
 	.version = FI_VERSION(0, 7),
 	.getinfo = fi_ibv_getinfo,
 	.freeinfo = fi_ibv_freeinfo,
