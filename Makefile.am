@@ -24,7 +24,7 @@ src_libfabric_la_SOURCES = \
 	prov/sockets/src/indexer.c
 
 if HAVE_VERBS
-src_libfabric_la_SOURCES += prov/ibverbs/src/fi_verbs.c
+src_libfabric_la_SOURCES += prov/verbs/src/fi_verbs.c
 endif
 
 if HAVE_PSM
