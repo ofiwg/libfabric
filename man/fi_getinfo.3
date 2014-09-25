@@ -58,7 +58,7 @@ by this call.
 .nf
 struct fi_info {
 	struct fi_info        *next;
-	size_t                size;
+	uint64_t              type;
 	uint64_t              ep_cap;
 	uint64_t              op_flags;
 	enum fi_addr_format   addr_format;
@@ -76,11 +76,6 @@ struct fi_info {
 .IP "next"
 Pointer to the next fi_info structure in the list.  Will be NULL
 if no more structures exist.
-.IP "size"
-Size of the fi_info structure, used for compatibility.  Callers should specify
-the size of any fi_info structure passed in as hints.  The size set on any fi_info
-structures returned from fi_getinfo indicates the size that was interpreted by
-the providers.
 .IP "type"
 If specified, indicates the type of fabric interface communication desired.
 Supported types are listed in the

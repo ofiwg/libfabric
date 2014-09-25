@@ -80,6 +80,8 @@ AC_CHECK_LIB(dl, dlsym, [],
     AC_MSG_ERROR([dlsym() not found.  libfabric requires libdl.]))
 AC_CHECK_LIB(pthread, pthread_mutex_init, [],
     AC_MSG_ERROR([pthread_mutex_init() not found.  libfabric requires libpthread.]))
+AC_CHECK_LIB(rt, clock_gettime, [],
+    AC_MSG_ERROR([clock_gettime() not found.  libfabric requires librt.]))
 
 dnl Check for gcc atomic intrinsics
 AC_MSG_CHECKING(compiler support for atomics)
