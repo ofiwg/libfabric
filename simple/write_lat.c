@@ -237,7 +237,7 @@ static int run_test(void)
 		ret = write_data(transfer_size);
 		if (ret)
 			goto out;
-		wait_for_completion(scq, 1);
+		ret = wait_for_completion(scq, 1);
 		if (ret)
 			goto out;
 	}
