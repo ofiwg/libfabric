@@ -10,61 +10,54 @@ AC_DEFUN([FI_PSM_CONFIGURE],[
 	      [],
 	      [enable_psm=auto])
 
-	AC_ARG_WITH([psm],
-	    [AS_HELP_STRING([--with-psm=@<:@PSM installation path@:>@],
-			    [Provide path to PSM installation])
-	    ],
-	    [AS_CASE([$with_psm],
-		     [yes|no], [],
-		     [CPPFLAGS="-I$with_psm/include $CPPFLAGS"
-		      LDFLAGS="-L$with_psm/lib64 -Wl,-rpath=$with_psm/lib64 $LDFLAGS"])
-	     enable_psm=yes
-	    ])
-
-	AC_ARG_WITH([psm-include],
-            [AS_HELP_STRING([--with-psm-include=@<:@PSM include path@:>@],
-                            [Provide path to PSM include files])
-            ],
-            [AS_CASE([$with_psm_include],
-                     [yes|no], [],
-                     [CPPFLAGS="-I$with_psm_include $CPPFLAGS"])
-	     enable_psm=yes
-            ])
-
-	AC_ARG_WITH([psm-lib],
-            [AS_HELP_STRING([--with-psm-lib=@<:@PSM library path@:>@],
-                            [Provide path to PSM library files])
-            ],
-            [AS_CASE([$with_psm_lib],
-                     [yes|no], [],
-                     [LDFLAGS="-L$with_psm_lib -Wl,-rpath=$with_psm_lib $LDFLAGS"])
-	     enable_psm=yes
-            ])
-
+	psm_dl=0
 	AS_CASE([$enable_psm],
-	[auto], [AC_CHECK_LIB(psm_infinipath, psm_init,
-			[AC_CHECK_HEADER([psm.h], [enable_psm=yes], [enable_psm=no])],
-			[enable_psm=no])
-		],
-	[yes],	[AC_CHECK_LIB(psm_infinipath, psm_init,
-			[AC_CHECK_HEADER([psm.h], [],
-				[AC_MSG_ERROR([psm.h not found. Provide the correct path to PSM with --with-psm-include (or --with-psm)])])
-			],
-			[AC_MSG_ERROR([psm_init() not found. Provide the correct path to PSM --with-psm-lib])])
-		],
-	[dl],	[enable_psm=yes; psm_dl=yes],
-	[no],	[],
-	[])
+	[yes|no], [],
+	[dl],     [enable_psm=yes psm_dl=1],
+	[auto],   [],
+	[AS_IF([test ! -d "$enable_psm"],
+	       [AC_MSG_WARN([supplied directory "$enable_psm" does not exist])
+	        AC_MSG_ERROR([Cannot continue])
+	       ])
+	 AS_IF([test -d "$enable_psm/include"],
+	       [CPPFLAGS="-I$enable_psm/include"],
+	       [AC_MSG_WARN([could not find "include" subdirectory in supplied "$enable_psm" directory"])
+	        AC_MSG_ERROR([Cannot continue])
+	       ])
+	 AS_IF([test -d "$enable_psm/lib"],
+	       [LDFLAGS="-L$enable_psm/lib"],
+	       [AS_IF([test -d "$enable_psm/lib64"],
+		      [LDFLAGS="-L$enable_psm/lib64"],
+		      [AC_MSG_WARN([could not find "lib" or "lib64" subdirectories in supplied "$enable_psm" directory"])
+		       AC_MSG_ERROR([Cannot continue])
+		      ])
+	       ])
+	])
 
-	AS_IF([test x"$psm_dl" = x"yes"],
-		[AC_DEFINE([HAVE_PSM_DL], [1],
-			[Define if PSM will be built as module])])
+	# First, determine if we can support the psm provider
+	psm_happy=0
+	AS_IF([test "x$enable_psm" != "xno"],
+	      [psm_happy=1
+	       AC_CHECK_HEADER([psm.h], [], [psm_happy=0])
+	       AC_CHECK_LIB([psm_infinipath], [psm_init], [], [psm_happy=0])
+	       ])
 
-	AS_IF([test x"$enable_psm" = x"yes"],
-		[AC_DEFINE([HAVE_PSM], [1], [Define if PSM is enabled])
-		 LIBS="-lpsm_infinipath $LIBS"
-		],
-		[AC_MSG_NOTICE(PSM not enabled)])
+	# If psm was specifically requested but we can't build it,
+	# error.
+	AS_IF([test "$enable_psm $psm_happy" = "yes 0"],
+	      [AC_MSG_WARN([psm provider was requested, but cannot be compiled])
+	       AC_MSG_ERROR([Cannot continue])
+	      ])
+
+	AS_IF([test $psm_happy -eq 1],
+	      [AS_IF([test $psm_dl -eq 1],
+		     [AC_MSG_NOTICE([psm provider to be built as a DSO])],
+		     [AC_MSG_NOTICE([psm provider to be built statically])])
+	      ],
+	      [AC_MSG_NOTICE([psm provider disabled])])
+
+	AC_DEFINE_UNQUOTED([HAVE_PSM_DL], [$psm_dl],
+		[Whether psm should be built as as DSO])
 ])
 
 dnl A separate macro for AM CONDITIONALS, since they cannot be invoked
