@@ -69,7 +69,7 @@ struct test_size_param {
 };
 
 static struct test_size_param test_size[] = {
-	{ 1 <<  0, 0 },
+	{ 1 <<  0, 1 },
 	{ 1 <<  1, 1 },
 	{ 1 <<  2, 1 },
 	{ 1 <<  3, 1 },
@@ -155,10 +155,26 @@ static void init_test(int size)
 	iterations = size_to_count(transfer_size);
 }
 
+static int wait_for_completion(struct fid_cq *cq, int num_completions)
+{
+	int ret;
+	struct fi_cq_entry comp;
+	
+	while(num_completions>0){
+		ret = fi_cq_read(cq, &comp, sizeof comp);
+		if (ret > 0) {
+			num_completions--;
+		} else if (ret < 0) {
+			fprintf(stderr, "Event queue read %d (%s)\n", ret, fi_strerror(-ret));
+			return ret;
+		}
+	}
+	return 0;
+}
+
 static int send_msg(int size)
 {
-	struct fi_cq_entry comp;
-	int ret, done = 0;
+	int ret;
 
 	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), NULL);
 	if (ret){
@@ -166,17 +182,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	do {
-		ret = fi_cq_read(scq, &comp, sizeof comp);
-		if (ret > 0) {
-			done = 1;
-		} else if (ret < 0) {
-			printf("Event queue read %d (%s)\n", ret, fi_strerror(-ret));
-			return ret;
-		}
-	} while (!done);
-
-	return 0;
+	return wait_for_completion(scq, 1);
 }
 
 static int post_recv()
@@ -194,8 +200,7 @@ static int post_recv()
 
 static int write_data(size_t size)
 {
-	int ret, done = 0;
-	struct fi_cq_entry comp;
+	int ret;
 
 	ret = fi_write(ep, buf, size, fi_mr_desc(mr),  
 		       (uint64_t)rem_buf, rem_key, NULL);
@@ -203,40 +208,6 @@ static int write_data(size_t size)
 		fprintf(stderr, "fi_write %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
-
-	do {
-		ret = fi_cq_read(scq, &comp, sizeof comp);
-		if (ret > 0) {
-			done = 1;
-		} else if (ret < 0) {
-			int ret1;
-			char tmp1[1024], tmp2[1024];
-			struct  fi_cq_err_entry err_entry;
-			printf("Event queue read %d (%s)\n", ret, fi_strerror(-ret));
-
-			while( 0 != (ret1 = fi_cq_readerr(scq, &err_entry, sizeof(err_entry), 0)));
-			fprintf(stderr, "ERROR: %s\n", fi_cq_strerror(scq, err_entry.err, tmp1, tmp2, 1024));
-			return ret;
-		}
-	} while (!done);
-
-	return 0;
-}
-
-static int wait_recv(void)
-{
-	int ret, done = 0;
-	struct fi_cq_entry comp;
-	
-	do {
-		ret = fi_cq_read(rcq, &comp, sizeof comp);
-		if (ret > 0) {
-			done = 1;
-		} else if (ret < 0) {
-			printf("Event queue read %d (%s)\n", ret, fi_strerror(-ret));
-			return ret;
-		}
-	} while (!done);
 	return 0;
 }
 
@@ -245,6 +216,8 @@ static int warmup(int iters)
 	int ret, i;
 	for(i = 0; i<iters; i++){
 		if((ret = write_data(16)) < 0)
+			return ret;
+		if((ret = wait_for_completion(scq, 1)) < 0)
 			return ret;
 	}
 	return 0;
@@ -261,6 +234,9 @@ static int run_test(void)
 	gettimeofday(&start, NULL);
 	for (i = 0; i < iterations; i++) {
 		ret = write_data(transfer_size);
+		if (ret)
+			goto out;
+		wait_for_completion(scq, 1);
 		if (ret)
 			goto out;
 	}
@@ -602,13 +578,13 @@ static int exchange_params(void)
 	*((uint64_t*)buf) = (uint64_t)buf;
 	post_recv();
 	send_msg(sizeof(uint64_t *));
-	wait_recv();
+	wait_for_completion(rcq, 1);
 	rem_buf = (void *)(*((uint64_t*)buf));
 
 	*((uint64_t*)buf) = fi_mr_key(mr);
 	post_recv();
 	send_msg(sizeof(uint64_t *));
-	wait_recv();
+	wait_for_completion(rcq, 1);
 	rem_key = (uint64_t)(*((uint64_t*)buf));
 
 	return 0;
@@ -618,7 +594,7 @@ static int synchronize(void)
 {
 	if(dst_addr){
 		post_recv();
-		wait_recv();
+		wait_for_completion(rcq, 1);
 	}else{
 		send_msg(sizeof(uint64_t *));
 	}
