@@ -60,7 +60,6 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_atomic.h>
 
-
 #include "../common/shared.h"
 
 struct test_size_param {
@@ -100,6 +99,7 @@ static int size_option;
 static int iterations = 1000;
 static int transfer_size = 1000;
 static int max_credits = 128;
+static int warmup_iters = 128;
 static char test_name[10] = "custom";
 static struct timeval start, end;
 static void *buf;
@@ -228,7 +228,7 @@ static int run_test(void)
 {
 	int ret, i;
 
-	ret = warmup(128);
+	ret = warmup(warmup_iters);
 	if (ret)
 		goto out;
 
@@ -652,7 +652,7 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:C:I:S:")) != -1) {
+	while ((op = getopt(argc, argv, "d:n:p:s:C:I:w:S:")) != -1) {
 		switch (op) {
 		case 'd':
 			dst_addr = optarg;
@@ -670,6 +670,9 @@ int main(int argc, char **argv)
 			custom = 1;
 			iterations = atoi(optarg);
 			break;
+		case 'w':
+			warmup_iters = atoi(optarg);
+			break;
 		case 'S':
 			if (!strncasecmp("all", optarg, 3)) {
 				size_option = 1;
@@ -685,6 +688,7 @@ int main(int argc, char **argv)
 			fprintf(stderr, "\t[-p port_number]\n");
 			fprintf(stderr, "\t[-s source_address]\n");
 			fprintf(stderr, "\t[-I iterations]\n");
+			fprintf(stderr, "\t[-w warmup iterations]\n");
 			fprintf(stderr, "\t[-S transfer_size or 'all']\n");
 			exit(1);
 		}
