@@ -577,16 +577,13 @@ err0:
 static int exchange_params(void)
 {
 	*((uint64_t*)buf) = (uint64_t)buf;
+	*(((uint64_t*)buf + 1)) = fi_mr_key(mr);
 	post_recv();
-	send_msg(sizeof(uint64_t *));
+	send_msg(sizeof(uint64_t *) * 2);
 	wait_for_completion(rcq, 1);
-	rem_buf = (void *)(*((uint64_t*)buf));
 
-	*((uint64_t*)buf) = fi_mr_key(mr);
-	post_recv();
-	send_msg(sizeof(uint64_t *));
-	wait_for_completion(rcq, 1);
-	rem_key = (uint64_t)(*((uint64_t*)buf));
+	rem_buf = (void *)(*((uint64_t*)buf));
+	rem_key = (uint64_t)(*(((uint64_t*)buf + 1)));
 
 	return 0;
 }
