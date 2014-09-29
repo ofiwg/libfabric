@@ -192,6 +192,7 @@ man_MANS = \
 	man/fi_recvmsg.3 \
 	man/fi_reject.3 \
 	man/fi_rma.3 \
+	man/fi_rx_addr.3 \
 	man/fi_send.3 \
 	man/fi_senddata.3 \
 	man/fi_senddatato.3 \

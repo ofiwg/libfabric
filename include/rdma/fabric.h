@@ -158,6 +158,8 @@ struct fi_ep_attr {
 	size_t			max_order_waw_size;
 	uint64_t		mem_tag_format;
 	uint64_t		msg_order;
+	size_t			tx_ctx_cnt;
+	size_t			rx_ctx_cnt;
 };
 
 struct fi_domain_attr {
@@ -168,6 +170,11 @@ struct fi_domain_attr {
 	enum fi_progress	data_progress;
 	size_t			mr_key_size;
 	size_t			eq_data_size;
+	size_t			ep_cnt;
+	size_t			tx_ctx_cnt;
+	size_t			rx_ctx_cnt;
+	size_t			max_ep_tx_ctx;
+	size_t			max_ep_rx_ctx;
 };
 
 struct fi_fabric_attr {

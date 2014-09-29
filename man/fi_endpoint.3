@@ -1,4 +1,4 @@
-.TH "FI_ENDPOINT" 3 "2014-09-11" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ENDPOINT" 3 "2014-09-29" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_endpoint \- Fabric endpoint operations
 .PP
@@ -47,6 +47,14 @@ Get or set endpoint options.
 .HP
 .BI "int fi_pendpoint(struct fi_fabric *" fabric ", struct fi_info *" info ", "
 .BI "struct fid_pep **" pep ", void *" context ");"
+.HP
+.BI "int fi_tx_context(struct fid_ep *" ep ", int " index ", "
+.BI "struct fi_tx_ctx_attr *" attr ", struct fid_ep **" tx_ep ", "
+.BI "void *" context ");"
+.HP
+.BI "int fi_rx_context(struct fid_ep *" ep ", int " index ", "
+.BI "struct fi_rx_ctx_attr *" attr ", struct fid_ep **" rx_ep ", "
+.BI "void *" context ");"
 .HP
 .BI "int fi_close(struct fid *" ep ");"
 .PP
@@ -112,9 +120,11 @@ may be connection-oriented or connectionless, and may provide data
 reliability.
 .PP
 Active endpoints are created in the disabled state.  They must transition into
-an enabled state before being used to connect to a remote destination
-or transfer data.  The fi_enable call is used to transition an endpoint into
-an active state.
+an enabled state before accepting data transfer operations, including posting
+of receive buffers.
+The fi_enable call is used to transition an endpoint into
+an active enabled state.  The fi_connect and fi_accept calls will also transition
+an endpoint into the enabled state, if it is not already active.
 .PP
 In order to transition an endpoint into an enabled state, it must be
 bound to one or more fabric resources.  An endpoint that
@@ -323,6 +333,8 @@ struct fi_ep_attr {
 	size_t    max_order_waw_size;
 	uint64_t  mem_tag_format;
 	uint64_t  msg_order;
+	size_t    tx_ctx_cnt;
+	size_t    rx_ctx_cnt;
 };
 .fi
 .SS "Protocol"
@@ -343,7 +355,7 @@ The protocol runs over the Internet wide area RDMA protocol transport.
 The protocol runs over Infiniband unreliable-connected queue pairs.
 .IP "FI_PROTO_IB_UD"
 The protocol runs over Infiniband unreliable datagram queue pairs.
-.SS "Max Message Size"
+.SS "Max Message Size (max_msg_size)"
 Defines the maximum size for an application data transfer as a
 single operation.
 .SS "Inject Size"
@@ -475,6 +487,128 @@ If not set, message sends may be processed ahead of RMA and atomic writes.
 Send after send.  If set, message send operations, including tagged sends,
 are processed in the order submitted relative to other message send.
 If not set, message sends may be processed out of order from their submission.
+.SS "Transmit Context Count (tx_ctx_cnt)"
+Number of transmit contexts to associate with the endpoint.  If not specified,
+1 context will be assigned if the endpoint supports outbound transfers.
+Transmit contexts are independent command queues that may be separately
+configured.  Each transmit context may be bound to a separate CQ, and no
+ordering is defined between contexts.  Additionally, no synchronization is
+needed when accessing contexts in parallel.  See the scalable endpoint
+section for additional details.
+.SS "Receive Context Count (rx_ctx_cnt)"
+Number of receive contexts to associate with the endpoint.  If not specified,
+1 context will be assigned if the endpoint supports inbound transfers.
+Receive contexts are independent processing queues that may be separately
+configured.  Each receive context may be bound to a separate CQ, and no
+ordering is defined between contexts.  Additionally, no synchronization is
+needed when accessing contexts in parallel.  See the scalable endpoint
+section for additional details.
+.SH "SCALABLE ENDPOINTS"
+A scalable endpoint is a communication portal that supports multiple
+transmit and receive contexts.  Scalable endpoints are loosely modeled
+after the networking concept of transmit/receive side scaling, also
+known as multi-queue.  By default, an endpoint is associated
+with a single transmit and receive context.  Support for scalable endpoints
+is domain specific.  Scalable endpoints may improve the performance
+of multi-threaded and parallel applications, by allowing threads to
+access independent transmit and receive queues.  A scalable endpoint has
+a single transport level address, which can reduce the memory requirements
+needed to store remote addressing data, versus using standard endpoints. 
+.SS "fi_tx_context"
+Transmit contexts are independent command queues.  Ordering and
+synchronization between contexts are not defined.  Conceptually a
+transmit context behaves similar to a send-only endpoint.  A transmit
+context may be configured with relaxed endpoint capabilities, and has
+its own completion queue.  The number of transmit contexts associated
+with an endpoint is specified during endpoint creation.
+.P
+The fi_tx_context call is used to retrieve a specific context,
+identified by an index.  Providers may dynamically allocate contexts
+when fi_tx_context is called, or may statically create all contexts
+when fi_endpoint is invoked.  By default, a transmit context inherents
+the properties of its associated endpoint.  However, applications
+may request context specific attributes through the attr parameter.
+Support for per transmit context attributes is provider specific
+and not guaranteed.  Providers will return the actual attributes
+assigned to the context through the attr parameter, if provided.
+.sp
+.nf
+struct fi_tx_ctx_attr {
+	uint64_t  ep_caps;
+	uint64_t  op_flags;
+	uint64_t  msg_order;
+	size_t    inject_size;
+};
+.fi
+.IP "ep_cap"
+The requested capabilities of the context.  The capabilities must be a
+subset of those requested of the associated endpoint.  See the ENDPOINT
+CAPABILITIES section if fi_getinfo(3) for capability details. 
+.IP "op_flags"
+Flags that control the operation of operations submitted against the
+context.  Applicable flags are listed in the Op Flags section in
+fi_getinfo(3). 
+.IP "msg_order"
+The message ordering requirements of the context.  The message ordering
+must be the same or more relaxed than those specified of the associated
+endpoint.  See the fi_endpoint Message Ordering section.
+.IP "inject_size"
+The requested inject operation size (see the FI_INJECT
+flag) that the context will support.  This value must be equal to or less
+than the inject_size of the associated endpoint.  See the fi_endpoint
+Inject Size section.
+.SS "fi_rx_context"
+Receive contexts are independent command queues for receiving incoming
+data.  Ordering and synchronization between contexts are not guaranteed.
+Conceptually a receive context behaves similar to a receive-only endpoint.
+A receive context may be configured with
+relaxed endpoint capabilities, and has its own completion queue.
+The number of receive contexts associated
+with an endpoint is specified during endpoint creation.
+.P
+Receive contexts are often associated with steering flows, that specify
+which incoming packets targeting a scalable endpoint to process.  However,
+receive contexts may be targeted directly by the intiator, if supported
+by the underlying protocol.  Such contexts are referred to as 'named'.
+Support for named contexts must be indicated by setting the ep_cap
+FI_NAMED_RX_CTX capability.  Support for named receive contexts is
+coordinated with address vectors.  See fi_av(3) and fi_rx_addr(3).
+.P
+The fi_rx_context call is used to retrieve a specific context,
+identified by an index.  Providers may dynamically allocate contexts
+when fi_rx_context is called, or may statically create all contexts
+when fi_endpoint is invoked.  By default, a receive context inherents
+the properties of its associated endpoint.  However, applications
+may request context specific attributes through the attr parameter.
+Support for per receive context attributes is provider specific
+and not guaranteed.  Providers will return the actual attributes
+assigned to the context through the attr parameter, if provided.
+.sp
+.nf
+struct fi_rx_ctx_attr {
+	uint64_t  ep_caps;
+	uint64_t  op_flag;
+	uint64_t  msg_order;
+	size_t    total_buffered_recv;
+};
+.fi
+.IP "ep_cap"
+The requested capabilities of the context.  The capabilities must be a
+subset of those requested of the associated endpoint.  See the ENDPOINT
+CAPABILITIES section if fi_getinfo(3) for capability details. 
+.IP "op_flags"
+Flags that control the operation of operations submitted against the
+context.  Applicable flags are listed in the Op Flags section in
+fi_getinfo(3). 
+.IP "msg_order"
+The message ordering requirements of the context.  The message ordering
+must be the same or more relaxed than those specified of the associated
+endpoint.  See the fi_endpoint Message Ordering section.
+.IP "total_buffered_recv"
+Defines the total available space allocated by the provider to buffer received
+messages on the context.  This value must be less than or equal to that
+specified for the associated endpoint.  See the fi_endpoint Total
+Buffered Receive section.
 .SH "CONTROL FLAGS"
 The following flags may be set to control the operation of data transfers
 initiated on an endpoint.  See fi_getinfo for additional descriptions of

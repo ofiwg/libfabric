@@ -199,6 +199,10 @@ FI_RECV flags to optimize an endpoint as send-only or receive-only.
 Indicates that the endpoint should support triggered operations.  Endpoints
 support this capability must meet the usage model as described by
 fi_trigger.3. 
+.IP "FI_NAMED_RX_CTX"
+Requests that endpoints which support multiple receive contexts allow an
+initiator to target (or name) a specific receive context as part of a data
+transfer operation.  
 .IP "FI_BUFFERED_RECV"
 Requests that the communication endpoint should attempt to queue
 inbound data that arrives before a receive buffer has been posted.  In the
