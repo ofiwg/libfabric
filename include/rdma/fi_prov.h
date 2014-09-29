@@ -47,7 +47,10 @@ extern "C" {
  * (probably via libtool "-release" option).  For example a low-level
  * driver named "libfoo" should build a plug-in named "libfoo-fi.so".
  */
-#define FI_LIB_EXTENSION fi
+#define FI_LIB_EXTENSION "fi"
+#define FI_LIB_SUFFIX FI_LIB_EXTENSION ".so"
+
+#define FI_LIB_CLASS_NAME	"libfabric"
 
 struct fi_provider {
 	const char *name;
@@ -65,7 +68,6 @@ static inline int fi_register(struct fi_provider *provider)
 	return fi_version_register(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 				   provider);
 }
-
 
 #ifdef __cplusplus
 }

@@ -37,18 +37,10 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <complex.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <poll.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
+#include <dirent.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
@@ -61,6 +53,9 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 
+#ifdef HAVE_LIBDL
+#include <dlfcn.h>
+#endif
 
 struct fi_prov {
 	struct fi_prov		*next;
@@ -68,31 +63,6 @@ struct fi_prov {
 };
 
 static struct fi_prov *prov_head, *prov_tail;
-
-
-int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
-{
-	char *path;
-	int fd, len;
-
-	if (asprintf(&path, "%s/%s", dir, file) < 0)
-		return -1;
-
-	fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		free(path);
-		return -1;
-	}
-
-	len = read(fd, buf, size);
-	close(fd);
-	free(path);
-
-	if (len > 0 && buf[len - 1] == '\n')
-		buf[--len] = '\0';
-
-	return len;
-}
 
 int fi_version_register(uint32_t version, struct fi_provider *provider)
 {
@@ -115,30 +85,54 @@ int fi_version_register(uint32_t version, struct fi_provider *provider)
 	return 0;
 }
 
-int fi_poll_fd(int fd, int timeout)
+static int lib_filter(const struct dirent *entry)
 {
-	struct pollfd fds;
+	size_t l = strlen(entry->d_name);
+	size_t sfx = sizeof (FI_LIB_SUFFIX) - 1;
 
-	fds.fd = fd;
-	fds.events = POLLIN;
-	return poll(&fds, 1, timeout) < 0 ? -errno : 0;
-}
-
-int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
-{
-	struct timespec ts;
-
-	if (timeout < 0)
-		return pthread_cond_wait(cond, mut);
-
-	clock_gettime(CLOCK_REALTIME, &ts);
-	ts.tv_sec += timeout / 1000;
-	ts.tv_nsec += (timeout % 1000) * 1000000;
-	return pthread_cond_timedwait(cond, mut, &ts);
+	if (l > sfx)
+		return !strcmp(&(entry->d_name[l-sfx]), FI_LIB_SUFFIX);
+	else
+		return 0;
 }
 
 static void __attribute__((constructor)) fi_ini(void)
 {
+	struct dirent **liblist;
+	int n;
+	char *lib, *path = getenv("FI_EXTPATH");
+	void *dlhandle;
+
+	if (!path)
+		path = EXTDIR;
+
+	if (dlopen(NULL, RTLD_NOW) == NULL) {
+		fprintf(stderr, "dlopen(NULL) failed, assuming static linking\n");
+		return;
+	}
+
+	n = scandir(path, &liblist, lib_filter, NULL);
+
+	if (n < 0) {
+		fprintf(stderr, "scandir error reading %s: %s\n", path, strerror(n));
+		return;
+	}
+
+	while (n--) {
+		if (asprintf(&lib, "%s/%s", path, liblist[n]->d_name) < 0) {
+			fprintf(stderr, "asprintf failed to allocate memory\n");
+			return;
+		}
+
+		dlhandle = dlopen(lib, RTLD_NOW);
+		if (dlhandle == NULL)
+			fprintf(stderr, "dlopen(%s): %s\n", lib, dlerror());
+
+		free(liblist[n]);
+		free(lib);
+	}
+
+	free(liblist);
 }
 
 static void __attribute__((destructor)) fi_fini(void)
@@ -192,44 +186,6 @@ int fi_getinfo(uint32_t version, const char *node, const char *service,
 	return *info ? 0 : ret;
 }
 
-struct fi_info *__fi_allocinfo(void)
-{
-	struct fi_info *info;
-
-	info = calloc(1, sizeof(*info));
-	if (!info)
-		return NULL;
-
-	info->ep_attr = calloc(1, sizeof(*info->ep_attr));
-	info->domain_attr = calloc(1, sizeof(*info->domain_attr));
-	info->fabric_attr = calloc(1, sizeof(*info->fabric_attr));
-	if (!info->ep_attr || !info->domain_attr || !info->fabric_attr)
-		goto err;
-
-	return info;
-err:
-	__fi_freeinfo(info);
-	return NULL;
-}
-
-void __fi_freeinfo(struct fi_info *info)
-{
-	free(info->src_addr);
-	free(info->dest_addr);
-	free(info->ep_attr);
-	if (info->domain_attr) {
-		free(info->domain_attr->name);
-		free(info->domain_attr);
-	}
-	if (info->fabric_attr) {
-		free(info->fabric_attr->name);
-		free(info->fabric_attr->prov_name);
-		free(info->fabric_attr);
-	}
-	free(info->data);
-	free(info);
-}
-
 void fi_freeinfo(struct fi_info *info)
 {
 	struct fi_prov *prov;
@@ -265,17 +221,6 @@ uint32_t fi_version(void)
 {
 	return FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION);
 }
-
-uint64_t fi_tag_bits(uint64_t mem_tag_format)
-{
-	return UINT64_MAX >> (ffsll(htonll(mem_tag_format)) -1);
-}
-
-uint64_t fi_tag_format(uint64_t tag_bits)
-{
-	return FI_TAG_GENERIC >> (ffsll(htonll(tag_bits)) - 1);
-}
-
 
 #define FI_ERRNO_OFFSET	256
 #define FI_ERRNO_MAX	FI_EOPBADSTATE

@@ -132,10 +132,12 @@ typedef struct { volatile int val; } atomic_t;
 #define atomic_dec(v) (__sync_sub_and_fetch(&(v)->val, 1))
 #define atomic_init(v) ((v)->val = 0)
 #endif /* DEFINE_ATOMICS */
+
 #define atomic_get(v) ((v)->val)
 #define atomic_set(v, s) ((v)->val = s)
 
-int  fi_init(void);
+/* non exported symbols */
+int fi_init(void);
 
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
 int fi_poll_fd(int fd, int timeout);
@@ -149,12 +151,18 @@ size_t fi_datatype_size(enum fi_datatype datatype);
 uint64_t fi_tag_bits(uint64_t mem_tag_format);
 uint64_t fi_tag_format(uint64_t tag_bits);
 
+int fi_version_register(uint32_t version, struct fi_provider *provider);
+
 #ifndef SYSCONFDIR
 #define SYSCONFDIR "/etc"
 #endif
 #ifndef RDMADIR
 #define RDMADIR "rdma"
 #endif
+#ifndef EXTDIR
+#define EXTDIR "/usr/lib/libfabric"
+#endif
+
 #define RDMA_CONF_DIR  SYSCONFDIR "/" RDMADIR
 #define FI_CONF_DIR RDMA_CONF_DIR "/fabric"
 
