@@ -32,20 +32,19 @@ AC_DEFUN([FI_PSM_CONFIGURE],[
 		       AC_MSG_ERROR([Cannot continue])
 		      ])
 	       ])
+	enable_psm=yes
 	])
 
 	# First, determine if we can support the psm provider
 	psm_happy=0
 	AS_IF([test "x$enable_psm" != "xno"],
 	      [psm_happy=1
-	       enable_psm=1
 	       AC_CHECK_HEADER([psm.h], [], [psm_happy=0])
-	       AC_CHECK_LIB([psm_infinipath], [psm_init], [], [psm_happy=0])],
-	      [enable_psm=0])
+	       AC_CHECK_LIB([psm_infinipath], [psm_init], [], [psm_happy=0])])
 
 	# If psm was specifically requested but we can't build it,
 	# error.
-	AS_IF([test "$enable_psm $psm_happy" = "1 0"],
+	AS_IF([test "$enable_psm $psm_happy" = "yes 0"],
 	      [AC_MSG_WARN([psm provider was requested, but cannot be compiled])
 	       AC_MSG_ERROR([Cannot continue])
 	      ])
@@ -57,7 +56,7 @@ AC_DEFUN([FI_PSM_CONFIGURE],[
 	      ],
 	      [AC_MSG_NOTICE([psm provider disabled])])
 
-        AC_DEFINE_UNQUOTED([HAVE_PSM], [$enable_psm],
+        AC_DEFINE_UNQUOTED([HAVE_PSM], [$psm_happy],
 		[Whether psm should be built])
 
 	AC_DEFINE_UNQUOTED([HAVE_PSM_DL], [$psm_dl],
@@ -67,6 +66,6 @@ AC_DEFUN([FI_PSM_CONFIGURE],[
 dnl A separate macro for AM CONDITIONALS, since they cannot be invoked
 dnl conditionally
 AC_DEFUN([FI_PSM_CONDITIONALS],[
-	AM_CONDITIONAL([HAVE_PSM], [test $enable_psm -eq 1])
+	AM_CONDITIONAL([HAVE_PSM], [test $psm_happy -eq 1])
 	AM_CONDITIONAL([HAVE_PSM_DL], [test $psm_dl -eq 1])
 ])
