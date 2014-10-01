@@ -412,22 +412,23 @@ err0:
 static int server_connect(void)
 {
 	struct fi_eq_cm_entry entry;
+	enum fi_eq_event event;
 	ssize_t rd;
 	int ret;
 
-	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, -1, 0);
+	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
 		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 
-	if (entry.event != FI_CONNREQ) {
-		printf("Unexpected CM event %d\n", entry.event);
+	if (event != FI_CONNREQ) {
+		printf("Unexpected CM event %d\n", event);
 		ret = -FI_EOTHER;
 		goto err1;
 	}
 
-	ret = fi_fdomain(fab, entry.info->domain_attr, &dom, NULL);
+	ret = fi_domain(fab, entry.info->domain_attr, &dom, NULL);
 	if (ret) {
 		printf("fi_fdomain %s\n", fi_strerror(-ret));
 		goto err1;
@@ -454,15 +455,15 @@ static int server_connect(void)
 		goto err3;
 	}
 
-	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, -1, 0);
+	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
 		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 
-	if (entry.event != FI_COMPLETE || entry.fid != &ep->fid) {
+	if (event != FI_COMPLETE || entry.fid != &ep->fid) {
 		printf("Unexpected CM event %d fid %p (ep %p)\n",
-			entry.event, entry.fid, ep);
+			event, entry.fid, ep);
 		ret = -FI_EOTHER;
 		goto err1;
 	}
@@ -484,6 +485,7 @@ err1:
 static int client_connect(void)
 {
 	struct fi_eq_cm_entry entry;
+	enum fi_eq_event event;
 	struct fi_info *fi;
 	ssize_t rd;
 	int ret;
@@ -507,7 +509,7 @@ static int client_connect(void)
 		goto err1;
 	}
 
-	ret = fi_fdomain(fab, fi->domain_attr, &dom, NULL);
+	ret = fi_domain(fab, fi->domain_attr, &dom, NULL);
 	if (ret) {
 		printf("fi_fdomain %s %s\n", fi_strerror(-ret),
 			fi->domain_attr->name);
@@ -534,15 +536,15 @@ static int client_connect(void)
 		goto err5;
 	}
 
-	rd = fi_eq_condread(cmeq, &entry, sizeof entry, NULL, -1, 0);
+	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
 		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 
-	if (entry.event != FI_COMPLETE || entry.fid != &ep->fid) {
+	if (event != FI_COMPLETE || entry.fid != &ep->fid) {
 		printf("Unexpected CM event %d fid %p (ep %p)\n",
-			entry.event, entry.fid, ep);
+			event, entry.fid, ep);
 		ret = -FI_EOTHER;
 		goto err1;
 	}
