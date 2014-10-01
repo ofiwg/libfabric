@@ -1,4 +1,4 @@
-.TH "FI_EQ" 3 "2014-09-18" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_EQ" 3 "2014-09-30" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_eq \- Event queue operations
 .PP
@@ -17,10 +17,9 @@ fi_eq_write
 Writes an event to an event queue
 .RE
 .PP
-fi_eq_condread
+fi_eq_sread
 .RS
-Waits until the specified condition has been met before reading an event
-from an event queue.
+A synchronous (blocking) read of an event queue
 .RE
 .PP
 fi_eq_strerror
@@ -38,21 +37,21 @@ Converts provider specific error information into a printable string
 .BI "int fi_control(struct fid *" eq ", int " command ", void *" arg ");"
 .PP
 .HP
-.BI "int fi_eq_read(struct fid_eq *" eq ","
+.BI "int fi_eq_read(struct fid_eq *" eq ", enum fi_eq_event *" event ", "
 .BI "void *" buf ", size_t " len ", uint64_t " flags ");"
 .HP
-.BI "int fi_eq_readerr(struct fid_eq *" eq ","
+.BI "int fi_eq_readerr(struct fid_eq *" eq ", "
 .BI "struct fi_eq_err_entry *" buf ", size_t " len ", "
 .BI "uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_eq_write(struct fid_eq *" eq ","
+.BI "int fi_eq_write(struct fid_eq *" eq ", enum fi_eq_event " event ", "
 .BI "const void *" buf ", size_t " len ", uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_eq_condread(struct fid_eq *" eq ","
+.BI "int fi_eq_sread(struct fid_eq *" eq ", enum fi_eq_event *" event ", "
 .BI "void *" buf ", size_t " len ", "
-.BI "const void *" cond ", int " timeout ", uint64_t " flags ");"
+.BI "int " timeout ", uint64_t " flags ");"
 .PP
 .HP
 .BI "const char * fi_eq_strerror(struct fid_eq *" eq ", int " prov_errno ", "
@@ -68,6 +67,8 @@ Event queue
 Event queue attributes
 .IP "context"
 User specified context associated with the event queue.
+.IP "event"
+Reported event
 .IP "buf"
 For read calls, the data buffer to write events into.
 .br
@@ -76,12 +77,8 @@ For write calls, an event to insert into the event queue.
 For fi_eq_strerror, an optional buffer that receives printable error information.
 .IP "len"
 Length of data buffer
-.IP "src_addr"
-Source address of a completed receive operation
 .IP "flags"
 Additional flags to apply to the operation
-.IP "cond"
-Condition that must be met before an event is generated
 .IP "prov_errno"
 Provider specific error value
 .IP "err_data"
@@ -127,10 +124,10 @@ of wait object associated with an EQ:
 .RS
 .IP "FI_WAIT_NONE"
 Used to indicate that the user will not block (wait) for events on the EQ.
-When FI_WAIT_NONE is specified, the application may not call fi_eq_condread.
+When FI_WAIT_NONE is specified, the application may not call fi_eq_sread.
 .IP "FI_WAIT_UNSPECIFIED"
 Specifies that the user will only wait on the EQ using fabric interface
-calls, such as fi_eq_condread.  In this case, the underlying provider may
+calls, such as fi_eq_sread.  In this case, the underlying provider may
 select the most appropriate or highest performing wait object available,
 including custom wait mechanisms.  Applications that select
 FI_WAIT_UNSPECIFIED are not guaranteed to retrieve the underlying wait
@@ -198,14 +195,13 @@ into the EQ.  The format of this structure is:
 .nf
 
 struct fi_eq_entry {
-	enum fi_eq_event event;      /* event type */
 	fid_t            fid;        /* fid associated with request */
 	void            *context;    /* operation context */
 };
 
 .fi
-For the completion of basic asynchronous control operations, the event
-type will be set to FI_COMPLETE.  The fid will reference the fabric descriptor
+For the completion of basic asynchronous control operations, the returned event
+will be to FI_COMPLETE.  The fid will reference the fabric descriptor
 associated with the event.  For memory registration, this will be the fid_mr,
 address resolution will reference a fid_av, and CM events will refer to a
 fid_ep.  The context field will be set to the context specified as part of
@@ -217,7 +213,6 @@ Connection requests are reported using struct fi_eq_cm_entry:
 .nf
 
 struct fi_eq_cm_entry {
-	enum fi_eq_event event;      /* event type */
 	fid_t            fid;        /* fid associated with request */
 	fi_connreq_t     connreq;    /* connection context */
 	struct fi_info  *info;       /* endpoint information */
@@ -247,8 +242,8 @@ Notification that a remote peer has disconnected from an active endpoint is
 done through the FI_SHUTDOWN event.  Shutdown notification uses struct
 fi_eq_entry as declared above.  The fid field for a shutdown notification
 refers to the active endpoint's fid_ep.  The context field is set to NULL.
-.SS "fi_eq_condread"
-The fi_eq_condread call is the blocking equivalent to fi_eq_read.
+.SS "fi_eq_sread"
+The fi_eq_sread call is the blocking (or synchronous) equivalent to fi_eq_read.
 It behaves is similar to
 the non-blocking call, with the exception that the calls will not return
 until either an event has been read from the EQ or an error or timeout occurs.
@@ -272,7 +267,6 @@ The format of this structure is defined below.
 .nf
 
 struct fi_eq_err_entry {
-	enum fi_eq_event event;      /* event type */
 	fid_t            fid;        /* fid associated with error */
 	void            *context;    /* operation context */
 	int              err;        /* positive error code */
@@ -281,7 +275,6 @@ struct fi_eq_err_entry {
 };
 
 .fi
-Error events will set the event field to FI_ERROR.
 The fid will reference the fabric descriptor
 associated with the event.  For memory registration, this will be the fid_mr,
 address resolution will reference a fid_av, and CM events will refer to a
@@ -301,7 +294,7 @@ fabric errno is returned.
 .PP
 fi_eq_read / fi_eq_readerr
 .br
-fi_eq_condread
+fi_eq_sread
 .br
 fi_eq_write
 .RS

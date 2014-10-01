@@ -40,7 +40,7 @@ fi
 
 AC_ARG_ENABLE([direct],
 	[AS_HELP_STRING([--enable-direct=@<:@provider@:>@],
-		[Enable direct calls to a fabric provider @<:@defaul=no@:>@])
+		[Enable direct calls to a fabric provider @<:@default=no@:>@])
 	],
 	[enable_direct=no])
 
