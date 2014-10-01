@@ -11,13 +11,13 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 		      [enable_verbs=auto])
 
 	verbs_dl=0
-	AS_IF([test "x$enable_verbs" = "xdl"],
+	AS_IF([test x"$enable_verbs" = x"dl"],
 	      [verbs_dl=1
 	       enable_verbs=yes])
 
 	# First, determine if we can support the verbs provider
 	verbs_happy=0
-	AS_IF([test "x$enable_verbs" != "xno"],
+	AS_IF([test x"$enable_verbs" != x"no"],
 	      [verbs_happy=1
 	       AC_CHECK_HEADER([infiniband/verbs.h], [], [verbs_happy=0])
 	       AC_CHECK_HEADER([rdma/rsocket.h], [], [verbs_happy=0])
@@ -39,8 +39,10 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	      ],
 	      [AC_MSG_NOTICE([verbs provider disabled])])
 
+	AC_DEFINE_UNQUOTED([HAVE_VERBS], [$verbs_happy],
+		[Whether verbs should be enabled])
 	AC_DEFINE_UNQUOTED([HAVE_VERBS_DL], [$verbs_dl],
-		[Whether verbs should be built as as DSO])
+		[Whether verbs should be built as DSO])
 
 # JMS This should have a test seeing if MLX4 direct is *available* or
 # not.  But I don't know what headers/libraries to test for...  (I
