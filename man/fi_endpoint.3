@@ -1,4 +1,4 @@
-.TH "FI_ENDPOINT" 3 "2014-09-29" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ENDPOINT" 3 "2014-09-30" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_endpoint \- Fabric endpoint operations
 .PP
@@ -347,12 +347,11 @@ vendor OUI.
 .IP "FI_PROTO_UNSPEC"
 The protocol is not specified.  This is usually provided as input, with other
 attributes of the socket or the provider selecting the actual protocol.
-.IP "FI_PROTO_IB_RC"
-The protocol runs over Infiniband reliable-connected queue pairs.
+.IP "FI_PROTO_RDMA_CM_IB_RC"
+The protocol runs over Infiniband reliable-connected queue pairs, using the
+RDMA CM protocol for connection establishment.
 .IP "FI_PROTO_IWARP"
 The protocol runs over the Internet wide area RDMA protocol transport.
-.IP "FI_PROTO_IB_UC"
-The protocol runs over Infiniband unreliable-connected queue pairs.
 .IP "FI_PROTO_IB_UD"
 The protocol runs over Infiniband unreliable datagram queue pairs.
 .SS "Max Message Size (max_msg_size)"

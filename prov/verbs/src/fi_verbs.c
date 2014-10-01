@@ -145,9 +145,8 @@ static int fi_ibv_check_hints(struct fi_info *hints)
 	if (hints->ep_attr) {
 		switch (hints->ep_attr->protocol) {
 		case FI_PROTO_UNSPEC:
-		case FI_PROTO_IB_RC:
+		case FI_PROTO_RDMA_CM_IB_RC:
 		case FI_PROTO_IWARP:
-		case FI_PROTO_IB_UC:
 		case FI_PROTO_IB_UD:
 			break;
 		default:
@@ -180,7 +179,7 @@ static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addr
 
 //	rai->ai_family = fi->sa_family;
 	if (fi->type == FI_EP_MSG || fi->ep_cap & FI_RMA || (fi->ep_attr &&
-	    (fi->ep_attr->protocol == FI_PROTO_IB_RC ||
+	    (fi->ep_attr->protocol == FI_PROTO_RDMA_CM_IB_RC ||
 	     fi->ep_attr->protocol == FI_PROTO_IWARP))) {
 		rai->ai_qp_type = IBV_QPT_RC;
 		rai->ai_port_space = RDMA_PS_TCP;
@@ -1615,7 +1614,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	if (event->id->verbs->device->transport_type == IBV_TRANSPORT_IWARP) {
 		fi->ep_attr->protocol = FI_PROTO_IWARP;
 	} else {
-		fi->ep_attr->protocol = FI_PROTO_IB_RC;
+		fi->ep_attr->protocol = FI_PROTO_RDMA_CM_IB_RC;
 	}
 	fi->ep_cap = FI_MSG | FI_RMA;
 

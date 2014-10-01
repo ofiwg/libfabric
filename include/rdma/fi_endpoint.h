@@ -60,12 +60,9 @@ enum fi_ep_type {
  */
 enum fi_proto {
 	FI_PROTO_UNSPEC,
-	FI_PROTO_IB_RC,
+	FI_PROTO_RDMA_CM_IB_RC,
 	FI_PROTO_IWARP,
-	FI_PROTO_IB_UC,
 	FI_PROTO_IB_UD,
-	FI_PROTO_IB_XRC,
-	FI_PROTO_RAW
 };
 
 struct fi_tx_ctx_attr {
