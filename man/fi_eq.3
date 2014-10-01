@@ -17,10 +17,9 @@ fi_eq_write
 Writes an event to an event queue
 .RE
 .PP
-fi_eq_condread
+fi_eq_sread
 .RS
-Waits until the specified condition has been met before reading an event
-from an event queue.
+A synchronous (blocking) read of an event queue
 .RE
 .PP
 fi_eq_strerror
@@ -50,9 +49,9 @@ Converts provider specific error information into a printable string
 .BI "const void *" buf ", size_t " len ", uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_eq_condread(struct fid_eq *" eq ","
+.BI "int fi_eq_sread(struct fid_eq *" eq ","
 .BI "void *" buf ", size_t " len ", "
-.BI "const void *" cond ", int " timeout ", uint64_t " flags ");"
+.BI "int " timeout ", uint64_t " flags ");"
 .PP
 .HP
 .BI "const char * fi_eq_strerror(struct fid_eq *" eq ", int " prov_errno ", "
@@ -127,10 +126,10 @@ of wait object associated with an EQ:
 .RS
 .IP "FI_WAIT_NONE"
 Used to indicate that the user will not block (wait) for events on the EQ.
-When FI_WAIT_NONE is specified, the application may not call fi_eq_condread.
+When FI_WAIT_NONE is specified, the application may not call fi_eq_sread.
 .IP "FI_WAIT_UNSPECIFIED"
 Specifies that the user will only wait on the EQ using fabric interface
-calls, such as fi_eq_condread.  In this case, the underlying provider may
+calls, such as fi_eq_sread.  In this case, the underlying provider may
 select the most appropriate or highest performing wait object available,
 including custom wait mechanisms.  Applications that select
 FI_WAIT_UNSPECIFIED are not guaranteed to retrieve the underlying wait
@@ -247,8 +246,8 @@ Notification that a remote peer has disconnected from an active endpoint is
 done through the FI_SHUTDOWN event.  Shutdown notification uses struct
 fi_eq_entry as declared above.  The fid field for a shutdown notification
 refers to the active endpoint's fid_ep.  The context field is set to NULL.
-.SS "fi_eq_condread"
-The fi_eq_condread call is the blocking equivalent to fi_eq_read.
+.SS "fi_eq_sread"
+The fi_eq_sread call is the blocking (or synchronous) equivalent to fi_eq_read.
 It behaves is similar to
 the non-blocking call, with the exception that the calls will not return
 until either an event has been read from the EQ or an error or timeout occurs.
@@ -301,7 +300,7 @@ fabric errno is returned.
 .PP
 fi_eq_read / fi_eq_readerr
 .br
-fi_eq_condread
+fi_eq_sread
 .br
 fi_eq_write
 .RS

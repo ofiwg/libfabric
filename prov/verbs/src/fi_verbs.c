@@ -1726,7 +1726,7 @@ fi_ibv_eq_read(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 }
 
 static ssize_t
-fi_ibv_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
+fi_ibv_eq_sread(struct fid_eq *eq, void *buf, size_t len,
 		int timeout, uint64_t flags)
 {
 	struct fi_ibv_eq *_eq;
@@ -1758,7 +1758,7 @@ static struct fi_ops_eq fi_ibv_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = fi_ibv_eq_read,
 	.readerr = fi_ibv_eq_readerr,
-	.condread = fi_ibv_eq_condread,
+	.sread = fi_ibv_eq_sread,
 	.strerror = fi_ibv_eq_strerror
 };
 

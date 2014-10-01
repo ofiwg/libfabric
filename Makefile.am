@@ -152,7 +152,7 @@ man_MANS = \
 	man/fi_eq_read.3 \
 	man/fi_eq_readerr.3 \
 	man/fi_eq_write.3 \
-	man/fi_eq_condread.3 \
+	man/fi_eq_sread.3 \
 	man/fi_eq_strerror.3 \
 	man/fi_enable.3 \
 	man/fi_endpoint.3 \

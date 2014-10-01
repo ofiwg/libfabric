@@ -154,8 +154,8 @@ struct fi_ops_eq {
 			size_t len, uint64_t flags);
 	ssize_t	(*write)(struct fid_eq *eq, const void *buf, size_t len,
 			uint64_t flags);
-	ssize_t	(*condread)(struct fid_eq *eq, void *buf, size_t len,
-			const void *cond, int timeout, uint64_t flags);
+	ssize_t	(*sread)(struct fid_eq *eq, void *buf, size_t len,
+			int timeout, uint64_t flags);
 	const char * (*strerror)(struct fid_eq *eq, int prov_errno,
 			const void *err_data, void *buf, size_t len);
 };
@@ -331,10 +331,10 @@ fi_eq_write(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 }
 
 static inline ssize_t
-fi_eq_condread(struct fid_eq *eq, void *buf, size_t len, const void *cond,
-	       int timeout, uint64_t flags)
+fi_eq_sread(struct fid_eq *eq, void *buf, size_t len,
+	    int timeout, uint64_t flags)
 {
-	return eq->ops->condread(eq, buf, len, cond, timeout, flags);
+	return eq->ops->sread(eq, buf, len, timeout, flags);
 }
 
 static inline const char *
