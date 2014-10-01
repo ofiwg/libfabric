@@ -230,15 +230,6 @@ ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t len,
 
 	psm_tag = ep_priv->domain->psm_epid | PSMX_MSG_BIT;
 
-	if (flags & FI_BLOCK) {
-		err = psm_mq_send(ep_priv->domain->psm_mq, psm_epaddr,
-				  send_flag, psm_tag, buf, len);
-		if (err == PSM_OK)
-			return len;
-		else
-			return psmx_errno(err);
-	}
-
 	if (flags & FI_INJECT) {
 		fi_context = malloc(sizeof(*fi_context) + len);
 		if (!fi_context)
