@@ -62,7 +62,7 @@ static void strcatf(char *dest, const char *fmt, ...)
 	va_end (arglist);
 }
 
-static void _pp_fi_ep_type(char *buf, uint64_t ep_type)
+static void _pp_ep_type(char *buf, uint64_t ep_type)
 {
 	strcat(buf, "type:\t");
 	switch (ep_type) {
@@ -116,7 +116,7 @@ static void _pp_op_flags(char *buf, uint64_t flags)
 	strcat(buf, "]\n");
 }
 
-static void _pp_fi_addr_format(char *buf, enum fi_addr_format addr_format)
+static void _pp_addr_format(char *buf, enum fi_addr_format addr_format)
 {
 	strcat(buf, "fi_addr_format:\t");
 	switch(addr_format) {
@@ -131,10 +131,10 @@ static void _pp_fi_addr_format(char *buf, enum fi_addr_format addr_format)
 	}
 }
 
-static void _pp_fi_proto(char *buf, enum fi_proto proto)
+static void _pp_protocol(char *buf, enum fi_proto protocol)
 {
 	strcat(buf, "protocol:\t");
-	switch (proto) {
+	switch (protocol) {
 	CASEENUMSTR(FI_PROTO_UNSPEC);
 	CASEENUMSTR(FI_PROTO_RDMA_CM_IB_RC);
 	CASEENUMSTR(FI_PROTO_IWARP);
@@ -169,7 +169,7 @@ static void _pp_domain_cap(char *buf, uint64_t domain_cap)
 	strcat(buf, "]\n");
 }
 
-static void _pp_fi_threading(char *buf, enum fi_threading threading)
+static void _pp_threading(char *buf, enum fi_threading threading)
 {
 	strcat(buf, "threading:\t");
 	switch (threading) {
@@ -182,7 +182,7 @@ static void _pp_fi_threading(char *buf, enum fi_threading threading)
 	}
 }
 
-static void _pp_fi_progress(char *buf, enum fi_progress progress, const char* label)
+static void _pp_progress(char *buf, enum fi_progress progress, const char* label)
 {
 	strcatf(buf, "%s:\t", label);
 	switch (progress) {
@@ -195,10 +195,42 @@ static void _pp_fi_progress(char *buf, enum fi_progress progress, const char* la
 	}
 }
 
-static void _pp_fi_ep_attr(char *buf, const struct fi_ep_attr *attr, const char *indent)
+static void _pp_tx_attr(char *buf, const struct fi_tx_ctx_attr *attr,
+			const char *indent)
+{
+	strcatf(buf, "fi_tx_ctx_attr:\n%s", indent);
+	strcat(buf, indent);
+	_pp_ep_cap(buf, attr->ep_cap);
+	strcat(buf, indent);
+	_pp_op_flags(buf, attr->op_flags);
+	strcat(buf, indent);
+	_pp_msg_order(buf, attr->msg_order);
+	strcatf(buf, "%sinject_size:\t%d\n", indent, attr->inject_size);
+	strcatf(buf, "%ssize:\t%d\n", indent, attr->size);
+	strcatf(buf, "%siov_limit:\t%d\n", indent, attr->iov_limit);
+	strcatf(buf, "%sop_alignment:\t%d\n", indent, attr->op_alignment);
+}
+
+static void _pp_rx_attr(char *buf, const struct fi_rx_ctx_attr *attr,
+			const char *indent)
+{
+	strcatf(buf, "fi_rx_ctx_attr:\n%s", indent);
+	strcat(buf, indent);
+	_pp_ep_cap(buf, attr->ep_cap);
+	strcat(buf, indent);
+	_pp_op_flags(buf, attr->op_flags);
+	strcat(buf, indent);
+	_pp_msg_order(buf, attr->msg_order);
+	strcatf(buf, "%stotal_buffered_recv:\t%d\n", indent, attr->total_buffered_recv);
+	strcatf(buf, "%ssize:\t%d\n", indent, attr->size);
+	strcatf(buf, "%siov_limit:\t%d\n", indent, attr->iov_limit);
+	strcatf(buf, "%sop_alignment:\t%d\n", indent, attr->op_alignment);
+}
+
+static void _pp_ep_attr(char *buf, const struct fi_ep_attr *attr, const char *indent)
 {
 	strcatf(buf, "fi_ep_attr:\n%s", indent);
-	_pp_fi_proto(buf, attr->protocol);
+	_pp_protocol(buf, attr->protocol);
 	strcatf(buf, "%smax_msg_size:\t%d\n", indent, attr->max_msg_size);
 	strcatf(buf, "%sinject_size:\t%d\n", indent, attr->inject_size);
 	strcatf(buf, "%stotal_buffered_recv:\t%d\n", indent, attr->total_buffered_recv);
@@ -212,18 +244,18 @@ static void _pp_fi_ep_attr(char *buf, const struct fi_ep_attr *attr, const char 
 	strcatf(buf, "%srx_ctx_cnt:\t%d\n", indent, attr->rx_ctx_cnt);
 }
 
-static void _pp_fi_domain_attr(char *buf, const struct fi_domain_attr *attr,
-			       const char *indent)
+static void _pp_domain_attr(char *buf, const struct fi_domain_attr *attr,
+			    const char *indent)
 {
 	strcat(buf, "fi_domain_attr:\n");
 	strcatf(buf, "%sname:\t%s\n", indent, attr->name);
 	strcat(buf, indent);
-	_pp_fi_threading(buf, attr->threading);
+	_pp_threading(buf, attr->threading);
 
 	strcat(buf, indent);
-	_pp_fi_progress(buf, attr->control_progress, "control_progress");
+	_pp_progress(buf, attr->control_progress, "control_progress");
 	strcat(buf, indent);
-	_pp_fi_progress(buf, attr->data_progress, "data_progress");
+	_pp_progress(buf, attr->data_progress, "data_progress");
 
 	strcatf(buf, "%smr_key_size:\t%d\n", indent, attr->mr_key_size);
 	strcatf(buf, "%seq_data_size:\t%d\n", indent, attr->eq_data_size);
@@ -232,10 +264,12 @@ static void _pp_fi_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcatf(buf, "%srx_ctx_cnt:\t%d\n", indent, attr->rx_ctx_cnt);
 	strcatf(buf, "%smax_ep_tx_ctx:\t%d\n", indent, attr->max_ep_tx_ctx);
 	strcatf(buf, "%smax_ep_rx_ctx:\t%d\n", indent, attr->max_ep_rx_ctx);
+	strcatf(buf, "%sop_size:\t%d\n", indent, attr->op_size);
+	strcatf(buf, "%siov_size:\t%d\n", indent, attr->iov_size);
 }
 
-static void _pp_fi_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
-			       const char *indent)
+static void _pp_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
+			    const char *indent)
 {
 	strcat(buf, "fi_fabric_attr:\n");
 	strcatf(buf, "%sname:\t\t%s\n", indent, attr->name);
@@ -244,32 +278,34 @@ static void _pp_fi_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
 		FI_MAJOR(attr->prov_version), FI_MINOR(attr->prov_version));
 }
 
-static void _pp_fi_info(char *buf, const struct fi_info *info, const char *indent)
+static void _pp_info(char *buf, const struct fi_info *info, const char *indent)
 {
 	char *rindent = "    ";
 
 	strcat(buf, "fi_info:\n");
 	strcat(buf, indent);
-	_pp_fi_ep_type(buf, info->type);
+	_pp_ep_type(buf, info->type);
 	strcat(buf, indent);
 	_pp_ep_cap(buf, info->ep_cap);
 	strcat(buf, indent);
 	_pp_domain_cap(buf, info->domain_cap);
 	strcat(buf, indent);
-	_pp_op_flags(buf, info->op_flags);
-	strcat(buf, indent);
-	_pp_fi_addr_format(buf, info->addr_format);
+	_pp_addr_format(buf, info->addr_format);
 
 	strcatf(buf, "%ssource_addr:\t%p\n", indent, info->src_addr);
 	strcatf(buf, "%sdest_addr:\t%p\n", indent, info->dest_addr);
 	strcatf(buf, "%sconnreq:\t%p\n", indent, info->connreq);
 
 	strcat(buf, indent);
-	_pp_fi_ep_attr(buf, info->ep_attr, rindent);
+	_pp_tx_attr(buf, info->tx_attr, rindent);
 	strcat(buf, indent);
-	_pp_fi_domain_attr(buf, info->domain_attr, rindent);
+	_pp_rx_attr(buf, info->rx_attr, rindent);
 	strcat(buf, indent);
-	_pp_fi_fabric_attr(buf, info->fabric_attr, rindent);
+	_pp_ep_attr(buf, info->ep_attr, rindent);
+	strcat(buf, indent);
+	_pp_domain_attr(buf, info->domain_attr, rindent);
+	strcat(buf, indent);
+	_pp_fabric_attr(buf, info->fabric_attr, rindent);
 }
 
 char *fi_tostr(const void *data, enum fi_pp_type datatype)
@@ -292,10 +328,10 @@ char *fi_tostr(const void *data, enum fi_pp_type datatype)
 
 	switch (datatype) {
 	case FI_PP_INFO:
-		_pp_fi_info(buf, data, indent);
+		_pp_info(buf, data, indent);
 		break;
 	case FI_PP_EP_TYPE:
-		_pp_fi_ep_type(buf, val64);
+		_pp_ep_type(buf, val64);
 		break;
 	case FI_PP_EP_CAP:
 		_pp_ep_cap(buf, val64);
@@ -304,28 +340,34 @@ char *fi_tostr(const void *data, enum fi_pp_type datatype)
 		_pp_op_flags(buf, val64);
 		break;
 	case FI_PP_ADDR_FORMAT:
-		_pp_fi_addr_format(buf, enumval);
+		_pp_addr_format(buf, enumval);
+		break;
+	case FI_PP_TX_ATTR:
+		_pp_tx_attr(buf, data, indent);
+		break;
+	case FI_PP_RX_ATTR:
+		_pp_rx_attr(buf, data, indent);
 		break;
 	case FI_PP_EP_ATTR:
-		_pp_fi_ep_attr(buf, data, indent);
+		_pp_ep_attr(buf, data, indent);
 		break;
 	case FI_PP_DOMAIN_ATTR:
-		_pp_fi_domain_attr(buf, data, indent);
+		_pp_domain_attr(buf, data, indent);
 		break;
 	case FI_PP_FABRIC_ATTR:
-		_pp_fi_fabric_attr(buf, data, indent);
+		_pp_fabric_attr(buf, data, indent);
 		break;
 	case FI_PP_DOMAIN_CAP:
 		_pp_domain_cap(buf, val64);
 		break;
 	case FI_PP_THREADING:
-		_pp_fi_threading(buf, enumval);
+		_pp_threading(buf, enumval);
 		break;
 	case FI_PP_PROGRESS:
-		_pp_fi_progress(buf, enumval, "progress");
+		_pp_progress(buf, enumval, "progress");
 		break;
-	case FI_PP_PROTO:
-		_pp_fi_proto(buf, val64);
+	case FI_PP_PROTOCOL:
+		_pp_protocol(buf, val64);
 		break;
 	case FI_PP_MSG_ORDER:
 		_pp_msg_order(buf, val64);

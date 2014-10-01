@@ -1,4 +1,4 @@
-.TH "FI_DOMAIN" 3 "2014-09-29" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_DOMAIN" 3 "2014-09-30" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_domain \- Open a fabric access domain
 .SH SYNOPSIS
@@ -83,6 +83,8 @@ struct fi_domain_attr {
 	size_t            rx_ctx_cnt;
 	size_t            max_ep_tx_ctx;
 	size_t            max_ep_rx_ctx;
+	size_t            op_size;
+	size_t            iov_size;
 };
 .fi
 .SS "Name"
@@ -206,6 +208,19 @@ endpoint.
 .SS "Maximum Endpoint Receive Context (max_ep_rx_ctx)"
 The maximum number of receive contexts that may be associated with an
 endpoint.
+.SS "Operation Size (op_size)"
+This is an output value.  It corresponds to the amount of transmit
+or receive context memory that is consumed for each posted request.
+It may be used by applications that manage their context usage
+to determine if a local context can queue an additional operation.
+See fi_endpoint(3) for further discussion.  
+.SS "IO Vector Size (iov_size)"
+This is an output value.  It corresponds to the amount of transmit
+or receive context memory that is consumed for each IO vector (e.g. SGE)
+that is referenced by a posted request.  It may be used by applications
+that manage their context usage to determine if a local context can
+queue an additional operation.
+See fi_endpoint(3) for further discussion.  
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 

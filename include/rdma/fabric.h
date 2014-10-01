@@ -149,6 +149,26 @@ enum fi_threading {
 #define FI_ORDER_SAW		(1 << 7)
 #define FI_ORDER_SAS		(1 << 8)
 
+struct fi_tx_ctx_attr {
+	uint64_t		ep_cap;
+	uint64_t		op_flags;
+	uint64_t		msg_order;
+	size_t			inject_size;
+	size_t			size;
+	size_t			iov_limit;
+	size_t			op_alignment;
+};
+
+struct fi_rx_ctx_attr {
+	uint64_t		ep_cap;
+	uint64_t		op_flags;
+	uint64_t		msg_order;
+	size_t			total_buffered_recv;
+	size_t			size;
+	size_t			iov_limit;
+	size_t			op_alignment;
+};
+
 struct fi_ep_attr {
 	uint64_t		protocol;
 	size_t			max_msg_size;
@@ -175,6 +195,8 @@ struct fi_domain_attr {
 	size_t			rx_ctx_cnt;
 	size_t			max_ep_tx_ctx;
 	size_t			max_ep_rx_ctx;
+	size_t			op_size;
+	size_t			iov_size;
 };
 
 struct fi_fabric_attr {
@@ -188,13 +210,14 @@ struct fi_info {
 	uint64_t		type;
 	uint64_t		ep_cap;
 	uint64_t		domain_cap;
-	uint64_t		op_flags;
 	enum fi_addr_format	addr_format;
 	size_t			src_addrlen;
 	size_t			dest_addrlen;
 	void			*src_addr;
 	void			*dest_addr;
 	fi_connreq_t		connreq;
+	struct fi_tx_ctx_attr	*tx_attr;
+	struct fi_rx_ctx_attr	*rx_attr;
 	struct fi_ep_attr	*ep_attr;
 	struct fi_domain_attr	*domain_attr;
 	struct fi_fabric_attr	*fabric_attr;
@@ -338,13 +361,15 @@ enum fi_pp_type {
 	FI_PP_EP_CAP,
 	FI_PP_OP_FLAGS,
 	FI_PP_ADDR_FORMAT,
+	FI_PP_TX_ATTR,
+	FI_PP_RX_ATTR,
 	FI_PP_EP_ATTR,
 	FI_PP_DOMAIN_ATTR,
 	FI_PP_FABRIC_ATTR,
 	FI_PP_DOMAIN_CAP,
 	FI_PP_THREADING,
 	FI_PP_PROGRESS,
-	FI_PP_PROTO,
+	FI_PP_PROTOCOL,
 	FI_PP_MSG_ORDER
 };
 

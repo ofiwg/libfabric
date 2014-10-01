@@ -102,10 +102,13 @@ struct fi_info *__fi_allocinfo(void)
 	if (!info)
 		return NULL;
 
+	info->tx_attr = calloc(1, sizeof(*info->tx_attr));
+	info->rx_attr = calloc(1, sizeof(*info->rx_attr));
 	info->ep_attr = calloc(1, sizeof(*info->ep_attr));
 	info->domain_attr = calloc(1, sizeof(*info->domain_attr));
 	info->fabric_attr = calloc(1, sizeof(*info->fabric_attr));
-	if (!info->ep_attr || !info->domain_attr || !info->fabric_attr)
+	if (!info->tx_attr|| !info->rx_attr || !info->ep_attr ||
+	    !info->domain_attr || !info->fabric_attr)
 		goto err;
 
 	return info;
@@ -118,6 +121,8 @@ void __fi_freeinfo(struct fi_info *info)
 {
 	free(info->src_addr);
 	free(info->dest_addr);
+	free(info->tx_attr);
+	free(info->rx_attr);
 	free(info->ep_attr);
 	if (info->domain_attr) {
 		free(info->domain_attr->name);

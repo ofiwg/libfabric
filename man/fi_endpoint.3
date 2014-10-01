@@ -353,14 +353,14 @@ RDMA CM protocol for connection establishment.
 The protocol runs over the Internet wide area RDMA protocol transport.
 .IP "FI_PROTO_IB_UD"
 The protocol runs over Infiniband unreliable datagram queue pairs.
-.SS "Max Message Size (max_msg_size)"
+.SS "max_msg_size - Max Message Size"
 Defines the maximum size for an application data transfer as a
 single operation.
-.SS "Inject Size"
+.SS "inject_size - Inject Size"
 Defines the default inject operation size (see the FI_INJECT
 flag) that an endpoint will support.  This value applies per send
 operation.
-.SS "Total Buffered Receive"
+.SS "total_buffered_ercv - Total Buffered Receive"
 Defines the total available space allocated by the provider to buffer received
 messages (see the FI_BUFFERED_RECV flag).
 .SS "Max RMA Ordered Size"
@@ -403,7 +403,7 @@ second RMA or atomic write.
 .PP
 An order size value of 0 indicates that ordering is not guaranteed.  A value
 of -1 guarantees ordering for any data size.
-.SS "Memory Tag Format"
+.SS "mem_tag_format - Memory Tag Format"
 The memory tag format is a bit array used to convey the number of tagged bits
 supported by a provider.  Additionally, it may be used to divide the bit array
 into separate fields.  The mem_tag_format optionally begins with a series of
@@ -432,7 +432,7 @@ fields.
 It is recommended that field sizes be ordered from smallest to largest.  A
 generic, unstructured tag and mask can be achieved by requesting a bit
 array consisting of alternating 1's and 0's. 
-.SS "Message Ordering"
+.SS "msg_order - Message Ordering"
 Message ordering refers to the order in which transport layer headers (as
 viewed by the application) are processed.  Relaxed message order enables
 data transfers to be sent and received out of order, which may improve
@@ -485,7 +485,7 @@ If not set, message sends may be processed ahead of RMA and atomic writes.
 Send after send.  If set, message send operations, including tagged sends,
 are processed in the order submitted relative to other message send.
 If not set, message sends may be processed out of order from their submission.
-.SS "Transmit Context Count (tx_ctx_cnt)"
+.SS "tx_ctx_cnt - Transmit Context Count"
 Number of transmit contexts to associate with the endpoint.  If not specified,
 1 context will be assigned if the endpoint supports outbound transfers.
 Transmit contexts are independent command queues that may be separately
@@ -493,7 +493,7 @@ configured.  Each transmit context may be bound to a separate CQ, and no
 ordering is defined between contexts.  Additionally, no synchronization is
 needed when accessing contexts in parallel.  See the scalable endpoint
 section for additional details.
-.SS "Receive Context Count (rx_ctx_cnt)"
+.SS "rx_ctx_cnt - Receive Context Count"
 Number of receive contexts to associate with the endpoint.  If not specified,
 1 context will be assigned if the endpoint supports inbound transfers.
 Receive contexts are independent processing queues that may be separately
@@ -536,6 +536,9 @@ struct fi_tx_ctx_attr {
 	uint64_t  op_flags;
 	uint64_t  msg_order;
 	size_t    inject_size;
+	size_t    size;
+	size_t    iov_limit;
+	size_t    op_alignment;
 };
 .fi
 .IP "ep_cap"
@@ -544,8 +547,7 @@ subset of those requested of the associated endpoint.  See the ENDPOINT
 CAPABILITIES section if fi_getinfo(3) for capability details. 
 .IP "op_flags"
 Flags that control the operation of operations submitted against the
-context.  Applicable flags are listed in the Op Flags section in
-fi_getinfo(3). 
+context.  Applicable flags are listed in the Operation Flags section.
 .IP "msg_order"
 The message ordering requirements of the context.  The message ordering
 must be the same or more relaxed than those specified of the associated
@@ -555,6 +557,17 @@ The requested inject operation size (see the FI_INJECT
 flag) that the context will support.  This value must be equal to or less
 than the inject_size of the associated endpoint.  See the fi_endpoint
 Inject Size section.
+.IP "size"
+The size of the context, in bytes.  The size is usually used as
+an output value by applications wishing to track if sufficient space is
+available in the local queue to post a new operation.
+.IP "iov_limit" 
+This is the maximumnumber of IO vectors (scatter-gather elements) that a
+single posted operaton may reference.
+.IP "op_alignment"
+The operation alignment is used to calculate any necessary padding needed
+to post an operation to the context.  All operations posted to the context
+consume an amount of space that is a multiple of op_alignment bytes.
 .SS "fi_rx_context"
 Receive contexts are independent command queues for receiving incoming
 data.  Ordering and synchronization between contexts are not guaranteed.
@@ -585,9 +598,12 @@ assigned to the context through the attr parameter, if provided.
 .nf
 struct fi_rx_ctx_attr {
 	uint64_t  ep_caps;
-	uint64_t  op_flag;
+	uint64_t  op_flags;
 	uint64_t  msg_order;
 	size_t    total_buffered_recv;
+	size_t    size;
+	size_t    iov_limit;
+	size_t    op_alignment;
 };
 .fi
 .IP "ep_cap"
@@ -596,8 +612,7 @@ subset of those requested of the associated endpoint.  See the ENDPOINT
 CAPABILITIES section if fi_getinfo(3) for capability details. 
 .IP "op_flags"
 Flags that control the operation of operations submitted against the
-context.  Applicable flags are listed in the Op Flags section in
-fi_getinfo(3). 
+context.  Applicable flags are listed in the Operation Flags section.
 .IP "msg_order"
 The message ordering requirements of the context.  The message ordering
 must be the same or more relaxed than those specified of the associated
@@ -607,10 +622,23 @@ Defines the total available space allocated by the provider to buffer received
 messages on the context.  This value must be less than or equal to that
 specified for the associated endpoint.  See the fi_endpoint Total
 Buffered Receive section.
-.SH "CONTROL FLAGS"
-The following flags may be set to control the operation of data transfers
-initiated on an endpoint.  See fi_getinfo for additional descriptions of
-the flags.
+.IP "size"
+The size of the context, in bytes.  The size is usually used as
+an output value by applications wishing to track if sufficient space is
+available in the local queue to post a new operation.
+.IP "iov_limit" 
+This is the maximumnumber of IO vectors (scatter-gather elements) that a
+single posted operaton may reference.
+.IP "op_alignment"
+The operation alignment is used to calculate any necessary padding needed
+to post an operation to the context.  All operations posted to the context
+consume an amount of space that is a multiple of op_alignment bytes.
+.SH "OPERATION FLAGS"
+Operation flags are obtained by OR-ing the following flags together.
+Operation flags define the default flags applied to an endpoint's data
+transfer operations, where a flags parameter is not available.  Data transfer
+operations that take flags as input override the op_flags value of an
+endpoint.
 .IP "FI_INJECT"
 Indicates that all outbound data buffer should be returned to the user's
 control immediately after a data transfer call returns, even if the
@@ -619,11 +647,30 @@ provider copy the data into a local buffer and transfer out of that buffer.
 A provider may limit the total amount of send data that may be buffered
 and/or the size of a single send.  Applications may discover and modify these
 limits using the endpoint's getopt and setopt interfaces.
+.IP "FI_MULTI_RECV"
+Applies to posted receive operations.  This flag allows the user to post a
+single buffer that will receive multiple incoming messages.  Received
+messages will be packed into the receive buffer until the buffer has been
+consumed.  Use of this flag may cause a single posted receive operation
+to generate multiple events as messages are placed into the buffer.
+The placement of received data into the buffer may be subjected to
+provider specific alignment restrictions.  The buffer will be freed from
+the endpoint when a message is received that cannot fit into the remaining
+free buffer space.
 .IP "FI_BUFFERED_RECV"
 If set, the communication interface implementation should attempt to queue inbound
 data that arrives before a receive buffer has been posted.  In the
 absence of this flag, any messages that arrive before a receive is
 posted are lost.
+.IP "FI_EVENT"
+Indicates that a completion entry should be generated for data transfer
+operations.
+.IP "FI_REMOTE_SIGNAL"
+Indicates that a completion event at the target process should be generated
+for the given operation.  The remote endpoint must be configured with
+FI_REMOTE_SIGNAL, or this flag will be ignored by the target.  The local
+endpoint must be configured with the FI_REMOTE_SIGNAL capability in order
+to specify this flag.
 .IP "FI_REMOTE_COMPLETE"
 Indicates that local completions should not be generated
 until the operation has completed on the remote side.  When set, if the
@@ -654,10 +701,6 @@ and atomic operations.
 Indicates that the endpoint should allow remote endpoints to write to memory
 regions exposed by this endpoint.  Remote write operations include some RMA
 operations and most atomic operations.
-.SH "RETURN VALUE"
-Returns 0 on success. On error, a negative value corresponding to fabric
-errno is returned. Fabric errno values are defined in 
-.IR "rdma/fi_errno.h".
 .SH "NOTES"
 Users should call fi_close to release all resources allocated to the fabric
 endpoint.
@@ -673,6 +716,37 @@ such data transfers.
 Operations that complete in error that are not associated with valid
 operational context will use the endpoint context in any error reporting
 structures.
+.PP
+Applications may use the transmit/receive context and domain attributes to
+determine if it has sufficient space available in local queues to post an
+asynchronous operation, without generating an FI_EAGAIN error.  The
+following equation may be used as a guide to determine if an operation
+can be posted:
+.nf
+
+needed = ((op_size + iov_size * niov) + op_alignment - 1) &
+         ~(op_alignment - 1)
+.fi
+A data transfer request consists of an operation followed by zero or more
+IOVs (scatter-gather elements).  The amount of space needed by a transmit
+or receive context to store a request depends on the size needed by the
+provider to store the operation, plus information about each IO vector
+element.  Additionally, each operation may need to be aligned to a specific
+address boundary, such as a cacheline or aligned on a 64-bit word.  The
+above equation defines this relationship, assuming that the op_alignment
+is given as a power of 2.
+.PP
+Providers may implement the size of their transmit and receive queues in a
+variety of ways.  For example, queues may support a fixed number of
+operations, or may be a fixed memory size with support for a variable
+number of operations.  But the reported domain and context attributes must be
+reported such that an application tracking queue utilization using the above
+equation allows an application to prevent queue overruns.  The reported
+queue size should be considered a lower-limit; providers may accept
+additional requests.
+.PP
+Applications may be able to simplify run time credit checks by pre-calculating
+needed checks or converting context sizes into a simple credit-based scheme.
 .SH "RETURN VALUES"
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.
