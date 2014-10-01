@@ -29,6 +29,18 @@ node or service, subject to any provided hints.  Callers must provide at least
 one of the node, service, or hints parameters.  If no matching fabric information
 is available, info will be set to NULL.
 .PP
+Based on the input hints, node, and service parameters, a list of fabric
+domains and endpoints will be returned.  Each fi_info structure will describe
+an endpoint that meets the application's specified communication criteria.
+Each endpoint will be associated with a domain.  Applications can restrict
+the number of returned endpoints by including additional criteria in their
+search hints.  Relaxing or eliminating input hints will increase the number
+and type of endpoints that are available.  Providers that return multiple
+endpoints to a single fi_getinfo call should return the endpoints that are
+highest performing.  Providers may indicate that an endpoint and domain
+can support additional capabilities than those requested by the user only
+if such support will not adversely affect performance.
+.PP
 The version parameter is used by the application to request the desired
 version of the interfaces.  The version determines the format of all data
 structures used by any of the fabric interfaces.  Applications should use the
@@ -199,6 +211,10 @@ FI_RECV flags to optimize an endpoint as send-only or receive-only.
 Indicates that the endpoint should support triggered operations.  Endpoints
 support this capability must meet the usage model as described by
 fi_trigger.3. 
+.IP "FI_NAMED_RX_CTX"
+Requests that endpoints which support multiple receive contexts allow an
+initiator to target (or name) a specific receive context as part of a data
+transfer operation.  
 .IP "FI_BUFFERED_RECV"
 Requests that the communication endpoint should attempt to queue
 inbound data that arrives before a receive buffer has been posted.  In the

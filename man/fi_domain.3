@@ -1,4 +1,4 @@
-.TH "FI_DOMAIN" 3 "2014-09-09" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_DOMAIN" 3 "2014-09-29" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_domain \- Open a fabric access domain
 .SH SYNOPSIS
@@ -85,6 +85,11 @@ struct fi_domain_attr {
 	enum fi_progress  data_progress;
 	size_t            mr_key_size;
 	size_t            eq_data_size;
+	size_t            ep_cnt;
+	size_t            tx_ctx_cnt;
+	size_t            rx_ctx_cnt;
+	size_t            max_ep_tx_ctx;
+	size_t            max_ep_rx_ctx;
 };
 .fi
 .SS "Name"
@@ -152,7 +157,7 @@ in their virtual address space, whether or not those addresses are
 back by physical pages or have been allocated to the app.
 Providers that lack this capability require that registered memory
 regions be backed by allocated memory pages.
-.SS "Multi-threading Support"
+.SS "Multi-threading Support (threading)"
 The threading model specifies the level of serialization required of an
 application when using the libfabric data transfer interfaces.  Control
 interfaces are always considered thread safe, and may be accessed by
@@ -185,7 +190,7 @@ poll sets.  For instance, endpoints that share the same event queue or poll
 set belong to the same progress domain.  Applications that can allocate
 endpoint resources to specific threads can reduce provider locking by
 using FI_THREAD_PROGRESS.
-.SS "Progress Models"
+.SS "Progress Models (control_progress / data_progress)"
 Progress is the ability of the underlying implementation to complete
 processing of an asynchronous request.  In many cases, the processing of
 an asynchronous request requires the use of the host processor.  For example,
@@ -238,7 +243,39 @@ request their own MR key must select a value within the range specified by
 this value.
 .SS "EQ Data Size"
 The number of bytes that the provider supports for remote EQ data.  See
-the FI_REMOTE_EQ_DATA flag (fi_getinfo) for the use of remote EQ data. 
+the FI_REMOTE_EQ_DATA flag (fi_getinfo) for the use of remote EQ data.
+.SS "Endpoint Count (ep_cnt)"
+The total number of endpoints supported by the domain, relative to any
+specified or default endpoint attributes.  The ep_cnt value may be a
+fixed value of the maximum number of endpoints supported by the underlying
+provider, or may be a dynamic value, based on the default attributes of
+an allocated endpoint, such as the endpoint capabilities and size.  The
+endpoint count is the number of addressable endpoints supported by the
+provider.
+.SS "Transmit Context Count (tx_ctx_cnt)"
+The number of outbound command queues optimally supported by the provider.
+For a low-level provider, this represents the number command queues to the
+hardware and/or the number of parallel transmit engines effectively
+supported by the hardware and caches.  Applications which allocate more
+transmit contexts than this value will end up sharing underlying resources.
+By default, there is a single transmit context associated with each endpoint,
+but in an advanced usage model, an endpoint may be configured with multiple
+transmit contexts.
+.SS "Receive Context Count (rx_ctx_cnt)"
+The number of inbound processing queues optimally supported by the provider.
+For a low-level provider, this represents the number hardware queues
+that can be effectively utilized for processing incoming packets.
+Applications which allocate more receive contexts than this value
+will end up sharing underlying resources.
+By default, a single receive context is associated with each endpoint,
+but in an advanced usage model, an endpoint may be configured with multiple
+receive contexts.
+.SS "Maximum Endpoint Transmit Context (max_ep_tx_ctx)"
+The maximum number of transmit contexts that may be associated with an
+endpoint.
+.SS "Maximum Endpoint Receive Context (max_ep_rx_ctx)"
+The maximum number of receive contexts that may be associated with an
+endpoint.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 

@@ -17,10 +17,10 @@ fi_cq_write
 Writes a completion to a completion queue
 .RE
 .PP
-fi_cq_condread / fi_cq_condreadfrom
+fi_cq_sread / fi_cq_sreadfrom
 .RS
-Waits until the specified condition has been met before reading a completion
-from a completion queue.
+A synchronous (blocking) read that waits until a specified condition has
+been met before reading a completion from a completion queue.
 .RE
 .PP
 fi_cq_strerror
@@ -54,11 +54,11 @@ Converts provider specific error information into a printable string
 .BI "const void *" buf ", size_t " len ");"
 .PP
 .HP
-.BI "int fi_cq_condread(struct fid_cq *" cq ","
+.BI "int fi_cq_sread(struct fid_cq *" cq ","
 .BI "void *" buf ", size_t " len ", "
 .BI "const void *" cond ", int " timeout ");"
 .HP
-.BI "int fi_cq_condreadfrom(struct fid_cq *" cq ","
+.BI "int fi_cq_sreadfrom(struct fid_cq *" cq ","
 .BI "void *" buf ", size_t " len ","
 .BI "fi_addr_t *" src_addr ", const void *" cond ", int " timeout ");"
 .PP
@@ -205,11 +205,11 @@ FI_WAIT_SET, FI_WAIT_FD, and FI_WAIT_MUT_COND.
 .RS
 .IP "FI_WAIT_NONE"
 Used to indicate that the user will not block (wait) for completions on the CQ.
-When FI_WAIT_NONE is specified, the application may not call fi_cq_condread
-or fi_cq_condreadfrom.
+When FI_WAIT_NONE is specified, the application may not call fi_cq_sread
+or fi_cq_sreadfrom.
 .IP "FI_WAIT_UNSPECIFIED"
 Specifies that the user will only wait on the CQ using fabric interface
-calls, such as fi_cq_readcond or fi_cq_condreadfrom.  In this case, the
+calls, such as fi_cq_readcond or fi_cq_sreadfrom.  In this case, the
 underlying provider may select the most appropriate or highest
 performing wait object available, including custom wait mechanisms.
 Applications that select
@@ -233,7 +233,7 @@ Indicates which processor core interrupts associated with the EQ should
 target.
 .IP "wait_cond"
 By default, when a completion is inserted into an CQ that supports blocking
-reads (fi_cq_condread/fi_cq_condreadfrom), the corresponding wait
+reads (fi_cq_sread/fi_cq_sreadfrom), the corresponding wait
 object is signaled.  Users may specify a condition that must
 first be met before the wait is satisfied.  This field indicates how the
 provider should interpret the cond field, which describes the condition
@@ -298,8 +298,8 @@ into an CQ, it is placed into a temporary error queue.  Attempting to read
 from an CQ while an item is in the error queue results in an FI_EAVAIL
 failure.  Applications may use this return code to determine when to
 call fi_cq_readerr.
-.SS "fi_cq_condread / fi_cq_condreadfrom"
-The fi_cq_condread and fi_cq_condreadfrom calls are the blocking equivalent
+.SS "fi_cq_sread / fi_cq_sreadfrom"
+The fi_cq_sread and fi_cq_sreadfrom calls are the blocking equivalent
 operations to fi_cq_read and fi_cq_readfrom.  Their behavior is similar to
 the non-blocking calls, with the exception that the calls will not return
 until either a completion has been read from the CQ or an error or timeout occurs.
@@ -340,7 +340,7 @@ fabric errno is returned.
 .PP
 fi_cq_read / fi_cq_readfrom / fi_cq_readerr
 .br
-fi_cq_condread / fi_cq_condreadfrom
+fi_cq_sread / fi_cq_sreadfrom
 .br
 fi_cq_write
 .RS

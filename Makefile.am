@@ -138,8 +138,8 @@ man_MANS = \
 	man/fi_cq_readfrom.3 \
 	man/fi_cq_readerr.3 \
 	man/fi_cq_write.3 \
-	man/fi_cq_condread.3 \
-	man/fi_cq_condreadfrom.3 \
+	man/fi_cq_sread.3 \
+	man/fi_cq_sreadfrom.3 \
 	man/fi_cq_strerror.3 \
 	man/fi_direct.7 \
 	man/fi_domain.3 \
@@ -152,7 +152,7 @@ man_MANS = \
 	man/fi_eq_read.3 \
 	man/fi_eq_readerr.3 \
 	man/fi_eq_write.3 \
-	man/fi_eq_condread.3 \
+	man/fi_eq_sread.3 \
 	man/fi_eq_strerror.3 \
 	man/fi_enable.3 \
 	man/fi_endpoint.3 \
@@ -192,6 +192,7 @@ man_MANS = \
 	man/fi_recvmsg.3 \
 	man/fi_reject.3 \
 	man/fi_rma.3 \
+	man/fi_rx_addr.3 \
 	man/fi_send.3 \
 	man/fi_senddata.3 \
 	man/fi_senddatato.3 \

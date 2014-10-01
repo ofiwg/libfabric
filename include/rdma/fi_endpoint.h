@@ -60,12 +60,23 @@ enum fi_ep_type {
  */
 enum fi_proto {
 	FI_PROTO_UNSPEC,
-	FI_PROTO_IB_RC,
+	FI_PROTO_RDMA_CM_IB_RC,
 	FI_PROTO_IWARP,
-	FI_PROTO_IB_UC,
 	FI_PROTO_IB_UD,
-	FI_PROTO_IB_XRC,
-	FI_PROTO_RAW
+};
+
+struct fi_tx_ctx_attr {
+	uint64_t		ep_cap;
+	uint64_t		op_flags;
+	uint64_t		msg_order;
+	size_t			inject_size;
+};
+
+struct fi_rx_ctx_attr {
+	uint64_t		ep_cap;
+	uint64_t		op_flags;
+	uint64_t		msg_order;
+	size_t			total_buffered_recv;
 };
 
 /* fi_info endpoint capabilities */
@@ -75,6 +86,7 @@ enum fi_proto {
 #define FI_TAGGED		(1ULL << 3)
 #define FI_ATOMICS		(1ULL << 4)
 #define FI_MULTICAST		(1ULL << 5)	/* multicast uses MSG ops */
+#define FI_NAMED_RX_CTX		(1ULL << 8)
 #define FI_BUFFERED_RECV	(1ULL << 9)
 
 
@@ -102,9 +114,15 @@ struct fi_ops_ep {
 	int	(*enable)(struct fid_ep *ep);
 	ssize_t	(*cancel)(fid_t fid, void *context);
 	int	(*getopt)(fid_t fid, int level, int optname,
-			  void *optval, size_t *optlen);
+			void *optval, size_t *optlen);
 	int	(*setopt)(fid_t fid, int level, int optname,
-			  const void *optval, size_t optlen);
+			const void *optval, size_t optlen);
+	int	(*tx_ctx)(struct fid_ep *ep, int index,
+			struct fi_tx_ctx_attr *attr, struct fid_ep **tx_ep,
+			void *context);
+	int	(*rx_ctx)(struct fid_ep *ep, int index,
+			struct fi_rx_ctx_attr *attr, struct fid_ep *rx_ep,
+			void *context);
 };
 
 struct fi_ops_msg {
@@ -183,7 +201,7 @@ fi_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 #define fi_ep_bind(ep, fid, flags) fi_bind(ep, fid, flags)
 
-static inline ssize_t fi_enable(struct fid_ep *ep)
+static inline int fi_enable(struct fid_ep *ep)
 {
 	return ep->ops->enable(ep);
 }
@@ -194,18 +212,34 @@ static inline ssize_t fi_cancel(fid_t fid, void *context)
 	return ep->ops->cancel(fid, context);
 }
 
-static inline ssize_t fi_setopt(fid_t fid, int level, int optname,
-				const void *optval, size_t optlen)
+static inline int
+fi_setopt(fid_t fid, int level, int optname,
+	  const void *optval, size_t optlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	return ep->ops->setopt(fid, level, optname, optval, optlen);
 }
 
-static inline ssize_t fi_getopt(fid_t fid, int level, int optname,
-				void *optval, size_t *optlen)
+static inline int
+fi_getopt(fid_t fid, int level, int optname,
+	  void *optval, size_t *optlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	return ep->ops->getopt(fid, level, optname, optval, optlen);
+}
+
+static inline int
+fi_tx_context(struct fid_ep *ep, int index, struct fi_tx_ctx_attr *attr,
+	      struct fid_ep **tx_ep, void *context)
+{
+	return ep->ops->tx_ctx(ep, index, attr, tx_ep, context);
+}
+
+static inline int
+fi_rx_context(struct fid_ep *ep, int index, struct fi_rx_ctx_attr *attr,
+	      struct fid_ep *rx_ep, void *context)
+{
+	return ep->ops->rx_ctx(ep, index, attr, rx_ep, context);
 }
 
 static inline ssize_t

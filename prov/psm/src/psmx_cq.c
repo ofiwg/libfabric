@@ -476,17 +476,17 @@ static ssize_t psmx_cq_write(struct fid_cq *cq, const void *buf, size_t len)
 	return -FI_ENOSYS;
 }
 
-static ssize_t psmx_cq_condreadfrom(struct fid_cq *cq, void *buf, size_t len,
-				    fi_addr_t *src_addr, const void *cond,
-				    int timeout)
+static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
+				 fi_addr_t *src_addr, const void *cond,
+				 int timeout)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t psmx_cq_condread(struct fid_cq *cq, void *buf, size_t len,
-				const void *cond, int timeout)
+static ssize_t psmx_cq_sread(struct fid_cq *cq, void *buf, size_t len,
+			     const void *cond, int timeout)
 {
-	return psmx_cq_condreadfrom(cq, buf, len, NULL, cond, timeout);
+	return psmx_cq_sreadfrom(cq, buf, len, NULL, cond, timeout);
 }
 
 static const char *psmx_cq_strerror(struct fid_cq *cq, int prov_errno, const void *prov_data,
@@ -534,8 +534,8 @@ static struct fi_ops_cq psmx_cq_ops = {
 	.readfrom = psmx_cq_readfrom,
 	.readerr = psmx_cq_readerr,
 	.write = psmx_cq_write,
-	.condread = psmx_cq_condread,
-	.condreadfrom = psmx_cq_condreadfrom,
+	.sread = psmx_cq_sread,
+	.sreadfrom = psmx_cq_sreadfrom,
 	.strerror = psmx_cq_strerror,
 };
 

@@ -1,4 +1,4 @@
-.TH "FI_AV" 3 "2014-09-11" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_AV" 3 "2014-09-30" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_av \- Address vector operations
 .PP
@@ -47,6 +47,9 @@ Convert an address into a printable string.
 .BI "int fi_av_lookup(struct fid_av *" av ", fi_addr_t " fi_addr ", "
 .BI "void *" addr ", size_t *" addrlen ");"
 .HP
+.BI "fi_addr_t fi_rx_addr(fi_addr_t " fi_addr ", int " rx_index ", "
+.BI "int " rx_ctx_bits ");"
+.HP
 .BI "const char * fi_av_straddr(struct fid_av *" av ", const void *" addr ", "
 .BI "void *" buf ", size_t " len ");"
 .SH ARGUMENTS
@@ -87,11 +90,12 @@ the address vector are defined by struct fi_av_attr.
 .PP
 .nf
 struct fi_av_attr {
-	enum fi_av_type      type;      /* type of AV */
-	size_t               count;     /* # entries for AV */
-	const char          *name;      /* system name of AV */
-	void                *map_addr;  /* base mmap address */
-	uint64_t             flags;     /* operation flags */
+	enum fi_av_type  type;        /* type of AV */
+	int              rx_ctx_bits; /* address bits to identify rx ctx */    
+	size_t           count;       /* # entries for AV */
+	const char       *name;       /* system name of AV */
+	void             *map_addr;   /* base mmap address */
+	uint64_t         flags;       /* operation flags */
 };
 .fi
 .IP "type"
@@ -112,6 +116,13 @@ index.  Conceptually, the AV may be treated as an array of addresses,
 though the provider may implement the AV using a variety of mechanisms.
 FI_AV_TABLE is often used with address formats FI_AV and FI_ADDR_INDEX.
 .RE
+.IP "Receive Context Bits (rx_ctx_bits)"
+The receive context bits field is only for use with scalable endpoints.  It
+indicates the number of bits reserved in a returned fi_addr_t, which will
+be used to identify a specific target receive context.  See fi_rx_addr()
+and fi_endpoint(3) for additional details on receive contexts.  The
+requested number of bits should be selected such that 2 ^ rx_ctx_bits >=
+rx_ctx_cnt for the endpoint.
 .IP "count"
 Indicates the expected number of addresses that will be inserted into
 the AV.  The provider uses this to optimize resource allocations.
@@ -168,16 +179,23 @@ associated with 'any' address (similar to the IPv4 address of 0.0.0.0).
 .PP
 For AV's of type FI_AV_MAP, once inserted addresses have been mapped,
 the mapped values are written into the buffer referenced by fi_addr.
-Addresses written to fi_addr use the format as specified in struct
-fi_info:addr_format.  The fi_addr buffer must remain valid until the
+THe fi_addr buffer must remain valid until the
 AV insertion has completed and an event has been generated
-to an associated event queue.
+to an associated event queue.  The value of the returned fi_addr should
+be considered opaque by the application for AVs of type FI_AV_MAP.
+The returned value may point to an internal structure or a provider
+specific encoding of low-level addresing data, for example.  In the latter
+case, use of FI_AV_MAP may be able to avoid memory dereferences during data
+transfer operations. 
 .PP
 For AV's of type FI_AV_TABLE, addresses are placed into the table in
 order.  That is, the first address inserted may be referenced at
 index 0.  The fi_addr parameter may be NULL in this case.  Otherwise,
 fi_addr must reference an array of fi_addr_t, and the buffer must
-remain valid until the insertion operation completes.
+remain valid until the insertion operation completes.  When addresses
+are inserted into an AV of type FI_AV_TABLE, the returned fi_addr values
+will be simple indices corresponding to the entry into the table where the
+address was inserted.  Addresses are indexed in order of their insertion.
 .PP
 The FI_RANGE flag may be used with fi_av_insert to indicate that a range
 of addresses should be inserted.  See the flags discussion below.
@@ -200,6 +218,17 @@ indicate the size of the addr buffer.  If the actual address is larger than
 what can fit into the buffer, it will be truncated.  On output, addrlen
 is set to the size of the buffer needed to store the address, which may
 be larger than the input value.
+.SS "fi_rx_addr"
+This function is used to convert an endpoint address, returned by fi_av_insert,
+into an address that specifies a target receive context.  The specified
+fi_addr parameter must either be a value returned from fi_av_insert, in the
+case of FI_AV_MAP, or an index, in the case of FI_AV_TABLE.  The value for
+rx_ctx_bits must match that specified in the AV attributes for the given
+address.
+.P
+Connected endpoints that support multiple receive contexts, but are not
+associated with address vectors should use specify FI_ADDR_UNSPEC for the
+fi_addr parameter.
 .SS "fi_av_straddr"
 The fi_av_straddr function converts the provided address into a printable
 string.  The specified address must be of the same format as those
