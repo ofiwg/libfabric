@@ -38,6 +38,12 @@ if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 	fi
 fi
 
+AC_ARG_ENABLE([direct],
+	[AS_HELP_STRING([--enable-direct=@<:@provider@:>@],
+		[Enable direct calls to a fabric provider @<:@defaul=no@:>@])
+	],
+	[enable_direct=no])
+
 dnl Checks for programs
 AC_PROG_CC
 
@@ -111,146 +117,6 @@ AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,
 
 AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 
-AC_ARG_ENABLE([sockets],
-	      [AS_HELP_STRING([--enable-sockets],
-			      [Enable sockets provider @<:@default=yes@:>@])
-	      ],
-	      [],
-	      [enable_sockets=yes])
-
-AS_IF([test x"$enable_sockets" = x"dl"], [sockets_dl=yes; enable_sockets=yes])
-
-AS_IF([test x"$enable_sockets" = x"yes"],
-	[AC_DEFINE([HAVE_SOCKETS], [1],
-		[Define if sockets provider is enabled])
-	],
-	[AC_MSG_NOTICE(Sockets provider not enabled)])
-
-AM_CONDITIONAL([HAVE_SOCKETS], [test x"$enable_sockets" = x"yes"])
-
-AS_IF([test x"$sockets_dl" = x"yes"],
-      [AC_DEFINE([HAVE_SOCKETS_DL], [1], [Build sockets provider as module])])
-
-AM_CONDITIONAL([HAVE_SOCKETS_DL], [test x"$sockets_dl" = x"yes"])
-
-AC_ARG_ENABLE([verbs],
-	      [AS_HELP_STRING([--enable-verbs],
-			      [Enable verbs provider @<:@default=auto@:>@])
-	      ],
-	      [],
-	      [enable_verbs=auto])
-
-AS_CASE([$enable_verbs],
-	[auto], [verbs_fail=no],
-	[yes],  [verbs_fail=yes],
-	[dl],   [verbs_dl=yes; enable_verbs=yes],
-	[no],   [],
-	[])
-
-AS_IF([test x"$enable_verbs" != x"no"],
-	[AC_CHECK_LIB(ibverbs, ibv_open_device,
-			[AC_CHECK_LIB(rdmacm, rsocket,
-				[enable_verbs=yes],
-				[enable_verbs=no])
-			],
-			[enable_verbs=no])
-	],
-	[AC_MSG_NOTICE(Verbs provider not enabled)])
-
-AS_IF([test x"$enable_verbs $verbs_fail" = x"no yes"],
-	[AC_MSG_ERROR(libfabric requires libibverbs, librdmacm 1.0.16 or greater)])
-
-AS_IF([test x"$enable_verbs" = x"yes"],
-	[AC_DEFINE([HAVE_VERBS], [1], [Define if verbs provider is enabled])
-         LIBS=" -libverbs -lrdmacm $LIBS"
-	])
-
-AS_IF([test x"$verbs_dl" = x"yes"],
-	[AC_DEFINE([HAVE_VERBS_DL], [1], [Define if verbs should be built as module])])
-
-AM_CONDITIONAL([HAVE_VERBS], [test x"$enable_verbs" = x"yes"])
-AM_CONDITIONAL([HAVE_VERBS_DL], [test x"$verbs_dl" = x"yes"])
-
-AC_ARG_ENABLE([psm],
-	      [AS_HELP_STRING([--enable-psm],
-			      [Enable PSM provider @<:@default=auto@:>@])
-	      ],
-	      [],
-	      [enable_psm=auto])
-
-AC_ARG_WITH([psm],
-	    [AS_HELP_STRING([--with-psm=@<:@PSM installation path@:>@],
-			    [Provide path to PSM installation])
-	    ],
-	    [AS_CASE([$with_psm],
-		     [yes|no], [],
-		     [CPPFLAGS="-I$with_psm/include $CPPFLAGS"
-		      LDFLAGS="-L$with_psm/lib64 -Wl,-rpath=$with_psm/lib64 $LDFLAGS"])
-	     enable_psm=yes
-	    ])
-
-AC_ARG_WITH([psm-include],
-            [AS_HELP_STRING([--with-psm-include=@<:@PSM include path@:>@],
-                            [Provide path to PSM include files])
-            ],
-            [AS_CASE([$with_psm_include],
-                     [yes|no], [],
-                     [CPPFLAGS="-I$with_psm_include $CPPFLAGS"])
-	     enable_psm=yes
-            ])
-
-AC_ARG_WITH([psm-lib],
-            [AS_HELP_STRING([--with-psm-lib=@<:@PSM library path@:>@],
-                            [Provide path to PSM library files])
-            ],
-            [AS_CASE([$with_psm_lib],
-                     [yes|no], [],
-                     [LDFLAGS="-L$with_psm_lib -Wl,-rpath=$with_psm_lib $LDFLAGS"])
-	     enable_psm=yes
-            ])
-
-AS_CASE([$enable_psm],
-	[auto], [AC_CHECK_LIB(psm_infinipath, psm_init,
-			[AC_CHECK_HEADER([psm.h], [enable_psm=yes], [enable_psm=no])],
-			[enable_psm=no])
-		],
-	[yes],	[AC_CHECK_LIB(psm_infinipath, psm_init,
-			[AC_CHECK_HEADER([psm.h], [],
-				[AC_MSG_ERROR([psm.h not found. Provide the correct path to PSM with --with-psm-include (or --with-psm)])])
-			],
-			[AC_MSG_ERROR([psm_init() not found. Provide the correct path to PSM --with-psm-lib])])
-		],
-	[dl],	[enable_psm=yes; psm_dl=yes],
-	[no],	[],
-	[])
-
-
-AS_IF([test x"$psm_dl" = x"yes"],
-	[AC_DEFINE([HAVE_PSM_DL], [1], [Define if PSM will be built as module])])
-
-
-AS_IF([test x"$enable_psm" = x"yes"],
-	[AC_DEFINE([HAVE_PSM], [1], [Define if PSM is enabled])
-	 LIBS="-lpsm_infinipath $LIBS"
-	],
-	[AC_MSG_NOTICE(PSM not enabled)])
-
-AM_CONDITIONAL([HAVE_PSM], [test x"$enable_psm" = x"yes"])
-AM_CONDITIONAL([HAVE_PSM_DL], [test x"$psm_dl" = x"yes"])
-
-AC_ARG_ENABLE([direct],
-	[AS_HELP_STRING([--enable-direct=@<:@provider@:>@],
-		[Enable direct calls to a fabric provider @<:@defaul=no@:>@])
-	],
-	[AS_CASE([$enable_direct],
-		[mlx4], [AC_DEFINE([HAVE_MLX4_DIRECT], [1],
-			[Define if mlx4 direct provider is enabled])],
-		[])
-	],
-        [enable_direct=no])
-
-AM_CONDITIONAL([HAVE_MLX4_DIRECT], [test x"$enable_direct" = x"mlx4"])
-
 AC_CACHE_CHECK(for .symver assembler support, ac_cv_asm_symver_support,
 	[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]],
 		[[asm("symbol:\n.symver symbol, api@ABI\n");]])],
@@ -260,6 +126,19 @@ AC_CACHE_CHECK(for .symver assembler support, ac_cv_asm_symver_support,
 if test $ac_cv_asm_symver_support = yes; then
 	AC_DEFINE([HAVE_SYMVER_SUPPORT], 1, [assembler has .symver support])
 fi
+
+dnl Provider-specific checks
+m4_include(prov/psm/configure.m4)
+FI_PSM_CONFIGURE
+FI_PSM_CONDITIONALS
+
+m4_include(prov/sockets/configure.m4)
+FI_SOCKETS_CONFIGURE
+FI_SOCKETS_CONDITIONALS
+
+m4_include(prov/verbs/configure.m4)
+FI_VERBS_CONFIGURE
+FI_VERBS_CONDITIONALS
 
 AC_CONFIG_FILES([Makefile libfabric.spec])
 AC_OUTPUT
