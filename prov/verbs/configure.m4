@@ -43,15 +43,6 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 		[Whether verbs should be enabled])
 	AC_DEFINE_UNQUOTED([HAVE_VERBS_DL], [$verbs_dl],
 		[Whether verbs should be built as DSO])
-
-# JMS This should have a test seeing if MLX4 direct is *available* or
-# not.  But I don't know what headers/libraries to test for...  (I
-# might also be mis-understanding what this --enable-direct=mlx4
-# switch is for...?)
-	AS_CASE([$enable_direct],
-		[mlx4], [AC_DEFINE([HAVE_MLX4_DIRECT], [1],
-		[Define if mlx4 direct provider is enabled])],
-	[])
 ])
 
 dnl A separate macro for AM CONDITIONALS, since they cannot be invoked
@@ -59,5 +50,4 @@ dnl conditionally
 AC_DEFUN([FI_VERBS_CONDITIONALS],[
 	AM_CONDITIONAL([HAVE_VERBS], [test x"$enable_verbs" = x"yes"])
 	AM_CONDITIONAL([HAVE_VERBS_DL], [test x"$verbs_dl" = x"yes"])
-	AM_CONDITIONAL([HAVE_MLX4_DIRECT], [test x"$enable_direct" = x"mlx4"])
 ])
