@@ -244,9 +244,9 @@ struct fi_ops_cq {
 	ssize_t	(*readerr)(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			size_t len, uint64_t flags);
 	ssize_t	(*write)(struct fid_cq *cq, const void *buf, size_t len);
-	ssize_t	(*condread)(struct fid_cq *cq, void *buf, size_t len,
+	ssize_t	(*sread)(struct fid_cq *cq, void *buf, size_t len,
 			const void *cond, int timeout);
-	ssize_t	(*condreadfrom)(struct fid_cq *cq, void *buf, size_t len,
+	ssize_t	(*sreadfrom)(struct fid_cq *cq, void *buf, size_t len,
 			fi_addr_t *src_addr, const void *cond, int timeout);
 	const char * (*strerror)(struct fid_cq *cq, int prov_errno,
 			const void *err_data, void *buf, size_t len);
@@ -369,16 +369,16 @@ static inline ssize_t fi_cq_write(struct fid_cq *cq, void *buf, size_t len)
 }
 
 static inline ssize_t
-fi_cq_condread(struct fid_cq *cq, void *buf, size_t len, void *cond, int timeout)
+fi_cq_sread(struct fid_cq *cq, void *buf, size_t len, void *cond, int timeout)
 {
-	return cq->ops->condread(cq, buf, len, cond, timeout);
+	return cq->ops->sread(cq, buf, len, cond, timeout);
 }
 
 static inline ssize_t
-fi_cq_condreadfrom(struct fid_cq *cq, void *buf, size_t len,
-		   fi_addr_t *src_addr, const void *cond, int timeout)
+fi_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
+		fi_addr_t *src_addr, const void *cond, int timeout)
 {
-	return cq->ops->condreadfrom(cq, buf, len, src_addr, cond, timeout);
+	return cq->ops->sreadfrom(cq, buf, len, src_addr, cond, timeout);
 }
 
 static inline const char *

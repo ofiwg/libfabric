@@ -138,8 +138,8 @@ man_MANS = \
 	man/fi_cq_readfrom.3 \
 	man/fi_cq_readerr.3 \
 	man/fi_cq_write.3 \
-	man/fi_cq_condread.3 \
-	man/fi_cq_condreadfrom.3 \
+	man/fi_cq_sread.3 \
+	man/fi_cq_sreadfrom.3 \
 	man/fi_cq_strerror.3 \
 	man/fi_direct.7 \
 	man/fi_domain.3 \

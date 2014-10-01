@@ -1892,7 +1892,7 @@ static int fi_ibv_cq_reset(struct fid_cq *cq, const void *cond)
 }
 
 static ssize_t
-fi_ibv_cq_condread(struct fid_cq *cq, void *buf, size_t len, const void *cond,
+fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t len, const void *cond,
 		int timeout)
 {
 	ssize_t ret = 0, cur, left;
@@ -2026,7 +2026,7 @@ fi_ibv_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 static struct fi_ops_cq fi_ibv_cq_context_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_cq_read_context,
-	.condread = fi_ibv_cq_condread,
+	.sread = fi_ibv_cq_sread,
 	.readerr = fi_ibv_cq_readerr,
 	.strerror = fi_ibv_cq_strerror
 };
@@ -2034,7 +2034,7 @@ static struct fi_ops_cq fi_ibv_cq_context_ops = {
 static struct fi_ops_cq fi_ibv_cq_msg_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_cq_read_msg,
-	.condread = fi_ibv_cq_condread,
+	.sread = fi_ibv_cq_sread,
 	.readerr = fi_ibv_cq_readerr,
 	.strerror = fi_ibv_cq_strerror
 };
@@ -2042,7 +2042,7 @@ static struct fi_ops_cq fi_ibv_cq_msg_ops = {
 static struct fi_ops_cq fi_ibv_cq_data_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_cq_read_data,
-	.condread = fi_ibv_cq_condread,
+	.sread = fi_ibv_cq_sread,
 	.readerr = fi_ibv_cq_readerr,
 	.strerror = fi_ibv_cq_strerror
 };
