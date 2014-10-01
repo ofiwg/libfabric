@@ -162,7 +162,7 @@ struct fid_domain {
 #ifndef FABRIC_DIRECT
 
 static inline int
-fi_fdomain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
+fi_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 	   struct fid_domain **domain, void *context)
 {
 	return fabric->ops->domain(fabric, attr, domain, context);

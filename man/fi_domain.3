@@ -6,7 +6,7 @@ fi_domain \- Open a fabric access domain
 .br
 .B "#include <rdma/fi_domain.h>"
 .HP
-.BI "int fi_fdomain(struct fid_fabric *" fabric ", struct fi_domain_attr *" attr ", "
+.BI "int fi_domain(struct fid_fabric *" fabric ", struct fi_domain_attr *" attr ", "
 .BI "struct fid_domain **" domain ", void *" context ");"
 .HP
 .BI "int fi_close(struct fid *" domain ");"
@@ -44,7 +44,7 @@ multiple hardware components for fail-over or data striping purposes.
 A domain defines the boundary for associating different resources
 together.  Fabric resources belonging to the same domain may share
 resources.
-.SS "fi_fdomain"
+.SS "fi_domain"
 Opens a fabric access domain, also referred to as a resource domain.
 Fabric domains are identified by a name.  The properties of
 the opened domain are specified using the attr parameter.
