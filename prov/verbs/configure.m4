@@ -25,6 +25,9 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	       AC_CHECK_LIB([rdmacm], [rsocket], [], [verbs_happy=0])
 	      ])
 
+	AS_IF([test "$enable_verbs $verbs_happy" = "auto 1"],
+	      [enable_verbs=yes])
+
 	# If verbs was specifically requested but we can't build it,
 	# error.
 	AS_IF([test "$enable_verbs $verbs_happy" = "yes 0"],
