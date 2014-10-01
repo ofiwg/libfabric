@@ -64,7 +64,8 @@ struct fi_prov {
 
 static struct fi_prov *prov_head, *prov_tail;
 
-int fi_version_register(uint32_t version, struct fi_provider *provider)
+
+int fi_register_provider(uint32_t version, struct fi_provider *provider)
 {
 	struct fi_prov *prov;
 
