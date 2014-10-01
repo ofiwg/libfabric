@@ -1,4 +1,4 @@
-.TH "FI_EQ" 3 "2014-09-18" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_EQ" 3 "2014-09-30" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_eq \- Event queue operations
 .PP
@@ -37,19 +37,19 @@ Converts provider specific error information into a printable string
 .BI "int fi_control(struct fid *" eq ", int " command ", void *" arg ");"
 .PP
 .HP
-.BI "int fi_eq_read(struct fid_eq *" eq ","
+.BI "int fi_eq_read(struct fid_eq *" eq ", enum fi_eq_event *" event ", "
 .BI "void *" buf ", size_t " len ", uint64_t " flags ");"
 .HP
-.BI "int fi_eq_readerr(struct fid_eq *" eq ","
+.BI "int fi_eq_readerr(struct fid_eq *" eq ", "
 .BI "struct fi_eq_err_entry *" buf ", size_t " len ", "
 .BI "uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_eq_write(struct fid_eq *" eq ","
+.BI "int fi_eq_write(struct fid_eq *" eq ", enum fi_eq_event " event ", "
 .BI "const void *" buf ", size_t " len ", uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_eq_sread(struct fid_eq *" eq ","
+.BI "int fi_eq_sread(struct fid_eq *" eq ", enum fi_eq_event *" event ", "
 .BI "void *" buf ", size_t " len ", "
 .BI "int " timeout ", uint64_t " flags ");"
 .PP
@@ -67,6 +67,8 @@ Event queue
 Event queue attributes
 .IP "context"
 User specified context associated with the event queue.
+.IP "event"
+Reported event
 .IP "buf"
 For read calls, the data buffer to write events into.
 .br
@@ -75,12 +77,8 @@ For write calls, an event to insert into the event queue.
 For fi_eq_strerror, an optional buffer that receives printable error information.
 .IP "len"
 Length of data buffer
-.IP "src_addr"
-Source address of a completed receive operation
 .IP "flags"
 Additional flags to apply to the operation
-.IP "cond"
-Condition that must be met before an event is generated
 .IP "prov_errno"
 Provider specific error value
 .IP "err_data"
@@ -197,14 +195,13 @@ into the EQ.  The format of this structure is:
 .nf
 
 struct fi_eq_entry {
-	enum fi_eq_event event;      /* event type */
 	fid_t            fid;        /* fid associated with request */
 	void            *context;    /* operation context */
 };
 
 .fi
-For the completion of basic asynchronous control operations, the event
-type will be set to FI_COMPLETE.  The fid will reference the fabric descriptor
+For the completion of basic asynchronous control operations, the returned event
+will be to FI_COMPLETE.  The fid will reference the fabric descriptor
 associated with the event.  For memory registration, this will be the fid_mr,
 address resolution will reference a fid_av, and CM events will refer to a
 fid_ep.  The context field will be set to the context specified as part of
@@ -216,7 +213,6 @@ Connection requests are reported using struct fi_eq_cm_entry:
 .nf
 
 struct fi_eq_cm_entry {
-	enum fi_eq_event event;      /* event type */
 	fid_t            fid;        /* fid associated with request */
 	fi_connreq_t     connreq;    /* connection context */
 	struct fi_info  *info;       /* endpoint information */
@@ -271,7 +267,6 @@ The format of this structure is defined below.
 .nf
 
 struct fi_eq_err_entry {
-	enum fi_eq_event event;      /* event type */
 	fid_t            fid;        /* fid associated with error */
 	void            *context;    /* operation context */
 	int              err;        /* positive error code */
@@ -280,7 +275,6 @@ struct fi_eq_err_entry {
 };
 
 .fi
-Error events will set the event field to FI_ERROR.
 The fid will reference the fabric descriptor
 associated with the event.  For memory registration, this will be the fid_mr,
 address resolution will reference a fid_av, and CM events will refer to a

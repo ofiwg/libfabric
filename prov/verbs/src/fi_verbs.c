@@ -1583,8 +1583,8 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 }
 
 static ssize_t
-fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry, size_t len,
-	       uint64_t flags)
+fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
+		  size_t len, uint64_t flags)
 {
 	struct fi_ibv_eq *_eq;
 
@@ -1643,33 +1643,33 @@ err:
 }
 
 static ssize_t
-fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *event,
-			struct fi_eq_cm_entry *entry, size_t len)
+fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event,
+	enum fi_eq_event *event, struct fi_eq_cm_entry *entry, size_t len)
 {
 	fid_t fid;
 	size_t datalen;
 
-	fid = event->id->context;
-	switch (event->event) {
+	fid = cma_event->id->context;
+	switch (cma_event->event) {
 //	case RDMA_CM_EVENT_ADDR_RESOLVED:
 //		return 0;
 //	case RDMA_CM_EVENT_ROUTE_RESOLVED:
 //		return 0;
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
-		entry->event = FI_CONNREQ;
-		entry->connreq = event->id;
-		entry->info = fi_ibv_eq_cm_getinfo(eq->fab, event);
+		*event = FI_CONNREQ;
+		entry->connreq = cma_event->id;
+		entry->info = fi_ibv_eq_cm_getinfo(eq->fab, cma_event);
 		if (!entry->info) {
-			rdma_destroy_id(event->id);
+			rdma_destroy_id(cma_event->id);
 			return 0;
 		}
 		break;
 	case RDMA_CM_EVENT_ESTABLISHED:
-		entry->event = FI_COMPLETE;
+		*event = FI_COMPLETE;
 		entry->info = NULL;
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
-		entry->event = FI_SHUTDOWN;
+		*event = FI_SHUTDOWN;
 		entry->info = NULL;
 		break;
 	case RDMA_CM_EVENT_ADDR_ERROR:
@@ -1677,12 +1677,12 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *event,
 	case RDMA_CM_EVENT_CONNECT_ERROR:
 	case RDMA_CM_EVENT_UNREACHABLE:
 		eq->err.fid = fid;
-		eq->err.err = event->status;
+		eq->err.err = cma_event->status;
 		return -EIO;
 	case RDMA_CM_EVENT_REJECTED:
 		eq->err.fid = fid;
 		eq->err.err = ECONNREFUSED;
-		eq->err.prov_errno = event->status;
+		eq->err.prov_errno = cma_event->status;
 		return -EIO;
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
 		eq->err.fid = fid;
@@ -1697,18 +1697,19 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *event,
 	}
 
 	entry->fid = fid;
-	datalen = min(len - sizeof(*entry), event->param.conn.private_data_len);
+	datalen = min(len - sizeof(*entry), cma_event->param.conn.private_data_len);
 	if (datalen)
-		memcpy(entry->data, event->param.conn.private_data, datalen);
+		memcpy(entry->data, cma_event->param.conn.private_data, datalen);
 	return sizeof(*entry) + datalen;
 }
 
 static ssize_t
-fi_ibv_eq_read(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
+fi_ibv_eq_read(struct fid_eq *eq, enum fi_eq_event *event,
+	       void *buf, size_t len, uint64_t flags)
 {
 	struct fi_ibv_eq *_eq;
 	struct fi_eq_cm_entry *entry;
-	struct rdma_cm_event *event;
+	struct rdma_cm_event *cma_event;
 	ssize_t ret = 0;
 
 	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
@@ -1716,18 +1717,18 @@ fi_ibv_eq_read(struct fid_eq *eq, void *buf, size_t len, uint64_t flags)
 	if (_eq->err.err)
 		return -FI_EIO;
 
-	ret = rdma_get_cm_event(_eq->channel, &event);
+	ret = rdma_get_cm_event(_eq->channel, &cma_event);
 	if (ret)
 		return (errno == EAGAIN) ? 0 : -errno;
 
-	ret = fi_ibv_eq_cm_process_event(_eq, event, entry, len);
-	rdma_ack_cm_event(event);
+	ret = fi_ibv_eq_cm_process_event(_eq, cma_event, event, entry, len);
+	rdma_ack_cm_event(cma_event);
 	return ret;
 }
 
 static ssize_t
-fi_ibv_eq_sread(struct fid_eq *eq, void *buf, size_t len,
-		int timeout, uint64_t flags)
+fi_ibv_eq_sread(struct fid_eq *eq, enum fi_eq_event *event,
+		void *buf, size_t len, int timeout, uint64_t flags)
 {
 	struct fi_ibv_eq *_eq;
 	ssize_t ret;
@@ -1735,7 +1736,7 @@ fi_ibv_eq_sread(struct fid_eq *eq, void *buf, size_t len,
 	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
 
 	do {
-		ret = fi_ibv_eq_read(eq, buf, len, flags);
+		ret = fi_ibv_eq_read(eq, event, buf, len, flags);
 		if (ret)
 			break;
 
