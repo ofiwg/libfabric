@@ -85,7 +85,6 @@ uint32_t fi_version(void);
  * 60 - 63	provider-domain specific
  */
 
-#define FI_BLOCK		(1ULL << 10)
 #define FI_INJECT		(1ULL << 11)
 #define FI_MULTI_RECV		(1ULL << 12)
 #define FI_SOURCE		(1ULL << 13)
