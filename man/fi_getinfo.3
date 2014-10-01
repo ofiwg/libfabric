@@ -29,6 +29,18 @@ node or service, subject to any provided hints.  Callers must provide at least
 one of the node, service, or hints parameters.  If no matching fabric information
 is available, info will be set to NULL.
 .PP
+Based on the input hints, node, and service parameters, a list of fabric
+domains and endpoints will be returned.  Each fi_info structure will describe
+an endpoint that meets the application's specified communication criteria.
+Each endpoint will be associated with a domain.  Applications can restrict
+the number of returned endpoints by including additional criteria in their
+search hints.  Relaxing or eliminating input hints will increase the number
+and type of endpoints that are available.  Providers that return multiple
+endpoints to a single fi_getinfo call should return the endpoints that are
+highest performing.  Providers may indicate that an endpoint and domain
+can support additional capabilities than those requested by the user only
+if such support will not adversely affect performance.
+.PP
 The version parameter is used by the application to request the desired
 version of the interfaces.  The version determines the format of all data
 structures used by any of the fabric interfaces.  Applications should use the
