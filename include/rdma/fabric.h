@@ -88,6 +88,7 @@ uint32_t fi_version(void);
 #define FI_INJECT		(1ULL << 11)
 #define FI_MULTI_RECV		(1ULL << 12)
 #define FI_SOURCE		(1ULL << 13)
+#define FI_SYMMETRIC		(1ULL << 14)
 
 #define FI_READ			(1ULL << 16)
 #define FI_WRITE		(1ULL << 17)

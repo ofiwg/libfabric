@@ -47,8 +47,6 @@ extern "C" {
  * Maps and stores transport/network addresses.
  */
 
-#define FI_RANGE		(1ULL << 0)
-
 enum fi_av_type {
 	FI_AV_MAP,
 	FI_AV_TABLE
@@ -58,6 +56,7 @@ struct fi_av_attr {
 	enum fi_av_type		type;
 	int			rx_ctx_bits;
 	size_t			count;
+	size_t			ep_per_node;
 	const char		*name;
 	void			*map_addr;
 	uint64_t		flags;
@@ -67,6 +66,11 @@ struct fi_ops_av {
 	size_t	size;
 	int	(*insert)(struct fid_av *av, const void *addr, size_t count,
 			fi_addr_t *fi_addr, uint64_t flags);
+	int	(*insertsvc)(struct fid_av *av, const char *node,
+			const char *service, fi_addr_t *fi_addr, uint64_t flags);
+	int	(*insertsym)(struct fid_av *av, const char *node, size_t nodecnt,
+			const char *service, size_t svccnt, fi_addr_t *fi_addr,
+			uint64_t flags);
 	int	(*remove)(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			uint64_t flags);
 	int	(*lookup)(struct fid_av *av, fi_addr_t fi_addr, void *addr,
@@ -214,8 +218,21 @@ fi_av_insert(struct fid_av *av, const void *addr, size_t count,
 {
 	return av->ops->insert(av, addr, count, fi_addr, flags);
 }
-#define fi_av_map(av, addr, count, fi_addr, flags) \
-	fi_av_insert(av, addr, count, fi_addr, flags)
+
+static inline int
+fi_av_insertsvc(struct fid_av *av, const char *node, const char *service,
+		fi_addr_t *fi_addr, uint64_t flags)
+{
+	return av->ops->insertsvc(av, node, service, fi_addr, flags);
+}
+
+static inline int
+fi_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt,
+		const char *service, size_t svccnt,
+		fi_addr_t *fi_addr, uint64_t flags)
+{
+	return av->ops->insertsym(av, node, nodecnt, service, svccnt, fi_addr, flags);
+}
 
 static inline int
 fi_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count, uint64_t flags)

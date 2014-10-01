@@ -113,6 +113,7 @@ man_MANS = \
 	man/fi_av.3 \
 	man/fi_av_bind.3 \
 	man/fi_av_insert.3 \
+	man/fi_av_insertsvc.3 \
 	man/fi_av_lookup.3 \
 	man/fi_av_open.3 \
 	man/fi_av_remove.3 \
