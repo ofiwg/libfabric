@@ -131,11 +131,8 @@ struct fi_eq_err_entry {
 	void			*err_data;
 };
 
-typedef void *			fi_connreq_t;
-
 struct fi_eq_cm_entry {
 	fid_t			fid;
-	fi_connreq_t		connreq;
 	/* user must call fi_freeinfo to release info */
 	struct fi_info		*info;
 	/* connection data placed here, up to space provided */

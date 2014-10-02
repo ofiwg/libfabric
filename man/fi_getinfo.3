@@ -78,11 +78,10 @@ struct fi_info {
 	size_t                dest_addrlen;
 	void                  *src_addr;
 	void                  *dest_addr;
+	fi_connreq_t          connreq;
 	struct fi_ep_attr     *ep_attr;
 	struct fi_domain_attr *domain_attr;
 	struct fi_fabric_attr *fabric_attr;
-	size_t                datalen;
-	void                  *data;
 };
 .fi
 .IP "next"
@@ -120,6 +119,10 @@ is specified).
 If specified, indicates the source address.
 .IP "dest_addr"
 If specified, indicates the destination address.
+.IP "connreq"
+References a specific connection request, otherwise the field must be
+NULL.  This field is used when processing connection requests and
+responses.  See fi_eq(3), fi_reject(3), and fi_endpoint(3).
 .IP "ep_attr"
 Optionally supplied endpoint attributes.
 Endpoint attributes may be specified and returned as part of fi_getinfo.
@@ -143,14 +146,6 @@ When provided as hints, requested values of struct fi_fabric_attr should be
 set.  On output, the actual fabric attributes
 that can be provided will be returned.
 See fi_fabric(3) for details.
-.IP "datalen"
-Length of any additional data (must be specified if
-.B data
-is specified).
-.IP "data"
-Any additional data about communication interface being requested.  Data is
-provider specific.  It is primarily used as output from fi_getinfo, to be
-provided as input into fi_domain or fi_endpoint.
 .SH "ENDPOINT CAPABILITIES"
 Endpoint capabilities are obtained by OR-ing the following flags together.
 If endpoint capabilities in the hint parameter are set to 0, the underlying

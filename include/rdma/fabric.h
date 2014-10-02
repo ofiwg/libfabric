@@ -125,6 +125,7 @@ enum fi_addr_format {
 
 #define FI_ADDR_UNSPEC		UINT64_MAX
 typedef uint64_t		fi_addr_t;
+typedef void *			fi_connreq_t;
 
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
@@ -193,11 +194,10 @@ struct fi_info {
 	size_t			dest_addrlen;
 	void			*src_addr;
 	void			*dest_addr;
+	fi_connreq_t		connreq;
 	struct fi_ep_attr	*ep_attr;
 	struct fi_domain_attr	*domain_attr;
 	struct fi_fabric_attr	*fabric_attr;
-	size_t			datalen;
-	void			*data;
 };
 
 enum {

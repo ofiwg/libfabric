@@ -148,9 +148,8 @@ of the endpoint are defined based on the provided struct fi_info.  See
 fi_getinfo for additional details on fi_info.  fi_info flags that control
 the operation of an endpoint are defined below.
 .PP
-A single struct fi_info may only be used to allocate a single endpoint.
-If multiple endpoints are to be allocated, each should be preceded by a
-separate call to fi_getinfo.
+If an active endpoint is associated with a connection request, the
+fi_info connreq must reference the corresponding request.
 .SS "fi_close"
 Closes an endpoint and release all resources associated with it.
 .SS "fi_ep_bind"
