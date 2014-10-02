@@ -330,6 +330,34 @@ fi_open_ops(struct fid *fid, const char *name, uint64_t flags,
 	return fid->ops->ops_open(fid, name, flags, ops, context);
 }
 
+/*
+ * Pretty-printable enums, int-flags, and structs
+ */
+enum fi_pp_type {
+	FI_PP_INFO,
+	FI_PP_EP_TYPE,
+	FI_PP_EP_CAP,
+	FI_PP_OP_FLAGS,
+	FI_PP_ADDR_FORMAT,
+	FI_PP_ADDR,
+	FI_PP_EP_ATTR,
+	FI_PP_DOMAIN_ATTR,
+	FI_PP_FABRIC_ATTR,
+	FI_PP_CAPS,
+	FI_PP_THREADING,
+	FI_PP_PROGRESS,
+	FI_PP_PROTO,
+	FI_PP_MSG_ORDER
+};
+
+/*
+ * Given a pointer and a type, return a malloc'd buffer containing
+ * a human readable representation. struct, enum, and OR-able int 
+ * flag fields can be printed. Plain data types like ints and strings
+ * should be printed directly.
+ */
+char *fi_tostr(void *ptr, enum fi_pp_type type);
+
 
 #ifndef FABRIC_DIRECT
 
