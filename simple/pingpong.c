@@ -414,7 +414,6 @@ static int server_connect(void)
 	struct fi_eq_cm_entry entry;
 	enum fi_eq_event event;
 	struct fi_info *info = NULL;
-	fi_connreq_t connreq = NULL;
 	ssize_t rd;
 	int ret;
 
@@ -431,7 +430,6 @@ static int server_connect(void)
 	}
 
 	info = entry.info;
-	connreq = entry.connreq;
 	ret = fi_domain(fab, info->domain_attr, &dom, NULL);
 	if (ret) {
 		printf("fi_fdomain %s\n", fi_strerror(-ret));
@@ -452,13 +450,12 @@ static int server_connect(void)
 	if (ret)
 		goto err3;
 
-	ret = fi_accept(ep, connreq, NULL, 0);
+	ret = fi_accept(ep, NULL, 0);
 	if (ret) {
 		printf("fi_accept %s\n", fi_strerror(-ret));
 		goto err3;
 	}
 
-	connreq = NULL;
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
 		printf("fi_eq_sread %zd %s\n", rd, fi_strerror((int) -rd));
@@ -480,8 +477,7 @@ err3:
 err2:
 	fi_close(&ep->fid);
 err1:
-	if (connreq)
-		fi_reject(pep, connreq, NULL, 0);
+	fi_reject(pep, info->connreq, NULL, 0);
 	fi_freeinfo(info);
 	return ret;
 }
