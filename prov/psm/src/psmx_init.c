@@ -213,8 +213,6 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->src_addr = NULL;
 	psmx_info->dest_addr = dest_addr;
 	psmx_info->fabric_attr->name = strdup("psm");
-	psmx_info->datalen = 0;
-	psmx_info->data = NULL;
 
 	*info = psmx_info;
 	return 0;

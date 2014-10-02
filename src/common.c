@@ -128,7 +128,6 @@ void __fi_freeinfo(struct fi_info *info)
 		free(info->fabric_attr->prov_name);
 		free(info->fabric_attr);
 	}
-	free(info->data);
 	free(info);
 }
 
