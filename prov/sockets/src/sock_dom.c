@@ -97,15 +97,13 @@ static int sock_mr_close(struct fid *fid)
 	return 0;
 }
 
-static int sock_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
-{
-	return -FI_ENOSYS;
-}
-
 static struct fi_ops sock_mr_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_mr_close,
-	.bind = sock_mr_bind,
+	.bind = fi_no_bind,
+	.sync = fi_no_sync,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
 };
 
 static int sock_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr,
@@ -186,6 +184,10 @@ static int sock_reg(struct fid_domain *domain, const void *buf, size_t len,
 static struct fi_ops sock_dom_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_dom_close,
+	.bind = fi_no_bind,
+	.sync = fi_no_sync,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
 };
 
 static struct fi_ops_domain sock_dom_ops = {

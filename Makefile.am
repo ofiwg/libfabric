@@ -19,7 +19,8 @@ endif
 
 src_libfabric_la_SOURCES = \
 	src/fabric.c \
-	src/common.c
+	src/common.c \
+	src/enosys.c
 
 if HAVE_SOCKETS
 _sockets_files = \
@@ -33,7 +34,7 @@ _sockets_files = \
 
 if HAVE_SOCKETS_DL
 pkglib_LTLIBRARIES += libsockets-fi.la
-libsockets_fi_la_SOURCES = $(_sockets_files) src/common.c
+libsockets_fi_la_SOURCES = $(_sockets_files) src/common.c src/enosys.c
 libsockets_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
 else
 src_libfabric_la_SOURCES += $(_sockets_files)
@@ -46,7 +47,7 @@ _verbs_files = prov/verbs/src/fi_verbs.c
 
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libibverbs-fi.la
-libibverbs_fi_la_SOURCES = $(_verbs_files) src/common.c
+libibverbs_fi_la_SOURCES = $(_verbs_files) src/common.c src/enosys.c
 libibverbs_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic -libverbs -lrdmacm
 else
 src_libfabric_la_SOURCES += $(_verbs_files)
@@ -74,7 +75,7 @@ _psm_files = \
 
 if HAVE_PSM_DL
 pkglib_LTLIBRARIES += libpsmx-fi.la
-libpsmx_fi_la_SOURCES = $(_psm_files) src/common.c
+libpsmx_fi_la_SOURCES = $(_psm_files) src/common.c src/enosys.c
 libpsmx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic -libverbs -lrdmacm
 else
 src_libfabric_la_SOURCES += $(_psm_files)
@@ -223,6 +224,7 @@ man_MANS = \
 
 EXTRA_DIST = libfabric.map libfabric.spec.in $(man_MANS) \
 	include/fi.h \
+	include/fi_enosys.h \
 	include/indexer.h \
 	prov/sockets/src/sock.h \
 	prov/psm/src/psmx.h

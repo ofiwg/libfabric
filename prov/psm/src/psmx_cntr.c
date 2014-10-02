@@ -267,16 +267,6 @@ static int psmx_cntr_close(fid_t fid)
 	return 0;
 }
 
-static int psmx_cntr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
-{
-	return -ENOSYS;
-}
-
-static int psmx_cntr_sync(fid_t fid, uint64_t flags, void *context)
-{
-	return -ENOSYS;
-}
-
 static int psmx_cntr_control(fid_t fid, int command, void *arg)
 {
 	struct psmx_fid_cntr *cntr;
@@ -311,8 +301,8 @@ static int psmx_cntr_control(fid_t fid, int command, void *arg)
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_cntr_close,
-	.bind = psmx_cntr_bind,
-	.sync = psmx_cntr_sync,
+	.bind = fi_no_bind,
+	.sync = fi_no_sync,
 	.control = psmx_cntr_control,
 };
 

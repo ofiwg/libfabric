@@ -292,6 +292,8 @@ static struct fi_ops_ep psmx_ep_ops = {
 	.getopt = psmx_ep_getopt,
 	.setopt = psmx_ep_setopt,
 	.enable = psmx_ep_enable,
+	.tx_ctx = fi_no_tx_ctx,
+	.rx_ctx = fi_no_rx_ctx,
 };
 
 int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,

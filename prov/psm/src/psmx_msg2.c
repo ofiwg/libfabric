@@ -614,5 +614,7 @@ struct fi_ops_msg psmx_msg2_ops = {
 	.sendmsg = psmx_sendmsg2,
 	.inject = psmx_inject2,
 	.injectto = psmx_injectto2,
+	.senddata = fi_no_msg_senddata,
+	.senddatato = fi_no_msg_senddatato,
 };
 

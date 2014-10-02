@@ -471,11 +471,6 @@ static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 	return 0;
 }
 
-static ssize_t psmx_cq_write(struct fid_cq *cq, const void *buf, size_t len)
-{
-	return -FI_ENOSYS;
-}
-
 static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
 				 fi_addr_t *src_addr, const void *cond,
 				 int timeout)
@@ -505,27 +500,12 @@ static int psmx_cq_close(fid_t fid)
 	return 0;
 }
 
-static int psmx_cq_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
-{
-	return -FI_ENOSYS;
-}
-
-static int psmx_cq_sync(fid_t fid, uint64_t flags, void *context)
-{
-	return -FI_ENOSYS;
-}
-
-static int psmx_cq_control(fid_t fid, int command, void *arg)
-{
-	return -FI_ENOSYS;
-}
-
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_cq_close,
-	.bind = psmx_cq_bind,
-	.sync = psmx_cq_sync,
-	.control = psmx_cq_control,
+	.bind = fi_no_bind,
+	.sync = fi_no_sync,
+	.control = fi_no_control,
 };
 
 static struct fi_ops_cq psmx_cq_ops = {
@@ -533,7 +513,7 @@ static struct fi_ops_cq psmx_cq_ops = {
 	.read = psmx_cq_read,
 	.readfrom = psmx_cq_readfrom,
 	.readerr = psmx_cq_readerr,
-	.write = psmx_cq_write,
+	.write = fi_no_cq_write,
 	.sread = psmx_cq_sread,
 	.sreadfrom = psmx_cq_sreadfrom,
 	.strerror = psmx_cq_strerror,

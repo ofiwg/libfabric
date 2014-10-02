@@ -192,22 +192,12 @@ static int psmx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
-static int psmx_mr_sync(fid_t fid, uint64_t flags, void *context)
-{
-	return -ENOSYS;
-}
-
-static int psmx_mr_control(fid_t fid, int command, void *arg)
-{
-	return -ENOSYS;
-}
-
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_mr_close,
 	.bind = psmx_mr_bind,
-	.sync = psmx_mr_sync,
-	.control = psmx_mr_control,
+	.sync = fi_no_sync,
+	.control = fi_no_control,
 };
 
 static void psmx_mr_normalize_iov(struct iovec *iov, size_t *count)
