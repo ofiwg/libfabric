@@ -1630,6 +1630,10 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 
 	if (!(fi->fabric_attr->name = strdup("RDMA")))
 		goto err;
+	if (!(fi->fabric_attr->prov_name = strdup("verbs")))
+		goto err;
+	fi->fabric_attr->prov_version = FI_VERSION(0, 7);
+
 	if (!(fi->domain_attr->name = strdup(event->id->verbs->device->name)))
 		goto err;
 
@@ -1637,7 +1641,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	fi->data = event->id;
 	return fi;
 err:
-	fi_freeinfo(fi);
+	__fi_freeinfo(fi);
 	return NULL;
 }
 
