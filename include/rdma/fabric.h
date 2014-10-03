@@ -62,6 +62,10 @@ enum {
 
 uint32_t fi_version(void);
 
+
+ // Standard flag value definition:
+#define ORFLAG(SYMBOL, VALUE) static const uint64_t SYMBOL = VALUE;
+
 /*
  * Vendor specific protocols/etc. are encoded as OUI, followed by vendor
  * specific data.  Vendor specific enum values are indicated by setting the
@@ -84,28 +88,27 @@ uint32_t fi_version(void);
  * 56 - 59	reserved
  * 60 - 63	provider-domain specific
  */
+#define OP_FLAGS \
+	ORFLAG(FI_INJECT,		1 << 11) \
+	ORFLAG(FI_MULTI_RECV,		1 << 12) \
+	ORFLAG(FI_SOURCE,		1 << 13) \
+	ORFLAG(FI_SYMMETRIC,		1 << 14) \
+	ORFLAG(FI_READ,			1 << 16) \
+	ORFLAG(FI_WRITE,		1 << 17) \
+	ORFLAG(FI_RECV,			1 << 18) \
+	ORFLAG(FI_SEND,			1 << 19) \
+	ORFLAG(FI_REMOTE_READ,		1 << 20) \
+	ORFLAG(FI_REMOTE_WRITE,		1 << 21) \
+	ORFLAG(FI_REMOTE_EQ_DATA,	1 << 24) \
+	ORFLAG(FI_EVENT,		1 << 25) \
+	ORFLAG(FI_REMOTE_SIGNAL,	1 << 26) \
+	ORFLAG(FI_REMOTE_COMPLETE,	1 << 27) \
+	ORFLAG(FI_CANCEL,		1 << 28) \
+	ORFLAG(FI_MORE,			1 << 29) \
+	ORFLAG(FI_PEEK,			1 << 30) \
+	ORFLAG(FI_TRIGGER,		1 << 31)
 
-#define FI_INJECT		(1ULL << 11)
-#define FI_MULTI_RECV		(1ULL << 12)
-#define FI_SOURCE		(1ULL << 13)
-#define FI_SYMMETRIC		(1ULL << 14)
-
-#define FI_READ			(1ULL << 16)
-#define FI_WRITE		(1ULL << 17)
-#define FI_RECV			(1ULL << 18)
-#define FI_SEND			(1ULL << 19)
-#define FI_REMOTE_READ		(1ULL << 20)
-#define FI_REMOTE_WRITE		(1ULL << 21)
-
-#define FI_REMOTE_EQ_DATA	(1ULL << 24)
-#define FI_EVENT		(1ULL << 25)
-#define FI_REMOTE_SIGNAL	(1ULL << 26)
-#define FI_REMOTE_COMPLETE	(1ULL << 27)
-#define FI_CANCEL		(1ULL << 28)
-#define FI_MORE			(1ULL << 29)
-#define FI_PEEK			(1ULL << 30)
-#define FI_TRIGGER		(1ULL << 31)
-
+OP_FLAGS
 
 struct fi_ioc {
 	void			*addr;
@@ -139,15 +142,19 @@ enum fi_threading {
 	FI_THREAD_PROGRESS
 };
 
-#define FI_ORDER_RAR		(1 << 0)
-#define FI_ORDER_RAW		(1 << 1)
-#define FI_ORDER_RAS		(1 << 2)
-#define FI_ORDER_WAR		(1 << 3)
-#define FI_ORDER_WAW		(1 << 4)
-#define FI_ORDER_WAS		(1 << 5)
-#define FI_ORDER_SAR		(1 << 6)
-#define FI_ORDER_SAW		(1 << 7)
-#define FI_ORDER_SAS		(1 << 8)
+/* fi_ep_attr msg_order */
+#define MSG_ORDER \
+	ORFLAG(FI_ORDER_RAR,	1 << 0) \
+	ORFLAG(FI_ORDER_RAW,	1 << 1) \
+	ORFLAG(FI_ORDER_RAS,	1 << 2) \
+	ORFLAG(FI_ORDER_WAR,	1 << 3) \
+	ORFLAG(FI_ORDER_WAW,	1 << 4) \
+	ORFLAG(FI_ORDER_WAS,	1 << 5) \
+	ORFLAG(FI_ORDER_SAR,	1 << 6) \
+	ORFLAG(FI_ORDER_SAW,	1 << 7) \
+	ORFLAG(FI_ORDER_SAS,	1 << 8)
+
+MSG_ORDER
 
 struct fi_ep_attr {
 	uint64_t		protocol;

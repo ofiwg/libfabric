@@ -50,6 +50,12 @@
 	case SYM: \
 		return strcat(buf, #SYM "\n");
 
+/* generate ifs inside OR-flag printers */
+#undef ORFLAG
+#define ORFLAG(SYMBOL, VALUE) \
+	if (*flags & SYMBOL) \
+		strcat(buf, #SYMBOL ", ");
+
 static char *strcatf(char *dest, const char *fmt, ...)
 {
 	size_t len = strlen(dest);
@@ -81,18 +87,7 @@ static char *_pp_ep_cap(char *buf, const uint64_t *flags)
 {
 	strcat(buf, "ep_cap: [");
 
-#define EP_CAPS \
-	EC(FI_PASSIVE) EC(FI_MSG) EC(FI_RMA) \
-	EC(FI_TAGGED) EC(FI_ATOMICS) \
-	EC(FI_MULTICAST) EC(FI_BUFFERED_RECV)
-
-#define EC(SYM) \
-	if (*flags & SYM) \
-		strcat(buf, #SYM ", ");
-
 	EP_CAPS
-
-#undef EC
 
 	return strcat(buf, "]\n");
 }
@@ -101,21 +96,7 @@ static char *_pp_op_flags(char *buf, const uint64_t *flags)
 {
 	strcat(buf, "op_flags: [");
 
-#define OP_FLAGS \
-	OF(FI_INJECT) OF(FI_MULTI_RECV) OF(FI_SOURCE) OF(FI_SYMMETRIC) \
-	OF(FI_READ) OF(FI_WRITE) OF(FI_RECV) OF(FI_SEND) \
-	OF(FI_REMOTE_READ) OF(FI_REMOTE_WRITE) \
-	OF(FI_REMOTE_READ) OF(FI_REMOTE_WRITE) \
-	OF(FI_REMOTE_EQ_DATA) OF(FI_EVENT) OF(FI_REMOTE_SIGNAL) \
-	OF(FI_REMOTE_COMPLETE) OF(FI_CANCEL) OF(FI_MORE) OF(FI_PEEK) OF(FI_TRIGGER)
-
-#define OF(SYM) \
-	if (*flags & SYM) \
-		strcat(buf, #SYM ", ");
-
 	OP_FLAGS
-
-#undef OF
 
 	return strcat(buf, "]\n");
 }
@@ -153,18 +134,7 @@ static char *_pp_msg_order(char *buf, const uint64_t *flags)
 {
 	strcat(buf, "msg_order: [");
 
-#define MSG_ORDER \
-	MO(FI_ORDER_RAR) MO(FI_ORDER_RAW) MO(FI_ORDER_RAS) \
-	MO(FI_ORDER_WAR) MO(FI_ORDER_WAW) MO(FI_ORDER_WAS) \
-	MO(FI_ORDER_SAR) MO(FI_ORDER_SAW) MO(FI_ORDER_SAS)
-
-#define MO(SYM) \
-	if (*flags & SYM) \
-		strcat(buf, #SYM ", ");
-
 	MSG_ORDER
-
-#undef MO
 
 	return strcat(buf, "]\n");
 }
@@ -173,16 +143,7 @@ static char *_pp_caps(char *buf, const uint64_t *flags)
 {
 	strcat(buf, "caps: [");
 
-#define DOM_CAPS \
-	DC(FI_WRITE_COHERENT) DC(FI_CONTEXT) DC(FI_LOCAL_MR)
-
-#define DC(SYM) \
-	if (*flags & SYM) \
-		strcat(buf, #SYM ", ");
-
 	DOM_CAPS
-
-#undef DC
 
 	return strcat(buf, "]\n");
 }
@@ -358,3 +319,4 @@ char *fi_tostr(void *ptr, enum fi_pp_type tp)
 }
 
 #undef EN
+#undef ORFLAG
