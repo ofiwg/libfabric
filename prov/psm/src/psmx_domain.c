@@ -64,38 +64,16 @@ static int psmx_domain_close(fid_t fid)
 	return 0;
 }
 
-static int psmx_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
-{
-	return -ENOSYS;
-}
-
-static int psmx_domain_sync(fid_t fid, uint64_t flags, void *context)
-{
-	return -ENOSYS;
-}
-
-static int psmx_domain_control(fid_t fid, int command, void *arg)
-{
-	return -ENOSYS;
-}
-
-static int psmx_domain_query(struct fid_domain *domain,
-			     struct fi_domain_attr *attr)
-{
-	return -ENOSYS;
-}
-
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_domain_close,
-	.bind = psmx_domain_bind,
-	.sync = psmx_domain_sync,
-	.control = psmx_domain_control,
+	.bind = fi_no_bind,
+	.sync = fi_no_sync,
+	.control = fi_no_control,
 };
 
 static struct fi_ops_domain psmx_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.query = psmx_domain_query,
 	.av_open = psmx_av_open,
 	.cq_open = psmx_cq_open,
 	.endpoint = psmx_ep_open,

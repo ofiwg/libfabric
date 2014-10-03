@@ -128,6 +128,10 @@ static struct fi_ops_cntr sock_cntr_ops = {
 static struct fi_ops sock_cntr_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_cntr_close,
+	.bind = fi_no_bind,
+	.sync = fi_no_sync,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
 };
 
 int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,

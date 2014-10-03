@@ -12,10 +12,6 @@ fi_domain \- Open a fabric access domain
 .BI "int fi_close(struct fid *" domain ");"
 .PP
 .HP
-.BI "int fi_domain_query(struct fid_domain *" domain ", "
-.BI "struct fi_domain_attr *" attr);"
-.PP
-.HP
 .BI "int fi_domain_bind(struct fid_domain *" domain ", struct fid *" eq ", "
 .BI "uint64_t " flags ");"
 .HP
@@ -53,8 +49,6 @@ fi_open_ops is used to open provider specific interfaces.
 Provider interfaces may be used to access low-level resources and operations
 that are specific to the opened resource domain.  The details of domain
 interfaces are outside the scope of this documentation.
-.SS "fi_domain_query"
-Query the attributes of an opened domain.
 .SS "fi_domain_bind"
 Associates an event queue with the domain.  An event queue bound to a
 domain will be the default EQ associated with

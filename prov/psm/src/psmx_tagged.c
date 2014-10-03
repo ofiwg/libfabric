@@ -392,11 +392,13 @@ struct fi_ops_tagged psmx_tagged_ops = {
 	.recvfrom = psmx_tagged_recvfrom,
 	.recvmsg = psmx_tagged_recvmsg,
 	.send = psmx_tagged_send,
-	.inject = psmx_tagged_inject,
 	.sendv = psmx_tagged_sendv,
 	.sendto = psmx_tagged_sendto,
-	.injectto = psmx_tagged_injectto,
 	.sendmsg = psmx_tagged_sendmsg,
+	.inject = psmx_tagged_inject,
+	.injectto = psmx_tagged_injectto,
+	.senddata = fi_no_tagged_senddata,
+	.senddatato = fi_no_tagged_senddatato,
 	.search = psmx_tagged_search,
 };
 

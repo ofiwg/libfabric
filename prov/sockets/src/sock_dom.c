@@ -53,12 +53,12 @@ static int sock_dom_close(struct fid *fid)
 	return 0;
 }
 
-static int sock_dom_query(struct fid_domain *domain, struct fi_domain_attr *attr)
-{
-	attr->mr_key_size = 2; /* IDX_MAX_INDEX bits */
-	attr->eq_data_size = sizeof(uint64_t);
-	return 0;
-}
+//static int sock_dom_query(struct fid_domain *domain, struct fi_domain_attr *attr)
+//{
+//	attr->mr_key_size = 2; /* IDX_MAX_INDEX bits */
+//	attr->eq_data_size = sizeof(uint64_t);
+//	return 0;
+//}
 
 static int sock_endpoint(struct fid_domain *domain, struct fi_info *info,
 			 struct fid_ep **ep, void *context)
@@ -97,15 +97,13 @@ static int sock_mr_close(struct fid *fid)
 	return 0;
 }
 
-static int sock_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
-{
-	return -FI_ENOSYS;
-}
-
 static struct fi_ops sock_mr_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_mr_close,
-	.bind = sock_mr_bind,
+	.bind = fi_no_bind,
+	.sync = fi_no_sync,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
 };
 
 static int sock_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr,
@@ -186,11 +184,14 @@ static int sock_reg(struct fid_domain *domain, const void *buf, size_t len,
 static struct fi_ops sock_dom_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_dom_close,
+	.bind = fi_no_bind,
+	.sync = fi_no_sync,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
 };
 
 static struct fi_ops_domain sock_dom_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.query = sock_dom_query,
 	.av_open = sock_av_open,
 	.cq_open = sock_cq_open,
 	.endpoint = sock_endpoint,
