@@ -120,7 +120,6 @@ struct fi_cntr_attr;
 
 struct fi_ops_domain {
 	size_t	size;
-	int	(*query)(struct fid_domain *domain, struct fi_domain_attr *attr);
 	int	(*av_open)(struct fid_domain *domain, struct fi_av_attr *attr,
 			struct fid_av **av, void *context);
 	int	(*cq_open)(struct fid_domain *domain, struct fi_cq_attr *attr,
