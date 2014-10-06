@@ -128,17 +128,15 @@ if test $ac_cv_asm_symver_support = yes; then
 fi
 
 dnl Provider-specific checks
-m4_include(prov/psm/configure.m4)
-FI_PSM_CONFIGURE
-FI_PSM_CONDITIONALS
+PROVIDERS_TO_BUILD=
+FI_PROVIDER_SETUP([psm])
+FI_PROVIDER_SETUP([sockets])
+FI_PROVIDER_SETUP([verbs])
 
-m4_include(prov/sockets/configure.m4)
-FI_SOCKETS_CONFIGURE
-FI_SOCKETS_CONDITIONALS
-
-m4_include(prov/verbs/configure.m4)
-FI_VERBS_CONFIGURE
-FI_VERBS_CONDITIONALS
+# Make sure at least one provider was setup
+AS_IF([test x"$PROVIDERS_TO_BUILD" = "x"],
+      [AC_MSG_NOTICE([No providers were configured])
+       AC_MSG_ERROR([Cannot continue])])
 
 AC_CONFIG_FILES([Makefile libfabric.spec])
 AC_OUTPUT
