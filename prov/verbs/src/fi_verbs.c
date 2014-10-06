@@ -123,10 +123,8 @@ static int fi_ibv_sockaddr_len(struct sockaddr *addr)
 		return sizeof(struct sockaddr_in);
 	case AF_INET6:
 		return sizeof(struct sockaddr_in6);
-#ifdef HAVE_VERBS
 	case AF_IB:
 		return sizeof(struct sockaddr_ib);
-#endif // HAVE_VERBS
 	default:
 		return 0;
 	}
@@ -2380,7 +2378,6 @@ static struct fi_provider fi_ibv_prov = {
 	.fabric = fi_ibv_fabric,
 };
 
-#if HAVE_VERBS
 static void __attribute__((constructor)) fi_ibv_ini(void)
 {
 	(void) fi_register(&fi_ibv_prov);
@@ -2389,4 +2386,3 @@ static void __attribute__((constructor)) fi_ibv_ini(void)
 static void __attribute__((destructor)) fi_ibv_fini(void)
 {
 }
-#endif /* HAVE_VERBS */
