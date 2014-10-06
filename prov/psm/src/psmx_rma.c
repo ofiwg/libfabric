@@ -90,32 +90,33 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		op_error = mr ?
 			psmx_mr_validate(mr, (uint64_t)rma_addr, len, FI_REMOTE_WRITE) :
 			-EINVAL;
-		if (!op_error)
+		if (!op_error) {
+			rma_addr += mr->offset;
 			memcpy(rma_addr, src, len);
+			if (eom) {
+				if (mr->cq) {
+					/* FIXME: report the addr/len of the whole write */
+					event = psmx_cq_create_event(
+							mr->cq->format,
+							0, /* context */
+							rma_addr,
+							0, /* flags */
+							rma_len,
+							0, /* data */
+							0, /* tag */
+							0, /* olen */
+							0);
 
-		if (eom && !op_error) {
-			if (mr->cq) {
-				/* FIXME: report the addr/len of the whole write */
-				event = psmx_cq_create_event(
-						mr->cq->format,
-						0, /* context */
-						rma_addr,
-						0, /* flags */
-						rma_len,
-						0, /* data */
-						0, /* tag */
-						0, /* olen */
-						0);
-
-				if (event)
-					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
-				else
-					err = -ENOMEM;
-			}
-			if (mr->cntr) {
-				mr->cntr->counter++;
-				if (mr->cntr->wait_obj == FI_WAIT_MUT_COND)
-					pthread_cond_signal(&mr->cntr->cond);
+					if (event)
+						psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+					else
+						err = -ENOMEM;
+				}
+				if (mr->cntr) {
+					mr->cntr->counter++;
+					if (mr->cntr->wait_obj == FI_WAIT_MUT_COND)
+						pthread_cond_signal(&mr->cntr->cond);
+				}
 			}
 		}
 		if (eom || op_error) {
@@ -146,6 +147,8 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			break;
 		}
 
+		rma_addr += mr->offset;
+
 		req = calloc(1, sizeof(*req));
 		if (!req) {
 			err = -ENOMEM;
@@ -171,7 +174,10 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		op_error = mr ?
 			psmx_mr_validate(mr, (uint64_t)rma_addr, rma_len, FI_REMOTE_READ) :
 			-EINVAL;
-		if (op_error) {
+		if (!op_error) {
+			rma_addr += mr->offset;
+		}
+		else {
 			rma_addr = NULL;
 			rma_len = 0;
 		}
@@ -185,6 +191,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		err = psm_am_reply_short(token, PSMX_AM_RMA_HANDLER,
 				rep_args, 3, rma_addr, rma_len, 0,
 				NULL, NULL );
+
 		if (eom && !op_error) {
 			if (mr->cq) {
 				/* FIXME: report the addr/len of the whole read */
@@ -230,6 +237,8 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					NULL, NULL );
 			break;
 		}
+
+		rma_addr += mr->offset;
 
 		req = calloc(1, sizeof(*req));
 		if (!req) {
@@ -351,14 +360,10 @@ static ssize_t psmx_rma_self(int am_cmd,
 	case PSMX_AM_REQ_WRITE:
 		ep->pending_writes++;
 		access = FI_REMOTE_WRITE;
-		dst = (void *)addr;
-		src = buf;
 		break;
 	case PSMX_AM_REQ_READ:
 		ep->pending_reads++;
 		access = FI_REMOTE_READ;
-		dst = buf;
-		src = (void *)addr;
 		break;
 	default:
 		return -EINVAL;
@@ -368,7 +373,18 @@ static ssize_t psmx_rma_self(int am_cmd,
 	op_error = mr ? psmx_mr_validate(mr, addr, len, access) : -EINVAL;
 
 	if (!op_error) {
+		addr += mr->offset;
+		if (am_cmd == PSMX_AM_REQ_WRITE) {
+			dst = (void *)addr;
+			src = buf;
+		}
+		else {
+			dst = buf;
+			src = (void *)addr;
+		}
+
 		memcpy(dst, src, len);
+
 		if (mr->cq) {
 			event = psmx_cq_create_event(
 					mr->cq->format,

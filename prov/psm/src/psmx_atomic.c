@@ -413,6 +413,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			-EINVAL;
 
 		if (!op_error) {
+			addr += mr->offset;
 			psmx_atomic_do_write(addr, src, datatype, op, count);
 			if (mr->cq) {
 				event = psmx_cq_create_event(
@@ -460,6 +461,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			-EINVAL;
 
 		if (!op_error) {
+			addr += mr->offset;
 			tmp_buf = malloc(len);
 			if (tmp_buf)
 				psmx_atomic_do_readwrite(addr, src, tmp_buf,
@@ -516,6 +518,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			-EINVAL;
 
 		if (!op_error) {
+			addr += mr->offset;
 			tmp_buf = malloc(len);
 			if (tmp_buf)
 				psmx_atomic_do_compwrite(addr, src, src + len,
@@ -666,6 +669,8 @@ static int psmx_atomic_self(int am_cmd,
 
 	if (op_error)
 		goto gen_local_event;
+
+	addr += mr->offset;
 
 	switch (am_cmd) {
 	case PSMX_AM_REQ_ATOMIC_WRITE:

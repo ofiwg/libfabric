@@ -468,6 +468,7 @@ struct psmx_fid_mr {
 	struct psmx_fid_cntr	*cntr;
 	uint64_t		access;
 	uint64_t		flags;
+	uint64_t		offset;
 	size_t			iov_count;
 	struct iovec		iov[0];	/* must be the last field */
 };
