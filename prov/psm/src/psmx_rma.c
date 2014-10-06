@@ -143,6 +143,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			err = psm_am_reply_short(token, PSMX_AM_RMA_HANDLER,
 					rep_args, 2, NULL, 0, 0,
 					NULL, NULL );
+			break;
 		}
 
 		req = calloc(1, sizeof(*req));
@@ -227,6 +228,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			err = psm_am_reply_short(token, PSMX_AM_RMA_HANDLER,
 					rep_args, 3, NULL, 0, 0,
 					NULL, NULL );
+			break;
 		}
 
 		req = calloc(1, sizeof(*req));
@@ -235,7 +237,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		}
 		else {
 			req->op = args[0].u32w0;
-			req->read.addr = args[1].u64;
+			req->read.addr = (uint64_t)rma_addr;
 			req->read.len = rma_len;
 			req->read.key = key;
 			req->read.context = (void *)args[4].u64;
