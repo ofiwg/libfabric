@@ -6,7 +6,7 @@ fi_domain \- Open a fabric access domain
 .br
 .B "#include <rdma/fi_domain.h>"
 .HP
-.BI "int fi_domain(struct fid_fabric *" fabric ", struct fi_domain_attr *" attr ", "
+.BI "int fi_domain(struct fid_fabric *" fabric ", struct fi_info *" info ", "
 .BI "struct fid_domain **" domain ", void *" context ");"
 .HP
 .BI "int fi_close(struct fid *" domain ");"
@@ -20,8 +20,8 @@ fi_domain \- Open a fabric access domain
 .SH ARGUMENTS
 .IP "fabric" 12
 Fabric domain
-.IP "attr" 12
-Attributes of the access domain.
+.IP "info" 12
+Fabric information, including domain capabilities and attributes.
 .IP "domain" 12
 An opened access domain.
 .IP "context" 12
@@ -43,7 +43,7 @@ resources.
 .SS "fi_domain"
 Opens a fabric access domain, also referred to as a resource domain.
 Fabric domains are identified by a name.  The properties of
-the opened domain are specified using the attr parameter.
+the opened domain are specified using the info parameter.
 .SS "fi_open_ops"
 fi_open_ops is used to open provider specific interfaces.
 Provider interfaces may be used to access low-level resources and operations
@@ -73,7 +73,6 @@ domain.
 .nf
 struct fi_domain_attr {
 	char              *name;
-	uint64_t          caps;
 	enum fi_threading threading;
 	enum fi_progress  control_progress;
 	enum fi_progress  data_progress;
@@ -88,69 +87,6 @@ struct fi_domain_attr {
 .fi
 .SS "Name"
 The name of the access domain.
-.SS "Capabilities"
-Domain capabilities are obtained by OR-ing the following flags together.
-Domain capabilities are most often used as output information from fi_getinfo,
-allowing applications to adjust their behavior based on the provider's
-hardware or software abilities.  However,specific capabilities may be
-requested through the hints parameter, with the actual supported capabilities
-returned by the provider.  Applications must check domain capabilities to
-ensure that all provider requirements for using resources associated with
-the access domain are met.
-.IP "FI_WRITE_COHERENT"
-Specifies that remote writes, including atomic operations, to the underlying
-access domain are coherent with the local processing domain.  Domain-level
-write coherency indicates that changes to local memory are visible to the
-local process immediately upon completion of a remote write operation.  The
-absence of this flag allows the NIC or memory subsystem to cache the results
-of remote write or atomic operations in non-coherent memory.
-.sp
-The behavior of a domain with and without FI_WRITE_COHERENT is illustrated
-below.
-.nf
-
-      Process 1            Process 2
-                           Register BUF
-      RMA write X to BUF
-      Notify process 2
-                           Receive notification
-                           if not FI_WRITE_COHERENT
-                                Sync with remote writes
-                           assert(BUF == X)
-
-.fi
-.sp
-This flag may be set on input hints to fi_getinfo, with the provider clearing
-the flag on output if it does not provide write coherency.  See the endpoint
-fi_ep_sync call for handling non-coherent writes.
-.IP "FI_CONTEXT"
-Specifies that the provider requires that applications use struct fi_context
-as their per operation context parameter.  This structure should be treated as
-opaque to the application.  For performance reasons, this structure must be
-allocated by the user, but may be used by the fabric provider to track the
-operation.  Typically, users embed struct fi_context within their own
-context structure.  The struct fi_context must remain valid until the
-corresponding operation completes or is successfully canceled.  As such,
-fi_context should NOT be allocated on the stack.  Doing so is likely to
-result in stack corruption that will be difficult to debug.  Users should
-not update or interpret the fields in this structure, or reuse it until
-the original operation has completed.  The structure is
-specified in rdma/fabric.h.
-.IP "FI_LOCAL_MR"
-The provider is optimized around having applications register memory
-for locally accessed data buffers.  Data buffers used in send and receive
-operations and as the source buffer for RMA and atomic operations must be
-registered by the application for access domains opened with this capability.
-.IP "FI_USER_MR_KEY"
-The provider supports user requested memory registration keys.  Providers
-that set this capability honor the requested_key parameter for memory
-registration calls.
-.IP "FI_DYNAMIC_MR"
-The provider supports applications registering any range of addresses
-in their virtual address space, whether or not those addresses are
-back by physical pages or have been allocated to the app.
-Providers that lack this capability require that registered memory
-regions be backed by allocated memory pages.
 .SS "Multi-threading Support (threading)"
 The threading model specifies the level of serialization required of an
 application when using the libfabric data transfer interfaces.  Control

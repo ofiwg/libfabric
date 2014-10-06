@@ -165,7 +165,6 @@ struct fi_ep_attr {
 
 struct fi_domain_attr {
 	char			*name;
-	uint64_t		caps;
 	enum fi_threading	threading;
 	enum fi_progress	control_progress;
 	enum fi_progress	data_progress;
@@ -188,6 +187,7 @@ struct fi_info {
 	struct fi_info		*next;
 	uint64_t		type;
 	uint64_t		ep_cap;
+	uint64_t		domain_cap;
 	uint64_t		op_flags;
 	enum fi_addr_format	addr_format;
 	size_t			src_addrlen;
@@ -259,7 +259,7 @@ void fi_freeinfo(struct fi_info *info);
 
 struct fi_ops_fabric {
 	size_t	size;
-	int	(*domain)(struct fid_fabric *fabric, struct fi_domain_attr *attr,
+	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_domain **dom, void *context);
 	int	(*endpoint)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);

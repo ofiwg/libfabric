@@ -486,7 +486,7 @@ extern struct fi_ops_rma	psmx_rma_ops;
 extern struct fi_ops_atomic	psmx_atomic_ops;
 extern struct psm_am_parameters psmx_am_param;
 
-int	psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
+int	psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			 struct fid_domain **domain, void *context);
 int	psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		     struct fid_ep **ep, void *context);

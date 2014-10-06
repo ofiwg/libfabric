@@ -218,8 +218,6 @@ static void _pp_fi_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcat(buf, "fi_domain_attr:\n");
 	strcatf(buf, "%sname:\t%s\n", indent, attr->name);
 	strcat(buf, indent);
-	_pp_domain_cap(buf, attr->caps);
-	strcat(buf, indent);
 	_pp_fi_threading(buf, attr->threading);
 
 	strcat(buf, indent);
@@ -255,6 +253,8 @@ static void _pp_fi_info(char *buf, const struct fi_info *info, const char *inden
 	_pp_fi_ep_type(buf, info->type);
 	strcat(buf, indent);
 	_pp_ep_cap(buf, info->ep_cap);
+	strcat(buf, indent);
+	_pp_domain_cap(buf, info->domain_cap);
 	strcat(buf, indent);
 	_pp_op_flags(buf, info->op_flags);
 	strcat(buf, indent);

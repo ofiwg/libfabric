@@ -135,10 +135,10 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		if (hints->domain_attr &&
-		    ((hints->domain_attr->caps & PSMX_DOMAIN_CAP) !=
-		      hints->domain_attr->caps)) {
+		    ((hints->domain_cap & PSMX_DOMAIN_CAP) !=
+		      hints->domain_cap)) {
 			psmx_debug("%s: hints->domain_cap=0x%llx, supported=0x%llx\n",
-					__func__, hints->domain_attr->caps, PSMX_DOMAIN_CAP);
+					__func__, hints->domain_cap, PSMX_DOMAIN_CAP);
 			goto err_out;
 		}
 
@@ -198,9 +198,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->threading = FI_THREAD_PROGRESS;
 	psmx_info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
 	psmx_info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
-	psmx_info->domain_attr->caps = (hints && hints->domain_attr &&
-					hints->domain_attr->caps) ?
-					hints->domain_attr->caps : PSMX_DOMAIN_CAP;
+	psmx_info->domain_cap = (hints && hints->domain_cap) ?
+				hints->domain_cap : PSMX_DOMAIN_CAP;
 	psmx_info->domain_attr->name = strdup("psm");
 
 	psmx_info->next = NULL;
