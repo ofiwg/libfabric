@@ -80,15 +80,18 @@ struct fi_rx_ctx_attr {
 };
 
 /* fi_info endpoint capabilities */
-#define FI_PASSIVE		(1ULL << 0)
-#define FI_MSG			(1ULL << 1)
-#define FI_RMA			(1ULL << 2)
-#define FI_TAGGED		(1ULL << 3)
-#define FI_ATOMICS		(1ULL << 4)
-#define FI_MULTICAST		(1ULL << 5)	/* multicast uses MSG ops */
-#define FI_NAMED_RX_CTX		(1ULL << 8)
-#define FI_BUFFERED_RECV	(1ULL << 9)
+/* multicast uses MSG ops */
+#define EP_CAPS \
+		ORFLAG(FI_PASSIVE,		1 << 0) \
+		ORFLAG(FI_MSG,			1 << 1) \
+		ORFLAG(FI_RMA,			1 << 2) \
+		ORFLAG(FI_TAGGED,		1 << 3) \
+		ORFLAG(FI_ATOMICS,		1 << 4) \
+		ORFLAG(FI_MULTICAST,		1 << 5)	\
+		ORFLAG(FI_NAMED_RX_CTX,		1 << 8) \
+		ORFLAG(FI_BUFFERED_RECV,	1 << 9)
 
+EP_CAPS
 
 struct fi_msg {
 	const struct iovec	*msg_iov;

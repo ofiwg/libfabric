@@ -111,12 +111,14 @@ struct fi_cntr_attr;
 
 
 /* fi_info domain capabilities */
-#define FI_WRITE_COHERENT	(1ULL << 0)
-#define FI_CONTEXT		(1ULL << 1)
-#define FI_LOCAL_MR		(1ULL << 2)
-#define FI_USER_MR_KEY		(1ULL << 3)
-#define FI_DYNAMIC_MR		(1ULL << 4)
+#define DOM_CAPS \
+		ORFLAG(FI_WRITE_COHERENT,	1 << 0) \
+		ORFLAG(FI_CONTEXT,		1 << 1) \
+		ORFLAG(FI_LOCAL_MR,		1 << 2) \
+		ORFLAG(FI_USER_MR_KEY,		1 << 3) \
+		ORFLAG(FI_DYNAMIC_MR,		1 << 4)
 
+DOM_CAPS
 
 struct fi_ops_domain {
 	size_t	size;
