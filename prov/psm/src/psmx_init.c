@@ -264,7 +264,6 @@ static struct fi_provider psmx_prov = {
 	.fabric = psmx_fabric,
 };
 
-#if HAVE_PSM
 static void __attribute__((constructor)) psmx_ini(void)
 {
 	int major, minor;
@@ -302,4 +301,3 @@ static void __attribute__((destructor)) psmx_fini(void)
 {
 	psm_finalize();
 }
-#endif /* HAVE_PSM */
