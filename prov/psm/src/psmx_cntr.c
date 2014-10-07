@@ -96,7 +96,8 @@ void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
 				      trigger->write.addr,
 				      trigger->write.key,
 				      trigger->write.context,
-				      trigger->write.flags);
+				      trigger->write.flags,
+				      trigger->write.data);
 			break;
 
 		case PSMX_TRIGGERED_READ:
