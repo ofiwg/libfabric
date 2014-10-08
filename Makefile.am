@@ -1,15 +1,17 @@
-AM_CPPFLAGS = -I$(srcdir)/include
+AM_CPPFLAGS = -I$(srcdir)/include -D_GNU_SOURCE
 
 lib_LTLIBRARIES = src/libfabric.la
 
 pkglib_LTLIBRARIES =
 
 ACLOCAL_AMFLAGS = -I config
-AM_CFLAGS = -g -Wall -D_GNU_SOURCE 
+AM_CFLAGS = -g -Wall
 
-src_libfabric_la_CFLAGS = $(AM_CFLAGS) -DSYSCONFDIR=\"$(sysconfdir)\" \
-				       -DRDMADIR=\"@rdmadir@\" \
-				       -DEXTDIR=\"$(libdir)/libfabric\"
+src_libfabric_la_CPPFLAGS = \
+	$(AM_CPPFLAGS)\
+	-DSYSCONFDIR=\"$(sysconfdir)\" \
+	-DRDMADIR=\"@rdmadir@\" \
+	-DEXTDIR=\"$(pkglibdir)\"
 
 if HAVE_LD_VERSION_SCRIPT
     libfabric_version_script = -Wl,--version-script=$(srcdir)/libfabric.map
