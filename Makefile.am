@@ -36,7 +36,7 @@ _sockets_files = \
 
 if HAVE_SOCKETS_DL
 pkglib_LTLIBRARIES += libsockets-fi.la
-libsockets_fi_la_SOURCES = $(_sockets_files) src/common.c src/enosys.c
+libsockets_fi_la_SOURCES = $(_sockets_files)
 libsockets_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
 else
 src_libfabric_la_SOURCES += $(_sockets_files)
@@ -49,7 +49,7 @@ _verbs_files = prov/verbs/src/fi_verbs.c
 
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libibverbs-fi.la
-libibverbs_fi_la_SOURCES = $(_verbs_files) src/common.c src/enosys.c
+libibverbs_fi_la_SOURCES = $(_verbs_files)
 libibverbs_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic -libverbs -lrdmacm
 else
 src_libfabric_la_SOURCES += $(_verbs_files)
@@ -77,7 +77,7 @@ _psm_files = \
 
 if HAVE_PSM_DL
 pkglib_LTLIBRARIES += libpsmx-fi.la
-libpsmx_fi_la_SOURCES = $(_psm_files) src/common.c src/enosys.c
+libpsmx_fi_la_SOURCES = $(_psm_files)
 libpsmx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic -libverbs -lrdmacm
 else
 src_libfabric_la_SOURCES += $(_psm_files)
