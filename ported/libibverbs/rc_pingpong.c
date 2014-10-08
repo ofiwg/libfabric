@@ -170,21 +170,22 @@ err:
 static int pp_accept_ctx(struct pingpong_context *ctx)
 {
 	struct fi_eq_cm_entry entry;
+	enum fi_eq_event event;
 	int rc = 0;
 	int rd = 0;
 
-	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, -1, 0);
+	rd = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FI_ERR_LOG("fi_eq_condread %s", -rd);
+		FI_ERR_LOG("fi_eq_sread %s", -rd);
 		goto err;
 	}
 
-	if (entry.event != FI_CONNREQ) {
-		fprintf(stderr, "Unexpected CM event %d\n", entry.event);
+	if (event != FI_CONNREQ) {
+		fprintf(stderr, "Unexpected CM event %d\n", event);
 		goto err;
 	}
 
-	rc = fi_fdomain(ctx->fabric, entry.info->domain_attr, &ctx->dom, NULL);
+	rc = fi_domain(ctx->fabric, entry.info, &ctx->dom, NULL);
 	if (rc) {
 		FI_ERR_LOG("fi_fdomain", rc);
 		goto err;
@@ -224,20 +225,20 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rc = fi_accept(ctx->ep, entry.connreq, NULL, 0);
+	rc = fi_accept(ctx->ep, NULL, 0);
 	if (rc) {
 		FI_ERR_LOG("fi_accept", rc);
 		goto err;
 	}
 
-	rd = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, -1, 0);
+	rd = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FI_ERR_LOG("fi_eq_condread %s", -rd);
+		FI_ERR_LOG("fi_eq_sread %s", -rd);
 		goto err;
 	}
 
-	if (entry.event != FI_COMPLETE) {
-		fprintf(stderr, "Unexpected CM event %d\n", entry.event);
+	if (event != FI_COMPLETE) {
+		fprintf(stderr, "Unexpected CM event %d\n", event);
 		goto err;
 	}
 	printf("Connection accepted\n");
@@ -253,10 +254,11 @@ err:
 static int pp_connect_ctx(struct pingpong_context *ctx)
 {
 	struct fi_eq_cm_entry entry;
+	enum fi_eq_event event;
 	int rc = 0;
 
 	/* Open domain */
-	rc = fi_fdomain(ctx->fabric, ctx->prov->domain_attr, &ctx->dom, NULL);
+	rc = fi_domain(ctx->fabric, ctx->prov, &ctx->dom, NULL);
 	if (rc) {
 		FI_ERR_LOG("fi_fdomain", -rc);
 		goto err;
@@ -310,14 +312,14 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rc = fi_eq_condread(ctx->eq, &entry, sizeof entry, NULL, -1, 0);
+	rc = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
 	if (rc != sizeof entry) {
-		FI_ERR_LOG("fi_eq_condread %s", -rc);
+		FI_ERR_LOG("fi_eq_sread %s", -rc);
 		goto err;
 	}
 
-	if (entry.event != FI_COMPLETE) {
-		fprintf(stderr, "Unexpected CM event %d\n", entry.event);
+	if (event != FI_COMPLETE) {
+		fprintf(stderr, "Unexpected CM event %d\n", event);
 		goto err;
 	}
 
@@ -632,7 +634,7 @@ int main(int argc, char *argv[])
 
 		if (use_event) {
 			/* Blocking read */
-			rd = fi_cq_condread(ctx->cq, &wc, sizeof wc, NULL, -1);
+			rd = fi_cq_sread(ctx->cq, &wc, sizeof wc, NULL, -1);
 		} else {
 			do {
 				rd = fi_cq_read(ctx->cq, &wc, sizeof wc);

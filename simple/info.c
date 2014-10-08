@@ -37,55 +37,68 @@
 #include <sys/types.h>
 
 #include <rdma/fabric.h>
+#include <rdma/fi_endpoint.h>
+#include <rdma/fi_domain.h>
 #include "shared.h"
 
 
-static struct fi_info hints;
-static char *dst_addr;
+static struct fi_info hints, *info;
+static char *node, *port;
+
 
 static int run(void)
 {
-	struct fi_info *fi, *cur;
+	struct fi_info *cur;
 	int ret;
 
-	ret = fi_getinfo(dst_addr, NULL, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), node, port, 0, &hints, &info);
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
 		return ret;
 	}
 
-	for (cur = fi; cur; cur = cur->next) {
-		printf("domain: %s\n", cur->domain_name);
-	}
+	for (cur = info; cur; cur = cur->next)
+		printf("%s\n", fi_tostr(cur, FI_PP_INFO));
 
-	return ret;
+	fi_freeinfo(info);
+	return 0;
+}
+
+static uint64_t ep_type(char *arg)
+{
+	if (!strcasecmp(arg, "msg"))
+		return FI_EP_MSG;
+	else if (!strcasecmp(arg, "rdm"))
+		return FI_EP_RDM;
+	else if (!strcasecmp(arg, "dgram"))
+		return FI_EP_DGRAM;
+	else
+		return FI_EP_UNSPEC;
 }
 
 int main(int argc, char **argv)
 {
 	int op, ret;
 
-	while ((op = getopt(argc, argv, "d:n:s:")) != -1) {
+	hints.ep_cap = FI_MSG;
+
+	while ((op = getopt(argc, argv, "e:n:p:")) != -1) {
 		switch (op) {
-		case 'd':
-			dst_addr = optarg;
+		case 'e':
+			hints.type = ep_type(optarg);
 			break;
 		case 'n':
-			hints.domain_name = optarg;
+			node = optarg;
 			break;
 		case 's':
-			ret = getaddr(optarg, NULL, (struct sockaddr **) &hints.src_addr,
-				      (socklen_t *) &hints.src_addrlen);
-			if (ret) {
-				printf("source address error %s\n",
-					gai_strerror(errno));
-			}
+			port = optarg;
 			break;
 		default:
 			printf("usage: %s\n", argv[0]);
-			printf("\t[-d destination_address]\n");
-			printf("\t[-n domain_name]\n");
-			printf("\t[-s source_address]\n");
+			printf("\t[-e ep_type\n");
+			printf("\t    (msg, dgram, rdm)");
+			printf("\t[-n node]\n");
+			printf("\t[-p service_port]\n");
 			exit(1);
 		}
 	}
