@@ -60,10 +60,6 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 		],
 		[AC_MSG_NOTICE([$1 provider disabled])])
 
-	AC_DEFINE_UNQUOTED([HAVE_]m4_translit([$1], [a-z], [A-Z])[_DL],
-		[$$1_dl],
-		[Whether $1 should be built as as DSO])
-
 	# If this provier was specifically requested but we can't
 	# build it, error.
 	AS_IF([test "$enable_$1 $$1_happy" = "yes 0"],
