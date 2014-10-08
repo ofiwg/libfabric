@@ -207,7 +207,7 @@ static struct fi_ops_mr sock_dom_mr_ops = {
 	.regattr = sock_regattr,
 };
 
-int sock_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
+int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context)
 {
 	struct sock_domain *_dom;

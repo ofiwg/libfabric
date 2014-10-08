@@ -80,7 +80,7 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.cntr_open = psmx_cntr_open,
 };
 
-int psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
+int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		     struct fid_domain **domain, void *context)
 {
 	struct psmx_fid_domain *domain_priv;
@@ -91,7 +91,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 
 	psmx_debug("%s\n", __func__);
 
-	if (!attr->name || strncmp(attr->name, "psm", 3))
+	if (!info->domain_attr->name || strncmp(info->domain_attr->name, "psm", 3))
 		return -EINVAL;
 
 	psmx_query_mpi();

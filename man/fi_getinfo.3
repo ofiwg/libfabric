@@ -72,13 +72,15 @@ struct fi_info {
 	struct fi_info        *next;
 	uint64_t              type;
 	uint64_t              ep_cap;
-	uint64_t              op_flags;
+	uint64_t              domain_cap;
 	enum fi_addr_format   addr_format;
 	size_t                src_addrlen;
 	size_t                dest_addrlen;
 	void                  *src_addr;
 	void                  *dest_addr;
 	fi_connreq_t          connreq;
+	struct fi_tx_ctx_attr *tx_attr;
+	struct fi_rx_ctx_attr *rx_attr;
 	struct fi_ep_attr     *ep_attr;
 	struct fi_domain_attr *domain_attr;
 	struct fi_fabric_attr *fabric_attr;
@@ -92,38 +94,52 @@ If specified, indicates the type of fabric interface communication desired.
 Supported types are listed in the
 .B "Endpoint types"
 section below.
-.IP "ep_cap"
+.IP "ep_cap - endpoint capabilities"
 If specified, indicates the desired endpoint communication capabilities. Supported
 capabilities are listed in the
-.B "Endpoint capabilities"
+.B "Endpoint Capabilities"
 section below.
-.IP "op_flags"
-Flags that control the operation of endpoints and other objects opened
-using the returned fi_info structure.  Supported op_flags are listed in the 
-.B "Op flags"
+.B "domain_cap - domain capabilities"
+If specified, indicates the desired capabilities supported by the domain.
+Supported capabilities are listed in the
+.B "Domain Capabilities"
 section below.
-.IP "addr_format"
+.IP "addr_format - address format"
 If specified, indicates the format of addresses referenced by the fabric
 interfaces and data structures.  Supported formats are listed in the
 .B "Addressing formats"
 section below.
-.IP "src_addrlen"
+.IP "src_addrlen - source address length"
 Indicates the length of the source address (must be specified if
 .B src_addr
 is specified).
-.IP "dest_addrlen"
+.IP "dest_addrlen - destination address length"
 Indicates the length of the destination address (must be specified if
 .B dst_addr
 is specified).
-.IP "src_addr"
+.IP "src_addr - source address"
 If specified, indicates the source address.
-.IP "dest_addr"
+.IP "dest_addr - destination address"
 If specified, indicates the destination address.
-.IP "connreq"
+.IP "connreq - connection request"
 References a specific connection request, otherwise the field must be
 NULL.  This field is used when processing connection requests and
 responses.  See fi_eq(3), fi_reject(3), and fi_endpoint(3).
-.IP "ep_attr"
+.IP "tx_attr - transmit context attributes"
+Optionally supplied transmit context attributes.
+Transmit context attributes may be specified and returned as part of
+fi_getinfo.  When provided as hints, requested values of struct fi_tx_ctx_attr
+should be set.  On output, the actual transmit context attributes that can
+be provided will be returned.  Output values will be greater than or
+or equal to the requested input values.
+.IP "rx_attr - receive context attributes"
+Optionally supplied receive context attributes.
+Receive context attributes may be specified and returned as part of
+fi_getinfo.  When provided as hints, requested values of struct fi_rx_ctx_attr
+should be set.  On output, the actual receive context attributes that can
+be provided will be returned.  Output values will be greater than or
+or equal to the requested input values.
+.IP "ep_attr - endpoint attributes"
 Optionally supplied endpoint attributes.
 Endpoint attributes may be specified and returned as part of fi_getinfo.
 When provided as hints, requested values of struct fi_ep_attr should be
@@ -131,7 +147,7 @@ set.  On output, the actual endpoint attributes
 that can be provided will be returned.  Output values will be greater than
 or equal to requested input values.
 See fi_endpoint(3) for details.
-.IP "domain_attr"
+.IP "domain_attr - domain attributes"
 Optionally supplied domain attributes.
 Domain attributes may be specified and returned as part of fi_getinfo.
 When provided as hints, requested values of struct fi_domain_attr should be
@@ -139,7 +155,7 @@ set.  On output, the actual domain attributes
 that can be provided will be returned.  Output values will be greater than
 or equal to requested input values.
 See fi_domain(3) for details.
-.IP "fabric_attr"
+.IP "fabric_attr - fabric attributes"
 Optionally supplied fabric attributes.
 Fabric attributes may be specified and returned as part of fi_getinfo.
 When provided as hints, requested values of struct fi_fabric_attr should be
@@ -278,43 +294,68 @@ appropriately.
 Indicates that the user desires the ability to cancel outstanding data
 transfer operations.  If FI_CANCEL is not set, a provider may optimize code
 paths with the assumption that fi_cancel will not be used by the application.
-.SH "OP FLAGS"
-Operation flags are obtained by OR-ing the following flags together.
-Operation flags define the default flags applied to an endpoint's data
-transfer operations, where a flags parameter is not available.  Data transfer
-operations that take flags as input override the op_flags value of an
-endpoint.
-.IP "FI_INJECT"
-If set, all data buffers used with outbound transfers return to the user's
-control immediately after the call returns.  This is true even if the
-operation is handled asynchronously.  This may require that the communication
-interface implementation copy the data into a local buffer or inject the data
-directly into the outbound transfer queue.
-.IP "FI_MULTI_RECV"
-Applies to posted receive operations.  This flag allows the user to post a
-single buffer that will receive multiple incoming messages.  Received
-messages will be packed into the receive buffer until the buffer has been
-consumed.  Use of this flag may cause a single posted receive operation
-to generate multiple events as messages are placed into the buffer.
-The placement of received data into the buffer may be subjected to
-provider specific alignment restrictions.  The buffer will be freed from
-the endpoint when a message is received that cannot fit into the remaining
-free buffer space.
-.IP "FI_EVENT"
-Indicates that a completion entry should be generated for data transfer
-operations.
-.IP "FI_REMOTE_SIGNAL"
-Indicates that a completion event at the target process should be generated
-for the given operation.  The remote endpoint must be configured with
-FI_REMOTE_SIGNAL, or this flag will be ignored by the target.  The local
-endpoint must be configured with the FI_REMOTE_SIGNAL capability in order
-to specify this flag.
-.IP "FI_REMOTE_COMPLETE"
-Indicates that a completion should not be generated for a data transfer
-operation until the operation has completed on the remote side.  The remote
-endpoint must be configured with FI_REMOTE_COMPLETE for correct operation.
-The local endpoint must be configured with the FI_REMOTE_COMPLETE capability
-in order to specify this flag.
+.SH "DOMAIN CAPABILITIES"
+Domain capabilities are often used as output information from fi_getinfo,
+allowing applications to adjust their behavior based on the provider's
+hardware or software abilities.  However,specific capabilities may be
+requested through the hints parameter, with the actual supported capabilities
+returned by the provider.  Applications must check domain capabilities to
+ensure that all provider requirements for using resources associated with
+the access domain are met.
+.IP "FI_WRITE_COHERENT"
+Specifies that remote writes, including atomic operations, to the underlying
+fabric domain are coherent with the local processing domain.  Domain-level
+write coherency indicates that changes to local memory are visible to the
+local process immediately upon completion of a remote write operation.  The
+absence of this flag allows the NIC or memory subsystem to cache the results
+of remote write or atomic operations in non-coherent memory.
+.sp
+The behavior of a domain with and without FI_WRITE_COHERENT is illustrated
+below.
+.nf
+
+      Process 1            Process 2
+                           Register BUF
+      RMA write X to BUF
+      Notify process 2
+                           Receive notification
+                           if not FI_WRITE_COHERENT
+                                Sync with remote writes
+                           assert(BUF == X)
+
+.fi
+.sp
+This flag may be set on input hints to fi_getinfo if write coherency is
+required by an application.  If left unset, the pro  See the endpoint
+fi_ep_sync call for handling non-coherent writes.
+.IP "FI_CONTEXT"
+Specifies that the provider requires that applications use struct fi_context
+as their per operation context parameter.  This structure should be treated as
+opaque to the application.  For performance reasons, this structure must be
+allocated by the user, but may be used by the fabric provider to track the
+operation.  Typically, users embed struct fi_context within their own
+context structure.  The struct fi_context must remain valid until the
+corresponding operation completes or is successfully canceled.  As such,
+fi_context should NOT be allocated on the stack.  Doing so is likely to
+result in stack corruption that will be difficult to debug.  Users should
+not update or interpret the fields in this structure, or reuse it until
+the original operation has completed.  The structure is
+specified in rdma/fabric.h.
+.IP "FI_LOCAL_MR"
+The provider is optimized around having applications register memory
+for locally accessed data buffers.  Data buffers used in send and receive
+operations and as the source buffer for RMA and atomic operations must be
+registered by the application for access domains opened with this capability.
+.IP "FI_USER_MR_KEY"
+The provider supports user requested memory registration keys.  Providers
+that set this capability honor the requested_key parameter for memory
+registration calls.
+.IP "FI_DYNAMIC_MR"
+The provider supports applications registering any range of addresses
+in their virtual address space, whether or not those addresses are
+back by physical pages or have been allocated to the app.
+Providers that lack this capability require that registered memory
+regions be backed by allocated memory pages.
 .SH "ENDPOINT TYPES"
 .IP "FI_EP_UNSPEC"
 The type of endpoint is not specified.  This is usually provided as input, with

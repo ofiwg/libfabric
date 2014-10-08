@@ -354,8 +354,12 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		return err;
 	}
 
-	if (info)
-		ep_priv->flags = info->op_flags;
+	if (info) {
+		if (info->tx_attr)
+			ep_priv->flags = info->tx_attr->op_flags;
+		if (info->rx_attr)
+			ep_priv->flags |= info->rx_attr->op_flags;
+	}
 
 	*ep = &ep_priv->ep;
 

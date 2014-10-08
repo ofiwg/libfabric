@@ -2205,7 +2205,7 @@ static struct fi_ops_domain fi_ibv_domain_ops = {
 };
 
 static int
-fi_ibv_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
+fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	   struct fid_domain **domain, void *context)
 {
 	struct fi_ibv_domain *_domain;
@@ -2215,7 +2215,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 	if (!_domain)
 		return -FI_ENOMEM;
 
-	ret = fi_ibv_open_device_by_name(_domain, attr->name);
+	ret = fi_ibv_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)
 		goto err;
 

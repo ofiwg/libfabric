@@ -149,6 +149,26 @@ enum fi_threading {
 #define FI_ORDER_SAW		(1 << 7)
 #define FI_ORDER_SAS		(1 << 8)
 
+struct fi_tx_ctx_attr {
+	uint64_t		ep_cap;
+	uint64_t		op_flags;
+	uint64_t		msg_order;
+	size_t			inject_size;
+	size_t			size;
+	size_t			iov_limit;
+	size_t			op_alignment;
+};
+
+struct fi_rx_ctx_attr {
+	uint64_t		ep_cap;
+	uint64_t		op_flags;
+	uint64_t		msg_order;
+	size_t			total_buffered_recv;
+	size_t			size;
+	size_t			iov_limit;
+	size_t			op_alignment;
+};
+
 struct fi_ep_attr {
 	uint64_t		protocol;
 	size_t			max_msg_size;
@@ -165,7 +185,6 @@ struct fi_ep_attr {
 
 struct fi_domain_attr {
 	char			*name;
-	uint64_t		caps;
 	enum fi_threading	threading;
 	enum fi_progress	control_progress;
 	enum fi_progress	data_progress;
@@ -176,6 +195,8 @@ struct fi_domain_attr {
 	size_t			rx_ctx_cnt;
 	size_t			max_ep_tx_ctx;
 	size_t			max_ep_rx_ctx;
+	size_t			op_size;
+	size_t			iov_size;
 };
 
 struct fi_fabric_attr {
@@ -188,13 +209,15 @@ struct fi_info {
 	struct fi_info		*next;
 	uint64_t		type;
 	uint64_t		ep_cap;
-	uint64_t		op_flags;
+	uint64_t		domain_cap;
 	enum fi_addr_format	addr_format;
 	size_t			src_addrlen;
 	size_t			dest_addrlen;
 	void			*src_addr;
 	void			*dest_addr;
 	fi_connreq_t		connreq;
+	struct fi_tx_ctx_attr	*tx_attr;
+	struct fi_rx_ctx_attr	*rx_attr;
 	struct fi_ep_attr	*ep_attr;
 	struct fi_domain_attr	*domain_attr;
 	struct fi_fabric_attr	*fabric_attr;
@@ -205,6 +228,8 @@ enum {
 	FI_CLASS_FABRIC,
 	FI_CLASS_DOMAIN,
 	FI_CLASS_EP,
+	FI_CLASS_RX_CTX,
+	FI_CLASS_TX_CTX,
 	FI_CLASS_PEP,
 	FI_CLASS_INTERFACE,
 	FI_CLASS_AV,
@@ -257,7 +282,7 @@ void fi_freeinfo(struct fi_info *info);
 
 struct fi_ops_fabric {
 	size_t	size;
-	int	(*domain)(struct fid_fabric *fabric, struct fi_domain_attr *attr,
+	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_domain **dom, void *context);
 	int	(*endpoint)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
@@ -329,6 +354,26 @@ fi_open_ops(struct fid *fid, const char *name, uint64_t flags,
 {
 	return fid->ops->ops_open(fid, name, flags, ops, context);
 }
+
+enum fi_pp_type {
+	FI_PP_INFO,
+	FI_PP_EP_TYPE,
+	FI_PP_EP_CAP,
+	FI_PP_OP_FLAGS,
+	FI_PP_ADDR_FORMAT,
+	FI_PP_TX_ATTR,
+	FI_PP_RX_ATTR,
+	FI_PP_EP_ATTR,
+	FI_PP_DOMAIN_ATTR,
+	FI_PP_FABRIC_ATTR,
+	FI_PP_DOMAIN_CAP,
+	FI_PP_THREADING,
+	FI_PP_PROGRESS,
+	FI_PP_PROTOCOL,
+	FI_PP_MSG_ORDER
+};
+
+char *fi_tostr(const void *data, enum fi_pp_type datatype);
 
 
 #ifndef FABRIC_DIRECT

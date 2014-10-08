@@ -128,17 +128,27 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			goto err_out;
 		}
 
-		if ((hints->op_flags & PSMX_OP_FLAGS) != hints->op_flags) {
-			psmx_debug("%s: hints->flags=0x%llx, supported=0x%llx\n",
-					__func__, hints->op_flags, PSMX_OP_FLAGS);
+		if (hints->tx_attr &&
+		    (hints->tx_attr->op_flags & PSMX_OP_FLAGS) !=
+		     hints->tx_attr->op_flags) {
+			psmx_debug("%s: hints->tx->flags=0x%llx, supported=0x%llx\n",
+					__func__, hints->tx_attr->op_flags, PSMX_OP_FLAGS);
+			goto err_out;
+		}
+
+		if (hints->rx_attr &&
+		    (hints->rx_attr->op_flags & PSMX_OP_FLAGS) !=
+		     hints->rx_attr->op_flags) {
+			psmx_debug("%s: hints->rx->flags=0x%llx, supported=0x%llx\n",
+					__func__, hints->rx_attr->op_flags, PSMX_OP_FLAGS);
 			goto err_out;
 		}
 
 		if (hints->domain_attr &&
-		    ((hints->domain_attr->caps & PSMX_DOMAIN_CAP) !=
-		      hints->domain_attr->caps)) {
+		    ((hints->domain_cap & PSMX_DOMAIN_CAP) !=
+		      hints->domain_cap)) {
 			psmx_debug("%s: hints->domain_cap=0x%llx, supported=0x%llx\n",
-					__func__, hints->domain_attr->caps, PSMX_DOMAIN_CAP);
+					__func__, hints->domain_cap, PSMX_DOMAIN_CAP);
 			goto err_out;
 		}
 
@@ -188,6 +198,11 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		goto err_out;
 	}
 
+	psmx_info->tx_attr->op_flags = (hints && hints->tx_attr && hints->tx_attr->op_flags)
+					? hints->tx_attr->op_flags : 0;
+	psmx_info->rx_attr->op_flags = (hints && hints->rx_attr && hints->tx_attr->op_flags)
+					? hints->tx_attr->op_flags : 0;
+
 	psmx_info->ep_attr->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
 	psmx_info->ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
 	psmx_info->ep_attr->inject_size = PSMX_INJECT_SIZE;
@@ -198,15 +213,13 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->threading = FI_THREAD_PROGRESS;
 	psmx_info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
 	psmx_info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
-	psmx_info->domain_attr->caps = (hints && hints->domain_attr &&
-					hints->domain_attr->caps) ?
-					hints->domain_attr->caps : PSMX_DOMAIN_CAP;
+	psmx_info->domain_cap = (hints && hints->domain_cap) ?
+				hints->domain_cap : PSMX_DOMAIN_CAP;
 	psmx_info->domain_attr->name = strdup("psm");
 
 	psmx_info->next = NULL;
 	psmx_info->type = type;
 	psmx_info->ep_cap = (hints && hints->ep_cap) ? hints->ep_cap : ep_cap;
-	psmx_info->op_flags = hints ? hints->op_flags : 0;
 	psmx_info->addr_format = FI_ADDR_PROTO;
 	psmx_info->src_addrlen = 0;
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);

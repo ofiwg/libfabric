@@ -65,20 +65,6 @@ enum fi_proto {
 	FI_PROTO_IB_UD,
 };
 
-struct fi_tx_ctx_attr {
-	uint64_t		ep_cap;
-	uint64_t		op_flags;
-	uint64_t		msg_order;
-	size_t			inject_size;
-};
-
-struct fi_rx_ctx_attr {
-	uint64_t		ep_cap;
-	uint64_t		op_flags;
-	uint64_t		msg_order;
-	size_t			total_buffered_recv;
-};
-
 /* fi_info endpoint capabilities */
 #define FI_PASSIVE		(1ULL << 0)
 #define FI_MSG			(1ULL << 1)
