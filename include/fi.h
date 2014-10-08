@@ -153,16 +153,6 @@ uint64_t fi_tag_format(uint64_t tag_bits);
 
 int fi_version_register(uint32_t version, struct fi_provider *provider);
 
-#ifndef SYSCONFDIR
-#define SYSCONFDIR "/etc"
-#endif
-#ifndef RDMADIR
-#define RDMADIR "rdma"
-#endif
-#ifndef EXTDIR
-#define EXTDIR "/usr/lib/libfabric"
-#endif
-
 #define RDMA_CONF_DIR  SYSCONFDIR "/" RDMADIR
 #define FI_CONF_DIR RDMA_CONF_DIR "/fabric"
 
