@@ -24,6 +24,4 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 dnl A separate macro for AM CONDITIONALS, since they cannot be invoked
 dnl conditionally
 AC_DEFUN([FI_VERBS_CONDITIONALS],[
-	AM_CONDITIONAL([HAVE_VERBS], [test $verbs_happy -eq 1])
-	AM_CONDITIONAL([HAVE_VERBS_DL], [test $verbs_dl -eq 1])
 ])

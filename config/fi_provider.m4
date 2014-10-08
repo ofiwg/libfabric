@@ -1,5 +1,25 @@
 dnl Macros to help setup FI providers
 
+dnl
+dnl Helper macro called from top-level configure.ac to get ready to
+dnl configure providers.
+dnl
+AC_DEFUN([FI_PROVIDER_INIT],[
+	PROVIDERS_TO_BUILD=
+	PROVIDERS_DL=
+	PROVIDERS_STATIC=
+])
+
+dnl
+dnl Helper macro called from top-level configure.ac to finalize
+dnl after all providers have been initialized
+dnl
+AC_DEFUN([FI_PROVIDER_FINI],[
+	AC_SUBST(PROVIDERS_TO_BUILD)
+	AC_SUBST(PROVIDERS_DL)
+	AC_SUBST(PROVIDERS_STATIC)
+])
+
 dnl Helper macro called from top-level configure.ac to setup a
 dnl provider.
 dnl
@@ -55,10 +75,18 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	AS_IF([test $$1_happy -eq 1],
 		[PROVIDERS_TO_BUILD="$PROVIDERS_TO_BUILD $1"
 		 AS_IF([test $$1_dl -eq 1],
-			[AC_MSG_NOTICE([$1 provider to be built as a DSO])],
-			[AC_MSG_NOTICE([$1 provider to be built statically])])
+			[AC_MSG_NOTICE([$1 provider to be built as a DSO])
+			 PROVIDERS_DL="prov/$1/lib$1.la $PROVIDERS_DL"],
+			[AC_MSG_NOTICE([$1 provider to be built statically])
+			 PROVIDERS_STATIC="prov/$1/lib$1.la $PROVIDERS_STATIC"])
 		],
 		[AC_MSG_NOTICE([$1 provider disabled])])
+
+	# Set conditionals for HAVE_<provider> and HAVE_<provider>_DL
+	AM_CONDITIONAL([HAVE_]m4_translit([$1], [a-z], [A-Z]),
+		[test $$1_happy -eq 1])
+	AM_CONDITIONAL([HAVE_]m4_translit([$1], [a-z], [A-Z])[_DL],
+		[test $$1_dl -eq 1])
 
 	# If this provier was specifically requested but we can't
 	# build it, error.

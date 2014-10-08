@@ -128,10 +128,11 @@ if test $ac_cv_asm_symver_support = yes; then
 fi
 
 dnl Provider-specific checks
-PROVIDERS_TO_BUILD=
+FI_PROVIDER_INIT
 FI_PROVIDER_SETUP([psm])
 FI_PROVIDER_SETUP([sockets])
 FI_PROVIDER_SETUP([verbs])
+FI_PROVIDER_FINI
 
 # Make sure at least one provider was setup
 AS_IF([test x"$PROVIDERS_TO_BUILD" = "x"],

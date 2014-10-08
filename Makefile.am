@@ -7,7 +7,7 @@ AM_CPPFLAGS = \
 
 lib_LTLIBRARIES = src/libfabric.la
 
-pkglib_LTLIBRARIES =
+pkglib_LTLIBRARIES = $(DL_PROVIDERS)
 
 ACLOCAL_AMFLAGS = -I config
 AM_CFLAGS = -g -Wall
