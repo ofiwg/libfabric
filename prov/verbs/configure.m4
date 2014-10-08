@@ -20,8 +20,3 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 
 	AS_IF([test $verbs_happy -eq 1], [$1], [$2])
 ])
-
-dnl A separate macro for AM CONDITIONALS, since they cannot be invoked
-dnl conditionally
-AC_DEFUN([FI_VERBS_CONDITIONALS],[
-])

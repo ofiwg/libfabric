@@ -17,8 +17,3 @@ AC_DEFUN([FI_PSM_CONFIGURE],[
 
 	AS_IF([test $psm_happy -eq 1], [$1], [$2])
 ])
-
-dnl A separate macro for AM CONDITIONALS, since they cannot be invoked
-dnl conditionally
-AC_DEFUN([FI_PSM_CONDITIONALS],[
-])

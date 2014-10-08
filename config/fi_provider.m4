@@ -68,8 +68,8 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 
 	# Call the provider's CONFIGURE and CONDITIONALS macros
 	m4_include([prov/]$1[/configure.m4])
-	_FI_PROVIDER_INVOKE($1, [CONFIGURE], [yes])
-	_FI_PROVIDER_INVOKE($1, [CONDITIONALS], [no])
+	_FI_PROVIDER_INVOKE($1, [CONFIGURE], [yes], [yes])
+	_FI_PROVIDER_INVOKE($1, [CONDITIONALS], [no], [no])
 
 	# See if the provider configured successfully
 	AS_IF([test $$1_happy -eq 1],
@@ -145,15 +145,18 @@ dnl
 dnl $1: name of the provider
 dnl $2: suffix of the macro to invoke
 dnl $3: whether to pass the happy/sad parameters to the invoked macro
+dnl $4: whether the macro must exist or not
 dnl
 AC_DEFUN([_FI_PROVIDER_INVOKE],[
 	dnl If the FI_<provider>_<suffix> macro is defined, invoke it.
-	dnl Otherwise, error.
 	m4_ifdef([FI_]m4_translit([$1], [a-z], [A-Z])[_$2],
 	    [m4_if([$3], [yes],
 		[FI_]m4_translit([$1], [a-z], [A-Z])[_$2([$1_happy=1],[$1_happy=0])],
 		[FI_]m4_translit([$1], [a-z], [A-Z])[_$2()]
 	     )],
-	    [m4_fatal([$1 provider did not define FI_]m4_translit([$1], [a-z], [A-Z])[_$2 macro in prov/$1/configure.m4])]
+	     dnl If $4 is yes and the macro does not exist, error
+	    [m4_if([$4], [yes],
+		[m4_fatal([$1 provider did not define FI_]m4_translit([$1], [a-z], [A-Z])[_$2 macro in prov/$1/configure.m4])],
+		[])]
 	    )
 ])
