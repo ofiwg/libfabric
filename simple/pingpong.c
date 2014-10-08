@@ -49,7 +49,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
-#include "shared.h"
+#include <shared.h>
 
 
 struct test_size_param {
