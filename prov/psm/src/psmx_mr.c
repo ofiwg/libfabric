@@ -123,6 +123,8 @@ int psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t
 {
 	int i;
 
+	addr += mr->offset;
+
 	if (!addr)
 		return -EINVAL;
 
@@ -293,6 +295,7 @@ static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	mr_priv->domain = domain_priv;
 	mr_priv->access = access;
 	mr_priv->flags = flags;
+	mr_priv->offset = (flags & FI_MR_OFFSET) ? offset : 0;
 	mr_priv->iov_count = 1;
 	mr_priv->iov[0].iov_base = (void *)buf;
 	mr_priv->iov[0].iov_len = len;
@@ -344,6 +347,7 @@ static int psmx_mr_regv(struct fid_domain *domain,
 	mr_priv->domain = domain_priv;
 	mr_priv->access = access;
 	mr_priv->flags = flags;
+	mr_priv->offset = (flags & FI_MR_OFFSET) ? offset : 0;
 	mr_priv->iov_count = count;
 	for (i=0; i<count; i++)
 		mr_priv->iov[i] = iov[i];
@@ -396,6 +400,7 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 	mr_priv->domain = domain_priv;
 	mr_priv->access = FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
 	mr_priv->flags = flags;
+	mr_priv->offset = (flags & FI_MR_OFFSET) ? attr->offset : 0;
 	mr_priv->iov_count = attr->iov_count;
 	for (i=0; i<attr->iov_count; i++)
 		mr_priv->iov[i] = attr->mr_iov[i];

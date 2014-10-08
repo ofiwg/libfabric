@@ -123,7 +123,8 @@ out:
 
 static struct psmx_cq_event *psmx_cq_create_event_from_status(
 				enum fi_cq_format format,
-				psm_mq_status_t *psm_status)
+				psm_mq_status_t *psm_status,
+				uint64_t data)
 {
 	struct psmx_cq_event *event;
 	struct psmx_multi_recv *req;
@@ -165,6 +166,8 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		event->cqe.err.prov_errno = psm_status->error_code;
 		event->cqe.err.tag = psm_status->msg_tag;
 		event->cqe.err.olen = psm_status->msg_length - psm_status->nbytes;
+		if (data)
+			event->cqe.err.data = data;
 		goto out;
 	}
 
@@ -182,6 +185,8 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		event->cqe.data.op_context = op_context;
 		event->cqe.data.buf = buf;
 		event->cqe.data.len = psm_status->nbytes;
+		if (data)
+			event->cqe.data.data = data;
 		break;
 
 	case FI_CQ_FORMAT_TAGGED:
@@ -189,6 +194,8 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		event->cqe.tagged.buf = buf;
 		event->cqe.tagged.len = psm_status->nbytes;
 		event->cqe.tagged.tag = psm_status->msg_tag;
+		if (data)
+			event->cqe.tagged.data = data;
 		break;
 
 	default:
@@ -319,6 +326,27 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				break;
 
 			case PSMX_REMOTE_WRITE_CONTEXT:
+				{
+				  struct fi_context *fi_context = psm_status.context;
+				  struct psmx_fid_mr *mr;
+				  struct psmx_am_request *req;
+				  req = container_of(fi_context, struct psmx_am_request, fi_context);
+				  mr = PSMX_CTXT_USER(fi_context);
+				  if (mr->cq) {
+					event = psmx_cq_create_event_from_status(
+							mr->cq->format, &psm_status, req->write.data);
+					if (!event)
+						return -ENOMEM;
+
+					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+				  }
+				  if (mr->cntr)
+					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
+				  if (!cq || mr->cq == cq)
+					return 1;
+				  continue;
+				}
+
 			case PSMX_REMOTE_READ_CONTEXT:
 				{
 				  struct fi_context *fi_context = psm_status.context;
@@ -326,9 +354,10 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				  mr = PSMX_CTXT_USER(fi_context);
 				  if (mr->cq) {
 					event = psmx_cq_create_event_from_status(
-							mr->cq->format, &psm_status);
+							mr->cq->format, &psm_status, 0);
 					if (!event)
 						return -ENOMEM;
+
 					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
 				  }
 				  if (mr->cntr)
@@ -340,7 +369,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 			}
 
 			if (tmp_cq) {
-				event = psmx_cq_create_event_from_status(tmp_cq->format, &psm_status);
+				event = psmx_cq_create_event_from_status(tmp_cq->format, &psm_status, 0);
 				if (!event)
 					return -ENOMEM;
 

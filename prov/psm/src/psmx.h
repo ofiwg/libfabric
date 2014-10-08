@@ -109,6 +109,7 @@ enum psmx_context_type {
 #define PSMX_AM_OP_MASK		0x0000FFFF
 #define PSMX_AM_FLAG_MASK	0xFFFF0000
 #define PSMX_AM_EOM		0x40000000
+#define PSMX_AM_DATA		0x20000000
 
 #ifndef PSMX_AM_USE_SEND_QUEUE
 #define PSMX_AM_USE_SEND_QUEUE	0
@@ -147,6 +148,7 @@ struct psmx_am_request {
 			uint64_t addr;
 			uint64_t key;
 			void	*context;
+			uint64_t data;
 		} write;
 		struct {
 			void	*buf;
@@ -346,6 +348,7 @@ struct psmx_trigger {
 			uint64_t	key;
 			void		*context;
 			uint64_t	flags;
+			uint64_t	data;
 		} write;
 		struct {
 			struct fid_ep	*ep;
@@ -468,6 +471,7 @@ struct psmx_fid_mr {
 	struct psmx_fid_cntr	*cntr;
 	uint64_t		access;
 	uint64_t		flags;
+	uint64_t		offset;
 	size_t			iov_count;
 	struct iovec		iov[0];	/* must be the last field */
 };
@@ -563,7 +567,7 @@ ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 		      void *desc, fi_addr_t dest_addr,
 		      uint64_t addr, uint64_t key, void *context,
-		      uint64_t flags);
+		      uint64_t flags, uint64_t data);
 ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
 		       void *desc, fi_addr_t src_addr,
 		       uint64_t addr, uint64_t key, void *context,

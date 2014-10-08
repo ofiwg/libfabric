@@ -181,7 +181,6 @@ struct fi_ops_atomic {
 			enum fi_datatype datatype, enum fi_op op, size_t *count);
 };
 
-
 #ifndef FABRIC_DIRECT
 
 static inline ssize_t
@@ -196,7 +195,7 @@ fi_atomic(struct fid_ep *ep,
 
 static inline ssize_t
 fi_atomicv(struct fid_ep *ep,
-	   const struct fi_ioc *iov, void *desc, size_t count,
+	   const struct fi_ioc *iov, void **desc, size_t count,
 	   uint64_t addr, uint64_t key,
 	   enum fi_datatype datatype, enum fi_op op, void *context)
 {
@@ -253,8 +252,8 @@ fi_fetch_atomic(struct fid_ep *ep,
 
 static inline ssize_t
 fi_fetch_atomicv(struct fid_ep *ep,
-		 const struct fi_ioc *iov, void *desc, size_t count,
-		 struct fi_ioc *resultv, void *result_desc, size_t result_count,
+		 const struct fi_ioc *iov, void **desc, size_t count,
+		 struct fi_ioc *resultv, void **result_desc, size_t result_count,
 		 uint64_t addr, uint64_t key,
 		 enum fi_datatype datatype, enum fi_op op, void *context)
 {
@@ -279,7 +278,7 @@ fi_fetch_atomicto(struct fid_ep *ep,
 static inline ssize_t
 fi_fetch_atomicmsg(struct fid_ep *ep,
 		   const struct fi_msg_atomic *msg,
-		   struct fi_ioc *resultv, void *result_desc, size_t result_count,
+		   struct fi_ioc *resultv, void **result_desc, size_t result_count,
 		   uint64_t flags)
 {
 	return ep->atomic->readwritemsg(ep, msg, resultv, result_desc,
@@ -302,9 +301,9 @@ fi_compare_atomic(struct fid_ep *ep,
 
 static inline ssize_t
 fi_compare_atomicv(struct fid_ep *ep,
-		   const struct fi_ioc *iov, void *desc, size_t count,
-		   const struct fi_ioc *comparev, void *compare_desc, size_t compare_count,
-		   struct fi_ioc *resultv, void *result_desc, size_t result_count,
+		   const struct fi_ioc *iov, void **desc, size_t count,
+		   const struct fi_ioc *comparev, void **compare_desc, size_t compare_count,
+		   struct fi_ioc *resultv, void **result_desc, size_t result_count,
 		   uint64_t addr, uint64_t key,
 		   enum fi_datatype datatype, enum fi_op op, void *context)
 {
@@ -331,8 +330,8 @@ fi_compare_atomicto(struct fid_ep *ep,
 static inline ssize_t
 fi_compare_atomicmsg(struct fid_ep *ep,
 		     const struct fi_msg_atomic *msg,
-		     const struct fi_ioc *comparev, void *compare_desc, size_t compare_count,
-		     struct fi_ioc *resultv, void *result_desc, size_t result_count,
+		     const struct fi_ioc *comparev, void **compare_desc, size_t compare_count,
+		     struct fi_ioc *resultv, void **result_desc, size_t result_count,
 		     uint64_t flags)
 {
 	return ep->atomic->compwritemsg(ep, msg,
