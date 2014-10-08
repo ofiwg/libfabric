@@ -20,7 +20,8 @@ endif
 src_libfabric_la_SOURCES = \
 	src/fabric.c \
 	src/common.c \
-	src/enosys.c
+	src/enosys.c \
+	src/fi_tostr.c
 
 if HAVE_SOCKETS
 _sockets_files = \

@@ -330,6 +330,24 @@ fi_open_ops(struct fid *fid, const char *name, uint64_t flags,
 	return fid->ops->ops_open(fid, name, flags, ops, context);
 }
 
+enum fi_pp_type {
+	FI_PP_INFO,
+	FI_PP_EP_TYPE,
+	FI_PP_EP_CAP,
+	FI_PP_OP_FLAGS,
+	FI_PP_ADDR_FORMAT,
+	FI_PP_EP_ATTR,
+	FI_PP_DOMAIN_ATTR,
+	FI_PP_FABRIC_ATTR,
+	FI_PP_DOMAIN_CAP,
+	FI_PP_THREADING,
+	FI_PP_PROGRESS,
+	FI_PP_PROTO,
+	FI_PP_MSG_ORDER
+};
+
+char *fi_tostr(const void *data, enum fi_pp_type datatype);
+
 
 #ifndef FABRIC_DIRECT
 
