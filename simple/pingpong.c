@@ -49,7 +49,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
-#include "../common/shared.h"
+#include "shared.h"
 
 
 struct test_size_param {
@@ -430,7 +430,7 @@ static int server_connect(void)
 	}
 
 	info = entry.info;
-	ret = fi_domain(fab, info->domain_attr, &dom, NULL);
+	ret = fi_domain(fab, info, &dom, NULL);
 	if (ret) {
 		printf("fi_fdomain %s\n", fi_strerror(-ret));
 		goto err1;
@@ -509,7 +509,7 @@ static int client_connect(void)
 		goto err1;
 	}
 
-	ret = fi_domain(fab, fi->domain_attr, &dom, NULL);
+	ret = fi_domain(fab, fi, &dom, NULL);
 	if (ret) {
 		printf("fi_fdomain %s %s\n", fi_strerror(-ret),
 			fi->domain_attr->name);
@@ -658,7 +658,6 @@ int main(int argc, char **argv)
 	hints.ep_attr = &ep_hints;
 	hints.type = FI_EP_MSG;
 	hints.ep_cap = FI_MSG;
-	domain_hints.caps = FI_LOCAL_MR;
 	hints.addr_format = FI_SOCKADDR;
 
 	ret = run();
