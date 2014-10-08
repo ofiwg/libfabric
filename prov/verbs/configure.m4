@@ -19,15 +19,6 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	      ])
 
 	AS_IF([test $verbs_happy -eq 1], [$1], [$2])
-
-# JMS This should have a test seeing if MLX4 direct is *available* or
-# not.  But I don't know what headers/libraries to test for...  (I
-# might also be mis-understanding what this --enable-direct=mlx4
-# switch is for...?)
-	AS_CASE([$enable_direct],
-		[mlx4], [AC_DEFINE([HAVE_MLX4_DIRECT], [1],
-				[Define if mlx4 direct provider is enabled])],
-	[])
 ])
 
 dnl A separate macro for AM CONDITIONALS, since they cannot be invoked
