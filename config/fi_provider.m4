@@ -1,5 +1,25 @@
 dnl Macros to help setup FI providers
 
+dnl
+dnl Helper macro called from top-level configure.ac to get ready to
+dnl configure providers.
+dnl
+AC_DEFUN([FI_PROVIDER_INIT],[
+	PROVIDERS_TO_BUILD=
+	PROVIDERS_DL=
+	PROVIDERS_STATIC=
+])
+
+dnl
+dnl Helper macro called from top-level configure.ac to finalize
+dnl after all providers have been initialized
+dnl
+AC_DEFUN([FI_PROVIDER_FINI],[
+	AC_SUBST(PROVIDERS_TO_BUILD)
+	AC_SUBST(PROVIDERS_DL)
+	AC_SUBST(PROVIDERS_STATIC)
+])
+
 dnl Helper macro called from top-level configure.ac to setup a
 dnl provider.
 dnl
@@ -48,21 +68,25 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 
 	# Call the provider's CONFIGURE and CONDITIONALS macros
 	m4_include([prov/]$1[/configure.m4])
-	_FI_PROVIDER_INVOKE($1, [CONFIGURE], [yes])
-	_FI_PROVIDER_INVOKE($1, [CONDITIONALS], [no])
+	_FI_PROVIDER_INVOKE($1, [CONFIGURE], [yes], [yes])
+	_FI_PROVIDER_INVOKE($1, [CONDITIONALS], [no], [no])
 
 	# See if the provider configured successfully
 	AS_IF([test $$1_happy -eq 1],
 		[PROVIDERS_TO_BUILD="$PROVIDERS_TO_BUILD $1"
 		 AS_IF([test $$1_dl -eq 1],
-			[AC_MSG_NOTICE([$1 provider to be built as a DSO])],
-			[AC_MSG_NOTICE([$1 provider to be built statically])])
+			[AC_MSG_NOTICE([$1 provider to be built as a DSO])
+			 PROVIDERS_DL="prov/$1/lib$1.la $PROVIDERS_DL"],
+			[AC_MSG_NOTICE([$1 provider to be built statically])
+			 PROVIDERS_STATIC="prov/$1/lib$1.la $PROVIDERS_STATIC"])
 		],
 		[AC_MSG_NOTICE([$1 provider disabled])])
 
-	AC_DEFINE_UNQUOTED([HAVE_]m4_translit([$1], [a-z], [A-Z])[_DL],
-		[$$1_dl],
-		[Whether $1 should be built as as DSO])
+	# Set conditionals for HAVE_<provider> and HAVE_<provider>_DL
+	AM_CONDITIONAL([HAVE_]m4_translit([$1], [a-z], [A-Z]),
+		[test $$1_happy -eq 1])
+	AM_CONDITIONAL([HAVE_]m4_translit([$1], [a-z], [A-Z])[_DL],
+		[test $$1_dl -eq 1])
 
 	# If this provier was specifically requested but we can't
 	# build it, error.
@@ -121,15 +145,18 @@ dnl
 dnl $1: name of the provider
 dnl $2: suffix of the macro to invoke
 dnl $3: whether to pass the happy/sad parameters to the invoked macro
+dnl $4: whether the macro must exist or not
 dnl
 AC_DEFUN([_FI_PROVIDER_INVOKE],[
 	dnl If the FI_<provider>_<suffix> macro is defined, invoke it.
-	dnl Otherwise, error.
 	m4_ifdef([FI_]m4_translit([$1], [a-z], [A-Z])[_$2],
 	    [m4_if([$3], [yes],
 		[FI_]m4_translit([$1], [a-z], [A-Z])[_$2([$1_happy=1],[$1_happy=0])],
 		[FI_]m4_translit([$1], [a-z], [A-Z])[_$2()]
 	     )],
-	    [m4_fatal([$1 provider did not define FI_]m4_translit([$1], [a-z], [A-Z])[_$2 macro in prov/$1/configure.m4])]
+	     dnl If $4 is yes and the macro does not exist, error
+	    [m4_if([$4], [yes],
+		[m4_fatal([$1 provider did not define FI_]m4_translit([$1], [a-z], [A-Z])[_$2 macro in prov/$1/configure.m4])],
+		[])]
 	    )
 ])
