@@ -67,12 +67,6 @@ struct test_size_param {
 };
 
 static struct test_size_param test_size[] = {
-	{ 1 <<  0, 1 },
-	{ 1 <<  1, 1 },
-	{ 1 <<  2, 1 },
-	{ 1 <<  3, 1 },
-	{ 1 <<  4, 1 },
-	{ 1 <<  5, 1 },
 	{ 1 <<  6, 0 },
 	{ 1 <<  7, 1 }, { (1 <<  7) + (1 <<  6), 1},
 	{ 1 <<  8, 1 }, { (1 <<  8) + (1 <<  7), 1},
@@ -159,7 +153,7 @@ static int wait_for_completion(struct fid_cq *cq, int num_completions)
 	int ret;
 	struct fi_cq_entry comp;
 	
-	while(num_completions>0){
+	while (num_completions > 0) {
 		ret = fi_cq_read(cq, &comp, sizeof comp);
 		if (ret > 0) {
 			num_completions--;
@@ -176,7 +170,7 @@ static int send_msg(int size)
 	int ret;
 
 	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), NULL);
-	if (ret){
+	if (ret) {
 		fprintf(stderr, "fi_send %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
@@ -189,7 +183,7 @@ static int post_recv()
 	int ret;
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), NULL);
-	if (ret){
+	if (ret) {
 		fprintf(stderr, "fi_recv %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
@@ -203,7 +197,7 @@ static int write_data(size_t size)
 
 	ret = fi_write(ep, buf, size, fi_mr_desc(mr),  
 		       (uint64_t)rem_buf, rem_key, NULL);
-	if (ret){
+	if (ret) {
 		fprintf(stderr, "fi_write %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
@@ -213,12 +207,12 @@ static int write_data(size_t size)
 static int warmup(int iters)
 {
 	int ret, i;
-	for(i = 0; i<iters; i++){
-		if((ret = write_data(16)) < 0)
+	for (i = 0; i<iters; i++) {
+		if ((ret = write_data(16)) < 0)
 			return ret;
 	}
 	
-	if((ret = wait_for_completion(scq, iters)) < 0)
+	if ((ret = wait_for_completion(scq, iters)) < 0)
 		return ret;
 	
 	return 0;
@@ -238,7 +232,7 @@ static int run_test(void)
 		if (ret)
 			goto out;
 
-		if(oust == max_credits){
+		if (oust == max_credits) {
 			ret = wait_for_completion(scq, oust);
 			if (ret)
 				goto out;
@@ -586,29 +580,26 @@ err0:
 	return ret;
 }
 
-static int exchange_params(void)
+static void exchange_params(void)
 {
-	*((uint64_t*)buf) = (uint64_t)buf;
-	*(((uint64_t*)buf + 1)) = fi_mr_key(mr);
+	*((uint64_t *) buf) = (uint64_t) buf;
+	*(((uint64_t *) buf + 1)) = fi_mr_key(mr);
 	post_recv();
 	send_msg(sizeof(uint64_t *) * 2);
 	wait_for_completion(rcq, 1);
 
-	rem_buf = (void *)(*((uint64_t*)buf));
-	rem_key = (uint64_t)(*(((uint64_t*)buf + 1)));
-
-	return 0;
+	rem_buf = (void *) (*((uint64_t *) buf));
+	rem_key = (uint64_t) (*(((uint64_t *) buf + 1)));
 }
 
-static int synchronize(void)
+static void synchronize(void)
 {
-	if(dst_addr){
+	if (dst_addr) {
 		post_recv();
 		wait_for_completion(rcq, 1);
-	}else{
+	} else {
 		send_msg(sizeof(uint64_t *));
 	}
-	return 0;
 }
 
 static int run(void)
@@ -628,9 +619,7 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	ret = exchange_params();
-	if (ret)
-		return ret;
+	exchange_params();
 
 	if (!custom) {
 		for (i = 0; i < TEST_CNT; i++) {
