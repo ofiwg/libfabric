@@ -34,9 +34,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-
-#include "shared.h"
-
+#include <shared.h>
 
 int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len)
 {

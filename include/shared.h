@@ -45,6 +45,8 @@ void size_str(char *str, size_t ssize, long long size);
 void cnt_str(char *str, size_t ssize, long long cnt);
 int size_to_count(int size);
 
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
 
 #ifdef __cplusplus
 }
