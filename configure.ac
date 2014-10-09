@@ -18,7 +18,7 @@ AC_ARG_ENABLE([debug],
 
 dnl Fix autoconf's habit of adding -g -O2 by default
 AS_IF([test -z "$CFLAGS"],
-      [CFLAGS='-O2 -DNDEBUG -Wall'])
+      [CFLAGS='-fvisibility=hidden -O2 -DNDEBUG -Wall'])
 
 # AM PROG_AR did not exist pre AM 1.11.x (where x is somewhere >0 and
 # <3), but it is necessary in AM 1.12.x.

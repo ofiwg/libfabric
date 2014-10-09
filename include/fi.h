@@ -156,6 +156,15 @@ int fi_version_register(uint32_t version, struct fi_provider *provider);
 #define RDMA_CONF_DIR  SYSCONFDIR "/" RDMADIR
 #define FI_CONF_DIR RDMA_CONF_DIR "/fabric"
 
+/* symbol -> external symbol mappings */
+#ifdef HAVE_SYMVER_SUPPORT
+
+/* FABRIC_1.0: default symbol set must match linker script */
+#define FABRIC_10(SYM, ESYM) asm(".symver " #SYM","#ESYM"@@FABRIC_1.0");
+
+#else
+#define FABRIC_10(SYM, ESYM)
+#endif
 
 #ifdef __cplusplus
 }

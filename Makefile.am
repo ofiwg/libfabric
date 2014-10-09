@@ -23,6 +23,9 @@ common_srcs = \
 	src/common.c \
 	src/enosys.c
 
+# ensure dl-built providers link back to libfabric
+linkback = -lfabric -Lsrc/.libs/
+
 src_libfabric_la_SOURCES = \
 	src/fabric.c \
 	src/fi_tostr.c \
@@ -41,7 +44,7 @@ _sockets_files = \
 if HAVE_SOCKETS_DL
 pkglib_LTLIBRARIES += libsockets-fi.la
 libsockets_fi_la_SOURCES = $(_sockets_files) $(common_srcs)
-libsockets_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libsockets_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic $(linkback)
 else
 src_libfabric_la_SOURCES += $(_sockets_files)
 endif
@@ -54,7 +57,7 @@ _verbs_files = prov/verbs/src/fi_verbs.c
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libibverbs-fi.la
 libibverbs_fi_la_SOURCES = $(_verbs_files) $(common_srcs)
-libibverbs_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic -libverbs -lrdmacm
+libibverbs_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic -libverbs -lrdmacm $(linkback)
 else
 src_libfabric_la_SOURCES += $(_verbs_files)
 endif
@@ -82,7 +85,7 @@ _psm_files = \
 if HAVE_PSM_DL
 pkglib_LTLIBRARIES += libpsmx-fi.la
 libpsmx_fi_la_SOURCES = $(_psm_files) $(common_srcs)
-libpsmx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic -libverbs -lrdmacm
+libpsmx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic $(linkback)
 else
 src_libfabric_la_SOURCES += $(_psm_files)
 endif

@@ -324,7 +324,8 @@ static void fi_tostr_info(char *buf, const struct fi_info *info)
 	strcat(buf, "]\n");
 }
 
-char *fi_tostr(const void *data, enum fi_type datatype)
+__attribute__((visibility ("default")))
+char *fi_tostr_(const void *data, enum fi_type datatype)
 {
 	static __thread char *buf;
 	uint64_t val64 = *(const uint64_t *) data;
