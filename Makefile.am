@@ -7,6 +7,7 @@ bin_PROGRAMS = \
 	simple/fi_write_bw \
 	simple/fi_read_lat \
 	simple/fi_read_bw \
+	simple/fi_ud_pingpong \
 	ported/libibverbs/fi_rc_pingpong
 
 simple_fi_info_SOURCES = \
@@ -31,6 +32,10 @@ simple_fi_read_lat_SOURCES = \
 
 simple_fi_read_bw_SOURCES = \
 	simple/read_bw.c \
+	common/shared.c
+
+simple_fi_ud_pingpong_SOURCES = \
+	simple/ud_pingpong.c \
 	common/shared.c
 
 ported_libibverbs_fi_rc_pingpong_SOURCES = \
