@@ -141,6 +141,7 @@ FI_PROVIDER_INIT
 FI_PROVIDER_SETUP([psm])
 FI_PROVIDER_SETUP([sockets])
 FI_PROVIDER_SETUP([verbs])
+FI_PROVIDER_SETUP([usnic])
 FI_PROVIDER_FINI
 
 # Make sure at least one provider was setup
