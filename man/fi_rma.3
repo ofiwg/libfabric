@@ -78,7 +78,7 @@ Protection key associated with the remote memory.
 .IP "desc"
 Descriptor associated with the local data buffer
 .IP "data"
-Remote EQ data to transfer with the operation.
+Remote CQ data to transfer with the operation.
 .IP "dest_addr"
 Destination address for connectionless write transfers
 .IP "src_addr"
@@ -167,7 +167,7 @@ discussion below for more details.
 This call is similar to fi_inject_write, but for unconnected endpoints.
 .SS "fi_writedata"
 The write data call is similar to fi_write, but allows for the sending of
-remote EQ data (see FI_REMOTE_EQ_DATA flag) as part of the transfer.
+remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the transfer.
 .SS "fi_writedatato"
 This call is similar to fi_writedata, but for unconnected endpoints.
 .SS "fi_read"
@@ -186,11 +186,11 @@ which can change the default data transfer operation.
 Flags specified with fi_readmsg / fi_writemsg override most flags
 previously configured with the endpoint, except where noted (see fi_endpoint).
 The following list of flags are usable with fi_readmsg and/or fi_writemsg.
-.IP "FI_REMOTE_EQ_DATA"
+.IP "FI_REMOTE_CQ_DATA"
 Applies to fi_writemsg, fi_writedata, and fi_writedatato.  Indicates that
-remote EQ data is available and should
+remote CQ data is available and should
 be sent as part of the request.  See fi_getinfo
-for additional details on FI_REMOTE_EQ_DATA.
+for additional details on FI_REMOTE_CQ_DATA.
 .IP "FI_EVENT"
 Indicates that a completion entry should be generated for the specified
 operation.  The endpoint must be bound to an event queue

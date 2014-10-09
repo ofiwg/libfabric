@@ -105,7 +105,7 @@ static void _pp_op_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_REMOTE_WRITE);
 	IFFLAGSTR(flags, FI_REMOTE_READ);
 	IFFLAGSTR(flags, FI_REMOTE_WRITE);
-	IFFLAGSTR(flags, FI_REMOTE_EQ_DATA);
+	IFFLAGSTR(flags, FI_REMOTE_CQ_DATA);
 	IFFLAGSTR(flags, FI_EVENT);
 	IFFLAGSTR(flags, FI_REMOTE_SIGNAL);
 	IFFLAGSTR(flags, FI_REMOTE_COMPLETE);
@@ -258,7 +258,7 @@ static void _pp_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	_pp_progress(buf, attr->data_progress, "data_progress");
 
 	strcatf(buf, "%smr_key_size:\t%d\n", indent, attr->mr_key_size);
-	strcatf(buf, "%seq_data_size:\t%d\n", indent, attr->eq_data_size);
+	strcatf(buf, "%scq_data_size:\t%d\n", indent, attr->cq_data_size);
 	strcatf(buf, "%sep_cnt:\t%d\n", indent, attr->ep_cnt);
 	strcatf(buf, "%stx_ctx_cnt:\t%d\n", indent, attr->tx_ctx_cnt);
 	strcatf(buf, "%srx_ctx_cnt:\t%d\n", indent, attr->rx_ctx_cnt);
