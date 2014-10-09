@@ -24,11 +24,9 @@ AS_IF([test -z "$CFLAGS"],
 # <3), but it is necessary in AM 1.12.x.
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
-LT_INIT([dlopen])
-
 AC_ARG_WITH([valgrind],
     AC_HELP_STRING([--with-valgrind],
-		   [Enable valgrind annotations - default NO]))
+		   [Enable valgrind annotations @<:@default=no@:>@]))
 
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 	AC_DEFINE([INCLUDE_VALGRIND], 1,
@@ -47,6 +45,9 @@ AC_ARG_ENABLE([direct],
 dnl Checks for programs
 AC_PROG_CC
 
+dnl Checks for header files.
+AC_HEADER_STDC
+
 dnl Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
 AC_CHECK_SIZEOF(long)
@@ -54,6 +55,8 @@ AC_CHECK_SIZEOF(long)
 dnl Only build on Linux
 AC_CHECK_HEADER([linux/types.h], [],
 	[AC_MSG_ERROR([libfabric only builds on Linux])])
+
+LT_INIT
 
 AC_CHECK_HEADERS([fcntl.h sys/socket.h])
 AC_CHECK_DECLS([O_CLOEXEC],,[AC_DEFINE([O_CLOEXEC],[0],
@@ -82,9 +85,17 @@ AC_CACHE_CHECK(for close on exec modifier for fopen(),
 AC_DEFINE_UNQUOTED([STREAM_CLOEXEC], "$ac_cv_feature_stream_cloexec_flag",
 	[fopen() modifier for setting close on exec flag])
 
+dnl dlopen support is optional
+AC_ARG_ENABLE([dlopen],
+	AC_HELP_STRING([--enable-dlopen],
+		       [dl-loadable provider support @<:@default=yes@:>@]))
+
+if test "$enable_dlopen" != "no"; then
+AC_CHECK_LIB(dl, dlopen, [],
+    AC_MSG_ERROR([dlsym or dlopen not found.  libfabric requires libdl.]))
+fi
+
 dnl Checks for libraries
-AC_CHECK_LIB(dl, dlsym, [],
-    AC_MSG_ERROR([dlsym() not found.  libfabric requires libdl.]))
 AC_CHECK_LIB(pthread, pthread_mutex_init, [],
     AC_MSG_ERROR([pthread_mutex_init() not found.  libfabric requires libpthread.]))
 AC_CHECK_LIB(rt, clock_gettime, [],
@@ -99,9 +110,6 @@ AC_TRY_LINK([int i = 0;],
         AC_MSG_RESULT(no)
         AC_DEFINE(DEFINE_ATOMICS, 1, [Set to 1 to implement atomics])
     ])
-
-dnl Checks for header files.
-AC_HEADER_STDC
 
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 AC_CHECK_HEADER(valgrind/memcheck.h, [],
