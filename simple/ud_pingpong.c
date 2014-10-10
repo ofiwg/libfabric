@@ -51,7 +51,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
-#include "../common/shared.h"
+#include <shared.h>
 
 
 struct test_size_param {
@@ -90,6 +90,7 @@ static struct fi_domain_attr domain_hints;
 static struct fi_ep_attr ep_hints;
 static char *dst_addr, *src_addr;
 static char *port = "9228";
+static fi_addr_t client_addr;
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -167,7 +168,8 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), NULL);
+	ret = dst_addr ? fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), NULL) :
+		fi_sendto(ep, buf, (size_t) size, fi_mr_desc(mr), client_addr, NULL);
 	if (ret)
 		printf("fi_send %d (%s)\n", ret, fi_strerror(-ret));
 
@@ -251,7 +253,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	int ret;
 
 	buffer_size = !custom ? test_size[TEST_CNT - 1].size : transfer_size;
-	buffer_size += 42;
 	buf = malloc(buffer_size);
 	if (!buf) {
 		perror("malloc");
@@ -472,43 +473,28 @@ struct udp_hdr {
 static int server_connect(void)
 {
 	int ret;
-	struct sockaddr_in sin;
-	size_t addrlen;
 	struct fi_cq_entry comp;
-	fi_addr_t faddr;
 
 	ret = common_connect();
 	if (ret != 0)
 		goto err;
 
 	do {
-		ret = fi_cq_readfrom(rcq, &comp, sizeof comp, &faddr);
+		ret = fi_cq_readfrom(rcq, &comp, sizeof comp, &client_addr);
 		if (ret < 0) {
 			printf("RCQ readfrom %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
 		}
 	} while (ret == 0);
 
-	if (faddr == FI_ADDR_UNSPEC) {
+	if (client_addr == FI_ADDR_UNSPEC) {
 		printf("Error getting address\n");
-		goto err;
-	}
-
-	addrlen = sizeof(sin);
-	ret = fi_av_lookup(av, faddr, &sin, &addrlen);
-	if (ret != 0) {
-		printf("fi_av_lookup %d (%s)\n", ret, fi_strerror(-ret));
 		goto err;
 	}
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), buf);
 	if (ret != 0) {
 		printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
-		goto err;
-	}
-	ret = fi_connect(ep, &sin, NULL, 0);
-	if (ret) {
-		printf("fi_connect %s\n", fi_strerror(-ret));
 		goto err;
 	}
 
