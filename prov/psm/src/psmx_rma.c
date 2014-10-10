@@ -395,7 +395,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 					(void *)addr,
 					0, /* flags */
 					len,
-					flags & FI_REMOTE_EQ_DATA ? data : 0,
+					flags & FI_REMOTE_CQ_DATA ? data : 0,
 					0, /* tag */
 					0, /* olen */
 					0 /* err */);
@@ -782,7 +782,7 @@ ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 		args[3].u64 = key;
 		args[4].u64 = psm_tag;
 		nargs = 5;
-		if (flags & FI_REMOTE_EQ_DATA) {
+		if (flags & FI_REMOTE_CQ_DATA) {
 			args[5].u64 = data;
 			args[0].u32w0 |= PSMX_AM_DATA;
 			nargs++;
@@ -820,7 +820,7 @@ ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 	args[1].u64 = (uint64_t)(uintptr_t)req;
 	args[2].u64 = addr;
 	args[3].u64 = key;
-	if (flags & FI_REMOTE_EQ_DATA) {
+	if (flags & FI_REMOTE_CQ_DATA) {
 		args[4].u64 = data;
 		args[0].u32w0 |= PSMX_AM_DATA;
 		nargs++;
@@ -923,7 +923,7 @@ static ssize_t psmx_writedatato(struct fid_ep *ep, const void *buf, size_t len, 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_writeto(ep, buf, len, desc, dest_addr, addr, key, context,
-			     ep_priv->flags | FI_REMOTE_EQ_DATA, data);
+			     ep_priv->flags | FI_REMOTE_CQ_DATA, data);
 }
 
 static ssize_t psmx_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
