@@ -19,7 +19,7 @@ Convert fabric attributes, flags, and capabilities to printable string
 .HP
 .BI "int fi_close(struct fid *" fabric ");"
 .HP
-.BI "char * fi_tostr(const void *" data ", enum fi_pp_type " datatype ");"
+.BI "char * fi_tostr(const void *" data ", enum fi_type " datatype ");"
 .SH ARGUMENTS
 .IP "attr" 12
 Attributes of fabric to open.
@@ -42,41 +42,41 @@ The fi_close call is used to release all resources associated with a fabric
 domain or interface.  All items associated with the opened fabric must
 be released prior to calling fi_close.
 .SS "fi_tostr"
-Converts fabric intrerface attributes, capabilities, flags, and enum values
+Converts fabric interface attributes, capabilities, flags, and enum values
 into a printable string.  The data parameter accepts a pointer to the
 attribute or value(s) to display, with the datatype parameter indicating
 the type of data referenced by the data parameter.  Valid values for the
 datatype are listed below, along with the corresponding datatype or field
 value.
-.IP "FI_PP_INFO"
+.IP "FI_TYPE_INFO"
 struct fi_info
-.IP "FI_PP_EP_TYPE"
+.IP "FI_TYPE_EP_TYPE"
 struct fi_info::type field
-.IP "FI_PP_EP_CAP"
+.IP "FI_TYPE_EP_CAP"
 struct fi_info::ep_cap field
-.IP "FI_PP_OP_FLAGS"
+.IP "FI_TYPE_OP_FLAGS"
 struct fi_info::op_flags field, or general uint64_t flags
-.IP "FI_PP_ADDR_FORMAT"
+.IP "FI_TYPE_ADDR_FORMAT"
 enum fi_addr_format
-.IP "FI_PP_TX_ATTR"
+.IP "FI_TYPE_TX_ATTR"
 struct fi_tx_ctx_attr
-.IP "FI_PP_RX_ATTR"
+.IP "FI_TYPE_RX_ATTR"
 struct fi_rx_ctx_attr
-.IP "FI_PP_EP_ATTR"
+.IP "FI_TYPE_EP_ATTR"
 struct fi_ep_attr
-.IP "FI_PP_DOMAIN_ATTR"
+.IP "FI_TYPE_DOMAIN_ATTR"
 struct fi_domain_attr
-.IP "FI_PP_FABRIC_ATTR"
+.IP "FI_TYPE_FABRIC_ATTR"
 struct fi_fabric_attr
-.IP "FI_PP_DOMAIN_CAP"
+.IP "FI_TYPE_DOMAIN_CAP"
 struct fi_info::domain_cap field
-.IP "FI_PP_THREADING"
+.IP "FI_TYPE_THREADING"
 enum fi_threading
-.IP "FI_PP_PROGRESS"
+.IP "FI_TYPE_PROGRESS"
 enum fi_progress
-.IP "FI_PP_PROTO"
+.IP "FI_TYPE_PROTO"
 struct fi_ep_attr::protocol field
-.IP "FI_PP_MSG_ORDER"
+.IP "FI_TYPE_MSG_ORDER"
 struct fi_ep_attr::msg_order field
 .SH "NOTES"
 The following resources are associated with fabric domains: access domains,
