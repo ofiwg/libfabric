@@ -277,7 +277,7 @@ fi_ibv_getepinfo(const char *node, const char *service,
 
 	ret = rdma_create_ep(id, rai, NULL, NULL);
 	if (ret) {
-		ret = -errno;
+		ret = -FI_ENODATA;
 		goto err2;
 	}
 	rdma_freeaddrinfo(rai);
