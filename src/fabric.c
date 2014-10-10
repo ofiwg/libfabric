@@ -42,20 +42,14 @@
 #include <string.h>
 #include <dirent.h>
 
-#include <rdma/fabric.h>
-#include <rdma/fi_atomic.h>
-#include <rdma/fi_cm.h>
-#include <rdma/fi_domain.h>
-#include <rdma/fi_prov.h>
-#include <rdma/fi_rma.h>
-#include <rdma/fi_endpoint.h>
-#include <rdma/fi_tagged.h>
 #include <rdma/fi_errno.h>
 #include "fi.h"
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
 #endif
+
+#define FI_WARN(fmt, ...) do { fprintf(stderr, "%s: " fmt, PACKAGE, ##__VA_ARGS__); } while (0)
 
 struct fi_prov {
 	struct fi_prov		*next;
@@ -86,6 +80,7 @@ int fi_register_provider(uint32_t version, struct fi_provider *provider)
 	return 0;
 }
 
+#ifdef HAVE_LIBDL
 static int lib_filter(const struct dirent *entry)
 {
 	size_t l = strlen(entry->d_name);
@@ -101,33 +96,33 @@ static void __attribute__((constructor)) fi_ini(void)
 {
 	struct dirent **liblist;
 	int n;
-	char *lib, *path = getenv("FI_EXTPATH");
+	char *lib, *extdir = getenv("FI_EXTDIR");
 	void *dlhandle;
 
-	if (!path)
-		path = EXTDIR;
+	if (!extdir)
+		extdir = EXTDIR;
 
 	if (dlopen(NULL, RTLD_NOW) == NULL) {
-		fprintf(stderr, "dlopen(NULL) failed, assuming static linking\n");
+		FI_WARN("dlopen(NULL) failed, assuming static linking\n");
 		return;
 	}
 
-	n = scandir(path, &liblist, lib_filter, NULL);
+	n = scandir(extdir, &liblist, lib_filter, NULL);
 
 	if (n < 0) {
-		fprintf(stderr, "scandir error reading %s: %s\n", path, strerror(n));
+		FI_WARN("scandir error reading %s: %s\n", extdir, strerror(n));
 		return;
 	}
 
 	while (n--) {
-		if (asprintf(&lib, "%s/%s", path, liblist[n]->d_name) < 0) {
-			fprintf(stderr, "asprintf failed to allocate memory\n");
+		if (asprintf(&lib, "%s/%s", extdir, liblist[n]->d_name) < 0) {
+			FI_WARN("asprintf failed to allocate memory\n");
 			return;
 		}
 
 		dlhandle = dlopen(lib, RTLD_NOW);
 		if (dlhandle == NULL)
-			fprintf(stderr, "dlopen(%s): %s\n", lib, dlerror());
+			FI_WARN("dlopen(%s): %s\n", lib, dlerror());
 
 		free(liblist[n]);
 		free(lib);
@@ -135,6 +130,7 @@ static void __attribute__((constructor)) fi_ini(void)
 
 	free(liblist);
 }
+#endif
 
 static void __attribute__((destructor)) fi_fini(void)
 {
