@@ -500,6 +500,28 @@ static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 	return 0;
 }
 
+static ssize_t psmx_cq_write(struct fid_cq *cq, const void *buf, size_t len)
+{
+	struct psmx_fid_cq *cq_priv;
+	struct psmx_cq_event *event;
+
+	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
+
+	if (len < cq_priv->entry_size)
+		return -FI_ETOOSMALL;
+
+	event = calloc(1, sizeof(*event));
+	if (!event) {
+		fprintf(stderr, "%s: out of memory\n", __func__);
+		return -ENOMEM;
+	}
+
+	memcpy((void *)&event->cqe, buf, cq_priv->entry_size);
+	psmx_cq_enqueue_event(&cq_priv->event_queue, event);
+
+	return cq_priv->entry_size;
+}
+
 static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
 				 fi_addr_t *src_addr, const void *cond,
 				 int timeout)
@@ -542,7 +564,7 @@ static struct fi_ops_cq psmx_cq_ops = {
 	.read = psmx_cq_read,
 	.readfrom = psmx_cq_readfrom,
 	.readerr = psmx_cq_readerr,
-	.write = fi_no_cq_write,
+	.write = psmx_cq_write,
 	.sread = psmx_cq_sread,
 	.sreadfrom = psmx_cq_sreadfrom,
 	.strerror = psmx_cq_strerror,
@@ -554,9 +576,6 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct psmx_fid_domain *domain_priv;
 	struct psmx_fid_cq *cq_priv;
 	int entry_size;
-
-	if (attr->flags & FI_WRITE)
-		return -FI_ENOSYS;
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:
