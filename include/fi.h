@@ -33,6 +33,10 @@
 #ifndef _FI_H_
 #define _FI_H_
 
+#if HAVE_CONFIG_H
+#  include <config.h>
+#endif /* HAVE_CONFIG_H */
+
 #include <byteswap.h>
 #include <endian.h>
 #include <semaphore.h>
@@ -155,6 +159,22 @@ int fi_version_register(uint32_t version, struct fi_provider *provider);
 
 #define RDMA_CONF_DIR  SYSCONFDIR "/" RDMADIR
 #define FI_CONF_DIR RDMA_CONF_DIR "/fabric"
+
+#define DEFAULT_ABI "FABRIC_1.0"
+
+/* symbol -> external symbol mappings */
+#ifdef HAVE_SYMVER_SUPPORT
+
+#  define symver(name, api, ver) \
+        asm(".symver " #name "," #api "@" #ver)
+#  define default_symver(name, api) \
+        asm(".symver " #name "," #api "@@" DEFAULT_ABI)
+#else
+#  define symver(name, api, ver)
+#  define default_symver(name, api) \
+        extern __typeof(name) api __attribute__((alias(#name)))
+
+#endif /* HAVE_SYMVER_SUPPORT */
 
 /* symbol -> external symbol mappings */
 #ifdef HAVE_SYMVER_SUPPORT

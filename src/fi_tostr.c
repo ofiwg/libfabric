@@ -395,6 +395,7 @@ char *fi_tostr_(const void *data, enum fi_type datatype)
 	}
 	return buf;
 }
+default_symver(fi_tostr_, fi_tostr);
 
 #undef CASEENUMSTR
 #undef IFFLAGSTR

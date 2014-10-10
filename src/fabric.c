@@ -79,6 +79,7 @@ int fi_register_provider_(uint32_t version, struct fi_provider *provider)
 	prov_tail = prov;
 	return 0;
 }
+default_symver(fi_register_provider_, fi_register_provider);
 
 #ifdef HAVE_LIBDL
 static int lib_filter(const struct dirent *entry)
@@ -183,6 +184,7 @@ int fi_getinfo_(uint32_t version, const char *node, const char *service,
 
 	return *info ? 0 : ret;
 }
+default_symver(fi_getinfo_, fi_getinfo);
 
 __attribute__((visibility ("default")))
 void fi_freeinfo_(struct fi_info *info)
@@ -201,6 +203,7 @@ void fi_freeinfo_(struct fi_info *info)
 			__fi_freeinfo(info);
 	}
 }
+default_symver(fi_freeinfo_, fi_freeinfo);
 
 __attribute__((visibility ("default")))
 int fi_fabric_(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)
@@ -216,12 +219,14 @@ int fi_fabric_(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *co
 
 	return prov->provider->fabric(attr, fabric, context);
 }
+default_symver(fi_fabric_, fi_fabric);
 
 __attribute__((visibility ("default")))
 uint32_t if_version_(void)
 {
 	return FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION);
 }
+default_symver(fi_version_, fi_version);
 
 #define FI_ERRNO_OFFSET	256
 #define FI_ERRNO_MAX	FI_EOPBADSTATE
@@ -246,6 +251,7 @@ const char *fi_strerror_(int errnum)
 	else
 		return errstr[FI_EOTHER - FI_ERRNO_OFFSET];
 }
+default_symver(fi_strerror_, fi_strerror);
 
 static const size_t __fi_datatype_size[] = {
 	[FI_INT8]   = sizeof(int8_t),
