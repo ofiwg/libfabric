@@ -267,7 +267,7 @@ fi_ibv_getepinfo(const char *node, const char *service,
 		return -errno;
 
 	if (!(fi = __fi_allocinfo())) {
-		ret = FI_ENOMEM;
+		ret = -FI_ENOMEM;
 		goto err1;
 	}
 
@@ -277,7 +277,7 @@ fi_ibv_getepinfo(const char *node, const char *service,
 
 	ret = rdma_create_ep(id, rai, NULL, NULL);
 	if (ret) {
-		ret = -errno;
+		ret = -FI_ENODATA;
 		goto err2;
 	}
 	rdma_freeaddrinfo(rai);
