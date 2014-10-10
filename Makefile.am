@@ -208,6 +208,7 @@ man_MANS = \
 	man/fi_tagged.3 \
 	man/fi_tinject.3 \
 	man/fi_tinjectto.3 \
+	man/fi_tostr.3 \
 	man/fi_trecv.3 \
 	man/fi_trecvv.3 \
 	man/fi_trecvfrom.3 \

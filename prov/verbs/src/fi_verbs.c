@@ -534,7 +534,7 @@ fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 
 	wr.wr_id = (uintptr_t) msg->context;
 	wr.next = NULL;
-	if (flags & FI_REMOTE_EQ_DATA) {
+	if (flags & FI_REMOTE_CQ_DATA) {
 		wr.opcode = IBV_WR_SEND_WITH_IMM;
 		wr.imm_data = (uint32_t) msg->data;
 	} else {
@@ -670,7 +670,7 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	wr.sg_list = sge;
 
 	wr.opcode = IBV_WR_RDMA_WRITE;
-	if (flags & FI_REMOTE_EQ_DATA) {
+	if (flags & FI_REMOTE_CQ_DATA) {
 		wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
 		wr.imm_data = (uint32_t) msg->data;
 	}
@@ -898,7 +898,7 @@ fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
 
 	switch (msg->op) {
 	case FI_ATOMIC_WRITE:
-		if (flags & FI_REMOTE_EQ_DATA) {
+		if (flags & FI_REMOTE_CQ_DATA) {
 			wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
 			wr.imm_data = (uint32_t) msg->data;
 		} else {
@@ -1052,7 +1052,7 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.send_flags = IBV_SEND_FENCE; 
-	if (flags & FI_REMOTE_EQ_DATA)
+	if (flags & FI_REMOTE_CQ_DATA)
 		wr.imm_data = (uint32_t) msg->data;
 
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
@@ -1176,7 +1176,7 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.send_flags = IBV_SEND_FENCE; 
-	if (flags & FI_REMOTE_EQ_DATA)
+	if (flags & FI_REMOTE_CQ_DATA)
 		wr.imm_data = (uint32_t) msg->data;
 
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
@@ -1899,7 +1899,7 @@ static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t len)
 
 		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
 		if (_cq->wc.wc_flags & IBV_WC_WITH_IMM) {
-			entry->flags = FI_REMOTE_EQ_DATA;
+			entry->flags = FI_REMOTE_CQ_DATA;
 			entry->data = _cq->wc.imm_data;
 		} else {
 			entry->flags = 0;

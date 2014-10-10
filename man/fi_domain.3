@@ -77,7 +77,7 @@ struct fi_domain_attr {
 	enum fi_progress  control_progress;
 	enum fi_progress  data_progress;
 	size_t            mr_key_size;
-	size_t            eq_data_size;
+	size_t            cq_data_size;
 	size_t            ep_cnt;
 	size_t            tx_ctx_cnt;
 	size_t            rx_ctx_cnt;
@@ -173,9 +173,9 @@ such as select, poll, or pthread routines, cannot.
 Size of the memory region remote access key, in bytes.  Applications that
 request their own MR key must select a value within the range specified by
 this value.
-.SS "EQ Data Size"
-The number of bytes that the provider supports for remote EQ data.  See
-the FI_REMOTE_EQ_DATA flag (fi_getinfo) for the use of remote EQ data.
+.SS "CQ Data Size"
+The number of bytes that the provider supports for remote CQ data.  See
+the FI_REMOTE_CQ_DATA flag (fi_getinfo) for the use of remote CQ data.
 .SS "Endpoint Count (ep_cnt)"
 The total number of endpoints supported by the domain, relative to any
 specified or default endpoint attributes.  The ep_cnt value may be a

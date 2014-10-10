@@ -70,7 +70,7 @@ Count of vectored data entries.
 .IP "desc"
 Descriptor associated with the data buffer
 .IP "data"
-Remote EQ data to transfer with the sent message.
+Remote CQ data to transfer with the sent message.
 .IP "dest_addr"
 Destination address for connectionless transfers
 .IP "src_addr"
@@ -142,7 +142,7 @@ discussion below for more details.
 This call is similar to fi_inject, but for unconnected endpoints.
 .SS "fi_senddata"
 The send data call is similar to fi_send, but allows for the sending of
-remote EQ data (see FI_REMOTE_EQ_DATA flag) as part of the transfer.
+remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the transfer.
 .SS "fi_senddatato"
 This call is similar to fi_senddata, but for unconnected endpoints.
 .SS "fi_recv"
@@ -165,10 +165,10 @@ which can change the default message handling of the endpoint.
 Flags specified with fi_recvmsg / fi_sendmsg override most flags
 previously configured with the endpoint, except where noted (see fi_endpoint).
 The following list of flags are usable with fi_recvmsg and/or fi_sendmsg.
-.IP "FI_REMOTE_EQ_DATA"
+.IP "FI_REMOTE_CQ_DATA"
 Applies to fi_sendmsg, fi_senddata, and fi_senddatato.  Indicates that remote
-EQ data is available and should be sent as part of the request.  See fi_getinfo
-for additional details on FI_REMOTE_EQ_DATA.
+CQ data is available and should be sent as part of the request.  See fi_getinfo
+for additional details on FI_REMOTE_CQ_DATA.
 .IP "FI_EVENT"
 Indicates that a completion entry should be generated for the specified
 operation.  The endpoint must be bound to an event queue

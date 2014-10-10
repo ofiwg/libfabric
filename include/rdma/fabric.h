@@ -97,7 +97,7 @@ uint32_t fi_version(void);
 #define FI_REMOTE_READ		(1ULL << 20)
 #define FI_REMOTE_WRITE		(1ULL << 21)
 
-#define FI_REMOTE_EQ_DATA	(1ULL << 24)
+#define FI_REMOTE_CQ_DATA	(1ULL << 24)
 #define FI_EVENT		(1ULL << 25)
 #define FI_REMOTE_SIGNAL	(1ULL << 26)
 #define FI_REMOTE_COMPLETE	(1ULL << 27)
@@ -189,7 +189,7 @@ struct fi_domain_attr {
 	enum fi_progress	control_progress;
 	enum fi_progress	data_progress;
 	size_t			mr_key_size;
-	size_t			eq_data_size;
+	size_t			cq_data_size;
 	size_t			ep_cnt;
 	size_t			tx_ctx_cnt;
 	size_t			rx_ctx_cnt;
@@ -355,25 +355,25 @@ fi_open_ops(struct fid *fid, const char *name, uint64_t flags,
 	return fid->ops->ops_open(fid, name, flags, ops, context);
 }
 
-enum fi_pp_type {
-	FI_PP_INFO,
-	FI_PP_EP_TYPE,
-	FI_PP_EP_CAP,
-	FI_PP_OP_FLAGS,
-	FI_PP_ADDR_FORMAT,
-	FI_PP_TX_ATTR,
-	FI_PP_RX_ATTR,
-	FI_PP_EP_ATTR,
-	FI_PP_DOMAIN_ATTR,
-	FI_PP_FABRIC_ATTR,
-	FI_PP_DOMAIN_CAP,
-	FI_PP_THREADING,
-	FI_PP_PROGRESS,
-	FI_PP_PROTOCOL,
-	FI_PP_MSG_ORDER
+enum fi_type {
+	FI_TYPE_INFO,
+	FI_TYPE_EP_TYPE,
+	FI_TYPE_EP_CAP,
+	FI_TYPE_OP_FLAGS,
+	FI_TYPE_ADDR_FORMAT,
+	FI_TYPE_TX_ATTR,
+	FI_TYPE_RX_ATTR,
+	FI_TYPE_EP_ATTR,
+	FI_TYPE_DOMAIN_ATTR,
+	FI_TYPE_FABRIC_ATTR,
+	FI_TYPE_DOMAIN_CAP,
+	FI_TYPE_THREADING,
+	FI_TYPE_PROGRESS,
+	FI_TYPE_PROTOCOL,
+	FI_TYPE_MSG_ORDER
 };
 
-char *fi_tostr(const void *data, enum fi_pp_type datatype);
+char *fi_tostr(const void *data, enum fi_type datatype);
 
 
 #ifndef FABRIC_DIRECT
