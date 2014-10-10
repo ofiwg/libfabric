@@ -294,6 +294,24 @@ appropriately.
 Indicates that the user desires the ability to cancel outstanding data
 transfer operations.  If FI_CANCEL is not set, a provider may optimize code
 paths with the assumption that fi_cancel will not be used by the application.
+.IP "FI_RECV_PREFIX"
+The provider supports a mode where packet header bytes are written into
+buffers posted for receive (e.g. via fi_recv()) ahead
+of the received data.  This is primarily
+a performance optimization for the provider, though some applications may use
+this to get access to the packet header information.  The number of bytes
+which must be reserved is specified by msg_prefix_len in endpoint attributes.
+When the user buffer address is requested to be present in CQ completion
+entries, a pointer to the actual start of the data will be returned, not the
+posted buffer address.
+.IP "FI_SEND_PREFIX"
+This is similar to FI_RECV_PREFIX, except that it applies to send functions.
+When an endpoint is opened with this flag, the provider is free to use the
+memory immediately preceeding the posted send address for its own purposes.
+If used, this is typically to build the packet header in this prefix area,
+collapsing the send to a single SGE without copying the user data to be sent.
+The number of bytes which must be reserved is specified by msg_prefix_len in
+endpoint attributes.
 .SH "DOMAIN CAPABILITIES"
 Domain capabilities are often used as output information from fi_getinfo,
 allowing applications to adjust their behavior based on the provider's

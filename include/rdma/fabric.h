@@ -106,6 +106,9 @@ uint32_t fi_version(void);
 #define FI_PEEK			(1ULL << 30)
 #define FI_TRIGGER		(1ULL << 31)
 
+#define FI_SEND_PREFIX	(1ULL << 32)
+#define FI_RECV_PREFIX	(1ULL << 33)
+
 
 struct fi_ioc {
 	void			*addr;
@@ -181,6 +184,7 @@ struct fi_ep_attr {
 	uint64_t		msg_order;
 	size_t			tx_ctx_cnt;
 	size_t			rx_ctx_cnt;
+	size_t			msg_prefix_len;
 };
 
 struct fi_domain_attr {
