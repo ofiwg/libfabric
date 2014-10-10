@@ -58,7 +58,7 @@ static int run(void)
 	}
 
 	for (cur = info; cur; cur = cur->next)
-		printf("%s\n", fi_tostr(cur, FI_PP_INFO));
+		printf("%s\n", fi_tostr(cur, FI_TYPE_INFO));
 
 	fi_freeinfo(info);
 	return 0;
