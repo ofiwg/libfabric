@@ -334,6 +334,7 @@ struct fi_ep_attr {
 	uint64_t  msg_order;
 	size_t    tx_ctx_cnt;
 	size_t    rx_ctx_cnt;
+	size_t    msg_prefix_len;
 };
 .fi
 .SS "Protocol"
@@ -501,6 +502,13 @@ configured.  Each receive context may be bound to a separate CQ, and no
 ordering is defined between contexts.  Additionally, no synchronization is
 needed when accessing contexts in parallel.  See the scalable endpoint
 section for additional details.
+.SS "msg_prefix_len - Message Prefix Length"
+This is an output value.  If FI_RECV_PREFIX or FI_SEND_PREFIX endpoint 
+attributes are supported by the fabric, this is the number of bytes that
+the provider will expect to available at the beginning of posted buffers
+for provider use. This value will always be a multiple of 8 bytes.
+See FI_RECV_PREFIX and FI_SEND_PREFIX in fi_getinfo(3)
+for more details.
 .SH "SCALABLE ENDPOINTS"
 A scalable endpoint is a communication portal that supports multiple
 transmit and receive contexts.  Scalable endpoints are loosely modeled
