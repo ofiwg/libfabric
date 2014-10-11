@@ -245,7 +245,7 @@ struct fi_info {
 	struct fi_info		*next;
 	uint64_t		ep_cap;
 	uint64_t		domain_cap;
-	enum fi_ep_type		type;
+	enum fi_ep_type		ep_type;
 	uint32_t		addr_format;
 	size_t			src_addrlen;
 	size_t			dest_addrlen;

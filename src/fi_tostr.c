@@ -298,7 +298,7 @@ static void fi_tostr_info(char *buf, const struct fi_info *info)
 {
 	strcat(buf, "fi_info: [\n");
 	strcat(buf, "\ttype:\t");
-	fi_tostr_ep_type(buf, info->type);
+	fi_tostr_ep_type(buf, info->ep_type);
 
 	strcat(buf, "\tep_cap: [ ");
 	fi_tostr_ep_cap(buf, info->ep_cap);

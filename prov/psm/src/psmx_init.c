@@ -76,7 +76,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	struct fi_info *psmx_info;
 	uint32_t cnt = 0;
 	void *dest_addr = NULL;
-	int type = FI_EP_RDM;
+	int ep_type = FI_EP_RDM;
 	int ep_cap = 0;
 	uint64_t max_tag_value = 0;
 	int err = -ENODATA;
@@ -97,16 +97,16 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	if (hints) {
-		switch (hints->type) {
+		switch (hints->ep_type) {
 		case FI_EP_UNSPEC:
 		case FI_EP_RDM:
 			break;
 		case FI_EP_MSG:
-			type = FI_EP_MSG;
+			ep_type = FI_EP_MSG;
 			break;
 		default:
-			psmx_debug("%s: hints->type=%d, supported=%d,%d,%d.\n",
-					__func__, hints->type, FI_EP_UNSPEC,
+			psmx_debug("%s: hints->ep_type=%d, supported=%d,%d,%d.\n",
+					__func__, hints->ep_type, FI_EP_UNSPEC,
 					FI_EP_RDM, FI_EP_MSG);
 			goto err_out;
 		}
@@ -220,7 +220,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->name = strdup("psm");
 
 	psmx_info->next = NULL;
-	psmx_info->type = type;
+	psmx_info->ep_type = ep_type;
 	psmx_info->ep_cap = (hints && hints->ep_cap) ? hints->ep_cap : ep_cap;
 	psmx_info->addr_format = FI_ADDR_PROTO;
 	psmx_info->src_addrlen = 0;

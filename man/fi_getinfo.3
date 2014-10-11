@@ -73,7 +73,7 @@ struct fi_info {
 	uint64_t              type;
 	uint64_t              ep_cap;
 	uint64_t              domain_cap;
-	enum fi_ep_type       type;
+	enum fi_ep_type       ep_type;
 	uint32_t              addr_format;
 	size_t                src_addrlen;
 	size_t                dest_addrlen;
@@ -105,8 +105,11 @@ If specified, indicates the desired capabilities supported by the domain.
 Supported capabilities are listed in the
 .B "Domain Capabilities"
 section below.
-.IP "type"
-Endpoint type
+.IP "ep_type"
+Specifies the desired endpoint type.  Supported endpoint types are listed in
+the
+.B "Endpoint Types"
+section below.
 .IP "addr_format - address format"
 If specified, indicates the format of addresses referenced by the fabric
 interfaces and data structures.  Supported formats are listed in the

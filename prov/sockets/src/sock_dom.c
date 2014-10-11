@@ -63,7 +63,7 @@ static int sock_dom_close(struct fid *fid)
 static int sock_endpoint(struct fid_domain *domain, struct fi_info *info,
 			 struct fid_ep **ep, void *context)
 {
-	switch (info->type) {
+	switch (info->ep_type) {
 	case FI_EP_RDM:
 		return sock_rdm_ep(domain, info, ep, context);
 	default:

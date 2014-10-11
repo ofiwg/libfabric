@@ -80,7 +80,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	if (hints) {
-		switch (hints->type) {
+		switch (hints->ep_type) {
 		case FI_EP_RDM:
 			return sock_rdm_getinfo(version, node, service, flags,
 						hints, info);
