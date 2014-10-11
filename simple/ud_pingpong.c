@@ -1,8 +1,12 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2014 Cisco Systems, Inc.  All rights reserved.
  *
- * This software is available to you under the OpenIB.org BSD license
- * below:
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * BSD license below:
  *
  *     Redistribution and use in source and binary forms, with or
  *     without modification, are permitted provided that the following
@@ -45,6 +49,7 @@
 #include <net/ethernet.h>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
+#include <arpa/inet.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
@@ -89,7 +94,7 @@ static struct fi_info hints;
 static struct fi_domain_attr domain_hints;
 static struct fi_ep_attr ep_hints;
 static char *dst_addr, *src_addr;
-static char *port = "9228";
+static char *port = "3333";
 static fi_addr_t client_addr;
 
 static struct fid_fabric *fab;
@@ -350,17 +355,15 @@ static int bind_ep_res(void)
 }
 
 
-static int common_connect(void)
+static int common_setup(void)
 {
 	struct fi_info *fi;
 	int ret;
 
-	if (src_addr) {
-		ret = getaddr(src_addr, NULL, (struct sockaddr **) &hints.src_addr,
-			      (socklen_t *) &hints.src_addrlen);
-		if (ret)
-			printf("source address error %s\n", gai_strerror(ret));
-	}
+	ret = getaddr(src_addr, port, (struct sockaddr **) &hints.src_addr,
+			  (socklen_t *) &hints.src_addrlen);
+	if (ret)
+		printf("source address error %s\n", gai_strerror(ret));
 
 	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, &hints, &fi);
 	if (ret) {
@@ -381,6 +384,16 @@ static int common_connect(void)
 		goto err2;
 	}
 
+	if (fi->src_addr != NULL) {
+		((struct sockaddr_in *)fi->src_addr)->sin_port = 
+			((struct sockaddr_in *)hints.src_addr)->sin_port;
+
+		if (dst_addr == NULL) {
+			printf("Local address %s:%d\n",
+					inet_ntoa(((struct sockaddr_in *)fi->src_addr)->sin_addr),
+					ntohs(((struct sockaddr_in *)fi->src_addr)->sin_port));
+		}
+	}
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
 		printf("fi_endpoint %s\n", fi_strerror(-ret));
@@ -423,14 +436,13 @@ err0:
 static int client_connect(void)
 {
 	int ret;
-	struct sockaddr_in *sin;
 	socklen_t addrlen;
+	struct sockaddr *sin;
 
-	ret = common_connect();
+	ret = common_setup();
 	if (ret != 0)
 		goto err;
 
-	addrlen = sizeof(sin);
 	ret = getaddr(dst_addr, port, (struct sockaddr **) &sin,
 			  (socklen_t *) &addrlen);
 	if (ret != 0)
@@ -475,7 +487,7 @@ static int server_connect(void)
 	int ret;
 	struct fi_cq_entry comp;
 
-	ret = common_connect();
+	ret = common_setup();
 	if (ret != 0)
 		goto err;
 
@@ -516,12 +528,13 @@ static int run(void)
 {
 	int i, ret = 0;
 
-	printf("%-10s%-8s%-8s%-8s%-8s%8s %10s%13s\n",
-	       "name", "bytes", "xfers", "iters", "total", "time", "Gb/sec", "usec/xfer");
-
 	ret = dst_addr ? client_connect() : server_connect();
 	if (ret)
 		return ret;
+
+	printf("%-10s%-8s%-8s%-8s%-8s%8s %10s%13s\n",
+	       "name", "bytes", "xfers", "iters", "total", "time",
+		   "Gb/sec", "usec/xfer");
 
 	if (!custom) {
 		for (i = 0; i < TEST_CNT; i++) {
