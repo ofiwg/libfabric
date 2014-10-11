@@ -1,4 +1,4 @@
-.TH "FI_ENDPOINT" 3 "2014-09-30" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ENDPOINT" 3 "2014-10-11" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_endpoint \- Fabric endpoint operations
 .PP
@@ -327,6 +327,7 @@ struct fi_ep_attr {
 	size_t    max_msg_size;
 	size_t    inject_size;
 	size_t    total_buffered_recv;
+	size_t    msg_prefix_size;
 	size_t    max_order_raw_size;
 	size_t    max_order_war_size;
 	size_t    max_order_waw_size;
@@ -364,9 +365,13 @@ single operation.
 Defines the default inject operation size (see the FI_INJECT
 flag) that an endpoint will support.  This value applies per send
 operation.
-.SS "total_buffered_ercv - Total Buffered Receive"
+.SS "total_buffered_recv - Total Buffered Receive"
 Defines the total available space allocated by the provider to buffer received
 messages (see the FI_BUFFERED_RECV flag).
+.SS "msg_prefix_size - Message Prefix Size"
+Specifies the size of any required message prefix buffer space.  This field
+will be 0 unless the FI_MSG_PREFIX mode is enabled.  If msg_prefix_size is > 0
+the specified value will be a multiple of 8-bytes.
 .SS "Max RMA Ordered Size"
 The maximum ordered size specifies the delivery order of transport data
 into target memory for RMA and atomic operations.  Data ordering is separate,

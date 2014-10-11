@@ -376,6 +376,32 @@ below.
 .fi
 .sp
 See the endpoint fi_ep_sync call for handling non-coherent writes.
+.IP "FI_MSG_PREFIX"
+Message prefix mode indicates that an application will provide buffer
+space in front of all message send and receive buffers for use by the
+provider.  Typically, the provider uses this space to implement
+a protocol, with the protocol headers being written into the prefix area.
+The contents of the prefix space should be treated as opaque.
+The use of FI_MSG_PREFIX may improve application
+performance over certain providers by reducing the number of IO vectors
+referenced by underlying hardware and eliminating provider buffer
+allocation.
+.sp
+FI_MSG_PREFIX only applies to send and receive operations, including
+tagged sends and receives.  RMA and atomics do not require the application
+to provide prefix buffers.  Prefix buffer space must be provided with
+all sends and receives, regardless of the size of the transfer or other
+transfer options.  The ownership of prefix buffers is treated the same as
+the corresponding message buffers, but the size of the prefix buffer is
+not counted toward any message limits, including inject.
+.sp
+Applications that support prefix mode must supply buffer space before
+their own message data.  The size of space that must be provided is
+specified by the msg_prefix_size endpoint attribute.  Providers are
+required to define a msg_prefix_size that is a multiple of 8 bytes.
+Additionally, applications may receive provider generated packets that do
+not contain application data.  Such received messages will indicate a
+transfer size of 0 bytes.
 .SH "ENDPOINT TYPES"
 .IP "FI_EP_UNSPEC"
 The type of endpoint is not specified.  This is usually provided as input, with

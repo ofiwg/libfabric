@@ -211,6 +211,7 @@ struct fi_ep_attr {
 	size_t			max_msg_size;
 	size_t			inject_size;
 	size_t			total_buffered_recv;
+	size_t			msg_prefix_size;
 	size_t			max_order_raw_size;
 	size_t			max_order_war_size;
 	size_t			max_order_waw_size;
