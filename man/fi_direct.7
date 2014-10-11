@@ -41,14 +41,14 @@ In order that application code may be optimized during compile time, direct
 providers must provide definitions for various capabilities, if those
 capabilities are supported.  The following #define values may be used
 by an application to test for provider support of supported features.
-.IP "FI_DIRECT_WRITE_COHERENT"
-The provider sets FI_WRITE_COHERENT for fi_info:domain_cap.  See fi_getinfo
+.IP "FI_DIRECT_WRITE_NONCOHERENT"
+The provider sets FI_WRITE_NONCOHERENT for fi_info:mode.  See fi_getinfo
 for additional details.
 .IP "FI_DIRECT_CONTEXT"
-The provider sets FI_CONTEXT for fi_info:domain_cap.  See fi_getinfo
+The provider sets FI_CONTEXT for fi_info:mode.  See fi_getinfo
 for additional details.
 .IP "FI_DIRECT_LOCAL_MR"
-The provider sets FI_LOCAL_MR for fi_info:domain_cap.  See fi_getinfo
+The provider sets FI_LOCAL_MR for fi_info:mode.  See fi_getinfo
 for additional details.
 .IP "FI_DIRECT_USER_MR_KEY"
 The provider sets FI_USER_MR_KEY for fi_info:domain_cap.  See fi_getinfo

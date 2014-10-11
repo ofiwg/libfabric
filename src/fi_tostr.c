@@ -182,11 +182,17 @@ static void fi_tostr_protocol(char *buf, uint32_t protocol)
 	}
 }
 
+static void fi_tostr_mode(char *buf, uint64_t mode)
+{
+	IFFLAGSTR(mode, FI_WRITE_NONCOHERENT);
+	IFFLAGSTR(mode, FI_CONTEXT);
+	IFFLAGSTR(mode, FI_LOCAL_MR);
+}
+
 static void fi_tostr_domain_cap(char *buf, uint64_t domain_cap)
 {
-	IFFLAGSTR(domain_cap, FI_WRITE_COHERENT);
-	IFFLAGSTR(domain_cap, FI_CONTEXT);
-	IFFLAGSTR(domain_cap, FI_LOCAL_MR);
+	IFFLAGSTR(domain_cap, FI_USER_MR_KEY);
+	IFFLAGSTR(domain_cap, FI_DYNAMIC_MR);
 	fi_tostr_flags(buf, domain_cap);
 }
 
@@ -297,9 +303,6 @@ static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
 static void fi_tostr_info(char *buf, const struct fi_info *info)
 {
 	strcat(buf, "fi_info: [\n");
-	strcat(buf, "\ttype:\t");
-	fi_tostr_ep_type(buf, info->ep_type);
-
 	strcat(buf, "\tep_cap: [ ");
 	fi_tostr_ep_cap(buf, info->ep_cap);
 	strcat(buf, "]\n");
@@ -308,6 +311,12 @@ static void fi_tostr_info(char *buf, const struct fi_info *info)
 	fi_tostr_domain_cap(buf, info->domain_cap);
 	strcat(buf, "]\n");
 
+	strcat(buf, "\tmode: [ ");
+	fi_tostr_mode(buf, info->mode);
+	strcat(buf, "]\n");
+
+	strcat(buf, "\tep_type:\t");
+	fi_tostr_ep_type(buf, info->ep_type);
 	strcat(buf, "\tfi_addr_format:\t");
 	fi_tostr_addr_format(buf, info->addr_format);
 
@@ -388,6 +397,9 @@ char *fi_tostr(const void *data, enum fi_type datatype)
 		break;
 	case FI_TYPE_MSG_ORDER:
 		fi_tostr_order(buf, val64);
+		break;
+	case FI_TYPE_MODE:
+		fi_tostr_mode(buf, val64);
 		break;
 	default:
 		strcat(buf, "Unknown type");

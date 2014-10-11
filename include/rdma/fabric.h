@@ -178,12 +178,13 @@ enum {
 };
 
 /* Domain capabilities */
-#define FI_WRITE_COHERENT	(1ULL << 0)
-#define FI_CONTEXT		(1ULL << 1)
-#define FI_LOCAL_MR		(1ULL << 2)
-#define FI_USER_MR_KEY		(1ULL << 3)
-#define FI_DYNAMIC_MR		(1ULL << 4)
+#define FI_USER_MR_KEY		(1ULL << 0)
+#define FI_DYNAMIC_MR		(1ULL << 1)
 
+/* Mode bits */
+#define FI_CONTEXT		(1ULL << 0)
+#define FI_LOCAL_MR		(1ULL << 1)
+#define FI_WRITE_NONCOHERENT	(1ULL << 2)
 
 struct fi_tx_ctx_attr {
 	uint64_t		ep_cap;
@@ -245,6 +246,7 @@ struct fi_info {
 	struct fi_info		*next;
 	uint64_t		ep_cap;
 	uint64_t		domain_cap;
+	uint64_t		mode;
 	enum fi_ep_type		ep_type;
 	uint32_t		addr_format;
 	size_t			src_addrlen;
@@ -406,7 +408,8 @@ enum fi_type {
 	FI_TYPE_THREADING,
 	FI_TYPE_PROGRESS,
 	FI_TYPE_PROTOCOL,
-	FI_TYPE_MSG_ORDER
+	FI_TYPE_MSG_ORDER,
+	FI_TYPE_MODE
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);

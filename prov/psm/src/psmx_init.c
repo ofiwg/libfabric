@@ -146,11 +146,15 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			goto err_out;
 		}
 
-		if (hints->domain_attr &&
-		    ((hints->domain_cap & PSMX_DOMAIN_CAP) !=
-		      hints->domain_cap)) {
+		if ((hints->domain_cap & PSMX_DOMAIN_CAP) != hints->domain_cap) {
 			psmx_debug("%s: hints->domain_cap=0x%llx, supported=0x%llx\n",
 					__func__, hints->domain_cap, PSMX_DOMAIN_CAP);
+			goto err_out;
+		}
+		
+		if ((hints->mode & PSMX_MODE) != PSMX_MODE) {
+			psmx_debug("%s: hints->mode=0x%llx, required=0x%llx\n",
+					__func__, hints->mode, PSMX_MODE);
 			goto err_out;
 		}
 
@@ -222,6 +226,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->next = NULL;
 	psmx_info->ep_type = ep_type;
 	psmx_info->ep_cap = (hints && hints->ep_cap) ? hints->ep_cap : ep_cap;
+	psmx_info->mode = PSMX_MODE;
 	psmx_info->addr_format = FI_ADDR_PROTO;
 	psmx_info->src_addrlen = 0;
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);

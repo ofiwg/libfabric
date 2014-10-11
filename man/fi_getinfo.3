@@ -1,4 +1,4 @@
-.TH "FI_GETINFO" 3 "2014-09-11" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_GETINFO" 3 "2014-10-11" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 .SH SYNOPSIS
@@ -70,9 +70,9 @@ by this call.
 .nf
 struct fi_info {
 	struct fi_info        *next;
-	uint64_t              type;
 	uint64_t              ep_cap;
 	uint64_t              domain_cap;
+	uint64_t              mode;
 	enum fi_ep_type       ep_type;
 	uint32_t              addr_format;
 	size_t                src_addrlen;
@@ -90,25 +90,24 @@ struct fi_info {
 .IP "next"
 Pointer to the next fi_info structure in the list.  Will be NULL
 if no more structures exist.
-.IP "type"
-If specified, indicates the type of fabric interface communication desired.
-Supported types are listed in the
-.B "Endpoint types"
-section below.
 .IP "ep_cap - endpoint capabilities"
 If specified, indicates the desired endpoint communication capabilities. Supported
 capabilities are listed in the
 .B "Endpoint Capabilities"
 section below.
-.B "domain_cap - domain capabilities"
+.IP "domain_cap - domain capabilities"
 If specified, indicates the desired capabilities supported by the domain.
 Supported capabilities are listed in the
 .B "Domain Capabilities"
 section below.
-.IP "ep_type"
-Specifies the desired endpoint type.  Supported endpoint types are listed in
-the
-.B "Endpoint Types"
+.IP "mode"
+Operational modes supported by the application.  See the
+.B "Mode"
+secton below.
+.IP "ep_type - endpoint type"
+If specified, indicates the type of fabric interface communication desired.
+Supported types are listed in the
+.B "Endpoint types"
 section below.
 .IP "addr_format - address format"
 If specified, indicates the format of addresses referenced by the fabric
@@ -301,39 +300,38 @@ Indicates that the user desires the ability to cancel outstanding data
 transfer operations.  If FI_CANCEL is not set, a provider may optimize code
 paths with the assumption that fi_cancel will not be used by the application.
 .SH "DOMAIN CAPABILITIES"
-Domain capabilities are often used as output information from fi_getinfo,
-allowing applications to adjust their behavior based on the provider's
-hardware or software abilities.  However,specific capabilities may be
-requested through the hints parameter, with the actual supported capabilities
-returned by the provider.  Applications must check domain capabilities to
-ensure that all provider requirements for using resources associated with
-the access domain are met.
-.IP "FI_WRITE_COHERENT"
-Specifies that remote writes, including atomic operations, to the underlying
-fabric domain are coherent with the local processing domain.  Domain-level
-write coherency indicates that changes to local memory are visible to the
-local process immediately upon completion of a remote write operation.  The
-absence of this flag allows the NIC or memory subsystem to cache the results
-of remote write or atomic operations in non-coherent memory.
-.sp
-The behavior of a domain with and without FI_WRITE_COHERENT is illustrated
-below.
-.nf
-
-      Process 1            Process 2
-                           Register BUF
-      RMA write X to BUF
-      Notify process 2
-                           Receive notification
-                           if not FI_WRITE_COHERENT
-                                Sync with remote writes
-                           assert(BUF == X)
-
-.fi
-.sp
-This flag may be set on input hints to fi_getinfo if write coherency is
-required by an application.  If left unset, the pro  See the endpoint
-fi_ep_sync call for handling non-coherent writes.
+Domain capabilities are obtained by OR-ing the following flags together.
+If domain capabilities in the hint parameter are set to 0, the underlying
+provider will return the set of capabilities which are supported.  Otherwise,
+providers will only return domains matching the specified set of
+capabilities.  Providers may indicate that a domain supports capabilities
+beyond those requested when the use of expanded capabilities will not
+adversely affect performance.  Applications may use this feature to request a
+minimal set of requirements, then check the returned capabilities to enable
+additional optimizations.
+.IP "FI_USER_MR_KEY"
+The provider supports user requested memory registration keys.  Providers
+that set this capability honor the requested_key parameter for memory
+registration calls.
+.IP "FI_DYNAMIC_MR"
+The provider supports applications registering any range of addresses
+in their virtual address space, whether or not those addresses are
+back by physical pages or have been allocated to the app.
+Providers that lack this capability require that registered memory
+regions be backed by allocated memory pages.
+.SH "MODE"
+The operational mode bits are used to convey requirements that an application
+must adhere to when using the fabric interfaces.  Modes specify optimal ways
+of accessing the reported endpoint or domain.  Applications that are designed
+to support a specific mode of operation may see improved performance when
+that mode is desired by the provider.  It is recommended that providers
+support applications that disable any provider preferred modes.
+.PP
+On input to fi_getinfo, applications set the mode bits that they support.
+On output, providers will clear mode bits that are not necessary to achieve
+high-performance.  Mode bits that remain set indicate application requirements
+for using the fabric interfaces created using the returned fi_info.  The
+set of modes are listed below.
 .IP "FI_CONTEXT"
 Specifies that the provider requires that applications use struct fi_context
 as their per operation context parameter.  This structure should be treated as
@@ -352,16 +350,32 @@ The provider is optimized around having applications register memory
 for locally accessed data buffers.  Data buffers used in send and receive
 operations and as the source buffer for RMA and atomic operations must be
 registered by the application for access domains opened with this capability.
-.IP "FI_USER_MR_KEY"
-The provider supports user requested memory registration keys.  Providers
-that set this capability honor the requested_key parameter for memory
-registration calls.
-.IP "FI_DYNAMIC_MR"
-The provider supports applications registering any range of addresses
-in their virtual address space, whether or not those addresses are
-back by physical pages or have been allocated to the app.
-Providers that lack this capability require that registered memory
-regions be backed by allocated memory pages.
+.IP "FI_WRITE_NONCOHERENT"
+Specifies that remote writes, including atomic operations, to the underlying
+fabric domain are not coherent with the local processing domain and the
+application must manually synchronize memory accessed by remote RMA.
+Domain-level write coherency indicates that changes to local memory are
+visible to the local process immediately upon completion of a remote write
+operation.  When this mode is enabled, the NIC or memory subsystem
+may cache the results of remote write or atomic operations in non-coherent
+memory.
+.sp
+The behavior of a domain with and without FI_WRITE_NONCOHERENT is illustrated
+below.
+.nf
+
+      Process 1            Process 2
+                           Register BUF
+      RMA write X to BUF
+      Notify process 2
+                           Receive notification
+                           if FI_WRITE_NONCOHERENT
+                                Sync with remote writes
+                           assert(BUF == X)
+
+.fi
+.sp
+See the endpoint fi_ep_sync call for handling non-coherent writes.
 .SH "ENDPOINT TYPES"
 .IP "FI_EP_UNSPEC"
 The type of endpoint is not specified.  This is usually provided as input, with
