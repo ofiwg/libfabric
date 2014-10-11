@@ -353,6 +353,10 @@ RDMA CM protocol for connection establishment.
 The protocol runs over the Internet wide area RDMA protocol transport.
 .IP "FI_PROTO_IB_UD"
 The protocol runs over Infiniband unreliable datagram queue pairs.
+.IP "FI_PROTO_PSMX"
+The protocol is based on an Intel proprietary protocol known as PSM, 
+performance scaled messaging.  PSMX is an extended version of the PSM
+protocol to support the libfabric interfaces.
 .SS "max_msg_size - Max Message Size"
 Defines the maximum size for an application data transfer as a
 single operation.

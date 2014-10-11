@@ -114,10 +114,12 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		if (hints->ep_attr) {
 			switch (hints->ep_attr->protocol) {
 			case FI_PROTO_UNSPEC:
+			case FI_PROTO_PSMX:
 				break;
 			default:
-				psmx_debug("%s: hints->protocol=%d, supported=%d\n",
-						__func__, hints->ep_attr->protocol, FI_PROTO_UNSPEC);
+				psmx_debug("%s: hints->protocol=%d, supported=%d %d\n",
+						__func__, hints->ep_attr->protocol,
+						FI_PROTO_UNSPEC, FI_PROTO_PSMX);
 				goto err_out;
 			}
 		}
@@ -203,7 +205,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->rx_attr->op_flags = (hints && hints->rx_attr && hints->tx_attr->op_flags)
 					? hints->tx_attr->op_flags : 0;
 
-	psmx_info->ep_attr->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
+	psmx_info->ep_attr->protocol = FI_PROTO_PSMX;
 	psmx_info->ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
 	psmx_info->ep_attr->inject_size = PSMX_INJECT_SIZE;
 	psmx_info->ep_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */

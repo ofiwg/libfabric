@@ -125,7 +125,6 @@ extern "C" {
 			 FI_USER_MR_KEY | FI_DYNAMIC_MR)
 
 #define PSMX_OUI_INTEL	0x0002b3L
-#define PSMX_PROTOCOL	0x0001
 
 #define PSMX_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
 #define PSMX_INJECT_SIZE	(64)

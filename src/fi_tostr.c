@@ -169,6 +169,7 @@ static void fi_tostr_protocol(char *buf, enum fi_proto protocol)
 	CASEENUMSTR(FI_PROTO_RDMA_CM_IB_RC);
 	CASEENUMSTR(FI_PROTO_IWARP);
 	CASEENUMSTR(FI_PROTO_IB_UD);
+	CASEENUMSTR(FI_PROTO_PSMX);
 	default:
 		strcat(buf, "Unknown\n");
 		break;

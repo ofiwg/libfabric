@@ -177,6 +177,7 @@ enum fi_proto {
 	FI_PROTO_RDMA_CM_IB_RC,
 	FI_PROTO_IWARP,
 	FI_PROTO_IB_UD,
+	FI_PROTO_PSMX,
 };
 
 /* Domain capabilities */
