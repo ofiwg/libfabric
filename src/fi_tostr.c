@@ -156,7 +156,6 @@ static void fi_tostr_ep_type(char *buf, uint64_t ep_type)
 	CASEENUMSTR(FI_EP_MSG);
 	CASEENUMSTR(FI_EP_DGRAM);
 	CASEENUMSTR(FI_EP_RDM);
-	CASEENUMSTR(FI_EP_MAX);
 	default:
 		strcat(buf, "Unknown\n");
 		break;
