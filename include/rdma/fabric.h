@@ -149,6 +149,45 @@ enum fi_threading {
 #define FI_ORDER_SAW		(1 << 7)
 #define FI_ORDER_SAS		(1 << 8)
 
+/* Endpoint capabilities */
+#define FI_PASSIVE		(1ULL << 0)
+#define FI_MSG			(1ULL << 1)
+#define FI_RMA			(1ULL << 2)
+#define FI_TAGGED		(1ULL << 3)
+#define FI_ATOMICS		(1ULL << 4)
+#define FI_MULTICAST		(1ULL << 5)	/* multicast uses MSG ops */
+#define FI_NAMED_RX_CTX		(1ULL << 8)
+#define FI_BUFFERED_RECV	(1ULL << 9)
+
+enum fi_ep_type {
+	FI_EP_UNSPEC,
+	FI_EP_MSG,
+	FI_EP_DGRAM,
+	FI_EP_RDM,
+	/* FI_EP_RAW, */
+	/* FI_EP_PACKET, */
+	FI_EP_MAX
+};
+
+/* fi_info protocol field.
+ * If two providers support the same protocol, then they shall interoperate
+ * when the protocol capabilities match.
+ */
+enum fi_proto {
+	FI_PROTO_UNSPEC,
+	FI_PROTO_RDMA_CM_IB_RC,
+	FI_PROTO_IWARP,
+	FI_PROTO_IB_UD,
+};
+
+/* Domain capabilities */
+#define FI_WRITE_COHERENT	(1ULL << 0)
+#define FI_CONTEXT		(1ULL << 1)
+#define FI_LOCAL_MR		(1ULL << 2)
+#define FI_USER_MR_KEY		(1ULL << 3)
+#define FI_DYNAMIC_MR		(1ULL << 4)
+
+
 struct fi_tx_ctx_attr {
 	uint64_t		ep_cap;
 	uint64_t		op_flags;
