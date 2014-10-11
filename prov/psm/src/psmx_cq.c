@@ -546,7 +546,47 @@ static int psmx_cq_close(fid_t fid)
 	struct psmx_fid_cq *cq;
 
 	cq = container_of(fid, struct psmx_fid_cq, cq.fid);
+
+	if (cq->wait) {
+		if (cq->wait->type == FI_WAIT_FD) {
+			close(cq->wait->fd[0]);
+			close(cq->wait->fd[1]);
+		}
+		free(cq->wait);
+	}
+
 	free(cq);
+
+	return 0;
+}
+
+static int psmx_cq_control(struct fid *fid, int command, void *arg)
+{
+	struct psmx_fid_cq *cq;
+
+	cq = container_of(fid, struct psmx_fid_cq, cq.fid);
+
+	switch (command) {
+	case FI_GETWAIT:
+		if (!cq->wait) {
+			switch (cq->wait->type) {
+			case FI_WAIT_SET:
+				*(struct fid_wait **)arg = cq->wait->wait_set;
+				break;
+			case FI_WAIT_FD:
+				*(int *)arg = cq->wait->fd[0];
+				break;
+			case FI_WAIT_MUT_COND:
+				memcpy(arg, &cq->wait->mutex_cond,
+					sizeof(cq->wait->mutex_cond));
+				break;
+			}
+		}
+		break;
+
+	default:
+		return -ENOSYS;
+	}
 
 	return 0;
 }
@@ -556,7 +596,7 @@ static struct fi_ops psmx_fi_ops = {
 	.close = psmx_cq_close,
 	.bind = fi_no_bind,
 	.sync = fi_no_sync,
-	.control = fi_no_control,
+	.control = psmx_cq_control,
 };
 
 static struct fi_ops_cq psmx_cq_ops = {
@@ -570,12 +610,44 @@ static struct fi_ops_cq psmx_cq_ops = {
 	.strerror = psmx_cq_strerror,
 };
 
+int psmx_cq_init_wait(struct psmx_wait *wait, struct fi_cq_attr *attr)
+{
+	int err;
+
+	wait->type = attr->wait_obj;
+	wait->cond = attr->wait_cond;
+
+	switch(attr->wait_obj) {
+	case FI_WAIT_SET:
+		wait->wait_set = attr->wait_set;
+		break;
+
+	case FI_WAIT_FD:
+		err = pipe(wait->fd);
+		if (err)
+			return -errno;
+		break;
+
+	case FI_WAIT_MUT_COND:
+		pthread_mutex_init(&wait->mutex_cond.mutex, NULL);
+		pthread_cond_init(&wait->mutex_cond.cond, NULL);
+		break;
+
+	default:
+		break;
+	}
+
+	return 0;
+}
+
 int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context)
 {
 	struct psmx_fid_domain *domain_priv;
 	struct psmx_fid_cq *cq_priv;
 	int entry_size;
+	struct psmx_wait *wait = NULL;
+	int err;
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:
@@ -605,14 +677,60 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_EINVAL;
 	}
 
+	switch (attr->wait_obj) {
+	case FI_WAIT_NONE:
+		break;
+
+	case FI_WAIT_SET:
+		if (!attr->wait_set) {
+			psmx_debug("%s: FI_WAIT_SET is specified but attr->wait_set is NULL\n",
+				   __func__);
+			return -FI_EINVAL;
+		}
+		/* fall through */
+	case FI_WAIT_UNSPECIFIED:
+	case FI_WAIT_FD:
+	case FI_WAIT_MUT_COND:
+		switch (attr->wait_cond) {
+		case FI_CQ_COND_NONE:
+		case FI_CQ_COND_THRESHOLD:
+			break;
+
+		default:
+			psmx_debug("%s: attr->wait_cond=%d, supported=%d...%d\n", __func__,
+					attr->wait_cond, FI_CQ_COND_NONE, FI_CQ_COND_THRESHOLD);
+			return -FI_EINVAL;
+		}
+
+		wait = calloc(sizeof(*wait), 1);
+		if (!wait)
+			return -FI_ENOMEM;
+
+		err = psmx_cq_init_wait(wait, attr);
+		if (err) {
+			free(wait);
+			return err;
+		}
+		break;
+
+	default:
+		psmx_debug("%s: attr->wait_obj=%d, supported=%d...%d\n", __func__, attr->wait_obj,
+				FI_WAIT_NONE, FI_WAIT_MUT_COND);
+		return -FI_EINVAL;
+	}
+
 	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
 	cq_priv = (struct psmx_fid_cq *) calloc(1, sizeof *cq_priv);
-	if (!cq_priv)
+	if (!cq_priv) {
+		if (wait)
+			free(wait);
 		return -FI_ENOMEM;
+	}
 
 	cq_priv->domain = domain_priv;
 	cq_priv->format = attr->format;
 	cq_priv->entry_size = entry_size;
+	cq_priv->wait = wait;
 	cq_priv->cq.fid.fclass = FI_CLASS_CQ;
 	cq_priv->cq.fid.context = context;
 	cq_priv->cq.fid.ops = &psmx_fi_ops;

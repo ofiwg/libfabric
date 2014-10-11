@@ -272,6 +272,19 @@ struct psmx_cq_event_queue {
 	struct psmx_cq_event	*tail;
 };
 
+struct psmx_wait {
+	int				type;
+	int				cond;
+	union {
+		struct fid_wait		*wait_set;
+		int			fd[2];
+		struct {
+		  pthread_mutex_t mutex;
+		  pthread_cond_t cond;
+		}			mutex_cond;
+	};
+};
+
 struct psmx_fid_cq {
 	struct fid_cq			cq;
 	struct psmx_fid_domain		*domain;
@@ -280,6 +293,7 @@ struct psmx_fid_cq {
 	struct psmx_cq_event_queue	event_queue;
 	struct psmx_cq_event		*pending_error;
 	int				poll_am_before_mq;
+	struct psmx_wait		*wait;
 };
 
 enum psmx_triggered_op {
