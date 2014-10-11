@@ -63,12 +63,9 @@ enum {
 uint32_t fi_version(void);
 
 /*
- * Vendor specific protocols/etc. are encoded as OUI, followed by vendor
- * specific data.  Vendor specific enum values are indicated by setting the
- * high-order bit.
+ * Provider specific values are indicated by setting the high-order bit.
  */
-#define FI_OUI_SHIFT		48
-#define FI_PROV_ENUM		(1 << 31)
+#define FI_PROV_SPECIFIC	(1 << 31)
 
 /* fi_info and operation flags - pass into endpoint ops calls.
  * A user may also set these on a endpoint by using fcntl, which has the
@@ -79,10 +76,10 @@ uint32_t fi_version(void);
  * Flags
  * The 64-bit flag field is divided as follows:
  * bits		use
- *  0 -  9	operation specific (used for a single call)
- * 10 - 55	common (usable with multiple operations)
- * 56 - 59	reserved
- * 60 - 63	provider-domain specific
+ *  0 - 10	operation specific (used for a single call)
+ * 11 - 32	common (usable with multiple operations)
+ * 33 - 59	reserved
+ * 60 - 63	provider specific
  */
 
 #define FI_INJECT		(1ULL << 11)
@@ -115,7 +112,7 @@ struct fi_ioc {
 /*
  * Format for transport addresses: sendto, writeto, etc.
  */
-enum fi_addr_format {
+enum {
 	FI_ADDR_PROTO,		/* void * proto_addr */
 	FI_SOCKADDR,		/* struct sockaddr */
 	FI_SOCKADDR_IN,		/* struct sockaddr_in */
@@ -168,11 +165,11 @@ enum fi_ep_type {
 	/* FI_EP_PACKET, */
 };
 
-/* fi_info protocol field.
+/* Endpoint protocol
  * If two providers support the same protocol, then they shall interoperate
  * when the protocol capabilities match.
  */
-enum fi_proto {
+enum {
 	FI_PROTO_UNSPEC,
 	FI_PROTO_RDMA_CM_IB_RC,
 	FI_PROTO_IWARP,
@@ -209,7 +206,7 @@ struct fi_rx_ctx_attr {
 };
 
 struct fi_ep_attr {
-	uint64_t		protocol;
+	uint32_t		protocol;
 	size_t			max_msg_size;
 	size_t			inject_size;
 	size_t			total_buffered_recv;
@@ -246,10 +243,10 @@ struct fi_fabric_attr {
 
 struct fi_info {
 	struct fi_info		*next;
-	uint64_t		type;
 	uint64_t		ep_cap;
 	uint64_t		domain_cap;
-	enum fi_addr_format	addr_format;
+	enum fi_ep_type		type;
+	uint32_t		addr_format;
 	size_t			src_addrlen;
 	size_t			dest_addrlen;
 	void			*src_addr;

@@ -85,16 +85,19 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_TRIGGER);
 }
 
-static void fi_tostr_addr_format(char *buf, enum fi_addr_format addr_format)
+static void fi_tostr_addr_format(char *buf, uint32_t addr_format)
 {
-	switch(addr_format) {
+	switch (addr_format) {
 	CASEENUMSTR(FI_ADDR_PROTO);
 	CASEENUMSTR(FI_SOCKADDR);
 	CASEENUMSTR(FI_SOCKADDR_IN);
 	CASEENUMSTR(FI_SOCKADDR_IN6);
 	CASEENUMSTR(FI_SOCKADDR_IB);
 	default:
-		strcat(buf, "Unknown\n");
+		if (addr_format & FI_PROV_SPECIFIC)
+			strcat(buf, "Provider specific\n");
+		else
+			strcat(buf, "Unknown\n");
 		break;
 	}
 }
@@ -149,7 +152,7 @@ static void fi_tostr_ep_cap(char *buf, uint64_t ep_cap)
 	fi_tostr_flags(buf, ep_cap);
 }
 
-static void fi_tostr_ep_type(char *buf, uint64_t ep_type)
+static void fi_tostr_ep_type(char *buf, enum fi_ep_type ep_type)
 {
 	switch (ep_type) {
 	CASEENUMSTR(FI_EP_UNSPEC);
@@ -162,7 +165,7 @@ static void fi_tostr_ep_type(char *buf, uint64_t ep_type)
 	}
 }
 
-static void fi_tostr_protocol(char *buf, enum fi_proto protocol)
+static void fi_tostr_protocol(char *buf, uint32_t protocol)
 {
 	switch (protocol) {
 	CASEENUMSTR(FI_PROTO_UNSPEC);
@@ -171,7 +174,10 @@ static void fi_tostr_protocol(char *buf, enum fi_proto protocol)
 	CASEENUMSTR(FI_PROTO_IB_UD);
 	CASEENUMSTR(FI_PROTO_PSMX);
 	default:
-		strcat(buf, "Unknown\n");
+		if (protocol & FI_PROV_SPECIFIC)
+			strcat(buf, "Provider specific\n");
+		else
+			strcat(buf, "Unknown\n");
 		break;
 	}
 }
@@ -323,6 +329,7 @@ char *fi_tostr(const void *data, enum fi_type datatype)
 {
 	static __thread char *buf;
 	uint64_t val64 = *(const uint64_t *) data;
+	uint32_t val32 = *(const uint32_t *) data;
 	int enumval = *(const int *) data;
 
 	if (!data)
@@ -341,7 +348,7 @@ char *fi_tostr(const void *data, enum fi_type datatype)
 		fi_tostr_info(buf, data);
 		break;
 	case FI_TYPE_EP_TYPE:
-		fi_tostr_ep_type(buf, val64);
+		fi_tostr_ep_type(buf, enumval);
 		break;
 	case FI_TYPE_EP_CAP:
 		fi_tostr_ep_cap(buf, val64);
@@ -350,7 +357,7 @@ char *fi_tostr(const void *data, enum fi_type datatype)
 		fi_tostr_flags(buf, val64);
 		break;
 	case FI_TYPE_ADDR_FORMAT:
-		fi_tostr_addr_format(buf, enumval);
+		fi_tostr_addr_format(buf, val32);
 		break;
 	case FI_TYPE_TX_ATTR:
 		fi_tostr_tx_attr(buf, data, "");
