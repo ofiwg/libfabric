@@ -104,24 +104,23 @@ extern "C" {
 #define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_EVENT | \
 			 FI_TRIGGER | FI_REMOTE_SIGNAL | FI_REMOTE_COMPLETE)
 
-#define PSMX_EP_CAP_EXT	(0)
+#define PSMX_CAP_EXT	(0)
 
 /* FI_MSG and FI_RMA appear in both BASE and OPT because they can be
  * supported w/ or w/o reserved tag bits
  */
-#define PSMX_EP_CAP_BASE (FI_TAGGED | FI_MSG | FI_ATOMICS | FI_INJECT | \
+#define PSMX_CAP_BASE	(FI_TAGGED | FI_MSG | FI_ATOMICS | FI_INJECT | \
 			 FI_RMA | FI_BUFFERED_RECV | FI_MULTI_RECV | \
                          FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
                          FI_REMOTE_COMPLETE | FI_REMOTE_SIGNAL | \
 			 FI_CANCEL | FI_TRIGGER | \
-			 PSMX_EP_CAP_EXT)
-#define PSMX_EP_CAP_OPT1 (FI_MSG)
-#define PSMX_EP_CAP_OPT2 (FI_RMA)
+			 FI_USER_MR_KEY | FI_DYNAMIC_MR | \
+			 PSMX_CAP_EXT)
+#define PSMX_CAP_OPT1	(FI_MSG)
+#define PSMX_CAP_OPT2	(FI_RMA)
 
-#define PSMX_EP_CAP	(PSMX_EP_CAP_BASE | PSMX_EP_CAP_OPT1 | PSMX_EP_CAP_OPT2)
-
-#define PSMX_DOMAIN_CAP (FI_USER_MR_KEY | FI_DYNAMIC_MR)
+#define PSMX_CAPS	(PSMX_CAP_BASE | PSMX_CAP_OPT1 | PSMX_CAP_OPT2)
 
 #define PSMX_MODE	(FI_CONTEXT)
 

@@ -172,7 +172,7 @@ err_out:
 
 int psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap)
 {
-	if ((ep_cap & PSMX_EP_CAP) != ep_cap)
+	if ((ep_cap & PSMX_CAPS) != ep_cap)
 		return -EINVAL;
 
 	if ((ep_cap & FI_TAGGED) && domain->tagged_used)

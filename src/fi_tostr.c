@@ -140,16 +140,18 @@ static void fi_tostr_order(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_ORDER_SAS);
 }
 
-static void fi_tostr_ep_cap(char *buf, uint64_t ep_cap)
+static void fi_tostr_caps(char *buf, uint64_t caps)
 {
-	IFFLAGSTR(ep_cap, FI_PASSIVE);
-	IFFLAGSTR(ep_cap, FI_MSG);
-	IFFLAGSTR(ep_cap, FI_RMA);
-	IFFLAGSTR(ep_cap, FI_TAGGED);
-	IFFLAGSTR(ep_cap, FI_ATOMICS);
-	IFFLAGSTR(ep_cap, FI_MULTICAST);
-	IFFLAGSTR(ep_cap, FI_BUFFERED_RECV);
-	fi_tostr_flags(buf, ep_cap);
+	IFFLAGSTR(caps, FI_PASSIVE);
+	IFFLAGSTR(caps, FI_MSG);
+	IFFLAGSTR(caps, FI_RMA);
+	IFFLAGSTR(caps, FI_TAGGED);
+	IFFLAGSTR(caps, FI_ATOMICS);
+	IFFLAGSTR(caps, FI_MULTICAST);
+	IFFLAGSTR(caps, FI_USER_MR_KEY);
+	IFFLAGSTR(caps, FI_DYNAMIC_MR);
+	IFFLAGSTR(caps, FI_BUFFERED_RECV);
+	fi_tostr_flags(buf, caps);
 }
 
 static void fi_tostr_ep_type(char *buf, enum fi_ep_type ep_type)
@@ -189,19 +191,12 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 	IFFLAGSTR(mode, FI_LOCAL_MR);
 }
 
-static void fi_tostr_domain_cap(char *buf, uint64_t domain_cap)
-{
-	IFFLAGSTR(domain_cap, FI_USER_MR_KEY);
-	IFFLAGSTR(domain_cap, FI_DYNAMIC_MR);
-	fi_tostr_flags(buf, domain_cap);
-}
-
 static void fi_tostr_tx_attr(char *buf, const struct fi_tx_ctx_attr *attr,
 			     const char *prefix)
 {
 	strcatf(buf, "%sfi_tx_attr: [\n", prefix);
-	strcatf(buf, "%s\tep_cap: [ ", prefix);
-	fi_tostr_ep_cap(buf, attr->ep_cap);
+	strcatf(buf, "%s\tcaps: [ ", prefix);
+	fi_tostr_caps(buf, attr->caps);
 	strcat(buf, "]\n");
 
 	strcatf(buf, "%s\top_flags: [ ", prefix);
@@ -223,8 +218,8 @@ static void fi_tostr_rx_attr(char *buf, const struct fi_rx_ctx_attr *attr,
 			     const char *prefix)
 {
 	strcatf(buf, "%sfi_rx_attr: [\n", prefix);
-	strcatf(buf, "%s\tep_cap: [ ", prefix);
-	fi_tostr_ep_cap(buf, attr->ep_cap);
+	strcatf(buf, "%s\tcaps: [ ", prefix);
+	fi_tostr_caps(buf, attr->caps);
 	strcat(buf, "]\n");
 
 	strcatf(buf, "%s\top_flags: [ ", prefix);
@@ -303,12 +298,8 @@ static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
 static void fi_tostr_info(char *buf, const struct fi_info *info)
 {
 	strcat(buf, "fi_info: [\n");
-	strcat(buf, "\tep_cap: [ ");
-	fi_tostr_ep_cap(buf, info->ep_cap);
-	strcat(buf, "]\n");
-
-	strcat(buf, "\tdomain_cap: [ ");
-	fi_tostr_domain_cap(buf, info->domain_cap);
+	strcat(buf, "\tcaps: [ ");
+	fi_tostr_caps(buf, info->caps);
 	strcat(buf, "]\n");
 
 	strcat(buf, "\tmode: [ ");
@@ -359,8 +350,8 @@ char *fi_tostr(const void *data, enum fi_type datatype)
 	case FI_TYPE_EP_TYPE:
 		fi_tostr_ep_type(buf, enumval);
 		break;
-	case FI_TYPE_EP_CAP:
-		fi_tostr_ep_cap(buf, val64);
+	case FI_TYPE_CAPS:
+		fi_tostr_caps(buf, val64);
 		break;
 	case FI_TYPE_OP_FLAGS:
 		fi_tostr_flags(buf, val64);
@@ -382,9 +373,6 @@ char *fi_tostr(const void *data, enum fi_type datatype)
 		break;
 	case FI_TYPE_FABRIC_ATTR:
 		fi_tostr_fabric_attr(buf, data, "");
-		break;
-	case FI_TYPE_DOMAIN_CAP:
-		fi_tostr_domain_cap(buf, val64);
 		break;
 	case FI_TYPE_THREADING:
 		fi_tostr_threading(buf, enumval);

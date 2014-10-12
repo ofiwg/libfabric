@@ -70,8 +70,7 @@ by this call.
 .nf
 struct fi_info {
 	struct fi_info        *next;
-	uint64_t              ep_cap;
-	uint64_t              domain_cap;
+	uint64_t              caps;
 	uint64_t              mode;
 	enum fi_ep_type       ep_type;
 	uint32_t              addr_format;
@@ -90,15 +89,10 @@ struct fi_info {
 .IP "next"
 Pointer to the next fi_info structure in the list.  Will be NULL
 if no more structures exist.
-.IP "ep_cap - endpoint capabilities"
-If specified, indicates the desired endpoint communication capabilities. Supported
-capabilities are listed in the
-.B "Endpoint Capabilities"
-section below.
-.IP "domain_cap - domain capabilities"
-If specified, indicates the desired capabilities supported by the domain.
+.IP "caps - fabric interface capabilities"
+If specified, indicates the desired capabilities of the fabric interfaces.
 Supported capabilities are listed in the
-.B "Domain Capabilities"
+.B "Capabilities"
 section below.
 .IP "mode"
 Operational modes supported by the application.  See the
@@ -167,14 +161,15 @@ When provided as hints, requested values of struct fi_fabric_attr should be
 set.  On output, the actual fabric attributes
 that can be provided will be returned.
 See fi_fabric(3) for details.
-.SH "ENDPOINT CAPABILITIES"
-Endpoint capabilities are obtained by OR-ing the following flags together.
-If endpoint capabilities in the hint parameter are set to 0, the underlying
+.SH "CAPABILITIES"
+Interface capabilities are obtained by OR-ing the following flags together.
+If capabilities in the hint parameter are set to 0, the underlying
 provider will return the set of capabilities which are supported.  Otherwise,
-providers will only return endpoints matching the specified set of
-capabilities.  Providers may indicate that an endpoint supports capabilities
+providers will only return data matching the specified set of
+capabilities.  Providers may indicate support for additional capabilities
 beyond those requested when the use of expanded capabilities will not
-adversely affect performance.  Applications may use this feature to request a
+adversely affect performance or expose the application to communication
+beyond that which was requested.  Applications may use this feature to request a
 minimal set of requirements, then check the returned capabilities to enable
 additional optimizations.
 .IP "FI_PASSIVE"
@@ -223,10 +218,16 @@ struct fi_msg_ops, when a multicast address is specified as the destination
 address.  In the absence of any relevant flags, FI_MULTICAST implies
 the ability to send and receive messages.  Applications can use the FI_SEND and
 FI_RECV flags to optimize an endpoint as send-only or receive-only.
-.IP "FI_TRIGGER"
-Indicates that the endpoint should support triggered operations.  Endpoints
-support this capability must meet the usage model as described by
-fi_trigger.3. 
+.IP "FI_USER_MR_KEY"
+The provider supports user requested memory registration keys.  Providers
+that set this capability honor the requested_key parameter for memory
+registration calls.
+.IP "FI_DYNAMIC_MR"
+The provider supports applications registering any range of addresses
+in their virtual address space, whether or not those addresses are
+back by physical pages or have been allocated to the app.
+Providers that lack this capability require that registered memory
+regions be backed by allocated memory pages.
 .IP "FI_NAMED_RX_CTX"
 Requests that endpoints which support multiple receive contexts allow an
 initiator to target (or name) a specific receive context as part of a data
@@ -299,26 +300,10 @@ appropriately.
 Indicates that the user desires the ability to cancel outstanding data
 transfer operations.  If FI_CANCEL is not set, a provider may optimize code
 paths with the assumption that fi_cancel will not be used by the application.
-.SH "DOMAIN CAPABILITIES"
-Domain capabilities are obtained by OR-ing the following flags together.
-If domain capabilities in the hint parameter are set to 0, the underlying
-provider will return the set of capabilities which are supported.  Otherwise,
-providers will only return domains matching the specified set of
-capabilities.  Providers may indicate that a domain supports capabilities
-beyond those requested when the use of expanded capabilities will not
-adversely affect performance.  Applications may use this feature to request a
-minimal set of requirements, then check the returned capabilities to enable
-additional optimizations.
-.IP "FI_USER_MR_KEY"
-The provider supports user requested memory registration keys.  Providers
-that set this capability honor the requested_key parameter for memory
-registration calls.
-.IP "FI_DYNAMIC_MR"
-The provider supports applications registering any range of addresses
-in their virtual address space, whether or not those addresses are
-back by physical pages or have been allocated to the app.
-Providers that lack this capability require that registered memory
-regions be backed by allocated memory pages.
+.IP "FI_TRIGGER"
+Indicates that the endpoint should support triggered operations.  Endpoints
+support this capability must meet the usage model as described by
+fi_trigger.3. 
 .SH "MODE"
 The operational mode bits are used to convey requirements that an application
 must adhere to when using the fabric interfaces.  Modes specify optimal ways

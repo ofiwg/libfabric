@@ -72,6 +72,18 @@ uint32_t fi_version(void);
  * affect of applying them to all applicable operations.
  */
 
+/* FI capabilities */
+#define FI_PASSIVE		(1ULL << 0)
+#define FI_MSG			(1ULL << 1)
+#define FI_RMA			(1ULL << 2)
+#define FI_TAGGED		(1ULL << 3)
+#define FI_ATOMICS		(1ULL << 4)
+#define FI_MULTICAST		(1ULL << 5)	/* multicast uses MSG ops */
+#define FI_USER_MR_KEY		(1ULL << 6)
+#define FI_DYNAMIC_MR		(1ULL << 7)
+#define FI_NAMED_RX_CTX		(1ULL << 8)
+#define FI_BUFFERED_RECV	(1ULL << 9)
+
 /*
  * Flags
  * The 64-bit flag field is divided as follows:
@@ -146,16 +158,6 @@ enum fi_threading {
 #define FI_ORDER_SAW		(1 << 7)
 #define FI_ORDER_SAS		(1 << 8)
 
-/* Endpoint capabilities */
-#define FI_PASSIVE		(1ULL << 0)
-#define FI_MSG			(1ULL << 1)
-#define FI_RMA			(1ULL << 2)
-#define FI_TAGGED		(1ULL << 3)
-#define FI_ATOMICS		(1ULL << 4)
-#define FI_MULTICAST		(1ULL << 5)	/* multicast uses MSG ops */
-#define FI_NAMED_RX_CTX		(1ULL << 8)
-#define FI_BUFFERED_RECV	(1ULL << 9)
-
 enum fi_ep_type {
 	FI_EP_UNSPEC,
 	FI_EP_MSG,
@@ -177,17 +179,13 @@ enum {
 	FI_PROTO_PSMX,
 };
 
-/* Domain capabilities */
-#define FI_USER_MR_KEY		(1ULL << 0)
-#define FI_DYNAMIC_MR		(1ULL << 1)
-
 /* Mode bits */
 #define FI_CONTEXT		(1ULL << 0)
 #define FI_LOCAL_MR		(1ULL << 1)
 #define FI_WRITE_NONCOHERENT	(1ULL << 2)
 
 struct fi_tx_ctx_attr {
-	uint64_t		ep_cap;
+	uint64_t		caps;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
 	size_t			inject_size;
@@ -197,7 +195,7 @@ struct fi_tx_ctx_attr {
 };
 
 struct fi_rx_ctx_attr {
-	uint64_t		ep_cap;
+	uint64_t		caps;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
 	size_t			total_buffered_recv;
@@ -245,8 +243,7 @@ struct fi_fabric_attr {
 
 struct fi_info {
 	struct fi_info		*next;
-	uint64_t		ep_cap;
-	uint64_t		domain_cap;
+	uint64_t		caps;
 	uint64_t		mode;
 	enum fi_ep_type		ep_type;
 	uint32_t		addr_format;
@@ -397,7 +394,7 @@ fi_open_ops(struct fid *fid, const char *name, uint64_t flags,
 enum fi_type {
 	FI_TYPE_INFO,
 	FI_TYPE_EP_TYPE,
-	FI_TYPE_EP_CAP,
+	FI_TYPE_CAPS,
 	FI_TYPE_OP_FLAGS,
 	FI_TYPE_ADDR_FORMAT,
 	FI_TYPE_TX_ATTR,
@@ -405,7 +402,6 @@ enum fi_type {
 	FI_TYPE_EP_ATTR,
 	FI_TYPE_DOMAIN_ATTR,
 	FI_TYPE_FABRIC_ATTR,
-	FI_TYPE_DOMAIN_CAP,
 	FI_TYPE_THREADING,
 	FI_TYPE_PROGRESS,
 	FI_TYPE_PROTOCOL,
