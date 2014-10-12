@@ -270,10 +270,9 @@ static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	struct psmx_fid_mr *mr_priv;
 	uint64_t key;
 
-	if ((flags & FI_MR_KEY) && psmx_mr_hash_get(requested_key))
-			return -FI_ENOKEY;
-
 	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
+	if (!(domain_priv->mode & FI_PROV_MR_KEY) && psmx_mr_hash_get(requested_key))
+			return -FI_ENOKEY;
 
 	mr_priv = (struct psmx_fid_mr *) calloc(1, sizeof(*mr_priv) + sizeof(struct iovec));
 	if (!mr_priv)
@@ -283,7 +282,7 @@ static int psmx_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	mr_priv->mr.fid.context = context;
 	mr_priv->mr.fid.ops = &psmx_fi_ops;
 	mr_priv->mr.mem_desc = mr_priv;
-	if (flags & FI_MR_KEY) {
+	if (!(domain_priv->mode & FI_PROV_MR_KEY)) {
 		key = requested_key;
 	}
 	else {
@@ -317,10 +316,9 @@ static int psmx_mr_regv(struct fid_domain *domain,
 	int i;
 	uint64_t key;
 
-	if ((flags & FI_MR_KEY) && psmx_mr_hash_get(requested_key))
-			return -FI_ENOKEY;
-
 	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
+	if (!(domain_priv->mode & FI_PROV_MR_KEY) && psmx_mr_hash_get(requested_key))
+			return -FI_ENOKEY;
 
 	if (count == 0 || iov == NULL)
 		return -EINVAL;
@@ -335,7 +333,7 @@ static int psmx_mr_regv(struct fid_domain *domain,
 	mr_priv->mr.fid.context = context;
 	mr_priv->mr.fid.ops = &psmx_fi_ops;
 	mr_priv->mr.mem_desc = mr_priv;
-	if (flags & FI_MR_KEY) {
+	if (!(domain_priv->mode & FI_PROV_MR_KEY)) {
 		key = requested_key;
 	}
 	else {
@@ -368,10 +366,9 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 	int i;
 	uint64_t key;
 
-	if ((flags & FI_MR_KEY) && psmx_mr_hash_get(attr->requested_key))
-			return -FI_ENOKEY;
-
 	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
+	if (!(domain_priv->mode & FI_PROV_MR_KEY) && psmx_mr_hash_get(attr->requested_key))
+			return -FI_ENOKEY;
 
 	if (!attr)
 		return -EINVAL;
@@ -388,7 +385,7 @@ static int psmx_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *a
 	mr_priv->mr.fid.fclass = FI_CLASS_MR;
 	mr_priv->mr.fid.ops = &psmx_fi_ops;
 	mr_priv->mr.mem_desc = mr_priv;
-	if (flags & FI_MR_KEY) {
+	if (!(domain_priv->mode & FI_PROV_MR_KEY)) {
 		key = attr->requested_key;
 	}
 	else {

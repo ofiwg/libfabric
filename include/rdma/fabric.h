@@ -78,7 +78,6 @@ uint32_t fi_version(void);
 #define FI_TAGGED		(1ULL << 3)
 #define FI_ATOMICS		(1ULL << 4)
 #define FI_MULTICAST		(1ULL << 5)	/* multicast uses MSG ops */
-#define FI_USER_MR_KEY		(1ULL << 6)
 #define FI_DYNAMIC_MR		(1ULL << 7)
 #define FI_NAMED_RX_CTX		(1ULL << 8)
 #define FI_BUFFERED_RECV	(1ULL << 9)
@@ -182,6 +181,7 @@ enum {
 #define FI_CONTEXT		(1ULL << 0)
 #define FI_LOCAL_MR		(1ULL << 1)
 #define FI_WRITE_NONCOHERENT	(1ULL << 2)
+#define FI_PROV_MR_KEY		(1ULL << 3)
 
 struct fi_tx_ctx_attr {
 	uint64_t		caps;

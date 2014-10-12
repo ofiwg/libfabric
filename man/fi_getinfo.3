@@ -212,10 +212,6 @@ struct fi_msg_ops, when a multicast address is specified as the destination
 address.  In the absence of any relevant flags, FI_MULTICAST implies
 the ability to send and receive messages.  Applications can use the FI_SEND and
 FI_RECV flags to optimize an endpoint as send-only or receive-only.
-.IP "FI_USER_MR_KEY"
-The provider supports user requested memory registration keys.  Providers
-that set this capability honor the requested_key parameter for memory
-registration calls.
 .IP "FI_DYNAMIC_MR"
 The provider supports applications registering any range of addresses
 in their virtual address space, whether or not those addresses are
@@ -381,6 +377,14 @@ required to define a msg_prefix_size that is a multiple of 8 bytes.
 Additionally, applications may receive provider generated packets that do
 not contain application data.  Such received messages will indicate a
 transfer size of 0 bytes.
+.IP "FI_PROV_MR_KEY"
+The provider assigns the memory registration keys that applications must use.
+Providers that set this mode require applications to exchange assigned MR
+keys with peer processes performing RMA operations, with the MR key value
+selected by the provider.  If FI_PROV_MR_KEY is disabled, applications
+must select all MR keys.  Applications can
+request that providers generate MR keys by forcing this bit set after
+fi_getinfo returns.
 .SH "ENDPOINT TYPES"
 .IP "FI_EP_UNSPEC"
 The type of endpoint is not specified.  This is usually provided as input, with

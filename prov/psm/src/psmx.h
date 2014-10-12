@@ -115,7 +115,7 @@ extern "C" {
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
                          FI_REMOTE_COMPLETE | FI_REMOTE_SIGNAL | \
 			 FI_CANCEL | FI_TRIGGER | \
-			 FI_USER_MR_KEY | FI_DYNAMIC_MR | \
+			 FI_DYNAMIC_MR | \
 			 PSMX_CAP_EXT)
 #define PSMX_CAP_OPT1	(FI_MSG)
 #define PSMX_CAP_OPT2	(FI_RMA)
@@ -279,6 +279,7 @@ struct psmx_fid_domain {
 	int			msg_used:1;
 	int			rma_used:1;
 	int			atomics_used:1;
+	uint64_t		mode;
 
 	int			use_am_msg;
 	int			use_tagged_rma;

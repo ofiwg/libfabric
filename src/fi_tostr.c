@@ -147,7 +147,6 @@ static void fi_tostr_caps(char *buf, uint64_t caps)
 	IFFLAGSTR(caps, FI_TAGGED);
 	IFFLAGSTR(caps, FI_ATOMICS);
 	IFFLAGSTR(caps, FI_MULTICAST);
-	IFFLAGSTR(caps, FI_USER_MR_KEY);
 	IFFLAGSTR(caps, FI_DYNAMIC_MR);
 	IFFLAGSTR(caps, FI_BUFFERED_RECV);
 	fi_tostr_flags(buf, caps);
@@ -188,6 +187,7 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 	IFFLAGSTR(mode, FI_WRITE_NONCOHERENT);
 	IFFLAGSTR(mode, FI_CONTEXT);
 	IFFLAGSTR(mode, FI_LOCAL_MR);
+	IFFLAGSTR(mode, FI_PROV_MR_KEY);
 }
 
 static void fi_tostr_tx_attr(char *buf, const struct fi_tx_ctx_attr *attr,
