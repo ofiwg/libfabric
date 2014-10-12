@@ -153,7 +153,7 @@ static int fi_ibv_check_hints(struct fi_info *hints)
 		}
 	}
 
-	if ( !(hints->caps & (FI_PASSIVE | FI_MSG | FI_RMA)) )
+	if ( !(hints->caps & (FI_MSG | FI_RMA)) )
 		return -FI_ENODATA;
 
 	if (hints->fabric_attr && hints->fabric_attr->name &&
@@ -169,7 +169,7 @@ static int fi_ibv_check_hints(struct fi_info *hints)
 static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinfo *rai)
 {
 	memset(rai, 0, sizeof *rai);
-	if ((fi->caps & FI_PASSIVE) || (flags & FI_SOURCE))
+	if (flags & FI_SOURCE)
 		rai->ai_flags = RAI_PASSIVE;
 	if (flags & FI_NUMERICHOST)
 		rai->ai_flags |= RAI_NUMERICHOST;
@@ -207,9 +207,6 @@ static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addr
  static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
 		 	  struct fi_info *fi)
  {
- 	if ((hints->caps & FI_PASSIVE) && (rai->ai_flags & RAI_PASSIVE))
- 		fi->caps = FI_PASSIVE;
-
  //	fi->sa_family = rai->ai_family;
 	if (rai->ai_qp_type == IBV_QPT_RC || rai->ai_port_space == RDMA_PS_TCP) {
 		fi->caps |= FI_MSG | FI_RMA;

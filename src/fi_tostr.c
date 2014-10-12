@@ -142,7 +142,6 @@ static void fi_tostr_order(char *buf, uint64_t flags)
 
 static void fi_tostr_caps(char *buf, uint64_t caps)
 {
-	IFFLAGSTR(caps, FI_PASSIVE);
 	IFFLAGSTR(caps, FI_MSG);
 	IFFLAGSTR(caps, FI_RMA);
 	IFFLAGSTR(caps, FI_TAGGED);

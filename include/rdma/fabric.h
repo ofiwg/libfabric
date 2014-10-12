@@ -73,7 +73,6 @@ uint32_t fi_version(void);
  */
 
 /* FI capabilities */
-#define FI_PASSIVE		(1ULL << 0)
 #define FI_MSG			(1ULL << 1)
 #define FI_RMA			(1ULL << 2)
 #define FI_TAGGED		(1ULL << 3)

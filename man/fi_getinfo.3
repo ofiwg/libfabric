@@ -54,11 +54,9 @@ against the application being built from source against a newer version of the
 library that introduces new fields to data structures, which would not be
 initialized by the application.
 .PP
-Either node, service, or hints must be provided.  If hints are provided, the
-operation will be controlled by hints.ai_flags.  If FI_PASSIVE is
-specified, the call will resolve address information for use on the
-passive side of a connection.
-If node is provided, fi_getinfo will attempt to resolve the fabric address
+Either node, service, or hints must be provided, with any combination
+being supported.  If node is provided, fi_getinfo will attempt
+to resolve the fabric address
 to the given node.  The hints parameter, if provided,
 may be used to control the resulting output as indicated below.
 If node is not given, fi_getinfo will attempt to resolve the fabric addressing
@@ -172,10 +170,6 @@ adversely affect performance or expose the application to communication
 beyond that which was requested.  Applications may use this feature to request a
 minimal set of requirements, then check the returned capabilities to enable
 additional optimizations.
-.IP "FI_PASSIVE"
-Indicates that the fabric endpoint will be used to listen for connection
-requests.  Use of this capability implies the use of the fi_getinfo flag
-FI_SOURCE. 
 .IP "FI_MSG"
 Specifies that an endpoint should support sending and receiving
 messages or datagrams.  Message capabilities imply support for send and/or
@@ -438,7 +432,8 @@ fabric address, such as a dotted decimal IP address.  Use of this flag will
 suppress any lengthy name resolution protocol.
 .IP "FI_SOURCE"
 Indicates that the node and service parameters specify the local source
-address to associate with an endpoint.
+address to associate with an endpoint.  This flag is often used with
+passive endpoints.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 
