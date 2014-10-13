@@ -498,6 +498,8 @@ struct psmx_epaddr_context {
 extern struct fi_ops_mr		psmx_mr_ops;
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
+extern struct fi_ops_tagged	psmx_tagged_ops_no_flag_av_map;
+extern struct fi_ops_tagged	psmx_tagged_ops_no_flag_av_table;
 extern struct fi_ops_msg	psmx_msg_ops;
 extern struct fi_ops_msg	psmx_msg2_ops;
 extern struct fi_ops_rma	psmx_rma_ops;

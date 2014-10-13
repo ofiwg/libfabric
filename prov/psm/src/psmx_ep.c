@@ -32,6 +32,18 @@
 
 #include "psmx.h"
 
+static void psmx_ep_optimize_ops(struct psmx_fid_ep *ep)
+{
+	if (ep->ep.tagged) {
+		if (ep->flags)
+			ep->ep.tagged = &psmx_tagged_ops;
+		else if (ep->av && ep->av->type == FI_AV_TABLE)
+			ep->ep.tagged = &psmx_tagged_ops_no_flag_av_table;
+		else
+			ep->ep.tagged = &psmx_tagged_ops_no_flag_av_map;
+	}
+}
+
 static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 {
 	struct psmx_fid_ep *ep;
@@ -177,6 +189,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (ep->domain != av->domain)
 			return -EINVAL;
 		ep->av = av;
+		psmx_ep_optimize_ops(ep);
 		break;
 
 	case FI_CLASS_MR:
@@ -258,11 +271,13 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 			new_ep->flags &= ~FI_EVENT;
 		}
 		/* REMOVE ME: ] */
+		psmx_ep_optimize_ops(new_ep);
 		*alias->fid = &new_ep->ep.fid;
 		break;
 
 	case FI_SETFIDFLAG:
 		ep->flags = *(uint64_t *)arg;
+		psmx_ep_optimize_ops(ep);
 		break;
 
 	case FI_GETFIDFLAG:
@@ -360,6 +375,8 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		if (info->rx_attr)
 			ep_priv->flags |= info->rx_attr->op_flags;
 	}
+
+	psmx_ep_optimize_ops(ep_priv);
 
 	*ep = &ep_priv->ep;
 
