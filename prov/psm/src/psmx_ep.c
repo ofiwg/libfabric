@@ -35,12 +35,33 @@
 static void psmx_ep_optimize_ops(struct psmx_fid_ep *ep)
 {
 	if (ep->ep.tagged) {
-		if (ep->flags)
+		if (ep->flags) {
 			ep->ep.tagged = &psmx_tagged_ops;
-		else if (ep->av && ep->av->type == FI_AV_TABLE)
-			ep->ep.tagged = &psmx_tagged_ops_no_flag_av_table;
-		else
-			ep->ep.tagged = &psmx_tagged_ops_no_flag_av_map;
+		}
+		else if (ep->send_cq_event_flag && ep->recv_cq_event_flag) {
+			if (ep->av && ep->av->type == FI_AV_TABLE)
+				ep->ep.tagged = &psmx_tagged_ops_no_event_av_table;
+			else
+				ep->ep.tagged = &psmx_tagged_ops_no_event_av_map;
+		}
+		else if (ep->send_cq_event_flag) {
+			if (ep->av && ep->av->type == FI_AV_TABLE)
+				ep->ep.tagged = &psmx_tagged_ops_no_send_event_av_table;
+			else
+				ep->ep.tagged = &psmx_tagged_ops_no_send_event_av_map;
+		}
+		else if (ep->recv_cq_event_flag) {
+			if (ep->av && ep->av->type == FI_AV_TABLE)
+				ep->ep.tagged = &psmx_tagged_ops_no_recv_event_av_table;
+			else
+				ep->ep.tagged = &psmx_tagged_ops_no_recv_event_av_map;
+		}
+		else {
+			if (ep->av && ep->av->type == FI_AV_TABLE)
+				ep->ep.tagged = &psmx_tagged_ops_no_flag_av_table;
+			else
+				ep->ep.tagged = &psmx_tagged_ops_no_flag_av_map;
+		}
 	}
 }
 
@@ -155,6 +176,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (flags & FI_EVENT)
 				ep->recv_cq_event_flag = 1;
 		}
+		psmx_ep_optimize_ops(ep);
 		break;
 
 	case FI_CLASS_CNTR:
