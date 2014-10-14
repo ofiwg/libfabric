@@ -37,30 +37,35 @@ static void psmx_ep_optimize_ops(struct psmx_fid_ep *ep)
 	if (ep->ep.tagged) {
 		if (ep->flags) {
 			ep->ep.tagged = &psmx_tagged_ops;
+			psmx_debug("%s: generic tagged ops.\n", __func__);
 		}
 		else if (ep->send_cq_event_flag && ep->recv_cq_event_flag) {
 			if (ep->av && ep->av->type == FI_AV_TABLE)
 				ep->ep.tagged = &psmx_tagged_ops_no_event_av_table;
 			else
 				ep->ep.tagged = &psmx_tagged_ops_no_event_av_map;
+			psmx_debug("%s: tagged ops optimized for op_flags=0 and event suppression\n", __func__);
 		}
 		else if (ep->send_cq_event_flag) {
 			if (ep->av && ep->av->type == FI_AV_TABLE)
 				ep->ep.tagged = &psmx_tagged_ops_no_send_event_av_table;
 			else
 				ep->ep.tagged = &psmx_tagged_ops_no_send_event_av_map;
+			psmx_debug("%s: tagged ops optimized for op_flags=0 and send event suppression\n", __func__);
 		}
 		else if (ep->recv_cq_event_flag) {
 			if (ep->av && ep->av->type == FI_AV_TABLE)
 				ep->ep.tagged = &psmx_tagged_ops_no_recv_event_av_table;
 			else
 				ep->ep.tagged = &psmx_tagged_ops_no_recv_event_av_map;
+			psmx_debug("%s: tagged ops optimized for op_flags=0 and recv event suppression\n", __func__);
 		}
 		else {
 			if (ep->av && ep->av->type == FI_AV_TABLE)
 				ep->ep.tagged = &psmx_tagged_ops_no_flag_av_table;
 			else
 				ep->ep.tagged = &psmx_tagged_ops_no_flag_av_map;
+			psmx_debug("%s: tagged ops optimized for op_flags=0\n", __func__);
 		}
 	}
 }
