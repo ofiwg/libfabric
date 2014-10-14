@@ -371,8 +371,7 @@ static int server_listen(void)
 	struct fi_info *fi;
 	int ret;
 
-	hints.ep_cap |= FI_PASSIVE;
-	ret = fi_getinfo(FI_VERSION(1, 0), src_addr, port, 0, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), src_addr, port, FI_SOURCE, &hints, &fi);
 	if (ret) {
 		fprintf(stderr, "fi_getinfo %s\n", strerror(-ret));
 		return ret;
@@ -694,8 +693,9 @@ int main(int argc, char **argv)
 
 	hints.domain_attr = &domain_hints;
 	hints.ep_attr = &ep_hints;
-	hints.type = FI_EP_MSG;
-	hints.ep_cap = FI_MSG | FI_RMA;
+	hints.ep_type = FI_EP_MSG;
+	hints.caps = FI_MSG | FI_RMA;
+	hints.mode = FI_LOCAL_MR | FI_PROV_MR_KEY;
 	hints.addr_format = FI_SOCKADDR;
 
 	ret = run();

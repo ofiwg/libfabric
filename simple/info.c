@@ -80,12 +80,12 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 
-	hints.ep_cap = FI_MSG;
+	hints.caps = FI_MSG;
 
 	while ((op = getopt(argc, argv, "e:n:p:")) != -1) {
 		switch (op) {
 		case 'e':
-			hints.type = ep_type(optarg);
+			hints.ep_type = ep_type(optarg);
 			break;
 		case 'n':
 			node = optarg;

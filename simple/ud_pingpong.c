@@ -604,8 +604,8 @@ int main(int argc, char **argv)
 
 	hints.domain_attr = &domain_hints;
 	hints.ep_attr = &ep_hints;
-	hints.type = FI_EP_DGRAM;
-	hints.ep_cap = FI_MSG;
+	hints.ep_type = FI_EP_DGRAM;
+	hints.caps = FI_MSG;
 	hints.addr_format = FI_SOCKADDR;
 
 	ret = run();

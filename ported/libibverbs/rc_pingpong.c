@@ -552,13 +552,14 @@ int main(int argc, char *argv[])
 	memset(&hints, 0, sizeof(hints));
 	
 	/* Infiniband provider */
-	hints.type              = FI_EP_MSG;
-	hints.ep_cap            = FI_MSG;
-	hints.addr_format       = FI_SOCKADDR;
+	hints.ep_type = FI_EP_MSG;
+	hints.caps = FI_MSG;
+	hints.mode = FI_LOCAL_MR | FI_PROV_MR_KEY;
+	hints.addr_format = FI_SOCKADDR;
 
 	asprintf(&service, "%d", port);
 	if (!servername) {
-		hints.ep_cap |= FI_PASSIVE;
+		flags |= FI_SOURCE;
 	} else {
 		node = servername;
 	}
