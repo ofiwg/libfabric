@@ -110,14 +110,6 @@ struct fi_cq_attr;
 struct fi_cntr_attr;
 
 
-/* fi_info domain capabilities */
-#define FI_WRITE_COHERENT	(1ULL << 0)
-#define FI_CONTEXT		(1ULL << 1)
-#define FI_LOCAL_MR		(1ULL << 2)
-#define FI_USER_MR_KEY		(1ULL << 3)
-#define FI_DYNAMIC_MR		(1ULL << 4)
-
-
 struct fi_ops_domain {
 	size_t	size;
 	int	(*av_open)(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -137,7 +129,6 @@ struct fi_ops_domain {
 
 /* Memory registration flags */
 #define FI_MR_OFFSET		(1ULL << 0)
-#define FI_MR_KEY		(1ULL << 3)	/* FI_USER_MR_KEY */
 
 struct fi_ops_mr {
 	size_t	size;

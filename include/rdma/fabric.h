@@ -63,26 +63,33 @@ enum {
 uint32_t fi_version(void);
 
 /*
- * Vendor specific protocols/etc. are encoded as OUI, followed by vendor
- * specific data.  Vendor specific enum values are indicated by setting the
- * high-order bit.
+ * Provider specific values are indicated by setting the high-order bit.
  */
-#define FI_OUI_SHIFT		48
-#define FI_PROV_ENUM		(1 << 31)
+#define FI_PROV_SPECIFIC	(1 << 31)
 
 /* fi_info and operation flags - pass into endpoint ops calls.
  * A user may also set these on a endpoint by using fcntl, which has the
  * affect of applying them to all applicable operations.
  */
 
+/* FI capabilities */
+#define FI_MSG			(1ULL << 1)
+#define FI_RMA			(1ULL << 2)
+#define FI_TAGGED		(1ULL << 3)
+#define FI_ATOMICS		(1ULL << 4)
+#define FI_MULTICAST		(1ULL << 5)	/* multicast uses MSG ops */
+#define FI_DYNAMIC_MR		(1ULL << 7)
+#define FI_NAMED_RX_CTX		(1ULL << 8)
+#define FI_BUFFERED_RECV	(1ULL << 9)
+
 /*
  * Flags
  * The 64-bit flag field is divided as follows:
  * bits		use
- *  0 -  9	operation specific (used for a single call)
- * 10 - 55	common (usable with multiple operations)
- * 56 - 59	reserved
- * 60 - 63	provider-domain specific
+ *  0 - 10	operation specific (used for a single call)
+ * 11 - 32	common (usable with multiple operations)
+ * 33 - 59	reserved
+ * 60 - 63	provider specific
  */
 
 #define FI_INJECT		(1ULL << 11)
@@ -115,7 +122,7 @@ struct fi_ioc {
 /*
  * Format for transport addresses: sendto, writeto, etc.
  */
-enum fi_addr_format {
+enum {
 	FI_ADDR_PROTO,		/* void * proto_addr */
 	FI_SOCKADDR,		/* struct sockaddr */
 	FI_SOCKADDR_IN,		/* struct sockaddr_in */
@@ -149,8 +156,35 @@ enum fi_threading {
 #define FI_ORDER_SAW		(1 << 7)
 #define FI_ORDER_SAS		(1 << 8)
 
+enum fi_ep_type {
+	FI_EP_UNSPEC,
+	FI_EP_MSG,
+	FI_EP_DGRAM,
+	FI_EP_RDM,
+	/* FI_EP_RAW, */
+	/* FI_EP_PACKET, */
+};
+
+/* Endpoint protocol
+ * If two providers support the same protocol, then they shall interoperate
+ * when the protocol capabilities match.
+ */
+enum {
+	FI_PROTO_UNSPEC,
+	FI_PROTO_RDMA_CM_IB_RC,
+	FI_PROTO_IWARP,
+	FI_PROTO_IB_UD,
+	FI_PROTO_PSMX,
+};
+
+/* Mode bits */
+#define FI_CONTEXT		(1ULL << 0)
+#define FI_LOCAL_MR		(1ULL << 1)
+#define FI_WRITE_NONCOHERENT	(1ULL << 2)
+#define FI_PROV_MR_KEY		(1ULL << 3)
+
 struct fi_tx_ctx_attr {
-	uint64_t		ep_cap;
+	uint64_t		caps;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
 	size_t			inject_size;
@@ -160,7 +194,7 @@ struct fi_tx_ctx_attr {
 };
 
 struct fi_rx_ctx_attr {
-	uint64_t		ep_cap;
+	uint64_t		caps;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
 	size_t			total_buffered_recv;
@@ -170,10 +204,11 @@ struct fi_rx_ctx_attr {
 };
 
 struct fi_ep_attr {
-	uint64_t		protocol;
+	uint32_t		protocol;
 	size_t			max_msg_size;
 	size_t			inject_size;
 	size_t			total_buffered_recv;
+	size_t			msg_prefix_size;
 	size_t			max_order_raw_size;
 	size_t			max_order_war_size;
 	size_t			max_order_waw_size;
@@ -207,10 +242,10 @@ struct fi_fabric_attr {
 
 struct fi_info {
 	struct fi_info		*next;
-	uint64_t		type;
-	uint64_t		ep_cap;
-	uint64_t		domain_cap;
-	enum fi_addr_format	addr_format;
+	uint64_t		caps;
+	uint64_t		mode;
+	enum fi_ep_type		ep_type;
+	uint32_t		addr_format;
 	size_t			src_addrlen;
 	size_t			dest_addrlen;
 	void			*src_addr;
@@ -358,7 +393,7 @@ fi_open_ops(struct fid *fid, const char *name, uint64_t flags,
 enum fi_type {
 	FI_TYPE_INFO,
 	FI_TYPE_EP_TYPE,
-	FI_TYPE_EP_CAP,
+	FI_TYPE_CAPS,
 	FI_TYPE_OP_FLAGS,
 	FI_TYPE_ADDR_FORMAT,
 	FI_TYPE_TX_ATTR,
@@ -366,11 +401,11 @@ enum fi_type {
 	FI_TYPE_EP_ATTR,
 	FI_TYPE_DOMAIN_ATTR,
 	FI_TYPE_FABRIC_ATTR,
-	FI_TYPE_DOMAIN_CAP,
 	FI_TYPE_THREADING,
 	FI_TYPE_PROGRESS,
 	FI_TYPE_PROTOCOL,
-	FI_TYPE_MSG_ORDER
+	FI_TYPE_MSG_ORDER,
+	FI_TYPE_MODE
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);

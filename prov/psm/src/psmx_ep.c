@@ -347,7 +347,7 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	uint64_t ep_cap;
 
 	if (info)
-		ep_cap = info->ep_cap;
+		ep_cap = info->caps;
 	else
 		ep_cap = FI_TAGGED;
 
@@ -390,7 +390,7 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (ep_cap & FI_ATOMICS)
 		ep_priv->ep.atomic = &psmx_atomic_ops;
 
-	err = psmx_domain_enable_features(domain_priv, info->ep_cap);
+	err = psmx_domain_enable_features(domain_priv, info->caps);
 	if (err) {
 		free(ep_priv);
 		return err;

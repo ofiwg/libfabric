@@ -63,7 +63,7 @@ static int sock_dom_close(struct fid *fid)
 static int sock_endpoint(struct fid_domain *domain, struct fi_info *info,
 			 struct fid_ep **ep, void *context)
 {
-	switch (info->type) {
+	switch (info->ep_type) {
 	case FI_EP_RDM:
 		return sock_rdm_ep(domain, info, ep, context);
 	default:
@@ -114,7 +114,7 @@ static int sock_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr
 	uint16_t key;
 
 	dom = container_of(domain, struct sock_domain, dom_fid);
-	if ((flags & FI_MR_KEY) && ((attr->requested_key > IDX_MAX_INDEX) ||
+	if (!(dom->mode & FI_PROV_MR_KEY) && ((attr->requested_key > IDX_MAX_INDEX) ||
 	    idm_lookup(&dom->mr_idm, (int) attr->requested_key)))
 		return -FI_ENOKEY;
 
@@ -133,7 +133,8 @@ static int sock_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr
 		      attr->offset : (uintptr_t) attr->mr_iov[0].iov_base;
 
 	fastlock_acquire(&dom->lock);
-	key = (flags & FI_MR_KEY) ? (uint16_t) attr->requested_key : sock_get_mr_key(dom);
+	key = (dom->mode & FI_PROV_MR_KEY) ?
+	      sock_get_mr_key(dom) : (uint16_t) attr->requested_key;
 	if (idm_set(&dom->mr_idm, key, _mr) < 0)
 		goto err;
 	_mr->mr_fid.key = key;

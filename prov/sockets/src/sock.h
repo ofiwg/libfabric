@@ -81,6 +81,7 @@ struct sock_domain {
 	fastlock_t		lock;
 	atomic_t		ref;
 	struct index_map	mr_idm;
+	uint64_t		mode;
 };
 
 struct sock_cntr {

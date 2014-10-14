@@ -1,4 +1,4 @@
-.TH "FI_GETINFO" 3 "2014-09-11" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_GETINFO" 3 "2014-10-11" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 .SH SYNOPSIS
@@ -54,11 +54,9 @@ against the application being built from source against a newer version of the
 library that introduces new fields to data structures, which would not be
 initialized by the application.
 .PP
-Either node, service, or hints must be provided.  If hints are provided, the
-operation will be controlled by hints.ai_flags.  If FI_PASSIVE is
-specified, the call will resolve address information for use on the
-passive side of a connection.
-If node is provided, fi_getinfo will attempt to resolve the fabric address
+Either node, service, or hints must be provided, with any combination
+being supported.  If node is provided, fi_getinfo will attempt
+to resolve the fabric address
 to the given node.  The hints parameter, if provided,
 may be used to control the resulting output as indicated below.
 If node is not given, fi_getinfo will attempt to resolve the fabric addressing
@@ -70,10 +68,10 @@ by this call.
 .nf
 struct fi_info {
 	struct fi_info        *next;
-	uint64_t              type;
-	uint64_t              ep_cap;
-	uint64_t              domain_cap;
-	enum fi_addr_format   addr_format;
+	uint64_t              caps;
+	uint64_t              mode;
+	enum fi_ep_type       ep_type;
+	uint32_t              addr_format;
 	size_t                src_addrlen;
 	size_t                dest_addrlen;
 	void                  *src_addr;
@@ -89,20 +87,19 @@ struct fi_info {
 .IP "next"
 Pointer to the next fi_info structure in the list.  Will be NULL
 if no more structures exist.
-.IP "type"
+.IP "caps - fabric interface capabilities"
+If specified, indicates the desired capabilities of the fabric interfaces.
+Supported capabilities are listed in the
+.B "Capabilities"
+section below.
+.IP "mode"
+Operational modes supported by the application.  See the
+.B "Mode"
+secton below.
+.IP "ep_type - endpoint type"
 If specified, indicates the type of fabric interface communication desired.
 Supported types are listed in the
 .B "Endpoint types"
-section below.
-.IP "ep_cap - endpoint capabilities"
-If specified, indicates the desired endpoint communication capabilities. Supported
-capabilities are listed in the
-.B "Endpoint Capabilities"
-section below.
-.B "domain_cap - domain capabilities"
-If specified, indicates the desired capabilities supported by the domain.
-Supported capabilities are listed in the
-.B "Domain Capabilities"
 section below.
 .IP "addr_format - address format"
 If specified, indicates the format of addresses referenced by the fabric
@@ -162,20 +159,17 @@ When provided as hints, requested values of struct fi_fabric_attr should be
 set.  On output, the actual fabric attributes
 that can be provided will be returned.
 See fi_fabric(3) for details.
-.SH "ENDPOINT CAPABILITIES"
-Endpoint capabilities are obtained by OR-ing the following flags together.
-If endpoint capabilities in the hint parameter are set to 0, the underlying
+.SH "CAPABILITIES"
+Interface capabilities are obtained by OR-ing the following flags together.
+If capabilities in the hint parameter are set to 0, the underlying
 provider will return the set of capabilities which are supported.  Otherwise,
-providers will only return endpoints matching the specified set of
-capabilities.  Providers may indicate that an endpoint supports capabilities
+providers will only return data matching the specified set of
+capabilities.  Providers may indicate support for additional capabilities
 beyond those requested when the use of expanded capabilities will not
-adversely affect performance.  Applications may use this feature to request a
+adversely affect performance or expose the application to communication
+beyond that which was requested.  Applications may use this feature to request a
 minimal set of requirements, then check the returned capabilities to enable
 additional optimizations.
-.IP "FI_PASSIVE"
-Indicates that the fabric endpoint will be used to listen for connection
-requests.  Use of this capability implies the use of the fi_getinfo flag
-FI_SOURCE. 
 .IP "FI_MSG"
 Specifies that an endpoint should support sending and receiving
 messages or datagrams.  Message capabilities imply support for send and/or
@@ -218,10 +212,12 @@ struct fi_msg_ops, when a multicast address is specified as the destination
 address.  In the absence of any relevant flags, FI_MULTICAST implies
 the ability to send and receive messages.  Applications can use the FI_SEND and
 FI_RECV flags to optimize an endpoint as send-only or receive-only.
-.IP "FI_TRIGGER"
-Indicates that the endpoint should support triggered operations.  Endpoints
-support this capability must meet the usage model as described by
-fi_trigger.3. 
+.IP "FI_DYNAMIC_MR"
+The provider supports applications registering any range of addresses
+in their virtual address space, whether or not those addresses are
+back by physical pages or have been allocated to the app.
+Providers that lack this capability require that registered memory
+regions be backed by allocated memory pages.
 .IP "FI_NAMED_RX_CTX"
 Requests that endpoints which support multiple receive contexts allow an
 initiator to target (or name) a specific receive context as part of a data
@@ -294,40 +290,23 @@ appropriately.
 Indicates that the user desires the ability to cancel outstanding data
 transfer operations.  If FI_CANCEL is not set, a provider may optimize code
 paths with the assumption that fi_cancel will not be used by the application.
-.SH "DOMAIN CAPABILITIES"
-Domain capabilities are often used as output information from fi_getinfo,
-allowing applications to adjust their behavior based on the provider's
-hardware or software abilities.  However,specific capabilities may be
-requested through the hints parameter, with the actual supported capabilities
-returned by the provider.  Applications must check domain capabilities to
-ensure that all provider requirements for using resources associated with
-the access domain are met.
-.IP "FI_WRITE_COHERENT"
-Specifies that remote writes, including atomic operations, to the underlying
-fabric domain are coherent with the local processing domain.  Domain-level
-write coherency indicates that changes to local memory are visible to the
-local process immediately upon completion of a remote write operation.  The
-absence of this flag allows the NIC or memory subsystem to cache the results
-of remote write or atomic operations in non-coherent memory.
-.sp
-The behavior of a domain with and without FI_WRITE_COHERENT is illustrated
-below.
-.nf
-
-      Process 1            Process 2
-                           Register BUF
-      RMA write X to BUF
-      Notify process 2
-                           Receive notification
-                           if not FI_WRITE_COHERENT
-                                Sync with remote writes
-                           assert(BUF == X)
-
-.fi
-.sp
-This flag may be set on input hints to fi_getinfo if write coherency is
-required by an application.  If left unset, the pro  See the endpoint
-fi_ep_sync call for handling non-coherent writes.
+.IP "FI_TRIGGER"
+Indicates that the endpoint should support triggered operations.  Endpoints
+support this capability must meet the usage model as described by
+fi_trigger.3. 
+.SH "MODE"
+The operational mode bits are used to convey requirements that an application
+must adhere to when using the fabric interfaces.  Modes specify optimal ways
+of accessing the reported endpoint or domain.  Applications that are designed
+to support a specific mode of operation may see improved performance when
+that mode is desired by the provider.  It is recommended that providers
+support applications that disable any provider preferred modes.
+.PP
+On input to fi_getinfo, applications set the mode bits that they support.
+On output, providers will clear mode bits that are not necessary to achieve
+high-performance.  Mode bits that remain set indicate application requirements
+for using the fabric interfaces created using the returned fi_info.  The
+set of modes are listed below.
 .IP "FI_CONTEXT"
 Specifies that the provider requires that applications use struct fi_context
 as their per operation context parameter.  This structure should be treated as
@@ -346,16 +325,66 @@ The provider is optimized around having applications register memory
 for locally accessed data buffers.  Data buffers used in send and receive
 operations and as the source buffer for RMA and atomic operations must be
 registered by the application for access domains opened with this capability.
-.IP "FI_USER_MR_KEY"
-The provider supports user requested memory registration keys.  Providers
-that set this capability honor the requested_key parameter for memory
-registration calls.
-.IP "FI_DYNAMIC_MR"
-The provider supports applications registering any range of addresses
-in their virtual address space, whether or not those addresses are
-back by physical pages or have been allocated to the app.
-Providers that lack this capability require that registered memory
-regions be backed by allocated memory pages.
+.IP "FI_WRITE_NONCOHERENT"
+Specifies that remote writes, including atomic operations, to the underlying
+fabric domain are not coherent with the local processing domain and the
+application must manually synchronize memory accessed by remote RMA.
+Domain-level write coherency indicates that changes to local memory are
+visible to the local process immediately upon completion of a remote write
+operation.  When this mode is enabled, the NIC or memory subsystem
+may cache the results of remote write or atomic operations in non-coherent
+memory.
+.sp
+The behavior of a domain with and without FI_WRITE_NONCOHERENT is illustrated
+below.
+.nf
+
+      Process 1            Process 2
+                           Register BUF
+      RMA write X to BUF
+      Notify process 2
+                           Receive notification
+                           if FI_WRITE_NONCOHERENT
+                                Sync with remote writes
+                           assert(BUF == X)
+
+.fi
+.sp
+See the endpoint fi_ep_sync call for handling non-coherent writes.
+.IP "FI_MSG_PREFIX"
+Message prefix mode indicates that an application will provide buffer
+space in front of all message send and receive buffers for use by the
+provider.  Typically, the provider uses this space to implement
+a protocol, with the protocol headers being written into the prefix area.
+The contents of the prefix space should be treated as opaque.
+The use of FI_MSG_PREFIX may improve application
+performance over certain providers by reducing the number of IO vectors
+referenced by underlying hardware and eliminating provider buffer
+allocation.
+.sp
+FI_MSG_PREFIX only applies to send and receive operations, including
+tagged sends and receives.  RMA and atomics do not require the application
+to provide prefix buffers.  Prefix buffer space must be provided with
+all sends and receives, regardless of the size of the transfer or other
+transfer options.  The ownership of prefix buffers is treated the same as
+the corresponding message buffers, but the size of the prefix buffer is
+not counted toward any message limits, including inject.
+.sp
+Applications that support prefix mode must supply buffer space before
+their own message data.  The size of space that must be provided is
+specified by the msg_prefix_size endpoint attribute.  Providers are
+required to define a msg_prefix_size that is a multiple of 8 bytes.
+Additionally, applications may receive provider generated packets that do
+not contain application data.  Such received messages will indicate a
+transfer size of 0 bytes.
+.IP "FI_PROV_MR_KEY"
+The provider assigns the memory registration keys that applications must use.
+Providers that set this mode require applications to exchange assigned MR
+keys with peer processes performing RMA operations, with the MR key value
+selected by the provider.  If FI_PROV_MR_KEY is disabled, applications
+must select all MR keys.  Applications can
+request that providers generate MR keys by forcing this bit set after
+fi_getinfo returns.
 .SH "ENDPOINT TYPES"
 .IP "FI_EP_UNSPEC"
 The type of endpoint is not specified.  This is usually provided as input, with
@@ -407,7 +436,8 @@ fabric address, such as a dotted decimal IP address.  Use of this flag will
 suppress any lengthy name resolution protocol.
 .IP "FI_SOURCE"
 Indicates that the node and service parameters specify the local source
-address to associate with an endpoint.
+address to associate with an endpoint.  This flag is often used with
+passive endpoints.
 .SH "RETURN VALUE"
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 

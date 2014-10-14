@@ -85,16 +85,19 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_TRIGGER);
 }
 
-static void fi_tostr_addr_format(char *buf, enum fi_addr_format addr_format)
+static void fi_tostr_addr_format(char *buf, uint32_t addr_format)
 {
-	switch(addr_format) {
+	switch (addr_format) {
 	CASEENUMSTR(FI_ADDR_PROTO);
 	CASEENUMSTR(FI_SOCKADDR);
 	CASEENUMSTR(FI_SOCKADDR_IN);
 	CASEENUMSTR(FI_SOCKADDR_IN6);
 	CASEENUMSTR(FI_SOCKADDR_IB);
 	default:
-		strcat(buf, "Unknown\n");
+		if (addr_format & FI_PROV_SPECIFIC)
+			strcat(buf, "Provider specific\n");
+		else
+			strcat(buf, "Unknown\n");
 		break;
 	}
 }
@@ -137,59 +140,62 @@ static void fi_tostr_order(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_ORDER_SAS);
 }
 
-static void fi_tostr_ep_cap(char *buf, uint64_t ep_cap)
+static void fi_tostr_caps(char *buf, uint64_t caps)
 {
-	IFFLAGSTR(ep_cap, FI_PASSIVE);
-	IFFLAGSTR(ep_cap, FI_MSG);
-	IFFLAGSTR(ep_cap, FI_RMA);
-	IFFLAGSTR(ep_cap, FI_TAGGED);
-	IFFLAGSTR(ep_cap, FI_ATOMICS);
-	IFFLAGSTR(ep_cap, FI_MULTICAST);
-	IFFLAGSTR(ep_cap, FI_BUFFERED_RECV);
-	fi_tostr_flags(buf, ep_cap);
+	IFFLAGSTR(caps, FI_MSG);
+	IFFLAGSTR(caps, FI_RMA);
+	IFFLAGSTR(caps, FI_TAGGED);
+	IFFLAGSTR(caps, FI_ATOMICS);
+	IFFLAGSTR(caps, FI_MULTICAST);
+	IFFLAGSTR(caps, FI_DYNAMIC_MR);
+	IFFLAGSTR(caps, FI_BUFFERED_RECV);
+	fi_tostr_flags(buf, caps);
 }
 
-static void fi_tostr_ep_type(char *buf, uint64_t ep_type)
+static void fi_tostr_ep_type(char *buf, enum fi_ep_type ep_type)
 {
 	switch (ep_type) {
 	CASEENUMSTR(FI_EP_UNSPEC);
 	CASEENUMSTR(FI_EP_MSG);
 	CASEENUMSTR(FI_EP_DGRAM);
 	CASEENUMSTR(FI_EP_RDM);
-	CASEENUMSTR(FI_EP_MAX);
 	default:
 		strcat(buf, "Unknown\n");
 		break;
 	}
 }
 
-static void fi_tostr_protocol(char *buf, enum fi_proto protocol)
+static void fi_tostr_protocol(char *buf, uint32_t protocol)
 {
 	switch (protocol) {
 	CASEENUMSTR(FI_PROTO_UNSPEC);
 	CASEENUMSTR(FI_PROTO_RDMA_CM_IB_RC);
 	CASEENUMSTR(FI_PROTO_IWARP);
 	CASEENUMSTR(FI_PROTO_IB_UD);
+	CASEENUMSTR(FI_PROTO_PSMX);
 	default:
-		strcat(buf, "Unknown\n");
+		if (protocol & FI_PROV_SPECIFIC)
+			strcat(buf, "Provider specific\n");
+		else
+			strcat(buf, "Unknown\n");
 		break;
 	}
 }
 
-static void fi_tostr_domain_cap(char *buf, uint64_t domain_cap)
+static void fi_tostr_mode(char *buf, uint64_t mode)
 {
-	IFFLAGSTR(domain_cap, FI_WRITE_COHERENT);
-	IFFLAGSTR(domain_cap, FI_CONTEXT);
-	IFFLAGSTR(domain_cap, FI_LOCAL_MR);
-	fi_tostr_flags(buf, domain_cap);
+	IFFLAGSTR(mode, FI_WRITE_NONCOHERENT);
+	IFFLAGSTR(mode, FI_CONTEXT);
+	IFFLAGSTR(mode, FI_LOCAL_MR);
+	IFFLAGSTR(mode, FI_PROV_MR_KEY);
 }
 
 static void fi_tostr_tx_attr(char *buf, const struct fi_tx_ctx_attr *attr,
 			     const char *prefix)
 {
 	strcatf(buf, "%sfi_tx_attr: [\n", prefix);
-	strcatf(buf, "%s\tep_cap: [ ", prefix);
-	fi_tostr_ep_cap(buf, attr->ep_cap);
+	strcatf(buf, "%s\tcaps: [ ", prefix);
+	fi_tostr_caps(buf, attr->caps);
 	strcat(buf, "]\n");
 
 	strcatf(buf, "%s\top_flags: [ ", prefix);
@@ -211,8 +217,8 @@ static void fi_tostr_rx_attr(char *buf, const struct fi_rx_ctx_attr *attr,
 			     const char *prefix)
 {
 	strcatf(buf, "%sfi_rx_attr: [\n", prefix);
-	strcatf(buf, "%s\tep_cap: [ ", prefix);
-	fi_tostr_ep_cap(buf, attr->ep_cap);
+	strcatf(buf, "%s\tcaps: [ ", prefix);
+	fi_tostr_caps(buf, attr->caps);
 	strcat(buf, "]\n");
 
 	strcatf(buf, "%s\top_flags: [ ", prefix);
@@ -291,17 +297,16 @@ static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
 static void fi_tostr_info(char *buf, const struct fi_info *info)
 {
 	strcat(buf, "fi_info: [\n");
-	strcat(buf, "\ttype:\t");
-	fi_tostr_ep_type(buf, info->type);
-
-	strcat(buf, "\tep_cap: [ ");
-	fi_tostr_ep_cap(buf, info->ep_cap);
+	strcat(buf, "\tcaps: [ ");
+	fi_tostr_caps(buf, info->caps);
 	strcat(buf, "]\n");
 
-	strcat(buf, "\tdomain_cap: [ ");
-	fi_tostr_domain_cap(buf, info->domain_cap);
+	strcat(buf, "\tmode: [ ");
+	fi_tostr_mode(buf, info->mode);
 	strcat(buf, "]\n");
 
+	strcat(buf, "\tep_type:\t");
+	fi_tostr_ep_type(buf, info->ep_type);
 	strcat(buf, "\tfi_addr_format:\t");
 	fi_tostr_addr_format(buf, info->addr_format);
 
@@ -323,6 +328,7 @@ char *fi_tostr(const void *data, enum fi_type datatype)
 {
 	static __thread char *buf;
 	uint64_t val64 = *(const uint64_t *) data;
+	uint32_t val32 = *(const uint32_t *) data;
 	int enumval = *(const int *) data;
 
 	if (!data)
@@ -341,16 +347,16 @@ char *fi_tostr(const void *data, enum fi_type datatype)
 		fi_tostr_info(buf, data);
 		break;
 	case FI_TYPE_EP_TYPE:
-		fi_tostr_ep_type(buf, val64);
+		fi_tostr_ep_type(buf, enumval);
 		break;
-	case FI_TYPE_EP_CAP:
-		fi_tostr_ep_cap(buf, val64);
+	case FI_TYPE_CAPS:
+		fi_tostr_caps(buf, val64);
 		break;
 	case FI_TYPE_OP_FLAGS:
 		fi_tostr_flags(buf, val64);
 		break;
 	case FI_TYPE_ADDR_FORMAT:
-		fi_tostr_addr_format(buf, enumval);
+		fi_tostr_addr_format(buf, val32);
 		break;
 	case FI_TYPE_TX_ATTR:
 		fi_tostr_tx_attr(buf, data, "");
@@ -367,9 +373,6 @@ char *fi_tostr(const void *data, enum fi_type datatype)
 	case FI_TYPE_FABRIC_ATTR:
 		fi_tostr_fabric_attr(buf, data, "");
 		break;
-	case FI_TYPE_DOMAIN_CAP:
-		fi_tostr_domain_cap(buf, val64);
-		break;
 	case FI_TYPE_THREADING:
 		fi_tostr_threading(buf, enumval);
 		break;
@@ -381,6 +384,9 @@ char *fi_tostr(const void *data, enum fi_type datatype)
 		break;
 	case FI_TYPE_MSG_ORDER:
 		fi_tostr_order(buf, val64);
+		break;
+	case FI_TYPE_MODE:
+		fi_tostr_mode(buf, val64);
 		break;
 	default:
 		strcat(buf, "Unknown type");

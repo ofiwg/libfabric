@@ -328,7 +328,7 @@ int fi_no_tx_ctx(struct fid_ep *ep, int index,
 	return -FI_ENOSYS;
 }
 int fi_no_rx_ctx(struct fid_ep *ep, int index,
-		struct fi_rx_ctx_attr *attr, struct fid_ep *rx_ep,
+		struct fi_rx_ctx_attr *attr, struct fid_ep **rx_ep,
 		void *context)
 {
 	return -FI_ENOSYS;

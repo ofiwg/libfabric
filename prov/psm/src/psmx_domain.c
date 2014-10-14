@@ -105,6 +105,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->domain.fid.ops = &psmx_fi_ops;
 	domain_priv->domain.ops = &psmx_domain_ops;
 	domain_priv->domain.mr = &psmx_mr_ops;
+	domain_priv->mode = info->mode;
 
 	psm_ep_open_opts_get_defaults(&opts);
 
@@ -172,7 +173,7 @@ err_out:
 
 int psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap)
 {
-	if ((ep_cap & PSMX_EP_CAP) != ep_cap)
+	if ((ep_cap & PSMX_CAPS) != ep_cap)
 		return -EINVAL;
 
 	if ((ep_cap & FI_TAGGED) && domain->tagged_used)

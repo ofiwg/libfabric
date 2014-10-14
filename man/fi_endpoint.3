@@ -1,4 +1,4 @@
-.TH "FI_ENDPOINT" 3 "2014-09-30" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_ENDPOINT" 3 "2014-10-11" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_endpoint \- Fabric endpoint operations
 .PP
@@ -268,11 +268,11 @@ data transfers have completed.  The sync is not ordered with respect to
 non-send operations.
 .IP "FI_REMOTE_WRITE"
 The FI_REMOTE_WRITE flag is used in conjunction with access domains that
-do NOT support FI_WRITE_COHERENT.  The fi_ep_sync with FI_REMOTE_WRITE is
+use mode FI_WRITE_NONCOHERENT.  The fi_ep_sync with FI_REMOTE_WRITE is
 issued on the target side of an RMA or atomic data transfer.  It ensures
 that the view of memory of the local process is consistent with memory
 updates from the network.  See fi_getinfo for additional details on
-FI_WRITE_COHERENT.
+FI_WRITE_NONCOHERENT.
 .SS "fi_alias"
 This call creates an alias to the specified endpoint.  Conceptually, an
 endpoint alias provides an alternate software path from the
@@ -327,6 +327,7 @@ struct fi_ep_attr {
 	size_t    max_msg_size;
 	size_t    inject_size;
 	size_t    total_buffered_recv;
+	size_t    msg_prefix_size;
 	size_t    max_order_raw_size;
 	size_t    max_order_war_size;
 	size_t    max_order_waw_size;
@@ -353,6 +354,10 @@ RDMA CM protocol for connection establishment.
 The protocol runs over the Internet wide area RDMA protocol transport.
 .IP "FI_PROTO_IB_UD"
 The protocol runs over Infiniband unreliable datagram queue pairs.
+.IP "FI_PROTO_PSMX"
+The protocol is based on an Intel proprietary protocol known as PSM, 
+performance scaled messaging.  PSMX is an extended version of the PSM
+protocol to support the libfabric interfaces.
 .SS "max_msg_size - Max Message Size"
 Defines the maximum size for an application data transfer as a
 single operation.
@@ -360,9 +365,13 @@ single operation.
 Defines the default inject operation size (see the FI_INJECT
 flag) that an endpoint will support.  This value applies per send
 operation.
-.SS "total_buffered_ercv - Total Buffered Receive"
+.SS "total_buffered_recv - Total Buffered Receive"
 Defines the total available space allocated by the provider to buffer received
 messages (see the FI_BUFFERED_RECV flag).
+.SS "msg_prefix_size - Message Prefix Size"
+Specifies the size of any required message prefix buffer space.  This field
+will be 0 unless the FI_MSG_PREFIX mode is enabled.  If msg_prefix_size is > 0
+the specified value will be a multiple of 8-bytes.
 .SS "Max RMA Ordered Size"
 The maximum ordered size specifies the delivery order of transport data
 into target memory for RMA and atomic operations.  Data ordering is separate,
@@ -516,7 +525,7 @@ needed to store remote addressing data, versus using standard endpoints.
 Transmit contexts are independent command queues.  Ordering and
 synchronization between contexts are not defined.  Conceptually a
 transmit context behaves similar to a send-only endpoint.  A transmit
-context may be configured with relaxed endpoint capabilities, and has
+context may be configured with relaxed capabilities, and has
 its own completion queue.  The number of transmit contexts associated
 with an endpoint is specified during endpoint creation.
 .P
@@ -532,7 +541,7 @@ assigned to the context through the attr parameter, if provided.
 .sp
 .nf
 struct fi_tx_ctx_attr {
-	uint64_t  ep_caps;
+	uint64_t  caps;
 	uint64_t  op_flags;
 	uint64_t  msg_order;
 	size_t    inject_size;
@@ -541,10 +550,10 @@ struct fi_tx_ctx_attr {
 	size_t    op_alignment;
 };
 .fi
-.IP "ep_cap"
+.IP "caps"
 The requested capabilities of the context.  The capabilities must be a
-subset of those requested of the associated endpoint.  See the ENDPOINT
-CAPABILITIES section if fi_getinfo(3) for capability details. 
+subset of those requested of the associated endpoint.  See the
+CAPABILITIES section if fi_getinfo(3) for capability details.
 .IP "op_flags"
 Flags that control the operation of operations submitted against the
 context.  Applicable flags are listed in the Operation Flags section.
@@ -581,9 +590,10 @@ Receive contexts are often associated with steering flows, that specify
 which incoming packets targeting a scalable endpoint to process.  However,
 receive contexts may be targeted directly by the intiator, if supported
 by the underlying protocol.  Such contexts are referred to as 'named'.
-Support for named contexts must be indicated by setting the ep_cap
-FI_NAMED_RX_CTX capability.  Support for named receive contexts is
-coordinated with address vectors.  See fi_av(3) and fi_rx_addr(3).
+Support for named contexts must be indicated by setting the caps
+FI_NAMED_RX_CTX capability when the corresponding endpoint is created.
+Support for named receive contexts is coordinated with address vectors.
+See fi_av(3) and fi_rx_addr(3).
 .P
 The fi_rx_context call is used to retrieve a specific context,
 identified by an index.  Providers may dynamically allocate contexts
@@ -597,7 +607,7 @@ assigned to the context through the attr parameter, if provided.
 .sp
 .nf
 struct fi_rx_ctx_attr {
-	uint64_t  ep_caps;
+	uint64_t  caps;
 	uint64_t  op_flags;
 	uint64_t  msg_order;
 	size_t    total_buffered_recv;
@@ -606,9 +616,9 @@ struct fi_rx_ctx_attr {
 	size_t    op_alignment;
 };
 .fi
-.IP "ep_cap"
+.IP "caps"
 The requested capabilities of the context.  The capabilities must be a
-subset of those requested of the associated endpoint.  See the ENDPOINT
+subset of those requested of the associated endpoint.  See the
 CAPABILITIES section if fi_getinfo(3) for capability details. 
 .IP "op_flags"
 Flags that control the operation of operations submitted against the
@@ -705,7 +715,7 @@ operations and most atomic operations.
 Users should call fi_close to release all resources allocated to the fabric
 endpoint.
 .PP
-Endpoints allocated with the domain capability FI_CONTEXT set must
+Endpoints allocated with the FI_CONTEXT mode set must
 typically provide struct fi_context as their per operation context
 parameter.  (See fi_getinfo.3 for details.)  However, when FI_EVENT is
 enabled to suppress completion events, and an operation is initiated without

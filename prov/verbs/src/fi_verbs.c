@@ -132,7 +132,7 @@ static int fi_ibv_sockaddr_len(struct sockaddr *addr)
 
 static int fi_ibv_check_hints(struct fi_info *hints)
 {
-	switch (hints->type) {
+	switch (hints->ep_type) {
 	case FI_EP_UNSPEC:
 	case FI_EP_MSG:
 	case FI_EP_DGRAM:
@@ -153,7 +153,7 @@ static int fi_ibv_check_hints(struct fi_info *hints)
 		}
 	}
 
-	if ( !(hints->ep_cap & (FI_PASSIVE | FI_MSG | FI_RMA)) )
+	if ( !(hints->caps & (FI_MSG | FI_RMA)) )
 		return -FI_ENODATA;
 
 	if (hints->fabric_attr && hints->fabric_attr->name &&
@@ -169,7 +169,7 @@ static int fi_ibv_check_hints(struct fi_info *hints)
 static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinfo *rai)
 {
 	memset(rai, 0, sizeof *rai);
-	if ((fi->ep_cap & FI_PASSIVE) || (flags & FI_SOURCE))
+	if (flags & FI_SOURCE)
 		rai->ai_flags = RAI_PASSIVE;
 	if (flags & FI_NUMERICHOST)
 		rai->ai_flags |= RAI_NUMERICHOST;
@@ -177,12 +177,12 @@ static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addr
 //		rai->ai_flags |= RAI_FAMILY;
 
 //	rai->ai_family = fi->sa_family;
-	if (fi->type == FI_EP_MSG || fi->ep_cap & FI_RMA || (fi->ep_attr &&
+	if (fi->ep_type == FI_EP_MSG || fi->caps & FI_RMA || (fi->ep_attr &&
 	    (fi->ep_attr->protocol == FI_PROTO_RDMA_CM_IB_RC ||
 	     fi->ep_attr->protocol == FI_PROTO_IWARP))) {
 		rai->ai_qp_type = IBV_QPT_RC;
 		rai->ai_port_space = RDMA_PS_TCP;
-	} else if (fi->type == FI_EP_DGRAM || (fi->ep_attr &&
+	} else if (fi->ep_type == FI_EP_DGRAM || (fi->ep_attr &&
 		   fi->ep_attr->protocol == FI_PROTO_IB_UD)) {
 		rai->ai_qp_type = IBV_QPT_UD;
 		rai->ai_port_space = RDMA_PS_UDP;
@@ -207,18 +207,15 @@ static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addr
  static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
 		 	  struct fi_info *fi)
  {
- 	if ((hints->ep_cap & FI_PASSIVE) && (rai->ai_flags & RAI_PASSIVE))
- 		fi->ep_cap = FI_PASSIVE;
-
  //	fi->sa_family = rai->ai_family;
 	if (rai->ai_qp_type == IBV_QPT_RC || rai->ai_port_space == RDMA_PS_TCP) {
-		fi->ep_cap |= FI_MSG | FI_RMA;
-		fi->type = FI_EP_MSG;
+		fi->caps |= FI_MSG | FI_RMA;
+		fi->ep_type = FI_EP_MSG;
 	} else if (rai->ai_qp_type == IBV_QPT_UD ||
 		   rai->ai_port_space == RDMA_PS_UDP) {
 		fi->ep_attr->protocol = FI_PROTO_IB_UD;
-		fi->ep_cap |= FI_MSG;
-		fi->type = FI_EP_DGRAM;
+		fi->caps |= FI_MSG;
+		fi->ep_type = FI_EP_DGRAM;
 	}
 
  	if (rai->ai_src_len) {
@@ -1506,14 +1503,14 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	if (!fi)
 		return NULL;
 
-	fi->type = FI_EP_MSG;
-	fi->ep_cap  = FI_MSG | FI_RMA;
+	fi->ep_type = FI_EP_MSG;
+	fi->caps  = FI_MSG | FI_RMA;
 	if (event->id->verbs->device->transport_type == IBV_TRANSPORT_IWARP) {
 		fi->ep_attr->protocol = FI_PROTO_IWARP;
 	} else {
 		fi->ep_attr->protocol = FI_PROTO_RDMA_CM_IB_RC;
 	}
-	fi->ep_cap = FI_MSG | FI_RMA;
+	fi->caps = FI_MSG | FI_RMA;
 
 	fi->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!(fi->src_addr = malloc(fi->src_addrlen)))
@@ -2311,7 +2308,7 @@ fi_ibv_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 	if (!_pep)
 		return -FI_ENOMEM;
 
-	ret = fi_ibv_getepinfo(NULL, NULL, 0, info, &fi, &_pep->id);
+	ret = fi_ibv_getepinfo(NULL, NULL, FI_SOURCE, info, &fi, &_pep->id);
 	if (ret)
 		goto err;
 

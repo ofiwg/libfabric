@@ -33,15 +33,15 @@
 #include "psmx.h"
 #include "fi.h"
 
-static int psmx_reserve_tag_bits(int *ep_cap, uint64_t *max_tag_value)
+static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 {
 	int reserved_bits = 0;
 
-	if (*ep_cap) {
-		if (*ep_cap & PSMX_EP_CAP_OPT1)
+	if (*caps) {
+		if (*caps & PSMX_CAP_OPT1)
 			reserved_bits++;
 
-		if (*ep_cap & PSMX_EP_CAP_OPT2)
+		if (*caps & PSMX_CAP_OPT2)
 			reserved_bits++;
 
 		if (*max_tag_value > (~0ULL >> reserved_bits)) {
@@ -54,15 +54,15 @@ static int psmx_reserve_tag_bits(int *ep_cap, uint64_t *max_tag_value)
 		return 0;
 	}
 
-	*ep_cap = PSMX_EP_CAP_BASE;
+	*caps = PSMX_CAP_BASE;
 
 	if (*max_tag_value <= (~0ULL >> 1)) {
-		*ep_cap |= PSMX_EP_CAP_OPT1;
+		*caps |= PSMX_CAP_OPT1;
 		reserved_bits++;
 	}
 
 	if (*max_tag_value <= (~0ULL >> 2)) {
-		*ep_cap |= PSMX_EP_CAP_OPT2;
+		*caps |= PSMX_CAP_OPT2;
 		reserved_bits++;
 	}
 
@@ -76,8 +76,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	struct fi_info *psmx_info;
 	uint32_t cnt = 0;
 	void *dest_addr = NULL;
-	int type = FI_EP_RDM;
-	int ep_cap = 0;
+	int ep_type = FI_EP_RDM;
+	int caps = 0;
 	uint64_t max_tag_value = 0;
 	int err = -ENODATA;
 
@@ -97,16 +97,16 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	if (hints) {
-		switch (hints->type) {
+		switch (hints->ep_type) {
 		case FI_EP_UNSPEC:
 		case FI_EP_RDM:
 			break;
 		case FI_EP_MSG:
-			type = FI_EP_MSG;
+			ep_type = FI_EP_MSG;
 			break;
 		default:
-			psmx_debug("%s: hints->type=%d, supported=%d,%d,%d.\n",
-					__func__, hints->type, FI_EP_UNSPEC,
+			psmx_debug("%s: hints->ep_type=%d, supported=%d,%d,%d.\n",
+					__func__, hints->ep_type, FI_EP_UNSPEC,
 					FI_EP_RDM, FI_EP_MSG);
 			goto err_out;
 		}
@@ -114,17 +114,19 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		if (hints->ep_attr) {
 			switch (hints->ep_attr->protocol) {
 			case FI_PROTO_UNSPEC:
+			case FI_PROTO_PSMX:
 				break;
 			default:
-				psmx_debug("%s: hints->protocol=%d, supported=%d\n",
-						__func__, hints->ep_attr->protocol, FI_PROTO_UNSPEC);
+				psmx_debug("%s: hints->protocol=%d, supported=%d %d\n",
+						__func__, hints->ep_attr->protocol,
+						FI_PROTO_UNSPEC, FI_PROTO_PSMX);
 				goto err_out;
 			}
 		}
 
-		if ((hints->ep_cap & PSMX_EP_CAP) != hints->ep_cap) {
-			psmx_debug("%s: hints->ep_cap=0x%llx, supported=0x%llx\n",
-					__func__, hints->ep_cap, PSMX_EP_CAP);
+		if ((hints->caps & PSMX_CAPS) != hints->caps) {
+			psmx_debug("%s: hints->caps=0x%llx, supported=0x%llx\n",
+					__func__, hints->caps, PSMX_CAPS);
 			goto err_out;
 		}
 
@@ -144,11 +146,9 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			goto err_out;
 		}
 
-		if (hints->domain_attr &&
-		    ((hints->domain_cap & PSMX_DOMAIN_CAP) !=
-		      hints->domain_cap)) {
-			psmx_debug("%s: hints->domain_cap=0x%llx, supported=0x%llx\n",
-					__func__, hints->domain_cap, PSMX_DOMAIN_CAP);
+		if ((hints->mode & PSMX_MODE) != PSMX_MODE) {
+			psmx_debug("%s: hints->mode=0x%llx, required=0x%llx\n",
+					__func__, hints->mode, PSMX_MODE);
 			goto err_out;
 		}
 
@@ -184,12 +184,12 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			max_tag_value = fi_tag_bits(hints->ep_attr->mem_tag_format);
 		}
 
-		ep_cap = hints->ep_cap;
+		caps = hints->caps;
 
 		/* FIXME: check other fields of hints */
 	}
 
-	if (psmx_reserve_tag_bits(&ep_cap, &max_tag_value) < 0)
+	if (psmx_reserve_tag_bits(&caps, &max_tag_value) < 0)
 		goto err_out;
 
 	psmx_info = __fi_allocinfo();
@@ -203,7 +203,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->rx_attr->op_flags = (hints && hints->rx_attr && hints->tx_attr->op_flags)
 					? hints->tx_attr->op_flags : 0;
 
-	psmx_info->ep_attr->protocol = PSMX_OUI_INTEL << FI_OUI_SHIFT | PSMX_PROTOCOL;
+	psmx_info->ep_attr->protocol = FI_PROTO_PSMX;
 	psmx_info->ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
 	psmx_info->ep_attr->inject_size = PSMX_INJECT_SIZE;
 	psmx_info->ep_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
@@ -213,13 +213,12 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->threading = FI_THREAD_PROGRESS;
 	psmx_info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
 	psmx_info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
-	psmx_info->domain_cap = (hints && hints->domain_cap) ?
-				hints->domain_cap : PSMX_DOMAIN_CAP;
 	psmx_info->domain_attr->name = strdup("psm");
 
 	psmx_info->next = NULL;
-	psmx_info->type = type;
-	psmx_info->ep_cap = (hints && hints->ep_cap) ? hints->ep_cap : ep_cap;
+	psmx_info->ep_type = ep_type;
+	psmx_info->caps = (hints && hints->caps) ? hints->caps : caps;
+	psmx_info->mode = PSMX_MODE;
 	psmx_info->addr_format = FI_ADDR_PROTO;
 	psmx_info->src_addrlen = 0;
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);

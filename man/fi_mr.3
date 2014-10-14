@@ -156,12 +156,10 @@ must provide the key associated with the registration.
 .PP
 Because MR keys must be provided by a remote process, an application
 can use the requested_key parameter to indicate that a specific key
-value be returned.  Support for user requested keys is provider specific.
-An access domain must be opened with the FI_USER_MR_KEY capability set
-in order to enable support for application selectable MR keys.  An
-application indicates that a requested_key has been provided by setting
-the FI_MR_KEY flag in the registration call, otherwise, the requested_key
-parameter is ignored.
+value be returned.  Support for user requested keys is provider specific
+and is determined by the FI_PROV_MR_KEY mode bit.
+Access domains must be opened with the FI_PROV_MR_KEY mode cleared
+in order to enable support for application selectable MR keys.
 .PP
 Remote RMA and atomic operations indicate the location within a registered
 memory region by specifying an address.  By default, the RMA target address
