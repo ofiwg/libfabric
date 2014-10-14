@@ -2308,7 +2308,7 @@ fi_ibv_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 	if (!_pep)
 		return -FI_ENOMEM;
 
-	ret = fi_ibv_getepinfo(NULL, NULL, 0, info, &fi, &_pep->id);
+	ret = fi_ibv_getepinfo(NULL, NULL, FI_SOURCE, info, &fi, &_pep->id);
 	if (ret)
 		goto err;
 

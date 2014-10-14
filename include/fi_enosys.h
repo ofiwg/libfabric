@@ -273,7 +273,7 @@ int fi_no_tx_ctx(struct fid_ep *ep, int index,
 		struct fi_tx_ctx_attr *attr, struct fid_ep **tx_ep,
 		void *context);
 int fi_no_rx_ctx(struct fid_ep *ep, int index,
-		struct fi_rx_ctx_attr *attr, struct fid_ep *rx_ep,
+		struct fi_rx_ctx_attr *attr, struct fid_ep **rx_ep,
 		void *context);
 
 /*

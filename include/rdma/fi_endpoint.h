@@ -75,7 +75,7 @@ struct fi_ops_ep {
 			struct fi_tx_ctx_attr *attr, struct fid_ep **tx_ep,
 			void *context);
 	int	(*rx_ctx)(struct fid_ep *ep, int index,
-			struct fi_rx_ctx_attr *attr, struct fid_ep *rx_ep,
+			struct fi_rx_ctx_attr *attr, struct fid_ep **rx_ep,
 			void *context);
 };
 
@@ -191,7 +191,7 @@ fi_tx_context(struct fid_ep *ep, int index, struct fi_tx_ctx_attr *attr,
 
 static inline int
 fi_rx_context(struct fid_ep *ep, int index, struct fi_rx_ctx_attr *attr,
-	      struct fid_ep *rx_ep, void *context)
+	      struct fid_ep **rx_ep, void *context)
 {
 	return ep->ops->rx_ctx(ep, index, attr, rx_ep, context);
 }
