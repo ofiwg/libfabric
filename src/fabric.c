@@ -111,7 +111,7 @@ static void __attribute__((constructor)) fi_ini(void)
 	n = scandir(extdir, &liblist, lib_filter, NULL);
 
 	if (n < 0) {
-		FI_WARN("scandir error reading %s: %s\n", extdir, strerror(n));
+		FI_WARN("scandir error reading %s: %s\n", extdir, strerror(errno));
 		return;
 	}
 
