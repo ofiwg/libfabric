@@ -43,6 +43,62 @@ extern "C" {
 #define MIN(x,y) ((x)<(y)?(x):(y))
 #endif
 
+#define PSMX_FREE_LIST_INIT(head, tail, type, count) \
+	do { \
+		int i; \
+		type *item; \
+		head = tail = NULL; \
+		for (i=0; i<count; i++) { \
+			item = calloc(sizeof(type), 1); \
+			if (!item) {\
+				fprintf(stderr, "%s: out of memory.\n", __func__); \
+				exit(-1); \
+			} \
+			item->next = head; \
+			head = item; \
+			if (!tail) \
+				tail = head; \
+		} \
+	} while (0)
+
+#define PSMX_FREE_LIST_GET(head, tail, type, item) \
+	do { \
+		if (head) { \
+			item = head; \
+			head = head->next; \
+			if (!head) \
+				tail = head; \
+			item->next = NULL; \
+		} \
+		else { \
+			item = calloc(sizeof(type), 1); \
+			if (!item) {\
+				fprintf(stderr, "%s: out of memory.\n", __func__); \
+				exit(-1); \
+			} \
+		} \
+	} while (0)
+
+#define PSMX_FREE_LIST_PUT(head, tail, type, item) \
+	do { \
+		memset(item, 0, sizeof(type)); \
+		if (tail) \
+			tail->next = item; \
+		else \
+			head = tail = item; \
+	} while (0)
+
+#define PSMX_FREE_LIST_FINALIZE(head, tail, type) \
+	do { \
+		type *next; \
+		while (head) { \
+			next = head->next; \
+			free(head); \
+			head = next; \
+		} \
+		tail = NULL; \
+	} while (0)
+
 #define PSMX_TIME_OUT	120
 
 #define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_EVENT | \
@@ -291,6 +347,7 @@ struct psmx_fid_cq {
 	int 				format;
 	int				entry_size;
 	struct psmx_cq_event_queue	event_queue;
+	struct psmx_cq_event_queue	free_list;
 	struct psmx_cq_event		*pending_error;
 	int				poll_am_before_mq;
 	struct psmx_wait		*wait;
@@ -531,7 +588,7 @@ void	psmx_debug(char *fmt, ...);
 
 void	psmx_cq_enqueue_event(struct psmx_cq_event_queue *eq,
 			      struct psmx_cq_event *event);
-struct	psmx_cq_event *psmx_cq_create_event(enum fi_cq_format format,
+struct	psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 					void *op_context, void *buf,
 					uint64_t flags, size_t len,
 					uint64_t data, uint64_t tag,

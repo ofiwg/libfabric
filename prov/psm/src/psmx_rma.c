@@ -99,7 +99,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				if (mr->cq) {
 					/* FIXME: report the addr/len of the whole write */
 					event = psmx_cq_create_event(
-							mr->cq->format,
+							mr->cq,
 							0, /* context */
 							rma_addr,
 							0, /* flags */
@@ -199,7 +199,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			if (mr->cq) {
 				/* FIXME: report the addr/len of the whole read */
 				event = psmx_cq_create_event(
-						mr->cq->format,
+						mr->cq,
 						0, /* context */
 						rma_addr,
 						0, /* flags */
@@ -269,7 +269,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (eom) {
 			if (req->ep->send_cq && !req->no_event) {
 				event = psmx_cq_create_event(
-						req->ep->send_cq->format,
+						req->ep->send_cq,
 						req->write.context,
 						req->write.buf,
 						0, /* flags */
@@ -311,7 +311,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (eom) {
 			if (req->ep->send_cq && !req->no_event) {
 				event = psmx_cq_create_event(
-						req->ep->send_cq->format,
+						req->ep->send_cq,
 						req->read.context,
 						req->read.buf,
 						0, /* flags */
@@ -390,7 +390,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 
 		if (mr->cq) {
 			event = psmx_cq_create_event(
-					mr->cq->format,
+					mr->cq,
 					0, /* context */
 					(void *)addr,
 					0, /* flags */
@@ -417,7 +417,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 
 	if (ep->send_cq && !no_event) {
 		event = psmx_cq_create_event(
-				ep->send_cq->format,
+				ep->send_cq,
 				context,
 				(void *)buf,
 				0, /* flags */

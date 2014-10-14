@@ -60,7 +60,7 @@ static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_cq_event_queue *c
 	return event;
 }
 
-struct psmx_cq_event *psmx_cq_create_event(enum fi_cq_format format,
+struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 					   void *op_context, void *buf,
 					   uint64_t flags, size_t len,
 					   uint64_t data, uint64_t tag,
@@ -68,11 +68,7 @@ struct psmx_cq_event *psmx_cq_create_event(enum fi_cq_format format,
 {
 	struct psmx_cq_event *event;
 
-	event = calloc(1, sizeof(*event));
-	if (!event) {
-		fprintf(stderr, "%s: out of memory\n", __func__);
-		return NULL;
-	}
+	PSMX_FREE_LIST_GET(cq->free_list.head, cq->free_list.tail, struct psmx_cq_event, event);
 
 	if ((event->error = !!err)) {
 		event->cqe.err.op_context = op_context;
@@ -84,7 +80,7 @@ struct psmx_cq_event *psmx_cq_create_event(enum fi_cq_format format,
 		goto out;
 	}
 
-	switch (format) {
+	switch (cq->format) {
 	case FI_CQ_FORMAT_CONTEXT:
 		event->cqe.context.op_context = op_context;
 		break;
@@ -113,7 +109,7 @@ struct psmx_cq_event *psmx_cq_create_event(enum fi_cq_format format,
 		break;
 
 	default:
-		fprintf(stderr, "%s: unsupported CC format %d\n", __func__, format);
+		fprintf(stderr, "%s: unsupported CC format %d\n", __func__, cq->format);
 		return NULL;
 	}
 
@@ -122,7 +118,7 @@ out:
 }
 
 static struct psmx_cq_event *psmx_cq_create_event_from_status(
-				enum fi_cq_format format,
+				struct psmx_fid_cq *cq,
 				psm_mq_status_t *psm_status,
 				uint64_t data)
 {
@@ -132,11 +128,8 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 	void *op_context, *buf;
 	int is_recv = 0;
 
-	event = calloc(1, sizeof(*event));
-	if (!event) {
-		fprintf(stderr, "%s: out of memory\n", __func__);
-		return NULL;
-	}
+	PSMX_FREE_LIST_GET(cq->free_list.head, cq->free_list.tail,
+			   struct psmx_cq_event, event);
 
 	switch(PSMX_CTXT_TYPE(fi_context)) {
 	case PSMX_SEND_CONTEXT:
@@ -171,7 +164,7 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		goto out;
 	}
 
-	switch (format) {
+	switch (cq->format) {
 	case FI_CQ_FORMAT_CONTEXT:
 		event->cqe.context.op_context = op_context;
 		break;
@@ -199,7 +192,7 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		break;
 
 	default:
-		fprintf(stderr, "%s: unsupported EQ format %d\n", __func__, format);
+		fprintf(stderr, "%s: unsupported EQ format %d\n", __func__, cq->format);
 		return NULL;
 	}
 
@@ -334,7 +327,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				  mr = PSMX_CTXT_USER(fi_context);
 				  if (mr->cq) {
 					event = psmx_cq_create_event_from_status(
-							mr->cq->format, &psm_status, req->write.data);
+							mr->cq, &psm_status, req->write.data);
 					if (!event)
 						return -ENOMEM;
 
@@ -354,7 +347,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				  mr = PSMX_CTXT_USER(fi_context);
 				  if (mr->cq) {
 					event = psmx_cq_create_event_from_status(
-							mr->cq->format, &psm_status, 0);
+							mr->cq, &psm_status, 0);
 					if (!event)
 						return -ENOMEM;
 
@@ -369,7 +362,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 			}
 
 			if (tmp_cq) {
-				event = psmx_cq_create_event_from_status(tmp_cq->format, &psm_status, 0);
+				event = psmx_cq_create_event_from_status(tmp_cq, &psm_status, 0);
 				if (!event)
 					return -ENOMEM;
 
@@ -399,7 +392,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				else {
 					if (tmp_cq) {
 						event = psmx_cq_create_event(
-								tmp_cq->format,
+								tmp_cq,
 								req->context,
 								req->buf,
 								FI_MULTI_RECV,
@@ -463,7 +456,12 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 			memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
 			if (psmx_cq_get_event_src_addr(cq_priv, event, src_addr))
 				*src_addr = FI_ADDR_UNSPEC;
-			free(event);
+
+			PSMX_FREE_LIST_PUT(cq_priv->free_list.head,
+					   cq_priv->free_list.tail,
+					   struct psmx_cq_event,
+					   event);
+
 			return cq_priv->entry_size;
 		}
 		else {
@@ -546,6 +544,8 @@ static int psmx_cq_close(fid_t fid)
 	struct psmx_fid_cq *cq;
 
 	cq = container_of(fid, struct psmx_fid_cq, cq.fid);
+
+	PSMX_FREE_LIST_FINALIZE(cq->free_list.head, cq->free_list.tail, struct psmx_cq_event);
 
 	if (cq->wait) {
 		if (cq->wait->type == FI_WAIT_FD) {
@@ -735,6 +735,9 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cq_priv->cq.fid.context = context;
 	cq_priv->cq.fid.ops = &psmx_fi_ops;
 	cq_priv->cq.ops = &psmx_cq_ops;
+
+	PSMX_FREE_LIST_INIT(cq_priv->free_list.head, cq_priv->free_list.tail,
+			    struct psmx_cq_event, 64);
 
 	*cq = &cq_priv->cq;
 	return 0;

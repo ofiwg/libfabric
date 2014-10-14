@@ -173,7 +173,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (eom && req) {
 			if (req->ep->recv_cq && !req->no_event) {
 				event = psmx_cq_create_event(
-						req->ep->recv_cq->format,
+						req->ep->recv_cq,
 						req->recv.context,
 						req->recv.buf,
 						0, /* flags */
@@ -232,7 +232,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		else { /* done */
 			if (req->ep->send_cq && !req->no_event) {
 				event = psmx_cq_create_event(
-						req->ep->send_cq->format,
+						req->ep->send_cq,
 						req->send.context,
 						req->send.buf,
 						0, /* flags */
@@ -380,7 +380,7 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 	if (recv_done) {
 		if (req->ep->recv_cq && !req->no_event) {
 			event = psmx_cq_create_event(
-					req->ep->recv_cq->format,
+					req->ep->recv_cq,
 					req->recv.context,
 					req->recv.buf,
 					0, /* flags */
