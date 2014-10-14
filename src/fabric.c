@@ -58,8 +58,8 @@ struct fi_prov {
 
 static struct fi_prov *prov_head, *prov_tail;
 
-
-int fi_register_provider(uint32_t version, struct fi_provider *provider)
+__attribute__((visibility ("default")))
+int fi_register_provider_(uint32_t version, struct fi_provider *provider)
 {
 	struct fi_prov *prov;
 
@@ -79,6 +79,7 @@ int fi_register_provider(uint32_t version, struct fi_provider *provider)
 	prov_tail = prov;
 	return 0;
 }
+default_symver(fi_register_provider_, fi_register_provider);
 
 #ifdef HAVE_LIBDL
 static int lib_filter(const struct dirent *entry)
@@ -148,7 +149,8 @@ static struct fi_prov *fi_getprov(const char *prov_name)
 	return NULL;
 }
 
-int fi_getinfo(uint32_t version, const char *node, const char *service,
+__attribute__((visibility ("default")))
+int fi_getinfo_(uint32_t version, const char *node, const char *service,
 	       uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_prov *prov;
@@ -182,8 +184,10 @@ int fi_getinfo(uint32_t version, const char *node, const char *service,
 
 	return *info ? 0 : ret;
 }
+default_symver(fi_getinfo_, fi_getinfo);
 
-void fi_freeinfo(struct fi_info *info)
+__attribute__((visibility ("default")))
+void fi_freeinfo_(struct fi_info *info)
 {
 	struct fi_prov *prov;
 	struct fi_info *next;
@@ -199,8 +203,10 @@ void fi_freeinfo(struct fi_info *info)
 			__fi_freeinfo(info);
 	}
 }
+default_symver(fi_freeinfo_, fi_freeinfo);
 
-int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)
+__attribute__((visibility ("default")))
+int fi_fabric_(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)
 {
 	struct fi_prov *prov;
 
@@ -213,11 +219,14 @@ int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *con
 
 	return prov->provider->fabric(attr, fabric, context);
 }
+default_symver(fi_fabric_, fi_fabric);
 
-uint32_t fi_version(void)
+__attribute__((visibility ("default")))
+uint32_t if_version_(void)
 {
 	return FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION);
 }
+default_symver(fi_version_, fi_version);
 
 #define FI_ERRNO_OFFSET	256
 #define FI_ERRNO_MAX	FI_EOPBADSTATE
@@ -232,7 +241,8 @@ static const char *const errstr[] = {
 	[FI_EDOMAIN - FI_ERRNO_OFFSET] = "Invalid resource domain",
 };
 
-const char *fi_strerror(int errnum)
+__attribute__((visibility ("default")))
+const char *fi_strerror_(int errnum)
 {
 	if (errnum < FI_ERRNO_OFFSET)
 		return strerror(errnum);
@@ -241,6 +251,7 @@ const char *fi_strerror(int errnum)
 	else
 		return errstr[FI_EOTHER - FI_ERRNO_OFFSET];
 }
+default_symver(fi_strerror_, fi_strerror);
 
 static const size_t __fi_datatype_size[] = {
 	[FI_INT8]   = sizeof(int8_t),
