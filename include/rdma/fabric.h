@@ -62,6 +62,21 @@ enum {
 
 uint32_t fi_version(void);
 
+struct fid;
+struct fid_fabric;
+struct fid_domain;
+struct fid_av;
+struct fid_wait;
+struct fid_poll;
+struct fid_eq;
+struct fid_cq;
+struct fid_cntr;
+struct fid_ep;
+struct fid_pep;
+struct fid_mr;
+
+typedef struct fid *fid_t;
+
 /*
  * Provider specific values are indicated by setting the high-order bit.
  */
@@ -219,6 +234,7 @@ struct fi_ep_attr {
 };
 
 struct fi_domain_attr {
+	struct fid_domain	*domain;
 	char			*name;
 	enum fi_threading	threading;
 	enum fi_progress	control_progress;
@@ -235,6 +251,7 @@ struct fi_domain_attr {
 };
 
 struct fi_fabric_attr {
+	struct fid_fabric	*fabric;
 	char			*name;
 	char			*prov_name;
 	uint32_t		prov_version;
@@ -276,20 +293,6 @@ enum {
 	FI_CLASS_POLL
 };
 
-struct fid;
-struct fid_fabric;
-struct fid_domain;
-struct fid_av;
-struct fid_wait;
-struct fid_poll;
-struct fid_eq;
-struct fid_cq;
-struct fid_cntr;
-struct fid_ep;
-struct fid_pep;
-struct fid_mr;
-
-typedef struct fid *fid_t;
 struct fi_eq_attr;
 
 struct fi_ops {
