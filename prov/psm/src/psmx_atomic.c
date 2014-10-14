@@ -417,7 +417,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			psmx_atomic_do_write(addr, src, datatype, op, count);
 			if (mr->cq) {
 				event = psmx_cq_create_event(
-						mr->cq->format,
+						mr->cq,
 						0, /* context */
 						addr,
 						0, /* flags */
@@ -470,7 +470,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				err = -ENOMEM;
 			if (mr->cq) {
 				event = psmx_cq_create_event(
-						mr->cq->format,
+						mr->cq,
 						0, /* context */
 						addr,
 						0, /* flags */
@@ -527,7 +527,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				err = -ENOMEM;
 			if (mr->cq) {
 				event = psmx_cq_create_event(
-						mr->cq->format,
+						mr->cq,
 						0, /* context */
 						addr,
 						0, /* flags */
@@ -566,7 +566,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		assert(req->op == PSMX_AM_REQ_ATOMIC_WRITE);
 		if (req->ep->send_cq && !req->no_event) {
 			event = psmx_cq_create_event(
-					req->ep->send_cq->format,
+					req->ep->send_cq,
 					req->atomic.context,
 					req->atomic.buf,
 					0, /* flags */
@@ -604,7 +604,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 		if (req->ep->send_cq && !req->no_event) {
 			event = psmx_cq_create_event(
-					req->ep->send_cq->format,
+					req->ep->send_cq,
 					req->atomic.context,
 					req->atomic.buf,
 					0, /* flags */
@@ -692,7 +692,7 @@ static int psmx_atomic_self(int am_cmd,
 	}
 	if (mr->cq) {
 		event = psmx_cq_create_event(
-				mr->cq->format,
+				mr->cq,
 				0, /* context */
 				(void *)addr,
 				0, /* flags */
@@ -718,7 +718,7 @@ gen_local_event:
 		    (ep->send_cq_event_flag && !(flags & FI_EVENT)));
 	if (ep->send_cq && !no_event) {
 		event = psmx_cq_create_event(
-				ep->send_cq->format,
+				ep->send_cq,
 				context,
 				(void *)buf,
 				0, /* flags */

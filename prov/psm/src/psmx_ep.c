@@ -32,6 +32,44 @@
 
 #include "psmx.h"
 
+static void psmx_ep_optimize_ops(struct psmx_fid_ep *ep)
+{
+	if (ep->ep.tagged) {
+		if (ep->flags) {
+			ep->ep.tagged = &psmx_tagged_ops;
+			psmx_debug("%s: generic tagged ops.\n", __func__);
+		}
+		else if (ep->send_cq_event_flag && ep->recv_cq_event_flag) {
+			if (ep->av && ep->av->type == FI_AV_TABLE)
+				ep->ep.tagged = &psmx_tagged_ops_no_event_av_table;
+			else
+				ep->ep.tagged = &psmx_tagged_ops_no_event_av_map;
+			psmx_debug("%s: tagged ops optimized for op_flags=0 and event suppression\n", __func__);
+		}
+		else if (ep->send_cq_event_flag) {
+			if (ep->av && ep->av->type == FI_AV_TABLE)
+				ep->ep.tagged = &psmx_tagged_ops_no_send_event_av_table;
+			else
+				ep->ep.tagged = &psmx_tagged_ops_no_send_event_av_map;
+			psmx_debug("%s: tagged ops optimized for op_flags=0 and send event suppression\n", __func__);
+		}
+		else if (ep->recv_cq_event_flag) {
+			if (ep->av && ep->av->type == FI_AV_TABLE)
+				ep->ep.tagged = &psmx_tagged_ops_no_recv_event_av_table;
+			else
+				ep->ep.tagged = &psmx_tagged_ops_no_recv_event_av_map;
+			psmx_debug("%s: tagged ops optimized for op_flags=0 and recv event suppression\n", __func__);
+		}
+		else {
+			if (ep->av && ep->av->type == FI_AV_TABLE)
+				ep->ep.tagged = &psmx_tagged_ops_no_flag_av_table;
+			else
+				ep->ep.tagged = &psmx_tagged_ops_no_flag_av_map;
+			psmx_debug("%s: tagged ops optimized for op_flags=0\n", __func__);
+		}
+	}
+}
+
 static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 {
 	struct psmx_fid_ep *ep;
@@ -143,6 +181,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (flags & FI_EVENT)
 				ep->recv_cq_event_flag = 1;
 		}
+		psmx_ep_optimize_ops(ep);
 		break;
 
 	case FI_CLASS_CNTR:
@@ -177,6 +216,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (ep->domain != av->domain)
 			return -EINVAL;
 		ep->av = av;
+		psmx_ep_optimize_ops(ep);
 		break;
 
 	case FI_CLASS_MR:
@@ -258,11 +298,13 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 			new_ep->flags &= ~FI_EVENT;
 		}
 		/* REMOVE ME: ] */
+		psmx_ep_optimize_ops(new_ep);
 		*alias->fid = &new_ep->ep.fid;
 		break;
 
 	case FI_SETFIDFLAG:
 		ep->flags = *(uint64_t *)arg;
+		psmx_ep_optimize_ops(ep);
 		break;
 
 	case FI_GETFIDFLAG:
@@ -360,6 +402,8 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		if (info->rx_attr)
 			ep_priv->flags |= info->rx_attr->op_flags;
 	}
+
+	psmx_ep_optimize_ops(ep_priv);
 
 	*ep = &ep_priv->ep;
 
