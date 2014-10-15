@@ -638,7 +638,7 @@ int main(int argc, char *argv[])
 			rd = fi_cq_sread(ctx->cq, &wc, sizeof wc, NULL, -1);
 		} else {
 			do {
-				rd = fi_cq_read(ctx->cq, &wc, sizeof wc);
+				rd = fi_cq_read(ctx->cq, &wc, 1);
 			} while (rd == 0);
 		}
 

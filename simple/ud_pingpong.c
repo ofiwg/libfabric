@@ -139,7 +139,7 @@ static int poll_all_sends(void)
 	int ret;
 
 	do {
-		ret = fi_cq_read(scq, &comp, sizeof comp);
+		ret = fi_cq_read(scq, &comp, 1);
 		if (ret > 0) {
 			credits++;
 		} else if (ret < 0) {
@@ -156,7 +156,7 @@ static int send_xfer(int size)
 	int ret;
 
 	while (!credits) {
-		ret = fi_cq_read(scq, &comp, sizeof comp);
+		ret = fi_cq_read(scq, &comp, 1);
 		if (ret > 0) {
 			goto post;
 		} else if (ret < 0) {
