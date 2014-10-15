@@ -421,7 +421,7 @@ err0:
 static int server_connect(void)
 {
 	struct fi_eq_cm_entry entry;
-	enum fi_eq_event event;
+	uint32_t event;
 	struct fi_info *info = NULL;
 	ssize_t rd;
 	int ret;
@@ -496,7 +496,7 @@ err1:
 static int client_connect(void)
 {
 	struct fi_eq_cm_entry entry;
-	enum fi_eq_event event;
+	uint32_t event;
 	struct fi_info *fi;
 	ssize_t rd;
 	int ret;
