@@ -108,7 +108,7 @@ usually associated with a fabric endpoint, but may also refer to memory
 regions used as the target of an RMA or atomic operation.
 .SS "fi_cq_open"
 fi_cq_open allocates a new completion queue.  Unlike event queues, completion
-queues are assocaiated with a resource domain and may be offloaded entirely
+queues are associated with a resource domain and may be offloaded entirely
 in provider hardware.
 .PP 
 The properties and behavior of a completion queue are defined by
@@ -363,7 +363,11 @@ fabric errno is returned.
 fi_cq_read / fi_cq_readfrom / fi_cq_readerr
 .br
 fi_cq_sread / fi_cq_sreadfrom
-.br
+.RS
+On success, returns the number of completion events retrieved from the
+completion queue.  On error, a negative value corresponding to fabric
+errno is returned.
+.RE
 fi_cq_write / fi_cq_writeerr
 .RS
 On success, returns the number of bytes read from or written to the completion
