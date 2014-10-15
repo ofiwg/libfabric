@@ -844,7 +844,7 @@ static ssize_t psmx_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ign
 	case PSM_OK:
 		*tag = psm_status.msg_tag;
 		*len = psm_status.msg_length;
-		*src_addr = FI_ADDR_UNSPEC;
+		*src_addr = FI_ADDR_NOTAVAIL;
 		return 1;
 
 	case PSM_MQ_NO_COMPLETIONS:

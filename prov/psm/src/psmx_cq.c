@@ -452,7 +452,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		if (!event->error) {
 			memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
 			if (psmx_cq_get_event_src_addr(cq_priv, event, src_addr))
-				*src_addr = FI_ADDR_UNSPEC;
+				*src_addr = FI_ADDR_NOTAVAIL;
 
 			PSMX_FREE_LIST_PUT(cq_priv->free_list.head,
 					   cq_priv->free_list.tail,

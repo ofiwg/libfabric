@@ -145,7 +145,7 @@ enum {
 	FI_SOCKADDR_IB,		/* struct sockaddr_ib */
 };
 
-#define FI_ADDR_UNSPEC		UINT64_MAX
+#define FI_ADDR_NOTAVAIL	UINT64_MAX
 typedef uint64_t		fi_addr_t;
 typedef void *			fi_connreq_t;
 

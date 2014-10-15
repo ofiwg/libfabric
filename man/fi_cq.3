@@ -297,7 +297,7 @@ The fi_cq_readfrom call allows the CQ to return source address information to
 the user for any received data.  Source address data is only available for
 those endpoints configured with FI_SOURCE capability.  If fi_cq_readfrom is
 called on an endpoint for which source addressing data is not available, the
-source address will be set to FI_ADDR_UNSPEC.  The number of input src_addr
+source address will be set to FI_ADDR_NOTAVAIL.  The number of input src_addr
 entries must the the same as the count parameter.
 .PP
 CQs are optimized to report operations which have completed successfully.
@@ -352,7 +352,7 @@ by the len parameter.  Len must be a multiple of the size of the event to
 insert.
 .PP
 User events inserted into a CQ with be associated with the source address
-FI_ADDR_UNSPEC.
+FI_ADDR_NOTAVAIL.
 .SH "RETURN VALUES"
 fi_cq_open 
 .RS
