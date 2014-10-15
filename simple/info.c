@@ -81,6 +81,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	hints.caps = FI_MSG;
+	hints.mode = ~0;		/* support all modes */
 
 	while ((op = getopt(argc, argv, "e:n:p:")) != -1) {
 		switch (op) {

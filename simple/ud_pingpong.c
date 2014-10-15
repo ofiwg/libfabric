@@ -1,8 +1,12 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2014 Cisco Systems, Inc.  All rights reserved.
  *
- * This software is available to you under the OpenIB.org BSD license
- * below:
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * BSD license below:
  *
  *     Redistribution and use in source and binary forms, with or
  *     without modification, are permitted provided that the following
@@ -45,13 +49,14 @@
 #include <net/ethernet.h>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
+#include <arpa/inet.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
-#include "../common/shared.h"
+#include <shared.h>
 
 
 struct test_size_param {
@@ -83,13 +88,16 @@ static int credits = 128;
 static char test_name[10] = "custom";
 static struct timeval start, end;
 static void *buf;
+static void *buf_ptr;
 static size_t buffer_size;
+static size_t prefix_len;
 
 static struct fi_info hints;
 static struct fi_domain_attr domain_hints;
 static struct fi_ep_attr ep_hints;
 static char *dst_addr, *src_addr;
-static char *port = "9228";
+static char *port = "3333";
+static fi_addr_t client_addr;
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -167,7 +175,10 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), NULL);
+	ret = dst_addr ?
+		fi_send(ep, buf_ptr, (size_t) size, fi_mr_desc(mr), NULL) :
+		fi_sendto(ep, buf_ptr, (size_t) size, fi_mr_desc(mr),
+				client_addr, NULL);
 	if (ret)
 		printf("fi_send %d (%s)\n", ret, fi_strerror(-ret));
 
@@ -251,12 +262,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	int ret;
 
 	buffer_size = !custom ? test_size[TEST_CNT - 1].size : transfer_size;
-	buffer_size += 42;
+	buffer_size += prefix_len;
 	buf = malloc(buffer_size);
 	if (!buf) {
 		perror("malloc");
 		return -1;
 	}
+	buf_ptr = (char *)buf + prefix_len;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -349,17 +361,15 @@ static int bind_ep_res(void)
 }
 
 
-static int common_connect(void)
+static int common_setup(void)
 {
 	struct fi_info *fi;
 	int ret;
 
-	if (src_addr) {
-		ret = getaddr(src_addr, NULL, (struct sockaddr **) &hints.src_addr,
-			      (socklen_t *) &hints.src_addrlen);
-		if (ret)
-			printf("source address error %s\n", gai_strerror(ret));
-	}
+	ret = getaddr(src_addr, port, (struct sockaddr **) &hints.src_addr,
+			  (socklen_t *) &hints.src_addrlen);
+	if (ret)
+		printf("source address error %s\n", gai_strerror(ret));
 
 	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, &hints, &fi);
 	if (ret) {
@@ -372,12 +382,26 @@ static int common_connect(void)
 		printf("fi_fabric %s\n", fi_strerror(-ret));
 		goto err1;
 	}
+	if (fi->mode & FI_MSG_PREFIX) {
+		prefix_len = fi->ep_attr->msg_prefix_size;
+	}
 
 	ret = fi_domain(fab, fi, &dom, NULL);
 	if (ret) {
 		printf("fi_fdomain %s %s\n", fi_strerror(-ret),
 			fi->domain_attr->name);
 		goto err2;
+	}
+
+	if (fi->src_addr != NULL) {
+		((struct sockaddr_in *)fi->src_addr)->sin_port = 
+			((struct sockaddr_in *)hints.src_addr)->sin_port;
+
+		if (dst_addr == NULL) {
+			printf("Local address %s:%d\n",
+					inet_ntoa(((struct sockaddr_in *)fi->src_addr)->sin_addr),
+					ntohs(((struct sockaddr_in *)fi->src_addr)->sin_port));
+		}
 	}
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
@@ -422,14 +446,13 @@ err0:
 static int client_connect(void)
 {
 	int ret;
-	struct sockaddr_in *sin;
 	socklen_t addrlen;
+	struct sockaddr *sin;
 
-	ret = common_connect();
+	ret = common_setup();
 	if (ret != 0)
 		goto err;
 
-	addrlen = sizeof(sin);
 	ret = getaddr(dst_addr, port, (struct sockaddr **) &sin,
 			  (socklen_t *) &addrlen);
 	if (ret != 0)
@@ -472,43 +495,28 @@ struct udp_hdr {
 static int server_connect(void)
 {
 	int ret;
-	struct sockaddr_in sin;
-	size_t addrlen;
 	struct fi_cq_entry comp;
-	fi_addr_t faddr;
 
-	ret = common_connect();
+	ret = common_setup();
 	if (ret != 0)
 		goto err;
 
 	do {
-		ret = fi_cq_readfrom(rcq, &comp, sizeof comp, &faddr);
+		ret = fi_cq_readfrom(rcq, &comp, sizeof comp, &client_addr);
 		if (ret < 0) {
 			printf("RCQ readfrom %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
 		}
 	} while (ret == 0);
 
-	if (faddr == FI_ADDR_UNSPEC) {
+	if (client_addr == FI_ADDR_UNSPEC) {
 		printf("Error getting address\n");
-		goto err;
-	}
-
-	addrlen = sizeof(sin);
-	ret = fi_av_lookup(av, faddr, &sin, &addrlen);
-	if (ret != 0) {
-		printf("fi_av_lookup %d (%s)\n", ret, fi_strerror(-ret));
 		goto err;
 	}
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), buf);
 	if (ret != 0) {
 		printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
-		goto err;
-	}
-	ret = fi_connect(ep, &sin, NULL, 0);
-	if (ret) {
-		printf("fi_connect %s\n", fi_strerror(-ret));
 		goto err;
 	}
 
@@ -530,12 +538,13 @@ static int run(void)
 {
 	int i, ret = 0;
 
-	printf("%-10s%-8s%-8s%-8s%-8s%8s %10s%13s\n",
-	       "name", "bytes", "xfers", "iters", "total", "time", "Gb/sec", "usec/xfer");
-
 	ret = dst_addr ? client_connect() : server_connect();
 	if (ret)
 		return ret;
+
+	printf("%-10s%-8s%-8s%-8s%-8s%8s %10s%13s\n",
+	       "name", "bytes", "xfers", "iters", "total", "time",
+		   "Gb/sec", "usec/xfer");
 
 	if (!custom) {
 		for (i = 0; i < TEST_CNT; i++) {
@@ -606,6 +615,7 @@ int main(int argc, char **argv)
 	hints.ep_attr = &ep_hints;
 	hints.ep_type = FI_EP_DGRAM;
 	hints.caps = FI_MSG;
+	hints.mode = FI_LOCAL_MR | FI_MSG_PREFIX;
 	hints.addr_format = FI_SOCKADDR;
 
 	ret = run();
