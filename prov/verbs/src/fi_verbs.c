@@ -88,6 +88,7 @@ struct fi_ibv_cq {
 	struct fi_ibv_domain	*domain;
 	struct ibv_comp_channel	*channel;
 	struct ibv_cq		*cq;
+	size_t			entry_size;
 	uint64_t		flags;
 	struct ibv_wc		wc;
 };
@@ -1792,29 +1793,28 @@ static int fi_ibv_cq_reset(struct fid_cq *cq, const void *cond)
 }
 
 static ssize_t
-fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t len, const void *cond,
+fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 		int timeout)
 {
-	ssize_t ret = 0, cur, left;
+	ssize_t ret = 0, cur;
 	ssize_t  threshold;
 	int reset = 1;
 	struct fi_ibv_cq *_cq;
 
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
-	threshold = (ssize_t) cond;
+	threshold = min((ssize_t) cond, count);
 
-	for (cur = 0, left = len; cur < threshold && left > 0; ) {
-		ret = _cq->cq_fid.ops->read(cq, buf, left);
+	for (cur = 0; cur < threshold; ) {
+		ret = _cq->cq_fid.ops->read(cq, buf, count - cur);
 		if (ret < 0 || !_cq->channel)
 			break;
 
 		if (ret > 0) {
-			left -= ret;
-			buf += ret;
+			buf += ret * _cq->entry_size;
 			cur += ret;
 		}
 
-		if (cur >= threshold || left <= 0)
+		if (cur >= threshold)
 			break;
 
 		if (reset) {
@@ -1825,45 +1825,42 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t len, const void *cond,
 		fi_poll_fd(_cq->channel->fd, timeout);
 	}
 
-	return (left < len) ? len - left : ret;
+	return cur ? cur : ret;
 }
 
-static ssize_t fi_ibv_cq_read_context(struct fid_cq *cq, void *buf, size_t len)
+static ssize_t fi_ibv_cq_read_context(struct fid_cq *cq, void *buf, size_t count)
 {
 	struct fi_ibv_cq *_cq;
 	struct fi_cq_entry *entry = buf;
-	ssize_t ret = 0;
-	size_t left = len;
+	ssize_t ret = 0, i;
 
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 	if (_cq->wc.status)
 		return -FI_EAVAIL;
 
-	while (left >= sizeof(*entry)) {
+	for (i = 0; i < count; i++) {
 		ret = ibv_poll_cq(_cq->cq, 1, &_cq->wc);
 		if (ret <= 0 || _cq->wc.status)
 			break;
 
 		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
-		left -= sizeof(*entry);
 		entry += 1;
 	}
 
-	return (left < len) ? len - left : ret;
+	return i ? i : ret;
 }
 
-static ssize_t fi_ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t len)
+static ssize_t fi_ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t count)
 {
 	struct fi_ibv_cq *_cq;
 	struct fi_cq_msg_entry *entry = buf;
-	ssize_t ret = 0;
-	size_t left = len;
+	ssize_t ret = 0, i;
 
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 	if (_cq->wc.status)
 		return -FI_EAVAIL;
 
-	while (left >= sizeof(*entry)) {
+	for (i = 0; i < count; i++) {
 		ret = ibv_poll_cq(_cq->cq, 1, &_cq->wc);
 		if (ret <= 0 || _cq->wc.status)
 			break;
@@ -1871,25 +1868,23 @@ static ssize_t fi_ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t len)
 		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
 		entry->flags = (uint64_t) _cq->wc.wc_flags;
 		entry->len = (uint64_t) _cq->wc.byte_len;
-		left -= sizeof(*entry);
 		entry += 1;
 	}
 
-	return (left < len) ? len - left : ret;
+	return i ? i : ret;
 }
 
-static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t len)
+static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t count)
 {
 	struct fi_ibv_cq *_cq;
 	struct fi_cq_data_entry *entry = buf;
-	ssize_t ret = 0;
-	size_t left = len;
+	ssize_t ret = 0, i;
 
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 	if (_cq->wc.status)
 		return -FI_EAVAIL;
 
-	while (left >= sizeof(*entry)) {
+	for (i = 0; i < count; i++) {
 		ret = ibv_poll_cq(_cq->cq, 1, &_cq->wc);
 		if (ret <= 0 || _cq->wc.status)
 			break;
@@ -1907,11 +1902,10 @@ static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t len)
 		else
 			entry->len = 0;
 
-		left -= sizeof(*entry);
 		entry += 1;
 	}
 
-	return (left < len) ? len - left : ret;
+	return i ? i : ret;
 }
 
 static const char *
@@ -1926,8 +1920,10 @@ fi_ibv_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 static struct fi_ops_cq fi_ibv_cq_context_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_cq_read_context,
+	.readfrom = fi_no_cq_readfrom,
 	.readerr = fi_ibv_cq_readerr,
 	.write = fi_no_cq_write,
+	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
 	.strerror = fi_ibv_cq_strerror
 };
@@ -1935,8 +1931,10 @@ static struct fi_ops_cq fi_ibv_cq_context_ops = {
 static struct fi_ops_cq fi_ibv_cq_msg_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_cq_read_msg,
+	.readfrom = fi_no_cq_readfrom,
 	.readerr = fi_ibv_cq_readerr,
 	.write = fi_no_cq_write,
+	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
 	.strerror = fi_ibv_cq_strerror
 };
@@ -1944,8 +1942,10 @@ static struct fi_ops_cq fi_ibv_cq_msg_ops = {
 static struct fi_ops_cq fi_ibv_cq_data_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_cq_read_data,
+	.readfrom = fi_no_cq_readfrom,
 	.readerr = fi_ibv_cq_readerr,
 	.write = fi_no_cq_write,
+	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
 	.strerror = fi_ibv_cq_strerror
 };
@@ -2050,12 +2050,15 @@ fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	switch (attr->format) {
 	case FI_CQ_FORMAT_CONTEXT:
 		_cq->cq_fid.ops = &fi_ibv_cq_context_ops;
+		_cq->entry_size = sizeof(struct fi_cq_entry);
 		break;
 	case FI_CQ_FORMAT_MSG:
 		_cq->cq_fid.ops = &fi_ibv_cq_msg_ops;
+		_cq->entry_size = sizeof(struct fi_cq_msg_entry);
 		break;
 	case FI_CQ_FORMAT_DATA:
 		_cq->cq_fid.ops = &fi_ibv_cq_data_ops;
+		_cq->entry_size = sizeof(struct fi_cq_data_entry);
 		break;
 	default:
 		ret = -FI_ENOSYS;
