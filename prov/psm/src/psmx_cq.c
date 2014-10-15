@@ -686,7 +686,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			return -FI_EINVAL;
 		}
 		/* fall through */
-	case FI_WAIT_UNSPECIFIED:
+	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUT_COND:
 		switch (attr->wait_cond) {

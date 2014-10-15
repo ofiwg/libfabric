@@ -50,7 +50,7 @@ extern "C" {
 /* Use fi_control GETWAIT to get underlying wait object(s) */
 enum fi_wait_obj {
 	FI_WAIT_NONE,
-	FI_WAIT_UNSPECIFIED,
+	FI_WAIT_UNSPEC,
 	FI_WAIT_SET,
 	FI_WAIT_FD,
 	FI_WAIT_MUT_COND,	/* pthread mutex & cond */
