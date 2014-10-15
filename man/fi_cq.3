@@ -12,9 +12,9 @@ fi_cq_read / fi_cq_readfrom / fi_cq_readerr
 Read a completion from a completion queue
 .RE
 .PP
-fi_cq_write
+fi_cq_write / fi_cq_writeerr
 .RS
-Writes a completion to a completion queue
+Writes a completion or error event to a completion queue
 .RE
 .PP
 fi_cq_sread / fi_cq_sreadfrom
@@ -52,6 +52,10 @@ Converts provider specific error information into a printable string
 .HP
 .BI "int fi_cq_write(struct fid_cq *" cq ","
 .BI "const void *" buf ", size_t " len ");"
+.HP
+.BI "int fi_cq_writeerr(struct fid_cq *" cq ","
+.BI "struct fi_cq_err_entry *" buf ", size_t " len ", "
+.BI "uint64_t " flags ");"
 .PP
 .HP
 .BI "int fi_cq_sread(struct fid_cq *" cq ","
@@ -126,9 +130,10 @@ Flags that control the configuration of the CQ.
 .RS
 .IP "FI_WRITE"
 Indicates that the application requires support for inserting user events
-into the CQ.  If this flag is set, then the fi_cq_write operation must be
+into the CQ.  If this flag is set, then the fi_cq_write and fi_cq_writeerr
+operations must be
 supported by the provider.  If the FI_WRITE flag is not set, then the
-application may not invoke fi_cq_write. 
+application may not invoke fi_cq_write of fi_cq_writeerr. 
 .IP "FI_REMOTE_SIGNAL"
 If specified, this indicates that the CQ should only signal its wait object
 upon receiving a remote operation with FI_REMOTE_SIGNAL set, provided that all
@@ -331,6 +336,18 @@ The general reason for the error is provided through the err field.  Provider
 specific error information may also be available through the prov_errno
 and err_data fields.  Users may call fi_cq_strerror to convert provider
 specific error information into a printable string for debugging purposes.
+.SS "fi_cq_write / fi_cq_writeerr"
+The fi_cq_write and fi_cq_writeerr operations insert user-generated completion
+entries into a completion queue.  fi_cq_write inserts non-error events into
+the CQ.  The format of the fi_cq_write event must be the same as the
+fi_cq_format attribute defined for the CQ when it was created.  fi_cq_writeerr
+inserts error events into the CQ.  The error event format is struct
+fi_cq_err_entry.  The number of entries to insert into the CQ is determined
+by the len parameter.  Len must be a multiple of the size of the event to
+insert.
+.PP
+User events inserted into a CQ with be associated with the source address
+FI_ADDR_UNSPEC.
 .SH "RETURN VALUES"
 fi_cq_open 
 .RS
@@ -342,7 +359,7 @@ fi_cq_read / fi_cq_readfrom / fi_cq_readerr
 .br
 fi_cq_sread / fi_cq_sreadfrom
 .br
-fi_cq_write
+fi_cq_write / fi_cq_writeerr
 .RS
 On success, returns the number of bytes read from or written to the completion
 queue.  On error, a negative value corresponding to fabric errno

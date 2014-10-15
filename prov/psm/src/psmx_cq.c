@@ -605,6 +605,7 @@ static struct fi_ops_cq psmx_cq_ops = {
 	.readfrom = psmx_cq_readfrom,
 	.readerr = psmx_cq_readerr,
 	.write = psmx_cq_write,
+	.writeerr = fi_no_cq_writeerr,
 	.sread = psmx_cq_sread,
 	.sreadfrom = psmx_cq_sreadfrom,
 	.strerror = psmx_cq_strerror,

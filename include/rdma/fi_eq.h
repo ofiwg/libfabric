@@ -237,6 +237,8 @@ struct fi_ops_cq {
 	ssize_t	(*readerr)(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			size_t len, uint64_t flags);
 	ssize_t	(*write)(struct fid_cq *cq, const void *buf, size_t len);
+	ssize_t	(*writeerr)(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+			size_t len, uint64_t flags);
 	ssize_t	(*sread)(struct fid_cq *cq, void *buf, size_t len,
 			const void *cond, int timeout);
 	ssize_t	(*sreadfrom)(struct fid_cq *cq, void *buf, size_t len,
@@ -361,6 +363,12 @@ fi_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, size_t len,
 static inline ssize_t fi_cq_write(struct fid_cq *cq, const void *buf, size_t len)
 {
 	return cq->ops->write(cq, buf, len);
+}
+
+static inline ssize_t fi_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+				     size_t len, uint64_t flags)
+{
+	return cq->ops->writeerr(cq, buf, len, flags);
 }
 
 static inline ssize_t

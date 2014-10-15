@@ -361,6 +361,8 @@ static struct fi_ops_cq X = {
 ssize_t fi_no_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 		fi_addr_t *src_addr);
 ssize_t fi_no_cq_write(struct fid_cq *cq, const void *buf, size_t len);
+ssize_t fi_no_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+		size_t len, uint64_t flags);
 ssize_t fi_no_cq_sread(struct fid_cq *cq, void *buf, size_t len,
 		const void *cond, int timeout);
 ssize_t fi_no_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
