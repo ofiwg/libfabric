@@ -88,7 +88,9 @@ static int credits = 128;
 static char test_name[10] = "custom";
 static struct timeval start, end;
 static void *buf;
+static void *buf_ptr;
 static size_t buffer_size;
+static size_t prefix_len;
 
 static struct fi_info hints;
 static struct fi_domain_attr domain_hints;
@@ -173,8 +175,10 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = dst_addr ? fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), NULL) :
-		fi_sendto(ep, buf, (size_t) size, fi_mr_desc(mr), client_addr, NULL);
+	ret = dst_addr ?
+		fi_send(ep, buf_ptr, (size_t) size, fi_mr_desc(mr), NULL) :
+		fi_sendto(ep, buf_ptr, (size_t) size, fi_mr_desc(mr),
+				client_addr, NULL);
 	if (ret)
 		printf("fi_send %d (%s)\n", ret, fi_strerror(-ret));
 
@@ -258,11 +262,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	int ret;
 
 	buffer_size = !custom ? test_size[TEST_CNT - 1].size : transfer_size;
+	buffer_size += prefix_len;
 	buf = malloc(buffer_size);
 	if (!buf) {
 		perror("malloc");
 		return -1;
 	}
+	buf_ptr = (char *)buf + prefix_len;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -376,6 +382,9 @@ static int common_setup(void)
 		printf("fi_fabric %s\n", fi_strerror(-ret));
 		goto err1;
 	}
+	if (fi->mode & FI_MSG_PREFIX) {
+		prefix_len = fi->ep_attr->msg_prefix_size;
+	}
 
 	ret = fi_domain(fab, fi, &dom, NULL);
 	if (ret) {
@@ -394,6 +403,7 @@ static int common_setup(void)
 					ntohs(((struct sockaddr_in *)fi->src_addr)->sin_port));
 		}
 	}
+
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
 		printf("fi_endpoint %s\n", fi_strerror(-ret));
@@ -605,6 +615,7 @@ int main(int argc, char **argv)
 	hints.ep_attr = &ep_hints;
 	hints.ep_type = FI_EP_DGRAM;
 	hints.caps = FI_MSG;
+	hints.mode = FI_LOCAL_MR | FI_MSG_PREFIX;
 	hints.addr_format = FI_SOCKADDR;
 
 	ret = run();
