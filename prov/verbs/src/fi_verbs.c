@@ -1541,7 +1541,7 @@ err:
 
 static ssize_t
 fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event,
-	enum fi_eq_event *event, struct fi_eq_cm_entry *entry, size_t len)
+	uint32_t *event, struct fi_eq_cm_entry *entry, size_t len)
 {
 	fid_t fid;
 	size_t datalen;
@@ -1600,7 +1600,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 }
 
 static ssize_t
-fi_ibv_eq_read(struct fid_eq *eq, enum fi_eq_event *event,
+fi_ibv_eq_read(struct fid_eq *eq, uint32_t *event,
 	       void *buf, size_t len, uint64_t flags)
 {
 	struct fi_ibv_eq *_eq;
@@ -1623,7 +1623,7 @@ fi_ibv_eq_read(struct fid_eq *eq, enum fi_eq_event *event,
 }
 
 static ssize_t
-fi_ibv_eq_sread(struct fid_eq *eq, enum fi_eq_event *event,
+fi_ibv_eq_sread(struct fid_eq *eq, uint32_t *event,
 		void *buf, size_t len, int timeout, uint64_t flags)
 {
 	struct fi_ibv_eq *_eq;

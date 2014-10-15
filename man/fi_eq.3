@@ -1,4 +1,4 @@
-.TH "FI_EQ" 3 "2014-09-30" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_EQ" 3 "2014-10-15" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_eq \- Event queue operations
 .PP
@@ -37,7 +37,7 @@ Converts provider specific error information into a printable string
 .BI "int fi_control(struct fid *" eq ", int " command ", void *" arg ");"
 .PP
 .HP
-.BI "int fi_eq_read(struct fid_eq *" eq ", enum fi_eq_event *" event ", "
+.BI "int fi_eq_read(struct fid_eq *" eq ", uint32_t *" event ", "
 .BI "void *" buf ", size_t " len ", uint64_t " flags ");"
 .HP
 .BI "int fi_eq_readerr(struct fid_eq *" eq ", "
@@ -45,11 +45,11 @@ Converts provider specific error information into a printable string
 .BI "uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_eq_write(struct fid_eq *" eq ", enum fi_eq_event " event ", "
+.BI "int fi_eq_write(struct fid_eq *" eq ", uint32_t " event ", "
 .BI "const void *" buf ", size_t " len ", uint64_t " flags ");"
 .PP
 .HP
-.BI "int fi_eq_sread(struct fid_eq *" eq ", enum fi_eq_event *" event ", "
+.BI "int fi_eq_sread(struct fid_eq *" eq ", uint32_t *" event ", "
 .BI "void *" buf ", size_t " len ", "
 .BI "int " timeout ", uint64_t " flags ");"
 .PP

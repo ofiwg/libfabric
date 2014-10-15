@@ -341,9 +341,9 @@ static struct fi_ops_eq X = {
 	.strerror = X,
 };
 */
-ssize_t fi_no_eq_write(struct fid_eq *eq, enum fi_eq_event event,
+ssize_t fi_no_eq_write(struct fid_eq *eq, uint32_t event,
 		const void *buf, size_t len, int64_t flags);
-ssize_t fi_no_eq_sread(struct fid_eq *eq, enum fi_eq_event *event,
+ssize_t fi_no_eq_sread(struct fid_eq *eq, uint32_t *event,
 		void *buf, size_t len, int timeout, uint64_t flags);
 
 /*

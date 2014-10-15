@@ -111,7 +111,8 @@ struct fi_eq_attr {
 	struct fid_wait		*wait_set;
 };
 
-enum fi_eq_event {
+/* Standard EQ events */
+enum {
 	FI_COMPLETE,
 	FI_CONNREQ,
 	FI_SHUTDOWN
@@ -141,13 +142,13 @@ struct fi_eq_cm_entry {
 
 struct fi_ops_eq {
 	size_t	size;
-	ssize_t	(*read)(struct fid_eq *eq, enum fi_eq_event *event,
+	ssize_t	(*read)(struct fid_eq *eq, uint32_t *event,
 			void *buf, size_t len, uint64_t flags);
 	ssize_t	(*readerr)(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 			size_t len, uint64_t flags);
-	ssize_t	(*write)(struct fid_eq *eq, enum fi_eq_event event,
+	ssize_t	(*write)(struct fid_eq *eq, uint32_t event,
 			const void *buf, size_t len, int64_t flags);
-	ssize_t	(*sread)(struct fid_eq *eq, enum fi_eq_event *event,
+	ssize_t	(*sread)(struct fid_eq *eq, uint32_t *event,
 			void *buf, size_t len, int timeout, uint64_t flags);
 	const char * (*strerror)(struct fid_eq *eq, int prov_errno,
 			const void *err_data, void *buf, size_t len);
@@ -307,7 +308,7 @@ fi_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 }
 
 static inline ssize_t
-fi_eq_read(struct fid_eq *eq, enum fi_eq_event *event, void *buf,
+fi_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,
 	   size_t len, uint64_t flags)
 {
 	return eq->ops->read(eq, event, buf, len, flags);
@@ -321,14 +322,14 @@ fi_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 }
 
 static inline ssize_t
-fi_eq_write(struct fid_eq *eq, enum fi_eq_event event, const void *buf,
+fi_eq_write(struct fid_eq *eq, uint32_t event, const void *buf,
 	    size_t len, uint64_t flags)
 {
 	return eq->ops->write(eq, event, buf, len, flags);
 }
 
 static inline ssize_t
-fi_eq_sread(struct fid_eq *eq, enum fi_eq_event *event, void *buf, size_t len,
+fi_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 	    int timeout, uint64_t flags)
 {
 	return eq->ops->sread(eq, event, buf, len, timeout, flags);
