@@ -423,7 +423,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 	}
 }
 
-static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
+static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 				fi_addr_t *src_addr)
 {
 	struct psmx_fid_cq *cq_priv;
@@ -444,9 +444,6 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 	if (cq_priv->pending_error)
 		return -FI_EAVAIL;
 
-	if (len < cq_priv->entry_size)
-		return -FI_ETOOSMALL;
-
 	if (!buf)
 		return -FI_EINVAL;
 
@@ -462,7 +459,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 					   struct psmx_cq_event,
 					   event);
 
-			return cq_priv->entry_size;
+			return 1;
 		}
 		else {
 			cq_priv->pending_error = event;
@@ -473,9 +470,9 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 	return 0;
 }
 
-static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t len)
+static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t count)
 {
-	return psmx_cq_readfrom(cq, buf, len, NULL);
+	return psmx_cq_readfrom(cq, buf, count, NULL);
 }
 
 static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,

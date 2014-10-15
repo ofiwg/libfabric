@@ -1,4 +1,4 @@
-.TH "FI_CQ" 3 "2014-09-18" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_CQ" 3 "2014-10-14" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_cq \- Completion queue operations
 .PP
@@ -39,10 +39,10 @@ Converts provider specific error information into a printable string
 .PP
 .HP
 .BI "int fi_cq_read(struct fid_cq *" cq ","
-.BI "void *" buf ", size_t " len ");"
+.BI "void *" buf ", size_t " count ");"
 .HP
 .BI "int fi_cq_readfrom(struct fid_cq *" cq ","
-.BI "void *" buf ", size_t " len ", "
+.BI "void *" buf ", size_t " count ", "
 .BI "fi_addr_t *" src_addr ");"
 .HP
 .BI "int fi_cq_readerr(struct fid_cq *" cq ","
@@ -59,11 +59,11 @@ Converts provider specific error information into a printable string
 .PP
 .HP
 .BI "int fi_cq_sread(struct fid_cq *" cq ","
-.BI "void *" buf ", size_t " len ", "
+.BI "void *" buf ", size_t " count ", "
 .BI "const void *" cond ", int " timeout ");"
 .HP
 .BI "int fi_cq_sreadfrom(struct fid_cq *" cq ","
-.BI "void *" buf ", size_t " len ","
+.BI "void *" buf ", size_t " count ","
 .BI "fi_addr_t *" src_addr ", const void *" cond ", int " timeout ");"
 .PP
 .HP
@@ -84,6 +84,8 @@ For read calls, the data buffer to write completions into.
 For write calls, a completion to insert into the completion queue.
 .br
 For fi_cq_strerror, an optional buffer that receives printable error information.
+.IP "count"
+Number of CQ entries.
 .IP "len"
 Length of data buffer
 .IP "src_addr"
@@ -283,17 +285,20 @@ should be an address where a pointer to the returned wait object
 will be written.
 .SS "fi_cq_read / fi_cq_readfrom"
 The fi_cq_read and fi_cq_readfrom operations perform a non-blocking read of
-completion data from the CQ.  The format of the completion data is based on the user
-specified options when the CQ was opened.  Multiple completions may be retrieved
-from an CQ in a single call, provided that sufficient buffer space was
-provided.  The number of bytes successfully read from the CQ is returned
-by the calls.
+completion data from the CQ.  The format of the completion event
+is determined using the fi_cq_format option that was specified when
+the CQ was opened.  Multiple completions may be retrieved
+from a CQ in a single call.  The maximum number of
+entries to return is limited to the
+specified count parameter, with the number of entries successfully read from
+the CQ returned by the call.
 .PP
 The fi_cq_readfrom call allows the CQ to return source address information to
 the user for any received data.  Source address data is only available for
 those endpoints configured with FI_SOURCE capability.  If fi_cq_readfrom is
 called on an endpoint for which source addressing data is not available, the
-source address will be set to FI_ADDR_UNSPEC.
+source address will be set to FI_ADDR_UNSPEC.  The number of input src_addr
+entries must the the same as the count parameter.
 .PP
 CQs are optimized to report operations which have completed successfully.
 Operations which fail are reported 'out of band'.  Such operations are
