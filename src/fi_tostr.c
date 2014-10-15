@@ -88,11 +88,12 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 static void fi_tostr_addr_format(char *buf, uint32_t addr_format)
 {
 	switch (addr_format) {
-	CASEENUMSTR(FI_ADDR_PROTO);
+	CASEENUMSTR(FI_ADDR_UNSPEC);
 	CASEENUMSTR(FI_SOCKADDR);
 	CASEENUMSTR(FI_SOCKADDR_IN);
 	CASEENUMSTR(FI_SOCKADDR_IN6);
 	CASEENUMSTR(FI_SOCKADDR_IB);
+	CASEENUMSTR(FI_ADDR_PSMX);
 	default:
 		if (addr_format & FI_PROV_SPECIFIC)
 			strcat(buf, "Provider specific\n");

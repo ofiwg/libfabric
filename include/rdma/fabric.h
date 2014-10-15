@@ -138,11 +138,12 @@ struct fi_ioc {
  * Format for transport addresses: sendto, writeto, etc.
  */
 enum {
-	FI_ADDR_PROTO,		/* void * proto_addr */
+	FI_ADDR_UNSPEC,		/* void * */
 	FI_SOCKADDR,		/* struct sockaddr */
 	FI_SOCKADDR_IN,		/* struct sockaddr_in */
 	FI_SOCKADDR_IN6,	/* struct sockaddr_in6 */
 	FI_SOCKADDR_IB,		/* struct sockaddr_ib */
+	FI_ADDR_PSMX,		/* uint64_t */
 };
 
 #define FI_ADDR_NOTAVAIL	UINT64_MAX
