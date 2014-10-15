@@ -262,7 +262,7 @@ fi_ibv_getepinfo(const char *node, const char *service,
 					NULL, &rai);
 	}
 	if (ret)
-		return -errno;
+		return (errno == ENODEV) ? -FI_ENODATA : -errno;
 
 	if (!(fi = __fi_allocinfo())) {
 		ret = -FI_ENOMEM;
