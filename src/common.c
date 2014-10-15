@@ -94,7 +94,7 @@ int fi_poll_fd(int fd, int timeout)
 	return poll(&fds, 1, timeout) < 0 ? -errno : 0;
 }
 
-struct fi_info *__fi_allocinfo(void)
+struct fi_info *fi_allocinfo_internal(void)
 {
 	struct fi_info *info;
 
@@ -113,11 +113,11 @@ struct fi_info *__fi_allocinfo(void)
 
 	return info;
 err:
-	__fi_freeinfo(info);
+	fi_freeinfo_internal(info);
 	return NULL;
 }
 
-void __fi_freeinfo(struct fi_info *info)
+void fi_freeinfo_internal(struct fi_info *info)
 {
 	free(info->src_addr);
 	free(info->dest_addr);

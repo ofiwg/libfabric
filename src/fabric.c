@@ -200,7 +200,7 @@ void fi_freeinfo_(struct fi_info *info)
 		if (prov && prov->provider->freeinfo)
 			prov->provider->freeinfo(info);
 		else
-			__fi_freeinfo(info);
+			fi_freeinfo_internal(info);
 	}
 }
 default_symver(fi_freeinfo_, fi_freeinfo);
@@ -253,7 +253,7 @@ const char *fi_strerror_(int errnum)
 }
 default_symver(fi_strerror_, fi_strerror);
 
-static const size_t __fi_datatype_size[] = {
+static const size_t fi_datatype_size_table[] = {
 	[FI_INT8]   = sizeof(int8_t),
 	[FI_UINT8]  = sizeof(uint8_t),
 	[FI_INT16]  = sizeof(int16_t),
@@ -276,5 +276,5 @@ size_t fi_datatype_size(enum fi_datatype datatype)
 		errno = FI_EINVAL;
 		return 0;
 	}
-	return __fi_datatype_size[datatype];
+	return fi_datatype_size_table[datatype];
 }

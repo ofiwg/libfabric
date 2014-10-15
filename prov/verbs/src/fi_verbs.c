@@ -263,7 +263,7 @@ fi_ibv_getepinfo(const char *node, const char *service,
 	if (ret)
 		return -errno;
 
-	if (!(fi = __fi_allocinfo())) {
+	if (!(fi = fi_allocinfo_internal())) {
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
@@ -298,7 +298,7 @@ fi_ibv_getepinfo(const char *node, const char *service,
 err3:
 	rdma_destroy_ep(*id);
 err2:
-	__fi_freeinfo(fi);
+	fi_freeinfo_internal(fi);
 err1:
 	rdma_freeaddrinfo(rai);
 	return ret;
@@ -1453,7 +1453,7 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		if (ret)
 			goto err;
 
-		__fi_freeinfo(fi);
+		fi_freeinfo_internal(fi);
 	} else {
 		_ep->id = info->connreq;
 	}
@@ -1499,7 +1499,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 {
 	struct fi_info *fi;
 
-	fi = __fi_allocinfo();
+	fi = fi_allocinfo_internal();
 	if (!fi)
 		return NULL;
 
@@ -1534,7 +1534,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	fi->connreq = event->id;
 	return fi;
 err:
-	__fi_freeinfo(fi);
+	fi_freeinfo_internal(fi);
 	return NULL;
 }
 
@@ -2312,7 +2312,7 @@ fi_ibv_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err;
 
-	__fi_freeinfo(fi);
+	fi_freeinfo_internal(fi);
 	_pep->id->context = &_pep->pep_fid.fid;
 
 	_pep->pep_fid.fid.fclass = FI_CLASS_PEP;
