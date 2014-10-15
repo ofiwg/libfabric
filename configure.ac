@@ -86,14 +86,15 @@ AC_DEFINE_UNQUOTED([STREAM_CLOEXEC], "$ac_cv_feature_stream_cloexec_flag",
 	[fopen() modifier for setting close on exec flag])
 
 dnl dlopen support is optional
-AC_ARG_ENABLE([dlopen],
-	AC_HELP_STRING([--enable-dlopen],
-		       [dl-loadable provider support @<:@default=yes@:>@]))
+AC_ARG_WITH([dlopen],
+	AC_HELP_STRING([--with-dlopen],
+		       [dl-loadable provider support @<:@default=yes@:>@]),
+	)
 
-if test "$enable_dlopen" != "no"; then
+AS_IF([test x"$with_dlopen" != x"no"], [
 AC_CHECK_LIB(dl, dlopen, [],
-    AC_MSG_ERROR([dlsym or dlopen not found.  libfabric requires libdl.]))
-fi
+    AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.]))
+])
 
 dnl Checks for libraries
 AC_CHECK_LIB(pthread, pthread_mutex_init, [],
