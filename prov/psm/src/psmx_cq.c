@@ -32,6 +32,8 @@
 
 #include "psmx.h"
 
+#define PSMX_CQ_EMPTY(cq) (!cq->event_queue.head)
+
 void psmx_cq_enqueue_event(struct psmx_cq_event_queue *ceq,
 			   struct psmx_cq_event *event)
 {
@@ -120,16 +122,15 @@ out:
 static struct psmx_cq_event *psmx_cq_create_event_from_status(
 				struct psmx_fid_cq *cq,
 				psm_mq_status_t *psm_status,
-				uint64_t data)
+				uint64_t data,
+				struct psmx_cq_event *event_in,
+				int count)
 {
 	struct psmx_cq_event *event;
 	struct psmx_multi_recv *req;
 	struct fi_context *fi_context = psm_status->context;
 	void *op_context, *buf;
 	int is_recv = 0;
-
-	PSMX_FREE_LIST_GET(cq->free_list.head, cq->free_list.tail,
-			   struct psmx_cq_event, event);
 
 	switch(PSMX_CTXT_TYPE(fi_context)) {
 	case PSMX_SEND_CONTEXT:
@@ -153,6 +154,12 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		break;
 	}
 
+	if (event_in && count && !psm_status->error_code)
+		event = event_in;
+	else
+		PSMX_FREE_LIST_GET(cq->free_list.head, cq->free_list.tail,
+				   struct psmx_cq_event, event);
+
 	if ((event->error = !!psm_status->error_code)) {
 		event->cqe.err.op_context = op_context;
 		event->cqe.err.err = -psmx_errno(psm_status->error_code);
@@ -163,6 +170,8 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 			event->cqe.err.data = data;
 		goto out;
 	}
+
+	if (event_in && count)
 
 	switch (cq->format) {
 	case FI_CQ_FORMAT_CONTEXT:
@@ -226,7 +235,8 @@ static int psmx_cq_get_event_src_addr(struct psmx_fid_cq *cq,
 	return -ENODATA;
 }
 
-int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
+int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
+		    struct psmx_cq_event *event_in, int count)
 {
 	psm_mq_req_t psm_req;
 	psm_mq_status_t psm_status;
@@ -327,11 +337,13 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				  mr = PSMX_CTXT_USER(fi_context);
 				  if (mr->cq) {
 					event = psmx_cq_create_event_from_status(
-							mr->cq, &psm_status, req->write.data);
+							mr->cq, &psm_status, req->write.data,
+							(mr->cq == cq) ? event_in : NULL, count);
 					if (!event)
 						return -ENOMEM;
 
-					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+					if (event != event_in)
+						psmx_cq_enqueue_event(&mr->cq->event_queue, event);
 				  }
 				  if (mr->cntr)
 					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
@@ -347,11 +359,13 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 				  mr = PSMX_CTXT_USER(fi_context);
 				  if (mr->cq) {
 					event = psmx_cq_create_event_from_status(
-							mr->cq, &psm_status, 0);
+							mr->cq, &psm_status, 0,
+							(mr->cq == cq) ? event_in : NULL, count);
 					if (!event)
 						return -ENOMEM;
 
-					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+					if (event != event_in)
+						psmx_cq_enqueue_event(&mr->cq->event_queue, event);
 				  }
 				  if (mr->cntr)
 					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
@@ -362,11 +376,13 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 			}
 
 			if (tmp_cq) {
-				event = psmx_cq_create_event_from_status(tmp_cq, &psm_status, 0);
+				event = psmx_cq_create_event_from_status(tmp_cq, &psm_status, 0,
+							(tmp_cq == cq) ? event_in : NULL, count);
 				if (!event)
 					return -ENOMEM;
 
-				psmx_cq_enqueue_event(&tmp_cq->event_queue, event);
+				if (event != event_in)
+					psmx_cq_enqueue_event(&tmp_cq->event_queue, event);
 			}
 
 			if (tmp_cntr)
@@ -428,18 +444,24 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 {
 	struct psmx_fid_cq *cq_priv;
 	struct psmx_cq_event *event;
+	int ret;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 	assert(cq_priv->domain);
 
-	cq_priv->poll_am_before_mq = !cq_priv->poll_am_before_mq;
-	if (cq_priv->poll_am_before_mq)
-		psmx_am_progress(cq_priv->domain);
+	if (PSMX_CQ_EMPTY(cq_priv)) {
+		ret = psmx_cq_poll_mq(cq_priv, cq_priv->domain,
+				      (struct psmx_cq_event *)buf, count);
+		if (ret > 0) {
+			if (psmx_cq_get_event_src_addr(cq_priv,
+						       (struct psmx_cq_event *)buf,
+						       src_addr))
+				*src_addr = FI_ADDR_NOTAVAIL;
+			return ret;
+		}
 
-	psmx_cq_poll_mq(cq_priv, cq_priv->domain);
-
-	if (!cq_priv->poll_am_before_mq)
 		psmx_am_progress(cq_priv->domain);
+	}
 
 	if (cq_priv->pending_error)
 		return -FI_EAVAIL;
