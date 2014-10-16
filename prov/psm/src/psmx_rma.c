@@ -565,7 +565,7 @@ ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
 
 	chunk_size = MIN(PSMX_AM_CHUNK_SIZE, psmx_am_param.max_reply_short);
 
-	if (ep_priv->domain->use_tagged_rma && len > chunk_size) {
+	if (psmx_env.tagged_rma && len > chunk_size) {
 		psm_tag = PSMX_RMA_BIT | ep_priv->domain->psm_epid;
 		err = psm_mq_irecv(ep_priv->domain->psm_mq, psm_tag, -1ULL,
 			0, buf, len, (void *)&req->fi_context, &psm_req);
@@ -773,7 +773,7 @@ ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 
 	chunk_size = MIN(PSMX_AM_CHUNK_SIZE, psmx_am_param.max_request_short);
 
-	if (ep_priv->domain->use_tagged_rma && len > chunk_size) {
+	if (psmx_env.tagged_rma && len > chunk_size) {
 		psm_tag = PSMX_RMA_BIT | ep_priv->domain->psm_epid;
 		args[0].u32w0 = PSMX_AM_REQ_WRITE_LONG;
 		args[0].u32w1 = len;

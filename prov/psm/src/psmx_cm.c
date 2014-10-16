@@ -40,8 +40,10 @@ static int psmx_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	if (!ep->domain)
 		return -EBADF;
 
-	if (*addrlen < sizeof(psm_epid_t))
+	if (*addrlen < sizeof(psm_epid_t)) {
+		*addrlen = sizeof(psm_epid_t);
 		return -FI_ETOOSMALL;
+	}
 
 	*(psm_epid_t *)addr = ep->domain->psm_epid;
 	*addrlen = sizeof(psm_epid_t);
