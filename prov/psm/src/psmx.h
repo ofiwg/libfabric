@@ -106,10 +106,7 @@ extern "C" {
 
 #define PSMX_CAP_EXT	(0)
 
-/* FI_MSG and FI_RMA appear in both BASE and OPT because they can be
- * supported w/ or w/o reserved tag bits
- */
-#define PSMX_CAP_BASE	(FI_TAGGED | FI_MSG | FI_ATOMICS | FI_INJECT | \
+#define PSMX_CAPS	(FI_TAGGED | FI_MSG | FI_ATOMICS | FI_INJECT | \
 			 FI_RMA | FI_BUFFERED_RECV | FI_MULTI_RECV | \
                          FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
@@ -117,17 +114,14 @@ extern "C" {
 			 FI_CANCEL | FI_TRIGGER | \
 			 FI_DYNAMIC_MR | \
 			 PSMX_CAP_EXT)
-#define PSMX_CAP_OPT1	(FI_MSG)
-#define PSMX_CAP_OPT2	(FI_RMA)
-
-#define PSMX_CAPS	(PSMX_CAP_BASE | PSMX_CAP_OPT1 | PSMX_CAP_OPT2)
 
 #define PSMX_MODE	(FI_CONTEXT)
 
 #define PSMX_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
 #define PSMX_INJECT_SIZE	(64)
 
-#define PSMX_MSG_BIT		(0x1ULL << 63)
+#define PSMX_MSG_BIT	(0x1ULL << 63)
+#define PSMX_RMA_BIT	(0x1ULL << 62)
 
 enum psmx_context_type {
 	PSMX_NOCOMP_SEND_CONTEXT = 1,
@@ -149,8 +143,6 @@ enum psmx_context_type {
 #define PSMX_CTXT_TYPE(fi_context)	(*(int *)&(fi_context)->internal[1])
 #define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX_CTXT_EP(fi_context)	((fi_context)->internal[3])
-
-#define PSMX_RMA_BIT		(0x1ULL << 62)
 
 #define PSMX_AM_RMA_HANDLER	0
 #define PSMX_AM_MSG_HANDLER	1

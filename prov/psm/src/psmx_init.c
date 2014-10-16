@@ -38,37 +38,61 @@ struct psmx_env psmx_env;
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 {
 	int reserved_bits = 0;
+	int ret_caps;
+	int ask_caps = *caps;
 
-	if (*caps) {
-		if (*caps & PSMX_CAP_OPT1)
-			reserved_bits++;
+	ret_caps = ask_caps ? ask_caps : PSMX_CAPS;
 
-		if (*caps & PSMX_CAP_OPT2)
-			reserved_bits++;
-
-		if (*max_tag_value > (~0ULL >> reserved_bits)) {
-			psmx_debug("%s: unable to reserve %d bits for asked features.\n",
-					__func__);
+	if ((ret_caps & FI_MSG) && !psmx_env.am_msg) {
+		if (*max_tag_value < PSMX_MSG_BIT) {
+			reserved_bits |= PSMX_MSG_BIT;
+		}
+		else if (ask_caps) {
+			psmx_debug("%s: unable to reserve tag bit for FI_MSG support.\n"
+				   "ADVICE: please reduce the asked max_tag_value, "
+				   "or remove FI_MSG from the asked capabilities, "
+				   "or set SFI_PSM_AM_MSG=1 to use an alternative (but less "
+				   "optimized) message queue implementation.\n",
+				   __func__);
 			return -1;
 		}
-
-		*max_tag_value = (~0ULL >> reserved_bits);
-		return 0;
+		else {
+			psmx_debug("%s: unable to reserve tag bit for FI_MSG support. "
+				   "FI_MSG is removed from the capabilities.\n"
+				   "ADVICE: please reduce the asked max_tag_value, "
+				   "or set SFI_PSM_AM_MSG=1 to use an alternative (but less "
+				   "optimized) message queue implementation.\n",
+				   __func__);
+			ret_caps &= ~FI_MSG;
+		}
 	}
 
-	*caps = PSMX_CAP_BASE;
-
-	if (*max_tag_value <= (~0ULL >> 1)) {
-		*caps |= PSMX_CAP_OPT1;
-		reserved_bits++;
+	if ((ret_caps & FI_RMA) && psmx_env.tagged_rma) {
+		if (*max_tag_value < PSMX_RMA_BIT) {
+			reserved_bits |= PSMX_RMA_BIT;
+		}
+		else if (ask_caps) {
+			psmx_debug("%s: unable to reserve tag bit for tagged RMA acceleration.\n"
+				   "ADVICE: please reduce the asked max_tag_value, "
+				   "or remove FI_RMA from the asked capabilities, "
+				   "or set SFI_PSM_TAGGED_RMA=0 to disable RMA acceleration.\n",
+				   __func__);
+			return -1;
+		}
+		else {
+			psmx_debug("%s: unable to reserve tag bit for tagged RMA acceleration. "
+				   "FI_RMA is removed from the capabilities.\n"
+				   "ADVICE: please reduce the asked max_tag_value, "
+				   "or set SFI_PSM_TAGGED_RMA=0 to disable RMA acceleration.\n",
+				   __func__);
+			ret_caps &= ~FI_RMA;
+		}
 	}
 
-	if (*max_tag_value <= (~0ULL >> 2)) {
-		*caps |= PSMX_CAP_OPT2;
-		reserved_bits++;
-	}
+	reserved_bits |= (reserved_bits << 1);
 
-	*max_tag_value = (~0ULL >> reserved_bits);
+	*caps = ret_caps;
+	*max_tag_value = ~reserved_bits;
 	return 0;
 }
 
