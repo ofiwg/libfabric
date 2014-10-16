@@ -62,6 +62,21 @@ enum {
 
 uint32_t fi_version(void);
 
+struct fid;
+struct fid_fabric;
+struct fid_domain;
+struct fid_av;
+struct fid_wait;
+struct fid_poll;
+struct fid_eq;
+struct fid_cq;
+struct fid_cntr;
+struct fid_ep;
+struct fid_pep;
+struct fid_mr;
+
+typedef struct fid *fid_t;
+
 /*
  * Provider specific values are indicated by setting the high-order bit.
  */
@@ -123,14 +138,15 @@ struct fi_ioc {
  * Format for transport addresses: sendto, writeto, etc.
  */
 enum {
-	FI_ADDR_PROTO,		/* void * proto_addr */
+	FI_ADDR_UNSPEC,		/* void * */
 	FI_SOCKADDR,		/* struct sockaddr */
 	FI_SOCKADDR_IN,		/* struct sockaddr_in */
 	FI_SOCKADDR_IN6,	/* struct sockaddr_in6 */
 	FI_SOCKADDR_IB,		/* struct sockaddr_ib */
+	FI_ADDR_PSMX,		/* uint64_t */
 };
 
-#define FI_ADDR_UNSPEC		UINT64_MAX
+#define FI_ADDR_NOTAVAIL	UINT64_MAX
 typedef uint64_t		fi_addr_t;
 typedef void *			fi_connreq_t;
 
@@ -220,6 +236,7 @@ struct fi_ep_attr {
 };
 
 struct fi_domain_attr {
+	struct fid_domain	*domain;
 	char			*name;
 	enum fi_threading	threading;
 	enum fi_progress	control_progress;
@@ -236,6 +253,7 @@ struct fi_domain_attr {
 };
 
 struct fi_fabric_attr {
+	struct fid_fabric	*fabric;
 	char			*name;
 	char			*prov_name;
 	uint32_t		prov_version;
@@ -277,20 +295,6 @@ enum {
 	FI_CLASS_POLL
 };
 
-struct fid;
-struct fid_fabric;
-struct fid_domain;
-struct fid_av;
-struct fid_wait;
-struct fid_poll;
-struct fid_eq;
-struct fid_cq;
-struct fid_cntr;
-struct fid_ep;
-struct fid_pep;
-struct fid_mr;
-
-typedef struct fid *fid_t;
 struct fi_eq_attr;
 
 struct fi_ops {

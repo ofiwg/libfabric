@@ -209,13 +209,13 @@ associated with 'any' address (similar to the IPv4 address of 0.0.0.0).
 .PP
 For AV's of type FI_AV_MAP, once inserted addresses have been mapped,
 the mapped values are written into the buffer referenced by fi_addr.
-THe fi_addr buffer must remain valid until the
+The fi_addr buffer must remain valid until the
 AV insertion has completed and an event has been generated
 to an associated event queue.  The value of the returned fi_addr should
 be considered opaque by the application for AVs of type FI_AV_MAP.
 The returned value may point to an internal structure or a provider
-specific encoding of low-level addresing data, for example.  In the latter
-case, use of FI_AV_MAP may be able to avoid memory dereferences during data
+specific encoding of low-level addressing data, for example.  In the latter
+case, use of FI_AV_MAP may be able to avoid memory references during data
 transfer operations. 
 .PP
 For AV's of type FI_AV_TABLE, addresses are placed into the table in

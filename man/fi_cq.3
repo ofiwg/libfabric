@@ -1,4 +1,4 @@
-.TH "FI_CQ" 3 "2014-09-18" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_CQ" 3 "2014-10-14" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_cq \- Completion queue operations
 .PP
@@ -12,9 +12,9 @@ fi_cq_read / fi_cq_readfrom / fi_cq_readerr
 Read a completion from a completion queue
 .RE
 .PP
-fi_cq_write
+fi_cq_write / fi_cq_writeerr
 .RS
-Writes a completion to a completion queue
+Writes a completion or error event to a completion queue
 .RE
 .PP
 fi_cq_sread / fi_cq_sreadfrom
@@ -39,10 +39,10 @@ Converts provider specific error information into a printable string
 .PP
 .HP
 .BI "int fi_cq_read(struct fid_cq *" cq ","
-.BI "void *" buf ", size_t " len ");"
+.BI "void *" buf ", size_t " count ");"
 .HP
 .BI "int fi_cq_readfrom(struct fid_cq *" cq ","
-.BI "void *" buf ", size_t " len ", "
+.BI "void *" buf ", size_t " count ", "
 .BI "fi_addr_t *" src_addr ");"
 .HP
 .BI "int fi_cq_readerr(struct fid_cq *" cq ","
@@ -52,14 +52,18 @@ Converts provider specific error information into a printable string
 .HP
 .BI "int fi_cq_write(struct fid_cq *" cq ","
 .BI "const void *" buf ", size_t " len ");"
+.HP
+.BI "int fi_cq_writeerr(struct fid_cq *" cq ","
+.BI "struct fi_cq_err_entry *" buf ", size_t " len ", "
+.BI "uint64_t " flags ");"
 .PP
 .HP
 .BI "int fi_cq_sread(struct fid_cq *" cq ","
-.BI "void *" buf ", size_t " len ", "
+.BI "void *" buf ", size_t " count ", "
 .BI "const void *" cond ", int " timeout ");"
 .HP
 .BI "int fi_cq_sreadfrom(struct fid_cq *" cq ","
-.BI "void *" buf ", size_t " len ","
+.BI "void *" buf ", size_t " count ","
 .BI "fi_addr_t *" src_addr ", const void *" cond ", int " timeout ");"
 .PP
 .HP
@@ -80,6 +84,8 @@ For read calls, the data buffer to write completions into.
 For write calls, a completion to insert into the completion queue.
 .br
 For fi_cq_strerror, an optional buffer that receives printable error information.
+.IP "count"
+Number of CQ entries.
 .IP "len"
 Length of data buffer
 .IP "src_addr"
@@ -102,7 +108,7 @@ usually associated with a fabric endpoint, but may also refer to memory
 regions used as the target of an RMA or atomic operation.
 .SS "fi_cq_open"
 fi_cq_open allocates a new completion queue.  Unlike event queues, completion
-queues are assocaiated with a resource domain and may be offloaded entirely
+queues are associated with a resource domain and may be offloaded entirely
 in provider hardware.
 .PP 
 The properties and behavior of a completion queue are defined by
@@ -126,9 +132,10 @@ Flags that control the configuration of the CQ.
 .RS
 .IP "FI_WRITE"
 Indicates that the application requires support for inserting user events
-into the CQ.  If this flag is set, then the fi_cq_write operation must be
+into the CQ.  If this flag is set, then the fi_cq_write and fi_cq_writeerr
+operations must be
 supported by the provider.  If the FI_WRITE flag is not set, then the
-application may not invoke fi_cq_write. 
+application may not invoke fi_cq_write of fi_cq_writeerr. 
 .IP "FI_REMOTE_SIGNAL"
 If specified, this indicates that the CQ should only signal its wait object
 upon receiving a remote operation with FI_REMOTE_SIGNAL set, provided that all
@@ -200,20 +207,20 @@ applications to block until the wait object is signaled, indicating that
 a completion is available to be read.  Users may use fi_control to retrieve
 the underlying wait object associated with an CQ, in order to use it in
 other system calls.  The following values may be used to specify the type
-of wait object associated with an CQ: FI_WAIT_NONE, FI_WAIT_UNSPECIFIED,
+of wait object associated with an CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC,
 FI_WAIT_SET, FI_WAIT_FD, and FI_WAIT_MUT_COND.
 .RS
 .IP "FI_WAIT_NONE"
 Used to indicate that the user will not block (wait) for completions on the CQ.
 When FI_WAIT_NONE is specified, the application may not call fi_cq_sread
 or fi_cq_sreadfrom.
-.IP "FI_WAIT_UNSPECIFIED"
+.IP "FI_WAIT_UNSPEC"
 Specifies that the user will only wait on the CQ using fabric interface
 calls, such as fi_cq_readcond or fi_cq_sreadfrom.  In this case, the
 underlying provider may select the most appropriate or highest
 performing wait object available, including custom wait mechanisms.
 Applications that select
-FI_WAIT_UNSPECIFIED are not guaranteed to retrieve the underlying wait
+FI_WAIT_UNSPEC are not guaranteed to retrieve the underlying wait
 object.
 .IP "FI_WAIT_SET"
 Indicates that the completion queue should use a wait set object to wait
@@ -278,17 +285,20 @@ should be an address where a pointer to the returned wait object
 will be written.
 .SS "fi_cq_read / fi_cq_readfrom"
 The fi_cq_read and fi_cq_readfrom operations perform a non-blocking read of
-completion data from the CQ.  The format of the completion data is based on the user
-specified options when the CQ was opened.  Multiple completions may be retrieved
-from an CQ in a single call, provided that sufficient buffer space was
-provided.  The number of bytes successfully read from the CQ is returned
-by the calls.
+completion data from the CQ.  The format of the completion event
+is determined using the fi_cq_format option that was specified when
+the CQ was opened.  Multiple completions may be retrieved
+from a CQ in a single call.  The maximum number of
+entries to return is limited to the
+specified count parameter, with the number of entries successfully read from
+the CQ returned by the call.
 .PP
 The fi_cq_readfrom call allows the CQ to return source address information to
 the user for any received data.  Source address data is only available for
 those endpoints configured with FI_SOURCE capability.  If fi_cq_readfrom is
 called on an endpoint for which source addressing data is not available, the
-source address will be set to FI_ADDR_UNSPEC.
+source address will be set to FI_ADDR_NOTAVAIL.  The number of input src_addr
+entries must the the same as the count parameter.
 .PP
 CQs are optimized to report operations which have completed successfully.
 Operations which fail are reported 'out of band'.  Such operations are
@@ -331,6 +341,18 @@ The general reason for the error is provided through the err field.  Provider
 specific error information may also be available through the prov_errno
 and err_data fields.  Users may call fi_cq_strerror to convert provider
 specific error information into a printable string for debugging purposes.
+.SS "fi_cq_write / fi_cq_writeerr"
+The fi_cq_write and fi_cq_writeerr operations insert user-generated completion
+entries into a completion queue.  fi_cq_write inserts non-error events into
+the CQ.  The format of the fi_cq_write event must be the same as the
+fi_cq_format attribute defined for the CQ when it was created.  fi_cq_writeerr
+inserts error events into the CQ.  The error event format is struct
+fi_cq_err_entry.  The number of entries to insert into the CQ is determined
+by the len parameter.  Len must be a multiple of the size of the event to
+insert.
+.PP
+User events inserted into a CQ with be associated with the source address
+FI_ADDR_NOTAVAIL.
 .SH "RETURN VALUES"
 fi_cq_open 
 .RS
@@ -341,8 +363,12 @@ fabric errno is returned.
 fi_cq_read / fi_cq_readfrom / fi_cq_readerr
 .br
 fi_cq_sread / fi_cq_sreadfrom
-.br
-fi_cq_write
+.RS
+On success, returns the number of completion events retrieved from the
+completion queue.  On error, a negative value corresponding to fabric
+errno is returned.
+.RE
+fi_cq_write / fi_cq_writeerr
 .RS
 On success, returns the number of bytes read from or written to the completion
 queue.  On error, a negative value corresponding to fabric errno

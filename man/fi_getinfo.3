@@ -49,7 +49,7 @@ values for the major and minor values.  The FI_MAJOR_VERSION and FI_MINOR_VERSIO
 enum values defined in fabric.h specify the latest version of the installed
 library.  However, it is recommended that the integer values for FI_MAJOR_VERSION
 and FI_MINOR_VERSION be used, rather than referencing the enum types in order
-to ensure compatibiliy with future versions of the library.  This protects
+to ensure compatibility with future versions of the library.  This protects
 against the application being built from source against a newer version of the
 library that introduces new fields to data structures, which would not be
 initialized by the application.
@@ -95,7 +95,7 @@ section below.
 .IP "mode"
 Operational modes supported by the application.  See the
 .B "Mode"
-secton below.
+section below.
 .IP "ep_type - endpoint type"
 If specified, indicates the type of fabric interface communication desired.
 Supported types are listed in the
@@ -410,13 +410,15 @@ A provider may support one or more of the following addressing formats.  In
 some cases, a selected addressing format may need to be translated or mapped
 into into an address which is native to the fabric.
 .BR "fi_av(3)".
-.IP "FI_ADDR_PROTO"
-FI_ADDR_PROTO indicates that a native, protocol specific address format should
-be used.  Protocol specific addresses are intended to be treated as opaque
-by applications, and they target apps which make use of an out of band
+.IP "FI_ADDR_UNSPEC"
+FI_ADDR_UNSPEC indicates that a provider specific address format should
+be selected.  Provider specific addresses may be protocol specific or
+a vendor proprietary format.  Applications that select FI_ADDR_UNSPEC
+should be prepared to be treat returned addressing data as opaque.
+FI_ADDR_UNSPEC targets apps which make use of an out of band
 address exchange.
-Applications which use FI_ADDR_PROTO may use fi_getname() to obtain the
-protocol specific address assigned to an allocated endpoint.
+Applications which use FI_ADDR_UNSPEC may use fi_getname() to obtain a
+provider specific address assigned to an allocated endpoint.
 .IP "FI_SOCKADDR"
 Address is of type sockaddr.  The specific socket address format will be
 determined at run time by interfaces examining the sa_family field.
@@ -426,6 +428,9 @@ Address is of type sockaddr_in (IPv4).
 Address is of type sockaddr_in6 (IPv6).
 .IP "FI_SOCKADDR_IB"
 Address is of type sockaddr_ib (defined in Linux kernel source 
+.IP "FI_ADDR_PSMX"
+Address is an Intel proprietary format that is used with their PSMX
+(extended performance scaled messaging) protocol.
 .BR "include/rdma/ib.h").
 .SH "FLAGS"
 The operation of the fi_getinfo call may be controlled through the use of

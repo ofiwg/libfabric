@@ -423,7 +423,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain)
 	}
 }
 
-static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
+static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 				fi_addr_t *src_addr)
 {
 	struct psmx_fid_cq *cq_priv;
@@ -444,9 +444,6 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 	if (cq_priv->pending_error)
 		return -FI_EAVAIL;
 
-	if (len < cq_priv->entry_size)
-		return -FI_ETOOSMALL;
-
 	if (!buf)
 		return -FI_EINVAL;
 
@@ -455,14 +452,14 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 		if (!event->error) {
 			memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
 			if (psmx_cq_get_event_src_addr(cq_priv, event, src_addr))
-				*src_addr = FI_ADDR_UNSPEC;
+				*src_addr = FI_ADDR_NOTAVAIL;
 
 			PSMX_FREE_LIST_PUT(cq_priv->free_list.head,
 					   cq_priv->free_list.tail,
 					   struct psmx_cq_event,
 					   event);
 
-			return cq_priv->entry_size;
+			return 1;
 		}
 		else {
 			cq_priv->pending_error = event;
@@ -473,9 +470,9 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 	return 0;
 }
 
-static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t len)
+static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t count)
 {
-	return psmx_cq_readfrom(cq, buf, len, NULL);
+	return psmx_cq_readfrom(cq, buf, count, NULL);
 }
 
 static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
@@ -605,6 +602,7 @@ static struct fi_ops_cq psmx_cq_ops = {
 	.readfrom = psmx_cq_readfrom,
 	.readerr = psmx_cq_readerr,
 	.write = psmx_cq_write,
+	.writeerr = fi_no_cq_writeerr,
 	.sread = psmx_cq_sread,
 	.sreadfrom = psmx_cq_sreadfrom,
 	.strerror = psmx_cq_strerror,
@@ -688,7 +686,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			return -FI_EINVAL;
 		}
 		/* fall through */
-	case FI_WAIT_UNSPECIFIED:
+	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUT_COND:
 		switch (attr->wait_cond) {

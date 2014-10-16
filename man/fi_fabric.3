@@ -1,4 +1,4 @@
-.TH "FI_FABRIC" 3 "2013-07-25" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_FABRIC" 3 "2013-10-14" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_fabric \- Fabric domain operations
 .PP
@@ -87,11 +87,18 @@ fabric and a fabric provider.
 .sp
 .nf
 struct fi_fabric_attr {
+	struct fid_fabric *fabric;
 	char              *name;
 	char              *prov_name;
 	uint32_t          prov_version;
 };
 .fi
+.SS "fabric"
+On input to fi_getinfo, a user may set this to an opened fabric instance to
+restrict output to the given fabric.  On output from fi_getinfo, if no fabric
+was specified, but the user has an opened instance of the named fabric, this will
+reference the first opened instance.  If no instance has been opened, this
+field will be NULL.
 .SS "Name"
 A fabric identifier.
 .SS "Provider Name"

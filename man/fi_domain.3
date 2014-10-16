@@ -1,4 +1,4 @@
-.TH "FI_DOMAIN" 3 "2014-10-11" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_DOMAIN" 3 "2014-10-14" "libfabric" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_domain \- Open a fabric access domain
 .SH SYNOPSIS
@@ -72,6 +72,7 @@ domain.
 .sp
 .nf
 struct fi_domain_attr {
+	struct fid_domain *domain;
 	char              *name;
 	enum fi_threading threading;
 	enum fi_progress  control_progress;
@@ -87,6 +88,12 @@ struct fi_domain_attr {
 	size_t            iov_size;
 };
 .fi
+.SS "domain"
+On input to fi_getinfo, a user may set this to an opened domain instance to
+restrict output to the given domain.  On output from fi_getinfo, if no domain
+was specified, but the user has an opened instance of the named domain, this will
+reference the first opened instance.  If no instance has been opened, this
+field will be NULL.
 .SS "Name"
 The name of the access domain.
 .SS "Multi-threading Support (threading)"
