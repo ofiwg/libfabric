@@ -509,7 +509,7 @@ static int server_connect(void)
 		}
 	} while (ret == 0);
 
-	if (client_addr == FI_ADDR_UNSPEC) {
+	if (client_addr == FI_ADDR_NOTAVAIL) {
 		printf("Error getting address\n");
 		goto err;
 	}
