@@ -170,7 +170,7 @@ err:
 static int pp_accept_ctx(struct pingpong_context *ctx)
 {
 	struct fi_eq_cm_entry entry;
-	enum fi_eq_event event;
+	uint32_t event;
 	int rc = 0;
 	int rd = 0;
 
@@ -254,7 +254,7 @@ err:
 static int pp_connect_ctx(struct pingpong_context *ctx)
 {
 	struct fi_eq_cm_entry entry;
-	enum fi_eq_event event;
+	uint32_t event;
 	int rc = 0;
 
 	/* Open domain */
