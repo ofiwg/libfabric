@@ -238,7 +238,7 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 	switch (cntr_priv->wait_obj) {
 	case FI_WAIT_NONE:
 		while (cntr_priv->counter < threshold) {
-			psmx_cq_poll_mq(NULL, cntr_priv->domain);
+			psmx_cq_poll_mq(NULL, cntr_priv->domain, NULL, 0, NULL);
 			psmx_am_progress(cntr_priv->domain);
 		}
 		break;

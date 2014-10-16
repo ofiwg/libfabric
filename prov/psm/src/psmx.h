@@ -337,7 +337,6 @@ struct psmx_fid_cq {
 	struct psmx_cq_event_queue	event_queue;
 	struct psmx_cq_event_queue	free_list;
 	struct psmx_cq_event		*pending_error;
-	int				poll_am_before_mq;
 	struct psmx_wait		*wait;
 };
 
@@ -622,8 +621,8 @@ int	psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 int	psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
 
-int	psmx_cq_poll_mq(struct psmx_fid_cq *cq,
-			struct psmx_fid_domain *domain);
+int	psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
+			struct psmx_cq_event *event, int count, fi_addr_t *src_addr);
 struct	psmx_fid_mr *psmx_mr_hash_get(uint64_t key);
 int	psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access);
 void	psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr);
