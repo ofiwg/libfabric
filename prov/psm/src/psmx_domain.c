@@ -87,7 +87,6 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct psm_ep_open_opts opts;
 	psm_uuid_t uuid;
 	int err = -ENOMEM;
-	char *s;
 
 	psmx_debug("%s\n", __func__);
 
@@ -130,22 +129,13 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	domain_priv->ns_port = psmx_uuid_to_port(uuid);
 
-	s = getenv("SFI_PSM_NAME_SERVER");
-	if (s && (!strcasecmp(s, "yes") || !strcasecmp(s, "on") || !strcmp(s, "1")))
+	if (psmx_env.name_server)
 		err = pthread_create(&domain_priv->ns_thread, NULL, psmx_name_server, (void *)domain_priv);
 	else
 		err = -1;
 
 	if (err)
 		domain_priv->ns_thread = 0;
-
-	s = getenv("SFI_PSM_AM_MSG");
-	if (s && (!strcasecmp(s, "yes") || !strcasecmp(s, "on") || !strcmp(s, "1")))
-		domain_priv->use_am_msg = 1;
-
-	s = getenv("SFI_PSM_TAGGED_RMA");
-	if (s && (!strcasecmp(s, "yes") || !strcasecmp(s, "on") || !strcmp(s, "1")))
-		domain_priv->use_tagged_rma = 1;
 
 	if (psmx_domain_enable_features(domain_priv, 0) < 0) {
 		if (domain_priv->ns_thread) {
@@ -196,13 +186,13 @@ int psmx_domain_enable_features(struct psmx_fid_domain *domain, int ep_cap)
 	if (ep_cap & FI_MSG)
 		domain->reserved_tag_bits |= PSMX_MSG_BIT;
 
-	if (domain->use_am_msg)
+	if (psmx_env.am_msg)
 		domain->reserved_tag_bits &= ~PSMX_MSG_BIT;
 
-	if ((ep_cap & FI_RMA) && domain->use_tagged_rma)
+	if ((ep_cap & FI_RMA) && psmx_env.tagged_rma)
 		domain->reserved_tag_bits |= PSMX_RMA_BIT;
 
-	if (((ep_cap & FI_RMA) || (ep_cap & FI_ATOMICS) || domain->use_am_msg) &&
+	if (((ep_cap & FI_RMA) || (ep_cap & FI_ATOMICS) || psmx_env.am_msg) &&
 	    !domain->am_initialized) {
 		int err = psmx_am_init(domain);
 		if (err)

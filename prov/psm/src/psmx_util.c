@@ -59,7 +59,7 @@ static void psmx_string_to_uuid(const char *s, psm_uuid_t uuid)
 
 void psmx_get_uuid(psm_uuid_t uuid)
 {
-	psmx_string_to_uuid(getenv("SFI_PSM_UUID"), uuid);
+	psmx_string_to_uuid(psmx_env.uuid, uuid);
 }
 
 int psmx_uuid_to_port(psm_uuid_t uuid)
@@ -308,19 +308,9 @@ void psmx_query_mpi(void)
 
 void psmx_debug(char *fmt, ...)
 {
-	static int debug = -1;
-	char *env;
 	va_list ap;
 
-	if (debug == -1) {
-		env = getenv("SFI_PSM_DEBUG");
-		if (env)
-			debug = atoi(env);
-		else
-			debug = 0;
-	}
-
-	if (debug) {
+	if (psmx_env.debug) {
 		va_start(ap, fmt);
 		vfprintf(stderr, fmt, ap);
 		va_end(ap);

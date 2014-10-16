@@ -33,6 +33,8 @@
 #include "psmx.h"
 #include "fi.h"
 
+struct psmx_env psmx_env;
+
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 {
 	int reserved_bits = 0;
@@ -276,16 +278,37 @@ static struct fi_provider psmx_prov = {
 	.fabric = psmx_fabric,
 };
 
+static int psmx_get_int_env(char *name, int default_value)
+{
+	char *s;
+
+	s = getenv(name);
+	if (s) {
+		if (s[0]>='0' && s[0]<='9')
+			return atoi(s);
+
+		if (!strcasecmp(s, "yes") || !strcasecmp(s, "on"))
+			return 1;
+
+		if (!strcasecmp(s, "no") || !strcasecmp(s, "off"))
+			return 0;
+	}
+
+	return default_value;
+}
+
 static void __attribute__((constructor)) psmx_ini(void)
 {
 	int major, minor;
+	int check_version;
 	int err;
-	char *s;
-	int check_version = 1;
 
-	s = getenv("SFI_PSM_VERSION_CHECK");
-	if (s)
-		check_version = atoi(s);
+	psmx_env.name_server	= psmx_get_int_env("SFI_PSM_NAME_SERVER", 0);
+	psmx_env.am_msg		= psmx_get_int_env("SFI_PSM_AM_MSG", 0);
+	psmx_env.tagged_rma	= psmx_get_int_env("SFI_PSM_TAGGED_RMA", 0);
+	psmx_env.debug		= psmx_get_int_env("SFI_PSM_DEBUG", 0);
+	psmx_env.warning	= psmx_get_int_env("SFI_PSM_WARNING", 1);
+	psmx_env.uuid		= getenv("SFI_PSM_UUID");
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
 
@@ -298,6 +321,8 @@ static void __attribute__((constructor)) psmx_ini(void)
 			psm_error_get_string(err));
 		return;
 	}
+
+	check_version = psmx_get_int_env("SFI_PSM_VERSION_CHECK", 1);
 
 	if (check_version && major != PSM_VERNO_MAJOR) {
 		fprintf(stderr, "%s: PSM version mismatch: header %d.%d, library %d.%d.\n",

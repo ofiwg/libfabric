@@ -64,7 +64,7 @@ int psmx_am_progress(struct psmx_fid_domain *domain)
 	pthread_mutex_unlock(&domain->send_queue.lock);
 #endif
 
-	if (domain->use_tagged_rma) {
+	if (psmx_env.tagged_rma) {
 		pthread_mutex_lock(&domain->rma_queue.lock);
 		while (domain->rma_queue.head) {
 			req = domain->rma_queue.head;

@@ -279,8 +279,6 @@ struct psmx_fid_domain {
 	int			atomics_used:1;
 	uint64_t		mode;
 
-	int			use_am_msg;
-	int			use_tagged_rma;
 	int			am_initialized;
 
 #if PSMX_AM_USE_SEND_QUEUE
@@ -550,6 +548,15 @@ struct psmx_epaddr_context {
 	psm_epid_t		epid;
 };
 
+struct psmx_env {
+	int name_server;
+	int am_msg;
+	int tagged_rma;
+	int debug;
+	int warning;
+	char *uuid;
+};
+
 extern struct fi_ops_mr		psmx_mr_ops;
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
@@ -566,6 +573,7 @@ extern struct fi_ops_msg	psmx_msg2_ops;
 extern struct fi_ops_rma	psmx_rma_ops;
 extern struct fi_ops_atomic	psmx_atomic_ops;
 extern struct psm_am_parameters psmx_am_param;
+extern struct psmx_env		psmx_env;
 
 int	psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			 struct fid_domain **domain, void *context);
