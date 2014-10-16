@@ -147,8 +147,8 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
 int fi_poll_fd(int fd, int timeout);
 int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout);
 
-struct fi_info *__fi_allocinfo(void);
-void __fi_freeinfo(struct fi_info *info);
+struct fi_info *fi_allocinfo_internal(void);
+void fi_freeinfo_internal(struct fi_info *info);
 
 int fi_sockaddr_len(struct sockaddr *addr);
 size_t fi_datatype_size(enum fi_datatype datatype);

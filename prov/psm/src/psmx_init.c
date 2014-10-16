@@ -218,7 +218,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	if (psmx_reserve_tag_bits(&caps, &max_tag_value) < 0)
 		goto err_out;
 
-	psmx_info = __fi_allocinfo();
+	psmx_info = fi_allocinfo_internal();
 	if (!psmx_info) {
 		err = -ENOMEM;
 		goto err_out;
@@ -245,7 +245,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->ep_type = ep_type;
 	psmx_info->caps = (hints && hints->caps) ? hints->caps : caps;
 	psmx_info->mode = PSMX_MODE;
-	psmx_info->addr_format = FI_ADDR_PROTO;
+	psmx_info->addr_format = FI_ADDR_PSMX;
 	psmx_info->src_addrlen = 0;
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);
 	psmx_info->src_addr = NULL;

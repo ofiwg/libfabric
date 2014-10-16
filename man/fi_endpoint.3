@@ -532,7 +532,7 @@ with an endpoint is specified during endpoint creation.
 The fi_tx_context call is used to retrieve a specific context,
 identified by an index.  Providers may dynamically allocate contexts
 when fi_tx_context is called, or may statically create all contexts
-when fi_endpoint is invoked.  By default, a transmit context inherents
+when fi_endpoint is invoked.  By default, a transmit context inherits
 the properties of its associated endpoint.  However, applications
 may request context specific attributes through the attr parameter.
 Support for per transmit context attributes is provider specific
@@ -571,8 +571,8 @@ The size of the context, in bytes.  The size is usually used as
 an output value by applications wishing to track if sufficient space is
 available in the local queue to post a new operation.
 .IP "iov_limit" 
-This is the maximumnumber of IO vectors (scatter-gather elements) that a
-single posted operaton may reference.
+This is the maximum number of IO vectors (scatter-gather elements) that a
+single posted operation may reference.
 .IP "op_alignment"
 The operation alignment is used to calculate any necessary padding needed
 to post an operation to the context.  All operations posted to the context
@@ -588,7 +588,7 @@ with an endpoint is specified during endpoint creation.
 .P
 Receive contexts are often associated with steering flows, that specify
 which incoming packets targeting a scalable endpoint to process.  However,
-receive contexts may be targeted directly by the intiator, if supported
+receive contexts may be targeted directly by the initiator, if supported
 by the underlying protocol.  Such contexts are referred to as 'named'.
 Support for named contexts must be indicated by setting the caps
 FI_NAMED_RX_CTX capability when the corresponding endpoint is created.
@@ -598,7 +598,7 @@ See fi_av(3) and fi_rx_addr(3).
 The fi_rx_context call is used to retrieve a specific context,
 identified by an index.  Providers may dynamically allocate contexts
 when fi_rx_context is called, or may statically create all contexts
-when fi_endpoint is invoked.  By default, a receive context inherents
+when fi_endpoint is invoked.  By default, a receive context inherits
 the properties of its associated endpoint.  However, applications
 may request context specific attributes through the attr parameter.
 Support for per receive context attributes is provider specific
@@ -637,8 +637,8 @@ The size of the context, in bytes.  The size is usually used as
 an output value by applications wishing to track if sufficient space is
 available in the local queue to post a new operation.
 .IP "iov_limit" 
-This is the maximumnumber of IO vectors (scatter-gather elements) that a
-single posted operaton may reference.
+This is the maximum number of IO vectors (scatter-gather elements) that a
+single posted operating may reference.
 .IP "op_alignment"
 The operation alignment is used to calculate any necessary padding needed
 to post an operation to the context.  All operations posted to the context
@@ -742,7 +742,7 @@ IOVs (scatter-gather elements).  The amount of space needed by a transmit
 or receive context to store a request depends on the size needed by the
 provider to store the operation, plus information about each IO vector
 element.  Additionally, each operation may need to be aligned to a specific
-address boundary, such as a cacheline or aligned on a 64-bit word.  The
+address boundary, such as a cache line or aligned on a 64-bit word.  The
 above equation defines this relationship, assuming that the op_alignment
 is given as a power of 2.
 .PP
