@@ -154,7 +154,7 @@ static int wait_for_completion(struct fid_cq *cq, int num_completions)
 	struct fi_cq_entry comp;
 	
 	while (num_completions > 0) {
-		ret = fi_cq_read(cq, &comp, sizeof comp);
+		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
 			num_completions--;
 		} else if (ret < 0) {
