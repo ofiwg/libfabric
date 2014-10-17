@@ -71,7 +71,6 @@ static void
 do_usd_init()
 {
     usd_init_error = usd_ib_get_devlist(&usd_ib_dev_list);
-    return;
 }
 
 /*

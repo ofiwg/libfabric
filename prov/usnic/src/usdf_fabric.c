@@ -165,7 +165,7 @@ usdf_fill_addr_info(struct fi_info *fi, struct fi_info *hints,
 	return 0;
 
 fail:
-	return ret;		// fi_freeinfo_internal() in caller frees all
+	return ret;		// fi_freeinfo() in caller frees all
 }
 
 
@@ -208,12 +208,12 @@ usdf_fill_info(struct fi_info *fi, struct fi_info *hints,
 	return 0;
 
 fail:
-	return ret;		// fi_freeinfo_internal() in caller frees all
+	return ret;		// fi_freeinfo() in caller frees all
 }
 
 static int
 usdf_getinfo(uint32_t version, const char *node, const char *service,
-		       uint64_t flags, struct fi_info *hints, struct fi_info **info)
+	       uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct usd_device_entry devs[USD_MAX_DEVICES];
 	struct fi_info *fi_first;
@@ -232,6 +232,7 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 	fi_last = NULL;
 	ai = NULL;
 	sin = NULL;
+	dev = NULL;
 
 	if (node != NULL) {
 		ret = getaddrinfo(node, service, NULL, &ai);
@@ -315,10 +316,8 @@ fail:
 	if (dev != NULL) {
 		usd_close(dev);
 	}
-	while (fi_first != NULL) {
-		fi = fi_first->next;
-		fi_freeinfo_internal(fi_first);
-		fi_first = fi;
+	if (fi_first != NULL) {
+		fi_freeinfo(fi_first);
 	}
 	if (ai != NULL) {
 		freeaddrinfo(ai);
@@ -350,11 +349,6 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 {
 	struct usdf_fabric *fp;
 	int ret;
-
-	if (fattrp->prov_name == NULL ||
-			strcmp(fattrp->prov_name, USDF_FI_NAME) != 0) {
-		return -FI_ENODATA;
-	}
 
 	fp = calloc(1, sizeof(*fp));
 	if (fp == NULL) {

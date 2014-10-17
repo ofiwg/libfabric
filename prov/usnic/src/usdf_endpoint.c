@@ -195,7 +195,7 @@ usdf_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			ep->ep_wcq = cq_fidtou(bfid);
 		}
 
-    	if (flags & FI_RECV) {
+		if (flags & FI_RECV) {
 			if (ep->ep_rcq != NULL) {
 				return -FI_EINVAL;
 			}

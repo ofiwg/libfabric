@@ -45,25 +45,6 @@
 
 #include "usd.h"
 
-/* defined only in kernel? */
-enum ib_port_speed {
-    IB_SPEED_SDR = 1,
-    IB_SPEED_DDR = 2,
-    IB_SPEED_QDR = 4,
-    IB_SPEED_FDR10 = 8,
-    IB_SPEED_FDR = 16,
-    IB_SPEED_EDR = 32
-};
-
-enum ib_port_width {
-    IB_WIDTH_1X = 1,
-    IB_WIDTH_4X = 2,
-    IB_WIDTH_8X = 4,
-    IB_WIDTH_12X = 8
-};
-
-#define IB_PORT_ACTIVE 4
-
 int usd_ib_cmd_get_context(struct usd_device *dev);
 int usd_ib_cmd_alloc_pd(struct usd_device *dev, uint32_t * pd_handle_o);
 int usd_ib_cmd_reg_mr(struct usd_device *dev, void *vaddr, size_t length,
