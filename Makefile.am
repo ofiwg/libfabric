@@ -64,6 +64,84 @@ endif
 
 endif #HAVE_VERBS
 
+if HAVE_USNIC
+libusnic_direct_sources = \
+	prov/usnic/src/usnic_direct/cq_desc.h \
+	prov/usnic/src/usnic_direct/cq_enet_desc.h \
+	prov/usnic/src/usnic_direct/kcompat.h \
+	prov/usnic/src/usnic_direct/kcompat_priv.h \
+	prov/usnic/src/usnic_direct/libnl1_utils.h \
+	prov/usnic/src/usnic_direct/libnl3_utils.h \
+	prov/usnic/src/usnic_direct/libnl_utils_common.c \
+	prov/usnic/src/usnic_direct/libnl_utils.h \
+	prov/usnic/src/usnic_direct/linux/delay.h \
+	prov/usnic/src/usnic_direct/linux/slab.h \
+	prov/usnic/src/usnic_direct/linux_types.h \
+	prov/usnic/src/usnic_direct/rq_enet_desc.h \
+	prov/usnic/src/usnic_direct/usd_caps.c \
+	prov/usnic/src/usnic_direct/usd_caps.h \
+	prov/usnic/src/usnic_direct/usd_dest.c \
+	prov/usnic/src/usnic_direct/usd_dest.h \
+	prov/usnic/src/usnic_direct/usd_device.c \
+	prov/usnic/src/usnic_direct/usd_device.h \
+	prov/usnic/src/usnic_direct/usd_event.c \
+	prov/usnic/src/usnic_direct/usd.h \
+	prov/usnic/src/usnic_direct/usd_ib_cmd.c \
+	prov/usnic/src/usnic_direct/usd_ib_cmd.h \
+	prov/usnic/src/usnic_direct/usd_ib_sysfs.c \
+	prov/usnic/src/usnic_direct/usd_ib_sysfs.h \
+	prov/usnic/src/usnic_direct/usd_mem.c \
+	prov/usnic/src/usnic_direct/usd_poll.c \
+	prov/usnic/src/usnic_direct/usd_post.c \
+	prov/usnic/src/usnic_direct/usd_post.h \
+	prov/usnic/src/usnic_direct/usd_post_raw_normal.c \
+	prov/usnic/src/usnic_direct/usd_post_udp_normal.c \
+	prov/usnic/src/usnic_direct/usd_post_udp_pio.c \
+	prov/usnic/src/usnic_direct/usd_queue.h \
+	prov/usnic/src/usnic_direct/usd_queues.c \
+	prov/usnic/src/usnic_direct/usd_socket.c \
+	prov/usnic/src/usnic_direct/usd_socket.h \
+	prov/usnic/src/usnic_direct/usd_time.h \
+	prov/usnic/src/usnic_direct/usd_util.h \
+	prov/usnic/src/usnic_direct/usd_vnic.c \
+	prov/usnic/src/usnic_direct/usd_vnic.h \
+	prov/usnic/src/usnic_direct/usnic_abi.h \
+	prov/usnic/src/usnic_direct/usnic_direct.h \
+	prov/usnic/src/usnic_direct/usnic_ib_abi.h \
+	prov/usnic/src/usnic_direct/usnic_ip_utils.c \
+	prov/usnic/src/usnic_direct/usnic_ip_utils.h \
+	prov/usnic/src/usnic_direct/usnic_user_utils.h \
+	prov/usnic/src/usnic_direct/vnic_cq.c \
+	prov/usnic/src/usnic_direct/vnic_cq.h \
+	prov/usnic/src/usnic_direct/vnic_dev.c \
+	prov/usnic/src/usnic_direct/vnic_devcmd.h \
+	prov/usnic/src/usnic_direct/vnic_dev.h \
+	prov/usnic/src/usnic_direct/vnic_enet.h \
+	prov/usnic/src/usnic_direct/vnic_resource.h \
+	prov/usnic/src/usnic_direct/vnic_rq.c \
+	prov/usnic/src/usnic_direct/vnic_rq.h \
+	prov/usnic/src/usnic_direct/vnic_stats.h \
+	prov/usnic/src/usnic_direct/vnic_wq.c \
+	prov/usnic/src/usnic_direct/vnic_wq.h \
+	prov/usnic/src/usnic_direct/wq_enet_desc.h
+
+src_libfabric_la_SOURCES += \
+	$(libusnic_direct_sources) \
+	prov/usnic/src/usdf.h \
+	prov/usnic/src/usdf_fabric.c \
+	prov/usnic/src/usdf_domain.c \
+	prov/usnic/src/usdf_mem.c \
+	prov/usnic/src/usdf_cq.c \
+	prov/usnic/src/usdf_av.c \
+	prov/usnic/src/usdf_endpoint.c \
+	prov/usnic/src/usdf_msg.c \
+	prov/usnic/src/usdf_cm.c
+
+AM_CPPFLAGS += -I$(top_srcdir)/prov/usnic/src/usnic_direct
+AM_CPPFLAGS += -D__LIBUSNIC__
+
+endif # HAVE_USNIC
+
 if HAVE_PSM
 _psm_files = \
 	prov/psm/src/psmx_init.c \

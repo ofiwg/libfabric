@@ -147,7 +147,7 @@ extern "C" {
 #define	FI_ECONNRESET		ECONNRESET	/* Connection reset by peer */
 //#define	FI_ENOBUFS		ENOBUFS		/* No buffer space available */
 #define	FI_EISCONN		EISCONN		/* Transport endpoint is already connected */
-//#define	FI_ENOTCONN		ENOTCONN	/* Transport endpoint is not connected */
+#define	FI_ENOTCONN		ENOTCONN	/* Transport endpoint is not connected */
 #define	FI_ESHUTDOWN		ESHUTDOWN	/* Cannot send after transport endpoint shutdown */
 //#define	FI_ETOOMANYREFS		ETOOMANYREFS	/* Too many references: cannot splice */
 #define	FI_ETIMEDOUT		ETIMEDOUT	/* Connection timed out */

@@ -191,6 +191,7 @@ enum {
 	FI_PROTO_IWARP,
 	FI_PROTO_IB_UD,
 	FI_PROTO_PSMX,
+	FI_PROTO_UDP,
 };
 
 /* Mode bits */
