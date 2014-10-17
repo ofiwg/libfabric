@@ -8,6 +8,7 @@ AC_DEFUN([FI_PROVIDER_INIT],[
 	PROVIDERS_TO_BUILD=
 	PROVIDERS_DL=
 	PROVIDERS_STATIC=
+	PROVIDERS_COUNT=
 ])
 
 dnl
@@ -74,6 +75,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	# See if the provider configured successfully
 	AS_IF([test $$1_happy -eq 1],
 		[PROVIDERS_TO_BUILD="$PROVIDERS_TO_BUILD $1"
+		 PROVIDERS_COUNT=$((PROVIDERS_COUNT+1))
 		 AS_IF([test $$1_dl -eq 1],
 			[AC_MSG_NOTICE([$1 provider to be built as a DSO])
 			 PROVIDERS_DL="prov/$1/lib$1.la $PROVIDERS_DL"],
@@ -94,6 +96,12 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	      [AC_MSG_WARN([$1 provider was requested, but cannot be compiled])
 	       AC_MSG_ERROR([Cannot continue])
 	      ])
+	# If this provider was requested for direct build, ensure that
+	# provider's fi_direct.h exists in tree. Error otherwise.
+	AS_IF([test x"$enable_direct" = x"$1"],
+		[AC_CHECK_FILE(prov/$1/include/rdma/fi_direct.h, [],
+			[AC_MSG_WARN([$1 provider was requested as direct, but is missing required files])
+			 AC_MSG_ERROR([Cannot continue])])])
 ])
 
 
