@@ -35,6 +35,36 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <shared.h>
+#include <rdma/fi_errno.h>
+#include <rdma/fi_eq.h>
+
+struct test_size_param test_size[] = {
+	{ 1 <<  1, 0 }, { (1 <<  1) + (1 <<  0), 0},
+	{ 1 <<  2, 0 }, { (1 <<  2) + (1 <<  1), 0},
+	{ 1 <<  3, 0 }, { (1 <<  3) + (1 <<  2), 0},
+	{ 1 <<  4, 0 }, { (1 <<  4) + (1 <<  3), 0},
+	{ 1 <<  5, 0 }, { (1 <<  5) + (1 <<  4), 0},
+	{ 1 <<  6, 0 }, { (1 <<  6) + (1 <<  5), 0},
+	{ 1 <<  7, 1 }, { (1 <<  7) + (1 <<  6), 0},
+	{ 1 <<  8, 1 }, { (1 <<  8) + (1 <<  7), 1},
+	{ 1 <<  9, 1 }, { (1 <<  9) + (1 <<  8), 1},
+	{ 1 << 10, 1 }, { (1 << 10) + (1 <<  9), 1},
+	{ 1 << 11, 1 }, { (1 << 11) + (1 << 10), 1},
+	{ 1 << 12, 0 }, { (1 << 12) + (1 << 11), 1},
+	{ 1 << 13, 1 }, { (1 << 13) + (1 << 12), 1},
+	{ 1 << 14, 1 }, { (1 << 14) + (1 << 13), 1},
+	{ 1 << 15, 1 }, { (1 << 15) + (1 << 14), 1},
+	{ 1 << 16, 0 }, { (1 << 16) + (1 << 15), 1},
+	{ 1 << 17, 1 }, { (1 << 17) + (1 << 16), 1},
+	{ 1 << 18, 1 }, { (1 << 18) + (1 << 17), 1},
+	{ 1 << 19, 1 }, { (1 << 19) + (1 << 18), 1},
+	{ 1 << 20, 0 }, { (1 << 20) + (1 << 19), 1},
+	{ 1 << 21, 1 }, { (1 << 21) + (1 << 20), 1},
+	{ 1 << 22, 1 }, { (1 << 22) + (1 << 21), 1},
+	{ 1 << 23, 0 },
+};
+
+const unsigned int test_cnt = (sizeof test_size / sizeof test_size[0]);
 
 int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len)
 {
@@ -107,3 +137,31 @@ int size_to_count(int size)
 	else
 		return 100000;
 }
+
+int bind_fid( fid_t ep, fid_t res, uint64_t flags)
+{
+	int ret;
+
+	ret = fi_bind(ep, res, flags);
+	if (ret)
+		printf("fi_bind %s\n", fi_strerror(-ret));
+	return ret;
+}
+
+int wait_for_completion(struct fid_cq *cq, int num_completions)
+{
+	int ret;
+	struct fi_cq_entry comp;
+
+	while (num_completions > 0) {
+		ret = fi_cq_read(cq, &comp, 1);
+		if (ret > 0) {
+			num_completions--;
+		} else if (ret < 0) {
+			printf("Event queue read %d (%s)\n", ret, fi_strerror(-ret));
+			return ret;
+		}
+	}
+	return 0;
+}
+

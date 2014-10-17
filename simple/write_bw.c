@@ -61,32 +61,6 @@
 #include <rdma/fi_atomic.h>
 #include <shared.h>
 
-struct test_size_param {
-	int size;
-	int option;
-};
-
-static struct test_size_param test_size[] = {
-	{ 1 <<  6, 0 },
-	{ 1 <<  7, 1 }, { (1 <<  7) + (1 <<  6), 1},
-	{ 1 <<  8, 1 }, { (1 <<  8) + (1 <<  7), 1},
-	{ 1 <<  9, 1 }, { (1 <<  9) + (1 <<  8), 1},
-	{ 1 << 10, 1 }, { (1 << 10) + (1 <<  9), 1},
-	{ 1 << 11, 1 }, { (1 << 11) + (1 << 10), 1},
-	{ 1 << 12, 0 }, { (1 << 12) + (1 << 11), 1},
-	{ 1 << 13, 1 }, { (1 << 13) + (1 << 12), 1},
-	{ 1 << 14, 1 }, { (1 << 14) + (1 << 13), 1},
-	{ 1 << 15, 1 }, { (1 << 15) + (1 << 14), 1},
-	{ 1 << 16, 0 }, { (1 << 16) + (1 << 15), 1},
-	{ 1 << 17, 1 }, { (1 << 17) + (1 << 16), 1},
-	{ 1 << 18, 1 }, { (1 << 18) + (1 << 17), 1},
-	{ 1 << 19, 1 }, { (1 << 19) + (1 << 18), 1},
-	{ 1 << 20, 0 }, { (1 << 20) + (1 << 19), 1},
-	{ 1 << 21, 1 }, { (1 << 21) + (1 << 20), 1},
-	{ 1 << 22, 1 }, { (1 << 22) + (1 << 21), 1},
-};
-#define TEST_CNT (sizeof test_size / sizeof test_size[0])
-
 static int custom;
 static int size_option;
 static int iterations = 1000;
@@ -148,23 +122,6 @@ static void init_test(int size)
 	iterations = size_to_count(transfer_size);
 }
 
-static int wait_for_completion(struct fid_cq *cq, int num_completions)
-{
-	int ret;
-	struct fi_cq_entry comp;
-	
-	while (num_completions > 0) {
-		ret = fi_cq_read(cq, &comp, 1);
-		if (ret > 0) {
-			num_completions--;
-		} else if (ret < 0) {
-			fprintf(stderr, "Event queue read %d (%s)\n", ret, fi_strerror(-ret));
-			return ret;
-		}
-	}
-	return 0;
-}
-
 static int send_msg(int size)
 {
 	int ret;
@@ -211,10 +168,10 @@ static int warmup(int iters)
 		if ((ret = write_data(16)) < 0)
 			return ret;
 	}
-	
+
 	if ((ret = wait_for_completion(scq, iters)) < 0)
 		return ret;
-	
+
 	return 0;
 }
 
@@ -330,16 +287,6 @@ err2:
 	fi_close(&scq->fid);
 err1:
 	free(buf);
-	return ret;
-}
-
-static int bind_fid( fid_t ep, fid_t res, uint64_t flags)
-{
-	int ret;
-
-	ret = fi_bind(ep, res, flags);
-	if (ret)
-		fprintf(stderr, "fi_bind %s\n", fi_strerror(-ret));
 	return ret;
 }
 
