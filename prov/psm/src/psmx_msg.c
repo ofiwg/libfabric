@@ -37,6 +37,7 @@ ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 		       uint64_t flags)
 {
 	struct psmx_fid_ep *ep_priv;
+	struct psmx_fid_av *av;
 	struct psmx_epaddr_context *epaddr_context;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag, psm_tagsel;
@@ -44,6 +45,7 @@ ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 	int user_fi_context = 0;
 	int err;
 	int recv_flag = 0;
+	size_t idx;
 
 	if (flags & FI_TRIGGER) {
 		struct psmx_trigger *trigger;
@@ -72,6 +74,14 @@ ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	if (src_addr) {
+		av = ep_priv->av;
+		if (av && av->type == FI_AV_TABLE) {
+			idx = (size_t)src_addr;
+			if (idx >= av->last)
+				return -EINVAL;
+
+			src_addr = (fi_addr_t)av->psm_epaddrs[idx];
+		}
 		epaddr_context = psm_epaddr_getctxt((void *)src_addr);
 		psm_tag = epaddr_context->epid | PSMX_MSG_BIT;
 		psm_tagsel = -1ULL;

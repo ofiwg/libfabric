@@ -106,10 +106,7 @@ extern "C" {
 
 #define PSMX_CAP_EXT	(0)
 
-/* FI_MSG and FI_RMA appear in both BASE and OPT because they can be
- * supported w/ or w/o reserved tag bits
- */
-#define PSMX_CAP_BASE	(FI_TAGGED | FI_MSG | FI_ATOMICS | FI_INJECT | \
+#define PSMX_CAPS	(FI_TAGGED | FI_MSG | FI_ATOMICS | FI_INJECT | \
 			 FI_RMA | FI_BUFFERED_RECV | FI_MULTI_RECV | \
                          FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
@@ -117,19 +114,14 @@ extern "C" {
 			 FI_CANCEL | FI_TRIGGER | \
 			 FI_DYNAMIC_MR | \
 			 PSMX_CAP_EXT)
-#define PSMX_CAP_OPT1	(FI_MSG)
-#define PSMX_CAP_OPT2	(FI_RMA)
-
-#define PSMX_CAPS	(PSMX_CAP_BASE | PSMX_CAP_OPT1 | PSMX_CAP_OPT2)
 
 #define PSMX_MODE	(FI_CONTEXT)
-
-#define PSMX_OUI_INTEL	0x0002b3L
 
 #define PSMX_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
 #define PSMX_INJECT_SIZE	(64)
 
-#define PSMX_MSG_BIT		(0x1ULL << 63)
+#define PSMX_MSG_BIT	(0x1ULL << 63)
+#define PSMX_RMA_BIT	(0x1ULL << 62)
 
 enum psmx_context_type {
 	PSMX_NOCOMP_SEND_CONTEXT = 1,
@@ -151,8 +143,6 @@ enum psmx_context_type {
 #define PSMX_CTXT_TYPE(fi_context)	(*(int *)&(fi_context)->internal[1])
 #define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX_CTXT_EP(fi_context)	((fi_context)->internal[3])
-
-#define PSMX_RMA_BIT		(0x1ULL << 62)
 
 #define PSMX_AM_RMA_HANDLER	0
 #define PSMX_AM_MSG_HANDLER	1
@@ -281,8 +271,6 @@ struct psmx_fid_domain {
 	int			atomics_used:1;
 	uint64_t		mode;
 
-	int			use_am_msg;
-	int			use_tagged_rma;
 	int			am_initialized;
 
 #if PSMX_AM_USE_SEND_QUEUE
@@ -349,7 +337,6 @@ struct psmx_fid_cq {
 	struct psmx_cq_event_queue	event_queue;
 	struct psmx_cq_event_queue	free_list;
 	struct psmx_cq_event		*pending_error;
-	int				poll_am_before_mq;
 	struct psmx_wait		*wait;
 };
 
@@ -552,6 +539,15 @@ struct psmx_epaddr_context {
 	psm_epid_t		epid;
 };
 
+struct psmx_env {
+	int name_server;
+	int am_msg;
+	int tagged_rma;
+	int debug;
+	int warning;
+	char *uuid;
+};
+
 extern struct fi_ops_mr		psmx_mr_ops;
 extern struct fi_ops_cm		psmx_cm_ops;
 extern struct fi_ops_tagged	psmx_tagged_ops;
@@ -568,6 +564,7 @@ extern struct fi_ops_msg	psmx_msg2_ops;
 extern struct fi_ops_rma	psmx_rma_ops;
 extern struct fi_ops_atomic	psmx_atomic_ops;
 extern struct psm_am_parameters psmx_am_param;
+extern struct psmx_env		psmx_env;
 
 int	psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			 struct fid_domain **domain, void *context);
@@ -624,8 +621,8 @@ int	psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 int	psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
 
-int	psmx_cq_poll_mq(struct psmx_fid_cq *cq,
-			struct psmx_fid_domain *domain);
+int	psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
+			struct psmx_cq_event *event, int count, fi_addr_t *src_addr);
 struct	psmx_fid_mr *psmx_mr_hash_get(uint64_t key);
 int	psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access);
 void	psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr);

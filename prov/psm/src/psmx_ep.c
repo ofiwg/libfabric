@@ -236,7 +236,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 static inline int psmx_ep_progress(struct psmx_fid_ep *ep)
 {
-	return psmx_cq_poll_mq(NULL, ep->domain);
+	return psmx_cq_poll_mq(NULL, ep->domain, NULL, 0, NULL);
 }
 
 static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
@@ -284,7 +284,7 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 		new_ep->flags = alias->flags;
 		/* REMOVE ME: [ temporary fix for backward compatibility */
 		if (new_ep->flags & FI_EVENT) {
-			if (!getenv("SFI_PSM_NO_WARNING")) {
+			if (psmx_env.warning) {
 			    printf("WARNING: deprecated FI_EVENT flag in fi_alias().\n"
 				"\tThe flag passed to fi_alias should only mean op flags.\n"
 				"\tHere temporary backward compatibility is provided, but\n"
@@ -292,7 +292,7 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 				"\tan alias that doesn't automatically generate events is:\n"
 				"\t(1) call fi_alias() to create the new EP\n"
 				"\t(2) bind the new EP to the EQ with FI_EVENT flag\n"
-				"\tSet SFI_PSM_NO_WARNING to suppress this message.\n");
+				"\tSet SFI_PSM_WARNING=0 to suppress this message.\n");
 			}
 			new_ep->send_cq_event_flag = new_ep->recv_cq_event_flag = 1;
 			new_ep->flags &= ~FI_EVENT;
@@ -383,7 +383,7 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		ep_priv->ep.tagged = &psmx_tagged_ops;
 	if (ep_cap & FI_MSG)
 		ep_priv->ep.msg = &psmx_msg_ops;
-	if ((ep_cap & FI_MSG) && domain_priv->use_am_msg)
+	if ((ep_cap & FI_MSG) && psmx_env.am_msg)
 		ep_priv->ep.msg = &psmx_msg2_ops;
 	if (ep_cap & FI_RMA)
 		ep_priv->ep.rma = &psmx_rma_ops;
