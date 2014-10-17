@@ -44,6 +44,51 @@
 
 #include "sock.h"
 
+static int sock_at_insert(struct fid_av *av, const void *addr, size_t count,
+			  fi_addr_t *fi_addr, uint64_t flags)
+{
+	int i;
+	struct sock_av *_av;
+
+	_av = container_of(av, struct sock_av, av_fid);
+	_av->table = calloc(count, sizeof(struct sockaddr_in));
+	if (!_av->table)
+		return -ENOMEM;
+
+	for (i=0; i<count; i++) {
+		memcpy(&_av->table[i], &((struct sockaddr_in *)addr)[i], sizeof(struct sockaddr_in));
+	}
+	_av->count = count;
+
+	return 0;
+}
+
+static int sock_at_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
+			  uint64_t flags)
+{
+	return 0;
+}
+
+static int sock_at_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
+			  size_t *addrlen)
+{
+	int idx;
+	idx = (int)(int64_t)fi_addr;
+	struct sock_av *_av;
+
+	_av = container_of(av, struct sock_av, av_fid);
+	if (idx >= _av->count || idx < 0)
+		return -EINVAL;
+	memcpy(addr, &_av->table[idx], min(*addrlen, sizeof(struct sockaddr_in)));
+	*addrlen = sizeof(struct sockaddr_in);
+	return 0;
+}
+
+static const char * sock_at_straddr(struct fid_av *av, const void *addr,
+				    char *buf, size_t *len)
+{
+	return NULL;
+}
 
 static int sock_am_insert(struct fid_av *av, const void *addr, size_t count,
 			  fi_addr_t *fi_addr, uint64_t flags)
@@ -129,6 +174,14 @@ static struct fi_ops_av sock_am_ops = {
 	.straddr = sock_am_straddr
 };
 
+static struct fi_ops_av sock_at_ops = {
+	.size = sizeof(struct fi_ops_av),
+	.insert = sock_at_insert,
+	.remove = sock_at_remove,
+	.lookup = sock_at_lookup,
+	.straddr = sock_at_straddr
+};
+
 //static struct fi_ops_av sock_av_ops = {
 //	.size = sizeof(struct fi_ops_av),
 //	.insert = sock_av_insert,
@@ -137,6 +190,7 @@ static struct fi_ops_av sock_am_ops = {
 //	.straddr = sock_av_straddr
 //};
 
+#if 0
 static int sock_open_am(struct sock_domain *dom, struct fi_av_attr *attr,
 			struct sock_av **av, void *context)
 {
@@ -154,27 +208,43 @@ static int sock_open_am(struct sock_domain *dom, struct fi_av_attr *attr,
 	*av = _av;
 	return 0;
 }
+#endif
 
 int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context)
 {
 	struct sock_domain *dom;
 	struct sock_av *_av;
-	int ret;
+//	int ret;
 
 	if (attr->name || attr->flags)
 		return -FI_ENOSYS;
 
 	dom = container_of(domain, struct sock_domain, dom_fid);
+
+	_av = calloc(1, sizeof(*_av));
+	if (!_av)
+		return -FI_ENOMEM;
+
+	_av->av_fid.fid.fclass = FI_CLASS_AV;
+	_av->av_fid.fid.context = context;
+	_av->av_fid.fid.ops = &sock_av_fi_ops;
+
 	switch (attr->type) {
 	case FI_AV_MAP:
-		ret = sock_open_am(dom, attr, &_av, context);
+//		ret = sock_open_am(dom, attr, &_av, context);
+		_av->av_fid.ops = &sock_am_ops;
+		break;
+	case FI_AV_TABLE:
+		_av->av_fid.ops = &sock_at_ops;
+		break;
 	default:
 		return -FI_ENOSYS;
 	}
-
+#if 0
 	if (ret)
 		return ret;
+#endif
 
 	atomic_init(&_av->ref);
 	atomic_inc(&dom->ref);
@@ -182,4 +252,23 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	_av->attr = *attr;
 	*av = &_av->av_fid;
 	return 0;
+}
+
+/* TODO */
+fi_addr_t _sock_av_lookup(struct sock_av *av, struct sockaddr *addr)
+{
+	if (av->attr.type == FI_AV_MAP) {
+		return (fi_addr_t)addr;
+	} else {
+		int i;
+		struct sockaddr_in *addrin;
+		addrin = (struct sockaddr_in*)addr;
+		for (i = 0 ; i < av->count ; i++) {
+			if (av->table[i].sin_addr.s_addr == addrin->sin_addr.s_addr &&
+					av->table[i].sin_port == addrin->sin_port)
+				return (fi_addr_t)i;
+		}
+		fprintf(stderr, "[sock] failed to lookup src_addr in av table\n");
+	}
+	return FI_ADDR_UNSPEC;
 }

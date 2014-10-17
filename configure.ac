@@ -40,6 +40,7 @@ AC_ARG_ENABLE([direct],
 	[AS_HELP_STRING([--enable-direct=@<:@provider@:>@],
 		[Enable direct calls to a fabric provider @<:@default=no@:>@])
 	],
+	[],
 	[enable_direct=no])
 
 dnl Checks for programs
@@ -148,6 +149,16 @@ FI_PROVIDER_FINI
 AS_IF([test x"$PROVIDERS_TO_BUILD" = "x"],
       [AC_MSG_NOTICE([No providers were configured])
        AC_MSG_ERROR([Cannot continue])])
+
+# If the user requested to build in direct mode, but
+# we have more than one provider, error.
+AS_IF([test x"$enable_direct" != x"no"],
+      [AS_IF([test "$PROVIDERS_COUNT" -eq "1"],
+	     [AC_SUBST(PROVIDER_DIRECT, "$enable_direct")],
+	     [AC_MSG_NOTICE([Only one provider can be chosen when using --enable-direct])
+	     AC_MSG_ERROR(Cannot continue)])])
+
+AM_CONDITIONAL([HAVE_DIRECT], [test x"$enable_direct" != x"no"])
 
 AC_CONFIG_FILES([Makefile libfabric.spec])
 AC_OUTPUT
