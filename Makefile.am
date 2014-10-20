@@ -314,6 +314,7 @@ EXTRA_DIST = libfabric.map libfabric.spec.in $(man_MANS) \
 	include/fi.h \
 	include/fi_enosys.h \
 	include/indexer.h \
+	include/list.h \
 	prov/sockets/src/sock.h \
 	prov/psm/src/psmx.h
 

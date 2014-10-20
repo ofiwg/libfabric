@@ -104,44 +104,4 @@ static inline void *idm_lookup(struct index_map *idm, int index)
 		idm_at(idm, index) : NULL;
 }
 
-struct dlist_entry {
-	struct dlist_entry	*next;
-	struct dlist_entry	*prev;
-};
-
-static inline void dlist_init(struct dlist_entry *head)
-{
-	head->next = head;
-	head->prev = head;
-}
-
-static inline int dlist_empty(struct dlist_entry *head)
-{
-	return head->next == head;
-}
-
-static inline void
-dlist_insert_after(struct dlist_entry *item, struct dlist_entry *head)
-{
-	item->next = head->next;
-	item->prev = head;
-	head->next->prev = item;
-	head->next = item;
-}
-
-static inline void
-dlist_insert_before(struct dlist_entry *item, struct dlist_entry *head)
-{
-	dlist_insert_after(item, head->prev);
-}
-
-#define dlist_insert_head dlist_insert_after
-#define dlist_insert_tail dlist_insert_before
-
-static inline void dlist_remove(struct dlist_entry *item)
-{
-	item->prev->next = item->next;
-	item->next->prev = item->prev;
-}
-
 #endif /* INDEXER_H */
