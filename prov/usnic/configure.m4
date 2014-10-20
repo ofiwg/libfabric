@@ -12,6 +12,7 @@ AC_DEFUN([FI_USNIC_CONFIGURE],[
     usnic_happy=0
     AS_IF([test "x$enable_usnic" != "xno"],
 	[usnic_happy=1
+	 AC_CHECK_HEADER([infiniband/verbs.h], [], [usnic_happy=0])
 	 AC_CHECK_HEADER([linux/netlink.h], [], [usnic_happy=0], [
 #include <sys/types.h>
 #include <net/if.h>
