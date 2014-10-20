@@ -96,22 +96,30 @@ static int lib_filter(const struct dirent *entry)
 static void __attribute__((constructor)) fi_ini(void)
 {
 	struct dirent **liblist;
-	int n;
+	int n, want_warn = 0;
 	char *lib, *extdir = getenv("FI_EXTDIR");
 	void *dlhandle;
 
-	if (!extdir)
+	if (extdir) {
+		/* Warn if user specified $FI_EXTDIR, but there's a
+		 * problem with the value */
+		want_warn = 1;
+	} else {
 		extdir = EXTDIR;
+	}
 
+	/* If dlopen fails, assume static linking and just return
+	   without error */
 	if (dlopen(NULL, RTLD_NOW) == NULL) {
-		FI_WARN("dlopen(NULL) failed, assuming static linking\n");
 		return;
 	}
 
 	n = scandir(extdir, &liblist, lib_filter, NULL);
-
 	if (n < 0) {
-		FI_WARN("scandir error reading %s: %s\n", extdir, strerror(errno));
+		if (want_warn) {
+			FI_WARN("scandir error reading %s: %s\n",
+				extdir, strerror(errno));
+		}
 		return;
 	}
 
