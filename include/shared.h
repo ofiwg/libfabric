@@ -34,6 +34,7 @@
 #include <sys/types.h>
 
 #include <rdma/fabric.h>
+#include <rdma/fi_eq.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,6 +54,7 @@ void size_str(char *str, size_t ssize, long long size);
 void cnt_str(char *str, size_t ssize, long long cnt);
 int size_to_count(int size);
 int wait_for_completion(struct fid_cq *cq, int num_completions);
+void cq_readerr(struct fid_cq *cq, char *cq_str);
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
