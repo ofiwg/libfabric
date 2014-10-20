@@ -104,23 +104,24 @@ static inline void *idm_lookup(struct index_map *idm, int index)
 		idm_at(idm, index) : NULL;
 }
 
-typedef struct _dlist_entry {
-	struct _dlist_entry	*next;
-	struct _dlist_entry	*prev;
-}	dlist_entry;
+struct dlist_entry {
+	struct dlist_entry	*next;
+	struct dlist_entry	*prev;
+};
 
-static inline void dlist_init(dlist_entry *head)
+static inline void dlist_init(struct dlist_entry *head)
 {
 	head->next = head;
 	head->prev = head;
 }
 
-static inline int dlist_empty(dlist_entry *head)
+static inline int dlist_empty(struct dlist_entry *head)
 {
 	return head->next == head;
 }
 
-static inline void dlist_insert_after(dlist_entry *item, dlist_entry *head)
+static inline void
+dlist_insert_after(struct dlist_entry *item, struct dlist_entry *head)
 {
 	item->next = head->next;
 	item->prev = head;
@@ -128,7 +129,8 @@ static inline void dlist_insert_after(dlist_entry *item, dlist_entry *head)
 	head->next = item;
 }
 
-static inline void dlist_insert_before(dlist_entry *item, dlist_entry *head)
+static inline void
+dlist_insert_before(struct dlist_entry *item, struct dlist_entry *head)
 {
 	dlist_insert_after(item, head->prev);
 }
@@ -136,7 +138,7 @@ static inline void dlist_insert_before(dlist_entry *item, dlist_entry *head)
 #define dlist_insert_head dlist_insert_after
 #define dlist_insert_tail dlist_insert_before
 
-static inline void dlist_remove(dlist_entry *item)
+static inline void dlist_remove(struct dlist_entry *item)
 {
 	item->prev->next = item->next;
 	item->next->prev = item->prev;
