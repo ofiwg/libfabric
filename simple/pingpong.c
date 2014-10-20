@@ -163,6 +163,7 @@ static int sync_test(void)
 	if (ret) {
 		return ret;
 	}
+	credits = max_credits;
 
 	ret = dst_addr ? send_xfer(16) : recv_xfer(16);
 	if (ret) {
@@ -284,17 +285,23 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = bind_fid(&ep->fid, &cmeq->fid, 0);
-	if (ret)
+	ret = fi_bind(&ep->fid, &cmeq->fid, 0);
+	if (ret) {
+		printf("fi_bind %s\n", fi_strerror(-ret));
 		return ret;
+	}
 
-	ret = bind_fid(&ep->fid, &scq->fid, FI_SEND);
-	if (ret)
+	ret = fi_bind(&ep->fid, &scq->fid, FI_SEND);
+	if (ret) {
+		printf("fi_bind %s\n", fi_strerror(-ret));
 		return ret;
+	}
 
-	ret = bind_fid(&ep->fid, &rcq->fid, FI_RECV);
-	if (ret)
+	ret = fi_bind(&ep->fid, &rcq->fid, FI_RECV);
+	if (ret) {
+		printf("fi_bind %s\n", fi_strerror(-ret));
 		return ret;
+	}
 
 	ret = fi_enable(ep);
 	if (ret)
@@ -334,9 +341,11 @@ static int server_listen(void)
 	if (ret)
 		goto err2;
 
-	ret = bind_fid(&pep->fid, &cmeq->fid, 0);
-	if (ret)
+	ret = fi_bind(&pep->fid, &cmeq->fid, 0);
+	if (ret) {
+		printf("fi_bind %s\n", fi_strerror(-ret));
 		goto err3;
+	}
 
 	ret = fi_listen(pep);
 	if (ret) {
@@ -551,6 +560,7 @@ static int run(void)
 	if (ret) {
 		return ret;
 	}
+	credits = max_credits;
 
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);

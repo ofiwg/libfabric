@@ -70,6 +70,7 @@ static void *buf;
 static void *buf_ptr;
 static size_t buffer_size;
 static size_t prefix_len;
+static size_t max_msg_size = 0;
 
 static struct fi_info hints;
 static struct fi_domain_attr domain_hints;
@@ -297,21 +298,21 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = bind_fid(&ep->fid, &scq->fid, FI_SEND);
+	ret = fi_bind(&ep->fid, &scq->fid, FI_SEND);
 	if (ret) {
-		printf("bind_fid scq %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_bind scq %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
 
-	ret = bind_fid(&ep->fid, &rcq->fid, FI_RECV);
+	ret = fi_bind(&ep->fid, &rcq->fid, FI_RECV);
 	if (ret) {
-		printf("bind_fid rcq %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_bind rcq %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
 
-	ret = bind_fid(&ep->fid, &av->fid, 0);
+	ret = fi_bind(&ep->fid, &av->fid, 0);
 	if (ret) {
-		printf("bind_fid av %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_bind av %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
 
@@ -344,6 +345,9 @@ static int common_setup(void)
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
 		goto err0;
+	}
+	if (fi->ep_attr->max_msg_size) {
+		max_msg_size = fi->ep_attr->max_msg_size;
 	}
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -517,8 +521,10 @@ static int run(void)
 
 	if (!custom) {
 		for (i = 0; i < TEST_CNT; i++) {
-			if (test_size[i].option > size_option)
+			if (test_size[i].option > size_option ||
+				(max_msg_size && test_size[i].size > max_msg_size)) {
 				continue;
+			}
 			init_test(test_size[i].size);
 			run_test();
 		}
