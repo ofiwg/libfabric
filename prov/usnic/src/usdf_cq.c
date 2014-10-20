@@ -90,26 +90,29 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 }
 
 static ssize_t
-usdf_cq_sread(struct fid_cq *cq, void *buf, size_t len, const void *cond,
+usdf_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 		int timeout)
 {
 	return -FI_ENOSYS;
 }
 
 static ssize_t
-usdf_cq_read_context(struct fid_cq *fcq, void *buf, size_t len)
+usdf_cq_read_context(struct fid_cq *fcq, void *buf, size_t count)
 {
 	struct usdf_cq *cq;
-	struct fi_cq_entry *entry = buf;
-	ssize_t ret = 0;
-	size_t left = len;
+	struct fi_cq_entry *entry;
+	struct fi_cq_entry *last;
+	ssize_t ret;
 
-	cq = container_of(fcq, struct usdf_cq, cq_fid);
+	cq = cq_ftou(fcq);
 	if (cq->cq_comp.uc_status != 0) {
 		return -FI_EAVAIL;
 	}
 
-	while (left >= sizeof(*entry)) {
+	ret = 0;
+	entry = buf;
+	last = entry + count;
+	while (entry < last) {
 		ret = usd_poll_cq(cq->cq_cq, &cq->cq_comp);
 		if (ret == -EAGAIN) {
 			ret = 0;
@@ -122,22 +125,25 @@ usdf_cq_read_context(struct fid_cq *fcq, void *buf, size_t len)
 
 		entry->op_context = cq->cq_comp.uc_context;
 
-		left -= sizeof(*entry);
-		entry += 1;
+		entry++;
 	}
 
-	return (left < len) ? len - left : ret;
+	if (entry > (struct fi_cq_entry *)buf) {
+		return entry - (struct fi_cq_entry *)buf;
+	} else {
+		return ret;
+	}
 }
 
 static ssize_t
-usdf_cq_readfrom_context(struct fid_cq *fcq, void *buf, size_t len,
+usdf_cq_readfrom_context(struct fid_cq *fcq, void *buf, size_t count,
 			fi_addr_t *src_addr)
 {
 	struct usdf_cq *cq;
 	struct usd_cq_impl *ucq;
-	struct fi_cq_entry *entry = buf;
-	ssize_t ret = 0;
-	size_t left = len;
+	struct fi_cq_entry *entry;
+	struct fi_cq_entry *last;
+	ssize_t ret;
 	struct cq_desc *cq_desc;
 	struct usdf_ep *ep;
 	struct sockaddr_in sin;
@@ -150,7 +156,10 @@ usdf_cq_readfrom_context(struct fid_cq *fcq, void *buf, size_t len,
 	}
 	ucq = to_cqi(cq->cq_cq);
 
-	while (left >= sizeof(*entry)) {
+	ret = 0;
+	entry = buf;
+	last = entry + count;
+	while (entry < last) {
 		cq_desc = (struct cq_desc *)((uint8_t *)ucq->ucq_desc_ring +
 				(ucq->ucq_next_desc << 4));
 
@@ -184,27 +193,33 @@ usdf_cq_readfrom_context(struct fid_cq *fcq, void *buf, size_t len,
 
 		entry->op_context = cq->cq_comp.uc_context;
 
-		left -= sizeof(*entry);
-		entry += 1;
+		entry++;
 	}
 
-	return (left < len) ? len - left : ret;
+	if (entry > (struct fi_cq_entry *)buf) {
+		return entry - (struct fi_cq_entry *)buf;
+	} else {
+		return ret;
+	}
 }
 
 static ssize_t
-usdf_cq_read_msg(struct fid_cq *fcq, void *buf, size_t len)
+usdf_cq_read_msg(struct fid_cq *fcq, void *buf, size_t count)
 {
 	struct usdf_cq *cq;
-	struct fi_cq_msg_entry *entry = buf;
-	ssize_t ret = 0;
-	size_t left = len;
+	struct fi_cq_msg_entry *entry;
+	struct fi_cq_msg_entry *last;
+	ssize_t ret;
 
-	cq = container_of(fcq, struct usdf_cq, cq_fid);
+	cq = cq_ftou(fcq);
 	if (cq->cq_comp.uc_status != 0) {
 		return -FI_EAVAIL;
 	}
 
-	while (left >= sizeof(*entry)) {
+	ret = 0;
+	entry = buf;
+	last = entry + count;
+	while (entry < last) {
 		ret = usd_poll_cq(cq->cq_cq, &cq->cq_comp);
 		if (ret == -EAGAIN) {
 			ret = 0;
@@ -219,27 +234,33 @@ usdf_cq_read_msg(struct fid_cq *fcq, void *buf, size_t len)
 		entry->flags = 0;
 		entry->len = cq->cq_comp.uc_bytes;
 
-		left -= sizeof(*entry);
-		entry += 1;
+		entry++;
 	}
 
-	return (left < len) ? len - left : ret;
+	if (entry > (struct fi_cq_msg_entry *)buf) {
+		return entry - (struct fi_cq_msg_entry *)buf;
+	} else {
+		return ret;
+	}
 }
 
 static ssize_t
-usdf_cq_read_data(struct fid_cq *fcq, void *buf, size_t len)
+usdf_cq_read_data(struct fid_cq *fcq, void *buf, size_t count)
 {
 	struct usdf_cq *cq;
-	struct fi_cq_data_entry *entry = buf;
-	ssize_t ret = 0;
-	size_t left = len;
+	struct fi_cq_data_entry *entry;
+	struct fi_cq_data_entry *last;
+	ssize_t ret;
 
-	cq = container_of(fcq, struct usdf_cq, cq_fid);
+	cq = cq_ftou(fcq);
 	if (cq->cq_comp.uc_status != 0) {
 		return -FI_EAVAIL;
 	}
 
-	while (left >= sizeof(*entry)) {
+	ret = 0;
+	entry = buf;
+	last = entry + count;
+	while (entry < last) {
 		ret = usd_poll_cq(cq->cq_cq, &cq->cq_comp);
 		if (ret == -EAGAIN) {
 			ret = 0;
@@ -252,22 +273,27 @@ usdf_cq_read_data(struct fid_cq *fcq, void *buf, size_t len)
 
 		entry->op_context = cq->cq_comp.uc_context;
 		entry->flags = 0;
-		entry->buf = 0;
+		entry->len = cq->cq_comp.uc_bytes;
+		entry->buf = 0;	/* XXX */
 		entry->data = 0;
-		entry->len = cq->cq_comp.uc_bytes;
 
-		left -= sizeof(*entry);
-		entry += 1;
+		entry++;
 	}
 
-	return (left < len) ? len - left : ret;
+	if (entry > (struct fi_cq_data_entry *)buf) {
+		return entry - (struct fi_cq_data_entry *)buf;
+	} else {
+		return ret;
+	}
 }
 
 static const char *
 usdf_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 		void *buf, size_t len)
 {
-	return "CQ Error";
+	strncpy(buf, "CQ Error", len-1);
+	((char *)buf)[len-1] = '\0';
+	return buf;
 }
 
 static struct fi_ops_cq usdf_cq_context_ops = {

@@ -525,7 +525,7 @@ usd_ib_query_dev(
     dap = &dev->ud_attrs;
 
     dap->uda_link_state =
-        (presp.state == IB_PORT_ACTIVE) ? USD_LINK_UP : USD_LINK_DOWN;
+        (presp.state == 4) ? USD_LINK_UP : USD_LINK_DOWN;
 
     /*
      * If link it up derive bandwidth from speed and width.
@@ -536,12 +536,12 @@ usd_ib_query_dev(
 #define MKSW(S,W) (((S)<<8)|(W))
         speed = MKSW(presp.active_speed, presp.active_width);
         switch (speed) {
-        case MKSW(IB_SPEED_DDR, IB_WIDTH_4X):
-        case MKSW(IB_SPEED_FDR10, IB_WIDTH_1X):
+        case MKSW(2, 2):
+        case MKSW(8, 1):
             dap->uda_bandwidth = 10000;
             break;
-        case MKSW(IB_SPEED_FDR10, IB_WIDTH_4X):
-        case MKSW(IB_SPEED_EDR, IB_WIDTH_4X):
+        case MKSW(8, 2):
+        case MKSW(32, 2):
             dap->uda_bandwidth = 40000;
             break;
         default:

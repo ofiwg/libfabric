@@ -384,12 +384,15 @@ usd_create_wq(
         break;
     default:
         ret = -1;
+        break;
     }
 
-    wq = &qp->uq_wq;
-    wq->uwq_post_index_mask = (wq->uwq_num_entries-1);
-    wq->uwq_post_index = 1;
-    wq->uwq_last_comp = (wq->uwq_num_entries-1);
+    if (ret == 0) {
+        wq = &qp->uq_wq;
+        wq->uwq_post_index_mask = (wq->uwq_num_entries-1);
+        wq->uwq_post_index = 1;
+        wq->uwq_last_comp = (wq->uwq_num_entries-1);
+    }
 
     return ret;
 }
@@ -408,16 +411,13 @@ usd_create_vnic_rq(
     ret = vnic_rq_alloc(vf->vf_vdev, &rq->urq_vnic_rq,
             rq->urq_index, rq->urq_num_entries, sizeof(struct rq_enet_desc));
     if (ret != 0) {
-        goto out;
+        return ret;
     }
 
     vnic_rq_init(&rq->urq_vnic_rq, rq->urq_cq->ucq_index, 0, 0);
     rq->urq_state |= USD_QS_VNIC_INITIALIZED;
 
     return 0;
-
- out:
-    return ret;
 }
 
 static int
@@ -474,7 +474,9 @@ usd_enable_verbs_qp(
 
     /* XXX is this really necessary? */
     ret = usd_vnic_disable_qp(qp);
-    if (ret != 0) goto out;
+    if (ret != 0) {
+        goto out;
+    }
 
     /* state to INIT */
     ret = usd_ib_cmd_modify_qp(dev, qp, IBV_QPS_INIT);
@@ -497,8 +499,6 @@ usd_enable_verbs_qp(
     usd_vnic_enable_qp(qp);
     rq->urq_state |= USD_QS_READY;
     wq->uwq_state |= USD_QS_READY;
-
-    return 0;
 
  out:
     return ret;
@@ -1003,7 +1003,7 @@ usd_create_qp(
     /* Make sure device ready */
     ret = usd_device_ready(dev);
     if (ret != 0) {
-        return ret;
+        goto fail;
     }
 
     qp = calloc(sizeof(*qp), 1);
