@@ -77,6 +77,10 @@ static inline int flsll(long long int i)
 {
 	return i ? 65 - ffsll(htonll(i)) : 0;
 }
+static inline uint64_t roundup_power_of_two(uint64_t n)
+{
+	return 1ULL << flsll(n - 1);
+}
 
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
 
