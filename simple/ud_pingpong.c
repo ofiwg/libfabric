@@ -34,25 +34,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
-#include <errno.h>
 #include <getopt.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/time.h>
-#include <sys/wait.h>
 #include <netdb.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <net/ethernet.h>
-#include <netinet/ip.h>
-#include <netinet/udp.h>
 #include <arpa/inet.h>
 
 #include <rdma/fabric.h>
-#include <rdma/fi_domain.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
@@ -472,12 +460,6 @@ err:
 	fi_close(&fab->fid);
 	return ret;
 }
-
-struct udp_hdr {
-	struct ether_header eth;
-	struct iphdr ip;
-	struct udphdr udp;
-}__attribute__ ((__packed__));
 
 static int server_connect(void)
 {

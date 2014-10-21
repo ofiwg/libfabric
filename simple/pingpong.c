@@ -30,22 +30,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
-#include <errno.h>
 #include <getopt.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/time.h>
-#include <sys/wait.h>
 #include <netdb.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 
 #include <rdma/fabric.h>
-#include <rdma/fi_domain.h>
-#include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
