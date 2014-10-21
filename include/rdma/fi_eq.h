@@ -147,7 +147,7 @@ struct fi_ops_eq {
 	ssize_t	(*readerr)(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 			size_t len, uint64_t flags);
 	ssize_t	(*write)(struct fid_eq *eq, uint32_t event,
-			const void *buf, size_t len, int64_t flags);
+			const void *buf, size_t len, uint64_t flags);
 	ssize_t	(*sread)(struct fid_eq *eq, uint32_t *event,
 			void *buf, size_t len, int timeout, uint64_t flags);
 	const char * (*strerror)(struct fid_eq *eq, int prov_errno,

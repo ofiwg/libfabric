@@ -35,7 +35,7 @@
  */
 
 #if HAVE_CONFIG_H
-# include <config.h>
+#  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
 #include <asm/types.h>
@@ -47,6 +47,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <netdb.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -60,83 +61,7 @@
 #include "usnic_direct.h"
 #include "usdf.h"
 
-static int
-usdf_close_domain(fid_t fid)
+void
+usdf_progress()
 {
-	struct usdf_domain *udp;
-	int ret;
-
-	udp = container_of(fid, struct usdf_domain, dom_fid.fid);
-	if (atomic_get(&udp->dom_refcnt) > 0) {
-		return -FI_EBUSY;
-	}
-
-	if (udp->dom_dev != NULL) {
-		ret = usd_close(udp->dom_dev);
-		if (ret != 0) {
-			return ret;
-		}
-	}
-
-	atomic_dec(&udp->dom_fabric->fab_refcnt);
-	free(udp);
-
-	return 0;
-}
-
-static struct fi_ops usdf_fid_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = usdf_close_domain,
-};
-
-static struct fi_ops_mr usdf_domain_mr_ops = {
-	.size = sizeof(struct fi_ops_mr),
-	.reg = usdf_reg_mr,
-};
-
-static struct fi_ops_domain usdf_domain_ops = {
-	.size = sizeof(struct fi_ops_domain),
-	.cq_open = usdf_cq_open,
-	.av_open = usdf_av_open,
-	.endpoint = usdf_endpoint_open,
-};
-
-int
-usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-	   struct fid_domain **domain, void *context)
-{
-	struct usdf_fabric *fab;
-	struct usdf_domain *udp;
-	int ret;
-
-	udp = calloc(1, sizeof *udp);
-	if (udp == NULL) {
-		ret = -FI_ENOMEM;
-		goto fail;
-	}
-
-	fab = fab_fidtou(fabric);
-	ret = usd_open(fab->fab_name, &udp->dom_dev);
-	if (ret != 0) {
-		goto fail;
-	}
-
-	udp->dom_fid.fid.fclass = FI_CLASS_DOMAIN;
-	udp->dom_fid.fid.context = context;
-	udp->dom_fid.fid.ops = &usdf_fid_ops;
-	udp->dom_fid.ops = &usdf_domain_ops;
-	udp->dom_fid.mr = &usdf_domain_mr_ops;
-
-	udp->dom_fabric = fab;
-	atomic_init(&udp->dom_refcnt);
-	atomic_inc(&fab->fab_refcnt);
-
-	*domain = &udp->dom_fid;
-	return 0;
-
-fail:
-	if (udp != NULL) {
-		free(udp);
-	}
-	return ret;
 }

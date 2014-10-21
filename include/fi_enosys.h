@@ -342,7 +342,7 @@ static struct fi_ops_eq X = {
 };
 */
 ssize_t fi_no_eq_write(struct fid_eq *eq, uint32_t event,
-		const void *buf, size_t len, int64_t flags);
+		const void *buf, size_t len, uint64_t flags);
 ssize_t fi_no_eq_sread(struct fid_eq *eq, uint32_t *event,
 		void *buf, size_t len, int timeout, uint64_t flags);
 
@@ -473,6 +473,18 @@ ssize_t fi_no_tagged_senddatato(struct fid_ep *ep, const void *buf, size_t len, 
 ssize_t fi_no_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
 		uint64_t flags, fi_addr_t *src_addr, size_t *len, void *context);
 
+/*
+ * fi_ops_av
+ */
+int fi_no_av_insert(struct fid_av *av, const void *addr, size_t count,
+			fi_addr_t *fi_addr, uint64_t flags);
+int fi_no_av_insertsvc(struct fid_av *av, const char *node,
+		const char *service, fi_addr_t *fi_addr, uint64_t flags);
+int fi_no_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt,
+			const char *service, size_t svccnt, fi_addr_t *fi_addr,
+			uint64_t flags);
+int fi_no_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
+			uint64_t flags);
 
 #ifdef __cplusplus
 }
