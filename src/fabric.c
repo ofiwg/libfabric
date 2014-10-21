@@ -58,6 +58,9 @@ struct fi_prov {
 
 static struct fi_prov *prov_head, *prov_tail;
 
+static struct fi_prov *fi_getprov(const char *prov_name);
+
+
 __attribute__((visibility ("default")))
 int fi_register_provider_(uint32_t fi_version, struct fi_provider *provider)
 {
@@ -66,6 +69,21 @@ int fi_register_provider_(uint32_t fi_version, struct fi_provider *provider)
 	if (FI_MAJOR(fi_version) != FI_MAJOR_VERSION ||
 	    FI_MINOR(fi_version) > FI_MINOR_VERSION)
 		return -FI_ENOSYS;
+
+	/* If a provider with this name is already registered:
+	 * - if the new provider has a lower version number, just fail
+	 *   to register it
+	 * - otherwise, just overwrite the old prov entry
+	 * If the provider is a new/unique name, calloc() a new prov entry.
+	 */
+	prov = fi_getprov(provider->name);
+	if (prov) {
+		if (FI_VERSION_GE(prov->provider->version, provider->version))
+			return -FI_EALREADY;
+
+		prov->provider = provider;
+		return 0;
+	}
 
 	prov = calloc(sizeof *prov, 1);
 	if (!prov)
