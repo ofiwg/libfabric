@@ -55,6 +55,7 @@ void cnt_str(char *str, size_t ssize, long long cnt);
 int size_to_count(int size);
 int wait_for_completion(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, char *cq_str);
+int64_t get_elapsed_ms(struct timespec *b, struct timespec *a);
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))

@@ -8,6 +8,7 @@ bin_PROGRAMS = \
 	simple/fi_read_lat \
 	simple/fi_read_bw \
 	simple/fi_ud_pingpong \
+	unit/fi_eq_test \
 	ported/libibverbs/fi_rc_pingpong
 
 simple_fi_info_SOURCES = \
@@ -36,6 +37,10 @@ simple_fi_read_bw_SOURCES = \
 
 simple_fi_ud_pingpong_SOURCES = \
 	simple/ud_pingpong.c \
+	common/shared.c
+
+unit_fi_eq_test_SOURCES = \
+    unit/eq_test.c \
 	common/shared.c
 
 ported_libibverbs_fi_rc_pingpong_SOURCES = \
