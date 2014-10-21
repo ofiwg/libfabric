@@ -51,33 +51,6 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
-
-struct test_size_param {
-	int size;
-	int option;
-};
-
-static struct test_size_param test_size[] = {
-	{ 1 <<  6, 0 },
-	{ 1 <<  7, 1 }, { (1 <<  7) + (1 <<  6), 1},
-	{ 1 <<  8, 1 }, { (1 <<  8) + (1 <<  7), 1},
-	{ 1 <<  9, 1 }, { (1 <<  9) + (1 <<  8), 1},
-	{ 1 << 10, 1 }, { (1 << 10) + (1 <<  9), 1},
-	{ 1 << 11, 1 }, { (1 << 11) + (1 << 10), 1},
-	{ 1 << 12, 0 }, { (1 << 12) + (1 << 11), 1},
-	{ 1 << 13, 1 }, { (1 << 13) + (1 << 12), 1},
-	{ 1 << 14, 1 }, { (1 << 14) + (1 << 13), 1},
-	{ 1 << 15, 1 }, { (1 << 15) + (1 << 14), 1},
-	{ 1 << 16, 0 }, { (1 << 16) + (1 << 15), 1},
-	{ 1 << 17, 1 }, { (1 << 17) + (1 << 16), 1},
-	{ 1 << 18, 1 }, { (1 << 18) + (1 << 17), 1},
-	{ 1 << 19, 1 }, { (1 << 19) + (1 << 18), 1},
-	{ 1 << 20, 0 }, { (1 << 20) + (1 << 19), 1},
-	{ 1 << 21, 1 }, { (1 << 21) + (1 << 20), 1},
-	{ 1 << 22, 1 }, { (1 << 22) + (1 << 21), 1},
-};
-#define TEST_CNT (sizeof test_size / sizeof test_size[0])
-
 static int custom;
 static int size_option;
 static int iterations = 1000;
@@ -138,23 +111,6 @@ static void init_test(int size)
 	iterations = size_to_count(transfer_size);
 }
 
-static int poll_all_sends(void)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	do {
-		ret = fi_cq_read(scq, &comp, 1);
-		if (ret > 0) {
-			credits++;
-		} else if (ret < 0) {
-			printf("Event queue read %d (%s)\n", ret, fi_strerror(-ret));
-			return ret;
-		}
-	} while (ret);
-	return 0;
-}
-
 static int send_xfer(int size)
 {
 	struct fi_cq_entry comp;
@@ -203,12 +159,16 @@ static int sync_test(void)
 {
 	int ret;
 
-	while (credits < max_credits)
-		poll_all_sends();
+	ret = wait_for_completion(scq, max_credits - credits);
+	if (ret) {
+		return ret;
+	}
+	credits = max_credits;
 
 	ret = dst_addr ? send_xfer(16) : recv_xfer(16);
-	if (ret)
+	if (ret) {
 		return ret;
+	}
 
 	return dst_addr ? recv_xfer(16) : send_xfer(16);
 }
@@ -321,31 +281,27 @@ err1:
 	return ret;
 }
 
-static int bind_fid( fid_t ep, fid_t res, uint64_t flags)
-{
-	int ret;
-
-	ret = fi_bind(ep, res, flags);
-	if (ret)
-		printf("fi_bind %s\n", fi_strerror(-ret));
-	return ret;
-}
-
 static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = bind_fid(&ep->fid, &cmeq->fid, 0);
-	if (ret)
+	ret = fi_bind(&ep->fid, &cmeq->fid, 0);
+	if (ret) {
+		printf("fi_bind %s\n", fi_strerror(-ret));
 		return ret;
+	}
 
-	ret = bind_fid(&ep->fid, &scq->fid, FI_SEND);
-	if (ret)
+	ret = fi_bind(&ep->fid, &scq->fid, FI_SEND);
+	if (ret) {
+		printf("fi_bind %s\n", fi_strerror(-ret));
 		return ret;
+	}
 
-	ret = bind_fid(&ep->fid, &rcq->fid, FI_RECV);
-	if (ret)
+	ret = fi_bind(&ep->fid, &rcq->fid, FI_RECV);
+	if (ret) {
+		printf("fi_bind %s\n", fi_strerror(-ret));
 		return ret;
+	}
 
 	ret = fi_enable(ep);
 	if (ret)
@@ -385,9 +341,11 @@ static int server_listen(void)
 	if (ret)
 		goto err2;
 
-	ret = bind_fid(&pep->fid, &cmeq->fid, 0);
-	if (ret)
+	ret = fi_bind(&pep->fid, &cmeq->fid, 0);
+	if (ret) {
+		printf("fi_bind %s\n", fi_strerror(-ret));
 		goto err3;
+	}
 
 	ret = fi_listen(pep);
 	if (ret) {
@@ -583,8 +541,9 @@ static int run(void)
 	       "name", "bytes", "xfers", "iters", "total", "time", "Gb/sec", "usec/xfer");
 
 	ret = dst_addr ? client_connect() : server_connect();
-	if (ret)
+	if (ret) {
 		return ret;
+	}
 
 	if (!custom) {
 		for (i = 0; i < TEST_CNT; i++) {
@@ -594,12 +553,14 @@ static int run(void)
 			run_test();
 		}
 	} else {
-
 		ret = run_test();
 	}
 
-	while (credits < max_credits)
-		poll_all_sends();
+	ret = wait_for_completion(scq, max_credits - credits);
+	if (ret) {
+		return ret;
+	}
+	credits = max_credits;
 
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);
