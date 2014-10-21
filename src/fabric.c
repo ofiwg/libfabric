@@ -59,12 +59,12 @@ struct fi_prov {
 static struct fi_prov *prov_head, *prov_tail;
 
 __attribute__((visibility ("default")))
-int fi_register_provider_(uint32_t version, struct fi_provider *provider)
+int fi_register_provider_(uint32_t fi_version, struct fi_provider *provider)
 {
 	struct fi_prov *prov;
 
-	if (FI_MAJOR(version) != FI_MAJOR_VERSION ||
-	    FI_MINOR(version) > FI_MINOR_VERSION)
+	if (FI_MAJOR(fi_version) != FI_MAJOR_VERSION ||
+	    FI_MINOR(fi_version) > FI_MINOR_VERSION)
 		return -FI_ENOSYS;
 
 	prov = calloc(sizeof *prov, 1);
