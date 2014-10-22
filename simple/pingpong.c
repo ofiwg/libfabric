@@ -121,7 +121,11 @@ static int send_xfer(int size)
 		if (ret > 0) {
 			goto post;
 		} else if (ret < 0) {
-			printf("Event queue read %d (%s)\n", ret, fi_strerror(-ret));
+			if (ret == -FI_EAVAIL) {
+				cq_readerr(scq, "scq");
+			} else {
+				printf("Completion queue read %d (%s)\n", ret, fi_strerror(-ret));
+			}
 			return ret;
 		}
 	}
@@ -143,7 +147,11 @@ static int recv_xfer(int size)
 	do {
 		ret = fi_cq_read(rcq, &comp, 1);
 		if (ret < 0) {
-			printf("Event queue read %d (%s)\n", ret, fi_strerror(-ret));
+			if (ret == -FI_EAVAIL) {
+				cq_readerr(rcq, "rcq");
+			} else {
+				printf("Completion queue read %d (%s)\n", ret, fi_strerror(-ret));
+			}
 			return ret;
 		}
 	} while (!ret);

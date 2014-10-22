@@ -34,6 +34,9 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+
+#include <rdma/fi_errno.h>
+
 #include <shared.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_eq.h>
@@ -165,3 +168,16 @@ int wait_for_completion(struct fid_cq *cq, int num_completions)
 	return 0;
 }
 
+void cq_readerr(struct fid_cq *cq, char *cq_str)
+{ 
+	struct fi_cq_err_entry cq_err;
+	const char *err_str;
+	int ret;
+
+	ret = fi_cq_readerr(cq, &cq_err, sizeof(cq_err), 0);
+	if (ret)
+		printf("fi_cq_readerr %d (%s)\n", ret, fi_strerror(-ret));
+
+	err_str = fi_cq_strerror(cq, cq_err.err, cq_err.err_data, NULL, 0);
+	printf("%s fi_cq_readerr() %s (%d)\n", cq_str, err_str, cq_err.err);
+}
