@@ -242,6 +242,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	int ret;
 
 	buffer_size = !custom ? test_size[TEST_CNT - 1].size : transfer_size;
+	if (max_msg_size > 0 && buffer_size > max_msg_size) {
+		buffer_size = max_msg_size;
+	}
 	buffer_size += prefix_len;
 	buf = malloc(buffer_size);
 	if (!buf) {
