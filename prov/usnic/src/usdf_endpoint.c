@@ -206,7 +206,7 @@ usdf_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_EQ:
 		// XXX
 	default:
-		return -EINVAL;
+		return -FI_EINVAL;
 	}
 
 	return 0;

@@ -56,10 +56,19 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
+#include "fi_enosys.h"
 #include "fi.h"
 
 #include "usnic_direct.h"
 #include "usdf.h"
+
+/*
+ * Reap completed AV insert operatins and generate EQ entries
+ */
+void
+usdf_am_progress(struct usdf_av *av)
+{
+}
 
 static int
 usdf_am_insert(struct fid_av *fav, const void *addr, size_t count,
@@ -77,13 +86,25 @@ usdf_am_insert(struct fid_av *fav, const void *addr, size_t count,
 
 	av = av_ftou(fav);
 	sin = addr;
-	for (i = 0; i < count; i++) {
-		ret = usd_create_dest(av->av_domain->dom_dev, sin->sin_addr.s_addr,
-				sin->sin_port, &dest);
-		if (ret != 0) {
-			return ret;
+	if (av->av_eq != NULL) {
+		for (i = 0; i < count; i++) {
+			ret = usd_create_dest_start(av->av_domain->dom_dev,
+					sin->sin_addr.s_addr, sin->sin_port,
+					&fi_addr[i]);
+			if (ret != 0) {
+				return ret;
+			}
 		}
-		fi_addr[i] = (fi_addr_t)dest;
+	} else {
+		for (i = 0; i < count; i++) {
+			ret = usd_create_dest(av->av_domain->dom_dev,
+					sin->sin_addr.s_addr, sin->sin_port,
+					&dest);
+			if (ret != 0) {
+				return ret;
+			}
+			fi_addr[i] = (fi_addr_t)dest;
+		}
 	}
 
 	return 0;
@@ -144,7 +165,22 @@ usdf_av_straddr(struct fid_av *av, const void *addr,
 static int
 usdf_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	return -FI_ENOSYS;
+	struct usdf_av *av;
+
+	av = av_fidtou(fid);
+
+	switch (bfid->fclass) {
+	case FI_CLASS_EQ:
+		if (av->av_eq != NULL) {
+			return -FI_EINVAL;
+		}
+		av->av_eq = eq_fidtou(bfid);
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+
+	return 0;
 }
 
 static int
@@ -153,13 +189,11 @@ usdf_av_close(struct fid *fid)
 	struct usdf_av *av;
 
 	av = container_of(fid, struct usdf_av, av_fid.fid);
-#if 0
-	if (atomic_get(&av->av_ref) > 0) {
+	if (atomic_get(&av->av_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
-#endif
 
-	//atomic_dec(&av->av_dom->ref);
+	atomic_dec(&av->av_domain->dom_refcnt);
 	free(av);
 	return 0;
 }
@@ -174,6 +208,14 @@ static struct fi_ops_av usdf_am_ops = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = usdf_am_insert,
 	.remove = usdf_am_remove,
+	.lookup = usdf_am_lookup,
+	.straddr = usdf_av_straddr
+};
+
+static struct fi_ops_av usdf_am_ops_ro = {
+	.size = sizeof(struct fi_ops_av),
+	.insert = fi_no_av_insert,
+	.remove = fi_no_av_remove,
 	.lookup = usdf_am_lookup,
 	.straddr = usdf_av_straddr
 };
@@ -200,15 +242,17 @@ usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		return -FI_ENOMEM;
 	}
 
+	if (attr->flags & FI_READ) {
+		av->av_fid.ops = &usdf_am_ops_ro;
+	} else {
+		av->av_fid.ops = &usdf_am_ops;
+	}
 	av->av_fid.fid.fclass = FI_CLASS_AV;
 	av->av_fid.fid.context = context;
 	av->av_fid.fid.ops = &usdf_av_fi_ops;
-	av->av_fid.ops = &usdf_am_ops;
 
-#if 0 // XXX everywhere....
-	atomic_init(&av->ref);
-	atomic_inc(&dom->ref);
-#endif
+	atomic_init(&av->av_refcnt);
+	atomic_inc(&udp->dom_refcnt);
 	av->av_domain = udp;
 
 	*av_o = av_utof(av);

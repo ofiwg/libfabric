@@ -132,9 +132,11 @@ src_libfabric_la_SOURCES += \
 	prov/usnic/src/usdf_domain.c \
 	prov/usnic/src/usdf_mem.c \
 	prov/usnic/src/usdf_cq.c \
+	prov/usnic/src/usdf_eq.c \
 	prov/usnic/src/usdf_av.c \
 	prov/usnic/src/usdf_endpoint.c \
 	prov/usnic/src/usdf_msg.c \
+	prov/usnic/src/usdf_progress.c \
 	prov/usnic/src/usdf_cm.c
 
 AM_CPPFLAGS += -I$(top_srcdir)/prov/usnic/src/usnic_direct

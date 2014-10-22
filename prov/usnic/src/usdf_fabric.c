@@ -123,7 +123,12 @@ usdf_validate_hint_caps(struct fi_info *hints, struct usd_device_attrs *dap)
 
 	fattrp = hints->fabric_attr;
 	if (fattrp != NULL) {
-		if (fattrp->name != NULL && strcmp(fattrp->name, USDF_FI_NAME) != 0) {
+		if (fattrp->prov_name != NULL &&
+                    strcmp(fattrp->prov_name, USDF_FI_NAME) != 0) {
+			return -FI_ENODATA;
+		}
+		if (fattrp->name != NULL &&
+                    strcmp(fattrp->name, dap->uda_devname) != 0) {
 			return -FI_ENODATA;
 		}
 	}
@@ -328,7 +333,14 @@ fail:
 static int
 usdf_fabric_close(fid_t fid)
 {
-	free(fid);
+	struct usdf_fabric *fp;
+
+	fp = fab_fidtou(fid);
+	if (atomic_get(&fp->fab_refcnt) > 0) {
+		return -FI_EBUSY;
+	}
+
+	free(fp);
 	return 0;
 }
 
@@ -340,7 +352,7 @@ static struct fi_ops usdf_fi_ops = {
 static struct fi_ops_fabric usdf_ops_fabric = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = usdf_domain_open,
-	//.eq_open = usdf_eq_open,
+	.eq_open = usdf_eq_open,
 };
 
 int
@@ -366,6 +378,7 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 	fp->fab_fid.fid.ops = &usdf_fi_ops;
 	fp->fab_fid.ops = &usdf_ops_fabric;
 
+	atomic_init(&fp->fab_refcnt);
 	*fabric = &fp->fab_fid;
 	return 0;
 

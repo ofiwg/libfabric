@@ -36,6 +36,8 @@
 #ifndef _USDF_H_
 #define _USDF_H_
 
+#include <pthread.h>
+
 #define USDF_FI_NAME "usnic"
 #define USDF_HDR_BUF_ENTRY 64
 #define USDF_EP_CAP_PIO (1ULL << 63)
@@ -44,14 +46,23 @@
 #define USDF_SUPP_MODE (FI_LOCAL_MR | FI_MSG_PREFIX)
 #define USDF_REQ_MODE (FI_LOCAL_MR)
 
+/* usdf event flags */
+#define USDF_EVENT_FLAG_ERROR (1ULL << 62)
+#define USDF_EVENT_FLAG_FREE_BUF (1ULL << 63)
+
 struct usdf_fabric {
 	struct fid_fabric   fab_fid;
 	char *fab_name;
+	atomic_t fab_refcnt;
 };
+#define fab_ftou(FAB) container_of(FAB, struct usdf_fabric, fab_fid)
+#define fab_utof(FP) (&(FP)->fab_fid)
 #define fab_fidtou(FID) container_of(FID, struct usdf_fabric, fab_fid.fid)
 
 struct usdf_domain {
 	struct fid_domain   dom_fid;
+	struct usdf_fabric *dom_fabric;
+	atomic_t dom_refcnt;
 	struct usd_device   *dom_dev;
 	struct usd_device_attrs dom_dev_attrs;
 };
@@ -60,6 +71,7 @@ struct usdf_domain {
 
 struct usdf_ep {
 	struct fid_ep ep_fid;
+	atomic_t ep_refcnt;
 	uint64_t ep_caps;
 	uint64_t ep_mode;
 	uint64_t ep_req_port;
@@ -84,17 +96,54 @@ struct usdf_mr {
 
 struct usdf_cq {
 	struct fid_cq cq_fid;
+	atomic_t cq_refcnt;
 	struct usdf_domain *cq_domain;
 	struct usd_cq *cq_cq;
 	struct usd_completion cq_comp;
 };
 #define cq_ftou(FCQ) container_of(FCQ, struct usdf_cq, cq_fid)
 #define cq_fidtou(FID) container_of(FID, struct usdf_cq, cq_fid.fid)
-#define cq_utof(CQ) (&(CQ).cq_fid)
+#define cq_utof(CQ) (&(CQ)->cq_fid)
+
+struct usdf_event {
+	uint32_t ue_event;
+	void *ue_buf;
+	size_t ue_len;
+	uint64_t ue_flags;
+};
+
+struct usdf_eq {
+	struct fid_eq eq_fid;
+	struct usdf_fabric *eq_fabric;
+	atomic_t eq_refcnt;
+
+	pthread_spinlock_t eq_lock;
+
+	struct fi_eq_entry *eq_ev_buf;
+	struct usdf_event *eq_ev_ring;
+	struct usdf_event *eq_ev_head;
+	struct usdf_event *eq_ev_tail;
+	struct usdf_event *eq_ev_end;
+	int eq_ev_ring_size;
+	atomic_t eq_num_events;
+
+	/* various ways to wait */
+	enum fi_wait_obj eq_wait_obj;
+	union {
+		int eq_fd;
+	};
+
+	struct fi_ops_eq eq_ops_data;
+};
+#define eq_ftou(FEQ) container_of(FEQ, struct usdf_eq, eq_fid)
+#define eq_fidtou(FID) container_of(FID, struct usdf_eq, eq_fid.fid)
+#define eq_utof(EQ) (&(EQ)->eq_fid)
 
 struct usdf_av {
 	struct fid_av av_fid;
 	struct usdf_domain *av_domain;
+	struct usdf_eq *av_eq;
+	atomic_t av_refcnt;
 };
 #define av_ftou(FAV) container_of(FAV, struct usdf_av, av_fid)
 #define av_fidtou(FID) container_of(FID, struct usdf_av, av_fid.fid)
@@ -104,6 +153,9 @@ struct usdf_av {
 /*
  * Prototypes
  */
+
+/* global progress */
+void usdf_progress(void);
 
 /* fi_ops_fabric */
 int usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
