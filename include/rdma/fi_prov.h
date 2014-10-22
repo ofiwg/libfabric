@@ -62,7 +62,7 @@ struct fi_provider {
 			void *context);
 };
 
-int fi_register_provider(uint32_t version, struct fi_provider *provider);
+int fi_register_provider(uint32_t fi_version, struct fi_provider *provider);
 static inline int fi_register(struct fi_provider *provider)
 {
 	return fi_register_provider(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
