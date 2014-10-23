@@ -80,7 +80,9 @@ struct fi_info {
 	void                  *dest_addr;
 	fi_connreq_t          connreq;
 	struct fi_tx_ctx_attr *tx_attr;
+	size_t                tx_attr_cnt;
 	struct fi_rx_ctx_attr *rx_attr;
+	size_t                rx_attr_cnt;
 	struct fi_ep_attr     *ep_attr;
 	struct fi_domain_attr *domain_attr;
 	struct fi_fabric_attr *fabric_attr;
@@ -130,14 +132,22 @@ Transmit context attributes may be specified and returned as part of
 fi_getinfo.  When provided as hints, requested values of struct fi_tx_ctx_attr
 should be set.  On output, the actual transmit context attributes that can
 be provided will be returned.  Output values will be greater than or
-or equal to the requested input values.
+or equal to the requested input values. See SCALABLE ENDPOINTS section in
+fi_endpoint(3) for more details.
+.IP "tx_attr_cnt - Count of transmit context attributes."
+When provided as hints, indicate the number of transmit attribute structures.
+Output values are unchanged from the input.
 .IP "rx_attr - receive context attributes"
 Optionally supplied receive context attributes.
 Receive context attributes may be specified and returned as part of
 fi_getinfo.  When provided as hints, requested values of struct fi_rx_ctx_attr
 should be set.  On output, the actual receive context attributes that can
 be provided will be returned.  Output values will be greater than or
-or equal to the requested input values.
+or equal to the requested input values. See SCALABLE ENDPOINTS section in
+fi_endpoint(3) for more details.
+.IP "tx_attr_cnt - Count of receive context attributes."
+When provided as hints, indicate the number of receive attributes.
+Output values are unchanged from the input.
 .IP "ep_attr - endpoint attributes"
 Optionally supplied endpoint attributes.
 Endpoint attributes may be specified and returned as part of fi_getinfo.

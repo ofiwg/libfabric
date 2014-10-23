@@ -265,18 +265,20 @@ static struct fi_info *fi_dupinfo_internal(const struct fi_info *info)
 		memcpy(dup->dest_addr, info->dest_addr, info->dest_addrlen);
 	}
 	if (info->tx_attr != NULL) {
-		dup->tx_attr = malloc(sizeof(*dup->tx_attr));
+		dup->tx_attr = malloc(sizeof(*dup->tx_attr) * info->tx_attr_cnt);
 		if (dup->tx_attr == NULL) {
 			goto fail;
 		}
-		*dup->tx_attr = *info->tx_attr;
+		memcpy(dup->tx_attr, info->tx_attr,
+				sizeof(*dup->tx_attr) * info->tx_attr_cnt);
 	}
 	if (info->rx_attr != NULL) {
-		dup->rx_attr = malloc(sizeof(*dup->rx_attr));
+		dup->rx_attr = malloc(sizeof(*dup->rx_attr) * info->rx_attr_cnt);
 		if (dup->rx_attr == NULL) {
 			goto fail;
 		}
-		*dup->rx_attr = *info->rx_attr;
+		memcpy(dup->rx_attr, info->rx_attr,
+				sizeof(*dup->rx_attr) * info->rx_attr_cnt);
 	}
 	if (info->ep_attr != NULL) {
 		dup->ep_attr = malloc(sizeof(*dup->ep_attr));
