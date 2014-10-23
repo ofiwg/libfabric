@@ -14,9 +14,9 @@ AM_CFLAGS = -g -Wall
 
 if HAVE_LD_VERSION_SCRIPT
     libfabric_version_script = -Wl,--version-script=$(srcdir)/libfabric.map
-else
+else !HAVE_LD_VERSION_SCRIPT
     libfabric_version_script =
-endif
+endif !HAVE_LD_VERSION_SCRIPT
 
 # internal utility functions shared by in-tree providers:
 common_srcs = \
@@ -51,11 +51,11 @@ if HAVE_SOCKETS_DL
 pkglib_LTLIBRARIES += libsockets-fi.la
 libsockets_fi_la_SOURCES = $(_sockets_files) $(common_srcs)
 libsockets_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic $(linkback)
-else
+else !HAVE_SOCKETS_DL
 src_libfabric_la_SOURCES += $(_sockets_files)
-endif
+endif !HAVE_SOCKETS_DL
 
-endif #HAVE_SOCKETS
+endif HAVE_SOCKETS
 
 if HAVE_VERBS
 _verbs_files = prov/verbs/src/fi_verbs.c
@@ -64,11 +64,11 @@ if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libibverbs-fi.la
 libibverbs_fi_la_SOURCES = $(_verbs_files) $(common_srcs)
 libibverbs_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic -libverbs -lrdmacm $(linkback)
-else
+else !HAVE_VERBS_DL
 src_libfabric_la_SOURCES += $(_verbs_files)
-endif
+endif !HAVE_VERBS_DL
 
-endif #HAVE_VERBS
+endif HAVE_VERBS
 
 if HAVE_USNIC
 libusnic_direct_sources = \
@@ -131,7 +131,7 @@ libusnic_direct_sources = \
 	prov/usnic/src/usnic_direct/vnic_wq.h \
 	prov/usnic/src/usnic_direct/wq_enet_desc.h
 
-src_libfabric_la_SOURCES += \
+_usnic_files = \
 	$(libusnic_direct_sources) \
 	prov/usnic/src/usdf.h \
 	prov/usnic/src/usdf_fabric.c \
@@ -145,10 +145,22 @@ src_libfabric_la_SOURCES += \
 	prov/usnic/src/usdf_progress.c \
 	prov/usnic/src/usdf_cm.c
 
-AM_CPPFLAGS += -I$(top_srcdir)/prov/usnic/src/usnic_direct
-AM_CPPFLAGS += -D__LIBUSNIC__
+_usnic_cppflags = \
+        -D__LIBUSNIC__ \
+        -I$(top_srcdir)/prov/usnic/src/usnic_direct
 
-endif # HAVE_USNIC
+if HAVE_USNIC_DL
+pkglib_LTLIBRARIES += libusnic-fi.la
+libusnic_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(_usnic_cppflags)
+libusnic_fi_la_SOURCES = $(_usnic_files) $(common_srcs)
+libusnic_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libusnic_fi_la_LIBS = $(linkback)
+else !HAVE_USNIC_DL
+AM_CPPFLAGS += $(_usnic_cppflags)
+src_libfabric_la_SOURCES += $(_usnic_files)
+endif !HAVE_USNIC_DL
+
+endif HAVE_USNIC
 
 if HAVE_PSM
 _psm_files = \
@@ -172,11 +184,11 @@ if HAVE_PSM_DL
 pkglib_LTLIBRARIES += libpsmx-fi.la
 libpsmx_fi_la_SOURCES = $(_psm_files) $(common_srcs)
 libpsmx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic $(linkback)
-else
+else !HAVE_PSM_DL
 src_libfabric_la_SOURCES += $(_psm_files)
-endif
+endif !HAVE_PSM_DL
 
-endif #HAVE_PSM
+endif HAVE_PSM
 
 src_libfabric_la_LDFLAGS = -version-info 1 -export-dynamic \
 			   $(libfabric_version_script)
@@ -207,7 +219,7 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_atomic_def.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_atomic.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_cm.h
-endif
+endif HAVE_DIRECT
 
 man_MANS = \
 	man/fabric.7 \

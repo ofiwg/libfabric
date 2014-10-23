@@ -338,7 +338,7 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
 	if(!sock_cq)
 		return -FI_ENOENT;
 
-	if (sock_cq->attr.wait_obj == FI_CQ_COND_THRESHOLD){
+	if (sock_cq->attr.wait_cond == FI_CQ_COND_THRESHOLD){
 		cq_threshold = (int64_t)cond;
 	}else{
 		cq_threshold = 1;
