@@ -44,7 +44,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include "list.h"
+#include <fi_list.h>
 #include "sock.h"
 
 static int _sock_cq_read_out_fd(struct sock_cq *sock_cq)

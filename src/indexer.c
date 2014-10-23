@@ -39,7 +39,7 @@
 #include <sys/types.h>
 #include <stdlib.h>
 
-#include "indexer.h"
+#include <fi_indexer.h>
 
 /*
  * Indexer - to find a structure given an index
