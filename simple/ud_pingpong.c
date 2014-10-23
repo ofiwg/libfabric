@@ -229,9 +229,20 @@ out:
 
 static void free_ep_res(void)
 {
-	fi_close(&mr->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	int ret;
+	
+	ret = fi_close(&mr->fid);
+	if (ret != 0) {
+		printf("fi_close(mr) ret=%d, %s\n", ret, fi_strerror(-ret));
+	}
+	ret = fi_close(&rcq->fid);
+	if (ret != 0) {
+		printf("fi_close(rcq) ret=%d, %s\n", ret, fi_strerror(-ret));
+	}
+	ret = fi_close(&scq->fid);
+	if (ret != 0) {
+		printf("fi_close(scq) ret=%d, %s\n", ret, fi_strerror(-ret));
+	}
 	free(buf);
 }
 
@@ -539,11 +550,27 @@ static int run(void)
 	while (credits < max_credits)
 		poll_all_sends();
 
-	fi_shutdown(ep, 0);
-	fi_close(&ep->fid);
+	ret = fi_shutdown(ep, 0);
+	if (ret != 0) {
+		printf("fi_shutdown ret=%d, %s\n", ret, fi_strerror(-ret));
+	}
+	ret = fi_close(&ep->fid);
+	if (ret != 0) {
+		printf("fi_close(ep) ret=%d, %s\n", ret, fi_strerror(-ret));
+	}
 	free_ep_res();
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	ret = fi_close(&av->fid);
+	if (ret != 0) {
+		printf("fi_close(av) ret=%d, %s\n", ret, fi_strerror(-ret));
+	}
+	ret = fi_close(&dom->fid);
+	if (ret != 0) {
+		printf("fi_close(dom) ret=%d, %s\n", ret, fi_strerror(-ret));
+	}
+	ret = fi_close(&fab->fid);
+	if (ret != 0) {
+		printf("fi_close(fab) ret=%d, %s\n", ret, fi_strerror(-ret));
+	}
 	return ret;
 }
 
