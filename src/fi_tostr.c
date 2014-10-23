@@ -373,6 +373,17 @@ static void fi_tostr_info(char *buf, const struct fi_info *info)
 	strcat(buf, "]\n");
 }
 
+static void fi_tostr_av_type(char *buf, enum fi_av_type type)
+{
+	switch (type) {
+	CASEENUMSTR(FI_AV_MAP);
+	CASEENUMSTR(FI_AV_TABLE);
+	default:
+		strcat(buf, "Unknown\n");
+		break;
+	}
+}
+
 __attribute__((visibility ("default")))
 char *fi_tostr_(const void *data, enum fi_type datatype)
 {
@@ -437,6 +448,9 @@ char *fi_tostr_(const void *data, enum fi_type datatype)
 		break;
 	case FI_TYPE_MODE:
 		fi_tostr_mode(buf, val64);
+		break;
+	case FI_TYPE_AV_TYPE:
+		fi_tostr_av_type(buf, val32);
 		break;
 	default:
 		strcat(buf, "Unknown type");
