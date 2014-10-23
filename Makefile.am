@@ -131,7 +131,7 @@ libusnic_direct_sources = \
 	prov/usnic/src/usnic_direct/vnic_wq.h \
 	prov/usnic/src/usnic_direct/wq_enet_desc.h
 
-src_libfabric_la_SOURCES += \
+_usnic_files = \
 	$(libusnic_direct_sources) \
 	prov/usnic/src/usdf.h \
 	prov/usnic/src/usdf_fabric.c \
@@ -145,8 +145,20 @@ src_libfabric_la_SOURCES += \
 	prov/usnic/src/usdf_progress.c \
 	prov/usnic/src/usdf_cm.c
 
-AM_CPPFLAGS += -I$(top_srcdir)/prov/usnic/src/usnic_direct
-AM_CPPFLAGS += -D__LIBUSNIC__
+_usnic_cppflags = \
+        -D__LIBUSNIC__ \
+        -I$(top_srcdir)/prov/usnic/src/usnic_direct
+
+if HAVE_USNIC_DL
+pkglib_LTLIBRARIES += libusnic-fi.la
+libusnic_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(_usnic_cppflags)
+libusnic_fi_la_SOURCES = $(_usnic_files) $(common_srcs)
+libusnic_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libusnic_fi_la_LIBS = $(linkback)
+else !HAVE_USNIC_DL
+AM_CPPFLAGS += $(_usnic_cppflags)
+src_libfabric_la_SOURCES += $(_usnic_files)
+endif !HAVE_USNIC_DL
 
 endif # HAVE_USNIC
 
