@@ -173,7 +173,7 @@ ssize_t _sock_eq_report_error(struct sock_eq *sock_eq, const void *buf, size_t l
 }
 
 static ssize_t sock_eq_write(struct fid_eq *eq, uint32_t event, 
-		      const void *buf, size_t len, int64_t flags)
+		      const void *buf, size_t len, uint64_t flags)
 {
 	struct sock_eq *sock_eq;
 	sock_eq = container_of(eq, struct sock_eq, eq);
