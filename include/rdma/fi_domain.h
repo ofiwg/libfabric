@@ -239,7 +239,7 @@ fi_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr, size_t *addrlen)
 static inline fi_addr_t
 fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
 {
-	return (fi_addr_t) ((rx_index << (64 - rx_ctx_bits)) | fi_addr);
+	return (fi_addr_t) (((uint64_t) rx_index << (64 - rx_ctx_bits)) | fi_addr);
 }
 
 static inline int fi_av_sync(struct fid_av *av, uint64_t flags, void *context)
