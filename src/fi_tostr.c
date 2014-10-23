@@ -39,6 +39,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
@@ -174,6 +176,7 @@ static void fi_tostr_protocol(char *buf, uint32_t protocol)
 	CASEENUMSTR(FI_PROTO_IWARP);
 	CASEENUMSTR(FI_PROTO_IB_UD);
 	CASEENUMSTR(FI_PROTO_PSMX);
+	CASEENUMSTR(FI_PROTO_UDP);
 	default:
 		if (protocol & FI_PROV_SPECIFIC)
 			strcat(buf, "Provider specific\n");
@@ -190,6 +193,48 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 	IFFLAGSTR(mode, FI_LOCAL_MR);
 	IFFLAGSTR(mode, FI_PROV_MR_KEY);
 	IFFLAGSTR(mode, FI_MSG_PREFIX);
+}
+
+static void fi_tostr_addr(char *buf, uint32_t addr_format,
+		void *addr)
+{
+	char *p;
+	p = buf + strlen(buf);
+
+	if (addr == NULL) {
+		strcat(p, "(nil)\n");
+		return;
+	}
+
+	switch (addr_format) {
+	case FI_SOCKADDR:
+		/* translate and recurse... */
+		switch (((struct sockaddr *)addr)->sa_family) {
+		case AF_INET:
+			fi_tostr_addr(p, FI_SOCKADDR_IN, addr);
+			break;
+		case AF_INET6:
+			fi_tostr_addr(p, FI_SOCKADDR_IN6, addr);
+			break;
+		default:
+			fi_tostr_addr(p, FI_ADDR_UNSPEC, addr);
+			break;
+		}
+		break;
+	case FI_SOCKADDR_IN:
+		inet_ntop(AF_INET, &((struct sockaddr_in *)addr)->sin_addr,
+			p, 64);
+		strcat(p, "\n");
+		break;
+	case FI_SOCKADDR_IN6:
+		inet_ntop(AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr,
+			p, 64);
+		strcat(p, "\n");
+		break;
+	default:
+		sprintf(p, "%p\n", addr);
+		break;
+	}
 }
 
 static void fi_tostr_tx_attr(char *buf, const struct fi_tx_ctx_attr *attr,
@@ -314,8 +359,10 @@ static void fi_tostr_info(char *buf, const struct fi_info *info)
 
 	strcatf(buf, "\tsrc_addrlen:\t%zd\n", info->src_addrlen);
 	strcatf(buf, "\tdest_addrlen:\t%zd\n", info->dest_addrlen);
-	strcatf(buf, "\tsrc_addr:\t%p\n", info->src_addr);
-	strcatf(buf, "\tdest_addr:\t%p\n", info->dest_addr);
+	strcatf(buf, "\tsrc_addr:\t");
+	fi_tostr_addr(buf, info->addr_format, info->src_addr);
+	strcatf(buf, "\tdest_addr:\t");
+	fi_tostr_addr(buf, info->addr_format, info->dest_addr);
 	strcatf(buf, "\tconnreq:\t%p\n", info->connreq);
 
 	fi_tostr_tx_attr(buf, info->tx_attr, "\t");
