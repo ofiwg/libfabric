@@ -188,17 +188,18 @@ void cq_readerr(struct fid_cq *cq, char *cq_str)
 	printf("%s fi_cq_readerr() %s (%d)\n", cq_str, err_str, cq_err.err);
 }
 
-int64_t get_elapsed_ms(const struct timespec *b, const struct timespec *a)
+int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
+		    enum precision p)
 {
     int64_t elapsed;
 
     elapsed = (a->tv_sec - b->tv_sec) * 1000 * 1000 * 1000;
     elapsed += a->tv_nsec - b->tv_nsec;
-    return elapsed / 1000000;
+    return elapsed / p;
 }
 
 //	"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer"
-void perf_str(char *name, int tsize, int iters, long long total, float elapsed)
+void perf_str(char *name, int tsize, int iters, long long total, int64_t elapsed)
 {
 	char str[32];
 
@@ -211,6 +212,6 @@ void perf_str(char *name, int tsize, int iters, long long total, float elapsed)
 	printf("%-8s", size_str(str, total));
 
 	printf("%8.2fs%10.2f%11.2f\n",
-		elapsed / 1000000., (total * 8) / (1000. * elapsed),
-		(elapsed / iters / 2));
+		elapsed / 1000000.0, (total * 8) / (1000.0 * elapsed),
+		((float)elapsed / iters / 2));
 }

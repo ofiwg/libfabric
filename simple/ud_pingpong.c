@@ -35,7 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <getopt.h>
-#include <sys/time.h>
+#include <time.h>
 #include <netdb.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -53,7 +53,7 @@ static int transfer_size = 1000;
 static int max_credits = 128;
 static int credits = 128;
 static char test_name[10] = "custom";
-static struct timeval start, end;
+static struct timespec start, end;
 static void *buf;
 static void *buf_ptr;
 static size_t buffer_size;
@@ -74,14 +74,10 @@ static struct fid_cq *rcq, *scq;
 static struct fid_mr *mr;
 static struct fid_av *av;
 
-
 static void show_perf(void)
 {
-	float usec;
-	long long bytes;
-
-	usec = (end.tv_sec - start.tv_sec) * 1000000 + (end.tv_usec - start.tv_usec);
-	bytes = (long long) iterations * transfer_size * 2;
+	int64_t usec = get_elapsed(&start, &end, MICRO);
+	long long bytes = (long long) iterations * transfer_size * 2;
 
 	perf_str(test_name, transfer_size, iterations, bytes, usec);
 }
@@ -182,7 +178,7 @@ static int run_test(void)
 	if (ret)
 		goto out;
 
-	gettimeofday(&start, NULL);
+	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < iterations; i++) {
 		ret = dst_addr ? send_xfer(transfer_size) :
 				 recv_xfer(transfer_size);
@@ -194,7 +190,7 @@ static int run_test(void)
 		if (ret)
 			goto out;
 	}
-	gettimeofday(&end, NULL);
+	clock_gettime(CLOCK_MONOTONIC, &end);
 	show_perf();
 	ret = 0;
 
