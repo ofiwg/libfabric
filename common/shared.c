@@ -181,3 +181,15 @@ void cq_readerr(struct fid_cq *cq, char *cq_str)
 	err_str = fi_cq_strerror(cq, cq_err.err, cq_err.err_data, NULL, 0);
 	printf("%s fi_cq_readerr() %s (%d)\n", cq_str, err_str, cq_err.err);
 }
+
+int64_t
+get_elapsed_ms(
+    struct timespec *b,
+    struct timespec *a)
+{
+    int64_t elapsed;
+
+    elapsed = (a->tv_sec - b->tv_sec) * 1000 * 1000 * 1000;
+    elapsed += a->tv_nsec - b->tv_nsec;
+    return elapsed / 1000000;
+}
