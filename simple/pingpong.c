@@ -560,7 +560,7 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:C:I:S:")) != -1) {
+	while ((op = getopt(argc, argv, "d:n:p:s:I:S:")) != -1) {
 		switch (op) {
 		case 'd':
 			dst_addr = optarg;
