@@ -37,7 +37,7 @@
 #include <getopt.h>
 #include <poll.h>
 #include <time.h>
-#include <arpa/inet.h>
+#include <string.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
@@ -62,6 +62,7 @@ create_eq(size_t size, uint64_t flags, enum fi_wait_obj wait_obj)
 {
 	struct fi_eq_attr eq_attr;
 
+	memset(&eq_attr, 0, sizeof(eq_attr));
 	eq_attr.size = size;
 	eq_attr.flags = flags;
 	eq_attr.wait_obj = wait_obj;
@@ -71,11 +72,48 @@ create_eq(size_t size, uint64_t flags, enum fi_wait_obj wait_obj)
 
 /*
  * Tests:
+ * - test open and close of EQ over a range of sizes
+ */
+static int
+eq_open_close()
+{
+	int i;
+	int ret;
+	int size;
+	int testret;
+
+	testret = FAIL;
+
+	for (i = 0; i < 17; ++i) {
+		size = 1 << i;
+		ret = create_eq(size, 0, FI_WAIT_UNSPEC);
+		if (ret != 0) {
+			sprintf(err_buf, "fi_eq_open(%d, 0, FI_WAIT_UNSPEC) = %d, %s",
+					size, ret, fi_strerror(-ret));
+			goto fail;
+		}
+
+		ret = fi_close(&eq->fid);
+		if (ret != 0) {
+			sprintf(err_buf, "close(eq) = %d, %s", ret, fi_strerror(-ret));
+			goto fail;
+		}
+		eq = NULL;
+	}
+	testret = PASS;
+
+fail:
+	eq = NULL;
+	return testret;
+}
+
+/*
+ * Tests:
  * - writing to EQ
  * - reading from EQ with and without FI_PEEK
  * - underflow read
  */
-int
+static int
 eq_write_read_self()
 {
 	struct fi_eq_entry entry;
@@ -109,10 +147,18 @@ eq_write_read_self()
 
 	/* Now read them back, peeking first at each one */
 	for (i = 0; i < 10; ++i) {
+		event = ~0;
+		memset(&entry, 0, sizeof(entry));
 		ret = fi_eq_read(eq, &event, &entry, sizeof(entry),
 				(i & 1) ? 0 : FI_PEEK); 
 		if (ret != sizeof(entry)) {
 			sprintf(err_buf, "fi_eq_read ret=%d, %s", ret, fi_strerror(-ret));
+			goto fail;
+		}
+
+		if (event != FI_COMPLETE) {
+			sprintf(err_buf, "iter %d: event = %d, should be %d\n", i, event,
+					FI_COMPLETE);
 			goto fail;
 		}
 
@@ -149,7 +195,7 @@ fail:
  * Tests:
  * - write overflow
  */
-int
+static int
 eq_write_overflow()
 {
 	struct fi_eq_entry entry;
@@ -198,7 +244,7 @@ fail:
  * - wait on fd with nothing pending
  * - wait on fd with event pending
  */
-int
+static int
 eq_wait_fd_poll()
 {
 	int fd;
@@ -270,7 +316,7 @@ fail:
  * - sread with event pending
  * - sread with no event pending
  */
-int
+static int
 eq_wait_fd_sread()
 {
 	struct fi_eq_entry entry;
@@ -316,6 +362,8 @@ eq_wait_fd_sread()
 
 	/* timed sread on EQ with event, 2s timeout */
 	clock_gettime(CLOCK_MONOTONIC_RAW, &before);
+	event = ~0;
+	memset(&entry, 0, sizeof(entry));
 	ret = fi_eq_sread(eq, &event, &entry, sizeof(entry), 2000, 0);
 	if (ret != sizeof(entry)) {
 		sprintf(err_buf, "fi_eq_read ret=%d, %s", ret, fi_strerror(-ret));
@@ -328,6 +376,22 @@ eq_wait_fd_sread()
 	if (elapsed > 5) {
 		sprintf(err_buf, "fi_eq_sread slept %d ms, expected immediate return",
 				(int)elapsed);
+		goto fail;
+	}
+
+	if (event != FI_COMPLETE) {
+		sprintf(err_buf, "fi_eq_sread: event = %d, should be %d\n", event,
+				FI_COMPLETE);
+		goto fail;
+	}
+	if (entry.fid != &eq->fid) {
+		sprintf(err_buf, "fi_eq_sread: fid mismatch: %p should be %p\n",
+				entry.fid, &eq->fid);
+		goto fail;
+	}
+	if (entry.context != eq) {
+		sprintf(err_buf, "fi_eq_sread: context mismatch: %p should be %p\n",
+				entry.context, eq);
 		goto fail;
 	}
 
@@ -348,6 +412,7 @@ struct test_entry {
 };
 
 struct test_entry test_array[] = {
+	TEST_ENTRY(eq_open_close),
 	TEST_ENTRY(eq_write_read_self),
 	TEST_ENTRY(eq_write_overflow),
 	TEST_ENTRY(eq_wait_fd_poll),
@@ -355,7 +420,7 @@ struct test_entry test_array[] = {
 	{ NULL, "" }
 };
 
-int
+static int
 run_tests()
 {
 	int ret;
