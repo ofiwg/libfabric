@@ -39,21 +39,10 @@
 
 #define LIST_DEF_NUM_ENTRIES (128)
 
-#ifdef _LIST_USE_LOCKS_
-
 #define CREATE_LOCK(_x) pthread_mutex_init(&(_x->mutex), NULL)
 #define DESTROY_LOCK(_x) pthread_mutex_destroy(&((_x)->mutex))
 #define LOCK_LIST(_x) pthread_mutex_lock (&((_x)->mutex))
 #define UNLOCK_LIST(_x) pthread_mutex_unlock (&((_x)->mutex))
-
-#else
-
-#define CREATE_LOCK(_x) 0
-#define DESTROY_LOCK(_x) 0
-#define LOCK_LIST(_x) 0
-#define UNLOCK_LIST(_x) 0
-
-#endif
 
 #define ENQUEUE_LIST(_head, _tail, _elem) do{		\
 		(_elem)->next = NULL;			\
