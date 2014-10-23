@@ -46,9 +46,9 @@
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
 
-#include "fi.h"
-#include "fi_enosys.h"
-#include "indexer.h"
+#include <fi.h>
+#include <fi_enosys.h>
+#include <fi_indexer.h>
 #include "list.h"
 
 #ifndef _SOCK_H_
