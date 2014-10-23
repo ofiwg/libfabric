@@ -201,7 +201,7 @@ rdmainclude_HEADERS = \
 	$(top_srcdir)/include/rdma/fi_trigger.h
 
 if HAVE_DIRECT
-rdmainclude_HEADERS += \
+nodist_rdmainclude_HEADERS = \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_domain.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_endpoint.h \
