@@ -48,10 +48,9 @@
 #include "fi.h"
 
 #define CASEENUMSTR(SYM) \
-	case SYM: { strcat(buf, #SYM "\n"); break; }
+	case SYM: { strcat(buf, #SYM); break; }
 #define IFFLAGSTR(flags, SYM) \
 	do { if (flags & SYM) strcat(buf, #SYM " "); } while(0)
-
 
 static void strcatf(char *dest, const char *fmt, ...)
 {
@@ -98,9 +97,9 @@ static void fi_tostr_addr_format(char *buf, uint32_t addr_format)
 	CASEENUMSTR(FI_ADDR_PSMX);
 	default:
 		if (addr_format & FI_PROV_SPECIFIC)
-			strcat(buf, "Provider specific\n");
+			strcat(buf, "Provider specific");
 		else
-			strcat(buf, "Unknown\n");
+			strcat(buf, "Unknown");
 		break;
 	}
 }
@@ -112,7 +111,7 @@ static void fi_tostr_progress(char *buf, enum fi_progress progress)
 	CASEENUMSTR(FI_PROGRESS_AUTO);
 	CASEENUMSTR(FI_PROGRESS_MANUAL);
 	default:
-		strcat(buf, "Unknown\n");
+		strcat(buf, "Unknown");
 		break;
 	}
 }
@@ -124,7 +123,7 @@ static void fi_tostr_threading(char *buf, enum fi_threading threading)
 	CASEENUMSTR(FI_THREAD_SAFE);
 	CASEENUMSTR(FI_THREAD_PROGRESS);
 	default:
-		strcat(buf, "Unknown\n");
+		strcat(buf, "Unknown");
 		break;
 	}
 }
@@ -163,7 +162,7 @@ static void fi_tostr_ep_type(char *buf, enum fi_ep_type ep_type)
 	CASEENUMSTR(FI_EP_DGRAM);
 	CASEENUMSTR(FI_EP_RDM);
 	default:
-		strcat(buf, "Unknown\n");
+		strcat(buf, "Unknown");
 		break;
 	}
 }
@@ -179,9 +178,9 @@ static void fi_tostr_protocol(char *buf, uint32_t protocol)
 	CASEENUMSTR(FI_PROTO_UDP);
 	default:
 		if (protocol & FI_PROV_SPECIFIC)
-			strcat(buf, "Provider specific\n");
+			strcat(buf, "Provider specific");
 		else
-			strcat(buf, "Unknown\n");
+			strcat(buf, "Unknown");
 		break;
 	}
 }
@@ -202,7 +201,7 @@ static void fi_tostr_addr(char *buf, uint32_t addr_format,
 	p = buf + strlen(buf);
 
 	if (addr == NULL) {
-		strcat(p, "(nil)\n");
+		strcat(p, "(nil)");
 		return;
 	}
 
@@ -224,15 +223,13 @@ static void fi_tostr_addr(char *buf, uint32_t addr_format,
 	case FI_SOCKADDR_IN:
 		inet_ntop(AF_INET, &((struct sockaddr_in *)addr)->sin_addr,
 			p, 64);
-		strcat(p, "\n");
 		break;
 	case FI_SOCKADDR_IN6:
 		inet_ntop(AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr,
 			p, 64);
-		strcat(p, "\n");
 		break;
 	default:
-		sprintf(p, "%p\n", addr);
+		sprintf(p, "%p", addr);
 		break;
 	}
 }
@@ -257,7 +254,7 @@ static void fi_tostr_tx_attr(char *buf, const struct fi_tx_ctx_attr *attr,
 	strcatf(buf, "%s\tsize:\t%zd\n", prefix, attr->size);
 	strcatf(buf, "%s\tiov_limit:\t%zd\n", prefix, attr->iov_limit);
 	strcatf(buf, "%s\top_alignment:\t%zd\n", prefix, attr->op_alignment);
-	strcatf(buf, "%s]\n", prefix);
+	strcatf(buf, "%s]", prefix);
 }
 
 static void fi_tostr_rx_attr(char *buf, const struct fi_rx_ctx_attr *attr,
@@ -280,7 +277,7 @@ static void fi_tostr_rx_attr(char *buf, const struct fi_rx_ctx_attr *attr,
 	strcatf(buf, "%s\tsize:\t%zd\n", prefix, attr->size);
 	strcatf(buf, "%s\tiov_limit:\t%zd\n", prefix, attr->iov_limit);
 	strcatf(buf, "%s\top_alignment:\t%zd\n", prefix, attr->op_alignment);
-	strcatf(buf, "%s]\n", prefix);
+	strcatf(buf, "%s]", prefix);
 }
 
 static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const char *prefix)
@@ -288,6 +285,7 @@ static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const cha
 	strcatf(buf, "%sfi_ep_attr: [\n", prefix);
 	strcatf(buf, "%s\tprotocol:\t", prefix);
 	fi_tostr_protocol(buf, attr->protocol);
+	strcatf(buf, "\n");
 	strcatf(buf, "%s\tmax_msg_size:\t%zd\n", prefix, attr->max_msg_size);
 	strcatf(buf, "%s\tinject_size:\t%zd\n", prefix, attr->inject_size);
 	strcatf(buf, "%s\ttotal_buffered_recv:\t%zd\n", prefix, attr->total_buffered_recv);
@@ -302,7 +300,7 @@ static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const cha
 
 	strcatf(buf, "%s\ttx_ctx_cnt:\t%zd\n", prefix, attr->tx_ctx_cnt);
 	strcatf(buf, "%s\trx_ctx_cnt:\t%zd\n", prefix, attr->rx_ctx_cnt);
-	strcatf(buf, "%s]\n", prefix);
+	strcatf(buf, "%s]", prefix);
 }
 
 static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
@@ -312,11 +310,14 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcatf(buf, "%s\tname:\t%s\n", prefix, attr->name);
 	strcatf(buf, "%s\tthreading:\t", prefix);
 	fi_tostr_threading(buf, attr->threading);
+	strcatf(buf, "\n");
 
 	strcatf(buf, "%s\tcontrol_progress:\t", prefix);
 	fi_tostr_progress(buf, attr->control_progress);
+	strcatf(buf, "\n");
 	strcatf(buf, "%s\tdata_progress:\t", prefix);
 	fi_tostr_progress(buf, attr->data_progress);
+	strcatf(buf, "\n");
 
 	strcatf(buf, "%s\tmr_key_size:\t%zd\n", prefix, attr->mr_key_size);
 	strcatf(buf, "%s\tcq_data_size:\t%zd\n", prefix, attr->cq_data_size);
@@ -327,7 +328,7 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcatf(buf, "%s\tmax_ep_rx_ctx:\t%zd\n", prefix, attr->max_ep_rx_ctx);
 	strcatf(buf, "%s\top_size:\t%zd\n", prefix, attr->op_size);
 	strcatf(buf, "%s\tiov_size:\t%zd\n", prefix, attr->iov_size);
-	strcatf(buf, "%s]\n", prefix);
+	strcatf(buf, "%s]", prefix);
 }
 
 static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
@@ -338,7 +339,7 @@ static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
 	strcatf(buf, "%s\tprov_name:\t%s\n", prefix, attr->prov_name);
 	strcatf(buf, "%s\tprov_version:\t%d.%d\n", prefix,
 		FI_MAJOR(attr->prov_version), FI_MINOR(attr->prov_version));
-	strcatf(buf, "%s]\n", prefix);
+	strcatf(buf, "%s]", prefix);
 }
 
 static void fi_tostr_info(char *buf, const struct fi_info *info)
@@ -354,23 +355,32 @@ static void fi_tostr_info(char *buf, const struct fi_info *info)
 
 	strcat(buf, "\tep_type:\t");
 	fi_tostr_ep_type(buf, info->ep_type);
+	strcat(buf, "\n");
 	strcat(buf, "\tfi_addr_format:\t");
 	fi_tostr_addr_format(buf, info->addr_format);
+	strcat(buf, "\n");
 
 	strcatf(buf, "\tsrc_addrlen:\t%zd\n", info->src_addrlen);
 	strcatf(buf, "\tdest_addrlen:\t%zd\n", info->dest_addrlen);
 	strcatf(buf, "\tsrc_addr:\t");
 	fi_tostr_addr(buf, info->addr_format, info->src_addr);
+	strcat(buf, "\n");
 	strcatf(buf, "\tdest_addr:\t");
 	fi_tostr_addr(buf, info->addr_format, info->dest_addr);
+	strcat(buf, "\n");
 	strcatf(buf, "\tconnreq:\t%p\n", info->connreq);
 
 	fi_tostr_tx_attr(buf, info->tx_attr, "\t");
+	strcat(buf, "\n");
 	fi_tostr_rx_attr(buf, info->rx_attr, "\t");
+	strcat(buf, "\n");
 	fi_tostr_ep_attr(buf, info->ep_attr, "\t");
+	strcat(buf, "\n");
 	fi_tostr_domain_attr(buf, info->domain_attr, "\t");
+	strcat(buf, "\n");
 	fi_tostr_fabric_attr(buf, info->fabric_attr, "\t");
-	strcat(buf, "]\n");
+	strcat(buf, "\n");
+	strcat(buf, "]");
 }
 
 static void fi_tostr_av_type(char *buf, enum fi_av_type type)
@@ -379,7 +389,7 @@ static void fi_tostr_av_type(char *buf, enum fi_av_type type)
 	CASEENUMSTR(FI_AV_MAP);
 	CASEENUMSTR(FI_AV_TABLE);
 	default:
-		strcat(buf, "Unknown\n");
+		strcat(buf, "Unknown");
 		break;
 	}
 }
