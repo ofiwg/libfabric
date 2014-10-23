@@ -89,10 +89,12 @@ int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len)
 	return ret;
 }
 
-void size_str(char *str, size_t ssize, long long size)
+char *size_str(char str[32], long long size)
 {
 	long long base, fraction = 0;
 	char mag;
+
+	memcpy(str, "\0", 32);
 
 	if (size >= (1 << 30)) {
 		base = 1 << 30;
@@ -110,23 +112,27 @@ void size_str(char *str, size_t ssize, long long size)
 
 	if (size / base < 10)
 		fraction = (size % base) * 10 / base;
-	if (fraction) {
-		snprintf(str, ssize, "%lld.%lld%c", size / base, fraction, mag);
-	} else {
-		snprintf(str, ssize, "%lld%c", size / base, mag);
-	}
+
+	if (fraction)
+		snprintf(str, 32, "%lld.%lld%c", size / base, fraction, mag);
+	else
+		snprintf(str, 32, "%lld%c", size / base, mag);
+
+	return str;
 }
 
-void cnt_str(char *str, size_t ssize, long long cnt)
+char *cnt_str(char str[32], long long cnt)
 {
 	if (cnt >= 1000000000)
-		snprintf(str, ssize, "%lldb", cnt / 1000000000);
+		snprintf(str, 32, "%lldb", cnt / 1000000000);
 	else if (cnt >= 1000000)
-		snprintf(str, ssize, "%lldm", cnt / 1000000);
+		snprintf(str, 32, "%lldm", cnt / 1000000);
 	else if (cnt >= 1000)
-		snprintf(str, ssize, "%lldk", cnt / 1000);
+		snprintf(str, 32, "%lldk", cnt / 1000);
 	else
-		snprintf(str, ssize, "%lld", cnt);
+		snprintf(str, 32, "%lld", cnt);
+
+	return str;
 }
 
 int size_to_count(int size)
@@ -182,14 +188,29 @@ void cq_readerr(struct fid_cq *cq, char *cq_str)
 	printf("%s fi_cq_readerr() %s (%d)\n", cq_str, err_str, cq_err.err);
 }
 
-int64_t
-get_elapsed_ms(
-    struct timespec *b,
-    struct timespec *a)
+int64_t get_elapsed_ms(const struct timespec *b, const struct timespec *a)
 {
     int64_t elapsed;
 
     elapsed = (a->tv_sec - b->tv_sec) * 1000 * 1000 * 1000;
     elapsed += a->tv_nsec - b->tv_nsec;
     return elapsed / 1000000;
+}
+
+//	"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer"
+void perf_str(char *name, int tsize, int iters, long long total, float elapsed)
+{
+	char str[32];
+
+	printf("%-10s", name);
+
+	printf("%-8s", size_str(str, tsize));
+
+	printf("%-8s", cnt_str(str, iters));
+
+	printf("%-8s", size_str(str, total));
+
+	printf("%8.2fs%10.2f%11.2f\n",
+		elapsed / 1000000., (total * 8) / (1000. * elapsed),
+		(elapsed / iters / 2));
 }

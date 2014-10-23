@@ -70,33 +70,20 @@ static struct fid_mr *mr;
 
 static void show_perf(void)
 {
-	char str[32];
 	float usec;
 	long long bytes;
 
 	usec = (end.tv_sec - start.tv_sec) * 1000000 + (end.tv_usec - start.tv_usec);
 	bytes = (long long) iterations * transfer_size * 2;
 
-	/* name size transfers iterations bytes seconds Gb/sec usec/xfer */
-	fprintf(stderr, "%-10s", test_name);
-	size_str(str, sizeof str, transfer_size);
-	fprintf(stderr, "%-8s", str);
-	cnt_str(str, sizeof str, 1);
-	fprintf(stderr, "%-8s", str);
-	cnt_str(str, sizeof str, iterations);
-	fprintf(stderr, "%-8s", str);
-	size_str(str, sizeof str, bytes);
-	fprintf(stderr, "%-8s", str);
-	fprintf(stderr, "%8.2fs%10.2f%11.2f\n",
-		usec / 1000000., (bytes * 8) / (1000. * usec),
-		(usec / iterations) );
+	perf_str(test_name, transfer_size, iterations, bytes, usec);
 }
 
 static void init_test(int size)
 {
-	char sstr[5];
+	char sstr[32];
 
-	size_str(sstr, sizeof sstr, size);
+	size_str(sstr, size);
 	snprintf(test_name, sizeof test_name, "%s_lat", sstr);
 	transfer_size = size;
 	iterations = size_to_count(transfer_size);
@@ -536,8 +523,8 @@ static int run(void)
 			return ret;
 	}
 
-	fprintf(stderr, "%-10s%-8s%-8s%-8s%-8s%8s %10s%13s\n",
-	       "name", "bytes", "xfers", "iters", "total", "time", "Gb/sec", "usec/xfer");
+	printf("%-10s%-8s%-8s%-8s%8s %10s%13s\n",
+	       "name", "bytes", "xfers", "total", "time", "Gb/sec", "usec/xfer");
 
 	ret = dst_addr ? client_connect() : server_connect();
 	if (ret)
