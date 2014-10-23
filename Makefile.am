@@ -33,6 +33,7 @@ src_libfabric_la_SOURCES = \
 
 if HAVE_SOCKETS
 _sockets_files = \
+	prov/sockets/src/sock.h \
 	prov/sockets/src/sock_av.c \
 	prov/sockets/src/sock_dgram.c \
 	prov/sockets/src/sock_dom.c \
@@ -44,8 +45,10 @@ _sockets_files = \
 	prov/sockets/src/sock_fabric.c \
 	prov/sockets/src/sock_ep.c \
 	prov/sockets/src/sock_util.c \
+	prov/sockets/src/sock_util.h \
 	prov/sockets/src/indexer.c \
-	prov/sockets/src/list.c
+	prov/sockets/src/list.c \
+	prov/sockets/src/list.h
 
 if HAVE_SOCKETS_DL
 pkglib_LTLIBRARIES += libsockets-fi.la
@@ -210,7 +213,7 @@ rdmainclude_HEADERS = \
 	$(top_srcdir)/include/rdma/fi_trigger.h
 
 if HAVE_DIRECT
-rdmainclude_HEADERS += \
+nodist_rdmainclude_HEADERS = \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_domain.h \
 	$(top_srcdir)/prov/$(PROVIDER_DIRECT)/include/rdma/fi_direct_endpoint.h \
