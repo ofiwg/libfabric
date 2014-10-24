@@ -175,11 +175,11 @@ void cq_readerr(struct fid_cq *cq, char *cq_str)
 	int ret;
 
 	ret = fi_cq_readerr(cq, &cq_err, sizeof(cq_err), 0);
-	if (ret)
+	if (ret < 0)
 		printf("fi_cq_readerr %d (%s)\n", ret, fi_strerror(-ret));
 
-	err_str = fi_cq_strerror(cq, cq_err.err, cq_err.err_data, NULL, 0);
-	printf("%s fi_cq_readerr() %s (%d)\n", cq_str, err_str, cq_err.err);
+	err_str = fi_cq_strerror(cq, cq_err.prov_errno, cq_err.err_data, NULL, 0);
+	printf("%s %s (%d)\n", cq_str, err_str, cq_err.prov_errno);
 }
 
 int64_t
