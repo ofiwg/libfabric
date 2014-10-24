@@ -93,13 +93,29 @@ static inline size_t rbavail(struct ringbuf *rb)
 
 static inline void rbwrite(struct ringbuf *rb, void *buf, size_t len)
 {
-	memcpy(rb->buf + (rb->wcnt & rb->size_mask), buf, len);
+	size_t endlen;
+
+	endlen = rb->size - (rb->wcnt & rb->size_mask);
+	if (len <= endlen) {
+		memcpy(rb->buf + (rb->wcnt & rb->size_mask), buf, len);
+	} else {
+		memcpy(rb->buf + (rb->wcnt & rb->size_mask), buf, endlen);
+		memcpy(rb->buf, buf, len - endlen);
+	}
 	rb->wcnt += len;
 }
 
 static inline void rbpeek(struct ringbuf *rb, void *buf, size_t len)
 {
-	memcpy(buf, rb->buf + (rb->rcnt & rb->size_mask), len);
+	size_t endlen;
+
+	endlen = rb->size - (rb->rcnt & rb->size_mask);
+	if (len <= endlen) {
+		memcpy(buf, rb->buf + (rb->rcnt & rb->size_mask), len);
+	} else {
+		memcpy(buf, rb->buf + (rb->rcnt & rb->size_mask), endlen);
+		memcpy(buf, rb->buf, len - endlen);
+	}
 }
 
 static inline void rbread(struct ringbuf *rb, void *buf, size_t len)
