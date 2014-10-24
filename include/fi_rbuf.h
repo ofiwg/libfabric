@@ -95,7 +95,7 @@ static inline size_t rbavail(struct ringbuf *rb)
 	return rb->size - rbused(rb);
 }
 
-static inline void rbwrite(struct ringbuf *rb, void *buf, size_t len)
+static inline void rbwrite(struct ringbuf *rb, const void *buf, size_t len)
 {
 	size_t endlen;
 
@@ -227,7 +227,7 @@ static inline void rbfdreset(struct ringbuffd *rbfd)
 	}
 }
 
-static inline void rbfdwrite(struct ringbuffd *rbfd, void *buf, size_t len)
+static inline void rbfdwrite(struct ringbuffd *rbfd, const void *buf, size_t len)
 {
 	rbwrite(&rbfd->rb, buf, len);
 }
