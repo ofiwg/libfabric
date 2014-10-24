@@ -539,22 +539,50 @@ static ssize_t psmx_cq_write(struct fid_cq *cq, const void *buf, size_t len)
 {
 	struct psmx_fid_cq *cq_priv;
 	struct psmx_cq_event *event;
+	ssize_t written_len = 0;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 
-	if (len < cq_priv->entry_size)
-		return -FI_ETOOSMALL;
+	while (len >= cq_priv->entry_size) {
+		event = calloc(1, sizeof(*event));
+		if (!event) {
+			fprintf(stderr, "%s: out of memory\n", __func__);
+			return -ENOMEM;
+		}
 
-	event = calloc(1, sizeof(*event));
-	if (!event) {
-		fprintf(stderr, "%s: out of memory\n", __func__);
-		return -ENOMEM;
+		memcpy((void *)&event->cqe, buf + written_len, cq_priv->entry_size);
+		psmx_cq_enqueue_event(&cq_priv->event_queue, event);
+		written_len += cq_priv->entry_size;
+		len -= cq_priv->entry_size;
 	}
 
-	memcpy((void *)&event->cqe, buf, cq_priv->entry_size);
-	psmx_cq_enqueue_event(&cq_priv->event_queue, event);
+	return written_len;
+}
 
-	return cq_priv->entry_size;
+static ssize_t psmx_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+				size_t len, uint64_t flags)
+{
+	struct psmx_fid_cq *cq_priv;
+	struct psmx_cq_event *event;
+	ssize_t written_len = 0;
+
+	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
+
+	while (len >= sizeof(*buf)) {
+		event = calloc(1, sizeof(*event));
+		if (!event) {
+			fprintf(stderr, "%s: out of memory\n", __func__);
+			return -ENOMEM;
+		}
+
+		memcpy((void *)&event->cqe, buf + written_len, sizeof(*buf));
+		event->error = !!event->cqe.err.err;
+		psmx_cq_enqueue_event(&cq_priv->event_queue, event);
+		written_len += sizeof(*buf);
+		len -= sizeof(*buf);
+	}
+
+	return written_len;
 }
 
 static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
@@ -642,7 +670,7 @@ static struct fi_ops_cq psmx_cq_ops = {
 	.readfrom = psmx_cq_readfrom,
 	.readerr = psmx_cq_readerr,
 	.write = psmx_cq_write,
-	.writeerr = fi_no_cq_writeerr,
+	.writeerr = psmx_cq_writeerr,
 	.sread = psmx_cq_sread,
 	.sreadfrom = psmx_cq_sreadfrom,
 	.strerror = psmx_cq_strerror,
