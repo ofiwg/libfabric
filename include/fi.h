@@ -40,6 +40,7 @@
 #include <byteswap.h>
 #include <endian.h>
 #include <semaphore.h>
+#include <string.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_prov.h>
 #include <rdma/fi_atomic.h>
