@@ -155,6 +155,9 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		break;
 	}
 
+	/* NOTE: "event_in" only has space for the CQE of the current CQ format.
+	 * Fields like "error_code" and "source" should not be filled in.
+	 */
 	if (event_in && count && !psm_status->error_code) {
 		event = event_in;
 	}
