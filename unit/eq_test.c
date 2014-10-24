@@ -45,6 +45,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
 
+#include "unit_common.h"
 #include "shared.h"
 
 struct fi_info hints;
@@ -54,8 +55,6 @@ static struct fid_fabric *fabric;
 static struct fid_eq *eq;
 
 static char err_buf[512];
-
-enum { PASS, FAIL, NOTSUPP };
 
 static int
 create_eq(size_t size, uint64_t flags, enum fi_wait_obj wait_obj)
@@ -404,13 +403,6 @@ fail:
 	return testret;
 }
 
-#define TEST_ENTRY(NAME) { NAME, #NAME }
-
-struct test_entry {
-	int (*test)();
-	char *name;
-};
-
 struct test_entry test_array[] = {
 	TEST_ENTRY(eq_open_close),
 	TEST_ENTRY(eq_write_read_self),
@@ -419,44 +411,6 @@ struct test_entry test_array[] = {
 	TEST_ENTRY(eq_wait_fd_sread),
 	{ NULL, "" }
 };
-
-static int
-run_tests()
-{
-	int ret;
-	struct test_entry *tep;
-	int failed;
-
-	failed = 0;
-
-	tep = test_array;
-	while (tep->test != NULL) {
-		printf("Running %s...", tep->name);
-		fflush(stdout);
-		ret = tep->test();
-		switch (ret) {
-		case PASS:
-			printf("PASS!\n");
-			break;
-		case FAIL:
-			printf("FAIL\n");
-			printf("  %s\n", err_buf);
-			failed++;
-			break;
-		case NOTSUPP:
-			printf("requires unsupported feature: %s\n", err_buf);
-			break;
-		default:
-			printf("FATAL: unexpected code: %d\n", ret);
-			exit(1);
-			break;
-		}
-
-		++tep;
-	}
-
-	return failed;
-}
 
 int main(int argc, char **argv)
 {
@@ -497,7 +451,7 @@ int main(int argc, char **argv)
 
 	printf("Testing EQs on fabric %s\n", fi->fabric_attr->name);
 
-	failed = run_tests();
+	failed = run_tests(test_array, err_buf);
 	if (failed > 0) {
 		printf("Summary: %d tests failed\n", failed);
 	} else {

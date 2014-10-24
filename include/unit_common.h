@@ -1,8 +1,12 @@
 /*
- * Copyright (c) 2013,2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2014 Cisco Systems, Inc.  All rights reserved.
  *
- * This software is available to you under the OpenIB.org BSD license
- * below:
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * BSD license below:
  *
  *     Redistribution and use in source and binary forms, with or
  *     without modification, are permitted provided that the following
@@ -27,42 +31,17 @@
  * SOFTWARE.
  */
 
-#ifndef _SHARED_H_
-#define _SHARED_H_
+#ifndef _UNIT_COMMON_H_
+#define _UNIT_COMMON_H_
 
-#include <sys/socket.h>
-#include <sys/types.h>
+enum { PASS, FAIL, NOTSUPP, SKIPPED };
+#define TEST_ENTRY(NAME) { NAME, #NAME }
 
-#include <rdma/fabric.h>
-#include <rdma/fi_eq.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-struct test_size_param {
-	int size;
-	int option;
+struct test_entry {
+	int (*test)();
+	char *name;
 };
 
-extern struct test_size_param test_size[];
-const unsigned int test_cnt;
-#define TEST_CNT test_cnt
+int run_tests(struct test_entry *test_array, char *err_buf);
 
-int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len);
-void size_str(char *str, size_t ssize, long long size);
-void cnt_str(char *str, size_t ssize, long long cnt);
-int size_to_count(int size);
-int wait_for_completion(struct fid_cq *cq, int num_completions);
-void cq_readerr(struct fid_cq *cq, char *cq_str);
-int64_t get_elapsed_ms(struct timespec *b, struct timespec *a);
-
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-#define ARRAY_SIZE(A) (sizeof(A)/sizeof(*A))
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* _SHARED_H_ */
+#endif /* _UNIT_COMMON_H_ */
