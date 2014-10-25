@@ -314,6 +314,7 @@ struct psmx_cq_event {
 struct psmx_cq_event_queue {
 	struct psmx_cq_event	*head;
 	struct psmx_cq_event	*tail;
+	size_t	count;
 };
 
 struct psmx_wait {

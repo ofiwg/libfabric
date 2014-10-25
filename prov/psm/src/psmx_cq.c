@@ -44,6 +44,7 @@ void psmx_cq_enqueue_event(struct psmx_cq_event_queue *ceq,
 	else {
 		ceq->head = ceq->tail = event;
 	}
+	ceq->count++;
 }
 
 static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_cq_event_queue *ceq)
@@ -55,6 +56,7 @@ static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_cq_event_queue *c
 
 	event = ceq->head;
 	ceq->head = event->next;
+	ceq->count--;
 	if (!ceq->head)
 		ceq->tail = NULL;
 
