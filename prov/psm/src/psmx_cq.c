@@ -470,6 +470,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	struct psmx_fid_cq *cq_priv;
 	struct psmx_cq_event *event;
 	int ret;
+	ssize_t read_count;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 	assert(cq_priv->domain);
@@ -486,30 +487,41 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	if (cq_priv->pending_error)
 		return -FI_EAVAIL;
 
-	if (!buf)
+	if (!buf && count)
 		return -FI_EINVAL;
 
-	event = psmx_cq_dequeue_event(&cq_priv->event_queue);
-	if (event) {
-		if (!event->error) {
-			memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
-			if (psmx_cq_get_event_src_addr(cq_priv, event, src_addr))
-				*src_addr = FI_ADDR_NOTAVAIL;
+	read_count = 0;
+	while (count--) {
+		event = psmx_cq_dequeue_event(&cq_priv->event_queue);
+		if (event) {
+			if (!event->error) {
+				memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
+				if (psmx_cq_get_event_src_addr(cq_priv, event, src_addr))
+					*src_addr = FI_ADDR_NOTAVAIL;
 
-			PSMX_FREE_LIST_PUT(cq_priv->free_list.head,
-					   cq_priv->free_list.tail,
-					   struct psmx_cq_event,
-					   event);
+				PSMX_FREE_LIST_PUT(cq_priv->free_list.head,
+						   cq_priv->free_list.tail,
+						   struct psmx_cq_event,
+						   event);
 
-			return 1;
+				read_count++;
+				buf += cq_priv->entry_size;
+				src_addr++;
+				continue;
+			}
+			else {
+				cq_priv->pending_error = event;
+				if (!read_count)
+					read_count = -FI_EAVAIL;
+				break;
+			}
 		}
 		else {
-			cq_priv->pending_error = event;
-			return -FI_EAVAIL;
+			break;
 		}
 	}
 
-	return 0;
+	return read_count;
 }
 
 static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t count)
