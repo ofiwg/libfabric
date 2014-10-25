@@ -50,6 +50,7 @@
 #include <fi_enosys.h>
 #include <fi_indexer.h>
 #include "list.h"
+#include <fi_rbuf.h>
 
 #ifndef _SOCK_H_
 #define _SOCK_H_
@@ -215,6 +216,45 @@ struct sock_comm_item{
 	}item;
 };
 
+enum {
+	SOCK_OP_SEND,
+	SOCK_OP_WRITE,
+	SOCK_OP_READ,
+	SOCK_OP_TSEND,
+	SOCK_OP_ATOMIC
+};
+
+/*
+ * Transmit context - ring buffer data:
+ *    tx_op + flags + context + dest_addr + [data] + [tag] + tx_iov
+ *     8B       8B      8B         8B         8B       8B      24B+
+ * data - only present if flags indicate
+ * tag - only present for TSEND op
+ */
+struct sock_tx_op {
+	uint8_t			op;
+	uint8_t			src_iov_len;
+	uint8_t			dest_iov_len;
+	union {
+		struct {
+			uint8_t	op;
+			uint8_t	datatype;
+		} atomic;
+		uint8_t		reserved[5];
+	};
+};
+
+union sock_tx_iov {
+	struct fi_rma_iov	iov;
+	struct fi_rma_ioc	ioc;
+};
+
+struct sock_rxtx {
+	struct ringbuffd	rbfd;
+	fastlock_t		wlock;
+	fastlock_t		rlock;
+};
+
 struct sock_eq{
 	struct fid_eq eq;
 	struct fi_eq_attr attr;
@@ -345,6 +385,13 @@ int sock_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 int sock_ep_connect(struct fid_ep *ep, const void *addr,
 		    const void *param, size_t paramlen);
 
+struct sock_rxtx *sock_rxtx_alloc(size_t size);
+void sock_rxtx_free(struct sock_rxtx *rxtx);
+void sock_rxtx_start(struct sock_rxtx *rxtx);
+void sock_rxtx_commit(struct sock_rxtx *rxtx);
+void sock_rxtx_abort(struct sock_rxtx *rxtx);
+int sock_rxtx_write(struct sock_rxtx *rxtx, const void *buf, size_t len);
+int sock_rxtx_read(struct sock_rxtx *rxtx, void *buf, size_t len);
 
 int sock_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		struct fid_poll **pollset);
