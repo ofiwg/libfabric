@@ -585,17 +585,17 @@ static ssize_t psmx_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 	return written_len;
 }
 
-static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
+static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				 fi_addr_t *src_addr, const void *cond,
 				 int timeout)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t psmx_cq_sread(struct fid_cq *cq, void *buf, size_t len,
+static ssize_t psmx_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 			     const void *cond, int timeout)
 {
-	return psmx_cq_sreadfrom(cq, buf, len, NULL, cond, timeout);
+	return psmx_cq_sreadfrom(cq, buf, count, NULL, cond, timeout);
 }
 
 static const char *psmx_cq_strerror(struct fid_cq *cq, int prov_errno, const void *prov_data,
