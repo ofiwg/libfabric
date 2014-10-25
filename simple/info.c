@@ -147,8 +147,10 @@ static int run(struct fi_info *hints, char *node, char *port)
 		return ret;
 	}
 
-	for (cur = info; cur; cur = cur->next)
-		printf("%s\n", fi_tostr(cur, FI_TYPE_INFO));
+	for (cur = info; cur; cur = cur->next) {
+		printf("---\n");
+		printf("%s", fi_tostr(cur, FI_TYPE_INFO));
+	}
 
 	fi_freeinfo(info);
 	return EXIT_SUCCESS;
@@ -185,5 +187,6 @@ int main(int argc, char **argv)
 		}
 	}
 
+	//hints.addr_format = FI_SOCKADDR;
 	return run(&hints, node, port);
 }

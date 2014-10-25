@@ -45,17 +45,24 @@ struct test_size_param {
 	int option;
 };
 
+enum precision {
+	NANO = 1,
+	MICRO = 1000,
+	MILLI = 1000000,
+};
+
 extern struct test_size_param test_size[];
 const unsigned int test_cnt;
 #define TEST_CNT test_cnt
 
 int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len);
-void size_str(char *str, size_t ssize, long long size);
-void cnt_str(char *str, size_t ssize, long long cnt);
+char *size_str(char str[32], long long size);
+char *cnt_str(char str[32], long long cnt);
 int size_to_count(int size);
 int wait_for_completion(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, char *cq_str);
-int64_t get_elapsed_ms(struct timespec *b, struct timespec *a);
+int64_t get_elapsed(const struct timespec *b, const struct timespec *a, enum precision p);
+void perf_str(char *name, int tsize, int iters, long long total, int64_t elapsed);
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))

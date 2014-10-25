@@ -344,7 +344,7 @@ eq_wait_fd_sread()
 
 	/* check timeout accuracy */
 	clock_gettime(CLOCK_MONOTONIC_RAW, &after);
-	elapsed = get_elapsed_ms(&before, &after);
+	elapsed = get_elapsed(&before, &after, MILLI);
 	if (elapsed < 1500 || elapsed > 2500) {
 		sprintf(err_buf, "fi_eq_sread slept %d ms, expected 2000",
 				(int)elapsed);
@@ -372,7 +372,7 @@ eq_wait_fd_sread()
 
 	/* check that no undue waiting occurred */
 	clock_gettime(CLOCK_MONOTONIC_RAW, &after);
-	elapsed = get_elapsed_ms(&before, &after);
+	elapsed = get_elapsed(&before, &after, MILLI);
 	if (elapsed > 5) {
 		sprintf(err_buf, "fi_eq_sread slept %d ms, expected immediate return",
 				(int)elapsed);

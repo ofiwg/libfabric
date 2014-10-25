@@ -30,35 +30,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
-#include <errno.h>
 #include <getopt.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/wait.h>
+#include <time.h>
 #include <netdb.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-
-#include <rdma/fabric.h>
-#include <rdma/fi_domain.h>
-#include <rdma/fi_eq.h>
-#include <rdma/fi_errno.h>
-#include <rdma/fi_endpoint.h>
-#include <rdma/fi_rma.h>
-#include <rdma/fi_cm.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>
-#include <rdma/fi_domain.h>
-#include <rdma/fi_tagged.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_atomic.h>
 #include <shared.h>
 
 static int custom;
@@ -68,7 +49,7 @@ static int transfer_size = 1000;
 static int max_credits = 128;
 static int warmup_iters = 128;
 static char test_name[10] = "custom";
-static struct timeval start, end;
+static struct timespec start, end;
 static void *buf;
 static void *rem_buf;
 static uint64_t rem_key;
@@ -90,33 +71,17 @@ static struct fid_mr *mr;
 
 static void show_perf(void)
 {
-	char str[32];
-	float usec;
-	long long bytes;
+	int64_t usec = get_elapsed(&start, &end, MICRO);
+	long long bytes = (long long) iterations * transfer_size * 2;
 
-	usec = (end.tv_sec - start.tv_sec) * 1000000 + (end.tv_usec - start.tv_usec);
-	bytes = (long long) iterations * transfer_size * 2;
-
-	/* name size transfers iterations bytes seconds Gb/sec usec/xfer */
-	fprintf(stderr, "%-10s", test_name);
-	size_str(str, sizeof str, transfer_size);
-	fprintf(stderr, "%-8s", str);
-	cnt_str(str, sizeof str, 1);
-	fprintf(stderr, "%-8s", str);
-	cnt_str(str, sizeof str, iterations);
-	fprintf(stderr, "%-8s", str);
-	size_str(str, sizeof str, bytes);
-	fprintf(stderr, "%-8s", str);
-	fprintf(stderr, "%8.2fs%10.2f%11.2f\n",
-		usec / 1000000., (bytes * 8) / (1000. * usec),
-		(usec / iterations) );
+	perf_str(test_name, transfer_size, iterations, bytes, usec);
 }
 
 static void init_test(int size)
 {
-	char sstr[5];
+	char sstr[32];
 
-	size_str(sstr, sizeof sstr, size);
+	size_str(sstr, size);
 	snprintf(test_name, sizeof test_name, "%s_bw", sstr);
 	transfer_size = size;
 	iterations = size_to_count(transfer_size);
@@ -183,7 +148,7 @@ static int run_test(void)
 	if (ret)
 		goto out;
 
-	gettimeofday(&start, NULL);
+	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0, oust =0; i < iterations; i++, oust++) {
 		ret = write_data(transfer_size);
 		if (ret)
@@ -201,7 +166,7 @@ static int run_test(void)
 	if (ret)
 		goto out;
 
-	gettimeofday(&end, NULL);
+	clock_gettime(CLOCK_MONOTONIC, &end);
 	show_perf();
 	ret = 0;
 
@@ -566,8 +531,8 @@ static int run(void)
 			return ret;
 	}
 
-	fprintf(stderr, "%-10s%-8s%-8s%-8s%-8s%8s %10s%13s\n",
-	       "name", "bytes", "xfers", "iters", "total", "time", "Gb/sec", "usec/xfer");
+	printf("%-10s%-8s%-8s%-8s%8s %10s%13s\n",
+	       "name", "bytes", "xfers", "total", "time", "Gb/sec", "usec/xfer");
 
 	ret = dst_addr ? client_connect() : server_connect();
 	if (ret)
@@ -604,7 +569,7 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:C:I:w:S:")) != -1) {
+	while ((op = getopt(argc, argv, "d:n:p:s:I:w:S:")) != -1) {
 		switch (op) {
 		case 'd':
 			dst_addr = optarg;
