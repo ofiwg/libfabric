@@ -27,6 +27,11 @@ common_srcs = \
 linkback = -lfabric -Lsrc/.libs/
 
 src_libfabric_la_SOURCES = \
+	include/fi.h \
+	include/fi_enosys.h \
+	include/fi_indexer.h \
+	include/fi_list.h \
+	include/fi_rbuf.h \
 	src/fabric.c \
 	src/fi_tostr.c \
 	$(common_srcs)
@@ -168,6 +173,7 @@ endif HAVE_USNIC
 
 if HAVE_PSM
 _psm_files = \
+	prov/psm/src/psmx.h \
 	prov/psm/src/psmx_init.c \
 	prov/psm/src/psmx_domain.c \
 	prov/psm/src/psmx_cq.c \
@@ -346,14 +352,7 @@ man_MANS = \
 	man/fi_wait.3 \
 	man/fi_wait_open.3
 
-EXTRA_DIST = libfabric.map libfabric.spec.in $(man_MANS) \
-	include/fi.h \
-	include/fi_enosys.h \
-	include/fi_indexer.h \
-	include/fi_list.h \
-	include/fi_rbuf.h \
-	prov/sockets/src/sock.h \
-	prov/psm/src/psmx.h
+EXTRA_DIST = libfabric.map libfabric.spec.in $(man_MANS)
 
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
