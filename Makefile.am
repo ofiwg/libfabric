@@ -356,3 +356,4 @@ EXTRA_DIST = libfabric.map libfabric.spec.in $(man_MANS)
 
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
+	"$(top_srcdir)/config/distscript.pl" "$(distdir)" "$(PACKAGE_VERSION)"

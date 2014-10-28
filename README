@@ -1,5 +1,8 @@
 This README is for userspace RDMA fabric library.
 
+Version @VERSION@
+Released on @DATE@
+
 Building
 ========
 To make this directory, run:
