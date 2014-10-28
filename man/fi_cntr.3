@@ -183,6 +183,9 @@ the counter will be greater than or equal to the input threshold value.
 If an operation associated with the counter encounters an error, it will
 increment the error value associated with the counter.  Any change in a
 counter's error value will unblock any thread inside fi_cntr_wait. 
+.sp
+If the call returns due to timeout, -FI_ETIMEDOUT will be returned.
+The error value associated with the counter remains unchanged.
 .SH "RETURN VALUES"
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.
