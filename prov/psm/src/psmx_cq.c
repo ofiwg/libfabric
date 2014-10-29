@@ -692,7 +692,7 @@ static struct fi_ops_cq psmx_cq_ops = {
 
 int psmx_cq_init_wait(struct psmx_wait *wait, struct fi_cq_attr *attr)
 {
-	int err;
+	long flags = 0;
 
 	wait->type = attr->wait_obj;
 	wait->cond = attr->wait_cond;
@@ -703,9 +703,15 @@ int psmx_cq_init_wait(struct psmx_wait *wait, struct fi_cq_attr *attr)
 		break;
 
 	case FI_WAIT_FD:
-		err = pipe(wait->fd);
-		if (err)
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, wait->fd))
 			return -errno;
+
+		fcntl(wait->fd[0], F_GETFL, &flags);
+		if (fcntl(wait->fd[0], F_SETFL, flags | O_NONBLOCK)) {
+			close(wait->fd[0]);
+			close(wait->fd[1]);
+			return -errno;
+		}
 		break;
 
 	case FI_WAIT_MUT_COND:
