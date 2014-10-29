@@ -276,6 +276,7 @@ man_MANS = \
 	man/fi_domain.3 \
 	man/fi_domain_query.3 \
 	man/fi_domain_bind.3 \
+	man/fi_dupinfo.3 \
 	man/fi_ep_bind.3 \
 	man/fi_ep_sync.3 \
 	man/fi_eq.3 \

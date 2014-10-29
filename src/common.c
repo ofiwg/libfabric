@@ -135,7 +135,6 @@ void fi_freeinfo_internal(struct fi_info *info)
 	}
 	free(info);
 }
-
 uint64_t fi_tag_bits(uint64_t mem_tag_format)
 {
 	return UINT64_MAX >> (ffsll(htonll(mem_tag_format)) -1);
