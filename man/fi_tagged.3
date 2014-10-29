@@ -281,9 +281,10 @@ Indicates that an invalid argument was supplied by the user.
 Indicates that an unspecified error occurred.
 .SH "NOTES"
 .SS Any source
-The function fi_trecvfrom() may be used to receive a message from a specific
-source address.  If the user wishes to receive a message from any source on
-an unconnected fabric endpoint the function fi_recv() may be used.
+When using unconnected fabric endpoints, the function fi_trecvfrom() can
+be used to receive a message from any source. The address for 'any source'
+can be obtained by inserting a NULL value in the address vector. See
+fi_av(3).
 .SS Ordering
 The order in which tags are matched is only defined for a pair of sending and
 receiving endpoints.  The ordering is defined by the underlying protocol.
