@@ -37,6 +37,7 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <string.h>
 #include <byteswap.h>
 #include <endian.h>
 #include <semaphore.h>

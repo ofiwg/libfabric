@@ -235,8 +235,6 @@ usdf_eq_read(struct fid_eq *feq, uint32_t *event, void *buf, size_t len,
 			}
 		}
 		pthread_spin_unlock(&eq->eq_lock);
-	} else {
-		usdf_progress();
 	}
 	return ret;
 }
@@ -387,6 +385,38 @@ usdf_eq_write_fd(struct fid_eq *feq, uint32_t event, const void *buf,
 			ret = -FI_EIO;
 		}
 		/* XXX unpost event? */
+	}
+
+done:
+	pthread_spin_unlock(&eq->eq_lock);
+	return ret;
+}
+
+ssize_t
+usdf_eq_write_internal(struct usdf_eq *eq, uint32_t event, const void *buf,
+		size_t len, uint64_t flags)
+{
+	uint64_t val;
+	int ret;
+	int n;
+
+	pthread_spin_lock(&eq->eq_lock);
+
+	/* EQ full? */
+	if (atomic_get(&eq->eq_num_events) == eq->eq_ev_ring_size) {
+		ret = -FI_EAGAIN;
+		goto done;
+	}
+
+	ret = usdf_eq_write_event(eq, event, buf, len, flags);
+
+	/* If successful, post to eventfd */
+	if (ret >= 0 && eq->eq_wait_obj == FI_WAIT_FD) {
+		val = 1;
+		n = write(eq->eq_fd, &val, sizeof(val));
+		if (n != sizeof(val)) {
+			ret = -FI_EIO;
+		}
 	}
 
 done:

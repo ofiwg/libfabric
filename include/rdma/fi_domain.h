@@ -65,12 +65,13 @@ struct fi_av_attr {
 struct fi_ops_av {
 	size_t	size;
 	int	(*insert)(struct fid_av *av, const void *addr, size_t count,
-			fi_addr_t *fi_addr, uint64_t flags);
+			fi_addr_t *fi_addr, uint64_t flags, void *context);
 	int	(*insertsvc)(struct fid_av *av, const char *node,
-			const char *service, fi_addr_t *fi_addr, uint64_t flags);
+			const char *service, fi_addr_t *fi_addr,
+			uint64_t flags, void *context);
 	int	(*insertsym)(struct fid_av *av, const char *node, size_t nodecnt,
 			const char *service, size_t svccnt, fi_addr_t *fi_addr,
-			uint64_t flags);
+			uint64_t flags, void *context);
 	int	(*remove)(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			uint64_t flags);
 	int	(*lookup)(struct fid_av *av, fi_addr_t fi_addr, void *addr,
@@ -204,24 +205,25 @@ fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 static inline int
 fi_av_insert(struct fid_av *av, const void *addr, size_t count,
-	     fi_addr_t *fi_addr, uint64_t flags)
+	     fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	return av->ops->insert(av, addr, count, fi_addr, flags);
+	return av->ops->insert(av, addr, count, fi_addr, flags, context);
 }
 
 static inline int
 fi_av_insertsvc(struct fid_av *av, const char *node, const char *service,
-		fi_addr_t *fi_addr, uint64_t flags)
+		fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	return av->ops->insertsvc(av, node, service, fi_addr, flags);
+	return av->ops->insertsvc(av, node, service, fi_addr, flags, context);
 }
 
 static inline int
 fi_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt,
 		const char *service, size_t svccnt,
-		fi_addr_t *fi_addr, uint64_t flags)
+		fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	return av->ops->insertsym(av, node, nodecnt, service, svccnt, fi_addr, flags);
+	return av->ops->insertsym(av, node, nodecnt, service, svccnt,
+			fi_addr, flags, context);
 }
 
 static inline int

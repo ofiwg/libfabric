@@ -52,7 +52,6 @@
  */
 typedef struct usd_dest_req udr_t;
 struct usd_dest_req {
-    struct usd_device *udr_dev;
     struct usd_dest *udr_dest;
 
     uint32_t udr_daddr_be;
