@@ -45,6 +45,7 @@ static const struct option longopts[] = {
 	{"caps", required_argument, NULL, 'c'},
 	{"mode", required_argument, NULL, 'm'},
 	{"ep_type", required_argument, NULL, 'e'},
+	{"addr_format", required_argument, NULL, 'a'},
 	{0,0,0,0}
 };
 
@@ -54,6 +55,7 @@ static const char *help_strings[][2] = {
 	{"CAP1|CAP2..", "\tone or more capabilities: FI_MSG|FI_RMA..."},
 	{"MOD1|MOD2..", "\tone or more modes, default all modes"},
 	{"EPTYPE", "\t\tspecify single endpoint type: FI_EP_MSG, FI_EP_DGRAM..."},
+	{"FMT", "\t\tspecify accepted address format: FI_ADDR_UNSPEC, FI_SOCKADDR..."},
 	{"", ""}
 };
 
@@ -124,6 +126,16 @@ enum fi_ep_type str2ep_type(char *inputstr)
 	return FI_EP_UNSPEC;
 }
 
+uint32_t str2addr_format(char *inputstr)
+{
+	ORCASE(FI_ADDR_UNSPEC);
+	ORCASE(FI_SOCKADDR);
+	ORCASE(FI_SOCKADDR_IN);
+	ORCASE(FI_SOCKADDR_IN6);
+	ORCASE(FI_SOCKADDR_IB);
+	ORCASE(FI_ADDR_PSMX);
+}
+
 uint64_t tokparse(char *caps, uint64_t (*str2flag) (char *inputstr))
 {
 	uint64_t flags = 0;
@@ -162,7 +174,7 @@ int main(int argc, char **argv)
 
 	hints.mode = ~0;
 
-	while ((op = getopt_long(argc, argv, "n:p:c:m:e:h", longopts, NULL)) != -1) {
+	while ((op = getopt_long(argc, argv, "n:p:c:m:e:a:h", longopts, NULL)) != -1) {
 		switch (op) {
 		case 'n':
 			node = optarg;
@@ -179,6 +191,9 @@ int main(int argc, char **argv)
 		case 'e':
 			hints.ep_type = str2ep_type(optarg);
 			break;
+		case 'a':
+			hints.addr_format = str2addr_format(optarg);
+			break;
 		case 'h':
 		default:
 			printf("usage: %s\n", argv[0]);
@@ -187,6 +202,5 @@ int main(int argc, char **argv)
 		}
 	}
 
-	//hints.addr_format = FI_SOCKADDR;
 	return run(&hints, node, port);
 }
