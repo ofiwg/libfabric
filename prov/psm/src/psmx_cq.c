@@ -642,25 +642,45 @@ static int psmx_cq_close(fid_t fid)
 static int psmx_cq_control(struct fid *fid, int command, void *arg)
 {
 	struct psmx_fid_cq *cq;
+	struct fi_wait_obj_set *wait_obj_set;
+	int obj_size;
+	int obj_type;
+	int ret_count;
 
 	cq = container_of(fid, struct psmx_fid_cq, cq.fid);
 
 	switch (command) {
 	case FI_GETWAIT:
-		if (!cq->wait) {
+		if (!arg)
+			return -EINVAL;
+
+		wait_obj_set = arg;
+		obj_size = 0;
+		obj_type = FI_WAIT_NONE;
+		ret_count = 0;
+		if (cq->wait) {
 			switch (cq->wait->type) {
-			case FI_WAIT_SET:
-				*(struct fid_wait **)arg = cq->wait->wait_set;
-				break;
 			case FI_WAIT_FD:
-				*(int *)arg = cq->wait->fd[0];
+				obj_size = sizeof(cq->wait->fd[0]);
+				obj_type = FI_WAIT_FD;
 				break;
+
 			case FI_WAIT_MUT_COND:
-				memcpy(arg, &cq->wait->mutex_cond,
-					sizeof(cq->wait->mutex_cond));
+				obj_size = sizeof(cq->wait->mutex_cond);
+				obj_type = FI_WAIT_MUT_COND;
+				break;
+
+			default:
 				break;
 			}
 		}
+		if (obj_size) {
+			ret_count = 1;
+			if (wait_obj_set->count)
+				memcpy(wait_obj_set->obj, &cq->wait->obj, obj_size);
+		}
+		wait_obj_set->count = ret_count;
+		wait_obj_set->wait_obj = obj_type;
 		break;
 
 	default:
@@ -690,49 +710,14 @@ static struct fi_ops_cq psmx_cq_ops = {
 	.strerror = psmx_cq_strerror,
 };
 
-int psmx_cq_init_wait(struct psmx_wait *wait, struct fi_cq_attr *attr)
-{
-	long flags = 0;
-
-	wait->type = attr->wait_obj;
-	wait->cond = attr->wait_cond;
-
-	switch(attr->wait_obj) {
-	case FI_WAIT_SET:
-		wait->wait_set = attr->wait_set;
-		break;
-
-	case FI_WAIT_FD:
-		if (socketpair(AF_UNIX, SOCK_STREAM, 0, wait->fd))
-			return -errno;
-
-		fcntl(wait->fd[0], F_GETFL, &flags);
-		if (fcntl(wait->fd[0], F_SETFL, flags | O_NONBLOCK)) {
-			close(wait->fd[0]);
-			close(wait->fd[1]);
-			return -errno;
-		}
-		break;
-
-	case FI_WAIT_MUT_COND:
-		pthread_mutex_init(&wait->mutex_cond.mutex, NULL);
-		pthread_cond_init(&wait->mutex_cond.cond, NULL);
-		break;
-
-	default:
-		break;
-	}
-
-	return 0;
-}
-
 int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context)
 {
 	struct psmx_fid_domain *domain_priv;
 	struct psmx_fid_cq *cq_priv;
+	struct psmx_fid_wait *wait = NULL;
+	struct fi_wait_attr wait_attr;
 	int entry_size;
-	struct psmx_wait *wait = NULL;
 	int err;
 
 	switch (attr->format) {
@@ -773,10 +758,26 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 				   __func__);
 			return -FI_EINVAL;
 		}
-		/* fall through */
+		wait = (struct psmx_fid_wait *)attr->wait_set;
+		break;
+
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUT_COND:
+		wait_attr.wait_obj = attr->wait_obj;
+		wait_attr.flags = 0;
+		err = psmx_wait_open(domain, &wait_attr, (struct fid_wait **)&wait);
+		if (err)
+			return err;
+		break;
+
+	default:
+		psmx_debug("%s: attr->wait_obj=%d, supported=%d...%d\n", __func__, attr->wait_obj,
+				FI_WAIT_NONE, FI_WAIT_MUT_COND);
+		return -FI_EINVAL;
+	}
+
+	if (wait) {
 		switch (attr->wait_cond) {
 		case FI_CQ_COND_NONE:
 		case FI_CQ_COND_THRESHOLD:
@@ -787,22 +788,6 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 					attr->wait_cond, FI_CQ_COND_NONE, FI_CQ_COND_THRESHOLD);
 			return -FI_EINVAL;
 		}
-
-		wait = calloc(sizeof(*wait), 1);
-		if (!wait)
-			return -FI_ENOMEM;
-
-		err = psmx_cq_init_wait(wait, attr);
-		if (err) {
-			free(wait);
-			return err;
-		}
-		break;
-
-	default:
-		psmx_debug("%s: attr->wait_obj=%d, supported=%d...%d\n", __func__, attr->wait_obj,
-				FI_WAIT_NONE, FI_WAIT_MUT_COND);
-		return -FI_EINVAL;
 	}
 
 	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
@@ -817,6 +802,9 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cq_priv->format = attr->format;
 	cq_priv->entry_size = entry_size;
 	cq_priv->wait = wait;
+	if (wait)
+		cq_priv->wait_cond = attr->wait_cond;
+
 	cq_priv->cq.fid.fclass = FI_CLASS_CQ;
 	cq_priv->cq.fid.context = context;
 	cq_priv->cq.fid.ops = &psmx_fi_ops;

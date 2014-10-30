@@ -317,11 +317,11 @@ struct psmx_cq_event_queue {
 	size_t	count;
 };
 
-struct psmx_wait {
+struct psmx_fid_wait {
+	struct fid_wait			wait;
 	int				type;
-	int				cond;
 	union {
-		struct fid_wait		*wait_set;
+		int			obj;
 		int			fd[2];
 		struct {
 		  pthread_mutex_t mutex;
@@ -338,7 +338,8 @@ struct psmx_fid_cq {
 	struct psmx_cq_event_queue	event_queue;
 	struct psmx_cq_event_queue	free_list;
 	struct psmx_cq_event		*pending_error;
-	struct psmx_wait		*wait;
+	struct psmx_fid_wait		*wait;
+	int				wait_cond;
 };
 
 enum psmx_triggered_op {
@@ -577,6 +578,10 @@ int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		     struct fid_av **av, void *context);
 int	psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		       struct fid_cntr **cntr, void *context);
+int	psmx_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
+		       struct fid_wait **waitset);
+int	psmx_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
+		       struct fid_poll **pollset);
 
 int	psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap);
 int	psmx_domain_enable_features(struct psmx_fid_domain *domain, int ep_cap);

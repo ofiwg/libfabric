@@ -181,6 +181,7 @@ _psm_files = \
 	prov/psm/src/psmx_atomic.c \
 	prov/psm/src/psmx_am.c \
 	prov/psm/src/psmx_mr.c \
+	prov/psm/src/psmx_wait.c \
 	prov/psm/src/psmx_util.c
 
 if HAVE_PSM_DL
