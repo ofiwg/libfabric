@@ -248,7 +248,7 @@ int fi_fabric_(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *co
 default_symver(fi_fabric_, fi_fabric);
 
 __attribute__((visibility ("default")))
-uint32_t if_version_(void)
+uint32_t fi_version_(void)
 {
 	return FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION);
 }
