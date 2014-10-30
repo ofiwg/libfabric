@@ -38,15 +38,12 @@
 # include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <asm/types.h>
-#include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <poll.h>
+#include <sys/eventfd.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -64,12 +61,18 @@ static int
 usdf_close_domain(fid_t fid)
 {
 	struct usdf_domain *udp;
+	void *rv;
 	int ret;
 
 	udp = container_of(fid, struct usdf_domain, dom_fid.fid);
 	if (atomic_get(&udp->dom_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
+
+	/* Tell progression thread to exit */
+	udp->dom_exit = 1;
+	usdf_add_progression_item(udp);
+	pthread_join(udp->dom_thread, &rv);
 
 	if (udp->dom_dev != NULL) {
 		ret = usd_close(udp->dom_dev);
@@ -114,6 +117,7 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		ret = -FI_ENOMEM;
 		goto fail;
 	}
+	udp->dom_eventfd = -1;
 
 	fab = fab_fidtou(fabric);
 	ret = usd_open(fab->fab_name, &udp->dom_dev);
@@ -127,7 +131,21 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	udp->dom_fid.ops = &usdf_domain_ops;
 	udp->dom_fid.mr = &usdf_domain_mr_ops;
 
+	udp->dom_eventfd = eventfd(0, EFD_NONBLOCK | EFD_SEMAPHORE);
+	if (udp->dom_eventfd == -1) {
+		ret = -errno;
+		goto fail;
+	}
+	ret = pthread_create(&udp->dom_thread, NULL,
+			usdf_progression_thread, udp);
+	if (ret != 0) {
+		ret = -ret;
+		goto fail;
+	}
+	atomic_init(&udp->dom_pending_items);
+
 	udp->dom_fabric = fab;
+	pthread_spin_init(&udp->dom_usd_lock, PTHREAD_PROCESS_PRIVATE);
 	atomic_init(&udp->dom_refcnt);
 	atomic_inc(&fab->fab_refcnt);
 
@@ -136,6 +154,9 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 fail:
 	if (udp != NULL) {
+		if (udp->dom_eventfd != -1) {
+			close(udp->dom_eventfd);
+		}
 		free(udp);
 	}
 	return ret;

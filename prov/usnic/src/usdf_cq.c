@@ -183,9 +183,10 @@ usdf_cq_readfrom_context(struct fid_cq *fcq, void *buf, size_t count,
 			sin.sin_addr.s_addr = hdr->uh_ip.saddr;
 			sin.sin_port = hdr->uh_udp.source;
 
-			ret = fi_av_insert(av_utof(ep->ep_av), &sin, 1, src_addr, 0);
-			if (ret != 0) {
-				*src_addr = FI_ADDR_UNSPEC;
+			ret = fi_av_insert(av_utof(ep->ep_av), &sin, 1,
+					src_addr, 0, NULL);
+			if (ret != 1) {
+				*src_addr = FI_ADDR_NOTAVAIL;
 			}
 			++src_addr;
 		}

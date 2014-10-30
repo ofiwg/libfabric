@@ -43,6 +43,8 @@
 #ifndef _USD_H_
 #define _USD_H_
 
+#include <sys/queue.h>
+
 #include "kcompat.h"
 #include "vnic_rq.h"
 #include "vnic_wq.h"
@@ -90,7 +92,12 @@ struct usd_device {
     /* PD for this device */
     uint32_t ud_pd_handle;
 
+    /* destination related */
     int ud_arp_sockfd;          /* for ARP */
+    TAILQ_HEAD(, usd_dest_req) ud_pending_reqs;
+    TAILQ_HEAD(, usd_dest_req) ud_completed_reqs;
+
+    TAILQ_ENTRY(usd_device) ud_link;
 };
 
 /*

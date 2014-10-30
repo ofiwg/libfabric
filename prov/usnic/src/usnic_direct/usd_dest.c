@@ -61,10 +61,7 @@
 #include "usd_dest.h"
 #include "usd_socket.h"
 
-static TAILQ_HEAD(, usd_dest_req) usd_pending_reqs =
-    TAILQ_HEAD_INITIALIZER(usd_pending_reqs);
-static TAILQ_HEAD(, usd_dest_req) usd_completed_reqs =
-    TAILQ_HEAD_INITIALIZER(usd_completed_reqs);
+extern TAILQ_HEAD(, usd_device) usd_device_list;
 
 static struct usd_dest_params usd_dest_params = {
     .dp_arp_timeout = 1000,
@@ -96,6 +93,7 @@ usd_get_dest_distance(
 
 static void
 usd_dest_set_complete(
+    struct usd_device *dev,
     struct usd_dest_req *req)
 {
     req->udr_complete = 1;
@@ -103,12 +101,13 @@ usd_dest_set_complete(
         free(req->udr_dest);
         req->udr_dest = NULL;
     }
-    TAILQ_REMOVE(&usd_pending_reqs, req, udr_link);
-    TAILQ_INSERT_TAIL(&usd_completed_reqs, req, udr_link);
+    TAILQ_REMOVE(&dev->ud_pending_reqs, req, udr_link);
+    TAILQ_INSERT_TAIL(&dev->ud_completed_reqs, req, udr_link);
 }
 
 static int
 usd_dest_trigger_arp(
+    struct usd_device *dev,
     struct usd_dest_req *req)
 {
     int ret;
@@ -117,20 +116,21 @@ usd_dest_trigger_arp(
     req->udr_arps_sent++;
 
     ret =
-        usnic_arp_request(req->udr_daddr_be, req->udr_dev->ud_arp_sockfd);
+        usnic_arp_request(req->udr_daddr_be, dev->ud_arp_sockfd);
     return ret;
 }
 
 static int
 usd_check_dest_resolved(
+    struct usd_device *dev,
     struct usd_dest_req *req)
 {
     struct ether_header *eth;
     int ret;
 
     eth = &req->udr_dest->ds_dest.ds_udp.u_hdr.uh_eth;
-    ret = usnic_arp_lookup(req->udr_dev->ud_attrs.uda_ifname,
-                           req->udr_daddr_be, req->udr_dev->ud_arp_sockfd,
+    ret = usnic_arp_lookup(dev->ud_attrs.uda_ifname,
+                           req->udr_daddr_be, dev->ud_arp_sockfd,
                            &eth->ether_dhost[0]);
 
     if (ret == EAGAIN)
@@ -146,8 +146,9 @@ usd_check_dest_resolved(
  * If an entry is complete, move it to the completed queue.
  * If the retry timeout for an entry has arrived, re-trigger the ARP
  */
-static int
-usd_dest_progress()
+static void
+usd_dest_progress_dev(
+    struct usd_device *dev)
 {
     struct usd_dest_req *req;
     struct usd_dest_req *tmpreq;
@@ -157,12 +158,12 @@ usd_dest_progress()
 
     usd_get_time(&now);
 
-    TAILQ_FOREACH_SAFE(req, tmpreq, &usd_pending_reqs, udr_link) {
+    TAILQ_FOREACH_SAFE(req, tmpreq, &dev->ud_pending_reqs, udr_link) {
 
         /* resolution complete? */
-        ret = usd_check_dest_resolved(req);
+        ret = usd_check_dest_resolved(dev, req);
         if (ret == 0) {
-            usd_dest_set_complete(req);
+            usd_dest_set_complete(dev, req);
             continue;
         }
 
@@ -172,18 +173,27 @@ usd_dest_progress()
         if (delta > (int) usd_dest_params.dp_arp_timeout) {
             if (req->udr_arps_sent >= usd_dest_params.dp_max_arps) {
                 req->udr_status = -EHOSTUNREACH;
-                usd_dest_set_complete(req);
+                usd_dest_set_complete(dev, req);
                 continue;
             }
 
-            ret = usd_dest_trigger_arp(req);
+            ret = usd_dest_trigger_arp(dev, req);
             if (ret != 0) {
                 req->udr_status = ret;
-                usd_dest_set_complete(req);
+                usd_dest_set_complete(dev, req);
             }
         }
     }
-    return 0;
+}
+
+static void
+usd_dest_progress()
+{
+    struct usd_device *dev;
+
+    TAILQ_FOREACH(dev, &usd_device_list, ud_link) {
+        usd_dest_progress_dev(dev);
+    }
 }
 
 /*
@@ -259,18 +269,17 @@ usd_create_udp_dest_start(
     usd_fill_udp_dest(dest, dev, daddr_be, dport_be);
 
     /* initiate request and add to tail of pending list */
-    req->udr_dev = dev;
     req->udr_daddr_be = first_hop_daddr_be;
     req->udr_dest = dest;
 
-    ret = usd_dest_trigger_arp(req);
+    ret = usd_dest_trigger_arp(dev, req);
     if (ret != 0)
         goto fail;
 
 complete:
-    TAILQ_INSERT_TAIL(&usd_pending_reqs, req, udr_link);
+    TAILQ_INSERT_TAIL(&dev->ud_pending_reqs, req, udr_link);
     if (req->udr_status != 0) {
-        usd_dest_set_complete(req);
+        usd_dest_set_complete(dev, req);
     }
     *req_o = req;
 
@@ -312,7 +321,7 @@ usd_create_udp_dest(
     if (ret == 0)
         *dest_o = req->udr_dest;
 
-    TAILQ_REMOVE(&usd_completed_reqs, req, udr_link);
+    TAILQ_REMOVE(&dev->ud_completed_reqs, req, udr_link);
     free(req);
     return ret;
 }
@@ -438,20 +447,18 @@ usd_create_dest_start(
  */
 int
 usd_create_dest_poll(
+    struct usd_device *dev,
     void **context_o,
     int *status,
     struct usd_dest **dest_o)
 {
     struct usd_dest_req *req;
-    int ret;
 
-    ret = usd_dest_progress();
-    if (ret != 0)
-        return ret;
+    usd_dest_progress();
 
-    if (!TAILQ_EMPTY(&usd_completed_reqs)) {
-        req = TAILQ_FIRST(&usd_completed_reqs);
-        TAILQ_REMOVE(&usd_completed_reqs, req, udr_link);
+    if (!TAILQ_EMPTY(&dev->ud_completed_reqs)) {
+        req = TAILQ_FIRST(&dev->ud_completed_reqs);
+        TAILQ_REMOVE(&dev->ud_completed_reqs, req, udr_link);
         *context_o = req->udr_context;
         *status = req->udr_status;
         if (*status == 0)
@@ -469,21 +476,18 @@ usd_create_dest_poll(
  */
 int
 usd_create_dest_query(
+    struct usd_device *dev,
     void *context,
     int *status,
     struct usd_dest **dest_o)
 {
     struct usd_dest_req *req;
-    struct usd_dest_req *tmpreq;
-    int ret;
 
-    ret = usd_dest_progress();
-    if (ret != 0)
-        return ret;
+    usd_dest_progress();
 
-    TAILQ_FOREACH_SAFE(req, tmpreq, &usd_completed_reqs, udr_link) {
+    TAILQ_FOREACH(req, &dev->ud_completed_reqs, udr_link) {
         if (req->udr_context == context) {
-            TAILQ_REMOVE(&usd_completed_reqs, req, udr_link);
+            TAILQ_REMOVE(&dev->ud_completed_reqs, req, udr_link);
             *status = req->udr_status;
             if (*status == 0)
                 *dest_o = req->udr_dest;
@@ -502,20 +506,21 @@ usd_create_dest_query(
  */
 int
 usd_create_dest_cancel(
+    struct usd_device *dev,
     void *context)
 {
     struct usd_dest_req *req;
 
-    TAILQ_FOREACH(req, &usd_pending_reqs, udr_link) {
+    TAILQ_FOREACH(req, &dev->ud_pending_reqs, udr_link) {
         if (req->udr_context == context) {
-            TAILQ_REMOVE(&usd_pending_reqs, req, udr_link);
+            TAILQ_REMOVE(&dev->ud_pending_reqs, req, udr_link);
             goto found;
         }
     }
 
-    TAILQ_FOREACH(req, &usd_completed_reqs, udr_link) {
+    TAILQ_FOREACH(req, &dev->ud_completed_reqs, udr_link) {
         if (req->udr_context == context) {
-            TAILQ_REMOVE(&usd_completed_reqs, req, udr_link);
+            TAILQ_REMOVE(&dev->ud_completed_reqs, req, udr_link);
             goto found;
         }
     }

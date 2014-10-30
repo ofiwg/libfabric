@@ -121,11 +121,13 @@ enum {
 struct fi_eq_entry {
 	fid_t			fid;
 	void			*context;
+	uint64_t		data;
 };
 
 struct fi_eq_err_entry {
 	fid_t			fid;
 	void			*context;
+	uint64_t		data;
 	int			err;
 	int			prov_errno;
 	/* err_data is available until the next time the CQ is read */
