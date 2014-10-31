@@ -50,8 +50,6 @@
 extern "C" {
 #endif
 
-#define PFX "libfabric: "
-
 #ifdef INCLUDE_VALGRIND
 #   include <valgrind/memcheck.h>
 #   ifndef VALGRIND_MAKE_MEM_DEFINED
@@ -71,8 +69,8 @@ static inline uint64_t htonll(uint64_t x) { return x; }
 static inline uint64_t ntohll(uint64_t x) { return x; }
 #endif
 
-#define max(a, b) ((a) > (b) ? a : b)
-#define min(a, b) ((a) < (b) ? a : b)
+#define MIN(a, b) ((a) < (b) ? a : b)
+#define MAX(a, b) ((a) > (b) ? a : b)
 
 static inline int flsll(long long int i)
 {
@@ -185,16 +183,6 @@ int fi_version_register(uint32_t version, struct fi_provider *provider);
         extern __typeof(name) api __attribute__((alias(#name)))
 
 #endif /* HAVE_SYMVER_SUPPORT */
-
-/* symbol -> external symbol mappings */
-#ifdef HAVE_SYMVER_SUPPORT
-
-/* FABRIC_1.0: default symbol set must match linker script */
-#define FABRIC_10(SYM, ESYM) asm(".symver " #SYM","#ESYM"@@FABRIC_1.0");
-
-#else
-#define FABRIC_10(SYM, ESYM)
-#endif
 
 #ifdef __cplusplus
 }
