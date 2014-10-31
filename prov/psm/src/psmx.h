@@ -488,6 +488,7 @@ struct psmx_fid_cntr {
 	int			wait_obj;
 	uint64_t		flags;
 	volatile uint64_t	counter;
+	volatile uint64_t	error_counter;
 	pthread_mutex_t		mutex;
 	pthread_cond_t		cond;
 	struct psmx_trigger	*trigger;

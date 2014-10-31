@@ -198,6 +198,15 @@ static uint64_t psmx_cntr_read(struct fid_cntr *cntr)
 	return cntr_priv->counter;
 }
 
+static uint64_t psmx_cntr_readerr(struct fid_cntr *cntr)
+{
+	struct psmx_fid_cntr *cntr_priv;
+
+	cntr_priv = container_of(cntr, struct psmx_fid_cntr, cntr);
+
+	return cntr_priv->error_counter;
+}
+
 static int psmx_cntr_add(struct fid_cntr *cntr, uint64_t value)
 {
 	struct psmx_fid_cntr *cntr_priv;
@@ -310,6 +319,7 @@ static struct fi_ops psmx_fi_ops = {
 static struct fi_ops_cntr psmx_cntr_ops = {
 	.size = sizeof(struct fi_ops_cntr),
 	.read = psmx_cntr_read,
+	.readerr = psmx_cntr_readerr,
 	.add = psmx_cntr_add,
 	.set = psmx_cntr_set,
 	.wait = psmx_cntr_wait,
