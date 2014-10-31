@@ -36,6 +36,7 @@ extern "C" {
 #include "psm_am.h"
 #include "fi.h"
 #include "fi_enosys.h"
+#include "fi_list.h"
 
 #define PSM_PFX "libfabric:psm"
 
@@ -328,6 +329,16 @@ struct psmx_fid_wait {
 		  pthread_cond_t cond;
 		}			mutex_cond;
 	};
+};
+
+struct psmx_poll_list {
+	struct dlist_entry		entry;
+	struct fid			*fid;
+};
+
+struct psmx_fid_poll {
+	struct fid_poll			poll;
+	struct dlist_entry		poll_list_head;
 };
 
 struct psmx_fid_cq {
