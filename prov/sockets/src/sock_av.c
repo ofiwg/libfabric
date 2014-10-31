@@ -45,7 +45,7 @@
 #include "sock.h"
 
 static int sock_at_insert(struct fid_av *av, const void *addr, size_t count,
-			  fi_addr_t *fi_addr, uint64_t flags)
+			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	int i;
 	struct sock_av *_av;
@@ -91,7 +91,7 @@ static const char * sock_at_straddr(struct fid_av *av, const void *addr,
 }
 
 static int sock_am_insert(struct fid_av *av, const void *addr, size_t count,
-			  fi_addr_t *fi_addr, uint64_t flags)
+			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	const struct sockaddr_in *sin;
 	struct sockaddr_in *fin;

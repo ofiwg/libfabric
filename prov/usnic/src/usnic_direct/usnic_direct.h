@@ -469,7 +469,7 @@ int usd_create_dest_start(struct usd_device *dev, uint32_t daddr_be,
 /*
  * Cancel resolution on a not-yet-completed create_dest request
  */
-int usd_create_dest_cancel(void *context);
+int usd_create_dest_cancel(struct usd_device *dev, void *context);
 
 /*
  * Extract dest port and IP from a destination
@@ -486,7 +486,7 @@ int usd_expand_dest(struct usd_dest *dest, uint32_t *dest_ip_be_o,
  *    -EAGAIN - nothing is complete
  *    other - negative errno code
  */
-int usd_create_dest_query(void *context, int *status,
+int usd_create_dest_query(struct usd_device *dev, void *context, int *status,
         struct usd_dest **dest_o);
 
 /*
@@ -499,7 +499,7 @@ int usd_create_dest_query(void *context, int *status,
  *    -EAGAIN - nothing is complete
  *    other - negative errno code
  */
-int usd_create_dest_poll(void **context_o, int *status,
+int usd_create_dest_poll(struct usd_device *dev, void **context_o, int *status,
         struct usd_dest **dest_o);
 
 

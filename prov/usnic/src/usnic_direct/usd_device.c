@@ -64,6 +64,9 @@ static pthread_once_t usd_init_once = PTHREAD_ONCE_INIT;
 static struct usd_ib_dev *usd_ib_dev_list;
 static int usd_init_error;
 
+TAILQ_HEAD(,usd_device) usd_device_list =
+    TAILQ_HEAD_INITIALIZER(usd_device_list);
+
 /*
  * Perform one-time initialization
  */
@@ -186,6 +189,8 @@ usd_close(
     struct usd_cq_group *cgp;
     struct usd_cq_group *next_cgp;
 
+    TAILQ_REMOVE(&usd_device_list, dev, ud_link);
+
     /* XXX - verify all other resources closed out */
     if (dev->ud_flags & USD_DEVF_CLOSE_CMD_FD)
         close(dev->ud_ib_dev_fd);
@@ -273,6 +278,8 @@ usd_open_with_fd(
     dev->ud_arp_sockfd = -1;
     dev->ud_flags = 0;
     dev->ud_next_cq_grp_id = 1;     /* CQ group IDs start at 1 */
+    TAILQ_INIT(&dev->ud_pending_reqs);
+    TAILQ_INIT(&dev->ud_completed_reqs);
 
     /* Save pointer to IB device */
     dev->ud_ib_dev = idp;
@@ -310,7 +317,9 @@ usd_open_with_fd(
         }
     }
 
+    TAILQ_INSERT_TAIL(&usd_device_list, dev, ud_link);
     *dev_o = dev;
+
     return 0;
 
   out:
