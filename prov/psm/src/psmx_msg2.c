@@ -183,8 +183,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						req->recv.len - req->recv.len_received,
 						0 /* err */);
 				if (event)
-					psmx_cq_enqueue_event(&req->ep->recv_cq->event_queue,
-							      event);
+					psmx_cq_enqueue_event(req->ep->recv_cq, event);
 				else
 					err = -ENOMEM;
 			}
@@ -239,8 +238,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0, /* olen */
 						op_error);
 				if (event)
-					psmx_cq_enqueue_event(&req->ep->send_cq->event_queue,
-							      event);
+					psmx_cq_enqueue_event(req->ep->send_cq, event);
 				else
 					err = -ENOMEM;
 			}
@@ -384,7 +382,7 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 					req->recv.len - req->recv.len_received,
 					0 /* err */);
 			if (event)
-				psmx_cq_enqueue_event(&req->ep->recv_cq->event_queue, event);
+				psmx_cq_enqueue_event(req->ep->recv_cq, event);
 			else
 				err = -ENOMEM;
 		}

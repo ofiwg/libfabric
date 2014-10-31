@@ -34,9 +34,10 @@
 
 #define PSMX_CQ_EMPTY(cq) (!cq->event_queue.head)
 
-void psmx_cq_enqueue_event(struct psmx_cq_event_queue *ceq,
-			   struct psmx_cq_event *event)
+void psmx_cq_enqueue_event(struct psmx_fid_cq *cq, struct psmx_cq_event *event)
 {
+	struct psmx_cq_event_queue *ceq = &cq->event_queue;
+
 	if (ceq->tail) {
 		ceq->tail->next = event;
 		ceq->tail = event;
@@ -45,10 +46,13 @@ void psmx_cq_enqueue_event(struct psmx_cq_event_queue *ceq,
 		ceq->head = ceq->tail = event;
 	}
 	ceq->count++;
+	if (cq->wait)
+		psmx_wait_signal((struct fid_wait *)cq->wait);
 }
 
-static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_cq_event_queue *ceq)
+static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_fid_cq *cq)
 {
+	struct psmx_cq_event_queue *ceq = &cq->event_queue;
 	struct psmx_cq_event *event;
 
 	if (!ceq->head)
@@ -366,7 +370,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						return -ENOMEM;
 
 					if (event != event_in)
-						psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+						psmx_cq_enqueue_event(mr->cq, event);
 				  }
 				  if (mr->cntr)
 					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
@@ -389,7 +393,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						return -ENOMEM;
 
 					if (event != event_in)
-						psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+						psmx_cq_enqueue_event(mr->cq, event);
 				  }
 				  if (mr->cntr)
 					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
@@ -407,7 +411,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 					return -ENOMEM;
 
 				if (event != event_in)
-					psmx_cq_enqueue_event(&tmp_cq->event_queue, event);
+					psmx_cq_enqueue_event(tmp_cq, event);
 			}
 
 			if (tmp_cntr)
@@ -445,7 +449,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						if (!event)
 							return -ENOMEM;
 
-						psmx_cq_enqueue_event(&tmp_cq->event_queue, event);
+						psmx_cq_enqueue_event(tmp_cq, event);
 					}
 
 					free(req);
@@ -492,7 +496,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 
 	read_count = 0;
 	while (count--) {
-		event = psmx_cq_dequeue_event(&cq_priv->event_queue);
+		event = psmx_cq_dequeue_event(cq_priv);
 		if (event) {
 			if (!event->error) {
 				memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
@@ -565,7 +569,7 @@ static ssize_t psmx_cq_write(struct fid_cq *cq, const void *buf, size_t len)
 		}
 
 		memcpy((void *)&event->cqe, buf + written_len, cq_priv->entry_size);
-		psmx_cq_enqueue_event(&cq_priv->event_queue, event);
+		psmx_cq_enqueue_event(cq_priv, event);
 		written_len += cq_priv->entry_size;
 		len -= cq_priv->entry_size;
 	}
@@ -591,7 +595,7 @@ static ssize_t psmx_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 
 		memcpy((void *)&event->cqe, buf + written_len, sizeof(*buf));
 		event->error = !!event->cqe.err.err;
-		psmx_cq_enqueue_event(&cq_priv->event_queue, event);
+		psmx_cq_enqueue_event(cq_priv, event);
 		written_len += sizeof(*buf);
 		len -= sizeof(*buf);
 	}

@@ -428,7 +428,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(mr->cq, event);
 				else
 					err = -ENOMEM;
 			}
@@ -478,7 +478,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(mr->cq, event);
 				else
 					err = -ENOMEM;
 			}
@@ -532,7 +532,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(mr->cq, event);
 				else
 					err = -ENOMEM;
 			}
@@ -567,8 +567,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					0, /* olen */
 					op_error);
 			if (event)
-				psmx_cq_enqueue_event(&req->ep->send_cq->event_queue,
-						      event);
+				psmx_cq_enqueue_event(req->ep->send_cq, event);
 			else
 				err = -ENOMEM;
 		}
@@ -602,8 +601,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					0, /* olen */
 					op_error);
 			if (event)
-				psmx_cq_enqueue_event(&req->ep->send_cq->event_queue,
-						      event);
+				psmx_cq_enqueue_event(req->ep->send_cq, event);
 			else
 				err = -ENOMEM;
 		}
@@ -688,7 +686,7 @@ static int psmx_atomic_self(int am_cmd,
 				0 /* err */);
 
 		if (event)
-			psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+			psmx_cq_enqueue_event(mr->cq, event);
 		else
 			err = -ENOMEM;
 	}
@@ -710,7 +708,7 @@ gen_local_event:
 				0, /* olen */
 				op_error);
 		if (event)
-			psmx_cq_enqueue_event(&ep->send_cq->event_queue, event);
+			psmx_cq_enqueue_event(ep->send_cq, event);
 		else
 			err = -ENOMEM;
 	}

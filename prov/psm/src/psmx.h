@@ -605,8 +605,7 @@ int	psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 void	psmx_query_mpi(void);
 void	psmx_debug(char *fmt, ...);
 
-void	psmx_cq_enqueue_event(struct psmx_cq_event_queue *eq,
-			      struct psmx_cq_event *event);
+void	psmx_cq_enqueue_event(struct psmx_fid_cq *cq, struct psmx_cq_event *event);
 struct	psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 					void *op_context, void *buf,
 					uint64_t flags, size_t len,
