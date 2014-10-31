@@ -190,11 +190,8 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			}
 
 			if (req->ep->recv_cntr &&
-			    !(req->ep->recv_cntr_event_flag && req->no_event)) {
-				req->ep->recv_cntr->counter++;
-				if (req->ep->recv_cntr->wait_obj == FI_WAIT_MUT_COND)
-					pthread_cond_signal(&req->ep->recv_cntr->cond);
-			}
+			    !(req->ep->recv_cntr_event_flag && req->no_event))
+				psmx_cntr_inc(req->ep->recv_cntr);
 
 			free(req);
 		}
@@ -249,11 +246,8 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			}
 
 			if (req->ep->send_cntr &&
-			    !(req->ep->send_cntr_event_flag && req->no_event)) {
-				req->ep->send_cntr->counter++;
-				if (req->ep->send_cntr->wait_obj == FI_WAIT_MUT_COND)
-					pthread_cond_signal(&req->ep->send_cntr->cond);
-			}
+			    !(req->ep->send_cntr_event_flag && req->no_event))
+				psmx_cntr_inc(req->ep->send_cntr);
 
 			req->ep->pending_sends--;
 
@@ -396,11 +390,8 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 		}
 
 		if (req->ep->recv_cntr &&
-		    !(req->ep->recv_cntr_event_flag && req->no_event)) {
-			req->ep->recv_cntr->counter++;
-			if (req->ep->recv_cntr->wait_obj == FI_WAIT_MUT_COND)
-				pthread_cond_signal(&req->ep->recv_cntr->cond);
-		}
+		    !(req->ep->recv_cntr_event_flag && req->no_event))
+			psmx_cntr_inc(req->ep->recv_cntr);
 
 		free(req);
 	}

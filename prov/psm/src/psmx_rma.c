@@ -114,11 +114,8 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					else
 						err = -ENOMEM;
 				}
-				if (mr->cntr) {
-					mr->cntr->counter++;
-					if (mr->cntr->wait_obj == FI_WAIT_MUT_COND)
-						pthread_cond_signal(&mr->cntr->cond);
-				}
+				if (mr->cntr)
+					psmx_cntr_inc(mr->cntr);
 			}
 		}
 		if (eom || op_error) {
@@ -214,11 +211,8 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				else
 					err = -ENOMEM;
 			}
-			if (mr->cntr) {
-				mr->cntr->counter++;
-				if (mr->cntr->wait_obj == FI_WAIT_MUT_COND)
-					pthread_cond_signal(&mr->cntr->cond);
-			}
+			if (mr->cntr)
+				psmx_cntr_inc(mr->cntr);
 		}
 		break;
 
@@ -286,11 +280,8 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			}
 
 			if (req->ep->write_cntr &&
-			    !(req->ep->write_cntr_event_flag && req->no_event)) {
-				req->ep->write_cntr->counter++;
-				if (req->ep->write_cntr->wait_obj == FI_WAIT_MUT_COND)
-					pthread_cond_signal(&req->ep->write_cntr->cond);
-			}
+			    !(req->ep->write_cntr_event_flag && req->no_event))
+				psmx_cntr_inc(req->ep->write_cntr);
 
 			req->ep->pending_writes--;
 			free(req);
@@ -328,11 +319,8 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			}
 
 			if (req->ep->read_cntr &&
-			    !(req->ep->read_cntr_event_flag && req->no_event)) {
-				req->ep->read_cntr->counter++;
-				if (req->ep->read_cntr->wait_obj == FI_WAIT_MUT_COND)
-					pthread_cond_signal(&req->ep->read_cntr->cond);
-			}
+			    !(req->ep->read_cntr_event_flag && req->no_event))
+				psmx_cntr_inc(req->ep->read_cntr);
 
 			req->ep->pending_reads--;
 			free(req);
@@ -405,11 +393,8 @@ static ssize_t psmx_rma_self(int am_cmd,
 			else
 				err = -ENOMEM;
 		}
-		if (mr->cntr) {
-			mr->cntr->counter++;
-			if (mr->cntr->wait_obj == FI_WAIT_MUT_COND)
-				pthread_cond_signal(&mr->cntr->cond);
-		}
+		if (mr->cntr)
+			psmx_cntr_inc(mr->cntr);
 	}
 
 	no_event = (flags & FI_INJECT) ||
@@ -435,21 +420,15 @@ static ssize_t psmx_rma_self(int am_cmd,
 	switch (am_cmd) {
 	case PSMX_AM_REQ_WRITE:
 		if (ep->write_cntr &&
-		    !(ep->write_cntr_event_flag && no_event)) {
-			ep->write_cntr->counter++;
-			if (ep->write_cntr->wait_obj == FI_WAIT_MUT_COND)
-				pthread_cond_signal(&ep->write_cntr->cond);
-		}
+		    !(ep->write_cntr_event_flag && no_event))
+			psmx_cntr_inc(ep->write_cntr);
 		ep->pending_writes--;
 		break;
 
 	case PSMX_AM_REQ_READ:
 		if (ep->read_cntr &&
-		    !(ep->read_cntr_event_flag && no_event)) {
-			ep->read_cntr->counter++;
-			if (ep->read_cntr->wait_obj == FI_WAIT_MUT_COND)
-				pthread_cond_signal(&ep->read_cntr->cond);
-		}
+		    !(ep->read_cntr_event_flag && no_event))
+			psmx_cntr_inc(ep->read_cntr);
 		ep->pending_reads--;
 		break;
 	}

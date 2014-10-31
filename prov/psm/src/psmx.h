@@ -485,12 +485,10 @@ struct psmx_fid_cntr {
 	struct fid_cntr		cntr;
 	struct psmx_fid_domain	*domain;
 	int			events;
-	int			wait_obj;
 	uint64_t		flags;
 	volatile uint64_t	counter;
 	volatile uint64_t	error_counter;
-	pthread_mutex_t		mutex;
-	pthread_cond_t		cond;
+	struct psmx_fid_wait	*wait;
 	struct psmx_trigger	*trigger;
 };
 
@@ -617,6 +615,8 @@ struct	psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 int	psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			struct psmx_cq_event *event, int count, fi_addr_t *src_addr);
 int	psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg);
+int	psmx_wait_wait(struct fid_wait *wait, int timeout);
+void	psmx_wait_signal(struct fid_wait *wait);
 
 int	psmx_am_init(struct psmx_fid_domain *domain);
 int	psmx_am_fini(struct psmx_fid_domain *domain);
@@ -647,6 +647,14 @@ struct	psmx_fid_mr *psmx_mr_hash_get(uint64_t key);
 int	psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access);
 void	psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr);
 void	psmx_cntr_add_trigger(struct psmx_fid_cntr *cntr, struct psmx_trigger *trigger);
+
+static inline void psmx_cntr_inc(struct psmx_fid_cntr *cntr)
+{
+	cntr->counter++;
+	psmx_cntr_check_trigger(cntr);
+	if (cntr->wait)
+		psmx_wait_signal((struct fid_wait *)cntr->wait);
+}
 
 ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t len,
 		     void *desc, fi_addr_t dest_addr, void *context,
