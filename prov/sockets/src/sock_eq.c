@@ -81,7 +81,7 @@ ssize_t sock_eq_read(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 	}
 
 	if(eq_entry){
-		int copy_len = min(len, eq_entry->len);
+		int copy_len = MIN(len, eq_entry->len);
 		memcpy(buf, (char*)eq_entry + sizeof(struct sock_eq_item), copy_len);
 
 		if(event)
@@ -118,7 +118,7 @@ ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 	}
 
 	if(eq_entry){
-		int copy_len = min(len, eq_entry->len);
+		int copy_len = MIN(len, eq_entry->len);
 		memcpy(buf, (char*)eq_entry + sizeof(struct sock_eq_item), copy_len);
 
 		if(!(FI_PEEK & flags))
