@@ -642,52 +642,20 @@ static int psmx_cq_close(fid_t fid)
 static int psmx_cq_control(struct fid *fid, int command, void *arg)
 {
 	struct psmx_fid_cq *cq;
-	struct fi_wait_obj_set *wait_obj_set;
-	int obj_size;
-	int obj_type;
-	int ret_count;
+	int ret = 0;
 
 	cq = container_of(fid, struct psmx_fid_cq, cq.fid);
 
 	switch (command) {
 	case FI_GETWAIT:
-		if (!arg)
-			return -EINVAL;
-
-		wait_obj_set = arg;
-		obj_size = 0;
-		obj_type = FI_WAIT_NONE;
-		ret_count = 0;
-		if (cq->wait) {
-			switch (cq->wait->type) {
-			case FI_WAIT_FD:
-				obj_size = sizeof(cq->wait->fd[0]);
-				obj_type = FI_WAIT_FD;
-				break;
-
-			case FI_WAIT_MUT_COND:
-				obj_size = sizeof(cq->wait->mutex_cond);
-				obj_type = FI_WAIT_MUT_COND;
-				break;
-
-			default:
-				break;
-			}
-		}
-		if (obj_size) {
-			ret_count = 1;
-			if (wait_obj_set->count)
-				memcpy(wait_obj_set->obj, &cq->wait->obj, obj_size);
-		}
-		wait_obj_set->count = ret_count;
-		wait_obj_set->wait_obj = obj_type;
+		ret = psmx_wait_get_obj(cq->wait, arg);
 		break;
 
 	default:
 		return -ENOSYS;
 	}
 
-	return 0;
+	return ret;
 }
 
 static struct fi_ops psmx_fi_ops = {

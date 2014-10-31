@@ -32,6 +32,54 @@
 
 #include "psmx.h"
 
+int psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg)
+{
+	struct fi_wait_obj_set *wait_obj_set = arg;
+	void *obj_ptr;
+	int obj_size = 0;
+	int obj_type = FI_WAIT_NONE;
+	int ret_count = 0;
+	struct {
+		pthread_mutex_t *mutex;
+		pthread_cond_t *cond;
+	} mutex_cond;
+
+	if (!arg)
+		return -EINVAL;
+
+	if (wait) {
+		switch (wait->type) {
+			case FI_WAIT_FD:
+				obj_size = sizeof(wait->fd[0]);
+				obj_type = wait->type;
+				obj_ptr = &wait->fd[0];
+				break;
+
+			case FI_WAIT_MUT_COND:
+				mutex_cond.mutex = &wait->mutex_cond.mutex;
+				mutex_cond.cond = &wait->mutex_cond.cond;
+				obj_size = sizeof(mutex_cond);
+				obj_type = wait->type;
+				obj_ptr = &mutex_cond;
+				break;
+
+			default:
+				break;
+		}
+	}
+
+	if (obj_size) {
+		ret_count = 1;
+		if (wait_obj_set->count)
+			memcpy(wait_obj_set->obj, obj_ptr, obj_size);
+	}
+
+	wait_obj_set->count = ret_count;
+	wait_obj_set->wait_obj = obj_type;
+
+	return 0;
+}
+
 int psmx_wait_wait(struct fid_wait *wait, int timeout)
 {
 	struct psmx_fid_wait *wait_priv;

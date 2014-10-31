@@ -614,6 +614,10 @@ struct	psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 					uint64_t flags, size_t len,
 					uint64_t data, uint64_t tag,
 					size_t olen, int err);
+int	psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
+			struct psmx_cq_event *event, int count, fi_addr_t *src_addr);
+int	psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg);
+
 int	psmx_am_init(struct psmx_fid_domain *domain);
 int	psmx_am_fini(struct psmx_fid_domain *domain);
 int	psmx_am_enqueue_recv(struct psmx_fid_domain *domain,
@@ -639,8 +643,6 @@ int	psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 int	psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
 
-int	psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
-			struct psmx_cq_event *event, int count, fi_addr_t *src_addr);
 struct	psmx_fid_mr *psmx_mr_hash_get(uint64_t key);
 int	psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access);
 void	psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr);
