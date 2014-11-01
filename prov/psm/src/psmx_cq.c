@@ -607,7 +607,25 @@ static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				 fi_addr_t *src_addr, const void *cond,
 				 int timeout)
 {
-	return -FI_ENOSYS;
+	struct psmx_fid_cq *cq_priv;
+	size_t threshold;
+
+	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
+	if (cq_priv->wait_cond == FI_CQ_COND_THRESHOLD)
+		threshold = (size_t) cond;
+	else
+		threshold = 1;
+
+	/* NOTE: "cond" is only a hint, not a mandatory condition. */
+	if (cq_priv->event_queue.count < threshold) {
+		if (cq_priv->wait)
+			psmx_wait_wait((struct fid_wait *)cq_priv->wait, timeout);
+		else
+			while (!psmx_cq_poll_mq(cq_priv, cq_priv->domain, NULL, 0, NULL))
+				;
+	}
+
+	return psmx_cq_readfrom(cq, buf, count, src_addr);
 }
 
 static ssize_t psmx_cq_sread(struct fid_cq *cq, void *buf, size_t count,
