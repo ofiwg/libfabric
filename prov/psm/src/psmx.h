@@ -322,12 +322,11 @@ struct psmx_fid_wait {
 	struct fid_wait			wait;
 	int				type;
 	union {
-		int			obj;
 		int			fd[2];
 		struct {
-		  pthread_mutex_t mutex;
-		  pthread_cond_t cond;
-		}			mutex_cond;
+			pthread_mutex_t	mutex;
+			pthread_cond_t	cond;
+		};
 	};
 };
 

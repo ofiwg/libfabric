@@ -56,8 +56,8 @@ int psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg)
 				break;
 
 			case FI_WAIT_MUT_COND:
-				mutex_cond.mutex = &wait->mutex_cond.mutex;
-				mutex_cond.cond = &wait->mutex_cond.cond;
+				mutex_cond.mutex = &wait->mutex;
+				mutex_cond.cond = &wait->cond;
 				obj_size = sizeof(mutex_cond);
 				obj_type = wait->type;
 				obj_ptr = &mutex_cond;
@@ -100,8 +100,8 @@ int psmx_wait_wait(struct fid_wait *wait, int timeout)
 		break;
 
 	case FI_WAIT_MUT_COND:
-		err = fi_wait_cond(&wait_priv->mutex_cond.cond,
-				   &wait_priv->mutex_cond.mutex, timeout);
+		err = fi_wait_cond(&wait_priv->cond,
+				   &wait_priv->mutex, timeout);
 		break;
 
 	default:
@@ -128,7 +128,7 @@ void psmx_wait_signal(struct fid_wait *wait)
 		break;
 
 	case FI_WAIT_MUT_COND:
-		pthread_cond_signal(&wait_priv->mutex_cond.cond);
+		pthread_cond_signal(&wait_priv->cond);
 		break;
 	}
 }
@@ -184,8 +184,8 @@ static int psmx_wait_init(struct psmx_fid_wait *wait, int type)
 		break;
 
 	case FI_WAIT_MUT_COND:
-		pthread_mutex_init(&wait->mutex_cond.mutex, NULL);
-		pthread_cond_init(&wait->mutex_cond.cond, NULL);
+		pthread_mutex_init(&wait->mutex, NULL);
+		pthread_cond_init(&wait->cond, NULL);
 		break;
  
 	default:
