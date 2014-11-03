@@ -154,7 +154,7 @@ static int fi_ibv_check_hints(struct fi_info *hints)
 		}
 	}
 
-	if ( !(hints->caps & (FI_MSG | FI_RMA)) )
+	if (!(hints->caps & (FI_MSG | FI_RMA)) && hints->caps)
 		return -FI_ENODATA;
 
 	if (hints->fabric_attr && hints->fabric_attr->name &&
@@ -205,9 +205,9 @@ static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addr
 	return 0;
 }
 
- static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
+static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
 		 	  struct fi_info *fi)
- {
+{
  //	fi->sa_family = rai->ai_family;
 	if (rai->ai_qp_type == IBV_QPT_RC || rai->ai_port_space == RDMA_PS_TCP) {
 		fi->caps |= FI_MSG | FI_RMA;
@@ -235,7 +235,7 @@ static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addr
  	}
 
  	return 0;
- }
+}
 
 static int
 fi_ibv_getepinfo(const char *node, const char *service,
@@ -1511,7 +1511,6 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	} else {
 		fi->ep_attr->protocol = FI_PROTO_RDMA_CM_IB_RC;
 	}
-	fi->caps = FI_MSG | FI_RMA;
 
 	fi->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!(fi->src_addr = malloc(fi->src_addrlen)))
