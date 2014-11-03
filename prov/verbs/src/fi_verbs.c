@@ -35,7 +35,6 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <asm/types.h>
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -58,6 +57,11 @@
 #include "fi.h"
 #include "fi_enosys.h"
 
+#define PROV_NAME "verbs"
+#define PROV_VERS FI_VERSION(0,7)
+
+#define PROV_WARN(fmt, ...) \
+	do { fprintf(stderr, "%s:%s: " fmt, PACKAGE, PROV_NAME, ##__VA_ARGS__); } while (0)
 
 struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
@@ -1524,9 +1528,9 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 
 	if (!(fi->fabric_attr->name = strdup("RDMA")))
 		goto err;
-	if (!(fi->fabric_attr->prov_name = strdup("verbs")))
+	if (!(fi->fabric_attr->prov_name = strdup(PROV_NAME)))
 		goto err;
-	fi->fabric_attr->prov_version = FI_VERSION(0, 7);
+	fi->fabric_attr->prov_version = PROV_VERS;
 
 	if (!(fi->domain_attr->name = strdup(event->id->verbs->device->name)))
 		goto err;
@@ -1592,7 +1596,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	}
 
 	entry->fid = fid;
-	datalen = min(len - sizeof(*entry), cma_event->param.conn.private_data_len);
+	datalen = MIN(len - sizeof(*entry), cma_event->param.conn.private_data_len);
 	if (datalen)
 		memcpy(entry->data, cma_event->param.conn.private_data, datalen);
 	return sizeof(*entry) + datalen;
@@ -1801,7 +1805,7 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	struct fi_ibv_cq *_cq;
 
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
-	threshold = min((ssize_t) cond, count);
+	threshold = MIN((ssize_t) cond, count);
 
 	for (cur = 0; cur < threshold; ) {
 		ret = _cq->cq_fid.ops->read(cq, buf, count - cur);
@@ -2371,8 +2375,8 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void 
 }
 
 static struct fi_provider fi_ibv_prov = {
-	.name = "verbs",
-	.version = FI_VERSION(0, 7),
+	.name = PROV_NAME,
+	.version = PROV_VERS,
 	.getinfo = fi_ibv_getinfo,
 	.fabric = fi_ibv_fabric,
 };
