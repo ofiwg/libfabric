@@ -496,7 +496,7 @@ int sock_rdm_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	if(!sock_ep)
 		return -FI_EINVAL;
 
-	len = min(*addrlen, sizeof(struct sockaddr));
+	len = MIN(*addrlen, sizeof(struct sockaddr));
 	memcpy(addr, &sock_ep->src_addr, len);
 	*addrlen = sizeof(struct sockaddr);
 	return 0;
@@ -513,7 +513,7 @@ int sock_rdm_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 	if(!sock_ep)
 		return -FI_EINVAL;
 
-	*addrlen = min(*addrlen, sizeof(struct sockaddr));
+	*addrlen = MIN(*addrlen, sizeof(struct sockaddr));
 
 	memcpy(addr, &sock_ep->dest_addr, *addrlen);
 	return 0;
