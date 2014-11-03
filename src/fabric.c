@@ -49,7 +49,8 @@
 #include <dlfcn.h>
 #endif
 
-#define FI_WARN(fmt, ...) do { fprintf(stderr, "%s: " fmt, PACKAGE, ##__VA_ARGS__); } while (0)
+#define FI_WARN(fmt, ...) \
+	do { fprintf(stderr, "%s: " fmt, PACKAGE, ##__VA_ARGS__); } while (0)
 
 struct fi_prov {
 	struct fi_prov		*next;
