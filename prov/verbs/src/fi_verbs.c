@@ -1364,9 +1364,6 @@ static int
 fi_ibv_msg_ep_getopt(fid_t fid, int level, int optname,
 		  void *optval, size_t *optlen)
 {
-	struct fi_ibv_msg_ep *ep;
-	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
-
 	switch (level) {
 	case FI_OPT_ENDPOINT:
 		return -FI_ENOPROTOOPT;
@@ -1380,9 +1377,6 @@ static int
 fi_ibv_msg_ep_setopt(fid_t fid, int level, int optname,
 		  const void *optval, size_t optlen)
 {
-	struct fi_ibv_msg_ep *ep;
-	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
-
 	switch (level) {
 	case FI_OPT_ENDPOINT:
 		return -FI_ENOPROTOOPT;
@@ -1449,6 +1443,7 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!_ep)
 		return -FI_ENOMEM;
 
+	fi = NULL;
 	if (!info->connreq) {
 		ret = fi_ibv_getepinfo(NULL, NULL, 0, info, &fi, &_ep->id);
 		if (ret)
@@ -2301,16 +2296,15 @@ static int
 fi_ibv_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_pep **pep, void *context)
 {
-	struct fi_ibv_fabric *fab;
 	struct fi_ibv_pep *_pep;
 	struct fi_info *fi;
 	int ret;
 
-	fab = container_of(fabric, struct fi_ibv_fabric, fabric_fid);
 	_pep = calloc(1, sizeof *_pep);
 	if (!_pep)
 		return -FI_ENOMEM;
 
+	fi = NULL;
 	ret = fi_ibv_getepinfo(NULL, NULL, FI_SOURCE, info, &fi, &_pep->id);
 	if (ret)
 		goto err;
