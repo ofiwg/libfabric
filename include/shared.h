@@ -66,6 +66,7 @@ void perf_str(char *name, int tsize, int iters, long long total, int64_t elapsed
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
+#define ARRAY_SIZE(A) (sizeof(A)/sizeof(*A))
 
 #ifdef __cplusplus
 }
