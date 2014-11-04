@@ -123,7 +123,7 @@ use of flags.  The fi_sendmsg function takes a struct fi_msg as input.
 .nf
 struct fi_msg {
 	const struct iovec *msg_iov;/* scatter-gather array */
-	void               *desc;   /* local request descriptor */
+	void               **desc;  /* local request descriptor */
 	size_t             iov_count;/* # elements in iov */
 	const void         *addr;   /* optional endpoint address */
 	void               *context;/* user-defined context */
