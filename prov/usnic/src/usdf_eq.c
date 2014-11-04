@@ -326,7 +326,7 @@ retry:
 	if (ret < 0) {
 		return -errno;
 	} else if (ret == 0) {
-		return -FI_EAGAIN;
+		return 0;
 	}
 
 	pthread_spin_lock(&eq->eq_lock);
