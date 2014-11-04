@@ -604,18 +604,19 @@ ssize_t fi_no_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
  * fi_ops_av
  */
 int fi_no_av_insert(struct fid_av *av, const void *addr, size_t count,
-			fi_addr_t *fi_addr, uint64_t flags)
+			fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	return -FI_ENOSYS;
 }
 int fi_no_av_insertsvc(struct fid_av *av, const char *node,
-		const char *service, fi_addr_t *fi_addr, uint64_t flags)
+		const char *service, fi_addr_t *fi_addr, uint64_t flags,
+		void *context)
 {
 	return -FI_ENOSYS;
 }
 int fi_no_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt,
 			const char *service, size_t svccnt, fi_addr_t *fi_addr,
-			uint64_t flags)
+			uint64_t flags, void *context)
 {
 	return -FI_ENOSYS;
 }

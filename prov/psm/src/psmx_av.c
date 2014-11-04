@@ -114,7 +114,7 @@ static int psmx_av_check_table_size(struct psmx_fid_av *av, size_t count)
 }
 
 static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
-			  fi_addr_t *fi_addr, uint64_t flags)
+			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct psmx_fid_av *av_priv;
 	psm_error_t *errors;

@@ -38,16 +38,11 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <asm/types.h>
-#include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <netdb.h>
+#include <unistd.h>
+#include <errno.h>
+#include <poll.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -62,6 +57,74 @@
 #include "usdf.h"
 
 void
-usdf_progress()
+usdf_progress(struct usdf_domain *udp)
 {
+	usdf_av_progress(udp);
+}
+
+int
+usdf_add_progression_item(struct usdf_domain *udp)
+{
+	int64_t val;
+	int n;
+
+	if (atomic_inc(&udp->dom_pending_items) == 1) {
+		val = 1;
+		n = write(udp->dom_eventfd, &val, sizeof(val));
+		if (n != sizeof(val)) {
+			return -FI_EIO;
+		}
+	}
+	return 0;
+}
+
+void
+usdf_progression_item_complete(struct usdf_domain *udp)
+{
+	atomic_dec(&udp->dom_pending_items);
+}
+
+void *
+usdf_progression_thread(void *v)
+{
+	struct usdf_domain *udp;
+	int64_t val;
+	struct pollfd pfd;
+	int sleep_time;
+	int ret;
+	int n;
+
+	udp = v;
+
+	pfd.fd = udp->dom_eventfd;
+	pfd.events = POLLIN;
+	pfd.revents = 0;
+
+	while (1) {
+
+		/* sleep inifinitely if nothing to do */
+		if (atomic_get(&udp->dom_pending_items) > 0) {
+			sleep_time = 1;
+		} else {
+			sleep_time = -1;
+		}
+
+		ret = poll(&pfd, 1, sleep_time);
+		if (ret == -1) {
+			pthread_exit(NULL);
+		}
+		/* consume write if there was one */
+		if (ret == 1) {
+			n = read(udp->dom_eventfd, &val, sizeof(val));
+			if (n != sizeof(val)) {
+				pthread_exit(NULL);
+			}
+		}
+
+		if (udp->dom_exit) {
+			pthread_exit(NULL);
+		}
+
+		usdf_progress(udp);
+	}
 }
