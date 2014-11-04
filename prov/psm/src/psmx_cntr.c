@@ -198,6 +198,15 @@ static uint64_t psmx_cntr_read(struct fid_cntr *cntr)
 	return cntr_priv->counter;
 }
 
+static uint64_t psmx_cntr_readerr(struct fid_cntr *cntr)
+{
+	struct psmx_fid_cntr *cntr_priv;
+
+	cntr_priv = container_of(cntr, struct psmx_fid_cntr, cntr);
+
+	return cntr_priv->error_counter;
+}
+
 static int psmx_cntr_add(struct fid_cntr *cntr, uint64_t value)
 {
 	struct psmx_fid_cntr *cntr_priv;
@@ -207,8 +216,8 @@ static int psmx_cntr_add(struct fid_cntr *cntr, uint64_t value)
 
 	psmx_cntr_check_trigger(cntr_priv);
 
-	if (cntr_priv->wait_obj == FI_WAIT_MUT_COND)
-		pthread_cond_signal(&cntr_priv->cond);
+	if (cntr_priv->wait)
+		psmx_wait_signal((struct fid_wait *)cntr_priv->wait);
 
 	return 0;
 }
@@ -222,8 +231,8 @@ static int psmx_cntr_set(struct fid_cntr *cntr, uint64_t value)
 
 	psmx_cntr_check_trigger(cntr_priv);
 
-	if (cntr_priv->wait_obj == FI_WAIT_MUT_COND)
-		pthread_cond_signal(&cntr_priv->cond);
+	if (cntr_priv->wait)
+		psmx_wait_signal((struct fid_wait *)cntr_priv->wait);
 
 	return 0;
 }
@@ -235,27 +244,23 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 
 	cntr_priv = container_of(cntr, struct psmx_fid_cntr, cntr);
 
-	switch (cntr_priv->wait_obj) {
-	case FI_WAIT_NONE:
+	if (cntr_priv->wait) {
+		while (cntr_priv->counter < threshold) {
+			ret = psmx_wait_wait((struct fid_wait *)cntr_priv->wait, timeout);
+			if (ret == -FI_ETIMEDOUT)
+				break;
+			/* FIXME: fix timeout value before calling fi_wait again */
+		}
+	}
+	else {
+		/* FIXME: check timeout */
 		while (cntr_priv->counter < threshold) {
 			psmx_cq_poll_mq(NULL, cntr_priv->domain, NULL, 0, NULL);
 			psmx_am_progress(cntr_priv->domain);
 		}
-		break;
-
-	case FI_WAIT_MUT_COND:
-		pthread_mutex_lock(&cntr_priv->mutex);
-		while (cntr_priv->counter < threshold)
-			pthread_cond_wait(&cntr_priv->cond, &cntr_priv->mutex);
-			ret = fi_wait_cond(&cntr_priv->cond, &cntr_priv->mutex, timeout);
-		pthread_mutex_unlock(&cntr_priv->mutex);
-		break;
-
-	default:
-		return -EBADF;
 	}
 
-	return 0;
+	return ret;
 }
 
 static int psmx_cntr_close(fid_t fid)
@@ -271,6 +276,7 @@ static int psmx_cntr_close(fid_t fid)
 static int psmx_cntr_control(fid_t fid, int command, void *arg)
 {
 	struct psmx_fid_cntr *cntr;
+	int ret = 0;
 
 	cntr = container_of(fid, struct psmx_fid_cntr, cntr.fid);
 
@@ -286,17 +292,14 @@ static int psmx_cntr_control(fid_t fid, int command, void *arg)
 		break;
 
 	case FI_GETWAIT:
-		if (!arg)
-			return -EINVAL;
-		((void **)arg)[0] = &cntr->mutex;
-		((void **)arg)[1] = &cntr->cond;
+		ret = psmx_wait_get_obj(cntr->wait, arg);
 		break;
 
 	default:
 		return -ENOSYS;
 	}
 
-	return 0;
+	return ret;
 }
 
 static struct fi_ops psmx_fi_ops = {
@@ -310,6 +313,7 @@ static struct fi_ops psmx_fi_ops = {
 static struct fi_ops_cntr psmx_cntr_ops = {
 	.size = sizeof(struct fi_ops_cntr),
 	.read = psmx_cntr_read,
+	.readerr = psmx_cntr_readerr,
 	.add = psmx_cntr_add,
 	.set = psmx_cntr_set,
 	.wait = psmx_cntr_wait,
@@ -320,11 +324,13 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 {
 	struct psmx_fid_domain *domain_priv;
 	struct psmx_fid_cntr *cntr_priv;
-	int events , wait_obj;
+	struct psmx_fid_wait *wait = NULL;
+	struct fi_wait_attr wait_attr;
+	int events;
 	uint64_t flags;
+	int err;
 
 	events = FI_CNTR_EVENTS_COMP;
-	wait_obj = FI_WAIT_NONE;
 	flags = 0;
 
 	switch (attr->events) {
@@ -340,14 +346,31 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
+		break;
+
+	case FI_WAIT_SET:
+		if (!attr->wait_set) {
+			psmx_debug("%s: FI_WAIT_SET is specified but attr->wait_set is NULL\n",
+				   __func__);
+			return -FI_EINVAL;
+		}
+		wait = (struct psmx_fid_wait *)attr->wait_set;
+		break;
+
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_FD:
 	case FI_WAIT_MUT_COND:
-		wait_obj = attr->wait_obj;
+		wait_attr.wait_obj = attr->wait_obj;
+		wait_attr.flags = 0;
+		err = psmx_wait_open(domain, &wait_attr, (struct fid_wait **)&wait);
+		if (err)
+			return err;
 		break;
 
 	default:
-		psmx_debug("%s: attr->wait_obj=%d, supported=%d,%d\n", __func__,
-				attr->wait_obj, FI_WAIT_NONE, FI_WAIT_MUT_COND);
-		return -EINVAL;
+		psmx_debug("%s: attr->wait_obj=%d, supported=%d...%d\n", __func__,
+			   attr->wait_obj, FI_WAIT_NONE, FI_WAIT_MUT_COND);
+		return -FI_EINVAL;
 	}
 
 	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
@@ -357,17 +380,12 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	cntr_priv->domain = domain_priv;
 	cntr_priv->events = events;
-	cntr_priv->wait_obj = wait_obj;
+	cntr_priv->wait = wait;
 	cntr_priv->flags = flags;
 	cntr_priv->cntr.fid.fclass = FI_CLASS_CNTR;
 	cntr_priv->cntr.fid.context = context;
 	cntr_priv->cntr.fid.ops = &psmx_fi_ops;
 	cntr_priv->cntr.ops = &psmx_cntr_ops;
-
-	if (wait_obj == FI_WAIT_MUT_COND) {
-		pthread_mutex_init(&cntr_priv->mutex, NULL);
-		pthread_cond_init(&cntr_priv->cond, NULL);
-	}
 
 	*cntr = &cntr_priv->cntr;
 	return 0;

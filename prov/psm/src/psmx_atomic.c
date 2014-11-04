@@ -428,15 +428,12 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(mr->cq, event);
 				else
 					err = -ENOMEM;
 			}
-			if (mr->cntr) {
-				mr->cntr->counter++;
-				if (mr->cntr->wait_obj == FI_WAIT_MUT_COND)
-					pthread_cond_signal(&mr->cntr->cond);
-			}
+			if (mr->cntr)
+				psmx_cntr_inc(mr->cntr);
 		}
 
 		rep_args[0].u32w0 = PSMX_AM_REP_ATOMIC_WRITE;
@@ -481,15 +478,12 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(mr->cq, event);
 				else
 					err = -ENOMEM;
 			}
-			if (mr->cntr) {
-				mr->cntr->counter++;
-				if (mr->cntr->wait_obj == FI_WAIT_MUT_COND)
-					pthread_cond_signal(&mr->cntr->cond);
-			}
+			if (mr->cntr)
+				psmx_cntr_inc(mr->cntr);
 		}
 		else {
 			tmp_buf = NULL;
@@ -538,15 +532,12 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						0 /* err */);
 
 				if (event)
-					psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+					psmx_cq_enqueue_event(mr->cq, event);
 				else
 					err = -ENOMEM;
 			}
-			if (mr->cntr) {
-				mr->cntr->counter++;
-				if (mr->cntr->wait_obj == FI_WAIT_MUT_COND)
-					pthread_cond_signal(&mr->cntr->cond);
-			}
+			if (mr->cntr)
+				psmx_cntr_inc(mr->cntr);
 		}
 		else {
 			tmp_buf = NULL;
@@ -576,18 +567,14 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					0, /* olen */
 					op_error);
 			if (event)
-				psmx_cq_enqueue_event(&req->ep->send_cq->event_queue,
-						      event);
+				psmx_cq_enqueue_event(req->ep->send_cq, event);
 			else
 				err = -ENOMEM;
 		}
 
 		if (req->ep->write_cntr &&
-		    !(req->ep->write_cntr_event_flag && req->no_event)) {
-			req->ep->write_cntr->counter++;
-			if (req->ep->write_cntr->wait_obj == FI_WAIT_MUT_COND)
-				pthread_cond_signal(&req->ep->write_cntr->cond);
-		}
+		    !(req->ep->write_cntr_event_flag && req->no_event))
+			psmx_cntr_inc(req->ep->write_cntr);
 
 		req->ep->pending_atomics--;
 		free(req);
@@ -614,18 +601,14 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					0, /* olen */
 					op_error);
 			if (event)
-				psmx_cq_enqueue_event(&req->ep->send_cq->event_queue,
-						      event);
+				psmx_cq_enqueue_event(req->ep->send_cq, event);
 			else
 				err = -ENOMEM;
 		}
 
 		if (req->ep->read_cntr &&
-		    !(req->ep->read_cntr_event_flag && req->no_event)) {
-			req->ep->read_cntr->counter++;
-			if (req->ep->read_cntr->wait_obj == FI_WAIT_MUT_COND)
-				pthread_cond_signal(&req->ep->read_cntr->cond);
-		}
+		    !(req->ep->read_cntr_event_flag && req->no_event))
+			psmx_cntr_inc(req->ep->read_cntr);
 
 		req->ep->pending_atomics--;
 		free(req);
@@ -703,15 +686,12 @@ static int psmx_atomic_self(int am_cmd,
 				0 /* err */);
 
 		if (event)
-			psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+			psmx_cq_enqueue_event(mr->cq, event);
 		else
 			err = -ENOMEM;
 	}
-	if (mr->cntr) {
-		mr->cntr->counter++;
-		if (mr->cntr->wait_obj == FI_WAIT_MUT_COND)
-			pthread_cond_signal(&mr->cntr->cond);
-	}
+	if (mr->cntr)
+		psmx_cntr_inc(mr->cntr);
 
 gen_local_event:
 	no_event = ((flags & FI_INJECT) ||
@@ -728,7 +708,7 @@ gen_local_event:
 				0, /* olen */
 				op_error);
 		if (event)
-			psmx_cq_enqueue_event(&ep->send_cq->event_queue, event);
+			psmx_cq_enqueue_event(ep->send_cq, event);
 		else
 			err = -ENOMEM;
 	}
@@ -736,20 +716,14 @@ gen_local_event:
 	switch (am_cmd) {
 	case PSMX_AM_REQ_ATOMIC_WRITE:
 		if (ep->write_cntr &&
-		    !(ep->write_cntr_event_flag && no_event)) {
-			ep->write_cntr->counter++;
-			if (ep->write_cntr->wait_obj == FI_WAIT_MUT_COND)
-				pthread_cond_signal(&ep->write_cntr->cond);
-		}
+		    !(ep->write_cntr_event_flag && no_event))
+			psmx_cntr_inc(ep->write_cntr);
 		break;
 	case PSMX_AM_REQ_ATOMIC_READWRITE:
 	case PSMX_AM_REQ_ATOMIC_COMPWRITE:
 		if (ep->read_cntr &&
-		    !(ep->read_cntr_event_flag && no_event)) {
-			ep->read_cntr->counter++;
-			if (ep->read_cntr->wait_obj == FI_WAIT_MUT_COND)
-				pthread_cond_signal(&ep->read_cntr->cond);
-		}
+		    !(ep->read_cntr_event_flag && no_event))
+			psmx_cntr_inc(ep->read_cntr);
 		break;
 	}
 

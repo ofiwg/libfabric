@@ -34,9 +34,10 @@
 
 #define PSMX_CQ_EMPTY(cq) (!cq->event_queue.head)
 
-void psmx_cq_enqueue_event(struct psmx_cq_event_queue *ceq,
-			   struct psmx_cq_event *event)
+void psmx_cq_enqueue_event(struct psmx_fid_cq *cq, struct psmx_cq_event *event)
 {
+	struct psmx_cq_event_queue *ceq = &cq->event_queue;
+
 	if (ceq->tail) {
 		ceq->tail->next = event;
 		ceq->tail = event;
@@ -44,10 +45,14 @@ void psmx_cq_enqueue_event(struct psmx_cq_event_queue *ceq,
 	else {
 		ceq->head = ceq->tail = event;
 	}
+	ceq->count++;
+	if (cq->wait)
+		psmx_wait_signal((struct fid_wait *)cq->wait);
 }
 
-static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_cq_event_queue *ceq)
+static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_fid_cq *cq)
 {
+	struct psmx_cq_event_queue *ceq = &cq->event_queue;
 	struct psmx_cq_event *event;
 
 	if (!ceq->head)
@@ -55,6 +60,7 @@ static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_cq_event_queue *c
 
 	event = ceq->head;
 	ceq->head = event->next;
+	ceq->count--;
 	if (!ceq->head)
 		ceq->tail = NULL;
 
@@ -155,6 +161,9 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		break;
 	}
 
+	/* NOTE: "event_in" only has space for the CQE of the current CQ format.
+	 * Fields like "error_code" and "source" should not be filled in.
+	 */
 	if (event_in && count && !psm_status->error_code) {
 		event = event_in;
 	}
@@ -361,7 +370,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						return -ENOMEM;
 
 					if (event != event_in)
-						psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+						psmx_cq_enqueue_event(mr->cq, event);
 				  }
 				  if (mr->cntr)
 					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
@@ -384,7 +393,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						return -ENOMEM;
 
 					if (event != event_in)
-						psmx_cq_enqueue_event(&mr->cq->event_queue, event);
+						psmx_cq_enqueue_event(mr->cq, event);
 				  }
 				  if (mr->cntr)
 					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
@@ -402,7 +411,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 					return -ENOMEM;
 
 				if (event != event_in)
-					psmx_cq_enqueue_event(&tmp_cq->event_queue, event);
+					psmx_cq_enqueue_event(tmp_cq, event);
 			}
 
 			if (tmp_cntr)
@@ -440,7 +449,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						if (!event)
 							return -ENOMEM;
 
-						psmx_cq_enqueue_event(&tmp_cq->event_queue, event);
+						psmx_cq_enqueue_event(tmp_cq, event);
 					}
 
 					free(req);
@@ -465,6 +474,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	struct psmx_fid_cq *cq_priv;
 	struct psmx_cq_event *event;
 	int ret;
+	ssize_t read_count;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 	assert(cq_priv->domain);
@@ -481,30 +491,41 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	if (cq_priv->pending_error)
 		return -FI_EAVAIL;
 
-	if (!buf)
+	if (!buf && count)
 		return -FI_EINVAL;
 
-	event = psmx_cq_dequeue_event(&cq_priv->event_queue);
-	if (event) {
-		if (!event->error) {
-			memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
-			if (psmx_cq_get_event_src_addr(cq_priv, event, src_addr))
-				*src_addr = FI_ADDR_NOTAVAIL;
+	read_count = 0;
+	while (count--) {
+		event = psmx_cq_dequeue_event(cq_priv);
+		if (event) {
+			if (!event->error) {
+				memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
+				if (psmx_cq_get_event_src_addr(cq_priv, event, src_addr))
+					*src_addr = FI_ADDR_NOTAVAIL;
 
-			PSMX_FREE_LIST_PUT(cq_priv->free_list.head,
-					   cq_priv->free_list.tail,
-					   struct psmx_cq_event,
-					   event);
+				PSMX_FREE_LIST_PUT(cq_priv->free_list.head,
+						   cq_priv->free_list.tail,
+						   struct psmx_cq_event,
+						   event);
 
-			return 1;
+				read_count++;
+				buf += cq_priv->entry_size;
+				src_addr++;
+				continue;
+			}
+			else {
+				cq_priv->pending_error = event;
+				if (!read_count)
+					read_count = -FI_EAVAIL;
+				break;
+			}
 		}
 		else {
-			cq_priv->pending_error = event;
-			return -FI_EAVAIL;
+			break;
 		}
 	}
 
-	return 0;
+	return read_count;
 }
 
 static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t count)
@@ -536,35 +557,81 @@ static ssize_t psmx_cq_write(struct fid_cq *cq, const void *buf, size_t len)
 {
 	struct psmx_fid_cq *cq_priv;
 	struct psmx_cq_event *event;
+	ssize_t written_len = 0;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 
-	if (len < cq_priv->entry_size)
-		return -FI_ETOOSMALL;
+	while (len >= cq_priv->entry_size) {
+		event = calloc(1, sizeof(*event));
+		if (!event) {
+			fprintf(stderr, "%s: out of memory\n", __func__);
+			return -ENOMEM;
+		}
 
-	event = calloc(1, sizeof(*event));
-	if (!event) {
-		fprintf(stderr, "%s: out of memory\n", __func__);
-		return -ENOMEM;
+		memcpy((void *)&event->cqe, buf + written_len, cq_priv->entry_size);
+		psmx_cq_enqueue_event(cq_priv, event);
+		written_len += cq_priv->entry_size;
+		len -= cq_priv->entry_size;
 	}
 
-	memcpy((void *)&event->cqe, buf, cq_priv->entry_size);
-	psmx_cq_enqueue_event(&cq_priv->event_queue, event);
-
-	return cq_priv->entry_size;
+	return written_len;
 }
 
-static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t len,
+static ssize_t psmx_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+				size_t len, uint64_t flags)
+{
+	struct psmx_fid_cq *cq_priv;
+	struct psmx_cq_event *event;
+	ssize_t written_len = 0;
+
+	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
+
+	while (len >= sizeof(*buf)) {
+		event = calloc(1, sizeof(*event));
+		if (!event) {
+			fprintf(stderr, "%s: out of memory\n", __func__);
+			return -ENOMEM;
+		}
+
+		memcpy((void *)&event->cqe, buf + written_len, sizeof(*buf));
+		event->error = !!event->cqe.err.err;
+		psmx_cq_enqueue_event(cq_priv, event);
+		written_len += sizeof(*buf);
+		len -= sizeof(*buf);
+	}
+
+	return written_len;
+}
+
+static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				 fi_addr_t *src_addr, const void *cond,
 				 int timeout)
 {
-	return -FI_ENOSYS;
+	struct psmx_fid_cq *cq_priv;
+	size_t threshold;
+
+	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
+	if (cq_priv->wait_cond == FI_CQ_COND_THRESHOLD)
+		threshold = (size_t) cond;
+	else
+		threshold = 1;
+
+	/* NOTE: "cond" is only a hint, not a mandatory condition. */
+	if (cq_priv->event_queue.count < threshold) {
+		if (cq_priv->wait)
+			psmx_wait_wait((struct fid_wait *)cq_priv->wait, timeout);
+		else
+			while (!psmx_cq_poll_mq(cq_priv, cq_priv->domain, NULL, 0, NULL))
+				;
+	}
+
+	return psmx_cq_readfrom(cq, buf, count, src_addr);
 }
 
-static ssize_t psmx_cq_sread(struct fid_cq *cq, void *buf, size_t len,
+static ssize_t psmx_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 			     const void *cond, int timeout)
 {
-	return psmx_cq_sreadfrom(cq, buf, len, NULL, cond, timeout);
+	return psmx_cq_sreadfrom(cq, buf, count, NULL, cond, timeout);
 }
 
 static const char *psmx_cq_strerror(struct fid_cq *cq, int prov_errno, const void *prov_data,
@@ -597,32 +664,20 @@ static int psmx_cq_close(fid_t fid)
 static int psmx_cq_control(struct fid *fid, int command, void *arg)
 {
 	struct psmx_fid_cq *cq;
+	int ret = 0;
 
 	cq = container_of(fid, struct psmx_fid_cq, cq.fid);
 
 	switch (command) {
 	case FI_GETWAIT:
-		if (!cq->wait) {
-			switch (cq->wait->type) {
-			case FI_WAIT_SET:
-				*(struct fid_wait **)arg = cq->wait->wait_set;
-				break;
-			case FI_WAIT_FD:
-				*(int *)arg = cq->wait->fd[0];
-				break;
-			case FI_WAIT_MUT_COND:
-				memcpy(arg, &cq->wait->mutex_cond,
-					sizeof(cq->wait->mutex_cond));
-				break;
-			}
-		}
+		ret = psmx_wait_get_obj(cq->wait, arg);
 		break;
 
 	default:
 		return -ENOSYS;
 	}
 
-	return 0;
+	return ret;
 }
 
 static struct fi_ops psmx_fi_ops = {
@@ -639,49 +694,20 @@ static struct fi_ops_cq psmx_cq_ops = {
 	.readfrom = psmx_cq_readfrom,
 	.readerr = psmx_cq_readerr,
 	.write = psmx_cq_write,
-	.writeerr = fi_no_cq_writeerr,
+	.writeerr = psmx_cq_writeerr,
 	.sread = psmx_cq_sread,
 	.sreadfrom = psmx_cq_sreadfrom,
 	.strerror = psmx_cq_strerror,
 };
-
-int psmx_cq_init_wait(struct psmx_wait *wait, struct fi_cq_attr *attr)
-{
-	int err;
-
-	wait->type = attr->wait_obj;
-	wait->cond = attr->wait_cond;
-
-	switch(attr->wait_obj) {
-	case FI_WAIT_SET:
-		wait->wait_set = attr->wait_set;
-		break;
-
-	case FI_WAIT_FD:
-		err = pipe(wait->fd);
-		if (err)
-			return -errno;
-		break;
-
-	case FI_WAIT_MUT_COND:
-		pthread_mutex_init(&wait->mutex_cond.mutex, NULL);
-		pthread_cond_init(&wait->mutex_cond.cond, NULL);
-		break;
-
-	default:
-		break;
-	}
-
-	return 0;
-}
 
 int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context)
 {
 	struct psmx_fid_domain *domain_priv;
 	struct psmx_fid_cq *cq_priv;
+	struct psmx_fid_wait *wait = NULL;
+	struct fi_wait_attr wait_attr;
 	int entry_size;
-	struct psmx_wait *wait = NULL;
 	int err;
 
 	switch (attr->format) {
@@ -722,10 +748,26 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 				   __func__);
 			return -FI_EINVAL;
 		}
-		/* fall through */
+		wait = (struct psmx_fid_wait *)attr->wait_set;
+		break;
+
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUT_COND:
+		wait_attr.wait_obj = attr->wait_obj;
+		wait_attr.flags = 0;
+		err = psmx_wait_open(domain, &wait_attr, (struct fid_wait **)&wait);
+		if (err)
+			return err;
+		break;
+
+	default:
+		psmx_debug("%s: attr->wait_obj=%d, supported=%d...%d\n", __func__, attr->wait_obj,
+				FI_WAIT_NONE, FI_WAIT_MUT_COND);
+		return -FI_EINVAL;
+	}
+
+	if (wait) {
 		switch (attr->wait_cond) {
 		case FI_CQ_COND_NONE:
 		case FI_CQ_COND_THRESHOLD:
@@ -736,22 +778,6 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 					attr->wait_cond, FI_CQ_COND_NONE, FI_CQ_COND_THRESHOLD);
 			return -FI_EINVAL;
 		}
-
-		wait = calloc(sizeof(*wait), 1);
-		if (!wait)
-			return -FI_ENOMEM;
-
-		err = psmx_cq_init_wait(wait, attr);
-		if (err) {
-			free(wait);
-			return err;
-		}
-		break;
-
-	default:
-		psmx_debug("%s: attr->wait_obj=%d, supported=%d...%d\n", __func__, attr->wait_obj,
-				FI_WAIT_NONE, FI_WAIT_MUT_COND);
-		return -FI_EINVAL;
 	}
 
 	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
@@ -766,6 +792,9 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cq_priv->format = attr->format;
 	cq_priv->entry_size = entry_size;
 	cq_priv->wait = wait;
+	if (wait)
+		cq_priv->wait_cond = attr->wait_cond;
+
 	cq_priv->cq.fid.fclass = FI_CLASS_CQ;
 	cq_priv->cq.fid.context = context;
 	cq_priv->cq.fid.ops = &psmx_fi_ops;

@@ -122,7 +122,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	int err;
 	int i;
 	fi_addr_t *result = NULL;
-	struct psmx_epaddr_context *context;
+	struct psmx_epaddr_context *epaddr_context;
 
 	av_priv = container_of(av, struct psmx_fid_av, av);
 
@@ -162,8 +162,8 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			fi_addr[i] = 0;
 		}
 		if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
-			context = psm_epaddr_getctxt(epconn.addr);
-			if (context && context->epid  == ((psm_epid_t *) addr)[i])
+			epaddr_context = psm_epaddr_getctxt(epconn.addr);
+			if (epaddr_context && epaddr_context->epid  == ((psm_epid_t *) addr)[i])
 				((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
 			else
 				mask[i] = 1;
@@ -272,16 +272,10 @@ static int psmx_av_close(fid_t fid)
 	return 0;
 }
 
-/* Currently only support synchronous insertions */
-static int psmx_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
-{
-	return -FI_ENOSYS;
-}
-
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_av_close,
-	.bind = psmx_av_bind,
+	.bind = fi_no_bind,
 	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
