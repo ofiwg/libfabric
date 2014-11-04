@@ -392,7 +392,7 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 	fp->fab_fid.fid.ops = &usdf_fi_ops;
 	fp->fab_fid.ops = &usdf_ops_fabric;
 
-	atomic_init(&fp->fab_refcnt);
+	atomic_init(&fp->fab_refcnt, 0);
 	*fabric = &fp->fab_fid;
 	return 0;
 

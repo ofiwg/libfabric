@@ -142,7 +142,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	if (ret)
 		goto err2;
 
-	atomic_init(&_cntr->ref);
+	atomic_init(&_cntr->ref, 0);
 	_cntr->cntr_fid.fid.fclass = FI_CLASS_CNTR;
 	_cntr->cntr_fid.fid.context = context;
 	_cntr->cntr_fid.fid.ops = &sock_cntr_fi_ops;

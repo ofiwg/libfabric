@@ -104,14 +104,19 @@ AC_CHECK_LIB(rt, clock_gettime, [],
     AC_MSG_ERROR([clock_gettime() not found.  libfabric requires librt.]))
 
 dnl Check for gcc atomic intrinsics
-AC_MSG_CHECKING(compiler support for atomics)
-AC_TRY_LINK([int i = 0;],
-    [ return __sync_add_and_fetch(&i, 1) != __sync_sub_and_fetch(&i, 1); ],
-    [ AC_MSG_RESULT(yes) ],
+AC_MSG_CHECKING(compiler support for c11 atomics)
+AC_TRY_LINK([#include <stdatomic.h>],
+    [#ifdef __STDC_NO_ATOMICS__
+       return 1;
+     #else
+       return 0;
+     #endif
+    ],
     [
-        AC_MSG_RESULT(no)
-        AC_DEFINE(DEFINE_ATOMICS, 1, [Set to 1 to implement atomics])
-    ])
+	AC_MSG_RESULT(yes)
+        AC_DEFINE(HAVE_ATOMICS, 1, [Set to 1 to use c11 atomic functions])
+    ],
+    [AC_MSG_RESULT(no)])
 
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 AC_CHECK_HEADER(valgrind/memcheck.h, [],

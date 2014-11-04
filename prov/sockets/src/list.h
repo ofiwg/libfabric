@@ -33,7 +33,7 @@
 #ifndef _LIST_H_
 #define _LIST_H_
 
-#include <pthread.h>
+#include "fi.h"
 
 typedef struct _list_t list_t;
 typedef struct _list_element_t
@@ -50,7 +50,7 @@ struct _list_t
 	list_element_t *free_head, *free_tail;
 	size_t curr_len;
 	size_t max_len;
-	pthread_mutex_t mutex;
+	fastlock_t lock;
 };
 
 list_t *new_list(size_t length);
