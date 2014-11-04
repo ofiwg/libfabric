@@ -47,7 +47,7 @@ sub subst {
 chdir($builddir);
 subst("README");
 
-chdir("man").
+chdir("man");
 opendir(my $dh, ".") || die "Can't open man directory: $!";
 my @files = grep { /\.\d$/ && -f "./$_" } readdir($dh);
 closedir $dh;
