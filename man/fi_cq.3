@@ -1,4 +1,4 @@
-.TH "FI_CQ" 3 "2014-10-14" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_CQ" 3 "@DATE@" "@VERSION@" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_cq \- Completion queue operations
 .PP
@@ -366,7 +366,7 @@ fi_cq_sread / fi_cq_sreadfrom
 .RS
 On success, returns the number of completion events retrieved from the
 completion queue.  On error, a negative value corresponding to fabric
-errno is returned.
+errno is returned. On timeout, -FI_ETIMEDOUT is returned.
 .RE
 fi_cq_write / fi_cq_writeerr
 .RS

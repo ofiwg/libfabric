@@ -49,7 +49,8 @@
 #include <dlfcn.h>
 #endif
 
-#define FI_WARN(fmt, ...) do { fprintf(stderr, "%s: " fmt, PACKAGE, ##__VA_ARGS__); } while (0)
+#define FI_WARN(fmt, ...) \
+	do { fprintf(stderr, "%s: " fmt, PACKAGE, ##__VA_ARGS__); } while (0)
 
 struct fi_prov {
 	struct fi_prov		*next;
@@ -231,6 +232,116 @@ void fi_freeinfo_(struct fi_info *info)
 }
 default_symver(fi_freeinfo_, fi_freeinfo);
 
+static struct fi_info *fi_dupinfo_internal(const struct fi_info *info)
+{
+	struct fi_info *dup;
+
+	dup = malloc(sizeof(*dup));
+	if (dup == NULL) {
+		goto fail;
+	}
+	*dup = *info;
+	dup->src_addr = NULL;
+	dup->dest_addr = NULL;
+	dup->tx_attr = NULL;
+	dup->rx_attr = NULL;
+	dup->ep_attr = NULL;
+	dup->domain_attr = NULL;
+	dup->fabric_attr = NULL;
+	dup->next = NULL;
+
+	if (info->src_addr != NULL) {
+		dup->src_addr = malloc(dup->src_addrlen);
+		if (dup->src_addr == NULL) {
+			goto fail;
+		}
+		memcpy(dup->src_addr, info->src_addr, info->src_addrlen);
+	}
+	if (info->dest_addr != NULL) {
+		dup->dest_addr = malloc(dup->dest_addrlen);
+		if (dup->dest_addr == NULL) {
+			goto fail;
+		}
+		memcpy(dup->dest_addr, info->dest_addr, info->dest_addrlen);
+	}
+	if (info->tx_attr != NULL) {
+		dup->tx_attr = malloc(sizeof(*dup->tx_attr));
+		if (dup->tx_attr == NULL) {
+			goto fail;
+		}
+		*dup->tx_attr = *info->tx_attr;
+	}
+	if (info->rx_attr != NULL) {
+		dup->rx_attr = malloc(sizeof(*dup->rx_attr));
+		if (dup->rx_attr == NULL) {
+			goto fail;
+		}
+		*dup->rx_attr = *info->rx_attr;
+	}
+	if (info->ep_attr != NULL) {
+		dup->ep_attr = malloc(sizeof(*dup->ep_attr));
+		if (dup->ep_attr == NULL) {
+			goto fail;
+		}
+		*dup->ep_attr = *info->ep_attr;
+	}
+	if (info->domain_attr) {
+		dup->domain_attr = malloc(sizeof(*dup->domain_attr));
+		if (dup->domain_attr == NULL) {
+			goto fail;
+		}
+		*dup->domain_attr = *info->domain_attr;
+		if (info->domain_attr->name != NULL) {
+			dup->domain_attr->name =
+				strdup(info->domain_attr->name);
+			if (dup->domain_attr->name == NULL) {
+				goto fail;
+			}
+		}
+	}
+	if (info->fabric_attr) {
+		dup->fabric_attr = malloc(sizeof(*dup->fabric_attr));
+		if (dup->fabric_attr == NULL) {
+			goto fail;
+		}
+		*dup->fabric_attr = *info->fabric_attr;
+		if (info->fabric_attr->name != NULL) {
+			dup->fabric_attr->name =
+				strdup(info->fabric_attr->name);
+			if (dup->fabric_attr->name == NULL) {
+				goto fail;
+			}
+		}
+		if (info->fabric_attr->prov_name != NULL) {
+			dup->fabric_attr->prov_name =
+				strdup(info->fabric_attr->prov_name);
+			if (dup->fabric_attr->prov_name == NULL) {
+				goto fail;
+			}
+		}
+	}
+	return dup;
+
+fail:
+	fi_freeinfo_internal(dup);
+	return NULL;
+}
+
+__attribute__((visibility ("default")))
+struct fi_info *fi_dupinfo_(const struct fi_info *info)
+{
+	struct fi_prov *prov;
+
+	prov = info->fabric_attr ?
+		fi_getprov(info->fabric_attr->prov_name) : NULL;
+	if (prov != NULL && prov->provider->dupinfo != NULL) {
+		return prov->provider->dupinfo(info);
+	} else {
+		return fi_dupinfo_internal(info);
+	}
+}
+default_symver(fi_dupinfo_, fi_dupinfo);
+
 __attribute__((visibility ("default")))
 int fi_fabric_(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)
 {
@@ -248,7 +359,7 @@ int fi_fabric_(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *co
 default_symver(fi_fabric_, fi_fabric);
 
 __attribute__((visibility ("default")))
-uint32_t if_version_(void)
+uint32_t fi_version_(void)
 {
 	return FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION);
 }

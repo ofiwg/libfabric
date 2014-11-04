@@ -1,4 +1,4 @@
-.TH "FI_AV" 3 "2014-09-30" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_AV" 3 "@DATE@" "@VERSION@" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_av \- Address vector operations
 .PP
@@ -39,14 +39,15 @@ Convert an address into a printable string.
 .PP
 .HP
 .BI "int fi_av_insert(struct fid_av *" av ", void *" addr ", size_t " count ", "
-.BI "fi_addr_t *" fi_addr ", uint64_t " flags ");"
+.BI "fi_addr_t *" fi_addr ", uint64_t " flags ", void *" context ");"
 .HP
 .BI "int fi_av_insertsvc(struct fid_av *" av ", const char *" node ", "
-.BI "const char *" service ", fi_addr_t *" fi_addr ", uint64_t " flags ");"
+.BI "const char *" service ", fi_addr_t *" fi_addr ", uint64_t " flags ", "
+.BI "void *" context ");"
 .HP
 .BI "int fi_av_insertsym(struct fid_av *" av ", const char *" node ", "
 .BI "size_t " nodecnt ", const char *" service ", size_t " svccnt ", "
-.BI "fi_addr_t *" fi_addr ", uint64_t " flags ");"
+.BI "fi_addr_t *" fi_addr ", uint64_t " flags ", void *" context ");"
 .HP
 .BI "int fi_av_remove(struct fid_av *" av ", fi_addr_t " fi_addr ", size_t " count ", "
 .BI "uint64_t " flags ");"
@@ -69,7 +70,7 @@ Event queue
 .IP "attr"
 Address vector attributes
 .IP "context"
-User specified context associated with the address vector.
+User specified context associated with the address vector or insert opertion.
 .IP "addr"
 Buffer containing one or more addresses to insert into address vector.
 .IP "addrlen"
@@ -90,7 +91,11 @@ more natural for an application to use, into fabric specific addresses.
 The mapping of addresses is fabric and provider specific, but may involve
 lengthy address resolution and fabric management protocols.  AV operations
 are synchronous by default, but may be set to operate asynchronously by
-associating the AV with an event queue.
+specifying the FI_EVENT flag to
+.B fi_av_open.
+When requesting asynchronous operation, the
+application must first bind an event queue to the AV before inserting
+addresses.
 .SS "fi_av_open"
 fi_av_open allocates or opens an address vector.  The properties and behavior of
 the address vector are defined by struct fi_av_attr.
@@ -178,6 +183,28 @@ field is ignored if name is NULL.
 .IP "flags"
 The following flags may be used when opening an AV.
 .RS
+.IP "FI_EVENT"
+When the flag FI_EVENT is specified, all insert operations on this
+AV  will occur
+asynchronously.  There will be one EQ error entry generated for each
+failed address insertion, followed by one non-error event indicating that the
+insertion operation has completed.
+There will always be one non-error completion event for each
+insert operation, even if all addresses fail.  The context field in all
+completions will be the context specified to the insert call, and the data
+field in the final completion entry will report the number of addresses 
+successfully inserted.
+.sp
+If an AV is opened with FI_EVENT, any insertions attempted before an EQ
+is bound to the AV will fail with -FI_EINVAL.
+.sp
+Error completions for failed insertions will contain the index of the failed
+address in the index field of the error completion entry.
+.sp
+Note that the order of delivery of insert completions may not match
+the order in which the calls to fi_av_insert were made.  The only guarantee
+is that all error completions for a given call to fi_av_insert will preceed
+the single associated non-error completion.
 .IP "FI_READ"
 Opens an AV for read-only access.  An AV opened for read-only access
 must be named (name attribute specified), and the AV must exist.
@@ -199,7 +226,7 @@ AV indicates that the provider should perform all insertions asynchronously,
 with the completions reported through the event queue.  If an event queue
 is not bound to the AV, then insertion requests behave synchronously.
 .SS "fi_av_insert"
-The fi_av_insert call inserts one or more addresses into an AV.  The number
+The fi_av_insert call inserts zero or more addresses into an AV.  The number
 of addresses is specified through the count parameter.  The addr parameter
 references an array of addresses to insert into the AV.  Addresses
 inserted into an address vector must be in the same format as specified
@@ -226,6 +253,15 @@ remain valid until the insertion operation completes.  When addresses
 are inserted into an AV of type FI_AV_TABLE, the returned fi_addr values
 will be simple indices corresponding to the entry into the table where the
 address was inserted.  Addresses are indexed in order of their insertion.
+.IP "flags"
+The following flag may be passed to fi_av_insert
+.RS
+.IP "FI_MORE"
+In order to allow optimized address insertion, the application may
+specify the FI_MORE flag to the insert call to give a hint to the provider
+that more insertion requests will follow, allowing the provider to aggregate
+insertion requests if desired.  Providers are free to ignore FI_MORE.
+.RE
 .SS "fi_av_insertsvc"
 The fi_av_insertsvc call behaves similar to fi_av_insert, but allows the
 application to specify the node and service names, similar to the
@@ -300,11 +336,15 @@ a provider may begin resolving inserted addresses as soon as they have
 been added to an AV, even if asynchronous operation has been specified.
 Similarly, a provider may lazily release resources from removed entries. 
 .SH "RETURN VALUES"
-Returns 0 on success.  On error, a negative value corresponding to
-fabric errno is returned.
+The insert calls return the number of addresses successfully inserted or
+the number of asynchronous insertions initiated if FI_EVENT is set.
 .PP
+Other calls return 0 on success.
+.PP
+On error, a negative value corresponding to
+fabric errno is returned.
 Fabric errno values are defined in
 .IR "rdma/fi_errno.h".
 .SH "ERRORS"
 .SH "SEE ALSO"
-fi_getinfo(3), fi_endpoint(3), fi_domain(3)
+fi_getinfo(3), fi_endpoint(3), fi_domain(3), fi_eq(3)

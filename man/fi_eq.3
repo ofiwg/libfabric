@@ -1,4 +1,4 @@
-.TH "FI_EQ" 3 "2014-10-15" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_EQ" 3 "@DATE@" "@VERSION@" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_eq \- Event queue operations
 .PP
@@ -96,6 +96,7 @@ fi_eq_open allocates a new event queue.
 The properties and behavior of an event queue are defined by struct fi_eq_attr.
 .PP
 .nf
+
 struct fi_eq_attr {
 	size_t               size;      /* # entries for EQ */
 	uint64_t             flags;     /* operation flags */
@@ -103,6 +104,8 @@ struct fi_eq_attr {
 	int                  signaling_vector; /* interrupt affinity */
 	struct fid_wait     *wait_set;  /* optional wait set */
 };
+
+.fi
 .IP "size"
 Specifies the minimum size of an event queue.
 .IP "flags"
@@ -197,6 +200,7 @@ into the EQ.  The format of this structure is:
 struct fi_eq_entry {
 	fid_t            fid;        /* fid associated with request */
 	void            *context;    /* operation context */
+	uint32_t         data;       /* completion dependent data */
 };
 
 .fi
@@ -271,6 +275,7 @@ The format of this structure is defined below.
 struct fi_eq_err_entry {
 	fid_t            fid;        /* fid associated with error */
 	void            *context;    /* operation context */
+	uint32_t         index;      /* index for vector ops */
 	int              err;        /* positive error code */
 	int              prov_errno; /* provider error code */
 	void            *err_data;   /* additional error data */

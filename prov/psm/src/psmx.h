@@ -40,10 +40,6 @@ extern "C" {
 
 #define PSM_PFX "libfabric:psm"
 
-#ifndef MIN
-#define MIN(x,y) ((x)<(y)?(x):(y))
-#endif
-
 #define PSMX_FREE_LIST_INIT(head, tail, type, count) \
 	do { \
 		int i; \

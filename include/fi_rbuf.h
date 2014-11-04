@@ -40,6 +40,8 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <fi.h>
 
 
@@ -51,6 +53,7 @@ struct ringbuf {
 	size_t		size_mask;
 	size_t		rcnt;
 	size_t		wcnt;
+	size_t		wpos;
 	void		*buf;
 };
 
@@ -60,6 +63,7 @@ static inline int rbinit(struct ringbuf *rb, size_t size)
 	rb->size_mask = rb->size - 1;
 	rb->rcnt = 0;
 	rb->wcnt = 0;
+	rb->wpos = 0;
 	rb->buf = calloc(1, rb->size);
 	if (!rb->buf)
 		return -ENOMEM;
@@ -91,15 +95,41 @@ static inline size_t rbavail(struct ringbuf *rb)
 	return rb->size - rbused(rb);
 }
 
-static inline void rbwrite(struct ringbuf *rb, void *buf, size_t len)
+static inline void rbwrite(struct ringbuf *rb, const void *buf, size_t len)
 {
-	memcpy(rb->buf + (rb->wcnt & rb->size_mask), buf, len);
-	rb->wcnt += len;
+	size_t endlen;
+
+	endlen = rb->size - (rb->wpos & rb->size_mask);
+	if (len <= endlen) {
+		memcpy(rb->buf + (rb->wpos & rb->size_mask), buf, len);
+	} else {
+		memcpy(rb->buf + (rb->wpos & rb->size_mask), buf, endlen);
+		memcpy(rb->buf, buf, len - endlen);
+	}
+	rb->wpos += len;
+}
+
+static inline void rbcommit(struct ringbuf *rb)
+{
+	rb->wcnt = rb->wpos;
+}
+
+static inline void rbabort(struct ringbuf *rb)
+{
+	rb->wpos = rb->wcnt;
 }
 
 static inline void rbpeek(struct ringbuf *rb, void *buf, size_t len)
 {
-	memcpy(buf, rb->buf + (rb->rcnt & rb->size_mask), len);
+	size_t endlen;
+
+	endlen = rb->size - (rb->rcnt & rb->size_mask);
+	if (len <= endlen) {
+		memcpy(buf, rb->buf + (rb->rcnt & rb->size_mask), len);
+	} else {
+		memcpy(buf, rb->buf + (rb->rcnt & rb->size_mask), endlen);
+		memcpy(buf, rb->buf, len - endlen);
+	}
 }
 
 static inline void rbread(struct ringbuf *rb, void *buf, size_t len)
@@ -197,10 +227,20 @@ static inline void rbfdreset(struct ringbuffd *rbfd)
 	}
 }
 
-static inline void rbfdwrite(struct ringbuffd *rbfd, void *buf, size_t len)
+static inline void rbfdwrite(struct ringbuffd *rbfd, const void *buf, size_t len)
 {
 	rbwrite(&rbfd->rb, buf, len);
+}
+
+static inline void rbfdcommit(struct ringbuffd *rbfd)
+{
+	rbcommit(&rbfd->rb);
 	rbfdsignal(rbfd);
+}
+
+static inline void rbfdabort(struct ringbuffd *rbfd)
+{
+	rbabort(&rbfd->rb);
 }
 
 static inline void rbfdpeek(struct ringbuffd *rbfd, void *buf, size_t len)
@@ -223,7 +263,7 @@ static inline size_t rbfdsread(struct ringbuffd *rbfd, void *buf, size_t len,
 	do {
 		avail = rbfdavail(rbfd);
 		if (avail) {
-			len = min(len, avail);
+			len = MIN(len, avail);
 			rbfdread(rbfd, buf, len);
 			return len;
 		}

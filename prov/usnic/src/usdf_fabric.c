@@ -48,6 +48,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netdb.h>
+#include <unistd.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -176,10 +177,11 @@ fail:
 
 
 static int
-usdf_fill_info(struct fi_info *fi, struct fi_info *hints,
+usdf_fill_info_dgram(struct fi_info *fi, struct fi_info *hints,
 		struct usd_device_attrs *dap)
 {
 	struct fi_fabric_attr *fattrp;
+	struct fi_domain_attr *dattrp;
 	struct fi_ep_attr *eattrp;
 	int ret;
 
@@ -190,6 +192,7 @@ usdf_fill_info(struct fi_info *fi, struct fi_info *hints,
 	} else {
 		fi->mode = USDF_SUPP_MODE;
 	}
+	fi->ep_type = FI_EP_DGRAM;
 
 	ret = usdf_fill_addr_info(fi, hints, dap);
 	if (ret != 0) {
@@ -209,6 +212,17 @@ usdf_fill_info(struct fi_info *fi, struct fi_info *hints,
 	if (fi->mode & FI_MSG_PREFIX) {
 		eattrp->msg_prefix_size = USDF_HDR_BUF_ENTRY;
 	}
+	eattrp->max_msg_size = dap->uda_mtu -
+		sizeof(struct usd_udp_hdr);
+	eattrp->protocol = FI_PROTO_UDP;
+	eattrp->tx_ctx_cnt = 1;
+	eattrp->rx_ctx_cnt = 1;
+
+	/* domain attrs */
+	dattrp = fi->domain_attr;
+	dattrp->threading = FI_THREAD_UNSPEC;
+	dattrp->control_progress = FI_PROGRESS_MANUAL;
+	dattrp->data_progress = FI_PROGRESS_AUTO;
 
 	return 0;
 
@@ -290,7 +304,7 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		/* Fill info stuct to return */
-		ret = usdf_fill_info(fi, hints, &dattr);
+		ret = usdf_fill_info_dgram(fi, hints, &dattr);
 		if (ret != 0) {
 			goto fail;
 		}

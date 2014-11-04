@@ -114,7 +114,7 @@ static int psmx_av_check_table_size(struct psmx_fid_av *av, size_t count)
 }
 
 static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
-			  fi_addr_t *fi_addr, uint64_t flags)
+			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct psmx_fid_av *av_priv;
 	psm_error_t *errors;
@@ -122,7 +122,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	int err;
 	int i;
 	fi_addr_t *result = NULL;
-	struct psmx_epaddr_context *context;
+	struct psmx_epaddr_context *epaddr_context;
 
 	av_priv = container_of(av, struct psmx_fid_av, av);
 
@@ -162,8 +162,8 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			fi_addr[i] = 0;
 		}
 		if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
-			context = psm_epaddr_getctxt(epconn.addr);
-			if (context && context->epid  == ((psm_epid_t *) addr)[i])
+			epaddr_context = psm_epaddr_getctxt(epconn.addr);
+			if (epaddr_context && epaddr_context->epid  == ((psm_epid_t *) addr)[i])
 				((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
 			else
 				mask[i] = 1;

@@ -1,4 +1,4 @@
-.TH "FI_GETINFO" 3 "2014-10-11" "libfabric" "Libfabric Programmer's Manual" libfabric
+.TH "FI_GETINFO" 3 "@DATE@" "@VERSION@" "Libfabric Programmer's Manual" libfabric
 .SH NAME
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 .SH SYNOPSIS
@@ -8,6 +8,8 @@ fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 .BI "uint64_t " flags ", struct fi_info *" hints ", struct fi_info **" info ");"
 .HP
 .BI "int fi_freeinfo(struct fi_info *" info ");"
+.HP
+.BI "struct fi_info *fi_dupinfo(const struct fi_info *" info ");"
 .SH ARGUMENTS
 .IP "version"
 Interface version requested by application.
@@ -447,6 +449,10 @@ passive endpoints.
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned. Fabric errno values are defined in 
 .IR "rdma/fi_errno.h".
+.sp
+fi_dupinfo() duplicates a single fi_info structure and all the substructures
+within it and returns a pointer to the new fi_info strutcure.  This new fi_info
+structure must be freed via fi_freeinfo().  fi_getinfo() returns NULL on error.
 .SH "ERRORS"
 .IP "FI_EBADFLAGS"
 The specified endpoint or domain capability or operation flags are invalid. 

@@ -45,7 +45,7 @@
 #include "sock.h"
 
 static int sock_at_insert(struct fid_av *av, const void *addr, size_t count,
-			  fi_addr_t *fi_addr, uint64_t flags)
+			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	int i;
 	struct sock_av *_av;
@@ -79,7 +79,7 @@ static int sock_at_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	_av = container_of(av, struct sock_av, av_fid);
 	if (idx >= _av->count || idx < 0)
 		return -EINVAL;
-	memcpy(addr, &_av->table[idx], min(*addrlen, sizeof(struct sockaddr_in)));
+	memcpy(addr, &_av->table[idx], MIN(*addrlen, sizeof(struct sockaddr_in)));
 	*addrlen = sizeof(struct sockaddr_in);
 	return 0;
 }
@@ -91,7 +91,7 @@ static const char * sock_at_straddr(struct fid_av *av, const void *addr,
 }
 
 static int sock_am_insert(struct fid_av *av, const void *addr, size_t count,
-			  fi_addr_t *fi_addr, uint64_t flags)
+			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	const struct sockaddr_in *sin;
 	struct sockaddr_in *fin;
@@ -119,7 +119,7 @@ static int sock_am_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 static int sock_am_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			  size_t *addrlen)
 {
-	memcpy(addr, &fi_addr, min(*addrlen, sizeof(struct sockaddr_in)));
+	memcpy(addr, &fi_addr, MIN(*addrlen, sizeof(struct sockaddr_in)));
 	*addrlen = sizeof(struct sockaddr_in);
 	return 0;
 }

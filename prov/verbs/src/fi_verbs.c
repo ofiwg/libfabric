@@ -35,7 +35,6 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <asm/types.h>
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -58,6 +57,11 @@
 #include "fi.h"
 #include "fi_enosys.h"
 
+#define PROV_NAME "verbs"
+#define PROV_VERS FI_VERSION(0,7)
+
+#define PROV_WARN(fmt, ...) \
+	do { fprintf(stderr, "%s:%s: " fmt, PACKAGE, PROV_NAME, ##__VA_ARGS__); } while (0)
 
 struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
@@ -154,7 +158,7 @@ static int fi_ibv_check_hints(struct fi_info *hints)
 		}
 	}
 
-	if ( !(hints->caps & (FI_MSG | FI_RMA)) )
+	if (!(hints->caps & (FI_MSG | FI_RMA)) && hints->caps)
 		return -FI_ENODATA;
 
 	if (hints->fabric_attr && hints->fabric_attr->name &&
@@ -205,9 +209,9 @@ static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addr
 	return 0;
 }
 
- static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
+static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
 		 	  struct fi_info *fi)
- {
+{
  //	fi->sa_family = rai->ai_family;
 	if (rai->ai_qp_type == IBV_QPT_RC || rai->ai_port_space == RDMA_PS_TCP) {
 		fi->caps |= FI_MSG | FI_RMA;
@@ -235,7 +239,7 @@ static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addr
  	}
 
  	return 0;
- }
+}
 
 static int
 fi_ibv_getepinfo(const char *node, const char *service,
@@ -1364,9 +1368,6 @@ static int
 fi_ibv_msg_ep_getopt(fid_t fid, int level, int optname,
 		  void *optval, size_t *optlen)
 {
-	struct fi_ibv_msg_ep *ep;
-	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
-
 	switch (level) {
 	case FI_OPT_ENDPOINT:
 		return -FI_ENOPROTOOPT;
@@ -1380,9 +1381,6 @@ static int
 fi_ibv_msg_ep_setopt(fid_t fid, int level, int optname,
 		  const void *optval, size_t optlen)
 {
-	struct fi_ibv_msg_ep *ep;
-	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
-
 	switch (level) {
 	case FI_OPT_ENDPOINT:
 		return -FI_ENOPROTOOPT;
@@ -1449,6 +1447,7 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!_ep)
 		return -FI_ENOMEM;
 
+	fi = NULL;
 	if (!info->connreq) {
 		ret = fi_ibv_getepinfo(NULL, NULL, 0, info, &fi, &_ep->id);
 		if (ret)
@@ -1511,7 +1510,6 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	} else {
 		fi->ep_attr->protocol = FI_PROTO_RDMA_CM_IB_RC;
 	}
-	fi->caps = FI_MSG | FI_RMA;
 
 	fi->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(event->id));
 	if (!(fi->src_addr = malloc(fi->src_addrlen)))
@@ -1525,9 +1523,9 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 
 	if (!(fi->fabric_attr->name = strdup("RDMA")))
 		goto err;
-	if (!(fi->fabric_attr->prov_name = strdup("verbs")))
+	if (!(fi->fabric_attr->prov_name = strdup(PROV_NAME)))
 		goto err;
-	fi->fabric_attr->prov_version = FI_VERSION(0, 7);
+	fi->fabric_attr->prov_version = PROV_VERS;
 
 	if (!(fi->domain_attr->name = strdup(event->id->verbs->device->name)))
 		goto err;
@@ -1593,7 +1591,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	}
 
 	entry->fid = fid;
-	datalen = min(len - sizeof(*entry), cma_event->param.conn.private_data_len);
+	datalen = MIN(len - sizeof(*entry), cma_event->param.conn.private_data_len);
 	if (datalen)
 		memcpy(entry->data, cma_event->param.conn.private_data, datalen);
 	return sizeof(*entry) + datalen;
@@ -1802,7 +1800,7 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	struct fi_ibv_cq *_cq;
 
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
-	threshold = min((ssize_t) cond, count);
+	threshold = MIN((ssize_t) cond, count);
 
 	for (cur = 0; cur < threshold; ) {
 		ret = _cq->cq_fid.ops->read(cq, buf, count - cur);
@@ -2301,16 +2299,15 @@ static int
 fi_ibv_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_pep **pep, void *context)
 {
-	struct fi_ibv_fabric *fab;
 	struct fi_ibv_pep *_pep;
 	struct fi_info *fi;
 	int ret;
 
-	fab = container_of(fabric, struct fi_ibv_fabric, fabric_fid);
 	_pep = calloc(1, sizeof *_pep);
 	if (!_pep)
 		return -FI_ENOMEM;
 
+	fi = NULL;
 	ret = fi_ibv_getepinfo(NULL, NULL, FI_SOURCE, info, &fi, &_pep->id);
 	if (ret)
 		goto err;
@@ -2372,8 +2369,8 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void 
 }
 
 static struct fi_provider fi_ibv_prov = {
-	.name = "verbs",
-	.version = FI_VERSION(0, 7),
+	.name = PROV_NAME,
+	.version = PROV_VERS,
 	.getinfo = fi_ibv_getinfo,
 	.fabric = fi_ibv_fabric,
 };
