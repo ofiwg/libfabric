@@ -446,13 +446,14 @@ Indicates that the node and service parameters specify the local source
 address to associate with an endpoint.  This flag is often used with
 passive endpoints.
 .SH "RETURN VALUE"
-Returns 0 on success. On error, a negative value corresponding to fabric
-errno is returned. Fabric errno values are defined in 
+fi_getinfo() returns 0 on success. On error, fi_getinfo() returns
+a negative value corresponding to fabric errno. Fabric errno values are
+defined in
 .IR "rdma/fi_errno.h".
 .sp
 fi_dupinfo() duplicates a single fi_info structure and all the substructures
 within it and returns a pointer to the new fi_info strutcure.  This new fi_info
-structure must be freed via fi_freeinfo().  fi_getinfo() returns NULL on error.
+structure must be freed via fi_freeinfo().  fi_dupinfo() returns NULL on error.
 .SH "ERRORS"
 .IP "FI_EBADFLAGS"
 The specified endpoint or domain capability or operation flags are invalid. 
