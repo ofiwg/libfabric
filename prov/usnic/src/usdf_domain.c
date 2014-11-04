@@ -146,7 +146,7 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	udp->dom_fabric = fab;
 	pthread_spin_init(&udp->dom_usd_lock, PTHREAD_PROCESS_PRIVATE);
-	atomic_init(&udp->dom_refcnt);
+	atomic_init0(&udp->dom_refcnt);
 	atomic_inc(&fab->fab_refcnt);
 
 	*domain = &udp->dom_fid;
