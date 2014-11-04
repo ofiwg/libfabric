@@ -408,8 +408,8 @@ usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av->av_flags = attr->flags;
 	pthread_spin_init(&av->av_lock, PTHREAD_PROCESS_PRIVATE);
 
-	atomic_init(&av->av_refcnt);
-	atomic_init(&av->av_active_inserts);
+	atomic_init0(&av->av_active_inserts);
+	atomic_init0(&av->av_refcnt);
 	atomic_inc(&udp->dom_refcnt);
 	av->av_domain = udp;
 

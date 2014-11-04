@@ -40,12 +40,15 @@
 #include <string.h>
 #include <byteswap.h>
 #include <endian.h>
-#include <semaphore.h>
+#include <pthread.h>
 #include <string.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_prov.h>
 #include <rdma/fi_atomic.h>
 
+#ifdef HAVE_ATOMICS
+#  include <stdatomic.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -84,70 +87,91 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
 
-#if DEFINE_ATOMICS
+#if defined(HAVE_ATOMICS)
+#  define AT_VAL _Atomic int val
+#else
+#  define AT_VAL int val
+#endif
+
+#if defined(PT_LOCK_SPIN)
+
+#define fastlock_t pthread_spinlock_t
+#define fastlock_init(lock) pthread_spin_init(lock, PTHREAD_PROCESS_PRIVATE)
+#define fastlock_destroy(lock) pthread_spin_destroy(lock)
+#define fastlock_acquire(lock) pthread_spin_lock(lock)
+#define fastlock_release(lock) pthread_spin_unlock(lock)
+
+typedef struct { pthread_spinlock_t lock; AT_VAL; } atomic_t;
+
+#else /* default use mutex */
+
 #define fastlock_t pthread_mutex_t
 #define fastlock_init(lock) pthread_mutex_init(lock, NULL)
 #define fastlock_destroy(lock) pthread_mutex_destroy(lock)
 #define fastlock_acquire(lock) pthread_mutex_lock(lock)
 #define fastlock_release(lock) pthread_mutex_unlock(lock)
 
-typedef struct { pthread_mutex_t mut; int val; } atomic_t;
+typedef struct { pthread_mutex_t lock; AT_VAL; } atomic_t;
+
+#endif /* PT_LOCK_SPIN */
+
 static inline int atomic_inc(atomic_t *atomic)
 {
 	int v;
 
-	pthread_mutex_lock(&atomic->mut);
+	#ifdef HAVE_ATOMICS
+	v = atomic_fetch_add_explicit(&(atomic->val), 1, memory_order_acq_rel);
+	return v+1;
+	#endif
+
+	fastlock_acquire(&atomic->lock);
 	v = ++(atomic->val);
-	pthread_mutex_unlock(&atomic->mut);
+	fastlock_release(&atomic->lock);
 	return v;
 }
+
 static inline int atomic_dec(atomic_t *atomic)
 {
 	int v;
 
-	pthread_mutex_lock(&atomic->mut);
+	#ifdef HAVE_ATOMICS
+	v = atomic_fetch_sub_explicit(&(atomic->val), 1, memory_order_acq_rel);
+	return v-1;
+	#endif
+
+	fastlock_acquire(&atomic->lock);
 	v = --(atomic->val);
-	pthread_mutex_unlock(&atomic->mut);
+	fastlock_release(&atomic->lock);
 	return v;
 }
-static inline void atomic_init(atomic_t *atomic)
+
+static inline int atomic_set(atomic_t *atomic, int value)
 {
-	pthread_mutex_init(&atomic->mut, NULL);
+	int v;
+
+	#ifdef HAVE_ATOMICS
+	atomic_store(&(atomic->val), value);
+	return value;
+	#endif
+
+	fastlock_acquire(&atomic->lock);
+	v = (atomic->val) = value;
+	fastlock_release(&atomic->lock);
+	return v;
+}
+
+static inline void atomic_init0(atomic_t *atomic)
+{
+	#ifdef HAVE_ATOMICS
+	atomic_init(&(atomic->val), 0);
+	return;
+	#endif
+
+	fastlock_init(&atomic->lock);
 	atomic->val = 0;
 }
-#else
-typedef struct {
-	sem_t sem;
-	volatile int cnt;
-} fastlock_t;
-static inline void fastlock_init(fastlock_t *lock)
-{
-	sem_init(&lock->sem, 0, 0);
-	lock->cnt = 0;
-}
-static inline void fastlock_destroy(fastlock_t *lock)
-{
-	sem_destroy(&lock->sem);
-}
-static inline void fastlock_acquire(fastlock_t *lock)
-{
-	if (__sync_add_and_fetch(&lock->cnt, 1) > 1)
-		sem_wait(&lock->sem);
-}
-static inline void fastlock_release(fastlock_t *lock)
-{
-	if (__sync_sub_and_fetch(&lock->cnt, 1) > 0)
-		sem_post(&lock->sem);
-}
-
-typedef struct { volatile int val; } atomic_t;
-#define atomic_inc(v) (__sync_add_and_fetch(&(v)->val, 1))
-#define atomic_dec(v) (__sync_sub_and_fetch(&(v)->val, 1))
-#define atomic_init(v) ((v)->val = 0)
-#endif /* DEFINE_ATOMICS */
 
 #define atomic_get(v) ((v)->val)
-#define atomic_set(v, s) ((v)->val = s)
 
 /* non exported symbols */
 int fi_init(void);
