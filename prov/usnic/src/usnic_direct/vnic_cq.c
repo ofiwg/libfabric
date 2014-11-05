@@ -40,8 +40,9 @@
  *
  *
  */
-#ident "$Id: vnic_cq.c 75830 2011-04-20 20:12:00Z umalhi $"
+#ident "$Id: vnic_cq.c 171146 2014-05-02 07:08:20Z ssujith $"
 
+#ifndef ENIC_PMD
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -49,6 +50,7 @@
 
 #ifndef FOR_UPSTREAM_KERNEL
 #include "kcompat.h"
+#endif
 #endif
 #include "vnic_dev.h"
 #include "vnic_cq.h"
@@ -73,9 +75,16 @@ void vnic_cq_free(struct vnic_cq *cq)
 }
 
 int vnic_cq_alloc(struct vnic_dev *vdev, struct vnic_cq *cq, unsigned int index,
+#ifdef ENIC_PMD
+	unsigned int socket_id,  
+#endif
 	unsigned int desc_count, unsigned int desc_size)
 {
 	int err;
+#ifdef ENIC_PMD
+	char res_name[NAME_MAX];
+        static int instance = 0;
+#endif
 
 	cq->index = index;
 	cq->vdev = vdev;
@@ -86,7 +95,13 @@ int vnic_cq_alloc(struct vnic_dev *vdev, struct vnic_cq *cq, unsigned int index,
 		return -EINVAL;
 	}
 
+#ifdef ENIC_PMD
+	snprintf(res_name, sizeof(res_name), "%d-cq-%d", instance++, index);
+	err = vnic_dev_alloc_desc_ring(vdev, &cq->ring, desc_count, desc_size, 
+		socket_id, res_name);
+#else
 	err = vnic_dev_alloc_desc_ring(vdev, &cq->ring, desc_count, desc_size);
+#endif
 	if (err)
 		return err;
 

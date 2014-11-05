@@ -90,6 +90,7 @@ usd_ib_get_devlist(
 
     /* Check dir entries for USNIC devices */
     last_idp = NULL;
+    fd = -1;
     while ((dent = readdir(class_dir)) != NULL) {
 
         /* skip "." and ".." */
@@ -104,7 +105,8 @@ usd_ib_get_devlist(
         rc = stat(dev_path, &sbuf);
         if (rc != 0) {
             usd_perror(dev_path);
-            return -errno;
+            rc = -errno;
+            goto out;
         }
 
         /* Must be a directory */
@@ -116,22 +118,28 @@ usd_ib_get_devlist(
         fd = open(ibdev_path, O_RDONLY);
         if (fd == -1) {
             usd_perror(ibdev_path);
-            return -errno;
+            rc = -errno;
+            goto out;
         }
         n = read(fd, ibdev_buf, sizeof(ibdev_buf));
         if (n == -1) {
             usd_perror("reading ibdev");
-            return -errno;
+            rc = -errno;
+            goto out;
         }
         close(fd);
-        ibdev_buf[n - 1] = '\0';       /* newline -> EOF */
+        fd = -1;
+        if (n > 0 && ibdev_buf[n - 1] == '\n') {
+            ibdev_buf[n - 1] = '\0';       /* newline -> EOF */
+        }
 
         /* If USNIC device, remember this one */
         if (strncmp(ibdev_buf, "usnic", 5) == 0) {
             idp = calloc(sizeof(*idp), 1);
             if (idp == NULL) {
                 usd_perror("calloc IB device");
-                return -errno;
+                rc = -errno;
+                goto out;
             }
             strncpy(idp->id_name, dent->d_name, sizeof(idp->id_name));
             strncpy(idp->id_usnic_name, ibdev_buf,
@@ -150,12 +158,18 @@ usd_ib_get_devlist(
             last_idp = idp;
         }
     }
+    rc = 0;
 
+out:
     /* clean up */
-    if (class_dir != NULL)
+    if (class_dir != NULL) {
         closedir(class_dir);
+    }
+    if (fd != -1) {
+        close(fd);
+    }
 
-    return 0;
+    return rc;
 }
 
 /*

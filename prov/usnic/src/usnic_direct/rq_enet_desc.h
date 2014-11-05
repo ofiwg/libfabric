@@ -40,7 +40,7 @@
  *
  *
  */
-#ident "$Id: rq_enet_desc.h 59839 2010-09-27 20:36:31Z roprabhu $"
+#ident "$Id$"
 
 #ifndef _RQ_ENET_DESC_H_
 #define _RQ_ENET_DESC_H_

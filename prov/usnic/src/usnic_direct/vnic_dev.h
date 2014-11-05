@@ -40,7 +40,7 @@
  *
  *
  */
-#ident "$Id: vnic_dev.h 152086 2013-11-29 06:39:27Z nalreddy $"
+#ident "$Id$"
 
 #ifndef _VNIC_DEV_H_
 #define _VNIC_DEV_H_
@@ -48,6 +48,10 @@
 #ifdef __KERNEL__
 #include <asm/io.h>
 #endif	/* __KERNEL__ */
+#ifdef ENIC_PMD
+#include "enic_compat.h"
+#include "rte_pci.h"
+#endif
 #include "vnic_resource.h"
 #include "vnic_devcmd.h"
 
@@ -102,6 +106,12 @@ struct vnic_dev_ring {
 	unsigned int desc_avail;
 };
 
+struct vnic_dev_iomap_info {
+	dma_addr_t bus_addr;
+	unsigned long len;
+	void __iomem *vaddr;
+};
+
 struct vnic_dev;
 struct vnic_stats;
 
@@ -110,21 +120,33 @@ unsigned int vnic_dev_get_res_count(struct vnic_dev *vdev,
 	enum vnic_res_type type);
 void __iomem *vnic_dev_get_res(struct vnic_dev *vdev, enum vnic_res_type type,
 	unsigned int index);
-#ifndef FOR_UPSTREAM_KERNEL
 dma_addr_t vnic_dev_get_res_bus_addr(struct vnic_dev *vdev,
 	enum vnic_res_type type, unsigned int index);
+uint8_t vnic_dev_get_res_bar(struct vnic_dev *vdev,
+	enum vnic_res_type type);
+uint32_t vnic_dev_get_res_offset(struct vnic_dev *vdev,
+	enum vnic_res_type type, unsigned int index);
+unsigned long vnic_dev_get_res_type_len(struct vnic_dev *vdev,
+					enum vnic_res_type type);
+#ifndef FOR_UPSTREAM_KERNEL
 unsigned int vnic_dev_desc_ring_size(struct vnic_dev_ring *ring,
 	unsigned int desc_count, unsigned int desc_size);
 #endif
 void vnic_dev_clear_desc_ring(struct vnic_dev_ring *ring);
+#ifdef ENIC_PMD
+int vnic_dev_alloc_desc_ring(struct vnic_dev *vdev, struct vnic_dev_ring *ring,
+	unsigned int desc_count, unsigned int desc_size, unsigned int socket_id,
+        char *z_name);
+#else
 int vnic_dev_alloc_desc_ring(struct vnic_dev *vdev, struct vnic_dev_ring *ring,
 	unsigned int desc_count, unsigned int desc_size);
+#endif
 void vnic_dev_free_desc_ring(struct vnic_dev *vdev,
 	struct vnic_dev_ring *ring);
 int vnic_dev_cmd(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
 	u64 *a0, u64 *a1, int wait);
 int vnic_dev_cmd_args(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
-		                u64 *args, int nargs, int wait);
+                               u64 *args, int nargs, int wait);
 void vnic_dev_cmd_proxy_by_index_start(struct vnic_dev *vdev, u16 index);
 #ifndef FOR_UPSTREAM_KERNEL
 void vnic_dev_cmd_proxy_by_bdf_start(struct vnic_dev *vdev, u16 bdf);
@@ -201,10 +223,22 @@ u32 vnic_dev_get_intr_coal_timer_max(struct vnic_dev *vdev);
 void vnic_dev_unregister(struct vnic_dev *vdev);
 int vnic_dev_set_ig_vlan_rewrite_mode(struct vnic_dev *vdev,
 	u8 ig_vlan_rewrite_mode);
+#ifdef ENIC_PMD
+struct vnic_dev *vnic_dev_register(struct vnic_dev *vdev,
+	void *priv, struct rte_pci_device *pdev, struct vnic_dev_bar *bar,
+	unsigned int num_bars);
+struct rte_pci_device *vnic_dev_get_pdev(struct vnic_dev *vdev);
+#else
+struct vnic_dev *vnic_dev_alloc_discover(struct vnic_dev *vdev,
+	void *priv, struct pci_dev *pdev, struct vnic_dev_bar *bar,
+	unsigned int num_bars);
 struct vnic_dev *vnic_dev_register(struct vnic_dev *vdev,
 	void *priv, struct pci_dev *pdev, struct vnic_dev_bar *bar,
 	unsigned int num_bars);
+void vnic_dev_upd_res_vaddr(struct vnic_dev *vdev, struct vnic_dev_iomap_info *maps);
 struct pci_dev *vnic_dev_get_pdev(struct vnic_dev *vdev);
+#endif
+int vnic_dev_cmd_init(struct vnic_dev *vdev, int fallback);
 #ifndef NOT_FOR_OPEN_SOURCE
 int vnic_dev_get_size(void);
 int vnic_dev_int13(struct vnic_dev *vdev, u64 arg, u32 op);
@@ -217,5 +251,10 @@ int vnic_dev_enable2_done(struct vnic_dev *vdev, int *status);
 int vnic_dev_deinit_done(struct vnic_dev *vdev, int *status);
 int vnic_dev_set_mac_addr(struct vnic_dev *vdev, u8 *mac_addr);
 int vnic_dev_classifier(struct vnic_dev *vdev, u8 cmd, u16 *entry, struct filter *data);
-
+#ifdef ENIC_VXLAN
+int vnic_dev_overlay_offload_enable_disable(struct vnic_dev *vdev,
+	u8 overlay, u8 config);
+int vnic_dev_overlay_offload_cfg(struct vnic_dev *vdev, u8 overlay,
+	u16 vxlan_udp_port_number);
+#endif
 #endif /* _VNIC_DEV_H_ */

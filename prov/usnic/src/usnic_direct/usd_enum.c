@@ -123,6 +123,8 @@ const char *usd_capability(enum usd_capability cap)
 {
     switch (cap) {
     case USD_CAP_CQ_SHARING: return "USD_CAP_CQ_SHARING";
+    case USD_CAP_MAP_PER_RES: return "USD_CAP_MAP_PER_RES";
+    case USD_CAP_PIO: return "USD_CAP_PIO";
     case USD_CAP_MAX:        return "USD_CAP_MAX";
     default:                 return "UNKNOWN";
     }

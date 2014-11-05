@@ -40,7 +40,7 @@
  *
  *
  */
-#ident "$Id: cq_desc.h 129574 2013-04-26 22:11:14Z rfaucett $"
+#ident "$Id$"
 
 #ifndef _CQ_DESC_H_
 #define _CQ_DESC_H_

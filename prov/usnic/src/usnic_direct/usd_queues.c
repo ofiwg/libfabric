@@ -56,6 +56,7 @@
 #include "wq_enet_desc.h"
 #include "rq_enet_desc.h"
 
+#include "usnic_abi.h"
 #include "usnic_direct.h"
 #include "usd.h"
 #include "usd_ib_cmd.h"
@@ -73,6 +74,7 @@ usd_unmap_vf(
     struct usd_device *dev,
     struct usd_vf *vf)
 {
+    uint32_t i;
     --vf->vf_refcnt;
 
     if (vf->vf_refcnt == 0) {
@@ -87,11 +89,66 @@ usd_unmap_vf(
 
         if (vf->vf_vdev != NULL)
             vnic_dev_unregister(vf->vf_vdev);
-        if (vf->vf_bar0.vaddr != MAP_FAILED)
+        if (vf->vf_bar0.vaddr != MAP_FAILED) {
             munmap(vf->vf_bar0.vaddr, vf->vf_bar0.len);
+        }
+        for (i = 0; i < sizeof(vf->iomaps)/sizeof(vf->iomaps[0]); i++) {
+            if (vf->iomaps[i].bus_addr != 0 &&
+                    vf->iomaps[i].vaddr != MAP_FAILED) {
+                munmap(vf->iomaps[i].vaddr, vf->iomaps[i].len);
+            }
+        }
 
         free(vf);
     }
+}
+
+static int
+usd_map_one_res(struct usd_device *dev, struct usd_vf *vf,
+                    struct usnic_vnic_barres_info *barres)
+{
+    struct vnic_dev_iomap_info* iomap;
+    off64_t offset;
+    uint64_t page_size = sysconf(_SC_PAGE_SIZE);
+
+    iomap = &vf->iomaps[barres->type];
+    iomap->bus_addr = barres->bus_addr;
+    iomap->len = (barres->len + (page_size - 1)) & (~(page_size - 1));
+
+    offset = USNIC_ENCODE_PGOFF(vf->vf_id, USNIC_MMAP_RES, barres->type);
+    iomap->vaddr = mmap64(NULL, iomap->len, PROT_READ + PROT_WRITE,
+                        MAP_SHARED, dev->ud_ib_dev_fd, offset);
+    if (iomap->vaddr == MAP_FAILED) {
+        usd_err("Failed to map res type %d, bus_addr 0x%lx, len 0x%lx\n",
+                barres->type, iomap->bus_addr, iomap->len);
+        return -errno;
+    }
+    vnic_dev_upd_res_vaddr(vf->vf_vdev, iomap);
+
+    return 0;
+}
+
+static int
+usd_map_vnic_res(struct usd_device *dev, struct usd_vf *vf,
+                    struct usd_vf_info *vfip)
+{
+    int i, err;
+
+    /* unmap bar0 */
+    if (vf->vf_bar0.vaddr != MAP_FAILED) {
+        munmap(vf->vf_bar0.vaddr, vf->vf_bar0.len);
+        vf->vf_bar0.vaddr = MAP_FAILED;
+    }
+
+    for (i = RES_TYPE_EOL + 1; i < RES_TYPE_MAX; i++) {
+        if (vfip->barres[i].bus_addr != 0) {
+            err = usd_map_one_res(dev, vf, &vfip->barres[i]);
+            if (err)
+                return err;
+        }
+    }
+
+    return 0;
 }
 
 /*
@@ -105,6 +162,7 @@ usd_map_vf(
     struct usd_vf **vf_o)
 {
     struct usd_vf *vf;
+    off64_t offset;
     int ret;
 
     /* find matching VF */
@@ -128,23 +186,36 @@ usd_map_vf(
         vf->vf_bar0.bus_addr = vfip->vi_bar_bus_addr;
         vf->vf_bar0.len = vfip->vi_bar_len;
 
-        /* map the BAR */
-        vf->vf_bar0.vaddr = mmap(NULL, vf->vf_bar0.len,
+        /* map BAR0 first to get res info */
+        offset = USNIC_ENCODE_PGOFF(vf->vf_id, USNIC_MMAP_BAR, 0);
+        vf->vf_bar0.vaddr = mmap64(NULL, vf->vf_bar0.len,
                                  PROT_READ + PROT_WRITE, MAP_SHARED,
                                  dev->ud_ib_dev_fd,
-                                 vf->vf_id * sysconf(_SC_PAGE_SIZE));
+                                 offset);
         if (vf->vf_bar0.vaddr == MAP_FAILED) {
+            usd_err("Failed to map bar0\n");
             ret = -errno;
             goto out;
         }
 
         /* Register it */
-        vf->vf_vdev = vnic_dev_register(NULL, NULL, (void *)dev,
+        vf->vf_vdev = vnic_dev_alloc_discover(NULL, NULL, (void *)dev,
                                         &vf->vf_bar0, 1);
         if (vf->vf_vdev == NULL) {
             ret = -ENOENT;
             goto out;
         }
+
+        /* map individual vnic resource seperately */
+        if (dev->ud_caps[USNIC_CAP_MAP_PER_RES] > 0) {
+            ret = usd_map_vnic_res(dev, vf, vfip);
+            if (ret)
+                goto out;
+        }
+
+        ret = vnic_dev_cmd_init(vf->vf_vdev, 0);
+        if (ret)
+            goto out;
 
         /* link it in */
         vf->vf_next = dev->ud_vf_list;
@@ -291,20 +362,23 @@ usd_create_wq_pio(
     uint64_t pio_paddr;
     uint64_t ivaddr;
     struct usd_wq *wq;
+    struct usd_device *dev;
     int ret;
 
-    pio_memsize = vnic_dev_get_res_count(qp->uq_vf->vf_vdev, RES_TYPE_MEM);
-printf("pio_memsize = %d\n", pio_memsize);
-    if (pio_memsize == 0)
-        return -ENXIO;
+    dev = qp->uq_dev;
+    if (dev->ud_caps[USNIC_CAP_PIO] == 0 ||
+        vnic_dev_get_res_bus_addr(qp->uq_vf->vf_vdev, RES_TYPE_MEM, 0) == 0) {
+        usd_err("dev does not support PIO\n");
+        return -ENODEV;
+    }
 
+    pio_memsize = vnic_dev_get_res_count(qp->uq_vf->vf_vdev, RES_TYPE_MEM);
     pio_vaddr = vnic_dev_get_res(qp->uq_vf->vf_vdev, RES_TYPE_MEM, 0);
 
     ret = usd_get_devspec(qp);
     if (ret != 0)
         return ret;
     pio_paddr = qp->uq_attrs.uqa_pio_paddr;
-printf("pio_paddr = 0x%lx\n", pio_paddr);
 
     /* 512-byte alignment must match */
     if ((((uint64_t)pio_vaddr ^ pio_paddr) & 511) != 0) {
@@ -335,13 +409,11 @@ printf("pio_paddr = 0x%lx\n", pio_paddr);
     ret = usd_alloc_mr(qp->uq_dev, ring_size, (void **)&wq->uwq_desc_ring);
     if (ret != 0)
         return ret;
-printf("desc_ring = %p, v_ring = %p, p_ring = 0x%lx\n", wq->uwq_desc_ring, wq->pio_v_wq_addr, wq->pio_p_wq_addr);
 
     /* packet buffer */
     wq->pio_v_pkt_buf = (void *)ivaddr;
     wq->pio_p_pkt_buf = pio_paddr + ivaddr - (uint64_t)pio_vaddr;
     ivaddr += wq->uwq_num_entries * 256;
-printf("v_pkt = %p, p_pkt = 0x%lx\n", wq->pio_v_pkt_buf, wq->pio_p_pkt_buf);
 
     used_size = ivaddr - (uintptr_t)pio_vaddr;
     if (used_size > pio_memsize) {
@@ -352,8 +424,6 @@ printf("v_pkt = %p, p_pkt = 0x%lx\n", wq->pio_v_pkt_buf, wq->pio_p_pkt_buf);
     ret = usd_vnic_wq_init(wq, qp->uq_vf, wq->pio_p_wq_addr);
     if (ret != 0)
         goto out;
-
-printf("sudo sh -c \"echo 'base=0x%lx size=0x40000 type=write-combining' >| /proc/mtrr\"\n", (unsigned long)vnic_dev_get_res_bus_addr(qp->uq_vf->vf_vdev, RES_TYPE_MEM, 0));
 
     return 0;
 
@@ -906,6 +976,7 @@ usd_create_qp_normal(
      * instanstiate the filter in the VIC yet, need to bring the
      * verbs QP up to RTR state for that
      */
+    memset(&vf_info, 0, sizeof(vf_info));
     ret = usd_ib_cmd_create_qp(dev, qp, &vf_info);
     if (ret != 0) {
         goto fail;

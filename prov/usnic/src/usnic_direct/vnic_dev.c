@@ -40,7 +40,7 @@
  *
  *
  */
-#ident "$Id: vnic_dev.c 152086 2013-11-29 06:39:27Z nalreddy $"
+#ident "$Id$"
 
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -56,6 +56,7 @@
 #include "vnic_devcmd.h"
 #include "vnic_dev.h"
 #include "vnic_stats.h"
+#include "vnic_wq.h"
 
 enum vnic_proxy_type {
 	PROXY_NONE,
@@ -67,6 +68,9 @@ struct vnic_res {
 	void __iomem *vaddr;
 	dma_addr_t bus_addr;
 	unsigned int count;
+	u8 bar_num;
+	u32 bar_offset;
+	unsigned long len;
 };
 
 struct vnic_intr_coal_timer_info {
@@ -94,6 +98,8 @@ struct vnic_dev {
 	u32 proxy_index;
 	u64 args[VNIC_DEVCMD_NARGS];
 	struct vnic_intr_coal_timer_info intr_coal_timer_info;
+
+	int (*devcmd_rtn)(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd, int wait);
 };
 
 #define VNIC_MAX_RES_HDR_SIZE \
@@ -113,6 +119,7 @@ int vnic_dev_get_size(void)
 }
 
 #endif
+
 static int vnic_dev_discover_res(struct vnic_dev *vdev,
 	struct vnic_dev_bar *bar, unsigned int num_bars)
 {
@@ -155,7 +162,6 @@ static int vnic_dev_discover_res(struct vnic_dev *vdev,
 	else
 		r = (struct vnic_resource __iomem *)(rh + 1);
 
-
 	while ((type = ioread8(&r->type)) != RES_TYPE_EOL) {
 
 		u8 bar_num = ioread8(&r->bar);
@@ -188,17 +194,17 @@ static int vnic_dev_discover_res(struct vnic_dev *vdev,
 				return -EINVAL;
 			}
 			break;
+		case RES_TYPE_MEM:
 		case RES_TYPE_INTR_PBA_LEGACY:
 #ifdef CONFIG_MIPS
 		case RES_TYPE_DEV:
 #endif
+		case RES_TYPE_DEVCMD2:
 		case RES_TYPE_DEVCMD:
 #ifdef ENIC_UPT
 		case RES_TYPE_PASS_THRU_PAGE:
 #endif
 			len = count;
-			break;
-		case RES_TYPE_MEM:
 			break;
 		default:
 			continue;
@@ -208,10 +214,40 @@ static int vnic_dev_discover_res(struct vnic_dev *vdev,
 		vdev->res[type].vaddr = (char __iomem *)bar[bar_num].vaddr +
 			bar_offset;
 		vdev->res[type].bus_addr = bar[bar_num].bus_addr + bar_offset;
+		vdev->res[type].bar_num = bar_num;
+		vdev->res[type].bar_offset = bar_offset;
+		vdev->res[type].len = len;
 	}
 
 	return 0;
 }
+
+/*
+ * Assign virtual addresses to all resources whose bus address falls
+ * within the specified map.
+ * vnic_dev_discover_res assigns res vaddrs based on the assumption that
+ * the entire bar is mapped once. When memory regions on the bar
+ * are mapped seperately, the vnic res for those regions need to be updated
+ * with new virutal addresses.
+ * Notice that the mapping and virtual address update need to be done before
+ * other VNIC APIs that might use the old virtual address,
+ * such as vdev->devcmd
+ */
+void vnic_dev_upd_res_vaddr(struct vnic_dev *vdev,
+		struct vnic_dev_iomap_info *map)
+{
+	int i;
+
+	for (i = RES_TYPE_EOL + 1; i < RES_TYPE_MAX; i++) {
+		if (vdev->res[i].bus_addr >= map->bus_addr &&
+			vdev->res[i].bus_addr < map->bus_addr + map->len)
+			vdev->res[i].vaddr = map->vaddr +
+					(vdev->res[i].bus_addr - map->bus_addr);
+	}
+}
+#ifdef EXPORT_SYMBOL_FOR_USNIC
+EXPORT_SYMBOL(vnic_dev_upd_res_vaddr);
+#endif
 
 unsigned int vnic_dev_get_res_count(struct vnic_dev *vdev,
 	enum vnic_res_type type)
@@ -243,7 +279,6 @@ void __iomem *vnic_dev_get_res(struct vnic_dev *vdev, enum vnic_res_type type,
 EXPORT_SYMBOL(vnic_dev_get_res);
 #endif
 
-#ifndef FOR_UPSTREAM_KERNEL
 dma_addr_t vnic_dev_get_res_bus_addr(struct vnic_dev *vdev,
 	enum vnic_res_type type, unsigned int index)
 {
@@ -258,8 +293,49 @@ dma_addr_t vnic_dev_get_res_bus_addr(struct vnic_dev *vdev,
 		return vdev->res[type].bus_addr;
 	}
 }
-
+#ifdef EXPORT_SYMBOL_FOR_USNIC
+EXPORT_SYMBOL(vnic_dev_get_res_bus_addr);
 #endif
+
+uint8_t vnic_dev_get_res_bar(struct vnic_dev *vdev,
+	enum vnic_res_type type)
+{
+	return vdev->res[type].bar_num;
+}
+#ifdef EXPORT_SYMBOL_FOR_USNIC
+EXPORT_SYMBOL(vnic_dev_get_res_bar);
+#endif
+
+uint32_t vnic_dev_get_res_offset(struct vnic_dev *vdev,
+	enum vnic_res_type type, unsigned int index)
+{
+	switch (type) {
+	case RES_TYPE_WQ:
+	case RES_TYPE_RQ:
+	case RES_TYPE_CQ:
+	case RES_TYPE_INTR_CTRL:
+		return vdev->res[type].bar_offset +
+			index * VNIC_RES_STRIDE;
+	default:
+		return vdev->res[type].bar_offset;
+	}
+}
+#ifdef EXPORT_SYMBOL_FOR_USNIC
+EXPORT_SYMBOL(vnic_dev_get_res_offset);
+#endif
+
+/*
+ * Get the length of the res type
+ */
+unsigned long vnic_dev_get_res_type_len(struct vnic_dev *vdev,
+					enum vnic_res_type type)
+{
+	return vdev->res[type].len;
+}
+#ifdef EXPORT_SYMBOL_FOR_USNIC
+EXPORT_SYMBOL(vnic_dev_get_res_type_len);
+#endif
+
 #ifdef FOR_UPSTREAM_KERNEL
 static unsigned int vnic_dev_desc_ring_size(struct vnic_dev_ring *ring,
 #else
@@ -419,6 +495,41 @@ static int _vnic_dev_cmd(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
 #endif
 }
 
+static int vnic_dev_init_devcmdorig(struct vnic_dev *vdev)
+{
+#if !defined(CONFIG_MIPS) && !defined(MGMT_VNIC)
+	vdev->devcmd = vnic_dev_get_res(vdev, RES_TYPE_DEVCMD, 0);
+	if (!vdev->devcmd)
+		return -ENODEV;
+
+	vdev->devcmd_rtn = &_vnic_dev_cmd;
+	return 0;
+#else
+	return 0;
+#endif
+}
+
+int vnic_dev_cmd_args(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
+               u64 *args, int nargs, int wait)
+{
+       int err;
+       int i;
+
+       if (nargs > VNIC_DEVCMD_NARGS) {
+               nargs = VNIC_DEVCMD_NARGS;
+       }
+       for (i = 0; i < nargs; ++i) {
+               vdev->args[i] = args[i];
+       }
+
+       err = _vnic_dev_cmd(vdev, cmd, wait);
+
+       for (i = 0; i < nargs; ++i) {
+               args[i] = vdev->args[i];
+       }
+       return err;
+}
+
 static int vnic_dev_cmd_proxy(struct vnic_dev *vdev,
 	enum vnic_devcmd_cmd proxy_cmd, enum vnic_devcmd_cmd cmd,
 	u64 *a0, u64 *a1, int wait)
@@ -433,7 +544,7 @@ static int vnic_dev_cmd_proxy(struct vnic_dev *vdev,
 	vdev->args[2] = *a0;
 	vdev->args[3] = *a1;
 
-	err = _vnic_dev_cmd(vdev, proxy_cmd, wait);
+	err = (*vdev->devcmd_rtn)(vdev, proxy_cmd, wait);
 	if (err)
 		return err;
 
@@ -460,32 +571,11 @@ static int vnic_dev_cmd_no_proxy(struct vnic_dev *vdev,
 	vdev->args[0] = *a0;
 	vdev->args[1] = *a1;
 
-	err = _vnic_dev_cmd(vdev, cmd, wait);
+	err = (*vdev->devcmd_rtn)(vdev, cmd, wait);
 
 	*a0 = vdev->args[0];
 	*a1 = vdev->args[1];
 
-	return err;
-}
-
-int vnic_dev_cmd_args(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
-		u64 *args, int nargs, int wait)
-{
-	int err;
-	int i;
-
-	if (nargs > VNIC_DEVCMD_NARGS) {
-		nargs = VNIC_DEVCMD_NARGS;
-	}
-	for (i = 0; i < nargs; ++i) {
-		vdev->args[i] = args[i];
-	}
-
-	err = _vnic_dev_cmd(vdev, cmd, wait);
-
-	for (i = 0; i < nargs; ++i) {
-		args[i] = vdev->args[i];
-	}
 	return err;
 }
 
@@ -1014,6 +1104,21 @@ int vnic_dev_notify_unsetcmd(struct vnic_dev *vdev)
 
 int vnic_dev_notify_unset(struct vnic_dev *vdev)
 {
+#ifdef __VMKLNX__	
+	struct vnic_devcmd_notify *notify_tmp = vdev->notify;
+	dma_addr_t notify_pa_tmp = vdev->notify_pa;
+	int r;
+	
+	r = vnic_dev_notify_unsetcmd(vdev);
+	if (notify_tmp) {
+		pci_free_consistent(vdev->pdev,
+			sizeof(struct vnic_devcmd_notify),
+			notify_tmp,
+			notify_pa_tmp);
+	}
+
+	return r;
+#else 
 	if (vdev->notify) {
 		pci_free_consistent(vdev->pdev,
 			sizeof(struct vnic_devcmd_notify),
@@ -1022,6 +1127,7 @@ int vnic_dev_notify_unset(struct vnic_dev *vdev)
 	}
 
 	return vnic_dev_notify_unsetcmd(vdev);
+#endif       	
 }
 
 static int vnic_dev_notify_ready(struct vnic_dev *vdev)
@@ -1135,7 +1241,7 @@ int vnic_dev_intr_coal_timer_info(struct vnic_dev *vdev)
 	memset(vdev->args, 0, sizeof(vdev->args));
 
 	if (vnic_dev_capable(vdev, CMD_INTR_COAL_CONVERT))
-		err = _vnic_dev_cmd(vdev, CMD_INTR_COAL_CONVERT, wait);
+		err = (*vdev->devcmd_rtn)(vdev, CMD_INTR_COAL_CONVERT, wait);
 	else
 		err = ERR_ECMDUNKNOWN;
 
@@ -1280,6 +1386,7 @@ void vnic_dev_unregister(struct vnic_dev *vdev)
 			pci_free_consistent(vdev->pdev,
 				sizeof(struct vnic_devcmd_fw_info),
 				vdev->fw_info, vdev->fw_info_pa);
+
 		kfree(vdev);
 	}
 }
@@ -1287,7 +1394,7 @@ void vnic_dev_unregister(struct vnic_dev *vdev)
 EXPORT_SYMBOL(vnic_dev_unregister);
 #endif
 
-struct vnic_dev *vnic_dev_register(struct vnic_dev *vdev,
+struct vnic_dev *vnic_dev_alloc_discover(struct vnic_dev *vdev,
 	void *priv, struct pci_dev *pdev, struct vnic_dev_bar *bar,
 	unsigned int num_bars)
 {
@@ -1303,16 +1410,32 @@ struct vnic_dev *vnic_dev_register(struct vnic_dev *vdev,
 	if (vnic_dev_discover_res(vdev, bar, num_bars))
 		goto err_out;
 
-#if !defined(CONFIG_MIPS) && !defined(MGMT_VNIC)
-	vdev->devcmd = vnic_dev_get_res(vdev, RES_TYPE_DEVCMD, 0);
-	if (!vdev->devcmd)
-		goto err_out;
-#endif
-
 	return vdev;
 
 err_out:
 	vnic_dev_unregister(vdev);
+	return NULL;
+}
+#ifdef EXPORT_SYMBOL_FOR_USNIC
+EXPORT_SYMBOL(vnic_dev_alloc_discover);
+#endif
+
+struct vnic_dev *vnic_dev_register(struct vnic_dev *vdev,
+	void *priv, struct pci_dev *pdev, struct vnic_dev_bar *bar,
+	unsigned int num_bars)
+{
+	vdev = vnic_dev_alloc_discover(vdev, priv, pdev, bar, num_bars);
+	if (!vdev)
+		goto err_out;
+
+	if (vnic_dev_init_devcmdorig(vdev))
+		goto err_free;
+
+	return vdev;
+
+err_free:
+	vnic_dev_unregister(vdev);
+err_out:
 	return NULL;
 }
 #ifdef EXPORT_SYMBOL_FOR_USNIC
@@ -1326,6 +1449,15 @@ struct pci_dev *vnic_dev_get_pdev(struct vnic_dev *vdev)
 #ifdef EXPORT_SYMBOL_FOR_USNIC
 EXPORT_SYMBOL(vnic_dev_get_pdev);
 #endif
+
+int vnic_dev_cmd_init(struct vnic_dev *vdev, int UNUSED(fallback))
+{
+#if !defined(CONFIG_MIPS) && !defined(MGMT_VNIC)
+	return vnic_dev_init_devcmdorig(vdev);
+#else
+	return 0;
+#endif
+}
 
 #ifndef NOT_FOR_OPEN_SOURCE
 int vnic_dev_int13(struct vnic_dev *vdev, u64 arg, u32 op)
@@ -1427,7 +1559,7 @@ int vnic_dev_set_mac_addr(struct vnic_dev *vdev, u8 *mac_addr)
  *  @entry: In case of ADD filter, the caller passes the RQ number in this variable.
  *             This function stores the filter_id returned by the
  *             firmware in the same variable before return;
- * 
+ *
  *            In case of DEL filter, the caller passes the RQ number. Return
  *            value is irrelevant.
  * @data: filter data
@@ -1437,13 +1569,13 @@ int vnic_dev_classifier(struct vnic_dev *vdev, u8 cmd, u16 *entry, struct filter
 	u64 a0, a1;
 	int wait = 1000;
 	dma_addr_t tlv_pa;
-	int ret = -EINVAL;   
+	int ret = -EINVAL;
 	struct filter_tlv *tlv, *tlv_va;
 	struct filter_action *action;
 	u64 tlv_size;
-	
+
 	if (cmd == CLSF_ADD) {
-		tlv_size = sizeof(struct filter) + 
+		tlv_size = sizeof(struct filter) +
 			   sizeof(struct filter_action) +
 			   2*sizeof(struct filter_tlv);
 		tlv_va = pci_alloc_consistent(vdev->pdev, tlv_size, &tlv_pa);
@@ -1460,20 +1592,48 @@ int vnic_dev_classifier(struct vnic_dev *vdev, u8 cmd, u16 *entry, struct filter
 		tlv = (struct filter_tlv *)((char *)tlv +
 					 sizeof(struct filter_tlv) +
 					 sizeof(struct filter));
-			
+
 		tlv->type = CLSF_TLV_ACTION;
 		tlv->length = sizeof (struct filter_action);
 		action = (struct filter_action *)&tlv->val;
 		action->type = FILTER_ACTION_RQ_STEERING;
 		action->u.rq_idx = *entry;
-		
+
 		ret = vnic_dev_cmd(vdev, CMD_ADD_FILTER, &a0, &a1, wait);
-		*entry = (u16)a0; 
+		*entry = (u16)a0;
 		pci_free_consistent(vdev->pdev, tlv_size, tlv_va, tlv_pa);
 	} else if (cmd == CLSF_DEL) {
 		a0 = *entry;
 		ret = vnic_dev_cmd(vdev, CMD_DEL_FILTER, &a0, &a1, wait);
 	}
-	
+
 	return ret;
 }
+#ifdef ENIC_VXLAN
+int vnic_dev_overlay_offload_enable_disable(struct vnic_dev *vdev, u8 overlay,
+	u8 config)
+{
+	u64 a0, a1;
+	int wait = 1000;
+	int ret = -EINVAL;
+	a0 = overlay;
+	a1 = config;
+	ret = vnic_dev_cmd(vdev, CMD_OVERLAY_OFFLOAD_ENABLE_DISABLE,
+		&a0, &a1, wait);
+
+	return ret;
+}
+
+int vnic_dev_overlay_offload_cfg(struct vnic_dev *vdev, u8 overlay,
+	u16 vxlan_udp_port_number)
+{
+	u64 a0, a1;
+	int wait = 1000;
+	int ret = -EINVAL;
+	a0 = overlay;
+	a1 = vxlan_udp_port_number;
+	ret = vnic_dev_cmd(vdev, CMD_OVERLAY_OFFLOAD_CFG, &a0, &a1, wait);
+
+	return ret;
+}
+#endif

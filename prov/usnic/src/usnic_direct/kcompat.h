@@ -40,7 +40,7 @@
  *
  *
  */
-#ident "$Id: kcompat.h 165750 2014-03-24 09:55:39Z gvaradar $"
+#ident "$Id: kcompat.h 194404 2014-10-17 09:03:00Z gvaradar $"
 
 #ifndef _KCOMPAT_H_
 #define _KCOMPAT_H_
@@ -62,9 +62,14 @@
 #define PCI_VENDOR_ID_CISCO	0x1137
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && !defined(CONFIG_X86_XEN)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21))
 #define ENIC_AIC
 #endif
+
+#if !defined(__VMKLNX__)
+#define RX_COPYBREAK
+#endif
+
 /*
  * Kernel backward-compatibility definitions
  */
