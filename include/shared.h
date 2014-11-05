@@ -54,15 +54,19 @@ enum precision {
 extern struct test_size_param test_size[];
 const unsigned int test_cnt;
 #define TEST_CNT test_cnt
+#define FI_STR_LEN 32
 
 int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len);
-char *size_str(char str[32], long long size);
-char *cnt_str(char str[32], long long cnt);
+char *size_str(char str[FI_STR_LEN], long long size);
+char *cnt_str(char str[FI_STR_LEN], long long cnt);
 int size_to_count(int size);
+void init_test(int size, char *test_name, int *transfer_size, int *iterations);
 int wait_for_completion(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, char *cq_str);
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a, enum precision p);
-void perf_str(char *name, int tsize, int iters, long long total, int64_t elapsed);
+void print_test_hdr();
+void show_perf(char *name, int tsize, int iters, struct timespec *start, 
+		struct timespec *end, int xfers_per_iter);
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))

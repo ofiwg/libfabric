@@ -74,24 +74,6 @@ static struct fid_cq *rcq, *scq;
 static struct fid_mr *mr;
 static struct fid_av *av;
 
-static void show_perf(void)
-{
-	int64_t usec = get_elapsed(&start, &end, MICRO);
-	long long bytes = (long long) iterations * transfer_size * 2;
-
-	perf_str(test_name, transfer_size, iterations, bytes, usec);
-}
-
-static void init_test(int size)
-{
-	char sstr[32];
-
-	size_str(sstr, size);
-	snprintf(test_name, sizeof test_name, "%s_lat", sstr);
-	transfer_size = size;
-	iterations = size_to_count(transfer_size);
-}
-
 static int poll_all_sends(void)
 {
 	struct fi_cq_entry comp;
@@ -191,7 +173,7 @@ static int run_test(void)
 			goto out;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
-	show_perf();
+	show_perf(test_name, transfer_size, iterations, &start, &end, 2);
 	ret = 0;
 
 out:
@@ -494,8 +476,7 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	printf("%-10s%-8s%-8s%-8s%8s %10s%13s\n",
-	       "name", "bytes", "xfers", "total", "time", "Gb/sec", "usec/xfer");
+	print_test_hdr();
 
 	if (!custom) {
 		for (i = 0; i < TEST_CNT; i++) {
@@ -503,7 +484,7 @@ static int run(void)
 				(max_msg_size && test_size[i].size > max_msg_size)) {
 				continue;
 			}
-			init_test(test_size[i].size);
+			init_test(test_size[i].size, test_name, &transfer_size, &iterations);
 			run_test();
 		}
 	} else {
