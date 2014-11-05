@@ -251,6 +251,7 @@ int usnic_nl_rt_lookup(uint32_t src_addr, uint32_t dst_addr, int oif,
 	struct usnic_rt_cb_arg	arg;
 	int			err;
 
+	unlsk = NULL;
 	err = usnic_nl_sk_alloc(&unlsk, NETLINK_ROUTE);
 	if (err)
 		return err;
