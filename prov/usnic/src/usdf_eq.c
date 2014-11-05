@@ -326,7 +326,7 @@ retry:
 	if (ret < 0) {
 		return -errno;
 	} else if (ret == 0) {
-		return 0;
+		return -FI_ETIMEDOUT;
 	}
 
 	pthread_spin_lock(&eq->eq_lock);
