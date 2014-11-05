@@ -280,7 +280,8 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 
 		/* See if dest is reachable from this device */
 		if (node != NULL) {
-			ret = usd_get_dest_distance(dev, sin->sin_addr.s_addr, &metric);
+			ret = usd_get_dest_distance(dev,
+					sin->sin_addr.s_addr, &metric);
 			if (ret != 0) {
 				goto fail;
 			}
@@ -321,7 +322,9 @@ next_dev:
 		usd_close(dev);
 		dev = NULL;
 	}
-	freeaddrinfo(ai);
+	if (ai != NULL) {
+		freeaddrinfo(ai);
+	}
 
 	if (fi_first != NULL) {
 		*info = fi_first;
