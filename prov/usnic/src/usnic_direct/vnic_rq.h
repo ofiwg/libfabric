@@ -40,12 +40,14 @@
  *
  *
  */
-#ident "$Id: vnic_rq.h 164357 2014-03-13 18:22:46Z xuywang $"
+#ident "$Id: vnic_rq.h 180262 2014-07-02 07:57:43Z gvaradar $"
 
 #ifndef _VNIC_RQ_H_
 #define _VNIC_RQ_H_
 
+#ifndef ENIC_PMD
 #include <linux/pci.h>
+#endif
 
 #include "vnic_dev.h"
 #include "vnic_cq.h"
@@ -136,6 +138,10 @@ struct vnic_rq {
 	unsigned int bpoll_state;
 	spinlock_t bpoll_lock;
 #endif /*CONFIG_NET_RX_BUSY_POLL*/
+#ifdef ENIC_PMD
+	unsigned int socket_id;
+        struct rte_mempool *mp;
+#endif
 };
 
 static inline unsigned int vnic_rq_desc_avail(struct vnic_rq *rq)
@@ -237,21 +243,37 @@ enum desc_return_options {
 	VNIC_RQ_DEFER_RETURN_DESC,
 };
 
+#ifdef ENIC_PMD
+static inline int vnic_rq_service(struct vnic_rq *rq,
+	struct cq_desc *cq_desc, u16 completed_index,
+	int desc_return, int (*buf_service)(struct vnic_rq *rq,
+	struct cq_desc *cq_desc, struct vnic_rq_buf *buf,
+	int skipped, void *opaque), void *opaque)
+#else
 static inline void vnic_rq_service(struct vnic_rq *rq,
 	struct cq_desc *cq_desc, u16 completed_index,
 	int desc_return, void (*buf_service)(struct vnic_rq *rq,
 	struct cq_desc *cq_desc, struct vnic_rq_buf *buf,
 	int skipped, void *opaque), void *opaque)
+#endif
 {
 	struct vnic_rq_buf *buf;
 	int skipped;
+#ifdef ENIC_PMD
+        int eop = 0;
+#endif
 
 	buf = rq->to_clean;
 	while (1) {
 
 		skipped = (buf->index != completed_index);
 
+#ifdef ENIC_PMD
+		if((*buf_service)(rq, cq_desc, buf, skipped, opaque))
+                    eop++;
+#else
 		(*buf_service)(rq, cq_desc, buf, skipped, opaque);
+#endif
 
 		if (desc_return == VNIC_RQ_RETURN_DESC)
 			rq->ring.desc_avail++;
@@ -263,6 +285,9 @@ static inline void vnic_rq_service(struct vnic_rq *rq,
 
 		buf = rq->to_clean;
 	}
+#ifdef ENIC_PMD
+        return eop;
+#endif
 }
 
 static inline int vnic_rq_fill(struct vnic_rq *rq,
@@ -320,8 +345,9 @@ int vnic_rq_mem_size(struct vnic_rq *rq, unsigned int desc_count,
 	unsigned int desc_size);
 #endif
 
+#ifndef ENIC_PMD
 #ifdef CONFIG_NET_RX_BUSY_POLL
-static inline void enic_ll_poll_init_lock(struct vnic_rq *rq)
+static inline void enic_busy_poll_init_lock(struct vnic_rq *rq)
 {
 	spin_lock_init(&rq->bpoll_lock);
 	rq->bpoll_state = ENIC_POLL_STATE_IDLE;
@@ -387,13 +413,13 @@ static inline bool enic_poll_unlock_poll(struct vnic_rq *rq)
 	return rc;
 }
 
-static inline bool enic_poll_ll_polling(struct vnic_rq *rq)
+static inline bool enic_poll_busy_polling(struct vnic_rq *rq)
 {
 	WARN_ON(!(rq->bpoll_state & ENIC_POLL_LOCKED));
 	return rq->bpoll_state & ENIC_POLL_USER_PEND;
 }
 #else
-static inline void enic_ll_poll_init_lock(struct vnic_rq *UNUSED(rq))
+static inline void enic_busy_poll_init_lock(struct vnic_rq *UNUSED(rq))
 {
 }
 
@@ -417,10 +443,10 @@ static inline bool enic_poll_unlock_poll(struct vnic_rq *UNUSED(rq))
 	return false;
 }
 
-static inline bool enic_poll_ll_polling(struct vnic_rq *UNUSED(rq))
+static inline bool enic_poll_busy_polling(struct vnic_rq *UNUSED(rq))
 {
 	return false;
 }
 #endif /*CONFIG_NET_RX_BUSY_POLL*/
-
+#endif /* ENIC_PMD */
 #endif /* _VNIC_RQ_H_ */

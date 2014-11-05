@@ -52,6 +52,7 @@
 #include "wq_enet_desc.h"
 #include "rq_enet_desc.h"
 
+#include "usnic_abi.h"
 #include "usnic_direct.h"
 #include "usd_ib_sysfs.h"
 
@@ -120,6 +121,7 @@ struct usd_vf {
     int vf_refcnt;
     struct vnic_dev_bar vf_bar0;
     struct vnic_dev *vf_vdev;
+    struct vnic_dev_iomap_info iomaps[RES_TYPE_MAX];
 
     /* Will also protect the devcmd region */
     pthread_mutex_t vf_lock;
@@ -134,6 +136,7 @@ struct usd_vf_info {
     uint32_t vi_vfid;
     dma_addr_t vi_bar_bus_addr;
     uint32_t vi_bar_len;
+    struct usnic_vnic_barres_info barres[RES_TYPE_MAX];
 };
 
 /*

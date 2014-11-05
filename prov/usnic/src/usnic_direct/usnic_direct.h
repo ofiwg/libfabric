@@ -297,6 +297,8 @@ int usd_get_device_event(struct usd_device *dev,
 
 enum usd_capability {
     USD_CAP_CQ_SHARING,
+    USD_CAP_MAP_PER_RES,
+    USD_CAP_PIO,
     USD_CAP_MAX
 };
 int usd_get_cap(struct usd_device *dev, enum usd_capability cap);

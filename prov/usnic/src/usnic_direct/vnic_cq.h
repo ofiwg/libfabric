@@ -40,10 +40,14 @@
  *
  *
  */
-#ident "$Id: vnic_cq.h 151297 2013-11-21 07:55:45Z ssujith $"
+#ident "$Id: vnic_cq.h 173398 2014-05-19 09:17:02Z gvaradar $"
 
 #ifndef _VNIC_CQ_H_
 #define _VNIC_CQ_H_
+
+#ifdef ENIC_PMD
+#include <rte_mbuf.h>
+#endif
 
 #include "cq_desc.h"
 #include "vnic_dev.h"
@@ -91,9 +95,10 @@ struct vnic_cq {
 	unsigned int last_color;
 	unsigned int interrupt_offset;
 #ifdef ENIC_AIC
-        struct vnic_rx_bytes_counter pkt_size_counter;
-        unsigned int cur_rx_coal_timeval;
-        ktime_t prev_ts;
+	struct vnic_rx_bytes_counter pkt_size_counter;
+	unsigned int cur_rx_coal_timeval;
+	unsigned int tobe_rx_coal_timeval;
+	ktime_t prev_ts;
 #endif
 };
 
@@ -103,43 +108,62 @@ static inline unsigned int vnic_cq_service(struct vnic_cq *cq,
 	u8 type, u16 q_number, u16 completed_index, void *opaque),
 	void *opaque)
 {
-	struct cq_desc *cq_desc;
-	unsigned int work_done = 0;
-	u16 q_number, completed_index;
-	u8 type, color;
+        struct cq_desc *cq_desc;
+        unsigned int work_done = 0;
+        u16 q_number, completed_index;
+        u8 type, color;
+#ifdef ENIC_PMD
+        struct rte_mbuf **rx_pkts = opaque;
+        unsigned int ret;
+        unsigned int split_hdr_size = vnic_get_hdr_split_size(cq->vdev);
+#endif
 
-	cq_desc = (struct cq_desc *)((u8 *)cq->ring.descs +
-		cq->ring.desc_size * cq->to_clean);
-	cq_desc_dec(cq_desc, &type, &color,
-		&q_number, &completed_index);
+        cq_desc = (struct cq_desc *)((u8 *)cq->ring.descs +
+                cq->ring.desc_size * cq->to_clean);
+        cq_desc_dec(cq_desc, &type, &color,
+                &q_number, &completed_index);
 
-	while (color != cq->last_color) {
+        while (color != cq->last_color) {
+#ifdef ENIC_PMD
+            if(opaque)
+                opaque = (void *)&(rx_pkts[work_done]);
 
-		if ((*q_service)(cq->vdev, cq_desc, type,
-			q_number, completed_index, opaque))
-			break;
+            ret = (*q_service)(cq->vdev, cq_desc, type,
+                        q_number, completed_index, opaque);
+#else
 
-		cq->to_clean++;
-		if (cq->to_clean == cq->ring.desc_count) {
-			cq->to_clean = 0;
-			cq->last_color = cq->last_color ? 0 : 1;
-		}
+            if ((*q_service)(cq->vdev, cq_desc, type,
+                        q_number, completed_index, opaque))
+                break;
 
-		cq_desc = (struct cq_desc *)((u8 *)cq->ring.descs +
-			cq->ring.desc_size * cq->to_clean);
-		cq_desc_dec(cq_desc, &type, &color,
-			&q_number, &completed_index);
+#endif
+            cq->to_clean++;
+            if (cq->to_clean == cq->ring.desc_count) {
+                cq->to_clean = 0;
+                cq->last_color = cq->last_color ? 0 : 1;
+            }
 
-		work_done++;
-		if (work_done >= work_to_do)
-			break;
-	}
+            cq_desc = (struct cq_desc *)((u8 *)cq->ring.descs +
+                    cq->ring.desc_size * cq->to_clean);
+            cq_desc_dec(cq_desc, &type, &color,
+                    &q_number, &completed_index);
 
-	return work_done;
+#ifdef ENIC_PMD
+            if(ret)
+#endif
+            work_done++;
+            if (work_done >= work_to_do)
+                break;
+        }
+
+        return work_done;
 }
 
 void vnic_cq_free(struct vnic_cq *cq);
 int vnic_cq_alloc(struct vnic_dev *vdev, struct vnic_cq *cq, unsigned int index,
+#ifdef ENIC_PMD
+        unsigned int socket_id,
+#endif
 	unsigned int desc_count, unsigned int desc_size);
 void vnic_cq_init(struct vnic_cq *cq, unsigned int flow_control_enable,
 	unsigned int color_enable, unsigned int cq_head, unsigned int cq_tail,

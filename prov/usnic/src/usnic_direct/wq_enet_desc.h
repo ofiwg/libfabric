@@ -40,7 +40,7 @@
  *
  *
  */
-#ident "$Id: wq_enet_desc.h 59839 2010-09-27 20:36:31Z roprabhu $"
+#ident "$Id$"
 
 #ifndef _WQ_ENET_DESC_H_
 #define _WQ_ENET_DESC_H_

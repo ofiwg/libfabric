@@ -39,7 +39,7 @@
  *
  *
  */
-#ident "$Id: linux_types.h 134236 2013-06-10 20:45:23Z xuywang $"
+#ident "$Id$"
 
 #ifndef __LINUX_TYPES_H__
 #define __LINUX_TYPES_H__

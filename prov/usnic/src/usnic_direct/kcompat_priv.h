@@ -91,4 +91,5 @@ static inline void pci_free_consistent( __attribute__ ((unused))
 #ifndef rmb
 #define rmb() asm volatile("" ::: "memory")
 #endif
+
 #endif /* _KCOMPAT_PRIV_H_ */

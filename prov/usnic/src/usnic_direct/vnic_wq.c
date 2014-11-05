@@ -40,8 +40,9 @@
  *
  *
  */
-#ident "$Id: vnic_wq.c 160468 2014-02-18 09:50:15Z gvaradar $"
+#ident "$Id: vnic_wq.c 183023 2014-07-22 23:47:25Z xuywang $"
 
+#ifndef ENIC_PMD
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -52,8 +53,35 @@
 #ifndef FOR_UPSTREAM_KERNEL
 #include "kcompat.h"
 #endif
+#endif
 #include "vnic_dev.h"
 #include "vnic_wq.h"
+
+static inline
+int vnic_wq_get_ctrl(struct vnic_dev *vdev, struct vnic_wq *wq,
+				unsigned int index, enum vnic_res_type res_type)
+{
+	wq->ctrl = vnic_dev_get_res(vdev, res_type, index);
+	if (!wq->ctrl)
+		return -EINVAL;
+	return 0;
+}
+
+static inline
+int vnic_wq_alloc_ring(struct vnic_dev *vdev, struct vnic_wq *wq,
+				unsigned int desc_count, unsigned int desc_size)
+{
+#ifdef ENIC_PMD
+        char res_name[NAME_MAX];
+        static int instance = 0;
+
+	snprintf(res_name, sizeof(res_name), "%d-wq-%d", instance++, wq->index);
+	return vnic_dev_alloc_desc_ring(vdev, &wq->ring, desc_count, desc_size,
+                wq->socket_id, res_name);
+#else
+	return vnic_dev_alloc_desc_ring(vdev, &wq->ring, desc_count, desc_size);
+#endif
+}
 
 static int vnic_wq_alloc_bufs(struct vnic_wq *wq)
 {
@@ -124,6 +152,7 @@ int vnic_wq_mem_size(struct vnic_wq *wq, unsigned int desc_count,
 }
 
 #endif
+
 int vnic_wq_alloc(struct vnic_dev *vdev, struct vnic_wq *wq, unsigned int index,
 	unsigned int desc_count, unsigned int desc_size)
 {
@@ -132,15 +161,15 @@ int vnic_wq_alloc(struct vnic_dev *vdev, struct vnic_wq *wq, unsigned int index,
 	wq->index = index;
 	wq->vdev = vdev;
 
-	wq->ctrl = vnic_dev_get_res(vdev, RES_TYPE_WQ, index);
-	if (!wq->ctrl) {
-		pr_err("Failed to hook WQ[%d] resource\n", index);
-		return -EINVAL;
+	err = vnic_wq_get_ctrl(vdev, wq, index, RES_TYPE_WQ);
+	if (err) {
+		pr_err("Failed to hook WQ[%d] resource, err %d\n", index, err);
+		return err;
 	}
 
 	vnic_wq_disable(wq);
 
-	err = vnic_dev_alloc_desc_ring(vdev, &wq->ring, desc_count, desc_size);
+	err = vnic_wq_alloc_ring(vdev, wq, desc_count, desc_size);
 	if (err)
 		return err;
 

@@ -40,8 +40,9 @@
  *
  *
  */
-#ident "$Id: vnic_rq.c 160468 2014-02-18 09:50:15Z gvaradar $"
+#ident "$Id: vnic_rq.c 171146 2014-05-02 07:08:20Z ssujith $"
 
+#ifndef ENIC_PMD
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -53,6 +54,7 @@
 
 #ifndef FOR_UPSTREAM_KERNEL
 #include "kcompat.h"
+#endif
 #endif
 #include "vnic_dev.h"
 #include "vnic_rq.h"
@@ -130,6 +132,10 @@ int vnic_rq_alloc(struct vnic_dev *vdev, struct vnic_rq *rq, unsigned int index,
 	unsigned int desc_count, unsigned int desc_size)
 {
 	int err;
+#ifdef ENIC_PMD
+	char res_name[NAME_MAX];
+        static int instance = 0;
+#endif
 
 	rq->index = index;
 	rq->vdev = vdev;
@@ -142,7 +148,13 @@ int vnic_rq_alloc(struct vnic_dev *vdev, struct vnic_rq *rq, unsigned int index,
 
 	vnic_rq_disable(rq);
 
+#ifdef ENIC_PMD
+	snprintf(res_name, sizeof(res_name), "%d-rq-%d", instance++, index);
+	err = vnic_dev_alloc_desc_ring(vdev, &rq->ring, desc_count, desc_size,
+          rq->socket_id, res_name);
+#else
 	err = vnic_dev_alloc_desc_ring(vdev, &rq->ring, desc_count, desc_size);
+#endif
 	if (err)
 		return err;
 

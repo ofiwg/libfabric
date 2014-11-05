@@ -40,7 +40,7 @@
  *
  *
  */
-#ident "$Id: vnic_devcmd.h 152086 2013-11-29 06:39:27Z nalreddy $"
+#ident "$Id$"
 
 #ifndef _VNIC_DEVCMD_H_
 #define _VNIC_DEVCMD_H_
@@ -480,6 +480,24 @@ enum vnic_devcmd_cmd {
 	 */
 	CMD_QP_STATS_CLEAR = _CMDC(_CMD_DIR_WRITE, _CMD_VTYPE_ENET, 63),
 
+	/*
+	 * Enable/Disable overlay offloads on the given vnic
+	 * in: (u8) a0 = OVERLAY_FEATURE_NVGRE : NVGRE
+	 *          a0 = OVERLAY_FEATURE_VXLAN : VxLAN
+	 * in: (u8) a1 = OVERLAY_OFFLOAD_ENABLE : Enable
+	 *          a1 = OVERLAY_OFFLOAD_DISABLE : Disable
+	 */
+	CMD_OVERLAY_OFFLOAD_ENABLE_DISABLE =
+		_CMDC(_CMD_DIR_WRITE, _CMD_VTYPE_ENET, 72),
+
+	/*
+	 * Configuration of overlay offloads feature on a given vNIC
+	 * in: (u8) a0 = DEVCMD_OVERLAY_NVGRE : NVGRE
+	 *          a0 = DEVCMD_OVERLAY_VXLAN : VxLAN
+	 * in: (u8) a1 = VXLAN_PORT_UPDATE : VxLAN
+	 * in: (u16) a2 = unsigned short int port information
+	 */
+	CMD_OVERLAY_OFFLOAD_CFG = _CMDC(_CMD_DIR_WRITE, _CMD_VTYPE_ENET, 73),
 };
 
 /* CMD_ENABLE2 flags */
@@ -749,4 +767,19 @@ struct devcmd2_result {
 
 #define DEVCMD2_RESULTS_SIZE_MAX   ((1 << 16) - 1)
 
+// Overlay related definitions
+
+/*
+ * This enum lists the flag associated with each of the overlay features
+ */
+typedef enum {
+	OVERLAY_FEATURE_NVGRE = 1,
+	OVERLAY_FEATURE_VXLAN,
+	OVERLAY_FEATURE_MAX,
+} overlay_feature_t;
+
+#define OVERLAY_OFFLOAD_ENABLE 0
+#define OVERLAY_OFFLOAD_DISABLE 1
+
+#define OVERLAY_CFG_VXLAN_PORT_UPDATE 0
 #endif /* _VNIC_DEVCMD_H_ */

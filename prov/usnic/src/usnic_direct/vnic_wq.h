@@ -40,12 +40,14 @@
  *
  *
  */
-#ident "$Id: vnic_wq.h 152086 2013-11-29 06:39:27Z nalreddy $"
+#ident "$Id: vnic_wq.h 183023 2014-07-22 23:47:25Z xuywang $"
 
 #ifndef _VNIC_WQ_H_
 #define _VNIC_WQ_H_
 
+#ifndef ENIC_PMD
 #include <linux/pci.h>
+#endif
 
 #include "vnic_dev.h"
 #include "vnic_cq.h"
@@ -118,6 +120,9 @@ struct vnic_wq {
 #endif
 #if defined(__LIBUSNIC__)
 	uint32_t qp_num;
+#endif
+#ifdef ENIC_PMD
+        unsigned int socket_id;
 #endif
 };
 
@@ -222,7 +227,11 @@ static inline void vnic_wq_post(struct vnic_wq *wq,
 	buf->cq_entry = cq_entry;
 	buf->compressed_send = compressed_send;
 	buf->desc_skip_cnt = desc_skip_cnt;
+#ifdef ENIC_PMD
+	buf->os_buf = os_buf;
+#else
 	buf->os_buf = eop ? os_buf : NULL;
+#endif
 	buf->dma_addr = dma_addr;
 	buf->len = len;
 	buf->wr_id = wrid;

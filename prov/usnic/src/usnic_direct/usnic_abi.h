@@ -51,6 +51,21 @@
 #define USNIC_QP_GRP_MAX_RQS		8
 #define USNIC_QP_GRP_MAX_CQS		16
 
+#define USNIC_DECODE_PGOFF_VFID(pgoff)	((pgoff) & ((1ULL << 32) - 1))
+#define USNIC_DECODE_PGOFF_TYPE(pgoff)	((pgoff) >> 48)
+#define USNIC_DECODE_PGOFF_RES(pgoff)	(((pgoff) >> 32) & ((1ULL << 16) - 1))
+#define USNIC_DECODE_PGOFF_BAR(pgoff)	(((pgoff) >> 32) & ((1ULL << 16) - 1))
+
+#define USNIC_ENCODE_PGOFF(vfid, map_type, res_type_bar_id) \
+	(((((uint64_t)map_type & 0xffff) << 48) | \
+	  (((uint64_t)res_type_bar_id & 0xffff) << 32) | \
+	  ((uint64_t)vfid & ((1ULL << 32) - 1))) * sysconf(_SC_PAGE_SIZE))
+
+enum usnic_mmap_type {
+	USNIC_MMAP_BAR			= 0,
+	USNIC_MMAP_RES			= 1,
+};
+
 enum usnic_transport_type {
 	USNIC_TRANSPORT_UNKNOWN		= 0,
 	USNIC_TRANSPORT_ROCE_CUSTOM	= 1,
@@ -70,28 +85,53 @@ struct usnic_transport_spec {
 	};
 };
 
-struct usnic_ib_create_qp_cmd {
+#define USNIC_IB_CREATE_QP_VERSION 1
+
+struct usnic_ib_create_qp_cmd_v0 {
 	struct usnic_transport_spec	spec;
 };
 
-/*TODO: Future - usnic_modify_qp needs to pass in generic filters */
-struct usnic_ib_create_qp_resp {
-	u32				vfid;
-	u32				qp_grp_id;
-	u64				bar_bus_addr;
-	u32				bar_len;
+struct usnic_ib_create_qp_cmd {
+	struct usnic_transport_spec	spec;
+	u32				cmd_version;
+};
+
 /*
- * WQ, RQ, CQ are explicity specified bc exposing a generic resources inteface
- * expands the scope of ABI to many files.
+ * infomation of vnic bar resource
  */
-	u32				wq_cnt;
-	u32				rq_cnt;
-	u32				cq_cnt;
-	u32				wq_idx[USNIC_QP_GRP_MAX_WQS];
-	u32				rq_idx[USNIC_QP_GRP_MAX_RQS];
-	u32				cq_idx[USNIC_QP_GRP_MAX_CQS];
+struct usnic_vnic_barres_info {
+	int32_t	 	type;
+	uint32_t	padding;
+	uint64_t	bus_addr;
+	uint64_t	len;
+};
+
+/*
+ * All create_qp responses must start with this for backwards compatability
+ */
+#define USNIC_IB_CREATE_QP_RESP_V0_FIELDS                               \
+	u32				vfid;                           \
+	u32				qp_grp_id;                      \
+	u64				bar_bus_addr;                   \
+	u32				bar_len;                        \
+	u32				wq_cnt;                         \
+	u32				rq_cnt;                         \
+	u32				cq_cnt;                         \
+	u32				wq_idx[USNIC_QP_GRP_MAX_WQS];   \
+	u32				rq_idx[USNIC_QP_GRP_MAX_RQS];   \
+	u32				cq_idx[USNIC_QP_GRP_MAX_CQS];   \
 	u32				transport;
-	u32				reserved[9];
+
+struct usnic_ib_create_qp_resp_v0 {
+	USNIC_IB_CREATE_QP_RESP_V0_FIELDS
+};
+
+struct usnic_ib_create_qp_resp {
+	USNIC_IB_CREATE_QP_RESP_V0_FIELDS
+	u32				cmd_version;
+	u32				num_barres;
+	u32				pad_to_8byte;
+	struct usnic_vnic_barres_info	resources[0];
 };
 
 struct usnic_ib_create_cq_cmd {
@@ -112,6 +152,8 @@ struct usnic_ib_get_context_cmd	{
  */
 enum usnic_capability {
 	USNIC_CAP_CQ_SHARING,	/* CQ sharing version */
+	USNIC_CAP_MAP_PER_RES,	/* Map individual RES */
+	USNIC_CAP_PIO,		/* PIO send */
 	USNIC_CAP_CNT
 };
 

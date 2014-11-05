@@ -48,6 +48,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <inttypes.h>
 
 #include <infiniband/driver.h>
 
@@ -100,6 +101,14 @@ usd_ib_cmd_get_context(
         if (urp->num_caps > USNIC_CAP_CQ_SHARING &&
             urp->cap_info[USNIC_CAP_CQ_SHARING] > 0) {
             dev->ud_caps[USD_CAP_CQ_SHARING] = 1;
+        }
+        if (urp->num_caps > USNIC_CAP_MAP_PER_RES &&
+            urp->cap_info[USNIC_CAP_MAP_PER_RES] > 0) {
+            dev->ud_caps[USD_CAP_MAP_PER_RES] = 1;
+        }
+        if (urp->num_caps > USNIC_CAP_PIO &&
+            urp->cap_info[USNIC_CAP_PIO] > 0) {
+            dev->ud_caps[USD_CAP_PIO] = 1;
         }
     }
 
@@ -300,7 +309,7 @@ usd_ib_cmd_create_qp(
     struct usd_vf_info *vfip)
 {
     struct usnic_create_qp cmd;
-    struct usnic_create_qp_resp resp;
+    struct usnic_create_qp_resp *resp;
     struct ibv_create_qp *icp;
     struct ibv_create_qp_resp *irp = NULL;
     struct usnic_ib_create_qp_cmd *ucp;
@@ -308,16 +317,25 @@ usd_ib_cmd_create_qp(
     struct usd_qp_filter *qfilt;
     int ret;
     int n;
+    uint32_t i;
 
     irp = NULL;
     memset(&cmd, 0, sizeof(cmd));
-    memset(&resp, 0, sizeof(resp));
+
+    resp = calloc(1, sizeof(*resp) +
+            RES_TYPE_MAX*sizeof(struct usnic_vnic_barres_info));
+    if (resp == NULL) {
+        usd_err("Failed to allocate memory for create_qp_resp\n");
+        return -ENOMEM;
+    }
 
     icp = &cmd.ibv_cmd;
     icp->command = IB_USER_VERBS_CMD_CREATE_QP;
     icp->in_words = sizeof(cmd) / 4;
-    icp->out_words = sizeof(resp) / 4;
-    icp->response = (uintptr_t) & resp;
+    icp->out_words = (sizeof(*resp) +
+			RES_TYPE_MAX * sizeof(struct usnic_vnic_barres_info))
+			/ 4;
+    icp->response = (uintptr_t) resp;
 
     icp->user_handle = (uintptr_t) qp;
     icp->pd_handle = dev->ud_pd_handle;
@@ -335,6 +353,7 @@ usd_ib_cmd_create_qp(
     icp->reserved = 0;
 
     ucp = &cmd.usnic_cmd;
+    ucp->cmd_version = USNIC_IB_CREATE_QP_VERSION;
     qfilt = &qp->uq_filter;
     if (qfilt->qf_type == USD_FTY_UDP ||
             qfilt->qf_type == USD_FTY_UDP_SOCK) {
@@ -353,12 +372,12 @@ usd_ib_cmd_create_qp(
     }
 
     /* process IB part of response */
-    irp = &resp.ibv_resp;
+    irp = &resp->ibv_resp;
     qp->uq_qp_handle = irp->qp_handle;
     qp->uq_qp_num = irp->qpn;
 
     /* process usnic part response */
-    urp = &resp.usnic_resp;
+    urp = &resp->usnic_resp;
 
     qp->uq_rq.urq_index = urp->rq_idx[0];
     qp->uq_wq.uwq_index = urp->wq_idx[0];
@@ -373,11 +392,48 @@ usd_ib_cmd_create_qp(
     vfip->vi_bar_bus_addr = urp->bar_bus_addr;
     vfip->vi_bar_len = urp->bar_len;
 
+    if (dev->ud_caps[USD_CAP_MAP_PER_RES] > 0) {
+        for (i = 0; i < urp->num_barres; i++) {
+            enum vnic_res_type type = urp->resources[i].type;
+            if (type < RES_TYPE_MAX) {
+                vfip->barres[type].type = type;
+                vfip->barres[type].bus_addr = urp->resources[i].bus_addr;
+                vfip->barres[type].len = urp->resources[i].len;
+            }
+        }
+        if (vfip->barres[RES_TYPE_WQ].bus_addr == 0) {
+                usd_err("Failed to retrieve WQ res info\n");
+                ret = -ENXIO;
+                goto out;
+        }
+        if (vfip->barres[RES_TYPE_RQ].bus_addr == 0) {
+                usd_err("Failed to retrieve RQ res info\n");
+                ret = -ENXIO;
+                goto out;
+        }
+        if (vfip->barres[RES_TYPE_CQ].bus_addr == 0) {
+                usd_err("Failed to retrieve CQ res info\n");
+                ret = -ENXIO;
+                goto out;
+        }
+        if (vfip->barres[RES_TYPE_INTR_CTRL].bus_addr == 0) {
+                usd_err("Failed to retrieve INTR res info\n");
+                ret = -ENXIO;
+                goto out;
+        }
+        if (vfip->barres[RES_TYPE_DEVCMD].bus_addr == 0) {
+                usd_err("Failed to retrieve DEVCMD res info\n");
+                ret = -ENXIO;
+                goto out;
+        }
+    }
+    free(resp);
     return 0;
 
   out:
     if (irp != NULL)                   /* indicates successful IB create QP */
         usd_ib_cmd_destroy_qp(dev, qp);
+    free(resp);
     return ret;
 }
 

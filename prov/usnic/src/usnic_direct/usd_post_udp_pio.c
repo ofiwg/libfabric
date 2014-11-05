@@ -91,7 +91,7 @@ usd_post_send_one_udp_pio(
 
     v_pkt = wq->pio_v_pkt_buf + index * 256;
     p_pkt = wq->pio_p_pkt_buf + index * 256;
-    copylen = (len + sizeof(*hdr) + 63) & ~63;
+    copylen = (len + sizeof(*hdr) + 7) & ~7;
 //printf("len = %lu, p_pkt = 0x%lx, index = %d\n", len, p_pkt, index);
     d = (uint64_t *)v_pkt;
     d[0] = ((uint64_t *)hdr)[0];
@@ -193,7 +193,7 @@ usd_post_send_two_udp_pio(
 
     v_pkt = wq->pio_v_pkt_buf + index * 256;
     p_pkt = wq->pio_p_pkt_buf + index * 256;
-    copylen = (len + sizeof(*hdr) + 63) & ~63;
+    copylen = (len + sizeof(*hdr) + 7) & ~7;
 //printf("len = %lu, p_pkt = 0x%lx, index = %d\n", len, p_pkt, index);
     d = (uint64_t *)v_pkt;
     d[0] = ((uint64_t *)hdr)[0];

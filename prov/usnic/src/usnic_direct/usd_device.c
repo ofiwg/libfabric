@@ -108,7 +108,8 @@ usd_get_device_list(
 
     idp = usd_ib_dev_list;
     while (idp != NULL && n < *num_entries) {
-        strcpy(entries[n].ude_devname, idp->id_usnic_name);
+        strncpy(entries[n].ude_devname, idp->id_usnic_name,
+                sizeof(entries[n].ude_devname) - 1);
         ++n;
         idp = idp->id_next;
     }
@@ -365,6 +366,9 @@ usd_device_ready(
 {
     if (dev->ud_attrs.uda_ipaddr_be == 0) {
         return -EADDRNOTAVAIL;
+    }
+    if (dev->ud_attrs.uda_link_state != USD_LINK_UP) {
+        return -ENETDOWN;
     }
 
     return 0;
