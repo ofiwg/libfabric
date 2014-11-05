@@ -83,6 +83,8 @@ Additional flags to apply to the operation
 Provider specific error value
 .IP "err_data"
 Provider specific error data related to a completion
+.IP "timeout"
+Timeout specified in miliseconds
 .SH "DESCRIPTION"
 Event queues are used to report events associated with control operations.
 They are associated with memory registration, address vectors, connection
@@ -305,9 +307,9 @@ fi_eq_sread
 .br
 fi_eq_write
 .RS
-On success, returns the number of bytes read from or written to the event
-queue.  On error, a negative value corresponding to fabric errno
-is returned.
+On success, returns the number of bytes read from or written to the
+event queue (fi_eq_sread returns 0 if a timeout occurs).  On error, a
+negative value corresponding to fabric errno is returned.
 .RE
 .PP
 fi_eq_strerror
