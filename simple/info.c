@@ -134,6 +134,8 @@ uint32_t str2addr_format(char *inputstr)
 	ORCASE(FI_SOCKADDR_IN6);
 	ORCASE(FI_SOCKADDR_IB);
 	ORCASE(FI_ADDR_PSMX);
+
+	return FI_ADDR_UNSPEC;
 }
 
 uint64_t tokparse(char *caps, uint64_t (*str2flag) (char *inputstr))
