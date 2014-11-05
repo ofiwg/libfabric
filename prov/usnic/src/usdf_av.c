@@ -193,8 +193,8 @@ usdf_am_insert(struct fid_av *fav, const void *addr, size_t count,
 		}
 		insert->avi_av = av;
 		insert->avi_pending_ops = count;
-		atomic_init(&insert->avi_completed_ops);
-		atomic_init(&insert->avi_successful_ops);
+		atomic_init(&insert->avi_completed_ops, 0);
+		atomic_init(&insert->avi_successful_ops, 0);
 		insert->avi_context = context;
 
 		/* If no addresses, complete now */
@@ -408,8 +408,8 @@ usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av->av_flags = attr->flags;
 	pthread_spin_init(&av->av_lock, PTHREAD_PROCESS_PRIVATE);
 
-	atomic_init(&av->av_refcnt);
-	atomic_init(&av->av_active_inserts);
+	atomic_init(&av->av_active_inserts, 0);
+	atomic_init(&av->av_refcnt, 0);
 	atomic_inc(&udp->dom_refcnt);
 	av->av_domain = udp;
 

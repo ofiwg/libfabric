@@ -33,16 +33,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <pthread.h>
 
 #include "list.h"
 
 #define LIST_DEF_NUM_ENTRIES (128)
-
-#define CREATE_LOCK(_x) pthread_mutex_init(&(_x->mutex), NULL)
-#define DESTROY_LOCK(_x) pthread_mutex_destroy(&((_x)->mutex))
-#define LOCK_LIST(_x) pthread_mutex_lock (&((_x)->mutex))
-#define UNLOCK_LIST(_x) pthread_mutex_unlock (&((_x)->mutex))
 
 #define ENQUEUE_LIST(_head, _tail, _elem) do{		\
 		(_elem)->next = NULL;			\
@@ -110,7 +104,7 @@ list_t *new_list(size_t length)
 	list->head = list->tail = NULL;
 	list->free_head = list->free_tail = NULL;
 
-	if(0 != CREATE_LOCK(list))
+	if(0 != fastlock_init(&(list->lock)))
 		goto err;
 
 	list_element_t *elements = (list_element_t *)
@@ -126,7 +120,7 @@ list_t *new_list(size_t length)
 	return list;
 
 err1:
-	DESTROY_LOCK(list);
+	fastlock_destroy(&(list->lock));
 
 err:
 	free(list);
@@ -135,14 +129,14 @@ err:
 
 void free_list(list_t *list)
 {
-	DESTROY_LOCK(list);
+	fastlock_destroy(&(list->lock));
 	free((void *)list);
 }
 
 int enqueue_item(list_t *list, void *data)
 {
 	int ret;
-	LOCK_LIST(list);
+	fastlock_acquire(&(list->lock));
 	list_element_t *elem = _list_dequeue_free_list(list);
 	if(!elem){
 		int i;
@@ -153,7 +147,7 @@ int enqueue_item(list_t *list, void *data)
 				       sizeof(list_t) + list->max_len * sizeof(list_element_t) +
 				       sizeof(list_element_t) * LIST_DEF_NUM_ENTRIES);
 			if(!list){
-				UNLOCK_LIST(list);
+				fastlock_release(&(list->lock));
 				return -1;
 			}
 
@@ -166,14 +160,14 @@ int enqueue_item(list_t *list, void *data)
 				list_element_t *element = (list_element_t *)((char *)elements + 
 									     sizeof(list_element_t) * i);
 				if(0 != _list_enqueue_free_list(element)){
-					UNLOCK_LIST(list);
+					fastlock_release(&(list->lock));
 					return -1;
 				}
 			}
 			list->max_len += LIST_DEF_NUM_ENTRIES;
 			elem = _list_dequeue_free_list(list);
 			if(!elem){
-				UNLOCK_LIST(list);
+				fastlock_release(&(list->lock));
 				return -1;
 			}
 		}
@@ -185,13 +179,13 @@ int enqueue_item(list_t *list, void *data)
 	ret = _list_enqueue(elem);
 	if(!ret)
 		list->curr_len++;
-	UNLOCK_LIST(list);
+	fastlock_release(&(list->lock));
 	return ret;
 }
 
 void *dequeue_item(list_t *list)
 {
-	LOCK_LIST(list);
+	fastlock_acquire(&(list->lock));
 	if(list->curr_len > 0){
 		void *data;
 		list_element_t *element = _list_dequeue(list);
@@ -199,28 +193,28 @@ void *dequeue_item(list_t *list)
 		list->curr_len--;
 		data = element->data;
 		_list_enqueue_free_list(element);
-		UNLOCK_LIST(list);
+		fastlock_release(&(list->lock));
 		return data;
 	}
-	UNLOCK_LIST(list);
+	fastlock_release(&(list->lock));
 	return NULL;
 }
 
 void *peek_item(list_t *list)
 {
-	LOCK_LIST(list);
+	fastlock_acquire(&(list->lock));
 	if(list->curr_len > 0){
 		list_element_t *element = _list_dequeue(list);
-		UNLOCK_LIST(list);
+		fastlock_release(&(list->lock));
 	        return element->data;
 	}
-	UNLOCK_LIST(list);
+	fastlock_release(&(list->lock));
 	return NULL;
 }
 
 int delete_item(list_t *list, void *item)
 {
-	LOCK_LIST(list);
+	fastlock_acquire(&(list->lock));
 	list_element_t *curr;
 	list_element_t *prev = NULL;
 	
@@ -237,36 +231,36 @@ int delete_item(list_t *list, void *item)
 
 			_list_enqueue_free_list(curr);
 			list->curr_len--;
-			UNLOCK_LIST(list);
+			fastlock_release(&(list->lock));
 			return 0;
 		}
 		prev = curr;
 	}
-	UNLOCK_LIST(list);
+	fastlock_release(&(list->lock));
 	return -1;
 }
 
 int find_item(list_t *list, void *item)
 {
-	LOCK_LIST(list);
+	fastlock_acquire(&(list->lock));
 	list_element_t *curr = list->head;
 
 	while(curr){
 		if(curr->data == item){
-			UNLOCK_LIST(list);
+			fastlock_release(&(list->lock));
 			return 0;
 		}
 		curr=curr->next;
 	}
-	UNLOCK_LIST(list);
+	fastlock_release(&(list->lock));
 	return -1;
 }
 
 ssize_t list_length(list_t *list)
 {
 	ssize_t len;
-	LOCK_LIST(list);
+	fastlock_acquire(&(list->lock));
 	len = list->curr_len;
-	UNLOCK_LIST(list);
+	fastlock_release(&(list->lock));
 	return len;
 }

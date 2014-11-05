@@ -246,7 +246,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		return ret;
 #endif
 
-	atomic_init(&_av->ref);
+	atomic_init(&_av->ref, 0);
 	atomic_inc(&dom->ref);
 	_av->dom = dom;
 	_av->attr = *attr;

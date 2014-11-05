@@ -297,7 +297,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_ENOMEM;
 	
 	fastlock_init(&sock_domain->lock);
-	atomic_init(&sock_domain->ref);
+	atomic_init(&sock_domain->ref, 0);
 
 	sock_domain->dom_fid.fid.fclass = FI_CLASS_DOMAIN;
 	sock_domain->dom_fid.fid.context = context;
