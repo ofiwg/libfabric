@@ -355,7 +355,7 @@ man_MANS = \
 	man/fi_wait.3 \
 	man/fi_wait_open.3
 
-EXTRA_DIST = libfabric.map libfabric.spec.in $(man_MANS)
+EXTRA_DIST = libfabric.map libfabric.spec.in config/distscript.pl $(man_MANS)
 
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
