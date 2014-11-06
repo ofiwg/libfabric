@@ -30,19 +30,9 @@ if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 	fi
 fi
 
-AC_ARG_ENABLE(libcheck, [  --disable-libcheck      do not test for presence of libraries],
-[       if test "$enableval" = "no"; then
-                disable_libcheck=yes
-        fi
-])
-
 dnl Checks for programs
 AC_PROG_CC
 AM_PROG_CC_C_O
-
-dnl Checks for typedefs, structures, and compiler characteristics.
-AC_C_CONST
-AC_CHECK_SIZEOF(long)
 
 dnl Checks for libraries
 AC_CHECK_LIB([fabric], fi_getinfo, [],
@@ -53,11 +43,9 @@ AC_HEADER_STDC
 AC_CHECK_HEADER([rdma/fabric.h], [],
     [AC_MSG_ERROR([<rdma/fabric.h> not found.  fabtests requires libfabric.])])
 
-if test "$disable_libcheck" != "yes"; then
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 AC_CHECK_HEADER(valgrind/memcheck.h, [],
     AC_MSG_ERROR([valgrind requested but <valgrind/memcheck.h> not found.]))
-fi
 fi
 
 AC_CONFIG_FILES([Makefile])
