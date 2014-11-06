@@ -196,7 +196,7 @@ field in the final completion entry will report the number of addresses
 successfully inserted.
 .sp
 If an AV is opened with FI_EVENT, any insertions attempted before an EQ
-is bound to the AV will fail with -FI_EINVAL.
+is bound to the AV will fail with -FI_ENOEQ.
 .sp
 Error completions for failed insertions will contain the index of the failed
 address in the index field of the error completion entry.

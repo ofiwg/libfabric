@@ -182,7 +182,7 @@ usdf_am_insert(struct fid_av *fav, const void *addr, size_t count,
 
 	if (av->av_flags & FI_EVENT) {
 		if (av->av_eq == NULL) {
-			return -FI_EINVAL;
+			return -FI_ENOEQ;
 		}
 		udp = av->av_domain;
 
