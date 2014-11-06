@@ -471,7 +471,7 @@ char *fi_tostr_(const void *data, enum fi_type datatype)
 		fi_tostr_progress(buf, enumval);
 		break;
 	case FI_TYPE_PROTOCOL:
-		fi_tostr_protocol(buf, val64);
+		fi_tostr_protocol(buf, val32);
 		break;
 	case FI_TYPE_MSG_ORDER:
 		fi_tostr_order(buf, val64);
