@@ -255,6 +255,7 @@ The fi_eq_sread call is the blocking (or synchronous) equivalent to fi_eq_read.
 It behaves is similar to
 the non-blocking call, with the exception that the calls will not return
 until either an event has been read from the EQ or an error or timeout occurs.
+Specifying a negative timeout means an infinite timeout.
 .SS "fi_eq_readerr"
 The read error function, fi_eq_readerr, retrieves information regarding
 any asynchronous operation which has completed with an unexpected error.
@@ -308,8 +309,8 @@ fi_eq_sread
 fi_eq_write
 .RS
 On success, returns the number of bytes read from or written to the
-event queue (fi_eq_sread returns 0 if a timeout occurs).  On error, a
-negative value corresponding to fabric errno is returned.
+event queue.  On error, a negative value corresponding to fabric errno
+is returned.  On timeout, fi_eq_sread returns -FI_ETIMEDOUT.
 .RE
 .PP
 fi_eq_strerror

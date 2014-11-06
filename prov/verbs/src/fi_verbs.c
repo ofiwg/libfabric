@@ -1629,15 +1629,17 @@ fi_ibv_eq_sread(struct fid_eq *eq, uint32_t *event,
 
 	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
 
-	do {
+	while (1) {
 		ret = fi_ibv_eq_read(eq, event, buf, len, flags);
 		if (ret)
-			break;
+			return ret;
 
 		ret = fi_poll_fd(_eq->channel->fd, timeout);
-	} while (!ret);
-	
-	return ret;
+		if (ret == 0)
+			return -FI_ETIMEDOUT;
+		else if (ret < 0)
+			return ret;
+	};
 }
 
 static const char *

@@ -197,7 +197,7 @@ ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event,
 {
 	int ret;
 	fd_set rfds;
-	struct timeval tv;
+	struct timeval tv, *ptv;
 	struct sock_eq *sock_eq;
 
 	sock_eq = container_of(eq, struct sock_eq, eq);
@@ -208,11 +208,13 @@ ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event,
 	FD_SET(sock_eq->fd[SOCK_RD_FD], &rfds);
 	tv.tv_sec = timeout;
 	tv.tv_usec = 0;
+	ptv = (timeout >= 0) ? &tv : NULL;
 
-	ret = select(1, &rfds, NULL, NULL, &tv);
-	
-	if (ret == -1 || ret == 0)
+	ret = select(1, &rfds, NULL, NULL, ptv);
+	if (ret == -1)
 		return ret;
+	else if (ret == 0)
+		return -FI_ETIMEDOUT;
 	else
 		return sock_eq_read(eq, event, buf, len, flags);
 }
