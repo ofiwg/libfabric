@@ -108,7 +108,7 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 
 
 #ifdef HAVE_ATOMICS
-typedef _Atomic int atomic_t;
+typedef atomic_int atomic_t;
 
 static inline int atomic_inc(atomic_t *atomic)
 {
@@ -128,7 +128,7 @@ static inline int atomic_set(atomic_t *atomic, int value)
 
 static inline int atomic_get(atomic_t *atomic)
 {
-	return *atomic;
+	return atomic_load(atomic);
 }
 
 #else
