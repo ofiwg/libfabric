@@ -238,7 +238,7 @@ static struct fi_info *fi_dupinfo_internal(const struct fi_info *info)
 
 	dup = malloc(sizeof(*dup));
 	if (dup == NULL) {
-		goto fail;
+		return NULL;
 	}
 	*dup = *info;
 	dup->src_addr = NULL;
