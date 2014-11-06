@@ -140,7 +140,7 @@ struct fi_ioc {
 /*
  * Format for transport addresses: sendto, writeto, etc.
  */
-enum {
+enum fi_addr_format {
 	FI_ADDR_UNSPEC,		/* void * */
 	FI_SOCKADDR,		/* struct sockaddr */
 	FI_SOCKADDR_IN,		/* struct sockaddr_in */
@@ -188,7 +188,7 @@ enum fi_ep_type {
  * If two providers support the same protocol, then they shall interoperate
  * when the protocol capabilities match.
  */
-enum {
+enum fi_protocol {
 	FI_PROTO_UNSPEC,
 	FI_PROTO_RDMA_CM_IB_RC,
 	FI_PROTO_IWARP,
@@ -226,7 +226,7 @@ struct fi_rx_ctx_attr {
 };
 
 struct fi_ep_attr {
-	uint32_t		protocol;
+	enum fi_protocol	protocol;
 	size_t			max_msg_size;
 	size_t			inject_size;
 	size_t			total_buffered_recv;
@@ -269,7 +269,7 @@ struct fi_info {
 	uint64_t		caps;
 	uint64_t		mode;
 	enum fi_ep_type		ep_type;
-	uint32_t		addr_format;
+	enum fi_addr_format	addr_format;
 	size_t			src_addrlen;
 	size_t			dest_addrlen;
 	void			*src_addr;
