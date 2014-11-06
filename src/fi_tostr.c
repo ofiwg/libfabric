@@ -419,7 +419,6 @@ char *fi_tostr_(const void *data, enum fi_type datatype)
 {
 	static __thread char *buf;
 	uint64_t val64 = *(const uint64_t *) data;
-	uint32_t val32 = *(const uint32_t *) data;
 	int enumval = *(const int *) data;
 
 	if (!data)
@@ -447,7 +446,7 @@ char *fi_tostr_(const void *data, enum fi_type datatype)
 		fi_tostr_flags(buf, val64);
 		break;
 	case FI_TYPE_ADDR_FORMAT:
-		fi_tostr_addr_format(buf, val32);
+		fi_tostr_addr_format(buf, enumval);
 		break;
 	case FI_TYPE_TX_ATTR:
 		fi_tostr_tx_attr(buf, data, "");
@@ -471,7 +470,7 @@ char *fi_tostr_(const void *data, enum fi_type datatype)
 		fi_tostr_progress(buf, enumval);
 		break;
 	case FI_TYPE_PROTOCOL:
-		fi_tostr_protocol(buf, val64);
+		fi_tostr_protocol(buf, enumval);
 		break;
 	case FI_TYPE_MSG_ORDER:
 		fi_tostr_order(buf, val64);
