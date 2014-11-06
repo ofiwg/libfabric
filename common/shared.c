@@ -89,12 +89,12 @@ int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len)
 	return ret;
 }
 
-char *size_str(char str[32], long long size)
+char *size_str(char str[FI_STR_LEN], long long size)
 {
 	long long base, fraction = 0;
 	char mag;
 
-	memcpy(str, "\0", 32);
+	memcpy(str, "\0", FI_STR_LEN);
 
 	if (size >= (1 << 30)) {
 		base = 1 << 30;
@@ -114,23 +114,23 @@ char *size_str(char str[32], long long size)
 		fraction = (size % base) * 10 / base;
 
 	if (fraction)
-		snprintf(str, 32, "%lld.%lld%c", size / base, fraction, mag);
+		snprintf(str, FI_STR_LEN, "%lld.%lld%c", size / base, fraction, mag);
 	else
-		snprintf(str, 32, "%lld%c", size / base, mag);
+		snprintf(str, FI_STR_LEN, "%lld%c", size / base, mag);
 
 	return str;
 }
 
-char *cnt_str(char str[32], long long cnt)
+char *cnt_str(char str[FI_STR_LEN], long long cnt)
 {
 	if (cnt >= 1000000000)
-		snprintf(str, 32, "%lldb", cnt / 1000000000);
+		snprintf(str, FI_STR_LEN, "%lldb", cnt / 1000000000);
 	else if (cnt >= 1000000)
-		snprintf(str, 32, "%lldm", cnt / 1000000);
+		snprintf(str, FI_STR_LEN, "%lldm", cnt / 1000000);
 	else if (cnt >= 1000)
-		snprintf(str, 32, "%lldk", cnt / 1000);
+		snprintf(str, FI_STR_LEN, "%lldk", cnt / 1000);
 	else
-		snprintf(str, 32, "%lld", cnt);
+		snprintf(str, FI_STR_LEN, "%lld", cnt);
 
 	return str;
 }
@@ -145,6 +145,16 @@ int size_to_count(int size)
 		return 10000;
 	else
 		return 100000;
+}
+
+void init_test(int size, char *test_name, int *transfer_size, int *iterations)
+{
+	char sstr[FI_STR_LEN];
+
+	size_str(sstr, size);
+	snprintf(test_name, sizeof test_name, "%s_lat", sstr);
+	*transfer_size = size;
+	*iterations = size_to_count(*transfer_size);
 }
 
 int bind_fid( fid_t ep, fid_t res, uint64_t flags)
@@ -198,10 +208,19 @@ int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
     return elapsed / p;
 }
 
-//	"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer"
-void perf_str(char *name, int tsize, int iters, long long total, int64_t elapsed)
+void print_test_hdr()
 {
-	char str[32];
+	printf("%-10s%-8s%-8s%-8s%8s %10s%13s\n",
+		"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
+}
+
+//	"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer"
+void show_perf(char *name, int tsize, int iters, struct timespec *start, 
+		struct timespec *end, int xfers_per_iter)
+{
+	char str[FI_STR_LEN];
+	int64_t elapsed = get_elapsed(start, end, MICRO);
+	long long bytes = (long long) iters * tsize * 2;
 
 	printf("%-10s", name);
 
@@ -209,9 +228,9 @@ void perf_str(char *name, int tsize, int iters, long long total, int64_t elapsed
 
 	printf("%-8s", cnt_str(str, iters));
 
-	printf("%-8s", size_str(str, total));
+	printf("%-8s", size_str(str, bytes));
 
 	printf("%8.2fs%10.2f%11.2f\n",
-		elapsed / 1000000.0, (total * 8) / (1000.0 * elapsed),
-		((float)elapsed / iters / 2));
+		elapsed / 1000000.0, (bytes * 8) / (1000.0 * elapsed),
+		((float)elapsed / iters / xfers_per_iter));
 }
