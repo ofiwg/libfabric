@@ -133,9 +133,12 @@ on the heap.
 Addresses which are inserted into an AV of type FI_AV_TABLE are accessible
 using a simple index.  Conceptually, the AV may be treated as an array
 of addresses, though the provider may implement the AV using a variety
-of mechanisms.  When FI_AV_TABLE is used, the returned fi_addr_t is a
-0-based index, with the index for an inserted address the same as its
+of mechanisms.  When FI_AV_TABLE is used, the returned fi_addr_t is an
+index, with the index for an inserted address the same as its
 insertion order into the table.
+The index of the first address inserted into an FI_AV_TABLE will be 0, and
+successive insertions will be given sequential indices.
+Sequential indices will be assigned across insertion calls on the same AV.
 .RE
 .IP "Receive Context Bits (rx_ctx_bits)"
 The receive context bits field is only for use with scalable endpoints.  It
@@ -221,10 +224,11 @@ address vector.  Note that any events queued on an event queue referencing
 the AV are left untouched.  It is recommended that callers retrieve all
 events associated with the AV before closing it.
 .SS "fi_av_bind"
-Associates an event queue with the AV.  Binding an event queue to an
-AV indicates that the provider should perform all insertions asynchronously,
-with the completions reported through the event queue.  If an event queue
-is not bound to the AV, then insertion requests behave synchronously.
+Associates an event queue with the AV.  If an AV has been opened with
+.B FI_EVENT,
+then an event queue must be bound to the AV before any insertion
+calls are attempted.  Any calls to insert addresses before an event queue
+has been bound will fail with -FI_ENOEQ.
 .SS "fi_av_insert"
 The fi_av_insert call inserts zero or more addresses into an AV.  The number
 of addresses is specified through the count parameter.  The addr parameter
@@ -249,10 +253,17 @@ For AV's of type FI_AV_TABLE, addresses are placed into the table in
 order.  That is, the first address inserted may be referenced at
 index 0.  The fi_addr parameter may be NULL in this case.  Otherwise,
 fi_addr must reference an array of fi_addr_t, and the buffer must
-remain valid until the insertion operation completes.  When addresses
-are inserted into an AV of type FI_AV_TABLE, the returned fi_addr values
+remain valid until the insertion operation completes.  Note that if fi_addr
+is NULL and synchronous operation is requested, individual insertion failures
+cannot be reported and the application must use other calls, such as
+.B fi_av_lookup
+to learn which specific addresses failed to insert.
+When addresses
+are inserted into an AV of type FI_AV_TABLE, the assigned fi_addr values
 will be simple indices corresponding to the entry into the table where the
 address was inserted.  Addresses are indexed in order of their insertion.
+Index values accumulate across successive insert calls in the order the calls
+are made, not necessarily in the order the insertions complete.
 .IP "flags"
 The following flag may be passed to fi_av_insert
 .RS
