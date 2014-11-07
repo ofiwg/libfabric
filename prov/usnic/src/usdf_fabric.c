@@ -322,23 +322,19 @@ next_dev:
 		usd_close(dev);
 		dev = NULL;
 	}
-	if (ai != NULL) {
-		freeaddrinfo(ai);
-	}
 
 	if (fi_first != NULL) {
 		*info = fi_first;
-		return 0;
+		ret = 0;
 	} else {
 		ret = -FI_ENODATA;
-		goto fail;
 	}
 
 fail:
 	if (dev != NULL) {
 		usd_close(dev);
 	}
-	if (fi_first != NULL) {
+	if (fi_first != NULL && ret != 0) {
 		fi_freeinfo(fi_first);
 	}
 	if (ai != NULL) {
