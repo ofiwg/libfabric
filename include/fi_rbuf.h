@@ -261,7 +261,7 @@ static inline size_t rbfdsread(struct ringbuffd *rbfd, void *buf, size_t len,
 	int ret;
 
 	do {
-		avail = rbfdavail(rbfd);
+		avail = rbfdused(rbfd);
 		if (avail) {
 			len = MIN(len, avail);
 			rbfdread(rbfd, buf, len);
