@@ -248,6 +248,7 @@ static struct fi_info *fi_dupinfo_internal(const struct fi_info *info)
 	dup->ep_attr = NULL;
 	dup->domain_attr = NULL;
 	dup->fabric_attr = NULL;
+	dup->prov_info = NULL;
 	dup->next = NULL;
 
 	if (info->src_addr != NULL) {
@@ -319,6 +320,13 @@ static struct fi_info *fi_dupinfo_internal(const struct fi_info *info)
 				goto fail;
 			}
 		}
+	}
+	if (info->prov_info != NULL && info->prov_info_len > 0) {
+		dup->prov_info = malloc(info->prov_info_len);
+		if (dup->prov_info == NULL) {
+			goto fail;
+		}
+		memcpy(dup->prov_info, info->prov_info, info->prov_info_len);
 	}
 	return dup;
 

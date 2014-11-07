@@ -280,6 +280,8 @@ struct fi_info {
 	struct fi_ep_attr	*ep_attr;
 	struct fi_domain_attr	*domain_attr;
 	struct fi_fabric_attr	*fabric_attr;
+	void			*prov_info;
+	size_t			prov_info_len;
 };
 
 enum {
