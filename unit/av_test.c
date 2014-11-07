@@ -940,7 +940,7 @@ av_goodbad_2vector_async()
 		}
 	}
 	ret = fi_eq_sread(eq, &event, &entry, sizeof(entry), 1000, 0);
-	if (ret != -FI_EAGAIN) {
+	if (ret != -FI_ETIMEDOUT) {
 		sprintf(err_buf, "too many events");
 		goto fail;
 	}
