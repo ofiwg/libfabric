@@ -153,7 +153,10 @@ fi_endpoint(struct fid_domain *domain, struct fi_info *info,
 	return domain->ops->endpoint(domain, info, ep, context);
 }
 
-#define fi_ep_bind(ep, fid, flags) fi_bind(ep, fid, flags)
+static inline int fi_ep_bind(struct fid_ep *ep, struct fid *bfid, uint64_t flags)
+{
+	return ep->fid.ops->bind(&ep->fid, bfid, flags);
+}
 
 static inline int fi_enable(struct fid_ep *ep)
 {
