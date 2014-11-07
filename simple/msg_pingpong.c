@@ -79,7 +79,7 @@ static int send_xfer(int size)
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(scq, "scq");
 			} else {
-				printf("Completion queue read %d (%s)\n", ret, fi_strerror(-ret));
+				printf("scq read %d (%s)\n", ret, fi_strerror(-ret));
 			}
 			return ret;
 		}
@@ -105,7 +105,7 @@ static int recv_xfer(int size)
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rcq, "rcq");
 			} else {
-				printf("Completion queue read %d (%s)\n", ret, fi_strerror(-ret));
+				printf("rcq read %d (%s)\n", ret, fi_strerror(-ret));
 			}
 			return ret;
 		}
@@ -209,13 +209,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = max_credits << 1;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		printf("fi_eq_open send comp %s\n", fi_strerror(-ret));
+		printf("fi_cq_open send comp %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		printf("fi_eq_open recv comp %s\n", fi_strerror(-ret));
+		printf("fi_cq_open recv comp %s\n", fi_strerror(-ret));
 		goto err2;
 	}
 
@@ -296,7 +296,7 @@ static int server_listen(void)
 
 	ret = fi_pendpoint(fab, fi, &pep, NULL);
 	if (ret) {
-		printf("fi_endpoint %s\n", fi_strerror(-ret));
+		printf("fi_pendpoint %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 
@@ -352,7 +352,7 @@ static int server_connect(void)
 	info = entry.info;
 	ret = fi_domain(fab, info, &dom, NULL);
 	if (ret) {
-		printf("fi_fdomain %s\n", fi_strerror(-ret));
+		printf("fi_domain %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 
@@ -431,7 +431,7 @@ static int client_connect(void)
 
 	ret = fi_domain(fab, fi, &dom, NULL);
 	if (ret) {
-		printf("fi_fdomain %s %s\n", fi_strerror(-ret),
+		printf("fi_domain %s %s\n", fi_strerror(-ret),
 			fi->domain_attr->name);
 		goto err2;
 	}
@@ -458,7 +458,7 @@ static int client_connect(void)
 
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		printf("fi_eq_condread %zd %s\n", rd, fi_strerror((int) -rd));
+		printf("fi_eq_sread %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 

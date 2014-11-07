@@ -177,7 +177,7 @@ int wait_for_completion(struct fid_cq *cq, int num_completions)
 		if (ret > 0) {
 			num_completions--;
 		} else if (ret < 0) {
-			printf("Event queue read %d (%s)\n", ret, fi_strerror(-ret));
+			printf("cq read %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
 		}
 	}

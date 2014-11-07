@@ -84,7 +84,7 @@ static int poll_all_sends(void)
 		if (ret > 0) {
 			credits++;
 		} else if (ret < 0) {
-			printf("SCQ read %d (%s)\n", ret, fi_strerror(-ret));
+			printf("scq read %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
 		}
 	} while (ret);
@@ -101,7 +101,7 @@ static int send_xfer(int size)
 		if (ret > 0) {
 			goto post;
 		} else if (ret < 0) {
-			printf("RCQ read %d (%s)\n", ret, fi_strerror(-ret));
+			printf("scq read %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
 		}
 	}
@@ -126,7 +126,7 @@ static int recv_xfer(int size)
 	do {
 		ret = fi_cq_read(rcq, &comp, sizeof comp);
 		if (ret < 0) {
-			printf("recv RCQ read %d (%s)\n", ret, fi_strerror(-ret));
+			printf("rcq read %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
 		}
 	} while (!ret);
@@ -328,7 +328,7 @@ static int common_setup(void)
 
 	ret = fi_domain(fab, fi, &dom, NULL);
 	if (ret) {
-		printf("fi_fdomain %s %s\n", fi_strerror(-ret),
+		printf("fi_domain %s %s\n", fi_strerror(-ret),
 			fi->domain_attr->name);
 		goto err2;
 	}
@@ -438,7 +438,7 @@ static int server_connect(void)
 	do {
 		ret = fi_cq_readfrom(rcq, &comp, sizeof comp, &client_addr);
 		if (ret < 0) {
-			printf("RCQ readfrom %d (%s)\n", ret, fi_strerror(-ret));
+			printf("fi_cq_readfrom rcq %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
 		}
 	} while (ret == 0);
