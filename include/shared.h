@@ -64,9 +64,10 @@ void init_test(int size, char *test_name, int *transfer_size, int *iterations);
 int wait_for_completion(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, char *cq_str);
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a, enum precision p);
-void print_test_hdr();
 void show_perf(char *name, int tsize, int iters, struct timespec *start, 
 		struct timespec *end, int xfers_per_iter);
+void show_perf_mr(int tsize, int iters, struct timespec *start,
+		  struct timespec *end, int xfers_per_iter, int argc, char *argv[]);
 
 #define FI_PRINTERR(call, retv) \
 	do { fprintf(stderr, call ": %d (%s)\n", retv, fi_strerror(-retv)); } while (0)
