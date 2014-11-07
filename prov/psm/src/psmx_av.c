@@ -126,10 +126,6 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 
 	av_priv = container_of(av, struct psmx_fid_av, av);
 
-	/* TODO: support the FI_RANGE flag */
-	if (flags)
-		return -FI_EBADFLAGS;
-
 	errors = (psm_error_t *) calloc(count, sizeof *errors);
 	if (!errors)
 		return -ENOMEM;
