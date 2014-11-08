@@ -591,7 +591,7 @@ int	psmx_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 int	psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap);
 int	psmx_domain_enable_features(struct psmx_fid_domain *domain, int ep_cap);
 void 	*psmx_name_server(void *args);
-void	*psmx_resolve_name(const char *servername);
+void	*psmx_resolve_name(const char *servername, int port);
 void	psmx_get_uuid(psm_uuid_t uuid);
 int	psmx_uuid_to_port(psm_uuid_t uuid);
 int	psmx_errno(int err);

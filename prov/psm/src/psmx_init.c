@@ -114,12 +114,11 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		return -FI_ENODATA;
 	}
 
-	if (node)
-		dest_addr = psmx_resolve_name(node);
-
-	if (service) {
-		/* TODO: check service */
-		/* Can service be used as the port number needed by psmx_resolve_name? */
+	if (node) {
+		if (service)
+			dest_addr = psmx_resolve_name(node, atoi(service));
+		else
+			dest_addr = psmx_resolve_name(node, 0);
 	}
 
 	if (hints) {
