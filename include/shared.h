@@ -68,6 +68,12 @@ void print_test_hdr();
 void show_perf(char *name, int tsize, int iters, struct timespec *start, 
 		struct timespec *end, int xfers_per_iter);
 
+#define FI_PRINTERR(call, retv) \
+	do { fprintf(stderr, call ": %d (%s)\n", retv, fi_strerror(-retv)); } while (0)
+
+#define FI_DEBUG(fmt, ...) \
+	do { fprintf(stderr, "%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__); } while (0)
+
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define ARRAY_SIZE(A) (sizeof(A)/sizeof(*A))

@@ -27,19 +27,14 @@
  * SOFTWARE.
  */
 
-#include <errno.h>
 #include <netdb.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 
 #include <rdma/fi_errno.h>
 
 #include <shared.h>
-#include <rdma/fi_errno.h>
-#include <rdma/fi_eq.h>
 
 struct test_size_param test_size[] = {
 	{ 1 <<  1, 1 }, { (1 <<  1) + (1 <<  0), 2},
@@ -163,7 +158,7 @@ int bind_fid( fid_t ep, fid_t res, uint64_t flags)
 
 	ret = fi_bind(ep, res, flags);
 	if (ret)
-		printf("fi_bind %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_bind", ret);
 	return ret;
 }
 
@@ -177,7 +172,7 @@ int wait_for_completion(struct fid_cq *cq, int num_completions)
 		if (ret > 0) {
 			num_completions--;
 		} else if (ret < 0) {
-			printf("cq read %d (%s)\n", ret, fi_strerror(-ret));
+			FI_PRINTERR("fi_cq_read", ret);
 			return ret;
 		}
 	}
@@ -192,10 +187,10 @@ void cq_readerr(struct fid_cq *cq, char *cq_str)
 
 	ret = fi_cq_readerr(cq, &cq_err, sizeof(cq_err), 0);
 	if (ret < 0)
-		printf("fi_cq_readerr %d (%s)\n", ret, fi_strerror(-ret));
+		FI_PRINTERR("fi_cq_readerr", ret);
 
 	err_str = fi_cq_strerror(cq, cq_err.prov_errno, cq_err.err_data, NULL, 0);
-	printf("%s %s (%d)\n", cq_str, err_str, cq_err.prov_errno);
+	FI_DEBUG("%s %s (%d)\n", cq_str, err_str, cq_err.prov_errno);
 }
 
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
