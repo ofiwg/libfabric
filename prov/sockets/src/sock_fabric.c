@@ -188,7 +188,7 @@ struct fi_provider sock_prov = {
 	.fabric = sock_fabric,
 };
 
-static void __attribute__((constructor)) sock_ini(void)
+void __attribute__((constructor)) sockets_ini(void)
 {
 	char *tmp = getenv("SFI_SOCK_DEBUG_LEVEL");
 	if (tmp){
@@ -200,6 +200,6 @@ static void __attribute__((constructor)) sock_ini(void)
 	(void) fi_register(&sock_prov);
 }
 
-static void __attribute__((destructor)) sock_fini(void)
+void __attribute__((destructor)) sockets_fini(void)
 {
 }

@@ -2377,11 +2377,11 @@ static struct fi_provider fi_ibv_prov = {
 	.fabric = fi_ibv_fabric,
 };
 
-static void __attribute__((constructor)) fi_ibv_ini(void)
+void __attribute__((constructor)) verbs_ini(void)
 {
 	(void) fi_register(&fi_ibv_prov);
 }
 
-static void __attribute__((destructor)) fi_ibv_fini(void)
+void __attribute__((destructor)) verbs_fini(void)
 {
 }
