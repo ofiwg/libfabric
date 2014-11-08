@@ -249,11 +249,11 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 			ret = psmx_wait_wait((struct fid_wait *)cntr_priv->wait, timeout);
 			if (ret == -FI_ETIMEDOUT)
 				break;
-			/* FIXME: fix timeout value before calling fi_wait again */
+			/* TODO: fix timeout value before calling fi_wait again */
 		}
 	}
 	else {
-		/* FIXME: check timeout */
+		/* TODO: check timeout */
 		while (cntr_priv->counter < threshold) {
 			psmx_cq_poll_mq(NULL, cntr_priv->domain, NULL, 0, NULL);
 			psmx_am_progress(cntr_priv->domain);

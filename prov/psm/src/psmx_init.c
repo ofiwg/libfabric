@@ -118,7 +118,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		dest_addr = psmx_resolve_name(node);
 
 	if (service) {
-		/* FIXME: check service */
+		/* TODO: check service */
 		/* Can service be used as the port number needed by psmx_resolve_name? */
 	}
 
@@ -212,7 +212,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 		caps = hints->caps;
 
-		/* FIXME: check other fields of hints */
+		/* TODO: check other fields of hints */
 	}
 
 	if (psmx_reserve_tag_bits(&caps, &max_tag_value) < 0)

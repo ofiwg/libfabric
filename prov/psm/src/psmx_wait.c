@@ -88,7 +88,7 @@ int psmx_wait_wait(struct fid_wait *wait, int timeout)
 	wait_priv = container_of(wait, struct psmx_fid_wait, wait.fid);
 	switch (wait_priv->type) {
 	case FI_WAIT_UNSPEC:
-		/* FIXME: optimized custom wait */
+		/* TODO: optimized custom wait */
 		break;
 
 	case FI_WAIT_FD:
@@ -120,7 +120,7 @@ void psmx_wait_signal(struct fid_wait *wait)
 
 	switch (wait_priv->type) {
 	case FI_WAIT_UNSPEC:
-		/* FIXME: optimized custom wait */
+		/* TODO: optimized custom wait */
 		break;
 
 	case FI_WAIT_FD:
@@ -168,7 +168,7 @@ static int psmx_wait_init(struct psmx_fid_wait *wait, int type)
 	
 	switch (type) {
 	case FI_WAIT_UNSPEC:
-		/* FIXME: optimized custom wait */
+		/* TODO: optimized custom wait */
 		break;
 
 	case FI_WAIT_FD:

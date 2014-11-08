@@ -341,7 +341,7 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 	if (ep_priv->recv_cq_event_flag && !(flags & FI_EVENT))
 		req->no_event = 1;
 
-	/* FIXME: match src_addr */
+	/* TODO: match src_addr */
 	unexp = psmx_unexp_dequeue();
 	if (!unexp) {
 		psmx_am_enqueue_recv(ep_priv->domain, req);
@@ -614,7 +614,7 @@ static ssize_t psmx_injectto2(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	/* FIXME: optimize it & guarantee buffered */
+	/* TODO: optimize it & guarantee buffered */
 	return _psmx_sendto2(ep, buf, len, NULL, dest_addr, &ep_priv->sendimm_context,
 			     ep_priv->flags | FI_INJECT);
 }
