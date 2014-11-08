@@ -51,6 +51,8 @@ struct fi_trigger_threshold {
 	size_t			threshold;
 };
 
+#ifndef FABRIC_DIRECT
+
 /* Size must match struct fi_context */
 struct fi_triggered_context {
 	enum fi_trigger_event	event_type;
@@ -59,6 +61,10 @@ struct fi_triggered_context {
 		void				*internal[3];
 	};
 };
+
+#else // FABRIC_DIRECT
+#include <rdma/fi_direct_trigger.h>
+#endif
 
 
 #ifdef __cplusplus
