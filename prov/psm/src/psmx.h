@@ -485,6 +485,7 @@ struct psmx_fid_cntr {
 	volatile uint64_t	error_counter;
 	struct psmx_fid_wait	*wait;
 	struct psmx_trigger	*trigger;
+	pthread_mutex_t		trigger_lock;
 };
 
 struct psmx_fid_av {

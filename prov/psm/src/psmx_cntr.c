@@ -36,10 +36,10 @@ void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
 {
 	struct psmx_trigger *trigger;
 
-	/* TODO: protect the trigger list with mutex */
-
 	if (!cntr->trigger)
 		return;
+
+	pthread_mutex_lock(&cntr->trigger_lock);
 
 	trigger = cntr->trigger;
 	while (trigger) {
@@ -166,13 +166,15 @@ void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
 
 		free(trigger);
 	}
+
+	pthread_mutex_unlock(&cntr->trigger_lock);
 }
 
 void psmx_cntr_add_trigger(struct psmx_fid_cntr *cntr, struct psmx_trigger *trigger)
 {
 	struct psmx_trigger *p, *q;
 
-	/* TODO: protect the trigger list with mutex */
+	pthread_mutex_lock(&cntr->trigger_lock);
 
 	q = NULL;
 	p = cntr->trigger;
@@ -185,6 +187,8 @@ void psmx_cntr_add_trigger(struct psmx_fid_cntr *cntr, struct psmx_trigger *trig
 	else
 		cntr->trigger = trigger;
 	trigger->next = p;
+
+	pthread_mutex_unlock(&cntr->trigger_lock);
 
 	psmx_cntr_check_trigger(cntr);
 }
@@ -268,6 +272,8 @@ static int psmx_cntr_close(fid_t fid)
 	struct psmx_fid_cntr *cntr;
 
 	cntr = container_of(fid, struct psmx_fid_cntr, cntr.fid);
+
+	pthread_mutex_destroy(&cntr->trigger_lock);
 	free(cntr);
 
 	return 0;
@@ -386,6 +392,8 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	cntr_priv->cntr.fid.context = context;
 	cntr_priv->cntr.fid.ops = &psmx_fi_ops;
 	cntr_priv->cntr.ops = &psmx_cntr_ops;
+
+	pthread_mutex_init(&cntr_priv->trigger_lock, NULL);
 
 	*cntr = &cntr_priv->cntr;
 	return 0;
