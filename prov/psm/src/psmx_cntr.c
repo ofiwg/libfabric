@@ -244,23 +244,36 @@ static int psmx_cntr_set(struct fid_cntr *cntr, uint64_t value)
 static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 {
 	struct psmx_fid_cntr *cntr_priv;
+	struct timespec ts0, ts;
+	int msec_passed = 0;
 	int ret = 0;
 
 	cntr_priv = container_of(cntr, struct psmx_fid_cntr, cntr);
 
-	if (cntr_priv->wait) {
-		while (cntr_priv->counter < threshold) {
-			ret = psmx_wait_wait((struct fid_wait *)cntr_priv->wait, timeout);
+	clock_gettime(CLOCK_REALTIME, &ts0);
+
+	while (cntr_priv->counter < threshold) {
+		if (cntr_priv->wait) {
+			ret = psmx_wait_wait((struct fid_wait *)cntr_priv->wait,
+					     timeout - msec_passed);
 			if (ret == -FI_ETIMEDOUT)
 				break;
-			/* TODO: fix timeout value before calling fi_wait again */
 		}
-	}
-	else {
-		/* TODO: check timeout */
-		while (cntr_priv->counter < threshold) {
+		else {
 			psmx_cq_poll_mq(NULL, cntr_priv->domain, NULL, 0, NULL);
 			psmx_am_progress(cntr_priv->domain);
+		}
+
+		if (cntr_priv->counter >= threshold)
+			break;
+
+		clock_gettime(CLOCK_REALTIME, &ts);
+		msec_passed = (ts.tv_sec - ts0.tv_sec) * 1000 +
+			      (ts.tv_nsec - ts0.tv_nsec) / 1000000;
+
+		if (msec_passed >= timeout) {
+			ret = -FI_ETIMEDOUT;
+			break;
 		}
 	}
 
