@@ -158,7 +158,7 @@ void *psmx_name_server(void *args)
 	return NULL;
 }
 
-void *psmx_resolve_name(const char *servername)
+void *psmx_resolve_name(const char *servername, int port)
 {
 	struct addrinfo hints = {
 		.ai_family   = AF_UNSPEC,
@@ -169,11 +169,12 @@ void *psmx_resolve_name(const char *servername)
 	char *service;
 	void *dest_addr;
 	int sockfd = -1;
-	int port;
 	int n;
 
-	psmx_get_uuid(uuid);
-	port = psmx_uuid_to_port(uuid);
+	if (!port) {
+		psmx_get_uuid(uuid);
+		port = psmx_uuid_to_port(uuid);
+	}
 
 	if (asprintf(&service, "%d", port) < 0)
 		return NULL;

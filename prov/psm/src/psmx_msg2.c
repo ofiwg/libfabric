@@ -59,28 +59,49 @@ struct psmx_unexp {
 
 static struct psmx_unexp *psmx_unexp_head = NULL;
 static struct psmx_unexp *psmx_unexp_tail = NULL;
-
-/* TODO: use a mutex to protect the queue */
+static pthread_mutex_t psmx_unexp_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void psmx_unexp_enqueue(struct psmx_unexp *unexp)
 {
+	pthread_mutex_lock(&psmx_unexp_lock);
+
 	if (!psmx_unexp_head)
 		psmx_unexp_head = psmx_unexp_tail = unexp;
 	else
 		psmx_unexp_tail->next = unexp;
+
+	pthread_mutex_unlock(&psmx_unexp_lock);
 }
 
-static struct psmx_unexp *psmx_unexp_dequeue(void)
+static struct psmx_unexp *psmx_unexp_dequeue(fi_addr_t src_addr)
 {
 	struct psmx_unexp *unexp = NULL;
+	struct psmx_unexp *prev;
+
+	pthread_mutex_lock(&psmx_unexp_lock);
 
 	if (psmx_unexp_head) {
+		prev = NULL;
 		unexp = psmx_unexp_head;
-		psmx_unexp_head = psmx_unexp_head->next;
-		if (!psmx_unexp_head)
-			psmx_unexp_tail = NULL;
-		unexp->next = NULL;
+		while (unexp) {
+			if (!src_addr || src_addr == (fi_addr_t)unexp->sender_addr) {
+				if (prev)
+					prev->next = unexp->next;
+				else
+					psmx_unexp_head = unexp->next;
+
+				if (psmx_unexp_tail == unexp)
+					psmx_unexp_tail = prev;
+
+				unexp->next = NULL;
+				break;
+			}
+			prev = unexp;
+			unexp = unexp->next;
+		}
 	}
+
+	pthread_mutex_unlock(&psmx_unexp_lock);
 
 	return unexp;
 }
@@ -318,14 +339,26 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 {
 	psm_amarg_t args[8];
 	struct psmx_fid_ep *ep_priv;
+	struct psmx_fid_av *av;
 	struct psmx_am_request *req;
 	struct psmx_unexp *unexp;
 	struct psmx_cq_event *event;
 	int recv_done;
 	int err = 0;
+	size_t idx;
 
         ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-        assert(ep_priv->domain);
+
+        if (src_addr) {
+		av = ep_priv->av;
+		if (av && av->type == FI_AV_TABLE) {
+			idx = (size_t)src_addr;
+			if (idx >= av->last)
+				return -EINVAL;
+
+			src_addr = (fi_addr_t)av->psm_epaddrs[idx];
+		}
+	}
 
 	req = calloc(1, sizeof(*req));
 	if (!req)
@@ -341,8 +374,7 @@ static ssize_t _psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 	if (ep_priv->recv_cq_event_flag && !(flags & FI_EVENT))
 		req->no_event = 1;
 
-	/* FIXME: match src_addr */
-	unexp = psmx_unexp_dequeue();
+	unexp = psmx_unexp_dequeue(src_addr);
 	if (!unexp) {
 		psmx_am_enqueue_recv(ep_priv->domain, req);
 		return 0;
@@ -410,12 +442,22 @@ static ssize_t psmx_recvfrom2(struct fid_ep *ep, void *buf, size_t len,
 static ssize_t psmx_recvmsg2(struct fid_ep *ep, const struct fi_msg *msg,
 			     uint64_t flags)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!msg || msg->iov_count != 1)
+	void *buf;
+	size_t len;
+
+	if (!msg || msg->iov_count > 1)
 		return -EINVAL;
 
-	return _psmx_recvfrom2(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+	if (msg->iov_count) {
+		buf = msg->msg_iov[0].iov_base;
+		len = msg->msg_iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return _psmx_recvfrom2(ep, buf, len,
 			       msg->desc, msg->addr, msg->context, flags);
 }
 
@@ -437,12 +479,22 @@ static ssize_t psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 static ssize_t psmx_recvv2(struct fid_ep *ep, const struct iovec *iov,
 			   void **desc, size_t count, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_recv2(ep, iov->iov_base, iov->iov_len, desc ? desc[0] : NULL, context);
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_recv2(ep, buf, len, desc ? desc[0] : NULL, context);
 }
 
 static ssize_t _psmx_sendto2(struct fid_ep *ep, const void *buf, size_t len,
@@ -533,12 +585,22 @@ static ssize_t psmx_sendto2(struct fid_ep *ep, const void *buf,
 static ssize_t psmx_sendmsg2(struct fid_ep *ep, const struct fi_msg *msg,
 			     uint64_t flags)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!msg || msg->iov_count != 1)
+	void *buf;
+	size_t len;
+
+	if (!msg || msg->iov_count > 1)
 		return -EINVAL;
 
-	return _psmx_sendto2(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+	if (msg->iov_count) {
+		buf = msg->msg_iov[0].iov_base;
+		len = msg->msg_iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return _psmx_sendto2(ep, buf, len,
 			     msg->desc, msg->addr, msg->context, flags);
 }
 
@@ -559,12 +621,22 @@ static ssize_t psmx_send2(struct fid_ep *ep, const void *buf, size_t len,
 static ssize_t psmx_sendv2(struct fid_ep *ep, const struct iovec *iov,
 			   void **desc, size_t count, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_send2(ep, iov->iov_base, iov->iov_len, desc ? desc[0] : NULL, context);
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_send2(ep, buf, len, desc ? desc[0] : NULL, context);
 }
 
 static ssize_t psmx_injectto2(struct fid_ep *ep, const void *buf, size_t len,
@@ -574,7 +646,7 @@ static ssize_t psmx_injectto2(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	/* FIXME: optimize it & guarantee buffered */
+	/* TODO: optimize it & guarantee buffered */
 	return _psmx_sendto2(ep, buf, len, NULL, dest_addr, &ep_priv->sendimm_context,
 			     ep_priv->flags | FI_INJECT);
 }

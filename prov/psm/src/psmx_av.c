@@ -126,10 +126,6 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 
 	av_priv = container_of(av, struct psmx_fid_av, av);
 
-	/* TODO: support the FI_RANGE flag */
-	if (flags)
-		return -FI_EBADFLAGS;
-
 	errors = (psm_error_t *) calloc(count, sizeof *errors);
 	if (!errors)
 		return -ENOMEM;
@@ -161,7 +157,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		if (((psm_epid_t *) addr)[i] == 0) { /* "any source" address */
 			fi_addr[i] = 0;
 		}
-		if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
+		else if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
 			epaddr_context = psm_epaddr_getctxt(epconn.addr);
 			if (epaddr_context && epaddr_context->epid  == ((psm_epid_t *) addr)[i])
 				((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
