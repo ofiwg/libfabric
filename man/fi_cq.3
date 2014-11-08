@@ -126,7 +126,8 @@ struct fi_cq_attr {
 };
 .fi
 .IP "size"
-Specifies the minimum size of an event queue.
+Specifies the minimum size of an event queue. A value of 0 indicates that
+the provider may choose a default value.
 .IP "flags"
 Flags that control the configuration of the CQ.
 .RS
