@@ -59,20 +59,25 @@ struct psmx_unexp {
 
 static struct psmx_unexp *psmx_unexp_head = NULL;
 static struct psmx_unexp *psmx_unexp_tail = NULL;
-
-/* TODO: use a mutex to protect the queue */
+static pthread_mutex_t psmx_unexp_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void psmx_unexp_enqueue(struct psmx_unexp *unexp)
 {
+	pthread_mutex_lock(&psmx_unexp_lock);
+
 	if (!psmx_unexp_head)
 		psmx_unexp_head = psmx_unexp_tail = unexp;
 	else
 		psmx_unexp_tail->next = unexp;
+
+	pthread_mutex_unlock(&psmx_unexp_lock);
 }
 
 static struct psmx_unexp *psmx_unexp_dequeue(void)
 {
 	struct psmx_unexp *unexp = NULL;
+
+	pthread_mutex_lock(&psmx_unexp_lock);
 
 	if (psmx_unexp_head) {
 		unexp = psmx_unexp_head;
@@ -81,6 +86,8 @@ static struct psmx_unexp *psmx_unexp_dequeue(void)
 			psmx_unexp_tail = NULL;
 		unexp->next = NULL;
 	}
+
+	pthread_mutex_unlock(&psmx_unexp_lock);
 
 	return unexp;
 }
