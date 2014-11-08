@@ -603,8 +603,6 @@ static ssize_t psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
 static ssize_t psmx_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			uint64_t flags)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1? */
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
@@ -635,8 +633,6 @@ static ssize_t psmx_readv(struct fid_ep *ep, const struct iovec *iov,
 		      void **desc, size_t count, uint64_t addr,
 		      uint64_t key, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1? */
 	if (!iov || count != 1)
 		return -EINVAL;
 
@@ -825,8 +821,6 @@ static ssize_t psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 static ssize_t psmx_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			 uint64_t flags)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1? */
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
@@ -857,8 +851,6 @@ static ssize_t psmx_writev(struct fid_ep *ep, const struct iovec *iov,
 		       void **desc, size_t count, uint64_t addr,
 		       uint64_t key, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1? */
 	if (!iov || count != 1)
 		return -EINVAL;
 

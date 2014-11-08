@@ -149,12 +149,22 @@ static ssize_t psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *des
 
 static ssize_t psmx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!msg || msg->iov_count != 1)
+	void *buf;
+	size_t len;
+
+	if (!msg || msg->iov_count > 1)
 		return -EINVAL;
 
-	return _psmx_recvfrom(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+	if (msg->iov_count) {
+		buf = msg->msg_iov[0].iov_base;
+		len = msg->msg_iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return _psmx_recvfrom(ep, buf, len,
 			      msg->desc ? msg->desc[0] : NULL, msg->addr,
 			      msg->context, flags);
 }
@@ -176,12 +186,22 @@ static ssize_t psmx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 static ssize_t psmx_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			  size_t count, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_recv(ep, iov->iov_base, iov->iov_len, desc ? desc[0] : NULL, context);
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_recv(ep, buf, len, desc ? desc[0] : NULL, context);
 }
 
 ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t len,
@@ -293,12 +313,22 @@ static ssize_t psmx_sendto(struct fid_ep *ep, const void *buf, size_t len,
 
 static ssize_t psmx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!msg || msg->iov_count != 1)
+	void *buf;
+	size_t len;
+
+	if (!msg || msg->iov_count > 1)
 		return -EINVAL;
 
-	return _psmx_sendto(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+	if (msg->iov_count) {
+		buf = msg->msg_iov[0].iov_base;
+		len = msg->msg_iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return _psmx_sendto(ep, buf, len,
 			    msg->desc ? msg->desc[0] : NULL, msg->addr,
 			    msg->context, flags);
 }
@@ -319,13 +349,22 @@ static ssize_t psmx_send(struct fid_ep *ep, const void *buf, size_t len, void *d
 static ssize_t psmx_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			  size_t count, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_send(ep, iov->iov_base, iov->iov_len, desc ? desc[0] : NULL,
-			 context);
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_send(ep, buf, len, desc ? desc[0] : NULL, context);
 }
 
 static ssize_t psmx_injectto(struct fid_ep *ep, const void *buf, size_t len,

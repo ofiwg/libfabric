@@ -876,8 +876,6 @@ static ssize_t psmx_atomic_writemsg(struct fid_ep *ep,
 				const struct fi_msg_atomic *msg,
 				uint64_t flags)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1? */
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
@@ -916,8 +914,6 @@ static ssize_t psmx_atomic_writev(struct fid_ep *ep,
 			      enum fi_datatype datatype,
 			      enum fi_op op, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1? */
 	if (!iov || count != 1)
 		return -EINVAL;
 
@@ -1115,8 +1111,6 @@ static ssize_t psmx_atomic_readwritemsg(struct fid_ep *ep,
 				    size_t result_count,
 				    uint64_t flags)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1? */
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
@@ -1162,8 +1156,6 @@ static ssize_t psmx_atomic_readwritev(struct fid_ep *ep,
 				  enum fi_datatype datatype,
 				  enum fi_op op, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1? */
 	if (!iov || count != 1)
 		return -EINVAL;
 
@@ -1350,8 +1342,6 @@ static ssize_t psmx_atomic_compwritemsg(struct fid_ep *ep,
 				    size_t result_count,
 				    uint64_t flags)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1? */
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
@@ -1405,8 +1395,6 @@ static ssize_t psmx_atomic_compwritev(struct fid_ep *ep,
 				  enum fi_datatype datatype,
 				  enum fi_op op, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1? */
 	if (!iov || count != 1)
 		return -EINVAL;
 

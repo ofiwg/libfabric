@@ -269,13 +269,22 @@ static ssize_t psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len, vo
 static ssize_t psmx_tagged_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 				   uint64_t flags)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!msg || msg->iov_count != 1)
+	void *buf;
+	size_t len;
+
+	if (!msg || msg->iov_count > 1)
 		return -EINVAL;
 
-	return _psmx_tagged_recvfrom(ep, msg->msg_iov[0].iov_base,
-				     msg->msg_iov[0].iov_len,
+	if (msg->iov_count) {
+		buf = msg->msg_iov[0].iov_base;
+		len = msg->msg_iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return _psmx_tagged_recvfrom(ep, buf, len,
 				     msg->desc ? msg->desc[0] : NULL,
 				     msg->addr, msg->tag, msg->ignore,
 				     msg->context, flags);
@@ -341,12 +350,22 @@ static ssize_t psmx_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, voi
 				 size_t count, uint64_t tag, uint64_t ignore,
 				 void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_tagged_recv(ep, iov->iov_base, iov->iov_len,
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_tagged_recv(ep, buf, len,
 				desc ? desc[0] : NULL, tag, ignore, context);
 }
 
@@ -354,12 +373,22 @@ static ssize_t psmx_tagged_recvv_no_flag(struct fid_ep *ep, const struct iovec *
 					 void **desc, size_t count, uint64_t tag,
 					 uint64_t ignore, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_tagged_recv_no_flag(ep, iov->iov_base, iov->iov_len,
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_tagged_recv_no_flag(ep, buf, len,
 					desc ? desc[0] : NULL, tag, ignore,
 					context);
 }
@@ -368,12 +397,22 @@ static ssize_t psmx_tagged_recvv_no_event(struct fid_ep *ep, const struct iovec 
 					 void **desc, size_t count, uint64_t tag,
 					 uint64_t ignore, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_tagged_recv_no_event(ep, iov->iov_base, iov->iov_len,
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_tagged_recv_no_event(ep, buf, len,
 					desc ? desc[0] : NULL, tag, ignore,
 					context);
 }
@@ -634,12 +673,22 @@ static ssize_t psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len
 static ssize_t psmx_tagged_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 				   uint64_t flags)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!msg || msg->iov_count != 1)
+	void *buf;
+	size_t len;
+
+	if (!msg || msg->iov_count > 1)
 		return -EINVAL;
 
-	return _psmx_tagged_sendto(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
+	if (msg->iov_count) {
+		buf = msg->msg_iov[0].iov_base;
+		len = msg->msg_iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return _psmx_tagged_sendto(ep, buf, len,
 				   msg->desc ? msg->desc[0] : NULL, msg->addr,
 				   msg->tag, msg->context, flags);
 }
@@ -730,12 +779,22 @@ static ssize_t psmx_tagged_send_no_event_av_table(struct fid_ep *ep, const void 
 static ssize_t psmx_tagged_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 				 size_t count, uint64_t tag, void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_tagged_send(ep, iov->iov_base, iov->iov_len,
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_tagged_send(ep, buf, len,
 				desc ? desc[0] : NULL, tag, context);
 }
 
@@ -743,12 +802,22 @@ static ssize_t psmx_tagged_sendv_no_flag_av_map(struct fid_ep *ep, const struct 
 						void **desc, size_t count, uint64_t tag,
 						void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_tagged_send_no_flag_av_map(ep, iov->iov_base, iov->iov_len,
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_tagged_send_no_flag_av_map(ep, buf, len,
 					       desc ? desc[0] : NULL, tag, context);
 }
 
@@ -756,12 +825,22 @@ static ssize_t psmx_tagged_sendv_no_flag_av_table(struct fid_ep *ep, const struc
 						  void **desc, size_t count, uint64_t tag,
 						  void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_tagged_send_no_flag_av_table(ep, iov->iov_base, iov->iov_len,
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_tagged_send_no_flag_av_table(ep, buf, len,
 					         desc ? desc[0] : NULL, tag, context);
 }
 
@@ -769,12 +848,22 @@ static ssize_t psmx_tagged_sendv_no_event_av_map(struct fid_ep *ep, const struct
 						void **desc, size_t count, uint64_t tag,
 						void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_tagged_send_no_event_av_map(ep, iov->iov_base, iov->iov_len,
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_tagged_send_no_event_av_map(ep, buf, len,
 					       desc ? desc[0] : NULL, tag, context);
 }
 
@@ -782,12 +871,22 @@ static ssize_t psmx_tagged_sendv_no_event_av_table(struct fid_ep *ep, const stru
 						  void **desc, size_t count, uint64_t tag,
 						  void *context)
 {
-	/* FIXME: allow iov_count == 0? */
-	/* FIXME: allow iov_count > 1 */
-	if (!iov || count != 1)
+	void *buf;
+	size_t len;
+
+	if (!iov || count > 1)
 		return -EINVAL;
 
-	return psmx_tagged_send_no_event_av_table(ep, iov->iov_base, iov->iov_len,
+	if (count) {
+		buf = iov[0].iov_base;
+		len = iov[0].iov_len;
+	}
+	else {
+		buf = NULL;
+		len = 0;
+	}
+
+	return psmx_tagged_send_no_event_av_table(ep, buf, len,
 					         desc ? desc[0] : NULL, tag, context);
 }
 
