@@ -51,6 +51,7 @@
 #include <fi_indexer.h>
 #include "list.h"
 #include <fi_rbuf.h>
+#include <fi_list.h>
 
 #ifndef _SOCK_H_
 #define _SOCK_H_
@@ -90,6 +91,7 @@ extern const char const sock_dom_name[];
 
 struct sock_fabric{
 	struct fid_fabric fab_fid;
+	atomic_t ref;
 };
 
 struct sock_domain {
@@ -157,11 +159,6 @@ struct sock_wait {
 };
 
 struct sock_ep;
-
-struct sock_eq_item{
-	int type;
-	ssize_t len;
-};
 
 enum {
 	SOCK_REQ_TYPE_SEND,
@@ -255,14 +252,22 @@ struct sock_rxtx {
 	fastlock_t		rlock;
 };
 
+struct sock_eq_entry{
+	uint32_t type;
+	size_t len;
+	uint64_t flags;
+	struct dlist_entry entry;
+	char event[0];
+};
+
 struct sock_eq{
 	struct fid_eq eq;
 	struct fi_eq_attr attr;
 	struct sock_fabric *sock_fab;
-	int fd[2];
 
-	list_t *completed_list;
-	list_t *error_list;
+	struct dlistfd_head list;
+	struct dlistfd_head err_list;
+	fastlock_t lock;
 };
 
 typedef int (*sock_ep_progress_fn) (struct sock_ep *ep, struct sock_cq *cq);
@@ -365,9 +370,10 @@ int _sock_cq_report_error(struct sock_cq *sock_cq, struct fi_cq_err_entry *error
 
 int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		struct fid_eq **eq, void *context);
-ssize_t _sock_eq_report_error(struct sock_eq *sock_eq, const void *buf, size_t len);
-ssize_t _sock_eq_report_event(struct sock_eq *sock_eq, int event_type, 
-			      const void *buf, size_t len);
+ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event, 
+			     const void *buf, size_t len, uint64_t flags);
+ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
+			     int err, int prov_errno, void *err_data);
 
 
 int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,

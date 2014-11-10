@@ -67,7 +67,14 @@ static struct fi_ops_fabric sock_fab_ops = {
 
 static int sock_fabric_close(fid_t fid)
 {
-	free(fid);
+	struct sock_fabric *fab;
+	fab = container_of(fid, struct sock_fabric, fab_fid);
+
+	if(atomic_get(&fab->ref)) {
+		return -FI_EBUSY;
+	}
+
+	free(fab);
 	return 0;
 }
 
@@ -118,6 +125,7 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	fab->fab_fid.fid.ops = &sock_fab_fi_ops;
 	fab->fab_fid.ops = &sock_fab_ops;
 	*fabric = &fab->fab_fid;
+	atomic_init(&fab->ref, 0);
 	return 0;
 }
 
