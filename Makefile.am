@@ -49,7 +49,7 @@ _sockets_files = \
 	prov/sockets/src/sock_rdm.c \
 	prov/sockets/src/sock_fabric.c \
 	prov/sockets/src/sock_ep.c \
-	prov/sockets/src/sock_rxtx.c \
+	prov/sockets/src/sock_ctx.c \
 	prov/sockets/src/sock_util.c \
 	prov/sockets/src/sock_util.h \
 	prov/sockets/src/indexer.c \
