@@ -40,71 +40,101 @@
 #include "sock.h"
 
 
-struct sock_rxtx *sock_rxtx_alloc(size_t size)
+struct sock_rx_ctx *sock_rx_ctx_alloc()
 {
-	struct sock_rxtx *rxtx;
-
-	rxtx = calloc(sizeof(*rxtx), 1);
-	if (!rxtx)
+	struct sock_rx_ctx *rx_ctx;
+	rx_ctx = calloc(1, sizeof(*rx_ctx));
+	if(!rx_ctx)
 		return NULL;
 
-	if (rbfdinit(&rxtx->rbfd, size))
+	dlist_init(&rx_ctx->ep_entry);
+	dlist_init(&rx_ctx->cq_entry);
+	dlist_init(&rx_ctx->pe_entry);
+
+	dlist_init(&rx_ctx->pe_entry_list);
+	dlist_init(&rx_ctx->rx_entry_list);
+
+	fastlock_init(&rx_ctx->lock);
+	return rx_ctx;
+}
+
+void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx)
+{
+	fastlock_destroy(&rx_ctx->lock);
+	free(rx_ctx);
+}
+
+struct sock_tx_ctx *sock_tx_ctx_alloc(size_t size)
+{
+	struct sock_tx_ctx *tx_ctx;
+
+	tx_ctx = calloc(sizeof(*tx_ctx), 1);
+	if (!tx_ctx)
+		return NULL;
+
+	if (rbfdinit(&tx_ctx->rbfd, size))
 		goto err;
 
-	fastlock_init(&rxtx->rlock);
-	fastlock_init(&rxtx->wlock);
-	return rxtx;
+	dlist_init(&tx_ctx->ep_entry);
+	dlist_init(&tx_ctx->cq_entry);
+	dlist_init(&tx_ctx->pe_entry);
+
+	dlist_init(&tx_ctx->pe_entry_list);
+
+	fastlock_init(&tx_ctx->rlock);
+	fastlock_init(&tx_ctx->wlock);
+	return tx_ctx;
 err:
-	free(rxtx);
+	free(tx_ctx);
 	return NULL;
 }
 
-void sock_rxtx_free(struct sock_rxtx *rxtx)
+void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx)
 {
-	fastlock_destroy(&rxtx->rlock);
-	fastlock_destroy(&rxtx->wlock);
-	rbfdfree(&rxtx->rbfd);
-	free(rxtx);
+	fastlock_destroy(&tx_ctx->rlock);
+	fastlock_destroy(&tx_ctx->wlock);
+	rbfdfree(&tx_ctx->rbfd);
+	free(tx_ctx);
 }
 
-void sock_rxtx_start(struct sock_rxtx *rxtx)
+void sock_tx_ctx_start(struct sock_tx_ctx *tx_ctx)
 {
-	fastlock_acquire(&rxtx->wlock);
+	fastlock_acquire(&tx_ctx->wlock);
 }
 
-int sock_rxtx_write(struct sock_rxtx *rxtx, const void *buf, size_t len)
+int sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len)
 {
-	if (rbfdavail(&rxtx->rbfd) < len)
+	if (rbfdavail(&tx_ctx->rbfd) < len)
 		return -FI_EAGAIN;
 
-	rbfdwrite(&rxtx->rbfd, buf, len);
+	rbfdwrite(&tx_ctx->rbfd, buf, len);
 	return 0;
 }
 
-void sock_rxtx_commit(struct sock_rxtx *rxtx)
+void sock_tx_ctx_commit(struct sock_tx_ctx *tx_ctx)
 {
-	rbfdcommit(&rxtx->rbfd);
-	fastlock_release(&rxtx->rlock);
+	rbfdcommit(&tx_ctx->rbfd);
+	fastlock_release(&tx_ctx->rlock);
 }
 
-void sock_rxtx_abort(struct sock_rxtx *rxtx)
+void sock_tx_ctx_abort(struct sock_tx_ctx *tx_ctx)
 {
-	rbfdabort(&rxtx->rbfd);
-	fastlock_release(&rxtx->rlock);
+	rbfdabort(&tx_ctx->rbfd);
+	fastlock_release(&tx_ctx->rlock);
 }
 
-int sock_rxtx_read(struct sock_rxtx *rxtx, void *buf, size_t len)
+int sock_tx_ctx_read(struct sock_tx_ctx *tx_ctx, void *buf, size_t len)
 {
 	int ret;
 
-	fastlock_acquire(&rxtx->rlock);
-	if (rbfdused(&rxtx->rbfd) >= len) {
-		rbfdread(&rxtx->rbfd, buf, len);
+	fastlock_acquire(&tx_ctx->rlock);
+	if (rbfdused(&tx_ctx->rbfd) >= len) {
+		rbfdread(&tx_ctx->rbfd, buf, len);
 		ret = 0;
 	} else {
 		ret = -FI_EAGAIN;
 	}
-	fastlock_release(&rxtx->rlock);
+	fastlock_release(&tx_ctx->rlock);
 
 	return ret;
 }
