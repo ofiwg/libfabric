@@ -183,6 +183,12 @@ err:
 	return -errno;
 }
 
+static inline void dlistfd_head_free(struct dlistfd_head *head)
+{
+	close(head->fd[0]);
+	close(head->fd[1]);
+}
+
 static inline int dlistfd_empty(struct dlistfd_head *head)
 {
 	return dlist_empty(&head->list);
