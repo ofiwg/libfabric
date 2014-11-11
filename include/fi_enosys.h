@@ -256,7 +256,7 @@ int fi_no_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr,
 /*
 static struct fi_ops_ep X = {
 	.size = sizeof(struct fi_ops_ep);,
-	.enable = X,
+	.enable = fi_no_enable,
 	.cancel = fi_no_cancel,
 	.getopt = fi_no_getopt,
 	.setopt = fi_no_setopt,
@@ -264,6 +264,7 @@ static struct fi_ops_ep X = {
 	.rx_ctx = fi_no_rx_ctx,
 };
 */
+int fi_no_enable(struct fid_ep *ep);
 ssize_t fi_no_cancel(fid_t fid, void *context);
 int fi_no_getopt(fid_t fid, int level, int optname,
 		void *optval, size_t *optlen);
