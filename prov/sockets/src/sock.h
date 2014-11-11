@@ -339,7 +339,43 @@ struct sock_pep {
 
 	uint64_t			op_flags;
 	uint64_t			pep_cap;
+};
 
+struct sock_rx_ctx {
+	uint16_t rx_id;
+	uint8_t reserved[6];
+	uint64_t addr;
+
+	struct sock_cq *cq;
+	struct sock_ep *ep;
+
+	struct dlist_entry ep_entry;
+	struct dlist_entry cq_entry;
+	struct dlist_entry pe_entry;
+
+	struct dlist_entry pe_entry_list;
+	struct dlist_entry rx_entry_list;
+	fastlock_t lock;
+};
+
+struct sock_tx_ctx {
+	struct ringbuffd	rbfd;
+	fastlock_t		wlock;
+	fastlock_t		rlock;
+
+	uint16_t tx_id;
+	uint8_t reserved[6];
+	uint64_t addr;
+
+	struct sock_cq *cq;
+	struct sock_ep *ep;
+
+	struct dlist_entry ep_entry;
+	struct dlist_entry cq_entry;
+	struct dlist_entry pe_entry;
+
+	struct dlist_entry pe_entry_list;
+	fastlock_t lock;
 };
 
 int _sock_verify_info(struct fi_info *hints);
@@ -391,13 +427,18 @@ int sock_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 int sock_ep_connect(struct fid_ep *ep, const void *addr,
 		    const void *param, size_t paramlen);
 
-struct sock_rxtx *sock_rxtx_alloc(size_t size);
-void sock_rxtx_free(struct sock_rxtx *rxtx);
-void sock_rxtx_start(struct sock_rxtx *rxtx);
-void sock_rxtx_commit(struct sock_rxtx *rxtx);
-void sock_rxtx_abort(struct sock_rxtx *rxtx);
-int sock_rxtx_write(struct sock_rxtx *rxtx, const void *buf, size_t len);
-int sock_rxtx_read(struct sock_rxtx *rxtx, void *buf, size_t len);
+
+struct sock_rx_ctx *sock_rx_ctx_alloc();
+void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx);
+
+struct sock_tx_ctx *sock_tx_ctx_alloc(size_t size);
+void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx);
+void sock_tx_ctx_start(struct sock_tx_ctx *tx_ctx);
+int sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len);
+void sock_tx_ctx_commit(struct sock_tx_ctx *tx_ctx);
+void sock_tx_ctx_abort(struct sock_tx_ctx *tx_ctx);
+int sock_tx_ctx_read(struct sock_tx_ctx *tx_ctx, void *buf, size_t len);
+
 
 int sock_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		struct fid_poll **pollset);
