@@ -207,6 +207,7 @@ enum {
 
 struct fi_tx_ctx_attr {
 	uint64_t		caps;
+	uint64_t		mode;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
 	size_t			inject_size;
@@ -217,6 +218,7 @@ struct fi_tx_ctx_attr {
 
 struct fi_rx_ctx_attr {
 	uint64_t		caps;
+	uint64_t		mode;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
 	size_t			total_buffered_recv;

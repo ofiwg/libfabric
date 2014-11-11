@@ -542,6 +542,7 @@ assigned to the context through the attr parameter, if provided.
 .nf
 struct fi_tx_ctx_attr {
 	uint64_t  caps;
+	uint64_t  mode;
 	uint64_t  op_flags;
 	uint64_t  msg_order;
 	size_t    inject_size;
@@ -554,6 +555,10 @@ struct fi_tx_ctx_attr {
 The requested capabilities of the context.  The capabilities must be a
 subset of those requested of the associated endpoint.  See the
 CAPABILITIES section if fi_getinfo(3) for capability details.
+.IP "mode"
+The operational mode bits of the context.  The mode bits will be a
+subset of those associated with the endpoint.  See the MODE section of
+fi_getinfo(3) for details.
 .IP "op_flags"
 Flags that control the operation of operations submitted against the
 context.  Applicable flags are listed in the Operation Flags section.
@@ -608,6 +613,7 @@ assigned to the context through the attr parameter, if provided.
 .nf
 struct fi_rx_ctx_attr {
 	uint64_t  caps;
+	uint64_t  mode;
 	uint64_t  op_flags;
 	uint64_t  msg_order;
 	size_t    total_buffered_recv;
@@ -620,6 +626,10 @@ struct fi_rx_ctx_attr {
 The requested capabilities of the context.  The capabilities must be a
 subset of those requested of the associated endpoint.  See the
 CAPABILITIES section if fi_getinfo(3) for capability details. 
+.IP "mode"
+The operational mode bits of the context.  The mode bits will be a
+subset of those associated with the endpoint.  See the MODE section of
+fi_getinfo(3) for details.
 .IP "op_flags"
 Flags that control the operation of operations submitted against the
 context.  Applicable flags are listed in the Operation Flags section.
