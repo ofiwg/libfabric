@@ -39,22 +39,57 @@
 #include <sys/queue.h>
 #include <pthread.h>
 
+#include "usdf_progress.h"
+
 #define USDF_FI_NAME "usnic"
 #define USDF_HDR_BUF_ENTRY 64
 #define USDF_EP_CAP_PIO (1ULL << 63)
-#define USDF_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
 
-#define USDF_SUPP_MODE (FI_LOCAL_MR | FI_MSG_PREFIX)
-#define USDF_REQ_MODE (FI_LOCAL_MR)
+#define USDF_DGRAM_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
+
+#define USDF_DGRAM_SUPP_MODE (FI_LOCAL_MR | FI_MSG_PREFIX)
+#define USDF_DGRAM_REQ_MODE (FI_LOCAL_MR)
+
+#define USDF_MSG_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
+
+#define USDF_MSG_SUPP_MODE (FI_LOCAL_MR)
+#define USDF_MSG_REQ_MODE (FI_LOCAL_MR)
 
 /* usdf event flags */
 #define USDF_EVENT_FLAG_ERROR (1ULL << 62)
 #define USDF_EVENT_FLAG_FREE_BUF (1ULL << 63)
 
+struct usdf_dev_entry {
+	struct usd_device *ue_dev;
+	struct usd_device_attrs ue_dattr;
+	int ue_dev_ok;
+};
+struct usdf_usnic_info {
+	int uu_num_devs;
+	struct usd_device_entry uu_devs[USD_MAX_DEVICES];
+	struct usdf_dev_entry uu_info[USD_MAX_DEVICES];
+};
+extern struct usdf_usnic_info *__usdf_devinfo;
+
 struct usdf_fabric {
 	struct fid_fabric   fab_fid;
-	char *fab_name;
+	struct usd_device_attrs *fab_dev_attrs;
+	int fab_arp_sockfd;
 	atomic_t fab_refcnt;
+
+	/* progression */
+	pthread_t fab_thread;
+	int fab_exit;
+	int fab_epollfd;
+	int fab_eventfd;
+	struct usdf_poll_item fab_poll_item;
+
+	/* timer vars */
+	uint32_t fab_active_timer_count;
+	LIST_HEAD(usdf_timer_bucket, usdf_timer_entry) *fab_timer_buckets;
+	uint64_t fab_cur_bucket_ms;
+	uint32_t fab_cur_bucket;
+	pthread_spinlock_t fab_timer_lock;
 };
 #define fab_ftou(FAB) container_of(FAB, struct usdf_fabric, fab_fid)
 #define fab_utof(FP) (&(FP)->fab_fid)
@@ -64,29 +99,47 @@ struct usdf_domain {
 	struct fid_domain   dom_fid;
 	struct usdf_fabric *dom_fabric;
 	atomic_t dom_refcnt;
+	struct usdf_eq *dom_eq;
 	struct usd_device   *dom_dev;
 	struct usd_device_attrs dom_dev_attrs;
-
-	/* progression */
-	pthread_t dom_thread;
-	int dom_exit;
-	int dom_eventfd;
-	atomic_t dom_pending_items;
-	pthread_spinlock_t dom_usd_lock;
 };
 #define dom_ftou(FDOM) container_of(FDOM, struct usdf_domain, dom_fid)
 #define dom_utof(DOM) (&(DOM)->dom_fid)
+#define dom_fidtou(FID) container_of(FID, struct usdf_domain, dom_fid.fid)
+
+struct usdf_pep {
+	struct fid_pep pep_fid;
+	atomic_t pep_refcnt;
+	struct usdf_fabric *pep_fabric;
+	struct usdf_eq *pep_eq;
+	int pep_sock;
+	struct usdf_poll_item pep_pollitem;
+
+	pthread_spinlock_t pep_cr_lock;
+	size_t pep_cr_max_data;
+	uint32_t pep_backlog;
+	uint32_t pep_cr_alloced;
+	TAILQ_HEAD(,usdf_connreq) pep_cr_free;
+	TAILQ_HEAD(,usdf_connreq) pep_cr_pending;
+};
+#define pep_ftou(FPEP) container_of(FPEP, struct usdf_pep, pep_fid)
+#define pep_fidtou(FID) container_of(FID, struct usdf_pep, pep_fid.fid)
+#define pep_utof(PEP) (&(PEP)->pep_fid)
 
 struct usdf_ep {
 	struct fid_ep ep_fid;
 	atomic_t ep_refcnt;
 	uint64_t ep_caps;
 	uint64_t ep_mode;
-	uint64_t ep_req_port;
+	int ep_sock;
+	int ep_conn_sock;
+	uint32_t ep_wqe;
+	uint32_t ep_rqe;
 	struct usdf_domain *ep_domain;
 	struct usdf_av *ep_av;
 	struct usdf_cq *ep_wcq;
 	struct usdf_cq *ep_rcq;
+	struct usdf_eq *ep_eq;
 	struct usd_qp *ep_qp;
 	struct usd_dest *ep_dest;
 	struct usd_qp_attrs ep_qp_attrs;
@@ -147,47 +200,9 @@ struct usdf_eq {
 #define eq_fidtou(FID) container_of(FID, struct usdf_eq, eq_fid.fid)
 #define eq_utof(EQ) (&(EQ)->eq_fid)
 
-struct usdf_av_insert_block;
-struct usdf_av_sync_list;
-
-struct usdf_av {
-	struct fid_av av_fid;
-	struct usdf_domain *av_domain;
-	uint64_t av_flags;
-	struct usdf_eq *av_eq;
-	atomic_t av_refcnt;
-	int av_closing;
-	atomic_t av_active_inserts;
-	pthread_spinlock_t av_lock;
-};
-#define av_ftou(FAV) container_of(FAV, struct usdf_av, av_fid)
-#define av_fidtou(FID) container_of(FID, struct usdf_av, av_fid.fid)
-#define av_utof(AV) (&(AV)->av_fid)
-
-struct usdf_av_insert {
-	struct usdf_av *avi_av;
-	uint32_t avi_pending_ops;
-	atomic_t avi_completed_ops;
-	atomic_t avi_successful_ops;
-	void *avi_context;
-};
-
-/* struct used for context to usd_create_dest_start - will go away */
-struct usdf_av_req {
-	struct usdf_av_insert *avr_insert;
-	fi_addr_t *avr_fi_addr;
-};
-
 /*
  * Prototypes
  */
-
-/* progression */
-void usdf_progress(struct usdf_domain *udp);
-void *usdf_progression_thread(void *v);
-int usdf_add_progression_item(struct usdf_domain *udp);
-void usdf_progression_item_complete(struct usdf_domain *udp);
-void usdf_av_progress(struct usdf_domain *udp);
 
 ssize_t usdf_eq_write_internal(struct usdf_eq *eq, uint32_t event,
 		const void *buf, size_t len, uint64_t flags);
@@ -197,6 +212,8 @@ int usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct fid_domain **domain, void *context);
 int usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	struct fid_eq **eq, void *context);
+int usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
+		struct fid_pep **pep_p, void *context);
 
 /* fi_ops_domain */
 int usdf_cq_open();
@@ -204,6 +221,7 @@ int usdf_endpoint_open(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av_o, void *context);
+
 
 /* fi_ops_mr */
 int usdf_reg_mr(struct fid_domain *domain, const void *buf, size_t len,

@@ -1,8 +1,6 @@
 /*
  * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
  *
- * LICENSE_BEGIN
- *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
  * General Public License (GPL) Version 2, available from the file
@@ -34,33 +32,36 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- *
- * LICENSE_END
- *
- *
- * definitions about time
  */
+#ifndef _USDF_MSG_H_
+#define _USDF_MSG_H_
 
-#ifndef _USD_TIME_H_
-#define _USD_TIME_H_
+/* fi_ops_cm for RC */
+int usdf_cm_msg_connect(struct fid_ep *ep, const void *addr,
+	const void *param, size_t paramlen);
+int usdf_cm_msg_shutdown(struct fid_ep *ep, uint64_t flags);
 
-#include <time.h>
+/* fi_ops_msg for RC */
+ssize_t usdf_msg_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
+	void *context);
+ssize_t usdf_msg_recvv(struct fid_ep *ep, const struct iovec *iov,
+	void **desc, size_t count, void *context);
+ssize_t usdf_msg_recvfrom(struct fid_ep *ep, void *buf, size_t len,
+	void *desc, fi_addr_t src_addr, void *context);
+ssize_t usdf_msg_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
+	uint64_t flags);
 
-typedef uint64_t usd_time_t;
+ssize_t usdf_msg_send(struct fid_ep *ep, const void *buf, size_t len,
+	void *desc, void *context);
+ssize_t usdf_msg_sendv(struct fid_ep *ep, const struct iovec *iov,
+	void **desc, size_t count, void *context);
+ssize_t usdf_msg_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
+	uint64_t flags);
+ssize_t usdf_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
+	void *desc, uint64_t data, void *context);
 
-static inline void usd_get_time(usd_time_t * timep)
-{
-    struct timespec now;
+ssize_t usdf_msg_inject(struct fid_ep *ep, const void *buf, size_t len);
+	
 
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    *timep = now.tv_sec * 1000 + now.tv_nsec / 1000000;
-}
 
-/*
- * Returns time delta in ms
- */
-static inline int usd_time_diff(usd_time_t time1, usd_time_t time2)
-{
-    return time2 - time1;
-}
-#endif /* _USD_TIME_H_ */
+#endif /* _USDF_MSG_H_ */

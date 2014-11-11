@@ -1,8 +1,6 @@
 /*
  * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
  *
- * LICENSE_BEGIN
- *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
  * General Public License (GPL) Version 2, available from the file
@@ -34,33 +32,52 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- *
- * LICENSE_END
- *
- *
- * definitions about time
  */
+#ifndef _USDF_AV_H_
+#define _USDF_AV_H_
 
-#ifndef _USD_TIME_H_
-#define _USD_TIME_H_
+#define USDF_AV_MAX_ARPS 3
+#define USDF_AV_ARP_INTERVAL 1000
 
-#include <time.h>
+/* struct used to track async insert requests */
+struct usdf_av_req {
+	fi_addr_t *avr_fi_addr;
+	struct usd_dest *avr_dest;
+	int avr_status;
 
-typedef uint64_t usd_time_t;
+	uint32_t avr_daddr_be;
 
-static inline void usd_get_time(usd_time_t * timep)
-{
-    struct timespec now;
+	TAILQ_ENTRY(usdf_av_req) avr_link;
+};
 
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    *timep = now.tv_sec * 1000 + now.tv_nsec / 1000000;
-}
+struct usdf_av_insert {
+	struct usdf_av *avi_av;
+	void *avi_context;
 
-/*
- * Returns time delta in ms
- */
-static inline int usd_time_diff(usd_time_t time1, usd_time_t time2)
-{
-    return time2 - time1;
-}
-#endif /* _USD_TIME_H_ */
+	struct usdf_timer_entry *avi_timer;
+
+	uint32_t avi_successes;
+	TAILQ_HEAD(,usdf_av_req) avi_req_list;
+	uint32_t avi_arps_left;
+	uint64_t avi_last_arp_time;
+};
+
+struct usdf_av {
+	struct fid_av av_fid;
+	struct usdf_domain *av_domain;
+	uint64_t av_flags;
+	struct usdf_eq *av_eq;
+	atomic_t av_refcnt;
+	int av_closing;
+	atomic_t av_active_inserts;
+	pthread_spinlock_t av_lock;
+};
+#define av_ftou(FAV) container_of(FAV, struct usdf_av, av_fid)
+#define av_fidtou(FID) container_of(FID, struct usdf_av, av_fid.fid)
+#define av_utof(AV) (&(AV)->av_fid)
+
+/* USD routines we use */
+void usd_fill_udp_dest(struct usd_dest *dest, struct usd_device_attrs *dap,
+    uint32_t daddr_be, uint16_t dport_be);
+
+#endif /* _USDF_AV_H_ */

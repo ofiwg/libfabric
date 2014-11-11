@@ -1,8 +1,6 @@
 /*
  * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
  *
- * LICENSE_BEGIN
- *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
  * General Public License (GPL) Version 2, available from the file
@@ -34,33 +32,41 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- *
- * LICENSE_END
- *
- *
- * definitions about time
  */
-
-#ifndef _USD_TIME_H_
-#define _USD_TIME_H_
+#ifndef _USDF_TIMER_H_
+#define _USDF_TIMER_H_
 
 #include <time.h>
 
-typedef uint64_t usd_time_t;
+struct usdf_timer_entry;
 
-static inline void usd_get_time(usd_time_t * timep)
+static inline uint64_t
+usdf_get_ms(void)
 {
-    struct timespec now;
+	struct timespec now;
+	uint64_t ms;
 
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    *timep = now.tv_sec * 1000 + now.tv_nsec / 1000000;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	ms = now.tv_sec * 1000 + now.tv_nsec / 1000000;
+
+	return ms;
 }
 
-/*
- * Returns time delta in ms
- */
-static inline int usd_time_diff(usd_time_t time1, usd_time_t time2)
-{
-    return time2 - time1;
-}
-#endif /* _USD_TIME_H_ */
+typedef void (*usdf_timer_callback_t)(void *);
+
+int usdf_timer_alloc(usdf_timer_callback_t cb, void *arg,
+		struct usdf_timer_entry **entry);
+
+void usdf_timer_free(struct usdf_fabric *fp, struct usdf_timer_entry *entry);
+
+int usdf_timer_set(struct usdf_fabric *fp, struct usdf_timer_entry *entry,
+		uint32_t timeout);
+
+void usdf_timer_cancel(struct usdf_fabric *fp, struct usdf_timer_entry *entry);
+
+void usdf_timer_progress(struct usdf_fabric *fp);
+
+int usdf_timer_init(struct usdf_fabric *fp);
+void usdf_timer_deinit(struct usdf_fabric *fp);
+
+#endif /* _USDF_TIMER_H_ */
