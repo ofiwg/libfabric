@@ -42,8 +42,6 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
-#include <poll.h>
-#include <sys/eventfd.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -53,26 +51,43 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
 #include "fi.h"
+#include "fi_enosys.h"
 
 #include "usnic_direct.h"
 #include "usdf.h"
 
 static int
-usdf_close_domain(fid_t fid)
+usdf_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+{
+        struct usdf_domain *udp;
+
+        udp = dom_fidtou(fid);
+
+        switch (bfid->fclass) {
+        case FI_CLASS_EQ:
+                if (udp->dom_eq != NULL) {
+                        return -FI_EINVAL;
+                }
+                udp->dom_eq = eq_fidtou(bfid);
+                atomic_inc(&udp->dom_eq->eq_refcnt);
+                break;
+        default:
+                return -FI_EINVAL;
+        }
+
+        return 0;
+}
+
+static int
+usdf_domain_close(fid_t fid)
 {
 	struct usdf_domain *udp;
-	void *rv;
 	int ret;
 
 	udp = container_of(fid, struct usdf_domain, dom_fid.fid);
 	if (atomic_get(&udp->dom_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
-
-	/* Tell progression thread to exit */
-	udp->dom_exit = 1;
-	usdf_add_progression_item(udp);
-	pthread_join(udp->dom_thread, &rv);
 
 	if (udp->dom_dev != NULL) {
 		ret = usd_close(udp->dom_dev);
@@ -81,6 +96,9 @@ usdf_close_domain(fid_t fid)
 		}
 	}
 
+	if (udp->dom_eq != NULL) {
+		atomic_dec(&udp->dom_eq->eq_refcnt);
+	}
 	atomic_dec(&udp->dom_fabric->fab_refcnt);
 	free(udp);
 
@@ -89,7 +107,10 @@ usdf_close_domain(fid_t fid)
 
 static struct fi_ops usdf_fid_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = usdf_close_domain,
+	.close = usdf_domain_close,
+	.bind = usdf_domain_bind,
+	.sync = fi_no_sync,
+	.ops_open = fi_no_ops_open,
 };
 
 static struct fi_ops_mr usdf_domain_mr_ops = {
@@ -108,8 +129,11 @@ int
 usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	   struct fid_domain **domain, void *context)
 {
-	struct usdf_fabric *fab;
+	struct usdf_fabric *fp;
 	struct usdf_domain *udp;
+	struct usdf_usnic_info *dp;
+	struct usdf_dev_entry *dep;
+	int d;
 	int ret;
 
 	udp = calloc(1, sizeof *udp);
@@ -117,12 +141,27 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		ret = -FI_ENOMEM;
 		goto fail;
 	}
-	udp->dom_eventfd = -1;
 
-	fab = fab_fidtou(fabric);
-	ret = usd_open(fab->fab_name, &udp->dom_dev);
-	if (ret != 0) {
-		goto fail;
+	fp = fab_fidtou(fabric);
+
+	/* steal cached device from info if we can */
+	dp = __usdf_devinfo;
+	for (d = 0; d < dp->uu_num_devs; ++d) {
+		dep = &dp->uu_info[d];
+		if (dep->ue_dev != NULL &&
+		    strcmp(fp->fab_dev_attrs->uda_devname,
+			    dep->ue_dattr.uda_devname) == 0) {
+			udp->dom_dev = dep->ue_dev;
+			dep->ue_dev = NULL;
+			break;
+		}
+	}
+
+	if (udp->dom_dev == NULL) {
+		ret = usd_open(fp->fab_dev_attrs->uda_devname, &udp->dom_dev);
+		if (ret != 0) {
+			goto fail;
+		}
 	}
 
 	udp->dom_fid.fid.fclass = FI_CLASS_DOMAIN;
@@ -131,32 +170,15 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	udp->dom_fid.ops = &usdf_domain_ops;
 	udp->dom_fid.mr = &usdf_domain_mr_ops;
 
-	udp->dom_eventfd = eventfd(0, EFD_NONBLOCK | EFD_SEMAPHORE);
-	if (udp->dom_eventfd == -1) {
-		ret = -errno;
-		goto fail;
-	}
-	ret = pthread_create(&udp->dom_thread, NULL,
-			usdf_progression_thread, udp);
-	if (ret != 0) {
-		ret = -ret;
-		goto fail;
-	}
-	atomic_init(&udp->dom_pending_items, 0);
-
-	udp->dom_fabric = fab;
-	pthread_spin_init(&udp->dom_usd_lock, PTHREAD_PROCESS_PRIVATE);
+	udp->dom_fabric = fp;
 	atomic_init(&udp->dom_refcnt, 0);
-	atomic_inc(&fab->fab_refcnt);
+	atomic_inc(&fp->fab_refcnt);
 
 	*domain = &udp->dom_fid;
 	return 0;
 
 fail:
 	if (udp != NULL) {
-		if (udp->dom_eventfd != -1) {
-			close(udp->dom_eventfd);
-		}
 		free(udp);
 	}
 	return ret;

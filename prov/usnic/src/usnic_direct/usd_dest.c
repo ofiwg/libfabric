@@ -169,7 +169,7 @@ usd_dest_progress_dev(
 
 
         /* time for next ARP trigger? */
-        delta = usd_time_diff(now, req->udr_last_arp);
+        delta = usd_time_diff(req->udr_last_arp, now);
         if (delta > (int) usd_dest_params.dp_arp_timeout) {
             if (req->udr_arps_sent >= usd_dest_params.dp_max_arps) {
                 req->udr_status = -EHOSTUNREACH;
@@ -200,10 +200,10 @@ usd_dest_progress()
  * Fill in all of a header except the dest MAC and the UDP ports
  * specified remote host
  */
-static void
+void
 usd_fill_udp_dest(
     struct usd_dest *dest,
-    struct usd_device *dev,
+    struct usd_device_attrs *dap,
     uint32_t daddr_be,
     uint16_t dport_be)
 {
@@ -212,7 +212,7 @@ usd_fill_udp_dest(
     struct udphdr *udp;
 
     eth = &dest->ds_dest.ds_udp.u_hdr.uh_eth;
-    memcpy(eth->ether_shost, dev->ud_attrs.uda_mac_addr, ETH_ALEN);
+    memcpy(eth->ether_shost, dap->uda_mac_addr, ETH_ALEN);
     eth->ether_type = htons(0x0800);
 
     ip = &dest->ds_dest.ds_udp.u_hdr.uh_ip;
@@ -222,7 +222,7 @@ usd_fill_udp_dest(
     ip->frag_off = 0;
     ip->ttl = 8;
     ip->protocol = IPPROTO_UDP;
-    ip->saddr = dev->ud_attrs.uda_ipaddr_be;
+    ip->saddr = dap->uda_ipaddr_be;
     ip->daddr = daddr_be;
 
     udp = &dest->ds_dest.ds_udp.u_hdr.uh_udp;
@@ -266,7 +266,7 @@ usd_create_udp_dest_start(
         first_hop_daddr_be = daddr_be;
 
     /* Fill in dest as much as we can */
-    usd_fill_udp_dest(dest, dev, daddr_be, dport_be);
+    usd_fill_udp_dest(dest, &dev->ud_attrs, daddr_be, dport_be);
 
     /* initiate request and add to tail of pending list */
     req->udr_daddr_be = first_hop_daddr_be;
@@ -552,7 +552,7 @@ usd_create_dest_with_mac(
         return -errno;
 
     /* Fill in dest as much as we can */
-    usd_fill_udp_dest(dest, dev, daddr_be, dport_be);
+    usd_fill_udp_dest(dest, &dev->ud_attrs, daddr_be, dport_be);
 
     /* copy in MAC from caller */
     eth = &dest->ds_dest.ds_udp.u_hdr.uh_eth;

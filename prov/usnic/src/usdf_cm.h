@@ -1,8 +1,6 @@
 /*
  * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
  *
- * LICENSE_BEGIN
- *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
  * General Public License (GPL) Version 2, available from the file
@@ -34,33 +32,32 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- *
- * LICENSE_END
- *
- *
- * definitions about time
  */
+#ifndef _USDF_CM_H_
+#define _USDF_CM_H_
 
-#ifndef _USD_TIME_H_
-#define _USD_TIME_H_
+#include <sys/queue.h>
 
-#include <time.h>
+struct usdf_connreq_msg {
+	uint32_t creq_data_len;
+} __attribute__((packed));
 
-typedef uint64_t usd_time_t;
+struct usdf_connresp_msg {
+	uint32_t cresp_result;
+	uint32_t cresp_reason;
+} __attribute__((packed));
 
-static inline void usd_get_time(usd_time_t * timep)
-{
-    struct timespec now;
+struct usdf_connreq {
+	int cr_sockfd;
+	struct usdf_pep *cr_pep;
+	TAILQ_ENTRY(usdf_connreq) cr_link;
 
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    *timep = now.tv_sec * 1000 + now.tv_nsec / 1000000;
-}
+	struct usdf_poll_item cr_pollitem;
 
-/*
- * Returns time delta in ms
- */
-static inline int usd_time_diff(usd_time_t time1, usd_time_t time2)
-{
-    return time2 - time1;
-}
-#endif /* _USD_TIME_H_ */
+	uint8_t *cr_ptr;
+	size_t cr_resid;
+
+	uint8_t cr_data[0];
+};
+
+#endif /* _USDF_CM_H_ */
