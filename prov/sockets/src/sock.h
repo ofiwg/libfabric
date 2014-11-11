@@ -113,22 +113,6 @@ struct sock_cntr {
 	pthread_mutex_t		mut;
 };
 
-#define SOCK_RD_FD		0
-#define SOCK_WR_FD		1
-
-struct sock_cq {
-	struct fid_cq		cq_fid;
-	struct sock_domain	*domain;
-	ssize_t cq_entry_size;
-	atomic_t ref;
-	struct fi_cq_attr attr;
-	int fd[2];
-
-	list_t *ep_list;
-	list_t *completed_list;
-	list_t *error_list;
-};
-
 struct sock_mr {
 	struct fid_mr		mr_fid;
 	struct sock_domain	*dom;
@@ -157,8 +141,6 @@ struct sock_wait {
 	struct fid_wait wait_fid;
 	struct sock_domain *dom;
 };
-
-struct sock_ep;
 
 enum {
 	SOCK_REQ_TYPE_SEND,
@@ -241,7 +223,7 @@ struct sock_tx_op {
 	};
 };
 
-union sock_tx_iov {
+union sock_iov {
 	struct fi_rma_iov	iov;
 	struct fi_rma_ioc	ioc;
 };
@@ -269,8 +251,6 @@ struct sock_eq{
 	struct dlistfd_head err_list;
 	fastlock_t lock;
 };
-
-typedef int (*sock_ep_progress_fn) (struct sock_ep *ep, struct sock_cq *cq);
 
 struct sock_ep {
 	struct fid_ep		ep;
@@ -323,7 +303,6 @@ struct sock_ep {
 	struct sock_ep *base;
 	
 	int port_num;
-	sock_ep_progress_fn progress_fn;
 };
 
 struct sock_pep {
@@ -377,6 +356,77 @@ struct sock_tx_ctx {
 	struct dlist_entry pe_entry_list;
 	fastlock_t lock;
 };
+
+struct sock_tx_iov {
+	union sock_iov src;
+	union sock_iov dst;
+};
+
+struct sock_tx_pe_entry{
+	struct sock_tx_op tx_op;	
+	uint8_t header_sent;
+	uint8_t reserved[7];
+
+	union {
+		struct sock_tx_iov tx_iov[SOCK_EP_MAX_IOV_LIMIT];
+		char inject_data[SOCK_EP_MAX_INJECT_SZ];
+	};
+};
+
+struct sock_rx_pe_entry{
+	struct sock_tx_op rx_op;
+	void *raw_data;
+	union sock_iov rx_iov[SOCK_EP_MAX_IOV_LIMIT];
+};
+
+/* PE entry type */
+enum{
+	SOCK_PE_RX,
+	SOCK_PE_TX,
+};
+
+struct sock_pe_entry{
+	union{
+		struct sock_tx_pe_entry tx;
+		struct sock_rx_pe_entry rx;
+	};
+
+	uint64_t flags;
+	uint64_t context;
+	uint64_t addr;
+	uint64_t data;
+	uint64_t tag;
+
+	uint8_t type;
+	uint8_t reserved[7];
+
+	uint64_t done_len;
+	struct sock_ep *ep;
+	struct sock_cq *cq;
+	struct dlist_entry entry;
+};
+
+typedef int (*sock_cq_report_fn) (struct sock_cq *cq, fi_addr_t addr,
+				  struct sock_pe_entry *pe_entry);
+struct sock_cq {
+	struct fid_cq cq_fid;
+	struct sock_domain *domain;
+	ssize_t cq_entry_size;
+	atomic_t ref;
+	struct fi_cq_attr attr;
+
+	struct ringbuf addr_rb;
+	struct ringbuffd cq_rbfd;
+	struct ringbuf cqerr_rb;
+	fastlock_t lock;
+
+	struct dlist_entry ep_list;
+	struct dlist_entry rx_list;
+	struct dlist_entry tx_list;
+
+	sock_cq_report_fn report_completion;
+};
+
 
 int _sock_verify_info(struct fi_info *hints);
 int _sock_verify_ep_attr(struct fi_ep_attr *attr);
