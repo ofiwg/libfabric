@@ -850,8 +850,10 @@ int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 
 	if(0 != (sock_ep->recv_list = new_list(SOCK_EP_RCVQ_LEN)))
 		goto err3;
-	
+
+/*	
 	sock_ep->progress_fn = _sock_ep_rdm_progress;
+*/
 	return 0;
 
 err3:

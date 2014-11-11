@@ -426,9 +426,11 @@ static int sockd_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				return -EINVAL;
 			ep->recv_cq = cq;
 		}
+/*
 		if(enqueue_item(cq->ep_list, ep)) {
 			return -ENOMEM;
 		}
+*/
 		break;
 	case FI_CLASS_EQ:
 		sock_debug(SOCK_ERROR,"[sockd] bind EQ to ep\n");
@@ -841,8 +843,10 @@ int sock_dgram_ep(struct fid_domain *domain, struct fi_info *info,
 
 	if(!(_ep->recv_list = new_list(SOCK_EP_RCVQ_LEN)))
 		goto err3;
-	
+
+/*	
 	_ep->progress_fn = _sock_ep_dgram_progress;
+*/
 
 	*ep = &_ep->ep;
 
