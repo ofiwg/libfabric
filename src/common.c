@@ -135,6 +135,7 @@ void fi_freeinfo_internal(struct fi_info *info)
 		free(info->fabric_attr->prov_name);
 		free(info->fabric_attr);
 	}
+	free(info->prov_info);
 	free(info);
 }
 uint64_t fi_tag_bits(uint64_t mem_tag_format)
