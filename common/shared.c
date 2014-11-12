@@ -203,19 +203,19 @@ int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
     return elapsed / p;
 }
 
-void print_test_hdr()
-{
-	printf("%-10s%-8s%-8s%-8s%8s %10s%13s\n",
-		"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
-}
-
-//	"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer"
 void show_perf(char *name, int tsize, int iters, struct timespec *start, 
 		struct timespec *end, int xfers_per_iter)
 {
+	static int header = 1;
 	char str[FI_STR_LEN];
 	int64_t elapsed = get_elapsed(start, end, MICRO);
-	long long bytes = (long long) iters * tsize * 2;
+	long long bytes = (long long) iters * tsize * xfers_per_iter;
+
+	if (header) {
+		printf("%-10s%-8s%-8s%-8s%8s %10s%13s\n",
+			"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
+		header = 0;
+	}
 
 	printf("%-10s", name);
 
@@ -228,4 +228,32 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 	printf("%8.2fs%10.2f%11.2f\n",
 		elapsed / 1000000.0, (bytes * 8) / (1000.0 * elapsed),
 		((float)elapsed / iters / xfers_per_iter));
+}
+
+void show_perf_mr(int tsize, int iters, struct timespec *start,
+		  struct timespec *end, int xfers_per_iter, int argc, char *argv[])
+{
+	static int header = 1;
+	int64_t elapsed = get_elapsed(start, end, MICRO);
+	long long total = (long long) iters * tsize * xfers_per_iter;
+	int i;
+
+	if (header) {
+		printf("--- # ");
+
+		for (i = 0; i < argc; ++i)
+			printf("%s ", argv[i]);
+
+		printf("\n");
+		header = 0;
+	}
+
+	printf("- { ");
+	printf("xfer_size: %d, ", tsize);
+	printf("iterations: %d, ", iters);
+	printf("total: %lld, ", total);
+	printf("time: %f, ", elapsed / 1000000.0);
+	printf("Gb/sec: %f, ", (total * 8) / (1000.0 * elapsed));
+	printf("usec/xfer: %f", ((float)elapsed / iters / xfers_per_iter));
+	printf(" }\n");
 }

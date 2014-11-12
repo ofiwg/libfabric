@@ -59,6 +59,8 @@ static void *buf_ptr;
 static size_t buffer_size;
 static size_t prefix_len;
 static size_t max_msg_size = 0;
+static int machr, g_argc;
+static char **g_argv;
 
 static struct fi_info hints;
 static struct fi_domain_attr domain_hints;
@@ -159,26 +161,28 @@ static int run_test(void)
 
 	ret = sync_test();
 	if (ret)
-		goto out;
+		return ret;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < iterations; i++) {
 		ret = dst_addr ? send_xfer(transfer_size) :
 				 recv_xfer(transfer_size);
 		if (ret)
-			goto out;
+			return ret;
 
 		ret = dst_addr ? recv_xfer(transfer_size) :
 				 send_xfer(transfer_size);
 		if (ret)
-			goto out;
+			return ret;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
-	show_perf(test_name, transfer_size, iterations, &start, &end, 2);
-	ret = 0;
 
-out:
-	return ret;
+	if (machr)
+		show_perf_mr(transfer_size, iterations, &start, &end, 2, g_argc, g_argv);
+	else
+		show_perf(test_name, transfer_size, iterations, &start, &end, 2);
+
+	return 0;
 }
 
 static void free_ep_res(void)
@@ -477,8 +481,6 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	print_test_hdr();
-
 	if (!custom) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > size_option ||
@@ -522,9 +524,9 @@ static int run(void)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op;
 
-	while ((op = getopt(argc, argv, "d:f:n:p:s:I:S:")) != -1) {
+	while ((op = getopt(argc, argv, "d:f:n:p:s:I:S:m")) != -1) {
 		switch (op) {
 		case 'd':
 			dst_addr = optarg;
@@ -553,6 +555,11 @@ int main(int argc, char **argv)
 				transfer_size = atoi(optarg);
 			}
 			break;
+		case 'm':
+			machr = 1;
+			g_argc = argc;
+			g_argv = argv;
+			break;
 		default:
 			printf("usage: %s\n", argv[0]);
 			printf("\t[-d destination_address]\n");
@@ -562,6 +569,7 @@ int main(int argc, char **argv)
 			printf("\t[-s source_address]\n");
 			printf("\t[-I iterations]\n");
 			printf("\t[-S transfer_size or 'all']\n");
+			printf("\t[-m machine readable output]\n");
 			exit(1);
 		}
 	}
@@ -574,6 +582,5 @@ int main(int argc, char **argv)
 	hints.mode = FI_LOCAL_MR | FI_MSG_PREFIX;
 	hints.addr_format = FI_SOCKADDR;
 
-	ret = run();
-	return ret;
+	return run();
 }

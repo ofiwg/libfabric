@@ -53,6 +53,8 @@ static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
 struct fi_rma_iov local, remote;
+static int machr, g_argc;
+static char **g_argv;
 
 static struct fi_info hints;
 static struct fi_domain_attr domain_hints;
@@ -78,6 +80,7 @@ void usage(char *name)
 	fprintf(stderr, "\t[-I iterations]\n");
 	fprintf(stderr, "\t[-o read|write] (default: write)\n");
 	fprintf(stderr, "\t[-S transfer_size or 'all']\n");
+	fprintf(stderr, "\t[-m machine readable output]\n");
 	exit(1);
 }
 
@@ -182,7 +185,9 @@ static int run_test(void)
 {
 	int ret, i;
 
-	sync_test();
+	ret = sync_test();
+	if (ret)
+		return ret;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < iterations; i++) {
@@ -192,17 +197,19 @@ static int run_test(void)
 			ret = read_data(transfer_size); 
 		}
 		if (ret)
-			goto out;
+			return ret;
 		ret = wait_for_completion(scq, 1);
 		if (ret)
-			goto out;
+			return ret;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
-	show_perf(test_name, transfer_size, iterations, &start, &end, 1);
-	ret = 0;
 
-out:
-	return ret;
+	if (machr)
+		show_perf_mr(transfer_size, iterations, &start, &end, 2, g_argc, g_argv);
+	else
+		show_perf(test_name, transfer_size, iterations, &start, &end, 2);
+
+	return 0;
 }
 
 static void free_lres(void)
@@ -564,8 +571,6 @@ static int run(void)
 			return ret;
 	}
 
-	print_test_hdr();
-
 	ret = dst_addr ? client_connect() : server_connect();
 	if (ret)
 		return ret;
@@ -602,9 +607,9 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:I:o:S:")) != -1) {
+	while ((op = getopt(argc, argv, "d:n:p:s:I:o:S:m")) != -1) {
 		switch (op) {
 		case 'd':
 			dst_addr = optarg;
@@ -638,6 +643,11 @@ int main(int argc, char **argv)
 				transfer_size = atoi(optarg);
 			}
 			break;
+		case 'm':
+			machr = 1;
+			g_argc = argc;
+			g_argv = argv;
+			break;
 		default:
 			usage(argv[0]);
 		}
@@ -650,6 +660,5 @@ int main(int argc, char **argv)
 	hints.mode = FI_LOCAL_MR | FI_PROV_MR_KEY;
 	hints.addr_format = FI_SOCKADDR;
 
-	ret = run();
-	return ret;
+	return run();
 }
