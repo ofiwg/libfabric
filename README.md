@@ -26,4 +26,4 @@ The bulk of the libfabric code base is being developed in this GitHub repository
 
 Second: become part of the conversation.
 
-[Join the ofiwg mailing list])http://lists.openfabrics.org/mailman/listinfo/ofiwg).  Notices of the Tuesday-weekly OFIWG Webexes are sent on this list; anyone can join the calls to listen and participate in the design of libfabric.
+[Join the ofiwg mailing list](http://lists.openfabrics.org/mailman/listinfo/ofiwg).  Notices of the Tuesday-weekly OFIWG Webexes are sent on this list; anyone can join the calls to listen and participate in the design of libfabric.
