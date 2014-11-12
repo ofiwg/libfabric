@@ -207,6 +207,7 @@ enum {
 
 struct fi_tx_ctx_attr {
 	uint64_t		caps;
+	uint64_t		mode;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
 	size_t			inject_size;
@@ -217,6 +218,7 @@ struct fi_tx_ctx_attr {
 
 struct fi_rx_ctx_attr {
 	uint64_t		caps;
+	uint64_t		mode;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
 	size_t			total_buffered_recv;
@@ -276,7 +278,9 @@ struct fi_info {
 	void			*dest_addr;
 	fi_connreq_t		connreq;
 	struct fi_tx_ctx_attr	*tx_attr;
+	size_t			tx_attr_cnt;
 	struct fi_rx_ctx_attr	*rx_attr;
+	size_t			rx_attr_cnt;
 	struct fi_ep_attr	*ep_attr;
 	struct fi_domain_attr	*domain_attr;
 	struct fi_fabric_attr	*fabric_attr;
