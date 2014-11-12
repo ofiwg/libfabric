@@ -479,7 +479,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 	assert(cq_priv->domain);
 
-	if (PSMX_CQ_EMPTY(cq_priv)) {
+	if (PSMX_CQ_EMPTY(cq_priv) || !buf) {
 		ret = psmx_cq_poll_mq(cq_priv, cq_priv->domain,
 				      (struct psmx_cq_event *)buf, count, src_addr);
 		if (ret > 0)
