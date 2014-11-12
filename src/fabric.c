@@ -366,7 +366,7 @@ uint32_t fi_version_(void)
 default_symver(fi_version_, fi_version);
 
 #define FI_ERRNO_OFFSET	256
-#define FI_ERRNO_MAX	FI_EOPBADSTATE
+#define FI_ERRNO_MAX	FI_ENOCQ
 
 static const char *const errstr[] = {
 	[FI_EOTHER - FI_ERRNO_OFFSET] = "Unspecified error",
@@ -376,6 +376,7 @@ static const char *const errstr[] = {
 	[FI_EBADFLAGS - FI_ERRNO_OFFSET] = "Flags not supported",
 	[FI_ENOEQ - FI_ERRNO_OFFSET] = "Missing or unavailable event queue",
 	[FI_EDOMAIN - FI_ERRNO_OFFSET] = "Invalid resource domain",
+	[FI_ENOCQ - FI_ERRNO_OFFSET] = "Missing or unavailable completion queue",
 };
 
 __attribute__((visibility ("default")))
