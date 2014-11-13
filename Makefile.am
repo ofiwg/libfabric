@@ -305,6 +305,7 @@ man_MANS = \
 	man/fi_eq_strerror.3 \
 	man/fi_enable.3 \
 	man/fi_endpoint.3 \
+	man/fi_errno.3 \
 	man/fi_fabric.3 \
 	man/fi_fetch_atomic.3 \
 	man/fi_fetch_atomicv.3 \
@@ -350,6 +351,7 @@ man_MANS = \
 	man/fi_sendmsg.3 \
 	man/fi_setopt.3 \
 	man/fi_shutdown.3 \
+	man/fi_strerror.3 \
 	man/fi_tagged.3 \
 	man/fi_tinject.3 \
 	man/fi_tinjectto.3 \

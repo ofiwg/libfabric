@@ -346,10 +346,10 @@ The fi_atomicto function is equivalent to fi_atomic for unconnected endpoints.
 .PP
 The  fi_inject_atomic call is an optimized version of fi_atomic.  The
 fi_inject_atomic function behaves as if the FI_INJECT transfer flag were set,
-and FI_EVENT were not.  That is, the data buffer is available for reuse
+and FI_COMPLETION were not.  That is, the data buffer is available for reuse
 immediately on returning from from fi_inject_atomic, and no completion event
-will be generated for this atomic.  The completion event will be  suppressed
-even  if  the endpoint has not been configured with FI_EVENT.  See the flags
+will be generated for this atomic.  The completion event will be suppressed
+even if the endpoint has not been configured with FI_COMPLETION.  See the flags
 discussion below for more details.
 .PP
 The fi_inject_atomicto is  equivalent to fi_inject_atomic for unconnected
@@ -432,10 +432,10 @@ the user to specify flags which can change the default data transfer operation.
 Flags specified with atomic message operations override most flags
 previously configured with the endpoint, except where noted (see fi_control).
 The following list of flags are usable with atomic message calls.
-.IP "FI_EVENT"
+.IP "FI_COMPLETION"
 Indicates that a completion entry should be generated for the specified
 operation.  The endpoint must be bound to an event queue
-with FI_EVENT that corresponds to the specified operation, or this flag
+with FI_COMPLETION that corresponds to the specified operation, or this flag
 is ignored.
 .IP "FI_MORE"
 Indicates that the user has additional requests that will immediately be

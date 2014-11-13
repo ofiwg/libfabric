@@ -176,18 +176,18 @@ operations.
 .IP "FI_RECV"  
 Directs the notification of inbound data transfers to the
 specified completion queue.  This includes received messages.
-.IP "FI_EVENT"
-If FI_EVENT is specified, the indicated data transfer operations
+.IP "FI_COMPLETION"
+If FI_COMPLETION is specified, the indicated data transfer operations
 won't generate entries for successful completions in the
-completion queue unless FI_EVENT is set for that specific operation.
-FI_EVENT must be OR'ed with FI_SEND and/or FI_RECV flags.
+completion queue unless FI_COMPLETION is set for that specific operation.
+FI_COMPLETION must be OR'ed with FI_SEND and/or FI_RECV flags.
 .sp
 When set the user must determine when a request that does NOT have
-FI_EVENT set has completed indirectly, usually based on the completion
+FI_COMPLETION set has completed indirectly, usually based on the completion
 of a subsequent operation.  Use of this flag may improve performance by
 allowing the provider to avoid writing a completion entry for every operation.
 .sp
-The use of FI_EVENT is often paired with the call fi_sync.  FI_EVENT
+The use of FI_COMPLETION is often paired with the call fi_sync.  FI_COMPLETION
 allows the user to suppress completions from being generated.  In order
 for the application to ensure that all previous operations have
 completed, the application may call fi_sync.  The successful completion
@@ -542,6 +542,7 @@ assigned to the context through the attr parameter, if provided.
 .nf
 struct fi_tx_ctx_attr {
 	uint64_t  caps;
+	uint64_t  mode;
 	uint64_t  op_flags;
 	uint64_t  msg_order;
 	size_t    inject_size;
@@ -554,6 +555,10 @@ struct fi_tx_ctx_attr {
 The requested capabilities of the context.  The capabilities must be a
 subset of those requested of the associated endpoint.  See the
 CAPABILITIES section if fi_getinfo(3) for capability details.
+.IP "mode"
+The operational mode bits of the context.  The mode bits will be a
+subset of those associated with the endpoint.  See the MODE section of
+fi_getinfo(3) for details.
 .IP "op_flags"
 Flags that control the operation of operations submitted against the
 context.  Applicable flags are listed in the Operation Flags section.
@@ -608,6 +613,7 @@ assigned to the context through the attr parameter, if provided.
 .nf
 struct fi_rx_ctx_attr {
 	uint64_t  caps;
+	uint64_t  mode;
 	uint64_t  op_flags;
 	uint64_t  msg_order;
 	size_t    total_buffered_recv;
@@ -620,6 +626,10 @@ struct fi_rx_ctx_attr {
 The requested capabilities of the context.  The capabilities must be a
 subset of those requested of the associated endpoint.  See the
 CAPABILITIES section if fi_getinfo(3) for capability details. 
+.IP "mode"
+The operational mode bits of the context.  The mode bits will be a
+subset of those associated with the endpoint.  See the MODE section of
+fi_getinfo(3) for details.
 .IP "op_flags"
 Flags that control the operation of operations submitted against the
 context.  Applicable flags are listed in the Operation Flags section.
@@ -672,7 +682,7 @@ If set, the communication interface implementation should attempt to queue inbou
 data that arrives before a receive buffer has been posted.  In the
 absence of this flag, any messages that arrive before a receive is
 posted are lost.
-.IP "FI_EVENT"
+.IP "FI_COMPLETION"
 Indicates that a completion entry should be generated for data transfer
 operations.
 .IP "FI_REMOTE_SIGNAL"
@@ -717,9 +727,9 @@ endpoint.
 .PP
 Endpoints allocated with the FI_CONTEXT mode set must
 typically provide struct fi_context as their per operation context
-parameter.  (See fi_getinfo.3 for details.)  However, when FI_EVENT is
+parameter.  (See fi_getinfo.3 for details.)  However, when FI_COMPLETION is
 enabled to suppress completion entries, and an operation is initiated without
-FI_EVENT flag set, then the context parameter is ignored.  An
+FI_COMPLETION flag set, then the context parameter is ignored.  An
 application does not need to pass in a valid struct fi_context into
 such data transfers.
 .PP
@@ -767,7 +777,7 @@ Fabric errno values are defined in
 .IP "-FI_EDOMAIN"
 A resource domain was not bound to the endpoint or an attempt was made to
 bind multiple domains.
-.IP "-FI_ENOEQ"
+.IP "-FI_ENOCQ"
 The endpoint has not been configured with necessary event queue.
 .IP "-FI_EOPBADSTATE"
 The endpoint's state does not permit the requested operation.

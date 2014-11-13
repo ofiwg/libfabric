@@ -124,6 +124,7 @@ typedef struct fid *fid_t;
 
 #define FI_REMOTE_CQ_DATA	(1ULL << 24)
 #define FI_EVENT		(1ULL << 25)
+#define FI_COMPLETION		FI_EVENT
 #define FI_REMOTE_SIGNAL	(1ULL << 26)
 #define FI_REMOTE_COMPLETE	(1ULL << 27)
 #define FI_CANCEL		(1ULL << 28)
@@ -207,6 +208,7 @@ enum {
 
 struct fi_tx_ctx_attr {
 	uint64_t		caps;
+	uint64_t		mode;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
 	size_t			inject_size;
@@ -217,6 +219,7 @@ struct fi_tx_ctx_attr {
 
 struct fi_rx_ctx_attr {
 	uint64_t		caps;
+	uint64_t		mode;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
 	size_t			total_buffered_recv;
