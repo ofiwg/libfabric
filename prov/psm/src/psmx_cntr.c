@@ -267,6 +267,9 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 		if (cntr_priv->counter >= threshold)
 			break;
 
+		if (timeout < 0)
+			continue;
+
 		clock_gettime(CLOCK_REALTIME, &ts);
 		msec_passed = (ts.tv_sec - ts0.tv_sec) * 1000 +
 			      (ts.tv_nsec - ts0.tv_nsec) / 1000000;
