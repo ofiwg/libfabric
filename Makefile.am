@@ -4,6 +4,8 @@ bin_PROGRAMS = \
 	simple/fi_info \
 	simple/fi_msg_pingpong \
 	simple/fi_msg_rma \
+	simple/fi_rdm_pingpong \
+	simple/fi_rdm_tagged_pingpong \
 	simple/fi_ud_pingpong \
 	unit/fi_eq_test \
 	unit/fi_av_test \
@@ -19,6 +21,14 @@ simple_fi_msg_pingpong_SOURCES = \
 
 simple_fi_msg_rma_SOURCES = \
 	simple/msg_rma.c \
+	common/shared.c
+
+simple_fi_rdm_pingpong_SOURCES = \
+	simple/rdm_pingpong.c \
+	common/shared.c
+
+simple_fi_rdm_tagged_pingpong_SOURCES = \
+	simple/rdm_tagged_pingpong.c \
 	common/shared.c
 
 simple_fi_ud_pingpong_SOURCES = \
