@@ -548,7 +548,6 @@ struct fi_tx_ctx_attr {
 	size_t    inject_size;
 	size_t    size;
 	size_t    iov_limit;
-	size_t    op_alignment;
 };
 .fi
 .IP "caps"
@@ -578,10 +577,6 @@ available in the local queue to post a new operation.
 .IP "iov_limit" 
 This is the maximum number of IO vectors (scatter-gather elements) that a
 single posted operation may reference.
-.IP "op_alignment"
-The operation alignment is used to calculate any necessary padding needed
-to post an operation to the context.  All operations posted to the context
-consume an amount of space that is a multiple of op_alignment bytes.
 .SS "fi_rx_context"
 Receive contexts are independent command queues for receiving incoming
 data.  Ordering and synchronization between contexts are not guaranteed.
@@ -619,7 +614,6 @@ struct fi_rx_ctx_attr {
 	size_t    total_buffered_recv;
 	size_t    size;
 	size_t    iov_limit;
-	size_t    op_alignment;
 };
 .fi
 .IP "caps"
@@ -649,10 +643,6 @@ available in the local queue to post a new operation.
 .IP "iov_limit" 
 This is the maximum number of IO vectors (scatter-gather elements) that a
 single posted operating may reference.
-.IP "op_alignment"
-The operation alignment is used to calculate any necessary padding needed
-to post an operation to the context.  All operations posted to the context
-consume an amount of space that is a multiple of op_alignment bytes.
 .SH "OPERATION FLAGS"
 Operation flags are obtained by OR-ing the following flags together.
 Operation flags define the default flags applied to an endpoint's data
@@ -736,37 +726,6 @@ such data transfers.
 Operations that complete in error that are not associated with valid
 operational context will use the endpoint context in any error reporting
 structures.
-.PP
-Applications may use the transmit/receive context and domain attributes to
-determine if it has sufficient space available in local queues to post an
-asynchronous operation, without generating an FI_EAGAIN error.  The
-following equation may be used as a guide to determine if an operation
-can be posted:
-.nf
-
-needed = ((op_size + iov_size * niov) + op_alignment - 1) &
-         ~(op_alignment - 1)
-.fi
-A data transfer request consists of an operation followed by zero or more
-IOVs (scatter-gather elements).  The amount of space needed by a transmit
-or receive context to store a request depends on the size needed by the
-provider to store the operation, plus information about each IO vector
-element.  Additionally, each operation may need to be aligned to a specific
-address boundary, such as a cache line or aligned on a 64-bit word.  The
-above equation defines this relationship, assuming that the op_alignment
-is given as a power of 2.
-.PP
-Providers may implement the size of their transmit and receive queues in a
-variety of ways.  For example, queues may support a fixed number of
-operations, or may be a fixed memory size with support for a variable
-number of operations.  But the reported domain and context attributes must be
-reported such that an application tracking queue utilization using the above
-equation allows an application to prevent queue overruns.  The reported
-queue size should be considered a lower-limit; providers may accept
-additional requests.
-.PP
-Applications may be able to simplify run time credit checks by pre-calculating
-needed checks or converting context sizes into a simple credit-based scheme.
 .SH "RETURN VALUES"
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.

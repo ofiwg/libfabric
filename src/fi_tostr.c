@@ -284,7 +284,6 @@ static void fi_tostr_tx_attr(char *buf, const struct fi_tx_ctx_attr *attr,
 	strcatf(buf, "%s%sinject_size: %zd\n", prefix, TAB, attr->inject_size);
 	strcatf(buf, "%s%ssize: %zd\n", prefix, TAB, attr->size);
 	strcatf(buf, "%s%siov_limit: %zd\n", prefix, TAB, attr->iov_limit);
-	strcatf(buf, "%s%sop_alignment: %zd\n", prefix, TAB, attr->op_alignment);
 }
 
 static void fi_tostr_rx_attr(char *buf, const struct fi_rx_ctx_attr *attr,
@@ -306,7 +305,6 @@ static void fi_tostr_rx_attr(char *buf, const struct fi_rx_ctx_attr *attr,
 	strcatf(buf, "%s%stotal_buffered_recv: %zd\n", prefix, TAB, attr->total_buffered_recv);
 	strcatf(buf, "%s%ssize: %zd\n", prefix, TAB, attr->size);
 	strcatf(buf, "%s%siov_limit: %zd\n", prefix, TAB, attr->iov_limit);
-	strcatf(buf, "%s%sop_alignment: %zd\n", prefix, TAB, attr->op_alignment);
 }
 
 static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const char *prefix)
@@ -354,8 +352,6 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcatf(buf, "%s%srx_ctx_cnt: %zd\n", prefix, TAB, attr->rx_ctx_cnt);
 	strcatf(buf, "%s%smax_ep_tx_ctx: %zd\n", prefix, TAB, attr->max_ep_tx_ctx);
 	strcatf(buf, "%s%smax_ep_rx_ctx: %zd\n", prefix, TAB, attr->max_ep_rx_ctx);
-	strcatf(buf, "%s%sop_size: %zd\n", prefix, TAB, attr->op_size);
-	strcatf(buf, "%s%siov_size: %zd\n", prefix, TAB, attr->iov_size);
 }
 
 static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,

@@ -214,7 +214,6 @@ struct fi_tx_ctx_attr {
 	size_t			inject_size;
 	size_t			size;
 	size_t			iov_limit;
-	size_t			op_alignment;
 };
 
 struct fi_rx_ctx_attr {
@@ -225,7 +224,6 @@ struct fi_rx_ctx_attr {
 	size_t			total_buffered_recv;
 	size_t			size;
 	size_t			iov_limit;
-	size_t			op_alignment;
 };
 
 struct fi_ep_attr {
@@ -256,8 +254,6 @@ struct fi_domain_attr {
 	size_t			rx_ctx_cnt;
 	size_t			max_ep_tx_ctx;
 	size_t			max_ep_rx_ctx;
-	size_t			op_size;
-	size_t			iov_size;
 };
 
 struct fi_fabric_attr {
