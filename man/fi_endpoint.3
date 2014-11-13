@@ -37,6 +37,11 @@ fi_getopt / fi_setopt
 .RS
 Get or set endpoint options.
 .RE
+.PP
+fi_rx_context / fi_tx_context / fi_srx_context  / fi_stx_context
+.RS
+Open a transmit or receive context.
+.RE
 .SH SYNOPSIS
 .B "#include <rdma/fabric.h>"
 .br
@@ -53,6 +58,14 @@ Get or set endpoint options.
 .BI "void *" context ");"
 .HP
 .BI "int fi_rx_context(struct fid_ep *" ep ", int " index ", "
+.BI "struct fi_rx_ctx_attr *" attr ", struct fid_ep **" rx_ep ", "
+.BI "void *" context ");"
+.HP
+.BI "int fi_stx_context(struct fid_domain *" domain ", "
+.BI "struct fi_tx_ctx_attr *" attr ", struct fid_ep **" tx_ep ", "
+.BI "void *" context ");"
+.HP
+.BI "int fi_srx_context(struct fid_domain *" domain ", "
 .BI "struct fi_rx_ctx_attr *" attr ", struct fid_ep **" rx_ep ", "
 .BI "void *" context ");"
 .HP
@@ -495,21 +508,34 @@ Send after send.  If set, message send operations, including tagged sends,
 are processed in the order submitted relative to other message send.
 If not set, message sends may be processed out of order from their submission.
 .SS "tx_ctx_cnt - Transmit Context Count"
-Number of transmit contexts to associate with the endpoint.  If not specified,
+Number of transmit contexts to associate with the endpoint.  If not specified (0),
 1 context will be assigned if the endpoint supports outbound transfers.
 Transmit contexts are independent command queues that may be separately
 configured.  Each transmit context may be bound to a separate CQ, and no
 ordering is defined between contexts.  Additionally, no synchronization is
-needed when accessing contexts in parallel.  See the scalable endpoint
-section for additional details.
+needed when accessing contexts in parallel.
+.sp
+If the count is set to the value FI_SHARED_CONTEXT, the endpoint will
+be configured to use a shared transmit context, if supported by the provider.
+Providers that do not support shared transmit contexts will fail the request.
+.sp
+See the scalable endpoint and
+shared contexts sections for additional details.
 .SS "rx_ctx_cnt - Receive Context Count"
 Number of receive contexts to associate with the endpoint.  If not specified,
 1 context will be assigned if the endpoint supports inbound transfers.
 Receive contexts are independent processing queues that may be separately
 configured.  Each receive context may be bound to a separate CQ, and no
 ordering is defined between contexts.  Additionally, no synchronization is
-needed when accessing contexts in parallel.  See the scalable endpoint
-section for additional details.
+needed when accessing contexts in parallel.
+.sp
+If the count is set to the value FI_SHARED_CONTEXT,
+the endpoint will be configured to use a
+shared receive context, if supported by the provider.  Providers that do
+not support shared receive contexts will fail the request.
+.sp
+ See the scalable endpoint and
+shared contexts sections for additional details.
 .SH "SCALABLE ENDPOINTS"
 A scalable endpoint is a communication portal that supports multiple
 transmit and receive contexts.  Scalable endpoints are loosely modeled
@@ -548,7 +574,6 @@ struct fi_tx_ctx_attr {
 	size_t    inject_size;
 	size_t    size;
 	size_t    iov_limit;
-	size_t    op_alignment;
 };
 .fi
 .IP "caps"
@@ -578,10 +603,6 @@ available in the local queue to post a new operation.
 .IP "iov_limit" 
 This is the maximum number of IO vectors (scatter-gather elements) that a
 single posted operation may reference.
-.IP "op_alignment"
-The operation alignment is used to calculate any necessary padding needed
-to post an operation to the context.  All operations posted to the context
-consume an amount of space that is a multiple of op_alignment bytes.
 .SS "fi_rx_context"
 Receive contexts are independent command queues for receiving incoming
 data.  Ordering and synchronization between contexts are not guaranteed.
@@ -619,7 +640,6 @@ struct fi_rx_ctx_attr {
 	size_t    total_buffered_recv;
 	size_t    size;
 	size_t    iov_limit;
-	size_t    op_alignment;
 };
 .fi
 .IP "caps"
@@ -649,10 +669,47 @@ available in the local queue to post a new operation.
 .IP "iov_limit" 
 This is the maximum number of IO vectors (scatter-gather elements) that a
 single posted operating may reference.
-.IP "op_alignment"
-The operation alignment is used to calculate any necessary padding needed
-to post an operation to the context.  All operations posted to the context
-consume an amount of space that is a multiple of op_alignment bytes.
+.SH "SHARED CONTEXTS"
+Shared contexts are transmit and receive contexts explicitly shared
+among one or more endpoints.  A sharable context allows an application
+to use a single dedicated provider resource among multiple transport
+addressable endpoints.  This can greatly reduce the resources needed to
+manage communication over multiple endpoints by multiplexing transmit
+and/or receive processing, with the potential cost of serializing access
+across multiple endpoints.  Support for sharable contexts is domain
+specific.
+.sp
+Conceptually, sharable contexts are command queues that may be accessed
+by many endpoints.  The use of a shared transmit context is mostly
+opaque to an application.  Applications must allocate and bind shared
+transmit contexts to endpoints, but otherwise transmit operations are posted
+directly to the endpoint.  An endpoint may only be associated with a single
+shared transmit context.
+.sp
+Unlike shared transmit contexts, applications interact directly with
+shared receive contexts.  Users post receive buffers directly to a
+shared receive context, with the buffers usable by any endpoint bound to
+the shared receive context.  An endpoint may only be associated with a
+single receive context.
+.sp
+Endpoints associated with a shared transmit context may use dedicated
+receive contexts, and vice-versa.  Or an endpoint may use shared transmit
+and receive contexts.  And there is no requirement that the
+same group of endpoints sharing a context of one type also share the
+context of an alternate type.  Furthermore, an endpoint may use a shared
+context of one type, but a scalable set of contexts of the alternate type.
+.SS "fi_stx_context"
+This call is used to open a sharable transmit context.  See fi_tx_context
+call under the SCALABLE ENDPOINTS section for details on the transit context
+attributes.  The exception is that endpoints attached to a shared transmit
+context must use a subset of the transmit context attributes.  This is
+opposite of the requirement for scalable endpoints.
+.SS "fi_srx_context"
+This allocates a sharable receive context.  See fi_rx_context call under
+SCALABLE ENDPOINTS section for details on the receive context attributes.
+The exception is that endpoints attached to a shared receive context must
+use a subset of the receive context attributes.  This is opposite of the
+requirement for scalable endpoints.
 .SH "OPERATION FLAGS"
 Operation flags are obtained by OR-ing the following flags together.
 Operation flags define the default flags applied to an endpoint's data
@@ -736,37 +793,6 @@ such data transfers.
 Operations that complete in error that are not associated with valid
 operational context will use the endpoint context in any error reporting
 structures.
-.PP
-Applications may use the transmit/receive context and domain attributes to
-determine if it has sufficient space available in local queues to post an
-asynchronous operation, without generating an FI_EAGAIN error.  The
-following equation may be used as a guide to determine if an operation
-can be posted:
-.nf
-
-needed = ((op_size + iov_size * niov) + op_alignment - 1) &
-         ~(op_alignment - 1)
-.fi
-A data transfer request consists of an operation followed by zero or more
-IOVs (scatter-gather elements).  The amount of space needed by a transmit
-or receive context to store a request depends on the size needed by the
-provider to store the operation, plus information about each IO vector
-element.  Additionally, each operation may need to be aligned to a specific
-address boundary, such as a cache line or aligned on a 64-bit word.  The
-above equation defines this relationship, assuming that the op_alignment
-is given as a power of 2.
-.PP
-Providers may implement the size of their transmit and receive queues in a
-variety of ways.  For example, queues may support a fixed number of
-operations, or may be a fixed memory size with support for a variable
-number of operations.  But the reported domain and context attributes must be
-reported such that an application tracking queue utilization using the above
-equation allows an application to prevent queue overruns.  The reported
-queue size should be considered a lower-limit; providers may accept
-additional requests.
-.PP
-Applications may be able to simplify run time credit checks by pre-calculating
-needed checks or converting context sizes into a simple credit-based scheme.
 .SH "RETURN VALUES"
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.

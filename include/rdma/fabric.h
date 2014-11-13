@@ -151,6 +151,7 @@ enum {
 };
 
 #define FI_ADDR_NOTAVAIL	UINT64_MAX
+#define FI_SHARED_CONTEXT	UINT64_MAX
 typedef uint64_t		fi_addr_t;
 typedef void *			fi_connreq_t;
 
@@ -203,7 +204,7 @@ enum {
 #define FI_CONTEXT		(1ULL << 0)
 #define FI_LOCAL_MR		(1ULL << 1)
 #define FI_WRITE_NONCOHERENT	(1ULL << 2)
-#define FI_PROV_MR_KEY		(1ULL << 3)
+#define FI_PROV_MR_ATTR		(1ULL << 3)
 #define FI_MSG_PREFIX		(1ULL << 4)
 
 struct fi_tx_ctx_attr {
@@ -214,7 +215,6 @@ struct fi_tx_ctx_attr {
 	size_t			inject_size;
 	size_t			size;
 	size_t			iov_limit;
-	size_t			op_alignment;
 };
 
 struct fi_rx_ctx_attr {
@@ -225,7 +225,6 @@ struct fi_rx_ctx_attr {
 	size_t			total_buffered_recv;
 	size_t			size;
 	size_t			iov_limit;
-	size_t			op_alignment;
 };
 
 struct fi_ep_attr {
@@ -256,8 +255,6 @@ struct fi_domain_attr {
 	size_t			rx_ctx_cnt;
 	size_t			max_ep_tx_ctx;
 	size_t			max_ep_rx_ctx;
-	size_t			op_size;
-	size_t			iov_size;
 };
 
 struct fi_fabric_attr {
@@ -291,7 +288,9 @@ enum {
 	FI_CLASS_DOMAIN,
 	FI_CLASS_EP,
 	FI_CLASS_RX_CTX,
+	FI_CLASS_SRX_CTX,
 	FI_CLASS_TX_CTX,
+	FI_CLASS_STX_CTX,
 	FI_CLASS_PEP,
 	FI_CLASS_INTERFACE,
 	FI_CLASS_AV,

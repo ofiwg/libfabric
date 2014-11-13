@@ -125,11 +125,18 @@ struct fi_ops_domain {
 			struct fid_wait **waitset);
 	int	(*poll_open)(struct fid_domain *domain, struct fi_poll_attr *attr,
 			struct fid_poll **pollset);
+	int	(*stx_ctx)(struct fid_domain *domain,
+			struct fi_tx_ctx_attr *attr, struct fid_ep **tx_ep,
+			void *context);
+	int	(*srx_ctx)(struct fid_domain *domain,
+			struct fi_rx_ctx_attr *attr, struct fid_ep **rx_ep,
+			void *context);
 };
 
 
 /* Memory registration flags */
 #define FI_MR_OFFSET		(1ULL << 0)
+#define FI_MR_KEY		(1ULL << 1)
 
 struct fi_ops_mr {
 	size_t	size;

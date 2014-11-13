@@ -379,13 +379,20 @@ required to define a msg_prefix_size that is a multiple of 8 bytes.
 Additionally, applications may receive provider generated packets that do
 not contain application data.  Such received messages will indicate a
 transfer size of 0 bytes.
-.IP "FI_PROV_MR_KEY"
-The provider assigns the memory registration keys that applications must use.
-Providers that set this mode require applications to exchange assigned MR
-keys with peer processes performing RMA operations, with the MR key value
-selected by the provider.  If FI_PROV_MR_KEY is disabled, applications
-must select all MR keys.  Applications can
-request that providers generate MR keys by forcing this bit set after
+.IP "FI_PROV_MR_ATTR"
+The provider assigns one or more attributes associated with a memory
+registration request.  The provider will set this mode if it returns the
+the memory registration keys that applications must use, or if it
+requires that the MR offset associated with a memory region be the same
+as the virtual address of the memory.
+.sp
+Applications that support provider MR attributes will need to exchange
+MR parameters with remote peers for RMA and atomic operations.  The exchanged
+data should include both the address of the memory region as well as the
+MR key.  If this mode is disabled, then applications may select the MR
+key associated with a registration request, and the resulting memory region
+will start at a base address of 0.  Applications can
+request that providers select MR attributes by forcing this bit set after
 fi_getinfo returns.
 .SH "ENDPOINT TYPES"
 .IP "FI_EP_UNSPEC"

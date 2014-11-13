@@ -75,6 +75,7 @@ Count of vectored buffer entries.
 Memory access permissions associated with registration
 .IP "offset"
 Optional specified offset for accessing specified registered buffers.
+This parameter is reserved for future use and must be 0.
 .IP "requested_key"
 Optional requested remote key associated with registered buffers.
 .IP "attr"
@@ -105,6 +106,15 @@ back by physical pages or have been allocated to the app.  Support for
 this ability is specified through the FI_DYNAMIC_MR capability flag.
 Providers that lack this capability require that registered memory
 regions be backed by allocated memory pages.
+.PP
+The attributes of a registered memory region may be specified by either
+the provider or, if supported, the application.  Relevent attributes include
+the MR key associated with the region and the address (offset) used by
+peer applications when accessing the region through RMA or atomic operations.
+The FI_PROV_MR_ATTR mode bit indicates if the provider will supply these
+attribute values, or if the application may select them.  Provider supplied
+values will require that an application exchange the memory region attributes
+with peers if RMA is required.
 .PP
 The registrations functions -- fi_mr_reg, fi_mr_regv, and fi_mr_regattr --
 are used to register one or more memory buffers with fabric resources.
@@ -157,23 +167,18 @@ must provide the key associated with the registration.
 Because MR keys must be provided by a remote process, an application
 can use the requested_key parameter to indicate that a specific key
 value be returned.  Support for user requested keys is provider specific
-and is determined by the FI_PROV_MR_KEY mode bit.
-Access domains must be opened with the FI_PROV_MR_KEY mode cleared
+and is determined by the FI_PROV_MR_ATTR mode bit.
+Access domains must be opened with the FI_PROV_MR_ATTR mode cleared
 in order to enable support for application selectable MR keys.
 .PP
 Remote RMA and atomic operations indicate the location within a registered
 memory region by specifying an address.  By default, the RMA target address
-is a virtual address between the registered buf address and the end of the
-registered memory region (buf + len).  Typically, the starting virtual
-address and length are provided to the RMA initiator, either during connection
-setup or through separate communication messages.
+is a 0-based offset between the registered buf address and the end of the
+registered memory region (buf + len), unless the FI_PROV_MR_ATTR mode bit has
+been set.  If the FI_PROV_MR_ATTR mode bit is enabled, the RMA target
+address defaults to the starting virtual address of buf. 
 .PP
-In order to reduce the amount of state information an application must
-maintain regarding target RMA buffers, the memory registration calls allow
-a buffer to be associated with a specific target offset.  This offset is
-used on the initiator side in lieu of the virtual address.  To associate
-a memory region with a specific offset, the FI_MR_OFFSET flag must be
-used when registering the memory.
+The offset parameter is reserved for future use and must be 0.
 .PP
 For asynchronous memory registration requests, the result
 will be reported to the user through an event
@@ -228,7 +233,8 @@ The following flags are usable with fi_mr_reg, fi_mr_regv, fi_mr_regattr.
 .IP "FI_MR_KEY"
 Indicates that the registered memory region should be associated with the
 specified requested_key.  If this flag is not provided, the requested_key
-parameter is ignored.
+parameter is ignored.  It is an error to specify this flag on domains with
+the FI_PROV_MR_ATTR mode bit set.
 .IP "FI_MR_OFFSET"
 Associates the registered memory region with the specified offset as its
 base target address.  If this flag is not provided, the offset parameter
