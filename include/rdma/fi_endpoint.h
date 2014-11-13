@@ -199,6 +199,20 @@ fi_rx_context(struct fid_ep *ep, int index, struct fi_rx_ctx_attr *attr,
 	return ep->ops->rx_ctx(ep, index, attr, rx_ep, context);
 }
 
+static inline int
+fi_stx_context(struct fid_domain *domain, struct fi_tx_ctx_attr *attr,
+	       struct fid_ep **tx_ep, void *context)
+{
+	return domain->ops->stx_ctx(domain, attr, tx_ep, context);
+}
+
+static inline int
+fi_srx_context(struct fid_domain *domain, struct fi_rx_ctx_attr *attr,
+	       struct fid_ep **rx_ep, void *context)
+{
+	return domain->ops->srx_ctx(domain, attr, rx_ep, context);
+}
+
 static inline ssize_t
 fi_recv(struct fid_ep *ep, void *buf, size_t len, void *desc, void *context)
 {

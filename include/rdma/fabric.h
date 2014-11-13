@@ -151,6 +151,7 @@ enum {
 };
 
 #define FI_ADDR_NOTAVAIL	UINT64_MAX
+#define FI_SHARED_CONTEXT	UINT64_MAX
 typedef uint64_t		fi_addr_t;
 typedef void *			fi_connreq_t;
 
@@ -287,7 +288,9 @@ enum {
 	FI_CLASS_DOMAIN,
 	FI_CLASS_EP,
 	FI_CLASS_RX_CTX,
+	FI_CLASS_SRX_CTX,
 	FI_CLASS_TX_CTX,
+	FI_CLASS_STX_CTX,
 	FI_CLASS_PEP,
 	FI_CLASS_INTERFACE,
 	FI_CLASS_AV,

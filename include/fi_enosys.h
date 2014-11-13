@@ -220,6 +220,8 @@ static struct fi_ops_domain X = {
 	.cntr_open = fi_no_cntr_open,
 	.wait_open = fi_no_wait_open,
 	.poll_open = fi_no_poll_open,
+	.stx_ctx = fi_no_stx_context,
+	.srx_ctx = fi_no_srx_context,
 };
 */
 int fi_no_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -234,6 +236,10 @@ int fi_no_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
 		struct fid_wait **waitset);
 int fi_no_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		struct fid_poll **pollset);
+int fi_no_stx_context(struct fid_domain *domain, struct fi_tx_ctx_attr *attr,
+		struct fid_ep **tx_ep, void *context);
+int fi_no_srx_context(struct fid_domain *domain, struct fi_rx_ctx_attr *attr,
+		struct fid_ep **rx_ep, void *context);
 
 /*
 static struct fi_ops_mr X = {
