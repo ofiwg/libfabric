@@ -134,6 +134,7 @@ int psmx_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 	poll_priv->poll.fid.context = 0;
 	poll_priv->poll.fid.ops = &psmx_fi_ops;
 	poll_priv->poll.ops = &psmx_poll_ops;
+	poll_priv->domain = domain_priv;
 
 	*pollset = &poll_priv->poll;
 	return 0;

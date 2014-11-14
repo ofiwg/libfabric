@@ -316,6 +316,7 @@ struct psmx_cq_event_queue {
 
 struct psmx_fid_wait {
 	struct fid_wait			wait;
+	struct psmx_fid_domain		*domain;
 	int				type;
 	union {
 		int			fd[2];
@@ -333,6 +334,7 @@ struct psmx_poll_list {
 
 struct psmx_fid_poll {
 	struct fid_poll			poll;
+	struct psmx_fid_domain		*domain;
 	struct dlist_entry		poll_list_head;
 };
 
