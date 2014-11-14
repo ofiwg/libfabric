@@ -176,21 +176,21 @@ serialized across all calls when fi_cntr_control is invoked, as it may
 redirect the implementation of counter operations.  The following
 control commands are usable with a counter:
 
-*FI_GETOPSFLAG (uint64_t *)*
+*FI_GETOPSFLAG (uint64_t \*)*
 : Returns the current default operational flags associated with the counter.
 
-*FI_SETOPSFLAG (uint64_t *)*
+*FI_SETOPSFLAG (uint64_t \*)*
 : Modifies the current default operational flags associated with the
   counter.
 
-*FI_GETWAIT (void **)*
+*FI_GETWAIT (void \*\*)*
 : This command allows the user to retrieve the low-level wait object
   associated with the counter.  The format of the wait-object is
   specified during counter creation, through the counter attributes.
   The fi_cntr_control arg parameter should be an address where a
   pointer to the returned wait object will be written.
 
-- *FI_CNTR_WAIT_MUT_COND*
+*FI_CNTR_WAIT_MUT_COND*
 : The counter wait is implemented using a pthread_mutex_t and
   pthread_cond_t.  FI_GETWAIT will return two pointers, a reference to
   pthread_mutex_t * and pthread_cond_t *, respectively.

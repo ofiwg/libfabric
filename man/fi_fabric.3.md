@@ -10,15 +10,15 @@ tagline: Libfabric Programmer's Manual
 fi_fabric \- Fabric domain operations
 
 fi_fabric / fi_close
-:   Open / close a fabric domain
+: Open / close a fabric domain
 
 fi_tostr
-:   Convert fabric attributes, flags, and capabilities to printable string
+: Convert fabric attributes, flags, and capabilities to printable string
 
 # SYNOPSIS
 
 {% highlight c %}
-"#include <rdma/fabric.h>"
+#include <rdma/fabric.h>
 
 int fi_fabric(struct fi_fabric_attr *attr,
     struct fid_fabric **fabric, void *context);

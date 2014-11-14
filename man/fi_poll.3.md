@@ -198,7 +198,7 @@ serialized across all calls when fi_control is invoked, as it may
 redirect the implementation of wait set operations.  The following
 control commands are usable with a wait set.
 
-*FI_GETWAIT (void **)*
+*FI_GETWAIT (void \*\*)*
 : This command allows the user to retrieve the low-level wait
   object(s) associated with the wait set.  The format of the
   wait-object is specified during wait set creation, through the wait

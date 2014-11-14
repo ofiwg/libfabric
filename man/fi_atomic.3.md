@@ -519,11 +519,12 @@ errno is returned. Fabric errno values are defined in
 
 # ERRORS
 
-.IP "-FI_EOPNOTSUPP"
-The requested atomic operation is not supported on this endpoint.
-.IP "-FI_EMSGSIZE"
-The number of atomic operations in a single request exceeds that supported
-by the underlying provider.
+*-FI_EOPNOTSUPP*
+: The requested atomic operation is not supported on this endpoint.
+
+*-FI_EMSGSIZE*
+: The number of atomic operations in a single request exceeds that
+  supported by the underlying provider.
 
 # NOTES
 

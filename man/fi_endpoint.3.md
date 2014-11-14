@@ -707,7 +707,7 @@ struct fi_tx_ctx_attr {
   output value by applications wishing to track if sufficient space is
   available in the local queue to post a new operation.
 
-*iov_limit"*
+*iov_limit*
 : This is the maximum number of IO vectors (scatter-gather elements)
   that a single posted operation may reference.
 
@@ -784,7 +784,7 @@ struct fi_rx_ctx_attr {
   output value by applications wishing to track if sufficient space is
   available in the local queue to post a new operation.
 
-*iov_limit"*
+*iov_limit*
 : This is the maximum number of IO vectors (scatter-gather elements)
   that a single posted operating may reference.
 
