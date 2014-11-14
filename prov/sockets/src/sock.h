@@ -265,6 +265,14 @@ struct sock_ep {
 	int send_cq_event_flag;
 	int recv_cq_event_flag;
 
+	struct dlist_entry rx_ctx_entry;
+	struct dlist_entry tx_ctx_entry;
+
+	struct sock_rx_ctx **rx_array;
+	struct sock_tx_ctx **tx_array;
+	atomic_t num_rx_ctx;
+	atomic_t num_tx_ctx;
+
 	struct sock_cntr 	*send_cntr;
 	struct sock_cntr 	*recv_cntr;
 	struct sock_cntr 	*read_cntr;
@@ -335,40 +343,56 @@ struct sock_rx_entry {
 };
 
 struct sock_rx_ctx {
+	struct fid_ep ctx;
+
 	uint16_t rx_id;
-	uint8_t reserved[6];
+	uint8_t enabled;
+	uint8_t progress;
+	uint8_t cq_event_flag;
+	uint8_t reserved[3];
 	uint64_t addr;
 
 	struct sock_cq *cq;
 	struct sock_ep *ep;
+ 	struct sock_domain *domain;
 
-	struct dlist_entry ep_entry;
 	struct dlist_entry cq_entry;
 	struct dlist_entry pe_entry;
 
 	struct dlist_entry pe_entry_list;
 	struct dlist_entry rx_entry_list;
+	struct dlist_entry ep_list;
 	fastlock_t lock;
+
+	struct fi_rx_ctx_attr attr;
 };
 
 struct sock_tx_ctx {
+	struct fid_ep ctx;
+
 	struct ringbuffd	rbfd;
 	fastlock_t		wlock;
 	fastlock_t		rlock;
 
 	uint16_t tx_id;
-	uint8_t reserved[6];
+	uint8_t enabled;
+	uint8_t progress;
+	uint8_t cq_event_flag;
+	uint8_t reserved[3];
 	uint64_t addr;
 
 	struct sock_cq *cq;
 	struct sock_ep *ep;
+ 	struct sock_domain *domain;
 
-	struct dlist_entry ep_entry;
 	struct dlist_entry cq_entry;
 	struct dlist_entry pe_entry;
 
 	struct dlist_entry pe_entry_list;
+	struct dlist_entry ep_list;
 	fastlock_t lock;
+
+	struct fi_tx_ctx_attr attr;
 };
 
 #define SOCK_WIRE_PROTO_VERSION (0)
@@ -423,6 +447,8 @@ struct sock_pe_entry{
 		struct sock_tx_pe_entry tx;
 		struct sock_rx_pe_entry rx;
 	};
+
+	struct sock_msg_hdr msg_hdr;
 
 	uint64_t flags;
 	uint64_t context;
@@ -511,13 +537,18 @@ int sock_ep_connect(struct fid_ep *ep, const void *addr,
 		    const void *param, size_t paramlen);
 
 
-struct sock_rx_ctx *sock_rx_ctx_alloc();
+struct sock_rx_ctx *sock_rx_ctx_alloc(struct fi_rx_ctx_attr *attr, 
+				      void *context);
+void sock_rx_ctx_add_ep(struct sock_rx_ctx *rx_ctx, struct sock_ep *ep);
 void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx);
 
-struct sock_tx_ctx *sock_tx_ctx_alloc(size_t size);
+
+struct sock_tx_ctx *sock_tx_ctx_alloc(struct fi_tx_ctx_attr *attr, 
+				      void *context);
+void sock_tx_ctx_add_ep(struct sock_tx_ctx *tx_ctx, struct sock_ep *ep);
 void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx);
 void sock_tx_ctx_start(struct sock_tx_ctx *tx_ctx);
-int sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len);
+void sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len);
 void sock_tx_ctx_commit(struct sock_tx_ctx *tx_ctx);
 void sock_tx_ctx_abort(struct sock_tx_ctx *tx_ctx);
 int sock_tx_ctx_read(struct sock_tx_ctx *tx_ctx, void *buf, size_t len);
