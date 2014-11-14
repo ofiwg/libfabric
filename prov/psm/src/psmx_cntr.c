@@ -199,7 +199,9 @@ static uint64_t psmx_cntr_read(struct fid_cntr *cntr)
 
 	cntr_priv = container_of(cntr, struct psmx_fid_cntr, cntr);
 
-	return cntr_priv->counter;
+	cntr_priv->counter_last_read = cntr_priv->counter;
+
+	return cntr_priv->counter_last_read;
 }
 
 static uint64_t psmx_cntr_readerr(struct fid_cntr *cntr)
@@ -208,7 +210,9 @@ static uint64_t psmx_cntr_readerr(struct fid_cntr *cntr)
 
 	cntr_priv = container_of(cntr, struct psmx_fid_cntr, cntr);
 
-	return cntr_priv->error_counter;
+	cntr_priv->error_counter_last_read = cntr_priv->error_counter;
+
+	return cntr_priv->error_counter_last_read;
 }
 
 static int psmx_cntr_add(struct fid_cntr *cntr, uint64_t value)

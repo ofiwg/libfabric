@@ -75,6 +75,7 @@ static int psmx_poll_poll(struct fid_poll *pollset, void **context, int count)
 {
 	struct psmx_fid_poll *poll_priv;
 	struct psmx_fid_cq *cq;
+	struct psmx_fid_cntr *cntr;
 	struct psmx_poll_list *list_item;
 	struct dlist_entry *p, *head;
 	int ret_count = 0;
@@ -96,7 +97,11 @@ static int psmx_poll_poll(struct fid_poll *pollset, void **context, int count)
 			break;
 
 		case FI_CLASS_CNTR:
-			/* TODO: check counter updates */
+			cntr = container_of(list_item->fid, struct psmx_fid_cntr, cntr);
+			if (cntr->counter != cntr->counter_last_read) {
+				*context++ = cntr->cntr.fid.context;
+				ret_count++;
+			}
 			break;
 
 		default:
