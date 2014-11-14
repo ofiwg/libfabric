@@ -193,7 +193,7 @@ serialized across all calls when fi_control is invoked, as it may
 redirect the implementation of EQ operations.  The following control
 commands are usable with an EQ.
 
-*FI_GETWAIT (void **)*
+*FI_GETWAIT (void \*\*)*
 : This command allows the user to retrieve the low-level wait object
   associated with the EQ.  The format of the wait-object is specified
   during EQ creation, through the EQ attributes.  The fi_control arg
@@ -221,7 +221,7 @@ information regarding the format associated with each event.
   include the following types of events: memory registration, address
   vector resolution, connection established, and multicast join.
 
-: Control requests report their completion by inserting a `struct
+  Control requests report their completion by inserting a `struct
   fi_eq_entry` into the EQ.  The format of this structure is:
 
 {% highlight c %}
@@ -232,8 +232,7 @@ struct fi_eq_entry {
 };
 {% endhighlight %}
 
-*&nbsp;*
-: For the completion of basic asynchronous control operations, the
+  For the completion of basic asynchronous control operations, the
   returned event will be to FI_COMPLETE.  The fid will reference the
   fabric descriptor associated with the event.  For memory
   registration, this will be the fid_mr, address resolution will
@@ -255,8 +254,7 @@ struct fi_eq_cm_entry {
 };
 {% endhighlight %}
 
-*&nbsp;*
-: Connection request events are of type FI_CONNREQ.  The fid is the
+  Connection request events are of type FI_CONNREQ.  The fid is the
   passive endpoint.  Information regarding the requested endpoint's
   capabilities and attributes are available from the info field.  The
   application is responsible for freeing this structure by calling
@@ -268,7 +266,7 @@ struct fi_eq_cm_entry {
   fi_endpoint().  If the connection is rejected, the connreq must be
   passed into the fi_reject call.
 
-: Any application data exchanged as part of the connection request is
+  Any application data exchanged as part of the connection request is
   placed beyond the fi_eq_cm_entry structure.  The amount of data
   available is application dependent and limited to the buffer space
   provided by the application when fi_eq_read is called.  The amount
@@ -341,8 +339,8 @@ fi_eq_open
 : Returns 0 on success.  On error, a negative value corresponding to
   fabric errno is returned.
 
-fi_eq_read / fi_eq_readerr
-fi_eq_sread
+fi_eq_read / fi_eq_readerr  
+fi_eq_sread  
 fi_eq_write
 : On success, returns the number of bytes read from or written to the
   event queue.  On error, a negative value corresponding to fabric

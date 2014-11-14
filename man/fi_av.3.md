@@ -181,7 +181,7 @@ struct fi_av_attr {
   which access the same named domain on the same node.  The name field
   allows the underlying provider to identify a shared AV.
 
-: If the name field is non-NULL and the AV is not opened for read-only
+  If the name field is non-NULL and the AV is not opened for read-only
   access, a named AV will be created, if it does not already exist.
 
 *map_addr*

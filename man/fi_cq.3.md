@@ -223,14 +223,14 @@ struct fi_cq_tagged_entry {
 {% endhighlight %}
 
 *wait_obj*
-
-: CQ's may be associated with a specific wait object.  Wait objects allow
-  applications to block until the wait object is signaled, indicating that
-a completion is available to be read.  Users may use fi_control to retrieve
-the underlying wait object associated with an CQ, in order to use it in
-other system calls.  The following values may be used to specify the type
-of wait object associated with an CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC,
-FI_WAIT_SET, FI_WAIT_FD, and FI_WAIT_MUT_COND.
+: CQ's may be associated with a specific wait object.  Wait objects
+  allow applications to block until the wait object is signaled,
+  indicating that a completion is available to be read.  Users may use
+  fi_control to retrieve the underlying wait object associated with an
+  CQ, in order to use it in other system calls.  The following values
+  may be used to specify the type of wait object associated with an
+  CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_SET, FI_WAIT_FD, and
+  FI_WAIT_MUT_COND.
 
 - *FI_WAIT_NONE*
 : Used to indicate that the user will not block (wait) for completions
@@ -272,12 +272,12 @@ FI_WAIT_SET, FI_WAIT_FD, and FI_WAIT_MUT_COND.
   provider should interpret the cond field, which describes the
   condition needed to signal the wait object.
 
-: A wait condition should be treated as an optimization.  Providers
+  A wait condition should be treated as an optimization.  Providers
   are not required to meet the requirements of the condition before
   signaling the wait object.  Applications should not rely on the
   condition necessarily being true when a blocking read call returns.
 
-: If wait_cond is set to FI_CQ_COND_NONE, then no additional
+  If wait_cond is set to FI_CQ_COND_NONE, then no additional
   conditions are applied to the signaling of the CQ wait object, and
   the insertion of any new entry will trigger the wait condition.  If
   wait_cond is set to FI_CQ_COND_THRESHOLD, then the cond field is

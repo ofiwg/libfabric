@@ -213,7 +213,7 @@ additional optimizations.
   and/or receive queues.  Endpoints supporting this capability support
   operations defined by struct fi_ops_msg.
 
-: The ep_cap may be used to specify or restrict the type of messaging
+  The ep_cap may be used to specify or restrict the type of messaging
   operations that are supported.  In the absence of any relevant
   flags, FI_MSG implies the ability to send and receive messages.
   Applications can use the FI_SEND and FI_RECV flags to optimize an
@@ -408,7 +408,7 @@ below.
   the NIC or memory subsystem may cache the results of remote write or
   atomic operations in non-coherent memory.
 
-: The behavior of a domain with and without FI_WRITE_NONCOHERENT is
+  The behavior of a domain with and without FI_WRITE_NONCOHERENT is
   illustrated below.
 
 
@@ -434,7 +434,7 @@ below.
   vectors referenced by underlying hardware and eliminating provider
   buffer allocation.
 
-: FI_MSG_PREFIX only applies to send and receive operations, including
+  FI_MSG_PREFIX only applies to send and receive operations, including
   tagged sends and receives.  RMA and atomics do not require the
   application to provide prefix buffers.  Prefix buffer space must be
   provided with all sends and receives, regardless of the size of the
@@ -443,7 +443,7 @@ below.
   size of the prefix buffer is not counted toward any message limits,
   including inject.
 
-: Applications that support prefix mode must supply buffer space
+  Applications that support prefix mode must supply buffer space
   before their own message data.  The size of space that must be
   provided is specified by the msg_prefix_size endpoint attribute.
   Providers are required to define a msg_prefix_size that is a
@@ -458,7 +458,7 @@ below.
   it requires that the MR offset associated with a memory region be
   the same as the virtual address of the memory.
 
-: Applications that support provider MR attributes will need to
+  Applications that support provider MR attributes will need to
   exchange MR parameters with remote peers for RMA and atomic
   operations.  The exchanged data should include both the address of
   the memory region as well as the MR key.  If this mode is disabled,

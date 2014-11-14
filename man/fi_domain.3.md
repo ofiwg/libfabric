@@ -161,7 +161,7 @@ interfaces enables a provider to eliminate lower-level locks.
   initiate transfers on the same endpoint if they reference different
   data flows.
 
-: For providers with manual progress, applications must serialize
+  For providers with manual progress, applications must serialize
   their access to any object that is part of a single progress domain.
   A progress domain is any set of associated endpoints, event queues,
   counters, wait sets, and poll sets.  For instance, endpoints that
@@ -207,7 +207,7 @@ are defined.
   that the desired functionality is implemented by the provider
   hardware or is a standard service of the operating system.
 
-: All providers are required to support FI_PROGRESS_AUTO.  However, if
+  All providers are required to support FI_PROGRESS_AUTO.  However, if
   a provider does not natively support automatic progress, forcing the
   use of FI_PROGRESS_AUTO may result in threads being allocated below
   the fabric interfaces.
@@ -221,7 +221,7 @@ are defined.
   reported.  Progress also occurs when the application processes a
   poll or wait set.
 
-: Only wait operations defined by the fabric interface will result in
+  Only wait operations defined by the fabric interface will result in
   an operation progressing.  Operating system or external wait
   functions, such as select, poll, or pthread routines, cannot.
 

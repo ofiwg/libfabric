@@ -208,13 +208,13 @@ together when binding an endpoint to a completion domain CQ.
   operation.  FI_COMPLETION must be OR'ed with FI_SEND and/or FI_RECV
   flags.
 
-: When set the user must determine when a request that does NOT have
+  When set the user must determine when a request that does NOT have
   FI_COMPLETION set has completed indirectly, usually based on the
   completion of a subsequent operation.  Use of this flag may improve
   performance by allowing the provider to avoid writing a completion
   entry for every operation.
 
-: The use of FI_COMPLETION is often paired with the call fi_sync.
+  The use of FI_COMPLETION is often paired with the call fi_sync.
   FI_COMPLETION allows the user to suppress completions from being
   generated.  In order for the application to ensure that all previous
   operations have completed, the application may call fi_sync.  The
