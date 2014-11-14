@@ -10,13 +10,13 @@ tagline: Libfabric Programmer's Manual
 fi_cm - Connection management operations
 
 fi_connect / fi_listen / fi_accept / fi_reject / fi_shutdown
-:   Manage endpoint connection state.
+: Manage endpoint connection state.
 
 fi_getname / fi_getpeer
-:   Return local or peer endpoint address
+: Return local or peer endpoint address
 
 fi_join / fi_leave
-:   Have an endpoint join or leave a multicast group.
+: Have an endpoint join or leave a multicast group.
 
 # SYNOPSIS
 
@@ -29,7 +29,7 @@ int fi_connect(struct fid_ep *ep, const void *addr,
 int fi_listen(struct fid_pep *pep);
 
 int fi_accept(struct fid_ep *ep, fi_connreq_t connreq,
-   const void *param, size_t paramlen);
+    const void *param, size_t paramlen);
 
 int fi_reject(struct fid_pep *pep, fi_connreq_t connreq,
     const void *param, size_t paramlen);
@@ -50,35 +50,34 @@ int fi_leave(struct fid_ep *ep, void *addr, fi_addr_t fi_addr,
 # ARGUMENTS
 
 *ep / pep*
-:   Fabric endpoint on which to change connection state.
+: Fabric endpoint on which to change connection state.
 
 *addr*
-:    Buffer to store queried address (get), or address to
-     connect/join/leave.  The address must be in the same format as
-     that specified using fi_info: addr_format when the endpoint was
-     created.
+: Buffer to store queried address (get), or address to
+  connect/join/leave.  The address must be in the same format as that
+  specified using fi_info: addr_format when the endpoint was created.
 
 *addrlen*
-:    On input, specifies size of addr buffer.  On output, stores number
-     of bytes written to addr buffer.
+: On input, specifies size of addr buffer.  On output, stores number
+  of bytes written to addr buffer.
 
 *param*
-:    User-specified data exchanged as part of the connection exchange.
+: User-specified data exchanged as part of the connection exchange.
 
 *paramlen*
-:    Size of param buffer.
+: Size of param buffer.
 
 *info*
-:    Fabric information associated with a connection request.
+: Fabric information associated with a connection request.
 
 *fi_addr*
-:    Fabric address associated with a multicast address.
+: Fabric address associated with a multicast address.
 
 *flags*
-:    Additional flags for controlling connection operation.
+: Additional flags for controlling connection operation.
 
 *context*
-:    User context associated with the request.
+: User context associated with the request.
 
 # DESCRIPTION
 
@@ -162,10 +161,11 @@ be larger than the input value.
 
 ## fi_join / fi_leave
 
-fi_join and fi_leave are use to associate or dissociate an endpoint with
-a multicast group.  Join operations complete asynchronously, with the
-completion reported through the event queue associated with the endpoint
-or domain, if an event queue has not been bound to the endpoint.
+fi_join and fi_leave are use to associate or dissociate an endpoint
+with a multicast group.  Join operations complete asynchronously, with
+the completion reported through the event queue associated with the
+endpoint or domain, if an event queue has not been bound to the
+endpoint.
 
 A fabric address will be provided as part of the join request.  The
 address will be written to the memory location referenced by the
@@ -189,27 +189,28 @@ The fi_join call allows the user to specify flags requesting the type of
 join operation being requested.  Flags for fi_leave must be 0.
 
 *FI_SEND*
-:    Setting FI_SEND, but not FI_RECV, indicates that the endpoint should
-     join the multicast group as a send-only member.  If FI_RECV is
-     also set or neither FI_SEND or FI_RECV are set, then the endpoint
-     will join the group with send and receive capabilities.
+: Setting FI_SEND, but not FI_RECV, indicates that the endpoint should
+  join the multicast group as a send-only member.  If FI_RECV is also
+  set or neither FI_SEND or FI_RECV are set, then the endpoint will
+  join the group with send and receive capabilities.
 
 *FI_RECV*
-:    Setting FI_RECV, but not FI_SEND, indicates that the endpoint should
-     join the multicast group as a receive-only member.  If FI_SEND is
-     also set or neither FI_SEND or FI_RECV are set, then the endpoint
-     will join the group with send and receive capabilities.
+: Setting FI_RECV, but not FI_SEND, indicates that the endpoint should
+  join the multicast group as a receive-only member.  If FI_SEND is
+  also set or neither FI_SEND or FI_RECV are set, then the endpoint
+  will join the group with send and receive capabilities.
 
 # RETURN VALUE
 
-Returns 0 on success. On error, a negative value corresponding to
-fabric errno is returned. Fabric errno values are defined in
+Returns 0 on success. On error, a negative value corresponding to fabric
+errno is returned. Fabric errno values are defined in
 `rdma/fi_errno.h`.
 
 # ERRORS
 
+
 # NOTES
 
-# SEE ALSO
 
+# SEE ALSO
 `fi_getinfo`(3), `fi_endpoint`(3), `fi_domain`(3), `fi_eq`(3)
