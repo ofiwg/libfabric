@@ -210,7 +210,7 @@ enum {
  * data - only present if flags indicate
  * tag - only present for TSEND op
  */
-struct sock_tx_op {
+struct sock_op {
 	uint8_t			op;
 	uint8_t			src_iov_len;
 	uint8_t			dest_iov_len;
@@ -320,6 +320,20 @@ struct sock_pep {
 	uint64_t			pep_cap;
 };
 
+struct sock_rx_entry {
+	struct sock_op rx_op;
+
+	uint64_t flags;
+	uint64_t context;
+	uint64_t addr;
+	uint64_t data;
+	uint64_t tag;
+	uint64_t ignore;
+	
+	union sock_iov iov[SOCK_EP_MAX_IOV_LIMIT];
+	struct dlist_entry entry;
+};
+
 struct sock_rx_ctx {
 	uint16_t rx_id;
 	uint8_t reserved[6];
@@ -382,7 +396,7 @@ struct sock_tx_iov {
 };
 
 struct sock_tx_pe_entry{
-	struct sock_tx_op tx_op;	
+	struct sock_op tx_op;	
 	uint8_t header_sent;
 	uint8_t reserved[7];
 
@@ -393,7 +407,7 @@ struct sock_tx_pe_entry{
 };
 
 struct sock_rx_pe_entry{
-	struct sock_tx_op rx_op;
+	struct sock_op rx_op;
 	void *raw_data;
 	union sock_iov rx_iov[SOCK_EP_MAX_IOV_LIMIT];
 };
