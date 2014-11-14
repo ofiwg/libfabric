@@ -368,6 +368,7 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
+	case FI_WAIT_UNSPEC:
 		break;
 
 	case FI_WAIT_SET:
@@ -379,7 +380,6 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		wait = (struct psmx_fid_wait *)attr->wait_set;
 		break;
 
-	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUT_COND:
 		wait_attr.wait_obj = attr->wait_obj;
