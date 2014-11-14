@@ -609,7 +609,7 @@ static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 {
 	struct psmx_fid_cq *cq_priv;
 	struct timespec ts0, ts;
-	size_t threshold;
+	size_t threshold, event_count;
 	int msec_passed = 0;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
@@ -619,7 +619,8 @@ static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		threshold = 1;
 
 	/* NOTE: "cond" is only a hint, not a mandatory condition. */
-	if (cq_priv->event_queue.count < threshold) {
+	event_count = cq_priv->event_queue.count;
+	if (event_count < threshold) {
 		if (cq_priv->wait) {
 			psmx_wait_wait((struct fid_wait *)cq_priv->wait, timeout);
 		}
@@ -627,6 +628,10 @@ static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 			clock_gettime(CLOCK_REALTIME, &ts0);
 			while (1) {
 				if (psmx_cq_poll_mq(cq_priv, cq_priv->domain, NULL, 0, NULL) > 0)
+					break;
+
+				/* CQ may be updated asynchronously by the AM handlers */
+				if (cq_priv->event_queue.count > event_count)
 					break;
 
 				if (timeout < 0)
