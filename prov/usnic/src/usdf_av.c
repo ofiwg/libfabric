@@ -273,6 +273,9 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 			}
 
 		} else {
+			if (req->avr_daddr_be == 0) {
+				req->avr_daddr_be = sin->sin_addr.s_addr;
+			}
 			req->avr_dest = calloc(1, sizeof(*req->avr_dest));
 			if (req->avr_dest == NULL) {
 				ret = -FI_ENOMEM;
