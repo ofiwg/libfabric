@@ -45,7 +45,7 @@ There are two components to the libfabric software:
   all the interfaces that are defined; however, providers clearly
   indicate which interfaces they do support.
 
-: The fabric interfaces are designed such that they are cohesive and
+  The fabric interfaces are designed such that they are cohesive and
   not simply a union of disjoint interfaces.  The interfaces are
   logically divided into two groups: control interfaces and
   communication operations. The control interfaces are a common set of
@@ -56,7 +56,7 @@ There are two components to the libfabric software:
   atomic operations.  Communication operations are associated with
   fabric endpoints.
 
-: Applications will typically use the control interfaces to discover
+  Applications will typically use the control interfaces to discover
   local capabilities and allocate necessary resources.  They will then
   allocate and configure a communication endpoint to send and receive
   data, or perform other types of data transfers, with remote
@@ -75,7 +75,7 @@ obtaining the capabilities of the interfaces and opening a provider.
   results from fi_getinfo, fi_info, are used to reserve and configure
   fabric resources.
 
-: fi_getinfo returns a list of fi_info structures.  Each structure
+  fi_getinfo returns a list of fi_info structures.  Each structure
   references a single fabric provider, indicating the interfaces that
   the provider supports, along with a named set of resources.  A
   fabric provider may include multiple fi_info structures in the

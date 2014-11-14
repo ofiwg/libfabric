@@ -9,13 +9,13 @@ tagline: Libfabric Programmer's Manual
 
 fi_rma - Remote memory access operations
 
-fi_read / fi_readv
+fi_read / fi_readv  
 fi_readfrom / fi_readmsg
 :   Initiates a read from remote memory
 
-fi_write / fi_writev
-fi_writeto / fi_writemsg
-fi_inject_write / fi_inject_writeto
+fi_write / fi_writev  
+fi_writeto / fi_writemsg  
+fi_inject_write / fi_inject_writeto  
 fi_writedata / fi_writedatato
 :   Initiate a write to remote memory
 

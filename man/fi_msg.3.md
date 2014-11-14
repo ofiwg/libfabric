@@ -9,13 +9,13 @@ tagline: Libfabric Programmer's Manual
 
 fi_msg - Message data transfer operations
 
-fi_recv / fi_recvv
+fi_recv / fi_recvv  
 fi_recvfrom / fi_recvmsg
 :   Post a buffer to receive an incoming message
 
-fi_send / fi_sendv
-fi_sendto / fi_sendmsg
-fi_inject / fi_injectto
+fi_send / fi_sendv  
+fi_sendto / fi_sendmsg  
+fi_inject / fi_injectto  
 fi_senddata / fi_senddatato
 :   Initiate an operation to send a message
 

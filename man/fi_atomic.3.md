@@ -9,16 +9,16 @@ tagline: Libfabric Programmer's Manual
 
 fi_atomic - Remote atomic functions
 
-fi_atomic / fi_atomicv
+fi_atomic / fi_atomicv  
 fi_atomicto / fi_atomicmsg
 : Initiates an atomic operation to remote memory
 
-fi_fetch_atomic / fi_fetch_atomicv
+fi_fetch_atomic / fi_fetch_atomicv  
 fi_fetch_atomicto / fi_fetch_atomicmsg
 : Initiates an atomic operation to remote memory, retrieving the initial
   value.
 
-fi_compare_atomic / fi_compare_atomicv
+fi_compare_atomic / fi_compare_atomicv  
 fi_compare_atomicto / fi_compare_atomicmsg
 : Initiates an atomic compare-operation to remote memory, retrieving
   the initial value.
