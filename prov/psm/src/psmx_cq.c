@@ -479,7 +479,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 	assert(cq_priv->domain);
 
-	if (PSMX_CQ_EMPTY(cq_priv)) {
+	if (PSMX_CQ_EMPTY(cq_priv) || !buf) {
 		ret = psmx_cq_poll_mq(cq_priv, cq_priv->domain,
 				      (struct psmx_cq_event *)buf, count, src_addr);
 		if (ret > 0)
@@ -608,7 +608,9 @@ static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				 int timeout)
 {
 	struct psmx_fid_cq *cq_priv;
-	size_t threshold;
+	struct timespec ts0, ts;
+	size_t threshold, event_count;
+	int msec_passed = 0;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
 	if (cq_priv->wait_cond == FI_CQ_COND_THRESHOLD)
@@ -617,12 +619,32 @@ static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		threshold = 1;
 
 	/* NOTE: "cond" is only a hint, not a mandatory condition. */
-	if (cq_priv->event_queue.count < threshold) {
-		if (cq_priv->wait)
+	event_count = cq_priv->event_queue.count;
+	if (event_count < threshold) {
+		if (cq_priv->wait) {
 			psmx_wait_wait((struct fid_wait *)cq_priv->wait, timeout);
-		else
-			while (!psmx_cq_poll_mq(cq_priv, cq_priv->domain, NULL, 0, NULL))
-				;
+		}
+		else {
+			clock_gettime(CLOCK_REALTIME, &ts0);
+			while (1) {
+				if (psmx_cq_poll_mq(cq_priv, cq_priv->domain, NULL, 0, NULL) > 0)
+					break;
+
+				/* CQ may be updated asynchronously by the AM handlers */
+				if (cq_priv->event_queue.count > event_count)
+					break;
+
+				if (timeout < 0)
+					continue;
+
+				clock_gettime(CLOCK_REALTIME, &ts);
+				msec_passed = (ts.tv_sec - ts0.tv_sec) * 1000 +
+					       (ts.tv_nsec - ts0.tv_nsec) / 1000000;
+
+				if (msec_passed >= timeout)
+					break;
+			}
+		}
 	}
 
 	return psmx_cq_readfrom(cq, buf, count, src_addr);
@@ -740,6 +762,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
+	case FI_WAIT_UNSPEC:
 		break;
 
 	case FI_WAIT_SET:
@@ -751,7 +774,6 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		wait = (struct psmx_fid_wait *)attr->wait_set;
 		break;
 
-	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUT_COND:
 		wait_attr.wait_obj = attr->wait_obj;

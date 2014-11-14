@@ -74,13 +74,42 @@ int psmx_poll_del(struct fid_poll *pollset, struct fid *event_fid, uint64_t flag
 static int psmx_poll_poll(struct fid_poll *pollset, void **context, int count)
 {
 	struct psmx_fid_poll *poll_priv;
-	int err = 0;
+	struct psmx_fid_cq *cq;
+	struct psmx_fid_cntr *cntr;
+	struct psmx_poll_list *list_item;
+	struct dlist_entry *p, *head;
+	int ret_count = 0;
 	
 	poll_priv = container_of(pollset, struct psmx_fid_poll, poll.fid);
 
-	/* TODO: poll them all! */
+	psmx_cq_poll_mq(NULL, poll_priv->domain, NULL, 0, NULL);
 
-	return err;
+	head = &poll_priv->poll_list_head;
+	for (p = head->next; p != head && ret_count < count; p = p->next) {
+		list_item = container_of(p, struct psmx_poll_list, entry);
+		switch (list_item->fid->fclass) {
+		case FI_CLASS_CQ:
+			cq = container_of(list_item->fid, struct psmx_fid_cq, cq);
+			if (cq->event_queue.count) {
+				*context++ = cq->cq.fid.context;
+				ret_count++;
+			}
+			break;
+
+		case FI_CLASS_CNTR:
+			cntr = container_of(list_item->fid, struct psmx_fid_cntr, cntr);
+			if (cntr->counter != cntr->counter_last_read) {
+				*context++ = cntr->cntr.fid.context;
+				ret_count++;
+			}
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	return ret_count;
 }
 
 static int psmx_poll_close(fid_t fid)
@@ -134,6 +163,7 @@ int psmx_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 	poll_priv->poll.fid.context = 0;
 	poll_priv->poll.fid.ops = &psmx_fi_ops;
 	poll_priv->poll.ops = &psmx_poll_ops;
+	poll_priv->domain = domain_priv;
 
 	*pollset = &poll_priv->poll;
 	return 0;

@@ -199,7 +199,9 @@ static uint64_t psmx_cntr_read(struct fid_cntr *cntr)
 
 	cntr_priv = container_of(cntr, struct psmx_fid_cntr, cntr);
 
-	return cntr_priv->counter;
+	cntr_priv->counter_last_read = cntr_priv->counter;
+
+	return cntr_priv->counter_last_read;
 }
 
 static uint64_t psmx_cntr_readerr(struct fid_cntr *cntr)
@@ -208,7 +210,9 @@ static uint64_t psmx_cntr_readerr(struct fid_cntr *cntr)
 
 	cntr_priv = container_of(cntr, struct psmx_fid_cntr, cntr);
 
-	return cntr_priv->error_counter;
+	cntr_priv->error_counter_last_read = cntr_priv->error_counter;
+
+	return cntr_priv->error_counter_last_read;
 }
 
 static int psmx_cntr_add(struct fid_cntr *cntr, uint64_t value)
@@ -266,6 +270,9 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 
 		if (cntr_priv->counter >= threshold)
 			break;
+
+		if (timeout < 0)
+			continue;
 
 		clock_gettime(CLOCK_REALTIME, &ts);
 		msec_passed = (ts.tv_sec - ts0.tv_sec) * 1000 +
@@ -365,6 +372,7 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
+	case FI_WAIT_UNSPEC:
 		break;
 
 	case FI_WAIT_SET:
@@ -376,7 +384,6 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		wait = (struct psmx_fid_wait *)attr->wait_set;
 		break;
 
-	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUT_COND:
 		wait_attr.wait_obj = attr->wait_obj;

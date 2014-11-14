@@ -316,6 +316,7 @@ struct psmx_cq_event_queue {
 
 struct psmx_fid_wait {
 	struct fid_wait			wait;
+	struct psmx_fid_domain		*domain;
 	int				type;
 	union {
 		int			fd[2];
@@ -333,6 +334,7 @@ struct psmx_poll_list {
 
 struct psmx_fid_poll {
 	struct fid_poll			poll;
+	struct psmx_fid_domain		*domain;
 	struct dlist_entry		poll_list_head;
 };
 
@@ -483,6 +485,8 @@ struct psmx_fid_cntr {
 	uint64_t		flags;
 	volatile uint64_t	counter;
 	volatile uint64_t	error_counter;
+	uint64_t		counter_last_read;
+	uint64_t		error_counter_last_read;
 	struct psmx_fid_wait	*wait;
 	struct psmx_trigger	*trigger;
 	pthread_mutex_t		trigger_lock;
