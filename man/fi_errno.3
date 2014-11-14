@@ -1,0 +1,100 @@
+.TH "FI_ERRNO" 7 "@DATE@" "@VERSION@" "Libfabric Programmer's Manual" libfabric
+.SH NAME
+fi_errno \- fabric errors
+.PP
+fi_strerror \- Convert fabric error into a printable string
+.SH SYNOPSIS
+.B #include <rdma/fi_errno.h>
+.HP
+.BI "const char *fi_strerror(int " errnum ");"
+.SH "ERRORS"
+.IP "FI_ENOENT"
+No such file or directory.
+.IP "FI_EIO"
+I/O error
+.IP "FI_E2BIG"
+Argument list too long.
+.IP "FI_EBADF"
+Bad file number.
+.IP "FI_EAGAIN"
+Try again.
+.IP "FI_ENOMEM"
+Out of memory.
+.IP "FI_EACCES"
+Permission denied.
+.IP "FI_EBUSY"
+Device or resource busy
+.IP "FI_ENODEV"
+No such device
+.IP "FI_EINVAL"
+Invalid argument
+.IP "FI_EMFILE"
+Too many open files
+.IP "FI_ENOSPC"
+No space left on device
+.IP "FI_ENOSYS"
+Function not implemented
+.IP "FI_ENOMSG"
+No message of desired type
+.IP "FI_ENODATA"
+No data available
+.IP "FI_EMSGSIZE"
+Message too long
+.IP "FI_ENOPROTOOPT"
+Protocol not available
+.IP "FI_EOPNOTSUPP"
+Operation not supported on transport endpoint
+.IP "FI_EADDRINUSE"
+Address already in use
+.IP "FI_EADDRNOTAVAIL"
+Cannot assign requested address
+.IP "FI_ENETDOWN"
+Network is down
+.IP "FI_ENETUNREACH"
+Network is unreachable
+.IP "FI_ECONNABORTED"
+Software caused connection abort
+.IP "FI_ECONNRESET"
+Connection reset by peer
+.IP "FI_EISCONN"
+Transport endpoint is already connected
+.IP "FI_ENOTCONN"
+Transport endpoint is not connected
+.IP "FI_ESHUTDOWN"
+Cannot send after transport endpoint shutdown
+.IP "FI_ETIMEDOUT"
+Operation timed out
+.IP "FI_ECONNREFUSED"
+Connection refused
+.IP "FI_EHOSTUNREACH"
+No route to host
+.IP "FI_EALREADY"
+Operation already in progress
+.IP "FI_EINPROGRESS"
+Operation now in progress
+.IP "FI_EREMOTEIO"
+Remote I/O error
+.IP "FI_ECANCELED"
+Operation Canceled
+.IP "FI_ENOKEY"
+Required key not available
+.IP "FI_EKEYREJECTED"
+Key was rejected by service
+.IP "FI_EOTHER"
+Unspecified error
+.IP "FI_ETOOSMALL"
+Provided buffer is too small
+.IP "FI_EOPBADSTATE"
+Operation not permitted in current state
+.IP "FI_EAVAIL"
+Error available
+.IP "FI_EBADFLAGS"
+Flags not supported
+.IP "FI_ENOEQ"
+Missing or unavailable event queue
+.IP "FI_EDOMAIN"
+Invalid resource domain
+.IP "FI_ENOCQ"
+Missing or unavailable completion queue
+.SH "SEE ALSO"
+fi_fabric(7)

@@ -61,6 +61,7 @@
 #include "usnic_direct.h"
 #include "usd.h"
 #include "usdf.h"
+#include "usdf_av.h"
 
 static ssize_t
 usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,

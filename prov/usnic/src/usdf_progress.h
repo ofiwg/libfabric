@@ -1,8 +1,6 @@
 /*
  * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
  *
- * LICENSE_BEGIN
- *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
  * General Public License (GPL) Version 2, available from the file
@@ -34,33 +32,19 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- *
- * LICENSE_END
- *
- *
- * definitions about time
  */
+#ifndef _USDF_PROGRESS_H_
+#define _USDF_PROGRESS_H_
 
-#ifndef _USD_TIME_H_
-#define _USD_TIME_H_
+struct usdf_poll_item {
+	int (*pi_rtn)(void *context);
+	void *pi_context;
+};
 
-#include <time.h>
+struct usdf_fabric;
 
-typedef uint64_t usd_time_t;
+void *usdf_fabric_progression_thread(void *v);
+int usdf_fabric_wake_thread(struct usdf_fabric *fp);
+int usdf_fabric_progression_cb(void *v);
 
-static inline void usd_get_time(usd_time_t * timep)
-{
-    struct timespec now;
-
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    *timep = now.tv_sec * 1000 + now.tv_nsec / 1000000;
-}
-
-/*
- * Returns time delta in ms
- */
-static inline int usd_time_diff(usd_time_t time1, usd_time_t time2)
-{
-    return time2 - time1;
-}
-#endif /* _USD_TIME_H_ */
+#endif /* _USDF_PROGRESS_H_ */

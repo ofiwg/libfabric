@@ -172,10 +172,10 @@ struct fi_msg_tagged {
 .SS "fi_tinject"
 The tagged inject call is an optimized version of fi_tsend.  The
 fi_tinject function behaves as if the FI_INJECT transfer flag were
-set, and FI_EVENT were not.  That is, the data buffer is available for reuse
+set, and FI_COMPLETION were not.  That is, the data buffer is available for reuse
 immediately on returning from from fi_tinject, and no completion event will
 be generated for this send.  The completion event will be suppressed even if
-the endpoint has not been configured with FI_EVENT.  See the flags
+the endpoint has not been configured with FI_COMPLETION.  See the flags
 discussion below for more details.
 .SS "fi_tinjectto"
 This call is similar to fi_tinject, but for unconnected endpoints.
@@ -222,10 +222,10 @@ Applies to fi_tsendmsg, fi_tsenddata, and fi_tsenddatato.
 Indicates that remote CQ data is available and should
 be sent as part of the request.  See fi_getinfo
 for additional details on FI_REMOTE_CQ_DATA.
-.IP "FI_EVENT"
+.IP "FI_COMPLETION"
 Indicates that a completion entry should be generated for the specified
 operation.  The endpoint must be bound to an event queue
-with FI_EVENT that corresponds to the specified operation, or this flag
+with FI_COMPLETION that corresponds to the specified operation, or this flag
 is ignored.
 .IP "FI_MORE"
 Indicates that the user has additional requests that will immediately be

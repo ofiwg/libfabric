@@ -130,8 +130,6 @@ const struct fi_domain_attr _sock_domain_attr = {
 	.rx_ctx_cnt = 128,
 	.max_ep_tx_ctx = 1,
 	.max_ep_rx_ctx = 1,
-	.op_size = 0,
-	.iov_size = 8,
 };
 
 const struct fi_fabric_attr _sock_fabric_attr = {
@@ -149,7 +147,6 @@ const struct fi_tx_ctx_attr _sock_tx_attr = {
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_MAX_MSG_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
-	.op_alignment = 0,
 };
 
 const struct fi_rx_ctx_attr _sock_rx_attr = {
@@ -159,7 +156,6 @@ const struct fi_rx_ctx_attr _sock_rx_attr = {
 	.total_buffered_recv = 0,
 	.size = SOCK_EP_MAX_MSG_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
-	.op_alignment = 0,
 };
 
 static struct fi_info *allocate_fi_info(enum fi_ep_type ep_type, 
@@ -850,8 +846,10 @@ int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 
 	if(0 != (sock_ep->recv_list = new_list(SOCK_EP_RCVQ_LEN)))
 		goto err3;
-	
+
+/*	
 	sock_ep->progress_fn = _sock_ep_rdm_progress;
+*/
 	return 0;
 
 err3:

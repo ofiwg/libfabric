@@ -70,7 +70,7 @@ Event queue
 .IP "attr"
 Address vector attributes
 .IP "context"
-User specified context associated with the address vector or insert opertion.
+User specified context associated with the address vector or insert operation.
 .IP "addr"
 Buffer containing one or more addresses to insert into address vector.
 .IP "addrlen"
@@ -206,7 +206,7 @@ address in the index field of the error completion entry.
 .sp
 Note that the order of delivery of insert completions may not match
 the order in which the calls to fi_av_insert were made.  The only guarantee
-is that all error completions for a given call to fi_av_insert will preceed
+is that all error completions for a given call to fi_av_insert will precede
 the single associated non-error completion.
 .IP "FI_READ"
 Opens an AV for read-only access.  An AV opened for read-only access

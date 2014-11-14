@@ -281,6 +281,16 @@ int fi_no_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 {
 	return -FI_ENOSYS;
 }
+int fi_no_stx_context(struct fid_domain *domain, struct fi_tx_ctx_attr *attr,
+		struct fid_ep **tx_ep, void *context)
+{
+	return -FI_ENOSYS;
+}
+int fi_no_srx_context(struct fid_domain *domain, struct fi_rx_ctx_attr *attr,
+		struct fid_ep **rx_ep, void *context)
+{
+	return -FI_ENOSYS;
+}
 
 /*
  * struct fi_ops_mr
@@ -307,6 +317,10 @@ int fi_no_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr,
 /*
  * struct fi_ops_ep
  */
+int fi_no_enable(struct fid_ep *ep)
+{
+	return -FI_ENOSYS;
+}
 ssize_t fi_no_cancel(fid_t fid, void *context)
 {
 	return -FI_ENOSYS;
