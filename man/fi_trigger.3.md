@@ -87,4 +87,7 @@ the endpoint.
 
 # SEE ALSO
 
-`fi_getinfo`(3), `fi_endpoint`(3), `fi_alias`(3), `fi_cntr`(3)
+[`fi_getinfo`(3)](fi_getinfo.3.html),
+[`fi_endpoint`(3)](fi_endpoint.3.html),
+[`fi_alias`(3)](fi_alias.3.html),
+[`fi_cntr`(3)](fi_cntr.3.html)

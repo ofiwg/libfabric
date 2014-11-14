@@ -82,4 +82,6 @@ supported features.
 
 # SEE ALSO
 
-`fi_getinfo`(3), `fi_endpoint`(3), `fi_domain`(3)
+[`fi_getinfo`(3)](fi_getinfo.3.html),
+[`fi_endpoint`(3)](fi_endpoint.3.html),
+[`fi_domain`(3)](fi_domain.3.html)

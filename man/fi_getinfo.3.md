@@ -595,4 +595,6 @@ Multiple threads may call
 
 # SEE ALSO
 
-`fi_open`(3), `fi_domain`(3), `fi_endpoint`(3)
+[`fi_open`(3)](fi_open.3.html),
+[`fi_endpoint`(3)](fi_endpoint.3.html),
+[`fi_domain`(3)](fi_domain.3.html)

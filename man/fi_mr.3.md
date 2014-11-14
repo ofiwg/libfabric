@@ -303,5 +303,9 @@ Fabric errno values are defined in
 
 # SEE ALSO
 
-`fi_getinfo`(3), `fi_endpoint`(3), `fi_domain`(3), `fi_rma`(3),
-`fi_msg`(3), `fi_atomic`(3)
+[`fi_getinfo`(3)](fi_getinfo.3.html),
+[`fi_endpoint`(3)](fi_endpoint.3.html),
+[`fi_domain`(3)](fi_domain.3.html),
+[`fi_rma`(3)](fi_rma.3.html),
+[`fi_msg`(3)](fi_msg.3.html),
+[`fi_atomic`(3)](fi_atomic.3.html)

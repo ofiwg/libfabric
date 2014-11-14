@@ -39,4 +39,5 @@ the minor number.
 
 # SEE ALSO
 
-`fabric`(7), `fi_getinfo`(3)
+[`fi_fabric`(7)](fi_fabric.7.html),
+[`fi_getinfo`(3)](fi_getinfo.3.html)

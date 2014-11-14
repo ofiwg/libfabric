@@ -241,4 +241,7 @@ fi_poll
 
 # SEE ALSO
 
-`fi_getinfo`(3), `fi_domain`(3), `fi_cntr`(3), `fi_eq`(3)
+[`fi_getinfo`(3)](fi_getinfo.3.html),
+[`fi_domain`(3)](fi_domain.3.html),
+[`fi_cntr`(3)](fi_cntr.3.html),
+[`fi_eq`(3)](fi_eq.3.html)

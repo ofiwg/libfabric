@@ -370,4 +370,7 @@ satisfies the following requirement from the MPI-3.0 specification
 
 # SEE ALSO
 
-`fi_getinfo`(3), `fi_endpoint`(3), `fi_domain`(3), `fi_eq`(3)
+[`fi_getinfo`(3)](fi_getinfo.3.html),
+[`fi_endpoint`(3)](fi_endpoint.3.html),
+[`fi_domain`(3)](fi_domain.3.html),
+[`fi_eq`(3)](fi_eq.3.html)

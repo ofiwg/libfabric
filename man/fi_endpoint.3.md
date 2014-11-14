@@ -962,4 +962,8 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 
 # SEE ALSO
 
-`fi_getinfo`(3), `fi_domain`(3), `fi_msg`(3), `fi_tagged`(3), `fi_rma`(3)
+[`fi_getinfo`(3)](fi_getinfo.3.html),
+[`fi_domain`(3)](fi_domain.3.html),
+[`fi_msg`(3)](fi_msg.3.html),
+[`fi_tagged`(3)](fi_tagged.3.html),
+[`fi_rma`(3)](fi_rma.3.html)
