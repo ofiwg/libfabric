@@ -268,6 +268,11 @@ static void fi_tostr_addr(char *buf, uint32_t addr_format,
 static void fi_tostr_tx_attr(char *buf, const struct fi_tx_ctx_attr *attr,
 			     const char *prefix)
 {
+	if (!attr) {
+		strcatf(buf, "%sfi_tx_ctx_attr: (null)\n", prefix);
+		return;
+	}
+
 	strcatf(buf, "%sfi_tx_ctx_attr:\n", prefix);
 	strcatf(buf, "%s%scaps: [ ", prefix, TAB);
 	fi_tostr_caps(buf, attr->caps);
@@ -289,6 +294,11 @@ static void fi_tostr_tx_attr(char *buf, const struct fi_tx_ctx_attr *attr,
 static void fi_tostr_rx_attr(char *buf, const struct fi_rx_ctx_attr *attr,
 			     const char *prefix)
 {
+	if (!attr) {
+		strcatf(buf, "%sfi_rx_ctx_attr: (null)\n", prefix);
+		return;
+	}
+
 	strcatf(buf, "%sfi_rx_ctx_attr:\n", prefix);
 	strcatf(buf, "%s%scaps: [ ", prefix, TAB);
 	fi_tostr_caps(buf, attr->caps);
@@ -309,6 +319,11 @@ static void fi_tostr_rx_attr(char *buf, const struct fi_rx_ctx_attr *attr,
 
 static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const char *prefix)
 {
+	if (!attr) {
+		strcatf(buf, "%sfi_ep_attr: (null)\n", prefix);
+		return;
+	}
+
 	strcatf(buf, "%sfi_ep_attr:\n", prefix);
 	strcatf(buf, "%s%sprotocol: ", prefix, TAB);
 	fi_tostr_protocol(buf, attr->protocol);
@@ -332,6 +347,11 @@ static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const cha
 static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 				 const char *prefix)
 {
+	if (!attr) {
+		strcatf(buf, "%sfi_domain_attr: (null)\n", prefix);
+		return;
+	}
+
 	strcatf(buf, "%sfi_domain_attr:\n", prefix);
 	strcatf(buf, "%s%sname: %s\n", prefix, TAB, attr->name);
 	strcatf(buf, "%s%sthreading: ", prefix, TAB);
@@ -357,6 +377,11 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
 				 const char *prefix)
 {
+	if (!attr) {
+		strcatf(buf, "%sfi_fabric_attr: (null)\n", prefix);
+		return;
+	}
+
 	strcatf(buf, "%sfi_fabric_attr:\n", prefix);
 	strcatf(buf, "%s%sname: %s\n", prefix, TAB, attr->name);
 	strcatf(buf, "%s%sprov_name: %s\n", prefix, TAB, attr->prov_name);
