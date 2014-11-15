@@ -6,7 +6,7 @@ use warnings;
 use POSIX;
 use File::Basename;
 use Getopt::Long;
-use File::Temp;
+use File::Temp qw/tempfile/;
 
 my $source_arg;
 my $target_arg;
@@ -51,65 +51,88 @@ if (!defined($target_arg)) {
 print "*** Processing: $file -> $target_arg\n";
 
 # Read in the file
-my $str;
+my $pandoc_input;
 open(IN, $file)
     || die "Can't open $file";
-$str .= $_
+$pandoc_input .= $_
     while (<IN>);
 close(IN);
 
 # Remove the Jekyll header
-$str =~ s/.*---\n.+?---\n//s;
+$pandoc_input =~ s/.*---\n.+?---\n//s;
 
 # Remove the {% include ... %} directives
-$str =~ s/\n{0,1}\s*{%\s+include .+?\s+%}\s*\n/\n/g;
+$pandoc_input =~ s/\n{0,1}\s*{%\s+include .+?\s+%}\s*\n/\n/g;
 
 # Change {% highlight c %} to ```c
-$str =~ s/^\s*{%\s+highlight\s+c\s+%}\s*$/\n```c/gmi;
+$pandoc_input =~ s/^\s*{%\s+highlight\s+c\s+%}\s*$/\n```c/gmi;
 
 # Change {% endhighlight %} to ```
-$str =~ s/^\s*\{\%\s+endhighlight\s+\%\}\s*$/```\n/gmi;
+$pandoc_input =~ s/^\s*\{\%\s+endhighlight\s+\%\}\s*$/```\n/gmi;
 
 # Pandoc does not handle markdown links in output nroff properly,
 # so just remove all links.
-while ($str =~ m/\[(.+?)\]\(.+?\)/) {
+while ($pandoc_input =~ m/\[(.+?)\]\(.+?\)/) {
     my $text = $1;
-    $str =~ s/\[(.+?)\]\(.+?\)/$text/;
+    $pandoc_input =~ s/\[(.+?)\]\(.+?\)/$text/;
 }
 
-# Add the pando cheader
-$str = "% $shortfile($section) Libfabric Programmer's Manual | \@VERSION\@
+# Add the pandoc header
+$pandoc_input = "% $shortfile($section) Libfabric Programmer's Manual | \@VERSION\@
 % OpenFabrics
-% \@DATE\@\n\n$str";
+% \@DATE\@\n\n$pandoc_input";
 
-# Now that we have the string result, is it different than the target
-# file?
-my $target_str;
-my $file_open = 1;
-$file_open = 0
-    if (!open(IN, $target_arg));
-if ($file_open) {
-    $target_str .= $_
-        while(<IN>);
+# Generate the nroff output
+my ($fh, $temp_filename) = tempfile();
+print $fh $pandoc_input;
+close($fh);
+
+open(IN, "pandoc -s --from=markdown --to=man $temp_filename|")
+    || die "Can't run pandoc";
+my $pandoc_nroff;
+$pandoc_nroff .= $_
+    while (<IN>);
+close(IN);
+unlink($temp_filename);
+
+# Now that we have the nroff string result, is it different than the
+# target file?
+my $write_nroff = 1;
+if (-r $target_arg) {
+    # If the target file exists, read it in
+    open(IN, $target_arg)
+        || die "Can't open $target_arg";
+    my $target_nroff;
+    $target_nroff .= $_
+        while (<IN>);
     close(IN);
-    $target_str =~ s/% OpenFabrics\n% \d\d\d\d-\d\d-\d\d\n\n/% OpenFabrics\n% \@DATE\@\n\n/;
 
-    # If they're the same, then we're done with this file
-    if ($target_str eq $str) {
-        print "--> Files the same; not written\n";
-        exit(0);
-    }
+    # Remove the date from the target nroff string so that we can
+    # compare and ignore if the date has changed.  Note that some
+    # versions of pandoc render dates as xxxx\-xx\-xx, and others
+    # render it as xxxx-xx-xx.  Handle both.
+    $target_nroff =~ s/\"\d\d\d\d\\\-\d\d\\\-\d\d\"/\"\\\@DATE\\\@\"/;
+    $target_nroff =~ s/\"\d\d\d\d\-\d\d\-\d\d\"/\"\\\@DATE\\\@\"/;
+
+    $write_nroff = 0
+        if ($pandoc_nroff eq $target_nroff);
 }
 
-# What's the date right now?
-my $now_string = strftime "%Y-%m-%d", localtime;
+# Do we need to write a new target nroff?
+if ($write_nroff) {
 
-# If we get here, we need to write a new target file
-$str =~ s/\@DATE\@/$now_string/g;
-open(OUT, "|pandoc -s --from=markdown --to=man -o $target_arg")
-    || die "Can't run pandoc";
-print OUT $str;
-close(OUT);
+    # What's the date right now?
+    my $now_string = strftime "%Y\\-%m\\-%d", localtime;
+    $pandoc_nroff =~ s/\\\@DATE\\\@/$now_string/g;
 
-print "--> Wrote new $target_arg\n";
+    open(OUT, ">$target_arg")
+        || die "Can't write to $target_arg";
+    print OUT $pandoc_nroff;
+    close(OUT);
+
+    print "--> Wrote new $target_arg\n";
+} else {
+    print "--> $target_arg unchanged; not written\n";
+}
+
 exit(0);
