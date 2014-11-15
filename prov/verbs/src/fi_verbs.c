@@ -1643,7 +1643,7 @@ fi_ibv_eq_sread(struct fid_eq *eq, uint32_t *event,
 
 static const char *
 fi_ibv_eq_strerror(struct fid_eq *eq, int prov_errno, const void *err_data,
-		void *buf, size_t len)
+		   char *buf, size_t len)
 {
 	if (buf && len)
 		strncpy(buf, strerror(prov_errno), len);
@@ -1908,7 +1908,7 @@ static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t count)
 
 static const char *
 fi_ibv_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
-		void *buf, size_t len)
+		   char *buf, size_t len)
 {
 	if (buf && len)
 		strncpy(buf, ibv_wc_status_str(prov_errno), len);

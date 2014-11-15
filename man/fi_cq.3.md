@@ -57,7 +57,7 @@ int fi_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
     fi_addr_t *src_addr, const void *cond, int timeout);
 
 const char * fi_cq_strerror(struct fid_cq *cq, int prov_errno,
-      const void *err_data, void *buf, size_t len);
+      const void *err_data, char *buf, size_t len);
 {% endhighlight %}
 
 # ARGUMENTS

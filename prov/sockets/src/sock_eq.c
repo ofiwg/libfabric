@@ -191,7 +191,7 @@ static ssize_t sock_eq_write(struct fid_eq *eq, uint32_t event,
 }
 
 const char * sock_eq_strerror(struct fid_eq *eq, int prov_errno,
-			      const void *err_data, void *buf, size_t len)
+			      const void *err_data, char *buf, size_t len)
 {
 	if (buf && len)
 		return strncpy(buf, strerror(prov_errno), len);

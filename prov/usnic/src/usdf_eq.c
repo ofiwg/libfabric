@@ -426,7 +426,7 @@ done:
 
 static const char *
 usdf_eq_strerror(struct fid_eq *feq, int prov_errno, const void *err_data,
-		 void *buf, size_t len)
+		 char *buf, size_t len)
 {
 	return NULL;
 }

@@ -301,7 +301,7 @@ ssize_t sock_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 }
 
 const char * sock_cq_strerror(struct fid_cq *cq, int prov_errno,
-			      const void *err_data, void *buf, size_t len)
+			      const void *err_data, char *buf, size_t len)
 {
 	if (buf && len)
 		return strncpy(buf, strerror(prov_errno), len);

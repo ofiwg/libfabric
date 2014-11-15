@@ -291,10 +291,10 @@ usdf_cq_read_data(struct fid_cq *fcq, void *buf, size_t count)
 
 static const char *
 usdf_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
-		void *buf, size_t len)
+		 char *buf, size_t len)
 {
 	strncpy(buf, "CQ Error", len-1);
-	((char *)buf)[len-1] = '\0';
+	buf[len-1] = '\0';
 	return buf;
 }
 

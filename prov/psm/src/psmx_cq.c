@@ -634,7 +634,7 @@ static ssize_t psmx_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 }
 
 static const char *psmx_cq_strerror(struct fid_cq *cq, int prov_errno, const void *prov_data,
-				    void *buf, size_t len)
+				    char *buf, size_t len)
 {
 	return psm_error_get_string(prov_errno);
 }
