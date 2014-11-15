@@ -468,12 +468,6 @@ static int sockd_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
-static int sockd_ep_sync(fid_t fid, uint64_t flags, void *context)
-{
-	errno = FI_ENOSYS;
-	return -errno;
-}
-
 static int sockd_ep_control(fid_t fid, int command, void *arg)
 {
 	errno = FI_ENOSYS;
@@ -750,7 +744,6 @@ static struct fi_ops sockd_ep_fi_ops = {
 	.size		= sizeof(struct fi_ops),
 	.close		= sockd_ep_close,
 	.bind		= sockd_ep_bind,
-	.sync		= sockd_ep_sync,
 	.control	= sockd_ep_control,
 	.ops_open	= sockd_ep_ops_open
 };

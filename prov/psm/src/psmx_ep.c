@@ -234,35 +234,6 @@ static inline int psmx_ep_progress(struct psmx_fid_ep *ep)
 	return psmx_cq_poll_mq(NULL, ep->domain, NULL, 0, NULL);
 }
 
-static int psmx_ep_sync(fid_t fid, uint64_t flags, void *context)
-{
-	struct psmx_fid_ep *ep;
-
-	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
-
-	if (!flags || (flags & FI_SEND)) {
-		while (ep->pending_sends)
-			psmx_ep_progress(ep);
-	}
-
-	if (!flags || (flags & FI_WRITE)) {
-		while (ep->pending_writes)
-			psmx_ep_progress(ep);
-	}
-
-	if (!flags || (flags & FI_READ)) {
-		while (ep->pending_reads)
-			psmx_ep_progress(ep);
-	}
-
-	if (!flags || (flags & FI_WRITE) || (flags & FI_WRITE)) {
-		while (ep->pending_atomics)
-			psmx_ep_progress(ep);
-	}
-
-	return 0;
-}
-
 static int psmx_ep_control(fid_t fid, int command, void *arg)
 {
 	struct fi_alias *alias;
@@ -319,7 +290,6 @@ static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_ep_close,
 	.bind = psmx_ep_bind,
-	.sync = psmx_ep_sync,
 	.control = psmx_ep_control,
 };
 

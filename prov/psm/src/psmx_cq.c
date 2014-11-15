@@ -289,7 +289,6 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 
 			switch (PSMX_CTXT_TYPE(fi_context)) {
 			case PSMX_NOCOMP_SEND_CONTEXT:
-				tmp_ep->pending_sends--;
 				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
@@ -298,29 +297,24 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				break;
 
 			case PSMX_NOCOMP_WRITE_CONTEXT:
-				tmp_ep->pending_writes--;
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
 			case PSMX_NOCOMP_READ_CONTEXT:
-				tmp_ep->pending_reads--;
 				tmp_cntr = tmp_ep->read_cntr;
 				break;
 
 			case PSMX_INJECT_CONTEXT:
-				tmp_ep->pending_sends--;
 				tmp_cntr = tmp_ep->send_cntr;
 				free(fi_context);
 				break;
 
 			case PSMX_INJECT_WRITE_CONTEXT:
-				tmp_ep->pending_writes--;
 				tmp_cntr = tmp_ep->write_cntr;
 				free(fi_context);
 				break;
 
 			case PSMX_SEND_CONTEXT:
-				tmp_ep->pending_sends--;
 				tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->send_cntr;
 				break;
@@ -337,13 +331,11 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				break;
 
 			case PSMX_READ_CONTEXT:
-				tmp_ep->pending_reads--;
 				tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->read_cntr;
 				break;
 
 			case PSMX_WRITE_CONTEXT:
-				tmp_ep->pending_writes--;
 				tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->write_cntr;
 				break;

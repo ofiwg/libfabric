@@ -266,8 +266,6 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			if (req->ep->send_cntr)
 				psmx_cntr_inc(req->ep->send_cntr);
 
-			req->ep->pending_sends--;
-
 			if (req->state == PSMX_AM_STATE_QUEUED)
 				req->state = PSMX_AM_STATE_DONE;
 			else
@@ -553,8 +551,6 @@ static ssize_t _psmx_sendto2(struct fid_ep *ep, const void *buf, size_t len,
 	err = psm_am_request_short((psm_epaddr_t) dest_addr,
 				PSMX_AM_MSG_HANDLER, args, 4,
 				(void *)buf, msg_size, am_flags, NULL, NULL);
-
-	ep_priv->pending_sends++;
 
 #if ! PSMX_AM_USE_SEND_QUEUE
 	if (len > msg_size) {
