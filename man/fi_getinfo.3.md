@@ -398,31 +398,6 @@ below.
   operations must be registered by the application for access domains
   opened with this capability.
 
-*FI_WRITE_NONCOHERENT*
-: Specifies that remote writes, including atomic operations, to the
-  underlying fabric domain are not coherent with the local processing
-  domain and the application must manually synchronize memory accessed
-  by remote RMA.  Domain-level write coherency indicates that changes
-  to local memory are visible to the local process immediately upon
-  completion of a remote write operation.  When this mode is enabled,
-  the NIC or memory subsystem may cache the results of remote write or
-  atomic operations in non-coherent memory.
-
-  The behavior of a domain with and without FI_WRITE_NONCOHERENT is
-  illustrated below.
-
-
-      Process 1            Process 2
-                           Register BUF
-      RMA write X to BUF
-      Notify process 2
-                           Receive notification
-                           if FI_WRITE_NONCOHERENT
-                                Sync with remote writes
-                           assert(BUF == X)
-
-: See the endpoint fi_ep_sync call for handling non-coherent writes.
-
 *FI_MSG_PREFIX*
 : Message prefix mode indicates that an application will provide
   buffer space in front of all message send and receive buffers for

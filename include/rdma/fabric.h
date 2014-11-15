@@ -203,9 +203,8 @@ enum {
 /* Mode bits */
 #define FI_CONTEXT		(1ULL << 0)
 #define FI_LOCAL_MR		(1ULL << 1)
-#define FI_WRITE_NONCOHERENT	(1ULL << 2)
-#define FI_PROV_MR_ATTR		(1ULL << 3)
-#define FI_MSG_PREFIX		(1ULL << 4)
+#define FI_PROV_MR_ATTR		(1ULL << 2)
+#define FI_MSG_PREFIX		(1ULL << 3)
 
 struct fi_tx_ctx_attr {
 	uint64_t		caps;

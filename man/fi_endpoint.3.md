@@ -310,14 +310,6 @@ of the following flags.
   data transfers have completed.  The sync is not ordered with respect
   to non-send operations.
 
-*FI_REMOTE_WRITE*
-: The FI_REMOTE_WRITE flag is used in conjunction with access domains
-  that use mode FI_WRITE_NONCOHERENT.  The fi_ep_sync with
-  FI_REMOTE_WRITE is issued on the target side of an RMA or atomic
-  data transfer.  It ensures that the view of memory of the local
-  process is consistent with memory updates from the network.  See
-  fi_getinfo for additional details on FI_WRITE_NONCOHERENT.
-
 ## fi_alias
 
 This call creates an alias to the specified endpoint.  Conceptually,
