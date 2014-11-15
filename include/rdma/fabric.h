@@ -307,7 +307,6 @@ struct fi_ops {
 	size_t	size;
 	int	(*close)(struct fid *fid);
 	int	(*bind)(struct fid *fid, struct fid *bfid, uint64_t flags);
-	int	(*sync)(struct fid *fid, uint64_t flags, void *context);
 	int	(*control)(struct fid *fid, int command, void *arg);
 	int	(*ops_open)(struct fid *fid, const char *name,
 			uint64_t flags, void **ops, void *context);
@@ -355,11 +354,6 @@ static inline int fi_close(struct fid *fid)
 static inline int fi_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	return fid->ops->bind(fid, bfid, flags);
-}
-
-static inline int fi_sync(struct fid *fid, uint64_t flags, void *context)
-{
-	return fid->ops->sync(fid, flags, context);
 }
 
 struct fi_alias {

@@ -198,7 +198,6 @@ static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_mr_close,
 	.bind = psmx_mr_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 };
 

@@ -51,13 +51,11 @@ static struct fi_ops X = {
 	.size = sizeof(struct fi_ops);,
 	.close = X,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
  */
 int fi_no_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
-int fi_no_sync(struct fid *fid, uint64_t flags, void *context);
 int fi_no_control(struct fid *fid, int command, void *arg);
 int fi_no_ops_open(struct fid *fid, const char *name,
 		uint64_t flags, void **ops, void *context);

@@ -1063,7 +1063,6 @@ struct fi_ops sock_rdm_ctx_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_rdm_ctx_close,
 	.bind = sock_rdm_ctx_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 };
 
@@ -1309,7 +1308,6 @@ struct fi_ops sock_rdm_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_rdm_ep_fi_close,
 	.bind = sock_rdm_ep_fi_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };

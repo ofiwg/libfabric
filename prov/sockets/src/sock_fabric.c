@@ -133,11 +133,6 @@ int sock_fabric_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return -FI_ENOSYS;
 }
 
-int sock_fabric_sync(struct fid *fid, uint64_t flags, void *context)
-{
-	return -FI_ENOSYS;
-}
-
 int sock_fabric_control(struct fid *fid, int command, void *arg)
 {
 	return -FI_ENOSYS;
@@ -153,7 +148,6 @@ static struct fi_ops sock_fab_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_fabric_close,
 	.bind = sock_fabric_bind,
-	.sync = sock_fabric_sync,
 	.control = sock_fabric_control,
 	.ops_open = sock_fabric_ops_open,
 };

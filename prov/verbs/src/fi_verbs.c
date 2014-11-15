@@ -1425,7 +1425,6 @@ static struct fi_ops fi_ibv_msg_ep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_msg_ep_close,
 	.bind = fi_ibv_msg_ep_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -1698,7 +1697,6 @@ static struct fi_ops fi_ibv_eq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_eq_close,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_ibv_eq_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -1995,7 +1993,6 @@ static struct fi_ops fi_ibv_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_cq_close,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_ibv_cq_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -2094,7 +2091,6 @@ static struct fi_ops fi_ibv_mr_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_mr_close,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -2182,7 +2178,6 @@ static struct fi_ops fi_ibv_fid_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_close,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -2292,7 +2287,6 @@ static struct fi_ops fi_ibv_pep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_pep_close,
 	.bind = fi_ibv_pep_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -2339,7 +2333,6 @@ static struct fi_ops fi_ibv_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_fabric_close,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };

@@ -41,10 +41,6 @@ int fi_no_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	return -FI_ENOSYS;
 }
-int fi_no_sync(struct fid *fid, uint64_t flags, void *context)
-{
-	return -FI_ENOSYS;
-}
 int fi_no_control(struct fid *fid, int command, void *arg)
 {
 	return -FI_ENOSYS;

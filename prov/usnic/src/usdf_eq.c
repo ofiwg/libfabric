@@ -492,7 +492,6 @@ static struct fi_ops usdf_eq_fi_ops = {
         .size = sizeof(struct fi_ops),
         .close = usdf_eq_close,
         .bind = fi_no_bind,
-        .sync = fi_no_sync,
         .control = usdf_eq_control,
         .ops_open = fi_no_ops_open,
 };
