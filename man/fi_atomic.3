@@ -1,7 +1,7 @@
-.TH "fi_atomic" "3" "2014\-11\-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_atomic 3 "2014\-11\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_atomic \- Remote atomic functions
+fi_atomic - Remote atomic functions
 .PP
 fi_atomic / fi_atomicv
 .PD 0
@@ -22,7 +22,7 @@ fi_compare_atomic / fi_compare_atomicv
 .P
 .PD
 fi_compare_atomicto / fi_compare_atomicmsg : Initiates an atomic
-compare\-operation to remote memory, retrieving the initial value.
+compare-operation to remote memory, retrieving the initial value.
 .PP
 fi_atomic_valid / fi_fetch_atomic_valid / fi_compare_atomic_valid :
 Indicates if a provider supports a specific atomic operation
@@ -154,7 +154,8 @@ Atomic transfers are used to read and update data located in remote
 memory regions in an atomic fashion.
 Conceptually, they are similar to local atomic operations of a similar
 nature (e.g.
-atomic increment, compare and swap, etc.).
+atomic increment, compare and swap, etc.)
+\&.
 Updates to remote data involve one of several operations on the data,
 and act on specific types of data, as listed below.
 As such, atomic transfers have knowledge of the format of the data being
@@ -169,41 +170,40 @@ types.
 A given atomic function may support any datatype, subject to provider
 implementation constraints.
 .PP
-\f[I]FI_INT8\f[] : Signed 8\-bit integer.
+\f[I]FI_INT8\f[] : Signed 8-bit integer.
 .PP
-\f[I]FI_UINT8\f[] : Unsigned 8\-bit integer.
+\f[I]FI_UINT8\f[] : Unsigned 8-bit integer.
 .PP
-\f[I]FI_INT16\f[] : Signed 16\-bit integer.
+\f[I]FI_INT16\f[] : Signed 16-bit integer.
 .PP
-\f[I]FI_UINT16\f[] : Unsigned 16\-bit integer.
+\f[I]FI_UINT16\f[] : Unsigned 16-bit integer.
 .PP
-\f[I]FI_INT32\f[] : Signed 32\-bit integer.
+\f[I]FI_INT32\f[] : Signed 32-bit integer.
 .PP
-\f[I]FI_UINT32\f[] : Unsigned 32\-bit integer.
+\f[I]FI_UINT32\f[] : Unsigned 32-bit integer.
 .PP
-\f[I]FI_INT64\f[] : Signed 64\-bit integer.
+\f[I]FI_INT64\f[] : Signed 64-bit integer.
 .PP
-\f[I]FI_UINT64\f[] : Unsigned 64\-bit integer.
+\f[I]FI_UINT64\f[] : Unsigned 64-bit integer.
 .PP
-\f[I]FI_FLOAT\f[] : A single\-precision floating point value (IEEE 754).
+\f[I]FI_FLOAT\f[] : A single-precision floating point value (IEEE 754).
 .PP
-\f[I]FI_DOUBLE\f[] : A double\-precision floating point value (IEEE
-754).
+\f[I]FI_DOUBLE\f[] : A double-precision floating point value (IEEE 754).
 .PP
-\f[I]FI_FLOAT_COMPLEX\f[] : An ordered pair of single\-precision
+\f[I]FI_FLOAT_COMPLEX\f[] : An ordered pair of single-precision floating
+point values (IEEE 754), with the first value representing the real
+portion of a complex number and the second representing the imaginary
+portion.
+.PP
+\f[I]FI_DOUBLE_COMPLEX\f[] : An ordered pair of double-precision
 floating point values (IEEE 754), with the first value representing the
 real portion of a complex number and the second representing the
 imaginary portion.
 .PP
-\f[I]FI_DOUBLE_COMPLEX\f[] : An ordered pair of double\-precision
-floating point values (IEEE 754), with the first value representing the
-real portion of a complex number and the second representing the
-imaginary portion.
-.PP
-\f[I]FI_LONG_DOUBLE\f[] : A double\-extended precision floating point
+\f[I]FI_LONG_DOUBLE\f[] : A double-extended precision floating point
 value (IEEE 754).
 .PP
-\f[I]FI_LONG_DOUBLE_COMPLEX\f[] : An ordered pair of double\-extended
+\f[I]FI_LONG_DOUBLE_COMPLEX\f[] : An ordered pair of double-extended
 precision floating point values (IEEE 754), with the first value
 representing the real portion of a complex number and the second
 representing the imaginary portion.
@@ -282,7 +282,7 @@ addr[i]\ =\ addr[i]\ &\ buf[i]
 \f[]
 .fi
 .PP
-\f[I]FI_LXOR\f[] : Logical exclusive\-OR (XOR)
+\f[I]FI_LXOR\f[] : Logical exclusive-OR (XOR)
 .IP
 .nf
 \f[C]
@@ -290,7 +290,7 @@ addr[i]\ =\ ((addr[i]\ &&\ !buf[i])\ ||\ (!addr[i]\ &&\ buf[i]))
 \f[]
 .fi
 .PP
-\f[I]FI_BXOR\f[] : Bitwise exclusive\-OR (XOR)
+\f[I]FI_BXOR\f[] : Bitwise exclusive-OR (XOR)
 .IP
 .nf
 \f[C]
@@ -379,8 +379,8 @@ addr[i]\ =\ (buf[i]\ &\ compare[i])\ |\ (addr[i]\ &\ ~compare[i])
 .fi
 .SS Base Atomic Functions
 .PP
-The base atomic functions \-\- fi_atomic, fi_atomicv, fi_atomicto,
-fi_atomicmsg \-\- are used to transmit data to a remote node, where the
+The base atomic functions -- fi_atomic, fi_atomicv, fi_atomicto,
+fi_atomicmsg -- are used to transmit data to a remote node, where the
 specified atomic operation is performed against the target data.
 The result of a base atomic function is stored at the remote memory
 region.
@@ -388,7 +388,7 @@ The main difference between atomic functions are the number and type of
 parameters that they accept as input.
 Otherwise, they perform the same general function.
 .PP
-The call fi_atomic transfers the data contained in the user\-specified
+The call fi_atomic transfers the data contained in the user-specified
 data buffer to a remote node.
 The local endpoint must be connected to a remote endpoint or destination
 before fi_atomic is called.
@@ -398,8 +398,7 @@ fi_atomic call completes asynchronously.
 The target buffer of a base atomic operation must allow for remote read
 an/or write access, as appropriate.
 .PP
-The fi_atomicv call adds support for a scatter\-gather list to
-fi_atomic.
+The fi_atomicv call adds support for a scatter-gather list to fi_atomic.
 The fi_atomicv transfers the set of data buffers referenced by the ioc
 parameter to the remote node for processing.
 .PP
@@ -427,7 +426,7 @@ The fi_atomicmsg function takes a struct fi_msg_atomic as input.
 .nf
 \f[C]
 struct\ fi_msg_atomic\ {
-\ \ \ \ const\ struct\ fi_ioc\ *msg_iov;\ /*\ local\ scatter\-gather\ array\ */
+\ \ \ \ const\ struct\ fi_ioc\ *msg_iov;\ /*\ local\ scatter-gather\ array\ */
 \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ **desc;\ \ \ /*\ local\ access\ descriptors\ */
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ iov_count;/*\ #\ elements\ in\ ioc\ */
 \ \ \ \ const\ void\ \ \ \ \ \ \ \ \ \ *addr;\ \ \ \ /*\ optional\ endpoint\ address\ */
@@ -435,7 +434,7 @@ struct\ fi_msg_atomic\ {
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ rma_iov_count;/*\ #\ elements\ in\ remote\ SGL\ */
 \ \ \ \ enum\ fi_datatype\ \ \ \ datatype;\ /*\ operand\ datatype\ */
 \ \ \ \ enum\ fi_op\ \ \ \ \ \ \ \ \ \ op;\ \ \ \ \ \ \ /*\ atomic\ operation\ */
-\ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *context;\ /*\ user\-defined\ context\ */
+\ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *context;\ /*\ user-defined\ context\ */
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ \ data;\ \ \ \ \ /*\ optional\ data\ */
 };
 
@@ -446,44 +445,44 @@ struct\ fi_rma_ioc\ {
 };
 \f[]
 .fi
-.SS Fetch\-Atomic Functions
+.SS Fetch-Atomic Functions
 .PP
-The fetch atomic functions \-\- fi_fetch_atomic, fi_fetch_atomicv,
-fi_fetch_atomicto, and fi_fetch atomicmsg \-\- behave similar to the
+The fetch atomic functions -- fi_fetch_atomic, fi_fetch_atomicv,
+fi_fetch_atomicto, and fi_fetch atomicmsg -- behave similar to the
 equivalent base atomic function.
 The difference between the fetch and base atomic calls are the fetch
 atomic routines return the initial value that was stored at the target
 to the user.
 The initial value is read into the user provided result buffer.
-The target buffer of fetch\-atomic operations must be enabled for remote
+The target buffer of fetch-atomic operations must be enabled for remote
 read access.
 .PP
 The following list of atomic operations are usable with both the base
 atomic and fetch atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
 FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR, FI_ATOMIC_READ, and
 FI_ATOMIC_WRITE.
-.SS Compare\-Atomic Functions
+.SS Compare-Atomic Functions
 .PP
-The compare atomic functions \-\- fi_compare_atomic, fi_compare_atomicv,
-fi_compare_atomicto, and fi_compare atomicmsg \-\- are used for
-operations that require comparing the target data against a value before
-performing a swap operation.
+The compare atomic functions -- fi_compare_atomic, fi_compare_atomicv,
+fi_compare_atomicto, and fi_compare atomicmsg -- are used for operations
+that require comparing the target data against a value before performing
+a swap operation.
 The compare atomic functions support: FI_CSWAP, FI_CSWAP_NE,
 FI_CSWAP_LE, FI_CSWAP_LT, FI_CSWAP_GE, FI_CSWAP_GT, and FI_MSWAP.
 .SS Atomic Valid Functions
 .PP
-The atomic valid functions \-\- fi_atomicvalid, fi_fetch_atomicvalid,
-and fi_compare_atomicvalid \-\-indicate which operations the local
-provider supports.
+The atomic valid functions -- fi_atomicvalid, fi_fetch_atomicvalid, and
+fi_compare_atomicvalid --indicate which operations the local provider
+supports.
 Needed operations not supported by the provider must be emulated by the
 application.
 Each valid call corresponds to a set of atomic functions.
 fi_atomicvalid checks whether a provider supports a specific base atomic
 operation for a given datatype and operation.
 fi_fetch_atomicvalid indicates if a provider supports a specific
-fetch\-atomic operation for a given datatype and operation.
+fetch-atomic operation for a given datatype and operation.
 And fi_compare_atomicvalid checks if a provider supports a specified
-compare\-atomic operation for a given datatype and operation.
+compare-atomic operation for a given datatype and operation.
 .PP
 If an operation is supported, an atomic valid call will return 0, along
 with a count of atomic data units that a single function call will
@@ -528,7 +527,7 @@ target process should be generated for the given operation.
 The remote endpoint must be configured with FI_REMOTE_SIGNAL, or this
 flag will be ignored by the target.
 .PP
-\f[I]FI_INJECT\f[] : Indicates that the outbound non\-const data buffers
+\f[I]FI_INJECT\f[] : Indicates that the outbound non-const data buffers
 (buf and compare parameters) should be returned to user immediately
 after the call returns, even if the operation is handled asynchronously.
 This may require that the underlying provider implementation copy the
@@ -541,10 +540,10 @@ On error, a negative value corresponding to fabric errno is returned.
 Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 .SH ERRORS
 .PP
-\f[I]\-FI_EOPNOTSUPP\f[] : The requested atomic operation is not
+\f[I]-FI_EOPNOTSUPP\f[] : The requested atomic operation is not
 supported on this endpoint.
 .PP
-\f[I]\-FI_EMSGSIZE\f[] : The number of atomic operations in a single
+\f[I]-FI_EMSGSIZE\f[] : The number of atomic operations in a single
 request exceeds that supported by the underlying provider.
 .SH NOTES
 .SH SEE ALSO
