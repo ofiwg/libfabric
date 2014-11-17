@@ -65,7 +65,7 @@
 
 static ssize_t
 usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
-	       size_t len, uint64_t flags)
+	        uint64_t flags)
 {
 	struct usdf_cq *cq;
 
@@ -74,10 +74,6 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 	// If top entry has no error, return 0
 	if (cq->cq_comp.uc_status == 0) {
 		return 0;
-	}
-
-	if (len < sizeof(*entry)) {
-		return -FI_ETOOSMALL;
 	}
 
 	entry->op_context = cq->cq_comp.uc_context;

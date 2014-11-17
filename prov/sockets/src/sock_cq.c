@@ -254,15 +254,12 @@ ssize_t sock_cq_read(struct fid_cq *cq, void *buf, size_t count)
 
 
 ssize_t sock_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
-			size_t len, uint64_t flags)
+			uint64_t flags)
 {
 	ssize_t num_read;
 	struct sock_cq *sock_cq;
 	
 	sock_cq = container_of(cq, struct sock_cq, cq_fid);
-	if(len < sizeof(struct fi_cq_err_entry))
-		return -FI_ETOOSMALL;
-
 	num_read = 0;
 	fastlock_acquire(&sock_cq->lock);
 

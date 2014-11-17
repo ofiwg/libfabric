@@ -156,7 +156,7 @@ usdf_eq_write_event(struct usdf_eq *eq, uint32_t event,
 }
 
 static ssize_t
-usdf_eq_readerr(struct fid_eq *feq, struct fi_eq_err_entry *entry, size_t len,
+usdf_eq_readerr(struct fid_eq *feq, struct fi_eq_err_entry *entry,
 		uint64_t flags)
 {
 	struct usdf_eq *eq;

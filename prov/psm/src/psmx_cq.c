@@ -511,14 +511,11 @@ static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t count)
 }
 
 static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
-			       size_t len, uint64_t flags)
+			       uint64_t flags)
 {
 	struct psmx_fid_cq *cq_priv;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
-
-	if (len < sizeof *buf)
-		return -FI_ETOOSMALL;
 
 	if (cq_priv->pending_error) {
 		memcpy(buf, &cq_priv->pending_error->cqe, sizeof *buf);

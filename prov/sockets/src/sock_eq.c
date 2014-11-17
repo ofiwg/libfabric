@@ -98,7 +98,7 @@ ssize_t sock_eq_read(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 }
 
 ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
-			size_t len, uint64_t flags)
+			uint64_t flags)
 {
 	int ret;
 	struct sock_eq *sock_eq;
@@ -115,11 +115,6 @@ ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 
 	list = sock_eq->err_list.list.next;
 	entry = container_of(list, struct sock_eq_entry, entry);
-
-	if(entry->len > len) {
-		ret = -FI_ETOOSMALL;
-		goto out;
-	}
 
 	ret = entry->len;
 	memcpy(buf, entry->event, entry->len);

@@ -1476,16 +1476,13 @@ err:
 
 static ssize_t
 fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
-		  size_t len, uint64_t flags)
+		  uint64_t flags)
 {
 	struct fi_ibv_eq *_eq;
 
 	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
 	if (!_eq->err.err)
 		return 0;
-
-	if (len < sizeof(*entry))
-		return -FI_EINVAL;
 
 	*entry = _eq->err;
 	_eq->err.err = 0;
@@ -1753,16 +1750,13 @@ err1:
 
 static ssize_t
 fi_ibv_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
-	       size_t len, uint64_t flags)
+		  uint64_t flags)
 {
 	struct fi_ibv_cq *_cq;
 
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 	if (!_cq->wc.status)
 		return 0;
-
-	if (len < sizeof(*entry))
-		return -FI_ETOOSMALL;
 
 	entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
 	entry->flags = 0;
