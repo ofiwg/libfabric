@@ -217,7 +217,7 @@ together when binding an endpoint to a completion domain CQ.
   generated.  In order for the application to ensure that all previous
   operations have completed, the application may call fi_sync.  The
   successful completion of fi_sync indicates that all prior operations
-  have completed successfully.  .RE
+  have completed successfully.
 
 An endpoint may also, or instead, be bound to a fabric counter.  When
 binding an endpoint to a counter, the following flags may be specified.
