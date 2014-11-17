@@ -235,7 +235,7 @@ int fi_no_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
 int fi_no_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		struct fid_poll **pollset);
 int fi_no_stx_context(struct fid_domain *domain, struct fi_tx_ctx_attr *attr,
-		struct fid_ep **tx_ep, void *context);
+		struct fid_stx **stx, void *context);
 int fi_no_srx_context(struct fid_domain *domain, struct fi_rx_ctx_attr *attr,
 		struct fid_ep **rx_ep, void *context);
 

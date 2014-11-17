@@ -56,7 +56,7 @@ int fi_rx_context(struct fid_ep *ep, int index,
     void *context);
 
 int fi_stx_context(struct fid_domain *domain,
-    struct fi_tx_ctx_attr *attr, struct fid_ep **tx_ep,
+    struct fi_tx_ctx_attr *attr, struct fid_stx **stx,
     void *context);
 
 int fi_srx_context(struct fid_domain *domain,

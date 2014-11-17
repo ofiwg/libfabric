@@ -137,6 +137,11 @@ struct fid_pep {
 	struct fi_ops_cm	*cm;
 };
 
+struct fid_stx {
+	struct fid		fid;
+	struct fi_ops_ep	ops;
+};
+
 #ifndef FABRIC_DIRECT
 
 static inline int
@@ -201,9 +206,9 @@ fi_rx_context(struct fid_ep *ep, int index, struct fi_rx_ctx_attr *attr,
 
 static inline int
 fi_stx_context(struct fid_domain *domain, struct fi_tx_ctx_attr *attr,
-	       struct fid_ep **tx_ep, void *context)
+	       struct fid_stx **stx, void *context)
 {
-	return domain->ops->stx_ctx(domain, attr, tx_ep, context);
+	return domain->ops->stx_ctx(domain, attr, stx, context);
 }
 
 static inline int

@@ -278,7 +278,7 @@ int fi_no_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 	return -FI_ENOSYS;
 }
 int fi_no_stx_context(struct fid_domain *domain, struct fi_tx_ctx_attr *attr,
-		struct fid_ep **tx_ep, void *context)
+		struct fid_stx **stx, void *context)
 {
 	return -FI_ENOSYS;
 }
