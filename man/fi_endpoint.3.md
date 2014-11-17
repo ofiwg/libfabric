@@ -636,13 +636,13 @@ A scalable endpoint is a communication portal that supports multiple
 transmit and receive contexts.  Scalable endpoints are loosely modeled
 after the networking concept of transmit/receive side scaling, also
 known as multi-queue.  By default, an endpoint is associated with a
-single transmit and receive context.  Support for scalable endpoints
-is domain specific.  Scalable endpoints may improve the performance of
-multi-threaded and parallel applications, by allowing threads to
-access independent transmit and receive queues.  A scalable endpoint
-has a single transport level address, which can reduce the memory
-requirements needed to store remote addressing data, versus using
-standard endpoints.
+single transmit and receive context (index 0). Support for scalable
+endpoints is domain specific.  Scalable endpoints may improve the
+performance of multi-threaded and parallel applications, by allowing
+threads to access independent transmit and receive queues.  A scalable
+endpoint has a single transport level address, which can reduce the
+memory requirements needed to store remote addressing data, versus
+using standard endpoints.
 
 ## fi_tx_context
 
