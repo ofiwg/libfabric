@@ -241,11 +241,6 @@ static struct fi_info *allocate_fi_info(enum fi_ep_type ep_type,
 	return _info;
 }
 
-void free_fi_info(struct fi_info *info)
-{
-	fi_freeinfo_internal(info);
-}
-
 int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 		     uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {

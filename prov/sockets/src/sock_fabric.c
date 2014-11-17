@@ -222,25 +222,10 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	return ret;
 }
 
-int sock_freeinfo(struct fi_info *info)
-{
-	if (info)
-		free(info);
-
-	return 0;
-}
-
-int sock_free_info(struct fi_info *info)
-{
-	free_fi_info(info);
-	return 0;
-}
-
 struct fi_provider sock_prov = {
 	.name = "IP",
 	.version = FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION), 
 	.getinfo = sock_getinfo,
-	.freeinfo = sock_free_info,
 	.fabric = sock_fabric,
 };
 
