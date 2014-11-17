@@ -126,9 +126,9 @@ int sockd_check_hints(struct fi_info *hints)
 		 * msg_order */
 	}
 
-	if ((hints->caps & SOCK_EP_CAP) != hints->caps) {
+	if ((hints->caps & SOCK_EP_DGRAM_CAP) != hints->caps) {
 		sock_debug(SOCK_ERROR,"[sockd] %s: hints->ep_cap=0x%llx, supported=0x%llx\n",
-				__func__, hints->caps, SOCK_EP_CAP);
+				__func__, hints->caps, SOCK_EP_DGRAM_CAP);
 		return -FI_ENODATA;
 	}
 
@@ -188,7 +188,7 @@ static struct fi_info* sockd_dupinfo(struct fi_info *hints)
 		fi->caps	= hints->caps;
 		fi->addr_format = hints->addr_format;
 	} else {
-		fi->caps	= SOCK_EP_CAP;
+		fi->caps	= SOCK_EP_DGRAM_CAP;
 		fi->addr_format = FI_SOCKADDR;
 	}
 
@@ -838,10 +838,10 @@ int sock_dgram_ep(struct fid_domain *domain, struct fi_info *info,
 
 	_ep->port_num		= ntohs(si_me.sin_port);
 
-	if(!(_ep->send_list = new_list(SOCK_EP_SNDQ_LEN)))
+	if(!(_ep->send_list = new_list(SOCK_CQ_DEF_SZ)))
 		goto err2;
 
-	if(!(_ep->recv_list = new_list(SOCK_EP_RCVQ_LEN)))
+	if(!(_ep->recv_list = new_list(SOCK_CQ_DEF_SZ)))
 		goto err3;
 
 /*	
