@@ -39,8 +39,9 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
-#include <rdma/fi_tagged.h>
 #include <shared.h>
+
+#define CNTR_TIMEOUT 10000	// 10000 ms
 
 static int custom;
 static int size_option;
@@ -48,6 +49,7 @@ static int iterations = 1000;
 static int transfer_size = 1000;
 static int max_credits = 128;
 static int credits = 128;
+static int send_count = 0;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *buf;
@@ -62,7 +64,7 @@ static char *port = NULL;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_ep *ep;
-static struct fid_cq *rcq, *scq;
+static struct fid_cntr *rcntr, *scntr;
 static struct fid_av *av;
 static struct fid_mr *mr;
 static void *local_addr, *remote_addr;
@@ -72,77 +74,57 @@ struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
 
-static uint64_t tag_data = 0;
-static uint64_t tag_control = 0x12345678;
-
-int wait_for_completion_tagged(struct fid_cq *cq, int num_completions)
+static int get_send_completions()
 {
 	int ret;
-	struct fi_cq_tagged_entry comp;
 
-	while (num_completions > 0) {
-		ret = fi_cq_read(cq, &comp, 1);
-		if (ret > 0) {
-			num_completions--;
-		} else if (ret < 0) {
-			FI_PRINTERR("fi_cq_read", ret);
-			return ret;
-		}
+	ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
+	if (ret < 0) {
+		FI_PRINTERR("fi_cntr_wait: scntr", ret);
+		return ret;
 	}
-	return 0;
+
+	credits = max_credits;
+
+	return ret;
 }
 
 static int send_xfer(int size)
 {
-	struct fi_cq_entry comp;
 	int ret;
 
-	while (!credits) {
-		ret = fi_cq_read(scq, &comp, 1);
-		if (ret > 0) {
-			goto post;
-		} else if (ret < 0) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(scq, "scq");
-			} else {
-				FI_PRINTERR("fi_cq_read: scq", ret);
-			}
+	if (!credits) {
+		ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
+		if (ret < 0) {
+			FI_PRINTERR("fi_cntr_wait: scntr", ret);
 			return ret;
 		}
 	}
 
 	credits--;
-post:
-	ret = fi_tsendto(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, 
-			tag_data, &fi_ctx_send);
-	if (ret)
-		FI_PRINTERR("fi_tsendto", ret);
+	ret = fi_sendto(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, &fi_ctx_send);
+	if (ret) {
+		FI_PRINTERR("fi_sendto", ret);
+		return ret;
+	}
+	send_count++;
 
 	return ret;
 }
 
 static int recv_xfer(int size)
 {
-	struct fi_cq_tagged_entry comp;
 	int ret;
 
-	do {
-		ret = fi_cq_read(rcq, &comp, 1);
-		if (ret < 0) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(rcq, "rcq");
-			} else {
-				FI_PRINTERR("fi_cq_read: rcq", ret);
-			}
-			return ret;
-		}
-	} while (!ret);
+	ret = fi_cntr_wait(rcntr, fi_cntr_read(rcntr) + 1, CNTR_TIMEOUT);
+	if (ret < 0) {
+		FI_PRINTERR("fi_cntr_wait: rcntr", ret);
+		return ret;
+	}
 
-	/* Posting recv for next send. Hence tag_data + 1 */
-	ret = fi_trecvfrom(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr, 
-			tag_data + 1, 0, &fi_ctx_recv);
+	ret = fi_recvfrom(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr, &fi_ctx_recv);
 	if (ret)
-		FI_PRINTERR("fi_trecvfrom", ret);
+		FI_PRINTERR("fi_recvfrom", ret);
 
 	return ret;
 }
@@ -151,30 +133,37 @@ static int send_msg(int size)
 {
 	int ret;
 
-	ret = fi_tsendto(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, 
-			tag_control, &fi_ctx_send);
+	ret = fi_sendto(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
+			&fi_ctx_send);
 	if (ret) {
-		FI_PRINTERR("fi_tsendto", ret);
+		FI_PRINTERR("fi_sendto", ret);
 		return ret;
 	}
+	send_count++;
 
-	ret = wait_for_completion_tagged(scq, 1);
+	ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
+	if (ret < 0) {
+		FI_PRINTERR("fi_cntr_wait: scntr", ret);
+	}
 
 	return ret;
 }
 
-static int recv_msg(int size)
+static int recv_msg(int size) 
 {
 	int ret;
 
-	ret = fi_trecv(ep, buf, size, fi_mr_desc(mr), tag_control, 0, 
-			&fi_ctx_recv);
+	ret = fi_recv(ep, buf, size, fi_mr_desc(mr), &fi_ctx_recv);
 	if (ret) {
-		FI_PRINTERR("fi_trecv", ret);
+		FI_PRINTERR("fi_recv", ret);
 		return ret;
 	}
 
-	ret = wait_for_completion_tagged(rcq, 1);
+	ret = fi_cntr_wait(rcntr, fi_cntr_read(rcntr) + 1, CNTR_TIMEOUT);
+	if (ret < 0) {
+		FI_PRINTERR("fi_cntr_wait: rcntr", ret);
+		return ret;
+	}
 
 	return ret;
 }
@@ -183,21 +172,15 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = wait_for_completion_tagged(scq, max_credits - credits);
-	if (ret) {
+	ret = get_send_completions();
+	if (ret)
 		return ret;
-	}
-	credits = max_credits;
 
 	ret = dst_addr ? send_xfer(16) : recv_xfer(16);
 	if (ret)
 		return ret;
 
-	ret = dst_addr ? recv_xfer(16) : send_xfer(16);
-
-	tag_data++;
-
-	return ret;
+	return dst_addr ? recv_xfer(16) : send_xfer(16);
 }
 
 static int run_test(void)
@@ -219,8 +202,6 @@ static int run_test(void)
 				 send_xfer(transfer_size);
 		if (ret)
 			goto out;
-
-		tag_data++;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
 	show_perf(test_name, transfer_size, iterations, &start, &end, 2);
@@ -234,14 +215,14 @@ static void free_ep_res(void)
 {
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rcntr->fid);
+	fi_close(&scntr->fid);
 	free(buf);
 }
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cq_attr cq_attr;
+	struct fi_cntr_attr cntr_attr;
 	struct fi_av_attr av_attr;
 	int ret;
 
@@ -252,19 +233,18 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = max_credits << 1;
-	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
+	memset(&cntr_attr, 0, sizeof cntr_attr);
+	cntr_attr.events = FI_CNTR_EVENTS_COMP;
+
+	ret = fi_cntr_open(dom, &cntr_attr, &scntr, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cntr_open: scntr", ret);
 		goto err1;
 	}
 
-	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	ret = fi_cntr_open(dom, &cntr_attr, &rcntr, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cntr_open: rcntr", ret);
 		goto err2;
 	}
 
@@ -290,9 +270,9 @@ static int alloc_ep_res(struct fi_info *fi)
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcq->fid);
+	fi_close(&rcntr->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&scntr->fid);
 err1:
 	free(buf);
 	return ret;
@@ -302,15 +282,15 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_bind(&ep->fid, &scq->fid, FI_SEND);
+	ret = fi_bind(&ep->fid, &scntr->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_bind: scq", ret);
+		FI_PRINTERR("fi_bind: scntr", ret);
 		return ret;
 	}
 
-	ret = fi_bind(&ep->fid, &rcq->fid, FI_RECV);
+	ret = fi_bind(&ep->fid, &rcntr->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_bind: rcq", ret);
+		FI_PRINTERR("fi_bind: rcntr", ret);
 		return ret;
 	}
 
@@ -414,7 +394,7 @@ static int init_av(void)
 			FI_PRINTERR("fi_getname", ret);
 			return ret;
 		}
-
+		
 		local_addr = malloc(addrlen);
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
 		if (ret) {
@@ -462,8 +442,8 @@ static int init_av(void)
 	}
 
 	/* Post first recv */
-	ret = fi_trecvfrom(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr, 
-			tag_data, 0, &fi_ctx_recv);
+	ret = fi_recvfrom(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+			&fi_ctx_recv);
 	if (ret)
 		FI_PRINTERR("fi_recvfrom", ret);
 
@@ -486,19 +466,16 @@ static int run(void)
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > size_option)
 				continue;
-			init_test(test_size[i].size, test_name, &transfer_size, 
-					&iterations);
+			init_test(test_size[i].size, test_name, &transfer_size, &iterations);
 			run_test();
 		}
 	} else {
 		ret = run_test();
 	}
 
-	ret = wait_for_completion_tagged(scq, max_credits - credits);
-	if (ret) {
+	ret = get_send_completions();
+	if (ret)
 		goto out;
-	}
-	credits = max_credits;
 
 out:
 	fi_close(&ep->fid);
@@ -553,7 +530,7 @@ int main(int argc, char **argv)
 	hints.domain_attr = &domain_hints;
 	hints.ep_attr = &ep_hints;
 	hints.ep_type = FI_EP_RDM;
-	hints.caps = FI_MSG | FI_TAGGED;
+	hints.caps = FI_MSG;
 	hints.mode = FI_CONTEXT;
 	hints.addr_format = FI_ADDR_UNSPEC;
 

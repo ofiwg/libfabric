@@ -657,7 +657,7 @@ int main(int argc, char **argv)
 	hints.ep_attr = &ep_hints;
 	hints.ep_type = FI_EP_MSG;
 	hints.caps = FI_MSG | FI_RMA;
-	hints.mode = FI_LOCAL_MR | FI_PROV_MR_KEY;
+	hints.mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints.addr_format = FI_SOCKADDR;
 
 	return run();
