@@ -572,8 +572,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				err = -ENOMEM;
 		}
 
-		if (req->ep->write_cntr &&
-		    !(req->ep->write_cntr_event_flag && req->no_event))
+		if (req->ep->write_cntr)
 			psmx_cntr_inc(req->ep->write_cntr);
 
 		req->ep->pending_atomics--;
@@ -606,8 +605,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				err = -ENOMEM;
 		}
 
-		if (req->ep->read_cntr &&
-		    !(req->ep->read_cntr_event_flag && req->no_event))
+		if (req->ep->read_cntr)
 			psmx_cntr_inc(req->ep->read_cntr);
 
 		req->ep->pending_atomics--;
@@ -715,14 +713,12 @@ gen_local_event:
 
 	switch (am_cmd) {
 	case PSMX_AM_REQ_ATOMIC_WRITE:
-		if (ep->write_cntr &&
-		    !(ep->write_cntr_event_flag && no_event))
+		if (ep->write_cntr)
 			psmx_cntr_inc(ep->write_cntr);
 		break;
 	case PSMX_AM_REQ_ATOMIC_READWRITE:
 	case PSMX_AM_REQ_ATOMIC_COMPWRITE:
-		if (ep->read_cntr &&
-		    !(ep->read_cntr_event_flag && no_event))
+		if (ep->read_cntr)
 			psmx_cntr_inc(ep->read_cntr);
 		break;
 	}

@@ -515,10 +515,6 @@ struct psmx_fid_ep {
 	struct psmx_fid_cntr	*read_cntr;
 	int			send_cq_event_flag:1;
 	int			recv_cq_event_flag:1;
-	int			send_cntr_event_flag:1;
-	int			recv_cntr_event_flag:1;
-	int			write_cntr_event_flag:1;
-	int			read_cntr_event_flag:1;
 	uint64_t		flags;
 	int			connected;
 	psm_epid_t		peer_psm_epid;

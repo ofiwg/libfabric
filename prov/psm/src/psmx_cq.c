@@ -290,38 +290,32 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			switch (PSMX_CTXT_TYPE(fi_context)) {
 			case PSMX_NOCOMP_SEND_CONTEXT:
 				tmp_ep->pending_sends--;
-				if (!tmp_ep->send_cntr_event_flag)
-					tmp_cntr = tmp_ep->send_cntr;
+				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_NOCOMP_RECV_CONTEXT:
-				if (!tmp_ep->recv_cntr_event_flag)
-					tmp_cntr = tmp_ep->recv_cntr;
+				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
 			case PSMX_NOCOMP_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
-				if (!tmp_ep->write_cntr_event_flag)
-					tmp_cntr = tmp_ep->write_cntr;
+				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
 			case PSMX_NOCOMP_READ_CONTEXT:
 				tmp_ep->pending_reads--;
-				if (!tmp_ep->read_cntr_event_flag)
-					tmp_cntr = tmp_ep->read_cntr;
+				tmp_cntr = tmp_ep->read_cntr;
 				break;
 
 			case PSMX_INJECT_CONTEXT:
 				tmp_ep->pending_sends--;
-				if (!tmp_ep->send_cntr_event_flag)
-					tmp_cntr = tmp_ep->send_cntr;
+				tmp_cntr = tmp_ep->send_cntr;
 				free(fi_context);
 				break;
 
 			case PSMX_INJECT_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
-				if (!tmp_ep->write_cntr_event_flag)
-					tmp_cntr = tmp_ep->write_cntr;
+				tmp_cntr = tmp_ep->write_cntr;
 				free(fi_context);
 				break;
 

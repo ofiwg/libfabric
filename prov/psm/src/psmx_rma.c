@@ -278,8 +278,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					err = -ENOMEM;
 			}
 
-			if (req->ep->write_cntr &&
-			    !(req->ep->write_cntr_event_flag && req->no_event))
+			if (req->ep->write_cntr)
 				psmx_cntr_inc(req->ep->write_cntr);
 
 			req->ep->pending_writes--;
@@ -316,8 +315,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					err = -ENOMEM;
 			}
 
-			if (req->ep->read_cntr &&
-			    !(req->ep->read_cntr_event_flag && req->no_event))
+			if (req->ep->read_cntr)
 				psmx_cntr_inc(req->ep->read_cntr);
 
 			req->ep->pending_reads--;
@@ -417,15 +415,13 @@ static ssize_t psmx_rma_self(int am_cmd,
 
 	switch (am_cmd) {
 	case PSMX_AM_REQ_WRITE:
-		if (ep->write_cntr &&
-		    !(ep->write_cntr_event_flag && no_event))
+		if (ep->write_cntr)
 			psmx_cntr_inc(ep->write_cntr);
 		ep->pending_writes--;
 		break;
 
 	case PSMX_AM_REQ_READ:
-		if (ep->read_cntr &&
-		    !(ep->read_cntr_event_flag && no_event))
+		if (ep->read_cntr)
 			psmx_cntr_inc(ep->read_cntr);
 		ep->pending_reads--;
 		break;

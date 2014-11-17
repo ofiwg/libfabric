@@ -171,7 +171,7 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		cq = container_of(bfid, struct psmx_fid_cq, cq.fid);
 		if (ep->domain != cq->domain)
 			return -EINVAL;
-		if (flags & (FI_SEND | FI_READ | FI_WRITE)) {
+		if (flags & FI_SEND) {
 			ep->send_cq = cq;
 			if (flags & FI_EVENT)
 				ep->send_cq_event_flag = 1;
@@ -188,26 +188,14 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		cntr = container_of(bfid, struct psmx_fid_cntr, cntr.fid);
 		if (ep->domain != cntr->domain)
 			return -EINVAL;
-		if (flags & FI_SEND) {
+		if (flags & FI_SEND)
 			ep->send_cntr = cntr;
-			if (flags & FI_EVENT)
-				ep->send_cntr_event_flag = 1;
-		}
-		if (flags & FI_RECV){
+		if (flags & FI_RECV)
 			ep->recv_cntr = cntr;
-			if (flags & FI_EVENT)
-				ep->recv_cntr_event_flag = 1;
-		}
-		if (flags & FI_WRITE) {
+		if (flags & FI_WRITE)
 			ep->write_cntr = cntr;
-			if (flags & FI_EVENT)
-				ep->write_cntr_event_flag = 1;
-		}
-		if (flags & FI_READ){
+		if (flags & FI_READ)
 			ep->read_cntr = cntr;
-			if (flags & FI_EVENT)
-				ep->read_cntr_event_flag = 1;
-		}
 		break;
 
 	case FI_CLASS_AV:
