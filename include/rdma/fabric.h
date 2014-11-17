@@ -250,6 +250,7 @@ struct fi_domain_attr {
 	enum fi_progress	data_progress;
 	size_t			mr_key_size;
 	size_t			cq_data_size;
+	size_t			cq_cnt;
 	size_t			ep_cnt;
 	size_t			tx_ctx_cnt;
 	size_t			rx_ctx_cnt;
