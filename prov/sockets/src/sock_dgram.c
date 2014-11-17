@@ -594,20 +594,6 @@ static int sockd_cm_leave(struct fid_ep *ep, void *addr, fi_addr_t fi_addr,
 /* sockd_ops_msg */
 
 static ssize_t sockd_msg_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-		void *context)
-{
-	errno = FI_ENOSYS;
-	return -errno;
-}
-
-static ssize_t sockd_msg_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, void *context)
-{
-	errno = FI_ENOSYS;
-	return -errno;
-}
-
-static ssize_t sockd_msg_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
 		fi_addr_t src_addr, void *context)
 {
 	struct sock_ep *sock_ep;
@@ -646,6 +632,13 @@ static ssize_t sockd_msg_recvfrom(struct fid_ep *ep, void *buf, size_t len, void
 	return 0;
 }
 
+static ssize_t sockd_msg_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+			       size_t count, fi_addr_t src_addr, void *context)
+{
+	errno = FI_ENOSYS;
+	return -errno;
+}
+
 static ssize_t sockd_msg_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		uint64_t flags)
 {
@@ -654,20 +647,6 @@ static ssize_t sockd_msg_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 }
 
 static ssize_t sockd_msg_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		void *context)
-{
-	errno = FI_ENOSYS;
-	return -errno;
-}
-
-static ssize_t sockd_msg_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, void *context)
-{
-	errno = FI_ENOSYS;
-	return -errno;
-}
-
-static ssize_t sockd_msg_sendto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, void *context)
 {
 	struct sock_ep *sock_ep;
@@ -706,6 +685,13 @@ static ssize_t sockd_msg_sendto(struct fid_ep *ep, const void *buf, size_t len, 
 	return 0;
 }
 
+static ssize_t sockd_msg_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+				size_t count, fi_addr_t dest_addr, void *context)
+{
+	errno = FI_ENOSYS;
+	return -errno;
+}
+
 static ssize_t sockd_msg_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		uint64_t flags)
 {
@@ -713,28 +699,15 @@ static ssize_t sockd_msg_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	return -errno;
 }
 
-static ssize_t sockd_msg_inject(struct fid_ep *ep, const void *buf, size_t len)
-{
-	errno = FI_ENOSYS;
-	return -errno;
-}
-
-static ssize_t sockd_msg_injectto(struct fid_ep *ep, const void *buf, size_t len,
-		fi_addr_t dest_addr)
+static ssize_t sockd_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
+				fi_addr_t dest_addr)
 {
 	errno = FI_ENOSYS;
 	return -errno;
 }
 
 static ssize_t sockd_msg_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		uint64_t data, void *context)
-{
-	errno = FI_ENOSYS;
-	return -errno;
-}
-
-static ssize_t sockd_msg_senddatato(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		uint64_t data, fi_addr_t dest_addr, void *context)
+				  uint64_t data, fi_addr_t dest_addr, void *context)
 {
 	errno = FI_ENOSYS;
 	return -errno;
@@ -775,16 +748,12 @@ static struct fi_ops_msg sockd_ops_msg = {
 	.size 		= sizeof(struct fi_ops_msg),
 	.recv 		= sockd_msg_recv,
 	.recvv 		= sockd_msg_recvv,
-	.recvfrom 	= sockd_msg_recvfrom,
 	.recvmsg 	= sockd_msg_recvmsg,
 	.send 		= sockd_msg_send,
 	.sendv 		= sockd_msg_sendv,
-	.sendto 	= sockd_msg_sendto,
 	.sendmsg 	= sockd_msg_sendmsg,
 	.inject 	= sockd_msg_inject,
-	.injectto 	= sockd_msg_injectto,
 	.senddata 	= sockd_msg_senddata,
-	.senddatato 	= sockd_msg_senddatato
 };
 
 static inline int _sock_ep_dgram_progress(struct sock_ep *ep, struct sock_cq *cq)
