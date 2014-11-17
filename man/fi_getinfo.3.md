@@ -137,17 +137,21 @@ struct fi_info {
 
 *src_addrlen - source address length*
 : Indicates the length of the source address (must be specified if
-  *src_addr* is specified).
+  *src_addr* is specified).  This field will be ignored in hints if
+  FI_SOURCE is specified.
 
 *dest_addrlen - destination address length*
 : Indicates the length of the destination address (must be specified
-  if *dst_addr* is specified).
+  if *dst_addr* is specified).  This field will be ignored in hints
+  unless FI_SOURCE is specified.
 
 *src_addr - source address*
-: If specified, indicates the source address.
+: If specified, indicates the source address.  This field will be
+  ignored in hints if FI_SOURCE is specified.
 
 *dest_addr - destination address*
-: If specified, indicates the destination address.
+: If specified, indicates the destination address.  This field will be
+  ignored in hints unless FI_SOURCE is specified.
 
 *connreq - connection request*
 : References a specific connection request, otherwise the field must
