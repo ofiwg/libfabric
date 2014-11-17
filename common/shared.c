@@ -185,7 +185,7 @@ void cq_readerr(struct fid_cq *cq, char *cq_str)
 	const char *err_str;
 	int ret;
 
-	ret = fi_cq_readerr(cq, &cq_err, sizeof(cq_err), 0);
+	ret = fi_cq_readerr(cq, &cq_err, 0);
 	if (ret < 0)
 		FI_PRINTERR("fi_cq_readerr", ret);
 
