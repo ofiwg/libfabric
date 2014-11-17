@@ -171,6 +171,12 @@ fi_domain(struct fid_fabric *fabric, struct fi_info *info,
 }
 
 static inline int
+fi_domain_bind(struct fid_domain *domain, struct fid *fid, uint64_t flags)
+{
+	return domain->fid.ops->bind(&domain->fid, fid, flags);
+}
+
+static inline int
 fi_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	   struct fid_cq **cq, void *context)
 {
@@ -208,6 +214,12 @@ fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	   struct fid_av **av, void *context)
 {
 	return domain->ops->av_open(domain, attr, av, context);
+}
+
+static inline int
+fi_av_bind(struct fid_av *av, struct fid *fid, uint64_t flags)
+{
+	return av->fid.ops->bind(&av->fid, fid, flags);
 }
 
 static inline int
