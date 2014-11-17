@@ -1814,7 +1814,11 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 			reset = 0;
 			continue;
 		}
-		fi_poll_fd(_cq->channel->fd, timeout);
+		ret = fi_poll_fd(_cq->channel->fd, timeout);
+		if (ret == 0)
+			return -FI_ETIMEDOUT;
+		else if (ret < 0)
+			break;
 	}
 
 	return cur ? cur : ret;
