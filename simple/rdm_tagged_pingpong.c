@@ -478,8 +478,6 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	print_test_hdr();
-
 	ret = init_av();
 	if (ret)
 		goto out;

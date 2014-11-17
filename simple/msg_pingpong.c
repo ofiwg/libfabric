@@ -417,8 +417,10 @@ static int client_connect(void)
 	if (src_addr) {
 		ret = getaddr(src_addr, NULL, (struct sockaddr **) &hints.src_addr,
 			      (socklen_t *) &hints.src_addrlen);
-		if (ret)
+		if (ret) {
 			printf("source address error %s\n", gai_strerror(ret));
+			return ret;
+		}
 	}
 
 	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, &hints, &fi);
@@ -588,7 +590,7 @@ int main(int argc, char **argv)
 	hints.ep_attr = &ep_hints;
 	hints.ep_type = FI_EP_MSG;
 	hints.caps = FI_MSG;
-	hints.mode = FI_LOCAL_MR | FI_PROV_MR_KEY;
+	hints.mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints.addr_format = FI_SOCKADDR;
 
 	return run();

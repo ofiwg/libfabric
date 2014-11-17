@@ -554,7 +554,7 @@ int main(int argc, char *argv[])
 	/* Infiniband provider */
 	hints.ep_type = FI_EP_MSG;
 	hints.caps = FI_MSG;
-	hints.mode = FI_LOCAL_MR | FI_PROV_MR_KEY;
+	hints.mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints.addr_format = FI_SOCKADDR;
 
 	asprintf(&service, "%d", port);
