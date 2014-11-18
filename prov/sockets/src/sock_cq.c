@@ -373,7 +373,7 @@ static int sock_cq_verify_attr(struct fi_cq_attr *attr)
 }
 
 static struct fi_cq_attr _sock_cq_def_attr = {
-	.size = SOCK_CQ_DEF_LEN,
+	.size = SOCK_CQ_DEF_SZ,
 	.flags = 0,
 	.format = FI_CQ_FORMAT_CONTEXT,
 	.wait_obj = FI_WAIT_FD,

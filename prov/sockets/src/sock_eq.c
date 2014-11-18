@@ -269,7 +269,7 @@ static int _sock_eq_verify_attr(struct fi_eq_attr *attr)
 }
 
 static struct fi_eq_attr _sock_eq_def_attr ={
-	.size = SOCK_EQ_DEF_LEN,
+	.size = SOCK_EQ_DEF_SZ,
 	.flags = 0,
 	.wait_obj = FI_WAIT_FD,
 	.signaling_vector = 0,
