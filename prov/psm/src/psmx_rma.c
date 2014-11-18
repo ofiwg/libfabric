@@ -116,6 +116,8 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				}
 				if (mr->cntr)
 					psmx_cntr_inc(mr->cntr);
+				if (mr->domain->rma_ep->remote_write_cntr)
+					psmx_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
 			}
 		}
 		if (eom || op_error) {
@@ -213,6 +215,8 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			}
 			if (mr->cntr)
 				psmx_cntr_inc(mr->cntr);
+			if (mr->domain->rma_ep->remote_read_cntr)
+				psmx_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
 		}
 		break;
 
@@ -337,6 +341,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 {
 	struct psmx_fid_mr *mr;
 	struct psmx_cq_event *event;
+	struct psmx_fid_cntr *cntr;
 	int no_event;
 	int err = 0;
 	int op_error = 0;
@@ -364,10 +369,12 @@ static ssize_t psmx_rma_self(int am_cmd,
 		if (am_cmd == PSMX_AM_REQ_WRITE) {
 			dst = (void *)addr;
 			src = buf;
+			cntr = mr->domain->rma_ep->remote_write_cntr;
 		}
 		else {
 			dst = buf;
 			src = (void *)addr;
+			cntr = mr->domain->rma_ep->remote_read_cntr;
 		}
 
 		memcpy(dst, src, len);
@@ -391,6 +398,8 @@ static ssize_t psmx_rma_self(int am_cmd,
 		}
 		if (mr->cntr)
 			psmx_cntr_inc(mr->cntr);
+		if (cntr)
+			psmx_cntr_inc(cntr);
 	}
 
 	no_event = (flags & FI_INJECT) ||

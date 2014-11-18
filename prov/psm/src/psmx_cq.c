@@ -367,7 +367,9 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						psmx_cq_enqueue_event(mr->cq, event);
 				  }
 				  if (mr->cntr)
-					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
+					psmx_cntr_inc(mr->cntr);
+				  if (mr->domain->rma_ep->remote_write_cntr)
+					psmx_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
 				  if (!cq || mr->cq == cq)
 					return 1;
 				  continue;
@@ -390,7 +392,9 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						psmx_cq_enqueue_event(mr->cq, event);
 				  }
 				  if (mr->cntr)
-					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
+					psmx_cntr_inc(mr->cntr);
+				  if (mr->domain->rma_ep->remote_read_cntr)
+					psmx_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
 				  if (!cq || mr->cq == cq)
 					return 1;
 				  continue;
@@ -409,7 +413,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			}
 
 			if (tmp_cntr)
-				tmp_cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
+				psmx_cntr_inc(tmp_cntr);
 
 			if (multi_recv) {
 				struct psmx_multi_recv *req;

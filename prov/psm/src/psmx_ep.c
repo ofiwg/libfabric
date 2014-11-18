@@ -199,6 +199,10 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			ep->write_cntr = cntr;
 		if (flags & FI_READ)
 			ep->read_cntr = cntr;
+		if (flags & FI_REMOTE_WRITE)
+			ep->remote_write_cntr = cntr;
+		if (flags & FI_REMOTE_READ)
+			ep->remote_read_cntr = cntr;
 		break;
 
 	case FI_CLASS_AV:

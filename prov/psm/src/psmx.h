@@ -513,6 +513,8 @@ struct psmx_fid_ep {
 	struct psmx_fid_cntr	*recv_cntr;
 	struct psmx_fid_cntr	*write_cntr;
 	struct psmx_fid_cntr	*read_cntr;
+	struct psmx_fid_cntr	*remote_write_cntr;
+	struct psmx_fid_cntr	*remote_read_cntr;
 	int			send_cq_event_flag:1;
 	int			recv_cq_event_flag:1;
 	uint64_t		flags;
