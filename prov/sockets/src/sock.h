@@ -96,11 +96,15 @@ struct sock_conn {
 };
 
 struct sock_domain {
+	struct fi_info info;
 	struct fid_domain dom_fid;
-	uint64_t		mode;
 	struct sock_fabric *fab;
 	fastlock_t lock;
 	atomic_t ref;
+
+	struct sock_eq *eq;
+	struct sock_eq *mr_eq;
+
 	struct sock_pe *pe;
 	struct index_map mr_idm;
 };
