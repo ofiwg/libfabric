@@ -146,6 +146,9 @@ static int psmx_ep_close(fid_t fid)
 	struct psmx_fid_ep *ep;
 
 	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
+
+	psmx_domain_disable_ep(ep->domain, ep);
+
 	free(ep);
 
 	return 0;
@@ -378,7 +381,9 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (ep_cap & FI_ATOMICS)
 		ep_priv->ep.atomic = &psmx_atomic_ops;
 
-	err = psmx_domain_enable_features(domain_priv, info->caps);
+	ep_priv->caps = ep_cap;
+
+	err = psmx_domain_enable_ep(domain_priv, ep_priv);
 	if (err) {
 		free(ep_priv);
 		return err;
