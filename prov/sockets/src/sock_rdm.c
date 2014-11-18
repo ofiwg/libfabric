@@ -267,8 +267,8 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 
 	if (hints) {
 		if ((SOCK_EP_RDM_CAP | hints->caps) != SOCK_EP_RDM_CAP) {
-			sock_debug(SOCK_INFO, 
-				   "RDM: Cannot support requested options!\n");
+			SOCK_LOG_INFO(
+				   "Cannot support requested options!\n");
 			return -FI_ENODATA;
 		}
 		
@@ -305,7 +305,7 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 		ret = getaddrinfo(node, service, &sock_hints, &result);
 		if (ret != 0) {
 			ret = FI_ENODATA;
-			sock_debug(SOCK_INFO, "RDM: getaddrinfo failed!\n");
+			SOCK_LOG_INFO("getaddrinfo failed!\n");
 			goto err;
 		}
 		memcpy(src_addr, result->ai_addr, sizeof(struct sockaddr_in));
@@ -315,15 +315,15 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 			int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
 			if (0 != connect(udp_sock, result->ai_addr, 
 					 result->ai_addrlen)) {
-				sock_debug(SOCK_ERROR, 
-					   "RDM: Failed to get dest_addr\n");
+				SOCK_LOG_ERROR(
+					   "Failed to get dest_addr\n");
 				ret = FI_ENODATA;
 				goto err;
 			}
 			if (0!= getsockname(udp_sock, (struct sockaddr*)dest_addr, 
 					    &len)) {
-				sock_debug(SOCK_ERROR, 
-					   "RDM: Failed to get dest_addr\n");
+				SOCK_LOG_ERROR(
+					   "Failed to get dest_addr\n");
 				close(udp_sock);
 				ret = FI_ENODATA;
 				goto err;
@@ -348,7 +348,7 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 err:
 	free(src_addr);
 	free(dest_addr);
-	sock_debug(SOCK_ERROR, "RDM: fi_getinfo failed\n");
+	SOCK_LOG_ERROR("fi_getinfo failed\n");
 	return ret;	
 }
 
@@ -921,7 +921,7 @@ int	sock_rdm_ctx_close(struct fid *fid)
 		break;
 
 	default:
-		sock_debug(SOCK_ERROR, "RDM: Invalid fid\n");
+		SOCK_LOG_ERROR("Invalid fid\n");
 		return -FI_EINVAL;
 	}
 	return 0;
@@ -988,7 +988,7 @@ int	sock_rdm_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 			
 	default:
-		sock_debug(SOCK_ERROR, "RDM: Invalid fid\n");
+		SOCK_LOG_ERROR("Invalid fid\n");
 		return -FI_EINVAL;
 	}
 	return 0;
@@ -1037,7 +1037,7 @@ int	sock_rdm_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 			
 	default:
-		sock_debug(SOCK_ERROR, "RDM: Invalid fid\n");
+		SOCK_LOG_ERROR("Invalid fid\n");
 		return -FI_EINVAL;
 	}
 	return 0;
@@ -1053,7 +1053,7 @@ int	sock_rdm_ctx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return sock_rdm_ctx_bind_cntr(fid, bfid, flags);
 
 	default:
-		sock_debug(SOCK_ERROR, "RDM: Invalid bind()\n");
+		SOCK_LOG_ERROR("Invalid bind()\n");
 		return -FI_EINVAL;
 	}
 
@@ -1084,7 +1084,7 @@ int sock_rdm_ctx_enable(struct fid_ep *ep)
 		return 0;
 
 	default:
-		sock_debug(SOCK_ERROR, "RDM: Invalid CTX\n");
+		SOCK_LOG_ERROR("Invalid CTX\n");
 		break;
 	}
 	return -FI_EINVAL;
@@ -1634,8 +1634,8 @@ int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	if (info) {
 		ret = sock_verify_info(info);
 		if (ret) {
-			sock_debug(SOCK_INFO, 
-				   "RDM: Cannot support requested options!\n");
+			SOCK_LOG_INFO(
+				   "Cannot support requested options!\n");
 			return -FI_EINVAL;
 		}
 	}

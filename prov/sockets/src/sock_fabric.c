@@ -254,9 +254,9 @@ static void __attribute__((constructor)) sock_ini(void)
 {
 	char *tmp = getenv("SFI_SOCK_DEBUG_LEVEL");
 	if (tmp) {
-		sock_debug_level = atoi(tmp);
+		sock_log_level = atoi(tmp);
 	} else {
-		sock_debug_level = SOCK_ERROR;
+		sock_log_level = SOCK_ERROR;
 	}
 
 	(void) fi_register(&sock_prov);
