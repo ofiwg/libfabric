@@ -70,7 +70,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 	case FI_THREAD_PROGRESS:
 		break;
 	default:
-		sock_debug(SOCK_INFO, "Invalid threading model!\n");
+		SOCK_LOG_INFO("Invalid threading model!\n");
 		return -FI_ENODATA;
 	}
 
@@ -81,7 +81,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 
 	case FI_PROGRESS_MANUAL:
 	default:
-		sock_debug(SOCK_INFO, "Control progress mode not supported!\n");
+		SOCK_LOG_INFO("Control progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
 
@@ -92,7 +92,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 
 	case FI_PROGRESS_MANUAL:
 	default:
-		sock_debug(SOCK_INFO, "Data progress mode not supported!\n");
+		SOCK_LOG_INFO("Data progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
 	
@@ -315,7 +315,7 @@ int _sock_verify_domain_attr(struct fi_domain_attr *attr)
 	case FI_THREAD_PROGRESS:
 		break;
 	default:
-		sock_debug(SOCK_INFO, "Invalid threading model!\n");
+		SOCK_LOG_INFO("Invalid threading model!\n");
 		return -FI_ENODATA;
 	}
 
@@ -326,7 +326,7 @@ int _sock_verify_domain_attr(struct fi_domain_attr *attr)
 
 	case FI_PROGRESS_MANUAL:
 	default:
-		sock_debug(SOCK_INFO, "Control progress mode not supported!\n");
+		SOCK_LOG_INFO("Control progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
 
@@ -337,7 +337,7 @@ int _sock_verify_domain_attr(struct fi_domain_attr *attr)
 
 	case FI_PROGRESS_MANUAL:
 	default:
-		sock_debug(SOCK_INFO, "Data progress mode not supported!\n");
+		SOCK_LOG_INFO("Data progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
 
