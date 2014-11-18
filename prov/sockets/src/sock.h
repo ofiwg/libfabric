@@ -111,6 +111,7 @@ struct sock_cntr {
 	uint64_t		value;
 	uint64_t		threshold;
 	atomic_t		ref;
+	atomic_t err_cnt;
 	pthread_cond_t		cond;
 	pthread_mutex_t		mut;
 };
