@@ -54,8 +54,10 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
+
 #include "fi.h"
 #include "fi_enosys.h"
+#include "prov.h"
 
 #define PROV_NAME "verbs"
 #define PROV_VERS FI_VERSION(0,7)
@@ -2383,11 +2385,11 @@ static struct fi_provider fi_ibv_prov = {
 	.fabric = fi_ibv_fabric,
 };
 
-static void __attribute__((constructor)) fi_ibv_ini(void)
+VERBS_INI
 {
 	(void) fi_register(&fi_ibv_prov);
 }
 
-static void __attribute__((destructor)) fi_ibv_fini(void)
+VERBS_FINI
 {
 }

@@ -32,6 +32,7 @@
 
 #include "psmx.h"
 #include "fi.h"
+#include "prov.h"
 
 struct psmx_env psmx_env;
 
@@ -320,7 +321,7 @@ static int psmx_get_int_env(char *name, int default_value)
 	return default_value;
 }
 
-static void __attribute__((constructor)) psmx_ini(void)
+PSM_INI
 {
 	int major, minor;
 	int check_version;
@@ -357,7 +358,7 @@ static void __attribute__((constructor)) psmx_ini(void)
 	(void) fi_register(&psmx_prov);
 }
 
-static void __attribute__((destructor)) psmx_fini(void)
+PSM_FINI
 {
 	psm_finalize();
 }

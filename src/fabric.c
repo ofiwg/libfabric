@@ -44,6 +44,7 @@
 
 #include <rdma/fi_errno.h>
 #include "fi.h"
+#include "prov.h"
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
@@ -57,10 +58,11 @@ struct fi_prov {
 	struct fi_provider	*provider;
 };
 
-static struct fi_prov *prov_head, *prov_tail;
-
 static struct fi_prov *fi_getprov(const char *prov_name);
 
+static struct fi_prov *prov_head, *prov_tail;
+static int init = 0;
+static pthread_mutex_t ini_lock = PTHREAD_MUTEX_INITIALIZER;
 
 __attribute__((visibility ("default")))
 int fi_register_provider_(uint32_t fi_version, struct fi_provider *provider)
@@ -100,7 +102,6 @@ int fi_register_provider_(uint32_t fi_version, struct fi_provider *provider)
 }
 default_symver(fi_register_provider_, fi_register_provider);
 
-#ifdef HAVE_LIBDL
 static int lib_filter(const struct dirent *entry)
 {
 	size_t l = strlen(entry->d_name);
@@ -112,12 +113,35 @@ static int lib_filter(const struct dirent *entry)
 		return 0;
 }
 
-static void __attribute__((constructor)) fi_ini(void)
+static void fi_ini(void)
 {
+	pthread_mutex_lock(&ini_lock);
+
+	if (init)
+		goto unlock;
+
+#if (HAVE_VERBS) && !(HAVE_VERBS_DL)
+	VERBS_C();
+#endif
+
+#if (HAVE_PSM) && !(HAVE_PSM_DL)
+	PSM_C();
+#endif
+
+#if (HAVE_SOCKETS) && !(HAVE_SOCKETS_DL)
+	SOCKETS_C();
+#endif
+
+#if (HAVE_USNIC) && !(HAVE_USNIC_DL)
+	USNIC_C();
+#endif
+
+#ifdef HAVE_LIBDL
 	struct dirent **liblist;
 	int n, want_warn = 0;
 	char *lib, *extdir = getenv("FI_EXTDIR");
 	void *dlhandle;
+	void (*inif)(void);
 
 	if (extdir) {
 		/* Warn if user specified $FI_EXTDIR, but there's a
@@ -130,7 +154,7 @@ static void __attribute__((constructor)) fi_ini(void)
 	/* If dlopen fails, assume static linking and just return
 	   without error */
 	if (dlopen(NULL, RTLD_NOW) == NULL) {
-		return;
+		goto unlock;
 	}
 
 	n = scandir(extdir, &liblist, lib_filter, NULL);
@@ -139,13 +163,14 @@ static void __attribute__((constructor)) fi_ini(void)
 			FI_WARN("scandir error reading %s: %s\n",
 				extdir, strerror(errno));
 		}
-		return;
+		goto unlock;
 	}
 
 	while (n--) {
 		if (asprintf(&lib, "%s/%s", extdir, liblist[n]->d_name) < 0) {
 			FI_WARN("asprintf failed to allocate memory\n");
-			return;
+			free(liblist[n]);
+			goto unlock;
 		}
 
 		dlhandle = dlopen(lib, RTLD_NOW);
@@ -154,11 +179,21 @@ static void __attribute__((constructor)) fi_ini(void)
 
 		free(liblist[n]);
 		free(lib);
+
+		*(void **) (&inif) = dlsym(dlhandle, "fi_prov_ini");
+
+		if (inif == NULL)
+			FI_WARN("dlsym: %s\n", dlerror());
+		else
+			(inif)();
 	}
 
 	free(liblist);
-}
 #endif
+	init = 1;
+	unlock:
+		pthread_mutex_unlock(&ini_lock);
+}
 
 static void __attribute__((destructor)) fi_fini(void)
 {
@@ -183,6 +218,9 @@ int fi_getinfo_(uint32_t version, const char *node, const char *service,
 	struct fi_prov *prov;
 	struct fi_info *tail, *cur;
 	int ret = -ENOSYS;
+
+	if (!init)
+		fi_ini();
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
@@ -344,6 +382,9 @@ int fi_fabric_(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *co
 
 	if (!attr || !attr->prov_name || !attr->name)
 		return -FI_EINVAL;
+
+	if (!init)
+		fi_ini();
 
 	prov = fi_getprov(attr->prov_name);
 	if (!prov || !prov->provider->fabric)

@@ -176,10 +176,7 @@ static inline int atomic_get(atomic_t *atomic)
 
 #endif // HAVE_ATOMICS
 
-
 /* non exported symbols */
-int fi_init(void);
-
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
 int fi_poll_fd(int fd, int timeout);
 int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout);

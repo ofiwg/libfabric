@@ -60,6 +60,7 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 #include "fi_enosys.h"
+#include "prov.h"
 
 #include "usnic_direct.h"
 #include "libnl_utils.h"
@@ -773,13 +774,11 @@ static struct fi_provider usdf_ops = {
 	.fabric = usdf_fabric_open,
 };
 
-static void __attribute__((constructor))
-usdf_ini(void)
+USNIC_INI
 {
 	(void) fi_register(&usdf_ops);
 }
 
-static void __attribute__((destructor)) 
-usdf_fini(void)
+USNIC_FINI
 {
 }
