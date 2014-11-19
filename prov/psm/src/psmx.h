@@ -262,10 +262,10 @@ struct psmx_fid_domain {
 	psm_mq_t		psm_mq;
 	pthread_t		ns_thread;
 	int			ns_port;
-	int			tagged_used:1;
-	int			msg_used:1;
-	int			rma_used:1;
-	int			atomics_used:1;
+	struct psmx_fid_ep	*tagged_ep;
+	struct psmx_fid_ep	*msg_ep;
+	struct psmx_fid_ep	*rma_ep;
+	struct psmx_fid_ep	*atomics_ep;
 	uint64_t		mode;
 
 	int			am_initialized;
@@ -513,13 +513,12 @@ struct psmx_fid_ep {
 	struct psmx_fid_cntr	*recv_cntr;
 	struct psmx_fid_cntr	*write_cntr;
 	struct psmx_fid_cntr	*read_cntr;
+	struct psmx_fid_cntr	*remote_write_cntr;
+	struct psmx_fid_cntr	*remote_read_cntr;
 	int			send_cq_event_flag:1;
 	int			recv_cq_event_flag:1;
-	int			send_cntr_event_flag:1;
-	int			recv_cntr_event_flag:1;
-	int			write_cntr_event_flag:1;
-	int			read_cntr_event_flag:1;
 	uint64_t		flags;
+	uint64_t		caps;
 	int			connected;
 	psm_epid_t		peer_psm_epid;
 	psm_epaddr_t		peer_psm_epaddr;
@@ -594,7 +593,8 @@ int	psmx_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		       struct fid_poll **pollset);
 
 int	psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap);
-int	psmx_domain_enable_features(struct psmx_fid_domain *domain, int ep_cap);
+int	psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
+void	psmx_domain_disable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
 void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername, int port);
 void	psmx_get_uuid(psm_uuid_t uuid);

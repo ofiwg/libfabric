@@ -290,38 +290,32 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			switch (PSMX_CTXT_TYPE(fi_context)) {
 			case PSMX_NOCOMP_SEND_CONTEXT:
 				tmp_ep->pending_sends--;
-				if (!tmp_ep->send_cntr_event_flag)
-					tmp_cntr = tmp_ep->send_cntr;
+				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
 			case PSMX_NOCOMP_RECV_CONTEXT:
-				if (!tmp_ep->recv_cntr_event_flag)
-					tmp_cntr = tmp_ep->recv_cntr;
+				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
 			case PSMX_NOCOMP_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
-				if (!tmp_ep->write_cntr_event_flag)
-					tmp_cntr = tmp_ep->write_cntr;
+				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
 			case PSMX_NOCOMP_READ_CONTEXT:
 				tmp_ep->pending_reads--;
-				if (!tmp_ep->read_cntr_event_flag)
-					tmp_cntr = tmp_ep->read_cntr;
+				tmp_cntr = tmp_ep->read_cntr;
 				break;
 
 			case PSMX_INJECT_CONTEXT:
 				tmp_ep->pending_sends--;
-				if (!tmp_ep->send_cntr_event_flag)
-					tmp_cntr = tmp_ep->send_cntr;
+				tmp_cntr = tmp_ep->send_cntr;
 				free(fi_context);
 				break;
 
 			case PSMX_INJECT_WRITE_CONTEXT:
 				tmp_ep->pending_writes--;
-				if (!tmp_ep->write_cntr_event_flag)
-					tmp_cntr = tmp_ep->write_cntr;
+				tmp_cntr = tmp_ep->write_cntr;
 				free(fi_context);
 				break;
 
@@ -373,7 +367,9 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						psmx_cq_enqueue_event(mr->cq, event);
 				  }
 				  if (mr->cntr)
-					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
+					psmx_cntr_inc(mr->cntr);
+				  if (mr->domain->rma_ep->remote_write_cntr)
+					psmx_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
 				  if (!cq || mr->cq == cq)
 					return 1;
 				  continue;
@@ -384,20 +380,9 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				  struct fi_context *fi_context = psm_status.context;
 				  struct psmx_fid_mr *mr;
 				  mr = PSMX_CTXT_USER(fi_context);
-				  if (mr->cq) {
-					event = psmx_cq_create_event_from_status(
-							mr->cq, &psm_status, 0,
-							(mr->cq == cq) ? event_in : NULL,
-							count, src_addr);
-					if (!event)
-						return -ENOMEM;
-
-					if (event != event_in)
-						psmx_cq_enqueue_event(mr->cq, event);
-				  }
-				  if (mr->cntr)
-					mr->cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
-				  if (!cq || mr->cq == cq)
+				  if (mr->domain->rma_ep->remote_read_cntr)
+					psmx_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
+				  if (!cq)
 					return 1;
 				  continue;
 				}
@@ -415,7 +400,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			}
 
 			if (tmp_cntr)
-				tmp_cntr->cntr.ops->add(&tmp_cntr->cntr, 1);
+				psmx_cntr_inc(tmp_cntr);
 
 			if (multi_recv) {
 				struct psmx_multi_recv *req;
