@@ -470,25 +470,27 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 							 datatype, op, count);
 			else
 				err = -ENOMEM;
-			if (mr->cq) {
-				event = psmx_cq_create_event(
-						mr->cq,
-						0, /* context */
-						addr,
-						0, /* flags */
-						len,
-						0, /* data */
-						0, /* tag */
-						0, /* olen */
-						0 /* err */);
+			if (op != FI_ATOMIC_READ) {
+				if (mr->cq) {
+					event = psmx_cq_create_event(
+							mr->cq,
+							0, /* context */
+							addr,
+							0, /* flags */
+							len,
+							0, /* data */
+							0, /* tag */
+							0, /* olen */
+							0 /* err */);
 
-				if (event)
-					psmx_cq_enqueue_event(mr->cq, event);
-				else
-					err = -ENOMEM;
+					if (event)
+						psmx_cq_enqueue_event(mr->cq, event);
+					else
+						err = -ENOMEM;
+				}
+				if (mr->cntr)
+					psmx_cntr_inc(mr->cntr);
 			}
-			if (mr->cntr)
-				psmx_cntr_inc(mr->cntr);
 
 			target_ep = mr->domain->atomics_ep;
 			if (op == FI_ATOMIC_WRITE) {
@@ -701,25 +703,28 @@ static int psmx_atomic_self(int am_cmd,
 					       (int)datatype, (int)op, (int)count);
 		break;
 	}
-	if (mr->cq) {
-		event = psmx_cq_create_event(
-				mr->cq,
-				0, /* context */
-				(void *)addr,
-				0, /* flags */
-				len,
-				0, /* data */
-				0, /* tag */
-				0, /* olen */
-				0 /* err */);
 
-		if (event)
-			psmx_cq_enqueue_event(mr->cq, event);
-		else
-			err = -ENOMEM;
+	if (op != FI_ATOMIC_READ) {
+		if (mr->cq) {
+			event = psmx_cq_create_event(
+					mr->cq,
+					0, /* context */
+					(void *)addr,
+					0, /* flags */
+					len,
+					0, /* data */
+					0, /* tag */
+					0, /* olen */
+					0 /* err */);
+
+			if (event)
+				psmx_cq_enqueue_event(mr->cq, event);
+			else
+				err = -ENOMEM;
+		}
+		if (mr->cntr)
+			psmx_cntr_inc(mr->cntr);
 	}
-	if (mr->cntr)
-		psmx_cntr_inc(mr->cntr);
 
 	target_ep = mr->domain->atomics_ep;
 	if (op == FI_ATOMIC_WRITE) {

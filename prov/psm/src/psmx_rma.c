@@ -195,26 +195,6 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				NULL, NULL );
 
 		if (eom && !op_error) {
-			if (mr->cq) {
-				/* TODO: report the addr/len of the whole read */
-				event = psmx_cq_create_event(
-						mr->cq,
-						0, /* context */
-						rma_addr,
-						0, /* flags */
-						rma_len,
-						0, /* data */
-						0, /* tag */
-						0, /* olen */
-						0);
-
-				if (event)
-					psmx_cq_enqueue_event(mr->cq, event);
-				else
-					err = -ENOMEM;
-			}
-			if (mr->cntr)
-				psmx_cntr_inc(mr->cntr);
 			if (mr->domain->rma_ep->remote_read_cntr)
 				psmx_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
 		}
@@ -379,7 +359,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 
 		memcpy(dst, src, len);
 
-		if (mr->cq) {
+		if (mr->cq && am_cmd == PSMX_AM_REQ_WRITE) {
 			event = psmx_cq_create_event(
 					mr->cq,
 					0, /* context */
@@ -396,7 +376,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 			else
 				err = -ENOMEM;
 		}
-		if (mr->cntr)
+		if (mr->cntr && am_cmd == PSMX_AM_REQ_WRITE)
 			psmx_cntr_inc(mr->cntr);
 		if (cntr)
 			psmx_cntr_inc(cntr);

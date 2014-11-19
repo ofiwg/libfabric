@@ -380,22 +380,9 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				  struct fi_context *fi_context = psm_status.context;
 				  struct psmx_fid_mr *mr;
 				  mr = PSMX_CTXT_USER(fi_context);
-				  if (mr->cq) {
-					event = psmx_cq_create_event_from_status(
-							mr->cq, &psm_status, 0,
-							(mr->cq == cq) ? event_in : NULL,
-							count, src_addr);
-					if (!event)
-						return -ENOMEM;
-
-					if (event != event_in)
-						psmx_cq_enqueue_event(mr->cq, event);
-				  }
-				  if (mr->cntr)
-					psmx_cntr_inc(mr->cntr);
 				  if (mr->domain->rma_ep->remote_read_cntr)
 					psmx_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
-				  if (!cq || mr->cq == cq)
+				  if (!cq)
 					return 1;
 				  continue;
 				}
