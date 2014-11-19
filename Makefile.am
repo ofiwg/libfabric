@@ -189,6 +189,7 @@ if HAVE_PSM
 _psm_files = \
 	prov/psm/src/psm_am.h \
 	prov/psm/src/psmx.h \
+	prov/psm/src/psm_am.h \
 	prov/psm/src/psmx_init.c \
 	prov/psm/src/psmx_domain.c \
 	prov/psm/src/psmx_cq.c \
