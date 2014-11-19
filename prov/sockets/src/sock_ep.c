@@ -120,7 +120,7 @@ int sock_ep_listen(struct fid_pep *pep)
 	struct sock_pep *sock_pep;
 
 	sock_pep = container_of(pep, struct sock_pep, pep);
-	ret = listen(sock_pep->sock_fd, SOCK_EP_BACKLOG);
+	ret = listen(sock_pep->sock_fd, 0);
 	if(ret)
 		return -errno;
 	return 0;

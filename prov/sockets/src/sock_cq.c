@@ -73,7 +73,7 @@ static ssize_t sock_cq_entry_size(struct sock_cq *sock_cq)
 	case FI_CQ_FORMAT_UNSPEC:
 	default:
 		size = -1;
-		sock_debug(SOCK_ERROR, "CQ: Invalid CQ format\n");
+		SOCK_LOG_ERROR("CQ: Invalid CQ format\n");
 		break;
 	}
 	return size;
@@ -188,7 +188,7 @@ static void sock_cq_set_report_fn(struct sock_cq *sock_cq)
 
 	case FI_CQ_FORMAT_UNSPEC:
 	default:
-		sock_debug(SOCK_ERROR, "CQ: Invalid CQ format\n");
+		SOCK_LOG_ERROR("CQ: Invalid CQ format\n");
 		break;
 	}
 }
@@ -373,7 +373,7 @@ static int sock_cq_verify_attr(struct fi_cq_attr *attr)
 }
 
 static struct fi_cq_attr _sock_cq_def_attr = {
-	.size = SOCK_CQ_DEF_LEN,
+	.size = SOCK_CQ_DEF_SZ,
 	.flags = 0,
 	.format = FI_CQ_FORMAT_CONTEXT,
 	.wait_obj = FI_WAIT_FD,
