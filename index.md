@@ -37,8 +37,12 @@ How do I get involved?
 
 First, [read the documentation](master/man).
 
-The bulk of the libfabric code base is being developed in [the main OFIWG libfabric GitHub repository](https://github.com/ofiwg/libfabric).  As part of this repository, a set of Linux man pages are being carefully written to exactly specify the libfabric APIs.  Read through these man pages to get a sense of the libfabric APIs.
+A set of Linux man pages are being carefully written to exactly specify the libfabric APIs.  Read through these man pages to get a sense of the libfabric APIs.
 
-Second: [become part of the conversation](http://lists.openfabrics.org/mailman/listinfo/ofiwg)
+Second, [get the code](https://github.com/ofiwg/libfabric).
+
+The bulk of the libfabric code base is being developed in [the main OFIWG libfabric GitHub repository](https://github.com/ofiwg/libfabric).
+
+Third: [become part of the conversation](http://lists.openfabrics.org/mailman/listinfo/ofiwg)
 
 [Join the ofiwg mailing list](http://lists.openfabrics.org/mailman/listinfo/ofiwg).  Notices of the Tuesday-weekly OFIWG Webexes are sent on this list; anyone can join the calls to listen and participate in the design of libfabric.
