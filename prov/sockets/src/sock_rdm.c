@@ -575,6 +575,7 @@ struct fi_ops_msg sock_rdm_ctx_msg_ops = {
 	.sendmsg = sock_rdm_ctx_sendmsg,
 	.inject = sock_rdm_ctx_inject,
 	.senddata = sock_rdm_ctx_senddata,
+	.injectdata = fi_no_msg_injectdata,
 };
 
 ssize_t sock_rdm_ctx_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
@@ -823,6 +824,7 @@ struct fi_ops_tagged sock_rdm_ctx_tagged = {
 	.sendmsg = sock_rdm_ctx_tsendmsg,
 	.inject = sock_rdm_ctx_tinject,
 	.senddata = sock_rdm_ctx_tsenddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = sock_rdm_ctx_tsearch,
 };
 
@@ -1518,6 +1520,7 @@ struct fi_ops_msg sock_rdm_ep_msg_ops = {
 	.sendv = sock_rdm_ep_msg_sendv,
 	.sendmsg = sock_rdm_ep_msg_sendmsg,
 	.inject = sock_rdm_ep_msg_inject,
+	.injectdata = fi_no_msg_injectdata,
 	.senddata = sock_rdm_ep_msg_senddata,
 };
 

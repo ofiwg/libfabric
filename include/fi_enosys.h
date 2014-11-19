@@ -267,6 +267,7 @@ static struct fi_ops_msg X = {
 	.sendmsg = fi_no_msg_sendmsg,
 	.inject = fi_no_msg_inject,
 	.senddata = fi_no_msg_senddata,
+	.injectdata = fi_no_msg_injectdata,
 };
 */
 ssize_t fi_no_msg_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
@@ -285,6 +286,8 @@ ssize_t fi_no_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 		fi_addr_t dest_addr);
 ssize_t fi_no_msg_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		uint64_t data, fi_addr_t dest_addr, void *context);
+ssize_t fi_no_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+		uint64_t data, fi_addr_t dest_addr);
 
 /*
 static struct fi_ops_wait X = {
@@ -362,6 +365,7 @@ static struct fi_ops_rma X = {
 	.writemsg = fi_no_rma_writemsg,
 	.inject = fi_no_rma_inject,
 	.writedata = fi_no_rma_writedata,
+	.injectdata = fi_no_rma_injectdata,
 };
 */
 ssize_t fi_no_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
@@ -383,6 +387,8 @@ ssize_t fi_no_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
 ssize_t fi_no_rma_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 		void *context);
+ssize_t fi_no_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+		uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key);
 
 /*
 static struct fi_ops_tagged X = {
@@ -395,6 +401,7 @@ static struct fi_ops_tagged X = {
 	.sendmsg = fi_no_tagged_sendmsg,
 	.inject = fi_no_tagged_inject,
 	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = fi_no_tagged_search,
 };
 */
@@ -415,6 +422,8 @@ ssize_t fi_no_tagged_inject(struct fid_ep *ep, const void *buf, size_t len,
 		fi_addr_t dest_addr, uint64_t tag);
 ssize_t fi_no_tagged_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		uint64_t data, fi_addr_t dest_addr, uint64_t tag, void *context);
+ssize_t fi_no_tagged_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+		uint64_t data, fi_addr_t dest_addr, uint64_t tag);
 ssize_t fi_no_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
 		uint64_t flags, fi_addr_t *src_addr, size_t *len, void *context);
 

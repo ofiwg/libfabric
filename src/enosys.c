@@ -354,6 +354,11 @@ ssize_t fi_no_msg_senddata(struct fid_ep *ep, const void *buf, size_t len, void 
 {
 	return -FI_ENOSYS;
 }
+ssize_t fi_no_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+		uint64_t data, fi_addr_t dest_addr)
+{
+	return -FI_ENOSYS;
+}
 
 /*
  * struct fi_ops_wait
@@ -467,6 +472,11 @@ ssize_t fi_no_rma_writedata(struct fid_ep *ep, const void *buf, size_t len, void
 {
 	return -FI_ENOSYS;
 }
+ssize_t fi_no_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+		uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+{
+	return -FI_ENOSYS;
+}
 
 /*
  * struct fi_ops_tagged
@@ -509,6 +519,11 @@ ssize_t fi_no_tagged_inject(struct fid_ep *ep, const void *buf, size_t len,
 }
 ssize_t fi_no_tagged_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		uint64_t data, fi_addr_t dest_addr, uint64_t tag, void *context)
+{
+	return -FI_ENOSYS;
+}
+ssize_t fi_no_tagged_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+		uint64_t data, fi_addr_t dest_addr, uint64_t tag)
 {
 	return -FI_ENOSYS;
 }

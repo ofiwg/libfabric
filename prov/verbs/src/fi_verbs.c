@@ -582,6 +582,7 @@ static struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.sendmsg = fi_ibv_msg_ep_sendmsg,
 	.inject = fi_no_msg_inject,
 	.senddata = fi_ibv_msg_ep_senddata,
+	.injectdata = fi_no_msg_injectdata,
 };
 
 static ssize_t
@@ -807,6 +808,7 @@ static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 	.writemsg = fi_ibv_msg_ep_rma_writemsg,
 	.inject = fi_no_rma_inject,
 	.writedata = fi_ibv_msg_ep_rma_writedata,
+	.injectdata = fi_no_rma_injectdata,
 };
 
 static ssize_t

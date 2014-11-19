@@ -754,6 +754,7 @@ static struct fi_ops_msg sockd_ops_msg = {
 	.sendmsg 	= sockd_msg_sendmsg,
 	.inject 	= sockd_msg_inject,
 	.senddata 	= sockd_msg_senddata,
+	.injectdata	= fi_no_msg_injectdata,
 };
 
 static inline int _sock_ep_dgram_progress(struct sock_ep *ep, struct sock_cq *cq)
