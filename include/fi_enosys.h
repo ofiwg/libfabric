@@ -209,9 +209,9 @@ int fi_no_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
 		struct fid_wait **waitset);
 int fi_no_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		struct fid_poll **pollset);
-int fi_no_stx_context(struct fid_domain *domain, struct fi_tx_ctx_attr *attr,
+int fi_no_stx_context(struct fid_domain *domain, struct fi_tx_attr *attr,
 		struct fid_stx **stx, void *context);
-int fi_no_srx_context(struct fid_domain *domain, struct fi_rx_ctx_attr *attr,
+int fi_no_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		struct fid_ep **rx_ep, void *context);
 
 /*
@@ -250,10 +250,10 @@ int fi_no_getopt(fid_t fid, int level, int optname,
 int fi_no_setopt(fid_t fid, int level, int optname,
 		const void *optval, size_t optlen);
 int fi_no_tx_ctx(struct fid_sep *sep, int index,
-		struct fi_tx_ctx_attr *attr, struct fid_ep **tx_ep,
+		struct fi_tx_attr *attr, struct fid_ep **tx_ep,
 		void *context);
 int fi_no_rx_ctx(struct fid_sep *sep, int index,
-		struct fi_rx_ctx_attr *attr, struct fid_ep **rx_ep,
+		struct fi_rx_attr *attr, struct fid_ep **rx_ep,
 		void *context);
 
 /*

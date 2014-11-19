@@ -104,8 +104,8 @@ struct fi_info {
 	void                  *src_addr;
 	void                  *dest_addr;
 	fi_connreq_t          connreq;
-	struct fi_tx_ctx_attr *tx_attr;
-	struct fi_rx_ctx_attr *rx_attr;
+	struct fi_tx_attr *tx_attr;
+	struct fi_rx_attr *rx_attr;
 	struct fi_ep_attr     *ep_attr;
 	struct fi_domain_attr *domain_attr;
 	struct fi_fabric_attr *fabric_attr;

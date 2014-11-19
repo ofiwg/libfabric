@@ -264,15 +264,15 @@ static void fi_tostr_addr(char *buf, uint32_t addr_format,
 	}
 }
 
-static void fi_tostr_tx_attr(char *buf, const struct fi_tx_ctx_attr *attr,
+static void fi_tostr_tx_attr(char *buf, const struct fi_tx_attr *attr,
 			     const char *prefix)
 {
 	if (!attr) {
-		strcatf(buf, "%sfi_tx_ctx_attr: (null)\n", prefix);
+		strcatf(buf, "%sfi_tx_attr: (null)\n", prefix);
 		return;
 	}
 
-	strcatf(buf, "%sfi_tx_ctx_attr:\n", prefix);
+	strcatf(buf, "%sfi_tx_attr:\n", prefix);
 	strcatf(buf, "%s%scaps: [ ", prefix, TAB);
 	fi_tostr_caps(buf, attr->caps);
 	strcat(buf, " ]\n");
@@ -290,15 +290,15 @@ static void fi_tostr_tx_attr(char *buf, const struct fi_tx_ctx_attr *attr,
 	strcatf(buf, "%s%siov_limit: %zd\n", prefix, TAB, attr->iov_limit);
 }
 
-static void fi_tostr_rx_attr(char *buf, const struct fi_rx_ctx_attr *attr,
+static void fi_tostr_rx_attr(char *buf, const struct fi_rx_attr *attr,
 			     const char *prefix)
 {
 	if (!attr) {
-		strcatf(buf, "%sfi_rx_ctx_attr: (null)\n", prefix);
+		strcatf(buf, "%sfi_rx_attr: (null)\n", prefix);
 		return;
 	}
 
-	strcatf(buf, "%sfi_rx_ctx_attr:\n", prefix);
+	strcatf(buf, "%sfi_rx_attr:\n", prefix);
 	strcatf(buf, "%s%scaps: [ ", prefix, TAB);
 	fi_tostr_caps(buf, attr->caps);
 	strcat(buf, " ]\n");

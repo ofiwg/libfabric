@@ -189,8 +189,8 @@ usdf_fill_info_dgram(
 	struct fi_info *fi;
 	struct fi_fabric_attr *fattrp;
 	struct fi_domain_attr *dattrp;
-	struct fi_tx_ctx_attr *txattr;
-	struct fi_rx_ctx_attr *rxattr;
+	struct fi_tx_attr *txattr;
+	struct fi_rx_attr *rxattr;
 	struct fi_ep_attr *eattrp;
 	int ret;
 
@@ -298,8 +298,8 @@ usdf_fill_info_msg(
 	struct fi_info *fi;
 	struct fi_fabric_attr *fattrp;
 	struct fi_domain_attr *dattrp;
-	struct fi_tx_ctx_attr *txattr;
-	struct fi_rx_ctx_attr *rxattr;
+	struct fi_tx_attr *txattr;
+	struct fi_rx_attr *rxattr;
 	struct fi_ep_attr *eattrp;
 	int ret;
 
