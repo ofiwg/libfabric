@@ -51,13 +51,11 @@ static struct fi_ops X = {
 	.size = sizeof(struct fi_ops);,
 	.close = X,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
  */
 int fi_no_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
-int fi_no_sync(struct fid *fid, uint64_t flags, void *context);
 int fi_no_control(struct fid *fid, int command, void *arg);
 int fi_no_ops_open(struct fid *fid, const char *name,
 		uint64_t flags, void **ops, void *context);
@@ -237,7 +235,7 @@ int fi_no_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
 int fi_no_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		struct fid_poll **pollset);
 int fi_no_stx_context(struct fid_domain *domain, struct fi_tx_ctx_attr *attr,
-		struct fid_ep **tx_ep, void *context);
+		struct fid_stx **stx, void *context);
 int fi_no_srx_context(struct fid_domain *domain, struct fi_rx_ctx_attr *attr,
 		struct fid_ep **rx_ep, void *context);
 

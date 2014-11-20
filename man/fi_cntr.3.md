@@ -41,9 +41,9 @@ uint64_t fi_cntr_read(struct fid_cntr *cntr);
 
 uint64_t fi_cntr_readerr(struct fid_cntr *cntr);
 
-int fi_cntr_add(struct fid_cntr *" cntr ", uint64_t value);
+int fi_cntr_add(struct fid_cntr *cntr, uint64_t value);
 
-int fi_cntr_set(struct fid_cntr *" cntr ", uint64_t value);
+int fi_cntr_set(struct fid_cntr *cntr, uint64_t value);
 
 int fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
     int timeout);

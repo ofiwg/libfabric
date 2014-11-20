@@ -526,10 +526,6 @@ struct psmx_fid_ep {
 	struct fi_context	nocomp_recv_context;
 	struct fi_context	sendimm_context;
 	struct fi_context	writeimm_context;
-	uint64_t		pending_sends;
-	uint64_t		pending_writes;
-	uint64_t		pending_reads;
-	uint64_t		pending_atomics;
 	size_t			min_multi_recv;
 };
 

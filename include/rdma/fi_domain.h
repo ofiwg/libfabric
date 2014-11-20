@@ -126,7 +126,7 @@ struct fi_ops_domain {
 	int	(*poll_open)(struct fid_domain *domain, struct fi_poll_attr *attr,
 			struct fid_poll **pollset);
 	int	(*stx_ctx)(struct fid_domain *domain,
-			struct fi_tx_ctx_attr *attr, struct fid_ep **tx_ep,
+			struct fi_tx_ctx_attr *attr, struct fid_stx **stx,
 			void *context);
 	int	(*srx_ctx)(struct fid_domain *domain,
 			struct fi_rx_ctx_attr *attr, struct fid_ep **rx_ep,
@@ -171,6 +171,12 @@ fi_domain(struct fid_fabric *fabric, struct fi_info *info,
 }
 
 static inline int
+fi_domain_bind(struct fid_domain *domain, struct fid *fid, uint64_t flags)
+{
+	return domain->fid.ops->bind(&domain->fid, fid, flags);
+}
+
+static inline int
 fi_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	   struct fid_cq **cq, void *context)
 {
@@ -208,6 +214,12 @@ fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	   struct fid_av **av, void *context)
 {
 	return domain->ops->av_open(domain, attr, av, context);
+}
+
+static inline int
+fi_av_bind(struct fid_av *av, struct fid *fid, uint64_t flags)
+{
+	return av->fid.ops->bind(&av->fid, fid, flags);
 }
 
 static inline int
@@ -249,11 +261,6 @@ static inline fi_addr_t
 fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
 {
 	return (fi_addr_t) (((uint64_t) rx_index << (64 - rx_ctx_bits)) | fi_addr);
-}
-
-static inline int fi_av_sync(struct fid_av *av, uint64_t flags, void *context)
-{
-	return fi_sync(&av->fid, flags, context);
 }
 
 

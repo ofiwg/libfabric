@@ -56,7 +56,7 @@ int fi_rx_context(struct fid_ep *ep, int index,
     void *context);
 
 int fi_stx_context(struct fid_domain *domain,
-    struct fi_tx_ctx_attr *attr, struct fid_ep **tx_ep,
+    struct fi_tx_ctx_attr *attr, struct fid_stx **stx,
     void *context);
 
 int fi_srx_context(struct fid_domain *domain,
@@ -70,8 +70,6 @@ int fi_ep_bind(struct fid_ep *ep, struct fid *fid, uint64_t flags);
 int fi_enable(struct fid_ep *ep);
 
 int fi_cancel(struct fid_ep *ep, void *context);
-
-int fi_ep_sync(struct fid_ep *ep, uint64_t flags, void *context);
 
 int fi_alias(struct fid_ep *ep, fid_t *alias_ep, uint64_t flags);
 
@@ -219,7 +217,7 @@ together when binding an endpoint to a completion domain CQ.
   generated.  In order for the application to ensure that all previous
   operations have completed, the application may call fi_sync.  The
   successful completion of fi_sync indicates that all prior operations
-  have completed successfully.  .RE
+  have completed successfully.
 
 An endpoint may also, or instead, be bound to a fabric counter.  When
 binding an endpoint to a counter, the following flags may be specified.
@@ -273,50 +271,6 @@ Canceling an operation causes the fabric provider to search for the
 operation and, if it is still pending, complete it as having been
 canceled.  The cancel operation will complete within a bounded period
 of time.
-
-## fi_ep_sync
-
-The sync function is used to indicate that all previously identified
-operations submitted on the specified endpoint or endpoint alias have
-completed, with their results flushed from any intermediate caches.
-In this regard, it acts as a fencing operation.  When an fi_ep_sync
-call completes, it indicates that all prior operations, as indicated
-by the fi_ep_sync flags, submitted before fi_ep_sync call have also
-completed.  By default (flags are 0), fi_ep_sync completes only after
-all outbound operations have completed.  This includes message sends,
-RMA reads and writes, and atomic operations.
-
-Calling sync on an endpoint alias only requires that operations posted
-to the alias have completed.  This is useful when aliases are used to
-separate traffic based on specific operations (sends versus RMA) or
-for flow steering purposes.  Calling sync on the base endpoint waits
-for all selected operations to complete on all aliased endpoints.
-
-The behavior of fi_ep_sync may be adjusted by specifying one or more
-of the following flags.
-
-*FI_READ*
-: The sync call will not complete until all outstanding RMA or atomic
-  read data transfers have completed.  The sync is not ordered with
-  respect to non-read operations.
-
-*FI_WRITE*
-: The sync call will not complete until all outstanding RMA or atomic
-  write data transfers have completed.  The sync is not ordered with
-  respect to non-write operations.
-
-*FI_SEND*
-: The sync call will not complete until all outstanding message send
-  data transfers have completed.  The sync is not ordered with respect
-  to non-send operations.
-
-*FI_REMOTE_WRITE*
-: The FI_REMOTE_WRITE flag is used in conjunction with access domains
-  that use mode FI_WRITE_NONCOHERENT.  The fi_ep_sync with
-  FI_REMOTE_WRITE is issued on the target side of an RMA or atomic
-  data transfer.  It ensures that the view of memory of the local
-  process is consistent with memory updates from the network.  See
-  fi_getinfo for additional details on FI_WRITE_NONCOHERENT.
 
 ## fi_alias
 

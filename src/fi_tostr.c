@@ -216,7 +216,6 @@ static void fi_tostr_protocol(char *buf, uint32_t protocol)
 
 static void fi_tostr_mode(char *buf, uint64_t mode)
 {
-	IFFLAGSTR(mode, FI_WRITE_NONCOHERENT);
 	IFFLAGSTR(mode, FI_CONTEXT);
 	IFFLAGSTR(mode, FI_LOCAL_MR);
 	IFFLAGSTR(mode, FI_PROV_MR_ATTR);

@@ -512,8 +512,6 @@ ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	ep_priv->pending_sends++;
-
 	if (user_fi_context)
 		PSMX_CTXT_REQ(fi_context) = psm_req;
 
@@ -548,7 +546,6 @@ ssize_t psmx_tagged_sendto_no_flag_av_map(struct fid_ep *ep, const void *buf,
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	ep_priv->pending_sends++;
 	PSMX_CTXT_REQ(fi_context) = psm_req;
 	return 0;
 }
@@ -588,7 +585,6 @@ ssize_t psmx_tagged_sendto_no_flag_av_table(struct fid_ep *ep, const void *buf,
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	ep_priv->pending_sends++;
 	PSMX_CTXT_REQ(fi_context) = psm_req;
 	return 0;
 }
@@ -618,7 +614,6 @@ ssize_t psmx_tagged_sendto_no_event_av_map(struct fid_ep *ep, const void *buf,
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	ep_priv->pending_sends++;
 	return 0;
 }
 
@@ -654,7 +649,6 @@ ssize_t psmx_tagged_sendto_no_event_av_table(struct fid_ep *ep, const void *buf,
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	ep_priv->pending_sends++;
 	return 0;
 }
 

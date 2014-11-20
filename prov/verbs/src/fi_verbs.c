@@ -303,7 +303,7 @@ fi_ibv_getepinfo(const char *node, const char *service,
 err3:
 	rdma_destroy_ep(*id);
 err2:
-	fi_freeinfo_internal(fi);
+	fi_freeinfo(fi);
 err1:
 	rdma_freeaddrinfo(rai);
 	return ret;
@@ -1425,7 +1425,6 @@ static struct fi_ops fi_ibv_msg_ep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_msg_ep_close,
 	.bind = fi_ibv_msg_ep_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -1453,7 +1452,7 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		if (ret)
 			goto err;
 
-		fi_freeinfo_internal(fi);
+		fi_freeinfo(fi);
 	} else {
 		_ep->id = info->connreq;
 	}
@@ -1477,16 +1476,13 @@ err:
 
 static ssize_t
 fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
-		  size_t len, uint64_t flags)
+		  uint64_t flags)
 {
 	struct fi_ibv_eq *_eq;
 
 	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
 	if (!_eq->err.err)
 		return 0;
-
-	if (len < sizeof(*entry))
-		return -FI_EINVAL;
 
 	*entry = _eq->err;
 	_eq->err.err = 0;
@@ -1533,7 +1529,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	fi->connreq = event->id;
 	return fi;
 err:
-	fi_freeinfo_internal(fi);
+	fi_freeinfo(fi);
 	return NULL;
 }
 
@@ -1644,7 +1640,7 @@ fi_ibv_eq_sread(struct fid_eq *eq, uint32_t *event,
 
 static const char *
 fi_ibv_eq_strerror(struct fid_eq *eq, int prov_errno, const void *err_data,
-		void *buf, size_t len)
+		   char *buf, size_t len)
 {
 	if (buf && len)
 		strncpy(buf, strerror(prov_errno), len);
@@ -1698,7 +1694,6 @@ static struct fi_ops fi_ibv_eq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_eq_close,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_ibv_eq_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -1755,16 +1750,13 @@ err1:
 
 static ssize_t
 fi_ibv_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
-	       size_t len, uint64_t flags)
+		  uint64_t flags)
 {
 	struct fi_ibv_cq *_cq;
 
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 	if (!_cq->wc.status)
 		return 0;
-
-	if (len < sizeof(*entry))
-		return -FI_ETOOSMALL;
 
 	entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
 	entry->flags = 0;
@@ -1822,7 +1814,11 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 			reset = 0;
 			continue;
 		}
-		fi_poll_fd(_cq->channel->fd, timeout);
+		ret = fi_poll_fd(_cq->channel->fd, timeout);
+		if (ret == 0)
+			return -FI_ETIMEDOUT;
+		else if (ret < 0)
+			break;
 	}
 
 	return cur ? cur : ret;
@@ -1910,7 +1906,7 @@ static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t count)
 
 static const char *
 fi_ibv_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
-		void *buf, size_t len)
+		   char *buf, size_t len)
 {
 	if (buf && len)
 		strncpy(buf, ibv_wc_status_str(prov_errno), len);
@@ -1995,7 +1991,6 @@ static struct fi_ops fi_ibv_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_cq_close,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_ibv_cq_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -2094,7 +2089,6 @@ static struct fi_ops fi_ibv_mr_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_mr_close,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -2182,7 +2176,6 @@ static struct fi_ops fi_ibv_fid_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_close,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -2292,7 +2285,6 @@ static struct fi_ops fi_ibv_pep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_pep_close,
 	.bind = fi_ibv_pep_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -2314,7 +2306,7 @@ fi_ibv_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err;
 
-	fi_freeinfo_internal(fi);
+	fi_freeinfo(fi);
 	_pep->id->context = &_pep->pep_fid.fid;
 
 	_pep->pep_fid.fid.fclass = FI_CLASS_PEP;
@@ -2339,7 +2331,6 @@ static struct fi_ops fi_ibv_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_fabric_close,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };

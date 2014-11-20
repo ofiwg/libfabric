@@ -60,10 +60,6 @@ modes, if those capabilities are supported.  The following #define
 values may be used by an application to test for provider support of
 supported features.
 
-*FI_DIRECT_WRITE_NONCOHERENT*
-: The provider sets FI_WRITE_NONCOHERENT for fi_info:mode.  See fi_getinfo
-  for additional details.
-
 *FI_DIRECT_CONTEXT*
 : The provider sets FI_CONTEXT for fi_info:mode.  See fi_getinfo
   for additional details.

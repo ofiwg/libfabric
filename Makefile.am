@@ -308,7 +308,6 @@ dummy_man_pages = \
         man/fi_dupinfo.3 \
         man/fi_enable.3 \
         man/fi_ep_bind.3 \
-        man/fi_ep_sync.3 \
         man/fi_eq_open.3 \
         man/fi_eq_read.3 \
         man/fi_eq_readerr.3 \

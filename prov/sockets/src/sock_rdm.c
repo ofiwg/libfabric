@@ -241,11 +241,6 @@ static struct fi_info *allocate_fi_info(enum fi_ep_type ep_type,
 	return _info;
 }
 
-void free_fi_info(struct fi_info *info)
-{
-	fi_freeinfo_internal(info);
-}
-
 int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 		     uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
@@ -1063,7 +1058,6 @@ struct fi_ops sock_rdm_ctx_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_rdm_ctx_close,
 	.bind = sock_rdm_ctx_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 };
 
@@ -1309,7 +1303,6 @@ struct fi_ops sock_rdm_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_rdm_ep_fi_close,
 	.bind = sock_rdm_ep_fi_bind,
-	.sync = fi_no_sync,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };

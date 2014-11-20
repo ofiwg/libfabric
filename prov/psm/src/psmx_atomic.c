@@ -606,7 +606,6 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (req->ep->write_cntr)
 			psmx_cntr_inc(req->ep->write_cntr);
 
-		req->ep->pending_atomics--;
 		free(req);
 		break;
 
@@ -639,7 +638,6 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (req->ep->read_cntr)
 			psmx_cntr_inc(req->ep->read_cntr);
 
-		req->ep->pending_atomics--;
 		free(req);
 		break;
 
@@ -668,8 +666,6 @@ static int psmx_atomic_self(int am_cmd,
 	int err = 0;
 	int op_error;
 	int access;
-
-	ep->pending_atomics++;
 
 	if (am_cmd == PSMX_AM_REQ_ATOMIC_WRITE)
 		access = FI_REMOTE_WRITE;
@@ -775,8 +771,6 @@ gen_local_event:
 			psmx_cntr_inc(ep->read_cntr);
 		break;
 	}
-
-	ep->pending_atomics--;
 
 	return err;
 }
@@ -899,8 +893,6 @@ ssize_t _psmx_atomic_writeto(struct fid_ep *ep,
 	err = psm_am_request_short((psm_epaddr_t) dest_addr,
 				PSMX_AM_ATOMIC_HANDLER, args, 5,
 				(void *)buf, len, am_flags, NULL, NULL);
-
-	ep_priv->pending_atomics++;
 
 	return 0;
 }
@@ -1130,8 +1122,6 @@ ssize_t _psmx_atomic_readwriteto(struct fid_ep *ep,
 				PSMX_AM_ATOMIC_HANDLER, args, 5,
 				(void *)buf, len, am_flags, NULL, NULL);
 
-	ep_priv->pending_atomics++;
-
 	return 0;
 }
 
@@ -1355,8 +1345,6 @@ ssize_t _psmx_atomic_compwriteto(struct fid_ep *ep,
 				tmp_buf ? tmp_buf : (void *)buf,
 				len * 2, am_flags,
 				psmx_am_atomic_completion, tmp_buf);
-
-	ep_priv->pending_atomics++;
 
 	return 0;
 }
