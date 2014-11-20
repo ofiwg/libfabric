@@ -54,6 +54,8 @@ static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
+static int machr, g_argc;
+static char **g_argv;
 
 static struct fi_info hints;
 static struct fi_domain_attr domain_hints;
@@ -204,7 +206,12 @@ static int run_test(void)
 			goto out;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
-	show_perf(test_name, transfer_size, iterations, &start, &end, 2);
+
+	if (machr)
+		show_perf_mr(transfer_size, iterations, &start, &end, 2, g_argc, g_argv);
+	else
+		show_perf(test_name, transfer_size, iterations, &start, &end, 2);
+
 	ret = 0;
 
 out:
@@ -313,6 +320,7 @@ static int init_fabric(void)
 {
 	struct fi_info *fi;
 	char *node;
+	uint64_t flags = 0;
 	int ret;
 
 	if (src_addr) {
@@ -324,13 +332,22 @@ static int init_fabric(void)
 		}
 	}
 
-	node = dst_addr ? dst_addr : src_addr;
+	if (dst_addr) {
+		node = dst_addr;
+	} else {
+		node = src_addr;
+		flags = FI_SOURCE;
+	}
 
-	ret = fi_getinfo(FI_VERSION(1, 0), node, port, 0, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), node, port, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
+
+	/* We use provider MR attributes and direct address (no offsets) for RMA calls */
+	if (!(fi->mode & FI_PROV_MR_ATTR))
+		fi->mode |= FI_PROV_MR_ATTR;
 
 	/* Get remote address */
 	if (dst_addr) {
@@ -489,7 +506,7 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:I:S:")) != -1) {
+	while ((op = getopt(argc, argv, "d:n:p:s:I:S:m")) != -1) {
 		switch (op) {
 		case 'd':
 			dst_addr = optarg;
@@ -515,6 +532,11 @@ int main(int argc, char **argv)
 				transfer_size = atoi(optarg);
 			}
 			break;
+		case 'm':
+			machr = 1;
+			g_argc = argc;
+			g_argv = argv;
+			break;
 		default:
 			printf("usage: %s\n", argv[0]);
 			printf("\t[-d destination_address]\n");
@@ -523,6 +545,7 @@ int main(int argc, char **argv)
 			printf("\t[-s source_address]\n");
 			printf("\t[-I iterations]\n");
 			printf("\t[-S transfer_size or 'all']\n");
+			printf("\t[-m machine readable output]\n");
 			exit(1);
 		}
 	}
