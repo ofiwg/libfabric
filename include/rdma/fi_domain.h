@@ -119,6 +119,8 @@ struct fi_ops_domain {
 			struct fid_cq **cq, void *context);
 	int	(*endpoint)(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context);
+	int	(*scalable_ep)(struct fid_domain *domain, struct fi_info *info,
+			struct fid_sep **sep, void *context);
 	int	(*cntr_open)(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct fid_cntr **cntr, void *context);
 	int	(*wait_open)(struct fid_domain *domain, struct fi_wait_attr *attr,
