@@ -137,17 +137,21 @@ struct fi_info {
 
 *src_addrlen - source address length*
 : Indicates the length of the source address (must be specified if
-  *src_addr* is specified).
+  *src_addr* is specified).  This field will be ignored in hints if
+  FI_SOURCE is specified.
 
 *dest_addrlen - destination address length*
 : Indicates the length of the destination address (must be specified
-  if *dst_addr* is specified).
+  if *dst_addr* is specified).  This field will be ignored in hints
+  unless FI_SOURCE is specified.
 
 *src_addr - source address*
-: If specified, indicates the source address.
+: If specified, indicates the source address.  This field will be
+  ignored in hints if FI_SOURCE is specified.
 
 *dest_addr - destination address*
-: If specified, indicates the destination address.
+: If specified, indicates the destination address.  This field will be
+  ignored in hints unless FI_SOURCE is specified.
 
 *connreq - connection request*
 : References a specific connection request, otherwise the field must
@@ -397,31 +401,6 @@ below.
   receive operations and as the source buffer for RMA and atomic
   operations must be registered by the application for access domains
   opened with this capability.
-
-*FI_WRITE_NONCOHERENT*
-: Specifies that remote writes, including atomic operations, to the
-  underlying fabric domain are not coherent with the local processing
-  domain and the application must manually synchronize memory accessed
-  by remote RMA.  Domain-level write coherency indicates that changes
-  to local memory are visible to the local process immediately upon
-  completion of a remote write operation.  When this mode is enabled,
-  the NIC or memory subsystem may cache the results of remote write or
-  atomic operations in non-coherent memory.
-
-  The behavior of a domain with and without FI_WRITE_NONCOHERENT is
-  illustrated below.
-
-
-      Process 1            Process 2
-                           Register BUF
-      RMA write X to BUF
-      Notify process 2
-                           Receive notification
-                           if FI_WRITE_NONCOHERENT
-                                Sync with remote writes
-                           assert(BUF == X)
-
-: See the endpoint fi_ep_sync call for handling non-coherent writes.
 
 *FI_MSG_PREFIX*
 : Message prefix mode indicates that an application will provide
