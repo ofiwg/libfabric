@@ -77,6 +77,7 @@ struct fid_cntr;
 struct fid_ep;
 struct fid_pep;
 struct fid_stx;
+struct fid_sep;
 struct fid_mr;
 
 typedef struct fid *fid_t;
@@ -288,6 +289,7 @@ enum {
 	FI_CLASS_FABRIC,
 	FI_CLASS_DOMAIN,
 	FI_CLASS_EP,
+	FI_CLASS_SEP,
 	FI_CLASS_RX_CTX,
 	FI_CLASS_SRX_CTX,
 	FI_CLASS_TX_CTX,

@@ -44,6 +44,9 @@ fi_rx_context / fi_tx_context / fi_srx_context  / fi_stx_context
 int fi_endpoint(struct fid_domain *domain, struct fi_info *info,
     struct fid_ep **ep, void *context);
 
+int fi_scalable_ep(struct fid_domain *domain, struct fi_info *info,
+    struct fid_sep **ep, void *context);
+
 int fi_pendpoint(struct fi_fabric *fabric, struct fi_info *info,
     struct fid_pep **pep, void *context);
 
@@ -95,6 +98,9 @@ int fi_setopt(struct fid *ep, int level, int optname,
 
 *ep*
 : A fabric endpoint.
+
+*sep*
+: A scalable fabric endpoint.
 
 *fid*
 : Fabric identifier of an associated resource.
@@ -158,13 +164,14 @@ data and protocol options.  This allows the underlying provider to
 redirect function calls to implementations optimized to meet the
 desired application behavior.
 
-## fi_endpoint / fi_pendpoint
+## fi_endpoint / fi_pendpoint / fi_scalable_ep
 
 fi_endpoint allocates a new active endpoint.  fi_pendpoint allocates a
-new passive endpoint.  The properties and behavior of the endpoint are
-defined based on the provided struct fi_info.  See fi_getinfo for
-additional details on fi_info.  fi_info flags that control the
-operation of an endpoint are defined below.
+new passive endpoint.  fi_scalable_ep allocates a scalable endpoint.
+The properties and behavior of the endpoint are defined based on the
+provided struct fi_info.  See fi_getinfo for additional details on
+fi_info.  fi_info flags that control the operation of an endpoint are
+defined below. See section SCALABLE ENDPOINTS.
 
 If an active endpoint is associated with a connection request, the
 fi_info connreq must reference the corresponding request.
@@ -589,14 +596,15 @@ details.
 A scalable endpoint is a communication portal that supports multiple
 transmit and receive contexts.  Scalable endpoints are loosely modeled
 after the networking concept of transmit/receive side scaling, also
-known as multi-queue.  By default, an endpoint is associated with a
-single transmit and receive context.  Support for scalable endpoints
-is domain specific.  Scalable endpoints may improve the performance of
+known as multi-queue.  Support for scalable endpoints is domain
+specific.  Scalable endpoints may improve the performance of
 multi-threaded and parallel applications, by allowing threads to
 access independent transmit and receive queues.  A scalable endpoint
 has a single transport level address, which can reduce the memory
 requirements needed to store remote addressing data, versus using
-standard endpoints.
+standard endpoints. Scalable endpoints cannot be used directly for
+communication operations, and require the application to explicitly
+create transmit and receive contexts as described below.
 
 ## fi_tx_context
 
