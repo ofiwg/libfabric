@@ -432,8 +432,8 @@ static ssize_t sock_rdm_sendmsg(struct sock_tx_ctx *tx_ctx, struct sock_av *av,
 
 	assert(tx_ctx->enabled && msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT);
 
-	if ((ret = sock_av_lookup_addr(av, msg->addr, &conn)))
-		return ret;
+	if (!(conn = sock_av_lookup_addr(av, msg->addr)))
+		return -errno;
 
 	total_len = 0;
 	if (flags & FI_INJECT) {
@@ -697,8 +697,8 @@ static ssize_t sock_rdm_tsendmsg(struct sock_tx_ctx *tx_ctx, struct sock_av *av,
 
 	assert(tx_ctx->enabled && msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT);
 
-	if ((ret = sock_av_lookup_addr(av, msg->addr, &conn)))
-		return ret;
+	if (!(conn = sock_av_lookup_addr(av, msg->addr)))
+		return -errno;
 
 	total_len = 0;
 	if (flags & FI_INJECT) {
