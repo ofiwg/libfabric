@@ -610,40 +610,8 @@ static ssize_t sockd_msg_recvv(struct fid_ep *ep, const struct iovec *iov, void 
 static ssize_t sockd_msg_recvfrom(struct fid_ep *ep, void *buf, size_t len, void *desc,
 		fi_addr_t src_addr, void *context)
 {
-	struct sock_ep *sock_ep;
-	struct sock_req_item *recv_req;
-
-	sock_ep = container_of(ep, struct sock_ep, ep);
-	if(!sock_ep)
-		return -FI_EINVAL;
-
-	recv_req = calloc(1, sizeof(struct sock_req_item));
-	if(!recv_req)
-		return -FI_ENOMEM;
-	
-	recv_req->item.buf = (void*)buf;
-	recv_req->req_type = SOCK_REQ_TYPE_RECV;
-	recv_req->comm_type = SOCK_COMM_TYPE_SENDTO;
-	recv_req->context = context;
-	recv_req->total_len = len;
-	recv_req->done_len = 0;
-
-	if (sock_ep->av->attr.type == FI_AV_MAP) {
-		memcpy(&recv_req->addr, (void*)src_addr, sizeof(struct sockaddr_in));
-	} else {
-		size_t idx;
-		idx = (size_t)src_addr;
-		if (idx > sock_ep->av->count-1 || idx < 0) {
-			return -EINVAL;
-		}	
-		memcpy(&recv_req->addr, &sock_ep->av->table[idx], sizeof(struct sockaddr_in));
-	}
-
-	if(0 != enqueue_item(sock_ep->recv_list, recv_req)){
-		free(recv_req);
-		return -FI_ENOMEM;	
-	}
-	return 0;
+	errno = FI_ENOSYS;
+	return -errno;
 }
 
 static ssize_t sockd_msg_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
@@ -670,40 +638,8 @@ static ssize_t sockd_msg_sendv(struct fid_ep *ep, const struct iovec *iov, void 
 static ssize_t sockd_msg_sendto(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, void *context)
 {
-	struct sock_ep *sock_ep;
-	struct sock_req_item *send_req;
-
-	sock_ep = container_of(ep, struct sock_ep, ep);
-	if(!sock_ep)
-		return -FI_EINVAL;
-
-	send_req = calloc(1, sizeof(struct sock_req_item));
-	if(!send_req)
-		return -FI_ENOMEM;
-	
-	send_req->item.buf = (void*)buf;
-	send_req->req_type = SOCK_REQ_TYPE_SEND;
-	send_req->comm_type = SOCK_COMM_TYPE_SENDTO;
-	send_req->context = context;
-	send_req->total_len = len;
-	send_req->done_len = 0;
-
-	if (sock_ep->av->attr.type == FI_AV_MAP) {
-		memcpy(&send_req->addr, (void*)dest_addr, sizeof(struct sockaddr_in));
-	} else {
-		size_t idx;
-		idx = (size_t)dest_addr;
-		if (idx > sock_ep->av->count-1 || idx < 0) {
-			return -EINVAL;
-		}	
-		memcpy(&send_req->addr, &sock_ep->av->table[idx], sizeof(struct sockaddr_in));
-	}
-
-	if(0 != enqueue_item(sock_ep->send_list, send_req)){
-		free(send_req);
-		return -FI_ENOMEM;	
-	}
-	return 0;
+	errno = FI_ENOSYS;
+	return -errno;
 }
 
 static ssize_t sockd_msg_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
@@ -840,8 +776,6 @@ int sock_dgram_ep(struct fid_domain *domain, struct fi_info *info,
 		SOCK_LOG_ERROR("[sockd] %s: failed to bind sock_fd to port %d\n", __func__, ntohs(si_me.sin_port));
 		goto err2;
 	}
-
-	_ep->port_num		= ntohs(si_me.sin_port);
 
 	if(!(_ep->send_list = new_list(SOCK_CQ_DEF_SZ)))
 		goto err2;
