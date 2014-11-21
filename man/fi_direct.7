@@ -1,4 +1,4 @@
-.TH fi_direct 7 "2014-11-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_direct 7 "2014\-11\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 Direct fabric provider access
@@ -56,10 +56,6 @@ direct providers must provide definitions for various capabilities and
 modes, if those capabilities are supported.
 The following #define values may be used by an application to test for
 provider support of supported features.
-.PP
-\f[I]FI_DIRECT_WRITE_NONCOHERENT\f[] : The provider sets
-FI_WRITE_NONCOHERENT for fi_info:mode.
-See fi_getinfo for additional details.
 .PP
 \f[I]FI_DIRECT_CONTEXT\f[] : The provider sets FI_CONTEXT for
 fi_info:mode.
