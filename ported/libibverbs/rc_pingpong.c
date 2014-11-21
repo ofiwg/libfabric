@@ -396,7 +396,7 @@ static int pp_post_recv(struct pingpong_context *ctx, int n)
 
 	for (i = 0; i < n; ++i) {
 		rc = fi_recv(ctx->ep, ctx->buf, ctx->size, fi_mr_desc(ctx->mr),
-			   	(void *)(uintptr_t)PINGPONG_RECV_WCID); 
+			     0, (void *)(uintptr_t)PINGPONG_RECV_WCID);
 		if (rc) {
 			FI_ERR_LOG("fi_recv", -rc);
 			break;
@@ -411,7 +411,7 @@ static int pp_post_send(struct pingpong_context *ctx)
 	int rc = 0;
 
 	rc = fi_send(ctx->ep, ctx->buf, ctx->size, fi_mr_desc(ctx->mr), 
-			(void *)(uintptr_t)PINGPONG_SEND_WCID);
+		     0, (void *)(uintptr_t)PINGPONG_SEND_WCID);
 	if (rc) {
 		FI_ERR_LOG("fi_send", rc);
 		return 1;

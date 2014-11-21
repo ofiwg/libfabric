@@ -111,10 +111,8 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = dst_addr ?
-		fi_send(ep, buf_ptr, (size_t) size, fi_mr_desc(mr), NULL) :
-		fi_sendto(ep, buf_ptr, (size_t) size, fi_mr_desc(mr),
-				client_addr, NULL);
+	ret = fi_send(ep, buf_ptr, (size_t) size, fi_mr_desc(mr),
+			client_addr, NULL);
 	if (ret)
 		printf("fi_send %d (%s)\n", ret, fi_strerror(-ret));
 
@@ -134,7 +132,7 @@ static int recv_xfer(int size)
 		}
 	} while (!ret);
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), buf);
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
 		printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
 
@@ -294,7 +292,7 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), buf);
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret) {
 		printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
 	}
@@ -453,7 +451,7 @@ static int server_connect(void)
 		goto err;
 	}
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), buf);
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret != 0) {
 		printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
 		goto err;

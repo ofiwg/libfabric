@@ -115,10 +115,10 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_tsendto(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, 
+	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
 			tag_data, &fi_ctx_send);
 	if (ret)
-		FI_PRINTERR("fi_tsendto", ret);
+		FI_PRINTERR("fi_tsend", ret);
 
 	return ret;
 }
@@ -141,10 +141,10 @@ static int recv_xfer(int size)
 	} while (!ret);
 
 	/* Posting recv for next send. Hence tag_data + 1 */
-	ret = fi_trecvfrom(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr, 
+	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
 			tag_data + 1, 0, &fi_ctx_recv);
 	if (ret)
-		FI_PRINTERR("fi_trecvfrom", ret);
+		FI_PRINTERR("fi_trecv", ret);
 
 	return ret;
 }
@@ -153,10 +153,10 @@ static int send_msg(int size)
 {
 	int ret;
 
-	ret = fi_tsendto(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, 
+	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
 			tag_control, &fi_ctx_send);
 	if (ret) {
-		FI_PRINTERR("fi_tsendto", ret);
+		FI_PRINTERR("fi_tsend", ret);
 		return ret;
 	}
 
@@ -169,8 +169,8 @@ static int recv_msg(int size)
 {
 	int ret;
 
-	ret = fi_trecv(ep, buf, size, fi_mr_desc(mr), tag_control, 0, 
-			&fi_ctx_recv);
+	ret = fi_trecv(ep, buf, size, fi_mr_desc(mr), tag_control, 0,
+			0, &fi_ctx_recv);
 	if (ret) {
 		FI_PRINTERR("fi_trecv", ret);
 		return ret;
@@ -479,10 +479,10 @@ static int init_av(void)
 	}
 
 	/* Post first recv */
-	ret = fi_trecvfrom(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr, 
+	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
 			tag_data, 0, &fi_ctx_recv);
 	if (ret)
-		FI_PRINTERR("fi_recvfrom", ret);
+		FI_PRINTERR("fi_trecv", ret);
 
 	return ret;
 }
