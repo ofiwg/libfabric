@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
  *
- * This software is available to you under the BSD license
+ * This software is available to you under the OpenIB.org BSD license
  * below:
  *
  *     Redistribution and use in source and binary forms, with or
@@ -36,22 +36,23 @@
 #include <unistd.h>
 
 #include <rdma/fabric.h>
-#include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
+#include <rdma/fi_rma.h>
 #include <rdma/fi_cm.h>
-#include <rdma/fi_tagged.h>
+#include <rdma/fi_errno.h>
 #include <shared.h>
 
+static uint64_t op_type = FI_REMOTE_WRITE;
 static int custom;
 static int size_option;
 static int iterations = 1000;
 static int transfer_size = 1000;
 static int max_credits = 128;
-static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
+struct fi_rma_iov local, remote;
 static int machr, g_argc;
 static char **g_argv;
 
@@ -72,95 +73,36 @@ static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
 struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
+struct fi_context fi_ctx_write;
+struct fi_context fi_ctx_read;
 struct fi_context fi_ctx_av;
 
-static uint64_t tag_data = 0;
-static uint64_t tag_control = 0x12345678;
-
-int wait_for_completion_tagged(struct fid_cq *cq, int num_completions)
+void usage(char *name)
 {
-	int ret;
-	struct fi_cq_tagged_entry comp;
-
-	while (num_completions > 0) {
-		ret = fi_cq_read(cq, &comp, 1);
-		if (ret > 0) {
-			num_completions--;
-		} else if (ret < 0) {
-			FI_PRINTERR("fi_cq_read", ret);
-			return ret;
-		}
-	}
-	return 0;
-}
-
-static int send_xfer(int size)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	while (!credits) {
-		ret = fi_cq_read(scq, &comp, 1);
-		if (ret > 0) {
-			goto post;
-		} else if (ret < 0) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(scq, "scq");
-			} else {
-				FI_PRINTERR("fi_cq_read: scq", ret);
-			}
-			return ret;
-		}
-	}
-
-	credits--;
-post:
-	ret = fi_tsendto(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, 
-			tag_data, &fi_ctx_send);
-	if (ret)
-		FI_PRINTERR("fi_tsendto", ret);
-
-	return ret;
-}
-
-static int recv_xfer(int size)
-{
-	struct fi_cq_tagged_entry comp;
-	int ret;
-
-	do {
-		ret = fi_cq_read(rcq, &comp, 1);
-		if (ret < 0) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(rcq, "rcq");
-			} else {
-				FI_PRINTERR("fi_cq_read: rcq", ret);
-			}
-			return ret;
-		}
-	} while (!ret);
-
-	/* Posting recv for next send. Hence tag_data + 1 */
-	ret = fi_trecvfrom(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr, 
-			tag_data + 1, 0, &fi_ctx_recv);
-	if (ret)
-		FI_PRINTERR("fi_trecvfrom", ret);
-
-	return ret;
+	fprintf(stderr, "usage: %s\n", name);
+	fprintf(stderr, "\t[-d destination_address]\n");
+	fprintf(stderr, "\t[-n domain_name]\n");
+	fprintf(stderr, "\t[-p port_number]\n");
+	fprintf(stderr, "\t[-s source_address]\n");
+	fprintf(stderr, "\t[-I iterations]\n");
+	fprintf(stderr, "\t[-o read|write] (default: write)\n");
+	fprintf(stderr, "\t[-S transfer_size or 'all']\n");
+	fprintf(stderr, "\t[-m machine readable output]\n");
+	exit(1);
 }
 
 static int send_msg(int size)
 {
 	int ret;
 
-	ret = fi_tsendto(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, 
-			tag_control, &fi_ctx_send);
+	ret = fi_sendto(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, 
+			&fi_ctx_send);
 	if (ret) {
-		FI_PRINTERR("fi_tsendto", ret);
+		FI_PRINTERR("fi_sendto", ret);
 		return ret;
 	}
 
-	ret = wait_for_completion_tagged(scq, 1);
+	ret = wait_for_completion(scq, 1);
 
 	return ret;
 }
@@ -169,37 +111,53 @@ static int recv_msg(int size)
 {
 	int ret;
 
-	ret = fi_trecv(ep, buf, size, fi_mr_desc(mr), tag_control, 0, 
-			&fi_ctx_recv);
+	ret = fi_recv(ep, buf, size, fi_mr_desc(mr), &fi_ctx_recv);
 	if (ret) {
-		FI_PRINTERR("fi_trecv", ret);
+		FI_PRINTERR("fi_recv", ret);
 		return ret;
 	}
 
-	ret = wait_for_completion_tagged(rcq, 1);
+	ret = wait_for_completion(rcq, 1);
 
 	return ret;
+}
+
+static int read_data(size_t size)
+{
+	int ret;
+
+	ret = fi_readfrom(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 
+		       remote.addr, remote.key, &fi_ctx_read);
+	if (ret){
+		FI_PRINTERR("fi_readfrom", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int write_data(size_t size)
+{
+	int ret;
+
+	ret = fi_writeto(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 
+		       remote.addr, remote.key, &fi_ctx_write);
+	if (ret){
+		FI_PRINTERR("fi_writeto", ret);
+		return ret;
+	}
+	return 0;
 }
 
 static int sync_test(void)
 {
 	int ret;
 
-	ret = wait_for_completion_tagged(scq, max_credits - credits);
-	if (ret) {
-		return ret;
-	}
-	credits = max_credits;
-
-	ret = dst_addr ? send_xfer(16) : recv_xfer(16);
+	ret = dst_addr ? send_msg(16) : recv_msg(16);
 	if (ret)
 		return ret;
 
-	ret = dst_addr ? recv_xfer(16) : send_xfer(16);
-
-	tag_data++;
-
-	return ret;
+	return dst_addr ? recv_msg(16) : send_msg(16);
 }
 
 static int run_test(void)
@@ -208,21 +166,20 @@ static int run_test(void)
 
 	ret = sync_test();
 	if (ret)
-		goto out;
+		return ret;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < iterations; i++) {
-		ret = dst_addr ? send_xfer(transfer_size) :
-				 recv_xfer(transfer_size);
+		if (op_type == FI_REMOTE_WRITE) {
+			ret = write_data(transfer_size);
+		} else {
+			ret = read_data(transfer_size); 
+		}
 		if (ret)
-			goto out;
-
-		ret = dst_addr ? recv_xfer(transfer_size) :
-				 send_xfer(transfer_size);
+			return ret;
+		ret = wait_for_completion(scq, 1);
 		if (ret)
-			goto out;
-
-		tag_data++;
+			return ret;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
@@ -231,10 +188,7 @@ static int run_test(void)
 	else
 		show_perf(test_name, transfer_size, iterations, &start, &end, 2);
 
-	ret = 0;
-
-out:
-	return ret;
+	return 0;
 }
 
 static void free_ep_res(void)
@@ -253,7 +207,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	int ret;
 
 	buffer_size = !custom ? test_size[TEST_CNT - 1].size : transfer_size;
-	buf = malloc(buffer_size);
+	buf = malloc(MAX(buffer_size, sizeof(uint64_t)));
 	if (!buf) {
 		perror("malloc");
 		return -1;
@@ -274,8 +228,9 @@ static int alloc_ep_res(struct fi_info *fi)
 		FI_PRINTERR("fi_cq_open: rcq", ret);
 		goto err2;
 	}
-
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	
+	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)), 
+			op_type, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FI_PRINTERR("fi_mr_reg", ret);
 		goto err3;
@@ -365,7 +320,6 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	/* We use provider MR attributes and direct address (no offsets) for RMA calls */
 	if (!(fi->mode & FI_PROV_MR_ATTR))
 		fi->mode |= FI_PROV_MR_ATTR;
 
@@ -478,13 +432,27 @@ static int init_av(void)
 		}
 	}
 
-	/* Post first recv */
-	ret = fi_trecvfrom(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr, 
-			tag_data, 0, &fi_ctx_recv);
-	if (ret)
-		FI_PRINTERR("fi_recvfrom", ret);
-
 	return ret;
+}
+
+static int exchange_addr_key(void)
+{
+	local.addr = (uint64_t)buf;
+	local.key = fi_mr_key(mr);
+
+	if (dst_addr) {
+		*(struct fi_rma_iov *)buf = local;
+		send_msg(sizeof local);
+		recv_msg(sizeof remote);
+		remote = *(struct fi_rma_iov *)buf;
+	} else {
+		recv_msg(sizeof remote);
+		remote = *(struct fi_rma_iov *)buf;
+		*(struct fi_rma_iov *)buf = local;
+		send_msg(sizeof local);
+	}
+
+	return 0;
 }
 
 static int run(void)
@@ -499,23 +467,24 @@ static int run(void)
 	if (ret)
 		goto out;
 
+	ret = exchange_addr_key();
+	if (ret)
+		goto out;
+
 	if (!custom) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > size_option)
 				continue;
-			init_test(test_size[i].size, test_name, &transfer_size, 
-					&iterations);
-			run_test();
+			init_test(test_size[i].size, test_name, &transfer_size, &iterations);
+			ret = run_test();
+			if(ret)
+				goto out;
 		}
 	} else {
 		ret = run_test();
 	}
 
-	ret = wait_for_completion_tagged(scq, max_credits - credits);
-	if (ret) {
-		goto out;
-	}
-	credits = max_credits;
+	sync_test();
 
 out:
 	fi_close(&ep->fid);
@@ -527,9 +496,9 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:I:S:m")) != -1) {
+	while ((op = getopt(argc, argv, "d:n:p:s:I:o:S:m")) != -1) {
 		switch (op) {
 		case 'd':
 			dst_addr = optarg;
@@ -547,6 +516,14 @@ int main(int argc, char **argv)
 			custom = 1;
 			iterations = atoi(optarg);
 			break;
+		case 'o':
+			if (!strcmp(optarg, "read"))
+				op_type = FI_REMOTE_READ;
+			else if (!strcmp(optarg, "write"))
+				op_type = FI_REMOTE_WRITE;
+			else
+				usage(argv[0]);
+			break;
 		case 'S':
 			if (!strncasecmp("all", optarg, 3)) {
 				size_option = 1;
@@ -561,25 +538,16 @@ int main(int argc, char **argv)
 			g_argv = argv;
 			break;
 		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-d destination_address]\n");
-			printf("\t[-n domain_name]\n");
-			printf("\t[-p port_number]\n");
-			printf("\t[-s source_address]\n");
-			printf("\t[-I iterations]\n");
-			printf("\t[-S transfer_size or 'all']\n");
-			printf("\t[-m machine readable output]\n");
-			exit(1);
+			usage(argv[0]);
 		}
 	}
 
 	hints.domain_attr = &domain_hints;
 	hints.ep_attr = &ep_hints;
 	hints.ep_type = FI_EP_RDM;
-	hints.caps = FI_MSG | FI_TAGGED;
-	hints.mode = FI_CONTEXT;
+	hints.caps = FI_MSG | FI_RMA;
+	hints.mode = FI_CONTEXT | FI_PROV_MR_ATTR;
 	hints.addr_format = FI_ADDR_UNSPEC;
 
-	ret = run();
-	return ret;
+	return run();
 }
