@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2014\-11\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2014\-11\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -11,6 +11,11 @@ Allocate or close an endpoint.
 .B fi_ep_bind
 Associate an endpoint with an event queue, completion queue, address
 vector, or memory region
+.RS
+.RE
+.TP
+.B fi_scalable_ep_bind
+Associate a scalable endpoint with an address vector
 .RS
 .RE
 .TP
@@ -79,6 +84,8 @@ int\ fi_srx_context(struct\ fid_domain\ *domain,
 int\ fi_close(struct\ fid\ *ep);
 
 int\ fi_ep_bind(struct\ fid_ep\ *ep,\ struct\ fid\ *fid,\ uint64_t\ flags);
+
+int\ fi_scalable_ep_bind(struct\ fid_sep\ *sep,\ struct\ fid\ *fid,\ uint64_t\ flags);
 
 int\ fi_enable(struct\ fid_ep\ *ep);
 
@@ -256,6 +263,17 @@ successful RMA write or atomic operation is initiated from a remote
 endpoint that targets the given endpoint.
 .PP
 Connectionless endpoints must be bound to a single address vector.
+.SS fi_scalable_ep_bind
+.PP
+fi_scalable_ep_bind is used to associate a scalable endpoint with an
+address vector.
+See section on SCALABLE ENDPOINTS.
+A scalable endpoint has a single transport level address and can support
+multiple transmit and receive contexts.
+The transmit and receive contexts share the transport-level address.
+Address vectors that are bound to scalable endpoints are implicitly
+bound to any transmit or receive contexts created using the scalable
+endpoint.
 .SS fi_enable
 .PP
 This call transitions the endpoint into an enabled state.
