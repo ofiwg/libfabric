@@ -16,6 +16,9 @@ fi_ep_bind
 :   Associate an endpoint with an event queue, completion queue, address
     vector, or memory region
 
+fi_scalable_ep_bind
+:   Associate a scalable endpoint with an address vector
+
 fi_enable
 :   Transitions an endpoint into an active state.
 
@@ -69,6 +72,8 @@ int fi_srx_context(struct fid_domain *domain,
 int fi_close(struct fid *ep);
 
 int fi_ep_bind(struct fid_ep *ep, struct fid *fid, uint64_t flags);
+
+int fi_scalable_ep_bind(struct fid_sep *sep, struct fid *fid, uint64_t flags);
 
 int fi_enable(struct fid_ep *ep);
 
@@ -258,6 +263,16 @@ binding an endpoint to a counter, the following flags may be specified.
   the given endpoint.
 
 Connectionless endpoints must be bound to a single address vector.
+
+## fi_scalable_ep_bind
+
+fi_scalable_ep_bind is used to associate a scalable endpoint with an
+address vector. See section on SCALABLE ENDPOINTS.  A scalable
+endpoint has a single transport level address and can support multiple
+transmit and receive contexts. The transmit and receive contexts share
+the transport-level address. Address vectors that are bound to
+scalable endpoints are implicitly bound to any transmit or receive
+contexts created using the scalable endpoint.
 
 ## fi_enable
 

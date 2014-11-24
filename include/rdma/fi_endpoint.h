@@ -71,10 +71,10 @@ struct fi_ops_ep {
 			void *optval, size_t *optlen);
 	int	(*setopt)(fid_t fid, int level, int optname,
 			const void *optval, size_t optlen);
-	int	(*tx_ctx)(struct fid_ep *sep, int index,
+	int	(*tx_ctx)(struct fid_sep *sep, int index,
 			struct fi_tx_ctx_attr *attr, struct fid_ep **tx_ep,
 			void *context);
-	int	(*rx_ctx)(struct fid_ep *sep, int index,
+	int	(*rx_ctx)(struct fid_sep *sep, int index,
 			struct fi_rx_ctx_attr *attr, struct fid_ep **rx_ep,
 			void *context);
 };
@@ -176,6 +176,11 @@ static inline int fi_ep_bind(struct fid_ep *ep, struct fid *bfid, uint64_t flags
 	return ep->fid.ops->bind(&ep->fid, bfid, flags);
 }
 
+static inline int fi_scalable_ep_bind(struct fid_sep *sep, struct fid *bfid, uint64_t flags)
+{
+	return sep->fid.ops->bind(&sep->fid, bfid, flags);
+}
+
 static inline int fi_enable(struct fid_ep *ep)
 {
 	return ep->ops->enable(ep);
@@ -204,17 +209,17 @@ fi_getopt(fid_t fid, int level, int optname,
 }
 
 static inline int
-fi_tx_context(struct fid_ep *ep, int index, struct fi_tx_ctx_attr *attr,
+fi_tx_context(struct fid_sep *sep, int index, struct fi_tx_ctx_attr *attr,
 	      struct fid_ep **tx_ep, void *context)
 {
-	return ep->ops->tx_ctx(ep, index, attr, tx_ep, context);
+	return sep->ops->tx_ctx(sep, index, attr, tx_ep, context);
 }
 
 static inline int
-fi_rx_context(struct fid_ep *ep, int index, struct fi_rx_ctx_attr *attr,
+fi_rx_context(struct fid_sep *sep, int index, struct fi_rx_ctx_attr *attr,
 	      struct fid_ep **rx_ep, void *context)
 {
-	return ep->ops->rx_ctx(ep, index, attr, rx_ep, context);
+	return sep->ops->rx_ctx(sep, index, attr, rx_ep, context);
 }
 
 static inline int
