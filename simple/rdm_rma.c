@@ -95,10 +95,10 @@ static int send_msg(int size)
 {
 	int ret;
 
-	ret = fi_sendto(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, 
+	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
 			&fi_ctx_send);
 	if (ret) {
-		FI_PRINTERR("fi_sendto", ret);
+		FI_PRINTERR("fi_send", ret);
 		return ret;
 	}
 
@@ -111,7 +111,7 @@ static int recv_msg(int size)
 {
 	int ret;
 
-	ret = fi_recv(ep, buf, size, fi_mr_desc(mr), &fi_ctx_recv);
+	ret = fi_recv(ep, buf, size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret) {
 		FI_PRINTERR("fi_recv", ret);
 		return ret;
@@ -126,8 +126,8 @@ static int read_data(size_t size)
 {
 	int ret;
 
-	ret = fi_readfrom(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 
-		       remote.addr, remote.key, &fi_ctx_read);
+	ret = fi_read(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 
+		      remote.addr, remote.key, &fi_ctx_read);
 	if (ret){
 		FI_PRINTERR("fi_readfrom", ret);
 		return ret;
@@ -140,7 +140,7 @@ static int write_data(size_t size)
 {
 	int ret;
 
-	ret = fi_writeto(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 
+	ret = fi_write(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 
 		       remote.addr, remote.key, &fi_ctx_write);
 	if (ret){
 		FI_PRINTERR("fi_writeto", ret);

@@ -105,7 +105,7 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), NULL);
+	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), 0, NULL);
 	if (ret)
 		printf("fi_send %d (%s)\n", ret, fi_strerror(-ret));
 
@@ -129,7 +129,7 @@ static int recv_xfer(int size)
 		}
 	} while (!ret);
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), buf);
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
 		printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
 
@@ -141,7 +141,7 @@ static int read_data(size_t size)
 	int ret;
 
 	ret = fi_read(ep, buf, size, fi_mr_desc(mr), 
-		       remote.addr, remote.key, NULL);
+		      0, remote.addr, remote.key, NULL);
 	if (ret) {
 		fprintf(stderr, "fi_read %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
@@ -155,7 +155,7 @@ static int write_data(size_t size)
 	int ret;
 
 	ret = fi_write(ep, buf, size, fi_mr_desc(mr),  
-		       remote.addr, remote.key, NULL);
+		       0, remote.addr, remote.key, NULL);
 	if (ret) {
 		fprintf(stderr, "fi_write %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
@@ -319,7 +319,7 @@ static int bind_ep_res(void)
 	if (ret)
 		return ret;
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), buf);
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
 		printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
 
