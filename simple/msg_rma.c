@@ -205,9 +205,9 @@ static int run_test(void)
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	if (machr)
-		show_perf_mr(transfer_size, iterations, &start, &end, 2, g_argc, g_argv);
+		show_perf_mr(transfer_size, iterations, &start, &end, 1, g_argc, g_argv);
 	else
-		show_perf(test_name, transfer_size, iterations, &start, &end, 2);
+		show_perf(test_name, transfer_size, iterations, &start, &end, 1);
 
 	return 0;
 }
