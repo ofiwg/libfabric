@@ -9,17 +9,14 @@ tagline: Libfabric Programmer's Manual
 
 fi_atomic - Remote atomic functions
 
-fi_atomic / fi_atomicv  
-fi_atomicto / fi_atomicmsg
+fi_atomic / fi_atomicv / fi_atomicmsg / fi_inject_atomic
 : Initiates an atomic operation to remote memory
 
-fi_fetch_atomic / fi_fetch_atomicv  
-fi_fetch_atomicto / fi_fetch_atomicmsg
+fi_fetch_atomic / fi_fetch_atomicv / fi_fetch_atomicmsg
 : Initiates an atomic operation to remote memory, retrieving the initial
   value.
 
-fi_compare_atomic / fi_compare_atomicv  
-fi_compare_atomicto / fi_compare_atomicmsg
+fi_compare_atomic / fi_compare_atomicv / fi_compare_atomicmsg
 : Initiates an atomic compare-operation to remote memory, retrieving
   the initial value.
 
@@ -32,43 +29,33 @@ fi_atomic_valid / fi_fetch_atomic_valid / fi_compare_atomic_valid
 #include <rdma/fi_atomic.h>
 
 ssize_t fi_atomic(struct fid_ep *ep, const void *buf,
-	size_t count, void *desc, uint64_t addr, uint64_t key,
+	size_t count, void *desc, fi_addr_t dest_addr,
+	uint64_t addr, uint64_t key,
 	enum fi_datatype datatype, enum fi_op op, void *context);
 
 ssize_t fi_atomicv(struct fid_ep *ep, const struct fi_ioc *iov,
-	void **desc, size_t count, uint64_t addr, uint64_t key,
-	enum fi_datatype datatype, enum fi_op op, void *context);
-
-ssize_t fi_atomicto(struct fid_ep *ep, const void *buf, size_t count,
-	void *desc, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+	void **desc, size_t count, fi_addr_t dest_addr,
+	uint64_t addr, uint64_t key,
 	enum fi_datatype datatype, enum fi_op op, void *context);
 
 ssize_t fi_atomicmsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	uint64_t flags);
 
 ssize_t fi_inject_atomic(struct fid_ep *ep, const void *buf,
-	size_t count, uint64_t addr, uint64_t key,
+	size_t count, fi_addr_t dest_addr,
+	uint64_t addr, uint64_t key,
 	enum fi_datatype datatype, enum fi_op op);
-
-ssize_t fi_inject_atomicto(struct fid_ep *ep, const void *buf,
-	size_t count, fi_addr_t dest_addr, uint64_t addr,
-	uint64_t key, enum fi_datatype datatype, enum fi_op op);
 
 ssize_t fi_fetch_atomic(struct fid_ep *ep, const void *buf,
 	size_t count, void *desc, void *result, void *result_desc,
-	uint64_t addr, uint64_t key, enum fi_datatype datatype,
-	enum fi_op op, void *context);
+	fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+	enum fi_datatype datatype, enum fi_op op, void *context);
 
 ssize_t fi_fetch_atomicv(struct fid_ep *ep, const struct fi_ioc *iov,
 	void **desc, size_t count, struct fi_ioc *resultv,
-	void **result_desc, size_t result_count, uint64_t addr,
-	uint64_t key, enum fi_datatype datatype, enum fi_op op,
-	void *context);
-
-ssize_t fi_fetch_atomicto(struct fid_ep *ep, const void *buf,
-	size_t count, void *desc, void *result, void *result_desc,
-	fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-	enum fi_datatype datatype, enum fi_op op, void *context);
+	void **result_desc, size_t result_count, fi_addr_t dest_addr,
+	uint64_t addr, uint64_t key, enum fi_datatype datatype,
+	enum fi_op op, void *context);
 
 ssize_t fi_fetch_atomicmsg(struct fid_ep *ep,
 	const struct fi_msg_atomic *msg, struct fi_ioc *resultv,
@@ -77,21 +64,15 @@ ssize_t fi_fetch_atomicmsg(struct fid_ep *ep,
 ssize_t fi_compare_atomic(struct fid_ep *ep, const void *buf,
 	size_t count, void *desc, const void *compare,
 	void *compare_desc, void *result, void *result_desc,
-	uint64_t addr, uint64_t key, enum fi_datatype datatype,
-	enum fi_op op, void *context);
+	fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+	enum fi_datatype datatype, enum fi_op op, void *context);
 
 size_t fi_compare_atomicv(struct fid_ep *ep, const struct fi_ioc *iov,
        void **desc, size_t count, const struct fi_ioc *comparev,
        void **compare_desc, size_t compare_count, struct fi_ioc *resultv,
-       void **result_desc, size_t result_count, uint64_t addr,
-       uint64_t key, enum fi_datatype datatype, enum fi_op op,
-       void *context);
-
-ssize_t fi_compare_atomicto(struct fid_ep *ep, const void *buf,
-	size_t count, void *desc, const void *compare,
-	void *compare_desc, void *result, void *result_desc,
-	fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-	enum fi_datatype datatype, enum fi_op op, void *context);
+       void **result_desc, size_t result_count, fi_addr_t dest_addr,
+       uint64_t addr, uint64_t key, enum fi_datatype datatype,
+       enum fi_op op, void *context);
 
 ssize_t fi_compare_atomicmsg(struct fid_ep *ep,
 	const struct fi_msg_atomic *msg, const struct fi_ioc *comparev,
@@ -146,7 +127,8 @@ int fi_compare_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
   buffer, and local result buffer, respectively.
 
 *dest_addr*
-: Destination address for connectionless atomic operations
+: Destination address for connectionless atomic operations.  Ignored for
+  connected endpoints.
 
 *msg*
 : Message descriptor for atomic operations
@@ -357,7 +339,7 @@ addr[i] = (buf[i] & compare[i]) | (addr[i] & ~compare[i])
 
 ## Base Atomic Functions
 
-The base atomic functions -- fi_atomic, fi_atomicv, fi_atomicto,
+The base atomic functions -- fi_atomic, fi_atomicv,
 fi_atomicmsg -- are used to transmit data to a remote node, where the
 specified atomic operation is performed against the target data.  The
 result of a base atomic function is stored at the remote memory
@@ -366,8 +348,8 @@ and type of parameters that they accept as input.  Otherwise, they
 perform the same general function.
 
 The call fi_atomic transfers the data contained in the user-specified
-data buffer to a remote node.  The local endpoint must be connected to
-a remote endpoint or destination before fi_atomic is called.  Unless
+data buffer to a remote node.  For unconnected endpoints, the destination
+endpoint is specified through the dest_addr parameter.  Unless
 the endpoint has been configured differently, the data buffer passed
 into fi_atomic must not be touched by the application until the
 fi_atomic call completes asynchronously.  The target buffer of a base
@@ -378,9 +360,6 @@ The fi_atomicv call adds support for a scatter-gather list to
 fi_atomic.  The fi_atomicv transfers the set of data buffers
 referenced by the ioc parameter to the remote node for processing.
 
-The fi_atomicto function is equivalent to fi_atomic for unconnected
-endpoints.
-
 The fi_inject_atomic call is an optimized version of fi_atomic.  The
 fi_inject_atomic function behaves as if the FI_INJECT transfer flag
 were set, and FI_COMPLETION were not.  That is, the data buffer is
@@ -389,9 +368,6 @@ fi_inject_atomic, and no completion event will be generated for this
 atomic.  The completion event will be suppressed even if the endpoint
 has not been configured with FI_COMPLETION.  See the flags discussion
 below for more details.
-
-The fi_inject_atomicto is equivalent to fi_inject_atomic for
-unconnected endpoints.
 
 The fi_atomicmsg call supports atomic functions over both connected
 and unconnected endpoints, with the ability to control the atomic
@@ -422,7 +398,7 @@ struct fi_rma_ioc {
 ## Fetch-Atomic Functions
 
 The fetch atomic functions -- fi_fetch_atomic, fi_fetch_atomicv,
-fi_fetch_atomicto, and fi_fetch atomicmsg -- behave similar to the
+and fi_fetch atomicmsg -- behave similar to the
 equivalent base atomic function.  The difference between the fetch and
 base atomic calls are the fetch atomic routines return the initial
 value that was stored at the target to the user.  The initial value is
@@ -437,7 +413,7 @@ and FI_ATOMIC_WRITE.
 ## Compare-Atomic Functions
 
 The compare atomic functions -- fi_compare_atomic, fi_compare_atomicv,
-fi_compare_atomicto, and fi_compare atomicmsg -- are used for
+and fi_compare atomicmsg -- are used for
 operations that require comparing the target data against a value
 before performing a swap operation.  The compare atomic functions
 support: FI_CSWAP, FI_CSWAP_NE, FI_CSWAP_LE, FI_CSWAP_LT, FI_CSWAP_GE,

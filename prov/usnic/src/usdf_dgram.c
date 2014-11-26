@@ -64,7 +64,7 @@
 
 ssize_t
 usdf_dgram_recv(struct fid_ep *fep, void *buf, size_t len,
-		void *desc, void *context)
+		void *desc, fi_addr_t src_addr, void *context)
 {
 	struct usdf_ep *ep;
 	struct usd_qp_impl *qp;
@@ -94,7 +94,7 @@ usdf_dgram_recv(struct fid_ep *fep, void *buf, size_t len,
 
 ssize_t
 usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
-                 size_t count, void *context)
+                 size_t count, fi_addr_t src_addr, void *context)
 {
 	struct usdf_ep *ep;
 	struct usd_recv_desc rxd;
@@ -122,15 +122,8 @@ usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 	return usd_post_recv(ep->ep_qp, &rxd);
 }
 
-ssize_t
-usdf_dgram_recvfrom(struct fid_ep *fep, void *buf, size_t len, void *desc,
-		    fi_addr_t src_addr, void *context)
-{
-	return -FI_ENOSYS;
-}
-
 static inline ssize_t
-_usdf_dgram_sendto(struct usdf_ep *ep, struct usd_dest *dest, 
+_usdf_dgram_send(struct usdf_ep *ep, struct usd_dest *dest, 
 		const void *buf, size_t len,  void *context)
 {
 	if (len <= USD_SEND_MAX_COPY - sizeof(struct usd_udp_hdr)) {
@@ -143,38 +136,27 @@ _usdf_dgram_sendto(struct usdf_ep *ep, struct usd_dest *dest,
 }
 
 ssize_t
-usdf_dgram_sendto(struct fid_ep *fep, const void *buf, size_t len, void *desc,
-		  fi_addr_t dest_addr, void *context)
+usdf_dgram_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
+		fi_addr_t dest_addr, void *context)
 {
 	struct usdf_ep *ep;
 	struct usd_dest *dest;
-	int ret;
 
 	ep = ep_ftou(fep);
 
-	dest = (struct usd_dest *)(uintptr_t)dest_addr;
-	return _usdf_dgram_sendto(ep, dest, buf, len, context);
-
-	return ret;
+	dest = (struct usd_dest *)(uintptr_t) dest_addr;
+	return _usdf_dgram_send(ep, dest, buf, len, context);
 }
 
 ssize_t
-usdf_dgram_send(struct fid_ep *fep, const void *buf, size_t len,
+usdf_dgram_conn_send(struct fid_ep *fep, const void *buf, size_t len,
 		void *desc, void *context)
 {
 	struct usdf_ep *ep;
-	struct usd_dest *dest;
-	int ret;
 
 	ep = ep_ftou(fep);
-	dest = ep->ep_dest;
-	if (dest == NULL) {
-		return -FI_ENOTCONN;
-	}
 
-	return _usdf_dgram_sendto(ep, dest, buf, len, context);
-
-	return ret;
+	return _usdf_dgram_send(ep, ep->ep_dest, buf, len, context);
 }
 
 ssize_t
@@ -204,21 +186,6 @@ usdf_dgram_inject(struct fid_ep *ep, const void *buf, size_t len)
 }
 
 ssize_t
-usdf_dgram_injectto(struct fid_ep *ep, const void *buf, size_t len,
-		    fi_addr_t dest_addr)
-{
-	return -FI_ENOSYS;
-}
-
-ssize_t
-usdf_dgram_senddatato(struct fid_ep *ep, const void *buf, size_t len,
-		      void *desc, uint64_t data, fi_addr_t dest_addr,
-		      void *context)
-{
-	return -FI_ENOSYS;
-}
-
-ssize_t
 usdf_dgram_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	return -FI_ENOSYS;
@@ -229,7 +196,7 @@ usdf_dgram_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
  */
 ssize_t
 usdf_dgram_prefix_recv(struct fid_ep *fep, void *buf, size_t len,
-		void *desc, void *context)
+		void *desc, fi_addr_t src_addr, void *context)
 {
 	struct usdf_ep *ep;
 	struct usd_qp_impl *qp;
@@ -254,7 +221,7 @@ usdf_dgram_prefix_recv(struct fid_ep *fep, void *buf, size_t len,
 
 ssize_t
 usdf_dgram_prefix_recvv(struct fid_ep *fep, const struct iovec *iov,
-		void **desc, size_t count, void *context)
+		void **desc, size_t count, fi_addr_t src_addr, void *context)
 {
 	struct usdf_ep *ep;
 	struct usd_recv_desc rxd;
@@ -283,7 +250,7 @@ usdf_dgram_prefix_recvv(struct fid_ep *fep, const struct iovec *iov,
 }
 
 ssize_t
-usdf_dgram_prefix_sendto(struct fid_ep *fep, const void *buf, size_t len,
+usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
         void *desc, fi_addr_t dest_addr, void *context)
 {
     struct usdf_ep *ep;
