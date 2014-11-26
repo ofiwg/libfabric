@@ -233,7 +233,6 @@ usd_ib_cmd_create_cq(
     struct usnic_create_cq_resp resp;
     struct ibv_create_cq *icp;
     struct ibv_create_cq_resp *irp;
-    struct usnic_ib_create_cq_cmd *ucp;
     int n;
 
     memset(&cmd, 0, sizeof(cmd));
@@ -249,12 +248,6 @@ usd_ib_cmd_create_cq(
     icp->cqe = cq->ucq_num_entries;
     icp->comp_channel = -1;
     icp->comp_vector = 0;
-
-    ucp = &cmd.usnic_cmd;
-    if (cq->ucq_cq_group != USD_CQ_NO_GROUP) {
-        ucp->cq_group_id = cq->ucq_cq_group->cqg_id;
-        ucp->num_qps_in_group = cq->ucq_cq_group->cqg_num_qp;
-    }
 
     /* Issue command to IB driver */
     n = write(dev->ud_ib_dev_fd, &cmd, sizeof(cmd));

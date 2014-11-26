@@ -367,8 +367,7 @@ usdf_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq->cq_domain = container_of(domain, struct usdf_domain, dom_fid);
 
-	ret = usd_create_cq(cq->cq_domain->dom_dev, attr->size, USD_CQ_NO_GROUP,
-				-1, &cq->cq_cq);
+	ret = usd_create_cq(cq->cq_domain->dom_dev, attr->size, -1, &cq->cq_cq);
 	if (ret != 0) {
 		goto fail;
 	}
