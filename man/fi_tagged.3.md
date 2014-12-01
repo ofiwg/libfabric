@@ -240,7 +240,7 @@ fi_endpoint).  The following list of flags are usable with fi_trecvmsg
 and/or fi_tsendmsg.
 
 *FI_REMOTE_CQ_DATA*
-: Applies to fi_tsendmsg and fi_tsenddatato.  Indicates
+: Applies to fi_tsendmsg and fi_tsenddata.  Indicates
   that remote CQ data is available and should be sent as part of the
   request.  See fi_getinfo for additional details on
   FI_REMOTE_CQ_DATA.
@@ -304,7 +304,7 @@ src_addr, and src_addrlen parameters.
 *-FI_EAGAIN*
 : Indicates that the underlying provider currently lacks the resources
   needed to initiate the requested operation.  This may be the result
-  of insufficient internal buffering, in the case of FI_SEND_BUFFERED,
+  of insufficient internal buffering, in the case of FI_INJECT,
   or processing queues are full.  The operation may be retried after
   additional provider resources become available, usually through the
   completion of currently outstanding operations.
