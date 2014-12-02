@@ -185,8 +185,8 @@ parameters and need not meet these requirements).
   capability must support the corresponding data transfer interface.
 * Endpoints must support operations to send and receive data for any
   data transfer operations that they support.
-* Connectionless endpoints must support all relevant 'to/from' data
-  transfer routines. (sendto / recvfrom / writeto / readfrom / etc.)
+* Connectionless endpoints must support all relevant data
+  transfer routines. (send / recv / write / read / etc.)
 * Connectionless endpoints must support the CM interfaces for getname,
   getpeer, and connect.
 * Connectionless endpoints that support multicast operations must
