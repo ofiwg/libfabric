@@ -1,4 +1,4 @@
-.TH fi_rma 3 "2014\-11\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_rma 3 "2014\-12\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_rma - Remote memory access operations
@@ -241,7 +241,7 @@ Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 \f[I]-FI_EAGAIN\f[] : Indicates that the underlying provider currently
 lacks the resources needed to initiate the requested operation.
 This may be the result of insufficient internal buffering, in the case
-of FI_SEND_BUFFERED, or processing queues are full.
+of FI_INJECT, or processing queues are full.
 The operation may be retried after additional provider resources become
 available, usually through the completion of currently outstanding
 operations.

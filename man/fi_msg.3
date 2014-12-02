@@ -1,4 +1,4 @@
-.TH fi_msg 3 "2014\-11\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_msg 3 "2014\-12\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_msg - Message data transfer operations
@@ -181,8 +181,7 @@ fi_endpoint).
 The following list of flags are usable with fi_recvmsg and/or
 fi_sendmsg.
 .PP
-\f[I]FI_REMOTE_CQ_DATA\f[] : Applies to fi_sendmsg, fi_senddata, and
-fi_senddatato.
+\f[I]FI_REMOTE_CQ_DATA\f[] : Applies to fi_sendmsg and fi_senddata.
 Indicates that remote CQ data is available and should be sent as part of
 the request.
 See fi_getinfo for additional details on FI_REMOTE_CQ_DATA.
@@ -235,7 +234,7 @@ Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 \f[I]-FI_EAGAIN\f[] : Indicates that the underlying provider currently
 lacks the resources needed to initiate the requested operation.
 This may be the result of insufficient internal buffering, in the case
-of FI_SEND_BUFFERED, or processing queues are full.
+of FI_INJECT, or processing queues are full.
 The operation may be retried after additional provider resources become
 available, usually through the completion of currently outstanding
 operations.
