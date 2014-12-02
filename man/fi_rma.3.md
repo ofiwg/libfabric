@@ -263,7 +263,7 @@ errno is returned. Fabric errno values are defined in
 *-FI_EAGAIN*
 : Indicates that the underlying provider currently lacks the resources
   needed to initiate the requested operation.  This may be the result
-  of insufficient internal buffering, in the case of FI_SEND_BUFFERED,
+  of insufficient internal buffering, in the case of FI_INJECT,
   or processing queues are full.  The operation may be retried after
   additional provider resources become available, usually through the
   completion of currently outstanding operations.
