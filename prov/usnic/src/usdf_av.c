@@ -58,6 +58,7 @@
 #include "libnl_utils.h"
 #include "usd.h"
 #include "usd_queue.h"
+#include "usd_dest.h"
 
 #include "usdf.h"
 #include "usdf_av.h"
