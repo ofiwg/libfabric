@@ -472,7 +472,7 @@ static int client_connect(void)
 		printf("Unexpected CM event %d fid %p (ep %p)\n",
 			event, entry.fid, ep);
 		ret = -FI_EOTHER;
-		goto err1;
+		goto err5;
 	}
 
 	if (hints.src_addr)

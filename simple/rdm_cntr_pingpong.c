@@ -151,11 +151,11 @@ static int send_msg(int size)
 	return ret;
 }
 
-static int recv_msg(int size) 
+static int recv_msg(void) 
 {
 	int ret;
 
-	ret = fi_recv(ep, buf, size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret) {
 		FI_PRINTERR("fi_recv", ret);
 		return ret;
@@ -411,7 +411,7 @@ static int init_av(void)
 			FI_PRINTERR("fi_getname", ret);
 			return ret;
 		}
-		
+
 		local_addr = malloc(addrlen);
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
 		if (ret) {
@@ -425,37 +425,38 @@ static int init_av(void)
 			return ret;
 		}
 
-		/* Send local addr size */
+		/* Send local addr size and local addr */
 		memcpy(buf, &addrlen, sizeof(size_t));
-		ret = send_msg(sizeof(size_t));
+		memcpy(buf + sizeof(size_t), local_addr, addrlen);
+		ret = send_msg(sizeof(size_t) + addrlen);
 		if (ret)
 			return ret;
-		
-		/* Send local addr */
-		memcpy(buf, local_addr, addrlen);
-		ret = send_msg(addrlen);
+
+		/* Receive ACK from server */
+		ret = recv_msg();
 		if (ret)
 			return ret;
 
 	} else {
-		/* Get the size of remote address */
-		ret = recv_msg(sizeof(size_t));
+		/* Post a recv to get the remote address */
+		ret = recv_msg();
 		if (ret)
 			return ret;
-		memcpy(&addrlen, buf, sizeof(size_t));
 
-		/* Get remote address */
+		memcpy(&addrlen, buf, sizeof(size_t));
 		remote_addr = malloc(addrlen);
-		ret = recv_msg(addrlen);
-		if (ret)
-			return ret;
-		memcpy(remote_addr, buf, addrlen);
+		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
 		if (ret) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
+
+		/* Send ACK */
+		ret = send_msg(16);
+		if (ret)
+			return ret;
 	}
 
 	/* Post first recv */

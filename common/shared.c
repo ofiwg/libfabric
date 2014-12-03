@@ -172,7 +172,11 @@ int wait_for_completion(struct fid_cq *cq, int num_completions)
 		if (ret > 0) {
 			num_completions--;
 		} else if (ret < 0) {
-			FI_PRINTERR("fi_cq_read", ret);
+			if (ret == -FI_EAVAIL) {
+				cq_readerr(cq, "cq");
+			} else {
+				FI_PRINTERR("fi_cq_read", ret);
+			}
 			return ret;
 		}
 	}
