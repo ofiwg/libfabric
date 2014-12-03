@@ -94,6 +94,7 @@ struct fi_ibv_cq {
 	struct ibv_cq		*cq;
 	size_t			entry_size;
 	uint64_t		flags;
+	enum fi_cq_wait_cond	wait_cond;
 	struct ibv_wc		wc;
 };
 
@@ -1792,7 +1793,8 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	struct fi_ibv_cq *_cq;
 
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
-	threshold = MIN((ssize_t) cond, count);
+	threshold = (_cq->wait_cond == FI_CQ_COND_THRESHOLD) ?
+		MIN((ssize_t) cond, count) : 1;
 
 	for (cur = 0; cur < threshold; ) {
 		ret = _cq->cq_fid.ops->read(cq, buf, count - cur);
@@ -2036,6 +2038,7 @@ fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	}
 
 	_cq->flags |= attr->flags;
+	_cq->wait_cond = attr->wait_cond;
 	_cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	_cq->cq_fid.fid.context = context;
 	_cq->cq_fid.fid.ops = &fi_ibv_cq_fi_ops;
