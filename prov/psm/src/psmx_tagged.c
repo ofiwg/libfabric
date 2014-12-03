@@ -397,7 +397,6 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 {
 	struct psmx_fid_ep *ep_priv;
 	struct psmx_fid_av *av;
-	int send_flag = 0;
 	psm_epaddr_t psm_epaddr;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag;
@@ -482,7 +481,7 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 		}
 	}
 
-	err = psm_mq_isend(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
+	err = psm_mq_isend(ep_priv->domain->psm_mq, psm_epaddr, 0,
 				psm_tag, buf, len, (void*)fi_context, &psm_req);
 
 	if (err != PSM_OK)
