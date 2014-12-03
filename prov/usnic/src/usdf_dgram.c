@@ -61,6 +61,7 @@
 #include "usd.h"
 #include "usd_post.h"
 #include "usdf.h"
+#include "usdf_dgram.h"
 
 ssize_t
 usdf_dgram_recv(struct fid_ep *fep, void *buf, size_t len,
@@ -150,7 +151,7 @@ usdf_dgram_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 
 ssize_t
 usdf_dgram_conn_send(struct fid_ep *fep, const void *buf, size_t len,
-		void *desc, void *context)
+		     void *desc, fi_addr_t dest_addr, void *context)
 {
 	struct usdf_ep *ep;
 
@@ -161,14 +162,15 @@ usdf_dgram_conn_send(struct fid_ep *fep, const void *buf, size_t len,
 
 ssize_t
 usdf_dgram_senddata(struct fid_ep *ep, const void *buf, size_t len,
-		    void *desc, uint64_t data, void *context)
+		    void *desc, uint64_t data, fi_addr_t dest_addr,
+		    void *context)
 {
 	return -FI_ENOSYS;
 }
 
 ssize_t
 usdf_dgram_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-                 size_t count, void *context)
+		 size_t count, fi_addr_t dest_addr, void *context)
 {
 	return -FI_ENOSYS;
 }
@@ -180,7 +182,8 @@ usdf_dgram_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 }
 
 ssize_t
-usdf_dgram_inject(struct fid_ep *ep, const void *buf, size_t len)
+usdf_dgram_inject(struct fid_ep *ep, const void *buf, size_t len,
+		  fi_addr_t dest_addr)
 {
 	return -FI_ENOSYS;
 }
