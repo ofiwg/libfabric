@@ -133,8 +133,7 @@ static int pp_listen_ctx(struct pingpong_context *ctx)
 {
 	int rc = 0;
 
-	/* Create listener endpoint */
-	rc = fi_pendpoint(ctx->fabric, ctx->prov, &ctx->lep, NULL);
+	rc = fi_passive_ep(ctx->fabric, ctx->prov, &ctx->lep, NULL);
 	if (rc) {
 		fprintf(stderr, "Unable to open listener endpoint\n");
 		return 1;

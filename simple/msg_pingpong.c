@@ -298,9 +298,9 @@ static int server_listen(void)
 		goto err0;
 	}
 
-	ret = fi_pendpoint(fab, fi, &pep, NULL);
+	ret = fi_passive_ep(fab, fi, &pep, NULL);
 	if (ret) {
-		printf("fi_pendpoint %s\n", fi_strerror(-ret));
+		printf("fi_passive_ep %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 
