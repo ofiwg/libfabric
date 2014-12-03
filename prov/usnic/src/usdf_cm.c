@@ -59,6 +59,8 @@
 #include "usnic_direct.h"
 #include "usdf.h"
 #include "usdf_dgram.h"
+#include "usdf_cm.h"
+#include "usdf_msg.h"
 
 
 static struct fi_ops_msg usdf_dgram_conn_ops = {

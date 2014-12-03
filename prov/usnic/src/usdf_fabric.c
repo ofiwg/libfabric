@@ -394,7 +394,7 @@ fail:
 }
 
 static int
-usdf_get_devinfo()
+usdf_get_devinfo(void)
 {
 	struct usdf_usnic_info *dp;
 	struct usdf_dev_entry *dep;
@@ -436,7 +436,7 @@ fail:
 	return ret;
 }
 
-int
+static int
 usdf_get_distance(
     struct usd_device_attrs *dap,
     uint32_t daddr_be,
@@ -659,7 +659,7 @@ static struct fi_ops_fabric usdf_ops_fabric = {
 	.eq_open = usdf_eq_open,
 };
 
-int
+static int
 usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 	       void *context)
 {
