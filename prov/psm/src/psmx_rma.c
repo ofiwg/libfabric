@@ -265,7 +265,6 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			if (req->ep->write_cntr)
 				psmx_cntr_inc(req->ep->write_cntr);
 
-			req->ep->pending_writes--;
 			free(req);
 		}
 		break;
@@ -302,7 +301,6 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			if (req->ep->read_cntr)
 				psmx_cntr_inc(req->ep->read_cntr);
 
-			req->ep->pending_reads--;
 			free(req);
 		}
 		break;
@@ -330,11 +328,9 @@ static ssize_t psmx_rma_self(int am_cmd,
 
 	switch (am_cmd) {
 	case PSMX_AM_REQ_WRITE:
-		ep->pending_writes++;
 		access = FI_REMOTE_WRITE;
 		break;
 	case PSMX_AM_REQ_READ:
-		ep->pending_reads++;
 		access = FI_REMOTE_READ;
 		break;
 	default:
@@ -406,13 +402,11 @@ static ssize_t psmx_rma_self(int am_cmd,
 	case PSMX_AM_REQ_WRITE:
 		if (ep->write_cntr)
 			psmx_cntr_inc(ep->write_cntr);
-		ep->pending_writes--;
 		break;
 
 	case PSMX_AM_REQ_READ:
 		if (ep->read_cntr)
 			psmx_cntr_inc(ep->read_cntr);
-		ep->pending_reads--;
 		break;
 	}
 
@@ -439,10 +433,9 @@ int psmx_am_process_rma(struct psmx_fid_domain *domain, struct psmx_am_request *
 	return psmx_errno(err);
 }
 
-ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
-		       void *desc, fi_addr_t src_addr,
-		       uint64_t addr, uint64_t key, void *context,
-		       uint64_t flags)
+ssize_t _psmx_read(struct fid_ep *ep, void *buf, size_t len,
+		   void *desc, fi_addr_t src_addr,
+		   uint64_t addr, uint64_t key, void *context, uint64_t flags)
 {
 	struct psmx_fid_ep *ep_priv;
 	struct psmx_fid_av *av;
@@ -455,6 +448,11 @@ ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
 	uint64_t psm_tag;
 	psm_mq_req_t psm_req;
 	size_t idx;
+
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	assert(ep_priv->domain);
+	if (ep_priv->connected)
+		src_addr = (fi_addr_t) ep_priv->peer_psm_epaddr;
 
 	if (flags & FI_TRIGGER) {
 		struct psmx_trigger *trigger;
@@ -481,9 +479,6 @@ ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
 		psmx_cntr_add_trigger(trigger->cntr, trigger);
 		return 0;
 	}
-
-	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-	assert(ep_priv->domain);
 
 	if (!buf)
 		return -EINVAL;
@@ -542,7 +537,6 @@ ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
 					PSMX_AM_RMA_HANDLER, args, 5, NULL, 0,
 					PSM_AM_FLAG_NOREPLY, NULL, NULL);
 
-		ep_priv->pending_reads++;
 		return 0;
 	}
 
@@ -569,11 +563,10 @@ ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
 				PSMX_AM_RMA_HANDLER, args, 5, NULL, 0,
 				0, NULL, NULL);
 
-	ep_priv->pending_reads++;
 	return 0;
 }
 
-static ssize_t psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
+static ssize_t psmx_read(struct fid_ep *ep, void *buf, size_t len,
 			 void *desc, fi_addr_t src_addr,
 			 uint64_t addr, uint64_t key, void *context)
 {
@@ -581,8 +574,8 @@ static ssize_t psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	return _psmx_readfrom(ep, buf, len, desc, src_addr, addr,
-			      key, context, ep_priv->flags);
+	return _psmx_read(ep, buf, len, desc, src_addr, addr,
+			  key, context, ep_priv->flags);
 }
 
 static ssize_t psmx_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
@@ -591,41 +584,25 @@ static ssize_t psmx_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
-	return _psmx_readfrom(ep, msg->msg_iov[0].iov_base,
-			      msg->msg_iov[0].iov_len,
-			      msg->desc ? msg->desc[0] : NULL, msg->addr,
-			      msg->rma_iov[0].addr, msg->rma_iov[0].key,
-			      msg->context, flags);
-}
-
-static ssize_t psmx_read(struct fid_ep *ep, void *buf, size_t len,
-		     void *desc, uint64_t addr, uint64_t key,
-		     void *context)
-{
-	struct psmx_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-	assert(ep_priv->domain);
-
-	if (!ep_priv->connected)
-		return -ENOTCONN;
-
-	return psmx_readfrom(ep, buf, len, desc, (fi_addr_t) ep_priv->peer_psm_epaddr,
-			     addr, key, context);
+	return _psmx_read(ep, msg->msg_iov[0].iov_base,
+			  msg->msg_iov[0].iov_len,
+			  msg->desc ? msg->desc[0] : NULL, msg->addr,
+			  msg->rma_iov[0].addr, msg->rma_iov[0].key,
+			  msg->context, flags);
 }
 
 static ssize_t psmx_readv(struct fid_ep *ep, const struct iovec *iov,
-		      void **desc, size_t count, uint64_t addr,
-		      uint64_t key, void *context)
+		      void **desc, size_t count, fi_addr_t src_addr,
+		      uint64_t addr, uint64_t key, void *context)
 {
 	if (!iov || count != 1)
 		return -EINVAL;
 
 	return psmx_read(ep, iov->iov_base, iov->iov_len,
-			 desc ? desc[0] : NULL, addr, key, context);
+			 desc ? desc[0] : NULL, src_addr, addr, key, context);
 }
 
-ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
+ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 		      void *desc, fi_addr_t dest_addr,
 		      uint64_t addr, uint64_t key, void *context,
 		      uint64_t flags, uint64_t data)
@@ -642,6 +619,11 @@ ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag;
 	size_t idx;
+
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+	assert(ep_priv->domain);
+	if (ep_priv->connected)
+		dest_addr = (fi_addr_t) ep_priv->peer_psm_epaddr;
 
 	if (flags & FI_TRIGGER) {
 		struct psmx_trigger *trigger;
@@ -669,9 +651,6 @@ ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 		psmx_cntr_add_trigger(trigger->cntr, trigger);
 		return 0;
 	}
-
-	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-	assert(ep_priv->domain);
 
 	if (!buf)
 		return -EINVAL;
@@ -753,7 +732,6 @@ ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 		psm_mq_isend(ep_priv->domain->psm_mq, (psm_epaddr_t) dest_addr,
 				0, psm_tag, buf, len, (void *)&req->fi_context, &psm_req);
 
-		ep_priv->pending_writes++;
 		return 0;
 	}
 
@@ -787,11 +765,10 @@ ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 				PSMX_AM_RMA_HANDLER, args, nargs,
 				(void *)buf, len, am_flags, NULL, NULL);
 
-	ep_priv->pending_writes++;
 	return 0;
 }
 
-static ssize_t psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 			void *desc, fi_addr_t dest_addr, uint64_t addr,
 			uint64_t key, void *context)
 {
@@ -799,8 +776,8 @@ static ssize_t psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	return _psmx_writeto(ep, buf, len, desc, dest_addr, addr, key, context,
-			     ep_priv->flags, 0);
+	return _psmx_write(ep, buf, len, desc, dest_addr, addr, key, context,
+			   ep_priv->flags, 0);
 }
 
 static ssize_t psmx_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
@@ -809,104 +786,55 @@ static ssize_t psmx_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	if (!msg || msg->iov_count != 1)
 		return -EINVAL;
 
-	return _psmx_writeto(ep, msg->msg_iov[0].iov_base,
-			     msg->msg_iov[0].iov_len,
-			     msg->desc ? msg->desc[0] : NULL, msg->addr,
-			     msg->rma_iov[0].addr, msg->rma_iov[0].key,
-			     msg->context, flags, msg->data);
-}
-
-static ssize_t psmx_write(struct fid_ep *ep, const void *buf, size_t len,
-		      void *desc, uint64_t addr, uint64_t key,
-		      void *context)
-{
-	struct psmx_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-	assert(ep_priv->domain);
-
-	if (!ep_priv->connected)
-		return -ENOTCONN;
-
-	return psmx_writeto(ep, buf, len, desc, (fi_addr_t) ep_priv->peer_psm_epaddr,
-			    addr, key, context);
+	return _psmx_write(ep, msg->msg_iov[0].iov_base,
+			   msg->msg_iov[0].iov_len,
+			   msg->desc ? msg->desc[0] : NULL, msg->addr,
+			   msg->rma_iov[0].addr, msg->rma_iov[0].key,
+			   msg->context, flags, msg->data);
 }
 
 static ssize_t psmx_writev(struct fid_ep *ep, const struct iovec *iov,
-		       void **desc, size_t count, uint64_t addr,
-		       uint64_t key, void *context)
+		       void **desc, size_t count, fi_addr_t dest_addr,
+		       uint64_t addr, uint64_t key, void *context)
 {
 	if (!iov || count != 1)
 		return -EINVAL;
 
 	return psmx_write(ep, iov->iov_base, iov->iov_len,
-			  desc ? desc[0] : NULL, addr, key, context);
+			  desc ? desc[0] : NULL, dest_addr, addr, key, context);
 }
 
-static ssize_t psmx_injectto(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t psmx_inject(struct fid_ep *ep, const void *buf, size_t len,
 			fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	struct psmx_fid_ep *ep_priv;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	return _psmx_writeto(ep, buf, len, NULL, dest_addr, addr, key,
-			     NULL, ep_priv->flags | FI_INJECT, 0);
-}
-
-static ssize_t psmx_inject(struct fid_ep *ep, const void *buf, size_t len,
-			uint64_t addr, uint64_t key)
-{
-	struct psmx_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-	assert(ep_priv->domain);
-
-	if (!ep_priv->connected)
-		return -ENOTCONN;
-
-	return psmx_injectto(ep, buf, len, (fi_addr_t) ep_priv->peer_psm_epaddr, addr, key);
-}
-
-static ssize_t psmx_writedatato(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-				uint64_t data, fi_addr_t dest_addr, uint64_t addr,
-				uint64_t key, void *context)
-{
-	struct psmx_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-
-	return _psmx_writeto(ep, buf, len, desc, dest_addr, addr, key, context,
-			     ep_priv->flags | FI_REMOTE_CQ_DATA, data);
+	return _psmx_write(ep, buf, len, NULL, dest_addr, addr, key,
+			   NULL, ep_priv->flags | FI_INJECT, 0);
 }
 
 static ssize_t psmx_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-			      uint64_t data, uint64_t addr, uint64_t key, void *context)
+			      uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+			      uint64_t key, void *context)
 {
 	struct psmx_fid_ep *ep_priv;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-	assert(ep_priv->domain);
 
-	if (!ep_priv->connected)
-		return -ENOTCONN;
-
-	return psmx_writedatato(ep, buf, len, desc, data, (fi_addr_t) ep_priv->peer_psm_epaddr,
-				addr, key, context);
+	return _psmx_write(ep, buf, len, desc, dest_addr, addr, key, context,
+			   ep_priv->flags | FI_REMOTE_CQ_DATA, data);
 }
 
 struct fi_ops_rma psmx_rma_ops = {
 	.read = psmx_read,
 	.readv = psmx_readv,
-	.readfrom = psmx_readfrom,
 	.readmsg = psmx_readmsg,
 	.write = psmx_write,
 	.writev = psmx_writev,
-	.writeto = psmx_writeto,
 	.writemsg = psmx_writemsg,
 	.inject = psmx_inject,
-	.injectto = psmx_injectto,
 	.writedata = psmx_writedata,
-	.writedatato = psmx_writedatato,
 };
 

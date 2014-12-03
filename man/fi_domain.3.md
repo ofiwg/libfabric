@@ -108,6 +108,7 @@ struct fi_domain_attr {
 	enum fi_progress  data_progress;
 	size_t            mr_key_size;
 	size_t            cq_data_size;
+	size_t            cq_cnt;
 	size_t            ep_cnt;
 	size_t            tx_ctx_cnt;
 	size_t            rx_ctx_cnt;
@@ -236,6 +237,14 @@ specified by this value.
 The number of bytes that the provider supports for remote CQ data.
 See the FI_REMOTE_CQ_DATA flag (fi_getinfo) for the use of remote CQ
 data.
+
+## Completion Queue Count (cq_cnt)
+
+The total number of completion queues supported by the domain, relative
+to any specified or default CQ attributes.  The cq_cnt value may be a
+fixed value of the maximum number of CQs supported by the
+underlying provider, or may be a dynamic value, based on the default
+attributes of an allocated CQ, such as the CQ size and data format.
 
 ## Endpoint Count (ep_cnt)
 

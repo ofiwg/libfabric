@@ -1,4 +1,4 @@
-.TH fi_getinfo 3 "2014-11-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_getinfo 3 "2014\-11\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo - Obtain / free fabric interface information
@@ -130,16 +130,20 @@ below.
 \f[I]src_addrlen - source address length\f[] : Indicates the length of
 the source address (must be specified if \f[I]src_addr\f[] is
 specified).
+This field will be ignored in hints if FI_SOURCE is specified.
 .PP
 \f[I]dest_addrlen - destination address length\f[] : Indicates the
 length of the destination address (must be specified if
 \f[I]dst_addr\f[] is specified).
+This field will be ignored in hints unless FI_SOURCE is specified.
 .PP
 \f[I]src_addr - source address\f[] : If specified, indicates the source
 address.
+This field will be ignored in hints if FI_SOURCE is specified.
 .PP
 \f[I]dest_addr - destination address\f[] : If specified, indicates the
 destination address.
+This field will be ignored in hints unless FI_SOURCE is specified.
 .PP
 \f[I]connreq - connection request\f[] : References a specific connection
 request, otherwise the field must be NULL.
@@ -402,34 +406,6 @@ applications register memory for locally accessed data buffers.
 Data buffers used in send and receive operations and as the source
 buffer for RMA and atomic operations must be registered by the
 application for access domains opened with this capability.
-.PP
-\f[I]FI_WRITE_NONCOHERENT\f[] : Specifies that remote writes, including
-atomic operations, to the underlying fabric domain are not coherent with
-the local processing domain and the application must manually
-synchronize memory accessed by remote RMA.
-Domain-level write coherency indicates that changes to local memory are
-visible to the local process immediately upon completion of a remote
-write operation.
-When this mode is enabled, the NIC or memory subsystem may cache the
-results of remote write or atomic operations in non-coherent memory.
-.PP
-The behavior of a domain with and without FI_WRITE_NONCOHERENT is
-illustrated below.
-.IP
-.nf
-\f[C]
-\ \ Process\ 1\ \ \ \ \ \ \ \ \ \ \ \ Process\ 2
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ Register\ BUF
-\ \ RMA\ write\ X\ to\ BUF
-\ \ Notify\ process\ 2
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ Receive\ notification
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ if\ FI_WRITE_NONCOHERENT
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ Sync\ with\ remote\ writes
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ assert(BUF\ ==\ X)
-\f[]
-.fi
-.PP
-: See the endpoint fi_ep_sync call for handling non-coherent writes.
 .PP
 \f[I]FI_MSG_PREFIX\f[] : Message prefix mode indicates that an
 application will provide buffer space in front of all message send and

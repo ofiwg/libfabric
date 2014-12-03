@@ -526,10 +526,6 @@ struct psmx_fid_ep {
 	struct fi_context	nocomp_recv_context;
 	struct fi_context	sendimm_context;
 	struct fi_context	writeimm_context;
-	uint64_t		pending_sends;
-	uint64_t		pending_writes;
-	uint64_t		pending_reads;
-	uint64_t		pending_atomics;
 	size_t			min_multi_recv;
 };
 
@@ -655,53 +651,53 @@ static inline void psmx_cntr_inc(struct psmx_fid_cntr *cntr)
 		psmx_wait_signal((struct fid_wait *)cntr->wait);
 }
 
-ssize_t _psmx_sendto(struct fid_ep *ep, const void *buf, size_t len,
-		     void *desc, fi_addr_t dest_addr, void *context,
-		     uint64_t flags);
-ssize_t _psmx_recvfrom(struct fid_ep *ep, void *buf, size_t len,
-		       void *desc, fi_addr_t src_addr, void *context,
-		       uint64_t flags);
-ssize_t _psmx_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
-			    void *desc, fi_addr_t dest_addr, uint64_t tag,
-			    void *context, uint64_t flags);
-ssize_t _psmx_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t len,
-			      void *desc, fi_addr_t src_addr, uint64_t tag,
-			      uint64_t ignore, void *context, uint64_t flags);
-ssize_t _psmx_writeto(struct fid_ep *ep, const void *buf, size_t len,
-		      void *desc, fi_addr_t dest_addr,
-		      uint64_t addr, uint64_t key, void *context,
-		      uint64_t flags, uint64_t data);
-ssize_t _psmx_readfrom(struct fid_ep *ep, void *buf, size_t len,
-		       void *desc, fi_addr_t src_addr,
-		       uint64_t addr, uint64_t key, void *context,
-		       uint64_t flags);
-ssize_t _psmx_atomic_writeto(struct fid_ep *ep,
-			     const void *buf,
-			     size_t count, void *desc,
-			     fi_addr_t dest_addr,
-			     uint64_t addr, uint64_t key,
-			     enum fi_datatype datatype,
-			     enum fi_op op, void *context,
-			     uint64_t flags);
-ssize_t _psmx_atomic_readwriteto(struct fid_ep *ep,
-				 const void *buf,
-				 size_t count, void *desc,
-				 void *result, void *result_desc,
-				 fi_addr_t dest_addr,
-				 uint64_t addr, uint64_t key,
-				 enum fi_datatype datatype,
-				 enum fi_op op, void *context,
-				 uint64_t flags);
-ssize_t _psmx_atomic_compwriteto(struct fid_ep *ep,
-				 const void *buf,
-				 size_t count, void *desc,
-				 const void *compare, void *compare_desc,
-				 void *result, void *result_desc,
-				 fi_addr_t dest_addr,
-				 uint64_t addr, uint64_t key,
-				 enum fi_datatype datatype,
-				 enum fi_op op, void *context,
-				 uint64_t flags);
+ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
+		   void *desc, fi_addr_t dest_addr, void *context,
+		   uint64_t flags);
+ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
+		   void *desc, fi_addr_t src_addr, void *context,
+		   uint64_t flags);
+ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
+			  void *desc, fi_addr_t dest_addr, uint64_t tag,
+			  void *context, uint64_t flags);
+ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
+			  void *desc, fi_addr_t src_addr, uint64_t tag,
+			  uint64_t ignore, void *context, uint64_t flags);
+ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
+		    void *desc, fi_addr_t dest_addr,
+		    uint64_t addr, uint64_t key, void *context,
+		    uint64_t flags, uint64_t data);
+ssize_t _psmx_read(struct fid_ep *ep, void *buf, size_t len,
+		   void *desc, fi_addr_t src_addr,
+		   uint64_t addr, uint64_t key, void *context,
+		   uint64_t flags);
+ssize_t _psmx_atomic_write(struct fid_ep *ep,
+			   const void *buf,
+			   size_t count, void *desc,
+			   fi_addr_t dest_addr,
+			   uint64_t addr, uint64_t key,
+			   enum fi_datatype datatype,
+			   enum fi_op op, void *context,
+			   uint64_t flags);
+ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
+				const void *buf,
+				size_t count, void *desc,
+				void *result, void *result_desc,
+				fi_addr_t dest_addr,
+				uint64_t addr, uint64_t key,
+				enum fi_datatype datatype,
+				enum fi_op op, void *context,
+				uint64_t flags);
+ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
+				const void *buf,
+				size_t count, void *desc,
+				const void *compare, void *compare_desc,
+				void *result, void *result_desc,
+				fi_addr_t dest_addr,
+				uint64_t addr, uint64_t key,
+				enum fi_datatype datatype,
+				enum fi_op op, void *context,
+				uint64_t flags);
 
 #ifdef __cplusplus
 }

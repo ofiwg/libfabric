@@ -1,27 +1,18 @@
-.TH fi_msg 3 "2014-11-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_msg 3 "2014\-12\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_msg - Message data transfer operations
+.TP
+.B fi_recv / fi_recvv / fi_recvmsg
+Post a buffer to receive an incoming message
+.RS
+.RE
 .PP
-fi_recv / fi_recvv
+fi_send / fi_sendv / fi_sendmsg
 .PD 0
 .P
 .PD
-fi_recvfrom / fi_recvmsg : Post a buffer to receive an incoming message
-.PP
-fi_send / fi_sendv
-.PD 0
-.P
-.PD
-fi_sendto / fi_sendmsg
-.PD 0
-.P
-.PD
-fi_inject / fi_injectto
-.PD 0
-.P
-.PD
-fi_senddata / fi_senddatato : Initiate an operation to send a message
+fi_inject / fi_senddata : Initiate an operation to send a message
 .SH SYNOPSIS
 .IP
 .nf
@@ -29,38 +20,27 @@ fi_senddata / fi_senddatato : Initiate an operation to send a message
 #include\ <rdma/fi_endpoint.h>
 
 ssize_t\ fi_recv(struct\ fid_ep\ *ep,\ void\ *\ buf,\ size_t\ len,
-\ \ \ \ void\ *desc,\ void\ *context);
+\ \ \ \ void\ *desc,\ fi_addr_t\ src_addr,\ void\ *context);
 
 ssize_t\ fi_recvv(struct\ fid_ep\ *ep,\ const\ struct\ iovec\ *iov,\ void\ *desc,
-\ \ \ \ size_t\ count,\ void\ *context);
-
-ssize_t\ fi_recvfrom(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,
-\ \ \ \ void\ *desc,\ fi_addr_t\ src_addr,\ void\ *context);
+\ \ \ \ size_t\ count,\ fi_addr_t\ src_addr,\ void\ *context);
 
 ssize_t\ fi_recvmsg(struct\ fid_ep\ *ep,\ const\ struct\ fi_msg\ *msg,
 \ \ \ \ uint64_t\ flags);
 
 ssize_t\ fi_send(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,
-\ \ \ \ void\ *desc,\ void\ *context);
+\ \ \ \ void\ *desc,\ fi_addr_t\ dest_addr,\ void\ *context);
 
 ssize_t\ fi_sendv(struct\ fid_ep\ *ep,\ const\ void\ *iov,\ void\ *desc,
-\ \ \ \ size_t\ count,\ void\ *context);
-
-ssize_t\ fi_sendto(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,
-\ \ \ \ void\ *desc,\ fi_addr_t\ dest_addr,\ void\ *context);
+\ \ \ \ size_t\ count,\ fi_addr_t\ dest_addr,\ void\ *context);
 
 ssize_t\ fi_sendmsg(struct\ fid_ep\ *ep,\ const\ struct\ fi_msg\ *msg,
 \ \ \ \ uint64_t\ flags);
 
-ssize_t\ fi_inject(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len);
-
-ssize_t\ fi_injectto(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,
+ssize_t\ fi_inject(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,
 \ \ \ \ fi_addr_t\ dest_addr);
 
 ssize_t\ fi_senddata(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,
-\ \ \ \ void\ *desc,\ uint64_t\ data,\ void\ *context);
-
-ssize_t\ fi_senddatato(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,
 \ \ \ \ void\ *desc,\ uint64_t\ data,\ fi_addr_t\ dest_addr,\ void\ *context);
 \f[]
 .fi
@@ -83,10 +63,12 @@ Valid transfers are from 0 bytes up to the endpoint\[aq]s max_msg_size.
 .PP
 \f[I]data\f[] : Remote CQ data to transfer with the sent message.
 .PP
-\f[I]dest_addr\f[] : Destination address for connectionless transfers
+\f[I]dest_addr\f[] : Destination address for connectionless transfers.
+Ignored for connected endpoints.
 .PP
 \f[I]src_addr\f[] : Source address to receive from for connectionless
-transfers
+transfers.
+Ignored for connected endpoints.
 .PP
 \f[I]msg\f[] : Message descriptor for send and receive operations.
 .PP
@@ -97,17 +79,17 @@ operation.
 operation.
 .SH DESCRIPTION
 .PP
-The send functions -- fi_send, fi_sendv, fi_sendto, fi_sendmsg,
-fi_inject, fi_injectto, fi_senddata, and fi_senddatato -- are used to
-transmit a message from one endpoint to another endpoint.
+The send functions -- fi_send, fi_sendv, fi_sendmsg, fi_inject, and
+fi_senddata -- are used to transmit a message from one endpoint to
+another endpoint.
 The main difference between send functions are the number and type of
 parameters that they accept as input.
 Otherwise, they perform the same general function.
 Messages sent using fi_msg operations are received by a remote endpoint
 into a buffer posted to receive such messages.
 .PP
-The receive functions -- fi_recv, fi_recvv, fi_recvfrom, fi_recvmsg --
-post a data buffer to an endpoint to receive inbound messages.
+The receive functions -- fi_recv, fi_recvv, fi_recvmsg -- post a data
+buffer to an endpoint to receive inbound messages.
 Similar to the send operations, receive operations operate
 asynchronously.
 Users should not touch the posted data buffer(s) until the receive
@@ -129,17 +111,9 @@ passed into fi_send must not be touched by the application until the
 fi_send call completes asynchronously.
 .SS fi_sendv
 .PP
-The fi_sendv call adds support for a scatter-gather list to fi_send
-and/or fi_sendmem.
+The fi_sendv call adds support for a scatter-gather list to fi_send.
 The fi_sendv transfers the set of data buffers referenced by the iov
 parameter to a remote endpoint as a single message.
-The format of iov parameter is specified by the user when the endpoint
-is created.
-See fi_getinfo for more details on iov formats.
-.SS fi_sendto
-.PP
-The fi_sendto function is equivalent to fi_send for unconnected
-endpoints.
 .SS fi_sendmsg
 .PP
 The fi_sendmsg call supports data transfers over both connected and
@@ -170,30 +144,27 @@ send.
 The completion event will be suppressed even if the endpoint has not
 been configured with FI_COMPLETION.
 See the flags discussion below for more details.
-.SS fi_injectto
-.PP
-This call is similar to fi_inject, but for unconnected endpoints.
 .SS fi_senddata
 .PP
 The send data call is similar to fi_send, but allows for the sending of
 remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the transfer.
-.SS fi_senddatato
-.PP
-This call is similar to fi_senddata, but for unconnected endpoints.
 .SS fi_recv
 .PP
 The fi_recv call posts a data buffer to the receive queue of the
 corresponding endpoint.
-Posted receives are matched with inbound sends in the order in which
-they were posted.
+Posted receives are searched in the order in which they were posted in
+order to match sends.
 Message boundaries are maintained.
 The order in which the receives complete is dependent on the endpoint
 type and protocol.
-.SS fi_recvfrom
+For unconnected endpoints, the src_addr parameter can be used to
+indicate that a buffer should be posted to receive incoming data from a
+specific remote endpoint.
+.SS fi_recvv
 .PP
-The fi_recvfrom call is equivalent to fi_recv for unconnected endpoints.
-These calls are used to indicate that a buffer should be posted to
-receive incoming data from a specific remote endpoint.
+The fi_recvv call adds support for a scatter-gather list to fi_recv.
+The fi_recvv posts the set of data buffers referenced by the iov
+parameter to a receive incoming data.
 .SS fi_recvmsg
 .PP
 The fi_recvmsg call supports posting buffers over both connected and
@@ -210,8 +181,7 @@ fi_endpoint).
 The following list of flags are usable with fi_recvmsg and/or
 fi_sendmsg.
 .PP
-\f[I]FI_REMOTE_CQ_DATA\f[] : Applies to fi_sendmsg, fi_senddata, and
-fi_senddatato.
+\f[I]FI_REMOTE_CQ_DATA\f[] : Applies to fi_sendmsg and fi_senddata.
 Indicates that remote CQ data is available and should be sent as part of
 the request.
 See fi_getinfo for additional details on FI_REMOTE_CQ_DATA.
@@ -264,7 +234,7 @@ Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 \f[I]-FI_EAGAIN\f[] : Indicates that the underlying provider currently
 lacks the resources needed to initiate the requested operation.
 This may be the result of insufficient internal buffering, in the case
-of FI_SEND_BUFFERED, or processing queues are full.
+of FI_INJECT, or processing queues are full.
 The operation may be retried after additional provider resources become
 available, usually through the completion of currently outstanding
 operations.

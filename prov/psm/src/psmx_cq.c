@@ -289,7 +289,6 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 
 			switch (PSMX_CTXT_TYPE(fi_context)) {
 			case PSMX_NOCOMP_SEND_CONTEXT:
-				tmp_ep->pending_sends--;
 				tmp_cntr = tmp_ep->send_cntr;
 				break;
 
@@ -298,29 +297,24 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				break;
 
 			case PSMX_NOCOMP_WRITE_CONTEXT:
-				tmp_ep->pending_writes--;
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
 
 			case PSMX_NOCOMP_READ_CONTEXT:
-				tmp_ep->pending_reads--;
 				tmp_cntr = tmp_ep->read_cntr;
 				break;
 
 			case PSMX_INJECT_CONTEXT:
-				tmp_ep->pending_sends--;
 				tmp_cntr = tmp_ep->send_cntr;
 				free(fi_context);
 				break;
 
 			case PSMX_INJECT_WRITE_CONTEXT:
-				tmp_ep->pending_writes--;
 				tmp_cntr = tmp_ep->write_cntr;
 				free(fi_context);
 				break;
 
 			case PSMX_SEND_CONTEXT:
-				tmp_ep->pending_sends--;
 				tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->send_cntr;
 				break;
@@ -337,13 +331,11 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				break;
 
 			case PSMX_READ_CONTEXT:
-				tmp_ep->pending_reads--;
 				tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->read_cntr;
 				break;
 
 			case PSMX_WRITE_CONTEXT:
-				tmp_ep->pending_writes--;
 				tmp_cq = tmp_ep->send_cq;
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
@@ -519,14 +511,11 @@ static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t count)
 }
 
 static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
-			       size_t len, uint64_t flags)
+			       uint64_t flags)
 {
 	struct psmx_fid_cq *cq_priv;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
-
-	if (len < sizeof *buf)
-		return -FI_ETOOSMALL;
 
 	if (cq_priv->pending_error) {
 		memcpy(buf, &cq_priv->pending_error->cqe, sizeof *buf);
@@ -642,7 +631,7 @@ static ssize_t psmx_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 }
 
 static const char *psmx_cq_strerror(struct fid_cq *cq, int prov_errno, const void *prov_data,
-				    void *buf, size_t len)
+				    char *buf, size_t len)
 {
 	return psm_error_get_string(prov_errno);
 }
@@ -691,7 +680,6 @@ static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_cq_close,
 	.bind = fi_no_bind,
-	.sync = fi_no_sync,
 	.control = psmx_cq_control,
 };
 

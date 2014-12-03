@@ -491,7 +491,6 @@ static struct fi_ops usdf_av_fi_ops = {
 	.close = usdf_av_close,
 	.bind = usdf_av_bind,
 	.control = fi_no_control,
-	.sync = fi_no_sync,
 	.ops_open = usdf_av_ops_open,
 };
 

@@ -273,7 +273,6 @@ dummy_man_pages = \
         man/fi_alias.3 \
         man/fi_atomic_valid.3 \
         man/fi_atomicmsg.3 \
-        man/fi_atomicto.3 \
         man/fi_atomicv.3 \
         man/fi_av_bind.3 \
         man/fi_av_insert.3 \
@@ -292,7 +291,6 @@ dummy_man_pages = \
         man/fi_compare_atomic.3 \
         man/fi_compare_atomic_valid.3 \
         man/fi_compare_atomicmsg.3 \
-        man/fi_compare_atomicto.3 \
         man/fi_compare_atomicv.3 \
         man/fi_connect.3 \
         man/fi_cq_open.3 \
@@ -308,7 +306,6 @@ dummy_man_pages = \
         man/fi_dupinfo.3 \
         man/fi_enable.3 \
         man/fi_ep_bind.3 \
-        man/fi_ep_sync.3 \
         man/fi_eq_open.3 \
         man/fi_eq_read.3 \
         man/fi_eq_readerr.3 \
@@ -318,14 +315,13 @@ dummy_man_pages = \
         man/fi_fetch_atomic.3 \
         man/fi_fetch_atomic_valid.3 \
         man/fi_fetch_atomicmsg.3 \
-        man/fi_fetch_atomicto.3 \
         man/fi_fetch_atomicv.3 \
         man/fi_freeinfo.3 \
         man/fi_getname.3 \
         man/fi_getopt.3 \
         man/fi_getpeer.3 \
         man/fi_inject.3 \
-        man/fi_injectto.3 \
+        man/fi_inject_atomic.3 \
         man/fi_join.3 \
         man/fi_leave.3 \
         man/fi_listen.3 \
@@ -341,33 +337,26 @@ dummy_man_pages = \
         man/fi_poll_del.3 \
         man/fi_poll_open.3 \
         man/fi_recv.3 \
-        man/fi_recvfrom.3 \
         man/fi_recvmsg.3 \
         man/fi_recvv.3 \
         man/fi_reject.3 \
         man/fi_rx_addr.3 \
         man/fi_send.3 \
         man/fi_senddata.3 \
-        man/fi_senddatato.3 \
         man/fi_sendmsg.3 \
-        man/fi_sendto.3 \
         man/fi_sendv.3 \
         man/fi_setopt.3 \
         man/fi_shutdown.3 \
         man/fi_strerror.3 \
         man/fi_tinject.3 \
-        man/fi_tinjectto.3 \
         man/fi_tostr.3 \
         man/fi_trecv.3 \
-        man/fi_trecvfrom.3 \
         man/fi_trecvmsg.3 \
         man/fi_trecvv.3 \
         man/fi_tsearch.3 \
         man/fi_tsend.3 \
         man/fi_tsenddata.3 \
-        man/fi_tsenddatato.3 \
         man/fi_tsendmsg.3 \
-        man/fi_tsendto.3 \
         man/fi_tsendv.3 \
         man/fi_wait.3 \
         man/fi_wait_open.3

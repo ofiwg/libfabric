@@ -1,28 +1,18 @@
-.TH fi_tagged 3 "2014-11-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_tagged 3 "2014\-12\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_tagged - Tagged data transfer operations
+.TP
+.B fi_trecv / fi_trecvv / fi_trecvmsg
+Post a buffer to receive an incoming message
+.RS
+.RE
 .PP
-fi_trecv / fi_trecvv
+fi_tsend / fi_tsendv / fi_tsendmsg
 .PD 0
 .P
 .PD
-fi_trecvfrom / fi_trecvmsg : Post a buffer to receive an incoming
-message
-.PP
-fi_tsend / fi_tsendv
-.PD 0
-.P
-.PD
-fi_tsendto / fi_tsendmsg
-.PD 0
-.P
-.PD
-fi_tinject / fi_tinjectto
-.PD 0
-.P
-.PD
-fi_tsenddata / fi_tsenddatato : Initiate an operation to send a message
+fi_tinject / fi_tsenddata : Initiate an operation to send a message
 .TP
 .B fi_tsearch
 Initiate a search operation for a buffered receive matching a given tag
@@ -35,40 +25,29 @@ Initiate a search operation for a buffered receive matching a given tag
 #include\ <rdma/fi_tagged.h>
 
 ssize_t\ fi_trecv(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,\ void\ *desc,
-\ \ \ \ uint64_t\ tag,\ uint64_t\ ignore,\ void\ *context);
+\ \ \ \ fi_addr_t\ src_addr,\ uint64_t\ tag,\ uint64_t\ ignore,\ void\ *context);
 
 ssize_t\ fi_trecvv(struct\ fid_ep\ *ep,\ const\ struct\ iovec\ *iov,\ void\ *desc,
-\ \ \ \ size_t\ count,\ uint64_t\ tag,\ uint4_t\ ignore,\ void\ *context);
-
-ssize_t\ fi_trecvfrom(struct\ fid_ep\ *ep,\ const\ void\ *buf,\ size_t\ len,
-\ \ \ \ void\ *desc,\ fi_addr_t\ src_addr,\ uint64_t\ tag,\ uint64_t\ ignore,
+\ \ \ \ size_t\ count,\ fi_addr_t\ src_addr,\ uint64_t\ tag,\ uint4_t\ ignore,
 \ \ \ \ void\ *context);
 
 ssize_t\ fi_trecvmsg(struct\ fid_ep\ *ep,\ const\ struct\ fi_msg_tagged\ *msg,
 \ \ \ \ uint64_t\ flags);
 
 ssize_t\ fi_tsend(struct\ fid_ep\ *ep,\ const\ void\ *buf,\ size_t\ len,
-\ \ \ \ void\ *desc,\ uint64_t\ tag,\ void\ *context);
+\ \ \ \ void\ *desc,\ fi_addr_t\ dest_addr,\ uint64_t\ tag,\ void\ *context);
 
 ssize_t\ fi_tsendv(struct\ fid_ep\ *ep,\ const\ struct\ iovec\ *iov,
-\ \ \ \ void\ *desc,\ size_t\ count,\ uint64_t\ tag,\ void\ *context);
-
-ssize_t\ fi_tsendto(struct\ fid_ep\ *ep,\ const\ void\ *buf,\ size_t\ len,
-\ \ \ \ void\ *desc,\ fi_addr_t\ dest_addr,\ uint64_t\ tag,\ void\ *context);
+\ \ \ \ void\ *desc,\ size_t\ count,\ fi_addr_t\ dest_addr,\ uint64_t\ tag,
+\ \ \ \ void\ *context);
 
 ssize_t\ fi_tsendmsg(struct\ fid_ep\ *ep,\ const\ struct\ fi_msg_tagged\ *msg,
 \ \ \ \ uint64_t\ flags);
 
 ssize_t\ fi_tinject(struct\ fid_ep\ *ep,\ const\ void\ *buf,\ size_t\ len,
-\ \ \ \ uint64_t\ tag);
-
-ssize_t\ fi_tinjectto(struct\ fid_ep\ *ep,\ const\ void\ *buf,\ size_t\ len,
 \ \ \ \ fi_addr_t\ dest_addr,\ uint64_t\ tag);
 
 ssize_t\ fi_tsenddata(struct\ fid_ep\ *ep,\ const\ void\ *buf,\ size_t\ len,
-\ \ \ \ void\ *desc,\ uint64_t\ data,\ uint64_t\ tag,\ void\ *context);
-
-ssize_t\ fi_tsenddatato(struct\ fid_ep\ *ep,\ const\ void\ *buf,\ size_t\ len,
 \ \ \ \ void\ *desc,\ uint64_t\ data,\ fi_addr_t\ dest_addr,\ uint64_t\ tag,
 \ \ \ \ void\ *context);
 
@@ -99,10 +78,12 @@ operations.
 .PP
 \f[I]data\f[] : Remote CQ data to transfer with the sent data.
 .PP
-\f[I]dest_addr\f[] : Destination address for connectionless transfers
+\f[I]dest_addr\f[] : Destination address for connectionless transfers.
+Ignored for connected endpoints.
 .PP
 \f[I]src_addr\f[] : Source address to receive from for connectionless
-transfers
+transfers.
+Ignored for connected endpoints.
 .PP
 \f[I]msg\f[] : Message descriptor for send and receive operations.
 .PP
@@ -131,15 +112,15 @@ In general, message tags are checked against receive buffers in the
 order in which messages have been posted to the endpoint.
 See the ordering discussion below for more details.
 .PP
-The send functions -- fi_tsend, fi_tsendv, fi_tsendto, fi_tsendmsg,
-fi_tinject, fi_tinjectto, fi_tsenddata, and fi_tsenddatato -- are used
-to transmit a tagged message from one endpoint to another endpoint.
+The send functions -- fi_tsend, fi_tsendv, fi_tsendmsg, fi_tinject, and
+fi_tsenddata -- are used to transmit a tagged message from one endpoint
+to another endpoint.
 The main difference between send functions are the number and type of
 parameters that they accept as input.
 Otherwise, they perform the same general function.
 .PP
-The receive functions -- fi_trecv, fi_trecvv, fi_trecvfrom, fi_recvmsg
--- post a data buffer to an endpoint to receive inbound tagged messages.
+The receive functions -- fi_trecv, fi_trecvv, fi_recvmsg -- post a data
+buffer to an endpoint to receive inbound tagged messages.
 Similar to the send operations, receive operations operate
 asynchronously.
 Users should not touch the posted data buffer(s) until the receive
@@ -164,17 +145,9 @@ passed into fi_tsend must not be touched by the application until the
 fi_tsend call completes asynchronously.
 .SS fi_tsendv
 .PP
-The fi_tsendv call adds support for a scatter-gather list to fi_tsend
-and/or fi_tsendmem.
+The fi_tsendv call adds support for a scatter-gather list to fi_tsend.
 The fi_sendv transfers the set of data buffers referenced by the iov
 parameter to a remote endpoint as a single message.
-The format of iov parameter is specified by the user when the endpoint
-is created.
-See fi_getinfo for more details on iov formats.
-.SS fi_tsendto
-.PP
-The fi_tsendto function is equivalent to fi_tsend for unconnected
-endpoints.
 .SS fi_tsendmsg
 .PP
 The fi_tsendmsg call supports data transfers over both connected and
@@ -207,32 +180,25 @@ send.
 The completion event will be suppressed even if the endpoint has not
 been configured with FI_COMPLETION.
 See the flags discussion below for more details.
-.SS fi_tinjectto
-.PP
-This call is similar to fi_tinject, but for unconnected endpoints.
 .SS fi_tsenddata
 .PP
 The tagged send data call is similar to fi_tsend, but allows for the
 sending of remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the
 transfer.
-.SS fi_tsenddatato
-.PP
-This call is similar to fi_tsenddata, but for unconnected endpoints.
 .SS fi_trecv
 .PP
 The fi_trecv call posts a data buffer to the receive queue of the
 corresponding endpoint.
-Posted receives are matched with inbound sends in the order in which
-they were posted.
+Posted receives are searched in the order in which they were posted in
+order to match sends.
 Message boundaries are maintained.
 The order in which the receives complete is dependent on the endpoint
 type and protocol.
-.SS f_trecvfrom
+.SS fi_trecvv
 .PP
-The fi_trecvfrom call is equivalent to fi_trecv for unconnected
-endpoints.
-It is used to indicate that a buffer should be posted to receive
-incoming data from a specific remote endpoint.
+The fi_trecvv call adds support for a scatter-gather list to fi_trecv.
+The fi_trecvv posts the set of data buffers referenced by the iov
+parameter to a receive incoming data.
 .SS fi_trecvmsg
 .PP
 The fi_trecvmsg call supports posting buffers over both connected and
@@ -267,8 +233,7 @@ fi_endpoint).
 The following list of flags are usable with fi_trecvmsg and/or
 fi_tsendmsg.
 .PP
-\f[I]FI_REMOTE_CQ_DATA\f[] : Applies to fi_tsendmsg, fi_tsenddata, and
-fi_tsenddatato.
+\f[I]FI_REMOTE_CQ_DATA\f[] : Applies to fi_tsendmsg and fi_tsenddata.
 Indicates that remote CQ data is available and should be sent as part of
 the request.
 See fi_getinfo for additional details on FI_REMOTE_CQ_DATA.
@@ -326,7 +291,7 @@ but no matching message was located.
 \f[I]-FI_EAGAIN\f[] : Indicates that the underlying provider currently
 lacks the resources needed to initiate the requested operation.
 This may be the result of insufficient internal buffering, in the case
-of FI_SEND_BUFFERED, or processing queues are full.
+of FI_INJECT, or processing queues are full.
 The operation may be retried after additional provider resources become
 available, usually through the completion of currently outstanding
 operations.
@@ -338,10 +303,13 @@ the user.
 .SH NOTES
 .SS Any source
 .PP
-The function fi_trecvfrom() may be used to receive a message from a
-specific source address.
+The function fi_trecv() may be used to receive a message from a specific
+source address.
 If the user wishes to receive a message from any source on an
-unconnected fabric endpoint the function fi_recv() may be used.
+unconnected fabric endpoint the function fi_recv() may be used, or
+fi_trecv() may be used with the src_addr set to a wildcard address that
+has been inserted into an address vector.
+See fi_av.3 for more details.
 .SS Ordering
 .PP
 The order in which tags are matched is only defined for a pair of
