@@ -122,7 +122,7 @@ usdf_post_insert_request_error(struct usdf_av_insert *insert,
 /*
  * Called by progression thread to look for AV completions on this domain
  */
-void
+static void
 usdf_av_insert_progress(void *v)
 {
 	int ret;
