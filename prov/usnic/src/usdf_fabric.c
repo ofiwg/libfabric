@@ -655,7 +655,7 @@ static struct fi_ops usdf_fi_ops = {
 static struct fi_ops_fabric usdf_ops_fabric = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = usdf_domain_open,
-	.endpoint = usdf_pep_open,
+	.passive_ep = usdf_pep_open,
 	.eq_open = usdf_eq_open,
 };
 

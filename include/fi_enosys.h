@@ -64,13 +64,13 @@ int fi_no_ops_open(struct fid *fid, const char *name,
 static struct fi_ops_fabric X = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = fi_no_domain,
-	.endpoint = fi_no_pendpoint,
+	.endpoint = fi_no_passive_ep,
 	.eq_open = fi_no_eq_open,
 };
 */
 int fi_no_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 		struct fid_domain **dom, void *context);
-int fi_no_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
+int fi_no_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_pep **pep, void *context);
 int fi_no_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		struct fid_eq **eq, void *context);

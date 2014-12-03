@@ -334,7 +334,7 @@ struct fi_ops_fabric {
 	size_t	size;
 	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_domain **dom, void *context);
-	int	(*endpoint)(struct fid_fabric *fabric, struct fi_info *info,
+	int	(*passive_ep)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
 	int	(*eq_open)(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 			struct fid_eq **eq, void *context);

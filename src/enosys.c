@@ -59,7 +59,7 @@ int fi_no_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
 {
 	return -FI_ENOSYS;
 }
-int fi_no_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
+int fi_no_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_pep **pep, void *context)
 {
 	return -FI_ENOSYS;

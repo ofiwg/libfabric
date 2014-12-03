@@ -146,10 +146,10 @@ struct fid_sep {
 #ifndef FABRIC_DIRECT
 
 static inline int
-fi_pendpoint(struct fid_fabric *fabric, struct fi_info *info,
+fi_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	     struct fid_pep **pep, void *context)
 {
-	return fabric->ops->endpoint(fabric, info, pep, context);
+	return fabric->ops->passive_ep(fabric, info, pep, context);
 }
 
 static inline int
