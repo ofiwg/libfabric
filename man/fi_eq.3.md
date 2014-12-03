@@ -260,11 +260,14 @@ struct fi_eq_cm_entry {
   application is responsible for freeing this structure by calling
   fi_freeinfo when it is no longer needed.  The fi_info connreq field
   will reference the connection request associated with this event.
-  For an accepted connection, the connreq must be associated with an
-  endpoint when it is opened.  Typically, this is done by simply
+  To accept a connection, an endpoint must first be created by passing
+  an fi_info structure referencing this connreq field to fi_endpoint().
+  This endpoint is then passed to fi_accept() to complete the acceptance
+  of the connection attempt.
+  Creating the endpoint is most easily accomplished by
   passing the fi_info returned as part of the CM event into
-  fi_endpoint().  If the connection is rejected, the connreq must be
-  passed into the fi_reject call.
+  fi_endpoint().  If the connection is to be rejected, the connreq is
+  passed to fi_reject().
 
   Any application data exchanged as part of the connection request is
   placed beyond the fi_eq_cm_entry structure.  The amount of data

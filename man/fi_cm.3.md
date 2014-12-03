@@ -28,8 +28,7 @@ int fi_connect(struct fid_ep *ep, const void *addr,
 
 int fi_listen(struct fid_pep *pep);
 
-int fi_accept(struct fid_ep *ep, fi_connreq_t connreq,
-    const void *param, size_t paramlen);
+int fi_accept(struct fid_ep *ep, const void *param, size_t paramlen);
 
 int fi_reject(struct fid_pep *pep, fi_connreq_t connreq,
     const void *param, size_t paramlen);
@@ -110,12 +109,15 @@ address as part of the data transfer.
 The fi_accept and fi_reject calls are used on the passive (listening)
 side of a connection to accept or reject a connection request,
 respectively.  To accept a connection, the listening application first
-waits for a connection request event.  After receiving such an event, it
-allocates a new endpoint to accept the connection.  fi_accept is invoked
-with the newly allocated endpoint passed in as the fid parameter.  If
+waits for a connection request event (FI_CONNREQ).
+After receiving such an event, the application
+allocates a new endpoint to accept the connection.  This endpoint must
+be allocated using an fi_info structure referencing the connreq from this
+FI_CONNREQ event.  fi_accept is then invoked
+with the newly allocated endpoint.  If
 the listening application wishes to reject a connection request, it calls
-fi_reject with the listening endpoint passed in as the fid.
-fi_reject takes a reference to the connection request as an input parameter.
+fi_reject with the listening endpoint and
+a reference to the connection request.
 
 A successfully accepted connection request will result in the active
 (connecting) endpoint seeing an FI_CONNECTED event on its associated
@@ -125,6 +127,8 @@ the reason for the failed attempt.
 
 An FI_CONNECTED event will also be generated on the passive side for the
 accepting endpoint once the connection has been properly established.
+The fid of the FI_CONNECTED event will be that of the endpoint passed to
+fi_accept as opposed to the listening passive endpoint.
 Outbound data transfers cannot be initiated on a connection-oriented
 endpoint until an FI_CONNECTED event has been generated.  However, receive
 buffers may be associated with an endpoint anytime.
