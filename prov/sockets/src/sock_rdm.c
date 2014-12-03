@@ -1280,13 +1280,13 @@ int sock_rdm_ep_setopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
-int sock_rdm_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_ctx_attr *attr, 
-		    struct fid_ep **tx_ep, void *context)
+int sock_rdm_ep_tx_ctx(struct fid_sep *sep, int index, struct fi_tx_ctx_attr *attr, 
+		       struct fid_ep **tx_ep, void *context)
 {
 	struct sock_ep *sock_ep;
 	struct sock_tx_ctx *tx_ctx;
 
-	sock_ep = container_of(ep, struct sock_ep, ep.fid);
+	sock_ep = container_of(sep, struct sock_ep, ep.fid);
 	if (index >= sock_ep->ep_attr.tx_ctx_cnt)
 		return -FI_EINVAL;
 
@@ -1313,13 +1313,13 @@ int sock_rdm_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_ctx_attr *attr
 	return 0;
 }
 
-int sock_rdm_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_ctx_attr *attr,
-		    struct fid_ep **rx_ep, void *context)
+int sock_rdm_ep_rx_ctx(struct fid_sep *sep, int index, struct fi_rx_ctx_attr *attr,
+		       struct fid_ep **rx_ep, void *context)
 {
 	struct sock_ep *sock_ep;
 	struct sock_rx_ctx *rx_ctx;
 
-	sock_ep = container_of(ep, struct sock_ep, ep.fid);
+	sock_ep = container_of(sep, struct sock_ep, ep.fid);
 	if (index >= sock_ep->ep_attr.rx_ctx_cnt)
 		return -FI_EINVAL;
 

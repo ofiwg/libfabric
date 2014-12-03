@@ -514,7 +514,7 @@ static int sockd_ep_setopt(fid_t fid, int level, int optname,
 	return -errno;
 }
 
-static int sockd_ep_tx_ctx(struct fid_ep *ep, int index,
+static int sockd_ep_tx_ctx(struct fid_sep *sep, int index,
 		struct fi_tx_ctx_attr *attr, struct fid_ep **tx_ep,
 		void *context)
 {
@@ -523,7 +523,7 @@ static int sockd_ep_tx_ctx(struct fid_ep *ep, int index,
 }
 
 
-static int	sockd_ep_rx_ctx(struct fid_ep *ep, int index,
+static int sockd_ep_rx_ctx(struct fid_sep *sep, int index,
 			struct fi_rx_ctx_attr *attr, struct fid_ep **rx_ep,
 			void *context)
 {
