@@ -85,10 +85,10 @@ datatype or field value.
 : struct fi_info::addr_format field
 
 *FI_TYPE_TX_ATTR*
-: struct fi_tx_ctx_attr
+: struct fi_tx_attr
 
 *FI_TYPE_RX_ATTR*
-: struct fi_rx_ctx_attr
+: struct fi_rx_attr
 
 *FI_TYPE_EP_ATTR*
 : struct fi_ep_attr

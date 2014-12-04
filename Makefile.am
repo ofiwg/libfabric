@@ -321,7 +321,9 @@ dummy_man_pages = \
         man/fi_getopt.3 \
         man/fi_getpeer.3 \
         man/fi_inject.3 \
+        man/fi_injectdata.3 \
         man/fi_inject_atomic.3 \
+        man/fi_inject_writedata.3 \
         man/fi_join.3 \
         man/fi_leave.3 \
         man/fi_listen.3 \
@@ -349,6 +351,7 @@ dummy_man_pages = \
         man/fi_shutdown.3 \
         man/fi_strerror.3 \
         man/fi_tinject.3 \
+        man/fi_tinjectdata.3 \
         man/fi_tostr.3 \
         man/fi_trecv.3 \
         man/fi_trecvmsg.3 \

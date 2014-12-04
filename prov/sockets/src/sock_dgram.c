@@ -271,7 +271,7 @@ static struct fi_info* sockd_dupinfo(struct fi_info *hints)
 		fi->dest_addrlen = 0;
 	}
 
-	fi->tx_attr = calloc(1, sizeof (struct fi_tx_ctx_attr));
+	fi->tx_attr = calloc(1, sizeof (struct fi_tx_attr));
 	if (!fi->tx_attr) {
 		goto err7;
 	}
@@ -515,7 +515,7 @@ static int sockd_ep_setopt(fid_t fid, int level, int optname,
 }
 
 static int sockd_ep_tx_ctx(struct fid_sep *sep, int index,
-		struct fi_tx_ctx_attr *attr, struct fid_ep **tx_ep,
+		struct fi_tx_attr *attr, struct fid_ep **tx_ep,
 		void *context)
 {
 	errno = FI_ENOSYS;
@@ -524,7 +524,7 @@ static int sockd_ep_tx_ctx(struct fid_sep *sep, int index,
 
 
 static int sockd_ep_rx_ctx(struct fid_sep *sep, int index,
-			struct fi_rx_ctx_attr *attr, struct fid_ep **rx_ep,
+			struct fi_rx_attr *attr, struct fid_ep **rx_ep,
 			void *context)
 {
 	errno = FI_ENOSYS;
@@ -754,6 +754,7 @@ static struct fi_ops_msg sockd_ops_msg = {
 	.sendmsg 	= sockd_msg_sendmsg,
 	.inject 	= sockd_msg_inject,
 	.senddata 	= sockd_msg_senddata,
+	.injectdata	= fi_no_msg_injectdata,
 };
 
 static inline int _sock_ep_dgram_progress(struct sock_ep *ep, struct sock_cq *cq)
