@@ -193,9 +193,9 @@ static int server_listen(void)
 		goto err0;
 	}
 
-	ret = fi_pendpoint(fab, fi, &pep, NULL);
+	ret = fi_passive_ep(fab, fi, &pep, NULL);
 	if (ret) {
-		printf("fi_pendpoint %s\n", fi_strerror(-ret));
+		printf("fi_passive_ep %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 
@@ -421,7 +421,6 @@ static int run_test()
 			return ret;
 		}
 
-		// TODO sread will not work right now due to a libfabric bug. Check back later.
 		fprintf(stdout, "Waiting for immediate data from client\n");
 		ret = fi_cq_sread(rcq, &comp, 1, NULL, -1);
 		if (ret < 0) {
@@ -434,13 +433,15 @@ static int run_test()
 		}
 
 		/* Verify completion data */
-		if (comp.data == remote_cq_data)
-			fprintf(stdout, "remote_cq_data: success\n");
-		else
-			fprintf(stdout, "remote_cq_data: failure\n");
+		if (comp.flags & FI_REMOTE_CQ_DATA) {
+			if (comp.data == remote_cq_data)
+				fprintf(stdout, "remote_cq_data: success\n");
+			else
+				fprintf(stdout, "remote_cq_data: failure\n");
 
-		fprintf(stdout, "Expected data:0x%lx, Received data:0x%lx\n",
+			fprintf(stdout, "Expected data:0x%lx, Received data:0x%lx\n",
 				remote_cq_data, comp.data);
+		}
 	}
 	
 	return 0;
