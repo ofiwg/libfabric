@@ -334,7 +334,7 @@ dummy_man_pages = \
         man/fi_mr_regattr.3 \
         man/fi_mr_regv.3 \
         man/fi_open.3 \
-        man/fi_pendpoint.3 \
+        man/fi_passive_ep.3 \
         man/fi_poll_add.3 \
         man/fi_poll_del.3 \
         man/fi_poll_open.3 \
