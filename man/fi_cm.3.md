@@ -81,9 +81,8 @@ int fi_leave(struct fid_ep *ep, void *addr, fi_addr_t fi_addr,
 
 # DESCRIPTION
 
-Connection management functions are used to connect an endpoint to a
-remote address (in the case of a connectionless endpoint) or a peer
-endpoint (for connection-oriented endpoints).
+Connection management functions are used to connect an 
+connection-oriented endpoint to a peer endpoint.
 
 ## fi_listen
 
@@ -99,11 +98,8 @@ through the fi_control call.
 
 ## fi_connect
 
-For a connection-oriented endpoint, fi_connect initiates a connection
-request to the destination address.  For a connectionless endpoint,
-fi_connect specifies the destination address that future data transfer
-operations will target.  This avoids the need for the user to specify the
-address as part of the data transfer.
+The fi_connect call initiates a connection request on a
+connection-oriented endpoint to the destination address.
 
 ## fi_accept / fi_reject
 
