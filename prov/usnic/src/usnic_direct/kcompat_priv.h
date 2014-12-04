@@ -45,6 +45,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 struct pci_dev;
 typedef uint64_t dma_addr_t;
@@ -80,9 +81,16 @@ static inline void pci_free_consistent( __attribute__ ((unused))
     (void) usd_free_mr(vaddr);
 }
 
-#define usd_err(args...) fprintf(stderr, args)
+static inline void usd_err(const char *format, ...)
+{
+        va_list ap;
+        va_start(ap, format);
+        vfprintf(stderr, format, ap);
+        va_end(ap);
+}
+
 #define pr_err usd_err
-#define pr_warning(args...)
+#define pr_warning usd_err
 
 #ifndef wmb
 #define wmb() asm volatile("" ::: "memory")

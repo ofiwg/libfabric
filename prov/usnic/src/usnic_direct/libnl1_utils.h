@@ -77,8 +77,8 @@ typedef struct nl_handle NL_HANDLE;
 		int msg_cnt = cb_arg.msg_cnt; \
 		err = nl_recvmsgs_default(nlh); \
 		if (err < 0) { \
-			usnic_err("Failed to receive netlink reply message, error %s\n", \
-				NL_GETERROR(err)); \
+			usnic_err(("Failed to receive netlink reply message, error %s\n", \
+				NL_GETERROR(err)));             \
 			goto out; \
 		} \
 		if (msg_cnt == cb_arg.msg_cnt) {\

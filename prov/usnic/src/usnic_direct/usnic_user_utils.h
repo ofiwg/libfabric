@@ -46,6 +46,7 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <sys/param.h>
+#include <stdarg.h>
 
 #ifndef __CHAR_BIT__
 #define __CHAR_BIT__ 8
@@ -63,54 +64,60 @@
 #define USNIC_LOG_LVL			USNIC_LOG_LVL_NONE
 #endif
 
-#define usnic_printf(fd, args...) \
-	do { \
-		fprintf(fd, "usnic:%-22s:%5d: ", __func__, __LINE__); \
-		fprintf(fd, args); \
-	} while (0)
+static inline void usnic_stderr(const char *format, ...)
+{
+        va_list ap;
+        va_start(ap, format);
+        vfprintf(stderr, format, ap);
+        va_end(ap);
+}
 
 #if USNIC_LOG_LVL >= USNIC_LOG_LVL_ERR
-#define usnic_err(args...) usnic_printf(stderr, args)
+#define usnic_err(args)                                                \
+	do {                                                           \
+		usnic_stderr("usnic:%-22s:%5d: ", __func__, __LINE__); \
+		usnic_stderr args;                                     \
+	} while (0)
 #else
-#define usnic_err(args...) {}
+#define usnic_err(args) {}
 #endif
 
 #if USNIC_LOG_LVL >= USNIC_LOG_LVL_ERR
-#define usnic_strerror(err, args, ...) \
-	do { \
-		char err_buf[50]; \
+#define usnic_strerror(err, args)                                       \
+	do {                                                            \
+		char err_buf[50];                                       \
 		char *estr = strerror_r(err, err_buf, sizeof(err_buf)); \
-		fprintf(stderr, "usnic:%-22s:%5d: ", __func__, __LINE__); \
-		fprintf(stderr, args " error: %s\n", ## __VA_ARGS__, \
-					estr); \
+		usnic_stderr("usnic:%-22s:%5d: ", __func__, __LINE__);  \
+		usnic_stderr args;                                      \
+		usnic_stderr(" error: %s\n", estr);                     \
 	} while (0)
 #else
-#define usnic_strerror(err, args, ...)
+#define usnic_strerror(err, args)
 #endif
 
 #if USNIC_LOG_LVL >= USNIC_LOG_LVL_ERR
-#define usnic_perr(args, ...) \
-	do { \
-		char err_buf[50]; \
+#define usnic_perr(args)                                                \
+	do {                                                            \
+		char err_buf[50];                                       \
 		char *estr = strerror_r(errno, err_buf, sizeof(err_buf)); \
-		fprintf(stderr, "usnic:%-22s:%5d: ", __func__, __LINE__); \
-		fprintf(stderr, args " error: %s\n", ## __VA_ARGS__, \
-					estr); \
+		usnic_stderr("usnic:%-22s:%5d: ", __func__, __LINE__);  \
+		usnic_stderr args;                                      \
+		usnic_stderr(" error: %s\n", estr);                     \
 	} while (0)
 #else
-#define usnic_perr(args, ...) {}
+#define usnic_perr(args)
 #endif
 
 #if USNIC_LOG_LVL >= USNIC_LOG_LVL_INFO
-#define usnic_info(args...) usnic_printf(stdout, args)
+#define usnic_info(args) printf args
 #else
-#define usnic_info(args...) {}
+#define usnic_info(args)
 #endif
 
 #if USNIC_LOG_LVL >= USNIC_LOG_LVL_VERBOSE
-#define usnic_verbose(args...) usnic_printf(stdout, args)
+#define usnic_verbose(args) printf args
 #else
-#define usnic_verbose(args...) {}
+#define usnic_verbose(args)
 #endif
 
 #endif /* USNIC_USER_UTILS_H */
