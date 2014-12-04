@@ -82,7 +82,7 @@ struct usnic_transport_spec {
 		struct {
 			uint32_t	sock_fd;
 		} udp;
-	};
+	} trans;
 };
 
 #define USNIC_IB_CREATE_QP_VERSION 1

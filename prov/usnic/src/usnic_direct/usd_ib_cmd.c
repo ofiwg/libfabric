@@ -351,7 +351,7 @@ usd_ib_cmd_create_qp(
     if (qfilt->qf_type == USD_FTY_UDP ||
             qfilt->qf_type == USD_FTY_UDP_SOCK) {
         ucp->spec.trans_type = USNIC_TRANSPORT_IPV4_UDP;
-        ucp->spec.udp.sock_fd = qfilt->qf_filter.qf_udp.u_sockfd;
+        ucp->spec.trans.udp.sock_fd = qfilt->qf_filter.qf_udp.u_sockfd;
     } else {
         ret = -EINVAL;
         goto out;
