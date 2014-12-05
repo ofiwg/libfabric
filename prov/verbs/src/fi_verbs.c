@@ -141,7 +141,6 @@ static int fi_ibv_check_hints(struct fi_info *hints)
 	switch (hints->ep_type) {
 	case FI_EP_UNSPEC:
 	case FI_EP_MSG:
-	case FI_EP_DGRAM:
 		break;
 	default:
 		return -FI_ENODATA;
