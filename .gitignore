@@ -27,3 +27,5 @@ config/libtool.m4
 config/ltmain.sh
 config/lt*.m4
 config/missing
+
+include/fi_static_providers.h

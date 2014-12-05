@@ -773,13 +773,13 @@ static struct fi_provider usdf_ops = {
 	.fabric = usdf_fabric_open,
 };
 
-static void __attribute__((constructor))
-usdf_ini(void)
+void __attribute__((constructor))
+usnic_ini(void)
 {
 	(void) fi_register(&usdf_ops);
 }
 
-static void __attribute__((destructor)) 
-usdf_fini(void)
+void __attribute__((destructor))
+usnic_fini(void)
 {
 }

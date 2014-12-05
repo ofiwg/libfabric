@@ -41,9 +41,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <pthread.h>
 
 #include <rdma/fi_errno.h>
 #include "fi.h"
+#include "fi_static_providers.h"
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
@@ -114,10 +116,17 @@ static int lib_filter(const struct dirent *entry)
 
 static void __attribute__((constructor)) fi_ini(void)
 {
+	static int first = 1;
 	struct dirent **liblist;
 	int n, want_warn = 0;
 	char *lib, *extdir = getenv("FI_EXTDIR");
 	void *dlhandle;
+
+	/* Check to ensure that we were not already invoked (see
+	   run_static_constructors()) */
+	if (!first)
+		return;
+	first = 0;
 
 	if (extdir) {
 		/* Warn if user specified $FI_EXTDIR, but there's a
@@ -164,6 +173,36 @@ static void __attribute__((destructor)) fi_fini(void)
 {
 }
 
+static void run_static_constructors(void)
+{
+	static volatile int first = 1;
+	static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+	int i;
+
+	/* Ensure no caller passes this point until all constructors
+	   have been invoked */
+	pthread_mutex_lock(&lock);
+	if (!first) {
+		pthread_mutex_unlock(&lock);
+		return;
+	}
+	first = 0;
+
+	/* Run constructors for providers located here in libfabric
+	   (i.e., static providers that were discovered at configure
+	   time) */
+	for (i = 0; fi_prov_constructors[i] != NULL; ++i)
+		fi_prov_constructors[i]();
+
+	/* Run constructors for providers that are located outside of
+	   libfabric and need to be dlopened.  Invoked manually for
+	   the case where libfabric is static (i.e., libfabric.a) and
+	   did not have fi_ini() invoked via constructor. */
+	fi_ini();
+
+	pthread_mutex_unlock(&lock);
+}
+
 static struct fi_prov *fi_getprov(const char *prov_name)
 {
 	struct fi_prov *prov;
@@ -183,6 +222,8 @@ int fi_getinfo_(uint32_t version, const char *node, const char *service,
 	struct fi_prov *prov;
 	struct fi_info *tail, *cur;
 	int ret = -ENOSYS;
+
+	run_static_constructors();
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
