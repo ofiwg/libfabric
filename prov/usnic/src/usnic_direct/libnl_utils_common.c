@@ -71,10 +71,10 @@ static int usnic_is_nlreply_expected(struct usnic_nl_sk *unlsk,
 {
 	if (nlm_hdr->nlmsg_pid != nl_socket_get_local_port(unlsk->nlh)
 		|| nlm_hdr->nlmsg_seq != unlsk->seq) {
-		usnic_err("Not an expected reply msg pid: %u local pid: %u msg seq: %u expected seq: %u\n",
+		usnic_err(("Not an expected reply msg pid: %u local pid: %u msg seq: %u expected seq: %u\n",
 				nlm_hdr->nlmsg_pid,
 				nl_socket_get_local_port(unlsk->nlh),
-				nlm_hdr->nlmsg_seq, unlsk->seq);
+				nlm_hdr->nlmsg_seq, unlsk->seq));
 		return 0;
 	}
 
@@ -87,10 +87,10 @@ static int usnic_is_nlreply_err(struct nlmsghdr *nlm_hdr)
 		struct nlmsgerr *e = (struct nlmsgerr *)nlmsg_data(nlm_hdr);
 		if (nlm_hdr->nlmsg_len >= (__u32)NLMSG_SIZE(sizeof(*e)))
 			usnic_strerror(e->error,
-					"Received a netlink error message");
+				("Received a netlink error message"));
 		else
-			usnic_err(
-				"Received a truncated netlink error message\n");
+			usnic_err((
+					"Received a truncated netlink error message\n"));
 		return 1;
 	}
 
@@ -122,7 +122,7 @@ static int usnic_nl_set_rcvsk_timer(NL_HANDLE *nlh)
 	err = setsockopt(nl_socket_get_fd(nlh), SOL_SOCKET, SO_RCVTIMEO,
 				(char *)&timeout, sizeof(timeout));
 	if (err < 0)
-		usnic_perr("Failed to set SO_RCVTIMEO for nl socket");
+		usnic_perr(("Failed to set SO_RCVTIMEO for nl socket"));
 
 	return err;
 }
@@ -135,21 +135,21 @@ static int usnic_nl_sk_alloc(struct usnic_nl_sk **p_sk, int protocol)
 
 	unlsk = calloc(1, sizeof(*unlsk));
 	if (!unlsk) {
-		usnic_err("Failed to allocate usnic_nl_sk struct\n");
+		usnic_err(("Failed to allocate usnic_nl_sk struct\n"));
 		return ENOMEM;
 	}
 
 	nlh = NL_HANDLE_ALLOC();
 	if (!nlh) {
-		usnic_err("Failed to allocate nl handle\n");
+		usnic_err(("Failed to allocate nl handle\n"));
 		err = ENOMEM;
 		goto err_free_unlsk;
 	}
 
 	err = nl_connect(nlh, protocol);
 	if (err < 0) {
-		usnic_err("Failed to connnect netlink route socket error: %s\n",
-				NL_GETERROR(err));
+		usnic_err(("Failed to connnect netlink route socket error: %s\n",
+				NL_GETERROR(err)));
                 err = EINVAL;
 		goto err_free_nlh;
 	}
@@ -205,16 +205,16 @@ static int usnic_rt_raw_parse_cb(struct nl_msg *msg, void *arg)
 	if (nlm_hdr->nlmsg_type != RTM_NEWROUTE) {
 		char buf[128];
 		nl_nlmsgtype2str(nlm_hdr->nlmsg_type, buf, sizeof(buf));
-		usnic_err("Received an invalid route request reply message type: %s\n",
-				buf);
+		usnic_err(("Received an invalid route request reply message type: %s\n",
+				buf));
 		usnic_nlmsg_dump(msg);
 		return NL_SKIP;
 	}
 
 	rtm = nlmsg_data(nlm_hdr);
 	if (rtm->rtm_family != AF_INET) {
-		usnic_err("RTM message contains invalid AF family: %u\n",
-				rtm->rtm_family);
+		usnic_err(("RTM message contains invalid AF family: %u\n",
+				rtm->rtm_family));
 		usnic_nlmsg_dump(msg);
 		return NL_SKIP;
 	}
@@ -222,7 +222,7 @@ static int usnic_rt_raw_parse_cb(struct nl_msg *msg, void *arg)
 	err = nlmsg_parse(nlm_hdr, sizeof(struct rtmsg), tb, RTA_MAX,
 			  route_policy);
 	if (err < 0) {
-		usnic_err("nlmsg parse error %s\n", NL_GETERROR(err));
+		usnic_err(("nlmsg parse error %s\n", NL_GETERROR(err)));
 		usnic_nlmsg_dump(msg);
 		return NL_SKIP;
 	}
@@ -231,9 +231,9 @@ static int usnic_rt_raw_parse_cb(struct nl_msg *msg, void *arg)
 		if (nla_get_u32(tb[RTA_OIF]) == (uint32_t)lookup_arg->oif)
 			found = 1;
 		else
-			usnic_err("Retrieved route has a different outgoing interface %d (expected %d)\n",
+			usnic_err(("Retrieved route has a different outgoing interface %d (expected %d)\n",
 					nla_get_u32(tb[RTA_OIF]),
-					lookup_arg->oif);
+					lookup_arg->oif));
 	}
 
 	if (found && tb[RTA_GATEWAY])
@@ -264,8 +264,8 @@ int usnic_nl_rt_lookup(uint32_t src_addr, uint32_t dst_addr, int oif,
 
 	nlm = nlmsg_alloc_simple(RTM_GETROUTE, 0);
 	if (!nlm) {
-		usnic_err("Failed to alloc nl message, %s\n",
-				NL_GETERROR(err));
+		usnic_err(("Failed to alloc nl message, %s\n",
+				NL_GETERROR(err)));
 		err = ENOMEM;
 		goto out;
 	}
@@ -276,8 +276,8 @@ int usnic_nl_rt_lookup(uint32_t src_addr, uint32_t dst_addr, int oif,
 	err = usnic_nl_send_query(unlsk, nlm, NETLINK_ROUTE, NLM_F_REQUEST);
 	nlmsg_free(nlm);
 	if (err < 0) {
-		usnic_err("Failed to send RTM_GETROUTE query message, error %s\n",
-				NL_GETERROR(err));
+		usnic_err(("Failed to send RTM_GETROUTE query message, error %s\n",
+				NL_GETERROR(err)));
                 err = EINVAL;
 		goto out;
 	}
@@ -288,8 +288,8 @@ int usnic_nl_rt_lookup(uint32_t src_addr, uint32_t dst_addr, int oif,
 	err = nl_socket_modify_cb(unlsk->nlh, NL_CB_MSG_IN, NL_CB_CUSTOM,
 					usnic_rt_raw_parse_cb, &arg);
 	if (err != 0) {
-		usnic_err("Failed to setup callback function, error %s\n",
-				NL_GETERROR(err));
+		usnic_err(("Failed to setup callback function, error %s\n",
+				NL_GETERROR(err)));
                 err = EINVAL;
 		goto out;
 	}

@@ -64,8 +64,8 @@ typedef struct nl_sock NL_HANDLE;
 	do { \
 		err = nl_recvmsgs_default(nlh); \
 		if (err < 0) { \
-			usnic_err("Failed to receive netlink reply message, error %s\n", \
-				NL_GETERROR(err)); \
+			usnic_err(("Failed to receive netlink reply message, error %s\n", \
+				NL_GETERROR(err)));             \
 			if (err == -NLE_AGAIN) \
 				err = rc; \
 			goto out; \

@@ -82,7 +82,7 @@ struct usnic_transport_spec {
 		struct {
 			uint32_t	sock_fd;
 		} udp;
-	};
+	} trans;
 };
 
 #define USNIC_IB_CREATE_QP_VERSION 1
@@ -131,7 +131,7 @@ struct usnic_ib_create_qp_resp {
 	u32				cmd_version;
 	u32				num_barres;
 	u32				pad_to_8byte;
-	struct usnic_vnic_barres_info	resources[0];
+	struct usnic_vnic_barres_info	resources[1];
 };
 
 #define USNIC_CTX_RESP_VERSION 1

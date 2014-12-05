@@ -43,7 +43,7 @@
 #ifndef LIBNL_UTILS_H
 #define LIBNL_UTILS_H
 
-#if LIBNL3
+#if defined(LIBNL3) && LIBNL3
 #include "libnl3_utils.h"
 #else
 #include "libnl1_utils.h"

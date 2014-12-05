@@ -90,7 +90,7 @@ static int usnic_arp_lookup_index(int if_index, uint32_t ipaddr, int sockfd, uin
 	char			ifname[IF_NAMESIZE];
 
 	if (if_indextoname((unsigned int)if_index, ifname) == NULL) {
-		usnic_perr("if_indextoname failed. ifindex: %d", if_index);
+		usnic_perr(("if_indextoname failed. ifindex: %d", if_index));
 		return errno;
 	}
 
@@ -109,8 +109,8 @@ int usnic_arp_request(uint32_t ipaddr, int sockfd)
 	if (err == -1) {
 		char buf[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &ipaddr, buf, sizeof(buf));
-		usnic_perr("Arp triggering socket sendto() failed. ip: %s",
-				buf);
+		usnic_perr(("Arp triggering socket sendto() failed. ip: %s",
+				buf));
 	}
 	else
 		err = 0;
@@ -128,9 +128,9 @@ int usnic_resolve_arp(int if_index, uint32_t ipaddr, uint8_t *macaddr)
 	inet_ntop(AF_INET, &ipaddr, buf, sizeof(buf));
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sockfd == -1) {
-		usnic_perr(
+		usnic_perr((
 			"socket() failed when creating socket for arp resolution, ip: %s",
-			buf);
+			buf));
 		return ENXIO;
 	}
 
@@ -165,9 +165,9 @@ int usnic_resolve_dst(int if_index, uint32_t src_ip_addr,
 		inet_ntop(AF_INET, &src_ip_addr, src_buf, sizeof(src_buf));
 		inet_ntop(AF_INET, &dst_ip_addr, dst_buf, sizeof(dst_buf));
 
-		usnic_err(
+		usnic_err((
 			"ip route lookup for dst: %s on if: %d device: %s src ip: %s failed\n",
-			dst_buf, if_index, ifname, src_buf);
+			dst_buf, if_index, ifname, src_buf));
 		return EHOSTUNREACH;
 	}
 
@@ -180,16 +180,16 @@ int usnic_resolve_dst(int if_index, uint32_t src_ip_addr,
 		inet_ntop(AF_INET, &src_ip_addr, src_buf, sizeof(src_buf));
 		inet_ntop(AF_INET, &dst_ip_addr, dst_buf, sizeof(dst_buf));
 
-		usnic_info("ip route for dest %s src %s is via %s\n",
-				dst_buf, src_buf, nh_buf);
+		usnic_info(("ip route for dest %s src %s is via %s\n",
+				dst_buf, src_buf, nh_buf));
 	} else {
 		char src_buf[INET_ADDRSTRLEN];
 		char dst_buf[INET_ADDRSTRLEN];
 
 		inet_ntop(AF_INET, &src_ip_addr, src_buf, sizeof(src_buf));
 		inet_ntop(AF_INET, &dst_ip_addr, dst_buf, sizeof(dst_buf));
-		usnic_info("ip route for dest %s src %s is directly connected\n",
-				dst_buf, src_buf);
+		usnic_info(("ip route for dest %s src %s is directly connected\n",
+				dst_buf, src_buf));
 	}
 
 	if (nh_ip_addr)
