@@ -55,7 +55,7 @@ static const char *help_strings[][2] = {
 	{"CAP1|CAP2..", "\tone or more capabilities: FI_MSG|FI_RMA..."},
 	{"MOD1|MOD2..", "\tone or more modes, default all modes"},
 	{"EPTYPE", "\t\tspecify single endpoint type: FI_EP_MSG, FI_EP_DGRAM..."},
-	{"FMT", "\t\tspecify accepted address format: FI_ADDR_UNSPEC, FI_SOCKADDR..."},
+	{"FMT", "\t\tspecify accepted address format: FI_FORMAT_UNSPEC, FI_SOCKADDR..."},
 	{"", ""}
 };
 
@@ -127,14 +127,14 @@ enum fi_ep_type str2ep_type(char *inputstr)
 
 uint32_t str2addr_format(char *inputstr)
 {
-	ORCASE(FI_ADDR_UNSPEC);
+	ORCASE(FI_FORMAT_UNSPEC);
 	ORCASE(FI_SOCKADDR);
 	ORCASE(FI_SOCKADDR_IN);
 	ORCASE(FI_SOCKADDR_IN6);
 	ORCASE(FI_SOCKADDR_IB);
 	ORCASE(FI_ADDR_PSMX);
 
-	return FI_ADDR_UNSPEC;
+	return FI_FORMAT_UNSPEC;
 }
 
 uint64_t tokparse(char *caps, uint64_t (*str2flag) (char *inputstr))

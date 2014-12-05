@@ -549,7 +549,7 @@ int main(int argc, char **argv)
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG | FI_RMA;
 	hints.mode = FI_CONTEXT | FI_PROV_MR_ATTR;
-	hints.addr_format = FI_ADDR_UNSPEC;
+	hints.addr_format = FI_FORMAT_UNSPEC;
 
 	return run();
 }
