@@ -479,13 +479,13 @@ formats.  In some cases, a selected addressing format may need to be
 translated or mapped into into an address which is native to the
 fabric.  See `fi_av`(3).
 
-*FI_ADDR_UNSPEC*
-: FI_ADDR_UNSPEC indicates that a provider specific address format
+*FI_FORMAT_UNSPEC*
+: FI_FORMAT_UNSPEC indicates that a provider specific address format
   should be selected.  Provider specific addresses may be protocol
   specific or a vendor proprietary format.  Applications that select
-  FI_ADDR_UNSPEC should be prepared to be treat returned addressing
-  data as opaque.  FI_ADDR_UNSPEC targets apps which make use of an
-  out of band address exchange.  Applications which use FI_ADDR_UNSPEC
+  FI_FORMAT_UNSPEC should be prepared to be treat returned addressing
+  data as opaque.  FI_FORMAT_UNSPEC targets apps which make use of an
+  out of band address exchange.  Applications which use FI_FORMAT_UNSPEC
   may use fi_getname() to obtain a provider specific address assigned
   to an allocated endpoint.
 

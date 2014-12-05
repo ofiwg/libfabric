@@ -114,7 +114,7 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 static void fi_tostr_addr_format(char *buf, uint32_t addr_format)
 {
 	switch (addr_format) {
-	CASEENUMSTR(FI_ADDR_UNSPEC);
+	CASEENUMSTR(FI_FORMAT_UNSPEC);
 	CASEENUMSTR(FI_SOCKADDR);
 	CASEENUMSTR(FI_SOCKADDR_IN);
 	CASEENUMSTR(FI_SOCKADDR_IN6);
@@ -246,7 +246,7 @@ static void fi_tostr_addr(char *buf, uint32_t addr_format,
 			fi_tostr_addr(p, FI_SOCKADDR_IN6, addr);
 			break;
 		default:
-			fi_tostr_addr(p, FI_ADDR_UNSPEC, addr);
+			fi_tostr_addr(p, FI_FORMAT_UNSPEC, addr);
 			break;
 		}
 		break;

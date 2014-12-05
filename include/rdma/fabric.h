@@ -144,7 +144,7 @@ struct fi_ioc {
  * Format for transport addresses: sendto, writeto, etc.
  */
 enum {
-	FI_ADDR_UNSPEC,		/* void * */
+	FI_FORMAT_UNSPEC,	/* void * */
 	FI_SOCKADDR,		/* struct sockaddr */
 	FI_SOCKADDR_IN,		/* struct sockaddr_in */
 	FI_SOCKADDR_IN6,	/* struct sockaddr_in6 */
