@@ -71,7 +71,7 @@ TAILQ_HEAD(,usd_device) usd_device_list =
  * Perform one-time initialization
  */
 static void
-do_usd_init()
+do_usd_init(void)
 {
     usd_init_error = usd_ib_get_devlist(&usd_ib_dev_list);
 }

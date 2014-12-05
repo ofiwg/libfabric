@@ -919,6 +919,7 @@ struct fi_ops_tagged psmx_tagged_ops = {
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject,
 	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = psmx_tagged_search,
 };
 
@@ -933,6 +934,7 @@ struct fi_ops_tagged psmx_tagged_ops_no_flag_av_map = {
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_map,
 	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = psmx_tagged_search,
 };
 
@@ -947,6 +949,7 @@ struct fi_ops_tagged psmx_tagged_ops_no_flag_av_table = {
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_table,
 	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = psmx_tagged_search,
 };
 
@@ -961,6 +964,7 @@ struct fi_ops_tagged psmx_tagged_ops_no_event_av_map = {
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_map,
 	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = psmx_tagged_search,
 };
 
@@ -975,6 +979,7 @@ struct fi_ops_tagged psmx_tagged_ops_no_event_av_table = {
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_table,
 	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = psmx_tagged_search,
 };
 
@@ -989,6 +994,7 @@ struct fi_ops_tagged psmx_tagged_ops_no_send_event_av_map = {
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_map,
 	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = psmx_tagged_search,
 };
 
@@ -1003,6 +1009,7 @@ struct fi_ops_tagged psmx_tagged_ops_no_send_event_av_table = {
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_table,
 	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = psmx_tagged_search,
 };
 
@@ -1017,6 +1024,7 @@ struct fi_ops_tagged psmx_tagged_ops_no_recv_event_av_map = {
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_map,
 	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = psmx_tagged_search,
 };
 
@@ -1031,6 +1039,7 @@ struct fi_ops_tagged psmx_tagged_ops_no_recv_event_av_table = {
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_table,
 	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = psmx_tagged_search,
 };
 

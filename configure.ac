@@ -44,7 +44,7 @@ AC_ARG_ENABLE([direct],
 	[enable_direct=no])
 
 dnl Checks for programs
-AC_PROG_CC
+AC_PROG_CC_C99
 
 dnl Checks for header files.
 AC_HEADER_STDC

@@ -111,7 +111,7 @@ int sock_verify_info(struct fi_info *hints)
 static struct fi_ops_fabric sock_fab_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = sock_domain,
-	.endpoint = sock_pendpoint,
+	.passive_ep = sock_passive_ep,
 	.eq_open = sock_eq_open,
 };
 
