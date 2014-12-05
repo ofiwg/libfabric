@@ -75,8 +75,10 @@ ssize_t fi_senddata(struct fid_ep *ep, void *buf, size_t len,
   connected endpoints.
 
 *src_addr*
-: Source address to receive from for connectionless transfers.  Ignored
-  for connected endpoints.
+: Source address to receive from for connectionless transfers.  Applies
+  only to connectionless endpoints with the FI_DIRECTED_RECV capability
+  enabled, otherwise this field is ignored.  If set to FI_ADDR_UNSPEC,
+  any source address may match.
 
 *msg*
 : Message descriptor for send and receive operations.

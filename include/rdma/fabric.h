@@ -101,6 +101,7 @@ typedef struct fid *fid_t;
 #define FI_DYNAMIC_MR		(1ULL << 7)
 #define FI_NAMED_RX_CTX		(1ULL << 8)
 #define FI_BUFFERED_RECV	(1ULL << 9)
+#define FI_DIRECTED_RECV	(1ULL << 10)
 
 /*
  * Flags
@@ -152,6 +153,7 @@ enum {
 	FI_ADDR_PSMX,		/* uint64_t */
 };
 
+#define FI_ADDR_UNSPEC		UINT64_MAX
 #define FI_ADDR_NOTAVAIL	UINT64_MAX
 #define FI_SHARED_CONTEXT	UINT64_MAX
 typedef uint64_t		fi_addr_t;

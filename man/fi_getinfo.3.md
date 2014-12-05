@@ -280,6 +280,12 @@ additional optimizations.
   options (getopt/setopt) to determine the size of available buffered
   receive space.
 
+*FI_DIRECTED_RECV*
+: Requests that the communication endpoint use the source address of
+  an incoming message when matching it with a receive buffer.  If this
+  capability is not set, then the src_addr parameter for msg and tagged
+  receive operations is ignored.
+
 *FI_INJECT*
 : Indicates that the endpoint be able to support the FI_INJECT flag on
   data transfer operations and the 'inject' data transfer calls.  The
