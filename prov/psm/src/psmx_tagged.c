@@ -45,8 +45,6 @@ ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 	int err;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-	if (ep_priv->connected)
-		src_addr = (fi_addr_t) ep_priv->peer_psm_epaddr;
 
 	if (src_addr)
 		psmx_debug("%s: warning: src_addr is currently ignored.", __func__);
@@ -407,8 +405,6 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 	size_t idx;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-	if (ep_priv->connected)
-		dest_addr = (fi_addr_t) ep_priv->peer_psm_epaddr;
 
 	if (flags & FI_TRIGGER) {
 		struct psmx_trigger *trigger;

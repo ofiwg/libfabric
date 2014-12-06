@@ -323,6 +323,7 @@ dummy_man_pages = \
         man/fi_inject.3 \
         man/fi_injectdata.3 \
         man/fi_inject_atomic.3 \
+        man/fi_inject_write.3 \
         man/fi_inject_writedata.3 \
         man/fi_join.3 \
         man/fi_leave.3 \
@@ -338,6 +339,9 @@ dummy_man_pages = \
         man/fi_poll_add.3 \
         man/fi_poll_del.3 \
         man/fi_poll_open.3 \
+        man/fi_read.3 \
+        man/fi_readmsg.3 \
+        man/fi_readv.3 \
         man/fi_recv.3 \
         man/fi_recvmsg.3 \
         man/fi_recvv.3 \
@@ -362,7 +366,11 @@ dummy_man_pages = \
         man/fi_tsendmsg.3 \
         man/fi_tsendv.3 \
         man/fi_wait.3 \
-        man/fi_wait_open.3
+        man/fi_wait_open.3 \
+        man/fi_write.3 \
+        man/fi_writedata.3 \
+        man/fi_writemsg.3 \
+        man/fi_writev.3
 
 man_MANS = $(real_man_pages) $(dummy_man_pages)
 

@@ -338,8 +338,7 @@ additional optimizations.
   endpoint must support the FI_REMOTE_CQ_DATA flag on data transfer
   operations.  The minimum supported size of remote CQ data that an
   endpoint with this capability must support is 4-bytes.  Applications
-  may access endpoint options (getopt/setopt) to determine remote CQ
-  data limits.
+  may check the domain attributes to determine remote CQ data limits.
 
 *FI_REMOTE_SIGNAL*
 : Indicates that the endpoint support the FI_REMOTE_SIGNAL flag on
