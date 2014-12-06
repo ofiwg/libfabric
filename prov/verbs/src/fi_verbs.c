@@ -1835,8 +1835,13 @@ static ssize_t fi_ibv_cq_read_context(struct fid_cq *cq, void *buf, size_t count
 
 	for (i = 0; i < count; i++) {
 		ret = ibv_poll_cq(_cq->cq, 1, &_cq->wc);
-		if (ret <= 0 || _cq->wc.status)
+		if (ret <= 0)
 			break;
+
+		if (_cq->wc.status) {
+			ret = -FI_EAVAIL;
+			break;
+		}
 
 		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
 		entry += 1;
@@ -1857,8 +1862,13 @@ static ssize_t fi_ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t count)
 
 	for (i = 0; i < count; i++) {
 		ret = ibv_poll_cq(_cq->cq, 1, &_cq->wc);
-		if (ret <= 0 || _cq->wc.status)
+		if (ret <= 0)
 			break;
+
+		if (_cq->wc.status) {
+			ret = -FI_EAVAIL;
+			break;
+		}
 
 		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
 		entry->flags = (uint64_t) _cq->wc.wc_flags;
@@ -1881,8 +1891,13 @@ static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t count)
 
 	for (i = 0; i < count; i++) {
 		ret = ibv_poll_cq(_cq->cq, 1, &_cq->wc);
-		if (ret <= 0 || _cq->wc.status)
+		if (ret <= 0)
 			break;
+
+		if (_cq->wc.status) {
+			ret = -FI_EAVAIL;
+			break;
+		}
 
 		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
 		if (_cq->wc.wc_flags & IBV_WC_WITH_IMM) {
