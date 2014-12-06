@@ -52,6 +52,7 @@ _sockets_files = \
 	prov/sockets/src/sock_ctx.c \
 	prov/sockets/src/sock_util.c \
 	prov/sockets/src/sock_util.h \
+	prov/sockets/src/sock_conn.c \
 	prov/sockets/src/indexer.c \
 	prov/sockets/src/list.c \
 	prov/sockets/src/list.h

@@ -114,11 +114,22 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 static int sock_dom_close(struct fid *fid)
 {
 	struct sock_domain *dom;
+	void *res;
 
 	dom = container_of(fid, struct sock_domain, dom_fid.fid);
 	if (atomic_get(&dom->ref))
 		return -FI_EBUSY;
 
+	dom->listening = 0;
+	if (pthread_join(dom->listen_thread, &res)) {
+		SOCK_LOG_ERROR("could not join listener thread, errno = %d\n", errno);
+		return -FI_EBUSY;
+	}
+
+	if (dom->u_cmap.size)
+		sock_conn_map_destroy(&dom->u_cmap);
+	if (dom->r_cmap.size)
+		sock_conn_map_destroy(&dom->r_cmap);
 	fastlock_destroy(&dom->lock);
 	free(dom);
 	return 0;
@@ -396,12 +407,28 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	fastlock_init(&sock_domain->lock);
 	atomic_init(&sock_domain->ref, 0);
 
+	if(info) {
+		sock_domain->info = *info;
+	} else {
+		SOCK_LOG_ERROR("invalid fi_info\n");
+		goto err;
+	}
+
 	sock_domain->dom_fid.fid.fclass = FI_CLASS_DOMAIN;
 	sock_domain->dom_fid.fid.context = context;
 	sock_domain->dom_fid.fid.ops = &sock_dom_fi_ops;
 	sock_domain->dom_fid.ops = &sock_dom_ops;
 	sock_domain->dom_fid.mr = &sock_dom_mr_ops;
 
+	sock_domain->r_cmap.dom = sock_domain;
+	sock_domain->u_cmap.dom = sock_domain;
+
+	sock_conn_listen(sock_domain);
+
 	*dom = &sock_domain->dom_fid;
 	return 0;
+
+err:
+	free(sock_domain);
+	return -FI_EINVAL;
 }
