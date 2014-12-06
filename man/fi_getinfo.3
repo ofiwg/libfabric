@@ -1,4 +1,4 @@
-.TH fi_getinfo 3 "2014\-12\-04" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_getinfo 3 "2014\-12\-05" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo - Obtain / free fabric interface information
@@ -344,8 +344,8 @@ The FI_REMOTE_CQ_DATA indicates that an endpoint must support the
 FI_REMOTE_CQ_DATA flag on data transfer operations.
 The minimum supported size of remote CQ data that an endpoint with this
 capability must support is 4-bytes.
-Applications may access endpoint options (getopt/setopt) to determine
-remote CQ data limits.
+Applications may check the domain attributes to determine remote CQ data
+limits.
 .PP
 \f[I]FI_REMOTE_SIGNAL\f[] : Indicates that the endpoint support the
 FI_REMOTE_SIGNAL flag on data transfer operations.
