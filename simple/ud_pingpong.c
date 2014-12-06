@@ -68,7 +68,7 @@ static struct fi_fabric_attr fabric_hints;
 static struct fi_ep_attr ep_hints;
 static char *dst_addr, *src_addr;
 static char *port = "3333";
-static fi_addr_t client_addr;
+static fi_addr_t rem_addr;
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -112,7 +112,7 @@ static int send_xfer(int size)
 	credits--;
 post:
 	ret = fi_send(ep, buf_ptr, (size_t) size, fi_mr_desc(mr),
-			client_addr, NULL);
+			rem_addr, NULL);
 	if (ret)
 		printf("fi_send %d (%s)\n", ret, fi_strerror(-ret));
 
@@ -401,9 +401,9 @@ static int client_connect(void)
 	if (ret != 0)
 		goto err;
 
-	ret = fi_connect(ep, sin, NULL, 0);
-	if (ret) {
-		printf("fi_connect %s\n", fi_strerror(-ret));
+	ret = fi_av_insert(av, sin, 1, &rem_addr, 0, NULL);
+	if (ret != 1) {
+		printf("fi_av_insert %s\n", fi_strerror(-ret));
 		goto err;
 	}
 
@@ -439,14 +439,14 @@ static int server_connect(void)
 		goto err;
 
 	do {
-		ret = fi_cq_readfrom(rcq, &comp, sizeof comp, &client_addr);
+		ret = fi_cq_readfrom(rcq, &comp, sizeof comp, &rem_addr);
 		if (ret < 0) {
 			printf("fi_cq_readfrom rcq %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
 		}
 	} while (ret == 0);
 
-	if (client_addr == FI_ADDR_NOTAVAIL) {
+	if (rem_addr == FI_ADDR_NOTAVAIL) {
 		printf("Error getting address\n");
 		goto err;
 	}
@@ -496,10 +496,6 @@ static int run(void)
 	while (credits < max_credits)
 		poll_all_sends();
 
-	ret = fi_shutdown(ep, 0);
-	if (ret != 0) {
-		printf("fi_shutdown ret=%d, %s\n", ret, fi_strerror(-ret));
-	}
 	ret = fi_close(&ep->fid);
 	if (ret != 0) {
 		printf("fi_close(ep) ret=%d, %s\n", ret, fi_strerror(-ret));
