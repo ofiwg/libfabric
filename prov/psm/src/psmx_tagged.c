@@ -634,8 +634,6 @@ ssize_t psmx_tagged_inject_no_flag_av_map(struct fid_ep *ep, const void *buf, si
 	int err;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-	if (ep_priv->connected)
-		dest_addr = (fi_addr_t) ep_priv->peer_psm_epaddr;
 
 	psm_epaddr = (psm_epaddr_t) dest_addr;
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
@@ -669,8 +667,6 @@ ssize_t psmx_tagged_inject_no_flag_av_table(struct fid_ep *ep, const void *buf, 
 	size_t idx;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-	if (ep_priv->connected)
-		dest_addr = (fi_addr_t) ep_priv->peer_psm_epaddr;
 
 	av = ep_priv->av;
 	idx = (size_t)dest_addr;
