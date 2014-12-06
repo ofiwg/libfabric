@@ -43,7 +43,7 @@ int fi_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
     fi_addr_t *src_addr);
 
 int fi_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
-    size_t len, uint64_t flags);
+    uint64_t flags);
 
 int fi_cq_write(struct fid_cq *cq, const void *buf, size_t len);
 
