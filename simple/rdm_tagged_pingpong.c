@@ -579,7 +579,7 @@ int main(int argc, char **argv)
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG | FI_TAGGED;
 	hints.mode = FI_CONTEXT;
-	hints.addr_format = FI_ADDR_UNSPEC;
+	hints.addr_format = FI_FORMAT_UNSPEC;
 
 	ret = run();
 	return ret;
