@@ -2,6 +2,7 @@ AM_CFLAGS = -g -Wall -D_GNU_SOURCE -I$(srcdir)/include
 
 bin_PROGRAMS = \
 	simple/fi_info \
+	simple/fi_msg\
 	simple/fi_msg_pingpong \
 	simple/fi_msg_rma \
 	simple/fi_rdm_pingpong \
@@ -17,6 +18,10 @@ bin_PROGRAMS = \
 
 simple_fi_info_SOURCES = \
 	simple/info.c \
+	common/shared.c
+
+simple_fi_msg_SOURCES = \
+	simple/msg.c \
 	common/shared.c
 
 simple_fi_msg_pingpong_SOURCES = \
