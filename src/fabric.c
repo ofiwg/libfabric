@@ -120,21 +120,10 @@ static void fi_ini(void)
 	if (init)
 		goto unlock;
 
-#if (HAVE_VERBS) && !(HAVE_VERBS_DL)
-	VERBS_C();
-#endif
-
-#if (HAVE_PSM) && !(HAVE_PSM_DL)
-	PSM_C();
-#endif
-
-#if (HAVE_SOCKETS) && !(HAVE_SOCKETS_DL)
-	SOCKETS_C();
-#endif
-
-#if (HAVE_USNIC) && !(HAVE_USNIC_DL)
-	USNIC_C();
-#endif
+	VERBS_C;
+	PSM_C;
+	SOCKETS_C;
+	USNIC_C;
 
 #ifdef HAVE_LIBDL
 	struct dirent **liblist;
