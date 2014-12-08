@@ -280,6 +280,12 @@ additional optimizations.
   options (getopt/setopt) to determine the size of available buffered
   receive space.
 
+*FI_DIRECTED_RECV*
+: Requests that the communication endpoint use the source address of
+  an incoming message when matching it with a receive buffer.  If this
+  capability is not set, then the src_addr parameter for msg and tagged
+  receive operations is ignored.
+
 *FI_INJECT*
 : Indicates that the endpoint be able to support the FI_INJECT flag on
   data transfer operations and the 'inject' data transfer calls.  The
@@ -479,13 +485,13 @@ formats.  In some cases, a selected addressing format may need to be
 translated or mapped into into an address which is native to the
 fabric.  See `fi_av`(3).
 
-*FI_ADDR_UNSPEC*
-: FI_ADDR_UNSPEC indicates that a provider specific address format
+*FI_FORMAT_UNSPEC*
+: FI_FORMAT_UNSPEC indicates that a provider specific address format
   should be selected.  Provider specific addresses may be protocol
   specific or a vendor proprietary format.  Applications that select
-  FI_ADDR_UNSPEC should be prepared to be treat returned addressing
-  data as opaque.  FI_ADDR_UNSPEC targets apps which make use of an
-  out of band address exchange.  Applications which use FI_ADDR_UNSPEC
+  FI_FORMAT_UNSPEC should be prepared to be treat returned addressing
+  data as opaque.  FI_FORMAT_UNSPEC targets apps which make use of an
+  out of band address exchange.  Applications which use FI_FORMAT_UNSPEC
   may use fi_getname() to obtain a provider specific address assigned
   to an allocated endpoint.
 

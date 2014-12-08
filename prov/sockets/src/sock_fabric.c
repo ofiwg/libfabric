@@ -85,7 +85,7 @@ int sock_verify_info(struct fi_info *hints)
 	}
 	
 	switch (hints->addr_format) {
-	case FI_ADDR_UNSPEC:
+	case FI_FORMAT_UNSPEC:
 	case FI_SOCKADDR:
 	case FI_SOCKADDR_IN:
 		break;

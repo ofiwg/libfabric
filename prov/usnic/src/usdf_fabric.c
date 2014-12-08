@@ -78,7 +78,7 @@ usdf_validate_hints(struct fi_info *hints, struct usd_device_attrs *dap)
 	size_t size;
 
 	switch (hints->addr_format) {
-	case FI_ADDR_UNSPEC:
+	case FI_FORMAT_UNSPEC:
 	case FI_SOCKADDR_IN:
 		size = sizeof(struct sockaddr_in);
 		break;
@@ -130,7 +130,7 @@ usdf_fill_addr_info(struct fi_info *fi, struct fi_info *hints,
 	int ret;
 
 	/* If hints speficied, we already validated requested addr_format */
-	if (hints != NULL && hints->addr_format != FI_ADDR_UNSPEC) {
+	if (hints != NULL && hints->addr_format != FI_FORMAT_UNSPEC) {
 		fi->addr_format = hints->addr_format;
 	} else {
 		fi->addr_format = FI_SOCKADDR_IN;
