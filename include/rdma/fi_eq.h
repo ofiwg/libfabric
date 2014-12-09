@@ -139,7 +139,7 @@ struct fi_eq_cm_entry {
 	/* user must call fi_freeinfo to release info */
 	struct fi_info		*info;
 	/* connection data placed here, up to space provided */
-	uint8_t			data[0];
+	uint8_t			data[];
 };
 
 struct fi_ops_eq {
