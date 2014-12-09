@@ -232,6 +232,7 @@ struct fi_rx_attr {
 
 struct fi_ep_attr {
 	uint32_t		protocol;
+	uint32_t		protocol_version;
 	size_t			max_msg_size;
 	size_t			inject_size;
 	size_t			total_buffered_recv;
