@@ -89,17 +89,9 @@ A poll set is defined with the following attributes.
 
 {% highlight c %}
 struct fi_poll_attr {
-	int                  mask;      /* valid attr fields */
 	uint64_t             flags;     /* operation flags */
 };
 {% endhighlight %}
-
-*mask*
-: The mask field is used for forward and backward API compatibility.
-  It is used by the application to indicate which fields in the
-  attribute structure have been set.  For this version of the API,
-  mask should be set to FI_POLL_ATTR_MASK_V1, indicating that all
-  specified fields have been initialized.
 
 *flags*
 : Flags that set the default operation of the poll set.  The use of
@@ -140,18 +132,10 @@ fi_wait_attr.
 
 {% highlight c %}
 struct fi_wait_attr {
-	int                  mask;      /* valid attr fields */
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
 	uint64_t             flags;     /* operation flags */
 };
 {% endhighlight %}
-
-*mask*
-: The mask field is used for forward and backward API compatibility.
-  It is used by the application to indicate which fields in the
-  attribute structure have been set.  For this version of the API,
-  mask should be set to FI_WAIT_ATTR_MASK_V1, indicating that all
-  specified fields have been initialized.
 
 *wait_obj*
 : Wait sets are associated with specific wait object(s).  Wait objects
