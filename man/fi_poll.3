@@ -1,4 +1,4 @@
-.TH fi_poll 3 "2014-11-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_poll 3 "2014\-12\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_poll - Polling and wait set operations
@@ -71,18 +71,10 @@ A poll set is defined with the following attributes.
 .nf
 \f[C]
 struct\ fi_poll_attr\ {
-\ \ \ \ int\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ mask;\ \ \ \ \ \ /*\ valid\ attr\ fields\ */
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ \ \ flags;\ \ \ \ \ /*\ operation\ flags\ */
 };
 \f[]
 .fi
-.PP
-\f[I]mask\f[] : The mask field is used for forward and backward API
-compatibility.
-It is used by the application to indicate which fields in the attribute
-structure have been set.
-For this version of the API, mask should be set to FI_POLL_ATTR_MASK_V1,
-indicating that all specified fields have been initialized.
 .PP
 \f[I]flags\f[] : Flags that set the default operation of the poll set.
 The use of this field is reserved and must be set to 0 by the caller.
@@ -120,19 +112,11 @@ fi_wait_attr.
 .nf
 \f[C]
 struct\ fi_wait_attr\ {
-\ \ \ \ int\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ mask;\ \ \ \ \ \ /*\ valid\ attr\ fields\ */
 \ \ \ \ enum\ fi_wait_obj\ \ \ \ \ wait_obj;\ \ /*\ requested\ wait\ object\ */
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ \ \ flags;\ \ \ \ \ /*\ operation\ flags\ */
 };
 \f[]
 .fi
-.PP
-\f[I]mask\f[] : The mask field is used for forward and backward API
-compatibility.
-It is used by the application to indicate which fields in the attribute
-structure have been set.
-For this version of the API, mask should be set to FI_WAIT_ATTR_MASK_V1,
-indicating that all specified fields have been initialized.
 .PP
 \f[I]wait_obj\f[] : Wait sets are associated with specific wait
 object(s).
