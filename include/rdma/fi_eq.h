@@ -89,7 +89,11 @@ struct fi_poll_attr {
 
 struct fi_ops_poll {
 	size_t	size;
-	int	(*poll)(struct fid_poll *pollset, void **context, int count);
+	int (*poll)(struct fid_poll *pollset, void **context, int count);
+	int (*poll_add)(struct fid_poll *pollset, struct fid *event_fid, 
+			uint64_t flags);
+	int (*poll_del)(struct fid_poll *pollset, struct fid *event_fid, 
+			uint64_t flags);
 };
 
 struct fid_poll {
