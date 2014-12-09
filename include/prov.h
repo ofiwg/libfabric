@@ -37,18 +37,19 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-/* dl providers ctor and dtors are called when loaded and unloaded */
-#define EXT_INI \
-	__attribute__((visibility ("default"))) \
-	__attribute__((alias(fi_prov_ini)))
-
-#define EXT_FINI \
-	__attribute__((visibility ("default"))) \
-	__attribute__((alias(fi_prov_fini)))
-
 /* ctor and dtor function signatures */
 #define INI_SIG(name) void name(void)
 #define FINI_SIG(name) void name(void)
+
+/* dl providers ctor and dtors are called when loaded and unloaded */
+#define EXT_INI \
+	__attribute__((visibility ("default"))) \
+	void fi_prov_ini(void)
+
+#define EXT_FINI \
+	__attribute__((visibility ("default"))) \
+	void fi_prov_fini(void)
+
 
 /* for each provider defines for three scenarios:
  * dl: externally visible ctor and dtor, aliased to fi_prov_*
@@ -60,8 +61,8 @@
 #define VERBS_DF fi_verbs_fini
 
 #if (HAVE_VERBS) && (HAVE_VERBS_DL)
-#  define VERBS_INI EXT_INI INI_SIG(VERBS_IF)
-#  define VERBS_FINI EXT_FINI FINI_SIG(VERBS_DF)
+#  define VERBS_INI EXT_INI
+#  define VERBS_FINI EXT_FINI
 #  define VERBS_C
 #  define VERBS_D
 #elif (HAVE_VERBS)
@@ -80,8 +81,8 @@ VERBS_FINI ;
 #define PSM_DF fi_psm_fini
 
 #if (HAVE_PSM) && (HAVE_PSM_DL)
-#  define PSM_INI EXT_INI INI_SIG(PSM_IF)
-#  define PSM_FINI EXT_FINI FINI_SIG(PSM_DF)
+#  define PSM_INI EXT_INI
+#  define PSM_FINI EXT_FINI
 #  define PSM_C
 #  define PSM_D
 #elif (HAVE_PSM)
@@ -100,8 +101,8 @@ PSM_FINI ;
 #define SOCKETS_DF fi_sockets_fini
 
 #if (HAVE_SOCKETS) && (HAVE_SOCKETS_DL)
-#  define SOCKETS_INI EXT_INI INI_SIG(SOCKETS_IF)
-#  define SOCKETS_FINI EXT_FINI FINI_SIG(SOCKETS_DF)
+#  define SOCKETS_INI EXT_INI
+#  define SOCKETS_FINI EXT_FINI
 #  define SOCKETS_C
 #  define SOCKETS_D
 #elif (HAVE_SOCKETS)
@@ -120,8 +121,8 @@ SOCKETS_FINI ;
 #define USNIC_DF fi_usnic_fini
 
 #if (HAVE_USNIC) && (HAVE_USNIC_DL)
-#  define USNIC_INI EXT_INI INI_SIG(USNIC_IF)
-#  define USNIC_FINI EXT_FINI FINI_SIG(USNIC_DF)
+#  define USNIC_INI EXT_INI
+#  define USNIC_FINI EXT_FINI
 #  define USNIC_C
 #  define USNIC_D
 #elif (HAVE_USNIC)
