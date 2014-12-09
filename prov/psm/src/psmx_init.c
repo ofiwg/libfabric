@@ -298,6 +298,7 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 static struct fi_provider psmx_prov = {
 	.name = "PSM",
 	.version = FI_VERSION(0, 9),
+	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = psmx_getinfo,
 	.fabric = psmx_fabric,
 };
@@ -343,7 +344,7 @@ PSM_INI
 	if (err != PSM_OK) {
 		fprintf(stderr, "%s: psm_init failed: %s\n", __func__,
 			psm_error_get_string(err));
-		return;
+		return NULL;
 	}
 
 	check_version = psmx_get_int_env("SFI_PSM_VERSION_CHECK", 1);
@@ -352,10 +353,10 @@ PSM_INI
 		fprintf(stderr, "%s: PSM version mismatch: header %d.%d, library %d.%d.\n",
 			__func__, PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
 		fprintf(stderr, "\tSet envar SFI_PSM_VERSION_CHECK=0 to bypass version check.\n");
-		return;
+		return NULL;
 	}
 
-	(void) fi_register(&psmx_prov);
+	return (&psmx_prov);
 }
 
 PSM_FINI

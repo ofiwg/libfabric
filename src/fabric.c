@@ -64,13 +64,15 @@ static struct fi_prov *prov_head, *prov_tail;
 static int init = 0;
 static pthread_mutex_t ini_lock = PTHREAD_MUTEX_INITIALIZER;
 
-__attribute__((visibility ("default")))
-int fi_register_provider_(uint32_t fi_version, struct fi_provider *provider)
+static int fi_register_provider(struct fi_provider *provider)
 {
 	struct fi_prov *prov;
 
-	if (FI_MAJOR(fi_version) != FI_MAJOR_VERSION ||
-	    FI_MINOR(fi_version) > FI_MINOR_VERSION)
+	if (!provider)
+		return -FI_EINVAL;
+
+	if (FI_MAJOR(provider->fi_version) != FI_MAJOR_VERSION ||
+	    FI_MINOR(provider->fi_version) > FI_MINOR_VERSION)
 		return -FI_ENOSYS;
 
 	/* If a provider with this name is already registered:
@@ -100,7 +102,6 @@ int fi_register_provider_(uint32_t fi_version, struct fi_provider *provider)
 	prov_tail = prov;
 	return 0;
 }
-default_symver(fi_register_provider_, fi_register_provider);
 
 static int lib_filter(const struct dirent *entry)
 {
@@ -120,17 +121,17 @@ static void fi_ini(void)
 	if (init)
 		goto unlock;
 
-	VERBS_C;
-	PSM_C;
-	SOCKETS_C;
-	USNIC_C;
+	fi_register_provider(VERBS_C);
+	fi_register_provider(PSM_C);
+	fi_register_provider(SOCKETS_C);
+	fi_register_provider(USNIC_C);
 
 #ifdef HAVE_LIBDL
 	struct dirent **liblist;
 	int n, want_warn = 0;
 	char *lib, *extdir = getenv("FI_EXTDIR");
 	void *dlhandle;
-	void (*inif)(void);
+	struct fi_provider* (*inif)(void);
 
 	if (extdir) {
 		/* Warn if user specified $FI_EXTDIR, but there's a
@@ -174,7 +175,7 @@ static void fi_ini(void)
 		if (inif == NULL)
 			FI_WARN("dlsym: %s\n", dlerror());
 		else
-			(inif)();
+			fi_register_provider((inif)());
 	}
 
 	free(liblist);
@@ -206,7 +207,7 @@ int fi_getinfo_(uint32_t version, const char *node, const char *service,
 {
 	struct fi_prov *prov;
 	struct fi_info *tail, *cur;
-	int ret = -ENOSYS;
+	int ret = -FI_ENOSYS;
 
 	if (!init)
 		fi_ini();

@@ -53,20 +53,27 @@ extern "C" {
 #define FI_LIB_CLASS_NAME	"libfabric"
 
 struct fi_provider {
-	const char *name;
 	uint32_t version;
+	uint32_t fi_version;
 	int	(*getinfo)(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info);
 	int	(*fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
+	const char *name;
 };
 
-int fi_register_provider(uint32_t fi_version, struct fi_provider *provider);
-static inline int fi_register(struct fi_provider *provider)
-{
-	return fi_register_provider(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
-				    provider);
-}
+/* ctor and dtor function signatures */
+#define INI_SIG(name) struct fi_provider* name(void)
+#define FINI_SIG(name) void name(void)
+
+/* dl providers ctor and dtors are called when loaded and unloaded */
+#define EXT_INI \
+	__attribute__((visibility ("default"))) \
+	struct fi_provider* fi_prov_ini(void)
+
+#define EXT_FINI \
+	__attribute__((visibility ("default"))) \
+	void fi_prov_fini(void)
 
 #ifdef __cplusplus
 }

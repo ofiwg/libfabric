@@ -770,13 +770,14 @@ fail:
 static struct fi_provider usdf_ops = {
 	.name = USDF_FI_NAME,
 	.version = FI_VERSION(0, 7),
+	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = usdf_getinfo,
 	.fabric = usdf_fabric_open,
 };
 
 USNIC_INI
 {
-	(void) fi_register(&usdf_ops);
+	return (&usdf_ops);
 }
 
 USNIC_FINI

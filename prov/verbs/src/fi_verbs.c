@@ -2381,13 +2381,14 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void 
 static struct fi_provider fi_ibv_prov = {
 	.name = PROV_NAME,
 	.version = PROV_VERS,
+	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = fi_ibv_getinfo,
-	.fabric = fi_ibv_fabric,
+	.fabric = fi_ibv_fabric
 };
 
 VERBS_INI
 {
-	(void) fi_register(&fi_ibv_prov);
+	return &fi_ibv_prov;
 }
 
 VERBS_FINI

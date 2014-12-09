@@ -188,8 +188,6 @@ size_t fi_datatype_size(enum fi_datatype datatype);
 uint64_t fi_tag_bits(uint64_t mem_tag_format);
 uint64_t fi_tag_format(uint64_t tag_bits);
 
-int fi_version_register(uint32_t version, struct fi_provider *provider);
-
 #define RDMA_CONF_DIR  SYSCONFDIR "/" RDMADIR
 #define FI_CONF_DIR RDMA_CONF_DIR "/fabric"
 

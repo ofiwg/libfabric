@@ -227,6 +227,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 struct fi_provider sock_prov = {
 	.name = "IP",
 	.version = FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION), 
+	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = sock_getinfo,
 	.fabric = sock_fabric,
 };
@@ -241,7 +242,7 @@ SOCKETS_INI
 		sock_log_level = SOCK_ERROR;
 	}
 
-	(void) fi_register(&sock_prov);
+	return (&sock_prov);
 }
 
 SOCKETS_FINI

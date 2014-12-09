@@ -37,20 +37,7 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-/* ctor and dtor function signatures */
-#define INI_SIG(name) void name(void)
-#define FINI_SIG(name) void name(void)
-
-/* dl providers ctor and dtors are called when loaded and unloaded */
-#define EXT_INI \
-	__attribute__((visibility ("default"))) \
-	void fi_prov_ini(void)
-
-#define EXT_FINI \
-	__attribute__((visibility ("default"))) \
-	void fi_prov_fini(void)
-
-
+#include <rdma/fi_prov.h>
 /* for each provider defines for three scenarios:
  * dl: externally visible ctor and dtor, aliased to fi_prov_*
  * built-in: ctor and dtor function defs, don't export symbols
@@ -63,18 +50,18 @@
 #if (HAVE_VERBS) && (HAVE_VERBS_DL)
 #  define VERBS_INI EXT_INI
 #  define VERBS_FINI EXT_FINI
-#  define VERBS_C
-#  define VERBS_D
+#  define VERBS_C NULL
+#  define VERBS_D NULL
 #elif (HAVE_VERBS)
 #  define VERBS_INI INI_SIG(VERBS_IF)
 #  define VERBS_FINI INI_SIG(VERBS_DF)
-#  define VERBS_C VERBS_IF();
-#  define VERBS_D VERBS_DF();
+#  define VERBS_C VERBS_IF()
+#  define VERBS_D VERBS_DF()
 VERBS_INI ;
 VERBS_FINI ;
 #else
-#  define VERBS_C
-#  define VERBS_D
+#  define VERBS_C NULL
+#  define VERBS_D NULL
 #endif
 
 #define PSM_IF fi_psm_ini
@@ -83,18 +70,18 @@ VERBS_FINI ;
 #if (HAVE_PSM) && (HAVE_PSM_DL)
 #  define PSM_INI EXT_INI
 #  define PSM_FINI EXT_FINI
-#  define PSM_C
-#  define PSM_D
+#  define PSM_C NULL
+#  define PSM_D NULL
 #elif (HAVE_PSM)
 #  define PSM_INI INI_SIG(PSM_IF)
 #  define PSM_FINI FINI_SIG(PSM_DF)
-#  define PSM_C PSM_IF();
-#  define PSM_D PSM_DF();
+#  define PSM_C PSM_IF()
+#  define PSM_D PSM_DF()
 PSM_INI ;
 PSM_FINI ;
 #else
-#  define PSM_C
-#  define PSM_D
+#  define PSM_C NULL
+#  define PSM_D NULL
 #endif
 
 #define SOCKETS_IF fi_sockets_ini
@@ -103,18 +90,18 @@ PSM_FINI ;
 #if (HAVE_SOCKETS) && (HAVE_SOCKETS_DL)
 #  define SOCKETS_INI EXT_INI
 #  define SOCKETS_FINI EXT_FINI
-#  define SOCKETS_C
-#  define SOCKETS_D
+#  define SOCKETS_C NULL
+#  define SOCKETS_D NULL
 #elif (HAVE_SOCKETS)
 #  define SOCKETS_INI INI_SIG(SOCKETS_IF)
 #  define SOCKETS_FINI FINI_SIG(SOCKETS_DF)
-#  define SOCKETS_C SOCKETS_IF();
-#  define SOCKETS_D SOCKETS_DF();
+#  define SOCKETS_C SOCKETS_IF()
+#  define SOCKETS_D SOCKETS_DF()
 SOCKETS_INI ;
 SOCKETS_FINI ;
 #else
-#  define SOCKETS_C
-#  define SOCKETS_D
+#  define SOCKETS_C NULL
+#  define SOCKETS_D NULL
 #endif
 
 #define USNIC_IF fi_usnic_ini
@@ -123,18 +110,18 @@ SOCKETS_FINI ;
 #if (HAVE_USNIC) && (HAVE_USNIC_DL)
 #  define USNIC_INI EXT_INI
 #  define USNIC_FINI EXT_FINI
-#  define USNIC_C
-#  define USNIC_D
+#  define USNIC_C NULL
+#  define USNIC_D NULL
 #elif (HAVE_USNIC)
 #  define USNIC_INI INI_SIG(USNIC_IF)
 #  define USNIC_FINI FINI_SIG(USNIC_DF)
-#  define USNIC_C USNIC_IF();
-#  define USNIC_D USNIC_DF();
+#  define USNIC_C USNIC_IF()
+#  define USNIC_D USNIC_DF()
 USNIC_INI ;
 USNIC_FINI ;
 #else
-#  define USNIC_C
-#  define USNIC_D
+#  define USNIC_C NULL
+#  define USNIC_D NULL
 #endif
 
 #endif /* _PROV_H_ */
