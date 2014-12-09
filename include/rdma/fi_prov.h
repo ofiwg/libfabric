@@ -50,16 +50,14 @@ extern "C" {
 #define FI_LIB_EXTENSION "fi"
 #define FI_LIB_SUFFIX FI_LIB_EXTENSION ".so"
 
-#define FI_LIB_CLASS_NAME	"libfabric"
-
 struct fi_provider {
 	uint32_t version;
 	uint32_t fi_version;
+	const char *name;
 	int	(*getinfo)(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info);
 	int	(*fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
-	const char *name;
 };
 
 /* ctor and dtor function signatures */

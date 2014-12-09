@@ -121,10 +121,10 @@ static void fi_ini(void)
 	if (init)
 		goto unlock;
 
-	fi_register_provider(VERBS_C);
-	fi_register_provider(PSM_C);
-	fi_register_provider(SOCKETS_C);
-	fi_register_provider(USNIC_C);
+	fi_register_provider(VERBS_INIT);
+	fi_register_provider(PSM_INIT);
+	fi_register_provider(SOCKETS_INIT);
+	fi_register_provider(USNIC_INIT);
 
 #ifdef HAVE_LIBDL
 	struct dirent **liblist;
