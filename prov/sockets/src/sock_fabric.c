@@ -224,12 +224,17 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	return ret;
 }
 
+static void fi_sockets_fini(void)
+{
+}
+
 struct fi_provider sock_prov = {
 	.name = "IP",
 	.version = FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION), 
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = sock_getinfo,
 	.fabric = sock_fabric,
+	.deinit = fi_sockets_fini
 };
 
 
@@ -243,8 +248,4 @@ SOCKETS_INI
 	}
 
 	return (&sock_prov);
-}
-
-SOCKETS_FINI
-{
 }

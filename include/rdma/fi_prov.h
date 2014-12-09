@@ -58,20 +58,16 @@ struct fi_provider {
 			uint64_t flags, struct fi_info *hints, struct fi_info **info);
 	int	(*fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
+	void (*deinit)(void);
 };
 
-/* ctor and dtor function signatures */
+/* ctor function signature template */
 #define INI_SIG(name) struct fi_provider* name(void)
-#define FINI_SIG(name) void name(void)
 
 /* dl providers ctor and dtors are called when loaded and unloaded */
 #define EXT_INI \
 	__attribute__((visibility ("default"))) \
 	struct fi_provider* fi_prov_ini(void)
-
-#define EXT_FINI \
-	__attribute__((visibility ("default"))) \
-	void fi_prov_fini(void)
 
 #ifdef __cplusplus
 }

@@ -2378,19 +2378,20 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void 
 	return 0;
 }
 
+static void fi_ibv_fini(void)
+{
+}
+
 static struct fi_provider fi_ibv_prov = {
 	.name = PROV_NAME,
 	.version = PROV_VERS,
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = fi_ibv_getinfo,
-	.fabric = fi_ibv_fabric
+	.fabric = fi_ibv_fabric,
+	.deinit = fi_ibv_fini
 };
 
 VERBS_INI
 {
 	return &fi_ibv_prov;
-}
-
-VERBS_FINI
-{
 }

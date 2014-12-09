@@ -78,7 +78,7 @@ static int fi_register_provider(struct fi_provider *provider)
 	/* If a provider with this name is already registered:
 	 * - if the new provider has a lower version number, just fail
 	 *   to register it
-	 * - otherwise, just overwrite the old prov entry
+	 * - otherwise, de-init old provider and overwrite the entry
 	 * If the provider is a new/unique name, calloc() a new prov entry.
 	 */
 	prov = fi_getprov(provider->name);
@@ -86,6 +86,7 @@ static int fi_register_provider(struct fi_provider *provider)
 		if (FI_VERSION_GE(prov->provider->version, provider->version))
 			return -FI_EALREADY;
 
+		prov->provider->deinit();
 		prov->provider = provider;
 		return 0;
 	}
@@ -187,6 +188,8 @@ static void fi_ini(void)
 
 static void __attribute__((destructor)) fi_fini(void)
 {
+	for (struct fi_prov *prov = prov_head; prov; prov = prov->next)
+		prov->provider->deinit();
 }
 
 static struct fi_prov *fi_getprov(const char *prov_name)

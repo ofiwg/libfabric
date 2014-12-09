@@ -295,12 +295,18 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 	return 0;
 }
 
+static void psmx_fini(void)
+{
+	psm_finalize();
+}
+
 static struct fi_provider psmx_prov = {
 	.name = "PSM",
 	.version = FI_VERSION(0, 9),
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = psmx_getinfo,
 	.fabric = psmx_fabric,
+	.deinit = psmx_fini
 };
 
 static int psmx_get_int_env(char *name, int default_value)
@@ -359,7 +365,3 @@ PSM_INI
 	return (&psmx_prov);
 }
 
-PSM_FINI
-{
-	psm_finalize();
-}
