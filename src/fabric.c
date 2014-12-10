@@ -86,7 +86,7 @@ static int fi_register_provider(struct fi_provider *provider)
 		if (FI_VERSION_GE(prov->provider->version, provider->version))
 			return -FI_EALREADY;
 
-		prov->provider->deinit();
+		prov->provider->cleanup();
 		prov->provider = provider;
 		return 0;
 	}
@@ -189,7 +189,7 @@ static void fi_ini(void)
 static void __attribute__((destructor)) fi_fini(void)
 {
 	for (struct fi_prov *prov = prov_head; prov; prov = prov->next)
-		prov->provider->deinit();
+		prov->provider->cleanup();
 }
 
 static struct fi_prov *fi_getprov(const char *prov_name)

@@ -43,12 +43,20 @@ extern "C" {
 #endif
 
 /*
- * Extension that low-level drivers should add to their .so filename
- * (probably via libtool "-release" option).  For example a low-level
- * driver named "libfoo" should build a plug-in named "libfoo-fi.so".
+ * Extension that dl-loaded providers should add to their .so filename
+ * (probably via libtool "-release" option). For example a provider
+ * driver named "foo" should build a plug-in named "libfoo-fi.so", and
+ * place it in $prefix/$libdir/libfabric/
  */
 #define FI_LIB_EXTENSION "fi"
 #define FI_LIB_SUFFIX FI_LIB_EXTENSION ".so"
+
+/* Dl-loaded providers initialization entry point is called when loaded.
+ * When unloaded a provider's fi_provider->cleanup function is called.
+ */
+#define EXT_INI \
+	__attribute__((visibility ("default"))) \
+	struct fi_provider* fi_prov_ini(void)
 
 struct fi_provider {
 	uint32_t version;
@@ -58,16 +66,8 @@ struct fi_provider {
 			uint64_t flags, struct fi_info *hints, struct fi_info **info);
 	int	(*fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
-	void (*deinit)(void);
+	void (*cleanup)(void);
 };
-
-/* ctor function signature template */
-#define INI_SIG(name) struct fi_provider* name(void)
-
-/* dl providers ctor and dtors are called when loaded and unloaded */
-#define EXT_INI \
-	__attribute__((visibility ("default"))) \
-	struct fi_provider* fi_prov_ini(void)
 
 #ifdef __cplusplus
 }

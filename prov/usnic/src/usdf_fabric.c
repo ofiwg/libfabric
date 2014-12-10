@@ -777,7 +777,7 @@ static struct fi_provider usdf_ops = {
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = usdf_getinfo,
 	.fabric = usdf_fabric_open,
-	.deinit =  usdf_fini
+	.cleanup =  usdf_fini
 };
 
 USNIC_INI

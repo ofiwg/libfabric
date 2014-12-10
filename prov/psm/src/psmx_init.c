@@ -306,7 +306,7 @@ static struct fi_provider psmx_prov = {
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = psmx_getinfo,
 	.fabric = psmx_fabric,
-	.deinit = psmx_fini
+	.cleanup = psmx_fini
 };
 
 static int psmx_get_int_env(char *name, int default_value)

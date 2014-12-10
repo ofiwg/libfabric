@@ -2388,7 +2388,7 @@ static struct fi_provider fi_ibv_prov = {
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = fi_ibv_getinfo,
 	.fabric = fi_ibv_fabric,
-	.deinit = fi_ibv_fini
+	.cleanup = fi_ibv_fini
 };
 
 VERBS_INI

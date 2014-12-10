@@ -234,7 +234,7 @@ struct fi_provider sock_prov = {
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = sock_getinfo,
 	.fabric = sock_fabric,
-	.deinit = fi_sockets_fini
+	.cleanup = fi_sockets_fini
 };
 
 

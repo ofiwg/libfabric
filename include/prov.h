@@ -39,6 +39,10 @@
 
 #include <rdma/fi_prov.h>
 
+/* Provider initialization function signature that built-in providers
+ * must specify. */
+#define INI_SIG(name) struct fi_provider* name(void)
+
 /* for each provider defines for three scenarios:
  * dl: externally visible ctor with known name (see fi_prov.h)
  * built-in: ctor function def, don't export symbols
