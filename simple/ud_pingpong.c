@@ -70,6 +70,7 @@ static char *dst_addr, *src_addr;
 static char *port = "3333";
 static fi_addr_t rem_addr;
 
+static struct fi_info *fi;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_ep *ep;
@@ -212,6 +213,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	if (max_msg_size > 0 && buffer_size > max_msg_size) {
 		buffer_size = max_msg_size;
 	}
+	if (buffer_size < fi->src_addrlen) {
+		buffer_size = fi->src_addrlen;
+	}
 	buffer_size += prefix_len;
 	buf = malloc(buffer_size);
 	if (!buf) {
@@ -242,6 +246,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err3;
 	}
 
+	memset(&av_attr, 0, sizeof(av_attr));
 	av_attr.type = FI_AV_MAP;
 	av_attr.name = NULL;
 	av_attr.flags = 0;
@@ -303,7 +308,6 @@ static int bind_ep_res(void)
 
 static int common_setup(void)
 {
-	struct fi_info *fi;
 	int ret;
 
 	ret = getaddr(src_addr, port, (struct sockaddr **) &hints.src_addr,
@@ -367,7 +371,6 @@ static int common_setup(void)
 
 	if (hints.src_addr)
 		free(hints.src_addr);
-	fi_freeinfo(fi);
 	return 0;
 
 err5:
@@ -407,8 +410,9 @@ static int client_connect(void)
 		goto err;
 	}
 
-	// send initial message to server
-	ret = send_xfer(4);
+	// send initial message to server with our local address
+	memcpy(buf_ptr, fi->src_addr, fi->src_addrlen);
+	ret = send_xfer(fi->src_addrlen);
 	if (ret != 0)
 		goto err;
 
@@ -439,15 +443,22 @@ static int server_connect(void)
 		goto err;
 
 	do {
-		ret = fi_cq_readfrom(rcq, &comp, sizeof comp, &rem_addr);
+		ret = fi_cq_read(rcq, &comp, 1);
 		if (ret < 0) {
-			printf("fi_cq_readfrom rcq %d (%s)\n", ret, fi_strerror(-ret));
+			printf("fi_cq_read rcq %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
 		}
 	} while (ret == 0);
 
-	if (rem_addr == FI_ADDR_NOTAVAIL) {
-		printf("Error getting address\n");
+	ret = fi_av_insert(av, buf_ptr, 1, &rem_addr, 0, NULL);
+	if (ret != 1) {
+		if (ret == 0) {
+			printf("Unable to resolve remote address 0x%x 0x%x\n",
+					((uint32_t *)buf)[0], ((uint32_t *)buf)[1]);
+			ret = -FI_EINVAL;
+		} else {
+			printf("fi_insert_av %d (%s)\n", ret, fi_strerror(-ret));
+		}
 		goto err;
 	}
 
@@ -513,6 +524,7 @@ static int run(void)
 	if (ret != 0) {
 		printf("fi_close(fab) ret=%d, %s\n", ret, fi_strerror(-ret));
 	}
+	fi_freeinfo(fi);
 	return ret;
 }
 
