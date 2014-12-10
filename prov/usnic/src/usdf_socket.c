@@ -33,17 +33,38 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef _USDF_ENDPOINT_H_
-#define _USDF_ENDPOINT_H_
 
-int usdf_ep_port_bind(struct usdf_ep *ep, struct fi_info *info);
-int usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int usdf_ep_msg_get_queues(struct usdf_ep *ep);
-void usdf_ep_msg_release_queues(struct usdf_ep *ep);
+#if HAVE_CONFIG_H
+#  include <config.h>
+#endif /* HAVE_CONFIG_H */
 
-extern struct fi_ops usdf_ep_ops;
+#include <errno.h>
+#include <stdint.h>
+#include <sys/socket.h>
+#include <sys/epoll.h>
 
-#endif /* _USDF_ENDPOINT_H_ */
+#include <rdma/fi_errno.h>
+
+#include "usdf_socket.h"
+
+int
+usdf_check_sock_error(int sock, uint32_t events)
+{
+	socklen_t len;
+	int status;
+	int ret;
+
+	if (events & EPOLLBAD) {
+		return -FI_ECONNRESET;
+	}
+
+	len = sizeof(status);
+	ret = getsockopt(sock, SOL_SOCKET, SO_ERROR, &status, &len);
+	if (ret == -1) {
+		return -errno;
+	}
+	if (status != 0) {
+		return -status;
+	}
+	return 0;
+}

@@ -149,6 +149,7 @@ _usnic_files = \
 	prov/usnic/src/usdf_cm.c \
 	prov/usnic/src/usdf_cm.h \
 	prov/usnic/src/usdf_cq.c \
+	prov/usnic/src/usdf_cq.h \
 	prov/usnic/src/usdf_dgram.c \
 	prov/usnic/src/usdf_dgram.h \
 	prov/usnic/src/usdf_domain.c \

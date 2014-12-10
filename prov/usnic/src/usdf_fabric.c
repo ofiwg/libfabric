@@ -68,6 +68,8 @@
 #include "fi_usnic.h"
 #include "usdf_progress.h"
 #include "usdf_timer.h"
+#include "usdf_dgram.h"
+#include "usdf_msg.h"
 
 struct usdf_usnic_info *__usdf_devinfo;
 
@@ -108,8 +110,12 @@ usdf_validate_hints(struct fi_info *hints, struct usd_device_attrs *dap)
 
 	fattrp = hints->fabric_attr;
 	if (fattrp != NULL) {
+		if (fattrp->prov_version != 0 &&
+		    fattrp->prov_version != USDF_PROV_VERSION) {
+			return -FI_ENODATA;
+		}
 		if (fattrp->prov_name != NULL &&
-                    strcmp(fattrp->prov_name, USDF_FI_NAME) != 0) {
+                    strcmp(fattrp->prov_name, USDF_PROV_NAME) != 0) {
 			return -FI_ENODATA;
 		}
 		if (fattrp->name != NULL &&
@@ -122,16 +128,15 @@ usdf_validate_hints(struct fi_info *hints, struct usd_device_attrs *dap)
 }
 
 static int
-usdf_fill_addr_info(struct fi_info *fi, struct fi_info *hints,
+usdf_fill_addr_info(struct fi_info *fi, uint32_t addr_format,
 		struct sockaddr_in *src, struct sockaddr_in *dest,
 		struct usd_device_attrs *dap)
 {
 	struct sockaddr_in *sin;
 	int ret;
 
-	/* If hints speficied, we already validated requested addr_format */
-	if (hints != NULL && hints->addr_format != FI_FORMAT_UNSPEC) {
-		fi->addr_format = hints->addr_format;
+	if (addr_format != FI_FORMAT_UNSPEC) {
+		fi->addr_format = addr_format;
 	} else {
 		fi->addr_format = FI_SOCKADDR_IN;
 	}
@@ -192,6 +197,8 @@ usdf_fill_info_dgram(
 	struct fi_tx_attr *txattr;
 	struct fi_rx_attr *rxattr;
 	struct fi_ep_attr *eattrp;
+	uint32_t addr_format;
+	size_t entries;
 	int ret;
 
 	/* check that we are capable of what's requested */
@@ -214,12 +221,14 @@ usdf_fill_info_dgram(
 
 	if (hints != NULL) {
 		fi->mode = hints->mode & USDF_DGRAM_SUPP_MODE;
+		addr_format = hints->addr_format;
 	} else {
 		fi->mode = USDF_DGRAM_SUPP_MODE;
+		addr_format = FI_FORMAT_UNSPEC;
 	}
 	fi->ep_type = FI_EP_DGRAM;
 
-	ret = usdf_fill_addr_info(fi, hints, src, dest, dap);
+	ret = usdf_fill_addr_info(fi, addr_format, src, dest, dap);
 	if (ret != 0) {
 		goto fail;
 	}
@@ -234,22 +243,72 @@ usdf_fill_info_dgram(
 
 	/* TX attrs */
 	txattr = fi->tx_attr;
-	txattr->size = dap->uda_max_send_credits;
-	if (hints != NULL &&
-	    hints->tx_attr != NULL &&
-	    hints->tx_attr->size != 0 &&
-	    hints->tx_attr->size < txattr->size) {
-		txattr->size = hints->tx_attr->size;
+	txattr->iov_limit = USDF_DGRAM_DFLT_SGE;
+	txattr->size = dap->uda_max_send_credits / USDF_DGRAM_DFLT_SGE;
+	if (hints != NULL && hints->tx_attr != NULL) {
+		if (hints->tx_attr->iov_limit > USDF_MSG_MAX_SGE) {
+			ret = -FI_ENODATA;
+			goto fail;
+		}
+		if (hints->tx_attr->iov_limit != 0) {
+			txattr->iov_limit = hints->tx_attr->iov_limit;
+			entries = hints->tx_attr->size * txattr->iov_limit;
+			if (entries > dap->uda_max_send_credits) {
+				ret = -FI_ENODATA;
+				goto fail;
+			} else if (entries == 0) {
+				txattr->size = dap->uda_max_send_credits /
+					txattr->iov_limit;
+			} else {
+				txattr->size = hints->tx_attr->size;
+			}
+		} else if (hints->tx_attr->size != 0) {
+			txattr->size = hints->tx_attr->size;
+			if (txattr->size > dap->uda_max_send_credits) {
+				ret = -FI_ENODATA;
+				goto fail;
+			}
+			entries = txattr->size * txattr->iov_limit;
+			if (entries > dap->uda_max_send_credits) {
+				txattr->iov_limit = dap->uda_max_send_credits /
+					txattr->size;
+			}
+		}
 	}
 
 	/* RX attrs */
 	rxattr = fi->rx_attr;
-	rxattr->size = dap->uda_max_recv_credits;
-	if (hints != NULL &&
-	    hints->rx_attr != NULL &&
-	    hints->rx_attr->size != 0 &&
-	    hints->rx_attr->size < rxattr->size) {
-		rxattr->size = hints->rx_attr->size;
+	rxattr->iov_limit = USDF_DGRAM_DFLT_SGE;
+	rxattr->size = dap->uda_max_recv_credits / USDF_DGRAM_DFLT_SGE;
+	if (hints != NULL && hints->rx_attr != NULL) {
+		if (hints->rx_attr->iov_limit > USDF_MSG_MAX_SGE) {
+			ret = -FI_ENODATA;
+			goto fail;
+		}
+		if (hints->rx_attr->iov_limit != 0) {
+			rxattr->iov_limit = hints->rx_attr->iov_limit;
+			entries = hints->rx_attr->size * rxattr->iov_limit;
+			if (entries > dap->uda_max_recv_credits) {
+				ret = -FI_ENODATA;
+				goto fail;
+			} else if (entries == 0) {
+				rxattr->size = dap->uda_max_recv_credits /
+					rxattr->iov_limit;
+			} else {
+				rxattr->size = hints->rx_attr->size;
+			}
+		} else if (hints->rx_attr->size != 0) {
+			rxattr->size = hints->rx_attr->size;
+			if (rxattr->size > dap->uda_max_recv_credits) {
+				ret = -FI_ENODATA;
+				goto fail;
+			}
+			entries = rxattr->size * rxattr->iov_limit;
+			if (entries > dap->uda_max_recv_credits) {
+				rxattr->iov_limit = dap->uda_max_recv_credits /
+					rxattr->size;
+			}
+		}
 	}
 
 	/* endpoint attrs */
@@ -301,6 +360,7 @@ usdf_fill_info_msg(
 	struct fi_tx_attr *txattr;
 	struct fi_rx_attr *rxattr;
 	struct fi_ep_attr *eattrp;
+	uint32_t addr_format;
 	int ret;
 
 	/* check that we are capable of what's requested */
@@ -323,13 +383,15 @@ usdf_fill_info_msg(
 
 	if (hints != NULL) {
 		fi->mode = hints->mode & USDF_MSG_SUPP_MODE;
+		addr_format = hints->addr_format;
 	} else {
 		fi->mode = USDF_MSG_SUPP_MODE;
+		addr_format = FI_FORMAT_UNSPEC;
 	}
 	fi->ep_type = FI_EP_MSG;
 
 
-	ret = usdf_fill_addr_info(fi, hints, src, dest, dap);
+	ret = usdf_fill_addr_info(fi, addr_format, src, dest, dap);
 	if (ret != 0) {
 		goto fail;
 	}
@@ -344,28 +406,21 @@ usdf_fill_info_msg(
 
 	/* TX attrs */
 	txattr = fi->tx_attr;
-	txattr->size = dap->uda_max_send_credits;
-	if (hints != NULL &&
-	    hints->tx_attr != NULL &&
-	    hints->tx_attr->size != 0 &&
-	    hints->tx_attr->size < txattr->size) {
-		txattr->size = hints->tx_attr->size;
+	if (hints != NULL && hints->tx_attr != NULL) {
+		*txattr = *hints->tx_attr;
 	}
+	usdf_msg_fill_tx_attr(txattr);
 
 	/* RX attrs */
 	rxattr = fi->rx_attr;
-	rxattr->size = dap->uda_max_recv_credits;
-	if (hints != NULL &&
-	    hints->rx_attr != NULL &&
-	    hints->rx_attr->size != 0 &&
-	    hints->rx_attr->size < rxattr->size) {
-		rxattr->size = hints->rx_attr->size;
+	if (hints != NULL && hints->rx_attr != NULL) {
+		*rxattr = *hints->rx_attr;
 	}
+	usdf_msg_fill_rx_attr(rxattr);
 
 	/* endpoint attrs */
 	eattrp = fi->ep_attr;
-	eattrp->max_msg_size = dap->uda_mtu -
-		sizeof(struct usd_udp_hdr);
+	eattrp->max_msg_size = USDF_MSG_MAX_MSG;
 	eattrp->protocol = FI_PROTO_RUDP;
 	eattrp->tx_ctx_cnt = 1;
 	eattrp->rx_ctx_cnt = 1;
@@ -690,6 +745,17 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 	}
 	fp->fab_epollfd = -1;
 	fp->fab_arp_sockfd = -1;
+	LIST_INIT(&fp->fab_domain_list);
+
+	fp->fab_attr.fabric = fab_utof(fp);
+	fp->fab_attr.name = strdup(fattrp->name);
+	fp->fab_attr.prov_name = strdup(USDF_PROV_NAME);
+	fp->fab_attr.prov_version = USDF_PROV_VERSION;
+	if (fp->fab_attr.name == NULL ||
+			fp->fab_attr.prov_name == NULL) {
+		ret = -FI_ENOMEM;
+		goto fail;
+	}
 
 	fp->fab_fid.fid.fclass = FI_CLASS_FABRIC;
 	fp->fab_fid.fid.context = context;
@@ -726,6 +792,7 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 		goto fail;
 	}
 
+	/* initialize timer subsystem */
 	ret = usdf_timer_init(fp);
 	if (ret != 0) {
 		goto fail;
@@ -746,7 +813,9 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 	}
 
 	atomic_init(&fp->fab_refcnt, 0);
-	*fabric = &fp->fab_fid;
+	fattrp->fabric = fab_utof(fp);
+	fattrp->prov_version = USDF_PROV_VERSION;
+	*fabric = fab_utof(fp);
 	return 0;
 
 fail:
@@ -767,8 +836,8 @@ fail:
 }
 
 static struct fi_provider usdf_ops = {
-	.name = USDF_FI_NAME,
-	.version = FI_VERSION(0, 7),
+	.name = USDF_PROV_NAME,
+	.version = USDF_PROV_VERSION,
 	.getinfo = usdf_getinfo,
 	.fabric = usdf_fabric_open,
 };

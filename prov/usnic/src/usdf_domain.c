@@ -100,6 +100,8 @@ usdf_domain_close(fid_t fid)
 		atomic_dec(&udp->dom_eq->eq_refcnt);
 	}
 	atomic_dec(&udp->dom_fabric->fab_refcnt);
+	LIST_REMOVE(udp, dom_link);
+	fi_freeinfo(udp->dom_info);
 	free(udp);
 
 	return 0;
@@ -132,6 +134,8 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct usdf_domain *udp;
 	struct usdf_usnic_info *dp;
 	struct usdf_dev_entry *dep;
+	struct sockaddr_in *sin;
+	size_t addrlen;
 	int d;
 	int ret;
 
@@ -142,6 +146,27 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	fp = fab_fidtou(fabric);
+
+	/*
+	 * Make sure address format is good and matches this fabric
+	 */
+	switch (info->addr_format) {
+	case FI_SOCKADDR:
+		addrlen = sizeof(struct sockaddr);
+		break;
+	case FI_SOCKADDR_IN:
+		addrlen = sizeof(struct sockaddr_in);
+		break;
+	default:
+		ret = -FI_EINVAL;
+		goto fail;
+	}
+	sin = info->src_addr;
+	if (info->src_addrlen != addrlen || sin->sin_family != AF_INET ||
+	    sin->sin_addr.s_addr != fp->fab_dev_attrs->uda_ipaddr_be) {
+		ret = -FI_EINVAL;
+		goto fail;
+	}
 
 	/* steal cached device from info if we can */
 	dp = __usdf_devinfo;
@@ -169,7 +194,27 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	udp->dom_fid.ops = &usdf_domain_ops;
 	udp->dom_fid.mr = &usdf_domain_mr_ops;
 
+	ret = pthread_spin_init(&udp->dom_progress_lock,
+			PTHREAD_PROCESS_PRIVATE);
+	if (ret != 0) {
+		ret = -ret;
+		goto fail;
+	}
+	TAILQ_INIT(&udp->dom_tx_ready);
+	TAILQ_INIT(&udp->dom_hcq_list);
+
+	udp->dom_info = fi_dupinfo(info);
+	if (udp->dom_info == NULL) {
+		ret = -FI_ENOMEM;
+		goto fail;
+	}
+	if (udp->dom_info->dest_addr != NULL) {
+		free(udp->dom_info->dest_addr);
+		udp->dom_info->dest_addr = NULL;
+	}
+
 	udp->dom_fabric = fp;
+	LIST_INSERT_HEAD(&fp->fab_domain_list, udp, dom_link);
 	atomic_init(&udp->dom_refcnt, 0);
 	atomic_inc(&fp->fab_refcnt);
 
@@ -178,6 +223,12 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 fail:
 	if (udp != NULL) {
+		if (udp->dom_info != NULL) {
+			fi_freeinfo(udp->dom_info);
+		}
+		if (udp->dom_dev != NULL) {
+			usd_close(udp->dom_dev);
+		}
 		free(udp);
 	}
 	return ret;
