@@ -32,6 +32,7 @@
 
 #include "psmx.h"
 #include "fi.h"
+#include "prov.h"
 
 struct psmx_env psmx_env;
 
@@ -294,11 +295,18 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 	return 0;
 }
 
+static void psmx_fini(void)
+{
+	psm_finalize();
+}
+
 static struct fi_provider psmx_prov = {
 	.name = "PSM",
 	.version = FI_VERSION(0, 9),
+	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = psmx_getinfo,
 	.fabric = psmx_fabric,
+	.cleanup = psmx_fini
 };
 
 static int psmx_get_int_env(char *name, int default_value)
@@ -320,7 +328,7 @@ static int psmx_get_int_env(char *name, int default_value)
 	return default_value;
 }
 
-static void __attribute__((constructor)) psmx_ini(void)
+PSM_INI
 {
 	int major, minor;
 	int check_version;
@@ -342,7 +350,7 @@ static void __attribute__((constructor)) psmx_ini(void)
 	if (err != PSM_OK) {
 		fprintf(stderr, "%s: psm_init failed: %s\n", __func__,
 			psm_error_get_string(err));
-		return;
+		return NULL;
 	}
 
 	check_version = psmx_get_int_env("SFI_PSM_VERSION_CHECK", 1);
@@ -351,13 +359,9 @@ static void __attribute__((constructor)) psmx_ini(void)
 		fprintf(stderr, "%s: PSM version mismatch: header %d.%d, library %d.%d.\n",
 			__func__, PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
 		fprintf(stderr, "\tSet envar SFI_PSM_VERSION_CHECK=0 to bypass version check.\n");
-		return;
+		return NULL;
 	}
 
-	(void) fi_register(&psmx_prov);
+	return (&psmx_prov);
 }
 
-static void __attribute__((destructor)) psmx_fini(void)
-{
-	psm_finalize();
-}

@@ -1,7 +1,4 @@
 /*
- * Copyright (c) 2004, 2005 Topspin Communications.  All rights reserved.
- * Copyright (c) 2005, 2006 Cisco Systems, Inc.  All rights reserved.
- * Copyright (c) 2005 PathScale, Inc.  All rights reserved.
  * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -33,44 +30,67 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_PROV_H_
-#define _FI_PROV_H_
+#ifndef _PROV_H_
+#define _PROV_H_
 
-#include <rdma/fabric.h>
+#if HAVE_CONFIG_H
+#  include <config.h>
+#endif /* HAVE_CONFIG_H */
 
-#ifdef __cplusplus
-extern "C" {
+#include <rdma/fi_prov.h>
+
+/* Provider initialization function signature that built-in providers
+ * must specify. */
+#define INI_SIG(name) struct fi_provider* name(void)
+
+/* for each provider defines for three scenarios:
+ * dl: externally visible ctor with known name (see fi_prov.h)
+ * built-in: ctor function def, don't export symbols
+ * not built: no-op call for ctor
+*/
+
+#if (HAVE_VERBS) && (HAVE_VERBS_DL)
+#  define VERBS_INI EXT_INI
+#  define VERBS_INIT NULL
+#elif (HAVE_VERBS)
+#  define VERBS_INI INI_SIG(fi_verbs_ini)
+#  define VERBS_INIT fi_verbs_ini()
+VERBS_INI ;
+#else
+#  define VERBS_INIT NULL
 #endif
 
-/*
- * Extension that dl-loaded providers should add to their .so filename
- * (probably via libtool "-release" option). For example a provider
- * driver named "foo" should build a plug-in named "libfoo-fi.so", and
- * place it in $prefix/$libdir/libfabric/
- */
-#define FI_LIB_EXTENSION "fi"
-#define FI_LIB_SUFFIX FI_LIB_EXTENSION ".so"
-
-/* Dl-loaded providers initialization entry point is called when loaded.
- * When unloaded a provider's fi_provider->cleanup function is called.
- */
-#define EXT_INI \
-	__attribute__((visibility ("default"))) \
-	struct fi_provider* fi_prov_ini(void)
-
-struct fi_provider {
-	uint32_t version;
-	uint32_t fi_version;
-	const char *name;
-	int	(*getinfo)(uint32_t version, const char *node, const char *service,
-			uint64_t flags, struct fi_info *hints, struct fi_info **info);
-	int	(*fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-			void *context);
-	void (*cleanup)(void);
-};
-
-#ifdef __cplusplus
-}
+#if (HAVE_PSM) && (HAVE_PSM_DL)
+#  define PSM_INI EXT_INI
+#  define PSM_INIT NULL
+#elif (HAVE_PSM)
+#  define PSM_INI INI_SIG(fi_psm_ini)
+#  define PSM_INIT fi_psm_ini()
+PSM_INI ;
+#else
+#  define PSM_INIT NULL
 #endif
 
-#endif /* _FI_PROV_H_ */
+#if (HAVE_SOCKETS) && (HAVE_SOCKETS_DL)
+#  define SOCKETS_INI EXT_INI
+#  define SOCKETS_INIT NULL
+#elif (HAVE_SOCKETS)
+#  define SOCKETS_INI INI_SIG(fi_sockets_ini)
+#  define SOCKETS_INIT fi_sockets_ini()
+SOCKETS_INI ;
+#else
+#  define SOCKETS_INIT NULL
+#endif
+
+#if (HAVE_USNIC) && (HAVE_USNIC_DL)
+#  define USNIC_INI EXT_INI
+#  define USNIC_INIT NULL
+#elif (HAVE_USNIC)
+#  define USNIC_INI INI_SIG(fi_usnic_ini)
+#  define USNIC_INIT fi_usnic_ini()
+USNIC_INI ;
+#else
+#  define USNIC_INIT NULL
+#endif
+
+#endif /* _PROV_H_ */
