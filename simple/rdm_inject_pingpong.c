@@ -45,6 +45,7 @@ static int custom;
 static int size_option;
 static int iterations = 1000;
 static int transfer_size = 1000;
+static int max_inject_size;
 static int max_credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
@@ -150,6 +151,9 @@ static int sync_test(void)
 static int run_test(void)
 {
 	int ret, i;
+
+	if (transfer_size > max_inject_size) 
+		return 0;
 
 	ret = sync_test();
 	if (ret)
@@ -297,6 +301,14 @@ static int init_fabric(void)
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
+	}
+	
+	/* check max msg size */
+	max_inject_size = fi->ep_attr->inject_size;
+	if (custom && transfer_size > max_inject_size) {
+		fprintf(stderr, "Msg size greater than max inject size\n");
+		ret = -FI_EINVAL;
+		goto err0;
 	}
 
 	/* We use provider MR attributes and direct address (no offsets) for RMA calls */
