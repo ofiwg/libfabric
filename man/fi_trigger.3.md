@@ -18,8 +18,8 @@ fi_trigger - Triggered operations
 # DESCRIPTION
 
 Triggered operations allow an application to queue a data transfer
-request that is deferred until a specified condition is met.  It is
-often used to send a message, but only after receiving all input data.
+request that is deferred until a specified condition is met.  A typical
+use is to send a message only after receiving all input data.
 
 A triggered operation may be requested by specifying the FI_TRIGGER
 flag as part of the operation.  Alternatively, an endpoint alias may
@@ -27,7 +27,7 @@ be created and configured with the FI_TRIGGER flag.  Such an endpoint
 is referred to as a triggerable endpoint.  All data transfer
 operations on a triggerable endpoint are deferred.
 
-Any data transfer operation is potentially be triggerable, subject to
+Any data transfer operation is potentially triggerable, subject to
 provider constraints.  Triggerable endpoints are initialized such that
 only those interfaces supported by the provider which are triggerable
 are available.
@@ -66,7 +66,7 @@ event type.
 
 The following trigger events are defined.
 
-*FI_TRIGGER_THRESHOL*
+*FI_TRIGGER_THRESHOLD*
 : This indicates that the data transfer operation will be deferred
   until an event counter crosses an application specified threshold
   value.  The threshold is specified using struct
