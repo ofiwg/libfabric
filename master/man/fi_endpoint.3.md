@@ -352,7 +352,8 @@ an endpoint.
 
 {% highlight c %}
 struct fi_ep_attr {
-	uint64_t  protocol;
+	uint32_t  protocol;
+	uint32_t  protocol_version;
 	size_t    max_msg_size;
 	size_t    inject_size;
 	size_t    total_buffered_recv;
@@ -373,8 +374,8 @@ Specifies the low-level end to end protocol employed by the provider.
 A matching protocol must be used by communicating endpoints to ensure
 interoperability.  The following protocol values are defined.
 Provider specific protocols are also allowed.  Provider specific
-protocols will be indicated by having the upper 3 bytes of the
-protocol value set to the vendor OUI.
+protocols will be indicated by having the upper bit of the
+protocol value set to one.
 
 *FI_PROTO_UNSPEC*
 : The protocol is not specified.  This is usually provided as input,
@@ -395,6 +396,15 @@ protocol value set to the vendor OUI.
 : The protocol is based on an Intel proprietary protocol known as PSM,
   performance scaled messaging.  PSMX is an extended version of the
   PSM protocol to support the libfabric interfaces.
+
+## protocol_version - Protocol Version
+
+Identifies which version of the protocol is employeed by the provider.
+The protocol version allows providers to extend an existing protocol,
+by adding support for additional features or functionality for example,
+in a backward compatible manner.  Providers that support different versions
+of the same protocol should interoperate, but only when using the
+capabilities defined for the lesser version. 
 
 ## max_msg_size - Max Message Size
 
