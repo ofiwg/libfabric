@@ -393,6 +393,8 @@ static int server_connect(void)
 		goto err3;
 	}
 
+	fi_close(&pep->fid);
+
 	fi_freeinfo(info);
 	return 0;
 
@@ -409,6 +411,7 @@ err1:
 static int client_connect(void)
 {
 	struct fi_eq_cm_entry entry;
+	struct fi_eq_err_entry err;
 	uint32_t event;
 	struct fi_info *fi;
 	ssize_t rd;
@@ -464,7 +467,17 @@ static int client_connect(void)
 
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		printf("fi_eq_sread %zd %s\n", rd, fi_strerror((int) -rd));
+		if (rd == -FI_EAVAIL) {
+			rd = fi_eq_readerr(cmeq, &err, 0);
+			if (rd != sizeof(err)) {
+				printf("fi_eq_readerr %zd %s\n", rd, fi_strerror((int) -rd));
+			} else {
+				printf("EQ report error %d %s\n", err.err,
+						fi_strerror(err.err));
+			}
+		} else {
+			printf("fi_eq_sread %zd %s\n", rd, fi_strerror((int) -rd));
+		}
 		return (int) rd;
 	}
 
