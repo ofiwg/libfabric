@@ -73,11 +73,11 @@ usdf_dgram_recv(struct fid_ep *fep, void *buf, size_t len,
 	uint32_t index;
 
 	ep = ep_ftou(fep);
-	qp = to_qpi(ep->ep_qp);
+	qp = to_qpi(ep->e.dg.ep_qp);
 
 	index = qp->uq_rq.urq_post_index;
 	rxd.urd_context = context;
-	rxd.urd_iov[0].iov_base = (uint8_t *)ep->ep_hdr_buf +
+	rxd.urd_iov[0].iov_base = (uint8_t *)ep->e.dg.ep_hdr_buf +
 		(index * USDF_HDR_BUF_ENTRY) +
 		(USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr));
 	rxd.urd_iov[0].iov_len = sizeof(struct usd_udp_hdr);
@@ -86,11 +86,11 @@ usdf_dgram_recv(struct fid_ep *fep, void *buf, size_t len,
 	rxd.urd_iov_cnt = 2;
 	rxd.urd_next = NULL;
 
-	ep->ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
+	ep->e.dg.ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
 	index = (index + 1) & qp->uq_rq.urq_post_index_mask;
-	ep->ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
+	ep->e.dg.ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
 
-	return usd_post_recv(ep->ep_qp, &rxd);
+	return usd_post_recv(ep->e.dg.ep_qp, &rxd);
 }
 
 ssize_t
@@ -104,10 +104,10 @@ usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 	int i;
 
 	ep = ep_ftou(fep);
-	qp = to_qpi(ep->ep_qp);
+	qp = to_qpi(ep->e.dg.ep_qp);
 
 	rxd.urd_context = context;
-	rxd.urd_iov[0].iov_base = ep->ep_hdr_buf + 
+	rxd.urd_iov[0].iov_base = ep->e.dg.ep_hdr_buf + 
 		qp->uq_rq.urq_post_index * USDF_HDR_BUF_ENTRY;
 	rxd.urd_iov[0].iov_len = sizeof(struct usd_udp_hdr);
 	memcpy(&rxd.urd_iov[1], iov, sizeof(*iov) * count);
@@ -116,11 +116,11 @@ usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 
 	index = qp->uq_rq.urq_post_index;
 	for (i = 0; i < count; ++i) {
-		ep->ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
+		ep->e.dg.ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
 		index = (index + 1) & qp->uq_rq.urq_post_index_mask;
 	}
 
-	return usd_post_recv(ep->ep_qp, &rxd);
+	return usd_post_recv(ep->e.dg.ep_qp, &rxd);
 }
 
 static inline ssize_t
@@ -128,10 +128,10 @@ _usdf_dgram_send(struct usdf_ep *ep, struct usd_dest *dest,
 		const void *buf, size_t len,  void *context)
 {
 	if (len <= USD_SEND_MAX_COPY - sizeof(struct usd_udp_hdr)) {
-		return usd_post_send_one_copy(ep->ep_qp, dest, buf, len,
+		return usd_post_send_one_copy(ep->e.dg.ep_qp, dest, buf, len,
 			USD_SF_SIGNAL, context);
 	} else {
-		return usd_post_send_one(ep->ep_qp, dest, buf, len,
+		return usd_post_send_one(ep->e.dg.ep_qp, dest, buf, len,
 			USD_SF_SIGNAL, context);
 	}
 }
@@ -147,17 +147,6 @@ usdf_dgram_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 
 	dest = (struct usd_dest *)(uintptr_t) dest_addr;
 	return _usdf_dgram_send(ep, dest, buf, len, context);
-}
-
-ssize_t
-usdf_dgram_conn_send(struct fid_ep *fep, const void *buf, size_t len,
-		     void *desc, fi_addr_t dest_addr, void *context)
-{
-	struct usdf_ep *ep;
-
-	ep = ep_ftou(fep);
-
-	return _usdf_dgram_send(ep, ep->ep_dest, buf, len, context);
 }
 
 ssize_t
@@ -207,7 +196,7 @@ usdf_dgram_prefix_recv(struct fid_ep *fep, void *buf, size_t len,
 	uint32_t index;
 
 	ep = ep_ftou(fep);
-	qp = to_qpi(ep->ep_qp);
+	qp = to_qpi(ep->e.dg.ep_qp);
 
 	index = qp->uq_rq.urq_post_index;
 	rxd.urd_context = context;
@@ -217,9 +206,9 @@ usdf_dgram_prefix_recv(struct fid_ep *fep, void *buf, size_t len,
 	rxd.urd_iov_cnt = 1;
 	rxd.urd_next = NULL;
 
-	ep->ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
+	ep->e.dg.ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
 
-	return usd_post_recv(ep->ep_qp, &rxd);
+	return usd_post_recv(ep->e.dg.ep_qp, &rxd);
 }
 
 ssize_t
@@ -233,7 +222,7 @@ usdf_dgram_prefix_recvv(struct fid_ep *fep, const struct iovec *iov,
 	int i;
 
 	ep = ep_ftou(fep);
-	qp = to_qpi(ep->ep_qp);
+	qp = to_qpi(ep->e.dg.ep_qp);
 
 	rxd.urd_context = context;
 	memcpy(&rxd.urd_iov[0], iov, sizeof(*iov) * count);
@@ -245,11 +234,11 @@ usdf_dgram_prefix_recvv(struct fid_ep *fep, const struct iovec *iov,
 
 	index = qp->uq_rq.urq_post_index;
 	for (i = 0; i < count; ++i) {
-		ep->ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
+		ep->e.dg.ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
 		index = (index + 1) & qp->uq_rq.urq_post_index_mask;
 	}
 
-	return usd_post_recv(ep->ep_qp, &rxd);
+	return usd_post_recv(ep->e.dg.ep_qp, &rxd);
 }
 
 ssize_t
@@ -267,7 +256,7 @@ usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
     ep = ep_ftou(fep);
     dest = (struct usd_dest *)(uintptr_t)dest_addr;
 
-    qp = to_qpi(ep->ep_qp);
+    qp = to_qpi(ep->e.dg.ep_qp);
     wq = &qp->uq_wq;
 
     hdr = (struct usd_udp_hdr *) buf - 1;

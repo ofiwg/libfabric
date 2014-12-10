@@ -33,17 +33,22 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef _USDF_ENDPOINT_H_
-#define _USDF_ENDPOINT_H_
+#ifndef _USDF_CQ_H_
+#define _USDF_CQ_H_
 
-int usdf_ep_port_bind(struct usdf_ep *ep, struct fi_info *info);
-int usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int usdf_ep_msg_get_queues(struct usdf_ep *ep);
-void usdf_ep_msg_release_queues(struct usdf_ep *ep);
+int usdf_cq_is_soft(struct usdf_cq *cq);
+int usdf_cq_make_soft(struct usdf_cq *cq);
+int usdf_cq_create_cq(struct usdf_cq *cq);
 
-extern struct fi_ops usdf_ep_ops;
+void usdf_progress_hard_cq_context(struct usdf_cq_hard *hcq);
+void usdf_progress_hard_cq_msg(struct usdf_cq_hard *hcq);
+void usdf_progress_hard_cq_data(struct usdf_cq_hard *hcq);
 
-#endif /* _USDF_ENDPOINT_H_ */
+void usdf_cq_post_soft_context(struct usdf_cq_hard *hcq, void *context,
+		size_t len);
+void usdf_cq_post_soft_msg(struct usdf_cq_hard *hcq, void *context,
+		size_t len);
+void usdf_cq_post_soft_data(struct usdf_cq_hard *hcq, void *context,
+		size_t len);
+
+#endif /* _USDF_CQ_H_ */

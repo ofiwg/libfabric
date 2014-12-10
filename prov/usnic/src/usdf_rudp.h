@@ -33,17 +33,72 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef _USDF_ENDPOINT_H_
-#define _USDF_ENDPOINT_H_
+#ifndef _USDF_RUDP_H_
+#define _USDF_RUDP_H_
 
-int usdf_ep_port_bind(struct usdf_ep *ep, struct fi_info *info);
-int usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int usdf_ep_msg_get_queues(struct usdf_ep *ep);
-void usdf_ep_msg_release_queues(struct usdf_ep *ep);
+#define USDF_RUDP_SEQ_CREDITS 256
+#define USDF_RUDP_ACK_TIMEOUT 5  /* ms */
 
-extern struct fi_ops usdf_ep_ops;
+#define RUDP_SEQ_DIFF(A, B) ((int16_t)((u_int16_t)(A) - (u_int16_t)(B)))
+#define RUDP_SEQ_LT(A, B) (RUDP_SEQ_DIFF(A, B) < 0)
+#define RUDP_SEQ_LE(A, B) (RUDP_SEQ_DIFF(A, B) <= 0)
+#define RUDP_SEQ_GT(A, B) (RUDP_SEQ_DIFF(A, B) > 0)
+#define RUDP_SEQ_GE(A, B) (RUDP_SEQ_DIFF(A, B) >= 0)
 
-#endif /* _USDF_ENDPOINT_H_ */
+enum {
+    /* data messages */
+    RUDP_OP_FIRST   = 0x00,
+    RUDP_OP_MID     = 0x01,
+    RUDP_OP_LAST    = 0x02,
+
+    /* control messages */
+    RUDP_OP_CONNECT_REQ  = 0x81,
+    RUDP_OP_CONNECT_RESP = 0x82,
+    RUDP_OP_NAK       = 0x83,
+    RUDP_OP_ACK       = 0x84,
+};
+
+struct rudp_rc_data_msg {
+    u_int32_t offset;  /* 4 */
+    u_int16_t length;  /* 8 */
+    u_int16_t seqno;   /* 10 */
+} __attribute__ ((__packed__));
+
+struct rudp_rma_data_msg {
+    u_int32_t offset;  /* 4 */
+    u_int16_t rkey;    /* 8 */
+    u_int16_t length;  /* 10 */
+    u_int16_t seqno;   /* 12 */
+    u_int16_t rdma_id; /* 14 */
+} __attribute__ ((__packed__));
+
+struct rudp_msg {
+    u_int16_t opcode;
+    u_int16_t src_peer_id;
+    union {
+        struct rudp_rc_data_msg rc_data;
+        struct {
+            u_int16_t dst_peer_id;
+        } connect_req;
+        struct {
+            u_int16_t dst_peer_id;
+        } connect_resp;
+        struct {
+            u_int16_t ack_seq;
+        } ack;
+        struct {
+            u_int16_t nak_seq;
+            u_int32_t seq_mask;
+        } nak;
+    } __attribute__ ((__packed__)) m;
+} __attribute__ ((__packed__));
+
+struct rudp_pkt {
+    struct ether_header eth;
+    struct iphdr ip;
+    struct udphdr udp;
+    struct rudp_msg msg;
+} __attribute__ ((__packed__));
+
+
+#endif /* _USDF_RUDP_H_ */

@@ -33,17 +33,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef _USDF_ENDPOINT_H_
-#define _USDF_ENDPOINT_H_
+#ifndef _USDF_SOCKET_H_
+#define _USDF_SOCKET_H_
 
-int usdf_ep_port_bind(struct usdf_ep *ep, struct fi_info *info);
-int usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int usdf_ep_msg_get_queues(struct usdf_ep *ep);
-void usdf_ep_msg_release_queues(struct usdf_ep *ep);
+#define EPOLLBAD (EPOLLHUP | EPOLLRDHUP | EPOLLERR)
 
-extern struct fi_ops usdf_ep_ops;
+int usdf_check_sock_error(int sock, uint32_t events);
 
-#endif /* _USDF_ENDPOINT_H_ */
+#endif /* _USDF_SOCKET_H_ */
