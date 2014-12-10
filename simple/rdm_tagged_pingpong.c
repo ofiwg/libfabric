@@ -169,8 +169,8 @@ static int recv_msg(void)
 {
 	int ret;
 
-	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), tag_control, 0,
-			0, &fi_ctx_recv);
+	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+		       tag_control, 0, &fi_ctx_recv);
 	if (ret) {
 		FI_PRINTERR("fi_trecv", ret);
 		return ret;
