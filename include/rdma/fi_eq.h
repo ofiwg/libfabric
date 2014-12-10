@@ -90,6 +90,10 @@ struct fi_poll_attr {
 struct fi_ops_poll {
 	size_t	size;
 	int	(*poll)(struct fid_poll *pollset, void **context, int count);
+	int	(*poll_add)(struct fid_poll *pollset, struct fid *event_fid, 
+			uint64_t flags);
+	int	(*poll_del)(struct fid_poll *pollset, struct fid *event_fid, 
+			uint64_t flags);
 };
 
 struct fid_poll {
@@ -301,6 +305,17 @@ fi_poll(struct fid_poll *pollset, void **context, int count)
 	return pollset->ops->poll(pollset, context, count);
 }
 
+static inline int
+fi_poll_add(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
+{
+	return pollset->ops->poll_add(pollset, event_fid, flags);
+}
+
+static inline int
+fi_poll_del(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
+{
+	return pollset->ops->poll_del(pollset, event_fid, flags);
+}
 
 static inline int
 fi_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
