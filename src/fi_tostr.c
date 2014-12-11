@@ -437,7 +437,7 @@ static void fi_tostr_av_type(char *buf, enum fi_av_type type)
 __attribute__((visibility ("default")))
 char *fi_tostr_(const void *data, enum fi_type datatype)
 {
-	static __thread char *buf;
+	static char *buf = NULL;
 	uint64_t val64 = *(const uint64_t *) data;
 	uint32_t val32 = *(const uint32_t *) data;
 	int enumval = *(const int *) data;
@@ -446,12 +446,11 @@ char *fi_tostr_(const void *data, enum fi_type datatype)
 		return NULL;
 
 	if (!buf) {
-		buf = calloc(4096, sizeof (*buf));
+		buf = calloc(BUFSIZ, 1);
 		if (!buf)
 			return NULL;
-	} else {
-		buf[0] = 0;
 	}
+	buf[0] = '\0';
 
 	switch (datatype) {
 	case FI_TYPE_INFO:
