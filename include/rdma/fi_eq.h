@@ -76,7 +76,11 @@ struct fi_wait_obj_set {
 	enum fi_wait_obj	wait_obj;
 	void			*obj;
 };
-
+	
+struct fi_mutex_cond {
+	pthread_mutex_t		*mutex;
+	pthread_cond_t		*cond;
+};
 
 /*
  * Poll Set

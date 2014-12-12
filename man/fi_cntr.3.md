@@ -187,8 +187,7 @@ control commands are usable with a counter:
 : This command allows the user to retrieve the low-level wait object
   associated with the counter.  The format of the wait-object is
   specified during counter creation, through the counter attributes.
-  The fi_cntr_control arg parameter should be an address where a
-  pointer to the returned wait object will be written.
+  See fi_eq.3 for addition details using control with FI_GETWAIT.
 
 ## fi_cntr_read
 

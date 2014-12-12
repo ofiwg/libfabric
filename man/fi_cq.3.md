@@ -314,9 +314,9 @@ commands are usable with an CQ.
 *FI_GETWAIT (void **)*
 : This command allows the user to retrieve the low-level wait object
   associated with the CQ.  The format of the wait-object is specified
-  during CQ creation, through the CQ attributes.  The fi_control arg
-  parameter should be an address where a pointer to the returned wait
-  object will be written.
+  during CQ creation, through the CQ attributes.
+  See fi_eq.3 for addition details using control with FI_GETWAIT.
+
 
 ## fi_cq_read / fi_cq_readfrom
 

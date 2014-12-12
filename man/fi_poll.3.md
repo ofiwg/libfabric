@@ -197,11 +197,11 @@ struct fi_wait_obj_set {
 };
 {% endhighlight %}
 
-On input, len should indicate the size in bytes referenced by the obj
-field.  On output, the needed size will be returned.  The underlying
-wait objects will be returned in the obj array.  If insufficient space
-is provided, the results will be truncated.  The wait_obj field may be
-used to identify the format of the wait objects.
+: On input, len should indicate the size in bytes referenced by the obj
+  field.  On output, the needed size will be returned.  The underlying
+  wait objects will be returned in the obj array.  If insufficient space
+  is provided, the results will be truncated.  The wait_obj field may be
+  used to identify the format of the wait objects.
 
 ## fi_wait
 

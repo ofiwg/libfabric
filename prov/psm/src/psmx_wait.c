@@ -39,10 +39,7 @@ int psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg)
 	int obj_size = 0;
 	int obj_type = FI_WAIT_NONE;
 	int ret_count = 0;
-	struct {
-		pthread_mutex_t *mutex;
-		pthread_cond_t *cond;
-	} mutex_cond;
+	struct fi_mutex_cond mutex_cond;
 
 	if (!arg)
 		return -EINVAL;
