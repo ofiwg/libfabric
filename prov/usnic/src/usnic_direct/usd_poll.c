@@ -87,11 +87,11 @@ usd_desc_to_rq_comp(
         CQ_ENET_RQ_DESC_FLAGS_TCP_UDP_CSUM_OK;
     if (bytes_written_flags & CQ_ENET_RQ_DESC_FLAGS_TRUNCATED ||
             (edesc->flags & ipudpok) != ipudpok) {
-        if (edesc->flags & CQ_ENET_RQ_DESC_FLAGS_FCS_OK ||
-                bytes_written != 0)
-            comp->uc_status = USD_COMPSTAT_ERROR_CRC;
-        else
+        if (((edesc->flags & CQ_ENET_RQ_DESC_FLAGS_FCS_OK) == 0) &&
+                bytes_written == 0)
             comp->uc_status = USD_COMPSTAT_ERROR_TRUNC;
+        else
+            comp->uc_status = USD_COMPSTAT_ERROR_CRC;
     } else {
         comp->uc_status = USD_COMPSTAT_SUCCESS;
     }
