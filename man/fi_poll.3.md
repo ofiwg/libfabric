@@ -144,7 +144,7 @@ struct fi_wait_attr {
   fi_control to retrieve the underlying wait object(s) associated with
   a wait set, in order to use it in other system calls.  The following
   values may be used to specify the type of wait object associated
-  with an wait set: FI_WAIT_UNSPEC, FI_WAIT_FD, and FI_WAIT_MUT_COND.
+  with an wait set: FI_WAIT_UNSPEC, FI_WAIT_FD, and FI_WAIT_MUTEX_COND.
 
 - *FI_WAIT_UNSPEC*
 : Specifies that the user will only wait on the wait set using
@@ -160,7 +160,7 @@ struct fi_wait_attr {
   poll, and epoll routines.  However, a provider may signal an FD wait
   object by marking it as readable, writable, or with an error.
 
-- *FI_WAIT_MUT_COND*
+- *FI_WAIT_MUTEX_COND*
 : Specifies that the wait set should use a pthread mutex and cond
   variable as a wait object.
 

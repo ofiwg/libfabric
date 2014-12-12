@@ -230,7 +230,7 @@ struct fi_cq_tagged_entry {
   CQ, in order to use it in other system calls.  The following values
   may be used to specify the type of wait object associated with an
   CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_SET, FI_WAIT_FD, and
-  FI_WAIT_MUT_COND.
+  FI_WAIT_MUTEX_COND.
 
 - *FI_WAIT_NONE*
 : Used to indicate that the user will not block (wait) for completions
@@ -256,7 +256,7 @@ struct fi_cq_tagged_entry {
   poll, and epoll routines.  However, a provider may signal an FD wait
   object by marking it as readable, writable, or with an error.
 
-- *FI_WAIT_MUT_COND*
+- *FI_WAIT_MUTEX_COND*
 : Specifies that the CQ should use a pthread mutex and cond variable
   as a wait object.
 

@@ -163,7 +163,7 @@ struct fi_eq_attr {
   poll, and epoll routines.  However, a provider may signal an FD wait
   object by marking it as readable, writable, or with an error.
 
-- *FI_WAIT_MUT_COND*
+- *FI_WAIT_MUTEX_COND*
 : Specifies that the EQ should use a pthread mutex and cond variable
   as a wait object.
 
