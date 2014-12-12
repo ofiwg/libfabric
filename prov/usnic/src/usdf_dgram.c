@@ -202,7 +202,8 @@ usdf_dgram_prefix_recv(struct fid_ep *fep, void *buf, size_t len,
 	rxd.urd_context = context;
 	rxd.urd_iov[0].iov_base = (uint8_t *)buf +
 		USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
-	rxd.urd_iov[0].iov_len = len;
+        rxd.urd_iov[0].iov_len = len -
+                        (USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr));
 	rxd.urd_iov_cnt = 1;
 	rxd.urd_next = NULL;
 
