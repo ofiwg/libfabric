@@ -47,8 +47,6 @@ int fi_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
 
 int fi_close(struct fid *waitset);
 
-int fi_control(struct fid *waitset, int command, void *arg);
-
 int fi_wait(struct fid_wait *waitset, int timeout);
 {% endhighlight %}
 
@@ -140,11 +138,9 @@ struct fi_wait_attr {
 *wait_obj*
 : Wait sets are associated with specific wait object(s).  Wait objects
   allow applications to block until the wait object is signaled,
-  indicating that an event is available to be read.  Users may use
-  fi_control to retrieve the underlying wait object(s) associated with
-  a wait set, in order to use it in other system calls.  The following
+  indicating that an event is available to be read.  The following
   values may be used to specify the type of wait object associated
-  with an wait set: FI_WAIT_UNSPEC, FI_WAIT_FD, and FI_WAIT_MUTEX_COND.
+  with a wait set: FI_WAIT_UNSPEC, FI_WAIT_FD, and FI_WAIT_MUTEX_COND.
 
 - *FI_WAIT_UNSPEC*
 : Specifies that the user will only wait on the wait set using
@@ -173,35 +169,6 @@ struct fi_wait_attr {
 The fi_close call releases all resources associated with a wait set.
 The wait set must not be bound to any other opened resources prior to
 being closed.
-
-## fi_control
-
-The fi_control call is used to access provider or implementation
-specific details of the wait set.  Access to the wait set should be
-serialized across all calls when fi_control is invoked, as it may
-redirect the implementation of wait set operations.  The following
-control commands are usable with a wait set.
-
-*FI_GETWAIT (void \*\*)*
-: This command allows the user to retrieve the low-level wait
-  object(s) associated with the wait set.  The format of the
-  wait-object is specified during wait set creation, through the wait
-  set attributes.  The fi_control arg parameter should be an address
-  to a struct fi_wait_obj_set.
-
-{% highlight c %}
-struct fi_wait_obj_set {
-	size_t            len;      /* size of obj array entries */
-	enum fi_wait_obj  wait_obj; /* type of wait obj */
-	void             *obj;      /* array of wait objects */
-};
-{% endhighlight %}
-
-: On input, len should indicate the size in bytes referenced by the obj
-  field.  On output, the needed size will be returned.  The underlying
-  wait objects will be returned in the obj array.  If insufficient space
-  is provided, the results will be truncated.  The wait_obj field may be
-  used to identify the format of the wait objects.
 
 ## fi_wait
 

@@ -70,12 +70,6 @@ struct fid_wait {
 	struct fid		fid;
 	struct fi_ops_wait	*ops;
 };
-
-struct fi_wait_obj_set {
-	size_t			count;
-	enum fi_wait_obj	wait_obj;
-	void			*obj;
-};
 	
 struct fi_mutex_cond {
 	pthread_mutex_t		*mutex;

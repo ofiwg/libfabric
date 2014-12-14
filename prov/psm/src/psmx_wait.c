@@ -34,11 +34,9 @@
 
 int psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg)
 {
-	struct fi_wait_obj_set *wait_obj_set = arg;
 	void *obj_ptr;
 	int obj_size = 0;
 	int obj_type = FI_WAIT_NONE;
-	int ret_count = 0;
 	struct fi_mutex_cond mutex_cond;
 
 	if (!arg)
@@ -66,13 +64,8 @@ int psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg)
 	}
 
 	if (obj_size) {
-		ret_count = 1;
-		if (wait_obj_set->count)
-			memcpy(wait_obj_set->obj, obj_ptr, obj_size);
+		memcpy(arg, obj_ptr, obj_size);
 	}
-
-	wait_obj_set->count = ret_count;
-	wait_obj_set->wait_obj = obj_type;
 
 	return 0;
 }
