@@ -60,6 +60,7 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 #include "fi_enosys.h"
+#include "prov.h"
 
 #include "usnic_direct.h"
 #include "libnl_utils.h"
@@ -835,20 +836,20 @@ fail:
 	return ret;
 }
 
+static void usdf_fini(void)
+{
+}
+
 static struct fi_provider usdf_ops = {
 	.name = USDF_PROV_NAME,
 	.version = USDF_PROV_VERSION,
+	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = usdf_getinfo,
 	.fabric = usdf_fabric_open,
+	.cleanup =  usdf_fini
 };
 
-static void __attribute__((constructor))
-usdf_ini(void)
+USNIC_INI
 {
-	(void) fi_register(&usdf_ops);
-}
-
-static void __attribute__((destructor)) 
-usdf_fini(void)
-{
+	return (&usdf_ops);
 }

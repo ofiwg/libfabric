@@ -37,6 +37,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "prov.h"
+
 #include "sock.h"
 #include "sock_util.h"
 
@@ -222,14 +224,21 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	return ret;
 }
 
+static void fi_sockets_fini(void)
+{
+}
+
 struct fi_provider sock_prov = {
 	.name = "IP",
 	.version = FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION), 
+	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = sock_getinfo,
 	.fabric = sock_fabric,
+	.cleanup = fi_sockets_fini
 };
 
-static void __attribute__((constructor)) sock_ini(void)
+
+SOCKETS_INI
 {
 	char *tmp = getenv("SFI_SOCK_DEBUG_LEVEL");
 	if (tmp) {
@@ -238,9 +247,5 @@ static void __attribute__((constructor)) sock_ini(void)
 		sock_log_level = SOCK_ERROR;
 	}
 
-	(void) fi_register(&sock_prov);
-}
-
-static void __attribute__((destructor)) sock_fini(void)
-{
+	return (&sock_prov);
 }
