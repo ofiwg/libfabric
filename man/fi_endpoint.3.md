@@ -224,13 +224,6 @@ together when binding an endpoint to a completion domain CQ.
   performance by allowing the provider to avoid writing a completion
   entry for every operation.
 
-  The use of FI_COMPLETION is often paired with the call fi_sync.
-  FI_COMPLETION allows the user to suppress completions from being
-  generated.  In order for the application to ensure that all previous
-  operations have completed, the application may call fi_sync.  The
-  successful completion of fi_sync indicates that all prior operations
-  have completed successfully.
-
 An endpoint may also, or instead, be bound to a fabric counter.  When
 binding an endpoint to a counter, the following flags may be specified.
 

@@ -232,15 +232,9 @@ struct fi_mr_attr {
 
 ## fi_close
 
-Fi_close may be used to release all resources associated with a
+Fi_close is used to release all resources associated with a
 registering a memory region.  Once unregistered, further access to the
-registered memory is not guaranteed.  For performance reasons,
-unregistration processing may be done asynchronously or lazily.  To
-force all queued unregistration requests to complete, applications may
-call fi_sync on the domain.  Upon completion of a domain fi_sync call,
-all memory regions unregistered before fi_sync was invoked will have
-completed, and no further access to the registered region, either
-locally or remotely, via fabric resources will be possible.
+registered memory is not guaranteed.
 
 ## fi_mr_desc / fi_mr_key
 
