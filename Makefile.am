@@ -24,7 +24,7 @@ common_srcs = \
 	src/enosys.c
 
 # ensure dl-built providers link back to libfabric
-linkback = -lfabric -Lsrc/.libs/
+linkback = $(top_builddir)/src/libfabric.la
 
 src_libfabric_la_SOURCES = \
 	include/fi.h \
@@ -59,7 +59,9 @@ _sockets_files = \
 if HAVE_SOCKETS_DL
 pkglib_LTLIBRARIES += libsockets-fi.la
 libsockets_fi_la_SOURCES = $(_sockets_files) $(common_srcs)
-libsockets_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic $(linkback)
+libsockets_fi_la_LIBADD = $(linkback)
+libsockets_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libsockets_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_SOCKETS_DL
 src_libfabric_la_SOURCES += $(_sockets_files)
 endif !HAVE_SOCKETS_DL
@@ -72,7 +74,9 @@ _verbs_files = prov/verbs/src/fi_verbs.c
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libverbs-fi.la
 libverbs_fi_la_SOURCES = $(_verbs_files) $(common_srcs)
-libverbs_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic -libverbs -lrdmacm $(linkback)
+libverbs_fi_la_LIBADD = -libverbs -lrdmacm $(linkback)
+libverbs_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libverbs_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_VERBS_DL
 src_libfabric_la_SOURCES += $(_verbs_files)
 endif !HAVE_VERBS_DL
@@ -176,8 +180,9 @@ if HAVE_USNIC_DL
 pkglib_LTLIBRARIES += libusnic-fi.la
 libusnic_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(_usnic_cppflags)
 libusnic_fi_la_SOURCES = $(_usnic_files) $(common_srcs)
+libusnic_fi_la_LIBADD = $(linkback)
 libusnic_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
-libusnic_fi_la_LIBS = $(linkback)
+libusnic_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_USNIC_DL
 AM_CPPFLAGS += $(_usnic_cppflags)
 src_libfabric_la_SOURCES += $(_usnic_files)
@@ -210,7 +215,9 @@ _psm_files = \
 if HAVE_PSM_DL
 pkglib_LTLIBRARIES += libpsmx-fi.la
 libpsmx_fi_la_SOURCES = $(_psm_files) $(common_srcs)
-libpsmx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic $(linkback)
+libpsmx_fi_la_LIBADD = $(linkback)
+libpsmx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libpsmx_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_PSM_DL
 src_libfabric_la_SOURCES += $(_psm_files)
 endif !HAVE_PSM_DL
