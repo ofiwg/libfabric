@@ -1,4 +1,4 @@
-.TH fi_mr 3 "2014-11-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_mr 3 "2014\-12\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_mr - Memory region operations
@@ -221,18 +221,10 @@ struct\ fi_mr_attr\ {
 .fi
 .SS fi_close
 .PP
-Fi_close may be used to release all resources associated with a
-registering a memory region.
+Fi_close is used to release all resources associated with a registering
+a memory region.
 Once unregistered, further access to the registered memory is not
 guaranteed.
-For performance reasons, unregistration processing may be done
-asynchronously or lazily.
-To force all queued unregistration requests to complete, applications
-may call fi_sync on the domain.
-Upon completion of a domain fi_sync call, all memory regions
-unregistered before fi_sync was invoked will have completed, and no
-further access to the registered region, either locally or remotely, via
-fabric resources will be possible.
 .SS fi_mr_desc / fi_mr_key
 .PP
 The local memory descriptor and remote protection key associated with a
