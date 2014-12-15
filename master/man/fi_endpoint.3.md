@@ -224,13 +224,6 @@ together when binding an endpoint to a completion domain CQ.
   performance by allowing the provider to avoid writing a completion
   entry for every operation.
 
-  The use of FI_COMPLETION is often paired with the call fi_sync.
-  FI_COMPLETION allows the user to suppress completions from being
-  generated.  In order for the application to ensure that all previous
-  operations have completed, the application may call fi_sync.  The
-  successful completion of fi_sync indicates that all prior operations
-  have completed successfully.
-
 An endpoint may also, or instead, be bound to a fabric counter.  When
 binding an endpoint to a counter, the following flags may be specified.
 
@@ -343,7 +336,11 @@ The following option levels and option names and parameters are defined.
 
 - *FI_OPT_MIN_MULTI_RECV - size_t*
 : Defines the minimum receive buffer space available when the receive
-  buffer is automatically freed (see FI_MULTI_RECV).
+  buffer is automatically freed (see FI_MULTI_RECV).  Modifying this
+  value is only guaranteed to set the minimum buffer space needed on
+  receives posted after the value has been changed.  It is recommended
+  that applications that want to override the default MIN_MULTI_RECV
+  value set this option before enabling the corresponding endpoint.
 
 # ENDPOINT ATTRIBUTES
 
