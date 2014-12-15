@@ -53,7 +53,7 @@ enum fi_wait_obj {
 	FI_WAIT_UNSPEC,
 	FI_WAIT_SET,
 	FI_WAIT_FD,
-	FI_WAIT_MUT_COND,	/* pthread mutex & cond */
+	FI_WAIT_MUTEX_COND,	/* pthread mutex & cond */
 };
 
 struct fi_wait_attr {
@@ -70,13 +70,11 @@ struct fid_wait {
 	struct fid		fid;
 	struct fi_ops_wait	*ops;
 };
-
-struct fi_wait_obj_set {
-	size_t			count;
-	enum fi_wait_obj	wait_obj;
-	void			*obj;
+	
+struct fi_mutex_cond {
+	pthread_mutex_t		*mutex;
+	pthread_cond_t		*cond;
 };
-
 
 /*
  * Poll Set

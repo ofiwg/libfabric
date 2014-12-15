@@ -152,7 +152,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	int ret;
 
 	if ((attr->events != FI_CNTR_EVENTS_COMP) ||
-	    (attr->wait_obj != FI_WAIT_MUT_COND) || attr->flags)
+	    (attr->wait_obj != FI_WAIT_MUTEX_COND) || attr->flags)
 		return -FI_ENOSYS;
 
 	_cntr = calloc(1, sizeof(*_cntr));
