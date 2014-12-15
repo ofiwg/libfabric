@@ -363,7 +363,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				  if (mr->domain->rma_ep->remote_write_cntr)
 					psmx_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
 				  if (!cq || mr->cq == cq)
-					return 1;
+					return psm_status.error_code ? -FI_EAVAIL : 1;
 				  continue;
 				}
 
@@ -375,7 +375,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				  if (mr->domain->rma_ep->remote_read_cntr)
 					psmx_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
 				  if (!cq)
-					return 1;
+					return psm_status.error_code ? -FI_EAVAIL : 1;
 				  continue;
 				}
 			}
@@ -434,7 +434,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			}
 
 			if (!cq || tmp_cq == cq)
-				return 1;
+				return psm_status.error_code ? -FI_EAVAIL : 1;
 		}
 		else if (err == PSM_MQ_NO_COMPLETIONS) {
 			return 0;
@@ -601,7 +601,7 @@ static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		else {
 			clock_gettime(CLOCK_REALTIME, &ts0);
 			while (1) {
-				if (psmx_cq_poll_mq(cq_priv, cq_priv->domain, NULL, 0, NULL) > 0)
+				if (psmx_cq_poll_mq(cq_priv, cq_priv->domain, NULL, 0, NULL))
 					break;
 
 				/* CQ may be updated asynchronously by the AM handlers */
