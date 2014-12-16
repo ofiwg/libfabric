@@ -184,7 +184,7 @@ application threads.
 
 Control progress indicates the method that the provider uses to make
 progress on asynchronous control operations.  Control operations are
-function which do not directly involve the transfer of application
+functions which do not directly involve the transfer of application
 data between endpoints.  They include address vector, memory
 registration, and connection management routines.
 
@@ -259,7 +259,7 @@ supported by the provider.
 ## Transmit Context Count (tx_ctx_cnt)
 
 The number of outbound command queues optimally supported by the
-provider.  For a low-level provider, this represents the number
+provider.  For a low-level provider, this represents the number of
 command queues to the hardware and/or the number of parallel transmit
 engines effectively supported by the hardware and caches.
 Applications which allocate more transmit contexts than this value
