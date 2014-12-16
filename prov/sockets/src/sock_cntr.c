@@ -118,7 +118,7 @@ static int sock_cntr_close(struct fid *fid)
 	
 	pthread_mutex_destroy(&cntr->mut);
 	pthread_cond_destroy(&cntr->cond);
-	atomic_dec(&cntr->dom->ref);
+	atomic_dec(&cntr->domain->ref);
 	free(cntr);
 	return 0;
 }
@@ -178,7 +178,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	dom = container_of(domain, struct sock_domain, dom_fid);
 	atomic_inc(&dom->ref);
-	_cntr->dom = dom;
+	_cntr->domain = dom;
 	*cntr = &_cntr->cntr_fid;
 	return 0;
 

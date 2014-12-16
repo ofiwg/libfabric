@@ -152,7 +152,7 @@ static int sock_av_close(struct fid *fid)
 	if (atomic_get(&av->ref))
 		return -FI_EBUSY;
 
-	atomic_dec(&av->dom->ref);
+	atomic_dec(&av->domain->ref);
 	free(av);
 	return 0;
 }
@@ -247,7 +247,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	atomic_init(&_av->ref, 0);
 	atomic_inc(&dom->ref);
-	_av->dom = dom;
+	_av->domain = dom;
 	_av->attr = *attr;
 	*av = &_av->av_fid;
 	return 0;
