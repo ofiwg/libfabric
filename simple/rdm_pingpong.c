@@ -56,6 +56,7 @@ static char **g_argv;
 
 static struct fi_info hints;
 static struct fi_domain_attr domain_hints;
+static struct fi_fabric_attr fabric_hints;
 static struct fi_ep_attr ep_hints;
 static char *dst_addr, *src_addr;
 static char *port = NULL;
@@ -365,6 +366,10 @@ static int init_fabric(void)
 		goto err2;
 	}
 
+	if (dst_addr == NULL) {
+		printf("EP opened on fabric %s\n", fi->fabric_attr->name);
+	}
+
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;
@@ -411,7 +416,7 @@ static int init_av(void)
 		}
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
-		if (ret) {
+		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
@@ -439,7 +444,7 @@ static int init_av(void)
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
-		if (ret) {
+		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
@@ -501,10 +506,13 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:I:S:m")) != -1) {
+	while ((op = getopt(argc, argv, "d:f:n:p:s:I:S:m")) != -1) {
 		switch (op) {
 		case 'd':
 			dst_addr = optarg;
+			break;
+		case 'f':
+			fabric_hints.name = optarg;
 			break;
 		case 'n':
 			domain_hints.name = optarg;
@@ -535,6 +543,7 @@ int main(int argc, char **argv)
 		default:
 			printf("usage: %s\n", argv[0]);
 			printf("\t[-d destination_address]\n");
+			printf("\t[-f fabric_name]\n");
 			printf("\t[-n domain_name]\n");
 			printf("\t[-p port_number]\n");
 			printf("\t[-s source_address]\n");
@@ -546,6 +555,7 @@ int main(int argc, char **argv)
 	}
 
 	hints.domain_attr = &domain_hints;
+	hints.fabric_attr = &fabric_hints;
 	hints.ep_attr = &ep_hints;
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG;
