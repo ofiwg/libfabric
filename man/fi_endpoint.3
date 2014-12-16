@@ -9,8 +9,8 @@ Allocate or close an endpoint.
 .RE
 .TP
 .B fi_ep_bind
-Associate an endpoint with an event queue, completion queue, address
-vector, or memory region
+Associate an endpoint with an event queue, completion queue, counter,
+address vector, or memory region
 .RS
 .RE
 .TP
@@ -942,6 +942,13 @@ such data transfers.
 Operations that complete in error that are not associated with valid
 operational context will use the endpoint context in any error reporting
 structures.
+.PP
+Users can attach both counters and completion queues to an endpoint.
+When both counter and completion queue are attached, a successful
+completion increments the counter and does not generate a completion
+entry in the completion queue.
+Operations that complete with an error increment the error counter and
+generate a completion event.
 .SH RETURN VALUES
 .PP
 Returns 0 on success.
