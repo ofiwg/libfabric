@@ -186,73 +186,34 @@ struct sock_wait {
 };
 
 enum {
-	SOCK_REQ_TYPE_SEND,
-	SOCK_REQ_TYPE_RECV,
-	SOCK_REQ_TYPE_USER,
-};
+	/* wire protocol */
+	SOCK_OP_SEND = 0,
+	SOCK_OP_TSEND = 1,
+	SOCK_OP_SEND_COMPLETE = 2,
 
-enum{
-	SOCK_COMM_TYPE_SEND,
-	SOCK_COMM_TYPE_SENDV,
-	SOCK_COMM_TYPE_SENDTO,
-	SOCK_COMM_TYPE_SENDMSG,
-	SOCK_COMM_TYPE_SENDDATA,
-	SOCK_COMM_TYPE_SENDDATATO,
-};
+	SOCK_OP_WRITE = 3,
+	SOCK_OP_WRITE_COMPLETE = 4,
+	SOCK_OP_WRITE_ERROR = 5,
 
-struct sock_req_item{
-	int req_type;
-	int comm_type;
-	struct sock_ep *ep;
+	SOCK_OP_READ = 6,
+	SOCK_OP_READ_COMPLETE = 7,
+	SOCK_OP_READ_ERROR = 8,
 
-	void *context;
-	uint64_t flags;
-	uint64_t tag;
-	uint64_t data;
+	SOCK_OP_ATOMIC_WRITE = 9,
+	SOCK_OP_ATOMIC_READ_WRITE = 10,
+	SOCK_OP_ATOMIC_COMP_WRITE = 11,
 
-	size_t done_len;
-	size_t total_len;
-	struct sockaddr  src_addr;
-	struct sockaddr addr;
+	SOCK_OP_ATOMIC_COMPLETE = 12,
+	SOCK_OP_ATOMIC_ERROR = 13,
 
-	union{
-		struct fi_msg msg;
-		void *buf;
-	}item;
-
-};
-
-struct sock_comm_item{
-	int type;
-	int is_done;
-	void *context;
-	size_t done_len;
-	size_t total_len;
-	uint64_t flags;
-
-	struct sockaddr addr;
-
-	union{
-		struct fi_msg msg;
-		void *buf;
-	}item;
-};
-
-enum {
-	SOCK_OP_SEND,
+	/* internal */
 	SOCK_OP_RECV,
-	SOCK_OP_WRITE,
-	SOCK_OP_READ,
-	SOCK_OP_TSEND,
 	SOCK_OP_TRECV,
-	SOCK_OP_ATOMIC,
-	SOCK_OP_SEND_INJECT,
-	SOCK_OP_TSEND_INJECT,
 };
 
 /*
  * Transmit context - ring buffer data:
- *    tx_op + flags + context + dest_addr + [data] + [tag] + tx_iov
+ *    tx_op + flags + context + dest_addr + conn + [data] + [tag] + tx_iov
  *     8B       8B      8B         8B         8B       8B      24B+
  * data - only present if flags indicate
  * tag - only present for TSEND op
@@ -265,6 +226,8 @@ struct sock_op {
 		struct {
 			uint8_t	op;
 			uint8_t	datatype;
+			uint8_t	res_iov_len;
+			uint8_t	cmp_iov_len;
 		} atomic;
 		uint8_t		reserved[5];
 	};
@@ -276,6 +239,8 @@ struct sock_op_send {
 	uint64_t context;
 	uint64_t dest_addr;
 	struct sock_conn *conn;
+	uint64_t buf;
+	struct sock_ep *ep;
 };
 
 struct sock_op_tsend {
@@ -285,6 +250,8 @@ struct sock_op_tsend {
 	uint64_t dest_addr;
 	struct sock_conn *conn;
 	uint64_t tag;
+	uint64_t buf;
+	struct sock_ep *ep;
 };
 
 union sock_iov {
@@ -630,13 +597,11 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
 fi_addr_t _sock_av_lookup(struct sock_av *av, struct sockaddr *addr);
-int sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr, 
-			struct sock_conn **entry);
+struct sock_conn *sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr);
 
 
 int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
-int _sock_cq_report_completion(struct sock_cq *sock_cq, struct sock_req_item *item);
 int _sock_cq_report_error(struct sock_cq *sock_cq, struct fi_cq_err_entry *error);
 
 

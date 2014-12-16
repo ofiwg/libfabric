@@ -273,8 +273,7 @@ fi_addr_t _sock_av_lookup(struct sock_av *av, struct sockaddr *addr)
 }
 
 /* place holder */
-int sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr, 
-			struct sock_conn **entry)
+struct sock_conn *sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr)
 {
-	return -FI_ENOSYS;
+	return NULL;
 }
