@@ -45,7 +45,7 @@
 
 const struct fi_cntr_attr sock_cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
-	.wait_obj = FI_WAIT_MUT_COND,
+	.wait_obj = FI_WAIT_MUTEX_COND,
 	.wait_set = NULL,
 	.flags = 0,
 };
@@ -159,7 +159,6 @@ int sock_cntr_control(struct fid *fid, int command, void *arg)
 {
 	int ret = 0;
 	struct sock_cntr *cntr;
-	struct fi_wait_obj_set waitobj;
 	
 	cntr = container_of(fid, struct sock_cntr, cntr_fid);
 	
@@ -168,7 +167,7 @@ int sock_cntr_control(struct fid *fid, int command, void *arg)
 		switch (cntr->attr.wait_obj) {
 		case FI_WAIT_NONE:
 		case FI_WAIT_UNSPEC:
-		case FI_WAIT_MUT_COND:
+		case FI_WAIT_MUTEX_COND:
 			memcpy(arg, &cntr->mut, sizeof(cntr->mut));
 			memcpy((char*)arg + sizeof(cntr->mut), &cntr->cond, 
 			       sizeof(cntr->cond));
@@ -176,8 +175,7 @@ int sock_cntr_control(struct fid *fid, int command, void *arg)
 			
 		case FI_WAIT_SET:
 		case FI_WAIT_FD:
-			waitobj.obj = arg;
-			sock_wait_get_obj(cntr->waitset, &waitobj);
+			sock_wait_get_obj(cntr->waitset, arg);
 			break;
 		
 		default:
@@ -255,7 +253,7 @@ static int sock_cntr_verify_attr(struct fi_cntr_attr *attr)
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
 	case FI_WAIT_UNSPEC:
-	case FI_WAIT_MUT_COND:
+	case FI_WAIT_MUTEX_COND:
 	case FI_WAIT_SET:
 	case FI_WAIT_FD:
 		break;
@@ -297,7 +295,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	case FI_WAIT_NONE:
 	case FI_WAIT_UNSPEC:
-	case FI_WAIT_MUT_COND:
+	case FI_WAIT_MUTEX_COND:
 		_cntr->signal = 0;
 		break;
 

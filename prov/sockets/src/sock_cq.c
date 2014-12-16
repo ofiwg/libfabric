@@ -358,7 +358,7 @@ int sock_cq_close(struct fid *fid)
 	if (atomic_get(&cq->ref))
 		return -FI_EBUSY;
 
-	if (cq->signal && cq->attr.wait_obj == FI_WAIT_MUT_COND)
+	if (cq->signal && cq->attr.wait_obj == FI_WAIT_MUTEX_COND)
 		sock_wait_close(&cq->waitset->fid);
 
 	rbfree(&cq->addr_rb);
@@ -387,7 +387,6 @@ static int sock_cq_control(struct fid *fid, int command, void *arg)
 {
 	struct sock_cq *cq;
 	int ret = 0;
-	struct fi_wait_obj_set waitobj;
 	
 	cq = container_of(fid, struct sock_cq, cq_fid);
 	switch (command) {
@@ -400,9 +399,8 @@ static int sock_cq_control(struct fid *fid, int command, void *arg)
 			break;
 
 		case FI_WAIT_SET:
-		case FI_WAIT_MUT_COND:
-			waitobj.obj = arg;
-			sock_wait_get_obj(cq->waitset, &waitobj);
+		case FI_WAIT_MUTEX_COND:
+			sock_wait_get_obj(cq->waitset, arg);
 			break;
 
 		default:
@@ -444,7 +442,7 @@ static int sock_cq_verify_attr(struct fi_cq_attr *attr)
 	case FI_WAIT_NONE:
 	case FI_WAIT_FD:
 	case FI_WAIT_SET:
-	case FI_WAIT_MUT_COND:
+	case FI_WAIT_MUTEX_COND:
 		break;
 	case FI_WAIT_UNSPEC:
 		attr->wait_obj = FI_WAIT_FD;
@@ -528,9 +526,9 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	case FI_WAIT_FD:
 		break;
 
-	case FI_WAIT_MUT_COND:
+	case FI_WAIT_MUTEX_COND:
 		wait_attr.flags = 0;
-		wait_attr.wait_obj = FI_WAIT_MUT_COND;
+		wait_attr.wait_obj = FI_WAIT_MUTEX_COND;
 		ret = sock_wait_open(&sock_dom->dom_fid, &wait_attr, 
 				     &sock_cq->waitset);
 		if (ret)
