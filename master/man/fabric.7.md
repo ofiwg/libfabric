@@ -105,11 +105,12 @@ obtaining the capabilities of the interfaces and opening a provider.
 
 *fi_eq - Event Queue*
 : Event queues, are used to collect and report the completion of
-  asynchronous operations.  For example, the completion of a data
-  transfer operation submitted over a fabric endpoint may write an
-  event to an event queue associated with the endpoint.  There are
-  multiple types of event queues, and the format of the events that
-  they report are controlled by applications.
+  asynchronous operations and events.  Event queues report events
+  that are not directly associated with data transfer operations.
+
+*fi_cq - Completion Queue*
+: Completion queues are high-performance event queues used to report
+  the completion of data transfer operations.
 
 *fi_cntr - Event Counters*
 : Event counters are used to report the number of completed
@@ -200,12 +201,11 @@ parameters and need not meet these requirements).
   formats.
 * Address vectors must support FI_ADDR, FI_ADDR_INDEX, and FI_AV
   output formats.
-* Access domains must support opening event queues and counters.
-* Event queues must support the FI_EQ_FORMAT_CONTEXT format.
-* Event queues associated with data transfer completions must support
-  the FI_EQ_FORMAT_DATA format.
+* Access domains must support opening completion queues and counters.
+* Completion queues must support the FI_CQ_FORMAT_CONTEXT and
+  FI_CQ_FORMAT_MSG formats.
 * Event queues associated with tagged message transfers must support
-  the FI_EQ_FORMAT_TAGGED format.
+  the FI_CQ_FORMAT_TAGGED format.
 * A provider is expected to be forward compatible, and must be able to
   be compiled against expanded `fi_xxx_ops` structures that define new
   functions added after the provider was written.  Any unknown
@@ -218,4 +218,6 @@ parameters and need not meet these requirements).
 [`fi_domain`(3)](fi_domain.3.html),
 [`fi_av`(3)](fi_av.3.html),
 [`fi_eq`(3)](fi_eq.3.html),
+[`fi_cq`(3)](fi_cq.3.html),
+[`fi_cntr`(3)](fi_cntr.3.html),
 [`fi_mr`(3)](fi_mr.3.html)
