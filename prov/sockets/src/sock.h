@@ -187,13 +187,14 @@ struct sock_fid_list {
 };
 
 struct sock_poll {
-	struct fid_poll		poll_fid;
-	struct sock_domain	*dom;
+	struct fid_poll poll_fid;
+	struct sock_domain *domain;
+	struct dlist_entry fid_list;
 };
 
 struct sock_wait {
 	struct fid_wait wait_fid;
-	struct sock_domain *dom;
+	struct sock_domain *domain;
 	struct dlist_entry fid_list;
 	enum fi_wait_obj type;
 	union {
@@ -699,7 +700,9 @@ struct sock_conn *sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr);
 
 int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
-int _sock_cq_report_error(struct sock_cq *sock_cq, struct fi_cq_err_entry *error);
+int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
+			 size_t olen, int err, int prov_errno, void *err_data);
+int sock_cq_progress(struct sock_cq *cq);
 
 
 int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
@@ -712,6 +715,9 @@ ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
 
 int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		struct fid_cntr **cntr, void *context);
+int sock_cntr_inc(struct sock_cntr *cntr);
+int sock_cntr_err_inc(struct sock_cntr *cntr);
+int sock_cntr_progress(struct sock_cntr *cntr);
 
 
 int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
