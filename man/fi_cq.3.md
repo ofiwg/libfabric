@@ -400,6 +400,21 @@ a multiple of the size of the event to insert.
 User events inserted into a CQ with be associated with the source address
 FI_ADDR_NOTAVAIL.
 
+# COMPLETION FLAGS
+
+Completion flags provide additional details regarding the completed
+operation.  The following completion flags are defined.
+
+*FI_REMOTE_CQ_DATA
+: This indicates that remote CQ data is available as part of the
+  completion.
+
+*FI_MULTI_RECV*
+: This flag applies to receive buffers that were posted with the
+  FI_MULTI_RECV flag set.  This completion flag indicates that the
+  receive buffer referenced by the completion has been consumed and
+  was released by the provider.
+ 
 # RETURN VALUES
 
 fi_cq_open
