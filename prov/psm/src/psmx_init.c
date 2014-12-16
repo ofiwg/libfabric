@@ -127,13 +127,11 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		case FI_EP_UNSPEC:
 		case FI_EP_RDM:
 			break;
-		case FI_EP_MSG:
-			ep_type = FI_EP_MSG;
 			break;
 		default:
-			psmx_debug("%s: hints->ep_type=%d, supported=%d,%d,%d.\n",
+			psmx_debug("%s: hints->ep_type=%d, supported=%d,%d.\n",
 					__func__, hints->ep_type, FI_EP_UNSPEC,
-					FI_EP_RDM, FI_EP_MSG);
+					FI_EP_RDM);
 			goto err_out;
 		}
 
