@@ -139,10 +139,12 @@ _usdf_timer_do_set(struct usdf_fabric *fp, struct usdf_timer_entry *entry,
 	unsigned bucket;
 
 	/* If no timers active, cur_bucket_ms may need catchup */
-	if (fp->fab_active_timer_count == 0) {
+	++fp->fab_active_timer_count;
+	if (fp->fab_active_timer_count == 1) {
 		fp->fab_cur_bucket_ms = usdf_get_ms();
 		ret = usdf_fabric_wake_thread(fp);
 		if (ret != 0) {
+			--fp->fab_active_timer_count;
 			return ret;
 		}
 	}
@@ -154,13 +156,13 @@ _usdf_timer_do_set(struct usdf_fabric *fp, struct usdf_timer_entry *entry,
 
 	// we could make "overflow" bucket...
 	if (ms >= USDF_NUM_TIMER_BUCKETS) {
+		--fp->fab_active_timer_count;
 		return -FI_EINVAL;
 	}
 	bucket = (fp->fab_cur_bucket + ms) & (USDF_NUM_TIMER_BUCKETS - 1);
 
 	LIST_INSERT_HEAD(&fp->fab_timer_buckets[bucket], entry, te_link);
 	entry->te_flags |= USDF_TF_QUEUED;
-	++fp->fab_active_timer_count;
 	return 0;
 }
 

@@ -57,11 +57,6 @@
 #define USDF_DGRAM_SUPP_MODE (FI_LOCAL_MR | FI_MSG_PREFIX)
 #define USDF_DGRAM_REQ_MODE (FI_LOCAL_MR)
 
-#define USDF_MSG_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
-
-#define USDF_MSG_SUPP_MODE (FI_LOCAL_MR)
-#define USDF_MSG_REQ_MODE (FI_LOCAL_MR)
-
 /* usdf event flags */
 #define USDF_EVENT_FLAG_ERROR (1ULL << 62)
 #define USDF_EVENT_FLAG_FREE_BUF (1ULL << 63)
@@ -129,6 +124,11 @@ struct usdf_domain {
 	TAILQ_HEAD(,usdf_tx) dom_tx_ready;
 	TAILQ_HEAD(,usdf_cq_hard) dom_hcq_list;
 
+	struct usdf_rdm_connection **dom_rdc_hashtab;
+	SLIST_HEAD(,usdf_rdm_connection) dom_rdc_free;
+	atomic_t dom_rdc_free_cnt;
+	size_t dom_rdc_total;
+
 	/* used only by connected endpoints */
 	struct usdf_ep **dom_peer_tab;
 	uint32_t dom_next_peer;
@@ -167,6 +167,7 @@ struct usdf_tx {
 
 	struct fi_tx_attr tx_attr;
 	struct usd_qp *tx_qp;
+	void (*tx_progress)(struct usdf_tx *tx);
 
 	union {
 		struct {
@@ -175,9 +176,17 @@ struct usdf_tx {
 			struct usdf_msg_qe *tx_wqe_buf;
 			TAILQ_HEAD(,usdf_msg_qe) tx_free_wqe;
 			TAILQ_HEAD(,usdf_ep) tx_ep_ready;
-			TAILQ_HEAD(,usdf_ep) tx_ep_blocked;
 			TAILQ_HEAD(,usdf_ep) tx_ep_have_acks;
 		} msg;
+		struct {
+			struct usdf_cq_hard *tx_hcq;
+
+			atomic_t tx_next_msg_id;
+			struct usdf_rdm_qe *tx_wqe_buf;
+			TAILQ_HEAD(,usdf_rdm_qe) tx_free_wqe;
+			TAILQ_HEAD(,usdf_rdm_connection) tx_rdc_ready;
+			TAILQ_HEAD(,usdf_rdm_connection) tx_rdc_have_acks;
+		} rdm;
 	} t;
 };
 #define tx_ftou(FEP) container_of(FEP, struct usdf_tx, tx_fid)
@@ -202,6 +211,16 @@ struct usdf_rx {
 			TAILQ_HEAD(,usdf_msg_qe) rx_free_rqe;
 			TAILQ_HEAD(,usdf_msg_qe) rx_posted_rqe;
 		} msg;
+		struct {
+			int rx_sock;
+			struct usdf_cq_hard *rx_hcq;
+			struct usdf_tx *rx_tx;
+
+			uint8_t *rx_bufs;
+			struct usdf_rdm_qe *rx_rqe_buf;
+			TAILQ_HEAD(,usdf_rdm_qe) rx_free_rqe;
+			TAILQ_HEAD(,usdf_rdm_qe) rx_posted_rqe;
+		} rdm;
 	} r;
 };
 #define rx_ftou(FEP) container_of(FEP, struct usdf_rx, rx_fid)
@@ -234,7 +253,6 @@ struct usdf_ep {
 
 			int ep_sock;
 			struct usdf_av *ep_av;
-			struct usd_dest *ep_dest;
 
 			void *ep_hdr_buf;
 			struct usd_udp_hdr **ep_hdr_ptr;
@@ -247,7 +265,7 @@ struct usdf_ep {
 			uint32_t ep_lcl_peer_id;
 
 			TAILQ_HEAD(,usdf_msg_qe) ep_posted_wqe;
-			TAILQ_HEAD(usdf_qe_head ,usdf_msg_qe) ep_sent_wqe;
+			TAILQ_HEAD(usdf_msg_qe_head ,usdf_msg_qe) ep_sent_wqe;
 			uint32_t ep_fairness_credits;
 			uint32_t ep_seq_credits;
 			uint16_t ep_next_tx_seq;
@@ -262,6 +280,11 @@ struct usdf_ep {
 
 			TAILQ_ENTRY(usdf_ep) ep_link;
 		} msg;
+		struct {
+			int ep_sock;
+			struct usdf_av *ep_av;
+
+		} rdm;
 	 } e;
 };
 #define ep_ftou(FEP) container_of(FEP, struct usdf_ep, ep_fid)

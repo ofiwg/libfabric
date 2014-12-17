@@ -161,6 +161,7 @@ _usnic_files = \
 	prov/usnic/src/usdf_endpoint.h \
 	prov/usnic/src/usdf_ep_dgram.c \
 	prov/usnic/src/usdf_ep_msg.c \
+	prov/usnic/src/usdf_ep_rdm.c \
 	prov/usnic/src/usdf_eq.c \
 	prov/usnic/src/usdf_fabric.c \
 	prov/usnic/src/usdf_mem.c \
@@ -169,6 +170,8 @@ _usnic_files = \
 	prov/usnic/src/usdf_pep.c \
 	prov/usnic/src/usdf_progress.c \
 	prov/usnic/src/usdf_progress.h \
+	prov/usnic/src/usdf_rdm.c \
+	prov/usnic/src/usdf_rdm.h \
 	prov/usnic/src/usdf_timer.c \
 	prov/usnic/src/usdf_timer.h
 

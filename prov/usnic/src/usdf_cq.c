@@ -63,7 +63,7 @@
 #include "usd.h"
 #include "usdf.h"
 #include "usdf_av.h"
-#include "usdf_msg.h"
+#include "usdf_progress.h"
 #include "usdf_cq.h"
 
 static ssize_t
@@ -443,7 +443,7 @@ usdf_cq_read_common_soft(struct fid_cq *fcq, void *buf, size_t count,
 	}
 
 	/* progress... */
-	usdf_msg_progress_domain(cq->cq_domain);
+	usdf_domain_progress(cq->cq_domain);
 
 	switch (format) {
 	case FI_CQ_FORMAT_CONTEXT:

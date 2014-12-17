@@ -92,6 +92,8 @@ usdf_endpoint_open(struct fid_domain *domain, struct fi_info *info,
 		return usdf_ep_dgram_open(domain, info, ep_o, context);
 	case FI_EP_MSG:
 		return usdf_ep_msg_open(domain, info, ep_o, context);
+	case FI_EP_RDM:
+		return usdf_ep_rdm_open(domain, info, ep_o, context);
 	default:
 		return -FI_ENODEV;
 	}

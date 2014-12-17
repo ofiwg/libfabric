@@ -36,20 +36,29 @@
 #ifndef _USDF_RUDP_H_
 #define _USDF_RUDP_H_
 
+#include "usnic_direct.h"
+
 #define USDF_RUDP_SEQ_CREDITS 256
 #define USDF_RUDP_ACK_TIMEOUT 5  /* ms */
 
 #define RUDP_SEQ_DIFF(A, B) ((int16_t)((u_int16_t)(A) - (u_int16_t)(B)))
-#define RUDP_SEQ_LT(A, B) (RUDP_SEQ_DIFF(A, B) < 0)
-#define RUDP_SEQ_LE(A, B) (RUDP_SEQ_DIFF(A, B) <= 0)
-#define RUDP_SEQ_GT(A, B) (RUDP_SEQ_DIFF(A, B) > 0)
-#define RUDP_SEQ_GE(A, B) (RUDP_SEQ_DIFF(A, B) >= 0)
+#define RUDP_SEQ_LT(A, B) (RUDP_SEQ_DIFF((A), (B)) < 0)
+#define RUDP_SEQ_LE(A, B) (RUDP_SEQ_DIFF((A), (B)) <= 0)
+#define RUDP_SEQ_GT(A, B) (RUDP_SEQ_DIFF((A), (B)) > 0)
+#define RUDP_SEQ_GE(A, B) (RUDP_SEQ_DIFF((A), (B)) >= 0)
+
+#define RUDP_MSGID_DIFF(A, B) ((int32_t)((u_int32_t)(A) - (u_int32_t)(B)))
+#define RUDP_MSGID_LT(A, B) (RUDP_MSGID_DIFF((A), (B)) < 0)
+#define RUDP_MSGID_LE(A, B) (RUDP_MSGID_DIFF((A), (B)) <= 0)
+#define RUDP_MSGID_GT(A, B) (RUDP_MSGID_DIFF((A), (B)) > 0)
+#define RUDP_MSGID_GE(A, B) (RUDP_MSGID_DIFF((A), (B)) >= 0)
 
 enum {
-    /* data messages */
-    RUDP_OP_FIRST   = 0x00,
-    RUDP_OP_MID     = 0x01,
+    /* data messages (a bitmask of FIRST and LAST) */
+    RUDP_OP_MID     = 0x00,
+    RUDP_OP_FIRST   = 0x01,
     RUDP_OP_LAST    = 0x02,
+    RUDP_OP_ONLY    = 0x03,
 
     /* control messages */
     RUDP_OP_CONNECT_REQ  = 0x81,
@@ -58,13 +67,9 @@ enum {
     RUDP_OP_ACK       = 0x84,
 };
 
-struct rudp_rc_data_msg {
-    u_int32_t offset;  /* 4 */
-    u_int16_t length;  /* 8 */
-    u_int16_t seqno;   /* 10 */
-} __attribute__ ((__packed__));
+#define RUDP_OP_DATA_MASK (RUDP_OP_FIRST | RUDP_OP_LAST)
 
-struct rudp_rma_data_msg {
+struct rudp_rc_data_msg {
     u_int32_t offset;  /* 4 */
     u_int16_t rkey;    /* 8 */
     u_int16_t length;  /* 10 */
@@ -75,6 +80,7 @@ struct rudp_rma_data_msg {
 struct rudp_msg {
     u_int16_t opcode;
     u_int16_t src_peer_id;
+    u_int32_t msg_id;
     union {
         struct rudp_rc_data_msg rc_data;
         struct {
@@ -93,10 +99,9 @@ struct rudp_msg {
     } __attribute__ ((__packed__)) m;
 } __attribute__ ((__packed__));
 
+
 struct rudp_pkt {
-    struct ether_header eth;
-    struct iphdr ip;
-    struct udphdr udp;
+    struct usd_udp_hdr hdr;
     struct rudp_msg msg;
 } __attribute__ ((__packed__));
 
