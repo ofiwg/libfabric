@@ -36,6 +36,11 @@
 #ifndef _USDF_MSG_H_
 #define _USDF_MSG_H_
 
+#define USDF_MSG_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
+
+#define USDF_MSG_SUPP_MODE (FI_LOCAL_MR)
+#define USDF_MSG_REQ_MODE (FI_LOCAL_MR)
+
 #define USDF_MSG_MAX_SGE 8
 #define USDF_MSG_DFLT_SGE 8
 #define USDF_MSG_MAX_CTX_SIZE 1024
@@ -71,8 +76,8 @@ int usdf_msg_fill_rx_attr(struct fi_rx_attr *rxattr);
 int usdf_cq_msg_poll(struct usd_cq *ucq, struct usd_completion *comp);
 void usdf_msg_ep_timeout(void *vep);
 
-void usdf_msg_progress_hcq(struct usdf_cq_hard *hcq);
-void usdf_msg_progress_domain(struct usdf_domain *udp);
+void usdf_msg_hcq_progress(struct usdf_cq_hard *hcq);
+void usdf_msg_tx_progress(struct usdf_tx *tx);
 
 
 /* fi_ops_cm for RC */

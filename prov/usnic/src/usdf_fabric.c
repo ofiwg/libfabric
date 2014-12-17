@@ -71,6 +71,7 @@
 #include "usdf_timer.h"
 #include "usdf_dgram.h"
 #include "usdf_msg.h"
+#include "usdf_rdm.h"
 
 struct usdf_usnic_info *__usdf_devinfo;
 
@@ -327,7 +328,7 @@ usdf_fill_info_dgram(
 	dattrp = fi->domain_attr;
 	dattrp->threading = FI_THREAD_UNSPEC;
 	dattrp->control_progress = FI_PROGRESS_AUTO;
-	dattrp->data_progress = FI_PROGRESS_AUTO;
+	dattrp->data_progress = FI_PROGRESS_MANUAL;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
@@ -430,7 +431,109 @@ usdf_fill_info_msg(
 	dattrp = fi->domain_attr;
 	dattrp->threading = FI_THREAD_UNSPEC;
 	dattrp->control_progress = FI_PROGRESS_AUTO;
-	dattrp->data_progress = FI_PROGRESS_AUTO;
+	dattrp->data_progress = FI_PROGRESS_MANUAL;
+
+	/* add to tail of list */
+	if (*fi_first == NULL) {
+		*fi_first = fi;
+	} else {
+		(*fi_last)->next = fi;
+	}
+	*fi_last = fi;
+
+	return 0;
+
+fail:
+	if (fi != NULL) {
+		fi_freeinfo(fi);
+	}
+	return ret;
+}
+
+static int
+usdf_fill_info_rdm(
+	struct fi_info *hints,
+	struct sockaddr_in *src,
+	struct sockaddr_in *dest,
+	struct usd_device_attrs *dap,
+	struct fi_info **fi_first,
+	struct fi_info **fi_last)
+{
+	struct fi_info *fi;
+	struct fi_fabric_attr *fattrp;
+	struct fi_domain_attr *dattrp;
+	struct fi_tx_attr *txattr;
+	struct fi_rx_attr *rxattr;
+	struct fi_ep_attr *eattrp;
+	uint32_t addr_format;
+	int ret;
+
+	/* check that we are capable of what's requested */
+	if ((hints->caps & ~USDF_RDM_CAPS) != 0) {
+		return -FI_ENODATA;
+	}
+
+	/* app must support these modes */
+	if ((hints->mode & USDF_RDM_REQ_MODE) != USDF_RDM_REQ_MODE) {
+		return -FI_ENODATA;
+	}
+
+	fi = fi_allocinfo_internal();
+	if (fi == NULL) {
+		ret = -FI_ENOMEM;
+		goto fail;
+	}
+
+	fi->caps = USDF_RDM_CAPS;
+
+	if (hints != NULL) {
+		fi->mode = hints->mode & USDF_RDM_SUPP_MODE;
+		addr_format = hints->addr_format;
+	} else {
+		fi->mode = USDF_RDM_SUPP_MODE;
+		addr_format = FI_FORMAT_UNSPEC;
+	}
+	fi->ep_type = FI_EP_RDM;
+
+	ret = usdf_fill_addr_info(fi, addr_format, src, dest, dap);
+	if (ret != 0) {
+		goto fail;
+	}
+
+	/* fabric attrs */
+	fattrp = fi->fabric_attr;
+	fattrp->name = strdup(dap->uda_devname);
+	if (fattrp->name == NULL) {
+		ret = -FI_ENOMEM;
+		goto fail;
+	}
+
+	/* TX attrs */
+	txattr = fi->tx_attr;
+	if (hints != NULL && hints->tx_attr != NULL) {
+		*txattr = *hints->tx_attr;
+	}
+	usdf_rdm_fill_tx_attr(txattr);
+
+	/* RX attrs */
+	rxattr = fi->rx_attr;
+	if (hints != NULL && hints->rx_attr != NULL) {
+		*rxattr = *hints->rx_attr;
+	}
+	usdf_rdm_fill_rx_attr(rxattr);
+
+	/* endpoint attrs */
+	eattrp = fi->ep_attr;
+	eattrp->max_msg_size = USDF_RDM_MAX_MSG;
+	eattrp->protocol = FI_PROTO_RUDP;
+	eattrp->tx_ctx_cnt = 1;
+	eattrp->rx_ctx_cnt = 1;
+
+	/* domain attrs */
+	dattrp = fi->domain_attr;
+	dattrp->threading = FI_THREAD_UNSPEC;
+	dattrp->control_progress = FI_PROGRESS_AUTO;
+	dattrp->data_progress = FI_PROGRESS_MANUAL;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
@@ -612,6 +715,14 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 
 		if (ep_type == FI_EP_MSG || ep_type == FI_EP_UNSPEC) {
 			ret = usdf_fill_info_msg(hints, src, dest, dap,
+					&fi_first, &fi_last);
+			if (ret != 0 && ret != -FI_ENODATA) {
+				goto fail;
+			}
+		}
+
+		if (ep_type == FI_EP_RDM || ep_type == FI_EP_UNSPEC) {
+			ret = usdf_fill_info_rdm(hints, src, dest, dap,
 					&fi_first, &fi_last);
 			if (ret != 0 && ret != -FI_ENODATA) {
 				goto fail;

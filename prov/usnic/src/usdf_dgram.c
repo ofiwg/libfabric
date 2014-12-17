@@ -57,11 +57,12 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 
-#include "usnic_direct.h"
 #include "usd.h"
 #include "usd_post.h"
+
 #include "usdf.h"
 #include "usdf_dgram.h"
+#include "usdf_av.h"
 
 ssize_t
 usdf_dgram_recv(struct fid_ep *fep, void *buf, size_t len,
@@ -124,15 +125,15 @@ usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 }
 
 static inline ssize_t
-_usdf_dgram_send(struct usdf_ep *ep, struct usd_dest *dest, 
+_usdf_dgram_send(struct usdf_ep *ep, struct usdf_dest *dest, 
 		const void *buf, size_t len,  void *context)
 {
 	if (len <= USD_SEND_MAX_COPY - sizeof(struct usd_udp_hdr)) {
-		return usd_post_send_one_copy(ep->e.dg.ep_qp, dest, buf, len,
-			USD_SF_SIGNAL, context);
+		return usd_post_send_one_copy(ep->e.dg.ep_qp,
+			&dest->ds_dest, buf, len, USD_SF_SIGNAL, context);
 	} else {
-		return usd_post_send_one(ep->e.dg.ep_qp, dest, buf, len,
-			USD_SF_SIGNAL, context);
+		return usd_post_send_one(ep->e.dg.ep_qp, &dest->ds_dest,
+			buf, len, USD_SF_SIGNAL, context);
 	}
 }
 
@@ -141,11 +142,11 @@ usdf_dgram_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, void *context)
 {
 	struct usdf_ep *ep;
-	struct usd_dest *dest;
+	struct usdf_dest *dest;
 
 	ep = ep_ftou(fep);
 
-	dest = (struct usd_dest *)(uintptr_t) dest_addr;
+	dest = (struct usdf_dest *)(uintptr_t) dest_addr;
 	return _usdf_dgram_send(ep, dest, buf, len, context);
 }
 
@@ -247,7 +248,7 @@ usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
         void *desc, fi_addr_t dest_addr, void *context)
 {
     struct usdf_ep *ep;
-    struct usd_dest *dest;
+    struct usdf_dest *dest;
     struct usd_qp_impl *qp;
     struct usd_udp_hdr *hdr;
     struct usd_wq *wq;
@@ -255,13 +256,13 @@ usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
     struct usd_wq_post_info *info;
 
     ep = ep_ftou(fep);
-    dest = (struct usd_dest *)(uintptr_t)dest_addr;
+    dest = (struct usdf_dest *)(uintptr_t)dest_addr;
 
     qp = to_qpi(ep->e.dg.ep_qp);
     wq = &qp->uq_wq;
 
     hdr = (struct usd_udp_hdr *) buf - 1;
-    memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
+    memcpy(hdr, &dest->ds_dest.ds_dest.ds_udp.u_hdr, sizeof(*hdr));
 
     /* adjust lengths and insert source port */
     hdr->uh_ip.tot_len = htons(len + sizeof(struct usd_udp_hdr) -

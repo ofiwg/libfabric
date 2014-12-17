@@ -69,4 +69,6 @@ struct usdf_connreq {
 
 void usdf_cm_msg_connreq_failed(struct usdf_connreq *crp, int error);
 
+int usdf_cm_rdm_getname(fid_t fid, void *addr, size_t *addrlen);
+
 #endif /* _USDF_CM_H_ */

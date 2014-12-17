@@ -62,6 +62,7 @@
 #include "usdf_endpoint.h"
 #include "usdf_dgram.h"
 #include "usdf_msg.h"
+#include "usdf_av.h"
 #include "usdf_cm.h"
 
 static void
@@ -153,7 +154,8 @@ usdf_cm_msg_accept(struct fid_ep *fep, const void *param, size_t paramlen)
 
 	/* start creating the dest early */
 	ret = usd_create_dest_with_mac(udp->dom_dev, reqp->creq_ipaddr,
-			reqp->creq_port, reqp->creq_mac, &ep->e.msg.ep_dest);
+			reqp->creq_port, reqp->creq_mac,
+			&ep->e.msg.ep_dest);
 	if (ret != 0) {
 		goto fail;
 	}
@@ -198,7 +200,7 @@ usdf_cm_msg_accept(struct fid_ep *fep, const void *param, size_t paramlen)
 
 	return 0;
 fail:
-	usd_destroy_dest(ep->e.msg.ep_dest);
+	free(ep->e.msg.ep_dest);
 	/* XXX release queues */
 	return ret;
 }
@@ -301,7 +303,7 @@ usdf_cm_msg_connect_cb_rd(void *v)
 				entry_len, 0);
 		free(entry);
 		if (ret != entry_len) {
-			usd_destroy_dest(ep->e.msg.ep_dest);
+			free(ep->e.msg.ep_dest);
 			ep->e.msg.ep_dest = NULL;
 			usdf_cm_msg_connreq_failed(crp, ret);
 			return 0;
@@ -469,4 +471,41 @@ int
 usdf_cq_msg_poll(struct usd_cq *ucq, struct usd_completion *comp)
 {
 	return -EAGAIN;
+}
+
+/*
+ * Return local address of an EP
+ */
+int usdf_cm_rdm_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	struct usdf_ep *ep;
+	struct usdf_rx *rx;
+	struct sockaddr_in sin;
+	size_t copylen;
+
+	ep = ep_fidtou(fid);
+	rx = ep->ep_rx;
+
+	copylen = sizeof(sin);
+	if (copylen > *addrlen) {
+		copylen = *addrlen;
+	}
+	*addrlen = sizeof(sin);
+
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_addr.s_addr =
+		ep->ep_domain->dom_fabric->fab_dev_attrs->uda_ipaddr_be;
+	if (rx == NULL || rx->rx_qp == NULL) {
+		sin.sin_port = 0;
+	} else {
+		sin.sin_port = to_qpi(rx->rx_qp)->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
+	}
+	memcpy(addr, &sin, copylen);
+
+	if (copylen < sizeof(sin)) {
+		return -FI_ETOOSMALL;
+	} else {
+		return 0;
+	}
 }

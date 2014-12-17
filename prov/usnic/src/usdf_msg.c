@@ -64,6 +64,7 @@
 #include "usdf_rudp.h"
 #include "usdf_msg.h"
 #include "usdf_timer.h"
+#include "usdf_progress.h"
 
 static inline void
 usdf_msg_ep_ready(struct usdf_ep *ep)
@@ -244,7 +245,7 @@ usdf_msg_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 
 	pthread_spin_unlock(&udp->dom_progress_lock);
 
-	usdf_msg_progress_domain(udp);
+	usdf_domain_progress(udp);
 
 	return 0;
 }
@@ -345,10 +346,10 @@ usdf_msg_send_segment(struct usdf_tx *tx, struct usdf_ep *ep)
 
 		/* add packet lengths */
 		sge_len = resid;
-		hdr->ip.tot_len = htons(
+		hdr->hdr.uh_ip.tot_len = htons(
 				sge_len + sizeof(struct rudp_pkt) -
 				sizeof(struct ether_header));
-		hdr->udp.len = htons(
+		hdr->hdr.uh_udp.len = htons(
 				(sizeof(struct rudp_pkt) -
 				 sizeof(struct ether_header) -
 				 sizeof(struct iphdr)) + sge_len);
@@ -412,16 +413,16 @@ usdf_msg_send_segment(struct usdf_tx *tx, struct usdf_ep *ep)
 		/* add packet lengths */
 		sent = ep->ep_domain->dom_fabric->fab_dev_attrs->uda_mtu -
 			space;
-		hdr->ip.tot_len = htons(
+		hdr->hdr.uh_ip.tot_len = htons(
 				sent + sizeof(struct rudp_pkt) -
 				sizeof(struct ether_header));
-		hdr->udp.len = htons(
+		hdr->hdr.uh_udp.len = htons(
 				(sizeof(struct rudp_pkt) -
 				 sizeof(struct ether_header) -
 				 sizeof(struct iphdr)) + sent);
 if (0) {
 if ((random() % 177) == 0 && resid == 0) {
-	hdr->eth.ether_type = 0;
+	hdr->hdr.uh_eth.ether_type = 0;
 //printf("BORK seq %u\n", ep->e.msg.ep_next_tx_seq);
 }
 }
@@ -493,10 +494,10 @@ usdf_msg_send_ack(struct usdf_tx *tx, struct usdf_ep *ep)
 	}
 
 	/* add packet lengths */
-	hdr->ip.tot_len = htons(
+	hdr->hdr.uh_ip.tot_len = htons(
 			sizeof(struct rudp_pkt) -
 			sizeof(struct ether_header));
-	hdr->udp.len = htons(sizeof(struct rudp_pkt) -
+	hdr->hdr.uh_udp.len = htons(sizeof(struct rudp_pkt) -
 			 sizeof(struct ether_header) - sizeof(struct iphdr));
 
 	last_post = _usd_post_send_one(wq, hdr, sizeof(*hdr), 1);
@@ -506,6 +507,10 @@ usdf_msg_send_ack(struct usdf_tx *tx, struct usdf_ep *ep)
 	info->wp_len = 0;
 }
 
+/*
+ * If this TX has sends to do and is not on domain ready list, then
+ * this completion means we can go back on the domain ready list
+ */
 static void
 usdf_msg_send_completion(struct usd_completion *comp)
 {
@@ -525,8 +530,8 @@ usdf_msg_send_completion(struct usd_completion *comp)
  * or
  * b) all endpoints are complete or blocked awaiting ACKs
  */
-static inline void
-usdf_msg_progress_tx(struct usdf_tx *tx)
+void
+usdf_msg_tx_progress(struct usdf_tx *tx)
 {
 	struct usdf_ep *ep;
 	struct usd_qp_impl *qp;
@@ -692,7 +697,7 @@ usdf_process_nak(struct usdf_ep *ep, uint16_t seq)
 	 * is optimized out of the fastpath
 	 */
 	while (!TAILQ_EMPTY(&ep->e.msg.ep_sent_wqe)) {
-		wqe = TAILQ_LAST(&ep->e.msg.ep_sent_wqe, usdf_qe_head);
+		wqe = TAILQ_LAST(&ep->e.msg.ep_sent_wqe, usdf_msg_qe_head);
 		TAILQ_REMOVE(&ep->e.msg.ep_sent_wqe, wqe, ms_link);
 		wqe->ms_resid = 0;
 		TAILQ_INSERT_HEAD(&ep->e.msg.ep_posted_wqe, wqe, ms_link);
@@ -807,10 +812,10 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 
 		rqe = ep->e.msg.ep_cur_recv;
 		if (rqe == NULL) {
-			rqe = TAILQ_FIRST(&rx->r.msg.rx_posted_rqe);
-			if (rqe == NULL) {
+			if (TAILQ_EMPTY(&rx->r.msg.rx_posted_rqe)) {
 				goto dropit;
 			}
+			rqe = TAILQ_FIRST(&rx->r.msg.rx_posted_rqe);
 			TAILQ_REMOVE(&rx->r.msg.rx_posted_rqe, rqe, ms_link);
 			ep->e.msg.ep_cur_recv = rqe;
 		}
@@ -900,7 +905,7 @@ dropit:
  * Process message completions
  */
 void
-usdf_msg_progress_hcq(struct usdf_cq_hard *hcq)
+usdf_msg_hcq_progress(struct usdf_cq_hard *hcq)
 {
 	struct usd_completion comp;
 
@@ -914,32 +919,4 @@ usdf_msg_progress_hcq(struct usdf_cq_hard *hcq)
 			break;
 		}
 	}
-}
-
-/*
- * Progress operations in this domain
- * XXX move to usdf_domain.c or usdf_progress.c 
- */
-void
-usdf_msg_progress_domain(struct usdf_domain *udp)
-{
-	struct usdf_tx *tx;
-	struct usdf_cq_hard *hcq;
-
-	/* one big hammer lock... */
-	pthread_spin_lock(&udp->dom_progress_lock);
-
-	TAILQ_FOREACH(hcq, &udp->dom_hcq_list, cqh_dom_link) {
-		hcq->cqh_progress(hcq);
-	}
-
-	while (!TAILQ_EMPTY(&udp->dom_tx_ready)) {
-		tx = TAILQ_FIRST(&udp->dom_tx_ready);
-		TAILQ_REMOVE_MARK(&udp->dom_tx_ready, tx, tx_link);
-
-		/* XXX switch to tx->tx_progress(tx) */
-		usdf_msg_progress_tx(tx);
-	}
-
-	pthread_spin_unlock(&udp->dom_progress_lock);
 }

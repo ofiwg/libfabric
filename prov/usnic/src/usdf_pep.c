@@ -63,6 +63,7 @@
 #include "usd.h"
 #include "usdf.h"
 #include "usdf_cm.h"
+#include "usdf_msg.h"
 
 int
 usdf_pep_bind(fid_t fid, fid_t bfid, uint64_t flags)
