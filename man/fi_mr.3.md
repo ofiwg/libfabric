@@ -108,7 +108,15 @@ In order to support as broad range of applications as possible,
 without unduly affecting their performance, applications that wish to
 manage their own local memory registrations may do so by using the
 memory registration calls.  Applications may use the FI_LOCAL_MR
-domain capability bit as a guide.
+domain mode bit as a guide.
+
+When the FI_LOCAL_MR mode bit is set, applications must register all
+data buffers that will be accessed by the local hardware and provide
+a valid mem_desc parameter into applicable data transfer operations.
+When FI_LOCAL_MR is zero, applications are not required to register
+data buffers before using them for local operations (e.g. send and
+receive data buffers), and the mem_desc parameter into data transfer
+operations is ignored.
 
 Providers may support applications registering any range of addresses
 in their virtual address space, whether or not those addresses are
@@ -188,7 +196,9 @@ can use the requested_key parameter to indicate that a specific key
 value be returned.  Support for user requested keys is provider
 specific and is determined by the FI_PROV_MR_ATTR mode bit.  Access
 domains must be opened with the FI_PROV_MR_ATTR mode cleared in order
-to enable support for application selectable MR keys.
+to enable support for application selectable MR keys.  The requested_key
+parameter is ignored for memory registration calls unless the access
+flags include either FI_REMOTE_READ or FI_REMOTE_WRITE.
 
 Remote RMA and atomic operations indicate the location within a
 registered memory region by specifying an address.  By default, the
