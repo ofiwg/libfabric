@@ -108,7 +108,7 @@ usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 	qp = to_qpi(ep->e.dg.ep_qp);
 
 	rxd.urd_context = context;
-	rxd.urd_iov[0].iov_base = ep->e.dg.ep_hdr_buf + 
+	rxd.urd_iov[0].iov_base = ep->e.dg.ep_hdr_buf +
 		qp->uq_rq.urq_post_index * USDF_HDR_BUF_ENTRY;
 	rxd.urd_iov[0].iov_len = sizeof(struct usd_udp_hdr);
 	memcpy(&rxd.urd_iov[1], iov, sizeof(*iov) * count);
@@ -125,7 +125,7 @@ usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 }
 
 static inline ssize_t
-_usdf_dgram_send(struct usdf_ep *ep, struct usdf_dest *dest, 
+_usdf_dgram_send(struct usdf_ep *ep, struct usdf_dest *dest,
 		const void *buf, size_t len,  void *context)
 {
 	if (len <= USD_SEND_MAX_COPY - sizeof(struct usd_udp_hdr)) {
@@ -158,11 +158,103 @@ usdf_dgram_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	return -FI_ENOSYS;
 }
 
+
+static ssize_t
+_usdf_dgram_send_iov_copy(struct usdf_ep *ep, struct usd_dest *dest,
+		const struct iovec *iov, size_t count, void *context)
+{
+	struct usd_wq *wq;
+ 	struct usd_qp_impl *qp;
+	struct usd_udp_hdr *hdr;
+	uint32_t last_post;
+	struct usd_wq_post_info *info;
+	uint8_t *copybuf;
+	size_t len;
+	int i;
+
+	qp = to_qpi(ep->e.dg.ep_qp);
+	wq = &qp->uq_wq;
+	copybuf = wq->uwq_copybuf +
+			wq->uwq_post_index * USD_SEND_MAX_COPY;
+
+	hdr = (struct usd_udp_hdr *)copybuf;
+	memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
+	hdr->uh_udp.source =
+	    qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
+
+	len = sizeof(*hdr);
+	for (i = 0; i < count; i++) {
+	    memcpy(copybuf + len, iov[i].iov_base, iov[i].iov_len);
+	    len += iov[i].iov_len;
+	}
+
+	/* adjust lengths */
+	hdr->uh_ip.tot_len = htons(len - sizeof(struct ether_header));
+	hdr->uh_udp.len = htons(len - sizeof(struct ether_header) -
+                             sizeof(struct iphdr));
+
+	last_post = _usd_post_send_one(wq, hdr, len, 1);
+
+	info = &wq->uwq_post_info[last_post];
+	info->wp_context = context;
+	info->wp_len = len;
+
+	return 0;
+}
+
 ssize_t
-usdf_dgram_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+usdf_dgram_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 		 size_t count, fi_addr_t dest_addr, void *context)
 {
-	return -FI_ENOSYS;
+	struct usdf_ep *ep;
+	struct usd_dest *dest;
+	struct usd_wq *wq;
+ 	struct usd_qp_impl *qp;
+	struct usd_udp_hdr *hdr;
+	uint32_t last_post;
+	struct usd_wq_post_info *info;
+	uint8_t *copybuf;
+	size_t len;
+	struct iovec send_iov[USDF_DGRAM_MAX_SGE];
+	int i;
+
+	ep = ep_ftou(fep);
+	dest = (struct usd_dest *)(uintptr_t) dest_addr;
+
+	len = 0;
+	for (i = 0; i < count; i++) {
+		len += iov[i].iov_len;
+	}
+
+	if (len + sizeof(struct usd_udp_hdr) > USD_SEND_MAX_COPY) {
+		qp = to_qpi(ep->e.dg.ep_qp);
+		wq = &qp->uq_wq;
+		copybuf = wq->uwq_copybuf +
+				wq->uwq_post_index * USD_SEND_MAX_COPY;
+		hdr = (struct usd_udp_hdr *)copybuf;
+		memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
+
+		/* adjust lengths and insert source port */
+		hdr->uh_ip.tot_len = htons(len + sizeof(struct usd_udp_hdr) -
+		    sizeof(struct ether_header));
+		hdr->uh_udp.len = htons((sizeof(struct usd_udp_hdr) -
+		    sizeof(struct ether_header) -
+		    sizeof(struct iphdr)) + len);
+		hdr->uh_udp.source =
+		    qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
+
+		send_iov[0].iov_base = hdr;
+		send_iov[0].iov_len = sizeof(*hdr);
+		memcpy(&send_iov[1], iov, sizeof(struct iovec) * count);
+		last_post = _usd_post_send_iov(ep->e.dg.ep_qp, send_iov,
+						count + 1, 1);
+		info = &wq->uwq_post_info[last_post];
+		info->wp_context = context;
+		info->wp_len = len;
+	} else {
+		_usdf_dgram_send_iov_copy(ep, dest, iov, count, context);
+	}
+	return 0;
 }
 
 ssize_t
@@ -230,6 +322,8 @@ usdf_dgram_prefix_recvv(struct fid_ep *fep, const struct iovec *iov,
 	memcpy(&rxd.urd_iov[0], iov, sizeof(*iov) * count);
 	rxd.urd_iov[0].iov_base = (uint8_t *)rxd.urd_iov[0].iov_base +
 		USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
+	rxd.urd_iov[0].iov_len -= (USDF_HDR_BUF_ENTRY -
+					sizeof(struct usd_udp_hdr));
 
 	rxd.urd_iov_cnt = count;
 	rxd.urd_next = NULL;
@@ -245,7 +339,7 @@ usdf_dgram_prefix_recvv(struct fid_ep *fep, const struct iovec *iov,
 
 ssize_t
 usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
-        void *desc, fi_addr_t dest_addr, void *context)
+		void *desc, fi_addr_t dest_addr, void *context)
 {
     struct usdf_ep *ep;
     struct usdf_dest *dest;
@@ -282,3 +376,58 @@ usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
 
     return 0;
 }
+
+ssize_t
+usdf_dgram_prefix_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
+		size_t count, fi_addr_t dest_addr, void *context)
+{
+	struct usdf_ep *ep;
+	struct usd_dest *dest;
+	struct usd_wq *wq;
+ 	struct usd_qp_impl *qp;
+	struct usd_udp_hdr *hdr;
+	uint32_t last_post;
+	struct usd_wq_post_info *info;
+	struct iovec send_iov[USDF_DGRAM_MAX_SGE];
+	size_t len;
+	int i;
+
+	ep = ep_ftou(fep);
+	dest = (struct usd_dest *)(uintptr_t) dest_addr;
+
+	len = 0;
+	for (i = 0; i < count; i++) {
+		len += iov[i].iov_len;
+	}
+
+	if (len + sizeof(struct usd_udp_hdr) > USD_SEND_MAX_COPY) {
+		qp = to_qpi(ep->e.dg.ep_qp);
+		wq = &qp->uq_wq;
+		hdr = (struct usd_udp_hdr *) iov[0].iov_base - 1;
+		memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
+
+		/* adjust lengths and insert source port */
+		hdr->uh_ip.tot_len = htons(len + sizeof(struct usd_udp_hdr) -
+		    sizeof(struct ether_header));
+		hdr->uh_udp.len = htons((sizeof(struct usd_udp_hdr) -
+		    sizeof(struct ether_header) -
+		    sizeof(struct iphdr)) + len);
+		hdr->uh_udp.source =
+		    qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
+
+		memcpy(send_iov, iov, sizeof(struct iovec) * count);
+		send_iov[0].iov_base = hdr;
+		send_iov[0].iov_len += sizeof(*hdr);
+
+		last_post = _usd_post_send_iov(ep->e.dg.ep_qp,
+						send_iov, count, 1);
+		info = &wq->uwq_post_info[last_post];
+		info->wp_context = context;
+		info->wp_len = len;
+	} else {
+		_usdf_dgram_send_iov_copy(ep, dest, iov, count, context);
+	}
+	return 0;
+}
+
+
