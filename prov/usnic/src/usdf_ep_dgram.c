@@ -260,7 +260,7 @@ usdf_ep_dgram_close(fid_t fid)
 	}
 	usdf_ep_dgram_deref_cq(ep->e.dg.ep_wcq);
 	usdf_ep_dgram_deref_cq(ep->e.dg.ep_rcq);
-	
+
 	free(ep);
 	return 0;
 }
@@ -293,8 +293,8 @@ static struct fi_ops_msg usdf_dgram_prefix_ops = {
 	.recv = usdf_dgram_prefix_recv,
 	.recvv = usdf_dgram_prefix_recvv,
 	.recvmsg = usdf_dgram_recvmsg,
-	.send = usdf_dgram_send,
-	.sendv = usdf_dgram_sendv,
+	.send = usdf_dgram_prefix_send,
+	.sendv = usdf_dgram_prefix_sendv,
 	.sendmsg = usdf_dgram_sendmsg,
 	.inject = usdf_dgram_inject,
 	.senddata = usdf_dgram_senddata,
