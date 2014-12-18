@@ -246,8 +246,7 @@ usdf_dgram_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 		send_iov[0].iov_base = hdr;
 		send_iov[0].iov_len = sizeof(*hdr);
 		memcpy(&send_iov[1], iov, sizeof(struct iovec) * count);
-		last_post = _usd_post_send_iov(ep->e.dg.ep_qp, send_iov,
-						count + 1, 1);
+		last_post = _usd_post_send_iov(wq, send_iov, count + 1, 1);
 		info = &wq->uwq_post_info[last_post];
 		info->wp_context = context;
 		info->wp_len = len;
@@ -419,8 +418,7 @@ usdf_dgram_prefix_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc
 		send_iov[0].iov_base = hdr;
 		send_iov[0].iov_len += sizeof(*hdr);
 
-		last_post = _usd_post_send_iov(ep->e.dg.ep_qp,
-						send_iov, count, 1);
+		last_post = _usd_post_send_iov(wq, send_iov, count, 1);
 		info = &wq->uwq_post_info[last_post];
 		info->wp_context = context;
 		info->wp_len = len;
