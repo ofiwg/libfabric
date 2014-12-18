@@ -187,6 +187,34 @@ static int sock_am_insert(struct fid_av *av, const void *addr, size_t count,
 	return 0;
 }
 
+int sock_insertsvc(struct fid_av *av, const char *node,
+		   const char *service, fi_addr_t *fi_addr,
+		   uint64_t flags, void *context)
+{
+	int ret;
+	struct addrinfo sock_hints;
+	struct addrinfo *result = NULL;
+	struct sock_av *_av;
+
+	_av = container_of(av, struct sock_av, av_fid);
+
+	memset(&sock_hints, 0, sizeof(struct addrinfo));
+	ret = getaddrinfo(node, service, &sock_hints, &result);
+	if (!ret)
+		return -FI_EINVAL;
+
+	if (_av->attr.type == FI_AV_MAP) {
+		ret = sock_am_insert(av, result->ai_addr, 1, 
+				     fi_addr, flags, context);
+	} else {
+		ret = sock_at_insert(av, result->ai_addr, 1, 
+				     fi_addr, flags, context);
+	}
+
+	freeaddrinfo(result); 
+	return ret;
+}
+
 static int sock_am_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			  uint64_t flags)
 {
@@ -252,6 +280,7 @@ static struct fi_ops sock_av_fi_ops = {
 static struct fi_ops_av sock_am_ops = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = sock_am_insert,
+	.insertsvc = sock_insertsvc,
 	.remove = sock_am_remove,
 	.lookup = sock_am_lookup,
 	.straddr = sock_am_straddr
@@ -260,6 +289,7 @@ static struct fi_ops_av sock_am_ops = {
 static struct fi_ops_av sock_at_ops = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = sock_at_insert,
+	.insertsvc = sock_insertsvc,
 	.remove = sock_at_remove,
 	.lookup = sock_at_lookup,
 	.straddr = sock_at_straddr
@@ -302,7 +332,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (attr->flags)
 		return -FI_ENOSYS;
 
-	if (attr->rx_ctx_bits > 63) {
+	if (attr->rx_ctx_bits > SOCK_EP_MAX_CTX_BITS) {
 		SOCK_LOG_ERROR("Invalid rx_ctx_bits\n");
 		return -EINVAL;
 	}
