@@ -41,6 +41,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <ctype.h>
 
 #include "sock.h"
 #include "sock_util.h"
@@ -105,31 +106,33 @@ struct sock_conn *sock_av_lookup_addr(struct sock_av *av,
 }
 
 static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
-		int count)
+			       fi_addr_t *fi_addr, int count)
 {
-	int i;
+	int i, ret;
 	struct sock_av_addr *av_addr;
 	av_addr = calloc(count, sizeof(struct sock_av_addr));
 	if (!av_addr)
 		return -ENOMEM;
-
-	for (i=0; i<count; i++) {
+	
+	for (i=0, ret = 0; i<count; i++) {
 		memcpy(&av_addr[i].addr, &addr[i], sizeof(struct sockaddr_in));
-		if (idm_set(&_av->addr_idm, _av->stored, &av_addr[i]) < 0)
-			goto err;
+		if (idm_set(&_av->addr_idm, _av->stored, &av_addr[i]) < 0) {
+			if (fi_addr)
+				fi_addr[i] = FI_ADDR_NOTAVAIL;
+			continue;
+		}
 
+		if (fi_addr)
+			fi_addr[i] = (fi_addr_t)_av->stored;
+		
 		_av->stored++;
+		ret++;
 	}
-
-	return 0;
-
-err:
-	free(av_addr);
-	return -errno;
+	return ret;
 }
 
-static int sock_at_insert(struct fid_av *av, const void *addr, size_t count,
-			  fi_addr_t *fi_addr, uint64_t flagsi, void *context)
+static int sock_av_insert(struct fid_av *av, const void *addr, size_t count,
+			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct sock_av *_av;
 
@@ -137,7 +140,8 @@ static int sock_at_insert(struct fid_av *av, const void *addr, size_t count,
 
 	switch(((struct sockaddr *)addr)->sa_family) {
 	case AF_INET:
-		return sock_check_table_in(_av, (struct sockaddr_in *)addr, count);
+		return sock_check_table_in(_av, (struct sockaddr_in *)addr, 
+					   fi_addr, count);
 	default:
 		SOCK_LOG_ERROR("invalid address type inserted: only IPv4 supported\n");
 		return -EINVAL;
@@ -176,44 +180,78 @@ static const char * sock_at_straddr(struct fid_av *av, const void *addr,
 	return NULL;
 }
 
-static int sock_am_insert(struct fid_av *av, const void *addr, size_t count,
-			  fi_addr_t *fi_addr, uint64_t flags, void *context)
-{
-	int i;
-	sock_at_insert(av, addr, count, fi_addr, flags, context);
-	for (i = 0; i < count; i++)
-		fi_addr[i] = (fi_addr_t)i;
-
-	return 0;
-}
-
-int sock_insertsvc(struct fid_av *av, const char *node,
+int sock_av_insertsvc(struct fid_av *av, const char *node,
 		   const char *service, fi_addr_t *fi_addr,
 		   uint64_t flags, void *context)
 {
 	int ret;
+	struct sock_av *_av;
 	struct addrinfo sock_hints;
 	struct addrinfo *result = NULL;
-	struct sock_av *_av;
-
+	
+	if (!service) {
+		SOCK_LOG_ERROR("Port not provided\n");
+		return -FI_EINVAL;
+	}
+	
 	_av = container_of(av, struct sock_av, av_fid);
 
 	memset(&sock_hints, 0, sizeof(struct addrinfo));
+	sock_hints.ai_family = AF_INET;
+	sock_hints.ai_socktype = SOCK_STREAM;
+	
 	ret = getaddrinfo(node, service, &sock_hints, &result);
-	if (!ret)
-		return -FI_EINVAL;
+	if (ret)
+		return -ret;
 
-	if (_av->attr.type == FI_AV_MAP) {
-		ret = sock_am_insert(av, result->ai_addr, 1, 
-				     fi_addr, flags, context);
-	} else {
-		ret = sock_at_insert(av, result->ai_addr, 1, 
-				     fi_addr, flags, context);
-	}
-
+	ret = sock_av_insert(av, result->ai_addr, 1, fi_addr, flags, context);
 	freeaddrinfo(result); 
 	return ret;
 }
+
+int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt,
+		      const char *service, size_t svccnt, fi_addr_t *fi_addr,
+		      uint64_t flags, void *context)
+{
+	int ret = 0;
+	int var_port, var_host;
+	char base_host[FI_NAME_MAX] = {0};
+	char tmp_host[FI_NAME_MAX] = {0};
+	char tmp_port[FI_NAME_MAX] = {0};
+	int hostlen, offset = 0, fmt, i, j;
+
+	if (!node || !service) {
+		SOCK_LOG_ERROR("Node/service not provided\n");
+		return -FI_EINVAL;
+	}
+	
+	hostlen = strlen(node);
+	while(isdigit(*(node + hostlen - (offset+1))))
+		offset++;
+	
+	if (*(node + hostlen - offset) == '.')
+		fmt = 0;
+	else 
+		fmt = offset;
+
+	strncpy(base_host, node, hostlen - (offset));
+	var_port = atoi(service);
+	var_host = atoi(node + hostlen - offset);
+	
+	for (i = 0; i < nodecnt; i++) {
+		for (j = 0; j < svccnt; j++) {
+			sprintf(tmp_host, "%s%0*d", base_host, fmt, var_host + i);
+			sprintf(tmp_port, "%d", var_port + j);
+
+			if (sock_av_insertsvc(av, tmp_host, tmp_port, 
+					   &fi_addr[i * nodecnt + j],
+					   flags, context) == 1)
+				ret++;
+		}
+	}
+	return ret;
+}
+
 
 static int sock_am_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			  uint64_t flags)
@@ -279,8 +317,9 @@ static struct fi_ops sock_av_fi_ops = {
 
 static struct fi_ops_av sock_am_ops = {
 	.size = sizeof(struct fi_ops_av),
-	.insert = sock_am_insert,
-	.insertsvc = sock_insertsvc,
+	.insert = sock_av_insert,
+	.insertsvc = sock_av_insertsvc,
+	.insertsym = sock_av_insertsym,
 	.remove = sock_am_remove,
 	.lookup = sock_am_lookup,
 	.straddr = sock_am_straddr
@@ -288,8 +327,9 @@ static struct fi_ops_av sock_am_ops = {
 
 static struct fi_ops_av sock_at_ops = {
 	.size = sizeof(struct fi_ops_av),
-	.insert = sock_at_insert,
-	.insertsvc = sock_insertsvc,
+	.insert = sock_av_insert,
+	.insertsvc = sock_av_insertsvc,
+	.insertsym = sock_av_insertsym,
 	.remove = sock_at_remove,
 	.lookup = sock_at_lookup,
 	.straddr = sock_at_straddr
