@@ -184,7 +184,7 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		dst_len += (tx_iov.ioc.count * datatype_sz);
 	}
 
-	if (dst_len != src_len) {
+	if (result_count && (dst_len != src_len)) {
 		SOCK_LOG_ERROR("Buffer length mismatch\n");
 		ret = -FI_EINVAL;
 		goto err;
@@ -197,7 +197,7 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		dst_len += (tx_iov.ioc.count * datatype_sz);
 	}
 
-	if (dst_len != src_len) {
+	if (compare_count && (dst_len != src_len)) {
 		SOCK_LOG_ERROR("Buffer length mismatch\n");
 		ret = -FI_EINVAL;
 		goto err;
