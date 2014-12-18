@@ -55,7 +55,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-ssize_t sock_comm_send_socket(struct sock_conn *conn, const void *buf, size_t len)
+static ssize_t sock_comm_send_socket(struct sock_conn *conn, const void *buf, size_t len)
 {
 	ssize_t ret;
 	size_t rem = len;

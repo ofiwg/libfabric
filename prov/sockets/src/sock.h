@@ -45,13 +45,13 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
+#include <netdb.h>
 
 #include <fi.h>
 #include <fi_enosys.h>
 #include <fi_indexer.h>
 #include <fi_rbuf.h>
 #include <fi_list.h>
-#include <netdb.h>
 
 #ifndef _SOCK_H_
 #define _SOCK_H_
@@ -63,7 +63,6 @@
 #define SOCK_EP_MAX_ORDER_WAR_SZ (0)
 #define SOCK_EP_MAX_ORDER_WAW_SZ (0)
 #define SOCK_EP_MEM_TAG_FMT (0)
-#define SOCK_EP_MSG_ORDER (0)
 #define SOCK_EP_MAX_EP_CNT (128)
 #define SOCK_EP_MAX_TX_CNT (16)
 #define SOCK_EP_MAX_RX_CNT (16)
@@ -71,12 +70,16 @@
 #define SOCK_EP_MAX_TX_CTX_SZ (1<<12)
 #define SOCK_EP_MIN_MULTI_RECV (64)
 #define SOCK_EP_MAX_ATOMIC_SZ (512)
+#define SOCK_EP_MAX_CTX_BITS (16)
 
 #define SOCK_PE_POLL_TIMEOUT (100000)
 #define SOCK_PE_MAX_ENTRIES (128)
 
 #define SOCK_EQ_DEF_SZ (1<<8)
 #define SOCK_CQ_DEF_SZ (1<<8)
+
+#define SOCK_CQ_DATA_SIZE (sizeof(uint64_t))
+#define SOCK_TAG_SIZE (sizeof(uint64_t))
 
 
 #define SOCK_EP_RDM_CAP (FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS | FI_DYNAMIC_MR | \
@@ -96,7 +99,11 @@
 
 #define SOCK_DEF_OPS (FI_SEND | FI_RECV |			\
 		      FI_BUFFERED_RECV | FI_READ | FI_WRITE |	\
-		      FI_REMOTE_READ | FI_REMOTE_WRITE )
+		      FI_REMOTE_READ | FI_REMOTE_WRITE)
+
+#define SOCK_EP_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS|	\
+			   FI_ORDER_WAR | FI_ORDER_WAW | FI_ORDER_WAS |	\
+			   FI_ORDER_SAR | FI_ORDER_SAW | FI_ORDER_SAS)
 
 #define SOCK_MODE (0)
 
@@ -105,9 +112,6 @@
 
 #define SOCK_MAJOR_VERSION 1
 #define SOCK_MINOR_VERSION 0
-
-extern const char const sock_fab_name[];
-extern const char const sock_dom_name[];
 
 struct sock_fabric{
 	struct fid_fabric fab_fid;
@@ -127,7 +131,7 @@ struct sock_conn_map {
         struct sock_conn *table;
         int used;
         int size;
-		struct sock_domain *domain;
+	struct sock_domain *domain;
 };
 
 struct sock_domain {
@@ -146,19 +150,19 @@ struct sock_domain {
 	struct sock_conn_map u_cmap;
 	struct sock_conn_map r_cmap;
 	pthread_t listen_thread;
-	int	listening;
+	int listening;
 	char service[NI_MAXSERV];
 };
 
 struct sock_cntr {
-	struct fid_cntr		cntr_fid;
-	struct sock_domain	*domain;
-	atomic_t	value;
-	atomic_t	threshold;
-	atomic_t	ref;
+	struct fid_cntr cntr_fid;
+	struct sock_domain *domain;
+	atomic_t value;
+	atomic_t threshold;
+	atomic_t ref;
 	atomic_t err_cnt;
-	pthread_cond_t		cond;
-	pthread_mutex_t		mut;
+	pthread_cond_t 	cond;
+	pthread_mutex_t mut;
 	struct fi_cntr_attr attr;
 
 	struct dlist_entry rx_list;
@@ -182,19 +186,27 @@ struct sock_mr {
 	struct sock_cq *cq;
 };
 
+struct sock_av_addr {
+	uint16_t key;
+	struct sockaddr_storage addr;
+};
+
 struct sock_av {
-	struct fid_av		av_fid;
-	struct sock_domain	*domain;
-	atomic_t		ref;
-	struct fi_av_attr	attr;
-	size_t			count;
-	struct sockaddr_in	*table;
-	struct sock_conn_map	*cmap;
+	struct fid_av av_fid;
+	struct sock_domain *domain;
+	atomic_t ref;
+	struct fi_av_attr attr;
+	uint64_t mask;
+	int rx_ctx_bits;
+	size_t stored;
+	struct index_map addr_idm;
+	socklen_t addrlen;
+	struct sock_conn_map *cmap;
 };
 
 struct sock_fid_list {
 	struct dlist_entry entry;
-	struct fid	*fid;
+	struct fid *fid;
 };
 
 struct sock_poll {
@@ -209,7 +221,7 @@ struct sock_wait {
 	struct dlist_entry fid_list;
 	enum fi_wait_obj type;
 	union {
-		int			fd[2];
+		int fd[2];
 		struct {
 			pthread_mutex_t	mutex;
 			pthread_cond_t	cond;
@@ -251,9 +263,9 @@ enum {
  * tag - only present for TSEND op
  */
 struct sock_op {
-	uint8_t			op;
-	uint8_t			src_iov_len;
-	uint8_t			dest_iov_len;
+	uint8_t op;
+	uint8_t src_iov_len;
+	uint8_t	dest_iov_len;
 	union {
 		struct {
 			uint8_t	op;
@@ -261,7 +273,7 @@ struct sock_op {
 			uint8_t	res_iov_len;
 			uint8_t	cmp_iov_len;
 		} atomic;
-		uint8_t		reserved[5];
+		uint8_t	reserved[5];
 	};
 };
 
@@ -287,14 +299,8 @@ struct sock_op_tsend {
 };
 
 union sock_iov {
-	struct fi_rma_iov	iov;
-	struct fi_rma_ioc	ioc;
-};
-
-struct sock_rxtx {
-	struct ringbuffd	rbfd;
-	fastlock_t		wlock;
-	fastlock_t		rlock;
+	struct fi_rma_iov iov;
+	struct fi_rma_ioc ioc;
 };
 
 struct sock_eq_entry{
@@ -383,23 +389,6 @@ struct sock_ep {
 	enum fi_ep_type ep_type;
 	struct sockaddr_in *src_addr;
 	struct sockaddr_in *dest_addr;
-	fi_addr_t conn_addr;
-};
-
-
-struct sock_pep {
-	struct fid_pep		pep;
-	struct sock_domain  *dom;
-	
-	int sock_fd;
-
-	struct sock_eq 	*eq;
-
-	struct sock_cq 	*send_cq;
-	struct sock_cq 	*recv_cq;
-
-	uint64_t			op_flags;
-	uint64_t			pep_cap;
 };
 
 struct sock_rx_entry {
@@ -503,9 +492,8 @@ struct sock_msg_hdr{
 	uint8_t dest_iov_len;
 	uint8_t reserved[1];
 
-	uint64_t src_addr;
 	uint64_t flags;
-	uint64_t msg_len; /* includes header len */
+	uint64_t msg_len;
 };
 
 struct sock_msg_send{
@@ -634,8 +622,26 @@ struct sock_pe_entry{
 	struct dlist_entry ctx_entry;
 };
 
+struct sock_pe{
+	struct sock_domain *domain;
+
+	struct sock_pe_entry pe_table[SOCK_PE_MAX_ENTRIES];
+	fastlock_t lock;
+
+	struct dlist_entry free_list;
+	struct dlist_entry busy_list;
+
+	struct dlistfd_head tx_list;
+	struct dlistfd_head rx_list;
+
+	pthread_t progress_thread;
+	volatile int do_progress;
+	struct sock_pe_entry *pe_atomic;
+};
+
 typedef int (*sock_cq_report_fn) (struct sock_cq *cq, fi_addr_t addr,
 				  struct sock_pe_entry *pe_entry);
+
 struct sock_cq {
 	struct fid_cq cq_fid;
 	struct sock_domain *domain;
@@ -658,6 +664,7 @@ struct sock_cq {
 	sock_cq_report_fn report_completion;
 };
 
+
 int sock_verify_info(struct fi_info *hints);
 int sock_verify_fabric_attr(struct fi_fabric_attr *attr);
 int sock_verify_domain_attr(struct fi_domain_attr *attr);
@@ -677,10 +684,16 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 		       uint64_t flags, struct fi_info *hints, struct fi_info **info);
 int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
-		       uint64_t flags, struct fi_info *hints, struct fi_info **info);
+		     uint64_t flags, struct fi_info *hints, struct fi_info **info);
+void free_fi_info(struct fi_info *info);
+
+
+int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
+		struct fid_domain **dom, void *context);
+
 
 int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
-		  struct sock_ep **ep, void *context, size_t fclass);
+			struct sock_ep **ep, void *context, size_t fclass);
 int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int sock_rdm_sep(struct fid_domain *domain, struct fi_info *info,
@@ -689,24 +702,20 @@ int sock_rdm_sep(struct fid_domain *domain, struct fi_info *info,
 int sock_dgram_ep(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
 int sock_dgram_sep(struct fid_domain *domain, struct fi_info *info,
-		 struct fid_sep **sep, void *context);
+		   struct fid_sep **sep, void *context);
 
 int sock_msg_ep(struct fid_domain *domain, struct fi_info *info,
-		  struct fid_ep **ep, void *context);
+		struct fid_ep **ep, void *context);
 int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_sep **sep, void *context);
 int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
-		 struct fid_pep **pep, void *context);
+			struct fid_pep **pep, void *context);
 
 
-int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
-		struct fid_domain **dom, void *context);
-
-
-int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-		struct fid_av **av, void *context);
-fi_addr_t _sock_av_lookup(struct sock_av *av, struct sockaddr *addr);
-struct sock_conn *sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr);
+int sock_stx_ctx(struct fid_domain *domain,
+		 struct fi_tx_attr *attr, struct fid_stx **stx, void *context);
+int sock_srx_ctx(struct fid_domain *domain,
+		 struct fi_rx_attr *attr, struct fid_ep **srx, void *context);
 
 
 int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -716,76 +725,70 @@ int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
 int sock_cq_progress(struct sock_cq *cq);
 
 
+int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+		   struct fid_cntr **cntr, void *context);
+int sock_cntr_inc(struct sock_cntr *cntr);
+int sock_cntr_err_inc(struct sock_cntr *cntr);
+int sock_cntr_progress(struct sock_cntr *cntr);
+
+
 int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-		struct fid_eq **eq, void *context);
+		 struct fid_eq **eq, void *context);
 ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event, 
 			     const void *buf, size_t len, uint64_t flags);
 ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
 			     int err, int prov_errno, void *err_data);
 
 
-int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
-		struct fid_cntr **cntr, void *context);
-int sock_cntr_inc(struct sock_cntr *cntr);
-int sock_cntr_err_inc(struct sock_cntr *cntr);
-int sock_cntr_progress(struct sock_cntr *cntr);
+struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key, 
+				   void *buf, size_t len, uint64_t access);
+struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc, 
+				    void *buf, size_t len, uint64_t access);
+struct sock_mr * sock_mr_get_entry(struct sock_domain *domain, uint16_t key);
 
 
-int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
-int sock_dgram_ep(struct fid_domain *domain, struct fi_info *info,
-		  struct fid_ep **ep, void *context);
-int sock_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
-		   struct fid_pep **pep, void *context);
-
-
-int sock_ep_connect(struct fid_ep *ep, const void *addr,
-		    const void *param, size_t paramlen);
-
-
-struct sock_rx_ctx *sock_rx_ctx_alloc(struct fi_rx_attr *attr,
-				      void *context);
-void sock_rx_ctx_add_ep(struct sock_rx_ctx *rx_ctx, struct sock_ep *ep);
+struct sock_rx_ctx *sock_rx_ctx_alloc(struct fi_rx_attr *attr, void *context);
 void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx);
 
-int sock_stx_ctx(struct fid_domain *domain,
-		 struct fi_tx_attr *attr, struct fid_stx **stx, void *context);
-int sock_srx_ctx(struct fid_domain *domain,
-		 struct fi_rx_attr *attr, struct fid_ep **srx, void *context);
-
-
-struct sock_tx_ctx *sock_tx_ctx_alloc(struct fi_tx_attr *attr,
-				      void *context);
-void sock_tx_ctx_add_ep(struct sock_tx_ctx *tx_ctx, struct sock_ep *ep);
+struct sock_tx_ctx *sock_tx_ctx_alloc(struct fi_tx_attr *attr, void *context);
 void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx);
 void sock_tx_ctx_start(struct sock_tx_ctx *tx_ctx);
 void sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len);
 void sock_tx_ctx_commit(struct sock_tx_ctx *tx_ctx);
 void sock_tx_ctx_abort(struct sock_tx_ctx *tx_ctx);
-int sock_tx_ctx_read(struct sock_tx_ctx *tx_ctx, void *buf, size_t len);
 
 
 int sock_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
-		struct fid_poll **pollset);
+		   struct fid_poll **pollset);
 int sock_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
-		struct fid_wait **waitset);
+		   struct fid_wait **waitset);
+int sock_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
+		   struct fid_wait **waitset);
+void sock_wait_signal(struct fid_wait *wait_fid);
+int sock_wait_get_obj(struct fid_wait *fid, void *arg);
+int sock_wait_close(fid_t fid);
 
-#define SOCK_GET_RX_ID(_addr, _bits) (((uint64_t)_addr) >> (64 - _bits))
+
+int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+		 struct fid_av **av, void *context);
+fi_addr_t _sock_av_lookup(struct sock_av *av, struct sockaddr *addr);
+fi_addr_t sock_av_get_fiaddr(struct sock_av *av, struct sock_conn *conn);
+fi_addr_t sock_av_lookup_key(struct sock_av *av, int key);
 struct sock_conn *sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr);
+
+
 struct sock_conn *sock_conn_map_lookup_key(struct sock_conn_map *conn_map,
-		uint16_t key);
+					   uint16_t key);
 uint16_t sock_conn_map_match_or_connect(struct sock_conn_map *map, 
-					struct sockaddr_in *addr, 
-					int match_only);
+					struct sockaddr_in *addr, int match_only);
 int sock_conn_listen(struct sock_domain *domain);
-int sock_conn_map_clear_pe_entry(struct sock_conn *conn_entry, 
-		uint16_t key);
+int sock_conn_map_clear_pe_entry(struct sock_conn *conn_entry, uint16_t key);
 void sock_conn_map_destroy(struct sock_conn_map *cmap);
 
 
 struct sock_pe *sock_pe_init(struct sock_domain *domain);
-int sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);
-int sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx);
+void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);
+void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx);
 int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx);
 int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx);
 void sock_pe_finalize(struct sock_pe *pe);
@@ -794,24 +797,16 @@ void sock_pe_finalize(struct sock_pe *pe);
 struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx);
 struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,
 						 size_t len);
-struct sock_rx_entry *sock_rx_check_buffered_list(struct sock_rx_ctx *rx_ctx,
-						   const struct fi_msg *msg, uint64_t flags);
-struct sock_rx_entry *sock_rx_check_buffered_tlist(struct sock_rx_ctx *rx_ctx,
-						    const struct fi_msg_tagged *msg, 
-						    uint64_t flags);
 struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx, 
 					uint64_t addr, uint64_t tag);
 size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry);
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry);
 
-int sock_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
-		   struct fid_wait **waitset);
-void sock_wait_signal(struct fid_wait *wait_fid);
-int sock_wait_get_obj(struct fid_wait *fid, void *arg);
-int sock_wait_close(fid_t fid);
 
-
-void free_fi_info(struct fi_info *info);
-
+int sock_comm_buffer_init(struct sock_conn *conn);
+void sock_comm_buffer_finalize(struct sock_conn *conn);
+ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len);
+ssize_t sock_comm_recv(struct sock_conn *conn, void *buf, size_t len);
+ssize_t sock_comm_flush(struct sock_conn *conn);
 
 #endif

@@ -44,7 +44,6 @@
 #define SOCK_INFO (3)
 
 extern int sock_log_level;
-extern char host[128];
 
 #define SOCK_LOG_INFO(...) do {						\
 		if (sock_log_level >= SOCK_INFO) {			\
@@ -69,10 +68,3 @@ extern char host[128];
 
 #endif
 
-#define HTON_16 htons
-#define HTON_32 htonl
-#define HTON_64 htonll
-
-#define NTOH_16 ntohs
-#define NTOH_32 ntohl
-#define NTOH_64 ntohll

@@ -166,8 +166,6 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	int ret;
 	struct fi_info *_info, *tmp;
 
-	return -FI_ENODATA;
-
 	ret = sock_verify_info(hints);
 	if (ret) 
 		return ret;

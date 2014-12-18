@@ -62,3 +62,10 @@ int sock_conn_listen(struct sock_domain *domain)
 {
 	return 0;
 }
+
+uint16_t sock_conn_map_match_or_connect(struct sock_conn_map *map, 
+					struct sockaddr_in *addr,
+					int match_only)
+{
+	return 0;
+}

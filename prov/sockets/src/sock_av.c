@@ -43,23 +43,39 @@
 #include <sys/socket.h>
 
 #include "sock.h"
+#include "sock_util.h"
+
+fi_addr_t sock_av_lookup_key(struct sock_av *av, int key)
+{
+	int i;
+	struct sock_av_addr *av_addr;
+
+	for (i = 0; i < IDX_MAX_INDEX; i++) {
+		av_addr = idm_lookup(&av->addr_idm, i);
+		if (!av_addr)
+			continue;
+
+		if (!av_addr->key) {
+			av_addr->key = sock_conn_map_match_or_connect(
+				av->cmap,
+				(struct sockaddr_in*)&av_addr->addr, 1);
+			if (!av_addr->key) {
+				continue;
+			}
+		}
+
+		if (av_addr->key == key + 1) {
+			return i;
+		}
+	}
+
+	SOCK_LOG_INFO("Reverse-lookup failed: %d\n", key);
+	return FI_ADDR_NOTAVAIL;
+}
 
 static int sock_at_insert(struct fid_av *av, const void *addr, size_t count,
 			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	int i;
-	struct sock_av *_av;
-
-	_av = container_of(av, struct sock_av, av_fid);
-	_av->table = calloc(count, sizeof(struct sockaddr_in));
-	if (!_av->table)
-		return -ENOMEM;
-
-	for (i=0; i<count; i++) {
-		memcpy(&_av->table[i], &((struct sockaddr_in *)addr)[i], sizeof(struct sockaddr_in));
-	}
-	_av->count = count;
-
 	return 0;
 }
 
@@ -72,15 +88,6 @@ static int sock_at_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 static int sock_at_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			  size_t *addrlen)
 {
-	int idx;
-	idx = (int)(int64_t)fi_addr;
-	struct sock_av *_av;
-
-	_av = container_of(av, struct sock_av, av_fid);
-	if (idx >= _av->count || idx < 0)
-		return -EINVAL;
-	memcpy(addr, &_av->table[idx], MIN(*addrlen, sizeof(struct sockaddr_in)));
-	*addrlen = sizeof(struct sockaddr_in);
 	return 0;
 }
 
@@ -256,20 +263,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 /* TODO */
 fi_addr_t _sock_av_lookup(struct sock_av *av, struct sockaddr *addr)
 {
-	if (av->attr.type == FI_AV_MAP) {
-		return (fi_addr_t)addr;
-	} else {
-		int i;
-		struct sockaddr_in *addrin;
-		addrin = (struct sockaddr_in*)addr;
-		for (i = 0 ; i < av->count ; i++) {
-			if (av->table[i].sin_addr.s_addr == addrin->sin_addr.s_addr &&
-					av->table[i].sin_port == addrin->sin_port)
-				return (fi_addr_t)i;
-		}
-		fprintf(stderr, "[sock] failed to lookup src_addr in av table\n");
-	}
-	return FI_ADDR_NOTAVAIL;
+	return 0;
 }
 
 /* place holder */

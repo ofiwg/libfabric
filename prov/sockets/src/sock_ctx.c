@@ -154,19 +154,3 @@ void sock_tx_ctx_abort(struct sock_tx_ctx *tx_ctx)
 	fastlock_release(&tx_ctx->rlock);
 }
 
-int sock_tx_ctx_read(struct sock_tx_ctx *tx_ctx, void *buf, size_t len)
-{
-	int ret;
-
-	fastlock_acquire(&tx_ctx->rlock);
-	if (rbfdused(&tx_ctx->rbfd) >= len) {
-		rbfdread(&tx_ctx->rbfd, buf, len);
-		ret = 0;
-	} else {
-		ret = -FI_EAGAIN;
-	}
-	fastlock_release(&tx_ctx->rlock);
-
-	return ret;
-}
-
