@@ -116,6 +116,11 @@ struct sock_fabric{
 
 struct sock_conn {
         int sock_fd;
+        struct sockaddr addr;
+        struct sock_pe_entry *rx_pe_entry;
+        struct sock_pe_entry *tx_pe_entry;
+	struct ringbuf inbuf;
+	struct ringbuf outbuf;
 };
 
 struct sock_conn_map {

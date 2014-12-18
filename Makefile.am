@@ -54,6 +54,7 @@ _sockets_files = \
 	prov/sockets/src/sock_ctx.c \
 	prov/sockets/src/sock_rx_entry.c \
 	prov/sockets/src/sock_progress.c \
+	prov/sockets/src/sock_comm.c \
 	prov/sockets/src/sock_msg.c \
 	prov/sockets/src/sock_rma.c \
 	prov/sockets/src/sock_atomic.c \
