@@ -66,14 +66,14 @@ const struct fi_ep_attr sock_rdm_ep_attr = {
 	.max_order_waw_size = SOCK_EP_MAX_ORDER_WAW_SZ,
 	.mem_tag_format = SOCK_EP_MEM_TAG_FMT,
 	.msg_order = SOCK_EP_MSG_ORDER,
-	.tx_ctx_cnt = SOCK_EP_MAX_TX_CNT,
-	.rx_ctx_cnt = SOCK_EP_MAX_RX_CNT,
+	.tx_ctx_cnt = 0,
+	.rx_ctx_cnt = 0,
 };
 
 const struct fi_tx_attr sock_rdm_tx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
 	.op_flags = SOCK_DEF_OPS,
-	.msg_order = 0,
+	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_MAX_TX_CTX_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
@@ -82,7 +82,7 @@ const struct fi_tx_attr sock_rdm_tx_attr = {
 const struct fi_rx_attr sock_rdm_rx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
 	.op_flags = SOCK_DEF_OPS,
-	.msg_order = 0,
+	.msg_order = SOCK_EP_MSG_ORDER,
 	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.size = SOCK_EP_MAX_MSG_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
@@ -99,7 +99,7 @@ static int sock_rdm_verify_rx_attr(const struct fi_rx_attr *attr)
 	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP)
 		return -FI_ENODATA;
 
-	if (attr->msg_order != sock_rdm_rx_attr.msg_order)
+	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
 		return -FI_ENODATA;
 
 	if (attr->total_buffered_recv > sock_rdm_rx_attr.total_buffered_recv)
@@ -125,7 +125,7 @@ static int sock_rdm_verify_tx_attr(const struct fi_tx_attr *attr)
 	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP)
 		return -FI_ENODATA;
 
-	if (attr->msg_order != sock_rdm_tx_attr.msg_order)
+	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
 		return -FI_ENODATA;
 
 	if (attr->inject_size > sock_rdm_tx_attr.inject_size)
@@ -175,15 +175,14 @@ int sock_rdm_verify_ep_attr(struct fi_ep_attr *ep_attr,
 		   sock_rdm_ep_attr.max_order_waw_size)
 			return -FI_ENODATA;
 
-		if (ep_attr->msg_order !=
-		   sock_rdm_ep_attr.msg_order)
+		if ((ep_attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
 			return -FI_ENODATA;
 
-		if ((ep_attr->tx_ctx_cnt > sock_rdm_ep_attr.tx_ctx_cnt) &&
+		if ((ep_attr->tx_ctx_cnt > SOCK_EP_MAX_TX_CNT) &&
 		    ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT)
 			return -FI_ENODATA;
 
-		if ((ep_attr->rx_ctx_cnt > sock_rdm_ep_attr.rx_ctx_cnt) &&
+		if ((ep_attr->rx_ctx_cnt > SOCK_EP_MAX_RX_CNT) &&
 		    ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
 			return -FI_ENODATA;
 	}

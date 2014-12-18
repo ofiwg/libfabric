@@ -49,9 +49,9 @@
 #include <fi.h>
 #include <fi_enosys.h>
 #include <fi_indexer.h>
-#include "list.h"
 #include <fi_rbuf.h>
 #include <fi_list.h>
+#include <netdb.h>
 
 #ifndef _SOCK_H_
 #define _SOCK_H_
@@ -136,16 +136,18 @@ struct sock_domain {
 	struct sock_fabric *fab;
 	fastlock_t lock;
 	atomic_t ref;
-
+	
 	struct sock_eq *eq;
 	struct sock_eq *mr_eq;
 
-	struct sock_pe *pe;
+	enum fi_progress progress_mode;
 	struct index_map mr_idm;
-
+	struct sock_pe *pe;
 	struct sock_conn_map u_cmap;
 	struct sock_conn_map r_cmap;
-	enum fi_progress progress_mode;
+	pthread_t listen_thread;
+	int	listening;
+	char service[NI_MAXSERV];
 };
 
 struct sock_cntr {
@@ -167,13 +169,17 @@ struct sock_cntr {
 };
 
 struct sock_mr {
-	struct fid_mr		mr_fid;
-	struct sock_domain	*dom;
-	uint64_t		access;
-	uint64_t		offset;
-	uint64_t		key;
-	size_t			iov_count;
-	struct iovec		mr_iov[1];
+	struct fid_mr mr_fid;
+	struct sock_domain *domain;
+	uint64_t access;
+	uint64_t offset;
+	uint64_t key;
+	uint64_t flags;
+	size_t iov_count;
+	struct iovec mr_iov[1];
+
+	struct sock_cntr *cntr;
+	struct sock_cq *cq;
 };
 
 struct sock_av {
@@ -742,6 +748,11 @@ struct sock_rx_ctx *sock_rx_ctx_alloc(struct fi_rx_attr *attr,
 void sock_rx_ctx_add_ep(struct sock_rx_ctx *rx_ctx, struct sock_ep *ep);
 void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx);
 
+int sock_stx_ctx(struct fid_domain *domain,
+		 struct fi_tx_attr *attr, struct fid_stx **stx, void *context);
+int sock_srx_ctx(struct fid_domain *domain,
+		 struct fi_rx_attr *attr, struct fid_ep **srx, void *context);
+
 
 struct sock_tx_ctx *sock_tx_ctx_alloc(struct fi_tx_attr *attr,
 				      void *context);
@@ -758,6 +769,19 @@ int sock_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		struct fid_poll **pollset);
 int sock_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
 		struct fid_wait **waitset);
+
+#define SOCK_GET_RX_ID(_addr, _bits) (((uint64_t)_addr) >> (64 - _bits))
+struct sock_conn *sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr);
+struct sock_conn *sock_conn_map_lookup_key(struct sock_conn_map *conn_map,
+		uint16_t key);
+uint16_t sock_conn_map_match_or_connect(struct sock_conn_map *map, 
+					struct sockaddr_in *addr, 
+					int match_only);
+int sock_conn_listen(struct sock_domain *domain);
+int sock_conn_map_clear_pe_entry(struct sock_conn *conn_entry, 
+		uint16_t key);
+void sock_conn_map_destroy(struct sock_conn_map *cmap);
+
 
 struct sock_pe *sock_pe_init(struct sock_domain *domain);
 int sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);

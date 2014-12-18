@@ -36,7 +36,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <netdb.h>
 
 #include "sock.h"
 #include "sock_util.h"
@@ -852,9 +851,7 @@ static int sock_ep_rx_ctx(struct fid_sep *ep, int index, struct fi_rx_attr *attr
 	rx_ctx->ctx.msg = &sock_ep_msg_ops;
 	rx_ctx->ctx.tagged = &sock_ep_tagged;
 
-	/* default config */
-	rx_ctx->min_multi_recv = SOCK_EP_MIN_MULTI_RECV;
-
+	rx_ctx->min_multi_recv = sock_ep->min_multi_recv;
 	*rx_ep = &rx_ctx->ctx;
 	sock_ep->rx_array[index] = rx_ctx;
 	atomic_inc(&sock_ep->num_rx_ctx);

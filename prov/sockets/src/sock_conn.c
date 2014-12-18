@@ -5,7 +5,7 @@
  * licenses.  You may choose to be licensed under the terms of the GNU
  * General Public License (GPL) Version 2, available from the file
  * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
+ * BSD license below:
  *
  *     Redistribution and use in source and binary forms, with or
  *     without modification, are permitted provided that the following
@@ -30,37 +30,35 @@
  * SOFTWARE.
  */
 
-#ifndef _LIST_H_
-#define _LIST_H_
+#if HAVE_CONFIG_H
+#  include <config.h>
+#endif /* HAVE_CONFIG_H */
 
-#include "fi.h"
+#include <stdlib.h>
+#include <stdio.h>
 
-typedef struct _list_t list_t;
-typedef struct _list_element_t
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <ifaddrs.h>
+
+#include "sock.h"
+#include "sock_util.h"
+
+/* place holders */
+
+void sock_conn_map_destroy(struct sock_conn_map *cmap)
 {
-	void *data;
-	size_t len;
-	list_t *list;
-	struct _list_element_t *next;
-}list_element_t;
+}
 
-struct _list_t
+int sock_conn_listen(struct sock_domain *domain)
 {
-	list_element_t *head, *tail;
-	list_element_t *free_head, *free_tail;
-	size_t curr_len;
-	size_t max_len;
-	fastlock_t lock;
-};
-
-list_t *new_list(size_t length);
-void free_list(list_t *list);
-
-int enqueue_item(list_t *list, void *item);
-void *peek_item(list_t *list);
-void *dequeue_item(list_t *list);
-int find_item(list_t *list, void *item);
-int delete_item(list_t *list, void *item);
-ssize_t list_length(list_t *list);
-
-#endif /* _LIST_H_ */
+	return 0;
+}

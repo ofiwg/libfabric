@@ -78,3 +78,12 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	return 0;
 }
 
+struct sock_pe *sock_pe_init(struct sock_domain *domain)
+{
+	return NULL;
+}
+
+void sock_pe_finalize(struct sock_pe *pe)
+{
+}
+

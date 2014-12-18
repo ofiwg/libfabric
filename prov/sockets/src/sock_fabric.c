@@ -95,8 +95,9 @@ int sock_verify_info(struct fi_info *hints)
 		return -FI_ENODATA;
 	}
 
-	if (!sock_rdm_verify_ep_attr(hints->ep_attr, 
-				    hints->tx_attr, hints->rx_attr))
+	if (!sock_rdm_verify_ep_attr(hints->ep_attr, hints->tx_attr, hints->rx_attr) ||
+	    !sock_dgram_verify_ep_attr(hints->ep_attr, hints->tx_attr, hints->rx_attr) ||
+	    !sock_msg_verify_ep_attr(hints->ep_attr, hints->tx_attr, hints->rx_attr))
 		return 0;
 
 	ret = sock_verify_domain_attr(hints->domain_attr);
@@ -130,28 +131,12 @@ static int sock_fabric_close(fid_t fid)
 	return 0;
 }
 
-int sock_fabric_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
-{
-	return -FI_ENOSYS;
-}
-
-int sock_fabric_control(struct fid *fid, int command, void *arg)
-{
-	return -FI_ENOSYS;
-}
-
-int sock_fabric_ops_open(struct fid *fid, const char *name,
-		    uint64_t flags, void **ops, void *context)
-{
-	return -FI_ENOSYS;
-}
-
 static struct fi_ops sock_fab_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_fabric_close,
-	.bind = sock_fabric_bind,
-	.control = sock_fabric_control,
-	.ops_open = sock_fabric_ops_open,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
 };
 
 static int sock_fabric(struct fi_fabric_attr *attr,
@@ -195,6 +180,10 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 		case FI_EP_DGRAM:
 			return sock_dgram_getinfo(version, node, service, flags,
 						hints, info);
+		
+		case FI_EP_MSG:
+			return sock_msg_getinfo(version, node, service, flags,
+						hints, info);
 		default:
 			break;
 		}
@@ -213,6 +202,18 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 		return ret;
 	
 	ret = sock_dgram_getinfo(version, node, service, flags,
+			       hints, &_info);
+
+	if (ret == 0) {
+		*info = tmp = _info;
+		while(tmp->next != NULL)
+			tmp=tmp->next;
+	} else if (ret == -FI_ENODATA) {
+		tmp = NULL;
+	} else
+		return ret;
+
+	ret = sock_msg_getinfo(version, node, service, flags,
 			       hints, &_info);
 
 	if (NULL != tmp) {
@@ -240,7 +241,7 @@ struct fi_provider sock_prov = {
 
 SOCKETS_INI
 {
-	char *tmp = getenv("SFI_SOCK_DEBUG_LEVEL");
+	char *tmp = getenv("OFI_SOCK_LOG_LEVEL");
 	if (tmp) {
 		sock_log_level = atoi(tmp);
 	} else {
