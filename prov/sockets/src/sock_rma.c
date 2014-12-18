@@ -193,6 +193,7 @@ static ssize_t sock_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 	rma_iov.key = key;
 	rma_iov.len = 1;
 
+	msg.rma_iov = &rma_iov;
 	msg.addr = src_addr;
 	msg.context = context;
 
@@ -356,6 +357,7 @@ static ssize_t sock_ep_rma_writev(struct fid_ep *ep,
 	rma_iov.key = key;
 	rma_iov.len = 1;
 	
+	msg.rma_iov = &rma_iov;
 	msg.context = context;
 	msg.addr = dest_addr;
 
@@ -373,13 +375,16 @@ static ssize_t sock_ep_rma_writedata(struct fid_ep *ep, const void *buf,
 
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;
-	msg.msg_iov = &msg_iov;
 	msg.desc = &desc;
 	msg.iov_count = 1;
 
 	rma_iov.addr = addr;
 	rma_iov.key = key;
 	rma_iov.len = 1;
+
+	msg.rma_iov = &rma_iov;
+	msg.msg_iov = &msg_iov;
+
 	msg.addr = dest_addr;
 	msg.context = context;
 	msg.data = data;
@@ -403,6 +408,9 @@ static ssize_t sock_ep_rma_inject(struct fid_ep *ep, const void *buf,
 	rma_iov.addr = addr;
 	rma_iov.key = key;
 	rma_iov.len = 1;
+
+	msg.rma_iov = &rma_iov;
+	msg.msg_iov = &msg_iov;
 	msg.addr = dest_addr;
 
 	return sock_ep_rma_writemsg(ep, &msg, FI_INJECT);
@@ -424,6 +432,9 @@ static ssize_t sock_ep_rma_injectdata(struct fid_ep *ep, const void *buf,
 	rma_iov.addr = addr;
 	rma_iov.key = key;
 	rma_iov.len = 1;
+
+	msg.rma_iov = &rma_iov;
+	msg.msg_iov = &msg_iov;
 	msg.addr = dest_addr;
 	msg.data = data;
 	return sock_ep_rma_writemsg(ep, &msg, FI_INJECT|FI_REMOTE_CQ_DATA);
