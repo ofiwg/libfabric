@@ -64,6 +64,7 @@ static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_ep *ep;
 static struct fid_cq *rcq;
+static struct fid_cq *scq;
 static struct fid_av *av;
 static struct fid_mr *mr;
 static void *local_addr, *remote_addr;
@@ -189,6 +190,7 @@ static void free_ep_res(void)
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
+	fi_close(&scq->fid);
 	free(send_buf);
 	free(recv_buf);
 }
@@ -218,12 +220,18 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err1;
 	}
 
+	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
+	if (ret) {
+		FI_PRINTERR("fi_cq_open: scq", ret);
+		goto err2;
+	}
+
 	/* Memory registration not required for send_buf since we use fi_inject.
 	 * fi_inject copies the buffer of data that needs to be sent. */
 	ret = fi_mr_reg(dom, recv_buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FI_PRINTERR("fi_cq_open: rcq", ret);
-		goto err2;
+		goto err3;
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
@@ -234,13 +242,15 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
 	if (ret) {
 		FI_PRINTERR("fi_av_open", ret);
-		goto err3;
+		goto err4;
 	}
 
 	return 0;
 
-err3:
+err4:
 	fi_close(&mr->fid);
+err3:
+	fi_close(&scq->fid);
 err2:
 	fi_close(&rcq->fid);
 err1:
@@ -256,6 +266,12 @@ static int bind_ep_res(void)
 	ret = fi_bind(&ep->fid, &rcq->fid, FI_RECV);
 	if (ret) {
 		FI_PRINTERR("fi_bind: rcq", ret);
+		return ret;
+	}
+
+	ret = fi_bind(&ep->fid, &scq->fid, FI_SEND);
+	if (ret) {
+		FI_PRINTERR("fi_bind: scq", ret);
 		return ret;
 	}
 
