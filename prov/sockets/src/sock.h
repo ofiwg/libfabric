@@ -580,7 +580,6 @@ struct sock_rx_pe_entry{
 	uint8_t pending_send;
 	uint8_t reserved[6];
 	struct sock_rx_entry *rx_entry;
-	struct sock_msg_response response;
 	union sock_iov rx_iov[SOCK_EP_MAX_IOV_LIMIT];
 	char atomic_cmp[SOCK_EP_MAX_ATOMIC_SZ];
 	char atomic_src[SOCK_EP_MAX_ATOMIC_SZ];
@@ -599,6 +598,7 @@ struct sock_pe_entry{
 	};
 
 	struct sock_msg_hdr msg_hdr;
+	struct sock_msg_response response;
 
 	uint64_t flags;
 	uint64_t context;
