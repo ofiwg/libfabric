@@ -185,7 +185,6 @@ int sock_av_insertsvc(struct fid_av *av, const char *node,
 		   uint64_t flags, void *context)
 {
 	int ret;
-	struct sock_av *_av;
 	struct addrinfo sock_hints;
 	struct addrinfo *result = NULL;
 	
@@ -193,8 +192,6 @@ int sock_av_insertsvc(struct fid_av *av, const char *node,
 		SOCK_LOG_ERROR("Port not provided\n");
 		return -FI_EINVAL;
 	}
-	
-	_av = container_of(av, struct sock_av, av_fid);
 
 	memset(&sock_hints, 0, sizeof(struct addrinfo));
 	sock_hints.ai_family = AF_INET;
