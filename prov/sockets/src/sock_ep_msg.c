@@ -57,7 +57,7 @@
 #include "sock_util.h"
 
 const struct fi_ep_attr sock_msg_ep_attr = {
-	.protocol = FI_PROTO_TCP,
+	.protocol = FI_PROTO_SOCK_TCP,
 	.max_msg_size = SOCK_EP_MAX_MSG_SZ,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
@@ -147,7 +147,7 @@ int sock_msg_verify_ep_attr(struct fi_ep_attr *ep_attr,
 	if (ep_attr) {
 		switch (ep_attr->protocol) {
 		case FI_PROTO_UNSPEC:
-		case FI_PROTO_TCP:
+		case FI_PROTO_SOCK_TCP:
 			break;
 		default:
 			return -FI_ENODATA;
