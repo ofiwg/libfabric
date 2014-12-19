@@ -222,11 +222,11 @@ struct sock_wait {
 	enum fi_wait_obj type;
 	union {
 		int fd[2];
-		struct {
+		struct sock_mutex_cond {
 			pthread_mutex_t	mutex;
 			pthread_cond_t	cond;
-		};
-	};
+		} mutex_cond;
+	} wobj;
 };
 
 enum {
@@ -266,15 +266,13 @@ struct sock_op {
 	uint8_t op;
 	uint8_t src_iov_len;
 	uint8_t	dest_iov_len;
-	union {
-		struct {
-			uint8_t	op;
-			uint8_t	datatype;
-			uint8_t	res_iov_len;
-			uint8_t	cmp_iov_len;
-		} atomic;
-		uint8_t	reserved[5];
-	};
+	struct {
+		uint8_t	op;
+		uint8_t	datatype;
+		uint8_t	res_iov_len;
+		uint8_t	cmp_iov_len;
+	} atomic;
+	uint8_t	reserved[1];
 };
 
 struct sock_op_send {
@@ -351,11 +349,11 @@ struct sock_comp {
 };
 
 struct sock_ep {
-	union{
+	union {
 		struct fid_ep ep;
 		struct fid_sep sep;
 		struct fid_pep pep;
-	};
+	} fid;
 	size_t fclass;
 	uint64_t op_flags;
 
@@ -452,7 +450,7 @@ struct sock_tx_ctx {
 	union {
 		struct fid_ep ctx;
 		struct fid_stx stx;
-	};
+	} fid;
 	size_t fclass;
 
 	struct ringbuffd	rbfd;
@@ -568,8 +566,8 @@ struct sock_tx_pe_entry{
 	struct sock_tx_ctx *tx_ctx;
 	union {
 		struct sock_tx_iov tx_iov[SOCK_EP_MAX_IOV_LIMIT];
-		char inject_data[SOCK_EP_MAX_INJECT_SZ];
-	};
+		char inject[SOCK_EP_MAX_INJECT_SZ];
+	} data;
 };
 
 struct sock_rx_pe_entry{
@@ -592,10 +590,10 @@ enum{
 };
 
 struct sock_pe_entry{
-	union{
+	union {
 		struct sock_tx_pe_entry tx;
 		struct sock_rx_pe_entry rx;
-	};
+	} pe;
 
 	struct sock_msg_hdr msg_hdr;
 	struct sock_msg_response response;

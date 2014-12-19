@@ -422,7 +422,7 @@ int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 
-	*ep = &endpoint->ep;
+	*ep = &endpoint->fid.ep;
 	return 0;
 }
 
@@ -436,7 +436,7 @@ int sock_rdm_sep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 
-	*sep = &endpoint->sep;
+	*sep = &endpoint->fid.sep;
 	return 0;
 }
 

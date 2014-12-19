@@ -585,9 +585,9 @@ int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
 	err_entry.op_context = (void*)entry->context;
 	
 	if (entry->type == SOCK_PE_RX) {
-		err_entry.buf = (void*)entry->rx.rx_iov[0].iov.addr;
+		err_entry.buf = (void*)entry->pe.rx.rx_iov[0].iov.addr;
 	}else {
-		err_entry.buf = (void*)entry->tx.tx_iov[0].src.iov.addr;
+		err_entry.buf = (void*)entry->pe.tx.data.tx_iov[0].src.iov.addr;
 	}
 
 	rbwrite(&cq->cqerr_rb, &err_entry, sizeof(struct fi_cq_err_entry));

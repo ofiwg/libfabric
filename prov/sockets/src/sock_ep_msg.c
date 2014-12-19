@@ -380,7 +380,7 @@ static int sock_msg_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 		return -FI_ETOOSMALL;
 	}
 
-	sock_ep = container_of(fid, struct sock_ep, ep.fid);
+	sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
 	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
 	memcpy(addr, sock_ep->src_addr, *addrlen);
 	return 0;
@@ -395,7 +395,7 @@ static int sock_msg_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen
 		return -FI_ETOOSMALL;
 	}
 
-	sock_ep = container_of(ep, struct sock_ep, ep);
+	sock_ep = container_of(ep, struct sock_ep, fid.ep);
 	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
 	memcpy(addr, sock_ep->dest_addr, *addrlen);
 	return 0;
@@ -494,7 +494,7 @@ int sock_msg_ep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 	
-	*ep = &endpoint->ep;
+	*ep = &endpoint->fid.ep;
 	return 0;
 }
 
@@ -508,7 +508,7 @@ int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 	
-	*sep = &endpoint->sep;
+	*sep = &endpoint->fid.sep;
 	return 0;
 }
 
@@ -522,6 +522,6 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		return ret;
 	
-	*pep = &endpoint->pep;
+	*pep = &endpoint->fid.pep;
 	return 0;
 }

@@ -66,7 +66,7 @@ static int sock_ctx_close(struct fid *fid)
 
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
-		tx_ctx = container_of(fid, struct sock_tx_ctx, ctx.fid);
+		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx.fid);
 		
 		for (entry = tx_ctx->ep_list.next; entry != &tx_ctx->ep_list;
 		    entry = entry->next) {
@@ -88,7 +88,7 @@ static int sock_ctx_close(struct fid *fid)
 		break;
 
 	case FI_CLASS_STX_CTX:
-		tx_ctx = container_of(fid, struct sock_tx_ctx, stx.fid);
+		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
 		atomic_dec(&tx_ctx->domain->ref);
 		sock_tx_ctx_free(tx_ctx);
 		break;
@@ -115,7 +115,7 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 	sock_cq = container_of(bfid, struct sock_cq, cq_fid.fid);
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
-		tx_ctx = container_of(fid, struct sock_tx_ctx, ctx);
+		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx);
 		if (flags & FI_SEND) {
 			tx_ctx->comp.send_cq = sock_cq;
 			if (flags & FI_COMPLETION)
@@ -169,7 +169,7 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	case FI_CLASS_STX_CTX:
-		tx_ctx = container_of(fid, struct sock_tx_ctx, stx.fid);
+		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
 		if (flags & FI_SEND) {
 			tx_ctx->comp.send_cq = sock_cq;
 			if (flags & FI_COMPLETION)
@@ -211,7 +211,7 @@ static int sock_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 	cntr = container_of(bfid, struct sock_cntr, cntr_fid.fid);
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
-		tx_ctx = container_of(fid, struct sock_tx_ctx, ctx.fid);
+		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx.fid);
 		if (flags & FI_SEND)
 			tx_ctx->comp.send_cntr = cntr;
 		
@@ -248,7 +248,7 @@ static int sock_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	case FI_CLASS_STX_CTX:
-		tx_ctx = container_of(fid, struct sock_tx_ctx, ctx.fid);
+		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx.fid);
 		if (flags & FI_SEND)
 			tx_ctx->comp.send_cntr = cntr;
 		
@@ -296,7 +296,7 @@ static int sock_ctx_control(struct fid *fid, int command, void *arg)
 
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
-		tx_ctx = container_of(fid, struct sock_tx_ctx, ctx.fid);
+		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx.fid);
 		switch (command) {
 		case FI_GETOPSFLAG:
 			*(uint64_t*)arg = tx_ctx->attr.op_flags;
@@ -324,7 +324,7 @@ static int sock_ctx_control(struct fid *fid, int command, void *arg)
 		break;
 
 	case FI_CLASS_STX_CTX:
-		tx_ctx = container_of(fid, struct sock_tx_ctx, stx.fid);
+		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
 		switch (command) {
 		case FI_GETOPSFLAG:
 			*(uint64_t*)arg = tx_ctx->attr.op_flags;
@@ -363,7 +363,7 @@ static int sock_ctx_enable(struct fid_ep *ep)
 		return 0;
 
 	case FI_CLASS_TX_CTX:
-		tx_ctx = container_of(ep, struct sock_tx_ctx, ctx.fid);
+		tx_ctx = container_of(ep, struct sock_tx_ctx, fid.ctx.fid);
 		tx_ctx->enabled = 1;
 		return 0;
 
@@ -425,7 +425,7 @@ static ssize_t sock_ep_cancel(fid_t fid, void *context)
 
 	switch (fid->fclass) {
 	case FI_CLASS_EP:
-		sock_ep = container_of(fid, struct sock_ep, ep.fid);
+		sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
 		rx_ctx = sock_ep->rx_ctx;
 		break;
 
@@ -472,7 +472,7 @@ struct fi_ops_ep sock_ctx_ep_ops = {
 static int sock_ep_close(struct fid *fid)
 {
 	struct sock_ep *sock_ep;
-	sock_ep = container_of(fid, struct sock_ep, ep.fid);
+	sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
 
 	if (atomic_get(&sock_ep->ref) || atomic_get(&sock_ep->num_rx_ctx) ||
 	    atomic_get(&sock_ep->num_tx_ctx))
@@ -505,7 +505,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
 
-	ep = container_of(fid, struct sock_ep, ep.fid);
+	ep = container_of(fid, struct sock_ep, fid.ep.fid);
 	
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
@@ -561,7 +561,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				if (!tx_ctx)
 					continue;
 				
-				if ((ret = sock_ctx_bind_cq(&tx_ctx->ctx.fid, 
+				if ((ret = sock_ctx_bind_cq(&tx_ctx->fid.ctx.fid, 
 							    bfid, flags)))
 					return ret;
 			}
@@ -611,7 +611,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				if (!tx_ctx)
 					continue;
 				
-				if ((ret = sock_ctx_bind_cntr(&tx_ctx->ctx.fid, 
+				if ((ret = sock_ctx_bind_cntr(&tx_ctx->fid.ctx.fid, 
 							      bfid, flags)))
 					return ret;
 			}
@@ -640,7 +640,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		av->cmap = &av->domain->r_cmap;
 
 		if (ep->tx_ctx && 
-		    ep->tx_ctx->ctx.fid.fclass == FI_CLASS_TX_CTX) {
+		    ep->tx_ctx->fid.ctx.fid.fclass == FI_CLASS_TX_CTX) {
 			ep->tx_ctx->av = av;
 		}
 		
@@ -661,7 +661,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	case FI_CLASS_STX_CTX:
-		tx_ctx = container_of(bfid, struct sock_tx_ctx, stx.fid);
+		tx_ctx = container_of(bfid, struct sock_tx_ctx, fid.stx.fid);
 		dlist_insert_tail(&ep->tx_ctx_entry, &tx_ctx->ep_list);
 		ep->tx_ctx = tx_ctx;
 		ep->tx_array[ep->ep_attr.tx_ctx_cnt] = tx_ctx;
@@ -685,7 +685,7 @@ static int sock_ep_control(struct fid *fid, int command, void *arg)
 {
 	struct fi_alias *alias;
 	struct sock_ep *ep, *new_ep;
-	ep = container_of(fid, struct sock_ep, ep.fid);
+	ep = container_of(fid, struct sock_ep, fid.ep.fid);
 
 	switch (command) {
 	case FI_ALIAS:
@@ -695,7 +695,7 @@ static int sock_ep_control(struct fid *fid, int command, void *arg)
 			return -FI_ENOMEM;
 		*new_ep = *ep;
 		new_ep->op_flags = alias->flags;
-		*alias->fid = &new_ep->ep.fid;
+		*alias->fid = &new_ep->fid.ep.fid;
 		break;
 
 	case FI_GETOPSFLAG:
@@ -726,10 +726,10 @@ static int sock_ep_enable(struct fid_ep *ep)
 	int i;
 	struct sock_ep *sock_ep;
 
-	sock_ep = container_of(ep, struct sock_ep, ep);
+	sock_ep = container_of(ep, struct sock_ep, fid.ep);
 
 	if (sock_ep->tx_ctx && 
-	    sock_ep->tx_ctx->ctx.fid.fclass == FI_CLASS_TX_CTX)
+	    sock_ep->tx_ctx->fid.ctx.fid.fclass == FI_CLASS_TX_CTX)
 		sock_ep->tx_ctx->enabled = 1;
 
 	if (sock_ep->rx_ctx && 
@@ -752,7 +752,7 @@ static int sock_ep_getopt(fid_t fid, int level, int optname,
 		       void *optval, size_t *optlen)
 {
 	struct sock_ep *sock_ep;
-	sock_ep = container_of(fid, struct sock_ep, ep.fid);
+	sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -ENOPROTOOPT;
@@ -774,7 +774,7 @@ static int sock_ep_setopt(fid_t fid, int level, int optname,
 {
 	int i;
 	struct sock_ep *sock_ep;
-	sock_ep = container_of(fid, struct sock_ep, ep.fid);
+	sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -ENOPROTOOPT;
@@ -803,7 +803,7 @@ static int sock_ep_tx_ctx(struct fid_sep *ep, int index, struct fi_tx_attr *attr
 	struct sock_ep *sock_ep;
 	struct sock_tx_ctx *tx_ctx;
 
-	sock_ep = container_of(ep, struct sock_ep, sep);
+	sock_ep = container_of(ep, struct sock_ep, fid.sep);
 	if (index >= sock_ep->ep_attr.tx_ctx_cnt)
 		return -FI_EINVAL;
 
@@ -816,13 +816,13 @@ static int sock_ep_tx_ctx(struct fid_sep *ep, int index, struct fi_tx_attr *attr
 	tx_ctx->domain = sock_ep->domain;
 	dlist_insert_tail(&sock_ep->tx_ctx_entry, &tx_ctx->ep_list);
 
-	tx_ctx->ctx.ops = &sock_ctx_ep_ops;
-	tx_ctx->ctx.msg = &sock_ep_msg_ops;
-	tx_ctx->ctx.tagged = &sock_ep_tagged;
-	tx_ctx->ctx.rma = &sock_ep_rma;
-	tx_ctx->ctx.atomic = &sock_ep_atomic;
+	tx_ctx->fid.ctx.ops = &sock_ctx_ep_ops;
+	tx_ctx->fid.ctx.msg = &sock_ep_msg_ops;
+	tx_ctx->fid.ctx.tagged = &sock_ep_tagged;
+	tx_ctx->fid.ctx.rma = &sock_ep_rma;
+	tx_ctx->fid.ctx.atomic = &sock_ep_atomic;
 
-	*tx_ep = &tx_ctx->ctx;
+	*tx_ep = &tx_ctx->fid.ctx;
 	sock_ep->tx_array[index] = tx_ctx;
 	atomic_inc(&sock_ep->num_tx_ctx);
 	return 0;
@@ -834,7 +834,7 @@ static int sock_ep_rx_ctx(struct fid_sep *ep, int index, struct fi_rx_attr *attr
 	struct sock_ep *sock_ep;
 	struct sock_rx_ctx *rx_ctx;
 
-	sock_ep = container_of(ep, struct sock_ep, sep);
+	sock_ep = container_of(ep, struct sock_ep, fid.sep);
 	if (index >= sock_ep->ep_attr.rx_ctx_cnt)
 		return -FI_EINVAL;
 
@@ -876,7 +876,7 @@ static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 		return -FI_ETOOSMALL;
 	}
 
-	sock_ep = container_of(fid, struct sock_ep, ep.fid);
+	sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
 	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
 	memcpy(addr, sock_ep->src_addr, *addrlen);
 	return 0;
@@ -908,10 +908,10 @@ int sock_stx_ctx(struct fid_domain *domain,
 		return -FI_ENOMEM;
 
 	tx_ctx->domain = dom;
-	tx_ctx->stx.ops = sock_ep_ops;
+	tx_ctx->fid.stx.ops = sock_ep_ops;
 	atomic_inc(&dom->ref);
 
-	*stx = &tx_ctx->stx;
+	*stx = &tx_ctx->fid.stx;
 	return 0;
 }
 
@@ -1026,34 +1026,34 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	switch (fclass) {
 	case FI_CLASS_EP:
-		sock_ep->ep.fid.fclass = FI_CLASS_EP;
-		sock_ep->ep.fid.context = context;	
-		sock_ep->ep.fid.ops = &sock_ep_fi_ops;
+		sock_ep->fid.ep.fid.fclass = FI_CLASS_EP;
+		sock_ep->fid.ep.fid.context = context;	
+		sock_ep->fid.ep.fid.ops = &sock_ep_fi_ops;
 		
-		sock_ep->ep.ops = &sock_ep_ops;
-		sock_ep->ep.cm = &sock_ep_cm_ops;
-		sock_ep->ep.msg = &sock_ep_msg_ops;
-		sock_ep->ep.rma = &sock_ep_rma;
-		sock_ep->ep.tagged = &sock_ep_tagged;
-		sock_ep->ep.atomic = &sock_ep_atomic;
+		sock_ep->fid.ep.ops = &sock_ep_ops;
+		sock_ep->fid.ep.cm = &sock_ep_cm_ops;
+		sock_ep->fid.ep.msg = &sock_ep_msg_ops;
+		sock_ep->fid.ep.rma = &sock_ep_rma;
+		sock_ep->fid.ep.tagged = &sock_ep_tagged;
+		sock_ep->fid.ep.atomic = &sock_ep_atomic;
 		break;
 
 	case FI_CLASS_SEP:
-		sock_ep->sep.fid.fclass = FI_CLASS_SEP;
-		sock_ep->sep.fid.context = context;	
-		sock_ep->sep.fid.ops = &sock_ep_fi_ops;
+		sock_ep->fid.sep.fid.fclass = FI_CLASS_SEP;
+		sock_ep->fid.sep.fid.context = context;	
+		sock_ep->fid.sep.fid.ops = &sock_ep_fi_ops;
 		
-		sock_ep->sep.ops = &sock_ep_ops;
-		sock_ep->sep.cm = &sock_ep_cm_ops;
+		sock_ep->fid.sep.ops = &sock_ep_ops;
+		sock_ep->fid.sep.cm = &sock_ep_cm_ops;
 		break;
 
 	case FI_CLASS_PEP:
-		sock_ep->pep.fid.fclass = FI_CLASS_SEP;
-		sock_ep->pep.fid.context = context;	
-		sock_ep->pep.fid.ops = &sock_ep_fi_ops;
+		sock_ep->fid.pep.fid.fclass = FI_CLASS_SEP;
+		sock_ep->fid.pep.fid.context = context;	
+		sock_ep->fid.pep.fid.ops = &sock_ep_fi_ops;
 		
-		sock_ep->pep.ops = &sock_ep_ops;
-		sock_ep->pep.cm = &sock_ep_cm_ops;
+		sock_ep->fid.pep.ops = &sock_ep_ops;
+		sock_ep->fid.pep.cm = &sock_ep_cm_ops;
 		break;
 		
 	default:
