@@ -35,6 +35,7 @@
 #include "prov.h"
 
 struct psmx_env psmx_env;
+volatile int init_count = 0;
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 {
@@ -115,12 +116,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		return -FI_ENODATA;
 	}
 
-	if (node && !(flags & FI_SOURCE)) {
-		if (service)
-			dest_addr = psmx_resolve_name(node, atoi(service));
-		else
-			dest_addr = psmx_resolve_name(node, 0);
-	}
+	if (node && !(flags & FI_SOURCE))
+		dest_addr = psmx_resolve_name(node, 0);
 
 	if (hints) {
 		switch (hints->ep_type) {
@@ -295,7 +292,8 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 
 static void psmx_fini(void)
 {
-	psm_finalize();
+	if (! --init_count)
+		psm_finalize();
 }
 
 static struct fi_provider psmx_prov = {
@@ -360,6 +358,7 @@ PSM_INI
 		return NULL;
 	}
 
+	init_count++;
 	return (&psmx_prov);
 }
 
