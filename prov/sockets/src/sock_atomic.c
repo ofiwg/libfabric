@@ -75,12 +75,12 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
-		sock_ep = container_of(ep, struct sock_ep, ep);
+		sock_ep = container_of(ep, struct sock_ep, fid.ep);
 		tx_ctx = sock_ep->tx_ctx;
 		break;
 
 	case FI_CLASS_TX_CTX:
-		tx_ctx = container_of(ep, struct sock_tx_ctx, ctx);
+		tx_ctx = container_of(ep, struct sock_tx_ctx, fid.ctx);
 		sock_ep = tx_ctx->ep;
 		break;
 

@@ -55,12 +55,12 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 	
 	switch (wait->type) {
 	case FI_WAIT_FD:
-		memcpy(arg,&wait->fd[WAIT_READ_FD], sizeof(int));
+		memcpy(arg,&wait->wobj.fd[WAIT_READ_FD], sizeof(int));
 		break;
 		
 	case FI_WAIT_MUTEX_COND:
-		mut_cond.mutex = &wait->mutex;
-		mut_cond.cond = &wait->cond;
+		mut_cond.mutex = &wait->wobj.mutex_cond.mutex;
+		mut_cond.cond = &wait->wobj.mutex_cond.cond;
 		memcpy(arg, &mut_cond, sizeof(mut_cond));
 		break;
 		
@@ -79,20 +79,20 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 	
 	switch (type) {
 	case FI_WAIT_FD:
-		if (socketpair(AF_UNIX, SOCK_STREAM, 0, wait->fd))
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, wait->wobj.fd))
 			return -errno;
 		
-		fcntl(wait->fd[WAIT_READ_FD], F_GETFL, &flags);
-		if (fcntl(wait->fd[WAIT_READ_FD], F_SETFL, flags | O_NONBLOCK)) {
-			close(wait->fd[WAIT_READ_FD]);
-			close(wait->fd[WAIT_WRITE_FD]);
+		fcntl(wait->wobj.fd[WAIT_READ_FD], F_GETFL, &flags);
+		if (fcntl(wait->wobj.fd[WAIT_READ_FD], F_SETFL, flags | O_NONBLOCK)) {
+			close(wait->wobj.fd[WAIT_READ_FD]);
+			close(wait->wobj.fd[WAIT_WRITE_FD]);
 			return -errno;
 		}
 		break;
 		
 	case FI_WAIT_MUTEX_COND:
-		pthread_mutex_init(&wait->mutex, NULL);
-		pthread_cond_init(&wait->cond, NULL);
+		pthread_mutex_init(&wait->wobj.mutex_cond.mutex, NULL);
+		pthread_cond_init(&wait->wobj.mutex_cond.cond, NULL);
 		break;
 		
 	default:
@@ -149,7 +149,7 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 
 	switch (wait->type) {
 	case FI_WAIT_FD:
-		err = fi_poll_fd(wait->fd[WAIT_READ_FD], timeout);
+		err = fi_poll_fd(wait->wobj.fd[WAIT_READ_FD], timeout);
 		if (err > 0)
 			err = 0;
 		else if (err == 0)
@@ -157,8 +157,8 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 		break;
 		
 	case FI_WAIT_MUTEX_COND:
-		err = fi_wait_cond(&wait->cond,
-				   &wait->mutex, timeout);
+		err = fi_wait_cond(&wait->wobj.mutex_cond.cond,
+				   &wait->wobj.mutex_cond.mutex, timeout);
 		break;
 		
 	default:
@@ -177,11 +177,11 @@ void sock_wait_signal(struct fid_wait *wait_fid)
 
 	switch (wait->type) {
 	case FI_WAIT_FD:
-		write(wait->fd[WAIT_WRITE_FD], &c, 1);
+		write(wait->wobj.fd[WAIT_WRITE_FD], &c, 1);
 		break;
 		
 	case FI_WAIT_MUTEX_COND:
-		pthread_cond_signal(&wait->cond);
+		pthread_cond_signal(&wait->wobj.mutex_cond.cond);
 		break;
 	default:
 		SOCK_LOG_ERROR("Invalid wait object type\n");
@@ -226,8 +226,8 @@ int sock_wait_close(fid_t fid)
 	}
 
 	if (wait->type == FI_WAIT_FD) {
-		close(wait->fd[WAIT_READ_FD]);
-		close(wait->fd[WAIT_WRITE_FD]);
+		close(wait->wobj.fd[WAIT_READ_FD]);
+		close(wait->wobj.fd[WAIT_WRITE_FD]);
 	}
 
 	atomic_dec(&wait->domain->ref);
