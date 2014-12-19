@@ -35,6 +35,7 @@
 #include "prov.h"
 
 struct psmx_env psmx_env;
+volatile int init_count = 0;
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 {
@@ -291,7 +292,8 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 
 static void psmx_fini(void)
 {
-	psm_finalize();
+	if (! --init_count)
+		psm_finalize();
 }
 
 static struct fi_provider psmx_prov = {
@@ -356,6 +358,7 @@ PSM_INI
 		return NULL;
 	}
 
+	init_count++;
 	return (&psmx_prov);
 }
 
