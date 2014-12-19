@@ -585,7 +585,7 @@ static int sock_pe_process_rx_read(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 static int sock_pe_process_rx_write(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 				   struct sock_pe_entry *pe_entry)
 {
-	int i, ret;
+	int i, ret = 0;
 	struct sock_mr *mr;
 	uint64_t offset, rem, len, entry_len, done_data, data_len;
 
@@ -1250,7 +1250,7 @@ out:
 static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 				   struct sock_pe_entry *pe_entry)
 {
-	ssize_t i, ret;
+	ssize_t i, ret = 0;
 	struct sock_rx_entry *rx_entry;
 	uint64_t len, rem, offset, data_len, done_data, used;
 
