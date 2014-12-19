@@ -394,7 +394,7 @@ static int init_av(void)
 		}
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
-		if (ret) {
+		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
@@ -423,7 +423,7 @@ static int init_av(void)
 
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
-		if (ret) {
+		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
