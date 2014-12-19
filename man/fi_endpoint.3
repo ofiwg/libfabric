@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2014\-12\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2014\-12\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -591,7 +591,7 @@ submission.
 Number of transmit contexts to associate with the endpoint.
 If not specified (0), 1 context will be assigned if the endpoint
 supports outbound transfers.
-Transmit contexts are independent command queues that may be separately
+Transmit contexts are independent transmit queues that may be separately
 configured.
 Each transmit context may be bound to a separate CQ, and no ordering is
 defined between contexts.
@@ -644,7 +644,7 @@ and require the application to explicitly create transmit and receive
 contexts as described below.
 .SS fi_tx_context
 .PP
-Transmit contexts are independent command queues.
+Transmit contexts are independent transmit queues.
 Ordering and synchronization between contexts are not defined.
 Conceptually a transmit context behaves similar to a send-only endpoint.
 A transmit context may be configured with relaxed capabilities, and has
@@ -713,7 +713,7 @@ operation.
 (scatter-gather elements) that a single posted operation may reference.
 .SS fi_rx_context
 .PP
-Receive contexts are independent command queues for receiving incoming
+Receive contexts are independent receive queues for receiving incoming
 data.
 Ordering and synchronization between contexts are not guaranteed.
 Conceptually a receive context behaves similar to a receive-only
@@ -804,7 +804,7 @@ processing, with the potential cost of serializing access across
 multiple endpoints.
 Support for sharable contexts is domain specific.
 .PP
-Conceptually, sharable contexts are command queues that may be accessed
+Conceptually, sharable contexts are transmit queues that may be accessed
 by many endpoints.
 The use of a shared transmit context is mostly opaque to an application.
 Applications must allocate and bind shared transmit contexts to
