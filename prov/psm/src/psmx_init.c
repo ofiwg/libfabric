@@ -109,6 +109,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	uint64_t max_tag_value = 0;
 	int err = -ENODATA;
 
+	psmx_debug("%s\n", __func__);
+
 	*info = NULL;
 
 	if (psm_ep_num_devunits(&cnt) || !cnt) {
@@ -275,6 +277,8 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 {
 	struct psmx_fid_fabric *fabric_priv;
 
+	psmx_debug("%s\n", __func__);
+
 	if (strncmp(attr->name, "psm", 3))
 		return -FI_ENODATA;
 
@@ -292,6 +296,8 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 
 static void psmx_fini(void)
 {
+	psmx_debug("%s\n", __func__);
+
 	if (! --init_count)
 		psm_finalize();
 }
@@ -329,6 +335,8 @@ PSM_INI
 	int major, minor;
 	int check_version;
 	int err;
+
+	psmx_debug("%s\n", __func__);
 
 	psmx_env.name_server	= psmx_get_int_env("SFI_PSM_NAME_SERVER", 0);
 	psmx_env.am_msg		= psmx_get_int_env("SFI_PSM_AM_MSG", 0);
