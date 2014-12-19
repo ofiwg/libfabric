@@ -135,14 +135,12 @@ _usd_post_send_two(
  */
 static inline uint32_t
 _usd_post_send_iov(
-    struct usd_qp *uqp,
+    struct usd_wq *wq,
     const struct iovec *iov,
     size_t count,
     u_int8_t cq_entry)
 {
-    struct usd_wq *wq;
     struct vnic_wq *vwq;
-    struct usd_qp_impl *qp;
     uint32_t index;
     struct wq_enet_desc *desc;
     u_int8_t offload_mode = 0;
@@ -150,8 +148,6 @@ _usd_post_send_iov(
     u_int8_t vlan_tag_insert = 0, loopback = 0, fcoe_encap = 0;
     unsigned i;
 
-    qp = to_qpi(uqp);
-    wq = &qp->uq_wq;
     vwq = &wq->uwq_vnic_wq;
     desc = wq->uwq_next_desc;
     index = wq->uwq_post_index;
