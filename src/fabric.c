@@ -113,6 +113,7 @@ cleanup:
 	return ret;
 }
 
+#ifdef HAVE_LIBDL
 static int lib_filter(const struct dirent *entry)
 {
 	size_t l = strlen(entry->d_name);
@@ -123,6 +124,7 @@ static int lib_filter(const struct dirent *entry)
 	else
 		return 0;
 }
+#endif
 
 static void fi_ini(void)
 {
@@ -188,8 +190,8 @@ static void fi_ini(void)
 	}
 
 	free(liblist);
-#endif
 done:
+#endif
 	init = 1;
 unlock:
 	pthread_mutex_unlock(&ini_lock);
