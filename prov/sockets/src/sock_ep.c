@@ -967,11 +967,19 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type,
 	if (hints->caps) 
 		_info->caps = hints->caps;
 		
-	if (hints->ep_attr)
+	if (hints->ep_attr) {
 		*(_info->ep_attr) = *hints->ep_attr;
+		if (_info->ep_attr->inject_size == 0)
+			_info->ep_attr->inject_size = SOCK_EP_MAX_INJECT_SZ;
+		if (_info->ep_attr->max_msg_size == 0)
+			_info->ep_attr->max_msg_size = SOCK_EP_MAX_MSG_SZ;
+	}
 	
-	if (hints->tx_attr)
+	if (hints->tx_attr) {
 		*(_info->tx_attr) = *hints->tx_attr;
+		if (_info->tx_attr->inject_size == 0)
+			_info->tx_attr->inject_size = SOCK_EP_MAX_INJECT_SZ;
+	}
 
 	if (hints->rx_attr)
 		*(_info->rx_attr) = *hints->rx_attr;
