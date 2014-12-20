@@ -8,6 +8,7 @@ bin_PROGRAMS = \
 	simple/fi_rdm \
 	simple/fi_rdm_pingpong \
 	simple/fi_rdm_tagged_pingpong \
+	simple/fi_rdm_tagged_search \
 	simple/fi_rdm_cntr_pingpong \
 	simple/fi_rdm_rma \
 	simple/fi_ud_pingpong \
@@ -44,6 +45,10 @@ simple_fi_rdm_pingpong_SOURCES = \
 
 simple_fi_rdm_tagged_pingpong_SOURCES = \
 	simple/rdm_tagged_pingpong.c \
+	common/shared.c
+
+simple_fi_rdm_tagged_search_SOURCES = \
+	simple/rdm_tagged_search.c \
 	common/shared.c
 
 simple_fi_rdm_cntr_pingpong_SOURCES = \
