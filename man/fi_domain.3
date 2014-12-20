@@ -1,4 +1,4 @@
-.TH fi_domain 3 "2014\-12\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_domain 3 "2014\-12\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_domain - Open a fabric access domain
@@ -160,6 +160,9 @@ For instance, endpoints that share the same event queue or poll set
 belong to the same progress domain.
 Applications that can allocate endpoint resources to specific threads
 can reduce provider locking by using FI_THREAD_PROGRESS.
+.PP
+\f[I]FI_THREAD_DOMAIN\f[] : A domain serialization model requires
+applications to serialize access to all objects belonging to a domain.
 .SS Progress Models (control_progress / data_progress)
 .PP
 Progress is the ability of the underlying implementation to complete

@@ -56,7 +56,7 @@
 #include "sock.h"
 
 const struct fi_ep_attr sock_dgram_ep_attr = {
-	.protocol = FI_PROTO_TCP,
+	.protocol = FI_PROTO_SOCK_TCP,
 	.max_msg_size = SOCK_EP_MAX_MSG_SZ,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
@@ -146,7 +146,7 @@ int sock_dgram_verify_ep_attr(struct fi_ep_attr *ep_attr,
 	if (ep_attr) {
 		switch (ep_attr->protocol) {
 		case FI_PROTO_UNSPEC:
-		case FI_PROTO_TCP:
+		case FI_PROTO_SOCK_TCP:
 			break;
 		default:
 			return -FI_ENODATA;
@@ -424,7 +424,7 @@ int sock_dgram_ep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 
-	*ep = &endpoint->ep;
+	*ep = &endpoint->fid.ep;
 	return 0;
 }
 
@@ -438,6 +438,6 @@ int sock_dgram_sep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 
-	*sep = &endpoint->sep;
+	*sep = &endpoint->fid.sep;
 	return 0;
 }

@@ -84,7 +84,7 @@ struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 		event->cqe.err.data = data;
 		event->cqe.err.tag = tag;
 		event->cqe.err.olen = olen;
-		event->cqe.err.prov_errno = 0;
+		event->cqe.err.prov_errno = PSM_INTERNAL_ERR;
 		goto out;
 	}
 
@@ -454,7 +454,6 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	ssize_t read_count;
 
 	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
-	assert(cq_priv->domain);
 
 	if (PSMX_CQ_EMPTY(cq_priv) || !buf) {
 		ret = psmx_cq_poll_mq(cq_priv, cq_priv->domain,

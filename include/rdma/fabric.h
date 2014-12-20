@@ -168,7 +168,8 @@ enum fi_progress {
 enum fi_threading {
 	FI_THREAD_UNSPEC,
 	FI_THREAD_SAFE,
-	FI_THREAD_PROGRESS
+	FI_THREAD_PROGRESS,
+	FI_THREAD_DOMAIN
 };
 
 #define FI_ORDER_RAR		(1 << 0)
@@ -201,7 +202,7 @@ enum {
 	FI_PROTO_IB_UD,
 	FI_PROTO_PSMX,
 	FI_PROTO_UDP,
-	FI_PROTO_TCP,
+	FI_PROTO_SOCK_TCP
 };
 
 /* Mode bits */

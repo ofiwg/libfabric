@@ -113,6 +113,7 @@ cleanup:
 	return ret;
 }
 
+#ifdef HAVE_LIBDL
 static int lib_filter(const struct dirent *entry)
 {
 	size_t l = strlen(entry->d_name);
@@ -123,7 +124,12 @@ static int lib_filter(const struct dirent *entry)
 	else
 		return 0;
 }
+#endif
 
+/*
+ * Initialize the sockets provider last.  This will result in it being
+ * the least preferred provider.
+ */
 static void fi_ini(void)
 {
 	pthread_mutex_lock(&ini_lock);
@@ -133,7 +139,6 @@ static void fi_ini(void)
 
 	fi_register_provider(VERBS_INIT);
 	fi_register_provider(PSM_INIT);
-	fi_register_provider(SOCKETS_INIT);
 	fi_register_provider(USNIC_INIT);
 
 #ifdef HAVE_LIBDL
@@ -154,7 +159,7 @@ static void fi_ini(void)
 	/* If dlopen fails, assume static linking and just return
 	   without error */
 	if (dlopen(NULL, RTLD_NOW) == NULL) {
-		goto unlock;
+		goto done;
 	}
 
 	n = scandir(extdir, &liblist, lib_filter, NULL);
@@ -163,14 +168,14 @@ static void fi_ini(void)
 			FI_WARN("scandir error reading %s: %s\n",
 				extdir, strerror(errno));
 		}
-		goto unlock;
+		goto done;
 	}
 
 	while (n--) {
 		if (asprintf(&lib, "%s/%s", extdir, liblist[n]->d_name) < 0) {
 			FI_WARN("asprintf failed to allocate memory\n");
 			free(liblist[n]);
-			goto unlock;
+			goto done;
 		}
 
 		dlhandle = dlopen(lib, RTLD_NOW);
@@ -188,7 +193,9 @@ static void fi_ini(void)
 	}
 
 	free(liblist);
+done:
 #endif
+	fi_register_provider(SOCKETS_INIT);
 	init = 1;
 unlock:
 	pthread_mutex_unlock(&ini_lock);

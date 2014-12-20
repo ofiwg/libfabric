@@ -171,6 +171,10 @@ interfaces enables a provider to eliminate lower-level locks.
   specific threads can reduce provider locking by using
   FI_THREAD_PROGRESS.
 
+*FI_THREAD_DOMAIN*
+: A domain serialization model requires applications to serialize
+  access to all objects belonging to a domain.
+
 ## Progress Models (control_progress / data_progress)
 
 Progress is the ability of the underlying implementation to complete

@@ -32,6 +32,7 @@ src_libfabric_la_SOURCES = \
 	include/fi_indexer.h \
 	include/fi_list.h \
 	include/fi_rbuf.h \
+	include/prov.h \
 	src/fabric.c \
 	src/fi_tostr.c \
 	$(common_srcs)
@@ -179,6 +180,7 @@ _usnic_files = \
 	prov/usnic/src/usdf_progress.h \
 	prov/usnic/src/usdf_rdm.c \
 	prov/usnic/src/usdf_rdm.h \
+	prov/usnic/src/usdf_rudp.h \
 	prov/usnic/src/usdf_timer.c \
 	prov/usnic/src/usdf_timer.h
 

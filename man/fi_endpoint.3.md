@@ -581,7 +581,7 @@ which data is sent or received by the transport layer.
 
 Number of transmit contexts to associate with the endpoint.  If not
 specified (0), 1 context will be assigned if the endpoint supports
-outbound transfers.  Transmit contexts are independent command queues
+outbound transfers.  Transmit contexts are independent transmit queues
 that may be separately configured.  Each transmit context may be bound
 to a separate CQ, and no ordering is defined between contexts.
 Additionally, no synchronization is needed when accessing contexts in
@@ -630,7 +630,7 @@ create transmit and receive contexts as described below.
 
 ## fi_tx_context
 
-Transmit contexts are independent command queues.  Ordering and
+Transmit contexts are independent transmit queues.  Ordering and
 synchronization between contexts are not defined.  Conceptually a
 transmit context behaves similar to a send-only endpoint.  A transmit
 context may be configured with relaxed capabilities, and has its own
@@ -697,7 +697,7 @@ struct fi_tx_attr {
 
 ## fi_rx_context
 
-Receive contexts are independent command queues for receiving incoming
+Receive contexts are independent receive queues for receiving incoming
 data.  Ordering and synchronization between contexts are not
 guaranteed.  Conceptually a receive context behaves similar to a
 receive-only endpoint.  A receive context may be configured with
@@ -783,7 +783,7 @@ transmit and/or receive processing, with the potential cost of
 serializing access across multiple endpoints.  Support for sharable
 contexts is domain specific.
 
-Conceptually, sharable contexts are command queues that may be
+Conceptually, sharable contexts are transmit queues that may be
 accessed by many endpoints.  The use of a shared transmit context is
 mostly opaque to an application.  Applications must allocate and bind
 shared transmit contexts to endpoints, but otherwise transmit
