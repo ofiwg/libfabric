@@ -126,6 +126,10 @@ static int lib_filter(const struct dirent *entry)
 }
 #endif
 
+/*
+ * Initialize the sockets provider last.  This will result in it being
+ * the least preferred provider.
+ */
 static void fi_ini(void)
 {
 	pthread_mutex_lock(&ini_lock);
@@ -135,7 +139,6 @@ static void fi_ini(void)
 
 	fi_register_provider(VERBS_INIT);
 	fi_register_provider(PSM_INIT);
-	fi_register_provider(SOCKETS_INIT);
 	fi_register_provider(USNIC_INIT);
 
 #ifdef HAVE_LIBDL
@@ -192,6 +195,7 @@ static void fi_ini(void)
 	free(liblist);
 done:
 #endif
+	fi_register_provider(SOCKETS_INIT);
 	init = 1;
 unlock:
 	pthread_mutex_unlock(&ini_lock);
