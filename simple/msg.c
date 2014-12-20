@@ -453,11 +453,14 @@ int main(int argc, char **argv)
 		}
 	}
 
+	memset(&domain_hints, 0, sizeof(domain_hints));
+	memset(&ep_hints, 0, sizeof(ep_hints));
+
 	hints.domain_attr	= &domain_hints;
 	hints.ep_attr		= &ep_hints;
 	hints.ep_type		= FI_EP_MSG;
-	hints.caps			= FI_MSG;
-	hints.mode			= FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints.caps		= FI_MSG;
+	hints.mode		= FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints.addr_format	= FI_SOCKADDR;
 
 	/* Fabric and connection setup */
