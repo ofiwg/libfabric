@@ -46,7 +46,7 @@ static uint64_t op_type = FI_REMOTE_WRITE;
 static int custom;
 static int size_option;
 static int iterations = 1000;
-static int transfer_size = 1000;
+static int transfer_size = 1024;
 static int max_credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
@@ -60,7 +60,7 @@ static struct fi_info hints;
 static struct fi_domain_attr domain_hints;
 static struct fi_ep_attr ep_hints;
 static char *dst_addr, *src_addr;
-static char *port = NULL;
+static char *port = "9228";
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;

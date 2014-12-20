@@ -44,7 +44,7 @@
 static int custom;
 static int size_option;
 static int iterations = 1000;
-static int transfer_size = 1000;
+static int transfer_size = 1024;
 static int max_credits = 128;
 static int credits = 128;
 static char test_name[10] = "custom";
