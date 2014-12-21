@@ -50,6 +50,7 @@ static int transfer_size = 1024;
 static int max_credits = 128;
 static int credits = 128;
 static int send_count = 0;
+static int recv_outs = 0;	/* Outstanding recvs */
 static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *buf;
@@ -118,7 +119,7 @@ static int recv_xfer(int size)
 {
 	int ret;
 
-	ret = fi_cntr_wait(rcntr, fi_cntr_read(rcntr) + 1, CNTR_TIMEOUT);
+	ret = fi_cntr_wait(rcntr, recv_outs, CNTR_TIMEOUT);
 	if (ret < 0) {
 		FI_PRINTERR("fi_cntr_wait: rcntr", ret);
 		return ret;
@@ -127,6 +128,7 @@ static int recv_xfer(int size)
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr, &fi_ctx_recv);
 	if (ret)
 		FI_PRINTERR("fi_recv", ret);
+	recv_outs++;
 
 	return ret;
 }
@@ -160,8 +162,9 @@ static int recv_msg(void)
 		FI_PRINTERR("fi_recv", ret);
 		return ret;
 	}
+	recv_outs++;
 
-	ret = fi_cntr_wait(rcntr, fi_cntr_read(rcntr) + 1, CNTR_TIMEOUT);
+	ret = fi_cntr_wait(rcntr, recv_outs, CNTR_TIMEOUT);
 	if (ret < 0) {
 		FI_PRINTERR("fi_cntr_wait: rcntr", ret);
 		return ret;
@@ -464,6 +467,7 @@ static int init_av(void)
 			&fi_ctx_recv);
 	if (ret)
 		FI_PRINTERR("fi_recv", ret);
+	recv_outs++;
 
 	return ret;
 }
