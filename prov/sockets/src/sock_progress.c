@@ -399,7 +399,8 @@ static int sock_pe_handle_ack(struct sock_pe *pe, struct sock_pe_entry *pe_entry
 		      waiting_entry, response->pe_entry_id);
 	
 	assert(waiting_entry->type == SOCK_PE_TX);
-	sock_pe_report_tx_completion(waiting_entry);
+	if (!(waiting_entry->flags & FI_INJECT))
+		sock_pe_report_tx_completion(waiting_entry);
 	waiting_entry->is_complete = 1;
 	pe_entry->is_complete = 1;
 	return 0;
@@ -472,7 +473,8 @@ static int sock_pe_handle_atomic_complete(struct sock_pe *pe,
 		len += (waiting_entry->pe.tx.data.tx_iov[i].res.ioc.count * datatype_sz);
 	}
 
-	sock_pe_report_tx_completion(waiting_entry);
+	if (!(waiting_entry->flags & FI_INJECT))
+		sock_pe_report_tx_completion(waiting_entry);
 	waiting_entry->is_complete = 1;
 	pe_entry->is_complete = 1;
 	return 0;
@@ -1534,7 +1536,8 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 		SOCK_LOG_INFO("Send complete\n");
 		
 		if (!(pe_entry->flags & FI_REMOTE_COMPLETE)) {
-			sock_pe_report_tx_completion(pe_entry);
+			if (!(pe_entry->flags & FI_INJECT))
+				sock_pe_report_tx_completion(pe_entry);
 			pe_entry->is_complete = 1;
 		}
 	}
