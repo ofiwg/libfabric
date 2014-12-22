@@ -219,16 +219,16 @@ fi_rx_context(struct fid_sep *sep, int index, struct fi_rx_attr *attr,
 
 static inline int
 fi_stx_context(struct fid_domain *domain, struct fi_tx_attr *attr,
-	       struct fid_stx **stx, void *context)
+	       struct fi_sctx_attr *sctx_attr, struct fid_stx **stx, void *context)
 {
-	return domain->ops->stx_ctx(domain, attr, stx, context);
+	return domain->ops->stx_ctx(domain, attr, sctx_attr, stx, context);
 }
 
 static inline int
 fi_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
-	       struct fid_ep **rx_ep, void *context)
+	       struct fi_sctx_attr *sctx_attr, struct fid_ep **rx_ep, void *context)
 {
-	return domain->ops->srx_ctx(domain, attr, rx_ep, context);
+	return domain->ops->srx_ctx(domain, attr, sctx_attr, rx_ep, context);
 }
 
 static inline ssize_t
