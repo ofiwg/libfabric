@@ -536,9 +536,8 @@ static int sock_pe_process_rx_write(struct sock_pe *pe, struct sock_rx_ctx *rx_c
 {
 	int i, ret = 0;
 	struct sock_mr *mr;
-	uint64_t offset, rem, len, entry_len;
+	uint64_t rem, len, entry_len;
 
-	offset = 0;
 	len = sizeof(struct sock_msg_hdr);
 	if (pe_entry->msg_hdr.flags & FI_REMOTE_CQ_DATA) {
 		if (sock_pe_recv_field(pe_entry, &pe_entry->data,
