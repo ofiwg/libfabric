@@ -202,6 +202,7 @@ struct sock_av {
 	struct index_map addr_idm;
 	socklen_t addrlen;
 	struct sock_conn_map *cmap;
+	struct sock_eq *eq;
 };
 
 struct sock_fid_list {

@@ -189,6 +189,7 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		goto err;
 	}
 
+	dst_len = 0;
 	for (i = 0; i< compare_count; i++) {
 		tx_iov.ioc.addr = (uint64_t)comparev[i].addr;
 		tx_iov.ioc.count = comparev[i].count;
