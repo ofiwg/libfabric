@@ -1255,9 +1255,7 @@ static int sock_pe_process_recv(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 		ret = sock_pe_process_rx_read(pe, rx_ctx, pe_entry);
 		break;
 
-	case SOCK_OP_ATOMIC_WRITE:
-	case SOCK_OP_ATOMIC_READ_WRITE:
-	case SOCK_OP_ATOMIC_COMP_WRITE:
+	case SOCK_OP_ATOMIC:
 		ret = sock_pe_process_rx_atomic(pe, rx_ctx, pe_entry);
 		break;
 
@@ -1322,18 +1320,16 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 {
 	int datatype_sz;
 	union sock_iov iov[SOCK_EP_MAX_IOV_LIMIT];
-	ssize_t len, i, iov_len;
-	struct sock_atomic_req  req;
+	ssize_t len, i, entry_len;
 
 	if (pe_entry->pe.tx.send_done)
 		return 0;
 
 	len = sizeof(struct sock_msg_hdr);
-	if (pe_entry->done_len < len + sizeof(req)) {
-		if (sock_pe_send_field(pe_entry, &req, sizeof(req), len))
-			return 0;
-		len += sizeof(req);
-	}
+	entry_len = sizeof(struct sock_atomic_req) - sizeof(struct sock_msg_hdr); 
+	if (sock_pe_send_field(pe_entry, &pe_entry->pe.tx.tx_op, entry_len, len))
+		return 0;
+	len += entry_len;
 	
 	if (pe_entry->flags & FI_REMOTE_CQ_DATA) {
 		if (sock_pe_send_field(pe_entry, &pe_entry->data, 
@@ -1343,16 +1339,16 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 	}
 	
 	/* dest iocs */
-	iov_len = sizeof(union sock_iov) * pe_entry->pe.tx.tx_op.dest_iov_len;
+	entry_len = sizeof(union sock_iov) * pe_entry->pe.tx.tx_op.dest_iov_len;
 	for (i=0; i < pe_entry->pe.tx.tx_op.dest_iov_len; i++) {
 		iov[i].ioc.addr = pe_entry->pe.tx.data.tx_iov[i].dst.ioc.addr;
 		iov[i].ioc.count = pe_entry->pe.tx.data.tx_iov[i].dst.ioc.count;
 		iov[i].ioc.key = pe_entry->pe.tx.data.tx_iov[i].dst.ioc.key;
 	}
 
-	if (sock_pe_send_field(pe_entry, &iov[0], iov_len, len))
+	if (sock_pe_send_field(pe_entry, &iov[0], entry_len, len))
 		return 0;
-	len += iov_len;
+	len += entry_len;
 	
 	/* cmp data */
 	datatype_sz = fi_datatype_size(pe_entry->pe.tx.tx_op.atomic.datatype);
@@ -1589,9 +1585,7 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 		ret = sock_pe_progress_tx_read(pe, pe_entry, conn);
 		break;
 
-	case SOCK_OP_ATOMIC_WRITE:
-	case SOCK_OP_ATOMIC_READ_WRITE:
-	case SOCK_OP_ATOMIC_COMP_WRITE:
+	case SOCK_OP_ATOMIC:
 		ret = sock_pe_progress_tx_atomic(pe, pe_entry, conn);
 		break;
 		
@@ -1764,10 +1758,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 		}
 		break;
 
-	case SOCK_OP_ATOMIC_WRITE:			
-	case SOCK_OP_ATOMIC_READ_WRITE:
-	case SOCK_OP_ATOMIC_COMP_WRITE:
-
+	case SOCK_OP_ATOMIC:			
 		msg_hdr->msg_len += sizeof(struct sock_op);
 		datatype_sz = fi_datatype_size(pe_entry->pe.tx.tx_op.atomic.datatype);
 		if (pe_entry->flags & FI_INJECT) {
