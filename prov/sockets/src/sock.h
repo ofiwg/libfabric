@@ -187,8 +187,14 @@ struct sock_mr {
 };
 
 struct sock_av_addr {
-	uint16_t key;
 	struct sockaddr_storage addr;
+	uint8_t valid;
+	uint8_t reserved[7];
+};
+
+struct sock_av_table_hdr {
+	uint32_t size;
+	uint32_t stored;
 };
 
 struct sock_av {
@@ -198,11 +204,15 @@ struct sock_av {
 	struct fi_av_attr attr;
 	uint64_t mask;
 	int rx_ctx_bits;
-	size_t stored;
 	struct index_map addr_idm;
 	socklen_t addrlen;
 	struct sock_conn_map *cmap;
 	struct sock_eq *eq;
+	struct sock_av_table_hdr *table_hdr;
+	struct sock_av_addr *table;
+	uint16_t *key;
+	char name[FI_NAME_MAX];
+	int shared_fd;
 };
 
 struct sock_fid_list {
