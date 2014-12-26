@@ -172,8 +172,11 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 	assert(tx_ctx->enabled && msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT);
-
-	conn = sock_av_lookup_addr(tx_ctx->av, msg->addr);
+	if (sock_ep->connected) {
+		conn = sock_ep_lookup_conn(sock_ep);
+	} else {
+		conn = sock_av_lookup_addr(tx_ctx->av, msg->addr);
+	}
 	assert(conn);
 
 	SOCK_LOG_INFO("New sendmsg on TX: %p using conn: %p\n", 
