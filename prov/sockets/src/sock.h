@@ -101,6 +101,9 @@
 		      FI_BUFFERED_RECV | FI_READ | FI_WRITE |	\
 		      FI_REMOTE_READ | FI_REMOTE_WRITE)
 
+#define SOCK_DGRAM_DEF_OPS (FI_SEND | FI_RECV | FI_BUFFERED_RECV)
+
+
 #define SOCK_EP_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS|	\
 			   FI_ORDER_WAR | FI_ORDER_WAW | FI_ORDER_WAS |	\
 			   FI_ORDER_SAR | FI_ORDER_SAW | FI_ORDER_SAS)
@@ -187,8 +190,14 @@ struct sock_mr {
 };
 
 struct sock_av_addr {
-	uint16_t key;
 	struct sockaddr_storage addr;
+	uint8_t valid;
+	uint8_t reserved[7];
+};
+
+struct sock_av_table_hdr {
+	uint32_t size;
+	uint32_t stored;
 };
 
 struct sock_av {
@@ -198,10 +207,15 @@ struct sock_av {
 	struct fi_av_attr attr;
 	uint64_t mask;
 	int rx_ctx_bits;
-	size_t stored;
 	struct index_map addr_idm;
 	socklen_t addrlen;
 	struct sock_conn_map *cmap;
+	struct sock_eq *eq;
+	struct sock_av_table_hdr *table_hdr;
+	struct sock_av_addr *table;
+	uint16_t *key;
+	char name[FI_NAME_MAX];
+	int shared_fd;
 };
 
 struct sock_fid_list {
@@ -243,12 +257,9 @@ enum {
 	SOCK_OP_READ_COMPLETE = 7,
 	SOCK_OP_READ_ERROR = 8,
 
-	SOCK_OP_ATOMIC_WRITE = 9,
-	SOCK_OP_ATOMIC_READ_WRITE = 10,
-	SOCK_OP_ATOMIC_COMP_WRITE = 11,
-
-	SOCK_OP_ATOMIC_COMPLETE = 12,
-	SOCK_OP_ATOMIC_ERROR = 13,
+	SOCK_OP_ATOMIC = 9,
+	SOCK_OP_ATOMIC_COMPLETE = 10,
+	SOCK_OP_ATOMIC_ERROR = 11,
 
 	/* internal */
 	SOCK_OP_RECV,

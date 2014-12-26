@@ -65,13 +65,13 @@ const struct fi_ep_attr sock_dgram_ep_attr = {
 	.max_order_waw_size = SOCK_EP_MAX_ORDER_WAW_SZ,
 	.mem_tag_format = SOCK_EP_MEM_TAG_FMT,
 	.msg_order = SOCK_EP_MSG_ORDER,
-	.tx_ctx_cnt = 0,
-	.rx_ctx_cnt = 0,
+	.tx_ctx_cnt = SOCK_EP_MAX_TX_CNT,
+	.rx_ctx_cnt = SOCK_EP_MAX_RX_CNT,
 };
 
 const struct fi_tx_attr sock_dgram_tx_attr = {
 	.caps = SOCK_EP_DGRAM_CAP,
-	.op_flags = SOCK_DEF_OPS,
+	.op_flags = SOCK_DGRAM_DEF_OPS,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_MAX_TX_CTX_SZ,
@@ -80,7 +80,7 @@ const struct fi_tx_attr sock_dgram_tx_attr = {
 
 const struct fi_rx_attr sock_dgram_rx_attr = {
 	.caps = SOCK_EP_DGRAM_CAP,
-	.op_flags = SOCK_DEF_OPS,
+	.op_flags = SOCK_DGRAM_DEF_OPS,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.size = SOCK_EP_MAX_MSG_SZ,

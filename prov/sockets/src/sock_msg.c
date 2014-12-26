@@ -588,6 +588,7 @@ static ssize_t sock_ep_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore
 		return -FI_EINVAL;
 	}
 
+	ret = -FI_ENOMSG;
 	fastlock_acquire(&rx_ctx->lock);
 	for (entry = rx_ctx->rx_buffered_list.next;
 	     entry != &rx_ctx->rx_buffered_list; entry = entry->next) {
@@ -599,25 +600,25 @@ static ssize_t sock_ep_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore
 		if (((rx_entry->tag & ~rx_entry->ignore) == 
 		     (*tag & ~rx_entry->ignore)) &&
 		    (rx_entry->addr == FI_ADDR_UNSPEC ||
-		     rx_entry->addr == *src_addr)) {
-
+		     (src_addr == NULL) || 
+		     (src_addr && 
+		      ((*src_addr == FI_ADDR_UNSPEC) ||
+		       (rx_entry->addr == *src_addr))))) {
+			
 			if (flags & FI_CLAIM)
 				rx_entry->is_claimed = 1;
 			*tag = rx_entry->tag;
-			*src_addr = rx_entry->addr;
+			if (src_addr)
+				*src_addr = rx_entry->addr;
 			*len = rx_entry->used;
 			ret = 1;
 			break;
 		}
 	}
 
-	if (entry == &rx_ctx->rx_entry_list)
-		ret = -FI_ENOENT;
-
 	fastlock_release(&rx_ctx->lock);
 	return ret;
 }
-
 
 struct fi_ops_tagged sock_ep_tagged = {
 	.size = sizeof(struct fi_ops_tagged),

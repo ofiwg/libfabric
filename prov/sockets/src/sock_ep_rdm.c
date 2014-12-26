@@ -66,8 +66,8 @@ const struct fi_ep_attr sock_rdm_ep_attr = {
 	.max_order_waw_size = SOCK_EP_MAX_ORDER_WAW_SZ,
 	.mem_tag_format = SOCK_EP_MEM_TAG_FMT,
 	.msg_order = SOCK_EP_MSG_ORDER,
-	.tx_ctx_cnt = 0,
-	.rx_ctx_cnt = 0,
+	.tx_ctx_cnt = SOCK_EP_MAX_TX_CNT,
+	.rx_ctx_cnt = SOCK_EP_MAX_RX_CNT,
 };
 
 const struct fi_tx_attr sock_rdm_tx_attr = {
@@ -205,14 +205,9 @@ static struct fi_info *sock_rdm_fi_info(struct fi_info *hints,
 	if (!hints->caps) 
 		_info->caps = SOCK_EP_RDM_CAP;
 	
-	if (!hints->tx_attr)
-		*(_info->tx_attr) = sock_rdm_tx_attr;
-
-	if (!hints->rx_attr)
-		*(_info->rx_attr) = sock_rdm_rx_attr;
-
-	if (!hints->ep_attr)
-		*(_info->ep_attr) = sock_rdm_ep_attr;
+	*(_info->tx_attr) = sock_rdm_tx_attr;
+	*(_info->rx_attr) = sock_rdm_rx_attr;
+	*(_info->ep_attr) = sock_rdm_ep_attr;
 
 	return _info;
 }
