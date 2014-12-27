@@ -115,9 +115,9 @@ check_eq_result(int ret, uint32_t event, struct fi_eq_entry *entry,
 				(ret < 0) ? fi_strerror(-ret) : "unknown");
 		return -1;
 	}
-	if (event != FI_COMPLETE) {
+	if (event != FI_AV_COMPLETE) {
 		sprintf(err_buf, "fi_eq_sread event = %u, should be %u", event,
-				FI_COMPLETE);
+				FI_AV_COMPLETE);
 		return -1;
 	}
 	if (entry->fid != fid) {
