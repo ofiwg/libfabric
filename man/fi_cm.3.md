@@ -15,9 +15,6 @@ fi_connect / fi_listen / fi_accept / fi_reject / fi_shutdown
 fi_getname / fi_getpeer
 : Return local or peer endpoint address
 
-fi_join / fi_leave
-: Have an endpoint join or leave a multicast group.
-
 # SYNOPSIS
 
 {% highlight c %}
@@ -38,12 +35,6 @@ int fi_shutdown(struct fid_ep *ep, uint64_t flags);
 int fi_getname(fid_t fid, void *addr, size_t *addrlen);
 
 int fi_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen);
-
-int fi_join(struct fid_ep *ep, void *addr, fi_addr_t *fi_addr,
-    uint64_t flags, void *context);
-
-int fi_leave(struct fid_ep *ep, void *addr, fi_addr_t fi_addr,
-    uint64_t flags);
 {% endhighlight %}
 
 # ARGUMENTS
@@ -53,7 +44,7 @@ int fi_leave(struct fid_ep *ep, void *addr, fi_addr_t fi_addr,
 
 *addr*
 : Buffer to store queried address (get), or address to
-  connect/join/leave.  The address must be in the same format as that
+  connect.  The address must be in the same format as that
   specified using fi_info: addr_format when the endpoint was created.
 
 *addrlen*
@@ -68,9 +59,6 @@ int fi_leave(struct fid_ep *ep, void *addr, fi_addr_t fi_addr,
 
 *info*
 : Fabric information associated with a connection request.
-
-*fi_addr*
-: Fabric address associated with a multicast address.
 
 *flags*
 : Additional flags for controlling connection operation.
@@ -159,46 +147,9 @@ what can fit into the buffer, it will be truncated.  On output, addrlen
 is set to the size of the buffer needed to store the address, which may
 be larger than the input value.
 
-## fi_join / fi_leave
-
-fi_join and fi_leave are use to associate or dissociate an endpoint
-with a multicast group.  Join operations complete asynchronously, with
-the completion reported through the event queue associated with the
-endpoint or domain, if an event queue has not been bound to the
-endpoint.
-
-A fabric address will be provided as part of the join request.  The
-address will be written to the memory location referenced by the
-fi_addr parameter.  This address must be used when issuing data
-transfer operations to the multicast group.  Because join operations
-are asynchronous, the memory location referenced by the fi_addr
-parameter must remain valid until an event associated with the join is
-reported, or a corresponding call to leave the multicast group
-returns.  Fi_addr is not guaranteed to be set upon return from
-fi_join, and it is strongly recommended that fi_addr not be declared
-on the stack, as data corruption may result.
-
-The fi_leave call will result in an endpoint leaving a multicast
-group.  The fi_leave call may be called even if the join operation has
-not completed, in which case the join will be canceled if it has not
-yet completed.
-
 # FLAGS
 
-The fi_join call allows the user to specify flags requesting the type of
-join operation being requested.  Flags for fi_leave must be 0.
-
-*FI_SEND*
-: Setting FI_SEND, but not FI_RECV, indicates that the endpoint should
-  join the multicast group as a send-only member.  If FI_RECV is also
-  set or neither FI_SEND or FI_RECV are set, then the endpoint will
-  join the group with send and receive capabilities.
-
-*FI_RECV*
-: Setting FI_RECV, but not FI_SEND, indicates that the endpoint should
-  join the multicast group as a receive-only member.  If FI_SEND is
-  also set or neither FI_SEND or FI_RECV are set, then the endpoint
-  will join the group with send and receive capabilities.
+Flag values are reserved and must be 0.
 
 # RETURN VALUE
 

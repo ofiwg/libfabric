@@ -227,7 +227,7 @@ information regarding the format associated with each event.
 : Asynchronous control operations are basic requests that simply need
   to generate an event to indicate that they have completed.  These
   include the following types of events: memory registration, address
-  vector resolution, connection established, and multicast join.
+  vector resolution, and connection established.
 
   Control requests report their completion by inserting a `struct
   fi_eq_entry` into the EQ.  The format of this structure is:

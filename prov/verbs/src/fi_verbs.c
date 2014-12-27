@@ -1699,8 +1699,6 @@ static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.accept = fi_ibv_msg_ep_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_ibv_msg_ep_shutdown,
-	.join = fi_no_join,
-	.leave = fi_no_leave,
 };
 
 static int
@@ -2593,8 +2591,6 @@ static struct fi_ops_cm fi_ibv_pep_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = fi_ibv_msg_ep_reject,
 	.shutdown = fi_no_shutdown,
-	.join = fi_no_join,
-	.leave = fi_no_leave,
 };
 
 static int fi_ibv_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
