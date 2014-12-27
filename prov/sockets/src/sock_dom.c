@@ -283,7 +283,7 @@ static int sock_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr
 	if (dom->mr_eq) {
 		eq_entry.fid = &domain->fid;
 		eq_entry.context = attr->context;
-		return sock_eq_report_event(dom->mr_eq, FI_COMPLETE,
+		return sock_eq_report_event(dom->mr_eq, FI_MR_COMPLETE,
 					    &eq_entry, sizeof(eq_entry), 0);
 	}
 

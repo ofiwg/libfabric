@@ -241,12 +241,14 @@ struct fi_eq_entry {
 {% endhighlight %}
 
   For the completion of basic asynchronous control operations, the
-  returned event will be to FI_COMPLETE.  The fid will reference the
-  fabric descriptor associated with the event.  For memory
-  registration, this will be the fid_mr, address resolution will
-  reference a fid_av, and CM events will refer to a fid_ep.  The
-  context field will be set to the context specified as part of the
-  operation.
+  returned event will indicate the operation that has completed, and
+  the fid will reference the fabric descriptor associated with
+  the event.  For memory registration, this will be an FI_MR_COMPLETE
+  event and the fid_mr, address resolution will reference an
+  FI_AV_COMPLETE event and fid_av, and CM events will refer to a
+  FI_CONNECTED event and fid_ep.  The context field will be set
+  to the context specified as part of the operation, if available,
+  otherwise the context will be associated with the fabric descriptor.
 
 *Connection Request Notification*
 : Connection requests are unsolicited notifications that a remote

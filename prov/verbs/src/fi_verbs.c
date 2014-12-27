@@ -1883,7 +1883,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 		}
 		break;
 	case RDMA_CM_EVENT_ESTABLISHED:
-		*event = FI_COMPLETE;
+		*event = FI_CONNECTED;
 		entry->info = NULL;
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
