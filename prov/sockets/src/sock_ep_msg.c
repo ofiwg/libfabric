@@ -482,7 +482,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 struct fi_ops_cm sock_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.getname = sock_ep_cm_getname,
-	.getpeer = fi_no_getpeer,
+	.getpeer = sock_ep_cm_getpeer,
 	.connect = sock_ep_cm_connect,
 	.listen = fi_no_listen,
 	.accept = sock_ep_cm_accept,
@@ -553,7 +553,6 @@ static int sock_pep_fi_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 {
 	struct sock_pep *pep;
 	struct sock_eq *eq;
-	int ret;
 
 	pep = container_of(fid, struct sock_pep, pep.fid);
 

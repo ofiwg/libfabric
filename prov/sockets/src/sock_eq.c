@@ -212,15 +212,8 @@ ssize_t sock_eq_fd_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 		size_t len, int timeout, uint64_t flags)
 {
 	struct sock_eq *sock_eq;
-	struct sock_pep *sock_pep;
 	struct fid_ep *fid_ep;
 	struct sock_ep *sock_ep;
-	struct timeval tv;
-	struct timeval *tv_ptr;
-	fd_set readfds;
-	fd_set writefds;
-	socklen_t optlen;
-	int optval;
 	int ret;
 	struct sock_conn_req *req;
 	socklen_t addrlen;
