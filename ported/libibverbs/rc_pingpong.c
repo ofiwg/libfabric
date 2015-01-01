@@ -236,7 +236,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	if (event != FI_COMPLETE) {
+	if (event != FI_CONNECTED) {
 		fprintf(stderr, "Unexpected CM event %d\n", event);
 		goto err;
 	}
@@ -317,7 +317,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	if (event != FI_COMPLETE) {
+	if (event != FI_CONNECTED) {
 		fprintf(stderr, "Unexpected CM event %d\n", event);
 		goto err;
 	}

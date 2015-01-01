@@ -137,7 +137,7 @@ eq_write_read_self()
 			entry.fid = &eq->fid;
 		}
 		entry.context = (void *)(uintptr_t)i;
-		ret = fi_eq_write(eq, FI_COMPLETE, &entry, sizeof(entry), 0);
+		ret = fi_eq_write(eq, FI_NOTIFY, &entry, sizeof(entry), 0);
 		if (ret != sizeof(entry)) {
 			sprintf(err_buf, "fi_eq_write ret=%d, %s", ret, fi_strerror(-ret));
 			goto fail;
@@ -155,9 +155,9 @@ eq_write_read_self()
 			goto fail;
 		}
 
-		if (event != FI_COMPLETE) {
+		if (event != FI_NOTIFY) {
 			sprintf(err_buf, "iter %d: event = %d, should be %d\n", i, event,
-					FI_COMPLETE);
+					FI_NOTIFY);
 			goto fail;
 		}
 
@@ -214,14 +214,14 @@ eq_write_overflow()
 	for (i = 0; i < 32; ++i) {
 		entry.fid = &fabric->fid;
 		entry.context = (void *)(uintptr_t)i;
-		ret = fi_eq_write(eq, FI_COMPLETE, &entry, sizeof(entry), 0);
+		ret = fi_eq_write(eq, FI_NOTIFY, &entry, sizeof(entry), 0);
 		if (ret != sizeof(entry)) {
 			sprintf(err_buf, "fi_eq_write ret=%d, %s", ret, fi_strerror(-ret));
 			goto fail;
 		}
 	}
 
-	ret = fi_eq_write(eq, FI_COMPLETE, &entry, sizeof(entry), 0);
+	ret = fi_eq_write(eq, FI_NOTIFY, &entry, sizeof(entry), 0);
 	if (ret != -FI_EAGAIN) {
 		sprintf(err_buf, "fi_eq_write of full EQ returned %d", ret);
 		goto fail;
@@ -282,7 +282,7 @@ eq_wait_fd_poll()
 	/* write an event */
 	entry.fid = &eq->fid;
 	entry.context = eq;
-	ret = fi_eq_write(eq, FI_COMPLETE, &entry, sizeof(entry), 0);
+	ret = fi_eq_write(eq, FI_NOTIFY, &entry, sizeof(entry), 0);
 	if (ret != sizeof(entry)) {
 		sprintf(err_buf, "fi_eq_write ret=%d, %s", ret, fi_strerror(-ret));
 		goto fail;
@@ -353,7 +353,7 @@ eq_wait_fd_sread()
 	/* write an event */
 	entry.fid = &eq->fid;
 	entry.context = eq;
-	ret = fi_eq_write(eq, FI_COMPLETE, &entry, sizeof(entry), 0);
+	ret = fi_eq_write(eq, FI_NOTIFY, &entry, sizeof(entry), 0);
 	if (ret != sizeof(entry)) {
 		sprintf(err_buf, "fi_eq_write ret=%d, %s", ret, fi_strerror(-ret));
 		goto fail;
@@ -378,9 +378,9 @@ eq_wait_fd_sread()
 		goto fail;
 	}
 
-	if (event != FI_COMPLETE) {
+	if (event != FI_NOTIFY) {
 		sprintf(err_buf, "fi_eq_sread: event = %d, should be %d\n", event,
-				FI_COMPLETE);
+				FI_NOTIFY);
 		goto fail;
 	}
 	if (entry.fid != &eq->fid) {
