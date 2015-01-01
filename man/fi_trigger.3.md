@@ -54,7 +54,7 @@ struct fi_triggered_context {
 	union {
 		struct fi_trigger_threshold	threshold;
 		void                *internal[3]; /* reserved */
-	};
+	} trigger;
 };
 {% endhighlight %}
 
