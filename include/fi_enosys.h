@@ -154,8 +154,6 @@ static struct fi_ops_cm X = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
-	.join = fi_no_join,
-	.leave = fi_no_leave,
 };
 */
 int fi_no_getname(fid_t fid, void *addr, size_t *addrlen);
@@ -167,10 +165,6 @@ int fi_no_accept(struct fid_ep *ep, const void *param, size_t paramlen);
 int fi_no_reject(struct fid_pep *pep, fi_connreq_t connreq,
 		const void *param, size_t paramlen);
 int fi_no_shutdown(struct fid_ep *ep, uint64_t flags);
-int fi_no_join(struct fid_ep *ep, void *addr, fi_addr_t *fi_addr,
-		uint64_t flags, void *context);
-int fi_no_leave(struct fid_ep *ep, void *addr, fi_addr_t fi_addr,
-		uint64_t flags);
 
 /*
 static struct fi_ops_av X = {

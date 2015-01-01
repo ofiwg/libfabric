@@ -251,15 +251,6 @@ additional optimizations.
   FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
   types of atomic operations supported by an endpoint.
 
-*FI_MULTICAST*
-: Indicates that the endpoint should support multicast data transfers.
-  Endpoints supporting this capability support multicast operations
-  defined by struct fi_ops_msg, when a multicast address is specified
-  as the destination address.  In the absence of any relevant flags,
-  FI_MULTICAST implies the ability to send and receive messages.
-  Applications can use the FI_SEND and FI_RECV flags to optimize an
-  endpoint as send-only or receive-only.
-
 *FI_DYNAMIC_MR*
 : The provider supports applications registering any range of
   addresses in their virtual address space, whether or not those

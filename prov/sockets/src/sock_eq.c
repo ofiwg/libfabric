@@ -241,7 +241,7 @@ ssize_t sock_eq_fd_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 			SOCK_LOG_ERROR("recvfrom value invalid: %d\n", ret);
 			return 0;
 		}
-		*event = FI_COMPLETE;
+		*event = FI_CONNECTED;
 		entry->info = NULL;
 		entry->fid = req->c_fid;
 		fid_ep = container_of(req->c_fid, struct fid_ep, fid);
@@ -284,7 +284,7 @@ ssize_t sock_eq_fd_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 		break;
 	case SOCK_CONNECTED:
 		SOCK_LOG_INFO("received SOCK_CONNECTED\n");
-		*event = FI_COMPLETE;
+		*event = FI_CONNECTED;
 		entry->info = NULL;
 		entry->fid = req->s_fid;
 		fid_ep = container_of(req->s_fid, struct fid_ep, fid);
