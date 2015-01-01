@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -171,6 +171,7 @@ enum fi_threading {
 	FI_THREAD_DOMAIN
 };
 
+#define FI_ORDER_NONE		0
 #define FI_ORDER_RAR		(1 << 0)
 #define FI_ORDER_RAW		(1 << 1)
 #define FI_ORDER_RAS		(1 << 2)
@@ -180,6 +181,8 @@ enum fi_threading {
 #define FI_ORDER_SAR		(1 << 6)
 #define FI_ORDER_SAW		(1 << 7)
 #define FI_ORDER_SAS		(1 << 8)
+#define FI_ORDER_RECV		(1 << 9)
+#define FI_ORDER_STRICT		0xFFFFFFFF
 
 enum fi_ep_type {
 	FI_EP_UNSPEC,
@@ -215,6 +218,7 @@ struct fi_tx_attr {
 	uint64_t		mode;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
+	uint64_t		comp_order;
 	size_t			inject_size;
 	size_t			size;
 	size_t			iov_limit;
@@ -225,6 +229,7 @@ struct fi_rx_attr {
 	uint64_t		mode;
 	uint64_t		op_flags;
 	uint64_t		msg_order;
+	uint64_t		comp_order;
 	size_t			total_buffered_recv;
 	size_t			size;
 	size_t			iov_limit;
@@ -242,6 +247,7 @@ struct fi_ep_attr {
 	size_t			max_order_waw_size;
 	uint64_t		mem_tag_format;
 	uint64_t		msg_order;
+	uint64_t		comp_order;
 	size_t			tx_ctx_cnt;
 	size_t			rx_ctx_cnt;
 };
