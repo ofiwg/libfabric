@@ -805,9 +805,9 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 			return -ENOMEM;
 
 		trigger->op = PSMX_TRIGGERED_ATOMIC_WRITE;
-		trigger->cntr = container_of(ctxt->threshold.cntr,
+		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
 					     struct psmx_fid_cntr, cntr);
-		trigger->threshold = ctxt->threshold.threshold;
+		trigger->threshold = ctxt->trigger.threshold.threshold;
 		trigger->atomic_write.ep = ep;
 		trigger->atomic_write.buf = buf;
 		trigger->atomic_write.count = count;
@@ -990,9 +990,9 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 			return -ENOMEM;
 
 		trigger->op = PSMX_TRIGGERED_ATOMIC_READWRITE;
-		trigger->cntr = container_of(ctxt->threshold.cntr,
+		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
 					     struct psmx_fid_cntr, cntr);
-		trigger->threshold = ctxt->threshold.threshold;
+		trigger->threshold = ctxt->trigger.threshold.threshold;
 		trigger->atomic_readwrite.ep = ep;
 		trigger->atomic_readwrite.buf = buf;
 		trigger->atomic_readwrite.count = count;
@@ -1175,9 +1175,9 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 			return -ENOMEM;
 
 		trigger->op = PSMX_TRIGGERED_ATOMIC_COMPWRITE;
-		trigger->cntr = container_of(ctxt->threshold.cntr,
+		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
 					     struct psmx_fid_cntr, cntr);
-		trigger->threshold = ctxt->threshold.threshold;
+		trigger->threshold = ctxt->trigger.threshold.threshold;
 		trigger->atomic_compwrite.ep = ep;
 		trigger->atomic_compwrite.buf = buf;
 		trigger->atomic_compwrite.count = count;
