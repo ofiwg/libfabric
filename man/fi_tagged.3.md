@@ -52,8 +52,7 @@ ssize_t fi_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 	void *context);
 
 ssize_t fi_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
-	uint64_t flags, void *src_addr, size_t *src_addrlen,
-	size_t *len, void *context);
+	uint64_t flags, void *src_addr, size_t *len, void *context);
 {% endhighlight %}
 
 # ARGUMENTS
