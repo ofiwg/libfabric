@@ -171,6 +171,12 @@ enum fi_threading {
 	FI_THREAD_DOMAIN
 };
 
+enum fi_resource_mgmt {
+	FI_RM_UNSPEC,
+	FI_RM_DISABLED,
+	FI_RM_ENABLED
+};
+
 #define FI_ORDER_NONE		0
 #define FI_ORDER_RAR		(1 << 0)
 #define FI_ORDER_RAW		(1 << 1)
@@ -258,6 +264,7 @@ struct fi_domain_attr {
 	enum fi_threading	threading;
 	enum fi_progress	control_progress;
 	enum fi_progress	data_progress;
+	enum fi_resource_mgmt	resource_mgmt;
 	size_t			mr_key_size;
 	size_t			cq_data_size;
 	size_t			cq_cnt;
