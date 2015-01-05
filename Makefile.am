@@ -11,6 +11,7 @@ bin_PROGRAMS = \
 	simple/fi_rdm_tagged_search \
 	simple/fi_rdm_cntr_pingpong \
 	simple/fi_rdm_rma \
+	simple/fi_rdm_atomic \
 	simple/fi_ud_pingpong \
 	simple/fi_imm_data \
 	simple/fi_poll \
@@ -58,6 +59,10 @@ simple_fi_rdm_cntr_pingpong_SOURCES = \
 
 simple_fi_rdm_rma_SOURCES = \
 	simple/rdm_rma.c \
+	common/shared.c
+	
+simple_fi_rdm_atomic_SOURCES = \
+	simple/rdm_atomic.c \
 	common/shared.c
 
 simple_fi_ud_pingpong_SOURCES = \
