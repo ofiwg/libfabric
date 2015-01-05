@@ -274,7 +274,7 @@ static int server_connect(void)
 		goto err3;
 	}
 
-	if (event != FI_COMPLETE || entry.fid != &ep->fid) {
+	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
 		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
 			event, entry.fid, ep);
 		ret = -FI_EOTHER;
@@ -359,7 +359,7 @@ static int client_connect(void)
 		return (int) rd;
 	}
 
-	if (event != FI_COMPLETE || entry.fid != &ep->fid) {
+	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
 		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
 			event, entry.fid, ep);
 		ret = -FI_EOTHER;
