@@ -67,6 +67,14 @@ static enum node_type {
 	CLIENT
 } type;
 
+static void usage(char *name)
+{
+	printf("usage: %s\n", name);
+	printf("\t-d destination_address\n");
+	printf("\t-s or -c (server or client)\n");
+	exit(1);
+}
+
 static void free_ep_res(void)
 {
 	fi_close(&av->fid);
@@ -315,18 +323,18 @@ int main(int argc, char **argv)
 			type = CLIENT;
 			break;
 		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-d destination_address]\n");
-			printf("\t[-s or -c (server or client)]\n");
-			exit(1);
+			usage(argv[0]);
 		}
 	}
+	/* Check if we got required args */
+	if (optind != 4)
+		usage(argv[0]);
 
 	hints.domain_attr	= &domain_hints;
 	hints.ep_attr		= &ep_hints;
 	hints.ep_type		= FI_EP_RDM;
-	hints.caps			= FI_MSG | FI_BUFFERED_RECV;
-	hints.mode			= FI_CONTEXT;
+	hints.caps		= FI_MSG | FI_BUFFERED_RECV;
+	hints.mode		= FI_CONTEXT;
 	hints.addr_format	= FI_FORMAT_UNSPEC;
 
 	/* Fabric initialization */
