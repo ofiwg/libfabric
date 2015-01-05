@@ -231,7 +231,7 @@ struct sock_poll {
 
 struct sock_wait {
 	struct fid_wait wait_fid;
-	struct sock_domain *domain;
+	struct sock_fabric *fab;
 	struct dlist_entry fid_list;
 	enum fi_wait_obj type;
 	union {
@@ -825,9 +825,7 @@ void sock_tx_ctx_abort(struct sock_tx_ctx *tx_ctx);
 
 int sock_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		   struct fid_poll **pollset);
-int sock_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
-		   struct fid_wait **waitset);
-int sock_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
+int sock_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset);
 void sock_wait_signal(struct fid_wait *wait_fid);
 int sock_wait_get_obj(struct fid_wait *fid, void *arg);

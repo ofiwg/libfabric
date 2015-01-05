@@ -69,6 +69,11 @@ int fi_no_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 {
 	return -FI_ENOSYS;
 }
+int fi_no_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+		struct fid_wait **waitset)
+{
+	return -FI_ENOSYS;
+}
 
 /*
  * struct fi_ops_atomic
@@ -221,11 +226,6 @@ int fi_no_endpoint(struct fid_domain *domain, struct fi_info *info,
 }
 int fi_no_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		struct fid_cntr **cntr, void *context)
-{
-	return -FI_ENOSYS;
-}
-int fi_no_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
-		struct fid_wait **waitset)
 {
 	return -FI_ENOSYS;
 }

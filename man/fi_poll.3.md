@@ -42,7 +42,7 @@ int fi_poll_del(struct fid_poll *pollset, struct fid *event_fid,
 
 int fi_poll(struct fid_poll *pollset, void **context, int count);
 
-int fi_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
+int fi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
     struct fid_wait **waitset);
 
 int fi_close(struct fid *waitset);
@@ -51,6 +51,9 @@ int fi_wait(struct fid_wait *waitset, int timeout);
 {% endhighlight %}
 
 # ARGUMENTS
+
+*fabric*
+: Fabric provider
 
 *domain*
 : Resource domain

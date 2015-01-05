@@ -315,6 +315,7 @@ enum {
 };
 
 struct fi_eq_attr;
+struct fi_wait_attr;
 
 struct fi_ops {
 	size_t	size;
@@ -347,6 +348,8 @@ struct fi_ops_fabric {
 			struct fid_pep **pep, void *context);
 	int	(*eq_open)(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 			struct fid_eq **eq, void *context);
+	int	(*wait_open)(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+			struct fid_wait **waitset);
 };
 
 struct fid_fabric {

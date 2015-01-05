@@ -512,9 +512,7 @@ int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	case FI_WAIT_MUTEX_COND:
 		wait_attr.flags = 0;
 		wait_attr.wait_obj = FI_WAIT_MUTEX_COND;
-		/* FIXME: waitset is a domain object, but not EQ. This needs to be 
-		 updated based on #394 */
-		ret = sock_wait_open(NULL, &wait_attr, &sock_eq->waitset);
+		ret = sock_wait_open(fabric, &wait_attr, &sock_eq->waitset);
 		if (ret)
 			goto err2;
 		sock_eq->signal = 1;

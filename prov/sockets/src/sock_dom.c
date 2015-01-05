@@ -386,7 +386,6 @@ static struct fi_ops_domain sock_dom_ops = {
 	.endpoint = sock_endpoint,
 	.scalable_ep = sock_scalable_ep,
 	.cntr_open = sock_cntr_open,
-	.wait_open = sock_wait_open,
 	.poll_open = sock_poll_open,
 	.stx_ctx = sock_stx_ctx,
 	.srx_ctx = sock_srx_ctx,

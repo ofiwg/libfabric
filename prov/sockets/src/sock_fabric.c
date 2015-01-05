@@ -116,6 +116,7 @@ static struct fi_ops_fabric sock_fab_ops = {
 	.domain = sock_domain,
 	.passive_ep = sock_msg_passive_ep,
 	.eq_open = sock_eq_open,
+	.wait_open = sock_wait_open,
 };
 
 static int sock_fabric_close(fid_t fid)

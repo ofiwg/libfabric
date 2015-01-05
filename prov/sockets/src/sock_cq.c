@@ -529,7 +529,7 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	case FI_WAIT_MUTEX_COND:
 		wait_attr.flags = 0;
 		wait_attr.wait_obj = FI_WAIT_MUTEX_COND;
-		ret = sock_wait_open(&sock_dom->dom_fid, &wait_attr, 
+		ret = sock_wait_open(&sock_dom->fab->fab_fid, &wait_attr,
 				     &sock_cq->waitset);
 		if (ret)
 			goto err3;
