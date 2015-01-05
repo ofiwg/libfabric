@@ -14,6 +14,7 @@ bin_PROGRAMS = \
 	simple/fi_imm_data \
 	simple/fi_poll \
 	simple/fi_rdm_inject_pingpong \
+	simple/fi_rdm_multi_recv \
 	unit/fi_eq_test \
 	unit/fi_av_test \
 	ported/libibverbs/fi_rc_pingpong
@@ -68,6 +69,10 @@ simple_fi_imm_data_SOURCES = \
 
 simple_fi_poll_SOURCES = \
 	simple/poll.c \
+	common/shared.c
+
+simple_fi_rdm_multi_recv_SOURCES = \
+	simple/rdm_multi_recv.c \
 	common/shared.c
 
 unit_fi_eq_test_SOURCES = \
