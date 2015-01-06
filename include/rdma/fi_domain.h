@@ -110,6 +110,14 @@ struct fi_mr_attr {
 struct fi_cq_attr;
 struct fi_cntr_attr;
 
+/* Shared context flags */
+#define FI_SCTX_EXCL		(1ULL << 1)
+
+struct fi_sctx_attr {
+	size_t			ep_per_node;
+	const char		*name;
+	uint64_t		flags;
+};
 
 struct fi_ops_domain {
 	size_t	size;
@@ -128,11 +136,11 @@ struct fi_ops_domain {
 	int	(*poll_open)(struct fid_domain *domain, struct fi_poll_attr *attr,
 			struct fid_poll **pollset);
 	int	(*stx_ctx)(struct fid_domain *domain,
-			struct fi_tx_attr *attr, struct fid_stx **stx,
-			void *context);
+			struct fi_tx_attr *attr, struct fi_sctx_attr *sctx_attr,
+			struct fid_stx **stx, void *context);
 	int	(*srx_ctx)(struct fid_domain *domain,
-			struct fi_rx_attr *attr, struct fid_ep **rx_ep,
-			void *context);
+			struct fi_rx_attr *attr, struct fi_sctx_attr *sctx_attr,
+			struct fid_ep **rx_ep, void *context);
 };
 
 

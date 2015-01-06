@@ -62,12 +62,12 @@ int fi_rx_context(struct fid_ep *ep, int index,
     void *context);
 
 int fi_stx_context(struct fid_domain *domain,
-    struct fi_tx_attr *attr, struct fid_stx **stx,
-    void *context);
+    struct fi_tx_attr *attr, struct fi_sctx_attr *sctx_attr,
+    struct fid_stx **stx, void *context);
 
 int fi_srx_context(struct fid_domain *domain,
-    struct fi_rx_attr *attr, struct fid_ep **rx_ep,
-    void *context);
+    struct fi_rx_attr *attr, struct fi_sctx_attr *sctx_attr,
+    struct fid_ep **rx_ep, void *context);
 
 int fi_close(struct fid *ep);
 
@@ -777,7 +777,8 @@ struct fi_rx_attr {
 Shared contexts are transmit and receive contexts explicitly shared
 among one or more endpoints.  A sharable context allows an application
 to use a single dedicated provider resource among multiple transport
-addressable endpoints.  This can greatly reduce the resources needed
+addressable endpoints within a process and across multiple processes
+on the system. This can greatly reduce the resources needed
 to manage communication over multiple endpoints by multiplexing
 transmit and/or receive processing, with the potential cost of
 serializing access across multiple endpoints.  Support for sharable
@@ -803,6 +804,39 @@ same group of endpoints sharing a context of one type also share the
 context of an alternate type.  Furthermore, an endpoint may use a
 shared context of one type, but a scalable set of contexts of the
 alternate type.
+
+{% highlight c %}
+struct fi_sctx_attr {
+	size_t     ep_per_node;
+	const char *name;
+	uint64_t   flags;
+};
+{% endhighlight %}
+
+*ep_per_node*
+: This field indicates the number of endpoints that will be associated
+  with the shared context on the node.  If the number of
+  endpoints per node is unknown, this value should be set to 0.  The
+  provider uses this value to optimize resource allocations.  For
+  example, distributed, parallel applications may set this to the
+  number of processes allocated per node, times the number of
+  endpoints each process will open.
+
+*name*
+: An optional system name associated with the shared context to create
+  or open.  The name field allows the underlying provider to identify a
+  shared context.
+
+  If the name field is non-NULL and the context is not opened for
+  a named shared context will be created, if it does not already
+  exist.
+
+*flags*
+: The following flags may be used when opening a shared context.
+
+- *FI_SCTX_EXCL*
+: When the flag FI_SCTX_EXCL is specified, the shared context will only
+  be used by endpoints within the calling process.
 
 ## fi_stx_context
 

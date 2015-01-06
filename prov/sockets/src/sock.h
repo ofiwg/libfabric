@@ -769,9 +769,11 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 
 int sock_stx_ctx(struct fid_domain *domain,
-		 struct fi_tx_attr *attr, struct fid_stx **stx, void *context);
+		 struct fi_tx_attr *attr, struct fi_sctx_attr *sctx_attr,
+		 struct fid_stx **stx, void *context);
 int sock_srx_ctx(struct fid_domain *domain,
-		 struct fi_rx_attr *attr, struct fid_ep **srx, void *context);
+		 struct fi_rx_attr *attr, struct fi_sctx_attr *sctx_attr,
+		 struct fid_ep **srx, void *context);
 
 
 int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,

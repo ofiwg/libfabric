@@ -874,7 +874,8 @@ struct fi_ops_ep sock_ep_ops ={
 };
 
 int sock_stx_ctx(struct fid_domain *domain,
-		 struct fi_tx_attr *attr, struct fid_stx **stx, void *context)
+		 struct fi_tx_attr *attr, struct fi_sctx_attr *sctx_attr,
+		 struct fid_stx **stx, void *context)
 {
 	struct sock_domain *dom;
 	struct sock_tx_ctx *tx_ctx;
@@ -894,7 +895,8 @@ int sock_stx_ctx(struct fid_domain *domain,
 }
 
 int sock_srx_ctx(struct fid_domain *domain,
-		 struct fi_rx_attr *attr, struct fid_ep **srx, void *context)
+		 struct fi_rx_attr *attr, struct fi_sctx_attr *sctx_attr,
+		 struct fid_ep **srx, void *context)
 {
 	struct sock_domain *dom;
 	struct sock_rx_ctx *rx_ctx;
