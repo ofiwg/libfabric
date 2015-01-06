@@ -332,7 +332,7 @@ int main(int argc, char **argv)
 
 	hints.domain_attr	= &domain_hints;
 	hints.ep_attr		= &ep_hints;
-	hints.ep_type		= FI_EP_RDM;
+	hints.ep_type		= FI_EP_DGRAM;
 	hints.caps		= FI_MSG | FI_BUFFERED_RECV;
 	hints.mode		= FI_CONTEXT;
 	hints.addr_format	= FI_FORMAT_UNSPEC;
