@@ -114,37 +114,37 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 	struct sock_fid_list *list_item;
 	
 	wait = container_of(wait_fid, struct sock_wait, wait_fid);
-	if (wait->domain->progress_mode == FI_PROGRESS_MANUAL) {
-		if (timeout > 0) {
-			gettimeofday(&now, NULL);
-			start_ms = (double)now.tv_sec * 1000.0 + 
-				(double)now.tv_usec / 1000.0;
-		}
+	if (timeout > 0) {
+		gettimeofday(&now, NULL);
+		start_ms = (double)now.tv_sec * 1000.0 +
+			(double)now.tv_usec / 1000.0;
+	}
 
-		head = &wait->fid_list;
-		for (p = head->next; p != head; p = p->next) {
-			list_item = container_of(p, struct sock_fid_list, entry);
-			switch (list_item->fid->fclass) {
-			case FI_CLASS_CQ:
-				cq = container_of(list_item->fid, 
-						  struct sock_cq, cq_fid);
+	head = &wait->fid_list;
+	for (p = head->next; p != head; p = p->next) {
+		list_item = container_of(p, struct sock_fid_list, entry);
+		switch (list_item->fid->fclass) {
+		case FI_CLASS_CQ:
+			cq = container_of(list_item->fid,
+					  struct sock_cq, cq_fid);
+			if (cq->domain->progress_mode == FI_PROGRESS_MANUAL)
 				sock_cq_progress(cq);
-				break;
+			break;
 
-			case FI_CLASS_CNTR:
-				cntr = container_of(list_item->fid, 
-						    struct sock_cntr, cntr_fid);
+		case FI_CLASS_CNTR:
+			cntr = container_of(list_item->fid,
+					    struct sock_cntr, cntr_fid);
+			if (cntr->domain->progress_mode == FI_PROGRESS_MANUAL)
 				sock_cntr_progress(cntr);
-				break;
-			}
+			break;
 		}
-		if (timeout > 0) {
-			gettimeofday(&now, NULL);
-			end_ms = (double)now.tv_sec * 1000.0 + 
-				(double)now.tv_usec / 1000.0;
-			timeout -=  (end_ms - start_ms);
-			timeout = timeout < 0 ? 0 : timeout;
-		}
+	}
+	if (timeout > 0) {
+		gettimeofday(&now, NULL);
+		end_ms = (double)now.tv_sec * 1000.0 +
+			(double)now.tv_usec / 1000.0;
+		timeout -=  (end_ms - start_ms);
+		timeout = timeout < 0 ? 0 : timeout;
 	}
 
 	switch (wait->type) {
@@ -230,7 +230,7 @@ int sock_wait_close(fid_t fid)
 		close(wait->wobj.fd[WAIT_WRITE_FD]);
 	}
 
-	atomic_dec(&wait->domain->ref);
+	atomic_dec(&wait->fab->ref);
 	free(wait);
 	return 0;
 }
@@ -260,19 +260,18 @@ static int sock_verify_wait_attr(struct fi_wait_attr *attr)
 	return 0;
 }
 
-int sock_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
+int sock_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset)
 {
 	int err;
 	struct sock_wait *wait;
-	struct sock_domain *dom;
+	struct sock_fabric *fab;
 	enum fi_wait_obj wait_obj_type;
 
-
-	if(attr && sock_verify_wait_attr(attr))
+	if (attr && sock_verify_wait_attr(attr))
 		return -FI_EINVAL;
 	
-	dom = container_of(domain, struct sock_domain, dom_fid);
+	fab = container_of(fabric, struct sock_fabric, fab_fid);
 	if (!attr || attr->wait_obj == FI_WAIT_UNSPEC)
 		wait_obj_type = FI_WAIT_FD;
 	
@@ -290,9 +289,9 @@ int sock_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
 	wait->wait_fid.fid.context = 0;
 	wait->wait_fid.fid.ops = &sock_wait_fi_ops;
 	wait->wait_fid.ops = &sock_wait_ops;
-	wait->domain = dom;
+	wait->fab = fab;
 	wait->type = wait_obj_type;
-	atomic_inc(&dom->ref);
+	atomic_inc(&fab->ref);
 
 	*waitset = &wait->wait_fid;
 	return 0;

@@ -2536,7 +2536,6 @@ static struct fi_ops_domain fi_ibv_domain_ops = {
 	.cq_open = fi_ibv_cq_open,
 	.endpoint = fi_ibv_open_ep,
 	.cntr_open = fi_no_cntr_open,
-	.wait_open = fi_no_wait_open,
 	.poll_open = fi_no_poll_open,
 };
 
@@ -2681,6 +2680,7 @@ static struct fi_ops_fabric fi_ibv_ops_fabric = {
 	.domain = fi_ibv_domain,
 	.passive_ep = fi_ibv_passive_ep,
 	.eq_open = fi_ibv_eq_open,
+	.wait_open = fi_no_wait_open,
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)

@@ -66,6 +66,7 @@ static struct fi_ops_fabric X = {
 	.domain = fi_no_domain,
 	.endpoint = fi_no_passive_ep,
 	.eq_open = fi_no_eq_open,
+	.wait_open = fi_no_wait_open,
 };
 */
 int fi_no_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
@@ -74,6 +75,8 @@ int fi_no_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_pep **pep, void *context);
 int fi_no_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		struct fid_eq **eq, void *context);
+int fi_no_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+		struct fid_wait **waitset);
 
 /*
 static struct fi_ops_atomic X = {
@@ -185,7 +188,6 @@ static struct fi_ops_domain X = {
 	.cq_open = fi_no_cq_open,
 	.endpoint = fi_no_endpoint,
 	.cntr_open = fi_no_cntr_open,
-	.wait_open = fi_no_wait_open,
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
@@ -199,8 +201,6 @@ int fi_no_endpoint(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int fi_no_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		struct fid_cntr **cntr, void *context);
-int fi_no_wait_open(struct fid_domain *domain, struct fi_wait_attr *attr,
-		struct fid_wait **waitset);
 int fi_no_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		struct fid_poll **pollset);
 int fi_no_stx_context(struct fid_domain *domain, struct fi_tx_attr *attr,

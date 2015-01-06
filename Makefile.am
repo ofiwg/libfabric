@@ -3,7 +3,7 @@ AM_CPPFLAGS = \
 	-D_GNU_SOURCE \
 	-DSYSCONFDIR=\"$(sysconfdir)\" \
 	-DRDMADIR=\"@rdmadir@\" \
-	-DEXTDIR=\"$(pkglibdir)\"
+	-DPROVDLDIR=\"$(pkglibdir)\"
 
 lib_LTLIBRARIES = src/libfabric.la
 

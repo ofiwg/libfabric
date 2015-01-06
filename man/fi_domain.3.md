@@ -101,19 +101,20 @@ with a domain.
 
 {% highlight c %}
 struct fi_domain_attr {
-	struct fid_domain *domain;
-	char              *name;
-	enum fi_threading threading;
-	enum fi_progress  control_progress;
-	enum fi_progress  data_progress;
-	size_t            mr_key_size;
-	size_t            cq_data_size;
-	size_t            cq_cnt;
-	size_t            ep_cnt;
-	size_t            tx_ctx_cnt;
-	size_t            rx_ctx_cnt;
-	size_t            max_ep_tx_ctx;
-	size_t            max_ep_rx_ctx;
+	struct fid_domain     *domain;
+	char                  *name;
+	enum fi_threading     threading;
+	enum fi_progress      control_progress;
+	enum fi_progress      data_progress;
+	enum fi_resource_mgmt resource_mgmt;
+	size_t                mr_key_size;
+	size_t                cq_data_size;
+	size_t                cq_cnt;
+	size_t                ep_cnt;
+	size_t                tx_ctx_cnt;
+	size_t                rx_ctx_cnt;
+	size_t                max_ep_tx_ctx;
+	size_t                max_ep_rx_ctx;
 };
 {% endhighlight %}
 
@@ -229,6 +230,65 @@ are defined.
   Only wait operations defined by the fabric interface will result in
   an operation progressing.  Operating system or external wait
   functions, such as select, poll, or pthread routines, cannot.
+
+## Resource Management (resource_mgmt)
+
+Resource management is provider and protocol support to protect
+against overrunning local and remote resources.  This includes
+local and remote transmit contexts, receive contexts, completion
+queues, and source and target data buffers.
+
+When enabled, applications are given some level of protection against
+overruning provider queues and local and remote data buffers.  Such
+support may be built directly into the hardware and/or network
+protocol, but may also require that checks be enabled in the provider
+software.  By disabling resource management, an application assumes
+all responsibility for preventing queue and buffer overruns, but doing
+so may allow a provider to eliminate internal synchronization calls.
+
+It should be noted that even if resource management is disabled, the
+provider implementation and protocol may still provide some level of
+protection against overruns.  However, such protection is not guaranteed.
+The following values for resource management are defined.
+
+*FI_RM_UNSPEC*
+: This value indicates that no resource management model has been defined.
+  It may be used on input hints to the fi_getinfo call.
+
+*FI_RM_DISABLED*
+: The provider is free to select an implementation and protocol that does
+  not protect against resource overruns.  The application is responsible
+  for resource protection.
+
+*FI_RM_ENABLED*
+: Resource management is enabled for this provider domain.
+
+The behavior of the various resource management options depends on whether
+the endpoint is reliable or unreliable, as shown in the following tables.
+
+: Resource | Unreliable EP | Unreliable EP | Reliable EP | Reliable EP
+: .        | RM Disabled   | RM Enabled    | RM Disabled | RM Enabled
+: ---------|---------------|---------------|-------------|------------
+:    Tx    |     fatal     |     EAGAIN    |    fatal    |   EAGAIN
+: ---------|---------------|---------------|-------------|------------
+:    Rx    |     fatal     |     EAGAIN    |    fatal    |   EAGAIN
+: ---------|---------------|---------------|-------------|------------
+:   Tx CQ  |     fatal     |     EAGAIN    |    fatal    |   EAGAIN
+: ---------|---------------|---------------|-------------|------------
+:   Rx CQ  |     fatal     |     EAGAIN    |    fatal    |   EAGAIN
+: .        |               |      drop     |             |    retry
+: ---------|---------------|---------------|-------------|------------
+: Unmatched|    buffered   |    buffered   |   buffered  |  buffered
+:   Recv   |     drop      |      drop     |    error    |    retry
+: ---------|---------------|---------------|-------------|------------
+:   Recv   |    truncate   |    truncate   |   truncate  |  truncate
+:  Overrun |     drop      |      drop     |    error    |    error
+: ---------|---------------|---------------|-------------|------------
+: Unmatched|      N/A      |      N/A      |    error    |    error
+:    RMA   |               |               |             |
+: ---------|---------------|---------------|-------------|------------
+:    RMA   |      N/A      |      N/A      |    error    |    error
+:  Overrun |               |               |             |
 
 ## MR Key Size
 
