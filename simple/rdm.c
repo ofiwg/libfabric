@@ -45,7 +45,7 @@ static void *buf;
 static size_t buffer_size = 1024;
 static int rx_depth = 512;
 
-static char *dst_addr;
+static char *dst_addr, *src_addr;
 static char *port = "9228";
 static void *remote_addr;
 static size_t addrlen = 0;
@@ -70,8 +70,9 @@ static enum node_type {
 static void usage(char *name)
 {
 	printf("usage: %s\n", name);
-	printf("\t-d destination_address\n");
-	printf("\t-s or -c (server or client)\n");
+	printf("\t-d destination address\n");
+	printf("\t-s source address\n");
+	printf("\t-S or -C (server or client)\n");
 	exit(1);
 }
 
@@ -125,7 +126,6 @@ static int alloc_ep_res(void)
 	memset(&av_attr, 0, sizeof av_attr);
 	av_attr.type = FI_AV_MAP;
 	av_attr.count = 1;
-	av_attr.name = "addr to fi_addr map";
 
 	/* Open address vector (AV) for mapping address */
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
@@ -184,12 +184,32 @@ static int init_fabric(void)
 {
 	struct fi_info *fi;
 	int ret;
-
-	/* Get fabric info */
-	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, &hints, &fi);
-	if (ret) {
-		FI_PRINTERR("fi_getinfo", ret);
-		goto err0;
+	
+	if(type == CLIENT) {
+		/* Translate local network address */
+		/*ret = getaddr(src_addr, port, 
+				(struct sockaddr **) &hints.src_addr, 
+				(socklen_t *) &hints.src_addrlen);
+		if (ret) {
+			fprintf(stderr, "source address error %s\n", 
+					gai_strerror(ret));
+			return ret;
+		}*/
+		/* Get fabric info */
+		ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, 
+				&hints, &fi);
+		if (ret) {
+			FI_PRINTERR("fi_getinfo", ret);
+			goto err0;
+		}
+	} else {
+		/* Get fabric info */
+		ret = fi_getinfo(FI_VERSION(1, 0), src_addr, port, 
+				FI_SOURCE, &hints, &fi);
+		if (ret) {
+			FI_PRINTERR("fi_getinfo", ret);
+			goto err0;
+		}
 	}
 	
 	addrlen = fi->dest_addrlen;
@@ -260,8 +280,8 @@ static int send_recv()
 		/* Client */
 		fprintf(stdout, "Posting a send...\n");
 		sprintf(buf, "Hello from Client!"); 
-		ret = fi_send(ep, buf, sizeof("Hello from Client!"), fi_mr_desc(mr), 
-				remote_fi_addr, &fi_ctx_send);
+		ret = fi_send(ep, buf, sizeof("Hello from Client!"), 
+				fi_mr_desc(mr), remote_fi_addr, &fi_ctx_send);
 		if (ret) {
 			FI_PRINTERR("fi_send", ret);
 			return ret;
@@ -280,7 +300,8 @@ static int send_recv()
 	} else {
 		/* Server */
 		fprintf(stdout, "Posting a recv...\n");
-		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, 
+				&fi_ctx_recv);
 		if (ret) {
 			FI_PRINTERR("fi_recv", ret);
 			return ret;
@@ -311,23 +332,27 @@ int main(int argc, char **argv)
 	memset(&domain_hints, 0, sizeof(struct fi_domain_attr));
 	memset(&ep_hints, 0, sizeof(struct fi_ep_attr));
 
-	while ((op = getopt(argc, argv, "d:sc")) != -1) {
+	while ((op = getopt(argc, argv, "d:s:SC")) != -1) {
 		switch (op) {
 		case 'd':
 			dst_addr = optarg;
 			break;
 		case 's':
+			src_addr = optarg;
+			break;
+		case 'S':
 			type = SERVER;
 			break;
-		case 'c':
+		case 'C':
 			type = CLIENT;
 			break;
 		default:
 			usage(argv[0]);
 		}
 	}
+	
 	/* Check if we got required args */
-	if (optind != 4)
+	if (optind != 6)
 		usage(argv[0]);
 
 	hints.domain_attr	= &domain_hints;
