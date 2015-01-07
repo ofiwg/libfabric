@@ -239,7 +239,7 @@ local and remote transmit contexts, receive contexts, completion
 queues, and source and target data buffers.
 
 When enabled, applications are given some level of protection against
-overruning provider queues and local and remote data buffers.  Such
+overrunning provider queues and local and remote data buffers.  Such
 support may be built directly into the hardware and/or network
 protocol, but may also require that checks be enabled in the provider
 software.  By disabling resource management, an application assumes
@@ -293,7 +293,7 @@ Tx CQ and Rx CQ refer to the completion queues associated with the
 transmit and receive contexts, respectively.  When RM is disabled,
 applications must take care to ensure that completion queues do not
 get overrun.  This can be accomplished by sizing the CQs appropriately
-or by defering the posting of a data transfer operation unless CQ space
+or by deferring the posting of a data transfer operation unless CQ space
 is available to store its completion.  When RM is enabled, providers
 may use different mechanisms to prevent CQ overruns.  This includes
 failing (returning -FI_EAGAIN) the posting of operations that could
@@ -327,7 +327,7 @@ endpoints, unmatched RMA and RMA overruns are both treated as errors.
 When a resource management error occurs on an endpoint, the endpoint is
 transitioned into a disabled state.  Any operations which have not
 already completed will fail and be discarded.  For unconnected endpoints,
-the endopint must be re-enabled before it will accept new data transfer
+the endpoint must be re-enabled before it will accept new data transfer
 operations.  For connected endpoints, the connection is torn down and
 must be re-established.
 
