@@ -256,7 +256,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&av_attr, 0, sizeof av_attr);
 	av_attr.type = FI_AV_MAP;
 	av_attr.count = 1;
-	av_attr.name = "addr to fi_addr map";
+	av_attr.name = NULL;
 
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
 	if (ret) {
@@ -316,10 +316,12 @@ static int init_fabric(void)
 	int ret;
 
 	if (src_addr) {
-		ret = getaddr(src_addr, NULL, (struct sockaddr **) &hints.src_addr,
-			      (socklen_t *) &hints.src_addrlen);
+		ret = getaddr(src_addr, NULL, 
+				(struct sockaddr **) &hints.src_addr, 
+				(socklen_t *) &hints.src_addrlen);
 		if (ret) {
-			fprintf(stderr, "source address error %s\n", gai_strerror(ret));
+			fprintf(stderr, "source address error %s\n", 
+					gai_strerror(ret));
 			return ret;
 		}
 	}
@@ -337,7 +339,8 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	/* We use provider MR attributes and direct address (no offsets) for RMA calls */
+	/* We use provider MR attributes and direct address (no offsets) 
+	 * for RMA calls */
 	if (!(fi->mode & FI_PROV_MR_ATTR))
 		fi->mode |= FI_PROV_MR_ATTR;
 
@@ -399,8 +402,8 @@ static int init_av(void)
 	int ret;
 
 	if (dst_addr) {
-		/* Get local address blob. Find the addrlen first. We set addrlen 
-		 * as 0 and fi_getname will return the actual addrlen. */
+		/* Get local address blob. Find the addrlen first. We set 
+		 * addrlen as 0 and fi_getname will return the actual addrlen. */
 		addrlen = 0;
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
 		if (ret != -FI_ETOOSMALL) {
@@ -415,7 +418,8 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+				&fi_ctx_av);
 		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -443,7 +447,8 @@ static int init_av(void)
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+				&fi_ctx_av);
 		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;

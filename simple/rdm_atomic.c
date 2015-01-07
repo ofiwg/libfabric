@@ -232,8 +232,8 @@ static int execute_base_atomic_op(enum fi_op op)
 {
 	int ret;
 	
-	ret = fi_atomic(ep, buf, 1, fi_mr_desc(mr), remote_fi_addr, remote.addr, 
-			remote.key, datatype, op, &fi_ctx_atomic);
+	ret = fi_atomic(ep, buf, 1, fi_mr_desc(mr), remote_fi_addr, remote.addr,
+		       	remote.key, datatype, op, &fi_ctx_atomic);
 	if (ret) {
 		fprintf(stderr, "fi_atomic %d (%s)\n", ret, fi_strerror(-ret));
 	} else {						
@@ -248,10 +248,11 @@ static int execute_fetch_atomic_op(enum fi_op op)
 	int ret;
 		
 	ret = fi_fetch_atomic(ep, buf, 1, fi_mr_desc(mr), result, 
-			fi_mr_desc(mr_result), remote_fi_addr, remote.addr, remote.key, 
-			datatype, op, &fi_ctx_atomic);
+			fi_mr_desc(mr_result), remote_fi_addr, remote.addr, 
+			remote.key, datatype, op, &fi_ctx_atomic);
 	if (ret) {
-		fprintf(stderr, "fi_fetch_atomic %d (%s)\n", ret, fi_strerror(-ret));
+		fprintf(stderr, "fi_fetch_atomic %d (%s)\n", ret, 
+				fi_strerror(-ret));
 	} else {						
 		ret = wait_for_completion(scq, 1);
 	}
@@ -268,7 +269,8 @@ static int execute_compare_atomic_op(enum fi_op op)
 			remote_fi_addr, remote.addr, remote.key, datatype, op, 
 			&fi_ctx_atomic);
 	if (ret) {
-		fprintf(stderr, "fi_compare_atomic %d (%s)\n", ret, fi_strerror(-ret));
+		fprintf(stderr, "fi_compare_atomic %d (%s)\n", ret, 
+				fi_strerror(-ret));
 	} else {			
 		ret = wait_for_completion(scq, 1);
 	}
@@ -389,7 +391,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = !run_all_sizes ? test_size[TEST_CNT - 1].size : transfer_size;
+	buffer_size = !run_all_sizes ? test_size[TEST_CNT - 1].size : 
+		transfer_size;
 	buf = malloc(MAX(buffer_size, sizeof(uint64_t)));
 	if (!buf) {
 		perror("malloc");
@@ -453,7 +456,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&av_attr, 0, sizeof av_attr);
 	av_attr.type = FI_AV_MAP;
 	av_attr.count = 1;
-	av_attr.name = "addr to fi_addr map";
+	av_attr.name = NULL;
 
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
 	if (ret) {
@@ -521,10 +524,12 @@ static int init_fabric(void)
 	int ret;
 
 	if (src_addr) {
-		ret = getaddr(src_addr, NULL, (struct sockaddr **) &hints.src_addr,
+		ret = getaddr(src_addr, NULL, 
+				(struct sockaddr **) &hints.src_addr,
 				(socklen_t *) &hints.src_addrlen);
 		if (ret) {
-			fprintf(stderr, "source address error %s\n", gai_strerror(ret));
+			fprintf(stderr, "source address error %s\n", 
+					gai_strerror(ret));
 			return ret;
 		}
 	}
@@ -605,8 +610,8 @@ static int init_av(void)
 	int ret;
 
 	if (dst_addr) {
-		// get local address blob. Find the addrlen first. We set addrlen as 0 
-		// and fi_getname will return the actual addrlen
+		// get local address blob. Find the addrlen first. We set 
+		// addrlen as 0 and fi_getname will return the actual addrlen
 		addrlen = 0;
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
 		if (ret != -FI_ETOOSMALL) {
@@ -621,7 +626,8 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+				&fi_ctx_av);
 		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -648,7 +654,8 @@ static int init_av(void)
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+				&fi_ctx_av);
 		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -720,8 +727,9 @@ static int run(void)
 				  test_name, &transfer_size, &iterations);
 			ret = run_test();
 			if (ret) {
-				fprintf(stderr, "Test failed at iteration %d, msg size %d\n", 
-					i, transfer_size);
+				fprintf(stderr, "Test failed at iteration %d, "
+						"msg size %d\n", i, 
+						transfer_size);
 				goto out;
 			}
 		}

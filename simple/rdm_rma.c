@@ -184,7 +184,8 @@ static int run_test(void)
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	if (machr)
-		show_perf_mr(transfer_size, iterations, &start, &end, 1, g_argc, g_argv);
+		show_perf_mr(transfer_size, iterations, &start, &end, 1, g_argc,
+			       	g_argv);
 	else
 		show_perf(test_name, transfer_size, iterations, &start, &end, 1);
 
@@ -239,7 +240,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&av_attr, 0, sizeof av_attr);
 	av_attr.type = FI_AV_MAP;
 	av_attr.count = 1;
-	av_attr.name = "addr to fi_addr map";
+	av_attr.name = NULL;
 
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
 	if (ret) {
@@ -299,10 +300,12 @@ static int init_fabric(void)
 	int ret;
 
 	if (src_addr) {
-		ret = getaddr(src_addr, NULL, (struct sockaddr **) &hints.src_addr,
-			      (socklen_t *) &hints.src_addrlen);
+		ret = getaddr(src_addr, NULL, 
+				(struct sockaddr **) &hints.src_addr, 
+				(socklen_t *) &hints.src_addrlen);
 		if (ret) {
-			fprintf(stderr, "source address error %s\n", gai_strerror(ret));
+			fprintf(stderr, "source address error %s\n", 
+					gai_strerror(ret));
 			return ret;
 		}
 	}
@@ -393,7 +396,8 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+				&fi_ctx_av);
 		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -422,7 +426,8 @@ static int init_av(void)
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
 
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+				&fi_ctx_av);
 		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -477,7 +482,8 @@ static int run(void)
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > size_option)
 				continue;
-			init_test(test_size[i].size, test_name, &transfer_size, &iterations);
+			init_test(test_size[i].size, test_name, &transfer_size, 
+					&iterations);
 			ret = run_test();
 			if(ret)
 				goto out;

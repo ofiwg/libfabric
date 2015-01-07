@@ -125,7 +125,7 @@ static int alloc_ep_res(void)
 	memset(&av_attr, 0, sizeof av_attr);
 	av_attr.type = FI_AV_MAP;
 	av_attr.count = 1;
-	av_attr.name = "addr to fi_addr map";
+	av_attr.name = NULL;
 
 	/* Open address vector (AV) for mapping address */
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
@@ -260,8 +260,8 @@ static int send_recv()
 		/* Client */
 		fprintf(stdout, "Posting a send...\n");
 		sprintf(buf, "Hello from Client!"); 
-		ret = fi_send(ep, buf, sizeof("Hello from Client!"), fi_mr_desc(mr), 
-				remote_fi_addr, &fi_ctx_send);
+		ret = fi_send(ep, buf, sizeof("Hello from Client!"), 
+				fi_mr_desc(mr), remote_fi_addr, &fi_ctx_send);
 		if (ret) {
 			FI_PRINTERR("fi_send", ret);
 			return ret;
@@ -280,7 +280,8 @@ static int send_recv()
 	} else {
 		/* Server */
 		fprintf(stdout, "Posting a recv...\n");
-		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, 
+				&fi_ctx_recv);
 		if (ret) {
 			FI_PRINTERR("fi_recv", ret);
 			return ret;
