@@ -886,7 +886,7 @@ int sock_stx_ctx(struct fid_domain *domain,
 		return -FI_ENOMEM;
 
 	tx_ctx->domain = dom;
-	tx_ctx->fid.stx.ops = sock_ep_ops;
+	tx_ctx->fid.stx.ops = &sock_ep_ops;
 	atomic_inc(&dom->ref);
 
 	*stx = &tx_ctx->fid.stx;
