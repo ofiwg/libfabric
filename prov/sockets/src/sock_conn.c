@@ -199,6 +199,7 @@ static void * _sock_conn_listen(void *arg)
 		return NULL;
 	}
 
+	SOCK_LOG_INFO("Binding listener thread to port: %s\n", domain->service);
 	for (p=s_res; p; p=p->ai_next) {
 		listen_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (listen_fd >= 0) {
