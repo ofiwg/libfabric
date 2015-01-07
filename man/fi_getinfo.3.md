@@ -142,7 +142,7 @@ struct fi_info {
 
 *dest_addrlen - destination address length*
 : Indicates the length of the destination address (must be specified
-  if *dst_addr* is specified).  This field will be ignored in hints
+  if *dest_addr* is specified).  This field will be ignored in hints
   unless FI_SOURCE is specified.
 
 *src_addr - source address*

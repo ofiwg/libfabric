@@ -397,11 +397,11 @@ protocol value set to one.
 
 ## protocol_version - Protocol Version
 
-Identifies which version of the protocol is employeed by the provider.
+Identifies which version of the protocol is employed by the provider.
 The protocol version allows providers to extend an existing protocol,
 by adding support for additional features or functionality for example,
 in a backward compatible manner.  Providers that support different versions
-of the same protocol should interoperate, but only when using the
+of the same protocol should inter-operate, but only when using the
 capabilities defined for the lesser version. 
 
 ## max_msg_size - Max Message Size
@@ -583,11 +583,11 @@ which data is sent or received by the transport layer.
 Completion ordering refers to the order in which completed requests are
 written into the completion queue.  Completion ordering is similar to
 message order.  Relaxed completion order may enable faster reporting of
-completed transfers, allow acknowledgements to be sent over different
+completed transfers, allow acknowledgments to be sent over different
 fabric paths, and support more sophisticated retry mechanisms.
 This can result in lower-latency completions, particularly when
 using unconnected endpoints.  Strict completion ordering may require
-that providers queue completed opertions or limit available optimizations
+that providers queue completed operations or limit available optimizations
 
 For transmit requests, completion ordering depends on the endpoint
 communication type.  For unreliable communication, completion ordering
@@ -599,7 +599,7 @@ is not defined.
 
 Applications should specify the completion ordering that they support
 or require.  Providers should return the completion order that they
-actually provide, with the contraint that the returned ordering is
+actually provide, with the constraint that the returned ordering is
 stricter than that specified by the application.  Supported completion
 order values are:
 

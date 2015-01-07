@@ -436,6 +436,8 @@ enum fi_type {
 	FI_TYPE_MSG_ORDER,
 	FI_TYPE_MODE,
 	FI_TYPE_AV_TYPE,
+	FI_TYPE_ATOMIC_TYPE,
+	FI_TYPE_ATOMIC_OP,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);
