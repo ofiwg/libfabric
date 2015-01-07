@@ -189,7 +189,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&av_attr, 0, sizeof av_attr);
 	av_attr.type = FI_AV_MAP;
 	av_attr.count = 1;
-	av_attr.name = "addr to fi_addr map";
+	av_attr.name = NULL;
 
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
 	if (ret) {
@@ -249,10 +249,12 @@ static int init_fabric(void)
 	int ret;
 
 	if (src_addr) {
-		ret = getaddr(src_addr, NULL, (struct sockaddr **) &hints.src_addr,
-			      (socklen_t *) &hints.src_addrlen);
+		ret = getaddr(src_addr, NULL, 
+				(struct sockaddr **) &hints.src_addr, 
+				(socklen_t *) &hints.src_addrlen);
 		if (ret) {
-			fprintf(stderr, "source address error %s\n", gai_strerror(ret));
+			fprintf(stderr, "source address error %s\n", 
+					gai_strerror(ret));
 			return ret;
 		}
 	}
@@ -329,8 +331,8 @@ static int init_av(void)
 	int ret;
 
 	if (dst_addr) {
-		// get local address blob. Find the addrlen first. We set addrlen 
-		// as 0 and fi_getname will return the actual addrlen.
+		// get local address blob. Find the addrlen first. We set 
+		// addrlen as 0 and fi_getname will return the actual addrlen.
 		addrlen = 0;
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
 		if (ret != -FI_ETOOSMALL) {
@@ -345,7 +347,8 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+				&fi_ctx_av);
 		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -373,7 +376,8 @@ static int init_av(void)
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+				&fi_ctx_av);
 		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -399,7 +403,8 @@ static int tagged_search(uint64_t tag)
 		else
 			FI_PRINTERR("fi_tsearch", ret);
 	} else if(ret == 0) {
-		// search was initiated asynchronously, so wait for the completion event
+		// search was initiated asynchronously, so wait for 
+		// the completion event
 		ret = wait_for_tagged_completion(scq, 1);
 	} else {
 		// search completes immediately
@@ -422,13 +427,14 @@ static int run(void)
 	
 	// Receiver
 	if(dst_addr) {
-		// search for initial tag, it should fail since the sender hasn't sent 
-		// anyting
-		fprintf(stdout, "[fi_tsearch] Searching msg with tag [%zu]\n", tag_data);
+		// search for initial tag, it should fail since the sender 
+		// hasn't sent anyting
+		fprintf(stdout, "[fi_tsearch] Searching msg with tag [%zu]\n", 
+				tag_data);
 		tagged_search(tag_data);
 		
-		fprintf(stdout, "[fi_trecv] Posting buffer for msg with tag [%zu]\n", 
-				tag_data + 1);
+		fprintf(stdout, "[fi_trecv] Posting buffer for msg with tag "
+				"[%zu]\n", tag_data + 1);
 		ret = post_recv(tag_data + 1);
 		if(ret)
 			goto out;
@@ -443,19 +449,21 @@ static int run(void)
 		ret = wait_for_tagged_completion(rcq, 1);
 		if(ret)
 			goto out;
-		fprintf(stdout, "[fi_cq_read] Received completion event for msg with " 
-				"tag [%zu]\n", tag_data + 1);
+		fprintf(stdout, "[fi_cq_read] Received completion event for msg"
+			       	" with tag [%zu]\n", tag_data + 1);
 		
 		// search again for the initial tag, it should be successful now
-		fprintf(stdout, "Searching msg with initial tag [%zu]\n", tag_data);
+		fprintf(stdout, "Searching msg with initial tag [%zu]\n", 
+				tag_data);
 		tagged_search(tag_data);
 		
 		// wait for the completion event of the initial tag
 		ret = recv_msg(tag_data);	
 		if(ret)
 			goto out;
-		fprintf(stdout, "[fi_trecv][fi_cq_read] Posted buffer and received "
-				"completion event for msg with tag [%zu]\n", tag_data);
+		fprintf(stdout, "[fi_trecv][fi_cq_read] Posted buffer and "
+				"received completion event for msg with tag "
+				"[%zu]\n", tag_data);
 
 	} else {
 		// Sender	
@@ -465,12 +473,14 @@ static int run(void)
 		if (ret)
 			goto out;
 
-		fprintf(stdout, "[fi_tsend] Sending msg with tag [%zu]\n", tag_data);
+		fprintf(stdout, "[fi_tsend] Sending msg with tag [%zu]\n", 
+				tag_data);
 		ret = send_msg(16, tag_data);
 		if(ret)
 			goto out;
 
-		fprintf(stdout, "[fi_tsend] Sending msg with tag [%zu]\n", tag_data + 1);
+		fprintf(stdout, "[fi_tsend] Sending msg with tag [%zu]\n", 
+				tag_data + 1);
 		ret = send_msg(16, tag_data + 1);
 		if(ret)
 			goto out;

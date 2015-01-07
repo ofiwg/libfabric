@@ -177,7 +177,8 @@ static int run_test(void)
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	if (machr)
-		show_perf_mr(transfer_size, iterations, &start, &end, 2, g_argc, g_argv);
+		show_perf_mr(transfer_size, iterations, &start, &end, 2, g_argc,
+			       	g_argv);
 	else
 		show_perf(test_name, transfer_size, iterations, &start, &end, 2);
 
@@ -496,7 +497,8 @@ static int run(void)
 				(max_msg_size && test_size[i].size > max_msg_size)) {
 				continue;
 			}
-			init_test(test_size[i].size, test_name, &transfer_size, &iterations);
+			init_test(test_size[i].size, test_name, &transfer_size, 
+					&iterations);
 			run_test();
 		}
 	} else {

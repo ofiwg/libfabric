@@ -153,7 +153,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&av_attr, 0, sizeof av_attr);
 	av_attr.type = FI_AV_MAP;
 	av_attr.count = 1;
-	av_attr.name = "addr to fi_addr map";
+	av_attr.name = NULL;
 
 	/* Open Address Vector */
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
@@ -248,10 +248,12 @@ static int init_fabric(void)
 	int ret;
 
 	if (src_addr) {
-		ret = getaddr(src_addr, NULL, (struct sockaddr **) &hints.src_addr,
-			      (socklen_t *) &hints.src_addrlen);
+		ret = getaddr(src_addr, NULL, 
+				(struct sockaddr **) &hints.src_addr, 
+				(socklen_t *) &hints.src_addrlen);
 		if (ret) {
-			fprintf(stderr, "source address error %s\n", gai_strerror(ret));
+			fprintf(stderr, "source address error %s\n", 
+					gai_strerror(ret));
 			return ret;
 		}
 	}
@@ -339,7 +341,8 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+				&fi_ctx_av);
 		if (ret) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -367,7 +370,8 @@ static int init_av(void)
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+				&fi_ctx_av);
 		if (ret) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
