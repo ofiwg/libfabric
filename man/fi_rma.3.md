@@ -158,16 +158,16 @@ struct fi_msg_rma {
 	void               **desc;       /* operation descriptor */
 	size_t             iov_count;    /* # elements in msg_iov */
 	const void         *addr;        /* optional endpoint address */
-	const struct fi_rma_iov rma_iov; /* remote SGL */
+	const struct fi_rma_iov *rma_iov;/* remote SGL */
 	size_t             rma_iov_count;/* # elements in rma_iov */
 	void               *context;     /* user-defined context */
 	uint64_t           data;         /* optional immediate data */
 };
 
 struct fi_rma_iov {
-    uint64_t           addr;         /* target RMA address */
-    size_t             len;          /* size of target buffer */
-    uint64_t           key;          /* access key */
+	uint64_t           addr;         /* target RMA address */
+	size_t             len;          /* size of target buffer */
+	uint64_t           key;          /* access key */
 };
 {% endhighlight %}
 
