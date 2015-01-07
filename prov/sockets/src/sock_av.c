@@ -194,15 +194,8 @@ static int sock_av_insert(struct fid_av *av, const void *addr, size_t count,
 {
 	struct sock_av *_av;
 	_av = container_of(av, struct sock_av, av_fid);
-
-	switch(((struct sockaddr *)addr)->sa_family) {
-	case AF_INET:
-		return sock_check_table_in(_av, (struct sockaddr_in *)addr, 
-					   fi_addr, count, flags, context, 0);
-	default:
-		SOCK_LOG_ERROR("invalid address type inserted: only IPv4 supported\n");
-		return -EINVAL;
-	}
+	return sock_check_table_in(_av, (struct sockaddr_in *)addr, 
+				   fi_addr, count, flags, context, 0);
 }
 
 static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
@@ -424,6 +417,9 @@ static int sock_verify_av_attr(struct fi_av_attr *attr)
 	if (attr->flags & FI_READ && !attr->name)
 		return -FI_EINVAL;
 
+	if (attr->count <= 0)
+		return -FI_EINVAL;
+	
 	if (attr->rx_ctx_bits > SOCK_EP_MAX_CTX_BITS) {
 		SOCK_LOG_ERROR("Invalid rx_ctx_bits\n");
 		return -FI_EINVAL;
