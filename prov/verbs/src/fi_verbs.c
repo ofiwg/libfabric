@@ -1699,8 +1699,6 @@ static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.accept = fi_ibv_msg_ep_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_ibv_msg_ep_shutdown,
-	.join = fi_no_join,
-	.leave = fi_no_leave,
 };
 
 static int
@@ -1883,7 +1881,7 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 		}
 		break;
 	case RDMA_CM_EVENT_ESTABLISHED:
-		*event = FI_COMPLETE;
+		*event = FI_CONNECTED;
 		entry->info = NULL;
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
@@ -2538,7 +2536,6 @@ static struct fi_ops_domain fi_ibv_domain_ops = {
 	.cq_open = fi_ibv_cq_open,
 	.endpoint = fi_ibv_open_ep,
 	.cntr_open = fi_no_cntr_open,
-	.wait_open = fi_no_wait_open,
 	.poll_open = fi_no_poll_open,
 };
 
@@ -2593,8 +2590,6 @@ static struct fi_ops_cm fi_ibv_pep_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = fi_ibv_msg_ep_reject,
 	.shutdown = fi_no_shutdown,
-	.join = fi_no_join,
-	.leave = fi_no_leave,
 };
 
 static int fi_ibv_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
@@ -2685,6 +2680,7 @@ static struct fi_ops_fabric fi_ibv_ops_fabric = {
 	.domain = fi_ibv_domain,
 	.passive_ep = fi_ibv_passive_ep,
 	.eq_open = fi_ibv_eq_open,
+	.wait_open = fi_no_wait_open,
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)

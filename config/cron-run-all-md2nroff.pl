@@ -39,8 +39,12 @@ sub doit {
         if (!$verbose_arg);
 
     my $rc = system($cmd);
-    die "Command @_ failed: exit status $rc"
-        if (0 != $rc && !$allowed_to_fail);
+    if (0 != $rc && !$allowed_to_fail) {
+        # If we die/fail, ensure to change out of the temp tree so
+        # that it can be removed upon exit.
+        chdir("/");
+        die "Command @_ failed: exit status $rc";
+    }
 }
 
 sub verbose {

@@ -126,6 +126,10 @@ static int lib_filter(const struct dirent *entry)
 }
 #endif
 
+/*
+ * Initialize the sockets provider last.  This will result in it being
+ * the least preferred provider.
+ */
 static void fi_ini(void)
 {
 	pthread_mutex_lock(&ini_lock);
@@ -135,23 +139,14 @@ static void fi_ini(void)
 
 	fi_register_provider(VERBS_INIT);
 	fi_register_provider(PSM_INIT);
-	fi_register_provider(SOCKETS_INIT);
 	fi_register_provider(USNIC_INIT);
 
 #ifdef HAVE_LIBDL
 	struct dirent **liblist;
-	int n, want_warn = 0;
-	char *lib, *extdir = getenv("FI_EXTDIR");
+	int n;
+	char *lib, *provdir;
 	void *dlhandle;
 	struct fi_provider* (*inif)(void);
-
-	if (extdir) {
-		/* Warn if user specified $FI_EXTDIR, but there's a
-		 * problem with the value */
-		want_warn = 1;
-	} else {
-		extdir = EXTDIR;
-	}
 
 	/* If dlopen fails, assume static linking and just return
 	   without error */
@@ -159,17 +154,13 @@ static void fi_ini(void)
 		goto done;
 	}
 
-	n = scandir(extdir, &liblist, lib_filter, NULL);
-	if (n < 0) {
-		if (want_warn) {
-			FI_WARN("scandir error reading %s: %s\n",
-				extdir, strerror(errno));
-		}
+	provdir = PROVDLDIR;
+	n = scandir(provdir, &liblist, lib_filter, NULL);
+	if (n < 0)
 		goto done;
-	}
 
 	while (n--) {
-		if (asprintf(&lib, "%s/%s", extdir, liblist[n]->d_name) < 0) {
+		if (asprintf(&lib, "%s/%s", provdir, liblist[n]->d_name) < 0) {
 			FI_WARN("asprintf failed to allocate memory\n");
 			free(liblist[n]);
 			goto done;
@@ -192,6 +183,7 @@ static void fi_ini(void)
 	free(liblist);
 done:
 #endif
+	fi_register_provider(SOCKETS_INIT);
 	init = 1;
 unlock:
 	pthread_mutex_unlock(&ini_lock);

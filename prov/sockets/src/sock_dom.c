@@ -283,7 +283,7 @@ static int sock_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr
 	if (dom->mr_eq) {
 		eq_entry.fid = &domain->fid;
 		eq_entry.context = attr->context;
-		return sock_eq_report_event(dom->mr_eq, FI_COMPLETE, 
+		return sock_eq_report_event(dom->mr_eq, FI_MR_COMPLETE,
 					    &eq_entry, sizeof(eq_entry), 0);
 	}
 
@@ -386,7 +386,6 @@ static struct fi_ops_domain sock_dom_ops = {
 	.endpoint = sock_endpoint,
 	.scalable_ep = sock_scalable_ep,
 	.cntr_open = sock_cntr_open,
-	.wait_open = sock_wait_open,
 	.poll_open = sock_poll_open,
 	.stx_ctx = sock_stx_ctx,
 	.srx_ctx = sock_srx_ctx,

@@ -499,6 +499,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	int ret, i;
 	struct sock_ep *ep;
+	struct sock_eq *eq;
 	struct sock_cq *cq;
 	struct sock_av *av;
 	struct sock_cntr *cntr;
@@ -509,7 +510,11 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
-		return -FI_EINVAL;
+		eq = container_of(bfid, struct sock_eq, eq.fid);
+		ep->eq = eq;
+		if ((eq->attr.wait_obj == FI_WAIT_FD) && (eq->wait_fd < 0))
+			sock_eq_openwait(eq, (char *)&ep->domain->service);
+		break;
 
 	case FI_CLASS_MR:
 		return -FI_EINVAL;
@@ -868,33 +873,6 @@ struct fi_ops_ep sock_ep_ops ={
 	.rx_ctx = sock_ep_rx_ctx,
 };
 
-static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
-{
-	struct sock_ep *sock_ep;
-	if (*addrlen == 0) {
-		*addrlen = sizeof(struct sockaddr_in);
-		return -FI_ETOOSMALL;
-	}
-
-	sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
-	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
-	memcpy(addr, sock_ep->src_addr, *addrlen);
-	return 0;
-}
-
-struct fi_ops_cm sock_ep_cm_ops = {
-	.size = sizeof(struct fi_ops_cm),
-	.getname = sock_ep_cm_getname,
-	.getpeer = fi_no_getpeer,
-	.connect = fi_no_connect,
-	.listen = fi_no_listen,
-	.accept = fi_no_accept,
-	.reject = fi_no_reject,
-	.shutdown = fi_no_shutdown,
-	.join = fi_no_join,
-	.leave = fi_no_leave,
-};
-
 int sock_stx_ctx(struct fid_domain *domain,
 		 struct fi_tx_attr *attr, struct fid_stx **stx, void *context)
 {
@@ -967,27 +945,8 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type,
 	if (hints->caps) 
 		_info->caps = hints->caps;
 		
-	if (hints->ep_attr) {
-		*(_info->ep_attr) = *hints->ep_attr;
-		if (_info->ep_attr->inject_size == 0)
-			_info->ep_attr->inject_size = SOCK_EP_MAX_INJECT_SZ;
-		if (_info->ep_attr->max_msg_size == 0)
-			_info->ep_attr->max_msg_size = SOCK_EP_MAX_MSG_SZ;
-	}
-	
-	if (hints->tx_attr) {
-		*(_info->tx_attr) = *hints->tx_attr;
-		if (_info->tx_attr->inject_size == 0)
-			_info->tx_attr->inject_size = SOCK_EP_MAX_INJECT_SZ;
-	}
-
-	if (hints->rx_attr)
-		*(_info->rx_attr) = *hints->rx_attr;
-
-	*(_info->domain_attr) = hints->domain_attr ? *hints->domain_attr : 
-		sock_domain_attr;
-	*(_info->fabric_attr) = hints->fabric_attr ? *hints->fabric_attr : 
-		sock_fabric_attr;
+	*(_info->domain_attr) = sock_domain_attr;
+	*(_info->fabric_attr) = sock_fabric_attr;
 
 	_info->domain_attr->name = strdup(sock_dom_name);
 	_info->fabric_attr->name = strdup(sock_fab_name);
@@ -1064,6 +1023,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	*ep = sock_ep;	
 
 	if (info) {
+		sock_ep->ep_type = info->ep_type;
 		sock_ep->info.caps = info->caps;
 		sock_ep->info.addr_format = FI_SOCKADDR_IN;
 		
@@ -1135,6 +1095,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	/* default config */
 	sock_ep->min_multi_recv = SOCK_EP_MIN_MULTI_RECV;
 	
+	memcpy(&sock_ep->info, info, sizeof(struct fi_info));
   	sock_ep->domain = sock_dom;
 	atomic_inc(&sock_dom->ref);
 	return 0;
@@ -1143,3 +1104,18 @@ err:
 	free(sock_ep);
 	return -FI_EAVAIL;
 }
+
+struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep)
+{
+	if (!ep->key) {
+		ep->key = sock_conn_map_match_or_connect(&ep->domain->r_cmap,
+				ep->dest_addr, 0);
+		if (!ep->key) {
+			SOCK_LOG_ERROR("failed to match or connect to addr\n");
+			errno = EINVAL;
+			return NULL;
+		}
+	}
+	return sock_conn_map_lookup_key(&ep->domain->r_cmap, ep->key);
+}
+
