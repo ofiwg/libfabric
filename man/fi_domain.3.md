@@ -174,6 +174,14 @@ interfaces enables a provider to eliminate lower-level locks.
   Conceptually, FI_THREAD_FID maps well to providers that implement
   fabric services in hardware and provide separate command queues to
   different data flows.
+  
+*FI_THREAD_ENDPOINT*
+: The endpoint threading model is similar to FI_THREAD_FID, but with
+  the added restriction that serialization is required when accessing
+  the same endpoint, even if multiple transmit and receive contexts are
+  used.  Conceptualy, FI_THREAD_ENDPOINT maps well to providers that
+  implement fabric services in hardware but use a single command
+  queue to access different data flows.
 
 *FI_THREAD_COMPLETION*
   The completion threading model is intended for providers that make use

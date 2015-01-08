@@ -149,6 +149,7 @@ static void fi_tostr_threading(char *buf, enum fi_threading threading)
 	CASEENUMSTR(FI_THREAD_FID);
 	CASEENUMSTR(FI_THREAD_DOMAIN);
 	CASEENUMSTR(FI_THREAD_COMPLETION);
+	CASEENUMSTR(FI_THREAD_ENDPOINT);
 	default:
 		strcatf(buf, "Unknown");
 		break;

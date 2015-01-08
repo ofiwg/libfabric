@@ -169,7 +169,8 @@ enum fi_threading {
 	FI_THREAD_SAFE,
 	FI_THREAD_FID,
 	FI_THREAD_DOMAIN,
-	FI_THREAD_COMPLETION
+	FI_THREAD_COMPLETION,
+	FI_THREAD_ENDPOINT,
 };
 
 enum fi_resource_mgmt {
