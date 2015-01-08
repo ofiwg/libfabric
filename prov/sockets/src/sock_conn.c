@@ -48,6 +48,7 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <ifaddrs.h>
+#include <poll.h>
 
 #include "sock.h"
 #include "sock_util.h"
@@ -182,11 +183,12 @@ static void * _sock_conn_listen(void *arg)
 	struct sock_conn_map *map = &domain->r_cmap;
 	struct addrinfo *s_res = NULL, *p;
 	struct addrinfo hints;
-	int optval;
+	int optval, flags;
 	int listen_fd = 0, conn_fd;
 	struct sockaddr_in remote;
 	socklen_t addr_size;
 	struct sock_conn *conn;
+	struct pollfd poll_fds[2];
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
@@ -199,9 +201,13 @@ static void * _sock_conn_listen(void *arg)
 		return NULL;
 	}
 
+	SOCK_LOG_INFO("Binding listener thread to port: %s\n", domain->service);
 	for (p=s_res; p; p=p->ai_next) {
 		listen_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (listen_fd >= 0) {
+			flags = fcntl(listen_fd, F_GETFL, 0);
+			fcntl(listen_fd, F_SETFL, flags | O_NONBLOCK);
+
 			optval = 1;
 			setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof
 					optval);
@@ -222,8 +228,17 @@ static void * _sock_conn_listen(void *arg)
 		SOCK_LOG_ERROR("failed to listen socket: %d\n", errno);
 		goto err;
 	}
- 
-	while(domain->listening) {
+
+	poll_fds[0].fd = listen_fd;
+	poll_fds[1].fd = domain->signal_fds[1];
+	poll_fds[0].events = poll_fds[1].events = POLLIN;
+ 	while(domain->listening) {
+		if (poll(poll_fds, 2, -1) > 0) {
+			if (!poll_fds[0].revents & POLLIN)
+				continue;
+		} else
+			goto err;
+
 		addr_size = sizeof(struct sockaddr_in);
 		conn_fd = accept(listen_fd, (struct sockaddr *)&remote, &addr_size);
 		SOCK_LOG_INFO("CONN: accepted conn-req: %d\n", conn_fd);

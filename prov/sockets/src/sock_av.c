@@ -77,6 +77,28 @@ fi_addr_t sock_av_lookup_key(struct sock_av *av, int key)
 	return FI_ADDR_NOTAVAIL;
 }
 
+int sock_av_compare_addr(struct sock_av *av, 
+			 fi_addr_t addr1, fi_addr_t addr2)
+{
+	int index1, index2;
+	struct sock_av_addr *av_addr1, *av_addr2;
+
+	index1 = ((uint64_t)addr1 & av->mask);
+	index2 = ((uint64_t)addr2 & av->mask);
+
+	if (index1 >= av->table_hdr->stored || index1 < 0 ||
+	    index2 >= av->table_hdr->stored || index2 < 0) {
+		SOCK_LOG_ERROR("requested rank is larger than av table\n");
+		return -1;
+	}
+	
+	av_addr1 = idm_lookup(&av->addr_idm, index1);
+	av_addr2 = idm_lookup(&av->addr_idm, index2);
+
+	return memcmp(&av_addr1->addr, &av_addr2->addr, 
+		      sizeof(struct sockaddr_in));
+}
+
 struct sock_conn *sock_av_lookup_addr(struct sock_av *av, 
 		fi_addr_t addr)
 {
@@ -133,7 +155,9 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 			       void *context, int index)
 {
 	int i, j, ret = 0;
+	char sa_ip[INET_ADDRSTRLEN];
 	struct sock_av_addr *av_addr;
+	size_t new_count, table_sz;
 
 	if ((_av->attr.flags & FI_EVENT) && !_av->eq)
 		return -FI_ENOEQ;
@@ -156,7 +180,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 					
 					if (fi_addr)
 						fi_addr[i] = (fi_addr_t)j;
-
+					
 					sock_av_report_success(
 						_av, count > 1 ? &i : &index, flags);
 					ret++;
@@ -167,7 +191,35 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 	}
 
 	for (i = 0, ret = 0; i < count; i++) {
-		av_addr = &_av->table[_av->table_hdr->stored];	
+
+		if (_av->table_hdr->stored == _av->table_hdr->size) {
+			if (_av->table_hdr->req_sz) {
+				SOCK_LOG_ERROR("Cannot insert to AV table\n");
+				return -FI_EINVAL;
+			} else{
+				new_count = _av->table_hdr->size * 2;
+				_av->key = realloc(_av->key, 
+						   sizeof(uint16_t) * new_count);
+				if (!_av->key)
+					return -FI_ENOMEM;
+				
+				table_sz = sizeof(struct sock_av_table_hdr) +
+					new_count * sizeof(struct sock_av_addr);
+
+				_av->table_hdr = realloc(_av->table_hdr, table_sz);
+				if (!_av->table_hdr)
+					return -FI_ENOMEM;
+				_av->table_hdr->size = new_count;
+				_av->table = (struct sock_av_addr*)((char*)_av->table_hdr + 
+								    sizeof(struct sock_av_table_hdr));
+			}
+		}
+
+		av_addr = &_av->table[_av->table_hdr->stored];		
+		memcpy(sa_ip, inet_ntoa((&addr[i])->sin_addr), INET_ADDRSTRLEN);
+		SOCK_LOG_INFO("AV-INSERT:src_addr: family: %d, IP is %s\n",
+			       ((struct sockaddr_in*)&addr[i])->sin_family, sa_ip);
+		
 		memcpy(&av_addr->addr, &addr[i], sizeof(struct sockaddr_in));
 		if (idm_set(&_av->addr_idm, _av->table_hdr->stored, av_addr) < 0) {
 			if (fi_addr)
@@ -194,15 +246,8 @@ static int sock_av_insert(struct fid_av *av, const void *addr, size_t count,
 {
 	struct sock_av *_av;
 	_av = container_of(av, struct sock_av, av_fid);
-
-	switch(((struct sockaddr *)addr)->sa_family) {
-	case AF_INET:
-		return sock_check_table_in(_av, (struct sockaddr_in *)addr, 
-					   fi_addr, count, flags, context, 0);
-	default:
-		SOCK_LOG_ERROR("invalid address type inserted: only IPv4 supported\n");
-		return -EINVAL;
-	}
+	return sock_check_table_in(_av, (struct sockaddr_in *)addr, 
+				   fi_addr, count, flags, context, 0);
 }
 
 static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
@@ -447,14 +492,17 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (!_av)
 		return -FI_ENOMEM;
 
-	_av->key = calloc(attr->count, sizeof(uint16_t));
+	_av->attr = *attr;
+	_av->attr.count = (attr->count) ? attr->count : SOCK_AV_DEF_SZ;
+
+	_av->key = calloc(_av->attr.count, sizeof(uint16_t));
 	if (!_av->key) {
 		free(_av);
 		return -FI_ENOMEM;
 	}
 
 	table_sz = sizeof(struct sock_av_table_hdr) +
-		attr->count * sizeof(struct sock_av_addr);
+		_av->attr.count * sizeof(struct sock_av_addr);
 	
 	if (attr->name) {
 		strcpy(_av->name, attr->name);
@@ -485,10 +533,10 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		_av->table_hdr = mmap(NULL, table_sz, PROT_READ | PROT_WRITE, 
 				      MAP_SHARED, _av->shared_fd, 0);
 		if (attr->flags & FI_READ) {
-			if (_av->table_hdr->size != attr->count)
+			if (_av->table_hdr->size != _av->attr.count)
 				return -FI_EINVAL;
 		} else {
-			_av->table_hdr->size = attr->count;
+			_av->table_hdr->size = _av->attr.count;
 			_av->table_hdr->stored = 0;
 		}
 
@@ -503,6 +551,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		if (!_av->table_hdr)
 			return -FI_ENOMEM;
 		_av->table_hdr->size = _av->attr.count;
+		_av->table_hdr->req_sz = attr->count;
 	}
 
 	_av->table = (struct sock_av_addr*)((char*)_av->table_hdr + 
@@ -534,8 +583,8 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		goto err;
 	}
 	_av->rx_ctx_bits = attr->rx_ctx_bits;
-	_av->mask = ((uint64_t)1<<(64 - attr->rx_ctx_bits + 1))-1;
-	_av->attr = *attr;
+	_av->mask = attr->rx_ctx_bits ? 
+		((uint64_t)1<<(64 - attr->rx_ctx_bits + 1))-1 : ~0;
 	*av = &_av->av_fid;
 	return 0;
 err:

@@ -77,6 +77,7 @@
 
 #define SOCK_EQ_DEF_SZ (1<<8)
 #define SOCK_CQ_DEF_SZ (1<<8)
+#define SOCK_AV_DEF_SZ (1<<8)
 
 #define SOCK_CQ_DATA_SIZE (sizeof(uint64_t))
 #define SOCK_TAG_SIZE (sizeof(uint64_t))
@@ -155,6 +156,7 @@ struct sock_domain {
 	pthread_t listen_thread;
 	int listening;
 	char service[NI_MAXSERV];
+	int signal_fds[2];
 };
 
 struct sock_cntr {
@@ -196,8 +198,9 @@ struct sock_av_addr {
 };
 
 struct sock_av_table_hdr {
-	uint32_t size;
-	uint32_t stored;
+	uint64_t size;
+	uint64_t stored;
+	uint64_t req_sz;
 };
 
 struct sock_av {
@@ -838,6 +841,8 @@ fi_addr_t _sock_av_lookup(struct sock_av *av, struct sockaddr *addr);
 fi_addr_t sock_av_get_fiaddr(struct sock_av *av, struct sock_conn *conn);
 fi_addr_t sock_av_lookup_key(struct sock_av *av, int key);
 struct sock_conn *sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr);
+int sock_av_compare_addr(struct sock_av *av, 
+			 fi_addr_t addr1, fi_addr_t addr2);
 
 
 struct sock_conn *sock_conn_map_lookup_key(struct sock_conn_map *conn_map,
@@ -870,6 +875,7 @@ int sock_comm_buffer_init(struct sock_conn *conn);
 void sock_comm_buffer_finalize(struct sock_conn *conn);
 ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len);
 ssize_t sock_comm_recv(struct sock_conn *conn, void *buf, size_t len);
+ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len);
 ssize_t sock_comm_flush(struct sock_conn *conn);
 
 #endif
