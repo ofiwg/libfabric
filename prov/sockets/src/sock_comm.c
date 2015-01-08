@@ -190,6 +190,16 @@ ssize_t sock_comm_recv(struct sock_conn *conn, void *buf, size_t len)
 	return ret + read_len;
 }
 
+ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len)
+{
+	sock_comm_recv_buffer(conn);
+	if (rbused(&conn->inbuf) >= len) {
+		rbpeek(&conn->inbuf, buf, len);
+		return len;
+	} 
+	return 0;
+}
+
 int sock_comm_buffer_init(struct sock_conn *conn)
 {
 	uint64_t flags;

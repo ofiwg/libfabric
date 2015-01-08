@@ -336,9 +336,18 @@ int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 			ret = FI_ENODATA;
 			goto err;
 		}
-		
 		close(udp_sock);
 		freeaddrinfo(result); 
+	}
+
+	if (hints->src_addr) {
+		assert(hints->src_addrlen == sizeof(struct sockaddr_in));
+		memcpy(src_addr, hints->src_addr, hints->src_addrlen);
+	}
+
+	if (hints->dest_addr) {
+		assert(hints->dest_addrlen == sizeof(struct sockaddr_in));
+		memcpy(dest_addr, hints->dest_addr, hints->dest_addrlen);
 	}
 
 	if (dest_addr) {

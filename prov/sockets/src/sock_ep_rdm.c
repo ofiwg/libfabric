@@ -329,9 +329,18 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 			ret = FI_ENODATA;
 			goto err;
 		}
-		
 		close(udp_sock);
 		freeaddrinfo(result); 
+	}
+
+	if (hints->src_addr) {
+		assert(hints->src_addrlen == sizeof(struct sockaddr_in));
+		memcpy(src_addr, hints->src_addr, hints->src_addrlen);
+	}
+
+	if (hints->dest_addr) {
+		assert(hints->dest_addrlen == sizeof(struct sockaddr_in));
+		memcpy(dest_addr, hints->dest_addr, hints->dest_addrlen);
 	}
 
 	if (dest_addr) {
@@ -422,7 +431,7 @@ int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 }
 
 int sock_rdm_sep(struct fid_domain *domain, struct fi_info *info,
-		struct fid_sep **sep, void *context)
+		 struct fid_sep **sep, void *context)
 {
 	int ret;
 	struct sock_ep *endpoint;
