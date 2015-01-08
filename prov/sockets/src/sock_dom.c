@@ -117,6 +117,7 @@ static int sock_dom_close(struct fid *fid)
 {
 	struct sock_domain *dom;
 	void *res;
+	int c;
 
 	dom = container_of(fid, struct sock_domain, dom_fid.fid);
 	if (atomic_get(&dom->ref)) {
@@ -124,6 +125,7 @@ static int sock_dom_close(struct fid *fid)
 	}
 
 	dom->listening = 0;
+	write(dom->signal_fds[0], &c, 1);
 	if (pthread_join(dom->listen_thread, &res)) {
 		SOCK_LOG_ERROR("could not join listener thread, errno = %d\n", errno);
 		return -FI_EBUSY;
@@ -401,7 +403,7 @@ static struct fi_ops_mr sock_dom_mr_ops = {
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context)
 {
-	int ret;
+	int ret, flags;
 	struct sock_domain *sock_domain;
 
 	if(info && info->domain_attr){
@@ -452,6 +454,11 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	sock_domain->r_cmap.domain = sock_domain;
 	sock_domain->u_cmap.domain = sock_domain;
 
+	if(socketpair(AF_UNIX, SOCK_STREAM, 0, sock_domain->signal_fds) < 0)
+		goto err;
+
+	flags = fcntl(sock_domain->signal_fds[1], F_GETFL, 0);
+	fcntl(sock_domain->signal_fds[1], F_SETFL, flags | O_NONBLOCK);
 	sock_conn_listen(sock_domain);
 
 	*dom = &sock_domain->dom_fid;
