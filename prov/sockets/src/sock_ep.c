@@ -72,6 +72,7 @@ static int sock_ctx_close(struct fid *fid)
 			ep = container_of(entry, struct sock_ep, tx_ctx_entry);
 			atomic_dec(&ep->num_tx_ctx);
 		}
+		atomic_dec(&tx_ctx->domain->ref);
 		sock_tx_ctx_free(tx_ctx);
 		break;
 
@@ -83,6 +84,7 @@ static int sock_ctx_close(struct fid *fid)
 			ep = container_of(entry, struct sock_ep, rx_ctx_entry);
 			atomic_dec(&ep->num_rx_ctx);
 		}
+		atomic_dec(&rx_ctx->domain->ref);
 		sock_rx_ctx_free(rx_ctx);
 		break;
 
@@ -508,6 +510,7 @@ static int sock_ep_close(struct fid *fid)
 	if (sock_ep->dest_addr)
 		free(sock_ep->dest_addr);
 	
+	atomic_dec(&sock_ep->domain->ref);
 	free(sock_ep);
 	return 0;
 }
@@ -877,6 +880,7 @@ static int sock_ep_tx_ctx(struct fid_sep *ep, int index, struct fi_tx_attr *attr
 	*tx_ep = &tx_ctx->fid.ctx;
 	sock_ep->tx_array[index] = tx_ctx;
 	atomic_inc(&sock_ep->num_tx_ctx);
+	atomic_inc(&sock_ep->domain->ref);
 	return 0;
 }
 
@@ -911,6 +915,7 @@ static int sock_ep_rx_ctx(struct fid_sep *ep, int index, struct fi_rx_attr *attr
 	*rx_ep = &rx_ctx->ctx;
 	sock_ep->rx_array[index] = rx_ctx;
 	atomic_inc(&sock_ep->num_rx_ctx);
+	atomic_inc(&sock_ep->domain->ref);
 	return 0;
 }
 
@@ -1033,8 +1038,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	sock_ep = (struct sock_ep*)calloc(1, sizeof(*sock_ep));
 	if (!sock_ep)
 		return -FI_ENOMEM;
-
-	atomic_init(&sock_ep->ref, 0);
 
 	switch (fclass) {
 	case FI_CLASS_EP:

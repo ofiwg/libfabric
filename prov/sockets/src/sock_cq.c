@@ -488,7 +488,6 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	sock_cq->cq_fid.fid.context = context;
 	sock_cq->cq_fid.fid.ops = &sock_cq_fi_ops;
 	sock_cq->cq_fid.ops = &sock_cq_ops;
-	atomic_inc(&sock_dom->ref);
 
 	if (attr == NULL) 
 		sock_cq->attr = _sock_cq_def_attr;
