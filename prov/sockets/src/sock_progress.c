@@ -57,8 +57,8 @@
 
 
 #define PE_INDEX(_pe, _e) (_e - &_pe->pe_table[0])
-#define SOCK_GET_RX_ID(_addr, _bits) (((uint64_t)_addr) >> (64 - _bits))
-
+#define SOCK_GET_RX_ID(_addr, _bits) ((_bits) == 0) ? 0 : \
+	(((uint64_t)_addr) >> (64 - _bits))
 
 static inline ssize_t sock_pe_send_field(struct sock_pe_entry *pe_entry,
 					 void * field, size_t field_len, 
