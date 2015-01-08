@@ -101,8 +101,6 @@ static inline ssize_t sock_pe_recv_field(struct sock_pe_entry *pe_entry,
 	return (ret == data_len) ? 0 : -1;
 }
 
-	
-
 static void sock_pe_release_entry(struct sock_pe *pe, 
 				  struct sock_pe_entry *pe_entry)
 {
@@ -1284,24 +1282,58 @@ out:
 	return ret;
 }
 
-static void sock_pe_read_hdr(struct sock_pe *pe, 
+static int sock_pe_peek_hdr(struct sock_pe *pe, 
+			     struct sock_pe_entry *pe_entry)
+{
+	int len;
+	struct sock_msg_hdr *msg_hdr;
+	struct sock_conn *conn = pe_entry->conn;
+	
+	if (conn->rx_pe_entry != NULL && conn->rx_pe_entry != pe_entry)
+		return -1;
+	
+	if (conn->rx_pe_entry == NULL) {
+		conn->rx_pe_entry = pe_entry;
+	}
+
+	len = sizeof(struct sock_msg_hdr);
+	msg_hdr = &pe_entry->msg_hdr;
+	if (sock_comm_peek(pe_entry->conn, (void*)msg_hdr, len) != len)
+		return -1;
+	
+	msg_hdr->msg_len = ntohll(msg_hdr->msg_len);
+	msg_hdr->rx_id = ntohs(msg_hdr->rx_id);
+	msg_hdr->flags = ntohll(msg_hdr->flags);
+	msg_hdr->pe_entry_id = ntohs(msg_hdr->pe_entry_id);
+	
+	SOCK_LOG_INFO("PE RX (Hdr peek): MsgLen: %lu, TX-ID: %d, Type: %d\n", 
+		      msg_hdr->msg_len, msg_hdr->rx_id, msg_hdr->op_type);
+	return 0;
+}
+
+static int sock_pe_read_hdr(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 			     struct sock_pe_entry *pe_entry)
 {
 	struct sock_msg_hdr *msg_hdr;
 	struct sock_conn *conn = pe_entry->conn;
 
 	if (conn->rx_pe_entry != NULL && conn->rx_pe_entry != pe_entry)
-		return;
+		return 0;
 
 	if (conn->rx_pe_entry == NULL) {
 		conn->rx_pe_entry = pe_entry;
 	}
 
 	msg_hdr = &pe_entry->msg_hdr;
-	if (sock_pe_recv_field(pe_entry, (void*)msg_hdr, 
-			       sizeof(struct sock_msg_hdr), 0))
-		return;
-
+	if (sock_pe_peek_hdr(pe, pe_entry))
+		return 0;
+	
+	if (msg_hdr->rx_id != rx_ctx->rx_id)
+		return -1;
+	
+	sock_pe_recv_field(pe_entry, (void*)msg_hdr, 
+			   sizeof(struct sock_msg_hdr), 0);
+	
 	msg_hdr->msg_len = ntohll(msg_hdr->msg_len);
 	msg_hdr->rx_id = ntohs(msg_hdr->rx_id);
 	msg_hdr->flags = ntohll(msg_hdr->flags);
@@ -1310,7 +1342,7 @@ static void sock_pe_read_hdr(struct sock_pe *pe,
 	
 	SOCK_LOG_INFO("PE RX (Hdr read): MsgLen: %lu, TX-ID: %d, Type: %d\n", 
 		      msg_hdr->msg_len, msg_hdr->rx_id, msg_hdr->op_type);
-	return;
+	return 0;
 }
 
 static int sock_pe_progress_tx_atomic(struct sock_pe *pe, 
@@ -1839,17 +1871,52 @@ void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx)
 	SOCK_LOG_INFO("RX ctx added to PE\n");
 }
 
-int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
+int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
+			   struct sock_rx_ctx *rx_ctx)
 {
-	int i, ret = 0, data_avail;
-	struct sock_ep *ep;
-	struct pollfd poll_fd;
 	struct sock_conn *conn;
-	struct dlist_entry *entry;
-	struct sock_pe_entry *pe_entry;
 	struct sock_conn_map *map;
+	int i, ret = 0, data_avail;
+	struct pollfd poll_fd;
+	
+	map = &ep->domain->r_cmap;
+	assert(map != NULL);
 
 	poll_fd.events = POLLIN;
+	for (i=0; i<map->used; i++) {
+		conn = &map->table[i];
+		
+		data_avail = 0;
+		if (rbused(&conn->inbuf) > 0) {
+			data_avail = 1;
+		} else {
+			poll_fd.fd = conn->sock_fd;
+			ret = poll(&poll_fd, 1, 0);
+			if (ret < 0) {
+				SOCK_LOG_INFO("Error polling fd: %d\n", 
+					      conn->sock_fd);
+				return ret;
+			}
+			data_avail = (ret == 1);
+		}
+		
+		if (data_avail && conn->rx_pe_entry == NULL) {
+			/* new RX PE entry */
+			ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn, i);
+			if (ret < 0)
+				return ret;
+		}
+	}
+	return 0;
+}
+
+int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
+{
+	int ret = 0;
+	struct sock_ep *ep;
+	struct dlist_entry *entry;
+	struct sock_pe_entry *pe_entry;
+
 	fastlock_acquire(&pe->lock);
 
 	/* progress buffered recvs */
@@ -1858,40 +1925,21 @@ int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
 	fastlock_release(&rx_ctx->lock);
 
 	/* check for incoming data */
-	for (entry = rx_ctx->ep_list.next;
-	     entry != &rx_ctx->ep_list; entry = entry->next) {
-		
-		ep = container_of(entry, struct sock_ep, rx_ctx_entry);
-		map = &ep->domain->r_cmap;
-		assert(map != NULL);
-
-		for (i=0; i<map->used; i++) {
-			conn = &map->table[i];
-
-			data_avail = 0;
-			if (rbused(&conn->inbuf) > 0) {
-				data_avail = 1;
-			} else {
-				poll_fd.fd = conn->sock_fd;
-				ret = poll(&poll_fd, 1, 0);
-				if (ret < 0) {
-					SOCK_LOG_INFO("Error polling fd: %d\n", 
-						      conn->sock_fd);
-					goto out;
-				}
-				data_avail = (ret == 1);
-			}
-
-			if (data_avail && conn->rx_pe_entry == NULL) {
-				/* new RX PE entry */
-				ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn, i);
-				if (ret < 0) 
-					goto out;
-			}
+	if (rx_ctx->ctx.fid.fclass == FI_CLASS_SRX_CTX) {
+		for (entry = rx_ctx->ep_list.next;
+		     entry != &rx_ctx->ep_list; entry = entry->next) {
+			
+			ep = container_of(entry, struct sock_ep, rx_ctx_entry);
+			if ((ret = sock_pe_progress_rx_ep(pe, ep, rx_ctx)) < 0)
+				goto out;
 		}
+	} else {
+		ep = rx_ctx->ep;
+		if ((ret = sock_pe_progress_rx_ep(pe, ep, rx_ctx)) < 0)
+			goto out;
 	}
 
-	/* progress tx_ctx in PE table */
+	/* progress rx_ctx in PE table */
 	for (entry = rx_ctx->pe_entry_list.next;
 	    entry != &rx_ctx->pe_entry_list;) {
 		
@@ -1909,9 +1957,12 @@ int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
 
 
 		if (!pe_entry->pe.rx.header_read) {
-			sock_pe_read_hdr(pe, pe_entry);
+			if (sock_pe_read_hdr(pe, rx_ctx, pe_entry) == -1) {
+				sock_pe_release_entry(pe, pe_entry);
+				continue;
+			}
 		}
-
+		
 		if (pe_entry->pe.rx.header_read) {
 			ret = sock_pe_process_recv(pe, rx_ctx, pe_entry);
 			if (ret < 0) 
