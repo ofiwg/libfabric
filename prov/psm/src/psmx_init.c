@@ -243,7 +243,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->ep_attr->tx_ctx_cnt = 1;
 	psmx_info->ep_attr->rx_ctx_cnt = 1;
 
-	psmx_info->domain_attr->threading = FI_THREAD_PROGRESS;
+	psmx_info->domain_attr->threading = FI_THREAD_COMPLETION;
 	psmx_info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
 	psmx_info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	psmx_info->domain_attr->name = strdup("psm");

@@ -146,7 +146,9 @@ static void fi_tostr_threading(char *buf, enum fi_threading threading)
 	switch (threading) {
 	CASEENUMSTR(FI_THREAD_UNSPEC);
 	CASEENUMSTR(FI_THREAD_SAFE);
-	CASEENUMSTR(FI_THREAD_PROGRESS);
+	CASEENUMSTR(FI_THREAD_FID);
+	CASEENUMSTR(FI_THREAD_DOMAIN);
+	CASEENUMSTR(FI_THREAD_COMPLETION);
 	default:
 		strcatf(buf, "Unknown");
 		break;

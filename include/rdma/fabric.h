@@ -167,8 +167,9 @@ enum fi_progress {
 enum fi_threading {
 	FI_THREAD_UNSPEC,
 	FI_THREAD_SAFE,
-	FI_THREAD_PROGRESS,
-	FI_THREAD_DOMAIN
+	FI_THREAD_FID,
+	FI_THREAD_DOMAIN,
+	FI_THREAD_COMPLETION
 };
 
 enum fi_resource_mgmt {

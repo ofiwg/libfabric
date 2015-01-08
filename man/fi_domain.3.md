@@ -141,7 +141,9 @@ interfaces enables a provider to eliminate lower-level locks.
 
 *FI_THREAD_UNSPEC*
 : This value indicates that no threading model has been defined.  It
-  may be used on input hints to the fi_getinfo call.
+  may be used on input hints to the fi_getinfo call.  When specified,
+  providers will return a threading model that allows for the greatest
+  level of parallelism.
 
 *FI_THREAD_SAFE*
 : A thread safe serialization model allows a multi-threaded
@@ -149,28 +151,43 @@ interfaces enables a provider to eliminate lower-level locks.
   without restriction.  All providers are required to support
   FI_THREAD_SAFE.
 
-*FI_THREAD_PROGRESS*
-: A progress serialization model requires applications to serialize
-  access to provider resources and interfaces based on the progress
-  model.  For providers with automatic progress, access to each
-  endpoint must be serialized, and access to each event queue,
-  counter, wait or poll set must be serialized.  Serialization is
-  required only by threads accessing the same object.  For example,
-  one thread may be initiating a data transfer on an endpoint, while
-  another thread reads from an event queue associated with the
-  endpoint.  Serialization to endpoint access is further limited to
-  different endpoint data flows, if available.  Multiple threads may
-  initiate transfers on the same endpoint if they reference different
-  data flows.
+*FI_THREAD_FID*
+: A fabric descriptor (FID) serialization model requires applications
+  to serialize access to individual fabric resources associated with
+  data transfer operations and completions.  Multiple threads must
+  be serialized when accessing the same endpoint, transmit context,
+  receive context, completion queue, counter, wait set, or poll set.
+  Serialization is required only by threads accessing the same object.
 
-  For providers with manual progress, applications must serialize
-  their access to any object that is part of a single progress domain.
-  A progress domain is any set of associated endpoints, event queues,
-  counters, wait sets, and poll sets.  For instance, endpoints that
-  share the same event queue or poll set belong to the same progress
-  domain.  Applications that can allocate endpoint resources to
-  specific threads can reduce provider locking by using
-  FI_THREAD_PROGRESS.
+  For example, one thread may be initiating a data transfer on an
+  endpoint, while another thread reads from a completion queue
+  associated with the endpoint.
+  
+  Serialization to endpoint access is only required when accessing
+  the same endpoint data flow.  Multiple threads may initiate transfers
+  on different transmit contexts of the same endpoint without serializing,
+  and no serialization is required between the submission of data
+  transmit requests and data receive operations.
+  
+  In general, FI_THREAD_FID allows the provider to be implemented
+  without needing internal locking when handling data transfers.
+  Conceptually, FI_THREAD_FID maps well to providers that implement
+  fabric services in hardware and provide separate command queues to
+  different data flows.
+
+*FI_THREAD_COMPLETION*
+  The completion threading model is intended for providers that make use
+  of manual progress.  Applications must serialize access to all objects
+  that are associated through the use of having a shared completion
+  structure.  This includes endpoint, completion queue, counter, wait set,
+  and poll set objects.
+  
+  For example, threads must serialize access to an endpoint and its
+  bound completion queue(s) and/or counters.  Access to endpoints that
+  share the same completion queue must also be serialized.
+  
+  The use of FI_THREAD_COMPLETION can increase parallelism over
+  FI_THREAD_SAFE, but requires the use of isolated resources.
 
 *FI_THREAD_DOMAIN*
 : A domain serialization model requires applications to serialize
