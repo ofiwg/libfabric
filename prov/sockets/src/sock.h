@@ -77,6 +77,7 @@
 
 #define SOCK_EQ_DEF_SZ (1<<8)
 #define SOCK_CQ_DEF_SZ (1<<8)
+#define SOCK_AV_DEF_SZ (1<<8)
 
 #define SOCK_CQ_DATA_SIZE (sizeof(uint64_t))
 #define SOCK_TAG_SIZE (sizeof(uint64_t))
@@ -196,8 +197,9 @@ struct sock_av_addr {
 };
 
 struct sock_av_table_hdr {
-	uint32_t size;
-	uint32_t stored;
+	uint64_t size;
+	uint64_t stored;
+	uint64_t req_sz;
 };
 
 struct sock_av {
