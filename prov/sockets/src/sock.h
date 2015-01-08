@@ -156,6 +156,7 @@ struct sock_domain {
 	pthread_t listen_thread;
 	int listening;
 	char service[NI_MAXSERV];
+	int signal_fds[2];
 };
 
 struct sock_cntr {
