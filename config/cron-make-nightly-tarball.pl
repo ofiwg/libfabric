@@ -149,5 +149,12 @@ verbose("*** Re-generating md5/sha1sums...\n");
 doit(0, "md5sum libfabric*tar* > md5sums.txt");
 doit(0, "sha1sum libfabric*tar* > sha1sums.txt");
 
+# Re-write latest.txt
+verbose("*** Re-creating latest.txt...\n");
+unlink("latest.txt");
+open(OUT, ">latest.txt") || die "Can't write to latest.txt";
+print OUT "libfabric-$version-$gd\n";
+close(OUT);
+
 # All done
 exit(0);
