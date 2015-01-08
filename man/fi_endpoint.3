@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-01\-07" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-01\-08" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -215,10 +215,14 @@ This includes send message, RMA, and atomic operations.
 the specified completion queue.
 This includes received messages.
 .PP
-\f[I]FI_COMPLETION\f[] : If FI_COMPLETION is specified, the indicated
-data transfer operations won\[aq]t generate entries for successful
-completions in the completion queue unless FI_COMPLETION is set for that
-specific operation.
+\f[I]FI_COMPLETION\f[] : By default, data transfer operations generate
+completion entries into a completion queue after they have successfully
+completed.
+Applications can use this bind flag to selectively enable when
+completions are generated.
+If FI_COMPLETION is specified, data transfer operations will not
+generate entries for successful completions unless FI_COMPLETION is set
+as an operational flag for the given operation.
 FI_COMPLETION must be OR\[aq]ed with FI_SEND and/or FI_RECV flags.
 .PP
 When set the user must determine when a request that does NOT have
@@ -226,6 +230,32 @@ FI_COMPLETION set has completed indirectly, usually based on the
 completion of a subsequent operation.
 Use of this flag may improve performance by allowing the provider to
 avoid writing a completion entry for every operation.
+.PP
+Example: An application can selectively generate send completions by
+using the following general approach:
+.IP
+.nf
+\f[C]
+\ \ fi_tx_attr::op_flags\ =\ 0;\ //\ default\ -\ no\ completion
+\ \ fi_ep_bind(ep,\ cq,\ FI_SEND\ |\ FI_COMPLETION);
+\ \ fi_send(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ no\ completion
+\ \ fi_sendv(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ no\ completion
+\ \ fi_sendmsg(ep,\ ...,\ FI_COMPLETION);\ //\ completion!
+\f[]
+.fi
+.PP
+Example: An application can selectively disable send completions by
+modifying the operational flags:
+.IP
+.nf
+\f[C]
+\ \ fi_tx_attr::op_flags\ =\ FI_COMPLETION;\ //\ default\ -\ completion
+\ \ fi_ep_bind(ep,\ cq,\ FI_SEND\ |\ FI_COMPLETION);
+\ \ fi_send(ep,\ ...);\ \ \ \ \ \ \ //\ completion
+\ \ fi_sendv(ep,\ ...);\ \ \ \ \ \ //\ completion
+\ \ fi_sendmsg(ep,\ ...,\ 0);\ //\ no\ completion!
+\f[]
+.fi
 .PP
 An endpoint may also, or instead, be bound to a fabric counter.
 When binding an endpoint to a counter, the following flags may be
