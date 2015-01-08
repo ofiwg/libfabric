@@ -1,5 +1,15 @@
 #!/usr/bin/env perl
 
+# Script to convert markdown to nroff man pages.
+#
+# The main conversion work is done via pandoc.  But pandoc doesn't do
+# everything exactly the way we want it, so use some perl regular
+# expressions to fix up what pandoc doesn't get right.
+#
+# Do a "smart" write of the resulting output man page -- only write to
+# the output file if the contents have actually changed compared to
+# what was already there.
+
 use strict;
 use warnings;
 
