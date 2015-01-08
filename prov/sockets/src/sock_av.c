@@ -77,6 +77,28 @@ fi_addr_t sock_av_lookup_key(struct sock_av *av, int key)
 	return FI_ADDR_NOTAVAIL;
 }
 
+int sock_av_compare_addr(struct sock_av *av, 
+			 fi_addr_t addr1, fi_addr_t addr2)
+{
+	int index1, index2;
+	struct sock_av_addr *av_addr1, *av_addr2;
+
+	index1 = ((uint64_t)addr1 & av->mask);
+	index2 = ((uint64_t)addr2 & av->mask);
+
+	if (index1 >= av->table_hdr->stored || index1 < 0 ||
+	    index2 >= av->table_hdr->stored || index2 < 0) {
+		SOCK_LOG_ERROR("requested rank is larger than av table\n");
+		return -1;
+	}
+	
+	av_addr1 = idm_lookup(&av->addr_idm, index1);
+	av_addr2 = idm_lookup(&av->addr_idm, index2);
+
+	return memcmp(&av_addr1->addr, &av_addr2->addr, 
+		      sizeof(struct sockaddr_in));
+}
+
 struct sock_conn *sock_av_lookup_addr(struct sock_av *av, 
 		fi_addr_t addr)
 {
@@ -133,6 +155,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 			       void *context, int index)
 {
 	int i, j, ret = 0;
+	char sa_ip[INET_ADDRSTRLEN];
 	struct sock_av_addr *av_addr;
 	size_t new_count, table_sz;
 
@@ -193,6 +216,10 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 		}
 
 		av_addr = &_av->table[_av->table_hdr->stored];		
+		memcpy(sa_ip, inet_ntoa((&addr[i])->sin_addr), INET_ADDRSTRLEN);
+		SOCK_LOG_INFO("AV-INSERT:src_addr: family: %d, IP is %s\n",
+			       ((struct sockaddr_in*)&addr[i])->sin_family, sa_ip);
+		
 		memcpy(&av_addr->addr, &addr[i], sizeof(struct sockaddr_in));
 		if (idm_set(&_av->addr_idm, _av->table_hdr->stored, av_addr) < 0) {
 			if (fi_addr)
@@ -556,7 +583,8 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		goto err;
 	}
 	_av->rx_ctx_bits = attr->rx_ctx_bits;
-	_av->mask = ((uint64_t)1<<(64 - attr->rx_ctx_bits + 1))-1;
+	_av->mask = attr->rx_ctx_bits ? 
+		((uint64_t)1<<(64 - attr->rx_ctx_bits + 1))-1 : ~0;
 	*av = &_av->av_fid;
 	return 0;
 err:

@@ -840,6 +840,8 @@ fi_addr_t _sock_av_lookup(struct sock_av *av, struct sockaddr *addr);
 fi_addr_t sock_av_get_fiaddr(struct sock_av *av, struct sock_conn *conn);
 fi_addr_t sock_av_lookup_key(struct sock_av *av, int key);
 struct sock_conn *sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr);
+int sock_av_compare_addr(struct sock_av *av, 
+			 fi_addr_t addr1, fi_addr_t addr2);
 
 
 struct sock_conn *sock_conn_map_lookup_key(struct sock_conn_map *conn_map,
