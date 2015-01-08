@@ -212,17 +212,42 @@ together when binding an endpoint to a completion domain CQ.
   completion queue.  This includes received messages.
 
 *FI_COMPLETION*
-: If FI_COMPLETION is specified, the indicated data transfer
-  operations won't generate entries for successful completions in the
-  completion queue unless FI_COMPLETION is set for that specific
-  operation.  FI_COMPLETION must be OR'ed with FI_SEND and/or FI_RECV
-  flags.
+: By default, data transfer operations generate completion entries
+  into a completion queue after they have successfully completed.
+  Applications can use this bind flag to selectively enable
+  when completions are generated.  If FI_COMPLETION is specified,
+  data transfer operations will not generate entries for successful
+  completions unless FI_COMPLETION is set as an operational flag
+  for the given operation.  FI_COMPLETION must be OR'ed with
+  FI_SEND and/or FI_RECV flags.
 
   When set the user must determine when a request that does NOT have
   FI_COMPLETION set has completed indirectly, usually based on the
   completion of a subsequent operation.  Use of this flag may improve
   performance by allowing the provider to avoid writing a completion
   entry for every operation.
+  
+  Example: An application can selectively generate send completions by
+  using the following general approach:
+  
+  {% highlight c %}
+  fi_tx_attr::op_flags = 0; // default - no completion
+  fi_ep_bind(ep, cq, FI_SEND | FI_COMPLETION);
+  fi_send(ep, ...);                   // no completion
+  fi_sendv(ep, ...);                  // no completion
+  fi_sendmsg(ep, ..., FI_COMPLETION); // completion!
+  {% endhighlight %}
+  
+  Example: An application can selectively disable send completions by
+  modifying the operational flags:
+  
+  {% highlight c %}
+  fi_tx_attr::op_flags = FI_COMPLETION; // default - completion
+  fi_ep_bind(ep, cq, FI_SEND | FI_COMPLETION);
+  fi_send(ep, ...);       // completion
+  fi_sendv(ep, ...);      // completion
+  fi_sendmsg(ep, ..., 0); // no completion!
+  {% endhighlight %}
 
 An endpoint may also, or instead, be bound to a fabric counter.  When
 binding an endpoint to a counter, the following flags may be specified.
