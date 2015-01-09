@@ -89,7 +89,7 @@ char *size_str(char str[FI_STR_LEN], long long size)
 	long long base, fraction = 0;
 	char mag;
 
-	memcpy(str, "\0", FI_STR_LEN);
+	memset(str, '\0', FI_STR_LEN);
 
 	if (size >= (1 << 30)) {
 		base = 1 << 30;
@@ -142,12 +142,13 @@ int size_to_count(int size)
 		return 100000;
 }
 
-void init_test(int size, char *test_name, int *transfer_size, int *iterations)
+void init_test(int size, char *test_name, size_t test_name_len,
+	int *transfer_size, int *iterations)
 {
 	char sstr[FI_STR_LEN];
 
 	size_str(sstr, size);
-	snprintf(test_name, sizeof test_name, "%s_lat", sstr);
+	snprintf(test_name, test_name_len, "%s_lat", sstr);
 	*transfer_size = size;
 	*iterations = size_to_count(*transfer_size);
 }

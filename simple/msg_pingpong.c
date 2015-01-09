@@ -528,7 +528,9 @@ static int run(void)
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > size_option)
 				continue;
-			init_test(test_size[i].size, test_name, &transfer_size, &iterations);
+			init_test(test_size[i].size, test_name,
+					sizeof(test_name), &transfer_size,
+					&iterations);
 			run_test();
 		}
 	} else {
