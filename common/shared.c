@@ -1,8 +1,7 @@
 /*
  * Copyright (c) 2013,2014 Intel Corporation.  All rights reserved.
  *
- * This software is available to you under the OpenIB.org BSD license
- * below:
+ * This software is available to you under the BSD license below:
  *
  *     Redistribution and use in source and binary forms, with or
  *     without modification, are permitted provided that the following
