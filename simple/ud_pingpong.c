@@ -497,7 +497,8 @@ static int run(void)
 				(max_msg_size && test_size[i].size > max_msg_size)) {
 				continue;
 			}
-			init_test(test_size[i].size, test_name, &transfer_size, 
+			init_test(test_size[i].size, test_name,
+					sizeof(test_name), &transfer_size,
 					&iterations);
 			run_test();
 		}

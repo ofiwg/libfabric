@@ -60,7 +60,8 @@ int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len);
 char *size_str(char str[FI_STR_LEN], long long size);
 char *cnt_str(char str[FI_STR_LEN], long long cnt);
 int size_to_count(int size);
-void init_test(int size, char *test_name, int *transfer_size, int *iterations);
+void init_test(int size, char *test_name, size_t test_name_len,
+		int *transfer_size, int *iterations);
 int wait_for_completion(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, char *cq_str);
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a, enum precision p);
