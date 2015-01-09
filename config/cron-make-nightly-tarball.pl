@@ -32,6 +32,7 @@ use strict;
 use warnings;
 
 use Getopt::Long;
+use POSIX qw(strftime);
 
 my $source_dir_arg;
 my $download_dir_arg;
