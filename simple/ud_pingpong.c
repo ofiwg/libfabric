@@ -310,13 +310,27 @@ static int bind_ep_res(void)
 static int common_setup(void)
 {
 	int ret;
+	char *node;
+	uint64_t flags = 0;
 
-	ret = getaddr(src_addr, port, (struct sockaddr **) &hints.src_addr,
-			  (socklen_t *) &hints.src_addrlen);
-	if (ret)
-		printf("source address error %s\n", gai_strerror(ret));
+	if (src_addr) {
+		ret = getaddr(src_addr, port, (struct sockaddr **) &hints.src_addr,
+				(socklen_t *) &hints.src_addrlen);
+		if (ret) {
+			fprintf(stderr, "source address error %s\n",
+					gai_strerror(ret));
+			return ret;
+		}
+	}
 
-	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, &hints, &fi);
+	if (dst_addr) {
+		node = dst_addr;
+	} else {
+		node = src_addr;
+		flags = FI_SOURCE;
+	}
+
+	ret = fi_getinfo(FI_VERSION(1, 0), node, port, flags, &hints, &fi);
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
 		goto err0;
@@ -339,17 +353,6 @@ static int common_setup(void)
 		printf("fi_domain %s %s\n", fi_strerror(-ret),
 			fi->domain_attr->name);
 		goto err2;
-	}
-
-	if (fi->src_addr != NULL) {
-		((struct sockaddr_in *)fi->src_addr)->sin_port = 
-			((struct sockaddr_in *)hints.src_addr)->sin_port;
-
-		if (dst_addr == NULL) {
-			printf("Local address %s:%d\n",
-					inet_ntoa(((struct sockaddr_in *)fi->src_addr)->sin_addr),
-					ntohs(((struct sockaddr_in *)fi->src_addr)->sin_port));
-		}
 	}
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
