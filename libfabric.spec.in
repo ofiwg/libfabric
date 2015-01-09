@@ -5,7 +5,8 @@ Summary: User-space RDMA Fabric Interfaces
 Group: System Environment/Libraries
 License: GPLv2 or BSD
 Url: http://www.github.com/ofiwg/libfabric
-Source: http://www.openfabrics.org/downloads/fabrics/%{name}-%{version}.tar.bz2
+%define tarball_version %{version}
+Source: http://www.openfabrics.org/downloads/fabrics/%{name}-%{tarball_version}.tar.bz2
 Prefix: ${_prefix}
 
 %description
@@ -21,7 +22,7 @@ Requires: libfabric = %{version}
 Development files for the libfabric library.
 
 %prep
-%setup -q -n %{name}-%{version}
+%setup -q -n %{name}-%{tarball_version}
 
 %build
 # defaults: with-dlopen and without-valgrind can be over-rode:

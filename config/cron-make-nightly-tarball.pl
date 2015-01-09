@@ -144,6 +144,7 @@ close(IN);
 # Update the version and release numbers
 $spec =~ s/(Version: )\S+/$1$version/;
 $spec =~ s/(Release: )\S+/$1$rpm_release/;
+$spec =~ s/(%define tarball_version )\S+/$1$version-$gd/;
 open(OUT, ">libfabric.spec.in");
 print OUT $spec;
 close(OUT);
