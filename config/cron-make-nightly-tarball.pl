@@ -15,10 +15,12 @@
 #    directory, no need to do anything further / quit
 # 5. Re-write configure.ac to include the git describe string in the
 #    version argument to AC_INIT
-# 6. autogen.sh/configure/make distcheck
-# 7. Move the resulting tarballs to the destination directory
-# 8. Re-create sym links for libfabric-latest.tar.(gz|bz2)
-# 9. Re-generate md5 and sh1 hash files
+# 6. Re-write libfabric.spec.in to include raw version number and
+#    release as expected by Fedora Packaging guidelines
+# 7. autogen.sh/configure/make distcheck
+# 8. Move the resulting tarballs to the destination directory
+# 9. Re-create sym links for libfabric-latest.tar.(gz|bz2)
+# 10. Re-generate md5 and sh1 hash files
 #
 # Note that this script intentionally does *not* prune old nightly
 # tarballs as result of an OFIWG phone discussion, the conlcusion of
@@ -30,6 +32,7 @@ use strict;
 use warnings;
 
 use Getopt::Long;
+use POSIX qw(strftime);
 
 my $source_dir_arg;
 my $download_dir_arg;
@@ -121,6 +124,31 @@ open(OUT, ">configure.ac");
 print OUT $config;
 close(OUT);
 
+# git describe output looks like: ${tag}-${count}-g${commitid}
+# Fedora guidelines want RPM release tag to look like:
+# Release: 0.${date}git${commitid}
+my @gdsplit = split(/-/, $gd);
+my $commitid = substr($gdsplit[-1], 1);
+my $today = strftime "%Y%m%d", localtime;
+chomp($today);
+my $rpm_release = "0.${today}git$commitid";
+
+# Regenerate libfabric.spec.in to honor this convention
+verbose("*** Re-writing libfabric.spec.in with git describe results...\n");
+open(IN, "libfabric.spec.in") || die "Can't open libfabric.spec.in for reading";
+my $spec;
+$spec .= $_
+    while(<IN>);
+close(IN);
+
+# Update the version and release numbers
+$spec =~ s/(Version: )\S+/$1$version/;
+$spec =~ s/(Release: )\S+/$1$rpm_release/;
+$spec =~ s/(%define tarball_version )\S+/$1$version-$gd/;
+open(OUT, ">libfabric.spec.in");
+print OUT $spec;
+close(OUT);
+
 # Now make the tarball
 verbose("*** Running autogen.sh...\n");
 doit(0, "./autogen.sh");
@@ -129,9 +157,10 @@ doit(0, "./configure");
 verbose("*** Running make distcheck...\n");
 doit(0, "AM_MAKEFLAGS=-j32 make distcheck");
 
-# Restore configure.ac
+# Restore configure.ac and libfabric.spec.in
 verbose("*** Restoring configure.ac...\n");
 doit(0, "git checkout configure.ac");
+doit(0, "git checkout libfabric.spec.in");
 
 # Move the resulting tarballs to the downloads directory
 verbose("*** Placing tarballs in download directory...\n");
