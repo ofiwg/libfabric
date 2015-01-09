@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2015 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under the OpenIB.org BSD license
  * below:
@@ -439,6 +440,7 @@ static int send_recv()
 				break;
 			default:
 				printf("Unknown completion received\n");
+				return -1;
 			}
 
 			/* Read the completion entry */
