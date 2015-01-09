@@ -157,9 +157,10 @@ doit(0, "./configure");
 verbose("*** Running make distcheck...\n");
 doit(0, "AM_MAKEFLAGS=-j32 make distcheck");
 
-# Restore configure.ac
+# Restore configure.ac and libfabric.spec.in
 verbose("*** Restoring configure.ac...\n");
 doit(0, "git checkout configure.ac");
+doit(0, "git checkout libfabric.spec.in");
 
 # Move the resulting tarballs to the downloads directory
 verbose("*** Placing tarballs in download directory...\n");
