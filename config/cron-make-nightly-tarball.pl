@@ -96,7 +96,7 @@ chomp($gd);
 verbose("*** Git describe: $gd\n");
 
 # Read in configure.ac
-verbose("*** Re-writing configure.ac with git describe results...\n");
+verbose("*** Reading version number from configure.ac...\n");
 open(IN, "configure.ac") || die "Can't open configure.ac for reading";
 my $config;
 $config .= $_
@@ -106,6 +106,7 @@ close(IN);
 # Get the original version number
 $config =~ m/AC_INIT\(\[libfabric\], \[(.+?)\]/;
 my $version = $1;
+verbose("*** Got configure.ac version: $version\n");
 
 # Is there already a tarball of this version in the download
 # directory?  If so, just exit now without doing anything.
@@ -116,6 +117,7 @@ if (-f "$download_dir_arg/libfabric-$version-$gd.tar.gz") {
 }
 
 # Update the version number with the output from "git describe"
+verbose("*** Re-writing configure.ac with git describe results...\n");
 $config =~ s/(AC_INIT\(\[libfabric\], \[.+?)\]/$1-$gd]/;
 open(OUT, ">configure.ac");
 print OUT $config;
