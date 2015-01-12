@@ -107,7 +107,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	int ep_type = FI_EP_RDM;
 	int caps = 0;
 	uint64_t max_tag_value = 0;
-	int err = -ENODATA;
+	int err = -FI_ENODATA;
 
 	psmx_debug("%s\n", __func__);
 
