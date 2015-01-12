@@ -218,7 +218,9 @@ static int fi_ibv_check_domain_attr(struct fi_domain_attr *attr)
 	switch (attr->threading) {
 	case FI_THREAD_UNSPEC:
 	case FI_THREAD_SAFE:
-	case FI_THREAD_PROGRESS:
+	case FI_THREAD_FID:
+	case FI_THREAD_DOMAIN:
+	case FI_THREAD_COMPLETION:
 		break;
 	default:
 		VERBS_WARN("Invalid threading model\n");
