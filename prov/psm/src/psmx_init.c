@@ -193,6 +193,13 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			goto err_out;
 		}
 
+		if (hints->fabric_attr && hints->fabric_attr->prov_name &&
+		    strncmp(hints->fabric_attr->prov_name, "psm", 3)) {
+			psmx_debug("%s: hints->fabric_prov_name=%s, supported=psm\n",
+					__func__, hints->fabric_attr->prov_name);
+			goto err_out;
+		}
+
 		if (hints->domain_attr && hints->domain_attr->name &&
 		    strncmp(hints->domain_attr->name, "psm", 3)) {
 			psmx_debug("%s: hints->domain_name=%s, supported=psm\n",
