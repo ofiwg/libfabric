@@ -107,7 +107,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	int ep_type = FI_EP_RDM;
 	int caps = 0;
 	uint64_t max_tag_value = 0;
-	int err = -ENODATA;
+	int err = -FI_ENODATA;
 
 	psmx_debug("%s\n", __func__);
 
@@ -125,7 +125,6 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		switch (hints->ep_type) {
 		case FI_EP_UNSPEC:
 		case FI_EP_RDM:
-			break;
 			break;
 		default:
 			psmx_debug("%s: hints->ep_type=%d, supported=%d,%d.\n",
@@ -191,6 +190,13 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		    strncmp(hints->fabric_attr->name, "psm", 3)) {
 			psmx_debug("%s: hints->fabric_name=%s, supported=psm\n",
 					__func__, hints->fabric_attr->name);
+			goto err_out;
+		}
+
+		if (hints->fabric_attr && hints->fabric_attr->prov_name &&
+		    strncmp(hints->fabric_attr->prov_name, "psm", 3)) {
+			psmx_debug("%s: hints->fabric_prov_name=%s, supported=psm\n",
+					__func__, hints->fabric_attr->prov_name);
 			goto err_out;
 		}
 
