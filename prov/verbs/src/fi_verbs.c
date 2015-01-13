@@ -204,9 +204,6 @@ static int fi_ibv_check_fabric_attr(struct fi_fabric_attr *attr)
 	    !strcmp(attr->name, VERBS_IWARP_FABRIC)))
 		return -FI_ENODATA;
 
-	if (attr->prov_name && strcmp(attr->prov_name, VERBS_PROV_NAME))
-		return -FI_ENODATA;
-
 	if (attr->prov_version > VERBS_PROV_VERS)
 		return -FI_ENODATA;
 

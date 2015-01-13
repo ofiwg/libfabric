@@ -222,6 +222,10 @@ int fi_getinfo_(uint32_t version, const char *node, const char *service,
 		if (!prov->provider->getinfo)
 			continue;
 
+		if (hints->fabric_attr && hints->fabric_attr->prov_name &&
+		    strcmp(prov->provider->name, hints->fabric_attr->prov_name))
+			continue;
+
 		ret = prov->provider->getinfo(version, node, service, flags,
 					      hints, &cur);
 		if (ret) {
