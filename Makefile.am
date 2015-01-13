@@ -18,6 +18,7 @@ bin_PROGRAMS = \
 	simple/fi_poll \
 	simple/fi_rdm_inject_pingpong \
 	simple/fi_rdm_multi_recv \
+	simple/fi_scalable_ep \
 	unit/fi_eq_test \
 	unit/fi_av_test \
 	ported/libibverbs/fi_rc_pingpong
@@ -74,12 +75,16 @@ simple_fi_ud_pingpong_SOURCES = \
 	simple/ud_pingpong.c \
 	common/shared.c
 
+simple_fi_imm_data_SOURCES = \
+	simple/imm_data.c \
+	common/shared.c
+
 simple_fi_rdm_inject_pingpong_SOURCES = \
 	simple/rdm_inject_pingpong.c \
 	common/shared.c
 
-simple_fi_imm_data_SOURCES = \
-	simple/imm_data.c \
+simple_fi_scalable_ep_SOURCES = \
+	simple/scalable_ep.c \
 	common/shared.c
 
 simple_fi_poll_SOURCES = \
