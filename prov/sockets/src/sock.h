@@ -155,8 +155,9 @@ struct sock_domain {
 	struct sock_conn_map r_cmap;
 	pthread_t listen_thread;
 	int listening;
-	char service[NI_MAXSERV];
+	int service;
 	int signal_fds[2];
+	struct sockaddr_storage src_addr;
 };
 
 struct sock_cntr {
@@ -845,9 +846,10 @@ int sock_av_compare_addr(struct sock_av *av,
 			 fi_addr_t addr1, fi_addr_t addr2);
 
 
-struct sock_conn *sock_conn_map_lookup_key(struct sock_conn_map *conn_map,
+struct sock_conn *sock_conn_map_lookup_key(struct sock_conn_map *conn_map, 
 					   uint16_t key);
-uint16_t sock_conn_map_match_or_connect(struct sock_conn_map *map, 
+uint16_t sock_conn_map_match_or_connect(struct sock_domain *dom,
+					struct sock_conn_map *map, 
 					struct sockaddr_in *addr, int match_only);
 int sock_conn_listen(struct sock_domain *domain);
 int sock_conn_map_clear_pe_entry(struct sock_conn *conn_entry, uint16_t key);
