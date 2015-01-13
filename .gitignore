@@ -19,6 +19,7 @@ libtool
 libfabric.spec
 
 config/ar-lib
+config/compile
 config/config.guess
 config/config.sub
 config/depcomp
