@@ -418,12 +418,13 @@ static int sock_av_close(struct fid *fid)
 	if (!av->name) 
 		free(av->table_hdr);
 	else {
+		free(av->name);
 		munmap(av->table_hdr, sizeof(struct sock_av_table_hdr) +
 		       av->attr.count * sizeof(struct sock_av_addr));
 		close(av->shared_fd);
 		shm_unlink(av->name);
 	}
-	
+
 	atomic_dec(&av->domain->ref);
 	free(av->key);
 	free(av);
@@ -507,10 +508,14 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		_av->attr.count * sizeof(struct sock_av_addr);
 	
 	if (attr->name) {
+		_av->name = calloc(1, FI_NAME_MAX);
+		if(!_av->name)
+			return -FI_ENOMEM;
+
 		strcpy(_av->name, attr->name);
 		if (!(attr->flags & FI_READ))
 			flags |= O_CREAT;
-
+		
 		for (i = 0; i < strlen(_av->name); i ++)
 			if (_av->name[i] == ' ')
 				_av->name[i] = '_';

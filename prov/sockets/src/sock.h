@@ -218,7 +218,7 @@ struct sock_av {
 	struct sock_av_table_hdr *table_hdr;
 	struct sock_av_addr *table;
 	uint16_t *key;
-	char name[FI_NAME_MAX];
+	char *name;
 	int shared_fd;
 };
 
