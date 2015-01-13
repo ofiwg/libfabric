@@ -116,10 +116,6 @@ usdf_validate_hints(struct fi_info *hints, struct usd_device_attrs *dap)
 		    fattrp->prov_version != USDF_PROV_VERSION) {
 			return -FI_ENODATA;
 		}
-		if (fattrp->prov_name != NULL &&
-                    strcmp(fattrp->prov_name, USDF_PROV_NAME) != 0) {
-			return -FI_ENODATA;
-		}
 		if (fattrp->name != NULL &&
                     strcmp(fattrp->name, dap->uda_devname) != 0) {
 			return -FI_ENODATA;
@@ -785,6 +781,7 @@ usdf_usnic_getinfo(struct fid_fabric *fabric, struct fi_usnic_info *uip)
 	dap = fp->fab_dev_attrs;
 
 	uip->ui_link_speed = dap->uda_bandwidth;
+	uip->ui_netmask_be = dap->uda_netmask_be;
 	strcpy(uip->ui_ifname, dap->uda_ifname);
 	uip->ui_num_vf = dap->uda_num_vf;
 	uip->ui_qp_per_vf = dap->uda_qp_per_vf;

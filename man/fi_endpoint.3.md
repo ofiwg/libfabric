@@ -212,17 +212,42 @@ together when binding an endpoint to a completion domain CQ.
   completion queue.  This includes received messages.
 
 *FI_COMPLETION*
-: If FI_COMPLETION is specified, the indicated data transfer
-  operations won't generate entries for successful completions in the
-  completion queue unless FI_COMPLETION is set for that specific
-  operation.  FI_COMPLETION must be OR'ed with FI_SEND and/or FI_RECV
-  flags.
+: By default, data transfer operations generate completion entries
+  into a completion queue after they have successfully completed.
+  Applications can use this bind flag to selectively enable
+  when completions are generated.  If FI_COMPLETION is specified,
+  data transfer operations will not generate entries for successful
+  completions unless FI_COMPLETION is set as an operational flag
+  for the given operation.  FI_COMPLETION must be OR'ed with
+  FI_SEND and/or FI_RECV flags.
 
   When set the user must determine when a request that does NOT have
   FI_COMPLETION set has completed indirectly, usually based on the
   completion of a subsequent operation.  Use of this flag may improve
   performance by allowing the provider to avoid writing a completion
   entry for every operation.
+  
+  Example: An application can selectively generate send completions by
+  using the following general approach:
+  
+  {% highlight c %}
+  fi_tx_attr::op_flags = 0; // default - no completion
+  fi_ep_bind(ep, cq, FI_SEND | FI_COMPLETION);
+  fi_send(ep, ...);                   // no completion
+  fi_sendv(ep, ...);                  // no completion
+  fi_sendmsg(ep, ..., FI_COMPLETION); // completion!
+  {% endhighlight %}
+  
+  Example: An application can selectively disable send completions by
+  modifying the operational flags:
+  
+  {% highlight c %}
+  fi_tx_attr::op_flags = FI_COMPLETION; // default - completion
+  fi_ep_bind(ep, cq, FI_SEND | FI_COMPLETION);
+  fi_send(ep, ...);       // completion
+  fi_sendv(ep, ...);      // completion
+  fi_sendmsg(ep, ..., 0); // no completion!
+  {% endhighlight %}
 
 An endpoint may also, or instead, be bound to a fabric counter.  When
 binding an endpoint to a counter, the following flags may be specified.
@@ -397,11 +422,11 @@ protocol value set to one.
 
 ## protocol_version - Protocol Version
 
-Identifies which version of the protocol is employeed by the provider.
+Identifies which version of the protocol is employed by the provider.
 The protocol version allows providers to extend an existing protocol,
 by adding support for additional features or functionality for example,
 in a backward compatible manner.  Providers that support different versions
-of the same protocol should interoperate, but only when using the
+of the same protocol should inter-operate, but only when using the
 capabilities defined for the lesser version. 
 
 ## max_msg_size - Max Message Size
@@ -583,11 +608,11 @@ which data is sent or received by the transport layer.
 Completion ordering refers to the order in which completed requests are
 written into the completion queue.  Completion ordering is similar to
 message order.  Relaxed completion order may enable faster reporting of
-completed transfers, allow acknowledgements to be sent over different
+completed transfers, allow acknowledgments to be sent over different
 fabric paths, and support more sophisticated retry mechanisms.
 This can result in lower-latency completions, particularly when
 using unconnected endpoints.  Strict completion ordering may require
-that providers queue completed opertions or limit available optimizations
+that providers queue completed operations or limit available optimizations
 
 For transmit requests, completion ordering depends on the endpoint
 communication type.  For unreliable communication, completion ordering
@@ -599,7 +624,7 @@ is not defined.
 
 Applications should specify the completion ordering that they support
 or require.  Providers should return the completion order that they
-actually provide, with the contraint that the returned ordering is
+actually provide, with the constraint that the returned ordering is
 stricter than that specified by the application.  Supported completion
 order values are:
 

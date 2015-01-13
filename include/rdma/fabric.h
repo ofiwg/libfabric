@@ -167,8 +167,10 @@ enum fi_progress {
 enum fi_threading {
 	FI_THREAD_UNSPEC,
 	FI_THREAD_SAFE,
-	FI_THREAD_PROGRESS,
-	FI_THREAD_DOMAIN
+	FI_THREAD_FID,
+	FI_THREAD_DOMAIN,
+	FI_THREAD_COMPLETION,
+	FI_THREAD_ENDPOINT,
 };
 
 enum fi_resource_mgmt {
@@ -436,6 +438,8 @@ enum fi_type {
 	FI_TYPE_MSG_ORDER,
 	FI_TYPE_MODE,
 	FI_TYPE_AV_TYPE,
+	FI_TYPE_ATOMIC_TYPE,
+	FI_TYPE_ATOMIC_OP,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);

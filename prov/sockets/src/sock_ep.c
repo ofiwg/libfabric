@@ -943,7 +943,7 @@ int sock_stx_ctx(struct fid_domain *domain,
 
 	tx_ctx->domain = dom;
 	tx_ctx->fid.stx.fid.ops = &sock_ctx_ops;
-	tx_ctx->fid.stx.ops = sock_ep_ops;
+	tx_ctx->fid.stx.ops = &sock_ep_ops;
 	atomic_inc(&dom->ref);
 
 	*stx = &tx_ctx->fid.stx;

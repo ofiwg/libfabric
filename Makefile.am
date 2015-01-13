@@ -279,6 +279,7 @@ real_man_pages = \
         man/fi_direct.7 \
         man/fi_domain.3 \
         man/fi_endpoint.3 \
+        man/fi_errno.3 \
         man/fi_eq.3 \
         man/fi_fabric.3 \
         man/fi_getinfo.3 \

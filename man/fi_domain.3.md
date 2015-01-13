@@ -141,7 +141,9 @@ interfaces enables a provider to eliminate lower-level locks.
 
 *FI_THREAD_UNSPEC*
 : This value indicates that no threading model has been defined.  It
-  may be used on input hints to the fi_getinfo call.
+  may be used on input hints to the fi_getinfo call.  When specified,
+  providers will return a threading model that allows for the greatest
+  level of parallelism.
 
 *FI_THREAD_SAFE*
 : A thread safe serialization model allows a multi-threaded
@@ -149,28 +151,51 @@ interfaces enables a provider to eliminate lower-level locks.
   without restriction.  All providers are required to support
   FI_THREAD_SAFE.
 
-*FI_THREAD_PROGRESS*
-: A progress serialization model requires applications to serialize
-  access to provider resources and interfaces based on the progress
-  model.  For providers with automatic progress, access to each
-  endpoint must be serialized, and access to each event queue,
-  counter, wait or poll set must be serialized.  Serialization is
-  required only by threads accessing the same object.  For example,
-  one thread may be initiating a data transfer on an endpoint, while
-  another thread reads from an event queue associated with the
-  endpoint.  Serialization to endpoint access is further limited to
-  different endpoint data flows, if available.  Multiple threads may
-  initiate transfers on the same endpoint if they reference different
-  data flows.
+*FI_THREAD_FID*
+: A fabric descriptor (FID) serialization model requires applications
+  to serialize access to individual fabric resources associated with
+  data transfer operations and completions.  Multiple threads must
+  be serialized when accessing the same endpoint, transmit context,
+  receive context, completion queue, counter, wait set, or poll set.
+  Serialization is required only by threads accessing the same object.
 
-  For providers with manual progress, applications must serialize
-  their access to any object that is part of a single progress domain.
-  A progress domain is any set of associated endpoints, event queues,
-  counters, wait sets, and poll sets.  For instance, endpoints that
-  share the same event queue or poll set belong to the same progress
-  domain.  Applications that can allocate endpoint resources to
-  specific threads can reduce provider locking by using
-  FI_THREAD_PROGRESS.
+  For example, one thread may be initiating a data transfer on an
+  endpoint, while another thread reads from a completion queue
+  associated with the endpoint.
+  
+  Serialization to endpoint access is only required when accessing
+  the same endpoint data flow.  Multiple threads may initiate transfers
+  on different transmit contexts of the same endpoint without serializing,
+  and no serialization is required between the submission of data
+  transmit requests and data receive operations.
+  
+  In general, FI_THREAD_FID allows the provider to be implemented
+  without needing internal locking when handling data transfers.
+  Conceptually, FI_THREAD_FID maps well to providers that implement
+  fabric services in hardware and provide separate command queues to
+  different data flows.
+  
+*FI_THREAD_ENDPOINT*
+: The endpoint threading model is similar to FI_THREAD_FID, but with
+  the added restriction that serialization is required when accessing
+  the same endpoint, even if multiple transmit and receive contexts are
+  used.  Conceptualy, FI_THREAD_ENDPOINT maps well to providers that
+  implement fabric services in hardware but use a single command
+  queue to access different data flows.
+
+*FI_THREAD_COMPLETION*
+  The completion threading model is intended for providers that make use
+  of manual progress.  Applications must serialize access to all objects
+  that are associated through the use of having a shared completion
+  structure.  This includes endpoint, completion queue, counter, wait set,
+  and poll set objects.
+  
+  For example, threads must serialize access to an endpoint and its
+  bound completion queue(s) and/or counters.  Access to endpoints that
+  share the same completion queue must also be serialized.
+  
+  The use of FI_THREAD_COMPLETION can increase parallelism over
+  FI_THREAD_SAFE, but requires the use of isolated resources.
 
 *FI_THREAD_DOMAIN*
 : A domain serialization model requires applications to serialize
@@ -233,18 +258,19 @@ are defined.
 
 ## Resource Management (resource_mgmt)
 
-Resource management is provider and protocol support to protect
+Resource management (RM) is provider and protocol support to protect
 against overrunning local and remote resources.  This includes
 local and remote transmit contexts, receive contexts, completion
 queues, and source and target data buffers.
 
 When enabled, applications are given some level of protection against
-overruning provider queues and local and remote data buffers.  Such
+overrunning provider queues and local and remote data buffers.  Such
 support may be built directly into the hardware and/or network
 protocol, but may also require that checks be enabled in the provider
 software.  By disabling resource management, an application assumes
 all responsibility for preventing queue and buffer overruns, but doing
-so may allow a provider to eliminate internal synchronization calls.
+so may allow a provider to eliminate internal synchronization calls,
+such as atomic variables or locks.
 
 It should be noted that even if resource management is disabled, the
 provider implementation and protocol may still provide some level of
@@ -264,31 +290,71 @@ The following values for resource management are defined.
 : Resource management is enabled for this provider domain.
 
 The behavior of the various resource management options depends on whether
-the endpoint is reliable or unreliable, as shown in the following tables.
+the endpoint is reliable or unreliable, as well as provider and protocol
+specific implementation details, as shown in the following tables.
 
-: Resource | Unreliable EP | Unreliable EP | Reliable EP | Reliable EP
-: .        | RM Disabled   | RM Enabled    | RM Disabled | RM Enabled
-: ---------|---------------|---------------|-------------|------------
-:    Tx    |     fatal     |     EAGAIN    |    fatal    |   EAGAIN
-: ---------|---------------|---------------|-------------|------------
-:    Rx    |     fatal     |     EAGAIN    |    fatal    |   EAGAIN
-: ---------|---------------|---------------|-------------|------------
-:   Tx CQ  |     fatal     |     EAGAIN    |    fatal    |   EAGAIN
-: ---------|---------------|---------------|-------------|------------
-:   Rx CQ  |     fatal     |     EAGAIN    |    fatal    |   EAGAIN
-: .        |               |      drop     |             |    retry
-: ---------|---------------|---------------|-------------|------------
-: Unmatched|    buffered   |    buffered   |   buffered  |  buffered
-:   Recv   |     drop      |      drop     |    error    |    retry
-: ---------|---------------|---------------|-------------|------------
-:   Recv   |    truncate   |    truncate   |   truncate  |  truncate
-:  Overrun |     drop      |      drop     |    error    |    error
-: ---------|---------------|---------------|-------------|------------
-: Unmatched|      N/A      |      N/A      |    error    |    error
-:    RMA   |               |               |             |
-: ---------|---------------|---------------|-------------|------------
-:    RMA   |      N/A      |      N/A      |    error    |    error
-:  Overrun |               |               |             |
+| Resource | Unrel EP-RM Disabled| Unrel EP-RM Enabled | Rel EP-RM Disabled | Rel EP-RM Enabled |
+|:--------:|:-------------------:|:-------------------:|:------------------:|:-----------------:|
+| Tx             | error            | EAGAIN           | error             | EAGAIN             |
+| Rx             | error            | EAGAIN           | error             | EAGAIN             |
+| Tx CQ          | error            | EAGAIN           | error             | EAGAIN             |
+| Rx CQ          | error            | EAGAIN or drop   | error             | EAGAIN or retry    |
+| Unmatched Recv | buffered or drop | buffered or drop | buffered or error | buffered or retry  |
+| Recv Overrun   | truncate or drop | truncate or drop | truncate or error | truncate or error  |
+| Unmatched RMA  | not applicable   | not applicable   | error             | error              |
+| RMA Overrun    | not applicable   | not applicable   | error             | error              |
+
+The resource column indicates the resource being accessed by a data
+transfer operation. Tx refers to the transmit context when a data
+transfer operation posted.  Rx refers to the receive context when
+receive data buffers are posted.  When RM is enabled, the
+provider will ensure that space is available to accept the operation.
+If space is not available, the operation will fail with -FI_EAGAIN.
+If resource management is disabled, the application is responsible for
+ensuring that there is space available before attempting to queue an
+operation.
+
+Tx CQ and Rx CQ refer to the completion queues associated with the
+transmit and receive contexts, respectively.  When RM is disabled,
+applications must take care to ensure that completion queues do not
+get overrun.  This can be accomplished by sizing the CQs appropriately
+or by deferring the posting of a data transfer operation unless CQ space
+is available to store its completion.  When RM is enabled, providers
+may use different mechanisms to prevent CQ overruns.  This includes
+failing (returning -FI_EAGAIN) the posting of operations that could
+result in CQ overruns, dropping received messages, or forcing requests
+to be retried.
+
+Unmatched receives and receive overruns deal with the processing of
+messages that consume a receive buffers.  Unmatched receives references
+incoming messages that are received by an endpoint, but do not have an
+application data buffer to consume.  No buffers may be available at the
+receive side, or buffers may available, but restricted from accepting
+the received message (such as being associated with different tags).
+Unmatched receives may be handled by protocol flow control, resulting
+in the message being retried.  For unreliable endpoints, unmatched
+messages are usually dropped, unless the provider can internally buffer
+the data.  An error will usually occur on a reliable endpoint if received
+data cannot be placed if RM is disabled, or the data cannot be received
+with RM enabled after retries have been exhausted.
+
+In some cases, buffering on the receive side may be available, but
+insufficient space may have been provided to receive the full message
+that was sent.  This is considered an error, however, rather than
+failing the operation, a provider may instead truncate the message and
+report the truncation to the app.
+
+Unmatched RMA and RMA overruns deal with the processing of RMA and
+atomic operations that access registered memory buffers directly.
+RMA operations are not defined for unreliable endpoints.  For reliable
+endpoints, unmatched RMA and RMA overruns are both treated as errors.
+
+When a resource management error occurs on an endpoint, the endpoint is
+transitioned into a disabled state.  Any operations which have not
+already completed will fail and be discarded.  For unconnected endpoints,
+the endpoint must be re-enabled before it will accept new data transfer
+operations.  For connected endpoints, the connection is torn down and
+must be re-established.
 
 ## MR Key Size
 

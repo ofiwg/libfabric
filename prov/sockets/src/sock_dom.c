@@ -69,7 +69,9 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 	switch(attr->threading){
 	case FI_THREAD_UNSPEC:
 	case FI_THREAD_SAFE:
-	case FI_THREAD_PROGRESS:
+	case FI_THREAD_FID:
+	case FI_THREAD_DOMAIN:
+	case FI_THREAD_COMPLETION:
 		break;
 	default:
 		SOCK_LOG_INFO("Invalid threading model!\n");

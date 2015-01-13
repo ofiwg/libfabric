@@ -156,4 +156,4 @@ const char *fi_strerror(int errnum);
 
 # SEE ALSO
 
-[`fi_fabric`(7)](fi_fabric.7.html)
+[`fabric`(7)](fabric.7.html)
