@@ -63,7 +63,7 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn, const void *buf, si
 
 	while(rem > 0) {
 		len = MIN(rem, SOCK_COMM_BUF_SZ);
-		ret = send(conn->sock_fd, buf + offset, len, 0);
+		ret = send(conn->sock_fd, (char *)buf + offset, len, 0);
 		if (ret <= 0) 
 			break;
 		
