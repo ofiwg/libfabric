@@ -477,8 +477,7 @@ static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addr
 	return 0;
 }
 
-static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
-			    struct fi_info *fi)
+static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
 {
  //	fi->sa_family = rai->ai_family;
 	if (rai->ai_qp_type == IBV_QPT_RC || rai->ai_port_space == RDMA_PS_TCP) {
@@ -596,10 +595,9 @@ static int fi_ibv_fill_info_attr(struct ibv_context *ctx, struct fi_info *hints,
 static int
 fi_ibv_getepinfo(const char *node, const char *service,
 		 uint64_t flags, struct fi_info *hints,
-		 struct fi_info **info, struct rdma_cm_id **id)
+		 struct rdma_addrinfo **rai)
 {
-	struct rdma_addrinfo rai_hints, *rai;
-	struct fi_info *fi;
+	struct rdma_addrinfo rai_hints;
 	int ret;
 
 	if (hints) {
@@ -612,58 +610,71 @@ fi_ibv_getepinfo(const char *node, const char *service,
 			return ret;
 
 		ret = rdma_getaddrinfo((char *) node, (char *) service,
-					&rai_hints, &rai);
+					&rai_hints, rai);
 	} else {
 		ret = rdma_getaddrinfo((char *) node, (char *) service,
-					NULL, &rai);
+					NULL, rai);
 	}
+
 	if (ret)
 		return (errno == ENODEV) ? -FI_ENODATA : -errno;
 
-	if (!(fi = fi_allocinfo_internal())) {
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
-
-	ret = fi_ibv_rai_to_fi(rai, hints, fi);
-	if (ret)
-		goto err2;
-
-	ret = rdma_create_ep(id, rai, NULL, NULL);
-	if (ret) {
-		ret = -errno;
-		goto err2;
-	}
-
-	ret = fi_ibv_fill_info_attr((*id)->verbs, hints, fi);
-	if (ret)
-		goto err3;
-
-	*info = fi;
-	rdma_freeaddrinfo(rai);
 	return 0;
-
-err3:
-	rdma_destroy_ep(*id);
-err2:
-	fi_freeinfo(fi);
-err1:
-	rdma_freeaddrinfo(rai);
-	return ret;
 }
 
 static int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 			  uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
+	struct rdma_addrinfo *rai, *rhead;
+	struct fi_info *fi, *fhead = NULL;
+	int ret, have_head = 0;
 	struct rdma_cm_id *id;
-	int ret;
 
-	ret = fi_ibv_getepinfo(node, service, flags, hints, info, &id);
+	ret = fi_ibv_getepinfo(node, service, flags, hints, &rai);
+
 	if (ret)
 		return ret;
 
-	rdma_destroy_ep(id);
-	return 0;
+	rhead = rai;
+
+	for (struct fi_info *tmp; rai; rai = rai->ai_next) {
+
+		if ((ret = rdma_create_ep(&id, rai, NULL, NULL))) {
+			ret = -FI_ENODATA;
+			continue;
+		}
+
+		if (!(tmp = fi_allocinfo_internal())) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		if (fi_ibv_rai_to_fi(rai, tmp) ||
+		    fi_ibv_fill_info_attr(id->verbs, hints, tmp)) {
+			rdma_destroy_ep(id);
+			fi_freeinfo(tmp);
+			continue;
+		}
+
+		if (!have_head) {
+			fhead = fi = tmp;
+			have_head = 1;
+		} else {
+			fi->next = tmp;
+			fi = fi->next;
+		}
+
+		rdma_destroy_ep(id);
+	}
+
+	rdma_freeaddrinfo(rhead);
+	(*info) = fhead;
+	return ret;
+
+err:
+	rdma_freeaddrinfo(rhead);
+
+	return ret;
 }
 
 static int fi_ibv_msg_ep_create_qp(struct fi_ibv_msg_ep *ep)
@@ -1774,7 +1785,7 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 {
 	struct fi_ibv_domain *_domain;
 	struct fi_ibv_msg_ep *_ep;
-	struct fi_info *fi;
+	struct rdma_addrinfo *rai;
 	int ret;
 
 	_domain = container_of(domain, struct fi_ibv_domain, domain_fid);
@@ -1785,13 +1796,18 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!_ep)
 		return -FI_ENOMEM;
 
-	fi = NULL;
 	if (!info->connreq) {
-		ret = fi_ibv_getepinfo(NULL, NULL, 0, info, &fi, &_ep->id);
+		ret = fi_ibv_getepinfo(NULL, NULL, 0, info, &rai);
 		if (ret)
 			goto err;
 
-		fi_freeinfo(fi);
+		ret = rdma_create_ep(&_ep->id, rai, NULL, NULL);
+		if (ret) {
+			rdma_freeaddrinfo(rai);
+			goto err;
+		}
+
+		rdma_freeaddrinfo(rai);
 	} else {
 		_ep->id = info->connreq;
 	}
@@ -2636,19 +2652,25 @@ fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_pep **pep, void *context)
 {
 	struct fi_ibv_pep *_pep;
-	struct fi_info *fi;
+	struct rdma_addrinfo *rai;
 	int ret;
 
 	_pep = calloc(1, sizeof *_pep);
 	if (!_pep)
 		return -FI_ENOMEM;
 
-	fi = NULL;
-	ret = fi_ibv_getepinfo(NULL, NULL, FI_SOURCE, info, &fi, &_pep->id);
+	ret = fi_ibv_getepinfo(NULL, NULL, FI_SOURCE, info, &rai);
 	if (ret)
 		goto err;
 
-	fi_freeinfo(fi);
+	ret = rdma_create_ep(&_pep->id, rai, NULL, NULL);
+	if (ret) {
+		rdma_freeaddrinfo(rai);
+		goto err;
+	}
+
+	rdma_freeaddrinfo(rai);
+
 	_pep->id->context = &_pep->pep_fid.fid;
 
 	_pep->pep_fid.fid.fclass = FI_CLASS_PEP;
