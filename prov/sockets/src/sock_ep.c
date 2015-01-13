@@ -1087,6 +1087,8 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			sock_ep->src_addr = calloc(1, sizeof(struct sockaddr_in));
 			memcpy(sock_ep->src_addr, info->src_addr, 
 			       sizeof(struct sockaddr_in));
+			((struct sockaddr_in*)sock_ep->src_addr)->sin_port = 
+				htons(sock_dom->service);
 		}
 		
 		if (info->dest_addr) {
@@ -1175,8 +1177,8 @@ err:
 struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep)
 {
 	if (!ep->key) {
-		ep->key = sock_conn_map_match_or_connect(&ep->domain->r_cmap,
-				ep->dest_addr, 0);
+		ep->key = sock_conn_map_match_or_connect(
+			ep->domain, &ep->domain->r_cmap, ep->dest_addr, 0);
 		if (!ep->key) {
 			SOCK_LOG_ERROR("failed to match or connect to addr\n");
 			errno = EINVAL;
