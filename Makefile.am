@@ -186,6 +186,7 @@ _usnic_files = \
 
 _usnic_cppflags = \
         -D__LIBUSNIC__ \
+        -DHAVE_LIBNL3=$(HAVE_LIBNL3) $(USNIC_LIBNL_CPPFLAGS) \
         -I$(top_srcdir)/prov/usnic/src/usnic_direct
 
 if HAVE_USNIC_DL
