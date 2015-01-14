@@ -71,12 +71,12 @@ int vnic_wq_alloc_ring(struct vnic_dev *vdev, struct vnic_wq *wq,
 				unsigned int desc_count, unsigned int desc_size)
 {
 #ifdef ENIC_PMD
-        char res_name[NAME_MAX];
-        static int instance = 0;
+	char res_name[NAME_MAX];
+	static int instance;
 
 	snprintf(res_name, sizeof(res_name), "%d-wq-%d", instance++, wq->index);
 	return vnic_dev_alloc_desc_ring(vdev, &wq->ring, desc_count, desc_size,
-                wq->socket_id, res_name);
+		wq->socket_id, res_name);
 #else
 	return vnic_dev_alloc_desc_ring(vdev, &wq->ring, desc_count, desc_size);
 #endif

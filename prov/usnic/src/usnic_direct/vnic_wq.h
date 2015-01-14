@@ -111,9 +111,9 @@ struct vnic_wq {
 	struct vnic_wq_buf *to_use;
 	struct vnic_wq_buf *to_clean;
 	unsigned int pkts_outstanding;
-#if defined(ENIC_NETQ)	
+#if defined(ENIC_NETQ)
 	unsigned int state;
-#endif    
+#endif
 #if defined(__VMKLNX__) && defined(ENIC_UPT)
 	int enabled;
 #endif
@@ -121,7 +121,7 @@ struct vnic_wq {
 	uint32_t qp_num;
 #endif
 #ifdef ENIC_PMD
-        unsigned int socket_id;
+	unsigned int socket_id;
 #endif
 };
 

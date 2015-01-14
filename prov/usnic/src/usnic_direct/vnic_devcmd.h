@@ -766,7 +766,7 @@ struct devcmd2_result {
 
 #define DEVCMD2_RESULTS_SIZE_MAX   ((1 << 16) - 1)
 
-// Overlay related definitions
+/* Overlay related definitions */
 
 /*
  * This enum lists the flag associated with each of the overlay features

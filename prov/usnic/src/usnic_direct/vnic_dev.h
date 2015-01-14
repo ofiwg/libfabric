@@ -145,7 +145,7 @@ void vnic_dev_free_desc_ring(struct vnic_dev *vdev,
 int vnic_dev_cmd(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
 	u64 *a0, u64 *a1, int wait);
 int vnic_dev_cmd_args(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
-                               u64 *args, int nargs, int wait);
+	u64 *args, int nargs, int wait);
 void vnic_dev_cmd_proxy_by_index_start(struct vnic_dev *vdev, u16 index);
 #ifndef FOR_UPSTREAM_KERNEL
 void vnic_dev_cmd_proxy_by_bdf_start(struct vnic_dev *vdev, u16 bdf);
@@ -234,7 +234,8 @@ struct vnic_dev *vnic_dev_alloc_discover(struct vnic_dev *vdev,
 struct vnic_dev *vnic_dev_register(struct vnic_dev *vdev,
 	void *priv, struct pci_dev *pdev, struct vnic_dev_bar *bar,
 	unsigned int num_bars);
-void vnic_dev_upd_res_vaddr(struct vnic_dev *vdev, struct vnic_dev_iomap_info *maps);
+void vnic_dev_upd_res_vaddr(struct vnic_dev *vdev,
+	struct vnic_dev_iomap_info *maps);
 struct pci_dev *vnic_dev_get_pdev(struct vnic_dev *vdev);
 #endif
 int vnic_dev_cmd_init(struct vnic_dev *vdev, int fallback);

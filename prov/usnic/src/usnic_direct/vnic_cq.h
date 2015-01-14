@@ -80,8 +80,8 @@ struct vnic_cq_ctrl {
 
 #ifdef ENIC_AIC
 struct vnic_rx_bytes_counter {
-        unsigned int small_pkt_bytes_cnt;
-        unsigned int large_pkt_bytes_cnt;
+	unsigned int small_pkt_bytes_cnt;
+	unsigned int large_pkt_bytes_cnt;
 };
 #endif
 
