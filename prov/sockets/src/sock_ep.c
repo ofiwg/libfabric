@@ -56,34 +56,38 @@ extern const struct fi_fabric_attr sock_fabric_attr;
 extern const char const sock_fab_name[];
 extern const char const sock_dom_name[];
 
+static void sock_dequeue_tx_ctx(struct sock_tx_ctx *tx_ctx)
+{
+	fastlock_acquire(&tx_ctx->domain->pe->lock);
+	dlist_remove(&tx_ctx->pe_entry);
+	fastlock_release(&tx_ctx->domain->pe->lock);
+}
+
+static void sock_dequeue_rx_ctx(struct sock_rx_ctx *rx_ctx)
+{
+	fastlock_acquire(&rx_ctx->domain->pe->lock);
+	dlist_remove(&rx_ctx->pe_entry);
+	fastlock_release(&rx_ctx->domain->pe->lock);
+}
+
 static int sock_ctx_close(struct fid *fid)
 {
-	struct sock_ep *ep;
-	struct dlist_entry *entry;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
 
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx.fid);
-		
-		for (entry = tx_ctx->ep_list.next; entry != &tx_ctx->ep_list;
-		    entry = entry->next) {
-			ep = container_of(entry, struct sock_ep, tx_ctx_entry);
-			atomic_dec(&ep->num_tx_ctx);
-		}
+		sock_dequeue_tx_ctx(tx_ctx);
+		atomic_dec(&tx_ctx->ep->num_rx_ctx);
 		atomic_dec(&tx_ctx->domain->ref);
 		sock_tx_ctx_free(tx_ctx);
 		break;
 
 	case FI_CLASS_RX_CTX:
 		rx_ctx = container_of(fid, struct sock_rx_ctx, ctx.fid);
-		
-		for (entry = rx_ctx->ep_list.next; entry != &rx_ctx->ep_list;
-		    entry = entry->next) {
-			ep = container_of(entry, struct sock_ep, rx_ctx_entry);
-			atomic_dec(&ep->num_rx_ctx);
-		}
+		sock_dequeue_rx_ctx(rx_ctx);
+		atomic_dec(&rx_ctx->ep->num_rx_ctx);
 		atomic_dec(&rx_ctx->domain->ref);
 		sock_rx_ctx_free(rx_ctx);
 		break;
@@ -91,12 +95,14 @@ static int sock_ctx_close(struct fid *fid)
 	case FI_CLASS_STX_CTX:
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
 		atomic_dec(&tx_ctx->domain->ref);
+		sock_dequeue_tx_ctx(tx_ctx);
 		sock_tx_ctx_free(tx_ctx);
 		break;
 
 	case FI_CLASS_SRX_CTX:
 		rx_ctx = container_of(fid, struct sock_rx_ctx, ctx.fid);
 		atomic_dec(&rx_ctx->domain->ref);
+		sock_dequeue_rx_ctx(rx_ctx);
 		sock_rx_ctx_free(rx_ctx);
 		break;
 
@@ -495,12 +501,16 @@ static int sock_ep_close(struct fid *fid)
 		return -FI_EBUSY;
 
 	if (sock_ep->fclass != FI_CLASS_SEP && 
-	    sock_ep->ep_attr.tx_ctx_cnt != FI_SHARED_CONTEXT)
+	    sock_ep->ep_attr.tx_ctx_cnt != FI_SHARED_CONTEXT) {
+		sock_dequeue_tx_ctx(sock_ep->tx_array[0]);
 		sock_tx_ctx_free(sock_ep->tx_array[0]);
+	}
 
 	if (sock_ep->fclass != FI_CLASS_SEP && 
-	    sock_ep->ep_attr.rx_ctx_cnt != FI_SHARED_CONTEXT)
+	    sock_ep->ep_attr.rx_ctx_cnt != FI_SHARED_CONTEXT) {
+		sock_dequeue_rx_ctx(sock_ep->rx_array[0]);
 		sock_rx_ctx_free(sock_ep->rx_array[0]);
+	}
 
 	free(sock_ep->tx_array);
 	free(sock_ep->rx_array);
@@ -1087,6 +1097,8 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			sock_ep->src_addr = calloc(1, sizeof(struct sockaddr_in));
 			memcpy(sock_ep->src_addr, info->src_addr, 
 			       sizeof(struct sockaddr_in));
+			((struct sockaddr_in*)sock_ep->src_addr)->sin_port = 
+				htons(sock_dom->service);
 		}
 		
 		if (info->dest_addr) {
@@ -1175,8 +1187,8 @@ err:
 struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep)
 {
 	if (!ep->key) {
-		ep->key = sock_conn_map_match_or_connect(&ep->domain->r_cmap,
-				ep->dest_addr, 0);
+		ep->key = sock_conn_map_match_or_connect(
+			ep->domain, &ep->domain->r_cmap, ep->dest_addr, 0);
 		if (!ep->key) {
 			SOCK_LOG_ERROR("failed to match or connect to addr\n");
 			errno = EINVAL;

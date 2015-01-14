@@ -1068,6 +1068,7 @@ int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		pe_entry.pe.rx.rx_iov[0].iov.addr = rx_posted->iov[0].iov.addr;
 		pe_entry.type = SOCK_PE_RX;
 		pe_entry.comp = rx_buffered->comp;
+		pe_entry.flags = 0;
 
 		if (rx_posted->flags & FI_MULTI_RECV) {
 			if (sock_rx_avail_len(rx_posted) < rx_ctx->min_multi_recv) {
