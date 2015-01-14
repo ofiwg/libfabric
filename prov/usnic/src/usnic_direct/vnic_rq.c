@@ -133,7 +133,7 @@ int vnic_rq_alloc(struct vnic_dev *vdev, struct vnic_rq *rq, unsigned int index,
 	int err;
 #ifdef ENIC_PMD
 	char res_name[NAME_MAX];
-        static int instance = 0;
+	static int instance;
 #endif
 
 	rq->index = index;

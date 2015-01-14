@@ -701,15 +701,15 @@ enum {
 #define FILTER_MAX_BUF_SIZE 100  /* Maximum size of buffer to CMD_ADD_FILTER */
 
 struct filter_tlv {
-	u_int32_t type;
-	u_int32_t length;
-	u_int32_t val[0];
+	uint32_t type;
+	uint32_t length;
+	uint32_t val[0];
 };
 
 enum {
 	CLSF_ADD = 0,
 	CLSF_DEL = 1,
-};	
+};
 
 /*
  * Writing cmd register causes STAT_BUSY to get set in status register.
