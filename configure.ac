@@ -34,6 +34,13 @@ dnl Checks for programs
 AC_PROG_CC
 AM_PROG_CC_C_O
 
+AC_ARG_WITH([libfabric],
+            AC_HELP_STRING([--with-libfabric], [Use non-default libfabric location - default NO]),
+            [AS_IF([test -d $withval/lib64], [fab_libdir="lib64"], [fab_libdir="lib"])
+             CPPFLAGS="-I $withval/include $CPPFLAGS"
+             LDFLAGS="-L$withval/$fab_libdir $LDFLAGS"],
+            [])
+
 dnl Checks for libraries
 AC_CHECK_LIB([fabric], fi_getinfo, [],
     AC_MSG_ERROR([fi_getinfo() not found.  fabtests requires libfabric.]))
