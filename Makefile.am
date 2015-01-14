@@ -82,7 +82,7 @@ _verbs_files = prov/verbs/src/fi_verbs.c
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libverbs-fi.la
 libverbs_fi_la_SOURCES = $(_verbs_files) $(common_srcs)
-libverbs_fi_la_LIBADD = -libverbs -lrdmacm $(linkback)
+libverbs_fi_la_LIBADD = $(linkback)
 libverbs_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
 libverbs_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_VERBS_DL
