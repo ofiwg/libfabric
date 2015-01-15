@@ -420,6 +420,15 @@ protocol value set to one.
   performance scaled messaging.  PSMX is an extended version of the
   PSM protocol to support the libfabric interfaces.
 
+*FI_PROTO_UDP*
+: The protocol sends and receives UDP datagrams.  For example, an
+  endpoint using *FI_PROTO_UDP* will be able to communicate with a
+  remote peer that is using Berkeley *SOCK_DGRAM* sockets using
+  *IPPROTO_UDP*.
+
+*FI_PROTO_SOCK_TCP*
+: The protocol is layered over TCP packets.
+
 ## protocol_version - Protocol Version
 
 Identifies which version of the protocol is employed by the provider.
