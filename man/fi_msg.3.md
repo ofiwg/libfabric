@@ -44,6 +44,10 @@ ssize_t fi_inject(struct fid_ep *ep, void *buf, size_t len,
 
 ssize_t fi_senddata(struct fid_ep *ep, void *buf, size_t len,
 	void *desc, uint64_t data, fi_addr_t dest_addr, void *context);
+
+ssize_t fi_rx_size_left(struct fid_ep *ep);
+
+ssize_t fi_tx_size_left(struct fid_ep *ep);
 {% endhighlight %}
 
 # ARGUMENTS
@@ -105,6 +109,10 @@ post a data buffer to an endpoint to receive inbound messages.
 Similar to the send operations, receive operations operate
 asynchronously.  Users should not touch the posted data buffer(s)
 until the receive operation has completed.
+
+The "size_left" functions -- fi_rx_size_left, fi_tx_size_left -- return a
+lower bound on the number of receive/send operations that may be posted to the
+given endpoint without returning -FI_EAGAIN.
 
 Completed message operations are reported to the user through one or
 more event collectors associated with the endpoint.  Users provide
@@ -186,6 +194,24 @@ The fi_recvmsg call supports posting buffers over both connected and
 unconnected endpoints, with the ability to control the receive
 operation per call through the use of flags.  The fi_recvmsg function
 takes a struct fi_msg as input.
+
+## fi_rx_size_left
+
+The fi_rx_size_left call returns a lower bound on the number of receive
+operations that may be posted to the given endpoint without that operation
+returning -FI_EAGAIN.  Depending on the specific details of the subsequently
+posted receive operations (e.g., number of iov entries, which receive function
+is called, etc.), it may be possible to post more receive operations than
+originally indicated by fi_rx_size_left.
+
+## fi_tx_size_left
+
+The fi_tx_size_left call returns a lower bound on the number of send
+operations that may be posted to the given endpoint without that operation
+returning -FI_EAGAIN.  Depending on the specific details of the subsequently
+posted send operations (e.g., number of iov entries, which send function is
+called, etc.), it may be possible to post more send operations than originally
+indicated by fi_tx_size_left.
 
 # FLAGS
 
