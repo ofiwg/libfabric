@@ -266,7 +266,8 @@ static int sock_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr
 	_mr->access = attr->access;
 	_mr->flags = flags;
 	_mr->offset = (flags & FI_MR_OFFSET) ?
-		      attr->offset : (uintptr_t) attr->mr_iov[0].iov_base;
+		(uintptr_t) attr->mr_iov[0].iov_base + attr->offset : 
+		(uintptr_t) attr->mr_iov[0].iov_base;
 
 	fastlock_acquire(&dom->lock);
 	key = (dom->info.mode & FI_PROV_MR_ATTR) ?
