@@ -21,6 +21,7 @@ bin_PROGRAMS = \
 	simple/fi_rdm_inject_pingpong \
 	simple/fi_rdm_multi_recv \
 	simple/fi_scalable_ep \
+	simple/fi_rdm_shared_ctx \
 	unit/fi_eq_test \
 	unit/fi_av_test \
 	unit/fi_size_left_test \
@@ -96,6 +97,10 @@ simple_fi_rdm_inject_pingpong_SOURCES = \
 
 simple_fi_scalable_ep_SOURCES = \
 	simple/scalable_ep.c \
+	common/shared.c
+
+simple_fi_rdm_shared_ctx_SOURCES = \
+	simple/rdm_shared_ctx.c \
 	common/shared.c
 
 simple_fi_poll_SOURCES = \
