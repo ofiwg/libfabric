@@ -163,8 +163,7 @@ uint16_t sock_conn_map_connect(struct sock_domain *dom,
 	}
 	
 	optval = 1;
-	ret = setsockopt(conn_fd, SOL_SOCKET, SO_REUSEADDR, &optval, 
-			 sizeof optval);
+	setsockopt(conn_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
 	
 	memcpy(sa_ip, inet_ntoa(addr->sin_addr), INET_ADDRSTRLEN);
 	SOCK_LOG_INFO("Connecting to: %s:%d\n",
@@ -280,8 +279,8 @@ static void *_sock_conn_listen(void *arg)
 			fcntl(listen_fd, F_SETFL, flags | O_NONBLOCK);
 
 			optval = 1;
-			ret = setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof
-					optval);
+			setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &optval, 
+				   sizeof optval);
 			
 			if (!bind(listen_fd, s_res->ai_addr, s_res->ai_addrlen))
 				break;
