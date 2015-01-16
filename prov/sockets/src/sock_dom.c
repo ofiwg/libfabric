@@ -133,10 +133,9 @@ static int sock_dom_close(struct fid *fid)
 		return -FI_EBUSY;
 	}
 
-	if (dom->u_cmap.size)
-		sock_conn_map_destroy(&dom->u_cmap);
 	if (dom->r_cmap.size)
 		sock_conn_map_destroy(&dom->r_cmap);
+	fastlock_destroy(&dom->r_cmap.lock);
 
 	sock_pe_finalize(dom->pe);
 	fastlock_destroy(&dom->lock);
@@ -456,8 +455,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	sock_domain->r_cmap.domain = sock_domain;
-	sock_domain->u_cmap.domain = sock_domain;
-
+	fastlock_init(&sock_domain->r_cmap.lock);
 	if(socketpair(AF_UNIX, SOCK_STREAM, 0, sock_domain->signal_fds) < 0)
 		goto err;
 
