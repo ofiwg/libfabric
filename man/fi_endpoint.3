@@ -426,6 +426,13 @@ datagram queue pairs.
 protocol known as PSM, performance scaled messaging.
 PSMX is an extended version of the PSM protocol to support the libfabric
 interfaces.
+.PP
+\f[I]FI_PROTO_UDP\f[] : The protocol sends and receives UDP datagrams.
+For example, an endpoint using \f[I]FI_PROTO_UDP\f[] will be able to
+communicate with a remote peer that is using Berkeley
+\f[I]SOCK_DGRAM\f[] sockets using \f[I]IPPROTO_UDP\f[].
+.PP
+\f[I]FI_PROTO_SOCK_TCP\f[] : The protocol is layered over TCP packets.
 .SS protocol_version - Protocol Version
 .PP
 Identifies which version of the protocol is employed by the provider.
