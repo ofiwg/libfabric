@@ -299,8 +299,8 @@ static struct fi_ops_msg usdf_dgram_ops = {
 	.inject = usdf_dgram_inject,
 	.senddata = usdf_dgram_senddata,
 	.injectdata = fi_no_msg_injectdata,
-	.rx_size_left = fi_no_msg_rx_size_left,
-	.tx_size_left = fi_no_msg_tx_size_left,
+	.rx_size_left = usdf_dgram_rx_size_left,
+	.tx_size_left = usdf_dgram_tx_size_left,
 };
 
 static struct fi_ops_msg usdf_dgram_prefix_ops = {
@@ -314,8 +314,8 @@ static struct fi_ops_msg usdf_dgram_prefix_ops = {
 	.inject = usdf_dgram_inject,
 	.senddata = usdf_dgram_senddata,
 	.injectdata = fi_no_msg_injectdata,
-	.rx_size_left = fi_no_msg_rx_size_left,
-	.tx_size_left = fi_no_msg_tx_size_left,
+	.rx_size_left = usdf_dgram_prefix_rx_size_left,
+	.tx_size_left = usdf_dgram_prefix_tx_size_left,
 };
 
 static struct fi_ops_cm usdf_cm_dgram_ops = {
