@@ -22,6 +22,7 @@ bin_PROGRAMS = \
 	simple/fi_scalable_ep \
 	unit/fi_eq_test \
 	unit/fi_av_test \
+	unit/fi_size_left_test \
 	ported/libibverbs/fi_rc_pingpong
 
 simple_fi_info_SOURCES = \
@@ -107,6 +108,10 @@ unit_fi_eq_test_SOURCES = \
 
 unit_fi_av_test_SOURCES = \
     unit/av_test.c \
+	unit/common.c
+
+unit_fi_size_left_test_SOURCES = \
+	unit/size_left_test.c \
 	unit/common.c
 
 ported_libibverbs_fi_rc_pingpong_SOURCES = \
