@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-01\-08" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-01\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -954,8 +954,9 @@ Use of this flag may cause a single posted receive operation to generate
 multiple completions as messages are placed into the buffer.
 The placement of received data into the buffer may be subjected to
 provider specific alignment restrictions.
-The buffer will be freed from the endpoint when a message is received
-that cannot fit into the remaining free buffer space.
+The buffer will be returned to the application\[aq]s control, and an
+\f[I]FI_MULTI_RECV\f[] completion will be generated, when a message is
+received that cannot fit into the remaining free buffer space.
 .PP
 \f[I]FI_BUFFERED_RECV\f[] : If set, the communication interface
 implementation should attempt to queue inbound data that arrives before
