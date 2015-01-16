@@ -923,7 +923,8 @@ value of an endpoint.
   posted receive operation to generate multiple completions as
   messages are placed into the buffer.  The placement of received data
   into the buffer may be subjected to provider specific alignment
-  restrictions.  The buffer will be freed from the endpoint when a
+  restrictions.  The buffer will be returned to the application's
+  control, and an *FI_MULTI_RECV* completion will be generated, when a
   message is received that cannot fit into the remaining free buffer
   space.
 
