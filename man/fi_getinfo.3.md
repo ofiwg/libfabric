@@ -429,7 +429,7 @@ below.
 *FI_PROV_MR_ATTR*
 : The provider assigns one or more attributes associated with a memory
   registration request.  The provider will set this mode if it returns
-  the the memory registration keys that applications must use, or if
+  the memory registration keys that applications must use, or if
   it requires that the MR offset associated with a memory region be
   the same as the virtual address of the memory.
 
@@ -473,7 +473,7 @@ field indicates the expected address format for these operations.
 
 A provider may support one or more of the following addressing
 formats.  In some cases, a selected addressing format may need to be
-translated or mapped into into an address which is native to the
+translated or mapped into an address which is native to the
 fabric.  See `fi_av`(3).
 
 *FI_FORMAT_UNSPEC*
