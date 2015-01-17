@@ -99,7 +99,7 @@ usdf_ep_dgram_enable(struct fid_ep *fep)
 				&filt,
 				&ep->e.dg.ep_qp);
 	} else {
-		ret = -EAGAIN;
+		ret = -FI_EAGAIN;
 	}
 
 	if (ret != 0) {
