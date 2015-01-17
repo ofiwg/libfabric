@@ -270,6 +270,10 @@ usdf_ep_dgram_close(fid_t fid)
 	usdf_ep_dgram_deref_cq(ep->e.dg.ep_wcq);
 	usdf_ep_dgram_deref_cq(ep->e.dg.ep_rcq);
 
+	if (ep->e.dg.ep_sock != -1) {
+		close(ep->e.dg.ep_sock);
+	}
+
 	free(ep);
 	return 0;
 }
