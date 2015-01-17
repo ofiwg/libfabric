@@ -2484,6 +2484,9 @@ static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *
 	struct ibv_context **dev_list;
 	int i, ret = -FI_ENODEV;
 
+	if (!name)
+		return -FI_EINVAL;
+
 	dev_list = rdma_get_devices(NULL);
 	if (!dev_list)
 		return -errno;
