@@ -17,7 +17,7 @@ fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 int fi_getinfo(int version, const char *node, const char *service,
         uint64_t flags, struct fi_info *hints, struct fi_info **info);
 
-int fi_freeinfo(struct fi_info *info);
+void fi_freeinfo(struct fi_info *info);
 
 struct fi_info *fi_dupinfo(const struct fi_info *info);
 {% endhighlight %}
