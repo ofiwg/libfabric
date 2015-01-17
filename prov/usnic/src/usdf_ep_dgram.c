@@ -76,6 +76,15 @@ usdf_ep_dgram_enable(struct fid_ep *fep)
 
 	ep = ep_ftou(fep);
 
+	if (ep->e.dg.ep_wcq == NULL) {
+		ret = -FI_EOPBADSTATE;
+		goto fail;
+	}
+	if (ep->e.dg.ep_rcq == NULL) {
+		ret = -FI_EOPBADSTATE;
+		goto fail;
+	}
+
 	filt.uf_type = USD_FTY_UDP_SOCK;
 	filt.uf_filter.uf_udp_sock.u_sock = ep->e.dg.ep_sock;
 
