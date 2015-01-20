@@ -76,6 +76,15 @@ usdf_ep_dgram_enable(struct fid_ep *fep)
 
 	ep = ep_ftou(fep);
 
+	if (ep->e.dg.ep_wcq == NULL) {
+		ret = -FI_EOPBADSTATE;
+		goto fail;
+	}
+	if (ep->e.dg.ep_rcq == NULL) {
+		ret = -FI_EOPBADSTATE;
+		goto fail;
+	}
+
 	filt.uf_type = USD_FTY_UDP_SOCK;
 	filt.uf_filter.uf_udp_sock.u_sock = ep->e.dg.ep_sock;
 
@@ -90,7 +99,7 @@ usdf_ep_dgram_enable(struct fid_ep *fep)
 				&filt,
 				&ep->e.dg.ep_qp);
 	} else {
-		ret = -EAGAIN;
+		ret = -FI_EAGAIN;
 	}
 
 	if (ret != 0) {
@@ -260,6 +269,10 @@ usdf_ep_dgram_close(fid_t fid)
 	}
 	usdf_ep_dgram_deref_cq(ep->e.dg.ep_wcq);
 	usdf_ep_dgram_deref_cq(ep->e.dg.ep_rcq);
+
+	if (ep->e.dg.ep_sock != -1) {
+		close(ep->e.dg.ep_sock);
+	}
 
 	free(ep);
 	return 0;
