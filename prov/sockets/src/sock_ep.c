@@ -1188,7 +1188,7 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep)
 {
 	if (!ep->key) {
 		ep->key = sock_conn_map_match_or_connect(
-			ep->domain, &ep->domain->r_cmap, ep->dest_addr, 0);
+			ep->domain, &ep->domain->r_cmap, ep->dest_addr);
 		if (!ep->key) {
 			SOCK_LOG_ERROR("failed to match or connect to addr\n");
 			errno = EINVAL;
