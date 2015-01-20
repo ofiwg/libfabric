@@ -296,21 +296,21 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_bind(&ep->fid, &cmeq->fid, 0);
+	ret = fi_ep_bind(ep, &cmeq->fid, 0);
 	if (ret) {
-		printf("fi_bind %s\n", fi_strerror(-ret));
+		printf("fi_ep_bind %s\n", fi_strerror(-ret));
 		return ret;
 	}
 
-	ret = fi_bind(&ep->fid, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		printf("fi_bind %s\n", fi_strerror(-ret));
+		printf("fi_ep_bind %s\n", fi_strerror(-ret));
 		return ret;
 	}
 
-	ret = fi_bind(&ep->fid, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		printf("fi_bind %s\n", fi_strerror(-ret));
+		printf("fi_ep_bind %s\n", fi_strerror(-ret));
 		return ret;
 	}
 
@@ -352,9 +352,9 @@ static int server_listen(void)
 	if (ret)
 		goto err2;
 
-	ret = fi_bind(&pep->fid, &cmeq->fid, 0);
+	ret = fi_pep_bind(pep, &cmeq->fid, 0);
 	if (ret) {
-		printf("fi_bind %s\n", fi_strerror(-ret));
+		printf("fi_pep_bind %s\n", fi_strerror(-ret));
 		goto err3;
 	}
 

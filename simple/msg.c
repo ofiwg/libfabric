@@ -134,23 +134,23 @@ static int bind_ep_res(void)
 	int ret;
 
 	/* Bind EQ with endpoint */
-	ret = fi_bind(&ep->fid, &cmeq->fid, 0);
+	ret = fi_ep_bind(ep, &cmeq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_bind: cmeq", ret);
+		FI_PRINTERR("fi_ep_bind: cmeq", ret);
 		return ret;
 	}
 
 	/* Bind Send CQ with endpoint to collect send completions */
-	ret = fi_bind(&ep->fid, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind: scq", ret);
 		return ret;
 	}
 
 	/* Bind Recv CQ with endpoint to collect recv completions */
-	ret = fi_bind(&ep->fid, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind: rcq", ret);
 		return ret;
 	}
 
@@ -189,9 +189,9 @@ static int server_listen(void)
 		goto err2;
 
 	/* Bind EQ to passive endpoint */
-	ret = fi_bind(&pep->fid, &cmeq->fid, 0);
+	ret = fi_pep_bind(pep, &cmeq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_bind: cmeq", ret);
+		FI_PRINTERR("fi_pep_bind: cmeq", ret);
 		goto err3;
 	}
 

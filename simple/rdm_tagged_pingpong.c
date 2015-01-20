@@ -310,21 +310,21 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_bind(&ep->fid, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind: scq", ret);
 		return ret;
 	}
 
-	ret = fi_bind(&ep->fid, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind: rcq", ret);
 		return ret;
 	}
 
-	ret = fi_bind(&ep->fid, &av->fid, 0);
+	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind: av", ret);
 		return ret;
 	}
 
