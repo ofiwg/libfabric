@@ -346,7 +346,6 @@ int main(int argc, char **argv)
 	ret = send_recv();
 
 	/* Tear down */
-	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);

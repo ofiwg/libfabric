@@ -82,6 +82,7 @@ static void usage(char *name)
 
 static void free_ep_res(void)
 {
+	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&pollset->fid);
 	fi_close(&rcq->fid);
@@ -343,7 +344,7 @@ static int init_av(void)
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
 				&fi_ctx_av);
-		if (ret) {
+		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
@@ -372,7 +373,7 @@ static int init_av(void)
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
 				&fi_ctx_av);
-		if (ret) {
+		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
@@ -490,7 +491,7 @@ int main(int argc, char **argv)
 	hints.ep_attr = &ep_hints;
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG;
-	hints.mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints.mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints.addr_format = FI_FORMAT_UNSPEC;
 
 	ret = init_fabric();
