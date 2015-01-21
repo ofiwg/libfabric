@@ -25,7 +25,8 @@ bin_PROGRAMS = \
 	unit/fi_eq_test \
 	unit/fi_av_test \
 	unit/fi_size_left_test \
-	ported/libibverbs/fi_rc_pingpong
+	ported/libibverbs/fi_rc_pingpong \
+	complex/fabtest
 
 simple_fi_info_SOURCES = \
 	simple/info.c \
@@ -126,6 +127,17 @@ unit_fi_size_left_test_SOURCES = \
 
 ported_libibverbs_fi_rc_pingpong_SOURCES = \
 	ported/libibverbs/rc_pingpong.c
+
+complex_fabtest_SOURCES = \
+	complex/fabtest.c \
+	complex/ft_comm.c \
+	complex/ft_comp.c \
+	complex/ft_config.c \
+	complex/ft_domain.c \
+	complex/ft_endpoint.c \
+	complex/ft_msg.c \
+	complex/ft_test.c \
+	common/shared.c
 
 man_MANS = man/fabtests.7
 
