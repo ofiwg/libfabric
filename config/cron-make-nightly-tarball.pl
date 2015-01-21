@@ -107,7 +107,8 @@ close(IN);
 $config =~ m/AC_INIT\(\[libfabric\], \[(.+?)\]/;
 my $orig_version = $1;
 verbose("*** Got configure.ac version: $orig_version\n");
-my $version = "$orig_version-$gd";
+my $version = "$orig_version.$gd";
+$version =~ y/-/./;
 verbose("*** Nightly tarball version: $version\n");
 
 # Is there already a tarball of this version in the download
