@@ -293,6 +293,9 @@ static int psmx_cntr_close(fid_t fid)
 
 	cntr = container_of(fid, struct psmx_fid_cntr, cntr.fid);
 
+	if (cntr->wait && cntr->wait_is_local)
+		fi_close((fid_t)cntr->wait);
+
 	pthread_mutex_destroy(&cntr->trigger_lock);
 	free(cntr);
 
@@ -351,6 +354,7 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	struct psmx_fid_cntr *cntr_priv;
 	struct psmx_fid_wait *wait = NULL;
 	struct fi_wait_attr wait_attr;
+	int wait_is_local = 0;
 	int events;
 	uint64_t flags;
 	int err;
@@ -392,6 +396,7 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 				     &wait_attr, (struct fid_wait **)&wait);
 		if (err)
 			return err;
+		wait_is_local = 1;
 		break;
 
 	default:
@@ -407,6 +412,7 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	cntr_priv->domain = domain_priv;
 	cntr_priv->events = events;
 	cntr_priv->wait = wait;
+	cntr_priv->wait_is_local = wait_is_local;
 	cntr_priv->flags = flags;
 	cntr_priv->cntr.fid.fclass = FI_CLASS_CNTR;
 	cntr_priv->cntr.fid.context = context;

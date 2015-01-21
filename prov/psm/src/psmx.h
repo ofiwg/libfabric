@@ -349,6 +349,7 @@ struct psmx_fid_cq {
 	struct psmx_cq_event		*pending_error;
 	struct psmx_fid_wait		*wait;
 	int				wait_cond;
+	int				wait_is_local;
 };
 
 enum psmx_triggered_op {
@@ -489,6 +490,7 @@ struct psmx_fid_cntr {
 	uint64_t		counter_last_read;
 	uint64_t		error_counter_last_read;
 	struct psmx_fid_wait	*wait;
+	int			wait_is_local;
 	struct psmx_trigger	*trigger;
 	pthread_mutex_t		trigger_lock;
 };
