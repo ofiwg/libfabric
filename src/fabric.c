@@ -136,10 +136,6 @@ static void fi_ini(void)
 	if (init)
 		goto unlock;
 
-	fi_register_provider(VERBS_INIT);
-	fi_register_provider(PSM_INIT);
-	fi_register_provider(USNIC_INIT);
-
 #ifdef HAVE_LIBDL
 	struct dirent **liblist;
 	int n;
@@ -182,8 +178,14 @@ static void fi_ini(void)
 	free(liblist);
 done:
 #endif
+
+	fi_register_provider(PSM_INIT);
+	fi_register_provider(USNIC_INIT);
+
+	fi_register_provider(VERBS_INIT);
 	fi_register_provider(SOCKETS_INIT);
 	init = 1;
+
 unlock:
 	pthread_mutex_unlock(&ini_lock);
 }
