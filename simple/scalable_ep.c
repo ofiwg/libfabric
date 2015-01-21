@@ -230,9 +230,9 @@ static int bind_ep_res(void)
 	int i, ret;
 
 	for (i = 0; i < ctx_cnt; i++) {
-		ret = fi_bind(&tx_ep[i]->fid, &scq[i]->fid, FI_SEND);
+		ret = fi_ep_bind(tx_ep[i], &scq[i]->fid, FI_SEND);
 		if (ret) {
-			FI_PRINTERR("fi_bind: scq", ret);
+			FI_PRINTERR("fi_ep_bind: scq", ret);
 			return ret;
 		}
 
@@ -244,9 +244,9 @@ static int bind_ep_res(void)
 	}
 
 	for (i = 0; i < ctx_cnt; i++) {
-		ret = fi_bind(&rx_ep[i]->fid, &rcq[i]->fid, FI_RECV);
+		ret = fi_ep_bind(rx_ep[i], &rcq[i]->fid, FI_RECV);
 		if (ret) {
-			FI_PRINTERR("fi_bind: rcq", ret);
+			FI_PRINTERR("fi_ep_bind: rcq", ret);
 			return ret;
 		}
 
@@ -258,9 +258,9 @@ static int bind_ep_res(void)
 	}
 
 	/* Bind scalable EP with AV */
-	ret = fi_bind(&sep->fid, &av->fid, 0);
+	ret = fi_scalable_ep_bind(sep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind: av", ret);
 		return ret;
 	}
 

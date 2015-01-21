@@ -483,32 +483,27 @@ err1:
 	return ret;
 }
 
-static int bind_fid( fid_t ep, fid_t res, uint64_t flags)
-{
-	int ret;
-
-	ret = fi_bind(ep, res, flags);
-	if (ret)
-		fprintf(stderr, "fi_bind %s\n", fi_strerror(-ret));
-	
-	return ret;
-}
-
 static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = bind_fid(&ep->fid, &scq->fid, FI_SEND | FI_READ | FI_WRITE);
-	if (ret)
+	ret = fi_ep_bind(ep, &scq->fid, FI_SEND | FI_READ | FI_WRITE);
+	if (ret) {
+		fprintf(stderr, "fi_ep_bind %s\n", fi_strerror(-ret));
 		return ret;
+	}
 
-	ret = bind_fid(&ep->fid, &rcq->fid, FI_RECV);
-	if (ret)
+	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	if (ret) {
+		fprintf(stderr, "fi_ep_bind %s\n", fi_strerror(-ret));
 		return ret;
-	
-	ret = bind_fid(&ep->fid, &av->fid, 0);
-	if(ret)
+	}
+
+	ret = fi_ep_bind(ep, &av->fid, FI_RECV);
+	if (ret) {
+		fprintf(stderr, "fi_ep_bind %s\n", fi_strerror(-ret));
 		return ret;
+	}
 
 	ret = fi_enable(ep);
 

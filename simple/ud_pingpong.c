@@ -274,21 +274,21 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_bind(&ep->fid, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		printf("fi_bind scq %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_ep_bind scq %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
 
-	ret = fi_bind(&ep->fid, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		printf("fi_bind rcq %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_ep_bind rcq %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
 
-	ret = fi_bind(&ep->fid, &av->fid, 0);
+	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		printf("fi_bind av %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_ep_bind av %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
 

@@ -506,9 +506,9 @@ av_good_vector_async()
 				ret, fi_strerror(-ret));
 		goto fail;
 	}
-	ret = fi_bind(&av->fid, &eq->fid, 0);
+	ret = fi_av_bind(av, &eq->fid, 0);
 	if (ret != 0) {
-		sprintf(err_buf, "fi_bind() = %d, %s", ret, fi_strerror(-ret));
+		sprintf(err_buf, "fi_av_bind() = %d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
 
@@ -580,9 +580,9 @@ av_zero_async()
 				ret, fi_strerror(-ret));
 		goto fail;
 	}
-	ret = fi_bind(&av->fid, &eq->fid, 0);
+	ret = fi_av_bind(av, &eq->fid, 0);
 	if (ret != 0) {
-		sprintf(err_buf, "fi_bind() = %d, %s", ret, fi_strerror(-ret));
+		sprintf(err_buf, "fi_av_bind() = %d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
 
@@ -638,9 +638,9 @@ av_good_2vector_async()
 				ret, fi_strerror(-ret));
 		goto fail;
 	}
-	ret = fi_bind(&av->fid, &eq->fid, 0);
+	ret = fi_av_bind(av, &eq->fid, 0);
 	if (ret != 0) {
-		sprintf(err_buf, "fi_bind() = %d, %s", ret, fi_strerror(-ret));
+		sprintf(err_buf, "fi_av_bind() = %d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
 
@@ -748,9 +748,9 @@ av_goodbad_vector_async()
 				ret, fi_strerror(-ret));
 		goto fail;
 	}
-	ret = fi_bind(&av->fid, &eq->fid, 0);
+	ret = fi_av_bind(av, &eq->fid, 0);
 	if (ret != 0) {
-		sprintf(err_buf, "fi_bind() = %d, %s", ret, fi_strerror(-ret));
+		sprintf(err_buf, "fi_av_bind() = %d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
 
@@ -850,9 +850,9 @@ av_goodbad_2vector_async()
 				ret, fi_strerror(-ret));
 		goto fail;
 	}
-	ret = fi_bind(&av->fid, &eq->fid, 0);
+	ret = fi_av_bind(av, &eq->fid, 0);
 	if (ret != 0) {
-		sprintf(err_buf, "fi_bind() = %d, %s", ret, fi_strerror(-ret));
+		sprintf(err_buf, "fi_av_bind() = %d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
 

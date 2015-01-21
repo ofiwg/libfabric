@@ -152,16 +152,6 @@ void init_test(int size, char *test_name, size_t test_name_len,
 	*iterations = size_to_count(*transfer_size);
 }
 
-int bind_fid( fid_t ep, fid_t res, uint64_t flags)
-{
-	int ret;
-
-	ret = fi_bind(ep, res, flags);
-	if (ret)
-		FI_PRINTERR("fi_bind", ret);
-	return ret;
-}
-
 int wait_for_completion(struct fid_cq *cq, int num_completions)
 {
 	int ret;

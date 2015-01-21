@@ -146,7 +146,7 @@ static int pp_listen_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rc = fi_bind(&ctx->lep->fid, &ctx->eq->fid, 0);
+	rc = fi_pep_bind(ctx->lep, &ctx->eq->fid, 0);
 	if (rc) {
 		FI_ERR_LOG("Unable to bind listener resources", -rc);
 		goto err;
@@ -212,15 +212,15 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rc = fi_bind(&ctx->ep->fid, &ctx->cq->fid, FI_SEND | FI_RECV);
+	rc = fi_ep_bind(ctx->ep, &ctx->cq->fid, FI_SEND | FI_RECV);
 	if (rc) {
-		FI_ERR_LOG("fi_bind", rc);
+		FI_ERR_LOG("fi_ep_bind", rc);
 		goto err;
 	}
 
-	rc = fi_bind(&ctx->ep->fid, &ctx->eq->fid, 0);
+	rc = fi_ep_bind(ctx->ep, &ctx->eq->fid, 0);
 	if (rc) {
-		FI_ERR_LOG("fi_bind", rc);
+		FI_ERR_LOG("fi_ep_bind", rc);
 		goto err;
 	}
 
@@ -292,15 +292,15 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 	}
 	
 	/* Bind eq to ep */
-	rc = fi_bind(&ctx->ep->fid, &ctx->cq->fid, FI_SEND | FI_RECV);
+	rc = fi_ep_bind(ctx->ep, &ctx->cq->fid, FI_SEND | FI_RECV);
 	if (rc) {
-		FI_ERR_LOG("fi_bind", rc);
+		FI_ERR_LOG("fi_ep_bind", rc);
 		goto err;
 	}	
 
-	rc = fi_bind(&ctx->ep->fid, &ctx->eq->fid, 0);
+	rc = fi_ep_bind(ctx->ep, &ctx->eq->fid, 0);
 	if (rc) {
-		FI_ERR_LOG("fi_bind", rc);
+		FI_ERR_LOG("fi_ep_bind", rc);
 		goto err;
 	}
 

@@ -295,21 +295,21 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_bind(&ep->fid, &scntr->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &scntr->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_bind: scntr", ret);
+		FI_PRINTERR("fi_ep_bind: scntr", ret);
 		return ret;
 	}
 
-	ret = fi_bind(&ep->fid, &rcntr->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rcntr->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_bind: rcntr", ret);
+		FI_PRINTERR("fi_ep_bind: rcntr", ret);
 		return ret;
 	}
 
-	ret = fi_bind(&ep->fid, &av->fid, 0);
+	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind: av", ret);
 		return ret;
 	}
 
