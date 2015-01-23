@@ -334,7 +334,7 @@ static int init_fabric(void)
 				(struct sockaddr **) &hints.src_addr, 
 				(socklen_t *) &hints.src_addrlen);
 		if (ret) {
-			fprintf(stderr, "source address error %s\n", 
+			FI_DEBUG("source address error %s\n", 
 					gai_strerror(ret));
 			return ret;
 		}
@@ -517,15 +517,33 @@ out:
 	return ret;
 }
 
+void print_usage(char *name)
+{
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "  %s [OPTIONS]\t\tstart ping server\n", name);
+	fprintf(stderr, "  %s [OPTIONS] <host>\tpong given host\n", name);
+
+	fprintf(stderr, "\nOptions:\n");
+	fprintf(stderr, "  -n\tdomain name\n");
+	fprintf(stderr, "  -p\tport number\n");
+	fprintf(stderr, "  -s\tsource address\n");
+	fprintf(stderr, "  -I\tnumber of iterations\n");
+	fprintf(stderr, "  -S\tspecific transfer size or 'all'\n");
+	fprintf(stderr, "  -m\tmachine readable output\n");
+	fprintf(stderr, "  -i\tprint hints structure and exit\n");
+	fprintf(stderr, "  -v\tdisplay versions and exit\n");
+	fprintf(stderr, "  -h\tdisplay this help output\n");
+
+	return;
+}
+
 int main(int argc, char **argv)
 {
 	int op, ret;
+	int prhints = 0;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:I:S:m")) != -1) {
+	while ((op = getopt(argc, argv, "n:p:s:I:S:mivh")) != -1) {
 		switch (op) {
-		case 'd':
-			dst_addr = optarg;
-			break;
 		case 'n':
 			domain_hints.name = optarg;
 			break;
@@ -533,7 +551,15 @@ int main(int argc, char **argv)
 			port = optarg;
 			break;
 		case 's':
+			ret = getaddr(optarg, NULL,
+				      (struct sockaddr **) &hints.src_addr,
+				      (socklen_t *) &hints.src_addrlen);
+
 			src_addr = optarg;
+			if (ret) {
+				FI_DEBUG("source address error %s\n", gai_strerror(ret));
+				return EXIT_FAILURE;
+			}
 			break;
 		case 'I':
 			custom = 1;
@@ -553,17 +579,13 @@ int main(int argc, char **argv)
 			g_argv = argv;
 			break;
 		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-d destination_address]\n");
-			printf("\t[-n domain_name]\n");
-			printf("\t[-p port_number]\n");
-			printf("\t[-s source_address]\n");
-			printf("\t[-I iterations]\n");
-			printf("\t[-S transfer_size or 'all']\n");
-			printf("\t[-m machine readable output]\n");
-			exit(1);
+			print_usage(argv[0]);
+			return EXIT_FAILURE;
 		}
 	}
+
+	if (optind < argc)
+		dst_addr = argv[optind];
 
 	hints.domain_attr = &domain_hints;
 	hints.ep_attr = &ep_hints;
@@ -572,6 +594,10 @@ int main(int argc, char **argv)
 	hints.mode = FI_CONTEXT;
 	hints.addr_format = FI_FORMAT_UNSPEC;
 
-	ret = run();
-	return ret;
+	if (prhints) {
+		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
+		return EXIT_SUCCESS;
+	}
+
+	return run();
 }
