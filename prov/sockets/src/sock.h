@@ -437,6 +437,7 @@ struct sock_rx_entry {
 	uint8_t is_buffered;
 	uint8_t is_busy;
 	uint8_t is_claimed;
+	uint8_t is_complete;
 	uint8_t reserved[5];
 
 	uint64_t used;

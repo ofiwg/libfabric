@@ -1031,12 +1031,14 @@ int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		rx_buffered = container_of(entry, struct sock_rx_entry, entry);
 		entry = entry->next;
 
+		if (!rx_buffered->is_complete)
+			continue;
+
 		rx_posted = sock_rx_get_entry(rx_ctx, rx_buffered->addr, 
 					      rx_buffered->tag);
 		if (!rx_posted) 
 			continue;
 
-		rx_ctx->buffered_len -= rem;
 		SOCK_LOG_INFO("Consuming buffered entry: %p, ctx: %p\n", 
 			      rx_buffered, rx_ctx);
 		SOCK_LOG_INFO("Consuming posted entry: %p, ctx: %p\n", 
@@ -1044,6 +1046,7 @@ int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 
 		offset = 0;
 		rem = rx_buffered->iov[0].iov.len;
+		rx_ctx->buffered_len -= rem;
 		used_len = rx_posted->used;
 		for (i = 0; i < rx_posted->rx_op.dest_iov_len && rem > 0; i++) {
 			if (used_len >= rx_posted->rx_op.dest_iov_len) {
@@ -1204,6 +1207,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 
 	pe_entry->is_complete = 1;
 	rx_entry->is_busy = 0;
+	rx_entry->is_complete = 1;
 
 	/* report error, if any */
 	if (rem) {

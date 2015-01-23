@@ -85,6 +85,7 @@ struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,
 		       rx_entry, len, rx_ctx);
 
 	rx_entry->is_buffered = 1;
+	rx_entry->is_complete = 0;
 	rx_entry->rx_op.dest_iov_len = 1;
 	rx_entry->iov[0].iov.len = len;
 	rx_entry->iov[0].iov.addr = (uint64_t)((char*)rx_entry + 
