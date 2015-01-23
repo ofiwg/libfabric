@@ -253,6 +253,7 @@ struct psmx_multi_recv {
 
 struct psmx_fid_fabric {
 	struct fid_fabric	fabric;
+	struct psmx_fid_domain	*active_domain;
 };
 
 struct psmx_fid_domain {
