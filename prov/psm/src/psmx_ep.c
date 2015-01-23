@@ -237,11 +237,6 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
-static inline int psmx_ep_progress(struct psmx_fid_ep *ep)
-{
-	return psmx_cq_poll_mq(NULL, ep->domain, NULL, 0, NULL);
-}
-
 static int psmx_ep_control(fid_t fid, int command, void *arg)
 {
 	struct fi_alias *alias;

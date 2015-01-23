@@ -60,10 +60,9 @@ static void *psmx_wait_progress(void *args)
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
 		psmx_wait_thread_busy = 1;
-		while (psmx_wait_thread_enabled) {
-			psmx_cq_poll_mq(NULL, domain, NULL, 0, NULL);
-			psmx_am_progress(domain);
-		}
+		while (psmx_wait_thread_enabled)
+			psmx_progress(domain);
+
 		psmx_wait_thread_busy = 0;
 
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);

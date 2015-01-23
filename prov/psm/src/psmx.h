@@ -659,6 +659,12 @@ static inline void psmx_cntr_inc(struct psmx_fid_cntr *cntr)
 		psmx_wait_signal((struct fid_wait *)cntr->wait);
 }
 
+static inline void psmx_progress(struct psmx_fid_domain *domain)
+{
+	psmx_cq_poll_mq(NULL, domain, NULL, 0, NULL);
+	psmx_am_progress(domain);
+}
+
 ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 		   void *desc, fi_addr_t dest_addr, void *context,
 		   uint64_t flags);

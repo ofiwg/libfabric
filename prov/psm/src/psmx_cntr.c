@@ -202,8 +202,7 @@ static uint64_t psmx_cntr_read(struct fid_cntr *cntr)
 	cntr_priv = container_of(cntr, struct psmx_fid_cntr, cntr);
 
 	if (poll_cnt++ == PSMX_CNTR_POLL_THRESHOLD) {
-		psmx_cq_poll_mq(NULL, cntr_priv->domain, NULL, 0, NULL);
-		psmx_am_progress(cntr_priv->domain);
+		psmx_progress(cntr_priv->domain);
 		poll_cnt = 0;
 	}
 
@@ -272,8 +271,7 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 				break;
 		}
 		else {
-			psmx_cq_poll_mq(NULL, cntr_priv->domain, NULL, 0, NULL);
-			psmx_am_progress(cntr_priv->domain);
+			psmx_progress(cntr_priv->domain);
 		}
 
 		if (cntr_priv->counter >= threshold)
