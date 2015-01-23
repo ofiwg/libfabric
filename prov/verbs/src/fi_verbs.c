@@ -908,6 +908,8 @@ static struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.inject = fi_no_msg_inject,
 	.senddata = fi_ibv_msg_ep_senddata,
 	.injectdata = fi_no_msg_injectdata,
+	.rx_size_left = fi_no_msg_rx_size_left,
+	.tx_size_left = fi_no_msg_tx_size_left,
 };
 
 static ssize_t

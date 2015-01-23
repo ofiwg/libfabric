@@ -99,6 +99,8 @@ struct fi_ops_msg {
 			uint64_t data, fi_addr_t dest_addr, void *context);
 	ssize_t	(*injectdata)(struct fid_ep *ep, const void *buf, size_t len,
 			uint64_t data, fi_addr_t dest_addr);
+	ssize_t (*rx_size_left)(struct fid_ep *ep);
+	ssize_t (*tx_size_left)(struct fid_ep *ep);
 };
 
 struct fi_ops_cm;
@@ -294,6 +296,18 @@ fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t dest_addr)
 {
 	return ep->msg->injectdata(ep, buf, len, data, dest_addr);
+}
+
+static inline ssize_t
+fi_rx_size_left(struct fid_ep *ep)
+{
+	return ep->msg->rx_size_left(ep);
+}
+
+static inline ssize_t
+fi_tx_size_left(struct fid_ep *ep)
+{
+	return ep->msg->tx_size_left(ep);
 }
 
 #else // FABRIC_DIRECT
