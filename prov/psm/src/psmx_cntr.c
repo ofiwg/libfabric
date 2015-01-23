@@ -193,11 +193,19 @@ void psmx_cntr_add_trigger(struct psmx_fid_cntr *cntr, struct psmx_trigger *trig
 	psmx_cntr_check_trigger(cntr);
 }
 
+#define PSMX_CNTR_POLL_THRESHOLD 100
 static uint64_t psmx_cntr_read(struct fid_cntr *cntr)
 {
 	struct psmx_fid_cntr *cntr_priv;
+	static int poll_cnt = 0;
 
 	cntr_priv = container_of(cntr, struct psmx_fid_cntr, cntr);
+
+	if (poll_cnt++ == PSMX_CNTR_POLL_THRESHOLD) {
+		psmx_cq_poll_mq(NULL, cntr_priv->domain, NULL, 0, NULL);
+		psmx_am_progress(cntr_priv->domain);
+		poll_cnt = 0;
+	}
 
 	cntr_priv->counter_last_read = cntr_priv->counter;
 
