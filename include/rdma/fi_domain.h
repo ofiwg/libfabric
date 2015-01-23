@@ -223,6 +223,11 @@ static inline uint64_t fi_mr_key(struct fid_mr *mr)
 	return mr->key;
 }
 
+static inline int fi_mr_bind(struct fid_mr *mr, struct fid *bfid, uint64_t flags)
+{
+	return mr->fid.ops->bind(&mr->fid, bfid, flags);
+}
+
 static inline int
 fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	   struct fid_av **av, void *context)
