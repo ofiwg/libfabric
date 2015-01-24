@@ -2025,6 +2025,7 @@ fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	_eq->fab = container_of(fabric, struct fi_ibv_fabric, fabric_fid);
 
 	switch (attr->wait_obj) {
+	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 		_eq->channel = rdma_create_event_channel();
 		if (!_eq->channel) {
@@ -2338,6 +2339,7 @@ fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	_cq->domain = container_of(domain, struct fi_ibv_domain, domain_fid);
 
 	switch (attr->wait_obj) {
+	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 		_cq->channel = ibv_create_comp_channel(_cq->domain->verbs);
 		if (!_cq->channel) {
