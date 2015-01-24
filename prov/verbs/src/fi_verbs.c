@@ -1720,6 +1720,8 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	if (!_ep->eq)
 		return -FI_ENOEQ;
+	if (!_ep->scq || !_ep->rcq)
+		return -FI_ENOCQ;
 
 	return fi_ibv_msg_ep_create_qp(_ep);
 }
