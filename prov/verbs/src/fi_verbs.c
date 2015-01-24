@@ -1678,7 +1678,7 @@ static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 
 static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.getname = NULL, /* TODO */
+	.getname = fi_no_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_ibv_msg_ep_connect,
 	.listen = fi_no_listen,
@@ -2574,7 +2574,7 @@ static int fi_ibv_pep_listen(struct fid_pep *pep)
 
 static struct fi_ops_cm fi_ibv_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.getname = NULL, /* TODO */
+	.getname = fi_no_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
 	.listen = fi_ibv_pep_listen,
