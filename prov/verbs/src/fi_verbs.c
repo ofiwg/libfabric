@@ -689,6 +689,9 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
+		if (!(flags & (FI_RECV|FI_SEND))) {
+			return -EINVAL;
+		}
 		if (flags & FI_RECV) {
 			if (ep->rcq)
 				return -EINVAL;
