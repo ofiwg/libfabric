@@ -114,6 +114,10 @@ datatype or field value.
 *FI_TYPE_MSG_ORDER*
 : struct fi_ep_attr::msg_order field
 
+*FI_TYPE_VERSION*
+: Returns the library version of libfabric in string form.  The data
+  parameter is ignored.
+
 fi_tostr() will return a pointer to an internal libfabric buffer that
 should not be modified, and will be overwritten the next time
 fi_tostr() is invoked.  fi_tostr() is not thread safe.
