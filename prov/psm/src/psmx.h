@@ -253,6 +253,7 @@ struct psmx_multi_recv {
 
 struct psmx_fid_fabric {
 	struct fid_fabric	fabric;
+	struct psmx_fid_domain	*active_domain;
 };
 
 struct psmx_fid_domain {
@@ -349,6 +350,7 @@ struct psmx_fid_cq {
 	struct psmx_cq_event		*pending_error;
 	struct psmx_fid_wait		*wait;
 	int				wait_cond;
+	int				wait_is_local;
 };
 
 enum psmx_triggered_op {
@@ -489,6 +491,7 @@ struct psmx_fid_cntr {
 	uint64_t		counter_last_read;
 	uint64_t		error_counter_last_read;
 	struct psmx_fid_wait	*wait;
+	int			wait_is_local;
 	struct psmx_trigger	*trigger;
 	pthread_mutex_t		trigger_lock;
 };
@@ -654,6 +657,12 @@ static inline void psmx_cntr_inc(struct psmx_fid_cntr *cntr)
 	psmx_cntr_check_trigger(cntr);
 	if (cntr->wait)
 		psmx_wait_signal((struct fid_wait *)cntr->wait);
+}
+
+static inline void psmx_progress(struct psmx_fid_domain *domain)
+{
+	psmx_cq_poll_mq(NULL, domain, NULL, 0, NULL);
+	psmx_am_progress(domain);
 }
 
 ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,

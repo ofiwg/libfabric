@@ -82,7 +82,7 @@ static int psmx_poll_poll(struct fid_poll *pollset, void **context, int count)
 	
 	poll_priv = container_of(pollset, struct psmx_fid_poll, poll.fid);
 
-	psmx_cq_poll_mq(NULL, poll_priv->domain, NULL, 0, NULL);
+	psmx_progress(poll_priv->domain);
 
 	head = &poll_priv->poll_list_head;
 	for (p = head->next; p != head && ret_count < count; p = p->next) {

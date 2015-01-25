@@ -646,13 +646,8 @@ static int psmx_cq_close(fid_t fid)
 
 	PSMX_FREE_LIST_FINALIZE(cq->free_list.head, cq->free_list.tail, struct psmx_cq_event);
 
-	if (cq->wait) {
-		if (cq->wait->type == FI_WAIT_FD) {
-			close(cq->wait->fd[0]);
-			close(cq->wait->fd[1]);
-		}
-		free(cq->wait);
-	}
+	if (cq->wait && cq->wait_is_local)
+		fi_close((fid_t)cq->wait);
 
 	free(cq);
 
@@ -704,6 +699,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct psmx_fid_cq *cq_priv;
 	struct psmx_fid_wait *wait = NULL;
 	struct fi_wait_attr wait_attr;
+	int wait_is_local = 0;
 	int entry_size;
 	int err;
 
@@ -758,6 +754,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 				     &wait_attr, (struct fid_wait **)&wait);
 		if (err)
 			return err;
+		wait_is_local = 1;
 		break;
 
 	default:
@@ -792,6 +789,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cq_priv->wait = wait;
 	if (wait)
 		cq_priv->wait_cond = attr->wait_cond;
+	cq_priv->wait_is_local = wait_is_local;
 
 	cq_priv->cq.fid.fclass = FI_CLASS_CQ;
 	cq_priv->cq.fid.context = context;
