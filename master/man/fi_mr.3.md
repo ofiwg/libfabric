@@ -22,7 +22,7 @@ fi_mr_key
 : Return the remote key needed to access a registered memory region
 
 fi_mr_bind
-: Associate a registered memory region with an event collector.
+: Associate a registered memory region with a completion queue or counter.
 
 # SYNOPSIS
 
@@ -46,7 +46,7 @@ void * fi_mr_desc(struct fid_mr *mr);
 
 uint64_t fi_mr_key(struct fid_mr *mr);
 
-int fi_mr_bind(struct fid_mr *mr, struct fid *ec, uint64_t flags);
+int fi_mr_bind(struct fid_mr *mr, struct fid *bfid, uint64_t flags);
 {% endhighlight %}
 
 # ARGUMENTS
@@ -57,8 +57,8 @@ int fi_mr_bind(struct fid_mr *mr, struct fid *ec, uint64_t flags);
 *mr*
 : Memory region
 
-*ec*
-: Event queue or counter
+*bfid*
+: Fabric identifier of an associated resource.
 
 *context*
 : User specified context associated with the memory region.
@@ -255,12 +255,12 @@ successfully before invoking these calls.
 
 ## fi_mr_bind
 
-The fi_mr_bind function associates a memory region with an event
-counter or queue, for providers that support the generation of events
+The fi_mr_bind function associates a memory region with a
+counter, for providers that support the generation of completions
 based on fabric operations.  The type of events tracked against the
 memory region is based on the bitwise OR of the following flags.
 
-*FI_WRITE*
+*FI_REMOTE_WRITE*
 : Generates an event whenever a remote RMA write or atomic operation
   modify the memory region.
 
