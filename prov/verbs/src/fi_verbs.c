@@ -1885,20 +1885,20 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	case RDMA_CM_EVENT_UNREACHABLE:
 		eq->err.fid = fid;
 		eq->err.err = cma_event->status;
-		return -EIO;
+		return -FI_EAVAIL;
 	case RDMA_CM_EVENT_REJECTED:
 		eq->err.fid = fid;
 		eq->err.err = ECONNREFUSED;
 		eq->err.prov_errno = cma_event->status;
-		return -EIO;
+		return -FI_EAVAIL;
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
 		eq->err.fid = fid;
 		eq->err.err = ENODEV;
-		return -EIO;
+		return -FI_EAVAIL;
 	case RDMA_CM_EVENT_ADDR_CHANGE:
 		eq->err.fid = fid;
 		eq->err.err = EADDRNOTAVAIL;
-		return -EIO;
+		return -FI_EAVAIL;
 	default:
 		return 0;
 	}
@@ -1922,7 +1922,7 @@ fi_ibv_eq_read(struct fid_eq *eq, uint32_t *event,
 	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
 	entry = (struct fi_eq_cm_entry *) buf;
 	if (_eq->err.err)
-		return -FI_EIO;
+		return -FI_EAVAIL;
 
 	ret = rdma_get_cm_event(_eq->channel, &cma_event);
 	if (ret)
