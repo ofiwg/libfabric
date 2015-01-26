@@ -56,18 +56,17 @@ ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 
 	sock_eq = container_of(eq, struct sock_eq, eq);
 
-	fastlock_acquire(&sock_eq->lock);
 	if(!dlistfd_empty(&sock_eq->err_list)) {
-		ret = -FI_EAVAIL;
-		goto out;
+		return -FI_EAVAIL;
 	}
-		
+	
 	if(dlistfd_empty(&sock_eq->list)) {
 		ret = dlistfd_wait_avail(&sock_eq->list, timeout);
 		if(ret <= 0)
-			goto out;
+			return ret;
 	}
 
+	fastlock_acquire(&sock_eq->lock);
 	list = sock_eq->list.list.next;
 	entry = container_of(list, struct sock_eq_entry, entry);
 
