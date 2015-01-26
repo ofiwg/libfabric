@@ -41,6 +41,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <netdb.h>
 #include <fi_list.h>
 
 #include "sock.h"
@@ -423,7 +424,7 @@ int sock_eq_openwait(struct sock_eq *eq, char *service)
 	SOCK_LOG_INFO("enter\n");
 	struct addrinfo *s_res = NULL, *p;
 	struct addrinfo hints;
-	int optval;
+	int optval, ret;
 
 	if (eq->wait_fd > 0 && !strncmp((char *)&eq->service, service, NI_MAXSERV))
 	{
@@ -440,9 +441,10 @@ int sock_eq_openwait(struct sock_eq *eq, char *service)
 	hints.ai_flags = AI_PASSIVE;
 	hints.ai_protocol = IPPROTO_UDP;
 
-	if(getaddrinfo(NULL, service, &hints, &s_res)) {
-		SOCK_LOG_ERROR("no available AF_INET address\n");
-		perror("no available AF_INET address");
+	ret = getaddrinfo(NULL, service, &hints, &s_res);
+	if (ret) {
+		SOCK_LOG_ERROR("no available AF_INET address service:%s, %s\n",
+				service, gai_strerror(ret));
 		return -FI_EINVAL;
 	}
 
