@@ -214,7 +214,7 @@ ssize_t sock_eq_fd_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 	struct sock_eq *sock_eq;
 	struct fid_ep *fid_ep;
 	struct sock_ep *sock_ep;
-	int ret;
+	int ret = 0;
 	struct sock_conn_req *req;
 	socklen_t addrlen;
 	struct sockaddr_in addr;
@@ -225,7 +225,7 @@ ssize_t sock_eq_fd_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 	if (!req) {
 		SOCK_LOG_ERROR("calloc for conn_req failed\n");
 		errno = ENOMEM;
-		return 0;
+		return -FI_ENOMEM;
 	}
 	sock_eq = container_of(eq, struct sock_eq, eq);
 
@@ -235,11 +235,13 @@ ssize_t sock_eq_fd_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 
 	entry = (struct fi_eq_cm_entry *)buf;
 	switch (req->type) {
+
 	case SOCK_ACCEPT:
 		SOCK_LOG_INFO("received SOCK_ACCEPT\n");
 		if (ret != sizeof req->type + sizeof req->c_fid + sizeof req->s_fid) {
 			SOCK_LOG_ERROR("recvfrom value invalid: %d\n", ret);
-			return 0;
+			ret = 0;
+			goto out;
 		}
 		*event = FI_CONNECTED;
 		entry->info = NULL;
@@ -249,29 +251,37 @@ ssize_t sock_eq_fd_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 		sock_ep->connected = 1;
 		req->type = SOCK_CONNECTED;
 		if (sock_util_sendto(sock_eq->wait_fd, req, sizeof(req->type) +
-				sizeof(req->c_fid) + sizeof(req->s_fid), &addr, addrlen, 0))
-			return 0;
-		free(req);
+				     sizeof(req->c_fid) + sizeof(req->s_fid), &addr, addrlen, 0)) {
+			ret = 0;
+			goto out;
+		}
+		ret = sizeof *entry;
 		break;
+
 	case SOCK_CONNREQ:
 		SOCK_LOG_INFO("received SOCK_CONNREQ\n");
 		if (ret != sizeof *req) {
 			SOCK_LOG_ERROR("recvfrom value invalid: %d\n", ret);
-			return 0;
+			ret = 0;
+			goto out;
 		}
 		*event = FI_CONNREQ;
 		entry->info = sock_ep_msg_process_info(req);
 		entry->info->connreq = (fi_connreq_t)req;
 		if (!entry->info) {
 			SOCK_LOG_ERROR("failed create new info\n");
-			return -errno;
+			ret = -errno;
+			goto out;
 		}
+		ret = sizeof *entry;
 		break;
+
 	case SOCK_REJECT:
 		SOCK_LOG_INFO("received SOCK_REJECT\n");
 		if (ret != sizeof req->type + sizeof req->c_fid) {
 			SOCK_LOG_ERROR("recvfrom value invalid: %d\n", ret);
-			return 0;
+			ret = 0;
+			goto out;
 		}
 		err.fid = req->c_fid;
 		err.context = NULL;
@@ -280,8 +290,9 @@ ssize_t sock_eq_fd_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 		err.prov_errno = 0;
 		err.err_data = NULL;
 		sock_eq_report_event(sock_eq, 0, &err, sizeof err, 0);
-		free(req);
+		ret = sizeof *entry;
 		break;
+
 	case SOCK_CONNECTED:
 		SOCK_LOG_INFO("received SOCK_CONNECTED\n");
 		*event = FI_CONNECTED;
@@ -290,22 +301,26 @@ ssize_t sock_eq_fd_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 		fid_ep = container_of(req->s_fid, struct fid_ep, fid);
 		sock_ep = container_of(fid_ep, struct sock_ep, fid.ep);
 		sock_ep->connected = 1;
-		free(req);
+		ret = sizeof *entry;
 		break;
+
 	case SOCK_SHUTDOWN:
 		SOCK_LOG_INFO("received SOCK_SHUTDOWN\n");
 		*event = FI_SHUTDOWN;
 		entry->info = NULL;
 		entry->fid = req->s_fid;
-		free(req);
+		ret = sizeof *entry;
 		break;
+
 	default:
 		SOCK_LOG_ERROR("unexpected req to EQ\n");
-		free(req);
-		return 0;
+		ret = 0;
+		goto out;
 	}
 
-	return sizeof *entry ;
+out:
+	free(req);
+	return ret;
 }
 
 static struct fi_ops_eq sock_eq_fd_ops = {
