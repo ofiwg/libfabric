@@ -37,6 +37,10 @@ fi_getopt / fi_setopt
 fi_rx_context / fi_tx_context / fi_srx_context  / fi_stx_context
 :   Open a transmit or receive context.
 
+fi_rx_size_left / fi_tx_size_left
+:   Query the lower bound on how many RX/TX operations may be posted without
+    an operation returning -FI_EAGAIN.
+
 # SYNOPSIS
 
 {% highlight c %}
@@ -88,6 +92,10 @@ int fi_getopt(struct fid_ *ep, int level, int optname,
 
 int fi_setopt(struct fid *ep, int level, int optname,
     const void *optval, size_t optlen);
+
+ssize_t fi_rx_size_left(struct fid_ep *ep);
+
+ssize_t fi_tx_size_left(struct fid_ep *ep);
 {% endhighlight %}
 
 # ARGUMENTS
@@ -366,6 +374,24 @@ The following option levels and option names and parameters are defined.
   receives posted after the value has been changed.  It is recommended
   that applications that want to override the default MIN_MULTI_RECV
   value set this option before enabling the corresponding endpoint.
+
+## fi_rx_size_left
+
+The fi_rx_size_left call returns a lower bound on the number of receive
+operations that may be posted to the given endpoint without that operation
+returning -FI_EAGAIN.  Depending on the specific details of the subsequently
+posted receive operations (e.g., number of iov entries, which receive function
+is called, etc.), it may be possible to post more receive operations than
+originally indicated by fi_rx_size_left.
+
+## fi_tx_size_left
+
+The fi_tx_size_left call returns a lower bound on the number of transmit
+operations that may be posted to the given endpoint without that operation
+returning -FI_EAGAIN.  Depending on the specific details of the subsequently
+posted transmit operations (e.g., number of iov entries, which transmit
+function is called, etc.), it may be possible to post more transmit operations
+than originally indicated by fi_tx_size_left.
 
 # ENDPOINT ATTRIBUTES
 
