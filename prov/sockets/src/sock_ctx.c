@@ -79,8 +79,9 @@ static struct sock_tx_ctx *sock_tx_context_alloc(struct fi_tx_attr *attr,
 	tx_ctx = calloc(sizeof(*tx_ctx), 1);
 	if (!tx_ctx)
 		return NULL;
-
-	if (rbfdinit(&tx_ctx->rbfd, attr->size))
+	
+	if (rbfdinit(&tx_ctx->rbfd, 
+		     (attr->size) ? attr->size : SOCK_EP_MAX_TX_CTX_SZ))
 		goto err;
 
 	dlist_init(&tx_ctx->cq_entry);
@@ -99,7 +100,7 @@ static struct sock_tx_ctx *sock_tx_context_alloc(struct fi_tx_attr *attr,
 		tx_ctx->fid.ctx.fid.context = context;
 		break;
 	case FI_CLASS_STX_CTX:
-		tx_ctx->fid.stx.fid.fclass = FI_CLASS_TX_CTX;
+		tx_ctx->fid.stx.fid.fclass = FI_CLASS_STX_CTX;
 		tx_ctx->fid.stx.fid.context = context;
 		break;
 	default:

@@ -69,7 +69,7 @@
 #define SOCK_EP_MAX_IOV_LIMIT (8)
 #define SOCK_EP_MAX_TX_CTX_SZ (1<<12)
 #define SOCK_EP_MIN_MULTI_RECV (64)
-#define SOCK_EP_MAX_ATOMIC_SZ (512)
+#define SOCK_EP_MAX_ATOMIC_SZ (256)
 #define SOCK_EP_MAX_CTX_BITS (16)
 
 #define SOCK_PE_POLL_TIMEOUT (100000)
@@ -145,6 +145,7 @@ struct sock_domain {
 	struct sock_fabric *fab;
 	fastlock_t lock;
 	atomic_t ref;
+	short ep_count;
 	
 	struct sock_eq *eq;
 	struct sock_eq *mr_eq;
@@ -195,7 +196,8 @@ struct sock_mr {
 struct sock_av_addr {
 	struct sockaddr_storage addr;
 	uint8_t valid;
-	uint8_t reserved[7];
+	uint16_t rem_ep_id;
+	uint8_t reserved[5];
 };
 
 struct sock_av_table_hdr {
@@ -375,9 +377,12 @@ struct sock_ep {
 	uint64_t op_flags;
 
 	uint8_t connected;
+	uint8_t tx_shared;
+	uint8_t rx_shared;
+	uint16_t ep_id;
+	uint16_t rem_ep_id;
 	uint16_t buffered_len;
 	uint16_t min_multi_recv;
-	char reserved[4];
 
 	atomic_t ref;
 	struct sock_comp comp;
@@ -432,6 +437,7 @@ struct sock_rx_entry {
 	uint8_t is_buffered;
 	uint8_t is_busy;
 	uint8_t is_claimed;
+	uint8_t is_complete;
 	uint8_t reserved[5];
 
 	uint64_t used;
@@ -523,10 +529,10 @@ struct sock_tx_ctx {
 struct sock_msg_hdr{
 	uint8_t version;
 	uint8_t op_type;
-	uint16_t rx_id;
-	uint16_t pe_entry_id;
+	uint8_t rx_id;
 	uint8_t dest_iov_len;
-	uint8_t reserved[1];
+	uint16_t ep_id;
+	uint16_t pe_entry_id;
 
 	uint64_t flags;
 	uint64_t msg_len;
@@ -704,6 +710,7 @@ struct sock_conn_req {
 	int type;
 	fid_t c_fid;
 	fid_t s_fid;
+	uint16_t ep_id;
 	struct fi_info info;
 	struct sockaddr_in src_addr;
 	struct sockaddr_in dest_addr;
@@ -842,8 +849,8 @@ fi_addr_t _sock_av_lookup(struct sock_av *av, struct sockaddr *addr);
 fi_addr_t sock_av_get_fiaddr(struct sock_av *av, struct sock_conn *conn);
 fi_addr_t sock_av_lookup_key(struct sock_av *av, int key);
 struct sock_conn *sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr);
-int sock_av_compare_addr(struct sock_av *av, 
-			 fi_addr_t addr1, fi_addr_t addr2);
+int sock_av_compare_addr(struct sock_av *av, fi_addr_t addr1, fi_addr_t addr2);
+uint16_t sock_av_lookup_ep_id(struct sock_av *av, fi_addr_t addr);
 
 
 struct sock_conn *sock_conn_map_lookup_key(struct sock_conn_map *conn_map, 
@@ -866,6 +873,8 @@ void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);
 void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx);
 int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx);
 int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx);
+void sock_pe_remove_tx_ctx(struct sock_tx_ctx *tx_ctx);
+void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx);
 void sock_pe_finalize(struct sock_pe *pe);
 
 

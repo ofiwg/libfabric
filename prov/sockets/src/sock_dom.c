@@ -72,6 +72,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 	case FI_THREAD_FID:
 	case FI_THREAD_DOMAIN:
 	case FI_THREAD_COMPLETION:
+	case FI_THREAD_ENDPOINT:
 		break;
 	default:
 		SOCK_LOG_INFO("Invalid threading model!\n");
@@ -180,13 +181,15 @@ static int sock_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct sock_cq, cq_fid.fid);
 		assert(mr->domain == cq->domain);
-		mr->cq = cq;
+		if (flags & FI_REMOTE_WRITE)
+			mr->cq = cq;
 		break;
 
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct sock_cntr, cntr_fid.fid);
 		assert(mr->domain == cntr->domain);
-		mr->cntr = cntr;
+		if (flags & FI_REMOTE_WRITE)
+			mr->cntr = cntr;
 		break;
 
 	default:
@@ -455,6 +458,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err;
 	}
 
+	sock_domain->ep_count = AF_INET;
 	sock_domain->r_cmap.domain = sock_domain;
 	fastlock_init(&sock_domain->r_cmap.lock);
 	if(socketpair(AF_UNIX, SOCK_STREAM, 0, sock_domain->signal_fds) < 0)

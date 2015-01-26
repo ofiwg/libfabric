@@ -55,7 +55,7 @@
 #include "sock_util.h"
 
 int sock_log_level = SOCK_ERROR;
-char host[128] = {0};
+useconds_t sock_progress_thread_wait = 0;
 #define SOCK_SENDTO_TIMEOUT 5
 
 int sock_util_sendto(int fd, void *buf, size_t len, struct sockaddr_in *addr,
