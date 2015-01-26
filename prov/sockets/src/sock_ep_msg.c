@@ -257,9 +257,6 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 			return ret;
 	}
 
-	src_addr = calloc(1, sizeof(struct sockaddr_in));
-	dest_addr = calloc(1, sizeof(struct sockaddr_in));
-
 	memset(&sock_hints, 0, sizeof(struct addrinfo));
 	sock_hints.ai_family = AF_INET;
 	sock_hints.ai_socktype = SOCK_STREAM;
@@ -294,6 +291,11 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 			goto err;
 		}
 		
+		src_addr = calloc(1, sizeof(struct sockaddr_in));
+		if (!src_addr) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
 		memcpy(src_addr, result->ai_addr, result->ai_addrlen);
 		freeaddrinfo(result); 
 	} else if (node || service) {
@@ -318,6 +320,11 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 			goto err;
 		}
 		
+		dest_addr = calloc(1, sizeof(struct sockaddr_in));
+		if (!dest_addr) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
 		memcpy(dest_addr, result->ai_addr, result->ai_addrlen);
 		
 		udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -329,7 +336,12 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 			goto err;
 		}
 
-		len = sizeof(struct sockaddr_in);				
+		len = sizeof(struct sockaddr_in);		
+		src_addr = calloc(1, sizeof(struct sockaddr_in));
+		if (!src_addr) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}		
 		ret = getsockname(udp_sock, (struct sockaddr*)src_addr, &len);
 		if (ret != 0) {
 			SOCK_LOG_ERROR("getsockname failed\n");
@@ -347,17 +359,38 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	if (hints->dest_addr) {
+		if (!dest_addr) {
+			dest_addr = calloc(1, sizeof(struct sockaddr_in));
+			if (!dest_addr) {
+				ret = -FI_ENOMEM;
+				goto err;
+			}
+		}
 		assert(hints->dest_addrlen == sizeof(struct sockaddr_in));
 		memcpy(dest_addr, hints->dest_addr, hints->dest_addrlen);
 	}
 
 	if (dest_addr) {
+		if (!dest_addr) {
+			dest_addr = calloc(1, sizeof(struct sockaddr_in));
+			if (!dest_addr) {
+				ret = -FI_ENOMEM;
+				goto err;
+			}
+		}
 		memcpy(sa_ip, inet_ntoa(dest_addr->sin_addr), INET_ADDRSTRLEN);
 		SOCK_LOG_INFO("dest_addr: family: %d, IP is %s\n",
 			      ((struct sockaddr_in*)dest_addr)->sin_family, sa_ip);
 	}
 	
 	if (src_addr) {
+		if (!src_addr) {
+			src_addr = calloc(1, sizeof(struct sockaddr_in));				
+			if (!src_addr) {
+				ret = -FI_ENOMEM;
+				goto err;
+			}
+		}
 		memcpy(sa_ip, inet_ntoa(src_addr->sin_addr), INET_ADDRSTRLEN);
 		SOCK_LOG_INFO("src_addr: family: %d, IP is %s\n",
 			      ((struct sockaddr_in*)src_addr)->sin_family, sa_ip);
@@ -370,13 +403,17 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	*info = _info;
-	free(src_addr);
-	free(dest_addr);
+	if (src_addr)
+		free(src_addr);
+	if (dest_addr)
+		free(dest_addr);
 	return 0;
 
 err:
-	free(src_addr);
-	free(dest_addr);
+	if (src_addr)
+		free(src_addr);
+	if (dest_addr)
+		free(dest_addr);
 	SOCK_LOG_ERROR("fi_getinfo failed\n");
 	return ret;	
 }
@@ -423,12 +460,11 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 		return -FI_EINVAL;
 	}
 
-	if(((struct sockaddr *)addr)->sa_family != AF_INET) {
-		SOCK_LOG_ERROR("invalid address type to connect: only IPv4 supported\n");
-		return -FI_EINVAL;
-	}
+	_ep->rem_ep_id = ((struct sockaddr *)addr)->sa_family;
+	((struct sockaddr *)addr)->sa_family = AF_INET;
 
 	req.type = SOCK_CONNREQ;
+	req.ep_id = _ep->ep_id;
 	req.c_fid = &ep->fid;
 	req.s_fid = 0;
 	memcpy(&req.info, &_ep->info, sizeof(struct fi_info));
@@ -472,6 +508,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 		return -FI_EINVAL;
 	}
 
+	_ep->rem_ep_id = req->ep_id;
 	if (((struct sockaddr *)addr)->sa_family != AF_INET) {
 		SOCK_LOG_ERROR("invalid address type to connect: only IPv4 supported\n");
 		return -FI_EINVAL;
