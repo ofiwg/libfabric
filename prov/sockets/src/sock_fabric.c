@@ -255,5 +255,10 @@ SOCKETS_INI
 		sock_log_level = SOCK_ERROR;
 	}
 
+	tmp = getenv("OFI_SOCK_PROGRESS_YIELD_TIME");
+	if (tmp) {
+		sock_progress_thread_wait = atoi(tmp);
+	}
+
 	return (&sock_prov);
 }

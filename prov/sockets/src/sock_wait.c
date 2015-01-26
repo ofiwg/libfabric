@@ -127,15 +127,13 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 		case FI_CLASS_CQ:
 			cq = container_of(list_item->fid,
 					  struct sock_cq, cq_fid);
-			if (cq->domain->progress_mode == FI_PROGRESS_MANUAL)
-				sock_cq_progress(cq);
+			sock_cq_progress(cq);
 			break;
 
 		case FI_CLASS_CNTR:
 			cntr = container_of(list_item->fid,
 					    struct sock_cntr, cntr_fid);
-			if (cntr->domain->progress_mode == FI_PROGRESS_MANUAL)
-				sock_cntr_progress(cntr);
+			sock_cntr_progress(cntr);
 			break;
 		}
 	}

@@ -44,6 +44,7 @@
 #define SOCK_INFO (3)
 
 extern int sock_log_level;
+extern useconds_t sock_progress_thread_wait;
 
 #define SOCK_LOG_INFO(...) do {						\
 		if (sock_log_level >= SOCK_INFO) {			\
