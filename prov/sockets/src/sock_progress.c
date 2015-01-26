@@ -1160,7 +1160,6 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 			rx_entry->comp = pe_entry->comp;
 			pe_entry->context = rx_entry->context;
 		}
-		rx_entry->is_busy = 1;
 		fastlock_release(&rx_ctx->lock);
 		pe_entry->context = rx_entry->context;
 		pe_entry->pe.rx.rx_entry = rx_entry;
