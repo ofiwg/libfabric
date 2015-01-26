@@ -220,8 +220,9 @@ int sock_wait_close(fid_t fid)
 	wait = container_of(fid, struct sock_wait, wait_fid.fid);
 	head = &wait->fid_list;
 
-	for (p = head->next; p != head; p = p->next) {
+	for (p = head->next; p != head;) {
 		list_item = container_of(p, struct sock_fid_list, entry);
+		p = p->next;
 		free(list_item);
 	}
 
@@ -284,7 +285,7 @@ int sock_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		free(wait);
 		return err;
 	}
-	
+
 	wait->wait_fid.fid.fclass = FI_CLASS_WAIT;
 	wait->wait_fid.fid.context = 0;
 	wait->wait_fid.fid.ops = &sock_wait_fi_ops;
@@ -292,6 +293,7 @@ int sock_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	wait->fab = fab;
 	wait->type = wait_obj_type;
 	atomic_inc(&fab->ref);
+	dlist_init(&wait->fid_list);
 
 	*waitset = &wait->wait_fid;
 	return 0;
