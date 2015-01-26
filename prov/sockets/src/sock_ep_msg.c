@@ -610,7 +610,7 @@ static int sock_pep_fi_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	}
 	pep->eq = eq;
 	if ((eq->attr.wait_obj == FI_WAIT_FD) && (eq->wait_fd < 0))
-		sock_eq_openwait(eq, (char *)&pep->service);
+		sock_eq_openwait(eq, pep->service);
 
 	return 0;
 }
