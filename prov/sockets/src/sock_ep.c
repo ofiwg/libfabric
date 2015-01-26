@@ -463,6 +463,8 @@ struct fi_ops_ep sock_ctx_ep_ops = {
 	.setopt = sock_ctx_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
+	.rx_size_left = fi_no_rx_size_left,
+	.tx_size_left = fi_no_tx_size_left,
 };
 
 static int sock_ep_close(struct fid *fid)
@@ -970,6 +972,8 @@ struct fi_ops_ep sock_ep_ops ={
 	.setopt = sock_ep_setopt,
 	.tx_ctx = sock_ep_tx_ctx,
 	.rx_ctx = sock_ep_rx_ctx,
+	.rx_size_left = fi_no_rx_size_left,
+	.tx_size_left = fi_no_tx_size_left,
 };
 
 static int sock_verify_tx_attr(const struct fi_tx_attr *attr)
