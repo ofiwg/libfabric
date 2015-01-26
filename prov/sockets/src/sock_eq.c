@@ -419,7 +419,7 @@ static struct fi_eq_attr _sock_eq_def_attr ={
 	.wait_set = NULL,
 };
 
-int sock_eq_openwait(struct sock_eq *eq, char *service)
+int sock_eq_openwait(struct sock_eq *eq, const char *service)
 {
 	SOCK_LOG_INFO("enter\n");
 	struct addrinfo *s_res = NULL, *p;

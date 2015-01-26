@@ -409,7 +409,6 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context)
 {
 	int ret, flags;
-	char service[NI_MAXSERV];
 	struct sock_domain *sock_domain;
 
 	if(info && info->domain_attr){
@@ -427,11 +426,11 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	if(info && info->src_addr) {
 		if (getnameinfo(info->src_addr, info->src_addrlen, NULL, 0,
-				service, sizeof(service), NI_NUMERICSERV)) {
+				sock_domain->service, sizeof(sock_domain->service),
+				NI_NUMERICSERV)) {
 			SOCK_LOG_ERROR("could not resolve src_addr\n");
 			goto err;
 		}
-		sock_domain->service = atoi(service);
 		sock_domain->info = *info;
 		memcpy(&sock_domain->src_addr, info->src_addr, 
 		       sizeof(struct sockaddr_in));

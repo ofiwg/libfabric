@@ -253,7 +253,6 @@ static void *_sock_conn_listen(void *arg)
 	struct sockaddr_in remote;
 	socklen_t addr_size;
 	struct pollfd poll_fds[2];
-	char service[NI_MAXSERV];
 	struct sockaddr_in addr;
 	char sa_ip[INET_ADDRSTRLEN];
 	unsigned short port;
@@ -264,15 +263,14 @@ static void *_sock_conn_listen(void *arg)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	sprintf(service, "%d", domain->service);
-	ret = getaddrinfo(NULL, service, &hints, &s_res);
+	ret = getaddrinfo(NULL, domain->service, &hints, &s_res);
 	if (ret) {
 		SOCK_LOG_ERROR("no available AF_INET address, service %s, %s\n",
-				service, gai_strerror(ret));
+				domain->service, gai_strerror(ret));
 		return NULL;
 	}
 
-	SOCK_LOG_INFO("Binding listener thread to port: %d\n", domain->service);
+	SOCK_LOG_INFO("Binding listener thread to port: %s\n", domain->service);
 	for (p=s_res; p; p=p->ai_next) {
 		listen_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (listen_fd >= 0) {
@@ -292,16 +290,17 @@ static void *_sock_conn_listen(void *arg)
 	freeaddrinfo(s_res);
 
 	if (listen_fd < 0) {
-		SOCK_LOG_ERROR("failed to listen to port: %d\n", domain->service);
+		SOCK_LOG_ERROR("failed to listen to port: %s\n", domain->service);
 		goto err;
 	}
 	
-	if (domain->service == 0) {
+	if (atoi(domain->service) == 0) {
 		addr_size = sizeof(struct sockaddr_in);
 		if (getsockname(listen_fd, (struct sockaddr*)&addr, &addr_size))
 			goto err;
-		domain->service = ntohs(addr.sin_port);
-		SOCK_LOG_INFO("Bound to port: %d\n", domain->service);
+		snprintf(domain->service, sizeof domain->service, "%d",
+			 ntohs(addr.sin_port));
+		SOCK_LOG_INFO("Bound to port: %s\n", domain->service);
 	}
 
 	if (listen(listen_fd, 0)) {
@@ -310,7 +309,7 @@ static void *_sock_conn_listen(void *arg)
 	}
 
 	((struct sockaddr_in*)&(domain->src_addr))->sin_port = 
-		htons(domain->service);
+		htons(atoi(domain->service));
 	domain->listening = 1;
 
 	poll_fds[0].fd = listen_fd;
