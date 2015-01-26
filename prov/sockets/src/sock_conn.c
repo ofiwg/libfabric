@@ -265,9 +265,10 @@ static void *_sock_conn_listen(void *arg)
 	hints.ai_flags = AI_PASSIVE;
 
 	sprintf(service, "%d", domain->service);
-	if(getaddrinfo(NULL, service, &hints, &s_res)) {
-		SOCK_LOG_ERROR("no available AF_INET address\n");
-		perror("no available AF_INET address");
+	ret = getaddrinfo(NULL, service, &hints, &s_res);
+	if (ret) {
+		SOCK_LOG_ERROR("no available AF_INET address, service %s, %s\n",
+				service, gai_strerror(ret));
 		return NULL;
 	}
 
