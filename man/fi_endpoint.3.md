@@ -19,6 +19,9 @@ fi_ep_bind
 fi_scalable_ep_bind
 :   Associate a scalable endpoint with an address vector
 
+fi_pep_bind
+:   Associate a passive endpoint with an event queue
+
 fi_enable
 :   Transitions an endpoint into an active state.
 
@@ -79,6 +82,8 @@ int fi_ep_bind(struct fid_ep *ep, struct fid *fid, uint64_t flags);
 
 int fi_scalable_ep_bind(struct fid_sep *sep, struct fid *fid, uint64_t flags);
 
+int fi_pep_bind(struct fid_pep *pep, struct fid *fid, uint64_t flags);
+
 int fi_enable(struct fid_ep *ep);
 
 int fi_cancel(struct fid_ep *ep, void *context);
@@ -114,6 +119,9 @@ ssize_t fi_tx_size_left(struct fid_ep *ep);
 
 *sep*
 : A scalable fabric endpoint.
+
+*pep*
+: A passive fabric endpoint.
 
 *fid*
 : Fabric identifier of an associated resource.
