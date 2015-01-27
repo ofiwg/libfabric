@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-01\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-01\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -46,6 +46,12 @@ Get or set endpoint options.
 .TP
 .B fi_rx_context / fi_tx_context / fi_srx_context / fi_stx_context
 Open a transmit or receive context.
+.RS
+.RE
+.TP
+.B fi_rx_size_left / fi_tx_size_left
+Query the lower bound on how many RX/TX operations may be posted without
+an operation returning -FI_EAGAIN.
 .RS
 .RE
 .SH SYNOPSIS
@@ -100,6 +106,10 @@ int\ fi_getopt(struct\ fid_\ *ep,\ int\ level,\ int\ optname,
 
 int\ fi_setopt(struct\ fid\ *ep,\ int\ level,\ int\ optname,
 \ \ \ \ const\ void\ *optval,\ size_t\ optlen);
+
+ssize_t\ fi_rx_size_left(struct\ fid_ep\ *ep);
+
+ssize_t\ fi_tx_size_left(struct\ fid_ep\ *ep);
 \f[]
 .fi
 .SH ARGUMENTS
@@ -373,6 +383,26 @@ needed on receives posted after the value has been changed.
 It is recommended that applications that want to override the default
 MIN_MULTI_RECV value set this option before enabling the corresponding
 endpoint.
+.SS fi_rx_size_left
+.PP
+The fi_rx_size_left call returns a lower bound on the number of receive
+operations that may be posted to the given endpoint without that
+operation returning -FI_EAGAIN.
+Depending on the specific details of the subsequently posted receive
+operations (e.g., number of iov entries, which receive function is
+called, etc.)
+, it may be possible to post more receive operations than originally
+indicated by fi_rx_size_left.
+.SS fi_tx_size_left
+.PP
+The fi_tx_size_left call returns a lower bound on the number of transmit
+operations that may be posted to the given endpoint without that
+operation returning -FI_EAGAIN.
+Depending on the specific details of the subsequently posted transmit
+operations (e.g., number of iov entries, which transmit function is
+called, etc.)
+, it may be possible to post more transmit operations than originally
+indicated by fi_tx_size_left.
 .SH ENDPOINT ATTRIBUTES
 .PP
 The fi_ep_attr structure defines the set of attributes associated with
