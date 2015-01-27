@@ -275,6 +275,11 @@ and/or fi_tsendmsg.
 : Applies to fi_tsendmsg.  Indicates that a completion should not be
   generated until the operation has completed on the remote side.
 
+*FI_FENCE*
+: Applies to transmits.  Indicates that the requested operation, also
+  known as the fenced operation, be deferred until all previous operations
+  targeting the same target endpoint have completed.
+
 The following flags may be used with fi_tsearch.
 
 *FI_CLAIM*

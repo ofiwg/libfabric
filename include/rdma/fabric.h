@@ -133,6 +133,7 @@ typedef struct fid *fid_t;
 #define FI_MORE			(1ULL << 29)
 #define FI_PEEK			(1ULL << 30)
 #define FI_TRIGGER		(1ULL << 31)
+#define FI_FENCE		(1ULL << 32)
 
 
 struct fi_ioc {
@@ -220,6 +221,7 @@ enum {
 #define FI_LOCAL_MR		(1ULL << 1)
 #define FI_PROV_MR_ATTR		(1ULL << 2)
 #define FI_MSG_PREFIX		(1ULL << 3)
+#define FI_ASYNC_IOV		(1ULL << 4)
 
 struct fi_tx_attr {
 	uint64_t		caps;
@@ -230,6 +232,7 @@ struct fi_tx_attr {
 	size_t			inject_size;
 	size_t			size;
 	size_t			iov_limit;
+	size_t			rma_iov_limit;
 };
 
 struct fi_rx_attr {
