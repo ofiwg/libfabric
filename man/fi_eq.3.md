@@ -181,9 +181,11 @@ struct fi_eq_attr {
 
 ## fi_close
 
-The fi_close call releases all resources associated with an event
-queue.  The EQ must not be bound to any other resources prior to being
-closed.  Any events which remain on the EQ when it is closed are lost.
+The fi_close call releases all resources associated with an event queue.  Any
+events which remain on the EQ when it is closed are lost.
+
+The EQ must not be bound to any other objects prior to being closed, otherwise
+the call will return -FI_EBUSY.
 
 ## fi_control
 

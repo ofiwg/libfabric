@@ -102,7 +102,7 @@ struct fi_poll_attr {
 
 The fi_close call releases all resources associated with a poll set.
 The poll set must not be associated with any other resources prior to
-being closed.
+being closed, otherwise the call will return -FI_EBUSY.
 
 ## fi_poll_add
 
@@ -171,7 +171,7 @@ struct fi_wait_attr {
 
 The fi_close call releases all resources associated with a wait set.
 The wait set must not be bound to any other opened resources prior to
-being closed.
+being closed, otherwise the call will return -FI_EBUSY.
 
 ## fi_wait
 

@@ -246,6 +246,10 @@ Fi_close is used to release all resources associated with a
 registering a memory region.  Once unregistered, further access to the
 registered memory is not guaranteed.
 
+When closing the MR, there must be no opened endpoints or counters associated
+with the MR.  If resources are still associated with the MR when attempting to
+close, the call will return -FI_EBUSY.
+
 ## fi_mr_desc / fi_mr_key
 
 The local memory descriptor and remote protection key associated with
