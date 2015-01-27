@@ -221,6 +221,7 @@ enum {
 #define FI_LOCAL_MR		(1ULL << 1)
 #define FI_PROV_MR_ATTR		(1ULL << 2)
 #define FI_MSG_PREFIX		(1ULL << 3)
+#define FI_ASYNC_IOV		(1ULL << 4)
 
 struct fi_tx_attr {
 	uint64_t		caps;
