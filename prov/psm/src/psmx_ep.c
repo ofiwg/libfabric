@@ -288,6 +288,8 @@ static struct fi_ops_ep psmx_ep_ops = {
 	.enable = psmx_ep_enable,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
+	.rx_size_left = fi_no_rx_size_left,
+	.tx_size_left = fi_no_tx_size_left,
 };
 
 int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,

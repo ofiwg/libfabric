@@ -300,6 +300,14 @@ int fi_no_rx_ctx(struct fid_sep *sep, int index,
 {
 	return -FI_ENOSYS;
 }
+ssize_t fi_no_rx_size_left(struct fid_ep *ep)
+{
+	return -FI_ENOSYS;
+}
+ssize_t fi_no_tx_size_left(struct fid_ep *ep)
+{
+	return -FI_ENOSYS;
+}
 
 /*
  * struct fi_ops_msg
@@ -346,14 +354,6 @@ ssize_t fi_no_msg_senddata(struct fid_ep *ep, const void *buf, size_t len, void 
 }
 ssize_t fi_no_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t dest_addr)
-{
-	return -FI_ENOSYS;
-}
-ssize_t fi_no_msg_rx_size_left(struct fid_ep *ep)
-{
-	return -FI_ENOSYS;
-}
-ssize_t fi_no_msg_tx_size_left(struct fid_ep *ep)
 {
 	return -FI_ENOSYS;
 }
