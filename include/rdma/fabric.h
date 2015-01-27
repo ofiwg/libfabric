@@ -133,6 +133,7 @@ typedef struct fid *fid_t;
 #define FI_MORE			(1ULL << 29)
 #define FI_PEEK			(1ULL << 30)
 #define FI_TRIGGER		(1ULL << 31)
+#define FI_FENCE		(1ULL << 32)
 
 
 struct fi_ioc {

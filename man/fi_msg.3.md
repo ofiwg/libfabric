@@ -269,6 +269,11 @@ fi_sendmsg.
 : Applies to fi_sendmsg.  Indicates that a completion should not be
   generated until the operation has completed on the remote side.
 
+*FI_FENCE*
+: Applies to transmits.  Indicates that the requested operation, also
+  known as the fenced operation, be deferred until all previous operations
+  targeting the same target endpoint have completed.
+
 # RETURN VALUE
 
 Returns 0 on success. On error, a negative value corresponding to fabric

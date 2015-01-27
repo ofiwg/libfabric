@@ -359,6 +359,14 @@ additional optimizations.
   Endpoints support this capability must meet the usage model as
   described by fi_trigger.3.
 
+*FI_FENCE*
+: Indicates that the endpoint support the FI_FENCE flag on data
+  transfer operations.  Support requires tracking that all previous
+  transmit requests to a specified remote endpoint complete prior
+  to initiating the fenced operation.  Fenced operations are often
+  used to enforce ordering between operations that are not otherwise
+  guaranteed by the underlying provider or protocol.
+
 # MODE
 
 The operational mode bits are used to convey requirements that an
