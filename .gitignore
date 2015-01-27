@@ -17,6 +17,7 @@ config.log
 config.status
 configure
 libtool
+fabtests.spec
 
 ported/libibverbs/fi_rc_pingpong
 

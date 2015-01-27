@@ -1,0 +1,41 @@
+Name: fabtests
+Version: @VERSION@
+Release: 1%{?dist}
+Summary: Test suite for libfabric API
+Group: System Environment/Libraries
+License: GPLv2 or BSD
+Url: http://www.github.com/ofiwg/fabtests
+Source: http://www.openfabrics.org/downloads/fabrics/%{name}-%{version}.tar.bz2
+Prefix: ${_prefix}
+Requires: libfabric
+# TODO: Fix the libfabric version for final distribution
+#Requires: libfabric = %{version}
+
+%description
+Fabtests provides a set of examples that uses libfabric - a high-performance fabric software library.
+
+%prep
+%setup -q -n %{name}-%{version}
+
+%build
+%configure
+make %{?_smp_mflags}
+
+%install
+rm -rf %{buildroot}
+%makeinstall installdirs
+# remove unpackaged files from the buildroot
+rm -f %{buildroot}%{_libdir}/*.la
+
+%clean
+rm -rf %{buildroot}
+
+%files
+%defattr(-,root,root,-)
+%{_bindir}/*
+%{_mandir}/man7/*
+%doc AUTHORS COPYING README
+
+%changelog
+* Mon Jan 19 2015 Maintainer Name <email@intel.com> 1.0.0
+- TODO: Release manager fill this out for initial release
