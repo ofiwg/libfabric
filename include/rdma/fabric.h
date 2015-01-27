@@ -231,6 +231,7 @@ struct fi_tx_attr {
 	size_t			inject_size;
 	size_t			size;
 	size_t			iov_limit;
+	size_t			rma_iov_limit;
 };
 
 struct fi_rx_attr {
