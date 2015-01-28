@@ -546,7 +546,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		eq = container_of(bfid, struct sock_eq, eq.fid);
 		ep->eq = eq;
 		if ((eq->attr.wait_obj == FI_WAIT_FD) && (eq->wait_fd < 0))
-			sock_eq_openwait(eq, (char *)&ep->domain->service);
+			sock_eq_openwait(eq, ep->domain->service);
 		break;
 
 	case FI_CLASS_MR:
@@ -1183,7 +1183,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			memcpy(sock_ep->src_addr, info->src_addr, 
 			       sizeof(struct sockaddr_in));
 			((struct sockaddr_in*)sock_ep->src_addr)->sin_port = 
-				htons(sock_dom->service);
+				htons(atoi(sock_dom->service));
 			((struct sockaddr_in*)sock_ep->src_addr)->sin_family = 
 				sock_ep->ep_id;
 		}

@@ -487,6 +487,11 @@ with atomic message calls.
   into a local buffer and transfer out of that buffer.  The use of
   output result buffers are not affected by this flag.
 
+*FI_FENCE*
+: Indicates that the requested operation, also
+  known as the fenced operation, be deferred until all previous operations
+  targeting the same target endpoint have completed.
+
 # RETURN VALUE
 
 Returns 0 on success. On error, a negative value corresponding to fabric

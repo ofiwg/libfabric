@@ -156,7 +156,7 @@ struct sock_domain {
 	struct sock_conn_map r_cmap;
 	pthread_t listen_thread;
 	int listening;
-	int service;
+	char service[NI_MAXSERV];
 	int signal_fds[2];
 	struct sockaddr_storage src_addr;
 };
@@ -798,7 +798,7 @@ ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event,
 			     const void *buf, size_t len, uint64_t flags);
 ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
 			     int err, int prov_errno, void *err_data);
-int sock_eq_openwait(struct sock_eq *eq, char *service);
+int sock_eq_openwait(struct sock_eq *eq, const char *service);
 struct fi_info * sock_ep_msg_process_info(struct sock_conn_req *req);
 
 int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
