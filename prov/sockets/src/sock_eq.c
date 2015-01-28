@@ -274,7 +274,7 @@ ssize_t sock_eq_fd_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 			goto out;
 		}
 		ret = sizeof *entry;
-		break;
+		return ret;
 
 	case SOCK_REJECT:
 		SOCK_LOG_INFO("received SOCK_REJECT\n");
