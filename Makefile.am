@@ -154,7 +154,7 @@ libusnic_direct_sources = \
 
 _usnic_files = \
 	$(libusnic_direct_sources) \
-	prov/usnic/src/fi_usnic.h \
+	prov/usnic/src/fi_ext_usnic.h \
 	prov/usnic/src/usdf.h \
 	prov/usnic/src/usdf_av.c \
 	prov/usnic/src/usdf_av.h \

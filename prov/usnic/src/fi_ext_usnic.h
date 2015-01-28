@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_USNIC_H_
-#define _FI_USNIC_H_
+#ifndef _FI_EXT_USNIC_H_
+#define _FI_EXT_USNIC_H_
 
 #include <stdint.h>
 #include <net/if.h>
@@ -69,4 +69,4 @@ struct fi_usnic_ops_av {
 	int (*get_distance)(struct fid_av *av, void *addr, int *metric);
 };
 
-#endif /* _FI_USNIC_H_ */
+#endif /* _FI_EXT_USNIC_H_ */

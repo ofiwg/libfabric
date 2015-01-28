@@ -66,7 +66,7 @@
 #include "libnl_utils.h"
 
 #include "usdf.h"
-#include "fi_usnic.h"
+#include "fi_ext_usnic.h"
 #include "usdf_progress.h"
 #include "usdf_timer.h"
 #include "usdf_dgram.h"
