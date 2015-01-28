@@ -181,7 +181,7 @@ void *psmx_resolve_name(const char *servername, int port)
 
 	n = getaddrinfo(servername, service, &hints, &res);
 	if (n < 0) {
-		fprintf(stderr, "%s:(%s:%d):%s\n", __func__, servername, port, gai_strerror(n));
+		psmx_debug("%s:(%s:%d):%s\n", __func__, servername, port, gai_strerror(n));
 		free(service);
 		return NULL;
 	}
@@ -200,7 +200,7 @@ void *psmx_resolve_name(const char *servername, int port)
 	free(service);
 
 	if (sockfd < 0) {
-		fprintf(stderr, "%s: couldn't connect to %s:%d\n", __func__, servername, port);
+		psmx_debug("%s: couldn't connect to %s:%d\n", __func__, servername, port);
 		return NULL;
 	}
 
