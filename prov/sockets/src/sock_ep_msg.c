@@ -790,6 +790,9 @@ struct fi_info * sock_ep_msg_process_info(struct sock_conn_req *req)
 	req->info.ep_attr = &req->ep_attr;
 	req->info.domain_attr = &req->domain_attr;
 	req->info.fabric_attr = &req->fabric_attr;
+	req->info.domain_attr->name = NULL;
+	req->info.fabric_attr->name = NULL;
+	req->info.fabric_attr->prov_name = NULL;
 	if (sock_verify_info(&req->info)) {
 		SOCK_LOG_INFO("incoming conn_req not supported\n");
 		errno = EINVAL;
