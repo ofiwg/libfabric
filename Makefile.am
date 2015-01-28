@@ -8,6 +8,7 @@ bin_PROGRAMS = \
 	simple/fi_rdm \
 	simple/fi_rdm_rma_simple \
 	simple/fi_dgram \
+	simple/fi_dgram_waitset \
 	simple/fi_rdm_pingpong \
 	simple/fi_rdm_tagged_pingpong \
 	simple/fi_rdm_tagged_search \
@@ -50,6 +51,10 @@ simple_fi_rdm_rma_simple_SOURCES = \
 
 simple_fi_dgram_SOURCES = \
 	simple/dgram.c \
+	common/shared.c
+
+simple_fi_dgram_waitset_SOURCES = \
+	simple/dgram_waitset.c \
 	common/shared.c
 
 simple_fi_rdm_pingpong_SOURCES = \
