@@ -762,6 +762,7 @@ struct fi_tx_attr {
 	size_t    inject_size;
 	size_t    size;
 	size_t    iov_limit;
+	size_t    rma_iov_limit;
 };
 {% endhighlight %}
 
@@ -806,6 +807,16 @@ struct fi_tx_attr {
 *iov_limit*
 : This is the maximum number of IO vectors (scatter-gather elements)
   that a single posted operation may reference.
+
+*rma_iov_limit*
+: This is the maximum number of RMA IO vectors (scatter-gather elements)
+  that an RMA or atomic operation may reference.  The rma_iov_limit
+  corresponds to the rma_iov_count values in RMA and atomic operations.
+  See struct fi_msg_rma and struct fi_msg_atomic in fi_rma.3 and
+  fi_atomic.3, for additional details.  This limit applies to both the
+  number of RMA IO vectors that may be specified when initiating an
+  operation from the local endpoint, as well as the maximum number of
+  IO vectors that may be carried in a single request from a remote endpoint.
 
 ## fi_rx_context
 
