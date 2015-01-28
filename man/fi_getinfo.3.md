@@ -359,6 +359,14 @@ additional optimizations.
   Endpoints support this capability must meet the usage model as
   described by fi_trigger.3.
 
+*FI_FENCE*
+: Indicates that the endpoint support the FI_FENCE flag on data
+  transfer operations.  Support requires tracking that all previous
+  transmit requests to a specified remote endpoint complete prior
+  to initiating the fenced operation.  Fenced operations are often
+  used to enforce ordering between operations that are not otherwise
+  guaranteed by the underlying provider or protocol.
+
 # MODE
 
 The operational mode bits are used to convey requirements that an
@@ -441,6 +449,18 @@ below.
   registration request, and the resulting memory region will start at
   a base address of 0.  Applications can request that providers select
   MR attributes by forcing this bit set after fi_getinfo returns.
+
+*FI_ASYNC_IOV*
+: Applications can reference multiple data buffers as part of a single
+  transmit operation through the use of IO vectors (SGEs).  Typically,
+  the contents of an IO vector are copied by the provider into an
+  internal buffer area, or directly to the underlying hardware.
+  However, when a large number of IOV entries are supported,
+  IOV buffering may have a negative impact on performance and memory
+  consumption.  The FI_ASYNC_IOV mode indicates that the application
+  must provide the buffering needed for the IO vectors.  When set,
+  an application must not modify an IO vector until the associated
+  operation has completed.
 
 # ENDPOINT TYPES
 

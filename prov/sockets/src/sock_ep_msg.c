@@ -610,7 +610,7 @@ static int sock_pep_fi_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	}
 	pep->eq = eq;
 	if ((eq->attr.wait_obj == FI_WAIT_FD) && (eq->wait_fd < 0))
-		sock_eq_openwait(eq, (char *)&pep->service);
+		sock_eq_openwait(eq, pep->service);
 
 	return 0;
 }
@@ -790,6 +790,9 @@ struct fi_info * sock_ep_msg_process_info(struct sock_conn_req *req)
 	req->info.ep_attr = &req->ep_attr;
 	req->info.domain_attr = &req->domain_attr;
 	req->info.fabric_attr = &req->fabric_attr;
+	req->info.domain_attr->name = NULL;
+	req->info.fabric_attr->name = NULL;
+	req->info.fabric_attr->prov_name = NULL;
 	if (sock_verify_info(&req->info)) {
 		SOCK_LOG_INFO("incoming conn_req not supported\n");
 		errno = EINVAL;
