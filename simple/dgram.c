@@ -45,7 +45,7 @@ static void *buf;
 static size_t buffer_size = 1024;
 static int rx_depth = 512;
 
-static char *dst_addr;
+static char *dst_addr = NULL;
 static char *port = "9228";
 static void *remote_addr;
 static size_t addrlen = 0;
@@ -62,16 +62,10 @@ struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
 
-static enum node_type {
-	SERVER = 1,
-	CLIENT
-} type;
-
 static void usage(char *name)
 {
 	printf("usage: %s\n", name);
-	printf("\t-d destination_address\n");
-	printf("\t-s or -c (server or client)\n");
+	printf("\t-d destination address\n");
 	exit(1);
 }
 
@@ -184,17 +178,26 @@ static int init_fabric(void)
 {
 	struct fi_info *fi;
 	int ret;
-
+	uint64_t flags = 0;
+	
+	/* Set FI_SOURCE flag to enforce the port number to be the local port 
+	 * the server will be bound to */
+	if(!dst_addr) 
+		flags = FI_SOURCE;
+	
 	/* Get fabric info */
-	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		goto err0;
 	}
 	
-	addrlen = fi->dest_addrlen;
-	remote_addr = malloc(addrlen);
-	memcpy(remote_addr, fi->dest_addr, addrlen);
+	/* Get remote address of the server */
+	if(dst_addr){
+		addrlen = fi->dest_addrlen;
+		remote_addr = malloc(addrlen);
+		memcpy(remote_addr, fi->dest_addr, addrlen);
+	}
 
 	/* Open fabric */
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -227,11 +230,14 @@ static int init_fabric(void)
 	if (ret)
 		goto err5;
 	
-	/* Insert address to the AV and get the fabric address back */ 	
-	ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
-	if (ret != 1) {
-		FI_PRINTERR("fi_av_insert", ret);
-		return ret;
+	if(dst_addr){
+		/* Insert address to the AV and get the fabric address back */ 	
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+				&fi_ctx_av);
+		if (ret != 1) {
+			FI_PRINTERR("fi_av_insert", ret);
+			return ret;
+		}
 	}
 
 	fi_freeinfo(fi);
@@ -256,7 +262,7 @@ static int send_recv()
 	struct fi_cq_entry comp;
 	int ret;
 
-	if (type == CLIENT) {
+	if (dst_addr) {
 		/* Client */
 		fprintf(stdout, "Posting a send...\n");
 		sprintf(buf, "Hello from Client!"); 
@@ -312,25 +318,16 @@ int main(int argc, char **argv)
 	memset(&domain_hints, 0, sizeof(struct fi_domain_attr));
 	memset(&ep_hints, 0, sizeof(struct fi_ep_attr));
 
-	while ((op = getopt(argc, argv, "d:sc")) != -1) {
+	while ((op = getopt(argc, argv, "d:")) != -1) {
 		switch (op) {
 		case 'd':
 			dst_addr = optarg;
-			break;
-		case 's':
-			type = SERVER;
-			break;
-		case 'c':
-			type = CLIENT;
 			break;
 		default:
 			usage(argv[0]);
 		}
 	}
-	/* Check if we got required args */
-	if (optind != 4)
-		usage(argv[0]);
-
+	
 	hints.domain_attr	= &domain_hints;
 	hints.ep_attr		= &ep_hints;
 	hints.ep_type		= FI_EP_DGRAM;
@@ -349,7 +346,6 @@ int main(int argc, char **argv)
 	ret = send_recv();
 
 	/* Tear down */
-	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);

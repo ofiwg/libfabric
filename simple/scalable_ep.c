@@ -112,6 +112,7 @@ static int recv_msg(void)
 
 static void free_ep_res(void)
 {
+	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	FI_CLOSEV(rx_ep, ctx_cnt);
 	FI_CLOSEV(tx_ep, ctx_cnt);

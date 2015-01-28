@@ -737,7 +737,6 @@ static int run(void)
 	sync_test();
 
 out:
-	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);
