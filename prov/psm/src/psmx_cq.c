@@ -117,7 +117,7 @@ struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 		break;
 
 	default:
-		fprintf(stderr, "%s: unsupported CC format %d\n", __func__, cq->format);
+		fprintf(stderr, "%s: unsupported CQ format %d\n", __func__, cq->format);
 		return NULL;
 	}
 
