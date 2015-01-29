@@ -1,7 +1,9 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-AC_INIT([fabtests], [0.0.1], [linux-rdma@vger.kernel.org])
+AC_INIT([fabtests], [0.0.2], [linux-rdma@vger.kernel.org])
+AC_CONFIG_AUX_DIR(config)
+AC_CONFIG_MACRO_DIR(config)
 AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([1.11 dist-bzip2 foreign -Wall -Werror subdir-objects])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -53,5 +55,5 @@ AC_CHECK_HEADER(valgrind/memcheck.h, [],
     AC_MSG_ERROR([valgrind requested but <valgrind/memcheck.h> not found.]))
 fi
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile fabtests.spec])
 AC_OUTPUT

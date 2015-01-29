@@ -107,12 +107,12 @@ simple_fi_rdm_multi_recv_SOURCES = \
 	common/shared.c
 
 unit_fi_eq_test_SOURCES = \
-    unit/eq_test.c \
+	unit/eq_test.c \
 	unit/common.c \
 	common/shared.c
 
 unit_fi_av_test_SOURCES = \
-    unit/av_test.c \
+	unit/av_test.c \
 	unit/common.c
 
 unit_fi_size_left_test_SOURCES = \
@@ -124,4 +124,7 @@ ported_libibverbs_fi_rc_pingpong_SOURCES = \
 
 man_MANS = man/fabtests.7
 
-EXTRA_DIST = common/shared.h $(man_MANS)
+EXTRA_DIST = include/shared.h include/unit_common.h fabtests.spec.in $(man_MANS)
+
+dist-hook: fabtests.spec
+	cp fabtests.spec $(distdir)
