@@ -283,9 +283,11 @@ static int run_op(void)
 	case FI_CSWAP:
 		ret = is_valid_compare_atomic_op(op_type);
 		if (ret > 0) {
-			ret = execute_compare_atomic_op(op_type);
-		} else {
-			goto out;
+			for (i = 0; i < opts.iterations; i++) {
+				ret = execute_compare_atomic_op(op_type);
+				if(ret)
+					break;
+			}	
 		}
 		break;
 	default:
@@ -299,9 +301,11 @@ static int run_op(void)
 		goto out;
 
 	if(op_type == FI_CSWAP)		
-		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 1);
+		show_perf(test_name, opts.transfer_size, opts.iterations, 
+				&start, &end, 1);
 	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
+		show_perf(test_name, opts.transfer_size, opts.iterations, 
+				&start, &end, 2);
 
 	ret = 0;
 
