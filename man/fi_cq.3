@@ -1,4 +1,4 @@
-.TH fi_cq 3 "2014\-12\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_cq 3 "2015\-01\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cq - Completion queue operations
@@ -288,8 +288,12 @@ This field is ignored if wait_obj is not FI_WAIT_SET.
 .PP
 The fi_close call releases all resources associated with a completion
 queue.
-The CQ must not be bound to any other resources prior to being closed.
 Any completions which remain on the CQ when it is closed are lost.
+.PP
+When closing the CQ, there must be no opened endpoints, transmit
+contexts, or receive contexts associated with the CQ.
+If resources are still associated with the CQ when attempting to close,
+the call will return -FI_EBUSY.
 .SS fi_control
 .PP
 The fi_control call is used to access provider or implementation

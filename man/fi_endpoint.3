@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-01\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-01\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -207,6 +207,11 @@ fi_info connreq must reference the corresponding request.
 .SS fi_close
 .PP
 Closes an endpoint and release all resources associated with it.
+.PP
+When closing a scalable endpoint, there must be no opened transmit
+contexts, or receive contexts associated with the scalable endpoint.
+If resources are still associated with the scalable endpoint when
+attempting to close, the call will return -FI_EBUSY.
 .SS fi_ep_bind
 .PP
 fi_ep_bind is used to associate an endpoint with hardware resources.

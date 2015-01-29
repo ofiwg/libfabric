@@ -246,6 +246,10 @@ address vector.  Note that any events queued on an event queue referencing
 the AV are left untouched.  It is recommended that callers retrieve all
 events associated with the AV before closing it.
 
+When closing the address vector, there must be no opened endpoints associated
+with the AV.  If resources are still associated with the AV when attempting to
+close, the call will return -FI_EBUSY.
+
 ## fi_av_bind
 
 Associates an event queue with the AV.  If an AV has been opened with

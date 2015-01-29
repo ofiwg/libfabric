@@ -1,4 +1,4 @@
-.TH fi_av 3 "2014-11-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_av 3 "2015\-01\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_av - Address vector operations
@@ -227,6 +227,11 @@ Note that any events queued on an event queue referencing the AV are
 left untouched.
 It is recommended that callers retrieve all events associated with the
 AV before closing it.
+.PP
+When closing the address vector, there must be no opened endpoints
+associated with the AV.
+If resources are still associated with the AV when attempting to close,
+the call will return -FI_EBUSY.
 .SS fi_av_bind
 .PP
 Associates an event queue with the AV.
