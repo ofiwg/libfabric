@@ -288,7 +288,7 @@ static int run_test(void)
 	if(dst_addr) {	
 		/* Execute RMA write operation from Client */
 		fprintf(stdout, "RMA write from Client\n");
-		sprintf(buf, welcome_text);
+		sprintf(buf, "%s", welcome_text);
 		ret = write_data(sizeof(char *) * strlen(buf));
 		if (ret)
 			return ret;

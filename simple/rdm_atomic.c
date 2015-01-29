@@ -678,12 +678,12 @@ static int exchange_addr_key(void)
 		if(ret)
 			return ret;
 
-		ret = post_recv(len);
+		ret = post_recv();
 		if(ret)
 			return ret;
 		remote = *(struct addr_key *)buf;
 	} else {
-		ret = post_recv(len);
+		ret = post_recv();
 		if(ret)
 			return ret;
 		remote = *(struct addr_key *)buf;

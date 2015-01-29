@@ -124,7 +124,7 @@ static int alloc_ep_res(void)
 	struct fi_rx_attr rx_attr;
 	struct fi_tx_attr tx_attr;
 	struct fi_av_attr av_attr;
-	int ret;
+	int ret = 0;
 
 	buffer_size = test_size[TEST_CNT - 1].size;
 	buf = malloc(buffer_size);
