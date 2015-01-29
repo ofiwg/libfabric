@@ -201,6 +201,11 @@ fi_info connreq must reference the corresponding request.
 
 Closes an endpoint and release all resources associated with it.
 
+When closing a scalable endpoint, there must be no opened transmit contexts, or
+receive contexts associated with the scalable endpoint.  If resources are still
+associated with the scalable endpoint when attempting to close, the call will
+return -FI_EBUSY.
+
 ## fi_ep_bind
 
 fi_ep_bind is used to associate an endpoint with hardware resources.

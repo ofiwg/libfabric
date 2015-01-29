@@ -164,9 +164,12 @@ struct fi_cntr_attr {
 
 ## fi_close
 
-The fi_close call releases all resources associated with a counter.
-The counter must not be bound to any other resources prior to being
-freed.
+The fi_close call releases all resources associated with a counter.  When
+closing the counter, there must be no opened endpoints, transmit contexts,
+receive contexts or memory regions associated with the counter.  If resources
+are still associated with the counter when attempting to close, the call will
+return -FI_EBUSY.
+
 
 ## fi_cntr_control
 
