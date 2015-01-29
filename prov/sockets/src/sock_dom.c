@@ -364,7 +364,7 @@ int sock_endpoint(struct fid_domain *domain, struct fi_info *info,
 }
 
 int sock_scalable_ep(struct fid_domain *domain, struct fi_info *info,
-		     struct fid_sep **sep, void *context)
+		     struct fid_ep **sep, void *context)
 {
 	switch (info->ep_type) {
 	case FI_EP_RDM:

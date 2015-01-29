@@ -468,7 +468,7 @@ int sock_dgram_ep(struct fid_domain *domain, struct fi_info *info,
 }
 
 int sock_dgram_sep(struct fid_domain *domain, struct fi_info *info,
-		struct fid_sep **sep, void *context)
+		struct fid_ep **sep, void *context)
 {
 	int ret;
 	struct sock_ep *endpoint;
