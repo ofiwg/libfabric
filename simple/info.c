@@ -33,6 +33,8 @@
 
 #include <rdma/fabric.h>
 
+#include "shared.h"
+
 static struct fi_info hints;
 static char *node, *port;
 
@@ -152,7 +154,7 @@ static int run(struct fi_info *hints, char *node, char *port)
 	struct fi_info *info;
 	int ret;
 
-	ret = fi_getinfo(FI_VERSION(1, 0), node, port, 0, hints, &info);
+	ret = fi_getinfo(FT_FIVERSION, node, port, 0, hints, &info);
 	if (ret) {
 		printf("fi_getinfo() %s\n", strerror(-ret));
 		return ret;

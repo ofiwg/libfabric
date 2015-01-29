@@ -44,14 +44,6 @@
 #include <time.h>
 
 #include <rdma/fabric.h>
-#include <rdma/fi_domain.h>
-#include <rdma/fi_eq.h>
-#include <rdma/fi_errno.h>
-#include <rdma/fi_endpoint.h>
-#include <rdma/fi_rma.h>
-#include <rdma/fi_cm.h>
-
-#include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_tagged.h>
@@ -59,17 +51,16 @@
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_atomic.h>
-#include <shared.h>
+
+#include "shared.h"
 
 struct addr_key {
 	uint64_t addr;
 	uint64_t key;
 };
 
+static struct cs_opts opts;
 static enum fi_op op_type = FI_MIN;
-static int size_option;
-static int iterations = 1000;
-static int transfer_size = 1024;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *buf;
@@ -79,10 +70,6 @@ static size_t buffer_size;
 struct addr_key local, remote;
 
 static struct fi_info hints;
-static struct fi_domain_attr domain_hints;
-static struct fi_ep_attr ep_hints;
-static char *dst_addr, *src_addr;
-static char *port = "9288";
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -177,11 +164,11 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = dst_addr ? send_msg(16) : post_recv();
+	ret = opts.dst_addr ? send_msg(16) : post_recv();
 	if (ret)
 		return ret;
 
-	return dst_addr ? post_recv() : send_msg(16);
+	return opts.dst_addr ? post_recv() : send_msg(16);
 }
 
 static int is_valid_base_atomic_op(enum fi_op op)
@@ -292,7 +279,7 @@ static int run_op(void)
 	case FI_ATOMIC_WRITE:
 		ret = is_valid_base_atomic_op(op_type);
 		if (ret > 0) {
-			for (i = 0; i < iterations; i++) {
+			for (i = 0; i < opts.iterations; i++) {
 				ret = execute_base_atomic_op(op_type);
 				if (ret)
 					break;
@@ -301,7 +288,7 @@ static int run_op(void)
 
 		ret = is_valid_fetch_atomic_op(op_type);
 		if (ret > 0) {
-			for (i = 0; i < iterations; i++) {
+			for (i = 0; i < opts.iterations; i++) {
 				ret = execute_fetch_atomic_op(op_type);
 				if (ret)
 					break;
@@ -326,7 +313,7 @@ static int run_op(void)
 	if (ret)
 		goto out;
 		
-	show_perf(test_name, transfer_size, iterations, &start, &end, 2);
+	show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
 	ret = 0;
 
 out:
@@ -391,7 +378,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	int ret;
 
 	buffer_size = !run_all_sizes ? test_size[TEST_CNT - 1].size : 
-		transfer_size;
+		opts.transfer_size;
 	buf = malloc(MAX(buffer_size, sizeof(uint64_t)));
 	if (!buf) {
 		perror("malloc");
@@ -517,25 +504,14 @@ static int init_fabric(void)
 	uint64_t flags = 0;
 	int ret;
 
-	if (src_addr) {
-		ret = getaddr(src_addr, NULL, 
-				(struct sockaddr **) &hints.src_addr,
-				(socklen_t *) &hints.src_addrlen);
-		if (ret) {
-			fprintf(stderr, "source address error %s\n", 
-					gai_strerror(ret));
-			return ret;
-		}
-	}
-
-	if (dst_addr) {
-		node = dst_addr;
+	if (opts.dst_addr) {
+		node = opts.dst_addr;
 	} else {
-		node = src_addr;
+		node = opts.src_addr;
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FI_VERSION(1, 0), node, port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, opts.port, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -547,7 +523,7 @@ static int init_fabric(void)
 		fi->mode |= FI_PROV_MR_ATTR;
 
 	// get remote address
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		addrlen = fi->dest_addrlen;
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, fi->dest_addr, addrlen);
@@ -571,7 +547,7 @@ static int init_fabric(void)
 		goto err2;
 	}
 
-	if (dst_addr == NULL) {
+	if (opts.dst_addr == NULL) {
 		printf("EP opened on fabric %s\n", fi->fabric_attr->name);
 	}
 
@@ -603,7 +579,7 @@ static int init_av(void)
 {
 	int ret;
 
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		// get local address blob. Find the addrlen first. We set 
 		// addrlen as 0 and fi_getname will return the actual addrlen
 		addrlen = 0;
@@ -672,7 +648,7 @@ static int exchange_addr_key(void)
 	local.addr = (uint64_t)buf;
 	local.key = fi_mr_key(mr);
 
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		*(struct addr_key *)buf = local;
 		ret = send_msg(len);
 		if(ret)
@@ -715,16 +691,16 @@ static int run(void)
 
 	if (run_all_sizes) {
 		for (i = 0; i < TEST_CNT; i++) {
-			if (test_size[i].option > size_option)
+			if (test_size[i].option > opts.size_option)
 				continue;
 			init_test(test_size[i].size, test_name,
-					sizeof(test_name), &transfer_size,
-					&iterations);
+					sizeof(test_name), &opts.transfer_size,
+					&opts.iterations);
 			ret = run_test();
 			if (ret) {
 				fprintf(stderr, "Test failed at iteration %d, "
 						"msg size %d\n", i, 
-						transfer_size);
+						opts.transfer_size);
 				goto out;
 			}
 		}
@@ -749,23 +725,15 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:C:I:o:S:")) != -1) {
+	/* default options for test */
+	opts.iterations = 1000;
+	opts.transfer_size = 1024;
+	opts.port = "9228";
+	opts.argc = argc;
+	opts.argv = argv;
+
+	while ((op = getopt(argc, argv, "vho:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'd':
-			dst_addr = optarg;
-			break;
-		case 'n':
-			domain_hints.name = optarg;
-			break;
-		case 'p':
-			port = optarg;
-			break;
-		case 's':
-			src_addr = optarg;
-			break;
-		case 'I':
-			iterations = atoi(optarg);
-			break;
 		case 'o':
 			if (!strncasecmp("all", optarg, 3)) {
 				run_all_ops = 1;
@@ -773,32 +741,45 @@ int main(int argc, char **argv)
 				run_all_ops = 0;
 				op_type = get_fi_op(optarg);
 				if (op_type == FI_ATOMIC_OP_LAST)
-					usage(argv[0]);
+					ft_csusage(argv[0], NULL);
 			}
 			break;
-		case 'S':
-			if (!strncasecmp("all", optarg, 3)) {
-				size_option = 1;
-				run_all_sizes = 1;
-			} else {
-				run_all_sizes = 0;
-				transfer_size = atoi(optarg);
-			}
-			break;
+		case 'v':
+			ft_version(argv[0]);
+			return EXIT_SUCCESS;
 		default:
-			usage(argv[0]);
-			return -1;
+			ft_parseinfo(op, optarg, &hints);
+			ft_parsecsopts(op, optarg, &opts);
+			break;
+		case '?':
+		case 'h':
+			ft_csusage(argv[0], "Ping pong client and server using atomic ops.");
+			fprintf(stderr, "  -o <op>\tatomic op type: all|min|max|read|write|cswap (default: all)]\n");
+			return EXIT_FAILURE;
 		}
 	}
 
-	hints.domain_attr = &domain_hints;
-	hints.ep_attr = &ep_hints;
+	if (optind < argc)
+		opts.dst_addr = argv[optind];
+
+	if (opts.src_addr) {
+		ret = ft_getsrcaddr(opts.src_addr, opts.port, &hints);
+
+		if (ret) {
+			FI_DEBUG("source address error %s\n", gai_strerror(ret));
+			return EXIT_FAILURE;
+		}
+	}
+
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG | FI_ATOMICS | FI_BUFFERED_RECV;
 	hints.mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints.addr_format = FI_FORMAT_UNSPEC;
-	
-	ret = run();
 
-	return ret;
+	if (opts.prhints) {
+		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
+		return EXIT_SUCCESS;
+	}
+
+	return run();
 }

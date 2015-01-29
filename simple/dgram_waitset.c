@@ -232,9 +232,7 @@ static int init_fabric(void)
 	int ret;
 
 	if (src_addr) {
-		ret = getaddr(src_addr, NULL, 
-				(struct sockaddr **) &hints.src_addr, 
-				(socklen_t *) &hints.src_addrlen);
+		ret = ft_getsrcaddr(src_addr, NULL, &hints);
 		if (ret) {
 			fprintf(stderr, "source address error %s\n", 
 					gai_strerror(ret));

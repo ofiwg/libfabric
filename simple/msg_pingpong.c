@@ -277,7 +277,7 @@ static int server_listen(void)
 	struct fi_info *fi;
 	int ret;
 
-	ret = fi_getinfo(FI_VERSION(1,0), opts.src_addr, opts.port, FI_SOURCE, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.port, FI_SOURCE, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -548,9 +548,7 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, "vhg:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		case 'v':
-			printf("%s: %s\n", argv[0], PACKAGE_VERSION);
-			printf("libfabric: %s\n", fi_tostr("1", FI_TYPE_VERSION));
-			printf("libfabric api: %d.%d\n", FI_MAJOR(FT_FIVERSION), FI_MINOR(FT_FIVERSION));
+			ft_version(argv[0]);
 			return EXIT_SUCCESS;
 		default:
 			ft_parseinfo(op, optarg, &hints);
