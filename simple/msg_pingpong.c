@@ -41,24 +41,15 @@
 
 #include "shared.h"
 
-static int custom;
-static int size_option;
-static int iterations = 1000;
-static int transfer_size = 1024;
+static struct cs_opts opts;
 static int max_credits = 128;
 static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
-static int machr, g_argc;
-static char **g_argv;
 
 static struct fi_info hints;
-static struct fi_domain_attr domain_hints;
-static struct fi_ep_attr ep_hints;
-static char *dst_addr = NULL, *src_addr;
-static char *port = "9228";
 
 static struct fid_fabric *fab;
 static struct fid_pep *pep;
@@ -130,12 +121,12 @@ static int sync_test(void)
 	}
 	credits = max_credits;
 
-	ret = dst_addr ? send_xfer(16) : recv_xfer(16);
+	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
 	if (ret) {
 		return ret;
 	}
 
-	return dst_addr ? recv_xfer(16) : send_xfer(16);
+	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
 }
 
 static int run_test()
@@ -147,23 +138,23 @@ static int run_test()
 		return ret;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
-	for (i = 0; i < iterations; i++) {
-		ret = dst_addr ? send_xfer(transfer_size) :
-				 recv_xfer(transfer_size);
+	for (i = 0; i < opts.iterations; i++) {
+		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
+				 recv_xfer(opts.transfer_size);
 		if (ret)
 			return ret;
 
-		ret = dst_addr ? recv_xfer(transfer_size) :
-				 send_xfer(transfer_size);
+		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
+				 send_xfer(opts.transfer_size);
 		if (ret)
 			return ret;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
-	if (machr)
-		show_perf_mr(transfer_size, iterations, &start, &end, 2, g_argc, g_argv);
+	if (opts.machr)
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
 	else
-		show_perf(test_name, transfer_size, iterations, &start, &end, 2);
+		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
 
 	return 0;
 }
@@ -200,7 +191,7 @@ static int alloc_ep_res(void)
 	struct fi_cq_attr cq_attr;
 	int ret;
 
-	buffer_size = !custom ? test_size[TEST_CNT - 1].size : transfer_size;
+	buffer_size = !opts.custom ? test_size[TEST_CNT - 1].size : opts.transfer_size;
 	buf = malloc(buffer_size);
 	if (!buf) {
 		perror("malloc");
@@ -286,7 +277,7 @@ static int server_listen(void)
 	struct fi_info *fi;
 	int ret;
 
-	ret = fi_getinfo(FI_VERSION(1,0), src_addr, port, FI_SOURCE, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1,0), opts.src_addr, opts.port, FI_SOURCE, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -417,7 +408,7 @@ static int client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	ret = fi_getinfo(FI_VERSION(1,0), dst_addr, port, 0, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1,0), opts.dst_addr, opts.port, 0, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -503,24 +494,24 @@ static int run(void)
 {
 	int i, ret = 0;
 
-	if (!dst_addr) {
+	if (!opts.dst_addr) {
 		ret = server_listen();
 		if (ret)
 			return ret;
 	}
 
-	ret = dst_addr ? client_connect() : server_connect();
+	ret = opts.dst_addr ? client_connect() : server_connect();
 	if (ret) {
 		return ret;
 	}
 
-	if (!custom) {
+	if (!opts.custom) {
 		for (i = 0; i < TEST_CNT; i++) {
-			if (test_size[i].option > size_option)
+			if (test_size[i].option > opts.size_option)
 				continue;
 			init_test(test_size[i].size, test_name,
-					sizeof(test_name), &transfer_size,
-					&iterations);
+					sizeof(test_name), &opts.transfer_size,
+					&opts.iterations);
 			run_test();
 		}
 	} else {
@@ -536,99 +527,60 @@ static int run(void)
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);
 	free_ep_res();
-	if (!dst_addr)
+	if (!opts.dst_addr)
 		free_lres();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
 	return ret;
 }
 
-void print_usage(char *name)
-{
-	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "  %s [OPTIONS]\t\tstart ping server\n", name);
-	fprintf(stderr, "  %s [OPTIONS] <host>\tpong given host\n", name);
-
-	fprintf(stderr, "\nOptions:\n");
-	fprintf(stderr, "  -n\tdomain name\n");
-	fprintf(stderr, "  -p\tport number\n");
-	fprintf(stderr, "  -s\tsource address\n");
-	fprintf(stderr, "  -I\tnumber of iterations\n");
-	fprintf(stderr, "  -S\tspecific transfer size or 'all'\n");
-	fprintf(stderr, "  -m\tmachine readable output\n");
-	fprintf(stderr, "  -i\tprint hints structure and exit\n");
-	fprintf(stderr, "  -v\tdisplay versions and exit\n");
-	fprintf(stderr, "  -h\tdisplay this help output\n");
-
-	return;
-}
-
 int main(int argc, char **argv)
 {
 	int op, ret;
-	int prhints = 0;
 
-	while ((op = getopt(argc, argv, "n:p:s:I:S:mivh")) != -1) {
+	/* default options for test */
+	opts.iterations = 1000;
+	opts.transfer_size = 1024;
+	opts.port = "9228";
+	opts.argc = argc;
+	opts.argv = argv;
+
+	while ((op = getopt(argc, argv, "vhg:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'n':
-			domain_hints.name = optarg;
-			break;
-		case 'p':
-			port = optarg;
-			break;
-		case 's':
-			ret = getaddr(optarg, NULL,
-				      (struct sockaddr **) &hints.src_addr,
-				      (socklen_t *) &hints.src_addrlen);
-
-			src_addr = optarg;
-			if (ret) {
-				FI_DEBUG("source address error %s\n", gai_strerror(ret));
-				return EXIT_FAILURE;
-			}
-			break;
-		case 'I':
-			custom = 1;
-			iterations = atoi(optarg);
-			break;
-		case 'S':
-			if (!strncasecmp("all", optarg, 3)) {
-				size_option = 1;
-			} else {
-				custom = 1;
-				transfer_size = atoi(optarg);
-			}
-			break;
-		case 'm':
-			machr = 1;
-			g_argc = argc;
-			g_argv = argv;
-			break;
-		case 'i':
-			prhints = 1;
-			break;
 		case 'v':
-			printf("%s: 0.0.1\n", argv[0]);
-			printf("%s: %s\n", PACKAGE_NAME, PACKAGE_VERSION);
+			printf("%s: %s\n", argv[0], PACKAGE_VERSION);
+			printf("libfabric: %s\n", fi_tostr("1", FI_TYPE_VERSION));
+			printf("libfabric api: %d.%d\n", FI_MAJOR(FT_FIVERSION), FI_MINOR(FT_FIVERSION));
 			return EXIT_SUCCESS;
-		case 'h':
 		default:
-			print_usage(argv[0]);
+			ft_parseinfo(op, optarg, &hints);
+			ft_parsecsopts(op, optarg, &opts);
+			break;
+		case '?':
+		case 'h':
+			ft_csusage(argv[0], "Ping pong client and server using message endpoints.");
 			return EXIT_FAILURE;
 		}
 	}
 
 	if (optind < argc)
-		dst_addr = argv[optind];
+		opts.dst_addr = argv[optind];
 
-	hints.domain_attr = &domain_hints;
-	hints.ep_attr = &ep_hints;
+	if (opts.src_addr) {
+		ret = ft_getsrcaddr(opts.src_addr, opts.port, &hints);
+
+		if (ret) {
+			FI_DEBUG("source address error %s\n", gai_strerror(ret));
+			return EXIT_FAILURE;
+		}
+	}
+
 	hints.ep_type = FI_EP_MSG;
 	hints.caps = FI_MSG;
 	hints.mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints.addr_format = FI_SOCKADDR;
 
-	if (prhints) {
+	if (opts.prhints) {
 		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
 		return EXIT_SUCCESS;
 	}

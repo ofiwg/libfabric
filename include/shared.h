@@ -43,6 +43,9 @@
 extern "C" {
 #endif
 
+/* all tests should work with 1.0 API */
+#define FT_FIVERSION FI_VERSION(1,0)
+
 struct test_size_param {
 	int size;
 	int option;
@@ -54,12 +57,34 @@ enum precision {
 	MILLI = 1000000,
 };
 
+/* client-server common options and option parsing */
+
+struct cs_opts {
+	int prhints;
+	int custom;
+	int iterations;
+	int transfer_size;
+	char *port;
+	char *src_addr;
+	char *dst_addr;
+	int size_option;
+	int machr;
+	int argc;
+	char **argv;
+};
+
+void ft_parseinfo(int op, char *optarg, struct fi_info *hints);
+void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts);
+void ft_csusage(char *name, char *desc);
+#define INFO_OPTS "n:f:"
+#define CS_OPTS "p:I:S:s:mi"
+
 extern struct test_size_param test_size[];
 const unsigned int test_cnt;
 #define TEST_CNT test_cnt
 #define FI_STR_LEN 32
 
-int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len);
+int ft_getsrcaddr(char *node, char *service, struct fi_info *hints);
 char *size_str(char str[FI_STR_LEN], long long size);
 char *cnt_str(char str[FI_STR_LEN], long long cnt);
 int size_to_count(int size);
