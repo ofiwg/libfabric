@@ -1,4 +1,4 @@
-.TH fi_domain 3 "2015\-01\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_domain 3 "2015\-01\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_domain - Open a fabric access domain
@@ -81,8 +81,8 @@ then memory registration requests complete synchronously.
 .PP
 The fi_close call is used to release all resources associated with a
 domain or interface.
-All items associated with the opened domain must be released prior to
-calling fi_close.
+All objects associated with the opened domain must be released prior to
+calling fi_close, otherwise the call will return -FI_EBUSY.
 .SH DOMAIN ATTRIBUTES
 .PP
 The \f[C]fi_domain_attr\f[] structure defines the set of attributes
