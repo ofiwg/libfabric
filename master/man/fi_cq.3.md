@@ -299,9 +299,12 @@ struct fi_cq_tagged_entry {
 ## fi_close
 
 The fi_close call releases all resources associated with a completion
-queue.  The CQ must not be bound to any other resources prior to being
-closed.  Any completions which remain on the CQ when it is closed are
+queue. Any completions which remain on the CQ when it is closed are
 lost.
+
+When closing the CQ, there must be no opened endpoints, transmit contexts, or
+receive contexts associated with the CQ.  If resources are still associated
+with the CQ when attempting to close, the call will return -FI_EBUSY.
 
 ## fi_control
 

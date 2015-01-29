@@ -90,9 +90,9 @@ then memory registration requests complete synchronously.
 
 ## fi_close
 
-The fi_close call is used to release all resources associated with a
-domain or interface.  All items associated with the opened domain must
-be released prior to calling fi_close.
+The fi_close call is used to release all resources associated with a domain or
+interface.  All objects associated with the opened domain must be released
+prior to calling fi_close, otherwise the call will return -FI_EBUSY.
 
 # DOMAIN ATTRIBUTES
 
