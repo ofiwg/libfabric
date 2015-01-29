@@ -180,11 +180,9 @@ err_out:
 
 int psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap)
 {
-	int rma_target = 1;
+	int rma_target;
 
-	if ((ep_cap & (FI_READ | FI_WRITE)) && 
-	    !(ep_cap & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
-		rma_target = 0;
+	rma_target = fi_rma_target_allowed(ep_cap);
 
 	if ((ep_cap & PSMX_CAPS) != ep_cap)
 		return -EINVAL;
@@ -207,7 +205,7 @@ int psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap)
 int psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep)
 {
 	uint64_t ep_cap = 0;
-	int rma_target = 1;
+	int rma_target;
 
 	if (ep)
 		ep_cap = ep->caps;
@@ -230,9 +228,7 @@ int psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep
 		domain->am_initialized = 1;
 	}
 
-	if ((ep_cap & (FI_READ | FI_WRITE)) && 
-	    !(ep_cap & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
-		rma_target = 0;
+	rma_target = fi_rma_target_allowed(ep_cap);
 
 	if ((ep_cap & FI_RMA) && rma_target)
 		domain->rma_ep = ep;
