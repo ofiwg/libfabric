@@ -226,7 +226,7 @@ static int server_connect(void)
 	/* Wait for connection request from client */
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		fprintf(stderr, "fi_eq_sread %zd %s\n", rd, fi_strerror((int) -rd));
+		fprintf(stderr, "fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 
@@ -270,7 +270,7 @@ static int server_connect(void)
 	/* Wait for the connection to be established */
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		printf("fi_eq_sread %zd %s\n", rd, fi_strerror((int) -rd));
+		printf("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		goto err3;
 	}
 
@@ -355,7 +355,7 @@ static int client_connect(void)
 	/* Wait for the connection to be established */
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		printf("fi_eq_sread %zd %s\n", rd, fi_strerror((int) -rd));
+		printf("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 

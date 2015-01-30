@@ -232,19 +232,19 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = max_credits << 1;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		printf("fi_cq_open send comp %s\n", fi_strerror(-ret));
+		printf("fi_cq_open() send comp %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		printf("fi_cq_open recv comp %s\n", fi_strerror(-ret));
+		printf("fi_cq_open() recv comp %s\n", fi_strerror(-ret));
 		goto err2;
 	}
 
 	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
-		printf("fi_mr_reg %s\n", fi_strerror(-ret));
+		printf("fi_mr_reg() %s\n", fi_strerror(-ret));
 		goto err3;
 	}
 
@@ -254,7 +254,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	av_attr.flags = 0;
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
 	if (ret) {
-		printf("fi_av_open %s\n", fi_strerror(-ret));
+		printf("fi_av_open() %s\n", fi_strerror(-ret));
 		goto err4;
 	}
 
@@ -277,31 +277,31 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		printf("fi_ep_bind scq %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_ep_bind() scq %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		printf("fi_ep_bind rcq %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_ep_bind() rcq %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		printf("fi_ep_bind av %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_ep_bind() av %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
 
 	ret = fi_enable(ep);
 	if (ret) {
-		printf("fi_enable %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_enable() %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret) {
-		printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_recv() %d (%s)\n", ret, fi_strerror(-ret));
 	}
 
 	return ret;
@@ -323,7 +323,7 @@ static int common_setup(void)
 
 	ret = fi_getinfo(FI_VERSION(1, 0), node, port, flags, &hints, &fi);
 	if (ret) {
-		printf("fi_getinfo %s\n", strerror(-ret));
+		printf("fi_getinfo() %s\n", strerror(-ret));
 		goto err0;
 	}
 	if (fi->ep_attr->max_msg_size) {
@@ -332,7 +332,7 @@ static int common_setup(void)
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
-		printf("fi_fabric %s\n", fi_strerror(-ret));
+		printf("fi_fabric() %s\n", fi_strerror(-ret));
 		goto err1;
 	}
 	if (fi->mode & FI_MSG_PREFIX) {
@@ -341,26 +341,26 @@ static int common_setup(void)
 
 	ret = fi_domain(fab, fi, &dom, NULL);
 	if (ret) {
-		printf("fi_domain %s %s\n", fi_strerror(-ret),
+		printf("fi_domain() %s %s\n", fi_strerror(-ret),
 			fi->domain_attr->name);
 		goto err2;
 	}
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
-		printf("fi_endpoint %s\n", fi_strerror(-ret));
+		printf("fi_endpoint() %s\n", fi_strerror(-ret));
 		goto err3;
 	}
 
 	ret = alloc_ep_res(fi);
 	if (ret) {
-		printf("alloc_ep_res %s\n", fi_strerror(-ret));
+		printf("alloc_ep_res() %s\n", fi_strerror(-ret));
 		goto err4;
 	}
 
 	ret = bind_ep_res();
 	if (ret) {
-		printf("bind_ep_res %s\n", fi_strerror(-ret));
+		printf("bind_ep_res() %s\n", fi_strerror(-ret));
 		goto err5;
 	}
 
@@ -401,7 +401,7 @@ static int client_connect(void)
 
 	ret = fi_av_insert(av, sin, 1, &rem_addr, 0, NULL);
 	if (ret != 1) {
-		printf("fi_av_insert %s\n", fi_strerror(-ret));
+		printf("fi_av_insert() %s\n", fi_strerror(-ret));
 		goto err;
 	}
 
@@ -440,7 +440,7 @@ static int server_connect(void)
 	do {
 		ret = fi_cq_read(rcq, &comp, 1);
 		if (ret < 0) {
-			printf("fi_cq_read rcq %d (%s)\n", ret, fi_strerror(-ret));
+			printf("fi_cq_read() rcq %d (%s)\n", ret, fi_strerror(-ret));
 			return ret;
 		}
 	} while (ret == 0);
@@ -452,14 +452,14 @@ static int server_connect(void)
 					((uint32_t *)buf)[0], ((uint32_t *)buf)[1]);
 			ret = -FI_EINVAL;
 		} else {
-			printf("fi_insert_av %d (%s)\n", ret, fi_strerror(-ret));
+			printf("fi_insert_av() %d (%s)\n", ret, fi_strerror(-ret));
 		}
 		goto err;
 	}
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret != 0) {
-		printf("fi_recv %d (%s)\n", ret, fi_strerror(-ret));
+		printf("fi_recv() %d (%s)\n", ret, fi_strerror(-ret));
 		goto err;
 	}
 

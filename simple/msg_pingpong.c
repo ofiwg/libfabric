@@ -343,7 +343,7 @@ static int server_connect(void)
 
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FI_DEBUG("fi_eq_sread %zd %s\n", rd, fi_strerror((int) -rd));
+		FI_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 
@@ -382,7 +382,7 @@ static int server_connect(void)
 
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FI_DEBUG("fi_eq_sread %zd %s\n", rd, fi_strerror((int) -rd));
+		FI_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		goto err3;
 	}
 
@@ -460,13 +460,13 @@ static int client_connect(void)
 		if (rd == -FI_EAVAIL) {
 			rd = fi_eq_readerr(cmeq, &err, 0);
 			if (rd != sizeof(err)) {
-				FI_DEBUG("fi_eq_readerr %zd %s\n", rd, fi_strerror((int) -rd));
+				FI_DEBUG("fi_eq_readerr() %zd %s\n", rd, fi_strerror((int) -rd));
 			} else {
 				FI_DEBUG("EQ report error %d %s\n", err.err,
 						fi_strerror(err.err));
 			}
 		} else {
-			FI_DEBUG("fi_eq_sread %zd %s\n", rd, fi_strerror((int) -rd));
+			FI_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		}
 		return (int) rd;
 	}
