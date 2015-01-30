@@ -63,7 +63,7 @@ struct test_size_param test_size[] = {
 
 const unsigned int test_cnt = (sizeof test_size / sizeof test_size[0]);
 
-int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len)
+int ft_getsrcaddr(char *node, char *service, struct fi_info *hints)
 {
 	struct addrinfo *ai;
 	int ret;
@@ -72,9 +72,9 @@ int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len)
 	if (ret)
 		return ret;
 
-	if ((*addr = malloc(ai->ai_addrlen))) {
-		memcpy(*addr, ai->ai_addr, ai->ai_addrlen);
-		*len = ai->ai_addrlen;
+	if ((hints->src_addr = malloc(ai->ai_addrlen))) {
+		memcpy(hints->src_addr, ai->ai_addr, ai->ai_addrlen);
+		hints->src_addrlen = ai->ai_addrlen;
 	} else {
 		ret = EAI_MEMORY;
 	}
@@ -251,3 +251,93 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 	printf("usec/xfer: %f", ((float)elapsed / iters / xfers_per_iter));
 	printf(" }\n");
 }
+
+void ft_csusage(char *name, char *desc)
+{
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
+	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server\n", name);
+
+	if (desc)
+		fprintf(stderr, "\n%s\n", desc);
+
+	fprintf(stderr, "\nOptions:\n");
+	fprintf(stderr, "  -n <domain>\tdomain name\n");
+	fprintf(stderr, "  -p <port>\tnon default port number\n");
+	fprintf(stderr, "  -f <provier>\tspecific provider name eg IP,verbs\n");
+	fprintf(stderr, "  -s <address>\tsource address\n");
+	fprintf(stderr, "  -I <number>\tnumber of iterations\n");
+	fprintf(stderr, "  -S <size>\tspecific transfer size or 'all'\n");
+	fprintf(stderr, "  -m\t\tmachine readable output\n");
+	fprintf(stderr, "  -i\t\tprint hints structure and exit\n");
+	fprintf(stderr, "  -v\t\tdisplay versions and exit\n");
+	fprintf(stderr, "  -h\t\tdisplay this help output\n");
+
+	return;
+}
+
+void ft_parseinfo(int op, char *optarg, struct fi_info *hints)
+{
+	struct fi_domain_attr *domain_hints;
+	struct fi_fabric_attr *fabric_hints;
+
+	switch (op) {
+	case 'n':
+		domain_hints = malloc(sizeof *domain_hints);
+		if (!domain_hints) {
+			perror("malloc");
+			exit(EXIT_FAILURE);
+		}
+
+		domain_hints->name = optarg;
+		hints->domain_attr = domain_hints;
+		break;
+	case 'f':
+		fabric_hints = malloc(sizeof *fabric_hints);
+		if (!fabric_hints) {
+			perror("malloc");
+			exit(EXIT_FAILURE);
+		}
+		fabric_hints->prov_name = optarg;
+		hints->fabric_attr = fabric_hints;
+		break;
+	default:
+		/* let getopt handle unknown opts*/
+		break;
+
+	}
+}
+
+void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts)
+{
+	switch (op) {
+	case 's':
+		opts->src_addr = optarg;
+		break;
+	case 'p':
+		opts->port = optarg;
+		break;
+	case 'I':
+		opts->custom = 1;
+		opts->iterations = atoi(optarg);
+		break;
+	case 'S':
+		if (!strncasecmp("all", optarg, 3)) {
+			opts->size_option = 1;
+		} else {
+			opts->custom = 1;
+			opts->transfer_size = atoi(optarg);
+		}
+		break;
+	case 'm':
+		opts->machr = 1;
+		break;
+	case 'i':
+		opts->prhints = 1;
+		break;
+	default:
+		/* let getopt handle unknown opts*/
+		break;
+	}
+}
+
