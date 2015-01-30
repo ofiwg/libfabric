@@ -64,7 +64,7 @@ static int ctx_cnt = 2;
 static int rx_ctx_bits = 0;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
-static struct fid_sep *sep;
+static struct fid_ep *sep;
 static struct fid_ep **tx_ep, **rx_ep;
 static struct fid_cq **scq;
 static struct fid_cq **rcq;
@@ -125,7 +125,7 @@ static void free_ep_res(void)
 	free(rx_ep);
 }
 
-static int alloc_ep_res(struct fid_sep *sep)
+static int alloc_ep_res(struct fid_ep *sep)
 {
 	struct fi_cq_attr cq_attr;
 	struct fi_rx_attr rx_attr;
