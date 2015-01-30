@@ -80,7 +80,7 @@ sub doit {
         # If we die/fail, ensure to change out of the temp tree so
         # that it can be removed upon exit.
         chdir("/");
-        die "Command @_ failed: exit status $rc";
+        die "Command $cmd failed: exit status $rc";
     }
 }
 
