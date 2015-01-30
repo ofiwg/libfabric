@@ -79,10 +79,13 @@ extern "C" {
 #define PSMX_FREE_LIST_PUT(head, tail, type, item) \
 	do { \
 		memset(item, 0, sizeof(type)); \
-		if (tail) \
+		if (tail) { \
 			tail->next = item; \
-		else \
+			tail = item; \
+		} \
+		else { \
 			head = tail = item; \
+		} \
 	} while (0)
 
 #define PSMX_FREE_LIST_FINALIZE(head, tail, type) \
