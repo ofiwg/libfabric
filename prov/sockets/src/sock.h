@@ -370,7 +370,7 @@ struct sock_comp {
 struct sock_ep {
 	union {
 		struct fid_ep ep;
-		struct fid_sep sep;
+		struct fid_ep sep;
 		struct fid_pep pep;
 	} fid;
 	size_t fclass;
@@ -764,17 +764,17 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep);
 int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int sock_rdm_sep(struct fid_domain *domain, struct fi_info *info,
-		 struct fid_sep **sep, void *context);
+		 struct fid_ep **sep, void *context);
 
 int sock_dgram_ep(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
 int sock_dgram_sep(struct fid_domain *domain, struct fi_info *info,
-		   struct fid_sep **sep, void *context);
+		   struct fid_ep **sep, void *context);
 
 int sock_msg_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
-		 struct fid_sep **sep, void *context);
+		 struct fid_ep **sep, void *context);
 int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
 

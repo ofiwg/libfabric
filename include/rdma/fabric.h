@@ -77,7 +77,6 @@ struct fid_cntr;
 struct fid_ep;
 struct fid_pep;
 struct fid_stx;
-struct fid_sep;
 struct fid_mr;
 
 typedef struct fid *fid_t;

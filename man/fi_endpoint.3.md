@@ -55,16 +55,16 @@ int fi_endpoint(struct fid_domain *domain, struct fi_info *info,
     struct fid_ep **ep, void *context);
 
 int fi_scalable_ep(struct fid_domain *domain, struct fi_info *info,
-    struct fid_sep **ep, void *context);
+    struct fid_ep **sep, void *context);
 
 int fi_passive_ep(struct fi_fabric *fabric, struct fi_info *info,
     struct fid_pep **pep, void *context);
 
-int fi_tx_context(struct fid_ep *ep, int index,
+int fi_tx_context(struct fid_ep *sep, int index,
     struct fi_tx_attr *attr, struct fid_ep **tx_ep,
     void *context);
 
-int fi_rx_context(struct fid_ep *ep, int index,
+int fi_rx_context(struct fid_ep *sep, int index,
     struct fi_rx_attr *attr, struct fid_ep **rx_ep,
     void *context);
 
@@ -80,7 +80,7 @@ int fi_close(struct fid *ep);
 
 int fi_ep_bind(struct fid_ep *ep, struct fid *fid, uint64_t flags);
 
-int fi_scalable_ep_bind(struct fid_sep *sep, struct fid *fid, uint64_t flags);
+int fi_scalable_ep_bind(struct fid_ep *sep, struct fid *fid, uint64_t flags);
 
 int fi_pep_bind(struct fid_pep *pep, struct fid *fid, uint64_t flags);
 

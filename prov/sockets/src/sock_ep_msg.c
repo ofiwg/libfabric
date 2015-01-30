@@ -689,7 +689,7 @@ static struct fi_ops_cm sock_pep_cm_ops = {
 };
 
 int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
-		 struct fid_sep **sep, void *context)
+		 struct fid_ep **sep, void *context)
 {
 	int ret;
 	struct sock_ep *endpoint;

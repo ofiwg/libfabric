@@ -896,7 +896,7 @@ static int sock_ep_setopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
-static int sock_ep_tx_ctx(struct fid_sep *ep, int index, struct fi_tx_attr *attr,
+static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 			  struct fid_ep **tx_ep, void *context)
 {
 	struct sock_ep *sock_ep;
@@ -929,7 +929,7 @@ static int sock_ep_tx_ctx(struct fid_sep *ep, int index, struct fi_tx_attr *attr
 	return 0;
 }
 
-static int sock_ep_rx_ctx(struct fid_sep *ep, int index, struct fi_rx_attr *attr,
+static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 		    struct fid_ep **rx_ep, void *context)
 {
 	struct sock_ep *sock_ep;
