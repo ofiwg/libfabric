@@ -148,7 +148,7 @@ static enum fi_op get_fi_op(char *op) {
 	}
 }
 
-static int post_recv()
+static int post_recv(void)
 {
 	int ret;
 	
