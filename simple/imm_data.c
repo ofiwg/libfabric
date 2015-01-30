@@ -33,6 +33,7 @@
 #include <time.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <inttypes.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
@@ -178,7 +179,8 @@ static int server_listen(void)
 	struct fi_info *fi;
 	int ret;
 
-	ret = fi_getinfo(FI_VERSION(1, 0), src_addr, port, FI_SOURCE, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), src_addr, port, FI_SOURCE, &hints,
+			&fi);
 	if (ret) {
 		printf("fi_getinfo %s\n", strerror(-ret));
 		return ret;
@@ -403,8 +405,10 @@ static int run_test()
 	remote_cq_data = 0x0123456789abcdef & ((0x1ULL << (cq_data_size * 8)) - 1);
 
 	if (dst_addr) {
-		fprintf(stdout, "Posting send with immediate data: %lx\n", remote_cq_data);
-		ret = fi_senddata(ep, buf, size, fi_mr_desc(mr), remote_cq_data, 
+		fprintf(stdout,
+			"Posting send with immediate data: 0x%" PRIx64 "\n",
+			remote_cq_data);
+		ret = fi_senddata(ep, buf, size, fi_mr_desc(mr), remote_cq_data,
 				0, buf);
 		if (ret) {
 			FI_PRINTERR("fi_send", ret);
@@ -438,7 +442,8 @@ static int run_test()
 			else
 				fprintf(stdout, "remote_cq_data: failure\n");
 
-			fprintf(stdout, "Expected data:0x%lx, Received data:0x%lx\n",
+			fprintf(stdout, "Expected data:0x%" PRIx64
+				", Received data:0x%" PRIx64 "\n",
 				remote_cq_data, comp.data);
 		}
 	}

@@ -45,7 +45,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/time.h>
-#include <malloc.h>
 #include <getopt.h>
 #include <time.h>
 #include <rdma/fabric.h>
@@ -340,13 +339,12 @@ static struct pingpong_context *pp_init_ctx(struct fi_info *prov, int size,
 	if (!ctx)
 		return NULL;
 
-	ctx->prov 			= prov;
+	ctx->prov 		= prov;
 	ctx->size       	= size;
 	ctx->rx_depth   	= rx_depth;
 	ctx->use_event   	= use_event;
 
-	ctx->buf = memalign(page_size, size);
-	if (!ctx->buf) {
+	if (posix_memalign(&(ctx->buf), page_size, size)) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
 		goto clean_ctx;
 	}
@@ -495,7 +493,7 @@ int main(int argc, char *argv[])
 			break;
 
 		case 'd':
-			prov_name = strdupa(optarg);
+			prov_name = strdup(optarg);
 			break;
 
 		case 'i':
@@ -540,7 +538,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (optind == argc - 1)
-		servername = strdupa(argv[optind]);
+		servername = strdup(argv[optind]);
 	else if (optind < argc) {
 		usage(argv[0]);
 		return 1;
@@ -708,6 +706,7 @@ int main(int argc, char *argv[])
 	fi_freeinfo(prov_list);
 	free(service);
 	free(prov_name);
+	free(servername);
 
 	return 0;
 }

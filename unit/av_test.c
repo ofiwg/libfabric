@@ -42,6 +42,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <inttypes.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
@@ -94,7 +95,7 @@ check_eq_readerr(struct fid_eq *eq, fid_t fid, void *context, int index)
 		return -1;
 	}
 	if (err_entry.data != index) {
-		sprintf(err_buf, "fi_eq_readerr index = %ld, should be %d",
+		sprintf(err_buf, "fi_eq_readerr index = %" PRIu64 ", should be %d",
 				err_entry.data, index);
 		return -1;
 	}
@@ -132,7 +133,7 @@ check_eq_result(int ret, uint32_t event, struct fi_eq_entry *entry,
 		return -1;
 	}
 	if (count != ~0 && entry->data != count) {
-		sprintf(err_buf, "count = %lu, should be %u", entry->data, count);
+		sprintf(err_buf, "count = %" PRIu64 ", should be %u", entry->data, count);
 		return -1;
 	}
 	return 0;
@@ -388,7 +389,7 @@ av_bad_sync()
 	}
 	if (fi_addr != FI_ADDR_NOTAVAIL) {
 		sprintf(err_buf,
-				"fi_addr = 0x%lx, should be 0x%lx (FI_ADDR_NOTAVAIL)",
+				"fi_addr = 0x%" PRIx64 ", should be 0x%" PRIx64" (FI_ADDR_NOTAVAIL)",
 				fi_addr, FI_ADDR_NOTAVAIL);
 		goto fail;
 	}
@@ -693,7 +694,7 @@ av_good_2vector_async()
 			goto fail;
 		}
 		if (*(uint32_t *)(entry.context) != entry.data) {
-			sprintf(err_buf, "count = %lu, should be %d", entry.data,
+			sprintf(err_buf, "count = %" PRIu64 ", should be %d", entry.data,
 					*(uint32_t *)(entry.context));
 			goto fail;
 		}
@@ -932,7 +933,7 @@ av_goodbad_2vector_async()
 					goto fail;
 			}
 			if (*(uint32_t *)(entry.context) != entry.data) {
-				sprintf(err_buf, "count = %lu, should be %d", entry.data,
+				sprintf(err_buf, "count = %" PRIu64 ", should be %d", entry.data,
 						*(uint32_t *)(entry.context));
 				goto fail;
 			}

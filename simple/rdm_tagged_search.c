@@ -34,6 +34,7 @@
 #include <time.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <inttypes.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
@@ -250,10 +251,10 @@ static int init_fabric(void)
 
 	if (src_addr) {
 		ret = getaddr(src_addr, NULL, 
-				(struct sockaddr **) &hints.src_addr, 
+				(struct sockaddr **) &hints.src_addr,
 				(socklen_t *) &hints.src_addrlen);
 		if (ret) {
-			fprintf(stderr, "source address error %s\n", 
+			fprintf(stderr, "source address error %s\n",
 					gai_strerror(ret));
 			return ret;
 		}
@@ -331,7 +332,7 @@ static int init_av(void)
 	int ret;
 
 	if (dst_addr) {
-		// get local address blob. Find the addrlen first. We set 
+		// get local address blob. Find the addrlen first. We set
 		// addrlen as 0 and fi_getname will return the actual addrlen.
 		addrlen = 0;
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
@@ -347,7 +348,7 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
 				&fi_ctx_av);
 		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
@@ -376,7 +377,7 @@ static int init_av(void)
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
 				&fi_ctx_av);
 		if (ret != 1) {
 			FI_PRINTERR("fi_av_insert", ret);
@@ -399,7 +400,9 @@ static int tagged_search(uint64_t tag)
 	ret = fi_tsearch(ep, &tag, 0, 0, NULL, &len, &fi_ctx_search);
 	if(ret < 0) {
 		if(ret == -ENOMSG)
-			fprintf(stdout, "No match found with tag [%zu]\n", tag);
+			fprintf(stdout,
+				"No match found with tag [%" PRIu64 "]\n",
+				tag);
 		else
 			FI_PRINTERR("fi_tsearch", ret);
 	} else if(ret == 0) {
@@ -408,7 +411,8 @@ static int tagged_search(uint64_t tag)
 		ret = wait_for_tagged_completion(scq, 1);
 	} else {
 		// search completes immediately
-		fprintf(stdout, "Success! Match found with tag [%zu]\n", tag); 
+		fprintf(stdout, "Success! Match found with tag [%" PRIu64 "]\n",
+			tag);
 	}
 	
 	return ret;
@@ -429,12 +433,13 @@ static int run(void)
 	if(dst_addr) {
 		// search for initial tag, it should fail since the sender 
 		// hasn't sent anyting
-		fprintf(stdout, "[fi_tsearch] Searching msg with tag [%zu]\n", 
-				tag_data);
+		fprintf(stdout,
+			"[fi_tsearch] Searching msg with tag [%" PRIu64 "]\n",
+			tag_data);
 		tagged_search(tag_data);
 		
 		fprintf(stdout, "[fi_trecv] Posting buffer for msg with tag "
-				"[%zu]\n", tag_data + 1);
+				"[%" PRIu64 "]\n", tag_data + 1);
 		ret = post_recv(tag_data + 1);
 		if(ret)
 			goto out;
@@ -449,12 +454,14 @@ static int run(void)
 		ret = wait_for_tagged_completion(rcq, 1);
 		if(ret)
 			goto out;
-		fprintf(stdout, "[fi_cq_read] Received completion event for msg"
-			       	" with tag [%zu]\n", tag_data + 1);
+		fprintf(stdout,
+			"[fi_cq_read] Received completion event for msg"
+			" with tag [%" PRIu64 "]\n", tag_data + 1);
 		
 		// search again for the initial tag, it should be successful now
-		fprintf(stdout, "Searching msg with initial tag [%zu]\n", 
-				tag_data);
+		fprintf(stdout,
+			"Searching msg with initial tag [%" PRIu64 "]\n",
+			tag_data);
 		tagged_search(tag_data);
 		
 		// wait for the completion event of the initial tag
@@ -463,7 +470,7 @@ static int run(void)
 			goto out;
 		fprintf(stdout, "[fi_trecv][fi_cq_read] Posted buffer and "
 				"received completion event for msg with tag "
-				"[%zu]\n", tag_data);
+				"[%" PRIu64 "]\n", tag_data);
 
 	} else {
 		// Sender	
@@ -473,14 +480,16 @@ static int run(void)
 		if (ret)
 			goto out;
 
-		fprintf(stdout, "[fi_tsend] Sending msg with tag [%zu]\n", 
-				tag_data);
+		fprintf(stdout,
+			"[fi_tsend] Sending msg with tag [%" PRIu64 "]\n",
+			tag_data);
 		ret = send_msg(16, tag_data);
 		if(ret)
 			goto out;
 
-		fprintf(stdout, "[fi_tsend] Sending msg with tag [%zu]\n", 
-				tag_data + 1);
+		fprintf(stdout,
+			"[fi_tsend] Sending msg with tag [%" PRIu64 "]\n",
+			tag_data + 1);
 		ret = send_msg(16, tag_data + 1);
 		if(ret)
 			goto out;

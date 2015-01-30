@@ -148,7 +148,7 @@ static enum fi_op get_fi_op(char *op) {
 	}
 }
 
-static int post_recv()
+static int post_recv(void)
 {
 	int ret;
 	
@@ -678,12 +678,12 @@ static int exchange_addr_key(void)
 		if(ret)
 			return ret;
 
-		ret = post_recv(len);
+		ret = post_recv();
 		if(ret)
 			return ret;
 		remote = *(struct addr_key *)buf;
 	} else {
-		ret = post_recv(len);
+		ret = post_recv();
 		if(ret)
 			return ret;
 		remote = *(struct addr_key *)buf;

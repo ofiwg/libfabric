@@ -334,7 +334,7 @@ eq_wait_fd_sread()
 	}
 
 	/* timed sread on empty EQ, 2s timeout */
-	clock_gettime(CLOCK_MONOTONIC_RAW, &before);
+	clock_gettime(CLOCK_MONOTONIC, &before);
 	ret = fi_eq_sread(eq, &event, &entry, sizeof(entry), 2000, 0);
 	if (ret != -FI_ETIMEDOUT) {
 		sprintf(err_buf, "fi_eq_read of empty EQ returned %d", ret);
@@ -342,7 +342,7 @@ eq_wait_fd_sread()
 	}
 
 	/* check timeout accuracy */
-	clock_gettime(CLOCK_MONOTONIC_RAW, &after);
+	clock_gettime(CLOCK_MONOTONIC, &after);
 	elapsed = get_elapsed(&before, &after, MILLI);
 	if (elapsed < 1500 || elapsed > 2500) {
 		sprintf(err_buf, "fi_eq_sread slept %d ms, expected 2000",
@@ -360,7 +360,7 @@ eq_wait_fd_sread()
 	}
 
 	/* timed sread on EQ with event, 2s timeout */
-	clock_gettime(CLOCK_MONOTONIC_RAW, &before);
+	clock_gettime(CLOCK_MONOTONIC, &before);
 	event = ~0;
 	memset(&entry, 0, sizeof(entry));
 	ret = fi_eq_sread(eq, &event, &entry, sizeof(entry), 2000, 0);
@@ -370,7 +370,7 @@ eq_wait_fd_sread()
 	}
 
 	/* check that no undue waiting occurred */
-	clock_gettime(CLOCK_MONOTONIC_RAW, &after);
+	clock_gettime(CLOCK_MONOTONIC, &after);
 	elapsed = get_elapsed(&before, &after, MILLI);
 	if (elapsed > 5) {
 		sprintf(err_buf, "fi_eq_sread slept %d ms, expected immediate return",
