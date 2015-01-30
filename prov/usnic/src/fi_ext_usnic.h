@@ -38,10 +38,12 @@
 
 #define FI_PROTO_RUDP 100
 
+#define FI_USNIC_INFO_VERSION 1
+
 /*
  * usNIC specific info
  */
-struct fi_usnic_info {
+struct fi_usnic_info_v1 {
 	uint32_t ui_link_speed;
 	uint32_t ui_netmask_be;
 	char ui_ifname[IFNAMSIZ];
@@ -49,6 +51,13 @@ struct fi_usnic_info {
 	uint32_t ui_num_vf;
 	uint32_t ui_qp_per_vf;
 	uint32_t ui_cq_per_vf;
+};
+
+struct fi_usnic_info {
+	uint32_t ui_version;
+	union {
+		struct fi_usnic_info_v1 v1;
+	} ui;
 };
 
 /*
