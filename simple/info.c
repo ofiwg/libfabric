@@ -154,7 +154,7 @@ static int run(struct fi_info *hints, char *node, char *port)
 
 	ret = fi_getinfo(FI_VERSION(1, 0), node, port, 0, hints, &info);
 	if (ret) {
-		printf("fi_getinfo %s\n", strerror(-ret));
+		printf("fi_getinfo() %s\n", strerror(-ret));
 		return ret;
 	}
 
