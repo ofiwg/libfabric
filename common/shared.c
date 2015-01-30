@@ -83,6 +83,26 @@ int ft_getsrcaddr(char *node, char *service, struct fi_info *hints)
 	return ret;
 }
 
+int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len)
+{
+	struct addrinfo *ai;
+	int ret;
+
+	ret = getaddrinfo(node, service, NULL, &ai);
+	if (ret)
+		return ret;
+
+	if ((*addr = malloc(ai->ai_addrlen))) {
+		memcpy(*addr, ai->ai_addr, ai->ai_addrlen);
+		*len = ai->ai_addrlen;
+	} else {
+		ret = EAI_MEMORY;
+	}
+
+	freeaddrinfo(ai);
+	return ret;
+}
+
 char *size_str(char str[FI_STR_LEN], long long size)
 {
 	long long base, fraction = 0;
