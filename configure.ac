@@ -13,8 +13,13 @@ AC_ARG_ENABLE([debug],
 	      [AS_HELP_STRING([--enable-debug],
 			      [Enable debugging @<:@default=no@:>@])
 	      ],
-	      [CFLAGS="$CFLAGS -g -O0 -Wall"],
-	      [enable_debug=no])
+	      [CFLAGS="$CFLAGS -g -O0 -Wall"
+	       dbg=1],
+	      [enable_debug=no
+               dbg=0])
+
+AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
+                   [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
 
 dnl Fix autoconf's habit of adding -g -O2 by default
 AS_IF([test -z "$CFLAGS"],

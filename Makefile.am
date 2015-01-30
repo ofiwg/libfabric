@@ -31,10 +31,12 @@ src_libfabric_la_SOURCES = \
 	include/fi_enosys.h \
 	include/fi_indexer.h \
 	include/fi_list.h \
+	include/fi_log.h \
 	include/fi_rbuf.h \
 	include/prov.h \
 	src/fabric.c \
 	src/fi_tostr.c \
+	src/log.c \
 	$(common_srcs)
 
 if HAVE_SOCKETS
