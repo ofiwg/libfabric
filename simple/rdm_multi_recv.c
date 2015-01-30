@@ -50,9 +50,7 @@
 #define DEFAULT_MULTI_BUF_SIZE 1024*1024
 #define SYNC_DATA_SIZE 16
 
-static int custom;
-static int iterations = 1000;
-static int transfer_size = 1024;
+static struct cs_opts opts;
 static int max_credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
@@ -60,10 +58,6 @@ static void *send_buf, *multi_recv_buf;
 static size_t max_send_buf_size, multi_buf_size;
 
 static struct fi_info hints;
-static struct fi_domain_attr domain_hints;
-static struct fi_ep_attr ep_hints;
-static char *dst_addr, *src_addr;
-static char *port = "9228";
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -86,7 +80,7 @@ struct fi_ctx_multi_recv {
 enum data_type {
 	DATA = 1,
 	CONTROL
-} ;
+};
 
 int wait_for_send_completion(int num_completions)
 {
@@ -169,12 +163,12 @@ static int send_msg(int size)
 static int sync_test(void)
 {
 	int ret;
-	ret = dst_addr ? send_msg(SYNC_DATA_SIZE) :
+	ret = opts.dst_addr ? send_msg(SYNC_DATA_SIZE) :
 	   	wait_for_recv_completion(NULL, CONTROL, 1);
 	if (ret)
 		return ret;
 
-	return dst_addr ? wait_for_recv_completion(NULL, CONTROL, 1) : 
+	return opts.dst_addr ? wait_for_recv_completion(NULL, CONTROL, 1) : 
 		send_msg(SYNC_DATA_SIZE);
 }
 
@@ -208,10 +202,10 @@ static int send_multi_recv_msg()
 	int ret, i;
 	ret = 0;
 	// send multi_recv data based on the transfer size
-	for(i = 0; i < iterations; i++) {
+	for(i = 0; i < opts.iterations; i++) {
 		ctx_send = (struct fi_ctx_multi_recv *) 
 			malloc(sizeof(struct fi_ctx_multi_recv));
-		ret = fi_send(ep, send_buf, (size_t) transfer_size, 
+		ret = fi_send(ep, send_buf, (size_t) opts.transfer_size, 
 				fi_mr_desc(mr), remote_fi_addr, 
 				&ctx_send->context);
 		if (ret) {
@@ -234,7 +228,7 @@ static int run_test(void)
 	}
 	
 	clock_gettime(CLOCK_MONOTONIC, &start);
-	if(dst_addr) {
+	if(opts.dst_addr) {
 		ret = send_multi_recv_msg();
 		if(ret){
 		  fprintf(stderr, "send_multi_recv_msg failed!\n");
@@ -243,7 +237,7 @@ static int run_test(void)
 	} else {
 		// wait for all the receive completion events for 
 		// multi_recv transfer
-		ret = wait_for_recv_completion(NULL, CONTROL, iterations);
+		ret = wait_for_recv_completion(NULL, CONTROL, opts.iterations);
 		if(ret){
 		  fprintf(stderr, "wait_for_recv_completion failed\n");
 			goto out;			
@@ -252,7 +246,7 @@ static int run_test(void)
 	
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
-	show_perf(test_name, transfer_size, iterations, &start, &end, 2);
+	show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
 	ret = 0;
 
 out:
@@ -282,7 +276,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	int data_size = sizeof(size_t);
 
 	// maximum size of the buffer that needs to allocated
-	max_send_buf_size = MAX(MAX(data_size, SYNC_DATA_SIZE), transfer_size);
+	max_send_buf_size = MAX(MAX(data_size, SYNC_DATA_SIZE), opts.transfer_size);
 	
 	if(max_send_buf_size > fi->ep_attr->max_msg_size) {
 		fprintf(stderr, "transfer size is larger than the maximum size "
@@ -410,27 +404,17 @@ static int init_fabric(void)
 	struct fi_info *fi;
 	char *node;
 	int ret;
-	if (src_addr) {
-		ret = getaddr(src_addr, NULL, 
-				(struct sockaddr **) &hints.src_addr, 
-				(socklen_t *) &hints.src_addrlen);
-		if (ret) {
-			fprintf(stderr, "source address error %s\n", 
-					gai_strerror(ret));
-			return ret;
-		}
-	}
 
-	node = dst_addr ? dst_addr : src_addr;
+	node = opts.dst_addr ? opts.dst_addr : opts.src_addr;
 
-	ret = fi_getinfo(FI_VERSION(1, 0), node, port, 0, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, opts.port, 0, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 	
 	/* Get remote address */
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		addrlen = fi->dest_addrlen;
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, fi->dest_addr, addrlen);
@@ -496,7 +480,7 @@ static int init_av(void)
 	int ret;
 	void *recv_buf = NULL;
 	
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		// Get local address blob. Find the addrlen first. We set 
 		// addrlen as 0 and fi_getname will return the actual addrlen. 
 		addrlen = 0;
@@ -591,47 +575,45 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:I:S:")) != -1) {
+	/* default options for test */
+	opts.iterations = 1000;
+	opts.transfer_size = 1024;
+	opts.port = "9228";
+	opts.argc = argc;
+	opts.argv = argv;
+
+	while ((op = getopt(argc, argv, "vhg:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'd':
-			dst_addr = optarg;
-			break;
-		case 'n':
-			domain_hints.name = optarg;
-			break;
-		case 'p':
-			port = optarg;
-			break;
-		case 's':
-			src_addr = optarg;
-			break;
-		case 'I':
-			custom = 1;
-			iterations = atoi(optarg);
-			break;
-		case 'S':
-			custom = 1;
-			transfer_size = atoi(optarg);
-			break;
+		case 'v':
+			ft_version(argv[0]);
+			return EXIT_SUCCESS;
 		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-d destination_address]\n");
-			printf("\t[-n domain_name]\n");
-			printf("\t[-p port_number]\n");
-			printf("\t[-s source_address]\n");
-			printf("\t[-I iterations]\n");
-			printf("\t[-S transfer_size(in bytes)]\n");
-			exit(1);
+			ft_parseinfo(op, optarg, &hints);
+			ft_parsecsopts(op, optarg, &opts);
+			break;
+		case '?':
+		case 'h':
+			ft_csusage(argv[0], "Ping pong client and server using message endpoints.");
+			return EXIT_FAILURE;
 		}
 	}
 
-	hints.domain_attr = &domain_hints;
-	hints.ep_attr = &ep_hints;
+	if (optind < argc)
+		opts.dst_addr = argv[optind];
+
+	if (opts.src_addr) {
+		ret = ft_getsrcaddr(opts.src_addr, opts.port, &hints);
+
+		if (ret) {
+			FI_DEBUG("source address error %s\n", gai_strerror(ret));
+			return EXIT_FAILURE;
+		}
+	}
+
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG | FI_MULTI_RECV | FI_BUFFERED_RECV;
 	hints.mode = FI_CONTEXT;
 	hints.addr_format = FI_FORMAT_UNSPEC;
 
-	ret = run();
-	return ret;
+	return run();
 }

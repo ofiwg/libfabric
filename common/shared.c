@@ -83,24 +83,12 @@ int ft_getsrcaddr(char *node, char *service, struct fi_info *hints)
 	return ret;
 }
 
-int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len)
+/* yaml version info */
+void ft_version(char *app)
 {
-	struct addrinfo *ai;
-	int ret;
-
-	ret = getaddrinfo(node, service, NULL, &ai);
-	if (ret)
-		return ret;
-
-	if ((*addr = malloc(ai->ai_addrlen))) {
-		memcpy(*addr, ai->ai_addr, ai->ai_addrlen);
-		*len = ai->ai_addrlen;
-	} else {
-		ret = EAI_MEMORY;
-	}
-
-	freeaddrinfo(ai);
-	return ret;
+	printf("%s: %s\n", app, PACKAGE_VERSION);
+	printf("libfabric: %s\n", fi_tostr("1", FI_TYPE_VERSION));
+	printf("libfabric api: %d.%d\n", FI_MAJOR(FT_FIVERSION), FI_MINOR(FT_FIVERSION));
 }
 
 char *size_str(char str[FI_STR_LEN], long long size)
@@ -284,7 +272,7 @@ void ft_csusage(char *name, char *desc)
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -n <domain>\tdomain name\n");
 	fprintf(stderr, "  -p <port>\tnon default port number\n");
-	fprintf(stderr, "  -f <provier>\tspecific provider name eg IP,verbs\n");
+	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP,verbs\n");
 	fprintf(stderr, "  -s <address>\tsource address\n");
 	fprintf(stderr, "  -I <number>\tnumber of iterations\n");
 	fprintf(stderr, "  -S <size>\tspecific transfer size or 'all'\n");

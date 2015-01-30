@@ -76,6 +76,7 @@ struct cs_opts {
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints);
 void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts);
 void ft_csusage(char *name, char *desc);
+void ft_version(char *app);
 #define INFO_OPTS "n:f:"
 #define CS_OPTS "p:I:S:s:mi"
 
