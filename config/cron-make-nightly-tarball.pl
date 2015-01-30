@@ -63,8 +63,16 @@ die "$download_dir_arg is not a valid directory"
 sub doit {
     my $allowed_to_fail = shift;
     my $cmd = shift;
+    my $stdout_file = shift;
 
-    $cmd .= " 2>/dev/null >/dev/null"
+    # Redirect stdout if requested or not verbose
+    if (defined $stdout_file) {
+        $cmd .= " >$stdout_file";
+    } elsif (!$verbose_arg) {
+        $cmd .= " >/dev/null";
+    }
+
+    $cmd .= " 2>/dev/null"
         if (!$verbose_arg);
 
     my $rc = system($cmd);
@@ -72,7 +80,7 @@ sub doit {
         # If we die/fail, ensure to change out of the temp tree so
         # that it can be removed upon exit.
         chdir("/");
-        die "Command @_ failed: exit status $rc";
+        die "Command $cmd failed: exit status $rc";
     }
 }
 
@@ -151,8 +159,8 @@ doit(0, "ln -s libfabric-$version.tar.bz2 libfabric-latest.tar.bz2");
 
 # Re-generate hashes
 verbose("*** Re-generating md5/sha1sums...\n");
-doit(0, "md5sum libfabric*tar* > md5sums.txt");
-doit(0, "sha1sum libfabric*tar* > sha1sums.txt");
+doit(0, "md5sum libfabric*tar*", "md5sums.txt");
+doit(0, "sha1sum libfabric*tar*", "sha1sums.txt");
 
 # Re-write latest.txt
 verbose("*** Re-creating latest.txt...\n");
