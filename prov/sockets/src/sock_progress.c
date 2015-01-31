@@ -2084,7 +2084,8 @@ int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 			data_avail = (ret == 1);
 		}
 		
-		if (data_avail && conn->rx_pe_entry == NULL) {
+		if (data_avail && conn->rx_pe_entry == NULL &&
+				!dlist_empty(&pe->free_list)) {
 			/* new RX PE entry */
 			ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn, i);
 			if (ret < 0)
