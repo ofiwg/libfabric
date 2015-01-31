@@ -208,130 +208,6 @@ static struct fi_ops_eq sock_eq_ops = {
 	.strerror = sock_eq_strerror,
 };
 
-ssize_t sock_eq_fd_sread(struct fid_eq *eq, uint32_t *event, void *buf,
-		size_t len, int timeout, uint64_t flags)
-{
-	struct sock_eq *sock_eq;
-	struct fid_ep *fid_ep;
-	struct sock_ep *sock_ep;
-	int ret = 0;
-	struct sock_conn_req *req;
-	socklen_t addrlen;
-	struct sockaddr_in addr;
-	struct fi_eq_cm_entry *entry;
-	struct fi_eq_err_entry err;
-
-	req = (struct sock_conn_req *)calloc(1, sizeof(struct sock_conn_req));
-	if (!req) {
-		SOCK_LOG_ERROR("calloc for conn_req failed\n");
-		errno = ENOMEM;
-		return -FI_ENOMEM;
-	}
-	sock_eq = container_of(eq, struct sock_eq, eq);
-
-	addrlen = sizeof(struct sockaddr_in);
-	ret = sock_util_recvfrom(sock_eq->wait_fd, req, sizeof *req, &addr, &addrlen,
-			timeout);
-
-	entry = (struct fi_eq_cm_entry *)buf;
-	switch (req->type) {
-
-	case SOCK_ACCEPT:
-		SOCK_LOG_INFO("received SOCK_ACCEPT\n");
-		if (ret != sizeof req->type + sizeof req->c_fid + sizeof req->s_fid) {
-			SOCK_LOG_ERROR("recvfrom value invalid: %d\n", ret);
-			ret = 0;
-			goto out;
-		}
-		*event = FI_CONNECTED;
-		entry->info = NULL;
-		entry->fid = req->c_fid;
-		fid_ep = container_of(req->c_fid, struct fid_ep, fid);
-		sock_ep = container_of(fid_ep, struct sock_ep, fid.ep);
-		sock_ep->connected = 1;
-		req->type = SOCK_CONNECTED;
-		if (sock_util_sendto(sock_eq->wait_fd, req, sizeof(req->type) +
-				     sizeof(req->c_fid) + sizeof(req->s_fid), &addr, addrlen, 0)) {
-			ret = 0;
-			goto out;
-		}
-		ret = sizeof *entry;
-		break;
-
-	case SOCK_CONNREQ:
-		SOCK_LOG_INFO("received SOCK_CONNREQ\n");
-		if (ret != sizeof *req) {
-			SOCK_LOG_ERROR("recvfrom value invalid: %d\n", ret);
-			ret = 0;
-			goto out;
-		}
-		*event = FI_CONNREQ;
-		entry->info = sock_ep_msg_process_info(req);
-		entry->info->connreq = (fi_connreq_t)req;
-		if (!entry->info) {
-			SOCK_LOG_ERROR("failed create new info\n");
-			ret = -errno;
-			goto out;
-		}
-		ret = sizeof *entry;
-		return ret;
-
-	case SOCK_REJECT:
-		SOCK_LOG_INFO("received SOCK_REJECT\n");
-		if (ret != sizeof req->type + sizeof req->c_fid) {
-			SOCK_LOG_ERROR("recvfrom value invalid: %d\n", ret);
-			ret = 0;
-			goto out;
-		}
-		err.fid = req->c_fid;
-		err.context = NULL;
-		err.data = 0;
-		err.err = -FI_ECONNREFUSED;
-		err.prov_errno = 0;
-		err.err_data = NULL;
-		sock_eq_report_event(sock_eq, 0, &err, sizeof err, 0);
-		ret = sizeof *entry;
-		break;
-
-	case SOCK_CONNECTED:
-		SOCK_LOG_INFO("received SOCK_CONNECTED\n");
-		*event = FI_CONNECTED;
-		entry->info = NULL;
-		entry->fid = req->s_fid;
-		fid_ep = container_of(req->s_fid, struct fid_ep, fid);
-		sock_ep = container_of(fid_ep, struct sock_ep, fid.ep);
-		sock_ep->connected = 1;
-		ret = sizeof *entry;
-		break;
-
-	case SOCK_SHUTDOWN:
-		SOCK_LOG_INFO("received SOCK_SHUTDOWN\n");
-		*event = FI_SHUTDOWN;
-		entry->info = NULL;
-		entry->fid = req->s_fid;
-		ret = sizeof *entry;
-		break;
-
-	default:
-		SOCK_LOG_ERROR("unexpected req to EQ\n");
-		ret = 0;
-		goto out;
-	}
-
-out:
-	free(req);
-	return ret;
-}
-
-static struct fi_ops_eq sock_eq_fd_ops = {
-	.size = sizeof(struct fi_ops_eq),
-	.read = sock_eq_read,
-	.readerr = sock_eq_readerr,
-	.write = sock_eq_write,
-	.sread = sock_eq_fd_sread,
-	.strerror = sock_eq_strerror,
-};
-
 int sock_eq_fi_close(struct fid *fid)
 {
 	struct sock_eq *sock_eq;
@@ -522,7 +398,6 @@ int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		break;
 	case FI_WAIT_FD:
 		sock_eq->signal = 0;
-		sock_eq->eq.ops = &sock_eq_fd_ops;	
 		break;
 
 	case FI_WAIT_MUTEX_COND:

@@ -69,7 +69,3 @@ extern useconds_t sock_progress_thread_wait;
 
 #endif
 
-int sock_util_sendto(int fd, void *buf, size_t len, struct sockaddr_in *addr,
-		socklen_t addrlen, int timeout);
-int sock_util_recvfrom(int fd, void *buf, size_t len, struct sockaddr_in *addr,
-		socklen_t *addrlen, int timeout);

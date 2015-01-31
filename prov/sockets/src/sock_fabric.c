@@ -44,6 +44,7 @@
 
 const char const sock_fab_name[] = "IP";
 const char const sock_dom_name[] = "sockets";
+const char const sock_prov_name[] = "sockets";
 
 const struct fi_fabric_attr sock_fabric_attr = {
 	.fabric = NULL,
@@ -237,7 +238,7 @@ static void fi_sockets_fini(void)
 }
 
 struct fi_provider sock_prov = {
-	.name = "IP",
+	.name = sock_prov_name,
 	.version = FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION), 
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = sock_getinfo,
