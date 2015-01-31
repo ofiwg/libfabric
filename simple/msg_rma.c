@@ -610,11 +610,8 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	ret = ft_getsrcaddr(opts.src_addr, opts.port, &hints);
-
-	if (ret) {
-		FI_DEBUG("source address error %s\n", gai_strerror(ret));
+	if (ret)
 		return EXIT_FAILURE;
-	}
 
 	hints.ep_type = FI_EP_MSG;
 	hints.caps = FI_MSG | FI_RMA;

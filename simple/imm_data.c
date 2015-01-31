@@ -311,10 +311,8 @@ static int client_connect(void)
 	int ret;
 
 	ret = ft_getsrcaddr(src_addr, NULL, &hints);
-	if (ret) {
-		printf("source address error %s\n", gai_strerror(ret));
+	if (ret)
 		return ret;
-	}
 
 	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, &hints, &fi);
 	if (ret) {
