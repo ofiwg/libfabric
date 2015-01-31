@@ -472,19 +472,10 @@ out:
 int main(int argc, char **argv)
 {
 	int op, ret;
+	opts = INIT_OPTS;
 
-	/* default options for test */
-	opts.iterations = 1000;
-	opts.transfer_size = 1024;
-	opts.port = "9228";
-	opts.argc = argc;
-	opts.argv = argv;
-
-	while ((op = getopt(argc, argv, "vhg:" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'v':
-			ft_version(argv[0]);
-			return EXIT_SUCCESS;
 		default:
 			ft_parseinfo(op, optarg, &hints);
 			ft_parsecsopts(op, optarg, &opts);
@@ -499,13 +490,11 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	if (opts.src_addr) {
-		ret = ft_getsrcaddr(opts.src_addr, opts.port, &hints);
+	ret = ft_getsrcaddr(opts.src_addr, opts.port, &hints);
 
-		if (ret) {
-			FI_DEBUG("source address error %s\n", gai_strerror(ret));
-			return EXIT_FAILURE;
-		}
+	if (ret) {
+		FI_DEBUG("source address error %s\n", gai_strerror(ret));
+		return EXIT_FAILURE;
 	}
 
 	hints.ep_type = FI_EP_RDM;

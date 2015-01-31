@@ -47,6 +47,7 @@ static const struct option longopts[] = {
 	{"mode", required_argument, NULL, 'm'},
 	{"ep_type", required_argument, NULL, 'e'},
 	{"addr_format", required_argument, NULL, 'a'},
+	{"version", no_argument, NULL, 'v'},
 	{0,0,0,0}
 };
 
@@ -57,6 +58,7 @@ static const char *help_strings[][2] = {
 	{"MOD1|MOD2..", "\tone or more modes, default all modes"},
 	{"EPTYPE", "\t\tspecify single endpoint type: FI_EP_MSG, FI_EP_DGRAM..."},
 	{"FMT", "\t\tspecify accepted address format: FI_FORMAT_UNSPEC, FI_SOCKADDR..."},
+	{"", "\t\tprint version info and exit"},
 	{"", ""}
 };
 
@@ -66,8 +68,12 @@ void usage()
 	const struct option *ptr = longopts;
 
 	for (; ptr->name != NULL; ++i, ptr = &longopts[i])
-		printf("  -%c, --%s=%s%s\n", ptr->val, ptr->name,
-			help_strings[i][0], help_strings[i][1]);
+		if (ptr->has_arg)
+			printf("  -%c, --%s=%s%s\n", ptr->val, ptr->name,
+				help_strings[i][0], help_strings[i][1]);
+		else
+			printf("  -%c, --%s\t%s\n", ptr->val, ptr->name,
+				help_strings[i][1]);
 }
 
 #define ORCASE(SYM) \
@@ -82,6 +88,7 @@ uint64_t str2cap(char *inputstr)
 	ORCASE(FI_DYNAMIC_MR);
 	ORCASE(FI_NAMED_RX_CTX);
 	ORCASE(FI_BUFFERED_RECV);
+	ORCASE(FI_DIRECTED_RECV);
 	ORCASE(FI_INJECT);
 	ORCASE(FI_MULTI_RECV);
 	ORCASE(FI_SOURCE);
@@ -94,12 +101,14 @@ uint64_t str2cap(char *inputstr)
 	ORCASE(FI_REMOTE_WRITE);
 	ORCASE(FI_REMOTE_CQ_DATA);
 	ORCASE(FI_EVENT);
+	ORCASE(FI_COMPLETION);
 	ORCASE(FI_REMOTE_SIGNAL);
 	ORCASE(FI_REMOTE_COMPLETE);
 	ORCASE(FI_CANCEL);
 	ORCASE(FI_MORE);
 	ORCASE(FI_PEEK);
 	ORCASE(FI_TRIGGER);
+	ORCASE(FI_FENCE);
 
 	return 0;
 }
@@ -110,6 +119,7 @@ uint64_t str2mode(char *inputstr)
 	ORCASE(FI_LOCAL_MR);
 	ORCASE(FI_PROV_MR_ATTR);
 	ORCASE(FI_MSG_PREFIX);
+	ORCASE(FI_ASYNC_IOV);
 
 	return 0;
 }
@@ -175,7 +185,7 @@ int main(int argc, char **argv)
 
 	hints.mode = ~0;
 
-	while ((op = getopt_long(argc, argv, "n:p:c:m:e:a:h", longopts, NULL)) != -1) {
+	while ((op = getopt_long(argc, argv, "n:p:c:m:e:a:hv", longopts, NULL)) != -1) {
 		switch (op) {
 		case 'n':
 			node = optarg;
@@ -195,11 +205,16 @@ int main(int argc, char **argv)
 		case 'a':
 			hints.addr_format = str2addr_format(optarg);
 			break;
+		case 'v':
+			printf("%s: %s\n", argv[0], PACKAGE_VERSION);
+			printf("libfabric: %s\n", fi_tostr("1", FI_TYPE_VERSION));
+			printf("libfabric api: %d.%d\n", FI_MAJOR(FT_FIVERSION), FI_MINOR(FT_FIVERSION));
+			return EXIT_SUCCESS;
 		case 'h':
 		default:
 			printf("usage: %s\n", argv[0]);
 			usage();
-			return (EXIT_FAILURE);
+			return EXIT_FAILURE;
 		}
 	}
 
