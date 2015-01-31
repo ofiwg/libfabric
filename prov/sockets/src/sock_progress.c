@@ -142,8 +142,8 @@ static struct sock_pe_entry *sock_pe_acquire_entry(struct sock_pe *pe)
 	pe_entry = container_of(entry, struct sock_pe_entry, entry);
 	dlist_remove(&pe_entry->entry);
 	dlist_insert_tail(&pe_entry->entry, &pe->busy_list);
-	SOCK_LOG_INFO("progress entry %p acquired : %d\n", pe_entry,
-		PE_INDEX(pe, pe_entry));
+	SOCK_LOG_INFO("progress entry %p acquired : %lu\n", pe_entry,
+		      PE_INDEX(pe, pe_entry));
 	return pe_entry;
 }
 
