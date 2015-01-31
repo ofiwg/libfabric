@@ -244,11 +244,16 @@ _psm_files = \
 if HAVE_PSM_DL
 pkglib_LTLIBRARIES += libpsmx-fi.la
 libpsmx_fi_la_SOURCES = $(_psm_files) $(common_srcs)
-libpsmx_fi_la_LIBADD = $(linkback)
-libpsmx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libpsmx_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(psm_CPPFLAGS)
+libpsmx_fi_la_LDFLAGS = \
+    -module -avoid-version -shared -export-dynamic $(psm_LDFLAGS)
+libpsmx_fi_la_LIBADD = $(linkback) $(psm_LIBS)
 libpsmx_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_PSM_DL
 src_libfabric_la_SOURCES += $(_psm_files)
+src_libfabric_la_CPPFLAGS += $(psm_CPPFLAGS)
+src_libfabric_la_LDFLAGS += $(psm_LDFLAGS)
+src_libfabric_la_LIBADD += $(psm_LIBS)
 endif !HAVE_PSM_DL
 
 endif HAVE_PSM
