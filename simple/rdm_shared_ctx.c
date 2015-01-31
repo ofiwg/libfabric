@@ -309,10 +309,8 @@ static int init_fabric(void)
 	int i, ret;
 
 	ret = ft_getsrcaddr(src_addr, NULL, &hints);
-	if (ret) {
-		fprintf(stderr, "source address error %s\n", gai_strerror(ret));
+	if (ret)
 		return ret;
-	}
 
 	if (dst_addr) {
 		node = dst_addr;

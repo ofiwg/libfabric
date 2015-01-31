@@ -72,13 +72,16 @@ int ft_getsrcaddr(char *node, char *service, struct fi_info *hints)
 		return 0;
 
 	ret = getaddrinfo(node, service, NULL, &ai);
-	if (ret)
+	if (ret) {
+		FI_DEBUG("getaddrfino error %s\n", gai_strerror(ret));
 		return ret;
+	}
 
 	if ((hints->src_addr = malloc(ai->ai_addrlen))) {
 		memcpy(hints->src_addr, ai->ai_addr, ai->ai_addrlen);
 		hints->src_addrlen = ai->ai_addrlen;
 	} else {
+		FI_DEBUG("src_addr allocation failed\n");
 		ret = EAI_MEMORY;
 	}
 
