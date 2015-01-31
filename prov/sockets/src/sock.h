@@ -117,6 +117,8 @@
 #define SOCK_MAJOR_VERSION 1
 #define SOCK_MINOR_VERSION 0
 
+#define SOCK_INJECT_OK(_flgs)  (((_flgs) & FI_INJECT) && ((!(_flgs)) & FI_FENCE))
+
 struct sock_fabric{
 	struct fid_fabric fab_fid;
 	atomic_t ref;
@@ -137,6 +139,7 @@ struct sock_conn_map {
         int size;
 	struct sock_domain *domain;
 	fastlock_t lock;
+	struct sockaddr_storage curr_addr;
 };
 
 struct sock_domain {
@@ -823,10 +826,10 @@ struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc,
 struct sock_mr * sock_mr_get_entry(struct sock_domain *domain, uint16_t key);
 
 
-struct sock_rx_ctx *sock_rx_ctx_alloc(struct fi_rx_attr *attr, void *context);
+struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr, void *context);
 void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx);
 
-struct sock_tx_ctx *sock_tx_ctx_alloc(struct fi_tx_attr *attr, void *context);
+struct sock_tx_ctx *sock_tx_ctx_alloc(const struct fi_tx_attr *attr, void *context);
 void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx);
 void sock_tx_ctx_start(struct sock_tx_ctx *tx_ctx);
 void sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len);
