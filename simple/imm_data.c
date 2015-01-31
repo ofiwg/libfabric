@@ -310,12 +310,10 @@ static int client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	if (src_addr) {
-		ret = ft_getsrcaddr(src_addr, NULL, &hints);
-		if (ret) {
-			printf("source address error %s\n", gai_strerror(ret));
-			return ret;
-		}
+	ret = ft_getsrcaddr(src_addr, NULL, &hints);
+	if (ret) {
+		printf("source address error %s\n", gai_strerror(ret));
+		return ret;
 	}
 
 	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, &hints, &fi);

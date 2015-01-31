@@ -231,13 +231,11 @@ static int init_fabric(void)
 	char *node;
 	int ret;
 
-	if (src_addr) {
-		ret = ft_getsrcaddr(src_addr, NULL, &hints);
-		if (ret) {
-			fprintf(stderr, "source address error %s\n", 
-					gai_strerror(ret));
-			return ret;
-		}
+	ret = ft_getsrcaddr(src_addr, NULL, &hints);
+	if (ret) {
+		fprintf(stderr, "source address error %s\n", 
+				gai_strerror(ret));
+		return ret;
 	}
 
 	if (dst_addr) {
