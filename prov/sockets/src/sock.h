@@ -373,8 +373,7 @@ struct sock_comp {
 struct sock_ep {
 	union {
 		struct fid_ep ep;
-		struct fid_ep sep;
-		struct fid_pep pep;
+		struct fid_sep sep;
 	} fid;
 	size_t fclass;
 	uint64_t op_flags;
@@ -415,24 +414,25 @@ struct sock_ep {
 	struct sockaddr_in *dest_addr;
 	fi_addr_t conn_addr;
 	uint16_t key;
+	int socket;
+
+	pthread_t listener_thread;
+	int do_listen;
 };
 
 struct sock_pep {
-	struct fid_pep		pep;
+	struct fid_pep	pep;
 	struct sock_fabric *sock_fab;
-	struct sock_domain  *dom;
+
+	int do_listen;
+	pthread_t listener_thread;
+	int signal_fds[2];
+	int socket;
+	int listener_sock_fd;
+
+	struct sockaddr_in src_addr;
 	struct fi_info info;
-
-	int sock_fd;
-	char service[NI_MAXSERV];
-
-	struct sock_eq 	*eq;
-
-	struct sock_cq 	*send_cq;
-	struct sock_cq 	*recv_cq;
-
-	uint64_t			op_flags;
-	uint64_t			pep_cap;
+	struct sock_eq *eq;
 };
 
 struct sock_rx_entry {
@@ -669,7 +669,7 @@ struct sock_pe_entry{
 
 struct sock_pe{
 	struct sock_domain *domain;
-
+	int num_free_entries;
 	struct sock_pe_entry pe_table[SOCK_PE_MAX_ENTRIES];
 	fastlock_t lock;
 
@@ -709,10 +709,15 @@ struct sock_cq {
 	sock_cq_report_fn report_completion;
 };
 
-struct sock_conn_req {
-	int type;
+struct sock_conn_hdr {
+	uint8_t type;
+	uint8_t reserved[7];
 	fid_t c_fid;
 	fid_t s_fid;
+};
+
+struct sock_conn_req {
+	struct sock_conn_hdr hdr;
 	uint16_t ep_id;
 	struct fi_info info;
 	struct sockaddr_in src_addr;
@@ -722,14 +727,20 @@ struct sock_conn_req {
 	struct fi_ep_attr	ep_attr;
 	struct fi_domain_attr	domain_attr;
 	struct fi_fabric_attr	fabric_attr;
+	struct sockaddr_in from_addr;
+	char user_data[0];
+};
+
+struct sock_conn_response {
+	struct sock_conn_hdr hdr;
+	char user_data[0];
 };
 
 enum {
-	SOCK_CONNREQ,
-	SOCK_ACCEPT,
-	SOCK_REJECT,
-	SOCK_CONNECTED,
-	SOCK_SHUTDOWN
+	SOCK_CONN_REQ,
+	SOCK_CONN_ACCEPT,
+	SOCK_CONN_REJECT,
+	SOCK_CONN_SHUTDOWN,
 };
 
 int sock_verify_info(struct fi_info *hints);
@@ -780,6 +791,7 @@ int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **sep, void *context);
 int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
+int sock_ep_enable(struct fid_ep *ep);
 
 
 int sock_stx_ctx(struct fid_domain *domain,
@@ -802,7 +814,6 @@ ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event,
 ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
 			     int err, int prov_errno, void *err_data);
 int sock_eq_openwait(struct sock_eq *eq, const char *service);
-struct fi_info * sock_ep_msg_process_info(struct sock_conn_req *req);
 
 int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr, void *context);
