@@ -153,7 +153,6 @@ void sock_tx_ctx_commit(struct sock_tx_ctx *tx_ctx)
 void sock_tx_ctx_abort(struct sock_tx_ctx *tx_ctx)
 {
 	rbfdabort(&tx_ctx->rbfd);
-	fastlock_release(&tx_ctx->rlock);
 	fastlock_release(&tx_ctx->wlock);
 }
 
