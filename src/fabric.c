@@ -44,13 +44,11 @@
 #include <rdma/fi_errno.h>
 #include "fi.h"
 #include "prov.h"
+#include "fi_log.h"
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
 #endif
-
-#define FI_WARN(fmt, ...) \
-	do { fprintf(stderr, "%s: " fmt, PACKAGE, ##__VA_ARGS__); } while (0)
 
 struct fi_prov {
 	struct fi_prov		*next;
@@ -71,6 +69,8 @@ static int fi_register_provider(struct fi_provider *provider)
 
 	if (!provider)
 		return -FI_EINVAL;
+
+	FI_LOG(2, NULL, "registering provider: %s\n", provider->name);
 
 	if (FI_MAJOR(provider->fi_version) != FI_MAJOR_VERSION ||
 	    FI_MINOR(provider->fi_version) > FI_MINOR_VERSION) {
@@ -136,6 +136,8 @@ static void fi_ini(void)
 	if (init)
 		goto unlock;
 
+	fi_log_init();
+
 #ifdef HAVE_LIBDL
 	struct dirent **liblist;
 	int n;
@@ -156,21 +158,22 @@ static void fi_ini(void)
 
 	while (n--) {
 		if (asprintf(&lib, "%s/%s", provdir, liblist[n]->d_name) < 0) {
-			FI_WARN("asprintf failed to allocate memory\n");
+			FI_WARN(NULL, "asprintf failed to allocate memory\n");
 			free(liblist[n]);
 			goto done;
 		}
+		FI_DEBUG(NULL, "opening provider lib %s\n", lib);
 
 		dlhandle = dlopen(lib, RTLD_NOW);
 		if (dlhandle == NULL)
-			FI_WARN("dlopen(%s): %s\n", lib, dlerror());
+			FI_WARN(NULL, "dlopen(%s): %s\n", lib, dlerror());
 
 		free(liblist[n]);
 		free(lib);
 
 		inif = dlsym(dlhandle, "fi_prov_ini");
 		if (inif == NULL)
-			FI_WARN("dlsym: %s\n", dlerror());
+			FI_WARN(NULL, "dlsym: %s\n", dlerror());
 		else
 			fi_register_provider((inif)());
 	}
@@ -258,6 +261,8 @@ int fi_getinfo_(uint32_t version, const char *node, const char *service,
 		ret = prov->provider->getinfo(version, node, service, flags,
 					      hints, &cur);
 		if (ret) {
+			FI_LOG(1, NULL, "fi_getinfo: provider %s returned -%d (%s)\n",
+				prov->provider->name, -ret, fi_strerror(-ret));
 			if (ret == -FI_ENODATA) {
 				continue;
 			} else {
