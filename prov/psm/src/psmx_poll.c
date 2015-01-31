@@ -90,7 +90,7 @@ static int psmx_poll_poll(struct fid_poll *pollset, void **context, int count)
 		switch (list_item->fid->fclass) {
 		case FI_CLASS_CQ:
 			cq = container_of(list_item->fid, struct psmx_fid_cq, cq);
-			if (cq->event_queue.count) {
+			if (cq->event_count) {
 				*context++ = cq->cq.fid.context;
 				ret_count++;
 			}
