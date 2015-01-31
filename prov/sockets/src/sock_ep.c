@@ -446,7 +446,7 @@ static ssize_t sock_ep_cancel(fid_t fid, void *context)
 
 	switch (fid->fclass) {
 	case FI_CLASS_EP:
-		sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
+		sock_ep = container_of(fid, struct sock_ep, ep.fid);
 		rx_ctx = sock_ep->rx_ctx;
 		break;
 
@@ -486,11 +486,11 @@ static int sock_ep_close(struct fid *fid)
 
 	switch(fid->fclass) {
 	case FI_CLASS_EP:
-		sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
+		sock_ep = container_of(fid, struct sock_ep, ep.fid);
 		break;
 
 	case FI_CLASS_SEP:
-		sock_ep = container_of(fid, struct sock_ep, fid.sep.fid);
+		sock_ep = container_of(fid, struct sock_ep, ep.fid);
 		break;
 
 	default:
@@ -537,11 +537,11 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch(fid->fclass) {
 	case FI_CLASS_EP:
-		ep = container_of(fid, struct sock_ep, fid.ep.fid);
+		ep = container_of(fid, struct sock_ep, ep.fid);
 		break;
 
 	case FI_CLASS_SEP:
-		ep = container_of(fid, struct sock_ep, fid.sep.fid);
+		ep = container_of(fid, struct sock_ep, ep.fid);
 		break;
 
 	default:
@@ -769,11 +769,11 @@ static int sock_ep_control(struct fid *fid, int command, void *arg)
 
 	switch(fid->fclass) {
 	case FI_CLASS_EP:
-		ep = container_of(fid, struct sock_ep, fid.ep.fid);
+		ep = container_of(fid, struct sock_ep, ep.fid);
 		break;
 
 	case FI_CLASS_SEP:
-		ep = container_of(fid, struct sock_ep, fid.sep.fid);
+		ep = container_of(fid, struct sock_ep, ep.fid);
 		break;
 
 	default:
@@ -788,7 +788,7 @@ static int sock_ep_control(struct fid *fid, int command, void *arg)
 			return -FI_ENOMEM;
 		*new_ep = *ep;
 		new_ep->op_flags = alias->flags;
-		*alias->fid = &new_ep->fid.ep.fid;
+		*alias->fid = &new_ep->ep.fid;
 		break;
 
 	case FI_GETOPSFLAG:
@@ -819,7 +819,7 @@ int sock_ep_enable(struct fid_ep *ep)
 	int i;
 	struct sock_ep *sock_ep;
 
-	sock_ep = container_of(ep, struct sock_ep, fid.ep);
+	sock_ep = container_of(ep, struct sock_ep, ep);
 
 	if (sock_ep->tx_ctx && 
 	    sock_ep->tx_ctx->fid.ctx.fid.fclass == FI_CLASS_TX_CTX) {
@@ -865,7 +865,7 @@ static int sock_ep_getopt(fid_t fid, int level, int optname,
 		       void *optval, size_t *optlen)
 {
 	struct sock_ep *sock_ep;
-	sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
+	sock_ep = container_of(fid, struct sock_ep, ep.fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -ENOPROTOOPT;
@@ -887,7 +887,7 @@ static int sock_ep_setopt(fid_t fid, int level, int optname,
 {
 	int i;
 	struct sock_ep *sock_ep;
-	sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
+	sock_ep = container_of(fid, struct sock_ep, ep.fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -ENOPROTOOPT;
@@ -916,7 +916,7 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	struct sock_ep *sock_ep;
 	struct sock_tx_ctx *tx_ctx;
 
-	sock_ep = container_of(ep, struct sock_ep, fid.sep);
+	sock_ep = container_of(ep, struct sock_ep, ep);
 	if (index >= sock_ep->ep_attr.tx_ctx_cnt)
 		return -FI_EINVAL;
 
@@ -949,7 +949,7 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	struct sock_ep *sock_ep;
 	struct sock_rx_ctx *rx_ctx;
 
-	sock_ep = container_of(ep, struct sock_ep, fid.sep);
+	sock_ep = container_of(ep, struct sock_ep, ep);
 	if (index >= sock_ep->ep_attr.rx_ctx_cnt)
 		return -FI_EINVAL;
 
@@ -1155,25 +1155,25 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	switch (fclass) {
 	case FI_CLASS_EP:
-		sock_ep->fid.ep.fid.fclass = FI_CLASS_EP;
-		sock_ep->fid.ep.fid.context = context;	
-		sock_ep->fid.ep.fid.ops = &sock_ep_fi_ops;
+		sock_ep->ep.fid.fclass = FI_CLASS_EP;
+		sock_ep->ep.fid.context = context;	
+		sock_ep->ep.fid.ops = &sock_ep_fi_ops;
 		
-		sock_ep->fid.ep.ops = &sock_ep_ops;
-		sock_ep->fid.ep.cm = &sock_ep_cm_ops;
-		sock_ep->fid.ep.msg = &sock_ep_msg_ops;
-		sock_ep->fid.ep.rma = &sock_ep_rma;
-		sock_ep->fid.ep.tagged = &sock_ep_tagged;
-		sock_ep->fid.ep.atomic = &sock_ep_atomic;
+		sock_ep->ep.ops = &sock_ep_ops;
+		sock_ep->ep.cm = &sock_ep_cm_ops;
+		sock_ep->ep.msg = &sock_ep_msg_ops;
+		sock_ep->ep.rma = &sock_ep_rma;
+		sock_ep->ep.tagged = &sock_ep_tagged;
+		sock_ep->ep.atomic = &sock_ep_atomic;
 		break;
 
 	case FI_CLASS_SEP:
-		sock_ep->fid.sep.fid.fclass = FI_CLASS_SEP;
-		sock_ep->fid.sep.fid.context = context;	
-		sock_ep->fid.sep.fid.ops = &sock_ep_fi_ops;
+		sock_ep->ep.fid.fclass = FI_CLASS_SEP;
+		sock_ep->ep.fid.context = context;	
+		sock_ep->ep.fid.ops = &sock_ep_fi_ops;
 		
-		sock_ep->fid.sep.ops = &sock_ep_ops;
-		sock_ep->fid.sep.cm = &sock_ep_cm_ops;
+		sock_ep->ep.ops = &sock_ep_ops;
+		sock_ep->ep.cm = &sock_ep_cm_ops;
 		break;
 
 	default:

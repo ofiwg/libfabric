@@ -75,7 +75,7 @@ const struct fi_tx_attr sock_rdm_tx_attr = {
 	.op_flags = SOCK_DEF_OPS,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
-	.size = SOCK_EP_MAX_TX_CTX_SZ,
+	.size = SOCK_EP_TX_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
@@ -202,13 +202,12 @@ static struct fi_info *sock_rdm_fi_info(struct fi_info *hints,
 	if (!_info)
 		return NULL;
 	
-	if (!hints->caps) 
-		_info->caps = SOCK_EP_RDM_CAP;
-	
+	_info->caps = SOCK_EP_RDM_CAP;
 	*(_info->tx_attr) = sock_rdm_tx_attr;
 	*(_info->rx_attr) = sock_rdm_rx_attr;
 	*(_info->ep_attr) = sock_rdm_ep_attr;
 
+	_info->caps |= (_info->rx_attr->caps | _info->tx_attr->caps);
 	return _info;
 }
 
@@ -456,7 +455,7 @@ int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 
-	*ep = &endpoint->fid.ep;
+	*ep = &endpoint->ep;
 	return 0;
 }
 
@@ -470,7 +469,7 @@ int sock_rdm_sep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 
-	*sep = &endpoint->fid.sep;
+	*sep = &endpoint->ep;
 	return 0;
 }
 

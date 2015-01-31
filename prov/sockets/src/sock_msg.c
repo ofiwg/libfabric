@@ -67,7 +67,7 @@ static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
-		sock_ep = container_of(ep, struct sock_ep, fid.ep);
+		sock_ep = container_of(ep, struct sock_ep, ep);
 		rx_ctx = sock_ep->rx_ctx;
 		break;
 
@@ -157,7 +157,7 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
-		sock_ep = container_of(ep, struct sock_ep, fid.ep);
+		sock_ep = container_of(ep, struct sock_ep, ep);
 		tx_ctx = sock_ep->tx_ctx;
 		break;
 
@@ -330,7 +330,7 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
-		sock_ep = container_of(ep, struct sock_ep, fid.ep);
+		sock_ep = container_of(ep, struct sock_ep, ep);
 		rx_ctx = sock_ep->rx_ctx;
 		break;
 
@@ -422,7 +422,7 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
-		sock_ep = container_of(ep, struct sock_ep, fid.ep);
+		sock_ep = container_of(ep, struct sock_ep, ep);
 		tx_ctx = sock_ep->tx_ctx;
 		break;
 
@@ -579,7 +579,7 @@ static ssize_t sock_ep_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
-		sock_ep = container_of(ep, struct sock_ep, fid.ep);
+		sock_ep = container_of(ep, struct sock_ep, ep);
 		rx_ctx = sock_ep->rx_ctx;
 		break;
 

@@ -420,7 +420,7 @@ static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 		return -FI_ETOOSMALL;
 	}
 
-	sock_ep = container_of(fid, struct sock_ep, fid.ep.fid);
+	sock_ep = container_of(fid, struct sock_ep, ep.fid);
 	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
 	memcpy(addr, sock_ep->src_addr, *addrlen);
 	return 0;
@@ -435,7 +435,7 @@ static int sock_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 		return -FI_ETOOSMALL;
 	}
 
-	sock_ep = container_of(ep, struct sock_ep, fid.ep);
+	sock_ep = container_of(ep, struct sock_ep, ep);
 	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
 	memcpy(addr, sock_ep->dest_addr, *addrlen);
 	return 0;
@@ -577,9 +577,9 @@ static void *sock_msg_ep_listener_thread (void *data)
 
 			fid_ep = container_of(conn_response->hdr.c_fid, 
 					      struct fid_ep, fid);
-			sock_ep = container_of(fid_ep, struct sock_ep, fid.ep);
+			sock_ep = container_of(fid_ep, struct sock_ep, ep);
 			sock_ep->connected = 1;
-			sock_ep_enable(&ep->fid.ep);
+			sock_ep_enable(&ep->ep);
 			if (sock_eq_report_event(ep->eq, FI_CONNECTED, &cm_entry, 
 						 sizeof(cm_entry) + user_data_sz, 0)) 
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
@@ -632,7 +632,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	struct sock_conn_req *req;
 	struct sock_ep *_ep;
 	struct sock_eq *_eq;
-	_ep = container_of(ep, struct sock_ep, fid.ep);
+	_ep = container_of(ep, struct sock_ep, ep);
 	_eq = _ep->eq;
 	if (!_eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ) 
 		return -FI_EINVAL;
@@ -692,7 +692,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	struct sock_eq *_eq;
 	int ret;
 
-	_ep = container_of(ep, struct sock_ep, fid.ep);
+	_ep = container_of(ep, struct sock_ep, ep);
 	_eq = _ep->eq;
 	if (!_eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ) 
 		return -FI_EINVAL;
@@ -807,7 +807,7 @@ int sock_msg_ep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 	
-	*ep = &endpoint->fid.ep;
+	*ep = &endpoint->ep;
 	return 0;
 }
 
@@ -1093,7 +1093,7 @@ static struct fi_ops_cm sock_pep_cm_ops = {
 };
 
 int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
-		 struct fid_sep **sep, void *context)
+		 struct fid_ep **sep, void *context)
 {
 	int ret;
 	struct sock_ep *endpoint;
@@ -1102,7 +1102,7 @@ int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 	
-	*sep = &endpoint->fid.sep;
+	*sep = &endpoint->ep;
 	return 0;
 }
 

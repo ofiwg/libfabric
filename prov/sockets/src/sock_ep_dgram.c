@@ -71,16 +71,16 @@ const struct fi_ep_attr sock_dgram_ep_attr = {
 
 const struct fi_tx_attr sock_dgram_tx_attr = {
 	.caps = SOCK_EP_DGRAM_CAP,
-	.op_flags = SOCK_DGRAM_DEF_OPS,
+	.op_flags = SOCK_DEF_OPS,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
-	.size = SOCK_EP_MAX_TX_CTX_SZ,
+	.size = SOCK_EP_TX_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
 const struct fi_rx_attr sock_dgram_rx_attr = {
 	.caps = SOCK_EP_DGRAM_CAP,
-	.op_flags = SOCK_DGRAM_DEF_OPS,
+	.op_flags = SOCK_DEF_OPS,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.size = SOCK_EP_MAX_MSG_SZ,
@@ -200,18 +200,12 @@ static struct fi_info *sock_dgram_fi_info(struct fi_info *hints,
 	if (!_info)
 		return NULL;
 	
-	if (!hints->caps) 
-		_info->caps = SOCK_EP_DGRAM_CAP;
-	
-	if (!hints->tx_attr)
-		*(_info->tx_attr) = sock_dgram_tx_attr;
+	_info->caps = SOCK_EP_DGRAM_CAP;
+	*(_info->tx_attr) = sock_dgram_tx_attr;
+	*(_info->rx_attr) = sock_dgram_rx_attr;
+	*(_info->ep_attr) = sock_dgram_ep_attr;
 
-	if (!hints->rx_attr)
-		*(_info->rx_attr) = sock_dgram_rx_attr;
-
-	if (!hints->ep_attr)
-		*(_info->ep_attr) = sock_dgram_ep_attr;
-
+	_info->caps |= (_info->rx_attr->caps | _info->tx_attr->caps);
 	return _info;
 }
 
@@ -463,7 +457,7 @@ int sock_dgram_ep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 
-	*ep = &endpoint->fid.ep;
+	*ep = &endpoint->ep;
 	return 0;
 }
 
@@ -477,6 +471,6 @@ int sock_dgram_sep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 
-	*sep = &endpoint->fid.sep;
+	*sep = &endpoint->ep;
 	return 0;
 }
