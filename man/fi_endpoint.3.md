@@ -918,18 +918,22 @@ transmit and/or receive processing, with the potential cost of
 serializing access across multiple endpoints.  Support for sharable
 contexts is domain specific.
 
-Conceptually, sharable contexts are transmit queues that may be
+Conceptually, sharable transmit contexts are transmit queues that may be
 accessed by many endpoints.  The use of a shared transmit context is
 mostly opaque to an application.  Applications must allocate and bind
-shared transmit contexts to endpoints, but otherwise transmit
-operations are posted directly to the endpoint.  An endpoint may only
+shared transmit contexts to endpoints, but operations are posted
+directly to the endpoint.  Shared transmit contexts are not associated
+with completion queues or counters.  Completed operations are posted
+to the CQs bound to the endpoint.  An endpoint may only
 be associated with a single shared transmit context.
 
 Unlike shared transmit contexts, applications interact directly with
 shared receive contexts.  Users post receive buffers directly to a
 shared receive context, with the buffers usable by any endpoint bound
-to the shared receive context.  An endpoint may only be associated
-with a single receive context.
+to the shared receive context.  Shared receive contexts are not
+associated with completion queues or counters.  Completed receive
+operations are posted to the CQs bound to the endpoint.  An endpoint
+may only be associated with a single receive context.
 
 Endpoints associated with a shared transmit context may use dedicated
 receive contexts, and vice-versa.  Or an endpoint may use shared
