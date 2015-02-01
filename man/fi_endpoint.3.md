@@ -158,9 +158,15 @@ fabric domain and are used to listen for incoming connection requests.
 Active endpoints belong to access domains and can perform data
 transfers.
 
-Data transfer interfaces are bound to active endpoints.  Active
-endpoints may be connection-oriented or connectionless, and may
-provide data reliability.
+Active endpoints may be connection-oriented or connectionless, and may
+provide data reliability.  The data transfer interfaces -- messages (fi_msg),
+tagged messages (fi_tagged), RMA (fi_rma), and atomics (fi_atomic) --
+are associated with active endpoints.  In basic configurations, an
+active endpoint has transmit and receive queues.  In general, operations
+that generate traffic on the fabric are posted to the transmit queue.
+This includes all RMA and atomic operations, along with sent messages and
+sent tagged messages.  Operations that post buffers for receiving incoming
+data are submitted to the receive queue.
 
 Active endpoints are created in the disabled state.  They must
 transition into an enabled state before accepting data transfer
@@ -223,10 +229,10 @@ CQs, based on the type of operation.  This is specified using
 fi_ep_bind flags.  The following flags may be used separately or OR'ed
 together when binding an endpoint to a completion domain CQ.
 
-*FI_SEND*
+*FI_TRANSMIT*
 : Directs the completion of outbound data transfer requests to the
   specified completion queue.  This includes send message, RMA, and
-  atomic operations.
+  atomic operations.  The FI_SEND flag may be used interchangeably.
 
 *FI_RECV*
 : Directs the notification of inbound data transfers to the specified

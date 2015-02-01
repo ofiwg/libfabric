@@ -120,6 +120,7 @@ typedef struct fid *fid_t;
 #define FI_WRITE		(1ULL << 17)
 #define FI_RECV			(1ULL << 18)
 #define FI_SEND			(1ULL << 19)
+#define FI_TRANSMIT		FI_SEND
 #define FI_REMOTE_READ		(1ULL << 20)
 #define FI_REMOTE_WRITE		(1ULL << 21)
 
