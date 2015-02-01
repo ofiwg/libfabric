@@ -95,7 +95,8 @@ typedef struct fid *fid_t;
 #define FI_MSG			(1ULL << 1)
 #define FI_RMA			(1ULL << 2)
 #define FI_TAGGED		(1ULL << 3)
-#define FI_ATOMICS		(1ULL << 4)
+#define FI_ATOMIC		(1ULL << 4)
+#define FI_ATOMICS		FI_ATOMIC
 #define FI_DYNAMIC_MR		(1ULL << 7)
 #define FI_NAMED_RX_CTX		(1ULL << 8)
 #define FI_BUFFERED_RECV	(1ULL << 9)

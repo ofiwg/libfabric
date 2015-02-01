@@ -242,11 +242,11 @@ additional optimizations.
   Applications can use the FI_SEND and FI_RECV flags to optimize an
   endpoint as send-only or receive-only.
 
-*FI_ATOMICS*
+*FI_ATOMIC*
 : Specifies that the endpoint supports some set of atomic operations.
   Endpoints supporting this capability support operations defined by
   struct fi_ops_atomic.  In the absence of any relevant flags,
-  FI_ATOMICS implies the ability to initiate and be the target of
+  FI_ATOMIC implies the ability to initiate and be the target of
   remote atomic reads and writes.  Applications can use the FI_READ,
   FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
   types of atomic operations supported by an endpoint.
@@ -300,12 +300,12 @@ additional optimizations.
 *FI_READ*
 : Indicates that the user requires an endpoint capable of initiating
   reads against remote memory regions.  This flag requires that FI_RMA
-  and/or FI_ATOMICS be set.
+  and/or FI_ATOMIC be set.
 
 *FI_WRITE*
 : Indicates that the user requires an endpoint capable of initiating
   writes against remote memory regions.  This flag requires that FI_RMA
-  and/or FI_ATOMICS be set.
+  and/or FI_ATOMIC be set.
 
 *FI_SEND*
 : Indicates that the user requires an endpoint capable of sending
@@ -320,12 +320,12 @@ additional optimizations.
 *FI_REMOTE_READ*
 : Indicates that the user requires an endpoint capable of receiving
   read memory operations from remote endpoints.  This flag requires
-  that FI_RMA and/or FI_ATOMICS be set.
+  that FI_RMA and/or FI_ATOMIC be set.
 
 *FI_REMOTE_WRITE*
 : Indicates that the user requires an endpoint capable of receiving
   write memory operations from remote endpoints.  This flag requires
-  that FI_RMA and/or FI_ATOMICS be set.
+  that FI_RMA and/or FI_ATOMIC be set.
 
 *FI_REMOTE_CQ_DATA*
 : Applications may include a small message with a data transfer that
