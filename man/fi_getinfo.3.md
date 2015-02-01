@@ -299,13 +299,13 @@ additional optimizations.
 
 *FI_READ*
 : Indicates that the user requires an endpoint capable of initiating
-  reads against remote memory regions.  Remote reads include some RMA
-  and atomic operations.
+  reads against remote memory regions.  This flag requires that FI_RMA
+  and/or FI_ATOMICS be set.
 
 *FI_WRITE*
 : Indicates that the user requires an endpoint capable of initiating
-  writes against remote memory regions.  Remote writes include some
-  RMA and most atomic operations.
+  writes against remote memory regions.  This flag requires that FI_RMA
+  and/or FI_ATOMICS be set.
 
 *FI_SEND*
 : Indicates that the user requires an endpoint capable of sending
@@ -319,13 +319,13 @@ additional optimizations.
 
 *FI_REMOTE_READ*
 : Indicates that the user requires an endpoint capable of receiving
-  read memory operations from remote endpoints.  Remote read
-  operations include some RMA and atomic operations.
+  read memory operations from remote endpoints.  This flag requires
+  that FI_RMA and/or FI_ATOMICS be set.
 
 *FI_REMOTE_WRITE*
 : Indicates that the user requires an endpoint capable of receiving
-  write memory operations from remote endpoints.  Remote write
-  operations include some RMA operations and most atomic operations.
+  write memory operations from remote endpoints.  This flag requires
+  that FI_RMA and/or FI_ATOMICS be set.
 
 *FI_REMOTE_CQ_DATA*
 : Applications may include a small message with a data transfer that
