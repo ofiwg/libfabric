@@ -158,9 +158,15 @@ fabric domain and are used to listen for incoming connection requests.
 Active endpoints belong to access domains and can perform data
 transfers.
 
-Data transfer interfaces are bound to active endpoints.  Active
-endpoints may be connection-oriented or connectionless, and may
-provide data reliability.
+Active endpoints may be connection-oriented or connectionless, and may
+provide data reliability.  The data transfer interfaces -- messages (fi_msg),
+tagged messages (fi_tagged), RMA (fi_rma), and atomics (fi_atomic) --
+are associated with active endpoints.  In basic configurations, an
+active endpoint has transmit and receive queues.  In general, operations
+that generate traffic on the fabric are posted to the transmit queue.
+This includes all RMA and atomic operations, along with sent messages and
+sent tagged messages.  Operations that post buffers for receiving incoming
+data are submitted to the receive queue.
 
 Active endpoints are created in the disabled state.  They must
 transition into an enabled state before accepting data transfer
@@ -223,10 +229,10 @@ CQs, based on the type of operation.  This is specified using
 fi_ep_bind flags.  The following flags may be used separately or OR'ed
 together when binding an endpoint to a completion domain CQ.
 
-*FI_SEND*
+*FI_TRANSMIT*
 : Directs the completion of outbound data transfer requests to the
   specified completion queue.  This includes send message, RMA, and
-  atomic operations.
+  atomic operations.  The FI_SEND flag may be used interchangeably.
 
 *FI_RECV*
 : Directs the notification of inbound data transfers to the specified
@@ -302,6 +308,9 @@ binding an endpoint to a counter, the following flags may be specified.
   the given endpoint.
 
 Connectionless endpoints must be bound to a single address vector.
+If an endpoint is using a shared transmit and/or receive context, the
+shared contexts must be bound to the endpoint.  CQs, counters, AV, and
+shared contexts must be bound to endpoints before they are enabled.
 
 ## fi_scalable_ep_bind
 
@@ -330,8 +339,10 @@ The endpoint must have been configured to support cancelable
 operations -- see FI_CANCEL flag -- in order for this call to succeed.
 Canceling an operation causes the fabric provider to search for the
 operation and, if it is still pending, complete it as having been
-canceled.  The cancel operation will complete within a bounded period
-of time.
+canceled.  If multiple outstanding operations match the context
+parameter, only one will be canceled.  In this case, the operation
+which is canceled is provider specific.  The cancel operation will
+complete within a bounded period of time.
 
 ## fi_alias
 
@@ -918,18 +929,24 @@ transmit and/or receive processing, with the potential cost of
 serializing access across multiple endpoints.  Support for sharable
 contexts is domain specific.
 
-Conceptually, sharable contexts are transmit queues that may be
+Conceptually, sharable transmit contexts are transmit queues that may be
 accessed by many endpoints.  The use of a shared transmit context is
 mostly opaque to an application.  Applications must allocate and bind
-shared transmit contexts to endpoints, but otherwise transmit
-operations are posted directly to the endpoint.  An endpoint may only
+shared transmit contexts to endpoints, but operations are posted
+directly to the endpoint.  Shared transmit contexts are not associated
+with completion queues or counters.  Completed operations are posted
+to the CQs bound to the endpoint.  An endpoint may only
 be associated with a single shared transmit context.
 
 Unlike shared transmit contexts, applications interact directly with
 shared receive contexts.  Users post receive buffers directly to a
 shared receive context, with the buffers usable by any endpoint bound
-to the shared receive context.  An endpoint may only be associated
-with a single receive context.
+to the shared receive context.  Shared receive contexts are not
+associated with completion queues or counters.  Completed receive
+operations are posted to the CQs bound to the endpoint.  An endpoint
+may only be associated with a single receive context, and all
+connectless endpoints associated with a shared receive context must
+also share the same address vector. 
 
 Endpoints associated with a shared transmit context may use dedicated
 receive contexts, and vice-versa.  Or an endpoint may use shared

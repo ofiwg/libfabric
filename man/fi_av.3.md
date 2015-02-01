@@ -47,7 +47,7 @@ int fi_av_insertsym(struct fid_av *av, const char *node,
     size_t nodecnt, const char *service, size_t svccnt,
     fi_addr_t *fi_addr, uint64_t flags, void *context);
 
-int fi_av_remove(struct fid_av *av, fi_addr_t fi_addr, size_t count,
+int fi_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
     uint64_t flags);
 
 int fi_av_lookup(struct fid_av *av, fi_addr_t fi_addr,

@@ -231,6 +231,10 @@ matching message, the message is claimed by caller. Subsequent
 searches cannot find the same message, although they may match other
 messages that have the same tag.
 
+An application can request that a buffered message be discarded by
+using the FI_DISCARD flag as part of the search.  When set, FI_DISCARD
+indicates that any matching message be dropped.
+
 # FLAGS
 
 The fi_trecvmsg and fi_tsendmsg calls allow the user to specify flags
@@ -287,6 +291,11 @@ The following flags may be used with fi_tsearch.
   the message is claimed by caller. Subsequent searches cannot find
   the same message, although they may match other messages that have
   the same tag.
+
+*FI_DISCARD*
+: Indicates that if a search successfully finds a matching message,
+  that the message is discarded by the provider, as the data is not
+  needed by the application.
 
 # RETURN VALUE
 

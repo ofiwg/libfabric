@@ -12,6 +12,9 @@ fi_cq \- Completion queue operations
 fi_cq_open / fi_close
 : Open/close a completion queue
 
+fi_control
+: Control CQ operation or attributes.
+
 fi_cq_read / fi_cq_readfrom / fi_cq_readerr
 : Read a completion from a completion queue
 
@@ -91,6 +94,12 @@ const char * fi_cq_strerror(struct fid_cq *cq, int prov_errno,
 
 *flags*
 : Additional flags to apply to the operation
+
+*command*
+: Command of control operation to perform on CQ.
+
+*arg*
+: Optional control argument
 
 *cond*
 : Condition that must be met before a completion is generated
@@ -314,12 +323,13 @@ serialized across all calls when fi_control is invoked, as it may
 redirect the implementation of CQ operations.  The following control
 commands are usable with an CQ.
 
-*FI_GETWAIT (void **)*
+*FI_GETWAIT (void \*\*)*
 : This command allows the user to retrieve the low-level wait object
   associated with the CQ.  The format of the wait-object is specified
-  during CQ creation, through the CQ attributes.
-  See fi_eq.3 for addition details using control with FI_GETWAIT.
-
+  during CQ creation, through the CQ attributes.  The fi_control arg
+  parameter should be an address where a pointer to the returned wait
+  object will be written.  See fi_eq.3 for addition details using
+  fi_control with FI_GETWAIT.
 
 ## fi_cq_read / fi_cq_readfrom
 

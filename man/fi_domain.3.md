@@ -247,10 +247,11 @@ are defined.
 : This progress model indicates that the provider requires the use of
   an application thread to complete an asynchronous request.  When
   manual progress is set, the provider will attempt to advance an
-  asynchronous operation forward when the application invokes any
-  event queue read or wait operation where the completion will be
-  reported.  Progress also occurs when the application processes a
-  poll or wait set.
+  asynchronous operation forward when the application attempts to
+  wait on or read an event queue, completion queue, or counter
+  where the completed operation will be reported.  Progress also
+  occurs when the application processes a poll or wait set that
+  has been associated with the event or completion queue.
 
   Only wait operations defined by the fabric interface will result in
   an operation progressing.  Operating system or external wait
