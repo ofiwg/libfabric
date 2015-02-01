@@ -308,6 +308,9 @@ binding an endpoint to a counter, the following flags may be specified.
   the given endpoint.
 
 Connectionless endpoints must be bound to a single address vector.
+If an endpoint is using a shared transmit and/or receive context, the
+shared contexts must be bound to the endpoint.  CQs, counters, AV, and
+shared contexts must be bound to endpoints before they are enabled.
 
 ## fi_scalable_ep_bind
 
@@ -941,7 +944,9 @@ shared receive context, with the buffers usable by any endpoint bound
 to the shared receive context.  Shared receive contexts are not
 associated with completion queues or counters.  Completed receive
 operations are posted to the CQs bound to the endpoint.  An endpoint
-may only be associated with a single receive context.
+may only be associated with a single receive context, and all
+connectless endpoints associated with a shared receive context must
+also share the same address vector. 
 
 Endpoints associated with a shared transmit context may use dedicated
 receive contexts, and vice-versa.  Or an endpoint may use shared
