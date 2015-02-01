@@ -12,6 +12,9 @@ fi_eq \- Event queue operations
 fi_eq_open / fi_close
 : Open/close an event queue
 
+fi_control
+: Control operation of EQ
+
 fi_eq_read / fi_eq_readerr
 : Read an event from an event queue
 
@@ -82,6 +85,12 @@ const char * fi_eq_strerror(struct fid_eq *eq, int prov_errno,
 
 *flags*
 : Additional flags to apply to the operation
+
+*command*
+: Command of control operation to perform on EQ.
+
+*arg*
+: Optional control argument
 
 *prov_errno*
 : Provider specific error value
