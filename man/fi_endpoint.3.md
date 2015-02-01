@@ -330,8 +330,10 @@ The endpoint must have been configured to support cancelable
 operations -- see FI_CANCEL flag -- in order for this call to succeed.
 Canceling an operation causes the fabric provider to search for the
 operation and, if it is still pending, complete it as having been
-canceled.  The cancel operation will complete within a bounded period
-of time.
+canceled.  If multiple outstanding operations match the context
+parameter, only one will be canceled.  In this case, the operation
+which is canceled is provider specific.  The cancel operation will
+complete within a bounded period of time.
 
 ## fi_alias
 
