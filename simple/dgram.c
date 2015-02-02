@@ -62,11 +62,20 @@ struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
 
-static void usage(char *name)
+void print_usage(char *name, char *desc)
 {
-	printf("usage: %s\n", name);
-	printf("\t-d destination address\n");
-	exit(1);
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
+	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server\n", name);
+
+	if (desc)
+		fprintf(stderr, "\n%s\n", desc);
+
+	fprintf(stderr, "\nOptions:\n");
+	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
+	fprintf(stderr, "  -h\t\tdisplay this help output\n");
+	
+	return;
 }
 
 static void free_ep_res(void)
@@ -186,7 +195,7 @@ static int init_fabric(void)
 		flags = FI_SOURCE;
 	
 	/* Get fabric info */
-	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, dst_addr, port, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -312,24 +321,29 @@ static int send_recv()
 int main(int argc, char **argv)
 {
 	int op, ret;
-	struct fi_domain_attr domain_hints;
-	struct fi_ep_attr ep_hints;
+	struct fi_fabric_attr *fabric_hints;
 	
-	memset(&domain_hints, 0, sizeof(struct fi_domain_attr));
-	memset(&ep_hints, 0, sizeof(struct fi_ep_attr));
-
-	while ((op = getopt(argc, argv, "d:")) != -1) {
+	while ((op = getopt(argc, argv, "f:h")) != -1) {
 		switch (op) {
-		case 'd':
-			dst_addr = optarg;
+		case 'f':
+			fabric_hints = malloc(sizeof *fabric_hints);
+			if (!fabric_hints) {
+				perror("malloc");
+				exit(EXIT_FAILURE);
+			}
+			fabric_hints->prov_name = optarg;
+			hints.fabric_attr = fabric_hints;
 			break;
-		default:
-			usage(argv[0]);
+		case '?':
+		case 'h':
+			print_usage(argv[0], "A simple DRAM client-sever example.");
+			return EXIT_FAILURE;
 		}
 	}
+
+	if (optind < argc)
+		dst_addr = argv[optind];
 	
-	hints.domain_attr	= &domain_hints;
-	hints.ep_attr		= &ep_hints;
 	hints.ep_type		= FI_EP_DGRAM;
 	hints.caps		= FI_MSG | FI_BUFFERED_RECV;
 	hints.mode		= FI_CONTEXT;

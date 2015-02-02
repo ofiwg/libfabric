@@ -32,6 +32,7 @@
 #include <getopt.h>
 
 #include <rdma/fabric.h>
+#include <rdma/fi_errno.h>
 
 #include "shared.h"
 
@@ -166,7 +167,7 @@ static int run(struct fi_info *hints, char *node, char *port)
 
 	ret = fi_getinfo(FT_FIVERSION, node, port, 0, hints, &info);
 	if (ret) {
-		printf("fi_getinfo() %s\n", strerror(-ret));
+		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 
@@ -212,7 +213,7 @@ int main(int argc, char **argv)
 			return EXIT_SUCCESS;
 		case 'h':
 		default:
-			printf("usage: %s\n", argv[0]);
+			printf("Usage: %s\n", argv[0]);
 			usage();
 			return EXIT_FAILURE;
 		}

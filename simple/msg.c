@@ -57,6 +57,22 @@ static struct fid_eq *cmeq;
 static struct fid_cq *rcq, *scq;
 static struct fid_mr *mr;
 
+void print_usage(char *name, char *desc)
+{
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
+	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server\n", name);
+
+	if (desc)
+		fprintf(stderr, "\n%s\n", desc);
+
+	fprintf(stderr, "\nOptions:\n");
+	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
+	fprintf(stderr, "  -h\t\tdisplay this help output\n");
+			
+	return;
+}
+
 static int alloc_cm_res(void)
 {
 	struct fi_eq_attr cm_attr;
@@ -163,7 +179,7 @@ static int server_listen(void)
 	int ret;
 
 	/* Get fabric info */
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, port, FI_SOURCE, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, NULL, port, FI_SOURCE, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -226,12 +242,12 @@ static int server_connect(void)
 	/* Wait for connection request from client */
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		fprintf(stderr, "fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
+		FI_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 
 	if (event != FI_CONNREQ) {
-		fprintf(stderr, "Unexpected CM event %d\n", event);
+		FI_DEBUG("Unexpected CM event %d\n", event);
 		ret = -FI_EOTHER;
 		goto err1;
 	}
@@ -270,12 +286,12 @@ static int server_connect(void)
 	/* Wait for the connection to be established */
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		printf("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
+		FI_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		goto err3;
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
+		FI_DEBUG("Unexpected CM event %d fid %p (ep %p)\n",
 			event, entry.fid, ep);
 		ret = -FI_EOTHER;
 		goto err3;
@@ -303,7 +319,7 @@ static int client_connect(void)
 	int ret;
 
 	/* Get fabric info */
-	ret = fi_getinfo(FI_VERSION(1, 0), dst_addr, port, 0, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, dst_addr, port, 0, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -355,12 +371,12 @@ static int client_connect(void)
 	/* Wait for the connection to be established */
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		printf("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
+		FI_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
+		FI_DEBUG("Unexpected CM event %d fid %p (ep %p)\n",
 			event, entry.fid, ep);
 		ret = -FI_EOTHER;
 		goto err6;
@@ -438,26 +454,29 @@ static int send_recv()
 int main(int argc, char **argv)
 {
 	int op, ret;
-	struct fi_domain_attr domain_hints;
-	struct fi_ep_attr ep_hints;
-
-	while ((op = getopt(argc, argv, "d:")) != -1) {
-		switch (op) {
-		case 'd':
-			dst_addr = optarg;
+	struct fi_fabric_attr *fabric_hints;
+		
+	while ((op = getopt(argc, argv, "f:h")) != -1) {
+		switch (op) {					
+		case 'f':
+			fabric_hints = malloc(sizeof *fabric_hints);
+			if (!fabric_hints) {
+				perror("malloc");
+				exit(EXIT_FAILURE);
+			}
+			fabric_hints->prov_name = optarg;
+			hints.fabric_attr = fabric_hints;
 			break;
-		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-d destination_address]\n");
-			exit(1);
+		case '?':
+		case 'h':
+			print_usage(argv[0], "A simple MSG client-sever example.");
+			return EXIT_FAILURE;
 		}
 	}
+		
+	if (optind < argc)
+		dst_addr = argv[optind];
 
-	memset(&domain_hints, 0, sizeof(domain_hints));
-	memset(&ep_hints, 0, sizeof(ep_hints));
-
-	hints.domain_attr	= &domain_hints;
-	hints.ep_attr		= &ep_hints;
 	hints.ep_type		= FI_EP_MSG;
 	hints.caps		= FI_MSG;
 	hints.mode		= FI_LOCAL_MR | FI_PROV_MR_ATTR;

@@ -93,19 +93,6 @@ static size_t *count;
 static int run_all_ops = 1;
 static int run_all_sizes = 1;
 
-void usage(char *name)
-{
-	fprintf(stderr, "usage: %s\n", name);
-	fprintf(stderr, "\t[-d destination_address]\n");
-	fprintf(stderr, "\t[-n domain_name]\n");
-	fprintf(stderr, "\t[-p port_number]\n");
-	fprintf(stderr, "\t[-s source_address]\n");
-	fprintf(stderr, "\t[-I iterations]\n");
-	fprintf(stderr, "\t[-o all|min|max|read|write|cswap (default: all)]\n");
-	fprintf(stderr, "\t[-S transfer_size or 'all']\n");
-	exit(1);
-}
-
 static const char* get_fi_op_name(enum fi_op op)
 {
 	switch (op) {
@@ -130,7 +117,7 @@ static enum fi_op get_fi_op(char *op) {
 	else if (!strcmp(op, "cswap"))
 		return FI_CSWAP;
 	else {
-		printf("Not supported by the example\n");
+		fprintf(stderr, "Not supported by the example\n");
 		return FI_ATOMIC_OP_LAST;
 	}
 }
@@ -141,7 +128,7 @@ static int post_recv(void)
 	
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret){
-		fprintf(stderr, "fi_recv() %d (%s)\n", ret, fi_strerror(-ret));
+		FI_PRINTERR("fi_recv", ret);
 		return ret;
 	}
 	
@@ -155,7 +142,7 @@ static int send_msg(int size)
 	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, 
 			&fi_ctx_send);
 	if (ret)
-		fprintf(stderr, "fi_send() %d (%s)\n", ret, fi_strerror(-ret));
+		FI_PRINTERR("fi_send", ret);
 
 	return wait_for_completion(scq, 1);
 }
@@ -221,7 +208,7 @@ static int execute_base_atomic_op(enum fi_op op)
 	ret = fi_atomic(ep, buf, 1, fi_mr_desc(mr), remote_fi_addr, remote.addr,
 		       	remote.key, datatype, op, &fi_ctx_atomic);
 	if (ret) {
-		fprintf(stderr, "fi_atomic() %d (%s)\n", ret, fi_strerror(-ret));
+		FI_PRINTERR("fi_atomic", ret);
 	} else {						
 		ret = wait_for_completion(scq, 1);
 	}
@@ -237,8 +224,7 @@ static int execute_fetch_atomic_op(enum fi_op op)
 			fi_mr_desc(mr_result), remote_fi_addr, remote.addr, 
 			remote.key, datatype, op, &fi_ctx_atomic);
 	if (ret) {
-		fprintf(stderr, "fi_fetch_atomic() %d (%s)\n", ret, 
-				fi_strerror(-ret));
+		FI_PRINTERR("fi_fetch_atomic", ret);
 	} else {						
 		ret = wait_for_completion(scq, 1);
 	}
@@ -255,8 +241,7 @@ static int execute_compare_atomic_op(enum fi_op op)
 			remote_fi_addr, remote.addr, remote.key, datatype, op, 
 			&fi_ctx_atomic);
 	if (ret) {
-		fprintf(stderr, "fi_compare_atomic() %d (%s)\n", ret, 
-				fi_strerror(-ret));
+		FI_PRINTERR("fi_compare_atomic", ret);
 	} else {			
 		ret = wait_for_completion(scq, 1);
 	}
@@ -403,13 +388,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = 128;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_cq_open() send comp %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_cq_open: scq", ret);
 		goto err1;
 	}
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_cq_open() recv comp %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_cq_open: rcq", ret);
 		goto err2;
 	}
 	
@@ -418,7 +403,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)), 
 		FI_REMOTE_READ | FI_REMOTE_WRITE, 0, 0, 0, &mr, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_mr_reg() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_mr_reg", ret);
 		goto err3;
 	}
 
@@ -427,7 +412,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_mr_reg(dom, result, MAX(buffer_size, sizeof(uint64_t)), 
 		FI_REMOTE_READ | FI_REMOTE_WRITE, 0, 0, 0, &mr_result, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_mr_reg() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_mr_reg", -ret);
 		goto err4;
 	}
 	
@@ -435,7 +420,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_mr_reg(dom, compare, MAX(buffer_size, sizeof(uint64_t)), 
 		FI_REMOTE_READ | FI_REMOTE_WRITE, 0, 0, 0, &mr_compare, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_mr_reg() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_mr_reg", ret);
 		goto err5;
 	}
 
@@ -476,19 +461,19 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND | FI_READ | FI_WRITE);
 	if (ret) {
-		fprintf(stderr, "fi_ep_bind() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_ep_bind: scq", -ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		fprintf(stderr, "fi_ep_bind() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_ep_bind: rcq", -ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, FI_RECV);
 	if (ret) {
-		fprintf(stderr, "fi_ep_bind() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_ep_bind: av", ret);
 		return ret;
 	}
 
@@ -548,7 +533,7 @@ static int init_fabric(void)
 	}
 
 	if (opts.dst_addr == NULL) {
-		printf("EP opened on fabric %s\n", fi->fabric_attr->name);
+		FI_DEBUG("EP opened on fabric %s\n", fi->fabric_attr->name);
 	}
 
 	ret = alloc_ep_res(fi);
@@ -734,8 +719,11 @@ int main(int argc, char **argv)
 			} else {
 				run_all_ops = 0;
 				op_type = get_fi_op(optarg);
-				if (op_type == FI_ATOMIC_OP_LAST)
+				if (op_type == FI_ATOMIC_OP_LAST) { 
 					ft_csusage(argv[0], NULL);
+					fprintf(stderr, "  -o <op>\tatomic op type: all|min|max|read|write|cswap (default: all)]\n");
+					return EXIT_FAILURE;
+				}
 			}
 			break;
 		default:
