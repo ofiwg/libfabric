@@ -63,6 +63,17 @@ static volatile int init = 0;
 static pthread_mutex_t ini_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
+static void cleanup_provider(struct fi_provider *provider, void *dlhandle)
+{
+	if (provider && provider->cleanup)
+		provider->cleanup();
+
+#ifdef HAVE_LIBDL
+	if (dlhandle)
+		dlclose(dlhandle);
+#endif
+}
+
 static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 {
 	struct fi_prov *prov;
@@ -105,11 +116,7 @@ static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 		 */
 		FI_LOG(2, NULL, "an older %s provider was already loaded; keeping this one and ignoring the older one\n",
 			provider->name);
-		prov->provider->cleanup();
-#ifdef HAVE_LIBDL
-		if (prov->dlhandle)
-			dlclose(prov->dlhandle);
-#endif
+		cleanup_provider(prov->provider, prov->dlhandle);
 
 		prov->dlhandle = dlhandle;
 		prov->provider = provider;
@@ -132,13 +139,7 @@ static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 	return 0;
 
 cleanup:
-	if (provider)
-		provider->cleanup();
-
-#ifdef HAVE_LIBDL
-	if (dlhandle)
-		dlclose(dlhandle);
-#endif
+	cleanup_provider(provider, dlhandle);
 
 	return ret;
 }
@@ -227,7 +228,7 @@ unlock:
 static void __attribute__((destructor)) fi_fini(void)
 {
 	for (struct fi_prov *prov = prov_head; prov; prov = prov->next)
-		prov->provider->cleanup();
+		cleanup_provider(prov->provider, prov->dlhandle);
 }
 
 static struct fi_prov *fi_getprov(const char *prov_name)
