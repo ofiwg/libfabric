@@ -63,13 +63,17 @@ struct test_size_param test_size[] = {
 
 const unsigned int test_cnt = (sizeof test_size / sizeof test_size[0]);
 
-int ft_getsrcaddr(char *node, char *service, struct fi_info *hints)
+static int getaddr(char *node, char *service, void **addr,
+			size_t *len)
 {
 	struct addrinfo *ai;
 	int ret;
 
-	if (!node)
+	if (!node) {
+		*addr = NULL;
+		*len = 0;
 		return 0;
+	}
 
 	ret = getaddrinfo(node, service, NULL, &ai);
 	if (ret) {
@@ -77,9 +81,9 @@ int ft_getsrcaddr(char *node, char *service, struct fi_info *hints)
 		return ret;
 	}
 
-	if ((hints->src_addr = malloc(ai->ai_addrlen))) {
-		memcpy(hints->src_addr, ai->ai_addr, ai->ai_addrlen);
-		hints->src_addrlen = ai->ai_addrlen;
+	if ((*addr = malloc(ai->ai_addrlen))) {
+		memcpy(*addr, ai->ai_addr, ai->ai_addrlen);
+		*len = (size_t)ai->ai_addrlen;
 	} else {
 		FI_DEBUG("src_addr allocation failed\n");
 		ret = EAI_MEMORY;
@@ -87,6 +91,16 @@ int ft_getsrcaddr(char *node, char *service, struct fi_info *hints)
 
 	freeaddrinfo(ai);
 	return ret;
+}
+
+int ft_getsrcaddr(char *node, char *service, struct fi_info *hints)
+{
+	return getaddr(node, service, &hints->src_addr, &hints->src_addrlen);
+}
+
+int ft_getdestaddr(char *node, char *service, struct fi_info *hints)
+{
+	return getaddr(node, service, &hints->dest_addr, &hints->dest_addrlen);
 }
 
 char *size_str(char str[FI_STR_LEN], long long size)

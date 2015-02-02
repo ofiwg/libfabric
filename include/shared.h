@@ -89,8 +89,8 @@ const unsigned int test_cnt;
 #define TEST_CNT test_cnt
 #define FI_STR_LEN 32
 
-int getaddr(char *node, char *service, struct sockaddr **addr, socklen_t *len);
 int ft_getsrcaddr(char *node, char *service, struct fi_info *hints);
+int ft_getdestaddr(char *node, char *service, struct fi_info *hints);
 char *size_str(char str[FI_STR_LEN], long long size);
 char *cnt_str(char str[FI_STR_LEN], long long cnt);
 int size_to_count(int size);
