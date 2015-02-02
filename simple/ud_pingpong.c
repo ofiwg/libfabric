@@ -381,11 +381,11 @@ static int client_connect(void)
 	if (ret != 0)
 		goto err;
 
-	ret = ft_getsrcaddr(opts.dst_addr, opts.port, &hints);
+	ret = ft_getdestaddr(opts.dst_addr, opts.port, &hints);
 	if (ret != 0)
 		goto err;
 
-	ret = fi_av_insert(av, &hints.src_addr, 1, &rem_addr, 0, NULL);
+	ret = fi_av_insert(av, hints.dest_addr, 1, &rem_addr, 0, NULL);
 	if (ret != 1) {
 		printf("fi_av_insert() %s\n", fi_strerror(-ret));
 		goto err;
