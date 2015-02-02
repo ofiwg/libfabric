@@ -70,10 +70,16 @@ static int fi_register_provider(struct fi_provider *provider)
 	if (!provider)
 		return -FI_EINVAL;
 
-	FI_LOG(2, NULL, "registering provider: %s\n", provider->name);
+	FI_LOG(2, NULL, "registering provider: %s (%d.%d)\n", provider->name,
+		FI_MAJOR(provider->version), FI_MINOR(provider->version));
 
 	if (FI_MAJOR(provider->fi_version) != FI_MAJOR_VERSION ||
 	    FI_MINOR(provider->fi_version) > FI_MINOR_VERSION) {
+		FI_LOG(2, NULL, "provider has unsupported FI version (provider %d.%d != libfabric %d.%d); ignoring\n",
+			FI_MAJOR(provider->fi_version),
+			FI_MINOR(provider->fi_version),
+			FI_MAJOR_VERSION, FI_MINOR_VERSION);
+
 		ret = -FI_ENOSYS;
 		goto cleanup;
 	}
@@ -84,10 +90,14 @@ static int fi_register_provider(struct fi_provider *provider)
 		 * keep the most recent
 		 */
 		if (FI_VERSION_GE(prov->provider->version, provider->version)) {
+			FI_LOG(2, NULL, "a newer %s provider was already loaded; ignoring this one\n",
+				provider->name);
 			ret = -FI_EALREADY;
 			goto cleanup;
 		}
 
+		FI_LOG(2, NULL, "an older %s provider was already loaded; keeping this one and ignoring the older one\n",
+			provider->name);
 		prov->provider->cleanup();
 		prov->provider = provider;
 		return 0;
