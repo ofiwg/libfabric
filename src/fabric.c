@@ -53,6 +53,7 @@
 struct fi_prov {
 	struct fi_prov		*next;
 	struct fi_provider	*provider;
+	void			*dlhandle;
 };
 
 static struct fi_prov *fi_getprov(const char *prov_name);
@@ -62,13 +63,15 @@ static volatile int init = 0;
 static pthread_mutex_t ini_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
-static int fi_register_provider(struct fi_provider *provider)
+static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 {
 	struct fi_prov *prov;
 	int ret;
 
-	if (!provider)
-		return -FI_EINVAL;
+	if (!provider) {
+		ret = -FI_EINVAL;
+		goto cleanup;
+	}
 
 	FI_LOG(2, NULL, "registering provider: %s (%d.%d)\n", provider->name,
 		FI_MAJOR(provider->version), FI_MINOR(provider->version));
@@ -86,8 +89,8 @@ static int fi_register_provider(struct fi_provider *provider)
 
 	prov = fi_getprov(provider->name);
 	if (prov) {
-		/* If we have two versions of the same provider,
-		 * keep the most recent
+		/* If this provider is older than an already-loaded
+		 * provider of the same name, then discard this one.
 		 */
 		if (FI_VERSION_GE(prov->provider->version, provider->version)) {
 			FI_LOG(2, NULL, "a newer %s provider was already loaded; ignoring this one\n",
@@ -96,9 +99,19 @@ static int fi_register_provider(struct fi_provider *provider)
 			goto cleanup;
 		}
 
+		/* This provider is newer than an already-loaded
+		 * provider of the same name, so discard the
+		 * already-loaded one.
+		 */
 		FI_LOG(2, NULL, "an older %s provider was already loaded; keeping this one and ignoring the older one\n",
 			provider->name);
 		prov->provider->cleanup();
+#ifdef HAVE_LIBDL
+		if (prov->dlhandle)
+			dlclose(prov->dlhandle);
+#endif
+
+		prov->dlhandle = dlhandle;
 		prov->provider = provider;
 		return 0;
 	}
@@ -109,6 +122,7 @@ static int fi_register_provider(struct fi_provider *provider)
 		goto cleanup;
 	}
 
+	prov->dlhandle = dlhandle;
 	prov->provider = provider;
 	if (prov_tail)
 		prov_tail->next = prov;
@@ -118,7 +132,14 @@ static int fi_register_provider(struct fi_provider *provider)
 	return 0;
 
 cleanup:
-	provider->cleanup();
+	if (provider)
+		provider->cleanup();
+
+#ifdef HAVE_LIBDL
+	if (dlhandle)
+		dlclose(dlhandle);
+#endif
+
 	return ret;
 }
 
@@ -185,18 +206,18 @@ static void fi_ini(void)
 		if (inif == NULL)
 			FI_WARN(NULL, "dlsym: %s\n", dlerror());
 		else
-			fi_register_provider((inif)());
+			fi_register_provider((inif)(), dlhandle);
 	}
 
 	free(liblist);
 done:
 #endif
 
-	fi_register_provider(PSM_INIT);
-	fi_register_provider(USNIC_INIT);
+	fi_register_provider(PSM_INIT, NULL);
+	fi_register_provider(USNIC_INIT, NULL);
 
-	fi_register_provider(VERBS_INIT);
-	fi_register_provider(SOCKETS_INIT);
+	fi_register_provider(VERBS_INIT, NULL);
+	fi_register_provider(SOCKETS_INIT, NULL);
 	init = 1;
 
 unlock:
