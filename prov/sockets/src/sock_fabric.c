@@ -42,9 +42,9 @@
 #include "sock.h"
 #include "sock_util.h"
 
-const char const sock_fab_name[] = "IP";
-const char const sock_dom_name[] = "sockets";
-const char const sock_prov_name[] = "sockets";
+const char sock_fab_name[] = "IP";
+const char sock_dom_name[] = "sockets";
+const char sock_prov_name[] = "sockets";
 
 const struct fi_fabric_attr sock_fabric_attr = {
 	.fabric = NULL,
