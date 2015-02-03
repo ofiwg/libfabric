@@ -34,11 +34,15 @@ extern "C" {
 #include <psm.h>
 #include <psm_mq.h>
 #include "psm_am.h"
+
 #include "fi.h"
 #include "fi_enosys.h"
 #include "fi_list.h"
+#include "fi_log.h"
 
-#define PSM_PFX "libfabric:psm"
+#define PSMX_PROVNAME "PSM"
+
+#define PSMX_DEBUG(...) FI_LOG(2, PSMX_PROVNAME, __VA_ARGS__)
 
 #define PSMX_TIME_OUT	120
 
@@ -546,7 +550,6 @@ int	psmx_errno(int err);
 int	psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 			    psm_epid_t epid, psm_epaddr_t *epaddr);
 void	psmx_query_mpi(void);
-void	psmx_debug(char *fmt, ...);
 
 void	psmx_cq_enqueue_event(struct psmx_fid_cq *cq, struct psmx_cq_event *event);
 struct	psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,

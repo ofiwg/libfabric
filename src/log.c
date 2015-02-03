@@ -36,7 +36,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "fi.h"
 #include "fi_log.h"

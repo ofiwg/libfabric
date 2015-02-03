@@ -97,11 +97,11 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	psm_uuid_t uuid;
 	int err = -ENOMEM;
 
-	psmx_debug("%s\n", __func__);
+	PSMX_DEBUG("%s\n", __func__);
 
 	fabric_priv = container_of(fabric, struct psmx_fid_fabric, fabric);
 	if (fabric_priv->active_domain) {
-		psmx_debug("%s: a domain has been opened for the fabric\n");
+		PSMX_DEBUG("%s: a domain has been opened for the fabric\n");
 		return -EBUSY;
 	}
 

@@ -47,7 +47,7 @@ ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	if (src_addr)
-		psmx_debug("%s: warning: src_addr is currently ignored.", __func__);
+		PSMX_DEBUG("%s: warning: src_addr is currently ignored.", __func__);
 
 	if (flags & FI_TRIGGER) {
 		struct psmx_trigger *trigger;

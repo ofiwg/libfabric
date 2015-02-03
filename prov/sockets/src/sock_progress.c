@@ -51,6 +51,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <inttypes.h>
 
 #include "sock.h"
 #include "sock_util.h"
