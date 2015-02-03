@@ -576,7 +576,7 @@ static int sock_pe_process_rx_read(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 					pe_entry->pe.rx.rx_iov[i].iov.len,
 					FI_REMOTE_READ);
 		if (!mr) {
-			SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %lu\n",
+			SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %" PRIu64 "\n",
 				       (void*)pe_entry->pe.rx.rx_iov[i].iov.addr,
 				       pe_entry->pe.rx.rx_iov[i].iov.len,
 				       pe_entry->pe.rx.rx_iov[i].iov.key);
@@ -633,7 +633,7 @@ static int sock_pe_process_rx_write(struct sock_pe *pe, struct sock_rx_ctx *rx_c
 						pe_entry->pe.rx.rx_iov[i].iov.len,
 						FI_REMOTE_WRITE);
 			if (!mr) {
-				SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %lu\n",
+				SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %" PRIu64 "\n",
 					       (void*)pe_entry->pe.rx.rx_iov[i].iov.addr,
 					       pe_entry->pe.rx.rx_iov[i].iov.len,
 					       pe_entry->pe.rx.rx_iov[i].iov.key);
@@ -1047,7 +1047,7 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe, struct sock_rx_ctx *rx_
 						pe_entry->pe.rx.rx_iov[i].ioc.count * datatype_sz,
 						FI_REMOTE_WRITE);
 			if (!mr) {
-				SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %lu\n",
+				SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %" PRIu64 "\n",
 					       (void*)pe_entry->pe.rx.rx_iov[i].ioc.addr,
 					       pe_entry->pe.rx.rx_iov[i].ioc.count * datatype_sz,
 					       pe_entry->pe.rx.rx_iov[i].ioc.key);
@@ -1405,7 +1405,7 @@ static int sock_pe_peek_hdr(struct sock_pe *pe,
 	msg_hdr->pe_entry_id = ntohs(msg_hdr->pe_entry_id);
 	msg_hdr->ep_id = ntohs(msg_hdr->ep_id);
 	
-	SOCK_LOG_INFO("PE RX (Hdr peek): MsgLen: %lu, TX-ID: %d, Type: %d\n", 
+	SOCK_LOG_INFO("PE RX (Hdr peek): MsgLen:  %" PRIu64 ", TX-ID: %d, Type: %d\n", 
 		      msg_hdr->msg_len, msg_hdr->rx_id, msg_hdr->op_type);
 	return 0;
 }
@@ -1463,7 +1463,7 @@ static int sock_pe_read_hdr(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	msg_hdr->ep_id = ntohs(msg_hdr->ep_id);
 	pe_entry->pe.rx.header_read = 1;
 	
-	SOCK_LOG_INFO("PE RX (Hdr read): MsgLen: %lu, TX-ID: %d, Type: %d\n", 
+	SOCK_LOG_INFO("PE RX (Hdr read): MsgLen:  %" PRIu64 ", TX-ID: %d, Type: %d\n", 
 		      msg_hdr->msg_len, msg_hdr->rx_id, msg_hdr->op_type);
 	return 0;
 }

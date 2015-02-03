@@ -38,6 +38,7 @@
 #define _SOCK_UTIL_H_
 
 #include <stdio.h>
+#include <inttypes.h>
 
 #define SOCK_ERROR (1)
 #define SOCK_WARN (2)
