@@ -45,6 +45,15 @@ src_libfabric_la_SOURCES = \
 	src/log.c \
 	$(common_srcs)
 
+if MACOS
+src_libfabric_la_SOURCES += src/osx/osd.c
+src_libfabric_la_SOURCES += include/osx/osd.h
+endif
+
+if LINUX
+src_libfabric_la_SOURCES += include/linux/osd.h
+endif
+
 src_libfabric_la_CPPFLAGS = $(AM_CPPFLAGS)
 src_libfabric_la_LDFLAGS =
 src_libfabric_la_LIBADD =
