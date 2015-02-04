@@ -53,9 +53,9 @@ extern struct fi_ops_ep sock_ctx_ep_ops;
 extern const struct fi_domain_attr sock_domain_attr;
 extern const struct fi_fabric_attr sock_fabric_attr;
 
-extern const char const sock_fab_name[];
-extern const char const sock_dom_name[];
-extern const char const sock_prov_name[];
+extern const char sock_fab_name[];
+extern const char sock_dom_name[];
+extern const char sock_prov_name[];
 
 const struct fi_tx_attr sock_stx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
