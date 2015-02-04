@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2004, 2005 Topspin Communications.  All rights reserved.
- * Copyright (c) 2006 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2006-2015 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2013 Intel Corp., Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -456,6 +456,8 @@ static const char *const errstr[] = {
 	[FI_ENOEQ - FI_ERRNO_OFFSET] = "Missing or unavailable event queue",
 	[FI_EDOMAIN - FI_ERRNO_OFFSET] = "Invalid resource domain",
 	[FI_ENOCQ - FI_ERRNO_OFFSET] = "Missing or unavailable completion queue",
+	[FI_ECRC - FI_ERRNO_OFFSET] = "CRC error",
+	[FI_ETRUNC - FI_ERRNO_OFFSET] = "Truncation error",
 };
 
 __attribute__((visibility ("default")))
