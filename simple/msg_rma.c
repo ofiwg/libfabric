@@ -310,7 +310,7 @@ static int server_listen(void)
 	struct fi_info *fi;
 	int ret;
 
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.port, FI_SOURCE, 
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE,
 			&hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
@@ -441,7 +441,11 @@ static int client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.port, 0, &hints, &fi);
+	ret = ft_getsrcaddr(opts.src_addr, opts.src_port, &hints);
+	if (ret)
+		return ret;
+
+	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -611,10 +615,6 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
-
-	ret = ft_getsrcaddr(opts.src_addr, opts.port, &hints);
-	if (ret)
-		return EXIT_FAILURE;
 
 	hints.ep_type = FI_EP_MSG;
 	hints.caps = FI_MSG | FI_RMA;

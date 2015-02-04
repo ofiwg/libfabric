@@ -48,7 +48,7 @@ static size_t cq_data_size;
 
 static struct fi_info hints;
 static char *dst_addr, *src_addr;
-static char *port = "9228";
+static char *dst_port = "9228", *src_port = "9228";
 
 static struct fid_fabric *fab;
 static struct fid_pep *pep;
@@ -68,7 +68,8 @@ void print_usage(char *name, char *desc)
 	
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -n <domain>\tdomain name\n");
-	fprintf(stderr, "  -p <port>\tnon default port number\n");
+	fprintf(stderr, "  -b <src_port>\tnon default source port number\n");
+	fprintf(stderr, "  -p <dst_port>\tnon default destination port number\n");
 	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
 	fprintf(stderr, "  -s <address>\tsource address\n");
 	fprintf(stderr, "  -h\t\tdisplay this help output\n");
@@ -195,7 +196,7 @@ static int server_listen(void)
 	struct fi_info *fi;
 	int ret;
 
-	ret = fi_getinfo(FT_FIVERSION, src_addr, port, FI_SOURCE, &hints,
+	ret = fi_getinfo(FT_FIVERSION, src_addr, src_port, FI_SOURCE, &hints,
 			&fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
@@ -326,11 +327,11 @@ static int client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	ret = ft_getsrcaddr(src_addr, port, &hints);
+	ret = ft_getsrcaddr(src_addr, src_port, &hints);
 	if (ret)
 		return ret;
 
-	ret = fi_getinfo(FT_FIVERSION, dst_addr, port, 0, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, dst_addr, dst_port, 0, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -491,10 +492,13 @@ static int run(void)
 int main(int argc, char **argv)
 {
 	int op;
-	while ((op = getopt(argc, argv, "p:s:h" INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "b:p:s:h" INFO_OPTS)) != -1) {
 		switch (op) {
+		case 'b':
+			src_port = optarg;
+			break;
 		case 'p':
-			port = optarg;
+			dst_port = optarg;
 			break;
 		case 's':
 			src_addr = optarg;

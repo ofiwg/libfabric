@@ -64,7 +64,8 @@ struct cs_opts {
 	int custom;
 	int iterations;
 	int transfer_size;
-	char *port;
+	char *src_port;
+	char *dst_port;
 	char *src_addr;
 	char *dst_addr;
 	int size_option;
@@ -77,11 +78,12 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints);
 void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts);
 void ft_csusage(char *name, char *desc);
 #define INFO_OPTS "n:f:"
-#define CS_OPTS "p:I:S:s:mi"
+#define CS_OPTS "b:p:I:S:s:mi"
 
 #define INIT_OPTS (struct cs_opts) { .iterations = 1000, \
 				     .transfer_size = 1024, \
-				     .port = "9228", \
+				     .src_port = "9228", \
+				     .dst_port = "9228", \
 				     .argc = argc, .argv = argv }
 
 extern struct test_size_param test_size[];

@@ -302,18 +302,23 @@ static int bind_ep_res(void)
 static int init_fabric(void)
 {
 	struct fi_info *fi;
-	char *node;
 	uint64_t flags = 0;
+	char *node, *service;
 	int ret;
 
 	if (opts.dst_addr) {
+		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, &hints);
+		if (ret)
+			return ret;
 		node = opts.dst_addr;
+		service = opts.dst_port;
 	} else {
 		node = opts.src_addr;
+		service = opts.src_port;
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FT_FIVERSION, node, opts.port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -490,7 +495,7 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op;
 	opts = INIT_OPTS;
 
 	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
@@ -508,10 +513,6 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
-
-	ret = ft_getsrcaddr(opts.src_addr, opts.port, &hints);
-	if (ret)
-		return EXIT_FAILURE;
 
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG;

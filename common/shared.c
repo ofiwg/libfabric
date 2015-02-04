@@ -283,7 +283,8 @@ void ft_csusage(char *name, char *desc)
 
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -n <domain>\tdomain name\n");
-	fprintf(stderr, "  -p <port>\tnon default port number\n");
+	fprintf(stderr, "  -b <src_port>\tnon default source port number\n");
+	fprintf(stderr, "  -p <dst_port>\tnon default destination port number\n");
 	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP,verbs\n");
 	fprintf(stderr, "  -s <address>\tsource address\n");
 	fprintf(stderr, "  -I <number>\tnumber of iterations\n");
@@ -334,8 +335,11 @@ void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts)
 	case 's':
 		opts->src_addr = optarg;
 		break;
+	case 'b':
+		opts->src_port = optarg;
+		break;
 	case 'p':
-		opts->port = optarg;
+		opts->dst_port = optarg;
 		break;
 	case 'I':
 		opts->custom = 1;
