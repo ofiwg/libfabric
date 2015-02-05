@@ -57,6 +57,7 @@
 
 #include "fi.h"
 #include "fi_enosys.h"
+#include "fi_log.h"
 #include "prov.h"
 #include "fi_log.h"
 
@@ -614,6 +615,12 @@ fi_ibv_getepinfo(const char *node, const char *service,
 	ret = rdma_create_ep(id, rai, NULL, NULL);
 	if (ret) {
 		ret = -errno;
+		if (ret == -ENOENT) {
+			FI_LOG(1, "verbs",
+				"rdma_create_ep()-->ENOENT; likely usnic bug, "
+				"skipping verbs provider.\n");
+			ret = -FI_ENODATA;
+		}
 		goto err2;
 	}
 
