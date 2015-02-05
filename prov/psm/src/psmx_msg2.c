@@ -36,15 +36,19 @@
 static inline void psmx_am_enqueue_send(struct psmx_fid_domain *domain,
 					struct psmx_am_request *req)
 {
+	pthread_mutex_lock(&domain->send_queue.lock);
 	req->state = PSMX_AM_STATE_QUEUED;
 	slist_insert_tail(&req->list_entry, &domain->send_queue.list);
+	pthread_mutex_unlock(&domain->send_queue.lock);
 }
 #endif
 
 static inline void psmx_am_enqueue_recv(struct psmx_fid_domain *domain,
 					struct psmx_am_request *req)
 {
+	pthread_mutex_lock(&domain->recv_queue.lock);
 	slist_insert_tail(&req->list_entry, &domain->recv_queue.list);
+	pthread_mutex_unlock(&domain->recv_queue.lock);
 }
 
 static int match_recv(struct slist_entry *item, const void *src_addr)
@@ -64,8 +68,10 @@ static struct psmx_am_request *psmx_am_search_and_dequeue_recv(
 {
 	struct slist_entry *item;
 
+	pthread_mutex_lock(&domain->recv_queue.lock);
 	item = slist_remove_first_match(&domain->recv_queue.list,
 					match_recv, src_addr);
+	pthread_mutex_unlock(&domain->recv_queue.lock);
 
 	if (!item)
 		return NULL;
