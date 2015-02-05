@@ -98,14 +98,15 @@ void init_test(int size, char *test_name, size_t test_name_len,
 		int *transfer_size, int *iterations);
 int wait_for_completion(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, char *cq_str);
-int64_t get_elapsed(const struct timespec *b, const struct timespec *a, enum precision p);
+int64_t get_elapsed(const struct timespec *b, const struct timespec *a, 
+		enum precision p);
 void show_perf(char *name, int tsize, int iters, struct timespec *start, 
 		struct timespec *end, int xfers_per_iter);
-void show_perf_mr(int tsize, int iters, struct timespec *start,
-		  struct timespec *end, int xfers_per_iter, int argc, char *argv[]);
+void show_perf_mr(int tsize, int iters, struct timespec *start, 
+		struct timespec *end, int xfers_per_iter, int argc, char *argv[]);
 
 #define FI_PRINTERR(call, retv) \
-	do { fprintf(stderr, call "(): %d (%s)\n", retv, fi_strerror(-retv)); } while (0)
+	do { fprintf(stderr, call "(): %d, %d (%s)\n", __LINE__, (int) retv, fi_strerror((int) -retv)); } while (0)
 
 #define FI_DEBUG(fmt, ...) \
 	do { fprintf(stderr, "%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__); } while (0)

@@ -121,14 +121,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	/* Open completion queue for send completions */
 	ret = fi_cq_open(dom, &cq_attr, &scq, (void *)CQ_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	/* Open completion queue for recv completions */
 	ret = fi_cq_open(dom, &cq_attr, &rcq, (void *)CQ_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
@@ -143,14 +143,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	/* Add send CQ to the polling set */
 	ret = fi_poll_add(pollset, &scq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_poll_add: scq", ret);
+		FI_PRINTERR("fi_poll_add", ret);
 		goto err3;
 	}
 
 	/* Add recv CQ to the polling set */
 	ret = fi_poll_add(pollset, &rcq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_poll_add: scq", ret);
+		FI_PRINTERR("fi_poll_add", ret);
 		goto err3;
 	}
 
@@ -195,19 +195,19 @@ static int bind_ep_res(void)
 	/* Bind AV and CQs with endpoint */
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -448,7 +448,7 @@ static int send_recv()
 				if (ret == -FI_EAVAIL) {
 					cq_readerr(cq, "cq");
 				} else {
-					FI_PRINTERR("fi_cq_read", ret);
+					FI_PRINTERR("fi_cq_sread", ret);
 				}
 				return ret;
 			}

@@ -107,14 +107,14 @@ static int alloc_ep_res(void)
 	/* Open completion queue for send completions */
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	/* Open completion queue for recv completions */
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
@@ -157,27 +157,27 @@ static int bind_ep_res(void)
 	/* Bind Send CQ with endpoint to collect send completions */
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	/* Bind Recv CQ with endpoint to collect recv completions */
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 	
 	/* Bind AV with the endpoint to map addresses */
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 	ret = fi_enable(ep);
 	if (ret) {
-			FI_PRINTERR("fi_enable", ret);
-			return ret;
+		FI_PRINTERR("fi_enable", ret);
+		return ret;
 	 }
 
 	return ret;
@@ -286,7 +286,7 @@ static int send_recv()
 		do {
 			ret = fi_cq_read(scq, &comp, 1);
 			if (ret < 0) {
-				FI_PRINTERR("fi_cq_read: scq", ret);
+				FI_PRINTERR("fi_cq_read", ret);
 				return ret;
 			}
 		} while (!ret);
@@ -307,7 +307,7 @@ static int send_recv()
 		do {
 			ret = fi_cq_read(rcq, &comp, 1);
 			if (ret < 0) {
-				FI_PRINTERR("fi_cq_read: rcq", ret);
+				FI_PRINTERR("fi_cq_read", ret);
 				return ret;
 			}
 		} while (!ret);

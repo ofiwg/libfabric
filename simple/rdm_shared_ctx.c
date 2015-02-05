@@ -150,7 +150,7 @@ static int alloc_ep_res(void)
 
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 	
@@ -162,7 +162,7 @@ static int alloc_ep_res(void)
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err4;
 	}
 
@@ -207,37 +207,37 @@ static int bind_ep_res(void)
 	for (i = 0; i < ep_cnt; i++) {
 		ret = fi_ep_bind(ep[i], &stx_ctx->fid, 0);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: stx", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_ep_bind(ep[i], &srx_ctx->fid, 0);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: srx", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_ep_bind(ep[i], &scq->fid, FI_SEND);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: scq", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_ep_bind(ep[i], &rcq->fid, FI_RECV);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: rcq", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_ep_bind(ep[i], &av->fid, 0);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: av", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_enable(ep[i]);
 		if (ret) {
-			FI_PRINTERR("fi_enable: ep", ret);
+			FI_PRINTERR("fi_enable", ret);
 			return ret;
 		}
 	}

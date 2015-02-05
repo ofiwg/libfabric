@@ -78,7 +78,7 @@ static int send_xfer(int size)
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(scq, "scq");
 			} else {
-				FI_PRINTERR("fi_cq_read: scq", ret);
+				FI_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
 		}
@@ -105,7 +105,7 @@ static int recv_xfer(int size)
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rcq, "rcq");
 			} else {
-				FI_PRINTERR("fi_cq_read: rcq", ret);
+				FI_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
 		}
@@ -228,13 +228,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = max_credits << 1;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
@@ -274,19 +274,19 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 

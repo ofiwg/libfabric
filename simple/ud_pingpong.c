@@ -181,15 +181,15 @@ static void free_ep_res(void)
 	
 	ret = fi_close(&mr->fid);
 	if (ret != 0) {
-		FI_PRINTERR("fi_close: mr", ret);
+		FI_PRINTERR("fi_close", ret);
 	}
 	ret = fi_close(&rcq->fid);
 	if (ret != 0) {
-		FI_PRINTERR("fi_close: rcq", ret);
+		FI_PRINTERR("fi_close", ret);
 	}
 	ret = fi_close(&scq->fid);
 	if (ret != 0) {
-		FI_PRINTERR("fi_close: scq", ret);
+		FI_PRINTERR("fi_close", ret);
 	}
 	free(buf);
 }
@@ -221,13 +221,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = max_credits << 1;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
@@ -266,19 +266,19 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -422,7 +422,7 @@ static int server_connect(void)
 	do {
 		ret = fi_cq_read(rcq, &comp, 1);
 		if (ret < 0) {
-			FI_PRINTERR("fi_cq_read: rcq", ret);
+			FI_PRINTERR("fi_cq_read", ret);
 			return ret;
 		}
 	} while (ret == 0);
@@ -488,20 +488,20 @@ static int run(void)
 
 	ret = fi_close(&ep->fid);
 	if (ret != 0) {
-		FI_PRINTERR("fi_close: ep", ret);
+		FI_PRINTERR("fi_close", ret);
 	}
 	free_ep_res();
 	ret = fi_close(&av->fid);
 	if (ret != 0) {
-		FI_PRINTERR("fi_close: av", ret);
+		FI_PRINTERR("fi_close", ret);
 	}
 	ret = fi_close(&dom->fid);
 	if (ret != 0) {
-		FI_PRINTERR("fi_close: dom", ret);
+		FI_PRINTERR("fi_close", ret);
 	}
 	ret = fi_close(&fab->fid);
 	if (ret != 0) {
-		FI_PRINTERR("fi_close: fab", ret);
+		FI_PRINTERR("fi_close", ret);
 	}
 	fi_freeinfo(fi);
 	return ret;

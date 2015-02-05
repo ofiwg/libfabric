@@ -84,7 +84,7 @@ static int alloc_cm_res(void)
 	/* Open EQ to receive CM events */
 	ret = fi_eq_open(fab, &cm_attr, &cmeq, NULL);
 	if (ret)
-		FI_PRINTERR("fi_eq_open: cmeq", ret);
+		FI_PRINTERR("fi_eq_open", ret);
 
 	return ret;
 }
@@ -116,14 +116,14 @@ static int alloc_ep_res(void)
 	/* Open completion queue for send completions */
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	/* Open completion queue for recv completions */
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
@@ -152,21 +152,21 @@ static int bind_ep_res(void)
 	/* Bind EQ with endpoint */
 	ret = fi_ep_bind(ep, &cmeq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: cmeq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	/* Bind Send CQ with endpoint to collect send completions */
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	/* Bind Recv CQ with endpoint to collect recv completions */
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -207,7 +207,7 @@ static int server_listen(void)
 	/* Bind EQ to passive endpoint */
 	ret = fi_pep_bind(pep, &cmeq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_pep_bind: cmeq", ret);
+		FI_PRINTERR("fi_pep_bind", ret);
 		goto err3;
 	}
 
@@ -420,7 +420,7 @@ static int send_recv()
 		do {
 			ret = fi_cq_read(scq, &comp, 1);
 			if (ret < 0) {
-				FI_PRINTERR("fi_cq_read: scq", ret);
+				FI_PRINTERR("fi_cq_read", ret);
 				return ret;
 			}
 		} while (!ret);
@@ -440,7 +440,7 @@ static int send_recv()
 		do {
 			ret = fi_cq_read(rcq, &comp, 1);
 			if (ret < 0) {
-				FI_PRINTERR("fi_cq_read: rcq", ret);
+				FI_PRINTERR("fi_cq_read", ret);
 				return ret;
 			}
 		} while (!ret);

@@ -92,7 +92,7 @@ static int write_data(size_t size)
 	ret = fi_write(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 0, 
 			user_defined_key, &fi_ctx_write);
 	if (ret){
-		FI_PRINTERR("fi_writeto", ret);
+		FI_PRINTERR("fi_write", ret);
 		return ret;
 	}
 	return 0;
@@ -128,13 +128,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = 512;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 	
@@ -178,7 +178,7 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -186,13 +186,13 @@ static int bind_ep_res(void)
 	 *  for RMA write operation */
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV | FI_REMOTE_WRITE);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 

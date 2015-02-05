@@ -90,7 +90,7 @@ static int alloc_cm_res(void)
 	cm_attr.wait_obj = FI_WAIT_FD;
 	ret = fi_eq_open(fab, &cm_attr, &cmeq, NULL);
 	if (ret)
-		FI_PRINTERR("fi_eq_open: cm", ret);
+		FI_PRINTERR("fi_eq_open", ret);
 
 	return ret;
 }
@@ -121,14 +121,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = rx_depth;
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: recv completion", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: send completion", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
@@ -163,19 +163,19 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &cmeq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: cmeq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -440,7 +440,7 @@ static int run_test()
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rcq, "rcq");
 			} else {
-				FI_PRINTERR("fi_cq_read: rcq", ret);
+				FI_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
 		}
