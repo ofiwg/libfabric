@@ -772,13 +772,18 @@ usdf_fabric_close(fid_t fid)
 }
 
 static int
-usdf_usnic_getinfo(struct fid_fabric *fabric, struct fi_usnic_info *uip)
+usdf_usnic_getinfo(uint32_t version, struct fid_fabric *fabric,
+			struct fi_usnic_info *uip)
 {
 	struct usdf_fabric *fp;
 	struct usd_device_attrs *dap;
 
 	fp = fab_ftou(fabric);
 	dap = fp->fab_dev_attrs;
+
+	if (version > FI_EXT_USNIC_INFO_VERSION) {
+		return -FI_EINVAL;
+	}
 
 	uip->ui.v1.ui_link_speed = dap->uda_bandwidth;
 	uip->ui.v1.ui_netmask_be = dap->uda_netmask_be;
