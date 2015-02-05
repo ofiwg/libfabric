@@ -32,6 +32,15 @@
 
 #include "psmx.h"
 
+static inline void psmx_am_enqueue_rma(struct psmx_fid_domain *domain,
+				       struct psmx_am_request *req)
+{
+	pthread_mutex_lock(&domain->rma_queue.lock);
+	req->state = PSMX_AM_STATE_QUEUED;
+	slist_insert_tail(&req->list_entry, &domain->rma_queue.list);
+	pthread_mutex_unlock(&domain->rma_queue.lock);
+}
+
 /* RMA protocol:
  *
  * Write REQ:
@@ -511,6 +520,7 @@ ssize_t _psmx_read(struct fid_ep *ep, void *buf, size_t len,
 	req->ep = ep_priv;
 	PSMX_CTXT_TYPE(&req->fi_context) = PSMX_READ_CONTEXT;
 	PSMX_CTXT_USER(&req->fi_context) = context;
+	PSMX_CTXT_EP(&req->fi_context) = ep_priv;
 
 	if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT)) {
 		PSMX_CTXT_TYPE(&req->fi_context) = PSMX_NOCOMP_READ_CONTEXT;
@@ -701,6 +711,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 	req->write.context = context;
 	req->ep = ep_priv;
 	PSMX_CTXT_USER(&req->fi_context) = context;
+	PSMX_CTXT_EP(&req->fi_context) = ep_priv;
 
 	chunk_size = MIN(PSMX_AM_CHUNK_SIZE, psmx_am_param.max_request_short);
 
