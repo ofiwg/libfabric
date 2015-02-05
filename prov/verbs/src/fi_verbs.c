@@ -58,12 +58,12 @@
 #include "fi.h"
 #include "fi_enosys.h"
 #include "prov.h"
+#include "fi_log.h"
 
 #define VERBS_PROV_NAME "verbs"
 #define VERBS_PROV_VERS FI_VERSION(1,0)
 
-#define VERBS_WARN(fmt, ...) \
-	do { fprintf(stderr, "%s:%s: " fmt, PACKAGE, VERBS_PROV_NAME, ##__VA_ARGS__); } while (0)
+#define VERBS_WARN(...) FI_WARN(VERBS_PROV_NAME, __VA_ARGS__)
 
 #define VERBS_MSG_SIZE (1ULL << 31)
 #define VERBS_IB_PREFIX "IB-0x"
@@ -2715,5 +2715,6 @@ static struct fi_provider fi_ibv_prov = {
 
 VERBS_INI
 {
+	fi_log_init();
 	return &fi_ibv_prov;
 }

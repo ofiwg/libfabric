@@ -279,7 +279,7 @@ int psmx_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 			break;
 	 
 		default:
-			psmx_debug("%s: attr->wait_obj=%d, supported=%d,%d,%d\n",
+			PSMX_DEBUG("%s: attr->wait_obj=%d, supported=%d,%d,%d\n",
 					__func__, attr->wait_obj, FI_WAIT_UNSPEC,
 					FI_WAIT_FD, FI_WAIT_MUTEX_COND);
 			return -FI_EINVAL;

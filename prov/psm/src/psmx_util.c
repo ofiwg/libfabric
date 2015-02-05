@@ -181,7 +181,7 @@ void *psmx_resolve_name(const char *servername, int port)
 
 	n = getaddrinfo(servername, service, &hints, &res);
 	if (n < 0) {
-		psmx_debug("%s:(%s:%d):%s\n", __func__, servername, port, gai_strerror(n));
+		PSMX_DEBUG("%s:(%s:%d):%s\n", __func__, servername, port, gai_strerror(n));
 		free(service);
 		return NULL;
 	}
@@ -200,7 +200,7 @@ void *psmx_resolve_name(const char *servername, int port)
 	free(service);
 
 	if (sockfd < 0) {
-		psmx_debug("%s: couldn't connect to %s:%d\n", __func__, servername, port);
+		PSMX_DEBUG("%s: couldn't connect to %s:%d\n", __func__, servername, port);
 		return NULL;
 	}
 
@@ -305,16 +305,5 @@ void psmx_query_mpi(void)
 	}
 
 	/* TODO: check other MPI */
-}
-
-void psmx_debug(char *fmt, ...)
-{
-	va_list ap;
-
-	if (psmx_env.debug) {
-		va_start(ap, fmt);
-		vfprintf(stderr, fmt, ap);
-		va_end(ap);
-	}
 }
 
