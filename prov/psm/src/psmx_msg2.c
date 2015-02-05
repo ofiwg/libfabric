@@ -344,8 +344,6 @@ int psmx_am_process_send(struct psmx_fid_domain *domain, struct psmx_am_request 
 				(void *)req->send.buf+offset, len,
 				am_flags, NULL, NULL);
 
-	free(req);
-
 	return psmx_errno(err);
 }
 
