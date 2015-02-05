@@ -176,16 +176,24 @@ struct psmx_am_request {
 	};
 	struct fi_context fi_context;
 	struct psmx_fid_ep *ep;
-	struct psmx_am_request *next;
 	int state;
 	int no_event;
 	int error;
+	struct slist_entry list_entry;
+};
+
+struct psmx_unexp {
+	psm_epaddr_t		sender_addr;
+	uint64_t		sender_context;
+	uint32_t		len_received;
+	uint32_t		done;
+	struct slist_entry	list_entry;
+	char			buf[0];
 };
 
 struct psmx_req_queue {
-	pthread_mutex_t		lock;
-	struct psmx_am_request	*head;
-	struct psmx_am_request	*tail;
+	pthread_mutex_t	lock;
+	struct slist	list;
 };
 
 struct psmx_multi_recv {
@@ -565,17 +573,6 @@ void	psmx_wait_signal(struct fid_wait *wait);
 
 int	psmx_am_init(struct psmx_fid_domain *domain);
 int	psmx_am_fini(struct psmx_fid_domain *domain);
-int	psmx_am_enqueue_recv(struct psmx_fid_domain *domain,
-				struct psmx_am_request *req);
-struct psmx_am_request *
-	psmx_am_search_and_dequeue_recv(struct psmx_fid_domain *domain,
-					const void *src_addr);
-#if PSMX_AM_USE_SEND_QUEUE
-int	psmx_am_enqueue_send(struct psmx_fid_domain *domain,
-				  struct psmx_am_request *req);
-#endif
-int	psmx_am_enqueue_rma(struct psmx_fid_domain *domain,
-				  struct psmx_am_request *req);
 int	psmx_am_progress(struct psmx_fid_domain *domain);
 int	psmx_am_process_send(struct psmx_fid_domain *domain,
 				struct psmx_am_request *req);
