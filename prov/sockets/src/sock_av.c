@@ -295,7 +295,7 @@ static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	}
 
 	av_addr = idm_lookup(&_av->addr_idm, index);
-	addr = &av_addr->addr;
+        memcpy(addr, &av_addr->addr, MIN(*addrlen, _av->addrlen));
 	*addrlen = _av->addrlen;
 	return 0;
 }
