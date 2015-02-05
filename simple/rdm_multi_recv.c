@@ -246,7 +246,7 @@ static int run_test(void)
 	
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
-	show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
+	show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 1);
 	ret = 0;
 
 out:

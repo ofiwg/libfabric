@@ -161,10 +161,10 @@ static int run_test(void)
 
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 
-				2, opts.argc, opts.argv);
+				1, opts.argc, opts.argv);
 	else
 		show_perf(test_name, opts.transfer_size, opts.iterations, 
-				&start, &end, 2);
+				&start, &end, 1);
 
 	return 0;
 }

@@ -297,8 +297,12 @@ static int run_op(void)
 	
 	if (ret)
 		goto out;
-		
-	show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
+
+	if(op_type == FI_CSWAP)		
+		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 1);
+	else
+		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
+
 	ret = 0;
 
 out:
