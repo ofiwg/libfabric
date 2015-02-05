@@ -518,6 +518,7 @@ ssize_t _psmx_read(struct fid_ep *ep, void *buf, size_t len,
 	req->ep = ep_priv;
 	PSMX_CTXT_TYPE(&req->fi_context) = PSMX_READ_CONTEXT;
 	PSMX_CTXT_USER(&req->fi_context) = context;
+	PSMX_CTXT_EP(&req->fi_context) = ep_priv;
 
 	if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT)) {
 		PSMX_CTXT_TYPE(&req->fi_context) = PSMX_NOCOMP_READ_CONTEXT;
@@ -708,6 +709,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 	req->write.context = context;
 	req->ep = ep_priv;
 	PSMX_CTXT_USER(&req->fi_context) = context;
+	PSMX_CTXT_EP(&req->fi_context) = ep_priv;
 
 	chunk_size = MIN(PSMX_AM_CHUNK_SIZE, psmx_am_param.max_request_short);
 
