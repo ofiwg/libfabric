@@ -421,7 +421,7 @@ static ssize_t sock_rx_ctx_cancel(struct sock_rx_ctx *rx_ctx, void *context)
 	     entry != &rx_ctx->rx_entry_list; entry = entry->next) {
 		
 		rx_entry = container_of(entry, struct sock_rx_entry, entry);
-		if (rx_entry->is_busy || rx_entry->used)
+		if (rx_entry->is_busy)
 			continue;
 		
 		if ((uint64_t)context == rx_entry->context) {

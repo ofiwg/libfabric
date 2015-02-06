@@ -120,7 +120,7 @@
 #define SOCK_MAJOR_VERSION 1
 #define SOCK_MINOR_VERSION 0
 
-#define SOCK_INJECT_OK(_flgs)  (((_flgs) & FI_INJECT) && ((!(_flgs)) & FI_FENCE))
+#define SOCK_INJECT_OK(_flgs)  ((_flgs) & FI_INJECT)
 
 struct sock_fabric{
 	struct fid_fabric fab_fid;

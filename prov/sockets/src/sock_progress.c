@@ -124,6 +124,7 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 	pe_entry->total_len = 0;
 	pe_entry->data_len = 0;
 	pe_entry->buf = 0;
+	pe_entry->flags = 0;
 
 	dlist_remove(&pe_entry->entry);
 	dlist_insert_head(&pe_entry->entry, &pe->free_list);
