@@ -153,18 +153,6 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 				rx_ctx->comp.recv_cq_event = 1;
 		}
 
-		if (flags & FI_REMOTE_READ) {
-			rx_ctx->comp.rem_read_cq = sock_cq;
-			if (flags & FI_COMPLETION)
-				rx_ctx->comp.rem_read_cq_event = 1;
-		}
-
-		if (flags & FI_REMOTE_WRITE) {
-			rx_ctx->comp.rem_write_cq = sock_cq;
-			if (flags & FI_COMPLETION)
-				rx_ctx->comp.rem_write_cq_event = 1;
-		}
-
 		dlist_insert_tail(&rx_ctx->cq_entry, &sock_cq->rx_list);
 		break;
 
@@ -581,18 +569,6 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				ep->comp.recv_cq_event = 1;
 		}
 
-		if (flags & FI_REMOTE_READ) {
-			ep->comp.rem_read_cq = cq;
-			if (flags & FI_COMPLETION)
-				ep->comp.rem_read_cq_event = 1;
-		}
-
-		if (flags & FI_REMOTE_WRITE) {
-			ep->comp.rem_write_cq = cq;
-			if (flags & FI_COMPLETION)
-				ep->comp.rem_write_cq_event = 1;
-		}
-
 		if (flags & FI_SEND || flags & FI_WRITE || flags & FI_READ) {
 			for (i=0; i < ep->ep_attr.tx_ctx_cnt; i++) {
 				tx_ctx = ep->tx_array[i];
@@ -606,8 +582,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			}
 		}
 
-		if (flags & FI_RECV || flags & FI_REMOTE_READ || 
-		    flags & FI_REMOTE_WRITE) {
+		if (flags & FI_RECV) {
 			for (i = 0; i < ep->ep_attr.rx_ctx_cnt; i++) {
 				rx_ctx = ep->rx_array[i];
 				
@@ -621,18 +596,6 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 							ep->comp.recv_cq_event = 1;
 					}
 					
-					if (flags & FI_REMOTE_READ) {
-						ep->comp.rem_read_cq = cq;
-						if (flags & FI_COMPLETION)
-							ep->comp.rem_read_cq_event = 1;
-					}
-				  
-					if (flags & FI_REMOTE_WRITE) {
-						ep->comp.rem_write_cq = cq;
-						if (flags & FI_COMPLETION)
-							ep->comp.rem_write_cq_event = 1;
-					}
-
 					dlist_insert_tail(&rx_ctx->cq_entry, &cq->rx_list);
 					continue;
 				}
