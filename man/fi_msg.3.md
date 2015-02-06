@@ -33,8 +33,8 @@ ssize_t fi_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 ssize_t fi_send(struct fid_ep *ep, void *buf, size_t len,
 	void *desc, fi_addr_t dest_addr, void *context);
 
-ssize_t fi_sendv(struct fid_ep *ep, const void *iov, void *desc,
-	size_t count, fi_addr_t dest_addr, void *context);
+ssize_t fi_sendv(struct fid_ep *ep, const struct iovec *iov,
+	void **desc, size_t count, fi_addr_t dest_addr, void *context);
 
 ssize_t fi_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	uint64_t flags);
@@ -138,12 +138,12 @@ per call through the use of flags.  The fi_sendmsg function takes a
 
 {% highlight c %}
 struct fi_msg {
-	const struct iovec *msg_iov;/* scatter-gather array */
-	void               **desc;  /* local request descriptor */
+	const struct iovec *msg_iov; /* scatter-gather array */
+	void               **desc;   /* local request descriptors */
 	size_t             iov_count;/* # elements in iov */
-	const void         *addr;   /* optional endpoint address */
-	void               *context;/* user-defined context */
-	uint64_t           data;    /* optional message data */
+	fi_addr_t          addr;     /* optional endpoint address */
+	void               *context; /* user-defined context */
+	uint64_t           data;     /* optional message data */
 };
 {% endhighlight %}
 
