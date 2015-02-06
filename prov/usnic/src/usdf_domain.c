@@ -219,11 +219,14 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	udp = calloc(1, sizeof *udp);
 	if (udp == NULL) {
+		USDF_DEBUG("unable to alloc mem for domain\n");
 		ret = -FI_ENOMEM;
 		goto fail;
 	}
 
 	fp = fab_fidtou(fabric);
+
+	USDF_DEBUG("uda_devname=%s\n", fp->fab_dev_attrs->uda_devname);
 
 	/*
 	 * Make sure address format is good and matches this fabric
