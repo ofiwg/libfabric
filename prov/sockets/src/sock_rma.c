@@ -149,6 +149,7 @@ static ssize_t sock_ep_rma_readmsg(struct fid_ep *ep,
 	return 0;
 
 err:
+	SOCK_LOG_INFO("Not enough space for TX entry, try again\n");
 	sock_tx_ctx_abort(tx_ctx);
 	return ret;
 }
@@ -315,6 +316,7 @@ static ssize_t sock_ep_rma_writemsg(struct fid_ep *ep,
 	return 0;
 
 err:
+	SOCK_LOG_INFO("Not enough space for TX entry, try again\n");
 	sock_tx_ctx_abort(tx_ctx);
 	return ret;
 }
