@@ -86,7 +86,7 @@ static void psmx_wait_start_progress(struct psmx_fid_domain *domain)
 		pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED);
 		err = pthread_create(&psmx_wait_thread, &attr, psmx_wait_progress, (void *)domain);
 		if (err)
-			fprintf(stderr, "%s: cannot create wait progress thread\n", __func__);
+			PSMX_WARN("%s: cannot create wait progress thread\n", __func__);
 		pthread_attr_destroy(&attr);
 		while (!psmx_wait_thread_ready)
 			;

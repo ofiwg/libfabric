@@ -43,6 +43,7 @@ extern "C" {
 #define PSMX_PROVNAME "PSM"
 
 #define PSMX_DEBUG(...) FI_LOG(2, PSMX_PROVNAME, __VA_ARGS__)
+#define PSMX_WARN(...)	FI_WARN(PSMX_PROVNAME, __VA_ARGS__)
 
 #define PSMX_TIME_OUT	120
 

@@ -384,7 +384,7 @@ PSM_INI
 
         err = psm_init(&major, &minor);
 	if (err != PSM_OK) {
-		fprintf(stderr, "%s: psm_init failed: %s\n", __func__,
+		PSMX_WARN("%s: psm_init failed: %s\n", __func__,
 			psm_error_get_string(err));
 		return NULL;
 	}
