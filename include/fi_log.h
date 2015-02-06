@@ -41,7 +41,7 @@
 extern int fi_log_level;
 
 void fi_log_init(void);
-void fi_warn_impl(const char *prov, const char *func, int line, const char *fmt, ...);
+void fi_warn_impl(const char *prov, const char *fmt, ...);
 void fi_log_impl(int level, const char *prov, const char *func, int line,
 		 const char *fmt, ...);
 void fi_debug_impl(const char *prov, const char *func, int line, const char *fmt, ...);
@@ -49,7 +49,7 @@ void fi_debug_impl(const char *prov, const char *func, int line, const char *fmt
 /* Callers are responsible for including their own trailing "\n".  Non-provider
  * code should pass prov=NULL.
  */
-#define FI_WARN(prov, ...) fi_warn_impl(prov, __func__, __LINE__, __VA_ARGS__)
+#define FI_WARN(prov, ...) fi_warn_impl(prov, __VA_ARGS__)
 
 #define FI_LOG(level, prov, ...) \
 	do { \

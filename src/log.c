@@ -64,14 +64,14 @@ void fi_log_init(void)
 	}
 }
 
-void fi_warn_impl(const char *prov, const char *func, int line, const char *fmt, ...)
+void fi_warn_impl(const char *prov, const char *fmt, ...)
 {
 	va_list vargs;
 
 	if (prov != NULL)
-		fprintf(stderr, "%s:%s:%s:%d ", PACKAGE, prov, func, line);
+		fprintf(stderr, "%s:%s: ", PACKAGE, prov);
 	else
-		fprintf(stderr, "%s:%s:%d ", PACKAGE, func, line);
+		fprintf(stderr, "%s: ", PACKAGE);
 	va_start(vargs, fmt);
 	vfprintf(stderr, fmt, vargs);
 	va_end(vargs);
@@ -83,10 +83,10 @@ void fi_log_impl(int level, const char *prov, const char *func, int line,
 	va_list vargs;
 
 	if (prov != NULL)
-		fprintf(stderr, "%s:%s:%s:%d<%d> ", PACKAGE, prov, 
+		fprintf(stderr, "%s:%s:%s():%d<%d> ", PACKAGE, prov, 
 			func, line, level);
 	else
-		fprintf(stderr, "%s:%s:%d<%d> ", PACKAGE, func, line, level);
+		fprintf(stderr, "%s:%s():%d<%d> ", PACKAGE, func, line, level);
 	va_start(vargs, fmt);
 	vfprintf(stderr, fmt, vargs);
 	va_end(vargs);
@@ -97,9 +97,9 @@ void fi_debug_impl(const char *prov, const char *func, int line, const char *fmt
 	va_list vargs;
 
 	if (prov != NULL)
-		fprintf(stderr, "%s:%s:%s:%d<DBG> ", PACKAGE, prov, func, line);
+		fprintf(stderr, "%s:%s:%s():%d<DBG> ", PACKAGE, prov, func, line);
 	else
-		fprintf(stderr, "%s:%s:%d<DBG> ", PACKAGE, func, line);
+		fprintf(stderr, "%s:%s():%d<DBG> ", PACKAGE, func, line);
 	va_start(vargs, fmt);
 	vfprintf(stderr, fmt, vargs);
 	va_end(vargs);
