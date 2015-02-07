@@ -558,6 +558,8 @@ usdf_get_devinfo(void)
 	int ret;
 	int d;
 
+	assert(__usdf_devinfo == NULL);
+
 	dp = calloc(1, sizeof(*dp));
 	if (dp == NULL) {
 		ret = -FI_ENOMEM;
