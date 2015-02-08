@@ -111,7 +111,7 @@ void *psmx_name_server(void *args)
 
 	n = getaddrinfo(NULL, service, &hints, &res);
 	if (n < 0) {
-		PSMX_WARN("%s: port %d: %s\n", __func__, port, gai_strerror(n));
+		PSMX_DEBUG("%s: port %d: %s\n", __func__, port, gai_strerror(n));
 		free(service);
 		return NULL;
 	}
@@ -132,7 +132,7 @@ void *psmx_name_server(void *args)
 	free(service);
 
 	if (listenfd < 0) {
-		PSMX_WARN("%s: couldn't listen to port %d\n", __func__, port);
+		PSMX_DEBUG("%s: couldn't listen to port %d\n", __func__, port);
 		return NULL;
 	}
 
