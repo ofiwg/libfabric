@@ -1618,6 +1618,44 @@ static struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops = {
 	.compwritevalid = fi_ibv_msg_ep_atomic_compwritevalid
 };
 
+static int fi_ibv_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr)
+{
+	size_t src_addrlen = fi_ibv_sockaddr_len(src_addr);
+
+	if (*dst_addrlen == 0) {
+		*dst_addrlen = src_addrlen;
+		return -FI_ETOOSMALL;
+	}
+
+	if (*dst_addrlen < src_addrlen) {
+		memcpy(dst_addr, src_addr, *dst_addrlen);
+	} else {
+		memcpy(dst_addr, src_addr, src_addrlen);
+	}
+	*dst_addrlen = src_addrlen;
+	return 0;
+}
+
+static int fi_ibv_msg_ep_getname(fid_t ep, void *addr, size_t *addrlen)
+{
+	struct fi_ibv_msg_ep *_ep;
+	struct sockaddr *sa;
+
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+	sa = rdma_get_local_addr(_ep->id);
+	return fi_ibv_copy_addr(addr, addrlen, sa);
+}
+
+static int fi_ibv_msg_ep_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
+{
+	struct fi_ibv_msg_ep *_ep;
+	struct sockaddr *sa;
+
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+	sa = rdma_get_peer_addr(_ep->id);
+	return fi_ibv_copy_addr(addr, addrlen, sa);
+}
+
 static int
 fi_ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
 		   const void *param, size_t paramlen)
@@ -1686,8 +1724,8 @@ static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 
 static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.getname = fi_no_getname,
-	.getpeer = fi_no_getpeer,
+	.getname = fi_ibv_msg_ep_getname,
+	.getpeer = fi_ibv_msg_ep_getpeer,
 	.connect = fi_ibv_msg_ep_connect,
 	.listen = fi_no_listen,
 	.accept = fi_ibv_msg_ep_accept,
@@ -2576,6 +2614,16 @@ err:
 	return ret;
 }
 
+static int fi_ibv_pep_getname(fid_t pep, void *addr, size_t *addrlen)
+{
+	struct fi_ibv_pep *_pep;
+	struct sockaddr *sa;
+
+	_pep = container_of(pep, struct fi_ibv_pep, pep_fid);
+	sa = rdma_get_local_addr(_pep->id);
+	return fi_ibv_copy_addr(addr, addrlen, sa);
+}
+
 static int fi_ibv_pep_listen(struct fid_pep *pep)
 {
 	struct fi_ibv_pep *_pep;
@@ -2586,7 +2634,7 @@ static int fi_ibv_pep_listen(struct fid_pep *pep)
 
 static struct fi_ops_cm fi_ibv_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.getname = fi_no_getname,
+	.getname = fi_ibv_pep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
 	.listen = fi_ibv_pep_listen,
