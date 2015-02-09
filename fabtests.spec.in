@@ -18,7 +18,7 @@ Fabtests provides a set of examples that uses libfabric - a high-performance fab
 %setup -q -n %{name}-%{version}
 
 %build
-%configure
+%configure %{?_with_libfabric}
 make %{?_smp_mflags}
 
 %install
