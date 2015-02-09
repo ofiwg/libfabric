@@ -68,7 +68,7 @@ struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 	else {
 		event = calloc(1, sizeof(*event));
 		if (!event) {
-			fprintf(stderr, "%s: out of memory.\n", __func__);
+			PSMX_WARN("%s: out of memory.\n", __func__);
 			exit(-1);
 		}
 	}
@@ -112,7 +112,7 @@ struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 		break;
 
 	default:
-		fprintf(stderr, "%s: unsupported CQ format %d\n", __func__, cq->format);
+		PSMX_WARN("%s: unsupported CQ format %d\n", __func__, cq->format);
 		return NULL;
 	}
 
@@ -170,7 +170,7 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		else {
 			event = calloc(1, sizeof(*event));
 			if (!event) {
-				fprintf(stderr, "%s: out of memory.\n", __func__);
+				PSMX_WARN("%s: out of memory.\n", __func__);
 				exit(-1);
 			}
 		}
@@ -220,7 +220,7 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		break;
 
 	default:
-		fprintf(stderr, "%s: unsupported EQ format %d\n", __func__, cq->format);
+		PSMX_WARN("%s: unsupported EQ format %d\n", __func__, cq->format);
 		return NULL;
 	}
 
@@ -543,7 +543,7 @@ static ssize_t psmx_cq_write(struct fid_cq *cq, const void *buf, size_t len)
 	while (len >= cq_priv->entry_size) {
 		event = calloc(1, sizeof(*event));
 		if (!event) {
-			fprintf(stderr, "%s: out of memory\n", __func__);
+			PSMX_WARN("%s: out of memory\n", __func__);
 			return -ENOMEM;
 		}
 
@@ -568,7 +568,7 @@ static ssize_t psmx_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 	while (len >= sizeof(*buf)) {
 		event = calloc(1, sizeof(*event));
 		if (!event) {
-			fprintf(stderr, "%s: out of memory\n", __func__);
+			PSMX_WARN("%s: out of memory\n", __func__);
 			return -ENOMEM;
 		}
 
@@ -814,7 +814,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	for (i=0; i<PSMX_FREE_LIST_SIZE; i++) {
 		event = calloc(1, sizeof(*event));
 		if (!event) {
-			fprintf(stderr, "%s: out of memory.\n", __func__);
+			PSMX_WARN("%s: out of memory.\n", __func__);
 			exit(-1);
 		}
 		slist_insert_tail(&event->list_entry, &cq_priv->free_list);

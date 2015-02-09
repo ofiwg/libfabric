@@ -40,7 +40,7 @@ static void psmx_set_epaddr_context(struct psmx_fid_domain *domain,
 	context = (void *)psm_epaddr_getctxt(epaddr);
 	if (context) {
 		if (context->domain != domain || context->epid != epid) {
-			fprintf(stderr, "%s: domain or epid doesn't match\n", __func__);
+			PSMX_WARN("%s: domain or epid doesn't match\n", __func__);
 			context = NULL;
 		}
 	}
@@ -50,7 +50,7 @@ static void psmx_set_epaddr_context(struct psmx_fid_domain *domain,
 
 	context = malloc(sizeof *context);
 	if (!context) {
-		fprintf(stderr, "%s: cannot allocate context\n", __func__);
+		PSMX_WARN("%s: cannot allocate context\n", __func__);
 		return;
 	}
 
