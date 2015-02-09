@@ -408,7 +408,7 @@ static int client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	ret = fi_getinfo(FI_VERSION(1,0), opts.dst_addr, opts.port, 0, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.port, 0, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		goto err0;

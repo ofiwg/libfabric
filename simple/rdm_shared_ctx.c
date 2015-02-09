@@ -55,8 +55,6 @@ static int rx_depth = 512;
 static char *dst_addr = NULL;
 static char *port = "9228";
 static struct fi_info hints;
-static struct fi_domain_attr domain_hints;
-static struct fi_ep_attr ep_hints;
 static char *dst_addr, *src_addr;
 
 static int ep_cnt = 2;
@@ -152,7 +150,7 @@ static int alloc_ep_res(void)
 
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 	
@@ -164,7 +162,7 @@ static int alloc_ep_res(void)
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err4;
 	}
 
@@ -205,42 +203,41 @@ err1:
 static int bind_ep_res(void)
 {
 	int i, ret;
-
 	
 	for (i = 0; i < ep_cnt; i++) {
 		ret = fi_ep_bind(ep[i], &stx_ctx->fid, 0);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: stx", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_ep_bind(ep[i], &srx_ctx->fid, 0);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: srx", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_ep_bind(ep[i], &scq->fid, FI_SEND);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: scq", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_ep_bind(ep[i], &rcq->fid, FI_RECV);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: rcq", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_ep_bind(ep[i], &av->fid, 0);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: av", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_enable(ep[i]);
 		if (ret) {
-			FI_PRINTERR("fi_enable: ep", ret);
+			FI_PRINTERR("fi_enable", ret);
 			return ret;
 		}
 	}
@@ -308,10 +305,6 @@ static int init_fabric(void)
 	uint64_t flags = 0;
 	int i, ret;
 
-	ret = ft_getsrcaddr(src_addr, NULL, &hints);
-	if (ret)
-		return ret;
-
 	if (dst_addr) {
 		node = dst_addr;
 	} else {
@@ -319,7 +312,7 @@ static int init_fabric(void)
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FI_VERSION(1, 0), node, port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, port, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -509,47 +502,54 @@ out:
 	return ret;
 }
 
-void print_usage(char *name)
+void print_usage(char *name, char *desc)
 {
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
-	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to given host \t\n", name);
+	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server \t\n", name);
+
+	if(desc)
+		fprintf(stderr, "\n%s\n", desc);
 
 	fprintf(stderr, "\nOptions:\n");
-	fprintf(stderr, "  -n\tdomain_name\n");
-	fprintf(stderr, "  -p\tport number\n");
-	fprintf(stderr, "  -s\tsource address\n");
+	fprintf(stderr, "  -n <domain>\tdomain name\n");
+	fprintf(stderr, "  -p <port>\tnon default port number\n");
+	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
+	fprintf(stderr, "  -s <address>\tsource address\n");
+	fprintf(stderr, "  -h\t\tdisplay this help output\n");
 
 	return;
 }
 
 int main(int argc, char **argv)
 {
-	int op;
+	int op, ret;
 
-	while ((op = getopt(argc, argv, "n:p:s:h")) != -1) {
+	while ((op = getopt(argc, argv, "p:s:h" INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'n':
-			domain_hints.name = optarg;
-			break;
 		case 'p':
 			port = optarg;
 			break;
 		case 's':
 			src_addr = optarg;
 			break;
-		case 'h':
 		default:
-			print_usage(argv[0]);
-			exit(1);
+			ft_parseinfo(op, optarg, &hints);
+			break;
+		case '?':
+		case 'h':
+			print_usage(argv[0], "An RDM client-server example that uses shared context.\n");
+			return EXIT_FAILURE;
 		}
 	}
 
 	if (optind < argc)
 		dst_addr = argv[optind];
+	
+	ret = ft_getsrcaddr(src_addr, port, &hints);
+	if (ret)
+		return EXIT_FAILURE;
 
-	hints.domain_attr = &domain_hints;
-	hints.ep_attr = &ep_hints;
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG | FI_NAMED_RX_CTX;
 	hints.mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;

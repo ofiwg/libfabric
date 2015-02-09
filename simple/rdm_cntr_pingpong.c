@@ -74,7 +74,7 @@ static int get_send_completions()
 
 	ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
 	if (ret < 0) {
-		FI_PRINTERR("fi_cntr_wait: scntr", ret);
+		FI_PRINTERR("fi_cntr_wait", ret);
 		return ret;
 	}
 
@@ -90,7 +90,7 @@ static int send_xfer(int size)
 	if (!credits) {
 		ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
 		if (ret < 0) {
-			FI_PRINTERR("fi_cntr_wait: scntr", ret);
+			FI_PRINTERR("fi_cntr_wait", ret);
 			return ret;
 		}
 	}
@@ -113,7 +113,7 @@ static int recv_xfer(int size)
 
 	ret = fi_cntr_wait(rcntr, recv_outs, CNTR_TIMEOUT);
 	if (ret < 0) {
-		FI_PRINTERR("fi_cntr_wait: rcntr", ret);
+		FI_PRINTERR("fi_cntr_wait", ret);
 		return ret;
 	}
 
@@ -140,7 +140,7 @@ static int send_msg(int size)
 
 	ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
 	if (ret < 0) {
-		FI_PRINTERR("fi_cntr_wait: scntr", ret);
+		FI_PRINTERR("fi_cntr_wait", ret);
 	}
 
 	return ret;
@@ -159,7 +159,7 @@ static int recv_msg(void)
 
 	ret = fi_cntr_wait(rcntr, recv_outs, CNTR_TIMEOUT);
 	if (ret < 0) {
-		FI_PRINTERR("fi_cntr_wait: rcntr", ret);
+		FI_PRINTERR("fi_cntr_wait", ret);
 		return ret;
 	}
 
@@ -241,13 +241,13 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	ret = fi_cntr_open(dom, &cntr_attr, &scntr, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cntr_open: scntr", ret);
+		FI_PRINTERR("fi_cntr_open", ret);
 		goto err1;
 	}
 
 	ret = fi_cntr_open(dom, &cntr_attr, &rcntr, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cntr_open: rcntr", ret);
+		FI_PRINTERR("fi_cntr_open", ret);
 		goto err2;
 	}
 
@@ -287,19 +287,19 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &scntr->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scntr", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcntr->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcntr", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 

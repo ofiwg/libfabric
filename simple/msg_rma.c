@@ -73,7 +73,7 @@ static int send_xfer(int size)
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(scq, "scq");
 			} else {
-				printf("Completion queue read %d (%s)\n", ret, fi_strerror(-ret));
+				FI_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
 		}
@@ -83,7 +83,7 @@ static int send_xfer(int size)
 post:
 	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), 0, NULL);
 	if (ret)
-		printf("fi_send() %d (%s)\n", ret, fi_strerror(-ret));
+		FI_PRINTERR("fi_send", ret);
 
 	return ret;
 }
@@ -99,7 +99,7 @@ static int recv_xfer(int size)
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rcq, "rcq");
 			} else {
-				printf("Completion queue read %d (%s)\n", ret, fi_strerror(-ret));
+				FI_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
 		}
@@ -107,7 +107,7 @@ static int recv_xfer(int size)
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
-		printf("fi_recv() %d (%s)\n", ret, fi_strerror(-ret));
+		FI_PRINTERR("fi_recv", ret);
 
 	return ret;
 }
@@ -119,7 +119,7 @@ static int read_data(size_t size)
 	ret = fi_read(ep, buf, size, fi_mr_desc(mr), 
 		      0, remote.addr, remote.key, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_read() %d (%s)\n", ret, fi_strerror(-ret));
+		FI_PRINTERR("fi_read", ret);
 		return ret;
 	}
 
@@ -133,7 +133,7 @@ static int write_data(size_t size)
 	ret = fi_write(ep, buf, size, fi_mr_desc(mr),  
 		       0, remote.addr, remote.key, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_write() %d (%s)\n", ret, fi_strerror(-ret));
+		FI_PRINTERR("fi_write", ret);
 		return ret;
 	}
 	return 0;
@@ -181,9 +181,11 @@ static int run_test(void)
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 1, opts.argc, opts.argv);
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 
+				1, opts.argc, opts.argv);
 	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 1);
+		show_perf(test_name, opts.transfer_size, opts.iterations, 
+				&start, &end, 1);
 
 	return 0;
 }
@@ -202,7 +204,7 @@ static int alloc_cm_res(void)
 	cm_attr.wait_obj = FI_WAIT_FD;
 	ret = fi_eq_open(fab, &cm_attr, &cmeq, NULL);
 	if (ret)
-		fprintf(stderr, "fi_eq_open() cm %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_eq_open", ret);
 
 	return ret;
 }
@@ -220,7 +222,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_cq_attr cq_attr;
 	int ret;
 
-	buffer_size = !opts.custom ? test_size[TEST_CNT - 1].size : opts.transfer_size;
+	buffer_size = !opts.custom ? test_size[TEST_CNT - 1].size : 
+		opts.transfer_size;
 	buf = malloc(MAX(buffer_size, sizeof(uint64_t)));
 	if (!buf) {
 		perror("malloc");
@@ -233,20 +236,20 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = max_credits << 1;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_cq_open() send comp %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_cq_open() recv comp %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 	
 	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)), 
 			op_type, 0, 0, 0, &mr, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_mr_reg() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_mr_reg", ret);
 		goto err3;
 	}
 
@@ -275,19 +278,19 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &cmeq->fid, 0);
 	if (ret) {
-		printf("fi_ep_bind() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		printf("fi_ep_bind() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		printf("fi_ep_bind() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -297,7 +300,7 @@ static int bind_ep_res(void)
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
-		printf("fi_recv() %d (%s)\n", ret, fi_strerror(-ret));
+		FI_PRINTERR("fi_recv", ret);
 
 	return ret;
 }
@@ -307,21 +310,22 @@ static int server_listen(void)
 	struct fi_info *fi;
 	int ret;
 
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.port, FI_SOURCE, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.port, FI_SOURCE, 
+			&hints, &fi);
 	if (ret) {
-		fprintf(stderr, "fi_getinfo() %s\n", strerror(-ret));
+		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_fabric() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_fabric", ret);
 		goto err0;
 	}
 
 	ret = fi_passive_ep(fab, fi, &pep, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_passive_ep() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_passive_ep", ret);
 		goto err1;
 	}
 
@@ -331,13 +335,13 @@ static int server_listen(void)
 
 	ret = fi_pep_bind(pep, &cmeq->fid, 0);
 	if (ret) {
-		printf("fi_pep_bind() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_pep_bind", ret);
 		goto err3;
 	}
 
 	ret = fi_listen(pep);
 	if (ret) {
-		fprintf(stderr, "fi_listen() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_listen", ret);
 		goto err3;
 	}
 
@@ -364,12 +368,12 @@ static int server_connect(void)
 
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		fprintf(stderr, "fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
+		FI_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 
 	if (event != FI_CONNREQ) {
-		fprintf(stderr, "Unexpected CM event %d\n", event);
+		FI_DEBUG("Unexpected CM event %d\n", event);
 		ret = -FI_EOTHER;
 		goto err1;
 	}
@@ -377,14 +381,14 @@ static int server_connect(void)
 	info = entry.info;
 	ret = fi_domain(fab, info, &dom, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_domain() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
 
 
 	ret = fi_endpoint(dom, info, &ep, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_endpoint() for req %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_endpoint", -ret);
 		goto err1;
 	}
 
@@ -398,18 +402,18 @@ static int server_connect(void)
 
 	ret = fi_accept(ep, NULL, 0);
 	if (ret) {
-		fprintf(stderr, "fi_accept() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_accept", ret);
 		goto err3;
 	}
 
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
  	if (rd != sizeof entry) {
-		fprintf(stderr, "fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
+		FI_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		goto err3;
  	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
- 		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
+ 		FI_DEBUG("Unexpected CM event %d fid %p (ep %p)\n",
 			event, entry.fid, ep);
  		ret = -FI_EOTHER;
  		goto err3;
@@ -439,26 +443,25 @@ static int client_connect(void)
 
 	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.port, 0, &hints, &fi);
 	if (ret) {
-		fprintf(stderr, "fi_getinfo() %s\n", strerror(-ret));
+		FI_PRINTERR("fi_getinfo", ret);
 		goto err0;
 	}
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_fabric() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_fabric", ret);
 		goto err1;
 	}
 
  	ret = fi_domain(fab, fi, &dom, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_domain() %s %s\n", fi_strerror(-ret),
-			fi->domain_attr->name);
+		FI_PRINTERR("fi_domain", ret);
 		goto err2;
 	}
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
-		fprintf(stderr, "fi_endpoint() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_endpoint", ret);
 		goto err3;
 	}
 
@@ -472,18 +475,18 @@ static int client_connect(void)
 
 	ret = fi_connect(ep, fi->dest_addr, NULL, 0);
 	if (ret) {
-		fprintf(stderr, "fi_connect() %s\n", fi_strerror(-ret));
+		FI_PRINTERR("fi_connect", ret);
 		goto err5;
 	}
 
  	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		fprintf(stderr, "fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
+		FI_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
 		return (int) rd;
 	}
 
  	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
- 		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
+ 		FI_DEBUG("Unexpected CM event %d fid %p (ep %p)\n",
  			event, entry.fid, ep);
  		ret = -FI_EOTHER;
  		goto err1;
@@ -581,7 +584,6 @@ int main(int argc, char **argv)
 	int op, ret;
 	opts = INIT_OPTS;
 
-
 	while ((op = getopt(argc, argv, "ho:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		case 'o':
@@ -591,6 +593,7 @@ int main(int argc, char **argv)
 				op_type = FI_REMOTE_WRITE;
 			else {
 				ft_csusage(argv[0], NULL);
+				fprintf(stderr, "  -o <op>\tselect operation type (read or write)\n");
 				return EXIT_FAILURE;
 			}
 			break;

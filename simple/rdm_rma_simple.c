@@ -47,8 +47,6 @@ static size_t buffer_size;
 struct fi_rma_iov local, remote;
 
 static struct fi_info hints;
-static struct fi_domain_attr domain_hints;
-static struct fi_ep_attr ep_hints;
 static char *dst_addr;
 static char *port = "9228";
 
@@ -70,12 +68,20 @@ struct fi_context fi_ctx_av;
 static uint64_t user_defined_key = 45678;
 static char * welcome_text = "Hello from Client!";
 
-void usage(char *name)
+void print_usage(char *name, char *desc)
 {
-	fprintf(stderr, "usage: %s\n", name);
-	fprintf(stderr, "\t[-d destination_address]\n");
-	fprintf(stderr, "\t[-p port_number]\n");
-	exit(1);
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
+	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server\n", name);
+
+	if (desc)			
+		fprintf(stderr, "\n%s\n", desc);
+
+	fprintf(stderr, "\nOptions:\n");
+	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
+	fprintf(stderr, "  -h\t\tdisplay this help output\n");
+									
+	return;
 }
 
 static int write_data(size_t size)
@@ -86,7 +92,7 @@ static int write_data(size_t size)
 	ret = fi_write(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 0, 
 			user_defined_key, &fi_ctx_write);
 	if (ret){
-		FI_PRINTERR("fi_writeto", ret);
+		FI_PRINTERR("fi_write", ret);
 		return ret;
 	}
 	return 0;
@@ -122,13 +128,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = 512;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 	
@@ -172,7 +178,7 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -180,13 +186,13 @@ static int bind_ep_res(void)
 	 *  for RMA write operation */
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV | FI_REMOTE_WRITE);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -213,7 +219,7 @@ static int init_fabric(void)
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FI_VERSION(1, 0), node, port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, port, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -317,22 +323,29 @@ static int run_test(void)
 int main(int argc, char **argv)
 {
 	int op;
-
-	while ((op = getopt(argc, argv, "d:p:")) != -1) {
+	struct fi_fabric_attr *fabric_hints;
+		
+	while ((op = getopt(argc, argv, "f:h")) != -1) {
 		switch (op) {
-		case 'd':
-			dst_addr = optarg;
+		case 'f':
+			fabric_hints = malloc(sizeof *fabric_hints);
+			if (!fabric_hints) {
+				perror("malloc");
+				exit(EXIT_FAILURE);
+			}
+			fabric_hints->prov_name = optarg;
+			hints.fabric_attr = fabric_hints;
 			break;
-		case 'p':
-			port = optarg;
-			break;
-		default:
-			usage(argv[0]);
+		case '?':
+		case 'h':
+			print_usage(argv[0], "A simple RDM client-sever RMA example.");
+			return EXIT_FAILURE;
 		}
 	}
 
-	hints.domain_attr = &domain_hints;
-	hints.ep_attr = &ep_hints;
+	if (optind < argc)
+		dst_addr = argv[optind];
+
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG | FI_RMA | FI_REMOTE_COMPLETE;
 	// FI_PROV_MR_ATTR flag is not set

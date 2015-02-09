@@ -71,13 +71,23 @@ struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
 
-static void usage(char *name)
+void print_usage(char *name, char *desc)
 {
-	printf("usage: %s\n", name);
-	printf("\t[-d destination_address]\n");
-	printf("\t[-n domain_name]\n");
-	printf("\t[-p port_number]\n");
-	exit(1);
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
+	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server \t\n", name);
+	
+	if (desc)
+		fprintf(stderr, "\n%s\n", desc);
+
+	fprintf(stderr, "\nOptions:\n");
+	fprintf(stderr, "  -n <domain>\tdomain name\n");
+	fprintf(stderr, "  -p <port>\tnon default port number\n");
+	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
+	fprintf(stderr, "  -s <address>\tsource address\n");
+	fprintf(stderr, "  -h\t\tdisplay this help output\n");
+	
+	return;
 }
 
 static void free_ep_res(void)
@@ -111,14 +121,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	/* Open completion queue for send completions */
 	ret = fi_cq_open(dom, &cq_attr, &scq, (void *)CQ_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	/* Open completion queue for recv completions */
 	ret = fi_cq_open(dom, &cq_attr, &rcq, (void *)CQ_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
@@ -133,14 +143,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	/* Add send CQ to the polling set */
 	ret = fi_poll_add(pollset, &scq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_poll_add: scq", ret);
+		FI_PRINTERR("fi_poll_add", ret);
 		goto err3;
 	}
 
 	/* Add recv CQ to the polling set */
 	ret = fi_poll_add(pollset, &rcq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_poll_add: scq", ret);
+		FI_PRINTERR("fi_poll_add", ret);
 		goto err3;
 	}
 
@@ -185,19 +195,19 @@ static int bind_ep_res(void)
 	/* Bind AV and CQs with endpoint */
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -248,10 +258,6 @@ static int init_fabric(void)
 	char *node;
 	int ret;
 
-	ret = ft_getsrcaddr(src_addr, NULL, &hints);
-	if (ret)
-		return ret;
-
 	if (dst_addr) {
 		node = dst_addr;
 	} else {
@@ -259,7 +265,7 @@ static int init_fabric(void)
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FI_VERSION(1, 0), node, port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, port, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -442,7 +448,7 @@ static int send_recv()
 				if (ret == -FI_EAVAIL) {
 					cq_readerr(cq, "cq");
 				} else {
-					FI_PRINTERR("fi_cq_read", ret);
+					FI_PRINTERR("fi_cq_sread", ret);
 				}
 				return ret;
 			}
@@ -454,18 +460,10 @@ static int send_recv()
 
 int main(int argc, char **argv)
 {
-	struct fi_domain_attr domain_hints;
-	struct fi_ep_attr ep_hints;
 	int op, ret = 0;
-
-	while ((op = getopt(argc, argv, "d:n:p:s:")) != -1) {
+	
+	while ((op = getopt(argc, argv, "p:s:h" INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'd':
-			dst_addr = optarg;
-			break;
-		case 'n':
-			domain_hints.name = optarg;
-			break;
 		case 'p':
 			port = optarg;
 			break;
@@ -473,15 +471,22 @@ int main(int argc, char **argv)
 			src_addr = optarg;
 			break;
 		default:
-			usage(argv[0]);
+			ft_parseinfo(op, optarg, &hints);
+			break;
+		case '?':
+		case 'h':
+			print_usage(argv[0], "A MSG client-server example that uses poll.\n");
+			return EXIT_FAILURE;
 		}
 	}
 
-	memset(&domain_hints, 0, sizeof(domain_hints));
-	memset(&ep_hints, 0, sizeof(ep_hints));
-
-	hints.domain_attr = &domain_hints;
-	hints.ep_attr = &ep_hints;
+	if (optind < argc)
+		dst_addr = argv[optind];
+	
+	ret = ft_getsrcaddr(src_addr, port, &hints);
+	if (ret)
+		return EXIT_FAILURE;
+	
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG;
 	hints.mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;

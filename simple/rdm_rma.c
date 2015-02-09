@@ -41,25 +41,16 @@
 #include <rdma/fi_errno.h>
 #include <shared.h>
 
+static struct cs_opts opts;
 static uint64_t op_type = FI_REMOTE_WRITE;
-static int custom;
-static int size_option;
-static int iterations = 1000;
-static int transfer_size = 1024;
 static int max_credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
 struct fi_rma_iov local, remote;
-static int machr, g_argc;
-static char **g_argv;
 
 static struct fi_info hints;
-static struct fi_domain_attr domain_hints;
-static struct fi_ep_attr ep_hints;
-static char *dst_addr, *src_addr;
-static char *port = "9228";
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -75,20 +66,6 @@ struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_write;
 struct fi_context fi_ctx_read;
 struct fi_context fi_ctx_av;
-
-void usage(char *name)
-{
-	fprintf(stderr, "usage: %s\n", name);
-	fprintf(stderr, "\t[-d destination_address]\n");
-	fprintf(stderr, "\t[-n domain_name]\n");
-	fprintf(stderr, "\t[-p port_number]\n");
-	fprintf(stderr, "\t[-s source_address]\n");
-	fprintf(stderr, "\t[-I iterations]\n");
-	fprintf(stderr, "\t[-o read|write] (default: write)\n");
-	fprintf(stderr, "\t[-S transfer_size or 'all']\n");
-	fprintf(stderr, "\t[-m machine readable output]\n");
-	exit(1);
-}
 
 static int send_msg(int size)
 {
@@ -128,7 +105,7 @@ static int read_data(size_t size)
 	ret = fi_read(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 
 		      remote.addr, remote.key, &fi_ctx_read);
 	if (ret){
-		FI_PRINTERR("fi_readfrom", ret);
+		FI_PRINTERR("fi_read", ret);
 		return ret;
 	}
 
@@ -142,7 +119,7 @@ static int write_data(size_t size)
 	ret = fi_write(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 
 		       remote.addr, remote.key, &fi_ctx_write);
 	if (ret){
-		FI_PRINTERR("fi_writeto", ret);
+		FI_PRINTERR("fi_write", ret);
 		return ret;
 	}
 	return 0;
@@ -152,11 +129,11 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = dst_addr ? send_msg(16) : recv_msg();
+	ret = opts.dst_addr ? send_msg(16) : recv_msg();
 	if (ret)
 		return ret;
 
-	return dst_addr ? recv_msg() : send_msg(16);
+	return opts.dst_addr ? recv_msg() : send_msg(16);
 }
 
 static int run_test(void)
@@ -168,11 +145,11 @@ static int run_test(void)
 		return ret;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
-	for (i = 0; i < iterations; i++) {
+	for (i = 0; i < opts.iterations; i++) {
 		if (op_type == FI_REMOTE_WRITE) {
-			ret = write_data(transfer_size);
+			ret = write_data(opts.transfer_size);
 		} else {
-			ret = read_data(transfer_size); 
+			ret = read_data(opts.transfer_size); 
 		}
 		if (ret)
 			return ret;
@@ -182,11 +159,12 @@ static int run_test(void)
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
-	if (machr)
-		show_perf_mr(transfer_size, iterations, &start, &end, 1, g_argc,
-			       	g_argv);
+	if (opts.machr)
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 
+				1, opts.argc, opts.argv);
 	else
-		show_perf(test_name, transfer_size, iterations, &start, &end, 1);
+		show_perf(test_name, opts.transfer_size, opts.iterations, 
+				&start, &end, 1);
 
 	return 0;
 }
@@ -206,7 +184,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = !custom ? test_size[TEST_CNT - 1].size : transfer_size;
+	buffer_size = !opts.custom ? test_size[TEST_CNT - 1].size : opts.transfer_size;
 	buf = malloc(MAX(buffer_size, sizeof(uint64_t)));
 	if (!buf) {
 		perror("malloc");
@@ -219,13 +197,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = max_credits << 1;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 	
@@ -266,19 +244,19 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -298,18 +276,14 @@ static int init_fabric(void)
 	uint64_t flags = 0;
 	int ret;
 
-	ret = ft_getsrcaddr(src_addr, NULL, &hints);
-	if (ret)
-		return ret;
-
-	if (dst_addr) {
-		node = dst_addr;
+	if (opts.dst_addr) {
+		node = opts.dst_addr;
 	} else {
-		node = src_addr;
+		node = opts.src_addr;
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FI_VERSION(1, 0), node, port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, opts.port, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -319,7 +293,7 @@ static int init_fabric(void)
 		fi->mode |= FI_PROV_MR_ATTR;
 
 	/* Get remote address */
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		addrlen = fi->dest_addrlen;
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, fi->dest_addr, addrlen);
@@ -371,7 +345,7 @@ static int init_av(void)
 {
 	int ret;
 
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		/* Get local address blob. Find the addrlen first. We set addrlen 
 		 * as 0 and fi_getname will return the actual addrlen. */
 		addrlen = 0;
@@ -439,7 +413,7 @@ static int exchange_addr_key(void)
 	local.addr = (uint64_t)buf;
 	local.key = fi_mr_key(mr);
 
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		*(struct fi_rma_iov *)buf = local;
 		send_msg(sizeof local);
 		recv_msg();
@@ -470,13 +444,13 @@ static int run(void)
 	if (ret)
 		goto out;
 
-	if (!custom) {
+	if (!opts.custom) {
 		for (i = 0; i < TEST_CNT; i++) {
-			if (test_size[i].option > size_option)
+			if (test_size[i].option > opts.size_option)
 				continue;
-			init_test(test_size[i].size, test_name,
-					sizeof(test_name), &transfer_size,
-					&iterations);
+			init_test(test_size[i].size, test_name, 
+					sizeof(test_name), &opts.transfer_size, 
+					&opts.iterations);
 			ret = run_test();
 			if(ret)
 				goto out;
@@ -497,58 +471,50 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op;
+	int op, ret;
+	opts = INIT_OPTS;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:I:o:S:m")) != -1) {
+	while ((op = getopt(argc, argv, "ho:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'd':
-			dst_addr = optarg;
-			break;
-		case 'n':
-			domain_hints.name = optarg;
-			break;
-		case 'p':
-			port = optarg;
-			break;
-		case 's':
-			src_addr = optarg;
-			break;
-		case 'I':
-			custom = 1;
-			iterations = atoi(optarg);
-			break;
 		case 'o':
 			if (!strcmp(optarg, "read"))
 				op_type = FI_REMOTE_READ;
 			else if (!strcmp(optarg, "write"))
 				op_type = FI_REMOTE_WRITE;
-			else
-				usage(argv[0]);
-			break;
-		case 'S':
-			if (!strncasecmp("all", optarg, 3)) {
-				size_option = 1;
-			} else {
-				custom = 1;
-				transfer_size = atoi(optarg);
-			}
-			break;
-		case 'm':
-			machr = 1;
-			g_argc = argc;
-			g_argv = argv;
+			else {
+				ft_csusage(argv[0], "Ping pong client and server using rma.");
+				fprintf(stderr, "  -o <op>\trma op type: read|write (default: write)]\n");
+				return EXIT_FAILURE;
+			}	
 			break;
 		default:
-			usage(argv[0]);
+			ft_parseinfo(op, optarg, &hints);
+			ft_parsecsopts(op, optarg, &opts);
+			break;
+		case '?':
+		case 'h':
+			ft_csusage(argv[0], "Ping pong client and server using rma.");
+			fprintf(stderr, "  -o <op>\trma op type: read|write (default: write)]\n");
+			return EXIT_FAILURE;
 		}
 	}
 
-	hints.domain_attr = &domain_hints;
-	hints.ep_attr = &ep_hints;
+	if (optind < argc)
+		opts.dst_addr = argv[optind];
+	
+	ret = ft_getsrcaddr(opts.src_addr, opts.port, &hints);
+	if (ret)
+		return EXIT_FAILURE;
+
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG | FI_RMA;
 	hints.mode = FI_CONTEXT | FI_PROV_MR_ATTR;
 	hints.addr_format = FI_FORMAT_UNSPEC;
+	
+	if (opts.prhints) {
+		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
+		return EXIT_SUCCESS;
+	}
 
 	return run();
 }

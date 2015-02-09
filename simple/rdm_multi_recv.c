@@ -246,7 +246,7 @@ static int run_test(void)
 	
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
-	show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
+	show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 1);
 	ret = 0;
 
 out:
@@ -292,7 +292,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	
 	ret = fi_mr_reg(dom, send_buf, max_send_buf_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_mr_reg for send_buf", ret);
+		FI_PRINTERR("fi_mr_reg", ret);
 		goto err1;
 	}
 	
@@ -301,7 +301,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		MULTI_BUF_SIZE_FACTOR;
 	multi_recv_buf = malloc(multi_buf_size);
 	if(!multi_recv_buf) {
-		fprintf(stderr, "Cannot allocate multi_recv_buf\n");
+		FI_DEBUG("Cannot allocate multi_recv_buf\n");
 		ret = -1;
 		goto err1;
 	}
@@ -309,7 +309,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_mr_reg(dom, multi_recv_buf, multi_buf_size, 0, 0, 1, 0, 
 			&mr_multi_recv, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_mr_reg for multi_recv_buf", ret);
+		FI_PRINTERR("fi_mr_reg", ret);
 		goto err2;
 	}
 
@@ -319,13 +319,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = max_credits << 1;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: scq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err3;
 	}
 	
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open: rcq", ret);
+		FI_PRINTERR("fi_cq_open", ret);
 		goto err4;
 	}
 
@@ -374,19 +374,19 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: scq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: rcq", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 	
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 

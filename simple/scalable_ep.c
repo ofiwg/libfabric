@@ -55,8 +55,6 @@ static size_t transfer_size = 1000;
 static int rx_depth = 512;
 
 static struct fi_info hints;
-static struct fi_domain_attr domain_hints;
-static struct fi_ep_attr ep_hints;
 static char *dst_addr, *src_addr;
 static char *port = "5100";
 
@@ -77,6 +75,25 @@ struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
 static fi_addr_t *remote_rx_addr;
+
+void print_usage(char *name, char *desc)
+{
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
+	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server \t\n", name);
+
+	if (desc)
+		fprintf(stderr, "\n%s\n", desc);
+
+	fprintf(stderr, "\nOptions:\n");
+	fprintf(stderr, "  -n <domain>\tdomain name\n");
+	fprintf(stderr, "  -p <port>\tnon default port number\n");
+	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
+	fprintf(stderr, "  -s <address>\tsource address\n");
+	fprintf(stderr, "  -h\t\tdisplay this help output\n");
+
+	return;
+}
 
 static int send_msg(int size)
 {
@@ -163,7 +180,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 
 		ret = fi_cq_open(dom, &cq_attr, &scq[i], NULL);
 		if (ret) {
-			FI_PRINTERR("fi_cq_open: scq", ret);
+			FI_PRINTERR("fi_cq_open", ret);
 			goto err2;
 		}
 	}
@@ -178,7 +195,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 
 		ret = fi_cq_open(dom, &cq_attr, &rcq[i], NULL);
 		if (ret) {
-			FI_PRINTERR("fi_cq_open: rcq", ret);
+			FI_PRINTERR("fi_cq_open", ret);
 			goto err4;
 		}
 	}
@@ -233,13 +250,13 @@ static int bind_ep_res(void)
 	for (i = 0; i < ctx_cnt; i++) {
 		ret = fi_ep_bind(tx_ep[i], &scq[i]->fid, FI_SEND);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: scq", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_enable(tx_ep[i]);
 		if (ret) {
-			FI_PRINTERR("fi_enable: tx_ep", ret);
+			FI_PRINTERR("fi_enable", ret);
 			return ret;
 		}
 	}
@@ -247,13 +264,13 @@ static int bind_ep_res(void)
 	for (i = 0; i < ctx_cnt; i++) {
 		ret = fi_ep_bind(rx_ep[i], &rcq[i]->fid, FI_RECV);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind: rcq", ret);
+			FI_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_enable(rx_ep[i]);
 		if (ret) {
-			FI_PRINTERR("fi_enable: rx_ep", ret);
+			FI_PRINTERR("fi_enable", ret);
 			return ret;
 		}
 	}
@@ -261,7 +278,7 @@ static int bind_ep_res(void)
 	/* Bind scalable EP with AV */
 	ret = fi_scalable_ep_bind(sep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind: av", ret);
+		FI_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -315,10 +332,6 @@ static int init_fabric(void)
 	uint64_t flags = 0;
 	int ret;
 
-	ret = ft_getsrcaddr(src_addr, port, &hints);
-	if (ret)
-		return ret;
-
 	if (dst_addr) {
 		node = dst_addr;
 	} else {
@@ -326,7 +339,7 @@ static int init_fabric(void)
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FI_VERSION(1, 0), node, port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, port, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -489,16 +502,10 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op;
+	int op, ret;
 
-	while ((op = getopt(argc, argv, "d:n:p:s:")) != -1) {
+	while ((op = getopt(argc, argv, "p:s:h" INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'd':
-			dst_addr = optarg;
-			break;
-		case 'n':
-			domain_hints.name = optarg;
-			break;
 		case 'p':
 			port = optarg;
 			break;
@@ -506,17 +513,22 @@ int main(int argc, char **argv)
 			src_addr = optarg;
 			break;
 		default:
-			printf("usage: %s\n", argv[0]);
-			printf("\t[-d destination_address]\n");
-			printf("\t[-n domain_name]\n");
-			printf("\t[-p port_number]\n");
-			printf("\t[-s source_address]\n");
-			exit(1);
+			ft_parseinfo(op, optarg, &hints);
+			break;
+		case '?':
+		case 'h':
+			print_usage(argv[0], "An RDM client-server example with scalable endpoints.\n");
+			return EXIT_FAILURE;
 		}
 	}
 
-	hints.domain_attr = &domain_hints;
-	hints.ep_attr = &ep_hints;
+	if (optind < argc)
+		dst_addr = argv[optind];
+
+	ret = ft_getsrcaddr(src_addr, port, &hints);
+	if (ret)
+		return EXIT_FAILURE;
+	
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG | FI_NAMED_RX_CTX;
 	hints.mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;
