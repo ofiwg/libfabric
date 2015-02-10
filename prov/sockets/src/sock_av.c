@@ -38,6 +38,7 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -125,7 +126,8 @@ struct sock_conn *sock_av_lookup_addr(struct sock_av *av,
 			av->domain, av->cmap, 
 			(struct sockaddr_in*)&av_addr->addr);
 		if (!av->key[idx]) {
-			SOCK_LOG_ERROR("failed to match or connect to addr %lu\n", addr);
+			SOCK_LOG_ERROR("failed to match or connect to addr %"
+					PRIu64 "\n", addr);
 			errno = EINVAL;
 			return NULL;
 		}

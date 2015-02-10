@@ -34,6 +34,8 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <pthread.h>
+
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
 #include <rdma/fi_cm.h>
