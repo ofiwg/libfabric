@@ -199,21 +199,17 @@ if test "$PROVIDERS_TO_BUILD" = ""; then
 	exit 1
 fi
 
-echo "***"
-for i in $PROVIDERS_TO_BUILD; do
-	v=${i}_dl
-	if test `eval echo \\$${v}` != "1"; then
-		builtin="$i ${builtin}"
-	fi
-done
-echo -e "*** Built-in providers:\t${builtin}"
-echo "***"
-
 for i in $PROVIDERS_TO_BUILD; do
 	v=${i}_dl
 	if test `eval echo \\$${v}` == "1"; then
 		dso="$i ${dso}"
+	else
+		builtin="$i ${builtin}"
 	fi
 done
-echo -e "*** DSO providers:\t${dso}"
-echo "***"
+cat <<EOF
+***
+*** Built-in providers:	${builtin}
+*** DSO providers:	${dso}
+***
+EOF
