@@ -49,6 +49,8 @@ struct fi_info *fi_dupinfo(const struct fi_info *info);
 Returns information about available fabric services for reaching the
 specified node or service, subject to any provided hints.  Callers
 must provide at least one of the node, service, or hints parameters.
+If node and service are NULL, then the hints src_addr and/or dest_addr
+fields of the fi_info structure must be specified.
 If no matching fabric information is available, info will be set to
 NULL.
 
@@ -143,7 +145,8 @@ struct fi_info {
 *dest_addrlen - destination address length*
 : Indicates the length of the destination address (must be specified
   if *dest_addr* is specified).  This field will be ignored in hints
-  unless FI_SOURCE is specified.
+  unless the node and service parameters are NULL or FI_SOURCE is
+  specified.
 
 *src_addr - source address*
 : If specified, indicates the source address.  This field will be
@@ -151,7 +154,8 @@ struct fi_info {
 
 *dest_addr - destination address*
 : If specified, indicates the destination address.  This field will be
-  ignored in hints unless FI_SOURCE is specified.
+  ignored in hints unless the node and service parameters are NULL or
+  FI_SOURCE is specified.
 
 *connreq - connection request*
 : References a specific connection request, otherwise the field must
@@ -536,8 +540,9 @@ input flags.  Valid flags include the following.
 
 *FI_SOURCE*
 : Indicates that the node and service parameters specify the local
-  source address to associate with an endpoint.  This flag is often
-  used with passive endpoints.
+  source address to associate with an endpoint.  If specified, either
+  the node and/or service parameter must be non-NULL.  This flag is
+  often used with passive endpoints.
 
 # RETURN VALUE
 
