@@ -332,16 +332,6 @@ src_addr, and src_addrlen parameters.
 
 # NOTES
 
-
-## Any source
-
-The function fi_trecv() may be used to receive a message from a
-specific source address.  If the user wishes to receive a message from
-any source on an unconnected fabric endpoint the function fi_recv()
-may be used, or fi_trecv() may be used with the src_addr set to a
-wildcard address that has been inserted into an address vector.  See
-fi_av.3 for more details.
-
 ## Ordering
 
 The order in which tags are matched is only defined for a pair of
