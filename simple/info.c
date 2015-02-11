@@ -167,7 +167,7 @@ static int run(struct fi_info *hints, char *node, char *port)
 
 	ret = fi_getinfo(FT_FIVERSION, node, port, 0, hints, &info);
 	if (ret) {
-		FI_PRINTERR("fi_getinfo", ret);
+		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 

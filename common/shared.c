@@ -77,7 +77,7 @@ static int getaddr(char *node, char *service, void **addr,
 
 	ret = getaddrinfo(node, service, NULL, &ai);
 	if (ret) {
-		FI_DEBUG("getaddrfino error %s\n", gai_strerror(ret));
+		FT_DEBUG("getaddrfino error %s\n", gai_strerror(ret));
 		return ret;
 	}
 
@@ -85,7 +85,7 @@ static int getaddr(char *node, char *service, void **addr,
 		memcpy(*addr, ai->ai_addr, ai->ai_addrlen);
 		*len = (size_t)ai->ai_addrlen;
 	} else {
-		FI_DEBUG("src_addr allocation failed\n");
+		FT_DEBUG("src_addr allocation failed\n");
 		ret = EAI_MEMORY;
 	}
 
@@ -103,12 +103,12 @@ int ft_getdestaddr(char *node, char *service, struct fi_info *hints)
 	return getaddr(node, service, &hints->dest_addr, &hints->dest_addrlen);
 }
 
-char *size_str(char str[FI_STR_LEN], long long size)
+char *size_str(char str[FT_STR_LEN], long long size)
 {
 	long long base, fraction = 0;
 	char mag;
 
-	memset(str, '\0', FI_STR_LEN);
+	memset(str, '\0', FT_STR_LEN);
 
 	if (size >= (1 << 30)) {
 		base = 1 << 30;
@@ -128,23 +128,23 @@ char *size_str(char str[FI_STR_LEN], long long size)
 		fraction = (size % base) * 10 / base;
 
 	if (fraction)
-		snprintf(str, FI_STR_LEN, "%lld.%lld%c", size / base, fraction, mag);
+		snprintf(str, FT_STR_LEN, "%lld.%lld%c", size / base, fraction, mag);
 	else
-		snprintf(str, FI_STR_LEN, "%lld%c", size / base, mag);
+		snprintf(str, FT_STR_LEN, "%lld%c", size / base, mag);
 
 	return str;
 }
 
-char *cnt_str(char str[FI_STR_LEN], long long cnt)
+char *cnt_str(char str[FT_STR_LEN], long long cnt)
 {
 	if (cnt >= 1000000000)
-		snprintf(str, FI_STR_LEN, "%lldb", cnt / 1000000000);
+		snprintf(str, FT_STR_LEN, "%lldb", cnt / 1000000000);
 	else if (cnt >= 1000000)
-		snprintf(str, FI_STR_LEN, "%lldm", cnt / 1000000);
+		snprintf(str, FT_STR_LEN, "%lldm", cnt / 1000000);
 	else if (cnt >= 1000)
-		snprintf(str, FI_STR_LEN, "%lldk", cnt / 1000);
+		snprintf(str, FT_STR_LEN, "%lldk", cnt / 1000);
 	else
-		snprintf(str, FI_STR_LEN, "%lld", cnt);
+		snprintf(str, FT_STR_LEN, "%lld", cnt);
 
 	return str;
 }
@@ -164,7 +164,7 @@ int size_to_count(int size)
 void init_test(int size, char *test_name, size_t test_name_len,
 	int *transfer_size, int *iterations)
 {
-	char sstr[FI_STR_LEN];
+	char sstr[FT_STR_LEN];
 
 	size_str(sstr, size);
 	snprintf(test_name, test_name_len, "%s_lat", sstr);
@@ -185,7 +185,7 @@ int wait_for_completion(struct fid_cq *cq, int num_completions)
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(cq, "cq");
 			} else {
-				FI_PRINTERR("fi_cq_read", ret);
+				FT_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
 		}
@@ -201,10 +201,10 @@ void cq_readerr(struct fid_cq *cq, char *cq_str)
 
 	ret = fi_cq_readerr(cq, &cq_err, 0);
 	if (ret < 0)
-		FI_PRINTERR("fi_cq_readerr", ret);
+		FT_PRINTERR("fi_cq_readerr", ret);
 
 	err_str = fi_cq_strerror(cq, cq_err.prov_errno, cq_err.err_data, NULL, 0);
-	FI_DEBUG("%s %s (%d)\n", cq_str, err_str, cq_err.prov_errno);
+	FT_DEBUG("%s %s (%d)\n", cq_str, err_str, cq_err.prov_errno);
 }
 
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
@@ -221,7 +221,7 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter)
 {
 	static int header = 1;
-	char str[FI_STR_LEN];
+	char str[FT_STR_LEN];
 	int64_t elapsed = get_elapsed(start, end, MICRO);
 	long long bytes = (long long) iters * tsize * xfers_per_iter;
 

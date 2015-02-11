@@ -181,7 +181,7 @@ int ft_post_recv_bufs(void)
 		if (ret) {
 			if (ret == -FI_EAGAIN)
 				break;
-			FI_PRINTERR("recv", ret);
+			FT_PRINTERR("recv", ret);
 			return ret;
 		}
 	}
@@ -222,7 +222,7 @@ int ft_send_msg(void)
 	ret = (test_info.caps & FI_MSG) ?
 		ft_post_send() : ft_post_tsend();
 	if (ret) {
-		FI_PRINTERR("send", ret);
+		FT_PRINTERR("send", ret);
 		return ret;
 	}
 

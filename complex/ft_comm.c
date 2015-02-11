@@ -51,7 +51,7 @@ static int ft_accept(void)
 
 	ret = fi_accept(ep, NULL, 0);
 	if (ret) {
-		FI_PRINTERR("fi_accept", ret);
+		FT_PRINTERR("fi_accept", ret);
 		return ret;
 	}
 
@@ -72,7 +72,7 @@ static int ft_connect(void)
 
 	ret = fi_connect(ep, fabric_info->dest_addr, NULL, 0);
 	if (ret) {
-		FI_PRINTERR("fi_connect", ret);
+		FT_PRINTERR("fi_connect", ret);
 		return ret;
 	}
 
@@ -93,7 +93,7 @@ static int ft_load_av(void)
 	len = sizeof(msg.data);
 	ret = fi_getname(&ep->fid, msg.data, &len);
 	if (ret) {
-		FI_PRINTERR("fi_getname", ret);
+		FT_PRINTERR("fi_getname", ret);
 		return ret;
 	}
 
@@ -108,7 +108,7 @@ static int ft_load_av(void)
 
 	ret = fi_av_insert(av, msg.data, 1, &ft_tx.addr, 0, NULL);
 	if (ret != 1) {
-		FI_PRINTERR("fi_av_insert", ret);
+		FT_PRINTERR("fi_av_insert", ret);
 		return ret;
 	}
 

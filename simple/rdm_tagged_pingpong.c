@@ -79,7 +79,7 @@ int wait_for_completion_tagged(struct fid_cq *cq, int num_completions)
 		if (ret > 0) {
 			num_completions--;
 		} else if (ret < 0) {
-			FI_PRINTERR("fi_cq_read", ret);
+			FT_PRINTERR("fi_cq_read", ret);
 			return ret;
 		}
 	}
@@ -99,7 +99,7 @@ static int send_xfer(int size)
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(scq, "scq");
 			} else {
-				FI_PRINTERR("fi_cq_read", ret);
+				FT_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
 		}
@@ -110,7 +110,7 @@ post:
 	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
 			tag_data, &fi_ctx_send);
 	if (ret)
-		FI_PRINTERR("fi_tsend", ret);
+		FT_PRINTERR("fi_tsend", ret);
 
 	return ret;
 }
@@ -126,7 +126,7 @@ static int recv_xfer(int size)
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rcq, "rcq");
 			} else {
-				FI_PRINTERR("fi_cq_read", ret);
+				FT_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
 		}
@@ -136,7 +136,7 @@ static int recv_xfer(int size)
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
 			tag_data + 1, 0, &fi_ctx_recv);
 	if (ret)
-		FI_PRINTERR("fi_trecv", ret);
+		FT_PRINTERR("fi_trecv", ret);
 
 	return ret;
 }
@@ -148,7 +148,7 @@ static int send_msg(int size)
 	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
 			tag_control, &fi_ctx_send);
 	if (ret) {
-		FI_PRINTERR("fi_tsend", ret);
+		FT_PRINTERR("fi_tsend", ret);
 		return ret;
 	}
 
@@ -164,7 +164,7 @@ static int recv_msg(void)
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
 		       tag_control, 0, &fi_ctx_recv);
 	if (ret) {
-		FI_PRINTERR("fi_trecv", ret);
+		FT_PRINTERR("fi_trecv", ret);
 		return ret;
 	}
 
@@ -257,19 +257,19 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = max_credits << 1;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open", ret);
+		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open", ret);
+		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
 	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_mr_reg", ret);
+		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
 	}
 
@@ -280,7 +280,7 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_av_open", ret);
+		FT_PRINTERR("fi_av_open", ret);
 		goto err4;
 	}
 
@@ -303,25 +303,25 @@ static int bind_ep_res(void)
 
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind", ret);
+		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind", ret);
+		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind", ret);
+		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_enable(ep);
 	if (ret) {
-		FI_PRINTERR("fi_enable", ret);
+		FT_PRINTERR("fi_enable", ret);
 		return ret;
 	}
 
@@ -349,7 +349,7 @@ static int init_fabric(void)
 
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, &hints, &fi);
 	if (ret) {
-		FI_PRINTERR("fi_getinfo", ret);
+		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 
@@ -367,19 +367,19 @@ static int init_fabric(void)
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_fabric", ret);
+		FT_PRINTERR("fi_fabric", ret);
 		goto err0;
 	}
 
 	ret = fi_domain(fab, fi, &dom, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_domain", ret);
+		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_endpoint", ret);
+		FT_PRINTERR("fi_endpoint", ret);
 		goto err2;
 	}
 
@@ -417,21 +417,21 @@ static int init_av(void)
 		addrlen = 0;
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
 		if (ret != -FI_ETOOSMALL) {
-			FI_PRINTERR("fi_getname", ret);
+			FT_PRINTERR("fi_getname", ret);
 			return ret;
 		}
 
 		local_addr = malloc(addrlen);
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
 		if (ret) {
-			FI_PRINTERR("fi_getname", ret);
+			FT_PRINTERR("fi_getname", ret);
 			return ret;
 		}
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
 				&fi_ctx_av);
 		if (ret != 1) {
-			FI_PRINTERR("fi_av_insert", ret);
+			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
 
@@ -460,7 +460,7 @@ static int init_av(void)
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
 				&fi_ctx_av);
 		if (ret != 1) {
-			FI_PRINTERR("fi_av_insert", ret);
+			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
 
@@ -474,7 +474,7 @@ static int init_av(void)
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
 			tag_data, 0, &fi_ctx_recv);
 	if (ret)
-		FI_PRINTERR("fi_trecv", ret);
+		FT_PRINTERR("fi_trecv", ret);
 
 	return ret;
 }

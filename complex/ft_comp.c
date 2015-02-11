@@ -65,7 +65,7 @@ static int ft_open_cqs(void)
 
 		ret = fi_cq_open(domain, &attr, &txcq, NULL);
 		if (ret) {
-			FI_PRINTERR("fi_cq_open", ret);
+			FT_PRINTERR("fi_cq_open", ret);
 			return ret;
 		}
 	}
@@ -78,7 +78,7 @@ static int ft_open_cqs(void)
 
 		ret = fi_cq_open(domain, &attr, &rxcq, NULL);
 		if (ret) {
-			FI_PRINTERR("fi_cq_open", ret);
+			FT_PRINTERR("fi_cq_open", ret);
 			return ret;
 		}
 	}
@@ -103,7 +103,7 @@ int ft_bind_comp(struct fid_ep *ep, uint64_t flags)
 	if (flags & FI_SEND) {
 		ret = fi_ep_bind(ep, &txcq->fid, flags & ~FI_RECV);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind", ret);
+			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 	}
@@ -111,7 +111,7 @@ int ft_bind_comp(struct fid_ep *ep, uint64_t flags)
 	if (flags & FI_RECV) {
 		ret = fi_ep_bind(ep, &rxcq->fid, flags & ~FI_SEND);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind", ret);
+			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 	}
@@ -149,7 +149,7 @@ int ft_comp_rx(void)
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rxcq, "rxcq");
 			} else {
-				FI_PRINTERR("fi_cq_read", ret);
+				FT_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
 		} else if (ret) {
@@ -175,7 +175,7 @@ int ft_comp_tx(void)
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(txcq, "txcq");
 			} else {
-				FI_PRINTERR("fi_cq_read", ret);
+				FT_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
 		} else if (ret) {
