@@ -78,7 +78,7 @@
 		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | \
 		FI_REMOTE_SIGNAL)
 #define VERBS_MODE (FI_LOCAL_MR | FI_PROV_MR_ATTR)
-#define VERBS_TX_OP_FLAGS FI_INJECT
+#define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION)
 #define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
 		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
 
@@ -131,6 +131,7 @@ struct fi_ibv_msg_ep {
 	struct fi_ibv_cq	*scq;
 	uint32_t		inline_size;
 	uint32_t		tx_op_flags;
+	uint32_t		ep_flags;
 };
 
 static const char *local_node = "localhost";
@@ -682,7 +683,7 @@ static void fi_ibv_msg_ep_qp_init_attr(struct fi_ibv_msg_ep *ep,
 	attr->cap.max_recv_sge = atoi(def_recv_sge);
 	attr->srq = NULL;
 	attr->qp_type = IBV_QPT_RC;
-	attr->sq_sig_all = 1;
+	attr->sq_sig_all = 0;
 	if (ep) {
 		attr->cap.max_inline_data = ep->inline_size;
 		attr->qp_context = ep;
@@ -771,7 +772,12 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
-		if (!(flags & (FI_RECV|FI_SEND))) {
+		/* Must bind a CQ to either RECV or SEND completions, and
+		 * the FI_COMPLETION flag is only valid when binding the
+		 * FI_SEND CQ. */
+		if (!(flags & (FI_RECV|FI_SEND))
+				|| (flags & (FI_SEND|FI_COMPLETION))
+							== FI_COMPLETION) {
 			return -EINVAL;
 		}
 		if (flags & FI_RECV) {
@@ -783,6 +789,10 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (ep->scq)
 				return -EINVAL;
 			ep->scq = container_of(bfid, struct fi_ibv_cq, cq_fid.fid);
+			if (flags & FI_COMPLETION)
+				ep->ep_flags |= FI_COMPLETION;
+			else
+				ep->tx_op_flags |= FI_COMPLETION;
 		}
 		break;
 	case FI_CLASS_EQ:
@@ -886,6 +896,8 @@ fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 
 		wr.sg_list = sge;
 	}
+	if (!(_ep->ep_flags & FI_COMPLETION) || (flags & FI_COMPLETION))
+		wr.send_flags |= IBV_SEND_SIGNALED;
 
 	wr.wr_id = (uintptr_t) msg->context;
 	wr.next = NULL;
@@ -995,6 +1007,8 @@ fi_ibv_msg_ep_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 	wr.send_flags = 0;
 	if ((_ep->tx_op_flags & FI_INJECT) || (len <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
+	if (_ep->tx_op_flags & FI_COMPLETION)
+		wr.send_flags |= IBV_SEND_SIGNALED;
 	wr.wr.rdma.remote_addr = addr;
 	wr.wr.rdma.rkey = (uint32_t) key;
 
@@ -1033,6 +1047,8 @@ fi_ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc
 	wr.send_flags = 0;
 	if ((_ep->tx_op_flags & FI_INJECT) || (len <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
+	if (_ep->tx_op_flags & FI_COMPLETION)
+		wr.send_flags |= IBV_SEND_SIGNALED;
 
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
@@ -1066,6 +1082,8 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			}
 		}
 	}
+	if (!(_ep->ep_flags & FI_COMPLETION) || (flags & FI_COMPLETION))
+		wr.send_flags |= IBV_SEND_SIGNALED;
 	wr.sg_list = sge;
 
 	wr.opcode = IBV_WR_RDMA_WRITE;
@@ -1098,11 +1116,13 @@ fi_ibv_msg_ep_rma_read(struct fid_ep *ep, void *buf, size_t len,
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.opcode = IBV_WR_RDMA_READ;
-	wr.send_flags = 0;
 	wr.wr.rdma.remote_addr = addr;
 	wr.wr.rdma.rkey = (uint32_t) key;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+	wr.send_flags = (_ep->tx_op_flags & FI_COMPLETION)
+			? IBV_SEND_SIGNALED : 0;
+
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
@@ -1122,7 +1142,6 @@ fi_ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	wr.sg_list = sge;
 	wr.num_sge = count;
 	wr.opcode = IBV_WR_RDMA_READ;
-	wr.send_flags = 0;
 	wr.wr.rdma.remote_addr = addr;
 	wr.wr.rdma.rkey = (uint32_t) key;
 
@@ -1133,6 +1152,9 @@ fi_ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	}
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+	wr.send_flags = (_ep->tx_op_flags & FI_COMPLETION)
+			? IBV_SEND_SIGNALED : 0;
+
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
@@ -1159,12 +1181,17 @@ fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	}
 	wr.num_sge = msg->iov_count;
 	wr.opcode = IBV_WR_RDMA_READ;
-	wr.send_flags = 0;
 
 	wr.wr.rdma.remote_addr = msg->rma_iov->addr;
 	wr.wr.rdma.rkey = (uint32_t) msg->rma_iov->key;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+	if (!(_ep->ep_flags & FI_COMPLETION) || (flags & FI_COMPLETION)) {
+		wr.send_flags = IBV_SEND_SIGNALED;
+	} else {
+		wr.send_flags = 0;
+	}
+
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
@@ -1190,6 +1217,8 @@ fi_ibv_msg_ep_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	wr.send_flags = 0;
 	if ((_ep->tx_op_flags & FI_INJECT) || (len <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
+	if (_ep->tx_op_flags & FI_COMPLETION)
+		wr.send_flags |= IBV_SEND_SIGNALED;
 	wr.imm_data = (uint32_t) data;
 
 	wr.wr.rdma.remote_addr = addr;
@@ -1258,6 +1287,8 @@ fi_ibv_msg_ep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
+	if (_ep->tx_op_flags & FI_COMPLETION)
+		wr.send_flags |= IBV_SEND_SIGNALED;
 
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
@@ -1328,6 +1359,8 @@ fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
+	if (!(_ep->ep_flags & FI_COMPLETION) || (flags & FI_COMPLETION))
+		wr.send_flags |= IBV_SEND_SIGNALED;
 
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
@@ -1389,6 +1422,8 @@ fi_ibv_msg_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
+	if (_ep->tx_op_flags & FI_COMPLETION)
+		wr.send_flags |= IBV_SEND_SIGNALED;
 
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
@@ -1467,6 +1502,8 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
+	if (!(_ep->ep_flags & FI_COMPLETION) || (flags & FI_COMPLETION))
+		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
 		wr.imm_data = (uint32_t) msg->data;
 
@@ -1524,6 +1561,8 @@ fi_ibv_msg_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
+	if (_ep->tx_op_flags & FI_COMPLETION)
+		wr.send_flags |= IBV_SEND_SIGNALED;
 
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
@@ -1601,6 +1640,8 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
+	if (!(_ep->ep_flags & FI_COMPLETION) || (flags & FI_COMPLETION))
+		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
 		wr.imm_data = (uint32_t) msg->data;
 
