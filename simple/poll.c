@@ -55,7 +55,7 @@ static int rx_depth = 512;
 
 static struct fi_info hints;
 static char *dst_addr, *src_addr;
-static char *port = "5300";
+static char *dst_port = "5300", *src_port = "5300";
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -82,7 +82,8 @@ void print_usage(char *name, char *desc)
 
 	fprintf(stderr, "\nOptions:\n");
 	fprintf(stderr, "  -n <domain>\tdomain name\n");
-	fprintf(stderr, "  -p <port>\tnon default port number\n");
+	fprintf(stderr, "  -b <src_port>\tnon default source port number\n");
+	fprintf(stderr, "  -p <dst_port>\tnon default destination port number\n");
 	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
 	fprintf(stderr, "  -s <address>\tsource address\n");
 	fprintf(stderr, "  -h\t\tdisplay this help output\n");
@@ -255,17 +256,22 @@ static int init_fabric(void)
 {
 	struct fi_info *fi;
 	uint64_t flags = 0;
-	char *node;
+	char *node, *service;
 	int ret;
 
 	if (dst_addr) {
+		ret = ft_getsrcaddr(src_addr, src_port, &hints);
+		if (ret)
+			return ret;
 		node = dst_addr;
+		service = dst_port;
 	} else {
 		node = src_addr;
+		service = src_port;
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FT_FIVERSION, node, port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -462,10 +468,13 @@ int main(int argc, char **argv)
 {
 	int op, ret = 0;
 	
-	while ((op = getopt(argc, argv, "p:s:h" INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "b:p:s:h" INFO_OPTS)) != -1) {
 		switch (op) {
+		case 'b':
+			src_port = optarg;
+			break;
 		case 'p':
-			port = optarg;
+			dst_port = optarg;
 			break;
 		case 's':
 			src_addr = optarg;
@@ -482,10 +491,6 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		dst_addr = argv[optind];
-	
-	ret = ft_getsrcaddr(src_addr, port, &hints);
-	if (ret)
-		return EXIT_FAILURE;
 	
 	hints.ep_type = FI_EP_RDM;
 	hints.caps = FI_MSG;

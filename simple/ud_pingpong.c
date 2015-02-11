@@ -300,17 +300,22 @@ static int bind_ep_res(void)
 static int common_setup(void)
 {
 	int ret;
-	char *node;
 	uint64_t flags = 0;
+	char *node, *service;
 
 	if (opts.dst_addr) {
+		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, &hints);
+		if (ret)
+			return ret;
 		node = opts.dst_addr;
+		service = opts.dst_port;
 	} else {
 		node = opts.src_addr;
+		service = opts.src_port;
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FT_FIVERSION, node, opts.port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, &hints, &fi);
 	if (ret) {
 		FI_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -378,7 +383,7 @@ static int client_connect(void)
 	if (ret != 0)
 		goto err;
 
-	ret = ft_getdestaddr(opts.dst_addr, opts.port, &hints);
+	ret = ft_getdestaddr(opts.dst_addr, opts.dst_port, &hints);
 	if (ret != 0)
 		goto err;
 
@@ -509,7 +514,7 @@ static int run(void)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op;
 	opts = INIT_OPTS;
 
 	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
@@ -527,10 +532,6 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
-
-	ret = ft_getsrcaddr(opts.src_addr, opts.port, &hints);
-	if (ret)
-		return EXIT_FAILURE;
 
 	hints.ep_type = FI_EP_DGRAM;
 	hints.caps = FI_MSG;
