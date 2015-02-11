@@ -264,9 +264,7 @@ number of addresses is specified through the count parameter.  The
 addr parameter references an array of addresses to insert into the AV.
 Addresses inserted into an address vector must be in the same format
 as specified in struct fi_info:addr_format for the corresponding
-domain.  A NULL value for an address may be used to indicate that an
-entry should be associated with 'any' address (similar to the IPv4
-address of 0.0.0.0).
+domain.
 
 For AV's of type FI_AV_MAP, once inserted addresses have been mapped,
 the mapped values are written into the buffer referenced by fi_addr.
