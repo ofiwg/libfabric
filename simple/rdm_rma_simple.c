@@ -53,7 +53,7 @@ static char *port = "9228";
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_ep *ep;
-static struct fid_cq *rcq, *scq;
+static struct fid_cntr *rcntr, *scntr;
 static struct fid_av *av;
 static struct fid_mr *mr;
 static void *remote_addr;
@@ -102,14 +102,14 @@ static void free_ep_res(void)
 {
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rcntr->fid);
+	fi_close(&scntr->fid);
 	free(buf);
 }
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cq_attr cq_attr;
+	struct fi_cntr_attr cntr_attr;
 	struct fi_av_attr av_attr;
 	uint64_t flags = 0;
 	int ret;
@@ -122,19 +122,18 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = 512;
-	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
+	memset(&cntr_attr, 0, sizeof cntr_attr);
+	cntr_attr.events = FI_CNTR_EVENTS_COMP;
+
+	ret = fi_cntr_open(dom, &cntr_attr, &scntr, NULL);
 	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
+		FT_PRINTERR("fi_cntr_open", ret);
 		goto err1;
 	}
 
-	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	ret = fi_cntr_open(dom, &cntr_attr, &rcntr, NULL);
 	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
+		FT_PRINTERR("fi_cntr_open", ret);
 		goto err2;
 	}
 	
@@ -164,9 +163,9 @@ static int alloc_ep_res(struct fi_info *fi)
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcq->fid);
+	fi_close(&rcntr->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&scntr->fid);
 err1:
 	free(buf);
 	return ret;
@@ -176,7 +175,7 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &scntr->fid, FI_WRITE);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -184,7 +183,7 @@ static int bind_ep_res(void)
 
 	/* Use FI_REMOTE_WRITE flag so that remote side can get completion event
 	 *  for RMA write operation */
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV | FI_REMOTE_WRITE);
+	ret = fi_ep_bind(ep, &rcntr->fid, FI_REMOTE_WRITE);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -291,24 +290,29 @@ static int run_test(void)
 	if (ret)
 		return ret;
 
-	if(dst_addr) {	
+	if (dst_addr) {	
 		/* Execute RMA write operation from Client */
-		fprintf(stdout, "RMA write from Client\n");
+		fprintf(stdout, "RMA write to server\n");
 		sprintf(buf, "%s", welcome_text);
 		ret = write_data(sizeof(char *) * strlen(buf));
 		if (ret)
 			return ret;
 	
-		ret = wait_for_completion(scq, 1);
-		if (ret)
+		ret = fi_cntr_wait(scntr, 1, -1);
+		if (ret < 0) {
+			FT_PRINTERR("fi_cntr_wait", ret);
 			return ret;
+		}
+
 		fprintf(stdout, "Received a completion event for RMA write\n");
 	} else {	
 		/* Server waits for message from Client */
-		ret = wait_for_completion(rcq, 1);
-		if (ret)
+		ret = fi_cntr_wait(rcntr, 1, -1);
+		if (ret < 0) {
+			FT_PRINTERR("fi_cntr_wait", ret);
 			return ret;
-		
+		}
+
 		fprintf(stdout, "Received data from Client: %s\n", (char *)buf);
 	}
 
