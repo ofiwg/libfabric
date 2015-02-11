@@ -51,19 +51,19 @@ int ft_open_passive(void)
 
 	ret = fi_passive_ep(fabric, fabric_info, &pep, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_passive_ep", ret);
+		FT_PRINTERR("fi_passive_ep", ret);
 		return ret;
 	}
 
 	ret = fi_pep_bind(pep, &eq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_pep_bind", ret);
+		FT_PRINTERR("fi_pep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_listen(pep);
 	if (ret) {
-		FI_PRINTERR("fi_listen", ret);
+		FT_PRINTERR("fi_listen", ret);
 		return ret;
 	}
 
@@ -87,7 +87,7 @@ int ft_open_active(void)
 
 	ret = fi_endpoint(domain, fabric_info, &ep, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_endpoint", ret);
+		FT_PRINTERR("fi_endpoint", ret);
 		return ret;
 	}
 
@@ -96,7 +96,7 @@ int ft_open_active(void)
 
 	ret = fi_ep_bind(ep, &eq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind", ret);
+		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -107,14 +107,14 @@ int ft_open_active(void)
 	if (test_info.ep_type != FI_EP_MSG) {
 		ret = fi_ep_bind(ep, &av->fid, 0);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind", ret);
+			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 	}
 
 	ret = fi_enable(ep);
 	if (ret) {
-		FI_PRINTERR("fi_enable", ret);
+		FT_PRINTERR("fi_enable", ret);
 		return ret;
 	}
 

@@ -53,7 +53,7 @@ static int ft_open_fabric(void)
 
 	ret = fi_fabric(fabric_info->fabric_attr, &fabric, NULL);
 	if (ret)
-		FI_PRINTERR("fi_fabric", ret);
+		FT_PRINTERR("fi_fabric", ret);
 
 	return ret;
 }
@@ -70,7 +70,7 @@ static int ft_open_eq(void)
 	attr.wait_obj = FI_WAIT_FD;
 	ret = fi_eq_open(fabric, &attr, &eq, NULL);
 	if (ret)
-		FI_PRINTERR("fi_eq_open", ret);
+		FT_PRINTERR("fi_eq_open", ret);
 
 	return ret;
 }
@@ -82,7 +82,7 @@ int ft_eq_readerr(void)
 
 	ret = fi_eq_readerr(eq, &err, 0);
 	if (ret != sizeof(err)) {
-		FI_PRINTERR("fi_eq_readerr", ret);
+		FT_PRINTERR("fi_eq_readerr", ret);
 		return ret;
 	} else {
 		fprintf(stderr, "Error event %d %s\n",
@@ -100,7 +100,7 @@ ssize_t ft_get_event(uint32_t *event, void *buf, size_t len,
 	if (ret == -FI_EAVAIL) {
 		return ft_eq_readerr();
 	} else if (ret < 0) {
-		FI_PRINTERR("fi_eq_sread", ret);
+		FT_PRINTERR("fi_eq_sread", ret);
 		return ret;
 	}
 
@@ -134,7 +134,7 @@ static int ft_open_domain(void)
 
 	ret = fi_domain(fabric, fabric_info, &domain, NULL);
 	if (ret)
-		FI_PRINTERR("fi_domain", ret);
+		FT_PRINTERR("fi_domain", ret);
 
 	return ret;
 }
@@ -152,7 +152,7 @@ static int ft_open_av(void)
 	attr.count = 2;
 	ret = fi_av_open(domain, &attr, &av, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_av_open", ret);
+		FT_PRINTERR("fi_av_open", ret);
 		return ret;
 	}
 
@@ -175,7 +175,7 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 		ret = fi_mr_reg(domain, ctrl->buf, size,
 				0, 0, 0, 0, &ctrl->mr, NULL);
 		if (ret) {
-			FI_PRINTERR("fi_mr_reg", ret);
+			FT_PRINTERR("fi_mr_reg", ret);
 			return ret;
 		}
 		ctrl->memdesc = fi_mr_desc(ctrl->mr);

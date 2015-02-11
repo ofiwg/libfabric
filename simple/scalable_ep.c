@@ -103,7 +103,7 @@ static int send_msg(int size)
 	ret = fi_send(tx_ep[0], buf, (size_t) size, fi_mr_desc(mr),
 			remote_rx_addr[0], &fi_ctx_send);
 	if (ret) {
-		FI_PRINTERR("fi_send", ret);
+		FT_PRINTERR("fi_send", ret);
 		return ret;
 	}
 
@@ -119,7 +119,7 @@ static int recv_msg(void)
 	/* Messages sent to scalable EP fi_addr are received in context 0 */
 	ret = fi_recv(rx_ep[0], buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret) {
-		FI_PRINTERR("fi_recv", ret);
+		FT_PRINTERR("fi_recv", ret);
 		return ret;
 	}
 
@@ -175,13 +175,13 @@ static int alloc_ep_res(struct fid_ep *sep)
 		/* Create TX contexts: tx_ep */
 		ret = fi_tx_context(sep, i, &tx_attr, &tx_ep[i], NULL);
 		if (ret) {
-			FI_PRINTERR("fi_tx_context", ret);
+			FT_PRINTERR("fi_tx_context", ret);
 			goto err1;
 		}
 
 		ret = fi_cq_open(dom, &cq_attr, &scq[i], NULL);
 		if (ret) {
-			FI_PRINTERR("fi_cq_open", ret);
+			FT_PRINTERR("fi_cq_open", ret);
 			goto err2;
 		}
 	}
@@ -190,20 +190,20 @@ static int alloc_ep_res(struct fid_ep *sep)
 		/* Create RX contexts: rx_ep */
 		ret = fi_rx_context(sep, i, &rx_attr, &rx_ep[i], NULL);
 		if (ret) {
-			FI_PRINTERR("fi_tx_context", ret);
+			FT_PRINTERR("fi_tx_context", ret);
 			goto err3;
 		}
 
 		ret = fi_cq_open(dom, &cq_attr, &rcq[i], NULL);
 		if (ret) {
-			FI_PRINTERR("fi_cq_open", ret);
+			FT_PRINTERR("fi_cq_open", ret);
 			goto err4;
 		}
 	}
 
 	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_mr_reg", ret);
+		FT_PRINTERR("fi_mr_reg", ret);
 		goto err5;
 	}
 
@@ -218,7 +218,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 	/* Open Address Vector */
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_av_open", ret);
+		FT_PRINTERR("fi_av_open", ret);
 		goto err6;
 	}
 
@@ -251,13 +251,13 @@ static int bind_ep_res(void)
 	for (i = 0; i < ctx_cnt; i++) {
 		ret = fi_ep_bind(tx_ep[i], &scq[i]->fid, FI_SEND);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind", ret);
+			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_enable(tx_ep[i]);
 		if (ret) {
-			FI_PRINTERR("fi_enable", ret);
+			FT_PRINTERR("fi_enable", ret);
 			return ret;
 		}
 	}
@@ -265,13 +265,13 @@ static int bind_ep_res(void)
 	for (i = 0; i < ctx_cnt; i++) {
 		ret = fi_ep_bind(rx_ep[i], &rcq[i]->fid, FI_RECV);
 		if (ret) {
-			FI_PRINTERR("fi_ep_bind", ret);
+			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
 		ret = fi_enable(rx_ep[i]);
 		if (ret) {
-			FI_PRINTERR("fi_enable", ret);
+			FT_PRINTERR("fi_enable", ret);
 			return ret;
 		}
 	}
@@ -279,7 +279,7 @@ static int bind_ep_res(void)
 	/* Bind scalable EP with AV */
 	ret = fi_scalable_ep_bind(sep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind", ret);
+		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
@@ -298,7 +298,7 @@ static int run_test()
 		fprintf(stdout, "Posting recv for ctx: %d\n", i);
 		ret = fi_recv(rx_ep[i], buf, buffer_size, fi_mr_desc(mr), 0, NULL);
 		if (ret) {
-			FI_PRINTERR("fi_recv", ret);
+			FT_PRINTERR("fi_recv", ret);
 			return ret;
 		}
 	}
@@ -310,7 +310,7 @@ static int run_test()
 			ret = fi_send(tx_ep[i], buf, transfer_size, fi_mr_desc(mr),
 					remote_rx_addr[i], NULL); 
 			if (ret) {
-				FI_PRINTERR("fi_recv", ret);
+				FT_PRINTERR("fi_recv", ret);
 				return ret;
 			}
 
@@ -347,7 +347,7 @@ static int init_fabric(void)
 
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, &hints, &fi);
 	if (ret) {
-		FI_PRINTERR("fi_getinfo", ret);
+		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 
@@ -372,13 +372,13 @@ static int init_fabric(void)
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_fabric", ret);
+		FT_PRINTERR("fi_fabric", ret);
 		goto err0;
 	}
 
 	ret = fi_domain(fab, fi, &dom, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_domain", ret);
+		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
 
@@ -388,7 +388,7 @@ static int init_fabric(void)
 
 	ret = fi_scalable_ep(dom, fi, &sep, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_scalable_ep", ret);
+		FT_PRINTERR("fi_scalable_ep", ret);
 		goto err2;
 	}
 
@@ -427,20 +427,20 @@ static int init_av(void)
 		addrlen = 0;
 		ret = fi_getname(&sep->fid, local_addr, &addrlen);
 		if (ret != -FI_ETOOSMALL) {
-			FI_PRINTERR("fi_getname", ret);
+			FT_PRINTERR("fi_getname", ret);
 			return ret;
 		}
 
 		local_addr = malloc(addrlen);
 		ret = fi_getname(&sep->fid, local_addr, &addrlen);
 		if (ret) {
-			FI_PRINTERR("fi_getname", ret);
+			FT_PRINTERR("fi_getname", ret);
 			return ret;
 		}
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
 		if (ret != 1) {
-			FI_PRINTERR("fi_av_insert", ret);
+			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
 
@@ -471,7 +471,7 @@ static int init_av(void)
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, &fi_ctx_av);
 		if (ret != 1) {
-			FI_PRINTERR("fi_av_insert", ret);
+			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
 

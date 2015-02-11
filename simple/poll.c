@@ -122,14 +122,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	/* Open completion queue for send completions */
 	ret = fi_cq_open(dom, &cq_attr, &scq, (void *)CQ_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open", ret);
+		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	/* Open completion queue for recv completions */
 	ret = fi_cq_open(dom, &cq_attr, &rcq, (void *)CQ_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_cq_open", ret);
+		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
@@ -137,28 +137,28 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&poll_attr, 0, sizeof poll_attr);
 	ret = fi_poll_open(dom, &poll_attr, &pollset);
 	if (ret) {
-		FI_PRINTERR("fi_mr_reg", ret);
+		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
 	}
 	
 	/* Add send CQ to the polling set */
 	ret = fi_poll_add(pollset, &scq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_poll_add", ret);
+		FT_PRINTERR("fi_poll_add", ret);
 		goto err3;
 	}
 
 	/* Add recv CQ to the polling set */
 	ret = fi_poll_add(pollset, &rcq->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_poll_add", ret);
+		FT_PRINTERR("fi_poll_add", ret);
 		goto err3;
 	}
 
 	/* Register memory */
 	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_mr_reg", ret);
+		FT_PRINTERR("fi_mr_reg", ret);
 		goto err4;
 	}
 
@@ -170,7 +170,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	/* Open Address Vector */
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_av_open", ret);
+		FT_PRINTERR("fi_av_open", ret);
 		goto err5;
 	}
 
@@ -196,25 +196,25 @@ static int bind_ep_res(void)
 	/* Bind AV and CQs with endpoint */
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind", ret);
+		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind", ret);
+		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
-		FI_PRINTERR("fi_ep_bind", ret);
+		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	ret = fi_enable(ep);
 	if (ret) {
-		FI_PRINTERR("fi_enable", ret);
+		FT_PRINTERR("fi_enable", ret);
 		return ret;
 	}
 
@@ -228,7 +228,7 @@ static int send_msg(int size)
 	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
 			&fi_ctx_send);
 	if (ret) {
-		FI_PRINTERR("fi_send", ret);
+		FT_PRINTERR("fi_send", ret);
 		return ret;
 	}
 
@@ -243,7 +243,7 @@ static int recv_msg(void)
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret) {
-		FI_PRINTERR("fi_recv", ret);
+		FT_PRINTERR("fi_recv", ret);
 		return ret;
 	}
 
@@ -273,7 +273,7 @@ static int init_fabric(void)
 
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, &hints, &fi);
 	if (ret) {
-		FI_PRINTERR("fi_getinfo", ret);
+		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 
@@ -286,19 +286,19 @@ static int init_fabric(void)
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_fabric", ret);
+		FT_PRINTERR("fi_fabric", ret);
 		goto err0;
 	}
 
 	ret = fi_domain(fab, fi, &dom, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_domain", ret);
+		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
-		FI_PRINTERR("fi_endpoint", ret);
+		FT_PRINTERR("fi_endpoint", ret);
 		goto err2;
 	}
 
@@ -336,21 +336,21 @@ static int init_av(void)
 		addrlen = 0;
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
 		if (ret != -FI_ETOOSMALL) {
-			FI_PRINTERR("fi_getname", ret);
+			FT_PRINTERR("fi_getname", ret);
 			return ret;
 		}
 
 		local_addr = malloc(addrlen);
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
 		if (ret) {
-			FI_PRINTERR("fi_getname", ret);
+			FT_PRINTERR("fi_getname", ret);
 			return ret;
 		}
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
 				&fi_ctx_av);
 		if (ret != 1) {
-			FI_PRINTERR("fi_av_insert", ret);
+			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
 
@@ -379,7 +379,7 @@ static int init_av(void)
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
 				&fi_ctx_av);
 		if (ret != 1) {
-			FI_PRINTERR("fi_av_insert", ret);
+			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
 
@@ -404,7 +404,7 @@ static int send_recv()
 	ret = fi_recv(ep, buf, transfer_size, fi_mr_desc(mr),
 			remote_fi_addr, &fi_ctx_recv);
 	if (ret) {
-		FI_PRINTERR("fi_recv", ret);
+		FT_PRINTERR("fi_recv", ret);
 		return ret;
 	}
 	recv_pending++;
@@ -413,7 +413,7 @@ static int send_recv()
 	ret = fi_send(ep, buf, transfer_size, fi_mr_desc(mr),
 			remote_fi_addr, &fi_ctx_send);
 	if (ret) {
-		FI_PRINTERR("fi_send", ret);
+		FT_PRINTERR("fi_send", ret);
 		return ret;
 	}
 	send_pending++;
@@ -424,7 +424,7 @@ static int send_recv()
 		do {
 			ret_count = fi_poll(pollset, context, MAX_POLL_CNT);
 			if (ret_count < 0) {
-				FI_PRINTERR("fi_poll", ret_count);
+				FT_PRINTERR("fi_poll", ret_count);
 				return ret_count;
 			}
 		} while (!ret_count);
@@ -454,7 +454,7 @@ static int send_recv()
 				if (ret == -FI_EAVAIL) {
 					cq_readerr(cq, "cq");
 				} else {
-					FI_PRINTERR("fi_cq_sread", ret);
+					FT_PRINTERR("fi_cq_sread", ret);
 				}
 				return ret;
 			}

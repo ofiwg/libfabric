@@ -335,7 +335,7 @@ static int ft_fw_server(void)
 				 ft_strptr(test_info.service), FI_SOURCE,
 				 &hints, &info);
 		if (ret) {
-			FI_PRINTERR("fi_getinfo", ret);
+			FT_PRINTERR("fi_getinfo", ret);
 		} else {
 			if (info->next) {
 				printf("fi_getinfo returned multiple matches\n");
@@ -417,7 +417,7 @@ static int ft_fw_client(void)
 		ret = fi_getinfo(FT_VERSION, ft_strptr(test_info.node),
 				 ft_strptr(test_info.service), 0, &hints, &info);
 		if (ret) {
-			FI_PRINTERR("fi_getinfo", ret);
+			FT_PRINTERR("fi_getinfo", ret);
 		} else {
 			ret = ft_fw_process_list(&hints, info);
 			fi_freeinfo(info);
