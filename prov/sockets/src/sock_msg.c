@@ -93,7 +93,8 @@ static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	rx_entry->flags = flags;
 	rx_entry->context = (uint64_t)msg->context;
-	rx_entry->addr = msg->addr;
+	rx_entry->addr = (rx_ctx->attr.caps & FI_DIRECTED_RECV) ? 
+		msg->addr : FI_ADDR_UNSPEC;
 	rx_entry->data = msg->data;
 	rx_entry->ignore = 0xFFFFFFFF;
 
@@ -357,7 +358,8 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 
 	rx_entry->flags = flags;
 	rx_entry->context = (uint64_t)msg->context;
-	rx_entry->addr = msg->addr;
+	rx_entry->addr = (rx_ctx->attr.caps & FI_DIRECTED_RECV) ? 
+		msg->addr : FI_ADDR_UNSPEC;
 	rx_entry->data = msg->data;
 	rx_entry->tag = msg->tag;
 	rx_entry->ignore = msg->ignore;
