@@ -229,7 +229,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 	psmx_info = fi_allocinfo_internal();
 	if (!psmx_info) {
-		err = -ENOMEM;
+		err = -FI_ENOMEM;
 		goto err_out;
 	}
 

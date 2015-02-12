@@ -52,7 +52,7 @@ ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 
 		trigger = calloc(1, sizeof(*trigger));
 		if (!trigger)
-			return -ENOMEM;
+			return -FI_ENOMEM;
 
 		trigger->op = PSMX_TRIGGERED_TRECV;
 		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
@@ -86,7 +86,7 @@ ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 	}
 	else {
 		if (!context)
-			return -EINVAL;
+			return -FI_EINVAL;
 
 		fi_context = context;
 		user_fi_context= 1;
@@ -242,7 +242,7 @@ static ssize_t psmx_tagged_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged
 	size_t len;
 
 	if (!msg || msg->iov_count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
@@ -295,7 +295,7 @@ static ssize_t psmx_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, voi
 	size_t len;
 
 	if (!iov || count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (count) {
 		buf = iov[0].iov_base;
@@ -318,7 +318,7 @@ static ssize_t psmx_tagged_recvv_no_flag(struct fid_ep *ep, const struct iovec *
 	size_t len;
 
 	if (!iov || count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (count) {
 		buf = iov[0].iov_base;
@@ -342,7 +342,7 @@ static ssize_t psmx_tagged_recvv_no_event(struct fid_ep *ep, const struct iovec 
 	size_t len;
 
 	if (!iov || count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (count) {
 		buf = iov[0].iov_base;
@@ -380,7 +380,7 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 
 		trigger = calloc(1, sizeof(*trigger));
 		if (!trigger)
-			return -ENOMEM;
+			return -FI_ENOMEM;
 
 		trigger->op = PSMX_TRIGGERED_TSEND;
 		trigger->cntr = container_of(ctxt->trigger.threshold.cntr,
@@ -409,7 +409,7 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 	if (av && av->type == FI_AV_TABLE) {
 		idx = (size_t)dest_addr;
 		if (idx >= av->last)
-			return -EINVAL;
+			return -FI_EINVAL;
 
 		psm_epaddr = av->psm_epaddrs[idx];
 	}
@@ -422,7 +422,7 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 	if (flags & FI_INJECT) {
 		fi_context = malloc(sizeof(*fi_context) + len);
 		if (!fi_context)
-			return -ENOMEM;
+			return -FI_ENOMEM;
 
 		memcpy((void *)fi_context + sizeof(*fi_context), buf, len);
 		buf = (void *)fi_context + sizeof(*fi_context);
@@ -435,7 +435,7 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 	}
 	else {
 		if (!context)
-			return -EINVAL;
+			return -FI_EINVAL;
 
 		fi_context = context;
 		if (fi_context != &ep_priv->sendimm_context) {
@@ -509,7 +509,7 @@ ssize_t psmx_tagged_send_no_flag_av_table(struct fid_ep *ep, const void *buf,
 	av = ep_priv->av;
 	idx = (size_t)dest_addr;
 	if (idx >= av->last)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	psm_epaddr = av->psm_epaddrs[idx];
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
@@ -576,7 +576,7 @@ ssize_t psmx_tagged_send_no_event_av_table(struct fid_ep *ep, const void *buf,
 	av = ep_priv->av;
 	idx = (size_t)dest_addr;
 	if (idx >= av->last)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	psm_epaddr = av->psm_epaddrs[idx];
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
@@ -609,7 +609,7 @@ ssize_t psmx_tagged_inject_no_flag_av_map(struct fid_ep *ep, const void *buf, si
 
 	fi_context = malloc(sizeof(*fi_context) + len);
 	if (!fi_context)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	memcpy((void *)fi_context + sizeof(*fi_context), buf, len);
 	buf = (void *)fi_context + sizeof(*fi_context);
@@ -640,14 +640,14 @@ ssize_t psmx_tagged_inject_no_flag_av_table(struct fid_ep *ep, const void *buf, 
 	av = ep_priv->av;
 	idx = (size_t)dest_addr;
 	if (idx >= av->last)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	psm_epaddr = av->psm_epaddrs[idx];
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 
 	fi_context = malloc(sizeof(*fi_context) + len);
 	if (!fi_context)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	memcpy((void *)fi_context + sizeof(*fi_context), buf, len);
 	buf = (void *)fi_context + sizeof(*fi_context);
@@ -680,7 +680,7 @@ static ssize_t psmx_tagged_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged
 	size_t len;
 
 	if (!msg || msg->iov_count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
@@ -703,7 +703,7 @@ static ssize_t psmx_tagged_sendv(struct fid_ep *ep, const struct iovec *iov, voi
 	size_t len;
 
 	if (!iov || count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (count) {
 		buf = iov[0].iov_base;
@@ -727,7 +727,7 @@ static ssize_t psmx_tagged_sendv_no_flag_av_map(struct fid_ep *ep, const struct 
 	size_t len;
 
 	if (!iov || count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (count) {
 		buf = iov[0].iov_base;
@@ -752,7 +752,7 @@ static ssize_t psmx_tagged_sendv_no_flag_av_table(struct fid_ep *ep, const struc
 	size_t len;
 
 	if (!iov || count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (count) {
 		buf = iov[0].iov_base;
@@ -777,7 +777,7 @@ static ssize_t psmx_tagged_sendv_no_event_av_map(struct fid_ep *ep, const struct
 	size_t len;
 
 	if (!iov || count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (count) {
 		buf = iov[0].iov_base;
@@ -802,7 +802,7 @@ static ssize_t psmx_tagged_sendv_no_event_av_table(struct fid_ep *ep, const stru
 	size_t len;
 
 	if (!iov || count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (count) {
 		buf = iov[0].iov_base;
