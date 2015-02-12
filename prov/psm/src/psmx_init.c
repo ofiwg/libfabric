@@ -158,9 +158,10 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			}
 		}
 
-		if ((hints->caps & PSMX_CAPS) != hints->caps) {
-			PSMX_DEBUG("%s: hints->caps=0x%llx, supported=0x%llx\n",
-					__func__, hints->caps, PSMX_CAPS);
+		if ((hints->caps & PSMX_CAPS) != hints->caps &&
+		    (hints->caps & PSMX_CAPS2) != hints->caps) {
+			PSMX_DEBUG("%s: hints->caps=0x%llx, supported=0x%llx,0x%llx\n",
+					__func__, hints->caps, PSMX_CAPS, PSMX_CAPS2);
 			goto err_out;
 		}
 

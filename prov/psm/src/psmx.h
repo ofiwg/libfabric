@@ -62,6 +62,8 @@ extern "C" {
 			 FI_DYNAMIC_MR | \
 			 PSMX_CAP_EXT)
 
+#define PSMX_CAPS2	((PSMX_CAPS | FI_DIRECTED_RECV) & ~FI_TAGGED)
+
 #define PSMX_MODE	(FI_CONTEXT)
 
 #define PSMX_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
