@@ -1004,12 +1004,6 @@ value of an endpoint.
   message is received that cannot fit into the remaining free buffer
   space.
 
-*FI_BUFFERED_RECV*
-: If set, the communication interface implementation should attempt to
-  queue inbound data that arrives before a receive buffer has been
-  posted.  In the absence of this flag, any messages that arrive
-  before a receive is posted are lost.
-
 *FI_COMPLETION*
 : Indicates that a completion entry should be generated for data
   transfer operations.
@@ -1030,36 +1024,6 @@ value of an endpoint.
   For example, if the receive data is truncated at the target because
   the provided receive buffer is too small, the initiator will be
   notified of the truncation.
-
-*FI_READ*
-: Indicates that the user wants to initiate reads against remote
-  memory regions.  Remote reads include some RMA and atomic
-  operations.
-
-*FI_WRITE*
-: Indicates that the user wants to initiate writes against remote
-  memory regions.  Remote writes include some RMA and most atomic
-  operations.
-
-*FI_SEND*
-: Indicates that the endpoint will be used to send message data
-  transfers.  Message transfers include base message operations as
-  well as tagged message functionality.
-
-*FI_RECV*
-: Indicates that the endpoint will be used to receive message data
-  transfers.  Message transfers include base message operations as
-  well as tagged message functionality.
-
-*FI_REMOTE_READ*
-: Indicates that the endpoint should allow remote endpoints to read
-  memory regions exposed by this endpoint.  Remote read operations
-  include some RMA and atomic operations.
-
-*FI_REMOTE_WRITE*
-: Indicates that the endpoint should allow remote endpoints to write
-  to memory regions exposed by this endpoint.  Remote write operations
-  include some RMA operations and most atomic operations.
 
 # NOTES
 
