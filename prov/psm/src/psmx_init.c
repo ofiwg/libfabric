@@ -374,6 +374,8 @@ PSM_INI
 	psmx_env.tagged_rma	= psmx_get_int_env("OFI_PSM_TAGGED_RMA", 0);
 	psmx_env.warning	= psmx_get_int_env("OFI_PSM_WARNING", 1);
 	psmx_env.uuid		= getenv("OFI_PSM_UUID");
+	if (!psmx_env.uuid)
+		psmx_env.uuid	= PSMX_DEFAULT_UUID;
 
 	PSMX_DEBUG("%s\n", __func__);
 
