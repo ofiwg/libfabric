@@ -73,7 +73,7 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 		return 0;
 	}
 
-	if (src_addr) {
+	if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
 		if (av && av->type == FI_AV_TABLE) {
 			idx = (size_t)src_addr;

@@ -46,9 +46,6 @@ ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	if (src_addr)
-		PSMX_DEBUG("%s: warning: src_addr is currently ignored.", __func__);
-
 	if (flags & FI_TRIGGER) {
 		struct psmx_trigger *trigger;
 		struct fi_triggered_context *ctxt = context;
@@ -124,8 +121,6 @@ ssize_t psmx_tagged_recv_no_flag_av_map(struct fid_ep *ep, void *buf,
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	/* NOTE: src_addr currently unused */
-
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;
 
@@ -151,24 +146,12 @@ ssize_t psmx_tagged_recv_no_flag_av_table(struct fid_ep *ep, void *buf,
 					  void *context)
 {
 	struct psmx_fid_ep *ep_priv;
-	struct psmx_fid_av *av;
-	psm_epaddr_t psm_epaddr;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag, psm_tagsel;
 	struct fi_context *fi_context;
 	int err;
-	size_t idx;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-
-	av = ep_priv->av;
-	idx = (size_t)src_addr;
-	if (idx >= av->last)
-		return -EINVAL;
-
-	psm_epaddr = av->psm_epaddrs[idx];
-
-	/* NOTE: psm_epaddr currently unused */
 
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;
@@ -202,8 +185,6 @@ ssize_t psmx_tagged_recv_no_event_av_map(struct fid_ep *ep, void *buf,
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	/* NOTE: src_addr currently unused */
-
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;
 
@@ -223,24 +204,12 @@ ssize_t psmx_tagged_recv_no_event_av_table(struct fid_ep *ep, void *buf,
 					   void *context)
 {
 	struct psmx_fid_ep *ep_priv;
-	struct psmx_fid_av *av;
-	psm_epaddr_t psm_epaddr;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag, psm_tagsel;
 	struct fi_context *fi_context;
 	int err;
-	size_t idx;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-
-	av = ep_priv->av;
-	idx = (size_t)src_addr;
-	if (idx >= av->last)
-		return -EINVAL;
-
-	psm_epaddr = av->psm_epaddrs[idx];
-
-	/* NOTE: psm_epaddr currently unused */
 
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;

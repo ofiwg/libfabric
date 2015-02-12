@@ -369,7 +369,7 @@ static ssize_t _psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 
         ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-        if (src_addr) {
+        if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
 		if (av && av->type == FI_AV_TABLE) {
 			idx = (size_t)src_addr;
@@ -378,6 +378,9 @@ static ssize_t _psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 
 			src_addr = (fi_addr_t)av->psm_epaddrs[idx];
 		}
+	}
+	else {
+		src_addr = 0;
 	}
 
 	req = calloc(1, sizeof(*req));
