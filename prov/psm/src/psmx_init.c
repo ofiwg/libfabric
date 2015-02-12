@@ -391,6 +391,9 @@ PSM_INI
 		return NULL;
 	}
 
+	PSMX_DEBUG("%s: PSM header version = (%d, %d)\n", __func__, PSM_VERNO_MAJOR, PSM_VERNO_MINOR);
+	PSMX_DEBUG("%s: PSM library version = (%d, %d)\n", __func__, major, minor);
+
 	check_version = psmx_get_int_env("OFI_PSM_VERSION_CHECK", 1);
 
 	if (check_version && major != PSM_VERNO_MAJOR) {
@@ -399,6 +402,12 @@ PSM_INI
 		FI_WARN(PSMX_PROVNAME, "\tSet envar OFI_PSM_VERSION_CHECK=0 to bypass version check.\n");
 		return NULL;
 	}
+
+	PSMX_DEBUG("%s: OFI_PSM_NAME_SERVER = %d\n", __func__, psmx_env.name_server);
+	PSMX_DEBUG("%s: OFI_PSM_AM_MSG = %d\n", __func__, psmx_env.am_msg);
+	PSMX_DEBUG("%s: OFI_PSM_TAGGED_RMA = %d\n", __func__, psmx_env.tagged_rma);
+	PSMX_DEBUG("%s: OFI_PSM_WARNING = %d\n", __func__, psmx_env.warning);
+	PSMX_DEBUG("%s: OFI_PSM_UUID = %s\n", __func__, psmx_env.uuid);
 
 	init_count++;
 	return (&psmx_prov);
