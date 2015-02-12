@@ -112,7 +112,7 @@ int psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg)
 	struct fi_mutex_cond mutex_cond;
 
 	if (!arg)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (wait) {
 		switch (wait->type) {

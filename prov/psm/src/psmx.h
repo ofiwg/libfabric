@@ -41,6 +41,7 @@ extern "C" {
 #include "fi_log.h"
 
 #define PSMX_PROVNAME "psm"
+#define PSMX_DEFAULT_UUID	"0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF"
 
 #define PSMX_DEBUG(...) FI_LOG(2, PSMX_PROVNAME, __VA_ARGS__)
 #define PSMX_WARN(...)	FI_WARN(PSMX_PROVNAME, __VA_ARGS__)
@@ -60,6 +61,8 @@ extern "C" {
 			 FI_CANCEL | FI_TRIGGER | \
 			 FI_DYNAMIC_MR | \
 			 PSMX_CAP_EXT)
+
+#define PSMX_CAPS2	((PSMX_CAPS | FI_DIRECTED_RECV) & ~FI_TAGGED)
 
 #define PSMX_MODE	(FI_CONTEXT)
 

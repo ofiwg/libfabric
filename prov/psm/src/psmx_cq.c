@@ -228,7 +228,7 @@ out:
 	if (is_recv) {
 		if (event == event_in) {
 			if (src_addr) {
-				int err = -ENODATA;
+				int err = -FI_ENODATA;
 				if (cq->domain->reserved_tag_bits & PSMX_MSG_BIT & psm_status->msg_tag) {
 					err = psmx_epid_to_epaddr(cq->domain,
 								  psm_status->msg_tag & ~PSMX_MSG_BIT,
@@ -266,7 +266,7 @@ static int psmx_cq_get_event_src_addr(struct psmx_fid_cq *cq,
 		return 0;
 	}
 
-	return -ENODATA;
+	return -FI_ENODATA;
 }
 
 int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
@@ -361,7 +361,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 							(mr->cq == cq) ? event_in : NULL,
 							count, src_addr);
 					if (!event)
-						return -ENOMEM;
+						return -FI_ENOMEM;
 
 					if (event != event_in)
 						psmx_cq_enqueue_event(mr->cq, event);
@@ -393,7 +393,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 							(tmp_cq == cq) ? event_in : NULL, count,
 							src_addr);
 				if (!event)
-					return -ENOMEM;
+					return -FI_ENOMEM;
 
 				if (event != event_in)
 					psmx_cq_enqueue_event(tmp_cq, event);
@@ -432,7 +432,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 								0,	/* olen */
 								0);	/* err */
 						if (!event)
-							return -ENOMEM;
+							return -FI_ENOMEM;
 
 						psmx_cq_enqueue_event(tmp_cq, event);
 					}
@@ -544,7 +544,7 @@ static ssize_t psmx_cq_write(struct fid_cq *cq, const void *buf, size_t len)
 		event = calloc(1, sizeof(*event));
 		if (!event) {
 			PSMX_WARN("%s: out of memory\n", __func__);
-			return -ENOMEM;
+			return -FI_ENOMEM;
 		}
 
 		memcpy((void *)&event->cqe, buf + written_len, cq_priv->entry_size);
@@ -569,7 +569,7 @@ static ssize_t psmx_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 		event = calloc(1, sizeof(*event));
 		if (!event) {
 			PSMX_WARN("%s: out of memory\n", __func__);
-			return -ENOMEM;
+			return -FI_ENOMEM;
 		}
 
 		memcpy((void *)&event->cqe, buf + written_len, sizeof(*buf));
@@ -676,7 +676,7 @@ static int psmx_cq_control(struct fid *fid, int command, void *arg)
 		break;
 
 	default:
-		return -ENOSYS;
+		return -FI_ENOSYS;
 	}
 
 	return ret;

@@ -158,9 +158,10 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			}
 		}
 
-		if ((hints->caps & PSMX_CAPS) != hints->caps) {
-			PSMX_DEBUG("%s: hints->caps=0x%llx, supported=0x%llx\n",
-					__func__, hints->caps, PSMX_CAPS);
+		if ((hints->caps & PSMX_CAPS) != hints->caps &&
+		    (hints->caps & PSMX_CAPS2) != hints->caps) {
+			PSMX_DEBUG("%s: hints->caps=0x%llx, supported=0x%llx,0x%llx\n",
+					__func__, hints->caps, PSMX_CAPS, PSMX_CAPS2);
 			goto err_out;
 		}
 
@@ -228,7 +229,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 	psmx_info = fi_allocinfo_internal();
 	if (!psmx_info) {
-		err = -ENOMEM;
+		err = -FI_ENOMEM;
 		goto err_out;
 	}
 
@@ -374,6 +375,8 @@ PSM_INI
 	psmx_env.tagged_rma	= psmx_get_int_env("OFI_PSM_TAGGED_RMA", 0);
 	psmx_env.warning	= psmx_get_int_env("OFI_PSM_WARNING", 1);
 	psmx_env.uuid		= getenv("OFI_PSM_UUID");
+	if (!psmx_env.uuid)
+		psmx_env.uuid	= PSMX_DEFAULT_UUID;
 
 	PSMX_DEBUG("%s\n", __func__);
 
@@ -389,6 +392,9 @@ PSM_INI
 		return NULL;
 	}
 
+	PSMX_DEBUG("%s: PSM header version = (%d, %d)\n", __func__, PSM_VERNO_MAJOR, PSM_VERNO_MINOR);
+	PSMX_DEBUG("%s: PSM library version = (%d, %d)\n", __func__, major, minor);
+
 	check_version = psmx_get_int_env("OFI_PSM_VERSION_CHECK", 1);
 
 	if (check_version && major != PSM_VERNO_MAJOR) {
@@ -397,6 +403,12 @@ PSM_INI
 		FI_WARN(PSMX_PROVNAME, "\tSet envar OFI_PSM_VERSION_CHECK=0 to bypass version check.\n");
 		return NULL;
 	}
+
+	PSMX_DEBUG("%s: OFI_PSM_NAME_SERVER = %d\n", __func__, psmx_env.name_server);
+	PSMX_DEBUG("%s: OFI_PSM_AM_MSG = %d\n", __func__, psmx_env.am_msg);
+	PSMX_DEBUG("%s: OFI_PSM_TAGGED_RMA = %d\n", __func__, psmx_env.tagged_rma);
+	PSMX_DEBUG("%s: OFI_PSM_WARNING = %d\n", __func__, psmx_env.warning);
+	PSMX_DEBUG("%s: OFI_PSM_UUID = %s\n", __func__, psmx_env.uuid);
 
 	init_count++;
 	return (&psmx_prov);

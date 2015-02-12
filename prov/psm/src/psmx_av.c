@@ -100,13 +100,13 @@ static int psmx_av_check_table_size(struct psmx_fid_av *av, size_t count)
 
 	new_psm_epids = realloc(av->psm_epids, new_count * sizeof(*new_psm_epids));
 	if (!new_psm_epids)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	av->psm_epids = new_psm_epids;
 
 	new_psm_epaddrs = realloc(av->psm_epaddrs, new_count * sizeof(*new_psm_epaddrs));
 	if (!new_psm_epaddrs)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	av->psm_epaddrs = new_psm_epaddrs;
 	av->count = new_count;
@@ -129,19 +129,19 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 
 	errors = (psm_error_t *) calloc(count, sizeof *errors);
 	if (!errors)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	mask = (int *) calloc(count, sizeof *mask);
 	if (!mask) {
 		free(errors);
-		return -ENOMEM;
+		return -FI_ENOMEM;
 	}
 
 	if (av_priv->type == FI_AV_TABLE) {
 		if (psmx_av_check_table_size(av_priv, count)) {
 			free(mask);
 			free(errors);
-			return -ENOMEM;
+			return -FI_ENOMEM;
 		}
 
 		for (i=0; i<count; i++)
@@ -229,14 +229,14 @@ static int psmx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	int idx;
 
 	if (!addr || !addrlen)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	av_priv = container_of(av, struct psmx_fid_av, av);
 
 	if (av_priv->type == FI_AV_TABLE) {
 		idx = (int)(int64_t)fi_addr;
 		if (idx >= av_priv->last)
-			return -EINVAL;
+			return -FI_EINVAL;
 
 		epid = av_priv->psm_epids[idx];
 	}
@@ -317,7 +317,7 @@ int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		default:
 			PSMX_DEBUG("%s: attr->type=%d, supported=%d %d\n",
 				__func__, attr->type, FI_AV_MAP, FI_AV_TABLE);
-			return -EINVAL;
+			return -FI_EINVAL;
 		}
 
 		count = attr->count;
@@ -325,7 +325,7 @@ int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	av_priv = (struct psmx_fid_av *) calloc(1, sizeof *av_priv);
 	if (!av_priv)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	av_priv->domain = domain_priv;
 	av_priv->type = type;
