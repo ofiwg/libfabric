@@ -141,7 +141,11 @@ complex_fabtest_SOURCES = \
 
 man_MANS = man/fabtests.7
 
-EXTRA_DIST = include/shared.h include/unit_common.h fabtests.spec.in $(man_MANS)
+EXTRA_DIST = \
+	include/shared.h \
+	include/unit_common.h \
+	complex/fabtest.h \
+	fabtests.spec.in $(man_MANS)
 
 dist-hook: fabtests.spec
 	cp fabtests.spec $(distdir)
