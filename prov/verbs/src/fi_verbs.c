@@ -1666,7 +1666,7 @@ fi_ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	if (!_ep->id->qp) {
-		ret = ep->ops->enable(ep);
+		ret = ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
 		if (ret)
 			return ret;
 	}
@@ -1692,7 +1692,7 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	if (!_ep->id->qp) {
-		ret = ep->ops->enable(ep);
+		ret = ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
 		if (ret)
 			return ret;
 	}
@@ -1774,7 +1774,6 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 
 static struct fi_ops_ep fi_ibv_msg_ep_base_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.enable = fi_ibv_msg_ep_enable,
 	.cancel = fi_no_cancel,
 	.getopt = fi_ibv_msg_ep_getopt,
 	.setopt = fi_ibv_msg_ep_setopt,
@@ -1794,11 +1793,31 @@ static int fi_ibv_msg_ep_close(fid_t fid)
 	return 0;
 }
 
+static int fi_ibv_msg_ep_control(struct fid *fid, int command, void *arg)
+{
+	struct fid_ep *ep;
+
+	switch (fid->fclass) {
+	case FI_CLASS_EP:
+		ep = container_of(fid, struct fid_ep, fid);
+		switch (command) {
+		case FI_ENABLE:
+			return fi_ibv_msg_ep_enable(ep);
+			break;
+		default:
+			return -FI_EINVAL;
+		}
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+}
+
 static struct fi_ops fi_ibv_msg_ep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_msg_ep_close,
 	.bind = fi_ibv_msg_ep_bind,
-	.control = fi_no_control,
+	.control = fi_ibv_msg_ep_control,
 	.ops_open = fi_no_ops_open,
 };
 
