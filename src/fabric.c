@@ -140,7 +140,6 @@ static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 
 cleanup:
 	cleanup_provider(provider, dlhandle);
-
 	return ret;
 }
 
@@ -227,8 +226,14 @@ unlock:
 
 static void __attribute__((destructor)) fi_fini(void)
 {
-	for (struct fi_prov *prov = prov_head; prov; prov = prov->next)
+	struct fi_prov *prov;
+
+	while (prov_head) {
+		prov = prov_head;
+		prov_head = prov->next;
 		cleanup_provider(prov->provider, prov->dlhandle);
+		free(prov);
+	}
 }
 
 static struct fi_prov *fi_getprov(const char *prov_name)
