@@ -810,5 +810,8 @@ fail:
 		free(tx);
 		atomic_dec(&udp->dom_refcnt);
 	}
+	if (ep != NULL) {
+		free(ep);
+	}
 	return ret;
 }
