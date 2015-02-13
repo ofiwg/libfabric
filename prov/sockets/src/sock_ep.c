@@ -264,68 +264,6 @@ static int sock_ctx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 }
 
-static int sock_ctx_control(struct fid *fid, int command, void *arg)
-{
-	struct sock_tx_ctx *tx_ctx;
-	struct sock_rx_ctx *rx_ctx;
-
-	switch (fid->fclass) {
-	case FI_CLASS_TX_CTX:
-		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx.fid);
-		switch (command) {
-		case FI_GETOPSFLAG:
-			*(uint64_t*)arg = tx_ctx->attr.op_flags;
-			break;
-		case FI_SETOPSFLAG:
-			tx_ctx->attr.op_flags = (uint64_t)arg;
-			break;
-		default:
-			return -FI_EINVAL;
-		}
-		break;
-
-	case FI_CLASS_RX_CTX:
-		rx_ctx = container_of(fid, struct sock_rx_ctx, ctx.fid);
-		switch (command) {
-		case FI_GETOPSFLAG:
-			*(uint64_t*)arg = rx_ctx->attr.op_flags;
-			break;
-		case FI_SETOPSFLAG:
-			rx_ctx->attr.op_flags = (uint64_t)arg;
-			break;
-		default:
-			return -FI_EINVAL;
-		}
-		break;
-
-	case FI_CLASS_STX_CTX:
-		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
-		switch (command) {
-		case FI_GETOPSFLAG:
-			*(uint64_t*)arg = tx_ctx->attr.op_flags;
-			break;
-		case FI_SETOPSFLAG:
-			tx_ctx->attr.op_flags = (uint64_t)arg;
-			break;
-		default:
-			return -FI_EINVAL;
-		}
-		break;
-
-	default:
-		return -FI_EINVAL;
-	}
-	
-	return 0;
-}
-
-static struct fi_ops sock_ctx_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = sock_ctx_close,
-	.bind = sock_ctx_bind,
-	.control = sock_ctx_control,
-};
-
 static int sock_ctx_enable(struct fid_ep *ep)
 {
 	struct sock_tx_ctx *tx_ctx;
@@ -356,6 +294,77 @@ static int sock_ctx_enable(struct fid_ep *ep)
 	}
 	return -FI_EINVAL;
 }
+
+static int sock_ctx_control(struct fid *fid, int command, void *arg)
+{
+	struct fid_ep *ep;
+	struct sock_tx_ctx *tx_ctx;
+	struct sock_rx_ctx *rx_ctx;
+
+	switch (fid->fclass) {
+	case FI_CLASS_TX_CTX:
+		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx.fid);
+		switch (command) {
+		case FI_GETOPSFLAG:
+			*(uint64_t*)arg = tx_ctx->attr.op_flags;
+			break;
+		case FI_SETOPSFLAG:
+			tx_ctx->attr.op_flags = (uint64_t)arg;
+			break;
+		case FI_ENABLE:
+			ep = container_of(fid, struct fid_ep, fid);
+			return sock_ctx_enable(ep);
+			break;
+		default:
+			return -FI_ENOSYS;
+		}
+		break;
+
+	case FI_CLASS_RX_CTX:
+		rx_ctx = container_of(fid, struct sock_rx_ctx, ctx.fid);
+		switch (command) {
+		case FI_GETOPSFLAG:
+			*(uint64_t*)arg = rx_ctx->attr.op_flags;
+			break;
+		case FI_SETOPSFLAG:
+			rx_ctx->attr.op_flags = (uint64_t)arg;
+			break;
+		case FI_ENABLE:
+			ep = container_of(fid, struct fid_ep, fid);
+			return sock_ctx_enable(ep);
+			break;
+		default:
+			return -FI_ENOSYS;
+		}
+		break;
+
+	case FI_CLASS_STX_CTX:
+		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
+		switch (command) {
+		case FI_GETOPSFLAG:
+			*(uint64_t*)arg = tx_ctx->attr.op_flags;
+			break;
+		case FI_SETOPSFLAG:
+			tx_ctx->attr.op_flags = (uint64_t)arg;
+			break;
+		default:
+			return -FI_ENOSYS;
+		}
+		break;
+
+	default:
+		return -FI_ENOSYS;
+	}
+	
+	return 0;
+}
+
+static struct fi_ops sock_ctx_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = sock_ctx_close,
+	.bind = sock_ctx_bind,
+	.control = sock_ctx_control,
+};
 
 static int sock_ctx_getopt(fid_t fid, int level, int optname,
 		       void *optval, size_t *optlen)
@@ -454,7 +463,6 @@ static ssize_t sock_ep_cancel(fid_t fid, void *context)
 
 struct fi_ops_ep sock_ctx_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.enable = sock_ctx_enable,
 	.cancel = sock_ep_cancel,
 	.getopt = sock_ctx_getopt,
 	.setopt = sock_ctx_setopt,
@@ -723,6 +731,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 static int sock_ep_control(struct fid *fid, int command, void *arg)
 {
+	struct fid_ep *ep_fid;
 	struct fi_alias *alias;
 	struct sock_ep *ep, *new_ep;
 
@@ -757,6 +766,9 @@ static int sock_ep_control(struct fid *fid, int command, void *arg)
 	case FI_SETOPSFLAG:
 		ep->op_flags = (uint64_t)arg;
 		break;
+	case FI_ENABLE:
+		ep_fid = container_of(fid, struct fid_ep, fid);
+		return sock_ep_enable(ep_fid);
 
 	default:
 		return -FI_EINVAL;
@@ -939,7 +951,6 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 
 struct fi_ops_ep sock_ep_ops ={
 	.size = sizeof(struct fi_ops_ep),
-	.enable = sock_ep_enable,
 	.cancel = sock_ep_cancel,
 	.getopt = sock_ep_getopt,
 	.setopt = sock_ep_setopt,
