@@ -782,6 +782,9 @@ usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
 			rx->rx_attr = *info->rx_attr;
 		} else {
 			ret = usdf_rdm_fill_rx_attr(&rx->rx_attr);
+			if (ret != 0) {
+				goto fail;
+			}
 		}
 		TAILQ_INIT(&rx->r.rdm.rx_free_rqe);
 		TAILQ_INIT(&rx->r.rdm.rx_posted_rqe);
