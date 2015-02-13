@@ -165,6 +165,7 @@ void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
 		}
 
 		free(trigger);
+		trigger = cntr->trigger;
 	}
 
 	pthread_mutex_unlock(&cntr->trigger_lock);
