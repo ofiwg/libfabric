@@ -149,10 +149,14 @@ usdf_pep_conn_info(struct usdf_connreq *crp)
 	/* fill in dest addr */
 	ip->dest_addrlen = ip->src_addrlen;
 	sin = calloc(1, ip->dest_addrlen);
+	if (sin == NULL) {
+		goto fail;
+	}
 	sin->sin_family = AF_INET;
 	sin->sin_addr.s_addr = reqp->creq_ipaddr;
 	sin->sin_port = reqp->creq_port;
 
+	ip->dest_addr = sin;
 	ip->connreq = crp;
 	return ip;
 fail:
