@@ -83,6 +83,7 @@ usdf_av_insert_async_complete(struct usdf_av_insert *insert)
 
 	atomic_dec(&av->av_active_inserts);
 	if (atomic_get(&av->av_active_inserts) == 0 && av->av_closing) {
+		pthread_spin_destroy(&av->av_lock);
 		free(av);
 	} else {
 		pthread_spin_unlock(&av->av_lock);
