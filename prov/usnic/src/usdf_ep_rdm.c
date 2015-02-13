@@ -741,6 +741,9 @@ usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
 			tx->tx_attr = *info->tx_attr;
 		} else {
 			ret = usdf_rdm_fill_tx_attr(&tx->tx_attr);
+			if (ret != 0) {
+				goto fail;
+			}
 		}
 		TAILQ_INIT(&tx->t.rdm.tx_free_wqe);
 		TAILQ_INIT(&tx->t.rdm.tx_rdc_ready);
