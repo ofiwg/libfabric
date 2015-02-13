@@ -593,8 +593,10 @@ fi_ibv_getepinfo(const char *node, const char *service,
 	if (ret)
 		return ret;
 
-	if (!node && !rai_hints.ai_src_addr && !rai_hints.ai_dst_addr) {
-		node = local_node;
+	if (!node && !rai_hints.ai_dst_addr) {
+		if (!rai_hints.ai_src_addr) {
+			node = local_node;
+		}
 		rai_hints.ai_flags |= RAI_PASSIVE;
 	}
 
