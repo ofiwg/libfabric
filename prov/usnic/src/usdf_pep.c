@@ -322,7 +322,7 @@ usdf_pep_listen(struct fid_pep *fpep)
 
 	ret = listen(pep->pep_sock, pep->pep_backlog);
 	if (ret != 0) {
-		ret = -errno;
+		return -errno;
 	}
 
 	pep->pep_pollitem.pi_rtn = usdf_pep_listen_cb;
@@ -334,7 +334,7 @@ usdf_pep_listen(struct fid_pep *fpep)
 		return -errno;
 	}
 
-	return ret;
+	return 0;
 }
 
 ssize_t
