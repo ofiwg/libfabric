@@ -352,12 +352,12 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 		}
 		if (ret == 0) {
 			dest->ds_dest = *u_dest;
-			free(u_dest);
 			fi_addr[i] = (fi_addr_t)dest;
 			++ret_count;
 		} else {
 			fi_addr[i] = FI_ADDR_NOTAVAIL;
 		}
+		free(u_dest);
 		++sin;
 	}
 
