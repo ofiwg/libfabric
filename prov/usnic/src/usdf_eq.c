@@ -588,10 +588,10 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 fail:
 	if (eq != NULL) {
-		free(eq);
 		if (eq->eq_ev_ring != NULL) {
 			free(eq->eq_ev_ring);
 		}
+		free(eq);
 	}
 	return ret;
 }
