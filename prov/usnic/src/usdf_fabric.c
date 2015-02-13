@@ -201,6 +201,11 @@ usdf_fill_info_dgram(
 	size_t entries;
 	int ret;
 
+	/* bozo check */
+	if (hints == NULL) {
+		return -FI_ENODATA;
+	}
+
 	/* check that we are capable of what's requested */
 	if ((hints->caps & ~USDF_DGRAM_CAPS) != 0) {
 		return -FI_ENODATA;
