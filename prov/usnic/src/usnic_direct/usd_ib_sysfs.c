@@ -255,11 +255,7 @@ usd_get_iface(
         return -errno;
     }
 
-    /* allow for trailing newline */
-    if (dev->ud_attrs.uda_ifname[n - 1] == '\n')
-        dev->ud_attrs.uda_ifname[n - 1] = '\0';
-    else
-        dev->ud_attrs.uda_ifname[n] = '\0';
+    dev->ud_attrs.uda_ifname[n - 1] = '\0';
 
     return 0;
 }
