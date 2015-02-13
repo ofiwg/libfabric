@@ -98,9 +98,10 @@ doit(0, "git clean -df");
 doit(0, "git checkout .");
 doit(0, "git pull");
 
-# Get a git describe id
+# Get a git describe id (minus the initial 'v' in the tag name, if any)
 my $gd = `git describe --tags --always`;
 chomp($gd);
+$gd =~ s/^v//;
 verbose("*** Git describe: $gd\n");
 
 # Read in configure.ac
@@ -114,8 +115,8 @@ close(IN);
 # Get the original version number
 $config =~ m/AC_INIT\(\[libfabric\], \[(.+?)\]/;
 my $orig_version = $1;
-verbose("*** Got configure.ac version: $orig_version\n");
-my $version = "$orig_version.$gd";
+verbose("*** Replacing configure.ac version: $orig_version\n");
+my $version = $gd;
 $version =~ y/-/./;
 verbose("*** Nightly tarball version: $version\n");
 
