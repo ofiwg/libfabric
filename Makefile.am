@@ -353,6 +353,7 @@ dummy_man_pages = \
         man/fi_compare_atomicmsg.3 \
         man/fi_compare_atomicv.3 \
         man/fi_connect.3 \
+        man/fi_control.3 \
         man/fi_cq_open.3 \
         man/fi_cq_read.3 \
         man/fi_cq_readerr.3 \
