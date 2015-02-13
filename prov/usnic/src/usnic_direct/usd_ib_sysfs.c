@@ -121,7 +121,8 @@ usd_ib_get_devlist(
             rc = -errno;
             goto out;
         }
-        n = read(fd, ibdev_buf, sizeof(ibdev_buf));
+        memset(ibdev_buf, 0, sizeof(ibdev_buf));
+        n = read(fd, ibdev_buf, sizeof(ibdev_buf) - 1);
         if (n == -1) {
             usd_perror("reading ibdev");
             rc = -errno;
