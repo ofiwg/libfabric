@@ -379,6 +379,11 @@ assigned to an endpoint.
   the type of data transfer that the flags should apply to, with other
   flags OR'ed in.  Valid control flags are defined below.
 
+fi_control can also be used with some non-endpoint objects.  For usage
+relevant to those types, see [`fi_cntr`(3)](fi_cntr.3.html),
+[`fi_cm`(3)](fi_cm.3.html), [`fi_cq`(3)](fi_cq.3.html), and
+[`fi_eq`(3)](fi_eq.3.html).
+
 ## fi_getopt / fi_setopt
 
 Endpoint protocol operations may be retrieved using fi_getopt or set
