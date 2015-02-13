@@ -108,9 +108,12 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 	dlist_remove(&pe_entry->ctx_entry);
 
 	if (pe_entry->type == SOCK_PE_TX)
-		pe_entry->conn->tx_pe_entry = NULL;
-	else
+	{
+		if (pe_entry->conn->tx_pe_entry == pe_entry)
+			pe_entry->conn->tx_pe_entry = NULL;
+	} else {
 		pe_entry->conn->rx_pe_entry = NULL;
+	}
 
 	pe->num_free_entries++;
 	pe_entry->conn = NULL;

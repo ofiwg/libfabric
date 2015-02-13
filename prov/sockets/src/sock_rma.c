@@ -89,7 +89,12 @@ static ssize_t sock_ep_rma_readmsg(struct fid_ep *ep,
 	       msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT &&
 	       msg->rma_iov_count <= SOCK_EP_MAX_IOV_LIMIT);
 
-	conn = sock_av_lookup_addr(tx_ctx->av, msg->addr);
+	if (sock_ep->connected) {
+		conn = sock_ep_lookup_conn(sock_ep);
+	} else {
+		conn = sock_av_lookup_addr(tx_ctx->av, msg->addr);
+	}
+
 	if (!conn)
 		return -FI_EAGAIN;
 
