@@ -142,12 +142,12 @@ usd_ib_get_devlist(
                 rc = -errno;
                 goto out;
             }
-            strncpy(idp->id_name, dent->d_name, sizeof(idp->id_name));
+            strncpy(idp->id_name, dent->d_name, sizeof(idp->id_name) - 1);
             strncpy(idp->id_usnic_name, ibdev_buf,
-                    sizeof(idp->id_usnic_name));
-            snprintf(idp->id_dev_path, sizeof(idp->id_dev_path),
+                    sizeof(idp->id_usnic_name) - 1);
+            snprintf(idp->id_dev_path, sizeof(idp->id_dev_path) - 1,
                      "/dev/infiniband/%s", idp->id_name);
-            snprintf(idp->id_class_path, sizeof(idp->id_class_path),
+            snprintf(idp->id_class_path, sizeof(idp->id_class_path) - 1,
                      "%s/device/infiniband/%s", dev_path, ibdev_buf);
 
             if (last_idp == NULL) {
