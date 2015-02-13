@@ -265,6 +265,9 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 			return -FI_EINVAL;
 		*(uint64_t *)arg = ep->flags;
 		break;
+	case FI_ENABLE:
+		return psmx_ep_enable(ep);
+		break;
 
 	default:
 		return -FI_ENOSYS;
@@ -285,7 +288,6 @@ static struct fi_ops_ep psmx_ep_ops = {
 	.cancel = psmx_ep_cancel,
 	.getopt = psmx_ep_getopt,
 	.setopt = psmx_ep_setopt,
-	.enable = psmx_ep_enable,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
