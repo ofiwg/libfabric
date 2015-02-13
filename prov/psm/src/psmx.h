@@ -88,8 +88,13 @@ enum psmx_context_type {
 	PSMX_REMOTE_READ_CONTEXT,
 };
 
+union psmx_pi {
+	void	*p;
+	int	i;
+};
+
 #define PSMX_CTXT_REQ(fi_context)	((fi_context)->internal[0])
-#define PSMX_CTXT_TYPE(fi_context)	(*(int *)&(fi_context)->internal[1])
+#define PSMX_CTXT_TYPE(fi_context)	(((union psmx_pi *)&(fi_context)->internal[1])->i)
 #define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX_CTXT_EP(fi_context)	((fi_context)->internal[3])
 

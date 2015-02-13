@@ -264,10 +264,6 @@ static ssize_t psmx_tagged_recv_no_flag(struct fid_ep *ep, void *buf,
 					uint64_t tag, uint64_t ignore,
 					void *context)
 {
-	struct psmx_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-
 	return psmx_tagged_recv_no_flag_av_map(
 					ep, buf, len, desc, src_addr,
 					tag, ignore, context);
@@ -278,10 +274,6 @@ static ssize_t psmx_tagged_recv_no_event(struct fid_ep *ep, void *buf,
 					uint64_t tag, uint64_t ignore,
 					void *context)
 {
-	struct psmx_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-
 	return psmx_tagged_recv_no_event_av_map(
 					ep, buf, len, desc, src_addr,
 					tag, ignore, context);

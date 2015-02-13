@@ -140,7 +140,6 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
         struct psmx_cq_event *event;
 	struct psmx_epaddr_context *epaddr_context;
 	struct psmx_fid_domain *domain;
-	int msg_len;
 	int copy_len;
 	uint64_t offset;
 	int cmd, eom;
@@ -161,9 +160,8 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 	switch (cmd) {
 	case PSMX_AM_REQ_SEND:
-		msg_len = args[0].u32w1;
+		assert(len == args[0].u32w1);
                 offset = args[3].u64;
-                assert(len == msg_len);
 		if (offset == 0) {
 			/* this is the first packet */
 			req = psmx_am_search_and_dequeue_recv(domain, (const void *)epaddr);

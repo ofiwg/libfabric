@@ -120,7 +120,6 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	psm_error_t *errors;
 	int error_count = 0;
 	int *mask;
-	int err;
 	int i, j;
 	fi_addr_t *result = NULL;
 	struct psmx_epaddr_context *epaddr_context;
@@ -167,7 +166,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		}
 	}
 
-	err = psm_ep_connect(av_priv->domain->psm_ep, count, 
+	psm_ep_connect(av_priv->domain->psm_ep, count, 
 			(psm_epid_t *) addr, mask, errors,
 			(psm_epaddr_t *) fi_addr, 30*1e9);
 
@@ -209,10 +208,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 static int psmx_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			  uint64_t flags)
 {
-	struct psmx_fid_av *av_priv;
 	int err = PSM_OK;
-
-	av_priv = container_of(av, struct psmx_fid_av, av);
 
 	return psmx_errno(err);
 }

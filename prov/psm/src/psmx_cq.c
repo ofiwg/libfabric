@@ -134,7 +134,7 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 	void *op_context, *buf;
 	int is_recv = 0;
 
-	switch(PSMX_CTXT_TYPE(fi_context)) {
+	switch((int)PSMX_CTXT_TYPE(fi_context)) {
 	case PSMX_SEND_CONTEXT:
 		op_context = fi_context;
 		buf = PSMX_CTXT_USER(fi_context);
@@ -295,7 +295,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			tmp_cntr = NULL;
 			multi_recv = 0;
 
-			switch (PSMX_CTXT_TYPE(fi_context)) {
+			switch ((int)PSMX_CTXT_TYPE(fi_context)) {
 			case PSMX_NOCOMP_SEND_CONTEXT:
 				tmp_cntr = tmp_ep->send_cntr;
 				break;

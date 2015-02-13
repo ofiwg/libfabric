@@ -108,7 +108,6 @@ int psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg)
 {
 	void *obj_ptr;
 	int obj_size = 0;
-	int obj_type = FI_WAIT_NONE;
 	struct fi_mutex_cond mutex_cond;
 
 	if (!arg)
@@ -118,7 +117,6 @@ int psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg)
 		switch (wait->type) {
 			case FI_WAIT_FD:
 				obj_size = sizeof(wait->fd[0]);
-				obj_type = wait->type;
 				obj_ptr = &wait->fd[0];
 				break;
 
@@ -126,7 +124,6 @@ int psmx_wait_get_obj(struct psmx_fid_wait *wait, void *arg)
 				mutex_cond.mutex = &wait->mutex;
 				mutex_cond.cond = &wait->cond;
 				obj_size = sizeof(mutex_cond);
-				obj_type = wait->type;
 				obj_ptr = &mutex_cond;
 				break;
 
