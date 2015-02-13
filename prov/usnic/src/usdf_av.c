@@ -389,7 +389,7 @@ usdf_am_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			  size_t *addrlen)
 {
 	struct usdf_dest *dest;
-	struct sockaddr_in sin;
+	struct sockaddr_in sin = { 0 };
 	size_t copylen;
 
 	dest = (struct usdf_dest *)(uintptr_t)fi_addr;
