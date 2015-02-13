@@ -93,7 +93,7 @@ int ft_open_comp(void)
 	ret = (test_info.comp_type == FT_COMP_QUEUE) ?
 		ft_open_cqs() : -FI_ENOSYS;
 
-	return 0;
+	return ret;
 }
 
 int ft_bind_comp(struct fid_ep *ep, uint64_t flags)
