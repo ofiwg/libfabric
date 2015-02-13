@@ -467,6 +467,7 @@ usdf_av_close(struct fid *fid)
 		av->av_closing = 1;
 		pthread_spin_unlock(&av->av_lock);
 	} else {
+		pthread_spin_destroy(&av->av_lock);
 		free(av);
 	}
 	return 0;
