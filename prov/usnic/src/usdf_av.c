@@ -81,6 +81,8 @@ usdf_av_insert_async_complete(struct usdf_av_insert *insert)
 
 	pthread_spin_lock(&av->av_lock);
 
+	usdf_timer_free(av->av_domain->dom_fabric, insert->avi_timer);
+
 	atomic_dec(&av->av_active_inserts);
 	if (atomic_get(&av->av_active_inserts) == 0 && av->av_closing) {
 		pthread_spin_destroy(&av->av_lock);
@@ -89,7 +91,6 @@ usdf_av_insert_async_complete(struct usdf_av_insert *insert)
 		pthread_spin_unlock(&av->av_lock);
 	}
 
-	usdf_timer_free(av->av_domain->dom_fabric, insert->avi_timer);
 	free(insert);
 }
 
