@@ -352,11 +352,7 @@ usd_get_firmware(
         usd_perror("reading fw_ver");
         return -errno;
     }
-    /* allow for trailing newline */
-    if (fw[n - 1] == '\n')
-        fw[n - 1] = '\0';
-    else
-        fw[n] = '\0';
+    fw[n - 1] = '\0';
 
     return 0;
 }
