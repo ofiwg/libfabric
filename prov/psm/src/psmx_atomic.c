@@ -778,7 +778,6 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 	psm_amarg_t args[8];
 	int am_flags = PSM_AM_FLAG_ASYNC;
 	int chunk_size, len;
-	int err;
 	size_t idx;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
@@ -876,7 +875,7 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 	args[3].u64 = key;
 	args[4].u32w0 = datatype;
 	args[4].u32w1 = op;
-	err = psm_am_request_short((psm_epaddr_t) dest_addr,
+	psm_am_request_short((psm_epaddr_t) dest_addr,
 				PSMX_AM_ATOMIC_HANDLER, args, 5,
 				(void *)buf, len, am_flags, NULL, NULL);
 
@@ -963,7 +962,6 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 	psm_amarg_t args[8];
 	int am_flags = PSM_AM_FLAG_ASYNC;
 	int chunk_size, len;
-	int err;
 	size_t idx;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
@@ -1064,7 +1062,7 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 	args[3].u64 = key;
 	args[4].u32w0 = datatype;
 	args[4].u32w1 = op;
-	err = psm_am_request_short((psm_epaddr_t) dest_addr,
+	psm_am_request_short((psm_epaddr_t) dest_addr,
 				PSMX_AM_ATOMIC_HANDLER, args, 5,
 				(void *)buf, (buf?len:0), am_flags, NULL, NULL);
 
@@ -1164,7 +1162,6 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 	psm_amarg_t args[8];
 	int am_flags = PSM_AM_FLAG_ASYNC;
 	int chunk_size, len;
-	int err;
 	void *tmp_buf = NULL;
 	size_t idx;
 
@@ -1280,7 +1277,7 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 	args[3].u64 = key;
 	args[4].u32w0 = datatype;
 	args[4].u32w1 = op;
-	err = psm_am_request_short((psm_epaddr_t) dest_addr,
+	psm_am_request_short((psm_epaddr_t) dest_addr,
 				PSMX_AM_ATOMIC_HANDLER, args, 5,
 				tmp_buf ? tmp_buf : (void *)buf,
 				len * 2, am_flags,
