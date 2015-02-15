@@ -34,6 +34,7 @@ use Getopt::Long;
 
 my $source_dir_arg;
 my $download_dir_arg;
+my $coverity_token_arg;
 my $logfile_dir_arg;
 my $help_arg;
 my $verbose_arg;
@@ -41,6 +42,7 @@ my $debug_arg;
 
 my $ok = Getopt::Long::GetOptions("source-dir=s" => \$source_dir_arg,
                                   "download-dir=s" => \$download_dir_arg,
+                                  "coverity-token=s" => \$coverity_token_arg,
                                   "logfile-dir=s" => \$logfile_dir_arg,
                                   "verbose" => \$verbose_arg,
                                   "debug" => \$debug_arg,
@@ -179,6 +181,29 @@ unlink("latest.txt");
 open(OUT, ">latest.txt") || die "Can't write to latest.txt";
 print OUT "libfabric-$version\n";
 close(OUT);
+
+# Run the coverity script if requested
+if (defined($coverity_token_arg)) {
+    verbose("*** Perparing/submitting to Coverity...\n");
+
+    # The coverity script will be in the same directory as this script
+    my $dir = dirname($0);
+    my $cmd = "$dir/cron-submit-coverity.pl " .
+        "--filename $download_dir_arg/libfabric-$version.tar.bz2 " .
+        "--coverity-token $coverity_token_arg " .
+        "--make-args=-j8 " .
+        "--configure-args=\"--enable-sockets --enable-verbs --enable-psm --enable-usnic\" ";
+
+    $cmd .= "--verbose "
+        if ($verbose_arg);
+    $cmd .= "--debug "
+        if ($debug_arg);
+    $cmd .= "--logfile-dir=$logfile_dir_arg"
+        if (defined($logfile_dir_arg));
+
+    # Coverity script will do its own logging
+    doit(0, $cmd);
+}
 
 # All done
 verbose("*** All done / nightly tarball\n");
