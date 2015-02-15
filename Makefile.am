@@ -87,11 +87,12 @@ _sockets_files = \
 if HAVE_SOCKETS_DL
 pkglib_LTLIBRARIES += libsockets-fi.la
 libsockets_fi_la_SOURCES = $(_sockets_files) $(common_srcs)
-libsockets_fi_la_LIBADD = $(linkback)
+libsockets_fi_la_LIBADD = $(linkback) $(sockets_shm_LIBS)
 libsockets_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
 libsockets_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_SOCKETS_DL
 src_libfabric_la_SOURCES += $(_sockets_files)
+src_libfabric_la_LIBADD += $(sockets_shm_LIBS)
 endif !HAVE_SOCKETS_DL
 
 endif HAVE_SOCKETS
