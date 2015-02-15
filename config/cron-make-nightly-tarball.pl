@@ -29,16 +29,21 @@
 use strict;
 use warnings;
 
+use File::Basename;
 use Getopt::Long;
 
 my $source_dir_arg;
 my $download_dir_arg;
+my $logfile_dir_arg;
 my $help_arg;
 my $verbose_arg;
+my $debug_arg;
 
 my $ok = Getopt::Long::GetOptions("source-dir=s" => \$source_dir_arg,
                                   "download-dir=s" => \$download_dir_arg,
+                                  "logfile-dir=s" => \$logfile_dir_arg,
                                   "verbose" => \$verbose_arg,
+                                  "debug" => \$debug_arg,
                                   "help|h" => \$help_arg,
                                   );
 
@@ -58,6 +63,9 @@ die "$source_dir_arg is not libfabric git clone"
 die "$download_dir_arg is not a valid directory"
     if (! -d $download_dir_arg);
 
+$verbose_arg = 1
+    if ($debug_arg);
+
 #####################################################################
 
 sub doit {
@@ -67,13 +75,13 @@ sub doit {
 
     # Redirect stdout if requested or not verbose
     if (defined $stdout_file) {
+        $stdout_file = "$logfile_dir_arg/$stdout_file.log";
+        unlink($stdout_file);
         $cmd .= " >$stdout_file";
     } elsif (!$verbose_arg) {
         $cmd .= " >/dev/null";
     }
-
-    $cmd .= " 2>/dev/null"
-        if (!$verbose_arg);
+    $cmd .= " 2>&1";
 
     my $rc = system($cmd);
     if (0 != $rc && !$allowed_to_fail) {
@@ -82,6 +90,8 @@ sub doit {
         chdir("/");
         die "Command $cmd failed: exit status $rc";
     }
+    system("cat $stdout_file")
+        if ($debug_arg && defined($stdout_file) && -f $stdout_file);
 }
 
 sub verbose {
@@ -137,11 +147,11 @@ close(OUT);
 
 # Now make the tarball
 verbose("*** Running autogen.sh...\n");
-doit(0, "./autogen.sh");
+doit(0, "./autogen.sh", "autogen");
 verbose("*** Running configure...\n");
-doit(0, "./configure");
+doit(0, "./configure", "configure");
 verbose("*** Running make distcheck...\n");
-doit(0, "AM_MAKEFLAGS=-j32 make distcheck");
+doit(0, "AM_MAKEFLAGS=-j32 make distcheck", "distcheck");
 
 # Restore configure.ac
 verbose("*** Restoring configure.ac...\n");
@@ -160,8 +170,8 @@ doit(0, "ln -s libfabric-$version.tar.bz2 libfabric-latest.tar.bz2");
 
 # Re-generate hashes
 verbose("*** Re-generating md5/sha1sums...\n");
-doit(0, "md5sum libfabric*tar*", "md5sums.txt");
-doit(0, "sha1sum libfabric*tar*", "sha1sums.txt");
+doit(0, "md5sum libfabric*tar* > md5sums.txt");
+doit(0, "sha1sum libfabric*tar* > sha1sums.txt");
 
 # Re-write latest.txt
 verbose("*** Re-creating latest.txt...\n");
@@ -171,4 +181,5 @@ print OUT "libfabric-$version\n";
 close(OUT);
 
 # All done
+verbose("*** All done / nightly tarball\n");
 exit(0);
