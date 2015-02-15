@@ -313,6 +313,7 @@ real_man_pages = \
         man/fi_av.3 \
         man/fi_cm.3 \
         man/fi_cntr.3 \
+        man/fi_control.3 \
         man/fi_cq.3 \
         man/fi_direct.7 \
         man/fi_domain.3 \
