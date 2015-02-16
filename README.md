@@ -1,4 +1,5 @@
-<a href="https://scan.coverity.com/projects/4274"><img alt="Coverity Scan Build Status" src="https://scan.coverity.com/projects/4274/badge.svg"/></a>
+[Libfabric at Coverity](https://scan.coverity.com/projects/4274)
+[<img alt="Coverity Scan Build Status" src="https://scan.coverity.com/projects/4274/badge.svg"/>](https://scan.coverity.com/projects/4274)
 
 libfabric
 =========
