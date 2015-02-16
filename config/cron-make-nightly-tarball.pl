@@ -87,9 +87,14 @@ sub doit {
 
     my $rc = system($cmd);
     if (0 != $rc && !$allowed_to_fail) {
-        # If we die/fail, ensure to change out of the temp tree so
-        # that it can be removed upon exit.
+        # If we die/fail, ensure to a) restore the git tree to a clean
+        # state, and b) change out of the temp tree so that it can be
+        # removed upon exit.
+        chdir($source_dir_arg);
+        system("git checkout .");
+        system("git clean -df");
         chdir("/");
+
         die "Command $cmd failed: exit status $rc";
     }
     system("cat $stdout_file")
