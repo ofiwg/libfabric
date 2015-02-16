@@ -91,8 +91,8 @@ sub doit {
         # state, and b) change out of the temp tree so that it can be
         # removed upon exit.
         chdir($source_dir_arg);
-        system("git checkout .");
-        system("git clean -df");
+        system("git clean -dfx");
+        system("git reset --hard HEAD");
         chdir("/");
 
         die "Command $cmd failed: exit status $rc";
@@ -111,8 +111,8 @@ sub verbose {
 # Git pull to get the latest; ensure we have a totally clean tree
 verbose("*** Ensuring we have a clean git tree...\n");
 chdir($source_dir_arg);
-doit(0, "git clean -df");
-doit(0, "git checkout .");
+doit(0, "git clean -dfx");
+doit(0, "git reset --hard HEAD");
 doit(0, "git pull");
 
 # Get a git describe id (minus the initial 'v' in the tag name, if any)
