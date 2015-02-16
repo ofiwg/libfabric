@@ -83,14 +83,20 @@ verbose("Found: @markdown_files\n");
 #####################################################################
 
 # Copy each of the markdown files to the pages branch checkout
+chdir("pages/master");
 foreach my $file (@markdown_files) {
-    doit(0, "cp source/man/$file pages/master/man/$file");
+    doit(0, "cp ../../source/man/$file man/$file");
+
+    # Is there a new man page?  If so, we need to "git add" it.
+    my $out = `git status --porcelain man/$file`;
+    doit(0, "git add man/$file")
+        if ($out =~ /^\?\?/);
 }
 
 # Git commit those files in the pages repo and push them to the
 # upstream repo so that they go live.  If nothing changed, the commit
 # and push will be no-ops.
-chdir("pages");
+chdir("..");
 doit(1, "git commit --no-verify -a -m \"Updated Markdown man pages from $source_branch_arg\"");
 doit(1, "git push");
 
@@ -101,6 +107,13 @@ doit(1, "git push");
 chdir("../source/man");
 foreach my $file (@markdown_files) {
     doit(0, "../config/md2nroff.pl --source $file");
+
+    # Did we generate a new man page?  If so, we need to "git add" it.
+    my $man_file = $file;
+    $man_file =~ s/\.md$//;
+    my $out = `git status --porcelain $man_file`;
+    doit(0, "git add $man_file")
+        if ($out =~ /^\?\?/);
 }
 
 # Similar to above: commit the newly-generated nroff pages and push
