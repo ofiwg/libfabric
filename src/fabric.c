@@ -170,47 +170,52 @@ static void fi_ini(void)
 	fi_log_init();
 
 #ifdef HAVE_LIBDL
-	struct dirent **liblist;
-	int n;
+	struct dirent **liblist = NULL;
+	int n = 0;
 	char *lib, *provdir;
 	void *dlhandle;
 	struct fi_provider* (*inif)(void);
 
 	/* If dlopen fails, assume static linking and just return
 	   without error */
-	if (dlopen(NULL, RTLD_NOW) == NULL) {
-		goto done;
+	dlhandle = dlopen(NULL, RTLD_NOW);
+	if (dlhandle == NULL) {
+		goto libdl_done;
 	}
+	dlclose(dlhandle);
 
 	provdir = PROVDLDIR;
 	n = scandir(provdir, &liblist, lib_filter, NULL);
 	if (n < 0)
-		goto done;
+		goto libdl_done;
 
 	while (n--) {
 		if (asprintf(&lib, "%s/%s", provdir, liblist[n]->d_name) < 0) {
 			FI_WARN(NULL, "asprintf failed to allocate memory\n");
-			free(liblist[n]);
-			goto done;
+			goto libdl_done;
 		}
 		FI_DEBUG(NULL, "opening provider lib %s\n", lib);
 
 		dlhandle = dlopen(lib, RTLD_NOW);
-		if (dlhandle == NULL)
-			FI_WARN(NULL, "dlopen(%s): %s\n", lib, dlerror());
-
 		free(liblist[n]);
 		free(lib);
+		if (dlhandle == NULL) {
+			FI_WARN(NULL, "dlopen(%s): %s\n", lib, dlerror());
+			continue;
+		}
 
 		inif = dlsym(dlhandle, "fi_prov_ini");
-		if (inif == NULL)
+		if (inif == NULL) {
 			FI_WARN(NULL, "dlsym: %s\n", dlerror());
-		else
+			dlclose(dlhandle);
+		} else
 			fi_register_provider((inif)(), dlhandle);
 	}
 
+libdl_done:
+	while (n-- > 0)
+		free(liblist[n]);
 	free(liblist);
-done:
 #endif
 
 	fi_register_provider(PSM_INIT, NULL);
