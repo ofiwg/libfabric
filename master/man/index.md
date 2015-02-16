@@ -17,6 +17,7 @@ You have been warned.
 * [fabric(7)](fabric.7.html)
 * [fi_atomic(3)](fi_atomic.3.html)
 * [fi_av(3)](fi_av.3.html)
+* [fi_control(3)](fi_control.3.html)
 * [fi_cm(3)](fi_cm.3.html)
 * [fi_cntr(3)](fi_cntr.3.html)
 * [fi_cq(3)](fi_cq.3.html)
