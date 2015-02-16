@@ -198,16 +198,18 @@ static void fi_ini(void)
 		FI_DEBUG(NULL, "opening provider lib %s\n", lib);
 
 		dlhandle = dlopen(lib, RTLD_NOW);
-		if (dlhandle == NULL)
-			FI_WARN(NULL, "dlopen(%s): %s\n", lib, dlerror());
-
 		free(liblist[n]);
 		free(lib);
+		if (dlhandle == NULL) {
+			FI_WARN(NULL, "dlopen(%s): %s\n", lib, dlerror());
+			continue;
+		}
 
 		inif = dlsym(dlhandle, "fi_prov_ini");
-		if (inif == NULL)
+		if (inif == NULL) {
 			FI_WARN(NULL, "dlsym: %s\n", dlerror());
-		else
+			dlclose(dlhandle);
+		} else
 			fi_register_provider((inif)(), dlhandle);
 	}
 
