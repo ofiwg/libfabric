@@ -90,7 +90,7 @@ verbose "*** Working in $dir\n";
 # Get the coverity tool, put it in our path
 
 verbose "*** Downloading coverity tool\n";
-doit(0, "wget https://scan.coverity.com/download/linux-64 --post-data \"token=$coverity_token_arg\&project=libfabric\" -O coverity_tool.tgz");
+doit(0, "wget https://scan.coverity.com/download/linux-64 --post-data \"token=$coverity_token_arg\&project=ofiwg%2Flibfabric\" -O coverity_tool.tgz");
 doit(0, "tar xf coverity_tool.tgz");
 opendir(my $dh, ".") ||
     die "Can't opendir .";
@@ -131,7 +131,7 @@ if ($dry_run_arg) {
          "--form file=\@$libfabric_ver-analyzed.tar.bz2 " .
          "--form version=$libfabric_ver " .
          "--form description=nightly-master " .
-         "https://scan.coverity.com/builds?project=libfabric",
+         "https://scan.coverity.com/builds?project=ofiwg%2Flibfabric",
          "coverity-submit");
 }
 
