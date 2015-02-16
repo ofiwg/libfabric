@@ -178,9 +178,11 @@ static void fi_ini(void)
 
 	/* If dlopen fails, assume static linking and just return
 	   without error */
-	if (dlopen(NULL, RTLD_NOW) == NULL) {
+	dlhandle = dlopen(NULL, RTLD_NOW);
+	if (dlhandle == NULL) {
 		goto done;
 	}
+	dlclose(dlhandle);
 
 	provdir = PROVDLDIR;
 	n = scandir(provdir, &liblist, lib_filter, NULL);
