@@ -170,8 +170,8 @@ static void fi_ini(void)
 	fi_log_init();
 
 #ifdef HAVE_LIBDL
-	struct dirent **liblist;
-	int n;
+	struct dirent **liblist = NULL;
+	int n = 0;
 	char *lib, *provdir;
 	void *dlhandle;
 	struct fi_provider* (*inif)(void);
@@ -180,20 +180,19 @@ static void fi_ini(void)
 	   without error */
 	dlhandle = dlopen(NULL, RTLD_NOW);
 	if (dlhandle == NULL) {
-		goto done;
+		goto libdl_done;
 	}
 	dlclose(dlhandle);
 
 	provdir = PROVDLDIR;
 	n = scandir(provdir, &liblist, lib_filter, NULL);
 	if (n < 0)
-		goto done;
+		goto libdl_done;
 
 	while (n--) {
 		if (asprintf(&lib, "%s/%s", provdir, liblist[n]->d_name) < 0) {
 			FI_WARN(NULL, "asprintf failed to allocate memory\n");
-			free(liblist[n]);
-			goto done;
+			goto libdl_done;
 		}
 		FI_DEBUG(NULL, "opening provider lib %s\n", lib);
 
@@ -213,8 +212,10 @@ static void fi_ini(void)
 			fi_register_provider((inif)(), dlhandle);
 	}
 
+libdl_done:
+	while (n-- > 0)
+		free(liblist[n]);
 	free(liblist);
-done:
 #endif
 
 	fi_register_provider(PSM_INIT, NULL);
