@@ -414,15 +414,32 @@ err:
 
 static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-	struct sock_ep *sock_ep;
+	struct sock_ep *sock_ep = NULL;
+	struct sock_pep *sock_pep = NULL;
+
 	if (*addrlen == 0) {
 		*addrlen = sizeof(struct sockaddr_in);
 		return -FI_ETOOSMALL;
 	}
 
-	sock_ep = container_of(fid, struct sock_ep, ep.fid);
 	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
-	memcpy(addr, sock_ep->src_addr, *addrlen);
+
+	switch(fid->fclass) {
+
+	case FI_CLASS_EP:
+		sock_ep = container_of(fid, struct sock_ep, ep.fid);
+		memcpy(addr, sock_ep->src_addr, *addrlen);
+		break;
+
+	case FI_CLASS_PEP:
+		sock_pep = container_of(fid, struct sock_pep, pep.fid);
+		memcpy(addr, &sock_pep->src_addr, *addrlen);
+		break;
+
+	default:
+		SOCK_LOG_ERROR("Invalid argument\n");
+		return -FI_EINVAL;
+	}
 	return 0;
 }
 
@@ -1067,7 +1084,7 @@ out:
 
 static struct fi_ops_cm sock_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.getname = fi_no_getname,
+	.getname = sock_ep_cm_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
 	.listen = sock_pep_listen,
