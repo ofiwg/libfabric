@@ -2103,7 +2103,11 @@ fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 			ret = -errno;
 			goto err1;
 		}
-		fcntl(_eq->channel->fd, F_GETFL, &flags);
+		flags = fcntl(_eq->channel->fd, F_GETFL);
+		if (flags < 0) {
+			ret = -errno;
+			goto err2;
+		}
 		ret = fcntl(_eq->channel->fd, F_SETFL, flags | O_NONBLOCK);
 		if (ret) {
 			ret = -errno;
@@ -2113,7 +2117,8 @@ fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	case FI_WAIT_NONE:
 		break;
 	default:
-		return -ENOSYS;
+		ret = -FI_ENOSYS;
+		goto err1;
 	}
 
 	_eq->flags = attr->flags;
@@ -2418,17 +2423,22 @@ fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			goto err1;
 		}
 
-		fcntl(_cq->channel->fd, F_GETFL, &flags);
+		flags = fcntl(_cq->channel->fd, F_GETFL);
+		if (flags < 0) {
+			ret = -errno;
+			goto err2;
+		}
 		ret = fcntl(_cq->channel->fd, F_SETFL, flags | O_NONBLOCK);
 		if (ret) {
 			ret = -errno;
-			goto err1;
+			goto err2;
 		}
 		break;
 	case FI_WAIT_NONE:
 		break;
 	default:
-		return -FI_ENOSYS;
+		ret = -FI_ENOSYS;
+		goto err1;
 	}
 
 	_cq->cq = ibv_create_cq(_cq->domain->verbs, attr->size, _cq,
