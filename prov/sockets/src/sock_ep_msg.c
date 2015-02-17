@@ -588,6 +588,10 @@ static void *sock_msg_ep_listener_thread (void *data)
 					      struct fid_ep, fid);
 			sock_ep = container_of(fid_ep, struct sock_ep, ep);
 			sock_ep->connected = 1;
+
+			((struct sockaddr_in*)sock_ep->dest_addr)->sin_port = 
+				conn_response->hdr.s_port;
+
 			sock_ep_enable(&ep->ep);
 			if (sock_eq_report_event(ep->eq, FI_CONNECTED, cm_entry,
 						 entry_sz, 0))
@@ -640,6 +644,9 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 		return -FI_ENOMEM;
 
 	_ep->rem_ep_id = ((struct sockaddr *)addr)->sa_family;
+	((struct sockaddr_in*)_ep->src_addr)->sin_port = 
+		htons(atoi(_ep->domain->service));
+	
 	((struct sockaddr *)addr)->sa_family = AF_INET;
 
 	req->hdr.type = SOCK_CONN_REQ;
@@ -647,7 +654,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	req->hdr.c_fid = &ep->fid;
 	req->hdr.s_fid = 0;
 	memcpy(&req->info, &_ep->info, sizeof(struct fi_info));
-	memcpy(&req->src_addr, _ep->info.src_addr, sizeof(struct sockaddr_in));
+	memcpy(&req->src_addr, _ep->src_addr, sizeof(struct sockaddr_in));
 	memcpy(&req->dest_addr, _ep->info.dest_addr, sizeof(struct sockaddr_in));
 	memcpy(&req->tx_attr, _ep->info.tx_attr, sizeof(struct fi_tx_attr));
 	memcpy(&req->rx_attr, _ep->info.rx_attr, sizeof(struct fi_rx_attr));
@@ -713,6 +720,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	_ep->rem_ep_id = req->ep_id;
 	response->hdr.type = SOCK_CONN_ACCEPT;
 	response->hdr.s_fid = &ep->fid;
+	response->hdr.s_port = htons(atoi(_ep->domain->service));
 
 	_ep->socket = sock_ep_cm_create_socket();
 	if (!_ep->socket) {
