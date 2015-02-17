@@ -198,11 +198,12 @@ static void fi_ini(void)
 
 		dlhandle = dlopen(lib, RTLD_NOW);
 		free(liblist[n]);
-		free(lib);
 		if (dlhandle == NULL) {
 			FI_WARN(NULL, "dlopen(%s): %s\n", lib, dlerror());
+			free(lib);
 			continue;
 		}
+		free(lib);
 
 		inif = dlsym(dlhandle, "fi_prov_ini");
 		if (inif == NULL) {
