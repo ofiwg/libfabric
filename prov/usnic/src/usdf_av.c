@@ -81,14 +81,16 @@ usdf_av_insert_async_complete(struct usdf_av_insert *insert)
 
 	pthread_spin_lock(&av->av_lock);
 
+	usdf_timer_free(av->av_domain->dom_fabric, insert->avi_timer);
+
 	atomic_dec(&av->av_active_inserts);
 	if (atomic_get(&av->av_active_inserts) == 0 && av->av_closing) {
+		pthread_spin_destroy(&av->av_lock);
 		free(av);
 	} else {
 		pthread_spin_unlock(&av->av_lock);
 	}
 
-	usdf_timer_free(av->av_domain->dom_fabric, insert->avi_timer);
 	free(insert);
 }
 
@@ -352,12 +354,12 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 		}
 		if (ret == 0) {
 			dest->ds_dest = *u_dest;
-			free(u_dest);
 			fi_addr[i] = (fi_addr_t)dest;
 			++ret_count;
 		} else {
 			fi_addr[i] = FI_ADDR_NOTAVAIL;
 		}
+		free(u_dest);
 		++sin;
 	}
 
@@ -389,7 +391,7 @@ usdf_am_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			  size_t *addrlen)
 {
 	struct usdf_dest *dest;
-	struct sockaddr_in sin;
+	struct sockaddr_in sin = { 0 };
 	size_t copylen;
 
 	dest = (struct usdf_dest *)(uintptr_t)fi_addr;
@@ -467,6 +469,7 @@ usdf_av_close(struct fid *fid)
 		av->av_closing = 1;
 		pthread_spin_unlock(&av->av_lock);
 	} else {
+		pthread_spin_destroy(&av->av_lock);
 		free(av);
 	}
 	return 0;

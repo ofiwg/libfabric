@@ -201,6 +201,11 @@ usdf_fill_info_dgram(
 	size_t entries;
 	int ret;
 
+	/* bozo check */
+	if (hints == NULL) {
+		return -FI_ENODATA;
+	}
+
 	/* check that we are capable of what's requested */
 	if ((hints->caps & ~USDF_DGRAM_CAPS) != 0) {
 		return -FI_ENODATA;
@@ -363,6 +368,11 @@ usdf_fill_info_msg(
 	uint32_t addr_format;
 	int ret;
 
+	/* bozo check */
+	if (hints == NULL) {
+		return -FI_ENODATA;
+	}
+
 	/* check that we are capable of what's requested */
 	if ((hints->caps & ~USDF_MSG_CAPS) != 0) {
 		return -FI_ENODATA;
@@ -465,6 +475,11 @@ usdf_fill_info_rdm(
 	struct fi_ep_attr *eattrp;
 	uint32_t addr_format;
 	int ret;
+
+	/* bozo check */
+	if (hints == NULL) {
+		return -FI_ENODATA;
+	}
 
 	/* check that we are capable of what's requested */
 	if ((hints->caps & ~USDF_RDM_CAPS) != 0) {
