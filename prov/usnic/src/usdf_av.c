@@ -346,6 +346,7 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 
 	/* XXX parallelize, this will also eliminate u_dest silliness */
 	for (i = 0; i < count; i++) {
+		u_dest = NULL;
 		ret = usdf_av_alloc_dest(&dest);
 		if (ret == 0) {
 			ret = usd_create_dest(av->av_domain->dom_dev,
