@@ -421,15 +421,32 @@ err:
 
 static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-	struct sock_ep *sock_ep;
+	struct sock_ep *sock_ep = NULL;
+	struct sock_pep *sock_pep = NULL;
+
 	if (*addrlen == 0) {
 		*addrlen = sizeof(struct sockaddr_in);
 		return -FI_ETOOSMALL;
 	}
 
-	sock_ep = container_of(fid, struct sock_ep, ep.fid);
 	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
-	memcpy(addr, sock_ep->src_addr, *addrlen);
+
+	switch(fid->fclass) {
+
+	case FI_CLASS_EP:
+		sock_ep = container_of(fid, struct sock_ep, ep.fid);
+		memcpy(addr, sock_ep->src_addr, *addrlen);
+		break;
+
+	case FI_CLASS_PEP:
+		sock_pep = container_of(fid, struct sock_pep, pep.fid);
+		memcpy(addr, &sock_pep->src_addr, *addrlen);
+		break;
+
+	default:
+		SOCK_LOG_ERROR("Invalid argument\n");
+		return -FI_EINVAL;
+	}
 	return 0;
 }
 
@@ -579,6 +596,10 @@ static void *sock_msg_ep_listener_thread (void *data)
 					      struct fid_ep, fid);
 			sock_ep = container_of(fid_ep, struct sock_ep, ep);
 			sock_ep->connected = 1;
+
+			((struct sockaddr_in*)sock_ep->dest_addr)->sin_port = 
+				conn_response->hdr.s_port;
+
 			sock_ep_enable(&ep->ep);
 			if (sock_eq_report_event(ep->eq, FI_CONNECTED, cm_entry,
 						 entry_sz, 0))
@@ -631,6 +652,9 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 		return -FI_ENOMEM;
 
 	_ep->rem_ep_id = ((struct sockaddr *)addr)->sa_family;
+	((struct sockaddr_in*)_ep->src_addr)->sin_port = 
+		htons(atoi(_ep->domain->service));
+	
 	((struct sockaddr *)addr)->sa_family = AF_INET;
 
 	req->hdr.type = SOCK_CONN_REQ;
@@ -638,7 +662,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	req->hdr.c_fid = &ep->fid;
 	req->hdr.s_fid = 0;
 	memcpy(&req->info, &_ep->info, sizeof(struct fi_info));
-	memcpy(&req->src_addr, _ep->info.src_addr, sizeof(struct sockaddr_in));
+	memcpy(&req->src_addr, _ep->src_addr, sizeof(struct sockaddr_in));
 	memcpy(&req->dest_addr, _ep->info.dest_addr, sizeof(struct sockaddr_in));
 	memcpy(&req->tx_attr, _ep->info.tx_attr, sizeof(struct fi_tx_attr));
 	memcpy(&req->rx_attr, _ep->info.rx_attr, sizeof(struct fi_rx_attr));
@@ -704,6 +728,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	_ep->rem_ep_id = req->ep_id;
 	response->hdr.type = SOCK_CONN_ACCEPT;
 	response->hdr.s_fid = &ep->fid;
+	response->hdr.s_port = htons(atoi(_ep->domain->service));
 
 	_ep->socket = sock_ep_cm_create_socket();
 	if (!_ep->socket) {
@@ -1082,7 +1107,7 @@ out:
 
 static struct fi_ops_cm sock_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.getname = fi_no_getname,
+	.getname = sock_ep_cm_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
 	.listen = sock_pep_listen,
