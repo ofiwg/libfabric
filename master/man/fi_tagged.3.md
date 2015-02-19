@@ -330,24 +330,6 @@ src_addr, and src_addrlen parameters.
 *-FI_EOTHER*
 : Indicates that an unspecified error occurred.
 
-# NOTES
-
-## Ordering
-
-The order in which tags are matched is only defined for a pair of
-sending and receiving endpoints.  The ordering is defined by the
-underlying protocol.  If a specific protocol is not selected for an
-endpoint, the libfabric implementation will choose a protocol that
-satisfies the following requirement from the MPI-3.0 specification
-(page 41, lines 1-5):
-
-> If a sender sends two messages in succession to the same
-> destination, and both match the same receive, then this operation
-> cannot receive the second message if the first one is still pending.
-> If a receiver posts two receives in succession, and both match the
-> same message, then the second receive operation cannot be satisfied
-> by this message, if the first one is still pending.
-
 # SEE ALSO
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
