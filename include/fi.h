@@ -214,7 +214,7 @@ int fi_rma_target_allowed(uint64_t caps);
 
 #define DEFAULT_ABI "FABRIC_1.0"
 
-#if  HAVE_ALIAS_ATTRIBUTE == 1
+#ifdef HAVE_ALIAS_ATTRIBUTE
 #define DEFAULT_SYMVER_PRE(a) a##_
 #else
 #define DEFAULT_SYMVER_PRE(a) a
@@ -229,12 +229,12 @@ int fi_rma_target_allowed(uint64_t caps);
         asm(".symver " #name "," #api "@@" DEFAULT_ABI)
 #else
 #  define SYMVER(Name, api, ver)
-#if  HAVE_ALIAS_ATTRIBUTE == 1
+#ifdef HAVE_ALIAS_ATTRIBUTE
 #  define DEFAULT_SYMVER(name, api) \
         extern typeof (name) api __attribute__((alias(#name)));
 #else
 #  define DEFAULT_SYMVER(name, api)
-#endif  /* HAVE_ALIAS_ATTRIBUTE == 1*/
+#endif  /* HAVE_ALIAS_ATTRIBUTE 1*/
 
 #endif /* HAVE_SYMVER_SUPPORT */
 
