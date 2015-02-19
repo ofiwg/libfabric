@@ -237,8 +237,8 @@ information regarding the format associated with each event.
 *Asynchronous Control Operations*
 : Asynchronous control operations are basic requests that simply need
   to generate an event to indicate that they have completed.  These
-  include the following types of events: memory registration, address
-  vector resolution, and connection established.
+  include the following types of events: memory registration and address
+  vector resolution.
 
   Control requests report their completion by inserting a `struct
   fi_eq_entry` into the EQ.  The format of this structure is:
@@ -255,16 +255,16 @@ struct fi_eq_entry {
   returned event will indicate the operation that has completed, and
   the fid will reference the fabric descriptor associated with
   the event.  For memory registration, this will be an FI_MR_COMPLETE
-  event and the fid_mr, address resolution will reference an
-  FI_AV_COMPLETE event and fid_av, and CM events will refer to a
-  FI_CONNECTED event and fid_ep.  The context field will be set
+  event and the fid_mr; address resolution will reference an
+  FI_AV_COMPLETE event and fid_av.  The context field will be set
   to the context specified as part of the operation, if available,
   otherwise the context will be associated with the fabric descriptor.
 
-*Connection Request Notification*
-: Connection requests are unsolicited notifications that a remote
-  endpoint wishes to establish a new connection to a listening passive
-  endpoint.  Connection requests are reported using `struct
+*Connection Notification*
+: Connection notifications are connection management notifications
+  used to setup or teardown connections between endpoints.  There are
+  three connection notification events: FI_CONNREQ, FI_CONNECTED, and
+  FI_SHUTDOWN.  Connection notifications are reported using `struct
   fi_eq_cm_entry`:
 
 {% highlight c %}
@@ -275,8 +275,10 @@ struct fi_eq_cm_entry {
 };
 {% endhighlight %}
 
-  Connection request events are of type FI_CONNREQ.  The fid is the
-  passive endpoint.  Information regarding the requested endpoint's
+  A connection request (FI_CONNREQ) event indicates that
+  a remote endpoint wishes to establish a new connection to a listening,
+  or passive, endpoint.  The fid is the passive endpoint.
+  Information regarding the requested, active endpoint's
   capabilities and attributes are available from the info field.  The
   application is responsible for freeing this structure by calling
   fi_freeinfo when it is no longer needed.  The fi_info connreq field
@@ -299,13 +301,20 @@ struct fi_eq_cm_entry {
   underlying connection protocol, and the length of any data returned
   may include protocol padding.  As a result, the returned length may
   be larger than that specified by the connecting peer.
+  
+  If a connection request has been accepted, an FI_CONNECTED event will
+  be generated on both sides of the connection.  The active side -- one
+  that called fi_connect() -- may receive user data as part of the
+  FI_CONNECTED event.  The user data is passed to the connection
+  manager on the passive side through the fi_accept call.  User data is
+  not provided with an FI_CONNECTED event on the listening side of the
+  connection.
 
-*Connection Shutdown Notification*
-: Notification that a remote peer has disconnected from an active
+  Notification that a remote peer has disconnected from an active
   endpoint is done through the FI_SHUTDOWN event.  Shutdown
-  notification uses struct fi_eq_entry as declared above.  The fid
+  notification uses struct fi_eq_cm_entry as declared above.  The fid
   field for a shutdown notification refers to the active endpoint's
-  fid_ep.  The context field is set to NULL.
+  fid_ep.
 
 ## fi_eq_sread
 
@@ -352,8 +361,8 @@ fid_ep.  The context field will be set to the context specified as
 part of the operation.
 
 The general reason for the error is provided through the err field.
-Provider specific error information may also be available through the
-prov_errno and err_data fields.  Users may call fi_eq_strerror to
+Provider or operational specific error information may also be available
+through the prov_errno and err_data fields.  Users may call fi_eq_strerror to
 convert provider specific error information into a printable string
 for debugging purposes.
 
