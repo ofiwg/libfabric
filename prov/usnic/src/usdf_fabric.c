@@ -201,21 +201,6 @@ usdf_fill_info_dgram(
 	size_t entries;
 	int ret;
 
-	/* bozo check */
-	if (hints == NULL) {
-		return -FI_ENODATA;
-	}
-
-	/* check that we are capable of what's requested */
-	if ((hints->caps & ~USDF_DGRAM_CAPS) != 0) {
-		return -FI_ENODATA;
-	}
-
-	/* app must support these modes */
-	if ((hints->mode & USDF_DGRAM_REQ_MODE) != USDF_DGRAM_REQ_MODE) {
-		return -FI_ENODATA;
-	}
-
 	fi = fi_allocinfo_internal();
 	if (fi == NULL) {
 		ret = -FI_ENOMEM;
@@ -227,6 +212,18 @@ usdf_fill_info_dgram(
 	if (hints != NULL) {
 		fi->mode = hints->mode & USDF_DGRAM_SUPP_MODE;
 		addr_format = hints->addr_format;
+
+		/* check that we are capable of what's requested */
+		if ((hints->caps & ~USDF_DGRAM_CAPS) != 0) {
+			ret = -FI_ENODATA;
+			goto fail;
+		}
+
+		/* app must support these modes */
+		if ((hints->mode & USDF_DGRAM_REQ_MODE) != USDF_DGRAM_REQ_MODE) {
+			ret = -FI_ENODATA;
+			goto fail;
+		}
 	} else {
 		fi->mode = USDF_DGRAM_SUPP_MODE;
 		addr_format = FI_FORMAT_UNSPEC;
@@ -368,21 +365,6 @@ usdf_fill_info_msg(
 	uint32_t addr_format;
 	int ret;
 
-	/* bozo check */
-	if (hints == NULL) {
-		return -FI_ENODATA;
-	}
-
-	/* check that we are capable of what's requested */
-	if ((hints->caps & ~USDF_MSG_CAPS) != 0) {
-		return -FI_ENODATA;
-	}
-
-	/* app must support these modes */
-	if ((hints->mode & USDF_MSG_REQ_MODE) != USDF_MSG_REQ_MODE) {
-		return -FI_ENODATA;
-	}
-
 	fi = fi_allocinfo_internal();
 	if (fi == NULL) {
 		ret = -FI_ENOMEM;
@@ -394,6 +376,18 @@ usdf_fill_info_msg(
 	if (hints != NULL) {
 		fi->mode = hints->mode & USDF_MSG_SUPP_MODE;
 		addr_format = hints->addr_format;
+
+		/* check that we are capable of what's requested */
+		if ((hints->caps & ~USDF_MSG_CAPS) != 0) {
+			ret = -FI_ENODATA;
+			goto fail;
+		}
+
+		/* app must support these modes */
+		if ((hints->mode & USDF_MSG_REQ_MODE) != USDF_MSG_REQ_MODE) {
+			ret = -FI_ENODATA;
+			goto fail;
+		}
 	} else {
 		fi->mode = USDF_MSG_SUPP_MODE;
 		addr_format = FI_FORMAT_UNSPEC;
@@ -476,21 +470,6 @@ usdf_fill_info_rdm(
 	uint32_t addr_format;
 	int ret;
 
-	/* bozo check */
-	if (hints == NULL) {
-		return -FI_ENODATA;
-	}
-
-	/* check that we are capable of what's requested */
-	if ((hints->caps & ~USDF_RDM_CAPS) != 0) {
-		return -FI_ENODATA;
-	}
-
-	/* app must support these modes */
-	if ((hints->mode & USDF_RDM_REQ_MODE) != USDF_RDM_REQ_MODE) {
-		return -FI_ENODATA;
-	}
-
 	fi = fi_allocinfo_internal();
 	if (fi == NULL) {
 		ret = -FI_ENOMEM;
@@ -502,6 +481,17 @@ usdf_fill_info_rdm(
 	if (hints != NULL) {
 		fi->mode = hints->mode & USDF_RDM_SUPP_MODE;
 		addr_format = hints->addr_format;
+		/* check that we are capable of what's requested */
+		if ((hints->caps & ~USDF_RDM_CAPS) != 0) {
+			ret = -FI_ENODATA;
+			goto fail;
+		}
+
+		/* app must support these modes */
+		if ((hints->mode & USDF_RDM_REQ_MODE) != USDF_RDM_REQ_MODE) {
+			ret = -FI_ENODATA;
+			goto fail;
+		}
 	} else {
 		fi->mode = USDF_RDM_SUPP_MODE;
 		addr_format = FI_FORMAT_UNSPEC;
