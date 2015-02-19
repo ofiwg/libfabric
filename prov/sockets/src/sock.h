@@ -715,8 +715,8 @@ struct sock_cq {
 
 struct sock_conn_hdr {
 	uint8_t type;
-	int32_t s_port;
 	uint8_t reserved[3];
+	int32_t s_port;
 	fid_t c_fid;
 	fid_t s_fid;
 };
