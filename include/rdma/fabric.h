@@ -48,6 +48,9 @@ extern "C" {
 	((type *) ((char *)ptr - offsetof(type, field)))
 #endif
 
+#define FI_DEFINE_HANDLE(name) struct name##_s { int dummy; }; \
+				typedef struct name##_s *name
+
 enum {
 	FI_MAJOR_VERSION	= 1,
 	FI_MINOR_VERSION	= 0,
@@ -158,7 +161,7 @@ enum {
 #define FI_ADDR_NOTAVAIL	UINT64_MAX
 #define FI_SHARED_CONTEXT	UINT64_MAX
 typedef uint64_t		fi_addr_t;
-typedef void *			fi_connreq_t;
+FI_DEFINE_HANDLE(fi_connreq_t);
 
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
