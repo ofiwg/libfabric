@@ -1477,7 +1477,6 @@ static int sock_pe_read_hdr(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	}
 	
 	msg_hdr->msg_len = ntohll(msg_hdr->msg_len);
-	msg_hdr->rx_id = msg_hdr->rx_id;
 	msg_hdr->flags = ntohll(msg_hdr->flags);
 	msg_hdr->pe_entry_id = ntohs(msg_hdr->pe_entry_id);
 	msg_hdr->ep_id = ntohs(msg_hdr->ep_id);
@@ -2121,7 +2120,8 @@ int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
 	struct dlist_entry *entry;
 	struct sock_pe_entry *pe_entry;
 
-	fastlock_acquire(&pe->lock);
+	if (fastlock_tryacquire(&pe->lock))
+		return 0;
 
 	/* progress buffered recvs */
 	fastlock_acquire(&rx_ctx->lock);
@@ -2170,7 +2170,8 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	struct dlist_entry *entry;
 	struct sock_pe_entry *pe_entry;
 
-	fastlock_acquire(&pe->lock);
+	if (fastlock_tryacquire(&pe->lock))
+		return 0;
 
 	/* check tx_ctx rbuf */
 	fastlock_acquire(&tx_ctx->rlock);

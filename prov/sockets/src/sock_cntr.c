@@ -143,7 +143,8 @@ static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 				start_ms = (double)now.tv_sec * 1000.0 + 
 					(double)now.tv_usec / 1000.0;
 			}
-			sock_cntr_progress(_cntr);
+
+			sock_cntr_progress(_cntr);	
 			if (timeout > 0) {
 				gettimeofday(&now, NULL);
 				end_ms = (double)now.tv_sec * 1000.0 + 
@@ -289,7 +290,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	ret = pthread_cond_init(&_cntr->cond, NULL);
 	if (ret)
-		goto err1;
+		goto err;
 
 	if(attr == NULL)
 		memcpy(&_cntr->attr, &sock_cntr_add, sizeof(sock_cntr_attr));
@@ -309,14 +310,18 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		wait_attr.wait_obj = FI_WAIT_FD;
 		ret = sock_wait_open(&dom->fab->fab_fid, &wait_attr,
 				     &_cntr->waitset);
-		if (ret)
-			goto err1;
+		if (ret) {
+			ret = FI_EINVAL;
+			goto err;
+		}
 		_cntr->signal = 1;
 		break;
 		
 	case FI_WAIT_SET:
-		if (!attr)
-			return -FI_EINVAL;
+		if (!attr) {
+			ret = FI_EINVAL;
+			goto err;
+		}
 
 		_cntr->waitset = attr->wait_set;
 		_cntr->signal = 1;
@@ -325,7 +330,6 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		dlist_init(&list_entry->entry);
 		list_entry->fid = &_cntr->cntr_fid.fid;
 		dlist_insert_after(&list_entry->entry, &wait->fid_list);
-
 		break;
 		
 	default:
@@ -352,7 +356,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	*cntr = &_cntr->cntr_fid;
 	return 0;
 
-err1:
+err:
 	free(_cntr);
 	return -ret;
 }

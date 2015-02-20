@@ -1123,11 +1123,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		}
 	}
 
-	if (domain)
-		sock_dom = container_of(domain, struct sock_domain, dom_fid);
-	else
-		sock_dom = NULL;
-	
+	sock_dom = container_of(domain, struct sock_domain, dom_fid);
 	sock_ep = (struct sock_ep*)calloc(1, sizeof(*sock_ep));
 	if (!sock_ep)
 		return -FI_ENOMEM;

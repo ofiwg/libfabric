@@ -354,13 +354,6 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	if (hints && hints->src_addr) {
-		if (!src_addr) {
-			src_addr = calloc(1, sizeof(struct sockaddr_in));
-			if (!src_addr) {
-				ret = -FI_ENOMEM;
-				goto err;
-			}
-		}
 		assert(hints->src_addrlen == sizeof(struct sockaddr_in));
 		memcpy(src_addr, hints->src_addr, hints->src_addrlen);
 	}
@@ -516,7 +509,7 @@ static int sock_ep_cm_send_msg(int sock_fd,
 static int sock_ep_cm_send_ack(int sock_fd, struct sockaddr_in *addr)
 {
 	int ack_sent = 0, retry = 0, ret;
-	unsigned char response;
+	unsigned char response = 0;
 
 	while(!ack_sent && retry < SOCK_EP_MAX_RETRY) {
 		ret = sendto(sock_fd, &response, sizeof(response), 0,
@@ -550,9 +543,14 @@ static void *sock_msg_ep_listener_thread (void *data)
 	struct sock_ep *sock_ep;
 
 	SOCK_LOG_INFO("Starting listener thread for EP: %p\n", ep);
-	conn_response = malloc(sizeof(*conn_response) + SOCK_EP_MAX_CM_DATA_SZ);
-	cm_entry = malloc(sizeof(*cm_entry) + SOCK_EP_MAX_CM_DATA_SZ);
-	if (!conn_response || !cm_entry) {
+	conn_response = calloc(1, sizeof(*conn_response) + SOCK_EP_MAX_CM_DATA_SZ);
+	if (!conn_response) {
+		SOCK_LOG_ERROR("cannot allocate\n");
+		return NULL;
+	}
+
+	cm_entry = calloc(1, sizeof(*cm_entry) + SOCK_EP_MAX_CM_DATA_SZ);
+	if (!cm_entry) {
 		SOCK_LOG_ERROR("cannot allocate\n");
 		return NULL;
 	}
@@ -638,6 +636,8 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	struct sock_conn_req *req;
 	struct sock_ep *_ep;
 	struct sock_eq *_eq;
+	int ret = 0;
+
 	_ep = container_of(ep, struct sock_ep, ep);
 	_eq = _ep->eq;
 	if (!_eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ) 
@@ -672,23 +672,30 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	if (!_ep->socket) {
 		_ep->socket = sock_ep_cm_create_socket();
 		if (!_ep->socket) {
-			free (req);
-			return -FI_EIO;
+			ret = -FI_EIO;
+			goto err;
 		}
 	}
 
-	if (sock_ep_cm_send_msg(_ep->socket, addr, req, sizeof (*req) + paramlen))
-		return -FI_EIO;
+	if (sock_ep_cm_send_msg(_ep->socket, addr, req, 
+				sizeof (*req) + paramlen)) {
+		ret = -FI_EIO;
+		goto err;
+	}
 
 	if (pthread_create(&_ep->listener_thread, NULL, 
 			   sock_msg_ep_listener_thread, (void *)_ep)) {
 		SOCK_LOG_ERROR("Couldn't create listener thread\n");
-		free (req);
-		return -FI_EINVAL;
+		ret = -FI_EINVAL;
+		goto err;
 	}
 
 	free (req);
 	return 0;
+
+err:
+	free(req);
+	return ret;
 }
 
 static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paramlen)
@@ -714,6 +721,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	req = (struct sock_conn_req *)_ep->info.connreq;
 	if (!req) {
 		SOCK_LOG_ERROR("invalid connreq for cm_accept\n");
+		free(response);
 		return -FI_EINVAL;
 	}
 	
@@ -896,7 +904,8 @@ static void *sock_pep_listener_thread (void *data)
 	struct pollfd poll_fds[2];
 
 	socklen_t addr_len;
-	int ret, user_data_sz, entry_sz, tmp;
+	int ret, user_data_sz, entry_sz;
+	char tmp = 0;
 
 	SOCK_LOG_INFO("Starting listener thread for PEP: %p\n", pep);
 	cm_entry = malloc(sizeof(*cm_entry) + SOCK_EP_MAX_CM_DATA_SZ);
@@ -911,7 +920,9 @@ static void *sock_pep_listener_thread (void *data)
 	while((volatile int)pep->do_listen) {
 		if (poll(poll_fds, 2, -1) > 0) {
 			if (poll_fds[1].revents & POLLIN) {
-				read(pep->signal_fds[1], &tmp, 1);
+				ret = read(pep->signal_fds[1], &tmp, 1);
+				if (ret != 1)
+					SOCK_LOG_ERROR("Invalid signal\n");
 				continue;
 			}
 		} else {
@@ -1130,7 +1141,7 @@ int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context)
 {
-	int ret, flags;
+	int ret = -FI_EINVAL, flags;
 	struct sock_pep *_pep;
 	char hostname[HOST_NAME_MAX];
 	struct addrinfo sock_hints;

@@ -550,14 +550,18 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		wait_attr.wait_obj = FI_WAIT_MUTEX_COND;
 		ret = sock_wait_open(&sock_dom->fab->fab_fid, &wait_attr,
 				     &sock_cq->waitset);
-		if (ret)
-			goto err3;
+		if (ret) {
+			ret = -FI_EINVAL;
+			goto err4;
+		}
 		sock_cq->signal = 1;
 		break;
 
 	case FI_WAIT_SET:
-		if (!attr)
-			return -FI_EINVAL;
+		if (!attr) {
+			ret = -FI_EINVAL;
+			goto err4;
+		}
 
 		sock_cq->waitset = attr->wait_set;
 		sock_cq->signal = 1;
@@ -567,6 +571,7 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		list_entry->fid = &sock_cq->cq_fid.fid;
 		dlist_insert_after(&list_entry->entry, &wait->fid_list);
 		break;
+
 	default:
 		break;
 	}
@@ -574,7 +579,9 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	*cq = &sock_cq->cq_fid;
 	atomic_inc(&sock_dom->ref);
 	return 0;
-	
+
+err4:
+	rbfree(&sock_cq->cqerr_rb);
 err3:
 	rbfree(&sock_cq->addr_rb);
 err2:

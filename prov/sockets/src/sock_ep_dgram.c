@@ -353,13 +353,6 @@ int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	if (hints && hints->src_addr) {
-		if (!src_addr) {
-			src_addr = calloc(1, sizeof(struct sockaddr_in));				
-			if (!src_addr) {
-				ret = -FI_ENOMEM;
-				goto err;
-			}
-		}
 		assert(hints->src_addrlen == sizeof(struct sockaddr_in));
 		memcpy(src_addr, hints->src_addr, hints->src_addrlen);
 	}
