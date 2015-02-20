@@ -330,7 +330,7 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 	const struct sockaddr_in *sin;
 	struct usdf_av *av;
 	struct usd_dest *u_dest;
-	struct usdf_dest *dest = dest;	// supress uninit
+	struct usdf_dest *dest;
 	int ret_count;
 	int ret;
 	int i;
@@ -346,6 +346,7 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 
 	/* XXX parallelize, this will also eliminate u_dest silliness */
 	for (i = 0; i < count; i++) {
+		dest = NULL;
 		u_dest = NULL;
 		ret = usdf_av_alloc_dest(&dest);
 		if (ret == 0) {
