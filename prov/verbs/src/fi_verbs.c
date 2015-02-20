@@ -2226,6 +2226,41 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	return cur ? cur : ret;
 }
 
+static uint64_t fi_ibv_comp_flags(struct ibv_wc *wc)
+{
+	uint64_t flags = 0;
+
+	if (wc->wc_flags & IBV_WC_WITH_IMM)
+		flags |= FI_REMOTE_CQ_DATA;
+
+	switch (wc->opcode) {
+	case IBV_WC_SEND:
+		flags |= FI_SEND | FI_MSG;
+		break;
+	case IBV_WC_RDMA_WRITE:
+		flags |= FI_RMA | FI_WRITE;
+		break;
+	case IBV_WC_RDMA_READ:
+		flags |= FI_RMA | FI_READ;
+		break;
+	case IBV_WC_COMP_SWAP:
+		flags |= FI_ATOMIC;
+		break;
+	case IBV_WC_FETCH_ADD:
+		flags |= FI_ATOMIC;
+		break;
+	case IBV_WC_RECV:
+		flags |= FI_RECV | FI_MSG;
+		break;
+	case IBV_WC_RECV_RDMA_WITH_IMM:
+		flags = FI_RMA | FI_REMOTE_WRITE;
+		break;
+	default:
+		break;
+	}
+	return flags;
+}
+
 static ssize_t fi_ibv_cq_read_context(struct fid_cq *cq, void *buf, size_t count)
 {
 	struct fi_ibv_cq *_cq;
@@ -2274,7 +2309,7 @@ static ssize_t fi_ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t count)
 		}
 
 		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
-		entry->flags = (uint64_t) _cq->wc.wc_flags;
+		entry->flags = fi_ibv_comp_flags(&_cq->wc);
 		entry->len = (uint64_t) _cq->wc.byte_len;
 		entry += 1;
 	}
@@ -2303,11 +2338,10 @@ static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t count)
 		}
 
 		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
+		entry->flags = fi_ibv_comp_flags(&_cq->wc);
 		if (_cq->wc.wc_flags & IBV_WC_WITH_IMM) {
-			entry->flags = FI_REMOTE_CQ_DATA;
 			entry->data = _cq->wc.imm_data;
 		} else {
-			entry->flags = 0;
 			entry->data = 0;
 		}
 		if (_cq->wc.opcode & (IBV_WC_RECV | IBV_WC_RECV_RDMA_WITH_IMM))
