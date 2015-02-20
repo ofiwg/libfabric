@@ -26,6 +26,7 @@ bin_PROGRAMS = \
 	unit/fi_av_test \
 	unit/fi_size_left_test \
 	ported/libibverbs/fi_rc_pingpong \
+	ported/librdmacm/fi_cmatose \
 	complex/fabtest
 
 simple_fi_info_SOURCES = \
@@ -127,6 +128,9 @@ unit_fi_size_left_test_SOURCES = \
 
 ported_libibverbs_fi_rc_pingpong_SOURCES = \
 	ported/libibverbs/rc_pingpong.c
+
+ported_librdmacm_fi_cmatose_SOURCES = \
+	ported/librdmacm/cmatose.c
 
 complex_fabtest_SOURCES = \
 	complex/fabtest.c \
