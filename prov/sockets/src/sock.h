@@ -416,6 +416,9 @@ struct sock_ep {
 	enum fi_ep_type ep_type;
 	struct sockaddr_in *src_addr;
 	struct sockaddr_in *dest_addr;
+
+	struct sockaddr_in cm_addr;
+	fid_t peer_fid;
 	fi_addr_t conn_addr;
 	uint16_t key;
 	int socket;
@@ -717,6 +720,7 @@ struct sock_conn_hdr {
 	uint8_t type;
 	uint8_t reserved[3];
 	int32_t s_port;
+	uint64_t flags;
 	fid_t c_fid;
 	fid_t s_fid;
 };
@@ -797,6 +801,7 @@ int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
 int sock_ep_enable(struct fid_ep *ep);
+int sock_ep_disable(struct fid_ep *ep);
 
 
 int sock_stx_ctx(struct fid_domain *domain,

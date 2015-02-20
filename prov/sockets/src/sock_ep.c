@@ -839,6 +839,35 @@ int sock_ep_enable(struct fid_ep *ep)
 	return 0;
 }
 
+int sock_ep_disable(struct fid_ep *ep)
+{
+	int i;
+	struct sock_ep *sock_ep;
+
+	sock_ep = container_of(ep, struct sock_ep, ep);
+
+	if (sock_ep->tx_ctx && 
+	    sock_ep->tx_ctx->fid.ctx.fid.fclass == FI_CLASS_TX_CTX) {
+		sock_ep->tx_ctx->enabled = 0;
+	}
+
+	if (sock_ep->rx_ctx && 
+	    sock_ep->rx_ctx->ctx.fid.fclass == FI_CLASS_RX_CTX) {
+		sock_ep->rx_ctx->enabled = 0;
+	}
+
+	for (i = 0; i < sock_ep->ep_attr.tx_ctx_cnt; i++) {
+		if (sock_ep->tx_array[i]) 
+			sock_ep->tx_array[i]->enabled = 0;
+	}
+
+	for (i = 0; i < sock_ep->ep_attr.rx_ctx_cnt; i++) {
+		if (sock_ep->rx_array[i]) 
+			sock_ep->rx_array[i]->enabled = 0;
+	}
+	return 0;
+}
+
 static int sock_ep_getopt(fid_t fid, int level, int optname,
 		       void *optval, size_t *optlen)
 {
