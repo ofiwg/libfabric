@@ -26,6 +26,7 @@
  * SOFTWARE.
  */
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,7 +41,7 @@
 #include <rdma/fi_errno.h>
 #include <shared.h>
 
-static uint64_t op_type = FI_REMOTE_WRITE;
+static enum ft_rma_opcodes op_type = FT_RMA_WRITE;
 static struct cs_opts opts;
 static int max_credits = 128;
 static int credits = 128;
@@ -49,6 +50,7 @@ static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
 struct fi_rma_iov local, remote;
+static uint64_t cq_data = 1;
 
 static struct fi_info hints;
 
@@ -62,7 +64,7 @@ static struct fid_mr *mr;
 
 static int send_xfer(int size)
 {
-	struct fi_cq_entry comp;
+	struct fi_cq_data_entry comp;
 	int ret;
 
 	while (!credits) {
@@ -81,7 +83,7 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), 0, NULL);
+	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), 0, ep);
 	if (ret)
 		FT_PRINTERR("fi_send", ret);
 
@@ -90,7 +92,7 @@ post:
 
 static int recv_xfer(int size)
 {
-	struct fi_cq_entry comp;
+	struct fi_cq_data_entry comp;
 	int ret;
 
 	do {
@@ -117,7 +119,7 @@ static int read_data(size_t size)
 	int ret;
 
 	ret = fi_read(ep, buf, size, fi_mr_desc(mr), 
-		      0, remote.addr, remote.key, NULL);
+		      0, remote.addr, remote.key, ep);
 	if (ret) {
 		FT_PRINTERR("fi_read", ret);
 		return ret;
@@ -126,12 +128,25 @@ static int read_data(size_t size)
 	return 0;
 }
 
+static int write_data_with_cq_data(size_t size)
+{
+	int ret;
+
+	ret = fi_writedata(ep, buf, size, fi_mr_desc(mr),
+		       cq_data, 0, remote.addr, remote.key, ep);
+	if (ret) {
+		FT_PRINTERR("fi_writedata", ret);
+		return ret;
+	}
+	return 0;
+}
+
 static int write_data(size_t size)
 {
 	int ret;
 
 	ret = fi_write(ep, buf, size, fi_mr_desc(mr),  
-		       0, remote.addr, remote.key, NULL);
+		       0, remote.addr, remote.key, ep);
 	if (ret) {
 		FT_PRINTERR("fi_write", ret);
 		return ret;
@@ -143,7 +158,7 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = wait_for_completion(scq, max_credits - credits);
+	ret = wait_for_data_completion(scq, max_credits - credits);
 	if (ret) {
 		return ret;
 	}
@@ -157,6 +172,38 @@ static int sync_test(void)
 	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
 }
 
+static int wait_remote_writedata_completion(void)
+{
+	struct fi_cq_data_entry comp;
+	int ret;
+
+	do {
+		ret = fi_cq_read(rcq, &comp, 1);
+		if (ret < 0) {
+			if (ret == -FI_EAVAIL) {
+				cq_readerr(rcq, "rcq");
+			} else {
+				FT_PRINTERR("fi_cq_read", ret);
+			}
+			return ret;
+		}
+	} while (!ret);
+
+	ret = 0;
+	if (comp.data != cq_data) {
+		FT_DEBUG("Got unexpected completion data %" PRIu64 "\n", comp.data);
+	}
+	assert(comp.op_context == buf || comp.op_context == NULL);
+	if (comp.op_context == buf) {
+		/* We need to repost the receive */
+		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
+		if (ret)
+			FT_PRINTERR("fi_recv", ret);
+	}
+
+	return ret;
+}
+
 static int run_test(void)
 {
 	int ret, i;
@@ -167,14 +214,23 @@ static int run_test(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < opts.iterations; i++) {
-		if (op_type == FI_REMOTE_WRITE) {
+		switch (op_type) {
+		case FT_RMA_WRITE:
 			ret = write_data(opts.transfer_size);
-		} else {
+			break;
+		case FT_RMA_WRITEDATA:
+			ret = write_data_with_cq_data(opts.transfer_size);
+			if (ret)
+				return ret;
+			ret = wait_remote_writedata_completion();
+			break;
+		case FT_RMA_READ:
 			ret = read_data(opts.transfer_size); 
+			break;
 		}
 		if (ret)
 			return ret;
-		ret = wait_for_completion(scq, 1);
+		ret = wait_for_data_completion(scq, 1);
 		if (ret)
 			return ret;
 	}
@@ -220,6 +276,7 @@ static void free_ep_res(void)
 static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
+	uint64_t access_mode;
 	int ret;
 
 	buffer_size = !opts.custom ? test_size[TEST_CNT - 1].size : 
@@ -231,7 +288,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
+	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 	cq_attr.size = max_credits << 1;
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
@@ -246,8 +303,20 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err2;
 	}
 	
+	switch (op_type) {
+	case FT_RMA_READ:
+		access_mode = FI_REMOTE_READ;
+		break;
+	case FT_RMA_WRITE:
+	case FT_RMA_WRITEDATA:
+		access_mode = FI_REMOTE_WRITE;
+		break;
+	default:
+		/* Impossible to reach here */
+		assert(0);
+	}
 	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)), 
-			op_type, 0, 0, 0, &mr, NULL);
+			access_mode, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
@@ -591,11 +660,13 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, "ho:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		case 'o':
-			if (!strcmp(optarg, "read"))
-				op_type = FI_REMOTE_READ;
-			else if (!strcmp(optarg, "write"))
-				op_type = FI_REMOTE_WRITE;
-			else {
+			if (!strcmp(optarg, "read")) {
+				op_type = FT_RMA_READ;
+			} else if (!strcmp(optarg, "writedata")) {
+				op_type = FT_RMA_WRITEDATA;
+			} else if (!strcmp(optarg, "write")) {
+				op_type = FT_RMA_WRITE;
+			} else {
 				ft_csusage(argv[0], NULL);
 				fprintf(stderr, "  -o <op>\tselect operation type (read or write)\n");
 				return EXIT_FAILURE;
@@ -608,7 +679,7 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Ping pong client and server using message RMA.");
-			fprintf(stderr, "  -o <op>\tselect operation type (read or write)\n");
+			fprintf(stderr, "  -o <op>\trma op type: read|write|writedata (default: write)]\n");
 			return EXIT_FAILURE;
 		}
 	}
@@ -618,6 +689,9 @@ int main(int argc, char **argv)
 
 	hints.ep_type = FI_EP_MSG;
 	hints.caps = FI_MSG | FI_RMA;
+	if (op_type == FT_RMA_WRITEDATA) {
+		hints.caps |= FI_REMOTE_CQ_DATA;
+	}
 	hints.mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints.addr_format = FI_SOCKADDR;
 

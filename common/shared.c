@@ -172,6 +172,27 @@ void init_test(int size, char *test_name, size_t test_name_len,
 	*iterations = size_to_count(*transfer_size);
 }
 
+int wait_for_data_completion(struct fid_cq *cq, int num_completions)
+{
+	int ret;
+	struct fi_cq_data_entry comp;
+
+	while (num_completions > 0) {
+		ret = fi_cq_read(cq, &comp, 1);
+		if (ret > 0) {
+			num_completions--;
+		} else if (ret < 0) {
+			if (ret == -FI_EAVAIL) {
+				cq_readerr(cq, "cq");
+			} else {
+				FT_PRINTERR("fi_cq_read", ret);
+			}
+			return ret;
+		}
+	}
+	return 0;
+}
+
 int wait_for_completion(struct fid_cq *cq, int num_completions)
 {
 	int ret;
