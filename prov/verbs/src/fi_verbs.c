@@ -2506,15 +2506,21 @@ static struct fi_ops fi_ibv_mr_ops = {
 };
 
 static int
-fi_ibv_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
+fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	   uint64_t access, uint64_t offset, uint64_t requested_key,
 	   uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct fi_ibv_mem_desc *md;
 	int fi_ibv_access;
+	struct fid_domain *domain;
 
 	if (flags)
 		return -FI_EBADFLAGS;
+
+	if (fid->fclass != FI_CLASS_DOMAIN) {
+		return -FI_EINVAL;
+	}
+	domain = container_of(fid, struct fid_domain, fid);
 
 	md = calloc(1, sizeof *md);
 	if (!md)

@@ -140,14 +140,14 @@ struct fi_ops_domain {
 
 struct fi_ops_mr {
 	size_t	size;
-	int	(*reg)(struct fid_domain *domain, const void *buf, size_t len,
+	int	(*reg)(struct fid *fid, const void *buf, size_t len,
 			uint64_t access, uint64_t offset, uint64_t requested_key,
 			uint64_t flags, struct fid_mr **mr, void *context);
-	int	(*regv)(struct fid_domain *domain, const struct iovec *iov,
+	int	(*regv)(struct fid *fid, const struct iovec *iov,
 			size_t count, uint64_t access,
 			uint64_t offset, uint64_t requested_key,
 			uint64_t flags, struct fid_mr **mr, void *context);
-	int	(*regattr)(struct fid_domain *domain, const struct fi_mr_attr *attr,
+	int	(*regattr)(struct fid *fid, const struct fi_mr_attr *attr,
 			uint64_t flags, struct fid_mr **mr);
 };
 
@@ -209,7 +209,7 @@ fi_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 	  uint64_t access, uint64_t offset, uint64_t requested_key,
 	  uint64_t flags, struct fid_mr **mr, void *context)
 {
-	return domain->mr->reg(domain, buf, len, access, offset,
+	return domain->mr->reg(&domain->fid, buf, len, access, offset,
 			       requested_key, flags, mr, context);
 }
 
