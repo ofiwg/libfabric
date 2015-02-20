@@ -1,0 +1,10 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+includedir=@includedir@
+libdir=@libdir@
+
+Name: libfabric
+Description: A modern library for direct userspace use of RDMA hardware
+Version: @VERSION@
+Libs: -L${libdir} -lfabric
+Cflags: -I${includedir}
