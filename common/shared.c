@@ -285,7 +285,7 @@ void ft_csusage(char *name, char *desc)
 	fprintf(stderr, "  -n <domain>\tdomain name\n");
 	fprintf(stderr, "  -b <src_port>\tnon default source port number\n");
 	fprintf(stderr, "  -p <dst_port>\tnon default destination port number\n");
-	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP,verbs\n");
+	fprintf(stderr, "  -f <provider>\tspecific provider name eg sockets, verbs\n");
 	fprintf(stderr, "  -s <address>\tsource address\n");
 	fprintf(stderr, "  -I <number>\tnumber of iterations\n");
 	fprintf(stderr, "  -S <size>\tspecific transfer size or 'all'\n");
