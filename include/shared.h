@@ -98,6 +98,7 @@ char *cnt_str(char str[FT_STR_LEN], long long cnt);
 int size_to_count(int size);
 void init_test(int size, char *test_name, size_t test_name_len,
 		int *transfer_size, int *iterations);
+int wait_for_data_completion(struct fid_cq *cq, int num_completions);
 int wait_for_completion(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, char *cq_str);
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a, 
@@ -116,6 +117,14 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define ARRAY_SIZE(A) (sizeof(A)/sizeof(*A))
+
+/* for RMA tests --- we want to be able to select fi_writedata, but there is no
+ * constant in libfabric for this */
+enum ft_rma_opcodes {
+	FT_RMA_READ = 1,
+	FT_RMA_WRITE,
+	FT_RMA_WRITEDATA,
+};
 
 #ifdef __cplusplus
 }
