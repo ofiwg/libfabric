@@ -657,6 +657,7 @@ static void *sock_msg_ep_listener_thread (void *data)
 		switch (conn_response->hdr.type) {
 		case SOCK_CONN_ACCEPT:
 			SOCK_LOG_INFO("Received SOCK_CONN_ACCEPT\n");
+
 			entry_sz = sizeof(*cm_entry) + user_data_sz;
 			memset(cm_entry, 0, sizeof *cm_entry);
 			cm_entry->fid = conn_response->hdr.c_fid;
@@ -667,6 +668,11 @@ static void *sock_msg_ep_listener_thread (void *data)
 			fid_ep = container_of(conn_response->hdr.c_fid, 
 					      struct fid_ep, fid);
 			sock_ep = container_of(fid_ep, struct sock_ep, ep);
+
+			if (sock_ep->is_disabled || 
+			    sock_ep->cm.shutdown_received)
+				break;
+
 			sock_ep->peer_fid = conn_response->hdr.s_fid;
 			sock_ep->connected = 1;
 
@@ -681,15 +687,24 @@ static void *sock_msg_ep_listener_thread (void *data)
 
 		case SOCK_CONN_REJECT:
 			SOCK_LOG_INFO("Received SOCK_CONN_REJECT\n");
+
 			memset(&cm_err_entry, 0, sizeof cm_err_entry);
 			cm_err_entry.fid = conn_response->hdr.c_fid;
 			cm_err_entry.err = -FI_ECONNREFUSED;
-			
+
+			fid_ep = container_of(conn_response->hdr.c_fid, 
+					      struct fid_ep, fid);
+			sock_ep = container_of(fid_ep, struct sock_ep, ep);
+
+			if (sock_ep->is_disabled || 
+			    sock_ep->cm.shutdown_received)
+				break;
+
 			if (user_data_sz > 0)
 				memcpy(&cm_err_entry.err_data, 
 				       &conn_response->user_data, user_data_sz);
 			
-			if (sock_eq_report_event(ep->eq, FI_ECONNREFUSED, 
+			if (sock_eq_report_event(sock_ep->eq, FI_ECONNREFUSED, 
 						 &cm_err_entry, 
 						 sizeof(cm_err_entry) + 
 						 user_data_sz, 0)) 
@@ -698,6 +713,7 @@ static void *sock_msg_ep_listener_thread (void *data)
 
 		case SOCK_CONN_SHUTDOWN:
 			SOCK_LOG_INFO("Received SOCK_CONN_SHUTDOWN\n");
+
 			entry_sz = sizeof(*cm_entry) + user_data_sz;
 			memset(cm_entry, 0, sizeof *cm_entry);
 			cm_entry->fid = conn_response->hdr.c_fid;
@@ -708,7 +724,10 @@ static void *sock_msg_ep_listener_thread (void *data)
 			fid_ep = container_of(conn_response->hdr.c_fid, 
 					      struct fid_ep, fid);
 			sock_ep = container_of(fid_ep, struct sock_ep, ep);
-			
+			if (sock_ep->cm.shutdown_received)
+				break;
+
+			sock_ep->cm.shutdown_received = 1;
 			if (sock_eq_report_event(ep->eq, FI_SHUTDOWN, cm_entry,
 						 entry_sz, 0))
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
@@ -806,6 +825,9 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	_ep = container_of(ep, struct sock_ep, ep);
 	_eq = _ep->eq;
 	if (!_eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ) 
+		return -FI_EINVAL;
+
+	if (_ep->is_disabled || _ep->cm.shutdown_received)
 		return -FI_EINVAL;
 
 	if (!_ep->cm.listener_thread) {
@@ -1086,6 +1108,7 @@ static void *sock_pep_listener_thread (void *data)
 		switch (conn_req->hdr.type) {
 		case SOCK_CONN_REQ:
 			SOCK_LOG_INFO("Received SOCK_CONN_REQ\n");
+
 			user_data_sz = ret - sizeof(*conn_req);
 			entry_sz = sizeof(*cm_entry) + user_data_sz;
 
@@ -1115,7 +1138,10 @@ static void *sock_pep_listener_thread (void *data)
 			fid_ep = container_of(conn_response->hdr.c_fid, 
 					      struct fid_ep, fid);
 			sock_ep = container_of(fid_ep, struct sock_ep, ep);
+			if (sock_ep->cm.shutdown_received)
+				break;
 			
+			sock_ep->cm.shutdown_received = 1;
 			if (sock_eq_report_event(sock_ep->eq, FI_SHUTDOWN, cm_entry,
 						 entry_sz, 0))
 				SOCK_LOG_ERROR("Error in writing to EQ\n");

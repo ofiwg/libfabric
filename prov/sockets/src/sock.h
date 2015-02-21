@@ -382,6 +382,7 @@ struct sock_cm_entry {
 	int do_listen;
 	int signal_fds[2];
 	fastlock_t lock;
+	int shutdown_received;
 	pthread_t listener_thread;
 	struct dlist_entry msg_list;
 };
