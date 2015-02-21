@@ -517,6 +517,13 @@ static int sock_ep_close(struct fid *fid)
 		free(sock_ep->src_addr);
 	if (sock_ep->dest_addr)
 		free(sock_ep->dest_addr);
+
+	if (sock_ep->ep_type == FI_EP_MSG) {
+		sock_ep->cm.do_listen = 0;
+
+		close(sock_ep->cm.signal_fds[0]);
+		close(sock_ep->cm.signal_fds[1]);
+	}
 	
 	atomic_dec(&sock_ep->domain->ref);
 	free(sock_ep);
@@ -865,6 +872,7 @@ int sock_ep_disable(struct fid_ep *ep)
 		if (sock_ep->rx_array[i]) 
 			sock_ep->rx_array[i]->enabled = 0;
 	}
+	sock_ep->is_disabled = 1;
 	return 0;
 }
 
@@ -1138,7 +1146,7 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type,
 int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct sock_ep **ep, void *context, size_t fclass)
 {
-	int ret;
+	int ret, flags;
 	struct sock_ep *sock_ep;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
@@ -1289,6 +1297,18 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (info) {
 		memcpy(&sock_ep->info, info, sizeof(struct fi_info));
 	}
+
+	if (sock_ep->ep_type == FI_EP_MSG) {
+		dlist_init(&sock_ep->cm.msg_list);
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, 
+			       sock_ep->cm.signal_fds) < 0)
+			goto err;
+
+		flags = fcntl(sock_ep->cm.signal_fds[1], F_GETFL, 0);
+		if (fcntl(sock_ep->cm.signal_fds[1], F_SETFL, flags | O_NONBLOCK))
+			SOCK_LOG_ERROR("fcntl failed");
+	}
+
   	sock_ep->domain = sock_dom;
 	atomic_inc(&sock_dom->ref);
 	return 0;

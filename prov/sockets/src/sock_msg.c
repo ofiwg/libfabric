@@ -81,7 +81,7 @@ static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		return -FI_EINVAL;
 	}
 
-	assert(msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT);
+	assert(rx_ctx->enabled && msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT);
 
 	rx_entry = sock_rx_new_entry(rx_ctx);
 	if (!rx_entry)
@@ -347,7 +347,7 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	assert(msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT);
+	assert(rx_ctx->enabled && msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT);
 
 	rx_entry = sock_rx_new_entry(rx_ctx);
 	if (!rx_entry)

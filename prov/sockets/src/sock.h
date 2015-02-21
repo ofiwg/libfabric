@@ -377,6 +377,15 @@ struct sock_comp {
 	struct sock_eq *eq;
 };
 
+struct sock_cm_entry {
+	int sock;
+	int do_listen;
+	int signal_fds[2];
+	fastlock_t lock;
+	pthread_t listener_thread;
+	struct dlist_entry msg_list;
+};
+
 struct sock_ep {
 	struct fid_ep ep;
 	size_t fclass;
@@ -419,24 +428,16 @@ struct sock_ep {
 
 	struct sockaddr_in cm_addr;
 	fid_t peer_fid;
-	fi_addr_t conn_addr;
 	uint16_t key;
-	int socket;
-
-	pthread_t listener_thread;
-	int do_listen;
+	int is_disabled;
+	struct sock_cm_entry cm;
 };
 
 struct sock_pep {
 	struct fid_pep	pep;
 	struct sock_fabric *sock_fab;
 
-	int do_listen;
-	pthread_t listener_thread;
-	int signal_fds[2];
-	int socket;
-	int listener_sock_fd;
-
+	struct sock_cm_entry cm;
 	struct sockaddr_in src_addr;
 	struct fi_info info;
 	struct sock_eq *eq;
@@ -716,11 +717,17 @@ struct sock_cq {
 	sock_cq_report_fn report_completion;
 };
 
+struct sock_cm_msg_list_entry {
+	size_t msg_len;
+	struct sockaddr_in addr;
+	struct dlist_entry entry;
+	char msg[0];
+};
+
 struct sock_conn_hdr {
 	uint8_t type;
 	uint8_t reserved[3];
 	int32_t s_port;
-	uint64_t flags;
 	fid_t c_fid;
 	fid_t s_fid;
 };
