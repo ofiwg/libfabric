@@ -330,16 +330,6 @@ additional optimizations.
   write memory operations from remote endpoints.  This flag requires
   that FI_RMA and/or FI_ATOMIC be set.
 
-*FI_REMOTE_CQ_DATA*
-: Applications may include a small message with a data transfer that
-  is placed directly into a remote event queue as part of a completion
-  event.  This is referred to as remote CQ data (sometimes referred to
-  as immediate data).  The FI_REMOTE_CQ_DATA indicates that an
-  endpoint must support the FI_REMOTE_CQ_DATA flag on data transfer
-  operations.  The minimum supported size of remote CQ data that an
-  endpoint with this capability must support is 4-bytes.  Applications
-  may check the domain attributes to determine remote CQ data limits.
-
 *FI_REMOTE_SIGNAL*
 : Indicates that the endpoint support the FI_REMOTE_SIGNAL flag on
   data transfer operations.  Support requires marking outbound data
@@ -384,7 +374,7 @@ FI_DIRECTD_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
 and FI_REMOTE_WRITE.
 
 Secondary capabilities: FI_DYNAMIC_MR, FI_INJECT, FI_MULTI_RECV, FI_SOURCE,
-FI_REMOTE_CQ_DATA, FI_CANCEL, FI_FENCE, FI_REMOTE_COMPLETE 
+FI_CANCEL, FI_FENCE, FI_REMOTE_COMPLETE 
 
 # MODE
 

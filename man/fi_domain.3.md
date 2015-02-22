@@ -365,9 +365,13 @@ specified by this value.
 
 ## CQ Data Size
 
-The number of bytes that the provider supports for remote CQ data.
-See the FI_REMOTE_CQ_DATA flag (fi_getinfo) for the use of remote CQ
-data.
+Applications may include a small message with a data transfer that
+is placed directly into a remote completion queue as part of a completion
+event.  This is referred to as remote CQ data (sometimes referred to
+as immediate data).  This field indicates the number of bytes that
+the provider supports for remote CQ data.  If supported (non-zero
+value is returned), the minimum size of remote CQ data must be
+at least 4-bytes.
 
 ## Completion Queue Count (cq_cnt)
 
