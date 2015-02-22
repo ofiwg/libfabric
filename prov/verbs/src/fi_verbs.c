@@ -1744,7 +1744,16 @@ fi_ibv_msg_ep_getopt(fid_t fid, int level, int optname,
 {
 	switch (level) {
 	case FI_OPT_ENDPOINT:
-		return -FI_ENOPROTOOPT;
+		switch (optname) {
+		case FI_OPT_CM_DATA_SIZE:
+			if (*optlen < sizeof(size_t))
+				return -FI_ETOOSMALL;
+			*((size_t *) optval) = 56;
+			*optlen = sizeof(size_t);
+			return 0;
+		default:
+			return -FI_ENOPROTOOPT;
+		}
 	default:
 		return -FI_ENOPROTOOPT;
 	}

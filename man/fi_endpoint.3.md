@@ -399,6 +399,12 @@ The following option levels and option names and parameters are defined.
   that applications that want to override the default MIN_MULTI_RECV
   value set this option before enabling the corresponding endpoint.
 
+- *FI_OPT_CM_DATA_SIZE - size_t*
+: Defines the size of available space in CM messages for user-defined
+  data.  This value limits the amount of data that applications can
+  exchange between peer endpoints using the fi_connect, fi_accept,
+  and fi_reject operations.  This option is read only.
+
 ## fi_rx_size_left
 
 The fi_rx_size_left call returns a lower bound on the number of receive

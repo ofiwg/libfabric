@@ -377,10 +377,17 @@ static int sock_ctx_getopt(fid_t fid, int level, int optname,
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
+		if (*optlen < sizeof(size_t))
+			return -FI_ETOOSMALL;
 		*(size_t *)optval = rx_ctx->min_multi_recv;
 		*optlen = sizeof(size_t);
 		break;
-
+	case FI_OPT_CM_DATA_SIZE:
+		if (*optlen < sizeof(size_t))
+			return -FI_ETOOSMALL;
+		*((size_t *) optval) = SOCK_EP_MAX_CM_DATA_SZ;
+		*optlen = sizeof(size_t);
+		break;
 	default:
 		return -FI_ENOPROTOOPT;
 	}
