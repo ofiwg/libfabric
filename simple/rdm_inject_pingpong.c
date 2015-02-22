@@ -50,7 +50,7 @@ static struct timespec start, end;
 static void *send_buf, *recv_buf;
 static size_t buffer_size;
 
-static struct fi_info hints;
+static struct fi_info *hints;
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -290,7 +290,7 @@ static int init_fabric(void)
 	int ret;
 
 	if (opts.dst_addr) {
-		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, &hints);
+		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
 		if (ret)
 			return ret;
 		node = opts.dst_addr;
@@ -301,7 +301,7 @@ static int init_fabric(void)
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -478,11 +478,18 @@ int main(int argc, char **argv)
 {
 	int op;
 	opts = INIT_OPTS;
+	opts.transfer_size = 64;
+
+	hints = fi_allocinfo();
+	if (!hints) {
+		FT_PRINTERR("fi_allocinfo", -FI_ENOMEM);
+		return EXIT_FAILURE;
+	}
 
 	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
-			ft_parseinfo(op, optarg, &hints);
+			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
@@ -495,10 +502,14 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints.ep_type = FI_EP_RDM;
-	hints.caps = FI_MSG | FI_INJECT;
-	hints.mode = FI_CONTEXT;
-	hints.addr_format = FI_FORMAT_UNSPEC;
+	hints->ep_type = FI_EP_RDM;
+	hints->caps = FI_MSG;
+	hints->mode = FI_CONTEXT;
+
+	if (opts.transfer_size)
+		hints->ep_attr->inject_size = opts.transfer_size;
+	else
+		hints->ep_attr->inject_size = 16;
 
 	if (opts.prhints) {
 		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
