@@ -289,14 +289,6 @@ additional optimizations.
   capability is not set, then the src_addr parameter for msg and tagged
   receive operations is ignored.
 
-*FI_INJECT*
-: Indicates that the endpoint be able to support the FI_INJECT flag on
-  data transfer operations and the 'inject' data transfer calls.  The
-  minimum supported size of an inject operation that an endpoint with
-  this capability must support is 8-bytes.  Applications may access
-  endpoint options (getopt/setopt) to determine injected transfer
-  limits.
-
 *FI_MULTI_RECV*
 : Specifies that the endpoint must support the FI_MULTI_RECV flag when
   posting receive buffers.
@@ -382,7 +374,7 @@ Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_NAMED_RX_CTX,
 FI_DIRECTD_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
 and FI_REMOTE_WRITE.
 
-Secondary capabilities: FI_DYNAMIC_MR, FI_INJECT, FI_MULTI_RECV, FI_SOURCE,
+Secondary capabilities: FI_DYNAMIC_MR, FI_MULTI_RECV, FI_SOURCE,
 FI_CANCEL, FI_FENCE, FI_REMOTE_COMPLETE 
 
 # MODE

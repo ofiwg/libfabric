@@ -502,7 +502,7 @@ operation.
 ## inject_size - Inject Size
 
 Defines the default inject operation size (see the FI_INJECT flag)
-that an endpoint will support.  This value applies per send operation.
+that an endpoint will support.  This value applies per transmit operation.
 
 ## total_buffered_recv - Total Buffered Receive
 
@@ -988,14 +988,12 @@ transfer operations that take flags as input override the op_flags
 value of an endpoint.
 
 *FI_INJECT*
-: Indicates that all outbound data buffer should be returned to the
+: Indicates that all outbound data buffers should be returned to the
   user's control immediately after a data transfer call returns, even
   if the operation is handled asynchronously.  This may require that
   the provider copy the data into a local buffer and transfer out of
   that buffer.  A provider may limit the total amount of send data
-  that may be buffered and/or the size of a single send.  Applications
-  may discover and modify these limits using the endpoint's getopt and
-  setopt interfaces.
+  that may be buffered and/or the size of a single send.
 
 *FI_MULTI_RECV*
 : Applies to posted receive operations.  This flag allows the user to
