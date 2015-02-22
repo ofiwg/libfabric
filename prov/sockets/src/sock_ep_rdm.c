@@ -225,7 +225,7 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 	char hostname[HOST_NAME_MAX];
 
 	if (!info)
-		return -FI_EBADFLAGS;
+		return -FI_EINVAL;
 
 	*info = NULL;
 	

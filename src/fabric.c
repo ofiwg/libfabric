@@ -297,7 +297,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const cha
 		if (!prov->provider->getinfo)
 			continue;
 
-		if (hints->fabric_attr && hints->fabric_attr->prov_name &&
+		if (hints && hints->fabric_attr && hints->fabric_attr->prov_name &&
 		    strcmp(prov->provider->name, hints->fabric_attr->prov_name))
 			continue;
 

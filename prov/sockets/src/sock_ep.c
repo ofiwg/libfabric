@@ -1082,18 +1082,20 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type,
 		memcpy(_info->dest_addr, dest_addr, sizeof(struct sockaddr_in));
 	}
 
-	if (hints->caps) 
-		_info->caps = hints->caps;
+	if (hints) {
+		if (hints->caps)
+			_info->caps = hints->caps;
 
-	if (hints->ep_attr)
-		*(_info->ep_attr) = *(hints->ep_attr);
+		if (hints->ep_attr)
+			*(_info->ep_attr) = *(hints->ep_attr);
 
-	if (hints->tx_attr)
-		*(_info->tx_attr) = *(hints->tx_attr);
+		if (hints->tx_attr)
+			*(_info->tx_attr) = *(hints->tx_attr);
 
-	if (hints->rx_attr)
-		*(_info->rx_attr) = *(hints->rx_attr);
-		
+		if (hints->rx_attr)
+			*(_info->rx_attr) = *(hints->rx_attr);
+	}
+
 	*(_info->domain_attr) = sock_domain_attr;
 	*(_info->fabric_attr) = sock_fabric_attr;
 

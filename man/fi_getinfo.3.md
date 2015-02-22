@@ -48,11 +48,10 @@ struct fi_info *fi_dupinfo(const struct fi_info *info);
 
 Returns information about available fabric services for reaching the
 specified node or service, subject to any provided hints.  Callers
-must provide at least one of the node, service, or hints parameters.
-If node and service are NULL, then the hints src_addr and/or dest_addr
-fields of the fi_info structure must be specified.
-If no matching fabric information is available, info will be set to
-NULL.
+may specify NULL for node, service, and hints in order to retrieve
+information about what providers are available and their optimal usage
+models.  If no matching fabric information is available, info will
+be set to NULL.
 
 Based on the input hints, node, and service parameters, a list of
 fabric domains and endpoints will be returned.  Each fi_info structure
@@ -63,9 +62,9 @@ including additional criteria in their search hints.  Relaxing or
 eliminating input hints will increase the number and type of endpoints
 that are available.  Providers that return multiple endpoints to a
 single fi_getinfo call should return the endpoints that are highest
-performing.  Providers may indicate that an endpoint and domain can
+performing first.  Providers may indicate that an endpoint and domain can
 support additional capabilities than those requested by the user only
-if such support will not adversely affect performance.
+if such support will not adversely affect application performance or security.
 
 The version parameter is used by the application to request the
 desired version of the interfaces.  The version determines the format
@@ -82,7 +81,7 @@ from source against a newer version of the library that introduces new
 fields to data structures, which would not be initialized by the
 application.
 
-Either node, service, or hints must be provided, with any combination
+Node, service, or hints may be provided, with any combination
 being supported.  If node is provided, fi_getinfo will attempt to
 resolve the fabric address to the given node.  The hints parameter, if
 provided, may be used to control the resulting output as indicated
@@ -206,7 +205,7 @@ struct fi_info {
 Interface capabilities are obtained by OR-ing the following flags
 together.  If capabilities in the hint parameter are set to 0, the
 underlying provider will return the set of capabilities which are
-supported.  Otherwise, providers will only return data matching the
+supported.  Otherwise, providers will return data matching the
 specified set of capabilities.  Providers may indicate support for
 additional capabilities beyond those requested when the use of
 expanded capabilities will not adversely affect performance or expose
@@ -370,6 +369,22 @@ additional optimizations.
   to initiating the fenced operation.  Fenced operations are often
   used to enforce ordering between operations that are not otherwise
   guaranteed by the underlying provider or protocol.
+
+Capabilities may be grouped into two general categories: primary and
+secondary.  Primary capabilities must explicitly be requested by an
+application, and a provider must enable support for only those primary
+capabilities which were selected.  Secondary capabilities may optionally
+be requested by an application.  If requested, a provider must support
+the capability or fail the fi_getinfo request (FI_ENOSYS).  A provider
+may optionally report non-selected secondary capabilities if doing so
+would not compromise performance or security.
+
+Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_NAMED_RX_CTX,
+FI_DIRECTD_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
+and FI_REMOTE_WRITE.
+
+Secondary capabilities: FI_DYNAMIC_MR, FI_INJECT, FI_MULTI_RECV, FI_SOURCE,
+FI_REMOTE_CQ_DATA, FI_CANCEL, FI_FENCE, FI_REMOTE_COMPLETE 
 
 # MODE
 
