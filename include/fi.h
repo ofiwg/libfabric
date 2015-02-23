@@ -110,7 +110,6 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 #define fastlock_init(lock) pthread_spin_init(lock, PTHREAD_PROCESS_PRIVATE)
 #define fastlock_destroy(lock) pthread_spin_destroy(lock)
 #define fastlock_acquire(lock) pthread_spin_lock(lock)
-#define fastlock_tryacquire(lock) pthread_spin_trylock(lock)
 #define fastlock_release(lock) pthread_spin_unlock(lock)
 
 #else
@@ -119,7 +118,6 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 #define fastlock_init(lock) pthread_mutex_init(lock, NULL)
 #define fastlock_destroy(lock) pthread_mutex_destroy(lock)
 #define fastlock_acquire(lock) pthread_mutex_lock(lock)
-#define fastlock_tryacquire(lock) pthread_mutex_trylock(lock)
 #define fastlock_release(lock) pthread_mutex_unlock(lock)
 
 #endif /* PT_LOCK_SPIN */

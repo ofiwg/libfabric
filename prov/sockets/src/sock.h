@@ -184,9 +184,11 @@ struct sock_cntr {
 
 	struct dlist_entry rx_list;
 	struct dlist_entry tx_list;
+	fastlock_t list_lock;
 
 	struct fid_wait *waitset;
 	int signal;
+	int is_waiting;
 };
 
 struct sock_mr {
@@ -707,6 +709,7 @@ struct sock_cq {
 	struct ringbuffd cq_rbfd;
 	struct ringbuf cqerr_rb;
 	fastlock_t lock;
+	fastlock_t list_lock;
 
 	struct fid_wait *waitset;
 	int signal;

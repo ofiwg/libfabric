@@ -61,6 +61,7 @@ int sock_cntr_progress(struct sock_cntr *cntr)
 	    !sock_progress_thread_wait)
 		return 0;
 
+	fastlock_acquire(&cntr->list_lock);
 	for (entry = cntr->tx_list.next; entry != &cntr->tx_list;
 	     entry = entry->next) {
 		tx_ctx = container_of(entry, struct sock_tx_ctx, cntr_entry);
@@ -72,6 +73,8 @@ int sock_cntr_progress(struct sock_cntr *cntr)
 		rx_ctx = container_of(entry, struct sock_rx_ctx, cntr_entry);
 		sock_pe_progress_rx_ctx(cntr->domain->pe, rx_ctx);
 	}
+	fastlock_release(&cntr->list_lock);
+
 	return 0;
 }
 
@@ -132,33 +135,63 @@ static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 	struct timeval now;
 	double start_ms, end_ms;
 	struct sock_cntr *_cntr;
-
+	
 	_cntr = container_of(cntr, struct sock_cntr, cntr_fid);
 	fastlock_acquire(&_cntr->mut);
-	atomic_set(&_cntr->threshold, threshold);
-	while (atomic_get(&_cntr->value) < atomic_get(&_cntr->threshold) && !ret) {
-		if (_cntr->domain->progress_mode == FI_PROGRESS_MANUAL) {
-			if (timeout > 0) {
-				gettimeofday(&now, NULL);
-				start_ms = (double)now.tv_sec * 1000.0 + 
-					(double)now.tv_usec / 1000.0;
-			}
-
-			sock_cntr_progress(_cntr);	
-			if (timeout > 0) {
-				gettimeofday(&now, NULL);
-				end_ms = (double)now.tv_sec * 1000.0 + 
-					(double)now.tv_usec / 1000.0;
-				timeout -=  (end_ms - start_ms);
-				timeout = timeout < 0 ? 0 : timeout;
-			}
-		}
-		ret = fi_wait_cond(&_cntr->cond, &_cntr->mut, timeout);
+	if (atomic_get(&_cntr->value) >= threshold) {
+		fastlock_release(&_cntr->mut);
+		return 0;
 	}
+
+	if (_cntr->is_waiting) {
+		fastlock_release(&_cntr->mut);
+		return -FI_ETIMEDOUT;
+	}
+
+	_cntr->is_waiting = 1;
+	atomic_set(&_cntr->threshold, threshold);
+	fastlock_release(&_cntr->mut);
+
+	if (_cntr->domain->progress_mode == FI_PROGRESS_MANUAL) {
+		if (timeout > 0) {
+			gettimeofday(&now, NULL);
+			start_ms = (double)now.tv_sec * 1000.0 + 
+				(double)now.tv_usec / 1000.0;
+		}
+		
+		sock_cntr_progress(_cntr);	
+		if (timeout > 0) {
+			gettimeofday(&now, NULL);
+			end_ms = (double)now.tv_sec * 1000.0 + 
+				(double)now.tv_usec / 1000.0;
+			timeout -=  (end_ms - start_ms);
+			timeout = timeout < 0 ? 0 : timeout;
+		}
+
+		if (timeout >= 0) {
+			ret = fi_wait_cond(&_cntr->cond, &_cntr->mut, timeout);
+			if (ret && ret != ETIMEDOUT) {
+				if (sock_cntr_err_inc(_cntr)) 
+					SOCK_LOG_ERROR("failed to report error\n");
+			}
+			goto out;
+		} else {
+			while (atomic_get(&_cntr->value) < threshold)
+				sock_cntr_progress(_cntr);
+			goto out;
+		}
+	} else {
+		ret = fi_wait_cond(&_cntr->cond, &_cntr->mut, timeout);
+		goto out;
+	}
+
+out:
+	fastlock_acquire(&_cntr->mut);
+	_cntr->is_waiting = 0;
 	atomic_set(&_cntr->threshold, ~0);
 	fastlock_release(&_cntr->mut);
 	return -ret;
-}
+}		
 
 int sock_cntr_control(struct fid *fid, int command, void *arg)
 {
@@ -216,6 +249,8 @@ static int sock_cntr_close(struct fid *fid)
 		sock_wait_close(&cntr->waitset->fid);
 	
 	fastlock_destroy(&cntr->mut);
+	fastlock_destroy(&cntr->list_lock);
+
 	pthread_cond_destroy(&cntr->cond);
 	atomic_dec(&cntr->domain->ref);
 	free(cntr);
@@ -337,6 +372,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	}
 
 	fastlock_init(&_cntr->mut);
+	fastlock_init(&_cntr->list_lock);
 	atomic_init(&_cntr->ref, 0);
 	atomic_init(&_cntr->err_cnt, 0);
 

@@ -59,6 +59,7 @@ int sock_cq_progress(struct sock_cq *cq)
 	    !sock_progress_thread_wait)
 		return 0;
 
+	fastlock_acquire(&cq->list_lock);
 	for (entry = cq->tx_list.next; entry != &cq->tx_list;
 	     entry = entry->next) {
 		tx_ctx = container_of(entry, struct sock_tx_ctx, cq_entry);
@@ -70,6 +71,8 @@ int sock_cq_progress(struct sock_cq *cq)
 		rx_ctx = container_of(entry, struct sock_rx_ctx, cq_entry);
 		sock_pe_progress_rx_ctx(cq->domain->pe, rx_ctx);
 	}
+	fastlock_release(&cq->list_lock);
+
 	return 0;
 }
 
@@ -284,7 +287,15 @@ ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	fastlock_release(&sock_cq->lock);
 
 	if (ret == 0) {
-		ret = rbfdwait(&sock_cq->cq_rbfd, timeout);
+		if (sock_cq->domain->progress_mode == FI_PROGRESS_MANUAL &&
+		    timeout < 0) {
+			ret = 0;
+			while (rbfdused(&sock_cq->cq_rbfd) == 0) {
+				sock_cq_progress(sock_cq);
+			}
+		} else {
+			ret = rbfdwait(&sock_cq->cq_rbfd, timeout);
+		}
 		fastlock_acquire(&sock_cq->lock);
 		if (ret != -FI_ETIMEDOUT && (avail = rbfdused(&sock_cq->cq_rbfd)))
 			ret = sock_cq_rbuf_read(sock_cq, buf, 
@@ -386,6 +397,7 @@ int sock_cq_close(struct fid *fid)
 	rbfdfree(&cq->cq_rbfd);
 
 	fastlock_destroy(&cq->lock);
+	fastlock_destroy(&cq->list_lock);
 	atomic_dec(&cq->domain->ref);
 
 	free(cq);
@@ -578,6 +590,8 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	
 	*cq = &sock_cq->cq_fid;
 	atomic_inc(&sock_dom->ref);
+	fastlock_init(&sock_cq->list_lock);
+
 	return 0;
 
 err4:

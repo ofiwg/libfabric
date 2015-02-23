@@ -2120,7 +2120,7 @@ int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
 	struct dlist_entry *entry;
 	struct sock_pe_entry *pe_entry;
 
-	if (fastlock_tryacquire(&pe->lock))
+	if (fastlock_acquire(&pe->lock))
 		return 0;
 
 	/* progress buffered recvs */
@@ -2170,7 +2170,7 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	struct dlist_entry *entry;
 	struct sock_pe_entry *pe_entry;
 
-	if (fastlock_tryacquire(&pe->lock))
+	if (fastlock_acquire(&pe->lock))
 		return 0;
 
 	/* check tx_ctx rbuf */
