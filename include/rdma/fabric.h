@@ -356,6 +356,11 @@ int fi_getinfo(uint32_t version, const char *node, const char *service,
 void fi_freeinfo(struct fi_info *info);
 struct fi_info *fi_dupinfo(const struct fi_info *info);
 
+static inline struct fi_info *fi_allocinfo(void)
+{
+	return fi_dupinfo(NULL);
+}
+
 struct fi_ops_fabric {
 	size_t	size;
 	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,

@@ -1062,7 +1062,7 @@ int sock_srx_ctx(struct fid_domain *domain,
 struct fi_info *sock_fi_info(enum fi_ep_type ep_type, 
 			     struct fi_info *hints, void *src_addr, void *dest_addr)
 {
-	struct fi_info *_info = fi_allocinfo_internal();
+	struct fi_info *_info = fi_allocinfo();
 	if (!_info)
 		return NULL;
 	

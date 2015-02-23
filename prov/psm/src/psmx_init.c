@@ -227,7 +227,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	if (psmx_reserve_tag_bits(&caps, &max_tag_value) < 0)
 		goto err_out;
 
-	psmx_info = fi_allocinfo_internal();
+	psmx_info = fi_allocinfo();
 	if (!psmx_info) {
 		err = -FI_ENOMEM;
 		goto err_out;

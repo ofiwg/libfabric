@@ -9,6 +9,8 @@ tagline: Libfabric Programmer's Manual
 
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 
+fi_allocinfo / fi_dupinfo \- Allocate / duplicate an fi_info structure
+
 # SYNOPSIS
 
 {% highlight c %}
@@ -18,6 +20,8 @@ int fi_getinfo(int version, const char *node, const char *service,
         uint64_t flags, struct fi_info *hints, struct fi_info **info);
 
 void fi_freeinfo(struct fi_info *info);
+
+struct fi_info *fi_allocinfo(void);
 
 struct fi_info *fi_dupinfo(const struct fi_info *info);
 {% endhighlight %}
@@ -46,7 +50,7 @@ struct fi_info *fi_dupinfo(const struct fi_info *info);
 
 # DESCRIPTION
 
-Returns information about available fabric services for reaching the
+fi_getinfo returns information about available fabric services for reaching
 specified node or service, subject to any provided hints.  Callers
 may specify NULL for node, service, and hints in order to retrieve
 information about what providers are available and their optimal usage
@@ -90,6 +94,11 @@ fabric addressing information based on the provided hints.
 
 The caller must call fi_freeinfo to release fi_info structures returned
 by this call.
+
+The fi_allocinfo call will allocate and zero an fi_info structure
+and all related substructures.  The fi_dupinfo will duplicate
+a single fi_info structure and all the substructures within it.
+
 
 # FI_INFO
 
@@ -555,10 +564,12 @@ fi_getinfo() returns 0 on success. On error, fi_getinfo() returns a
 negative value corresponding to fabric errno. Fabric errno values are
 defined in `rdma/fi_errno.h`.
 
-fi_dupinfo() duplicates a single fi_info structure and all the
-substructures within it and returns a pointer to the new fi_info
-structure.  This new fi_info structure must be freed via
-fi_freeinfo().  fi_dupinfo() returns NULL on error.
+fi_allocinfo() returns a pointer to a new fi_info structure on
+success, or NULL on error.  fi_dupinfo() duplicates a single fi_info
+structure and all the substructures within it, returning a pointer to
+the new fi_info structure on success, or NULL on error.
+Both calls require that the returned fi_info structure be freed
+via fi_freeinfo().
 
 # ERRORS
 

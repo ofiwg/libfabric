@@ -607,7 +607,7 @@ fi_ibv_getepinfo(const char *node, const char *service,
 	if (ret)
 		return (errno == ENODEV) ? -FI_ENODATA : -errno;
 
-	if (!(fi = fi_allocinfo_internal())) {
+	if (!(fi = fi_allocinfo())) {
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
@@ -1902,7 +1902,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 {
 	struct fi_info *fi;
 
-	fi = fi_allocinfo_internal();
+	fi = fi_allocinfo();
 	if (!fi)
 		return NULL;
 
