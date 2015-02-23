@@ -392,7 +392,7 @@ static ssize_t _psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 	req->recv.src_addr = (void *)src_addr;
 	req->ep = ep_priv;
 
-	if (ep_priv->recv_cq_event_flag && !(flags & FI_EVENT))
+	if (ep_priv->recv_cq_event_flag && !(flags & FI_COMPLETION))
 		req->no_event = 1;
 
 	unexp = psmx_am_search_and_dequeue_unexp(ep_priv->domain,
@@ -548,7 +548,7 @@ static ssize_t _psmx_send2(struct fid_ep *ep, const void *buf, size_t len,
 	req->send.dest_addr = (void *)dest_addr;
 	req->ep = ep_priv;
 
-	if ((ep_priv->send_cq_event_flag && !(flags & FI_EVENT)) ||
+	if ((ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION)) ||
 	     (context == &ep_priv->sendimm_context))
 		req->no_event = 1;
 

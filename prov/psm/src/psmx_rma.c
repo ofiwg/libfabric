@@ -385,7 +385,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 	}
 
 	no_event = (flags & FI_INJECT) ||
-		   (ep->send_cq_event_flag && !(flags & FI_EVENT));
+		   (ep->send_cq_event_flag && !(flags & FI_COMPLETION));
 
 	if (ep->send_cq && !no_event) {
 		event = psmx_cq_create_event(
@@ -518,7 +518,7 @@ ssize_t _psmx_read(struct fid_ep *ep, void *buf, size_t len,
 	PSMX_CTXT_USER(&req->fi_context) = context;
 	PSMX_CTXT_EP(&req->fi_context) = ep_priv;
 
-	if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT)) {
+	if (ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION)) {
 		PSMX_CTXT_TYPE(&req->fi_context) = PSMX_NOCOMP_READ_CONTEXT;
 		req->no_event = 1;
 	}
@@ -689,7 +689,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 		if (!req)
 			return -FI_ENOMEM;
 
-		if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT)) {
+		if (ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION)) {
 			PSMX_CTXT_TYPE(&req->fi_context) = PSMX_NOCOMP_WRITE_CONTEXT;
 			req->no_event = 1;
 		}

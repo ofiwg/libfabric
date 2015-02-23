@@ -729,7 +729,7 @@ static int psmx_atomic_self(int am_cmd,
 
 gen_local_event:
 	no_event = ((flags & FI_INJECT) ||
-		    (ep->send_cq_event_flag && !(flags & FI_EVENT)));
+		    (ep->send_cq_event_flag && !(flags & FI_COMPLETION)));
 	if (ep->send_cq && !no_event) {
 		event = psmx_cq_create_event(
 				ep->send_cq,
@@ -856,7 +856,7 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 		if (!req)
 			return -FI_ENOMEM;
 
-		if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT))
+		if (ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION))
 			req->no_event = 1;
 	}
 
@@ -1042,7 +1042,7 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 		if (!req)
 			return -FI_ENOMEM;
 
-		if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT))
+		if (ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION))
 			req->no_event = 1;
 	}
 
@@ -1248,7 +1248,7 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 		if (!req)
 			return -FI_ENOMEM;
 
-		if (ep_priv->send_cq_event_flag && !(flags & FI_EVENT))
+		if (ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION))
 			req->no_event = 1;
 
 		if (compare != buf + len) {

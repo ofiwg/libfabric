@@ -172,12 +172,12 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 		if (flags & FI_SEND) {
 			ep->send_cq = cq;
-			if (flags & FI_EVENT)
+			if (flags & FI_COMPLETION)
 				ep->send_cq_event_flag = 1;
 		}
 		if (flags & FI_RECV) {
 			ep->recv_cq = cq;
-			if (flags & FI_EVENT)
+			if (flags & FI_COMPLETION)
 				ep->recv_cq_event_flag = 1;
 		}
 		psmx_ep_optimize_ops(ep);
