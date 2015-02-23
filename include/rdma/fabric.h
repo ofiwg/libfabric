@@ -102,7 +102,6 @@ typedef struct fid *fid_t;
 #define FI_ATOMICS		FI_ATOMIC
 #define FI_DYNAMIC_MR		(1ULL << 7)
 #define FI_NAMED_RX_CTX		(1ULL << 8)
-#define FI_BUFFERED_RECV	(1ULL << 9)
 #define FI_DIRECTED_RECV	(1ULL << 10)
 
 /*

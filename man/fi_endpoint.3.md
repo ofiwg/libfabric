@@ -507,7 +507,8 @@ that an endpoint will support.  This value applies per transmit operation.
 ## total_buffered_recv - Total Buffered Receive
 
 Defines the total available space allocated by the provider to buffer
-received messages (see the FI_BUFFERED_RECV flag).
+messages that are received for which there is no matching receive operation.
+If set to 0, any messages that arrive before a receive is posted are lost.
 
 ## msg_prefix_size - Message Prefix Size
 

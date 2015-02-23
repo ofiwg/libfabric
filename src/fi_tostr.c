@@ -179,7 +179,6 @@ static void fi_tostr_caps(char *buf, uint64_t caps)
 	IFFLAGSTR(caps, FI_TAGGED);
 	IFFLAGSTR(caps, FI_ATOMICS);
 	IFFLAGSTR(caps, FI_DYNAMIC_MR);
-	IFFLAGSTR(caps, FI_BUFFERED_RECV);
 	fi_tostr_flags(buf, caps);
 
 	fi_remove_comma(buf);

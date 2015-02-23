@@ -219,7 +219,8 @@ takes a struct fi_msg_tagged as input.
 The function fi_tsearch determines if a message with the specified tag
 with ignore mask from an optionally supplied source address has been
 received and is buffered by the provider.  The fi_tsearch call is only
-available on endpoints with FI_BUFFERED_RECV enabled.  The fi_tsearch
+available on endpoints with provider allocated buffering enabled (see
+fi_ep_attr total_buffered_recv).  The fi_tsearch
 operation may complete asynchronously or immediately, depending on the
 underlying provider implementation.
 
