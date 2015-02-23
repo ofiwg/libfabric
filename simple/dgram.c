@@ -345,7 +345,7 @@ int main(int argc, char **argv)
 		dst_addr = argv[optind];
 	
 	hints.ep_type		= FI_EP_DGRAM;
-	hints.caps		= FI_MSG | FI_BUFFERED_RECV;
+	hints.caps		= FI_MSG;
 	hints.mode		= FI_CONTEXT;
 	hints.addr_format	= FI_FORMAT_UNSPEC;
 

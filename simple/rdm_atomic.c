@@ -755,7 +755,7 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints.ep_type = FI_EP_RDM;
-	hints.caps = FI_MSG | FI_ATOMICS | FI_BUFFERED_RECV;
+	hints.caps = FI_MSG | FI_ATOMICS;
 	hints.mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints.addr_format = FI_FORMAT_UNSPEC;
 
