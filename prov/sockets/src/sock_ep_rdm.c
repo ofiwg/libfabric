@@ -93,23 +93,35 @@ static int sock_rdm_verify_rx_attr(const struct fi_rx_attr *attr)
 	if (!attr)
 		return 0;
 
-	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP)
+	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
+		SOCK_LOG_INFO("Unsupported RDM rx caps\n");
 		return -FI_ENODATA;
+	}
 
-	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP)
+	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
+		SOCK_LOG_INFO("Unsupported rx op_flags\n");
 		return -FI_ENODATA;
+	}
 
-	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
+	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER) {
+		SOCK_LOG_INFO("Unsuported rx message order\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->total_buffered_recv > sock_rdm_rx_attr.total_buffered_recv)
+	if (attr->total_buffered_recv > sock_rdm_rx_attr.total_buffered_recv) {
+		SOCK_LOG_INFO("Buffered receive size too large\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->size > sock_rdm_rx_attr.size)
+	if (attr->size > sock_rdm_rx_attr.size) {
+		SOCK_LOG_INFO("Rx size too large\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->iov_limit > sock_rdm_rx_attr.iov_limit)
+	if (attr->iov_limit > sock_rdm_rx_attr.iov_limit) {
+		SOCK_LOG_INFO("Rx iov limit too large\n");
 		return -FI_ENODATA;
+	}
 
 	return 0;
 }
@@ -119,23 +131,35 @@ static int sock_rdm_verify_tx_attr(const struct fi_tx_attr *attr)
 	if (!attr)
 		return 0;
 
-	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP)
+	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
+		SOCK_LOG_INFO("Unsupported RDM tx caps\n");
 		return -FI_ENODATA;
+	}
 
-	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP)
+	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
+		SOCK_LOG_INFO("Unsupported rx op_flags\n");
 		return -FI_ENODATA;
+	}
 
-	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
+	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER) {
+		SOCK_LOG_INFO("Unsupported tx message order\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->inject_size > sock_rdm_tx_attr.inject_size)
+	if (attr->inject_size > sock_rdm_tx_attr.inject_size) {
+		SOCK_LOG_INFO("Inject size too large\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->size > sock_rdm_tx_attr.size)
+	if (attr->size > sock_rdm_tx_attr.size) {
+		SOCK_LOG_INFO("Tx size too large\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->iov_limit > sock_rdm_tx_attr.iov_limit)
+	if (attr->iov_limit > sock_rdm_tx_attr.iov_limit) {
+		SOCK_LOG_INFO("Tx iov limit too large\n");
 		return -FI_ENODATA;
+	}
 
 	return 0;
 }
@@ -144,39 +168,56 @@ int sock_rdm_verify_ep_attr(struct fi_ep_attr *ep_attr,
 			    struct fi_tx_attr *tx_attr,
 			    struct fi_rx_attr *rx_attr)
 {
+	int ret;
+
 	if (ep_attr) {
 		switch (ep_attr->protocol) {
 		case FI_PROTO_UNSPEC:
 		case FI_PROTO_SOCK_TCP:
 			break;
 		default:
+			SOCK_LOG_INFO("Unsupported protocol\n");
 			return -FI_ENODATA;
 		}
 
-		if (ep_attr->max_msg_size > sock_rdm_ep_attr.max_msg_size)
+		if (ep_attr->max_msg_size > sock_rdm_ep_attr.max_msg_size) {
+			SOCK_LOG_INFO("Message size too large\n");
 			return -FI_ENODATA;
+		}
 
-		if (ep_attr->inject_size > sock_rdm_ep_attr.inject_size)
+		if (ep_attr->inject_size > sock_rdm_ep_attr.inject_size) {
+			SOCK_LOG_INFO("Inject size too large\n");
 			return -FI_ENODATA;
+		}
 
 		if (ep_attr->total_buffered_recv > 
-		   sock_rdm_ep_attr.total_buffered_recv)
+		   sock_rdm_ep_attr.total_buffered_recv) {
+			SOCK_LOG_INFO("Buffered receive too large\n");
 			return -FI_ENODATA;
+		}
 
 		if (ep_attr->max_order_raw_size >
-		   sock_rdm_ep_attr.max_order_raw_size)
+		   sock_rdm_ep_attr.max_order_raw_size) {
+			SOCK_LOG_INFO("RAW order size too large\n");
 			return -FI_ENODATA;
+		}
 
 		if (ep_attr->max_order_war_size >
-		   sock_rdm_ep_attr.max_order_war_size)
+		   sock_rdm_ep_attr.max_order_war_size) {
+			SOCK_LOG_INFO("WAR order size too large\n");
 			return -FI_ENODATA;
+		}
 
 		if (ep_attr->max_order_waw_size > 
-		   sock_rdm_ep_attr.max_order_waw_size)
+		   sock_rdm_ep_attr.max_order_waw_size) {
+			SOCK_LOG_INFO("WAW order size too large\n");
 			return -FI_ENODATA;
+		}
 
-		if ((ep_attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
+		if ((ep_attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER) {
+			SOCK_LOG_INFO("Unsupported message ordering\n");
 			return -FI_ENODATA;
+		}
 
 		if ((ep_attr->tx_ctx_cnt > SOCK_EP_MAX_TX_CNT) &&
 		    ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT)
@@ -187,8 +228,13 @@ int sock_rdm_verify_ep_attr(struct fi_ep_attr *ep_attr,
 			return -FI_ENODATA;
 	}
 
-	if (sock_rdm_verify_tx_attr(tx_attr) || sock_rdm_verify_rx_attr(rx_attr))
-		return -FI_ENODATA;
+	ret = sock_rdm_verify_tx_attr(tx_attr);
+	if (ret)
+		return ret;
+
+	ret = sock_rdm_verify_rx_attr(rx_attr);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -230,12 +276,14 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 	*info = NULL;
 	
 	if (version != FI_VERSION(SOCK_MAJOR_VERSION, 
-				 SOCK_MINOR_VERSION))
+				 SOCK_MINOR_VERSION)) {
+		SOCK_LOG_INFO("Unsupported version\n");
 		return -FI_ENODATA;
+	}
 
 	if (hints) {
 		if ((SOCK_EP_RDM_CAP | hints->caps) != SOCK_EP_RDM_CAP) {
-			SOCK_LOG_INFO("Cannot support requested options!\n");
+			SOCK_LOG_INFO("Unsupported capabilities\n");
 			return -FI_ENODATA;
 		}
 		

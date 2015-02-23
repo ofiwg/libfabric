@@ -205,11 +205,15 @@ static int fi_ibv_check_fabric_attr(struct fi_fabric_attr *attr)
 {
 	if (attr->name && !(!strcmp(attr->name, VERBS_ANY_FABRIC) ||
 	    !strncmp(attr->name, VERBS_IB_PREFIX, strlen(VERBS_IB_PREFIX)) ||
-	    !strcmp(attr->name, VERBS_IWARP_FABRIC)))
+	    !strcmp(attr->name, VERBS_IWARP_FABRIC))) {
+		VERBS_INFO("Unknown fabric name\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->prov_version > VERBS_PROV_VERS)
+	if (attr->prov_version > VERBS_PROV_VERS) {
+		VERBS_INFO("Unsupported provider version\n");
 		return -FI_ENODATA;
+	}
 
 	return 0;
 }
@@ -248,11 +252,15 @@ static int fi_ibv_check_domain_attr(struct fi_domain_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	if (attr->mr_key_size > sizeof_field(struct ibv_sge, lkey))
+	if (attr->mr_key_size > sizeof_field(struct ibv_sge, lkey)) {
+		VERBS_INFO("MR key size too large\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->cq_data_size > sizeof_field(struct ibv_send_wr, imm_data))
+	if (attr->cq_data_size > sizeof_field(struct ibv_send_wr, imm_data)) {
+		VERBS_INFO("CQ data size too large\n");
 		return -FI_ENODATA;
+	}
 
 	return 0;
 }
@@ -266,14 +274,19 @@ static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 	case FI_PROTO_IB_UD:
 		break;
 	default:
+		VERBS_INFO("Unsupported protocol\n");
 		return -FI_ENODATA;
 	}
 
-	if (attr->protocol_version > 1)
+	if (attr->protocol_version > 1) {
+		VERBS_INFO("Unsupported protocol version\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->max_msg_size > verbs_ep_attr.max_msg_size)
+	if (attr->max_msg_size > verbs_ep_attr.max_msg_size) {
+		VERBS_INFO("Max message size too large\n");
 		return -FI_ENODATA;
+	}
 
 	if (attr->total_buffered_recv) {
 		VERBS_INFO("Buffered Recv not supported\n");
@@ -372,14 +385,19 @@ static int fi_ibv_check_info(struct fi_info *info)
 	case FI_EP_MSG:
 		break;
 	default:
+		VERBS_INFO("Unsupported endpoint type\n");
 		return -FI_ENODATA;
 	}
 
-	if (info->caps && (info->caps & ~VERBS_CAPS))
+	if (info->caps && (info->caps & ~VERBS_CAPS)) {
+		VERBS_INFO("Unsupported capabilities\n");
 		return -FI_ENODATA;
+	}
 
-	if ((info->mode & VERBS_MODE) != VERBS_MODE)
+	if ((info->mode & VERBS_MODE) != VERBS_MODE) {
+		VERBS_INFO("Required mode bits not set\n");
 		return -FI_ENODATA;
+	}
 
 	if (info->fabric_attr) {
 		ret = fi_ibv_check_fabric_attr(info->fabric_attr);
