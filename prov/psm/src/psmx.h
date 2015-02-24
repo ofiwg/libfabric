@@ -80,6 +80,8 @@ enum psmx_context_type {
 	PSMX_SEND_CONTEXT,
 	PSMX_RECV_CONTEXT,
 	PSMX_MULTI_RECV_CONTEXT,
+	PSMX_TSEND_CONTEXT,
+	PSMX_TRECV_CONTEXT,
 	PSMX_WRITE_CONTEXT,
 	PSMX_READ_CONTEXT,
 	PSMX_INJECT_CONTEXT,
@@ -183,6 +185,7 @@ struct psmx_am_request {
 			void 	*result;
 		} atomic;
 	};
+	uint64_t cq_flags;
 	struct fi_context fi_context;
 	struct psmx_fid_ep *ep;
 	int state;

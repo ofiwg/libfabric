@@ -90,7 +90,7 @@ ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 
 		fi_context = context;
 		user_fi_context= 1;
-		PSMX_CTXT_TYPE(fi_context) = PSMX_RECV_CONTEXT;
+		PSMX_CTXT_TYPE(fi_context) = PSMX_TRECV_CONTEXT;
 		PSMX_CTXT_USER(fi_context) = buf;
 		PSMX_CTXT_EP(fi_context) = ep_priv;
 	}
@@ -125,7 +125,7 @@ ssize_t psmx_tagged_recv_no_flag_av_map(struct fid_ep *ep, void *buf,
 	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;
 
 	fi_context = context;
-	PSMX_CTXT_TYPE(fi_context) = PSMX_RECV_CONTEXT;
+	PSMX_CTXT_TYPE(fi_context) = PSMX_TRECV_CONTEXT;
 	PSMX_CTXT_USER(fi_context) = buf;
 	PSMX_CTXT_EP(fi_context) = ep_priv;
 
@@ -157,7 +157,7 @@ ssize_t psmx_tagged_recv_no_flag_av_table(struct fid_ep *ep, void *buf,
 	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;
 
 	fi_context = context;
-	PSMX_CTXT_TYPE(fi_context) = PSMX_RECV_CONTEXT;
+	PSMX_CTXT_TYPE(fi_context) = PSMX_TRECV_CONTEXT;
 	PSMX_CTXT_USER(fi_context) = buf;
 	PSMX_CTXT_EP(fi_context) = ep_priv;
 
@@ -432,7 +432,7 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 		fi_context = context;
 		if (fi_context != &ep_priv->sendimm_context) {
 			user_fi_context = 1;
-			PSMX_CTXT_TYPE(fi_context) = PSMX_SEND_CONTEXT;
+			PSMX_CTXT_TYPE(fi_context) = PSMX_TSEND_CONTEXT;
 			PSMX_CTXT_USER(fi_context) = (void *)buf;
 			PSMX_CTXT_EP(fi_context) = ep_priv;
 		}
@@ -468,7 +468,7 @@ ssize_t psmx_tagged_send_no_flag_av_map(struct fid_ep *ep, const void *buf,
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 
 	fi_context = context;
-	PSMX_CTXT_TYPE(fi_context) = PSMX_SEND_CONTEXT;
+	PSMX_CTXT_TYPE(fi_context) = PSMX_TSEND_CONTEXT;
 	PSMX_CTXT_USER(fi_context) = (void *)buf;
 	PSMX_CTXT_EP(fi_context) = ep_priv;
 
@@ -507,7 +507,7 @@ ssize_t psmx_tagged_send_no_flag_av_table(struct fid_ep *ep, const void *buf,
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 
 	fi_context = context;
-	PSMX_CTXT_TYPE(fi_context) = PSMX_SEND_CONTEXT;
+	PSMX_CTXT_TYPE(fi_context) = PSMX_TSEND_CONTEXT;
 	PSMX_CTXT_USER(fi_context) = (void *)buf;
 	PSMX_CTXT_EP(fi_context) = ep_priv;
 
