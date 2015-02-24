@@ -414,8 +414,10 @@ int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		break;
 
 	case FI_WAIT_SET:
-		if (!attr)
-			return -FI_EINVAL;
+		if (!attr) {
+			ret = -FI_EINVAL;
+			goto err2;
+		}
 
 		sock_eq->waitset = attr->wait_set;
 		sock_eq->signal = 1;

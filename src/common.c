@@ -46,6 +46,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <pthread.h>
+#include <sys/time.h>
 
 #include <rdma/fi_errno.h>
 #include "fi.h"
@@ -192,4 +193,11 @@ int fi_rma_target_allowed(uint64_t caps)
 	}
 
 	return 0;
+}
+
+double fi_gettime_ms()
+{
+	struct timeval now;
+	gettimeofday(&now, NULL);
+	return (double)now.tv_sec * 1000.0 + (double)now.tv_usec / 1000.0;
 }

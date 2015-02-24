@@ -142,7 +142,9 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 				tx_ctx->comp.write_cq_event = 1;
 		}
 
+		fastlock_acquire(&sock_cq->list_lock);
 		dlist_insert_tail(&tx_ctx->cq_entry, &sock_cq->tx_list);
+		fastlock_release(&sock_cq->list_lock);
 		break;
 		
 	case FI_CLASS_RX_CTX:
@@ -153,7 +155,9 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 				rx_ctx->comp.recv_cq_event = 1;
 		}
 
+		fastlock_acquire(&sock_cq->list_lock);
 		dlist_insert_tail(&rx_ctx->cq_entry, &sock_cq->rx_list);
+		fastlock_release(&sock_cq->list_lock);
 		break;
 
 	case FI_CLASS_STX_CTX:
@@ -176,7 +180,9 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 				tx_ctx->comp.write_cq_event = 1;
 		}
 
+		fastlock_acquire(&sock_cq->list_lock);
 		dlist_insert_tail(&tx_ctx->cq_entry, &sock_cq->tx_list);
+		fastlock_release(&sock_cq->list_lock);
 		break;
 			
 	default:
@@ -205,8 +211,9 @@ static int sock_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_WRITE)
 			tx_ctx->comp.write_cntr = cntr;
 
+		fastlock_acquire(&cntr->list_lock);
 		dlist_insert_tail(&tx_ctx->cntr_entry, &cntr->tx_list);
-			
+		fastlock_release(&cntr->list_lock);
 		break;
 		
 	case FI_CLASS_RX_CTX:
@@ -220,7 +227,9 @@ static int sock_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_REMOTE_WRITE) 
 			rx_ctx->comp.rem_write_cntr = cntr;
 		
+		fastlock_acquire(&cntr->list_lock);
 		dlist_insert_tail(&rx_ctx->cntr_entry, &cntr->rx_list);
+		fastlock_release(&cntr->list_lock);
 		break;
 
 	case FI_CLASS_STX_CTX:
@@ -234,7 +243,9 @@ static int sock_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_WRITE)
 			tx_ctx->comp.write_cntr = cntr;
 
+		fastlock_acquire(&cntr->list_lock);
 		dlist_insert_tail(&tx_ctx->cntr_entry, &cntr->tx_list);
+		fastlock_release(&cntr->list_lock);
 			
 		break;
 			
@@ -482,6 +493,7 @@ struct fi_ops_ep sock_ctx_ep_ops = {
 static int sock_ep_close(struct fid *fid)
 {
 	struct sock_ep *sock_ep;
+	char c = 0;
 
 	switch(fid->fclass) {
 	case FI_CLASS_EP:
@@ -517,6 +529,22 @@ static int sock_ep_close(struct fid *fid)
 		free(sock_ep->src_addr);
 	if (sock_ep->dest_addr)
 		free(sock_ep->dest_addr);
+
+	if (sock_ep->ep_type == FI_EP_MSG) {
+
+		sock_ep->cm.do_listen = 0;
+
+		if (write(sock_ep->cm.signal_fds[0], &c, 1) != 1)
+			SOCK_LOG_INFO("Failed to signal\n");
+
+		if (sock_ep->cm.listener_thread && 
+		    pthread_join(sock_ep->cm.listener_thread, NULL)) {
+			SOCK_LOG_INFO("pthread join failed\n");
+		}
+
+		close(sock_ep->cm.signal_fds[0]);
+		close(sock_ep->cm.signal_fds[1]);
+	}
 	
 	atomic_dec(&sock_ep->domain->ref);
 	free(sock_ep);
@@ -610,8 +638,10 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 						if (flags & FI_COMPLETION)
 							ep->comp.recv_cq_event = 1;
 					}
-					
+
+					fastlock_acquire(&cq->list_lock);
 					dlist_insert_tail(&rx_ctx->cq_entry, &cq->rx_list);
+					fastlock_release(&cq->list_lock);
 					continue;
 				}
  				
@@ -676,7 +706,9 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 					if (flags & FI_REMOTE_WRITE) 
 						rx_ctx->comp.rem_write_cntr = cntr;
 					
+					fastlock_acquire(&cntr->list_lock);
 					dlist_insert_tail(&rx_ctx->cntr_entry, &cntr->rx_list);
+					fastlock_release(&cntr->list_lock);
 					continue;
 				}
 				
@@ -836,6 +868,36 @@ int sock_ep_enable(struct fid_ep *ep)
 			}
 		}
 	}
+	return 0;
+}
+
+int sock_ep_disable(struct fid_ep *ep)
+{
+	int i;
+	struct sock_ep *sock_ep;
+
+	sock_ep = container_of(ep, struct sock_ep, ep);
+
+	if (sock_ep->tx_ctx && 
+	    sock_ep->tx_ctx->fid.ctx.fid.fclass == FI_CLASS_TX_CTX) {
+		sock_ep->tx_ctx->enabled = 0;
+	}
+
+	if (sock_ep->rx_ctx && 
+	    sock_ep->rx_ctx->ctx.fid.fclass == FI_CLASS_RX_CTX) {
+		sock_ep->rx_ctx->enabled = 0;
+	}
+
+	for (i = 0; i < sock_ep->ep_attr.tx_ctx_cnt; i++) {
+		if (sock_ep->tx_array[i]) 
+			sock_ep->tx_array[i]->enabled = 0;
+	}
+
+	for (i = 0; i < sock_ep->ep_attr.rx_ctx_cnt; i++) {
+		if (sock_ep->rx_array[i]) 
+			sock_ep->rx_array[i]->enabled = 0;
+	}
+	sock_ep->is_disabled = 1;
 	return 0;
 }
 
@@ -1109,7 +1171,7 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type,
 int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct sock_ep **ep, void *context, size_t fclass)
 {
-	int ret;
+	int ret, flags;
 	struct sock_ep *sock_ep;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
@@ -1123,11 +1185,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		}
 	}
 
-	if (domain)
-		sock_dom = container_of(domain, struct sock_domain, dom_fid);
-	else
-		sock_dom = NULL;
-	
+	sock_dom = container_of(domain, struct sock_domain, dom_fid);
 	sock_ep = (struct sock_ep*)calloc(1, sizeof(*sock_ep));
 	if (!sock_ep)
 		return -FI_ENOMEM;
@@ -1264,6 +1322,18 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (info) {
 		memcpy(&sock_ep->info, info, sizeof(struct fi_info));
 	}
+
+	if (sock_ep->ep_type == FI_EP_MSG) {
+		dlist_init(&sock_ep->cm.msg_list);
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, 
+			       sock_ep->cm.signal_fds) < 0)
+			goto err;
+
+		flags = fcntl(sock_ep->cm.signal_fds[1], F_GETFL, 0);
+		if (fcntl(sock_ep->cm.signal_fds[1], F_SETFL, flags | O_NONBLOCK))
+			SOCK_LOG_ERROR("fcntl failed");
+	}
+
   	sock_ep->domain = sock_dom;
 	atomic_inc(&sock_dom->ref);
 	return 0;

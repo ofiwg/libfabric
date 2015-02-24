@@ -207,6 +207,8 @@ int fi_recv_allowed(uint64_t caps);
 int fi_rma_initiate_allowed(uint64_t caps);
 int fi_rma_target_allowed(uint64_t caps);
 
+double fi_gettime_ms();
+
 #define RDMA_CONF_DIR  SYSCONFDIR "/" RDMADIR
 #define FI_CONF_DIR RDMA_CONF_DIR "/fabric"
 
