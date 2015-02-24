@@ -133,7 +133,7 @@ static int sock_cntr_set(struct fid_cntr *cntr, uint64_t value)
 static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 {
 	int ret = 0;
-	double start_ms = 0, end_ms = 0;
+	uint64_t start_ms = 0, end_ms = 0;
 	struct sock_cntr *_cntr;
 	
 	_cntr = container_of(cntr, struct sock_cntr, cntr_fid);

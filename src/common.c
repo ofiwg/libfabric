@@ -195,9 +195,10 @@ int fi_rma_target_allowed(uint64_t caps)
 	return 0;
 }
 
-double fi_gettime_ms()
+uint64_t fi_gettime_ms(void)
 {
 	struct timeval now;
+
 	gettimeofday(&now, NULL);
-	return (double)now.tv_sec * 1000.0 + (double)now.tv_usec / 1000.0;
+	return now.tv_sec * 1000 + now.tv_usec / 1000;
 }

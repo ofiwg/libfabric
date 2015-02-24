@@ -249,7 +249,7 @@ ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	int ret = 0;
 	int64_t threshold;
 	struct sock_cq *sock_cq;
-	double start_ms = 0, end_ms = 0;
+	uint64_t start_ms = 0, end_ms = 0;
 	ssize_t cq_entry_len, avail;
 	
 	sock_cq = container_of(cq, struct sock_cq, cq_fid);
