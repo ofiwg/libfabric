@@ -115,7 +115,7 @@ usdf_pep_conn_info(struct usdf_connreq *crp)
 
 	/* no domains yet, make an info suitable for creating one */
 	} else {
-		ip = fi_allocinfo_internal();
+		ip = fi_allocinfo();
 		if (ip == NULL) {
 			return NULL;
 		}

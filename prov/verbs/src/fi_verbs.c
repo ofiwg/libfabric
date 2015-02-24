@@ -75,7 +75,7 @@
 
 #define VERBS_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
 		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | \
-		FI_REMOTE_CQ_DATA | FI_REMOTE_SIGNAL)
+		FI_REMOTE_SIGNAL)
 #define VERBS_MODE (FI_LOCAL_MR | FI_PROV_MR_ATTR)
 #define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
 		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
@@ -205,11 +205,15 @@ static int fi_ibv_check_fabric_attr(struct fi_fabric_attr *attr)
 {
 	if (attr->name && !(!strcmp(attr->name, VERBS_ANY_FABRIC) ||
 	    !strncmp(attr->name, VERBS_IB_PREFIX, strlen(VERBS_IB_PREFIX)) ||
-	    !strcmp(attr->name, VERBS_IWARP_FABRIC)))
+	    !strcmp(attr->name, VERBS_IWARP_FABRIC))) {
+		VERBS_INFO("Unknown fabric name\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->prov_version > VERBS_PROV_VERS)
+	if (attr->prov_version > VERBS_PROV_VERS) {
+		VERBS_INFO("Unsupported provider version\n");
 		return -FI_ENODATA;
+	}
 
 	return 0;
 }
@@ -248,11 +252,15 @@ static int fi_ibv_check_domain_attr(struct fi_domain_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	if (attr->mr_key_size > sizeof_field(struct ibv_sge, lkey))
+	if (attr->mr_key_size > sizeof_field(struct ibv_sge, lkey)) {
+		VERBS_INFO("MR key size too large\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->cq_data_size > sizeof_field(struct ibv_send_wr, imm_data))
+	if (attr->cq_data_size > sizeof_field(struct ibv_send_wr, imm_data)) {
+		VERBS_INFO("CQ data size too large\n");
 		return -FI_ENODATA;
+	}
 
 	return 0;
 }
@@ -266,14 +274,19 @@ static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 	case FI_PROTO_IB_UD:
 		break;
 	default:
+		VERBS_INFO("Unsupported protocol\n");
 		return -FI_ENODATA;
 	}
 
-	if (attr->protocol_version > 1)
+	if (attr->protocol_version > 1) {
+		VERBS_INFO("Unsupported protocol version\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->max_msg_size > verbs_ep_attr.max_msg_size)
+	if (attr->max_msg_size > verbs_ep_attr.max_msg_size) {
+		VERBS_INFO("Max message size too large\n");
 		return -FI_ENODATA;
+	}
 
 	if (attr->total_buffered_recv) {
 		VERBS_INFO("Buffered Recv not supported\n");
@@ -372,14 +385,19 @@ static int fi_ibv_check_info(struct fi_info *info)
 	case FI_EP_MSG:
 		break;
 	default:
+		VERBS_INFO("Unsupported endpoint type\n");
 		return -FI_ENODATA;
 	}
 
-	if (info->caps && (info->caps & ~VERBS_CAPS))
+	if (info->caps && (info->caps & ~VERBS_CAPS)) {
+		VERBS_INFO("Unsupported capabilities\n");
 		return -FI_ENODATA;
+	}
 
-	if ((info->mode & VERBS_MODE) != VERBS_MODE)
+	if ((info->mode & VERBS_MODE) != VERBS_MODE) {
+		VERBS_INFO("Required mode bits not set\n");
 		return -FI_ENODATA;
+	}
 
 	if (info->fabric_attr) {
 		ret = fi_ibv_check_fabric_attr(info->fabric_attr);
@@ -607,7 +625,7 @@ fi_ibv_getepinfo(const char *node, const char *service,
 	if (ret)
 		return (errno == ENODEV) ? -FI_ENODATA : -errno;
 
-	if (!(fi = fi_allocinfo_internal())) {
+	if (!(fi = fi_allocinfo())) {
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
@@ -1744,7 +1762,16 @@ fi_ibv_msg_ep_getopt(fid_t fid, int level, int optname,
 {
 	switch (level) {
 	case FI_OPT_ENDPOINT:
-		return -FI_ENOPROTOOPT;
+		switch (optname) {
+		case FI_OPT_CM_DATA_SIZE:
+			if (*optlen < sizeof(size_t))
+				return -FI_ETOOSMALL;
+			*((size_t *) optval) = 56;
+			*optlen = sizeof(size_t);
+			return 0;
+		default:
+			return -FI_ENOPROTOOPT;
+		}
 	default:
 		return -FI_ENOPROTOOPT;
 	}
@@ -1893,7 +1920,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 {
 	struct fi_info *fi;
 
-	fi = fi_allocinfo_internal();
+	fi = fi_allocinfo();
 	if (!fi)
 		return NULL;
 
@@ -2217,6 +2244,41 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	return cur ? cur : ret;
 }
 
+static uint64_t fi_ibv_comp_flags(struct ibv_wc *wc)
+{
+	uint64_t flags = 0;
+
+	if (wc->wc_flags & IBV_WC_WITH_IMM)
+		flags |= FI_REMOTE_CQ_DATA;
+
+	switch (wc->opcode) {
+	case IBV_WC_SEND:
+		flags |= FI_SEND | FI_MSG;
+		break;
+	case IBV_WC_RDMA_WRITE:
+		flags |= FI_RMA | FI_WRITE;
+		break;
+	case IBV_WC_RDMA_READ:
+		flags |= FI_RMA | FI_READ;
+		break;
+	case IBV_WC_COMP_SWAP:
+		flags |= FI_ATOMIC;
+		break;
+	case IBV_WC_FETCH_ADD:
+		flags |= FI_ATOMIC;
+		break;
+	case IBV_WC_RECV:
+		flags |= FI_RECV | FI_MSG;
+		break;
+	case IBV_WC_RECV_RDMA_WITH_IMM:
+		flags = FI_RMA | FI_REMOTE_WRITE;
+		break;
+	default:
+		break;
+	}
+	return flags;
+}
+
 static ssize_t fi_ibv_cq_read_context(struct fid_cq *cq, void *buf, size_t count)
 {
 	struct fi_ibv_cq *_cq;
@@ -2265,7 +2327,7 @@ static ssize_t fi_ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t count)
 		}
 
 		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
-		entry->flags = (uint64_t) _cq->wc.wc_flags;
+		entry->flags = fi_ibv_comp_flags(&_cq->wc);
 		entry->len = (uint64_t) _cq->wc.byte_len;
 		entry += 1;
 	}
@@ -2294,11 +2356,10 @@ static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t count)
 		}
 
 		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
+		entry->flags = fi_ibv_comp_flags(&_cq->wc);
 		if (_cq->wc.wc_flags & IBV_WC_WITH_IMM) {
-			entry->flags = FI_REMOTE_CQ_DATA;
 			entry->data = _cq->wc.imm_data;
 		} else {
-			entry->flags = 0;
 			entry->data = 0;
 		}
 		if (_cq->wc.opcode & (IBV_WC_RECV | IBV_WC_RECV_RDMA_WITH_IMM))

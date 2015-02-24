@@ -351,6 +351,7 @@ struct fi_eq_err_entry {
 	int              err;        /* positive error code */
 	int              prov_errno; /* provider error code */
 	void            *err_data;   /* additional error data */
+	size_t           err_data_size; /* size of err_data */
 };
 {% endhighlight %}
 
@@ -365,6 +366,10 @@ Provider or operational specific error information may also be available
 through the prov_errno and err_data fields.  Users may call fi_eq_strerror to
 convert provider specific error information into a printable string
 for debugging purposes.
+
+If err_data_size is > 0, then the buffer referenced by err_data is
+directly user-accessible.  Applications which read the err_data buffer
+must ensure that they do not read past the end of the referenced buffer.
 
 # RETURN VALUES
 

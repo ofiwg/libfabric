@@ -399,6 +399,12 @@ The following option levels and option names and parameters are defined.
   that applications that want to override the default MIN_MULTI_RECV
   value set this option before enabling the corresponding endpoint.
 
+- *FI_OPT_CM_DATA_SIZE - size_t*
+: Defines the size of available space in CM messages for user-defined
+  data.  This value limits the amount of data that applications can
+  exchange between peer endpoints using the fi_connect, fi_accept,
+  and fi_reject operations.  This option is read only.
+
 ## fi_rx_size_left
 
 The fi_rx_size_left call returns a lower bound on the number of receive
@@ -496,7 +502,7 @@ operation.
 ## inject_size - Inject Size
 
 Defines the default inject operation size (see the FI_INJECT flag)
-that an endpoint will support.  This value applies per send operation.
+that an endpoint will support.  This value applies per transmit operation.
 
 ## total_buffered_recv - Total Buffered Receive
 
@@ -982,14 +988,12 @@ transfer operations that take flags as input override the op_flags
 value of an endpoint.
 
 *FI_INJECT*
-: Indicates that all outbound data buffer should be returned to the
+: Indicates that all outbound data buffers should be returned to the
   user's control immediately after a data transfer call returns, even
   if the operation is handled asynchronously.  This may require that
   the provider copy the data into a local buffer and transfer out of
   that buffer.  A provider may limit the total amount of send data
-  that may be buffered and/or the size of a single send.  Applications
-  may discover and modify these limits using the endpoint's getopt and
-  setopt interfaces.
+  that may be buffered and/or the size of a single send.
 
 *FI_MULTI_RECV*
 : Applies to posted receive operations.  This flag allows the user to

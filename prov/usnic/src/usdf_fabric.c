@@ -201,7 +201,7 @@ usdf_fill_info_dgram(
 	size_t entries;
 	int ret;
 
-	fi = fi_allocinfo_internal();
+	fi = fi_allocinfo();
 	if (fi == NULL) {
 		ret = -FI_ENOMEM;
 		goto fail;
@@ -365,7 +365,7 @@ usdf_fill_info_msg(
 	uint32_t addr_format;
 	int ret;
 
-	fi = fi_allocinfo_internal();
+	fi = fi_allocinfo();
 	if (fi == NULL) {
 		ret = -FI_ENOMEM;
 		goto fail;
@@ -470,7 +470,7 @@ usdf_fill_info_rdm(
 	uint32_t addr_format;
 	int ret;
 
-	fi = fi_allocinfo_internal();
+	fi = fi_allocinfo();
 	if (fi == NULL) {
 		ret = -FI_ENOMEM;
 		goto fail;

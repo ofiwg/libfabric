@@ -377,10 +377,17 @@ static int sock_ctx_getopt(fid_t fid, int level, int optname,
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
+		if (*optlen < sizeof(size_t))
+			return -FI_ETOOSMALL;
 		*(size_t *)optval = rx_ctx->min_multi_recv;
 		*optlen = sizeof(size_t);
 		break;
-
+	case FI_OPT_CM_DATA_SIZE:
+		if (*optlen < sizeof(size_t))
+			return -FI_ETOOSMALL;
+		*((size_t *) optval) = SOCK_EP_MAX_CM_DATA_SZ;
+		*optlen = sizeof(size_t);
+		break;
 	default:
 		return -FI_ENOPROTOOPT;
 	}
@@ -1055,7 +1062,7 @@ int sock_srx_ctx(struct fid_domain *domain,
 struct fi_info *sock_fi_info(enum fi_ep_type ep_type, 
 			     struct fi_info *hints, void *src_addr, void *dest_addr)
 {
-	struct fi_info *_info = fi_allocinfo_internal();
+	struct fi_info *_info = fi_allocinfo();
 	if (!_info)
 		return NULL;
 	
@@ -1075,18 +1082,20 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type,
 		memcpy(_info->dest_addr, dest_addr, sizeof(struct sockaddr_in));
 	}
 
-	if (hints->caps) 
-		_info->caps = hints->caps;
+	if (hints) {
+		if (hints->caps)
+			_info->caps = hints->caps;
 
-	if (hints->ep_attr)
-		*(_info->ep_attr) = *(hints->ep_attr);
+		if (hints->ep_attr)
+			*(_info->ep_attr) = *(hints->ep_attr);
 
-	if (hints->tx_attr)
-		*(_info->tx_attr) = *(hints->tx_attr);
+		if (hints->tx_attr)
+			*(_info->tx_attr) = *(hints->tx_attr);
 
-	if (hints->rx_attr)
-		*(_info->rx_attr) = *(hints->rx_attr);
-		
+		if (hints->rx_attr)
+			*(_info->rx_attr) = *(hints->rx_attr);
+	}
+
 	*(_info->domain_attr) = sock_domain_attr;
 	*(_info->fabric_attr) = sock_fabric_attr;
 

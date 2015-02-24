@@ -168,7 +168,7 @@ ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
 	err_entry->context = context;
 	err_entry->err = err;
 	err_entry->prov_errno = prov_errno;
-	err_entry->err_data = err_data;	
+	err_entry->err_data = err_data;
 	entry->len = sizeof(struct fi_eq_err_entry);
 	dlistfd_insert_tail(&entry->entry, &sock_eq->err_list);
 

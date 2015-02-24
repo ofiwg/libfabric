@@ -98,29 +98,6 @@ int fi_poll_fd(int fd, int timeout)
 	return ret == -1 ? -errno : ret;
 }
 
-struct fi_info *fi_allocinfo_internal(void)
-{
-	struct fi_info *info;
-
-	info = calloc(1, sizeof(*info));
-	if (!info)
-		return NULL;
-
-	info->tx_attr = calloc(1, sizeof(*info->tx_attr));
-	info->rx_attr = calloc(1, sizeof(*info->rx_attr));
-	info->ep_attr = calloc(1, sizeof(*info->ep_attr));
-	info->domain_attr = calloc(1, sizeof(*info->domain_attr));
-	info->fabric_attr = calloc(1, sizeof(*info->fabric_attr));
-	if (!info->tx_attr|| !info->rx_attr || !info->ep_attr ||
-	    !info->domain_attr || !info->fabric_attr)
-		goto err;
-
-	return info;
-err:
-	fi_freeinfo(info);
-	return NULL;
-}
-
 uint64_t fi_tag_bits(uint64_t mem_tag_format)
 {
 	return UINT64_MAX >> (ffsll(htonll(mem_tag_format)) -1);

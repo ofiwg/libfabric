@@ -223,13 +223,10 @@ int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 	char hostname[HOST_NAME_MAX];
 
 	if (!info)
-		return -FI_EBADFLAGS;
+		return -FI_EINVAL;
 
 	*info = NULL;
 	
-	if (!node && !service && !hints)
-		return -FI_EBADFLAGS;
-
 	if (version != FI_VERSION(SOCK_MAJOR_VERSION, 
 				 SOCK_MINOR_VERSION))
 		return -FI_ENODATA;

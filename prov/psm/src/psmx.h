@@ -53,7 +53,7 @@ extern "C" {
 
 #define PSMX_CAP_EXT	(0)
 
-#define PSMX_CAPS	(FI_TAGGED | FI_MSG | FI_ATOMICS | FI_INJECT | \
+#define PSMX_CAPS	(FI_TAGGED | FI_MSG | FI_ATOMICS | \
 			 FI_RMA | FI_BUFFERED_RECV | FI_MULTI_RECV | \
                          FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
