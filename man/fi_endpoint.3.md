@@ -434,7 +434,6 @@ struct fi_ep_attr {
 	uint32_t  protocol_version;
 	size_t    max_msg_size;
 	size_t    inject_size;
-	size_t    total_buffered_recv;
 	size_t    msg_prefix_size;
 	size_t    max_order_raw_size;
 	size_t    max_order_war_size;
@@ -503,12 +502,6 @@ operation.
 
 Defines the default inject operation size (see the FI_INJECT flag)
 that an endpoint will support.  This value applies per transmit operation.
-
-## total_buffered_recv - Total Buffered Receive
-
-Defines the total available space allocated by the provider to buffer
-messages that are received for which there is no matching receive operation.
-If set to 0, any messages that arrive before a receive is posted are lost.
 
 ## msg_prefix_size - Message Prefix Size
 
@@ -912,9 +905,9 @@ struct fi_rx_attr {
 
 *total_buffered_recv*
 : Defines the total available space allocated by the provider to
-  buffer received messages on the context.  This value must be less
-  than or equal to that specified for the associated endpoint.  See
-  the fi_endpoint Total Buffered Receive section.
+  buffer messages that are received for which there is no matching
+  receive operation.  If set to 0, any messages that arrive before a
+  receive buffer has been posted are lost.
 
 *size*
 : The size of the context, in bytes.  The size is usually used as an

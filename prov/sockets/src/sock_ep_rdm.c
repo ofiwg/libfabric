@@ -60,7 +60,6 @@ const struct fi_ep_attr sock_rdm_ep_attr = {
 	.protocol = FI_PROTO_SOCK_TCP,
 	.max_msg_size = SOCK_EP_MAX_MSG_SZ,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
-	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.max_order_raw_size = SOCK_EP_MAX_ORDER_RAW_SZ,
 	.max_order_war_size = SOCK_EP_MAX_ORDER_WAR_SZ,
 	.max_order_waw_size = SOCK_EP_MAX_ORDER_WAW_SZ,
@@ -187,12 +186,6 @@ int sock_rdm_verify_ep_attr(struct fi_ep_attr *ep_attr,
 
 		if (ep_attr->inject_size > sock_rdm_ep_attr.inject_size) {
 			SOCK_LOG_INFO("Inject size too large\n");
-			return -FI_ENODATA;
-		}
-
-		if (ep_attr->total_buffered_recv > 
-		   sock_rdm_ep_attr.total_buffered_recv) {
-			SOCK_LOG_INFO("Buffered receive too large\n");
 			return -FI_ENODATA;
 		}
 

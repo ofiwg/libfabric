@@ -232,7 +232,6 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->ep_attr->protocol = FI_PROTO_PSMX;
 	psmx_info->ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
 	psmx_info->ep_attr->inject_size = PSMX_INJECT_SIZE;
-	psmx_info->ep_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
 	psmx_info->ep_attr->mem_tag_format = fi_tag_format(max_tag_value);
 	psmx_info->ep_attr->msg_order = FI_ORDER_SAS;
 	psmx_info->ep_attr->comp_order = FI_ORDER_NONE;
@@ -272,7 +271,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 					? hints->tx_attr->op_flags : 0;
 	psmx_info->rx_attr->msg_order = psmx_info->ep_attr->msg_order;
 	psmx_info->rx_attr->comp_order = psmx_info->ep_attr->comp_order;
-	psmx_info->rx_attr->total_buffered_recv = psmx_info->ep_attr->total_buffered_recv;
+	psmx_info->rx_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
 	psmx_info->rx_attr->size = UINT64_MAX;
 	psmx_info->rx_attr->iov_limit = 1;
 
