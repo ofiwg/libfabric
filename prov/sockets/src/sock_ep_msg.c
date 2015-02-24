@@ -503,7 +503,7 @@ out:
 
 
 
-static int sock_ep_cm_send_msg(int sock_fd, 
+static int sock_ep_cm_send_msg(struct sock_cm_entry *cm, 
 			       const struct sockaddr_in *addr, 
 			       void *msg, size_t len)
 {
@@ -517,21 +517,21 @@ static int sock_ep_cm_send_msg(int sock_fd,
 	SOCK_LOG_INFO("Sending message to %s:%d\n",
 		      sa_ip, ntohs(addr->sin_port));
 
-	while (retry < SOCK_EP_MAX_RETRY) {
-		ret = sendto(sock_fd, (char *)msg, len, 0,
+	while (retry < SOCK_EP_MAX_RETRY && (volatile int)cm->do_listen) {
+		ret = sendto(cm->sock, (char *)msg, len, 0,
 			     (struct sockaddr *) addr, sizeof *addr);
 		SOCK_LOG_INFO("Total Sent: %d\n", ret);
 		if (ret < 0) 
 			return -1;
 		
-		ret = fi_poll_fd(sock_fd, SOCK_CM_COMM_TIMEOUT);
+		ret = fi_poll_fd(cm->sock, SOCK_CM_COMM_TIMEOUT);
 		retry++;
 		if (ret <= 0) {
 			continue;
 		}
 
 		addr_len = sizeof(struct sockaddr_in);
-		ret = recvfrom(sock_fd, &response, sizeof(response), 0,
+		ret = recvfrom(cm->sock, &response, sizeof(response), 0,
 			       (struct sockaddr *) &from_addr, &addr_len);
 		SOCK_LOG_INFO("Received ACK: %d\n", ret);
 		if (ret == sizeof(response))
@@ -540,13 +540,14 @@ static int sock_ep_cm_send_msg(int sock_fd,
 	return -1;
 }
 
-static int sock_ep_cm_send_ack(int sock_fd, struct sockaddr_in *addr)
+static int sock_ep_cm_send_ack(struct sock_cm_entry *cm, struct sockaddr_in *addr)
 {
 	int ack_sent = 0, retry = 0, ret;
 	unsigned char response = 0;
 
-	while(!ack_sent && retry < SOCK_EP_MAX_RETRY) {
-		ret = sendto(sock_fd, &response, sizeof(response), 0,
+	while(!ack_sent && retry < SOCK_EP_MAX_RETRY && 
+	      (volatile int) cm->do_listen) {
+		ret = sendto(cm->sock, &response, sizeof(response), 0,
 			     (struct sockaddr *) addr, sizeof *addr);
 		retry++;
 
@@ -575,7 +576,7 @@ static void sock_ep_cm_flush_msg(struct sock_cm_entry *cm)
 		entry = cm->msg_list.next;
 		msg_entry = container_of(entry, 
 					 struct sock_cm_msg_list_entry, entry);
-		if (sock_ep_cm_send_msg(cm->sock, &msg_entry->addr, 
+		if (sock_ep_cm_send_msg(cm, &msg_entry->addr, 
 					&msg_entry->msg, msg_entry->msg_len))
 			SOCK_LOG_INFO("Failed to send out cm message\n");
 		dlist_remove(entry);
@@ -649,7 +650,7 @@ static void *sock_msg_ep_listener_thread (void *data)
 		SOCK_LOG_INFO("Total received: %d\n", ret);
 		
 		if (ret < sizeof(*conn_response) || 
-		    !sock_ep_cm_send_ack(ep->cm.sock, &from_addr))
+		    !sock_ep_cm_send_ack(&ep->cm, &from_addr))
 			continue;
 
 		user_data_sz = ret - sizeof(*conn_response);
@@ -1097,7 +1098,7 @@ static void *sock_pep_listener_thread (void *data)
 			entry_sz = sizeof(*cm_entry) + user_data_sz;
 
 			if (ret < sizeof(*conn_req) || 
-			    !sock_ep_cm_send_ack(pep->cm.sock, &from_addr)) {
+			    !sock_ep_cm_send_ack(&pep->cm, &from_addr)) {
 				SOCK_LOG_ERROR("Invalid connection request\n");
 				break;
 			}

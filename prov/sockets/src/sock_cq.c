@@ -248,7 +248,6 @@ ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 {
 	int ret = 0;
 	int64_t threshold;
-	struct timeval now;
 	struct sock_cq *sock_cq;
 	double start_ms, end_ms;
 	ssize_t cq_entry_len, avail;
@@ -256,46 +255,33 @@ ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	sock_cq = container_of(cq, struct sock_cq, cq_fid);
 	cq_entry_len = sock_cq->cq_entry_size;
 
-	if (sock_cq->domain->progress_mode == FI_PROGRESS_MANUAL) {
-		if (timeout > 0) {
-			gettimeofday(&now, NULL);
-			start_ms = (double)now.tv_sec * 1000.0 + 
-				(double)now.tv_usec / 1000.0;
-		}
-		sock_cq_progress(sock_cq);
-		if (timeout > 0) {
-			gettimeofday(&now, NULL);
-			end_ms = (double)now.tv_sec * 1000.0 + 
-				(double)now.tv_usec / 1000.0;
-			timeout -=  (end_ms - start_ms);
-			timeout = timeout < 0 ? 0 : timeout;
-		}
-	} else
-		sock_cq_progress(sock_cq);
-	
 	if (sock_cq->attr.wait_cond == FI_CQ_COND_THRESHOLD) {
 		threshold = MIN((int64_t)cond, count);
 	}else{
 		threshold = count;
 	}
 
-	fastlock_acquire(&sock_cq->lock);
-	if ((avail = rbfdused(&sock_cq->cq_rbfd)))
-		ret = sock_cq_rbuf_read(sock_cq, buf, 
-					MIN(threshold, avail / cq_entry_len),
-					src_addr, cq_entry_len);
-	fastlock_release(&sock_cq->lock);
-
-	if (ret == 0) {
-		if (sock_cq->domain->progress_mode == FI_PROGRESS_MANUAL &&
-		    timeout < 0) {
-			ret = 0;
-			while (rbfdused(&sock_cq->cq_rbfd) == 0) {
-				sock_cq_progress(sock_cq);
-			}
-		} else {
-			ret = rbfdwait(&sock_cq->cq_rbfd, timeout);
+	if (sock_cq->domain->progress_mode == FI_PROGRESS_MANUAL) {
+		if (timeout >= 0) {
+			start_ms = fi_gettime_ms();
+			end_ms = start_ms + timeout;
 		}
+
+		do {
+			sock_cq_progress(sock_cq);
+			fastlock_acquire(&sock_cq->lock);
+			if ((avail = rbfdused(&sock_cq->cq_rbfd)))
+				ret = sock_cq_rbuf_read(sock_cq, buf, 
+							MIN(threshold, avail / cq_entry_len),
+							src_addr, cq_entry_len);
+			fastlock_release(&sock_cq->lock);
+			if (ret == 0 && timeout >= 0) {
+				if (fi_gettime_ms() >= end_ms)
+					return -FI_ETIMEDOUT;
+			}
+		}while (ret == 0);
+	} else {
+		ret = rbfdwait(&sock_cq->cq_rbfd, timeout);
 		fastlock_acquire(&sock_cq->lock);
 		if (ret != -FI_ETIMEDOUT && (avail = rbfdused(&sock_cq->cq_rbfd)))
 			ret = sock_cq_rbuf_read(sock_cq, buf, 
