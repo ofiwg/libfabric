@@ -147,7 +147,8 @@ void *psmx_name_server(void *args)
 			connfd = accept(listenfd, NULL, 0);
 			if (connfd >= 0) {
 				pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-				write(connfd, &domain->psm_epid, sizeof(psm_epid_t));
+				if (write(connfd, &domain->psm_epid, sizeof(psm_epid_t)) != sizeof(psm_epid_t))
+					PSMX_WARN("%s: error sending address info to the client\n", __func__);
 				close(connfd);
 				pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 			}

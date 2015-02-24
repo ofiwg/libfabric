@@ -188,7 +188,8 @@ void psmx_wait_signal(struct fid_wait *wait)
 		break;
 
 	case FI_WAIT_FD:
-		write(wait_priv->fd[1], &c, 1);
+		if (write(wait_priv->fd[1], &c, 1) != 1)
+			PSMX_WARN("%s: error signaling wait object\n", __func__);
 		break;
 
 	case FI_WAIT_MUTEX_COND:
