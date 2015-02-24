@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-02\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-02\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -415,6 +415,13 @@ needed on receives posted after the value has been changed.
 It is recommended that applications that want to override the default
 MIN_MULTI_RECV value set this option before enabling the corresponding
 endpoint.
+.IP \[bu] 2
+\f[I]FI_OPT_CM_DATA_SIZE - size_t\f[] : Defines the size of available
+space in CM messages for user-defined data.
+This value limits the amount of data that applications can exchange
+between peer endpoints using the fi_connect, fi_accept, and fi_reject
+operations.
+This option is read only.
 .SS fi_rx_size_left
 .PP
 The fi_rx_size_left call returns a lower bound on the number of receive
@@ -512,7 +519,7 @@ operation.
 .PP
 Defines the default inject operation size (see the FI_INJECT flag) that
 an endpoint will support.
-This value applies per send operation.
+This value applies per transmit operation.
 .SS total_buffered_recv - Total Buffered Receive
 .PP
 Defines the total available space allocated by the provider to buffer
@@ -1024,15 +1031,13 @@ data transfer operations, where a flags parameter is not available.
 Data transfer operations that take flags as input override the op_flags
 value of an endpoint.
 .PP
-\f[I]FI_INJECT\f[] : Indicates that all outbound data buffer should be
+\f[I]FI_INJECT\f[] : Indicates that all outbound data buffers should be
 returned to the user\[aq]s control immediately after a data transfer
 call returns, even if the operation is handled asynchronously.
 This may require that the provider copy the data into a local buffer and
 transfer out of that buffer.
 A provider may limit the total amount of send data that may be buffered
 and/or the size of a single send.
-Applications may discover and modify these limits using the
-endpoint\[aq]s getopt and setopt interfaces.
 .PP
 \f[I]FI_MULTI_RECV\f[] : Applies to posted receive operations.
 This flag allows the user to post a single buffer that will receive

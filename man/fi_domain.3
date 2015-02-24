@@ -1,4 +1,4 @@
-.TH fi_domain 3 "2015\-02\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_domain 3 "2015\-02\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_domain - Open a fabric access domain
@@ -367,9 +367,15 @@ Applications that request their own MR key must select a value within
 the range specified by this value.
 .SS CQ Data Size
 .PP
-The number of bytes that the provider supports for remote CQ data.
-See the FI_REMOTE_CQ_DATA flag (fi_getinfo) for the use of remote CQ
-data.
+Applications may include a small message with a data transfer that is
+placed directly into a remote completion queue as part of a completion
+event.
+This is referred to as remote CQ data (sometimes referred to as
+immediate data).
+This field indicates the number of bytes that the provider supports for
+remote CQ data.
+If supported (non-zero value is returned), the minimum size of remote CQ
+data must be at least 4-bytes.
 .SS Completion Queue Count (cq_cnt)
 .PP
 The total number of completion queues supported by the domain, relative
