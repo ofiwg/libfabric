@@ -1119,6 +1119,7 @@ static void *sock_pep_listener_thread (void *data)
 			SOCK_LOG_INFO("Received SOCK_CONN_SHUTDOWN\n");
 			conn_response = (struct sock_conn_response*)conn_req;
 
+			entry_sz = sizeof(*cm_entry);
 			cm_entry->fid = conn_response->hdr.c_fid;
 			fid_ep = container_of(conn_response->hdr.c_fid, 
 					      struct fid_ep, fid);
