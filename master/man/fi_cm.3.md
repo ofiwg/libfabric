@@ -158,10 +158,11 @@ errno is returned. Fabric errno values are defined in
 
 # NOTES
 
-For connection-oriented endpoints, the param buffer will be sent as
-part of the connection request or response, subject to the constraints of
-the underlying connection protocol.  Applications may use fi_control
-to determine the size of application data that may be exchanged as
+For connection-oriented endpoints, the buffer referenced by param
+will be sent as part of the connection request or response, subject
+to the constraints of the underlying connection protocol.
+Applications may use fi_getopt with the FI_OPT_CM_DATA_SIZE endpoint
+option to determine the size of application data that may be exchanged as
 part of a connection request or response.  The fi_connect, fi_accept, and
 fi_reject calls will silently truncate any application data which cannot
 fit into underlying protocol messages.  User data exchanged as part of

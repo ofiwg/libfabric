@@ -9,6 +9,8 @@ tagline: Libfabric Programmer's Manual
 
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 
+fi_allocinfo / fi_dupinfo \- Allocate / duplicate an fi_info structure
+
 # SYNOPSIS
 
 {% highlight c %}
@@ -18,6 +20,8 @@ int fi_getinfo(int version, const char *node, const char *service,
         uint64_t flags, struct fi_info *hints, struct fi_info **info);
 
 void fi_freeinfo(struct fi_info *info);
+
+struct fi_info *fi_allocinfo(void);
 
 struct fi_info *fi_dupinfo(const struct fi_info *info);
 {% endhighlight %}
@@ -46,13 +50,12 @@ struct fi_info *fi_dupinfo(const struct fi_info *info);
 
 # DESCRIPTION
 
-Returns information about available fabric services for reaching the
+fi_getinfo returns information about available fabric services for reaching
 specified node or service, subject to any provided hints.  Callers
-must provide at least one of the node, service, or hints parameters.
-If node and service are NULL, then the hints src_addr and/or dest_addr
-fields of the fi_info structure must be specified.
-If no matching fabric information is available, info will be set to
-NULL.
+may specify NULL for node, service, and hints in order to retrieve
+information about what providers are available and their optimal usage
+models.  If no matching fabric information is available, info will
+be set to NULL.
 
 Based on the input hints, node, and service parameters, a list of
 fabric domains and endpoints will be returned.  Each fi_info structure
@@ -63,9 +66,9 @@ including additional criteria in their search hints.  Relaxing or
 eliminating input hints will increase the number and type of endpoints
 that are available.  Providers that return multiple endpoints to a
 single fi_getinfo call should return the endpoints that are highest
-performing.  Providers may indicate that an endpoint and domain can
+performing first.  Providers may indicate that an endpoint and domain can
 support additional capabilities than those requested by the user only
-if such support will not adversely affect performance.
+if such support will not adversely affect application performance or security.
 
 The version parameter is used by the application to request the
 desired version of the interfaces.  The version determines the format
@@ -82,7 +85,7 @@ from source against a newer version of the library that introduces new
 fields to data structures, which would not be initialized by the
 application.
 
-Either node, service, or hints must be provided, with any combination
+Node, service, or hints may be provided, with any combination
 being supported.  If node is provided, fi_getinfo will attempt to
 resolve the fabric address to the given node.  The hints parameter, if
 provided, may be used to control the resulting output as indicated
@@ -91,6 +94,11 @@ fabric addressing information based on the provided hints.
 
 The caller must call fi_freeinfo to release fi_info structures returned
 by this call.
+
+The fi_allocinfo call will allocate and zero an fi_info structure
+and all related substructures.  The fi_dupinfo will duplicate
+a single fi_info structure and all the substructures within it.
+
 
 # FI_INFO
 
@@ -206,7 +214,7 @@ struct fi_info {
 Interface capabilities are obtained by OR-ing the following flags
 together.  If capabilities in the hint parameter are set to 0, the
 underlying provider will return the set of capabilities which are
-supported.  Otherwise, providers will only return data matching the
+supported.  Otherwise, providers will return data matching the
 specified set of capabilities.  Providers may indicate support for
 additional capabilities beyond those requested when the use of
 expanded capabilities will not adversely affect performance or expose
@@ -281,14 +289,6 @@ additional optimizations.
   capability is not set, then the src_addr parameter for msg and tagged
   receive operations is ignored.
 
-*FI_INJECT*
-: Indicates that the endpoint be able to support the FI_INJECT flag on
-  data transfer operations and the 'inject' data transfer calls.  The
-  minimum supported size of an inject operation that an endpoint with
-  this capability must support is 8-bytes.  Applications may access
-  endpoint options (getopt/setopt) to determine injected transfer
-  limits.
-
 *FI_MULTI_RECV*
 : Specifies that the endpoint must support the FI_MULTI_RECV flag when
   posting receive buffers.
@@ -331,16 +331,6 @@ additional optimizations.
   write memory operations from remote endpoints.  This flag requires
   that FI_RMA and/or FI_ATOMIC be set.
 
-*FI_REMOTE_CQ_DATA*
-: Applications may include a small message with a data transfer that
-  is placed directly into a remote event queue as part of a completion
-  event.  This is referred to as remote CQ data (sometimes referred to
-  as immediate data).  The FI_REMOTE_CQ_DATA indicates that an
-  endpoint must support the FI_REMOTE_CQ_DATA flag on data transfer
-  operations.  The minimum supported size of remote CQ data that an
-  endpoint with this capability must support is 4-bytes.  Applications
-  may check the domain attributes to determine remote CQ data limits.
-
 *FI_REMOTE_SIGNAL*
 : Indicates that the endpoint support the FI_REMOTE_SIGNAL flag on
   data transfer operations.  Support requires marking outbound data
@@ -370,6 +360,22 @@ additional optimizations.
   to initiating the fenced operation.  Fenced operations are often
   used to enforce ordering between operations that are not otherwise
   guaranteed by the underlying provider or protocol.
+
+Capabilities may be grouped into two general categories: primary and
+secondary.  Primary capabilities must explicitly be requested by an
+application, and a provider must enable support for only those primary
+capabilities which were selected.  Secondary capabilities may optionally
+be requested by an application.  If requested, a provider must support
+the capability or fail the fi_getinfo request (FI_ENOSYS).  A provider
+may optionally report non-selected secondary capabilities if doing so
+would not compromise performance or security.
+
+Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_NAMED_RX_CTX,
+FI_DIRECTD_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
+and FI_REMOTE_WRITE.
+
+Secondary capabilities: FI_DYNAMIC_MR, FI_MULTI_RECV, FI_SOURCE,
+FI_CANCEL, FI_FENCE, FI_REMOTE_COMPLETE 
 
 # MODE
 
@@ -550,10 +556,12 @@ fi_getinfo() returns 0 on success. On error, fi_getinfo() returns a
 negative value corresponding to fabric errno. Fabric errno values are
 defined in `rdma/fi_errno.h`.
 
-fi_dupinfo() duplicates a single fi_info structure and all the
-substructures within it and returns a pointer to the new fi_info
-structure.  This new fi_info structure must be freed via
-fi_freeinfo().  fi_dupinfo() returns NULL on error.
+fi_allocinfo() returns a pointer to a new fi_info structure on
+success, or NULL on error.  fi_dupinfo() duplicates a single fi_info
+structure and all the substructures within it, returning a pointer to
+the new fi_info structure on success, or NULL on error.
+Both calls require that the returned fi_info structure be freed
+via fi_freeinfo().
 
 # ERRORS
 
