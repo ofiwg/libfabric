@@ -219,6 +219,7 @@ struct psmx_multi_recv {
 struct psmx_fid_fabric {
 	struct fid_fabric	fabric;
 	struct psmx_fid_domain	*active_domain;
+	psm_uuid_t		uuid;
 };
 
 struct psmx_fid_domain {
@@ -227,8 +228,6 @@ struct psmx_fid_domain {
 	psm_ep_t		psm_ep;
 	psm_epid_t		psm_epid;
 	psm_mq_t		psm_mq;
-	pthread_t		ns_thread;
-	int			ns_port;
 	struct psmx_fid_ep	*tagged_ep;
 	struct psmx_fid_ep	*msg_ep;
 	struct psmx_fid_ep	*rma_ep;

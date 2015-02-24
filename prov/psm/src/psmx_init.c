@@ -308,6 +308,8 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric, void *context)
 {
 	struct psmx_fid_fabric *fabric_priv;
+	pthread_t thread;
+	pthread_attr_t thread_attr;
 
 	PSMX_DEBUG("%s\n", __func__);
 
@@ -322,6 +324,17 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 	fabric_priv->fabric.fid.context = context;
 	fabric_priv->fabric.fid.ops = &psmx_fabric_fi_ops;
 	fabric_priv->fabric.ops = &psmx_fabric_ops;
+
+	psmx_get_uuid(fabric_priv->uuid);
+
+	if (psmx_env.name_server) {
+		pthread_attr_init(&thread_attr);
+		pthread_attr_setdetachstate(&thread_attr,PTHREAD_CREATE_DETACHED);
+		pthread_create(&thread, &thread_attr, psmx_name_server, (void *)fabric_priv);
+	}
+
+	psmx_query_mpi();
+
 	*fabric = &fabric_priv->fabric;
 	return 0;
 }

@@ -74,11 +74,6 @@ int psmx_uuid_to_port(psm_uuid_t uuid)
 	return (int)port;
 }
 
-static void psmx_name_server_cleanup(void *args)
-{
-	close((int)(uintptr_t)args);
-}
-
 /*************************************************************
  * A simple name resolution mechanism for client-server style
  * applications. The server side has to run first. The client
@@ -89,7 +84,7 @@ static void psmx_name_server_cleanup(void *args)
  *************************************************************/
 void *psmx_name_server(void *args)
 {
-	struct psmx_fid_domain *domain;
+	struct psmx_fid_fabric *fabric;
 	struct addrinfo hints = {
 		.ai_flags = AI_PASSIVE,
 		.ai_family = AF_UNSPEC,
@@ -100,11 +95,10 @@ void *psmx_name_server(void *args)
 	int listenfd = -1, connfd;
 	int port;
 	int n;
+	int ret;
 
-	domain = args;
-	port = domain->ns_port;
-
-	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	fabric = args;
+	port = psmx_uuid_to_port(fabric->uuid);
 
 	if (asprintf(&service, "%d", port) < 0)
 		return NULL;
@@ -138,23 +132,18 @@ void *psmx_name_server(void *args)
 
 	listen(listenfd, 256);
 
-	pthread_cleanup_push(psmx_name_server_cleanup, (void *)(uintptr_t)listenfd);
-	{
-		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-		pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
-
-		while (1) {
-			connfd = accept(listenfd, NULL, 0);
-			if (connfd >= 0) {
-				pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-				if (write(connfd, &domain->psm_epid, sizeof(psm_epid_t)) != sizeof(psm_epid_t))
-					PSMX_WARN("%s: error sending address info to the client\n", __func__);
-				close(connfd);
-				pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+	while (1) {
+		connfd = accept(listenfd, NULL, 0);
+		if (connfd >= 0) {
+			if (fabric->active_domain) {
+				ret = write(connfd, &fabric->active_domain->psm_epid, sizeof(psm_epid_t));
+				if (ret != sizeof(psm_epid_t))
+					PSMX_WARN("%s: error sending address info to the client\n",
+						  __func__);
 			}
+			close(connfd);
 		}
 	}
-	pthread_cleanup_pop(1);
 
 	return NULL;
 }
