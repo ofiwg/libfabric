@@ -16,7 +16,7 @@ bin_PROGRAMS = \
 	simple/fi_rdm_rma \
 	simple/fi_rdm_atomic \
 	simple/fi_ud_pingpong \
-	simple/fi_imm_data \
+	simple/fi_cq_data \
 	simple/fi_poll \
 	simple/fi_rdm_inject_pingpong \
 	simple/fi_rdm_multi_recv \
@@ -89,8 +89,8 @@ simple_fi_ud_pingpong_SOURCES = \
 	simple/ud_pingpong.c \
 	common/shared.c
 
-simple_fi_imm_data_SOURCES = \
-	simple/imm_data.c \
+simple_fi_cq_data_SOURCES = \
+	simple/cq_data.c \
 	common/shared.c
 
 simple_fi_rdm_inject_pingpong_SOURCES = \

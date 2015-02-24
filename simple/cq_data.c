@@ -47,6 +47,7 @@ static int rx_depth = 500;
 static size_t cq_data_size;
 
 static struct fi_info hints;
+static struct fi_domain_attr domain_attr;
 static char *dst_addr, *src_addr;
 static char *dst_port = "9228", *src_port = "9228";
 
@@ -492,6 +493,7 @@ static int run(void)
 int main(int argc, char **argv)
 {
 	int op;
+
 	while ((op = getopt(argc, argv, "b:p:s:h" INFO_OPTS)) != -1) {
 		switch (op) {
 		case 'b':
@@ -508,7 +510,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			print_usage(argv[0], "A client-server example that tranfers immediate data.\n");
+			print_usage(argv[0], "A client-server example that tranfers CQ data.\n");
 			return EXIT_FAILURE;
 		}
 	}
@@ -516,8 +518,11 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		dst_addr = argv[optind];
 
+	domain_attr.cq_data_size = 4;  /* required minimum */
+	hints.domain_attr = &domain_attr;
+
 	hints.ep_type = FI_EP_MSG;
-	hints.caps = FI_MSG | FI_REMOTE_CQ_DATA;
+	hints.caps = FI_MSG;
 	hints.mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints.addr_format = FI_SOCKADDR;
 

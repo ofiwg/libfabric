@@ -112,10 +112,7 @@ static int ft_init_control(void)
 	ft.iov_array = sm_size_array;
 	ft.iov_cnt = sm_size_cnt;
 
-	if (test_info.caps & FI_INJECT) {
-		ft.size_array = sm_size_array;
-		ft.size_cnt = sm_size_cnt;
-	} else if (test_info.caps & FI_RMA) {
+	if (test_info.caps & FI_RMA) {
 		ft.size_array = lg_size_array;
 		ft.size_cnt = lg_size_cnt;
 	} else {
