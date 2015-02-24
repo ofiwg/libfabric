@@ -120,12 +120,10 @@ buffers may be associated with an endpoint anytime.
 ## fi_shutdown
 
 The fi_shutdown call is used to gracefully disconnect an endpoint from
-its peer.  If shutdown flags are 0, the endpoint is fully disconnected,
-and no additional data transfers will be possible.  Flags may also be
-used to indicate that only outbound (FI_WRITE) or inbound (FI_READ) data
-transfers should be disconnected.  Regardless of the shutdown option
-selected, any queued completions associated with asynchronous operations
-may still be retrieved from the corresponding event queues.
+its peer.  The flags parameter is reserved and must be 0.
+Any queued completions associated with asynchronous operations
+may still be retrieved from the corresponding event queues after an
+endpoint has been shutdown.
 
 An FI_SHUTDOWN event will be generated for an endpoint when the remote
 peer issues a disconnect using fi_shutdown or abruptly closes the endpoint.
