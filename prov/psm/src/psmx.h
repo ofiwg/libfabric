@@ -80,6 +80,8 @@ enum psmx_context_type {
 	PSMX_SEND_CONTEXT,
 	PSMX_RECV_CONTEXT,
 	PSMX_MULTI_RECV_CONTEXT,
+	PSMX_TSEND_CONTEXT,
+	PSMX_TRECV_CONTEXT,
 	PSMX_WRITE_CONTEXT,
 	PSMX_READ_CONTEXT,
 	PSMX_INJECT_CONTEXT,
@@ -183,6 +185,7 @@ struct psmx_am_request {
 			void 	*result;
 		} atomic;
 	};
+	uint64_t cq_flags;
 	struct fi_context fi_context;
 	struct psmx_fid_ep *ep;
 	int state;
@@ -219,6 +222,7 @@ struct psmx_multi_recv {
 struct psmx_fid_fabric {
 	struct fid_fabric	fabric;
 	struct psmx_fid_domain	*active_domain;
+	psm_uuid_t		uuid;
 };
 
 struct psmx_fid_domain {
@@ -227,8 +231,6 @@ struct psmx_fid_domain {
 	psm_ep_t		psm_ep;
 	psm_epid_t		psm_epid;
 	psm_mq_t		psm_mq;
-	pthread_t		ns_thread;
-	int			ns_port;
 	struct psmx_fid_ep	*tagged_ep;
 	struct psmx_fid_ep	*msg_ep;
 	struct psmx_fid_ep	*rma_ep;
