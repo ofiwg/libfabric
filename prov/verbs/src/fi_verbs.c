@@ -72,6 +72,7 @@
 #define VERBS_IB_PREFIX "IB-0x"
 #define VERBS_IWARP_FABRIC "Ethernet-iWARP"
 #define VERBS_ANY_FABRIC "Any RDMA fabric"
+#define VERBS_CM_DATA_SIZE 56
 
 #define VERBS_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
 		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | \
@@ -1766,7 +1767,7 @@ fi_ibv_msg_ep_getopt(fid_t fid, int level, int optname,
 		case FI_OPT_CM_DATA_SIZE:
 			if (*optlen < sizeof(size_t))
 				return -FI_ETOOSMALL;
-			*((size_t *) optval) = 56;
+			*((size_t *) optval) = VERBS_CM_DATA_SIZE;
 			*optlen = sizeof(size_t);
 			return 0;
 		default:
