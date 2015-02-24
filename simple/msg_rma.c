@@ -312,8 +312,9 @@ static int alloc_ep_res(struct fi_info *fi)
 		access_mode = FI_REMOTE_WRITE;
 		break;
 	default:
-		/* Impossible to reach here */
 		assert(0);
+		ret = -FI_EINVAL;
+		goto err3;
 	}
 	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)), 
 			access_mode, 0, 0, 0, &mr, NULL);
