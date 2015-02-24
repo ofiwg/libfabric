@@ -583,8 +583,6 @@ static int fi_ibv_fill_info_attr(struct ibv_context *ctx, struct fi_info *hints,
 
 	fi->ep_attr->protocol_version = 1;
 	fi->ep_attr->max_msg_size = port_attr.max_msg_sz;
-	// TODO Give a real size once verbs provider supports inject
-	fi->ep_attr->inject_size = 0;
 
 	return 0;
 }

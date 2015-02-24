@@ -253,7 +253,6 @@ struct fi_ep_attr {
 	uint32_t		protocol;
 	uint32_t		protocol_version;
 	size_t			max_msg_size;
-	size_t			inject_size;
 	size_t			msg_prefix_size;
 	size_t			max_order_raw_size;
 	size_t			max_order_war_size;

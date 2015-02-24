@@ -433,7 +433,6 @@ struct fi_ep_attr {
 	uint32_t  protocol;
 	uint32_t  protocol_version;
 	size_t    max_msg_size;
-	size_t    inject_size;
 	size_t    msg_prefix_size;
 	size_t    max_order_raw_size;
 	size_t    max_order_war_size;
@@ -497,11 +496,6 @@ capabilities defined for the lesser version.
 
 Defines the maximum size for an application data transfer as a single
 operation.
-
-## inject_size - Inject Size
-
-Defines the default inject operation size (see the FI_INJECT flag)
-that an endpoint will support.  This value applies per transmit operation.
 
 ## msg_prefix_size - Message Prefix Size
 
@@ -811,9 +805,7 @@ struct fi_tx_attr {
 
 *inject_size*
 : The requested inject operation size (see the FI_INJECT flag) that
-  the context will support.  This value must be equal to or less than
-  the inject_size of the associated endpoint.  See the fi_endpoint
-  Inject Size section.
+  the context will support.  See the fi_endpoint Inject Size section.
 
 *size*
 : The size of the context, in bytes.  The size is usually used as an
