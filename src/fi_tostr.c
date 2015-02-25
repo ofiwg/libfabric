@@ -492,6 +492,38 @@ static void fi_tostr_version(char *buf)
 	strcatf(buf, VERSION);
 }
 
+static void fi_tostr_eq_event(char *buf, int type)
+{
+	switch (type) {
+	CASEENUMSTR(FI_NOTIFY);
+	CASEENUMSTR(FI_CONNREQ);
+	CASEENUMSTR(FI_CONNECTED);
+	CASEENUMSTR(FI_SHUTDOWN);
+	CASEENUMSTR(FI_MR_COMPLETE);
+	CASEENUMSTR(FI_AV_COMPLETE);
+	default:
+		strcatf(buf, "Unknown");
+		break;
+	}
+}
+
+static void fi_tostr_cq_event_flags(char *buf, uint64_t flags)
+{
+	IFFLAGSTR(flags, FI_SEND);
+	IFFLAGSTR(flags, FI_RECV);
+	IFFLAGSTR(flags, FI_RMA);
+	IFFLAGSTR(flags, FI_ATOMIC);
+	IFFLAGSTR(flags, FI_MSG);
+	IFFLAGSTR(flags, FI_TAGGED);
+	IFFLAGSTR(flags, FI_READ);
+	IFFLAGSTR(flags, FI_WRITE);
+	IFFLAGSTR(flags, FI_REMOTE_READ);
+	IFFLAGSTR(flags, FI_REMOTE_WRITE);
+	IFFLAGSTR(flags, FI_REMOTE_CQ_DATA);
+	IFFLAGSTR(flags, FI_MULTI_RECV);
+	fi_remove_comma(buf);
+}
+
 __attribute__((visibility ("default")))
 char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 {
@@ -571,6 +603,12 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		break;
 	case FI_TYPE_VERSION:
 		fi_tostr_version(buf);
+		break;
+	case FI_TYPE_EQ_EVENT:
+		fi_tostr_eq_event(buf, enumval);
+		break;
+	case FI_TYPE_CQ_EVENT_FLAGS:
+		fi_tostr_cq_event_flags(buf, val64);
 		break;
 	default:
 		strcatf(buf, "Unknown type");

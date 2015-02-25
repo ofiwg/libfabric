@@ -449,6 +449,8 @@ enum fi_type {
 	FI_TYPE_ATOMIC_TYPE,
 	FI_TYPE_ATOMIC_OP,
 	FI_TYPE_VERSION,
+	FI_TYPE_EQ_EVENT,
+	FI_TYPE_CQ_EVENT_FLAGS,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);
