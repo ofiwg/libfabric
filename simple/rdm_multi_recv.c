@@ -604,7 +604,7 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints.ep_type = FI_EP_RDM;
-	hints.caps = FI_MSG | FI_MULTI_RECV | FI_BUFFERED_RECV;
+	hints.caps = FI_MSG | FI_MULTI_RECV;
 	hints.mode = FI_CONTEXT;
 	hints.addr_format = FI_FORMAT_UNSPEC;
 

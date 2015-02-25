@@ -47,7 +47,7 @@ static void *buf;
 static size_t buffer_size = 1024;
 static int rx_depth = 512;
 
-static struct fi_info hints;
+static struct fi_info *hints;
 static char *dst_addr, *src_addr;
 static char *src_port = "9228", *dst_port = "9228";
 
@@ -268,7 +268,7 @@ static int init_fabric(void)
 	int ret;
 
 	if (dst_addr) {
-		ret = ft_getsrcaddr(src_addr, src_port, &hints);
+		ret = ft_getsrcaddr(src_addr, src_port, hints);
 		if (ret)
 			return ret;
 		node = dst_addr;
@@ -279,7 +279,7 @@ static int init_fabric(void)
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -516,6 +516,12 @@ int main(int argc, char **argv)
 {
 	int op;
 
+	hints = fi_allocinfo();
+	if (!hints) {
+		FT_PRINTERR("fi_allocinfo", -FI_ENOMEM);
+		return EXIT_FAILURE;
+	}
+
 	while ((op = getopt(argc, argv, "b:p:s:h" INFO_OPTS)) != -1) {
 		switch (op) {
 		case 'b':
@@ -528,7 +534,7 @@ int main(int argc, char **argv)
 			src_addr = optarg;
 			break;
 		default:
-			ft_parseinfo(op, optarg, &hints);
+			ft_parseinfo(op, optarg, hints);
 			break;
 		case '?':
 		case 'h':
@@ -540,11 +546,10 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		dst_addr = argv[optind];
 	
-	hints.ep_type = FI_EP_RDM;
-	// FI_BUFFERED_RECV is required for tagged search
-	hints.caps = FI_MSG | FI_TAGGED | FI_BUFFERED_RECV;
-	hints.mode = FI_CONTEXT;
-	hints.addr_format = FI_FORMAT_UNSPEC;
+	hints->rx_attr->total_buffered_recv = buffer_size;
+	hints->ep_type = FI_EP_RDM;
+	hints->caps = FI_MSG | FI_TAGGED;
+	hints->mode = FI_CONTEXT;
 
 	return run();
 }

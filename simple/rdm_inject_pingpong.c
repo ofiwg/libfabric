@@ -308,7 +308,7 @@ static int init_fabric(void)
 	}
 	
 	/* check max msg size */
-	max_inject_size = fi->ep_attr->inject_size;
+	max_inject_size = fi->tx_attr->inject_size;
 	if (opts.custom && opts.transfer_size > max_inject_size) {
 		FT_DEBUG("Msg size greater than max inject size\n");
 		ret = -FI_EINVAL;
@@ -507,9 +507,9 @@ int main(int argc, char **argv)
 	hints->mode = FI_CONTEXT;
 
 	if (opts.transfer_size)
-		hints->ep_attr->inject_size = opts.transfer_size;
+		hints->tx_attr->inject_size = opts.transfer_size;
 	else
-		hints->ep_attr->inject_size = 16;
+		hints->tx_attr->inject_size = 16;
 
 	if (opts.prhints) {
 		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
