@@ -174,7 +174,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		if (!mask[i])
 			continue;
 
-		if (errors[i] == PSM_OK) {
+		if (errors[i] == PSM_OK || errors[i] == PSM_EPID_ALREADY_CONNECTED) {
 			psmx_set_epaddr_context(av_priv->domain,
 						((psm_epid_t *) addr)[i],
 						((psm_epaddr_t *) fi_addr)[i]);
