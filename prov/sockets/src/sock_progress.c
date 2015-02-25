@@ -412,9 +412,8 @@ static void sock_pe_send_response(struct sock_pe *pe,
 	response->msg_hdr.msg_len = htonll(response->msg_hdr.msg_len);
 	response->msg_hdr.rx_id = pe_entry->msg_hdr.rx_id;
 
-	if (pe_entry->ep->connected)
-		response->msg_hdr.ep_id = 
-			((pe_entry->ep != NULL) ? pe_entry->ep->rem_ep_id : 0);
+	if (pe_entry->ep && pe_entry->ep->connected)
+		response->msg_hdr.ep_id = pe_entry->ep->rem_ep_id;
 	else
 		response->msg_hdr.ep_id = 
 			sock_av_lookup_ep_id(rx_ctx->av, pe_entry->addr);
