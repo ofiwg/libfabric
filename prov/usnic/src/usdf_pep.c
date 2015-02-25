@@ -157,7 +157,7 @@ usdf_pep_conn_info(struct usdf_connreq *crp)
 	sin->sin_port = reqp->creq_port;
 
 	ip->dest_addr = sin;
-	ip->connreq = crp;
+	ip->connreq = (fi_connreq_t)crp;
 	return ip;
 fail:
 	fi_freeinfo(ip);
