@@ -502,7 +502,7 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->ep_type = FI_EP_RDM;
+	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT;
 

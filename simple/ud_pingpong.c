@@ -58,7 +58,7 @@ static size_t buffer_size;
 static size_t prefix_len;
 static size_t max_msg_size = 0;
 
-static struct fi_info hints;
+static struct fi_info *hints;
 static fi_addr_t rem_addr;
 
 static struct fi_info *fi;
@@ -304,7 +304,7 @@ static int common_setup(void)
 	char *node, *service;
 
 	if (opts.dst_addr) {
-		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, &hints);
+		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
 		if (ret)
 			return ret;
 		node = opts.dst_addr;
@@ -315,7 +315,7 @@ static int common_setup(void)
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -355,8 +355,8 @@ static int common_setup(void)
 		goto err5;
 	}
 
-	if (hints.src_addr)
-		free(hints.src_addr);
+	if (hints->src_addr)
+		free(hints->src_addr);
 	return 0;
 
 err5:
@@ -370,8 +370,8 @@ err2:
 err1:
 	fi_freeinfo(fi);
 err0:
-	if (hints.src_addr)
-		free(hints.src_addr);
+	if (hints->src_addr)
+		free(hints->src_addr);
 	return ret;
 }
 
@@ -383,11 +383,11 @@ static int client_connect(void)
 	if (ret != 0)
 		goto err;
 
-	ret = ft_getdestaddr(opts.dst_addr, opts.dst_port, &hints);
+	ret = ft_getdestaddr(opts.dst_addr, opts.dst_port, hints);
 	if (ret != 0)
 		goto err;
 
-	ret = fi_av_insert(av, hints.dest_addr, 1, &rem_addr, 0, NULL);
+	ret = fi_av_insert(av, hints->dest_addr, 1, &rem_addr, 0, NULL);
 	if (ret != 1) {
 		FT_PRINTERR("fi_av_insert", ret);
 		goto err;
@@ -514,13 +514,17 @@ static int run(void)
 
 int main(int argc, char **argv)
 {
-	int op;
+	int ret, op;
 	opts = INIT_OPTS;
+
+	hints = fi_allocinfo();
+	if (!hints)
+		return EXIT_FAILURE;
 
 	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
-			ft_parseinfo(op, optarg, &hints);
+			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
@@ -533,15 +537,18 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints.ep_type = FI_EP_DGRAM;
-	hints.caps = FI_MSG;
-	hints.mode = FI_LOCAL_MR | FI_MSG_PREFIX;
-	hints.addr_format = FI_SOCKADDR;
+	hints->ep_attr->type = FI_EP_DGRAM;
+	hints->caps = FI_MSG;
+	hints->mode = FI_LOCAL_MR | FI_MSG_PREFIX;
+	hints->addr_format = FI_SOCKADDR;
 
 	if (opts.prhints) {
-		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
-		return EXIT_SUCCESS;
+		printf("%s", fi_tostr(hints, FI_TYPE_INFO));
+		fi_freeinfo(hints);
+		ret = EXIT_SUCCESS;
+	} else {
+		ret = run();
 	}
-
-	return run();
+	fi_freeinfo(hints);
+	return ret;
 }

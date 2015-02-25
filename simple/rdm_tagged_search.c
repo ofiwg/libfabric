@@ -547,7 +547,7 @@ int main(int argc, char **argv)
 		dst_addr = argv[optind];
 	
 	hints->rx_attr->total_buffered_recv = buffer_size;
-	hints->ep_type = FI_EP_RDM;
+	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_TAGGED;
 	hints->mode = FI_CONTEXT;
 

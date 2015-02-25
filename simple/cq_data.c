@@ -46,8 +46,7 @@ static size_t buffer_size;
 static int rx_depth = 500;
 static size_t cq_data_size;
 
-static struct fi_info hints;
-static struct fi_domain_attr domain_attr;
+static struct fi_info *hints;
 static char *dst_addr, *src_addr;
 static char *dst_port = "9228", *src_port = "9228";
 
@@ -197,7 +196,7 @@ static int server_listen(void)
 	struct fi_info *fi;
 	int ret;
 
-	ret = fi_getinfo(FT_FIVERSION, src_addr, src_port, FI_SOURCE, &hints,
+	ret = fi_getinfo(FT_FIVERSION, src_addr, src_port, FI_SOURCE, hints,
 			&fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
@@ -328,11 +327,11 @@ static int client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	ret = ft_getsrcaddr(src_addr, src_port, &hints);
+	ret = ft_getsrcaddr(src_addr, src_port, hints);
 	if (ret)
 		return ret;
 
-	ret = fi_getinfo(FT_FIVERSION, dst_addr, dst_port, 0, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, dst_addr, dst_port, 0, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -385,8 +384,6 @@ static int client_connect(void)
 		goto err5;
 	}
 
-	if (hints.src_addr)
-		free(hints.src_addr);
 	fi_freeinfo(fi);
 	return 0;
 
@@ -401,8 +398,6 @@ err2:
 err1:
 	fi_freeinfo(fi);
 err0:
-	if (hints.src_addr)
-		free(hints.src_addr);
 	return ret;
 }
 
@@ -492,7 +487,11 @@ static int run(void)
 
 int main(int argc, char **argv)
 {
-	int op;
+	int op, ret;
+
+	hints = fi_allocinfo();
+	if (!hints)
+		return EXIT_FAILURE;
 
 	while ((op = getopt(argc, argv, "b:p:s:h" INFO_OPTS)) != -1) {
 		switch (op) {
@@ -506,7 +505,7 @@ int main(int argc, char **argv)
 			src_addr = optarg;
 			break;
 		default:
-			ft_parseinfo(op, optarg, &hints);
+			ft_parseinfo(op, optarg, hints);
 			break;
 		case '?':
 		case 'h':
@@ -518,13 +517,14 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		dst_addr = argv[optind];
 
-	domain_attr.cq_data_size = 4;  /* required minimum */
-	hints.domain_attr = &domain_attr;
+	hints->domain_attr->cq_data_size = 4;  /* required minimum */
 
-	hints.ep_type = FI_EP_MSG;
-	hints.caps = FI_MSG;
-	hints.mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
-	hints.addr_format = FI_SOCKADDR;
+	hints->ep_attr->type = FI_EP_MSG;
+	hints->caps = FI_MSG;
+	hints->mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->addr_format = FI_SOCKADDR;
 
-	return run();
+	ret = run();
+	fi_freeinfo(hints);
+	return ret;
 }

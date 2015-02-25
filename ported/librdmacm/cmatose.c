@@ -75,19 +75,16 @@ static int			connects_left;
 static int			disconnects_left;
 static int			connections = 1;
 
-static struct fi_info		hints, *info;
+static struct fi_info		*hints, *info;
 static uint64_t			flags;
-static struct fi_ep_attr	ep_attr;
-static struct fi_tx_attr	tx_attr;
-static struct fi_rx_attr	rx_attr;
 
 
 static int post_recvs(struct cma_node *node)
 {
 	int i, ret = 0;
 
-	for (i = 0; i < tx_attr.size && !ret; i++ ) {
-		ret = fi_recv(node->ep, node->mem, ep_attr.max_msg_size,
+	for (i = 0; i < hints->tx_attr->size && !ret; i++ ) {
+		ret = fi_recv(node->ep, node->mem, hints->ep_attr->max_msg_size,
 				node->mrdesc, 0, node);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
@@ -101,20 +98,20 @@ static int create_messages(struct cma_node *node)
 {
 	int ret;
 
-	if (!ep_attr.max_msg_size)
-		tx_attr.size = 0;
+	if (!hints->ep_attr->max_msg_size)
+		hints->tx_attr->size = 0;
 
-	if (!tx_attr.size)
+	if (!hints->tx_attr->size)
 		return 0;
 
-	node->mem = malloc(ep_attr.max_msg_size);
+	node->mem = malloc(hints->ep_attr->max_msg_size);
 	if (!node->mem) {
 		printf("failed message allocation\n");
 		return -1;
 	}
 
 	if (info->mode & FI_LOCAL_MR) {
-		ret = fi_mr_reg(node->domain, node->mem, ep_attr.max_msg_size,
+		ret = fi_mr_reg(node->domain, node->mem, hints->ep_attr->max_msg_size,
 				FI_SEND | FI_RECV, 0, 0, 0, &node->mr, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_reg_mr", ret);
@@ -143,7 +140,7 @@ static int init_node(struct cma_node *node, struct fi_info *info)
 	}
 
 	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.size = tx_attr.size ? tx_attr.size : 1;
+	cq_attr.size = hints->tx_attr->size ? hints->tx_attr->size : 1;
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	ret = fi_cq_open(node->domain, &cq_attr, &node->cq[SEND_CQ_INDEX], NULL);
 	if (ret) {
@@ -200,11 +197,11 @@ static int post_sends(struct cma_node *node)
 {
 	int i, ret = 0;
 
-	if (!node->connected || !tx_attr.size)
+	if (!node->connected || !hints->tx_attr->size)
 		return 0;
 
-	for (i = 0; i < tx_attr.size && !ret; i++) {
-		ret = fi_send(node->ep, node->mem, ep_attr.max_msg_size,
+	for (i = 0; i < hints->tx_attr->size && !ret; i++) {
+		ret = fi_send(node->ep, node->mem, hints->ep_attr->max_msg_size,
 				node->mrdesc, 0, node);
 		if (ret) {
 			FT_PRINTERR("fi_send", ret);
@@ -279,7 +276,7 @@ static int poll_cqs(enum CQ_INDEX index)
 		if (!nodes[i].connected)
 			continue;
 
-		for (done = 0; done < tx_attr.size; done += ret) {
+		for (done = 0; done < hints->tx_attr->size; done += ret) {
 			ret = fi_cq_read(nodes[i].cq[index], entry, 8);
 			if (ret < 0) {
 				printf("cmatose: failed polling CQ: %d\n", ret);
@@ -427,7 +424,7 @@ static int run_server(void)
 	if (ret)
 		goto out;
 
-	if (tx_attr.size) {
+	if (hints->tx_attr->size) {
 		printf("initiating data transfers\n");
 		for (i = 0; i < connections; i++) {
 			ret = post_sends(&nodes[i]);
@@ -485,7 +482,7 @@ static int run_client(void)
 	if (ret)
 		goto disc;
 
-	if (tx_attr.size) {
+	if (hints->tx_attr->size) {
 		printf("receiving data transfers\n");
 		ret = poll_cqs(RECV_CQ_INDEX);
 		if (ret)
@@ -529,19 +526,20 @@ int main(int argc, char **argv)
 	struct fi_eq_attr eq_attr;
 	int op, ret;
 
-	hints.caps = FI_MSG;
-	hints.ep_type = FI_EP_MSG;
-	hints.mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
-	hints.ep_attr = &ep_attr;
-	hints.tx_attr = &tx_attr;
-	tx_attr.mode = hints.mode;
-	hints.rx_attr = &rx_attr;
-	rx_attr.mode = hints.mode;
+	hints = fi_allocinfo();
+	if (!hints)
+		exit(1);
+
+	hints->caps = FI_MSG;
+	hints->ep_attr->type = FI_EP_MSG;
+	hints->mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->tx_attr->mode = hints->mode;
+	hints->rx_attr->mode = hints->mode;
 
 	flags = FI_SOURCE;
-	ep_attr.max_msg_size = 100;
-	tx_attr.size = 10;
-	rx_attr.size = 10;
+	hints->ep_attr->max_msg_size = 100;
+	hints->tx_attr->size = 10;
+	hints->rx_attr->size = 10;
 
 	while ((op = getopt(argc, argv, "s:b:c:C:S:p:")) != -1) {
 		switch (op) {
@@ -560,11 +558,11 @@ int main(int argc, char **argv)
 			connections = atoi(optarg);
 			break;
 		case 'C':
-			tx_attr.size = atoi(optarg);
-			rx_attr.size = tx_attr.size;
+			hints->tx_attr->size = atoi(optarg);
+			hints->rx_attr->size = hints->tx_attr->size;
 			break;
 		case 'S':
-			ep_attr.max_msg_size = atoi(optarg);
+			hints->ep_attr->max_msg_size = atoi(optarg);
 			break;
 		case 'p':
 			port = optarg;
@@ -576,12 +574,13 @@ int main(int argc, char **argv)
 
 	connects_left = connections;
 
-	ret = fi_getinfo(FT_FIVERSION, node, port, flags, &hints, &info);
+	ret = fi_getinfo(FT_FIVERSION, node, port, flags, hints, &info);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto exit0;
 	}
 
+	fi_freeinfo(hints);
 	printf("using provider: %s\n", info->fabric_attr->prov_name);
 	ret = fi_fabric(info->fabric_attr, &fabric, NULL);
 	if (ret) {
