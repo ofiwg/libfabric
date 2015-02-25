@@ -37,6 +37,8 @@ static int psmx_domain_close(fid_t fid)
 	struct psmx_fid_domain *domain;
 	int err;
 
+	PSMX_DEBUG("\n");
+
 	domain = container_of(fid, struct psmx_fid_domain, domain.fid);
 
 	psmx_am_fini(domain);
@@ -91,11 +93,11 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct psm_ep_open_opts opts;
 	int err = -FI_ENOMEM;
 
-	PSMX_DEBUG("%s\n", __func__);
+	PSMX_DEBUG("\n");
 
 	fabric_priv = container_of(fabric, struct psmx_fid_fabric, fabric);
 	if (fabric_priv->active_domain) {
-		PSMX_DEBUG("%s: a domain has been opened for the fabric\n");
+		PSMX_DEBUG("a domain has been opened for the fabric\n");
 		return -FI_EBUSY;
 	}
 
