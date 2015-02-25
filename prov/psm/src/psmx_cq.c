@@ -777,7 +777,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		break;
 
 	default:
-		PSMX_DEBUG("%s: attr->format=%d, supported=%d...%d\n", __func__, attr->format,
+		PSMX_DEBUG("attr->format=%d, supported=%d...%d\n", attr->format,
 				FI_CQ_FORMAT_UNSPEC, FI_CQ_FORMAT_TAGGED);
 		return -FI_EINVAL;
 	}
@@ -789,8 +789,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	case FI_WAIT_SET:
 		if (!attr->wait_set) {
-			PSMX_DEBUG("%s: FI_WAIT_SET is specified but attr->wait_set is NULL\n",
-				   __func__);
+			PSMX_DEBUG("FI_WAIT_SET is specified but attr->wait_set is NULL\n");
 			return -FI_EINVAL;
 		}
 		wait = (struct psmx_fid_wait *)attr->wait_set;
@@ -808,7 +807,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		break;
 
 	default:
-		PSMX_DEBUG("%s: attr->wait_obj=%d, supported=%d...%d\n", __func__, attr->wait_obj,
+		PSMX_DEBUG("attr->wait_obj=%d, supported=%d...%d\n", attr->wait_obj,
 				FI_WAIT_NONE, FI_WAIT_MUTEX_COND);
 		return -FI_EINVAL;
 	}
@@ -820,7 +819,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			break;
 
 		default:
-			PSMX_DEBUG("%s: attr->wait_cond=%d, supported=%d...%d\n", __func__,
+			PSMX_DEBUG("attr->wait_cond=%d, supported=%d...%d\n",
 					attr->wait_cond, FI_CQ_COND_NONE, FI_CQ_COND_THRESHOLD);
 			return -FI_EINVAL;
 		}

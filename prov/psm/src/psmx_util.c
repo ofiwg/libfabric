@@ -105,7 +105,7 @@ void *psmx_name_server(void *args)
 
 	n = getaddrinfo(NULL, service, &hints, &res);
 	if (n < 0) {
-		PSMX_DEBUG("%s: port %d: %s\n", __func__, port, gai_strerror(n));
+		PSMX_DEBUG("port %d: %s\n", port, gai_strerror(n));
 		free(service);
 		return NULL;
 	}
@@ -126,7 +126,7 @@ void *psmx_name_server(void *args)
 	free(service);
 
 	if (listenfd < 0) {
-		PSMX_DEBUG("%s: couldn't listen to port %d\n", __func__, port);
+		PSMX_DEBUG("couldn't listen to port %d. try set OFI_PSM_UUID to a different value?\n", port);
 		return NULL;
 	}
 
@@ -171,7 +171,7 @@ void *psmx_resolve_name(const char *servername, int port)
 
 	n = getaddrinfo(servername, service, &hints, &res);
 	if (n < 0) {
-		PSMX_DEBUG("%s:(%s:%d):%s\n", __func__, servername, port, gai_strerror(n));
+		PSMX_DEBUG("(%s:%d):%s\n", servername, port, gai_strerror(n));
 		free(service);
 		return NULL;
 	}
@@ -190,7 +190,7 @@ void *psmx_resolve_name(const char *servername, int port)
 	free(service);
 
 	if (sockfd < 0) {
-		PSMX_DEBUG("%s: couldn't connect to %s:%d\n", __func__, servername, port);
+		PSMX_DEBUG("couldn't connect to %s:%d\n", servername, port);
 		return NULL;
 	}
 

@@ -308,8 +308,8 @@ int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			type = attr->type;
 			break;
 		default:
-			PSMX_DEBUG("%s: attr->type=%d, supported=%d %d\n",
-				__func__, attr->type, FI_AV_MAP, FI_AV_TABLE);
+			PSMX_DEBUG("attr->type=%d, supported=%d %d\n",
+				attr->type, FI_AV_MAP, FI_AV_TABLE);
 			return -FI_EINVAL;
 		}
 
