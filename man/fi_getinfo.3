@@ -1,4 +1,4 @@
-.TH fi_getinfo 3 "2015\-02\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_getinfo 3 "2015\-02\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo - Obtain / free fabric interface information
@@ -282,14 +282,6 @@ regions be backed by allocated memory pages.
 \f[I]FI_NAMED_RX_CTX\f[] : Requests that endpoints which support
 multiple receive contexts allow an initiator to target (or name) a
 specific receive context as part of a data transfer operation.
-.PP
-\f[I]FI_BUFFERED_RECV\f[] : Requests that the communication endpoint
-should attempt to queue inbound data that arrives before a receive
-buffer has been posted.
-In the absence of this flag, any messages that arrive before a receive
-is posted are lost.
-Applications may access endpoint options (getopt/setopt) to determine
-the size of available buffered receive space.
 .PP
 \f[I]FI_DIRECTED_RECV\f[] : Requests that the communication endpoint use
 the source address of an incoming message when matching it with a

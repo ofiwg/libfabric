@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-02\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-02\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -453,8 +453,6 @@ struct\ fi_ep_attr\ {
 \ \ \ \ uint32_t\ \ protocol;
 \ \ \ \ uint32_t\ \ protocol_version;
 \ \ \ \ size_t\ \ \ \ max_msg_size;
-\ \ \ \ size_t\ \ \ \ inject_size;
-\ \ \ \ size_t\ \ \ \ total_buffered_recv;
 \ \ \ \ size_t\ \ \ \ msg_prefix_size;
 \ \ \ \ size_t\ \ \ \ max_order_raw_size;
 \ \ \ \ size_t\ \ \ \ max_order_war_size;
@@ -515,15 +513,6 @@ lesser version.
 .PP
 Defines the maximum size for an application data transfer as a single
 operation.
-.SS inject_size - Inject Size
-.PP
-Defines the default inject operation size (see the FI_INJECT flag) that
-an endpoint will support.
-This value applies per transmit operation.
-.SS total_buffered_recv - Total Buffered Receive
-.PP
-Defines the total available space allocated by the provider to buffer
-received messages (see the FI_BUFFERED_RECV flag).
 .SS msg_prefix_size - Message Prefix Size
 .PP
 Specifies the size of any required message prefix buffer space.
@@ -855,8 +844,6 @@ See the fi_endpoint Completion Ordering section.
 .PP
 \f[I]inject_size\f[] : The requested inject operation size (see the
 FI_INJECT flag) that the context will support.
-This value must be equal to or less than the inject_size of the
-associated endpoint.
 See the fi_endpoint Inject Size section.
 .PP
 \f[I]size\f[] : The size of the context, in bytes.
@@ -953,10 +940,10 @@ specified of the associated endpoint.
 See the fi_endpoint Completion Ordering section.
 .PP
 \f[I]total_buffered_recv\f[] : Defines the total available space
-allocated by the provider to buffer received messages on the context.
-This value must be less than or equal to that specified for the
-associated endpoint.
-See the fi_endpoint Total Buffered Receive section.
+allocated by the provider to buffer messages that are received for which
+there is no matching receive operation.
+If set to 0, any messages that arrive before a receive buffer has been
+posted are lost.
 .PP
 \f[I]size\f[] : The size of the context, in bytes.
 The size is usually used as an output value by applications wishing to
