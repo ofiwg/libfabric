@@ -250,6 +250,7 @@ struct fi_rx_attr {
 };
 
 struct fi_ep_attr {
+	enum fi_ep_type		type;
 	uint32_t		protocol;
 	uint32_t		protocol_version;
 	size_t			max_msg_size;
@@ -292,7 +293,6 @@ struct fi_info {
 	struct fi_info		*next;
 	uint64_t		caps;
 	uint64_t		mode;
-	enum fi_ep_type		ep_type;
 	uint32_t		addr_format;
 	size_t			src_addrlen;
 	size_t			dest_addrlen;

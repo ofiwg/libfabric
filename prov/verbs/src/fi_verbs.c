@@ -154,6 +154,7 @@ const struct fi_domain_attr verbs_domain_attr = {
 };
 
 const struct fi_ep_attr verbs_ep_attr = {
+	.type			= FI_EP_MSG,
 	.protocol_version	= 1,
 	.max_msg_size		= VERBS_MSG_SIZE,
 	.msg_prefix_size	= 0,
@@ -267,6 +268,15 @@ static int fi_ibv_check_domain_attr(struct fi_domain_attr *attr)
 
 static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 {
+	switch (attr->type) {
+	case FI_EP_UNSPEC:
+	case FI_EP_MSG:
+		break;
+	default:
+		VERBS_INFO("Unsupported endpoint type\n");
+		return -FI_ENODATA;
+	}
+
 	switch (attr->protocol) {
 	case FI_PROTO_UNSPEC:
 	case FI_PROTO_RDMA_CM_IB_RC:
@@ -375,15 +385,6 @@ static int fi_ibv_check_info(struct fi_info *info)
 {
 	int ret;
 
-	switch (info->ep_type) {
-	case FI_EP_UNSPEC:
-	case FI_EP_MSG:
-		break;
-	default:
-		VERBS_INFO("Unsupported endpoint type\n");
-		return -FI_ENODATA;
-	}
-
 	if (info->caps && (info->caps & ~VERBS_CAPS)) {
 		VERBS_INFO("Unsupported capabilities\n");
 		return -FI_ENODATA;
@@ -485,7 +486,7 @@ static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *hints,
 {
 	fi->caps = VERBS_CAPS;
 	fi->mode = VERBS_MODE;
-	fi->ep_type = FI_EP_MSG;
+	fi->ep_attr->type = FI_EP_MSG;
 
  	if (rai->ai_src_len) {
  		if (!(fi->src_addr = malloc(rai->ai_src_len)))
@@ -1917,7 +1918,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	if (!fi)
 		return NULL;
 
-	fi->ep_type = FI_EP_MSG;
+	fi->ep_attr->type = FI_EP_MSG;
 	fi->caps  = VERBS_CAPS;
 
 	fi->src_addrlen = fi_ibv_sockaddr_len(rdma_get_local_addr(event->id));

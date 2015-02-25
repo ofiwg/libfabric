@@ -1131,7 +1131,6 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type,
 	_info->src_addr = calloc(1, sizeof(struct sockaddr_in));
 	_info->dest_addr = calloc(1, sizeof(struct sockaddr_in));
 	
-	_info->ep_type = ep_type;
 	_info->mode = SOCK_MODE;
 	_info->addr_format = FI_SOCKADDR_IN;
 	_info->dest_addrlen =_info->src_addrlen = sizeof(struct sockaddr_in);
@@ -1158,6 +1157,7 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type,
 			*(_info->rx_attr) = *(hints->rx_attr);
 	}
 
+	_info->ep_attr->type = ep_type;
 	*(_info->domain_attr) = sock_domain_attr;
 	*(_info->fabric_attr) = sock_fabric_attr;
 
@@ -1225,7 +1225,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	fastlock_release(&sock_dom->lock);
 
 	if (info) {
-		sock_ep->ep_type = info->ep_type;
+		sock_ep->ep_type = info->ep_attr->type;
 		sock_ep->info.caps = info->caps;
 		sock_ep->info.addr_format = FI_SOCKADDR_IN;
 		

@@ -436,20 +436,45 @@ an endpoint.
 
 {% highlight c %}
 struct fi_ep_attr {
-	uint32_t  protocol;
-	uint32_t  protocol_version;
-	size_t    max_msg_size;
-	size_t    msg_prefix_size;
-	size_t    max_order_raw_size;
-	size_t    max_order_war_size;
-	size_t    max_order_waw_size;
-	uint64_t  mem_tag_format;
-	uint64_t  msg_order;
-	uint64_t  comp_order;
-	size_t    tx_ctx_cnt;
-	size_t    rx_ctx_cnt;
+	enum fi_ep_type ep_type;
+	uint32_t        protocol;
+	uint32_t        protocol_version;
+	size_t          max_msg_size;
+	size_t          msg_prefix_size;
+	size_t          max_order_raw_size;
+	size_t          max_order_war_size;
+	size_t          max_order_waw_size;
+	uint64_t        mem_tag_format;
+	uint64_t        msg_order;
+	uint64_t        comp_order;
+	size_t          tx_ctx_cnt;
+	size_t          rx_ctx_cnt;
 };
 {% endhighlight %}
+
+## type - Endpoint Type
+  If specified, indicates the type of fabric interface communication
+  desired.  Supported types are:
+
+*FI_EP_UNSPEC*
+: The type of endpoint is not specified.  This is usually provided as
+  input, with other attributes of the endpoint or the provider
+  selecting the type.
+
+*FI_EP_MSG*
+: Provides a reliable, connection-oriented data transfer service with
+  flow control that maintains message boundaries.
+
+*FI_EP_DGRAM*
+: Supports a connectionless, unreliable datagram communication.
+  Message boundaries are maintained, but the maximum message size may
+  be limited to the fabric MTU.  Flow control is not guaranteed.
+
+*FI_EP_RDM*
+: Reliable datagram message.  Provides a reliable, unconnected data
+  transfer service with flow control that maintains message
+  boundaries.
+
 
 ## Protocol
 

@@ -107,7 +107,6 @@ struct fi_info {
 	struct fi_info        *next;
 	uint64_t              caps;
 	uint64_t              mode;
-	enum fi_ep_type       ep_type;
 	uint32_t              addr_format;
 	size_t                src_addrlen;
 	size_t                dest_addrlen;
@@ -133,11 +132,6 @@ struct fi_info {
 
 *mode*
 : Operational modes supported by the application.  See the _Mode_
-  section below.
-
-*ep_type - endpoint type*
-: If specified, indicates the type of fabric interface communication
-  desired.  Supported types are listed in the _Endpoint types_
   section below.
 
 *addr_format - address format*
@@ -463,27 +457,6 @@ below.
   must provide the buffering needed for the IO vectors.  When set,
   an application must not modify an IO vector until the associated
   operation has completed.
-
-# ENDPOINT TYPES
-
-*FI_EP_UNSPEC*
-: The type of endpoint is not specified.  This is usually provided as
-  input, with other attributes of the endpoint or the provider
-  selecting the type.
-
-*FI_EP_MSG*
-: Provides a reliable, connection-oriented data transfer service with
-  flow control that maintains message boundaries.
-
-*FI_EP_DGRAM*
-: Supports a connectionless, unreliable datagram communication.
-  Message boundaries are maintained, but the maximum message size may
-  be limited to the fabric MTU.  Flow control is not guaranteed.
-
-*FI_EP_RDM*
-: Reliable datagram message.  Provides a reliable, unconnected data
-  transfer service with flow control that maintains message
-  boundaries.
 
 # ADDRESSING FORMATS
 
