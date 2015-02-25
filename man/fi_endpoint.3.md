@@ -212,6 +212,12 @@ receive contexts associated with the scalable endpoint.  If resources are still
 associated with the scalable endpoint when attempting to close, the call will
 return -FI_EBUSY.
 
+Outstanding operations posted to the endpoint when fi_close is
+called will be discarded.  Discarded operations will silently be dropped,
+with no completions reported.  Additionally, a provider may discard previously
+completed operations from the associated completion queue(s).  The
+behavior to discard completed operations is provider specific.
+
 ## fi_ep_bind
 
 fi_ep_bind is used to associate an endpoint with hardware resources.
