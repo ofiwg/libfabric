@@ -1245,14 +1245,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			       sizeof(struct sockaddr_in));
 		}
 		
-		if (info->ep_attr) {
-			sock_ep->ep_attr = *info->ep_attr;
-			sock_ep->ep_attr.total_buffered_recv = 
-				sock_ep->ep_attr.total_buffered_recv ?
-				sock_ep->ep_attr.total_buffered_recv : 
-				SOCK_EP_MAX_BUFF_RECV;
-		}
-		
 		if (info->tx_attr) {
 			sock_ep->tx_attr = *info->tx_attr;
 			sock_ep->op_flags = info->tx_attr->op_flags;

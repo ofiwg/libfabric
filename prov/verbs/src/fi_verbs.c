@@ -156,7 +156,6 @@ const struct fi_domain_attr verbs_domain_attr = {
 const struct fi_ep_attr verbs_ep_attr = {
 	.protocol_version	= 1,
 	.max_msg_size		= VERBS_MSG_SIZE,
-	.total_buffered_recv	= 0,
 	.msg_prefix_size	= 0,
 	.max_order_raw_size	= VERBS_MSG_SIZE,
 	.max_order_war_size	= 0,
@@ -286,11 +285,6 @@ static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 
 	if (attr->max_msg_size > verbs_ep_attr.max_msg_size) {
 		VERBS_INFO("Max message size too large\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->total_buffered_recv) {
-		VERBS_INFO("Buffered Recv not supported\n");
 		return -FI_ENODATA;
 	}
 
@@ -589,8 +583,6 @@ static int fi_ibv_fill_info_attr(struct ibv_context *ctx, struct fi_info *hints,
 
 	fi->ep_attr->protocol_version = 1;
 	fi->ep_attr->max_msg_size = port_attr.max_msg_sz;
-	// TODO Give a real size once verbs provider supports inject
-	fi->ep_attr->inject_size = 0;
 
 	return 0;
 }

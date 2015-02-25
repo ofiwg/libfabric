@@ -275,14 +275,6 @@ additional optimizations.
   allow an initiator to target (or name) a specific receive context as
   part of a data transfer operation.
 
-*FI_BUFFERED_RECV*
-: Requests that the communication endpoint should attempt to queue
-  inbound data that arrives before a receive buffer has been posted.
-  In the absence of this flag, any messages that arrive before a
-  receive is posted are lost.  Applications may access endpoint
-  options (getopt/setopt) to determine the size of available buffered
-  receive space.
-
 *FI_DIRECTED_RECV*
 : Requests that the communication endpoint use the source address of
   an incoming message when matching it with a receive buffer.  If this

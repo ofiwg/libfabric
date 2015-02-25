@@ -161,12 +161,22 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			goto err_out;
 		}
 
-		if (hints->tx_attr &&
-		    (hints->tx_attr->op_flags & PSMX_OP_FLAGS) !=
-		     hints->tx_attr->op_flags) {
-			PSMX_DEBUG("hints->tx->flags=0x%llx, supported=0x%llx\n",
-					hints->tx_attr->op_flags, PSMX_OP_FLAGS);
-			goto err_out;
+		if (hints->tx_attr) {
+			if ((hints->tx_attr->op_flags & PSMX_OP_FLAGS) !=
+			    hints->tx_attr->op_flags) {
+				PSMX_DEBUG("hints->tx->flags=0x%llx, "
+					   "supported=0x%llx\n",
+					   hints->tx_attr->op_flags,
+					   PSMX_OP_FLAGS);
+				goto err_out;
+			}
+			if (hints->tx_attr->inject_size > PSMX_INJECT_SIZE) {
+				PSMX_DEBUG("hints->tx_attr->inject_size=%ld,"
+					   "supported=%ld.\n",
+					   hints->tx_attr->inject_size,
+					   PSMX_INJECT_SIZE);
+				goto err_out;
+			}
 		}
 
 		if (hints->rx_attr &&
@@ -205,13 +215,6 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 						PSMX_MAX_MSG_SIZE);
 				goto err_out;
 			}
-			if (hints->ep_attr->inject_size > PSMX_INJECT_SIZE) {
-				PSMX_DEBUG("hints->ep_attr->inject_size=%ld,"
-						"supported=%ld.\n",
-						hints->ep_attr->inject_size,
-						PSMX_INJECT_SIZE);
-				goto err_out;
-			}
 			max_tag_value = fi_tag_bits(hints->ep_attr->mem_tag_format);
 		}
 
@@ -231,8 +234,6 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 	psmx_info->ep_attr->protocol = FI_PROTO_PSMX;
 	psmx_info->ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
-	psmx_info->ep_attr->inject_size = PSMX_INJECT_SIZE;
-	psmx_info->ep_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
 	psmx_info->ep_attr->mem_tag_format = fi_tag_format(max_tag_value);
 	psmx_info->ep_attr->msg_order = FI_ORDER_SAS;
 	psmx_info->ep_attr->comp_order = FI_ORDER_NONE;
@@ -262,7 +263,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 					? hints->tx_attr->op_flags : 0;
 	psmx_info->tx_attr->msg_order = psmx_info->ep_attr->msg_order;
 	psmx_info->tx_attr->comp_order = psmx_info->ep_attr->comp_order;
-	psmx_info->tx_attr->inject_size = psmx_info->ep_attr->inject_size;
+	psmx_info->tx_attr->inject_size = PSMX_INJECT_SIZE;
 	psmx_info->tx_attr->size = UINT64_MAX;
 	psmx_info->tx_attr->iov_limit = 1;
 
@@ -272,7 +273,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 					? hints->tx_attr->op_flags : 0;
 	psmx_info->rx_attr->msg_order = psmx_info->ep_attr->msg_order;
 	psmx_info->rx_attr->comp_order = psmx_info->ep_attr->comp_order;
-	psmx_info->rx_attr->total_buffered_recv = psmx_info->ep_attr->total_buffered_recv;
+	psmx_info->rx_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
 	psmx_info->rx_attr->size = UINT64_MAX;
 	psmx_info->rx_attr->iov_limit = 1;
 

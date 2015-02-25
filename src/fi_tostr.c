@@ -179,7 +179,6 @@ static void fi_tostr_caps(char *buf, uint64_t caps)
 	IFFLAGSTR(caps, FI_TAGGED);
 	IFFLAGSTR(caps, FI_ATOMICS);
 	IFFLAGSTR(caps, FI_DYNAMIC_MR);
-	IFFLAGSTR(caps, FI_BUFFERED_RECV);
 	fi_tostr_flags(buf, caps);
 
 	fi_remove_comma(buf);
@@ -330,8 +329,6 @@ static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const cha
 	fi_tostr_protocol(buf, attr->protocol);
 	strcatf(buf, "\n");
 	strcatf(buf, "%s%smax_msg_size: %zd\n", prefix, TAB, attr->max_msg_size);
-	strcatf(buf, "%s%sinject_size: %zd\n", prefix, TAB, attr->inject_size);
-	strcatf(buf, "%s%stotal_buffered_recv: %zd\n", prefix, TAB, attr->total_buffered_recv);
 	strcatf(buf, "%s%smax_order_raw_size: %zd\n", prefix, TAB, attr->max_order_raw_size);
 	strcatf(buf, "%s%smax_order_war_size: %zd\n", prefix, TAB, attr->max_order_war_size);
 	strcatf(buf, "%s%smax_order_waw_size: %zd\n", prefix, TAB, attr->max_order_waw_size);

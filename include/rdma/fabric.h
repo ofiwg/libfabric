@@ -102,7 +102,6 @@ typedef struct fid *fid_t;
 #define FI_ATOMICS		FI_ATOMIC
 #define FI_DYNAMIC_MR		(1ULL << 7)
 #define FI_NAMED_RX_CTX		(1ULL << 8)
-#define FI_BUFFERED_RECV	(1ULL << 9)
 #define FI_DIRECTED_RECV	(1ULL << 10)
 
 /*
@@ -254,8 +253,6 @@ struct fi_ep_attr {
 	uint32_t		protocol;
 	uint32_t		protocol_version;
 	size_t			max_msg_size;
-	size_t			inject_size;
-	size_t			total_buffered_recv;
 	size_t			msg_prefix_size;
 	size_t			max_order_raw_size;
 	size_t			max_order_war_size;
