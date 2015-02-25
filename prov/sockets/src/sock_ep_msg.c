@@ -354,7 +354,11 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	if (hints && hints->src_addr) {
-		assert(hints->src_addrlen == sizeof(struct sockaddr_in));
+		if (hints->src_addrlen != sizeof(struct sockaddr_in)) {
+			SOCK_LOG_ERROR("Sockets provider requires src_addrlen to be sizeof(struct sockaddr_in); got %zu\n",
+					hints->src_addrlen);
+			return -FI_ENODATA;
+		}
 		memcpy(src_addr, hints->src_addr, hints->src_addrlen);
 	}
 
@@ -366,7 +370,11 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 				goto err;
 			}
 		}
-		assert(hints->dest_addrlen == sizeof(struct sockaddr_in));
+		if (hints->dest_addrlen != sizeof(struct sockaddr_in)) {
+			SOCK_LOG_ERROR("Sockets provider requires dest_addrlen to be sizeof(struct sockaddr_in); got %zu\n",
+					hints->dest_addrlen);
+			return -FI_ENODATA;
+		}
 		memcpy(dest_addr, hints->dest_addr, hints->dest_addrlen);
 	}
 
