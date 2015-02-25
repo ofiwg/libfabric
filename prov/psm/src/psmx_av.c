@@ -180,6 +180,14 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 						((psm_epaddr_t *) fi_addr)[i]);
 		}
 		else {
+			PSMX_DEBUG("%d: psm_ep_connect returned %s. remote epid=%lx.\n",
+					i, psm_error_get_string(errors[i]),
+					((psm_epid_t *)addr)[i]);
+			if (((psm_epid_t *)addr)[i] == 0)
+				PSMX_DEBUG("does the application depend on the provider"
+					   "to resolve IP address into endpoint id? if so"
+					   "check if the name server has started correctly"
+					   "at the other side.\n");
 			fi_addr[i] = FI_ADDR_NOTAVAIL;
 			error_count++;
 		}
