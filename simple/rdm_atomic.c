@@ -91,7 +91,6 @@ static struct fi_context fi_ctx_av;
 static enum fi_datatype datatype = FI_UINT64;
 static size_t *count;
 static int run_all_ops = 1;
-static int run_all_sizes = 1;
 
 static const char* get_fi_op_name(enum fi_op op)
 {
@@ -370,7 +369,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = !run_all_sizes ? test_size[TEST_CNT - 1].size : 
+	buffer_size = !opts.custom ? test_size[TEST_CNT - 1].size : 
 		opts.transfer_size;
 	buf = malloc(MAX(buffer_size, sizeof(uint64_t)));
 	if (!buf) {
@@ -687,7 +686,7 @@ static int run(void)
 	if (ret)
 		goto out;
 
-	if (run_all_sizes) {
+	if (!opts.custom) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
