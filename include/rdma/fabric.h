@@ -161,6 +161,12 @@ enum {
 typedef uint64_t		fi_addr_t;
 FI_DEFINE_HANDLE(fi_connreq_t);
 
+enum fi_av_type {
+	FI_AV_UNSPEC,
+	FI_AV_MAP,
+	FI_AV_TABLE
+};
+
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
 	FI_PROGRESS_AUTO,
@@ -271,6 +277,7 @@ struct fi_domain_attr {
 	enum fi_progress	control_progress;
 	enum fi_progress	data_progress;
 	enum fi_resource_mgmt	resource_mgmt;
+	enum fi_av_type		av_type;
 	size_t			mr_key_size;
 	size_t			cq_data_size;
 	size_t			cq_cnt;
