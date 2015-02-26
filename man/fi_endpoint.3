@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-02\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-02\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -222,6 +222,14 @@ When closing a scalable endpoint, there must be no opened transmit
 contexts, or receive contexts associated with the scalable endpoint.
 If resources are still associated with the scalable endpoint when
 attempting to close, the call will return -FI_EBUSY.
+.PP
+Outstanding operations posted to the endpoint when fi_close is called
+will be discarded.
+Discarded operations will silently be dropped, with no completions
+reported.
+Additionally, a provider may discard previously completed operations
+from the associated completion queue(s).
+The behavior to discard completed operations is provider specific.
 .SS fi_ep_bind
 .PP
 fi_ep_bind is used to associate an endpoint with hardware resources.
