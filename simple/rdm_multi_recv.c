@@ -300,8 +300,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	multi_buf_size = MAX(max_send_buf_size, DEFAULT_MULTI_BUF_SIZE) * 
 		MULTI_BUF_SIZE_FACTOR;
 	multi_recv_buf = malloc(multi_buf_size);
-	if(!multi_recv_buf) {
-		FT_DEBUG("Cannot allocate multi_recv_buf\n");
+	if (!multi_recv_buf) {
+		fprintf(stderr, "Cannot allocate multi_recv_buf\n");
 		ret = -1;
 		goto err1;
 	}

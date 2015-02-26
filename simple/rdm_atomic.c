@@ -545,10 +545,6 @@ static int init_fabric(void)
 		goto err2;
 	}
 
-	if (opts.dst_addr == NULL) {
-		FT_DEBUG("EP opened on fabric %s\n", fi->fabric_attr->name);
-	}
-
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;

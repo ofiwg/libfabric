@@ -326,7 +326,7 @@ static int init_fabric(void)
 	/* Check the number of EPs supported by the provider */
 	if (ep_cnt > fi->domain_attr->ep_cnt) {
 		ep_cnt = fi->domain_attr->ep_cnt;
-		FT_DEBUG("Provider can support only %d of EPs\n", ep_cnt);
+		fprintf(stderr, "Provider can support only %d of EPs\n", ep_cnt);
 	}
 
 	/* Get remote address */

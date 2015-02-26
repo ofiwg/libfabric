@@ -310,7 +310,7 @@ static int init_fabric(void)
 	/* check max msg size */
 	max_inject_size = fi->tx_attr->inject_size;
 	if (opts.custom && opts.transfer_size > max_inject_size) {
-		FT_DEBUG("Msg size greater than max inject size\n");
+		fprintf(stderr, "Msg size greater than max inject size\n");
 		ret = -FI_EINVAL;
 		goto err0;
 	}

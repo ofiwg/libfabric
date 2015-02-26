@@ -161,7 +161,8 @@ static int wait_remote_writedata_completion(void)
 
 	ret = 0;
 	if (comp.data != cq_data) {
-		FT_DEBUG("Got unexpected completion data %" PRIu64 "\n", comp.data);
+		fprintf(stderr, "Got unexpected completion data %" PRIu64 "\n",
+			comp.data);
 	}
 	assert(comp.op_context == &fi_ctx_recv || comp.op_context == NULL);
 	if (comp.op_context == &fi_ctx_recv) {

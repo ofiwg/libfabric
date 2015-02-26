@@ -111,7 +111,7 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 #define FT_PRINTERR(call, retv) \
 	do { fprintf(stderr, call "(): %d, %d (%s)\n", __LINE__, (int) retv, fi_strerror((int) -retv)); } while (0)
 
-#define FT_DEBUG(fmt, ...) \
+#define FT_ERR(fmt, ...) \
 	do { fprintf(stderr, "%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__); } while (0)
 
 #define MIN(a,b) (((a)<(b))?(a):(b))

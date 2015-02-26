@@ -434,8 +434,8 @@ static int server_connect(void)
 	ret = fi_av_insert(av, buf_ptr, 1, &rem_addr, 0, NULL);
 	if (ret != 1) {
 		if (ret == 0) {
-			FT_DEBUG("Unable to resolve remote address 0x%x 0x%x\n",
-					((uint32_t *)buf)[0], ((uint32_t *)buf)[1]);
+			fprintf(stderr, "Unable to resolve remote address 0x%x 0x%x\n",
+				((uint32_t *)buf)[0], ((uint32_t *)buf)[1]);
 			ret = -FI_EINVAL;
 		} else {
 			FT_PRINTERR("fi_av_insert", ret);
