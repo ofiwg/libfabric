@@ -35,7 +35,6 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <assert.h>
 #include <sys/socket.h>
 
 #ifdef __cplusplus
