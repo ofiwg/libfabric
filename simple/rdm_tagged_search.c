@@ -47,7 +47,7 @@ static void *buf;
 static size_t buffer_size = 1024;
 static int rx_depth = 512;
 
-static struct fi_info *hints;
+static struct fi_info *fi, *hints;
 static char *dst_addr, *src_addr;
 static char *src_port = "9228", *dst_port = "9228";
 
@@ -206,7 +206,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = FI_AV_MAP;
+	av_attr.type = fi->domain_attr->av_type ?
+			fi->domain_attr->av_type : FI_AV_MAP;
 	av_attr.count = 1;
 	av_attr.name = NULL;
 
@@ -262,7 +263,6 @@ static int bind_ep_res(void)
 
 static int init_fabric(void)
 {
-	struct fi_info *fi;
 	uint64_t flags = 0;
 	char *node, *service;
 	int ret;
@@ -334,8 +334,6 @@ err2:
 err1:
 	fi_close(&fab->fid);
 err0:
-	fi_freeinfo(fi);
-
 	return ret;
 }
 
@@ -514,7 +512,7 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op;
+	int ret, op;
 
 	hints = fi_allocinfo();
 	if (!hints) {
@@ -551,5 +549,8 @@ int main(int argc, char **argv)
 	hints->caps = FI_MSG | FI_TAGGED;
 	hints->mode = FI_CONTEXT;
 
-	return run();
+	ret = run();
+	fi_freeinfo(hints);
+	fi_freeinfo(fi);
+	return ret;
 }

@@ -56,10 +56,9 @@
 
 int fabtests_debug = 0;
 
-struct fi_info *hints;
+static struct fi_info *fi, *hints;
 static struct fi_eq_attr eq_attr;
 
-static struct fi_info *fi;
 static struct fid_fabric *fabric;
 static struct fid_domain *domain;
 static struct fid_eq *eq;
@@ -161,7 +160,8 @@ static int setup_ep_fixture(struct fid_ep **ep_o)
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = FI_AV_MAP;
+	av_attr.type = myfi->domain_attr->av_type ?
+			myfi->domain_attr->av_type : FI_AV_MAP;
 	av_attr.count = 1;
 	av_attr.name = NULL;
 

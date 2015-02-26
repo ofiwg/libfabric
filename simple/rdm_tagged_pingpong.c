@@ -51,7 +51,7 @@ static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
 
-static struct fi_info *hints;
+static struct fi_info *fi, *hints;
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -274,7 +274,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = FI_AV_MAP;
+	av_attr.type = fi->domain_attr->av_type ?
+			fi->domain_attr->av_type : FI_AV_MAP;
 	av_attr.count = 1;
 	av_attr.name = NULL;
 
@@ -402,8 +403,6 @@ err2:
 err1:
 	fi_close(&fab->fid);
 err0:
-	fi_freeinfo(fi);
-
 	return ret;
 }
 
@@ -554,5 +553,6 @@ int main(int argc, char **argv)
 		ret = run();
 	}
 	fi_freeinfo(hints);
+	fi_freeinfo(fi);
 	return ret;
 }
