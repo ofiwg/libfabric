@@ -34,7 +34,6 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -300,7 +299,7 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 		ret = getaddrinfo(node ? node : hostname, service, 
 				  &sock_hints, &result_ptr);
 		if (ret != 0) {
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			SOCK_LOG_INFO("getaddrinfo failed!\n");
 			goto err;
 		}
@@ -331,7 +330,7 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 
 		ret = getaddrinfo(node, service, &sock_hints, &result_ptr);
 		if (ret != 0) {
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			SOCK_LOG_INFO("getaddrinfo failed!\n");
 			goto err;
 		}
@@ -367,7 +366,7 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 			      result->ai_addrlen);
 		if ( ret != 0) {
 			SOCK_LOG_ERROR("Failed to create udp socket\n");
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			goto err;
 		}
 
@@ -380,7 +379,7 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 		ret = getsockname(udp_sock, (struct sockaddr*)src_addr, &len);
 		if (ret != 0) {
 			SOCK_LOG_ERROR("getsockname failed\n");
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			goto err;
 		}
 		close(udp_sock);
@@ -390,7 +389,12 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	if (hints && hints->src_addr) {
-		assert(hints->src_addrlen == sizeof(struct sockaddr_in));
+		if(hints->src_addrlen != sizeof(struct sockaddr_in)){
+			SOCK_LOG_ERROR("Sockets provider requires src_addrlen to be sizeof(struct sockaddr_in); got %zu\n", 
+					hints->src_addrlen);
+			ret = -FI_ENODATA;
+			goto err;
+		}
 		memcpy(src_addr, hints->src_addr, hints->src_addrlen);
 	}
 
@@ -402,7 +406,12 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 				goto err;
 			}
 		}
-		assert(hints->dest_addrlen == sizeof(struct sockaddr_in));
+		if(hints->dest_addrlen != sizeof(struct sockaddr_in)){
+			SOCK_LOG_ERROR("Sockets provider requires dest_addrlen to be sizeof(struct sockaddr_in); got %zu\n", 
+					hints->dest_addrlen);
+			ret = -FI_ENODATA;
+			goto err;
+		}
 		memcpy(dest_addr, hints->dest_addr, hints->dest_addrlen);
 	}
 
@@ -420,7 +429,7 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 
 	_info = sock_rdm_fi_info(hints, src_addr, dest_addr);
 	if (!_info) {
-		ret = FI_ENOMEM;
+		ret = -FI_ENOMEM;
 		goto err;
 	}
 
