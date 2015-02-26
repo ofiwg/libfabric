@@ -346,8 +346,9 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	if (hints && hints->src_addr) {
-		if (hints->src_addrlen != sizeof(struct sockaddr_in)) {
-			SOCK_LOG_ERROR("Sockets provider requires src_addrlen to be sizeof(struct sockaddr_in); got %zu\n",
+		if ((hints->src_addrlen != 0) && 
+				(hints->src_addrlen != sizeof(struct sockaddr_in))) {
+			SOCK_LOG_ERROR("Sockets provider requires src_addrlen to be 0 or sizeof(struct sockaddr_in); got %zu\n",
 					hints->src_addrlen);
 			ret = -FI_ENODATA;
 			goto err;
@@ -363,8 +364,9 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 				goto err;
 			}
 		}
-		if (hints->dest_addrlen != sizeof(struct sockaddr_in)) {
-			SOCK_LOG_ERROR("Sockets provider requires dest_addrlen to be sizeof(struct sockaddr_in); got %zu\n",
+		if ((hints->dest_addrlen != 0) && 
+				(hints->dest_addrlen != sizeof(struct sockaddr_in))) {
+			SOCK_LOG_ERROR("Sockets provider requires dest_addrlen to be 0 or sizeof(struct sockaddr_in); got %zu\n",
 					hints->dest_addrlen);
 			ret = -FI_ENODATA;
 			goto err;
