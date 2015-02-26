@@ -140,15 +140,15 @@ struct fi_info {
   in the _Addressing formats_ section below.
 
 *src_addrlen - source address length*
-: Indicates the length of the source address (must be specified if
-  *src_addr* is specified).  This field will be ignored in hints if
-  FI_SOURCE is specified.
+: Indicates the length of the source address.  This value must be > 0
+  if *src_addr* is non-NULL.  This field will be ignored in hints if
+  FI_SOURCE is specified, or *src_addr* is NULL.
 
 *dest_addrlen - destination address length*
-: Indicates the length of the destination address (must be specified
-  if *dest_addr* is specified).  This field will be ignored in hints
+: Indicates the length of the destination address.  This value must be > 0
+  if *dest_addr* is non-NULL.  This field will be ignored in hints
   unless the node and service parameters are NULL or FI_SOURCE is
-  specified.
+  specified, or if *dst_addr* is NULL.
 
 *src_addr - source address*
 : If specified, indicates the source address.  This field will be
