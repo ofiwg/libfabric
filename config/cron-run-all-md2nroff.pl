@@ -109,10 +109,17 @@ foreach my $file (@markdown_files) {
     doit(0, "../config/md2nroff.pl --source $file");
 
     # Did we generate a new man page?  If so, we need to "git add" it.
-    my $man_file = $file;
+    my $man_file = basename($file);
+
+    $man_file =~ m/\.(\d)\.md$/;
+    my $section = $1;
+
     $man_file =~ s/\.md$//;
-    my $out = `git status --porcelain $man_file`;
-    doit(0, "git add $man_file")
+
+    my $full_filename = "man/man$section/$man_file";
+
+    my $out = `git status --porcelain $full_filename`;
+    doit(0, "git add $full_filename")
         if ($out =~ /^\?\?/);
 }
 
