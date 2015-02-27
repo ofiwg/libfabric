@@ -33,7 +33,7 @@ if ($help_arg) {
 }
 
 # Sanity checks
-die "Must specify both a source file"
+die "Must specify a source file"
     if (!defined($source_arg));
 die "Source file does not exist ($source_arg)"
     if (! -r $source_arg);
