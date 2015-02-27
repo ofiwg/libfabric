@@ -118,18 +118,18 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		dest_addr = psmx_resolve_name(node, 0);
 
 	if (hints) {
-		switch (hints->ep_type) {
-		case FI_EP_UNSPEC:
-		case FI_EP_RDM:
-			break;
-		default:
-			PSMX_DEBUG("hints->ep_type=%d, supported=%d,%d.\n",
-					hints->ep_type, FI_EP_UNSPEC,
-					FI_EP_RDM);
-			goto err_out;
-		}
-
 		if (hints->ep_attr) {
+			switch (hints->ep_attr->type) {
+			case FI_EP_UNSPEC:
+			case FI_EP_RDM:
+				break;
+			default:
+				PSMX_DEBUG("hints->ep_attr->type=%d, supported=%d,%d.\n",
+						hints->ep_attr->type, FI_EP_UNSPEC,
+						FI_EP_RDM);
+				goto err_out;
+			}
+
 			switch (hints->ep_attr->protocol) {
 			case FI_PROTO_UNSPEC:
 			case FI_PROTO_PSMX:
@@ -232,6 +232,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		goto err_out;
 	}
 
+	psmx_info->ep_attr->type = ep_type;
 	psmx_info->ep_attr->protocol = FI_PROTO_PSMX;
 	psmx_info->ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
 	psmx_info->ep_attr->mem_tag_format = fi_tag_format(max_tag_value);
@@ -246,7 +247,6 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->name = strdup("psm");
 
 	psmx_info->next = NULL;
-	psmx_info->ep_type = ep_type;
 	psmx_info->caps = (hints && hints->caps) ? hints->caps : caps;
 	psmx_info->mode = PSMX_MODE;
 	psmx_info->addr_format = FI_ADDR_PSMX;

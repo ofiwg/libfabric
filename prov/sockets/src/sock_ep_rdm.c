@@ -57,6 +57,7 @@
 #include "sock_util.h"
 
 const struct fi_ep_attr sock_rdm_ep_attr = {
+	.type = FI_EP_RDM,
 	.protocol = FI_PROTO_SOCK_TCP,
 	.max_msg_size = SOCK_EP_MAX_MSG_SZ,
 	.max_order_raw_size = SOCK_EP_MAX_ORDER_RAW_SZ,

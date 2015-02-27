@@ -122,7 +122,7 @@ usdf_pep_conn_info(struct usdf_connreq *crp)
 
 		ip->caps = USDF_MSG_CAPS;
 		ip->mode = USDF_MSG_SUPP_MODE;
-		ip->ep_type = FI_EP_MSG;
+		ip->ep_attr->type = FI_EP_MSG;
 
 		ip->addr_format = FI_SOCKADDR_IN;
 		ip->src_addrlen = sizeof(struct sockaddr_in);
@@ -451,7 +451,7 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 	int ret;
 	int optval;
 
-	if (info->ep_type != FI_EP_MSG) {
+	if (info->ep_attr->type != FI_EP_MSG) {
 		return -FI_ENODEV;
 	}
 

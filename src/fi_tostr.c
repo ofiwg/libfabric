@@ -325,6 +325,9 @@ static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const cha
 	}
 
 	strcatf(buf, "%sfi_ep_attr:\n", prefix);
+	strcatf(buf, "%sep_type: ", TAB);
+	fi_tostr_ep_type(buf, attr->type);
+	strcatf(buf, "\n");
 	strcatf(buf, "%s%sprotocol: ", prefix, TAB);
 	fi_tostr_protocol(buf, attr->protocol);
 	strcatf(buf, "\n");
@@ -398,9 +401,6 @@ static void fi_tostr_info(char *buf, const struct fi_info *info)
 	fi_tostr_mode(buf, info->mode);
 	strcatf(buf, " ]\n");
 
-	strcatf(buf, "%sep_type: ", TAB);
-	fi_tostr_ep_type(buf, info->ep_type);
-	strcatf(buf, "\n");
 	strcatf(buf, "%sfi_addr_format: ", TAB);
 	fi_tostr_addr_format(buf, info->addr_format);
 	strcatf(buf, "\n");

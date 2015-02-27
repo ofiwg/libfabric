@@ -364,7 +364,7 @@ int sock_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 int sock_endpoint(struct fid_domain *domain, struct fi_info *info,
 			 struct fid_ep **ep, void *context)
 {
-	switch (info->ep_type) {
+	switch (info->ep_attr->type) {
 	case FI_EP_RDM:
 		return sock_rdm_ep(domain, info, ep, context);
 	case FI_EP_DGRAM:
@@ -379,7 +379,7 @@ int sock_endpoint(struct fid_domain *domain, struct fi_info *info,
 int sock_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 		     struct fid_ep **sep, void *context)
 {
-	switch (info->ep_type) {
+	switch (info->ep_attr->type) {
 	case FI_EP_RDM:
 		return sock_rdm_sep(domain, info, sep, context);
 	case FI_EP_DGRAM:
