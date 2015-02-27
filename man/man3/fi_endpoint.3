@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-02\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -458,21 +458,44 @@ an endpoint.
 .nf
 \f[C]
 struct\ fi_ep_attr\ {
-\ \ \ \ uint32_t\ \ protocol;
-\ \ \ \ uint32_t\ \ protocol_version;
-\ \ \ \ size_t\ \ \ \ max_msg_size;
-\ \ \ \ size_t\ \ \ \ msg_prefix_size;
-\ \ \ \ size_t\ \ \ \ max_order_raw_size;
-\ \ \ \ size_t\ \ \ \ max_order_war_size;
-\ \ \ \ size_t\ \ \ \ max_order_waw_size;
-\ \ \ \ uint64_t\ \ mem_tag_format;
-\ \ \ \ uint64_t\ \ msg_order;
-\ \ \ \ uint64_t\ \ comp_order;
-\ \ \ \ size_t\ \ \ \ tx_ctx_cnt;
-\ \ \ \ size_t\ \ \ \ rx_ctx_cnt;
+\ \ \ \ enum\ fi_ep_type\ ep_type;
+\ \ \ \ uint32_t\ \ \ \ \ \ \ \ protocol;
+\ \ \ \ uint32_t\ \ \ \ \ \ \ \ protocol_version;
+\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ max_msg_size;
+\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ msg_prefix_size;
+\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ max_order_raw_size;
+\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ max_order_war_size;
+\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ max_order_waw_size;
+\ \ \ \ uint64_t\ \ \ \ \ \ \ \ mem_tag_format;
+\ \ \ \ uint64_t\ \ \ \ \ \ \ \ msg_order;
+\ \ \ \ uint64_t\ \ \ \ \ \ \ \ comp_order;
+\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ tx_ctx_cnt;
+\ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ rx_ctx_cnt;
 };
 \f[]
 .fi
+.SS type - Endpoint Type
+.PP
+If specified, indicates the type of fabric interface communication
+desired.
+Supported types are:
+.PP
+\f[I]FI_EP_UNSPEC\f[] : The type of endpoint is not specified.
+This is usually provided as input, with other attributes of the endpoint
+or the provider selecting the type.
+.PP
+\f[I]FI_EP_MSG\f[] : Provides a reliable, connection-oriented data
+transfer service with flow control that maintains message boundaries.
+.PP
+\f[I]FI_EP_DGRAM\f[] : Supports a connectionless, unreliable datagram
+communication.
+Message boundaries are maintained, but the maximum message size may be
+limited to the fabric MTU.
+Flow control is not guaranteed.
+.PP
+\f[I]FI_EP_RDM\f[] : Reliable datagram message.
+Provides a reliable, unconnected data transfer service with flow control
+that maintains message boundaries.
 .SS Protocol
 .PP
 Specifies the low-level end to end protocol employed by the provider.

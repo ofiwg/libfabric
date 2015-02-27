@@ -1,4 +1,4 @@
-.TH fi_getinfo 3 "2015\-02\-25" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_getinfo 3 "2015\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo - Obtain / free fabric interface information
@@ -100,7 +100,6 @@ struct\ fi_info\ {
 \ \ \ \ struct\ fi_info\ \ \ \ \ \ \ \ *next;
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ caps;
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ mode;
-\ \ \ \ enum\ fi_ep_type\ \ \ \ \ \ \ ep_type;
 \ \ \ \ uint32_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ addr_format;
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ src_addrlen;
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ dest_addrlen;
@@ -126,10 +125,6 @@ below.
 .PP
 \f[I]mode\f[] : Operational modes supported by the application.
 See the \f[I]Mode\f[] section below.
-.PP
-\f[I]ep_type - endpoint type\f[] : If specified, indicates the type of
-fabric interface communication desired.
-Supported types are listed in the \f[I]Endpoint types\f[] section below.
 .PP
 \f[I]addr_format - address format\f[] : If specified, indicates the
 format of addresses referenced by the fabric interfaces and data
@@ -471,24 +466,6 @@ The FI_ASYNC_IOV mode indicates that the application must provide the
 buffering needed for the IO vectors.
 When set, an application must not modify an IO vector until the
 associated operation has completed.
-.SH ENDPOINT TYPES
-.PP
-\f[I]FI_EP_UNSPEC\f[] : The type of endpoint is not specified.
-This is usually provided as input, with other attributes of the endpoint
-or the provider selecting the type.
-.PP
-\f[I]FI_EP_MSG\f[] : Provides a reliable, connection-oriented data
-transfer service with flow control that maintains message boundaries.
-.PP
-\f[I]FI_EP_DGRAM\f[] : Supports a connectionless, unreliable datagram
-communication.
-Message boundaries are maintained, but the maximum message size may be
-limited to the fabric MTU.
-Flow control is not guaranteed.
-.PP
-\f[I]FI_EP_RDM\f[] : Reliable datagram message.
-Provides a reliable, unconnected data transfer service with flow control
-that maintains message boundaries.
 .SH ADDRESSING FORMATS
 .PP
 Multiple fabric interfaces take as input either a source or destination
