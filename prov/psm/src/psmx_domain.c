@@ -41,6 +41,9 @@ static int psmx_domain_close(fid_t fid)
 
 	domain = container_of(fid, struct psmx_fid_domain, domain.fid);
 
+	if (--domain->refcnt > 0)
+		return 0;
+
 	psmx_am_fini(domain);
 
 #if 0
@@ -97,8 +100,9 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	fabric_priv = container_of(fabric, struct psmx_fid_fabric, fabric);
 	if (fabric_priv->active_domain) {
-		PSMX_DEBUG("a domain has been opened for the fabric\n");
-		return -FI_EBUSY;
+		fabric_priv->active_domain->refcnt++;
+		*domain = &fabric_priv->active_domain->domain;
+		return 0;
 	}
 
 	if (!info->domain_attr->name || strncmp(info->domain_attr->name, "psm", 3))
@@ -141,6 +145,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err_out_close_ep;
 	}
 
+	domain_priv->refcnt = 1;
 	fabric_priv->active_domain = domain_priv;
 	*domain = &domain_priv->domain;
 	return 0;

@@ -222,6 +222,7 @@ struct psmx_multi_recv {
 
 struct psmx_fid_fabric {
 	struct fid_fabric	fabric;
+	int			refcnt;
 	struct psmx_fid_domain	*active_domain;
 	psm_uuid_t		uuid;
 };
@@ -229,6 +230,7 @@ struct psmx_fid_fabric {
 struct psmx_fid_domain {
 	struct fid_domain	domain;
 	struct psmx_fid_fabric	*fabric;
+	int			refcnt;
 	psm_ep_t		psm_ep;
 	psm_epid_t		psm_epid;
 	psm_mq_t		psm_mq;
@@ -541,6 +543,7 @@ extern struct fi_ops_rma	psmx_rma_ops;
 extern struct fi_ops_atomic	psmx_atomic_ops;
 extern struct psm_am_parameters psmx_am_param;
 extern struct psmx_env		psmx_env;
+extern struct psmx_fid_fabric	*psmx_active_fabric;
 
 int	psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			 struct fid_domain **domain, void *context);

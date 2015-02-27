@@ -35,7 +35,8 @@
 #include "prov.h"
 
 struct psmx_env psmx_env;
-volatile int init_count = 0;
+volatile int psmx_init_count = 0;
+struct psmx_fid_fabric *psmx_active_fabric = NULL;
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 {
@@ -286,8 +287,19 @@ err_out:
 
 static int psmx_fabric_close(fid_t fid)
 {
+	struct psmx_fid_fabric *fabric;
+
 	PSMX_DEBUG("\n");
-	free(fid);
+
+	fabric = container_of(fid, struct psmx_fid_fabric, fabric.fid);
+	if (--fabric->refcnt) {
+		if (fabric->active_domain)
+			fi_close(&fabric->active_domain->domain.fid);
+		assert(fabric == psmx_active_fabric);
+		psmx_active_fabric = NULL;
+		free(fid);
+	}
+
 	return 0;
 }
 
@@ -314,6 +326,12 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 	if (strncmp(attr->name, "psm", 3))
 		return -FI_ENODATA;
 
+	if (psmx_active_fabric) {
+		psmx_active_fabric->refcnt++;
+		*fabric = &psmx_active_fabric->fabric;
+		return 0;
+	}
+
 	fabric_priv = calloc(1, sizeof(*fabric_priv));
 	if (!fabric_priv)
 		return -FI_ENOMEM;
@@ -333,6 +351,7 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 
 	psmx_query_mpi();
 
+	fabric_priv->refcnt = 1;
 	*fabric = &fabric_priv->fabric;
 	return 0;
 }
@@ -341,7 +360,7 @@ static void psmx_fini(void)
 {
 	PSMX_DEBUG("\n");
 
-	if (! --init_count)
+	if (! --psmx_init_count)
 		psm_finalize();
 }
 
@@ -421,7 +440,7 @@ PSM_INI
 	PSMX_DEBUG("OFI_PSM_WARNING = %d\n", psmx_env.warning);
 	PSMX_DEBUG("OFI_PSM_UUID = %s\n", psmx_env.uuid);
 
-	init_count++;
+	psmx_init_count++;
 	return (&psmx_prov);
 }
 
