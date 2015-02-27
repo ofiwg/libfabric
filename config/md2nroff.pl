@@ -33,7 +33,7 @@ if ($help_arg) {
 }
 
 # Sanity checks
-die "Must specify both a source file"
+die "Must specify a source file"
     if (!defined($source_arg));
 die "Source file does not exist ($source_arg)"
     if (! -r $source_arg);
@@ -53,12 +53,23 @@ my $shortfile = basename($file);
 $shortfile =~ s/\.$section\.md$//;
 
 # If the target file was not specified, derive it from the source file
+my $target;
 if (!defined($target_arg)) {
     $target_arg = $source_arg;
-    $target_arg =~ s/\.md$//;
+
+    $target_arg =~ m/\.(\d)\.md$/;
+    my $section = $1;
+
+    my $dirname = dirname($target_arg);
+    my $basename = basename($target_arg);
+    $basename =~ s/\.md$//;
+
+    $target = "$dirname/man$section/$basename";
+} else {
+    $target = $target_arg;
 }
 
-print "*** Processing: $file -> $target_arg\n";
+print "*** Processing: $file -> $target\n";
 
 # Read in the file
 my $pandoc_input;
@@ -108,10 +119,10 @@ unlink($temp_filename);
 # Now that we have the nroff string result, is it different than the
 # target file?
 my $write_nroff = 1;
-if (-r $target_arg) {
+if (-r $target) {
     # If the target file exists, read it in
-    open(IN, $target_arg)
-        || die "Can't open $target_arg";
+    open(IN, $target)
+        || die "Can't open $target";
     my $target_nroff;
     $target_nroff .= $_
         while (<IN>);
@@ -135,14 +146,19 @@ if ($write_nroff) {
     my $now_string = strftime "%Y\\-%m\\-%d", localtime;
     $pandoc_nroff =~ s/\\\@DATE\\\@/$now_string/g;
 
-    open(OUT, ">$target_arg")
-        || die "Can't write to $target_arg";
+    # Make sure the target directory exists
+    my $dirname = dirname($target);
+    mkdir($dirname)
+        if (! -d $dirname);
+
+    open(OUT, ">$target")
+        || die "Can't write to $target";
     print OUT $pandoc_nroff;
     close(OUT);
 
-    print "--> Wrote new $target_arg\n";
+    print "--> Wrote new $target\n";
 } else {
-    print "--> $target_arg unchanged; not written\n";
+    print "--> $target unchanged; not written\n";
 }
 
 exit(0);
