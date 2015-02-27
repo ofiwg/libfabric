@@ -693,6 +693,14 @@ static void *sock_msg_ep_listener_thread (void *data)
 		case SOCK_CONN_REJECT:
 			SOCK_LOG_INFO("Received SOCK_CONN_REJECT\n");
 			
+			fid_ep = container_of(conn_response->hdr.c_fid, 
+					      struct fid_ep, fid);
+			sock_ep = container_of(fid_ep, struct sock_ep, ep);
+
+			if (sock_ep->is_disabled || 
+			    sock_ep->cm.shutdown_received)
+				break;
+
 			cm_err_entry = calloc(1, sizeof(*cm_err_entry) + user_data_sz);
 			if (!cm_err_entry) {
 				SOCK_LOG_ERROR("cannot allocate memory\n");
@@ -702,14 +710,6 @@ static void *sock_msg_ep_listener_thread (void *data)
 			memset(cm_err_entry, 0, sizeof(*cm_err_entry) + user_data_sz);
 			cm_err_entry->fid = conn_response->hdr.c_fid;
 			cm_err_entry->err = -FI_ECONNREFUSED;
-
-			fid_ep = container_of(conn_response->hdr.c_fid, 
-					      struct fid_ep, fid);
-			sock_ep = container_of(fid_ep, struct sock_ep, ep);
-
-			if (sock_ep->is_disabled || 
-			    sock_ep->cm.shutdown_received)
-				break;
 
 			if (user_data_sz > 0)
 				memcpy(cm_err_entry->err_data, 
