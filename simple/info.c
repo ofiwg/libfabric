@@ -36,7 +36,7 @@
 
 #include "shared.h"
 
-static struct fi_info hints;
+static struct fi_info *hints;
 static char *node, *port;
 
 
@@ -180,9 +180,13 @@ static int run(struct fi_info *hints, char *node, char *port)
 
 int main(int argc, char **argv)
 {
-	int op, use_hints = 0;
+	int op, use_hints = 0, ret;
 
-	hints.mode = ~0;
+	hints = fi_allocinfo();
+	if (!hints)
+		return EXIT_FAILURE;
+
+	hints->mode = ~0;
 
 	while ((op = getopt_long(argc, argv, "n:p:c:m:e:a:hv", longopts, NULL)) != -1) {
 		switch (op) {
@@ -193,19 +197,19 @@ int main(int argc, char **argv)
 			port = optarg;
 			break;
 		case 'c':
-			hints.caps = tokparse(optarg, str2cap);
+			hints->caps = tokparse(optarg, str2cap);
 			use_hints = 1;
 			break;
 		case 'm':
-			hints.mode = tokparse(optarg, str2mode);
+			hints->mode = tokparse(optarg, str2mode);
 			use_hints = 1;
 			break;
 		case 'e':
-			hints.ep_type = str2ep_type(optarg);
+			hints->ep_attr->type = str2ep_type(optarg);
 			use_hints = 1;
 			break;
 		case 'a':
-			hints.addr_format = str2addr_format(optarg);
+			hints->addr_format = str2addr_format(optarg);
 			use_hints = 1;
 			break;
 		case 'v':
@@ -221,5 +225,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	return run(use_hints ? &hints : NULL, node, port);
+	ret = run(use_hints ? hints : NULL, node, port);
+	fi_freeinfo(hints);
+	return ret;
 }

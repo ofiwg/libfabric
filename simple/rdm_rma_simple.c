@@ -46,7 +46,7 @@ static void *buf;
 static size_t buffer_size;
 struct fi_rma_iov local, remote;
 
-static struct fi_info hints;
+static struct fi_info *hints;
 static char *dst_addr;
 static char *port = "9228";
 
@@ -218,7 +218,7 @@ static int init_fabric(void)
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FT_FIVERSION, node, port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, port, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -326,19 +326,16 @@ static int run_test(void)
 
 int main(int argc, char **argv)
 {
-	int op;
-	struct fi_fabric_attr *fabric_hints;
+	int op, ret;
 		
+	hints = fi_allocinfo();
+	if (!hints)
+		return EXIT_FAILURE;
+
 	while ((op = getopt(argc, argv, "f:h")) != -1) {
 		switch (op) {
 		case 'f':
-			fabric_hints = malloc(sizeof *fabric_hints);
-			if (!fabric_hints) {
-				perror("malloc");
-				exit(EXIT_FAILURE);
-			}
-			fabric_hints->prov_name = optarg;
-			hints.fabric_attr = fabric_hints;
+			hints->fabric_attr->prov_name = optarg;
 			break;
 		case '?':
 		case 'h':
@@ -350,11 +347,12 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		dst_addr = argv[optind];
 
-	hints.ep_type = FI_EP_RDM;
-	hints.caps = FI_MSG | FI_RMA | FI_REMOTE_COMPLETE;
+	hints->ep_attr->type = FI_EP_RDM;
+	hints->caps = FI_MSG | FI_RMA | FI_REMOTE_COMPLETE;
 	// FI_PROV_MR_ATTR flag is not set
-	hints.mode = FI_CONTEXT;
-	hints.addr_format = FI_FORMAT_UNSPEC;
+	hints->mode = FI_CONTEXT;
 
-	return run_test();
+	ret = run_test();
+	fi_freeinfo(hints);
+	return ret;
 }

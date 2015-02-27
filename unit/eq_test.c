@@ -48,8 +48,7 @@
 #include "unit_common.h"
 #include "shared.h"
 
-struct fi_info hints;
-static struct fi_fabric_attr fabric_hints;
+struct fi_info *hints;
 
 static struct fid_fabric *fabric;
 static struct fid_eq *eq;
@@ -418,13 +417,17 @@ int main(int argc, char **argv)
 	struct fi_info *fi;
 	int failed;
 
+	hints = fi_allocinfo();
+	if (!hints)
+		exit(1);
+
 	while ((op = getopt(argc, argv, "f:p:")) != -1) {
 		switch (op) {
 		case 'f':
-			fabric_hints.name = optarg;
+			hints->fabric_attr->name = optarg;
 			break;
 		case 'p':
-			fabric_hints.prov_name = optarg;
+			hints->fabric_attr->prov_name = optarg;
 			break;
 		default:
 			printf("usage: %s\n", argv[0]);
@@ -434,10 +437,9 @@ int main(int argc, char **argv)
 		}
 	}
 
-	hints.fabric_attr = &fabric_hints;
-	hints.mode = ~0;
+	hints->mode = ~0;
 
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	if (ret != 0) {
 		printf("fi_getinfo %s\n", fi_strerror(-ret));
 		exit(1);
@@ -463,6 +465,8 @@ int main(int argc, char **argv)
 		printf("Error %d closing fabric: %s\n", ret, fi_strerror(-ret));
 		exit(1);
 	}
+	fi_freeinfo(fi);
+	fi_freeinfo(hints);
 
 	exit(failed > 0);
 }

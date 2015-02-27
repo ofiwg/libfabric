@@ -439,7 +439,7 @@ int main(int argc, char *argv[])
 {
 	struct 		fi_info				*prov_list;
 	struct 		fi_info				*prov;
-	struct 		fi_info 			hints;
+	struct 		fi_info 			*hints;
 	uint64_t 	flags 				= 0;
 	char 		*service 			= NULL;
 	char 		*node 				= NULL;
@@ -546,13 +546,14 @@ int main(int argc, char *argv[])
 
 	page_size = sysconf(_SC_PAGESIZE);
 
-	memset(&hints, 0, sizeof(hints));
-	
-	/* Infiniband provider */
-	hints.ep_type = FI_EP_MSG;
-	hints.caps = FI_MSG;
-	hints.mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
-	hints.addr_format = FI_SOCKADDR;
+	hints = fi_allocinfo();
+	if (!hints)
+		return 1;
+
+	hints->ep_attr->type = FI_EP_MSG;
+	hints->caps = FI_MSG;
+	hints->mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->addr_format = FI_SOCKADDR;
 
 	asprintf(&service, "%d", port);
 	if (!servername) {
@@ -561,12 +562,12 @@ int main(int argc, char *argv[])
 		node = servername;
 	}
 	
-	rc = fi_getinfo(FI_VERSION(1, 0), node, service, flags, &hints, &prov_list);
+	rc = fi_getinfo(FI_VERSION(1, 0), node, service, flags, hints, &prov_list);
 	if (rc) {
 		FI_ERR_LOG("fi_getinfo", rc);
 		return 1;
 	}
-
+	fi_freeinfo(hints);
 
 	if (!prov_list) {
 		perror("Failed to get providers list");

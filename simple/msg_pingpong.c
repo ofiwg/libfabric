@@ -49,7 +49,7 @@ static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
 
-static struct fi_info hints;
+static struct fi_info *hints;
 
 static struct fid_fabric *fab;
 static struct fid_pep *pep;
@@ -278,7 +278,7 @@ static int server_listen(void)
 	int ret;
 
 	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE,
-			&hints, &fi);
+			hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -409,11 +409,11 @@ static int client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	ret = ft_getsrcaddr(opts.src_addr, opts.src_port, &hints);
+	ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
 	if (ret)
 		return ret;
 
-	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -474,8 +474,6 @@ static int client_connect(void)
 		goto err5;
 	}
 
-	if (hints.src_addr)
-		free(hints.src_addr);
 	fi_freeinfo(fi);
 	return 0;
 
@@ -490,8 +488,6 @@ err2:
 err1:
 	fi_freeinfo(fi);
 err0:
-	if (hints.src_addr)
-		free(hints.src_addr);
 	return ret;
 }
 
@@ -541,13 +537,17 @@ static int run(void)
 
 int main(int argc, char **argv)
 {
-	int op;
+	int op, ret;
 	opts = INIT_OPTS;
+
+	hints = fi_allocinfo();
+	if (!hints)
+		return EXIT_FAILURE;
 
 	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
-			ft_parseinfo(op, optarg, &hints);
+			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
@@ -560,15 +560,17 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints.ep_type = FI_EP_MSG;
-	hints.caps = FI_MSG;
-	hints.mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
-	hints.addr_format = FI_SOCKADDR;
+	hints->ep_attr->type = FI_EP_MSG;
+	hints->caps = FI_MSG;
+	hints->mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->addr_format = FI_SOCKADDR;
 
 	if (opts.prhints) {
 		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
-		return EXIT_SUCCESS;
+		ret = EXIT_SUCCESS;
+	} else {
+		ret = run();
 	}
-
-	return run();
+	fi_freeinfo(hints);
+	return ret;
 }

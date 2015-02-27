@@ -53,7 +53,7 @@ static size_t buffer_size;
 struct fi_rma_iov local, remote;
 static uint64_t cq_data = 1;
 
-static struct fi_info hints;
+static struct fi_info *hints;
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -350,7 +350,7 @@ static int init_fabric(void)
 	int ret;
 
 	if (opts.dst_addr) {
-		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, &hints);
+		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
 		if (ret)
 			return ret;
 		node = opts.dst_addr;
@@ -361,7 +361,7 @@ static int init_fabric(void)
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -549,8 +549,12 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op;
+	int op, ret;
 	opts = INIT_OPTS;
+
+	hints = fi_allocinfo();
+	if (!hints)
+		return EXIT_FAILURE;
 
 	while ((op = getopt(argc, argv, "ho:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
@@ -568,7 +572,7 @@ int main(int argc, char **argv)
 			}	
 			break;
 		default:
-			ft_parseinfo(op, optarg, &hints);
+			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
@@ -582,18 +586,19 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 	
-	hints.ep_type = FI_EP_RDM;
-	hints.caps = FI_MSG | FI_RMA;
+	hints->ep_attr->type = FI_EP_RDM;
+	hints->caps = FI_MSG | FI_RMA;
 	if (op_type == FT_RMA_WRITEDATA) {
-		hints.caps |= FI_REMOTE_CQ_DATA;
+		hints->caps |= FI_REMOTE_CQ_DATA;
 	}
-	hints.mode = FI_CONTEXT | FI_PROV_MR_ATTR;
-	hints.addr_format = FI_FORMAT_UNSPEC;
+	hints->mode = FI_CONTEXT | FI_PROV_MR_ATTR;
 	
 	if (opts.prhints) {
 		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
-		return EXIT_SUCCESS;
+		ret = EXIT_SUCCESS;
+	} else {
+		ret =run();
 	}
-
-	return run();
+	fi_freeinfo(hints);
+	return ret;
 }

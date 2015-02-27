@@ -48,7 +48,7 @@ static size_t buffer_size = 1024;
 static int transfer_size = 1000;
 static int rx_depth = 512;
 
-static struct fi_info hints;
+static struct fi_info *hints;
 static char *dst_addr, *src_addr;
 static char *dst_port = "5300", *src_port = "5300";
 
@@ -245,7 +245,7 @@ static int init_fabric(void)
 	int ret;
 
 	if (dst_addr) {
-		ret = ft_getsrcaddr(src_addr, src_port, &hints);
+		ret = ft_getsrcaddr(src_addr, src_port, hints);
 		if (ret)
 			return ret;
 		node = dst_addr;
@@ -256,7 +256,7 @@ static int init_fabric(void)
 		flags = FI_SOURCE;
 	}
 
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -445,6 +445,10 @@ int main(int argc, char **argv)
 {
 	int op, ret = 0;
 
+	hints = fi_allocinfo();
+	if (!hints)
+		return EXIT_FAILURE;
+
 	while ((op = getopt(argc, argv, "b:p:s:h" INFO_OPTS)) != -1) {
 		switch (op) {
 		case 'b':
@@ -457,7 +461,7 @@ int main(int argc, char **argv)
 			src_addr = optarg;
 			break;
 		default:
-			ft_parseinfo(op, optarg, &hints);
+			ft_parseinfo(op, optarg, hints);
 			break;
 		case '?':
 		case 'h':
@@ -469,10 +473,9 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		dst_addr = argv[optind];
 	
-	hints.ep_type = FI_EP_DGRAM;
-	hints.caps = FI_MSG;
-	hints.mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;
-	hints.addr_format = FI_FORMAT_UNSPEC;
+	hints->ep_attr->type = FI_EP_DGRAM;
+	hints->caps = FI_MSG;
+	hints->mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;
 
 	ret = init_fabric();
 	if (ret)
@@ -490,6 +493,7 @@ int main(int argc, char **argv)
 	free_ep_res();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
+	fi_freeinfo(hints);
 
 	return ret;
 }

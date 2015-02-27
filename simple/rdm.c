@@ -51,7 +51,7 @@ static void *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
 
-static struct fi_info hints;
+static struct fi_info *hints;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_ep *ep;
@@ -195,7 +195,7 @@ static int init_fabric(void)
 		flags = FI_SOURCE;
 	
 	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, dst_addr, port, flags, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, dst_addr, port, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -321,18 +321,15 @@ static int send_recv()
 int main(int argc, char **argv)
 {
 	int op, ret;
-	struct fi_fabric_attr *fabric_hints;
-		
+
+	hints = fi_allocinfo();
+	if (!hints)
+		return EXIT_FAILURE;
+
 	while ((op = getopt(argc, argv, "f:h")) != -1) {
 		switch (op) {			
 		case 'f':
-			fabric_hints = malloc(sizeof *fabric_hints);
-			if (!fabric_hints) {
-				perror("malloc");
-				exit(EXIT_FAILURE);
-			}
-			fabric_hints->prov_name = optarg;
-			hints.fabric_attr = fabric_hints;
+			hints->fabric_attr->prov_name = optarg;
 			break;
 		case '?':
 		case 'h':
@@ -344,10 +341,9 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		dst_addr = argv[optind];
 	
-	hints.ep_type		= FI_EP_RDM;
-	hints.caps		= FI_MSG;
-	hints.mode		= FI_CONTEXT;
-	hints.addr_format	= FI_FORMAT_UNSPEC;
+	hints->ep_attr->type	= FI_EP_RDM;
+	hints->caps		= FI_MSG;
+	hints->mode		= FI_CONTEXT;
 
 	/* Fabric initialization */
 	ret = init_fabric();
@@ -364,6 +360,7 @@ int main(int argc, char **argv)
 	free_ep_res();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
+	fi_freeinfo(hints);
 
 	return ret;
 }

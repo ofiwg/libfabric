@@ -48,7 +48,7 @@ static int rx_depth = 512;
 static char *dst_addr;
 static char *port = "9228";
 
-static struct fi_info hints;
+static struct fi_info *hints;
 static struct fid_fabric *fab;
 static struct fid_pep *pep;
 static struct fid_domain *dom;
@@ -179,7 +179,7 @@ static int server_listen(void)
 	int ret;
 
 	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, NULL, port, FI_SOURCE, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, NULL, port, FI_SOURCE, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -319,7 +319,7 @@ static int client_connect(void)
 	int ret;
 
 	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, dst_addr, port, 0, &hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, dst_addr, port, 0, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -454,18 +454,15 @@ static int send_recv()
 int main(int argc, char **argv)
 {
 	int op, ret;
-	struct fi_fabric_attr *fabric_hints;
-		
+
+	hints = fi_allocinfo();
+	if (!hints)
+		return EXIT_FAILURE;
+
 	while ((op = getopt(argc, argv, "f:h")) != -1) {
 		switch (op) {					
 		case 'f':
-			fabric_hints = malloc(sizeof *fabric_hints);
-			if (!fabric_hints) {
-				perror("malloc");
-				exit(EXIT_FAILURE);
-			}
-			fabric_hints->prov_name = optarg;
-			hints.fabric_attr = fabric_hints;
+			hints->fabric_attr->prov_name = optarg;
 			break;
 		case '?':
 		case 'h':
@@ -477,10 +474,10 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		dst_addr = argv[optind];
 
-	hints.ep_type		= FI_EP_MSG;
-	hints.caps		= FI_MSG;
-	hints.mode		= FI_LOCAL_MR | FI_PROV_MR_ATTR;
-	hints.addr_format	= FI_SOCKADDR;
+	hints->ep_attr->type	= FI_EP_MSG;
+	hints->caps		= FI_MSG;
+	hints->mode		= FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->addr_format	= FI_SOCKADDR;
 
 	/* Fabric and connection setup */
 	if (!dst_addr) {

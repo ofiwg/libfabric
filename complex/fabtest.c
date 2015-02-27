@@ -110,10 +110,6 @@ static void ft_show_test_info(void)
 
 static int ft_check_info(struct fi_info *hints, struct fi_info *info)
 {
-	if (hints->ep_type && hints->ep_type != info->ep_type) {
-		fprintf(stderr, "fi_getinfo ep type mismatch\n");
-		return -FI_EINVAL;
-	}
 	if (info->mode & ~hints->mode) {
 		fprintf(stderr, "fi_getinfo unsupported mode returned\n");
 		return -FI_EINVAL;
@@ -245,34 +241,22 @@ int ft_fw_recv(int fd, void *msg, size_t len)
 	}
 }
 
-static void ft_fw_convert_info(struct fi_info *info,
-	struct fi_fabric_attr *fabric_attr,
-	struct fi_ep_attr *ep_attr, struct ft_info *test_info)
+static void ft_fw_convert_info(struct fi_info *info, struct ft_info *test_info)
 {
-	memset(info, 0, sizeof *info);
 	info->caps = test_info->caps;
 	info->mode = test_info->mode;
-	info->ep_type = test_info->ep_type;
 
-	if (ep_attr) {
-		memset(ep_attr, 0, sizeof *ep_attr);
-		info->ep_attr = ep_attr;
-		ep_attr->protocol = test_info->protocol;
-		ep_attr->protocol_version = test_info->protocol_version;
+	info->ep_attr->type = test_info->ep_type;
+	info->ep_attr->protocol = test_info->protocol;
+	info->ep_attr->protocol_version = test_info->protocol_version;
+
+	if (!ft_nullstr(test_info->prov_name)) {
+		info->fabric_attr->prov_name = strndup(test_info->prov_name,
+					sizeof test_info->prov_name - 1);
 	}
-
-	if (fabric_attr) {
-		memset(fabric_attr, 0, sizeof *fabric_attr);
-		info->fabric_attr = fabric_attr;
-
-		if (!ft_nullstr(test_info->prov_name)) {
-			fabric_attr->prov_name = strndup(test_info->prov_name,
-						sizeof test_info->prov_name - 1);
-		}
-		if (!ft_nullstr(test_info->fabric_name)) {
-			fabric_attr->name = strndup(test_info->fabric_name,
-						sizeof test_info->fabric_name - 1);
-		}
+	if (!ft_nullstr(test_info->fabric_name)) {
+		info->fabric_attr->name = strndup(test_info->fabric_name,
+					sizeof test_info->fabric_name - 1);
 	}
 }
 
@@ -314,10 +298,12 @@ static int ft_fw_result_index(int fi_errno)
 
 static int ft_fw_server(void)
 {
-	struct fi_info hints, *info;
-	struct fi_fabric_attr fabric_attr;
-	struct fi_ep_attr ep_attr;
+	struct fi_info *hints, *info;
 	int ret;
+
+	hints = fi_allocinfo();
+	if (!hints)
+		return -FI_ENOMEM;
 
 	do {
 		ret = ft_fw_recv(sock, &test_info, sizeof test_info);
@@ -327,13 +313,13 @@ static int ft_fw_server(void)
 			break;
 		}
 
-		ft_fw_convert_info(&hints, &fabric_attr, &ep_attr, &test_info);
+		ft_fw_convert_info(hints, &test_info);
 		printf("Starting test %d-%d: ", test_info.test_index,
 			test_info.test_subindex);
 		ft_show_test_info();
 		ret = fi_getinfo(FT_VERSION, ft_strptr(test_info.node),
 				 ft_strptr(test_info.service), FI_SOURCE,
-				 &hints, &info);
+				 hints, &info);
 		if (ret) {
 			FT_PRINTERR("fi_getinfo", ret);
 		} else {
@@ -355,7 +341,7 @@ static int ft_fw_server(void)
 		if (ret) {
 			printf("Node: %s\nService: %s\n",
 				test_info.node, test_info.service);
-			printf("%s\n", fi_tostr(&hints, FI_TYPE_INFO));
+			printf("%s\n", fi_tostr(hints, FI_TYPE_INFO));
 		}
 
 		printf("Ending test %d-%d, result: %s\n", test_info.test_index,
@@ -364,6 +350,7 @@ static int ft_fw_server(void)
 		ret = ft_fw_send(sock, &ret, sizeof ret);
 	} while (!ret);
 
+	fi_freeinfo(hints);
 	return ret;
 }
 
@@ -401,32 +388,34 @@ static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
 
 static int ft_fw_client(void)
 {
-	struct fi_info hints, *info;
-	struct fi_fabric_attr fabric_attr;
-	struct fi_ep_attr ep_attr;
+	struct fi_info *hints, *info;
 	int ret;
+
+	hints = fi_allocinfo();
+	if (!hints)
+		return -FI_ENOMEM;
 
 	for (fts_start(series, test_start_index);
 	     !fts_end(series, test_end_index);
 	     fts_next(series)) {
 
 		fts_cur_info(series, &test_info);
-		ft_fw_convert_info(&hints, &fabric_attr, &ep_attr, &test_info);
+		ft_fw_convert_info(hints, &test_info);
 
 		printf("Starting test %d / %d\n", test_info.test_index, series->test_count);
 		ret = fi_getinfo(FT_VERSION, ft_strptr(test_info.node),
-				 ft_strptr(test_info.service), 0, &hints, &info);
+				 ft_strptr(test_info.service), 0, hints, &info);
 		if (ret) {
 			FT_PRINTERR("fi_getinfo", ret);
 		} else {
-			ret = ft_fw_process_list(&hints, info);
+			ret = ft_fw_process_list(hints, info);
 			fi_freeinfo(info);
 		}
 
 		if (ret) {
 			fprintf(stderr, "Node: %s\nService: %s\n",
 				test_info.node, test_info.service);
-			fprintf(stderr, "%s\n", fi_tostr(&hints, FI_TYPE_INFO));
+			fprintf(stderr, "%s\n", fi_tostr(hints, FI_TYPE_INFO));
 		}
 
 		printf("Ending test %d / %d, result: %s\n",
@@ -434,6 +423,7 @@ static int ft_fw_client(void)
 		results[ft_fw_result_index(-ret)]++;
 	}
 
+	fi_freeinfo(hints);
 	return 0;
 }
 

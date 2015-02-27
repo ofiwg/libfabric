@@ -56,10 +56,7 @@
 
 int fabtests_debug = 0;
 
-struct fi_info hints;
-struct fi_tx_attr tx_attr;
-struct fi_rx_attr rx_attr;
-static struct fi_fabric_attr fabric_hints;
+struct fi_info *hints;
 static struct fi_eq_attr eq_attr;
 
 static struct fi_info *fi;
@@ -355,18 +352,17 @@ int main(int argc, char **argv)
 		fabtests_debug = atoi(getenv("FABTESTS_DEBUG"));
 	}
 
-	memset(&hints, 0x00, sizeof(hints));
-	memset(&fabric_hints, 0x00, sizeof(fabric_hints));
+	hints = fi_allocinfo();
+	if (!hints)
+		exit(1);
 
 	while ((op = getopt(argc, argv, "f:p:")) != -1) {
 		switch (op) {
 		case 'f':
-			fabric_hints.name = optarg;
-			hints.fabric_attr = &fabric_hints;
+			hints->fabric_attr->name = optarg;
 			break;
 		case 'p':
-			fabric_hints.prov_name = optarg;
-			hints.fabric_attr = &fabric_hints;
+			hints->fabric_attr->prov_name = optarg;
 			break;
 		default:
 			printf("usage: %s\n", argv[0]);
@@ -376,9 +372,9 @@ int main(int argc, char **argv)
 		}
 	}
 
-	hints.mode = ~0;
+	hints->mode = ~0;
 
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, &hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	if (ret != 0) {
 		printf("fi_getinfo %s\n", fi_strerror(-ret));
 		exit(1);
@@ -437,6 +433,7 @@ int main(int argc, char **argv)
 		printf("Error %d freeing info: %s\n", ret, fi_strerror(-ret));
 		exit(1);
 	}
+	fi_freeinfo(hints);
 
 	return (failed > 0);
 }
