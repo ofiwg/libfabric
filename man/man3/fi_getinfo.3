@@ -1,4 +1,4 @@
-.TH fi_getinfo 3 "2015\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_getinfo 3 "2015\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo - Obtain / free fabric interface information
@@ -133,15 +133,17 @@ Supported formats are listed in the \f[I]Addressing formats\f[] section
 below.
 .PP
 \f[I]src_addrlen - source address length\f[] : Indicates the length of
-the source address (must be specified if \f[I]src_addr\f[] is
-specified).
-This field will be ignored in hints if FI_SOURCE is specified.
+the source address.
+This value must be > 0 if \f[I]src_addr\f[] is non-NULL.
+This field will be ignored in hints if FI_SOURCE is specified, or
+\f[I]src_addr\f[] is NULL.
 .PP
 \f[I]dest_addrlen - destination address length\f[] : Indicates the
-length of the destination address (must be specified if
-\f[I]dest_addr\f[] is specified).
+length of the destination address.
+This value must be > 0 if \f[I]dest_addr\f[] is non-NULL.
 This field will be ignored in hints unless the node and service
-parameters are NULL or FI_SOURCE is specified.
+parameters are NULL or FI_SOURCE is specified, or if \f[I]dst_addr\f[]
+is NULL.
 .PP
 \f[I]src_addr - source address\f[] : If specified, indicates the source
 address.
