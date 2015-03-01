@@ -47,11 +47,6 @@ extern "C" {
  * Maps and stores transport/network addresses.
  */
 
-enum fi_av_type {
-	FI_AV_MAP,
-	FI_AV_TABLE
-};
-
 struct fi_av_attr {
 	enum fi_av_type		type;
 	int			rx_ctx_bits;
