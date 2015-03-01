@@ -107,6 +107,7 @@ struct fi_domain_attr {
 	enum fi_progress      control_progress;
 	enum fi_progress      data_progress;
 	enum fi_resource_mgmt resource_mgmt;
+	enum fi_av_type       av_type;
 	size_t                mr_key_size;
 	size_t                cq_data_size;
 	size_t                cq_cnt;
@@ -357,13 +358,36 @@ the endpoint must be re-enabled before it will accept new data transfer
 operations.  For connected endpoints, the connection is torn down and
 must be re-established.
 
-## MR Key Size
+## AV Type (av_type)
+
+Specifies the type of address vectors that are usable with this domain.
+For additional details on AV type, see [`fi_av`(3)](fi_av.3.html).
+The following values may be specified.
+
+*FI_AV_UNSPEC*
+: Any address vector format is requested and supported.
+
+*FI_AV_MAP*
+: Only address vectors of type AV map are requested or supported.
+
+*FI_AV_TABLE*
+: Only address vectors of type AV index are requested or supported.
+
+Address vectors are only used by connectionless endpoints.  Applications
+that require the use of a specific type of address vector should set the
+domain attribute av_type to the necessary value when calling fi_getinfo.
+The value FI_AV_UNSPEC may be used to indicate that the provider can support
+either address vector format.  In this case, a provider may return
+FI_AV_UNSPEC to indicate that either format is supportable, or may return
+another AV type to indicate the optimal AV type supported by this domain. 
+
+## MR Key Size (mr_key_size)
 
 Size of the memory region remote access key, in bytes.  Applications
 that request their own MR key must select a value within the range
 specified by this value.
 
-## CQ Data Size
+## CQ Data Size (cq_data_size)
 
 Applications may include a small message with a data transfer that
 is placed directly into a remote completion queue as part of a completion
