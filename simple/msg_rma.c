@@ -192,7 +192,8 @@ static int wait_remote_writedata_completion(void)
 
 	ret = 0;
 	if (comp.data != cq_data) {
-		FT_DEBUG("Got unexpected completion data %" PRIu64 "\n", comp.data);
+		fprintf(stderr, "Got unexpected completion data %" PRIu64 "\n",
+			comp.data);
 	}
 	assert(comp.op_context == buf || comp.op_context == NULL);
 	if (comp.op_context == buf) {
@@ -439,12 +440,12 @@ static int server_connect(void)
 
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
+		FT_PRINTERR("fi_eq_sread", rd);
 		return (int) rd;
 	}
 
 	if (event != FI_CONNREQ) {
-		FT_DEBUG("Unexpected CM event %d\n", event);
+		fprintf(stderr, "Unexpected CM event %d\n", event);
 		ret = -FI_EOTHER;
 		goto err1;
 	}
@@ -479,12 +480,12 @@ static int server_connect(void)
 
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
  	if (rd != sizeof entry) {
-		FT_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
+		FT_PRINTERR("fi_eq_sread", rd);
 		goto err3;
  	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
- 		FT_DEBUG("Unexpected CM event %d fid %p (ep %p)\n",
+		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
 			event, entry.fid, ep);
  		ret = -FI_EOTHER;
  		goto err3;
@@ -556,12 +557,12 @@ static int client_connect(void)
 
  	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_DEBUG("fi_eq_sread() %zd %s\n", rd, fi_strerror((int) -rd));
+		FT_PRINTERR("fi_eq_sread", rd);
 		return (int) rd;
 	}
 
  	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
- 		FT_DEBUG("Unexpected CM event %d fid %p (ep %p)\n",
+ 		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
  			event, entry.fid, ep);
  		ret = -FI_EOTHER;
  		goto err1;

@@ -238,7 +238,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	memset(&av_attr, 0, sizeof(av_attr));
-	av_attr.type = FI_AV_MAP;
+	av_attr.type = fi->domain_attr->av_type ?
+			fi->domain_attr->av_type : FI_AV_MAP;
 	av_attr.name = NULL;
 	av_attr.flags = 0;
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
@@ -318,7 +319,7 @@ static int common_setup(void)
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
-		goto err0;
+		goto err1;
 	}
 	if (fi->ep_attr->max_msg_size) {
 		max_msg_size = fi->ep_attr->max_msg_size;
@@ -368,8 +369,6 @@ err3:
 err2:
 	fi_close(&fab->fid);
 err1:
-	fi_freeinfo(fi);
-err0:
 	if (hints->src_addr)
 		free(hints->src_addr);
 	return ret;
@@ -435,8 +434,8 @@ static int server_connect(void)
 	ret = fi_av_insert(av, buf_ptr, 1, &rem_addr, 0, NULL);
 	if (ret != 1) {
 		if (ret == 0) {
-			FT_DEBUG("Unable to resolve remote address 0x%x 0x%x\n",
-					((uint32_t *)buf)[0], ((uint32_t *)buf)[1]);
+			fprintf(stderr, "Unable to resolve remote address 0x%x 0x%x\n",
+				((uint32_t *)buf)[0], ((uint32_t *)buf)[1]);
 			ret = -FI_EINVAL;
 		} else {
 			FT_PRINTERR("fi_av_insert", ret);
@@ -508,7 +507,7 @@ static int run(void)
 	if (ret != 0) {
 		FT_PRINTERR("fi_close", ret);
 	}
-	fi_freeinfo(fi);
+
 	return ret;
 }
 
@@ -544,11 +543,11 @@ int main(int argc, char **argv)
 
 	if (opts.prhints) {
 		printf("%s", fi_tostr(hints, FI_TYPE_INFO));
-		fi_freeinfo(hints);
 		ret = EXIT_SUCCESS;
 	} else {
 		ret = run();
 	}
 	fi_freeinfo(hints);
+	fi_freeinfo(fi);
 	return ret;
 }

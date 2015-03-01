@@ -1081,13 +1081,19 @@ int main(int argc, char **argv)
 	printf("Testing AVs on fabric %s\n", fi->fabric_attr->name);
 	failed = 0;
 
-	av_type = FI_AV_MAP;
-	printf("Testing with type = FI_AV_MAP\n");
-	failed += run_test_set();
+	if (fi->domain_attr->av_type == FI_AV_UNSPEC ||
+	    fi->domain_attr->av_type == FI_AV_MAP) {
+		av_type = FI_AV_MAP;
+		printf("Testing with type = FI_AV_MAP\n");
+		failed += run_test_set();
+	}
 
-	av_type = FI_AV_TABLE;
-	printf("Testing with type = FI_AV_TABLE\n");
-	failed += run_test_set();
+	if (fi->domain_attr->av_type == FI_AV_UNSPEC ||
+	    fi->domain_attr->av_type == FI_AV_TABLE) {
+		av_type = FI_AV_TABLE;
+		printf("Testing with type = FI_AV_TABLE\n");
+		failed += run_test_set();
+	}
 
 	if (failed > 0) {
 		printf("Summary: %d tests failed\n", failed);

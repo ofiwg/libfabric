@@ -77,7 +77,7 @@ static int getaddr(char *node, char *service, void **addr,
 
 	ret = getaddrinfo(node, service, NULL, &ai);
 	if (ret) {
-		FT_DEBUG("getaddrfino error %s\n", gai_strerror(ret));
+		fprintf(stderr, "getaddrfino error %s\n", gai_strerror(ret));
 		return ret;
 	}
 
@@ -85,7 +85,7 @@ static int getaddr(char *node, char *service, void **addr,
 		memcpy(*addr, ai->ai_addr, ai->ai_addrlen);
 		*len = (size_t)ai->ai_addrlen;
 	} else {
-		FT_DEBUG("src_addr allocation failed\n");
+		fprintf(stderr, "src_addr allocation failed\n");
 		ret = EAI_MEMORY;
 	}
 
@@ -225,7 +225,7 @@ void cq_readerr(struct fid_cq *cq, char *cq_str)
 		FT_PRINTERR("fi_cq_readerr", ret);
 
 	err_str = fi_cq_strerror(cq, cq_err.prov_errno, cq_err.err_data, NULL, 0);
-	FT_DEBUG("%s %s (%d)\n", cq_str, err_str, cq_err.prov_errno);
+	fprintf(stderr, "%s %s (%d)\n", cq_str, err_str, cq_err.prov_errno);
 }
 
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a,

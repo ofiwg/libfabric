@@ -54,7 +54,7 @@ static size_t buffer_size = 1024;
 static size_t transfer_size = 1000;
 static int rx_depth = 512;
 
-static struct fi_info *hints;
+static struct fi_info *fi, *hints;
 static char *dst_addr, *src_addr;
 static char *src_port = "5100", *dst_port = "5100";
 
@@ -211,7 +211,8 @@ static int alloc_ep_res(struct fid_ep *sep)
 	while (ctx_cnt >> ++rx_ctx_bits);
 
 	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = FI_AV_MAP;
+	av_attr.type = fi->domain_attr->av_type ?
+			fi->domain_attr->av_type : FI_AV_MAP;
 	av_attr.count = 1;
 	av_attr.rx_ctx_bits = rx_ctx_bits;
 
@@ -328,7 +329,6 @@ static int run_test()
 
 static int init_fabric(void)
 {
-	struct fi_info *fi;
 	uint64_t flags = 0;
 	char *node, *service;
 	int ret;
@@ -411,8 +411,6 @@ err2:
 err1:
 	fi_close(&fab->fid);
 err0:
-	fi_freeinfo(fi);
-
 	return ret;
 }
 
@@ -545,5 +543,6 @@ int main(int argc, char **argv)
 
 	ret = run();
 	fi_freeinfo(hints);
+	fi_freeinfo(fi);
 	return ret;
 }

@@ -53,7 +53,7 @@ static size_t buffer_size = 1024;
 static int transfer_size = 1000;
 static int rx_depth = 512;
 
-static struct fi_info *hints;
+static struct fi_info *fi, *hints;
 static char *dst_addr, *src_addr;
 static char *dst_port = "5300", *src_port = "5300";
 
@@ -163,7 +163,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = FI_AV_MAP;
+	av_attr.type = fi->domain_attr->av_type ?
+			fi->domain_attr->av_type : FI_AV_MAP;
 	av_attr.count = 1;
 	av_attr.name = NULL;
 
@@ -517,6 +518,7 @@ int main(int argc, char **argv)
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
 	fi_freeinfo(hints);
+	fi_freeinfo(fi);
 
 	return ret;
 }

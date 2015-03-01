@@ -54,7 +54,7 @@ static int rx_depth = 512;
 
 static char *dst_addr = NULL;
 static char *src_port = "9228", *dst_port = "9228";
-static struct fi_info *hints;
+static struct fi_info *fi, *hints;
 static char *dst_addr, *src_addr;
 
 static int ep_cnt = 2;
@@ -173,7 +173,8 @@ static int alloc_ep_res(void)
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = FI_AV_MAP;
+	av_attr.type = fi->domain_attr->av_type ?
+			fi->domain_attr->av_type : FI_AV_MAP;
 	av_attr.count = ep_cnt;
 
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
@@ -300,7 +301,6 @@ static int run_test()
 
 static int init_fabric(void)
 {
-	struct fi_info *fi;
 	uint64_t flags = 0;
 	char *node, *service;
 	int i, ret;
@@ -326,7 +326,7 @@ static int init_fabric(void)
 	/* Check the number of EPs supported by the provider */
 	if (ep_cnt > fi->domain_attr->ep_cnt) {
 		ep_cnt = fi->domain_attr->ep_cnt;
-		FT_DEBUG("Provider can support only %d of EPs\n", ep_cnt);
+		fprintf(stderr, "Provider can support only %d of EPs\n", ep_cnt);
 	}
 
 	/* Get remote address */
@@ -384,8 +384,6 @@ err2:
 err1:
 	fi_close(&fab->fid);
 err0:
-	fi_freeinfo(fi);
-
 	return ret;
 }
 
@@ -566,5 +564,6 @@ int main(int argc, char **argv)
 
 	ret = run();
 	fi_freeinfo(hints);
+	fi_freeinfo(fi);
 	return ret;
 }

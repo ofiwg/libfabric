@@ -50,7 +50,7 @@ static struct timespec start, end;
 static void *send_buf, *recv_buf;
 static size_t buffer_size;
 
-static struct fi_info *hints;
+static struct fi_info *fi, *hints;
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -227,7 +227,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = FI_AV_MAP;
+	av_attr.type = fi->domain_attr->av_type ?
+			fi->domain_attr->av_type : FI_AV_MAP;
 	av_attr.count = 1;
 	av_attr.name = NULL;
 
@@ -284,7 +285,6 @@ static int bind_ep_res(void)
 
 static int init_fabric(void)
 {
-	struct fi_info *fi;
 	uint64_t flags = 0;
 	char *node, *service;
 	int ret;
@@ -310,7 +310,7 @@ static int init_fabric(void)
 	/* check max msg size */
 	max_inject_size = fi->tx_attr->inject_size;
 	if (opts.custom && opts.transfer_size > max_inject_size) {
-		FT_DEBUG("Msg size greater than max inject size\n");
+		fprintf(stderr, "Msg size greater than max inject size\n");
 		ret = -FI_EINVAL;
 		goto err0;
 	}
@@ -364,8 +364,6 @@ err2:
 err1:
 	fi_close(&fab->fid);
 err0:
-	fi_freeinfo(fi);
-
 	return ret;
 }
 
@@ -476,7 +474,7 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op;
+	int op, ret;
 	opts = INIT_OPTS;
 	opts.transfer_size = 64;
 
@@ -513,8 +511,12 @@ int main(int argc, char **argv)
 
 	if (opts.prhints) {
 		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
-		return EXIT_SUCCESS;
+		ret = EXIT_SUCCESS;
+	} else {
+		ret = run();
 	}
 
-	return run();
+	fi_freeinfo(hints);
+	fi_freeinfo(fi);
+	return ret;
 }
