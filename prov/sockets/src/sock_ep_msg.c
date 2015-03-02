@@ -213,7 +213,6 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 	struct addrinfo sock_hints;
 	struct addrinfo *result = NULL, *result_ptr = NULL;
 	struct sockaddr_in *src_addr = NULL, *dest_addr = NULL;
-	char sa_ip[INET_ADDRSTRLEN];
 	char hostname[HOST_NAME_MAX];
 
 	if (!info)
@@ -221,14 +220,12 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 
 	*info = NULL;
 	
-	if (version != FI_VERSION(SOCK_MAJOR_VERSION, 
-				 SOCK_MINOR_VERSION))
+	if (version != FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION))
 		return -FI_ENODATA;
 
 	if (hints) {
 		if ((SOCK_EP_MSG_CAP | hints->caps) != SOCK_EP_MSG_CAP) {
-			SOCK_LOG_INFO(
-				   "Cannot support requested options!\n");
+			SOCK_LOG_INFO("Cannot support requested options!\n");
 			return -FI_ENODATA;
 		}
 		
@@ -241,7 +238,7 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 			return ret;
 	}
 
-	memset(&sock_hints, 0, sizeof(struct addrinfo));
+	memset(&sock_hints, 0, sizeof(sock_hints));
 	sock_hints.ai_family = AF_INET;
 	sock_hints.ai_socktype = SOCK_STREAM;
 
@@ -249,7 +246,6 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 		sock_hints.ai_flags |= AI_NUMERICHOST;
 
 	if ((flags & FI_SOURCE) || !node) {
-
 		if (!node) {
 			gethostname(hostname, HOST_NAME_MAX);
 		}
@@ -276,7 +272,7 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 			goto err;
 		}
 		
-		src_addr = calloc(1, sizeof(struct sockaddr_in));
+		src_addr = calloc(1, sizeof(*src_addr));
 		if (!src_addr) {
 			ret = -FI_ENOMEM;
 			goto err;
@@ -307,7 +303,7 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 			goto err;
 		}
 		
-		dest_addr = calloc(1, sizeof(struct sockaddr_in));
+		dest_addr = calloc(1, sizeof(*dest_addr));
 		if (!dest_addr) {
 			ret = -FI_ENOMEM;
 			goto err;
@@ -348,7 +344,8 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 
 	if (hints && hints->src_addr) {
 		if (hints->src_addrlen != sizeof(struct sockaddr_in)) {
-			SOCK_LOG_ERROR("Sockets provider requires src_addrlen to be sizeof(struct sockaddr_in); got %zu\n",
+			SOCK_LOG_ERROR("Sockets provider requires src_addrlen "
+					"to be sizeof(struct sockaddr_in); got %zu\n",
 					hints->src_addrlen);
 			ret = -FI_ENODATA;
 			goto err;
@@ -365,7 +362,8 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 			}
 		}
 		if (hints->dest_addrlen != sizeof(struct sockaddr_in)) {
-			SOCK_LOG_ERROR("Sockets provider requires dest_addrlen to be sizeof(struct sockaddr_in); got %zu\n",
+			SOCK_LOG_ERROR("Sockets provider requires dest_addrlen "
+					"to be sizeof(struct sockaddr_in); got %zu\n",
 					hints->dest_addrlen);
 			ret = -FI_ENODATA;
 			goto err;
@@ -374,15 +372,14 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	if (dest_addr) {
-		memcpy(sa_ip, inet_ntoa(dest_addr->sin_addr), INET_ADDRSTRLEN);
 		SOCK_LOG_INFO("dest_addr: family: %d, IP is %s\n",
-			      ((struct sockaddr_in*)dest_addr)->sin_family, sa_ip);
+			      dest_addr->sin_family, inet_ntoa(dest_addr->sin_addr));
 	}
 	
 	if (src_addr) {
-		memcpy(sa_ip, inet_ntoa(src_addr->sin_addr), INET_ADDRSTRLEN);
+
 		SOCK_LOG_INFO("src_addr: family: %d, IP is %s\n",
-			      ((struct sockaddr_in*)src_addr)->sin_family, sa_ip);
+			      src_addr->sin_family, inet_ntoa(src_addr->sin_addr));
 	}
 
 	_info = sock_msg_fi_info(hints, src_addr, dest_addr);
@@ -425,18 +422,15 @@ static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
 
 	switch(fid->fclass) {
-
 	case FI_CLASS_EP:
 	case FI_CLASS_SEP:
 		sock_ep = container_of(fid, struct sock_ep, ep.fid);
 		memcpy(addr, sock_ep->src_addr, *addrlen);
 		break;
-
 	case FI_CLASS_PEP:
 		sock_pep = container_of(fid, struct sock_pep, pep.fid);
 		memcpy(addr, &sock_pep->src_addr, *addrlen);
 		break;
-
 	default:
 		SOCK_LOG_ERROR("Invalid argument\n");
 		return -FI_EINVAL;
@@ -481,17 +475,18 @@ static int sock_ep_cm_enqueue_msg(struct sock_cm_entry *cm,
 	int ret = 0;
 	struct sock_cm_msg_list_entry *list_entry;
 
-	fastlock_acquire(&cm->lock);
-	list_entry = calloc(1, sizeof(struct sock_cm_msg_list_entry) + len);
-	if (!list_entry) {
-		ret = -FI_ENOMEM;
-		goto out;
-	}
+	list_entry = calloc(1, sizeof(*list_entry) + len);
+	if (!list_entry)
+		return -FI_ENOMEM;
 
 	list_entry->msg_len = len;
 	memcpy(&list_entry->msg, msg, len);
-	memcpy(&list_entry->addr, addr, sizeof(struct sockaddr_in));
+	memcpy(&list_entry->addr, addr, sizeof(*addr));
+
+	fastlock_acquire(&cm->lock);
 	dlist_insert_tail(&list_entry->entry, &cm->msg_list);
+	fastlock_release(&cm->lock);
+
 	ret = write(cm->signal_fds[0], &c, 1);
 	if (ret != 1) {
 		SOCK_LOG_INFO("failed to signal\n");
@@ -500,13 +495,15 @@ static int sock_ep_cm_enqueue_msg(struct sock_cm_entry *cm,
 		ret = 0;
 		SOCK_LOG_INFO("Enqueued CM Msg\n");
 	}
-out:
-	fastlock_release(&cm->lock);
 	return ret;
 }
 
-
-
+/* TODO: if app is closing, we can hang here waiting for CM ack
+ * We need to poll the signal_fd here, and verify that loopback
+ * connections to the same process will work.
+ * It may be necessary to merge CM timeout processing into the main
+ * loop of the CM thread, which would probably be best anyway.
+ */
 static int sock_ep_cm_send_msg(struct sock_cm_entry *cm, 
 			       const struct sockaddr_in *addr, 
 			       void *msg, size_t len)
@@ -521,8 +518,8 @@ static int sock_ep_cm_send_msg(struct sock_cm_entry *cm,
 	SOCK_LOG_INFO("Sending message to %s:%d\n",
 		      sa_ip, ntohs(addr->sin_port));
 
-	while (retry < SOCK_EP_MAX_RETRY && (volatile int)cm->do_listen) {
-		ret = sendto(cm->sock, (char *)msg, len, 0,
+	while (retry < SOCK_EP_MAX_RETRY && (volatile int) cm->do_listen) {
+		ret = sendto(cm->sock, (char *) msg, len, 0,
 			     (struct sockaddr *) addr, sizeof *addr);
 		SOCK_LOG_INFO("Total Sent: %d\n", ret);
 		if (ret < 0) 
@@ -544,13 +541,14 @@ static int sock_ep_cm_send_msg(struct sock_cm_entry *cm,
 	return -1;
 }
 
+/* TODO: remove sleep */
 static int sock_ep_cm_send_ack(struct sock_cm_entry *cm, struct sockaddr_in *addr)
 {
 	int ack_sent = 0, retry = 0, ret;
 	unsigned char response = 0;
 
-	while(!ack_sent && retry < SOCK_EP_MAX_RETRY && 
-	      (volatile int) cm->do_listen) {
+	while (!ack_sent && retry < SOCK_EP_MAX_RETRY &&
+	       (volatile int) cm->do_listen) {
 		ret = sendto(cm->sock, &response, sizeof(response), 0,
 			     (struct sockaddr *) addr, sizeof *addr);
 		retry++;
@@ -559,7 +557,7 @@ static int sock_ep_cm_send_ack(struct sock_cm_entry *cm, struct sockaddr_in *add
 		
 		if (ret == sizeof(response)) {
 			ack_sent = 1;
-				break;
+			break;
 		}
 			
 		if (ret == EWOULDBLOCK || ret == EAGAIN)
@@ -575,22 +573,22 @@ static void sock_ep_cm_flush_msg(struct sock_cm_entry *cm)
 
 	fastlock_acquire(&cm->lock);
 	while (!dlist_empty(&cm->msg_list)) {
-
 		SOCK_LOG_INFO("Flushing CM message\n");
 		entry = cm->msg_list.next;
-		msg_entry = container_of(entry, 
-					 struct sock_cm_msg_list_entry, entry);
+		dlist_remove(entry);
+		fastlock_release(&cm->lock);
+
+		msg_entry = container_of(entry, struct sock_cm_msg_list_entry, entry);
 		if (sock_ep_cm_send_msg(cm, &msg_entry->addr, 
 					&msg_entry->msg, msg_entry->msg_len))
 			SOCK_LOG_INFO("Failed to send out cm message\n");
-		dlist_remove(entry);
 		free(msg_entry);
+		fastlock_acquire(&cm->lock);
 	}
 	fastlock_release(&cm->lock);
 }
-				 
 
-static void *sock_msg_ep_listener_thread (void *data)
+static void *sock_msg_ep_listener_thread(void *data)
 {
 	struct pollfd poll_fds[2];
 	struct sock_ep *ep = data;
@@ -629,8 +627,8 @@ static void *sock_msg_ep_listener_thread (void *data)
 	poll_fds[0].fd = ep->cm.sock;
 	poll_fds[1].fd = ep->cm.signal_fds[1];
 	poll_fds[0].events = poll_fds[1].events = POLLIN;
-	while((volatile int)ep->cm.do_listen) {
 
+	while ((volatile int) ep->cm.do_listen) {
 		if (poll(poll_fds, 2, -1) > 0) {
 			if (poll_fds[1].revents & POLLIN) {
 				ret = read(ep->cm.signal_fds[1], &tmp, 1);
@@ -645,8 +643,8 @@ static void *sock_msg_ep_listener_thread (void *data)
 			break;
 		}
 
-		addr_len = sizeof(struct sockaddr_in);
-		ret = recvfrom(ep->cm.sock, (char*)conn_response, 
+		addr_len = sizeof(from_addr);
+		ret = recvfrom(ep->cm.sock, (char*) conn_response,
 			       sizeof(*conn_response) + SOCK_EP_MAX_CM_DATA_SZ,
 			       0, (struct sockaddr *) &from_addr, &addr_len);
 		if (ret <= 0)
@@ -682,7 +680,7 @@ static void *sock_msg_ep_listener_thread (void *data)
 			sock_ep->peer_fid = conn_response->hdr.s_fid;
 			sock_ep->connected = 1;
 
-			((struct sockaddr_in*)sock_ep->dest_addr)->sin_port = 
+			((struct sockaddr_in*) sock_ep->dest_addr)->sin_port =
 				conn_response->hdr.s_port;
 
 			sock_ep_enable(&ep->ep);
@@ -690,7 +688,6 @@ static void *sock_msg_ep_listener_thread (void *data)
 						 entry_sz, 0))
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
 			break;
-
 		case SOCK_CONN_REJECT:
 			SOCK_LOG_INFO("Received SOCK_CONN_REJECT\n");
 			
@@ -713,12 +710,12 @@ static void *sock_msg_ep_listener_thread (void *data)
 			cm_err_entry->err = -FI_ECONNREFUSED;
 
 			if (user_data_sz > 0)
-				memcpy(cm_err_entry->err_data, 
+				memcpy(cm_err_entry->err_data,
 				       &conn_response->user_data, user_data_sz);
 			
-			if (sock_eq_report_event(sock_ep->eq, FI_ECONNREFUSED, 
-						 cm_err_entry, 
-						 sizeof(*cm_err_entry) + 
+			if (sock_eq_report_event(sock_ep->eq, FI_ECONNREFUSED,
+						 cm_err_entry,
+						 sizeof(*cm_err_entry) +
 						 user_data_sz, 0)) 
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
 			free(cm_err_entry);
@@ -773,28 +770,28 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	if (!_eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ) 
 		return -FI_EINVAL;
 
-	req = (struct sock_conn_req*)calloc(1, sizeof(*req) + paramlen);
+	req = calloc(1, sizeof(*req) + paramlen);
 	if (!req)
 		return -FI_ENOMEM;
 
 	_ep->rem_ep_id = ((struct sockaddr *)addr)->sa_family;
-	((struct sockaddr_in*)_ep->src_addr)->sin_port = 
-		htons(atoi(_ep->domain->service));
+	_ep->src_addr->sin_port = htons(atoi(_ep->domain->service));
 	
-	((struct sockaddr *)addr)->sa_family = AF_INET;
+	((struct sockaddr *) addr)->sa_family = AF_INET;
 
 	req->hdr.type = SOCK_CONN_REQ;
 	req->ep_id = _ep->ep_id;
 	req->hdr.c_fid = &ep->fid;
 	req->hdr.s_fid = 0;
 	req->info = _ep->info;
-	memcpy(&req->src_addr, _ep->src_addr, sizeof(struct sockaddr_in));
-	memcpy(&req->dest_addr, _ep->info.dest_addr, sizeof(struct sockaddr_in));
+	memcpy(&req->src_addr, _ep->src_addr, sizeof(req->src_addr));
+	memcpy(&req->dest_addr, _ep->info.dest_addr, sizeof(req->dest_addr));
 	req->tx_attr = *_ep->info.tx_attr;
 	req->rx_attr = *_ep->info.rx_attr;
 	req->ep_attr = *_ep->info.ep_attr;
 	req->domain_attr = *_ep->info.domain_attr;
 	req->fabric_attr = *_ep->info.fabric_attr;
+
 	if (param && paramlen)
 		memcpy(&req->user_data, param, paramlen);
 	
@@ -831,24 +828,23 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	if (_ep->is_disabled || _ep->cm.shutdown_received)
 		return -FI_EINVAL;
 
-	response = (struct sock_conn_response*)calloc(1, 
-						 sizeof(*response) + paramlen);
+	response = calloc(1, sizeof(*response) + paramlen);
 	if (!response)
 		return -FI_ENOMEM;
 
-	req = (struct sock_conn_req *)_ep->info.connreq;
+	req = (struct sock_conn_req *) _ep->info.connreq;
 	if (!req) {
 		SOCK_LOG_ERROR("invalid connreq for cm_accept\n");
 		free(response);
 		return -FI_EINVAL;
 	}
 	
-	memcpy(&response->hdr, &req->hdr, sizeof(struct sock_conn_hdr));
+	memcpy(&response->hdr, &req->hdr, sizeof(response->hdr));
 	if (param && paramlen)
 		memcpy(&response->user_data, param, paramlen);
 
 	addr = &req->from_addr;
-	memcpy(&_ep->cm_addr, addr, sizeof(struct sockaddr_in));
+	memcpy(&_ep->cm_addr, addr, sizeof(*addr));
 	_ep->peer_fid = req->hdr.c_fid;
 
 	_ep->rem_ep_id = req->ep_id;
@@ -961,7 +957,7 @@ int sock_msg_ep(struct fid_domain *domain, struct fi_info *info,
 		return ret;
 
 	if (pthread_create(&endpoint->cm.listener_thread, NULL, 
-			   sock_msg_ep_listener_thread, (void *)endpoint)) {
+			   sock_msg_ep_listener_thread, endpoint)) {
 		SOCK_LOG_ERROR("Couldn't create listener thread\n");
 		return -FI_EINVAL;
 	}
