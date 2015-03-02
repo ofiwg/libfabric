@@ -331,14 +331,15 @@ static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 	return 0;
 }
 
-static int fi_ibv_check_rx_attr(struct fi_rx_attr *attr)
+static int fi_ibv_check_rx_attr(struct fi_rx_attr *attr, struct fi_info *info)
 {
 	if (attr->caps & ~(verbs_rx_attr.caps)) {
 		VERBS_INFO("Given rx_attr->caps not supported\n");
 		return -FI_ENODATA;
 	}
 
-	if ((attr->mode & verbs_rx_attr.mode) != verbs_rx_attr.mode) {
+	if (((attr->mode ? attr->mode : info->mode) & 
+				verbs_rx_attr.mode) != verbs_rx_attr.mode) {
 		VERBS_INFO("Given rx_attr->mode not supported\n");
 		return -FI_ENODATA;
 	}
@@ -356,14 +357,15 @@ static int fi_ibv_check_rx_attr(struct fi_rx_attr *attr)
 	return 0;
 }
 
-static int fi_ibv_check_tx_attr(struct fi_tx_attr *attr)
+static int fi_ibv_check_tx_attr(struct fi_tx_attr *attr, struct fi_info *info)
 {
 	if (attr->caps & ~(verbs_tx_attr.caps)) {
 		VERBS_INFO("Given tx_attr->caps not supported\n");
 		return -FI_ENODATA;
 	}
 
-	if ((attr->mode & verbs_tx_attr.mode) != verbs_tx_attr.mode) {
+	if (((attr->mode ? attr->mode : info->mode) & 
+				verbs_tx_attr.mode) != verbs_tx_attr.mode) {
 		VERBS_INFO("Given tx_attr->mode not supported\n");
 		return -FI_ENODATA;
 	}
@@ -414,13 +416,13 @@ static int fi_ibv_check_info(struct fi_info *info)
 	}
 
 	if (info->rx_attr) {
-		ret = fi_ibv_check_rx_attr(info->rx_attr);
+		ret = fi_ibv_check_rx_attr(info->rx_attr, info);
 		if (ret)
 			return ret;
 	}
 
 	if (info->tx_attr) {
-		ret = fi_ibv_check_tx_attr(info->tx_attr);
+		ret = fi_ibv_check_tx_attr(info->tx_attr, info);
 		if (ret)
 			return ret;
 	}
