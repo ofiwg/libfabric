@@ -311,29 +311,25 @@ ssize_t sock_cq_read(struct fid_cq *cq, void *buf, size_t count)
 	return sock_cq_readfrom(cq, buf, count, NULL);
 }
 
-
 ssize_t sock_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			uint64_t flags)
 {
-	ssize_t num_read;
 	struct sock_cq *sock_cq;
+	ssize_t ret;
 	
 	sock_cq = container_of(cq, struct sock_cq, cq_fid);
-	num_read = 0;
-
 	if (sock_cq->domain->progress_mode == FI_PROGRESS_MANUAL)
 		sock_cq_progress(sock_cq);
 
 	fastlock_acquire(&sock_cq->lock);
-	while (rbused(&sock_cq->cqerr_rb) >= sizeof(struct fi_cq_err_entry)) {
-		rbread(&sock_cq->cqerr_rb, 
-		       (char*)buf +sizeof(struct fi_cq_err_entry) * num_read, 
-		       sizeof(struct fi_cq_err_entry));
-		num_read++;
+	if (rbused(&sock_cq->cqerr_rb) >= sizeof(struct fi_cq_err_entry)) {
+		rbread(&sock_cq->cqerr_rb, buf, sizeof(*buf));
+		ret = 1;
+	} else {
+		ret = 0;
 	}
-
 	fastlock_release(&sock_cq->lock);
-	return num_read;
+	return ret;
 }
 
 ssize_t sock_cq_write(struct fid_cq *cq, const void *buf, size_t len)
