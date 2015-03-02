@@ -318,10 +318,10 @@ static int sock_ctx_control(struct fid *fid, int command, void *arg)
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx.fid);
 		switch (command) {
 		case FI_GETOPSFLAG:
-			*(uint64_t*)arg = tx_ctx->attr.op_flags;
+			*(uint64_t *) arg = tx_ctx->attr.op_flags;
 			break;
 		case FI_SETOPSFLAG:
-			tx_ctx->attr.op_flags = (uint64_t)arg;
+			tx_ctx->attr.op_flags = *(uint64_t *) arg;
 			break;
 		case FI_ENABLE:
 			ep = container_of(fid, struct fid_ep, fid);
@@ -336,10 +336,10 @@ static int sock_ctx_control(struct fid *fid, int command, void *arg)
 		rx_ctx = container_of(fid, struct sock_rx_ctx, ctx.fid);
 		switch (command) {
 		case FI_GETOPSFLAG:
-			*(uint64_t*)arg = rx_ctx->attr.op_flags;
+			*(uint64_t *) arg = rx_ctx->attr.op_flags;
 			break;
 		case FI_SETOPSFLAG:
-			rx_ctx->attr.op_flags = (uint64_t)arg;
+			rx_ctx->attr.op_flags = *(uint64_t *) arg;
 			break;
 		case FI_ENABLE:
 			ep = container_of(fid, struct fid_ep, fid);
@@ -354,10 +354,10 @@ static int sock_ctx_control(struct fid *fid, int command, void *arg)
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
 		switch (command) {
 		case FI_GETOPSFLAG:
-			*(uint64_t*)arg = tx_ctx->attr.op_flags;
+			*(uint64_t *) arg = tx_ctx->attr.op_flags;
 			break;
 		case FI_SETOPSFLAG:
-			tx_ctx->attr.op_flags = (uint64_t)arg;
+			tx_ctx->attr.op_flags = *(uint64_t *) arg;
 			break;
 		default:
 			return -FI_ENOSYS;
@@ -440,7 +440,7 @@ static ssize_t sock_rx_ctx_cancel(struct sock_rx_ctx *rx_ctx, void *context)
 		if (rx_entry->is_busy)
 			continue;
 		
-		if ((uint64_t)context == rx_entry->context) {
+		if ((uintptr_t) context == rx_entry->context) {
 			dlist_remove(&rx_entry->entry);
 			sock_rx_release_entry(rx_entry);
 			ret = 0;
@@ -800,11 +800,10 @@ static int sock_ep_control(struct fid *fid, int command, void *arg)
 		break;
 
 	case FI_GETOPSFLAG:
-		*(uint64_t*)arg = ep->op_flags;
+		*(uint64_t *) arg = ep->op_flags;
 		break;
-
 	case FI_SETOPSFLAG:
-		ep->op_flags = (uint64_t)arg;
+		ep->op_flags = *(uint64_t *) arg;
 		break;
 	case FI_ENABLE:
 		ep_fid = container_of(fid, struct fid_ep, fid);

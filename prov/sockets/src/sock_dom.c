@@ -244,7 +244,7 @@ struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key,
 struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc, 
 			void *buf, size_t len, uint64_t access)
 {
-	uint64_t key = (uint64_t)desc;
+	uint64_t key = (uintptr_t) desc;
 	return sock_mr_verify_key(domain, key, buf, len, access);
 }
 
@@ -291,7 +291,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (idm_set(&dom->mr_idm, key, _mr) < 0)
 		goto err;
 	_mr->mr_fid.key = key;
-	_mr->mr_fid.mem_desc = (void *)key;
+	_mr->mr_fid.mem_desc = (void *) (uintptr_t) key;
 	fastlock_release(&dom->lock);
 
 	_mr->iov_count = attr->iov_count;
