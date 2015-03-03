@@ -1009,7 +1009,7 @@ int main(int argc, char **argv)
 	int failed;
 
 	hints = fi_allocinfo();
-	if (hints)
+	if (!hints)
 		exit(1);
 
 	while ((op = getopt(argc, argv, "f:p:d:D:n:")) != -1) {
