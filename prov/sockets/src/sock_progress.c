@@ -390,7 +390,7 @@ static void sock_pe_progress_pending_ack(struct sock_pe *pe,
 	if (pe_entry->total_len == pe_entry->done_len) {
 		pe_entry->is_complete = 1;
 		pe_entry->pe.rx.pending_send = 0;
-		sock_comm_flush(pe_entry->conn);
+//		sock_comm_flush(pe_entry->conn);
 		pe_entry->conn->tx_pe_entry = NULL;
 	}
 }
@@ -1543,7 +1543,7 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 		pe_entry->conn->tx_pe_entry = NULL;
 		SOCK_LOG_INFO("Send complete\n");		
 	}
-	sock_comm_flush(pe_entry->conn);
+//	sock_comm_flush(pe_entry->conn);
 	pe_entry->msg_hdr.flags = pe_entry->flags;
 	return 0;
 }
@@ -1602,7 +1602,7 @@ static int sock_pe_progress_tx_write(struct sock_pe *pe,
 		pe_entry->conn->tx_pe_entry = NULL;
 		SOCK_LOG_INFO("Send complete\n");		
 	}
-	sock_comm_flush(pe_entry->conn);
+//	sock_comm_flush(pe_entry->conn);
 	pe_entry->msg_hdr.flags = pe_entry->flags;
 	return 0;
 }
@@ -1638,7 +1638,7 @@ static int sock_pe_progress_tx_read(struct sock_pe *pe,
 		pe_entry->conn->tx_pe_entry = NULL;
 		SOCK_LOG_INFO("Send complete\n");		
 	}
-	sock_comm_flush(pe_entry->conn);
+//	sock_comm_flush(pe_entry->conn);
 	pe_entry->msg_hdr.flags = pe_entry->flags;
 	return 0;
 }
@@ -1685,7 +1685,7 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 		}
 	}
 	
-	sock_comm_flush(pe_entry->conn);
+//	sock_comm_flush(pe_entry->conn);
 	pe_entry->msg_hdr.flags = pe_entry->flags;
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
@@ -2037,8 +2037,8 @@ int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 	for (i = 0; i < map->used; i++) {
 		conn = &map->table[i];
 		
-		if (rbused(&conn->outbuf))
-			sock_comm_flush(conn);
+//		if (rbused(&conn->outbuf))
+//			sock_comm_flush(conn);
 		
 		data_avail = 0;
 		if (rbused(&conn->inbuf) > 0) {
