@@ -320,28 +320,26 @@ void ft_csusage(char *name, char *desc)
 
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints)
 {
-	struct fi_domain_attr *domain_hints;
-	struct fi_fabric_attr *fabric_hints;
-
 	switch (op) {
 	case 'n':
-		domain_hints = malloc(sizeof *domain_hints);
-		if (!domain_hints) {
-			perror("malloc");
-			exit(EXIT_FAILURE);
+		if (!hints->domain_attr) {
+			hints->domain_attr = malloc(sizeof *(hints->domain_attr));
+			if (!hints->domain_attr) {
+				perror("malloc");
+				exit(EXIT_FAILURE);
+			}
 		}
-
-		domain_hints->name = optarg;
-		hints->domain_attr = domain_hints;
+		hints->domain_attr->name = strdup(optarg);
 		break;
 	case 'f':
-		fabric_hints = malloc(sizeof *fabric_hints);
-		if (!fabric_hints) {
-			perror("malloc");
-			exit(EXIT_FAILURE);
+		if (!hints->fabric_attr) {
+			hints->fabric_attr = malloc(sizeof *(hints->fabric_attr));
+			if (!hints->fabric_attr) {
+				perror("malloc");
+				exit(EXIT_FAILURE);
+			}
 		}
-		fabric_hints->prov_name = optarg;
-		hints->fabric_attr = fabric_hints;
+		hints->fabric_attr->prov_name = strdup(optarg);
 		break;
 	default:
 		/* let getopt handle unknown opts*/
