@@ -488,7 +488,7 @@ static int init_av(void)
 
 static int exchange_addr_key(void)
 {
-	local.addr = (uint64_t)buf;
+	local.addr = (uintptr_t) buf;
 	local.key = fi_mr_key(mr);
 
 	if (opts.dst_addr) {

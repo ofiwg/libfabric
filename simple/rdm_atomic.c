@@ -636,7 +636,7 @@ static int exchange_addr_key(void)
 	int ret;
 	int len = sizeof(local);
 
-	local.addr = (uint64_t)buf;
+	local.addr = (uintptr_t) buf;
 	local.key = fi_mr_key(mr);
 
 	if (opts.dst_addr) {
