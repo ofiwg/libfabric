@@ -246,8 +246,11 @@ static int ft_run_latency(void)
 			break;
 
 		ft.xfer_iter = size_to_count(ft_tx.msg_size);
-		if (test_info.test_flags & FT_FLAG_QUICKTEST)
-			ft.xfer_iter >>= 2;
+		if (test_info.test_flags & FT_FLAG_QUICKTEST) {
+			ft.xfer_iter /= 100;
+			if (ft.xfer_iter == 0)
+				ft.xfer_iter = 1;
+		}
 
 		ret = ft_sync_test(0);
 		if (ret)
