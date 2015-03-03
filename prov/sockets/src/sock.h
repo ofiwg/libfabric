@@ -89,7 +89,7 @@
 #define SOCK_TAG_SIZE (sizeof(uint64_t))
 
 #define SOCK_PEP_LISTENER_TIMEOUT (10000)
-#define SOCK_CM_COMM_TIMEOUT (5000)
+#define SOCK_CM_COMM_TIMEOUT (2000)
 #define SOCK_EP_MAX_RETRY (5)
 #define SOCK_EP_MAX_CM_DATA_SZ (256)
 
