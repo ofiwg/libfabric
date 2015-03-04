@@ -2079,7 +2079,7 @@ static int fi_ibv_eq_control(fid_t fid, int command, void *arg)
 			ret = -FI_ENODATA;
 			break;
 		}
-		*(void **) arg = &eq->channel->fd;
+		*(int *) arg = eq->channel->fd;
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -2425,7 +2425,7 @@ static int fi_ibv_cq_control(fid_t fid, int command, void *arg)
 			ret = -FI_ENODATA;
 			break;
 		}
-		*(void **) arg = &cq->channel->fd;
+		*(int *) arg = cq->channel->fd;
 		break;
 	default:
 		ret = -FI_ENOSYS;
