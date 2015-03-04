@@ -1,4 +1,4 @@
-.TH fi_atomic 3 "2015\-01\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_atomic 3 "2015\-03\-04" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_atomic - Remote atomic functions
@@ -461,7 +461,7 @@ Completed atomic operations are reported to the user through one or more
 event collectors associated with the endpoint.
 Users provide context which are associated with each operation, and is
 returned to the user as part of the event completion.
-See fi_eq for completion event details.
+See fi_cq for completion event details.
 .PP
 Updates to the target buffer of an atomic operation are visible to
 processes running on the target system either after a completion has
@@ -521,6 +521,6 @@ request exceeds that supported by the underlying provider.
 .SH SEE ALSO
 .PP
 \f[C]fi_getinfo\f[](3), \f[C]fi_endpoint\f[](3), \f[C]fi_domain\f[](3),
-\f[C]fi_eq\f[](3), \f[C]fi_rma\f[](3)
+\f[C]fi_cq\f[](3), \f[C]fi_rma\f[](3)
 .SH AUTHORS
 OpenFabrics.
