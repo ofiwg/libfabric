@@ -441,7 +441,7 @@ will operate on.
 Completed atomic operations are reported to the user through one or
 more event collectors associated with the endpoint.  Users provide
 context which are associated with each operation, and is returned to
-the user as part of the event completion.  See fi_eq for completion
+the user as part of the event completion.  See fi_cq for completion
 event details.
 
 Updates to the target buffer of an atomic operation are visible to
@@ -515,5 +515,5 @@ errno is returned. Fabric errno values are defined in
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html),
-[`fi_eq`(3)](fi_eq.3.html),
+[`fi_cq`(3)](fi_cq.3.html),
 [`fi_rma`(3)](fi_rma.3.html)

@@ -137,7 +137,7 @@ the send and receive buffers.
 Completed message operations are reported to the user through one or
 more event collectors associated with the endpoint.  Users provide
 context which are associated with each operation, and is returned to
-the user as part of the event completion.  See fi_eq for completion
+the user as part of the event completion.  See fi_cq for completion
 event details.
 
 ## fi_tsend
@@ -336,4 +336,4 @@ src_addr, and src_addrlen parameters.
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html),
-[`fi_eq`(3)](fi_eq.3.html)
+[`fi_cq`(3)](fi_cq.3.html)
