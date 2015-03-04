@@ -1171,13 +1171,13 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type,
 
 int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct sock_ep **ep, void *context, size_t fclass)
-{
+{	
 	int ret, flags;
 	struct sock_ep *sock_ep;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_domain *sock_dom;
-	
+
 	if (info) {
 		ret = sock_verify_info(info);
 		if (ret) {
@@ -1229,6 +1229,8 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		sock_ep->ep_type = info->ep_attr->type;
 		sock_ep->info.caps = info->caps;
 		sock_ep->info.addr_format = FI_SOCKADDR_IN;
+		sock_ep->ep_attr.tx_ctx_cnt = info->ep_attr->tx_ctx_cnt;
+		sock_ep->ep_attr.rx_ctx_cnt = info->ep_attr->rx_ctx_cnt;
 		
 		if (info->src_addr) {
 			sock_ep->src_addr = calloc(1, sizeof(struct sockaddr_in));

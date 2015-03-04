@@ -427,6 +427,7 @@ static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	switch(fid->fclass) {
 
 	case FI_CLASS_EP:
+	case FI_CLASS_SEP:
 		sock_ep = container_of(fid, struct sock_ep, ep.fid);
 		memcpy(addr, sock_ep->src_addr, *addrlen);
 		break;
