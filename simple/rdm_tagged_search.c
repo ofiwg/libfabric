@@ -440,7 +440,7 @@ static int run(void)
 		goto out;
 	
 	// Receiver
-	if(dst_addr) {
+	if (dst_addr) {
 		// search for initial tag, it should fail since the sender 
 		// hasn't sent anyting
 		fprintf(stdout, "Searching msg with tag [%" PRIu64 "]\n", tag_data);
@@ -449,7 +449,7 @@ static int run(void)
 		fprintf(stdout, "Posting buffer for msg with tag [%" PRIu64 "]\n", 
 				tag_data + 1);
 		ret = post_recv(tag_data + 1);
-		if(ret)
+		if (ret)
 			goto out;
 		
 		// synchronize with sender
@@ -460,7 +460,7 @@ static int run(void)
 		
 		// wait for the completion event of the next tag
 		ret = wait_for_tagged_completion(rcq, 1);
-		if(ret)
+		if (ret)
 			goto out;
 		fprintf(stdout, "Received completion event for msg with tag "
 				"[%" PRIu64 "]\n", tag_data + 1);
@@ -473,7 +473,7 @@ static int run(void)
 		
 		// wait for the completion event of the initial tag
 		ret = recv_msg(tag_data);	
-		if(ret)
+		if (ret)
 			goto out;
 		fprintf(stdout, "Posted buffer and received completion event for"
 			       " msg with tag [%" PRIu64 "]\n", tag_data);
@@ -488,20 +488,17 @@ static int run(void)
 		fprintf(stdout, "Sending msg with tag [%" PRIu64 "]\n",
 			tag_data);
 		ret = send_msg(16, tag_data);
-		if(ret)
+		if (ret)
 			goto out;
 
 		fprintf(stdout, "Sending msg with tag [%" PRIu64 "]\n",
 			tag_data + 1);
 		ret = send_msg(16, tag_data + 1);
-		if(ret)
+		if (ret)
 			goto out;
 	}
 	
-	// sychronize before exiting
-	ret = sync_test();
-	if (ret)
-		goto out;
+	sync_test();
 out:
 	fi_close(&ep->fid);
 	free_ep_res();

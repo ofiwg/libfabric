@@ -503,12 +503,7 @@ static int run(void)
 		ret = run_test();
 	}
 
-	ret = wait_for_completion_tagged(scq, max_credits - credits);
-	if (ret) {
-		goto out;
-	}
-	credits = max_credits;
-
+	wait_for_completion_tagged(scq, max_credits - credits);
 out:
 	fi_close(&ep->fid);
 	free_ep_res();

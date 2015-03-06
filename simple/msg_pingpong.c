@@ -520,10 +520,6 @@ static int run(void)
 	}
 
 	ret = wait_for_completion(scq, max_credits - credits);
-	if (ret) {
-		return ret;
-	}
-	credits = max_credits;
 
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);

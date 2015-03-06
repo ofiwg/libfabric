@@ -487,10 +487,7 @@ static int run(void)
 		ret = run_test();
 	}
 
-	ret = get_send_completions();
-	if (ret)
-		goto out;
-
+	get_send_completions();
 out:
 	fi_close(&ep->fid);
 	free_ep_res();
