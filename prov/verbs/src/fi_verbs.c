@@ -2267,7 +2267,7 @@ static uint64_t fi_ibv_comp_flags(struct ibv_wc *wc)
 		flags |= FI_RECV | FI_MSG;
 		break;
 	case IBV_WC_RECV_RDMA_WITH_IMM:
-		flags = FI_RMA | FI_REMOTE_WRITE;
+		flags |= FI_RMA | FI_REMOTE_WRITE;
 		break;
 	default:
 		break;
