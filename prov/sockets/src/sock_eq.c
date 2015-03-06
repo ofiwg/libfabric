@@ -134,7 +134,6 @@ out:
 ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event, 
 			     const void *buf, size_t len, uint64_t flags)
 {
-	int ret;
 	struct sock_eq_entry *entry;
 
 	entry = calloc(1, len + sizeof(*entry));
@@ -144,7 +143,6 @@ ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event,
 	entry->type = event;
 	entry->len = len;
 	entry->flags = flags;
-	ret = entry->len;
 	memcpy(entry->event, buf, len);
 
 	fastlock_acquire(&sock_eq->lock);
@@ -152,7 +150,7 @@ ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event,
 	if (sock_eq->signal) 
 		sock_wait_signal(sock_eq->waitset);
 	fastlock_release(&sock_eq->lock);
-	return ret;
+	return 0;
 }
 
 ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
@@ -185,12 +183,15 @@ static ssize_t sock_eq_write(struct fid_eq *eq, uint32_t event,
 			     const void *buf, size_t len, uint64_t flags)
 {
 	struct sock_eq *sock_eq;
+	int ret;
 
 	sock_eq = container_of(eq, struct sock_eq, eq);
 	if (!(sock_eq->attr.flags & FI_WRITE))
 		return -FI_EINVAL;
 
-	return sock_eq_report_event(sock_eq, event, buf, len, flags);
+	ret = sock_eq_report_event(sock_eq, event, buf, len, flags);
+	return ret ? ret : len;
+
 }
 
 const char * sock_eq_strerror(struct fid_eq *eq, int prov_errno,
