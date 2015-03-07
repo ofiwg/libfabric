@@ -161,15 +161,14 @@ int size_to_count(int size)
 		return 100000;
 }
 
-void init_test(int size, char *test_name, size_t test_name_len,
-	int *transfer_size, int *iterations)
+void init_test(struct cs_opts *opts, char *test_name, size_t test_name_len)
 {
 	char sstr[FT_STR_LEN];
 
-	size_str(sstr, size);
+	size_str(sstr, opts->transfer_size);
 	snprintf(test_name, test_name_len, "%s_lat", sstr);
-	*transfer_size = size;
-	*iterations = size_to_count(*transfer_size);
+	if (!(opts->user_options & FT_OPT_ITER))
+		opts->iterations = size_to_count(opts->transfer_size);
 }
 
 int wait_for_data_completion(struct fid_cq *cq, int num_completions)
@@ -361,14 +360,14 @@ void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts)
 		opts->dst_port = optarg;
 		break;
 	case 'I':
-		opts->custom = 1;
+		opts->user_options |= FT_OPT_ITER;
 		opts->iterations = atoi(optarg);
 		break;
 	case 'S':
 		if (!strncasecmp("all", optarg, 3)) {
 			opts->size_option = 1;
 		} else {
-			opts->custom = 1;
+			opts->user_options |= FT_OPT_SIZE;
 			opts->transfer_size = atoi(optarg);
 		}
 		break;
