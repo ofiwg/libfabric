@@ -200,7 +200,6 @@ ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len)
 int sock_comm_buffer_init(struct sock_conn *conn)
 {
 	int optval;
-	uint64_t flags;
 	socklen_t size = SOCK_COMM_BUF_SZ;
 	socklen_t optlen = sizeof(socklen_t);
 
@@ -209,10 +208,7 @@ int sock_comm_buffer_init(struct sock_conn *conn)
 		       &optval, sizeof optval))
 		SOCK_LOG_ERROR("setsockopt failed\n");
 
-	flags = fcntl(conn->sock_fd, F_GETFL, 0);
-	if (fcntl(conn->sock_fd, F_SETFL, flags | O_NONBLOCK))
-		SOCK_LOG_ERROR("fcntl failed\n");
-
+	fd_set_nonblock(conn->sock_fd);
 	rbinit(&conn->inbuf, SOCK_COMM_BUF_SZ);
 //	rbinit(&conn->outbuf, SOCK_COMM_BUF_SZ);
 

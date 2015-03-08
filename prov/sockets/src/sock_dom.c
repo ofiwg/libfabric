@@ -421,8 +421,8 @@ static struct fi_ops_mr sock_dom_mr_ops = {
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context)
 {
-	int ret, flags;
 	struct sock_domain *sock_domain;
+	int ret;
 
 	if(info && info->domain_attr){
 		ret = sock_verify_domain_attr(info->domain_attr);
@@ -465,7 +465,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		sock_domain->progress_mode = info->domain_attr->data_progress;
 
 	sock_domain->pe = sock_pe_init(sock_domain);
-	if(!sock_domain->pe){
+	if (!sock_domain->pe){
 		SOCK_LOG_ERROR("Failed to init PE\n");
 		goto err;
 	}
@@ -473,13 +473,10 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	sock_domain->ep_count = AF_INET;
 	sock_domain->r_cmap.domain = sock_domain;
 	fastlock_init(&sock_domain->r_cmap.lock);
-	if(socketpair(AF_UNIX, SOCK_STREAM, 0, sock_domain->signal_fds) < 0)
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sock_domain->signal_fds) < 0)
 		goto err;
 
-	flags = fcntl(sock_domain->signal_fds[1], F_GETFL, 0);
-	if (fcntl(sock_domain->signal_fds[1], F_SETFL, flags | O_NONBLOCK))
-		SOCK_LOG_ERROR("fcntl failed\n");
-
+	fd_set_nonblock(sock_domain->signal_fds[1]);
 	sock_conn_listen(sock_domain);
 
 	while(!(volatile int)sock_domain->listening)

@@ -912,6 +912,7 @@ int sock_conn_listen(struct sock_domain *domain);
 int sock_conn_map_clear_pe_entry(struct sock_conn *conn_entry, uint16_t key);
 void sock_conn_map_destroy(struct sock_conn_map *cmap);
 void sock_set_sockopts(int sock);
+int fd_set_nonblock(int fd);
 
 struct sock_pe *sock_pe_init(struct sock_domain *domain);
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);

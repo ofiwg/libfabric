@@ -138,10 +138,23 @@ static int sock_conn_map_insert(struct sock_conn_map *map,
 	return index + 1;
 }				 
 
+int fd_set_nonblock(int fd)
+{
+	int flags, ret;
+
+	flags = fcntl(fd, F_GETFL, 0);
+	ret = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+	if (ret) {
+		SOCK_LOG_ERROR("fcntl failed\n");
+		ret = -errno;
+	}
+
+	return ret;
+}
+
 void sock_set_sockopts(int sock)
 {
 	int optval;
-	uint64_t flags;
 
 	optval = 1;
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval))
@@ -150,9 +163,7 @@ void sock_set_sockopts(int sock)
 	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof optval))
 		SOCK_LOG_ERROR("setsockopt nodelay failed\n");
 
-	flags = fcntl(sock, F_GETFL, 0);
-	if (fcntl(sock, F_SETFL, flags | O_NONBLOCK))
-		SOCK_LOG_ERROR("fcntl failed\n");
+	fd_set_nonblock(sock);
 }
 
 uint16_t sock_conn_map_connect(struct sock_domain *dom,
@@ -205,6 +216,7 @@ uint16_t sock_conn_map_connect(struct sock_domain *dom,
 		}
 	}
 	
+	fd_set_nonblock(conn_fd);
 	flags = fcntl(conn_fd, F_GETFL, 0);
 	flags &= (~O_NONBLOCK);
 	if (fcntl(conn_fd, F_SETFL, flags))

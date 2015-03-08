@@ -1300,7 +1300,7 @@ int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context)
 {
-	int ret = -FI_EINVAL, flags;
+	int ret = -FI_EINVAL;
 	struct sock_pep *_pep;
 	char hostname[HOST_NAME_MAX];
 	struct addrinfo sock_hints;
@@ -1348,9 +1348,7 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if(socketpair(AF_UNIX, SOCK_STREAM, 0, _pep->cm.signal_fds) < 0)
 		goto err;
 
-	flags = fcntl(_pep->cm.signal_fds[1], F_GETFL, 0);
-	if (fcntl(_pep->cm.signal_fds[1], F_SETFL, flags | O_NONBLOCK))
-		SOCK_LOG_ERROR("fcntl failed");
+	fd_set_nonblock(_pep->cm.signal_fds[1]);
 	dlist_init(&_pep->cm.msg_list);
 
 	_pep->pep.fid.fclass = FI_CLASS_PEP;
