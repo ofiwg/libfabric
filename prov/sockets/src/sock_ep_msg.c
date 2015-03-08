@@ -88,7 +88,7 @@ const struct fi_rx_attr sock_msg_rx_attr = {
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
-static int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
+int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
 {
 	if (!attr)
 		return 0;
@@ -114,7 +114,7 @@ static int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
 	return 0;
 }
 
-static int sock_msg_verify_tx_attr(const struct fi_tx_attr *attr)
+int sock_msg_verify_tx_attr(const struct fi_tx_attr *attr)
 {
 	if (!attr)
 		return 0;
@@ -186,227 +186,20 @@ int sock_msg_verify_ep_attr(struct fi_ep_attr *ep_attr,
 	return 0;
 }
 
-static struct fi_info *sock_msg_fi_info(struct fi_info *hints, 
-					  void *src_addr, void *dest_addr)
+int sock_msg_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
+		     struct fi_info **info)
 {
-	struct fi_info *_info = sock_fi_info(FI_EP_MSG, hints, 
-					     src_addr, dest_addr);
-	if (!_info)
-		return NULL;
+	*info = sock_fi_info(FI_EP_MSG, hints, src_addr, dest_addr);
+	if (!*info)
+		return -FI_ENOMEM;
 	
-	_info->caps = SOCK_EP_MSG_CAP;
-	*(_info->tx_attr) = sock_msg_tx_attr;
-	*(_info->rx_attr) = sock_msg_rx_attr;
-	*(_info->ep_attr) = sock_msg_ep_attr;
+	*(*info)->tx_attr = sock_msg_tx_attr;
+	*(*info)->rx_attr = sock_msg_rx_attr;
+	*(*info)->ep_attr = sock_msg_ep_attr;
 
-	_info->caps |= (_info->rx_attr->caps | _info->tx_attr->caps);
-	return _info;
-}
-
-int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
-		     uint64_t flags, struct fi_info *hints, struct fi_info **info)
-{
-	int ret;
-	int udp_sock = 0;
-	socklen_t len;
-	struct fi_info *_info;
-	struct addrinfo sock_hints;
-	struct addrinfo *result = NULL, *result_ptr = NULL;
-	struct sockaddr_in *src_addr = NULL, *dest_addr = NULL;
-	char hostname[HOST_NAME_MAX];
-
-	if (!info)
-		return -FI_EINVAL;
-
-	*info = NULL;
-	
-	if (version != FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION))
-		return -FI_ENODATA;
-
-	if (hints) {
-		if ((SOCK_EP_MSG_CAP | hints->caps) != SOCK_EP_MSG_CAP) {
-			SOCK_LOG_INFO("Cannot support requested options!\n");
-			return -FI_ENODATA;
-		}
-		
-		ret = sock_msg_verify_rx_attr(hints->rx_attr);
-		if (ret)
-			return ret;
-
-		ret = sock_msg_verify_tx_attr(hints->tx_attr);
-		if (ret)
-			return ret;
-	}
-
-	memset(&sock_hints, 0, sizeof(sock_hints));
-	sock_hints.ai_family = AF_INET;
-	sock_hints.ai_socktype = SOCK_STREAM;
-
-	if (flags & FI_NUMERICHOST)
-		sock_hints.ai_flags |= AI_NUMERICHOST;
-
-	if ((flags & FI_SOURCE) || !node) {
-		if (!node) {
-			gethostname(hostname, HOST_NAME_MAX);
-		}
-
-		ret = getaddrinfo(node ? node : hostname, service, 
-				  &sock_hints, &result_ptr);
-		if (ret != 0) {
-			ret = -FI_ENODATA;
-			SOCK_LOG_INFO("getaddrinfo failed!\n");
-			goto err;
-		}
-
-		result = result_ptr;
-		while (result) {
-			if (result->ai_family == AF_INET && 
-			    result->ai_addrlen == sizeof(struct sockaddr_in))
-				break;
-			result = result->ai_next;
-		}
-
-		if (!result) {
-			SOCK_LOG_ERROR("getaddrinfo failed\n");
-			ret = -FI_EINVAL;
-			goto err;
-		}
-		
-		src_addr = calloc(1, sizeof(*src_addr));
-		if (!src_addr) {
-			ret = -FI_ENOMEM;
-			goto err;
-		}
-		memcpy(src_addr, result->ai_addr, result->ai_addrlen);
-		freeaddrinfo(result_ptr); 
-		result_ptr = NULL;
-	} else {
-
-		ret = getaddrinfo(node, service, &sock_hints, &result_ptr);
-		if (ret != 0) {
-			ret = -FI_ENODATA;
-			SOCK_LOG_INFO("getaddrinfo failed!\n");
-			goto err;
-		}
-		
-		result = result_ptr;
-		while (result) {
-			if (result->ai_family == AF_INET && 
-			    result->ai_addrlen == sizeof(struct sockaddr_in))
-				break;
-			result = result->ai_next;
-		}
-
-		if (!result) {
-			SOCK_LOG_ERROR("getaddrinfo failed\n");
-			ret = -FI_EINVAL;
-			goto err;
-		}
-		
-		dest_addr = calloc(1, sizeof(*dest_addr));
-		if (!dest_addr) {
-			ret = -FI_ENOMEM;
-			goto err;
-		}
-		memcpy(dest_addr, result->ai_addr, result->ai_addrlen);
-		
-		udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
-		if (udp_sock < 0) {
-			ret = -FI_ENOMEM;
-			goto err;
-		}
-
-		ret = connect(udp_sock, result->ai_addr, 
-			      result->ai_addrlen);
-		if ( ret != 0) {
-			SOCK_LOG_ERROR("Failed to create udp socket\n");
-			ret = -FI_ENODATA;
-			goto err;
-		}
-
-		len = sizeof(struct sockaddr_in);		
-		src_addr = calloc(1, sizeof(struct sockaddr_in));
-		if (!src_addr) {
-			ret = -FI_ENOMEM;
-			goto err;
-		}		
-		ret = getsockname(udp_sock, (struct sockaddr*)src_addr, &len);
-		if (ret != 0) {
-			SOCK_LOG_ERROR("getsockname failed\n");
-			ret = -FI_ENODATA;
-			goto err;
-		}
-		close(udp_sock);
-		udp_sock = 0;
-		freeaddrinfo(result_ptr);
-		result_ptr = NULL;
-	}
-
-	if (hints && hints->src_addr) {
-		if (hints->src_addrlen != sizeof(struct sockaddr_in)) {
-			SOCK_LOG_ERROR("Sockets provider requires src_addrlen "
-					"to be sizeof(struct sockaddr_in); got %zu\n",
-					hints->src_addrlen);
-			ret = -FI_ENODATA;
-			goto err;
-		}
-		memcpy(src_addr, hints->src_addr, hints->src_addrlen);
-	}
-
-	if (hints && hints->dest_addr) {
-		if (!dest_addr) {
-			dest_addr = calloc(1, sizeof(struct sockaddr_in));
-			if (!dest_addr) {
-				ret = -FI_ENOMEM;
-				goto err;
-			}
-		}
-		if (hints->dest_addrlen != sizeof(struct sockaddr_in)) {
-			SOCK_LOG_ERROR("Sockets provider requires dest_addrlen "
-					"to be sizeof(struct sockaddr_in); got %zu\n",
-					hints->dest_addrlen);
-			ret = -FI_ENODATA;
-			goto err;
-		}
-		memcpy(dest_addr, hints->dest_addr, hints->dest_addrlen);
-	}
-
-	if (dest_addr) {
-		SOCK_LOG_INFO("dest_addr: family: %d, IP is %s\n",
-			      dest_addr->sin_family, inet_ntoa(dest_addr->sin_addr));
-	}
-	
-	if (src_addr) {
-
-		SOCK_LOG_INFO("src_addr: family: %d, IP is %s\n",
-			      src_addr->sin_family, inet_ntoa(src_addr->sin_addr));
-	}
-
-	_info = sock_msg_fi_info(hints, src_addr, dest_addr);
-	if (!_info) {
-		ret = -FI_ENOMEM;
-		goto err;
-	}
-
-	*info = _info;
-	if (src_addr)
-		free(src_addr);
-	if (dest_addr)
-		free(dest_addr);
+	(*info)->caps = SOCK_EP_MSG_CAP |
+			(*info)->rx_attr->caps | (*info)->tx_attr->caps;
 	return 0;
-
-err:
-	if (udp_sock > 0)
-		close(udp_sock);
-	if (src_addr)
-		free(src_addr);
-	if (dest_addr)
-		free(dest_addr);
-	if (result_ptr)
-		freeaddrinfo(result_ptr);
-
-	SOCK_LOG_ERROR("fi_getinfo failed\n");
-	return ret;	
 }
 
 static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
@@ -1300,44 +1093,38 @@ int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context)
 {
-	int ret = -FI_EINVAL;
+	int ret;
 	struct sock_pep *_pep;
-	char hostname[HOST_NAME_MAX];
-	struct addrinfo sock_hints;
-	struct addrinfo *result = NULL;
+	struct addrinfo hints, *result;
 
 	if (info) {
 		ret = sock_verify_info(info);
 		if (ret) {
 			SOCK_LOG_INFO("Cannot support requested options!\n");
-			return -FI_EINVAL;
+			return ret;
 		}
 	}
 
-	_pep = (struct sock_pep*)calloc(1, sizeof(*_pep));
+	_pep = calloc(1, sizeof(*_pep));
 	if (!_pep)
 		return -FI_ENOMEM;
 
-	if(info) {
+	if (info) {
 		if (info->src_addr) {
-			memcpy(&_pep->src_addr, info->src_addr, 
-			       sizeof(struct sockaddr_in));
+			memcpy(&_pep->src_addr, info->src_addr, info->src_addrlen);
 		} else {
-			gethostname(hostname, HOST_NAME_MAX);
-			
-			memset(&sock_hints, 0, sizeof(struct addrinfo));
-			sock_hints.ai_family = AF_INET;
-			sock_hints.ai_socktype = SOCK_STREAM;
-			ret = getaddrinfo(hostname, NULL, &sock_hints, &result);
+			memset(&hints, 0, sizeof(hints));
+			hints.ai_family = AF_INET;
+			hints.ai_socktype = SOCK_STREAM;
 
-			if (ret != 0) {
-				ret = FI_EINVAL;
+			ret = getaddrinfo("localhost", NULL, &hints, &result);
+			if (ret) {
+				ret = -FI_EINVAL;
 				SOCK_LOG_INFO("getaddrinfo failed!\n");
 				goto err;
 			}
 			memcpy(&_pep->src_addr, result->ai_addr, result->ai_addrlen);
 			freeaddrinfo(result);
-			result = NULL;
 		}
 		_pep->info = *info;
 	} else {
@@ -1345,8 +1132,11 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		goto err;
 	}
 
-	if(socketpair(AF_UNIX, SOCK_STREAM, 0, _pep->cm.signal_fds) < 0)
+	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, _pep->cm.signal_fds);
+	if (ret) {
+		ret = -errno;
 		goto err;
+	}
 
 	fd_set_nonblock(_pep->cm.signal_fds[1]);
 	dlist_init(&_pep->cm.msg_list);
@@ -1361,8 +1151,6 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	*pep = &_pep->pep;
 	return 0;
 err:
-	if (result)
-		freeaddrinfo(result);
 	free(_pep);
 	return ret;
 }

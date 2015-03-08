@@ -1121,51 +1121,51 @@ int sock_srx_ctx(struct fid_domain *domain,
 	return 0;
 }
 
-struct fi_info *sock_fi_info(enum fi_ep_type ep_type, 
-			     struct fi_info *hints, void *src_addr, void *dest_addr)
+struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
+			     void *src_addr, void *dest_addr)
 {
-	struct fi_info *_info = fi_allocinfo();
-	if (!_info)
+	struct fi_info *info;
+
+	info = fi_allocinfo();
+	if (!info)
 		return NULL;
 	
-	_info->src_addr = calloc(1, sizeof(struct sockaddr_in));
-	_info->dest_addr = calloc(1, sizeof(struct sockaddr_in));
+	info->src_addr = calloc(1, sizeof(struct sockaddr_in));
+	info->dest_addr = calloc(1, sizeof(struct sockaddr_in));
 	
-	_info->mode = SOCK_MODE;
-	_info->addr_format = FI_SOCKADDR_IN;
-	_info->dest_addrlen =_info->src_addrlen = sizeof(struct sockaddr_in);
+	info->mode = SOCK_MODE;
+	info->addr_format = FI_SOCKADDR_IN;
+	info->dest_addrlen = info->src_addrlen = sizeof(struct sockaddr_in);
 
-	if (src_addr) {
-		memcpy(_info->src_addr, src_addr, sizeof(struct sockaddr_in));
-	}
+	if (src_addr)
+		memcpy(info->src_addr, src_addr, sizeof(struct sockaddr_in));
 	
-	if (dest_addr) {
-		memcpy(_info->dest_addr, dest_addr, sizeof(struct sockaddr_in));
-	}
+	if (dest_addr)
+		memcpy(info->dest_addr, dest_addr, sizeof(struct sockaddr_in));
 
 	if (hints) {
 		if (hints->caps)
-			_info->caps = hints->caps;
+			info->caps = hints->caps;
 
 		if (hints->ep_attr)
-			*(_info->ep_attr) = *(hints->ep_attr);
+			*(info->ep_attr) = *(hints->ep_attr);
 
 		if (hints->tx_attr)
-			*(_info->tx_attr) = *(hints->tx_attr);
+			*(info->tx_attr) = *(hints->tx_attr);
 
 		if (hints->rx_attr)
-			*(_info->rx_attr) = *(hints->rx_attr);
+			*(info->rx_attr) = *(hints->rx_attr);
 	}
 
-	_info->ep_attr->type = ep_type;
-	*(_info->domain_attr) = sock_domain_attr;
-	*(_info->fabric_attr) = sock_fabric_attr;
+	info->ep_attr->type = ep_type;
+	*(info->domain_attr) = sock_domain_attr;
+	*(info->fabric_attr) = sock_fabric_attr;
 
-	_info->domain_attr->name = strdup(sock_dom_name);
-	_info->fabric_attr->name = strdup(sock_fab_name);
-	_info->fabric_attr->prov_name = strdup(sock_prov_name);
+	info->domain_attr->name = strdup(sock_dom_name);
+	info->fabric_attr->name = strdup(sock_fab_name);
+	info->fabric_attr->prov_name = strdup(sock_prov_name);
 
-	return _info;
+	return info;
 }
 
 int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
