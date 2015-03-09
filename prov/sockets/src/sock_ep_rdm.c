@@ -71,7 +71,7 @@ const struct fi_ep_attr sock_rdm_ep_attr = {
 
 const struct fi_tx_attr sock_rdm_tx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
-	.op_flags = SOCK_DEF_OPS,
+	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_TX_SZ,
@@ -80,7 +80,7 @@ const struct fi_tx_attr sock_rdm_tx_attr = {
 
 const struct fi_rx_attr sock_rdm_rx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
-	.op_flags = SOCK_DEF_OPS,
+	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.size = SOCK_EP_RX_SZ,
@@ -94,11 +94,6 @@ static int sock_rdm_verify_rx_attr(const struct fi_rx_attr *attr)
 
 	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
 		SOCK_LOG_INFO("Unsupported RDM rx caps\n");
-		return -FI_ENODATA;
-	}
-
-	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
-		SOCK_LOG_INFO("Unsupported rx op_flags\n");
 		return -FI_ENODATA;
 	}
 
@@ -132,11 +127,6 @@ static int sock_rdm_verify_tx_attr(const struct fi_tx_attr *attr)
 
 	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
 		SOCK_LOG_INFO("Unsupported RDM tx caps\n");
-		return -FI_ENODATA;
-	}
-
-	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
-		SOCK_LOG_INFO("Unsupported rx op_flags\n");
 		return -FI_ENODATA;
 	}
 
