@@ -654,25 +654,25 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 
 	if (!(fi = fi_allocinfo())) {
 		ret = -FI_ENOMEM;
-		goto err;
+		goto err1;
 	}
 
 	ret = fi_ibv_rai_to_fi(rai, fi);
 	if (ret)
-		goto err;
+		goto err2;
 
 	ret = fi_ibv_fill_info_attr(id->verbs, hints, fi);
 	if (ret)
-		goto err;
+		goto err2;
 
 	*info = fi;
 
 	rdma_destroy_ep(id);
 	rdma_freeaddrinfo(rai);
 	return 0;
-err:
-	if (fi)
-		fi_freeinfo(fi);
+err2:
+	fi_freeinfo(fi);
+err1:
 	rdma_destroy_ep(id);
 	rdma_freeaddrinfo(rai);
 	return ret;
