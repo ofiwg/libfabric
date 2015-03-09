@@ -56,7 +56,7 @@ extern const struct fi_fabric_attr sock_fabric_attr;
 
 const struct fi_tx_attr sock_stx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
-	.op_flags = SOCK_DEF_OPS,
+	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_TX_SZ,
@@ -65,7 +65,7 @@ const struct fi_tx_attr sock_stx_attr = {
 
 const struct fi_rx_attr sock_srx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
-	.op_flags = SOCK_DEF_OPS,
+	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.size = SOCK_EP_MAX_MSG_SZ,
@@ -1334,7 +1334,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	
 err:
 	free(sock_ep);
-	return -FI_EAVAIL;
+	return -FI_EINVAL;
 }
 
 struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep)

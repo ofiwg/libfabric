@@ -72,7 +72,7 @@ const struct fi_ep_attr sock_msg_ep_attr = {
 
 const struct fi_tx_attr sock_msg_tx_attr = {
 	.caps = SOCK_EP_MSG_CAP,
-	.op_flags = SOCK_DEF_OPS,
+	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_TX_SZ,
@@ -81,7 +81,7 @@ const struct fi_tx_attr sock_msg_tx_attr = {
 
 const struct fi_rx_attr sock_msg_rx_attr = {
 	.caps = SOCK_EP_MSG_CAP,
-	.op_flags = SOCK_DEF_OPS,
+	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.size = SOCK_EP_RX_SZ,
@@ -94,9 +94,6 @@ int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
 		return 0;
 
 	if ((attr->caps | SOCK_EP_MSG_CAP) != SOCK_EP_MSG_CAP)
-		return -FI_ENODATA;
-
-	if ((attr->op_flags | SOCK_EP_MSG_CAP) != SOCK_EP_MSG_CAP)
 		return -FI_ENODATA;
 
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
@@ -120,9 +117,6 @@ int sock_msg_verify_tx_attr(const struct fi_tx_attr *attr)
 		return 0;
 
 	if ((attr->caps | SOCK_EP_MSG_CAP) != SOCK_EP_MSG_CAP)
-		return -FI_ENODATA;
-
-	if ((attr->op_flags | SOCK_EP_MSG_CAP) != SOCK_EP_MSG_CAP)
 		return -FI_ENODATA;
 
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
@@ -703,19 +697,19 @@ int sock_msg_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	if (info) {
 		if (info->ep_attr) {
-			ret = sock_msg_verify_ep_attr(info->ep_attr, 
-						      info->tx_attr, 
+			ret = sock_msg_verify_ep_attr(info->ep_attr,
+						      info->tx_attr,
 						      info->rx_attr);
 			if (ret)
 				return ret;
 		}
-			
+
 		if (info->tx_attr) {
 			ret = sock_msg_verify_tx_attr(info->tx_attr);
 			if (ret)
 				return ret;
 		}
-		
+
 		if (info->rx_attr) {
 			ret = sock_msg_verify_rx_attr(info->rx_attr);
 			if (ret)
