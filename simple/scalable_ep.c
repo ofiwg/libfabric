@@ -42,11 +42,13 @@
 #include <shared.h>
 #include <math.h>
 
-#define FI_CLOSEV(FID_C, NUM)				\
-	do {						\
-		int i;					\
-		for (i = 0; i < NUM; i++)		\
-			fi_close(&FID_C[i]->fid);	\
+#define FT_CLOSEV(FID_C, NUM)			\
+	do {					\
+		int i;				\
+		for (i = 0; i < NUM; i++) {	\
+			if (FID_C[i])		\
+				fi_close(&FID_C[i]->fid); \
+		}				\
 	} while (0)
 
 static void *buf;
@@ -132,10 +134,10 @@ static void free_ep_res(void)
 {
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
-	FI_CLOSEV(rx_ep, ctx_cnt);
-	FI_CLOSEV(tx_ep, ctx_cnt);
-	FI_CLOSEV(rcq, ctx_cnt);
-	FI_CLOSEV(scq, ctx_cnt);
+	FT_CLOSEV(rx_ep, ctx_cnt);
+	FT_CLOSEV(tx_ep, ctx_cnt);
+	FT_CLOSEV(rcq, ctx_cnt);
+	FT_CLOSEV(scq, ctx_cnt);
 	free(buf);
 	free(rcq);
 	free(scq);
@@ -154,13 +156,13 @@ static int alloc_ep_res(struct fid_ep *sep)
 	buffer_size = test_size[TEST_CNT - 1].size;
 	buf = malloc(buffer_size);
 
-	scq = (struct fid_cq **)malloc(sizeof(struct fid_cq *) * ctx_cnt);
-	rcq = (struct fid_cq **)malloc(sizeof(struct fid_cq *) * ctx_cnt);
+	scq = calloc(ctx_cnt, sizeof *scq);
+	rcq = calloc(ctx_cnt, sizeof *rcq);
 
-	tx_ep = (struct fid_ep **)malloc(sizeof(struct fid_ep *) * ctx_cnt);
-	rx_ep = (struct fid_ep **)malloc(sizeof(struct fid_ep *) * ctx_cnt);
+	tx_ep = calloc(ctx_cnt, sizeof *tx_ep);
+	rx_ep = calloc(ctx_cnt, sizeof *rx_ep);
 
-	remote_rx_addr = (fi_addr_t *)malloc(sizeof(fi_addr_t) * ctx_cnt);
+	remote_rx_addr = calloc(ctx_cnt, sizeof *remote_rx_addr);
 	if (!buf || !scq || !rcq || !tx_ep || !rx_ep || !remote_rx_addr) {
 		perror("malloc");
 		return -1;
@@ -228,13 +230,13 @@ static int alloc_ep_res(struct fid_ep *sep)
 err6:
 	fi_close(&mr->fid);
 err5:
-	FI_CLOSEV(rcq, ctx_cnt);
+	FT_CLOSEV(rcq, ctx_cnt);
 err4:
-	FI_CLOSEV(rx_ep, ctx_cnt);
+	FT_CLOSEV(rx_ep, ctx_cnt);
 err3:
-	FI_CLOSEV(scq, ctx_cnt);
+	FT_CLOSEV(scq, ctx_cnt);
 err2:
-	FI_CLOSEV(tx_ep, ctx_cnt);
+	FT_CLOSEV(tx_ep, ctx_cnt);
 err1:
 	free(buf);
 	free(rcq);
@@ -495,7 +497,6 @@ static int run(void)
 		goto out;
 
 	run_test();
-
 out:
 	free_ep_res();
 	fi_close(&sep->fid);
