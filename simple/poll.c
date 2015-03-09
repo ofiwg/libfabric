@@ -512,7 +512,7 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	/* Tear down */
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);

@@ -642,6 +642,7 @@ static int run(void)
 
 	sync_test();
 	wait_for_data_completion(scq, max_credits - credits);
+	ft_finalize(ep, scq, rcq, FI_ADDR_UNSPEC);
 out:
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);

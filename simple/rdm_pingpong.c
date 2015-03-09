@@ -479,6 +479,7 @@ static int run(void)
 	}
 
 	wait_for_completion(scq, max_credits - credits);
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);
 	free_ep_res();

@@ -62,7 +62,8 @@ static struct fid_mr *mr;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
-struct fi_context fi_ctx_send;
+struct fi_context fi_ctx_tsend;
+struct fi_context fi_ctx_trecv;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
 
@@ -108,7 +109,7 @@ static int send_xfer(int size)
 	credits--;
 post:
 	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data, &fi_ctx_send);
+			tag_data, &fi_ctx_tsend);
 	if (ret)
 		FT_PRINTERR("fi_tsend", ret);
 
@@ -134,7 +135,7 @@ static int recv_xfer(int size)
 
 	/* Posting recv for next send. Hence tag_data + 1 */
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data + 1, 0, &fi_ctx_recv);
+			tag_data + 1, 0, &fi_ctx_trecv);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
 
@@ -146,7 +147,7 @@ static int send_msg(int size)
 	int ret;
 
 	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			tag_control, &fi_ctx_send);
+			tag_control, &fi_ctx_tsend);
 	if (ret) {
 		FT_PRINTERR("fi_tsend", ret);
 		return ret;
@@ -162,7 +163,7 @@ static int recv_msg(void)
 	int ret;
 
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-		       tag_control, 0, &fi_ctx_recv);
+		       tag_control, 0, &fi_ctx_trecv);
 	if (ret) {
 		FT_PRINTERR("fi_trecv", ret);
 		return ret;
@@ -327,6 +328,13 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0,
+			&fi_ctx_recv);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
+
 	return ret;
 }
 
@@ -472,7 +480,7 @@ static int init_av(void)
 
 	/* Post first recv */
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data, 0, &fi_ctx_recv);
+			tag_data, 0, &fi_ctx_trecv);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
 
@@ -509,6 +517,7 @@ static int run(void)
 	}
 
 	wait_for_completion_tagged(scq, max_credits - credits);
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);
 	free_ep_res();

@@ -59,7 +59,7 @@ static size_t prefix_len;
 static size_t max_msg_size = 0;
 
 static struct fi_info *hints;
-static fi_addr_t rem_addr;
+static fi_addr_t remote_fi_addr;
 
 static struct fi_info *fi;
 static struct fid_fabric *fab;
@@ -104,7 +104,7 @@ static int send_xfer(int size)
 	credits--;
 post:
 	ret = fi_send(ep, buf_ptr, (size_t) size, fi_mr_desc(mr),
-			rem_addr, NULL);
+			remote_fi_addr, NULL);
 	if (ret)
 		FT_PRINTERR("fi_send", ret);
 
@@ -393,7 +393,7 @@ static int client_connect(void)
 	if (ret != 0)
 		goto err;
 
-	ret = fi_av_insert(av, hints->dest_addr, 1, &rem_addr, 0, NULL);
+	ret = fi_av_insert(av, hints->dest_addr, 1, &remote_fi_addr, 0, NULL);
 	if (ret != 1) {
 		FT_PRINTERR("fi_av_insert", ret);
 		goto err;
@@ -446,7 +446,7 @@ static int server_connect(void)
 		}
 	} while (ret == 0);
 
-	ret = fi_av_insert(av, buf_ptr, 1, &rem_addr, 0, NULL);
+	ret = fi_av_insert(av, buf_ptr, 1, &remote_fi_addr, 0, NULL);
 	if (ret != 1) {
 		if (ret == 0) {
 			fprintf(stderr, "Unable to resolve remote address 0x%x 0x%x\n",
@@ -505,7 +505,7 @@ static int run(void)
 
 	while (credits < max_credits)
 		poll_all_sends();
-
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	ret = fi_close(&ep->fid);
 	if (ret != 0) {

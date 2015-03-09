@@ -470,6 +470,7 @@ static int run(void)
 			goto out;
 	}
 
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);
 	free_ep_res();

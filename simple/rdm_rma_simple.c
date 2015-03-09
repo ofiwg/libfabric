@@ -313,11 +313,11 @@ static int run_test(void)
 		fprintf(stdout, "Received data from Client: %s\n", (char *)buf);
 	}
 
+	/* TODO: need support for finalize operation to sync test */
 	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
-
 	return 0;
 }
 

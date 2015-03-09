@@ -493,6 +493,7 @@ static int run(void)
 	}
 
 	get_send_completions();
+	/* TODO: need support for finalize operation to sync test */
 out:
 	fi_close(&ep->fid);
 	free_ep_res();

@@ -497,6 +497,7 @@ static int run(void)
 		goto out;
 
 	run_test();
+	ft_finalize(tx_ep[0], scq[0], rcq[0], remote_rx_addr[0]);
 out:
 	free_ep_res();
 	fi_close(&sep->fid);

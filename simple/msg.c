@@ -260,6 +260,7 @@ static int server_connect(void)
 	}
 
 	/* Open the endpoint */
+	info->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 	ret = fi_endpoint(dom, info, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
@@ -340,6 +341,7 @@ static int client_connect(void)
 	}
 
 	/* Open endpoint */
+	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
@@ -494,7 +496,6 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	/* Tear down */
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);
 	free_ep_res();

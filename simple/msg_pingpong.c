@@ -104,6 +104,7 @@ static int recv_xfer(int size)
 		}
 	} while (!ret);
 
+
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
@@ -525,6 +526,7 @@ static int run(void)
 	}
 
 	ret = wait_for_completion(scq, max_credits - credits);
+	ft_finalize(ep, scq, rcq, FI_ADDR_UNSPEC);
 out:
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);

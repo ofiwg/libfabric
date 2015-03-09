@@ -101,10 +101,16 @@ int ft_getdestaddr(char *node, char *service, struct fi_info *hints);
 char *size_str(char str[FT_STR_LEN], long long size);
 char *cnt_str(char str[FT_STR_LEN], long long cnt);
 int size_to_count(int size);
+
 void init_test(struct cs_opts *opts, char *test_name, size_t test_name_len);
+int ft_finalize(struct fid_ep *tx_ep, struct fid_cq *scq, struct fid_cq *rcq,
+		fi_addr_t addr);
+
+
 int wait_for_data_completion(struct fid_cq *cq, int num_completions);
 int wait_for_completion(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, char *cq_str);
+
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a, 
 		enum precision p);
 void show_perf(char *name, int tsize, int iters, struct timespec *start, 

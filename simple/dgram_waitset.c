@@ -204,6 +204,12 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0,
+			&fi_ctx_recv);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
 	return ret;
 }
 
@@ -488,7 +494,7 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	/* Tear down */
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);

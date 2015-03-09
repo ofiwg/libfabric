@@ -475,6 +475,7 @@ static int run(void)
 
 	run_test();
 
+	ft_finalize(ep, scq, rcq, FI_ADDR_UNSPEC);
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);
 	free_ep_res();

@@ -572,12 +572,7 @@ static int run(void)
 
 	ret = run_test();	
 	
-	//synchronize before exiting
-	ret = sync_test();
-	if (ret) {
-		fprintf(stderr, "sync_test failed!\n");
-		goto out;
-	}
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);
 	free_ep_res();
