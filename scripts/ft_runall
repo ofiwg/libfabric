@@ -110,9 +110,9 @@ fi_rdm_inject_pingpong -I 5 $1
 echo ...done 
 sleep 3
 echo Running fi_rdm_multi_recv
-fi_rdm_multi_recv &
+fi_rdm_multi_recv -I 5 &
 sleep 3
-fi_rdm_multi_recv $1
+fi_rdm_multi_recv -I 5 $1
 echo ...done 
 sleep 3
 echo Running fi_scalable_ep
