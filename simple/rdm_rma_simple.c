@@ -345,7 +345,7 @@ int main(int argc, char **argv)
 		dst_addr = argv[optind];
 
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG | FI_RMA | FI_REMOTE_COMPLETE;
+	hints->caps = FI_MSG | FI_RMA;
 	// FI_PROV_MR_ATTR flag is not set
 	hints->mode = FI_CONTEXT;
 
