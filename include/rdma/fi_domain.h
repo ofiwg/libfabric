@@ -271,6 +271,12 @@ fi_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr, size_t *addrlen)
         return av->ops->lookup(av, fi_addr, addr, addrlen);
 }
 
+static inline const char *
+fi_av_straddr(struct fid_av *av, const void *addr, char *buf, size_t *len)
+{
+	return av->ops->straddr(av, addr, buf, len);
+}
+
 static inline fi_addr_t
 fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
 {
