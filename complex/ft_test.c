@@ -245,12 +245,8 @@ static int ft_run_latency(void)
 		if (ft_tx.msg_size > fabric_info->ep_attr->max_msg_size)
 			break;
 
-		ft.xfer_iter = size_to_count(ft_tx.msg_size);
-		if (test_info.test_flags & FT_FLAG_QUICKTEST) {
-			ft.xfer_iter /= 100;
-			if (ft.xfer_iter == 0)
-				ft.xfer_iter = 1;
-		}
+		ft.xfer_iter = test_info.test_flags & FT_FLAG_QUICKTEST ?
+				5 : size_to_count(ft_tx.msg_size);
 
 		ret = ft_sync_test(0);
 		if (ret)
@@ -316,6 +312,7 @@ int ft_run_test()
 		break;
 	}
 
+	ft_sync_test(0);
 	ft_cleanup();
 
 	return ret ? ret : -ft.error;
