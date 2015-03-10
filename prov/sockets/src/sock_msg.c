@@ -185,7 +185,7 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	tx_op.op = SOCK_OP_SEND;
 
 	total_len = 0;
-	if (SOCK_INJECT_OK(flags)) {
+	if (flags & FI_INJECT) {
 		for (i=0; i< msg->iov_count; i++) {
 			total_len += msg->msg_iov[i].iov_len;
 		}
@@ -215,7 +215,7 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		sock_tx_ctx_write(tx_ctx, &msg->data, sizeof(msg->data));
 	}
 
-	if (SOCK_INJECT_OK(flags)) {
+	if (flags & FI_INJECT) {
 		for (i=0; i< msg->iov_count; i++) {
 			sock_tx_ctx_write(tx_ctx, msg->msg_iov[i].iov_base,
 					  msg->msg_iov[i].iov_len);
@@ -299,7 +299,7 @@ static ssize_t sock_ep_inject(struct fid_ep *ep, const void *buf, size_t len,
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 
-	return sock_ep_sendmsg(ep, &msg, FI_INJECT);
+	return sock_ep_sendmsg(ep, &msg, FI_INJECT | SOCK_FLAG_NO_COMPLETION);
 }
 
 struct fi_ops_msg sock_ep_msg_ops = {
@@ -441,7 +441,7 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	tx_op.op = SOCK_OP_TSEND;
 
 	total_len = 0;
-	if (SOCK_INJECT_OK(flags)) {
+	if (flags & FI_INJECT) {
 		for (i=0; i< msg->iov_count; i++) {
 			total_len += msg->msg_iov[i].iov_len;
 		}
@@ -471,7 +471,7 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 		sock_tx_ctx_write(tx_ctx, &msg->data, sizeof(msg->data));
 	}
 
-	if (SOCK_INJECT_OK(flags)) {
+	if (flags & FI_INJECT) {
 		for (i=0; i< msg->iov_count; i++) {
 			sock_tx_ctx_write(tx_ctx, msg->msg_iov[i].iov_base,
 					  msg->msg_iov[i].iov_len);
@@ -557,7 +557,7 @@ static ssize_t sock_ep_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 	msg.tag = tag;
-	return sock_ep_tsendmsg(ep, &msg, FI_INJECT);
+	return sock_ep_tsendmsg(ep, &msg, FI_INJECT | SOCK_FLAG_NO_COMPLETION);
 }
 
 static ssize_t sock_ep_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,

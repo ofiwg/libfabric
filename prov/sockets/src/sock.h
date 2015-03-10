@@ -116,13 +116,13 @@
 
 #define SOCK_MODE (0)
 
+#define SOCK_FLAG_NO_COMPLETION (1ULL << 60)
+
 #define SOCK_COMM_BUF_SZ (SOCK_EP_MAX_MSG_SZ)
 #define SOCK_COMM_THRESHOLD (128 * 1024)
 
 #define SOCK_MAJOR_VERSION 1
 #define SOCK_MINOR_VERSION 0
-
-#define SOCK_INJECT_OK(_flgs)  ((_flgs) & FI_INJECT)
 
 struct sock_fabric {
 	struct fid_fabric fab_fid;

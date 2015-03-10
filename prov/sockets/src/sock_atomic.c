@@ -102,7 +102,7 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 
 	src_len = 0;
 	datatype_sz = fi_datatype_size(msg->datatype);
-	if (SOCK_INJECT_OK(flags)) {
+	if (flags & FI_INJECT) {
 		for (i=0; i< msg->iov_count; i++) {
 			src_len += (msg->msg_iov[i].count * datatype_sz);
 		}
@@ -131,7 +131,7 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	tx_op.atomic.res_iov_len = result_count;
 	tx_op.atomic.cmp_iov_len = compare_count;
 
-	if (SOCK_INJECT_OK(flags))
+	if (flags & FI_INJECT)
 		tx_op.src_iov_len = src_len;
 	else 
 		tx_op.src_iov_len = msg->iov_count;
@@ -144,7 +144,7 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	}
 	
 	src_len = 0;
-	if (SOCK_INJECT_OK(flags)) {
+	if (flags & FI_INJECT) {
 		for (i=0; i< msg->iov_count; i++) {
 			sock_tx_ctx_write(tx_ctx, msg->msg_iov[i].addr,
 					  msg->msg_iov[i].count * datatype_sz);
@@ -304,7 +304,7 @@ static ssize_t sock_ep_atomic_inject(struct fid_ep *ep, const void *buf, size_t 
 	msg.op = op;
 	msg.data = 0;
 
-	return sock_ep_atomic_writemsg(ep, &msg, FI_INJECT);
+	return sock_ep_atomic_writemsg(ep, &msg, FI_INJECT | SOCK_FLAG_NO_COMPLETION);
 }
 
 static ssize_t sock_ep_atomic_readwritemsg(struct fid_ep *ep, 

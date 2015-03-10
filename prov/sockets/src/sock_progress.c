@@ -159,7 +159,7 @@ static void sock_pe_report_tx_completion(struct sock_pe_entry *pe_entry)
 {
 	int ret1 = 0, ret2 = 0;
 
-	if (!(pe_entry->flags & FI_INJECT)) {
+	if (!(pe_entry->flags & SOCK_FLAG_NO_COMPLETION)) {
 		if (pe_entry->comp->send_cq && 
 		    (!pe_entry->comp->send_cq_event || 
 		     (pe_entry->comp->send_cq_event && 
@@ -263,7 +263,7 @@ static void sock_pe_report_remote_write(struct sock_rx_ctx *rx_ctx,
 
 static void sock_pe_report_write_completion(struct sock_pe_entry *pe_entry)
 {
-	if (!(pe_entry->flags & FI_INJECT)) {
+	if (!(pe_entry->flags & SOCK_FLAG_NO_COMPLETION)) {
 		sock_pe_report_tx_completion(pe_entry);
 	
 		if (pe_entry->comp->write_cq && 
@@ -309,7 +309,7 @@ static void sock_pe_report_remote_read(struct sock_rx_ctx *rx_ctx,
 
 static void sock_pe_report_read_completion(struct sock_pe_entry *pe_entry)
 {
-	if (!(pe_entry->flags & FI_INJECT)) {
+	if (!(pe_entry->flags & SOCK_FLAG_NO_COMPLETION)) {
 		sock_pe_report_tx_completion(pe_entry);
 		
 		if (pe_entry->comp->read_cq && 
