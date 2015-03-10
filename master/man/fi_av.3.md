@@ -57,7 +57,7 @@ fi_addr_t fi_rx_addr(fi_addr_t fi_addr, int rx_index,
 	  int rx_ctx_bits);
 
 const char * fi_av_straddr(struct fid_av *av, const void *addr,
-      void *buf, size_t len);
+      void *buf, size_t *len);
 {% endhighlight %}
 
 # ARGUMENTS
@@ -379,8 +379,8 @@ The fi_av_straddr function converts the provided address into a
 printable string.  The specified address must be of the same format as
 those stored by the AV, though the address itself is not required to
 have been inserted.  On input, the len parameter should specify the
-size of the buffer referenced by buf.  On output, the actual size
-needed to write the entire string will be returned.  This size may be
+size of the buffer referenced by buf.  On output, addrlen is set to the
+size of the buffer needed to store the address.  This size may be
 larger than the input len.  If the provided buffer is too small, the
 results will be truncated.  fi_av_straddr returns a pointer to buf.
 
