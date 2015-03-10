@@ -747,124 +747,63 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 }
 
 static ssize_t
-fi_ibv_msg_ep_recv(struct fid_ep *ep, void *buf, size_t len,
-		void *desc, fi_addr_t src_addr, void *context)
+fi_ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	struct fi_ibv_msg_ep *_ep;
 	struct ibv_recv_wr wr, *bad;
-	struct ibv_sge sge;
-
-	sge.addr = (uintptr_t) buf;
-	sge.length = (uint32_t) len;
-	sge.lkey = (uint32_t) (uintptr_t) desc;
-
-	wr.wr_id = (uintptr_t) context;
-	wr.next = NULL;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
+	struct ibv_sge *sge = NULL;
+	size_t i;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+	wr.wr_id = (uintptr_t) msg->context;
+	wr.next = NULL;
+	if (msg->iov_count) {
+		sge = alloca(sizeof(*sge) * msg->iov_count);
+		for (i = 0; i < msg->iov_count; i++) {
+			sge[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
+			sge[i].length = (uint32_t) msg->msg_iov[i].iov_len;
+			sge[i].lkey = (uint32_t) (uintptr_t) (msg->desc[i]);
+		}
+
+	}
+	wr.sg_list = sge;
+	wr.num_sge = msg->iov_count;
+
 	return -ibv_post_recv(_ep->id->qp, &wr, &bad);
+}
+
+static ssize_t
+fi_ibv_msg_ep_recv(struct fid_ep *ep, void *buf, size_t len,
+		void *desc, fi_addr_t src_addr, void *context)
+{
+	struct iovec iov;
+	struct fi_msg msg;
+
+	iov.iov_base = buf;
+	iov.iov_len = len;
+
+	msg.msg_iov = &iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = src_addr;
+	msg.context = context;
+
+	return fi_ibv_msg_ep_recvmsg(ep, &msg, 0);
 }
 
 static ssize_t
 fi_ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
                  size_t count, fi_addr_t src_addr, void *context)
 {
-	struct fi_ibv_msg_ep *_ep;
-	struct ibv_recv_wr wr, *bad;
-	struct ibv_sge *sge;
-	size_t i;
+	struct fi_msg msg;
 
-	sge = alloca(count * sizeof(struct ibv_sge));
-	wr.wr_id = (uintptr_t) context;
-	wr.next = NULL;
-	wr.sg_list = sge;
-	wr.num_sge = (int) count;
+	msg.msg_iov = iov;
+	msg.desc = desc;
+	msg.iov_count = count;
+	msg.addr = src_addr;
+	msg.context = context;
 
-	for (i = 0; i < count; i++) {
-		sge[i].addr = (uintptr_t) iov[i].iov_base;
-		sge[i].length = (uint32_t) iov[i].iov_len;
-		sge[i].lkey = (uint32_t) (uintptr_t) desc[i];
-	}
-
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	return -ibv_post_recv(_ep->id->qp, &wr, &bad);
-}
-
-static ssize_t
-fi_ibv_msg_ep_send(struct fid_ep *ep, const void *buf, size_t len,
-		void *desc, fi_addr_t dest_addr, void *context)
-{
-	struct fi_ibv_msg_ep *_ep;
-	struct ibv_send_wr wr, *bad;
-	struct ibv_sge sge;
-
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	sge.addr = (uintptr_t) buf;
-	sge.length = (uint32_t) len;
-	sge.lkey = (uint32_t) (uintptr_t) desc;
-
-	wr.wr_id = (uintptr_t) context;
-	wr.next = NULL;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.opcode = IBV_WR_SEND;
-	wr.send_flags = (len <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
-
-	return -ibv_post_send(_ep->id->qp, &wr, &bad);
-}
-
-static ssize_t
-fi_ibv_msg_ep_senddata(struct fid_ep *ep, const void *buf, size_t len,
-		    void *desc, uint64_t data, fi_addr_t dest_addr, void *context)
-{
-	struct fi_ibv_msg_ep *_ep;
-	struct ibv_send_wr wr, *bad;
-	struct ibv_sge sge;
-
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	sge.addr = (uintptr_t) buf;
-	sge.length = (uint32_t) len;
-	sge.lkey = (uint32_t) (uintptr_t) desc;
-
-	wr.wr_id = (uintptr_t) context;
-	wr.next = NULL;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.opcode = IBV_WR_SEND_WITH_IMM;
-	wr.send_flags = (len <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
-	wr.imm_data = (uint32_t) data;
-
-	return -ibv_post_send(_ep->id->qp, &wr, &bad);
-}
-
-static ssize_t
-fi_ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-                 size_t count, fi_addr_t dest_addr, void *context)
-{
-	struct fi_ibv_msg_ep *_ep;
-	struct ibv_send_wr wr, *bad;
-	struct ibv_sge *sge;
-	size_t bytes = 0, i;
-
-	sge = alloca(count * sizeof(struct ibv_sge));
-	wr.wr_id = (uintptr_t) context;
-	wr.next = NULL;
-	wr.sg_list = sge;
-	wr.num_sge = (int) count;
-	wr.opcode = IBV_WR_SEND;
-
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	for (i = 0; i < count; i++) {
-		sge[i].addr = (uintptr_t) iov[i].iov_base;
-		sge[i].length = (uint32_t) iov[i].iov_len;
-		bytes += iov[i].iov_len;
-		sge[i].lkey = (uint32_t) (uintptr_t) desc[i];
-	}
-	wr.send_flags = (bytes <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
-
-	return -ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_msg_ep_recvmsg(ep, &msg, 0);
 }
 
 static ssize_t
@@ -905,29 +844,57 @@ fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 }
 
 static ssize_t
-fi_ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+fi_ibv_msg_ep_send(struct fid_ep *ep, const void *buf, size_t len,
+		void *desc, fi_addr_t dest_addr, void *context)
 {
-	struct fi_ibv_msg_ep *_ep;
-	struct ibv_recv_wr wr, *bad;
-	struct ibv_sge *sge=NULL;
-	size_t i;
+	struct iovec iov;
+	struct fi_msg msg;
 
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	wr.wr_id = (uintptr_t) msg->context;
-	wr.next = NULL;
-	if (msg->iov_count) {
-		sge = alloca(sizeof(*sge) * msg->iov_count);
-		for (i = 0; i < msg->iov_count; i++) {
-			sge[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
-			sge[i].length = (uint32_t) msg->msg_iov[i].iov_len;
-			sge[i].lkey = (uint32_t) (uintptr_t) (msg->desc[i]);
-		}
+	iov.iov_base = (void *)buf;
+	iov.iov_len = len;
 
-	}
-	wr.sg_list = sge;
-	wr.num_sge = msg->iov_count;
+	msg.msg_iov = &iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	msg.context = context;
 
-	return -ibv_post_recv(_ep->id->qp, &wr, &bad);
+	return fi_ibv_msg_ep_sendmsg(ep, &msg, 0);
+}
+
+static ssize_t
+fi_ibv_msg_ep_senddata(struct fid_ep *ep, const void *buf, size_t len,
+		    void *desc, uint64_t data, fi_addr_t dest_addr, void *context)
+{
+	struct iovec iov;
+	struct fi_msg msg;
+
+	iov.iov_base = (void *)buf;
+	iov.iov_len = len;
+
+	msg.msg_iov = &iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	msg.context = context;
+	msg.data = data;
+
+	return fi_ibv_msg_ep_sendmsg(ep, &msg, FI_REMOTE_CQ_DATA);
+}
+
+static ssize_t
+fi_ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+                 size_t count, fi_addr_t dest_addr, void *context)
+{
+	struct fi_msg msg;
+
+	msg.msg_iov = iov;
+	msg.desc = desc;
+	msg.iov_count = count;
+	msg.addr = dest_addr;
+	msg.context = context;
+
+	return fi_ibv_msg_ep_sendmsg(ep, &msg, 0);
 }
 
 static struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
