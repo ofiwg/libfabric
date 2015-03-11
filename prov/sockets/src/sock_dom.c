@@ -46,6 +46,8 @@ const struct fi_domain_attr sock_domain_attr = {
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
+	.resource_mgmt = FI_RM_ENABLED,
+	.av_type = FI_AV_UNSPEC,
 	.mr_key_size = sizeof(uint16_t),
 	.cq_data_size = sizeof(uint64_t),
 	.ep_cnt = SOCK_EP_MAX_EP_CNT,
@@ -57,15 +59,15 @@ const struct fi_domain_attr sock_domain_attr = {
 
 int sock_verify_domain_attr(struct fi_domain_attr *attr)
 {
-	if(!attr)
+	if (!attr)
 		return 0;
 
-	if(attr->name){
+	if (attr->name) {
 		if (strcmp(attr->name, sock_dom_name))
 			return -FI_ENODATA;
 	}
 
-	switch(attr->threading){
+	switch (attr->threading) {
 	case FI_THREAD_UNSPEC:
 	case FI_THREAD_SAFE:
 	case FI_THREAD_FID:
@@ -78,38 +80,36 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	switch (attr->control_progress){
+	switch (attr->control_progress) {
 	case FI_PROGRESS_UNSPEC:
 	case FI_PROGRESS_AUTO:
 	case FI_PROGRESS_MANUAL:
 		break;
-
 	default:
 		SOCK_LOG_INFO("Control progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
 
-	switch (attr->data_progress){
+	switch (attr->data_progress) {
 	case FI_PROGRESS_UNSPEC:
 	case FI_PROGRESS_AUTO:
 	case FI_PROGRESS_MANUAL:
 		break;
-
 	default:
 		SOCK_LOG_INFO("Data progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
 	
-	if(attr->cq_data_size > sock_domain_attr.cq_data_size)
+	if (attr->cq_data_size > sock_domain_attr.cq_data_size)
 		return -FI_ENODATA;
 
-	if(attr->ep_cnt > sock_domain_attr.ep_cnt)
+	if (attr->ep_cnt > sock_domain_attr.ep_cnt)
 		return -FI_ENODATA;
 
-	if(attr->max_ep_tx_ctx > sock_domain_attr.max_ep_tx_ctx)
+	if (attr->max_ep_tx_ctx > sock_domain_attr.max_ep_tx_ctx)
 		return -FI_ENODATA;
 
-	if(attr->max_ep_rx_ctx > sock_domain_attr.max_ep_rx_ctx)
+	if (attr->max_ep_rx_ctx > sock_domain_attr.max_ep_rx_ctx)
 		return -FI_ENODATA;
 
 	return 0;
