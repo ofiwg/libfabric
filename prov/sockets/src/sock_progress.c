@@ -1521,7 +1521,7 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 	}
 
 	/* data */
-	if (SOCK_INJECT_OK(pe_entry->flags)) {
+	if (pe_entry->flags & FI_INJECT) {
 		if (sock_pe_send_field(pe_entry, 
 				       &pe_entry->pe.tx.data.inject[0],
 				       pe_entry->pe.tx.tx_op.src_iov_len, len))
@@ -1578,7 +1578,7 @@ static int sock_pe_progress_tx_write(struct sock_pe *pe,
 	len += dest_iov_len;
 	
 	/* data */
-	if (SOCK_INJECT_OK(pe_entry->flags)) {
+	if (pe_entry->flags & FI_INJECT) {
 		if (sock_pe_send_field(pe_entry, &pe_entry->pe.tx.data.inject[0],
 				       pe_entry->pe.tx.tx_op.src_iov_len, len))
 			return 0;
@@ -1667,7 +1667,7 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 		len += SOCK_CQ_DATA_SIZE;
 	}
 
-	if (SOCK_INJECT_OK(pe_entry->flags)) {
+	if (pe_entry->flags & FI_INJECT) {
 		if (sock_pe_send_field(pe_entry, pe_entry->pe.tx.data.inject,
 				       pe_entry->pe.tx.tx_op.src_iov_len, len))
 			return 0;
@@ -1888,7 +1888,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	switch (pe_entry->pe.tx.tx_op.op) {
 	case SOCK_OP_SEND:
 	case SOCK_OP_TSEND:
-		if (SOCK_INJECT_OK(pe_entry->flags)) {
+		if (pe_entry->flags & FI_INJECT) {
 			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.inject[0],
 				 pe_entry->pe.tx.tx_op.src_iov_len);
 			msg_hdr->msg_len += pe_entry->pe.tx.tx_op.src_iov_len;
@@ -1901,7 +1901,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 		}
 		break;
 	case SOCK_OP_WRITE:
-		if (SOCK_INJECT_OK(pe_entry->flags)) {
+		if (pe_entry->flags & FI_INJECT) {
 			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.inject[0],
 				 pe_entry->pe.tx.tx_op.src_iov_len);
 			msg_hdr->msg_len += pe_entry->pe.tx.tx_op.src_iov_len;
@@ -1934,7 +1934,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	case SOCK_OP_ATOMIC:			
 		msg_hdr->msg_len += sizeof(struct sock_op);
 		datatype_sz = fi_datatype_size(pe_entry->pe.tx.tx_op.atomic.datatype);
-		if (SOCK_INJECT_OK(pe_entry->flags)) {
+		if (pe_entry->flags & FI_INJECT) {
 			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.inject[0],
 				 pe_entry->pe.tx.tx_op.src_iov_len);
 			msg_hdr->msg_len += pe_entry->pe.tx.tx_op.src_iov_len;
