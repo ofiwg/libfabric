@@ -928,18 +928,18 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 		goto fail;
 	}
 
+	/* initialize timer subsystem */
+	ret = usdf_timer_init(fp);
+	if (ret != 0) {
+		USDF_INFO("unable to initialize timer\n");
+		goto fail;
+	}
+
 	ret = pthread_create(&fp->fab_thread, NULL,
 			usdf_fabric_progression_thread, fp);
 	if (ret != 0) {
 		ret = -ret;
 		USDF_INFO("unable to create progress thread\n");
-		goto fail;
-	}
-
-	/* initialize timer subsystem */
-	ret = usdf_timer_init(fp);
-	if (ret != 0) {
-		USDF_INFO("unable to initialize timer\n");
 		goto fail;
 	}
 
