@@ -178,18 +178,24 @@ static int run_test(void)
 static void free_ep_res(void)
 {
 	int ret;
-	
-	ret = fi_close(&mr->fid);
-	if (ret != 0) {
-		FT_PRINTERR("fi_close", ret);
+
+	if (mr) {
+		ret = fi_close(&mr->fid);
+		if (ret != 0) {
+			FT_PRINTERR("fi_close", ret);
+		}
 	}
-	ret = fi_close(&rcq->fid);
-	if (ret != 0) {
-		FT_PRINTERR("fi_close", ret);
+	if (rcq) {
+		ret = fi_close(&rcq->fid);
+		if (ret != 0) {
+			FT_PRINTERR("fi_close", ret);
+		}
 	}
-	ret = fi_close(&scq->fid);
-	if (ret != 0) {
-		FT_PRINTERR("fi_close", ret);
+	if (scq) {
+		ret = fi_close(&scq->fid);
+		if (ret != 0) {
+			FT_PRINTERR("fi_close", ret);
+		}
 	}
 	free(buf);
 }
@@ -407,10 +413,18 @@ static int client_connect(void)
 
 err:
 	free_ep_res();
-	fi_close(&av->fid);
-	fi_close(&ep->fid);
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	if (av) {
+		fi_close(&av->fid);
+	}
+	if (ep) {
+		fi_close(&ep->fid);
+	}
+	if (dom) {
+		fi_close(&dom->fid);
+	}
+	if (fab) {
+		fi_close(&fab->fid);
+	}
 	return ret;
 }
 
