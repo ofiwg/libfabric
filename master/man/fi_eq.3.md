@@ -247,7 +247,7 @@ information regarding the format associated with each event.
 struct fi_eq_entry {
 	fid_t            fid;        /* fid associated with request */
 	void            *context;    /* operation context */
-	uint32_t         data;       /* completion dependent data */
+	uint64_t         data;       /* completion-specific data */
 };
 {% endhighlight %}
 
@@ -259,6 +259,10 @@ struct fi_eq_entry {
   FI_AV_COMPLETE event and fid_av.  The context field will be set
   to the context specified as part of the operation, if available,
   otherwise the context will be associated with the fabric descriptor.
+  The data field will be set as described in the man page for the
+  corresponding object type (e.g., see [`fi_av`(3)](fi_av.3.html) for
+  a description of how asynchronous address vector insertions are
+  completed).
 
 *Connection Notification*
 : Connection notifications are connection management notifications
@@ -347,6 +351,7 @@ fi_eq_err_entry.  The format of this structure is defined below.
 struct fi_eq_err_entry {
 	fid_t            fid;        /* fid associated with error */
 	void            *context;    /* operation context */
+	uint64_t         data;       /* completion-specific data */
 	uint32_t         index;      /* index for vector ops */
 	int              err;        /* positive error code */
 	int              prov_errno; /* provider error code */
@@ -360,6 +365,11 @@ event.  For memory registration, this will be the fid_mr, address
 resolution will reference a fid_av, and CM events will refer to a
 fid_ep.  The context field will be set to the context specified as
 part of the operation.
+
+The data field will be set as described in the man page for the
+corresponding object type (e.g., see [`fi_av`(3)](fi_av.3.html) for a
+description of how asynchronous address vector insertions are
+completed).
 
 The general reason for the error is provided through the err field.
 Provider or operational specific error information may also be available
