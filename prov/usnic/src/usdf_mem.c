@@ -76,7 +76,10 @@ int usdf_dereg_mr(fid_t fid)
 
 static struct fi_ops usdf_mr_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = usdf_dereg_mr
+	.close = usdf_dereg_mr,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
 };
 
 int

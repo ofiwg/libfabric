@@ -376,6 +376,7 @@ static struct fi_ops sock_ctx_ops = {
 	.close = sock_ctx_close,
 	.bind = sock_ctx_bind,
 	.control = sock_ctx_control,
+	.ops_open = fi_no_ops_open,
 };
 
 static int sock_ctx_getopt(fid_t fid, int level, int optname,

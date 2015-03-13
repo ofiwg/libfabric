@@ -833,6 +833,7 @@ static ssize_t psmx_writedata(struct fid_ep *ep, const void *buf, size_t len, vo
 }
 
 struct fi_ops_rma psmx_rma_ops = {
+	.size = sizeof(struct fi_ops_rma),
 	.read = psmx_read,
 	.readv = psmx_readv,
 	.readmsg = psmx_readmsg,
