@@ -481,6 +481,57 @@ static ssize_t sock_ep_cancel(fid_t fid, void *context)
 	return sock_rx_ctx_cancel(rx_ctx, context);
 }
 
+static ssize_t sock_rx_size_left(struct fid_ep *ep)
+{
+	struct sock_rx_ctx *rx_ctx;
+	struct sock_ep *sock_ep;
+
+	switch (ep->fid.fclass) {
+	case FI_CLASS_EP:
+		sock_ep = container_of(ep, struct sock_ep, ep);
+		rx_ctx = sock_ep->rx_ctx;
+		break;
+
+	case FI_CLASS_RX_CTX:
+	case FI_CLASS_SRX_CTX:
+		rx_ctx = container_of(ep, struct sock_rx_ctx, ctx);
+		break;
+
+	default:
+		SOCK_LOG_ERROR("Invalid ep type\n");
+		return -FI_EINVAL;
+	}
+
+	return rx_ctx->attr.size;
+}
+
+static ssize_t sock_tx_size_left(struct fid_ep *ep)
+{
+	struct sock_ep *sock_ep;
+	struct sock_tx_ctx *tx_ctx;
+	ssize_t num_left = 0;
+
+	switch (ep->fid.fclass) {
+	case FI_CLASS_EP:
+		sock_ep = container_of(ep, struct sock_ep, ep);
+		tx_ctx = sock_ep->tx_ctx;
+		break;
+
+	case FI_CLASS_TX_CTX:
+		tx_ctx = container_of(ep, struct sock_tx_ctx, fid.ctx);
+		break;
+
+	default:
+		SOCK_LOG_ERROR("Invalid EP type\n");
+		return -FI_EINVAL;
+	}
+
+	fastlock_acquire(&tx_ctx->wlock);
+	num_left = rbfdavail(&tx_ctx->rbfd)/SOCK_EP_TX_ENTRY_SZ;
+	fastlock_release(&tx_ctx->wlock);
+	return num_left;
+}
+
 struct fi_ops_ep sock_ctx_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = sock_ep_cancel,
@@ -488,8 +539,8 @@ struct fi_ops_ep sock_ctx_ep_ops = {
 	.setopt = sock_ctx_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
-	.rx_size_left = fi_no_rx_size_left,
-	.tx_size_left = fi_no_tx_size_left,
+	.rx_size_left = sock_rx_size_left,
+	.tx_size_left = sock_tx_size_left,
 };
 
 static int sock_ep_close(struct fid *fid)
@@ -1026,8 +1077,8 @@ struct fi_ops_ep sock_ep_ops ={
 	.setopt = sock_ep_setopt,
 	.tx_ctx = sock_ep_tx_ctx,
 	.rx_ctx = sock_ep_rx_ctx,
-	.rx_size_left = fi_no_rx_size_left,
-	.tx_size_left = fi_no_tx_size_left,
+	.rx_size_left = sock_rx_size_left,
+	.tx_size_left = sock_tx_size_left,
 };
 
 static int sock_verify_tx_attr(const struct fi_tx_attr *attr)
