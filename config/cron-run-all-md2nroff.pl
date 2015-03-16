@@ -116,7 +116,7 @@ foreach my $file (@markdown_files) {
 
     $man_file =~ s/\.md$//;
 
-    my $full_filename = "man/man$section/$man_file";
+    my $full_filename = "man$section/$man_file";
 
     my $out = `git status --porcelain $full_filename`;
     doit(0, "git add $full_filename")
