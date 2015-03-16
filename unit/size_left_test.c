@@ -359,10 +359,10 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, "f:p:")) != -1) {
 		switch (op) {
 		case 'f':
-			hints->fabric_attr->name = optarg;
+			hints->fabric_attr->name = strdup(optarg);
 			break;
 		case 'p':
-			hints->fabric_attr->prov_name = optarg;
+			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		default:
 			printf("usage: %s\n", argv[0]);

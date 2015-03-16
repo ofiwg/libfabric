@@ -1021,13 +1021,13 @@ int main(int argc, char **argv)
 			bad_address = optarg;
 			break;
 		case 'f':
-			hints->fabric_attr->name = optarg;
+			hints->fabric_attr->name = strdup(optarg);
 			break;
 		case 'n':
 			num_good_addr = atoi(optarg);
 			break;
 		case 'p':
-			hints->fabric_attr->prov_name = optarg;
+			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		default:
 			printf("usage: %s\n", argv[0]);
