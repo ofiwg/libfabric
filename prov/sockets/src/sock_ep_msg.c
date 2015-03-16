@@ -867,7 +867,7 @@ static void *sock_pep_listener_thread (void *data)
 	struct sock_ep *sock_ep;
 
 	socklen_t addr_len;
-	int ret, user_data_sz, entry_sz, timeout;
+	int ret = 0, user_data_sz, entry_sz, timeout;
 	char tmp = 0;
 
 	SOCK_LOG_INFO("Starting listener thread for PEP: %p\n", pep);

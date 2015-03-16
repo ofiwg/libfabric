@@ -180,7 +180,7 @@ static inline void sock_av_report_error(struct sock_av *av, void *context)
 
 static int sock_av_is_valid_address(struct sockaddr_in *addr)
 {
-	return addr->sin_family == AF_INET ? 1 : 0;
+	return addr->sin_family >= AF_INET ? 1 : 0;
 }
 
 static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,

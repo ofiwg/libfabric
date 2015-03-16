@@ -55,9 +55,11 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 	rx_entry = calloc(1, sizeof(*rx_entry));
 	if (!rx_entry)
 		return NULL;
-
+	
+	rx_entry->is_tagged = 0;
 	SOCK_LOG_INFO("New rx_entry: %p, ctx: %p\n", rx_entry, rx_ctx);
 	dlist_init(&rx_entry->entry);
+	
 	return rx_entry;
 }
 
@@ -93,6 +95,9 @@ struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,
 	
 	rx_ctx->buffered_len += len;
 	dlist_insert_tail(&rx_entry->entry, &rx_ctx->rx_buffered_list);
+	rx_entry->is_busy = 1;
+	rx_entry->is_tagged = 0;
+
 	return rx_entry;
 }
 
@@ -102,7 +107,8 @@ inline size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry)
 }
 
 struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx, 
-					uint64_t addr, uint64_t tag)
+					uint64_t addr, uint64_t tag, 
+					uint8_t op_type)
 {
 	struct dlist_entry *entry;
 	struct sock_rx_entry *rx_entry;
@@ -111,7 +117,7 @@ struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx,
 	     entry != &rx_ctx->rx_entry_list; entry = entry->next) {
 
 		rx_entry = container_of(entry, struct sock_rx_entry, entry);
-		if (rx_entry->is_busy)
+		if (rx_entry->is_busy || (op_type != rx_entry->is_tagged))
 			continue;
 
 		if (((rx_entry->tag & ~rx_entry->ignore) == (tag & ~rx_entry->ignore)) &&
@@ -123,6 +129,5 @@ struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx,
 			return rx_entry;
 		}
 	}
-
 	return NULL;
 }

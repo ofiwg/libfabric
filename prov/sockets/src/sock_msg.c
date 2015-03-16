@@ -65,7 +65,7 @@ static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_rx_entry *rx_entry;
 	struct sock_ep *sock_ep;
-
+	
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
@@ -96,6 +96,7 @@ static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			 msg->addr : FI_ADDR_UNSPEC;
 	rx_entry->data = msg->data;
 	rx_entry->ignore = ~0ULL;
+	rx_entry->is_tagged = 0;
 
 	for (i = 0; i< msg->iov_count; i++) {
 		rx_entry->iov[i].iov.addr = (uintptr_t) msg->msg_iov[i].iov_base;
@@ -339,7 +340,7 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_rx_entry *rx_entry;
 	struct sock_ep *sock_ep;
-
+	
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
@@ -361,6 +362,7 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 		return -FI_ENOMEM;
 	
 	flags |= rx_ctx->attr.op_flags;
+	flags &= ~FI_MULTI_RECV;
 	rx_entry->rx_op.op = SOCK_OP_TRECV;
 	rx_entry->rx_op.dest_iov_len = msg->iov_count;
 
@@ -371,6 +373,7 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	rx_entry->data = msg->data;
 	rx_entry->tag = msg->tag;
 	rx_entry->ignore = msg->ignore;
+	rx_entry->is_tagged = 1;
 
 	for (i=0; i< msg->iov_count; i++) {
 		rx_entry->iov[i].iov.addr = (uintptr_t) msg->msg_iov[i].iov_base;
@@ -379,6 +382,7 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	}
 
 	fastlock_acquire(&rx_ctx->lock);
+	SOCK_LOG_INFO("New rx_entry: %p (ctx: %p)\n", rx_entry, rx_ctx);
 	dlist_insert_tail(&rx_entry->entry, &rx_ctx->rx_entry_list);
 	fastlock_release(&rx_ctx->lock);
 	return 0;
@@ -431,7 +435,7 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	struct sock_conn *conn;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_ep *sock_ep;
-
+	
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);

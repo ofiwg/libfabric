@@ -450,6 +450,7 @@ struct sock_rx_entry {
 	uint8_t is_busy;
 	uint8_t is_claimed;
 	uint8_t is_complete;
+	uint8_t is_tagged;
 	uint8_t reserved[5];
 
 	uint64_t used;
@@ -932,7 +933,8 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx);
 struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,
 						 size_t len);
 struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx, 
-					uint64_t addr, uint64_t tag);
+					uint64_t addr, uint64_t tag, 
+					uint8_t op_type);
 size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry);
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry);
 

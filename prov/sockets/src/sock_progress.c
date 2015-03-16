@@ -159,7 +159,7 @@ static void sock_pe_report_tx_completion(struct sock_pe_entry *pe_entry)
 {
 	int ret1 = 0, ret2 = 0;
 
-	if (!(pe_entry->flags & SOCK_FLAG_NO_COMPLETION)) {
+	if (!(pe_entry->flags & FI_INJECT) || (pe_entry->flags & FI_COMPLETION)) {
 		if (pe_entry->comp->send_cq && 
 		    (!pe_entry->comp->send_cq_event || 
 		     (pe_entry->comp->send_cq_event && 
@@ -191,7 +191,7 @@ static void sock_pe_report_rx_completion(struct sock_pe_entry *pe_entry)
 	if (pe_entry->comp->recv_cq && 
 	    (!pe_entry->comp->recv_cq_event || 
 	     (pe_entry->comp->recv_cq_event && 
-	      (pe_entry->msg_hdr.flags & FI_COMPLETION)))) 
+	      (pe_entry->flags & FI_COMPLETION)))) 
 		ret1 = pe_entry->comp->recv_cq->report_completion(
 			pe_entry->comp->recv_cq, pe_entry->addr,
 			pe_entry);
@@ -263,7 +263,7 @@ static void sock_pe_report_remote_write(struct sock_rx_ctx *rx_ctx,
 
 static void sock_pe_report_write_completion(struct sock_pe_entry *pe_entry)
 {
-	if (!(pe_entry->flags & SOCK_FLAG_NO_COMPLETION)) {
+	if (!(pe_entry->flags & FI_INJECT) || (pe_entry->flags & FI_COMPLETION)) {
 		sock_pe_report_tx_completion(pe_entry);
 	
 		if (pe_entry->comp->write_cq && 
@@ -309,7 +309,7 @@ static void sock_pe_report_remote_read(struct sock_rx_ctx *rx_ctx,
 
 static void sock_pe_report_read_completion(struct sock_pe_entry *pe_entry)
 {
-	if (!(pe_entry->flags & SOCK_FLAG_NO_COMPLETION)) {
+	if (!(pe_entry->flags & FI_INJECT) || (pe_entry->flags & FI_COMPLETION)) {
 		sock_pe_report_tx_completion(pe_entry);
 		
 		if (pe_entry->comp->read_cq && 
@@ -1112,7 +1112,6 @@ err:
 	return -FI_EINVAL;
 }
 
-
 int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 {
 	struct dlist_entry *entry;
@@ -1133,11 +1132,12 @@ int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		if (!rx_buffered->is_complete)
 			continue;
 
-		rx_posted = sock_rx_get_entry(rx_ctx, rx_buffered->addr, 
-					      rx_buffered->tag);
+		rx_posted = sock_rx_get_entry(rx_ctx, rx_buffered->addr,
+						rx_buffered->tag, 
+						rx_buffered->is_tagged);
 		if (!rx_posted) 
 			continue;
-
+		
 		SOCK_LOG_INFO("Consuming buffered entry: %p, ctx: %p\n", 
 			      rx_buffered, rx_ctx);
 		SOCK_LOG_INFO("Consuming posted entry: %p, ctx: %p\n", 
@@ -1174,7 +1174,8 @@ int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		pe_entry.pe.rx.rx_iov[0].iov.addr = rx_posted->iov[0].iov.addr;
 		pe_entry.type = SOCK_PE_RX;
 		pe_entry.comp = rx_buffered->comp;
-		pe_entry.flags = 0;
+		pe_entry.flags = rx_posted->flags;
+		pe_entry.flags &= ~FI_MULTI_RECV;
 
 		if (rx_posted->flags & FI_MULTI_RECV) {
 			if (sock_rx_avail_len(rx_posted) < rx_ctx->min_multi_recv) {
@@ -1196,7 +1197,8 @@ int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		dlist_remove(&rx_buffered->entry);
 		sock_rx_release_entry(rx_buffered);
 
-		if (pe_entry.flags & FI_MULTI_RECV)
+		if ((!(rx_posted->flags & FI_MULTI_RECV) ||
+		     (pe_entry.flags & FI_MULTI_RECV)))
 			sock_rx_release_entry(rx_posted);
 	}
 	return 0;
@@ -1227,15 +1229,14 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 	}
 
 	if (pe_entry->done_len == len && !pe_entry->pe.rx.rx_entry) {
-
 		data_len = pe_entry->msg_hdr.msg_len - len;
 
 		fastlock_acquire(&rx_ctx->lock);
 		sock_pe_progress_buffered_rx(rx_ctx);
-		rx_entry = sock_rx_get_entry(rx_ctx, pe_entry->addr, pe_entry->tag);
-
-		SOCK_LOG_INFO("Consuming posted entry: %p\n", rx_entry);
 		
+		rx_entry = sock_rx_get_entry(rx_ctx, pe_entry->addr, pe_entry->tag, pe_entry->msg_hdr.op_type);
+		SOCK_LOG_INFO("Consuming posted entry: %p\n", rx_entry);	
+
 		if (!rx_entry) {
 			SOCK_LOG_INFO("%p: No matching recv, buffering recv (len=%llu)\n", 
 				      pe_entry, (long long unsigned int)data_len);
@@ -1252,6 +1253,10 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 			rx_entry->ignore = 0;
 			rx_entry->comp = pe_entry->comp;
 			pe_entry->context = rx_entry->context;
+			
+			if (pe_entry->msg_hdr.op_type == SOCK_OP_TSEND) {
+				rx_entry->is_tagged = 1;
+			}
 		}
 		fastlock_release(&rx_ctx->lock);
 		pe_entry->context = rx_entry->context;
@@ -1290,6 +1295,12 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 			return 0;
 	}
 
+	pe_entry->is_complete = 1;
+	rx_entry->is_complete = 1;
+	rx_entry->is_busy = 0;
+	pe_entry->flags = rx_entry->flags;
+	pe_entry->flags &= ~FI_MULTI_RECV;
+
 	fastlock_acquire(&rx_ctx->lock);
 	if (rx_entry->flags & FI_MULTI_RECV) {
 		if (sock_rx_avail_len(rx_entry) < rx_ctx->min_multi_recv) {
@@ -1301,10 +1312,6 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 			dlist_remove(&rx_entry->entry);
 	}
 	fastlock_release(&rx_ctx->lock);
-
-	pe_entry->is_complete = 1;
-	rx_entry->is_complete = 1;
-	rx_entry->is_busy = 0;
 
 	/* report error, if any */
 	if (rem) {
