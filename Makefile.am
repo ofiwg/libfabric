@@ -328,6 +328,11 @@ real_man_pages = \
         man/man3/fi_trigger.3 \
         man/man3/fi_version.3 \
         man/man7/fabric.7 \
+        man/man7/fi_provider.7 \
+        man/man7/fi_psm.7 \
+        man/man7/fi_sockets.7 \
+        man/man7/fi_usnic.7 \
+        man/man7/fi_verbs.7 \
         man/man7/fi_direct.7
 
 dummy_man_pages = \
