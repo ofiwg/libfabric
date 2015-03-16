@@ -36,7 +36,8 @@ There are two components to the libfabric software:
   fabric hardware devices and their software drivers are required to
   support this framework.  Devices and the drivers that plug into the
   libfabric framework are referred to as fabric providers, or simply
-  providers.  Provider details may be found in fi_prov.
+  providers.  Provider details may be found in
+  [`fi_provider`(7)](fi_provider.7.html).
 
 *Fabric Interfaces*
 : The second component is a set of communication operations.
@@ -45,22 +46,22 @@ There are two components to the libfabric software:
   all the interfaces that are defined; however, providers clearly
   indicate which interfaces they do support.
 
-  The fabric interfaces are designed such that they are cohesive and
-  not simply a union of disjoint interfaces.  The interfaces are
-  logically divided into two groups: control interfaces and
-  communication operations. The control interfaces are a common set of
-  operations that provide access to local communication resources,
-  such as address vectors and event queues.  The communication
-  operations expose particular models of communication and fabric
-  functionality, such as message queues, remote memory access, and
-  atomic operations.  Communication operations are associated with
-  fabric endpoints.
+# FABRIC INTERFACES
 
-  Applications will typically use the control interfaces to discover
-  local capabilities and allocate necessary resources.  They will then
-  allocate and configure a communication endpoint to send and receive
-  data, or perform other types of data transfers, with remote
-  endpoints.
+The fabric interfaces are designed such that they are cohesive and not
+simply a union of disjoint interfaces.  The interfaces are logically
+divided into two groups: control interfaces and communication
+operations. The control interfaces are a common set of operations that
+provide access to local communication resources, such as address
+vectors and event queues.  The communication operations expose
+particular models of communication and fabric functionality, such as
+message queues, remote memory access, and atomic operations.
+Communication operations are associated with fabric endpoints.
+
+Applications will typically use the control interfaces to discover
+local capabilities and allocate necessary resources.  They will then
+allocate and configure a communication endpoint to send and receive
+data, or perform other types of data transfers, with remote endpoints.
 
 # CONTROL INTERFACES
 
@@ -167,52 +168,9 @@ interfaces are defined by libfabric.
   operations are aware of the data formatting at the target memory
   region.
 
-# PROVIDER REQUIREMENTS
-
-Libfabric provides a general framework for supporting multiple types
-of fabric objects and their related interfaces.  Fabric providers have
-a large amount of flexibility in selecting which components they are
-able and willing to support, based on specific hardware constraints.
-To assist in the development of applications, libfabric specifies the
-following requirements that must be met by any fabric provider, if
-requested by an application.  (Note that the instantiation of a
-specific fabric object is subject to application configuration
-parameters and need not meet these requirements).
-
-* A fabric provider must support at least one endpoint type.
-* All endpoints must support the message queue data transfer
-  interface.
-* An endpoint that advertises support for a specific endpoint
-  capability must support the corresponding data transfer interface.
-* Endpoints must support operations to send and receive data for any
-  data transfer operations that they support.
-* Connectionless endpoints must support all relevant data
-  transfer routines. (send / recv / write / read / etc.)
-* Connectionless endpoints must support the CM interface getname.
-* Connectionless endpoints that support multicast operations must
-  support the CM interfaces join and leave.
-* Connection-oriented interfaces must support the CM interfaces
-  getname, getpeer, connect, listen, accept, reject, and shutdown.
-* All endpoints must support all relevant 'msg' data transfer
-  routines.  (sendmsg / recvmsg / writemsg / readmsg / etc.)
-* Access domains must support opening address vector maps and tables.
-* Address vectors associated with domains that may be identified using
-  IP addresses must support FI_SOCKADDR_IN and FI_SOCKADDR_IN6 input
-  formats.
-* Address vectors must support FI_ADDR, FI_ADDR_INDEX, and FI_AV
-  output formats.
-* Access domains must support opening completion queues and counters.
-* Completion queues must support the FI_CQ_FORMAT_CONTEXT and
-  FI_CQ_FORMAT_MSG formats.
-* Event queues associated with tagged message transfers must support
-  the FI_CQ_FORMAT_TAGGED format.
-* A provider is expected to be forward compatible, and must be able to
-  be compiled against expanded `fi_xxx_ops` structures that define new
-  functions added after the provider was written.  Any unknown
-  functions must be set to NULL.
-
 # SEE ALSO
 
+[`fi_provider`(7)](fi_provider.7.html),
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html),

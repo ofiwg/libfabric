@@ -39,29 +39,26 @@ int fi_close(struct fid *eq);
 
 int fi_control(struct fid *eq, int command, void *arg);
 
-int fi_eq_read(struct fid_eq *eq, uint32_t *event,
+ssize_t fi_eq_read(struct fid_eq *eq, uint32_t *event,
     void *buf, size_t len, uint64_t flags);
 
-int fi_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
-    size_t len, uint64_t flags);
+ssize_t fi_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
+    uint64_t flags);
 
-int fi_eq_write(struct fid_eq *eq, uint32_t event,
+ssize_t fi_eq_write(struct fid_eq *eq, uint32_t event,
     const void *buf, size_t len, uint64_t flags);
 
-int fi_eq_sread(struct fid_eq *eq, uint32_t *event,
+ssize_t fi_eq_sread(struct fid_eq *eq, uint32_t *event,
     void *buf, size_t len, int timeout, uint64_t flags);
 
 const char * fi_eq_strerror(struct fid_eq *eq, int prov_errno,
-      const void *err_data, void *buf, size_t len);
+      const void *err_data, char *buf, size_t len);
 {% endhighlight %}
 
 # ARGUMENTS
 
 *fabric*
 : Opened fabric descriptor
-
-*domain*
-: Open resource domain
 
 *eq*
 : Event queue
@@ -275,7 +272,7 @@ struct fi_eq_entry {
 struct fi_eq_cm_entry {
 	fid_t            fid;        /* fid associated with request */
 	struct fi_info  *info;       /* endpoint information */
-	uint8_t         data[0];     /* app connection data */
+	uint8_t         data[];     /* app connection data */
 };
 {% endhighlight %}
 
@@ -305,7 +302,7 @@ struct fi_eq_cm_entry {
   underlying connection protocol, and the length of any data returned
   may include protocol padding.  As a result, the returned length may
   be larger than that specified by the connecting peer.
-  
+
   If a connection request has been accepted, an FI_CONNECTED event will
   be generated on both sides of the connection.  The active side -- one
   that called fi_connect() -- may receive user data as part of the
@@ -352,7 +349,6 @@ struct fi_eq_err_entry {
 	fid_t            fid;        /* fid associated with error */
 	void            *context;    /* operation context */
 	uint64_t         data;       /* completion-specific data */
-	uint32_t         index;      /* index for vector ops */
 	int              err;        /* positive error code */
 	int              prov_errno; /* provider error code */
 	void            *err_data;   /* additional error data */
@@ -387,8 +383,8 @@ fi_eq_open
 : Returns 0 on success.  On error, a negative value corresponding to
   fabric errno is returned.
 
-fi_eq_read / fi_eq_readerr  
-fi_eq_sread  
+fi_eq_read / fi_eq_readerr
+fi_eq_sread
 fi_eq_write
 : On success, returns the number of bytes read from or written to the
   event queue.  On error, a negative value corresponding to fabric
