@@ -299,7 +299,24 @@ static ssize_t sock_ep_inject(struct fid_ep *ep, const void *buf, size_t len,
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 
-	return sock_ep_sendmsg(ep, &msg, FI_INJECT | SOCK_FLAG_NO_COMPLETION);
+	return sock_ep_sendmsg(ep, &msg, FI_INJECT);
+}
+
+static ssize_t	sock_ep_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+			   uint64_t data, fi_addr_t dest_addr)
+{
+	struct fi_msg msg;
+	struct iovec msg_iov;
+
+	msg_iov.iov_base = (void*)buf;
+	msg_iov.iov_len = len;	
+	msg.msg_iov = &msg_iov;
+
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	msg.data = data;
+
+	return sock_ep_sendmsg(ep, &msg, FI_REMOTE_CQ_DATA | FI_INJECT);
 }
 
 struct fi_ops_msg sock_ep_msg_ops = {
@@ -312,7 +329,7 @@ struct fi_ops_msg sock_ep_msg_ops = {
 	.sendmsg = sock_ep_sendmsg,
 	.inject = sock_ep_inject,
 	.senddata = sock_ep_senddata,
-	.injectdata = fi_no_msg_injectdata,
+	.injectdata = sock_ep_injectdata
 };
 
 static ssize_t sock_ep_trecvmsg(struct fid_ep *ep, 
@@ -558,8 +575,27 @@ static ssize_t sock_ep_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 	msg.tag = tag;
-	return sock_ep_tsendmsg(ep, &msg, FI_INJECT | SOCK_FLAG_NO_COMPLETION);
+	return sock_ep_tsendmsg(ep, &msg, FI_INJECT);
 }
+
+static ssize_t	sock_ep_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
+				    uint64_t data, fi_addr_t dest_addr, uint64_t tag)
+{
+	struct fi_msg_tagged msg;
+	struct iovec msg_iov;
+
+	msg_iov.iov_base = (void*)buf;
+	msg_iov.iov_len = len;
+	msg.msg_iov = &msg_iov;
+
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	msg.data = data;
+	msg.tag = tag;
+
+	return sock_ep_tsendmsg(ep, &msg, FI_REMOTE_CQ_DATA | FI_INJECT);
+}
+
 
 static ssize_t sock_ep_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
 				uint64_t flags, fi_addr_t *src_addr, size_t *len, 
@@ -629,7 +665,7 @@ struct fi_ops_tagged sock_ep_tagged = {
 	.sendmsg = sock_ep_tsendmsg,
 	.inject = sock_ep_tinject,
 	.senddata = sock_ep_tsenddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.injectdata = sock_ep_tinjectdata,
 	.search = sock_ep_tsearch,
 };
 
