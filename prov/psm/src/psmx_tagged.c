@@ -412,17 +412,22 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 
 	if (flags & FI_INJECT) {
-		fi_context = malloc(sizeof(*fi_context) + len);
-		if (!fi_context)
-			return -FI_ENOMEM;
+		if (len > PSMX_INJECT_SIZE)
+			return -FI_EMSGSIZE;
 
-		memcpy((void *)fi_context + sizeof(*fi_context), buf, len);
-		buf = (void *)fi_context + sizeof(*fi_context);
+		err = psm_mq_send(ep_priv->domain->psm_mq, psm_epaddr, 0,
+				  psm_tag, buf, len);
 
-		PSMX_CTXT_TYPE(fi_context) = PSMX_INJECT_CONTEXT;
-		PSMX_CTXT_EP(fi_context) = ep_priv;
+		if (err != PSM_OK)
+			return psmx_errno(err);
+
+		if (ep_priv->send_cntr)
+			psmx_cntr_inc(ep_priv->send_cntr);
+
+		return 0;
 	}
-	else if (ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION) && !context) {
+
+	if (ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION) && !context) {
 		fi_context = &ep_priv->nocomp_send_context;
 	}
 	else {
@@ -589,30 +594,26 @@ ssize_t psmx_tagged_inject_no_flag_av_map(struct fid_ep *ep, const void *buf, si
 {
 	struct psmx_fid_ep *ep_priv;
 	psm_epaddr_t psm_epaddr;
-	psm_mq_req_t psm_req;
 	uint64_t psm_tag;
-	struct fi_context *fi_context;
 	int err;
+
+	if (len > PSMX_INJECT_SIZE)
+		return -FI_EMSGSIZE;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	psm_epaddr = (psm_epaddr_t) dest_addr;
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 
-	fi_context = malloc(sizeof(*fi_context) + len);
-	if (!fi_context)
-		return -FI_ENOMEM;
+	err = psm_mq_send(ep_priv->domain->psm_mq, psm_epaddr, 0, psm_tag, buf, len);
 
-	memcpy((void *)fi_context + sizeof(*fi_context), buf, len);
-	buf = (void *)fi_context + sizeof(*fi_context);
+	if (err != PSM_OK)
+		return psmx_errno(err);
 
-	PSMX_CTXT_TYPE(fi_context) = PSMX_INJECT_CONTEXT;
-	PSMX_CTXT_EP(fi_context) = ep_priv;
+	if (ep_priv->send_cntr)
+		psmx_cntr_inc(ep_priv->send_cntr);
 
-	err = psm_mq_isend(ep_priv->domain->psm_mq, psm_epaddr, 0,
-			   psm_tag, buf, len, (void*)fi_context, &psm_req);
-
-	return psmx_errno(err);
+	return 0;
 }
 
 ssize_t psmx_tagged_inject_no_flag_av_table(struct fid_ep *ep, const void *buf, size_t len,
@@ -621,11 +622,12 @@ ssize_t psmx_tagged_inject_no_flag_av_table(struct fid_ep *ep, const void *buf, 
 	struct psmx_fid_ep *ep_priv;
 	struct psmx_fid_av *av;
 	psm_epaddr_t psm_epaddr;
-	psm_mq_req_t psm_req;
 	uint64_t psm_tag;
-	struct fi_context *fi_context;
 	int err;
 	size_t idx;
+
+	if (len > PSMX_INJECT_SIZE)
+		return -FI_EMSGSIZE;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
@@ -637,20 +639,15 @@ ssize_t psmx_tagged_inject_no_flag_av_table(struct fid_ep *ep, const void *buf, 
 	psm_epaddr = av->psm_epaddrs[idx];
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 
-	fi_context = malloc(sizeof(*fi_context) + len);
-	if (!fi_context)
-		return -FI_ENOMEM;
+	err = psm_mq_send(ep_priv->domain->psm_mq, psm_epaddr, 0, psm_tag, buf, len);
 
-	memcpy((void *)fi_context + sizeof(*fi_context), buf, len);
-	buf = (void *)fi_context + sizeof(*fi_context);
+	if (err != PSM_OK)
+		return psmx_errno(err);
 
-	PSMX_CTXT_TYPE(fi_context) = PSMX_INJECT_CONTEXT;
-	PSMX_CTXT_EP(fi_context) = ep_priv;
+	if (ep_priv->send_cntr)
+		psmx_cntr_inc(ep_priv->send_cntr);
 
-	err = psm_mq_isend(ep_priv->domain->psm_mq, psm_epaddr, 0,
-			   psm_tag, buf, len, (void*)fi_context, &psm_req);
-
-	return psmx_errno(err);
+	return 0;
 }
 
 static ssize_t psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,

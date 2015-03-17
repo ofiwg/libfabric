@@ -246,17 +246,22 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 	psm_tag = ep_priv->domain->psm_epid | PSMX_MSG_BIT;
 
 	if (flags & FI_INJECT) {
-		fi_context = malloc(sizeof(*fi_context) + len);
-		if (!fi_context)
-			return -FI_ENOMEM;
+		if (len > PSMX_INJECT_SIZE)
+			return -FI_EMSGSIZE;
 
-		memcpy((void *)fi_context + sizeof(*fi_context), buf, len);
-		buf = (void *)fi_context + sizeof(*fi_context);
+		err = psm_mq_send(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
+				  psm_tag, buf, len);
 
-		PSMX_CTXT_TYPE(fi_context) = PSMX_INJECT_CONTEXT;
-		PSMX_CTXT_EP(fi_context) = ep_priv;
+		if (err != PSM_OK)
+			return psmx_errno(err);
+
+		if (ep_priv->send_cntr)
+			psmx_cntr_inc(ep_priv->send_cntr);
+
+		return 0;
 	}
-	else if (ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION) && !context) {
+
+	if (ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION) && !context) {
 		fi_context = &ep_priv->nocomp_send_context;
 	}
 	else {
