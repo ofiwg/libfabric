@@ -405,7 +405,7 @@ PSM_INI
 
 	psmx_env.name_server	= psmx_get_int_env("OFI_PSM_NAME_SERVER", 1);
 	psmx_env.am_msg		= psmx_get_int_env("OFI_PSM_AM_MSG", 0);
-	psmx_env.tagged_rma	= psmx_get_int_env("OFI_PSM_TAGGED_RMA", 0);
+	psmx_env.tagged_rma	= psmx_get_int_env("OFI_PSM_TAGGED_RMA", 1);
 	psmx_env.warning	= psmx_get_int_env("OFI_PSM_WARNING", 1);
 	psmx_env.uuid		= getenv("OFI_PSM_UUID");
 	if (!psmx_env.uuid)
