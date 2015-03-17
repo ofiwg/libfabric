@@ -1,4 +1,4 @@
-dnl Configry specific to the libfabrics usNIC provider
+dnl Configury specific to the libfabric usNIC provider
 
 dnl
 dnl Check for libnl; prefer version 3 instead of version 1.  Abort (i.e.,
