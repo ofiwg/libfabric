@@ -157,6 +157,16 @@ A fabric identifier.
 
 The name of the underlying fabric provider.
 
+For debugging and administrative purposes, environment variables can be used
+to control which fabric providers will be registered with libfabric.
+Specifying "FI_PROVIDER=foo,bar" will allow any providers with the names "foo"
+or "bar" to be registered.  Similarly, specifying "FI_PROVIDER=^foo,bar" will
+prevent any providers with the names "foo" or "bar" from being registered.
+Providers which are not registered will not appear in fi_getinfo results.
+Applications which need a specific set of providers should implement
+their own filtering of fi_getinfo's results rather than relying on these
+environment variables in a production setting.
+
 ## prov_version
 
 Version information for the fabric provider.
