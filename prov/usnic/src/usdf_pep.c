@@ -405,7 +405,7 @@ usdf_pep_close(fid_t fid)
 
 	usdf_pep_free_cr_lists(pep);
 	close(pep->pep_sock);
-	if (&pep->pep_eq != NULL) {
+	if (pep->pep_eq != NULL) {
 		atomic_dec(&pep->pep_eq->eq_refcnt);
 	}
 	atomic_dec(&pep->pep_fabric->fab_refcnt);
