@@ -185,7 +185,7 @@ interfaces enables a provider to eliminate lower-level locks.
   queue to access different data flows.
 
 *FI_THREAD_COMPLETION*
-  The completion threading model is intended for providers that make use
+: The completion threading model is intended for providers that make use
   of manual progress.  Applications must serialize access to all objects
   that are associated through the use of having a shared completion
   structure.  This includes endpoint, completion queue, counter, wait set,
