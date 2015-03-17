@@ -85,8 +85,6 @@ enum psmx_context_type {
 	PSMX_TRECV_CONTEXT,
 	PSMX_WRITE_CONTEXT,
 	PSMX_READ_CONTEXT,
-	PSMX_INJECT_CONTEXT,
-	PSMX_INJECT_WRITE_CONTEXT,
 	PSMX_REMOTE_WRITE_CONTEXT,
 	PSMX_REMOTE_READ_CONTEXT,
 };
@@ -490,8 +488,6 @@ struct psmx_fid_ep {
 	uint64_t		caps;
 	struct fi_context	nocomp_send_context;
 	struct fi_context	nocomp_recv_context;
-	struct fi_context	sendimm_context;
-	struct fi_context	writeimm_context;
 	size_t			min_multi_recv;
 };
 

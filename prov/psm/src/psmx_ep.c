@@ -326,10 +326,6 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	PSMX_CTXT_EP(&ep_priv->nocomp_send_context) = ep_priv;
 	PSMX_CTXT_TYPE(&ep_priv->nocomp_recv_context) = PSMX_NOCOMP_RECV_CONTEXT;
 	PSMX_CTXT_EP(&ep_priv->nocomp_recv_context) = ep_priv;
-	PSMX_CTXT_TYPE(&ep_priv->sendimm_context) = PSMX_INJECT_CONTEXT;
-	PSMX_CTXT_EP(&ep_priv->sendimm_context) = ep_priv;
-	PSMX_CTXT_TYPE(&ep_priv->writeimm_context) = PSMX_INJECT_WRITE_CONTEXT;
-	PSMX_CTXT_EP(&ep_priv->writeimm_context) = ep_priv;
 
 	if (ep_cap & FI_TAGGED)
 		ep_priv->ep.tagged = &psmx_tagged_ops;
