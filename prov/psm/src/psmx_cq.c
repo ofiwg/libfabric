@@ -349,16 +349,6 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				tmp_cntr = tmp_ep->read_cntr;
 				break;
 
-			case PSMX_INJECT_CONTEXT:
-				tmp_cntr = tmp_ep->send_cntr;
-				free(fi_context);
-				break;
-
-			case PSMX_INJECT_WRITE_CONTEXT:
-				tmp_cntr = tmp_ep->write_cntr;
-				free(fi_context);
-				break;
-
 			case PSMX_SEND_CONTEXT:
 			case PSMX_TSEND_CONTEXT:
 				tmp_cq = tmp_ep->send_cq;

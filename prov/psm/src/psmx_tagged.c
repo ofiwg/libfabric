@@ -435,12 +435,10 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 			return -FI_EINVAL;
 
 		fi_context = context;
-		if (fi_context != &ep_priv->sendimm_context) {
-			user_fi_context = 1;
-			PSMX_CTXT_TYPE(fi_context) = PSMX_TSEND_CONTEXT;
-			PSMX_CTXT_USER(fi_context) = (void *)buf;
-			PSMX_CTXT_EP(fi_context) = ep_priv;
-		}
+		user_fi_context = 1;
+		PSMX_CTXT_TYPE(fi_context) = PSMX_TSEND_CONTEXT;
+		PSMX_CTXT_USER(fi_context) = (void *)buf;
+		PSMX_CTXT_EP(fi_context) = ep_priv;
 	}
 
 	err = psm_mq_isend(ep_priv->domain->psm_mq, psm_epaddr, 0,
