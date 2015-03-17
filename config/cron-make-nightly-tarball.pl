@@ -75,12 +75,12 @@ sub doit {
     my $cmd = shift;
     my $stdout_file = shift;
 
-    # Redirect stdout if requested or not verbose
+    # Redirect stdout if requested
     if (defined $stdout_file) {
         $stdout_file = "$logfile_dir_arg/$stdout_file.log";
         unlink($stdout_file);
         $cmd .= " >$stdout_file";
-    } elsif (!$verbose_arg) {
+    } elsif (!$verbose_arg && $cmd !~ />/) {
         $cmd .= " >/dev/null";
     }
     $cmd .= " 2>&1";
