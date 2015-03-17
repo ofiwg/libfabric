@@ -427,7 +427,7 @@ struct sock_ep {
 	struct sockaddr_in *dest_addr;
 
 	struct sockaddr_in cm_addr;
-	fid_t peer_fid;
+	uint64_t peer_fid;
 	uint16_t key;
 	int is_disabled;
 	struct sock_cm_entry cm;
@@ -729,8 +729,8 @@ struct sock_conn_hdr {
 	uint8_t type;
 	uint8_t reserved[3];
 	int32_t s_port;
-	fid_t c_fid;
-	fid_t s_fid;
+	uint64_t source_id;
+	uint64_t target_id;
 };
 
 struct sock_conn_req {
