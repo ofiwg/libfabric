@@ -42,7 +42,6 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag, psm_tagsel;
 	struct fi_context *fi_context;
-	int user_fi_context = 0;
 	int err;
 	int recv_flag = 0;
 	size_t idx;
@@ -99,7 +98,6 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 			return -FI_EINVAL;
 
 		fi_context = context;
-		user_fi_context = 1;
 		if (flags & FI_MULTI_RECV) {
 			struct psmx_multi_recv *req;
 
@@ -131,7 +129,7 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	if (user_fi_context)
+	if (fi_context == context)
 		PSMX_CTXT_REQ(fi_context) = psm_req;
 
 	return 0;
@@ -201,7 +199,6 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag;
 	struct fi_context * fi_context;
-	int user_fi_context = 0;
 	int err;
 	size_t idx;
 
@@ -269,7 +266,6 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 			return -FI_EINVAL;
 
 		fi_context = context;
-		user_fi_context = 1;
 		PSMX_CTXT_TYPE(fi_context) = PSMX_SEND_CONTEXT;
 		PSMX_CTXT_USER(fi_context) = (void *)buf;
 		PSMX_CTXT_EP(fi_context) = ep_priv;
@@ -281,7 +277,7 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
-	if (user_fi_context)
+	if (fi_context == context)
 		PSMX_CTXT_REQ(fi_context) = psm_req;
 
 	return 0;
