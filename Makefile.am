@@ -216,7 +216,7 @@ _usnic_files = \
 
 _usnic_cppflags = \
         -D__LIBUSNIC__ \
-        -DHAVE_LIBNL3=$(HAVE_LIBNL3) $(usnic_libnl_CPPFLAGS) \
+        -DHAVE_LIBNL3=$(HAVE_LIBNL3) $(usnic_nl_CPPFLAGS) \
         -I$(top_srcdir)/prov/usnic/src/usnic_direct
 
 rdmainclude_HEADERS += \
@@ -226,13 +226,16 @@ if HAVE_USNIC_DL
 pkglib_LTLIBRARIES += libusnic-fi.la
 libusnic_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(_usnic_cppflags)
 libusnic_fi_la_SOURCES = $(_usnic_files) $(common_srcs)
-libusnic_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
-libusnic_fi_la_LIBADD = $(linkback) $(usnic_libnl_LIBS)
+libusnic_fi_la_LDFLAGS = \
+        $(usnic_ln_LDFLAGS) \
+        -module -avoid-version -shared -export-dynamic
+libusnic_fi_la_LIBADD = $(linkback) $(usnic_nl_LIBS)
 libusnic_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_USNIC_DL
 src_libfabric_la_SOURCES += $(_usnic_files)
 src_libfabric_la_CPPFLAGS += $(_usnic_cppflags)
-src_libfabric_la_LIBADD += $(usnic_libnl_LIBS)
+src_libfabric_la_LDFLAGS += $(usnic_nl_LDFLAGS)
+src_libfabric_la_LIBADD += $(usnic_nl_LIBS)
 endif !HAVE_USNIC_DL
 
 endif HAVE_USNIC
