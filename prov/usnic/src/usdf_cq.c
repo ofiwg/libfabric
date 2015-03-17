@@ -653,7 +653,7 @@ static struct fi_ops_cq usdf_cq_context_ops = {
 	.write = fi_no_cq_write,
 	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread,
-	.sreadfrom = fi_no_cq_readfrom,
+	.sreadfrom = fi_no_cq_sreadfrom,
 	.strerror = usdf_cq_strerror,
 };
 
@@ -665,7 +665,7 @@ static struct fi_ops_cq usdf_cq_context_soft_ops = {
 	.write = fi_no_cq_write,
 	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread_soft,
-	.sreadfrom = fi_no_cq_readfrom,
+	.sreadfrom = fi_no_cq_sreadfrom,
 	.strerror = usdf_cq_strerror,
 };
 
@@ -677,7 +677,7 @@ static struct fi_ops_cq usdf_cq_msg_ops = {
 	.write = fi_no_cq_write,
 	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread,
-	.sreadfrom = fi_no_cq_readfrom,
+	.sreadfrom = fi_no_cq_sreadfrom,
 	.strerror = usdf_cq_strerror,
 };
 
@@ -689,7 +689,7 @@ static struct fi_ops_cq usdf_cq_msg_soft_ops = {
 	.write = fi_no_cq_write,
 	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread,
-	.sreadfrom = fi_no_cq_readfrom,
+	.sreadfrom = fi_no_cq_sreadfrom,
 	.strerror = usdf_cq_strerror,
 };
 
@@ -701,7 +701,7 @@ static struct fi_ops_cq usdf_cq_data_ops = {
 	.write = fi_no_cq_write,
 	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread,
-	.sreadfrom = fi_no_cq_readfrom,
+	.sreadfrom = fi_no_cq_sreadfrom,
 	.strerror = usdf_cq_strerror,
 };
 
@@ -713,7 +713,7 @@ static struct fi_ops_cq usdf_cq_data_soft_ops = {
 	.write = fi_no_cq_write,
 	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread,
-	.sreadfrom = fi_no_cq_readfrom,
+	.sreadfrom = fi_no_cq_sreadfrom,
 	.strerror = usdf_cq_strerror,
 };
 
