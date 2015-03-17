@@ -1,4 +1,4 @@
-.TH fi_domain 3 "2015\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_domain 3 "2015\-03\-17" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_domain - Open a fabric access domain
@@ -174,8 +174,8 @@ Conceptualy, FI_THREAD_ENDPOINT maps well to providers that implement
 fabric services in hardware but use a single command queue to access
 different data flows.
 .PP
-\f[I]FI_THREAD_COMPLETION\f[] The completion threading model is intended
-for providers that make use of manual progress.
+\f[I]FI_THREAD_COMPLETION\f[] : The completion threading model is
+intended for providers that make use of manual progress.
 Applications must serialize access to all objects that are associated
 through the use of having a shared completion structure.
 This includes endpoint, completion queue, counter, wait set, and poll
