@@ -687,7 +687,7 @@ static void *sock_msg_ep_listener_thread (void *data)
 
 			sock_ep_enable(&ep->ep);
 			if (sock_eq_report_event(ep->eq, FI_CONNECTED, cm_entry,
-						 entry_sz, 0))
+						 entry_sz, 0) < 0)
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
 			break;
 
@@ -719,7 +719,7 @@ static void *sock_msg_ep_listener_thread (void *data)
 			if (sock_eq_report_event(sock_ep->eq, FI_ECONNREFUSED, 
 						 cm_err_entry, 
 						 sizeof(*cm_err_entry) + 
-						 user_data_sz, 0)) 
+						 user_data_sz, 0) < 0) 
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
 			free(cm_err_entry);
 			goto out;
@@ -742,7 +742,7 @@ static void *sock_msg_ep_listener_thread (void *data)
 
 			sock_ep->cm.shutdown_received = 1;
 			if (sock_eq_report_event(ep->eq, FI_SHUTDOWN, cm_entry,
-						 entry_sz, 0))
+						 entry_sz, 0) < 0)
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
 			goto out;
 
@@ -1122,7 +1122,7 @@ static void *sock_pep_listener_thread (void *data)
 			conn_req = NULL;
 			
 			if (sock_eq_report_event(pep->eq, FI_CONNREQ, cm_entry,
-						 entry_sz, 0))
+						 entry_sz, 0) < 0)
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
 			break;
 
@@ -1140,7 +1140,7 @@ static void *sock_pep_listener_thread (void *data)
 			
 			sock_ep->cm.shutdown_received = 1;
 			if (sock_eq_report_event(sock_ep->eq, FI_SHUTDOWN, cm_entry,
-						 entry_sz, 0))
+						 entry_sz, 0) < 0)
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
 			break;
 
