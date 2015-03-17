@@ -1597,6 +1597,7 @@ static struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops = {
 	.write		= fi_ibv_msg_ep_atomic_write,
 	.writev		= fi_ibv_msg_ep_atomic_writev,
 	.writemsg	= fi_ibv_msg_ep_atomic_writemsg,
+	.inject		= fi_no_atomic_inject,
 	.readwrite	= fi_ibv_msg_ep_atomic_readwrite,
 	.readwritev	= fi_ibv_msg_ep_atomic_readwritev,
 	.readwritemsg	= fi_ibv_msg_ep_atomic_readwritemsg,
@@ -1777,6 +1778,8 @@ static struct fi_ops_ep fi_ibv_msg_ep_base_ops = {
 	.cancel = fi_no_cancel,
 	.getopt = fi_ibv_msg_ep_getopt,
 	.setopt = fi_ibv_msg_ep_setopt,
+	.tx_ctx = fi_no_tx_ctx,
+	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
 	.tx_size_left = fi_no_tx_size_left,
 };
@@ -2355,6 +2358,7 @@ static struct fi_ops_cq fi_ibv_cq_context_ops = {
 	.write = fi_no_cq_write,
 	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
+	.sreadfrom = fi_no_cq_sreadfrom,
 	.strerror = fi_ibv_cq_strerror
 };
 
@@ -2366,6 +2370,7 @@ static struct fi_ops_cq fi_ibv_cq_msg_ops = {
 	.write = fi_no_cq_write,
 	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
+	.sreadfrom = fi_no_cq_sreadfrom,
 	.strerror = fi_ibv_cq_strerror
 };
 
@@ -2377,6 +2382,7 @@ static struct fi_ops_cq fi_ibv_cq_data_ops = {
 	.write = fi_no_cq_write,
 	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
+	.sreadfrom = fi_no_cq_sreadfrom,
 	.strerror = fi_ibv_cq_strerror
 };
 
@@ -2642,8 +2648,11 @@ static struct fi_ops_domain fi_ibv_domain_ops = {
 	.av_open = fi_no_av_open,
 	.cq_open = fi_ibv_cq_open,
 	.endpoint = fi_ibv_open_ep,
+	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = fi_no_cntr_open,
 	.poll_open = fi_no_poll_open,
+	.stx_ctx = fi_no_stx_context,
+	.srx_ctx = fi_no_srx_context,
 };
 
 static int

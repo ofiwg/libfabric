@@ -726,6 +726,7 @@ static struct fi_ops psmx_fi_ops = {
 	.close = psmx_cq_close,
 	.bind = fi_no_bind,
 	.control = psmx_cq_control,
+	.ops_open = fi_no_ops_open,
 };
 
 static struct fi_ops_cq psmx_cq_ops = {

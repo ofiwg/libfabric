@@ -391,6 +391,7 @@ int sock_cq_close(struct fid *fid)
 }
 
 struct fi_ops_cq sock_cq_ops = {
+	.size = sizeof(struct fi_ops_cq),
 	.read = sock_cq_read,
 	.readfrom = sock_cq_readfrom,
 	.readerr = sock_cq_readerr,
@@ -437,8 +438,10 @@ static int sock_cq_control(struct fid *fid, int command, void *arg)
 
 struct fi_ops sock_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.control = sock_cq_control,
 	.close = sock_cq_close,
+	.bind = fi_no_bind,
+	.control = sock_cq_control,
+	.ops_open = fi_no_ops_open,
 };
 
 static int sock_cq_verify_attr(struct fi_cq_attr *attr)

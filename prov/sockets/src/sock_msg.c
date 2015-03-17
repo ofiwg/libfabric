@@ -322,6 +322,7 @@ struct fi_ops_msg sock_ep_msg_ops = {
 	.sendmsg = sock_ep_sendmsg,
 	.inject = sock_ep_inject,
 	.senddata = sock_ep_senddata,
+	.injectdata = fi_no_msg_injectdata,
 };
 
 static ssize_t sock_ep_trecvmsg(struct fid_ep *ep, 
@@ -647,6 +648,7 @@ struct fi_ops_tagged sock_ep_tagged = {
 	.sendmsg = sock_ep_tsendmsg,
 	.inject = sock_ep_tinject,
 	.senddata = sock_ep_tsenddata,
+	.injectdata = fi_no_tagged_injectdata,
 	.search = sock_ep_tsearch,
 };
 

@@ -429,6 +429,8 @@ static struct fi_ops_ep usdf_pep_base_ops = {
 	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
+	.rx_size_left = fi_no_rx_size_left,
+	.tx_size_left = fi_no_tx_size_left,
 };
 
 static struct fi_ops_cm usdf_pep_cm_ops = {
