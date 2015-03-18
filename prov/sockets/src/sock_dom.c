@@ -144,6 +144,7 @@ static int sock_dom_close(struct fid *fid)
 	fastlock_destroy(&dom->r_cmap.lock);
 
 	sock_pe_finalize(dom->pe);
+	sock_fabric_remove_service(dom->fab, atoi(dom->service));
 	fastlock_destroy(&dom->lock);
 	free(dom);
 	return 0;
@@ -422,8 +423,10 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context)
 {
 	struct sock_domain *sock_domain;
+	struct sock_fabric *fab;
 	int ret;
 
+	fab = container_of(fabric, struct sock_fabric, fab_fid);
 	if(info && info->domain_attr){
 		ret = sock_verify_domain_attr(info->domain_attr);
 		if(ret)
@@ -438,15 +441,23 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	atomic_init(&sock_domain->ref, 0);
 
 	if(info && info->src_addr) {
+
 		if (getnameinfo(info->src_addr, info->src_addrlen, NULL, 0,
 				sock_domain->service, sizeof(sock_domain->service),
 				NI_NUMERICSERV)) {
 			SOCK_LOG_ERROR("could not resolve src_addr\n");
 			goto err;
 		}
+
 		sock_domain->info = *info;
 		memcpy(&sock_domain->src_addr, info->src_addr, 
 		       sizeof(struct sockaddr_in));
+
+		if (!sock_fabric_check_service(fab, atoi(sock_domain->service))) {
+			memset(sock_domain->service, 0, NI_MAXSERV);
+			((struct sockaddr_in*)&sock_domain->src_addr)->sin_port = 0;
+		}
+
 	} else {
 		SOCK_LOG_ERROR("invalid fi_info\n");
 		goto err;
@@ -482,6 +493,8 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	while(!(volatile int)sock_domain->listening)
 		pthread_yield();
 
+	sock_domain->fab = fab;
+	sock_fabric_add_service(fab, atoi(sock_domain->service));
 	*dom = &sock_domain->dom_fid;
 	return 0;
 

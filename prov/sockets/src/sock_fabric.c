@@ -156,6 +156,7 @@ static int sock_fabric_close(fid_t fid)
 		return -FI_EBUSY;
 	}
 
+	fastlock_destroy(&fab->lock);
 	free(fab);
 	return 0;
 }
@@ -179,6 +180,9 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	fab = calloc(1, sizeof(*fab));
 	if (!fab)
 		return -FI_ENOMEM;
+
+	fastlock_init(&fab->lock);
+	dlist_init(&fab->service_list);
 	
 	fab->fab_fid.fid.fclass = FI_CLASS_FABRIC;
 	fab->fab_fid.fid.context = context;
@@ -187,6 +191,55 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	*fabric = &fab->fab_fid;
 	atomic_init(&fab->ref, 0);
 	return 0;
+}
+
+int sock_fabric_check_service(struct sock_fabric *fab, int service)
+{
+	struct dlist_entry *entry;
+	struct sock_service_entry *service_entry;
+
+	fastlock_acquire(&fab->lock);
+	for (entry = fab->service_list.next; entry != &fab->service_list;
+	     entry = entry->next) {
+		service_entry = container_of(entry, 
+					     struct sock_service_entry, entry);
+		if (service_entry->service == service) {
+			fastlock_release(&fab->lock);
+			return 0;
+		}
+	}
+	fastlock_release(&fab->lock);
+	return 1;
+}
+
+void sock_fabric_add_service(struct sock_fabric *fab, int service)
+{
+	struct sock_service_entry *entry;
+
+	entry = calloc(1, sizeof *entry);
+	entry->service = service;
+
+	fastlock_acquire(&fab->lock);
+	dlist_insert_tail(&entry->entry, &fab->service_list);
+	fastlock_release(&fab->lock);
+}
+
+void sock_fabric_remove_service(struct sock_fabric *fab, int service)
+{
+	struct dlist_entry *entry;
+	struct sock_service_entry *service_entry;
+
+	fastlock_acquire(&fab->lock);
+	for (entry = fab->service_list.next; entry != &fab->service_list;
+	     entry = entry->next) {
+		service_entry = container_of(entry, struct sock_service_entry, entry);
+		if (service_entry->service == service) {
+			dlist_remove(entry);
+			free(service_entry);
+			break;
+		}
+	}
+	fastlock_release(&fab->lock);
 }
 
 static int sock_get_src_addr(struct sockaddr_in *dest_addr,
@@ -208,7 +261,6 @@ static int sock_get_src_addr(struct sockaddr_in *dest_addr,
 	}
 
 	ret = getsockname(sock, (struct sockaddr *) src_addr, &len);
-	//src_addr->sin_port = 0;
 	if (ret) {
 		SOCK_LOG_ERROR("getsockname failed\n");
 		ret = -errno;
@@ -240,10 +292,6 @@ static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags
 			return -FI_ENODATA;
 		}
 		src_addr = (struct sockaddr_in *) rai->ai_addr;
-/*
-		if (service == NULL)
-			src_addr->sin_port = 0;
-*/
 
 		if (hints && hints->dest_addr)
 			dest_addr = hints->dest_addr;

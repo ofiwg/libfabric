@@ -116,17 +116,22 @@
 
 #define SOCK_MODE (0)
 
-#define SOCK_FLAG_NO_COMPLETION (1ULL << 60)
-
 #define SOCK_COMM_BUF_SZ (SOCK_EP_MAX_MSG_SZ)
 #define SOCK_COMM_THRESHOLD (128 * 1024)
 
 #define SOCK_MAJOR_VERSION 1
 #define SOCK_MINOR_VERSION 0
 
+struct sock_service_entry {
+	int service;
+	struct dlist_entry entry;
+};
+
 struct sock_fabric {
 	struct fid_fabric fab_fid;
 	atomic_t ref;
+	struct dlist_entry service_list;
+	fastlock_t lock;
 };
 
 struct sock_conn {
@@ -794,6 +799,9 @@ int sock_msg_getinfo(uint32_t version, const char *node, const char *service,
 
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context);
+void sock_fabric_add_service(struct sock_fabric *fab, int service);
+void sock_fabric_remove_service(struct sock_fabric *fab, int service);
+int sock_fabric_check_service(struct sock_fabric *fab, int service);
 
 
 int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
