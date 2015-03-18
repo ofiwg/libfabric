@@ -328,8 +328,8 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0,
-			&fi_ctx_recv);
+	/* Post the first recv buffer */
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
 		return ret;
@@ -517,6 +517,7 @@ static int run(void)
 	}
 
 	wait_for_completion_tagged(scq, max_credits - credits);
+	/* Finalize before closing ep */
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);

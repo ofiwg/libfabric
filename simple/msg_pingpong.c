@@ -264,9 +264,12 @@ static int bind_ep_res(void)
 	}
 
 	ret = fi_enable(ep);
-	if (ret)
+	if (ret) {
+		FT_PRINTERR("fi_enable", ret);
 		return ret;
+	}
 
+	/* Post the first recv buffer */
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
@@ -526,6 +529,7 @@ static int run(void)
 	}
 
 	ret = wait_for_completion(scq, max_credits - credits);
+	/* Finalize before closing ep */
 	ft_finalize(ep, scq, rcq, FI_ADDR_UNSPEC);
 out:
 	fi_shutdown(ep, 0);

@@ -296,6 +296,7 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
+	/* Post the first recv buffer */
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
@@ -505,6 +506,7 @@ static int run(void)
 
 	while (credits < max_credits)
 		poll_all_sends();
+	
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	ret = fi_close(&ep->fid);

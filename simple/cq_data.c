@@ -183,11 +183,7 @@ static int bind_ep_res(void)
 	ret = fi_enable(ep);
 	if (ret)
 		return ret;
-
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
-	if (ret)
-		FT_PRINTERR("fi_recv", ret);
-
+	
 	return ret;
 }
 
@@ -273,6 +269,9 @@ static int server_connect(void)
 		goto err1;
 	}
 
+	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
+	info->tx_attr->op_flags = FI_REMOTE_COMPLETE;
+	
 	ret = fi_endpoint(dom, info, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
@@ -350,6 +349,9 @@ static int client_connect(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
 	}
+	
+	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
+	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
@@ -475,7 +477,6 @@ static int run(void)
 
 	run_test();
 
-	ft_finalize(ep, scq, rcq, FI_ADDR_UNSPEC);
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);
 	free_ep_res();

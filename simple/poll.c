@@ -284,7 +284,9 @@ static int init_fabric(void)
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, fi->dest_addr, addrlen);
 	}
-
+	
+	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
+	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
@@ -512,7 +514,6 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	ft_finalize(ep, scq, rcq, remote_fi_addr);
 	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);

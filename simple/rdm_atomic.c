@@ -486,6 +486,17 @@ static int bind_ep_res(void)
 	}
 
 	ret = fi_enable(ep);
+	if(ret) {
+		FT_PRINTERR("fi_enable", ret);
+		return ret;
+	}
+	
+	/* Post the first recv buffer */
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
 
 	return ret;
 }
@@ -627,7 +638,7 @@ static int init_av(void)
 		if (ret)
 			return ret;
 	}
-	
+
 	return ret;	
 }
 
@@ -696,7 +707,7 @@ static int run(void)
 		if (ret)
 			goto out;
 	}
-
+	/* Finalize before closing ep */
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);

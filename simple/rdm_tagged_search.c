@@ -258,6 +258,13 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
+	/* Post a recv buffer for synchronization */
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
+
 	return ret;
 }
 
@@ -308,7 +315,8 @@ static int init_fabric(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
-
+	
+	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
@@ -497,7 +505,7 @@ static int run(void)
 		if (ret)
 			goto out;
 	}
-	
+	/* Finalize before closing ep */
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);

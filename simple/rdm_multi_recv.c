@@ -571,7 +571,7 @@ static int run(void)
 		goto out;
 
 	ret = run_test();	
-	
+	/* Finalize before closing ep */
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);
