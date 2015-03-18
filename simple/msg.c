@@ -246,13 +246,13 @@ static int server_connect(void)
 		return (int) rd;
 	}
 
+	info = entry.info;
 	if (event != FI_CONNREQ) {
 		fprintf(stderr, "Unexpected CM event %d\n", event);
 		ret = -FI_EOTHER;
 		goto err1;
 	}
 
-	info = entry.info;
 	ret = fi_domain(fab, info, &dom, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
