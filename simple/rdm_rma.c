@@ -279,7 +279,8 @@ static int alloc_ep_res(struct fi_info *fi)
 		break;
 	default:
 		/* Impossible to reach here */
-		assert(0);
+		FT_PRINTERR("invalid op_type", ret);
+		exit(1);
 	}
 	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)), 
 			access_mode, 0, 0, 0, &mr, NULL);
