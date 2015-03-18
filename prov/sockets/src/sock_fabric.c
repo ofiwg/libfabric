@@ -208,6 +208,7 @@ static int sock_get_src_addr(struct sockaddr_in *dest_addr,
 	}
 
 	ret = getsockname(sock, (struct sockaddr *) src_addr, &len);
+	src_addr->sin_port = 0;
 	if (ret) {
 		SOCK_LOG_ERROR("getsockname failed\n");
 		ret = -errno;
@@ -239,6 +240,9 @@ static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags
 			return -FI_ENODATA;
 		}
 		src_addr = (struct sockaddr_in *) rai->ai_addr;
+		if (service == NULL)
+			src_addr->sin_port = 0;
+
 		if (hints && hints->dest_addr)
 			dest_addr = hints->dest_addr;
 	} else {
@@ -314,6 +318,11 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 
 	if (!node && !service && !hints) {
 		flags |= FI_SOURCE;
+		gethostname(hostname, sizeof hostname);
+		node = hostname;
+	}
+
+	if (!node && !service && !(flags & FI_SOURCE)) {
 		gethostname(hostname, sizeof hostname);
 		node = hostname;
 	}

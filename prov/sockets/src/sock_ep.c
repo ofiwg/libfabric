@@ -1131,18 +1131,18 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 	if (!info)
 		return NULL;
 	
-	info->src_addr = calloc(1, sizeof(struct sockaddr_in));
-	info->dest_addr = calloc(1, sizeof(struct sockaddr_in));
-	
+	info->src_addr = calloc(1, sizeof(struct sockaddr_in));	
 	info->mode = SOCK_MODE;
 	info->addr_format = FI_SOCKADDR_IN;
-	info->dest_addrlen = info->src_addrlen = sizeof(struct sockaddr_in);
 
 	if (src_addr)
 		memcpy(info->src_addr, src_addr, sizeof(struct sockaddr_in));
 	
-	if (dest_addr)
+	if (dest_addr) {
+		info->dest_addr = calloc(1, sizeof(struct sockaddr_in));
+		info->dest_addrlen = info->src_addrlen = sizeof(struct sockaddr_in);
 		memcpy(info->dest_addr, dest_addr, sizeof(struct sockaddr_in));
+	}
 
 	if (hints) {
 		if (hints->caps)
