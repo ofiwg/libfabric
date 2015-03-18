@@ -2173,7 +2173,7 @@ static void *sock_pe_progress_thread(void *data)
 	struct sock_pe *pe = (struct sock_pe *)data;
 
 	SOCK_LOG_INFO("Progress thread started\n");
-	while (pe->do_progress) {
+	while (*((volatile int*)&pe->do_progress)) {
 
 		/* FIXME */
 		if (sock_progress_thread_wait) {

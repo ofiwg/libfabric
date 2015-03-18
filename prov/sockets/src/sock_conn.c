@@ -341,7 +341,7 @@ static void *_sock_conn_listen(void *arg)
 	poll_fds[0].fd = listen_fd;
 	poll_fds[1].fd = domain->signal_fds[1];
 	poll_fds[0].events = poll_fds[1].events = POLLIN;
- 	while (domain->listening) {
+ 	while (*((volatile int*)&domain->listening)) {
 		if (poll(poll_fds, 2, -1) > 0) {
 			if (poll_fds[1].revents & POLLIN) {
 				ret = read(domain->signal_fds[1], &tmp, 1);

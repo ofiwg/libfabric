@@ -429,12 +429,11 @@ static void *sock_msg_ep_listener_thread(void *data)
 		return NULL;
 	}
 
-	ep->cm.do_listen = 1;	
 	poll_fds[0].fd = ep->cm.sock;
 	poll_fds[1].fd = ep->cm.signal_fds[1];
 	poll_fds[0].events = poll_fds[1].events = POLLIN;
 
-	while ((volatile int) ep->cm.do_listen) {
+	while (*((volatile int*) &ep->cm.do_listen)) {
 		timeout = dlist_empty(&ep->cm.msg_list) ? -1 : SOCK_CM_COMM_TIMEOUT;
 		if ((ret = poll(poll_fds, 2, timeout)) > 0) {
 			if (poll_fds[1].revents & POLLIN) {
@@ -772,6 +771,7 @@ int sock_msg_ep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		return ret;
 
+	endpoint->cm.do_listen = 1;	
 	if (pthread_create(&endpoint->cm.listener_thread, NULL, 
 			   sock_msg_ep_listener_thread, endpoint)) {
 		SOCK_LOG_ERROR("Couldn't create listener thread\n");
@@ -880,7 +880,7 @@ static void *sock_pep_listener_thread (void *data)
 	poll_fds[0].fd = pep->cm.sock;
 	poll_fds[1].fd = pep->cm.signal_fds[1];
 	poll_fds[0].events = poll_fds[1].events = POLLIN;
-	while((volatile int)pep->cm.do_listen) {
+	while(*((volatile int*)&pep->cm.do_listen)) {
 		timeout = dlist_empty(&pep->cm.msg_list) ? -1 : SOCK_CM_COMM_TIMEOUT;
 		if (poll(poll_fds, 2, timeout) > 0) {
 			if (poll_fds[1].revents & POLLIN) {
