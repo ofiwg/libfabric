@@ -79,13 +79,13 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, "f:p:n:")) != -1) {
 		switch (op) {
 		case 'f':
-			fabric_hints.name = optarg;
+			fabric_hints.name = strdup(optarg);
 			break;
 		case 'n':
 			num_domains = atoi(optarg);
 			break;
 		case 'p':
-			fabric_hints.prov_name = optarg;
+			fabric_hints.prov_name = strdup(optarg);
 			break;
 		default:
 			printf("usage: %s\n", argv[0]);
