@@ -361,8 +361,8 @@ static void sock_ep_cm_handle_ack(struct sock_cm_entry *cm,
 	struct sock_cm_msg_list_entry *msg_entry;
 	struct fi_eq_cm_entry cm_entry;
 	struct sock_ep *sock_ep;
-	struct fid_ep *fid_ep;
 
+	sock_ep = container_of(cm, struct sock_ep, cm);
 	fastlock_acquire(&cm->lock);
 	for (entry = cm->msg_list.next; entry != &cm->msg_list;) {
 
@@ -373,10 +373,7 @@ static void sock_ep_cm_handle_ack(struct sock_cm_entry *cm,
 		if (msg_hdr->msg_id == hdr->msg_id) {
 			if (msg_hdr->type == SOCK_CONN_SHUTDOWN) {
 				memset(&cm_entry, 0, sizeof cm_entry);
-				cm_entry.fid = (fid_t)msg_hdr->source_id;
-				fid_ep = container_of(msg_hdr->source_id, struct fid_ep, fid);
-				sock_ep = container_of(fid_ep, struct sock_ep, ep);
-
+				cm_entry.fid = &sock_ep->ep.fid;
 				if (sock_ep->cm.shutdown_received)
 					break;
 
@@ -397,7 +394,7 @@ static void sock_ep_cm_handle_ack(struct sock_cm_entry *cm,
 static void *sock_msg_ep_listener_thread(void *data)
 {
 	struct pollfd poll_fds[2];
-	struct sock_ep *ep = data;
+	struct sock_ep *ep = (struct sock_ep*)data;
 	struct sock_conn_response *conn_response;
 	struct fi_eq_cm_entry *cm_entry;
 	struct fi_eq_err_entry *cm_err_entry;
@@ -405,8 +402,6 @@ static void *sock_msg_ep_listener_thread(void *data)
 	struct sockaddr_in from_addr;
 	socklen_t addr_len;
 	int ret, user_data_sz, entry_sz, timeout;
-	struct fid_ep *fid_ep;
-	struct sock_ep *sock_ep;
 	char tmp = 0;
 
 	ep->cm.sock = sock_ep_cm_create_socket();
@@ -482,23 +477,16 @@ static void *sock_msg_ep_listener_thread(void *data)
 
 			entry_sz = sizeof(*cm_entry) + user_data_sz;
 			memset(cm_entry, 0, sizeof *cm_entry);
-			cm_entry->fid = (fid_t)conn_response->hdr.source_id;
+			cm_entry->fid = &ep->ep.fid;
 
 			memcpy(&cm_entry->data, &conn_response->user_data,
 			       user_data_sz);
 
-			fid_ep = container_of(conn_response->hdr.source_id, 
-					      struct fid_ep, fid);
-			sock_ep = container_of(fid_ep, struct sock_ep, ep);
-
-			if (sock_ep->is_disabled || 
-			    sock_ep->cm.shutdown_received)
+			if (ep->is_disabled || ep->cm.shutdown_received)
 				break;
 
-			sock_ep->peer_fid = conn_response->hdr.target_id;
-			sock_ep->connected = 1;
-
-			((struct sockaddr_in*) sock_ep->dest_addr)->sin_port =
+			ep->connected = 1;
+			((struct sockaddr_in*) ep->dest_addr)->sin_port =
 				conn_response->hdr.s_port;
 
 			sock_ep_enable(&ep->ep);
@@ -509,12 +497,7 @@ static void *sock_msg_ep_listener_thread(void *data)
 		case SOCK_CONN_REJECT:
 			SOCK_LOG_INFO("Received SOCK_CONN_REJECT\n");
 			
-			fid_ep = container_of(conn_response->hdr.source_id, 
-					      struct fid_ep, fid);
-			sock_ep = container_of(fid_ep, struct sock_ep, ep);
-
-			if (sock_ep->is_disabled || 
-			    sock_ep->cm.shutdown_received)
+			if (ep->is_disabled || ep->cm.shutdown_received)
 				break;
 
 			cm_err_entry = calloc(1, sizeof(*cm_err_entry) + user_data_sz);
@@ -524,14 +507,14 @@ static void *sock_msg_ep_listener_thread(void *data)
 			}
 
 			memset(cm_err_entry, 0, sizeof(*cm_err_entry) + user_data_sz);
-			cm_err_entry->fid = (fid_t)conn_response->hdr.source_id;
+			cm_err_entry->fid = &ep->ep.fid;
 			cm_err_entry->err = -FI_ECONNREFUSED;
 
 			if (user_data_sz > 0)
 				memcpy(cm_err_entry->err_data,
 				       &conn_response->user_data, user_data_sz);
 			
-			if (sock_eq_report_event(sock_ep->eq, FI_ECONNREFUSED,
+			if (sock_eq_report_event(ep->eq, FI_ECONNREFUSED,
 						 cm_err_entry,
 						 sizeof(*cm_err_entry) +
 						 user_data_sz, 0)) 
@@ -594,8 +577,6 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	req->hdr.type = SOCK_CONN_REQ;
 	req->hdr.msg_id = _ep->cm.next_msg_id++;
 	req->ep_id = _ep->ep_id;
-	req->hdr.source_id = (uint64_t)&ep->fid;
-	req->hdr.target_id = 0;
 	req->info = _ep->info;
 	memcpy(&req->src_addr, _ep->src_addr, sizeof(req->src_addr));
 	memcpy(&req->dest_addr, _ep->info.dest_addr, sizeof(req->dest_addr));
@@ -658,12 +639,10 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 
 	addr = &req->from_addr;
 	memcpy(&_ep->cm_addr, addr, sizeof(*addr));
-	_ep->peer_fid = req->hdr.source_id;
 
 	_ep->rem_ep_id = req->ep_id;
 	response->hdr.type = SOCK_CONN_ACCEPT;
 	req->hdr.msg_id = _ep->cm.next_msg_id++;
-	response->hdr.target_id = (uint64_t)&ep->fid;
 	response->hdr.s_port = htons(atoi(_ep->domain->service));
 
 	if (sock_ep_cm_enqueue_msg(&_ep->cm, addr, response, 
@@ -693,8 +672,6 @@ int sock_ep_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 	_ep = container_of(ep, struct sock_ep, ep);
 	memset(&response, 0, sizeof(response));
 
-	response.hdr.target_id = (uint64_t)_ep->peer_fid;
-	response.hdr.source_id = (uint64_t)&ep->fid;
 	response.hdr.type = SOCK_CONN_SHUTDOWN;
 	response.hdr.msg_id = _ep->cm.next_msg_id++;
 
@@ -859,12 +836,9 @@ static void *sock_pep_listener_thread (void *data)
 {
 	struct sock_pep *pep = (struct sock_pep *)data;
 	struct sock_conn_req *conn_req = NULL;
-	struct sock_conn_response *conn_response = NULL;
 	struct fi_eq_cm_entry *cm_entry;
 	struct sockaddr_in from_addr;
 	struct pollfd poll_fds[2];
-	struct fid_ep *fid_ep;
-	struct sock_ep *sock_ep;
 
 	socklen_t addr_len;
 	int ret = 0, user_data_sz, entry_sz, timeout;
@@ -954,18 +928,11 @@ static void *sock_pep_listener_thread (void *data)
 
 		case SOCK_CONN_SHUTDOWN:
 			SOCK_LOG_INFO("Received SOCK_CONN_SHUTDOWN\n");
-			conn_response = (struct sock_conn_response*)conn_req;
 
 			entry_sz = sizeof(*cm_entry);
-			cm_entry->fid = (fid_t)conn_response->hdr.target_id;
-			fid_ep = container_of(conn_response->hdr.target_id, 
-					      struct fid_ep, fid);
-			sock_ep = container_of(fid_ep, struct sock_ep, ep);
-			if (sock_ep->cm.shutdown_received)
-				break;
-			
-			sock_ep->cm.shutdown_received = 1;
-			if (sock_eq_report_event(sock_ep->eq, FI_SHUTDOWN, cm_entry,
+			cm_entry->fid = &pep->pep.fid;
+
+			if (sock_eq_report_event(pep->eq, FI_SHUTDOWN, cm_entry,
 						 entry_sz, 0))
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
 			break;
@@ -1088,7 +1055,6 @@ static int sock_pep_reject(struct fid_pep *pep, fi_connreq_t connreq,
 	addr = &req->from_addr;
 	response->hdr.type = SOCK_CONN_REJECT;
 	req->hdr.msg_id = _pep->cm.next_msg_id++;
-	response->hdr.target_id = 0;
 
 	if (sock_ep_cm_enqueue_msg(&_pep->cm, addr, req, 
 				   sizeof(struct sock_conn_response))) {

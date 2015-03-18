@@ -740,8 +740,6 @@ struct sock_conn_hdr {
 	uint8_t reserved[3];
 	int32_t s_port;
 	uint64_t msg_id;
-	uint64_t source_id;
-	uint64_t target_id;
 };
 
 struct sock_conn_req {
