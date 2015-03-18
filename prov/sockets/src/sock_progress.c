@@ -2003,32 +2003,32 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx)
 {
-	fastlock_acquire(&pe->lock);
+	fastlock_acquire(&pe->list_lock);
 	dlistfd_insert_tail(&ctx->pe_entry, &pe->tx_list);
-	fastlock_release(&pe->lock);
+	fastlock_release(&pe->list_lock);
 	SOCK_LOG_INFO("TX ctx added to PE\n");
 }
 
 void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx)
 {
-	fastlock_acquire(&pe->lock);
+	fastlock_acquire(&pe->list_lock);
 	dlistfd_insert_tail(&ctx->pe_entry, &pe->rx_list);
-	fastlock_release(&pe->lock);
+	fastlock_release(&pe->list_lock);
 	SOCK_LOG_INFO("RX ctx added to PE\n");
 }
 
 void sock_pe_remove_tx_ctx(struct sock_tx_ctx *tx_ctx)
 {
-	fastlock_acquire(&tx_ctx->domain->pe->lock);
+	fastlock_acquire(&tx_ctx->domain->pe->list_lock);
 	dlist_remove(&tx_ctx->pe_entry);
-	fastlock_release(&tx_ctx->domain->pe->lock);
+	fastlock_release(&tx_ctx->domain->pe->list_lock);
 }
 
 void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx)
 {
-	fastlock_acquire(&rx_ctx->domain->pe->lock);
+	fastlock_acquire(&rx_ctx->domain->pe->list_lock);
 	dlist_remove(&rx_ctx->pe_entry);
-	fastlock_release(&rx_ctx->domain->pe->lock);
+	fastlock_release(&rx_ctx->domain->pe->list_lock);
 }
 
 int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
@@ -2182,7 +2182,7 @@ static void *sock_pe_progress_thread(void *data)
 		}
 		
 		if (!dlistfd_empty(&pe->tx_list)) {
-			/* TODO: how is this list protected? */
+			fastlock_acquire(&pe->list_lock);
 			for (entry = pe->tx_list.list.next;
 			     entry != &pe->tx_list.list; entry = entry->next) {
 				tx_ctx = container_of(entry, struct sock_tx_ctx,
@@ -2190,13 +2190,15 @@ static void *sock_pe_progress_thread(void *data)
 				ret = sock_pe_progress_tx_ctx(pe, tx_ctx);
 				if (ret < 0) {
 					SOCK_LOG_ERROR("failed to progress TX\n");
+					fastlock_release(&pe->list_lock);
 					return NULL;
 				}
 			}
+			fastlock_release(&pe->list_lock);
 		}
 
 		if (!dlistfd_empty(&pe->rx_list)) {
-			/* TODO: how is this list protected? */
+			fastlock_acquire(&pe->list_lock);
 			for (entry = pe->rx_list.list.next;
 			     entry != &pe->rx_list.list; entry = entry->next) {
 				rx_ctx = container_of(entry, struct sock_rx_ctx,
@@ -2204,9 +2206,11 @@ static void *sock_pe_progress_thread(void *data)
 				ret = sock_pe_progress_rx_ctx(pe, rx_ctx);
 				if (ret < 0) {
 					SOCK_LOG_ERROR("failed to progress RX\n");
+					fastlock_release(&pe->list_lock);
 					return NULL;
 				}
 			}
+			fastlock_release(&pe->list_lock);
 		}
 	}
 	
@@ -2244,6 +2248,7 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 	dlistfd_head_init(&pe->tx_list);
 	dlistfd_head_init(&pe->rx_list);
 	fastlock_init(&pe->lock);
+	fastlock_init(&pe->list_lock);
 	pe->domain = domain;
 
 	if (domain->progress_mode == FI_PROGRESS_AUTO) {
@@ -2273,6 +2278,7 @@ void sock_pe_finalize(struct sock_pe *pe)
 	}
 	
 	fastlock_destroy(&pe->lock);
+	fastlock_destroy(&pe->list_lock);
 	dlistfd_head_free(&pe->tx_list);
 	dlistfd_head_free(&pe->rx_list);
 	free(pe);
