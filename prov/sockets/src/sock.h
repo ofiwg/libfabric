@@ -380,6 +380,7 @@ struct sock_cm_entry {
 	int sock;
 	int do_listen;
 	int signal_fds[2];
+	uint64_t next_msg_id;
 	fastlock_t lock;
 	int shutdown_received;
 	pthread_t listener_thread;
@@ -719,7 +720,10 @@ struct sock_cq {
 };
 
 struct sock_cm_msg_list_entry {
-	size_t msg_len;
+	uint64_t msg_len;
+	uint8_t retry;
+	uint8_t reserved[7];
+	uint64_t timestamp_ms;
 	struct sockaddr_in addr;
 	struct dlist_entry entry;
 	char msg[0];
@@ -729,6 +733,7 @@ struct sock_conn_hdr {
 	uint8_t type;
 	uint8_t reserved[3];
 	int32_t s_port;
+	uint64_t msg_id;
 	uint64_t source_id;
 	uint64_t target_id;
 };
@@ -758,6 +763,7 @@ enum {
 	SOCK_CONN_ACCEPT,
 	SOCK_CONN_REJECT,
 	SOCK_CONN_SHUTDOWN,
+	SOCK_CONN_ACK
 };
 
 int sock_verify_info(struct fi_info *hints);
