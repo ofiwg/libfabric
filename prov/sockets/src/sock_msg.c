@@ -300,7 +300,7 @@ static ssize_t sock_ep_inject(struct fid_ep *ep, const void *buf, size_t len,
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 
-	return sock_ep_sendmsg(ep, &msg, FI_INJECT);
+	return sock_ep_sendmsg(ep, &msg, FI_INJECT | SOCK_NO_COMPLETION);
 }
 
 static ssize_t	sock_ep_injectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -317,7 +317,8 @@ static ssize_t	sock_ep_injectdata(struct fid_ep *ep, const void *buf, size_t len
 	msg.addr = dest_addr;
 	msg.data = data;
 
-	return sock_ep_sendmsg(ep, &msg, FI_REMOTE_CQ_DATA | FI_INJECT);
+	return sock_ep_sendmsg(ep, &msg, FI_REMOTE_CQ_DATA | FI_INJECT | 
+			       SOCK_NO_COMPLETION);
 }
 
 struct fi_ops_msg sock_ep_msg_ops = {
@@ -360,7 +361,8 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	rx_entry = sock_rx_new_entry(rx_ctx);
 	if (!rx_entry)
 		return -FI_ENOMEM;
-	
+
+	SOCK_LOG_INFO("TRECV: [tag: %p, addr: %p]\n", msg->tag, msg->addr);
 	flags |= rx_ctx->attr.op_flags;
 	flags &= ~FI_MULTI_RECV;
 	rx_entry->rx_op.op = SOCK_OP_TRECV;
@@ -450,6 +452,7 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
+	SOCK_LOG_INFO("TSEND: [tag: %p, addr: %p]\n", msg->tag, msg->addr);
 	assert(tx_ctx->enabled && msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT);
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
@@ -579,7 +582,7 @@ static ssize_t sock_ep_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 	msg.tag = tag;
-	return sock_ep_tsendmsg(ep, &msg, FI_INJECT);
+	return sock_ep_tsendmsg(ep, &msg, FI_INJECT | SOCK_NO_COMPLETION);
 }
 
 static ssize_t	sock_ep_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -597,7 +600,8 @@ static ssize_t	sock_ep_tinjectdata(struct fid_ep *ep, const void *buf, size_t le
 	msg.data = data;
 	msg.tag = tag;
 
-	return sock_ep_tsendmsg(ep, &msg, FI_REMOTE_CQ_DATA | FI_INJECT);
+	return sock_ep_tsendmsg(ep, &msg, FI_REMOTE_CQ_DATA | FI_INJECT |
+				SOCK_NO_COMPLETION);
 }
 
 

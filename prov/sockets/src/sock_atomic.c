@@ -304,7 +304,7 @@ static ssize_t sock_ep_atomic_inject(struct fid_ep *ep, const void *buf, size_t 
 	msg.op = op;
 	msg.data = 0;
 
-	return sock_ep_atomic_writemsg(ep, &msg, FI_INJECT);
+	return sock_ep_atomic_writemsg(ep, &msg, FI_INJECT | SOCK_NO_COMPLETION);
 }
 
 static ssize_t sock_ep_atomic_readwritemsg(struct fid_ep *ep, 

@@ -432,7 +432,7 @@ static ssize_t sock_ep_rma_inject(struct fid_ep *ep, const void *buf,
 	msg.msg_iov = &msg_iov;
 	msg.addr = dest_addr;
 
-	return sock_ep_rma_writemsg(ep, &msg, FI_INJECT);
+	return sock_ep_rma_writemsg(ep, &msg, FI_INJECT | SOCK_NO_COMPLETION);
 }
 
 static ssize_t sock_ep_rma_injectdata(struct fid_ep *ep, const void *buf, 
@@ -457,7 +457,8 @@ static ssize_t sock_ep_rma_injectdata(struct fid_ep *ep, const void *buf,
 	msg.msg_iov = &msg_iov;
 	msg.addr = dest_addr;
 	msg.data = data;
-	return sock_ep_rma_writemsg(ep, &msg, FI_INJECT | FI_REMOTE_CQ_DATA);
+	return sock_ep_rma_writemsg(ep, &msg, FI_INJECT | FI_REMOTE_CQ_DATA |
+		SOCK_NO_COMPLETION);
 }
 
 
