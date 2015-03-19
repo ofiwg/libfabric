@@ -61,7 +61,7 @@ libfabric interface.
 
 These extensions are available via the "fi_ext_usnic.h" header file.
 
-The following is an example of how to utilize the "usnic getinfo"
+The following is an example of how to utilize the usnic "fabric getinfo"
 extension, which returns IP and SR-IOV information about a usNIC
 interface obtained from the [`fi_getinfo`(3)](fi_getinfo.3.html)
 function.
@@ -70,7 +70,8 @@ function.
 #include <stdio.h>
 #include <rdma/fabric.h>
 
-/* The usNIC extensions are all in the rdma/fi_ext_usnic.h header */
+/* The usNIC extensions are all in the
+   rdma/fi_ext_usnic.h header */
 #include <rdma/fi_ext_usnic.h>
 
 int main(int argc, char *argv[]) {
@@ -97,14 +98,16 @@ int main(int argc, char *argv[]) {
         struct fid_fabric *fabric;
         fi_fabric(info->fabric_attr, &fabric, NULL);
 
-        /* Pass FI_USNIC_FABRIC_OPS_1 to get usnic ops on the fabric */
+        /* Pass FI_USNIC_FABRIC_OPS_1 to get usnic ops
+           on the fabric */
         struct fi_usnic_ops_fabric *usnic_fabric_ops;
         fi_open_ops(&fabric->fid, FI_USNIC_FABRIC_OPS_1, 0,
                 (void **) &usnic_fabric_ops, NULL);
 
-        /* Now use the returned usnic ops structure to call usnic
-           extensions.  The following extension queries some IP and
-           SR-IOV characteristics about the usNIC device. */
+        /* Now use the returned usnic ops structure to call
+           usnic extensions.  The following extension queries
+           some IP and SR-IOV characteristics about the
+           usNIC device. */
         struct fi_usnic_info usnic_info;
         usnic_fabric_ops->getinfo(FI_EXT_USNIC_INFO_VERSION,
                                   fabric, &usnic_info);
@@ -129,7 +132,16 @@ int main(int argc, char *argv[]) {
 }
 {% endhighlight %}
 
+Note that other usnic extensions are defined for other fabric objects.
+The second argument to [`fi_open_ops`(3)](fi_open_ops.3.html) is used
+to identify both the fid type and the extension family.  For example,
+*FI_USNIC_AV_OPS_1* can be used in conjunction with an `fi_av` fid
+to obtain usnic extensions for address vectors.
+
+See fi_ext_usnic.h for more details.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
+[`fi_open_ops`(3)](fi_open_ops.3.html),
 [`fi_provider`(7)](fi_provider.7.html),
