@@ -187,7 +187,11 @@ static inline void atomic_init(atomic_t *atomic, int value)
 
 static inline int atomic_get(atomic_t *atomic)
 {
-	return atomic->val;
+	int v;
+	fastlock_acquire(&atomic->lock);
+	v = atomic->val;
+	fastlock_release(&atomic->lock);
+	return v;
 }
 
 #endif // HAVE_ATOMICS
