@@ -58,7 +58,7 @@ extern "C" {
 			 FI_RMA | FI_MULTI_RECV | \
                          FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
-                         FI_REMOTE_COMPLETE | FI_REMOTE_SIGNAL | \
+                         FI_REMOTE_SIGNAL | \
 			 FI_CANCEL | FI_TRIGGER | \
 			 FI_DYNAMIC_MR | \
 			 PSMX_CAP_EXT)

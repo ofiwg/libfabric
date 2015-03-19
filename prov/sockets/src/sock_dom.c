@@ -46,6 +46,8 @@ const struct fi_domain_attr sock_domain_attr = {
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
+	.resource_mgmt = FI_RM_ENABLED,
+	.av_type = FI_AV_UNSPEC,
 	.mr_key_size = sizeof(uint16_t),
 	.cq_data_size = sizeof(uint64_t),
 	.ep_cnt = SOCK_EP_MAX_EP_CNT,
@@ -57,15 +59,15 @@ const struct fi_domain_attr sock_domain_attr = {
 
 int sock_verify_domain_attr(struct fi_domain_attr *attr)
 {
-	if(!attr)
+	if (!attr)
 		return 0;
 
-	if(attr->name){
+	if (attr->name) {
 		if (strcmp(attr->name, sock_dom_name))
 			return -FI_ENODATA;
 	}
 
-	switch(attr->threading){
+	switch (attr->threading) {
 	case FI_THREAD_UNSPEC:
 	case FI_THREAD_SAFE:
 	case FI_THREAD_FID:
@@ -78,38 +80,36 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	switch (attr->control_progress){
+	switch (attr->control_progress) {
 	case FI_PROGRESS_UNSPEC:
 	case FI_PROGRESS_AUTO:
 	case FI_PROGRESS_MANUAL:
 		break;
-
 	default:
 		SOCK_LOG_INFO("Control progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
 
-	switch (attr->data_progress){
+	switch (attr->data_progress) {
 	case FI_PROGRESS_UNSPEC:
 	case FI_PROGRESS_AUTO:
 	case FI_PROGRESS_MANUAL:
 		break;
-
 	default:
 		SOCK_LOG_INFO("Data progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
 	
-	if(attr->cq_data_size > sock_domain_attr.cq_data_size)
+	if (attr->cq_data_size > sock_domain_attr.cq_data_size)
 		return -FI_ENODATA;
 
-	if(attr->ep_cnt > sock_domain_attr.ep_cnt)
+	if (attr->ep_cnt > sock_domain_attr.ep_cnt)
 		return -FI_ENODATA;
 
-	if(attr->max_ep_tx_ctx > sock_domain_attr.max_ep_tx_ctx)
+	if (attr->max_ep_tx_ctx > sock_domain_attr.max_ep_tx_ctx)
 		return -FI_ENODATA;
 
-	if(attr->max_ep_rx_ctx > sock_domain_attr.max_ep_rx_ctx)
+	if (attr->max_ep_rx_ctx > sock_domain_attr.max_ep_rx_ctx)
 		return -FI_ENODATA;
 
 	return 0;
@@ -244,7 +244,7 @@ struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key,
 struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc, 
 			void *buf, size_t len, uint64_t access)
 {
-	uint64_t key = (uint64_t)desc;
+	uint64_t key = (uintptr_t) desc;
 	return sock_mr_verify_key(domain, key, buf, len, access);
 }
 
@@ -291,7 +291,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (idm_set(&dom->mr_idm, key, _mr) < 0)
 		goto err;
 	_mr->mr_fid.key = key;
-	_mr->mr_fid.mem_desc = (void *)key;
+	_mr->mr_fid.mem_desc = (void *) (uintptr_t) key;
 	fastlock_release(&dom->lock);
 
 	_mr->iov_count = attr->iov_count;
@@ -421,8 +421,8 @@ static struct fi_ops_mr sock_dom_mr_ops = {
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context)
 {
-	int ret, flags;
 	struct sock_domain *sock_domain;
+	int ret;
 
 	if(info && info->domain_attr){
 		ret = sock_verify_domain_attr(info->domain_attr);
@@ -465,7 +465,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		sock_domain->progress_mode = info->domain_attr->data_progress;
 
 	sock_domain->pe = sock_pe_init(sock_domain);
-	if(!sock_domain->pe){
+	if (!sock_domain->pe){
 		SOCK_LOG_ERROR("Failed to init PE\n");
 		goto err;
 	}
@@ -473,13 +473,10 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	sock_domain->ep_count = AF_INET;
 	sock_domain->r_cmap.domain = sock_domain;
 	fastlock_init(&sock_domain->r_cmap.lock);
-	if(socketpair(AF_UNIX, SOCK_STREAM, 0, sock_domain->signal_fds) < 0)
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sock_domain->signal_fds) < 0)
 		goto err;
 
-	flags = fcntl(sock_domain->signal_fds[1], F_GETFL, 0);
-	if (fcntl(sock_domain->signal_fds[1], F_SETFL, flags | O_NONBLOCK))
-		SOCK_LOG_ERROR("fcntl failed\n");
-
+	fd_set_nonblock(sock_domain->signal_fds[1]);
 	sock_conn_listen(sock_domain);
 
 	while(!(volatile int)sock_domain->listening)
