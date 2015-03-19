@@ -296,42 +296,21 @@ void fi_create_filter(struct fi_filter *filter, const char *env_name)
 			"unable to parse %s env var\n", env_name);
 }
 
-/*
- * Initialize the sockets provider last.  This will result in it being
- * the least preferred provider.
- */
-static void fi_ini(void)
-{
-	pthread_mutex_lock(&ini_lock);
-
-	if (init)
-		goto unlock;
-
-	fi_log_init();
-	fi_create_filter(&prov_filter, "FI_PROVIDER");
-
 #ifdef HAVE_LIBDL
-	struct dirent **liblist = NULL;
+static void fi_ini_dir(const char *dir)
+{
 	int n = 0;
-	char *lib, *provdir;
+	char *lib;
 	void *dlhandle;
+	struct dirent **liblist = NULL;
 	struct fi_provider* (*inif)(void);
 
-	/* If dlopen fails, assume static linking and just return
-	   without error */
-	dlhandle = dlopen(NULL, RTLD_NOW);
-	if (dlhandle == NULL) {
-		goto libdl_done;
-	}
-	dlclose(dlhandle);
-
-	provdir = PROVDLDIR;
-	n = scandir(provdir, &liblist, lib_filter, NULL);
+	n = scandir(dir, &liblist, lib_filter, NULL);
 	if (n < 0)
 		goto libdl_done;
 
 	while (n--) {
-		if (asprintf(&lib, "%s/%s", provdir, liblist[n]->d_name) < 0) {
+		if (asprintf(&lib, "%s/%s", dir, liblist[n]->d_name) < 0) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
 			       "asprintf failed to allocate memory\n");
 			goto libdl_done;
@@ -360,12 +339,49 @@ libdl_done:
 	while (n-- > 0)
 		free(liblist[n]);
 	free(liblist);
+}
+#endif
+
+static void fi_ini(void)
+{
+	pthread_mutex_lock(&ini_lock);
+
+	if (init)
+		goto unlock;
+
+	fi_log_init();
+	fi_create_filter(&prov_filter, "FI_PROVIDER");
+
+#ifdef HAVE_LIBDL
+	int n = 0;
+	char **dirs;
+	char *provdir;
+	void *dlhandle;
+
+	/* If dlopen fails, assume static linking and just return
+	   without error */
+	dlhandle = dlopen(NULL, RTLD_NOW);
+	if (dlhandle == NULL) {
+		goto libdl_done;
+	}
+	dlclose(dlhandle);
+
+	provdir = getenv("FI_PROVIDER_PATH");
+	if (!provdir)
+		provdir = PROVDLDIR;
+	dirs = split_and_alloc(provdir, ":");
+	for (n = 0; dirs[n]; ++n) {
+		fi_ini_dir(dirs[n]);
+	}
+	free_string_array(dirs);
+libdl_done:
 #endif
 
 	fi_register_provider(PSM_INIT, NULL);
 	fi_register_provider(USNIC_INIT, NULL);
-
 	fi_register_provider(VERBS_INIT, NULL);
+        /* Initialize the sockets provider last.  This will result in
+           it being the least preferred provider. */
 	fi_register_provider(SOCKETS_INIT, NULL);
 	init = 1;
 
