@@ -1279,11 +1279,14 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	fastlock_release(&sock_dom->lock);
 
 	if (info) {
-		sock_ep->ep_type = info->ep_attr->type;
 		sock_ep->info.caps = info->caps;
 		sock_ep->info.addr_format = FI_SOCKADDR_IN;
-		sock_ep->ep_attr.tx_ctx_cnt = info->ep_attr->tx_ctx_cnt;
-		sock_ep->ep_attr.rx_ctx_cnt = info->ep_attr->rx_ctx_cnt;
+
+		if (info->ep_attr) {
+			sock_ep->ep_type = info->ep_attr->type;
+			sock_ep->ep_attr.tx_ctx_cnt = info->ep_attr->tx_ctx_cnt;
+			sock_ep->ep_attr.rx_ctx_cnt = info->ep_attr->rx_ctx_cnt;
+		}
 		
 		if (info->src_addr) {
 			sock_ep->src_addr = calloc(1, sizeof(struct sockaddr_in));
