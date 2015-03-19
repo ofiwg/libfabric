@@ -60,7 +60,7 @@
 
 #define SOCK_EP_MAX_MSG_SZ (1<<23)
 #define SOCK_EP_MAX_INJECT_SZ ((1<<8) - 1)
-#define SOCK_EP_MAX_BUFF_RECV (1<<20)
+#define SOCK_EP_MAX_BUFF_RECV (1<<24)
 #define SOCK_EP_MAX_ORDER_RAW_SZ SOCK_EP_MAX_MSG_SZ
 #define SOCK_EP_MAX_ORDER_WAR_SZ SOCK_EP_MAX_MSG_SZ
 #define SOCK_EP_MAX_ORDER_WAW_SZ SOCK_EP_MAX_MSG_SZ
@@ -115,6 +115,7 @@
 			   FI_ORDER_SAR | FI_ORDER_SAW | FI_ORDER_SAS)
 
 #define SOCK_MODE (0)
+#define SOCK_NO_COMPLETION (1ULL << 60)
 
 #define SOCK_COMM_BUF_SZ (SOCK_EP_MAX_MSG_SZ)
 #define SOCK_COMM_THRESHOLD (128 * 1024)
@@ -140,7 +141,7 @@ struct sock_conn {
         struct sock_pe_entry *rx_pe_entry;
         struct sock_pe_entry *tx_pe_entry;
 	struct ringbuf inbuf;
-//	struct ringbuf outbuf;
+	struct ringbuf outbuf;
 };
 
 struct sock_conn_map {
@@ -908,7 +909,8 @@ fi_addr_t sock_av_lookup_key(struct sock_av *av, int key);
 struct sock_conn *sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr);
 int sock_av_compare_addr(struct sock_av *av, fi_addr_t addr1, fi_addr_t addr2);
 uint16_t sock_av_lookup_ep_id(struct sock_av *av, fi_addr_t addr);
-
+int sock_compare_addr(struct sockaddr_in *addr1,
+		      struct sockaddr_in *addr2);
 
 struct sock_conn *sock_conn_map_lookup_key(struct sock_conn_map *conn_map, 
 					   uint16_t key);
@@ -951,6 +953,6 @@ void sock_comm_buffer_finalize(struct sock_conn *conn);
 ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len);
 ssize_t sock_comm_recv(struct sock_conn *conn, void *buf, size_t len);
 ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len);
-//ssize_t sock_comm_flush(struct sock_conn *conn);
+ssize_t sock_comm_flush(struct sock_conn *conn);
 
 #endif

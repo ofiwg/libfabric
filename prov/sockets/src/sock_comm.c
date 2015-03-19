@@ -69,58 +69,58 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn, const void *buf, si
 	return ret;
 }
 
-//ssize_t sock_comm_flush(struct sock_conn *conn)
-//{
-//	ssize_t ret1, ret2 = 0;
-//	size_t endlen, len, xfer_len;
-//
-//	len = rbused(&conn->outbuf);
-//	endlen = conn->outbuf.size - (conn->outbuf.rcnt & conn->outbuf.size_mask);
-//
-//	xfer_len = MIN(len, endlen);
-//	ret1 = sock_comm_send_socket(conn, conn->outbuf.buf +
-//				     (conn->outbuf.rcnt & conn->outbuf.size_mask),
-//				     xfer_len);
-//	if (ret1 > 0)
-//		conn->outbuf.rcnt += ret1;
-//
-//	if (ret1 == xfer_len && xfer_len < len) {
-//		ret2 = sock_comm_send_socket(conn, conn->outbuf.buf +
-//					     (conn->outbuf.rcnt & conn->outbuf.size_mask),
-//					     len - xfer_len);
-//		if (ret2 > 0)
-//			conn->outbuf.rcnt += ret2;
-//		else
-//			ret2 = 0;
-//	}
-//
-//	return (ret1 > 0) ? ret1 + ret2 : 0;
-//}
+ssize_t sock_comm_flush(struct sock_conn *conn)
+{
+	ssize_t ret1, ret2 = 0;
+	size_t endlen, len, xfer_len;
+
+	len = rbused(&conn->outbuf);
+	endlen = conn->outbuf.size - (conn->outbuf.rcnt & conn->outbuf.size_mask);
+
+	xfer_len = MIN(len, endlen);
+	ret1 = sock_comm_send_socket(conn, conn->outbuf.buf +
+				     (conn->outbuf.rcnt & conn->outbuf.size_mask),
+				     xfer_len);
+	if (ret1 > 0)
+		conn->outbuf.rcnt += ret1;
+
+	if (ret1 == xfer_len && xfer_len < len) {
+		ret2 = sock_comm_send_socket(conn, conn->outbuf.buf +
+					     (conn->outbuf.rcnt & conn->outbuf.size_mask),
+					     len - xfer_len);
+		if (ret2 > 0)
+			conn->outbuf.rcnt += ret2;
+		else
+			ret2 = 0;
+	}
+
+	return (ret1 > 0) ? ret1 + ret2 : 0;
+}
 
 ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len)
 {
-//	ssize_t ret, used;
-//
-//	if (len >= SOCK_COMM_THRESHOLD) {
-//		used = rbused(&conn->outbuf);
-//		if (used == sock_comm_flush(conn)) {
+	ssize_t ret, used;
+
+	if (len >= SOCK_COMM_THRESHOLD) {
+		used = rbused(&conn->outbuf);
+		if (used == sock_comm_flush(conn)) {
 			return sock_comm_send_socket(conn, buf, len);
-//		} else {
-//			return 0;
-//		}
-//	}
-//
-//	if (rbavail(&conn->outbuf) < len) {
-//		ret = sock_comm_flush(conn);
-//		if (ret <= 0)
-//			return 0;
-//	}
-//
-//	ret = MIN(rbavail(&conn->outbuf), len);
-//	rbwrite(&conn->outbuf, buf, ret);
-//	rbcommit(&conn->outbuf);
-//	SOCK_LOG_INFO("buffered %lu\n", ret);
-//	return ret;
+		} else {
+			return 0;
+		}
+	}
+
+	if (rbavail(&conn->outbuf) < len) {
+		ret = sock_comm_flush(conn);
+		if (ret <= 0)
+			return 0;
+	}
+
+	ret = MIN(rbavail(&conn->outbuf), len);
+	rbwrite(&conn->outbuf, buf, ret);
+	rbcommit(&conn->outbuf);
+	SOCK_LOG_INFO("buffered %lu\n", ret);
+	return ret;
 }
 
 ssize_t sock_comm_recv_socket(struct sock_conn *conn, void *buf, size_t len)
@@ -128,7 +128,7 @@ ssize_t sock_comm_recv_socket(struct sock_conn *conn, void *buf, size_t len)
 	ssize_t ret;
 
 	ret = read(conn->sock_fd, buf, len);
-	if (ret <= 0) {
+	if (ret < 0) {
 		SOCK_LOG_INFO("read %s\n", strerror(ret));
 		ret = 0;
 	}
@@ -210,7 +210,7 @@ int sock_comm_buffer_init(struct sock_conn *conn)
 
 	fd_set_nonblock(conn->sock_fd);
 	rbinit(&conn->inbuf, SOCK_COMM_BUF_SZ);
-//	rbinit(&conn->outbuf, SOCK_COMM_BUF_SZ);
+	rbinit(&conn->outbuf, SOCK_COMM_BUF_SZ);
 
 	if (setsockopt(conn->sock_fd, SOL_SOCKET, SO_RCVBUF, &size, optlen))
 		SOCK_LOG_ERROR("setsockopt failed\n");
@@ -230,5 +230,5 @@ int sock_comm_buffer_init(struct sock_conn *conn)
 void sock_comm_buffer_finalize(struct sock_conn *conn)
 {
 	rbfree(&conn->inbuf);
-//	rbfree(&conn->outbuf);
+	rbfree(&conn->outbuf);
 }
