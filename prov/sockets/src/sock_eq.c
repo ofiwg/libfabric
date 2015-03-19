@@ -97,7 +97,9 @@ out:
 ssize_t sock_eq_read(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 		     uint64_t flags)
 {
-	return sock_eq_sread(eq, event, buf, len, 0, flags);
+	ssize_t ret;
+	ret = sock_eq_sread(eq, event, buf, len, 0, flags);
+	return ret == -FI_ETIMEDOUT ? -FI_EAGAIN : ret;
 }
 
 ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
@@ -111,7 +113,7 @@ ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 	sock_eq = container_of(eq, struct sock_eq, eq);
 	fastlock_acquire(&sock_eq->lock);
 	if (dlistfd_empty(&sock_eq->err_list)) {
-		ret = 0;
+		ret = -FI_EAGAIN;
 		goto out;
 	}
 
