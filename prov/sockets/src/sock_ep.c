@@ -502,7 +502,7 @@ static ssize_t sock_rx_size_left(struct fid_ep *ep)
 		return -FI_EINVAL;
 	}
 
-	return rx_ctx->attr.size;
+	return rx_ctx->num_left;
 }
 
 static ssize_t sock_tx_size_left(struct fid_ep *ep)

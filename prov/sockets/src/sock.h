@@ -472,6 +472,7 @@ struct sock_rx_entry {
 	
 	union sock_iov iov[SOCK_EP_MAX_IOV_LIMIT];
 	struct dlist_entry entry;
+	struct sock_rx_ctx *rx_ctx;
 };
 
 struct sock_rx_ctx {
@@ -486,7 +487,8 @@ struct sock_rx_ctx {
 	uint8_t rem_write_cq_event;
 	uint16_t buffered_len;
 	uint16_t min_multi_recv;
-	uint8_t reserved[7];
+	uint16_t num_left;
+	uint8_t reserved[5];
 
 	uint64_t addr;
 	struct sock_comp comp;

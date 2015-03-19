@@ -2179,9 +2179,9 @@ static void *sock_pe_progress_thread(void *data)
 			pthread_yield();
 			usleep(sock_progress_thread_wait * 1000);
 		}
-		
+
+		fastlock_acquire(&pe->list_lock);		
 		if (!dlistfd_empty(&pe->tx_list)) {
-			fastlock_acquire(&pe->list_lock);
 			for (entry = pe->tx_list.list.next;
 			     entry != &pe->tx_list.list; entry = entry->next) {
 				tx_ctx = container_of(entry, struct sock_tx_ctx,
@@ -2193,11 +2193,9 @@ static void *sock_pe_progress_thread(void *data)
 					return NULL;
 				}
 			}
-			fastlock_release(&pe->list_lock);
 		}
 
 		if (!dlistfd_empty(&pe->rx_list)) {
-			fastlock_acquire(&pe->list_lock);
 			for (entry = pe->rx_list.list.next;
 			     entry != &pe->rx_list.list; entry = entry->next) {
 				rx_ctx = container_of(entry, struct sock_rx_ctx,
@@ -2209,8 +2207,8 @@ static void *sock_pe_progress_thread(void *data)
 					return NULL;
 				}
 			}
-			fastlock_release(&pe->list_lock);
 		}
+		fastlock_release(&pe->list_lock);
 	}
 	
 	SOCK_LOG_INFO("Progress thread terminated\n");
