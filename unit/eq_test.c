@@ -175,7 +175,7 @@ eq_write_read_self()
 
 	/* queue is now empty */
 	ret = fi_eq_read(eq, &event, &entry, sizeof(entry), 0);
-	if (ret != 0) {
+	if (ret != -FI_EAGAIN) {
 		sprintf(err_buf, "fi_eq_read of empty EQ returned %d", ret);
 		goto fail;
 	}
