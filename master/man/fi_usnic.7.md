@@ -66,7 +66,7 @@ extension, which returns IP and SR-IOV information about a usNIC
 interface obtained from the [`fi_getinfo`(3)](fi_getinfo.3.html)
 function.
 
-```c
+{% highlight c %}
 #include <stdio.h>
 #include <rdma/fabric.h>
 
@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
     fi_freeinfo(info_list);
     return 0;
 }
-```
+{% endhighlight %}
 
 # SEE ALSO
 
