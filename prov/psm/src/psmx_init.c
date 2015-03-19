@@ -401,8 +401,6 @@ PSM_INI
 	int check_version;
 	int err;
 
-	fi_log_init();
-
 	psmx_env.name_server	= psmx_get_int_env("OFI_PSM_NAME_SERVER", 1);
 	psmx_env.am_msg		= psmx_get_int_env("OFI_PSM_AM_MSG", 0);
 	psmx_env.tagged_rma	= psmx_get_int_env("OFI_PSM_TAGGED_RMA", 1);

@@ -255,8 +255,6 @@ SOCKETS_INI
 {
 	char *tmp;
 
-	fi_log_init();
-
 	tmp = getenv("OFI_SOCK_PROGRESS_YIELD_TIME");
 	if (tmp)
 		sock_progress_thread_wait = atoi(tmp);
