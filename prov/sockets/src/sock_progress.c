@@ -1252,6 +1252,9 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 			rx_entry->ignore = 0;
 			rx_entry->comp = pe_entry->comp;
 			pe_entry->context = rx_entry->context;
+
+			if (pe_entry->msg_hdr.flags & FI_REMOTE_CQ_DATA)
+				rx_entry->flags |= FI_REMOTE_CQ_DATA;
 			
 			if (pe_entry->msg_hdr.op_type == SOCK_OP_TSEND) {
 				rx_entry->is_tagged = 1;
@@ -1298,6 +1301,8 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 	rx_entry->is_complete = 1;
 	rx_entry->is_busy = 0;
 	pe_entry->flags = rx_entry->flags;
+	if (pe_entry->msg_hdr.flags & FI_REMOTE_CQ_DATA)
+		pe_entry->flags |= FI_REMOTE_CQ_DATA;
 	pe_entry->flags &= ~FI_MULTI_RECV;
 
 	fastlock_acquire(&rx_ctx->lock);
