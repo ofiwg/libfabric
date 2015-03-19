@@ -98,7 +98,7 @@ sock_conn_map_lookup_key(struct sock_conn_map *conn_map, uint16_t key)
 	return &conn_map->table[key - 1];
 }
 
-static int sock_compare_addr(struct sockaddr_in *addr1,
+int sock_compare_addr(struct sockaddr_in *addr1,
 			     struct sockaddr_in *addr2)
 {
 	return ((addr1->sin_addr.s_addr == addr2->sin_addr.s_addr) &&

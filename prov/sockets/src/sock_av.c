@@ -49,34 +49,32 @@
 #include "sock.h"
 #include "sock_util.h"
 
+
 fi_addr_t sock_av_lookup_key(struct sock_av *av, int key)
 {
-	int i, idx;
+	int i;
 	struct sock_av_addr *av_addr;
+	struct sock_conn_map *cmap;
 
-	for (i = 0; i < IDX_MAX_INDEX; i++) {
-		av_addr = idm_lookup(&av->addr_idm, i);
+	cmap = av->cmap;
+	for (i = 0; i < av->table_hdr->stored; i++) {
+		av_addr = &av->table[i];
 		if (!av_addr)
 			continue;
 		
-		idx = av_addr - &av->table[0];
-		if (!av->key[idx]) {
-			av->key[idx] = sock_conn_map_lookup(
-				av->cmap,
-				(struct sockaddr_in*)&av_addr->addr);
-			if (!av->key[idx]) {
-				continue;
-			}
-		}
-		
-		if (av->key[idx] == key + 1) {
+		if (sock_compare_addr(&cmap->table[key].addr, 
+				      (struct sockaddr_in*)&av_addr->addr)) {
+			SOCK_LOG_INFO("LOOKUP: (%d->%d)\n", key, i);
 			return i;
 		}
 	}
 	
-	SOCK_LOG_INFO("Reverse-lookup failed: %d\n", key);
+	SOCK_LOG_INFO("Reverse-LOOKUP failed: %d, %s:%d\n", key,
+		       inet_ntoa(cmap->table[key].addr.sin_addr),
+		       ntohs(cmap->table[key].addr.sin_port));
 	return FI_ADDR_NOTAVAIL;
 }
+
 
 int sock_av_compare_addr(struct sock_av *av, 
 			 fi_addr_t addr1, fi_addr_t addr2)
