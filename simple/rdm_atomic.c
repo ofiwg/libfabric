@@ -299,12 +299,12 @@ static int run_op(void)
 	if (ret)
 		goto out;
 
-	if(op_type == FI_CSWAP)		
+	if (opts.machr)
 		show_perf(test_name, opts.transfer_size, opts.iterations, 
-				&start, &end, 1);
+				&start, &end, op_type == FI_CSWAP ? 1 : 2);
 	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, 
-				&start, &end, 2);
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
+				op_type == FI_CSWAP ? 1 : 2, opts.argc, opts.argv);
 
 	ret = 0;
 
