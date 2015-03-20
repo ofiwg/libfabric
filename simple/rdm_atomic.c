@@ -300,14 +300,13 @@ static int run_op(void)
 		goto out;
 
 	if (opts.machr)
-		show_perf(test_name, opts.transfer_size, opts.iterations, 
-				&start, &end, op_type == FI_CSWAP ? 1 : 2);
-	else
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
 				op_type == FI_CSWAP ? 1 : 2, opts.argc, opts.argv);
+	else
+		show_perf(test_name, opts.transfer_size, opts.iterations, 
+				&start, &end, op_type == FI_CSWAP ? 1 : 2);
 
 	ret = 0;
-
 out:
 	free(count);
 	return ret;
