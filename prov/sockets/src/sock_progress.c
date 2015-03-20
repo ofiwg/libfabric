@@ -1197,8 +1197,10 @@ int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		sock_rx_release_entry(rx_buffered);
 
 		if ((!(rx_posted->flags & FI_MULTI_RECV) ||
-		     (pe_entry.flags & FI_MULTI_RECV)))
+		     (pe_entry.flags & FI_MULTI_RECV))) {
 			sock_rx_release_entry(rx_posted);
+			rx_ctx->num_left++;
+		}
 	}
 	return 0;
 }
@@ -1335,8 +1337,12 @@ out:
 		
 	if (!rx_entry->is_buffered &&
 	    (!(rx_entry->flags & FI_MULTI_RECV) ||
-	     (pe_entry->flags & FI_MULTI_RECV)))
+	     (pe_entry->flags & FI_MULTI_RECV))) {
 		sock_rx_release_entry(rx_entry);
+		fastlock_acquire(&rx_ctx->lock);
+		rx_ctx->num_left++;
+		fastlock_release(&rx_ctx->lock);
+	}
 	return ret;
 }
 

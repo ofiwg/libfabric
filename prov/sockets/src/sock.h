@@ -472,7 +472,6 @@ struct sock_rx_entry {
 	
 	union sock_iov iov[SOCK_EP_MAX_IOV_LIMIT];
 	struct dlist_entry entry;
-	struct sock_rx_ctx *rx_ctx;
 };
 
 struct sock_rx_ctx {
