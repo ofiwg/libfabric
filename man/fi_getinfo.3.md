@@ -322,12 +322,6 @@ additional optimizations.
   data transfer operations.  Support requires marking outbound data
   transfers as signaled and handling incoming transfers appropriately.
 
-*FI_REMOTE_COMPLETE*
-: Indicates that the endpoint support the FI_REMOTE_COMPLETE flag on
-  data transfer operations.  Support requires marking outbound data
-  transfers as using remote completions and responding to incoming
-  transfers appropriately.
-
 *FI_CANCEL*
 : Indicates that the user desires the ability to cancel outstanding
   data transfer operations.  If FI_CANCEL is not set, a provider may
@@ -361,7 +355,7 @@ FI_DIRECTD_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
 and FI_REMOTE_WRITE.
 
 Secondary capabilities: FI_DYNAMIC_MR, FI_MULTI_RECV, FI_SOURCE,
-FI_CANCEL, FI_FENCE, FI_REMOTE_COMPLETE 
+FI_CANCEL, FI_FENCE 
 
 # MODE
 

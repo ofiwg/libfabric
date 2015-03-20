@@ -144,6 +144,7 @@ static int sock_dom_close(struct fid *fid)
 	fastlock_destroy(&dom->r_cmap.lock);
 
 	sock_pe_finalize(dom->pe);
+	sock_fabric_remove_service(dom->fab, atoi(dom->service));
 	fastlock_destroy(&dom->lock);
 	free(dom);
 	return 0;
@@ -244,7 +245,7 @@ struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key,
 struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc, 
 			void *buf, size_t len, uint64_t access)
 {
-	uint64_t key = (uint64_t)desc;
+	uint64_t key = (uintptr_t) desc;
 	return sock_mr_verify_key(domain, key, buf, len, access);
 }
 
@@ -291,7 +292,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (idm_set(&dom->mr_idm, key, _mr) < 0)
 		goto err;
 	_mr->mr_fid.key = key;
-	_mr->mr_fid.mem_desc = (void *)key;
+	_mr->mr_fid.mem_desc = (void *) (uintptr_t) key;
 	fastlock_release(&dom->lock);
 
 	_mr->iov_count = attr->iov_count;
@@ -421,9 +422,11 @@ static struct fi_ops_mr sock_dom_mr_ops = {
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context)
 {
-	int ret, flags;
 	struct sock_domain *sock_domain;
+	struct sock_fabric *fab;
+	int ret;
 
+	fab = container_of(fabric, struct sock_fabric, fab_fid);
 	if(info && info->domain_attr){
 		ret = sock_verify_domain_attr(info->domain_attr);
 		if(ret)
@@ -438,15 +441,23 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	atomic_init(&sock_domain->ref, 0);
 
 	if(info && info->src_addr) {
+
 		if (getnameinfo(info->src_addr, info->src_addrlen, NULL, 0,
 				sock_domain->service, sizeof(sock_domain->service),
 				NI_NUMERICSERV)) {
 			SOCK_LOG_ERROR("could not resolve src_addr\n");
 			goto err;
 		}
+
 		sock_domain->info = *info;
 		memcpy(&sock_domain->src_addr, info->src_addr, 
 		       sizeof(struct sockaddr_in));
+
+		if (!sock_fabric_check_service(fab, atoi(sock_domain->service))) {
+			memset(sock_domain->service, 0, NI_MAXSERV);
+			((struct sockaddr_in*)&sock_domain->src_addr)->sin_port = 0;
+		}
+
 	} else {
 		SOCK_LOG_ERROR("invalid fi_info\n");
 		goto err;
@@ -465,7 +476,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		sock_domain->progress_mode = info->domain_attr->data_progress;
 
 	sock_domain->pe = sock_pe_init(sock_domain);
-	if(!sock_domain->pe){
+	if (!sock_domain->pe){
 		SOCK_LOG_ERROR("Failed to init PE\n");
 		goto err;
 	}
@@ -473,18 +484,17 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	sock_domain->ep_count = AF_INET;
 	sock_domain->r_cmap.domain = sock_domain;
 	fastlock_init(&sock_domain->r_cmap.lock);
-	if(socketpair(AF_UNIX, SOCK_STREAM, 0, sock_domain->signal_fds) < 0)
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sock_domain->signal_fds) < 0)
 		goto err;
 
-	flags = fcntl(sock_domain->signal_fds[1], F_GETFL, 0);
-	if (fcntl(sock_domain->signal_fds[1], F_SETFL, flags | O_NONBLOCK))
-		SOCK_LOG_ERROR("fcntl failed\n");
-
+	fd_set_nonblock(sock_domain->signal_fds[1]);
 	sock_conn_listen(sock_domain);
 
 	while(!(volatile int)sock_domain->listening)
 		pthread_yield();
 
+	sock_domain->fab = fab;
+	sock_fabric_add_service(fab, atoi(sock_domain->service));
 	*dom = &sock_domain->dom_fid;
 	return 0;
 

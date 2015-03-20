@@ -49,34 +49,32 @@
 #include "sock.h"
 #include "sock_util.h"
 
+
 fi_addr_t sock_av_lookup_key(struct sock_av *av, int key)
 {
-	int i, idx;
+	int i;
 	struct sock_av_addr *av_addr;
+	struct sock_conn_map *cmap;
 
-	for (i = 0; i < IDX_MAX_INDEX; i++) {
-		av_addr = idm_lookup(&av->addr_idm, i);
+	cmap = av->cmap;
+	for (i = 0; i < av->table_hdr->stored; i++) {
+		av_addr = &av->table[i];
 		if (!av_addr)
 			continue;
 		
-		idx = av_addr - &av->table[0];
-		if (!av->key[idx]) {
-			av->key[idx] = sock_conn_map_lookup(
-				av->cmap,
-				(struct sockaddr_in*)&av_addr->addr);
-			if (!av->key[idx]) {
-				continue;
-			}
-		}
-		
-		if (av->key[idx] == key + 1) {
+		if (sock_compare_addr(&cmap->table[key].addr, 
+				      (struct sockaddr_in*)&av_addr->addr)) {
+			SOCK_LOG_INFO("LOOKUP: (%d->%d)\n", key, i);
 			return i;
 		}
 	}
 	
-	SOCK_LOG_INFO("Reverse-lookup failed: %d\n", key);
+	SOCK_LOG_INFO("Reverse-LOOKUP failed: %d, %s:%d\n", key,
+		       inet_ntoa(cmap->table[key].addr.sin_addr),
+		       ntohs(cmap->table[key].addr.sin_port));
 	return FI_ADDR_NOTAVAIL;
 }
+
 
 int sock_av_compare_addr(struct sock_av *av, 
 			 fi_addr_t addr1, fi_addr_t addr2)
@@ -154,21 +152,33 @@ uint16_t sock_av_lookup_ep_id(struct sock_av *av, fi_addr_t addr)
 }
 
 
-static inline void sock_av_report_success(struct sock_av *av, 
-					  int *index, uint64_t flags)
+static inline void sock_av_report_success(struct sock_av *av, void *context,
+					  int num_done, uint64_t flags)
 {
-	if (av->eq) 
-		sock_eq_report_event(av->eq, FI_COMPLETION, 
-				     index, sizeof(int), flags);
+	struct fi_eq_entry eq_entry;
+	
+	if (!av->eq) 
+		return;
+
+	eq_entry.fid = &av->av_fid.fid;
+	eq_entry.context = context;
+	eq_entry.data = num_done;
+	sock_eq_report_event(av->eq, FI_AV_COMPLETE, 
+			     &eq_entry, sizeof(eq_entry), flags);
 }
 
-static inline void sock_av_report_error(struct sock_av *av, void *context, 
-					uint64_t flags, int *index)
+static inline void sock_av_report_error(struct sock_av *av, void *context)
 {
-	if (av->eq) 
-		sock_eq_report_error(av->eq, &av->av_fid.fid, 
-				     context, -FI_EINVAL, -FI_EINVAL, NULL);
-	sock_av_report_success(av, index, flags);
+	if (!av->eq) 
+		return;
+	
+	sock_eq_report_error(av->eq, &av->av_fid.fid, 
+			     context, -FI_EINVAL, -FI_EINVAL, NULL);
+}
+
+static int sock_av_is_valid_address(struct sockaddr_in *addr)
+{
+	return addr->sin_family >= AF_INET ? 1 : 0;
 }
 
 static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
@@ -187,6 +197,14 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 	if (_av->attr.flags & FI_READ) {
 		for (i = 0; i < count; i++) {
 			for (j = 0; j < _av->table_hdr->stored; j++) {
+
+				if (!sock_av_is_valid_address(&addr[i])) {
+					if (fi_addr)
+						fi_addr[i] = FI_ADDR_NOTAVAIL;
+					sock_av_report_error(_av, context);
+					continue;
+				}
+
 				av_addr = &_av->table[j];
 
 				rem_ep_id = ((struct sockaddr_in*)&addr[i])->sin_family;
@@ -199,21 +217,18 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 					if (idm_set(&_av->addr_idm, _av->key[j], av_addr) < 0) {
 						if (fi_addr)
 							fi_addr[i] = FI_ADDR_NOTAVAIL;
-						sock_av_report_error(
-							_av, context, flags, 
-							count > 1 ? &i : &index);
+						sock_av_report_error(_av, context);
 						continue;
 					}
 					
 					if (fi_addr)
 						fi_addr[i] = (fi_addr_t)j;
 					
-					sock_av_report_success(
-						_av, count > 1 ? &i : &index, flags);
 					ret++;
 				}
 			}
 		}
+		sock_av_report_success(_av, context, ret, flags);
 		return ret;
 	}
 
@@ -242,6 +257,13 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 			}
 		}
 
+		if (!sock_av_is_valid_address(&addr[i])) {
+			if (fi_addr)
+				fi_addr[i] = FI_ADDR_NOTAVAIL;
+			sock_av_report_error(_av, context);
+			continue;
+		}
+
 		rem_ep_id = ((struct sockaddr_in*)&addr[i])->sin_family;
 		((struct sockaddr_in*)&addr[i])->sin_family = AF_INET;
 
@@ -256,20 +278,18 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 		if (idm_set(&_av->addr_idm, _av->table_hdr->stored, av_addr) < 0) {
 			if (fi_addr)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
-			sock_av_report_error(
-				_av, context, flags, 
-				count > 1 ? &i : &index);
+			sock_av_report_error(_av, context);
 			continue;
 		}
 		
 		if (fi_addr)
 			fi_addr[i] = (fi_addr_t)_av->table_hdr->stored;
 
-		sock_av_report_success(_av, count > 1 ? &i : &index, flags);
 		av_addr->valid = 1;
 		_av->table_hdr->stored++;
 		ret++;
 	}
+	sock_av_report_success(_av, context, ret, flags);
 	return ret;
 }
 
@@ -324,10 +344,8 @@ static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 	ret = getaddrinfo(node, service, &sock_hints, &result);
 	if (ret) {
 		if (_av->eq) {
-			sock_eq_report_error(_av->eq, &_av->av_fid.fid, 
-					     context, -FI_EINVAL, -FI_EINVAL, NULL);
-			sock_eq_report_event(_av->eq, FI_COMPLETION, 
-					     &index, sizeof(int), flags);
+			sock_av_report_error(_av, context);
+			sock_av_report_success(_av, context, 0, flags);
 		}
 		return -ret;
 	}
