@@ -1037,14 +1037,25 @@ value of an endpoint.
   FI_REMOTE_SIGNAL capability in order to specify this flag.
 
 *FI_REMOTE_COMPLETE*
-: Indicates that local completions should not be generated until the
-  operation has completed on the remote side.  When set, if the target
-  endpoint experiences an error receiving the transferred data, that
-  error will be reported back to the initiator of the request.  This
-  includes errors which may not normally be reported to the initiator.
-  For example, if the receive data is truncated at the target because
-  the provided receive buffer is too small, the initiator will be
-  notified of the truncation.
+: Generally, this flag indicates that an operation will not complete until
+  it has been accepted into the fabric and acknowledged by a remote service.
+  When used with unreliable endpoints, local completions should not be
+  generated until the associated operation has been successfully delivered
+  into the fabric.  For example, the corresponding messages have been
+  placed on the wire.  When used with reliable endpoints, this
+  flag indicates that the operation will not complete until it has been
+  acknowledged by the target, or a proxy for the target that is responsible
+  for ensuring its reliable delivery.  For example, this flag often implies
+  that a completion is not generated until an ack has been received from
+  the target.
+  
+  Note that when set, if the target endpoint experiences an error receiving
+  the transferred data, that error will often be reported back to the
+  initiator of the request.  This includes errors which may not normally
+  be reported to the initiator, such as remote buffer overruns.
+
+*FI_REMOTE_COMMIT*
+: This flag is defined for future use.
 
 # NOTES
 
