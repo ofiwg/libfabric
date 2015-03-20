@@ -46,6 +46,7 @@ const struct fi_domain_attr sock_domain_attr = {
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
+	.resource_mgmt = FI_RM_ENABLED,
 	.mr_key_size = sizeof(uint16_t),
 	.cq_data_size = sizeof(uint64_t),
 	.ep_cnt = SOCK_EP_MAX_EP_CNT,
@@ -97,6 +98,17 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 
 	default:
 		SOCK_LOG_INFO("Data progress mode not supported!\n");
+		return -FI_ENODATA;
+	}
+
+	switch (attr->resource_mgmt){
+	case FI_RM_UNSPEC:
+	case FI_RM_DISABLED:
+	case FI_RM_ENABLED:
+		break;
+
+	default:
+		SOCK_LOG_INFO("Resource mgmt not supported!\n");
 		return -FI_ENODATA;
 	}
 	
