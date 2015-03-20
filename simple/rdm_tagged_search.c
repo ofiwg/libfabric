@@ -258,6 +258,13 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
+	/* Post a recv buffer for synchronization */
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
+
 	return ret;
 }
 
@@ -308,7 +315,8 @@ static int init_fabric(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
-
+	
+	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
@@ -440,7 +448,7 @@ static int run(void)
 		goto out;
 	
 	// Receiver
-	if(dst_addr) {
+	if (dst_addr) {
 		// search for initial tag, it should fail since the sender 
 		// hasn't sent anyting
 		fprintf(stdout, "Searching msg with tag [%" PRIu64 "]\n", tag_data);
@@ -449,7 +457,7 @@ static int run(void)
 		fprintf(stdout, "Posting buffer for msg with tag [%" PRIu64 "]\n", 
 				tag_data + 1);
 		ret = post_recv(tag_data + 1);
-		if(ret)
+		if (ret)
 			goto out;
 		
 		// synchronize with sender
@@ -460,7 +468,7 @@ static int run(void)
 		
 		// wait for the completion event of the next tag
 		ret = wait_for_tagged_completion(rcq, 1);
-		if(ret)
+		if (ret)
 			goto out;
 		fprintf(stdout, "Received completion event for msg with tag "
 				"[%" PRIu64 "]\n", tag_data + 1);
@@ -473,7 +481,7 @@ static int run(void)
 		
 		// wait for the completion event of the initial tag
 		ret = recv_msg(tag_data);	
-		if(ret)
+		if (ret)
 			goto out;
 		fprintf(stdout, "Posted buffer and received completion event for"
 			       " msg with tag [%" PRIu64 "]\n", tag_data);
@@ -488,20 +496,17 @@ static int run(void)
 		fprintf(stdout, "Sending msg with tag [%" PRIu64 "]\n",
 			tag_data);
 		ret = send_msg(16, tag_data);
-		if(ret)
+		if (ret)
 			goto out;
 
 		fprintf(stdout, "Sending msg with tag [%" PRIu64 "]\n",
 			tag_data + 1);
 		ret = send_msg(16, tag_data + 1);
-		if(ret)
+		if (ret)
 			goto out;
 	}
-	
-	// sychronize before exiting
-	ret = sync_test();
-	if (ret)
-		goto out;
+	/* Finalize before closing ep */
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);
 	free_ep_res();

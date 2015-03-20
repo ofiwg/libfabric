@@ -40,11 +40,13 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
-#define FI_CLOSEV(FID_C, NUM)				\
-	do {						\
-		int i;					\
-		for (i = 0; i < NUM; i++)		\
-			fi_close(&FID_C[i]->fid);	\
+#define FT_CLOSEV(FID_C, NUM)			\
+	do {					\
+		int i;				\
+		for (i = 0; i < NUM; i++) {	\
+			if (FID_C[i])		\
+				fi_close(&FID_C[i]->fid); \
+		}				\
 	} while (0)
 
 static void *buf;
@@ -351,7 +353,7 @@ static int init_fabric(void)
 	fi->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
 	fi->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 
-	ep = (struct fid_ep **)malloc(sizeof(*ep) * ep_cnt);
+	ep = calloc(ep_cnt, sizeof(*ep));
 	for (i = 0; i < ep_cnt; i++) {
 		if (!ep) {
 			perror("malloc");
@@ -378,7 +380,7 @@ static int init_fabric(void)
 err4:
 	free_ep_res();
 err3:
-	FI_CLOSEV(ep, ep_cnt);
+	FT_CLOSEV(ep, ep_cnt);
 err2:
 	fi_close(&dom->fid);
 err1:
@@ -496,10 +498,11 @@ static int run(void)
 		goto out;
 
 	run_test();
-
+	/* TODO: Add a local finalize applicable to shared ctx */
+	//ft_finalize(ep[0], scq, rcq, remote_fi_addr[0]);
 out:
 	free_ep_res();
-	FI_CLOSEV(ep, ep_cnt);
+	FT_CLOSEV(ep, ep_cnt);
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
 	return ret;

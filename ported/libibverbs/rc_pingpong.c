@@ -555,7 +555,8 @@ int main(int argc, char *argv[])
 	hints->mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints->addr_format = FI_SOCKADDR;
 
-	asprintf(&service, "%d", port);
+	if (asprintf(&service, "%d", port) < 0)
+		return 1;
 	if (!servername) {
 		flags |= FI_SOURCE;
 	} else {

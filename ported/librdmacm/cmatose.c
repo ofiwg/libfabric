@@ -495,6 +495,11 @@ static int run_client(void)
 				goto disc;
 		}
 
+		printf("completing sends\n");
+		ret = poll_cqs(SEND_CQ_INDEX);
+		if (ret)
+			goto disc;
+
 		printf("data transfers complete\n");
 	}
 
@@ -580,7 +585,6 @@ int main(int argc, char **argv)
 		goto exit0;
 	}
 
-	fi_freeinfo(hints);
 	printf("using provider: %s\n", info->fabric_attr->prov_name);
 	ret = fi_fabric(info->fabric_attr, &fabric, NULL);
 	if (ret) {
@@ -612,6 +616,7 @@ exit2:
 exit1:
 	fi_freeinfo(info);
 exit0:
+	fi_freeinfo(hints);
 	printf("return status %d\n", ret);
 	return ret;
 }

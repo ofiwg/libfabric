@@ -191,7 +191,7 @@ static int init_fabric(void)
 	
 	/* Set FI_SOURCE flag to enforce the port number to be the local port 
 	 * the server will be bound to */
-	if(!dst_addr) 
+	if (!dst_addr)
 		flags = FI_SOURCE;
 	
 	/* Get fabric info */
@@ -202,7 +202,7 @@ static int init_fabric(void)
 	}
 	
 	/* Get remote address of the server */
-	if(dst_addr){
+	if (dst_addr) {
 		addrlen = fi->dest_addrlen;
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, fi->dest_addr, addrlen);
@@ -221,6 +221,9 @@ static int init_fabric(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
 	}
+	
+	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
+	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 
 	/* Open endpoint */
 	ret = fi_endpoint(dom, fi, &ep, NULL);
@@ -239,7 +242,7 @@ static int init_fabric(void)
 	if (ret)
 		goto err5;
 	
-	if(dst_addr){
+	if (dst_addr) {
 		/* Insert address to the AV and get the fabric address back */ 	
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
 				&fi_ctx_av);
@@ -355,7 +358,6 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	/* Tear down */
 	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);

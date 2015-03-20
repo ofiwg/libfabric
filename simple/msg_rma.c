@@ -281,8 +281,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	uint64_t access_mode;
 	int ret;
 
-	buffer_size = !opts.custom ? test_size[TEST_CNT - 1].size : 
-		opts.transfer_size;
+	buffer_size = opts.user_options & FT_OPT_SIZE ?
+			opts.transfer_size : test_size[TEST_CNT - 1].size;
 	buf = malloc(MAX(buffer_size, sizeof(uint64_t)));
 	if (!buf) {
 		perror("malloc");
@@ -367,9 +367,12 @@ static int bind_ep_res(void)
 	}
 
 	ret = fi_enable(ep);
-	if (ret)
+	if (ret) {
+		FT_PRINTERR("fi_enable", ret);
 		return ret;
-
+	}
+	
+	/* Post the first recv buffer */
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
@@ -587,7 +590,7 @@ err0:
 
 static int exchange_addr_key(void)
 {
-	local.addr = (uint64_t)buf;
+	local.addr = (uintptr_t) buf;
 	local.key = fi_mr_key(mr);
 
 	if (opts.dst_addr) {
@@ -623,23 +626,27 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	if (!opts.custom) {
+	if (!(opts.user_options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
-			init_test(test_size[i].size, test_name,
-					sizeof(test_name), &opts.transfer_size,
-					&opts.iterations);
+			opts.transfer_size = test_size[i].size;
+			init_test(&opts, test_name, sizeof(test_name));
 			ret = run_test();
-			if(ret)
+			if (ret)
 				goto out;
 		}
 	} else {
+		init_test(&opts, test_name, sizeof(test_name));
 		ret = run_test();
+		if (ret)
+			goto out;
 	}
 
 	sync_test();
-
+	wait_for_data_completion(scq, max_credits - credits);
+	/* Finalize before closing ep */
+	ft_finalize(ep, scq, rcq, FI_ADDR_UNSPEC);
 out:
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);

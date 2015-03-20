@@ -258,6 +258,9 @@ static int server_connect(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
+	
+	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
+	info->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 
 	/* Open the endpoint */
 	ret = fi_endpoint(dom, info, &ep, NULL);
@@ -338,6 +341,9 @@ static int client_connect(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
 	}
+	
+	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
+	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 
 	/* Open endpoint */
 	ret = fi_endpoint(dom, fi, &ep, NULL);
@@ -462,7 +468,7 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, "f:h")) != -1) {
 		switch (op) {					
 		case 'f':
-			hints->fabric_attr->prov_name = optarg;
+			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		case '?':
 		case 'h':
@@ -494,7 +500,6 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	/* Tear down */
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);
 	free_ep_res();

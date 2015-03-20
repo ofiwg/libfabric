@@ -59,7 +59,7 @@ static size_t prefix_len;
 static size_t max_msg_size = 0;
 
 static struct fi_info *hints;
-static fi_addr_t rem_addr;
+static fi_addr_t remote_fi_addr;
 
 static struct fi_info *fi;
 static struct fid_fabric *fab;
@@ -104,7 +104,7 @@ static int send_xfer(int size)
 	credits--;
 post:
 	ret = fi_send(ep, buf_ptr, (size_t) size, fi_mr_desc(mr),
-			rem_addr, NULL);
+			remote_fi_addr, NULL);
 	if (ret)
 		FT_PRINTERR("fi_send", ret);
 
@@ -206,7 +206,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = !opts.custom ? test_size[TEST_CNT - 1].size : opts.transfer_size;
+	buffer_size = opts.user_options & FT_OPT_SIZE ?
+			opts.transfer_size : test_size[TEST_CNT - 1].size;
 	if (max_msg_size > 0 && buffer_size > max_msg_size) {
 		buffer_size = max_msg_size;
 	}
@@ -295,6 +296,7 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
+	/* Post the first recv buffer */
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
@@ -392,7 +394,7 @@ static int client_connect(void)
 	if (ret != 0)
 		goto err;
 
-	ret = fi_av_insert(av, hints->dest_addr, 1, &rem_addr, 0, NULL);
+	ret = fi_av_insert(av, hints->dest_addr, 1, &remote_fi_addr, 0, NULL);
 	if (ret != 1) {
 		FT_PRINTERR("fi_av_insert", ret);
 		goto err;
@@ -445,7 +447,7 @@ static int server_connect(void)
 		}
 	} while (ret == 0);
 
-	ret = fi_av_insert(av, buf_ptr, 1, &rem_addr, 0, NULL);
+	ret = fi_av_insert(av, buf_ptr, 1, &remote_fi_addr, 0, NULL);
 	if (ret != 1) {
 		if (ret == 0) {
 			fprintf(stderr, "Unable to resolve remote address 0x%x 0x%x\n",
@@ -485,25 +487,28 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	if (!opts.custom) {
+	if (!(opts.user_options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
-			if (test_size[i].option > opts.size_option ||
-				(max_msg_size && test_size[i].size > max_msg_size)) {
+			if (test_size[i].option > opts.size_option)
 				continue;
-			}
-			init_test(test_size[i].size, test_name,
-					sizeof(test_name), &opts.transfer_size,
-					&opts.iterations);
-			run_test();
+			opts.transfer_size = test_size[i].size;
+			init_test(&opts, test_name, sizeof(test_name));
+			ret = run_test();
+			if (ret)
+				goto out;
 		}
 	} else {
-
+		init_test(&opts, test_name, sizeof(test_name));
 		ret = run_test();
+		if (ret)
+			goto out;
 	}
 
 	while (credits < max_credits)
 		poll_all_sends();
-
+	
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
+out:
 	ret = fi_close(&ep->fid);
 	if (ret != 0) {
 		FT_PRINTERR("fi_close", ret);

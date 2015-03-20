@@ -300,14 +300,13 @@ static int run_op(void)
 		goto out;
 
 	if (opts.machr)
-		show_perf(test_name, opts.transfer_size, opts.iterations, 
-				&start, &end, op_type == FI_CSWAP ? 1 : 2);
-	else
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
 				op_type == FI_CSWAP ? 1 : 2, opts.argc, opts.argv);
+	else
+		show_perf(test_name, opts.transfer_size, opts.iterations, 
+				&start, &end, op_type == FI_CSWAP ? 1 : 2);
 
 	ret = 0;
-
 out:
 	free(count);
 	return ret;
@@ -369,8 +368,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = !opts.custom ? test_size[TEST_CNT - 1].size : 
-		opts.transfer_size;
+	buffer_size = opts.user_options & FT_OPT_SIZE ?
+			opts.transfer_size : test_size[TEST_CNT - 1].size;
 	buf = malloc(MAX(buffer_size, sizeof(uint64_t)));
 	if (!buf) {
 		perror("malloc");
@@ -486,6 +485,17 @@ static int bind_ep_res(void)
 	}
 
 	ret = fi_enable(ep);
+	if(ret) {
+		FT_PRINTERR("fi_enable", ret);
+		return ret;
+	}
+	
+	/* Post the first recv buffer */
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
 
 	return ret;
 }
@@ -627,7 +637,7 @@ static int init_av(void)
 		if (ret)
 			return ret;
 	}
-	
+
 	return ret;	
 }
 
@@ -636,7 +646,7 @@ static int exchange_addr_key(void)
 	int ret;
 	int len = sizeof(local);
 
-	local.addr = (uint64_t)buf;
+	local.addr = (uintptr_t) buf;
 	local.key = fi_mr_key(mr);
 
 	if (opts.dst_addr) {
@@ -680,29 +690,24 @@ static int run(void)
 	if (ret)
 		goto out;
 
-	if (!opts.custom) {
+	if (!(opts.user_options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
-			init_test(test_size[i].size, test_name,
-					sizeof(test_name), &opts.transfer_size,
-					&opts.iterations);
+			opts.transfer_size = test_size[i].size;
+			init_test(&opts, test_name, sizeof(test_name));
 			ret = run_test();
-			if (ret) {
-				fprintf(stderr, "Test failed at iteration %d, "
-						"msg size %d\n", i, 
-						opts.transfer_size);
+			if (ret)
 				goto out;
-			}
 		}
 	} else {
+		init_test(&opts, test_name, sizeof(test_name));
 		ret = run_test();
 		if (ret)
 			goto out;
-	}	
-
-	sync_test();
-
+	}
+	/* Finalize before closing ep */
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);
 	free_ep_res();

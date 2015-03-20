@@ -241,7 +241,10 @@ static int init_fabric(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
-
+	
+	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
+	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
+	
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
@@ -313,11 +316,11 @@ static int run_test(void)
 		fprintf(stdout, "Received data from Client: %s\n", (char *)buf);
 	}
 
+	/* TODO: need support for finalize operation to sync test */
 	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
-
 	return 0;
 }
 
@@ -345,7 +348,7 @@ int main(int argc, char **argv)
 		dst_addr = argv[optind];
 
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG | FI_RMA | FI_REMOTE_COMPLETE;
+	hints->caps = FI_MSG | FI_RMA;
 	// FI_PROV_MR_ATTR flag is not set
 	hints->mode = FI_CONTEXT;
 

@@ -193,7 +193,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = !opts.custom ? test_size[TEST_CNT - 1].size : opts.transfer_size;
+	buffer_size = opts.user_options & FT_OPT_SIZE ?
+			opts.transfer_size : test_size[TEST_CNT - 1].size;
 	send_buf = malloc(buffer_size);
 	recv_buf = malloc(buffer_size);
 	if (!send_buf || !recv_buf) {
@@ -309,7 +310,8 @@ static int init_fabric(void)
 	
 	/* check max msg size */
 	max_inject_size = fi->tx_attr->inject_size;
-	if (opts.custom && opts.transfer_size > max_inject_size) {
+	if ((opts.user_options & FT_OPT_SIZE) &&
+	    (opts.transfer_size > max_inject_size)) {
 		fprintf(stderr, "Msg size greater than max inject size\n");
 		ret = -FI_EINVAL;
 		goto err0;
@@ -451,19 +453,25 @@ static int run(void)
 	if (ret)
 		goto out;
 
-	if (!opts.custom) {
+	if (!(opts.user_options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
-			init_test(test_size[i].size, test_name,
-					sizeof(test_name), &opts.transfer_size,
-					&opts.iterations);
-			run_test();
+			opts.transfer_size = test_size[i].size;
+			init_test(&opts, test_name, sizeof(test_name));
+			ret = run_test();
+			if (ret)
+				goto out;
 		}
 	} else {
+		init_test(&opts, test_name, sizeof(test_name));
 		ret = run_test();
+		if (ret)
+			goto out;
 	}
 
+	/* Finalize before closing ep */
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);
 	free_ep_res();

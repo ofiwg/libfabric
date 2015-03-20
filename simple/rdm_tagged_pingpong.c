@@ -62,7 +62,8 @@ static struct fid_mr *mr;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
-struct fi_context fi_ctx_send;
+struct fi_context fi_ctx_tsend;
+struct fi_context fi_ctx_trecv;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
 
@@ -108,7 +109,7 @@ static int send_xfer(int size)
 	credits--;
 post:
 	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data, &fi_ctx_send);
+			tag_data, &fi_ctx_tsend);
 	if (ret)
 		FT_PRINTERR("fi_tsend", ret);
 
@@ -134,7 +135,7 @@ static int recv_xfer(int size)
 
 	/* Posting recv for next send. Hence tag_data + 1 */
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data + 1, 0, &fi_ctx_recv);
+			tag_data + 1, 0, &fi_ctx_trecv);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
 
@@ -146,7 +147,7 @@ static int send_msg(int size)
 	int ret;
 
 	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			tag_control, &fi_ctx_send);
+			tag_control, &fi_ctx_tsend);
 	if (ret) {
 		FT_PRINTERR("fi_tsend", ret);
 		return ret;
@@ -162,7 +163,7 @@ static int recv_msg(void)
 	int ret;
 
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-		       tag_control, 0, &fi_ctx_recv);
+		       tag_control, 0, &fi_ctx_trecv);
 	if (ret) {
 		FT_PRINTERR("fi_trecv", ret);
 		return ret;
@@ -244,7 +245,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = !opts.custom ? test_size[TEST_CNT - 1].size : opts.transfer_size;
+	buffer_size = opts.user_options & FT_OPT_SIZE ?
+			opts.transfer_size : test_size[TEST_CNT - 1].size;
 	buf = malloc(buffer_size);
 	if (!buf) {
 		perror("malloc");
@@ -323,6 +325,13 @@ static int bind_ep_res(void)
 	ret = fi_enable(ep);
 	if (ret) {
 		FT_PRINTERR("fi_enable", ret);
+		return ret;
+	}
+
+	/* Post the first recv buffer */
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
 		return ret;
 	}
 
@@ -471,7 +480,7 @@ static int init_av(void)
 
 	/* Post first recv */
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data, 0, &fi_ctx_recv);
+			tag_data, 0, &fi_ctx_trecv);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
 
@@ -490,25 +499,26 @@ static int run(void)
 	if (ret)
 		goto out;
 
-	if (!opts.custom) {
+	if (!(opts.user_options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
-			init_test(test_size[i].size, test_name,
-					sizeof(test_name), &opts.transfer_size,
-					&opts.iterations);
-			run_test();
+			opts.transfer_size = test_size[i].size;
+			init_test(&opts, test_name, sizeof(test_name));
+			ret = run_test();
+			if (ret)
+				goto out;
 		}
 	} else {
+		init_test(&opts, test_name, sizeof(test_name));
 		ret = run_test();
+		if (ret)
+			goto out;
 	}
 
-	ret = wait_for_completion_tagged(scq, max_credits - credits);
-	if (ret) {
-		goto out;
-	}
-	credits = max_credits;
-
+	wait_for_completion_tagged(scq, max_credits - credits);
+	/* Finalize before closing ep */
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	fi_close(&ep->fid);
 	free_ep_res();
