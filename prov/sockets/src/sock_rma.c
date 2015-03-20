@@ -164,6 +164,7 @@ static ssize_t sock_ep_rma_read(struct fid_ep *ep, void *buf, size_t len,
 	struct iovec msg_iov;
 	struct fi_rma_iov rma_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;
 	msg.msg_iov = &msg_iov;
@@ -190,6 +191,7 @@ static ssize_t sock_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg.msg_iov = iov;
 	msg.desc = desc;
 	msg.iov_count = count;
@@ -332,6 +334,7 @@ static ssize_t sock_ep_rma_write(struct fid_ep *ep, const void *buf,
 	struct iovec msg_iov;
 	struct fi_rma_iov rma_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;
 
@@ -362,6 +365,7 @@ static ssize_t sock_ep_rma_writev(struct fid_ep *ep,
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg.msg_iov = iov;
 	msg.desc = desc;
 	msg.iov_count = count;
@@ -418,6 +422,7 @@ static ssize_t sock_ep_rma_inject(struct fid_ep *ep, const void *buf,
 	struct iovec msg_iov;
 	struct fi_rma_iov rma_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;
 	msg.msg_iov = &msg_iov;
@@ -443,6 +448,7 @@ static ssize_t sock_ep_rma_injectdata(struct fid_ep *ep, const void *buf,
 	struct iovec msg_iov;
 	struct fi_rma_iov rma_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;
 	msg.msg_iov = &msg_iov;

@@ -59,9 +59,6 @@ fi_addr_t sock_av_lookup_key(struct sock_av *av, int key)
 	cmap = av->cmap;
 	for (i = 0; i < av->table_hdr->stored; i++) {
 		av_addr = &av->table[i];
-		if (!av_addr)
-			continue;
-		
 		if (sock_compare_addr(&cmap->table[key].addr, 
 				      (struct sockaddr_in*)&av_addr->addr)) {
 			SOCK_LOG_INFO("LOOKUP: (%d->%d)\n", key, i);

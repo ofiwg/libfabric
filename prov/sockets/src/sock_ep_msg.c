@@ -1097,7 +1097,7 @@ int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context)
 {
-	int ret;
+	int ret = 0;
 	struct sock_pep *_pep;
 	struct addrinfo hints, *result;
 
