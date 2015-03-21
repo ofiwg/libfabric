@@ -1,4 +1,4 @@
-.TH fi_usnic 7 "2015\-03\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_usnic 7 "2015\-03\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The usNIC Fabric Provider
@@ -64,7 +64,7 @@ interface.
 .PP
 These extensions are available via the "fi_ext_usnic.h" header file.
 .PP
-The following is an example of how to utilize the "usnic getinfo"
+The following is an example of how to utilize the usnic "fabric getinfo"
 extension, which returns IP and SR-IOV information about a usNIC
 interface obtained from the \f[C]fi_getinfo\f[](3) function.
 .IP
@@ -73,7 +73,8 @@ interface obtained from the \f[C]fi_getinfo\f[](3) function.
 #include\ <stdio.h>
 #include\ <rdma/fabric.h>
 
-/*\ The\ usNIC\ extensions\ are\ all\ in\ the\ rdma/fi_ext_usnic.h\ header\ */
+/*\ The\ usNIC\ extensions\ are\ all\ in\ the
+\ \ \ rdma/fi_ext_usnic.h\ header\ */
 #include\ <rdma/fi_ext_usnic.h>
 
 int\ main(int\ argc,\ char\ *argv[])\ {
@@ -100,14 +101,16 @@ int\ main(int\ argc,\ char\ *argv[])\ {
 \ \ \ \ \ \ \ \ struct\ fid_fabric\ *fabric;
 \ \ \ \ \ \ \ \ fi_fabric(info->fabric_attr,\ &fabric,\ NULL);
 
-\ \ \ \ \ \ \ \ /*\ Pass\ FI_USNIC_FABRIC_OPS_1\ to\ get\ usnic\ ops\ on\ the\ fabric\ */
+\ \ \ \ \ \ \ \ /*\ Pass\ FI_USNIC_FABRIC_OPS_1\ to\ get\ usnic\ ops
+\ \ \ \ \ \ \ \ \ \ \ on\ the\ fabric\ */
 \ \ \ \ \ \ \ \ struct\ fi_usnic_ops_fabric\ *usnic_fabric_ops;
 \ \ \ \ \ \ \ \ fi_open_ops(&fabric->fid,\ FI_USNIC_FABRIC_OPS_1,\ 0,
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ (void\ **)\ &usnic_fabric_ops,\ NULL);
 
-\ \ \ \ \ \ \ \ /*\ Now\ use\ the\ returned\ usnic\ ops\ structure\ to\ call\ usnic
-\ \ \ \ \ \ \ \ \ \ \ extensions.\ \ The\ following\ extension\ queries\ some\ IP\ and
-\ \ \ \ \ \ \ \ \ \ \ SR-IOV\ characteristics\ about\ the\ usNIC\ device.\ */
+\ \ \ \ \ \ \ \ /*\ Now\ use\ the\ returned\ usnic\ ops\ structure\ to\ call
+\ \ \ \ \ \ \ \ \ \ \ usnic\ extensions.\ \ The\ following\ extension\ queries
+\ \ \ \ \ \ \ \ \ \ \ some\ IP\ and\ SR-IOV\ characteristics\ about\ the
+\ \ \ \ \ \ \ \ \ \ \ usNIC\ device.\ */
 \ \ \ \ \ \ \ \ struct\ fi_usnic_info\ usnic_info;
 \ \ \ \ \ \ \ \ usnic_fabric_ops->getinfo(FI_EXT_USNIC_INFO_VERSION,
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ fabric,\ &usnic_info);
@@ -132,8 +135,16 @@ int\ main(int\ argc,\ char\ *argv[])\ {
 }
 \f[]
 .fi
+.PP
+Note that other usnic extensions are defined for other fabric objects.
+The second argument to \f[C]fi_open_ops\f[](3) is used to identify both
+the fid type and the extension family.
+For example, \f[I]FI_USNIC_AV_OPS_1\f[] can be used in conjunction with
+an \f[C]fi_av\f[] fid to obtain usnic extensions for address vectors.
+.PP
+See fi_ext_usnic.h for more details.
 .SH SEE ALSO
 .PP
-\f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
+\f[C]fabric\f[](7), \f[C]fi_open_ops\f[](3), \f[C]fi_provider\f[](7),
 .SH AUTHORS
 OpenFabrics.
