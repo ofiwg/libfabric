@@ -2842,6 +2842,5 @@ static struct fi_provider fi_ibv_prov = {
 
 VERBS_INI
 {
-	fi_log_init();
 	return &fi_ibv_prov;
 }
