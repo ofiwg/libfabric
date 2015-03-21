@@ -173,7 +173,7 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
 	} else {
-		conn = sock_av_lookup_addr(tx_ctx->av, msg->addr);
+		conn = sock_av_lookup_addr(sock_ep, tx_ctx->av, msg->addr);
 	}
 	if (!conn)
 		return -FI_EAGAIN;
@@ -365,7 +365,6 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	if (!rx_entry)
 		return -FI_ENOMEM;
 
-	SOCK_LOG_INFO("TRECV: [tag: %p, addr: %p]\n", msg->tag, msg->addr);
 	flags |= rx_ctx->attr.op_flags;
 	flags &= ~FI_MULTI_RECV;
 	rx_entry->rx_op.op = SOCK_OP_TRECV;
@@ -457,12 +456,11 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	SOCK_LOG_INFO("TSEND: [tag: %p, addr: %p]\n", msg->tag, msg->addr);
 	assert(tx_ctx->enabled && msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT);
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
 	} else {
-		conn = sock_av_lookup_addr(tx_ctx->av, msg->addr);
+		conn = sock_av_lookup_addr(sock_ep, tx_ctx->av, msg->addr);
 	}
 	if (!conn)
 		return -FI_EAGAIN;

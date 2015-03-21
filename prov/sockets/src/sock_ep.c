@@ -587,18 +587,33 @@ static int sock_ep_close(struct fid *fid)
 
 		sock_ep->cm.do_listen = 0;
 
-		if (write(sock_ep->cm.signal_fds[0], &c, 1) != 1)
+		if (write(sock_ep->cm.signal_fds[0], &c, 1) != 1) {
 			SOCK_LOG_INFO("Failed to signal\n");
+		}
 
 		if (sock_ep->cm.listener_thread && 
 		    pthread_join(sock_ep->cm.listener_thread, NULL)) {
-			SOCK_LOG_INFO("pthread join failed\n");
+			SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
 		}
 
 		close(sock_ep->cm.signal_fds[0]);
 		close(sock_ep->cm.signal_fds[1]);
 	}
 	
+	sock_ep->listener.do_listen = 0;
+	if (write(sock_ep->listener.signal_fds[0], &c, 1) != 1) {
+		SOCK_LOG_INFO("Failed to signal\n");
+	}
+	
+	if (pthread_join(sock_ep->listener.listener_thread, NULL)) {
+		SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
+	}
+	
+	close(sock_ep->listener.signal_fds[0]);
+	close(sock_ep->listener.signal_fds[1]);
+	sock_fabric_remove_service(sock_ep->domain->fab, 
+				   atoi(sock_ep->listener.service));
+
 	atomic_dec(&sock_ep->domain->ref);
 	free(sock_ep);
 	return 0;
@@ -1275,7 +1290,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	*ep = sock_ep;	
 
 	fastlock_acquire(&sock_dom->lock);
-	sock_ep->ep_id = sock_dom->ep_count++; 
 	fastlock_release(&sock_dom->lock);
 
 	if (info) {
@@ -1292,10 +1306,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			sock_ep->src_addr = calloc(1, sizeof(struct sockaddr_in));
 			memcpy(sock_ep->src_addr, info->src_addr, 
 			       sizeof(struct sockaddr_in));
-			((struct sockaddr_in*)sock_ep->src_addr)->sin_port = 
-				htons(atoi(sock_dom->service));
-			((struct sockaddr_in*)sock_ep->src_addr)->sin_family = 
-				sock_ep->ep_id;
 		}
 		
 		if (info->dest_addr) {
@@ -1374,6 +1384,10 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		memcpy(&sock_ep->info, info, sizeof(struct fi_info));
 	}
 
+  	sock_ep->domain = sock_dom;
+	if (sock_conn_listen(sock_ep))
+		goto err;
+
 	if (sock_ep->ep_type == FI_EP_MSG) {
 		dlist_init(&sock_ep->cm.msg_list);
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, 
@@ -1385,7 +1399,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			SOCK_LOG_ERROR("fcntl failed");
 	}
 
-  	sock_ep->domain = sock_dom;
 	atomic_inc(&sock_dom->ref);
 	return 0;
 	
@@ -1398,7 +1411,7 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep)
 {
 	if (!ep->key) {
 		ep->key = sock_conn_map_match_or_connect(
-			ep->domain, &ep->domain->r_cmap, ep->dest_addr);
+			ep, ep->domain, &ep->domain->r_cmap, ep->dest_addr);
 		if (!ep->key) {
 			SOCK_LOG_ERROR("failed to match or connect to addr\n");
 			errno = EINVAL;

@@ -411,13 +411,6 @@ static void sock_pe_send_response(struct sock_pe *pe,
 	response->msg_hdr.msg_len = htonll(response->msg_hdr.msg_len);
 	response->msg_hdr.rx_id = pe_entry->msg_hdr.rx_id;
 
-	if (pe_entry->ep && pe_entry->ep->connected)
-		response->msg_hdr.ep_id = pe_entry->ep->rem_ep_id;
-	else
-		response->msg_hdr.ep_id = 
-			sock_av_lookup_ep_id(rx_ctx->av, pe_entry->addr);
-	response->msg_hdr.ep_id = htons(response->msg_hdr.ep_id);
-
 	pe->pe_atomic = NULL;
 	pe_entry->done_len = 0;
 	pe_entry->pe.rx.pending_send = 1;
@@ -1422,7 +1415,6 @@ static int sock_pe_peek_hdr(struct sock_pe *pe,
 	msg_hdr->msg_len = ntohll(msg_hdr->msg_len);
 	msg_hdr->flags = ntohll(msg_hdr->flags);
 	msg_hdr->pe_entry_id = ntohs(msg_hdr->pe_entry_id);
-	msg_hdr->ep_id = ntohs(msg_hdr->ep_id);
 	
 	SOCK_LOG_INFO("PE RX (Hdr peek): MsgLen:  %" PRIu64 ", TX-ID: %d, Type: %d\n", 
 		      msg_hdr->msg_len, msg_hdr->rx_id, msg_hdr->op_type);
@@ -1432,9 +1424,6 @@ static int sock_pe_peek_hdr(struct sock_pe *pe,
 static int sock_pe_read_hdr(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 			     struct sock_pe_entry *pe_entry)
 {
-	int match;
-	struct sock_ep *ep;
-	struct dlist_entry *entry;
 	struct sock_msg_hdr *msg_hdr;
 	struct sock_conn *conn = pe_entry->conn;
 
@@ -1451,26 +1440,6 @@ static int sock_pe_read_hdr(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	
 	if (msg_hdr->rx_id != rx_ctx->rx_id)
 		return -1;
-
-	if (rx_ctx->ctx.fid.fclass == FI_CLASS_SRX_CTX) {
-		match = 0;
-		for (entry = rx_ctx->ep_list.next;
-		     entry != &rx_ctx->ep_list; entry = entry->next) {
-			ep = container_of(entry, struct sock_ep, rx_ctx_entry);
-			if (ep->ep_id == msg_hdr->ep_id) {
-				match = 1;
-				break;
-			}
-		}
-		if (!match)
-			return -1;
-	} else {
-		if (msg_hdr->ep_id != rx_ctx->ep->ep_id) {
-			SOCK_LOG_INFO("Mismatch: %d:%d\n", 
-				       msg_hdr->ep_id,rx_ctx->ep->ep_id);
-			return -1;
-		}
-	}
 	
 	if (sock_pe_recv_field(pe_entry, (void*)msg_hdr, 
 			       sizeof(struct sock_msg_hdr), 0)) {
@@ -1481,7 +1450,6 @@ static int sock_pe_read_hdr(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	msg_hdr->msg_len = ntohll(msg_hdr->msg_len);
 	msg_hdr->flags = ntohll(msg_hdr->flags);
 	msg_hdr->pe_entry_id = ntohs(msg_hdr->pe_entry_id);
-	msg_hdr->ep_id = ntohs(msg_hdr->ep_id);
 	pe_entry->pe.rx.header_read = 1;
 	pe_entry->flags = msg_hdr->flags;
 	
@@ -1996,10 +1964,8 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	if (tx_ctx->av) {
 		msg_hdr->rx_id = (uint16_t) SOCK_GET_RX_ID(pe_entry->addr,
 							   tx_ctx->av->rx_ctx_bits);
-		msg_hdr->ep_id = sock_av_lookup_ep_id(tx_ctx->av, pe_entry->addr);
 	} else {
 		msg_hdr->rx_id = 0;
-		msg_hdr->ep_id = ep ? ep->rem_ep_id : 0;
 	}
 
 	msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.dest_iov_len;
@@ -2007,7 +1973,6 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	pe_entry->total_len = msg_hdr->msg_len;
 	msg_hdr->msg_len = htonll(msg_hdr->msg_len);
 	msg_hdr->pe_entry_id = htons(msg_hdr->pe_entry_id);
-	msg_hdr->ep_id = htons(msg_hdr->ep_id);
 	return sock_pe_progress_tx_entry(pe, tx_ctx, pe_entry);
 }
 

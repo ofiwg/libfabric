@@ -93,7 +93,7 @@ static ssize_t sock_ep_rma_readmsg(struct fid_ep *ep,
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
 	} else {
-		conn = sock_av_lookup_addr(tx_ctx->av, msg->addr);
+		conn = sock_av_lookup_addr(sock_ep, tx_ctx->av, msg->addr);
 	}
 
 	if (!conn)
@@ -245,7 +245,7 @@ static ssize_t sock_ep_rma_writemsg(struct fid_ep *ep,
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
 	} else {
-		conn = sock_av_lookup_addr(tx_ctx->av, msg->addr);
+		conn = sock_av_lookup_addr(sock_ep, tx_ctx->av, msg->addr);
 	}
 
 	if (!conn)

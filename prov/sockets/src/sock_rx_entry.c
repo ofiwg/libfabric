@@ -130,8 +130,6 @@ struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx,
 		     (rx_ctx->av && 
 		      !sock_av_compare_addr(rx_ctx->av, addr, rx_entry->addr)))) {
 			rx_entry->is_busy = 1;
-			SOCK_LOG_INFO("MATCH: [tag: (%p-%p), addr: (%p-%p)]\n", tag, rx_entry->tag, 
-				       addr, rx_entry->addr);
 			return rx_entry;
 		}
 	}

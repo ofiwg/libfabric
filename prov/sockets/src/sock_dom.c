@@ -130,24 +130,8 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 static int sock_dom_close(struct fid *fid)
 {
 	struct sock_domain *dom;
-	void *res;
-	int ret;
-	char c = 0;
-
 	dom = container_of(fid, struct sock_domain, dom_fid.fid);
 	if (atomic_get(&dom->ref)) {
-		return -FI_EBUSY;
-	}
-
-	dom->listening = 0;
-	ret = write(dom->signal_fds[0], &c, 1);
-	if (ret != 1) {
-		SOCK_LOG_ERROR("Failed to signal\n");
-		return -FI_EINVAL;
-	}
-
-	if (pthread_join(dom->listen_thread, &res)) {
-		SOCK_LOG_ERROR("could not join listener thread, errno = %d\n", errno);
 		return -FI_EBUSY;
 	}
 
@@ -156,7 +140,6 @@ static int sock_dom_close(struct fid *fid)
 	fastlock_destroy(&dom->r_cmap.lock);
 
 	sock_pe_finalize(dom->pe);
-	sock_fabric_remove_service(dom->fab, atoi(dom->service));
 	fastlock_destroy(&dom->lock);
 	free(dom);
 	return 0;
@@ -452,24 +435,8 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	fastlock_init(&sock_domain->lock);
 	atomic_init(&sock_domain->ref, 0);
 
-	if(info && info->src_addr) {
-
-		if (getnameinfo(info->src_addr, info->src_addrlen, NULL, 0,
-				sock_domain->service, sizeof(sock_domain->service),
-				NI_NUMERICSERV)) {
-			SOCK_LOG_ERROR("could not resolve src_addr\n");
-			goto err;
-		}
-
+	if (info) {
 		sock_domain->info = *info;
-		memcpy(&sock_domain->src_addr, info->src_addr, 
-		       sizeof(struct sockaddr_in));
-
-		if (!sock_fabric_check_service(fab, atoi(sock_domain->service))) {
-			memset(sock_domain->service, 0, NI_MAXSERV);
-			((struct sockaddr_in*)&sock_domain->src_addr)->sin_port = 0;
-		}
-
 	} else {
 		SOCK_LOG_ERROR("invalid fi_info\n");
 		goto err;
@@ -493,20 +460,13 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err;
 	}
 
-	sock_domain->ep_count = AF_INET;
-	sock_domain->r_cmap.domain = sock_domain;
-	fastlock_init(&sock_domain->r_cmap.lock);
-	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sock_domain->signal_fds) < 0)
+	if (sock_conn_map_init(&sock_domain->r_cmap, 128))
 		goto err;
 
-	fd_set_nonblock(sock_domain->signal_fds[1]);
-	sock_conn_listen(sock_domain);
-
-	while(!(volatile int)sock_domain->listening)
-		pthread_yield();
+	sock_domain->r_cmap.domain = sock_domain;
+	fastlock_init(&sock_domain->r_cmap.lock);
 
 	sock_domain->fab = fab;
-	sock_fabric_add_service(fab, atoi(sock_domain->service));
 	*dom = &sock_domain->dom_fid;
 	return 0;
 

@@ -158,7 +158,6 @@ struct sock_domain {
 	struct sock_fabric *fab;
 	fastlock_t lock;
 	atomic_t ref;
-	short ep_count;
 	
 	struct sock_eq *eq;
 	struct sock_eq *mr_eq;
@@ -167,11 +166,6 @@ struct sock_domain {
 	struct index_map mr_idm;
 	struct sock_pe *pe;
 	struct sock_conn_map r_cmap;
-	pthread_t listen_thread;
-	int listening;
-	char service[NI_MAXSERV];
-	int signal_fds[2];
-	struct sockaddr_storage src_addr;
 };
 
 struct sock_cntr {
@@ -211,8 +205,7 @@ struct sock_mr {
 struct sock_av_addr {
 	struct sockaddr_storage addr;
 	uint8_t valid;
-	uint16_t rem_ep_id;
-	uint8_t reserved[5];
+	uint8_t reserved[7];
 };
 
 struct sock_av_table_hdr {
@@ -393,16 +386,23 @@ struct sock_cm_entry {
 	struct dlist_entry msg_list;
 };
 
+struct sock_conn_listener {
+	int sock;
+	int do_listen;
+	int signal_fds[2];
+	pthread_t listener_thread;
+	char service[NI_MAXSERV];
+};
+
 struct sock_ep {
 	struct fid_ep ep;
 	size_t fclass;
 	uint64_t op_flags;
 
 	uint8_t connected;
+	char reserved[1];
 	uint8_t tx_shared;
 	uint8_t rx_shared;
-	uint16_t ep_id;
-	uint16_t rem_ep_id;
 	uint16_t buffered_len;
 	uint16_t min_multi_recv;
 
@@ -438,6 +438,7 @@ struct sock_ep {
 	uint16_t key;
 	int is_disabled;
 	struct sock_cm_entry cm;
+	struct sock_conn_listener listener;
 };
 
 struct sock_pep {
@@ -457,7 +458,7 @@ struct sock_rx_entry {
 	uint8_t is_claimed;
 	uint8_t is_complete;
 	uint8_t is_tagged;
-	uint8_t reserved[5];
+	uint8_t reserved[3];
 
 	uint64_t used;
 	uint64_t total_len;
@@ -551,8 +552,8 @@ struct sock_msg_hdr {
 	uint8_t op_type;
 	uint8_t rx_id;
 	uint8_t dest_iov_len;
-	uint16_t ep_id;
 	uint16_t pe_entry_id;
+	uint8_t reserved[2];
 
 	uint64_t flags;
 	uint64_t msg_len;
@@ -747,7 +748,6 @@ struct sock_conn_hdr {
 
 struct sock_conn_req {
 	struct sock_conn_hdr hdr;
-	uint16_t ep_id;
 	struct fi_info info;
 	struct sockaddr_in src_addr;
 	struct sockaddr_in dest_addr;
@@ -907,27 +907,30 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 fi_addr_t _sock_av_lookup(struct sock_av *av, struct sockaddr *addr);
 fi_addr_t sock_av_get_fiaddr(struct sock_av *av, struct sock_conn *conn);
 fi_addr_t sock_av_lookup_key(struct sock_av *av, int key);
-struct sock_conn *sock_av_lookup_addr(struct sock_av *av, fi_addr_t addr);
+struct sock_conn *sock_av_lookup_addr(struct sock_ep *ep, 
+				      struct sock_av *av, fi_addr_t addr);
 int sock_av_compare_addr(struct sock_av *av, fi_addr_t addr1, fi_addr_t addr2);
-uint16_t sock_av_lookup_ep_id(struct sock_av *av, fi_addr_t addr);
 int sock_compare_addr(struct sockaddr_in *addr1,
 		      struct sockaddr_in *addr2);
 
 struct sock_conn *sock_conn_map_lookup_key(struct sock_conn_map *conn_map, 
 					   uint16_t key);
-uint16_t sock_conn_map_connect(struct sock_domain *dom,
+uint16_t sock_conn_map_connect(struct sock_ep *ep,
+			       struct sock_domain *dom,
 			       struct sock_conn_map *map, 
 			       struct sockaddr_in *addr);
 uint16_t sock_conn_map_lookup(struct sock_conn_map *map,
 			      struct sockaddr_in *addr);
-uint16_t sock_conn_map_match_or_connect(struct sock_domain *dom,
+uint16_t sock_conn_map_match_or_connect(struct sock_ep *ep,
+					struct sock_domain *dom,
 					struct sock_conn_map *map, 
 					struct sockaddr_in *addr);
-int sock_conn_listen(struct sock_domain *domain);
+int sock_conn_listen(struct sock_ep *ep);
 int sock_conn_map_clear_pe_entry(struct sock_conn *conn_entry, uint16_t key);
 void sock_conn_map_destroy(struct sock_conn_map *cmap);
 void sock_set_sockopts(int sock);
 int fd_set_nonblock(int fd);
+int sock_conn_map_init(struct sock_conn_map *map, int init_size);
 
 struct sock_pe *sock_pe_init(struct sock_domain *domain);
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);
