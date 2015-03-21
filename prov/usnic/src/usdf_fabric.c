@@ -329,6 +329,7 @@ usdf_fill_info_dgram(
 	dattrp->threading = FI_THREAD_UNSPEC;
 	dattrp->control_progress = FI_PROGRESS_AUTO;
 	dattrp->data_progress = FI_PROGRESS_MANUAL;
+	dattrp->resource_mgmt = FI_RM_DISABLED;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
@@ -434,6 +435,7 @@ usdf_fill_info_msg(
 	dattrp->threading = FI_THREAD_UNSPEC;
 	dattrp->control_progress = FI_PROGRESS_AUTO;
 	dattrp->data_progress = FI_PROGRESS_MANUAL;
+	dattrp->resource_mgmt = FI_RM_DISABLED;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
@@ -537,6 +539,7 @@ usdf_fill_info_rdm(
 	dattrp->threading = FI_THREAD_UNSPEC;
 	dattrp->control_progress = FI_PROGRESS_AUTO;
 	dattrp->data_progress = FI_PROGRESS_MANUAL;
+	dattrp->resource_mgmt = FI_RM_DISABLED;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
