@@ -171,7 +171,7 @@ uint16_t sock_conn_map_connect(struct sock_ep *ep,
 			       struct sock_conn_map *map, 
 			       struct sockaddr_in *addr)
 {
-	int conn_fd, optval, ret;
+	int conn_fd, optval = 0, ret;
 	char use_conn;
 	struct timeval tv;
 	socklen_t optlen;
@@ -407,7 +407,7 @@ int sock_conn_listen(struct sock_ep *ep)
 	if (atoi(listener->service) == 0) {
 		addr_size = sizeof(addr);
 		if (getsockname(listen_fd, (struct sockaddr *) &addr, &addr_size))
-			return -FI_EINVAL;
+			goto err;
 		snprintf(listener->service, sizeof listener->service, "%d",
 			 ntohs(addr.sin_port));
 		SOCK_LOG_INFO("Bound to port: %s\n", listener->service);

@@ -256,7 +256,7 @@ static int sock_get_src_addr(struct sockaddr_in *dest_addr,
 		return -errno;
 
 	len = sizeof(*dest_addr);
-	ret = connect(sock, dest_addr, len);
+	ret = connect(sock, (struct sockaddr*)dest_addr, len);
 	if (ret) {
 		SOCK_LOG_ERROR("Failed to connect udp socket\n");
 		ret = -errno;
