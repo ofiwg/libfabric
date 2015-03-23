@@ -19,10 +19,22 @@ sleep 3
 fi_msg_pingpong -I 5 $1
 echo ...done 
 sleep 3
-echo Running fi_msg_rma
-fi_msg_rma -I 5 &
+echo Running fi_msg_rma write
+fi_msg_rma -I 5 -o write &
 sleep 3
-fi_msg_rma -I 5 $1
+fi_msg_rma -I 5 -o write $1
+echo ...done 
+sleep 3
+echo Running fi_msg_rma read
+fi_msg_rma -I 5 -o read &
+sleep 3
+fi_msg_rma -I 5 -o read $1
+echo ...done 
+sleep 3
+echo Running fi_msg_rma writedata
+fi_msg_rma -I 5 -o writedata &
+sleep 3
+fi_msg_rma -I 5 -o writedata $1
 echo ...done 
 sleep 3
 echo Running fi_rdm
@@ -73,10 +85,22 @@ sleep 3
 fi_rdm_cntr_pingpong -I 5 $1
 echo ...done 
 sleep 3
-echo Running fi_rdm_rma
-fi_rdm_rma -I 5 &
+echo Running fi_rdm_rma write
+fi_rdm_rma -I 5 -o write &
 sleep 3
-fi_rdm_rma -I 5 $1
+fi_rdm_rma -I 5 -o write $1
+echo ...done 
+sleep 3
+echo Running fi_rdm_rma read
+fi_rdm_rma -I 5 -o read &
+sleep 3
+fi_rdm_rma -I 5 -o read $1
+echo ...done 
+sleep 3
+echo Running fi_rdm_rma writedata
+fi_rdm_rma -I 5 -o writedata &
+sleep 3
+fi_rdm_rma -I 5 -o writedata $1
 echo ...done 
 sleep 3
 echo Running fi_rdm_atomic
