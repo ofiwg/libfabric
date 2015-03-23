@@ -19,7 +19,10 @@ configure
 libtool
 fabtests.spec
 
-ported/libibverbs/fi_rc_pingpong
+ported/libibverbs/fi_*
+ported/librdmacm/fi_*
 
-simple/fi*
-unit/fi*
+complex/fabtest
+
+simple/fi_*
+unit/fi_*
