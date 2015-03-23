@@ -569,14 +569,10 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	if (!req)
 		return -FI_ENOMEM;
 
-	_ep->rem_ep_id = ((struct sockaddr *)addr)->sa_family;
-	_ep->src_addr->sin_port = htons(atoi(_ep->domain->service));
-	
 	((struct sockaddr *) addr)->sa_family = AF_INET;
 
 	req->hdr.type = SOCK_CONN_REQ;
 	req->hdr.msg_id = _ep->cm.next_msg_id++;
-	req->ep_id = _ep->ep_id;
 	req->info = _ep->info;
 	memcpy(&req->src_addr, _ep->src_addr, sizeof(req->src_addr));
 	memcpy(&req->dest_addr, _ep->info.dest_addr, sizeof(req->dest_addr));
@@ -640,10 +636,9 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	addr = &req->from_addr;
 	memcpy(&_ep->cm_addr, addr, sizeof(*addr));
 
-	_ep->rem_ep_id = req->ep_id;
 	response->hdr.type = SOCK_CONN_ACCEPT;
 	req->hdr.msg_id = _ep->cm.next_msg_id++;
-	response->hdr.s_port = htons(atoi(_ep->domain->service));
+	response->hdr.s_port = htons(atoi(_ep->listener.service));
 
 	if (sock_ep_cm_enqueue_msg(&_ep->cm, addr, response, 
 				   sizeof (*response) + paramlen)) {
@@ -1097,7 +1092,7 @@ int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,
 int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context)
 {
-	int ret;
+	int ret = 0;
 	struct sock_pep *_pep;
 	struct addrinfo hints, *result;
 

@@ -116,7 +116,7 @@ static ssize_t sock_ep_recv(struct fid_ep *ep, void *buf, size_t len, void *desc
 {
 	struct fi_msg msg;
 	struct iovec msg_iov;
-
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = buf;
 	msg_iov.iov_len = len;
 
@@ -134,7 +134,7 @@ static ssize_t sock_ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 		       void *context)
 {
 	struct fi_msg msg;
-
+	memset(&msg, 0, sizeof msg);
 	msg.msg_iov = iov;
 	msg.desc = desc;
 	msg.iov_count = count;
@@ -173,7 +173,7 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
 	} else {
-		conn = sock_av_lookup_addr(tx_ctx->av, msg->addr);
+		conn = sock_av_lookup_addr(sock_ep, tx_ctx->av, msg->addr);
 	}
 	if (!conn)
 		return -FI_EAGAIN;
@@ -243,7 +243,7 @@ static ssize_t sock_ep_send(struct fid_ep *ep, const void *buf, size_t len,
 {
 	struct fi_msg msg;
 	struct iovec msg_iov;
-
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;
 	msg.msg_iov = &msg_iov;
@@ -260,6 +260,7 @@ static ssize_t sock_ep_sendv(struct fid_ep *ep, const struct iovec *iov,
 		       void *context)
 {
 	struct fi_msg msg;
+	memset(&msg, 0, sizeof msg);
 	msg.msg_iov = iov;
 	msg.desc = desc;
 	msg.iov_count = count;
@@ -294,6 +295,7 @@ static ssize_t sock_ep_inject(struct fid_ep *ep, const void *buf, size_t len,
 	struct fi_msg msg;
 	struct iovec msg_iov;
 	
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;
 	msg.msg_iov = &msg_iov;
@@ -309,6 +311,7 @@ static ssize_t	sock_ep_injectdata(struct fid_ep *ep, const void *buf, size_t len
 	struct fi_msg msg;
 	struct iovec msg_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;	
 	msg.msg_iov = &msg_iov;
@@ -362,7 +365,6 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	if (!rx_entry)
 		return -FI_ENOMEM;
 
-	SOCK_LOG_INFO("TRECV: [tag: %p, addr: %p]\n", msg->tag, msg->addr);
 	flags |= rx_ctx->attr.op_flags;
 	flags &= ~FI_MULTI_RECV;
 	rx_entry->rx_op.op = SOCK_OP_TRECV;
@@ -396,6 +398,7 @@ static ssize_t sock_ep_trecv(struct fid_ep *ep, void *buf, size_t len, void *des
 	struct fi_msg_tagged msg;
 	struct iovec msg_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = buf;
 	msg_iov.iov_len = len;
 
@@ -416,6 +419,7 @@ static ssize_t sock_ep_trecvv(struct fid_ep *ep, const struct iovec *iov,
 {
 	struct fi_msg_tagged msg;
 
+	memset(&msg, 0, sizeof msg);
 	msg.msg_iov = iov;
 	msg.desc = desc;
 	msg.iov_count = count;
@@ -452,12 +456,11 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	SOCK_LOG_INFO("TSEND: [tag: %p, addr: %p]\n", msg->tag, msg->addr);
 	assert(tx_ctx->enabled && msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT);
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
 	} else {
-		conn = sock_av_lookup_addr(tx_ctx->av, msg->addr);
+		conn = sock_av_lookup_addr(sock_ep, tx_ctx->av, msg->addr);
 	}
 	if (!conn)
 		return -FI_EAGAIN;
@@ -524,6 +527,7 @@ static ssize_t sock_ep_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	struct fi_msg_tagged msg;
 	struct iovec msg_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;
 	msg.msg_iov = &msg_iov;
@@ -541,6 +545,8 @@ static ssize_t sock_ep_tsendv(struct fid_ep *ep, const struct iovec *iov,
 			       uint64_t tag, void *context)
 {
 	struct fi_msg_tagged msg;
+
+	memset(&msg, 0, sizeof msg);
 	msg.msg_iov = iov;
 	msg.desc = desc;
 	msg.iov_count = count;
@@ -557,6 +563,7 @@ static ssize_t sock_ep_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 	struct fi_msg_tagged msg;
 	struct iovec msg_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;
 	msg.msg_iov = &msg_iov;
@@ -576,6 +583,7 @@ static ssize_t sock_ep_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	struct fi_msg_tagged msg;
 	struct iovec msg_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;
 	msg.msg_iov = &msg_iov;
@@ -591,6 +599,7 @@ static ssize_t	sock_ep_tinjectdata(struct fid_ep *ep, const void *buf, size_t le
 	struct fi_msg_tagged msg;
 	struct iovec msg_iov;
 
+	memset(&msg, 0, sizeof msg);
 	msg_iov.iov_base = (void*)buf;
 	msg_iov.iov_len = len;
 	msg.msg_iov = &msg_iov;

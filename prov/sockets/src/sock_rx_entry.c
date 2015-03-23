@@ -57,7 +57,6 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 		return NULL;
 	
 	rx_entry->is_tagged = 0;
-	rx_entry->rx_ctx = rx_ctx;
 	SOCK_LOG_INFO("New rx_entry: %p, ctx: %p\n", rx_entry, rx_ctx);
 	dlist_init(&rx_entry->entry);
 
@@ -71,9 +70,6 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry)
 {
 	SOCK_LOG_INFO("Releasing rx_entry: %p\n", rx_entry);
-	fastlock_acquire(&rx_entry->rx_ctx->lock);
-	rx_entry->rx_ctx->num_left++;
-	fastlock_release(&rx_entry->rx_ctx->lock);
 	free(rx_entry);
 }
 
@@ -134,8 +130,6 @@ struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx,
 		     (rx_ctx->av && 
 		      !sock_av_compare_addr(rx_ctx->av, addr, rx_entry->addr)))) {
 			rx_entry->is_busy = 1;
-			SOCK_LOG_INFO("MATCH: [tag: (%p-%p), addr: (%p-%p)]\n", tag, rx_entry->tag, 
-				       addr, rx_entry->addr);
 			return rx_entry;
 		}
 	}

@@ -53,7 +53,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-static int sock_conn_map_init(struct sock_conn_map *map, int init_size)
+int sock_conn_map_init(struct sock_conn_map *map, int init_size)
 {
 	map->table = calloc(init_size, sizeof(*map->table));
 	if (!map->table) 
@@ -166,7 +166,8 @@ void sock_set_sockopts(int sock)
 	fd_set_nonblock(sock);
 }
 
-uint16_t sock_conn_map_connect(struct sock_domain *dom,
+uint16_t sock_conn_map_connect(struct sock_ep *ep,
+			       struct sock_domain *dom,
 			       struct sock_conn_map *map, 
 			       struct sockaddr_in *addr)
 {
@@ -222,9 +223,9 @@ uint16_t sock_conn_map_connect(struct sock_domain *dom,
 	if (fcntl(conn_fd, F_SETFL, flags))
 		SOCK_LOG_ERROR("fcntl failed\n");
 	
-	ret = send(conn_fd, &((struct sockaddr_in*) &dom->src_addr)->sin_port,
-		   sizeof(((struct sockaddr_in*) &dom->src_addr)->sin_port), 0);
-	if (ret != sizeof(((struct sockaddr_in*) &dom->src_addr)->sin_port)) {
+	ret = send(conn_fd, &((struct sockaddr_in*) ep->src_addr)->sin_port,
+		   sizeof(((struct sockaddr_in*) ep->src_addr)->sin_port), 0);
+	if (ret != sizeof(((struct sockaddr_in*) ep->src_addr)->sin_port)) {
 		SOCK_LOG_ERROR("Cannot exchange port\n");
 		goto err;
 	}
@@ -260,7 +261,8 @@ err:
 	return 0;
 }
 
-uint16_t sock_conn_map_match_or_connect(struct sock_domain *dom,
+uint16_t sock_conn_map_match_or_connect(struct sock_ep *ep,
+					struct sock_domain *dom,
 					struct sock_conn_map *map, 
 					struct sockaddr_in *addr)
 {
@@ -270,81 +272,31 @@ uint16_t sock_conn_map_match_or_connect(struct sock_domain *dom,
 	fastlock_release(&map->lock);
 
 	if (!index)
-		index = sock_conn_map_connect(dom, map, addr);
+		index = sock_conn_map_connect(ep, dom, map, addr);
 	return index;
 }
 
 static void *_sock_conn_listen(void *arg)
 {
-	struct sock_domain *domain = (struct sock_domain*) arg;
-	struct sock_conn_map *map = &domain->r_cmap;
-	struct addrinfo *s_res = NULL, *p;
-	struct addrinfo hints;
-	int listen_fd = 0, conn_fd, ret;
-	struct sockaddr_in remote;
-	socklen_t addr_size;
-	struct pollfd poll_fds[2];
-	struct sockaddr_in addr;
-	char tmp;
-	char use_conn;
 	uint16_t index;
+	int conn_fd, ret;
+	char tmp, use_conn;
+	socklen_t addr_size;
+	struct sockaddr_in remote;
+	struct pollfd poll_fds[2];
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
+	struct sock_ep *ep = (struct sock_ep *)arg;
+	struct sock_conn_listener *listener = &ep->listener;
+	struct sock_conn_map *map = &ep->domain->r_cmap;
 
-	ret = getaddrinfo(NULL, domain->service, &hints, &s_res);
-	if (ret) {
-		SOCK_LOG_ERROR("no available AF_INET address, service %s, %s\n",
-				domain->service, gai_strerror(ret));
-		return NULL;
-	}
-
-	SOCK_LOG_INFO("Binding listener thread to port: %s\n", domain->service);
-	for (p = s_res; p; p = p->ai_next) {
-		listen_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-		if (listen_fd >= 0) {
-			sock_set_sockopts(listen_fd);
-			
-			if (!bind(listen_fd, s_res->ai_addr, s_res->ai_addrlen))
-				break;
-			close(listen_fd);
-			listen_fd = -1;
-		}
-	}
-	freeaddrinfo(s_res);
-
-	if (listen_fd < 0) {
-		SOCK_LOG_ERROR("failed to listen to port: %s\n", domain->service);
-		goto err;
-	}
-	
-	if (atoi(domain->service) == 0) {
-		addr_size = sizeof(addr);
-		if (getsockname(listen_fd, (struct sockaddr *) &addr, &addr_size))
-			goto err;
-		snprintf(domain->service, sizeof domain->service, "%d",
-			 ntohs(addr.sin_port));
-		SOCK_LOG_INFO("Bound to port: %s\n", domain->service);
-	}
-
-	if (listen(listen_fd, 0)) {
-		SOCK_LOG_ERROR("failed to listen socket: %s\n", strerror(errno));
-		goto err;
-	}
-
-	((struct sockaddr_in *) &(domain->src_addr))->sin_port =
-		htons(atoi(domain->service));
-	domain->listening = 1;
-
-	poll_fds[0].fd = listen_fd;
-	poll_fds[1].fd = domain->signal_fds[1];
+	poll_fds[0].fd = listener->sock;
+	poll_fds[1].fd = listener->signal_fds[1];
 	poll_fds[0].events = poll_fds[1].events = POLLIN;
- 	while (*((volatile int*)&domain->listening)) {
+
+ 	while (listener->do_listen) {
 		if (poll(poll_fds, 2, -1) > 0) {
 			if (poll_fds[1].revents & POLLIN) {
-				ret = read(domain->signal_fds[1], &tmp, 1);
+				ret = read(listener->signal_fds[1], &tmp, 1);
 				if (ret != 1) {
 					SOCK_LOG_ERROR("Invalid signal\n");
 					goto err;
@@ -356,7 +308,7 @@ static void *_sock_conn_listen(void *arg)
 		}
 
 		addr_size = sizeof(remote);
-		conn_fd = accept(listen_fd, (struct sockaddr *) &remote, &addr_size);
+		conn_fd = accept(listener->sock, (struct sockaddr *) &remote, &addr_size);
 		SOCK_LOG_INFO("CONN: accepted conn-req: %d\n", conn_fd);
 		if (conn_fd < 0) {
 			SOCK_LOG_ERROR("failed to accept: %d\n", errno);
@@ -392,27 +344,94 @@ static void *_sock_conn_listen(void *arg)
 		}
 	}
 
-	close(listen_fd);
-	return NULL;
-
 err:
-	if (listen_fd > 0)
-		close(listen_fd);
-	perror("listening thread failed");
+	close(listener->sock);
+	SOCK_LOG_INFO("Listener thread exited\n");
 	return NULL;
 }
 
-int sock_conn_listen(struct sock_domain *domain)
+int sock_conn_listen(struct sock_ep *ep)
 {
-	int ret;
+	struct addrinfo *s_res = NULL, *p;
+	struct addrinfo hints;
+	int listen_fd = 0, ret;
+	socklen_t addr_size;
+	struct sockaddr_in addr;
+	struct sock_conn_listener *listener = &ep->listener;
+	struct sock_domain *domain = ep->domain;	
 
-	ret = sock_conn_map_init(&domain->r_cmap, 128);
-	if (ret)
-		return ret;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
 
-	ret = pthread_create(&domain->listen_thread, 0, _sock_conn_listen, domain);
-	if (ret)
-		return ret;
+	if (getnameinfo((void*)ep->src_addr, sizeof (*ep->src_addr),
+			NULL, 0, listener->service, 
+			sizeof(listener->service), NI_NUMERICSERV)) {
+		SOCK_LOG_ERROR("could not resolve src_addr\n");
+		return -FI_EINVAL;
+	}
+	
+	if (!sock_fabric_check_service(domain->fab, atoi(listener->service))) {
+		memset(listener->service, 0, NI_MAXSERV);
+		((struct sockaddr_in*)ep->src_addr)->sin_port = 0;
+	}
+	
+	ret = getaddrinfo(NULL, listener->service, &hints, &s_res);
+	if (ret) {
+		SOCK_LOG_ERROR("no available AF_INET address, service %s, %s\n",
+			       listener->service, gai_strerror(ret));
+		return -FI_EINVAL;
+	}
 
-	return 0;
+	SOCK_LOG_INFO("Binding listener thread to port: %s\n", listener->service);
+	for (p = s_res; p; p = p->ai_next) {
+		listen_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		if (listen_fd >= 0) {
+			sock_set_sockopts(listen_fd);
+			
+			if (!bind(listen_fd, s_res->ai_addr, s_res->ai_addrlen))
+				break;
+			close(listen_fd);
+			listen_fd = -1;
+		}
+	}
+	freeaddrinfo(s_res);
+
+	if (listen_fd < 0) {
+		SOCK_LOG_ERROR("failed to listen to port: %s\n", 
+			       listener->service);
+		goto err;
+	}
+	
+	if (atoi(listener->service) == 0) {
+		addr_size = sizeof(addr);
+		if (getsockname(listen_fd, (struct sockaddr *) &addr, &addr_size))
+			return -FI_EINVAL;
+		snprintf(listener->service, sizeof listener->service, "%d",
+			 ntohs(addr.sin_port));
+		SOCK_LOG_INFO("Bound to port: %s\n", listener->service);
+	}
+
+	if (listen(listen_fd, 0)) {
+		SOCK_LOG_ERROR("failed to listen socket: %s\n", strerror(errno));
+		goto err;
+	}
+
+	((struct sockaddr_in *) (ep->src_addr))->sin_port =
+		htons(atoi(listener->service));
+	listener->do_listen = 1;
+	listener->sock = listen_fd;
+
+	sock_fabric_add_service(domain->fab, atoi(listener->service));
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, listener->signal_fds) < 0)
+		goto err;
+
+	fd_set_nonblock(listener->signal_fds[1]);
+	return pthread_create(&listener->listener_thread, 0, 
+			      _sock_conn_listen, ep);
+err:
+	if (listen_fd >= 0)
+		close(listen_fd);
+	return -FI_EINVAL;
 }
