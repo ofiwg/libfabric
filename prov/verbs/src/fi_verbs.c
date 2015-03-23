@@ -821,8 +821,12 @@ fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 		for (len = 0, i = 0; i < msg->iov_count; i++) {
 			sge[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
 			sge[i].length = (uint32_t) msg->msg_iov[i].iov_len;
-			sge[i].lkey = (uint32_t) (uintptr_t) (msg->desc[i]);
 			len += sge[i].length;
+		}
+		if (!(flags & FI_INJECT)) {
+			for (i = 0; i < msg->iov_count; i++) {
+				sge[i].lkey = (uint32_t)(uintptr_t)(msg->desc[i]);
+			}
 		}
 
 		wr.sg_list = sge;
@@ -987,8 +991,12 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		for (len = 0, i = 0; i < msg->iov_count; i++) {
 			sge[i].addr = (uintptr_t) msg->msg_iov[i].iov_base;
 			sge[i].length = (uint32_t) msg->msg_iov[i].iov_len;
-			sge[i].lkey = (uint32_t) (uintptr_t) (msg->desc[i]);
 			len += sge[i].length;
+		}
+		if (!(flags & FI_INJECT)) {
+			for (i = 0; i < msg->iov_count; i++) {
+				sge[i].lkey = (uint32_t)(uintptr_t)(msg->desc[i]);
+			}
 		}
 
 		wr.send_flags = (len <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
@@ -1239,7 +1247,9 @@ fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
 
 	sge.addr = (uintptr_t) msg->msg_iov->addr;
 	sge.length = (uint32_t) sizeof(uint64_t);
-	sge.lkey = (uint32_t) (uintptr_t) msg->desc[0];
+	if (!(flags & FI_INJECT)) {
+		sge.lkey = (uint32_t) (uintptr_t) msg->desc[0];
+	}
 
 	wr.wr_id = (uintptr_t) msg->context;
 	wr.next = NULL;
@@ -1369,7 +1379,9 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 
 	sge.addr = (uintptr_t) resultv->addr;
 	sge.length = (uint32_t) sizeof(uint64_t);
-	sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
+	if (!(flags & FI_INJECT)) {
+		sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
+	}
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 
@@ -1495,7 +1507,9 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 
 	sge.addr = (uintptr_t) resultv->addr;
 	sge.length = (uint32_t) sizeof(uint64_t);
-	sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
+	if (!(flags & FI_INJECT)) {
+		sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
+	}
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 
