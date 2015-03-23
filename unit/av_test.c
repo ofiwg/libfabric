@@ -1020,22 +1020,22 @@ int main(int argc, char **argv)
 		case 'D':
 			bad_address = optarg;
 			break;
-		case 'f':
+		case 'a':
 			hints->fabric_attr->name = strdup(optarg);
 			break;
 		case 'n':
 			num_good_addr = atoi(optarg);
 			break;
-		case 'p':
+		case 'f':
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		default:
 			printf("usage: %s\n", argv[0]);
 			printf("\t[-d good_address]\n");
 			printf("\t[-D bad_address]\n");
-			printf("\t[-f fabric_name]\n");
+			printf("\t[-a fabric_name]\n");
 			printf("\t[-n num_good_addr (max=%d]\n", MAX_ADDR - 1);
-			printf("\t[-p provider_name]\n");
+			printf("\t[-f provider_name]\n");
 			exit(1);
 		}
 	}

@@ -322,6 +322,26 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 	printf(" }\n");
 }
 
+void ft_usage(char *name, char *desc)
+{
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
+	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server\n", name);
+
+	if (desc)
+		fprintf(stderr, "\n%s\n", desc);
+
+	fprintf(stderr, "\nOptions:\n");
+	fprintf(stderr, "  -n <domain>\tdomain name\n");
+	fprintf(stderr, "  -b <src_port>\tnon default source port number\n");
+	fprintf(stderr, "  -p <dst_port>\tnon default destination port number\n");
+	fprintf(stderr, "  -f <provider>\tspecific provider name eg sockets, verbs\n");
+	fprintf(stderr, "  -s <address>\tsource address\n");
+	fprintf(stderr, "  -h\t\tdisplay this help output\n");
+
+	return;
+}
+
 void ft_csusage(char *name, char *desc)
 {
 	fprintf(stderr, "Usage:\n");
@@ -377,7 +397,7 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints)
 	}
 }
 
-void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts)
+void ft_parse_addr_opts(int op, char *optarg, struct cs_opts *opts)
 {
 	switch (op) {
 	case 's':
@@ -389,6 +409,17 @@ void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts)
 	case 'p':
 		opts->dst_port = optarg;
 		break;
+	default:
+		/* let getopt handle unknown opts*/
+		break;
+	}
+}
+
+void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts)
+{
+	ft_parse_addr_opts(op, optarg, opts);
+
+	switch (op) {
 	case 'I':
 		opts->user_options |= FT_OPT_ITER;
 		opts->iterations = atoi(optarg);

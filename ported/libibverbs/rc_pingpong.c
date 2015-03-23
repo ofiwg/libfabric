@@ -424,6 +424,7 @@ static void usage(const char *argv0)
 	printf("  %s <host>     connect to server at <host>\n", argv0);
 	printf("\n");
 	printf("Options:\n");
+	printf("  -f, --fabric=<provider> specific provider name eg sockets, verbs\n");
 	printf("  -p, --port=<port>      listen on/connect to port <port> (default 18515)\n");
 	printf("  -d, --ib-dev=<dev>     use IB device <dev> (default first device found)\n");
 	printf("  -i, --ib-port=<port>   use port <port> of IB device (default 1)\n");
@@ -466,8 +467,8 @@ int main(int argc, char *argv[])
 		int c;
 
 		static struct option long_options[] = {
+			{ .name = "fabric",    	.has_arg = 1, .val = 'f' },
 			{ .name = "port",     	.has_arg = 1, .val = 'p' },
-			{ .name = "prov-name",	.has_arg = 1, .val = 'd' },
 			{ .name = "ib-port",  	.has_arg = 1, .val = 'i' },
 			{ .name = "size",     	.has_arg = 1, .val = 's' },
 			// No provider support yet
@@ -492,7 +493,7 @@ int main(int argc, char *argv[])
 			}
 			break;
 
-		case 'd':
+		case 'f':
 			prov_name = strdup(optarg);
 			break;
 
