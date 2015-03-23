@@ -184,6 +184,12 @@ static int bind_ep_res(void)
 	if (ret)
 		return ret;
 	
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
+
 	return ret;
 }
 
@@ -427,12 +433,6 @@ static int run_test()
 		wait_for_completion(scq, 1);
 		fprintf(stdout, "Done\n");
 	} else {
-		ret = fi_recv(ep, buf, size, fi_mr_desc(mr), 0, buf);
-		if (ret) {
-			FT_PRINTERR("fi_recv", ret);
-			return ret;
-		}
-
 		fprintf(stdout, "Waiting for immediate data from client\n");
 		ret = fi_cq_sread(rcq, &comp, 1, NULL, -1);
 		if (ret < 0) {
