@@ -853,7 +853,7 @@ fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 		}
 
 		wr.sg_list = sge;
-		wr.send_flags = (len <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
+		wr.send_flags = (flags & FI_INJECT) ? IBV_SEND_INLINE : 0;
 	} else {
 		wr.send_flags = 0;
 	}
@@ -1022,7 +1022,7 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			}
 		}
 
-		wr.send_flags = (len <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
+		wr.send_flags = (flags & FI_INJECT) ? IBV_SEND_INLINE : 0;
 	}
 	wr.sg_list = sge;
 
@@ -1278,7 +1278,7 @@ fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
 	wr.next = NULL;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
-	wr.send_flags = (sge.length <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
+	wr.send_flags = (flags & FI_INJECT) ? IBV_SEND_INLINE : 0;
 	wr.send_flags |= IBV_SEND_FENCE; 
 
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
