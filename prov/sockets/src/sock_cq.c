@@ -276,7 +276,7 @@ ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 			fastlock_release(&sock_cq->lock);
 			if (ret == 0 && timeout >= 0) {
 				if (fi_gettime_ms() >= end_ms)
-					return -FI_ETIMEDOUT;
+					return -FI_EAGAIN;
 			}
 		}while (ret == 0);
 	} else {
@@ -288,7 +288,7 @@ ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 						src_addr, cq_entry_len);
 		fastlock_release(&sock_cq->lock);
 	}
-	return ret;
+	return (ret == 0 || ret == -FI_ETIMEDOUT) ? -FI_EAGAIN : ret;
 }
 
 ssize_t sock_cq_sread(struct fid_cq *cq, void *buf, size_t len,
@@ -300,9 +300,7 @@ ssize_t sock_cq_sread(struct fid_cq *cq, void *buf, size_t len,
 ssize_t sock_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 			fi_addr_t *src_addr)
 {
-	int ret;
-	ret = sock_cq_sreadfrom(cq, buf, count, src_addr, NULL, 0);
-	return (ret == -FI_ETIMEDOUT) ? 0 : ret;
+	return sock_cq_sreadfrom(cq, buf, count, src_addr, NULL, 0);
 }
 
 ssize_t sock_cq_read(struct fid_cq *cq, void *buf, size_t count)
@@ -325,7 +323,7 @@ ssize_t sock_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 		rbread(&sock_cq->cqerr_rb, buf, sizeof(*buf));
 		ret = 1;
 	} else {
-		ret = 0;
+		ret = -FI_EAGAIN;
 	}
 	fastlock_release(&sock_cq->lock);
 	return ret;
