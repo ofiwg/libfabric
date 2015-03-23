@@ -78,7 +78,7 @@ static int ft_post_trecv(void)
 				ft_rx.buf, ft_rx.msg_size);
 		ret = fi_trecvv(ft_rx.ep, ft_rx.iov, ft_rx.iov_desc,
 				ft.iov_array[ft_rx.iov_iter], ft_rx.addr,
-				ft_rx.tag++, 0, NULL);
+				ft_rx.tag, 0, NULL);
 		ft_next_iov_cnt(&ft_rx, fabric_info->rx_attr->iov_limit);
 		break;
 	case FT_FUNC_SENDMSG:
@@ -88,7 +88,7 @@ static int ft_post_trecv(void)
 		msg.desc = ft_rx.iov_desc;
 		msg.iov_count = ft.iov_array[ft_rx.iov_iter];
 		msg.addr = ft_rx.addr;
-		msg.tag = ft_rx.tag++;
+		msg.tag = ft_rx.tag;
 		msg.ignore = 0;
 		msg.context = NULL;
 		ret = fi_trecvmsg(ft_rx.ep, &msg, 0);
@@ -96,7 +96,7 @@ static int ft_post_trecv(void)
 		break;
 	default:
 		ret = fi_trecv(ft_rx.ep, ft_rx.buf, ft_rx.msg_size,
-				ft_rx.memdesc, ft_rx.addr, ft_rx.tag++, 0, NULL);
+				ft_rx.memdesc, ft_rx.addr, ft_rx.tag, 0, NULL);
 		break;
 	}
 	return ret;
@@ -147,7 +147,7 @@ static int ft_post_tsend(void)
 				ft_tx.buf, ft_tx.msg_size);
 		ret = fi_tsendv(ft_tx.ep, ft_tx.iov, ft_tx.iov_desc,
 				ft.iov_array[ft_tx.iov_iter], ft_tx.addr,
-				ft_tx.tag++, NULL);
+				ft_tx.tag, NULL);
 		ft_next_iov_cnt(&ft_tx, fabric_info->tx_attr->iov_limit);
 		break;
 	case FT_FUNC_SENDMSG:
@@ -157,7 +157,7 @@ static int ft_post_tsend(void)
 		msg.desc = ft_tx.iov_desc;
 		msg.iov_count = ft.iov_array[ft_tx.iov_iter];
 		msg.addr = ft_tx.addr;
-		msg.tag = ft_tx.tag++;
+		msg.tag = ft_tx.tag;
 		msg.context = NULL;
 		msg.data = 0;
 		ret = fi_tsendmsg(ft_tx.ep, &msg, 0);
@@ -165,7 +165,7 @@ static int ft_post_tsend(void)
 		break;
 	default:
 		ret = fi_tsend(ft_tx.ep, ft_tx.buf, ft_tx.msg_size,
-				ft_tx.memdesc, ft_tx.addr, ft_tx.tag++, NULL);
+				ft_tx.memdesc, ft_tx.addr, ft_tx.tag, NULL);
 		break;
 	}
 	return ret;
@@ -176,8 +176,13 @@ int ft_post_recv_bufs(void)
 	int ret;
 
 	for (; ft_rx.credits; ft_rx.credits--) {
-		ret = (test_info.caps & FI_TAGGED) ?
-			ft_post_trecv() : ft_post_recv();
+		if (test_info.caps & FI_MSG) {
+			ret = ft_post_recv();
+		} else {
+			ret = ft_post_trecv();
+			if (!ret)
+				ft_rx.tag++;
+		}
 		if (ret) {
 			if (ret == -FI_EAGAIN)
 				break;
@@ -219,8 +224,13 @@ int ft_send_msg(void)
 	}
 
 	ft_tx.credits--;
-	ret = (test_info.caps & FI_MSG) ?
-		ft_post_send() : ft_post_tsend();
+	if (test_info.caps & FI_MSG) {
+		ret = ft_post_send();
+	} else {
+		ret = ft_post_tsend();
+		if (!ret)
+			ft_tx.tag++;
+	}
 	if (ret) {
 		FT_PRINTERR("send", ret);
 		return ret;
@@ -235,28 +245,44 @@ int ft_send_msg(void)
 	return 0;
 }
 
+int ft_send_dgram(void)
+{
+	int ret;
+
+	*(uint8_t*) ft_tx.buf = ft_tx.seqno++;
+	ret = ft_send_msg();
+	return ret;
+}
+
 int ft_recv_dgram(void)
 {
 	struct timespec s, e;
 	int credits, ret;
 	int64_t poll_time = 0;
 
-	if (ft_rx.credits > (ft_rx.max_credits >> 1)) {
-		ret = ft_post_recv_bufs();
-		if (ret)
-			return ret;
-	}
-
-	credits = ft_rx.credits;
 	do {
+		if (ft_rx.credits > (ft_rx.max_credits >> 1)) {
+			ret = ft_post_recv_bufs();
+			if (ret)
+				return ret;
+		}
+
+		credits = ft_rx.credits;
+
 		ret = ft_comp_rx();
-		if ((credits != ft_rx.credits) || ret)
+		if ((credits != ft_rx.credits) &&
+		    (*(uint8_t *) ft_rx.buf == ft_rx.seqno)) {
+			ft_rx.seqno++;
+			return 0;
+		}
+
+		if (ret)
 			return ret;
 
 		if (!poll_time)
 			clock_gettime(CLOCK_MONOTONIC, &s);
 
-		clock_gettime(CLOCK_MONOTONIC,&e);
+		clock_gettime(CLOCK_MONOTONIC, &e);
 		poll_time = get_elapsed(&s, &e, MILLI);
 
 	} while (poll_time < 1);
@@ -269,7 +295,7 @@ int ft_sendrecv_dgram(void)
 	int ret, try;
 
 	for (try = 0; try < 1000; try++) {
-		ret = ft_send_msg();
+		ret = ft_send_dgram();
 		if (ret)
 			return ret;
 
@@ -277,9 +303,10 @@ int ft_sendrecv_dgram(void)
 		if (ret != -FI_ETIMEDOUT)
 			break;
 
-		/* resend last tag */
+		/* resend */
 		if (test_info.caps & FI_TAGGED)
 			ft_tx.tag--;
+		ft_tx.seqno--;
 	}
 
 	return ret;

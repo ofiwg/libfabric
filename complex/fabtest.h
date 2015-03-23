@@ -87,6 +87,7 @@ struct ft_xcontrol {
 	size_t			max_credits;
 	fi_addr_t		addr;
 	uint64_t		tag;
+	uint8_t			seqno;
 	enum fi_cq_format	cq_format;
 	enum fi_wait_obj	comp_wait;  /* must be NONE */
 };
@@ -110,6 +111,7 @@ extern struct ft_control ft;
 enum {
 	FT_MAX_CAPS		= 64,
 	FT_MAX_EP_TYPES		= 8,
+	FT_MAX_AV_TYPES		= 3,
 	FT_MAX_PROV_MODES	= 4,
 	FT_DEFAULT_CREDITS	= 128,
 	FT_COMP_BUF_SIZE	= 256,
@@ -147,6 +149,7 @@ struct ft_set {
 	enum ft_test_type	test_type[FT_MAX_TEST];
 	enum ft_class_function	class_function[FT_MAX_FUNCTIONS];
 	enum fi_ep_type		ep_type[FT_MAX_EP_TYPES];
+	enum fi_av_type		av_type[FT_MAX_AV_TYPES];
 	enum ft_comp_type	comp_type[FT_MAX_COMP];
 	uint64_t		mode[FT_MAX_PROV_MODES];
 	uint64_t		caps[FT_MAX_CAPS];
@@ -162,6 +165,7 @@ struct ft_series {
 	int			cur_type;
 	int			cur_func;
 	int			cur_ep;
+	int			cur_av;
 	int			cur_comp;
 	int			cur_mode;
 	int			cur_caps;
@@ -221,6 +225,7 @@ void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt);
 
 int ft_recv_msg();
 int ft_send_msg();
+int ft_send_dgram();
 int ft_recv_dgram();
 int ft_sendrecv_dgram();
 

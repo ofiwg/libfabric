@@ -43,6 +43,7 @@ static size_t comp_entry_cnt[] = {
 	[FI_CQ_FORMAT_TAGGED] = FT_COMP_BUF_SIZE / sizeof(struct fi_cq_tagged_entry)
 };
 
+/*
 static size_t comp_entry_size[] = {
 	[FI_CQ_FORMAT_UNSPEC] = 0,
 	[FI_CQ_FORMAT_CONTEXT] = sizeof(struct fi_cq_entry),
@@ -50,6 +51,7 @@ static size_t comp_entry_size[] = {
 	[FI_CQ_FORMAT_DATA] = sizeof(struct fi_cq_data_entry),
 	[FI_CQ_FORMAT_TAGGED] = sizeof(struct fi_cq_tagged_entry)
 };
+*/
 
 
 static int ft_open_cqs(void)
@@ -119,43 +121,24 @@ int ft_bind_comp(struct fid_ep *ep, uint64_t flags)
 	return 0;
 }
 
-static void ft_check_rx_comp(void *buf)
-{
-	struct fi_cq_err_entry *entry;
-
-	entry = buf;
-	switch (ft_rx.cq_format) {
-	case FI_CQ_FORMAT_TAGGED:
-	case FI_CQ_FORMAT_DATA:
-	case FI_CQ_FORMAT_MSG:
-		if (entry->len != ft_tx.msg_size)
-			ft_record_error(FI_EMSGSIZE);
-		/* fall through */
-	default:
-		if (entry->op_context != NULL)
-			ft_record_error(FI_EOTHER);
-		break;
-	}
-}
-
 int ft_comp_rx(void)
 {
 	uint8_t buf[FT_COMP_BUF_SIZE];
-	int i, ret;
+	int ret;
 
 	do {
 		ret = fi_cq_read(rxcq, buf, comp_entry_cnt[ft_rx.cq_format]);
 		if (ret < 0) {
+			if (ret == -FI_EAGAIN)
+				break;
+
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rxcq, "rxcq");
 			} else {
 				FT_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
-		} else if (ret) {
-			for (i = 0; i < ret; i++) {
-				ft_check_rx_comp(&buf[comp_entry_size[ft_rx.cq_format] * i]);
-			}
+		} else {
 			ft_rx.credits += ret;
 		}
 	} while (ret == comp_entry_cnt[ft_rx.cq_format]);
@@ -172,13 +155,16 @@ int ft_comp_tx(void)
 	do {
 		ret = fi_cq_read(txcq, buf, comp_entry_cnt[ft_tx.cq_format]);
 		if (ret < 0) {
+			if (ret == -FI_EAGAIN)
+				break;
+
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(txcq, "txcq");
 			} else {
 				FT_PRINTERR("fi_cq_read", ret);
 			}
 			return ret;
-		} else if (ret) {
+		} else {
 			ft_tx.credits += ret;
 		}
 	} while (ret == comp_entry_cnt[ft_tx.cq_format]);
