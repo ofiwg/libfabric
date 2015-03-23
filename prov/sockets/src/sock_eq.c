@@ -63,11 +63,12 @@ ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 	if (dlistfd_empty(&sock_eq->list)) {
 		if(!timeout) {
 			SOCK_LOG_INFO("Nothing to read from eq!\n");
-			return 0;
+			return -FI_EAGAIN;
 		}
 		ret = dlistfd_wait_avail(&sock_eq->list, timeout);
 		if (ret <= 0)
-			return ret;
+			return (ret == 0 || ret == -FI_ETIMEDOUT) ? 
+				-FI_EAGAIN : ret;
 	}
 
 	fastlock_acquire(&sock_eq->lock);
@@ -90,16 +91,14 @@ ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 
 out:
 	fastlock_release(&sock_eq->lock);
-	return ret;
+	return (ret == 0 || ret == -FI_ETIMEDOUT) ? -FI_EAGAIN : ret;
 }
 
 
 ssize_t sock_eq_read(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 		     uint64_t flags)
 {
-	ssize_t ret;
-	ret = sock_eq_sread(eq, event, buf, len, 0, flags);
-	return ret == -FI_ETIMEDOUT ? -FI_EAGAIN : ret;
+	return sock_eq_sread(eq, event, buf, len, 0, flags);
 }
 
 ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
@@ -130,7 +129,7 @@ ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 
 out:
 	fastlock_release(&sock_eq->lock);
-	return ret;
+	return (ret == 0) ? -FI_EAGAIN : ret;
 }
 
 ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event, 
