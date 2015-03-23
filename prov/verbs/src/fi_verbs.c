@@ -375,11 +375,6 @@ static int fi_ibv_check_tx_attr(struct fi_tx_attr *attr, struct fi_info *info)
 		return -FI_ENODATA;
 	}
 
-	if (attr->inject_size > verbs_tx_attr.inject_size) {
-		VERBS_INFO("Given tx_attr->inject_size exceeds supported size\n");
-		return -FI_ENODATA;
-	}
-
 	return 0;
 }
 
@@ -507,11 +502,14 @@ static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
  	return 0;
 }
 
-static int fi_ibv_fill_info_attr(struct ibv_context *ctx, struct fi_info *hints,
+static int fi_ibv_fill_info_attr(struct ibv_context *ctx, struct ibv_qp *qp,
+				 struct fi_info *hints,
 				 struct fi_info *fi)
 {
+	struct ibv_qp_init_attr qp_init_attr;
 	struct ibv_device_attr device_attr;
 	struct ibv_port_attr port_attr;
+	struct ibv_qp_attr qp_attr;
 	union ibv_gid gid;
 	size_t name_len;
 	int ret;
@@ -530,6 +528,17 @@ static int fi_ibv_fill_info_attr(struct ibv_context *ctx, struct fi_info *hints,
 			return -FI_ENOMEM;
 
 		return 0;
+	}
+
+	if (qp) {
+		ret = ibv_query_qp(qp, &qp_attr, IBV_QP_CAP, &qp_init_attr);
+		if (ret)
+			return -ret;
+		fi->tx_attr->inject_size = qp_attr.cap.max_inline_data;
+	} else {
+		fi_read_file(FI_CONF_DIR, "def_inline_data",
+			def_inline_data, sizeof def_inline_data);
+		fi->tx_attr->inject_size = atoi(def_inline_data);
 	}
 
 	ibv_query_gid(ctx, 1, 0, &gid);
@@ -652,6 +661,19 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 	if (ret)
 		return ret;
 
+	if (id->verbs) {
+		fi_ibv_msg_ep_qp_init_attr(NULL, &qp_init_attr);
+		if (hints && hints->tx_attr)
+			qp_init_attr.cap.max_inline_data = hints->tx_attr->inject_size;
+
+		ret = rdma_create_qp(id, NULL, &qp_init_attr);
+		if (ret) {
+			FI_LOG(3, "verbs", "Could not create queue pair with requested attributes\n");
+			ret = -FI_ENODATA;
+			goto err1;
+		}
+	}
+
 	if (!(fi = fi_allocinfo())) {
 		ret = -FI_ENOMEM;
 		goto err1;
@@ -661,18 +683,22 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 	if (ret)
 		goto err2;
 
-	ret = fi_ibv_fill_info_attr(id->verbs, hints, fi);
+	ret = fi_ibv_fill_info_attr(id->verbs, id->qp, hints, fi);
 	if (ret)
 		goto err2;
 
 	*info = fi;
 
+	if (id->verbs)
+		rdma_destroy_qp(id);
 	rdma_destroy_ep(id);
 	rdma_freeaddrinfo(rai);
 	return 0;
 err2:
 	fi_freeinfo(fi);
 err1:
+	if (id->verbs)
+		rdma_destroy_qp(id);
 	rdma_destroy_ep(id);
 	rdma_freeaddrinfo(rai);
 	return ret;
@@ -691,14 +717,11 @@ static int fi_ibv_msg_ep_create_qp(struct fi_ibv_msg_ep *ep)
 			def_send_sge, sizeof def_send_sge);
 	fi_read_file(FI_CONF_DIR, "def_recv_sge",
 			def_recv_sge, sizeof def_recv_sge);
-	fi_read_file(FI_CONF_DIR, "def_inline_data",
-			def_inline_data, sizeof def_inline_data);
 
 	attr.cap.max_send_wr = atoi(def_send_wr);
 	attr.cap.max_recv_wr = atoi(def_recv_wr);
 	attr.cap.max_send_sge = atoi(def_send_sge);
 	attr.cap.max_recv_sge = atoi(def_recv_sge);
-	ep->inline_size = atoi(def_inline_data);
 	attr.cap.max_inline_data = ep->inline_size;
 	attr.qp_context = ep;
 	attr.send_cq = ep->scq->cq;
@@ -1873,6 +1896,14 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
 	_ep->ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
 
+	if (info->tx_attr) {
+		_ep->inline_size = info->tx_attr->inject_size;
+	} else {
+		fi_read_file(FI_CONF_DIR, "def_inline_data",
+			def_inline_data, sizeof def_inline_data);
+		_ep->inline_size = atoi(def_inline_data);
+	}
+
 	*ep = &_ep->ep_fid;
 	return 0;
 err:
@@ -1919,7 +1950,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 		goto err;
 	memcpy(fi->dest_addr, rdma_get_peer_addr(event->id), fi->dest_addrlen);
 
-	fi_ibv_fill_info_attr(event->id->verbs, NULL, fi);
+	fi_ibv_fill_info_attr(event->id->verbs, NULL, NULL, fi);
 
 	fi->connreq = (fi_connreq_t) event->id;
 	return fi;
