@@ -90,6 +90,8 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 #define MIN(a, b) ((a) < (b) ? a : b)
 #define MAX(a, b) ((a) > (b) ? a : b)
 
+#define ARRAY_SIZE(x) (sizeof((x)) / sizeof((x)[0]))
+
 /* flsll is defined on BSD systems, but is different. */
 static inline int fi_flsll(long long int i)
 {

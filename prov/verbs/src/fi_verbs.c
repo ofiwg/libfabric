@@ -64,9 +64,11 @@
 #define VERBS_PROV_NAME "verbs"
 #define VERBS_PROV_VERS FI_VERSION(1,0)
 
-#define VERBS_WARN(...) FI_WARN(VERBS_PROV_NAME, __VA_ARGS__)
-#define VERBS_INFO(...) FI_LOG(2, VERBS_PROV_NAME, __VA_ARGS__)
-#define VERBS_DEBUG(...) FI_DEBUG(VERBS_PROV_NAME, __VA_ARGS__)
+#define VERBS_WARN(...) FI_ERR(VERBS_PROV_NAME, FI_FABRIC, __VA_ARGS__)
+#define VERBS_INFO(...)                                                        \
+	FI_LOG(VERBS_PROV_NAME, verbs_handle, FI_LOG_INFO, FI_FABRIC,          \
+	       __VA_ARGS__)
+#define VERBS_DEBUG(...) FI_DEBUG(VERBS_PROV_NAME, FI_FABRIC, __VA_ARGS__)
 
 #define VERBS_MSG_SIZE (1ULL << 31)
 #define VERBS_IB_PREFIX "IB-0x"
@@ -137,6 +139,7 @@ static char def_recv_wr[16] = "384";
 static char def_send_sge[16] = "4";
 static char def_recv_sge[16] = "4";
 static char def_inline_data[16] = "64";
+static int verbs_handle = FI_VERBS_HANDLE;
 
 const struct fi_fabric_attr verbs_fabric_attr = {
 	.name			= VERBS_PROV_NAME,
@@ -623,9 +626,9 @@ fi_ibv_create_ep(const char *node, const char *service,
 	if (ret) {
 		ret = -errno;
 		if (ret == -ENOENT) {
-			FI_LOG(1, "verbs",
-				"rdma_create_ep()-->ENOENT; likely usnic bug, "
-				"skipping verbs provider.\n");
+			FI_LOG(VERBS_PROV_NAME, verbs_handle, FI_LOG_WARN,
+			       FI_FABRIC,
+			       "rdma_create_ep()-->ENOENT; likely usnic bug, skipping verbs provider.\n");
 			ret = -FI_ENODATA;
 		}
 		goto err;
@@ -2837,7 +2840,8 @@ static struct fi_provider fi_ibv_prov = {
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = fi_ibv_getinfo,
 	.fabric = fi_ibv_fabric,
-	.cleanup = fi_ibv_fini
+	.cleanup = fi_ibv_fini,
+	.context = { {[0] = &verbs_handle} }
 };
 
 VERBS_INI

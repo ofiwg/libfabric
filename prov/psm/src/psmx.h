@@ -44,8 +44,9 @@ extern "C" {
 #define PSMX_PROVNAME "psm"
 #define PSMX_DEFAULT_UUID	"0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF"
 
-#define PSMX_DEBUG(...) FI_LOG(2, PSMX_PROVNAME, __VA_ARGS__)
-#define PSMX_WARN(...)	FI_WARN(PSMX_PROVNAME, __VA_ARGS__)
+#define PSMX_DEBUG(...)                                                        \
+	FI_LOG(PSMX_PROVNAME, psm_handle, FI_LOG_TRACE, FI_FABRIC, __VA_ARGS__)
+#define PSMX_WARN(...) FI_ERR(PSMX_PROVNAME, FI_FABRIC, __VA_ARGS__)
 
 #define PSMX_TIME_OUT	120
 
@@ -540,6 +541,7 @@ extern struct fi_ops_atomic	psmx_atomic_ops;
 extern struct psm_am_parameters psmx_am_param;
 extern struct psmx_env		psmx_env;
 extern struct psmx_fid_fabric	*psmx_active_fabric;
+extern int psm_handle;
 
 int	psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			 struct fid_domain **domain, void *context);

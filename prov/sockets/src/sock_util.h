@@ -35,20 +35,22 @@
 
 #include "fi_log.h"
 
-#define SOCK_ERROR (1)
-#define SOCK_WARN (2)
-#define SOCK_INFO (3)
+#define SOCK_ERROR (FI_LOG_ERROR)
+#define SOCK_WARN (FI_LOG_WARN)
+#define SOCK_INFO (FI_LOG_INFO)
 
 extern useconds_t sock_progress_thread_wait;
 
 extern const char sock_fab_name[];
 extern const char sock_dom_name[];
 extern const char sock_prov_name[];
+extern int sock_handle;
 
-#define SOCK_LOG_INFO(...) FI_LOG(SOCK_INFO, sock_prov_name, __VA_ARGS__)
+#define SOCK_LOG_INFO(...)                                                     \
+	FI_LOG(sock_prov_name, sock_handle, SOCK_INFO, FI_FABRIC, __VA_ARGS__)
 
-#define SOCK_LOG_WARN(...) FI_WARN(sock_prov_name, __VA_ARGS__)
+#define SOCK_LOG_WARN(...) FI_ERR(sock_prov_name, FI_FABRIC, __VA_ARGS__)
 
-#define SOCK_LOG_ERROR(...) FI_WARN(sock_prov_name, __VA_ARGS__)
+#define SOCK_LOG_ERROR(...) FI_ERR(sock_prov_name, FI_FABRIC, __VA_ARGS__)
 
 #endif

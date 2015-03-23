@@ -76,6 +76,7 @@
 #include "usdf_rdm.h"
 
 struct usdf_usnic_info *__usdf_devinfo;
+int usnic_handle = FI_USNIC_HANDLE;
 
 static int
 usdf_validate_hints(struct fi_info *hints, struct usd_device_attrs *dap)
@@ -996,7 +997,8 @@ static struct fi_provider usdf_ops = {
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = usdf_getinfo,
 	.fabric = usdf_fabric_open,
-	.cleanup =  usdf_fini
+	.cleanup =  usdf_fini,
+	.context = { {[0] = &usnic_handle} }
 };
 
 USNIC_INI

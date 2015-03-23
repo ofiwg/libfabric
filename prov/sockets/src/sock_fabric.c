@@ -52,6 +52,7 @@ const char sock_dom_name[] = "sockets";
 const char sock_prov_name[] = "sockets";
 
 useconds_t sock_progress_thread_wait = 0;
+int sock_handle = FI_SOCK_HANDLE;
 
 const struct fi_fabric_attr sock_fabric_attr = {
 	.fabric = NULL,
@@ -427,7 +428,8 @@ struct fi_provider sock_prov = {
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = sock_getinfo,
 	.fabric = sock_fabric,
-	.cleanup = fi_sockets_fini
+	.cleanup = fi_sockets_fini,
+	.context = { {[0] = &sock_handle} }
 };
 
 SOCKETS_INI

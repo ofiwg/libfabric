@@ -68,6 +68,7 @@ struct fi_provider {
 	int	(*fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
 	void	(*cleanup)(void);
+	struct fi_context context;
 };
 
 #ifdef __cplusplus
