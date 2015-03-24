@@ -649,10 +649,45 @@ err:
 	return ret;
 }
 
+static void fi_ibv_msg_ep_qp_init_attr(struct fi_ibv_msg_ep *ep,
+		struct ibv_qp_init_attr *attr)
+{
+	/* TODO: serialize access to string buffers */
+	fi_read_file(FI_CONF_DIR, "def_send_wr",
+			def_send_wr, sizeof def_send_wr);
+	fi_read_file(FI_CONF_DIR, "def_recv_wr",
+			def_recv_wr, sizeof def_recv_wr);
+	fi_read_file(FI_CONF_DIR, "def_send_sge",
+			def_send_sge, sizeof def_send_sge);
+	fi_read_file(FI_CONF_DIR, "def_recv_sge",
+			def_recv_sge, sizeof def_recv_sge);
+
+	attr->cap.max_send_wr = atoi(def_send_wr);
+	attr->cap.max_recv_wr = atoi(def_recv_wr);
+	attr->cap.max_send_sge = atoi(def_send_sge);
+	attr->cap.max_recv_sge = atoi(def_recv_sge);
+	attr->srq = NULL;
+	attr->qp_type = IBV_QPT_RC;
+	attr->sq_sig_all = 1;
+	if (ep) {
+		attr->cap.max_inline_data = ep->inline_size;
+		attr->qp_context = ep;
+		attr->send_cq = ep->scq->cq;
+		attr->recv_cq = ep->rcq->cq;
+	} else {
+		fi_read_file(FI_CONF_DIR, "def_inline_data",
+			def_inline_data, sizeof def_inline_data);
+		attr->cap.max_inline_data = atoi(def_inline_data);
+		attr->qp_context = NULL;
+		attr->send_cq = attr->recv_cq = NULL;
+	}
+}
+
 static int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 			  uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct rdma_cm_id *id;
+	struct ibv_qp_init_attr qp_init_attr;
 	struct rdma_addrinfo *rai;
 	struct fi_info *fi;
 	int ret;
@@ -664,7 +699,8 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 	if (id->verbs) {
 		fi_ibv_msg_ep_qp_init_attr(NULL, &qp_init_attr);
 		if (hints && hints->tx_attr)
-			qp_init_attr.cap.max_inline_data = hints->tx_attr->inject_size;
+			qp_init_attr.cap.max_inline_data
+				= hints->tx_attr->inject_size;
 
 		ret = rdma_create_qp(id, NULL, &qp_init_attr);
 		if (ret) {
@@ -708,28 +744,7 @@ static int fi_ibv_msg_ep_create_qp(struct fi_ibv_msg_ep *ep)
 {
 	struct ibv_qp_init_attr attr;
 
-	/* TODO: serialize access to string buffers */
-	fi_read_file(FI_CONF_DIR, "def_send_wr",
-			def_send_wr, sizeof def_send_wr);
-	fi_read_file(FI_CONF_DIR, "def_recv_wr",
-			def_recv_wr, sizeof def_recv_wr);
-	fi_read_file(FI_CONF_DIR, "def_send_sge",
-			def_send_sge, sizeof def_send_sge);
-	fi_read_file(FI_CONF_DIR, "def_recv_sge",
-			def_recv_sge, sizeof def_recv_sge);
-
-	attr.cap.max_send_wr = atoi(def_send_wr);
-	attr.cap.max_recv_wr = atoi(def_recv_wr);
-	attr.cap.max_send_sge = atoi(def_send_sge);
-	attr.cap.max_recv_sge = atoi(def_recv_sge);
-	attr.cap.max_inline_data = ep->inline_size;
-	attr.qp_context = ep;
-	attr.send_cq = ep->scq->cq;
-	attr.recv_cq = ep->rcq->cq;
-	attr.srq = NULL;
-	attr.qp_type = IBV_QPT_RC;
-	attr.sq_sig_all = 1;
-
+	fi_ibv_msg_ep_qp_init_attr(ep, &attr);
 	return rdma_create_qp(ep->id, ep->rcq->domain->pd, &attr) ? -errno : 0;
 }
 
