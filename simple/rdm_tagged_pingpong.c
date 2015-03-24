@@ -77,7 +77,9 @@ int wait_for_completion_tagged(struct fid_cq *cq, int num_completions)
 
 	while (num_completions > 0) {
 		ret = fi_cq_read(cq, &comp, 1);
-		if (ret > 0) {
+		if (ret == -FI_EAGAIN)
+			continue;
+		else if (ret > 0) {
 			num_completions--;
 		} else if (ret < 0) {
 			FT_PRINTERR("fi_cq_read", ret);
@@ -96,6 +98,8 @@ static int send_xfer(int size)
 		ret = fi_cq_read(scq, &comp, 1);
 		if (ret > 0) {
 			goto post;
+		} else if (ret == -FI_EAGAIN) {
+			continue;
 		} else if (ret < 0) {
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(scq, "scq");
@@ -123,7 +127,10 @@ static int recv_xfer(int size)
 
 	do {
 		ret = fi_cq_read(rcq, &comp, 1);
-		if (ret < 0) {
+		if (ret == -FI_EAGAIN) {
+			ret = 0;
+			continue;
+		} else if (ret < 0) {
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rcq, "rcq");
 			} else {

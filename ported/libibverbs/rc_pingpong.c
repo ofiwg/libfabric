@@ -639,12 +639,16 @@ int main(int argc, char *argv[])
 		} else {
 			do {
 				rd = fi_cq_read(ctx->cq, &wc, 1);
+				if (rd == -FI_EAGAIN) {
+					rd = 0;
+					continue;
+				}
 			} while (rd == 0);
 		}
 
 		if (rd < 0) {
 			fi_cq_readerr(ctx->cq, &cq_err, 0);
-			fprintf(stderr, "cq fi_eq_readerr() %s (%d)\n", 
+			fprintf(stderr, "cq fi_cq_readerr() %s (%d)\n", 
 				fi_cq_strerror(ctx->cq, cq_err.err, cq_err.err_data, NULL, 0),
 				cq_err.err);
 			return 1;

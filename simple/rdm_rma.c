@@ -150,7 +150,10 @@ static int wait_remote_writedata_completion(void)
 
 	do {
 		ret = fi_cq_read(rcq, &comp, 1);
-		if (ret < 0) {
+		if (ret == -FI_EAGAIN) {
+			ret = 0;
+			continue;
+		} else if (ret < 0) {
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rcq, "rcq");
 			} else {

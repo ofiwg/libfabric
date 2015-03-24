@@ -415,6 +415,8 @@ static int send_recv()
 		if(ret > 0) {
 			send_pending--;
 			fprintf(stdout, "Received send completion event!\n");
+		} else if (ret == -FI_EAGAIN) {
+			continue;
 		} else if (ret < 0) {
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(scq, "scq");
@@ -430,6 +432,8 @@ static int send_recv()
 		if(ret > 0) {
 			recv_pending--;
 			fprintf(stdout, "Received recv completion event!\n");
+		} else if (ret == -FI_EAGAIN) {
+			continue;
 		} else if (ret < 0) {
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rcq, "rcq");

@@ -277,7 +277,10 @@ static int poll_cqs(enum CQ_INDEX index)
 
 		for (done = 0; done < hints->tx_attr->size; done += ret) {
 			ret = fi_cq_read(nodes[i].cq[index], entry, 8);
-			if (ret < 0) {
+			if (ret == -FI_EAGAIN) {
+				ret = 0;
+				continue;
+			} else if (ret < 0) {
 				printf("cmatose: failed polling CQ: %d\n", ret);
 				return ret;
 			}
@@ -354,7 +357,10 @@ static int connect_events(void)
 
 	while (connects_left && !ret) {
 		ret = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
-		if (ret < 0) {
+		
+		if (ret == -FI_EAGAIN)
+			continue;
+		else if (ret < 0) {
 			FT_PRINTERR("fi_eq_sread", ret);
 			break;
 		}
@@ -379,7 +385,9 @@ static int shutdown_events(void)
 
 	while (disconnects_left && !ret) {
 		ret = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
-		if (ret < 0) {
+		if (ret == -FI_EAGAIN)
+			continue;
+		else if (ret < 0) {
 			FT_PRINTERR("fi_eq_sread", ret);
 			break;
 		}
