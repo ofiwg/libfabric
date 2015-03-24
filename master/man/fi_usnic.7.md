@@ -32,8 +32,8 @@ libfabric provider:
   * If you have libnl (either v1 or v3) installed in a non-standard
     location (e.g., not in /usr/lib or /usr/lib64), you may need to
     tell libfabric's configure where to find libnl via the
-    `--with-libnl=DIR` or `--with-libnl3=DIR` command line options (for
-    libnl v1 and v3, respectively).
+    `--with-libnl=DIR` command line option (where DIR is the
+    installation prefix of the libnl package).
 * The most common way to use the libfabric usnic provider is via an
   MPI implementation that uses libfabric (and the usnic provider) as a
   lower layer transport.  MPI applications do not need to know
