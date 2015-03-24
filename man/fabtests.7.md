@@ -111,15 +111,15 @@ These tests are a mix of very basic tests and major features of libfabric. All o
 To run basic tests: fi_dgram, fi_msg, fi_rdm, fi_rdm_rma_simple
 
 	run server: ./<basic_test_name> -f <provider_name>
-		e.g.	./fi_dgram -f sockest
-	run client: ./<basic_test_name> <server addr> -f <provider_name>
+		e.g.	./fi_dgram -f sockets
+	run client: ./<basic_test_name> <server_addr> -f <provider_name>
 		e.g.	./fi_dgram 192.168.0.123 -f sockets
 
 To run non-basic tests:
 
-	run server: ./<non_basic_test_name> -f <provider_name> -s <source addr>
-		e.g.	./fi_msg_rma -f sockest -s 192.168.0.123
-	run client: ./<non_basic_test_name> <server addr> -f <provider_name>
+	run server: ./<non_basic_test_name> -f <provider_name> -s <source_addr>
+		e.g.	./fi_msg_rma -f sockets -s 192.168.0.123
+	run client: ./<non_basic_test_name> <server_addr> -f <provider_name>
 		e.g.	./fi_msg_rma 192.168.0.123 -f sockets
 
 To run tests with different options:
