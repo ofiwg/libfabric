@@ -88,6 +88,13 @@ asynchronously, with the completion reported through the event queue.
 If an event queue is not bound to the domain with the FI_REG_MR flag,
 then memory registration requests complete synchronously.
 
+See [`fi_av_bind`(3)](fi_av_bind.3.html),
+[`fi_ep_bind`(3)](fi_ep_bind.3.html),
+[`fi_mr_bind`(3)](fi_mr_bind.3.html),
+[`fi_pep_bind`(3)](fi_pep_bind.3.html), and
+[`fi_scalable_ep_bind`(3)](fi_scalable_ep_bind.3.html) for more
+information.
+
 ## fi_close
 
 The fi_close call is used to release all resources associated with a domain or
@@ -468,5 +475,6 @@ vectors.
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_av`(3)](fi_av.3.html),
+[`fi_ep`(3)](fi_ep.3.html),
 [`fi_eq`(3)](fi_eq.3.html),
 [`fi_mr`(3)](fi_mr.3.html)
