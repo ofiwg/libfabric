@@ -59,6 +59,10 @@ static struct ft_set test_sets[] = {
 			FI_EP_DGRAM,
 			FI_EP_RDM
 		},
+		.av_type = {
+			FI_AV_TABLE,
+			FI_AV_MAP
+		},
 		.comp_type = {
 			FT_COMP_QUEUE
 		},
@@ -158,6 +162,7 @@ void fts_start(struct ft_series *series, int index)
 	series->cur_set = 0;
 	series->cur_type = 0;
 	series->cur_ep = 0;
+	series->cur_av = 0;
 	series->cur_comp = 0;
 	series->cur_mode = 0;
 	series->cur_caps = 0;
@@ -195,6 +200,13 @@ void fts_next(struct ft_series *series)
 		return;
 	series->cur_comp = 0;
 
+	if (set->ep_type[series->cur_ep] == FI_EP_RDM ||
+	    set->ep_type[series->cur_ep] == FI_EP_DGRAM) {
+		if (set->av_type[++series->cur_av])
+			return;
+	}
+	series->cur_av = 0;
+
 	if (set->ep_type[++series->cur_ep])
 		return;
 	series->cur_ep = 0;
@@ -228,6 +240,7 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->mode = (set->mode[series->cur_mode] == FT_MODE_NONE) ?
 			0 : set->mode[series->cur_mode];
 	info->ep_type = set->ep_type[series->cur_ep];
+	info->av_type = set->av_type[series->cur_av];
 	info->comp_type = set->comp_type[series->cur_comp];
 
 	memcpy(info->node, set->node, FI_NAME_MAX);

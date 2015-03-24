@@ -218,9 +218,13 @@ static int ft_pingpong_dgram(void)
 				return ret;
 		}
 	} else {
-		ret = ft_recv_dgram();
-		if (ret)
-			return ret;
+		for (i = 0; i < 1000; i++) {
+			ret = ft_recv_dgram();
+			if (!ret)
+				break;
+			else if (ret != -FI_ETIMEDOUT)
+				return ret;
+		}
 
 		for (i = 0; i < ft.xfer_iter - 1; i++) {
 			ret = ft_sendrecv_dgram();
@@ -228,7 +232,7 @@ static int ft_pingpong_dgram(void)
 				return ret;
 		}
 
-		ret = ft_send_msg();
+		ret = ft_send_dgram();
 		if (ret)
 			return ret;
 	}
