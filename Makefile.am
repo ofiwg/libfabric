@@ -35,7 +35,7 @@ noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = common/shared.c
 
 if MACOS
-libfabtests_la_SOURCES += common/osx/osd.h
+libfabtests_la_SOURCES += include/osx/osd.h
 libfabtests_la_SOURCES += common/osx/osd.c
 endif
 
@@ -90,7 +90,7 @@ simple_fi_rdm_cntr_pingpong_LDADD = libfabtests.la
 simple_fi_rdm_rma_SOURCES = \
 	simple/rdm_rma.c
 simple_fi_rdm_rma_LDADD = libfabtests.la
-	
+
 simple_fi_rdm_atomic_SOURCES = \
 	simple/rdm_atomic.c
 simple_fi_rdm_atomic_LDADD = libfabtests.la
