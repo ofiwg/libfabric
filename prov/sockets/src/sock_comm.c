@@ -129,7 +129,7 @@ ssize_t sock_comm_recv_socket(struct sock_conn *conn, void *buf, size_t len)
 	
 	ret = read(conn->sock_fd, buf, len);
 	if (ret < 0) {
-		SOCK_LOG_INFO("read %s\n", strerror(ret));
+		SOCK_LOG_INFO("read %s\n", strerror(errno));
 		ret = 0;
 	}
 
