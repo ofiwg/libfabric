@@ -554,7 +554,7 @@ int main(int argc, char **argv)
 	hints->tx_attr->size = 10;
 	hints->rx_attr->size = 10;
 
-	while ((op = getopt(argc, argv, "s:b:c:C:S:p:")) != -1) {
+	while ((op = getopt(argc, argv, "s:b:c:C:S:p:f:")) != -1) {
 		switch (op) {
 		case 's':
 			flags &= ~FI_SOURCE;
