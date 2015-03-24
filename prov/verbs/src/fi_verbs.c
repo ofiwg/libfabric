@@ -1990,7 +1990,7 @@ fi_ibv_eq_read(struct fid_eq *eq, uint32_t *event,
 
 	ret = rdma_get_cm_event(_eq->channel, &cma_event);
 	if (ret)
-		return (errno == EAGAIN) ? 0 : -errno;
+		return -errno;
 
 	ret = fi_ibv_eq_cm_process_event(_eq, cma_event, event, entry, len);
 	rdma_ack_cm_event(cma_event);
@@ -2008,12 +2008,12 @@ fi_ibv_eq_sread(struct fid_eq *eq, uint32_t *event,
 
 	while (1) {
 		ret = fi_ibv_eq_read(eq, event, buf, len, flags);
-		if (ret)
+		if (ret && (ret != -FI_EAGAIN))
 			return ret;
 
 		ret = fi_poll_fd(_eq->channel->fd, timeout);
 		if (ret == 0)
-			return -FI_ETIMEDOUT;
+			return -FI_EAGAIN;
 		else if (ret < 0)
 			return ret;
 	};
@@ -2186,7 +2186,7 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 
 	for (cur = 0; cur < threshold; ) {
 		ret = _cq->cq_fid.ops->read(cq, buf, count - cur);
-		if (ret < 0 || !_cq->channel)
+		if ((ret < 0 && ret != -FI_EAGAIN) || !_cq->channel)
 			break;
 
 		if (ret > 0) {
@@ -2204,7 +2204,7 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 		}
 		ret = fi_poll_fd(_cq->channel->fd, timeout);
 		if (ret == 0)
-			return -FI_ETIMEDOUT;
+			return -FI_EAGAIN;
 		else if (ret < 0)
 			break;
 	}
@@ -2271,7 +2271,7 @@ static ssize_t fi_ibv_cq_read_context(struct fid_cq *cq, void *buf, size_t count
 		entry += 1;
 	}
 
-	return i ? i : ret;
+	return i ? i : (ret ? ret : -FI_EAGAIN);
 }
 
 static ssize_t fi_ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t count)
@@ -2300,7 +2300,7 @@ static ssize_t fi_ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t count)
 		entry += 1;
 	}
 
-	return i ? i : ret;
+	return i ? i : (ret ? ret : -FI_EAGAIN);
 }
 
 static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t count)
@@ -2338,7 +2338,7 @@ static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t count)
 		entry += 1;
 	}
 
-	return i ? i : ret;
+	return i ? i : (ret ? ret : -FI_EAGAIN);
 }
 
 static const char *
