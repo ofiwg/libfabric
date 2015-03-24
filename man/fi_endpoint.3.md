@@ -436,7 +436,7 @@ an endpoint.
 
 {% highlight c %}
 struct fi_ep_attr {
-	enum fi_ep_type ep_type;
+	enum fi_ep_type type;
 	uint32_t        protocol;
 	uint32_t        protocol_version;
 	size_t          max_msg_size;
