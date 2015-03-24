@@ -478,7 +478,8 @@ fi_cq_read / fi_cq_readfrom / fi_cq_readerr
 fi_cq_sread / fi_cq_sreadfrom
 : On success, returns the number of completion events retrieved from
   the completion queue.  On error, a negative value corresponding to
-  fabric errno is returned. On timeout, -FI_ETIMEDOUT is returned.
+  fabric errno is returned.  If no completions are available to
+  return from the CQ, -FI_EAGAIN will be returned.
 
 fi_cq_write / fi_cq_writeerr
 : On success, returns the number of bytes read from or written to the
