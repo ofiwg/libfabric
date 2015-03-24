@@ -1,4 +1,4 @@
-.TH fi_usnic 7 "2015\-03\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_usnic 7 "2015\-03\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The usNIC Fabric Provider
@@ -28,8 +28,8 @@ installing libnl from RPM or other packaging system, install the
 If you have libnl (either v1 or v3) installed in a non-standard location
 (e.g., not in /usr/lib or /usr/lib64), you may need to tell
 libfabric\[aq]s configure where to find libnl via the
-\f[C]--with-libnl=DIR\f[] or \f[C]--with-libnl3=DIR\f[] command line
-options (for libnl v1 and v3, respectively).
+\f[C]--with-libnl=DIR\f[] command line option (where DIR is the
+installation prefix of the libnl package).
 .IP \[bu] 2
 The most common way to use the libfabric usnic provider is via an MPI
 implementation that uses libfabric (and the usnic provider) as a lower
