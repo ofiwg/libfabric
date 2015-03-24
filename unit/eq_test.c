@@ -423,16 +423,16 @@ int main(int argc, char **argv)
 
 	while ((op = getopt(argc, argv, "f:p:")) != -1) {
 		switch (op) {
-		case 'f':
+		case 'a':
 			hints->fabric_attr->name = strdup(optarg);
 			break;
-		case 'p':
+		case 'f':
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		default:
 			printf("usage: %s\n", argv[0]);
-			printf("\t[-f fabric_name]\n");
-			printf("\t[-p provider_name]\n");
+			printf("\t[-a fabric_name]\n");
+			printf("\t[-f provider_name]\n");
 			exit(1);
 		}
 	}

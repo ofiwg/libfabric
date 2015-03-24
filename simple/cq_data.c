@@ -41,14 +41,13 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
+static struct cs_opts opts;
 static void *buf;
 static size_t buffer_size;
 static int rx_depth = 500;
 static size_t cq_data_size;
 
 static struct fi_info *hints;
-static char *dst_addr, *src_addr;
-static char *dst_port = "9228", *src_port = "9228";
 
 static struct fid_fabric *fab;
 static struct fid_pep *pep;
@@ -57,25 +56,6 @@ static struct fid_ep *ep;
 static struct fid_eq *cmeq;
 static struct fid_cq *rcq, *scq;
 static struct fid_mr *mr;
-
-void print_usage(char *name, char *desc)
-{
-	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
-	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server \t\n", name);
-	if (desc)
-		fprintf(stderr, "\n%s\n", desc);
-	
-	fprintf(stderr, "\nOptions:\n");
-	fprintf(stderr, "  -n <domain>\tdomain name\n");
-	fprintf(stderr, "  -b <src_port>\tnon default source port number\n");
-	fprintf(stderr, "  -p <dst_port>\tnon default destination port number\n");
-	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
-	fprintf(stderr, "  -s <address>\tsource address\n");
-	fprintf(stderr, "  -h\t\tdisplay this help output\n");
-
-	return;
-}
 
 static void free_lres(void)
 {
@@ -184,6 +164,12 @@ static int bind_ep_res(void)
 	if (ret)
 		return ret;
 	
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
+
 	return ret;
 }
 
@@ -192,7 +178,7 @@ static int server_listen(void)
 	struct fi_info *fi;
 	int ret;
 
-	ret = fi_getinfo(FT_FIVERSION, src_addr, src_port, FI_SOURCE, hints,
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE, hints,
 			&fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
@@ -326,11 +312,11 @@ static int client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	ret = ft_getsrcaddr(src_addr, src_port, hints);
+	ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
 	if (ret)
 		return ret;
 
-	ret = fi_getinfo(FT_FIVERSION, dst_addr, dst_port, 0, hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -413,7 +399,7 @@ static int run_test()
 	/* Set remote_cq_data based on the cq_data_size we got from fi_getinfo */
 	remote_cq_data = 0x0123456789abcdef & ((0x1ULL << (cq_data_size * 8)) - 1);
 
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		fprintf(stdout,
 			"Posting send with immediate data: 0x%" PRIx64 "\n",
 			remote_cq_data);
@@ -427,12 +413,6 @@ static int run_test()
 		wait_for_completion(scq, 1);
 		fprintf(stdout, "Done\n");
 	} else {
-		ret = fi_recv(ep, buf, size, fi_mr_desc(mr), 0, buf);
-		if (ret) {
-			FT_PRINTERR("fi_recv", ret);
-			return ret;
-		}
-
 		fprintf(stdout, "Waiting for immediate data from client\n");
 		ret = fi_cq_sread(rcq, &comp, 1, NULL, -1);
 		if (ret < 0) {
@@ -464,13 +444,13 @@ static int run(void)
 {
 	int ret = 0;
 
-	if (!dst_addr) {
+	if (!opts.dst_addr) {
 		ret = server_listen();
 		if (ret)
 			return ret;
 	}
 
-	ret = dst_addr ? client_connect() : server_connect();
+	ret = opts.dst_addr ? client_connect() : server_connect();
 	if (ret) {
 		return ret;
 	}
@@ -480,7 +460,7 @@ static int run(void)
 	fi_shutdown(ep, 0);
 	fi_close(&ep->fid);
 	free_ep_res();
-	if (!dst_addr)
+	if (!opts.dst_addr)
 		free_lres();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
@@ -490,34 +470,27 @@ static int run(void)
 int main(int argc, char **argv)
 {
 	int op, ret;
+	opts = INIT_OPTS;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "b:p:s:h" INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'b':
-			src_port = optarg;
-			break;
-		case 'p':
-			dst_port = optarg;
-			break;
-		case 's':
-			src_addr = optarg;
-			break;
 		default:
+			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints);
 			break;
 		case '?':
 		case 'h':
-			print_usage(argv[0], "A client-server example that tranfers CQ data.\n");
+			ft_usage(argv[0], "A client-server example that tranfers CQ data.\n");
 			return EXIT_FAILURE;
 		}
 	}
 	
 	if (optind < argc)
-		dst_addr = argv[optind];
+		opts.dst_addr = argv[optind];
 
 	hints->domain_attr->cq_data_size = 4;  /* required minimum */
 

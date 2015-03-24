@@ -80,10 +80,13 @@ enum {
 };
 
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints);
+void ft_parse_addr_opts(int op, char *optarg, struct cs_opts *opts);
 void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts);
+void ft_usage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);
+#define ADDR_OPTS "b:p:s:"
 #define INFO_OPTS "n:f:"
-#define CS_OPTS "b:p:I:S:s:mi"
+#define CS_OPTS ADDR_OPTS "I:S:mi"
 
 #define INIT_OPTS (struct cs_opts) { .iterations = 1000, \
 				     .transfer_size = 1024, \

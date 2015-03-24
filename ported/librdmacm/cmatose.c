@@ -521,6 +521,7 @@ static void usage(char *progname)
 	printf("\t[-C message_count]\n");
 	printf("\t[-S message_size]\n");
 	printf("\t[-p port_number]\n");
+	printf("\t[-f provider_name]\n");
 	exit(1);
 }
 
@@ -571,6 +572,9 @@ int main(int argc, char **argv)
 			break;
 		case 'p':
 			port = optarg;
+			break;
+		case 'f':
+			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		default:
 			usage(argv[0]);

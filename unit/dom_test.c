@@ -78,19 +78,19 @@ int main(int argc, char **argv)
 
 	while ((op = getopt(argc, argv, "f:p:n:")) != -1) {
 		switch (op) {
-		case 'f':
+		case 'a':
 			fabric_hints.name = strdup(optarg);
 			break;
 		case 'n':
 			num_domains = atoi(optarg);
 			break;
-		case 'p':
+		case 'f':
 			fabric_hints.prov_name = strdup(optarg);
 			break;
 		default:
 			printf("usage: %s\n", argv[0]);
-			printf("\t[-f fabric_name]\n");
-			printf("\t[-p provider_name]\n");
+			printf("\t[-a fabric_name]\n");
+			printf("\t[-f provider_name]\n");
 			printf("\t[-n num domains to open]\n");
 			exit(EXIT_FAILURE);
 		}
