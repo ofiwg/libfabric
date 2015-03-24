@@ -8,6 +8,26 @@ AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([1.11 dist-bzip2 foreign -Wall -Werror subdir-objects])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
+AC_CANONICAL_HOST
+
+macos=0
+linux=0
+
+case $host_os in
+*darwin*)
+	macos=1
+	;;
+*linux*)
+	linux=1
+	;;
+*)
+	AC_MSG_ERROR([libfabric only builds on Linux & OS X])
+	;;
+esac
+
+AM_CONDITIONAL([MACOS], [test $macos -eq 1])
+AM_CONDITIONAL([LINUX], [test $linux -eq 1])
+
 dnl Fix autoconf's habit of adding -g -O2 by default
 AS_IF([test -z "$CFLAGS"],
       [CFLAGS='-O2 -DNDEBUG -Wall'])
@@ -33,6 +53,8 @@ fi
 dnl Checks for programs
 AC_PROG_CC
 AM_PROG_CC_C_O
+
+LT_INIT
 
 AC_ARG_WITH([libfabric],
             AC_HELP_STRING([--with-libfabric], [Use non-default libfabric location - default NO]),

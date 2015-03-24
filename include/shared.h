@@ -39,12 +39,18 @@
 #include <rdma/fabric.h>
 #include <rdma/fi_eq.h>
 
+#include <time.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* all tests should work with 1.0 API */
 #define FT_FIVERSION FI_VERSION(1,0)
+
+#ifdef __APPLE__
+#include "osx/osd.h"
+#endif
 
 struct test_size_param {
 	int size;

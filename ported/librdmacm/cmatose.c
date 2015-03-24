@@ -38,7 +38,6 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <byteswap.h>
 #include <getopt.h>
 
 #include <rdma/fabric.h>
