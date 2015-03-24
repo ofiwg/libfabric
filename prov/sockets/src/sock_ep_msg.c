@@ -479,6 +479,7 @@ static void *sock_msg_ep_listener_thread(void *data)
 			memset(cm_entry, 0, sizeof *cm_entry);
 			cm_entry->fid = &ep->ep.fid;
 
+			memcpy(&ep->cm_addr, &from_addr, sizeof(from_addr));
 			memcpy(&cm_entry->data, &conn_response->user_data,
 			       user_data_sz);
 
