@@ -41,12 +41,11 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
+static struct cs_opts opts;
 static void *buf;
 static size_t buffer_size = 1024;
 static int rx_depth = 512;
 
-static char *dst_addr = NULL;
-static char *port = "9228";
 static void *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
@@ -61,22 +60,6 @@ static struct fid_mr *mr;
 struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
-
-void print_usage(char *name, char *desc)
-{
-	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
-	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server\n", name);
-
-	if (desc)
-		fprintf(stderr, "\n%s\n", desc);
-
-	fprintf(stderr, "\nOptions:\n");
-	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
-	fprintf(stderr, "  -h\t\tdisplay this help output\n");
-							
-	return;
-}
 
 static void free_ep_res(void)
 {
@@ -195,23 +178,23 @@ static int bind_ep_res(void)
 
 static int init_fabric(void)
 {
-	int ret;
+	char *node, *service;
 	uint64_t flags = 0;
+	int ret;
 	
-	/* Set FI_SOURCE flag to enforce the port number to be the local port 
-	 * the server will be bound to */
-	if (!dst_addr)
-		flags = FI_SOURCE;
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
 	
 	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, dst_addr, port, flags, hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 	
 	/* Get remote address of the server */
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		addrlen = fi->dest_addrlen;
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, fi->dest_addr, addrlen);
@@ -239,7 +222,7 @@ static int init_fabric(void)
 	if (ret)
 		goto err5;
 	
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		/* Insert address to the AV and get the fabric address back */ 	
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
 				&fi_ctx_av);
@@ -266,7 +249,7 @@ static int send_recv()
 	struct fi_cq_entry comp;
 	int ret;
 
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		/* Client */
 		fprintf(stdout, "Posting a send...\n");
 		sprintf(buf, "Hello from Client!"); 
@@ -316,25 +299,27 @@ static int send_recv()
 int main(int argc, char **argv)
 {
 	int op, ret;
+	opts = INIT_OPTS;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:h")) != -1) {
+	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {			
-		case 'f':
-			hints->fabric_attr->prov_name = strdup(optarg);
+		default:
+			ft_parse_addr_opts(op, optarg, &opts);
+			ft_parseinfo(op, optarg, hints);
 			break;
 		case '?':
 		case 'h':
-			print_usage(argv[0], "A simple RDM client-sever example.");
+			ft_usage(argv[0], "A simple RDM client-sever example.");
 			return EXIT_FAILURE;
 		}
 	}
 	
 	if (optind < argc)
-		dst_addr = argv[optind];
+		opts.dst_addr = argv[optind];
 	
 	hints->ep_attr->type	= FI_EP_RDM;
 	hints->caps		= FI_MSG;

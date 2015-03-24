@@ -43,13 +43,12 @@
 #include <rdma/fi_tagged.h>
 #include <shared.h>
 
+static struct cs_opts opts;
 static void *buf;
 static size_t buffer_size = 1024;
 static int rx_depth = 512;
 
 static struct fi_info *fi, *hints;
-static char *dst_addr, *src_addr;
-static char *src_port = "9228", *dst_port = "9228";
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -68,26 +67,6 @@ struct fi_context fi_ctx_search;
 static uint64_t tag_data = 1;
 static uint64_t tag_control = 0x12345678;
 static uint64_t tag_param = 0x87654321;
-
-void print_usage(char *name, char *desc)
-{
-	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
-	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server \t\n", name);
-	
-	if (desc)
-		fprintf(stderr, "\n%s\n", desc);
-
-	fprintf(stderr, "\nOptions:\n");
-	fprintf(stderr, "  -n <domain>\tdomain name\n");
-	fprintf(stderr, "  -b <src_port>\tnon default source port number\n");
-	fprintf(stderr, "  -p <dst_port>\tnon default destination port number\n");
-	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
-	fprintf(stderr, "  -s <address>\tsource address\n");
-	fprintf(stderr, "  -h\t\tdisplay this help output\n");
-	
-	return;
-}
 
 int wait_for_tagged_completion(struct fid_cq *cq, int num_completions)
 {
@@ -153,11 +132,11 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = dst_addr ? send_msg(16, tag_control) : recv_msg(tag_control);
+	ret = opts.dst_addr ? send_msg(16, tag_control) : recv_msg(tag_control);
 	if (ret)
 		return ret;
 
-	ret = dst_addr ? recv_msg(tag_control) : send_msg(16, tag_control);
+	ret = opts.dst_addr ? recv_msg(tag_control) : send_msg(16, tag_control);
 
 	return ret;
 }
@@ -283,18 +262,10 @@ static int init_fabric(void)
 	char *node, *service;
 	int ret;
 
-	if (dst_addr) {
-		ret = ft_getsrcaddr(src_addr, src_port, hints);
-		if (ret)
-			return ret;
-		node = dst_addr;
-		service = dst_port;
-	} else {
-		node = src_addr;
-		service = src_port;
-		flags = FI_SOURCE;
-	}
-
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
+	
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
@@ -307,7 +278,7 @@ static int init_fabric(void)
 		fi->mode |= FI_PROV_MR_ATTR;
 
 	// get remote address
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		addrlen = fi->dest_addrlen;
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, fi->dest_addr, addrlen);
@@ -349,7 +320,7 @@ static int init_av(void)
 {
 	int ret;
 
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		// get local address blob. Find the addrlen first. We set
 		// addrlen as 0 and fi_getname will return the actual addrlen.
 		addrlen = 0;
@@ -448,7 +419,7 @@ static int run(void)
 		goto out;
 	
 	// Receiver
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		// search for initial tag, it should fail since the sender 
 		// hasn't sent anyting
 		fprintf(stdout, "Searching msg with tag [%" PRIu64 "]\n", tag_data);
@@ -517,6 +488,7 @@ out:
 int main(int argc, char **argv)
 {
 	int ret, op;
+	opts = INIT_OPTS;
 
 	hints = fi_allocinfo();
 	if (!hints) {
@@ -524,29 +496,21 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	while ((op = getopt(argc, argv, "b:p:s:h" INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'b':
-			src_port = optarg;
-			break;
-		case 'p':
-			dst_port = optarg;
-			break;
-		case 's':
-			src_addr = optarg;
-			break;
 		default:
+			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints);
 			break;
 		case '?':
 		case 'h':
-			print_usage(argv[0], "An RDM client-server example that uses tagged search.\n");
+			ft_usage(argv[0], "An RDM client-server example that uses tagged search.\n");
 			return EXIT_FAILURE;
 		}		
 	}
 
 	if (optind < argc)
-		dst_addr = argv[optind];
+		opts.dst_addr = argv[optind];
 	
 	hints->rx_attr->total_buffered_recv = buffer_size;
 	hints->ep_attr->type = FI_EP_RDM;

@@ -107,6 +107,8 @@ const unsigned int test_cnt;
 
 int ft_getsrcaddr(char *node, char *service, struct fi_info *hints);
 int ft_getdestaddr(char *node, char *service, struct fi_info *hints);
+int ft_read_addr_opts(char **node, char **service, struct fi_info *hints, 
+		uint64_t *flags, struct cs_opts *opts);
 char *size_str(char str[FT_STR_LEN], long long size);
 char *cnt_str(char str[FT_STR_LEN], long long cnt);
 int size_to_count(int size);
