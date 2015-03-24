@@ -407,6 +407,7 @@ dummy_man_pages = \
         man/man3/fi_open.3 \
         man/man3/fi_open_ops.3 \
         man/man3/fi_passive_ep.3 \
+        man/man3/fi_pep_bind.3 \
         man/man3/fi_poll_add.3 \
         man/man3/fi_poll_del.3 \
         man/man3/fi_poll_open.3 \
@@ -419,6 +420,7 @@ dummy_man_pages = \
         man/man3/fi_reject.3 \
         man/man3/fi_rx_addr.3 \
         man/man3/fi_rx_size_left.3 \
+        man/man3/fi_scalable_ep_bind.3 \
         man/man3/fi_send.3 \
         man/man3/fi_senddata.3 \
         man/man3/fi_sendmsg.3 \
