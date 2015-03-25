@@ -355,12 +355,10 @@ static int connect_events(void)
 	uint32_t event;
 	int ret = 0;
 
-	while (connects_left && !ret) {
+	while (connects_left && ret == -FI_EAGAIN) {
 		ret = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 		
-		if (ret == -FI_EAGAIN)
-			continue;
-		else if (ret < 0) {
+		if (ret < 0 && ret != FI_EAGAIN) {
 			FT_PRINTERR("fi_eq_sread", ret);
 			break;
 		}

@@ -92,9 +92,7 @@ int wait_for_send_completion(int num_completions)
 		ret = fi_cq_read(scq, &comp, 1);
 		if (ret > 0) {
 			num_completions--;
-		} else if (ret == -FI_EAGAIN) {
-			continue;
-		} else if (ret < 0) {
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			FT_PRINTERR("fi_cq_read", ret);
 			return ret;
 		}
@@ -137,9 +135,7 @@ int wait_for_recv_completion(void **recv_data, enum data_type type,
 					*recv_data = comp.buf;
 				}
 			}
-		} else if (ret == -FI_EAGAIN) {
-			continue;
-		} else if (ret < 0) {
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			FT_PRINTERR("fi_cq_read", ret);
 			return ret;
 		}

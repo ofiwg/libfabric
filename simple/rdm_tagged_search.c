@@ -96,11 +96,9 @@ int wait_for_tagged_completion(struct fid_cq *cq, int num_completions)
 
 	while (num_completions > 0) {
 		ret = fi_cq_read(cq, &comp, 1);
-		if (ret == -FI_EAGAIN)
-			continue;
-		else if (ret > 0) {
+		if (ret > 0) {
 			num_completions--;
-		} else if (ret < 0) {
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			FT_PRINTERR("fi_cq_read", ret);
 			return ret;
 		}

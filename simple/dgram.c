@@ -288,15 +288,11 @@ static int send_recv()
 		/* Read send queue */
 		do {
 			ret = fi_cq_read(scq, &comp, 1);
-			if (ret == -FI_EAGAIN) { 
-				ret = 0;
-				continue;
-			}
-			else if (ret < 0) {
+			if (ret < 0 && ret != -FI_EAGAIN) {
 				FT_PRINTERR("fi_cq_read", ret);
 				return ret;
 			}
-		} while (!ret);
+		} while (ret == -FI_EAGAIN);
 
 		fprintf(stdout, "Send completion received\n");
 	} else {
@@ -313,15 +309,11 @@ static int send_recv()
 		fprintf(stdout, "Waiting for client...\n");
 		do {
 			ret = fi_cq_read(rcq, &comp, 1);
-			if (ret == -FI_EAGAIN) {
-				ret = 0;
-				continue;
-			}
-			else if (ret < 0) {
+			if (ret < 0 && ret != -FI_EAGAIN) {
 				FT_PRINTERR("fi_cq_read", ret);
 				return ret;
 			}
-		} while (!ret);
+		} while (ret == -FI_EAGAIN);
 
 		fprintf(stdout, "Received data from client: %s\n", (char *)buf);
 	}
