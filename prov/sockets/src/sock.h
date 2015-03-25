@@ -137,12 +137,12 @@ struct sock_fabric {
 
 struct sock_conn {
         int sock_fd;
-	struct sock_ep *ep;
         struct sockaddr_in addr;
         struct sock_pe_entry *rx_pe_entry;
         struct sock_pe_entry *tx_pe_entry;
 	struct ringbuf inbuf;
 	struct ringbuf outbuf;
+	struct sock_ep *ep;
 };
 
 struct sock_conn_map {
