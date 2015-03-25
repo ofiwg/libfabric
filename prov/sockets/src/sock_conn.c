@@ -120,6 +120,7 @@ uint16_t sock_conn_map_lookup(struct sock_conn_map *map,
 
 static int sock_conn_map_insert(struct sock_conn_map *map,
 				struct sockaddr_in *addr,
+				struct sock_ep *ep,
 				int conn_fd)
 {
 	int index;
@@ -133,6 +134,7 @@ static int sock_conn_map_insert(struct sock_conn_map *map,
 	index = map->used;
 	map->table[index].addr = *addr;
 	map->table[index].sock_fd = conn_fd;
+	map->table[index].ep = ep;
 	sock_comm_buffer_init(&map->table[index]);
 	map->used++;
 	return index + 1;
@@ -241,7 +243,7 @@ uint16_t sock_conn_map_connect(struct sock_ep *ep,
 	if (use_conn) {
 		sock_set_sockopts(conn_fd);
 		fastlock_acquire(&map->lock);
-		ret = sock_conn_map_insert(map, addr, conn_fd);
+		ret = sock_conn_map_insert(map, addr, ep, conn_fd);
 		fastlock_release(&map->lock);
 	} else {
 		close(conn_fd);
@@ -327,7 +329,7 @@ static void *_sock_conn_listen(void *arg)
 		fastlock_acquire(&map->lock);
 		index = sock_conn_map_lookup(map, &remote);
 		if (!index) {
-			sock_conn_map_insert(map, &remote, conn_fd);
+			sock_conn_map_insert(map, &remote, ep, conn_fd);
 			use_conn = 1;
 		} else {
 			use_conn = 0;

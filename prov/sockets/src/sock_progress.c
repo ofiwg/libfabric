@@ -2022,6 +2022,9 @@ int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 		if (rbused(&conn->outbuf))
 			sock_comm_flush(conn);
 		
+		if (ep != conn->ep)
+			continue;
+
 		data_avail = 0;
 		if (rbused(&conn->inbuf) > 0) {
 			data_avail = 1;
