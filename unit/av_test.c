@@ -995,10 +995,11 @@ run_test_set()
 	if (bad_address != NULL) {
 		printf("Testing with bad_address = \"%s\"\n", bad_address);
 		failed += run_tests(test_array_bad, err_buf);
+	
+		bad_address = NULL;
+		printf("Testing with invalid address\n");
+		failed += run_tests(test_array_bad, err_buf);
 	}
-	bad_address = NULL;
-	printf("Testing with invalid address\n");
-	failed += run_tests(test_array_bad, err_buf);
 
 	return failed;
 }
@@ -1040,8 +1041,8 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (good_address == NULL || bad_address == NULL || num_good_addr == 0) {
-		printf("Test requires all of -d, -D, and -n\n");
+	if (good_address == NULL ||  num_good_addr == 0) {
+		printf("Test requires -d  and -n\n");
 		exit(1);
 	}
 
