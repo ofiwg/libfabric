@@ -66,7 +66,7 @@ static const char * const log_levels[] = {
  * By default support logging from all providers and subsystems. This will
  * change if the relevant environment variables are set.
  */
-uint64_t log_mask = PROV_MASK | SUBSYS_MASK;
+uint64_t log_mask = FI_PROV_MASK | FI_SUBSYS_MASK;
 
 typedef void found_func_t(char *ptr);
 
@@ -102,9 +102,9 @@ void set_provider(const char *prov_name, int position)
 
 	if (found) {
 		if (provider_list.negated)
-			log_mask &= ~EXPAND(position, PROV_OFFSET);
+			log_mask &= ~FI_EXPAND(position, FI_PROV_OFFSET);
 		else
-			log_mask |= EXPAND(position, PROV_OFFSET);
+			log_mask |= FI_EXPAND(position, FI_PROV_OFFSET);
 
 		item = container_of(found, struct provider_parameter, entry);
 		free(item->name);
@@ -177,7 +177,7 @@ static void handle_subsys_option(char *name)
 	}
 
 	if (found) {
-		log_mask |= EXPAND(i, SUBSYS_OFFSET);
+		log_mask |= FI_EXPAND(i, FI_SUBSYS_OFFSET);
 	} else {
 		fprintf(stderr,
 			"%s: invalid option \"%s\" for env FI_LOG_SUBSYSTEMS.\n",
@@ -225,7 +225,7 @@ static void get_providers(void)
 		     handle_provider_option);
 
 	if (!provider_list.negated)
-		log_mask &= ~PROV_MASK;
+		log_mask &= ~FI_PROV_MASK;
 
 	free(requested);
 }
@@ -239,11 +239,11 @@ static void get_subsystems(void)
 	if (!requested)
 		return;
 
-	log_mask &= ~SUBSYS_MASK;
+	log_mask &= ~FI_SUBSYS_MASK;
 
 	find_options(true, &negated, requested, handle_subsys_option);
 	if (negated)
-		log_mask ^= SUBSYS_MASK;
+		log_mask ^= FI_SUBSYS_MASK;
 
 	free(requested);
 }

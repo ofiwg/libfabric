@@ -67,21 +67,22 @@ enum {
  * Subsystem occupies bit positions 3-31
  * Provider occupes bit positions 32-63
  */
-#define SUBSYS_OFFSET 3
-#define PROV_OFFSET 32
+#define FI_SUBSYS_OFFSET 3
+#define FI_PROV_OFFSET 32
 
-#define MASK(width) ((UINT64_C(1) << (width)) - 1)
+#define FI_MASK(width) ((UINT64_C(1) << (width)) - 1)
 
-#define SUBSYS_MASK (MASK(29) << SUBSYS_OFFSET)
-#define PROV_MASK (MASK(32) << PROV_OFFSET)
+#define FI_SUBSYS_MASK (FI_MASK(29) << FI_SUBSYS_OFFSET)
+#define FI_PROV_MASK (FI_MASK(32) << FI_PROV_OFFSET)
 
 /*
  * Take bit position and offset and set bit in UINT64
  */
-#define EXPAND(position, offset) (UINT64_C(1) << ((position) + (offset)))
+#define FI_EXPAND(position, offset) (UINT64_C(1) << ((position) + (offset)))
 
 #define FI_LOG_TAG(prov, subsys, level)                                        \
-	(EXPAND((prov), PROV_OFFSET) | EXPAND((subsys), SUBSYS_OFFSET) | level)
+	(FI_EXPAND((prov), FI_PROV_OFFSET) |                                   \
+	 FI_EXPAND((subsys), FI_SUBSYS_OFFSET) | level)
 
 extern uint64_t log_mask;
 
