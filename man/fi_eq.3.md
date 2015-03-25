@@ -383,12 +383,16 @@ fi_eq_open
 : Returns 0 on success.  On error, a negative value corresponding to
   fabric errno is returned.
 
-fi_eq_read / fi_eq_readerr
-fi_eq_sread
-fi_eq_write
-: On success, returns the number of bytes read from or written to the
+fi_eq_read / fi_eq_readerr / fi_eq_sread
+: On success, returns the number of bytes read from the
   event queue.  On error, a negative value corresponding to fabric
-  errno is returned.  On timeout, fi_eq_sread returns -FI_ETIMEDOUT.
+  errno is returned.  If no data is available to be read from the
+  event queue, -FI_EAGAIN is returned.
+
+fi_eq_write
+: On success, returns the number of bytes written to the
+  event queue.  On error, a negative value corresponding to fabric
+  errno is returned.
 
 fi_eq_strerror
 : Returns a character string interpretation of the provider specific

@@ -536,7 +536,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		}
 	}
 
-	return read_count;
+	return read_count ? read_count : -FI_EAGAIN;
 }
 
 static ssize_t psmx_cq_read(struct fid_cq *cq, void *buf, size_t count)
