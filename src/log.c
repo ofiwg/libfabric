@@ -116,20 +116,24 @@ void set_provider(const char *prov_name, int position)
  * Negatable describes whether the function should check for the caret symbol
  * (^) at the beginning of the given environment variable. Tokenize string input
  * and run given action function on each token found.
+ *
+ * On completion negated will contain whether the list was marked negated.
  */
-static bool find_options(bool negatable, char *input, found_func_t *action)
+static void find_options(bool negatable, bool *negated, char *input,
+			 found_func_t *action)
 {
-	bool negated = false;
 	char *save_ptr = NULL;
 	char *token = NULL;
 
 	if (!input)
-		return negated;
+		return;
 
 	if (negatable) {
 		if (*input == '^') {
 			input++;
-			negated = true;
+			*negated = true;
+		} else {
+			*negated = false;
 		}
 	}
 
@@ -137,8 +141,6 @@ static bool find_options(bool negatable, char *input, found_func_t *action)
 	     token = strtok_r(NULL, ",", &save_ptr)) {
 		action(token);
 	}
-
-	return negated;
 }
 
 static void handle_log_option(char *name)
@@ -207,7 +209,7 @@ static void get_log_level(void)
 	if (!requested)
 		return;
 
-	find_options(false, requested, handle_log_option);
+	find_options(false, NULL, requested, handle_log_option);
 	free(requested);
 }
 
@@ -219,8 +221,8 @@ static void get_providers(void)
 	if (!requested)
 		return;
 
-	provider_list.negated = find_options(true, requested,
-					     handle_provider_option);
+	find_options(true, &provider_list.negated, requested,
+		     handle_provider_option);
 
 	if (!provider_list.negated)
 		log_mask &= ~PROV_MASK;
@@ -231,6 +233,7 @@ static void get_providers(void)
 static void get_subsystems(void)
 {
 	char *requested;
+	bool negated = false;
 
 	requested = alloc_env("FI_LOG_SUBSYSTEMS");
 	if (!requested)
@@ -238,10 +241,8 @@ static void get_subsystems(void)
 
 	log_mask &= ~SUBSYS_MASK;
 
-	/*
-	 * find_options returns whether the requested options were negated
-	 */
-	if (find_options(true, requested, handle_subsys_option))
+	find_options(true, &negated, requested, handle_subsys_option);
+	if (negated)
 		log_mask ^= SUBSYS_MASK;
 
 	free(requested);
