@@ -323,12 +323,12 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 	int i;
 
 	if (header) {
-		printf("--- # ");
+		printf("---\n");
 
 		for (i = 0; i < argc; ++i)
 			printf("%s ", argv[i]);
 
-		printf("\n");
+		printf(":\n");
 		header = 0;
 	}
 
@@ -380,7 +380,6 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-I <number>", "number of iterations");
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
-	FT_PRINT_OPTS_USAGE("-i", "print hints structure and exit");
 	FT_PRINT_OPTS_USAGE("-v", "display versions and exit");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
@@ -454,9 +453,6 @@ void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts)
 		break;
 	case 'm':
 		opts->machr = 1;
-		break;
-	case 'i':
-		opts->prhints = 1;
 		break;
 	default:
 		/* let getopt handle unknown opts*/

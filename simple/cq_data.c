@@ -486,5 +486,5 @@ int main(int argc, char **argv)
 
 	ret = run();
 	fi_freeinfo(hints);
-	return ret;
+	return -ret;
 }

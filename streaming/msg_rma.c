@@ -697,12 +697,8 @@ int main(int argc, char **argv)
 	hints->mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints->addr_format = FI_SOCKADDR;
 
-	if (opts.prhints) {
-		printf("%s", fi_tostr(hints, FI_TYPE_INFO));
-		ret = EXIT_SUCCESS;
-	} else {
-		ret = run();
-	}
+	ret = run();
+
 	fi_freeinfo(hints);
-	return ret;
+	return -ret;
 }
