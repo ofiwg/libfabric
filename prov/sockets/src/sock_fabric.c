@@ -258,14 +258,14 @@ static int sock_get_src_addr(struct sockaddr_in *dest_addr,
 	len = sizeof(*dest_addr);
 	ret = connect(sock, (struct sockaddr*)dest_addr, len);
 	if (ret) {
-		SOCK_LOG_ERROR("Failed to connect udp socket\n");
+		SOCK_LOG_INFO("Failed to connect udp socket\n");
 		ret = -errno;
 		goto out;
 	}
 
 	ret = getsockname(sock, (struct sockaddr *) src_addr, &len);
 	if (ret) {
-		SOCK_LOG_ERROR("getsockname failed\n");
+		SOCK_LOG_INFO("getsockname failed\n");
 		ret = -errno;
 	}
 out:

@@ -142,6 +142,7 @@ struct sock_conn {
         struct sock_pe_entry *tx_pe_entry;
 	struct ringbuf inbuf;
 	struct ringbuf outbuf;
+	struct sock_ep *ep;
 };
 
 struct sock_conn_map {
