@@ -597,9 +597,6 @@ int main(int argc, char **argv)
 	
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_RMA;
-	if (op_type == FT_RMA_WRITEDATA) {
-		hints->caps |= FI_REMOTE_CQ_DATA;
-	}
 	hints->mode = FI_CONTEXT | FI_PROV_MR_ATTR;
 	
 	if (opts.prhints) {
