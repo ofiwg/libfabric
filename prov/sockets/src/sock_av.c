@@ -146,13 +146,14 @@ static inline void sock_av_report_success(struct sock_av *av, void *context,
 			     &eq_entry, sizeof(eq_entry), flags);
 }
 
-static inline void sock_av_report_error(struct sock_av *av, void *context)
+static inline void sock_av_report_error(struct sock_av *av, 
+					void *context, int index)
 {
 	if (!av->eq) 
 		return;
 	
-	sock_eq_report_error(av->eq, &av->av_fid.fid, 
-			     context, -FI_EINVAL, -FI_EINVAL, NULL);
+	sock_eq_report_error(av->eq, &av->av_fid.fid,
+			     context, index, FI_EINVAL, -FI_EINVAL, NULL, 0);
 }
 
 static int sock_av_is_valid_address(struct sockaddr_in *addr)
@@ -179,7 +180,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 				if (!sock_av_is_valid_address(&addr[i])) {
 					if (fi_addr)
 						fi_addr[i] = FI_ADDR_NOTAVAIL;
-					sock_av_report_error(_av, context);
+					sock_av_report_error(_av, context, i);
 					continue;
 				}
 
@@ -191,7 +192,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 					if (idm_set(&_av->addr_idm, _av->key[j], av_addr) < 0) {
 						if (fi_addr)
 							fi_addr[i] = FI_ADDR_NOTAVAIL;
-						sock_av_report_error(_av, context);
+						sock_av_report_error(_av, context, i);
 						continue;
 					}
 					
@@ -234,7 +235,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 		if (!sock_av_is_valid_address(&addr[i])) {
 			if (fi_addr)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
-			sock_av_report_error(_av, context);
+			sock_av_report_error(_av, context, i);
 			continue;
 		}
 
@@ -248,7 +249,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 		if (idm_set(&_av->addr_idm, _av->table_hdr->stored, av_addr) < 0) {
 			if (fi_addr)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
-			sock_av_report_error(_av, context);
+			sock_av_report_error(_av, context, i);
 			continue;
 		}
 		
@@ -314,7 +315,7 @@ static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 	ret = getaddrinfo(node, service, &sock_hints, &result);
 	if (ret) {
 		if (_av->eq) {
-			sock_av_report_error(_av, context);
+			sock_av_report_error(_av, context, 0);
 			sock_av_report_success(_av, context, 0, flags);
 		}
 		return -ret;

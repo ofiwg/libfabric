@@ -322,7 +322,7 @@ static void sock_ep_cm_release_entry(struct sock_cm_msg_list_entry *msg_entry)
 		sock_ep_disable(&sock_ep->ep);
 	} else {
 		if (sock_eq_report_error(msg_entry->eq, msg_entry->fid, NULL,
-					 FI_ETIMEDOUT, -FI_ETIMEDOUT, NULL))
+					 0, FI_ETIMEDOUT, -FI_ETIMEDOUT, NULL, 0))
 			SOCK_LOG_ERROR("failed to report error\n");
 	}
 
@@ -541,6 +541,11 @@ static void *sock_msg_ep_listener_thread(void *data)
 			if (user_data_sz > 0)
 				memcpy(cm_err_entry->err_data,
 				       &conn_response->user_data, user_data_sz);
+
+			if (sock_eq_report_error(ep->eq, &ep->ep.fid, NULL, 0,
+						 FI_ECONNREFUSED, -FI_ECONNREFUSED,
+						 NULL, 0))
+				SOCK_LOG_ERROR("Error in writing to EQ\n");
 			
 			if (sock_eq_report_event(ep->eq, FI_ECONNREFUSED,
 						 cm_err_entry,

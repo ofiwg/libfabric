@@ -849,7 +849,8 @@ int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event, 
 			     const void *buf, size_t len, uint64_t flags);
 ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
-			     int err, int prov_errno, void *err_data);
+			     uint64_t data, int err, int prov_errno, 
+			     void *err_data, size_t err_data_size);
 int sock_eq_openwait(struct sock_eq *eq, const char *service);
 
 int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
@@ -857,14 +858,6 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 int sock_cntr_inc(struct sock_cntr *cntr);
 int sock_cntr_err_inc(struct sock_cntr *cntr);
 int sock_cntr_progress(struct sock_cntr *cntr);
-
-
-int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-		 struct fid_eq **eq, void *context);
-ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event, 
-			     const void *buf, size_t len, uint64_t flags);
-ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
-			     int err, int prov_errno, void *err_data);
 
 
 struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key, 

@@ -155,7 +155,8 @@ ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event,
 }
 
 ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
-			     int err, int prov_errno, void *err_data)
+			     uint64_t data, int err, int prov_errno, 
+			     void *err_data, size_t err_data_size)
 {
 	struct fi_eq_err_entry *err_entry;
 	struct sock_eq_entry *entry;
@@ -167,9 +168,11 @@ ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
 	err_entry = (struct fi_eq_err_entry *) entry->event;
 	err_entry->fid = fid;
 	err_entry->context = context;
+	err_entry->data = data;
 	err_entry->err = err;
 	err_entry->prov_errno = prov_errno;
 	err_entry->err_data = err_data;
+	err_entry->err_data_size = err_data_size;
 	entry->len = sizeof(*err_entry);
 
 	fastlock_acquire(&sock_eq->lock);
