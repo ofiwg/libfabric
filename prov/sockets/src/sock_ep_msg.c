@@ -424,7 +424,6 @@ static void *sock_msg_ep_listener_thread(void *data)
 	struct sock_ep *ep = (struct sock_ep*)data;
 	struct sock_conn_response *conn_response;
 	struct fi_eq_cm_entry *cm_entry;
-	struct fi_eq_err_entry *cm_err_entry;
 
 	struct sockaddr_in from_addr;
 	socklen_t addr_len;
@@ -528,31 +527,11 @@ static void *sock_msg_ep_listener_thread(void *data)
 			if (ep->is_disabled || ep->cm.shutdown_received)
 				break;
 
-			cm_err_entry = calloc(1, sizeof(*cm_err_entry) + user_data_sz);
-			if (!cm_err_entry) {
-				SOCK_LOG_ERROR("cannot allocate memory\n");
-				goto out;
-			}
-
-			memset(cm_err_entry, 0, sizeof(*cm_err_entry) + user_data_sz);
-			cm_err_entry->fid = &ep->ep.fid;
-			cm_err_entry->err = -FI_ECONNREFUSED;
-
-			if (user_data_sz > 0)
-				memcpy(cm_err_entry->err_data,
-				       &conn_response->user_data, user_data_sz);
-
 			if (sock_eq_report_error(ep->eq, &ep->ep.fid, NULL, 0,
 						 FI_ECONNREFUSED, -FI_ECONNREFUSED,
-						 NULL, 0))
+						 &conn_response->user_data, 
+						 user_data_sz))
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
-			
-			if (sock_eq_report_event(ep->eq, FI_ECONNREFUSED,
-						 cm_err_entry,
-						 sizeof(*cm_err_entry) +
-						 user_data_sz, 0)) 
-				SOCK_LOG_ERROR("Error in writing to EQ\n");
-			free(cm_err_entry);
 			goto out;
 
 		case SOCK_CONN_SHUTDOWN:
