@@ -84,6 +84,9 @@ ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 			return -FI_EAGAIN;
 		}
 		ret = dlistfd_wait_avail(&sock_eq->list, timeout);
+		if (!dlistfd_empty(&sock_eq->err_list)) {
+			return -FI_EAVAIL;
+		}
 		if (ret <= 0)
 			return (ret == 0 || ret == -FI_ETIMEDOUT) ? 
 				-FI_EAGAIN : ret;
@@ -220,6 +223,7 @@ ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
 
 	fastlock_acquire(&sock_eq->lock);
 	dlistfd_insert_tail(&entry->entry, &sock_eq->err_list);
+	dlistfd_signal(&sock_eq->list);
 	if (sock_eq->signal) 
 		sock_wait_signal(sock_eq->waitset);
 	fastlock_release(&sock_eq->lock);
