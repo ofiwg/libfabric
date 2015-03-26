@@ -737,6 +737,8 @@ struct sock_cm_msg_list_entry {
 	uint64_t timestamp_ms;
 	struct sockaddr_in addr;
 	struct dlist_entry entry;
+	fid_t fid;
+	struct sock_eq *eq;
 	char msg[0];
 };
 
