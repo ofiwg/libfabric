@@ -335,6 +335,12 @@ struct sock_eq_entry {
 	char event[0];
 };
 
+struct sock_eq_err_data_entry {
+	struct dlist_entry entry;
+	int do_free;
+	char err_data[];
+};
+
 struct sock_eq {
 	struct fid_eq eq;
 	struct fi_eq_attr attr;
@@ -342,6 +348,7 @@ struct sock_eq {
 
 	struct dlistfd_head list;
 	struct dlistfd_head err_list;
+	struct dlist_entry err_data_list;
 	fastlock_t lock;
 
 	struct fid_wait *waitset;
