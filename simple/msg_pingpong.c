@@ -68,7 +68,7 @@ static int send_xfer(int size)
 		ret = fi_cq_read(scq, &comp, 1);
 		if (ret > 0) {
 			goto post;
-		} else if (ret < 0) {
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(scq, "scq");
 			} else {
@@ -94,7 +94,7 @@ static int recv_xfer(int size)
 
 	do {
 		ret = fi_cq_read(rcq, &comp, 1);
-		if (ret < 0) {
+		if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rcq, "rcq");
 			} else {
@@ -102,7 +102,7 @@ static int recv_xfer(int size)
 			}
 			return ret;
 		}
-	} while (!ret);
+	} while (ret == -FI_EAGAIN);
 
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);

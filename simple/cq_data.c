@@ -419,7 +419,7 @@ static int run_test()
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rcq, "rcq");
 			} else {
-				FT_PRINTERR("fi_cq_read", ret);
+				FT_PRINTERR("fi_cq_sread", ret);
 			}
 			return ret;
 		}

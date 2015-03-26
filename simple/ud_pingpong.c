@@ -78,11 +78,11 @@ static int poll_all_sends(void)
 		ret = fi_cq_read(scq, &comp, 1);
 		if (ret > 0) {
 			credits++;
-		} else if (ret < 0) {
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			FT_PRINTERR("fi_cq_read", ret);
 			return ret;
 		}
-	} while (ret);
+	} while (ret != -FI_EAGAIN);
 	return 0;
 }
 
@@ -95,7 +95,7 @@ static int send_xfer(int size)
 		ret = fi_cq_read(scq, &comp, 1);
 		if (ret > 0) {
 			goto post;
-		} else if (ret < 0) {
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			FT_PRINTERR("fi_cq_read", ret);
 			return ret;
 		}
@@ -118,11 +118,11 @@ static int recv_xfer(int size)
 
 	do {
 		ret = fi_cq_read(rcq, &comp, sizeof comp);
-		if (ret < 0) {
+		if (ret < 0 && ret != -FI_EAGAIN) {
 			FT_PRINTERR("fi_cq_read", ret);
 			return ret;
 		}
-	} while (!ret);
+	} while (ret == -FI_EAGAIN);
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
@@ -441,11 +441,11 @@ static int server_connect(void)
 
 	do {
 		ret = fi_cq_read(rcq, &comp, 1);
-		if (ret < 0) {
+		if (ret < 0 && ret != -FI_EAGAIN) {
 			FT_PRINTERR("fi_cq_read", ret);
 			return ret;
 		}
-	} while (ret == 0);
+	} while (ret == -FI_EAGAIN);
 
 	ret = fi_av_insert(av, buf_ptr, 1, &remote_fi_addr, 0, NULL);
 	if (ret != 1) {
@@ -503,7 +503,7 @@ static int run(void)
 		if (ret)
 			goto out;
 	}
-
+	
 	while (credits < max_credits)
 		poll_all_sends();
 	

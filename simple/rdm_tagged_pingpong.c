@@ -79,7 +79,7 @@ int wait_for_completion_tagged(struct fid_cq *cq, int num_completions)
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
 			num_completions--;
-		} else if (ret < 0) {
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			FT_PRINTERR("fi_cq_read", ret);
 			return ret;
 		}
@@ -96,7 +96,7 @@ static int send_xfer(int size)
 		ret = fi_cq_read(scq, &comp, 1);
 		if (ret > 0) {
 			goto post;
-		} else if (ret < 0) {
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(scq, "scq");
 			} else {
@@ -123,7 +123,7 @@ static int recv_xfer(int size)
 
 	do {
 		ret = fi_cq_read(rcq, &comp, 1);
-		if (ret < 0) {
+		if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
 				cq_readerr(rcq, "rcq");
 			} else {
@@ -131,7 +131,7 @@ static int recv_xfer(int size)
 			}
 			return ret;
 		}
-	} while (!ret);
+	} while (ret == -FI_EAGAIN);
 
 	/* Posting recv for next send. Hence tag_data + 1 */
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,

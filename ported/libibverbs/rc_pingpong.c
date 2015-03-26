@@ -479,7 +479,7 @@ int main(int argc, char *argv[])
 			{ 0 }
 		};
 
-		c = getopt_long(argc, argv, "p:d:i:s:m:r:n:e:",
+		c = getopt_long(argc, argv, "p:d:i:s:m:r:n:e:f:",
 							long_options, NULL);
 		if (c == -1)
 			break;
@@ -639,12 +639,12 @@ int main(int argc, char *argv[])
 		} else {
 			do {
 				rd = fi_cq_read(ctx->cq, &wc, 1);
-			} while (rd == 0);
+			} while (rd == -FI_EAGAIN);
 		}
 
 		if (rd < 0) {
 			fi_cq_readerr(ctx->cq, &cq_err, 0);
-			fprintf(stderr, "cq fi_eq_readerr() %s (%d)\n", 
+			fprintf(stderr, "cq fi_cq_readerr() %s (%d)\n", 
 				fi_cq_strerror(ctx->cq, cq_err.err, cq_err.err_data, NULL, 0),
 				cq_err.err);
 			return 1;

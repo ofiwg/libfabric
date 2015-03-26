@@ -335,7 +335,7 @@ eq_wait_fd_sread()
 	/* timed sread on empty EQ, 2s timeout */
 	clock_gettime(CLOCK_MONOTONIC, &before);
 	ret = fi_eq_sread(eq, &event, &entry, sizeof(entry), 2000, 0);
-	if (ret != -FI_ETIMEDOUT) {
+	if (ret != -FI_EAGAIN) {
 		sprintf(err_buf, "fi_eq_read of empty EQ returned %d", ret);
 		goto fail;
 	}
