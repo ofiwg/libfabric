@@ -6,6 +6,7 @@ bin_PROGRAMS = \
 	simple/fi_msg\
 	simple/fi_msg_pingpong \
 	simple/fi_msg_rma \
+	simple/fi_msg_epoll \
 	simple/fi_rdm \
 	simple/fi_rdm_rma_simple \
 	simple/fi_dgram \
@@ -54,6 +55,10 @@ simple_fi_msg_pingpong_LDADD = libfabtests.la
 simple_fi_msg_rma_SOURCES = \
 	simple/msg_rma.c
 simple_fi_msg_rma_LDADD = libfabtests.la
+
+simple_fi_msg_epoll_SOURCES = \
+	simple/msg_epoll.c
+simple_fi_msg_epoll_LDADD = libfabtests.la
 
 simple_fi_rdm_SOURCES = \
 	simple/rdm.c
