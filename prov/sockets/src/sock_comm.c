@@ -133,7 +133,8 @@ ssize_t sock_comm_recv_socket(struct sock_conn *conn, void *buf, size_t len)
 		ret = 0;
 	}
 
-	SOCK_LOG_INFO("read from network: %lu\n", ret);
+	if (ret > 0)
+		SOCK_LOG_INFO("read from network: %lu\n", ret);
 	return ret;
 }
 

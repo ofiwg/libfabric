@@ -334,7 +334,6 @@ static void sock_ep_cm_flush_msg(struct sock_cm_entry *cm)
 {
 	struct dlist_entry *entry, *next_entry;
 	struct sock_cm_msg_list_entry *msg_entry;
-	
 	fastlock_acquire(&cm->lock);
 	for (entry = cm->msg_list.next; entry != &cm->msg_list;) {
 		msg_entry = container_of(entry, 
