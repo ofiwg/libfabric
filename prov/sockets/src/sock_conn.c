@@ -157,7 +157,6 @@ int fd_set_nonblock(int fd)
 void sock_set_sockopts(int sock)
 {
 	int optval;
-
 	optval = 1;
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval))
 		SOCK_LOG_ERROR("setsockopt reuseaddr failed\n");
@@ -177,7 +176,6 @@ uint16_t sock_conn_map_connect(struct sock_ep *ep,
 	char use_conn;
 	struct timeval tv;
 	socklen_t optlen;
-	uint64_t flags;
 	fd_set fds;
 
 	conn_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -186,8 +184,6 @@ uint16_t sock_conn_map_connect(struct sock_ep *ep,
 		return 0;
 	}
 	
-	sock_set_sockopts(conn_fd);
-
 	SOCK_LOG_INFO("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
 		      ntohs(addr->sin_port));
 
@@ -219,20 +215,19 @@ uint16_t sock_conn_map_connect(struct sock_ep *ep,
 		}
 	}
 	
-	fd_set_nonblock(conn_fd);
-	flags = fcntl(conn_fd, F_GETFL, 0);
-	flags &= (~O_NONBLOCK);
-	if (fcntl(conn_fd, F_SETFL, flags))
-		SOCK_LOG_ERROR("fcntl failed\n");
-	
-	ret = send(conn_fd, &((struct sockaddr_in*) ep->src_addr)->sin_port,
-		   sizeof(((struct sockaddr_in*) ep->src_addr)->sin_port), 0);
+	do {
+		ret = send(conn_fd, 
+			   &((struct sockaddr_in*) ep->src_addr)->sin_port,
+			   sizeof(((struct sockaddr_in*) ep->src_addr)->sin_port), 0);
+	} while(ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
 	if (ret != sizeof(((struct sockaddr_in*) ep->src_addr)->sin_port)) {
 		SOCK_LOG_ERROR("Cannot exchange port\n");
 		goto err;
 	}
 
-	ret = recv(conn_fd, &use_conn, sizeof(use_conn), 0);
+	do {
+		ret = recv(conn_fd, &use_conn, sizeof(use_conn), 0);
+	} while(ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
 	if (ret != sizeof(use_conn)) {
 		SOCK_LOG_ERROR("Cannot exchange port: %d\n", ret);
 		goto err;
@@ -241,7 +236,6 @@ uint16_t sock_conn_map_connect(struct sock_ep *ep,
 	SOCK_LOG_INFO("Connect response: %d\n", use_conn);
 
 	if (use_conn) {
-		sock_set_sockopts(conn_fd);
 		fastlock_acquire(&map->lock);
 		ret = sock_conn_map_insert(map, addr, ep, conn_fd);
 		fastlock_release(&map->lock);
@@ -320,7 +314,10 @@ static void *_sock_conn_listen(void *arg)
 		SOCK_LOG_INFO("ACCEPT: %s, %d\n", inet_ntoa(remote.sin_addr),
 				ntohs(remote.sin_port));
 
-		ret = recv(conn_fd, &remote.sin_port, sizeof(remote.sin_port), 0);
+		do {
+			ret = recv(conn_fd, &remote.sin_port, 
+				   sizeof(remote.sin_port), 0);
+		} while(ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
 		if (ret != sizeof(remote.sin_port))
 			SOCK_LOG_ERROR("Cannot exchange port\n");
 
@@ -336,7 +333,9 @@ static void *_sock_conn_listen(void *arg)
 		}
 		fastlock_release(&map->lock);
 
-		ret = send(conn_fd, &use_conn, sizeof(use_conn), 0);
+		do {
+			ret = send(conn_fd, &use_conn, sizeof(use_conn), 0);
+		} while(ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
 		if (ret != sizeof(use_conn))
 			SOCK_LOG_ERROR("Cannot exchange port\n");
 		

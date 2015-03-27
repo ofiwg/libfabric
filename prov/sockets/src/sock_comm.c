@@ -200,24 +200,18 @@ ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len)
 
 int sock_comm_buffer_init(struct sock_conn *conn)
 {
-	int optval;
 	socklen_t size = SOCK_COMM_BUF_SZ;
 	socklen_t optlen = sizeof(socklen_t);
 
-	optval = 1;
-	if (setsockopt(conn->sock_fd, IPPROTO_TCP, TCP_NODELAY,
-		       &optval, sizeof optval))
-		SOCK_LOG_ERROR("setsockopt failed\n");
-
-	fd_set_nonblock(conn->sock_fd);
+	sock_set_sockopts(conn->sock_fd);
 	rbinit(&conn->inbuf, SOCK_COMM_BUF_SZ);
 	rbinit(&conn->outbuf, SOCK_COMM_BUF_SZ);
 
 	if (setsockopt(conn->sock_fd, SOL_SOCKET, SO_RCVBUF, &size, optlen))
-		SOCK_LOG_ERROR("setsockopt failed\n");
+		SOCK_LOG_ERROR("setsockopt SO_RCVBUF failed\n");
 
 	if (setsockopt(conn->sock_fd, SOL_SOCKET, SO_SNDBUF, &size, optlen))
-		SOCK_LOG_ERROR("setsockopt failed\n");
+		SOCK_LOG_ERROR("setsockopt SO_SNDBUF failed\n");
 
 	if (!getsockopt(conn->sock_fd, SOL_SOCKET, SO_RCVBUF, &size, &optlen))
 		SOCK_LOG_INFO("SO_RCVBUF: %d\n", size);
