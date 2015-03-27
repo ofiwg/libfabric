@@ -232,6 +232,7 @@ static int run_test(void)
 
 static void free_ep_res(void)
 {
+	fi_close(&ep->fid);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
@@ -400,7 +401,7 @@ static int init_fabric(void)
 
 	ret = alloc_ep_res(fi);
 	if (ret)
-		goto err3;
+		goto err2;
 
 	ret = bind_ep_res();
 	if (ret)
@@ -410,8 +411,6 @@ static int init_fabric(void)
 
 err4:
 	free_ep_res();
-err3:
-	fi_close(&ep->fid);
 err2:
 	fi_close(&dom->fid);
 err1:
@@ -549,7 +548,6 @@ static int run(void)
 	/* Finalize before closing ep */
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
-	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);

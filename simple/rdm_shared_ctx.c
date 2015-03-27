@@ -108,6 +108,7 @@ static int recv_msg(void)
 
 static void free_ep_res(void)
 {
+	FT_CLOSEV(ep, ep_cnt);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
@@ -383,7 +384,6 @@ static int init_fabric(void)
 err4:
 	free_ep_res();
 err3:
-	FT_CLOSEV(ep, ep_cnt);
 	fi_close(&dom->fid);
 err1:
 	fi_close(&fab->fid);
@@ -504,7 +504,6 @@ static int run(void)
 	//ft_finalize(ep[0], scq, rcq, remote_fi_addr[0]);
 out:
 	free_ep_res();
-	FT_CLOSEV(ep, ep_cnt);
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
 	return ret;

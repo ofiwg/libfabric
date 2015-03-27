@@ -179,6 +179,12 @@ static void free_ep_res(void)
 {
 	int ret;
 
+	if (ep) {
+		ret = fi_close(&ep->fid);
+		if (ret != 0) {
+			FT_PRINTERR("fi_close", ret);
+		}
+	}
 	if (mr) {
 		ret = fi_close(&mr->fid);
 		if (ret != 0) {
@@ -373,7 +379,6 @@ static int common_setup(void)
 err5:
 	free_ep_res();
 err4:
-	fi_close(&ep->fid);
 	fi_close(&dom->fid);
 err2:
 	fi_close(&fab->fid);
@@ -474,7 +479,6 @@ static int server_connect(void)
 
 err:
 	free_ep_res();
-	fi_close(&ep->fid);
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
 	return ret;
@@ -510,10 +514,6 @@ static int run(void)
 	
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
-	ret = fi_close(&ep->fid);
-	if (ret != 0) {
-		FT_PRINTERR("fi_close", ret);
-	}
 	free_ep_res();
 	ret = fi_close(&av->fid);
 	if (ret != 0) {

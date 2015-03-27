@@ -89,6 +89,7 @@ void print_usage(char *name, char *desc)
 
 static void free_ep_res(void)
 {
+	fi_close(&ep->fid);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
@@ -305,7 +306,6 @@ static int init_fabric(void)
 err4:
 	free_ep_res();
 err3:
-	fi_close(&ep->fid);
 	fi_close(&dom->fid);
 err1:
 	fi_close(&fab->fid);
@@ -492,7 +492,6 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);

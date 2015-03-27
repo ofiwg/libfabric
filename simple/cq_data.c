@@ -78,6 +78,7 @@ static int alloc_cm_res(void)
 
 static void free_ep_res(void)
 {
+	fi_close(&ep->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
 	fi_close(&scq->fid);
@@ -266,7 +267,7 @@ static int server_connect(void)
 	
 	ret = alloc_ep_res(info);
 	if (ret)
-		 goto err2;
+		 goto err1;
 
 	ret = bind_ep_res();
 	if (ret)
@@ -296,8 +297,6 @@ static int server_connect(void)
 
 err3:
 	free_ep_res();
-err2:
-	fi_close(&ep->fid);
 err1:
 	fi_reject(pep, info->connreq, NULL, 0);
 	fi_freeinfo(info);
@@ -372,7 +371,6 @@ static int client_connect(void)
 err5:
 	free_ep_res();
 err4:
-	fi_close(&ep->fid);
 	fi_close(&dom->fid);
 err2:
 	fi_close(&fab->fid);
@@ -451,7 +449,6 @@ static int run(void)
 	run_test();
 
 	fi_shutdown(ep, 0);
-	fi_close(&ep->fid);
 	free_ep_res();
 	if (!opts.dst_addr)
 		free_lres();

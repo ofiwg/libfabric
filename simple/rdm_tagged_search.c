@@ -164,6 +164,7 @@ static int sync_test(void)
 
 static void free_ep_res(void)
 {
+	fi_close(&ep->fid);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
@@ -338,7 +339,6 @@ static int init_fabric(void)
 err4:
 	free_ep_res();
 err3:
-	fi_close(&ep->fid);
 	fi_close(&dom->fid);
 err1:
 	fi_close(&fab->fid);
@@ -509,7 +509,6 @@ static int run(void)
 	/* Finalize before closing ep */
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
-	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
