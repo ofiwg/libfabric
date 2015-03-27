@@ -378,7 +378,8 @@ int sock_conn_listen(struct sock_ep *ep)
 		((struct sockaddr_in*)ep->src_addr)->sin_port = 0;
 	}
 	
-	ret = getaddrinfo(NULL, listener->service, &hints, &s_res);
+	ret = getaddrinfo(inet_ntoa(((struct sockaddr_in*)ep->src_addr)->sin_addr),
+			  listener->service, &hints, &s_res);
 	if (ret) {
 		SOCK_LOG_ERROR("no available AF_INET address, service %s, %s\n",
 			       listener->service, gai_strerror(ret));
