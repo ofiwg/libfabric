@@ -986,7 +986,7 @@ fi_ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc
 	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge *sge;
-	size_t bytes = 0, i;
+	size_t len, i;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	sge = alloca(count * sizeof(struct ibv_sge));
@@ -999,13 +999,13 @@ fi_ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc
 	wr.wr.rdma.remote_addr = addr;
 	wr.wr.rdma.rkey = (uint32_t) key;
 
-	for (i = 0; i < count; i++) {
+	for (len = 0, i = 0; i < count; i++) {
 		sge[i].addr = (uintptr_t) iov[i].iov_base;
 		sge[i].length = (uint32_t) iov[i].iov_len;
-		bytes += iov[i].iov_len;
+		len += iov[i].iov_len;
 		sge[i].lkey = (uint32_t) (uintptr_t) desc[i];
 	}
-	wr.send_flags = (bytes <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
+	wr.send_flags = (len <= _ep->inline_size) ? IBV_SEND_INLINE : 0;
 
 	return -ibv_post_send(_ep->id->qp, &wr, &bad);
 }
