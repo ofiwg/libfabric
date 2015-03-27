@@ -210,7 +210,8 @@ static int alloc_ep_res(struct fid_ep *sep)
 	}
 
 	/* Get number of bits needed to represent ctx_cnt */
-	while (ctx_cnt >> ++rx_ctx_bits);
+	while (ctx_cnt >> ++rx_ctx_bits)
+		;
 
 	memset(&av_attr, 0, sizeof av_attr);
 	av_attr.type = fi->domain_attr->av_type ?

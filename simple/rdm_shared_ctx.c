@@ -118,13 +118,13 @@ static void free_ep_res(void)
 	free(remote_fi_addr);
 }
 
-static int alloc_ep_res(void)
+static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
 	struct fi_rx_attr rx_attr;
 	struct fi_tx_attr tx_attr;
 	struct fi_av_attr av_attr;
-	int ret = 0;
+	int i, ret = 0;
 
 	buffer_size = test_size[TEST_CNT - 1].size;
 	buf = malloc(buffer_size);
@@ -185,8 +185,25 @@ static int alloc_ep_res(void)
 		goto err6;
 	}
 
+	ep = calloc(ep_cnt, sizeof(*ep));
+	if (!ep) {
+		perror("malloc");
+		goto err7;
+	}
+	for (i = 0; i < ep_cnt; i++) {
+		ret = fi_endpoint(dom, fi, &ep[i], NULL);
+		if (ret) {
+			FT_PRINTERR("fi_endpoint", ret);
+			goto err8;
+		}
+	}
+
 	return 0;
 
+err8:
+	FT_CLOSEV(ep, ep_cnt);
+err7:
+	fi_close(&av->fid);
 err6:
 	fi_close(&mr->fid);
 err5:
@@ -305,7 +322,7 @@ static int init_fabric(void)
 {
 	uint64_t flags = 0;
 	char *node, *service;
-	int i, ret;
+	int ret;
 
 	if (dst_addr) {
 		ret = ft_getsrcaddr(src_addr, src_port, hints);
@@ -353,21 +370,7 @@ static int init_fabric(void)
 	fi->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
 	fi->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 
-	ep = calloc(ep_cnt, sizeof(*ep));
-	for (i = 0; i < ep_cnt; i++) {
-		if (!ep) {
-			perror("malloc");
-			goto err2;
-		}
-
-		ret = fi_endpoint(dom, fi, &ep[i], NULL);
-		if (ret) {
-			FT_PRINTERR("fi_endpoint", ret);
-			goto err2;
-		}
-	}
-
-	ret = alloc_ep_res();
+	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;
 
@@ -381,7 +384,6 @@ err4:
 	free_ep_res();
 err3:
 	FT_CLOSEV(ep, ep_cnt);
-err2:
 	fi_close(&dom->fid);
 err1:
 	fi_close(&fab->fid);

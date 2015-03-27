@@ -442,8 +442,16 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err6;
 	}
 	
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		goto err7;
+	}
+
 	return 0;
 
+err7:
+	fi_close(&av->fid);
 err6:
 	fi_close(&mr_compare->fid);
 err5:
@@ -548,12 +556,6 @@ static int init_fabric(void)
 		goto err1;
 	}
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		goto err2;
-	}
-
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;
@@ -568,7 +570,6 @@ err4:
 	free_ep_res();
 err3:
 	fi_close(&ep->fid);
-err2:
 	fi_close(&dom->fid);
 err1:
 	fi_close(&fab->fid);
