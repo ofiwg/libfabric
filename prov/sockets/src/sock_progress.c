@@ -178,7 +178,7 @@ static void sock_pe_report_tx_completion(struct sock_pe_entry *pe_entry)
 				pe_entry->comp->eq, 
 				&pe_entry->comp->send_cntr->cntr_fid.fid, 
 				pe_entry->comp->send_cntr->cntr_fid.fid.context, 
-				-FI_ENOSPC, -FI_ENOSPC, NULL);
+				0, FI_ENOSPC, -FI_ENOSPC, NULL, 0);
 		}				
 	}
 }
@@ -206,7 +206,7 @@ static void sock_pe_report_rx_completion(struct sock_pe_entry *pe_entry)
 				pe_entry->comp->eq, 
 				&pe_entry->comp->recv_cq->cq_fid.fid, 
 				pe_entry->comp->recv_cq->cq_fid.fid.context, 
-				-FI_ENOSPC, -FI_ENOSPC, NULL);
+				0, FI_ENOSPC, -FI_ENOSPC, NULL, 0);
 		}
 	}
 }

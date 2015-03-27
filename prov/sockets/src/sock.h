@@ -117,7 +117,7 @@
 #define SOCK_MODE (0)
 #define SOCK_NO_COMPLETION (1ULL << 60)
 
-#define SOCK_COMM_BUF_SZ (SOCK_EP_MAX_MSG_SZ)
+#define SOCK_COMM_BUF_SZ (1<<20)
 #define SOCK_COMM_THRESHOLD (128 * 1024)
 
 #define SOCK_MAJOR_VERSION 1
@@ -335,6 +335,12 @@ struct sock_eq_entry {
 	char event[0];
 };
 
+struct sock_eq_err_data_entry {
+	struct dlist_entry entry;
+	int do_free;
+	char err_data[];
+};
+
 struct sock_eq {
 	struct fid_eq eq;
 	struct fi_eq_attr attr;
@@ -342,6 +348,7 @@ struct sock_eq {
 
 	struct dlistfd_head list;
 	struct dlistfd_head err_list;
+	struct dlist_entry err_data_list;
 	fastlock_t lock;
 
 	struct fid_wait *waitset;
@@ -737,6 +744,8 @@ struct sock_cm_msg_list_entry {
 	uint64_t timestamp_ms;
 	struct sockaddr_in addr;
 	struct dlist_entry entry;
+	fid_t fid;
+	struct sock_eq *eq;
 	char msg[0];
 };
 
@@ -847,7 +856,8 @@ int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event, 
 			     const void *buf, size_t len, uint64_t flags);
 ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
-			     int err, int prov_errno, void *err_data);
+			     uint64_t data, int err, int prov_errno, 
+			     void *err_data, size_t err_data_size);
 int sock_eq_openwait(struct sock_eq *eq, const char *service);
 
 int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
@@ -855,14 +865,6 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 int sock_cntr_inc(struct sock_cntr *cntr);
 int sock_cntr_err_inc(struct sock_cntr *cntr);
 int sock_cntr_progress(struct sock_cntr *cntr);
-
-
-int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-		 struct fid_eq **eq, void *context);
-ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event, 
-			     const void *buf, size_t len, uint64_t flags);
-ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
-			     int err, int prov_errno, void *err_data);
 
 
 struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key, 
