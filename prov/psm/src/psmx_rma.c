@@ -81,7 +81,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	uint64_t key;
 	int err = 0;
 	int op_error = 0;
-	int cmd, eom, has_data;
+	int cmd, eom, has_data, force_ack;
 	struct psmx_am_request *req;
 	struct psmx_cq_event *event;
 	uint64_t offset;
@@ -90,6 +90,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	cmd = args[0].u32w0 & PSMX_AM_OP_MASK;
 	eom = args[0].u32w0 & PSMX_AM_EOM;
 	has_data = args[0].u32w0 & PSMX_AM_DATA;
+	force_ack = args[0].u32w0 & PSMX_AM_FORCE_ACK;
 
 	switch (cmd) {
 	case PSMX_AM_REQ_WRITE:
@@ -168,6 +169,8 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			req->write.len = rma_len;
 			req->write.key = key;
 			req->write.context = (void *)args[4].u64;
+			req->write.peer_context = (void *)args[1].u64;
+			req->write.peer_addr = (void *)epaddr;
 			req->write.data = has_data ? args[5].u64 : 0;
 			PSMX_CTXT_TYPE(&req->fi_context) = PSMX_REMOTE_WRITE_CONTEXT;
 			PSMX_CTXT_USER(&req->fi_context) = mr;
@@ -422,6 +425,22 @@ static ssize_t psmx_rma_self(int am_cmd,
 	return err;
 }
 
+void psmx_am_ack_rma(struct psmx_am_request *req)
+{
+	psm_amarg_t args[8];
+
+	if ((req->op & PSMX_AM_OP_MASK) != PSMX_AM_REQ_WRITE_LONG)
+		return;
+
+	args[0].u32w0 = PSMX_AM_REP_WRITE | PSMX_AM_EOM;
+	args[0].u32w1 = req->error;
+	args[1].u64 = (uint64_t)(uintptr_t)req->write.peer_context;
+
+	psm_am_request_short(req->write.peer_addr,
+			     PSMX_AM_RMA_HANDLER, args, 2, NULL, 0,
+			     PSM_AM_FLAG_NOREPLY, NULL, NULL);
+}
+
 int psmx_am_process_rma(struct psmx_fid_domain *domain, struct psmx_am_request *req)
 {
 	int err;
@@ -625,6 +644,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag;
 	size_t idx;
+	void *psm_context;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
@@ -731,13 +751,22 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 			args[0].u32w0 |= PSMX_AM_DATA;
 			nargs++;
 		}
+
+		if (flags & FI_REMOTE_COMPLETE) {
+			args[0].u32w0 |= PSMX_AM_FORCE_ACK;
+			psm_context = NULL;
+		}
+		else {
+			psm_context = (void *)&req->fi_context;
+		}
+
 		psm_am_request_short((psm_epaddr_t) dest_addr,
 					PSMX_AM_RMA_HANDLER, args, nargs,
 					NULL, 0, am_flags | PSM_AM_FLAG_NOREPLY,
 					NULL, NULL);
 
 		psm_mq_isend(ep_priv->domain->psm_mq, (psm_epaddr_t) dest_addr,
-				0, psm_tag, buf, len, (void *)&req->fi_context, &psm_req);
+				0, psm_tag, buf, len, psm_context, &psm_req);
 
 		return 0;
 	}
