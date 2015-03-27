@@ -92,6 +92,68 @@ parameters and need not meet these requirements).
   functions added after the provider was written.  Any unknown
   functions must be set to NULL.
 
+# LOGGING INTERFACE
+
+Logging is performed using the FI_ERR, FI_LOG, and FI_DEBUG macros.
+
+## DEFINITIONS
+
+{% highlight c %}
+#define FI_ERR(prov_name, subsystem, ...)
+
+#define FI_LOG(prov_name, prov, level, subsystem, ...)
+
+#define FI_DEBUG(prov_name, subsystem, ...)
+
+/* Subsystems */
+enum {
+	FI_FABRIC,
+	FI_DOMAIN,
+	FI_EP_CM,
+	FI_EP_DM,
+	FI_AV,
+	FI_CQ,
+	FI_EQ,
+	FI_MR
+};
+
+/* Log Levels */
+enum {
+	FI_LOG_WARN = 0,
+	FI_LOG_TRACE = 3,
+	FI_LOG_INFO = 7
+};
+
+{% endhighlight %}
+
+## ARGUMENTS
+*prov_name*
+: String representing the provider name.
+
+*prov*
+: Provider handle. In-tree providers will provide a pre-determined value in the
+  first slot of the context member in the fi_provider struct returned by their
+  initialization function. Dynamic providers will be assigned a handle that can
+  be retrieved from the context member of their fi_provider struct. Dynamic
+  providers should cleanup the returned handle in their cleanup function.
+
+*level*
+: Log level associated with log statement.
+
+*subsystem*
+: Subsystem being logged from.
+
+## DESCRIPTION
+*FI_ERR*
+: Always logged.
+
+*FI_LOG*
+: Logged if the intended provider, log level, and subsystem parameters match
+  the user supplied values.
+
+*FI_DEBUG*
+: Logged if configured with the --enable-debug flag.
+
 # SEE ALSO
 
 [`fi_psm`(7)](fi_psm.7.html),

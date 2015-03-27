@@ -44,14 +44,17 @@
 #include "usdf_progress.h"
 #include "usd.h"
 
+
 #define USDF_PROV_NAME "usnic"
 #define USDF_MAJOR_VERS 1
 #define USDF_MINOR_VERS 0
 #define USDF_PROV_VERSION FI_VERSION(USDF_MAJOR_VERS, USDF_MINOR_VERS)
 
-#define USDF_WARN(...) FI_WARN("usnic", __VA_ARGS__)
-#define USDF_INFO(...) FI_LOG(3, "usnic", __VA_ARGS__)
-#define USDF_DEBUG(...) FI_DEBUG("usnic", __VA_ARGS__)
+#define USDF_WARN(...) FI_ERR(USDF_PROV_NAME, FI_FABRIC, __VA_ARGS__)
+#define USDF_INFO(...)                                                         \
+	FI_LOG(USDF_PROV_NAME, usnic_handle, FI_LOG_INFO, FI_FABRIC,           \
+	       __VA_ARGS__)
+#define USDF_DEBUG(...) FI_DEBUG(USDF_PROV_NAME, FI_FABRIC, __VA_ARGS__)
 
 #define USDF_HDR_BUF_ENTRY 64
 #define USDF_EP_CAP_PIO (1ULL << 63)
@@ -79,6 +82,7 @@
 #define TAILQ_ON_LIST(elm, link) ((elm)->link.tqe_prev != NULL)
 
 struct usdf_domain;
+extern int usnic_handle;
 
 struct usdf_dev_entry {
 	struct usd_device *ue_dev;

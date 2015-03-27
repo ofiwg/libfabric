@@ -38,29 +38,92 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-extern int fi_log_level;
+#include <fi_list.h>
+#include <stdbool.h>
+#include <stdio.h>
+
+/*
+ * Define the basic subsystems that can be used to enable fine grained logging.
+ */
+enum {
+	FI_FABRIC,
+	FI_DOMAIN,
+	FI_EP_CM,
+	FI_EP_DM,
+	FI_AV,
+	FI_CQ,
+	FI_EQ,
+	FI_MR
+};
+
+enum {
+	FI_LOG_WARN = 0,
+	FI_LOG_TRACE = 3,
+	FI_LOG_INFO = 7
+};
+
+/*
+ * Log level occupies bit positions 0-2
+ * Subsystem occupies bit positions 3-31
+ * Provider occupes bit positions 32-63
+ */
+#define FI_SUBSYS_OFFSET 3
+#define FI_PROV_OFFSET 32
+
+#define FI_MASK(width) ((UINT64_C(1) << (width)) - 1)
+
+#define FI_SUBSYS_MASK (FI_MASK(29) << FI_SUBSYS_OFFSET)
+#define FI_PROV_MASK (FI_MASK(32) << FI_PROV_OFFSET)
+
+/*
+ * Take bit position and offset and set bit in UINT64
+ */
+#define FI_EXPAND(position, offset) (UINT64_C(1) << ((position) + (offset)))
+
+#define FI_LOG_TAG(prov, subsys, level)                                        \
+	(FI_EXPAND((prov), FI_PROV_OFFSET) |                                   \
+	 FI_EXPAND((subsys), FI_SUBSYS_OFFSET) | level)
+
+extern uint64_t log_mask;
+
+struct log_providers {
+	struct slist names;
+	bool negated;
+};
+
+struct provider_parameter {
+	struct slist_entry entry;
+	char *name;
+};
 
 void fi_log_init(void);
-void fi_warn_impl(const char *prov, const char *fmt, ...);
-void fi_log_impl(int level, const char *prov, const char *func, int line,
-		 const char *fmt, ...);
-void fi_debug_impl(const char *prov, const char *func, int line, const char *fmt, ...);
+void set_provider(const char *prov_name, int position);
 
-/* Callers are responsible for including their own trailing "\n".  Non-provider
- * code should pass prov=NULL.
- */
-#define FI_WARN(prov, ...) fi_warn_impl(prov, __VA_ARGS__)
+void fi_err_impl(const char *prov, int subsystem, const char *fmt, ...);
+void fi_log_impl(const char *prov, int level, int subsystem, const char *func,
+		 int line, const char *fmt, ...);
+void fi_debug_impl(const char *prov, int subsystem, const char *func, int line,
+		   const char *fmt, ...);
 
-#define FI_LOG(level, prov, ...) \
-	do { \
-		if ((level) <= fi_log_level) \
-			fi_log_impl(level, prov, __func__, __LINE__, __VA_ARGS__); \
+#define FI_ERR(prov_name, subsystem, ...)                                      \
+	fi_err_impl(prov_name, subsystem, __VA_ARGS__)
+
+#define FI_LOG(prov_name, prov, level, subsystem, ...)                         \
+	do {                                                                   \
+		if ((FI_LOG_TAG(prov, subsystem, level) & log_mask) ==         \
+		    FI_LOG_TAG(prov, subsystem, level))                        \
+			fi_log_impl(prov_name, level, subsystem, __func__,     \
+				    __LINE__, __VA_ARGS__);                    \
 	} while (0)
 
+/*
+ * FI_DEBUG always print if configured with --enable-debug.
+ */
 #if ENABLE_DEBUG
-#  define FI_DEBUG(prov, ...) fi_debug_impl(prov, __func__, __LINE__, __VA_ARGS__)
+#define FI_DEBUG(prov_name, subsystem, ...)                                    \
+	fi_debug_impl(prov_name, subsystem, __func__, __LINE__, __VA_ARGS__)
 #else
-#  define FI_DEBUG(prov, ...) do {} while (0)
+#define FI_DEBUG(prov_name, subsystem, ...)
 #endif
 
 #endif /* !defined(FI_LOG_H) */

@@ -168,6 +168,45 @@ interfaces are defined by libfabric.
   operations are aware of the data formatting at the target memory
   region.
 
+# LOGGING CONTROL INTERFACE
+
+Logging can be controlled using the FI_LOG_LEVEL, FI_LOG_PROV, and
+FI_LOG_SUBSYSTEMS environment variables.
+
+*FI_LOG_LEVEL*
+: The FI_LOG_LEVEL environment variable has three valid values: "warn", "trace",
+  and "info".
+
+- *Warn*
+: Warn is the least verbose setting and is intended for warnings. These
+  will be logged regardless of the value of FI_LOG_LEVEL.
+
+- *Trace*
+: Trace is more verbose and is meant to include non-detailed output helpful to
+  tracing program execution.
+
+- *Info*
+: Info is high traffic and meant for detailed output.
+
+*FI_LOG_PROV*
+: The FI_LOG_PROV environment variable enables or disables logging from
+  specific providers. Providers can be enabled by listing them in a comma
+  separated fashion. If the list begins with the '^' symbol, then the list will
+  be negated. By default all providers are enabled.
+
+  To enable logging from the psm and sockets provider:
+	e.g. FI_LOG_PROV="psm,sockets"
+
+  To enable logging from providers other than psm:
+  	e.g. FI_LOG_PROV="^psm"
+
+*FI_LOG_SUBSYSTEMS*
+: The FI_LOG_SUBSYSTEMS environment variable enables or disables logging at the
+  subsystem level. There are eight defined subsystems: "fabric", "domain",
+  "ep_cm", "ep_dm", "av", "cq", "eq", and "mr". The syntax for enabling or
+  disabling subsystems is the same as accepted by the FI_LOG_PROV environment
+  variable.
+
 # SEE ALSO
 
 [`fi_provider`(7)](fi_provider.7.html),

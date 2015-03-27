@@ -37,6 +37,7 @@
 struct psmx_env psmx_env;
 volatile int psmx_init_count = 0;
 struct psmx_fid_fabric *psmx_active_fabric = NULL;
+int psm_handle = FI_PSMX_HANDLE;
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 {
@@ -373,7 +374,8 @@ static struct fi_provider psmx_prov = {
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = psmx_getinfo,
 	.fabric = psmx_fabric,
-	.cleanup = psmx_fini
+	.cleanup = psmx_fini,
+	.context = { {[0] = &psm_handle} }
 };
 
 static int psmx_get_int_env(char *name, int default_value)
@@ -429,9 +431,12 @@ PSM_INI
 	check_version = psmx_get_int_env("OFI_PSM_VERSION_CHECK", 1);
 
 	if (check_version && major != PSM_VERNO_MAJOR) {
-		FI_WARN(PSMX_PROVNAME, "%s: PSM version mismatch: header %d.%d, library %d.%d.\n",
-			__func__, PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
-		FI_WARN(PSMX_PROVNAME, "\tSet envar OFI_PSM_VERSION_CHECK=0 to bypass version check.\n");
+		FI_ERR(PSMX_PROVNAME, FI_FABRIC,
+		       "%s: PSM version mismatch: header %d.%d, library %d.%d.\n",
+			__func__, PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major,
+			minor);
+		FI_ERR(PSMX_PROVNAME, FI_FABRIC,
+		       "\tSet envar OFI_PSM_VERSION_CHECK=0 to bypass version check.\n");
 		return NULL;
 	}
 
