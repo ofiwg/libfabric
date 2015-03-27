@@ -249,8 +249,8 @@ const char * sock_eq_strerror(struct fid_eq *eq, int prov_errno,
 			      const void *err_data, char *buf, size_t len)
 {
 	if (buf && len)
-		return strncpy(buf, strerror(prov_errno), len);
-	return strerror(prov_errno);
+		return strncpy(buf, strerror(-prov_errno), len);
+	return strerror(-prov_errno);
 }
 
 static struct fi_ops_eq sock_eq_ops = {
