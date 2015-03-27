@@ -327,6 +327,9 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 
 			fi_context = psm_status.context;
 
+			if (!fi_context)
+				continue;
+
 			tmp_ep = PSMX_CTXT_EP(fi_context);
 			tmp_cq = NULL;
 			tmp_cntr = NULL;
@@ -383,6 +386,11 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				  struct psmx_fid_mr *mr;
 				  struct psmx_am_request *req;
 				  req = container_of(fi_context, struct psmx_am_request, fi_context);
+				  if (req->op & PSMX_AM_FORCE_ACK) {
+					req->error = psmx_errno(psm_status.error_code);
+					psmx_am_ack_rma(req);
+				  }
+
 				  mr = PSMX_CTXT_USER(fi_context);
 				  if (mr->cq) {
 					event = psmx_cq_create_event_from_status(
