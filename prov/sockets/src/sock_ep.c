@@ -576,6 +576,10 @@ static int sock_ep_close(struct fid *fid)
 		}
 		close(sock_ep->cm.signal_fds[0]);
 		close(sock_ep->cm.signal_fds[1]);
+	} else {
+		if (sock_ep->av) {
+			atomic_dec(&sock_ep->av->ref);
+		}
 	}
 	
 	sock_ep->listener.do_listen = 0;
@@ -790,6 +794,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		ep->av = av;
 		av->cmap = &av->domain->r_cmap;
+		atomic_inc(&av->ref);
 
 		if (ep->tx_ctx && 
 		    ep->tx_ctx->fid.ctx.fid.fclass == FI_CLASS_TX_CTX) {
