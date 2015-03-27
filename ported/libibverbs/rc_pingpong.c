@@ -52,20 +52,20 @@
 #include <rdma/fi_domain.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
+#include <shared.h>
 
-#define FI_CLOSE(DESC, STR) 										\
-	do {															\
-		if (DESC) {													\
-			if (fi_close(&DESC->fid)) {								\
-				fprintf(stderr, STR);								\
-				return 1;											\
-			}														\
-		}															\
+#define FT_CLOSE(DESC, STR) 				\
+	do {						\
+		if (DESC) {				\
+			if (fi_close(&DESC->fid)) {	\
+				fprintf(stderr, STR);	\
+				return 1;		\
+			}				\
+		}					\
 	} while (0)
 
-#define FI_ERR_LOG(STR, RC) fprintf(stderr, "%s: %s (%d)", STR, fi_strerror(-RC), -RC)
-
 static int page_size;
+static struct cs_opts opts;
 
 enum {
 	PINGPONG_RECV_WCID = 1,
@@ -73,7 +73,7 @@ enum {
 };
 
 struct pingpong_context {
-	struct fi_info		*prov;
+	struct fi_info		*info;
 	struct fid_fabric	*fabric;
 	struct fid_domain	*dom;
 	struct fid_mr		*mr;
@@ -101,7 +101,7 @@ static int pp_eq_create(struct pingpong_context *ctx)
 
 	rc = fi_eq_open(ctx->fabric, &cm_attr, &ctx->eq, NULL);
 	if (rc)
-		FI_ERR_LOG("fi_eq_open cm", rc);
+		FT_PRINTERR("fi_eq_open", rc);
 
 	return rc;
 }
@@ -121,7 +121,7 @@ static int pp_cq_create(struct pingpong_context *ctx)
 
 	rc = fi_cq_open(ctx->dom, &cq_attr, &ctx->cq, NULL);
 	if (rc) {
-		FI_ERR_LOG("fi_eq_open", rc);
+		FT_PRINTERR("fi_cq_open", rc);
 		return 1;
 	}
 
@@ -132,7 +132,7 @@ static int pp_listen_ctx(struct pingpong_context *ctx)
 {
 	int rc = 0;
 
-	rc = fi_passive_ep(ctx->fabric, ctx->prov, &ctx->lep, NULL);
+	rc = fi_passive_ep(ctx->fabric, ctx->info, &ctx->lep, NULL);
 	if (rc) {
 		fprintf(stderr, "Unable to open listener endpoint\n");
 		return 1;
@@ -147,13 +147,13 @@ static int pp_listen_ctx(struct pingpong_context *ctx)
 
 	rc = fi_pep_bind(ctx->lep, &ctx->eq->fid, 0);
 	if (rc) {
-		FI_ERR_LOG("Unable to bind listener resources", -rc);
+		FT_PRINTERR("fi_pep_bind", rc);
 		goto err;
 	}
 
 	rc = fi_listen(ctx->lep);
 	if (rc) {
-		FI_ERR_LOG("Unable to listen for connections", -rc);
+		FT_PRINTERR("fi_listen", rc);
 		goto err;
 	}
 
@@ -174,7 +174,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 
 	rd = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FI_ERR_LOG("fi_eq_sread %s", -rd);
+		FT_PRINTERR("fi_eq_sread", rd);
 		goto err;
 	}
 
@@ -185,23 +185,23 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 
 	rc = fi_domain(ctx->fabric, entry.info, &ctx->dom, NULL);
 	if (rc) {
-		FI_ERR_LOG("fi_fdomain", rc);
+		FT_PRINTERR("fi_fdomain", rc);
 		goto err;
 	}
 
 	/* Check if we require memory registration: No provider support for now
 	 * so we register memory without checking */
-	//if (ctx->prov->domain_cap & FI_LOCAL_MR ) {
+	//if (ctx->info->domain_cap & FI_LOCAL_MR ) {
 		rc = fi_mr_reg(ctx->dom, ctx->buf, ctx->size, FI_SEND | FI_RECV, 0, 0, 0, &ctx->mr, NULL);
 		if (rc) {
-			FI_ERR_LOG("fi_mr_reg", -rc);
+			FT_PRINTERR("fi_mr_reg", rc);
 			goto err;
 		}	
 	//}
 
 	rc = fi_endpoint(ctx->dom, entry.info, &ctx->ep, NULL);
 	if (rc) {
-		FI_ERR_LOG("fi_endpoint for req", rc);
+		FT_PRINTERR("fi_endpoint", rc);
 		goto err;
 	}
 
@@ -213,25 +213,25 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 
 	rc = fi_ep_bind(ctx->ep, &ctx->cq->fid, FI_SEND | FI_RECV);
 	if (rc) {
-		FI_ERR_LOG("fi_ep_bind", rc);
+		FT_PRINTERR("fi_ep_bind", rc);
 		goto err;
 	}
 
 	rc = fi_ep_bind(ctx->ep, &ctx->eq->fid, 0);
 	if (rc) {
-		FI_ERR_LOG("fi_ep_bind", rc);
+		FT_PRINTERR("fi_ep_bind", rc);
 		goto err;
 	}
 
 	rc = fi_accept(ctx->ep, NULL, 0);
 	if (rc) {
-		FI_ERR_LOG("fi_accept", rc);
+		FT_PRINTERR("fi_accept", rc);
 		goto err;
 	}
 
 	rd = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FI_ERR_LOG("fi_eq_sread %s", -rd);
+		FT_PRINTERR("fi_eq_sread", rd);
 		goto err;
 	}
 
@@ -256,9 +256,9 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 	int rc = 0;
 
 	/* Open domain */
-	rc = fi_domain(ctx->fabric, ctx->prov, &ctx->dom, NULL);
+	rc = fi_domain(ctx->fabric, ctx->info, &ctx->dom, NULL);
 	if (rc) {
-		FI_ERR_LOG("fi_fdomain", -rc);
+		FT_PRINTERR("fi_fdomain", rc);
 		goto err;
 	}
 
@@ -272,15 +272,15 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 	//if (ctx->prov->domain_cap & FI_LOCAL_MR ) {
 		rc = fi_mr_reg(ctx->dom, ctx->buf, ctx->size, FI_SEND | FI_RECV, 0, 0, 0, &ctx->mr, NULL);
 		if (rc) {
-			FI_ERR_LOG("fi_mr_reg", -rc);
+			FT_PRINTERR("fi_mr_reg", rc);
 			goto err;
 		}	
 	//}
 
 	/* Open endpoint */
-	rc = fi_endpoint(ctx->dom, ctx->prov, &ctx->ep, NULL);
+	rc = fi_endpoint(ctx->dom, ctx->info, &ctx->ep, NULL);
 	if (rc) {
-		FI_ERR_LOG("Unable to create EP", rc);
+		FT_PRINTERR("fi_endpoint", rc);
 		goto err;
 	}
 	
@@ -293,26 +293,26 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 	/* Bind eq to ep */
 	rc = fi_ep_bind(ctx->ep, &ctx->cq->fid, FI_SEND | FI_RECV);
 	if (rc) {
-		FI_ERR_LOG("fi_ep_bind", rc);
+		FT_PRINTERR("fi_ep_bind", rc);
 		goto err;
 	}	
 
 	rc = fi_ep_bind(ctx->ep, &ctx->eq->fid, 0);
 	if (rc) {
-		FI_ERR_LOG("fi_ep_bind", rc);
+		FT_PRINTERR("fi_ep_bind", rc);
 		goto err;
 	}
 
 	printf("Connecting to server\n");
-	rc = fi_connect(ctx->ep, ctx->prov->dest_addr, NULL, 0);
+	rc = fi_connect(ctx->ep, ctx->info->dest_addr, NULL, 0);
 	if (rc) {
-		FI_ERR_LOG("Unable to connect to destination", rc);
+		FT_PRINTERR("fi_connect", rc);
 		goto err;
 	}
 
 	rc = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
 	if (rc != sizeof entry) {
-		FI_ERR_LOG("fi_eq_sread %s", -rc);
+		FT_PRINTERR("fi_eq_sread", rc);
 		goto err;
 	}
 
@@ -329,7 +329,7 @@ err:
 	return 1;
 }
 
-static struct pingpong_context *pp_init_ctx(struct fi_info *prov, int size,
+static struct pingpong_context *pp_init_ctx(struct fi_info *info, int size,
 					    int rx_depth, int use_event)
 {
 	struct pingpong_context *ctx;
@@ -339,7 +339,7 @@ static struct pingpong_context *pp_init_ctx(struct fi_info *prov, int size,
 	if (!ctx)
 		return NULL;
 
-	ctx->prov 		= prov;
+	ctx->info 		= info;
 	ctx->size       	= size;
 	ctx->rx_depth   	= rx_depth;
 	ctx->use_event   	= use_event;
@@ -353,9 +353,9 @@ static struct pingpong_context *pp_init_ctx(struct fi_info *prov, int size,
 	memset(ctx->buf, 0x7b, size);
 
 	/* Open the fabric */
-	rc = fi_fabric(prov->fabric_attr, &ctx->fabric, NULL);
+	rc = fi_fabric(info->fabric_attr, &ctx->fabric, NULL);
 	if (rc) {
-		FI_ERR_LOG("Couldn't open fabric", rc);
+		FT_PRINTERR("fi_fabric", rc);
 		return NULL;
 	}
 
@@ -369,13 +369,13 @@ clean_ctx:
 
 int pp_close_ctx(struct pingpong_context *ctx)
 {
-	FI_CLOSE(ctx->lep, "Couldn't destroy listener EP\n");
-	FI_CLOSE(ctx->ep, "Couldn't destroy EP\n");
-	FI_CLOSE(ctx->eq, "Couldn't destroy EQ\n");
-	FI_CLOSE(ctx->cq, "Couldn't destroy CQ\n");
-	FI_CLOSE(ctx->mr, "Couldn't destroy MR\n");
-	FI_CLOSE(ctx->dom, "Couldn't deallocate Domain\n");
-	FI_CLOSE(ctx->fabric, "Couldn't close fabric\n");
+	FT_CLOSE(ctx->lep, "Couldn't destroy listener EP\n");
+	FT_CLOSE(ctx->ep, "Couldn't destroy EP\n");
+	FT_CLOSE(ctx->eq, "Couldn't destroy EQ\n");
+	FT_CLOSE(ctx->cq, "Couldn't destroy CQ\n");
+	FT_CLOSE(ctx->mr, "Couldn't destroy MR\n");
+	FT_CLOSE(ctx->dom, "Couldn't deallocate Domain\n");
+	FT_CLOSE(ctx->fabric, "Couldn't close fabric\n");
 
 	if (ctx->buf)
 		free(ctx->buf);
@@ -395,7 +395,7 @@ static int pp_post_recv(struct pingpong_context *ctx, int n)
 		rc = fi_recv(ctx->ep, ctx->buf, ctx->size, fi_mr_desc(ctx->mr),
 			     0, (void *)(uintptr_t)PINGPONG_RECV_WCID);
 		if (rc) {
-			FI_ERR_LOG("fi_recv", -rc);
+			FT_PRINTERR("fi_recv", rc);
 			break;
 		}
 	}
@@ -410,46 +410,33 @@ static int pp_post_send(struct pingpong_context *ctx)
 	rc = fi_send(ctx->ep, ctx->buf, ctx->size, fi_mr_desc(ctx->mr), 
 		     0, (void *)(uintptr_t)PINGPONG_SEND_WCID);
 	if (rc) {
-		FI_ERR_LOG("fi_send", rc);
+		FT_PRINTERR("fi_send", rc);
 		return 1;
 	}
 
 	return 0;
 }
 
-static void usage(const char *argv0)
+static void usage(char *argv0)
 {
-	printf("Usage:\n");
-	printf("  %s            start a server and wait for connection\n", argv0);
-	printf("  %s <host>     connect to server at <host>\n", argv0);
-	printf("\n");
-	printf("Options:\n");
-	printf("  -f, --fabric=<provider> specific provider name eg sockets, verbs\n");
-	printf("  -p, --port=<port>      listen on/connect to port <port> (default 18515)\n");
-	printf("  -d, --ib-dev=<dev>     use IB device <dev> (default first device found)\n");
-	printf("  -i, --ib-port=<port>   use port <port> of IB device (default 1)\n");
-	printf("  -s, --size=<size>      size of message to exchange (default 4096)\n");
+	ft_usage(argv0, "Reliable Connection Pingpong test");
+	FT_PRINT_OPTS_USAGE("-S <size>", "size of message to exchange (default 4096)");
 	// No provider support yet
 	// printf("  -m, --mtu=<size>       path MTU (default 1024)\n");
-	printf("  -r, --rx-depth=<dep>   number of receives to post at a time (default 500)\n");
-	printf("  -n, --iters=<iters>    number of exchanges (default 1000)\n");
-	printf("  -e, --events           sleep on CQ events (default poll)\n");
+	FT_PRINT_OPTS_USAGE("-r <rx-depth>", "number of receives to post at a time (default 500)");
+	FT_PRINT_OPTS_USAGE("-n <iters>",  "number of exchanges (default 1000)");
+	FT_PRINT_OPTS_USAGE("-e",         "sleep on CQ events (default poll)");
 }
 
 int main(int argc, char *argv[])
 {
-	struct 		fi_info				*prov_list;
-	struct 		fi_info				*prov;
+	struct 		fi_info				*info;
 	struct 		fi_info 			*hints;
 	uint64_t 	flags 				= 0;
 	char 		*service 			= NULL;
 	char 		*node 				= NULL;
 	struct pingpong_context *ctx;
 	struct timeval           start, end;
-	char                    *prov_name = NULL;
-	char                    *servername = NULL;
-	int                      port = 18515;
-	int                      ib_port = 1;
 	int                      size = 4096;
 	// No provider support yet
 	//enum ibv_mtu		 mtu = IBV_MTU_1024;
@@ -463,49 +450,21 @@ int main(int argc, char *argv[])
 
 	srand48(getpid() * time(NULL));
 
+	opts = INIT_OPTS;
+
+	hints = fi_allocinfo();
+	if (!hints)
+		return 1;
+
 	while (1) {
 		int c;
 
-		static struct option long_options[] = {
-			{ .name = "fabric",    	.has_arg = 1, .val = 'f' },
-			{ .name = "port",     	.has_arg = 1, .val = 'p' },
-			{ .name = "ib-port",  	.has_arg = 1, .val = 'i' },
-			{ .name = "size",     	.has_arg = 1, .val = 's' },
-			// No provider support yet
-			//{ .name = "mtu",      	.has_arg = 1, .val = 'm' },
-			{ .name = "rx-depth", 	.has_arg = 1, .val = 'r' },
-			{ .name = "iters",    	.has_arg = 1, .val = 'n' },
-			{ .name = "events",   	.has_arg = 0, .val = 'e' },
-			{ 0 }
-		};
-
-		c = getopt_long(argc, argv, "p:d:i:s:m:r:n:e:f:",
-							long_options, NULL);
+		c = getopt(argc, argv, "i:S:m:r:n:e:" ADDR_OPTS INFO_OPTS);
 		if (c == -1)
 			break;
 
 		switch (c) {
-		case 'p':
-			port = strtol(optarg, NULL, 0);
-			if (port < 0 || port > 65535) {
-				usage(argv[0]);
-				return 1;
-			}
-			break;
-
-		case 'f':
-			prov_name = strdup(optarg);
-			break;
-
-		case 'i':
-			ib_port = strtol(optarg, NULL, 0);
-			if (ib_port < 0) {
-				usage(argv[0]);
-				return 1;
-			}
-			break;
-
-		case 's':
+		case 'S':
 			size = strtol(optarg, NULL, 0);
 			break;
 
@@ -533,13 +492,18 @@ int main(int argc, char *argv[])
 			break;
 
 		default:
+			ft_parse_addr_opts(c, optarg, &opts);
+			ft_parseinfo(c, optarg, hints);
+			break;
+		case '?':
+		case 'h':
 			usage(argv[0]);
 			return 1;
 		}
 	}
 
 	if (optind == argc - 1)
-		servername = strdup(argv[optind]);
+		opts.dst_addr = argv[optind];
 	else if (optind < argc) {
 		usage(argv[0]);
 		return 1;
@@ -547,56 +511,27 @@ int main(int argc, char *argv[])
 
 	page_size = sysconf(_SC_PAGESIZE);
 
-	hints = fi_allocinfo();
-	if (!hints)
-		return 1;
-
 	hints->ep_attr->type = FI_EP_MSG;
 	hints->caps = FI_MSG;
 	hints->mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
 	hints->addr_format = FI_SOCKADDR;
 
-	if (asprintf(&service, "%d", port) < 0)
+	rc = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (rc)
 		return 1;
-	if (!servername) {
-		flags |= FI_SOURCE;
-	} else {
-		node = servername;
-	}
 	
-	rc = fi_getinfo(FI_VERSION(1, 0), node, service, flags, hints, &prov_list);
+	rc = fi_getinfo(FI_VERSION(1, 0), node, service, flags, hints, &info);
 	if (rc) {
-		FI_ERR_LOG("fi_getinfo", rc);
+		FT_PRINTERR("fi_getinfo", rc);
 		return 1;
 	}
 	fi_freeinfo(hints);
 
-	if (!prov_list) {
-		perror("Failed to get providers list");
-		return 1;
-	}
-
-	if (!prov_name) {
-		prov = prov_list;
-		if (!prov) {
-			fprintf(stderr, "No providers found\n");
-			return 1;
-		}
-	} else {
-		for (prov = prov_list; prov; prov = prov->next)
-			if (!strcmp(prov->fabric_attr->prov_name, prov_name))
-				break;
-		if (!prov) {
-			fprintf(stderr, "Provider %s not found\n", prov_name);
-			return 1;
-		}
-	}
-
-	ctx = pp_init_ctx(prov, size, rx_depth, use_event);
+	ctx = pp_init_ctx(info, size, rx_depth, use_event);
 	if (!ctx)
 		return 1;
 
-	if (servername) {
+	if (opts.dst_addr) {
 		/* client connect */
 		if (pp_connect_ctx(ctx))
 			return 1;
@@ -614,7 +549,7 @@ int main(int argc, char *argv[])
 
 	ctx->pending = PINGPONG_RECV_WCID;
 
-	if (servername) {
+	if (opts.dst_addr) {
 		if (pp_post_send(ctx)) {
 			fprintf(stderr, "Couldn't post send\n");
 			return 1;
@@ -705,11 +640,6 @@ int main(int argc, char *argv[])
 	fi_shutdown(ctx->ep, 0);
 	if (pp_close_ctx(ctx))
 		return 1;
-
-	fi_freeinfo(prov_list);
-	free(service);
-	free(prov_name);
-	free(servername);
 
 	return 0;
 }

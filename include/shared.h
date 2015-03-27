@@ -135,6 +135,8 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 #define FT_ERR(fmt, ...) \
 	do { fprintf(stderr, "%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__); } while (0)
 
+#define FT_PRINT_OPTS_USAGE(opt, desc) fprintf(stderr, " %-20s %s\n", opt, desc)
+
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define ARRAY_SIZE(A) (sizeof(A)/sizeof(*A))
