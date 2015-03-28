@@ -71,7 +71,7 @@ void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 
 #define FI_LOG(prov, level, subsystem, ...)				\
 	do {								\
-		if (fi_log_enabled(prov, subsystem, level)) 		\
+		if (fi_log_enabled(prov, level, subsystem))		\
 			fi_log(prov, level, subsystem,			\
 				__func__, __LINE__, __VA_ARGS__);	\
 	} while (0)
