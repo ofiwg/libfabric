@@ -76,7 +76,7 @@ enum {
 //				   FI_LOG_PROV_OFFSET)
 };
 
-#define FI_LOG_TAG(prov, subsys, level) \
+#define FI_LOG_TAG(prov, level, subsys) \
 	(((uint64_t) prov << FI_LOG_PROV_OFFSET) | \
 	 ((uint64_t) (1 << (subsys + FI_LOG_SUBSYS_OFFSET))) | \
 	 ((uint64_t) (1 << level)))
@@ -132,8 +132,8 @@ int fi_log_enabled(const struct fi_provider *prov, enum fi_log_level level,
 	struct fi_prov_context *ctx;
 
 	ctx = (struct fi_prov_context *) &prov->context;
-	return ((FI_LOG_TAG(ctx->disable_logging, subsys, level) & log_mask) ==
-		FI_LOG_TAG(ctx->disable_logging, subsys, level));
+	return ((FI_LOG_TAG(ctx->disable_logging, level, subsys) & log_mask) ==
+		FI_LOG_TAG(ctx->disable_logging, level, subsys));
 }
 
 void fi_log(const struct fi_provider *prov, enum fi_log_level level,
