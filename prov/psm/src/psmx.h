@@ -41,7 +41,13 @@ extern "C" {
 #include "fi_list.h"
 #include <rdma/fi_log.h>
 
-#define PSMX_PROVNAME "psm"
+#define PSMX_PROV_NAME		"psm"
+#define PSMX_PROV_NAME_LEN	3
+#define PSMX_DOMAIN_NAME	"psm"
+#define PSMX_DOMAIN_NAME_LEN	3
+#define PSMX_FABRIC_NAME	"psm"
+#define PSMX_FABRIC_NAME_LEN	3
+
 #define PSMX_DEFAULT_UUID	"0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF"
 
 extern struct fi_provider psmx_prov;
