@@ -210,7 +210,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		if (hints->fabric_attr && hints->fabric_attr->name &&
-		    strncmp(hints->fabric_attr->name, "psm", 3)) {
+		    strncmp(hints->fabric_attr->name, PSMX_FABRIC_NAME, PSMX_FABRIC_NAME_LEN)) {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
 				"hints->fabric_name=%s, supported=psm\n",
 				hints->fabric_attr->name);
@@ -218,7 +218,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		if (hints->domain_attr && hints->domain_attr->name &&
-		    strncmp(hints->domain_attr->name, "psm", 3)) {
+		    strncmp(hints->domain_attr->name, PSMX_DOMAIN_NAME, PSMX_DOMAIN_NAME_LEN)) {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
 				"hints->domain_name=%s, supported=psm\n",
 				hints->domain_attr->name);
@@ -343,7 +343,7 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
-	if (strncmp(attr->name, "psm", 3))
+	if (strncmp(attr->name, PSMX_FABRIC_NAME, PSMX_FABRIC_NAME_LEN))
 		return -FI_ENODATA;
 
 	if (psmx_active_fabric) {
@@ -385,7 +385,7 @@ static void psmx_fini(void)
 }
 
 struct fi_provider psmx_prov = {
-	.name = PSMX_PROVNAME,
+	.name = PSMX_PROV_NAME,
 	.version = FI_VERSION(0, 9),
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = psmx_getinfo,
