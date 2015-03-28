@@ -112,7 +112,8 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 		if (pe_entry->conn->tx_pe_entry == pe_entry)
 			pe_entry->conn->tx_pe_entry = NULL;
 	} else {
-		pe_entry->conn->rx_pe_entry = NULL;
+		if (pe_entry->conn->rx_pe_entry == pe_entry)
+			pe_entry->conn->rx_pe_entry = NULL;
 	}
 
 	pe->num_free_entries++;
