@@ -43,6 +43,7 @@
 #include <rdma/fabric.h>
 #include <rdma/fi_prov.h>
 #include <rdma/fi_atomic.h>
+#include <rdma/fi_log.h>
 
 #ifdef __APPLE__
 #include <osx/osd.h>
@@ -89,6 +90,26 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 
 #define MIN(a, b) ((a) < (b) ? a : b)
 #define MAX(a, b) ((a) > (b) ? a : b)
+
+/* Restrict to size of struct fi_context */
+struct fi_prov_context {
+	int disable_logging;
+};
+
+struct fi_filter {
+	char **names;
+	int negated;
+};
+
+extern struct fi_filter prov_log_filter;
+
+void fi_create_filter(struct fi_filter *filter, const char *env_name);
+void fi_free_filter(struct fi_filter *filter);
+int fi_apply_filter(struct fi_filter *filter, const char *name);
+
+void fi_log_init();
+void fi_log_fini();
+
 
 /* flsll is defined on BSD systems, but is different. */
 static inline int fi_flsll(long long int i)

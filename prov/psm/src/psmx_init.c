@@ -429,9 +429,10 @@ PSM_INI
 	check_version = psmx_get_int_env("OFI_PSM_VERSION_CHECK", 1);
 
 	if (check_version && major != PSM_VERNO_MAJOR) {
-		FI_WARN(PSMX_PROVNAME, "%s: PSM version mismatch: header %d.%d, library %d.%d.\n",
-			__func__, PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
-		FI_WARN(PSMX_PROVNAME, "\tSet envar OFI_PSM_VERSION_CHECK=0 to bypass version check.\n");
+		PSMX_WARN("%s: PSM version mismatch: header %d.%d, library %d.%d.\n",
+			__func__, PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major,
+			minor);
+		PSMX_WARN("\tSet envar OFI_PSM_VERSION_CHECK=0 to bypass version check.\n");
 		return NULL;
 	}
 
