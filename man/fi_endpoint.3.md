@@ -1045,7 +1045,8 @@ value of an endpoint.
   For unreliable endpoints, this flag indicates that an operation will
   not complete until it has been successfully delivered
   into the fabric.  For example, the corresponding message has been
-  placed on the wire.
+  placed on the wire.  FI_TRANSMIT_COMPLETE is the default completion
+  model for all endpoints.
   
   Note that when set, if the target endpoint experiences an error receiving
   the transferred data, that error will often be reported back to the
