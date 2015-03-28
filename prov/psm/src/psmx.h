@@ -55,7 +55,7 @@ extern struct fi_provider psmx_prov;
 #define PSMX_TIME_OUT	120
 
 #define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
-			 FI_TRIGGER | FI_REMOTE_SIGNAL | FI_REMOTE_COMPLETE)
+			 FI_TRIGGER | FI_REMOTE_COMPLETE)
 
 #define PSMX_CAP_EXT	(0)
 
@@ -63,7 +63,6 @@ extern struct fi_provider psmx_prov;
 			 FI_RMA | FI_MULTI_RECV | \
                          FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
-                         FI_REMOTE_SIGNAL | \
 			 FI_CANCEL | FI_TRIGGER | \
 			 FI_DYNAMIC_MR | \
 			 PSMX_CAP_EXT)

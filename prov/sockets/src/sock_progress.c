@@ -601,10 +601,6 @@ static int sock_pe_process_rx_read(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 	pe_entry->buf = pe_entry->pe.rx.rx_iov[0].iov.addr;
 	pe_entry->data_len = data_len;
 
-	if (pe_entry->flags & FI_REMOTE_SIGNAL) {
-		sock_pe_report_rx_completion(pe_entry);
-	}
-
 	sock_pe_report_remote_read(rx_ctx, pe_entry);
 	sock_pe_send_response(pe, rx_ctx, pe_entry, data_len, 
 			      SOCK_OP_READ_COMPLETE);	
@@ -672,8 +668,7 @@ static int sock_pe_process_rx_write(struct sock_pe *pe, struct sock_rx_ctx *rx_c
 		sock_pe_report_error(pe_entry, rem);
 		goto out;
 	} else {
-		if (pe_entry->flags & FI_REMOTE_SIGNAL ||
-			pe_entry->flags & FI_REMOTE_CQ_DATA) {
+		if (pe_entry->flags & FI_REMOTE_CQ_DATA) {
 			sock_pe_report_rx_completion(pe_entry);
 		}
 	}
@@ -1090,8 +1085,7 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe, struct sock_rx_ctx *rx_
 	pe_entry->buf = pe_entry->pe.rx.rx_iov[0].iov.addr;
 	pe_entry->data_len = offset;
 	
-	if (pe_entry->flags & FI_REMOTE_SIGNAL ||
-		pe_entry->flags & FI_REMOTE_CQ_DATA) {
+	if (pe_entry->flags & FI_REMOTE_CQ_DATA) {
 		sock_pe_report_rx_completion(pe_entry);
 	}
 	

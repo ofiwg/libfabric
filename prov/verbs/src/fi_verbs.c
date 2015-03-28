@@ -86,8 +86,7 @@ static struct fi_provider fi_ibv_prov = {
 #define VERBS_CM_DATA_SIZE 56
 
 #define VERBS_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
-		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | \
-		FI_REMOTE_SIGNAL)
+		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
 #define VERBS_MODE (FI_LOCAL_MR | FI_PROV_MR_ATTR)
 #define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_REMOTE_COMPLETE)
 #define VERBS_TX_MODE VERBS_MODE
@@ -2374,7 +2373,7 @@ static int fi_ibv_cq_reset(struct fid_cq *cq, const void *cond)
         if (!ret)
                 ibv_ack_cq_events(ibcq, 1);
 
-        return -ibv_req_notify_cq(_cq->cq, (_cq->flags & FI_REMOTE_SIGNAL) ? 1:0);
+        return -ibv_req_notify_cq(_cq->cq, 0);
 }
 
 static ssize_t

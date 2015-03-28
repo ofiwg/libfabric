@@ -157,17 +157,6 @@ struct fi_cq_attr {
   FI_WRITE flag is not set, then the application may not invoke
   fi_cq_write of fi_cq_writeerr.
 
-- *FI_REMOTE_SIGNAL*
-: If specified, this indicates that the CQ should only signal its wait
-  object upon receiving a remote operation with FI_REMOTE_SIGNAL set,
-  provided that all other wait conditions have been met.  The use of
-  FI_REMOTE_SIGNAL may improve system utilization by deferring
-  processing of an CQ until a remote endpoint has completed all
-  necessary operations.  FI_REMOTE_SIGNAL should be treated as an
-  optimization.  Providers are not required to wait until a remote
-  operation with FI_REMOTE_SIGNAL is received before signaling a wait
-  object associated with an CQ.
-
 *format*
 : Completion queues allow the application to select the amount of
   detail that it must store and report.  The format attribute allows

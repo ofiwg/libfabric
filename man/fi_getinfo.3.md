@@ -317,11 +317,6 @@ additional optimizations.
   write memory operations from remote endpoints.  This flag requires
   that FI_RMA and/or FI_ATOMIC be set.
 
-*FI_REMOTE_SIGNAL*
-: Indicates that the endpoint support the FI_REMOTE_SIGNAL flag on
-  data transfer operations.  Support requires marking outbound data
-  transfers as signaled and handling incoming transfers appropriately.
-
 *FI_CANCEL*
 : Indicates that the user desires the ability to cancel outstanding
   data transfer operations.  If FI_CANCEL is not set, a provider may

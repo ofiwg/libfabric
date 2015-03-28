@@ -1029,13 +1029,6 @@ value of an endpoint.
 : Indicates that a completion entry should be generated for data
   transfer operations.
 
-*FI_REMOTE_SIGNAL*
-: Indicates that a completion entry at the target process should be
-  generated for the given operation.  The remote endpoint must be
-  configured with FI_REMOTE_SIGNAL, or this flag will be ignored by
-  the target.  The local endpoint must be configured with the
-  FI_REMOTE_SIGNAL capability in order to specify this flag.
-
 *FI_REMOTE_COMPLETE*
 : Generally, this flag indicates that an operation will not complete until
   it has been accepted into the fabric and acknowledged by a remote service.

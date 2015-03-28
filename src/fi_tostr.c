@@ -101,7 +101,6 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 
 	IFFLAGSTR(flags, FI_REMOTE_CQ_DATA);
 	IFFLAGSTR(flags, FI_EVENT);
-	IFFLAGSTR(flags, FI_REMOTE_SIGNAL);
 	IFFLAGSTR(flags, FI_REMOTE_COMPLETE);
 	IFFLAGSTR(flags, FI_CANCEL);
 	IFFLAGSTR(flags, FI_MORE);
