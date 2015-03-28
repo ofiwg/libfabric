@@ -1045,7 +1045,7 @@ value of an endpoint.
   initiator of the request.  This includes errors which may not normally
   be reported to the initiator, such as remote buffer overruns.
 
-*FI_REMOTE_COMMIT*
+*FI_COMMIT_COMPLETE*
 : This flag is defined for future use.
 
 # NOTES
