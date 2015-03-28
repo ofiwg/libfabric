@@ -318,6 +318,9 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 	struct psmx_cq_event *event;
 	int multi_recv;
 	int err;
+	int read_more = 1;
+	int read_count = 0;
+	void *event_buffer = count ? event_in : NULL;
 
 	while (1) {
 		err = psm_mq_ipeek(domain->psm_mq, &psm_req, NULL);
@@ -385,6 +388,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				  struct fi_context *fi_context = psm_status.context;
 				  struct psmx_fid_mr *mr;
 				  struct psmx_am_request *req;
+
 				  req = container_of(fi_context, struct psmx_am_request, fi_context);
 				  if (req->op & PSMX_AM_FORCE_ACK) {
 					req->error = psmx_errno(psm_status.error_code);
@@ -395,21 +399,31 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				  if (mr->cq) {
 					event = psmx_cq_create_event_from_status(
 							mr->cq, &psm_status, req->write.data,
-							(mr->cq == cq) ? event_in : NULL,
+							(mr->cq == cq) ? event_buffer : NULL,
 							count, src_addr);
 					if (!event)
 						return -FI_ENOMEM;
 
-					if (event != event_in)
+					if (event == event_buffer) {
+						read_count++;
+						read_more = --count;
+						event_buffer = count ? event_buffer + cq->entry_size : NULL;
+					}
+					else {
 						psmx_cq_enqueue_event(mr->cq, event);
+						if (mr->cq == cq)
+							read_more = 0;
+					}
 				  }
 				  if (mr->cntr)
 					psmx_cntr_inc(mr->cntr);
 				  if (mr->domain->rma_ep->remote_write_cntr)
 					psmx_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
-				  if (!cq || mr->cq == cq)
-					return psm_status.error_code ? -FI_EAVAIL : 1;
-				  continue;
+
+				  if (read_more)
+					continue;
+
+				  return read_count;
 				}
 
 			case PSMX_REMOTE_READ_CONTEXT:
@@ -419,21 +433,28 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				  mr = PSMX_CTXT_USER(fi_context);
 				  if (mr->domain->rma_ep->remote_read_cntr)
 					psmx_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
-				  if (!cq)
-					return psm_status.error_code ? -FI_EAVAIL : 1;
+
 				  continue;
 				}
 			}
 
 			if (tmp_cq) {
 				event = psmx_cq_create_event_from_status(tmp_cq, &psm_status, 0,
-							(tmp_cq == cq) ? event_in : NULL, count,
+							(tmp_cq == cq) ? event_buffer : NULL, count,
 							src_addr);
 				if (!event)
 					return -FI_ENOMEM;
 
-				if (event != event_in)
+				if (event == event_buffer) {
+					read_count++;
+					read_more = --count;
+					event_buffer = count ? event_buffer + cq->entry_size : NULL;
+				}
+				else {
 					psmx_cq_enqueue_event(tmp_cq, event);
+					if (tmp_cq == cq)
+						read_more = 0;
+				}
 			}
 
 			if (tmp_cntr)
@@ -472,17 +493,21 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 							return -FI_ENOMEM;
 
 						psmx_cq_enqueue_event(tmp_cq, event);
+						if (tmp_cq == cq)
+							read_more = 0;
 					}
 
 					free(req);
 				}
 			}
 
-			if (!cq || tmp_cq == cq)
-				return psm_status.error_code ? -FI_EAVAIL : 1;
+			if (read_more)
+				continue;
+
+			return read_count;
 		}
 		else if (err == PSM_MQ_NO_COMPLETIONS) {
-			return 0;
+			return read_count;
 		}
 		else {
 			return psmx_errno(err);
