@@ -41,6 +41,9 @@
 #include "sock.h"
 #include "sock_util.h"
 
+#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_DOMAIN, __VA_ARGS__)
+#define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_DOMAIN, __VA_ARGS__)
+
 const struct fi_domain_attr sock_domain_attr = {
 	.name = NULL,
 	.threading = FI_THREAD_SAFE,
