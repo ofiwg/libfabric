@@ -530,7 +530,7 @@ static void usage(char *progname)
 
 int main(int argc, char **argv)
 {
-	char *port = "7471";
+	char *port = "9228";
 	char *node = NULL;
 	struct fi_eq_attr eq_attr;
 	int op, ret;
