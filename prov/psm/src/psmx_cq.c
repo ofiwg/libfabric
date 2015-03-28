@@ -68,7 +68,7 @@ struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 	else {
 		event = calloc(1, sizeof(*event));
 		if (!event) {
-			PSMX_WARN("%s: out of memory.\n", __func__);
+			FI_WARN(&psmx_prov, FI_LOG_CQ, "out of memory.\n");
 			exit(-1);
 		}
 	}
@@ -112,7 +112,8 @@ struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 		break;
 
 	default:
-		PSMX_WARN("%s: unsupported CQ format %d\n", __func__, cq->format);
+		FI_WARN(&psmx_prov, FI_LOG_CQ,
+			"unsupported CQ format %d\n", cq->format);
 		return NULL;
 	}
 
@@ -206,7 +207,8 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		else {
 			event = calloc(1, sizeof(*event));
 			if (!event) {
-				PSMX_WARN("%s: out of memory.\n", __func__);
+				FI_WARN(&psmx_prov, FI_LOG_CQ,
+					"out of memory.\n");
 				exit(-1);
 			}
 		}
@@ -257,7 +259,8 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		break;
 
 	default:
-		PSMX_WARN("%s: unsupported EQ format %d\n", __func__, cq->format);
+		FI_WARN(&psmx_prov, FI_LOG_CQ,
+			"unsupported EQ format %d\n", cq->format);
 		return NULL;
 	}
 
@@ -580,7 +583,7 @@ static ssize_t psmx_cq_write(struct fid_cq *cq, const void *buf, size_t len)
 	while (len >= cq_priv->entry_size) {
 		event = calloc(1, sizeof(*event));
 		if (!event) {
-			PSMX_WARN("%s: out of memory\n", __func__);
+			FI_WARN(&psmx_prov, FI_LOG_CQ, "out of memory\n");
 			return -FI_ENOMEM;
 		}
 
@@ -605,7 +608,7 @@ static ssize_t psmx_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 	while (len >= sizeof(*buf)) {
 		event = calloc(1, sizeof(*event));
 		if (!event) {
-			PSMX_WARN("%s: out of memory\n", __func__);
+			FI_WARN(&psmx_prov, FI_LOG_CQ, "out of memory\n");
 			return -FI_ENOMEM;
 		}
 
@@ -776,8 +779,9 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		break;
 
 	default:
-		PSMX_DEBUG("attr->format=%d, supported=%d...%d\n", attr->format,
-				FI_CQ_FORMAT_UNSPEC, FI_CQ_FORMAT_TAGGED);
+		FI_INFO(&psmx_prov, FI_LOG_CQ,
+			"attr->format=%d, supported=%d...%d\n", attr->format,
+			FI_CQ_FORMAT_UNSPEC, FI_CQ_FORMAT_TAGGED);
 		return -FI_EINVAL;
 	}
 
@@ -788,7 +792,8 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	case FI_WAIT_SET:
 		if (!attr->wait_set) {
-			PSMX_DEBUG("FI_WAIT_SET is specified but attr->wait_set is NULL\n");
+			FI_INFO(&psmx_prov, FI_LOG_CQ,
+				"FI_WAIT_SET is specified but attr->wait_set is NULL\n");
 			return -FI_EINVAL;
 		}
 		wait = (struct psmx_fid_wait *)attr->wait_set;
@@ -806,8 +811,9 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		break;
 
 	default:
-		PSMX_DEBUG("attr->wait_obj=%d, supported=%d...%d\n", attr->wait_obj,
-				FI_WAIT_NONE, FI_WAIT_MUTEX_COND);
+		FI_INFO(&psmx_prov, FI_LOG_CQ,
+			"attr->wait_obj=%d, supported=%d...%d\n", attr->wait_obj,
+			FI_WAIT_NONE, FI_WAIT_MUTEX_COND);
 		return -FI_EINVAL;
 	}
 
@@ -818,8 +824,9 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			break;
 
 		default:
-			PSMX_DEBUG("attr->wait_cond=%d, supported=%d...%d\n",
-					attr->wait_cond, FI_CQ_COND_NONE, FI_CQ_COND_THRESHOLD);
+			FI_INFO(&psmx_prov, FI_LOG_CQ,
+				"attr->wait_cond=%d, supported=%d...%d\n",
+				attr->wait_cond, FI_CQ_COND_NONE, FI_CQ_COND_THRESHOLD);
 			return -FI_EINVAL;
 		}
 	}
@@ -851,7 +858,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	for (i=0; i<PSMX_FREE_LIST_SIZE; i++) {
 		event = calloc(1, sizeof(*event));
 		if (!event) {
-			PSMX_WARN("%s: out of memory.\n", __func__);
+			FI_WARN(&psmx_prov, FI_LOG_CQ, "out of memory.\n");
 			exit(-1);
 		}
 		slist_insert_tail(&event->list_entry, &cq_priv->free_list);

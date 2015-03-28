@@ -149,7 +149,8 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 	epaddr_context = psm_epaddr_getctxt(epaddr);
 	if (!epaddr_context) {
-		PSMX_WARN("%s: NULL context for epaddr %p\n", __func__, epaddr);
+		FI_WARN(&psmx_prov, FI_LOG_EP_DATA,
+			"NULL context for epaddr %p\n", epaddr);
 		return -FI_EIO;
 	}
 
@@ -210,7 +211,8 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				req->recv.len_received += copy_len;
 			}
 			else {
-				PSMX_WARN("%s: NULL recv_req in follow-up packets.\n", __func__);
+				FI_WARN(&psmx_prov, FI_LOG_EP_DATA,
+					"NULL recv_req in follow-up packets.\n");
 				op_error = -FI_ENOMSG;
 			}
 		}
