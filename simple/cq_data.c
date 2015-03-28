@@ -262,8 +262,7 @@ static int server_connect(void)
 		goto err1;
 	}
 
-	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
-	info->tx_attr->op_flags = FI_REMOTE_COMPLETE;
+	info->tx_attr->op_flags = FI_TRANSMIT_COMPLETE;
 	
 	ret = alloc_ep_res(info);
 	if (ret)
@@ -335,8 +334,7 @@ static int client_connect(void)
 		goto err2;
 	}
 	
-	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
-	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
+	fi->tx_attr->op_flags = FI_TRANSMIT_COMPLETE;
 
 	ret = alloc_ep_res(fi);
 	if (ret)
