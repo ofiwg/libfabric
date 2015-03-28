@@ -233,9 +233,10 @@ fi_sendmsg.
   space falls below the network's MTU size (see
   FI_OPT_MIN_MULTI_RECV).
 
-*FI_REMOTE_COMPLETE*
+*FI_TRANSMIT_COMPLETE*
 : Applies to fi_sendmsg.  Indicates that a completion should not be
-  generated until the operation has completed on the remote side.
+  generated until the operation has been successfully transmitted and
+  is no longer being tracked by the provider.
 
 *FI_FENCE*
 : Applies to transmits.  Indicates that the requested operation, also

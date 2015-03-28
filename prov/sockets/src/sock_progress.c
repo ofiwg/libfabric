@@ -1320,7 +1320,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 	}
 
 out:
-	if (pe_entry->msg_hdr.flags & FI_REMOTE_COMPLETE) {
+	if (pe_entry->msg_hdr.flags & FI_TRANSMIT_COMPLETE) {
 		sock_pe_send_response(pe, rx_ctx, pe_entry, 0, 
 				      SOCK_OP_SEND_COMPLETE);
 	}
@@ -1674,7 +1674,7 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 		pe_entry->conn->tx_pe_entry = NULL;
 		SOCK_LOG_INFO("Send complete\n");
 		
-		if (!(pe_entry->flags & FI_REMOTE_COMPLETE)) {
+		if (!(pe_entry->flags & FI_TRANSMIT_COMPLETE)) {
 			sock_pe_report_tx_completion(pe_entry);
 			pe_entry->is_complete = 1;
 		}

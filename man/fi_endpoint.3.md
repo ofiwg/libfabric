@@ -1029,18 +1029,16 @@ value of an endpoint.
 : Indicates that a completion entry should be generated for data
   transfer operations.
 
-*FI_REMOTE_COMPLETE*
-: Generally, this flag indicates that an operation will not complete until
+*FI_TRANSMIT_COMPLETE*
+: Indicates that a completion should not be generated until an
+  operation has been successfully transmitted and is no longer
+  being tracked by the provider.  For reliable endpoints, this flag
+  generally indicates that an operation will not complete until
   it has been accepted into the fabric and acknowledged by a remote service.
-  When used with unreliable endpoints, local completions should not be
-  generated until the associated operation has been successfully delivered
-  into the fabric.  For example, the corresponding messages have been
-  placed on the wire.  When used with reliable endpoints, this
-  flag indicates that the operation will not complete until it has been
-  acknowledged by the target, or a proxy for the target that is responsible
-  for ensuring its reliable delivery.  For example, this flag often implies
-  that a completion is not generated until an ack has been received from
-  the target.
+  For unreliable endpoints, this flag indicates that an operation will
+  not complete until it has been successfully delivered
+  into the fabric.  For example, the corresponding message has been
+  placed on the wire.
   
   Note that when set, if the target endpoint experiences an error receiving
   the transferred data, that error will often be reported back to the

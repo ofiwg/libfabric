@@ -270,9 +270,10 @@ and/or fi_tsendmsg.
   that the underlying provider implementation copy the data into a
   local buffer and transfer out of that buffer.
 
-*FI_REMOTE_COMPLETE*
+*FI_TRANSMIT_COMPLETE*
 : Applies to fi_tsendmsg.  Indicates that a completion should not be
-  generated until the operation has completed on the remote side.
+  generated until the operation has been successfully transmitted and
+  is no longer being tracked by the provider.
 
 *FI_FENCE*
 : Applies to transmits.  Indicates that the requested operation, also

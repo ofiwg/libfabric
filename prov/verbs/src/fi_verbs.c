@@ -88,7 +88,7 @@ static struct fi_provider fi_ibv_prov = {
 #define VERBS_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
 		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
 #define VERBS_MODE (FI_LOCAL_MR | FI_PROV_MR_ATTR)
-#define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_REMOTE_COMPLETE)
+#define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
 #define VERBS_TX_MODE VERBS_MODE
 #define VERBS_RX_MODE (FI_LOCAL_MR | FI_PROV_MR_ATTR | FI_RX_CQ_DATA)
 #define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
@@ -650,9 +650,8 @@ static int fi_ibv_fill_info_attr(struct ibv_context *ctx, struct ibv_qp *qp,
 	fi->ep_attr->max_msg_size = port_attr.max_msg_sz;
 
 	if (hints && hints->tx_attr) {
-		if ((ctx->device->transport_type == IBV_TRANSPORT_IWARP)
-					&& (hints->tx_attr->op_flags
-						& FI_REMOTE_COMPLETE)) {
+		if ((ctx->device->transport_type == IBV_TRANSPORT_IWARP) &&
+		    (hints->tx_attr->op_flags & FI_TRANSMIT_COMPLETE)) {
 			return -FI_ENODATA;
 		}
 		fi->tx_attr->op_flags = hints->tx_attr->op_flags;
@@ -947,8 +946,8 @@ fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 
 		wr.sg_list = sge;
 	}
-	if (!(_ep->ep_flags & FI_COMPLETION)
-			|| (flags & (FI_COMPLETION|FI_REMOTE_COMPLETE)))
+	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
 	wr.wr_id = (uintptr_t) msg->context;
@@ -1134,8 +1133,8 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			}
 		}
 	}
-	if (!(_ep->ep_flags & FI_COMPLETION)
-			|| (flags & (FI_COMPLETION|FI_REMOTE_COMPLETE)))
+	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	wr.sg_list = sge;
 
@@ -1555,8 +1554,8 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
-	if (!(_ep->ep_flags & FI_COMPLETION)
-			|| (flags & (FI_COMPLETION|FI_REMOTE_COMPLETE)))
+	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
 		wr.imm_data = (uint32_t) msg->data;
@@ -1694,8 +1693,8 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
-	if (!(_ep->ep_flags & FI_COMPLETION)
-			|| (flags & (FI_COMPLETION|FI_REMOTE_COMPLETE)))
+	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
 		wr.imm_data = (uint32_t) msg->data;
@@ -2055,7 +2054,7 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (info->tx_attr) {
 		_ep->inline_size = info->tx_attr->inject_size;
 		_ep->tx_op_flags = info->tx_attr->op_flags;
-		if (_ep->tx_op_flags & FI_REMOTE_COMPLETE)
+		if (_ep->tx_op_flags & FI_TRANSMIT_COMPLETE)
 			_ep->tx_op_flags |= FI_COMPLETION;
 	} else {
 		fi_read_file(FI_CONF_DIR, "def_inline_data",

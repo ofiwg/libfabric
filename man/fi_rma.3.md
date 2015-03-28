@@ -242,9 +242,10 @@ fi_writemsg.
    require that the underlying provider implementation copy the data
    into a local buffer and transfer out of that buffer.
 
-*FI_REMOTE_COMPLETE*
+*FI_TRANSMIT_COMPLETE*
 : Applies to fi_writemsg.  Indicates that a completion should not be
-  generated until the operation has completed on the remote side.
+  generated until the operation has been successfully transmitted and
+  is no longer being tracked by the provider.
 
 *FI_FENCE*
 : Indicates that the requested operation, also
