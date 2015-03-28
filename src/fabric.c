@@ -449,7 +449,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const cha
 {
 	struct fi_prov *prov;
 	struct fi_info *tail, *cur;
-	int ret = -FI_ENOSYS;
+	int ret = -FI_ENODATA;
 
 	if (!init)
 		fi_ini();
