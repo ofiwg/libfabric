@@ -80,6 +80,7 @@ void print_usage(char *name, char *desc)
 
 static void free_ep_res(void)
 {
+	fi_close(&ep->fid);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
@@ -87,7 +88,7 @@ static void free_ep_res(void)
 	free(buf);
 }
 
-static int alloc_ep_res(void)
+static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
 	struct fi_av_attr av_attr;
@@ -138,8 +139,16 @@ static int alloc_ep_res(void)
 		 goto err4;
 	 }
 
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		goto err5;
+	}
+
 	return 0;
 
+err5:
+	fi_close(&av->fid);
 err4:
 	fi_close(&mr->fid);
 err3:
@@ -225,19 +234,10 @@ static int init_fabric(void)
 	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
 	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 
-	/* Open endpoint */
-	ret = fi_endpoint(dom, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		goto err3;
-	}
-
-	/* Allocate endpoint resources */
-	ret = alloc_ep_res();
+	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err4;
 
-	/* Bind EQs and AVs with endpoint */
 	ret = bind_ep_res();
 	if (ret)
 		goto err5;
@@ -258,8 +258,6 @@ static int init_fabric(void)
 err5:
 	free_ep_res();
 err4:
-	fi_close(&ep->fid);
-err3:
 	fi_close(&dom->fid);
 err2:
 	fi_close(&fab->fid);
@@ -358,7 +356,6 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);

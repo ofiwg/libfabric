@@ -93,6 +93,7 @@ static int alloc_cm_res(void)
 
 static void free_ep_res(void)
 {
+	fi_close(&ep->fid);
 	fi_close(&mr->fid);
 	close(epfd);
 	fi_close(&rcq->fid);
@@ -100,7 +101,7 @@ static void free_ep_res(void)
 	free(buf);
 }
 
-static int alloc_ep_res(void)
+static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
 	struct epoll_event event;
@@ -182,8 +183,16 @@ static int alloc_ep_res(void)
 		goto err4;
 	}
 
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		goto err5;
+	}
+
 	return 0;
 
+err5:
+	fi_close(&mr->fid);
 err4:
 	close(epfd);
 err3:
@@ -312,19 +321,10 @@ static int server_connect(void)
 	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
 	info->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 
-	/* Open the endpoint */
-	ret = fi_endpoint(dom, info, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		goto err1;
-	}
-
-	/* Allocate endpoint resources */
-	ret = alloc_ep_res();
+	ret = alloc_ep_res(info);
 	if (ret)
-		 goto err2;
+		 goto err1;
 
-	/* Bind EP to EQ and CQs */
 	ret = bind_ep_res();
 	if (ret)
 		goto err3;
@@ -355,8 +355,6 @@ static int server_connect(void)
 
 err3:
 	free_ep_res();
-err2:
-	fi_close(&ep->fid);
 err1:
 	fi_reject(pep, info->connreq, NULL, 0);
 	fi_freeinfo(info);
@@ -395,24 +393,14 @@ static int client_connect(void)
 	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
 	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 
-	/* Open endpoint */
-	ret = fi_endpoint(dom, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		goto err3;
-	}
-
-	/* Allocate connection management resources */
 	ret = alloc_cm_res();
 	if (ret)
 		goto err4;
 
-	/* Allocate endpoint resources */
-	ret = alloc_ep_res();
+	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err5;
 
-	/* Bind EQs and CQs with endpoint */
 	ret = bind_ep_res();
 	if (ret)
 		goto err6;
@@ -446,8 +434,6 @@ err6:
 err5:
 	fi_close(&cmeq->fid);
 err4:
-	fi_close(&ep->fid);
-err3:
 	fi_close(&dom->fid);
 err2:
 	fi_close(&fab->fid);
@@ -573,7 +559,6 @@ int main(int argc, char **argv)
 	ret = send_recv();
 
 	fi_shutdown(ep, 0);
-	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&cmeq->fid);
 	fi_close(&dom->fid);

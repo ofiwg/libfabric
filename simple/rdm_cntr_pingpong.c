@@ -41,8 +41,6 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
-#define CNTR_TIMEOUT 10000	// 10000 ms
-
 static struct cs_opts opts;
 static int max_credits = 128;
 static int credits = 128;
@@ -72,7 +70,7 @@ static int get_send_completions()
 {
 	int ret;
 
-	ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
+	ret = fi_cntr_wait(scntr, send_count, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 		return ret;
@@ -88,7 +86,7 @@ static int send_xfer(int size)
 	int ret;
 
 	if (!credits) {
-		ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
+		ret = fi_cntr_wait(scntr, send_count, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			return ret;
@@ -111,7 +109,7 @@ static int recv_xfer(int size)
 {
 	int ret;
 
-	ret = fi_cntr_wait(rcntr, recv_outs, CNTR_TIMEOUT);
+	ret = fi_cntr_wait(rcntr, recv_outs, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 		return ret;
@@ -138,7 +136,7 @@ static int send_msg(int size)
 	}
 	send_count++;
 
-	ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
+	ret = fi_cntr_wait(scntr, send_count, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 	}
@@ -157,7 +155,7 @@ static int recv_msg(void)
 	}
 	recv_outs++;
 
-	ret = fi_cntr_wait(rcntr, recv_outs, CNTR_TIMEOUT);
+	ret = fi_cntr_wait(rcntr, recv_outs, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 		return ret;
@@ -216,6 +214,7 @@ out:
 
 static void free_ep_res(void)
 {
+	fi_close(&ep->fid);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcntr->fid);
@@ -270,8 +269,16 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err4;
 	}
 
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		goto err5;
+	}
+
 	return 0;
 
+err5:
+	fi_close(&av->fid);
 err4:
 	fi_close(&mr->fid);
 err3:
@@ -362,12 +369,6 @@ static int init_fabric(void)
 		goto err1;
 	}
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		goto err2;
-	}
-
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;
@@ -381,8 +382,6 @@ static int init_fabric(void)
 err4:
 	free_ep_res();
 err3:
-	fi_close(&ep->fid);
-err2:
 	fi_close(&dom->fid);
 err1:
 	fi_close(&fab->fid);
@@ -495,7 +494,6 @@ static int run(void)
 	get_send_completions();
 	/* TODO: need support for finalize operation to sync test */
 out:
-	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);

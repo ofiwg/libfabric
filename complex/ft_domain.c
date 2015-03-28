@@ -96,7 +96,7 @@ ssize_t ft_get_event(uint32_t *event, void *buf, size_t len,
 {
 	ssize_t ret;
 
-	ret = fi_eq_sread(eq, event, buf, len, FT_TIMEOUT, 0);
+	ret = fi_eq_sread(eq, event, buf, len, -1, 0);
 	if (ret == -FI_EAVAIL) {
 		return ft_eq_readerr();
 	} else if (ret < 0) {

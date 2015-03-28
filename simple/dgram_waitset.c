@@ -41,8 +41,6 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
-#define WAIT_TIMEOUT 10000 // 10ms
-
 static void *buf;
 static size_t buffer_size = 1024;
 static int transfer_size = 1000;
@@ -89,6 +87,7 @@ void print_usage(char *name, char *desc)
 
 static void free_ep_res(void)
 {
+	fi_close(&ep->fid);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
@@ -160,8 +159,16 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err5;
 	}
 
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		goto err6;
+	}
+
 	return 0;
 
+err6:
+	fi_close(&av->fid);
 err5:
 	fi_close(&mr->fid);
 err4:
@@ -284,12 +291,6 @@ static int init_fabric(void)
 	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
 	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 	
-	ret = fi_endpoint(dom, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		goto err2;
-	}
-
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;
@@ -303,8 +304,6 @@ static int init_fabric(void)
 err4:
 	free_ep_res();
 err3:
-	fi_close(&ep->fid);
-err2:
 	fi_close(&dom->fid);
 err1:
 	fi_close(&fab->fid);
@@ -404,7 +403,7 @@ static int send_recv()
 
 	while (send_pending || recv_pending) {
 		/* Wait for completion events on CQs */
-		ret = fi_wait(waitset, WAIT_TIMEOUT);
+		ret = fi_wait(waitset, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_wait", ret);
 			return ret;
@@ -491,7 +490,6 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);

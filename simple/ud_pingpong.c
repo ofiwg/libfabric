@@ -179,6 +179,12 @@ static void free_ep_res(void)
 {
 	int ret;
 
+	if (ep) {
+		ret = fi_close(&ep->fid);
+		if (ret != 0) {
+			FT_PRINTERR("fi_close", ret);
+		}
+	}
 	if (mr) {
 		ret = fi_close(&mr->fid);
 		if (ret != 0) {
@@ -255,8 +261,16 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err4;
 	}
 
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		goto err5;
+	}
+
 	return 0;
 
+err5:
+	fi_close(&av->fid);
 err4:
 	fi_close(&mr->fid);
 err3:
@@ -348,12 +362,6 @@ static int common_setup(void)
 		goto err2;
 	}
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		goto err3;
-	}
-
 	ret = alloc_ep_res(fi);
 	if (ret) {
 		goto err4;
@@ -371,8 +379,6 @@ static int common_setup(void)
 err5:
 	free_ep_res();
 err4:
-	fi_close(&ep->fid);
-err3:
 	fi_close(&dom->fid);
 err2:
 	fi_close(&fab->fid);
@@ -473,7 +479,6 @@ static int server_connect(void)
 
 err:
 	free_ep_res();
-	fi_close(&ep->fid);
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
 	return ret;
@@ -509,10 +514,6 @@ static int run(void)
 	
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
-	ret = fi_close(&ep->fid);
-	if (ret != 0) {
-		FT_PRINTERR("fi_close", ret);
-	}
 	free_ep_res();
 	ret = fi_close(&av->fid);
 	if (ret != 0) {

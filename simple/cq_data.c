@@ -78,6 +78,7 @@ static int alloc_cm_res(void)
 
 static void free_ep_res(void)
 {
+	fi_close(&ep->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
 	fi_close(&scq->fid);
@@ -123,6 +124,12 @@ static int alloc_ep_res(struct fi_info *fi)
 		ret = alloc_cm_res();
 		if (ret)
 			goto err4;
+	}
+
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		goto err4;
 	}
 
 	return 0;
@@ -258,15 +265,9 @@ static int server_connect(void)
 	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
 	info->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 	
-	ret = fi_endpoint(dom, info, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		goto err1;
-	}
-
 	ret = alloc_ep_res(info);
 	if (ret)
-		 goto err2;
+		 goto err1;
 
 	ret = bind_ep_res();
 	if (ret)
@@ -296,8 +297,6 @@ static int server_connect(void)
 
 err3:
 	free_ep_res();
-err2:
-	fi_close(&ep->fid);
 err1:
 	fi_reject(pep, info->connreq, NULL, 0);
 	fi_freeinfo(info);
@@ -339,12 +338,6 @@ static int client_connect(void)
 	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
 	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		goto err3;
-	}
-
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err4;
@@ -378,8 +371,6 @@ static int client_connect(void)
 err5:
 	free_ep_res();
 err4:
-	fi_close(&ep->fid);
-err3:
 	fi_close(&dom->fid);
 err2:
 	fi_close(&fab->fid);
@@ -458,7 +449,6 @@ static int run(void)
 	run_test();
 
 	fi_shutdown(ep, 0);
-	fi_close(&ep->fid);
 	free_ep_res();
 	if (!opts.dst_addr)
 		free_lres();
