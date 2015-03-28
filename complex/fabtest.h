@@ -115,7 +115,6 @@ enum {
 	FT_MAX_PROV_MODES	= 4,
 	FT_DEFAULT_CREDITS	= 128,
 	FT_COMP_BUF_SIZE	= 256,
-	FT_TIMEOUT		= 15000
 };
 
 enum ft_comp_type {

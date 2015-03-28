@@ -41,8 +41,6 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
-#define CNTR_TIMEOUT 10000	// 10000 ms
-
 static struct cs_opts opts;
 static int max_credits = 128;
 static int credits = 128;
@@ -72,7 +70,7 @@ static int get_send_completions()
 {
 	int ret;
 
-	ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
+	ret = fi_cntr_wait(scntr, send_count, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 		return ret;
@@ -88,7 +86,7 @@ static int send_xfer(int size)
 	int ret;
 
 	if (!credits) {
-		ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
+		ret = fi_cntr_wait(scntr, send_count, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			return ret;
@@ -111,7 +109,7 @@ static int recv_xfer(int size)
 {
 	int ret;
 
-	ret = fi_cntr_wait(rcntr, recv_outs, CNTR_TIMEOUT);
+	ret = fi_cntr_wait(rcntr, recv_outs, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 		return ret;
@@ -138,7 +136,7 @@ static int send_msg(int size)
 	}
 	send_count++;
 
-	ret = fi_cntr_wait(scntr, send_count, CNTR_TIMEOUT);
+	ret = fi_cntr_wait(scntr, send_count, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 	}
@@ -157,7 +155,7 @@ static int recv_msg(void)
 	}
 	recv_outs++;
 
-	ret = fi_cntr_wait(rcntr, recv_outs, CNTR_TIMEOUT);
+	ret = fi_cntr_wait(rcntr, recv_outs, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 		return ret;

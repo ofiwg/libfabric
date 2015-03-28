@@ -41,8 +41,6 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
-#define WAIT_TIMEOUT 10000 // 10ms
-
 static void *buf;
 static size_t buffer_size = 1024;
 static int transfer_size = 1000;
@@ -405,7 +403,7 @@ static int send_recv()
 
 	while (send_pending || recv_pending) {
 		/* Wait for completion events on CQs */
-		ret = fi_wait(waitset, WAIT_TIMEOUT);
+		ret = fi_wait(waitset, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_wait", ret);
 			return ret;
