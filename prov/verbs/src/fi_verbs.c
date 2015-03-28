@@ -60,12 +60,24 @@
 #include <rdma/fi_log.h>
 #include "prov.h"
 
+
+static int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
+			  uint64_t flags, struct fi_info *hints, struct fi_info **info);
+static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+			 void *context);
+static void fi_ibv_fini(void);
+
 #define VERBS_PROV_NAME "verbs"
 #define VERBS_PROV_VERS FI_VERSION(1,0)
 
-#define VERBS_WARN(...)
-#define VERBS_INFO(...)
-#define VERBS_DEBUG(...)
+static struct fi_provider fi_ibv_prov = {
+	.name = VERBS_PROV_NAME,
+	.version = VERBS_PROV_VERS,
+	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+	.getinfo = fi_ibv_getinfo,
+	.fabric = fi_ibv_fabric,
+	.cleanup = fi_ibv_fini
+};
 
 #define VERBS_MSG_SIZE (1ULL << 31)
 #define VERBS_IB_PREFIX "IB-0x"
@@ -206,12 +218,13 @@ static int fi_ibv_check_fabric_attr(struct fi_fabric_attr *attr)
 	if (attr->name && !(!strcmp(attr->name, VERBS_ANY_FABRIC) ||
 	    !strncmp(attr->name, VERBS_IB_PREFIX, strlen(VERBS_IB_PREFIX)) ||
 	    !strcmp(attr->name, VERBS_IWARP_FABRIC))) {
-		VERBS_INFO("Unknown fabric name\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown fabric name\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->prov_version > VERBS_PROV_VERS) {
-		VERBS_INFO("Unsupported provider version\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Unsupported provider version\n");
 		return -FI_ENODATA;
 	}
 
@@ -228,7 +241,8 @@ static int fi_ibv_check_domain_attr(struct fi_domain_attr *attr)
 	case FI_THREAD_COMPLETION:
 		break;
 	default:
-		VERBS_INFO("Invalid threading model\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Invalid threading model\n");
 		return -FI_ENODATA;
 	}
 
@@ -238,7 +252,8 @@ static int fi_ibv_check_domain_attr(struct fi_domain_attr *attr)
 	case FI_PROGRESS_MANUAL:
 		break;
 	default:
-		VERBS_INFO("Given control progress mode not supported\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Given control progress mode not supported\n");
 		return -FI_ENODATA;
 	}
 
@@ -248,17 +263,20 @@ static int fi_ibv_check_domain_attr(struct fi_domain_attr *attr)
 	case FI_PROGRESS_MANUAL:
 		break;
 	default:
-		VERBS_INFO("Given data progress mode not supported!\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Given data progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->mr_key_size > sizeof_field(struct ibv_sge, lkey)) {
-		VERBS_INFO("MR key size too large\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"MR key size too large\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->cq_data_size > sizeof_field(struct ibv_send_wr, imm_data)) {
-		VERBS_INFO("CQ data size too large\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"CQ data size too large\n");
 		return -FI_ENODATA;
 	}
 
@@ -272,7 +290,8 @@ static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 	case FI_EP_MSG:
 		break;
 	default:
-		VERBS_INFO("Unsupported endpoint type\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Unsupported endpoint type\n");
 		return -FI_ENODATA;
 	}
 
@@ -283,47 +302,56 @@ static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 	case FI_PROTO_IB_UD:
 		break;
 	default:
-		VERBS_INFO("Unsupported protocol\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Unsupported protocol\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->protocol_version > 1) {
-		VERBS_INFO("Unsupported protocol version\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Unsupported protocol version\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->max_msg_size > verbs_ep_attr.max_msg_size) {
-		VERBS_INFO("Max message size too large\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Max message size too large\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->max_order_raw_size > verbs_ep_attr.max_order_raw_size) {
-		VERBS_INFO("max_order_raw_size exceeds supported size\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"max_order_raw_size exceeds supported size\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->max_order_war_size) {
-		VERBS_INFO("max_order_war_size exceeds supported size\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"max_order_war_size exceeds supported size\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->max_order_waw_size > verbs_ep_attr.max_order_waw_size) {
-		VERBS_INFO("max_order_waw_size exceeds supported size\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"max_order_waw_size exceeds supported size\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->msg_order & ~(verbs_ep_attr.msg_order)) {
-		VERBS_INFO("Given msg ordering not supported\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Given msg ordering not supported\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->tx_ctx_cnt > verbs_ep_attr.tx_ctx_cnt) {
-		VERBS_INFO("tx_ctx_cnt exceeds supported size\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"tx_ctx_cnt exceeds supported size\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->rx_ctx_cnt > verbs_ep_attr.rx_ctx_cnt) {
-		VERBS_INFO("rx_ctx_cnt exceeds supported size\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"rx_ctx_cnt exceeds supported size\n");
 		return -FI_ENODATA;
 	}
 
@@ -333,23 +361,27 @@ static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 static int fi_ibv_check_rx_attr(struct fi_rx_attr *attr, struct fi_info *info)
 {
 	if (attr->caps & ~(verbs_rx_attr.caps)) {
-		VERBS_INFO("Given rx_attr->caps not supported\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Given rx_attr->caps not supported\n");
 		return -FI_ENODATA;
 	}
 
 	if (((attr->mode ? attr->mode : info->mode) & 
 				verbs_rx_attr.mode) != verbs_rx_attr.mode) {
-		VERBS_INFO("Given rx_attr->mode not supported\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Given rx_attr->mode not supported\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->msg_order & ~(verbs_rx_attr.msg_order)) {
-		VERBS_INFO("Given rx_attr->msg_order not supported\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Given rx_attr->msg_order not supported\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->total_buffered_recv > verbs_rx_attr.total_buffered_recv) {
-		VERBS_INFO("Given rx_attr->total_buffered_recv exceeds supported size\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Given rx_attr->total_buffered_recv exceeds supported size\n");
 		return -FI_ENODATA;
 	}
 
@@ -359,18 +391,21 @@ static int fi_ibv_check_rx_attr(struct fi_rx_attr *attr, struct fi_info *info)
 static int fi_ibv_check_tx_attr(struct fi_tx_attr *attr, struct fi_info *info)
 {
 	if (attr->caps & ~(verbs_tx_attr.caps)) {
-		VERBS_INFO("Given tx_attr->caps not supported\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Given tx_attr->caps not supported\n");
 		return -FI_ENODATA;
 	}
 
 	if (((attr->mode ? attr->mode : info->mode) & 
 				verbs_tx_attr.mode) != verbs_tx_attr.mode) {
-		VERBS_INFO("Given tx_attr->mode not supported\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Given tx_attr->mode not supported\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->msg_order & ~(verbs_tx_attr.msg_order)) {
-		VERBS_INFO("Given tx_attr->msg_order not supported\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Given tx_attr->msg_order not supported\n");
 		return -FI_ENODATA;
 	}
 
@@ -382,12 +417,14 @@ static int fi_ibv_check_info(struct fi_info *info)
 	int ret;
 
 	if (info->caps && (info->caps & ~VERBS_CAPS)) {
-		VERBS_INFO("Unsupported capabilities\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Unsupported capabilities\n");
 		return -FI_ENODATA;
 	}
 
 	if ((info->mode & VERBS_MODE) != VERBS_MODE) {
-		VERBS_INFO("Required mode bits not set\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Required mode bits not set\n");
 		return -FI_ENODATA;
 	}
 
@@ -428,22 +465,26 @@ static int fi_ibv_check_dev_limits(struct fi_domain_attr *domain_attr,
 				   struct ibv_device_attr *device_attr)
 {
 	if (domain_attr->cq_cnt > device_attr->max_cq) {
-		VERBS_INFO("cq_cnt exceeds supported size\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"cq_cnt exceeds supported size\n");
 		return -FI_ENODATA;
 	}
 	
 	if (domain_attr->ep_cnt > device_attr->max_qp) {
-		VERBS_INFO("ep_cnt exceeds supported size\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"ep_cnt exceeds supported size\n");
 		return -FI_ENODATA;
 	}
 
 	if (domain_attr->tx_ctx_cnt > device_attr->max_qp) {
-		VERBS_INFO("domain_attr: tx_ctx_cnt exceeds supported size\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"domain_attr: tx_ctx_cnt exceeds supported size\n");
 		return -FI_ENODATA;
 	}
 
 	if (domain_attr->rx_ctx_cnt > device_attr->max_qp) {
-		VERBS_INFO("domain_attr: rx_ctx_cnt exceeds supported size\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"domain_attr: rx_ctx_cnt exceeds supported size\n");
 		return -FI_ENODATA;
 	}
 
@@ -568,7 +609,7 @@ static int fi_ibv_fill_info_attr(struct ibv_context *ctx, struct ibv_qp *qp,
 		fi->fabric_attr->name = strdup(VERBS_IWARP_FABRIC);
 		break;
 	default:
-		VERBS_INFO("Unknown transport type");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown transport type");
 		return -FI_ENODATA;
 	}
 
@@ -631,8 +672,9 @@ fi_ibv_create_ep(const char *node, const char *service,
 	if (ret) {
 		ret = -errno;
 		if (ret == -ENOENT) {
-			VERBS_WARN("rdma_create_ep()-->ENOENT; "
-				   "likely usnic bug, skipping verbs provider.\n");
+			FI_WARN(&fi_ibv_prov, FI_LOG_CORE,
+				"rdma_create_ep()-->ENOENT; "
+				"likely usnic bug, skipping verbs provider.\n");
 			ret = -FI_ENODATA;
 		}
 		goto err;
@@ -702,7 +744,8 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 
 		ret = rdma_create_qp(id, NULL, &qp_init_attr);
 		if (ret) {
-			FI_LOG(3, "verbs", "Could not create queue pair with requested attributes\n");
+			FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+				"Could not create queue pair with requested attributes\n");
 			ret = -FI_ENODATA;
 			goto err1;
 		}
@@ -2864,7 +2907,8 @@ static struct fi_ops_fabric fi_ibv_ops_fabric = {
 	.wait_open = fi_no_wait_open,
 };
 
-int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)
+static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+			 void *context)
 {
 	struct fi_ibv_fabric *fab;
 	int ret;
@@ -2888,15 +2932,6 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void 
 static void fi_ibv_fini(void)
 {
 }
-
-static struct fi_provider fi_ibv_prov = {
-	.name = VERBS_PROV_NAME,
-	.version = VERBS_PROV_VERS,
-	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
-	.getinfo = fi_ibv_getinfo,
-	.fabric = fi_ibv_fabric,
-	.cleanup = fi_ibv_fini
-};
 
 VERBS_INI
 {
