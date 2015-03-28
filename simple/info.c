@@ -119,6 +119,7 @@ uint64_t str2mode(char *inputstr)
 	ORCASE(FI_PROV_MR_ATTR);
 	ORCASE(FI_MSG_PREFIX);
 	ORCASE(FI_ASYNC_IOV);
+	ORCASE(FI_RX_CQ_DATA);
 
 	return 0;
 }
