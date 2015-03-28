@@ -129,6 +129,7 @@ typedef struct fid *fid_t;
 #define FI_REMOTE_CQ_DATA	(1ULL << 24)
 #define FI_EVENT		(1ULL << 25)
 #define FI_COMPLETION		FI_EVENT
+#define FI_INJECT_COMPLETE	(1ULL << 26)
 #define FI_TRANSMIT_COMPLETE	(1ULL << 27)
 #define FI_CANCEL		(1ULL << 28)
 #define FI_MORE			(1ULL << 29)

@@ -1029,6 +1029,13 @@ value of an endpoint.
 : Indicates that a completion entry should be generated for data
   transfer operations.
 
+*FI_INJECT_COMPLETE*
+: Indicates that a completion should be generated when the
+  source buffer(s) may be reused.  FI_INJECT_COMPLETE allows for the
+  provider to complete an operation after all source data has been
+  cached, and while the operation may still be in the process of
+  being transmitted.
+
 *FI_TRANSMIT_COMPLETE*
 : Indicates that a completion should not be generated until an
   operation has been successfully transmitted and is no longer

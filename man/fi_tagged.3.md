@@ -270,6 +270,10 @@ and/or fi_tsendmsg.
   that the underlying provider implementation copy the data into a
   local buffer and transfer out of that buffer.
 
+*FI_INJECT_COMPLETE*
+: Applies to fi_tsendmsg.  Indicates that a completion should be
+  generated when the source buffer(s) may be reused.
+  
 *FI_TRANSMIT_COMPLETE*
 : Applies to fi_tsendmsg.  Indicates that a completion should not be
   generated until the operation has been successfully transmitted and
