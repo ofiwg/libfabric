@@ -90,6 +90,8 @@ static struct fi_provider fi_ibv_prov = {
 		FI_REMOTE_SIGNAL)
 #define VERBS_MODE (FI_LOCAL_MR | FI_PROV_MR_ATTR)
 #define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_REMOTE_COMPLETE)
+#define VERBS_TX_MODE VERBS_MODE
+#define VERBS_RX_MODE (FI_LOCAL_MR | FI_PROV_MR_ATTR | FI_RX_CQ_DATA)
 #define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
 		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
 
@@ -183,7 +185,7 @@ const struct fi_ep_attr verbs_ep_attr = {
 
 const struct fi_rx_attr verbs_rx_attr = {
 	.caps			= VERBS_CAPS,
-	.mode			= VERBS_MODE,
+	.mode			= VERBS_RX_MODE,
 	.msg_order		= VERBS_MSG_ORDER,
 	.total_buffered_recv	= 0,
 	.size			= 256,
@@ -192,7 +194,7 @@ const struct fi_rx_attr verbs_rx_attr = {
 
 const struct fi_tx_attr verbs_tx_attr = {
 	.caps			= VERBS_CAPS,
-	.mode			= VERBS_MODE,
+	.mode			= VERBS_TX_MODE,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
 	.inject_size		= 0,
@@ -364,14 +366,18 @@ static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 
 static int fi_ibv_check_rx_attr(struct fi_rx_attr *attr, struct fi_info *info)
 {
+	uint64_t compare_mode, check_mode;
+
 	if (attr->caps & ~(verbs_rx_attr.caps)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given rx_attr->caps not supported\n");
 		return -FI_ENODATA;
 	}
 
-	if (((attr->mode ? attr->mode : info->mode) & 
-				verbs_rx_attr.mode) != verbs_rx_attr.mode) {
+	compare_mode = attr->mode ? attr->mode : info->mode;
+	check_mode = info->domain_attr && info->domain_attr->cq_data_size ?
+		     verbs_rx_attr.mode : VERBS_MODE;
+	if ((compare_mode & check_mode) != check_mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given rx_attr->mode not supported\n");
 		return -FI_ENODATA;

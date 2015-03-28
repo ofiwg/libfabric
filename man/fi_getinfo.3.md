@@ -452,6 +452,12 @@ below.
   an application must not modify an IO vector until the associated
   operation has completed.
 
+*FI_RX_CQ_DATA*
+: This mode bit only applies to data transfers that set FI_REMOTE_CQ_DATA.
+  When set, a data transfer that carries remote CQ data will consume a
+  receive buffer at the target.  This is true even for operations that would
+  normally not consume posted receive buffers, such as RMA write operations.
+
 # ADDRESSING FORMATS
 
 Multiple fabric interfaces take as input either a source or

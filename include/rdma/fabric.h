@@ -230,6 +230,7 @@ enum {
 #define FI_PROV_MR_ATTR		(1ULL << 2)
 #define FI_MSG_PREFIX		(1ULL << 3)
 #define FI_ASYNC_IOV		(1ULL << 4)
+#define FI_RX_CQ_DATA		(1ULL << 5)
 
 struct fi_tx_attr {
 	uint64_t		caps;
