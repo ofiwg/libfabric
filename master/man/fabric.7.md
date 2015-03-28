@@ -168,6 +168,76 @@ interfaces are defined by libfabric.
   operations are aware of the data formatting at the target memory
   region.
 
+# LOGGING INTERFACE
+
+Logging can be controlled using the FI_LOG_LEVEL, FI_LOG_PROV, and
+FI_LOG_SUBSYSTEMS environment variables.
+
+*FI_LOG_LEVEL*
+: FI_LOG_LEVEL controls the amount of logging data that is output.  The
+  following log levels are defined.
+
+- *Warn*
+: Warn is the least verbose setting and is intended for reporting errors
+  or warnings.
+
+- *Trace*
+: Trace is more verbose and is meant to include non-detailed output helpful to
+  tracing program execution.
+
+- *Info*
+: Info is high traffic and meant for detailed output.
+
+- *Debug*
+: Debug is high traffic and is likely to impact application performance.
+  Debug output is only available if the library has been compiled with
+  debugging enabled.
+
+*FI_LOG_PROV*
+: The FI_LOG_PROV environment variable enables or disables logging from
+  specific providers. Providers can be enabled by listing them in a comma
+  separated fashion. If the list begins with the '^' symbol, then the list will
+  be negated. By default all providers are enabled.
+
+  Example: To enable logging from the psm and sockets provider:
+	FI_LOG_PROV="psm,sockets"
+
+  Example: To enable logging from providers other than psm:
+	FI_LOG_PROV="^psm"
+
+*FI_LOG_SUBSYS*
+: The FI_LOG_SUBSYS environment variable enables or disables logging at the
+  subsystem level.  The syntax for enabling or disabling subsystems is similar to
+  that used for FI_LOG_PROV.  The following subsystems are defined.
+
+- *core*
+: Provides output related to the core framework and its management of providers.
+
+- *fabric*
+: Provides output specific to interactions associated with the fabric object.
+
+- *domain*
+: Provides outout specific to interactions associated with the domain object.
+
+- *ep_ctrl*
+: Provides outout specific to endpoint non-data transfer operations,
+  such as CM operations.
+
+- *ep_data*
+: Provides outout specific to endpoint data transfer operations.
+
+- *av*
+: Provides outout specific to address vector operations.
+
+- *cq*
+: Provides outout specific to completion queue operations.
+
+- *eq*
+: Provides outout specific to event queue operations.
+
+- *mr*
+: Provides outout specific to memory registration.
+
 # SEE ALSO
 
 [`fi_provider`(7)](fi_provider.7.html),
