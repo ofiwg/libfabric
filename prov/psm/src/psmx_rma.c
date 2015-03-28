@@ -81,7 +81,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	uint64_t key;
 	int err = 0;
 	int op_error = 0;
-	int cmd, eom, has_data, force_ack;
+	int cmd, eom, has_data;
 	struct psmx_am_request *req;
 	struct psmx_cq_event *event;
 	uint64_t offset;
@@ -90,7 +90,6 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	cmd = args[0].u32w0 & PSMX_AM_OP_MASK;
 	eom = args[0].u32w0 & PSMX_AM_EOM;
 	has_data = args[0].u32w0 & PSMX_AM_DATA;
-	force_ack = args[0].u32w0 & PSMX_AM_FORCE_ACK;
 
 	switch (cmd) {
 	case PSMX_AM_REQ_WRITE:
