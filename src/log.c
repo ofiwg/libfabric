@@ -76,7 +76,7 @@ enum {
 //				   FI_LOG_PROV_OFFSET)
 };
 
-#define FI_LOG_TAG(prov, level, subsys) \
+#define FI_LOG_TAG(prov, subsys, level) \
 	(((uint64_t) prov << FI_LOG_PROV_OFFSET) | \
 	 ((uint64_t) (1 << (subsys + FI_LOG_SUBSYS_OFFSET))) | \
 	 ((uint64_t) (1 << level)))
