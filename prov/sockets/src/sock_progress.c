@@ -57,6 +57,8 @@
 #include "sock.h"
 #include "sock_util.h"
 
+#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_DATA, __VA_ARGS__)
+#define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
 #define PE_INDEX(_pe, _e) (_e - &_pe->pe_table[0])
 #define SOCK_GET_RX_ID(_addr, _bits) ((_bits) == 0) ? 0 : \
@@ -112,7 +114,8 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 		if (pe_entry->conn->tx_pe_entry == pe_entry)
 			pe_entry->conn->tx_pe_entry = NULL;
 	} else {
-		pe_entry->conn->rx_pe_entry = NULL;
+		if (pe_entry->conn->rx_pe_entry == pe_entry)
+			pe_entry->conn->rx_pe_entry = NULL;
 	}
 
 	pe->num_free_entries++;

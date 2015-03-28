@@ -38,7 +38,6 @@ src_libfabric_la_SOURCES = \
 	include/fi_enosys.h \
 	include/fi_indexer.h \
 	include/fi_list.h \
-	include/fi_log.h \
 	include/fi_rbuf.h \
 	include/prov.h \
 	src/fabric.c \
@@ -290,6 +289,7 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fi_cm.h \
 	$(top_srcdir)/include/rdma/fi_domain.h \
 	$(top_srcdir)/include/rdma/fi_eq.h \
+	$(top_srcdir)/include/rdma/fi_log.h \
 	$(top_srcdir)/include/rdma/fi_prov.h \
 	$(top_srcdir)/include/rdma/fi_rma.h \
 	$(top_srcdir)/include/rdma/fi_endpoint.h \

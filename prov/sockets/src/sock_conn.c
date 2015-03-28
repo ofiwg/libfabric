@@ -53,6 +53,9 @@
 #include "sock.h"
 #include "sock_util.h"
 
+#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
+
 int sock_conn_map_init(struct sock_conn_map *map, int init_size)
 {
 	map->table = calloc(init_size, sizeof(*map->table));
