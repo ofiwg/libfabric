@@ -839,9 +839,9 @@ struct fi_tx_attr {
   the context will support.  See the fi_endpoint Inject Size section.
 
 *size*
-: The size of the context, in bytes.  The size is usually used as an
-  output value by applications wishing to track if sufficient space is
-  available in the local queue to post a new operation.
+: The size of the context.  The size is specified as the minimum number
+  of transmit operations that may be posted to the endpoint without the
+  operation returning -FI_EAGAIN.
 
 *iov_limit*
 : This is the maximum number of IO vectors (scatter-gather elements)
@@ -933,9 +933,9 @@ struct fi_rx_attr {
   receive buffer has been posted are lost.
 
 *size*
-: The size of the context, in bytes.  The size is usually used as an
-  output value by applications wishing to track if sufficient space is
-  available in the local queue to post a new operation.
+: The size of the context.  The size is specified as the minimum number
+  of receive operations that may be posted to the endpoint without the
+  operation returning -FI_EAGAIN.
 
 *iov_limit*
 : This is the maximum number of IO vectors (scatter-gather elements)
