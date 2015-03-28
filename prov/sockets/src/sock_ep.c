@@ -41,6 +41,9 @@
 #include "sock.h"
 #include "sock_util.h"
 
+#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
+
 extern struct fi_ops_rma sock_ep_rma;
 extern struct fi_ops_msg sock_ep_msg_ops;
 extern struct fi_ops_tagged sock_ep_tagged;

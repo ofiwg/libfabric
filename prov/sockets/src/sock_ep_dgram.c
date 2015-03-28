@@ -55,6 +55,9 @@
 #include "sock_util.h"
 #include "sock.h"
 
+#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
+
 const struct fi_ep_attr sock_dgram_ep_attr = {
 	.type = FI_EP_DGRAM,
 	.protocol = FI_PROTO_SOCK_TCP,
