@@ -268,8 +268,6 @@ static int server_connect(void)
 		goto err1;
 	}
 	
-	info->tx_attr->op_flags = FI_TRANSMIT_COMPLETE;
-
 	ret = alloc_ep_res(info);
 	if (ret)
 		 goto err1;
@@ -339,8 +337,6 @@ static int client_connect(void)
 		goto err2;
 	}
 	
-	fi->tx_attr->op_flags = FI_TRANSMIT_COMPLETE;
-
 	ret = alloc_cm_res();
 	if (ret)
 		goto err4;

@@ -288,8 +288,6 @@ static int init_fabric(void)
 		goto err1;
 	}
 	
-	fi->tx_attr->op_flags = FI_TRANSMIT_COMPLETE;
-	
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;
