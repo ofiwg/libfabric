@@ -125,7 +125,7 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
 
 
-#if defined(PT_LOCK_SPIN)
+#if PT_LOCK_SPIN == 1
 
 #define fastlock_t pthread_spinlock_t
 #define fastlock_init(lock) pthread_spin_init(lock, PTHREAD_PROCESS_PRIVATE)

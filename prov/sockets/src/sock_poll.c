@@ -110,12 +110,12 @@ static int sock_poll_poll(struct fid_poll *pollset, void **context, int count)
 		case FI_CLASS_CNTR:
 			cntr = container_of(list_item->fid, struct sock_cntr, cntr_fid);
 			sock_cntr_progress(cntr);
-			fastlock_acquire(&cntr->mut);
+			pthread_mutex_lock(&cntr->mut);
 			if (atomic_get(&cntr->value) >= atomic_get(&cntr->threshold)) {
 				*context++ = cntr->cntr_fid.fid.context;
 				ret_count++;
 			}
-			fastlock_release(&cntr->mut);
+			pthread_mutex_unlock(&cntr->mut);
 			break;
 
 		case FI_CLASS_EQ:
