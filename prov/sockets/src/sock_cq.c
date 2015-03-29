@@ -135,30 +135,6 @@ out:
 	return ret;
 }
 
-static ssize_t _sock_cq_writeerr(struct sock_cq *cq, 
-				 struct fi_cq_err_entry *buf, size_t len)
-{
-	ssize_t ret;
-	
-	fastlock_acquire(&cq->lock);
-	if (rbavail(&cq->cqerr_rb) < len) {
-		ret = -FI_ENOSPC;
-		SOCK_LOG_ERROR("Not enough space in CQ\n");
-		goto out;
-	}
-
-	rbwrite(&cq->cqerr_rb, buf, len);
-	rbcommit(&cq->cqerr_rb);
-	ret = len;
-
-	if (cq->signal) 
-		sock_wait_signal(cq->waitset);
-out:
-	fastlock_release(&cq->lock);
-	return ret;
-}
-
-
 static int sock_cq_report_context(struct sock_cq *cq, fi_addr_t addr,
 				  struct sock_pe_entry *pe_entry)
 {
@@ -331,29 +307,6 @@ ssize_t sock_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 	return ret;
 }
 
-ssize_t sock_cq_write(struct fid_cq *cq, const void *buf, size_t len)
-{
-	struct sock_cq *sock_cq;
-	
-	sock_cq = container_of(cq, struct sock_cq, cq_fid);
-	if (!(sock_cq->attr.flags & FI_WRITE))
-		return -FI_EINVAL;
-
-	return _sock_cq_write(sock_cq, FI_ADDR_NOTAVAIL, buf, len);
-}
-
-ssize_t sock_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
-			size_t len, uint64_t flags)
-{
-	struct sock_cq *sock_cq;
-	
-	sock_cq = container_of(cq, struct sock_cq, cq_fid);
-	if (!(sock_cq->attr.flags & FI_WRITE))
-		return -FI_EINVAL;
-
-	return _sock_cq_writeerr(sock_cq, buf, len);
-}
-
 const char * sock_cq_strerror(struct fid_cq *cq, int prov_errno,
 			      const void *err_data, char *buf, size_t len)
 {
@@ -390,10 +343,9 @@ struct fi_ops_cq sock_cq_ops = {
 	.read = sock_cq_read,
 	.readfrom = sock_cq_readfrom,
 	.readerr = sock_cq_readerr,
-	.write = sock_cq_write,
-	.writeerr = sock_cq_writeerr,
 	.sread = sock_cq_sread,
 	.sreadfrom = sock_cq_sreadfrom,
+	.signal = fi_no_cq_signal,	/* TODO: write me */
 	.strerror = sock_cq_strerror,
 };
 

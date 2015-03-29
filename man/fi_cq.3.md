@@ -18,9 +18,6 @@ fi_control
 fi_cq_read / fi_cq_readfrom / fi_cq_readerr
 : Read a completion from a completion queue
 
-fi_cq_write / fi_cq_writeerr
-: Writes a completion or error event to a completion queue
-
 fi_cq_sread / fi_cq_sreadfrom
 : A synchronous (blocking) read that waits until a specified condition
   has been met before reading a completion from a completion queue.
@@ -40,24 +37,21 @@ int fi_close(struct fid *cq);
 
 int fi_control(struct fid *cq, int command, void *arg);
 
-int fi_cq_read(struct fid_cq *cq, void *buf, size_t count);
+ssize_t fi_cq_read(struct fid_cq *cq, void *buf, size_t count);
 
-int fi_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
+ssize_t fi_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
     fi_addr_t *src_addr);
 
-int fi_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+ssize_t fi_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
     uint64_t flags);
 
-int fi_cq_write(struct fid_cq *cq, const void *buf, size_t len);
-
-int fi_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
-    size_t len, uint64_t flags);
-
-int fi_cq_sread(struct fid_cq *cq, void *buf, size_t count,
+ssize_t fi_cq_sread(struct fid_cq *cq, void *buf, size_t count,
     const void *cond, int timeout);
 
-int fi_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
+ssize_t fi_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
     fi_addr_t *src_addr, const void *cond, int timeout);
+
+int fi_cq_signal(struct fid_cq *cq);
 
 const char * fi_cq_strerror(struct fid_cq *cq, int prov_errno,
       const void *err_data, char *buf, size_t len);
@@ -148,14 +142,7 @@ struct fi_cq_attr {
   the provider may choose a default value.
 
 *flags*
-: Flags that control the configuration of the CQ.
-
-- *FI_WRITE*
-: Indicates that the application requires support for inserting user
-  events into the CQ.  If this flag is set, then the fi_cq_write and
-  fi_cq_writeerr operations must be supported by the provider.  If the
-  FI_WRITE flag is not set, then the application may not invoke
-  fi_cq_write of fi_cq_writeerr.
+: Flags that control the configuration of the CQ.  This field must be 0.
 
 *format*
 : Completion queues allow the application to select the amount of
@@ -388,19 +375,12 @@ the buffer will remain valid until a subsequent read call against the
 CQ.  Users may call fi_cq_strerror to convert provider specific error
 information into a printable string for debugging purposes.
 
-## fi_cq_write / fi_cq_writeerr
+## fi_cq_signal
 
-The fi_cq_write and fi_cq_writeerr operations insert user-generated
-completion entries into a completion queue.  fi_cq_write inserts
-non-error events into the CQ.  The format of the fi_cq_write event
-must be the same as the fi_cq_format attribute defined for the CQ when
-it was created.  fi_cq_writeerr inserts error events into the CQ.  The
-error event format is struct fi_cq_err_entry.  The number of entries
-to insert into the CQ is determined by the len parameter.  Len must be
-a multiple of the size of the event to insert.
-
-User events inserted into a CQ with be associated with the source address
-FI_ADDR_NOTAVAIL.
+The fi_cq_signal call will signal the wait object used by the fi_cq_sread
+and fi_cq_sreadfrom function.  This may be used to wake-up a thread
+that is blocked waiting to read a completion operation.  The fi_cq_signal
+operation is only available if the CQ was configured with a wait object.
 
 # COMPLETION FLAGS
 
@@ -459,7 +439,7 @@ operation.  The following completion flags are defined.
  
 # RETURN VALUES
 
-fi_cq_open
+fi_cq_open / fi_cq_signal
 : Returns 0 on success.  On error, a negative value corresponding to
   fabric errno is returned.
 
@@ -469,11 +449,6 @@ fi_cq_sread / fi_cq_sreadfrom
   the completion queue.  On error, a negative value corresponding to
   fabric errno is returned.  If no completions are available to
   return from the CQ, -FI_EAGAIN will be returned.
-
-fi_cq_write / fi_cq_writeerr
-: On success, returns the number of bytes read from or written to the
-  completion queue.  On error, a negative value corresponding to
-  fabric errno is returned.
 
 fi_cq_strerror
 : Returns a character string interpretation of the provider specific

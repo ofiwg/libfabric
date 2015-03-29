@@ -2559,10 +2559,9 @@ static struct fi_ops_cq fi_ibv_cq_context_ops = {
 	.read = fi_ibv_cq_read_context,
 	.readfrom = fi_no_cq_readfrom,
 	.readerr = fi_ibv_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,	/* TODO: write me */
 	.strerror = fi_ibv_cq_strerror
 };
 
@@ -2571,10 +2570,9 @@ static struct fi_ops_cq fi_ibv_cq_msg_ops = {
 	.read = fi_ibv_cq_read_msg,
 	.readfrom = fi_no_cq_readfrom,
 	.readerr = fi_ibv_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,	/* TODO: write me */
 	.strerror = fi_ibv_cq_strerror
 };
 
@@ -2583,10 +2581,9 @@ static struct fi_ops_cq fi_ibv_cq_data_ops = {
 	.read = fi_ibv_cq_read_data,
 	.readfrom = fi_no_cq_readfrom,
 	.readerr = fi_ibv_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,	/* TODO: write me */
 	.strerror = fi_ibv_cq_strerror
 };
 
