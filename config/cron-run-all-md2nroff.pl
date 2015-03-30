@@ -17,7 +17,7 @@ use File::Temp;
 my $repo_arg;
 my $source_branch_arg;
 my $pages_branch_arg;
-my $logfile_dir_arg;
+my $logfile_dir_arg = "/tmp";
 my $verbose_arg;
 my $help_arg;
 
@@ -39,6 +39,7 @@ die "Must specify a git pages branch"
 
 #####################################################################
 
+my $logfile_dir = $logfile_dir_arg;
 my $logfile_counter = 1;
 
 sub doit {
@@ -54,7 +55,7 @@ sub doit {
 
     # Redirect stdout if requested
     if (defined $stdout_file) {
-        $stdout_file = "$logfile_dir_arg/$stdout_file.log";
+        $stdout_file = "$logfile_dir/$stdout_file.log";
         unlink($stdout_file);
         $cmd .= " >$stdout_file";
     } elsif (!$verbose_arg && $cmd !~ />/) {
@@ -80,6 +81,15 @@ sub verbose {
 }
 
 #####################################################################
+
+# Setup a logfile dir just for this run
+my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+    localtime(time);
+$logfile_dir =
+    sprintf("%s/cron-run-all-md2nroff-logs-%04d-%02d-%02d-%02d%02d",
+            $logfile_dir_arg, $year + 1900, $mon + 1, $mday,
+            $hour, $min);
+system("mkdir -p $logfile_dir");
 
 # First, git clone the source branch of the repo
 verbose("*** Cloning repo: $repo_arg / $source_branch_arg...\n");
@@ -152,5 +162,9 @@ doit(1, "git push", "git-push-final");
 
 # chdir out of the tmpdir so that it can be removed
 chdir("/");
+
+# If we get here, we finished successfully, so there's no need to keep
+# the logfile dir around
+system("rm -rf $logfile_dir");
 
 exit(0);
