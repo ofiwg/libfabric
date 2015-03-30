@@ -263,7 +263,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->threading = FI_THREAD_COMPLETION;
 	psmx_info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
 	psmx_info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
-	psmx_info->domain_attr->name = strdup("psm");
+	psmx_info->domain_attr->name = strdup(PSMX_DOMAIN_NAME);
 
 	psmx_info->next = NULL;
 	psmx_info->caps = (hints && hints->caps) ? hints->caps : caps;
@@ -273,8 +273,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);
 	psmx_info->src_addr = NULL;
 	psmx_info->dest_addr = dest_addr;
-	psmx_info->fabric_attr->name = strdup("psm");
-	psmx_info->fabric_attr->prov_name = strdup("psm");
+	psmx_info->fabric_attr->name = strdup(PSMX_FABRIC_NAME);
+	psmx_info->fabric_attr->prov_name = strdup(PSMX_PROV_NAME);
 
 	psmx_info->tx_attr->caps = psmx_info->caps;
 	psmx_info->tx_attr->mode = psmx_info->mode;
