@@ -888,6 +888,11 @@ the _Transmit Context Attribute_ section.
 : Receive operations complete in the order in which they are processed by
   the receive context, based on the receive side msg_order attribute.
 
+*FI_ORDER_DATA*
+: When set, this bit indicates that received data is written into memory
+  in order.  Data ordering applies to memory accessed as part of a single
+  operation and between operations if message ordering is guaranteed.
+
 ## total_buffered_recv
 
 Defines the total available space allocated by the provider to
