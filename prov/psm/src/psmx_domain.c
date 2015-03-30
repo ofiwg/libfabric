@@ -107,7 +107,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		return 0;
 	}
 
-	if (!info->domain_attr->name || strncmp(info->domain_attr->name, "psm", 3))
+	if (!info->domain_attr->name || strncmp(info->domain_attr->name, PSMX_DOMAIN_NAME, PSMX_DOMAIN_NAME_LEN))
 		return -FI_EINVAL;
 
 	domain_priv = (struct psmx_fid_domain *) calloc(1, sizeof *domain_priv);
