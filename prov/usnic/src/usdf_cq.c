@@ -157,7 +157,6 @@ usdf_cq_read_common(struct fid_cq *fcq, void *buf, size_t count,
 	while (entry < last) {
 		ret = usd_poll_cq(cq->c.hard.cq_cq, &cq->cq_comp);
 		if (ret == -EAGAIN) {
-			ret = 0;
 			break;
 		}
 		if (cq->cq_comp.uc_status != 0) {
@@ -451,7 +450,6 @@ usdf_cq_read_common_soft(struct fid_cq *fcq, void *buf, size_t count,
 	uint8_t *last;
 	void *tail;
 	size_t entry_len;
-	ssize_t ret;
 
 	cq = cq_ftou(fcq);
 	if (cq->cq_comp.uc_status != 0) {
@@ -472,10 +470,10 @@ usdf_cq_read_common_soft(struct fid_cq *fcq, void *buf, size_t count,
 		entry_len = sizeof(struct fi_cq_data_entry);
 		break;
 	default:
-		return 0;
+		USDF_WARN("unexpected CQ format, internal error\n");
+		return -FI_EOPNOTSUPP;
 	}
 
-	ret = 0;
 	entry = buf;
 	last = entry + (entry_len * count);
 	tail = cq->c.soft.cq_tail;
@@ -495,7 +493,7 @@ usdf_cq_read_common_soft(struct fid_cq *fcq, void *buf, size_t count,
 	if (entry > (uint8_t *)buf) {
 		return (entry - (uint8_t *)buf) / entry_len;
 	} else {
-		return ret;
+		return -FI_EAGAIN;
 	}
 }
 
