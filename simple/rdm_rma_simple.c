@@ -251,9 +251,6 @@ static int init_fabric(void)
 		goto err1;
 	}
 	
-	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
-	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
-	
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;

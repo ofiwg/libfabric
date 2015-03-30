@@ -246,7 +246,7 @@ int ft_finalize(struct fid_ep *tx_ep, struct fid_cq *scq, struct fid_cq *rcq,
 	msg.context = &tx_ctx;
 	msg.data = 0;
 
-	ret = fi_sendmsg(tx_ep, &msg, FI_INJECT | FI_REMOTE_COMPLETE);
+	ret = fi_sendmsg(tx_ep, &msg, FI_INJECT | FI_TRANSMIT_COMPLETE);
 	if (ret) {
 		FT_PRINTERR("fi_sendmsg", ret);
 		return ret;
