@@ -338,6 +338,14 @@ int sock_cq_close(struct fid *fid)
 	return 0;
 }
 
+int sock_cq_signal(struct fid_cq *cq)
+{
+	struct sock_cq *sock_cq;
+	sock_cq = container_of(cq, struct sock_cq, cq_fid);
+	rbfdsignal(&sock_cq->cq_rbfd);
+	return 0;
+}
+
 struct fi_ops_cq sock_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = sock_cq_read,
@@ -345,7 +353,7 @@ struct fi_ops_cq sock_cq_ops = {
 	.readerr = sock_cq_readerr,
 	.sread = sock_cq_sread,
 	.sreadfrom = sock_cq_sreadfrom,
-	.signal = fi_no_cq_signal,	/* TODO: write me */
+	.signal = sock_cq_signal,
 	.strerror = sock_cq_strerror,
 };
 
