@@ -337,10 +337,6 @@ static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const cha
 	strcatf(buf, "%s%smax_order_waw_size: %zd\n", prefix, TAB, attr->max_order_waw_size);
 	strcatf(buf, "%s%smem_tag_format: 0x%016llx\n", prefix, TAB, attr->mem_tag_format);
 
-	strcatf(buf, "%s%smsg_order: [ ", prefix, TAB);
-	fi_tostr_order(buf, attr->msg_order);
-	strcatf(buf, " ]\n");
-
 	strcatf(buf, "%s%stx_ctx_cnt: %zd\n", prefix, TAB, attr->tx_ctx_cnt);
 	strcatf(buf, "%s%srx_ctx_cnt: %zd\n", prefix, TAB, attr->rx_ctx_cnt);
 }

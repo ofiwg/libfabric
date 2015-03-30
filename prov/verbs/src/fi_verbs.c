@@ -177,7 +177,6 @@ const struct fi_ep_attr verbs_ep_attr = {
 	.max_order_war_size	= 0,
 	.max_order_waw_size	= VERBS_MSG_SIZE,
 	.mem_tag_format		= 0,
-	.msg_order		= VERBS_MSG_ORDER,
 	.tx_ctx_cnt		= 1,
 	.rx_ctx_cnt		= 1,
 };
@@ -339,12 +338,6 @@ static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 	if (attr->max_order_waw_size > verbs_ep_attr.max_order_waw_size) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"max_order_waw_size exceeds supported size\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->msg_order & ~(verbs_ep_attr.msg_order)) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Given msg ordering not supported\n");
 		return -FI_ENODATA;
 	}
 

@@ -266,8 +266,6 @@ struct fi_ep_attr {
 	size_t			max_order_war_size;
 	size_t			max_order_waw_size;
 	uint64_t		mem_tag_format;
-	uint64_t		msg_order;
-	uint64_t		comp_order;
 	size_t			tx_ctx_cnt;
 	size_t			rx_ctx_cnt;
 };

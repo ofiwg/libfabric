@@ -67,7 +67,6 @@ const struct fi_ep_attr sock_rdm_ep_attr = {
 	.max_order_war_size = SOCK_EP_MAX_ORDER_WAR_SZ,
 	.max_order_waw_size = SOCK_EP_MAX_ORDER_WAW_SZ,
 	.mem_tag_format = SOCK_EP_MEM_TAG_FMT,
-	.msg_order = SOCK_EP_MSG_ORDER,
 	.tx_ctx_cnt = SOCK_EP_MAX_TX_CNT,
 	.rx_ctx_cnt = SOCK_EP_MAX_RX_CNT,
 };
@@ -192,11 +191,6 @@ int sock_rdm_verify_ep_attr(struct fi_ep_attr *ep_attr,
 		if (ep_attr->max_order_waw_size > 
 		   sock_rdm_ep_attr.max_order_waw_size) {
 			SOCK_LOG_INFO("WAW order size too large\n");
-			return -FI_ENODATA;
-		}
-
-		if ((ep_attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER) {
-			SOCK_LOG_INFO("Unsupported message ordering\n");
 			return -FI_ENODATA;
 		}
 
