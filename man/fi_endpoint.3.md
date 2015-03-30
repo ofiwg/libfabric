@@ -633,6 +633,10 @@ Message ordering only applies to the processing of transport headers.
 Message ordering is necessary, but does not guarantee the order in
 which data is sent or received by the transport layer.
 
+*FI_ORDER_NONE*
+: No ordering is specified.  This value may be used as input in order
+  to obtain the default message order supported by the provider.
+
 *FI_ORDER_RAR*
 : Read after read.  If set, RMA and atomic read operations are
   processed in the order submitted relative to other RMA and atomic

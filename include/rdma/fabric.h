@@ -200,8 +200,7 @@ enum fi_resource_mgmt {
 #define FI_ORDER_SAR		(1 << 6)
 #define FI_ORDER_SAW		(1 << 7)
 #define FI_ORDER_SAS		(1 << 8)
-#define FI_ORDER_RECV		(1 << 9)
-#define FI_ORDER_STRICT		0xFFFFFFFF
+#define FI_ORDER_STRICT		0x1FF
 
 enum fi_ep_type {
 	FI_EP_UNSPEC,
