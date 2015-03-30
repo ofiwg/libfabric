@@ -1674,7 +1674,6 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 		pe_entry->conn->tx_pe_entry = NULL;
 		SOCK_LOG_INFO("Send complete\n");
 		
-		/* TODO: make FI_TRANSMIT_COMPLETE the default */
 		if (pe_entry->flags & FI_INJECT_COMPLETE) {
 			sock_pe_report_tx_completion(pe_entry);
 			pe_entry->is_complete = 1;
@@ -1964,6 +1963,10 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 							   tx_ctx->av->rx_ctx_bits);
 	} else {
 		msg_hdr->rx_id = 0;
+	}
+
+	if (pe_entry->flags & FI_INJECT_COMPLETE) {
+		pe_entry->flags &= ~FI_TRANSMIT_COMPLETE;
 	}
 
 	msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.dest_iov_len;
