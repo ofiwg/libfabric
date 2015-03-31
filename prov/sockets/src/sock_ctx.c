@@ -124,7 +124,7 @@ struct sock_tx_ctx *sock_tx_ctx_alloc(const struct fi_tx_attr *attr, void *conte
 	return sock_tx_context_alloc(attr, context, FI_CLASS_TX_CTX);
 }
 
-struct sock_tx_ctx *sock_stx_ctx_alloc(const struct fi_tx_attr *attr, void *context)
+static struct sock_tx_ctx *sock_stx_ctx_alloc(const struct fi_tx_attr *attr, void *context)
 {
 	return sock_tx_context_alloc(attr, context, FI_CLASS_STX_CTX);
 }

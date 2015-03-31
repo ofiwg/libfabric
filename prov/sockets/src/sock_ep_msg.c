@@ -60,7 +60,7 @@
 #define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-const struct fi_ep_attr sock_msg_ep_attr = {
+static const struct fi_ep_attr sock_msg_ep_attr = {
 	.type = FI_EP_MSG,
 	.protocol = FI_PROTO_SOCK_TCP,
 	.max_msg_size = SOCK_EP_MAX_MSG_SZ,
@@ -73,7 +73,7 @@ const struct fi_ep_attr sock_msg_ep_attr = {
 	.rx_ctx_cnt = SOCK_EP_MAX_RX_CNT,
 };
 
-const struct fi_tx_attr sock_msg_tx_attr = {
+static const struct fi_tx_attr sock_msg_tx_attr = {
 	.caps = SOCK_EP_MSG_CAP,
 	.op_flags = FI_TRANSMIT_COMPLETE,
 	.msg_order = SOCK_EP_MSG_ORDER,
@@ -82,7 +82,7 @@ const struct fi_tx_attr sock_msg_tx_attr = {
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
-const struct fi_rx_attr sock_msg_rx_attr = {
+static const struct fi_rx_attr sock_msg_rx_attr = {
 	.caps = SOCK_EP_MSG_CAP,
 	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
@@ -91,7 +91,7 @@ const struct fi_rx_attr sock_msg_rx_attr = {
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
-int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
+static int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
 {
 	if (!attr)
 		return 0;
@@ -114,7 +114,7 @@ int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
 	return 0;
 }
 
-int sock_msg_verify_tx_attr(const struct fi_tx_attr *attr)
+static int sock_msg_verify_tx_attr(const struct fi_tx_attr *attr)
 {
 	if (!attr)
 		return 0;
@@ -243,7 +243,7 @@ static int sock_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 	return 0;
 }
 
-static int sock_ep_cm_create_socket() 
+static int sock_ep_cm_create_socket(void)
 {
 	int sock, optval;
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -677,7 +677,7 @@ out:
 	return ret;
 }
 
-int sock_ep_cm_shutdown(struct fid_ep *ep, uint64_t flags)
+static int sock_ep_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 {
 	struct sock_conn_response response;
 	struct sock_ep *_ep;
@@ -708,7 +708,7 @@ struct fi_ops_cm sock_ep_cm_ops = {
 	.shutdown = sock_ep_cm_shutdown,
 };
 
-int sock_msg_endpoint(struct fid_domain *domain, struct fi_info *info,
+static int sock_msg_endpoint(struct fid_domain *domain, struct fi_info *info,
 		struct sock_ep **ep, void *context, size_t fclass)
 {
 	int ret;
