@@ -18,9 +18,6 @@ low latency and other offload capabilities on Ethernet networks.
 
 # RELEASE NOTES
 
-The following capabilities are currently supported via the *usnic*
-libfabric provider:
-
 * The *usnic* libfabric provider requires the use of the "libnl"
   library.
   * There are two versions of libnl generally available: v1 and v3;
@@ -46,9 +43,24 @@ libfabric provider:
     MPI's *usnic* BTL.
   * *FI_EP_MSG* and *FI_EP_RDM* endpoints are implemented, but are
     only lightly tested.  It is likely that there are still some bugs
-    in these endpoint types.
-  * Other capabilities, such as the tag matching interface and RDMA
-    operations, are not yet implemented.
+    in these endpoint types.  RMA is not yet supported.
+  * [`fi_provider`(7)](fi_provider.7.html) lists requirements for all
+    providers.  The following limitations exist in the *usnic*
+    provider:
+    * *fi_getname* is not supported on *FI_EP_DGRAM*, *FI_EP_MSG*, and
+      passive endpoints.
+    * multicast operations are not supported on *FI_EP_DGRAM* and
+      *FI_EP_RDM* endpoints.
+    * *FI_EP_MSG* endpoints only support connect, accept, and shutdown
+      CM operations.
+    * Passive endpoints only support listen CM operations.
+    * *FI_EP_DGRAM* endpoints support `fi_sendmsg()` and
+      `fi_recvmsg()`, but all flags are ignored.
+    * *FI_EP_RDM* and *FI_EP_MSG* endponts do not support
+      `fi_sendmsg()` and `fi_recvmsg()`.
+    * Address vectors only support `FI_AV_MAP`.
+    * No counters are supported.
+    * The tag matching interface is not supported.
   * The usnic libfabric provider supports extensions that provide
     information and functionality beyond the standard libfabric
     interface.  See the "USNIC EXTENSIONS" section, below.
