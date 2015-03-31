@@ -421,7 +421,6 @@ PSM_INI
 	psmx_env.name_server	= psmx_get_int_env("OFI_PSM_NAME_SERVER", 1);
 	psmx_env.am_msg		= psmx_get_int_env("OFI_PSM_AM_MSG", 0);
 	psmx_env.tagged_rma	= psmx_get_int_env("OFI_PSM_TAGGED_RMA", 1);
-	psmx_env.warning	= psmx_get_int_env("OFI_PSM_WARNING", 1);
 	psmx_env.uuid		= getenv("OFI_PSM_UUID");
 	if (!psmx_env.uuid)
 		psmx_env.uuid	= PSMX_DEFAULT_UUID;
@@ -462,8 +461,6 @@ PSM_INI
 		"OFI_PSM_AM_MSG = %d\n", psmx_env.am_msg);
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"OFI_PSM_TAGGED_RMA = %d\n", psmx_env.tagged_rma);
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"OFI_PSM_WARNING = %d\n", psmx_env.warning);
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"OFI_PSM_UUID = %s\n", psmx_env.uuid);
 
