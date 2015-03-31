@@ -601,10 +601,6 @@ static int sock_pe_process_rx_read(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 	pe_entry->buf = pe_entry->pe.rx.rx_iov[0].iov.addr;
 	pe_entry->data_len = data_len;
 
-	if (pe_entry->flags & FI_REMOTE_SIGNAL) {
-		sock_pe_report_rx_completion(pe_entry);
-	}
-
 	sock_pe_report_remote_read(rx_ctx, pe_entry);
 	sock_pe_send_response(pe, rx_ctx, pe_entry, data_len, 
 			      SOCK_OP_READ_COMPLETE);	
@@ -672,8 +668,7 @@ static int sock_pe_process_rx_write(struct sock_pe *pe, struct sock_rx_ctx *rx_c
 		sock_pe_report_error(pe_entry, rem);
 		goto out;
 	} else {
-		if (pe_entry->flags & FI_REMOTE_SIGNAL ||
-			pe_entry->flags & FI_REMOTE_CQ_DATA) {
+		if (pe_entry->flags & FI_REMOTE_CQ_DATA) {
 			sock_pe_report_rx_completion(pe_entry);
 		}
 	}
@@ -1090,8 +1085,7 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe, struct sock_rx_ctx *rx_
 	pe_entry->buf = pe_entry->pe.rx.rx_iov[0].iov.addr;
 	pe_entry->data_len = offset;
 	
-	if (pe_entry->flags & FI_REMOTE_SIGNAL ||
-		pe_entry->flags & FI_REMOTE_CQ_DATA) {
+	if (pe_entry->flags & FI_REMOTE_CQ_DATA) {
 		sock_pe_report_rx_completion(pe_entry);
 	}
 	
@@ -1326,7 +1320,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 	}
 
 out:
-	if (pe_entry->msg_hdr.flags & FI_REMOTE_COMPLETE) {
+	if (pe_entry->msg_hdr.flags & FI_TRANSMIT_COMPLETE) {
 		sock_pe_send_response(pe, rx_ctx, pe_entry, 0, 
 				      SOCK_OP_SEND_COMPLETE);
 	}
@@ -1680,7 +1674,7 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 		pe_entry->conn->tx_pe_entry = NULL;
 		SOCK_LOG_INFO("Send complete\n");
 		
-		if (!(pe_entry->flags & FI_REMOTE_COMPLETE)) {
+		if (pe_entry->flags & FI_INJECT_COMPLETE) {
 			sock_pe_report_tx_completion(pe_entry);
 			pe_entry->is_complete = 1;
 		}
@@ -1969,6 +1963,10 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 							   tx_ctx->av->rx_ctx_bits);
 	} else {
 		msg_hdr->rx_id = 0;
+	}
+
+	if (pe_entry->flags & FI_INJECT_COMPLETE) {
+		pe_entry->flags &= ~FI_TRANSMIT_COMPLETE;
 	}
 
 	msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.dest_iov_len;

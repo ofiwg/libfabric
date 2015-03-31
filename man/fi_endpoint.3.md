@@ -839,9 +839,9 @@ struct fi_tx_attr {
   the context will support.  See the fi_endpoint Inject Size section.
 
 *size*
-: The size of the context, in bytes.  The size is usually used as an
-  output value by applications wishing to track if sufficient space is
-  available in the local queue to post a new operation.
+: The size of the context.  The size is specified as the minimum number
+  of transmit operations that may be posted to the endpoint without the
+  operation returning -FI_EAGAIN.
 
 *iov_limit*
 : This is the maximum number of IO vectors (scatter-gather elements)
@@ -933,9 +933,9 @@ struct fi_rx_attr {
   receive buffer has been posted are lost.
 
 *size*
-: The size of the context, in bytes.  The size is usually used as an
-  output value by applications wishing to track if sufficient space is
-  available in the local queue to post a new operation.
+: The size of the context.  The size is specified as the minimum number
+  of receive operations that may be posted to the endpoint without the
+  operation returning -FI_EAGAIN.
 
 *iov_limit*
 : This is the maximum number of IO vectors (scatter-gather elements)
@@ -1029,32 +1029,31 @@ value of an endpoint.
 : Indicates that a completion entry should be generated for data
   transfer operations.
 
-*FI_REMOTE_SIGNAL*
-: Indicates that a completion entry at the target process should be
-  generated for the given operation.  The remote endpoint must be
-  configured with FI_REMOTE_SIGNAL, or this flag will be ignored by
-  the target.  The local endpoint must be configured with the
-  FI_REMOTE_SIGNAL capability in order to specify this flag.
+*FI_INJECT_COMPLETE*
+: Indicates that a completion should be generated when the
+  source buffer(s) may be reused.  FI_INJECT_COMPLETE allows for the
+  provider to complete an operation after all source data has been
+  cached, and while the operation may still be in the process of
+  being transmitted.
 
-*FI_REMOTE_COMPLETE*
-: Generally, this flag indicates that an operation will not complete until
+*FI_TRANSMIT_COMPLETE*
+: Indicates that a completion should not be generated until an
+  operation has been successfully transmitted and is no longer
+  being tracked by the provider.  For reliable endpoints, this flag
+  generally indicates that an operation will not complete until
   it has been accepted into the fabric and acknowledged by a remote service.
-  When used with unreliable endpoints, local completions should not be
-  generated until the associated operation has been successfully delivered
-  into the fabric.  For example, the corresponding messages have been
-  placed on the wire.  When used with reliable endpoints, this
-  flag indicates that the operation will not complete until it has been
-  acknowledged by the target, or a proxy for the target that is responsible
-  for ensuring its reliable delivery.  For example, this flag often implies
-  that a completion is not generated until an ack has been received from
-  the target.
+  For unreliable endpoints, this flag indicates that an operation will
+  not complete until it has been successfully delivered
+  into the fabric.  For example, the corresponding message has been
+  placed on the wire.  FI_TRANSMIT_COMPLETE is the default completion
+  model for all endpoints.
   
   Note that when set, if the target endpoint experiences an error receiving
   the transferred data, that error will often be reported back to the
   initiator of the request.  This includes errors which may not normally
   be reported to the initiator, such as remote buffer overruns.
 
-*FI_REMOTE_COMMIT*
+*FI_COMMIT_COMPLETE*
 : This flag is defined for future use.
 
 # NOTES

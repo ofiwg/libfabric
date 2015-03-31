@@ -101,8 +101,8 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 
 	IFFLAGSTR(flags, FI_REMOTE_CQ_DATA);
 	IFFLAGSTR(flags, FI_EVENT);
-	IFFLAGSTR(flags, FI_REMOTE_SIGNAL);
-	IFFLAGSTR(flags, FI_REMOTE_COMPLETE);
+	IFFLAGSTR(flags, FI_INJECT_COMPLETE);
+	IFFLAGSTR(flags, FI_TRANSMIT_COMPLETE);
 	IFFLAGSTR(flags, FI_CANCEL);
 	IFFLAGSTR(flags, FI_MORE);
 	IFFLAGSTR(flags, FI_PEEK);
@@ -220,6 +220,7 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 	IFFLAGSTR(mode, FI_LOCAL_MR);
 	IFFLAGSTR(mode, FI_PROV_MR_ATTR);
 	IFFLAGSTR(mode, FI_MSG_PREFIX);
+	IFFLAGSTR(mode, FI_RX_CQ_DATA);
 
 	fi_remove_comma(buf);
 }

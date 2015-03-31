@@ -235,12 +235,6 @@ fi_writemsg.
   flag may improve performance by enabling the provider to optimize
   its access to the fabric hardware.
 
-*FI_REMOTE_SIGNAL*
-: Indicates that a completion event at the target process should be
-  generated for the given operation.  The remote endpoint must be
-  configured with FI_REMOTE_SIGNAL, or this flag will be ignored by
-  the target.
-
 *FI_INJECT*
 : Applies to fi_writemsg.  Indicates that the outbound data buffer
    should be returned to user immediately after the write call
@@ -248,9 +242,14 @@ fi_writemsg.
    require that the underlying provider implementation copy the data
    into a local buffer and transfer out of that buffer.
 
-*FI_REMOTE_COMPLETE*
+*FI_INJECT_COMPLETE*
+: Applies to fi_writemsg.  Indicates that a completion should be
+  generated when the source buffer(s) may be reused.
+  
+*FI_TRANSMIT_COMPLETE*
 : Applies to fi_writemsg.  Indicates that a completion should not be
-  generated until the operation has completed on the remote side.
+  generated until the operation has been successfully transmitted and
+  is no longer being tracked by the provider.
 
 *FI_FENCE*
 : Indicates that the requested operation, also

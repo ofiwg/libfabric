@@ -370,7 +370,7 @@ dummy_man_pages = \
         man/man3/fi_cq_sread.3 \
         man/man3/fi_cq_sreadfrom.3 \
         man/man3/fi_cq_strerror.3 \
-        man/man3/fi_cq_write.3 \
+        man/man3/fi_cq_signal.3 \
         man/man3/fi_domain_bind.3 \
         man/man3/fi_domain_query.3 \
         man/man3/fi_dupinfo.3 \

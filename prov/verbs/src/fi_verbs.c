@@ -86,10 +86,11 @@ static struct fi_provider fi_ibv_prov = {
 #define VERBS_CM_DATA_SIZE 56
 
 #define VERBS_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
-		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | \
-		FI_REMOTE_SIGNAL)
+		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
 #define VERBS_MODE (FI_LOCAL_MR | FI_PROV_MR_ATTR)
-#define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_REMOTE_COMPLETE)
+#define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
+#define VERBS_TX_MODE VERBS_MODE
+#define VERBS_RX_MODE (FI_LOCAL_MR | FI_PROV_MR_ATTR | FI_RX_CQ_DATA)
 #define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
 		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
 
@@ -183,7 +184,7 @@ const struct fi_ep_attr verbs_ep_attr = {
 
 const struct fi_rx_attr verbs_rx_attr = {
 	.caps			= VERBS_CAPS,
-	.mode			= VERBS_MODE,
+	.mode			= VERBS_RX_MODE,
 	.msg_order		= VERBS_MSG_ORDER,
 	.total_buffered_recv	= 0,
 	.size			= 256,
@@ -192,7 +193,7 @@ const struct fi_rx_attr verbs_rx_attr = {
 
 const struct fi_tx_attr verbs_tx_attr = {
 	.caps			= VERBS_CAPS,
-	.mode			= VERBS_MODE,
+	.mode			= VERBS_TX_MODE,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
 	.inject_size		= 0,
@@ -364,14 +365,18 @@ static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 
 static int fi_ibv_check_rx_attr(struct fi_rx_attr *attr, struct fi_info *info)
 {
+	uint64_t compare_mode, check_mode;
+
 	if (attr->caps & ~(verbs_rx_attr.caps)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given rx_attr->caps not supported\n");
 		return -FI_ENODATA;
 	}
 
-	if (((attr->mode ? attr->mode : info->mode) & 
-				verbs_rx_attr.mode) != verbs_rx_attr.mode) {
+	compare_mode = attr->mode ? attr->mode : info->mode;
+	check_mode = info->domain_attr && info->domain_attr->cq_data_size ?
+		     verbs_rx_attr.mode : VERBS_MODE;
+	if ((compare_mode & check_mode) != check_mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given rx_attr->mode not supported\n");
 		return -FI_ENODATA;
@@ -646,9 +651,8 @@ static int fi_ibv_fill_info_attr(struct ibv_context *ctx, struct ibv_qp *qp,
 	fi->ep_attr->max_msg_size = port_attr.max_msg_sz;
 
 	if (hints && hints->tx_attr) {
-		if ((ctx->device->transport_type == IBV_TRANSPORT_IWARP)
-					&& (hints->tx_attr->op_flags
-						& FI_REMOTE_COMPLETE)) {
+		if ((ctx->device->transport_type == IBV_TRANSPORT_IWARP) &&
+		    (hints->tx_attr->op_flags & FI_TRANSMIT_COMPLETE)) {
 			return -FI_ENODATA;
 		}
 		fi->tx_attr->op_flags = hints->tx_attr->op_flags;
@@ -943,8 +947,8 @@ fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 
 		wr.sg_list = sge;
 	}
-	if (!(_ep->ep_flags & FI_COMPLETION)
-			|| (flags & (FI_COMPLETION|FI_REMOTE_COMPLETE)))
+	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
 	wr.wr_id = (uintptr_t) msg->context;
@@ -1130,8 +1134,8 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			}
 		}
 	}
-	if (!(_ep->ep_flags & FI_COMPLETION)
-			|| (flags & (FI_COMPLETION|FI_REMOTE_COMPLETE)))
+	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	wr.sg_list = sge;
 
@@ -1551,8 +1555,8 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
-	if (!(_ep->ep_flags & FI_COMPLETION)
-			|| (flags & (FI_COMPLETION|FI_REMOTE_COMPLETE)))
+	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
 		wr.imm_data = (uint32_t) msg->data;
@@ -1690,8 +1694,8 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
-	if (!(_ep->ep_flags & FI_COMPLETION)
-			|| (flags & (FI_COMPLETION|FI_REMOTE_COMPLETE)))
+	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
 		wr.imm_data = (uint32_t) msg->data;
@@ -2051,7 +2055,7 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (info->tx_attr) {
 		_ep->inline_size = info->tx_attr->inject_size;
 		_ep->tx_op_flags = info->tx_attr->op_flags;
-		if (_ep->tx_op_flags & FI_REMOTE_COMPLETE)
+		if (_ep->tx_op_flags & FI_TRANSMIT_COMPLETE)
 			_ep->tx_op_flags |= FI_COMPLETION;
 	} else {
 		fi_read_file(FI_CONF_DIR, "def_inline_data",
@@ -2369,7 +2373,7 @@ static int fi_ibv_cq_reset(struct fid_cq *cq, const void *cond)
         if (!ret)
                 ibv_ack_cq_events(ibcq, 1);
 
-        return -ibv_req_notify_cq(_cq->cq, (_cq->flags & FI_REMOTE_SIGNAL) ? 1:0);
+        return -ibv_req_notify_cq(_cq->cq, 0);
 }
 
 static ssize_t
@@ -2556,10 +2560,9 @@ static struct fi_ops_cq fi_ibv_cq_context_ops = {
 	.read = fi_ibv_cq_read_context,
 	.readfrom = fi_no_cq_readfrom,
 	.readerr = fi_ibv_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,	/* TODO: write me */
 	.strerror = fi_ibv_cq_strerror
 };
 
@@ -2568,10 +2571,9 @@ static struct fi_ops_cq fi_ibv_cq_msg_ops = {
 	.read = fi_ibv_cq_read_msg,
 	.readfrom = fi_no_cq_readfrom,
 	.readerr = fi_ibv_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,	/* TODO: write me */
 	.strerror = fi_ibv_cq_strerror
 };
 
@@ -2580,10 +2582,9 @@ static struct fi_ops_cq fi_ibv_cq_data_ops = {
 	.read = fi_ibv_cq_read_data,
 	.readfrom = fi_no_cq_readfrom,
 	.readerr = fi_ibv_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = fi_ibv_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,	/* TODO: write me */
 	.strerror = fi_ibv_cq_strerror
 };
 

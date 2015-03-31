@@ -75,7 +75,7 @@ const struct fi_ep_attr sock_msg_ep_attr = {
 
 const struct fi_tx_attr sock_msg_tx_attr = {
 	.caps = SOCK_EP_MSG_CAP,
-	.op_flags = 0,
+	.op_flags = FI_TRANSMIT_COMPLETE,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_TX_SZ,

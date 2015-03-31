@@ -648,10 +648,9 @@ static struct fi_ops_cq usdf_cq_context_ops = {
 	.read = usdf_cq_read_context,
 	.readfrom = usdf_cq_readfrom_context,
 	.readerr = usdf_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
 };
 
@@ -660,10 +659,9 @@ static struct fi_ops_cq usdf_cq_context_soft_ops = {
 	.read = usdf_cq_read_context_soft,
 	.readfrom = usdf_cq_readfrom_context_soft,
 	.readerr = usdf_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread_soft,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
 };
 
@@ -672,10 +670,9 @@ static struct fi_ops_cq usdf_cq_msg_ops = {
 	.read = usdf_cq_read_msg,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
 };
 
@@ -684,10 +681,9 @@ static struct fi_ops_cq usdf_cq_msg_soft_ops = {
 	.read = usdf_cq_read_msg_soft,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
 };
 
@@ -696,10 +692,9 @@ static struct fi_ops_cq usdf_cq_data_ops = {
 	.read = usdf_cq_read_data,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
 };
 
@@ -708,10 +703,9 @@ static struct fi_ops_cq usdf_cq_data_soft_ops = {
 	.read = usdf_cq_read_data_soft,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
+	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
 };
 
