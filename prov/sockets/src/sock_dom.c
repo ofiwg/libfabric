@@ -342,7 +342,7 @@ static int sock_reg(struct fid *fid, const void *buf, size_t len,
 			 flags, mr, context);
 }
 
-int sock_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+static int sock_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct sock_domain *dom;
 	struct sock_eq *eq;
@@ -360,7 +360,7 @@ int sock_dom_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
-int sock_endpoint(struct fid_domain *domain, struct fi_info *info,
+static int sock_endpoint(struct fid_domain *domain, struct fi_info *info,
 			 struct fid_ep **ep, void *context)
 {
 	switch (info->ep_attr->type) {
@@ -375,7 +375,7 @@ int sock_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 }
 
-int sock_scalable_ep(struct fid_domain *domain, struct fi_info *info,
+static int sock_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 		     struct fid_ep **sep, void *context)
 {
 	switch (info->ep_attr->type) {
