@@ -427,7 +427,7 @@ usdf_cq_post_soft_data(struct usdf_cq_hard *hcq, void *context, size_t len)
 	usdf_cq_post_soft(hcq, context, len, FI_CQ_FORMAT_DATA);
 }
 
-ssize_t
+static ssize_t
 usdf_cq_sread_soft(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 		int timeout)
 {
