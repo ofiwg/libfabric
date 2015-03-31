@@ -329,14 +329,14 @@ static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 	return ret;
 }
 
-int sock_av_insertsvc(struct fid_av *av, const char *node,
+static int sock_av_insertsvc(struct fid_av *av, const char *node,
 		   const char *service, fi_addr_t *fi_addr,
 		   uint64_t flags, void *context)
 {
 	return _sock_av_insertsvc(av, node, service, fi_addr, flags, context, 0);
 }
 
-int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt,
+static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt,
 		      const char *service, size_t svccnt, fi_addr_t *fi_addr,
 		      uint64_t flags, void *context)
 {

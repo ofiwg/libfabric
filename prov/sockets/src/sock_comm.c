@@ -126,7 +126,7 @@ ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len)
 	return ret;
 }
 
-ssize_t sock_comm_recv_socket(struct sock_conn *conn, void *buf, size_t len)
+static ssize_t sock_comm_recv_socket(struct sock_conn *conn, void *buf, size_t len)
 {
 	ssize_t ret;
 	
@@ -141,7 +141,7 @@ ssize_t sock_comm_recv_socket(struct sock_conn *conn, void *buf, size_t len)
 	return ret;
 }
 
-ssize_t sock_comm_recv_buffer(struct sock_conn *conn)
+static ssize_t sock_comm_recv_buffer(struct sock_conn *conn)
 {
 	int ret;
 	size_t endlen;

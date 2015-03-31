@@ -214,7 +214,7 @@ _usnic_files = \
 	prov/usnic/src/usdf_timer.h
 
 _usnic_cppflags = \
-        -D__LIBUSNIC__ \
+        -D__LIBUSNIC__ -DWANT_DEBUG_MSGS=0 \
         -DHAVE_LIBNL3=$(HAVE_LIBNL3) $(usnic_nl_CPPFLAGS) \
         -I$(top_srcdir)/prov/usnic/src/usnic_direct
 

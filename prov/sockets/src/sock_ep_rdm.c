@@ -236,7 +236,7 @@ int sock_rdm_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 	return 0;
 }
 
-int sock_rdm_endpoint(struct fid_domain *domain, struct fi_info *info,
+static int sock_rdm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		struct sock_ep **ep, void *context, size_t fclass)
 {
 	int ret;
