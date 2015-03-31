@@ -43,6 +43,10 @@ libfabtests_la_SOURCES += include/osx/osd.h
 libfabtests_la_SOURCES += common/osx/osd.c
 endif
 
+simple_fi_msg_epoll_SOURCES = \
+	simple/msg_epoll.c
+simple_fi_msg_epoll_LDADD = libfabtests.la
+
 simple_fi_info_SOURCES = \
 	simple/info.c
 simple_fi_info_LDADD = libfabtests.la
