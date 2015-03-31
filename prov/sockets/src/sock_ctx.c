@@ -111,6 +111,7 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 		goto err;
 	}
 	tx_ctx->attr = *attr;		
+	tx_ctx->attr.op_flags |= FI_TRANSMIT_COMPLETE;
 	return tx_ctx;
 
 err:
