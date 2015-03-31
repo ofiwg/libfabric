@@ -11,8 +11,8 @@ MPI implementations.
 PSM also has limited Active Message support, which is not officially
 published but is quite stable and well documented in the source code.
 The \f[I]psm\f[] provider makes use of both the tag-matching message
-queue functions and the Active Message functions to support a varieties
-of libfabric data transfer APIs, including tagged message queue, message
+queue functions and the Active Message functions to support a variety of
+libfabric data transfer APIs, including tagged message queue, message
 queue, RMA, and atomic operations.
 .SH LIMITATIONS
 .PP
@@ -20,21 +20,21 @@ The \f[I]psm\f[] provider doesn\[aq]t support all the features defined
 in the libfabric API.
 Here are the limitations:
 .PP
-\f[I]Endpoint type\f[] : Only support non-connection based types
+Endpoint types : Only support non-connection based types
 \f[I]FI_DGRAM\f[] and \f[I]FI_RDM\f[]
 .PP
-\f[I]Endpoint capabilities\f[] : Endpoints can support any combination
-of data transfer capabilities \f[I]FI_TAGGED\f[], \f[I]FI_MSG\f[],
+Endpoint capabilities : Endpoints can support any combination of data
+transfer capabilities \f[I]FI_TAGGED\f[], \f[I]FI_MSG\f[],
 \f[I]FI_ATOMICS\f[], and \f[I]FI_RMA\f[]s, with further refinement of
 \f[I]FI_SEND\f[], \f[I]FI_RECV\f[], \f[I]FI_READ\f[], \f[I]FI_WRITE\f[],
 \f[I]FI_REMOTE_READ\f[], and \f[I]FI_REMOTE_WRITE\f[] if only one
 direction is needed.
 However, no two endpoints can have overlapping receive or RMA target
 capabilities of any of the above categories.
-For example it is fine to have two endpoints with
-\f[I]FI_TAGGED|FI_SEND\f[], one endpoint with
-\f[I]FI_TAGGED|FI_RECV\f[], one endpoint with \f[I]FI_MSG\f[], one
-endpoint with \f[I]FI_RMA|FI_ATOMICS\f[].
+For example it is fine to have two endpoints with \f[I]FI_TAGGED\f[] |
+\f[I]FI_SEND\f[], one endpoint with \f[I]FI_TAGGED\f[] |
+\f[I]FI_RECV\f[], one endpoint with \f[I]FI_MSG\f[], one endpoint with
+\f[I]FI_RMA\f[] | \f[I]FI_ATOMICS\f[].
 But it is not allowed to have two endpoints with \f[I]FI_TAGGED\f[], or
 two endpoints with \f[I]FI_RMA\f[].
 .PP
@@ -43,14 +43,14 @@ two endpoints with \f[I]FI_RMA\f[].
 Other supported capabilities include \f[I]FI_CANCEL\f[],
 \f[I]FI_TRIGGER\f[], and \f[I]FI_DYNAMIC_MR\f[].
 .PP
-\f[I]Modes\f[] : \f[I]FI_CONTEXT\f[] is required.
+Modes : \f[I]FI_CONTEXT\f[] is required.
 That means, all the requests that generate completions must have a valid
 pointer to type \f[I]struct fi_context\f[] passed as the operation
 context.
 .PP
-\f[I]Unsupported features\f[] : These features are unsupported:
-connection management, event queue, scalable endpoint, passive endpoint,
-shared receive context, senddata, and inject data.
+Unsupported features : These features are unsupported: connection
+management, event queue, scalable endpoint, passive endpoint, shared
+receive context, senddata, and inject data.
 .SH RUNTIME PARAMETERS
 .PP
 The \f[I]psm\f[] provider checks for the following environment
@@ -68,8 +68,7 @@ If running into "resource busy" or "connection failure" issues with
 unknown reason, it is advisable to manually set the UUID to a value
 different from the default.
 .PP
-The default UUID set by the \f[I]psm\f[] provider is
-0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF.
+The default UUID is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF.
 .PP
 \f[I]OFI_PSM_NAME_SERVER\f[] : The \f[I]psm\f[] provider has a simple
 built-in name server that can be used to resolve an IP address or host
