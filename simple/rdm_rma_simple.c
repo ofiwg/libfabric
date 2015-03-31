@@ -305,6 +305,7 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 		
+	opts = INIT_OPTS;
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
