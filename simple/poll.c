@@ -293,8 +293,6 @@ static int init_fabric(void)
 		memcpy(remote_addr, fi->dest_addr, addrlen);
 	}
 	
-	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
-	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);

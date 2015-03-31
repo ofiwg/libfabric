@@ -318,9 +318,6 @@ static int server_connect(void)
 		goto err1;
 	}
 
-	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
-	info->tx_attr->op_flags = FI_REMOTE_COMPLETE;
-
 	ret = alloc_ep_res(info);
 	if (ret)
 		 goto err1;
@@ -389,9 +386,6 @@ static int client_connect(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
 	}
-
-	/* Add FI_REMOTE_COMPLETE flag to ensure completion */
-	fi->tx_attr->op_flags = FI_REMOTE_COMPLETE;
 
 	ret = alloc_cm_res();
 	if (ret)
