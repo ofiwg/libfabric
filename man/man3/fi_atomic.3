@@ -1,4 +1,4 @@
-.TH fi_atomic 3 "2015\-03\-04" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_atomic 3 "2015\-03\-31" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_atomic - Remote atomic functions
@@ -489,11 +489,6 @@ corresponds to the specified operation, or this flag is ignored.
 will immediately be posted after the current call returns.
 Use of this flag may improve performance by enabling the provider to
 optimize its access to the fabric hardware.
-.PP
-\f[I]FI_REMOTE_SIGNAL\f[] : Indicates that a completion event at the
-target process should be generated for the given operation.
-The remote endpoint must be configured with FI_REMOTE_SIGNAL, or this
-flag will be ignored by the target.
 .PP
 \f[I]FI_INJECT\f[] : Indicates that the outbound non-const data buffers
 (buf and compare parameters) should be returned to user immediately
