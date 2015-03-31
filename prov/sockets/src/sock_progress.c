@@ -1107,7 +1107,7 @@ err:
 	return -FI_EINVAL;
 }
 
-int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
+static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 {
 	struct dlist_entry *entry;
 	struct sock_pe_entry pe_entry;
@@ -2009,7 +2009,7 @@ void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx)
 	fastlock_release(&rx_ctx->domain->pe->list_lock);
 }
 
-int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
+static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 			   struct sock_rx_ctx *rx_ctx)
 {
 	struct sock_conn *conn;

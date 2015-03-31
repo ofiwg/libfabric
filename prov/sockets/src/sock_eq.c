@@ -67,7 +67,7 @@ static void sock_eq_clean_err_data_list(struct sock_eq *eq, int free_all)
 	}
 }
 
-ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
+static ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 		      int timeout, uint64_t flags)
 {
 	int ret;
@@ -119,13 +119,13 @@ out:
 }
 
 
-ssize_t sock_eq_read(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
+static ssize_t sock_eq_read(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 		     uint64_t flags)
 {
 	return sock_eq_sread(eq, event, buf, len, 0, flags);
 }
 
-ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
+static ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 			uint64_t flags)
 {
 	int ret;
@@ -248,7 +248,7 @@ static ssize_t sock_eq_write(struct fid_eq *eq, uint32_t event,
 
 }
 
-const char * sock_eq_strerror(struct fid_eq *eq, int prov_errno,
+static const char * sock_eq_strerror(struct fid_eq *eq, int prov_errno,
 			      const void *err_data, char *buf, size_t len)
 {
 	if (buf && len)
@@ -265,7 +265,7 @@ static struct fi_ops_eq sock_eq_ops = {
 	.strerror = sock_eq_strerror,
 };
 
-int sock_eq_fi_close(struct fid *fid)
+static int sock_eq_fi_close(struct fid *fid)
 {
 	struct sock_eq *sock_eq;
 
@@ -284,7 +284,7 @@ int sock_eq_fi_close(struct fid *fid)
 	return 0;
 }
 
-int sock_eq_control(struct fid *fid, int command, void *arg)
+static int sock_eq_control(struct fid *fid, int command, void *arg)
 {
 	int ret = 0;
 	struct sock_eq *eq;

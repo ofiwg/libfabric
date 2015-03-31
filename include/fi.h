@@ -107,8 +107,8 @@ void fi_create_filter(struct fi_filter *filter, const char *env_name);
 void fi_free_filter(struct fi_filter *filter);
 int fi_apply_filter(struct fi_filter *filter, const char *name);
 
-void fi_log_init();
-void fi_log_fini();
+void fi_log_init(void);
+void fi_log_fini(void);
 
 
 /* flsll is defined on BSD systems, but is different. */
@@ -227,7 +227,7 @@ int fi_recv_allowed(uint64_t caps);
 int fi_rma_initiate_allowed(uint64_t caps);
 int fi_rma_target_allowed(uint64_t caps);
 
-uint64_t fi_gettime_ms();
+uint64_t fi_gettime_ms(void);
 
 #define RDMA_CONF_DIR  SYSCONFDIR "/" RDMADIR
 #define FI_CONF_DIR RDMA_CONF_DIR "/fabric"
