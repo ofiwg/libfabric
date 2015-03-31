@@ -650,6 +650,17 @@ static ssize_t psmx_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 	return psmx_cq_sreadfrom(cq, buf, count, NULL, cond, timeout);
 }
 
+static int psmx_cq_signal(struct fid_cq *cq)
+{
+	struct psmx_fid_cq *cq_priv;
+	cq_priv = container_of(cq, struct psmx_fid_cq, cq);
+
+	if (cq_priv->wait)
+		psmx_wait_signal((struct fid_wait *)cq_priv->wait);
+
+	return 0;
+}
+
 static const char *psmx_cq_strerror(struct fid_cq *cq, int prov_errno, const void *prov_data,
 				    char *buf, size_t len)
 {
@@ -712,7 +723,7 @@ static struct fi_ops_cq psmx_cq_ops = {
 	.readerr = psmx_cq_readerr,
 	.sread = psmx_cq_sread,
 	.sreadfrom = psmx_cq_sreadfrom,
-	.signal = fi_no_cq_signal,	/* TODO: write me */
+	.signal = psmx_cq_signal,
 	.strerror = psmx_cq_strerror,
 };
 
