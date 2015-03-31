@@ -596,6 +596,7 @@ static int sock_ep_close(struct fid *fid)
 	
 	close(sock_ep->listener.signal_fds[0]);
 	close(sock_ep->listener.signal_fds[1]);
+	fastlock_destroy(&sock_ep->cm.lock);
 
 	if (sock_ep->fclass != FI_CLASS_SEP && !sock_ep->tx_shared) {
 		sock_pe_remove_tx_ctx(sock_ep->tx_array[0]);
@@ -1294,9 +1295,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	sock_ep->fclass = fclass;
 	*ep = sock_ep;	
 
-	fastlock_acquire(&sock_dom->lock);
-	fastlock_release(&sock_dom->lock);
-
 	if (info) {
 		sock_ep->info.caps = info->caps;
 		sock_ep->info.addr_format = FI_SOCKADDR_IN;
@@ -1393,6 +1391,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (sock_conn_listen(sock_ep))
 		goto err;
 
+	fastlock_init(&sock_ep->cm.lock);
 	if (sock_ep->ep_type == FI_EP_MSG) {
 		dlist_init(&sock_ep->cm.msg_list);
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, 
