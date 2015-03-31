@@ -55,7 +55,7 @@ specified node or service, subject to any provided hints.  Callers
 may specify NULL for node, service, and hints in order to retrieve
 information about what providers are available and their optimal usage
 models.  If no matching fabric information is available, info will
-be set to NULL.
+be set to NULL and the call will return -FI_ENODATA.
 
 Based on the input hints, node, and service parameters, a list of
 fabric domains and endpoints will be returned.  Each fi_info structure
@@ -87,10 +87,17 @@ application.
 
 Node, service, or hints may be provided, with any combination
 being supported.  If node is provided, fi_getinfo will attempt to
-resolve the fabric address to the given node.  The hints parameter, if
-provided, may be used to control the resulting output as indicated
-below.  If node is not given, fi_getinfo will attempt to resolve the
-fabric addressing information based on the provided hints.
+resolve the fabric address to the given node.  If node is not given,
+fi_getinfo will attempt to resolve the fabric addressing information
+based on the provided hints.
+
+The hints parameter, if provided, may be used to limit the resulting
+output as indicated below.  As a general rule, specifying a non-zero
+value for input hints indicates that a provider must support the
+requested value or fail the operation with -FI_ENODATA.  With the
+exception of mode bits, hints that are set to zero are treated as
+a wildcard.  A zeroed hint value results in providers either returning
+a default value or a value that works best for their implementation.
 
 The caller must call fi_freeinfo to release fi_info structures returned
 by this call.
@@ -152,7 +159,9 @@ struct fi_info {
 
 *src_addr - source address*
 : If specified, indicates the source address.  This field will be
-  ignored in hints if FI_SOURCE is specified.
+  ignored in hints if FI_SOURCE is specified.  On output a provider shall
+  return an address that corresponds to the indicated fabric or domain,
+  with the format indicated by the returned *addr_format* field.
 
 *dest_addr - destination address*
 : If specified, indicates the destination address.  This field will be
@@ -223,7 +232,7 @@ additional optimizations.
   and/or receive queues.  Endpoints supporting this capability support
   operations defined by struct fi_ops_msg.
 
-  The ep_cap may be used to specify or restrict the type of messaging
+  The caps may be used to specify or restrict the type of messaging
   operations that are supported.  In the absence of any relevant
   flags, FI_MSG implies the ability to send and receive messages.
   Applications can use the FI_SEND and FI_RECV flags to optimize an
@@ -317,11 +326,6 @@ additional optimizations.
   write memory operations from remote endpoints.  This flag requires
   that FI_RMA and/or FI_ATOMIC be set.
 
-*FI_REMOTE_SIGNAL*
-: Indicates that the endpoint support the FI_REMOTE_SIGNAL flag on
-  data transfer operations.  Support requires marking outbound data
-  transfers as signaled and handling incoming transfers appropriately.
-
 *FI_CANCEL*
 : Indicates that the user desires the ability to cancel outstanding
   data transfer operations.  If FI_CANCEL is not set, a provider may
@@ -346,12 +350,12 @@ secondary.  Primary capabilities must explicitly be requested by an
 application, and a provider must enable support for only those primary
 capabilities which were selected.  Secondary capabilities may optionally
 be requested by an application.  If requested, a provider must support
-the capability or fail the fi_getinfo request (FI_ENOSYS).  A provider
+the capability or fail the fi_getinfo request (FI_ENODATA).  A provider
 may optionally report non-selected secondary capabilities if doing so
 would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_NAMED_RX_CTX,
-FI_DIRECTD_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
+FI_DIRECTED_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
 and FI_REMOTE_WRITE.
 
 Secondary capabilities: FI_DYNAMIC_MR, FI_MULTI_RECV, FI_SOURCE,
@@ -452,6 +456,12 @@ below.
   an application must not modify an IO vector until the associated
   operation has completed.
 
+*FI_RX_CQ_DATA*
+: This mode bit only applies to data transfers that set FI_REMOTE_CQ_DATA.
+  When set, a data transfer that carries remote CQ data will consume a
+  receive buffer at the target.  This is true even for operations that would
+  normally not consume posted receive buffers, such as RMA write operations.
+
 # ADDRESSING FORMATS
 
 Multiple fabric interfaces take as input either a source or
@@ -534,9 +544,6 @@ via fi_freeinfo().
 *FI_ENODATA*
 : Indicates that no providers could be found which support the requested
   fabric information.
-
-*FI_ENOSYS*
-: No fabric providers were found.
 
 # NOTES
 

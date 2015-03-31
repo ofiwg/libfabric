@@ -473,12 +473,6 @@ with atomic message calls.
   flag may improve performance by enabling the provider to optimize
   its access to the fabric hardware.
 
-*FI_REMOTE_SIGNAL*
-: Indicates that a completion event at the target process should be
-  generated for the given operation.  The remote endpoint must be
-  configured with FI_REMOTE_SIGNAL, or this flag will be ignored by
-  the target.
-
 *FI_INJECT*
 : Indicates that the outbound non-const data buffers (buf and compare
   parameters) should be returned to user immediately after the call
