@@ -810,6 +810,7 @@ static int sock_pep_fi_close(fid_t fid)
 
 	close(pep->cm.signal_fds[0]);
 	close(pep->cm.signal_fds[1]);
+	fastlock_destroy(&pep->cm.lock);
 
 	free(pep);
 	return 0;
@@ -1153,6 +1154,7 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->pep.fid.ops = &sock_pep_fi_ops;
 	_pep->pep.cm = &sock_pep_cm_ops;
 	_pep->pep.ops = NULL;
+	fastlock_init(&_pep->cm.lock);
 
 	_pep->sock_fab = container_of(fabric, struct sock_fabric, fab_fid);
 	*pep = &_pep->pep;

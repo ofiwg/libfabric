@@ -548,7 +548,6 @@ struct sock_tx_ctx {
 
 	struct dlist_entry pe_entry_list;
 	struct dlist_entry ep_list;
-	fastlock_t lock;
 
 	struct fi_tx_attr attr;
 };
