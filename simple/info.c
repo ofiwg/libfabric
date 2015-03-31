@@ -213,6 +213,9 @@ int main(int argc, char **argv)
 			hints->addr_format = str2addr_format(optarg);
 			use_hints = 1;
 			break;
+		case 'f':
+			hints->fabric_attr->prov_name = strdup(optarg);
+			break;
 		case 'v':
 			printf("%s: %s\n", argv[0], PACKAGE_VERSION);
 			printf("libfabric: %s\n", fi_tostr("1", FI_TYPE_VERSION));
