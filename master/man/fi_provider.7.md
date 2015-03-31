@@ -78,10 +78,7 @@ parameters and need not meet these requirements).
   routines.  (sendmsg / recvmsg / writemsg / readmsg / etc.)
 * Access domains must support opening address vector maps and tables.
 * Address vectors associated with domains that may be identified using
-  IP addresses must support FI_SOCKADDR_IN and FI_SOCKADDR_IN6 input
-  formats.
-* Address vectors must support FI_ADDR, FI_ADDR_INDEX, and FI_AV
-  output formats.
+  IP addresses must support the FI_SOCKADDR_IN input format.
 * Access domains must support opening completion queues and counters.
 * Completion queues must support the FI_CQ_FORMAT_CONTEXT and
   FI_CQ_FORMAT_MSG formats.
