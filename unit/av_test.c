@@ -771,7 +771,7 @@ av_goodbad_vector_async()
 		goto fail;		// av_create_address_list filled err_buf
 	}
 	ret = fi_av_insert(av, addrbuf, 2, fi_addr, 0, &ctx);
-	if (ret != 2) {
+	if (ret != 1) {
 		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
@@ -888,7 +888,7 @@ av_goodbad_2vector_async()
 		}
 	}
 	ret = fi_av_insert(av, addrbuf, num_good_addr, &fi_addr[1], 0, &ctx[1]);
-	if (ret != num_good_addr) {
+	if (ret != num_good_addr-1) {
 		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
@@ -940,7 +940,7 @@ av_goodbad_2vector_async()
 		}
 	}
 	ret = fi_eq_sread(eq, &event, &entry, sizeof(entry), 1000, 0);
-	if (ret != -FI_ETIMEDOUT) {
+	if (ret != -FI_EAGAIN) {
 		sprintf(err_buf, "too many events");
 		goto fail;
 	}
@@ -995,7 +995,8 @@ run_test_set()
 	if (bad_address != NULL) {
 		printf("Testing with bad_address = \"%s\"\n", bad_address);
 		failed += run_tests(test_array_bad, err_buf);
-	}
+	}	
+
 	bad_address = NULL;
 	printf("Testing with invalid address\n");
 	failed += run_tests(test_array_bad, err_buf);
@@ -1040,8 +1041,8 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (good_address == NULL || bad_address == NULL || num_good_addr == 0) {
-		printf("Test requires all of -d, -D, and -n\n");
+	if (good_address == NULL ||  num_good_addr == 0) {
+		printf("Test requires -d  and -n\n");
 		exit(1);
 	}
 
