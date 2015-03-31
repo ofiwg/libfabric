@@ -17,7 +17,7 @@ message queue functions that are optimized for MPI implementations.
 PSM also has limited Active Message support, which is not officially
 published but is quite stable and well documented in the source code.
 The *psm* provider makes use of both the tag-matching message queue
-functions and the Active Message functions to support a varieties of
+functions and the Active Message functions to support a variety of
 libfabric data transfer APIs, including tagged message queue, message
 queue, RMA, and atomic operations.
 
@@ -26,19 +26,19 @@ queue, RMA, and atomic operations.
 The *psm* provider doesn't support all the features defined in the
 libfabric API. Here are the limitations:
 
-*Endpoint type*
+Endpoint types
 : Only support non-connection based types *FI_DGRAM* and *FI_RDM*
 
-*Endpoint capabilities*
+Endpoint capabilities
 : Endpoints can support any combination of data transfer capabilities
   *FI_TAGGED*, *FI_MSG*, *FI_ATOMICS*, and *FI_RMA*s, with further
   refinement of *FI_SEND*, *FI_RECV*, *FI_READ*, *FI_WRITE*,
   *FI_REMOTE_READ*, and *FI_REMOTE_WRITE* if only one direction is
   needed. However, no two endpoints can have overlapping receive
   or RMA target capabilities of any of the above categories. For
-  example it is fine to have two endpoints with *FI_TAGGED|FI_SEND*,
-  one endpoint with *FI_TAGGED|FI_RECV*, one endpoint with *FI_MSG*,
-  one endpoint with *FI_RMA|FI_ATOMICS*. But it is not allowed to
+  example it is fine to have two endpoints with *FI_TAGGED* | *FI_SEND*,
+  one endpoint with *FI_TAGGED* | *FI_RECV*, one endpoint with *FI_MSG*,
+  one endpoint with *FI_RMA* | *FI_ATOMICS*. But it is not allowed to
   have two endpoints with *FI_TAGGED*, or two endpoints with *FI_RMA*.
 
   *FI_MULTI_RECV* is supported for non-tagged message queue only.
@@ -46,12 +46,12 @@ libfabric API. Here are the limitations:
   Other supported capabilities include *FI_CANCEL*, *FI_TRIGGER*,
   and *FI_DYNAMIC_MR*.
 
-*Modes*
+Modes
 : *FI_CONTEXT* is required. That means, all the requests that generate
   completions must have a valid pointer to type *struct fi_context*
   passed as the operation context.
   
-*Unsupported features*
+Unsupported features
 : These features are unsupported: connection management, event queue, 
   scalable endpoint, passive endpoint, shared receive context,
   senddata, and inject data.
@@ -71,7 +71,7 @@ The *psm* provider checks for the following environment variables:
   issues with unknown reason, it is advisable to manually set the UUID
   to a value different from the default.
 
-  The default UUID set by the *psm* provider is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF.
+  The default UUID is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF.
 
 *OFI_PSM_NAME_SERVER*
 : The *psm* provider has a simple built-in name server that can be used
