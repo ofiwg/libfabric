@@ -111,6 +111,7 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 		goto err;
 	}
 	tx_ctx->attr = *attr;		
+	tx_ctx->attr.op_flags |= FI_TRANSMIT_COMPLETE;
 	return tx_ctx;
 
 err:
@@ -122,11 +123,6 @@ err:
 struct sock_tx_ctx *sock_tx_ctx_alloc(const struct fi_tx_attr *attr, void *context)
 {
 	return sock_tx_context_alloc(attr, context, FI_CLASS_TX_CTX);
-}
-
-static struct sock_tx_ctx *sock_stx_ctx_alloc(const struct fi_tx_attr *attr, void *context)
-{
-	return sock_tx_context_alloc(attr, context, FI_CLASS_STX_CTX);
 }
 
 void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx)
