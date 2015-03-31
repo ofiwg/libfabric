@@ -141,9 +141,9 @@ struct fi_ibv_msg_ep {
 	struct fi_ibv_eq	*eq;
 	struct fi_ibv_cq	*rcq;
 	struct fi_ibv_cq	*scq;
+	uint64_t		tx_op_flags;
+	uint64_t		ep_flags;
 	uint32_t		inline_size;
-	uint32_t		tx_op_flags;
-	uint32_t		ep_flags;
 };
 
 static const char *local_node = "localhost";
@@ -194,7 +194,7 @@ const struct fi_rx_attr verbs_rx_attr = {
 const struct fi_tx_attr verbs_tx_attr = {
 	.caps			= VERBS_CAPS,
 	.mode			= VERBS_TX_MODE,
-	.op_flags		= VERBS_TX_OP_FLAGS,
+	.op_flags		= 0,
 	.msg_order		= VERBS_MSG_ORDER,
 	.inject_size		= 0,
 	.size			= 256,
@@ -218,7 +218,7 @@ static int fi_ibv_sockaddr_len(struct sockaddr *addr)
 	}
 }
 
-static int fi_ibv_check_fabric_attr(struct fi_fabric_attr *attr)
+static int fi_ibv_check_fabric_attr(const struct fi_fabric_attr *attr)
 {
 	if (attr->name && !(!strcmp(attr->name, VERBS_ANY_FABRIC) ||
 	    !strncmp(attr->name, VERBS_IB_PREFIX, strlen(VERBS_IB_PREFIX)) ||
@@ -236,7 +236,7 @@ static int fi_ibv_check_fabric_attr(struct fi_fabric_attr *attr)
 	return 0;
 }
 
-static int fi_ibv_check_domain_attr(struct fi_domain_attr *attr)
+static int fi_ibv_check_domain_attr(const struct fi_domain_attr *attr)
 {
 	switch (attr->threading) {
 	case FI_THREAD_UNSPEC:
@@ -288,7 +288,7 @@ static int fi_ibv_check_domain_attr(struct fi_domain_attr *attr)
 	return 0;
 }
 
-static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
+static int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr)
 {
 	switch (attr->type) {
 	case FI_EP_UNSPEC:
@@ -363,7 +363,7 @@ static int fi_ibv_check_ep_attr(struct fi_ep_attr *attr)
 	return 0;
 }
 
-static int fi_ibv_check_rx_attr(struct fi_rx_attr *attr, struct fi_info *info)
+static int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr, const struct fi_info *info)
 {
 	uint64_t compare_mode, check_mode;
 
@@ -397,7 +397,7 @@ static int fi_ibv_check_rx_attr(struct fi_rx_attr *attr, struct fi_info *info)
 	return 0;
 }
 
-static int fi_ibv_check_tx_attr(struct fi_tx_attr *attr, struct fi_info *info)
+static int fi_ibv_check_tx_attr(const struct fi_tx_attr *attr, const struct fi_info *info)
 {
 	if (attr->caps & ~(verbs_tx_attr.caps)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
@@ -412,7 +412,7 @@ static int fi_ibv_check_tx_attr(struct fi_tx_attr *attr, struct fi_info *info)
 		return -FI_ENODATA;
 	}
 
-	if (attr->op_flags & ~verbs_tx_attr.op_flags) {
+	if (attr->op_flags & ~(VERBS_TX_OP_FLAGS)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given tx_attr->op_flags not supported\n");
 		return -FI_ENODATA;
@@ -427,7 +427,7 @@ static int fi_ibv_check_tx_attr(struct fi_tx_attr *attr, struct fi_info *info)
 	return 0;
 }
 
-static int fi_ibv_check_info(struct fi_info *info)
+static int fi_ibv_check_info(const struct fi_info *info)
 {
 	int ret;
 
@@ -506,7 +506,7 @@ static int fi_ibv_check_dev_limits(struct fi_domain_attr *domain_attr,
 	return 0;
 }
 
-static int fi_ibv_fi_to_rai(struct fi_info *fi, uint64_t flags, struct rdma_addrinfo *rai)
+static int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags, struct rdma_addrinfo *rai)
 {
 	memset(rai, 0, sizeof *rai);
 	if (flags & FI_SOURCE)
@@ -558,7 +558,7 @@ static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
 }
 
 static int fi_ibv_fill_info_attr(struct ibv_context *ctx, struct ibv_qp *qp,
-				 struct fi_info *hints,
+				 const struct fi_info *hints,
 				 struct fi_info *fi)
 {
 	struct ibv_qp_init_attr qp_init_attr;
@@ -665,7 +665,7 @@ static int fi_ibv_fill_info_attr(struct ibv_context *ctx, struct ibv_qp *qp,
 
 static int
 fi_ibv_create_ep(const char *node, const char *service,
-		 uint64_t flags, struct fi_info *hints,
+		 uint64_t flags, const struct fi_info *hints,
 		 struct rdma_addrinfo **rai, struct rdma_cm_id **id)
 {
 	struct rdma_addrinfo rai_hints, *_rai;
