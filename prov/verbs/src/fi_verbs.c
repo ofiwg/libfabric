@@ -194,7 +194,7 @@ const struct fi_rx_attr verbs_rx_attr = {
 const struct fi_tx_attr verbs_tx_attr = {
 	.caps			= VERBS_CAPS,
 	.mode			= VERBS_TX_MODE,
-	.op_flags		= VERBS_TX_OP_FLAGS,
+	.op_flags		= 0,
 	.msg_order		= VERBS_MSG_ORDER,
 	.inject_size		= 0,
 	.size			= 256,
@@ -412,7 +412,7 @@ static int fi_ibv_check_tx_attr(const struct fi_tx_attr *attr, const struct fi_i
 		return -FI_ENODATA;
 	}
 
-	if (attr->op_flags & ~verbs_tx_attr.op_flags) {
+	if (attr->op_flags & ~(VERBS_TX_OP_FLAGS)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given tx_attr->op_flags not supported\n");
 		return -FI_ENODATA;
