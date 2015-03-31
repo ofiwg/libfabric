@@ -292,6 +292,7 @@ static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags
 		ai.ai_flags |= AI_NUMERICHOST;
 
 	if (flags & FI_SOURCE) {
+		ai.ai_flags |= AI_PASSIVE;
 		ret = getaddrinfo(node, service, &ai, &rai);
 		if (ret) {
 			SOCK_LOG_INFO("getaddrinfo failed!\n");
