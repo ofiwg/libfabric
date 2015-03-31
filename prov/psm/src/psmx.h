@@ -78,6 +78,9 @@ extern struct fi_provider psmx_prov;
 #define PSMX_MSG_BIT	(0x1ULL << 63)
 #define PSMX_RMA_BIT	(0x1ULL << 62)
 
+/* Bits 60 .. 63 of the flag are provider specific */
+#define PSMX_NO_COMPLETION	(1ULL << 60)
+
 enum psmx_context_type {
 	PSMX_NOCOMP_SEND_CONTEXT = 1,
 	PSMX_NOCOMP_RECV_CONTEXT,

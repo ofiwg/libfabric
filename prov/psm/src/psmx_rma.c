@@ -389,7 +389,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 			psmx_cntr_inc(cntr);
 	}
 
-	no_event = (flags & FI_INJECT) ||
+	no_event = (flags & PSMX_NO_COMPLETION) ||
 		   (ep->send_cq_event_flag && !(flags & FI_COMPLETION));
 
 	if (ep->send_cq && !no_event) {
@@ -644,6 +644,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t psm_tag;
 	size_t idx;
 	void *psm_context;
+	int no_event;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
@@ -695,6 +696,9 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 				     ep_priv, (void *)buf, len, desc,
 				     addr, key, context, flags, data);
 
+	no_event = (flags & PSMX_NO_COMPLETION) ||
+		   (ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION));
+
 	if (flags & FI_INJECT) {
 		if (len > PSMX_INJECT_SIZE)
 			return -FI_EMSGSIZE;
@@ -706,23 +710,18 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req + sizeof(*req), (void *)buf, len);
 		buf = (void *)req + sizeof(*req);
-
-		req->no_event = 1;
 	}
 	else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
 			return -FI_ENOMEM;
 
-		if (ep_priv->send_cq_event_flag && !(flags & FI_COMPLETION)) {
-			PSMX_CTXT_TYPE(&req->fi_context) = PSMX_NOCOMP_WRITE_CONTEXT;
-			req->no_event = 1;
-		}
-		else {
-			PSMX_CTXT_TYPE(&req->fi_context) = PSMX_WRITE_CONTEXT;
-		}
+		PSMX_CTXT_TYPE(&req->fi_context) = no_event ?
+						   PSMX_NOCOMP_WRITE_CONTEXT :
+						   PSMX_WRITE_CONTEXT;
 	}
 
+	req->no_event = no_event;
 	req->op = PSMX_AM_REQ_WRITE;
 	req->write.buf = (void *)buf;
 	req->write.len = len;
@@ -847,7 +846,7 @@ static ssize_t psmx_inject(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	return _psmx_write(ep, buf, len, NULL, dest_addr, addr, key,
-			   NULL, ep_priv->flags | FI_INJECT, 0);
+			   NULL, ep_priv->flags | FI_INJECT | PSMX_NO_COMPLETION, 0);
 }
 
 static ssize_t psmx_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
