@@ -185,18 +185,18 @@ struct fi_av_attr {
   access, a named AV will be created, if it does not already exist.
 
 *map_addr*
-: The map_addr determines the base FI_ADDR address that a provider
+: The map_addr determines the base fi_addr_t address that a provider
   should use when sharing an AV of type FI_AV_MAP between processes.
   Processes that provide the same value for map_addr to a shared AV
-  may use the same FI_ADDR values returned from an fi_av_insert call.
+  may use the same fi_addr_t values returned from an fi_av_insert call.
 
   The map_addr may be used by the provider to mmap memory allocated
   for a shared AV between processes; however, the provider is not
   required to use the map_addr in this fashion.  The only requirement
-  is that an FI_ADDR returned as part of an fi_av_insert call on one
+  is that an fi_addr_t returned as part of an fi_av_insert call on one
   process is usable on another process which opens an AV of the same
   name at the same map_addr value.  The relationship between the
-  map_addr and any returned FI_ADDR is not defined.
+  map_addr and any returned fi_addr_t is not defined.
 
   If name is non-NULL and map_addr is 0, then the map_addr used by the
   provider will be returned through the attribute structure.  The
