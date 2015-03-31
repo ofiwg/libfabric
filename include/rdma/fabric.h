@@ -127,15 +127,17 @@ typedef struct fid *fid_t;
 #define FI_REMOTE_WRITE		(1ULL << 21)
 
 #define FI_REMOTE_CQ_DATA	(1ULL << 24)
-#define FI_EVENT		(1ULL << 25)
+#define FI_CANCEL		(1ULL << 25)
+#define FI_MORE			(1ULL << 26)
+#define FI_PEEK			(1ULL << 27)
+#define FI_TRIGGER		(1ULL << 28)
+#define FI_FENCE		(1ULL << 29)
+
+#define FI_EVENT		(1ULL << 32)
 #define FI_COMPLETION		FI_EVENT
-#define FI_INJECT_COMPLETE	(1ULL << 26)
-#define FI_TRANSMIT_COMPLETE	(1ULL << 27)
-#define FI_CANCEL		(1ULL << 28)
-#define FI_MORE			(1ULL << 29)
-#define FI_PEEK			(1ULL << 30)
-#define FI_TRIGGER		(1ULL << 31)
-#define FI_FENCE		(1ULL << 32)
+#define FI_INJECT_COMPLETE	(1ULL << 33)
+#define FI_TRANSMIT_COMPLETE	(1ULL << 34)
+#define FI_COMMIT_COMPLETE	(1ULL << 35)
 
 
 struct fi_ioc {
