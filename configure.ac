@@ -77,5 +77,8 @@ AC_CHECK_HEADER(valgrind/memcheck.h, [],
     AC_MSG_ERROR([valgrind requested but <valgrind/memcheck.h> not found.]))
 fi
 
+AC_CHECK_FUNC([epoll_create1], [HAVE_EPOLL=1], [HAVE_EPOLL=0])
+AM_CONDITIONAL(HAVE_EPOLL, [test $HAVE_EPOLL -eq 1])
+
 AC_CONFIG_FILES([Makefile fabtests.spec])
 AC_OUTPUT
