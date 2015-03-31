@@ -11,7 +11,12 @@ TEST_TYPE=$3
 SERVER=$4
 CLIENT=$5
 
-declare -r TO=120s
+if [ $TEST_TYPE == "quick" ]; then
+	declare -r TO=30s	
+else
+	declare -r TO=120s	
+fi
+
 declare -r ssh="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
 declare -r tssh="timeout ${TO} ${ssh}"
 
@@ -31,6 +36,7 @@ simple_tests=(
     "rdm_shared_ctx"
     "rdm_tagged_search"
     "scalable_ep"
+    "cmatose"
 )
 
 quick_tests=(
@@ -48,7 +54,7 @@ quick_tests=(
     "rdm_rma -o writedata -I 100 -S 1024"
     "rdm_tagged_pingpong -I 100 -S 1024"
     "ud_pingpong -I 100 -S 1024"
-    "rc_pingpong -n 100 -s 1024"
+    "rc_pingpong -n 100 -S 1024"
 )
 
 all_tests=(
@@ -72,10 +78,8 @@ all_tests=(
 unit_tests=(
     "av_test -d 192.168.10.1 -n 1"
     "dom_test -n 2"
-    "eq_test"	)
-
-ported_tests=(
-    "cmatose" )
+    "eq_test"	
+    "size_left_test")
 
 function print_border 
 {
@@ -121,19 +125,6 @@ function run_test {
 
 		wait $p2
 		ret2=$?
-	elif [ "${type}" = 'ported' ]; then
-		echo "Running test $test_exe"
-		(set -x; $tssh $SERVER "${BIN_PATH}/fi_${test} -f $PROV -b $SERVER") &
-		p1=$!
-		sleep 1s
-		(set -x; $tssh $CLIENT "${BIN_PATH}/fi_${test} $SERVER -f $PROV -s $CLIENT") &
-		p2=$!
-
-		wait $p1
-		ret1=$?
-
-		wait $p2
-		ret2=$?
 	fi
 
 	if [ $ret1 != 0 -o $ret1 != 0 ]; then
@@ -164,13 +155,6 @@ testset=("${simple_tests[@]}")
 
 for test in "${testset[@]}"; do
 	run_test "client-server" "$test"
-done
-
-#ported tests
-testset=("${ported_tests[@]}")  
-
-for test in "${testset[@]}"; do
-	run_test "ported" "$test"
 done
 
 #iterative tests
