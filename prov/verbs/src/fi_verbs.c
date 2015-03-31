@@ -408,7 +408,8 @@ static int fi_ibv_check_tx_attr(struct fi_tx_attr *attr, struct fi_info *info)
 	}
 
 	if (attr->op_flags & ~verbs_tx_attr.op_flags) {
-		VERBS_INFO("Given tx_attr->op_flags not supported\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"Given tx_attr->op_flags not supported\n");
 		return -FI_ENODATA;
 	}
 
