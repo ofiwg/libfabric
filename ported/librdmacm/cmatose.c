@@ -65,6 +65,7 @@ enum CQ_INDEX {
 	RECV_CQ_INDEX
 };
 
+static struct cs_opts 		opts;
 static struct fid_fabric	*fabric;
 static struct fid_eq		*eq;
 static struct fid_pep		*pep;
@@ -75,7 +76,6 @@ static int			disconnects_left;
 static int			connections = 1;
 
 static struct fi_info		*hints, *info;
-static uint64_t			flags;
 
 
 static int post_recvs(struct cma_node *node)
@@ -243,7 +243,7 @@ static int alloc_nodes(void)
 
 	for (i = 0; i < connections; i++) {
 		nodes[i].id = i;
-		if (!(flags & FI_SOURCE)) {
+		if (opts.dst_addr) {
 			ret = init_node(nodes + i, info);
 			if (ret)
 				goto err;
@@ -517,23 +517,21 @@ disc:
 
 static void usage(char *progname)
 {
-	printf("usage: %s\n", progname);
-	printf("\t[-s dest_svr_addr]\n");
-	printf("\t[-b bind_address]\n");
-	printf("\t[-c connections]\n");
-	printf("\t[-C message_count]\n");
-	printf("\t[-S message_size]\n");
-	printf("\t[-p port_number]\n");
-	printf("\t[-f provider_name]\n");
+	ft_usage(progname, "Connection establishment test");
+	FT_PRINT_OPTS_USAGE("-c <connections>", "# of connections");
+	FT_PRINT_OPTS_USAGE("-C <message_count>", "Message count");
+	FT_PRINT_OPTS_USAGE("-S <message_size>", "Message size");
 	exit(1);
 }
 
 int main(int argc, char **argv)
 {
-	char *port = "9228";
-	char *node = NULL;
+	char *node, *service;
+	uint64_t flags = 0;
 	struct fi_eq_attr eq_attr;
 	int op, ret;
+
+	opts = INIT_OPTS;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -545,24 +543,12 @@ int main(int argc, char **argv)
 	hints->tx_attr->mode = hints->mode;
 	hints->rx_attr->mode = hints->mode;
 
-	flags = FI_SOURCE;
 	hints->ep_attr->max_msg_size = 100;
 	hints->tx_attr->size = 10;
 	hints->rx_attr->size = 10;
 
-	while ((op = getopt(argc, argv, "s:b:c:C:S:p:f:")) != -1) {
+	while ((op = getopt(argc, argv, "c:C:S:" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
-		case 's':
-			flags &= ~FI_SOURCE;
-			if (node)
-				usage(argv[0]);
-			node = optarg;
-			break;
-		case 'b':
-			if (node)
-				usage(argv[0]);
-			node = optarg;
-			break;
 		case 'c':
 			connections = atoi(optarg);
 			break;
@@ -573,20 +559,26 @@ int main(int argc, char **argv)
 		case 'S':
 			hints->ep_attr->max_msg_size = atoi(optarg);
 			break;
-		case 'p':
-			port = optarg;
-			break;
-		case 'f':
-			hints->fabric_attr->prov_name = strdup(optarg);
-			break;
 		default:
+			ft_parse_addr_opts(op, optarg, &opts);
+			ft_parseinfo(op, optarg, hints);
+			break;
+		case '?':
+		case 'h':
 			usage(argv[0]);
 		}
 	}
 
+	if (optind < argc)
+		opts.dst_addr = argv[optind];
+	
 	connects_left = connections;
 
-	ret = fi_getinfo(FT_FIVERSION, node, port, flags, hints, &info);
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
+	
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &info);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto exit0;
@@ -610,7 +602,7 @@ int main(int argc, char **argv)
 	if (alloc_nodes())
 		goto exit3;
 
-	ret = (flags & FI_SOURCE) ? run_server() : run_client();
+	ret = opts.dst_addr ? run_client() : run_server();
 
 	printf("test complete\n");
 	destroy_nodes();

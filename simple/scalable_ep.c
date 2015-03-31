@@ -51,14 +51,13 @@
 		}				\
 	} while (0)
 
+static struct cs_opts opts;
 static void *buf;
 static size_t buffer_size = 1024;
 static size_t transfer_size = 1000;
 static int rx_depth = 512;
 
 static struct fi_info *fi, *hints;
-static char *dst_addr, *src_addr;
-static char *src_port = "5100", *dst_port = "5100";
 
 static int ctx_cnt = 2;
 static int rx_ctx_bits = 0;
@@ -77,26 +76,6 @@ struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
 static fi_addr_t *remote_rx_addr;
-
-void print_usage(char *name, char *desc)
-{
-	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
-	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server \t\n", name);
-
-	if (desc)
-		fprintf(stderr, "\n%s\n", desc);
-
-	fprintf(stderr, "\nOptions:\n");
-	fprintf(stderr, "  -n <domain>\tdomain name\n");
-	fprintf(stderr, "  -b <src_port>\tnon default source port number\n");
-	fprintf(stderr, "  -p <dst_port>\tnon default destination port number\n");
-	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
-	fprintf(stderr, "  -s <address>\tsource address\n");
-	fprintf(stderr, "  -h\t\tdisplay this help output\n");
-
-	return;
-}
 
 static int send_msg(int size)
 {
@@ -307,7 +286,7 @@ static int run_test()
 		}
 	}
 
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		/* Post sends directly to each of the recv contexts */
 		for (i = 0; i < ctx_cnt; i++) {
 			fprintf(stdout, "Posting send for ctx: %d\n", i);
@@ -336,17 +315,9 @@ static int init_fabric(void)
 	char *node, *service;
 	int ret;
 
-	if (dst_addr) {
-		ret = ft_getsrcaddr(src_addr, src_port, hints);
-		if (ret)
-			return ret;
-		node = dst_addr;
-		service = dst_port;
-	} else {
-		node = src_addr;
-		service = src_port;
-		flags = FI_SOURCE;
-	}
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
 
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
@@ -367,7 +338,7 @@ static int init_fabric(void)
 		fi->mode |= FI_PROV_MR_ATTR;
 
 	/* Get remote address */
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		addrlen = fi->dest_addrlen;
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, fi->dest_addr, addrlen);
@@ -422,7 +393,7 @@ static int init_av(void)
 	int ret;
 	int i;
 
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		/* Get local address blob. Find the addrlen first. We set addrlen 
 		 * as 0 and fi_getname will return the actual addrlen. */
 		addrlen = 0;
@@ -511,34 +482,27 @@ out:
 int main(int argc, char **argv)
 {
 	int ret, op;
+	opts = INIT_OPTS;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "b:p:s:h" INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'b':
-			src_port = optarg;
-			break;
-		case 'p':
-			dst_port = optarg;
-			break;
-		case 's':
-			src_addr = optarg;
-			break;
 		default:
+			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints);
 			break;
 		case '?':
 		case 'h':
-			print_usage(argv[0], "An RDM client-server example with scalable endpoints.\n");
+			ft_usage(argv[0], "An RDM client-server example with scalable endpoints.\n");
 			return EXIT_FAILURE;
 		}
 	}
 
 	if (optind < argc)
-		dst_addr = argv[optind];
+		opts.dst_addr = argv[optind];
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_NAMED_RX_CTX;

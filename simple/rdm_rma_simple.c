@@ -42,13 +42,12 @@
 #include <rdma/fi_errno.h>
 #include <shared.h>
 
+static struct cs_opts opts;
 static void *buf;
 static size_t buffer_size;
 struct fi_rma_iov local, remote;
 
 static struct fi_info *fi, *hints;
-static char *dst_addr;
-static char *port = "9228";
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -67,22 +66,6 @@ struct fi_context fi_ctx_av;
 
 static uint64_t user_defined_key = 45678;
 static char * welcome_text = "Hello from Client!";
-
-void print_usage(char *name, char *desc)
-{
-	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
-	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server\n", name);
-
-	if (desc)			
-		fprintf(stderr, "\n%s\n", desc);
-
-	fprintf(stderr, "\nOptions:\n");
-	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
-	fprintf(stderr, "  -h\t\tdisplay this help output\n");
-									
-	return;
-}
 
 static int write_data(size_t size)
 {
@@ -216,24 +199,21 @@ static int bind_ep_res(void)
 
 static int init_fabric(void)
 {
-	char *node;
+	char *node, *service;
 	uint64_t flags = 0;
 	int ret;
 
-	if (dst_addr) {
-		node = dst_addr;
-	} else {
-		node = NULL;
-		flags = FI_SOURCE;
-	}
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
 
-	ret = fi_getinfo(FT_FIVERSION, node, port, flags, hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		addrlen = fi->dest_addrlen;
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, fi->dest_addr, addrlen);
@@ -259,7 +239,7 @@ static int init_fabric(void)
 	if (ret)
 		goto err4;
 	
-	if(dst_addr) {
+	if(opts.dst_addr) {
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
 				&fi_ctx_av);
 		if (ret != 1) {
@@ -288,7 +268,7 @@ static int run_test(void)
 	if (ret)
 		return ret;
 
-	if (dst_addr) {	
+	if (opts.dst_addr) {	
 		/* Execute RMA write operation from Client */
 		fprintf(stdout, "RMA write to server\n");
 		sprintf(buf, "%s", welcome_text);
@@ -329,20 +309,21 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:h")) != -1) {
+	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'f':
-			hints->fabric_attr->prov_name = strdup(optarg);
+		default:
+			ft_parse_addr_opts(op, optarg, &opts);
+			ft_parseinfo(op, optarg, hints);
 			break;
 		case '?':
 		case 'h':
-			print_usage(argv[0], "A simple RDM client-sever RMA example.");
+			ft_usage(argv[0], "A simple RDM client-sever RMA example.");
 			return EXIT_FAILURE;
 		}
 	}
 
 	if (optind < argc)
-		dst_addr = argv[optind];
+		opts.dst_addr = argv[optind];
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_RMA;
