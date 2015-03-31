@@ -527,8 +527,6 @@ struct psmx_env {
 	int name_server;
 	int am_msg;
 	int tagged_rma;
-	int debug;
-	int warning;
 	char *uuid;
 };
 
