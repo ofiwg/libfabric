@@ -141,9 +141,9 @@ struct fi_ibv_msg_ep {
 	struct fi_ibv_eq	*eq;
 	struct fi_ibv_cq	*rcq;
 	struct fi_ibv_cq	*scq;
+	uint64_t		tx_op_flags;
+	uint64_t		ep_flags;
 	uint32_t		inline_size;
-	uint32_t		tx_op_flags;
-	uint32_t		ep_flags;
 };
 
 static const char *local_node = "localhost";
