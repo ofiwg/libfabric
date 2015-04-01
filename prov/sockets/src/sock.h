@@ -958,6 +958,7 @@ void sock_comm_buffer_finalize(struct sock_conn *conn);
 ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len);
 ssize_t sock_comm_recv(struct sock_conn *conn, void *buf, size_t len);
 ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len);
+ssize_t sock_comm_data_avail(struct sock_conn *conn);
 ssize_t sock_comm_flush(struct sock_conn *conn);
 
 #endif

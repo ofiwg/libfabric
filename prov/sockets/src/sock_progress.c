@@ -2036,7 +2036,7 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 					      conn->sock_fd);
 				return ret;
 			}
-			data_avail = (ret == 1);
+			data_avail = (ret == 1 && sock_comm_data_avail(conn));
 		}
 		
 		if (data_avail && conn->rx_pe_entry == NULL &&
