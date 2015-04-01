@@ -200,8 +200,8 @@ enum fi_resource_mgmt {
 #define FI_ORDER_SAR		(1 << 6)
 #define FI_ORDER_SAW		(1 << 7)
 #define FI_ORDER_SAS		(1 << 8)
-#define FI_ORDER_RECV		(1 << 9)
-#define FI_ORDER_STRICT		0xFFFFFFFF
+#define FI_ORDER_STRICT		0x1FF
+#define FI_ORDER_DATA		(1 << 16)
 
 enum fi_ep_type {
 	FI_EP_UNSPEC,
@@ -267,8 +267,6 @@ struct fi_ep_attr {
 	size_t			max_order_war_size;
 	size_t			max_order_waw_size;
 	uint64_t		mem_tag_format;
-	uint64_t		msg_order;
-	uint64_t		comp_order;
 	size_t			tx_ctx_cnt;
 	size_t			rx_ctx_cnt;
 };
