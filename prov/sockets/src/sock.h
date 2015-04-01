@@ -696,7 +696,7 @@ struct sock_pe {
 	int num_free_entries;
 	struct sock_pe_entry pe_table[SOCK_PE_MAX_ENTRIES];
 	fastlock_t lock;
-	fastlock_t list_lock;
+	pthread_mutex_t list_lock;
 
 	struct dlist_entry free_list;
 	struct dlist_entry busy_list;
