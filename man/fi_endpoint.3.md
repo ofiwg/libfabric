@@ -1087,7 +1087,9 @@ value of an endpoint.
   be reported to the initiator, such as remote buffer overruns.
 
 *FI_COMMIT_COMPLETE*
-: This flag is defined for future use.
+: Indicates that a completion should not be generated until an operation
+  has successfully been processed at the target, with the data placed
+  into the specified destination buffer.
 
 # NOTES
 
