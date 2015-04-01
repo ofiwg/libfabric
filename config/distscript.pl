@@ -50,6 +50,28 @@ sub subst {
 }
 
 ###############################################################################
+# Check to see that the source tree is clean / has no local changes
+###############################################################################
+
+if (-d ".git") {
+    open(GIT_STATUS, "git status --porcelain|") ||
+        die "Can't run git status to verify that the source tree is clean";
+    my $clean = 1;
+    while (<GIT_STATUS>) {
+        chomp;
+        if ($_ =~ m/^([^?! ].|.[^?! ]) (.+)$/) {
+            print "*** WARNING: found modified file in source tree: $1\n";
+            $clean = 0;
+        }
+    }
+    close(GIT_STATUS);
+    if (!$clean) {
+        print "*** WARNING: Source tree is not clean.\n";
+        die "Refusing to make tarball";
+    }
+}
+
+###############################################################################
 # Change into the new distribution tree
 ###############################################################################
 
