@@ -351,7 +351,7 @@ static int
 usdf_pep_reject(struct fid_pep *pep, fi_connreq_t connreq,
 		const void *param, size_t paramlen)
 {
-	return 0;
+	return -FI_ENOSYS;
 }
 
 static void
