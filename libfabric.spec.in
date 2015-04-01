@@ -61,5 +61,5 @@ rm -rf %{buildroot}
 %{_mandir}/man7/*
 
 %changelog
-* Mon Feb 16 2015 Open Fabrics Interfaces Working Group <ofiwg@lists.openfabrics.org> 1.0.0
-- Release 1.0.0rc2
+* Tue Mar 31 2015 Open Fabrics Interfaces Working Group <ofiwg@lists.openfabrics.org> 1.0.0
+- Release 1.0.0rc3
