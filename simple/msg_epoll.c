@@ -42,12 +42,10 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
+static struct cs_opts opts;
 static void *buf;
 static size_t buffer_size = 1024;
 static int rx_depth = 512;
-
-static char *dst_addr;
-static char *port = "9228";
 
 static struct fi_info *hints;
 static struct fid_fabric *fab;
@@ -58,22 +56,6 @@ static struct fid_eq *cmeq;
 static struct fid_cq *rcq, *scq;
 static int epfd;
 static struct fid_mr *mr;
-
-void print_usage(char *name, char *desc)
-{
-	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "  %s [OPTIONS]\t\tstart server\n", name);
-	fprintf(stderr, "  %s [OPTIONS] <host>\tconnect to server\n", name);
-
-	if (desc)
-		fprintf(stderr, "\n%s\n", desc);
-
-	fprintf(stderr, "\nOptions:\n");
-	fprintf(stderr, "  -f <provider>\tspecific provider name eg IP, verbs\n");
-	fprintf(stderr, "  -h\t\tdisplay this help output\n");
-
-	return;
-}
 
 static int alloc_cm_res(void)
 {
@@ -238,7 +220,7 @@ static int server_listen(void)
 	int ret;
 
 	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, NULL, port, FI_SOURCE, hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, NULL, opts.src_port, FI_SOURCE, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -367,7 +349,7 @@ static int client_connect(void)
 	int ret;
 
 	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, dst_addr, port, 0, hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto err0;
@@ -443,7 +425,7 @@ static int send_recv()
 	struct epoll_event event;
 	int ret;
 
-	if (dst_addr) {
+	if (opts.dst_addr) {
 		/* Client */
 		fprintf(stdout, "Posting a send...\n");
 		sprintf(buf, "Hello World!");
@@ -513,24 +495,26 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 
+	opts = INIT_OPTS;
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:h")) != -1) {
+	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
-		case 'f':
-			hints->fabric_attr->prov_name = strdup(optarg);
+		default:
+			ft_parse_addr_opts(op, optarg, &opts);
+			ft_parseinfo(op, optarg, hints);
 			break;
 		case '?':
 		case 'h':
-			print_usage(argv[0], "A simple MSG client-sever example that demonstrates one possible usage of the underlying cq wait objects.");
+			ft_usage(argv[0], "A simple MSG client-sever example that demonstrates one possible usage of the underlying cq wait objects.");
 			return EXIT_FAILURE;
 		}
 	}
 
 	if (optind < argc)
-		dst_addr = argv[optind];
+		opts.dst_addr = argv[optind];
 
 	hints->ep_attr->type	= FI_EP_MSG;
 	hints->caps		= FI_MSG;
@@ -538,13 +522,13 @@ int main(int argc, char **argv)
 	hints->addr_format	= FI_SOCKADDR;
 
 	/* Fabric and connection setup */
-	if (!dst_addr) {
+	if (!opts.dst_addr) {
 		ret = server_listen();
 		if (ret)
 			return ret;
 	}
 
-	ret = dst_addr ? client_connect() : server_connect();
+	ret = opts.dst_addr ? client_connect() : server_connect();
 	if (ret) {
 		return ret;
 	}
