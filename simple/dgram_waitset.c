@@ -441,7 +441,7 @@ int main(int argc, char **argv)
 
 	ret = init_fabric();
 	if (ret)
-		return ret;
+		return -ret;
 
 	ret = init_av();
 	if (ret)

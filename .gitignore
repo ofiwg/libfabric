@@ -26,3 +26,5 @@ complex/fabtest
 
 simple/fi_*
 unit/fi_*
+streaming/fi_*
+pingpong/fi_*

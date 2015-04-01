@@ -334,5 +334,5 @@ int main(int argc, char **argv)
 	ret = run_test();
 	fi_freeinfo(hints);
 	fi_freeinfo(fi);
-	return ret;
+	return -ret;
 }

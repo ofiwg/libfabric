@@ -611,14 +611,9 @@ int main(int argc, char **argv)
 	hints->caps = FI_MSG | FI_MULTI_RECV;
 	hints->mode = FI_CONTEXT;
 
-	if (opts.prhints) {
-		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
-		ret = EXIT_SUCCESS;
-	} else {
-		ret = run();
-	}
+	ret = run();
 
 	fi_freeinfo(hints);
 	fi_freeinfo(fi);
-	return ret;
+	return -ret;
 }

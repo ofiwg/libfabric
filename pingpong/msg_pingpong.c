@@ -1,8 +1,7 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
  *
- * This software is available to you under the BSD license
- * below:
+ * This software is available to you under the BSD license below:
  *
  *     Redistribution and use in source and binary forms, with or
  *     without modification, are permitted provided that the following
@@ -39,7 +38,6 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
-#include <rdma/fi_tagged.h>
 
 #include "shared.h"
 
@@ -51,41 +49,15 @@ static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
 
-static struct fi_info *fi, *hints;
+static struct fi_info *hints;
 
 static struct fid_fabric *fab;
+static struct fid_pep *pep;
 static struct fid_domain *dom;
 static struct fid_ep *ep;
+static struct fid_eq *cmeq;
 static struct fid_cq *rcq, *scq;
-static struct fid_av *av;
 static struct fid_mr *mr;
-static void *local_addr, *remote_addr;
-static size_t addrlen = 0;
-static fi_addr_t remote_fi_addr;
-struct fi_context fi_ctx_tsend;
-struct fi_context fi_ctx_trecv;
-struct fi_context fi_ctx_recv;
-struct fi_context fi_ctx_av;
-
-static uint64_t tag_data = 0;
-static uint64_t tag_control = 0x12345678;
-
-int wait_for_completion_tagged(struct fid_cq *cq, int num_completions)
-{
-	int ret;
-	struct fi_cq_tagged_entry comp;
-
-	while (num_completions > 0) {
-		ret = fi_cq_read(cq, &comp, 1);
-		if (ret > 0) {
-			num_completions--;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			FT_PRINTERR("fi_cq_read", ret);
-			return ret;
-		}
-	}
-	return 0;
-}
 
 static int send_xfer(int size)
 {
@@ -108,17 +80,16 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data, &fi_ctx_tsend);
+	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), 0, NULL);
 	if (ret)
-		FT_PRINTERR("fi_tsend", ret);
+		FT_PRINTERR("fi_send", ret);
 
 	return ret;
 }
 
 static int recv_xfer(int size)
 {
-	struct fi_cq_tagged_entry comp;
+	struct fi_cq_entry comp;
 	int ret;
 
 	do {
@@ -133,43 +104,10 @@ static int recv_xfer(int size)
 		}
 	} while (ret == -FI_EAGAIN);
 
-	/* Posting recv for next send. Hence tag_data + 1 */
-	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data + 1, 0, &fi_ctx_trecv);
+
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
-		FT_PRINTERR("fi_trecv", ret);
-
-	return ret;
-}
-
-static int send_msg(int size)
-{
-	int ret;
-
-	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			tag_control, &fi_ctx_tsend);
-	if (ret) {
-		FT_PRINTERR("fi_tsend", ret);
-		return ret;
-	}
-
-	ret = wait_for_completion_tagged(scq, 1);
-
-	return ret;
-}
-
-static int recv_msg(void)
-{
-	int ret;
-
-	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-		       tag_control, 0, &fi_ctx_trecv);
-	if (ret) {
-		FT_PRINTERR("fi_trecv", ret);
-		return ret;
-	}
-
-	ret = wait_for_completion_tagged(rcq, 1);
+		FT_PRINTERR("fi_recv", ret);
 
 	return ret;
 }
@@ -178,44 +116,39 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = wait_for_completion_tagged(scq, max_credits - credits);
+	ret = wait_for_completion(scq, max_credits - credits);
 	if (ret) {
 		return ret;
 	}
 	credits = max_credits;
 
 	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
-	if (ret)
+	if (ret) {
 		return ret;
+	}
 
-	ret = opts.dst_addr ? recv_xfer(16) : send_xfer(16);
-
-	tag_data++;
-
-	return ret;
+	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
 }
 
-static int run_test(void)
+static int run_test()
 {
 	int ret, i;
 
 	ret = sync_test();
 	if (ret)
-		goto out;
+		return ret;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < opts.iterations; i++) {
 		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
 				 recv_xfer(opts.transfer_size);
 		if (ret)
-			goto out;
+			return ret;
 
 		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
 				 send_xfer(opts.transfer_size);
 		if (ret)
-			goto out;
-
-		tag_data++;
+			return ret;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
@@ -224,16 +157,31 @@ static int run_test(void)
 	else
 		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
 
-	ret = 0;
+	return 0;
+}
 
-out:
+static void free_lres(void)
+{
+	fi_close(&cmeq->fid);
+}
+
+static int alloc_cm_res(void)
+{
+	struct fi_eq_attr cm_attr;
+	int ret;
+
+	memset(&cm_attr, 0, sizeof cm_attr);
+	cm_attr.wait_obj = FI_WAIT_FD;
+	ret = fi_eq_open(fab, &cm_attr, &cmeq, NULL);
+	if (ret)
+		FT_PRINTERR("fi_eq_open", ret);
+
 	return ret;
 }
 
 static void free_ep_res(void)
 {
 	fi_close(&ep->fid);
-	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
 	fi_close(&scq->fid);
@@ -243,7 +191,6 @@ static void free_ep_res(void)
 static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
-	struct fi_av_attr av_attr;
 	int ret;
 
 	buffer_size = opts.user_options & FT_OPT_SIZE ?
@@ -276,28 +223,20 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err3;
 	}
 
-	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = fi->domain_attr->av_type ?
-			fi->domain_attr->av_type : FI_AV_MAP;
-	av_attr.count = 1;
-	av_attr.name = NULL;
-
-	ret = fi_av_open(dom, &av_attr, &av, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_av_open", ret);
-		goto err4;
+	if (!cmeq) {
+		ret = alloc_cm_res();
+		if (ret)
+			goto err4;
 	}
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
-		goto err5;
+		goto err4;
 	}
 
 	return 0;
 
-err5:
-	fi_close(&av->fid);
 err4:
 	fi_close(&mr->fid);
 err3:
@@ -313,6 +252,12 @@ static int bind_ep_res(void)
 {
 	int ret;
 
+	ret = fi_ep_bind(ep, &cmeq->fid, 0);
+	if (ret) {
+		FT_PRINTERR("fi_ep_bind", ret);
+		return ret;
+	}
+
 	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
@@ -325,12 +270,6 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &av->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
 	ret = fi_enable(ep);
 	if (ret) {
 		FT_PRINTERR("fi_enable", ret);
@@ -338,50 +277,23 @@ static int bind_ep_res(void)
 	}
 
 	/* Post the first recv buffer */
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
-	if (ret) {
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
+	if (ret)
 		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
 
 	return ret;
 }
 
-static int init_fabric(void)
+static int server_listen(void)
 {
 	struct fi_info *fi;
-	uint64_t flags = 0;
-	char *node, *service;
 	int ret;
 
-	if (opts.dst_addr) {
-		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
-		if (ret)
-			return ret;
-		node = opts.dst_addr;
-		service = opts.dst_port;
-	} else {
-		node = opts.src_addr;
-		service = opts.src_port;
-		flags = FI_SOURCE;
-	}
-
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE,
+			hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
-	}
-
-	/* We use provider MR attributes and direct address (no offsets) 
-	 * for RMA calls */
-	if (!(fi->mode & FI_PROV_MR_ATTR))
-		fi->mode |= FI_PROV_MR_ATTR;
-
-	/* Get remote address */
-	if (opts.dst_addr) {
-		addrlen = fi->dest_addrlen;
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, fi->dest_addr, addrlen);
 	}
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
@@ -390,10 +302,143 @@ static int init_fabric(void)
 		goto err0;
 	}
 
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_passive_ep(fab, fi, &pep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_passive_ep", ret);
+		goto err1;
+	}
+
+	ret = alloc_cm_res();
+	if (ret)
+		goto err2;
+
+	ret = fi_pep_bind(pep, &cmeq->fid, 0);
+	if (ret) {
+		FT_PRINTERR("fi_pep_bind", ret);
+		goto err3;
+	}
+
+	ret = fi_listen(pep);
+	if (ret) {
+		FT_PRINTERR("fi_listen", ret);
+		goto err3;
+	}
+
+	fi_freeinfo(fi);
+	return 0;
+err3:
+	free_lres();
+err2:
+	fi_close(&pep->fid);
+err1:
+	fi_close(&fab->fid);
+err0:
+	fi_freeinfo(fi);
+	return ret;
+}
+
+static int server_connect(void)
+{
+	struct fi_eq_cm_entry entry;
+	uint32_t event;
+	struct fi_info *info = NULL;
+	ssize_t rd;
+	int ret;
+
+	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	if (rd != sizeof entry) {
+		FT_PRINTERR("fi_eq_sread", rd);
+		return (int) rd;
+	}
+
+	info = entry.info;
+	if (event != FI_CONNREQ) {
+		fprintf(stderr, "Unexpected CM event %d\n", event);
+		ret = -FI_EOTHER;
+		goto err1;
+	}
+
+	ret = fi_domain(fab, info, &dom, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
+	}
+
+	ret = alloc_ep_res(info);
+	if (ret)
+		 goto err1;
+
+	ret = bind_ep_res();
+	if (ret)
+		goto err3;
+
+	ret = fi_accept(ep, NULL, 0);
+	if (ret) {
+		FT_PRINTERR("fi_accept", ret);
+		goto err3;
+	}
+
+	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	if (rd != sizeof entry) {
+		FT_PRINTERR("fi_eq_sread", rd);
+		goto err3;
+	}
+
+	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
+		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
+			event, entry.fid, ep);
+		ret = -FI_EOTHER;
+		goto err3;
+	}
+
+	fi_close(&pep->fid);
+
+	fi_freeinfo(info);
+	return 0;
+
+err3:
+	free_ep_res();
+err1:
+	fi_reject(pep, info->connreq, NULL, 0);
+	fi_freeinfo(info);
+	return ret;
+}
+
+static int client_connect(void)
+{
+	struct fi_eq_cm_entry entry;
+	struct fi_eq_err_entry err;
+	uint32_t event;
+	struct fi_info *fi;
+	ssize_t rd;
+	int ret;
+
+	ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
+	if (ret)
+		return ret;
+
+	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints, &fi);
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
+		goto err0;
+	}
+
+	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_fabric", ret);
+		goto err1;
+	}
+
+	ret = fi_domain(fab, fi, &dom, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_domain", ret);
+		goto err2;
+	}
+
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		goto err3;
 	}
 
 	ret = alloc_ep_res(fi);
@@ -402,89 +447,49 @@ static int init_fabric(void)
 
 	ret = bind_ep_res();
 	if (ret)
-		goto err4;
+		goto err5;
 
+	ret = fi_connect(ep, fi->dest_addr, NULL, 0);
+	if (ret) {
+		FT_PRINTERR("fi_connect", ret);
+		goto err5;
+	}
+
+	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	if (rd != sizeof entry) {
+		if (rd == -FI_EAVAIL) {
+			rd = fi_eq_readerr(cmeq, &err, 0);
+			if (rd != sizeof(err)) {
+				FT_PRINTERR("fi_eq_sread", rd);
+			} else {
+				fprintf(stderr, "EQ report error %d %s\n", err.err,
+						fi_strerror(err.err));
+			}
+		} else {
+			FT_PRINTERR("fi_eq_sread", rd);
+		}
+		return (int) rd;
+	}
+
+	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
+		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
+			event, entry.fid, ep);
+		ret = -FI_EOTHER;
+		goto err5;
+	}
+
+	fi_freeinfo(fi);
 	return 0;
 
-err4:
+err5:
 	free_ep_res();
 err3:
 	fi_close(&dom->fid);
-err1:
+err2:
 	fi_close(&fab->fid);
+err1:
+	fi_freeinfo(fi);
 err0:
-	return ret;
-}
-
-static int init_av(void)
-{
-	int ret;
-
-	if (opts.dst_addr) {
-		/* Get local address blob. Find the addrlen first. We set addrlen 
-		 * as 0 and fi_getname will return the actual addrlen. */
-		addrlen = 0;
-		ret = fi_getname(&ep->fid, local_addr, &addrlen);
-		if (ret != -FI_ETOOSMALL) {
-			FT_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		local_addr = malloc(addrlen);
-		ret = fi_getname(&ep->fid, local_addr, &addrlen);
-		if (ret) {
-			FT_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
-				&fi_ctx_av);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-
-		/* Send local addr size and local addr */
-		memcpy(buf, &addrlen, sizeof(size_t));
-		memcpy(buf + sizeof(size_t), local_addr, addrlen);
-		ret = send_msg(sizeof(size_t) + addrlen);
-		if (ret)
-			return ret;
-
-		/* Receive ACK from server */
-		ret = recv_msg();
-		if (ret)
-			return ret;
-
-	} else {
-		/* Post a recv to get the remote address */
-		ret = recv_msg();
-		if (ret)
-			return ret;
-
-		memcpy(&addrlen, buf, sizeof(size_t));
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
-
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
-				&fi_ctx_av);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-
-		/* Send ACK */
-		ret = send_msg(16);
-		if (ret)
-			return ret;
-	}
-
-	/* Post first recv */
-	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data, 0, &fi_ctx_trecv);
-	if (ret)
-		FT_PRINTERR("fi_trecv", ret);
-
 	return ret;
 }
 
@@ -492,13 +497,16 @@ static int run(void)
 {
 	int i, ret = 0;
 
-	ret = init_fabric();
-	if (ret)
-		return ret;
+	if (!opts.dst_addr) {
+		ret = server_listen();
+		if (ret)
+			return ret;
+	}
 
-	ret = init_av();
-	if (ret)
-		goto out;
+	ret = opts.dst_addr ? client_connect() : server_connect();
+	if (ret) {
+		return ret;
+	}
 
 	if (!(opts.user_options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
@@ -517,11 +525,14 @@ static int run(void)
 			goto out;
 	}
 
-	wait_for_completion_tagged(scq, max_credits - credits);
+	ret = wait_for_completion(scq, max_credits - credits);
 	/* Finalize before closing ep */
-	ft_finalize(ep, scq, rcq, remote_fi_addr);
+	ft_finalize(ep, scq, rcq, FI_ADDR_UNSPEC);
 out:
+	fi_shutdown(ep, 0);
 	free_ep_res();
+	if (!opts.dst_addr)
+		free_lres();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
 	return ret;
@@ -544,7 +555,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Ping pong client and server using tagged messages.");
+			ft_csusage(argv[0], "Ping pong client and server using message endpoints.");
 			return EXIT_FAILURE;
 		}
 	}
@@ -552,17 +563,13 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG | FI_TAGGED;
-	hints->mode = FI_CONTEXT;
+	hints->ep_attr->type = FI_EP_MSG;
+	hints->caps = FI_MSG;
+	hints->mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->addr_format = FI_SOCKADDR;
 
-	if (opts.prhints) {
-		printf("%s", fi_tostr(hints, FI_TYPE_INFO));
-		ret = EXIT_SUCCESS;
-	} else {
-		ret = run();
-	}
+	ret = run();
+
 	fi_freeinfo(hints);
-	fi_freeinfo(fi);
-	return ret;
+	return -ret;
 }
