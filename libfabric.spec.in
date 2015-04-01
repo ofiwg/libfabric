@@ -8,7 +8,7 @@ Url: http://www.github.com/ofiwg/libfabric
 Source: http://www.openfabrics.org/downloads/fabrics/%{name}-%{version}.tar.bz2
 Prefix: ${_prefix}
 
-BuildRequires: libnl3-devel
+BuildRequires: libnl-devel
 BuildRequires: librdmacm-devel
 BuildRequires: libibverbs-devel
 BuildRequires: infinipath-psm-devel
