@@ -89,16 +89,16 @@ static int teardown_ep_fixture(struct fid_ep *ep)
 		}
 	}
 	if (wcq != NULL) {
-		ret = fi_close(&rcq->fid);
+		ret = fi_close(&wcq->fid);
 		if (ret != 0) {
-			printf("fi_close(rcq) %s\n", fi_strerror(-ret));
+			printf("fi_close(wcq) %s\n", fi_strerror(-ret));
 			teardown_ret = ret;
 		}
 	}
 	if (rcq != NULL) {
-		ret = fi_close(&wcq->fid);
+		ret = fi_close(&rcq->fid);
 		if (ret != 0) {
-			printf("fi_close(wcq) %s\n", fi_strerror(-ret));
+			printf("fi_close(rcq) %s\n", fi_strerror(-ret));
 			teardown_ret = ret;
 		}
 	}
@@ -373,6 +373,7 @@ int main(int argc, char **argv)
 	}
 
 	hints->mode = ~0;
+	hints->ep_attr->type = FI_EP_RDM;
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	if (ret != 0) {

@@ -6,7 +6,6 @@ bin_PROGRAMS = \
 	simple/fi_msg\
 	simple/fi_msg_pingpong \
 	simple/fi_msg_rma \
-	simple/fi_msg_epoll \
 	simple/fi_rdm \
 	simple/fi_rdm_rma_simple \
 	simple/fi_dgram \
@@ -31,6 +30,10 @@ bin_PROGRAMS = \
 	ported/libibverbs/fi_rc_pingpong \
 	ported/librdmacm/fi_cmatose \
 	complex/fabtest
+
+if HAVE_EPOLL
+bin_PROGRAMS += simple/fi_msg_epoll
+endif
 
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = common/shared.c
