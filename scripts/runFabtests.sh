@@ -12,7 +12,7 @@ SERVER=$4
 CLIENT=$5
 
 if [ $TEST_TYPE == "quick" ]; then
-	declare -r TO=30s	
+	declare -r TO=60s	
 else
 	declare -r TO=120s	
 fi
@@ -114,7 +114,7 @@ function run_test {
 
 	elif [ "${type}" = 'client-server' ]; then
 		echo "Running test $test_exe"
-		(set -x; $tssh $SERVER "${BIN_PATH}/fi_${test} -f $PROV") &
+		(set -x; $tssh $SERVER "${BIN_PATH}/fi_${test} -f $PROV -s $SERVER") &
 		p1=$!
 		sleep 1s
 		(set -x; $tssh $CLIENT "${BIN_PATH}/fi_${test} $SERVER -f $PROV") &
