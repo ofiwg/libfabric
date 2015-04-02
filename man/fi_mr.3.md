@@ -22,7 +22,7 @@ fi_mr_key
 : Return the remote key needed to access a registered memory region
 
 fi_mr_bind
-: Associate a registered memory region with a completion queue or counter.
+: Associate a registered memory region with a completion counter.
 
 # SYNOPSIS
 
