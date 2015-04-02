@@ -151,7 +151,7 @@ function run_test {
 		CO=$(cat $c_outp)
 	fi
 
-	if [ "$ret1" == "61" -o "$ret1" == "61" ]; then
+	if [ "$ret1" == "61" -a "$ret1" == "61" ]; then
 		printf "%-50s%10s\n" "$test_exe:" "Notrun"
 		skip_count+=1
 	
@@ -201,7 +201,11 @@ print_border
 
 printf "# %-50s%10d\n" "Total Pass" $pass_count
 printf "# %-50s%10d\n" "Total Fail" $fail_count
-printf "# %-50s%10.2f\n" "Percentage of Pass" `echo "scale=2; $pass_count * 100 / $total" | bc`
+
+if [[ "$total" > "0" ]]; then
+	printf "# %-50s%10.2f\n" "Percentage of Pass" `echo "scale=2; $pass_count * 100 / $total" | bc`
+fi
+
 print_border
 
 cleanup

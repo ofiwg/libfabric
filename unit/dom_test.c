@@ -167,5 +167,5 @@ err:
 			       fi_strerror(-ret));
 		}
 	}
-	exit(EXIT_FAILURE);
+	return -ret;
 }

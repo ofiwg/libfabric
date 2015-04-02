@@ -61,7 +61,7 @@ static size_t max_msg_size = 0;
 static struct fi_info *hints;
 static fi_addr_t remote_fi_addr;
 
-static struct fi_info *fi;
+static struct fi_info *fi = NULL;
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_ep *ep;
@@ -372,8 +372,8 @@ static int common_setup(void)
 		goto err5;
 	}
 
-	if (hints->src_addr)
-		free(hints->src_addr);
+	free(hints->src_addr);
+
 	return 0;
 
 err5:
@@ -383,8 +383,8 @@ err4:
 err2:
 	fi_close(&fab->fid);
 err1:
-	if (hints->src_addr)
-		free(hints->src_addr);
+	free(hints->src_addr);
+
 	return ret;
 }
 
@@ -394,45 +394,39 @@ static int client_connect(void)
 
 	ret = common_setup();
 	if (ret != 0)
-		goto err;
+		return ret;
 
 	ret = ft_getdestaddr(opts.dst_addr, opts.dst_port, hints);
 	if (ret != 0)
-		goto err;
+		goto err1;
 
 	ret = fi_av_insert(av, hints->dest_addr, 1, &remote_fi_addr, 0, NULL);
 	if (ret != 1) {
 		FT_PRINTERR("fi_av_insert", ret);
-		goto err;
+		goto err2;
 	}
 
 	// send initial message to server with our local address
 	memcpy(buf_ptr, fi->src_addr, fi->src_addrlen);
 	ret = send_xfer(fi->src_addrlen);
 	if (ret != 0)
-		goto err;
+		goto err2;
 
 	// wait for reply to know server is ready
 	ret = recv_xfer(4);
 	if (ret != 0)
-		goto err;
+		goto err2;
 
 	return 0;
 
-err:
+err2:
+	free(hints->dest_addr);
+err1:
 	free_ep_res();
-	if (av) {
-		fi_close(&av->fid);
-	}
-	if (ep) {
-		fi_close(&ep->fid);
-	}
-	if (dom) {
-		fi_close(&dom->fid);
-	}
-	if (fab) {
-		fi_close(&fab->fid);
-	}
+	fi_close(&av->fid);
+	fi_close(&dom->fid);
+	fi_close(&fab->fid);
+
 	return ret;
 }
 
@@ -479,8 +473,12 @@ static int server_connect(void)
 
 err:
 	free_ep_res();
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	if (dom)
+		fi_close(&dom->fid);
+
+	if (fab)
+		fi_close(&fab->fid);
+
 	return ret;
 }
 

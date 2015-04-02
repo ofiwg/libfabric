@@ -378,7 +378,7 @@ int main(int argc, char **argv)
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	if (ret != 0) {
 		printf("fi_getinfo %s\n", fi_strerror(-ret));
-		exit(1);
+		exit(-ret);
 	}
 
 	DEBUG("using provider \"%s\" and fabric \"%s\"\n",
