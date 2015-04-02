@@ -1765,7 +1765,7 @@ static int sock_pe_progress_rx_pe_entry(struct sock_pe *pe,
 	}
 	
 out:
-	if (pe_entry->is_complete) {
+	if (pe_entry->is_complete && !pe_entry->pe.rx.pending_send) {
 		sock_pe_release_entry(pe, pe_entry);
 		SOCK_LOG_INFO("[%p] RX done\n", pe_entry);
 	}
