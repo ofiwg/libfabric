@@ -51,21 +51,21 @@ simple_tests=(
 )
 
 quick_tests=(
-	"msg_pingpong -I 100 -S 1024"
-	"msg_rma -o write -I 100 -S 1024"
-	"msg_rma -o read -I 100 -S 1024"
-	"msg_rma -o writedata -I 100 -S 1024"
-	"rdm_atomic -I 100 -S 1024 -o all"
-	"rdm_cntr_pingpong -I 100 -S 1024"
-	"rdm_inject_pingpong -I 100 -S 128"
-	"rdm_multi_recv -I 100 -S 1024"
-	"rdm_pingpong -I 100 -S 1024"
-	"rdm_rma -o write -I 100 -S 1024"
-	"rdm_rma -o read -I 100 -S 1024"
-	"rdm_rma -o writedata -I 100 -S 1024"
-	"rdm_tagged_pingpong -I 100 -S 1024"
-	"ud_pingpong -I 100 -S 1024"
-	"rc_pingpong -n 100 -S 1024"
+	"msg_pingpong -I 5"
+	"msg_rma -o write -I 5"
+	"msg_rma -o read -I 5"
+	"msg_rma -o writedata -I 5"
+	"rdm_atomic -I 5 -o all"
+	"rdm_cntr_pingpong -I 5"
+	"rdm_inject_pingpong -I 5"
+	"rdm_multi_recv -I 5"
+	"rdm_pingpong -I 5"
+	"rdm_rma -o write -I 5"
+	"rdm_rma -o read -I 5"
+	"rdm_rma -o writedata -I 5"
+	"rdm_tagged_pingpong -I 5"
+	"ud_pingpong -I 5"
+	"rc_pingpong -n 5"
 )
 
 all_tests=(
