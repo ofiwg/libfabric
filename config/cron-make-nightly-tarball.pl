@@ -157,8 +157,19 @@ verbose("*** Running autogen.sh...\n");
 doit(0, "./autogen.sh", "autogen");
 verbose("*** Running configure...\n");
 doit(0, "./configure", "configure");
+
+# Note that distscript.pl, invoked by "make dist", checks for a dirty
+# git tree.  We have to tell it that a modified configure.ac is ok.
+# So take the sha1sum of configure.ac and put it in a magic
+# environment variable.
+my $sha1 = `sha1sum configure.ac`;
+chomp($sha1);
+$ENV{'LIBFABRIC_DISTSCRIPT_SHA1_configure.ac'} = $sha1;
+
 verbose("*** Running make distcheck...\n");
 doit(0, "AM_MAKEFLAGS=-j32 make distcheck", "distcheck");
+
+delete $ENV{'LIBFABRIC_DISTSCRIPT_SHA1_configure.ac'};
 
 # Restore configure.ac
 verbose("*** Restoring configure.ac...\n");
