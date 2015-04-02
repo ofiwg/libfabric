@@ -35,6 +35,8 @@ if HAVE_EPOLL
 bin_PROGRAMS += simple/fi_msg_epoll
 endif
 
+bin_SCRIPTS=scripts/runfabtests.sh
+
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = common/shared.c
 
