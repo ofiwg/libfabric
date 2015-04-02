@@ -104,24 +104,6 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			rma_addr += mr->offset;
 			memcpy(rma_addr, src, len);
 			if (eom) {
-				if (mr->cq) {
-					/* TODO: report the addr/len of the whole write */
-					event = psmx_cq_create_event(
-							mr->cq,
-							0, /* context */
-							rma_addr,
-							FI_REMOTE_WRITE | FI_RMA | (has_data ? FI_REMOTE_CQ_DATA : 0),
-							rma_len,
-							has_data ? args[4].u64 : 0,
-							0, /* tag */
-							0, /* olen */
-							0);
-
-					if (event)
-						psmx_cq_enqueue_event(mr->cq, event);
-					else
-						err = -FI_ENOMEM;
-				}
 				if (mr->domain->rma_ep->recv_cq && has_data) {
 					/* TODO: report the addr/len of the whole write */
 					event = psmx_cq_create_event(
@@ -385,23 +367,6 @@ static ssize_t psmx_rma_self(int am_cmd,
 
 		memcpy(dst, src, len);
 
-		if (mr->cq && am_cmd == PSMX_AM_REQ_WRITE) {
-			event = psmx_cq_create_event(
-					mr->cq,
-					0, /* context */
-					(void *)addr,
-					FI_REMOTE_WRITE | FI_RMA | (flags & FI_REMOTE_CQ_DATA),
-					len,
-					flags & FI_REMOTE_CQ_DATA ? data : 0,
-					0, /* tag */
-					0, /* olen */
-					0 /* err */);
-
-			if (event)
-				psmx_cq_enqueue_event(mr->cq, event);
-			else
-				err = -FI_ENOMEM;
-		}
 		if (mr->domain->rma_ep->recv_cq &&
 		    am_cmd == PSMX_AM_REQ_WRITE &&
 		    (flags & FI_REMOTE_CQ_DATA)) {

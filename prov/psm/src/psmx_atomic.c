@@ -400,23 +400,6 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (!op_error) {
 			addr += mr->offset;
 			psmx_atomic_do_write(addr, src, datatype, op, count);
-			if (mr->cq) {
-				event = psmx_cq_create_event(
-						mr->cq,
-						0, /* context */
-						addr,
-						FI_REMOTE_WRITE | FI_ATOMIC,
-						len,
-						0, /* data */
-						0, /* tag */
-						0, /* olen */
-						0 /* err */);
-
-				if (event)
-					psmx_cq_enqueue_event(mr->cq, event);
-				else
-					err = -FI_ENOMEM;
-			}
 			if (mr->cntr)
 				psmx_cntr_inc(mr->cntr);
 
@@ -462,23 +445,6 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			else
 				err = -FI_ENOMEM;
 			if (op != FI_ATOMIC_READ) {
-				if (mr->cq) {
-					event = psmx_cq_create_event(
-							mr->cq,
-							0, /* context */
-							addr,
-							cq_flags,
-							len,
-							0, /* data */
-							0, /* tag */
-							0, /* olen */
-							0 /* err */);
-
-					if (event)
-						psmx_cq_enqueue_event(mr->cq, event);
-					else
-						err = -FI_ENOMEM;
-				}
 				if (mr->cntr)
 					psmx_cntr_inc(mr->cntr);
 			}
@@ -534,23 +500,6 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 							 tmp_buf, datatype, op, count);
 			else
 				err = -FI_ENOMEM;
-			if (mr->cq) {
-				event = psmx_cq_create_event(
-						mr->cq,
-						0, /* context */
-						addr,
-						FI_REMOTE_WRITE | FI_ATOMIC,
-						len,
-						0, /* data */
-						0, /* tag */
-						0, /* olen */
-						0 /* err */);
-
-				if (event)
-					psmx_cq_enqueue_event(mr->cq, event);
-				else
-					err = -FI_ENOMEM;
-			}
 			if (mr->cntr)
 				psmx_cntr_inc(mr->cntr);
 
@@ -699,23 +648,6 @@ static int psmx_atomic_self(int am_cmd,
 	}
 
 	if (op != FI_ATOMIC_READ) {
-		if (mr->cq) {
-			event = psmx_cq_create_event(
-					mr->cq,
-					0, /* context */
-					(void *)addr,
-					FI_REMOTE_WRITE | FI_ATOMIC,
-					len,
-					0, /* data */
-					0, /* tag */
-					0, /* olen */
-					0 /* err */);
-
-			if (event)
-				psmx_cq_enqueue_event(mr->cq, event);
-			else
-				err = -FI_ENOMEM;
-		}
 		if (mr->cntr)
 			psmx_cntr_inc(mr->cntr);
 	}

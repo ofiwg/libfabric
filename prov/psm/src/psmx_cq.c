@@ -399,27 +399,6 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				  }
 
 				  mr = PSMX_CTXT_USER(fi_context);
-				  if (mr->cq) {
-					event = psmx_cq_create_event_from_status(
-							mr->cq, &psm_status, req->write.data,
-							(mr->cq == cq) ? event_buffer : NULL,
-							count, src_addr);
-					if (!event)
-						return -FI_ENOMEM;
-
-					if (event == event_buffer) {
-						read_count++;
-						read_more = --count;
-						event_buffer = count ? event_buffer + cq->entry_size : NULL;
-						if (src_addr)
-							src_addr = count ? src_addr + 1 : NULL;
-					}
-					else {
-						psmx_cq_enqueue_event(mr->cq, event);
-						if (mr->cq == cq)
-							read_more = 0;
-					}
-				  }
 				  if (mr->domain->rma_ep->recv_cq && (req->cq_flags & FI_REMOTE_CQ_DATA)) {
 					event = psmx_cq_create_event_from_status(
 							mr->domain->rma_ep->recv_cq,
