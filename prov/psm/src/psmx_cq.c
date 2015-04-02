@@ -411,6 +411,8 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						read_count++;
 						read_more = --count;
 						event_buffer = count ? event_buffer + cq->entry_size : NULL;
+						if (src_addr)
+							src_addr = count ? src_addr + 1 : NULL;
 					}
 					else {
 						psmx_cq_enqueue_event(mr->cq, event);
@@ -452,6 +454,8 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 					read_count++;
 					read_more = --count;
 					event_buffer = count ? event_buffer + cq->entry_size : NULL;
+					if (src_addr)
+						src_addr = count ? src_addr + 1 : NULL;
 				}
 				else {
 					psmx_cq_enqueue_event(tmp_cq, event);
@@ -557,7 +561,8 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 
 				read_count++;
 				buf += cq_priv->entry_size;
-				src_addr++;
+				if (src_addr)
+					src_addr++;
 				continue;
 			}
 			else {
