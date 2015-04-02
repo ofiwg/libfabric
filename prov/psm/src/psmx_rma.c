@@ -122,6 +122,24 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					else
 						err = -FI_ENOMEM;
 				}
+				if (mr->domain->rma_ep->recv_cq && has_data) {
+					/* TODO: report the addr/len of the whole write */
+					event = psmx_cq_create_event(
+							mr->domain->rma_ep->recv_cq,
+							0, /* context */
+							rma_addr,
+							FI_REMOTE_WRITE | FI_RMA | FI_REMOTE_CQ_DATA,
+							rma_len,
+							args[4].u64,
+							0, /* tag */
+							0, /* olen */
+							0);
+
+					if (event)
+						psmx_cq_enqueue_event(mr->domain->rma_ep->recv_cq, event);
+					else
+						err = -FI_ENOMEM;
+				}
 				if (mr->cntr)
 					psmx_cntr_inc(mr->cntr);
 				if (mr->domain->rma_ep->remote_write_cntr)
@@ -171,6 +189,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			req->write.peer_context = (void *)args[1].u64;
 			req->write.peer_addr = (void *)epaddr;
 			req->write.data = has_data ? args[5].u64 : 0;
+			req->cq_flags = FI_REMOTE_WRITE | FI_RMA | (has_data ? FI_REMOTE_CQ_DATA : 0),
 			PSMX_CTXT_TYPE(&req->fi_context) = PSMX_REMOTE_WRITE_CONTEXT;
 			PSMX_CTXT_USER(&req->fi_context) = mr;
 			psmx_am_enqueue_rma(mr->domain, req);
@@ -380,6 +399,25 @@ static ssize_t psmx_rma_self(int am_cmd,
 
 			if (event)
 				psmx_cq_enqueue_event(mr->cq, event);
+			else
+				err = -FI_ENOMEM;
+		}
+		if (mr->domain->rma_ep->recv_cq &&
+		    am_cmd == PSMX_AM_REQ_WRITE &&
+		    (flags & FI_REMOTE_CQ_DATA)) {
+			event = psmx_cq_create_event(
+					mr->domain->rma_ep->recv_cq,
+					0, /* context */
+					(void *)addr,
+					FI_REMOTE_WRITE | FI_RMA | FI_REMOTE_CQ_DATA,
+					len,
+					data,
+					0, /* tag */
+					0, /* olen */
+					0 /* err */);
+
+			if (event)
+				psmx_cq_enqueue_event(mr->domain->rma_ep->recv_cq, event);
 			else
 				err = -FI_ENOMEM;
 		}
