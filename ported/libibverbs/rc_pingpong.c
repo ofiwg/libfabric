@@ -523,7 +523,7 @@ int main(int argc, char *argv[])
 	rc = fi_getinfo(FI_VERSION(1, 0), node, service, flags, hints, &info);
 	if (rc) {
 		FT_PRINTERR("fi_getinfo", rc);
-		return 1;
+		return -rc;
 	}
 	fi_freeinfo(hints);
 

@@ -525,12 +525,12 @@ int main(int argc, char **argv)
 	if (!opts.dst_addr) {
 		ret = server_listen();
 		if (ret)
-			return ret;
+			return -ret;
 	}
 
 	ret = opts.dst_addr ? client_connect() : server_connect();
 	if (ret) {
-		return ret;
+		return -ret;
 	}
 
 	/* Exchange data */
