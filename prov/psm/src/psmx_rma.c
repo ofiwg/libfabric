@@ -122,10 +122,12 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 					else
 						err = -FI_ENOMEM;
 				}
-				if (mr->cntr)
-					psmx_cntr_inc(mr->cntr);
+
 				if (mr->domain->rma_ep->remote_write_cntr)
 					psmx_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
+
+				if (mr->cntr && mr->cntr != mr->domain->rma_ep->remote_write_cntr)
+					psmx_cntr_inc(mr->cntr);
 			}
 		}
 		if (eom || op_error) {
@@ -329,6 +331,8 @@ static ssize_t psmx_rma_self(int am_cmd,
 	struct psmx_fid_mr *mr;
 	struct psmx_cq_event *event;
 	struct psmx_fid_cntr *cntr;
+	struct psmx_fid_cntr *mr_cntr = NULL;
+	struct psmx_fid_cq *cq = NULL;
 	int no_event;
 	int err = 0;
 	int op_error = 0;
@@ -358,6 +362,10 @@ static ssize_t psmx_rma_self(int am_cmd,
 			dst = (void *)addr;
 			src = buf;
 			cntr = mr->domain->rma_ep->remote_write_cntr;
+			if (flags & FI_REMOTE_CQ_DATA)
+				cq = mr->domain->rma_ep->recv_cq;
+			if (mr->cntr != cntr)
+				mr_cntr = mr->cntr;
 		}
 		else {
 			dst = buf;
@@ -367,11 +375,9 @@ static ssize_t psmx_rma_self(int am_cmd,
 
 		memcpy(dst, src, len);
 
-		if (mr->domain->rma_ep->recv_cq &&
-		    am_cmd == PSMX_AM_REQ_WRITE &&
-		    (flags & FI_REMOTE_CQ_DATA)) {
+		if (cq) {
 			event = psmx_cq_create_event(
-					mr->domain->rma_ep->recv_cq,
+					cq,
 					0, /* context */
 					(void *)addr,
 					FI_REMOTE_WRITE | FI_RMA | FI_REMOTE_CQ_DATA,
@@ -382,14 +388,16 @@ static ssize_t psmx_rma_self(int am_cmd,
 					0 /* err */);
 
 			if (event)
-				psmx_cq_enqueue_event(mr->domain->rma_ep->recv_cq, event);
+				psmx_cq_enqueue_event(cq, event);
 			else
 				err = -FI_ENOMEM;
 		}
-		if (mr->cntr && am_cmd == PSMX_AM_REQ_WRITE)
-			psmx_cntr_inc(mr->cntr);
+
 		if (cntr)
 			psmx_cntr_inc(cntr);
+
+		if (mr_cntr)
+			psmx_cntr_inc(mr_cntr);
 	}
 
 	no_event = (flags & PSMX_NO_COMPLETION) ||

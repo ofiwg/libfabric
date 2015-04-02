@@ -422,10 +422,12 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 							read_more = 0;
 					}
 				  }
-				  if (mr->cntr)
-					psmx_cntr_inc(mr->cntr);
+
 				  if (mr->domain->rma_ep->remote_write_cntr)
 					psmx_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
+
+				  if (mr->cntr && mr->cntr != mr->domain->rma_ep->remote_write_cntr)
+					psmx_cntr_inc(mr->cntr);
 
 				  if (read_more)
 					continue;
