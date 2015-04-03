@@ -397,15 +397,35 @@ static void sock_ep_cm_handle_ack(struct sock_cm_entry *cm,
 		msg_hdr = (struct sock_conn_hdr*)msg_entry->msg;
 
 		if (msg_hdr->msg_id == hdr->msg_id) {
-			if (msg_hdr->type == SOCK_CONN_SHUTDOWN) {
+			switch (msg_hdr->type) {
+			case SOCK_CONN_SHUTDOWN:
+				SOCK_LOG_INFO("Got ack for SOCK_CONN_SHUTDOWN\n");
 				memset(&cm_entry, 0, sizeof cm_entry);
 				cm_entry.fid = &sock_ep->ep.fid;
 				if (sock_ep->cm.shutdown_received)
 					break;
-
-				if (sock_eq_report_event(sock_ep->eq, FI_SHUTDOWN, &cm_entry,
+				
+				if (sock_eq_report_event(sock_ep->eq, FI_SHUTDOWN,
+							 &cm_entry,
 							 sizeof(cm_entry), 0))
 					SOCK_LOG_ERROR("Error in writing to EQ\n");
+				break;
+
+			case SOCK_CONN_ACCEPT:
+				SOCK_LOG_INFO("Got ack for SOCK_CONN_ACCEPT\n");
+				memset(&cm_entry, 0, sizeof cm_entry);
+				cm_entry.fid = &sock_ep->ep.fid;
+				sock_ep->connected = 1;
+				sock_ep_enable(&sock_ep->ep);
+				
+				if (sock_eq_report_event(sock_ep->eq, FI_CONNECTED,
+							 &cm_entry,
+							 sizeof(cm_entry), 0))
+					SOCK_LOG_ERROR("Error in writing to EQ\n");
+				break;
+				
+			default:
+				break;
 			}
 			dlist_remove(entry);
 			free(msg_entry);
@@ -616,16 +636,13 @@ err:
 static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	struct sock_conn_req *req;
-	struct fi_eq_cm_entry cm_entry;
 	struct sock_conn_response *response;
 	struct sockaddr_in *addr;
 	struct sock_ep *_ep;
-	struct sock_eq *_eq;
 	int ret = 0;
 
 	_ep = container_of(ep, struct sock_ep, ep);
-	_eq = _ep->eq;
-	if (!_eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ) 
+	if (!_ep->eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ) 
 		return -FI_EINVAL;
 
 	if (_ep->is_disabled || _ep->cm.shutdown_received)
@@ -660,12 +677,6 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 		goto out;
 	}
 	    
-	sock_ep_enable(ep);
-	memset(&cm_entry, 0, sizeof(cm_entry));
-	cm_entry.fid = &ep->fid;
-	_ep->connected = 1;
-	ret = sock_eq_report_event(_eq, FI_CONNECTED, &cm_entry, 
-				   sizeof(cm_entry), 0);
 out:
 	free(req);
 	free(response);
