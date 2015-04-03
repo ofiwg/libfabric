@@ -50,7 +50,7 @@ static inline void psmx_am_enqueue_rma(struct psmx_fid_domain *domain,
  *	args[2].u64	addr
  *	args[3].u64	key
  *	args[4].u64	data (optional) / tag(long protocol)
- *	args[5].u64	<unused> / data (optional, long protocol)
+ *	payload		<unused> / data (optional, long protocol)
  *
  * Write REP:
  *	args[0].u32w0	cmd, flag
@@ -172,7 +172,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			req->write.context = (void *)args[4].u64;
 			req->write.peer_context = (void *)args[1].u64;
 			req->write.peer_addr = (void *)epaddr;
-			req->write.data = has_data ? args[5].u64 : 0;
+			req->write.data = has_data ? *(uint64_t *)src: 0;
 			req->cq_flags = FI_REMOTE_WRITE | FI_RMA | (has_data ? FI_REMOTE_CQ_DATA : 0),
 			PSMX_CTXT_TYPE(&req->fi_context) = PSMX_REMOTE_WRITE_CONTEXT;
 			PSMX_CTXT_USER(&req->fi_context) = mr;
@@ -747,6 +747,9 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 	chunk_size = MIN(PSMX_AM_CHUNK_SIZE, psmx_am_param.max_request_short);
 
 	if (psmx_env.tagged_rma && len > chunk_size) {
+		void *payload = NULL;
+		int payload_len = 0;
+
 		psm_tag = PSMX_RMA_BIT | ep_priv->domain->psm_epid;
 		args[0].u32w0 = PSMX_AM_REQ_WRITE_LONG;
 		args[0].u32w1 = len;
@@ -756,9 +759,10 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 		args[4].u64 = psm_tag;
 		nargs = 5;
 		if (flags & FI_REMOTE_CQ_DATA) {
-			args[5].u64 = data;
 			args[0].u32w0 |= PSMX_AM_DATA;
-			nargs++;
+			payload = &data;
+			payload_len = sizeof(data);
+			am_flags = 0;
 		}
 
 		if (flags & FI_COMMIT_COMPLETE) {
@@ -769,9 +773,14 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 			psm_context = (void *)&req->fi_context;
 		}
 
+		/* NOTE: if nargs is greater than 5, the following psm_mq_isend
+		 * would hang if the destination is on the same node (i.e. going
+		 * through the shared memory path). As the result, the immediate
+		 * data is sent as payload instead of args[5].
+		 */
 		psm_am_request_short((psm_epaddr_t) dest_addr,
 					PSMX_AM_RMA_HANDLER, args, nargs,
-					NULL, 0, am_flags,
+					payload, payload_len, am_flags,
 					NULL, NULL);
 
 		psm_mq_isend(ep_priv->domain->psm_mq, (psm_epaddr_t) dest_addr,
