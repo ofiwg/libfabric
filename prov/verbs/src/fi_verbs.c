@@ -42,6 +42,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <infiniband/ib.h>
 #include <infiniband/verbs.h>
@@ -127,6 +128,7 @@ struct fi_ibv_cq {
 	uint64_t		flags;
 	enum fi_cq_wait_cond	wait_cond;
 	struct ibv_wc		wc;
+	int			signal_fd[2];
 };
 
 struct fi_ibv_mem_desc {
@@ -2403,18 +2405,35 @@ fi_ibv_poll_events(struct fi_ibv_cq *_cq, int timeout)
 {
 	int ret;
 	void *context;
+	struct pollfd fds[2];
+	char data;
 
-	ret = fi_poll_fd(_cq->channel->fd, timeout);
+	fds[0].fd = _cq->channel->fd;
+	fds[1].fd = _cq->signal_fd[0];
+
+	fds[0].events = fds[1].events = POLLIN;
+
+	ret = poll(fds, 2, timeout);
 	if (ret == 0)
 		return -FI_EAGAIN;
 	else if (ret < 0)
-		return ret;
+		return -errno;
 
-	ret = ibv_get_cq_event(_cq->channel, &_cq->cq, &context);
-	if (ret)
-		return ret;
+	if (fds[1].revents & POLLIN) {
+		do {
+			ret = read(fds[1].fd, &data, 1);
+		} while (ret > 0);
+		return -FI_EAGAIN;
+	} else if (fds[0].revents & POLLIN) {
+		ret = ibv_get_cq_event(_cq->channel, &_cq->cq, &context);
+		if (ret)
+			return ret;
 
-	ibv_ack_cq_events(_cq->cq, 1);
+		ibv_ack_cq_events(_cq->cq, 1);
+	} else {
+		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Unknown poll error: check revents\n");
+		return -FI_EOTHER;
+	}
 
 	return 0;
 }
@@ -2610,6 +2629,22 @@ fi_ibv_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 	return ibv_wc_status_str(prov_errno);
 }
 
+static int
+fi_ibv_cq_signal(struct fid_cq *cq)
+{
+	struct fi_ibv_cq *_cq;
+	int data = '0';
+
+	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
+
+	if (write(_cq->signal_fd[1], &data, 1) != 1) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Error signalling CQ\n");
+		return -errno;
+	}
+
+	return 0;
+}
+
 static struct fi_ops_cq fi_ibv_cq_context_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_cq_read_context,
@@ -2617,7 +2652,7 @@ static struct fi_ops_cq fi_ibv_cq_context_ops = {
 	.readerr = fi_ibv_cq_readerr,
 	.sread = fi_ibv_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
-	.signal = fi_no_cq_signal,	/* TODO: write me */
+	.signal = fi_ibv_cq_signal,
 	.strerror = fi_ibv_cq_strerror
 };
 
@@ -2628,7 +2663,7 @@ static struct fi_ops_cq fi_ibv_cq_msg_ops = {
 	.readerr = fi_ibv_cq_readerr,
 	.sread = fi_ibv_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
-	.signal = fi_no_cq_signal,	/* TODO: write me */
+	.signal = fi_ibv_cq_signal,
 	.strerror = fi_ibv_cq_strerror
 };
 
@@ -2639,7 +2674,7 @@ static struct fi_ops_cq fi_ibv_cq_data_ops = {
 	.readerr = fi_ibv_cq_readerr,
 	.sread = fi_ibv_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
-	.signal = fi_no_cq_signal,	/* TODO: write me */
+	.signal = fi_ibv_cq_signal,
 	.strerror = fi_ibv_cq_strerror
 };
 
@@ -2697,7 +2732,6 @@ fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	    struct fid_cq **cq, void *context)
 {
 	struct fi_ibv_cq *_cq;
-	long flags = 0;
 	int ret;
 
 	_cq = calloc(1, sizeof *_cq);
@@ -2715,36 +2749,39 @@ fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			goto err1;
 		}
 
-		flags = fcntl(_cq->channel->fd, F_GETFL);
-		if (flags < 0) {
+		ret = fi_fd_nonblock(_cq->channel->fd);
+		if (ret)
+			goto err2;
+
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, _cq->signal_fd)) {
 			ret = -errno;
 			goto err2;
 		}
-		ret = fcntl(_cq->channel->fd, F_SETFL, flags | O_NONBLOCK);
-		if (ret) {
-			ret = -errno;
-			goto err2;
-		}
+
+		ret = fi_fd_nonblock(_cq->signal_fd[0]);
+		if (ret)
+			goto err3;
+
 		break;
 	case FI_WAIT_NONE:
 		break;
 	default:
 		ret = -FI_ENOSYS;
-		goto err1;
+		goto err3;
 	}
 
 	_cq->cq = ibv_create_cq(_cq->domain->verbs, attr->size, _cq,
 				_cq->channel, attr->signaling_vector);
 	if (!_cq->cq) {
 		ret = -errno;
-		goto err2;
+		goto err3;
 	}
 
 	if (_cq->channel) {
 		ret = ibv_req_notify_cq(_cq->cq, 0);
 		if (ret) {
 			FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "ibv_req_notify_cq failed\n");
-			goto err3;
+			goto err4;
 		}
 	}
 
@@ -2769,14 +2806,17 @@ fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		break;
 	default:
 		ret = -FI_ENOSYS;
-		goto err3;
+		goto err4;
 	}
 
 	*cq = &_cq->cq_fid;
 	return 0;
 
-err3:
+err4:
 	ibv_destroy_cq(_cq->cq);
+err3:
+	close(_cq->signal_fd[0]);
+	close(_cq->signal_fd[1]);
 err2:
 	if (_cq->channel)
 		ibv_destroy_comp_channel(_cq->channel);
