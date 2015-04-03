@@ -34,8 +34,11 @@
 
 void psmx_cq_enqueue_event(struct psmx_fid_cq *cq, struct psmx_cq_event *event)
 {
+	pthread_mutex_lock(&cq->mutex);
 	slist_insert_tail(&event->list_entry, &cq->event_queue);
 	cq->event_count++;
+	pthread_mutex_unlock(&cq->mutex);
+
 	if (cq->wait)
 		psmx_wait_signal((struct fid_wait *)cq->wait);
 }
@@ -47,8 +50,10 @@ static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_fid_cq *cq)
 	if (slist_empty(&cq->event_queue))
 		return NULL;
 
+	pthread_mutex_lock(&cq->mutex);
 	entry = slist_remove_head(&cq->event_queue);
 	cq->event_count--;
+	pthread_mutex_unlock(&cq->mutex);
 
 	return container_of(entry, struct psmx_cq_event, list_entry);
 }
@@ -847,6 +852,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	slist_init(&cq_priv->event_queue);
 	slist_init(&cq_priv->free_list);
+	pthread_mutex_init(&cq_priv->mutex, NULL);
 
 #define PSMX_FREE_LIST_SIZE	64
 	for (i=0; i<PSMX_FREE_LIST_SIZE; i++) {

@@ -320,6 +320,7 @@ struct psmx_fid_cq {
 	size_t				event_count;
 	struct slist			event_queue;
 	struct slist			free_list;
+	pthread_mutex_t			mutex;
 	struct psmx_cq_event		*pending_error;
 	struct psmx_fid_wait		*wait;
 	int				wait_cond;
