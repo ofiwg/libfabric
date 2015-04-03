@@ -332,7 +332,7 @@ int psmx_am_process_send(struct psmx_fid_domain *domain, struct psmx_am_request 
 		err = psm_am_request_short((psm_epaddr_t) req->send.dest_addr,
 					PSMX_AM_MSG_HANDLER, args, 4,
 					req->send.buf+offset, chunk_size,
-					am_flags | PSM_AM_FLAG_NOREPLY, NULL, NULL);
+					am_flags, NULL, NULL);
 
 		len -= chunk_size;
 		offset += chunk_size;

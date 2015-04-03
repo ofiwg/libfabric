@@ -571,7 +571,7 @@ ssize_t _psmx_read(struct fid_ep *ep, void *buf, size_t len,
 		args[4].u64 = psm_tag;
 		psm_am_request_short((psm_epaddr_t) src_addr,
 					PSMX_AM_RMA_HANDLER, args, 5, NULL, 0,
-					PSM_AM_FLAG_NOREPLY, NULL, NULL);
+					0, NULL, NULL);
 
 		return 0;
 	}
@@ -771,7 +771,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 
 		psm_am_request_short((psm_epaddr_t) dest_addr,
 					PSMX_AM_RMA_HANDLER, args, nargs,
-					NULL, 0, am_flags | PSM_AM_FLAG_NOREPLY,
+					NULL, 0, am_flags,
 					NULL, NULL);
 
 		psm_mq_isend(ep_priv->domain->psm_mq, (psm_epaddr_t) dest_addr,
@@ -790,7 +790,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 		psm_am_request_short((psm_epaddr_t) dest_addr,
 					PSMX_AM_RMA_HANDLER, args, nargs,
 					(void *)buf, chunk_size,
-					am_flags | PSM_AM_FLAG_NOREPLY, NULL, NULL);
+					am_flags, NULL, NULL);
 		buf += chunk_size;
 		addr += chunk_size;
 		len -= chunk_size;
