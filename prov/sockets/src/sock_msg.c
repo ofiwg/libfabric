@@ -657,15 +657,20 @@ static ssize_t sock_ep_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore
 		     (src_addr == NULL) || 
 		     (src_addr && 
 		      ((*src_addr == FI_ADDR_UNSPEC) ||
-		       (rx_entry->addr == *src_addr))))) {
-			
-			if (flags & FI_CLAIM)
-				rx_entry->is_claimed = 1;
+		       (rx_entry->addr == *src_addr))))) {			
 			*tag = rx_entry->tag;
 			if (src_addr)
 				*src_addr = rx_entry->addr;
 			*len = rx_entry->used;
 			ret = 1;
+
+			if (flags & FI_CLAIM)
+				rx_entry->is_claimed = 1;
+
+			if (flags & FI_DISCARD) {
+				dlist_remove(&rx_entry->entry);
+				sock_rx_release_entry(rx_entry);
+			}
 			break;
 		}
 	}
