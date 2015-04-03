@@ -600,7 +600,7 @@ static int sock_pe_process_rx_read(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 
 	pe_entry->buf = pe_entry->pe.rx.rx_iov[0].iov.addr;
 	pe_entry->data_len = data_len;
-
+	pe_entry->flags |= (FI_RMA | FI_REMOTE_READ);
 	sock_pe_report_remote_read(rx_ctx, pe_entry);
 	sock_pe_send_response(pe, rx_ctx, pe_entry, data_len, 
 			      SOCK_OP_READ_COMPLETE);	
@@ -674,6 +674,7 @@ static int sock_pe_process_rx_write(struct sock_pe *pe, struct sock_rx_ctx *rx_c
 	}
 	
 out:
+	pe_entry->flags |= (FI_RMA | FI_REMOTE_WRITE);
 	sock_pe_report_remote_write(rx_ctx, pe_entry);
 	sock_pe_report_mr_completion(rx_ctx->domain, pe_entry);
 	sock_pe_send_response(pe, rx_ctx, pe_entry, 0, 
@@ -1088,7 +1089,12 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe, struct sock_rx_ctx *rx_
 	if (pe_entry->flags & FI_REMOTE_CQ_DATA) {
 		sock_pe_report_rx_completion(pe_entry);
 	}
-	
+
+	pe_entry->flags |= FI_ATOMIC;
+	if (pe_entry->pe.rx.rx_op.atomic.op == FI_ATOMIC_READ)
+		pe_entry->flags |= FI_REMOTE_READ;
+	else
+		pe_entry->flags |= FI_REMOTE_WRITE;
 	sock_pe_report_remote_write(rx_ctx, pe_entry);
 	sock_pe_report_mr_completion(rx_ctx->domain, pe_entry);
 	sock_pe_send_response(pe, rx_ctx, pe_entry, 
@@ -1292,7 +1298,12 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 	pe_entry->is_complete = 1;
 	rx_entry->is_complete = 1;
 	rx_entry->is_busy = 0;
+
 	pe_entry->flags = rx_entry->flags;
+	if (pe_entry->msg_hdr.op_type == SOCK_OP_TSEND) 
+		pe_entry->flags |= FI_TAGGED;
+	pe_entry->flags |= (FI_MSG | FI_RECV);
+
 	if (pe_entry->msg_hdr.flags & FI_REMOTE_CQ_DATA)
 		pe_entry->flags |= FI_REMOTE_CQ_DATA;
 	pe_entry->flags &= ~FI_MULTI_RECV;
@@ -1526,6 +1537,12 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 		SOCK_LOG_INFO("Send complete\n");		
 	}
 	sock_comm_flush(pe_entry->conn);
+
+	pe_entry->flags |= FI_ATOMIC;
+	if (pe_entry->pe.tx.tx_op.atomic.op == FI_ATOMIC_READ)
+		pe_entry->flags |= FI_READ;
+	else
+		pe_entry->flags |= FI_WRITE;
 	pe_entry->msg_hdr.flags = pe_entry->flags;
 	return 0;
 }
@@ -1585,6 +1602,7 @@ static int sock_pe_progress_tx_write(struct sock_pe *pe,
 		SOCK_LOG_INFO("Send complete\n");		
 	}
 	sock_comm_flush(pe_entry->conn);
+	pe_entry->flags |= (FI_RMA | FI_WRITE);
 	pe_entry->msg_hdr.flags = pe_entry->flags;
 	return 0;
 }
@@ -1621,6 +1639,7 @@ static int sock_pe_progress_tx_read(struct sock_pe *pe,
 		SOCK_LOG_INFO("Send complete\n");		
 	}
 	sock_comm_flush(pe_entry->conn);
+	pe_entry->flags |= (FI_RMA | FI_READ);
 	pe_entry->msg_hdr.flags = pe_entry->flags;
 	return 0;
 }
@@ -1668,6 +1687,10 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 	}
 	
 	sock_comm_flush(pe_entry->conn);
+	if (pe_entry->pe.tx.tx_op.op == SOCK_OP_TSEND)
+		pe_entry->flags |= FI_TAGGED;
+	pe_entry->flags |= (FI_MSG | FI_SEND);
+
 	pe_entry->msg_hdr.flags = pe_entry->flags;
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
