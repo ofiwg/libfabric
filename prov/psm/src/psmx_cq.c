@@ -182,12 +182,12 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		flags = FI_WRITE | FI_RMA;
 		break;
 	case PSMX_REMOTE_READ_CONTEXT:
-		op_context = PSMX_CTXT_USER(fi_context);
+		op_context = NULL;
 		buf = NULL;
 		flags = FI_REMOTE_READ | FI_RMA;
 		break;
 	case PSMX_REMOTE_WRITE_CONTEXT:
-		op_context = PSMX_CTXT_USER(fi_context);
+		op_context = NULL;
 		buf = NULL;
 		flags = FI_REMOTE_WRITE | FI_RMA | FI_REMOTE_CQ_DATA;
 		break;
