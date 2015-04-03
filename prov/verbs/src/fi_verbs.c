@@ -2398,41 +2398,74 @@ static int fi_ibv_cq_reset(struct fid_cq *cq, const void *cond)
         return -ibv_req_notify_cq(_cq->cq, 0);
 }
 
+static inline int
+fi_ibv_poll_events(struct fi_ibv_cq *_cq, int timeout)
+{
+	int ret;
+	void *context;
+
+	ret = fi_poll_fd(_cq->channel->fd, timeout);
+	if (ret == 0)
+		return -FI_EAGAIN;
+	else if (ret < 0)
+		return ret;
+
+	ret = ibv_get_cq_event(_cq->channel, &_cq->cq, &context);
+	if (ret)
+		return ret;
+
+	ibv_ack_cq_events(_cq->cq, 1);
+
+	return 0;
+}
+
 static ssize_t
 fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 		int timeout)
 {
 	ssize_t ret = 0, cur;
 	ssize_t  threshold;
-	int reset = 1;
 	struct fi_ibv_cq *_cq;
 
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
+
+	if (!_cq->channel)
+		return -FI_ENOSYS;
+
 	threshold = (_cq->wait_cond == FI_CQ_COND_THRESHOLD) ?
 		MIN((ssize_t) cond, count) : 1;
 
 	for (cur = 0; cur < threshold; ) {
-		ret = _cq->cq_fid.ops->read(cq, buf, count - cur);
-		if ((ret < 0 && ret != -FI_EAGAIN) || !_cq->channel)
-			break;
-
+		ret = _cq->cq_fid.ops->read(&_cq->cq_fid, buf, count - cur);
 		if (ret > 0) {
 			buf += ret * _cq->entry_size;
 			cur += ret;
-		}
-
-		if (cur >= threshold)
+			if (cur >= threshold)
+				break;
+		} else if (ret != -FI_EAGAIN) {
 			break;
-
-		if (reset) {
-			fi_ibv_cq_reset(cq, NULL);
-			reset = 0;
-			continue;
 		}
-		ret = fi_poll_fd(_cq->channel->fd, timeout);
-		if (ret == 0)
-			return -FI_EAGAIN;
-		else if (ret < 0)
+
+		ret = ibv_req_notify_cq(_cq->cq, 0);
+		if (ret) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "ibv_req_notify_cq error: %d\n", ret);
+			break;
+		}
+
+		/* Read again to fetch any completions that we might have missed
+		 * while rearming */
+		ret = _cq->cq_fid.ops->read(&_cq->cq_fid, buf, count - cur);
+		if (ret > 0) {
+			buf += ret * _cq->entry_size;
+			cur += ret;
+			if (cur >= threshold)
+				break;
+		} else if (ret != -FI_EAGAIN) {
+			break;
+		}
+
+		ret = fi_ibv_poll_events(_cq, timeout);
+		if (ret)
 			break;
 	}
 
@@ -2705,6 +2738,14 @@ fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!_cq->cq) {
 		ret = -errno;
 		goto err2;
+	}
+
+	if (_cq->channel) {
+		ret = ibv_req_notify_cq(_cq->cq, 0);
+		if (ret) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "ibv_req_notify_cq failed\n");
+			goto err3;
+		}
 	}
 
 	_cq->flags |= attr->flags;
