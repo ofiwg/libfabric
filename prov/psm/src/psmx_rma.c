@@ -146,7 +146,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		key = args[3].u64;
 		mr = psmx_mr_hash_get(key);
 		op_error = mr ?
-			psmx_mr_validate(mr, (uint64_t)rma_addr, len, FI_REMOTE_WRITE) :
+			psmx_mr_validate(mr, (uint64_t)rma_addr, rma_len, FI_REMOTE_WRITE) :
 			-FI_EINVAL;
 		if (op_error) {
 			rep_args[0].u32w0 = PSMX_AM_REP_WRITE | eom;
@@ -217,7 +217,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		key = args[3].u64;
 		mr = psmx_mr_hash_get(key);
 		op_error = mr ?
-			psmx_mr_validate(mr, (uint64_t)rma_addr, len, FI_REMOTE_WRITE) :
+			psmx_mr_validate(mr, (uint64_t)rma_addr, rma_len, FI_REMOTE_READ) :
 			-FI_EINVAL;
 		if (op_error) {
 			rep_args[0].u32w0 = PSMX_AM_REP_READ | eom;
