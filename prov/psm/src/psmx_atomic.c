@@ -383,7 +383,6 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	struct psmx_fid_cntr *cntr = NULL;
 	struct psmx_fid_cntr *mr_cntr = NULL;
 	void *tmp_buf;
-	uint64_t cq_flags;
 
 	switch (args[0].u32w0 & PSMX_AM_OP_MASK) {
 	case PSMX_AM_REQ_ATOMIC_WRITE:
@@ -428,12 +427,9 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		key = args[3].u64;
 		datatype = args[4].u32w0;
 		op = args[4].u32w1;
-		cq_flags = FI_REMOTE_WRITE | FI_ATOMIC;
 
-		if (op == FI_ATOMIC_READ) {
+		if (op == FI_ATOMIC_READ)
 			len = fi_datatype_size(datatype) * count;
-			cq_flags = FI_REMOTE_READ | FI_ATOMIC;
-		}
 
 		assert(len == fi_datatype_size(datatype) * count);
 
