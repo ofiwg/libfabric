@@ -1,24 +1,54 @@
-.TH fi_sockets 7 "2015\-03\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_sockets 7 "2015\-04\-03" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Sockets Fabric Provider
 .SH OVERVIEW
 .PP
-\&...Whatever the sockets provider maintainer wants to put here...
+A general purpose provider that can be used on any network that supports
+TCP sockets.
+This provider is not intended to provide performance improvements over
+regular TCP sockets, but rather to allow developers to write, test, and
+debug application code even on platforms that do not have high-speed
+networking.
+Sockets provider supports all the provider requirements and interfaces
+of libfabric.
+It can be viewed as a generic implementation of a fabric provider (for
+testing purpose) with the union of the interfaces of supported by
+libfabric even if there is no hardware to support all.
+.SH SUPPORTED FEATURES
 .PP
-Suggestions:
-.IP \[bu] 2
-Document what is working
-.IP \[bu] 2
-Document what has been tested
-.IP \[bu] 2
-Document what is know to NOT be working
-.IP \[bu] 2
-Document any other things app developers and end users should know about
-this provider (e.g., run-time tunable parameters, differences in
-behavior between this and other providers, etc.)
+Sockets provider supports all the features defined in the libfabric API.
+Here are some key features:
+.PP
+Endpoint types : Supports both connection oriented \f[I]FI_MSG\f[] and
+connectionless \f[I]FI_RDM\f[] and \f[I]FI_DGRAM\f[]
+.PP
+Endpoint capabilities : Endpoints can support any combination of primary
+data transfer capabilities \f[I]FI_TAGGED\f[], \f[I]FI_MSG\f[],
+\f[I]FI_ATOMICS\f[], and \f[I]FI_RMA\f[]s, further refined by
+\f[I]FI_SEND\f[], \f[I]FI_RECV\f[], \f[I]FI_READ\f[], \f[I]FI_WRITE\f[],
+\f[I]FI_REMOTE_READ\f[], and
+\f[I]FI_REMOTE_WRITE\f[].\f[I]FI_MULTI_RECV\f[] is supported for
+non-tagged message queue only.
+.PP
+Modes : Sockets provider supports all operational modes including
+\f[I]FI_CONTEXT\f[], \f[I]FI_LOCAL_MR\f[], \f[I]FI_MR_PREFIX\f[], and
+\f[I]FI_PROV_MR_ATTR\f[].
+.PP
+Progress : Sockets provider supports both \f[I]FI_PROGRESS_AUTO\f[] and
+\f[I]FI_PROGRESS_MANUAL\f[] but the default is set to auto progress.
+A background thread runs to ensure progress is made for asynchronous
+requests.
+.SH LIMITATIONS
+.PP
+Sockets provider is implemented over TCP sockets and the performance
+numbers are lower compared to other providers which are implemented over
+high-speed fabric.
+But it is expected since the intention of sockets provider is not to
+have performance improvement but rather to serve as a reference
+implementation for testing.
 .SH SEE ALSO
 .PP
-\f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
+\f[C]fabric\f[](7), \f[C]fi_provider\f[](7), \f[C]fi_getinfo\f[](3)
 .SH AUTHORS
 OpenFabrics.
