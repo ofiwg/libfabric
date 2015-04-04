@@ -377,8 +377,8 @@ information into a printable string for debugging purposes.
 
 ## fi_cq_signal
 
-The fi_cq_signal call will signal the wait object used by the fi_cq_sread
-and fi_cq_sreadfrom function.  This may be used to wake-up a thread
+The fi_cq_signal call will unblock any thread waiting in fi_cq_sread
+or fi_cq_sreadfrom.  This may be used to wake-up a thread
 that is blocked waiting to read a completion operation.  The fi_cq_signal
 operation is only available if the CQ was configured with a wait object.
 
@@ -387,47 +387,47 @@ operation is only available if the CQ was configured with a wait object.
 Completion flags provide additional details regarding the completed
 operation.  The following completion flags are defined.
 
-*FI_SEND
+*FI_SEND*
 : Indicates that the completion was for a send operation.  This flag
   may be combined with an FI_MSG or FI_TAGGED flag.
 
-*FI_RECV
+*FI_RECV*
 : Indicates that the completion was for a receive operation.  This flag
   may be combined with an FI_MSG or FI_TAGGED flag.
 
-*FI_RMA
+*FI_RMA*
 : Indicates that an RMA operation completed.  This flag may be combined
   with an FI_READ, FI_WRITE, FI_REMOTE_READ, or FI_REMOTE_WRITE flag.
 
-*FI_ATOMIC
+*FI_ATOMIC*
 : Indicates that an atomic operation completed.  This flag may be combined
   with an FI_READ, FI_WRITE, FI_REMOTE_READ, or FI_REMOTE_WRITE flag.
 
-*FI_MSG
+*FI_MSG*
 : Indicates that a message-based operation completed.  This flag may be
   combined with an FI_SEND or FI_RECV flag.
 
-*FI_TAGGED
+*FI_TAGGED*
 : Indicates that a tagged message operation completed.  This flag may be
   combined with an FI_SEND or FI_RECV flag.
 
-*FI_READ
+*FI_READ*
 : Indicates that a locally initiated RMA or atomic read operation has
   completed.  This flag may be combined with an FI_RMA or FI_ATOMIC flag.
 
-*FI_WRITE
+*FI_WRITE*
 : Indicates that a locally initiated RMA or atomic write operation has
   completed.  This flag may be combined with an FI_RMA or FI_ATOMIC flag.
 
-*FI_REMOTE_READ
+*FI_REMOTE_READ*
 : Indicates that a remotely initiated RMA or atomic read operation has
   completed.  This flag may be combined with an FI_RMA or FI_ATOMIC flag.
 
-*FI_REMOTE_WRITE
+*FI_REMOTE_WRITE*
 : Indicates that a remotely initiated RMA or atomic read operation has
   completed.  This flag may be combined with an FI_RMA or FI_ATOMIC flag.
 
-*FI_REMOTE_CQ_DATA
+*FI_REMOTE_CQ_DATA*
 : This indicates that remote CQ data is available as part of the
   completion.
 
