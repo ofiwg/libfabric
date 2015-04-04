@@ -4,49 +4,47 @@
 The Sockets Fabric Provider
 .SH OVERVIEW
 .PP
-A general purpose provider that can be used on any network that supports
-TCP sockets.
-This provider is not intended to provide performance improvements over
+The sockets provider is a general purpose provider that can be used on
+any system that supports TCP sockets.
+The provider is not intended to provide performance improvements over
 regular TCP sockets, but rather to allow developers to write, test, and
-debug application code even on platforms that do not have high-speed
-networking.
-Sockets provider supports all the provider requirements and interfaces
-of libfabric.
-It can be viewed as a generic implementation of a fabric provider (for
-testing purpose) with the union of the interfaces of supported by
-libfabric even if there is no hardware to support all.
+debug application code even on platforms that do not have
+high-performance fabric hardware.
+The sockets provider supports all libfabric provider requirements and
+interfaces.
 .SH SUPPORTED FEATURES
 .PP
-Sockets provider supports all the features defined in the libfabric API.
-Here are some key features:
+The sockets provider supports all the features defined for the libfabric
+API.
+Key features include:
 .PP
-Endpoint types : Supports both connection oriented \f[I]FI_MSG\f[] and
-connectionless \f[I]FI_RDM\f[] and \f[I]FI_DGRAM\f[]
+\f[I]Endpoint types\f[] : The provider supports all endpoint types:
+\f[I]FI_EP_MSG\f[], \f[I]FI_EP_RDM\f[], and \f[I]FI_EP_DGRAM\f[].
 .PP
-Endpoint capabilities : Endpoints can support any combination of primary
-data transfer capabilities \f[I]FI_TAGGED\f[], \f[I]FI_MSG\f[],
-\f[I]FI_ATOMICS\f[], and \f[I]FI_RMA\f[]s, further refined by
-\f[I]FI_SEND\f[], \f[I]FI_RECV\f[], \f[I]FI_READ\f[], \f[I]FI_WRITE\f[],
-\f[I]FI_REMOTE_READ\f[], and
-\f[I]FI_REMOTE_WRITE\f[].\f[I]FI_MULTI_RECV\f[] is supported for
-non-tagged message queue only.
+\f[I]Endpoint capabilities\f[] : The following data transfer interface
+is supported for a all endpoint types: \f[I]fi_msg\f[].
+Additionally, these interfaces are supported for reliable endpoints
+(\f[I]FI_EP_MSG\f[] and \f[I]FI_EP_RDM\f[]): \f[I]fi_tagged\f[],
+\f[I]fi_atomic\f[], and \f[I]fi_rma\f[].
 .PP
-Modes : Sockets provider supports all operational modes including
-\f[I]FI_CONTEXT\f[], \f[I]FI_LOCAL_MR\f[], \f[I]FI_MR_PREFIX\f[], and
-\f[I]FI_PROV_MR_ATTR\f[].
+\f[I]Modes\f[] : The sockets provider supports all operational modes
+including \f[I]FI_CONTEXT\f[], \f[I]FI_LOCAL_MR\f[],
+\f[I]FI_MR_PREFIX\f[], and \f[I]FI_PROV_MR_ATTR\f[].
 .PP
-Progress : Sockets provider supports both \f[I]FI_PROGRESS_AUTO\f[] and
-\f[I]FI_PROGRESS_MANUAL\f[] but the default is set to auto progress.
-A background thread runs to ensure progress is made for asynchronous
-requests.
+\f[I]Progress\f[] : Sockets provider supports both
+\f[I]FI_PROGRESS_AUTO\f[] and \f[I]FI_PROGRESS_MANUAL\f[], with a
+default set to auto.
+When progress is set to auto, a background thread runs to ensure that
+progress is made for asynchronous requests.
 .SH LIMITATIONS
 .PP
-Sockets provider is implemented over TCP sockets and the performance
-numbers are lower compared to other providers which are implemented over
-high-speed fabric.
-But it is expected since the intention of sockets provider is not to
-have performance improvement but rather to serve as a reference
-implementation for testing.
+The sockets provider attempts to emulate the entire API set, including
+all defined options.
+In order to support development on a wide range of systems, it is
+implemented over TCP sockets.
+As a result, the performance numbers are lower compared to other
+providers implemented over high-speed fabric, and lower than what an
+application might see implementing to sockets directly.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7), \f[C]fi_getinfo\f[](3)
