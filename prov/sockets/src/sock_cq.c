@@ -461,7 +461,7 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!sock_cq)
 		return -FI_ENOMEM;
 	
-	atomic_init(&sock_cq->ref, 0);
+	atomic_initialize(&sock_cq->ref, 0);
 	sock_cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	sock_cq->cq_fid.fid.context = context;
 	sock_cq->cq_fid.fid.ops = &sock_cq_fi_ops;

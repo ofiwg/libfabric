@@ -319,7 +319,7 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	fab->fab_fid.fid.ops = &sock_fab_fi_ops;
 	fab->fab_fid.ops = &sock_fab_ops;
 	*fabric = &fab->fab_fid;
-	atomic_init(&fab->ref, 0);
+	atomic_initialize(&fab->ref, 0);
 	sock_fab_add_to_list(fab);
 	return 0;
 }

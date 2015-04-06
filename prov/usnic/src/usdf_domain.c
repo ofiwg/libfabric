@@ -132,7 +132,7 @@ usdf_dom_rdc_alloc_data(struct usdf_domain *udp)
 		return -FI_ENOMEM;
 	}
 	SLIST_INIT(&udp->dom_rdc_free);
-	atomic_init(&udp->dom_rdc_free_cnt, 0);
+	atomic_initialize(&udp->dom_rdc_free_cnt, 0);
 	for (i = 0; i < USDF_RDM_FREE_BLOCK; ++i) {
 		rdc = calloc(1, sizeof(*rdc));
 		if (rdc == NULL) {
@@ -297,7 +297,7 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	udp->dom_fabric = fp;
 	LIST_INSERT_HEAD(&fp->fab_domain_list, udp, dom_link);
-	atomic_init(&udp->dom_refcnt, 0);
+	atomic_initialize(&udp->dom_refcnt, 0);
 	atomic_inc(&fp->fab_refcnt);
 
 	*domain = &udp->dom_fid;

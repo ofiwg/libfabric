@@ -1403,9 +1403,9 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		sock_ep->info.handle = info->handle;
 	}
 	
-	atomic_init(&sock_ep->ref, 0);
-	atomic_init(&sock_ep->num_tx_ctx, 0);
-	atomic_init(&sock_ep->num_rx_ctx, 0);
+	atomic_initialize(&sock_ep->ref, 0);
+	atomic_initialize(&sock_ep->num_tx_ctx, 0);
+	atomic_initialize(&sock_ep->num_rx_ctx, 0);
 
 	if (sock_ep->ep_attr.tx_ctx_cnt == FI_SHARED_CONTEXT)
 		sock_ep->tx_shared = 1;

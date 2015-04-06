@@ -622,7 +622,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		goto err;
 	}
 
-	atomic_init(&_av->ref, 0);
+	atomic_initialize(&_av->ref, 0);
 	atomic_inc(&dom->ref);
 	_av->domain = dom;
 	switch (dom->info.addr_format) {

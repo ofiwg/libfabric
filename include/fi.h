@@ -37,6 +37,7 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <assert.h>
 #include <string.h>
 #include <pthread.h>
 
@@ -144,38 +145,69 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 #endif /* PT_LOCK_SPIN */
 
 
+#if ENABLE_DEBUG
+#define ATOMIC_IS_INITIALIZED(atomic) assert(atomic->is_initialized)
+#else
+#define ATOMIC_IS_INITIALIZED(atomic)
+#endif
+
 #ifdef HAVE_ATOMICS
-typedef atomic_int atomic_t;
+typedef struct {
+    atomic_int val;
+#if ENABLE_DEBUG
+    int is_initialized;
+#endif
+} atomic_t;
 
 static inline int atomic_inc(atomic_t *atomic)
 {
-	return atomic_fetch_add_explicit(atomic, 1, memory_order_acq_rel) + 1;
+	ATOMIC_IS_INITIALIZED(atomic);
+	return atomic_fetch_add_explicit(&atomic->val, 1, memory_order_acq_rel) + 1;
 }
 
 static inline int atomic_dec(atomic_t *atomic)
 {
-	return atomic_fetch_sub_explicit(atomic, 1, memory_order_acq_rel) - 1;
+	ATOMIC_IS_INITIALIZED(atomic);
+	return atomic_fetch_sub_explicit(&atomic->val, 1, memory_order_acq_rel) - 1;
 }
 
 static inline int atomic_set(atomic_t *atomic, int value)
 {
-	atomic_store(atomic, value);
+	ATOMIC_IS_INITIALIZED(atomic);
+	atomic_store(&atomic->val, value);
 	return value;
 }
 
 static inline int atomic_get(atomic_t *atomic)
 {
-	return atomic_load(atomic);
+	ATOMIC_IS_INITIALIZED(atomic);
+	return atomic_load(&atomic->val);
+}
+
+/* avoid using "atomic_init" so we don't conflict with symbol/macro from stdatomic.h */
+static inline void atomic_initialize(atomic_t *atomic, int value)
+{
+	atomic_init(&atomic->val, value);
+#if ENABLE_DEBUG
+	atomic->is_initialized = 1;
+#endif
 }
 
 #else
 
-typedef struct { fastlock_t lock; int val; } atomic_t;
+typedef struct {
+	fastlock_t lock;
+	int val;
+#if ENABLE_DEBUG
+	int is_initialized;
+#endif
+} atomic_t;
 
 static inline int atomic_inc(atomic_t *atomic)
 {
 	int v;
 
+	ATOMIC_IS_INITIALIZED(atomic);
 	fastlock_acquire(&atomic->lock);
 	v = ++(atomic->val);
 	fastlock_release(&atomic->lock);
@@ -186,6 +218,7 @@ static inline int atomic_dec(atomic_t *atomic)
 {
 	int v;
 
+	ATOMIC_IS_INITIALIZED(atomic);
 	fastlock_acquire(&atomic->lock);
 	v = --(atomic->val);
 	fastlock_release(&atomic->lock);
@@ -194,20 +227,26 @@ static inline int atomic_dec(atomic_t *atomic)
 
 static inline int atomic_set(atomic_t *atomic, int value)
 {
+	ATOMIC_IS_INITIALIZED(atomic);
 	fastlock_acquire(&atomic->lock);
 	atomic->val = value;
 	fastlock_release(&atomic->lock);
 	return value;
 }
 
-static inline void atomic_init(atomic_t *atomic, int value)
+/* avoid using "atomic_init" so we don't conflict with symbol/macro from stdatomic.h */
+static inline void atomic_initialize(atomic_t *atomic, int value)
 {
 	fastlock_init(&atomic->lock);
 	atomic->val = value;
+#if ENABLE_DEBUG
+	atomic->is_initialized = 1;
+#endif
 }
 
 static inline int atomic_get(atomic_t *atomic)
 {
+	ATOMIC_IS_INITIALIZED(atomic);
 	return atomic->val;
 }
 

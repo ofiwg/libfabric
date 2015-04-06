@@ -988,7 +988,7 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 		goto fail;
 	}
 
-	atomic_init(&fp->fab_refcnt, 0);
+	atomic_initialize(&fp->fab_refcnt, 0);
 	fattrp->fabric = fab_utof(fp);
 	fattrp->prov_version = USDF_PROV_VERSION;
 	*fabric = fab_utof(fp);
