@@ -1069,7 +1069,7 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	if (index >= sock_ep->ep_attr.rx_ctx_cnt)
 		return -FI_EINVAL;
 
-	rx_ctx = sock_rx_ctx_alloc(attr, context);
+	rx_ctx = sock_rx_ctx_alloc(attr ? attr : &sock_ep->rx_attr, context);
 	if (!rx_ctx)
 		return -FI_ENOMEM;
 
