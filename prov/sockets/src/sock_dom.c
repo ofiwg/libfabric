@@ -256,19 +256,18 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	uint64_t key;
 	struct fid_domain *domain;
 
-	if (fid->fclass != FI_CLASS_DOMAIN) {
-		SOCK_LOG_ERROR("memory registration only supported "
-				"for struct fid_domain\n");
+	if (fid->fclass != FI_CLASS_DOMAIN || !attr) {
 		return -FI_EINVAL;
 	}
+
 	domain = container_of(fid, struct fid_domain, fid);
-
 	dom = container_of(domain, struct sock_domain, dom_fid);
-	if (!(dom->info.mode & FI_PROV_MR_ATTR) && 
+	if ((flags & FI_MR_KEY) && 
+	    !(dom->info.mode & FI_PROV_MR_ATTR) && 
 	    ((attr->requested_key > IDX_MAX_INDEX) ||
-	    idm_lookup(&dom->mr_idm, (int) attr->requested_key)))
+	     idm_lookup(&dom->mr_idm, (int) attr->requested_key)))
 		return -FI_ENOKEY;
-
+	
 	_mr = calloc(1, sizeof(*_mr) + sizeof(_mr->mr_iov) * (attr->iov_count - 1));
 	if (!_mr)
 		return -FI_ENOMEM;
@@ -285,8 +284,8 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		(uintptr_t) attr->mr_iov[0].iov_base;
 
 	fastlock_acquire(&dom->lock);
-	key = (dom->info.mode & FI_PROV_MR_ATTR) ?
-	      sock_get_mr_key(dom) : (uint16_t) attr->requested_key;
+	key = ((dom->info.mode & FI_PROV_MR_ATTR) && !(flags & FI_MR_KEY)) ?
+		sock_get_mr_key(dom) : (uint16_t) attr->requested_key;
 	if (idm_set(&dom->mr_idm, key, _mr) < 0)
 		goto err;
 	_mr->mr_fid.key = key;
