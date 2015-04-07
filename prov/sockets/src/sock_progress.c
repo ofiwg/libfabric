@@ -334,7 +334,7 @@ static void sock_pe_report_error(struct sock_pe_entry *pe_entry, int rem)
 		sock_cntr_err_inc(pe_entry->comp->recv_cntr);
 	if (pe_entry->comp->recv_cq)
 		sock_cq_report_error(pe_entry->comp->recv_cq, pe_entry, rem, 
-				     -FI_ENOSPC, -FI_ENOSPC, NULL);
+				     FI_ENOSPC, -FI_ENOSPC, NULL);
 }
 
 static void sock_pe_progress_pending_ack(struct sock_pe *pe, 
