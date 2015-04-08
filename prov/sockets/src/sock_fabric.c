@@ -54,8 +54,6 @@ const char sock_fab_name[] = "IP";
 const char sock_dom_name[] = "sockets";
 const char sock_prov_name[] = "sockets";
 
-useconds_t sock_progress_thread_wait = 0;
-
 const struct fi_fabric_attr sock_fabric_attr = {
 	.fabric = NULL,
 	.name = NULL,
@@ -436,11 +434,5 @@ struct fi_provider sock_prov = {
 
 SOCKETS_INI
 {
-	char *tmp;
-
-	tmp = getenv("OFI_SOCK_PROGRESS_YIELD_TIME");
-	if (tmp)
-		sock_progress_thread_wait = atoi(tmp);
-
 	return (&sock_prov);
 }

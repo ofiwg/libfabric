@@ -57,8 +57,7 @@ int sock_cq_progress(struct sock_cq *cq)
 	struct sock_rx_ctx *rx_ctx;
 	struct dlist_entry *entry;
 
-	if (cq->domain->progress_mode == FI_PROGRESS_AUTO && 
-	    !sock_progress_thread_wait)
+	if (cq->domain->progress_mode == FI_PROGRESS_AUTO)
 		return 0;
 
 	fastlock_acquire(&cq->list_lock);

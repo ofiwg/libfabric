@@ -2265,12 +2265,6 @@ static void *sock_pe_progress_thread(void *data)
 	SOCK_LOG_INFO("Progress thread started\n");
 	while (*((volatile int*)&pe->do_progress)) {
 
-		/* FIXME */
-		if (sock_progress_thread_wait) {
-			pthread_yield();
-			usleep(sock_progress_thread_wait * 1000);
-		}
-
 		if (pe->domain->progress_mode == FI_PROGRESS_AUTO)
 			sock_pe_poll(pe);
 		

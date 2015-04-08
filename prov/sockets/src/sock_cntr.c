@@ -56,8 +56,7 @@ int sock_cntr_progress(struct sock_cntr *cntr)
 	struct sock_rx_ctx *rx_ctx;
 	struct dlist_entry *entry;
 
-	if (cntr->domain->progress_mode == FI_PROGRESS_AUTO && 
-	    !sock_progress_thread_wait)
+	if (cntr->domain->progress_mode == FI_PROGRESS_AUTO)
 		return 0;
 
 	fastlock_acquire(&cntr->list_lock);
