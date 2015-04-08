@@ -514,6 +514,10 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		return -FI_EINVAL;
 	
 	dom = container_of(domain, struct sock_domain, dom_fid);
+	if (dom->attr.av_type != FI_AV_UNSPEC && attr &&
+	    dom->attr.av_type != attr->type)
+		return -FI_EINVAL;
+
 	_av = calloc(1, sizeof(*_av));
 	if (!_av)
 		return -FI_ENOMEM;
