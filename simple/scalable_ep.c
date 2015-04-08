@@ -512,5 +512,5 @@ int main(int argc, char **argv)
 	ret = run();
 	fi_freeinfo(hints);
 	fi_freeinfo(fi);
-	return ret;
+	return -ret;
 }

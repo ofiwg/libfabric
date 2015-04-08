@@ -261,12 +261,19 @@ out:
 
 static void free_ep_res(void)
 {
-	fi_close(&ep->fid);
-	fi_close(&av->fid);
-	fi_close(&mr->fid);
-	fi_close(&mr_multi_recv->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	if (ep)
+		fi_close(&ep->fid);
+	if (av)
+		fi_close(&av->fid);
+	if (mr)
+		fi_close(&mr->fid);
+	if (mr_multi_recv)
+		fi_close(&mr_multi_recv->fid);
+	if (rcq)
+		fi_close(&rcq->fid);
+	if (scq)
+		fi_close(&scq->fid);
+
 	free(ctx_send);
 	free(ctx_multi_recv);
 	free(send_buf);
@@ -577,8 +584,12 @@ static int run(void)
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	free_ep_res();
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+
+	if (dom)
+		fi_close(&dom->fid);
+	if (fab)
+		fi_close(&fab->fid);
+
 	return ret;
 }
 
@@ -611,14 +622,9 @@ int main(int argc, char **argv)
 	hints->caps = FI_MSG | FI_MULTI_RECV;
 	hints->mode = FI_CONTEXT;
 
-	if (opts.prhints) {
-		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
-		ret = EXIT_SUCCESS;
-	} else {
-		ret = run();
-	}
+	ret = run();
 
 	fi_freeinfo(hints);
 	fi_freeinfo(fi);
-	return ret;
+	return -ret;
 }

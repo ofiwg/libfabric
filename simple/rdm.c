@@ -327,10 +327,8 @@ int main(int argc, char **argv)
 
 	/* Fabric initialization */
 	ret = init_fabric();
-	if(ret) {
-		fprintf(stderr, "Problem in fabric initialization\n");
-		return ret;
-	}
+	if(ret)
+		return -ret;
 
 	/* Exchange data */
 	ret = send_recv();

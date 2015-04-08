@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
- * Copyright (c) 2015 Cisco Systems, Inc.  All rights reserved.
  *
- * This software is available to you under the BSD license below:
+ * This software is available to you under the BSD license
+ * below:
  *
  *     Redistribution and use in source and binary forms, with or
  *     without modification, are permitted provided that the following
@@ -39,29 +39,143 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
-#include <shared.h>
+
+#include "shared.h"
 
 static struct cs_opts opts;
-static void *buf;
-static size_t buffer_size = 1024;
-static int transfer_size = 1000;
-static int rx_depth = 512;
+static int max_inject_size;
+static int max_credits = 128;
+static char test_name[10] = "custom";
+static struct timespec start, end;
+static void *send_buf, *recv_buf;
+static size_t buffer_size;
 
 static struct fi_info *fi, *hints;
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_ep *ep;
-static struct fid_cq *rcq, *scq;
+static struct fid_cq *rcq;
+static struct fid_cq *scq;
 static struct fid_av *av;
 static struct fid_mr *mr;
-static struct fid_wait *waitset;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
 struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
+
+static int send_xfer(int size)
+{
+	int ret;
+
+	ret = fi_inject(ep, send_buf, (size_t) size, remote_fi_addr);
+	if (ret)
+		FT_PRINTERR("fi_inject", ret);
+
+	return ret;
+}
+
+static int recv_xfer(int size)
+{
+	struct fi_cq_entry comp;
+	int ret;
+
+	do {
+		ret = fi_cq_read(rcq, &comp, 1);
+		if (ret < 0 && ret != -FI_EAGAIN) {
+			if (ret == -FI_EAVAIL) {
+				cq_readerr(rcq, "rcq");
+			} else {
+				FT_PRINTERR("fi_cq_read", ret);
+			}
+			return ret;
+		}
+	} while (ret == -FI_EAGAIN);
+
+	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+			&fi_ctx_recv);
+	if (ret)
+		FT_PRINTERR("fi_recv", ret);
+
+	return ret;
+}
+
+static int send_msg(int size)
+{
+	int ret;
+
+	ret = fi_inject(ep, send_buf, (size_t) size, remote_fi_addr);
+	if (ret) {
+		FT_PRINTERR("fi_inject", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+static int recv_msg(void)
+{
+	int ret;
+
+	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
+
+	ret = wait_for_completion(rcq, 1);
+
+	return ret;
+}
+
+static int sync_test(void)
+{
+	int ret;
+
+	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
+	if (ret)
+		return ret;
+
+	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
+}
+
+static int run_test(void)
+{
+	int ret, i;
+
+	if (opts.transfer_size > max_inject_size) 
+		return 0;
+
+	ret = sync_test();
+	if (ret)
+		goto out;
+
+	clock_gettime(CLOCK_MONOTONIC, &start);
+	for (i = 0; i < opts.iterations; i++) {
+		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
+				 recv_xfer(opts.transfer_size);
+		if (ret)
+			goto out;
+
+		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
+				 send_xfer(opts.transfer_size);
+		if (ret)
+			goto out;
+	}
+	clock_gettime(CLOCK_MONOTONIC, &end);
+
+	if (opts.machr)
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
+	else
+		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
+
+	ret = 0;
+
+out:
+	return ret;
+}
 
 static void free_ep_res(void)
 {
@@ -70,58 +184,48 @@ static void free_ep_res(void)
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
 	fi_close(&scq->fid);
-	fi_close(&waitset->fid);
-	free(buf);
+	free(send_buf);
+	free(recv_buf);
 }
 
 static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
 	struct fi_av_attr av_attr;
-	struct fi_wait_attr wait_attr;
 	int ret;
 
-	buf = malloc(buffer_size);
-	if (!buf) {
+	buffer_size = opts.user_options & FT_OPT_SIZE ?
+			opts.transfer_size : test_size[TEST_CNT - 1].size;
+	send_buf = malloc(buffer_size);
+	recv_buf = malloc(buffer_size);
+	if (!send_buf || !recv_buf) {
 		perror("malloc");
 		return -1;
 	}
 
-	/* Open a wait set */
-	memset(&wait_attr, 0, sizeof wait_attr);
-	wait_attr.wait_obj = FI_WAIT_UNSPEC;
-	ret = fi_wait_open(fab, &wait_attr, &waitset);
+	memset(&cq_attr, 0, sizeof cq_attr);
+	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
+	cq_attr.wait_obj = FI_WAIT_NONE;
+	cq_attr.size = max_credits << 1;
+
+	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
-		FT_PRINTERR("fi_wait_open", ret);
+		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	cq_attr.wait_obj = FI_WAIT_SET;
-	cq_attr.wait_cond = FI_CQ_COND_NONE;
-	cq_attr.wait_set = waitset;
-	cq_attr.size = rx_depth;
-
-	/* Open completion queue for send completions */
 	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
-	/* Open completion queue for recv completions */
-	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	/* Memory registration not required for send_buf since we use fi_inject.
+	 * fi_inject copies the buffer of data that needs to be sent. */
+	ret = fi_mr_reg(dom, recv_buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err3;
-	}
-	
-	/* Register memory */
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		goto err4;
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
@@ -130,33 +234,31 @@ static int alloc_ep_res(struct fi_info *fi)
 	av_attr.count = 1;
 	av_attr.name = NULL;
 
-	/* Open Address Vector */
 	ret = fi_av_open(dom, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
-		goto err5;
+		goto err4;
 	}
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
-		goto err6;
+		goto err5;
 	}
 
 	return 0;
 
-err6:
-	fi_close(&av->fid);
 err5:
-	fi_close(&mr->fid);
+	fi_close(&av->fid);
 err4:
-	fi_close(&rcq->fid);
+	fi_close(&mr->fid);
 err3:
 	fi_close(&scq->fid);
 err2:
-	fi_close(&waitset->fid);
+	fi_close(&rcq->fid);
 err1:
-	free(buf);
+	free(send_buf);
+	free(recv_buf);
 	return ret;
 }
 
@@ -164,14 +266,13 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	/* Bind AV and CQs with endpoint */
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -192,52 +293,43 @@ static int bind_ep_res(void)
 	return ret;
 }
 
-static int send_msg(int size)
-{
-	int ret;
-
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			&fi_ctx_send);
-	if (ret) {
-		FT_PRINTERR("fi_send", ret);
-		return ret;
-	}
-
-	ret = wait_for_completion(scq, 1);
-
-	return ret;
-}
-
-static int recv_msg(void)
-{
-	int ret;
-
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
-
-	ret = wait_for_completion(rcq, 1);
-
-	return ret;
-}
-
 static int init_fabric(void)
 {
 	uint64_t flags = 0;
 	char *node, *service;
 	int ret;
 
-	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
-	if (ret)
-		return ret;
-	
+	if (opts.dst_addr) {
+		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
+		if (ret)
+			return ret;
+		node = opts.dst_addr;
+		service = opts.dst_port;
+	} else {
+		node = opts.src_addr;
+		service = opts.src_port;
+		flags = FI_SOURCE;
+	}
+
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
+	
+	/* check max msg size */
+	max_inject_size = fi->tx_attr->inject_size;
+	if ((opts.user_options & FT_OPT_SIZE) &&
+	    (opts.transfer_size > max_inject_size)) {
+		fprintf(stderr, "Msg size greater than max inject size\n");
+		ret = -FI_EINVAL;
+		goto err0;
+	}
+
+	/* We use provider MR attributes and direct address (no offsets) 
+	 * for RMA calls */
+	if (!(fi->mode & FI_PROV_MR_ATTR))
+		fi->mode |= FI_PROV_MR_ATTR;
 
 	/* Get remote address */
 	if (opts.dst_addr) {
@@ -257,7 +349,7 @@ static int init_fabric(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
-	
+
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;
@@ -275,8 +367,6 @@ err3:
 err1:
 	fi_close(&fab->fid);
 err0:
-	fi_freeinfo(fi);
-
 	return ret;
 }
 
@@ -309,8 +399,8 @@ static int init_av(void)
 		}
 
 		/* Send local addr size and local addr */
-		memcpy(buf, &addrlen, sizeof(size_t));
-		memcpy(buf + sizeof(size_t), local_addr, addrlen);
+		memcpy(send_buf, &addrlen, sizeof(size_t));
+		memcpy(send_buf + sizeof(size_t), local_addr, addrlen);
 		ret = send_msg(sizeof(size_t) + addrlen);
 		if (ret)
 			return ret;
@@ -319,15 +409,16 @@ static int init_av(void)
 		ret = recv_msg();
 		if (ret)
 			return ret;
+
 	} else {
 		/* Post a recv to get the remote address */
 		ret = recv_msg();
 		if (ret)
 			return ret;
 
-		memcpy(&addrlen, buf, sizeof(size_t));
+		memcpy(&addrlen, recv_buf, sizeof(size_t));
 		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
+		memcpy(remote_addr, recv_buf + sizeof(size_t), addrlen);
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
 				&fi_ctx_av);
@@ -342,119 +433,93 @@ static int init_av(void)
 			return ret;
 	}
 
+	/* Post first recv */
+	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+			&fi_ctx_recv);
+	if (ret)
+		FT_PRINTERR("fi_recv", ret);
+
 	return ret;
 }
 
-static int send_recv()
+static int run(void)
 {
-	struct fi_cq_entry comp;
-	int ret, send_pending = 0, recv_pending = 0;
+	int i, ret = 0;
 
-	fprintf(stdout, "Posting a recv...\n");
-	ret = fi_recv(ep, buf, transfer_size, fi_mr_desc(mr),
-			remote_fi_addr, &fi_ctx_recv);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
+	ret = init_fabric();
+	if (ret)
 		return ret;
-	}
-	recv_pending++;
 
-	fprintf(stdout, "Posting a send...\n");
-	ret = fi_send(ep, buf, transfer_size, fi_mr_desc(mr),
-			remote_fi_addr, &fi_ctx_send);
-	if (ret) {
-		FT_PRINTERR("fi_send", ret);
-		return ret;
-	}
-	send_pending++;
+	ret = init_av();
+	if (ret)
+		goto out;
 
-	while (send_pending || recv_pending) {
-		/* Wait for completion events on CQs */
-		ret = fi_wait(waitset, -1);
-		if (ret < 0) {
-			FT_PRINTERR("fi_wait", ret);
-			return ret;
+	if (!(opts.user_options & FT_OPT_SIZE)) {
+		for (i = 0; i < TEST_CNT; i++) {
+			if (test_size[i].option > opts.size_option)
+				continue;
+			opts.transfer_size = test_size[i].size;
+			init_test(&opts, test_name, sizeof(test_name));
+			ret = run_test();
+			if (ret)
+				goto out;
 		}
-		
-		/* Read the send completion entry */
-		ret = fi_cq_read(scq, &comp, 1);
-		if(ret > 0) {
-			send_pending--;
-			fprintf(stdout, "Received send completion event!\n");
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(scq, "scq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			
-			return ret;
-		}
-		
-		/* Read the recv completion entry */
-		ret = fi_cq_read(rcq, &comp, 1);
-		if(ret > 0) {
-			recv_pending--;
-			fprintf(stdout, "Received recv completion event!\n");
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(rcq, "rcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-
-			return ret;
-		}
+	} else {
+		init_test(&opts, test_name, sizeof(test_name));
+		ret = run_test();
+		if (ret)
+			goto out;
 	}
 
-	return 0;
+	/* Finalize before closing ep */
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
+out:
+	free_ep_res();
+	fi_close(&dom->fid);
+	fi_close(&fab->fid);
+	return ret;
 }
 
 int main(int argc, char **argv)
 {
-	int op, ret = 0;
-
+	int op, ret;
 	opts = INIT_OPTS;
-	hints = fi_allocinfo();
-	if (!hints)
-		return EXIT_FAILURE;
+	opts.transfer_size = 64;
 
-	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
+	hints = fi_allocinfo();
+	if (!hints) {
+		FT_PRINTERR("fi_allocinfo", -FI_ENOMEM);
+		return EXIT_FAILURE;
+	}
+
+	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
-			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints);
+			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "A DGRAM client-server example that uses waitset.\n");
+			ft_csusage(argv[0], "Ping pong client and server using inject.");
 			return EXIT_FAILURE;
 		}
 	}
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
-	
-	hints->ep_attr->type = FI_EP_DGRAM;
+
+	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->mode = FI_CONTEXT;
 
-	ret = init_fabric();
-	if (ret)
-		return -ret;
+	if (opts.transfer_size)
+		hints->tx_attr->inject_size = opts.transfer_size;
+	else
+		hints->tx_attr->inject_size = 16;
 
-	ret = init_av();
-	if (ret)
-		return ret;
+	ret = run();
 
-	/* Exchange data */
-	ret = send_recv();
-
-	free_ep_res();
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
 	fi_freeinfo(hints);
 	fi_freeinfo(fi);
-
-	return ret;
+	return -ret;
 }

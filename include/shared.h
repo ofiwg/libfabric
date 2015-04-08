@@ -66,7 +66,6 @@ enum precision {
 /* client-server common options and option parsing */
 
 struct cs_opts {
-	int prhints;
 	int iterations;
 	int transfer_size;
 	char *src_port;
@@ -92,7 +91,7 @@ void ft_usage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);
 #define ADDR_OPTS "b:p:s:"
 #define INFO_OPTS "n:f:"
-#define CS_OPTS ADDR_OPTS "I:S:mi"
+#define CS_OPTS ADDR_OPTS "I:S:m"
 
 #define INIT_OPTS (struct cs_opts) { .iterations = 1000, \
 				     .transfer_size = 1024, \

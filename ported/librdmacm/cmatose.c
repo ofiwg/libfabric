@@ -616,6 +616,5 @@ exit1:
 	fi_freeinfo(info);
 exit0:
 	fi_freeinfo(hints);
-	printf("return status %d\n", ret);
-	return ret;
+	return -ret;
 }

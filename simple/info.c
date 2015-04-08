@@ -39,7 +39,6 @@
 static struct fi_info *hints;
 static char *node, *port;
 
-
 /* options and matching help strings need to be kept in sync */
 
 static const struct option longopts[] = {
@@ -49,6 +48,7 @@ static const struct option longopts[] = {
 	{"mode", required_argument, NULL, 'm'},
 	{"ep_type", required_argument, NULL, 'e'},
 	{"addr_format", required_argument, NULL, 'a'},
+	{"provider", required_argument, NULL, 'f'},
 	{"version", no_argument, NULL, 'v'},
 	{0,0,0,0}
 };
@@ -60,6 +60,7 @@ static const char *help_strings[][2] = {
 	{"MOD1|MOD2..", "\tone or more modes, default all modes"},
 	{"EPTYPE", "\t\tspecify single endpoint type: FI_EP_MSG, FI_EP_DGRAM..."},
 	{"FMT", "\t\tspecify accepted address format: FI_FORMAT_UNSPEC, FI_SOCKADDR..."},
+	{"PROV", "\t\tspecify provider explicitly"},
 	{"", "\t\tprint version info and exit"},
 	{"", ""}
 };
@@ -189,7 +190,7 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 
-	while ((op = getopt_long(argc, argv, "n:p:c:m:e:a:hv", longopts, NULL)) != -1) {
+	while ((op = getopt_long(argc, argv, "n:p:c:m:e:a:f:hv", longopts, NULL)) != -1) {
 		switch (op) {
 		case 'n':
 			node = optarg;
@@ -215,6 +216,7 @@ int main(int argc, char **argv)
 			break;
 		case 'f':
 			hints->fabric_attr->prov_name = strdup(optarg);
+			use_hints = 1;
 			break;
 		case 'v':
 			printf("%s: %s\n", argv[0], PACKAGE_VERSION);
@@ -231,5 +233,5 @@ int main(int argc, char **argv)
 
 	ret = run(use_hints ? hints : NULL, node, port);
 	fi_freeinfo(hints);
-	return ret;
+	return -ret;
 }

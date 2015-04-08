@@ -39,6 +39,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
+#include <rdma/fi_tagged.h>
 
 #include "shared.h"
 
@@ -61,9 +62,30 @@ static struct fid_mr *mr;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
-struct fi_context fi_ctx_send;
+struct fi_context fi_ctx_tsend;
+struct fi_context fi_ctx_trecv;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
+
+static uint64_t tag_data = 0;
+static uint64_t tag_control = 0x12345678;
+
+int wait_for_completion_tagged(struct fid_cq *cq, int num_completions)
+{
+	int ret;
+	struct fi_cq_tagged_entry comp;
+
+	while (num_completions > 0) {
+		ret = fi_cq_read(cq, &comp, 1);
+		if (ret > 0) {
+			num_completions--;
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
+			FT_PRINTERR("fi_cq_read", ret);
+			return ret;
+		}
+	}
+	return 0;
+}
 
 static int send_xfer(int size)
 {
@@ -86,17 +108,17 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			&fi_ctx_send);
+	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
+			tag_data, &fi_ctx_tsend);
 	if (ret)
-		FT_PRINTERR("fi_send", ret);
+		FT_PRINTERR("fi_tsend", ret);
 
 	return ret;
 }
 
 static int recv_xfer(int size)
 {
-	struct fi_cq_entry comp;
+	struct fi_cq_tagged_entry comp;
 	int ret;
 
 	do {
@@ -111,10 +133,11 @@ static int recv_xfer(int size)
 		}
 	} while (ret == -FI_EAGAIN);
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-			&fi_ctx_recv);
+	/* Posting recv for next send. Hence tag_data + 1 */
+	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+			tag_data + 1, 0, &fi_ctx_trecv);
 	if (ret)
-		FT_PRINTERR("fi_recv", ret);
+		FT_PRINTERR("fi_trecv", ret);
 
 	return ret;
 }
@@ -123,14 +146,14 @@ static int send_msg(int size)
 {
 	int ret;
 
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			&fi_ctx_send);
+	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
+			tag_control, &fi_ctx_tsend);
 	if (ret) {
-		FT_PRINTERR("fi_send", ret);
+		FT_PRINTERR("fi_tsend", ret);
 		return ret;
 	}
 
-	ret = wait_for_completion(scq, 1);
+	ret = wait_for_completion_tagged(scq, 1);
 
 	return ret;
 }
@@ -139,13 +162,14 @@ static int recv_msg(void)
 {
 	int ret;
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+		       tag_control, 0, &fi_ctx_trecv);
 	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
+		FT_PRINTERR("fi_trecv", ret);
 		return ret;
 	}
 
-	ret = wait_for_completion(rcq, 1);
+	ret = wait_for_completion_tagged(rcq, 1);
 
 	return ret;
 }
@@ -154,7 +178,7 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = wait_for_completion(scq, max_credits - credits);
+	ret = wait_for_completion_tagged(scq, max_credits - credits);
 	if (ret) {
 		return ret;
 	}
@@ -164,7 +188,11 @@ static int sync_test(void)
 	if (ret)
 		return ret;
 
-	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
+	ret = opts.dst_addr ? recv_xfer(16) : send_xfer(16);
+
+	tag_data++;
+
+	return ret;
 }
 
 static int run_test(void)
@@ -186,6 +214,8 @@ static int run_test(void)
 				 send_xfer(opts.transfer_size);
 		if (ret)
 			goto out;
+
+		tag_data++;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
@@ -307,11 +337,19 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
+	/* Post the first recv buffer */
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
+
 	return ret;
 }
 
 static int init_fabric(void)
 {
+	struct fi_info *fi;
 	uint64_t flags = 0;
 	char *node, *service;
 	int ret;
@@ -383,8 +421,8 @@ static int init_av(void)
 	int ret;
 
 	if (opts.dst_addr) {
-		/* Get local address blob. Find the addrlen first. We set 
-		 * addrlen as 0 and fi_getname will return the actual addrlen. */
+		/* Get local address blob. Find the addrlen first. We set addrlen 
+		 * as 0 and fi_getname will return the actual addrlen. */
 		addrlen = 0;
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
 		if (ret != -FI_ETOOSMALL) {
@@ -442,10 +480,10 @@ static int init_av(void)
 	}
 
 	/* Post first recv */
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-			&fi_ctx_recv);
+	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+			tag_data, 0, &fi_ctx_trecv);
 	if (ret)
-		FT_PRINTERR("fi_recv", ret);
+		FT_PRINTERR("fi_trecv", ret);
 
 	return ret;
 }
@@ -479,7 +517,7 @@ static int run(void)
 			goto out;
 	}
 
-	wait_for_completion(scq, max_credits - credits);
+	wait_for_completion_tagged(scq, max_credits - credits);
 	/* Finalize before closing ep */
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
@@ -506,7 +544,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Ping pong client and server using RDM.");
+			ft_csusage(argv[0], "Ping pong client and server using tagged messages.");
 			return EXIT_FAILURE;
 		}
 	}
@@ -515,16 +553,12 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->caps = FI_MSG | FI_TAGGED;
+	hints->mode = FI_CONTEXT;
 
-	if (opts.prhints) {
-		printf("%s", fi_tostr(&hints, FI_TYPE_INFO));
-		ret = EXIT_SUCCESS;
-	} else {
-		ret = run();
-	}
+	ret = run();
+
 	fi_freeinfo(hints);
 	fi_freeinfo(fi);
-	return ret;
+	return -ret;
 }
