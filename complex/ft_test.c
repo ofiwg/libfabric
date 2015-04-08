@@ -272,40 +272,39 @@ static int ft_run_latency(void)
 static int ft_bw(void)
 {
 	int ret, i;
+
 	if (listen_sock < 0) {
 		for (i = 0; i < ft.xfer_iter; i++) {
-                        ret = ft_send_msg();
+			ret = ft_send_msg();
 			if (ret)
 				return ret;
 		}
-                while (ft_tx.credits < ft_tx.max_credits) {
-                        ret = ft_comp_tx();
-                        if (ret)
-                                return ret;
-                }
-                ret = ft_recv_msg();
-                if (ret)
+
+		ret = ft_recv_msg();
+		if (ret)
 			return ret;
 	} else {
-		int count=0;
-                do {
+		for (i = 0; i < ft.xfer_iter; i += ft_rx.credits) {
 			ret = ft_post_recv_bufs();
 			if (ret)
 				return ret;
+
 			ret = ft_comp_rx();
 			if (ret)
 				return ret;
-			count+=ft_rx.credits;
-                } while (count < ft.xfer_iter);
-                ret = ft_send_msg();
-                if (ret)
-			return ret;
-                while (ft_tx.credits < ft_tx.max_credits) {
-			ret = ft_comp_tx();
-			if (ret)
-				return ret;
                 }
+
+		ret = ft_send_msg();
+		if (ret)
+			return ret;
 	}
+
+	while (ft_tx.credits < ft_tx.max_credits) {
+		ret = ft_comp_tx();
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
@@ -319,35 +318,23 @@ static int ft_bw_dgram(void)
 			if (ret)
 				return ret;
 		}
-		ret = ft_send_dgram_done();
-		if(ret)
-			return ret;
-		int credits = 0;
-		while(credits)
-		  {
-			  ret = ft_post_recv_bufs();
-			  if (ret)
-				  return ret;
-			  ret = ft_comp_rx();
-			  if (ret)
-				  return ret;
-			  credits=ft_rx.credits;
-		  }
+
+		ret = ft_sendrecv_dgram();
 	} else {
-          ret = ft_recv_dgram_flood();
-          if (ret)
-                return ret;
-          ret = ft_send_dgram();
-                return ret;
+		ret = ft_recv_dgram_flood();
+		if (ret)
+			return ret;
+
+		ret = ft_send_dgram();
 	}
 
-	return 0;
+	return ret;
 }
 
 static int ft_run_bandwidth(void)
 {
 	int ret, i;
-        ft.inc_step = 2;
+
 	for (i = 0; i < ft.size_cnt; i += ft.inc_step) {
 		ft_tx.msg_size = ft.size_array[i];
 		if (ft_tx.msg_size > fabric_info->ep_attr->max_msg_size)
