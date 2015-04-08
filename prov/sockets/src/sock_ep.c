@@ -1043,6 +1043,7 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	tx_ctx->tx_id = index;
 	tx_ctx->ep = sock_ep;
 	tx_ctx->domain = sock_ep->domain;
+	tx_ctx->av = sock_ep->av;
 	dlist_insert_tail(&sock_ep->tx_ctx_entry, &tx_ctx->ep_list);
 
 	tx_ctx->fid.ctx.fid.ops = &sock_ctx_ops;
@@ -1079,6 +1080,7 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	rx_ctx->rx_id = index;
 	rx_ctx->ep = sock_ep;
 	rx_ctx->domain = sock_ep->domain;
+	rx_ctx->av = sock_ep->av;
 	dlist_insert_tail(&sock_ep->rx_ctx_entry, &rx_ctx->ep_list);
 
 	rx_ctx->ctx.fid.ops = &sock_ctx_ops;
