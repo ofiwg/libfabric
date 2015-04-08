@@ -66,6 +66,7 @@
 #define SOCK_EP_MAX_ORDER_WAW_SZ SOCK_EP_MAX_MSG_SZ
 #define SOCK_EP_MEM_TAG_FMT (0)
 #define SOCK_EP_MAX_EP_CNT (128)
+#define SOCK_EP_MAX_CQ_CNT (32)
 #define SOCK_EP_MAX_TX_CNT (16)
 #define SOCK_EP_MAX_RX_CNT (16)
 #define SOCK_EP_MAX_IOV_LIMIT (8)
@@ -136,6 +137,7 @@ struct sock_fabric {
 	struct fid_fabric fab_fid;
 	atomic_t ref;
 	struct dlist_entry service_list;
+	struct dlist_entry fab_list_entry;
 	fastlock_t lock;
 };
 
@@ -171,6 +173,8 @@ struct sock_domain {
 	struct index_map mr_idm;
 	struct sock_pe *pe;
 	struct sock_conn_map r_cmap;
+	struct dlist_entry dom_list_entry;
+	struct fi_domain_attr attr;
 };
 
 struct sock_cntr {
@@ -818,6 +822,15 @@ void sock_fabric_add_service(struct sock_fabric *fab, int service);
 void sock_fabric_remove_service(struct sock_fabric *fab, int service);
 int sock_fabric_check_service(struct sock_fabric *fab, int service);
 
+void sock_dom_add_to_list(struct sock_domain *domain);
+int sock_dom_check_list(struct sock_domain *domain);
+void sock_dom_remove_from_list(struct sock_domain *domain);
+struct sock_domain *sock_dom_list_head(void);
+
+void sock_fab_add_to_list(struct sock_fabric *fabric);
+int sock_fab_check_list(struct sock_fabric *fabric);
+void sock_fab_remove_from_list(struct sock_fabric *fabric);
+struct sock_fabric *sock_fab_list_head(void);
 
 int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			struct sock_ep **ep, void *context, size_t fclass);

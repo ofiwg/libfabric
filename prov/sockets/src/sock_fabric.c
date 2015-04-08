@@ -61,6 +61,116 @@ const struct fi_fabric_attr sock_fabric_attr = {
 	.prov_version = FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION),
 };
 
+static struct dlist_entry sock_fab_list;
+static struct dlist_entry sock_dom_list;
+static fastlock_t sock_list_lock;
+
+void sock_dom_add_to_list(struct sock_domain *domain)
+{
+	fastlock_acquire(&sock_list_lock);
+	dlist_insert_tail(&domain->dom_list_entry, &sock_dom_list);
+	fastlock_release(&sock_list_lock);
+}
+
+static inline int sock_dom_check_list_internal(struct sock_domain *domain)
+{
+	struct dlist_entry *entry;
+	struct sock_domain *dom_entry;
+	for (entry = sock_dom_list.next; entry != &sock_dom_list; 
+	     entry = entry->next) {
+		dom_entry = container_of(entry, struct sock_domain, 
+					 dom_list_entry);
+		if (dom_entry == domain)
+			return 1;
+	}
+	return 0;
+}
+
+int sock_dom_check_list(struct sock_domain *domain) 
+{
+	int found;
+	fastlock_acquire(&sock_list_lock);
+	found = sock_dom_check_list_internal(domain);
+	fastlock_release(&sock_list_lock);
+	return found;
+}
+
+void sock_dom_remove_from_list(struct sock_domain *domain)
+{
+	fastlock_acquire(&sock_list_lock);
+	if (sock_dom_check_list_internal(domain)) {
+		dlist_remove(&domain->dom_list_entry);
+	}
+	fastlock_release(&sock_list_lock);
+}
+
+struct sock_domain *sock_dom_list_head(void)
+{
+	struct sock_domain *domain;
+	fastlock_acquire(&sock_list_lock);
+	if (dlist_empty(&sock_dom_list)) {
+		domain = NULL;
+	} else {
+		domain = container_of(sock_dom_list.next, 
+				      struct sock_domain, dom_list_entry);
+	}
+	fastlock_release(&sock_list_lock);
+	return domain;
+}
+
+void sock_fab_add_to_list(struct sock_fabric *fabric)
+{
+	fastlock_acquire(&sock_list_lock);
+	dlist_insert_tail(&fabric->fab_list_entry, &sock_fab_list);
+	fastlock_release(&sock_list_lock);
+}
+
+static inline int sock_fab_check_list_internal(struct sock_fabric *fabric)
+{
+	struct dlist_entry *entry;
+	struct sock_fabric *fab_entry;
+	for (entry = sock_fab_list.next; entry != &sock_fab_list; 
+	     entry = entry->next) {
+		fab_entry = container_of(entry, struct sock_fabric, 
+					 fab_list_entry);
+		if (fab_entry == fabric)
+			return 1;
+	}
+	return 0;
+}
+
+int sock_fab_check_list(struct sock_fabric *fabric) 
+{
+	int found;
+	fastlock_acquire(&sock_list_lock);
+	found = sock_fab_check_list_internal(fabric);
+	fastlock_release(&sock_list_lock);
+	return found;
+}
+
+void sock_fab_remove_from_list(struct sock_fabric *fabric)
+{
+	fastlock_acquire(&sock_list_lock);
+	if (sock_fab_check_list_internal(fabric)) {
+		dlist_remove(&fabric->fab_list_entry);
+	}
+	fastlock_release(&sock_list_lock);
+}
+
+struct sock_fabric *sock_fab_list_head(void)
+{
+	struct sock_fabric *fabric;
+	fastlock_acquire(&sock_list_lock);
+	if (dlist_empty(&sock_fab_list)) {
+		fabric = NULL;
+	} else {
+		fabric = container_of(sock_fab_list.next, 
+				      struct sock_fabric, fab_list_entry);
+	}
+	fastlock_release(&sock_list_lock);
+	return fabric;
+}
+
 int sock_verify_fabric_attr(struct fi_fabric_attr *attr)
 {
 	if (!attr)
@@ -84,6 +194,8 @@ int sock_verify_info(struct fi_info *hints)
 	uint64_t caps;
 	enum fi_ep_type ep_type;
 	int ret;
+	struct sock_domain *domain;
+	struct sock_fabric *fabric;
 
 	if (!hints)
 		return 0;
@@ -129,10 +241,26 @@ int sock_verify_info(struct fi_info *hints)
 		return -FI_ENODATA;
 	}
 
+	if (hints->domain_attr && hints->domain_attr->domain) {
+		domain = container_of(hints->domain_attr->domain,
+				      struct sock_domain, dom_fid);
+		if (!sock_dom_check_list(domain)) {
+			SOCK_LOG_INFO("no matching domain\n");
+			return -FI_ENODATA;
+		}
+	}
 	ret = sock_verify_domain_attr(hints->domain_attr);
 	if (ret) 
 		return ret;
 
+	if (hints->fabric_attr && hints->fabric_attr->fabric) {
+		fabric = container_of(hints->fabric_attr->fabric,
+				      struct sock_fabric, fab_fid);
+		if (!sock_fab_check_list(fabric)) {
+			SOCK_LOG_INFO("no matching fabric\n");
+			return -FI_ENODATA;
+		}
+	}
 	ret = sock_verify_fabric_attr(hints->fabric_attr);
 	if (ret) 
 		return ret;
@@ -152,11 +280,11 @@ static int sock_fabric_close(fid_t fid)
 {
 	struct sock_fabric *fab;
 	fab = container_of(fid, struct sock_fabric, fab_fid);
-
 	if (atomic_get(&fab->ref)) {
 		return -FI_EBUSY;
 	}
 
+	sock_fab_remove_from_list(fab);
 	fastlock_destroy(&fab->lock);
 	free(fab);
 	return 0;
@@ -191,6 +319,7 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	fab->fab_fid.ops = &sock_fab_ops;
 	*fabric = &fab->fab_fid;
 	atomic_init(&fab->ref, 0);
+	sock_fab_add_to_list(fab);
 	return 0;
 }
 
@@ -421,6 +550,7 @@ err:
 
 static void fi_sockets_fini(void)
 {
+	fastlock_destroy(&sock_list_lock);
 }
 
 struct fi_provider sock_prov = {
@@ -434,5 +564,8 @@ struct fi_provider sock_prov = {
 
 SOCKETS_INI
 {
+	fastlock_init(&sock_list_lock);
+	dlist_init(&sock_fab_list);
+	dlist_init(&sock_dom_list);
 	return (&sock_prov);
 }
