@@ -140,6 +140,7 @@ static int sock_conn_map_insert(struct sock_conn_map *map,
 	map->table[index].ep = ep;
 	sock_comm_buffer_init(&map->table[index]);
 	map->used++;
+	sock_pe_signal(ep->domain->pe);
 	return index + 1;
 }				 
 

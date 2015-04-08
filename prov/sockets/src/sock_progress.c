@@ -2000,10 +2000,19 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	return sock_pe_progress_tx_entry(pe, tx_ctx, pe_entry);
 }
 
+void sock_pe_signal(struct sock_pe *pe)
+{
+	char c = 0;
+	if (write(pe->signal_fds[SOCK_SIGNAL_WR_FD], &c, 1) != 1) {
+		SOCK_LOG_ERROR("Failed to signal\n");
+	}
+}
+
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx)
 {
 	pthread_mutex_lock(&pe->list_lock);
 	dlistfd_insert_tail(&ctx->pe_entry, &pe->tx_list);
+	sock_pe_signal(pe);
 	pthread_mutex_unlock(&pe->list_lock);
 	SOCK_LOG_INFO("TX ctx added to PE\n");
 }
@@ -2012,6 +2021,7 @@ void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx)
 {
 	pthread_mutex_lock(&pe->list_lock);
 	dlistfd_insert_tail(&ctx->pe_entry, &pe->rx_list);
+	sock_pe_signal(pe);
 	pthread_mutex_unlock(&pe->list_lock);
 	SOCK_LOG_INFO("RX ctx added to PE\n");
 }
@@ -2031,15 +2041,16 @@ void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx)
 }
 
 static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
-			   struct sock_rx_ctx *rx_ctx)
+				  struct sock_rx_ctx *rx_ctx)
 {
 	struct sock_conn *conn;
 	struct sock_conn_map *map;
-	int i, ret, data_avail;
+	int i, ret = 0, data_avail;
 	
 	map = &ep->domain->r_cmap;
 	assert(map != NULL);
 
+	fastlock_acquire(&map->lock);
 	for (i = 0; i < map->used; i++) {
 		conn = &map->table[i];
 		
@@ -2057,7 +2068,7 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 			if (ret < 0 && errno != EINTR) {
 				SOCK_LOG_INFO("Error polling fd: %d\n", 
 					      conn->sock_fd);
-				return ret;
+				goto out;
 			}
 			data_avail = (ret == 1 && sock_comm_data_avail(conn));
 		}
@@ -2067,10 +2078,13 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 			/* new RX PE entry */
 			ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn, i);
 			if (ret < 0)
-				return ret;
+				goto out;
 		}
 	}
-	return 0;
+	ret = 0;
+out:
+	fastlock_release(&map->lock);
+	return ret;
 }
 
 int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
@@ -2166,6 +2180,80 @@ out:
 	return ret;
 }
 
+static void sock_pe_poll(struct sock_pe *pe)
+{
+	char tmp;
+	fd_set rfds;
+	int i, max_fds = 0;
+	struct dlist_entry *entry;
+	struct sock_tx_ctx *tx_ctx;
+	struct sock_rx_ctx *rx_ctx;
+	struct sock_conn_map *map;
+	struct sock_conn *conn;
+
+	if (dlistfd_empty(&pe->tx_list) && dlistfd_empty(&pe->rx_list))
+		goto do_wait;
+
+	FD_ZERO(&rfds);
+	pthread_mutex_lock(&pe->list_lock);
+	if (!dlistfd_empty(&pe->tx_list)) {
+		for (entry = pe->tx_list.list.next;
+		     entry != &pe->tx_list.list; entry = entry->next) {
+			tx_ctx = container_of(entry, struct sock_tx_ctx, pe_entry);
+			if (!rbfdempty(&tx_ctx->rbfd) ||
+			    !dlist_empty(&tx_ctx->pe_entry_list)) {
+				pthread_mutex_unlock(&pe->list_lock);
+				return;
+			}
+			FD_SET(tx_ctx->rbfd.fd[RB_READ_FD], &rfds);
+			max_fds = MAX(tx_ctx->rbfd.fd[RB_READ_FD], max_fds);
+		}
+	}	
+
+	if (!dlistfd_empty(&pe->rx_list)) {
+		for (entry = pe->rx_list.list.next;
+		     entry != &pe->rx_list.list; entry = entry->next) {
+			rx_ctx = container_of(entry, struct sock_rx_ctx, pe_entry);
+			if (!dlist_empty(&rx_ctx->rx_buffered_list) ||
+			    !dlist_empty(&rx_ctx->pe_entry_list)) {
+				pthread_mutex_unlock(&pe->list_lock);
+				return;
+			}
+		}
+	}
+	pthread_mutex_unlock(&pe->list_lock);
+
+	map = &pe->domain->r_cmap;
+	fastlock_acquire(&map->lock);
+	for (i = 0; i < map->used; i++) {
+		conn = &map->table[i];		
+		if (rbused(&conn->outbuf) || rbused(&conn->inbuf)) {
+			sock_comm_flush(conn);
+			fastlock_release(&map->lock);
+			return;
+		}
+		
+		FD_SET(conn->sock_fd, &rfds);
+		max_fds = MAX(conn->sock_fd, max_fds);
+	}
+	fastlock_release(&map->lock);
+
+do_wait:
+	FD_SET(pe->signal_fds[SOCK_SIGNAL_RD_FD], &rfds);
+	max_fds = MAX(pe->signal_fds[SOCK_SIGNAL_RD_FD], max_fds);
+	
+	SOCK_LOG_ERROR("Entering select : %d: %d\n", max_fds, 
+		       pe->signal_fds[SOCK_SIGNAL_RD_FD]);
+	if (select(max_fds + 1, &rfds, NULL, NULL, NULL) < 0) {
+		SOCK_LOG_ERROR ("select failed\n");
+		return;
+	}
+
+	if (FD_ISSET(pe->signal_fds[SOCK_SIGNAL_RD_FD], &rfds)) {
+		while (read(pe->signal_fds[SOCK_SIGNAL_RD_FD], &tmp, 1) == 1);
+	}
+}
+
 static void *sock_pe_progress_thread(void *data)
 {
 	int ret;
@@ -2177,12 +2265,9 @@ static void *sock_pe_progress_thread(void *data)
 	SOCK_LOG_INFO("Progress thread started\n");
 	while (*((volatile int*)&pe->do_progress)) {
 
-		/* FIXME */
-		if (sock_progress_thread_wait) {
-			pthread_yield();
-			usleep(sock_progress_thread_wait * 1000);
-		}
-
+		if (pe->domain->progress_mode == FI_PROGRESS_AUTO)
+			sock_pe_poll(pe);
+		
 		pthread_mutex_lock(&pe->list_lock);		
 		if (!dlistfd_empty(&pe->tx_list)) {
 			for (entry = pe->tx_list.list.next;
@@ -2252,17 +2337,24 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 	pe->domain = domain;
 
 	if (domain->progress_mode == FI_PROGRESS_AUTO) {
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, pe->signal_fds) < 0) {
+			goto err1;
+		}
+		fd_set_nonblock(pe->signal_fds[SOCK_SIGNAL_RD_FD]);
 		pe->do_progress = 1;
 		if (pthread_create(&pe->progress_thread, NULL, 
 				   sock_pe_progress_thread, (void *)pe)) {
 			SOCK_LOG_ERROR("Couldn't create progress thread\n");
-			goto err;
+			goto err2;
 		}
 	}
 	SOCK_LOG_INFO("PE init: OK\n");
 	return pe;
 
-err:
+err2:
+	close(pe->signal_fds[0]);
+	close(pe->signal_fds[1]);
+err1:
 	fastlock_destroy(&pe->lock);
 	dlistfd_head_free(&pe->tx_list);
 	dlistfd_head_free(&pe->rx_list);
@@ -2274,7 +2366,10 @@ void sock_pe_finalize(struct sock_pe *pe)
 {
 	if (pe->domain->progress_mode == FI_PROGRESS_AUTO) {
 		pe->do_progress = 0;
+		sock_pe_signal(pe);
 		pthread_join(pe->progress_thread, NULL);
+		close(pe->signal_fds[0]);
+		close(pe->signal_fds[1]);
 	}
 	
 	fastlock_destroy(&pe->lock);

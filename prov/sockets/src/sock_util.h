@@ -35,8 +35,6 @@
 
 #include <rdma/fi_log.h>
 
-extern useconds_t sock_progress_thread_wait;
-
 extern const char sock_fab_name[];
 extern const char sock_dom_name[];
 extern const char sock_prov_name[];

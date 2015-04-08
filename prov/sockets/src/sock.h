@@ -119,6 +119,11 @@
 #define SOCK_COMM_BUF_SZ (1<<20)
 #define SOCK_COMM_THRESHOLD (128 * 1024)
 
+enum {
+	SOCK_SIGNAL_RD_FD = 0,
+	SOCK_SIGNAL_WR_FD
+};
+
 #define SOCK_MAJOR_VERSION 1
 #define SOCK_MINOR_VERSION 0
 
@@ -697,6 +702,7 @@ struct sock_pe {
 	struct sock_pe_entry pe_table[SOCK_PE_MAX_ENTRIES];
 	fastlock_t lock;
 	pthread_mutex_t list_lock;
+	int signal_fds[2];
 
 	struct dlist_entry free_list;
 	struct dlist_entry busy_list;
@@ -936,6 +942,7 @@ int sock_conn_map_init(struct sock_conn_map *map, int init_size);
 struct sock_pe *sock_pe_init(struct sock_domain *domain);
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);
 void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx);
+void sock_pe_signal(struct sock_pe *pe);
 int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx);
 int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx);
 void sock_pe_remove_tx_ctx(struct sock_tx_ctx *tx_ctx);
