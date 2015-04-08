@@ -127,7 +127,7 @@ enum ft_comp_type {
 enum ft_test_type {
 	FT_TEST_UNSPEC,
 	FT_TEST_LATENCY,
-//	FT_TEST_BANDWIDTH,
+	FT_TEST_BANDWIDTH,
 	FT_MAX_TEST
 };
 
@@ -225,7 +225,9 @@ void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt);
 int ft_recv_msg();
 int ft_send_msg();
 int ft_send_dgram();
+int ft_send_dgram_done();
 int ft_recv_dgram();
+int ft_recv_dgram_flood();
 int ft_sendrecv_dgram();
 
 int ft_run_test();
