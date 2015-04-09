@@ -196,6 +196,7 @@ usdf_msg_recv(struct fid_ep *fep, void *buf, size_t len,
 	rqe->ms_cur_ptr = buf;
 	rqe->ms_iov_resid = len;
 	rqe->ms_length = 0;
+	rqe->ms_resid = len;
 
 	TAILQ_INSERT_TAIL(&rx->r.msg.rx_posted_rqe, rqe, ms_link);
 
@@ -417,7 +418,7 @@ usdf_msg_send_segment(struct usdf_tx *tx, struct usdf_ep *ep)
 
 		/* add packet lengths */
 		sent = ep->ep_domain->dom_fabric->fab_dev_attrs->uda_mtu -
-			space;
+			sizeof(*hdr) - space;
 		hdr->hdr.uh_ip.tot_len = htons(
 				sent + sizeof(struct rudp_pkt) -
 				sizeof(struct ether_header));
@@ -780,6 +781,7 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 	uint8_t *rqe_ptr;
 	size_t cur_iov;
 	size_t iov_resid;
+	size_t ms_resid;
 	size_t rxlen;
 	size_t copylen;
 	int ret;
@@ -831,12 +833,14 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 		rqe_ptr = (uint8_t *)rqe->ms_cur_ptr;
 		iov_resid = rqe->ms_iov_resid;
 		cur_iov = rqe->ms_cur_iov;
+		ms_resid = rqe->ms_resid;
 		while (rxlen > 0) {
 			copylen = MIN(rxlen, iov_resid);
 			memcpy(rqe_ptr, rx_ptr, copylen);
 			rx_ptr += copylen;
 			rxlen -= copylen;
 			iov_resid -= copylen;
+			ms_resid -= copylen;
 			if (iov_resid == 0) {
 				if (cur_iov == rqe->ms_last_iov) {
 					break;
@@ -848,6 +852,10 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 				rqe_ptr += copylen;
 			}
 		}
+		rqe->ms_cur_ptr = rqe_ptr;
+		rqe->ms_iov_resid = iov_resid;
+		rqe->ms_cur_iov = cur_iov;
+		rqe->ms_resid = ms_resid;
 		break;
 
 	case RUDP_OP_LAST:
@@ -872,12 +880,14 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 		rqe_ptr = (uint8_t *)rqe->ms_cur_ptr;
 		iov_resid = rqe->ms_iov_resid;
 		cur_iov = rqe->ms_cur_iov;
+		ms_resid = rqe->ms_resid;
 		while (rxlen > 0) {
 			copylen = MIN(rxlen, iov_resid);
 			memcpy(rqe_ptr, rx_ptr, copylen);
 			rx_ptr += copylen;
 			rxlen -= copylen;
 			iov_resid -= copylen;
+			ms_resid -= copylen;
 			if (iov_resid == 0) {
 				if (cur_iov == rqe->ms_last_iov) {
 					break;
@@ -889,6 +899,12 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 				rqe_ptr += copylen;
 			}
 		}
+		/*
+		* Normally we need to store back the updated values of
+		* ms_resid, ms_cur_iov, ms_cur_ptr and ms_iov_resid. But
+		* being the last step of the process, updating these
+		* values are not necessary
+		*/
 		if (rxlen > 0) {
 			rqe->ms_length -= rxlen;
 /* printf("RQE truncated XXX\n"); */
