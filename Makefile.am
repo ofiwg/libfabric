@@ -8,7 +8,7 @@ bin_PROGRAMS = \
 	simple/fi_rdm_rma_simple \
 	simple/fi_dgram \
 	simple/fi_dgram_waitset \
-	simple/fi_rdm_tagged_search \
+	simple/fi_rdm_tagged_peek \
 	simple/fi_cq_data \
 	simple/fi_poll \
 	simple/fi_scalable_ep \
@@ -73,9 +73,9 @@ simple_fi_dgram_waitset_SOURCES = \
 	simple/dgram_waitset.c
 simple_fi_dgram_waitset_LDADD = libfabtests.la
 
-simple_fi_rdm_tagged_search_SOURCES = \
-	simple/rdm_tagged_search.c
-simple_fi_rdm_tagged_search_LDADD = libfabtests.la
+simple_fi_rdm_tagged_peek_SOURCES = \
+	simple/rdm_tagged_peek.c
+simple_fi_rdm_tagged_peek_LDADD = libfabtests.la
 
 simple_fi_cq_data_SOURCES = \
 	simple/cq_data.c

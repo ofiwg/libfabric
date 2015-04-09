@@ -73,7 +73,7 @@ sleep 3
 fi_rdm_tagged_pingpong -I 5 $1
 echo ...done 
 sleep 3
-echo Running fi_rdm_tagged_search
+echo Running fi_rdm_tagged_peek
 fi_rdm_tagged_search &
 sleep 3
 fi_rdm_tagged_search $1

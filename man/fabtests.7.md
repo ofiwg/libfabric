@@ -41,7 +41,7 @@ These tests are a mix of very basic tests and major features of libfabric. All o
 	fi_rdm_rma_simple: A simple RDM client-sever RMA example
 	fi_rdm_shared_ctx: An RDM client-server example that uses shared context
 	fi_rdm_tagged_pingpong: A ping pong client-server example using tagged messages
-	fi_rdm_tagged_search: An RDM client-server example that uses tagged search
+	fi_rdm_tagged_peek: An RDM client-server example that uses tagged FI_PEEK
 	fi_scalable_ep: An RDM client-server example with scalable endpoints
 	fi_ud_pingpong: A ping-pong client-server example using DGRAM endpoints
 
