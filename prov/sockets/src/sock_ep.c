@@ -70,7 +70,7 @@ const struct fi_rx_attr sock_srx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
 	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
-	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
+	.total_buffered_recv = 0,
 	.size = SOCK_EP_MAX_MSG_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
@@ -1074,9 +1074,6 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	if (!rx_ctx)
 		return -FI_ENOMEM;
 
-	rx_ctx->attr.total_buffered_recv = rx_ctx->attr.total_buffered_recv ?
-		rx_ctx->attr.total_buffered_recv : SOCK_EP_MAX_BUFF_RECV;
-	
 	rx_ctx->rx_id = index;
 	rx_ctx->ep = sock_ep;
 	rx_ctx->domain = sock_ep->domain;
@@ -1190,10 +1187,7 @@ int sock_srx_ctx(struct fid_domain *domain,
 	rx_ctx->ctx.tagged = &sock_ep_tagged;
 	
 	/* default config */
-	rx_ctx->min_multi_recv = SOCK_EP_MIN_MULTI_RECV;
-	rx_ctx->attr.total_buffered_recv = rx_ctx->attr.total_buffered_recv ?
-		rx_ctx->attr.total_buffered_recv : SOCK_EP_MAX_BUFF_RECV;
-	
+	rx_ctx->min_multi_recv = SOCK_EP_MIN_MULTI_RECV;	
 	*srx = &rx_ctx->ctx;
 	atomic_inc(&dom->ref);
 	return 0;
@@ -1395,10 +1389,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		if (info->rx_attr) {
 			sock_ep->rx_attr = *info->rx_attr;
 			sock_ep->op_flags |= info->rx_attr->op_flags;
-			sock_ep->rx_attr.total_buffered_recv = 
-				sock_ep->rx_attr.total_buffered_recv ?
-				sock_ep->rx_attr.total_buffered_recv : 
-				SOCK_EP_MAX_BUFF_RECV;
 		}
 		sock_ep->info.connreq = info->connreq;
 	}
