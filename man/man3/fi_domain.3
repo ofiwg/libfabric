@@ -1,4 +1,4 @@
-.TH fi_domain 3 "2015\-03\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_domain 3 "2015\-04\-08" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_domain - Open a fabric access domain
@@ -407,8 +407,8 @@ If supported (non-zero value is returned), the minimum size of remote CQ
 data must be at least 4-bytes.
 .SS Completion Queue Count (cq_cnt)
 .PP
-The total number of completion queues supported by the domain, relative
-to any specified or default CQ attributes.
+The optimal number of completion queues supported by the domain,
+relative to any specified or default CQ attributes.
 The cq_cnt value may be a fixed value of the maximum number of CQs
 supported by the underlying provider, or may be a dynamic value, based
 on the default attributes of an allocated CQ, such as the CQ size and
