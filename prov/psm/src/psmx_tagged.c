@@ -32,6 +32,56 @@
 
 #include "psmx.h"
 
+
+/*
+ * TODO: make asynchronous
+ */
+ssize_t _psmx_tagged_peek(struct fid_ep *ep, void *buf, size_t len,
+			  void *desc, fi_addr_t src_addr,
+			  uint64_t tag, uint64_t ignore,
+			  void *context, uint64_t flags)
+{
+	return -FI_ENOSYS;
+/*
+	struct psmx_fid_ep *ep_priv;
+	psm_mq_status_t psm_status;
+	uint64_t psm_tag, psm_tagsel;
+	int err;
+
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+
+	if ((*tag) & ep_priv->domain->reserved_tag_bits) {
+		FI_WARN(&psmx_prov, FI_LOG_EP_DATA,
+			"using reserved tag bits."
+			"tag=%lx. reserved_bits=%lx.\n", *tag,
+			ep_priv->domain->reserved_tag_bits);
+	}
+
+	psm_tag = *tag & (~ep_priv->domain->reserved_tag_bits);
+	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;
+
+	if (flags & FI_CLAIM)
+		return -FI_EOPNOTSUPP;
+
+	err = psm_mq_iprobe(ep_priv->domain->psm_mq, psm_tag, psm_tagsel,
+			    &psm_status);
+	switch (err) {
+	case PSM_OK:
+		*tag = psm_status.msg_tag;
+		*len = psm_status.msg_length;
+		if (src_addr)
+			*src_addr = FI_ADDR_NOTAVAIL;
+		return 1;
+
+	case PSM_MQ_NO_COMPLETIONS:
+		return -FI_ENOMSG;
+
+	default:
+		return psmx_errno(err);
+	}
+*/
+}
+
 ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 			  void *desc, fi_addr_t src_addr,
 			  uint64_t tag, uint64_t ignore,
@@ -44,6 +94,10 @@ ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 	int err;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+
+	if (flags & FI_PEEK)
+		return _psmx_tagged_peek(ep, buf, len, desc, src_addr,
+					 tag, ignore, context, flags);
 
 	if (flags & FI_TRIGGER) {
 		struct psmx_trigger *trigger;
@@ -835,48 +889,6 @@ static ssize_t psmx_tagged_inject(struct fid_ep *ep, const void *buf, size_t len
 				 ep_priv->flags | FI_INJECT | PSMX_NO_COMPLETION);
 }
 
-static ssize_t psmx_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
-				  uint64_t flags, fi_addr_t *src_addr, size_t *len,
-				  void *context)
-{
-	struct psmx_fid_ep *ep_priv;
-	psm_mq_status_t psm_status;
-	uint64_t psm_tag, psm_tagsel;
-	int err;
-
-	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-
-	if ((*tag) & ep_priv->domain->reserved_tag_bits) {
-		FI_WARN(&psmx_prov, FI_LOG_EP_DATA,
-			"using reserved tag bits."
-			"tag=%lx. reserved_bits=%lx.\n", *tag,
-			ep_priv->domain->reserved_tag_bits);
-	}
-
-	psm_tag = *tag & (~ep_priv->domain->reserved_tag_bits);
-	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;
-
-	if (flags & FI_CLAIM)
-		return -FI_EOPNOTSUPP;
-
-	err = psm_mq_iprobe(ep_priv->domain->psm_mq, psm_tag, psm_tagsel,
-			    &psm_status);
-	switch (err) {
-	case PSM_OK:
-		*tag = psm_status.msg_tag;
-		*len = psm_status.msg_length;
-		if (src_addr)
-			*src_addr = FI_ADDR_NOTAVAIL;
-		return 1;
-
-	case PSM_MQ_NO_COMPLETIONS:
-		return -FI_ENOMSG;
-
-	default:
-		return psmx_errno(err);
-	}
-}
-
 /* general case */
 struct fi_ops_tagged psmx_tagged_ops = {
 	.size = sizeof(struct fi_ops_tagged),
@@ -889,7 +901,6 @@ struct fi_ops_tagged psmx_tagged_ops = {
 	.inject = psmx_tagged_inject,
 	.senddata = fi_no_tagged_senddata,
 	.injectdata = fi_no_tagged_injectdata,
-	.search = psmx_tagged_search,
 };
 
 /* op_flags=0, no event suppression, FI_AV_MAP */
@@ -904,7 +915,6 @@ struct fi_ops_tagged psmx_tagged_ops_no_flag_av_map = {
 	.inject = psmx_tagged_inject_no_flag_av_map,
 	.senddata = fi_no_tagged_senddata,
 	.injectdata = fi_no_tagged_injectdata,
-	.search = psmx_tagged_search,
 };
 
 /* op_flags=0, no event suppression, FI_AV_TABLE */
@@ -919,7 +929,6 @@ struct fi_ops_tagged psmx_tagged_ops_no_flag_av_table = {
 	.inject = psmx_tagged_inject_no_flag_av_table,
 	.senddata = fi_no_tagged_senddata,
 	.injectdata = fi_no_tagged_injectdata,
-	.search = psmx_tagged_search,
 };
 
 /* op_flags=0, event suppression, FI_AV_MAP */
@@ -934,7 +943,6 @@ struct fi_ops_tagged psmx_tagged_ops_no_event_av_map = {
 	.inject = psmx_tagged_inject_no_flag_av_map,
 	.senddata = fi_no_tagged_senddata,
 	.injectdata = fi_no_tagged_injectdata,
-	.search = psmx_tagged_search,
 };
 
 /* op_flags=0, event suppression, FI_AV_TABLE */
@@ -949,7 +957,6 @@ struct fi_ops_tagged psmx_tagged_ops_no_event_av_table = {
 	.inject = psmx_tagged_inject_no_flag_av_table,
 	.senddata = fi_no_tagged_senddata,
 	.injectdata = fi_no_tagged_injectdata,
-	.search = psmx_tagged_search,
 };
 
 /* op_flags=0, send event suppression, FI_AV_MAP */
@@ -964,7 +971,6 @@ struct fi_ops_tagged psmx_tagged_ops_no_send_event_av_map = {
 	.inject = psmx_tagged_inject_no_flag_av_map,
 	.senddata = fi_no_tagged_senddata,
 	.injectdata = fi_no_tagged_injectdata,
-	.search = psmx_tagged_search,
 };
 
 /* op_flags=0, send event suppression, FI_AV_TABLE */
@@ -979,7 +985,6 @@ struct fi_ops_tagged psmx_tagged_ops_no_send_event_av_table = {
 	.inject = psmx_tagged_inject_no_flag_av_table,
 	.senddata = fi_no_tagged_senddata,
 	.injectdata = fi_no_tagged_injectdata,
-	.search = psmx_tagged_search,
 };
 
 /* op_flags=0, recv event suppression, FI_AV_MAP */
@@ -994,7 +999,6 @@ struct fi_ops_tagged psmx_tagged_ops_no_recv_event_av_map = {
 	.inject = psmx_tagged_inject_no_flag_av_map,
 	.senddata = fi_no_tagged_senddata,
 	.injectdata = fi_no_tagged_injectdata,
-	.search = psmx_tagged_search,
 };
 
 /* op_flags=0, recv event suppression, FI_AV_TABLE */
@@ -1009,6 +1013,4 @@ struct fi_ops_tagged psmx_tagged_ops_no_recv_event_av_table = {
 	.inject = psmx_tagged_inject_no_flag_av_table,
 	.senddata = fi_no_tagged_senddata,
 	.injectdata = fi_no_tagged_injectdata,
-	.search = psmx_tagged_search,
 };
-

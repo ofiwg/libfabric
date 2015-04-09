@@ -16,9 +16,6 @@ fi_tsend / fi_tsendv / fi_tsendmsg
 fi_tinject / fi_tsenddata
 :   Initiate an operation to send a message
 
-fi_tsearch
-:   Initiate a search operation for a buffered receive matching a given tag
-
 # SYNOPSIS
 
 {% highlight c %}
@@ -50,9 +47,6 @@ ssize_t fi_tinject(struct fid_ep *ep, const void *buf, size_t len,
 ssize_t fi_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 	void *desc, uint64_t data, fi_addr_t dest_addr, uint64_t tag,
 	void *context);
-
-ssize_t fi_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
-	uint64_t flags, void *src_addr, size_t *len, void *context);
 {% endhighlight %}
 
 # ARGUMENTS
@@ -214,28 +208,6 @@ unconnected endpoints, with the ability to control the receive
 operation per call through the use of flags.  The fi_trecvmsg function
 takes a struct fi_msg_tagged as input.
 
-## fi_tsearch
-
-The function fi_tsearch determines if a message with the specified tag
-with ignore mask from an optionally supplied source address has been
-received and is buffered by the provider.  The fi_tsearch call is only
-available on endpoints with provider allocated buffering enabled (see
-fi_rx_attr total_buffered_recv).  The fi_tsearch
-operation may complete asynchronously or immediately, depending on the
-underlying provider implementation.
-
-By default, a single message may be matched by multiple search
-operations.  The user can restrict a message to matching with a single
-fi_tsearch call by using the FI_CLAIM flag to control the search.
-When set, FI_CLAIM indicates that when a search successfully finds a
-matching message, the message is claimed by caller. Subsequent
-searches cannot find the same message, although they may match other
-messages that have the same tag.
-
-An application can request that a buffered message be discarded by
-using the FI_DISCARD flag as part of the search.  When set, FI_DISCARD
-indicates that any matching message be dropped.
-
 # FLAGS
 
 The fi_trecvmsg and fi_tsendmsg calls allow the user to specify flags
@@ -284,18 +256,56 @@ and/or fi_tsendmsg.
   known as the fenced operation, be deferred until all previous operations
   targeting the same target endpoint have completed.
 
-The following flags may be used with fi_tsearch.
+The following flags may be used with fi_trecvmsg.
+
+*FI_PEEK*
+: The peek flag may be used to see if a specified message has arrived.
+  A peek request is often useful on endpoints that have provider
+  allocated buffering enabled (see fi_rx_attr total_buffered_recv).
+  Unlike standard receive operations, a receive operation with the FI_PEEK
+  flag set does not remain queued with the provider until the peek completes
+  successfully.  If no data is available, the FI_PEEK receive will complete
+  with a status of FI_ENOMSG.
+
+  If a peek request locates a matching message, the operation will complete
+  successfully.  The returned completion data will indicate the metadata
+  associated with the message, such as the message length, completion flags,
+  available CQ data, and tag.  The data available is subject to
+  the completion entry format (e.g. struct fi_cq_tagged_entry).
+
+  An application may supply a buffer as part of the peek operation.  If
+  given, the provider may return a copy of the message data.  The returned data
+  is limited to the size of the input buffer(s) or the message size, if
+  smaller.  A provider indicates if data is available by setting the buf
+  field of the CQ entry to the user's first input buffer.  If buf is NULL, no
+  data was available to return.  A provider may return NULL even if the
+  peek operation completes successfully.  Note that the CQ entry len field
+  will reference the size of the message, not necessarily the size of the
+  returned data.
 
 *FI_CLAIM*
-: Indicates that when a search successfully finds a matching message,
-  the message is claimed by caller. Subsequent searches cannot find
-  the same message, although they may match other messages that have
-  the same tag.
+: If this flag is used in conjunction with FI_PEEK, it indicates if the
+  peek request completes successfully -- indicating that a matching message
+  was located -- the message is claimed by caller.  Claimed messages can only
+  be retrieved using a subsequent, paired receive operation with the FI_CLAIM
+  flag set.  A receive operation with the FI_CLAIM flag set, but FI_PEEK not
+  set is used to retrieve a previously claimed message.
+
+  In order to use the FI_CLAIM flag, an application must supply a struct
+  fi_context structure as the context for the receive operation.  The same
+  fi_context structure used for an FI_PEEK + FI_CLAIM operation must be used
+  by the paired FI_CLAIM request.
 
 *FI_DISCARD*
-: Indicates that if a search successfully finds a matching message,
-  that the message is discarded by the provider, as the data is not
-  needed by the application.
+: This flag must be used in conjunction with either FI_PEEK or FI_CLAIM.
+  If this flag is used in conjunction with FI_PEEK, it indicates if the
+  peek request completes successfully -- indicating that a matching message
+  was located -- the message is discarded by the provider, as the data is not
+  needed by the application.  This flag may also be used in conjunction with
+  FI_CLAIM in order to retrieve and discard a message previously claimed
+  using an FI_PEEK + FI_CLAIM request.
+
+  If this flag is set, the input buffer(s) and length parameters.
 
 # RETURN VALUE
 
@@ -303,18 +313,7 @@ The tagged send and receive calls return 0 on success.  On error, a
 negative value corresponding to fabric _errno _ is returned. Fabric
 errno values are defined in `fi_errno.h`.
 
-The fi_tsearch calls returns 0 if the search was successfully
-initiated asynchronously.  In this case, the result of the search will
-be reported through the event collector associated with the endpoint.
-If the search completes immediately, fi_tsearch will return 1, with
-information about the matching receive returned through the len, tag,
-src_addr, and src_addrlen parameters.
-
 # ERRORS
-
-*-FI_ENOMSG*
-: Returned by fi_tsearch on an immediate completion, but no matching
-  message was located.
 
 *-FI_EAGAIN*
 : Indicates that the underlying provider currently lacks the resources
