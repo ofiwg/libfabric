@@ -406,7 +406,7 @@ at least 4-bytes.
 
 ## Completion Queue Count (cq_cnt)
 
-The total number of completion queues supported by the domain, relative
+The optimal number of completion queues supported by the domain, relative
 to any specified or default CQ attributes.  The cq_cnt value may be a
 fixed value of the maximum number of CQs supported by the
 underlying provider, or may be a dynamic value, based on the default
