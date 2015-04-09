@@ -9,8 +9,11 @@ declare SERVER
 declare CLIENT
 declare -i VERBOSE=0
 
-declare -r ssh="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
-declare -r tssh="timeout 45s ${ssh}"
+# base ssh,  "short" and "long" timeout variants:
+declare -r bssh="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
+declare -r sssh="timeout 30s ${bssh}"
+declare -r lssh="timeout 60s ${bssh}"
+declare ssh=${sssh}
 
 declare -r c_outp=$(mktemp)
 declare -r s_outp=$(mktemp)
@@ -79,10 +82,13 @@ unit_tests=(
 
 all_tests=(
 	"${unit_tests[@]}"
-	"${quick_tests[@]}"
 	"${simple_tests[@]}"
 	"${standard_tests[@]}"
 )
+
+function errcho() {
+	>&2 echo $*
+}
 
 function print_border {
 	echo "# --------------------------------------------------------------"
@@ -111,7 +117,7 @@ function unit_test {
 	local test_exe="fi_${test} -f $PROV"
 	local SO=""
 
-	${tssh} ${SERVER} ${BIN_PATH} "${test_exe}" &> $s_outp &
+	${ssh} ${SERVER} ${BIN_PATH} "${test_exe}" &> $s_outp &
 	p1=$!
 
 	wait $p1
@@ -146,11 +152,11 @@ function cs_test {
 	local SO=""
 	local CO=""
 
-	${tssh} ${SERVER} ${BIN_PATH} "${test_exe} -s $SERVER" &> $s_outp &
+	${ssh} ${SERVER} ${BIN_PATH} "${test_exe} -s $SERVER" &> $s_outp &
 	p1=$!
 	sleep 1s
 
-	${tssh} ${CLIENT} ${BIN_PATH} "${test_exe} $SERVER" &> $c_outp &
+	${ssh} ${CLIENT} ${BIN_PATH} "${test_exe} $SERVER" &> $c_outp &
 	p2=$!
 
 	wait $p1
@@ -188,8 +194,10 @@ function main {
 	print_border
 
 	for ts in ${tests}; do
+	ssh=${lssh}
 	case ${ts} in
 		unit)
+			ssh=${sssh}
 			for test in "${unit_tests[@]}"; do
 				unit_test "$test"
 			done
@@ -211,7 +219,7 @@ function main {
 			done
 		;;
 		*)
-			echo "Unknown test set: ${ts}"
+			errcho "Unknown test set: ${ts}"
 			exit 1
 		;;
 	esac
@@ -225,7 +233,7 @@ function main {
 	printf "# %-50s%10d\n" "Total Fail" $fail_count
 
 	if [[ "$total" > "0" ]]; then
-		printf "# %-50s%10.2f\n" "Percentage of Pass" `echo "scale=2; $pass_count * 100 / $total" | bc`
+		printf "# %-50s%10d\n" "Percentage of Pass" $(( $pass_count * 100 / $total ))
 	fi
 
 	print_border
@@ -234,26 +242,40 @@ function main {
 	exit $fail_count
 }
 
+function usage {
+	errcho "Usage:"
+	errcho "  $0 [OPTIONS] provider <host> <client>"
+	errcho
+	errcho "Run fabtests on given nodes, report pass/fail/notrun status."
+	errcho
+	errcho "Options:"
+	errcho -e " -v..\tprint output of failing/notrun/passing"
+	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard (default all)"
+	errcho -e " -p\tpath to test bins (default PATH)"
+	exit 1
+}
+
 while getopts ":vt:p:" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
 	v) VERBOSE+=1
 	;;
-	p) BIN_PATH=PATH=${OPTARG}:${PATH}
+	p) BIN_PATH="PATH=${OPTARG}:${PATH}"
 	;;
-	:|\?)
-	echo "Usage: $0 [-vtp] <provider_name> <server_addr> <client_addr>"
-	echo "[-vtp] verbose"
-	echo "[-t] test type(s): all,quick,unit,simple"
-	echo "[-p] path to test bins (default PATH)"
-	exit 1
+	:|\?) usage
 	;;
 esac
 
 done
 
-shift $((OPTIND-1 ))
+# shift past options
+shift $((OPTIND-1))
+
+if [[ "$#" != "3" ]]; then
+	usage
+fi
+
 PROV=$1
 CLIENT=$2
 SERVER=$3
