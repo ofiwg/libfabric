@@ -2242,8 +2242,6 @@ do_wait:
 	FD_SET(pe->signal_fds[SOCK_SIGNAL_RD_FD], &rfds);
 	max_fds = MAX(pe->signal_fds[SOCK_SIGNAL_RD_FD], max_fds);
 	
-	SOCK_LOG_ERROR("Entering select : %d: %d\n", max_fds, 
-		       pe->signal_fds[SOCK_SIGNAL_RD_FD]);
 	if (select(max_fds + 1, &rfds, NULL, NULL, NULL) < 0) {
 		SOCK_LOG_ERROR ("select failed\n");
 		return;
