@@ -78,7 +78,7 @@ static int getaddr(char *node, char *service, void **addr,
 
 	ret = getaddrinfo(node, service, NULL, &ai);
 	if (ret) {
-		fprintf(stderr, "getaddrfino error %s\n", gai_strerror(ret));
+		FT_ERR("getaddrinfo error %s\n", gai_strerror(ret));
 		return ret;
 	}
 
@@ -86,7 +86,7 @@ static int getaddr(char *node, char *service, void **addr,
 		memcpy(*addr, ai->ai_addr, ai->ai_addrlen);
 		*len = (size_t)ai->ai_addrlen;
 	} else {
-		fprintf(stderr, "src_addr allocation failed\n");
+		FT_ERR("addr allocation failed\n");
 		ret = EAI_MEMORY;
 	}
 

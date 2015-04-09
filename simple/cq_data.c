@@ -99,7 +99,7 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_DATA;
-	cq_attr.wait_obj = FI_WAIT_NONE;
+	cq_attr.wait_obj = FI_WAIT_UNSPEC;
 	cq_attr.size = rx_depth;
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	if (ret) {
