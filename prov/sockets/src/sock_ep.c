@@ -1037,7 +1037,7 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	struct sock_tx_ctx *tx_ctx;
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
-	if (index >= sock_ep->ep_attr.tx_ctx_cnt)
+	if (sock_ep->fclass != FI_CLASS_SEP || index >= sock_ep->ep_attr.tx_ctx_cnt)
 		return -FI_EINVAL;
 
 	tx_ctx = sock_tx_ctx_alloc(&sock_ep->tx_attr, context);
@@ -1071,7 +1071,7 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	struct sock_rx_ctx *rx_ctx;
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
-	if (index >= sock_ep->ep_attr.rx_ctx_cnt)
+	if (sock_ep->fclass != FI_CLASS_SEP || index >= sock_ep->ep_attr.rx_ctx_cnt)
 		return -FI_EINVAL;
 
 	rx_ctx = sock_rx_ctx_alloc(attr ? attr : &sock_ep->rx_attr, context);
