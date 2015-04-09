@@ -59,17 +59,21 @@ extern const struct fi_fabric_attr sock_fabric_attr;
 
 const struct fi_tx_attr sock_stx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
+	.mode = SOCK_MODE,
 	.op_flags = FI_TRANSMIT_COMPLETE,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_TX_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
+	.rma_iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
 const struct fi_rx_attr sock_srx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
+	.mode = SOCK_MODE,
 	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
+	.comp_order = SOCK_EP_COMP_ORDER,
 	.total_buffered_recv = 0,
 	.size = SOCK_EP_MAX_MSG_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
@@ -1118,6 +1122,9 @@ static int sock_verify_tx_attr(const struct fi_tx_attr *attr)
 	if (attr->iov_limit > SOCK_EP_MAX_IOV_LIMIT)
 		return -FI_ENODATA;
 
+	if (attr->rma_iov_limit > SOCK_EP_MAX_IOV_LIMIT)
+		return -FI_ENODATA;
+
 	return 0;
 }
 
@@ -1151,6 +1158,12 @@ static int sock_verify_rx_attr(const struct fi_rx_attr *attr)
 {
 	if (!attr)
 		return 0;
+
+	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
+		return -FI_ENODATA;
+
+	if ((attr->comp_order | SOCK_EP_COMP_ORDER) != SOCK_EP_COMP_ORDER)
+		return -FI_ENODATA;
 
 	if (attr->total_buffered_recv > SOCK_EP_MAX_BUFF_RECV)
 		return -FI_ENODATA;
@@ -1197,8 +1210,8 @@ static void sock_set_fabric_attr(const struct fi_info *hints,
 				 struct fi_info *info)
 {
 	struct sock_fabric *fabric;
-	*(info->domain_attr) = sock_domain_attr;
-	if (hints->fabric_attr && hints->fabric_attr->fabric) {
+	*(info->fabric_attr) = sock_fabric_attr;
+	if (hints && hints->fabric_attr && hints->fabric_attr->fabric) {
 		info->fabric_attr->fabric = hints->fabric_attr->fabric;
 	} else {
 		fabric = sock_fab_list_head();
@@ -1211,19 +1224,18 @@ static void sock_set_domain_attr(const struct fi_info *hints,
 {
 	struct sock_domain *domain;
 
-	if (hints->domain_attr->domain) {
+	domain = sock_dom_list_head();
+	info->domain_attr->domain = domain ? &domain->dom_fid : NULL;
+	if (!hints || !hints->domain_attr) {
+		*(info->domain_attr) = sock_domain_attr;
+		return;
+	}
+
+	if (hints->domain_attr && hints->domain_attr->domain) {
 		domain = container_of(info->domain_attr->domain,
 				      struct sock_domain, dom_fid);
 		*(info->domain_attr) = domain->attr;
 		info->domain_attr->domain = hints->domain_attr->domain;
-		return;
-	}
-
-	domain = sock_dom_list_head();
-	info->domain_attr->domain = domain ? &domain->dom_fid : NULL;
-
-	if (!hints->domain_attr) {
-		*(info->domain_attr) = sock_domain_attr;
 		return;
 	}
 

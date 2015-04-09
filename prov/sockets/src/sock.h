@@ -77,6 +77,7 @@
 #define SOCK_EP_MIN_MULTI_RECV (64)
 #define SOCK_EP_MAX_ATOMIC_SZ (256)
 #define SOCK_EP_MAX_CTX_BITS (16)
+#define SOCK_EP_MSG_PREFIX_SZ (0)
 
 #define SOCK_PE_POLL_TIMEOUT (100000)
 #define SOCK_PE_MAX_ENTRIES (128)
@@ -114,6 +115,8 @@
 			   FI_ORDER_WAR | FI_ORDER_WAW | FI_ORDER_WAS |	\
 			   FI_ORDER_SAR | FI_ORDER_SAW | FI_ORDER_SAS)
 
+#define SOCK_EP_COMP_ORDER (FI_ORDER_STRICT | FI_ORDER_DATA)
+
 #define SOCK_MODE (0)
 #define SOCK_NO_COMPLETION (1ULL << 60)
 
@@ -127,6 +130,8 @@ enum {
 
 #define SOCK_MAJOR_VERSION 1
 #define SOCK_MINOR_VERSION 0
+
+#define SOCK_WIRE_PROTO_VERSION (0)
 
 struct sock_service_entry {
 	int service;
@@ -559,8 +564,6 @@ struct sock_tx_ctx {
 
 	struct fi_tx_attr attr;
 };
-
-#define SOCK_WIRE_PROTO_VERSION (0)
 
 struct sock_msg_hdr {
 	uint8_t version;

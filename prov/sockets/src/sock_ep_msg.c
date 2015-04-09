@@ -63,7 +63,9 @@
 static const struct fi_ep_attr sock_msg_ep_attr = {
 	.type = FI_EP_MSG,
 	.protocol = FI_PROTO_SOCK_TCP,
+	.protocol_version = SOCK_WIRE_PROTO_VERSION,
 	.max_msg_size = SOCK_EP_MAX_MSG_SZ,
+	.msg_prefix_size = SOCK_EP_MSG_PREFIX_SZ,
 	.max_order_raw_size = SOCK_EP_MAX_ORDER_RAW_SZ,
 	.max_order_war_size = SOCK_EP_MAX_ORDER_WAR_SZ,
 	.max_order_waw_size = SOCK_EP_MAX_ORDER_WAW_SZ,
@@ -74,17 +76,21 @@ static const struct fi_ep_attr sock_msg_ep_attr = {
 
 static const struct fi_tx_attr sock_msg_tx_attr = {
 	.caps = SOCK_EP_MSG_CAP,
+	.mode = SOCK_MODE,
 	.op_flags = FI_TRANSMIT_COMPLETE,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_TX_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
+	.rma_iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
 static const struct fi_rx_attr sock_msg_rx_attr = {
 	.caps = SOCK_EP_MSG_CAP,
+	.mode = SOCK_MODE,
 	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
+	.comp_order = SOCK_EP_COMP_ORDER,
 	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.size = SOCK_EP_RX_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
@@ -99,6 +105,9 @@ static int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
 		return -FI_ENODATA;
 
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
+		return -FI_ENODATA;
+
+	if ((attr->comp_order | SOCK_EP_COMP_ORDER) != SOCK_EP_COMP_ORDER)
 		return -FI_ENODATA;
 
 	if (attr->total_buffered_recv > sock_msg_rx_attr.total_buffered_recv)
@@ -133,6 +142,9 @@ static int sock_msg_verify_tx_attr(const struct fi_tx_attr *attr)
 	if (attr->iov_limit > sock_msg_tx_attr.iov_limit)
 		return -FI_ENODATA;
 
+	if (attr->rma_iov_limit > sock_msg_tx_attr.rma_iov_limit)
+		return -FI_ENODATA;
+
 	return 0;
 }
 
@@ -149,7 +161,13 @@ int sock_msg_verify_ep_attr(struct fi_ep_attr *ep_attr,
 			return -FI_ENODATA;
 		}
 
+		if (ep_attr->protocol_version != sock_msg_ep_attr.protocol_version)
+			return -FI_ENODATA;
+
 		if (ep_attr->max_msg_size > sock_msg_ep_attr.max_msg_size)
+			return -FI_ENODATA;
+
+		if (ep_attr->msg_prefix_size > sock_msg_ep_attr.msg_prefix_size)
 			return -FI_ENODATA;
 
 		if (ep_attr->max_order_raw_size >
