@@ -369,7 +369,7 @@ static int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr, const struct fi_i
 	}
 
 	compare_mode = attr->mode ? attr->mode : info->mode;
-	check_mode = info->domain_attr && info->domain_attr->cq_data_size ?
+	check_mode = (info->caps & FI_RMA) ?
 		     verbs_rx_attr.mode : VERBS_MODE;
 	if ((compare_mode & check_mode) != check_mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
@@ -2385,21 +2385,6 @@ fi_ibv_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *entry,
 	return sizeof(*entry);
 }
 
-static int fi_ibv_cq_reset(struct fid_cq *cq, const void *cond)
-{
-        struct fi_ibv_cq *_cq;
-        struct ibv_cq *ibcq;
-        void *context;
-        int ret;
-
-        _cq = container_of(cq, struct fi_ibv_cq, cq_fid);
-        ret = ibv_get_cq_event(_cq->channel, &ibcq, &context);
-        if (!ret)
-                ibv_ack_cq_events(ibcq, 1);
-
-        return -ibv_req_notify_cq(_cq->cq, 0);
-}
-
 static inline int
 fi_ibv_poll_events(struct fi_ibv_cq *_cq, int timeout)
 {
@@ -2633,7 +2618,7 @@ static int
 fi_ibv_cq_signal(struct fid_cq *cq)
 {
 	struct fi_ibv_cq *_cq;
-	int data = '0';
+	char data = '0';
 
 	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
 
