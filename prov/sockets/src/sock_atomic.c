@@ -34,7 +34,6 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -89,10 +88,13 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	assert(tx_ctx->enabled && 
-	       msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT &&
-	       msg->rma_iov_count <= SOCK_EP_MAX_IOV_LIMIT);
+	if (msg->iov_count > SOCK_EP_MAX_IOV_LIMIT || 
+	    msg->rma_iov_count > SOCK_EP_MAX_IOV_LIMIT)
+		return -FI_EINVAL;
 	
+	if (!tx_ctx->enabled)
+		return -FI_EOPBADSTATE;
+
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
 	} else {
@@ -108,7 +110,10 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		for (i=0; i< msg->iov_count; i++) {
 			src_len += (msg->msg_iov[i].count * datatype_sz);
 		}
-		assert(src_len <= SOCK_EP_MAX_INJECT_SZ);
+		if (src_len > SOCK_EP_MAX_INJECT_SZ) {
+			ret = -FI_EINVAL;
+			goto err;
+		}
 		total_len = src_len;
 	} else {
 		total_len = msg->iov_count * sizeof(union sock_iov);
@@ -161,7 +166,11 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 			src_len += (tx_iov.ioc.count * datatype_sz);
 		}
 	}
-	assert(src_len <= SOCK_EP_MAX_ATOMIC_SZ);
+
+	if (src_len > SOCK_EP_MAX_ATOMIC_SZ) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
 
 	dst_len = 0;
 	for (i = 0; i< msg->rma_iov_count; i++) {
@@ -210,7 +219,6 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	return 0;
 
 err:
-	SOCK_LOG_INFO("Not enough space for TX entry, try again\n");
 	sock_tx_ctx_abort(tx_ctx);
 	return ret;
 }

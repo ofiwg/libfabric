@@ -34,7 +34,6 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -665,7 +664,8 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct sock_cq, cq_fid.fid);
-		assert(ep->domain == cq->domain);
+		if (ep->domain != cq->domain)
+			return -FI_EINVAL;
 
 		if (flags & FI_SEND) {
 			ep->comp.send_cq = cq;
@@ -733,7 +733,8 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct sock_cntr, cntr_fid.fid);
-		assert(ep->domain == cntr->domain);
+		if (ep->domain != cntr->domain)
+			return -FI_EINVAL;
 
 		if (flags & FI_SEND)
 			ep->comp.send_cntr = cntr;
@@ -800,7 +801,8 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct sock_av, av_fid.fid);
-		assert(ep->domain == av->domain);
+		if (ep->domain != av->domain)
+			return -FI_EINVAL;
 
 		ep->av = av;
 		av->cmap = &av->domain->r_cmap;
