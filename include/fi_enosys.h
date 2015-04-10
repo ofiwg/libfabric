@@ -165,7 +165,7 @@ int fi_no_connect(struct fid_ep *ep, const void *addr,
 		const void *param, size_t paramlen);
 int fi_no_listen(struct fid_pep *pep);
 int fi_no_accept(struct fid_ep *ep, const void *param, size_t paramlen);
-int fi_no_reject(struct fid_pep *pep, fi_connreq_t connreq,
+int fi_no_reject(struct fid_pep *pep, fid_t handle,
 		const void *param, size_t paramlen);
 int fi_no_shutdown(struct fid_ep *ep, uint64_t flags);
 

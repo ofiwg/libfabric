@@ -192,7 +192,7 @@ int fi_no_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	return -FI_ENOSYS;
 }
-int fi_no_reject(struct fid_pep *pep, fi_connreq_t connreq,
+int fi_no_reject(struct fid_pep *pep, fid_t handle,
 		const void *param, size_t paramlen)
 {
 	return -FI_ENOSYS;

@@ -670,9 +670,9 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	if (!response)
 		return -FI_ENOMEM;
 
-	req = (struct sock_conn_req *) _ep->info.connreq;
+	req = (struct sock_conn_req *) _ep->info.handle;
 	if (!req) {
-		SOCK_LOG_ERROR("invalid connreq for cm_accept\n");
+		SOCK_LOG_ERROR("invalid handle for cm_accept\n");
 		free(response);
 		return -FI_EINVAL;
 	}
@@ -698,7 +698,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 out:
 	free(req);
 	free(response);
-	_ep->info.connreq = NULL;
+	_ep->info.handle = NULL;
 	return ret;
 }
 
@@ -954,7 +954,7 @@ static void *sock_pep_listener_thread (void *data)
 			
 			cm_entry->fid = &pep->pep.fid;
 			cm_entry->info = sock_ep_msg_process_info(conn_req);
-			cm_entry->info->connreq = (fi_connreq_t) conn_req;
+			cm_entry->info->handle = (fid_t) conn_req;
 
 			memcpy(&cm_entry->data, &conn_req->user_data,
 			       user_data_sz);
@@ -1057,7 +1057,7 @@ static int sock_pep_listen(struct fid_pep *pep)
 	return sock_pep_create_listener_thread(_pep);
 }
 
-static int sock_pep_reject(struct fid_pep *pep, fi_connreq_t connreq,
+static int sock_pep_reject(struct fid_pep *pep, fid_t handle,
 		const void *param, size_t paramlen)
 {
 	struct sock_conn_req *req;
@@ -1067,7 +1067,7 @@ static int sock_pep_reject(struct fid_pep *pep, fi_connreq_t connreq,
 	int ret = 0;
 
 	_pep = container_of(pep, struct sock_pep, pep);
-	req = (struct sock_conn_req *)connreq;
+	req = (struct sock_conn_req *) handle;
 	if (!req)
 		return 0;
 	

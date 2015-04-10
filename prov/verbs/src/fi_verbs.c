@@ -1917,10 +1917,10 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 }
 
 static int
-fi_ibv_msg_ep_reject(struct fid_pep *pep, fi_connreq_t connreq,
+fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 		  const void *param, size_t paramlen)
 {
-	return rdma_reject((struct rdma_cm_id *) connreq, param,
+	return rdma_reject((struct rdma_cm_id *) handle, param,
 			   (uint8_t) paramlen) ? -errno : 0;
 }
 
@@ -2057,13 +2057,13 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!_ep)
 		return -FI_ENOMEM;
 
-	if (!info->connreq) {
+	if (!info->handle) {
 		ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &_ep->id);
 		if (ret)
 			goto err;
 
 	} else {
-		_ep->id = (struct rdma_cm_id *) info->connreq;
+		_ep->id = (struct rdma_cm_id *) info->handle;
 	}
 	_ep->id->context = &_ep->ep_fid.fid;
 
@@ -2136,7 +2136,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 
 	fi_ibv_fill_info_attr(event->id->verbs, NULL, NULL, fi);
 
-	fi->connreq = (fi_connreq_t) event->id;
+	fi->handle = (fid_t) event->id;
 	return fi;
 err:
 	fi_freeinfo(fi);

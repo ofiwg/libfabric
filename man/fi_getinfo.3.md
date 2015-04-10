@@ -119,9 +119,9 @@ struct fi_info {
 	size_t                dest_addrlen;
 	void                  *src_addr;
 	void                  *dest_addr;
-	fi_connreq_t          connreq;
-	struct fi_tx_attr *tx_attr;
-	struct fi_rx_attr *rx_attr;
+	fid_t                 handle;
+	struct fi_tx_attr     *tx_attr;
+	struct fi_rx_attr     *rx_attr;
 	struct fi_ep_attr     *ep_attr;
 	struct fi_domain_attr *domain_attr;
 	struct fi_fabric_attr *fabric_attr;
@@ -168,8 +168,8 @@ struct fi_info {
   ignored in hints unless the node and service parameters are NULL or
   FI_SOURCE is specified.
 
-*connreq - connection request*
-: References a specific connection request, otherwise the field must
+*handle - request context handle*
+: References a specific connection request handle, otherwise the field must
   be NULL.  This field is used when processing connection requests and
   responses.  See fi_eq(3), fi_reject(3), and fi_endpoint(3).
 

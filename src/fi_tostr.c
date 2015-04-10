@@ -439,7 +439,7 @@ static void fi_tostr_info(char *buf, const struct fi_info *info)
 	strcatf(buf, "%sdest_addr: ", TAB);
 	fi_tostr_addr(buf, info->addr_format, info->dest_addr);
 	strcatf(buf, "\n");
-	strcatf(buf, "%sconnreq: %s\n", TAB, info->connreq);
+	strcatf(buf, "%shandle: %s\n", TAB, info->handle);
 
 	fi_tostr_tx_attr(buf, info->tx_attr, TAB);
 	fi_tostr_rx_attr(buf, info->rx_attr, TAB);

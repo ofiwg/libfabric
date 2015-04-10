@@ -27,7 +27,7 @@ int fi_listen(struct fid_pep *pep);
 
 int fi_accept(struct fid_ep *ep, const void *param, size_t paramlen);
 
-int fi_reject(struct fid_pep *pep, fi_connreq_t connreq,
+int fi_reject(struct fid_pep *pep, fid_t handle,
     const void *param, size_t paramlen);
 
 int fi_shutdown(struct fid_ep *ep, uint64_t flags);
@@ -96,7 +96,7 @@ respectively.  To accept a connection, the listening application first
 waits for a connection request event (FI_CONNREQ).
 After receiving such an event, the application
 allocates a new endpoint to accept the connection.  This endpoint must
-be allocated using an fi_info structure referencing the connreq from this
+be allocated using an fi_info structure referencing the handle from this
 FI_CONNREQ event.  fi_accept is then invoked
 with the newly allocated endpoint.  If
 the listening application wishes to reject a connection request, it calls

@@ -49,7 +49,7 @@ struct fi_ops_cm {
 			const void *param, size_t paramlen);
 	int	(*listen)(struct fid_pep *pep);
 	int	(*accept)(struct fid_ep *ep, const void *param, size_t paramlen);
-	int	(*reject)(struct fid_pep *pep, fi_connreq_t connreq,
+	int	(*reject)(struct fid_pep *pep, fid_t handle,
 			const void *param, size_t paramlen);
 	int	(*shutdown)(struct fid_ep *ep, uint64_t flags);
 };
@@ -87,10 +87,10 @@ fi_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 }
 
 static inline int
-fi_reject(struct fid_pep *pep, fi_connreq_t connreq,
+fi_reject(struct fid_pep *pep, fid_t handle,
 	  const void *param, size_t paramlen)
 {
-	return pep->cm->reject(pep, connreq, param, paramlen);
+	return pep->cm->reject(pep, handle, param, paramlen);
 }
 
 static inline int fi_shutdown(struct fid_ep *ep, uint64_t flags)

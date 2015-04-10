@@ -157,7 +157,7 @@ usdf_pep_conn_info(struct usdf_connreq *crp)
 	sin->sin_port = reqp->creq_port;
 
 	ip->dest_addr = sin;
-	ip->connreq = (fi_connreq_t)crp;
+	ip->handle = (fid_t) crp;
 	return ip;
 fail:
 	fi_freeinfo(ip);
@@ -348,7 +348,7 @@ usdf_pep_cancel(fid_t fid, void *context)
 }
 
 static int
-usdf_pep_reject(struct fid_pep *pep, fi_connreq_t connreq,
+usdf_pep_reject(struct fid_pep *pep, fid_t handle,
 		const void *param, size_t paramlen)
 {
 	return -FI_ENOSYS;
