@@ -329,7 +329,7 @@ int main(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_RMA;
 	// FI_PROV_MR_ATTR flag is not set
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_RX_CQ_DATA;
 
 	ret = run_test();
 	fi_freeinfo(hints);

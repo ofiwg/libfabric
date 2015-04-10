@@ -595,7 +595,7 @@ int main(int argc, char **argv)
 	
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_RMA;
-	hints->mode = FI_CONTEXT | FI_PROV_MR_ATTR;
+	hints->mode = FI_CONTEXT | FI_PROV_MR_ATTR | FI_RX_CQ_DATA;
 	
 	ret =run();
 
