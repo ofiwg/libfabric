@@ -52,6 +52,7 @@ const struct fi_domain_attr sock_domain_attr = {
 	.resource_mgmt = FI_RM_ENABLED,
 	.mr_key_size = sizeof(uint16_t),
 	.cq_data_size = sizeof(uint64_t),
+	.cq_cnt = SOCK_EP_MAX_CQ_CNT,
 	.ep_cnt = SOCK_EP_MAX_EP_CNT,
 	.tx_ctx_cnt = SOCK_EP_MAX_TX_CNT,
 	.rx_ctx_cnt = SOCK_EP_MAX_RX_CNT,
@@ -114,8 +115,25 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		SOCK_LOG_INFO("Resource mgmt not supported!\n");
 		return -FI_ENODATA;
 	}
+
+	switch (attr->av_type) {
+	case FI_AV_UNSPEC:
+	case FI_AV_MAP:
+	case FI_AV_TABLE:
+		break;
+
+	default:
+		SOCK_LOG_INFO("AV type not supported!\n");
+		return -FI_ENODATA;
+	}
+
+	if(attr->mr_key_size > sock_domain_attr.mr_key_size)
+		return -FI_ENODATA;
 	
 	if(attr->cq_data_size > sock_domain_attr.cq_data_size)
+		return -FI_ENODATA;
+
+	if(attr->cq_cnt > sock_domain_attr.cq_cnt)
 		return -FI_ENODATA;
 
 	if(attr->ep_cnt > sock_domain_attr.ep_cnt)
@@ -144,6 +162,7 @@ static int sock_dom_close(struct fid *fid)
 
 	sock_pe_finalize(dom->pe);
 	fastlock_destroy(&dom->lock);
+	sock_dom_remove_from_list(dom);
 	free(dom);
 	return 0;
 }
@@ -433,7 +452,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	sock_domain = calloc(1, sizeof *sock_domain);
 	if (!sock_domain)
 		return -FI_ENOMEM;
-	
+
 	fastlock_init(&sock_domain->lock);
 	atomic_init(&sock_domain->ref, 0);
 
@@ -470,6 +489,13 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	sock_domain->fab = fab;
 	*dom = &sock_domain->dom_fid;
+
+	if (info->domain_attr)
+		sock_domain->attr = *(info->domain_attr);
+	else
+		sock_domain->attr = sock_domain_attr;
+
+	sock_dom_add_to_list(sock_domain);
 	return 0;
 
 err:

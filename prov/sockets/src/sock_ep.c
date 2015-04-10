@@ -59,18 +59,22 @@ extern const struct fi_fabric_attr sock_fabric_attr;
 
 const struct fi_tx_attr sock_stx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
+	.mode = SOCK_MODE,
 	.op_flags = FI_TRANSMIT_COMPLETE,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_TX_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
+	.rma_iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
 const struct fi_rx_attr sock_srx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
+	.mode = SOCK_MODE,
 	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
-	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
+	.comp_order = SOCK_EP_COMP_ORDER,
+	.total_buffered_recv = 0,
 	.size = SOCK_EP_MAX_MSG_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
@@ -1033,7 +1037,7 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	struct sock_tx_ctx *tx_ctx;
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
-	if (index >= sock_ep->ep_attr.tx_ctx_cnt)
+	if (sock_ep->fclass != FI_CLASS_SEP || index >= sock_ep->ep_attr.tx_ctx_cnt)
 		return -FI_EINVAL;
 
 	tx_ctx = sock_tx_ctx_alloc(&sock_ep->tx_attr, context);
@@ -1067,16 +1071,13 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	struct sock_rx_ctx *rx_ctx;
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
-	if (index >= sock_ep->ep_attr.rx_ctx_cnt)
+	if (sock_ep->fclass != FI_CLASS_SEP || index >= sock_ep->ep_attr.rx_ctx_cnt)
 		return -FI_EINVAL;
 
 	rx_ctx = sock_rx_ctx_alloc(attr ? attr : &sock_ep->rx_attr, context);
 	if (!rx_ctx)
 		return -FI_ENOMEM;
 
-	rx_ctx->attr.total_buffered_recv = rx_ctx->attr.total_buffered_recv ?
-		rx_ctx->attr.total_buffered_recv : SOCK_EP_MAX_BUFF_RECV;
-	
 	rx_ctx->rx_id = index;
 	rx_ctx->ep = sock_ep;
 	rx_ctx->domain = sock_ep->domain;
@@ -1121,6 +1122,9 @@ static int sock_verify_tx_attr(const struct fi_tx_attr *attr)
 	if (attr->iov_limit > SOCK_EP_MAX_IOV_LIMIT)
 		return -FI_ENODATA;
 
+	if (attr->rma_iov_limit > SOCK_EP_MAX_IOV_LIMIT)
+		return -FI_ENODATA;
+
 	return 0;
 }
 
@@ -1154,6 +1158,12 @@ static int sock_verify_rx_attr(const struct fi_rx_attr *attr)
 {
 	if (!attr)
 		return 0;
+
+	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
+		return -FI_ENODATA;
+
+	if ((attr->comp_order | SOCK_EP_COMP_ORDER) != SOCK_EP_COMP_ORDER)
+		return -FI_ENODATA;
 
 	if (attr->total_buffered_recv > SOCK_EP_MAX_BUFF_RECV)
 		return -FI_ENODATA;
@@ -1190,14 +1200,73 @@ int sock_srx_ctx(struct fid_domain *domain,
 	rx_ctx->ctx.tagged = &sock_ep_tagged;
 	
 	/* default config */
-	rx_ctx->min_multi_recv = SOCK_EP_MIN_MULTI_RECV;
-	rx_ctx->attr.total_buffered_recv = rx_ctx->attr.total_buffered_recv ?
-		rx_ctx->attr.total_buffered_recv : SOCK_EP_MAX_BUFF_RECV;
-	
+	rx_ctx->min_multi_recv = SOCK_EP_MIN_MULTI_RECV;	
 	*srx = &rx_ctx->ctx;
 	atomic_inc(&dom->ref);
 	return 0;
 }
+
+static void sock_set_fabric_attr(const struct fi_info *hints,
+				 struct fi_info *info)
+{
+	struct sock_fabric *fabric;
+	*(info->fabric_attr) = sock_fabric_attr;
+	if (hints && hints->fabric_attr && hints->fabric_attr->fabric) {
+		info->fabric_attr->fabric = hints->fabric_attr->fabric;
+	} else {
+		fabric = sock_fab_list_head();
+		info->fabric_attr->fabric = fabric ? &fabric->fab_fid : NULL;
+	}
+}
+
+static void sock_set_domain_attr(const struct fi_info *hints, 
+				 struct fi_info *info) 
+{
+	struct sock_domain *domain;
+
+	domain = sock_dom_list_head();
+	info->domain_attr->domain = domain ? &domain->dom_fid : NULL;
+	if (!hints || !hints->domain_attr) {
+		*(info->domain_attr) = sock_domain_attr;
+		return;
+	}
+
+	if (hints->domain_attr && hints->domain_attr->domain) {
+		domain = container_of(info->domain_attr->domain,
+				      struct sock_domain, dom_fid);
+		*(info->domain_attr) = domain->attr;
+		info->domain_attr->domain = hints->domain_attr->domain;
+		return;
+	}
+
+	if (hints->domain_attr->threading == FI_THREAD_UNSPEC)
+		info->domain_attr->threading = 
+			sock_domain_attr.threading;
+	if (hints->domain_attr->control_progress == FI_PROGRESS_UNSPEC)
+		info->domain_attr->control_progress = 
+			sock_domain_attr.control_progress;
+	if (hints->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
+		info->domain_attr->data_progress = 
+			sock_domain_attr.data_progress;	
+
+	if (hints->domain_attr->cq_cnt == 0)
+		info->domain_attr->cq_cnt = sock_domain_attr.cq_cnt;
+	if (hints->domain_attr->ep_cnt == 0)
+		info->domain_attr->ep_cnt = sock_domain_attr.ep_cnt;
+	if (hints->domain_attr->tx_ctx_cnt == 0)
+		info->domain_attr->tx_ctx_cnt = sock_domain_attr.tx_ctx_cnt;
+	if (hints->domain_attr->rx_ctx_cnt == 0)
+		info->domain_attr->rx_ctx_cnt = sock_domain_attr.rx_ctx_cnt;
+	if (hints->domain_attr->max_ep_tx_ctx == 0)
+		info->domain_attr->max_ep_tx_ctx = sock_domain_attr.max_ep_tx_ctx;
+	if (hints->domain_attr->max_ep_rx_ctx == 0)
+		info->domain_attr->max_ep_rx_ctx = sock_domain_attr.max_ep_rx_ctx;
+	
+	info->domain_attr->mr_key_size = sock_domain_attr.mr_key_size;
+	info->domain_attr->cq_data_size = sock_domain_attr.cq_data_size;
+	info->domain_attr->resource_mgmt = sock_domain_attr.resource_mgmt;
+}
+
 
 struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 			     void *src_addr, void *dest_addr)
@@ -1238,13 +1307,11 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 	}
 
 	info->ep_attr->type = ep_type;
-	*(info->domain_attr) = sock_domain_attr;
-	*(info->fabric_attr) = sock_fabric_attr;
-
+	sock_set_domain_attr(hints, info);
+	sock_set_fabric_attr(hints, info);
 	info->domain_attr->name = strdup(sock_dom_name);
 	info->fabric_attr->name = strdup(sock_fab_name);
 	info->fabric_attr->prov_name = strdup(sock_prov_name);
-
 	return info;
 }
 
@@ -1334,10 +1401,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		if (info->rx_attr) {
 			sock_ep->rx_attr = *info->rx_attr;
 			sock_ep->op_flags |= info->rx_attr->op_flags;
-			sock_ep->rx_attr.total_buffered_recv = 
-				sock_ep->rx_attr.total_buffered_recv ?
-				sock_ep->rx_attr.total_buffered_recv : 
-				SOCK_EP_MAX_BUFF_RECV;
 		}
 		sock_ep->info.connreq = info->connreq;
 	}

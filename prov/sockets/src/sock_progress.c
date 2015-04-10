@@ -2191,10 +2191,10 @@ static void sock_pe_poll(struct sock_pe *pe)
 	struct sock_conn_map *map;
 	struct sock_conn *conn;
 
+	FD_ZERO(&rfds);
 	if (dlistfd_empty(&pe->tx_list) && dlistfd_empty(&pe->rx_list))
 		goto do_wait;
 
-	FD_ZERO(&rfds);
 	pthread_mutex_lock(&pe->list_lock);
 	if (!dlistfd_empty(&pe->tx_list)) {
 		for (entry = pe->tx_list.list.next;
@@ -2242,8 +2242,6 @@ do_wait:
 	FD_SET(pe->signal_fds[SOCK_SIGNAL_RD_FD], &rfds);
 	max_fds = MAX(pe->signal_fds[SOCK_SIGNAL_RD_FD], max_fds);
 	
-	SOCK_LOG_ERROR("Entering select : %d: %d\n", max_fds, 
-		       pe->signal_fds[SOCK_SIGNAL_RD_FD]);
 	if (select(max_fds + 1, &rfds, NULL, NULL, NULL) < 0) {
 		SOCK_LOG_ERROR ("select failed\n");
 		return;
