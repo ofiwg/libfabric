@@ -1043,26 +1043,25 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe, struct sock_rx_ctx *rx_
 				       entry_len, len))
 			return 0;
 		len += entry_len;
+	}
 			
-		/* compare */
-		for (i = 0; i < pe_entry->pe.rx.rx_op.dest_iov_len; i++) {
-			mr = sock_mr_verify_key(rx_ctx->domain, 
-						pe_entry->pe.rx.rx_iov[i].ioc.key,
-						(void *) (uintptr_t) pe_entry->pe.rx.rx_iov[i].ioc.addr,
-						pe_entry->pe.rx.rx_iov[i].ioc.count * datatype_sz,
-						FI_REMOTE_WRITE);
-			if (!mr) {
-				SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %" PRIu64 "\n",
-					       (void *) (uintptr_t) pe_entry->pe.rx.rx_iov[i].ioc.addr,
-					       pe_entry->pe.rx.rx_iov[i].ioc.count * datatype_sz,
-					       pe_entry->pe.rx.rx_iov[i].ioc.key);
-				sock_pe_send_response(pe, rx_ctx, pe_entry, 0, 
-						      SOCK_OP_ATOMIC_ERROR);
-				goto err;
-			}
-			if (mr->flags & FI_MR_OFFSET)
-				pe_entry->pe.rx.rx_iov[i].ioc.addr += mr->offset;
+	for (i = 0; i < pe_entry->pe.rx.rx_op.dest_iov_len; i++) {
+		mr = sock_mr_verify_key(rx_ctx->domain, 
+					pe_entry->pe.rx.rx_iov[i].ioc.key,
+					(void *) (uintptr_t) pe_entry->pe.rx.rx_iov[i].ioc.addr,
+					pe_entry->pe.rx.rx_iov[i].ioc.count * datatype_sz,
+					FI_REMOTE_WRITE);
+		if (!mr) {
+			SOCK_LOG_ERROR("Remote memory access error: %p, %lu, %" PRIu64 "\n",
+				       (void *) (uintptr_t) pe_entry->pe.rx.rx_iov[i].ioc.addr,
+				       pe_entry->pe.rx.rx_iov[i].ioc.count * datatype_sz,
+				       pe_entry->pe.rx.rx_iov[i].ioc.key);
+			sock_pe_send_response(pe, rx_ctx, pe_entry, 0, 
+					      SOCK_OP_ATOMIC_ERROR);
+			goto err;
 		}
+		if (mr->flags & FI_MR_OFFSET)
+			pe_entry->pe.rx.rx_iov[i].ioc.addr += mr->offset;
 	}
 
 	/* src data */

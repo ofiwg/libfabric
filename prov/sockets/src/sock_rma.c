@@ -34,7 +34,6 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -88,9 +87,12 @@ static ssize_t sock_ep_rma_readmsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	assert(tx_ctx->enabled && 
-	       msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT &&
-	       msg->rma_iov_count <= SOCK_EP_MAX_IOV_LIMIT);
+	if (msg->iov_count > SOCK_EP_MAX_IOV_LIMIT ||
+		msg->rma_iov_count > SOCK_EP_MAX_IOV_LIMIT)
+		return -FI_EINVAL;
+	
+	if (!tx_ctx->enabled)
+		return -FI_EOPBADSTATE;
 
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
@@ -153,7 +155,6 @@ static ssize_t sock_ep_rma_readmsg(struct fid_ep *ep,
 	return 0;
 
 err:
-	SOCK_LOG_INFO("Not enough space for TX entry, try again\n");
 	sock_tx_ctx_abort(tx_ctx);
 	return ret;
 }
@@ -241,9 +242,13 @@ static ssize_t sock_ep_rma_writemsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	assert(tx_ctx->enabled && 
-	       msg->iov_count <= SOCK_EP_MAX_IOV_LIMIT &&
-	       msg->rma_iov_count <= SOCK_EP_MAX_IOV_LIMIT);
+	if (msg->iov_count > SOCK_EP_MAX_IOV_LIMIT || 
+		msg->rma_iov_count > SOCK_EP_MAX_IOV_LIMIT)
+		return -FI_EINVAL;
+	
+	if (!tx_ctx->enabled)
+		return -FI_EOPBADSTATE;
+
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
 	} else {
@@ -263,7 +268,10 @@ static ssize_t sock_ep_rma_writemsg(struct fid_ep *ep,
 		for (i=0; i< msg->iov_count; i++) {
 			total_len += msg->msg_iov[i].iov_len;
 		}
-		assert(total_len <= SOCK_EP_MAX_INJECT_SZ);
+		if (total_len > SOCK_EP_MAX_INJECT_SZ) {
+			ret = -FI_EINVAL;
+			goto err;
+		}
 		tx_op.src_iov_len = total_len;
 	} else {
 		total_len += msg->iov_count * sizeof(union sock_iov);
@@ -323,7 +331,6 @@ static ssize_t sock_ep_rma_writemsg(struct fid_ep *ep,
 	return 0;
 
 err:
-	SOCK_LOG_INFO("Not enough space for TX entry, try again\n");
 	sock_tx_ctx_abort(tx_ctx);
 	return ret;
 }

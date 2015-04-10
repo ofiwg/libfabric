@@ -34,7 +34,6 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -203,14 +202,18 @@ static int sock_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct sock_cq, cq_fid.fid);
-		assert(mr->domain == cq->domain);
+		if (mr->domain != cq->domain)
+			return -FI_EINVAL;
+
 		if (flags & FI_REMOTE_WRITE)
 			mr->cq = cq;
 		break;
 
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct sock_cntr, cntr_fid.fid);
-		assert(mr->domain == cntr->domain);
+		if (mr->domain != cntr->domain)
+			return -FI_EINVAL;
+
 		if (flags & FI_REMOTE_WRITE)
 			mr->cntr = cntr;
 		break;
