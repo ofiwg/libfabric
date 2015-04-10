@@ -316,7 +316,7 @@ err2:
 	connects_left--;
 err1:
 	printf("cmatose: failing connection request\n");
-	fi_reject(pep, info->connreq, NULL, 0);
+	fi_reject(pep, info->handle, NULL, 0);
 	return ret;
 }
 

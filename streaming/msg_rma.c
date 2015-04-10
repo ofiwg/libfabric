@@ -501,7 +501,7 @@ static int server_connect(void)
 err3:
 	free_ep_res();
 err1:
- 	fi_reject(pep, info->connreq, NULL, 0);
+ 	fi_reject(pep, info->handle, NULL, 0);
  	fi_freeinfo(info);
  	return ret;
 }
