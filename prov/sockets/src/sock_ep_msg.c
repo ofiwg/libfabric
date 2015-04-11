@@ -653,6 +653,7 @@ err:
 
 static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
+	struct sock_conn_req_handle *handle;
 	struct sock_conn_req *req;
 	struct sock_conn_response *response;
 	struct sockaddr_in *addr;
@@ -670,13 +671,14 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	if (!response)
 		return -FI_ENOMEM;
 
-	req = (struct sock_conn_req *) _ep->info.handle;
-	if (!req) {
+	handle = container_of(_ep->info.handle, struct sock_conn_req_handle, handle);
+	if (!handle || handle->handle.fclass != FI_CLASS_CONNREQ) {
 		SOCK_LOG_ERROR("invalid handle for cm_accept\n");
 		free(response);
 		return -FI_EINVAL;
 	}
-	
+
+	req = handle->req;	
 	memcpy(&response->hdr, &req->hdr, sizeof(response->hdr));
 	if (param && paramlen)
 		memcpy(&response->user_data, param, paramlen);
@@ -696,6 +698,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	}
 	    
 out:
+	free(handle);
 	free(req);
 	free(response);
 	_ep->info.handle = NULL;
@@ -871,9 +874,10 @@ static struct fi_info * sock_ep_msg_process_info(struct sock_conn_req *req)
 			    req->info.dest_addr, req->info.src_addr);
 }
 
-static void *sock_pep_listener_thread (void *data)
+static void *sock_pep_listener_thread(void *data)
 {
-	struct sock_pep *pep = (struct sock_pep *)data;
+	struct sock_pep *pep = (struct sock_pep *) data;
+	struct sock_conn_req_handle *handle = NULL;
 	struct sock_conn_req *conn_req = NULL;
 	struct fi_eq_cm_entry *cm_entry;
 	struct sockaddr_in from_addr;
@@ -893,7 +897,7 @@ static void *sock_pep_listener_thread (void *data)
 	poll_fds[0].fd = pep->cm.sock;
 	poll_fds[1].fd = pep->cm.signal_fds[1];
 	poll_fds[0].events = poll_fds[1].events = POLLIN;
-	while(*((volatile int*)&pep->cm.do_listen)) {
+	while (*((volatile int*)&pep->cm.do_listen)) {
 		timeout = dlist_empty(&pep->cm.msg_list) ? -1 : SOCK_CM_COMM_TIMEOUT;
 		if (poll(poll_fds, 2, timeout) > 0) {
 			if (poll_fds[1].revents & POLLIN) {
@@ -912,6 +916,12 @@ static void *sock_pep_listener_thread (void *data)
 			}
 		}
 
+		if (handle == NULL) {
+			handle = calloc(1, sizeof *handle);
+			if (!handle)
+				break;
+		}
+
 		if (conn_req == NULL) {
 			conn_req = calloc(1, sizeof(*conn_req) + SOCK_EP_MAX_CM_DATA_SZ);
 			if (!conn_req) {
@@ -919,6 +929,9 @@ static void *sock_pep_listener_thread (void *data)
 				break;
 			}
 		}
+
+		handle->handle.fclass = FI_CLASS_CONNREQ;
+		handle->req = conn_req;
 
 		addr_len = sizeof(struct sockaddr_in);
 		ret = recvfrom(pep->cm.sock, (char*)conn_req, 
@@ -954,10 +967,11 @@ static void *sock_pep_listener_thread (void *data)
 			
 			cm_entry->fid = &pep->pep.fid;
 			cm_entry->info = sock_ep_msg_process_info(conn_req);
-			cm_entry->info->handle = (fid_t) conn_req;
+			cm_entry->info->handle = &handle->handle;
 
 			memcpy(&cm_entry->data, &conn_req->user_data,
 			       user_data_sz);
+			handle = NULL;
 			conn_req = NULL;
 			
 			if (sock_eq_report_event(pep->eq, FI_CONNREQ, cm_entry,
@@ -974,6 +988,8 @@ static void *sock_pep_listener_thread (void *data)
 out:
 	if (conn_req)
 		free(conn_req);
+	if (handle)
+		free(handle);
 	free(cm_entry);
 	close(pep->cm.sock);
 	return NULL;
@@ -1060,6 +1076,7 @@ static int sock_pep_listen(struct fid_pep *pep)
 static int sock_pep_reject(struct fid_pep *pep, fid_t handle,
 		const void *param, size_t paramlen)
 {
+	struct sock_conn_req_handle *hreq;
 	struct sock_conn_req *req;
 	struct sockaddr_in *addr;
 	struct sock_pep *_pep;
@@ -1067,9 +1084,10 @@ static int sock_pep_reject(struct fid_pep *pep, fid_t handle,
 	int ret = 0;
 
 	_pep = container_of(pep, struct sock_pep, pep);
-	req = (struct sock_conn_req *) handle;
-	if (!req)
-		return 0;
+	hreq = container_of(handle, struct sock_conn_req_handle, handle);
+	req = hreq->req;
+	if (!req || hreq->handle.fclass != FI_CLASS_CONNREQ)
+		return -FI_EINVAL;
 	
 	response = (struct sock_conn_response*)
 		calloc(1, sizeof(*response) + paramlen);
@@ -1093,6 +1111,7 @@ static int sock_pep_reject(struct fid_pep *pep, fid_t handle,
 	ret = 0;
 
 out:	
+	free(hreq);
 	free(req);
 	free(response);
 	return ret;

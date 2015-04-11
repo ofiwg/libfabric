@@ -796,6 +796,11 @@ enum {
 	SOCK_CONN_ACK
 };
 
+struct sock_conn_req_handle {
+	struct fid handle;
+	struct sock_conn_req *req;
+};
+
 int sock_verify_info(struct fi_info *hints);
 int sock_verify_fabric_attr(struct fi_fabric_attr *attr);
 int sock_verify_domain_attr(struct fi_domain_attr *attr);

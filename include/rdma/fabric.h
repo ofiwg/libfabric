@@ -327,7 +327,8 @@ enum {
 	FI_CLASS_CQ,
 	FI_CLASS_CNTR,
 	FI_CLASS_WAIT,
-	FI_CLASS_POLL
+	FI_CLASS_POLL,
+	FI_CLASS_CONNREQ
 };
 
 struct fi_eq_attr;
