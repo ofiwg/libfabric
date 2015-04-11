@@ -288,6 +288,18 @@ struct psmx_cq_event {
 	struct slist_entry list_entry;
 };
 
+struct psmx_eq_event {
+	int event;
+	union {
+		struct fi_eq_entry		data;
+		struct fi_eq_cm_entry		cm;
+		struct fi_eq_err_entry		err;
+	} eqe;
+	int error;
+	size_t entry_size;
+	struct slist_entry list_entry;
+};
+
 struct psmx_fid_wait {
 	struct fid_wait			wait;
 	struct psmx_fid_fabric		*fabric;
@@ -324,6 +336,17 @@ struct psmx_fid_cq {
 	struct psmx_cq_event		*pending_error;
 	struct psmx_fid_wait		*wait;
 	int				wait_cond;
+	int				wait_is_local;
+};
+
+struct psmx_fid_eq {
+	struct fid_eq			eq;
+	struct psmx_fid_fabric		*fabric;
+	struct slist			event_queue;
+	struct slist			error_queue;
+	struct slist			free_list;
+	pthread_mutex_t			mutex;
+	struct psmx_fid_wait		*wait;
 	int				wait_is_local;
 };
 
@@ -559,6 +582,8 @@ int	psmx_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 		     struct fid_stx **stx, void *context);
 int	psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		     struct fid_cq **cq, void *context);
+int	psmx_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+		     struct fid_eq **eq, void *context);
 int	psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		     struct fid_av **av, void *context);
 int	psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
@@ -621,8 +646,10 @@ static inline void psmx_cntr_inc(struct psmx_fid_cntr *cntr)
 
 static inline void psmx_progress(struct psmx_fid_domain *domain)
 {
-	psmx_cq_poll_mq(NULL, domain, NULL, 0, NULL);
-	psmx_am_progress(domain);
+	if (domain) {
+		psmx_cq_poll_mq(NULL, domain, NULL, 0, NULL);
+		psmx_am_progress(domain);
+	}
 }
 
 ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,

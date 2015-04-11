@@ -247,6 +247,7 @@ _psm_files = \
 	prov/psm/src/psmx_init.c \
 	prov/psm/src/psmx_domain.c \
 	prov/psm/src/psmx_cq.c \
+	prov/psm/src/psmx_eq.c \
 	prov/psm/src/psmx_cntr.c \
 	prov/psm/src/psmx_av.c \
 	prov/psm/src/psmx_ep.c \
