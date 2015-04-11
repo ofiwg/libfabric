@@ -171,6 +171,10 @@ int fi_no_atomic_compwritevalid(struct fid_ep *ep,
 /*
  * struct fi_ops_cm
  */
+int fi_no_setname(fid_t fid, void *addr, size_t *addrlen)
+{
+	return -FI_ENOSYS;
+}
 int fi_no_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	return -FI_ENOSYS;

@@ -12,8 +12,8 @@ fi_cm - Connection management operations
 fi_connect / fi_listen / fi_accept / fi_reject / fi_shutdown
 : Manage endpoint connection state.
 
-fi_getname / fi_getpeer
-: Return local or peer endpoint address
+fi_setname / fi_getname / fi_getpeer
+: Set local, or return local or peer endpoint address.
 
 # SYNOPSIS
 
@@ -32,6 +32,8 @@ int fi_reject(struct fid_pep *pep, fid_t handle,
 
 int fi_shutdown(struct fid_ep *ep, uint64_t flags);
 
+int fi_setname(fid_t fid, void *addr, size_t *addrlen);
+
 int fi_getname(fid_t fid, void *addr, size_t *addrlen);
 
 int fi_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen);
@@ -43,9 +45,11 @@ int fi_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen);
 : Fabric endpoint on which to change connection state.
 
 *addr*
-: Buffer to store queried address (get), or address to
-  connect.  The address must be in the same format as that
-  specified using fi_info: addr_format when the endpoint was created.
+: Buffer to address.  On a set call, the endpoint will be assigned the
+  specified address.  On a get, the local address will be copied into the
+  buffer, up to the space provided.  For connect, this parameter indicates
+  the peer address to connect to.  The address must be in the same format as
+  that specified using fi_info: addr_format when the endpoint was created.
 
 *addrlen*
 : On input, specifies size of addr buffer.  On output, stores number
@@ -141,6 +145,25 @@ Note that in the abrupt close case, an FI_SHUTDOWN event will only be
 generated if the peer system is reachable and a service or kernel agent
 on the peer system is able to notify the local endpoint that the connection
 has been aborted.
+
+## fi_setname
+
+The fi_setname call may be used to modify or assign the address of the
+local endpoint.  It is conceptually similar to the socket bind operation.
+An endpoint may be assigned an address on its creation,
+through the fi_info structure.  The fi_setname call allows an endpoint to
+be created without being associated with a specific service (i.e. port
+number) and/or node (i.e. network) address, with the addressing assigned
+dynamically.  The format of the specified addressing data must match that
+specified through the fi_info structure when the endpoint was created.
+
+If no service address is specified and a service address
+has not yet been assigned to the endpoint, then the provider will allocate
+a service address and assign it to the endpoint.  If a node or service
+address is specified, then, upon successful completion of fi_setname,
+the endpoint will be assigned the given addressing.  If an address cannot
+be assigned, or the endpoint address cannot be modified, an appropriate
+fabric error number is returned.
 
 ## fi_getname / fi_getpeer
 

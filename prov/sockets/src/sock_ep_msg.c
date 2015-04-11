@@ -727,6 +727,7 @@ static int sock_ep_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 
 struct fi_ops_cm sock_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
+	.setname = fi_no_setname,
 	.getname = sock_ep_cm_getname,
 	.getpeer = sock_ep_cm_getpeer,
 	.connect = sock_ep_cm_connect,
