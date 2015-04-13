@@ -32,46 +32,55 @@
 
 #include "psmx.h"
 
-
-/*
- * TODO: make asynchronous
- */
 ssize_t _psmx_tagged_peek(struct fid_ep *ep, void *buf, size_t len,
 			  void *desc, fi_addr_t src_addr,
 			  uint64_t tag, uint64_t ignore,
 			  void *context, uint64_t flags)
 {
-	return -FI_ENOSYS;
-/*
 	struct psmx_fid_ep *ep_priv;
 	psm_mq_status_t psm_status;
 	uint64_t psm_tag, psm_tagsel;
+	struct psmx_cq_event *event;
 	int err;
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-	if ((*tag) & ep_priv->domain->reserved_tag_bits) {
+	if (tag & ep_priv->domain->reserved_tag_bits) {
 		FI_WARN(&psmx_prov, FI_LOG_EP_DATA,
 			"using reserved tag bits."
-			"tag=%lx. reserved_bits=%lx.\n", *tag,
+			"tag=%lx. reserved_bits=%lx.\n", tag,
 			ep_priv->domain->reserved_tag_bits);
 	}
 
-	psm_tag = *tag & (~ep_priv->domain->reserved_tag_bits);
+	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;
 
-	if (flags & FI_CLAIM)
+	if (flags & (FI_CLAIM | FI_DISCARD))
 		return -FI_EOPNOTSUPP;
 
 	err = psm_mq_iprobe(ep_priv->domain->psm_mq, psm_tag, psm_tagsel,
 			    &psm_status);
 	switch (err) {
 	case PSM_OK:
-		*tag = psm_status.msg_tag;
-		*len = psm_status.msg_length;
-		if (src_addr)
-			*src_addr = FI_ADDR_NOTAVAIL;
-		return 1;
+		if (ep_priv->recv_cq) {
+			event = psmx_cq_create_event(
+					ep_priv->recv_cq,
+					context,		/* op_context */
+					NULL,			/* buf */
+					flags|FI_RECV|FI_TAGGED,/* flags */
+					psm_status.msg_length,	/* len */
+					0,			/* data */
+					psm_status.msg_tag,	/* tag */
+					psm_status.msg_length,	/* olen */
+					0);			/* err */
+			if (event)
+				psmx_cq_enqueue_event(ep_priv->recv_cq, event);
+			else
+				return -FI_ENOMEM;
+
+			/* TODO: set message source to FI_ADDR_NOTAVAIL? */
+		}
+		return 0;
 
 	case PSM_MQ_NO_COMPLETIONS:
 		return -FI_ENOMSG;
@@ -79,7 +88,6 @@ ssize_t _psmx_tagged_peek(struct fid_ep *ep, void *buf, size_t len,
 	default:
 		return psmx_errno(err);
 	}
-*/
 }
 
 ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
