@@ -317,6 +317,26 @@ struct fi_eq_cm_entry {
   field for a shutdown notification refers to the active endpoint's
   fid_ep.
 
+*Asynchronous Error Notification*
+: Asynchronous errors are used to report problems with fabric resources.
+  Reported errors may be fatal or transient, based on the error, and
+  result in the resource becoming disabled.  Disabled resources will fail
+  operations submitted against them until they are explicitly re-enabled
+  by the application.
+
+  Asynchronous errors may be reported for completion queues and endpoints
+  of all types.  CQ errors can result when resource management has been
+  disabled, and the provider has detected a queue overrun.  Endpoint
+  errors may be result of numerous actions, but are often associated with
+  a failed operation.  Operations may fail because of buffer overruns,
+  invalid permissions, incorrect memory access keys, network routing
+  failures, network reachability issues, etc.
+
+  Asynchronous errors are reported using struct fi_eq_err_entry, as defined
+  below.  The fabric descriptor (fid) associated with the error is provided
+  as part of the error data.  An error code is also available to determine
+  the cause of the error.
+
 ## fi_eq_sread
 
 The fi_eq_sread call is the blocking (or synchronous) equivalent to

@@ -338,6 +338,9 @@ assigned to it.
 Calling connect or accept on an endpoint will implicitly enable an
 endpoint if it has not already been enabled.
 
+Fi_enable may also be used to re-enable an endpoint that has been
+disabled as a result of experiencing an asynchronous error.
+
 ## fi_cancel
 
 fi_cancel attempts to cancel an outstanding asynchronous operation.
