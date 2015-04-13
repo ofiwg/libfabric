@@ -108,7 +108,7 @@ ssize_t fi_tx_size_left(struct fid_ep *ep);
 *fid*
 : On creation, specifies a fabric or access domain.  On bind,
   identifies the event queue, completion queue or address vector to
-  bind to the endpoint.
+  bind to the endpoint. In other cases, it's a fabric identifier of an associated resource.
 
 *info*
 : Details about the fabric interface endpoint to be opened, obtained
@@ -123,11 +123,14 @@ ssize_t fi_tx_size_left(struct fid_ep *ep);
 *pep*
 : A passive fabric endpoint.
 
-*fid*
-: Fabric identifier of an associated resource.
-
 *context*
 : Context associated with the endpoint or asynchronous operation.
+
+*index*
+: Index to retrieve a specific transmit/receive context.
+
+*attr*
+: Transmit or receive context attributes.
 
 *flags*
 : Additional flags to apply to the operation.
@@ -136,7 +139,7 @@ ssize_t fi_tx_size_left(struct fid_ep *ep);
 : Command of control operation to perform on endpoint.
 
 *arg*
-: Optional control argument
+: Optional control argument.
 
 *level*
 : Protocol level at which the desired option resides.
@@ -337,6 +340,9 @@ assigned to it.
 
 Calling connect or accept on an endpoint will implicitly enable an
 endpoint if it has not already been enabled.
+
+Fi_enable may also be used to re-enable an endpoint that has been
+disabled as a result of experiencing an asynchronous error.
 
 ## fi_cancel
 
