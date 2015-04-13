@@ -32,7 +32,7 @@ simple_tests=(
 	"rdm"
 	"rdm_rma_simple"
 	"rdm_shared_ctx"
-	"rdm_tagged_search"
+	"rdm_tagged_peek"
 	"scalable_ep"
 	"cmatose"
 )

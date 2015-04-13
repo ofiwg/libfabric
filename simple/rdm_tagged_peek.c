@@ -103,15 +103,12 @@ static int recv_msg(uint64_t tag)
 {
 	int ret;
 
-	// posting recv for next send
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
 			tag, 0, &fi_ctx_recv);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
-	
-	// wait for the completion event
-	ret = wait_for_tagged_completion(rcq, 1);
 
+	ret = wait_for_tagged_completion(rcq, 1);
 	return ret;
 }
 
@@ -119,12 +116,11 @@ static int post_recv(uint64_t tag)
 {
 	int ret;
 
-	// posting recv for next send
 	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
 			tag, 0, &fi_ctx_recv);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
-	
+
 	return ret;
 }
 
@@ -265,14 +261,14 @@ static int init_fabric(void)
 	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (ret)
 		return ret;
-	
+
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 
-	// we use provider MR attributes and direct address (no offsets) 
+	// we use provider MR attributes and direct address (no offsets)
 	// for RMA calls
 	if (!(fi->mode & FI_PROV_MR_ATTR))
 		fi->mode |= FI_PROV_MR_ATTR;
@@ -295,7 +291,7 @@ static int init_fabric(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
-	
+
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;
@@ -382,28 +378,28 @@ static int init_av(void)
 	return ret;
 }
 
-static int tagged_search(uint64_t tag)
+static int tagged_peek(uint64_t tag)
 {
 	int ret;
-	size_t len = 0;
-	ret = fi_tsearch(ep, &tag, 0, 0, NULL, &len, &fi_ctx_search);
-	if(ret < 0) {
-		if(ret == -ENOMSG)
+	struct fi_msg_tagged msg;
+
+	memset(&msg, 0, sizeof msg);
+	msg.tag = tag;
+	msg.context = &fi_ctx_search;
+	ret = fi_trecvmsg(ep, &msg, FI_PEEK);
+	if (ret < 0) {
+		if (ret == -ENOMSG)
 			fprintf(stdout,
 				"No match found with tag [%" PRIu64 "]\n",
 				tag);
 		else
 			FT_PRINTERR("fi_tsearch", ret);
-	} else if(ret == 0) {
-		// search was initiated asynchronously, so wait for 
+	} else {
+		// search was initiated asynchronously, so wait for
 		// the completion event
 		ret = wait_for_tagged_completion(scq, 1);
-	} else {
-		// search completes immediately
-		fprintf(stdout, "Success! Match found with tag [%" PRIu64 "]\n",
-			tag);
 	}
-	
+
 	return ret;
 }
 
@@ -417,47 +413,47 @@ static int run(void)
 	ret = init_av();
 	if (ret)
 		goto out;
-	
+
 	// Receiver
 	if (opts.dst_addr) {
-		// search for initial tag, it should fail since the sender 
+		// search for initial tag, it should fail since the sender
 		// hasn't sent anyting
 		fprintf(stdout, "Searching msg with tag [%" PRIu64 "]\n", tag_data);
-		tagged_search(tag_data);
-		
+		tagged_peek(tag_data);
+
 		fprintf(stdout, "Posting buffer for msg with tag [%" PRIu64 "]\n", 
 				tag_data + 1);
 		ret = post_recv(tag_data + 1);
 		if (ret)
 			goto out;
-		
+
 		// synchronize with sender
 		fprintf(stdout, "\nSynchronizing with sender..\n\n");
 		ret = sync_test();
 		if (ret)
 			goto out;
-		
+
 		// wait for the completion event of the next tag
 		ret = wait_for_tagged_completion(rcq, 1);
 		if (ret)
 			goto out;
 		fprintf(stdout, "Received completion event for msg with tag "
 				"[%" PRIu64 "]\n", tag_data + 1);
-		
+
 		// search again for the initial tag, it should be successful now
 		fprintf(stdout,
 			"Searching msg with initial tag [%" PRIu64 "]\n",
 			tag_data);
-		tagged_search(tag_data);
-		
+		tagged_peek(tag_data);
+
 		// wait for the completion event of the initial tag
-		ret = recv_msg(tag_data);	
+		ret = recv_msg(tag_data);
 		if (ret)
 			goto out;
 		fprintf(stdout, "Posted buffer and received completion event for"
 			       " msg with tag [%" PRIu64 "]\n", tag_data);
 	} else {
-		// Sender	
+		// Sender
 		// synchronize with receiver
 		fprintf(stdout, "Synchronizing with receiver..\n\n");
 		ret = sync_test();
@@ -506,12 +502,12 @@ int main(int argc, char **argv)
 		case 'h':
 			ft_usage(argv[0], "An RDM client-server example that uses tagged search.\n");
 			return EXIT_FAILURE;
-		}		
+		}
 	}
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
-	
+
 	hints->rx_attr->total_buffered_recv = buffer_size;
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_TAGGED;
