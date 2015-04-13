@@ -168,10 +168,16 @@ struct fi_info {
   ignored in hints unless the node and service parameters are NULL or
   FI_SOURCE is specified.
 
-*handle - request context handle*
-: References a specific connection request handle, otherwise the field must
-  be NULL.  This field is used when processing connection requests and
-  responses.  See fi_eq(3), fi_reject(3), and fi_endpoint(3).
+*handle - provider context handle*
+: References a provider specific handle.  The use of this field
+  is operation specific.  Unless its use is described for a given operation,
+  the handle field must be NULL.  It is commonly used by applications
+  that make use of connection-oriented endpoints.  For other applications,
+  the field should usually be NULL.
+
+  This field is used when processing connection requests and
+  responses.  It is also used to inherit endpoint's attributes.
+  See fi_eq(3), fi_reject(3), and fi_endpoint(3) .
 
 *tx_attr - transmit context attributes*
 : Optionally supplied transmit context attributes.  Transmit context
