@@ -1106,6 +1106,107 @@ err:
 	return -FI_EINVAL;
 }
 
+ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr, uint64_t tag,
+			  void *context, uint64_t flags, uint8_t is_tagged)
+{
+	ssize_t ret = 0;
+	struct sock_rx_entry *rx_buffered;
+	struct sock_pe_entry pe_entry;
+	
+	fastlock_acquire(&rx_ctx->lock);
+	rx_buffered = sock_rx_get_buffered_entry(rx_ctx, 
+					(rx_ctx->attr.caps & FI_DIRECTED_RECV) ?
+					addr : FI_ADDR_UNSPEC, 
+					0L, is_tagged);
+	if (rx_buffered) {
+		memset(&pe_entry, 0, sizeof pe_entry);
+		pe_entry.data_len = rx_buffered->total_len;
+		pe_entry.tag = tag;
+		pe_entry.context = rx_buffered->context = (uintptr_t)context;
+		pe_entry.flags = (flags | rx_ctx->attr.op_flags);
+		pe_entry.flags |= (FI_MSG | FI_RECV);
+		if (is_tagged)
+			pe_entry.flags |= FI_TAGGED;
+		
+		if (flags & FI_CLAIM)
+			rx_buffered->is_claimed = 1;
+		
+		if (flags & FI_DISCARD) {
+			dlist_remove(&rx_buffered->entry);
+			sock_rx_release_entry(rx_buffered);
+		}
+		sock_pe_report_rx_completion(&pe_entry);
+	} else {
+		ret = -FI_ENOMSG;
+	}
+	fastlock_release(&rx_ctx->lock);
+	return ret;
+}
+
+ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context, 
+			   uint64_t flags, uint64_t tag, uint8_t is_tagged,
+			   const struct iovec *msg_iov, size_t iov_count)
+{
+	ssize_t ret = 0;
+	size_t rem = 0, i, offset, len;
+	struct dlist_entry *entry;
+	struct sock_pe_entry pe_entry;
+	struct sock_rx_entry *rx_buffered = NULL;
+	
+	fastlock_acquire(&rx_ctx->lock);
+	for (entry = rx_ctx->rx_buffered_list.next;
+	     entry != &rx_ctx->rx_buffered_list; entry = entry->next) {
+		rx_buffered = container_of(entry, struct sock_rx_entry, entry);
+		if (rx_buffered->is_claimed && 
+		    (uintptr_t)rx_buffered->context == (uintptr_t)context &&
+		    is_tagged == rx_buffered->is_tagged && 
+		    tag == rx_buffered->tag)
+			break;
+		else
+			rx_buffered = NULL;
+	}
+
+	if (rx_buffered) {
+		memset(&pe_entry, 0, sizeof pe_entry);
+		pe_entry.data_len = rx_buffered->total_len;
+		pe_entry.tag = rx_buffered->tag;
+		pe_entry.context = rx_buffered->context;
+		pe_entry.flags = (flags | rx_ctx->attr.op_flags);
+		pe_entry.flags |= (FI_MSG | FI_RECV);
+		if (is_tagged)
+			pe_entry.flags |= FI_TAGGED;
+
+		if (!(flags & FI_DISCARD)) {
+			pe_entry.buf = (uintptr_t)msg_iov[0].iov_base;
+			offset = 0;
+			rem = rx_buffered->total_len;
+			for (i = 0; i < iov_count && rem > 0; i++) {
+				len = MIN(msg_iov[i].iov_len, rem);
+				memcpy(msg_iov[i].iov_base, 
+				       (char *) (uintptr_t) 
+				       rx_buffered->iov[0].iov.addr + offset, len);
+				rem -= len;
+				offset += len;
+			}
+		}
+
+		if (rem) {
+			SOCK_LOG_INFO("Not enough space in posted recv buffer\n");
+			sock_pe_report_error(&pe_entry, rem);
+		} else {
+			sock_pe_report_rx_completion(&pe_entry);
+		}
+		
+		dlist_remove(&rx_buffered->entry);
+		sock_rx_release_entry(rx_buffered);
+	} else {
+		ret = -FI_ENOMSG;
+	}
+
+	fastlock_release(&rx_ctx->lock);
+	return ret;
+}
+
 static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 {
 	struct dlist_entry *entry;
@@ -1169,6 +1270,9 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		pe_entry.type = SOCK_PE_RX;
 		pe_entry.comp = rx_buffered->comp;
 		pe_entry.flags = rx_posted->flags;
+		pe_entry.flags |= (FI_MSG | FI_RECV);
+		if (rx_buffered->is_tagged)
+			pe_entry.flags |= FI_TAGGED;
 		pe_entry.flags &= ~FI_MULTI_RECV;
 
 		if (rx_posted->flags & FI_MULTI_RECV) {
@@ -1230,7 +1334,8 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 		fastlock_acquire(&rx_ctx->lock);
 		sock_pe_progress_buffered_rx(rx_ctx);
 		
-		rx_entry = sock_rx_get_entry(rx_ctx, pe_entry->addr, pe_entry->tag, pe_entry->msg_hdr.op_type);
+		rx_entry = sock_rx_get_entry(rx_ctx, pe_entry->addr, pe_entry->tag, 
+					     pe_entry->msg_hdr.op_type == SOCK_OP_TSEND ? 1 : 0);
 		SOCK_LOG_INFO("Consuming posted entry: %p\n", rx_entry);	
 
 		if (!rx_entry) {
