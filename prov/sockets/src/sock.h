@@ -971,7 +971,16 @@ struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,
 						 size_t len);
 struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx, 
 					uint64_t addr, uint64_t tag, 
-					uint8_t op_type);
+					uint8_t is_tagged);
+struct sock_rx_entry *sock_rx_get_buffered_entry(struct sock_rx_ctx *rx_ctx, 
+						 uint64_t addr, uint64_t tag, 
+						 uint8_t is_tagged);
+ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr, 
+			  uint64_t tag, void *context, uint64_t flags, 
+			  uint8_t is_tagged);
+ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context, 
+			   uint64_t flags, uint64_t tag, uint8_t is_tagged,
+			   const struct iovec *msg_iov, size_t iov_count);
 size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry);
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry);
 
