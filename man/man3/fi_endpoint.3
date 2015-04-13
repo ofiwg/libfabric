@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-03\-31" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-04\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -124,6 +124,7 @@ ssize_t\ fi_tx_size_left(struct\ fid_ep\ *ep);
 \f[I]fid\f[] : On creation, specifies a fabric or access domain.
 On bind, identifies the event queue, completion queue or address vector
 to bind to the endpoint.
+In other cases, it\[aq]s a fabric identifier of an associated resource.
 .PP
 \f[I]info\f[] : Details about the fabric interface endpoint to be
 opened, obtained from fi_getinfo.
@@ -134,16 +135,18 @@ opened, obtained from fi_getinfo.
 .PP
 \f[I]pep\f[] : A passive fabric endpoint.
 .PP
-\f[I]fid\f[] : Fabric identifier of an associated resource.
-.PP
 \f[I]context\f[] : Context associated with the endpoint or asynchronous
 operation.
+.PP
+\f[I]index\f[] : Index to retrieve a specific transmit/receive context.
+.PP
+\f[I]attr\f[] : Transmit or receive context attributes.
 .PP
 \f[I]flags\f[] : Additional flags to apply to the operation.
 .PP
 \f[I]command\f[] : Command of control operation to perform on endpoint.
 .PP
-\f[I]arg\f[] : Optional control argument
+\f[I]arg\f[] : Optional control argument.
 .PP
 \f[I]level\f[] : Protocol level at which the desired option resides.
 .PP
@@ -353,6 +356,9 @@ assigned to it.
 .PP
 Calling connect or accept on an endpoint will implicitly enable an
 endpoint if it has not already been enabled.
+.PP
+Fi_enable may also be used to re-enable an endpoint that has been
+disabled as a result of experiencing an asynchronous error.
 .SS fi_cancel
 .PP
 fi_cancel attempts to cancel an outstanding asynchronous operation.
