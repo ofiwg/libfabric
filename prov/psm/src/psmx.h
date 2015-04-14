@@ -496,7 +496,9 @@ struct psmx_fid_cntr {
 struct psmx_fid_av {
 	struct fid_av		av;
 	struct psmx_fid_domain	*domain;
+	struct psmx_fid_eq	*eq;
 	int			type;
+	uint64_t		flags;
 	size_t			addrlen;
 	size_t			count;
 	size_t			last;
@@ -603,6 +605,12 @@ int	psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 			    psm_epid_t epid, psm_epaddr_t *epaddr);
 void	psmx_query_mpi(void);
 
+void	psmx_eq_enqueue_event(struct psmx_fid_eq *eq, struct psmx_eq_event *event);
+struct	psmx_eq_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
+					uint32_t event_num,
+					void *context, uint64_t data,
+					int err, int prov_errno,
+					void *err_data, size_t err_data_size);
 void	psmx_cq_enqueue_event(struct psmx_fid_cq *cq, struct psmx_cq_event *event);
 struct	psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 					void *op_context, void *buf,
