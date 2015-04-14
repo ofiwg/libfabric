@@ -91,10 +91,11 @@ static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		flags |= rx_ctx->attr.op_flags;
 
 	if (flags & FI_PEEK) {
-		return sock_rx_peek_recv(rx_ctx, msg->addr, 0L, 
+		return sock_rx_peek_recv(rx_ctx, msg->addr, 0L, ~0ULL,
 					 msg->context, flags, 0);
 	} else if (flags & FI_CLAIM) {
-		return sock_rx_claim_recv(rx_ctx, msg->context, flags, 0L, 0,
+		return sock_rx_claim_recv(rx_ctx, msg->context, flags, 
+					  0L, ~0ULL, 0, 
 					  msg->msg_iov, msg->iov_count);
 	}
 
@@ -393,11 +394,12 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 		flags |= rx_ctx->attr.op_flags;
 	flags &= ~FI_MULTI_RECV;
 	if (flags & FI_PEEK) {
-		return sock_rx_peek_recv(rx_ctx, msg->addr, msg->tag, 
+		return sock_rx_peek_recv(rx_ctx, msg->addr, 
+					 msg->tag, msg->ignore,
 					 msg->context, flags, 1);
 	} else if (flags & FI_CLAIM) {
 		return sock_rx_claim_recv(rx_ctx, msg->context, flags, 
-					  msg->tag, 1, 
+					  msg->tag, msg->ignore, 1, 
 					  msg->msg_iov, msg->iov_count);
 	}
 
