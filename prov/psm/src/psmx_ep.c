@@ -276,6 +276,16 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 	return 0;
 }
 
+static ssize_t psmx_rx_size_left(struct fid_ep *ep)
+{
+	return 0x7fffffff; /* a random choice */
+}
+
+static ssize_t psmx_tx_size_left(struct fid_ep *ep)
+{
+	return 0x7fffffff; /* a random choice */
+}
+
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_ep_close,
@@ -291,8 +301,8 @@ static struct fi_ops_ep psmx_ep_ops = {
 	.setopt = psmx_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
-	.rx_size_left = fi_no_rx_size_left,
-	.tx_size_left = fi_no_tx_size_left,
+	.rx_size_left = psmx_rx_size_left,
+	.tx_size_left = psmx_tx_size_left,
 };
 
 int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
