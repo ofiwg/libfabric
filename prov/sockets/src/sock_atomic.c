@@ -114,15 +114,14 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 			src_len += (msg->msg_iov[i].count * datatype_sz);
 		}
 		if (src_len > SOCK_EP_MAX_INJECT_SZ) {
-			ret = -FI_EINVAL;
-			goto err;
+			return -FI_EINVAL;
 		}
 		total_len = src_len;
 	} else {
 		total_len = msg->iov_count * sizeof(union sock_iov);
 	}
 
-	total_len += (sizeof(tx_op) +
+	total_len += (sizeof(struct sock_op_send) +
 		      (msg->rma_iov_count * sizeof(union sock_iov)) +
 		      (result_count * sizeof (union sock_iov)));
 	

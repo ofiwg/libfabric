@@ -321,6 +321,8 @@ struct sock_op_send {
 	uint64_t context;
 	uint64_t dest_addr;
 	uint64_t buf;
+	uint64_t tag;
+	uint64_t data;
 	struct sock_ep *ep;
 	struct sock_conn *conn;
 };
