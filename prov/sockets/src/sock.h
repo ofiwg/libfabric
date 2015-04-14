@@ -119,6 +119,7 @@
 
 #define SOCK_MODE (0)
 #define SOCK_NO_COMPLETION (1ULL << 60)
+#define SOCK_USE_OP_FLAGS (1ULL << 61)
 
 #define SOCK_COMM_BUF_SZ (1<<20)
 #define SOCK_COMM_THRESHOLD (128 * 1024)

@@ -113,7 +113,8 @@ static ssize_t sock_ep_rma_readmsg(struct fid_ep *ep,
 		goto err;
 	}
 
-	flags |= tx_ctx->attr.op_flags;	
+	if (flags & SOCK_USE_OP_FLAGS)
+		flags |= tx_ctx->attr.op_flags;	
 	memset(&tx_op, 0, sizeof(struct sock_op));
 	tx_op.op = SOCK_OP_READ;
 	tx_op.src_iov_len = msg->rma_iov_count;
@@ -183,7 +184,7 @@ static ssize_t sock_ep_rma_read(struct fid_ep *ep, void *buf, size_t len,
 	msg.addr = src_addr;
 	msg.context = context;
 
-	return sock_ep_rma_readmsg(ep, &msg, 0);
+	return sock_ep_rma_readmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov,
@@ -211,7 +212,7 @@ static ssize_t sock_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 	msg.addr = src_addr;
 	msg.context = context;
 
-	return sock_ep_rma_readmsg(ep, &msg, 0);
+	return sock_ep_rma_readmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, 
@@ -258,7 +259,8 @@ static ssize_t sock_ep_rma_writemsg(struct fid_ep *ep,
 	if (!conn)
 		return -FI_EAGAIN;
 
-	flags |= tx_ctx->attr.op_flags;
+	if (flags & SOCK_USE_OP_FLAGS)
+		flags |= tx_ctx->attr.op_flags;
 	memset(&tx_op, 0, sizeof(struct sock_op));
 	tx_op.op = SOCK_OP_WRITE;
 	tx_op.dest_iov_len = msg->rma_iov_count;
@@ -361,7 +363,7 @@ static ssize_t sock_ep_rma_write(struct fid_ep *ep, const void *buf,
 	msg.addr = dest_addr;
 	msg.context = context;
 
-	return sock_ep_rma_writemsg(ep, &msg, 0);
+	return sock_ep_rma_writemsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_rma_writev(struct fid_ep *ep, 
@@ -391,7 +393,7 @@ static ssize_t sock_ep_rma_writev(struct fid_ep *ep,
 	msg.context = context;
 	msg.addr = dest_addr;
 
-	return sock_ep_rma_writemsg(ep, &msg, 0);
+	return sock_ep_rma_writemsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_rma_writedata(struct fid_ep *ep, const void *buf, 
@@ -420,7 +422,7 @@ static ssize_t sock_ep_rma_writedata(struct fid_ep *ep, const void *buf,
 	msg.context = context;
 	msg.data = data;
 
-	return sock_ep_rma_writemsg(ep, &msg, FI_REMOTE_CQ_DATA);
+	return sock_ep_rma_writemsg(ep, &msg, FI_REMOTE_CQ_DATA | SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_rma_inject(struct fid_ep *ep, const void *buf, 
@@ -446,7 +448,8 @@ static ssize_t sock_ep_rma_inject(struct fid_ep *ep, const void *buf,
 	msg.msg_iov = &msg_iov;
 	msg.addr = dest_addr;
 
-	return sock_ep_rma_writemsg(ep, &msg, FI_INJECT | SOCK_NO_COMPLETION);
+	return sock_ep_rma_writemsg(ep, &msg, FI_INJECT | 
+				    SOCK_NO_COMPLETION | SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_rma_injectdata(struct fid_ep *ep, const void *buf, 
@@ -473,7 +476,7 @@ static ssize_t sock_ep_rma_injectdata(struct fid_ep *ep, const void *buf,
 	msg.addr = dest_addr;
 	msg.data = data;
 	return sock_ep_rma_writemsg(ep, &msg, FI_INJECT | FI_REMOTE_CQ_DATA |
-		SOCK_NO_COMPLETION);
+		SOCK_NO_COMPLETION | SOCK_USE_OP_FLAGS);
 }
 
 
