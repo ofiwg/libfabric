@@ -87,7 +87,7 @@ static int sock_ctx_close(struct fid *fid)
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx.fid);
 		sock_pe_remove_tx_ctx(tx_ctx);
-		atomic_dec(&tx_ctx->ep->num_rx_ctx);
+		atomic_dec(&tx_ctx->ep->num_tx_ctx);
 		atomic_dec(&tx_ctx->domain->ref);
 		sock_tx_ctx_free(tx_ctx);
 		break;
