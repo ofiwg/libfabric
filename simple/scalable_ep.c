@@ -127,8 +127,6 @@ static void free_ep_res(void)
 static int alloc_ep_res(struct fid_ep *sep)
 {
 	struct fi_cq_attr cq_attr;
-	struct fi_rx_attr rx_attr;
-	struct fi_tx_attr tx_attr;
 	struct fi_av_attr av_attr;
 	int i, ret;
 
@@ -154,7 +152,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 	
 	for (i = 0; i < ctx_cnt; i++) {
 		/* Create TX contexts: tx_ep */
-		ret = fi_tx_context(sep, i, &tx_attr, &tx_ep[i], NULL);
+		ret = fi_tx_context(sep, i, NULL, &tx_ep[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_tx_context", ret);
 			goto err1;
@@ -169,7 +167,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 	
 	for (i = 0; i < ctx_cnt; i++) {
 		/* Create RX contexts: rx_ep */
-		ret = fi_rx_context(sep, i, &rx_attr, &rx_ep[i], NULL);
+		ret = fi_rx_context(sep, i, NULL, &rx_ep[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_tx_context", ret);
 			goto err3;
