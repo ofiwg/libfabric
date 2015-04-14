@@ -211,10 +211,9 @@ struct sock_mr {
 	uint64_t key;
 	uint64_t flags;
 	size_t iov_count;
-	struct iovec mr_iov[1];
-
 	struct sock_cntr *cntr;
 	struct sock_cq *cq;
+	struct iovec mr_iov[0];
 };
 
 struct sock_av_addr {
