@@ -189,7 +189,10 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		return -FI_EINVAL;
 
 	if (!tx_ctx->enabled)
-		return -FI_EOPBADSTATE;
+		return -FI_EOPBADSTATE;	
+
+	if(sock_drop_packet(sock_ep))
+		return 0;
 
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
@@ -198,7 +201,7 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 	if (!conn)
 		return -FI_EAGAIN;
-
+	
 	SOCK_LOG_INFO("New sendmsg on TX: %p using conn: %p\n", 
 		      tx_ctx, conn);
 
@@ -501,7 +504,10 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 
 	if (!tx_ctx->enabled)
 		return -FI_EOPBADSTATE;
-
+	
+	if(sock_drop_packet(sock_ep))
+		return 0;
+	
 	if (sock_ep->connected) {
 		conn = sock_ep_lookup_conn(sock_ep);
 	} else {
@@ -509,7 +515,7 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	}
 	if (!conn)
 		return -FI_EAGAIN;
-
+	
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;
 

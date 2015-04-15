@@ -143,6 +143,9 @@ struct sock_service_entry {
 struct sock_fabric {
 	struct fid_fabric fab_fid;
 	atomic_t ref;
+#if ENABLE_DEBUG
+	uint64_t num_send_msg;
+#endif
 	struct dlist_entry service_list;
 	struct dlist_entry fab_list_entry;
 	fastlock_t lock;
