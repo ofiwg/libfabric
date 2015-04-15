@@ -137,6 +137,8 @@ usdf_cm_msg_accept(struct fid_ep *fep, const void *param, size_t paramlen)
 	int ret;
 	int n;
 
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
 	ep = ep_ftou(fep);
 	udp = ep->ep_domain;
 	fp = udp->dom_fabric;
@@ -372,6 +374,8 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 	struct usd_qp_impl *qp;
 	int ret;
 
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
 	ep = ep_ftou(fep);
 	udp = ep->ep_domain;
 	fp = udp->dom_fabric;
@@ -462,6 +466,7 @@ fail:
 int
 usdf_cm_msg_shutdown(struct fid_ep *ep, uint64_t flags)
 {
+	USDF_TRACE_SYS(EP_CTRL, "\n");
 	return -FI_ENOSYS;
 }
 
@@ -474,6 +479,8 @@ int usdf_cm_rdm_getname(fid_t fid, void *addr, size_t *addrlen)
 	struct usdf_rx *rx;
 	struct sockaddr_in sin;
 	size_t copylen;
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
 
 	ep = ep_fidtou(fid);
 	rx = ep->ep_rx;

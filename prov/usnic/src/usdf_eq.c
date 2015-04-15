@@ -164,6 +164,8 @@ usdf_eq_readerr(struct fid_eq *feq, struct fi_eq_err_entry *entry,
 	uint64_t val;
 	int ret;
 
+	USDF_TRACE_SYS(EQ, "\n");
+
 	eq = eq_ftou(feq);
 	pthread_spin_lock(&eq->eq_lock);
 
@@ -437,6 +439,8 @@ usdf_eq_control(fid_t fid, int command, void *arg)
 {
 	struct usdf_eq *eq;
 
+	USDF_TRACE_SYS(EQ, "\n");
+
 	eq = eq_fidtou(fid);
 
 	switch (command) {
@@ -458,6 +462,8 @@ static int
 usdf_eq_close(fid_t fid)
 {
 	struct usdf_eq *eq;
+
+	USDF_TRACE_SYS(EQ, "\n");
 
 	eq = eq_fidtou(fid);
 
@@ -504,6 +510,8 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	struct usdf_eq *eq;
 	struct usdf_fabric *fab;
 	int ret;
+
+	USDF_TRACE_SYS(EQ, "\n");
 
 	fab = fab_ftou(fabric);
 

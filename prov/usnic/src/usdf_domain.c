@@ -63,6 +63,8 @@ usdf_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
         struct usdf_domain *udp;
 
+	USDF_TRACE_SYS(DOMAIN, "\n");
+
         udp = dom_fidtou(fid);
 
         switch (bfid->fclass) {
@@ -161,6 +163,8 @@ usdf_domain_close(fid_t fid)
 	struct usdf_domain *udp;
 	int ret;
 
+	USDF_TRACE_SYS(DOMAIN, "\n");
+
 	udp = container_of(fid, struct usdf_domain, dom_fid.fid);
 	if (atomic_get(&udp->dom_refcnt) > 0) {
 		return -FI_EBUSY;
@@ -221,6 +225,8 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct sockaddr_in *sin;
 	size_t addrlen;
 	int ret;
+
+	USDF_TRACE_SYS(DOMAIN, "\n");
 
 	udp = calloc(1, sizeof *udp);
 	if (udp == NULL) {

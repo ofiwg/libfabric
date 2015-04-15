@@ -615,6 +615,8 @@ usdf_get_distance(
     uint32_t nh_ip_addr;
     int ret;
 
+    USDF_TRACE("\n");
+
     ret = usnic_nl_rt_lookup(dap->uda_ipaddr_be, daddr_be,
             dap->uda_ifindex, &nh_ip_addr);
     if (ret != 0) {
@@ -645,6 +647,8 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 	int metric;
 	int d;
 	int ret;
+
+	USDF_TRACE("\n");
 
 	fi_first = NULL;
 	fi_last = NULL;
@@ -781,6 +785,8 @@ usdf_fabric_close(fid_t fid)
 	int ret;
 	void *rv;
 
+	USDF_TRACE("\n");
+
 	fp = fab_fidtou(fid);
 	if (atomic_get(&fp->fab_refcnt) > 0) {
 		return -FI_EBUSY;
@@ -817,6 +823,8 @@ usdf_usnic_getinfo(uint32_t version, struct fid_fabric *fabric,
 	struct usdf_fabric *fp;
 	struct usd_device_attrs *dap;
 
+	USDF_TRACE("\n");
+
 	fp = fab_ftou(fabric);
 	dap = fp->fab_dev_attrs;
 
@@ -843,6 +851,8 @@ static int
 usdf_fabric_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 		void **ops, void *context)
 {
+	USDF_TRACE("\n");
+
 	if (strcmp(ops_name, FI_USNIC_FABRIC_OPS_1) == 0) {
 		*ops = &usdf_usnic_ops_fabric;
 	} else {
@@ -880,6 +890,8 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 	struct sockaddr_in sin;
 	int ret;
 	int d;
+
+	USDF_TRACE("\n");
 
 	/* Make sure this fabric exists */
 	dp = __usdf_devinfo;
@@ -993,6 +1005,7 @@ fail:
 
 static void usdf_fini(void)
 {
+	USDF_TRACE("\n");
 }
 
 struct fi_provider usdf_ops = {
