@@ -593,6 +593,7 @@ static struct fi_ops_ep usdf_base_msg_ops = {
 
 static struct fi_ops_cm usdf_cm_msg_ops = {
 	.size = sizeof(struct fi_ops_cm),
+	.setname = fi_no_setname,
 	.getname = fi_no_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = usdf_cm_msg_connect,
@@ -688,7 +689,7 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 	ep->ep_domain = udp;
 	ep->ep_caps = info->caps;
 	ep->ep_mode = info->mode;
-	ep->e.msg.ep_connreq = (struct usdf_connreq *)info->connreq;
+	ep->e.msg.ep_connreq = (struct usdf_connreq *)info->handle;
 
 	ep->e.msg.ep_seq_credits = USDF_RUDP_SEQ_CREDITS;
 	TAILQ_INIT(&ep->e.msg.ep_posted_wqe);

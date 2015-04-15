@@ -1404,7 +1404,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			sock_ep->rx_attr = *info->rx_attr;
 			sock_ep->op_flags |= info->rx_attr->op_flags;
 		}
-		sock_ep->info.connreq = info->connreq;
+		sock_ep->info.handle = info->handle;
 	}
 	
 	atomic_init(&sock_ep->ref, 0);

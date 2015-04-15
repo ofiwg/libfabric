@@ -157,9 +157,10 @@ ssize_t fi_tx_size_left(struct fid_ep *ep);
 
 Endpoints are transport level communication portals.  There are two
 types of endpoints: active and passive.  Passive endpoints belong to a
-fabric domain and are used to listen for incoming connection requests.
-Active endpoints belong to access domains and can perform data
-transfers.
+fabric domain and are most often used to listen for incoming connection requests.
+However, a passive endpoint may be used to reserve a fabric address that
+can be granted to an active endpoint.  Active endpoints belong to access
+domains and can perform data transfers.
 
 Active endpoints may be connection-oriented or connectionless, and may
 provide data reliability.  The data transfer interfaces -- messages (fi_msg),
@@ -203,8 +204,16 @@ provided struct fi_info.  See fi_getinfo for additional details on
 fi_info.  fi_info flags that control the operation of an endpoint are
 defined below. See section SCALABLE ENDPOINTS.
 
-If an active endpoint is associated with a connection request, the
-fi_info connreq must reference the corresponding request.
+If an active endpoint is allocated in order to accept a connection request,
+the fi_info parameter must be the same as the fi_info structure provided with
+the connection request (FI_CONNREQ) event.
+
+An active endpoint may acquire the properties of a passive endpoint by setting
+the fi_info handle field to the passive endpoint fabric descriptor.  This is
+useful for applications that need to reserve the fabric address of an
+endpoint prior to knowing if the endpoint will be used on the active or passive
+side of a connection.  For example, this feature is useful for simulating
+socket semantics.
 
 ## fi_close
 

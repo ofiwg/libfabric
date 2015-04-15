@@ -385,6 +385,7 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 		goto fail;
 	}
 
+	crp->handle.fclass = FI_CLASS_CONNREQ;
 	crp->cr_sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (crp->cr_sockfd == -1) {
 		ret = -errno;

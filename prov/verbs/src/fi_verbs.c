@@ -148,6 +148,11 @@ struct fi_ibv_msg_ep {
 	uint32_t		inline_size;
 };
 
+struct fi_ibv_connreq {
+	struct fid		handle;
+	struct rdma_cm_id	*id;
+};
+
 static const char *local_node = "localhost";
 static char def_send_wr[16] = "384";
 static char def_recv_wr[16] = "384";
@@ -1917,11 +1922,16 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 }
 
 static int
-fi_ibv_msg_ep_reject(struct fid_pep *pep, fi_connreq_t connreq,
+fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 		  const void *param, size_t paramlen)
 {
-	return rdma_reject((struct rdma_cm_id *) connreq, param,
-			   (uint8_t) paramlen) ? -errno : 0;
+	struct fi_ibv_connreq *connreq;
+	int ret;
+
+	connreq = container_of(handle, struct fi_ibv_connreq, handle);
+	ret = rdma_reject(connreq->id, param, (uint8_t) paramlen) ? -errno : 0;
+	free(connreq);
+	return ret;
 }
 
 static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
@@ -1933,6 +1943,7 @@ static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 
 static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
+	.setname = fi_no_setname,
 	.getname = fi_ibv_msg_ep_getname,
 	.getpeer = fi_ibv_msg_ep_getpeer,
 	.connect = fi_ibv_msg_ep_connect,
@@ -2047,6 +2058,7 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 {
 	struct fi_ibv_domain *_domain;
 	struct fi_ibv_msg_ep *_ep;
+	struct fi_ibv_connreq *connreq;
 	int ret;
 
 	_domain = container_of(domain, struct fi_ibv_domain, domain_fid);
@@ -2057,13 +2069,17 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!_ep)
 		return -FI_ENOMEM;
 
-	if (!info->connreq) {
+	if (!info->handle) {
 		ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &_ep->id);
 		if (ret)
 			goto err;
-
+	} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
+		connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
+		_ep->id = connreq->id;
+		free(connreq);
 	} else {
-		_ep->id = (struct rdma_cm_id *) info->connreq;
+		ret = -FI_ENOSYS;
+		goto err;
 	}
 	_ep->id->context = &_ep->ep_fid.fid;
 
@@ -2116,6 +2132,7 @@ static struct fi_info *
 fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 {
 	struct fi_info *fi;
+	struct fi_ibv_connreq *connreq;
 
 	fi = fi_allocinfo();
 	if (!fi)
@@ -2136,7 +2153,13 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 
 	fi_ibv_fill_info_attr(event->id->verbs, NULL, NULL, fi);
 
-	fi->connreq = (fi_connreq_t) event->id;
+	connreq = calloc(1, sizeof *connreq);
+	if (!connreq)
+		goto err;
+
+	connreq->handle.fclass = FI_CLASS_CONNREQ;
+	connreq->id = event->id;
+	fi->handle = &connreq->handle;
 	return fi;
 err:
 	fi_freeinfo(fi);
