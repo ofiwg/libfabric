@@ -134,7 +134,7 @@ typedef struct fid *fid_t;
 #define FI_COMPLETION		FI_EVENT
 #define FI_INJECT_COMPLETE	(1ULL << 33)
 #define FI_TRANSMIT_COMPLETE	(1ULL << 34)
-#define FI_COMMIT_COMPLETE	(1ULL << 35)
+#define FI_DELIVERY_COMPLETE	(1ULL << 35)
 
 
 struct fi_ioc {

@@ -1079,32 +1079,39 @@ value of an endpoint.
 
 *FI_INJECT_COMPLETE*
 : Indicates that a completion should be generated when the
-  source buffer(s) may be reused.  FI_INJECT_COMPLETE allows for the
-  provider to complete an operation after all source data has been
-  cached, and while the operation may still be in the process of
-  being transmitted.
+  source buffer(s) may be reused.  A completion guarantees that
+  the buffers will not be read from again and the application may
+  reclaim them.  No other guarantees are made with respect to the
+  state of the operation.
 
 *FI_TRANSMIT_COMPLETE*
-: Indicates that a completion should not be generated until an
-  operation has been successfully transmitted and is no longer
-  being tracked by the provider.  For reliable endpoints, this flag
-  generally indicates that an operation will not complete until
-  it has been accepted into the fabric and acknowledged by a remote service.
-  For unreliable endpoints, this flag indicates that an operation will
-  not complete until it has been successfully delivered
-  into the fabric.  For example, the corresponding message has been
-  placed on the wire.  FI_TRANSMIT_COMPLETE is the default completion
-  model for all endpoints.
-  
-  Note that when set, if the target endpoint experiences an error receiving
-  the transferred data, that error will often be reported back to the
-  initiator of the request.  This includes errors which may not normally
-  be reported to the initiator, such as remote buffer overruns.
+: Indicates that a completion should be generated when the transmit
+  operation has completed relative to the local provider.  The exact
+  behavior is dependent on the endpoint type.
 
-*FI_COMMIT_COMPLETE*
+  For reliable endpoints:
+
+  Indicates that a completion should be generated when the operation has
+  been delivered to the peer endpoint.  A completion guarantees that the
+  operation is no longer dependent on the fabric or local resources.  The
+  state of the operation at the peer endpoint is not defined.
+
+  For unreliable endpoints:
+
+  Indicates that a completion should be generated when the operation has
+  been delivered to the fabric.  A completion guarantees that the
+  operation is no longer dependent on local resources.  The state of the
+  operation within the fabric is not defined.
+
+*FI_DELIVERY_COMPLETE*
 : Indicates that a completion should not be generated until an operation
-  has successfully been processed at the target, with the data placed
-  into the specified destination buffer.
+  has been processed by the destination endpoint(s).  A completion
+  guarantees that the result of the operation is available.
+
+  This completion mode applies only to reliable endpoints.  For operations
+  that return data to the initiator, such as RMA read or atomic-fetch,
+  the source endpoint is also considered a destination endpoint.  This is the
+  default completion mode for such operations.
 
 # NOTES
 

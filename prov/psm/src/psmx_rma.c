@@ -765,7 +765,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 			am_flags = 0;
 		}
 
-		if (flags & FI_COMMIT_COMPLETE) {
+		if (flags & FI_DELIVERY_COMPLETE) {
 			args[0].u32w0 |= PSMX_AM_FORCE_ACK;
 			psm_context = NULL;
 		}
