@@ -12,8 +12,7 @@ fi_tagged \- Tagged data transfer operations
 fi_trecv / fi_trecvv / fi_trecvmsg
 :   Post a buffer to receive an incoming message
 
-fi_tsend / fi_tsendv / fi_tsendmsg  
-fi_tinject / fi_tsenddata
+fi_tsend / fi_tsendv / fi_tsendmsg / fi_tinject / fi_tsenddata
 :   Initiate an operation to send a message
 
 # SYNOPSIS
