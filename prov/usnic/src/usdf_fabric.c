@@ -670,7 +670,8 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 	if (node != NULL || service != NULL) {
 		ret = getaddrinfo(node, service, NULL, &ai);
 		if (ret != 0) {
-			return -errno;
+			ret = -errno;
+			goto fail;
 		}
 		if (flags & FI_SOURCE) {
 			src = (struct sockaddr_in *)ai->ai_addr;
