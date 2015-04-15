@@ -1,4 +1,4 @@
-.TH fi_getinfo 3 "2015\-03\-31" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_getinfo 3 "2015\-04\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo - Obtain / free fabric interface information
@@ -113,9 +113,9 @@ struct\ fi_info\ {
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ dest_addrlen;
 \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *src_addr;
 \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *dest_addr;
-\ \ \ \ fi_connreq_t\ \ \ \ \ \ \ \ \ \ connreq;
-\ \ \ \ struct\ fi_tx_attr\ *tx_attr;
-\ \ \ \ struct\ fi_rx_attr\ *rx_attr;
+\ \ \ \ fid_t\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ handle;
+\ \ \ \ struct\ fi_tx_attr\ \ \ \ \ *tx_attr;
+\ \ \ \ struct\ fi_rx_attr\ \ \ \ \ *rx_attr;
 \ \ \ \ struct\ fi_ep_attr\ \ \ \ \ *ep_attr;
 \ \ \ \ struct\ fi_domain_attr\ *domain_attr;
 \ \ \ \ struct\ fi_fabric_attr\ *fabric_attr;
@@ -165,10 +165,18 @@ destination address.
 This field will be ignored in hints unless the node and service
 parameters are NULL or FI_SOURCE is specified.
 .PP
-\f[I]connreq - connection request\f[] : References a specific connection
-request, otherwise the field must be NULL.
+\f[I]handle - provider context handle\f[] : References a provider
+specific handle.
+The use of this field is operation specific.
+Unless its use is described for a given operation, the handle field must
+be NULL.
+It is commonly used by applications that make use of connection-oriented
+endpoints.
+For other applications, the field should usually be NULL.
+.PP
 This field is used when processing connection requests and responses.
-See fi_eq(3), fi_reject(3), and fi_endpoint(3).
+It is also used to inherit endpoint\[aq]s attributes.
+See fi_eq(3), fi_reject(3), and fi_endpoint(3) .
 .PP
 \f[I]tx_attr - transmit context attributes\f[] : Optionally supplied
 transmit context attributes.

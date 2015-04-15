@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-04\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-04\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -159,8 +159,10 @@ operation.
 .PP
 Endpoints are transport level communication portals.
 There are two types of endpoints: active and passive.
-Passive endpoints belong to a fabric domain and are used to listen for
-incoming connection requests.
+Passive endpoints belong to a fabric domain and are most often used to
+listen for incoming connection requests.
+However, a passive endpoint may be used to reserve a fabric address that
+can be granted to an active endpoint.
 Active endpoints belong to access domains and can perform data
 transfers.
 .PP
@@ -215,8 +217,17 @@ fi_info flags that control the operation of an endpoint are defined
 below.
 See section SCALABLE ENDPOINTS.
 .PP
-If an active endpoint is associated with a connection request, the
-fi_info connreq must reference the corresponding request.
+If an active endpoint is allocated in order to accept a connection
+request, the fi_info parameter must be the same as the fi_info structure
+provided with the connection request (FI_CONNREQ) event.
+.PP
+An active endpoint may acquire the properties of a passive endpoint by
+setting the fi_info handle field to the passive endpoint fabric
+descriptor.
+This is useful for applications that need to reserve the fabric address
+of an endpoint prior to knowing if the endpoint will be used on the
+active or passive side of a connection.
+For example, this feature is useful for simulating socket semantics.
 .SS fi_close
 .PP
 Closes an endpoint and release all resources associated with it.
