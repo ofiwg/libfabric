@@ -466,16 +466,6 @@ usdf_cm_msg_shutdown(struct fid_ep *ep, uint64_t flags)
 }
 
 /*
- * Check a message CQ for completions and progress the send engine as needed,
- * create completions for the app if anything needs to be percolated up
- */
-int
-usdf_cq_msg_poll(struct usd_cq *ucq, struct usd_completion *comp)
-{
-	return -EAGAIN;
-}
-
-/*
  * Return local address of an EP
  */
 int usdf_cm_rdm_getname(fid_t fid, void *addr, size_t *addrlen)
