@@ -290,7 +290,8 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	     idm_lookup(&dom->mr_idm, (int) attr->requested_key)))
 		return -FI_ENOKEY;
 	
-	_mr = calloc(1, sizeof(*_mr) + sizeof(_mr->mr_iov) * (attr->iov_count));
+	_mr = calloc(1, sizeof(*_mr) + 
+		     sizeof(_mr->mr_iov) * (attr->iov_count - 1));
 	if (!_mr)
 		return -FI_ENOMEM;
 
