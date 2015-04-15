@@ -213,7 +213,7 @@ struct sock_mr {
 	size_t iov_count;
 	struct sock_cntr *cntr;
 	struct sock_cq *cq;
-	struct iovec mr_iov[0];
+	struct iovec mr_iov[1];
 };
 
 struct sock_av_addr {
