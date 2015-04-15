@@ -498,7 +498,7 @@ usdf_am_get_distance(struct fid_av *fav, void *addr, int *metric_o)
 }
 
 static struct fi_usnic_ops_av usdf_usnic_ops_av = {
-	.size = sizeof(struct fi_usnic_ops_fabric),
+	.size = sizeof(struct fi_usnic_ops_av),
 	.get_distance = usdf_am_get_distance,
 };
 
