@@ -29,17 +29,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <getopt.h>
-#include <time.h>
-#include <netdb.h>
-#include <unistd.h>
 
-#include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
-#include <shared.h>
+
+#include "shared.h"
 
 static struct cs_opts opts;
 static void *buf;
@@ -57,10 +53,9 @@ static struct fid_mr *mr;
 
 static int alloc_cm_res(void)
 {
-	struct fi_eq_attr cm_attr;
+	struct fi_eq_attr cm_attr = { 0 };
 	int ret;
 
-	memset(&cm_attr, 0, sizeof cm_attr);
 	cm_attr.wait_obj = FI_WAIT_FD;
 
 	/* Open EQ to receive CM events */
@@ -82,7 +77,7 @@ static void free_ep_res(void)
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cq_attr cq_attr;
+	struct fi_cq_attr cq_attr = { 0 };
 	int ret;
 
 	buf = malloc(buffer_size);
@@ -91,7 +86,6 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
-	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 	cq_attr.size = rx_depth;
@@ -239,7 +233,7 @@ static int server_connect(void)
 
 	info = entry.info;
 	if (event != FI_CONNREQ) {
-		fprintf(stderr, "Unexpected CM event %d\n", event);
+		FT_ERR("Unexpected CM event %d\n", event);
 		ret = -FI_EOTHER;
 		goto err1;
 	}
@@ -273,8 +267,7 @@ static int server_connect(void)
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
-			event, entry.fid, ep);
+		FT_ERR("Unexpected CM event %d fid %p (ep %p)\n", event, entry.fid, ep);
 		ret = -FI_EOTHER;
 		goto err3;
 	}
@@ -346,8 +339,7 @@ static int client_connect(void)
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
-			event, entry.fid, ep);
+		FT_ERR("Unexpected CM event %d fid %p (ep %p)\n", event, entry.fid, ep);
 		ret = -FI_EOTHER;
 		goto err6;
 	}
