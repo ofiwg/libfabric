@@ -211,10 +211,9 @@ struct sock_mr {
 	uint64_t key;
 	uint64_t flags;
 	size_t iov_count;
-	struct iovec mr_iov[1];
-
 	struct sock_cntr *cntr;
 	struct sock_cq *cq;
+	struct iovec mr_iov[0];
 };
 
 struct sock_av_addr {
@@ -977,13 +976,14 @@ struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx,
 					uint8_t is_tagged);
 struct sock_rx_entry *sock_rx_get_buffered_entry(struct sock_rx_ctx *rx_ctx, 
 						 uint64_t addr, uint64_t tag, 
-						 uint8_t is_tagged);
+						 uint64_t ignore, uint8_t is_tagged);
 ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr, 
-			  uint64_t tag, void *context, uint64_t flags, 
+			  uint64_t tag, uint64_t ignore, void *context, uint64_t flags, 
 			  uint8_t is_tagged);
 ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context, 
-			   uint64_t flags, uint64_t tag, uint8_t is_tagged,
-			   const struct iovec *msg_iov, size_t iov_count);
+			   uint64_t flags, uint64_t tag, uint64_t ignore, 
+			   uint8_t is_tagged, const struct iovec *msg_iov, 
+			   size_t iov_count);
 size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry);
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry);
 

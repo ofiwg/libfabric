@@ -139,7 +139,7 @@ struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx,
 
 struct sock_rx_entry *sock_rx_get_buffered_entry(struct sock_rx_ctx *rx_ctx, 
 						 uint64_t addr, uint64_t tag, 
-						 uint8_t is_tagged)
+						 uint64_t ignore, uint8_t is_tagged)
 {
 	struct dlist_entry *entry;
 	struct sock_rx_entry *rx_entry;
@@ -152,7 +152,7 @@ struct sock_rx_entry *sock_rx_get_buffered_entry(struct sock_rx_ctx *rx_ctx,
 		    rx_entry->is_claimed)
 			continue;
 
-		if (((rx_entry->tag & ~rx_entry->ignore) == (tag & ~rx_entry->ignore)) &&
+		if (((rx_entry->tag & ~ignore) == (tag & ~ignore)) &&
 		    (rx_entry->addr == FI_ADDR_UNSPEC || addr == FI_ADDR_UNSPEC || 
 		     rx_entry->addr == addr ||
 		     (rx_ctx->av && 

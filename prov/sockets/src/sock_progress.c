@@ -1106,22 +1106,24 @@ err:
 	return -FI_EINVAL;
 }
 
-ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr, uint64_t tag,
-			  void *context, uint64_t flags, uint8_t is_tagged)
+ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr, 
+			  uint64_t tag, uint64_t ignore, void *context, 
+			  uint64_t flags, uint8_t is_tagged)
 {
 	ssize_t ret = 0;
 	struct sock_rx_entry *rx_buffered;
 	struct sock_pe_entry pe_entry;
-	
+
 	fastlock_acquire(&rx_ctx->lock);
 	rx_buffered = sock_rx_get_buffered_entry(rx_ctx, 
 					(rx_ctx->attr.caps & FI_DIRECTED_RECV) ?
-					addr : FI_ADDR_UNSPEC, 
-					0L, is_tagged);
+						 addr : FI_ADDR_UNSPEC, 
+						 0L, ignore, is_tagged);
 	if (rx_buffered) {
 		memset(&pe_entry, 0, sizeof pe_entry);
+		pe_entry.comp = &rx_ctx->comp;
 		pe_entry.data_len = rx_buffered->total_len;
-		pe_entry.tag = tag;
+		pe_entry.tag = rx_buffered->tag;
 		pe_entry.context = rx_buffered->context = (uintptr_t)context;
 		pe_entry.flags = (flags | rx_ctx->attr.op_flags);
 		pe_entry.flags |= (FI_MSG | FI_RECV);
@@ -1143,8 +1145,8 @@ ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr, uint64_t t
 	return ret;
 }
 
-ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context, 
-			   uint64_t flags, uint64_t tag, uint8_t is_tagged,
+ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context, uint64_t flags, 
+			   uint64_t tag, uint64_t ignore, uint8_t is_tagged, 
 			   const struct iovec *msg_iov, size_t iov_count)
 {
 	ssize_t ret = 0;
@@ -1160,7 +1162,7 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 		if (rx_buffered->is_claimed && 
 		    (uintptr_t)rx_buffered->context == (uintptr_t)context &&
 		    is_tagged == rx_buffered->is_tagged && 
-		    tag == rx_buffered->tag)
+		    (tag & ~ignore) == (rx_buffered->tag & ~ignore))
 			break;
 		else
 			rx_buffered = NULL;
@@ -1168,6 +1170,7 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 
 	if (rx_buffered) {
 		memset(&pe_entry, 0, sizeof pe_entry);
+		pe_entry.comp = &rx_ctx->comp;
 		pe_entry.data_len = rx_buffered->total_len;
 		pe_entry.tag = rx_buffered->tag;
 		pe_entry.context = rx_buffered->context;
