@@ -694,7 +694,7 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 
 		/* skip this device if it has some problem */
 		if (!dep->ue_dev_ok) {
-			USDF_DEBUG("skipping %s/%s\n", dap->uda_devname,
+			USDF_DBG("skipping %s/%s\n", dap->uda_devname,
 				dap->uda_ifname);
 			continue;
 		}
@@ -707,7 +707,7 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 				goto fail;
 			}
 			if (metric == -1) {
-				USDF_DEBUG("dest %s unreachable from %s/%s, skipping\n",
+				USDF_DBG("dest %s unreachable from %s/%s, skipping\n",
 					inet_ntoa(dest->sin_addr),
 					dap->uda_devname, dap->uda_ifname);
 				continue;
@@ -718,7 +718,7 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 		if (hints != NULL) {
 			ret = usdf_validate_hints(hints, dap);
 			if (ret != 0) {
-				USDF_DEBUG("hints do not match for %s/%s, skipping\n",
+				USDF_DBG("hints do not match for %s/%s, skipping\n",
 					dap->uda_devname, dap->uda_ifname);
 				continue;
 			}
@@ -987,7 +987,7 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 fail:
 	ff = fab_utof(fp);
 	usdf_fabric_close(&ff->fid);
-	USDF_DEBUG("returning %d (%s)\n", ret, fi_strerror(-ret));
+	USDF_DBG("returning %d (%s)\n", ret, fi_strerror(-ret));
 	return ret;
 }
 
