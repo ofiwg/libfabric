@@ -2344,6 +2344,15 @@ static void sock_pe_poll(struct sock_pe *pe)
 	fastlock_release(&map->lock);
 
 do_wait:
+	if (!pe->waittime) {
+		pe->waittime = fi_gettime_ms();
+		return;
+	}
+
+	if (fi_gettime_ms() - pe->waittime < sock_pe_waittime)
+		return;
+		
+	pe->waittime = 0;
 	FD_SET(pe->signal_fds[SOCK_SIGNAL_RD_FD], &rfds);
 	max_fds = MAX(pe->signal_fds[SOCK_SIGNAL_RD_FD], max_fds);
 	

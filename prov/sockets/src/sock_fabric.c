@@ -50,6 +50,7 @@
 #define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_FABRIC, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_FABRIC, __VA_ARGS__)
 
+int sock_pe_waittime = SOCK_PE_WAITTIME;
 const char sock_fab_name[] = "IP";
 const char sock_dom_name[] = "sockets";
 const char sock_prov_name[] = "sockets";
@@ -564,6 +565,13 @@ struct fi_provider sock_prov = {
 
 SOCKETS_INI
 {
+	char *value;
+
+	if ((value = getenv("FI_SOCK_PE_WAITTIME"))) {
+		sock_pe_waittime = atoi(value);
+		SOCK_LOG_INFO("FI_SOCK_PE_WAITTIME = %d\n", sock_pe_waittime);
+	}
+	
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
 	dlist_init(&sock_dom_list);
