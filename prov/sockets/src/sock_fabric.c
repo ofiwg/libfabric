@@ -567,9 +567,9 @@ SOCKETS_INI
 {
 	char *value;
 
-	if ((value = getenv("FI_SOCK_PE_WAITTIME"))) {
+	if ((value = getenv("SOCK_PE_WAITTIME"))) {
 		sock_pe_waittime = atoi(value);
-		SOCK_LOG_INFO("FI_SOCK_PE_WAITTIME = %d\n", sock_pe_waittime);
+		SOCK_LOG_INFO("SOCK_PE_WAITTIME = %d\n", sock_pe_waittime);
 	}
 	
 	fastlock_init(&sock_list_lock);
