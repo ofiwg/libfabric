@@ -206,6 +206,19 @@ int sock_dgram_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 	*(*info)->rx_attr = sock_dgram_rx_attr;
 	*(*info)->ep_attr = sock_dgram_ep_attr;
 
+	if (hints && hints->ep_attr) {
+		(*info)->ep_attr->rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;
+		(*info)->ep_attr->tx_ctx_cnt = hints->ep_attr->tx_ctx_cnt;
+	}
+
+	if (hints && hints->rx_attr) {
+		(*info)->rx_attr->op_flags |= hints->rx_attr->op_flags;
+	}
+
+	if (hints && hints->tx_attr) {
+		(*info)->tx_attr->op_flags |= hints->tx_attr->op_flags;
+	}
+
 	(*info)->caps = SOCK_EP_DGRAM_CAP|
 			(*info)->rx_attr->caps | (*info)->tx_attr->caps;
 	return 0;

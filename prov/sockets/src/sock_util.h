@@ -40,6 +40,8 @@ extern const char sock_dom_name[];
 extern const char sock_prov_name[];
 extern struct fi_provider sock_prov;
 
+extern int sock_pe_waittime;
+
 #define _SOCK_LOG_INFO(subsys, ...) FI_INFO(&sock_prov, subsys, __VA_ARGS__);
 #define _SOCK_LOG_ERROR(subsys, ...) FI_WARN(&sock_prov, subsys, __VA_ARGS__);
 

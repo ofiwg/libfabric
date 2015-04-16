@@ -167,10 +167,11 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 			       fi_addr_t *fi_addr, int count, uint64_t flags, 
 			       void *context, int index)
 {
+	void *new_addr;
 	int i, j, ret = 0;
 	char sa_ip[INET_ADDRSTRLEN];
 	struct sock_av_addr *av_addr;
-	size_t new_count, table_sz;
+	size_t new_count, table_sz, old_sz;
 
 	if ((_av->attr.flags & FI_EVENT) && !_av->eq)
 		return -FI_ENOEQ;
@@ -224,10 +225,20 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 				
 				table_sz = sizeof(struct sock_av_table_hdr) +
 					new_count * sizeof(struct sock_av_addr);
+				old_sz = sizeof(struct sock_av_table_hdr) +
+					_av->table_hdr->size * sizeof(struct sock_av_addr);
 
-				_av->table_hdr = realloc(_av->table_hdr, table_sz);
-				if (!_av->table_hdr)
-					return -FI_ENOMEM;
+				if (_av->attr.name) {
+					new_addr = mremap(_av->table_hdr, 
+							  old_sz, table_sz, 0);
+					if (new_addr == ((void*) -1))
+						return -FI_ENOMEM;
+				} else {
+					new_addr = realloc(_av->table_hdr, table_sz);
+					if (!new_addr)
+						return -FI_ENOMEM;
+				}
+				_av->table_hdr = new_addr;
 				_av->table_hdr->size = new_count;
 				_av->table = (struct sock_av_addr*)((char*)_av->table_hdr + 
 								    sizeof(struct sock_av_table_hdr));

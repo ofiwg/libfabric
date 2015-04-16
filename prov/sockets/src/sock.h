@@ -82,6 +82,7 @@
 #define SOCK_PE_POLL_TIMEOUT (100000)
 #define SOCK_PE_MAX_ENTRIES (128)
 #define SOCK_PE_MIN_ENTRIES (1)
+#define SOCK_PE_WAITTIME (10)
 
 #define SOCK_EQ_DEF_SZ (1<<8)
 #define SOCK_CQ_DEF_SZ (1<<8)
@@ -712,6 +713,7 @@ struct sock_pe {
 	fastlock_t lock;
 	pthread_mutex_t list_lock;
 	int signal_fds[2];
+	uint64_t waittime;
 
 	struct dlist_entry free_list;
 	struct dlist_entry busy_list;
