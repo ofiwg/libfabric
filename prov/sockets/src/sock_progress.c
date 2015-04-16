@@ -243,7 +243,7 @@ static void sock_pe_report_remote_write(struct sock_rx_ctx *rx_ctx,
 	pe_entry->data_len = pe_entry->pe.rx.rx_iov[0].iov.len;
 	
 	if ((!pe_entry->comp->rem_write_cq && !pe_entry->comp->rem_write_cntr &&
-	     !(rx_ctx->attr.op_flags & FI_REMOTE_WRITE)))
+	     !(pe_entry->msg_hdr.flags & FI_REMOTE_WRITE)))
 		return;
 	
 	if (pe_entry->comp->rem_write_cq) {
@@ -289,7 +289,7 @@ static void sock_pe_report_remote_read(struct sock_rx_ctx *rx_ctx,
 	pe_entry->data_len = pe_entry->pe.rx.rx_iov[0].iov.len;
 	
 	if ((!pe_entry->comp->rem_read_cq && !pe_entry->comp->rem_read_cntr &&
-	     !(rx_ctx->attr.op_flags & FI_REMOTE_READ)))
+	     !(pe_entry->msg_hdr.flags & FI_REMOTE_READ)))
 		return;
 	
 	if (pe_entry->comp->rem_read_cq) {
@@ -1125,8 +1125,7 @@ ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr,
 		pe_entry.data_len = rx_buffered->total_len;
 		pe_entry.tag = rx_buffered->tag;
 		pe_entry.context = rx_buffered->context = (uintptr_t)context;
-		pe_entry.flags = (flags | rx_ctx->attr.op_flags);
-		pe_entry.flags |= (FI_MSG | FI_RECV);
+		pe_entry.flags = (flags | FI_MSG | FI_RECV);
 		if (is_tagged)
 			pe_entry.flags |= FI_TAGGED;
 		
@@ -1174,8 +1173,7 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context, uint64_t f
 		pe_entry.data_len = rx_buffered->total_len;
 		pe_entry.tag = rx_buffered->tag;
 		pe_entry.context = rx_buffered->context;
-		pe_entry.flags = (flags | rx_ctx->attr.op_flags);
-		pe_entry.flags |= (FI_MSG | FI_RECV);
+		pe_entry.flags = (flags | FI_MSG | FI_RECV);
 		if (is_tagged)
 			pe_entry.flags |= FI_TAGGED;
 
