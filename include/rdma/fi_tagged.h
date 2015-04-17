@@ -41,8 +41,8 @@
 extern "C" {
 #endif
 
-#define FI_CLAIM		(1ULL << 0)
-#define FI_DISCARD		FI_CANCEL
+#define FI_CLAIM		(1ULL << 59)
+#define FI_DISCARD		(1ULL << 58)
 
 struct fi_msg_tagged {
 	const struct iovec	*msg_iov;

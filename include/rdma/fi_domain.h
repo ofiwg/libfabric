@@ -47,6 +47,8 @@ extern "C" {
  * Maps and stores transport/network addresses.
  */
 
+#define FI_SYMMETRIC		(1ULL << 59)
+
 struct fi_av_attr {
 	enum fi_av_type		type;
 	int			rx_ctx_bits;
@@ -130,8 +132,8 @@ struct fi_ops_domain {
 
 
 /* Memory registration flags */
-#define FI_MR_OFFSET		(1ULL << 0)
-#define FI_MR_KEY		(1ULL << 1)
+#define FI_MR_OFFSET		(1ULL << 59)
+#define FI_MR_KEY		(1ULL << 58)
 
 struct fi_ops_mr {
 	size_t	size;
@@ -147,7 +149,7 @@ struct fi_ops_mr {
 };
 
 /* Domain bind flags */
-#define FI_REG_MR		(1ULL << 0)
+#define FI_REG_MR		(1ULL << 59)
 
 struct fid_domain {
 	struct fid		fid;
