@@ -373,7 +373,7 @@ int psmx_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 	case FI_WAIT_SET:
 		if (!attr->wait_set) {
-			FI_INFO(&psmx_prov, FI_LOG_CQ,
+			FI_INFO(&psmx_prov, FI_LOG_EQ,
 				"FI_WAIT_SET is specified but attr->wait_set is NULL\n");
 			return -FI_EINVAL;
 		}
@@ -391,7 +391,7 @@ int psmx_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		break;
 
 	default:
-		FI_INFO(&psmx_prov, FI_LOG_CQ,
+		FI_INFO(&psmx_prov, FI_LOG_EQ,
 			"attr->wait_obj=%d, supported=%d...%d\n", attr->wait_obj,
 			FI_WAIT_NONE, FI_WAIT_MUTEX_COND);
 		return -FI_EINVAL;

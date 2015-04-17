@@ -128,7 +128,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	err = psm_ep_open(fabric_priv->uuid, &opts,
 			  &domain_priv->psm_ep, &domain_priv->psm_epid);
 	if (err != PSM_OK) {
-		FI_WARN(&psmx_prov, FI_LOG_CQ,
+		FI_WARN(&psmx_prov, FI_LOG_CORE,
 			"psm_ep_open returns %d, errno=%d\n", err, errno);
 		err = psmx_errno(err);
 		goto err_out_free_domain;
@@ -137,7 +137,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	err = psm_mq_init(domain_priv->psm_ep, PSM_MQ_ORDERMASK_ALL,
 			  NULL, 0, &domain_priv->psm_mq);
 	if (err != PSM_OK) {
-		FI_WARN(&psmx_prov, FI_LOG_CQ,
+		FI_WARN(&psmx_prov, FI_LOG_CORE,
 			"psm_mq_init returns %d, errno=%d\n", err, errno);
 		err = psmx_errno(err);
 		goto err_out_close_ep;
