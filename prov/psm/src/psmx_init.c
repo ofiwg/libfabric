@@ -173,12 +173,6 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			goto err_out;
 		}
 
-		if (!psmx_env.am && (hints->caps & (FI_RMA | FI_ATOMICS))) {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"RMA and atomics are not supported because Active Message is turned off\n");
-			goto err_out;
-		}
-
 		if (hints->tx_attr) {
 			if ((hints->tx_attr->op_flags & PSMX_OP_FLAGS) !=
 			    hints->tx_attr->op_flags) {
@@ -423,17 +417,11 @@ PSM_INI
 	int err;
 
 	psmx_env.name_server	= psmx_get_int_env("OFI_PSM_NAME_SERVER", 1);
-	psmx_env.am		= psmx_get_int_env("OFI_PSM_AM", 1);
 	psmx_env.am_msg		= psmx_get_int_env("OFI_PSM_AM_MSG", 0);
 	psmx_env.tagged_rma	= psmx_get_int_env("OFI_PSM_TAGGED_RMA", 1);
 	psmx_env.uuid		= getenv("OFI_PSM_UUID");
 	if (!psmx_env.uuid)
 		psmx_env.uuid	= PSMX_DEFAULT_UUID;
-
-	if (!psmx_env.am) {
-		psmx_env.am_msg = 0;
-		psmx_env.tagged_rma = 0;
-	}
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
@@ -467,8 +455,6 @@ PSM_INI
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"OFI_PSM_NAME_SERVER = %d\n", psmx_env.name_server);
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"OFI_PSM_AM = %d\n", psmx_env.am);
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"OFI_PSM_AM_MSG = %d\n", psmx_env.am_msg);
 	FI_INFO(&psmx_prov, FI_LOG_CORE,

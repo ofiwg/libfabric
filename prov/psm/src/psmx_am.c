@@ -48,9 +48,6 @@ int psmx_am_progress(struct psmx_fid_domain *domain)
 	struct slist_entry *item;
 	struct psmx_am_request *req;
 
-	if (!psmx_env.am)
-		return 0;
-
 #if PSMX_AM_USE_SEND_QUEUE
 	pthread_mutex_lock(&domain->send_queue.lock);
 	while (!slist_empty(&domain->send_queue.list)) {
@@ -115,9 +112,6 @@ int psmx_am_init(struct psmx_fid_domain *domain)
 	psm_ep_t psm_ep = domain->psm_ep;
 	size_t size;
 	int err = 0;
-
-	if (!psmx_env.am)
-		return 0;
 
 	if (!psmx_am_handlers_initialized) {
 		err = psm_am_get_parameters(psm_ep, &psmx_am_param,
