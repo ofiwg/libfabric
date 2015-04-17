@@ -41,12 +41,17 @@
 #define USDF_MSG_SUPP_MODE (FI_LOCAL_MR)
 #define USDF_MSG_REQ_MODE (FI_LOCAL_MR)
 
+#define USDF_MSG_SUPP_SENDMSG_FLAGS \
+	(FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | FI_INJECT | FI_COMPLETION)
+
 #define USDF_MSG_MAX_SGE 8
 #define USDF_MSG_DFLT_SGE 8
 #define USDF_MSG_MAX_CTX_SIZE 1024
 #define USDF_MSG_DFLT_CTX_SIZE 512
 
 #define USDF_MSG_MAX_MSG UINT_MAX
+
+#define USDF_MSG_MAX_INJECT_SIZE 64
 
 #define USDF_MSG_FAIRNESS_CREDITS 16
 
@@ -66,6 +71,11 @@ struct usdf_msg_qe {
 	const uint8_t *ms_cur_ptr;
 	size_t ms_resid;      	/* amount remaining in entire msg */
 	size_t ms_iov_resid;    /* amount remaining in current iov */
+
+	/* points at buffer no larger than USDF_MSG_MAX_INJECT_SIZE */
+	uint8_t *ms_inject_buf;
+
+	uint8_t ms_signal_comp;
 
 	TAILQ_ENTRY(usdf_msg_qe) ms_link;
 };

@@ -193,6 +193,7 @@ struct usdf_tx {
 		struct {
 			struct usdf_cq_hard *tx_hcq;
 
+			uint8_t *tx_inject_bufs;
 			struct usdf_msg_qe *tx_wqe_buf;
 			TAILQ_HEAD(,usdf_msg_qe) tx_free_wqe;
 			TAILQ_HEAD(,usdf_ep) tx_ep_ready;
