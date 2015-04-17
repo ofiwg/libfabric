@@ -550,6 +550,7 @@ struct psmx_epaddr_context {
 
 struct psmx_env {
 	int name_server;
+	int am;
 	int am_msg;
 	int tagged_rma;
 	char *uuid;

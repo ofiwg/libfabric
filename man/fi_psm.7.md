@@ -121,6 +121,16 @@ The *psm* provider checks for the following environment variables:
 
   This option is off by default. To turn it on set the variable to 1.
 
+*OFI_PSM_AM*
+: The *psm* provider implements RMA and atomcis operations over the PSM Active
+  Message functions. The Active Message handlers may incur minor overhead
+  even if unused. For applications that don't use RMA and atomics operations
+  at all the use of Active Message can be disabled.
+
+  This option is on by default. To turn it off set the variable to 0. When
+  it is turned off, the options OFI_PSM_TAGGED_RMA and OFI_PSM_AM_MSG are also
+  turned off automatically.
+
 *OFI_PSM_VERSION_CHECK*
 : The *psm* provider checks the version of the PSM library and fails if the
   major version doesn't match with the header it is compiled with. In some

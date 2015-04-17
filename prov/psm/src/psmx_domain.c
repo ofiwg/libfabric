@@ -166,6 +166,9 @@ err_out:
 
 int psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap)
 {
+	if ((ep_cap & (FI_RMA | FI_ATOMICS)) && !psmx_env.am)
+		return -FI_EOPNOTSUPP;
+
 	if ((ep_cap & PSMX_CAPS) != ep_cap)
 		return -FI_EINVAL;
 
