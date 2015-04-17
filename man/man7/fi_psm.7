@@ -128,17 +128,6 @@ This experimental feature has slightly larger latency.
 This option is off by default.
 To turn it on set the variable to 1.
 .PP
-\f[I]OFI_PSM_AM\f[] : The \f[I]psm\f[] provider implements RMA and
-atomcis operations over the PSM Active Message functions.
-The Active Message handlers may incur minor overhead even if unused.
-For applications that don\[aq]t use RMA and atomics operations at all
-the use of Active Message can be disabled.
-.PP
-This option is on by default.
-To turn it off set the variable to 0.
-When it is turned off, the options OFI_PSM_TAGGED_RMA and OFI_PSM_AM_MSG
-are also turned off automatically.
-.PP
 \f[I]OFI_PSM_VERSION_CHECK\f[] : The \f[I]psm\f[] provider checks the
 version of the PSM library and fails if the major version doesn\[aq]t
 match with the header it is compiled with.
