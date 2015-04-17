@@ -318,12 +318,14 @@ binding an endpoint to a counter, the following flags may be specified.
 *FI_REMOTE_READ*
 : Increments the specified counter whenever a successful RMA read or
   atomic fetch operation is initiated from a remote endpoint that
-  targets the given endpoint.
+  targets the given endpoint.  Use of this flag requires that the
+  endpoint be created using FI_RMA_EVENT.
 
 *FI_REMOTE_WRITE*
 : Increments the specified counter whenever a successful RMA write or
   atomic operation is initiated from a remote endpoint that targets
-  the given endpoint.
+  the given endpoint.  Use of this flag requires that the
+  endpoint be created using FI_RMA_EVENT.
 
 Connectionless endpoints must be bound to a single address vector.
 If an endpoint is using a shared transmit and/or receive context, the

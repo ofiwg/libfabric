@@ -121,6 +121,7 @@ typedef struct fid *fid_t;
 #define FI_TRANSMIT_COMPLETE	(1ULL << 27)
 #define FI_DELIVERY_COMPLETE	(1ULL << 28)
 
+#define FI_RMA_EVENT		(1ULL << 55)
 #define FI_NAMED_RX_CTX		(1ULL << 56)
 #define FI_DYNAMIC_MR		(1ULL << 57)
 #define FI_SOURCE		(1ULL << 58)

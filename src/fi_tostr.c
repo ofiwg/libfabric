@@ -177,6 +177,7 @@ static void fi_tostr_order(char *buf, uint64_t flags)
 
 static void fi_tostr_caps(char *buf, uint64_t caps)
 {
+	IFFLAGSTR(caps, FI_RMA_EVENT);
 	IFFLAGSTR(caps, FI_NAMED_RX_CTX);
 	IFFLAGSTR(caps, FI_DYNAMIC_MR);
 	IFFLAGSTR(caps, FI_SOURCE);

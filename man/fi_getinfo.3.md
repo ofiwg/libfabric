@@ -332,6 +332,13 @@ additional optimizations.
   write memory operations from remote endpoints.  This flag requires
   that FI_RMA and/or FI_ATOMIC be set.
 
+*FI_RMA_EVENT*
+: Requests that an endpoint support the generation of completion events
+  when it is the target of an RMA and/or atomic operation.  If set, the
+  provider will support both completion queue and counter events.  This
+  flag requires that FI_REMOTE_READ and/or FI_REMOTE_WRITE be enabled on
+  the endpoint.
+
 *FI_TRIGGER*
 : Indicates that the endpoint should support triggered operations.
   Endpoints support this capability must meet the usage model as
