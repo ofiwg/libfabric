@@ -113,7 +113,6 @@ typedef struct fid *fid_t;
 #define FI_PEEK			(1ULL << 19)
 #define FI_TRIGGER		(1ULL << 20)
 #define FI_FENCE		(1ULL << 21)
-#define FI_CANCEL		(1ULL << 22)
 
 #define FI_COMPLETION		(1ULL << 24)
 #define FI_EVENT		FI_COMPLETION

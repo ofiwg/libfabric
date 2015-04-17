@@ -356,8 +356,6 @@ disabled as a result of experiencing an asynchronous error.
 ## fi_cancel
 
 fi_cancel attempts to cancel an outstanding asynchronous operation.
-The endpoint must have been configured to support cancelable
-operations -- see FI_CANCEL flag -- in order for this call to succeed.
 Canceling an operation causes the fabric provider to search for the
 operation and, if it is still pending, complete it as having been
 canceled.  If multiple outstanding operations match the context

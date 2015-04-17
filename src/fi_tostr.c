@@ -105,7 +105,6 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_PEEK);
 	IFFLAGSTR(flags, FI_TRIGGER);
 	IFFLAGSTR(flags, FI_FENCE);
-	IFFLAGSTR(flags, FI_CANCEL);
 
 	IFFLAGSTR(flags, FI_EVENT);
 	IFFLAGSTR(flags, FI_INJECT);
