@@ -482,10 +482,6 @@ static ssize_t sock_ep_cancel(fid_t fid, void *context)
 		return -FI_EINVAL;
 	}
 	
-	if (!(sock_ep->info.caps & FI_CANCEL)) {
-		return -FI_EINVAL;
-	}
-
 	return sock_rx_ctx_cancel(rx_ctx, context);
 }
 

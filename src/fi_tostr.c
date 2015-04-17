@@ -87,10 +87,10 @@ static void strcatf(char *dest, const char *fmt, ...)
 
 static void fi_tostr_flags(char *buf, uint64_t flags)
 {
-	IFFLAGSTR(flags, FI_INJECT);
-	IFFLAGSTR(flags, FI_MULTI_RECV);
-	IFFLAGSTR(flags, FI_SOURCE);
-	IFFLAGSTR(flags, FI_SYMMETRIC);
+	IFFLAGSTR(flags, FI_MSG);
+	IFFLAGSTR(flags, FI_RMA);
+	IFFLAGSTR(flags, FI_TAGGED);
+	IFFLAGSTR(flags, FI_ATOMIC);
 
 	IFFLAGSTR(flags, FI_READ);
 	IFFLAGSTR(flags, FI_WRITE);
@@ -99,14 +99,18 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_REMOTE_READ);
 	IFFLAGSTR(flags, FI_REMOTE_WRITE);
 
+	IFFLAGSTR(flags, FI_MULTI_RECV);
 	IFFLAGSTR(flags, FI_REMOTE_CQ_DATA);
-	IFFLAGSTR(flags, FI_EVENT);
-	IFFLAGSTR(flags, FI_INJECT_COMPLETE);
-	IFFLAGSTR(flags, FI_TRANSMIT_COMPLETE);
-	IFFLAGSTR(flags, FI_CANCEL);
 	IFFLAGSTR(flags, FI_MORE);
 	IFFLAGSTR(flags, FI_PEEK);
 	IFFLAGSTR(flags, FI_TRIGGER);
+	IFFLAGSTR(flags, FI_FENCE);
+
+	IFFLAGSTR(flags, FI_EVENT);
+	IFFLAGSTR(flags, FI_INJECT);
+	IFFLAGSTR(flags, FI_INJECT_COMPLETE);
+	IFFLAGSTR(flags, FI_TRANSMIT_COMPLETE);
+	IFFLAGSTR(flags, FI_DELIVERY_COMPLETE);
 
 	fi_remove_comma(buf);
 }
@@ -173,11 +177,11 @@ static void fi_tostr_order(char *buf, uint64_t flags)
 
 static void fi_tostr_caps(char *buf, uint64_t caps)
 {
-	IFFLAGSTR(caps, FI_MSG);
-	IFFLAGSTR(caps, FI_RMA);
-	IFFLAGSTR(caps, FI_TAGGED);
-	IFFLAGSTR(caps, FI_ATOMICS);
+	IFFLAGSTR(caps, FI_RMA_EVENT);
+	IFFLAGSTR(caps, FI_NAMED_RX_CTX);
 	IFFLAGSTR(caps, FI_DYNAMIC_MR);
+	IFFLAGSTR(caps, FI_SOURCE);
+	IFFLAGSTR(caps, FI_DIRECTED_RECV);
 	fi_tostr_flags(buf, caps);
 
 	fi_remove_comma(buf);
@@ -220,6 +224,7 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 	IFFLAGSTR(mode, FI_LOCAL_MR);
 	IFFLAGSTR(mode, FI_PROV_MR_ATTR);
 	IFFLAGSTR(mode, FI_MSG_PREFIX);
+	IFFLAGSTR(mode, FI_ASYNC_IOV);
 	IFFLAGSTR(mode, FI_RX_CQ_DATA);
 
 	fi_remove_comma(buf);

@@ -332,11 +332,12 @@ additional optimizations.
   write memory operations from remote endpoints.  This flag requires
   that FI_RMA and/or FI_ATOMIC be set.
 
-*FI_CANCEL*
-: Indicates that the user desires the ability to cancel outstanding
-  data transfer operations.  If FI_CANCEL is not set, a provider may
-  optimize code paths with the assumption that fi_cancel will not be
-  used by the application.
+*FI_RMA_EVENT*
+: Requests that an endpoint support the generation of completion events
+  when it is the target of an RMA and/or atomic operation.  If set, the
+  provider will support both completion queue and counter events.  This
+  flag requires that FI_REMOTE_READ and/or FI_REMOTE_WRITE be enabled on
+  the endpoint.
 
 *FI_TRIGGER*
 : Indicates that the endpoint should support triggered operations.
@@ -364,8 +365,7 @@ Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_NAMED_RX_CTX,
 FI_DIRECTED_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
 and FI_REMOTE_WRITE.
 
-Secondary capabilities: FI_DYNAMIC_MR, FI_MULTI_RECV, FI_SOURCE,
-FI_CANCEL, FI_FENCE 
+Secondary capabilities: FI_DYNAMIC_MR, FI_MULTI_RECV, FI_SOURCE, FI_FENCE 
 
 # MODE
 

@@ -123,6 +123,8 @@ struct fi_domain_attr {
 	size_t                rx_ctx_cnt;
 	size_t                max_ep_tx_ctx;
 	size_t                max_ep_rx_ctx;
+	size_t                max_ep_stx_ctx;
+	size_t                max_ep_srx_ctx;
 };
 {% endhighlight %}
 
@@ -454,6 +456,16 @@ endpoint.
 
 The maximum number of receive contexts that may be associated with an
 endpoint.
+
+## Maximum Sharing of Transmit Context (max_ep_stx_ctx)
+
+The maximum number of endpoints that may be associated with a
+shared transmit context.
+
+## Maximum Sharing of Receive Context (max_ep_srx_ctx)
+
+The maximum number of endpoints that may be associated with a
+shared receive context.
 
 # RETURN VALUE
 
