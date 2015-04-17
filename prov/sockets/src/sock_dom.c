@@ -57,6 +57,8 @@ const struct fi_domain_attr sock_domain_attr = {
 	.rx_ctx_cnt = SOCK_EP_MAX_RX_CNT,
 	.max_ep_tx_ctx = SOCK_EP_MAX_TX_CNT,
 	.max_ep_rx_ctx = SOCK_EP_MAX_RX_CNT,
+	.max_ep_stx_ctx = SOCK_EP_MAX_EP_CNT,
+	.max_ep_srx_ctx = SOCK_EP_MAX_EP_CNT,
 };
 
 int sock_verify_domain_attr(struct fi_domain_attr *attr)

@@ -274,6 +274,8 @@ struct fi_domain_attr {
 	size_t			rx_ctx_cnt;
 	size_t			max_ep_tx_ctx;
 	size_t			max_ep_rx_ctx;
+	size_t			max_ep_stx_ctx;
+	size_t			max_ep_srx_ctx;
 };
 
 struct fi_fabric_attr {
