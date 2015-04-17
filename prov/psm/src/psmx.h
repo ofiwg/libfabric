@@ -247,6 +247,7 @@ struct psmx_fid_domain {
 	struct psmx_fid_ep	*rma_ep;
 	struct psmx_fid_ep	*atomics_ep;
 	uint64_t		mode;
+	uint64_t		caps;
 
 	int			am_initialized;
 
