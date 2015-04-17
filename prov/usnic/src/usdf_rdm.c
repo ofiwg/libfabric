@@ -473,6 +473,7 @@ usdf_rdm_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 	struct usdf_dest *dest;
 	struct usdf_rdm_connection *rdc;
 	uint32_t msg_id;
+	uint64_t op_flags;
 
 	ep = ep_ftou(fep);
 	tx = ep->ep_tx;
@@ -510,6 +511,10 @@ usdf_rdm_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 	wqe->rd_resid = len;
 	wqe->rd_length = len;
 
+	op_flags = ep->ep_tx->tx_attr.op_flags;
+	wqe->rd_signal_comp = ep->ep_tx_dflt_signal_comp ||
+		(op_flags & FI_COMPLETION);
+
 	/* add send to TX list */
 	TAILQ_INSERT_TAIL(&rdc->dc_wqe_posted, wqe, rd_link);
 	usdf_rdm_rdc_ready(rdc, tx);
@@ -523,30 +528,249 @@ usdf_rdm_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 }
 
 ssize_t
-usdf_rdm_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+usdf_rdm_senddata(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 		uint64_t data, fi_addr_t dest_addr, void *context)
 {
 	return -FI_ENOSYS;
 }
 
 ssize_t
-usdf_rdm_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+usdf_rdm_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
                  size_t count, fi_addr_t dest_addr, void *context)
 {
-	return -FI_ENOSYS;
+	int i;
+	struct usdf_ep *ep;
+	struct usdf_tx *tx;
+	struct usdf_rdm_qe *wqe;
+	struct usdf_domain *udp;
+	struct usdf_dest *dest;
+	struct usdf_rdm_connection *rdc;
+	uint32_t msg_id;
+	size_t tot_len;
+	uint64_t op_flags;
+
+	ep = ep_ftou(fep);
+	tx = ep->ep_tx;
+	udp = ep->ep_domain;
+	dest = (struct usdf_dest *)dest_addr;
+
+	if (TAILQ_EMPTY(&tx->t.rdm.tx_free_wqe)) {
+		return -FI_EAGAIN;
+	}
+
+	pthread_spin_lock(&udp->dom_progress_lock);
+
+	rdc = usdf_rdm_rdc_tx_get(dest, ep);
+	if (rdc == NULL) {
+		pthread_spin_unlock(&udp->dom_progress_lock);
+		return -FI_EAGAIN;
+	}
+
+	wqe = TAILQ_FIRST(&tx->t.rdm.tx_free_wqe);
+	TAILQ_REMOVE(&tx->t.rdm.tx_free_wqe, wqe, rd_link);
+
+	wqe->rd_context = context;
+
+	msg_id = atomic_inc(&tx->t.rdm.tx_next_msg_id);
+	wqe->rd_msg_id_be = htonl(msg_id);
+
+	tot_len = 0;
+	for (i = 0; i < count; ++i) {
+		wqe->rd_iov[i].iov_base = (void *)iov[i].iov_base;
+		wqe->rd_iov[i].iov_len = iov[i].iov_len;
+		tot_len += iov[i].iov_len;
+	}
+	wqe->rd_last_iov = count - 1;
+
+	wqe->rd_cur_iov = 0;
+	wqe->rd_cur_ptr = iov[0].iov_base;
+	wqe->rd_iov_resid = iov[0].iov_len;
+	wqe->rd_resid = tot_len;
+	wqe->rd_length = tot_len;
+
+	op_flags = ep->ep_tx->tx_attr.op_flags;
+	wqe->rd_signal_comp = ep->ep_tx_dflt_signal_comp ||
+		(op_flags & FI_COMPLETION);
+
+	/* add send to TX list */
+	TAILQ_INSERT_TAIL(&rdc->dc_wqe_posted, wqe, rd_link);
+	usdf_rdm_rdc_ready(rdc, tx);
+
+	pthread_spin_unlock(&udp->dom_progress_lock);
+	USDF_DBG_SYS(EP_DATA, "SENDV posted len=%lu, ID=%d\n", tot_len, msg_id);
+
+	usdf_domain_progress(udp);
+
+	return 0;
 }
 
 ssize_t
-usdf_rdm_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+usdf_rdm_sendmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 {
-	return -FI_ENOSYS;
+	int i;
+	struct usdf_ep *ep;
+	struct usdf_tx *tx;
+	struct usdf_rdm_qe *wqe;
+	struct usdf_domain *udp;
+	struct usdf_dest *dest;
+	struct usdf_rdm_connection *rdc;
+	uint32_t msg_id;
+	size_t tot_len;
+	const struct iovec *iov;
+
+	ep = ep_ftou(fep);
+	tx = ep->ep_tx;
+	udp = ep->ep_domain;
+	dest = (struct usdf_dest *)msg->addr;
+
+	if (flags & ~USDF_RDM_SUPP_SENDMSG_FLAGS) {
+		USDF_DBG("one or more flags in 0x%llx not supported\n", flags);
+		return -FI_EOPNOTSUPP;
+	}
+
+	/* check for inject overrun before acquiring lock and allocating msg id,
+	 * easier to unwind this way */
+	if (flags & FI_INJECT) {
+		iov = msg->msg_iov;
+		tot_len = 0;
+		for (i = 0; i < msg->iov_count; ++i) {
+			tot_len += iov[i].iov_len;
+			if (tot_len > USDF_RDM_MAX_INJECT_SIZE) {
+				USDF_DBG_SYS(EP_DATA, "max inject len exceeded (%zu)\n",
+						tot_len);
+				return -FI_EINVAL;
+			}
+		}
+	}
+
+	if (TAILQ_EMPTY(&tx->t.rdm.tx_free_wqe)) {
+		return -FI_EAGAIN;
+	}
+
+	pthread_spin_lock(&udp->dom_progress_lock);
+
+	rdc = usdf_rdm_rdc_tx_get(dest, ep);
+	if (rdc == NULL) {
+		pthread_spin_unlock(&udp->dom_progress_lock);
+		return -FI_EAGAIN;
+	}
+
+	wqe = TAILQ_FIRST(&tx->t.rdm.tx_free_wqe);
+	TAILQ_REMOVE(&tx->t.rdm.tx_free_wqe, wqe, rd_link);
+
+	wqe->rd_context = msg->context;
+
+	msg_id = atomic_inc(&tx->t.rdm.tx_next_msg_id);
+	wqe->rd_msg_id_be = htonl(msg_id);
+
+	iov = msg->msg_iov;
+	tot_len = 0;
+	if (flags & FI_INJECT) {
+		/* copy to the the wqe's tiny injection buffer */
+		for (i = 0; i < msg->iov_count; ++i) {
+			assert(tot_len + iov[i].iov_len <= USDF_RDM_MAX_INJECT_SIZE);
+			memcpy(&wqe->rd_inject_buf[tot_len], iov[i].iov_base,
+				iov[i].iov_len);
+			tot_len += iov[i].iov_len;
+		}
+		wqe->rd_iov[0].iov_base = wqe->rd_inject_buf;
+		wqe->rd_iov[0].iov_len = tot_len;
+		wqe->rd_last_iov = 0;
+	} else {
+		for (i = 0; i < msg->iov_count; ++i) {
+			wqe->rd_iov[i].iov_base = (void *)iov[i].iov_base;
+			wqe->rd_iov[i].iov_len = iov[i].iov_len;
+			tot_len += iov[i].iov_len;
+		}
+		wqe->rd_last_iov = msg->iov_count - 1;
+	}
+
+	wqe->rd_cur_iov = 0;
+	wqe->rd_cur_ptr = iov[0].iov_base;
+	wqe->rd_iov_resid = iov[0].iov_len;
+	wqe->rd_resid = tot_len;
+	wqe->rd_length = tot_len;
+
+	wqe->rd_signal_comp = ep->ep_tx_dflt_signal_comp ||
+		(flags & FI_COMPLETION);
+
+	/* add send to TX list */
+	TAILQ_INSERT_TAIL(&rdc->dc_wqe_posted, wqe, rd_link);
+	usdf_rdm_rdc_ready(rdc, tx);
+
+	pthread_spin_unlock(&udp->dom_progress_lock);
+	USDF_DBG_SYS(EP_DATA, "SENDMSG posted len=%lu, ID=%d\n",
+			tot_len, msg_id);
+
+	usdf_domain_progress(udp);
+
+	return 0;
 }
 
 ssize_t
-usdf_rdm_inject(struct fid_ep *ep, const void *buf, size_t len,
+usdf_rdm_inject(struct fid_ep *fep, const void *buf, size_t len,
 		fi_addr_t dest_addr)
 {
-	return -FI_ENOSYS;
+	struct usdf_ep *ep;
+	struct usdf_tx *tx;
+	struct usdf_rdm_qe *wqe;
+	struct usdf_domain *udp;
+	struct usdf_dest *dest;
+	struct usdf_rdm_connection *rdc;
+	uint32_t msg_id;
+
+	ep = ep_ftou(fep);
+	tx = ep->ep_tx;
+	udp = ep->ep_domain;
+	dest = (struct usdf_dest *)dest_addr;
+
+	if (len > USDF_RDM_MAX_INJECT_SIZE) {
+		USDF_DBG_SYS(EP_DATA, "max inject len exceeded (%zu)\n", len);
+		return -FI_EINVAL;
+	}
+
+	if (TAILQ_EMPTY(&tx->t.rdm.tx_free_wqe)) {
+		return -FI_EAGAIN;
+	}
+
+	pthread_spin_lock(&udp->dom_progress_lock);
+
+	rdc = usdf_rdm_rdc_tx_get(dest, ep);
+	if (rdc == NULL) {
+		pthread_spin_unlock(&udp->dom_progress_lock);
+		return -FI_EAGAIN;
+	}
+
+	wqe = TAILQ_FIRST(&tx->t.rdm.tx_free_wqe);
+	TAILQ_REMOVE(&tx->t.rdm.tx_free_wqe, wqe, rd_link);
+
+	wqe->rd_context = NULL;
+
+	msg_id = atomic_inc(&tx->t.rdm.tx_next_msg_id);
+	wqe->rd_msg_id_be = htonl(msg_id);
+
+	memcpy(wqe->rd_inject_buf, buf, len);
+	wqe->rd_last_iov = 0;
+
+	wqe->rd_cur_iov = 0;
+	wqe->rd_cur_ptr = buf;
+	wqe->rd_iov_resid = len;
+	wqe->rd_resid = len;
+	wqe->rd_length = len;
+
+	/* inject never generates a completion */
+	wqe->rd_signal_comp = 0;
+
+	/* add send to TX list */
+	TAILQ_INSERT_TAIL(&rdc->dc_wqe_posted, wqe, rd_link);
+	usdf_rdm_rdc_ready(rdc, tx);
+
+	pthread_spin_unlock(&udp->dom_progress_lock);
+	USDF_DBG_SYS(EP_DATA, "INJECT posted len=%lu, ID = %d\n", len, msg_id);
+
+	usdf_domain_progress(udp);
+
+	return 0;
 }
 
 ssize_t
@@ -1056,8 +1280,9 @@ usdf_rdm_process_ack(struct usdf_rdm_connection *rdc,
 			if (wqe->rd_resid == 0) {
 				TAILQ_REMOVE(&rdc->dc_wqe_sent, wqe, rd_link);
 				USDF_DBG_SYS(EP_DATA, "send ID=%u complete\n", msg_id);
-				hcq->cqh_post(hcq, wqe->rd_context,
-						wqe->rd_length);
+				if (wqe->rd_signal_comp)
+					hcq->cqh_post(hcq, wqe->rd_context,
+							wqe->rd_length);
 
 				TAILQ_INSERT_HEAD(&tx->t.rdm.tx_free_wqe,
 					wqe, rd_link);
