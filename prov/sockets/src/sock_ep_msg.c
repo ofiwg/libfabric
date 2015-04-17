@@ -209,8 +209,10 @@ int sock_msg_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 	*(*info)->ep_attr = sock_msg_ep_attr;
 
 	if (hints && hints->ep_attr) {
-		(*info)->ep_attr->rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;
-		(*info)->ep_attr->tx_ctx_cnt = hints->ep_attr->tx_ctx_cnt;
+		if (hints->ep_attr->rx_ctx_cnt)
+			(*info)->ep_attr->rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;
+		if (hints->ep_attr->tx_ctx_cnt)
+			(*info)->ep_attr->tx_ctx_cnt = hints->ep_attr->tx_ctx_cnt;
 	}
 
 	if (hints && hints->rx_attr) {
