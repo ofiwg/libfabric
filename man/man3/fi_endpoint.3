@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-04\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-04\-17" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -336,10 +336,14 @@ successful RMA write or atomic operation is initiated from the endpoint.
 \f[I]FI_REMOTE_READ\f[] : Increments the specified counter whenever a
 successful RMA read or atomic fetch operation is initiated from a remote
 endpoint that targets the given endpoint.
+Use of this flag requires that the endpoint be created using
+FI_RMA_EVENT.
 .PP
 \f[I]FI_REMOTE_WRITE\f[] : Increments the specified counter whenever a
 successful RMA write or atomic operation is initiated from a remote
 endpoint that targets the given endpoint.
+Use of this flag requires that the endpoint be created using
+FI_RMA_EVENT.
 .PP
 Connectionless endpoints must be bound to a single address vector.
 If an endpoint is using a shared transmit and/or receive context, the
@@ -373,8 +377,6 @@ disabled as a result of experiencing an asynchronous error.
 .SS fi_cancel
 .PP
 fi_cancel attempts to cancel an outstanding asynchronous operation.
-The endpoint must have been configured to support cancelable operations
--- see FI_CANCEL flag -- in order for this call to succeed.
 Canceling an operation causes the fabric provider to search for the
 operation and, if it is still pending, complete it as having been
 canceled.
@@ -1125,30 +1127,41 @@ generated for data transfer operations.
 .PP
 \f[I]FI_INJECT_COMPLETE\f[] : Indicates that a completion should be
 generated when the source buffer(s) may be reused.
-FI_INJECT_COMPLETE allows for the provider to complete an operation
-after all source data has been cached, and while the operation may still
-be in the process of being transmitted.
+A completion guarantees that the buffers will not be read from again and
+the application may reclaim them.
+No other guarantees are made with respect to the state of the operation.
 .PP
-\f[I]FI_TRANSMIT_COMPLETE\f[] : Indicates that a completion should not
-be generated until an operation has been successfully transmitted and is
-no longer being tracked by the provider.
-For reliable endpoints, this flag generally indicates that an operation
-will not complete until it has been accepted into the fabric and
-acknowledged by a remote service.
-For unreliable endpoints, this flag indicates that an operation will not
-complete until it has been successfully delivered into the fabric.
-For example, the corresponding message has been placed on the wire.
-FI_TRANSMIT_COMPLETE is the default completion model for all endpoints.
+\f[I]FI_TRANSMIT_COMPLETE\f[] : Indicates that a completion should be
+generated when the transmit operation has completed relative to the
+local provider.
+The exact behavior is dependent on the endpoint type.
 .PP
-Note that when set, if the target endpoint experiences an error
-receiving the transferred data, that error will often be reported back
-to the initiator of the request.
-This includes errors which may not normally be reported to the
-initiator, such as remote buffer overruns.
+For reliable endpoints:
 .PP
-\f[I]FI_COMMIT_COMPLETE\f[] : Indicates that a completion should not be
-generated until an operation has successfully been processed at the
-target, with the data placed into the specified destination buffer.
+Indicates that a completion should be generated when the operation has
+been delivered to the peer endpoint.
+A completion guarantees that the operation is no longer dependent on the
+fabric or local resources.
+The state of the operation at the peer endpoint is not defined.
+.PP
+For unreliable endpoints:
+.PP
+Indicates that a completion should be generated when the operation has
+been delivered to the fabric.
+A completion guarantees that the operation is no longer dependent on
+local resources.
+The state of the operation within the fabric is not defined.
+.PP
+\f[I]FI_DELIVERY_COMPLETE\f[] : Indicates that a completion should not
+be generated until an operation has been processed by the destination
+endpoint(s).
+A completion guarantees that the result of the operation is available.
+.PP
+This completion mode applies only to reliable endpoints.
+For operations that return data to the initiator, such as RMA read or
+atomic-fetch, the source endpoint is also considered a destination
+endpoint.
+This is the default completion mode for such operations.
 .SH NOTES
 .PP
 Users should call fi_close to release all resources allocated to the
