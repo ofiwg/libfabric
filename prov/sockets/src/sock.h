@@ -650,10 +650,8 @@ struct sock_tx_pe_entry {
 	uint8_t reserved[6];
 
 	struct sock_tx_ctx *tx_ctx;
-	union {
-		struct sock_tx_iov tx_iov[SOCK_EP_MAX_IOV_LIMIT];
-		char inject[SOCK_EP_MAX_INJECT_SZ];
-	} data;
+	struct sock_tx_iov tx_iov[SOCK_EP_MAX_IOV_LIMIT];
+	char inject[SOCK_EP_MAX_INJECT_SZ];
 };
 
 struct sock_rx_pe_entry {

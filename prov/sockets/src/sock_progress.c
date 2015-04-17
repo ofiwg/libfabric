@@ -484,10 +484,10 @@ static int sock_pe_handle_read_complete(struct sock_pe *pe,
 	for (i=0; i < waiting_entry->pe.tx.tx_op.dest_iov_len; i++) {
 		if (sock_pe_recv_field(
 			    pe_entry,
-			    (char *) (uintptr_t) waiting_entry->pe.tx.data.tx_iov[i].dst.iov.addr,
-			    waiting_entry->pe.tx.data.tx_iov[i].dst.iov.len, len))
+			    (char *) (uintptr_t) waiting_entry->pe.tx.tx_iov[i].dst.iov.addr,
+			    waiting_entry->pe.tx.tx_iov[i].dst.iov.len, len))
 			return 0;
-		len += waiting_entry->pe.tx.data.tx_iov[i].dst.iov.len;
+		len += waiting_entry->pe.tx.tx_iov[i].dst.iov.len;
 	}
 
 	sock_pe_report_read_completion(waiting_entry);
@@ -543,11 +543,11 @@ static int sock_pe_handle_atomic_complete(struct sock_pe *pe,
 	for (i=0; i < waiting_entry->pe.tx.tx_op.atomic.res_iov_len; i++) {
 		if (sock_pe_recv_field(
 			    pe_entry,
-			    (char *) (uintptr_t) waiting_entry->pe.tx.data.tx_iov[i].res.ioc.addr,
-			    waiting_entry->pe.tx.data.tx_iov[i].res.ioc.count * datatype_sz,
+			    (char *) (uintptr_t) waiting_entry->pe.tx.tx_iov[i].res.ioc.addr,
+			    waiting_entry->pe.tx.tx_iov[i].res.ioc.count * datatype_sz,
 			    len))
 			return 0;
-		len += (waiting_entry->pe.tx.data.tx_iov[i].res.ioc.count * datatype_sz);
+		len += (waiting_entry->pe.tx.tx_iov[i].res.ioc.count * datatype_sz);
 	}
 
 	if (waiting_entry->pe.rx.rx_op.atomic.res_iov_len)
@@ -1598,9 +1598,9 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 	/* dest iocs */
 	entry_len = sizeof(union sock_iov) * pe_entry->pe.tx.tx_op.dest_iov_len;
 	for (i=0; i < pe_entry->pe.tx.tx_op.dest_iov_len; i++) {
-		iov[i].ioc.addr = pe_entry->pe.tx.data.tx_iov[i].dst.ioc.addr;
-		iov[i].ioc.count = pe_entry->pe.tx.data.tx_iov[i].dst.ioc.count;
-		iov[i].ioc.key = pe_entry->pe.tx.data.tx_iov[i].dst.ioc.key;
+		iov[i].ioc.addr = pe_entry->pe.tx.tx_iov[i].dst.ioc.addr;
+		iov[i].ioc.count = pe_entry->pe.tx.tx_iov[i].dst.ioc.count;
+		iov[i].ioc.key = pe_entry->pe.tx.tx_iov[i].dst.ioc.key;
 	}
 
 	if (sock_pe_send_field(pe_entry, &iov[0], entry_len, len))
@@ -1611,28 +1611,28 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 	datatype_sz = fi_datatype_size(pe_entry->pe.tx.tx_op.atomic.datatype);
 	for (i=0; i < pe_entry->pe.tx.tx_op.atomic.cmp_iov_len; i++) {
 		if (sock_pe_send_field(pe_entry, 
-				       (void *) (uintptr_t) pe_entry->pe.tx.data.tx_iov[i].cmp.ioc.addr,
-				       pe_entry->pe.tx.data.tx_iov[i].cmp.ioc.count * 
+				       (void *) (uintptr_t) pe_entry->pe.tx.tx_iov[i].cmp.ioc.addr,
+				       pe_entry->pe.tx.tx_iov[i].cmp.ioc.count * 
 				       datatype_sz, len))
 			return 0;
-		len += (pe_entry->pe.tx.data.tx_iov[i].cmp.ioc.count * datatype_sz);
+		len += (pe_entry->pe.tx.tx_iov[i].cmp.ioc.count * datatype_sz);
 	}
 
 	/* data */
 	if (pe_entry->flags & FI_INJECT) {
 		if (sock_pe_send_field(pe_entry, 
-				       &pe_entry->pe.tx.data.inject[0],
+				       &pe_entry->pe.tx.inject[0],
 				       pe_entry->pe.tx.tx_op.src_iov_len, len))
 			return 0;
 		len += pe_entry->pe.tx.tx_op.src_iov_len;
 	} else {
 		for (i=0; i < pe_entry->pe.tx.tx_op.src_iov_len; i++) {
 			if (sock_pe_send_field(pe_entry,
-				    (void *) (uintptr_t) pe_entry->pe.tx.data.tx_iov[i].src.ioc.addr,
-				    pe_entry->pe.tx.data.tx_iov[i].src.ioc.count * 
+				    (void *) (uintptr_t) pe_entry->pe.tx.tx_iov[i].src.ioc.addr,
+				    pe_entry->pe.tx.tx_iov[i].src.ioc.count * 
 				    datatype_sz, len))
 				return 0;
-			len += (pe_entry->pe.tx.data.tx_iov[i].src.ioc.count * datatype_sz);
+			len += (pe_entry->pe.tx.tx_iov[i].src.ioc.count * datatype_sz);
 		}
 	}
 	
@@ -1673,9 +1673,9 @@ static int sock_pe_progress_tx_write(struct sock_pe *pe,
 	/* dest iovs */
 	dest_iov_len = sizeof(union sock_iov) * pe_entry->pe.tx.tx_op.dest_iov_len;
 	for (i=0; i < pe_entry->pe.tx.tx_op.dest_iov_len; i++) {
-		dest_iov[i].iov.addr = pe_entry->pe.tx.data.tx_iov[i].dst.iov.addr;
-		dest_iov[i].iov.len = pe_entry->pe.tx.data.tx_iov[i].dst.iov.len;
-		dest_iov[i].iov.key = pe_entry->pe.tx.data.tx_iov[i].dst.iov.key;
+		dest_iov[i].iov.addr = pe_entry->pe.tx.tx_iov[i].dst.iov.addr;
+		dest_iov[i].iov.len = pe_entry->pe.tx.tx_iov[i].dst.iov.len;
+		dest_iov[i].iov.key = pe_entry->pe.tx.tx_iov[i].dst.iov.key;
 	}
 	if (sock_pe_send_field(pe_entry, &dest_iov[0], dest_iov_len, len))
 		return 0;
@@ -1683,7 +1683,7 @@ static int sock_pe_progress_tx_write(struct sock_pe *pe,
 	
 	/* data */
 	if (pe_entry->flags & FI_INJECT) {
-		if (sock_pe_send_field(pe_entry, &pe_entry->pe.tx.data.inject[0],
+		if (sock_pe_send_field(pe_entry, &pe_entry->pe.tx.inject[0],
 				       pe_entry->pe.tx.tx_op.src_iov_len, len))
 			return 0;
 		len += pe_entry->pe.tx.tx_op.src_iov_len;
@@ -1693,11 +1693,11 @@ static int sock_pe_progress_tx_write(struct sock_pe *pe,
 		for (i=0; i < pe_entry->pe.tx.tx_op.src_iov_len; i++) {
 			if (sock_pe_send_field(
 				    pe_entry,
-				    (void *) (uintptr_t) pe_entry->pe.tx.data.tx_iov[i].src.iov.addr,
-				    pe_entry->pe.tx.data.tx_iov[i].src.iov.len, len))
+				    (void *) (uintptr_t) pe_entry->pe.tx.tx_iov[i].src.iov.addr,
+				    pe_entry->pe.tx.tx_iov[i].src.iov.len, len))
 				return 0;
-			len += pe_entry->pe.tx.data.tx_iov[i].src.iov.len;
-			pe_entry->data_len += pe_entry->pe.tx.data.tx_iov[i].src.iov.len;
+			len += pe_entry->pe.tx.tx_iov[i].src.iov.len;
+			pe_entry->data_len += pe_entry->pe.tx.tx_iov[i].src.iov.len;
 		}
 	}
 
@@ -1728,10 +1728,10 @@ static int sock_pe_progress_tx_read(struct sock_pe *pe,
 	src_iov_len = sizeof(union sock_iov) * pe_entry->pe.tx.tx_op.src_iov_len;
 	pe_entry->data_len = 0;
 	for (i=0; i < pe_entry->pe.tx.tx_op.src_iov_len; i++) {
-		src_iov[i].iov.addr = pe_entry->pe.tx.data.tx_iov[i].src.iov.addr;
-		src_iov[i].iov.len = pe_entry->pe.tx.data.tx_iov[i].src.iov.len;
-		src_iov[i].iov.key = pe_entry->pe.tx.data.tx_iov[i].src.iov.key;
-		pe_entry->data_len += pe_entry->pe.tx.data.tx_iov[i].src.iov.len;
+		src_iov[i].iov.addr = pe_entry->pe.tx.tx_iov[i].src.iov.addr;
+		src_iov[i].iov.len = pe_entry->pe.tx.tx_iov[i].src.iov.len;
+		src_iov[i].iov.key = pe_entry->pe.tx.tx_iov[i].src.iov.key;
+		pe_entry->data_len += pe_entry->pe.tx.tx_iov[i].src.iov.len;
 	}
 
 	if (sock_pe_send_field(pe_entry, &src_iov[0], src_iov_len, len))
@@ -1774,7 +1774,7 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 	}
 
 	if (pe_entry->flags & FI_INJECT) {
-		if (sock_pe_send_field(pe_entry, pe_entry->pe.tx.data.inject,
+		if (sock_pe_send_field(pe_entry, pe_entry->pe.tx.inject,
 				       pe_entry->pe.tx.tx_op.src_iov_len, len))
 			return 0;
 		len += pe_entry->pe.tx.tx_op.src_iov_len;
@@ -1783,11 +1783,11 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 		pe_entry->data_len = 0;
 		for (i = 0; i < pe_entry->pe.tx.tx_op.src_iov_len; i++) {
 			if (sock_pe_send_field(pe_entry,
-				    (void *) (uintptr_t) pe_entry->pe.tx.data.tx_iov[i].src.iov.addr,
-				    pe_entry->pe.tx.data.tx_iov[i].src.iov.len, len))
+				    (void *) (uintptr_t) pe_entry->pe.tx.tx_iov[i].src.iov.addr,
+				    pe_entry->pe.tx.tx_iov[i].src.iov.len, len))
 				return 0;
-			len += pe_entry->pe.tx.data.tx_iov[i].src.iov.len;
-			pe_entry->data_len += pe_entry->pe.tx.data.tx_iov[i].src.iov.len;
+			len += pe_entry->pe.tx.tx_iov[i].src.iov.len;
+			pe_entry->data_len += pe_entry->pe.tx.tx_iov[i].src.iov.len;
 		}
 	}
 	
@@ -1999,80 +1999,80 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	case SOCK_OP_SEND:
 	case SOCK_OP_TSEND:
 		if (pe_entry->flags & FI_INJECT) {
-			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.inject[0],
+			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.inject[0],
 				 pe_entry->pe.tx.tx_op.src_iov_len);
 			msg_hdr->msg_len += pe_entry->pe.tx.tx_op.src_iov_len;
 		} else {
 			for (i = 0; i < pe_entry->pe.tx.tx_op.src_iov_len; i++) {
-				rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.tx_iov[i].src, 
-					 sizeof(pe_entry->pe.tx.data.tx_iov[i].src));
-				msg_hdr->msg_len += pe_entry->pe.tx.data.tx_iov[i].src.iov.len;
+				rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.tx_iov[i].src, 
+					 sizeof(pe_entry->pe.tx.tx_iov[i].src));
+				msg_hdr->msg_len += pe_entry->pe.tx.tx_iov[i].src.iov.len;
 			}
 		}
 		break;
 	case SOCK_OP_WRITE:
 		if (pe_entry->flags & FI_INJECT) {
-			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.inject[0],
+			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.inject[0],
 				 pe_entry->pe.tx.tx_op.src_iov_len);
 			msg_hdr->msg_len += pe_entry->pe.tx.tx_op.src_iov_len;
 		} else {
 			for (i = 0; i < pe_entry->pe.tx.tx_op.src_iov_len; i++) {
-				rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.tx_iov[i].src, 
-					 sizeof(pe_entry->pe.tx.data.tx_iov[i].src));
-				msg_hdr->msg_len += pe_entry->pe.tx.data.tx_iov[i].src.iov.len;
+				rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.tx_iov[i].src, 
+					 sizeof(pe_entry->pe.tx.tx_iov[i].src));
+				msg_hdr->msg_len += pe_entry->pe.tx.tx_iov[i].src.iov.len;
 			}
 		}
 
 		for (i = 0; i < pe_entry->pe.tx.tx_op.dest_iov_len; i++) {
-			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.tx_iov[i].dst, 
-				 sizeof(pe_entry->pe.tx.data.tx_iov[i].dst));
+			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.tx_iov[i].dst, 
+				 sizeof(pe_entry->pe.tx.tx_iov[i].dst));
 		}
 		msg_hdr->msg_len += sizeof(union sock_iov) * i;
 		break;
 	case SOCK_OP_READ:
 		for (i = 0; i < pe_entry->pe.tx.tx_op.src_iov_len; i++) {
-			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.tx_iov[i].src, 
-				 sizeof(pe_entry->pe.tx.data.tx_iov[i].src));
+			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.tx_iov[i].src, 
+				 sizeof(pe_entry->pe.tx.tx_iov[i].src));
 		}
 		msg_hdr->msg_len += sizeof(union sock_iov) * i;
 
 		for (i = 0;  i <pe_entry->pe.tx.tx_op.dest_iov_len; i++) {
-			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.tx_iov[i].dst, 
-				 sizeof(pe_entry->pe.tx.data.tx_iov[i].dst));
+			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.tx_iov[i].dst, 
+				 sizeof(pe_entry->pe.tx.tx_iov[i].dst));
 		}
 		break;
 	case SOCK_OP_ATOMIC:			
 		msg_hdr->msg_len += sizeof(struct sock_op);
 		datatype_sz = fi_datatype_size(pe_entry->pe.tx.tx_op.atomic.datatype);
 		if (pe_entry->flags & FI_INJECT) {
-			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.inject[0],
+			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.inject[0],
 				 pe_entry->pe.tx.tx_op.src_iov_len);
 			msg_hdr->msg_len += pe_entry->pe.tx.tx_op.src_iov_len;
 		} else {
 			for (i = 0; i < pe_entry->pe.tx.tx_op.src_iov_len; i++) {
-				rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.tx_iov[i].src, 
-					 sizeof(pe_entry->pe.tx.data.tx_iov[i].src));
+				rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.tx_iov[i].src, 
+					 sizeof(pe_entry->pe.tx.tx_iov[i].src));
 				msg_hdr->msg_len += datatype_sz *
-					pe_entry->pe.tx.data.tx_iov[i].src.ioc.count;
+					pe_entry->pe.tx.tx_iov[i].src.ioc.count;
 			}
 		}
 
 		for (i = 0; i < pe_entry->pe.tx.tx_op.dest_iov_len; i++) {
-			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.tx_iov[i].dst, 
-				 sizeof(pe_entry->pe.tx.data.tx_iov[i].dst));
+			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.tx_iov[i].dst, 
+				 sizeof(pe_entry->pe.tx.tx_iov[i].dst));
 		}
 		msg_hdr->msg_len += sizeof(union sock_iov) * i;
 
 		for (i = 0; i < pe_entry->pe.tx.tx_op.atomic.res_iov_len; i++) {
-			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.tx_iov[i].res, 
-				 sizeof(pe_entry->pe.tx.data.tx_iov[i].res));
+			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.tx_iov[i].res, 
+				 sizeof(pe_entry->pe.tx.tx_iov[i].res));
 		}
 		
 		for (i = 0; i < pe_entry->pe.tx.tx_op.atomic.cmp_iov_len; i++) {
-			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.data.tx_iov[i].cmp, 
-				 sizeof(pe_entry->pe.tx.data.tx_iov[i].cmp));
+			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.tx_iov[i].cmp, 
+				 sizeof(pe_entry->pe.tx.tx_iov[i].cmp));
 			msg_hdr->msg_len += datatype_sz *
-				pe_entry->pe.tx.data.tx_iov[i].cmp.ioc.count;
+				pe_entry->pe.tx.tx_iov[i].cmp.ioc.count;
 		}
 		break;
 	default:
