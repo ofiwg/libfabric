@@ -11,16 +11,80 @@ The Verbs Fabric Provider
 
 # OVERVIEW
 
-...Whatever the Verbs provider maintainer wants to put here...
+The verbs provider enables applications using OFI to be run over any verbs
+hardware (Infiniband, iWARP, etc). It uses the Linux Verbs API for network
+transport and provides a translation OFI calls to appropriate verbs API calls.
+It uses librdmacm for communication management and libibverbs for other control
+and data transfer operations.
 
-Suggestions:
+# SUPPORTED FEATURES
 
-* Document what is working
-* Document what has been tested
-* Document what is know to NOT be working
-* Document any other things app developers and end users should know
-  about this provider (e.g., run-time tunable parameters,
-  differences in behavior between this and other providers, etc.)
+The verbs provider supports a subset of OFI features.
+
+*Endpoint types*
+: Only FI_EP_MSG is supported.
+
+*Endpoint capabilities*
+: FI_MSG, FI_RMA, FI_ATOMIC.
+
+*Modes*
+: Verbs provider requires applications to support the following modes:
+  FI_LOCAL_MR, FI_PROV_MR_ATTR for all applications. FI_RX_CQ_DATA for
+  applications that want to use RMA. Applications must take responsibility
+  of posting receives for any incoming CQ data.
+
+*Progress*
+: Verbs provider supports FI_PROGRESS_AUTO: Asynchonous operations make forward
+  progress automatically.
+
+*Operation flags*
+: Verbs provider supports FI_INJECT, FI_COMPLETION, FI_REMOTE_CQ_DATA.
+
+*Msg Ordering*
+: Verbs provider support the following messaging ordering on the TX side:
+  * Read after Read
+  * Read after Write
+  * Read after Send
+  * Write after Write
+  * Write after Send
+  * Send after Write
+  * Send after Send
+
+# UNSUPPORTED FEATURES
+
+*Control Interfaces*
+: Counters and address vectors are not supported.
+
+*Data transfer interfaces*
+: Tagged messaging and multi-receive are not supported.
+
+*Endpoint features*
+: Scalable endpoints and shared contexts are not suppoted. fi_cancel,
+  fi_tx/rx_size_left and fi_alias operations are not supported.
+
+*Others*
+: Other unsupported features include resource management, polling.
+
+# LIMITATIONS
+
+*CQ*
+: cq_readfrom operations are not supported.
+
+*CM*
+: fi_setname is not yet supported.
+
+*EQ*
+: fi_eq_write is not supported.
+
+*Memory Regions*
+: Adding regions via s/g list is not supported. Generic fi_mr_regattr is not
+  supported. No support for binding memory regions to a counter.
+
+*Wait objects*
+: Only FI_WAIT_FD wait object is supported. Wait sets are not supported.
+
+*Others*
+: No direct inject calls yet.
 
 # SEE ALSO
 
