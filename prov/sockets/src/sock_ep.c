@@ -1246,6 +1246,8 @@ static void sock_set_domain_attr(const struct fi_info *hints,
 	if (hints->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
 		info->domain_attr->data_progress = 
 			sock_domain_attr.data_progress;	
+	if (hints->domain_attr->mr_mode == FI_MR_UNSPEC)
+		info->domain_attr->mr_mode = sock_domain_attr.mr_mode;
 
 	if (hints->domain_attr->cq_cnt == 0)
 		info->domain_attr->cq_cnt = sock_domain_attr.cq_cnt;

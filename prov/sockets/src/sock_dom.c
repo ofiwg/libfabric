@@ -49,6 +49,7 @@ const struct fi_domain_attr sock_domain_attr = {
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
 	.resource_mgmt = FI_RM_ENABLED,
+	.mr_mode = FI_MR_SCALABLE,
 	.mr_key_size = sizeof(uint16_t),
 	.cq_data_size = sizeof(uint64_t),
 	.cq_cnt = SOCK_EP_MAX_CQ_CNT,
@@ -125,6 +126,16 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 
 	default:
 		SOCK_LOG_INFO("AV type not supported!\n");
+		return -FI_ENODATA;
+	}
+
+	switch (attr->mr_mode) {
+	case FI_MR_UNSPEC:
+	case FI_MR_BASIC:
+	case FI_MR_SCALABLE:
+		break;
+	default:
+		SOCK_LOG_INFO("MR mode not supported\n");
 		return -FI_ENODATA;
 	}
 
@@ -249,7 +260,7 @@ struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key,
 	if (!mr)
 		return NULL;
 
-	if (mr->flags & FI_MR_OFFSET)
+	if (domain->attr.mr_mode == FI_MR_SCALABLE)
 		buf = (char*)buf + mr->offset;
 	
 	for (i = 0; i < mr->iov_count; i++) {
@@ -286,8 +297,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	domain = container_of(fid, struct fid_domain, fid);
 	dom = container_of(domain, struct sock_domain, dom_fid);
-	if ((flags & FI_MR_KEY) && 
-	    !(dom->info.mode & FI_PROV_MR_ATTR) && 
+	if ((dom->attr.mr_mode == FI_MR_SCALABLE) &&
 	    ((attr->requested_key > IDX_MAX_INDEX) ||
 	     idm_lookup(&dom->mr_idm, (int) attr->requested_key)))
 		return -FI_ENOKEY;
@@ -304,12 +314,12 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	_mr->domain = dom;
 	_mr->access = attr->access;
 	_mr->flags = flags;
-	_mr->offset = (flags & FI_MR_OFFSET) ?
+	_mr->offset = (dom->attr.mr_mode == FI_MR_SCALABLE) ?
 		(uintptr_t) attr->mr_iov[0].iov_base + attr->offset : 
 		(uintptr_t) attr->mr_iov[0].iov_base;
 
 	fastlock_acquire(&dom->lock);
-	key = ((dom->info.mode & FI_PROV_MR_ATTR) && !(flags & FI_MR_KEY)) ?
+	key = (dom->attr.mr_mode == FI_MR_BASIC) ?
 		sock_get_mr_key(dom) : (uint16_t) attr->requested_key;
 	if (idm_set(&dom->mr_idm, key, _mr) < 0)
 		goto err;

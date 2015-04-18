@@ -107,6 +107,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	void *dest_addr = NULL;
 	int ep_type = FI_EP_RDM;
 	int av_type = FI_AV_UNSPEC;
+	enum fi_mr_mode mr_mode = FI_MR_SCALABLE;
 	int caps = 0;
 	uint64_t max_tag_value = 0;
 	int err = -FI_ENODATA;
@@ -241,6 +242,21 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 					FI_AV_TABLE);
 				goto err_out;
 			}
+
+			switch (hints->domain_attr->mr_mode) {
+			case FI_MR_UNSPEC:
+				break;
+			case FI_MR_BASIC:
+			case FI_MR_SCALABLE:
+				mr_mode = hints->domain_attr->mr_mode;
+				break;
+			default:
+				FI_INFO(&psmx_prov, FI_LOG_CORE,
+					"hints->domain_attr->mr_mode=%d, supported=%d %d %d\n",
+					hints->domain_attr->mr_mode, FI_MR_UNSPEC, FI_MR_BASIC,
+					FI_MR_SCALABLE);
+				goto err_out;
+			}
 		}
 
 		if (hints->ep_attr) {
@@ -283,6 +299,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->name = strdup(PSMX_DOMAIN_NAME);
 	psmx_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	psmx_info->domain_attr->av_type = av_type;
+	psmx_info->domain_attr->mr_mode = mr_mode;
 	psmx_info->domain_attr->mr_key_size = sizeof(uint64_t);
 	psmx_info->domain_attr->cq_data_size = 4;
 	psmx_info->domain_attr->cq_cnt = 65535;

@@ -65,7 +65,7 @@ extern struct fi_provider psmx_prov;
                          FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			 FI_TRIGGER | \
-			 FI_DYNAMIC_MR | FI_RMA_EVENT | \
+			 FI_RMA_EVENT | \
 			 PSMX_CAP_EXT)
 
 #define PSMX_CAPS2	((PSMX_CAPS | FI_DIRECTED_RECV) & ~FI_TAGGED)
@@ -249,6 +249,7 @@ struct psmx_fid_domain {
 	struct psmx_fid_ep	*atomics_ep;
 	uint64_t		mode;
 	uint64_t		caps;
+	enum fi_mr_mode		mr_mode;
 
 	int			am_initialized;
 

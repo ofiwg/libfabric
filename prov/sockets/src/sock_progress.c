@@ -593,7 +593,7 @@ static int sock_pe_process_rx_read(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 			return -FI_EINVAL;
 		}
 		
-		if (mr->flags & FI_MR_OFFSET)
+		if (mr->domain->attr.mr_mode == FI_MR_SCALABLE)
 			pe_entry->pe.rx.rx_iov[i].iov.addr += mr->offset;
 		data_len += pe_entry->pe.rx.rx_iov[i].iov.len;
 	}
@@ -646,7 +646,7 @@ static int sock_pe_process_rx_write(struct sock_pe *pe, struct sock_rx_ctx *rx_c
 				break;
 			}
 			
-			if (mr->flags & FI_MR_OFFSET)
+			if (mr->domain->attr.mr_mode == FI_MR_SCALABLE)
 				pe_entry->pe.rx.rx_iov[i].iov.addr += mr->offset;
 		}
 			
@@ -1060,7 +1060,7 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe, struct sock_rx_ctx *rx_
 					      SOCK_OP_ATOMIC_ERROR);
 			goto err;
 		}
-		if (mr->flags & FI_MR_OFFSET)
+		if (mr->domain->attr.mr_mode == FI_MR_SCALABLE)
 			pe_entry->pe.rx.rx_iov[i].ioc.addr += mr->offset;
 	}
 

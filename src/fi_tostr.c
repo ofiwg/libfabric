@@ -179,7 +179,6 @@ static void fi_tostr_caps(char *buf, uint64_t caps)
 {
 	IFFLAGSTR(caps, FI_RMA_EVENT);
 	IFFLAGSTR(caps, FI_NAMED_RX_CTX);
-	IFFLAGSTR(caps, FI_DYNAMIC_MR);
 	IFFLAGSTR(caps, FI_SOURCE);
 	IFFLAGSTR(caps, FI_DIRECTED_RECV);
 	fi_tostr_flags(buf, caps);
@@ -222,7 +221,6 @@ static void fi_tostr_mode(char *buf, uint64_t mode)
 {
 	IFFLAGSTR(mode, FI_CONTEXT);
 	IFFLAGSTR(mode, FI_LOCAL_MR);
-	IFFLAGSTR(mode, FI_PROV_MR_ATTR);
 	IFFLAGSTR(mode, FI_MSG_PREFIX);
 	IFFLAGSTR(mode, FI_ASYNC_IOV);
 	IFFLAGSTR(mode, FI_RX_CQ_DATA);

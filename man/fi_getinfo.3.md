@@ -272,13 +272,6 @@ additional optimizations.
   FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
   types of atomic operations supported by an endpoint.
 
-*FI_DYNAMIC_MR*
-: The provider supports applications registering any range of
-  addresses in their virtual address space, whether or not those
-  addresses are back by physical pages or have been allocated to the
-  app.  Providers that lack this capability require that registered
-  memory regions be backed by allocated memory pages.
-
 *FI_NAMED_RX_CTX*
 : Requests that endpoints which support multiple receive contexts
   allow an initiator to target (or name) a specific receive context as
@@ -365,7 +358,7 @@ Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_NAMED_RX_CTX,
 FI_DIRECTED_RECV, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ,
 and FI_REMOTE_WRITE.
 
-Secondary capabilities: FI_DYNAMIC_MR, FI_MULTI_RECV, FI_SOURCE, FI_FENCE 
+Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_FENCE 
 
 # MODE
 
@@ -433,22 +426,6 @@ below.
   multiple of 8 bytes.  Additionally, applications may receive
   provider generated packets that do not contain application data.
   Such received messages will indicate a transfer size of 0 bytes.
-
-*FI_PROV_MR_ATTR*
-: The provider assigns one or more attributes associated with a memory
-  registration request.  The provider will set this mode if it returns
-  the memory registration keys that applications must use, or if
-  it requires that the MR offset associated with a memory region be
-  the same as the virtual address of the memory.
-
-  Applications that support provider MR attributes will need to
-  exchange MR parameters with remote peers for RMA and atomic
-  operations.  The exchanged data should include both the address of
-  the memory region as well as the MR key.  If this mode is disabled,
-  then applications may select the MR key associated with a
-  registration request, and the resulting memory region will start at
-  a base address of 0.  Applications can request that providers select
-  MR attributes by forcing this bit set after fi_getinfo returns.
 
 *FI_ASYNC_IOV*
 : Applications can reference multiple data buffers as part of a single

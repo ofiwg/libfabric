@@ -131,10 +131,6 @@ struct fi_ops_domain {
 };
 
 
-/* Memory registration flags */
-#define FI_MR_OFFSET		(1ULL << 59)
-#define FI_MR_KEY		(1ULL << 58)
-
 struct fi_ops_mr {
 	size_t	size;
 	int	(*reg)(struct fid *fid, const void *buf, size_t len,
