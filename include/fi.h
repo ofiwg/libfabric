@@ -128,21 +128,63 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 
 #if PT_LOCK_SPIN == 1
 
-#define fastlock_t pthread_spinlock_t
-#define fastlock_init(lock) pthread_spin_init(lock, PTHREAD_PROCESS_PRIVATE)
-#define fastlock_destroy(lock) pthread_spin_destroy(lock)
-#define fastlock_acquire(lock) pthread_spin_lock(lock)
-#define fastlock_release(lock) pthread_spin_unlock(lock)
+#define fastlock_t_ pthread_spinlock_t
+#define fastlock_init_(lock) pthread_spin_init(lock, PTHREAD_PROCESS_PRIVATE)
+#define fastlock_destroy_(lock) pthread_spin_destroy(lock)
+#define fastlock_acquire_(lock) pthread_spin_lock(lock)
+#define fastlock_release_(lock) pthread_spin_unlock(lock)
 
 #else
 
-#define fastlock_t pthread_mutex_t
-#define fastlock_init(lock) pthread_mutex_init(lock, NULL)
-#define fastlock_destroy(lock) pthread_mutex_destroy(lock)
-#define fastlock_acquire(lock) pthread_mutex_lock(lock)
-#define fastlock_release(lock) pthread_mutex_unlock(lock)
+#define fastlock_t_ pthread_mutex_t
+#define fastlock_init_(lock) pthread_mutex_init(lock, NULL)
+#define fastlock_destroy_(lock) pthread_mutex_destroy(lock)
+#define fastlock_acquire_(lock) pthread_mutex_lock(lock)
+#define fastlock_release_(lock) pthread_mutex_unlock(lock)
 
 #endif /* PT_LOCK_SPIN */
+
+#if ENABLE_DEBUG
+
+typedef struct {
+	fastlock_t_ impl;
+	int is_initialized;
+} fastlock_t;
+
+#  define fastlock_init(lock)                     \
+	do {                                      \
+		(lock)->is_initialized = 1;       \
+		fastlock_init_(&(lock)->impl);    \
+	} while (0)
+
+#  define fastlock_destroy(lock)                  \
+	do {                                      \
+		assert((lock)->is_initialized);   \
+		(lock)->is_initialized = 0;       \
+		fastlock_destroy_(&(lock)->impl); \
+	} while (0)
+
+static inline int fastlock_acquire(fastlock_t *lock)
+{
+	assert(lock->is_initialized);
+	return fastlock_acquire_(&lock->impl);
+}
+
+#  define fastlock_release(lock)                  \
+	do {                                      \
+		assert((lock)->is_initialized);   \
+		fastlock_release_(&(lock)->impl); \
+	} while (0)
+
+#else /* !ENABLE_DEBUG */
+
+#  define fastlock_t fastlock_t_
+#  define fastlock_init(lock) fastlock_init_(lock)
+#  define fastlock_destroy(lock) fastlock_destroy_(lock)
+#  define fastlock_acquire(lock) fastlock_acquire_(lock)
+#  define fastlock_release(lock) fastlock_release_(lock)
+
+#endif
 
 
 #if ENABLE_DEBUG
