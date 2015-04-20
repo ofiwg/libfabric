@@ -189,15 +189,12 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	/* Check if we require memory registration: No provider support for now
-	 * so we register memory without checking */
-	//if (ctx->info->domain_cap & FI_LOCAL_MR ) {
-		rc = fi_mr_reg(ctx->dom, ctx->buf, ctx->size, FI_SEND | FI_RECV, 0, 0, 0, &ctx->mr, NULL);
-		if (rc) {
-			FT_PRINTERR("fi_mr_reg", rc);
-			goto err;
-		}	
-	//}
+
+	rc = fi_mr_reg(ctx->dom, ctx->buf, ctx->size, FI_SEND | FI_RECV, 0, 0, 0, &ctx->mr, NULL);
+	if (rc) {
+		FT_PRINTERR("fi_mr_reg", rc);
+		goto err;
+	}
 
 	rc = fi_endpoint(ctx->dom, entry.info, &ctx->ep, NULL);
 	if (rc) {
@@ -267,15 +264,11 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 	
-	/* Check if we require memory registration: No provider support for now
-	 * so we register memory without checking */
-	//if (ctx->prov->domain_cap & FI_LOCAL_MR ) {
-		rc = fi_mr_reg(ctx->dom, ctx->buf, ctx->size, FI_SEND | FI_RECV, 0, 0, 0, &ctx->mr, NULL);
-		if (rc) {
-			FT_PRINTERR("fi_mr_reg", rc);
-			goto err;
-		}	
-	//}
+	rc = fi_mr_reg(ctx->dom, ctx->buf, ctx->size, FI_SEND | FI_RECV, 0, 0, 0, &ctx->mr, NULL);
+	if (rc) {
+		FT_PRINTERR("fi_mr_reg", rc);
+		goto err;
+	}
 
 	/* Open endpoint */
 	rc = fi_endpoint(ctx->dom, ctx->info, &ctx->ep, NULL);
@@ -513,7 +506,7 @@ int main(int argc, char *argv[])
 
 	hints->ep_attr->type = FI_EP_MSG;
 	hints->caps = FI_MSG;
-	hints->mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->mode = FI_LOCAL_MR;
 	hints->addr_format = FI_SOCKADDR;
 
 	rc = ft_read_addr_opts(&node, &service, hints, &flags, &opts);

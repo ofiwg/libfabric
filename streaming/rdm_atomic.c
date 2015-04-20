@@ -54,11 +54,6 @@
 
 #include "shared.h"
 
-struct addr_key {
-	uint64_t addr;
-	uint64_t key;
-};
-
 static struct cs_opts opts;
 static enum fi_op op_type = FI_MIN;
 static char test_name[10] = "custom";
@@ -67,7 +62,7 @@ static void *buf;
 static void *result;
 static void *compare;
 static size_t buffer_size;
-struct addr_key local, remote;
+struct fi_rma_iov remote;
 
 static struct fi_info *fi, *hints;
 
@@ -363,6 +358,14 @@ static void free_ep_res(void)
 	free(compare);
 }
 
+static uint64_t get_mr_key()
+{
+	static uint64_t user_key;
+
+	return fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
+		user_key++ : 0;
+}
+
 static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
@@ -408,7 +411,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	// registers local data buffer buff that specifies 
 	// the first operand of the atomic operation
 	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)), 
-		FI_REMOTE_READ | FI_REMOTE_WRITE, 0, 0, 0, &mr, NULL);
+		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
+		get_mr_key(), 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
@@ -417,7 +421,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	// registers local data buffer that stores initial value of 
 	// the remote buffer
 	ret = fi_mr_reg(dom, result, MAX(buffer_size, sizeof(uint64_t)), 
-		FI_REMOTE_READ | FI_REMOTE_WRITE, 0, 0, 0, &mr_result, NULL);
+		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
+		get_mr_key(), 0, &mr_result, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", -ret);
 		goto err4;
@@ -425,7 +430,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	
 	// registers local data buffer that contains comparison data
 	ret = fi_mr_reg(dom, compare, MAX(buffer_size, sizeof(uint64_t)), 
-		FI_REMOTE_READ | FI_REMOTE_WRITE, 0, 0, 0, &mr_compare, NULL);
+		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
+		get_mr_key(), 0, &mr_compare, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err5;
@@ -533,11 +539,6 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	// we use provider MR attributes and direct address (no offsets) 
-	// for RMA calls
-	if (!(fi->mode & FI_PROV_MR_ATTR))
-		fi->mode |= FI_PROV_MR_ATTR;
-
 	// get remote address
 	if (opts.dst_addr) {
 		addrlen = fi->dest_addrlen;
@@ -644,31 +645,34 @@ static int init_av(void)
 
 static int exchange_addr_key(void)
 {
+	struct fi_rma_iov *rma_iov;
 	int ret;
-	int len = sizeof(local);
 
-	local.addr = (uintptr_t) buf;
-	local.key = fi_mr_key(mr);
+	rma_iov = buf;
 
 	if (opts.dst_addr) {
-		*(struct addr_key *)buf = local;
-		ret = send_msg(len);
-		if(ret)
+		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
+				0 : (uintptr_t) buf;
+		rma_iov->key = fi_mr_key(mr);
+		ret = send_msg(sizeof *rma_iov);
+		if (ret)
 			return ret;
 
 		ret = post_recv();
-		if(ret)
+		if (ret)
 			return ret;
-		remote = *(struct addr_key *)buf;
+		remote = *rma_iov;
 	} else {
 		ret = post_recv();
-		if(ret)
+		if (ret)
 			return ret;
-		remote = *(struct addr_key *)buf;
-		
-		*(struct addr_key *)buf = local;
-		ret = send_msg(len);
-		if(ret)
+		remote = *rma_iov;
+
+		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
+				0 : (uintptr_t) buf;
+		rma_iov->key = fi_mr_key(mr);
+		ret = send_msg(sizeof *rma_iov);
+		if (ret)
 			return ret;
 	}
 
@@ -758,7 +762,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_ATOMICS;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
 
 	ret = run();
 

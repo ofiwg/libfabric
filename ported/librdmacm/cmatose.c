@@ -539,7 +539,7 @@ int main(int argc, char **argv)
 
 	hints->caps = FI_MSG;
 	hints->ep_attr->type = FI_EP_MSG;
-	hints->mode = FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->mode = FI_LOCAL_MR;
 	hints->tx_attr->mode = hints->mode;
 	hints->rx_attr->mode = hints->mode;
 

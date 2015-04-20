@@ -526,7 +526,7 @@ int main(int argc, char **argv)
 	
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_NAMED_RX_CTX;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR;
+	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
 	hints->addr_format = FI_SOCKADDR;
 
 	ret = run();
