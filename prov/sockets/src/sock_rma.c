@@ -124,10 +124,6 @@ static ssize_t sock_ep_rma_readmsg(struct fid_ep *ep,
 			msg->addr, (uintptr_t) msg->msg_iov[0].iov_base,
 			sock_ep, conn);
 
-	if (flags & FI_REMOTE_CQ_DATA) {
-		sock_tx_ctx_write(tx_ctx, &msg->data, sizeof(msg->data));
-	}
-
 	src_len = 0;
 	for (i = 0; i< msg->rma_iov_count; i++) {
 		tx_iov.iov.addr = msg->rma_iov[i].addr;
