@@ -217,26 +217,26 @@ FI_LOG_SUBSYSTEMS environment variables.
 : Provides output specific to interactions associated with the fabric object.
 
 - *domain*
-: Provides outout specific to interactions associated with the domain object.
+: Provides output specific to interactions associated with the domain object.
 
 - *ep_ctrl*
-: Provides outout specific to endpoint non-data transfer operations,
+: Provides output specific to endpoint non-data transfer operations,
   such as CM operations.
 
 - *ep_data*
-: Provides outout specific to endpoint data transfer operations.
+: Provides output specific to endpoint data transfer operations.
 
 - *av*
-: Provides outout specific to address vector operations.
+: Provides output specific to address vector operations.
 
 - *cq*
-: Provides outout specific to completion queue operations.
+: Provides output specific to completion queue operations.
 
 - *eq*
-: Provides outout specific to event queue operations.
+: Provides output specific to event queue operations.
 
 - *mr*
-: Provides outout specific to memory registration.
+: Provides output specific to memory registration.
 
 # SEE ALSO
 
