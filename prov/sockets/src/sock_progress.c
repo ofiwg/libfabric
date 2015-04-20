@@ -1225,7 +1225,7 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		rx_buffered = container_of(entry, struct sock_rx_entry, entry);
 		entry = entry->next;
 		
-		if (!rx_buffered->is_complete)
+		if (!rx_buffered->is_complete || rx_buffered->is_claimed)
 			continue;
 
 		rx_posted = sock_rx_get_entry(rx_ctx, rx_buffered->addr,
