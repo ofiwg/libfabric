@@ -989,7 +989,7 @@ fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 		wr.opcode = IBV_WR_SEND;
 	}
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1093,7 +1093,7 @@ fi_ibv_msg_ep_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 	wr.wr.rdma.remote_addr = addr;
 	wr.wr.rdma.rkey = (uint32_t) key;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1131,7 +1131,7 @@ fi_ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc
 	if (_ep->tx_op_flags & FI_COMPLETION)
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1177,7 +1177,7 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	wr.wr.rdma.remote_addr = msg->rma_iov->addr;
 	wr.wr.rdma.rkey = (uint32_t) msg->rma_iov->key;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1205,7 +1205,7 @@ fi_ibv_msg_ep_rma_read(struct fid_ep *ep, void *buf, size_t len,
 	wr.send_flags = (_ep->tx_op_flags & FI_COMPLETION)
 			? IBV_SEND_SIGNALED : 0;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1237,7 +1237,7 @@ fi_ibv_msg_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	wr.send_flags = (_ep->tx_op_flags & FI_COMPLETION)
 			? IBV_SEND_SIGNALED : 0;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1274,7 +1274,7 @@ fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		wr.send_flags = 0;
 	}
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1306,7 +1306,7 @@ fi_ibv_msg_ep_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	wr.wr.rdma.remote_addr = addr;
 	wr.wr.rdma.rkey = (uint32_t) key;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
@@ -1372,7 +1372,7 @@ fi_ibv_msg_ep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
 	if (_ep->tx_op_flags & FI_COMPLETION)
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1444,7 +1444,7 @@ fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
 	if (!(_ep->ep_flags & FI_COMPLETION) || (flags & FI_COMPLETION))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1507,7 +1507,7 @@ fi_ibv_msg_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 	if (_ep->tx_op_flags & FI_COMPLETION)
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1590,7 +1590,7 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if (flags & FI_REMOTE_CQ_DATA)
 		wr.imm_data = (uint32_t) msg->data;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1647,7 +1647,7 @@ fi_ibv_msg_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 	if (_ep->tx_op_flags & FI_COMPLETION)
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static ssize_t
@@ -1729,7 +1729,7 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 	if (flags & FI_REMOTE_CQ_DATA)
 		wr.imm_data = (uint32_t) msg->data;
 
-	return -fi_ibv_post_send(_ep->id->qp, &wr, &bad);
+	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
 
 static int
