@@ -72,6 +72,8 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 {
 	struct usdf_cq *cq;
 
+	USDF_TRACE_SYS(CQ, "\n");
+
 	cq = container_of(fcq, struct usdf_cq, cq_fid);
 
 	// If top entry has no error, return 0
@@ -109,6 +111,7 @@ static ssize_t
 usdf_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 		int timeout)
 {
+	USDF_TRACE_SYS(CQ, "\n"); /* XXX delete once implemented */
 	return -FI_ENOSYS;
 }
 
@@ -600,6 +603,7 @@ usdf_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 static int
 usdf_cq_control(fid_t fid, int command, void *arg)
 {
+	USDF_TRACE_SYS(CQ, "\n");
 	return -FI_ENOSYS;
 }
 
@@ -609,6 +613,8 @@ usdf_cq_close(fid_t fid)
 	struct usdf_cq *cq;
 	struct usdf_cq_hard *hcq;
 	int ret;
+
+	USDF_TRACE_SYS(CQ, "\n");
 
 	cq = container_of(fid, struct usdf_cq, cq_fid.fid);
 	if (atomic_get(&cq->cq_refcnt) > 0) {
@@ -852,6 +858,8 @@ usdf_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct usdf_cq *cq;
 	struct usdf_domain *udp;
 	int ret;
+
+	USDF_TRACE_SYS(CQ, "\n");
 
 	udp = dom_ftou(domain);
 	ret = usdf_cq_process_attr(attr, udp);

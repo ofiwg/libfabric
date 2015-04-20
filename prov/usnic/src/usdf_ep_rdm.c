@@ -78,6 +78,8 @@ usdf_tx_rdm_enable(struct usdf_tx *tx)
 	int ret;
 	int i;
 
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
 	udp = tx->tx_domain;
 
 	hcq = tx->t.rdm.tx_hcq;
@@ -144,6 +146,8 @@ usdf_rx_rdm_enable(struct usdf_rx *rx)
 	size_t mtu;
 	int ret;
 	int i;
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
 
 	udp = rx->rx_domain;
 
@@ -272,6 +276,9 @@ usdf_ep_rdm_getopt(fid_t fid, int level, int optname,
 		  void *optval, size_t *optlen)
 {
 	struct usdf_ep *ep;
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
 	ep = ep_fidtou(fid);
 	(void)ep;
 
@@ -289,6 +296,9 @@ usdf_ep_rdm_setopt(fid_t fid, int level, int optname,
 		  const void *optval, size_t optlen)
 {
 	struct usdf_ep *ep;
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
 	ep = ep_fidtou(fid);
 	(void)ep;
 
@@ -304,6 +314,8 @@ usdf_ep_rdm_setopt(fid_t fid, int level, int optname,
 static ssize_t
 usdf_ep_rdm_cancel(fid_t fid, void *context)
 {
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+	/* XXX should this have a non-empty implementation? */
 	return 0;
 }
 
@@ -441,6 +453,8 @@ usdf_ep_rdm_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct usdf_ep *ep;
 	struct usdf_cq *cq;
 
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
 	ep = ep_fidtou(fid);
 
 	switch (bfid->fclass) {
@@ -488,6 +502,8 @@ usdf_rdm_rx_ctx_close(fid_t fid)
 	struct usdf_rx *rx;
 	struct usdf_cq_hard *hcq;
 
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
 	rx = rx_fidtou(fid);
 
 	if (atomic_get(&rx->rx_refcnt) > 0) {
@@ -523,6 +539,8 @@ usdf_rdm_tx_ctx_close(fid_t fid)
 {
 	struct usdf_tx *tx;
 	struct usdf_cq_hard *hcq;
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
 
 	tx = tx_fidtou(fid);
 
@@ -592,6 +610,8 @@ usdf_ep_rdm_close(fid_t fid)
 {
 	struct usdf_ep *ep;
 
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
 	ep = ep_fidtou(fid);
 
 	if (atomic_get(&ep->ep_refcnt) > 0) {
@@ -660,6 +680,8 @@ static int usdf_ep_rdm_control(struct fid *fid, int command, void *arg)
 {
 	struct fid_ep *ep;
 
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
 	switch (fid->fclass) {
 	case FI_CLASS_EP:
 		ep = container_of(fid, struct fid_ep, fid);
@@ -693,6 +715,8 @@ usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
 	struct usdf_rx *rx;
 	struct usdf_ep *ep;
 	int ret;
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
 
 	ep = NULL;
 	rx = NULL;

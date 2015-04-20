@@ -70,6 +70,8 @@ usdf_pep_bind(fid_t fid, fid_t bfid, uint64_t flags)
 {
 	struct usdf_pep *pep;
 
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
 	pep = pep_fidtou(fid);
 
 	switch (bfid->fclass) {
@@ -321,6 +323,8 @@ usdf_pep_listen(struct fid_pep *fpep)
 	struct usdf_fabric *fp;
 	int ret;
 
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
 	pep = pep_ftou(fpep);
 	fp = pep->pep_fabric;
 
@@ -344,6 +348,7 @@ usdf_pep_listen(struct fid_pep *fpep)
 static ssize_t
 usdf_pep_cancel(fid_t fid, void *context)
 {
+	USDF_TRACE_SYS(EP_CTRL, "\n");
 	return -FI_EINVAL;
 }
 
@@ -351,6 +356,7 @@ static int
 usdf_pep_reject(struct fid_pep *pep, fid_t handle,
 		const void *param, size_t paramlen)
 {
+	USDF_TRACE_SYS(EP_CTRL, "\n");
 	return -FI_ENOSYS;
 }
 
@@ -398,6 +404,8 @@ static int
 usdf_pep_close(fid_t fid)
 {
 	struct usdf_pep *pep;
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
 
 	pep = pep_fidtou(fid);
 	if (atomic_get(&pep->pep_refcnt) > 0) {
@@ -453,6 +461,8 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct usdf_fabric *fp;
 	int ret;
 	int optval;
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
 
 	if (info->ep_attr->type != FI_EP_MSG) {
 		return -FI_ENODEV;

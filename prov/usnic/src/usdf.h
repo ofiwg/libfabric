@@ -52,9 +52,20 @@
 
 extern struct fi_provider usdf_ops;
 
-#define USDF_WARN(...) FI_WARN(&usdf_ops, FI_LOG_CORE, __VA_ARGS__ )
-#define USDF_INFO(...) FI_INFO(&usdf_ops, FI_LOG_CORE, __VA_ARGS__ )
-#define USDF_DEBUG(...) FI_DBG(&usdf_ops, FI_LOG_CORE, __VA_ARGS__ )
+#define USDF_WARN_SYS(subsys, ...) \
+	FI_WARN(&usdf_ops, FI_LOG_ ## subsys, __VA_ARGS__)
+#define USDF_TRACE_SYS(subsys, ...) \
+	FI_TRACE(&usdf_ops, FI_LOG_ ## subsys, __VA_ARGS__)
+#define USDF_INFO_SYS(subsys, ...) \
+	FI_INFO(&usdf_ops, FI_LOG_ ## subsys, __VA_ARGS__)
+#define USDF_DBG_SYS(subsys, ...) \
+	FI_DBG(&usdf_ops, FI_LOG_ ## subsys, __VA_ARGS__)
+
+/* default to "FI_LOG_FABRIC" */
+#define USDF_WARN(...) USDF_WARN_SYS(FABRIC, __VA_ARGS__)
+#define USDF_TRACE(...) USDF_TRACE_SYS(FABRIC, __VA_ARGS__)
+#define USDF_INFO(...) USDF_INFO_SYS(FABRIC, __VA_ARGS__)
+#define USDF_DBG(...)  USDF_DBG_SYS(FABRIC, __VA_ARGS__)
 
 #define USDF_HDR_BUF_ENTRY 64
 #define USDF_EP_CAP_PIO (1ULL << 63)
