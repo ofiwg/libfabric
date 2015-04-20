@@ -108,7 +108,7 @@ typedef struct fid *fid_t;
 #define FI_REMOTE_WRITE		(1ULL << 13)
 
 #define FI_MULTI_RECV		(1ULL << 16)
-#define FI_REMOTE_CQ_DATA	(1ULL << 27)
+#define FI_REMOTE_CQ_DATA	(1ULL << 17)
 #define FI_MORE			(1ULL << 18)
 #define FI_PEEK			(1ULL << 19)
 #define FI_TRIGGER		(1ULL << 20)
