@@ -1118,7 +1118,7 @@ ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr,
 	rx_buffered = sock_rx_get_buffered_entry(rx_ctx, 
 					(rx_ctx->attr.caps & FI_DIRECTED_RECV) ?
 						 addr : FI_ADDR_UNSPEC, 
-						 0L, ignore, is_tagged);
+						 tag, ignore, is_tagged);
 	if (rx_buffered) {
 		memset(&pe_entry, 0, sizeof pe_entry);
 		pe_entry.comp = &rx_ctx->comp;
@@ -1225,7 +1225,7 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		rx_buffered = container_of(entry, struct sock_rx_entry, entry);
 		entry = entry->next;
 		
-		if (!rx_buffered->is_complete)
+		if (!rx_buffered->is_complete || rx_buffered->is_claimed)
 			continue;
 
 		rx_posted = sock_rx_get_entry(rx_ctx, rx_buffered->addr,
