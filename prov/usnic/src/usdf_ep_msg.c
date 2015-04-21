@@ -61,6 +61,7 @@
 #include "usnic_direct.h"
 #include "usd.h"
 #include "usdf.h"
+#include "usdf_cm.h"
 #include "usdf_endpoint.h"
 #include "usdf_rudp.h"
 #include "usdf_msg.h"
@@ -294,6 +295,12 @@ usdf_ep_msg_getopt(fid_t fid, int level, int optname,
 	(void)ep;
 
 	switch (level) {
+	case FI_OPT_CM_DATA_SIZE:
+		if (*optlen < sizeof(size_t))
+			return -FI_ETOOSMALL;
+		*((size_t *) optval) = USDF_MAX_CONN_DATA;
+		*optlen = sizeof(size_t);
+		return 0;
 	case FI_OPT_ENDPOINT:
 		return -FI_ENOPROTOOPT;
 	default:
