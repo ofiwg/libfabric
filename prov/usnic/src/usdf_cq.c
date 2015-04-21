@@ -810,7 +810,7 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 			hcq->cqh_ucq = ucq;
 			hcq->cqh_progress = rtn;
 
-			atomic_init(&hcq->cqh_refcnt,
+			atomic_initialize(&hcq->cqh_refcnt,
 					atomic_get(&cq->cq_refcnt));
 			TAILQ_INSERT_HEAD(&cq->c.soft.cq_list, hcq, cqh_link);
 		}
@@ -876,7 +876,7 @@ usdf_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	cq->cq_fid.fid.context = context;
 	cq->cq_fid.fid.ops = &usdf_cq_fi_ops;
-	atomic_init(&cq->cq_refcnt, 0);
+	atomic_initialize(&cq->cq_refcnt, 0);
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_CONTEXT:

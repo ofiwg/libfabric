@@ -533,7 +533,7 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto fail;
 	}
 
-	atomic_init(&pep->pep_refcnt, 0);
+	atomic_initialize(&pep->pep_refcnt, 0);
 	atomic_inc(&fp->fab_refcnt);
 
 	*pep_o = pep_utof(pep);

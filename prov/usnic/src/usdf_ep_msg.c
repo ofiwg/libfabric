@@ -426,7 +426,7 @@ usdf_ep_msg_bind_cq(struct usdf_ep *ep, struct usdf_cq *cq, uint64_t flags)
 			goto fail;
 		}
 		hcq->cqh_cq = cq;
-		atomic_init(&hcq->cqh_refcnt, 0);
+		atomic_initialize(&hcq->cqh_refcnt, 0);
 		hcq->cqh_progress = usdf_msg_hcq_progress;
 		switch (cq->cq_attr.format) {
 		default:
@@ -727,7 +727,7 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 			goto fail;
 		}
 		tx->tx_fid.fid.fclass = FI_CLASS_TX_CTX;
-		atomic_init(&tx->tx_refcnt, 0);
+		atomic_initialize(&tx->tx_refcnt, 0);
 		tx->tx_domain = udp;
 		tx->tx_progress = usdf_msg_tx_progress;
 		atomic_inc(&udp->dom_refcnt);
@@ -762,7 +762,7 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 			goto fail;
 		}
 		rx->rx_fid.fid.fclass = FI_CLASS_RX_CTX;
-		atomic_init(&rx->rx_refcnt, 0);
+		atomic_initialize(&rx->rx_refcnt, 0);
 		rx->rx_domain = udp;
 		atomic_inc(&udp->dom_refcnt);
 		if (info->rx_attr != NULL) {
@@ -781,7 +781,7 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 		atomic_inc(&rx->rx_refcnt);
 	}
 
-	atomic_init(&ep->ep_refcnt, 0);
+	atomic_initialize(&ep->ep_refcnt, 0);
 	atomic_inc(&udp->dom_refcnt);
 
 	*ep_o = ep_utof(ep);

@@ -444,7 +444,7 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 		ep->ep_fid.ops = &usdf_base_dgram_ops;
 		ep->ep_fid.msg = &usdf_dgram_ops;
 	}
-	atomic_init(&ep->ep_refcnt, 0);
+	atomic_initialize(&ep->ep_refcnt, 0);
 	atomic_inc(&udp->dom_refcnt);
 
 	*ep_o = ep_utof(ep);

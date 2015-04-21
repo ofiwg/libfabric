@@ -460,7 +460,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	fastlock_init(&sock_domain->lock);
-	atomic_init(&sock_domain->ref, 0);
+	atomic_initialize(&sock_domain->ref, 0);
 
 	if (info) {
 		sock_domain->info = *info;
