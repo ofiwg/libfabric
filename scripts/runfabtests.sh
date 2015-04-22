@@ -4,15 +4,15 @@ trap cleanup_and_exit SIGINT
 
 declare BIN_PATH
 declare PROV
-declare TEST_TYPE="all"
+declare TEST_TYPE="quick"
 declare SERVER
 declare CLIENT
 declare -i VERBOSE=0
 
 # base ssh,  "short" and "long" timeout variants:
 declare -r bssh="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
-declare -r sssh="timeout 30s ${bssh}"
-declare -r lssh="timeout 60s ${bssh}"
+declare -r sssh="timeout 60s ${bssh}"
+declare -r lssh="timeout 90s ${bssh}"
 declare ssh=${sssh}
 
 declare -r c_outp=$(mktemp)
@@ -37,7 +37,7 @@ simple_tests=(
 	"cmatose"
 )
 
-quick_tests=(
+short_tests=(
 	"msg_pingpong -I 5"
 	"msg_rma -o write -I 5"
 	"msg_rma -o read -I 5"
@@ -60,7 +60,7 @@ standard_tests=(
 	"msg_rma -o write"
 	"msg_rma -o read"
 	"msg_rma -o writedata"
-	"rdm_atomic -o all"
+	"rdm_atomic -o all -I 10000"
 	"rdm_cntr_pingpong"
 	"rdm_inject_pingpong"
 	"rdm_multi_recv"
@@ -78,12 +78,7 @@ unit_tests=(
 	"dom_test -n 2"
 	"eq_test"	
 	"size_left_test"
-)
-
-all_tests=(
-	"${unit_tests[@]}"
-	"${simple_tests[@]}"
-	"${standard_tests[@]}"
+	"info"
 )
 
 function errcho() {
@@ -187,33 +182,36 @@ function cs_test {
 	fi
 }
 
-function main {
-	local -r tests=$(echo $1 | sed 's/all/unit,simple,quick,standard/' | tr ',' ' ')
+function main {	
+	if [[ $1 == "quick" ]]; then
+		local -r tests=$(echo $1 | sed 's/quick/unit,simple,short/g' | tr ',' ' ')
+	else
+		local -r tests=$(echo $1 | sed 's/all/unit,simple,standard/g' | tr ',' ' ')
+	fi
 
 	printf "# %-50s%10s\n" "Test" "Result"
 	print_border
 
 	for ts in ${tests}; do
-	ssh=${lssh}
+	ssh=${sssh}
 	case ${ts} in
 		unit)
-			ssh=${sssh}
 			for test in "${unit_tests[@]}"; do
 				unit_test "$test"
 			done
-
 		;;
 		simple)
 			for test in "${simple_tests[@]}"; do
 				cs_test "$test"
 			done
 		;;
-		quick)
-			for test in "${quick_tests[@]}"; do
+		short)
+			for test in "${short_tests[@]}"; do
 				cs_test "$test"
 			done
 		;;
 		standard)
+			ssh=${lssh}
 			for test in "${standard_tests[@]}"; do
 				cs_test "$test"
 			done
@@ -250,7 +248,7 @@ function usage {
 	errcho
 	errcho "Options:"
 	errcho -e " -v..\tprint output of failing/notrun/passing"
-	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard (default all)"
+	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short (default quick)"
 	errcho -e " -p\tpath to test bins (default PATH)"
 	exit 1
 }
