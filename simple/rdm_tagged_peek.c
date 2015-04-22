@@ -397,7 +397,7 @@ static int tagged_peek(uint64_t tag)
 	} else {
 		// search was initiated asynchronously, so wait for
 		// the completion event
-		ret = wait_for_tagged_completion(scq, 1);
+		ret = wait_for_tagged_completion(rcq, 1);
 	}
 
 	return ret;
@@ -440,16 +440,12 @@ static int run(void)
 		fprintf(stdout, "Received completion event for msg with tag "
 				"[%" PRIu64 "]\n", tag_data + 1);
 
-		// search again for the initial tag, it should be successful now
+		// search again for the initial tag, and wait for completion,  it should be successful now
 		fprintf(stdout,
 			"Searching msg with initial tag [%" PRIu64 "]\n",
 			tag_data);
 		tagged_peek(tag_data);
 
-		// wait for the completion event of the initial tag
-		ret = recv_msg(tag_data);
-		if (ret)
-			goto out;
 		fprintf(stdout, "Posted buffer and received completion event for"
 			       " msg with tag [%" PRIu64 "]\n", tag_data);
 	} else {
