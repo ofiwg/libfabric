@@ -11,35 +11,62 @@ except ImportError:
 	print ("PyYAML library missing, try: yum install pyyaml")
 	sys.exit(1)
 
-class yaml_obj:
-	def __init__(self, yaml):
-		self.data = yaml
+# diff two list-of dicts for perf numbers
+# this means just produce xfer_size, Gb/sec, usec/xfer
+def _diff(a,b):
+	r = []
 
-	def __str__(self):
-		return pprint.pformat(self.data)
+	for v1, v2 in zip(a,b):
+		d = {}
+		for k in v2.keys():
+			if k == 'xfer_size':
+				d[k] = v2[k]
+			elif k == 'Gb/sec' or k == 'usec/xfer':
+				d[k] = v2[k] - v1[k]
+			else:
+				continue
 
-	def __len__(self): return len (self.data)
+		r.append(d.copy())
 
-	def __sub__(self, other):
-		assert(len (self.data) == len (other.data))
+	return r
 
-		res = self.data[0].fromkeys(self.data[0].keys())
-		lres = []
+def difference(ystream):
+	"""Subtract a from b and print the results"""
 
-		for l1, l2 in zip(self.data, other.data):
-			for k in l1.keys():
-				if (l1[k] != l2[k]):
-					res[k] = l1[k] - l2[k]
-				else:
-					res[k] = l1[k]
-			lres.append(res.copy())
+	# reverse stream and split based on key
+	rev = reversed(list(ystream))
+	a, b = {}, {}
+	for i in rev:
+		if not set(i).issubset(set(b)):
+			b.update(i)
+		else:
+			a.update(i)
 
-		return yaml_obj(lres)
+	result = {}
+	for k in b.keys():
+		result[k] = _diff(a[k], b[k])
+
+	return result
+
+def pretty(stream):
+	"""Prety-print given yaml stream and exit"""
+	for i in stream: pprint.pprint(i)
+	return 0
+
+def perfprint(d):
+	for k,v in d.items():
+		print k, ":"
+		for i in v:
+			print 'xfer_size: ', i['xfer_size'],
+			print ', Gb/sec: %+f' % i['Gb/sec'],
+			print ', usec/xfer: %+f' % i['usec/xfer']
+	
 
 def main(argv=None):
 
 	parser = OptionParser(description='fabtests yaml parsing utility')
-	parser.add_option('-d', action='store_true', default=False, help='difference')
+	parser.add_option('-d', action='store_true', default=False, help=difference.__doc__)
+	parser.add_option('-v', action='store_true', default=False, help=pretty.__doc__)
 	(options, args) = parser.parse_args()
 
 	if len(args) == 0:
@@ -57,12 +84,10 @@ def main(argv=None):
 	yi = yaml.load_all(fd.read())
 
 	if options.d:
-		i = yaml_obj(yi.next())
-		j = yaml_obj(yi.next())
-		print (j - i)
+		perfprint(difference(yi))
 
-	for i in yi:
-		pprint.pprint(i)
+	if options.v:
+		pretty(yi)
 
 	return 0
 
