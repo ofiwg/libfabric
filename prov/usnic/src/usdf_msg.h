@@ -106,5 +106,7 @@ ssize_t usdf_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 	fi_addr_t src_addr);
 	
 
+ssize_t usdf_msg_rx_size_left(struct fid_ep *fep);
+ssize_t usdf_msg_tx_size_left(struct fid_ep *fep);
 
 #endif /* _USDF_MSG_H_ */

@@ -321,6 +321,8 @@ ssize_t usdf_dgram_rx_size_left(struct fid_ep *fep)
 {
 	struct usdf_ep *ep;
 
+	USDF_DBG_SYS(EP_DATA, "\n");
+
 	if (fep == NULL)
 		return -FI_EINVAL;
 
@@ -342,6 +344,8 @@ ssize_t usdf_dgram_rx_size_left(struct fid_ep *fep)
 ssize_t usdf_dgram_tx_size_left(struct fid_ep *fep)
 {
 	struct usdf_ep *ep;
+
+	USDF_DBG_SYS(EP_DATA, "\n");
 
 	if (fep == NULL)
 		return -FI_EINVAL;
@@ -526,6 +530,8 @@ ssize_t usdf_dgram_prefix_rx_size_left(struct fid_ep *fep)
 {
 	struct usdf_ep *ep;
 
+	USDF_DBG_SYS(EP_DATA, "\n");
+
 	if (fep == NULL)
 		return -FI_EINVAL;
 
@@ -543,6 +549,8 @@ ssize_t usdf_dgram_prefix_rx_size_left(struct fid_ep *fep)
 ssize_t usdf_dgram_prefix_tx_size_left(struct fid_ep *fep)
 {
 	struct usdf_ep *ep;
+
+	USDF_DBG_SYS(EP_DATA, "\n");
 
 	if (fep == NULL)
 		return -FI_EINVAL;
