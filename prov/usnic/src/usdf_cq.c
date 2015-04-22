@@ -66,6 +66,21 @@
 #include "usdf_progress.h"
 #include "usdf_cq.h"
 
+static inline int usdf_cqe_to_flags(struct usd_completion *comp)
+{
+	switch (comp->uc_type) {
+	case USD_COMPTYPE_SEND:
+		return (FI_MSG | FI_SEND);
+	case USD_COMPTYPE_RECV:
+		return (FI_MSG | FI_RECV);
+	default:
+		USDF_DBG_SYS(CQ, "WARNING: unknown completion type! (%d)\n",
+				comp->uc_type);
+		return 0;
+	}
+
+}
+
 static ssize_t
 usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 	        uint64_t flags)
@@ -174,13 +189,13 @@ usdf_cq_read_common(struct fid_cq *fcq, void *buf, size_t count,
 		case FI_CQ_FORMAT_MSG:
 			msg_entry = (struct fi_cq_msg_entry *)entry;
 			msg_entry->op_context = cq->cq_comp.uc_context;
-			msg_entry->flags = 0;
+			msg_entry->flags = usdf_cqe_to_flags(&cq->cq_comp);
 			msg_entry->len = cq->cq_comp.uc_bytes;
 			break;
 		case FI_CQ_FORMAT_DATA:
 			data_entry = (struct fi_cq_data_entry *)entry;
 			data_entry->op_context = cq->cq_comp.uc_context;
-			data_entry->flags = 0;
+			data_entry->flags = usdf_cqe_to_flags(&cq->cq_comp);
 			data_entry->len = cq->cq_comp.uc_bytes;
 			data_entry->buf = 0; /* XXX */
 			data_entry->data = 0;

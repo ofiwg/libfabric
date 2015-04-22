@@ -139,6 +139,9 @@ usdf_cm_msg_accept(struct fid_ep *fep, const void *param, size_t paramlen)
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
+	if (paramlen > USDF_MAX_CONN_DATA)
+		return -FI_EINVAL;
+
 	ep = ep_ftou(fep);
 	udp = ep->ep_domain;
 	fp = udp->dom_fabric;
@@ -375,6 +378,9 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 	int ret;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
+
+	if (paramlen > USDF_MAX_CONN_DATA)
+		return -FI_EINVAL;
 
 	ep = ep_ftou(fep);
 	udp = ep->ep_domain;
