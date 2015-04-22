@@ -70,6 +70,9 @@ extern struct fi_provider psmx_prov;
 
 #define PSMX_CAPS2	((PSMX_CAPS | FI_DIRECTED_RECV) & ~FI_TAGGED)
 
+#define PSMX_SUB_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
+			 FI_SEND | FI_RECV)
+
 #define PSMX_MODE	(FI_CONTEXT)
 
 #define PSMX_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
