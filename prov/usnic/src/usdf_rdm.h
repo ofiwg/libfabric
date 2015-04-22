@@ -158,5 +158,7 @@ ssize_t usdf_rdm_inject(struct fid_ep *ep, const void *buf, size_t len,
 	fi_addr_t src_addr);
 	
 
+ssize_t usdf_rdm_rx_size_left(struct fid_ep *fep);
+ssize_t usdf_rdm_tx_size_left(struct fid_ep *fep);
 
 #endif /* _USDF_RDM_H_ */

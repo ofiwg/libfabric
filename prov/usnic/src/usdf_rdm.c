@@ -435,6 +435,7 @@ usdf_rdm_recv(struct fid_ep *fep, void *buf, size_t len,
 
 	rqe = TAILQ_FIRST(&rx->r.rdm.rx_free_rqe);
 	TAILQ_REMOVE(&rx->r.rdm.rx_free_rqe, rqe, rd_link);
+	--rx->r.msg.rx_num_free_rqe;
 
 	rqe->rd_context = context;
 	rqe->rd_iov[0].iov_base = buf;
@@ -492,6 +493,7 @@ usdf_rdm_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 
 	wqe = TAILQ_FIRST(&tx->t.rdm.tx_free_wqe);
 	TAILQ_REMOVE(&tx->t.rdm.tx_free_wqe, wqe, rd_link);
+	--tx->t.rdm.tx_num_free_wqe;
 
 	wqe->rd_context = context;
 
@@ -884,6 +886,7 @@ usdf_rdm_recv_complete(struct usdf_rx *rx, struct usdf_rdm_connection *rdc,
 	hcq->cqh_post(hcq, rqe->rd_context, rqe->rd_length);
 
 	TAILQ_INSERT_HEAD(&rx->r.rdm.rx_free_rqe, rqe, rd_link);
+	++rx->r.msg.rx_num_free_rqe;
 
 	rdc->dc_cur_rqe = NULL;
 }
@@ -1058,6 +1061,7 @@ usdf_rdm_process_ack(struct usdf_rdm_connection *rdc,
 
 				TAILQ_INSERT_HEAD(&tx->t.rdm.tx_free_wqe,
 					wqe, rd_link);
+				++tx->t.rdm.tx_num_free_wqe;
 
 				/* prepare for next message */
 				rdc->dc_next_tx_seq = 0;
@@ -1326,4 +1330,34 @@ usdf_rdm_hcq_progress(struct usdf_cq_hard *hcq)
 			break;
 		}
 	}
+}
+
+ssize_t usdf_rdm_rx_size_left(struct fid_ep *fep)
+{
+	struct usdf_ep *ep;
+	struct usdf_rx *rx;
+
+	USDF_DBG_SYS(EP_DATA, "\n");
+
+	ep = ep_ftou(fep);
+	rx = ep->ep_rx;
+	if (rx == NULL)
+		return -FI_EOPBADSTATE; /* EP not enabled */
+
+	return rx->r.rdm.rx_num_free_rqe;
+}
+
+ssize_t usdf_rdm_tx_size_left(struct fid_ep *fep)
+{
+	struct usdf_ep *ep;
+	struct usdf_tx *tx;
+
+	USDF_DBG_SYS(EP_DATA, "\n");
+
+	ep = ep_ftou(fep);
+	tx = ep->ep_tx;
+	if (tx == NULL)
+		return -FI_EOPBADSTATE; /* EP not enabled */
+
+	return tx->t.rdm.tx_num_free_wqe;
 }

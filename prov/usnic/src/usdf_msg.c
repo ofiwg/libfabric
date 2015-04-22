@@ -186,6 +186,7 @@ usdf_msg_recv(struct fid_ep *fep, void *buf, size_t len,
 
 	rqe = TAILQ_FIRST(&rx->r.msg.rx_free_rqe);
 	TAILQ_REMOVE(&rx->r.msg.rx_free_rqe, rqe, ms_link);
+	--rx->r.msg.rx_num_free_rqe;
 
 	rqe->ms_context = context;
 	rqe->ms_iov[0].iov_base = buf;
@@ -591,11 +592,15 @@ static void inline
 usdf_msg_recv_complete(struct usdf_ep *ep, struct usdf_msg_qe *rqe)
 {
 	struct usdf_cq_hard *hcq;
+	struct usdf_rx *rx;
 
-	hcq = ep->ep_rx->r.msg.rx_hcq;
+	rx = ep->ep_rx;
+	hcq = rx->r.msg.rx_hcq;
+
 	hcq->cqh_post(hcq, rqe->ms_context, rqe->ms_length);
 
-	TAILQ_INSERT_HEAD(&ep->ep_rx->r.msg.rx_free_rqe, rqe, ms_link);
+	TAILQ_INSERT_HEAD(&rx->r.msg.rx_free_rqe, rqe, ms_link);
+	++rx->r.msg.rx_num_free_rqe;
 }
 
 static inline void
@@ -940,4 +945,34 @@ usdf_msg_hcq_progress(struct usdf_cq_hard *hcq)
 			break;
 		}
 	}
+}
+
+ssize_t usdf_msg_rx_size_left(struct fid_ep *fep)
+{
+	struct usdf_ep *ep;
+	struct usdf_rx *rx;
+
+	USDF_DBG_SYS(EP_DATA, "\n");
+
+	ep = ep_ftou(fep);
+	rx = ep->ep_rx;
+	if (rx == NULL)
+		return -FI_EOPBADSTATE; /* EP not enabled */
+
+	return rx->r.msg.rx_num_free_rqe;
+}
+
+ssize_t usdf_msg_tx_size_left(struct fid_ep *fep)
+{
+	struct usdf_ep *ep;
+	struct usdf_tx *tx;
+
+	USDF_DBG_SYS(EP_DATA, "\n");
+
+	ep = ep_ftou(fep);
+	tx = ep->ep_tx;
+	if (tx == NULL)
+		return -FI_EOPBADSTATE; /* EP not enabled */
+
+	return tx->t.msg.tx_num_free_wqe;
 }

@@ -197,6 +197,7 @@ struct usdf_tx {
 			TAILQ_HEAD(,usdf_msg_qe) tx_free_wqe;
 			TAILQ_HEAD(,usdf_ep) tx_ep_ready;
 			TAILQ_HEAD(,usdf_ep) tx_ep_have_acks;
+			size_t tx_num_free_wqe;
 		} msg;
 		struct {
 			struct usdf_cq_hard *tx_hcq;
@@ -206,6 +207,7 @@ struct usdf_tx {
 			TAILQ_HEAD(,usdf_rdm_qe) tx_free_wqe;
 			TAILQ_HEAD(,usdf_rdm_connection) tx_rdc_ready;
 			TAILQ_HEAD(,usdf_rdm_connection) tx_rdc_have_acks;
+			size_t tx_num_free_wqe;
 		} rdm;
 	} t;
 };
@@ -230,6 +232,7 @@ struct usdf_rx {
 			struct usdf_msg_qe *rx_rqe_buf;
 			TAILQ_HEAD(,usdf_msg_qe) rx_free_rqe;
 			TAILQ_HEAD(,usdf_msg_qe) rx_posted_rqe;
+			size_t rx_num_free_rqe;
 		} msg;
 		struct {
 			int rx_sock;
@@ -240,6 +243,7 @@ struct usdf_rx {
 			struct usdf_rdm_qe *rx_rqe_buf;
 			TAILQ_HEAD(,usdf_rdm_qe) rx_free_rqe;
 			TAILQ_HEAD(,usdf_rdm_qe) rx_posted_rqe;
+			size_t rx_num_free_rqe;
 		} rdm;
 	} r;
 };
