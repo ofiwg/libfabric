@@ -7,6 +7,7 @@ declare PROV
 declare TEST_TYPE="quick"
 declare SERVER
 declare CLIENT
+declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
 
 # base ssh,  "short" and "long" timeout variants:
@@ -74,7 +75,7 @@ standard_tests=(
 )
 
 unit_tests=(
-	"av_test -d 192.168.10.1 -n 1"
+	"av_test -d GOOD_ADDR -n 1"
 	"dom_test -n 2"
 	"eq_test"	
 	"size_left_test"
@@ -109,7 +110,7 @@ function cleanup_and_exit {
 function unit_test {
 	local test=$1
 	local ret1=0
-	local test_exe="fi_${test} -f $PROV"
+	local test_exe=$(echo "fi_${test} -f $PROV" | sed -e "s/GOOD_ADDR/$GOOD_ADDR/")
 	local SO=""
 
 	${ssh} ${SERVER} ${BIN_PATH} "${test_exe}" &> $s_outp &
@@ -247,19 +248,22 @@ function usage {
 	errcho "Run fabtests on given nodes, report pass/fail/notrun status."
 	errcho
 	errcho "Options:"
+	errcho -e " -g\tgood IP address from <client>'s perspective (default $GOOD_ADDR)"
 	errcho -e " -v..\tprint output of failing/notrun/passing"
 	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short (default quick)"
 	errcho -e " -p\tpath to test bins (default PATH)"
 	exit 1
 }
 
-while getopts ":vt:p:" opt; do
+while getopts ":vt:p:g:" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
 	v) VERBOSE+=1
 	;;
 	p) BIN_PATH="PATH=${OPTARG}:${PATH}"
+	;;
+	g) GOOD_ADDR=${OPTARG}
 	;;
 	:|\?) usage
 	;;
