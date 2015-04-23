@@ -591,7 +591,8 @@ static int sock_ep_close(struct fid *fid)
 		SOCK_LOG_INFO("Failed to signal\n");
 	}
 	
-	if (pthread_join(sock_ep->listener.listener_thread, NULL)) {
+	if (sock_ep->listener.listener_thread && 
+	    pthread_join(sock_ep->listener.listener_thread, NULL)) {
 		SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
 	}
 	
@@ -946,7 +947,8 @@ int sock_ep_enable(struct fid_ep *ep)
 			}
 		}
 	}
-	return 0;
+
+	return sock_conn_listen(sock_ep);
 }
 
 int sock_ep_disable(struct fid_ep *ep)
@@ -1461,9 +1463,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
   	sock_ep->domain = sock_dom;
-	if (sock_conn_listen(sock_ep))
-		goto err;
-
 	fastlock_init(&sock_ep->cm.lock);
 	if (sock_ep->ep_type == FI_EP_MSG) {
 		dlist_init(&sock_ep->cm.msg_list);
