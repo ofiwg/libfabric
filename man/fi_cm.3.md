@@ -32,7 +32,7 @@ int fi_reject(struct fid_pep *pep, fid_t handle,
 
 int fi_shutdown(struct fid_ep *ep, uint64_t flags);
 
-int fi_setname(fid_t fid, void *addr, size_t *addrlen);
+int fi_setname(fid_t fid, void *addr, size_t addrlen);
 
 int fi_getname(fid_t fid, void *addr, size_t *addrlen);
 
