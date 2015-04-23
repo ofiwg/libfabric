@@ -54,6 +54,9 @@ int sock_pe_waittime = SOCK_PE_WAITTIME;
 const char sock_fab_name[] = "IP";
 const char sock_dom_name[] = "sockets";
 const char sock_prov_name[] = "sockets";
+#if ENABLE_DEBUG
+int sock_dgram_drop_rate = 0;
+#endif
 
 const struct fi_fabric_attr sock_fabric_attr = {
 	.fabric = NULL,
@@ -320,7 +323,10 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	fab->fab_fid.ops = &sock_fab_ops;
 	*fabric = &fab->fab_fid;
 	atomic_initialize(&fab->ref, 0);
-	sock_fab_add_to_list(fab);
+#if ENABLE_DEBUG	
+	fab->num_send_msg = 0;
+#endif
+	sock_fab_add_to_list(fab);	
 	return 0;
 }
 
@@ -340,7 +346,6 @@ static struct sock_service_entry *sock_fabric_find_service(struct sock_fabric *f
 	}
 	return NULL;
 }
-
 
 int sock_fabric_check_service(struct sock_fabric *fab, int service)
 {
@@ -575,5 +580,12 @@ SOCKETS_INI
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
 	dlist_init(&sock_dom_list);
+#if ENABLE_DEBUG
+	if(getenv("SOCK_DGRAM_DROP_RATE") != NULL) {
+		sock_dgram_drop_rate =  strtol(getenv("SOCK_DGRAM_DROP_RATE"), NULL, 10);
+		if(sock_dgram_drop_rate)
+			SOCK_LOG_INFO("SOCK_DGRAM_DROP_RATE = %d\n", sock_dgram_drop_rate);
+	}
+#endif
 	return (&sock_prov);
 }
