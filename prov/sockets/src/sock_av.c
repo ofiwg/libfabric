@@ -229,8 +229,8 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 					_av->table_hdr->size * sizeof(struct sock_av_addr);
 
 				if (_av->attr.name) {
-					new_addr = mremap(_av->table_hdr, 
-							  old_sz, table_sz, 0);
+					new_addr = sock_mremap(_av->table_hdr, 
+							       old_sz, table_sz);
 					if (new_addr == ((void*) -1))
 						return -FI_ENOMEM;
 				} else {
