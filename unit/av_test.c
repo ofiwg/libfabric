@@ -527,7 +527,7 @@ av_good_vector_async()
 		fi_addr[i] = FI_ADDR_NOTAVAIL;
 	}
 	ret = fi_av_insert(av, addrbuf, num_good_addr, fi_addr, 0, &ctx);
-	if (ret != num_good_addr) {
+	if (ret) {
 		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
@@ -588,7 +588,7 @@ av_zero_async()
 
 	ret = fi_av_insert(av, addrbuf, 0, fi_addr, 0, &ctx);
 	if (ret != 0) {
-		sprintf(err_buf, "fi_av_insert ret=%d, should be 0", ret);
+		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
 
@@ -656,7 +656,7 @@ av_good_2vector_async()
 		goto fail;		// av_create_address_list filled err_buf
 	}
 	ret = fi_av_insert(av, addrbuf, 1, fi_addr, FI_MORE, &ctx[0]);
-	if (ret != 1) {
+	if (ret) {
 		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
@@ -771,7 +771,7 @@ av_goodbad_vector_async()
 		goto fail;		// av_create_address_list filled err_buf
 	}
 	ret = fi_av_insert(av, addrbuf, 2, fi_addr, 0, &ctx);
-	if (ret != 1) {
+	if (ret) {
 		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
@@ -869,7 +869,7 @@ av_goodbad_2vector_async()
 		goto fail;		// av_create_address_list filled err_buf
 	}
 	ret = fi_av_insert(av, addrbuf, 1, fi_addr, FI_MORE, &ctx[0]);
-	if (ret != 1) {
+	if (ret) {
 		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
