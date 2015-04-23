@@ -50,8 +50,9 @@ static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
-struct fi_rma_iov local, remote;
+struct fi_rma_iov remote;
 static uint64_t cq_data = 1;
+static enum fi_mr_mode mr_mode;
 
 static struct fi_info *hints;
 
@@ -455,6 +456,7 @@ static int server_connect(void)
 		goto err1;
 	}
 
+	mr_mode = info->domain_attr->mr_mode;
 	ret = fi_domain(fab, info, &dom, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
@@ -530,6 +532,7 @@ static int client_connect(void)
 		goto err1;
 	}
 
+	mr_mode = fi->domain_attr->mr_mode;
  	ret = fi_domain(fab, fi, &dom, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
@@ -586,19 +589,24 @@ err0:
 
 static int exchange_addr_key(void)
 {
-	local.addr = (uintptr_t) buf;
-	local.key = fi_mr_key(mr);
+	struct fi_rma_iov *rma_iov;
 
+	rma_iov = buf;
 	if (opts.dst_addr) {
-		*(struct fi_rma_iov *)buf = local;
-		send_xfer(sizeof local);
-		recv_xfer(sizeof remote);
-		remote = *(struct fi_rma_iov *)buf;
+		rma_iov->addr = mr_mode == FI_MR_SCALABLE ?
+				0 : (uintptr_t) buf;
+		rma_iov->key = fi_mr_key(mr);
+		send_xfer(sizeof *rma_iov);
+		recv_xfer(sizeof *rma_iov);
+		remote = *rma_iov;
 	} else {
-		recv_xfer(sizeof remote);
-		remote = *(struct fi_rma_iov *)buf;
-		*(struct fi_rma_iov *)buf = local;
-		send_xfer(sizeof local);
+		recv_xfer(sizeof *rma_iov);
+		remote = *rma_iov;
+
+		rma_iov->addr = mr_mode == FI_MR_SCALABLE ?
+				0 : (uintptr_t) buf;
+		rma_iov->key = fi_mr_key(mr);
+		send_xfer(sizeof *rma_iov);
 	}
 
 	return 0;
@@ -694,7 +702,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_MSG;
 	hints->caps = FI_MSG | FI_RMA;
-	hints->mode = FI_LOCAL_MR | FI_PROV_MR_ATTR | FI_RX_CQ_DATA;
+	hints->mode = FI_LOCAL_MR | FI_RX_CQ_DATA;
 	hints->addr_format = FI_SOCKADDR;
 
 	ret = run();

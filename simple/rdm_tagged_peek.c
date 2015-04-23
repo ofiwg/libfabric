@@ -268,11 +268,6 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	// we use provider MR attributes and direct address (no offsets)
-	// for RMA calls
-	if (!(fi->mode & FI_PROV_MR_ATTR))
-		fi->mode |= FI_PROV_MR_ATTR;
-
 	// get remote address
 	if (opts.dst_addr) {
 		addrlen = fi->dest_addrlen;
@@ -507,7 +502,7 @@ int main(int argc, char **argv)
 	hints->rx_attr->total_buffered_recv = buffer_size;
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_TAGGED;
-	hints->mode = FI_CONTEXT;
+	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
 
 	ret = run();
 	fi_freeinfo(hints);

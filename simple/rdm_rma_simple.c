@@ -67,7 +67,7 @@ struct fi_context fi_ctx_av;
 static uint64_t user_defined_key = 45678;
 static char * welcome_text = "Hello from Client!";
 
-static int write_data(size_t size)
+static int rma_write(size_t size)
 {
 	int ret;
 	
@@ -95,7 +95,6 @@ static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cntr_attr cntr_attr;
 	struct fi_av_attr av_attr;
-	uint64_t flags = 0;
 	int ret;
 
 	buffer_size = MAX(sizeof(char *) * strlen(welcome_text), 
@@ -121,11 +120,8 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err2;
 	}
 	
-	/* Set FI_MR_KEY to associate the memory region with the specified key
-	 * Set FI_MR_OFFSET to use specified offset as the base address */
-	flags = FI_MR_KEY | FI_MR_OFFSET;
-	ret = fi_mr_reg(dom, buf, buffer_size, FI_REMOTE_WRITE, 0, 
-			user_defined_key, flags, &mr, NULL);
+	ret = fi_mr_reg(dom, buf, buffer_size, FI_WRITE | FI_REMOTE_WRITE, 0,
+			user_defined_key, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
@@ -272,7 +268,7 @@ static int run_test(void)
 		/* Execute RMA write operation from Client */
 		fprintf(stdout, "RMA write to server\n");
 		sprintf(buf, "%s", welcome_text);
-		ret = write_data(sizeof(char *) * strlen(buf));
+		ret = rma_write(sizeof(char *) * strlen(buf));
 		if (ret)
 			return ret;
 	
@@ -326,10 +322,10 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
+	hints->domain_attr->mr_mode = FI_MR_SCALABLE;
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG | FI_RMA;
-	// FI_PROV_MR_ATTR flag is not set
-	hints->mode = FI_CONTEXT | FI_RX_CQ_DATA;
+	hints->caps = FI_MSG | FI_RMA | FI_RMA_EVENT;
+	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
 
 	ret = run_test();
 	fi_freeinfo(hints);
