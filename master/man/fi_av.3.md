@@ -407,13 +407,17 @@ resources from removed entries.
 
 # RETURN VALUES
 
-The insert calls return the number of addresses successfully inserted
-or the number of asynchronous insertions initiated if FI_EVENT is set.
+Insertion calls for an AV opened for synchronous operation will return
+the number of addresses that were successfully inserted.  In the case of
+failure, the return value will be less than the number of addresses that
+were specified.
 
-Other calls return 0 on success.
+Insertion calls for an AV opened for asynchronous operation (with FI_EVENT
+flag specified) will return 0 if the operation was successfully initiated.
+In the case of failure, a negative fabric errno will be returned.
 
-On error, a negative value corresponding to
-fabric errno is returned.
+All other calls return 0 on success, or a negative value corresponding to
+fabric errno on error.
 Fabric errno values are defined in
 `rdma/fi_errno.h`.
 
