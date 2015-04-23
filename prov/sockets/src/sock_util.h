@@ -52,7 +52,7 @@ static inline int sock_drop_packet(struct sock_ep *sock_ep)
 {	
 #if ENABLE_DEBUG	
 	if(sock_ep->ep_type == FI_EP_DGRAM && sock_dgram_drop_rate > 0) {
-	sock_ep->domain->fab->num_send_msg;
+		sock_ep->domain->fab->num_send_msg++;
 		if(!(sock_ep->domain->fab->num_send_msg % sock_dgram_drop_rate))
 			return 1;
 	}
