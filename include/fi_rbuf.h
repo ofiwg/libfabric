@@ -138,6 +138,12 @@ static inline void rbread(struct ringbuf *rb, void *buf, size_t len)
 	rb->rcnt += len;
 }
 
+static inline size_t rbdiscard(struct ringbuf *rb, size_t len)
+{
+	size_t used_len = MIN(rbused(rb), len);
+	rb->rcnt += used_len;
+	return used_len;
+}
 
 /*
  * Ring buffer with blocking read support using an fd
