@@ -330,6 +330,7 @@ usdf_fill_info_dgram(
 	dattrp->control_progress = FI_PROGRESS_AUTO;
 	dattrp->data_progress = FI_PROGRESS_MANUAL;
 	dattrp->resource_mgmt = FI_RM_DISABLED;
+	dattrp->mr_mode = FI_MR_BASIC;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
@@ -436,6 +437,7 @@ usdf_fill_info_msg(
 	dattrp->control_progress = FI_PROGRESS_AUTO;
 	dattrp->data_progress = FI_PROGRESS_MANUAL;
 	dattrp->resource_mgmt = FI_RM_DISABLED;
+	dattrp->mr_mode = FI_MR_BASIC;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
@@ -540,6 +542,7 @@ usdf_fill_info_rdm(
 	dattrp->control_progress = FI_PROGRESS_AUTO;
 	dattrp->data_progress = FI_PROGRESS_MANUAL;
 	dattrp->resource_mgmt = FI_RM_DISABLED;
+	dattrp->mr_mode = FI_MR_BASIC;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {

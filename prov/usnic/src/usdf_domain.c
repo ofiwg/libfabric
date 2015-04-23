@@ -228,6 +228,19 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	USDF_TRACE_SYS(DOMAIN, "\n");
 
+	if (info->domain_attr != NULL) {
+		switch (info->domain_attr->mr_mode) {
+		case FI_MR_UNSPEC:
+		case FI_MR_BASIC:
+			break;
+		default:
+			/* the caller ignored our fi_getinfo results */
+			USDF_WARN_SYS(DOMAIN, "MR mode (%d) not supported\n",
+				info->domain_attr->mr_mode);
+			return -FI_ENODATA;
+		}
+	}
+
 	udp = calloc(1, sizeof *udp);
 	if (udp == NULL) {
 		USDF_DBG("unable to alloc mem for domain\n");
