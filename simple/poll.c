@@ -78,6 +78,7 @@ static void free_ep_res(void)
 	fi_close(&rcq->fid);
 	fi_close(&scq->fid);
 	free(buf);
+	fi_close(&ep->fid);
 }
 
 static int alloc_ep_res(struct fi_info *fi)
@@ -116,8 +117,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&poll_attr, 0, sizeof poll_attr);
 	ret = fi_poll_open(dom, &poll_attr, &pollset);
 	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		goto err3;
+		FT_PRINTERR("fi_poll_open", ret);
+		goto err2;
 	}
 	
 	/* Add send CQ to the polling set */
@@ -288,7 +289,6 @@ static int init_fabric(void)
 err4:
 	free_ep_res();
 err3:
-	fi_close(&ep->fid);
 	fi_close(&dom->fid);
 err1:
 	fi_close(&fab->fid);
@@ -476,7 +476,6 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	fi_close(&ep->fid);
 	free_ep_res();
 	fi_close(&dom->fid);
 	fi_close(&fab->fid);
