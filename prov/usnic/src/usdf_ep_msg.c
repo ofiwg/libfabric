@@ -760,7 +760,6 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 
 		ep->ep_tx = tx;
 		atomic_inc(&tx->tx_refcnt);
-		atomic_inc(&udp->dom_refcnt);
 	}
 	TAILQ_INIT(&ep->e.msg.ep_posted_wqe);
 
