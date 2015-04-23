@@ -97,8 +97,8 @@ function print_results {
 }
 
 function cleanup {
-	$ssh ${CLIENT} "ps -eo comm,pid | grep ^fi_ | awk '{print \$2}' | xargs -r kill -9" > /dev/null
-	$ssh ${SERVER} "ps -eo comm,pid | grep ^fi_ | awk '{print \$2}' | xargs -r kill -9" > /dev/null
+	$ssh ${CLIENT} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs -r kill -9"
+	$ssh ${SERVER} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs -r kill -9"
 	rm -f $c_outp $s_outp
 }
 
