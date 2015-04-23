@@ -121,10 +121,9 @@ typedef struct fid *fid_t;
 #define FI_TRANSMIT_COMPLETE	(1ULL << 27)
 #define FI_DELIVERY_COMPLETE	(1ULL << 28)
 
-#define FI_RMA_EVENT		(1ULL << 55)
-#define FI_NAMED_RX_CTX		(1ULL << 56)
-#define FI_DYNAMIC_MR		(1ULL << 57)
-#define FI_SOURCE		(1ULL << 58)
+#define FI_RMA_EVENT		(1ULL << 56)
+#define FI_SOURCE		(1ULL << 57)
+#define FI_NAMED_RX_CTX		(1ULL << 58)
 #define FI_DIRECTED_RECV	(1ULL << 59)
 
 
@@ -154,6 +153,12 @@ enum fi_av_type {
 	FI_AV_UNSPEC,
 	FI_AV_MAP,
 	FI_AV_TABLE
+};
+
+enum fi_mr_mode {
+	FI_MR_UNSPEC,
+	FI_MR_BASIC,
+	FI_MR_SCALABLE
 };
 
 enum fi_progress {
@@ -214,12 +219,11 @@ enum {
 };
 
 /* Mode bits */
-#define FI_CONTEXT		(1ULL << 0)
-#define FI_LOCAL_MR		(1ULL << 1)
-#define FI_PROV_MR_ATTR		(1ULL << 2)
-#define FI_MSG_PREFIX		(1ULL << 3)
-#define FI_ASYNC_IOV		(1ULL << 4)
-#define FI_RX_CQ_DATA		(1ULL << 5)
+#define FI_CONTEXT		(1ULL << 59)
+#define FI_MSG_PREFIX		(1ULL << 58)
+#define FI_ASYNC_IOV		(1ULL << 57)
+#define FI_RX_CQ_DATA		(1ULL << 56)
+#define FI_LOCAL_MR		(1ULL << 55)
 
 struct fi_tx_attr {
 	uint64_t		caps;
@@ -266,6 +270,7 @@ struct fi_domain_attr {
 	enum fi_progress	data_progress;
 	enum fi_resource_mgmt	resource_mgmt;
 	enum fi_av_type		av_type;
+	enum fi_mr_mode		mr_mode;
 	size_t			mr_key_size;
 	size_t			cq_data_size;
 	size_t			cq_cnt;

@@ -29,7 +29,7 @@ The verbs provider supports a subset of OFI features.
 
 *Modes*
 : Verbs provider requires applications to support the following modes:
-  FI_LOCAL_MR, FI_PROV_MR_ATTR for all applications. FI_RX_CQ_DATA for
+  FI_LOCAL_MR for all applications.  FI_RX_CQ_DATA for
   applications that want to use RMA. Applications must take responsibility
   of posting receives for any incoming CQ data.
 

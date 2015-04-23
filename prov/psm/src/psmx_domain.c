@@ -119,6 +119,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->domain.fid.ops = &psmx_fi_ops;
 	domain_priv->domain.ops = &psmx_domain_ops;
 	domain_priv->domain.mr = &psmx_mr_ops;
+	domain_priv->mr_mode = info->domain_attr->mr_mode;
 	domain_priv->mode = info->mode;
 	domain_priv->caps = info->caps;
 	domain_priv->fabric = fabric_priv;

@@ -115,6 +115,7 @@ struct fi_domain_attr {
 	enum fi_progress      data_progress;
 	enum fi_resource_mgmt resource_mgmt;
 	enum fi_av_type       av_type;
+	enum fi_mr_mode       mr_mode;
 	size_t                mr_key_size;
 	size_t                cq_data_size;
 	size_t                cq_cnt;
@@ -389,6 +390,29 @@ The value FI_AV_UNSPEC may be used to indicate that the provider can support
 either address vector format.  In this case, a provider may return
 FI_AV_UNSPEC to indicate that either format is supportable, or may return
 another AV type to indicate the optimal AV type supported by this domain. 
+
+## Memory Registration Mode (mr_mode)
+
+Specifies the method of memory registration that is used with this domain.
+For additional details on MR mode, see [`fi_mr`(3)](fi_mr.3.html).
+The following values may be specified.
+
+*FI_MR_UNSPEC*
+: Any memory registration mode is requested and supported.
+
+*FI_MR_BASIC*
+: Only basic memory registration operations are requested or supported.
+
+*FI_MR_SCALABLE*
+: Only scalable memory registration operations are requested or supported.
+
+Buffers used in data transfer operations may require notifying the provider
+of their use before a data transfer can occur.  The mr_mode field indicates
+the type of memory registration that is required, and when registration is
+necessary.  Applications that require the use of a specific registration mode
+should set the domain attribute mr_mode to the necessary value when calling
+fi_getinfo.  The value FI_MR_UNSPEC may be used to indicate support for any
+registration mode.
 
 ## MR Key Size (mr_key_size)
 

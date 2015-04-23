@@ -1204,65 +1204,70 @@ int sock_srx_ctx(struct fid_domain *domain,
 	return 0;
 }
 
-static void sock_set_fabric_attr(const struct fi_info *hints,
-				 struct fi_info *info)
+static void sock_set_fabric_attr(const struct fi_fabric_attr *hint_attr,
+				 struct fi_fabric_attr *attr)
 {
 	struct sock_fabric *fabric;
-	*(info->fabric_attr) = sock_fabric_attr;
-	if (hints && hints->fabric_attr && hints->fabric_attr->fabric) {
-		info->fabric_attr->fabric = hints->fabric_attr->fabric;
+
+	*attr = sock_fabric_attr;
+	if (hint_attr && hint_attr->fabric) {
+		attr->fabric = hint_attr->fabric;
 	} else {
 		fabric = sock_fab_list_head();
-		info->fabric_attr->fabric = fabric ? &fabric->fab_fid : NULL;
+		attr->fabric = fabric ? &fabric->fab_fid : NULL;
 	}
+	attr->name = strdup(sock_fab_name);
+	attr->prov_name = strdup(sock_prov_name);
 }
 
-static void sock_set_domain_attr(const struct fi_info *hints, 
-				 struct fi_info *info) 
+static void sock_set_domain_attr(const struct fi_domain_attr *hint_attr,
+				 struct fi_domain_attr *attr)
 {
 	struct sock_domain *domain;
 
 	domain = sock_dom_list_head();
-	info->domain_attr->domain = domain ? &domain->dom_fid : NULL;
-	if (!hints || !hints->domain_attr) {
-		*(info->domain_attr) = sock_domain_attr;
-		return;
+	attr->domain = domain ? &domain->dom_fid : NULL;
+	if (!hint_attr) {
+		*attr = sock_domain_attr;
+		goto out;
 	}
 
-	if (hints->domain_attr && hints->domain_attr->domain) {
-		domain = container_of(info->domain_attr->domain,
+	if (hint_attr->domain) {
+		domain = container_of(hint_attr->domain,
 				      struct sock_domain, dom_fid);
-		*(info->domain_attr) = domain->attr;
-		info->domain_attr->domain = hints->domain_attr->domain;
-		return;
+		*attr = domain->attr;
+		attr->domain = hint_attr->domain;
+		goto out;
 	}
 
-	if (hints->domain_attr->threading == FI_THREAD_UNSPEC)
-		info->domain_attr->threading = 
-			sock_domain_attr.threading;
-	if (hints->domain_attr->control_progress == FI_PROGRESS_UNSPEC)
-		info->domain_attr->control_progress = 
-			sock_domain_attr.control_progress;
-	if (hints->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
-		info->domain_attr->data_progress = 
-			sock_domain_attr.data_progress;	
+	*attr = *hint_attr;
+	if (attr->threading == FI_THREAD_UNSPEC)
+		attr->threading = sock_domain_attr.threading;
+	if (attr->control_progress == FI_PROGRESS_UNSPEC)
+		attr->control_progress = sock_domain_attr.control_progress;
+	if (attr->data_progress == FI_PROGRESS_UNSPEC)
+		attr->data_progress = sock_domain_attr.data_progress;
+	if (attr->mr_mode == FI_MR_UNSPEC)
+		attr->mr_mode = sock_domain_attr.mr_mode;
 
-	if (hints->domain_attr->cq_cnt == 0)
-		info->domain_attr->cq_cnt = sock_domain_attr.cq_cnt;
-	if (hints->domain_attr->ep_cnt == 0)
-		info->domain_attr->ep_cnt = sock_domain_attr.ep_cnt;
-	if (hints->domain_attr->tx_ctx_cnt == 0)
-		info->domain_attr->tx_ctx_cnt = sock_domain_attr.tx_ctx_cnt;
-	if (hints->domain_attr->rx_ctx_cnt == 0)
-		info->domain_attr->rx_ctx_cnt = sock_domain_attr.rx_ctx_cnt;
-	if (hints->domain_attr->max_ep_tx_ctx == 0)
-		info->domain_attr->max_ep_tx_ctx = sock_domain_attr.max_ep_tx_ctx;
-	if (hints->domain_attr->max_ep_rx_ctx == 0)
-		info->domain_attr->max_ep_rx_ctx = sock_domain_attr.max_ep_rx_ctx;
-	
-	info->domain_attr->mr_key_size = sock_domain_attr.mr_key_size;
-	info->domain_attr->cq_data_size = sock_domain_attr.cq_data_size;
-	info->domain_attr->resource_mgmt = sock_domain_attr.resource_mgmt;
+	if (attr->cq_cnt == 0)
+		attr->cq_cnt = sock_domain_attr.cq_cnt;
+	if (attr->ep_cnt == 0)
+		attr->ep_cnt = sock_domain_attr.ep_cnt;
+	if (attr->tx_ctx_cnt == 0)
+		attr->tx_ctx_cnt = sock_domain_attr.tx_ctx_cnt;
+	if (attr->rx_ctx_cnt == 0)
+		attr->rx_ctx_cnt = sock_domain_attr.rx_ctx_cnt;
+	if (attr->max_ep_tx_ctx == 0)
+		attr->max_ep_tx_ctx = sock_domain_attr.max_ep_tx_ctx;
+	if (attr->max_ep_rx_ctx == 0)
+		attr->max_ep_rx_ctx = sock_domain_attr.max_ep_rx_ctx;
+
+	attr->mr_key_size = sock_domain_attr.mr_key_size;
+	attr->cq_data_size = sock_domain_attr.cq_data_size;
+	attr->resource_mgmt = sock_domain_attr.resource_mgmt;
+out:
+	attr->name = strdup(sock_dom_name);
 }
 
 
@@ -1302,14 +1307,15 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 
 		if (hints->rx_attr)
 			*(info->rx_attr) = *(hints->rx_attr);
+
+		sock_set_domain_attr(hints->domain_attr, info->domain_attr);
+		sock_set_fabric_attr(hints->fabric_attr, info->fabric_attr);
+	} else {
+		sock_set_domain_attr(NULL, info->domain_attr);
+		sock_set_fabric_attr(NULL, info->fabric_attr);
 	}
 
 	info->ep_attr->type = ep_type;
-	sock_set_domain_attr(hints, info);
-	sock_set_fabric_attr(hints, info);
-	info->domain_attr->name = strdup(sock_dom_name);
-	info->fabric_attr->name = strdup(sock_fab_name);
-	info->fabric_attr->prov_name = strdup(sock_prov_name);
 	return info;
 }
 

@@ -88,10 +88,10 @@ static struct fi_provider fi_ibv_prov = {
 
 #define VERBS_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
 		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
-#define VERBS_MODE (FI_LOCAL_MR | FI_PROV_MR_ATTR)
+#define VERBS_MODE (FI_LOCAL_MR)
 #define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
 #define VERBS_TX_MODE VERBS_MODE
-#define VERBS_RX_MODE (FI_LOCAL_MR | FI_PROV_MR_ATTR | FI_RX_CQ_DATA)
+#define VERBS_RX_MODE (FI_LOCAL_MR | FI_RX_CQ_DATA)
 #define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
 		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
 
@@ -169,6 +169,7 @@ const struct fi_domain_attr verbs_domain_attr = {
 	.threading		= FI_THREAD_SAFE,
 	.control_progress	= FI_PROGRESS_AUTO,
 	.data_progress		= FI_PROGRESS_AUTO,
+	.mr_mode		= FI_MR_BASIC,
 	.mr_key_size		= sizeof_field(struct ibv_sge, lkey),
 	.cq_data_size		= sizeof_field(struct ibv_send_wr, imm_data),
 	.max_ep_tx_ctx		= 1,
@@ -276,6 +277,16 @@ static int fi_ibv_check_domain_attr(const struct fi_domain_attr *attr)
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given data progress mode not supported!\n");
+		return -FI_ENODATA;
+	}
+
+	switch (attr->mr_mode) {
+	case FI_MR_UNSPEC:
+	case FI_MR_BASIC:
+		break;
+	default:
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+			"MR mode not supported\n");
 		return -FI_ENODATA;
 	}
 
