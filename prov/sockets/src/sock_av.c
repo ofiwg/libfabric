@@ -207,7 +207,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 			}
 		}
 		sock_av_report_success(_av, context, ret, flags);
-		return ret;
+		return (_av->attr.flags & FI_EVENT) ? 0 : ret;
 	}
 
 	for (i = 0, ret = 0; i < count; i++) {
@@ -274,7 +274,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 		ret++;
 	}
 	sock_av_report_success(_av, context, ret, flags);
-	return ret;
+	return (_av->attr.flags & FI_EVENT) ? 0 : ret;
 }
 
 static int sock_av_insert(struct fid_av *av, const void *addr, size_t count,
@@ -315,11 +315,6 @@ static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 	struct addrinfo *result = NULL;
 	struct sock_av *_av;
 	
-	if (!service) {
-		SOCK_LOG_ERROR("Port not provided\n");
-		return -FI_EINVAL;
-	}
-	
 	_av = container_of(av, struct sock_av, av_fid);
 	memset(&sock_hints, 0, sizeof(struct addrinfo));
 	sock_hints.ai_family = AF_INET;
@@ -344,6 +339,11 @@ static int sock_av_insertsvc(struct fid_av *av, const char *node,
 		   const char *service, fi_addr_t *fi_addr,
 		   uint64_t flags, void *context)
 {
+	if (!service) {
+		SOCK_LOG_ERROR("Port not provided\n");
+		return -FI_EINVAL;
+	}
+
 	return _sock_av_insertsvc(av, node, service, fi_addr, flags, context, 0);
 }
 

@@ -248,7 +248,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		return -FI_ENOMEM;
 
 	psmx_eq_enqueue_event(av_priv->eq, event);
-	return count;
+	return 0;
 }
 
 static int psmx_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,

@@ -315,7 +315,7 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 	/* resolve all addresses we can */
 	usdf_av_insert_progress(insert);
 
-	return count;
+	return 0;
 
 fail:
 	if (insert != NULL) {
