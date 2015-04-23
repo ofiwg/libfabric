@@ -68,14 +68,6 @@ supported features.
 : The provider sets FI_LOCAL_MR for fi_info:mode.  See fi_getinfo
   for additional details.
 
-*FI_DIRECT_PROV_MR_ATTR*
-: The provider sets FI_PROV_MR_ATTR for fi_info:mode.  See fi_getinfo
-  for additional details.
-
-*FI_DIRECT_DYNAMIC_MR*
-: The provider sets FI_DYNAMIC_MR for fi_info:caps.  See fi_getinfo
-  for additional details.
-
 # SEE ALSO
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),

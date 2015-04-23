@@ -43,7 +43,7 @@ Endpoint capabilities
 
   *FI_MULTI_RECV* is supported for non-tagged message queue only.
 
-  Other supported capabilities include *FI_TRIGGER* and *FI_DYNAMIC_MR*.
+  Other supported capabilities include *FI_TRIGGER*.
 
 Modes
 : *FI_CONTEXT* is required. That means, all the requests that generate

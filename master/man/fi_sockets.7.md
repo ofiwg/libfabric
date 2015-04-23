@@ -35,7 +35,7 @@ Key features include:
 
 *Modes*
 : The sockets provider supports all operational modes including
-  *FI_CONTEXT*, *FI_LOCAL_MR*, *FI_MR_PREFIX*, and *FI_PROV_MR_ATTR*.
+  *FI_CONTEXT* and *FI_MSG_PREFIX*.
 
 *Progress*
 : Sockets provider supports both *FI_PROGRESS_AUTO* and *FI_PROGRESS_MANUAL*,
