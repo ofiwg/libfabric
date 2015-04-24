@@ -444,6 +444,7 @@ static struct fi_ops_ep usdf_pep_base_ops = {
 
 static struct fi_ops_cm usdf_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
+	.setname = fi_no_setname,
 	.getname = fi_no_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,

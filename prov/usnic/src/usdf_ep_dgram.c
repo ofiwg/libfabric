@@ -336,6 +336,7 @@ static struct fi_ops_msg usdf_dgram_prefix_ops = {
 
 static struct fi_ops_cm usdf_cm_dgram_ops = {
 	.size = sizeof(struct fi_ops_cm),
+	.setname = fi_no_setname,
 	.getname = fi_no_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
