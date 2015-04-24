@@ -216,7 +216,6 @@ av_create_addr_sockaddr_in(char *first_address, int index, void *addr)
 	uint32_t tmp;
 	int ret;
 
-
 	memset(&hints, 0, sizeof(hints));
 
 	/* return all 0's for invalid address */
@@ -1011,7 +1010,7 @@ int main(int argc, char **argv)
 
 	hints = fi_allocinfo();
 	if (!hints)
-		exit(1);
+		return EXIT_FAILURE;
 
 	while ((op = getopt(argc, argv, "f:p:d:D:n:")) != -1) {
 		switch (op) {
@@ -1037,13 +1036,14 @@ int main(int argc, char **argv)
 			printf("\t[-a fabric_name]\n");
 			printf("\t[-n num_good_addr (max=%d]\n", MAX_ADDR - 1);
 			printf("\t[-f provider_name]\n");
-			exit(1);
+			return EXIT_FAILURE;
+			
 		}
 	}
 
 	if (good_address == NULL ||  num_good_addr == 0) {
-		printf("Test requires -d  and -n\n");
-		exit(1);
+		printf("Test requires -d  and -n\n");	
+		return EXIT_FAILURE;
 	}
 
 	if (num_good_addr > MAX_ADDR - 1) {
@@ -1053,22 +1053,23 @@ int main(int argc, char **argv)
 	}
 
 	hints->mode = ~0;
+	hints->addr_format = FI_SOCKADDR;
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
 	if (ret != 0) {
 		printf("fi_getinfo %s\n", fi_strerror(-ret));
-		exit(-ret);
+		goto err;
 	}
 
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret != 0) {
 		printf("fi_fabric %s\n", fi_strerror(-ret));
-		exit(1);
+		goto err;
 	}
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret != 0) {
 		printf("fi_domain %s\n", fi_strerror(-ret));
-		exit(1);
+		goto err;
 	}
 
 	eq_attr.size = 1024;
@@ -1076,7 +1077,7 @@ int main(int argc, char **argv)
 	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
 	if (ret != 0) {
 		printf("fi_eq_open %s\n", fi_strerror(-ret));
-		exit(1);
+		goto err;
 	}
 
 	printf("Testing AVs on fabric %s\n", fi->fabric_attr->name);
@@ -1105,20 +1106,22 @@ int main(int argc, char **argv)
 	ret = fi_close(&eq->fid);
 	if (ret != 0) {
 		printf("Error %d closing EQ: %s\n", ret, fi_strerror(-ret));
-		exit(1);
+		goto err;
 	}
 	ret = fi_close(&domain->fid);
 	if (ret != 0) {
 		printf("Error %d closing domain: %s\n", ret, fi_strerror(-ret));
-		exit(1);
+		goto err;
 	}
 	ret = fi_close(&fabric->fid);
 	if (ret != 0) {
 		printf("Error %d closing fabric: %s\n", ret, fi_strerror(-ret));
-		exit(1);
+		goto err;
 	}
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
 
-	exit(failed > 0);
+	return (failed > 0);
+err:
+	return -ret;
 }
