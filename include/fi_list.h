@@ -123,7 +123,7 @@ struct slist {
 
 static inline void slist_init(struct slist *list)
 {
-	list->head = NULL;
+	list->head = list->tail = NULL;
 }
 
 static inline int slist_empty(struct slist *list)
