@@ -690,6 +690,7 @@ static struct fi_ops_ep usdf_base_rdm_ops = {
 
 static struct fi_ops_cm usdf_cm_rdm_ops = {
 	.size = sizeof(struct fi_ops_cm),
+	.setname = fi_no_setname,
 	.getname = usdf_cm_rdm_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
