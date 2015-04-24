@@ -295,6 +295,10 @@ static int sock_ctx_enable(struct fid_ep *ep)
 			sock_pe_add_rx_ctx(rx_ctx->domain->pe, rx_ctx);
 			rx_ctx->progress = 1;
 		}
+		if (!rx_ctx->ep->listener.listener_thread &&
+		    sock_conn_listen(rx_ctx->ep)) {
+			SOCK_LOG_ERROR("failed to create listener\n");
+		}
 		return 0;
 
 	case FI_CLASS_TX_CTX:
@@ -303,6 +307,10 @@ static int sock_ctx_enable(struct fid_ep *ep)
 		if (!tx_ctx->progress) {
 			sock_pe_add_tx_ctx(tx_ctx->domain->pe, tx_ctx);
 			tx_ctx->progress = 1;
+		}
+		if (!tx_ctx->ep->listener.listener_thread &&
+		    sock_conn_listen(tx_ctx->ep)) {
+			SOCK_LOG_ERROR("failed to create listener\n");
 		}
 		return 0;
 
@@ -591,7 +599,8 @@ static int sock_ep_close(struct fid *fid)
 		SOCK_LOG_INFO("Failed to signal\n");
 	}
 	
-	if (pthread_join(sock_ep->listener.listener_thread, NULL)) {
+	if (sock_ep->listener.listener_thread && 
+	    pthread_join(sock_ep->listener.listener_thread, NULL)) {
 		SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
 	}
 	
@@ -946,6 +955,10 @@ int sock_ep_enable(struct fid_ep *ep)
 			}
 		}
 	}
+
+	if (sock_ep->ep_type != FI_EP_MSG && 
+	    !sock_ep->listener.listener_thread && sock_conn_listen(sock_ep))
+		SOCK_LOG_ERROR("cannot start connection thread\n");
 	return 0;
 }
 
@@ -1461,9 +1474,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
   	sock_ep->domain = sock_dom;
-	if (sock_conn_listen(sock_ep))
-		goto err;
-
 	fastlock_init(&sock_ep->cm.lock);
 	if (sock_ep->ep_type == FI_EP_MSG) {
 		dlist_init(&sock_ep->cm.msg_list);
