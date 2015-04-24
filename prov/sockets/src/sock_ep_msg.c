@@ -678,6 +678,8 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	req->ep_attr = *_ep->info.ep_attr;
 	req->domain_attr = *_ep->info.domain_attr;
 	req->fabric_attr = *_ep->info.fabric_attr;
+	req->fabric_attr.fabric = NULL;
+	req->domain_attr.domain = NULL;
 
 	if (param && paramlen)
 		memcpy(&req->user_data, param, paramlen);
