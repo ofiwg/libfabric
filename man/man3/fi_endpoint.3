@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-04\-17" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-04\-24" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -1130,6 +1130,11 @@ generated when the source buffer(s) may be reused.
 A completion guarantees that the buffers will not be read from again and
 the application may reclaim them.
 No other guarantees are made with respect to the state of the operation.
+.PP
+Note: This flag is used to control when a completion entry is inserted
+into a completion queue.
+It does not apply to operations that do not generate a completion queue
+entry, such as the fi_inject operation.
 .PP
 \f[I]FI_TRANSMIT_COMPLETE\f[] : Indicates that a completion should be
 generated when the transmit operation has completed relative to the
