@@ -113,10 +113,20 @@ usdf_tx_msg_enable(struct usdf_tx *tx)
 		goto fail;
 	}
 
+	ret = usd_alloc_mr(tx->tx_domain->dom_dev,
+			tx->tx_attr.size * USDF_MSG_MAX_INJECT_SIZE,
+			(void **)&tx->t.msg.tx_inject_bufs);
+	if (ret) {
+		USDF_INFO("usd_alloc_mr failed (%s)\n", strerror(-ret));
+		goto fail;
+	}
+
 	/* populate free list */
 	TAILQ_INIT(&tx->t.msg.tx_free_wqe);
 	wqe = tx->t.msg.tx_wqe_buf;
 	for (i = 0; i < tx->tx_attr.size; ++i) {
+		wqe->ms_inject_buf =
+			&tx->t.msg.tx_inject_bufs[USDF_MSG_MAX_INJECT_SIZE * i];
 		TAILQ_INSERT_TAIL(&tx->t.msg.tx_free_wqe, wqe, ms_link);
 		++wqe;
 	}
@@ -131,6 +141,12 @@ fail:
 		TAILQ_INIT(&tx->t.msg.tx_free_wqe);
 		tx->t.msg.tx_num_free_wqe = 0;
 	}
+
+	if (tx->t.msg.tx_inject_bufs != NULL) {
+		usd_free_mr(tx->t.msg.tx_inject_bufs);
+		tx->t.msg.tx_inject_bufs = NULL;
+	}
+
 	if (tx->tx_qp != NULL) {
 		usd_destroy_qp(tx->tx_qp);
 	}
@@ -355,6 +371,13 @@ usdf_msg_fill_tx_attr(struct fi_tx_attr *txattr)
 	if (txattr->iov_limit == 0) {
 		txattr->iov_limit = USDF_MSG_DFLT_SGE;
 	}
+
+	if (txattr->op_flags & ~USDF_MSG_SUPP_SENDMSG_FLAGS) {
+		USDF_WARN("one or more flags in 0x%llx not supported\n",
+			txattr->op_flags);
+		return -FI_EOPNOTSUPP;
+	}
+
 	return 0;
 }
 
@@ -484,11 +507,19 @@ usdf_ep_msg_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_CQ:
 		if (flags & FI_SEND) {
 			cq = cq_fidtou(bfid);
+			if (flags & FI_COMPLETION)
+				ep->ep_tx_dflt_signal_comp = 0;
+			else
+				ep->ep_tx_dflt_signal_comp = 1;
 			usdf_ep_msg_bind_cq(ep, cq, FI_SEND);
 		}
 
 		if (flags & FI_RECV) {
 			cq = cq_fidtou(bfid);
+			if (flags & FI_COMPLETION)
+				ep->ep_rx_dflt_signal_comp = 0;
+			else
+				ep->ep_rx_dflt_signal_comp = 1;
 			usdf_ep_msg_bind_cq(ep, cq, FI_RECV);
 		}
 		break;
@@ -556,6 +587,7 @@ usdf_msg_tx_ctx_close(fid_t fid)
 	}
 
 	if (tx->tx_qp != NULL) {
+		usd_free_mr(tx->t.msg.tx_inject_bufs);
 		free(tx->t.msg.tx_wqe_buf);
 		usd_destroy_qp(tx->tx_qp);
 	}
@@ -717,6 +749,8 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 	ep->ep_caps = info->caps;
 	ep->ep_mode = info->mode;
 	ep->e.msg.ep_connreq = (struct usdf_connreq *)info->handle;
+	ep->ep_tx_dflt_signal_comp = 1;
+	ep->ep_rx_dflt_signal_comp = 1;
 
 	ep->e.msg.ep_seq_credits = USDF_RUDP_SEQ_CREDITS;
 	TAILQ_INIT(&ep->e.msg.ep_posted_wqe);
@@ -760,7 +794,6 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 
 		ep->ep_tx = tx;
 		atomic_inc(&tx->tx_refcnt);
-		atomic_inc(&udp->dom_refcnt);
 	}
 	TAILQ_INIT(&ep->e.msg.ep_posted_wqe);
 

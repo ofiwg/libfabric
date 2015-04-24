@@ -182,6 +182,80 @@ fail:
 	return ret;		// fi_freeinfo() in caller frees all
 }
 
+static int usdf_fill_domain_attr_dgram(
+	struct fi_domain_attr *dhints,
+	struct fi_domain_attr *dattrp)
+{
+	switch (dhints ? dhints->threading : FI_THREAD_UNSPEC) {
+	case FI_THREAD_UNSPEC:
+	case FI_THREAD_ENDPOINT:
+		/* this is our natural thread safety level */
+		dattrp->threading = FI_THREAD_ENDPOINT;
+		break;
+	case FI_THREAD_FID:
+	case FI_THREAD_COMPLETION:
+	case FI_THREAD_DOMAIN:
+		/* subsets of _ENDPOINT, so supported */
+		dattrp->threading = dhints->threading;
+		break;
+	default:
+		USDF_INFO("cannot support threading=%d\n",
+				dhints->threading);
+		return -FI_ENODATA;
+	}
+
+	switch (dhints ? dhints->control_progress : FI_PROGRESS_UNSPEC) {
+	case FI_PROGRESS_UNSPEC:
+	case FI_PROGRESS_AUTO:
+		dattrp->control_progress = FI_PROGRESS_AUTO;
+		break;
+	case FI_PROGRESS_MANUAL:
+		/* we still behave the same as _AUTO, but we answer _MANUAL as
+		 * requested by the user */
+		dattrp->control_progress = FI_PROGRESS_MANUAL;
+		break;
+	default:
+		USDF_INFO("cannot support control_progress=%d\n",
+				dhints->control_progress);
+		return -FI_ENODATA;
+	}
+
+	switch (dhints ? dhints->data_progress : FI_PROGRESS_UNSPEC) {
+	case FI_PROGRESS_UNSPEC:
+	case FI_PROGRESS_MANUAL:
+		dattrp->data_progress = FI_PROGRESS_MANUAL;
+		break;
+	default:
+		USDF_INFO("cannot support data_progress=%d\n",
+				dhints->data_progress);
+		return -FI_ENODATA;
+	}
+
+	switch (dhints ? dhints->resource_mgmt : FI_RM_UNSPEC) {
+	case FI_RM_UNSPEC:
+	case FI_RM_DISABLED:
+		dattrp->resource_mgmt = FI_RM_DISABLED;
+		break;
+	default:
+		USDF_INFO("cannot support resource_mgmt=%d\n",
+				dhints->resource_mgmt);
+		return -FI_ENODATA;
+	}
+
+	switch (dhints ? dhints->mr_mode : FI_MR_UNSPEC) {
+	case FI_MR_UNSPEC:
+	case FI_MR_BASIC:
+		dattrp->mr_mode = FI_MR_BASIC;
+		break;
+	default:
+		USDF_INFO("cannot support mr_mode=%d\n",
+			dhints->mr_mode);
+		return -FI_ENODATA;
+	}
+
+	return 0;
+}
+
 static int
 usdf_fill_info_dgram(
 	struct fi_info *hints,
@@ -193,7 +267,6 @@ usdf_fill_info_dgram(
 {
 	struct fi_info *fi;
 	struct fi_fabric_attr *fattrp;
-	struct fi_domain_attr *dattrp;
 	struct fi_tx_attr *txattr;
 	struct fi_rx_attr *rxattr;
 	struct fi_ep_attr *eattrp;
@@ -325,11 +398,10 @@ usdf_fill_info_dgram(
 	eattrp->rx_ctx_cnt = 1;
 
 	/* domain attrs */
-	dattrp = fi->domain_attr;
-	dattrp->threading = FI_THREAD_UNSPEC;
-	dattrp->control_progress = FI_PROGRESS_AUTO;
-	dattrp->data_progress = FI_PROGRESS_MANUAL;
-	dattrp->resource_mgmt = FI_RM_DISABLED;
+	ret = usdf_fill_domain_attr_dgram(hints ? hints->domain_attr : NULL,
+						fi->domain_attr);
+	if (ret != 0)
+		goto fail;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
@@ -436,6 +508,7 @@ usdf_fill_info_msg(
 	dattrp->control_progress = FI_PROGRESS_AUTO;
 	dattrp->data_progress = FI_PROGRESS_MANUAL;
 	dattrp->resource_mgmt = FI_RM_DISABLED;
+	dattrp->mr_mode = FI_MR_BASIC;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
@@ -540,6 +613,7 @@ usdf_fill_info_rdm(
 	dattrp->control_progress = FI_PROGRESS_AUTO;
 	dattrp->data_progress = FI_PROGRESS_MANUAL;
 	dattrp->resource_mgmt = FI_RM_DISABLED;
+	dattrp->mr_mode = FI_MR_BASIC;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {

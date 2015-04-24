@@ -43,7 +43,7 @@ extern "C" {
 
 struct fi_ops_cm {
 	size_t	size;
-	int	(*setname)(fid_t fid, void *addr, size_t *addrlen);
+	int	(*setname)(fid_t fid, void *addr, size_t addrlen);
 	int	(*getname)(fid_t fid, void *addr, size_t *addrlen);
 	int	(*getpeer)(struct fid_ep *ep, void *addr, size_t *addrlen);
 	int	(*connect)(struct fid_ep *ep, const void *addr,
@@ -58,7 +58,7 @@ struct fi_ops_cm {
 
 #ifndef FABRIC_DIRECT
 
-static inline int fi_setname(fid_t fid, void *addr, size_t *addrlen)
+static inline int fi_setname(fid_t fid, void *addr, size_t addrlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	return ep->cm->setname(fid, addr, addrlen);

@@ -257,6 +257,35 @@ static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	return 0;
 }
 
+static int sock_ep_cm_setnmae(fid_t fid, void *addr, size_t addrlen)
+{
+	struct sock_ep *sock_ep = NULL;
+	struct sock_pep *sock_pep = NULL;
+
+	if (addrlen != sizeof(struct sockaddr_in))
+		return -FI_EINVAL;
+
+	switch(fid->fclass) {
+	case FI_CLASS_EP:
+	case FI_CLASS_SEP:
+		sock_ep = container_of(fid, struct sock_ep, ep.fid);
+		if (sock_ep->listener.listener_thread)
+			return -FI_EINVAL;
+		memcpy(sock_ep->src_addr, addr, addrlen);
+		break;
+	case FI_CLASS_PEP:
+		sock_pep = container_of(fid, struct sock_pep, pep.fid);
+		if (sock_pep->cm.listener_thread)
+			return -FI_EINVAL;
+		memcpy(&sock_pep->src_addr, addr, addrlen);
+		break;
+	default:
+		SOCK_LOG_ERROR("Invalid argument\n");
+		return -FI_EINVAL;
+	}
+	return 0;
+}
+
 static int sock_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 {
 	struct sock_ep *sock_ep;
@@ -630,6 +659,9 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	if (!_eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ) 
 		return -FI_EINVAL;
 
+	if (!_ep->listener.listener_thread && sock_conn_listen(_ep))
+		return -FI_EINVAL;
+
 	req = calloc(1, sizeof(*req) + paramlen);
 	if (!req)
 		return -FI_ENOMEM;
@@ -680,6 +712,9 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 		return -FI_EINVAL;
 
 	if (_ep->is_disabled || _ep->cm.shutdown_received)
+		return -FI_EINVAL;
+
+	if (!_ep->listener.listener_thread && sock_conn_listen(_ep))
 		return -FI_EINVAL;
 
 	response = calloc(1, sizeof(*response) + paramlen);
@@ -742,7 +777,7 @@ static int sock_ep_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 
 struct fi_ops_cm sock_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
+	.setname = sock_ep_cm_setnmae,
 	.getname = sock_ep_cm_getname,
 	.getpeer = sock_ep_cm_getpeer,
 	.connect = sock_ep_cm_connect,

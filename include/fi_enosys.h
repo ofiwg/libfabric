@@ -160,7 +160,7 @@ static struct fi_ops_cm X = {
 	.shutdown = fi_no_shutdown,
 };
 */
-int fi_no_setname(fid_t fid, void *addr, size_t *addrlen);
+int fi_no_setname(fid_t fid, void *addr, size_t addrlen);
 int fi_no_getname(fid_t fid, void *addr, size_t *addrlen);
 int fi_no_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen);
 int fi_no_connect(struct fid_ep *ep, const void *addr,

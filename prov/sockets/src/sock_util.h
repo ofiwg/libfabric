@@ -33,6 +33,7 @@
 #ifndef _SOCK_UTIL_H_
 #define _SOCK_UTIL_H_
 
+#include <sys/mman.h>
 #include <rdma/fi_log.h>
 #include "sock.h"
 
@@ -58,6 +59,16 @@ static inline int sock_drop_packet(struct sock_ep *sock_ep)
 	}
 #endif
 	return 0;
+}
+
+static inline void *sock_mremap(void *old_address, size_t old_size, 
+				size_t new_size)
+{
+#ifdef __APPLE__
+	return (void*) -1;
+#else
+	return mremap(old_address, old_size, new_size, 0);
+#endif
 }
 
 #endif

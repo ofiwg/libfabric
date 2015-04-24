@@ -376,8 +376,10 @@ void sock_fabric_remove_service(struct sock_fabric *fab, int service)
 	struct sock_service_entry *service_entry;
 	fastlock_acquire(&fab->lock);
 	service_entry = sock_fabric_find_service(fab, service);
-	dlist_remove(&service_entry->entry);
-	free(service_entry);
+	if (service_entry) {
+		dlist_remove(&service_entry->entry);
+		free(service_entry);
+	}
 	fastlock_release(&fab->lock);
 }
 
@@ -546,11 +548,16 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 		for (tail = cur; tail->next; tail = tail->next)
 			;
 	}
+	if (!*info) {
+		ret = -FI_ENODATA;
+		goto err_no_free;
+	}
 	return 0;
 
 err:
 	fi_freeinfo(*info);
 	*info = NULL;
+err_no_free:
 	return ret;
 }
 

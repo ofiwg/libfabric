@@ -193,6 +193,7 @@ struct usdf_tx {
 		struct {
 			struct usdf_cq_hard *tx_hcq;
 
+			uint8_t *tx_inject_bufs;
 			struct usdf_msg_qe *tx_wqe_buf;
 			TAILQ_HEAD(,usdf_msg_qe) tx_free_wqe;
 			TAILQ_HEAD(,usdf_ep) tx_ep_ready;
@@ -204,6 +205,7 @@ struct usdf_tx {
 
 			atomic_t tx_next_msg_id;
 			struct usdf_rdm_qe *tx_wqe_buf;
+			uint8_t *tx_inject_bufs;
 			TAILQ_HEAD(,usdf_rdm_qe) tx_free_wqe;
 			TAILQ_HEAD(,usdf_rdm_connection) tx_rdc_ready;
 			TAILQ_HEAD(,usdf_rdm_connection) tx_rdc_have_acks;
@@ -258,6 +260,9 @@ struct usdf_ep {
 	atomic_t ep_refcnt;
 	uint64_t ep_caps;
 	uint64_t ep_mode;
+
+	uint8_t ep_tx_dflt_signal_comp;
+	uint8_t ep_rx_dflt_signal_comp;
 
 	uint32_t ep_wqe;	/* requested queue sizes */
 	uint32_t ep_rqe;
