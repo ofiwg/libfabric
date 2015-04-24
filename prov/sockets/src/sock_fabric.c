@@ -376,8 +376,10 @@ void sock_fabric_remove_service(struct sock_fabric *fab, int service)
 	struct sock_service_entry *service_entry;
 	fastlock_acquire(&fab->lock);
 	service_entry = sock_fabric_find_service(fab, service);
-	dlist_remove(&service_entry->entry);
-	free(service_entry);
+	if (service_entry) {
+		dlist_remove(&service_entry->entry);
+		free(service_entry);
+	}
 	fastlock_release(&fab->lock);
 }
 
