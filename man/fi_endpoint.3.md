@@ -1084,6 +1084,10 @@ value of an endpoint.
   reclaim them.  No other guarantees are made with respect to the
   state of the operation.
 
+  Note: This flag is used to control when a completion entry is inserted
+  into a completion queue.  It does not apply to operations that do not
+  generate a completion queue entry, such as the fi_inject operation.
+
 *FI_TRANSMIT_COMPLETE*
 : Indicates that a completion should be generated when the transmit
   operation has completed relative to the local provider.  The exact
