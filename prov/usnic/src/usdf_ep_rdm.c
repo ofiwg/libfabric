@@ -112,10 +112,20 @@ usdf_tx_rdm_enable(struct usdf_tx *tx)
 		goto fail;
 	}
 
+	ret = usd_alloc_mr(tx->tx_domain->dom_dev,
+			tx->tx_attr.size * USDF_RDM_MAX_INJECT_SIZE,
+			(void **)&tx->t.rdm.tx_inject_bufs);
+	if (ret) {
+		USDF_INFO("usd_alloc_mr failed (%s)\n", strerror(-ret));
+		goto fail;
+	}
+
 	/* populate free list */
 	TAILQ_INIT(&tx->t.rdm.tx_free_wqe);
 	wqe = tx->t.rdm.tx_wqe_buf;
 	for (i = 0; i < tx->tx_attr.size; ++i) {
+		wqe->rd_inject_buf =
+			&tx->t.rdm.tx_inject_bufs[USDF_RDM_MAX_INJECT_SIZE * i];
 		TAILQ_INSERT_TAIL(&tx->t.rdm.tx_free_wqe, wqe, rd_link);
 		++wqe;
 	}
@@ -130,6 +140,12 @@ fail:
 		TAILQ_INIT(&tx->t.rdm.tx_free_wqe);
 		tx->t.rdm.tx_num_free_wqe = 0;
 	}
+
+	if (tx->t.rdm.tx_inject_bufs != NULL) {
+		usd_free_mr(tx->t.rdm.tx_inject_bufs);
+		tx->t.rdm.tx_inject_bufs = NULL;
+	}
+
 	if (tx->tx_qp != NULL) {
 		usd_destroy_qp(tx->tx_qp);
 	}
@@ -337,6 +353,13 @@ usdf_rdm_fill_tx_attr(struct fi_tx_attr *txattr)
 	if (txattr->iov_limit == 0) {
 		txattr->iov_limit = USDF_RDM_DFLT_SGE;
 	}
+
+	if (txattr->op_flags & ~USDF_RDM_SUPP_SENDMSG_FLAGS) {
+		USDF_WARN("one or more flags in 0x%llx not supported\n",
+			txattr->op_flags);
+		return -FI_EOPNOTSUPP;
+	}
+
 	return 0;
 }
 
@@ -474,11 +497,19 @@ usdf_ep_rdm_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_CQ:
 		if (flags & FI_SEND) {
 			cq = cq_fidtou(bfid);
+			if (flags & FI_COMPLETION)
+				ep->ep_tx_dflt_signal_comp = 0;
+			else
+				ep->ep_tx_dflt_signal_comp = 1;
 			usdf_ep_rdm_bind_cq(ep, cq, FI_SEND);
 		}
 
 		if (flags & FI_RECV) {
 			cq = cq_fidtou(bfid);
+			if (flags & FI_COMPLETION)
+				ep->ep_rx_dflt_signal_comp = 0;
+			else
+				ep->ep_rx_dflt_signal_comp = 1;
 			usdf_ep_rdm_bind_cq(ep, cq, FI_RECV);
 		}
 		break;
@@ -559,6 +590,7 @@ usdf_rdm_tx_ctx_close(fid_t fid)
 	}
 
 	if (tx->tx_qp != NULL) {
+		usd_free_mr(tx->t.rdm.tx_inject_bufs);
 		free(tx->t.rdm.tx_wqe_buf);
 		usd_destroy_qp(tx->tx_qp);
 	}
@@ -755,6 +787,8 @@ usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
 	ep->ep_domain = udp;
 	ep->ep_caps = info->caps;
 	ep->ep_mode = info->mode;
+	ep->ep_tx_dflt_signal_comp = 1;
+	ep->ep_rx_dflt_signal_comp = 1;
 
 	/* implicitly create TX context if not to be shared */
 	if (info->ep_attr == NULL ||
