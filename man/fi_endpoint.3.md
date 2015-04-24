@@ -256,42 +256,58 @@ together when binding an endpoint to a completion domain CQ.
 : Directs the notification of inbound data transfers to the specified
   completion queue.  This includes received messages.
 
-*FI_COMPLETION*
+*FI_SELECTIVE_COMPLETION*
 : By default, data transfer operations generate completion entries
   into a completion queue after they have successfully completed.
-  Applications can use this bind flag to selectively enable
-  when completions are generated.  If FI_COMPLETION is specified,
+  Applications can use this bind flag to selectively enable when
+  completions are generated.  If FI_SELECTIVE_COMPLETION is specified,
   data transfer operations will not generate entries for successful
-  completions unless FI_COMPLETION is set as an operational flag
-  for the given operation.  FI_COMPLETION must be OR'ed with
-  FI_SEND and/or FI_RECV flags.
+  completions unless FI_COMPLETION is set as an operational flag for the
+  given operation.  FI_SELECTIVE_COMPLETION must be OR'ed with FI_SEND
+  and/or FI_RECV flags.
 
-  When set the user must determine when a request that does NOT have
-  FI_COMPLETION set has completed indirectly, usually based on the
-  completion of a subsequent operation.  Use of this flag may improve
-  performance by allowing the provider to avoid writing a completion
-  entry for every operation.
-  
+  When FI_SELECTIVE_COMPLETION is set, the user must determine when a
+  request that does NOT have FI_COMPLETION set has completed indirectly,
+  usually based on the completion of a subsequent operation.  Use of
+  this flag may improve performance by allowing the provider to avoid
+  writing a completion entry for every operation.
+
   Example: An application can selectively generate send completions by
   using the following general approach:
-  
+
   {% highlight c %}
   fi_tx_attr::op_flags = 0; // default - no completion
-  fi_ep_bind(ep, cq, FI_SEND | FI_COMPLETION);
+  fi_ep_bind(ep, cq, FI_SEND | FI_SELECTIVE_COMPLETION);
   fi_send(ep, ...);                   // no completion
   fi_sendv(ep, ...);                  // no completion
   fi_sendmsg(ep, ..., FI_COMPLETION); // completion!
+  fi_inject(ep, ...);                 // no completion
   {% endhighlight %}
-  
+
   Example: An application can selectively disable send completions by
   modifying the operational flags:
-  
+
   {% highlight c %}
   fi_tx_attr::op_flags = FI_COMPLETION; // default - completion
-  fi_ep_bind(ep, cq, FI_SEND | FI_COMPLETION);
+  fi_ep_bind(ep, cq, FI_SEND | FI_SELECTIVE_COMPLETION);
   fi_send(ep, ...);       // completion
   fi_sendv(ep, ...);      // completion
   fi_sendmsg(ep, ..., 0); // no completion!
+  fi_inject(ep, ...);     // no completion!
+  {% endhighlight %}
+
+  Example: Omitting FI_SELECTIVE_COMPLETION when binding will generate
+  completions for all non-fi_inject calls:
+
+  {% highlight c %}
+  fi_tx_attr::op_flags = 0;
+  fi_ep_bind(ep, cq, FI_SEND);  // default - completion
+  fi_send(ep, ...);                   // completion
+  fi_sendv(ep, ...);                  // completion
+  fi_sendmsg(ep, ..., 0);             // completion!
+  fi_sendmsg(ep, ..., FI_COMPLETION); // completion
+  fi_sendmsg(ep, ..., FI_INJECT|FI_COMPLETION); // completion!
+  fi_inject(ep, ...);                 // no completion!
   {% endhighlight %}
 
 An endpoint may also, or instead, be bound to a fabric counter.  When

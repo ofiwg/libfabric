@@ -89,7 +89,7 @@ typedef struct fid *fid_t;
  * Flags
  * The 64-bit flag field is used as follows:
  * 1-grow up    common (usable with multiple operations)
- * 59-go down   operation spceific (used for single call/class)
+ * 59-grow down operation specific (used for single call/class)
  * 60 - 63      provider specific
  */
 
@@ -121,6 +121,7 @@ typedef struct fid *fid_t;
 #define FI_TRANSMIT_COMPLETE	(1ULL << 27)
 #define FI_DELIVERY_COMPLETE	(1ULL << 28)
 
+/* fi_getinfo()-specific flags */
 #define FI_RMA_EVENT		(1ULL << 56)
 #define FI_SOURCE		(1ULL << 57)
 #define FI_NAMED_RX_CTX		(1ULL << 58)
@@ -331,6 +332,9 @@ enum {
 
 struct fi_eq_attr;
 struct fi_wait_attr;
+
+/* fi_bind()-specific flags */
+#define FI_SELECTIVE_COMPLETION	(1ULL << 59)
 
 struct fi_ops {
 	size_t	size;

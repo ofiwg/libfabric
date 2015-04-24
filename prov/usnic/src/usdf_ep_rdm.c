@@ -497,7 +497,7 @@ usdf_ep_rdm_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_CQ:
 		if (flags & FI_SEND) {
 			cq = cq_fidtou(bfid);
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->ep_tx_dflt_signal_comp = 0;
 			else
 				ep->ep_tx_dflt_signal_comp = 1;
@@ -506,7 +506,7 @@ usdf_ep_rdm_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		if (flags & FI_RECV) {
 			cq = cq_fidtou(bfid);
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->ep_rx_dflt_signal_comp = 0;
 			else
 				ep->ep_rx_dflt_signal_comp = 1;
