@@ -3,6 +3,7 @@ ACLOCAL_AMFLAGS = -I config
 
 bin_PROGRAMS = \
 	simple/fi_msg \
+	simple/fi_msg_sockets \
 	simple/fi_rdm \
 	simple/fi_rdm_rma_simple \
 	simple/fi_dgram \
@@ -48,6 +49,10 @@ if MACOS
 libfabtests_la_SOURCES += include/osx/osd.h
 libfabtests_la_SOURCES += common/osx/osd.c
 endif
+
+simple_fi_msg_sockets_SOURCES = \
+	simple/msg_sockets.c
+simple_fi_msg_sockets_LDADD = libfabtests.la
 
 simple_fi_msg_epoll_SOURCES = \
 	simple/msg_epoll.c
