@@ -126,6 +126,17 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 		dest_addr = psmx_resolve_name(node, 0);
 
 	if (hints) {
+		switch (hints->addr_format) {
+		case FI_FORMAT_UNSPEC:
+		case FI_ADDR_PSMX:
+			break;
+		default:
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"hints->addr_format=%d, supported=%d,%d.\n",
+				hints->addr_format, FI_FORMAT_UNSPEC, FI_ADDR_PSMX);
+			goto err_out;
+		}
+
 		if (hints->ep_attr) {
 			switch (hints->ep_attr->type) {
 			case FI_EP_UNSPEC:
