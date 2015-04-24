@@ -1170,6 +1170,7 @@ out:
 
 static struct fi_ops_cm sock_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
+	.setname = sock_ep_cm_setnmae,
 	.getname = sock_ep_cm_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
