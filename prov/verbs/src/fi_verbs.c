@@ -894,7 +894,6 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 	struct rdma_cm_id *id;
 	struct rdma_addrinfo *rai;
 	struct fi_info *fi;
-	const char *dev_name;
 	int ret;
 
 	ret = fi_ibv_init_info(hints);
@@ -908,10 +907,8 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 	if (ret)
 		return ret;
 
-	if (id->verbs) {
-		dev_name = ibv_get_device_name(id->verbs->device);
-		assert(!strcmp(verbs_info->domain_attr->name, dev_name));
-	}
+	assert(!id->verbs || !strcmp(verbs_info->domain_attr->name,
+				     ibv_get_device_name(id->verbs->device)));
 
 	if (!(fi = fi_dupinfo(verbs_info))) {
 		ret = -FI_ENOMEM;
@@ -2286,12 +2283,12 @@ fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 static struct fi_info *
 fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 {
-	struct fi_info *info = NULL;
+	struct fi_info *info;
 	struct fi_ibv_connreq *connreq;
 
 	if (fi_ibv_init_info(NULL)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unable to initialize verbs_info\n");
-		goto err;
+		return NULL;
 	}
 
 	info = fi_dupinfo(verbs_info);
