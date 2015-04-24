@@ -659,6 +659,9 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	if (!_eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ) 
 		return -FI_EINVAL;
 
+	if (!_ep->listener.listener_thread && sock_conn_listen(_ep))
+		return -FI_EINVAL;
+
 	req = calloc(1, sizeof(*req) + paramlen);
 	if (!req)
 		return -FI_ENOMEM;
@@ -709,6 +712,9 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 		return -FI_EINVAL;
 
 	if (_ep->is_disabled || _ep->cm.shutdown_received)
+		return -FI_EINVAL;
+
+	if (!_ep->listener.listener_thread && sock_conn_listen(_ep))
 		return -FI_EINVAL;
 
 	response = calloc(1, sizeof(*response) + paramlen);

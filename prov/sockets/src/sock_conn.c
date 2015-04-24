@@ -311,6 +311,7 @@ static void *_sock_conn_listen(void *arg)
 	poll_fds[0].fd = listener->sock;
 	poll_fds[1].fd = listener->signal_fds[1];
 	poll_fds[0].events = poll_fds[1].events = POLLIN;
+	listener->is_ready = 1;
 
  	while (listener->do_listen) {
 		if (poll(poll_fds, 2, -1) > 0) {
@@ -453,8 +454,13 @@ int sock_conn_listen(struct sock_ep *ep)
 		goto err;
 
 	fd_set_nonblock(listener->signal_fds[1]);
-	return pthread_create(&listener->listener_thread, 0, 
-			      _sock_conn_listen, ep);
+	if (pthread_create(&listener->listener_thread, 0, 
+			   _sock_conn_listen, ep)) {
+		SOCK_LOG_ERROR("failed to create conn listener thread\n");
+		goto err;
+	}
+	while (!*((volatile int*)&listener->is_ready));
+	return 0;
 err:
 	if (listen_fd >= 0)
 		close(listen_fd);

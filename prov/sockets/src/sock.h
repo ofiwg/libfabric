@@ -416,6 +416,7 @@ struct sock_cm_entry {
 struct sock_conn_listener {
 	int sock;
 	int do_listen;
+	int is_ready;
 	int signal_fds[2];
 	pthread_t listener_thread;
 	char service[NI_MAXSERV];
