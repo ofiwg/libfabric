@@ -897,11 +897,9 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 	const char *dev_name;
 	int ret;
 
-	if (!verbs_info) {
-		ret = fi_ibv_init_info(hints);
-		if (ret)
-			return ret;
-	}
+	ret = fi_ibv_init_info(hints);
+	if (ret)
+		return ret;
 
 	/* TODO When multiple devices are present verbs_info would be list
 	 * of info. In that case we have to choose the correct verbs_info to 
@@ -2204,12 +2202,6 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (strcmp(_domain->verbs->device->name, info->domain_attr->name))
 		return -FI_EINVAL;
 
-	if (!verbs_info) {
-		ret = fi_ibv_init_info(NULL);
-		if (ret)
-			return ret;
-	}
-
 	if (info->ep_attr) {
 		ret = fi_ibv_check_ep_attr(info->ep_attr, verbs_info);
 		if (ret)
@@ -2294,14 +2286,12 @@ fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 static struct fi_info *
 fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 {
-	struct fi_info *info;
+	struct fi_info *info = NULL;
 	struct fi_ibv_connreq *connreq;
 
-	if (!verbs_info) {
-		if(fi_ibv_init_info(NULL)) {
-			FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unable to initialize verbs_info\n");
-			goto err;
-		}
+	if (fi_ibv_init_info(NULL)) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unable to initialize verbs_info\n");
+		goto err;
 	}
 
 	info = fi_dupinfo(verbs_info);
@@ -3293,11 +3283,10 @@ static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric
 	struct fi_ibv_fabric *fab;
 	int ret;
 
-	if (!verbs_info) {
-		ret = fi_ibv_init_info(NULL);
-		if (ret)
-			return ret;
-	}
+	ret = fi_ibv_init_info(NULL);
+	if (ret)
+		return ret;
+
 
 	ret = fi_ibv_check_fabric_attr(attr, verbs_info);
 	if (ret)
