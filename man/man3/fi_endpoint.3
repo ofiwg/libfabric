@@ -272,19 +272,20 @@ The FI_SEND flag may be used interchangeably.
 the specified completion queue.
 This includes received messages.
 .PP
-\f[I]FI_COMPLETION\f[] : By default, data transfer operations generate
-completion entries into a completion queue after they have successfully
-completed.
+\f[I]FI_SELECTIVE_COMPLETION\f[] : By default, data transfer operations
+generate completion entries into a completion queue after they have
+successfully completed.
 Applications can use this bind flag to selectively enable when
 completions are generated.
-If FI_COMPLETION is specified, data transfer operations will not
-generate entries for successful completions unless FI_COMPLETION is set
-as an operational flag for the given operation.
-FI_COMPLETION must be OR\[aq]ed with FI_SEND and/or FI_RECV flags.
+If FI_SELECTIVE_COMPLETION is specified, data transfer operations will
+not generate entries for successful completions unless FI_COMPLETION is
+set as an operational flag for the given operation.
+FI_SELECTIVE_COMPLETION must be OR\[aq]ed with FI_SEND and/or FI_RECV
+flags.
 .PP
-When set the user must determine when a request that does NOT have
-FI_COMPLETION set has completed indirectly, usually based on the
-completion of a subsequent operation.
+When FI_SELECTIVE_COMPLETION is set, the user must determine when a
+request that does NOT have FI_COMPLETION set has completed indirectly,
+usually based on the completion of a subsequent operation.
 Use of this flag may improve performance by allowing the provider to
 avoid writing a completion entry for every operation.
 .PP
@@ -294,10 +295,11 @@ using the following general approach:
 .nf
 \f[C]
 \ \ fi_tx_attr::op_flags\ =\ 0;\ //\ default\ -\ no\ completion
-\ \ fi_ep_bind(ep,\ cq,\ FI_SEND\ |\ FI_COMPLETION);
+\ \ fi_ep_bind(ep,\ cq,\ FI_SEND\ |\ FI_SELECTIVE_COMPLETION);
 \ \ fi_send(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ no\ completion
 \ \ fi_sendv(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ no\ completion
 \ \ fi_sendmsg(ep,\ ...,\ FI_COMPLETION);\ //\ completion!
+\ \ fi_inject(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ no\ completion
 \f[]
 .fi
 .PP
@@ -307,10 +309,27 @@ modifying the operational flags:
 .nf
 \f[C]
 \ \ fi_tx_attr::op_flags\ =\ FI_COMPLETION;\ //\ default\ -\ completion
-\ \ fi_ep_bind(ep,\ cq,\ FI_SEND\ |\ FI_COMPLETION);
+\ \ fi_ep_bind(ep,\ cq,\ FI_SEND\ |\ FI_SELECTIVE_COMPLETION);
 \ \ fi_send(ep,\ ...);\ \ \ \ \ \ \ //\ completion
 \ \ fi_sendv(ep,\ ...);\ \ \ \ \ \ //\ completion
 \ \ fi_sendmsg(ep,\ ...,\ 0);\ //\ no\ completion!
+\ \ fi_inject(ep,\ ...);\ \ \ \ \ //\ no\ completion!
+\f[]
+.fi
+.PP
+Example: Omitting FI_SELECTIVE_COMPLETION when binding will generate
+completions for all non-fi_inject calls:
+.IP
+.nf
+\f[C]
+\ \ fi_tx_attr::op_flags\ =\ 0;
+\ \ fi_ep_bind(ep,\ cq,\ FI_SEND);\ \ //\ default\ -\ completion
+\ \ fi_send(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ completion
+\ \ fi_sendv(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ completion
+\ \ fi_sendmsg(ep,\ ...,\ 0);\ \ \ \ \ \ \ \ \ \ \ \ \ //\ completion!
+\ \ fi_sendmsg(ep,\ ...,\ FI_COMPLETION);\ //\ completion
+\ \ fi_sendmsg(ep,\ ...,\ FI_INJECT|FI_COMPLETION);\ //\ completion!
+\ \ fi_inject(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ no\ completion!
 \f[]
 .fi
 .PP
