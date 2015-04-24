@@ -958,11 +958,11 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
 		/* Must bind a CQ to either RECV or SEND completions, and
-		 * the FI_COMPLETION flag is only valid when binding the
+		 * the FI_SELECTIVE_COMPLETION flag is only valid when binding the
 		 * FI_SEND CQ. */
 		if (!(flags & (FI_RECV|FI_SEND))
-				|| (flags & (FI_SEND|FI_COMPLETION))
-							== FI_COMPLETION) {
+				|| (flags & (FI_SEND|FI_SELECTIVE_COMPLETION))
+							== FI_SELECTIVE_COMPLETION) {
 			return -EINVAL;
 		}
 		if (flags & FI_RECV) {
@@ -974,8 +974,8 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (ep->scq)
 				return -EINVAL;
 			ep->scq = container_of(bfid, struct fi_ibv_cq, cq_fid.fid);
-			if (flags & FI_COMPLETION)
-				ep->ep_flags |= FI_COMPLETION;
+			if (flags & FI_SELECTIVE_COMPLETION)
+				ep->ep_flags |= FI_SELECTIVE_COMPLETION;
 			else
 				ep->tx_op_flags |= FI_COMPLETION;
 		}
@@ -1110,7 +1110,7 @@ fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 
 		wr.sg_list = sge;
 	}
-	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) ||
 	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
@@ -1297,7 +1297,7 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			}
 		}
 	}
-	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) ||
 	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	wr.sg_list = sge;
@@ -1402,7 +1402,7 @@ fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	wr.wr.rdma.rkey = (uint32_t) msg->rma_iov->key;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	if (!(_ep->ep_flags & FI_COMPLETION) || (flags & (FI_COMPLETION))) {
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) || (flags & (FI_COMPLETION))) {
 		wr.send_flags = IBV_SEND_SIGNALED;
 	} else {
 		wr.send_flags = 0;
@@ -1575,7 +1575,7 @@ fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
-	if (!(_ep->ep_flags & FI_COMPLETION) || (flags & FI_COMPLETION))
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) || (flags & FI_COMPLETION))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
 	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
@@ -1718,7 +1718,7 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
-	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) ||
 	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
@@ -1857,7 +1857,7 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
-	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) ||
 	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)

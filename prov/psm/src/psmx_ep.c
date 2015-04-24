@@ -40,7 +40,7 @@ static void psmx_ep_optimize_ops(struct psmx_fid_ep *ep)
 			FI_INFO(&psmx_prov, FI_LOG_EP_DATA,
 				"generic tagged ops.\n");
 		}
-		else if (ep->send_cq_event_flag && ep->recv_cq_event_flag) {
+		else if (ep->send_selective_completion && ep->recv_selective_completion) {
 			if (ep->av && ep->av->type == FI_AV_TABLE)
 				ep->ep.tagged = &psmx_tagged_ops_no_event_av_table;
 			else
@@ -48,7 +48,7 @@ static void psmx_ep_optimize_ops(struct psmx_fid_ep *ep)
 			FI_INFO(&psmx_prov, FI_LOG_EP_DATA,
 				"tagged ops optimized for op_flags=0 and event suppression\n");
 		}
-		else if (ep->send_cq_event_flag) {
+		else if (ep->send_selective_completion) {
 			if (ep->av && ep->av->type == FI_AV_TABLE)
 				ep->ep.tagged = &psmx_tagged_ops_no_send_event_av_table;
 			else
@@ -56,7 +56,7 @@ static void psmx_ep_optimize_ops(struct psmx_fid_ep *ep)
 			FI_INFO(&psmx_prov, FI_LOG_EP_DATA,
 				"tagged ops optimized for op_flags=0 and send event suppression\n");
 		}
-		else if (ep->recv_cq_event_flag) {
+		else if (ep->recv_selective_completion) {
 			if (ep->av && ep->av->type == FI_AV_TABLE)
 				ep->ep.tagged = &psmx_tagged_ops_no_recv_event_av_table;
 			else
@@ -177,13 +177,13 @@ static int psmx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 		if (flags & FI_SEND) {
 			ep->send_cq = cq;
-			if (flags & FI_COMPLETION)
-				ep->send_cq_event_flag = 1;
+			if (flags & FI_SELECTIVE_COMPLETION)
+				ep->send_selective_completion = 1;
 		}
 		if (flags & FI_RECV) {
 			ep->recv_cq = cq;
-			if (flags & FI_COMPLETION)
-				ep->recv_cq_event_flag = 1;
+			if (flags & FI_SELECTIVE_COMPLETION)
+				ep->recv_selective_completion = 1;
 		}
 		psmx_ep_optimize_ops(ep);
 		break;

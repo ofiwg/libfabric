@@ -133,19 +133,19 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx);
 		if (flags & FI_SEND) {
 			tx_ctx->comp.send_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.send_cq_event = 1;
 		}
 
 		if (flags & FI_READ) {
 			tx_ctx->comp.read_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.read_cq_event = 1;
 		}
 
 		if (flags & FI_WRITE) {
 			tx_ctx->comp.write_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.write_cq_event = 1;
 		}
 
@@ -158,7 +158,7 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		rx_ctx = container_of(fid, struct sock_rx_ctx, ctx.fid);
 		if (flags & FI_RECV) {
 			rx_ctx->comp.recv_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				rx_ctx->comp.recv_cq_event = 1;
 		}
 
@@ -171,19 +171,19 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
 		if (flags & FI_SEND) {
 			tx_ctx->comp.send_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.send_cq_event = 1;
 		}
 
 		if (flags & FI_READ) {
 			tx_ctx->comp.read_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.read_cq_event = 1;
 		}
 
 		if (flags & FI_WRITE) {
 			tx_ctx->comp.write_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.write_cq_event = 1;
 		}
 
@@ -674,25 +674,25 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		if (flags & FI_SEND) {
 			ep->comp.send_cq = cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->comp.send_cq_event = 1;
 		}
 
 		if (flags & FI_READ) {
 			ep->comp.read_cq = cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->comp.read_cq_event = 1;
 		}
 
 		if (flags & FI_WRITE) {
 			ep->comp.write_cq = cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->comp.write_cq_event = 1;
 		}
 
 		if (flags & FI_RECV) {
 			ep->comp.recv_cq = cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->comp.recv_cq_event = 1;
 		}
 
@@ -719,7 +719,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				if (rx_ctx->ctx.fid.fclass == FI_CLASS_SRX_CTX) {
 					if (flags & FI_RECV) {
 						ep->comp.recv_cq = cq;
-						if (flags & FI_COMPLETION)
+						if (flags & FI_SELECTIVE_COMPLETION)
 							ep->comp.recv_cq_event = 1;
 					}
 

@@ -332,6 +332,9 @@ enum {
 struct fi_eq_attr;
 struct fi_wait_attr;
 
+/* fi_bind()-specific flags */
+#define FI_SELECTIVE_COMPLETION	(1ULL << 59)
+
 struct fi_ops {
 	size_t	size;
 	int	(*close)(struct fid *fid);
