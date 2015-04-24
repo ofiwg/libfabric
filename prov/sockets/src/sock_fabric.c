@@ -546,11 +546,16 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 		for (tail = cur; tail->next; tail = tail->next)
 			;
 	}
+	if (!*info) {
+		ret = -FI_ENODATA;
+		goto err_no_free;
+	}
 	return 0;
 
 err:
 	fi_freeinfo(*info);
 	*info = NULL;
+err_no_free:
 	return ret;
 }
 
