@@ -190,7 +190,7 @@ interfaces enables a provider to eliminate lower-level locks.
 : The endpoint threading model is similar to FI_THREAD_FID, but with
   the added restriction that serialization is required when accessing
   the same endpoint, even if multiple transmit and receive contexts are
-  used.  Conceptualy, FI_THREAD_ENDPOINT maps well to providers that
+  used.  Conceptually, FI_THREAD_ENDPOINT maps well to providers that
   implement fabric services in hardware but use a single command
   queue to access different data flows.
 

@@ -56,7 +56,7 @@ low latency and other offload capabilities on Ethernet networks.
     * Passive endpoints only support listen CM operations.
     * *FI_EP_DGRAM* endpoints support `fi_sendmsg()` and
       `fi_recvmsg()`, but all flags are ignored.
-    * *FI_EP_RDM* and *FI_EP_MSG* endponts do not support
+    * *FI_EP_RDM* and *FI_EP_MSG* endpoints do not support
       `fi_sendmsg()` and `fi_recvmsg()`.
     * Address vectors only support `FI_AV_MAP`.
     * No counters are supported.

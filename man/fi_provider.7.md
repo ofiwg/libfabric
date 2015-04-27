@@ -20,7 +20,7 @@ this framework.  Devices and the drivers that plug into the libfabric
 framework are referred to as fabric providers, or simply providers.
 
 This distribution of libfabric contains the following providers
-(although more may be available via run-time plugins):
+(although more may be available via run-time plug-ins):
 
 *PSM*
 : High-speed InfiniBand networking from Intel.  See
@@ -82,7 +82,7 @@ to application configuration parameters and need not meet these requirements.
     msg operation by calling sendmsg().  Providers may reference the
     general operation, and supply on the sendmsg() implementation.
 * Providers must set all operations to an implementation.  Function
-  pointers may not be left NULL or unitialized.  The framework supplies
+  pointers may not be left NULL or uninitialized.  The framework supplies
   empty functions that return -FI_ENOSYS which can be used for this
   purpose.
 * Endpoints must support the CM interface as follows:
