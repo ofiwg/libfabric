@@ -116,6 +116,12 @@
 			   FI_ORDER_SAR | FI_ORDER_SAW | FI_ORDER_SAS)
 
 #define SOCK_EP_COMP_ORDER (FI_ORDER_STRICT | FI_ORDER_DATA)
+#define SOCK_EP_DEFAULT_OP_FLAGS (FI_TRANSMIT_COMPLETE)
+
+#define SOCK_EP_SET_TX_OP_FLAGS(_flags) do {			\
+		if (!((_flags) & FI_INJECT_COMPLETE))		\
+			(_flags) |= FI_TRANSMIT_COMPLETE;	\
+	} while (0)
 
 #define SOCK_MODE (0)
 #define SOCK_NO_COMPLETION (1ULL << 60)
