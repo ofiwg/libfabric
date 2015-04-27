@@ -113,6 +113,7 @@ static ssize_t sock_ep_rma_readmsg(struct fid_ep *ep,
 		goto err;
 	}
 
+	flags |= SOCK_EP_DEFAULT_OP_FLAGS;
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;	
 	memset(&tx_op, 0, sizeof(struct sock_op));
@@ -255,6 +256,7 @@ static ssize_t sock_ep_rma_writemsg(struct fid_ep *ep,
 	if (!conn)
 		return -FI_EAGAIN;
 
+	flags |= SOCK_EP_DEFAULT_OP_FLAGS;
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;
 	memset(&tx_op, 0, sizeof(struct sock_op));
