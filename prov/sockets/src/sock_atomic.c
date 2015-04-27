@@ -104,6 +104,7 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	if (!conn)
 		return -FI_EAGAIN;
 
+	SOCK_EP_SET_TX_OP_FLAGS(flags);
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;
 
