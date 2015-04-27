@@ -56,38 +56,60 @@ a large amount of flexibility in selecting which components they are
 able and willing to support, based on specific hardware constraints.
 To assist in the development of applications, libfabric specifies the
 following requirements that must be met by any fabric provider, if
-requested by an application.  (Note that the instantiation of a
-specific fabric object is subject to application configuration
-parameters and need not meet these requirements).
+requested by an application.
+
+Note that the instantiation of a specific fabric object is subject
+to application configuration parameters and need not meet these requirements.
 
 * A fabric provider must support at least one endpoint type.
 * All endpoints must support the message queue data transfer
-  interface.
+  interface (fi_ops_msg).
 * An endpoint that advertises support for a specific endpoint
   capability must support the corresponding data transfer interface.
-* Endpoints must support operations to send and receive data for any
-  data transfer operations that they support.
-* Connectionless endpoints must support all relevant data
-  transfer routines. (send / recv / write / read / etc.)
-* Connectionless endpoints must support the CM interface getname.
-* Connectionless endpoints that support multicast operations must
-  support the CM interfaces join and leave.
-* Connection-oriented interfaces must support the CM interfaces
-  getname, getpeer, connect, listen, accept, reject, and shutdown.
-* All endpoints must support all relevant 'msg' data transfer
-  routines.  (sendmsg / recvmsg / writemsg / readmsg / etc.)
-* Access domains must support opening address vector maps and tables.
-* Address vectors associated with domains that may be identified using
-  IP addresses must support the FI_SOCKADDR_IN input format.
-* Access domains must support opening completion queues and counters.
-* Completion queues must support the FI_CQ_FORMAT_CONTEXT and
-  FI_CQ_FORMAT_MSG formats.
-* Event queues associated with tagged message transfers must support
-  the FI_CQ_FORMAT_TAGGED format.
+** FI_ATOMIC - fi_ops_atomic
+** FI_RMA - fi_ops_rma
+** FI_TAGGED - fi_ops_tagged
+* Endpoints must support all transmit and receive operations for any
+  data transfer interface that they support.
+** Exception: If an operation is only usable for an operation that
+  the provider does not support, and support for that operation is
+  conveyed using some other mechanism, the operation may return
+  - FI_ENOSYS.  For example, if the provider does not support
+  injected data, it can set the attribute inject_size = 0, and fail
+  all fi_inject operations.
+** The framework supplies wrappers around the 'msg' operations that
+  can be used.  For example, the framework implements the sendv()
+  msg operation by calling sendmsg().  Providers may reference the
+  general operation, and supply on the sendmsg() implementation.
+* Providers must set all operations to an implementation.  Function
+  pointers may not be left NULL or unitialized.  The framework supplies
+  empty functions that return -FI_ENOSYS which can be used for this
+  purpose.
+* Endpoints must support the CM interface as follows:
+** FI_EP_MSG endpoints must support all CM operations.
+** FI_EP_DGRAM endpoints must support CM getname and setname.
+** FI_EP_RDM endpoints must support CM getname and setname.
+* Providers that support connectionless endpoints must support all AV
+  operations (fi_ops_av).
+* Providers that support memory registration, must support all MR operations
+  (fi_ops_mr).
+* Providers should support both completion queues and counters.
+** If FI_RMA_EVENT is not supported, counter support is limited to local
+  events only.
+** Completion queues must support the FI_CQ_FORMAT_CONTEXT and
+  FI_CQ_FORMAT_MSG.
+** Providers that support FI_REMOTE_CQ_DATA shall support FI_CQ_FORMAT_DATA.
+** Providers that support FI_TAGGED shall support FI_CQ_FORMAT_TAGGED.
 * A provider is expected to be forward compatible, and must be able to
   be compiled against expanded `fi_xxx_ops` structures that define new
   functions added after the provider was written.  Any unknown
   functions must be set to NULL.
+* Providers shall document in their man page which features they support,
+  and any missing requirements. 
+
+Future versions of libfabric will automatically enable a more complete
+set of features for providers that focus their implementation on a
+narrow subset of libfabric capabilities.
 
 # LOGGING INTERFACE
 
