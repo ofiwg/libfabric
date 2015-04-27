@@ -433,40 +433,6 @@ int usdf_reg_mr(struct fid *fid, const void *buf, size_t len,
 	uint64_t access, uint64_t offset, uint64_t requested_key,
 	uint64_t flags, struct fid_mr **mr_o, void *context);
 
-/* fi_ops_cm for US */
-int usdf_cm_ud_connect(struct fid_ep *ep, const void *addr,
-	const void *param, size_t paramlen);
-int usdf_cm_ud_shutdown(struct fid_ep *ep, uint64_t flags);
-
-/* fi_ops_msg for UD */
-ssize_t usdf_msg_ud_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-	void *context);
-ssize_t usdf_msg_ud_recvv(struct fid_ep *ep, const struct iovec *iov,
-	void **desc, size_t count, void *context);
-ssize_t usdf_msg_ud_recvfrom(struct fid_ep *ep, void *buf, size_t len,
-	void *desc, fi_addr_t src_addr, void *context);
-ssize_t usdf_msg_ud_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
-	uint64_t flags);
-ssize_t usdf_msg_ud_send(struct fid_ep *ep, const void *buf, size_t len,
-	void *desc, void *context);
-ssize_t usdf_msg_ud_sendv(struct fid_ep *ep, const struct iovec *iov,
-	void **desc, size_t count, void *context);
-ssize_t usdf_msg_ud_sendto(struct fid_ep *ep, const void *buf, size_t len,
-	void *desc, fi_addr_t dest_addr, void *context);
-ssize_t usdf_msg_ud_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
-	uint64_t flags);
-ssize_t usdf_msg_ud_inject(struct fid_ep *ep, const void *buf, size_t len);
-ssize_t usdf_msg_ud_injectto(struct fid_ep *ep, const void *buf, size_t len,
-	fi_addr_t dest_addr);
-ssize_t usdf_msg_ud_senddata(struct fid_ep *ep, const void *buf, size_t len,
-	void *desc, uint64_t data, void *context);
-ssize_t usdf_msg_ud_senddatato(struct fid_ep *ep, const void *buf, size_t len,
-	void *desc, uint64_t data, fi_addr_t dest_addr, void *context);
-ssize_t usdf_msg_ud_prefix_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-	void *context);
-ssize_t usdf_msg_ud_prefix_recvv(struct fid_ep *ep, const struct iovec *iov,
-	void **desc, size_t count, void *context);
-
 /* Fake IBV provider */
 void usdf_setup_fake_ibv_provider(void);
 
