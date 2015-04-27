@@ -87,6 +87,7 @@ static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!rx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
+	flags |= SOCK_EP_DEFAULT_OP_FLAGS;
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= rx_ctx->attr.op_flags;
 
@@ -205,6 +206,7 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	SOCK_LOG_INFO("New sendmsg on TX: %p using conn: %p\n", 
 		      tx_ctx, conn);
 
+	flags |= SOCK_EP_DEFAULT_OP_FLAGS;
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;
 	memset(&tx_op, 0, sizeof(struct sock_op));
@@ -393,6 +395,7 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	if (!rx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
+	flags |= SOCK_EP_DEFAULT_OP_FLAGS;
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= rx_ctx->attr.op_flags;
 	flags &= ~FI_MULTI_RECV;
@@ -516,6 +519,7 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	if (!conn)
 		return -FI_EAGAIN;
 	
+	flags |= SOCK_EP_DEFAULT_OP_FLAGS;
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;
 
