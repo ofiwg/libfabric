@@ -66,40 +66,40 @@ to application configuration parameters and need not meet these requirements.
   interface (fi_ops_msg).
 * An endpoint that advertises support for a specific endpoint
   capability must support the corresponding data transfer interface.
-** FI_ATOMIC - fi_ops_atomic
-** FI_RMA - fi_ops_rma
-** FI_TAGGED - fi_ops_tagged
+  * FI_ATOMIC - fi_ops_atomic
+  * FI_RMA - fi_ops_rma
+  * FI_TAGGED - fi_ops_tagged
 * Endpoints must support all transmit and receive operations for any
   data transfer interface that they support.
-** Exception: If an operation is only usable for an operation that
-  the provider does not support, and support for that operation is
-  conveyed using some other mechanism, the operation may return
-  - FI_ENOSYS.  For example, if the provider does not support
-  injected data, it can set the attribute inject_size = 0, and fail
-  all fi_inject operations.
-** The framework supplies wrappers around the 'msg' operations that
-  can be used.  For example, the framework implements the sendv()
-  msg operation by calling sendmsg().  Providers may reference the
-  general operation, and supply on the sendmsg() implementation.
+  * Exception: If an operation is only usable for an operation that
+    the provider does not support, and support for that operation is
+    conveyed using some other mechanism, the operation may return
+    - FI_ENOSYS.  For example, if the provider does not support
+    injected data, it can set the attribute inject_size = 0, and fail
+    all fi_inject operations.
+  * The framework supplies wrappers around the 'msg' operations that
+    can be used.  For example, the framework implements the sendv()
+    msg operation by calling sendmsg().  Providers may reference the
+    general operation, and supply on the sendmsg() implementation.
 * Providers must set all operations to an implementation.  Function
   pointers may not be left NULL or unitialized.  The framework supplies
   empty functions that return -FI_ENOSYS which can be used for this
   purpose.
 * Endpoints must support the CM interface as follows:
-** FI_EP_MSG endpoints must support all CM operations.
-** FI_EP_DGRAM endpoints must support CM getname and setname.
-** FI_EP_RDM endpoints must support CM getname and setname.
+  * FI_EP_MSG endpoints must support all CM operations.
+  * FI_EP_DGRAM endpoints must support CM getname and setname.
+  * FI_EP_RDM endpoints must support CM getname and setname.
 * Providers that support connectionless endpoints must support all AV
   operations (fi_ops_av).
 * Providers that support memory registration, must support all MR operations
   (fi_ops_mr).
 * Providers should support both completion queues and counters.
-** If FI_RMA_EVENT is not supported, counter support is limited to local
-  events only.
-** Completion queues must support the FI_CQ_FORMAT_CONTEXT and
-  FI_CQ_FORMAT_MSG.
-** Providers that support FI_REMOTE_CQ_DATA shall support FI_CQ_FORMAT_DATA.
-** Providers that support FI_TAGGED shall support FI_CQ_FORMAT_TAGGED.
+  * If FI_RMA_EVENT is not supported, counter support is limited to local
+    events only.
+  * Completion queues must support the FI_CQ_FORMAT_CONTEXT and
+    FI_CQ_FORMAT_MSG.
+  * Providers that support FI_REMOTE_CQ_DATA shall support FI_CQ_FORMAT_DATA.
+  * Providers that support FI_TAGGED shall support FI_CQ_FORMAT_TAGGED.
 * A provider is expected to be forward compatible, and must be able to
   be compiled against expanded `fi_xxx_ops` structures that define new
   functions added after the provider was written.  Any unknown
