@@ -3254,6 +3254,7 @@ err:
 static int fi_ibv_fabric_close(fid_t fid)
 {
 	fi_freeinfo(verbs_info);
+	verbs_info = NULL;
 	free(fid);
 	return 0;
 }
