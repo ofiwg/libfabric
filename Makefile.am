@@ -440,6 +440,7 @@ dummy_man_pages = \
         man/man3/fi_senddata.3 \
         man/man3/fi_sendmsg.3 \
         man/man3/fi_sendv.3 \
+        man/man3/fi_setname.3 \
         man/man3/fi_setopt.3 \
         man/man3/fi_shutdown.3 \
         man/man3/fi_strerror.3 \
