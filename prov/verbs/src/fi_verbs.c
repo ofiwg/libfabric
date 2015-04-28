@@ -175,6 +175,8 @@ const struct fi_domain_attr verbs_domain_attr = {
 	.mr_mode		= FI_MR_BASIC,
 	.mr_key_size		= sizeof_field(struct ibv_sge, lkey),
 	.cq_data_size		= sizeof_field(struct ibv_send_wr, imm_data),
+	.tx_ctx_cnt		= 1024,
+	.rx_ctx_cnt		= 1024,
 	.max_ep_tx_ctx		= 1,
 	.max_ep_rx_ctx		= 1,
 };
@@ -194,7 +196,6 @@ const struct fi_rx_attr verbs_rx_attr = {
 	.mode			= VERBS_RX_MODE,
 	.msg_order		= VERBS_MSG_ORDER,
 	.total_buffered_recv	= 0,
-	.size			= 256,
 };
 
 const struct fi_tx_attr verbs_tx_attr = {
@@ -203,7 +204,7 @@ const struct fi_tx_attr verbs_tx_attr = {
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
 	.inject_size		= 0,
-	.size			= 256,
+	.rma_iov_limit		= 1,
 };
 
 static struct fi_info *verbs_info = NULL;
@@ -604,8 +605,9 @@ static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
  	return 0;
 }
 
-static inline int fi_ibv_get_inject_size(struct ibv_context *ctx, 
-		const struct fi_info *hints, struct fi_info *info)
+static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
+		const struct fi_info *hints, struct ibv_device_attr *device_attr,
+		struct fi_info *info)
 {
 	struct ibv_pd *pd;
 	struct ibv_cq *cq;
@@ -623,13 +625,24 @@ static inline int fi_ibv_get_inject_size(struct ibv_context *ctx,
 		goto err1;
 	}
 
+
+	/* TODO: serialize access to string buffers */
+	fi_read_file(FI_CONF_DIR, "def_send_wr",
+			def_send_wr, sizeof def_send_wr);
+	fi_read_file(FI_CONF_DIR, "def_recv_wr",
+			def_recv_wr, sizeof def_recv_wr);
+	fi_read_file(FI_CONF_DIR, "def_send_sge",
+			def_send_sge, sizeof def_send_sge);
+	fi_read_file(FI_CONF_DIR, "def_recv_sge",
+			def_recv_sge, sizeof def_recv_sge);
+
 	memset(&init_attr, 0, sizeof init_attr);
 	init_attr.send_cq = cq;
 	init_attr.recv_cq = cq;
-	init_attr.cap.max_send_wr = 1;
-	init_attr.cap.max_recv_wr = 1;
-	init_attr.cap.max_send_sge = 1;
-	init_attr.cap.max_recv_sge = 1;
+	init_attr.cap.max_send_wr = atoi(def_send_wr);
+	init_attr.cap.max_recv_wr = atoi(def_recv_wr);
+	init_attr.cap.max_send_sge = MIN(atoi(def_send_sge), device_attr->max_sge);
+	init_attr.cap.max_recv_sge = MIN(atoi(def_recv_sge), device_attr->max_sge);
 
 	if (hints && hints->tx_attr && hints->tx_attr->inject_size) {
 		init_attr.cap.max_inline_data = hints->tx_attr->inject_size;
@@ -647,7 +660,12 @@ static inline int fi_ibv_get_inject_size(struct ibv_context *ctx,
 		goto err2;
 	}
 
-	info->tx_attr->inject_size = init_attr.cap.max_inline_data;
+	info->tx_attr->inject_size	= init_attr.cap.max_inline_data;
+	info->tx_attr->iov_limit 	= init_attr.cap.max_send_sge;
+	info->tx_attr->size	 	= init_attr.cap.max_send_wr;
+
+	info->rx_attr->iov_limit 	= init_attr.cap.max_recv_sge;
+	info->rx_attr->size	 	= init_attr.cap.max_recv_wr;
 
 	ibv_destroy_qp(qp);
 err2:
@@ -665,24 +683,20 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 	struct ibv_port_attr port_attr;
 	int ret = 0;
 
-	ret = fi_ibv_get_inject_size(ctx, hints, info);
-	if (ret)
-		return ret;
-
 	ret = ibv_query_device(ctx, &device_attr);
 	if (ret)
 		return -errno;
 
 	info->domain_attr->cq_cnt 		= device_attr.max_cq;
 	info->domain_attr->ep_cnt 		= device_attr.max_qp;
-	/* TODO find correct optimum values for ctx_cnt */
-	info->domain_attr->tx_ctx_cnt 		= device_attr.max_qp;
-	info->domain_attr->rx_ctx_cnt 		= device_attr.max_qp;
+	info->domain_attr->tx_ctx_cnt 		= MIN(info->domain_attr->tx_ctx_cnt, device_attr.max_qp);
+	info->domain_attr->rx_ctx_cnt 		= MIN(info->domain_attr->rx_ctx_cnt, device_attr.max_qp);
 	info->domain_attr->max_ep_tx_ctx 	= device_attr.max_qp;
 	info->domain_attr->max_ep_rx_ctx 	= device_attr.max_qp;
-	info->tx_attr->iov_limit 		= device_attr.max_sge;
-	info->tx_attr->rma_iov_limit 		= device_attr.max_sge;
-	info->rx_attr->iov_limit 		= device_attr.max_sge;
+
+	ret = fi_ibv_get_qp_cap(ctx, hints, &device_attr, info);
+	if (ret)
+		return ret;
 
 	ret = ibv_query_port(ctx, 1, &port_attr);
 	if (ret)
