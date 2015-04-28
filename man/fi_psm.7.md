@@ -93,7 +93,7 @@ The *psm* provider checks for the following environment variables:
   The name server won't work properly if there are more than one processes
   from the same job (i.e. with the same UUID) running on the same node and
   acting as servers. For such scenario it is recommended to have each
-  process getting local transport address with *fi_cm_getname* and exchanginge
+  process getting local transport address with *fi_cm_getname* and exchanging
   the addresses with out-of-band mechanism.
 
   The name server is on by default. It can be turned off by setting the
@@ -104,7 +104,7 @@ The *psm* provider checks for the following environment variables:
 : The RMA functions are implemented on top of the PSM Active Message functions.
   The Active Message functions has limit on the size of data can be transferred
   in a single message. Large transfers can be divided into small chunks and
-  be pipelined. However, the bandwidth is sub-optimal by doing this way.
+  be pipe-lined. However, the bandwidth is sub-optimal by doing this way.
 
   The *psm* provider use PSM tag-matching message queue functions to achieve
   higher bandwidth for large size RMA. For this purpose, a bit is reserved from
