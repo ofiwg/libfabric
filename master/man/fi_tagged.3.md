@@ -267,7 +267,7 @@ The following flags may be used with fi_trecvmsg.
   with a status of FI_ENOMSG.
 
   If a peek request locates a matching message, the operation will complete
-  successfully.  The returned completion data will indicate the metadata
+  successfully.  The returned completion data will indicate the meta-data
   associated with the message, such as the message length, completion flags,
   available CQ data, tag, and source address.  The data available is subject to
   the completion entry format (e.g. struct fi_cq_tagged_entry).

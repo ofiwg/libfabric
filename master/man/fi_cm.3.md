@@ -174,6 +174,13 @@ what can fit into the buffer, it will be truncated.  On output, addrlen
 is set to the size of the buffer needed to store the address, which may
 be larger than the input value.
 
+fi_getname is not guaranteed to return a valid source address until after the
+specified endpoint has been enabled or has had an address assigned.  An
+endpoint may be enabled explicitly through fi_enable, or implicitly, such as
+through fi_connect or fi_listen.  An address may be assigned using fi_setname.
+fi_getpeer is not guaranteed to return a valid peer address until an endpoint
+has been completely connected -- an FI_CONNECTED event has been generated.
+
 # FLAGS
 
 Flag values are reserved and must be 0.

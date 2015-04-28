@@ -16,7 +16,7 @@ fi_strerror \- Convert fabric error into a printable string
 {% highlight c %}
 #include <rdma/fi_errno.h>
 
-const char *fi_strerror(int errnum);
+const char *fi_strerror(int errno);
 {% endhighlight %}
 
 

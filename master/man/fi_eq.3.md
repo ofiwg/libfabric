@@ -263,7 +263,7 @@ struct fi_eq_entry {
 
 *Connection Notification*
 : Connection notifications are connection management notifications
-  used to setup or teardown connections between endpoints.  There are
+  used to setup or tear down connections between endpoints.  There are
   three connection notification events: FI_CONNREQ, FI_CONNECTED, and
   FI_SHUTDOWN.  Connection notifications are reported using `struct
   fi_eq_cm_entry`:
@@ -330,7 +330,7 @@ struct fi_eq_cm_entry {
   errors may be result of numerous actions, but are often associated with
   a failed operation.  Operations may fail because of buffer overruns,
   invalid permissions, incorrect memory access keys, network routing
-  failures, network reachability issues, etc.
+  failures, network reach-ability issues, etc.
 
   Asynchronous errors are reported using struct fi_eq_err_entry, as defined
   below.  The fabric descriptor (fid) associated with the error is provided

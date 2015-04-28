@@ -24,12 +24,12 @@ use is to send a message only after receiving all input data.
 A triggered operation may be requested by specifying the FI_TRIGGER
 flag as part of the operation.  Alternatively, an endpoint alias may
 be created and configured with the FI_TRIGGER flag.  Such an endpoint
-is referred to as a triggerable endpoint.  All data transfer
-operations on a triggerable endpoint are deferred.
+is referred to as a trigger-able endpoint.  All data transfer
+operations on a trigger-able endpoint are deferred.
 
-Any data transfer operation is potentially triggerable, subject to
-provider constraints.  Triggerable endpoints are initialized such that
-only those interfaces supported by the provider which are triggerable
+Any data transfer operation is potentially trigger-able, subject to
+provider constraints.  Trigger-able endpoints are initialized such that
+only those interfaces supported by the provider which are trigger-able
 are available.
 
 Triggered operations require that applications use struct
