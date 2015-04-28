@@ -254,7 +254,7 @@ static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 		SOCK_LOG_ERROR("Invalid argument\n");
 		return -FI_EINVAL;
 	}
-	return 0;
+	return (*addrlen == sizeof(struct sockaddr_in)) ? 0 : -FI_ETOOSMALL;
 }
 
 static int sock_pep_create_listener(struct sock_pep *pep)
@@ -363,7 +363,7 @@ static int sock_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 	sock_ep = container_of(ep, struct sock_ep, ep);
 	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
 	memcpy(addr, sock_ep->dest_addr, *addrlen);
-	return 0;
+	return (*addrlen == sizeof(struct sockaddr_in)) ? 0 : -FI_ETOOSMALL;
 }
 
 static int sock_ep_cm_create_socket(void)
