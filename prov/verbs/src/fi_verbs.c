@@ -48,6 +48,7 @@
 
 #include <infiniband/ib.h>
 #include <infiniband/verbs.h>
+#include <infiniband/driver.h>
 #include <rdma/rdma_cma.h>
 
 #include <rdma/fabric.h>
@@ -701,6 +702,7 @@ static int fi_ibv_init_info(const struct fi_info *hints)
 	union ibv_gid gid;
 	size_t name_len;
 	int ret, num_devices;
+	char version;
 
 	if (verbs_info)
 		return 0;
@@ -708,6 +710,15 @@ static int fi_ibv_init_info(const struct fi_info *hints)
 	pthread_mutex_lock(&verbs_info_lock);
 	if (verbs_info)
 		goto unlock;
+
+	/* Check for RDMA CM support first, and fail gracefully if not available */
+	ret = ibv_read_sysfs_file(ibv_get_sysfs_path(),
+				  "class/misc/rdma_cm/abi_version",
+				   &version, sizeof version);
+	if (ret < 0) {
+		ret = -FI_ENODATA;
+		goto err1;
+	}
 
 	/* TODO Handle the case where multiple devices are returned */
 	ctx_list = rdma_get_devices(&num_devices);
