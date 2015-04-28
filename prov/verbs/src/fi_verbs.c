@@ -723,7 +723,7 @@ static int fi_ibv_init_info(const struct fi_info *hints)
 	/* TODO Handle the case where multiple devices are returned */
 	ctx_list = rdma_get_devices(&num_devices);
 	if (!num_devices) {
-		ret = -errno;
+		ret = (errno == ENODEV) ? -FI_ENODATA : -errno;
 		goto err1;
 	}
 
