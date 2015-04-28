@@ -231,19 +231,7 @@ usdf_ep_dgram_deref_cq(struct usdf_cq *cq)
 	}
 	atomic_dec(&cq->cq_refcnt);
 
-        switch (cq->cq_attr.format) {
-        case FI_CQ_FORMAT_CONTEXT:
-                rtn = usdf_progress_hard_cq_context;
-                break;
-        case FI_CQ_FORMAT_MSG:
-                rtn = usdf_progress_hard_cq_msg;
-                break;
-        case FI_CQ_FORMAT_DATA:
-                rtn = usdf_progress_hard_cq_data;
-                break;
-        default:
-                return;
-        }
+	rtn = usdf_progress_hard_cq;
 
 	if (usdf_cq_is_soft(cq)) {
 		TAILQ_FOREACH(hcq, &cq->c.soft.cq_list, cqh_link) {

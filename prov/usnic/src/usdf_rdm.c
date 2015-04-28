@@ -1109,7 +1109,7 @@ usdf_rdm_recv_complete(struct usdf_rx *rx, struct usdf_rdm_connection *rdc,
 
 	USDF_DBG_SYS(EP_DATA, "RECV complete ID=%u len=%lu\n", rdc->dc_rx_msg_id, rqe->rd_length);
 	hcq = rx->r.rdm.rx_hcq;
-	hcq->cqh_post(hcq, rqe->rd_context, rqe->rd_length);
+	hcq->cqh_post(hcq, rqe->rd_context, rqe->rd_length, FI_SUCCESS);
 
 	TAILQ_INSERT_HEAD(&rx->r.rdm.rx_free_rqe, rqe, rd_link);
 	++rx->r.msg.rx_num_free_rqe;
@@ -1284,7 +1284,7 @@ usdf_rdm_process_ack(struct usdf_rdm_connection *rdc,
 				USDF_DBG_SYS(EP_DATA, "send ID=%u complete\n", msg_id);
 				if (wqe->rd_signal_comp)
 					hcq->cqh_post(hcq, wqe->rd_context,
-							wqe->rd_length);
+							wqe->rd_length, FI_SUCCESS);
 
 				TAILQ_INSERT_HEAD(&tx->t.rdm.tx_free_wqe,
 					wqe, rd_link);

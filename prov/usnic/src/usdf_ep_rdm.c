@@ -444,18 +444,7 @@ usdf_ep_rdm_bind_cq(struct usdf_ep *ep, struct usdf_cq *cq, uint64_t flags)
 		hcq->cqh_cq = cq;
 		atomic_initialize(&hcq->cqh_refcnt, 0);
 		hcq->cqh_progress = usdf_rdm_hcq_progress;
-		switch (cq->cq_attr.format) {
-		default:
-		case FI_CQ_FORMAT_CONTEXT:
-			hcq->cqh_post = usdf_cq_post_soft_context;
-			break;
-		case FI_CQ_FORMAT_MSG:
-			hcq->cqh_post = usdf_cq_post_soft_msg;
-			break;
-		case FI_CQ_FORMAT_DATA:
-			hcq->cqh_post = usdf_cq_post_soft_data;
-			break;
-		}
+		hcq->cqh_post = usdf_cq_post_soft;
 		TAILQ_INSERT_TAIL(&cq->c.soft.cq_list, hcq, cqh_link);
 
 		/* add to domain progression list */

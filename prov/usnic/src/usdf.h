@@ -331,9 +331,19 @@ struct usdf_cq_hard {
 	struct usd_cq *cqh_ucq;
 	atomic_t cqh_refcnt;
 	void (*cqh_progress)(struct usdf_cq_hard *hcq);
-	void (*cqh_post)(struct usdf_cq_hard *hcq, void *context, size_t len);
+	void (*cqh_post)(struct usdf_cq_hard *hcq, void *context, size_t len,
+			int prov_errno);
 	TAILQ_ENTRY(usdf_cq_hard) cqh_link;
 	TAILQ_ENTRY(usdf_cq_hard) cqh_dom_link;
+};
+
+struct usdf_cq_soft_entry {
+	void		*cse_context;
+	uint64_t	cse_flags;
+	size_t		cse_len;
+	void		*cse_buf;
+	uint64_t	cse_data;
+	int		cse_prov_errno;
 };
 
 struct usdf_cq {
@@ -347,10 +357,10 @@ struct usdf_cq {
 			struct usd_cq *cq_cq;
 		} hard;
 		struct {
-			void *cq_comps;
-			void *cq_end;
-			void *cq_head;
-			void *cq_tail;
+			struct usdf_cq_soft_entry *cq_comps;
+			struct usdf_cq_soft_entry *cq_end;
+			struct usdf_cq_soft_entry *cq_head;
+			struct usdf_cq_soft_entry *cq_tail;
 			TAILQ_HEAD(,usdf_cq_hard) cq_list;
 		} soft;
 	} c;

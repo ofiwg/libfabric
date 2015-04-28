@@ -770,6 +770,21 @@ usdf_msg_tx_progress(struct usdf_tx *tx)
 }
 
 static void inline
+usdf_msg_recv_complete_err(struct usdf_ep *ep, struct usdf_msg_qe *rqe,
+			int status)
+{
+	struct usdf_cq_hard *hcq;
+	struct usdf_rx *rx;
+
+	rx = ep->ep_rx;
+	hcq = ep->ep_rx->r.msg.rx_hcq;
+	hcq->cqh_post(hcq, rqe->ms_context, rqe->ms_length, status);
+
+	TAILQ_INSERT_HEAD(&rx->r.msg.rx_free_rqe, rqe, ms_link);
+	++rx->r.msg.rx_num_free_rqe;
+}
+
+static void inline
 usdf_msg_recv_complete(struct usdf_ep *ep, struct usdf_msg_qe *rqe)
 {
 	struct usdf_cq_hard *hcq;
@@ -778,7 +793,7 @@ usdf_msg_recv_complete(struct usdf_ep *ep, struct usdf_msg_qe *rqe)
 	rx = ep->ep_rx;
 	hcq = rx->r.msg.rx_hcq;
 
-	hcq->cqh_post(hcq, rqe->ms_context, rqe->ms_length);
+	hcq->cqh_post(hcq, rqe->ms_context, rqe->ms_length, FI_SUCCESS);
 
 	TAILQ_INSERT_HEAD(&rx->r.msg.rx_free_rqe, rqe, ms_link);
 	++rx->r.msg.rx_num_free_rqe;
@@ -848,7 +863,7 @@ usdf_msg_process_ack(struct usdf_ep *ep, uint16_t seq)
 			USDF_DBG_SYS(EP_DATA, "send complete, signal_comp=%u\n", wqe->ms_signal_comp); // XXX DJG
 			if (wqe->ms_signal_comp)
 				hcq->cqh_post(hcq, wqe->ms_context,
-						wqe->ms_length);
+						wqe->ms_length, FI_SUCCESS);
 
 			TAILQ_INSERT_HEAD(&ep->ep_tx->t.msg.tx_free_wqe,
 					wqe, ms_link);
@@ -1096,6 +1111,7 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 		*/
 		if (rxlen > 0) {
 			rqe->ms_length -= rxlen;
+			usdf_msg_recv_complete_err(ep, rqe, FI_ETRUNC);
 /* printf("RQE truncated XXX\n"); */
 		} else {
 			usdf_msg_recv_complete(ep, rqe);
