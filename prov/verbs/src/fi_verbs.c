@@ -48,6 +48,7 @@
 
 #include <infiniband/ib.h>
 #include <infiniband/verbs.h>
+#include <infiniband/driver.h>
 #include <rdma/rdma_cma.h>
 
 #include <rdma/fabric.h>
@@ -701,6 +702,7 @@ static int fi_ibv_init_info(const struct fi_info *hints)
 	union ibv_gid gid;
 	size_t name_len;
 	int ret, num_devices;
+	char version;
 
 	if (verbs_info)
 		return 0;
@@ -709,16 +711,27 @@ static int fi_ibv_init_info(const struct fi_info *hints)
 	if (verbs_info)
 		goto unlock;
 
+	/* Check for RDMA CM support first, and fail gracefully if not available */
+	ret = ibv_read_sysfs_file(ibv_get_sysfs_path(),
+				  "class/misc/rdma_cm/abi_version",
+				   &version, sizeof version);
+	if (ret < 0) {
+		ret = -FI_ENODATA;
+		goto err1;
+	}
+
 	/* TODO Handle the case where multiple devices are returned */
 	ctx_list = rdma_get_devices(&num_devices);
-	if (!num_devices)
-		return -errno;
+	if (!num_devices) {
+		ret = (errno == ENODEV) ? -FI_ENODATA : -errno;
+		goto err1;
+	}
 
 	ctx = *ctx_list;
 
 	if (!(fi = fi_allocinfo())) {
 		ret = -FI_ENOMEM;
-		goto err1;
+		goto err2;
 	}
 
 	fi->caps		= VERBS_CAPS;
@@ -732,20 +745,20 @@ static int fi_ibv_init_info(const struct fi_info *hints)
 
 	ret = fi_ibv_get_device_attrs(ctx, hints, fi);
 	if (ret)
-		goto err2;
+		goto err3;
 
 	switch (ctx->device->transport_type) {
 	case IBV_TRANSPORT_IB:
 		if(ibv_query_gid(ctx, 1, 0, &gid)) {
 			ret = -errno;
-			goto err2;
+			goto err3;
 		}
 
 		name_len =  strlen(VERBS_IB_PREFIX) + INET6_ADDRSTRLEN;
 
 		if (!(fi->fabric_attr->name = calloc(1, name_len + 1))) {
 			ret = -FI_ENOMEM;
-			goto err2;
+			goto err3;
 		}
 
 		snprintf(fi->fabric_attr->name, name_len, VERBS_IB_PREFIX "%lx",
@@ -757,7 +770,7 @@ static int fi_ibv_init_info(const struct fi_info *hints)
 		fi->fabric_attr->name = strdup(VERBS_IWARP_FABRIC);
 		if (!fi->fabric_attr->name) {
 			ret = -FI_ENOMEM;
-			goto err2;
+			goto err3;
 		}
 
 		fi->ep_attr->protocol = FI_PROTO_IWARP;
@@ -766,25 +779,26 @@ static int fi_ibv_init_info(const struct fi_info *hints)
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown transport type");
 		ret = -FI_ENODATA;
-		goto err2;
+		goto err3;
 	}
 
 	if (!(fi->domain_attr->name = strdup(ctx->device->name))) {
 		ret = -FI_ENOMEM;
-		goto err2;
+		goto err3;
 	}
 
 	verbs_info = fi;
 	rdma_free_devices(ctx_list);
-
 unlock:
 	pthread_mutex_unlock(&verbs_info_lock);
-
 	return 0;
-err2:
+
+err3:
 	fi_freeinfo(fi);
-err1:
+err2:
 	rdma_free_devices(ctx_list);
+err1:
+	pthread_mutex_unlock(&verbs_info_lock);
 	return ret;
 }
 
