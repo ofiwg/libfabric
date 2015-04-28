@@ -390,6 +390,7 @@ err1:
 
 static int client_connect(void)
 {
+	size_t addrlen;
 	int ret;
 
 	ret = common_setup();
@@ -407,8 +408,14 @@ static int client_connect(void)
 	}
 
 	// send initial message to server with our local address
-	memcpy(buf_ptr, fi->src_addr, fi->src_addrlen);
-	ret = send_xfer(fi->src_addrlen);
+	addrlen = buffer_size;
+	ret = fi_getname(&ep->fid, buf_ptr, &addrlen);
+	if (ret) {
+		FT_PRINTERR("fi_getname", ret);
+		return ret;
+	}
+
+	ret = send_xfer(addrlen);
 	if (ret != 0)
 		goto err2;
 
