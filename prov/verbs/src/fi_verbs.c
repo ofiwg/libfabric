@@ -695,6 +695,33 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 	return 0;
 }
 
+/*
+ * USNIC plugs into the verbs framework, but is not a usable device.
+ * Manually check for devices and fail gracefully if none are present.
+ * This avoids the lower libraries (libibverbs and librdmacm) from
+ * reporting error messages to stderr.
+ */
+static int fi_ibv_have_device(void)
+{
+	struct ibv_device **devs;
+	struct ibv_context *verbs;
+	int i;
+
+	devs = ibv_get_device_list(NULL);
+	if (!devs)
+		return 0;
+
+	for (i = 0; devs[i]; i++) {
+		verbs = ibv_open_device(devs[i]);
+		if (verbs) {
+			ibv_close_device(verbs);
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 static int fi_ibv_init_info(const struct fi_info *hints)
 {
 	struct ibv_context *ctx, **ctx_list;
@@ -702,7 +729,6 @@ static int fi_ibv_init_info(const struct fi_info *hints)
 	union ibv_gid gid;
 	size_t name_len;
 	int ret, num_devices;
-	char version;
 
 	if (verbs_info)
 		return 0;
@@ -711,11 +737,7 @@ static int fi_ibv_init_info(const struct fi_info *hints)
 	if (verbs_info)
 		goto unlock;
 
-	/* Check for RDMA CM support first, and fail gracefully if not available */
-	ret = ibv_read_sysfs_file(ibv_get_sysfs_path(),
-				  "class/misc/rdma_cm/abi_version",
-				   &version, sizeof version);
-	if (ret < 0) {
+	if (!fi_ibv_have_device()) {
 		ret = -FI_ENODATA;
 		goto err1;
 	}
