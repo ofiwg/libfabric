@@ -427,31 +427,31 @@ struct fi_ops usdf_pep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = usdf_pep_close,
 	.bind = usdf_pep_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open
+	.control = fi_enosys,
+	.ops_open = fi_enosys
 };
 
 static struct fi_ops_ep usdf_pep_base_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = usdf_pep_cancel,
-	.getopt = fi_no_getopt,
-	.setopt = fi_no_setopt,
-	.tx_ctx = fi_no_tx_ctx,
-	.rx_ctx = fi_no_rx_ctx,
-	.rx_size_left = fi_no_rx_size_left,
-	.tx_size_left = fi_no_tx_size_left,
+	.getopt = fi_enosys,
+	.setopt = fi_enosys,
+	.tx_ctx = fi_enosys,
+	.rx_ctx = fi_enosys,
+	.rx_size_left = fi_enosys_s,
+	.tx_size_left = fi_enosys_s,
 };
 
 static struct fi_ops_cm usdf_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
-	.getname = fi_no_getname,
-	.getpeer = fi_no_getpeer,
-	.connect = fi_no_connect,
+	.setname = fi_enosys,
+	.getname = fi_enosys,
+	.getpeer = fi_enosys,
+	.connect = fi_enosys,
 	.listen = usdf_pep_listen,
-	.accept = fi_no_accept,
+	.accept = fi_enosys,
 	.reject = usdf_pep_reject,
-	.shutdown = fi_no_shutdown,
+	.shutdown = fi_enosys,
 };
 
 int

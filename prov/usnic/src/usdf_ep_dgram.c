@@ -288,22 +288,22 @@ usdf_ep_dgram_close(fid_t fid)
 
 static struct fi_ops_ep usdf_base_dgram_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = fi_no_cancel,
-	.getopt = fi_no_getopt,
-	.setopt = fi_no_setopt,
-	.tx_ctx = fi_no_tx_ctx,
-	.rx_ctx = fi_no_rx_ctx,
+	.cancel = fi_enosys_s,
+	.getopt = fi_enosys,
+	.setopt = fi_enosys,
+	.tx_ctx = fi_enosys,
+	.rx_ctx = fi_enosys,
 	.rx_size_left = usdf_dgram_rx_size_left,
 	.tx_size_left = usdf_dgram_tx_size_left,
 };
 
 static struct fi_ops_ep usdf_base_dgram_prefix_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = fi_no_cancel,
-	.getopt = fi_no_getopt,
-	.setopt = fi_no_setopt,
-	.tx_ctx = fi_no_tx_ctx,
-	.rx_ctx = fi_no_rx_ctx,
+	.cancel = fi_enosys_s,
+	.getopt = fi_enosys,
+	.setopt = fi_enosys,
+	.tx_ctx = fi_enosys,
+	.rx_ctx = fi_enosys,
 	.rx_size_left = usdf_dgram_prefix_rx_size_left,
 	.tx_size_left = usdf_dgram_prefix_tx_size_left,
 };
@@ -318,7 +318,7 @@ static struct fi_ops_msg usdf_dgram_ops = {
 	.sendmsg = usdf_dgram_sendmsg,
 	.inject = usdf_dgram_inject,
 	.senddata = usdf_dgram_senddata,
-	.injectdata = fi_no_msg_injectdata,
+	.injectdata = fi_enosys_s,
 };
 
 static struct fi_ops_msg usdf_dgram_prefix_ops = {
@@ -331,19 +331,19 @@ static struct fi_ops_msg usdf_dgram_prefix_ops = {
 	.sendmsg = usdf_dgram_prefix_sendmsg,
 	.inject = usdf_dgram_inject,
 	.senddata = usdf_dgram_senddata,
-	.injectdata = fi_no_msg_injectdata,
+	.injectdata = fi_enosys_s,
 };
 
 static struct fi_ops_cm usdf_cm_dgram_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
-	.getname = fi_no_getname,
-	.getpeer = fi_no_getpeer,
-	.connect = fi_no_connect,
-	.listen = fi_no_listen,
-	.accept = fi_no_accept,
-	.reject = fi_no_reject,
-	.shutdown = fi_no_shutdown,
+	.setname = fi_enosys,
+	.getname = fi_enosys,
+	.getpeer = fi_enosys,
+	.connect = fi_enosys,
+	.listen = fi_enosys,
+	.accept = fi_enosys,
+	.reject = fi_enosys,
+	.shutdown = fi_enosys,
 };
 
 static int usdf_ep_dgram_control(struct fid *fid, int command, void *arg)
@@ -373,7 +373,7 @@ static struct fi_ops usdf_ep_dgram_ops = {
 	.close = usdf_ep_dgram_close,
 	.bind = usdf_ep_dgram_bind,
 	.control = usdf_ep_dgram_control,
-	.ops_open = fi_no_ops_open
+	.ops_open = fi_enosys
 };
 
 int

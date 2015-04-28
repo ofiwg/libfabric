@@ -217,9 +217,9 @@ static int psmx_wait_close(fid_t fid)
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_wait_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.bind = fi_enosys,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 static struct fi_ops_wait psmx_wait_ops = {

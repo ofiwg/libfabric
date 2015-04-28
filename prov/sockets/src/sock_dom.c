@@ -241,8 +241,8 @@ static struct fi_ops sock_mr_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_mr_close,
 	.bind = sock_mr_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 struct sock_mr * sock_mr_get_entry(struct sock_domain *domain, uint16_t key)
@@ -428,8 +428,8 @@ static struct fi_ops sock_dom_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_dom_close,
 	.bind = sock_dom_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 static struct fi_ops_domain sock_dom_ops = {

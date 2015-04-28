@@ -73,9 +73,9 @@ static int psmx_domain_close(fid_t fid)
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_domain_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.bind = fi_enosys,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 static struct fi_ops_domain psmx_domain_ops = {
@@ -83,11 +83,11 @@ static struct fi_ops_domain psmx_domain_ops = {
 	.av_open = psmx_av_open,
 	.cq_open = psmx_cq_open,
 	.endpoint = psmx_ep_open,
-	.scalable_ep = fi_no_scalable_ep,
+	.scalable_ep = fi_enosys,
 	.cntr_open = psmx_cntr_open,
 	.poll_open = psmx_poll_open,
 	.stx_ctx = psmx_stx_ctx,
-	.srx_ctx = fi_no_srx_context,
+	.srx_ctx = fi_enosys,
 };
 
 int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,

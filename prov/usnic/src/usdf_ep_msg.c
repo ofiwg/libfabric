@@ -640,21 +640,21 @@ static struct fi_ops_ep usdf_base_msg_ops = {
 	.cancel = usdf_ep_msg_cancel,
 	.getopt = usdf_ep_msg_getopt,
 	.setopt = usdf_ep_msg_setopt,
-	.tx_ctx = fi_no_tx_ctx,
-	.rx_ctx = fi_no_rx_ctx,
+	.tx_ctx = fi_enosys,
+	.rx_ctx = fi_enosys,
 	.rx_size_left = usdf_msg_rx_size_left,
 	.tx_size_left = usdf_msg_tx_size_left,
 };
 
 static struct fi_ops_cm usdf_cm_msg_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
-	.getname = fi_no_getname,
-	.getpeer = fi_no_getpeer,
+	.setname = fi_enosys,
+	.getname = fi_enosys,
+	.getpeer = fi_enosys,
 	.connect = usdf_cm_msg_connect,
-	.listen = fi_no_listen,
+	.listen = fi_enosys,
 	.accept = usdf_cm_msg_accept,
-	.reject = fi_no_reject,
+	.reject = fi_enosys,
 	.shutdown = usdf_cm_msg_shutdown,
 };
 
@@ -668,7 +668,7 @@ static struct fi_ops_msg usdf_msg_ops = {
 	.sendmsg = usdf_msg_sendmsg,
 	.inject = usdf_msg_inject,
 	.senddata = usdf_msg_senddata,
-	.injectdata = fi_no_msg_injectdata,
+	.injectdata = fi_enosys_s,
 };
 
 static int usdf_ep_msg_control(struct fid *fid, int command, void *arg)
@@ -698,7 +698,7 @@ static struct fi_ops usdf_ep_msg_ops = {
 	.close = usdf_ep_msg_close,
 	.bind = usdf_ep_msg_bind,
 	.control = usdf_ep_msg_control,
-	.ops_open = fi_no_ops_open
+	.ops_open = fi_enosys
 };
 
 int

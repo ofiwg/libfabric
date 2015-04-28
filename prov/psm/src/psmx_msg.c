@@ -376,7 +376,7 @@ struct fi_ops_msg psmx_msg_ops = {
 	.sendv = psmx_sendv,
 	.sendmsg = psmx_sendmsg,
 	.inject = psmx_inject,
-	.senddata = fi_no_msg_senddata,
-	.injectdata = fi_no_msg_injectdata,
+	.senddata = fi_enosys_s,
+	.injectdata = fi_enosys_s,
 };
 

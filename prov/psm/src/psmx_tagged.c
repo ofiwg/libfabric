@@ -907,8 +907,8 @@ struct fi_ops_tagged psmx_tagged_ops = {
 	.sendv = psmx_tagged_sendv,
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject,
-	.senddata = fi_no_tagged_senddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.senddata = fi_enosys_s,
+	.injectdata = fi_enosys_s,
 };
 
 /* op_flags=0, no event suppression, FI_AV_MAP */
@@ -921,8 +921,8 @@ struct fi_ops_tagged psmx_tagged_ops_no_flag_av_map = {
 	.sendv = psmx_tagged_sendv_no_flag_av_map,
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_map,
-	.senddata = fi_no_tagged_senddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.senddata = fi_enosys_s,
+	.injectdata = fi_enosys_s,
 };
 
 /* op_flags=0, no event suppression, FI_AV_TABLE */
@@ -935,8 +935,8 @@ struct fi_ops_tagged psmx_tagged_ops_no_flag_av_table = {
 	.sendv = psmx_tagged_sendv_no_flag_av_table,
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_table,
-	.senddata = fi_no_tagged_senddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.senddata = fi_enosys_s,
+	.injectdata = fi_enosys_s,
 };
 
 /* op_flags=0, event suppression, FI_AV_MAP */
@@ -949,8 +949,8 @@ struct fi_ops_tagged psmx_tagged_ops_no_event_av_map = {
 	.sendv = psmx_tagged_sendv_no_event_av_map,
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_map,
-	.senddata = fi_no_tagged_senddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.senddata = fi_enosys_s,
+	.injectdata = fi_enosys_s,
 };
 
 /* op_flags=0, event suppression, FI_AV_TABLE */
@@ -963,8 +963,8 @@ struct fi_ops_tagged psmx_tagged_ops_no_event_av_table = {
 	.sendv = psmx_tagged_sendv_no_event_av_table,
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_table,
-	.senddata = fi_no_tagged_senddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.senddata = fi_enosys_s,
+	.injectdata = fi_enosys_s,
 };
 
 /* op_flags=0, send event suppression, FI_AV_MAP */
@@ -977,8 +977,8 @@ struct fi_ops_tagged psmx_tagged_ops_no_send_event_av_map = {
 	.sendv = psmx_tagged_sendv_no_event_av_map,
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_map,
-	.senddata = fi_no_tagged_senddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.senddata = fi_enosys_s,
+	.injectdata = fi_enosys_s,
 };
 
 /* op_flags=0, send event suppression, FI_AV_TABLE */
@@ -991,8 +991,8 @@ struct fi_ops_tagged psmx_tagged_ops_no_send_event_av_table = {
 	.sendv = psmx_tagged_sendv_no_event_av_table,
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_table,
-	.senddata = fi_no_tagged_senddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.senddata = fi_enosys_s,
+	.injectdata = fi_enosys_s,
 };
 
 /* op_flags=0, recv event suppression, FI_AV_MAP */
@@ -1005,8 +1005,8 @@ struct fi_ops_tagged psmx_tagged_ops_no_recv_event_av_map = {
 	.sendv = psmx_tagged_sendv_no_flag_av_map,
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_map,
-	.senddata = fi_no_tagged_senddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.senddata = fi_enosys_s,
+	.injectdata = fi_enosys_s,
 };
 
 /* op_flags=0, recv event suppression, FI_AV_TABLE */
@@ -1019,6 +1019,6 @@ struct fi_ops_tagged psmx_tagged_ops_no_recv_event_av_table = {
 	.sendv = psmx_tagged_sendv_no_flag_av_table,
 	.sendmsg = psmx_tagged_sendmsg,
 	.inject = psmx_tagged_inject_no_flag_av_table,
-	.senddata = fi_no_tagged_senddata,
-	.injectdata = fi_no_tagged_injectdata,
+	.senddata = fi_enosys_s,
+	.injectdata = fi_enosys_s,
 };

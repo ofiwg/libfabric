@@ -393,7 +393,7 @@ static struct fi_ops sock_ctx_ops = {
 	.close = sock_ctx_close,
 	.bind = sock_ctx_bind,
 	.control = sock_ctx_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 static int sock_ctx_getopt(fid_t fid, int level, int optname,
@@ -550,8 +550,8 @@ struct fi_ops_ep sock_ctx_ep_ops = {
 	.cancel = sock_ep_cancel,
 	.getopt = sock_ctx_getopt,
 	.setopt = sock_ctx_setopt,
-	.tx_ctx = fi_no_tx_ctx,
-	.rx_ctx = fi_no_rx_ctx,
+	.tx_ctx = fi_enosys,
+	.rx_ctx = fi_enosys,
 	.rx_size_left = sock_rx_size_left,
 	.tx_size_left = sock_tx_size_left,
 };
@@ -909,7 +909,7 @@ struct fi_ops sock_ep_fi_ops = {
 	.close = sock_ep_close,
 	.bind = sock_ep_bind,
 	.control = sock_ep_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 int sock_ep_enable(struct fid_ep *ep)

@@ -188,8 +188,8 @@ static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_mr_close,
 	.bind = psmx_mr_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 static void psmx_mr_normalize_iov(struct iovec *iov, size_t *count)

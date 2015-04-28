@@ -386,7 +386,7 @@ static struct fi_ops psmx_fabric_fi_ops = {
 static struct fi_ops_fabric psmx_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = psmx_domain_open,
-	.passive_ep = fi_no_passive_ep,
+	.passive_ep = fi_enosys,
 	.eq_open = psmx_eq_open,
 	.wait_open = psmx_wait_open,
 };

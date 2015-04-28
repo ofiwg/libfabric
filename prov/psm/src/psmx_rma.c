@@ -891,6 +891,6 @@ struct fi_ops_rma psmx_rma_ops = {
 	.writemsg = psmx_writemsg,
 	.inject = psmx_inject,
 	.writedata = psmx_writedata,
-	.injectdata = fi_no_rma_injectdata,
+	.injectdata = fi_enosys_s,
 };
 

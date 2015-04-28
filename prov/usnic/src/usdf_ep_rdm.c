@@ -682,22 +682,22 @@ static struct fi_ops_ep usdf_base_rdm_ops = {
 	.cancel = usdf_ep_rdm_cancel,
 	.getopt = usdf_ep_rdm_getopt,
 	.setopt = usdf_ep_rdm_setopt,
-	.tx_ctx = fi_no_tx_ctx,
-	.rx_ctx = fi_no_rx_ctx,
+	.tx_ctx = fi_enosys,
+	.rx_ctx = fi_enosys,
 	.rx_size_left = usdf_rdm_rx_size_left,
 	.tx_size_left = usdf_rdm_tx_size_left,
 };
 
 static struct fi_ops_cm usdf_cm_rdm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
+	.setname = fi_enosys,
 	.getname = usdf_cm_rdm_getname,
-	.getpeer = fi_no_getpeer,
-	.connect = fi_no_connect,
-	.listen = fi_no_listen,
-	.accept = fi_no_accept,
-	.reject = fi_no_reject,
-	.shutdown = fi_no_shutdown,
+	.getpeer = fi_enosys,
+	.connect = fi_enosys,
+	.listen = fi_enosys,
+	.accept = fi_enosys,
+	.reject = fi_enosys,
+	.shutdown = fi_enosys,
 };
 
 static struct fi_ops_msg usdf_rdm_ops = {
@@ -710,7 +710,7 @@ static struct fi_ops_msg usdf_rdm_ops = {
 	.sendmsg = usdf_rdm_sendmsg,
 	.inject = usdf_rdm_inject,
 	.senddata = usdf_rdm_senddata,
-	.injectdata = fi_no_msg_injectdata,
+	.injectdata = fi_enosys_s,
 };
 
 static int usdf_ep_rdm_control(struct fid *fid, int command, void *arg)
@@ -740,7 +740,7 @@ static struct fi_ops usdf_ep_rdm_ops = {
 	.close = usdf_ep_rdm_close,
 	.bind = usdf_ep_rdm_bind,
 	.control = usdf_ep_rdm_control,
-	.ops_open = fi_no_ops_open
+	.ops_open = fi_enosys
 };
 
 int

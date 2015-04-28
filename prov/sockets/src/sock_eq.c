@@ -317,9 +317,9 @@ static int sock_eq_control(struct fid *fid, int command, void *arg)
 static struct fi_ops sock_eq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_eq_fi_close,
-	.bind = fi_no_bind,
+	.bind = fi_enosys,
 	.control = sock_eq_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 static int _sock_eq_verify_attr(struct fi_eq_attr *attr)
