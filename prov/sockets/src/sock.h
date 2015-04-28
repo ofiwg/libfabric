@@ -823,7 +823,8 @@ int sock_dgram_verify_ep_attr(struct fi_ep_attr *ep_attr, struct fi_tx_attr *tx_
 			      struct fi_rx_attr *rx_attr);
 int sock_msg_verify_ep_attr(struct fi_ep_attr *ep_attr, struct fi_tx_attr *tx_attr,
 			    struct fi_rx_attr *rx_attr);
-
+int sock_get_src_addr(struct sockaddr_in *dest_addr,
+		      struct sockaddr_in *src_addr);
 
 struct fi_info *sock_fi_info(enum fi_ep_type ep_type, 
 			     struct fi_info *hints, void *src_addr, void *dest_addr);

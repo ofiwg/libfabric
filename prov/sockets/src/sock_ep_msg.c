@@ -858,6 +858,7 @@ static int sock_msg_endpoint(struct fid_domain *domain, struct fi_info *info,
 		struct sock_ep **ep, void *context, size_t fclass)
 {
 	int ret;
+	struct sock_pep *pep;
 
 	if (info) {
 		if (info->ep_attr) {
@@ -880,10 +881,15 @@ static int sock_msg_endpoint(struct fid_domain *domain, struct fi_info *info,
 				return ret;
 		}
 	}
-	
+
 	ret = sock_alloc_endpoint(domain, info, ep, context, fclass);
 	if (ret)
 		return ret;
+
+	if (info && info->handle && info->handle->fclass == FI_CLASS_PEP) {
+		pep = container_of(info->handle, struct sock_pep, pep.fid);
+		memcpy((*ep)->src_addr, &pep->src_addr, sizeof *(*ep)->src_addr);
+	}
 
 	if (!info || !info->ep_attr) 
 		(*ep)->ep_attr = sock_msg_ep_attr;
