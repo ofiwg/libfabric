@@ -1,4 +1,4 @@
-.TH fi_cm 3 "2015\-04\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_cm 3 "2015\-04\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cm - Connection management operations
@@ -167,7 +167,7 @@ peer endpoint address, respectively.
 On input, the addrlen parameter should indicate the size of the addr
 buffer.
 If the actual address is larger than what can fit into the buffer, it
-will be truncated.
+will be truncated and -FI_ETOOSMALL will be returned.
 On output, addrlen is set to the size of the buffer needed to store the
 address, which may be larger than the input value.
 .PP
