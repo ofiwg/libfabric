@@ -134,7 +134,7 @@ struct fi_ioc {
 };
 
 /*
- * Format for transport addresses: sendto, writeto, etc.
+ * Format for transport addresses to insert into address vectors
  */
 enum {
 	FI_FORMAT_UNSPEC,	/* void * */
