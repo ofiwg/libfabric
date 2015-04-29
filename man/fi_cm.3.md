@@ -170,9 +170,9 @@ fabric error number is returned.
 The fi_getname and fi_getpeer calls may be used to retrieve the local or
 peer endpoint address, respectively.  On input, the addrlen parameter should
 indicate the size of the addr buffer.  If the actual address is larger than
-what can fit into the buffer, it will be truncated.  On output, addrlen
-is set to the size of the buffer needed to store the address, which may
-be larger than the input value.
+what can fit into the buffer, it will be truncated and -FI_ETOOSMALL will
+be returned.  On output, addrlen is set to the size of the buffer needed
+to store the address, which may be larger than the input value.  
 
 fi_getname is not guaranteed to return a valid source address until after the
 specified endpoint has been enabled or has had an address assigned.  An
