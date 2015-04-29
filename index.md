@@ -30,8 +30,24 @@ OFI targets support for the Linux operating system.  A reasonable effort is made
 Overview of OFI / libfabric
 ===========================
 
+The following document provides an introduction to the OFI architecture.
+
+
+<div align="center">
+<iframe src="https://www.slideshare.net/slideshow/embed_code/key/arAPmHHuShNbde" width="476" height="400" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe>
+</div>
+
+The following presentation describes some of the motivation for OFI and an earlyview of the libfabric architecture.
+
 <div align="center">
 <iframe src="//www.slideshare.net/slideshow/embed_code/41653017" width="476" height="400" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe>
+</div>
+
+The next presentation highlights some of the low-level details of the libfabric interface
+
+<div align="center">
+<iframe src="https://www.slideshare.net/slideshow/embed_code/key/NbCh89SSIbKQ0U" width="476" height="400" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe>
+
 </div>
 
 How do I get involved?
