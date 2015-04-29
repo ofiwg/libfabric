@@ -291,7 +291,7 @@ static struct fi_ops psmx_fi_ops = {
 	.close = psmx_ep_close,
 	.bind = psmx_ep_bind,
 	.control = psmx_ep_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 static struct fi_ops_ep psmx_ep_ops = {
@@ -299,8 +299,8 @@ static struct fi_ops_ep psmx_ep_ops = {
 	.cancel = psmx_ep_cancel,
 	.getopt = psmx_ep_getopt,
 	.setopt = psmx_ep_setopt,
-	.tx_ctx = fi_no_tx_ctx,
-	.rx_ctx = fi_no_rx_ctx,
+	.tx_ctx = fi_enosys,
+	.rx_ctx = fi_enosys,
 	.rx_size_left = psmx_rx_size_left,
 	.tx_size_left = psmx_tx_size_left,
 };
@@ -392,8 +392,8 @@ static int psmx_stx_close(fid_t fid)
 static struct fi_ops psmx_fi_ops_stx = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_stx_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.bind = fi_enosys,
+	.control = fi_enosys,
 };
 
 int psmx_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,

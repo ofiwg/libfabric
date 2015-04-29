@@ -348,15 +348,15 @@ static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_av_close,
 	.bind = psmx_av_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 static struct fi_ops_av psmx_av_ops = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = psmx_av_insert,
-	.insertsvc = fi_no_av_insertsvc,
-	.insertsym = fi_no_av_insertsym,
+	.insertsvc = fi_enosys,
+	.insertsym = fi_enosys,
 	.remove = psmx_av_remove,
 	.lookup = psmx_av_lookup,
 	.straddr = psmx_av_straddr,

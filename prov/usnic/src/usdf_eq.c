@@ -490,17 +490,17 @@ static struct fi_ops_eq usdf_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = usdf_eq_read,
 	.readerr = usdf_eq_readerr,
-	.write = fi_no_eq_write,
-	.sread = fi_no_eq_sread,
+	.write = fi_enosys_s,
+	.sread = fi_enosys_s,
 	.strerror = usdf_eq_strerror,
 };
 
 static struct fi_ops usdf_eq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = usdf_eq_close,
-	.bind = fi_no_bind,
+	.bind = fi_enosys,
 	.control = usdf_eq_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 int
@@ -543,7 +543,7 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	switch (eq->eq_wait_obj) {
 	case FI_WAIT_NONE:
 		eq->eq_ops_data.read = usdf_eq_read;
-		eq->eq_ops_data.sread = fi_no_eq_sread;
+		eq->eq_ops_data.sread = fi_enosys_s;
 		eq->eq_ops_data.write = usdf_eq_write;
 		break;
 	case FI_WAIT_UNSPEC:	/* default to FD */
@@ -569,7 +569,7 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	 * Dis-allow write if requested
 	 */
 	if ((attr->flags & FI_WRITE) == 0) {
-		eq->eq_ops_data.write = fi_no_eq_write;
+		eq->eq_ops_data.write = fi_enosys_s;
 	}
 
 	/*

@@ -396,9 +396,9 @@ static int sock_cq_control(struct fid *fid, int command, void *arg)
 static struct fi_ops sock_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_cq_close,
-	.bind = fi_no_bind,
+	.bind = fi_enosys,
 	.control = sock_cq_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 static int sock_cq_verify_attr(struct fi_cq_attr *attr)

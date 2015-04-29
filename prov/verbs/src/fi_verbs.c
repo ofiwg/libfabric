@@ -1245,9 +1245,9 @@ static struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.send = fi_ibv_msg_ep_send,
 	.sendv = fi_ibv_msg_ep_sendv,
 	.sendmsg = fi_ibv_msg_ep_sendmsg,
-	.inject = fi_no_msg_inject,
+	.inject = fi_enosys_s,
 	.senddata = fi_ibv_msg_ep_senddata,
-	.injectdata = fi_no_msg_injectdata,
+	.injectdata = fi_enosys_s,
 };
 
 static ssize_t
@@ -1501,9 +1501,9 @@ static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 	.write = fi_ibv_msg_ep_rma_write,
 	.writev = fi_ibv_msg_ep_rma_writev,
 	.writemsg = fi_ibv_msg_ep_rma_writemsg,
-	.inject = fi_no_rma_inject,
+	.inject = fi_enosys_s,
 	.writedata = fi_ibv_msg_ep_rma_writedata,
-	.injectdata = fi_no_rma_injectdata,
+	.injectdata = fi_enosys_s,
 };
 
 static ssize_t
@@ -2003,7 +2003,7 @@ static struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops = {
 	.write		= fi_ibv_msg_ep_atomic_write,
 	.writev		= fi_ibv_msg_ep_atomic_writev,
 	.writemsg	= fi_ibv_msg_ep_atomic_writemsg,
-	.inject		= fi_no_atomic_inject,
+	.inject		= fi_enosys_s,
 	.readwrite	= fi_ibv_msg_ep_atomic_readwrite,
 	.readwritev	= fi_ibv_msg_ep_atomic_readwritev,
 	.readwritemsg	= fi_ibv_msg_ep_atomic_readwritemsg,
@@ -2127,13 +2127,13 @@ static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 
 static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
+	.setname = fi_enosys,
 	.getname = fi_ibv_msg_ep_getname,
 	.getpeer = fi_ibv_msg_ep_getpeer,
 	.connect = fi_ibv_msg_ep_connect,
-	.listen = fi_no_listen,
+	.listen = fi_enosys,
 	.accept = fi_ibv_msg_ep_accept,
-	.reject = fi_no_reject,
+	.reject = fi_enosys,
 	.shutdown = fi_ibv_msg_ep_shutdown,
 };
 
@@ -2187,13 +2187,13 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 
 static struct fi_ops_ep fi_ibv_msg_ep_base_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = fi_no_cancel,
+	.cancel = fi_enosys_s,
 	.getopt = fi_ibv_msg_ep_getopt,
 	.setopt = fi_ibv_msg_ep_setopt,
-	.tx_ctx = fi_no_tx_ctx,
-	.rx_ctx = fi_no_rx_ctx,
-	.rx_size_left = fi_no_rx_size_left,
-	.tx_size_left = fi_no_tx_size_left,
+	.tx_ctx = fi_enosys,
+	.rx_ctx = fi_enosys,
+	.rx_size_left = fi_enosys_s,
+	.tx_size_left = fi_enosys_s,
 };
 
 static int fi_ibv_msg_ep_close(fid_t fid)
@@ -2233,7 +2233,7 @@ static struct fi_ops fi_ibv_msg_ep_ops = {
 	.close = fi_ibv_msg_ep_close,
 	.bind = fi_ibv_msg_ep_bind,
 	.control = fi_ibv_msg_ep_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 static int
@@ -2488,7 +2488,7 @@ static struct fi_ops_eq fi_ibv_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = fi_ibv_eq_read,
 	.readerr = fi_ibv_eq_readerr,
-	.write = fi_no_eq_write,
+	.write = fi_enosys_s,
 	.sread = fi_ibv_eq_sread,
 	.strerror = fi_ibv_eq_strerror
 };
@@ -2530,9 +2530,9 @@ static int fi_ibv_eq_close(fid_t fid)
 static struct fi_ops fi_ibv_eq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_eq_close,
-	.bind = fi_no_bind,
+	.bind = fi_enosys,
 	.control = fi_ibv_eq_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 static int
@@ -2860,10 +2860,10 @@ fi_ibv_cq_signal(struct fid_cq *cq)
 static struct fi_ops_cq fi_ibv_cq_context_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_cq_read_context,
-	.readfrom = fi_no_cq_readfrom,
+	.readfrom = fi_enosys_s,
 	.readerr = fi_ibv_cq_readerr,
 	.sread = fi_ibv_cq_sread,
-	.sreadfrom = fi_no_cq_sreadfrom,
+	.sreadfrom = fi_enosys_s,
 	.signal = fi_ibv_cq_signal,
 	.strerror = fi_ibv_cq_strerror
 };
@@ -2871,10 +2871,10 @@ static struct fi_ops_cq fi_ibv_cq_context_ops = {
 static struct fi_ops_cq fi_ibv_cq_msg_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_cq_read_msg,
-	.readfrom = fi_no_cq_readfrom,
+	.readfrom = fi_enosys_s,
 	.readerr = fi_ibv_cq_readerr,
 	.sread = fi_ibv_cq_sread,
-	.sreadfrom = fi_no_cq_sreadfrom,
+	.sreadfrom = fi_enosys_s,
 	.signal = fi_ibv_cq_signal,
 	.strerror = fi_ibv_cq_strerror
 };
@@ -2882,10 +2882,10 @@ static struct fi_ops_cq fi_ibv_cq_msg_ops = {
 static struct fi_ops_cq fi_ibv_cq_data_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_cq_read_data,
-	.readfrom = fi_no_cq_readfrom,
+	.readfrom = fi_enosys_s,
 	.readerr = fi_ibv_cq_readerr,
 	.sread = fi_ibv_cq_sread,
-	.sreadfrom = fi_no_cq_sreadfrom,
+	.sreadfrom = fi_enosys_s,
 	.signal = fi_ibv_cq_signal,
 	.strerror = fi_ibv_cq_strerror
 };
@@ -2934,9 +2934,9 @@ static int fi_ibv_cq_close(fid_t fid)
 static struct fi_ops fi_ibv_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_cq_close,
-	.bind = fi_no_bind,
+	.bind = fi_enosys,
 	.control = fi_ibv_cq_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 static int
@@ -3052,9 +3052,9 @@ static int fi_ibv_mr_close(fid_t fid)
 static struct fi_ops fi_ibv_mr_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_mr_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.bind = fi_enosys,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 static int
@@ -3148,28 +3148,28 @@ static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *
 static struct fi_ops fi_ibv_fid_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.bind = fi_enosys,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 static struct fi_ops_mr fi_ibv_domain_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
 	.reg = fi_ibv_mr_reg,
-	.regv = fi_no_mr_regv,
-	.regattr = fi_no_mr_regattr,
+	.regv = fi_enosys,
+	.regattr = fi_enosys,
 };
 
 static struct fi_ops_domain fi_ibv_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = fi_no_av_open,
+	.av_open = fi_enosys,
 	.cq_open = fi_ibv_cq_open,
 	.endpoint = fi_ibv_open_ep,
-	.scalable_ep = fi_no_scalable_ep,
-	.cntr_open = fi_no_cntr_open,
-	.poll_open = fi_no_poll_open,
-	.stx_ctx = fi_no_stx_context,
-	.srx_ctx = fi_no_srx_context,
+	.scalable_ep = fi_enosys,
+	.cntr_open = fi_enosys,
+	.poll_open = fi_enosys,
+	.stx_ctx = fi_enosys,
+	.srx_ctx = fi_enosys,
 };
 
 static int
@@ -3226,14 +3226,14 @@ static int fi_ibv_pep_listen(struct fid_pep *pep)
 
 static struct fi_ops_cm fi_ibv_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
+	.setname = fi_enosys,
 	.getname = fi_ibv_pep_getname,
-	.getpeer = fi_no_getpeer,
-	.connect = fi_no_connect,
+	.getpeer = fi_enosys,
+	.connect = fi_enosys,
 	.listen = fi_ibv_pep_listen,
-	.accept = fi_no_accept,
+	.accept = fi_enosys,
 	.reject = fi_ibv_msg_ep_reject,
-	.shutdown = fi_no_shutdown,
+	.shutdown = fi_enosys,
 };
 
 static int fi_ibv_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
@@ -3269,8 +3269,8 @@ static struct fi_ops fi_ibv_pep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_pep_close,
 	.bind = fi_ibv_pep_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 static int
@@ -3313,9 +3313,9 @@ static int fi_ibv_fabric_close(fid_t fid)
 static struct fi_ops fi_ibv_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_fabric_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.bind = fi_enosys,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 static struct fi_ops_fabric fi_ibv_ops_fabric = {
@@ -3323,7 +3323,7 @@ static struct fi_ops_fabric fi_ibv_ops_fabric = {
 	.domain = fi_ibv_domain,
 	.passive_ep = fi_ibv_passive_ep,
 	.eq_open = fi_ibv_eq_open,
-	.wait_open = fi_no_wait_open,
+	.wait_open = fi_enosys,
 };
 
 static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,

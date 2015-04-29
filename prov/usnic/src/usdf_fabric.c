@@ -939,8 +939,8 @@ usdf_fabric_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 static struct fi_ops usdf_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = usdf_fabric_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.bind = fi_enosys,
+	.control = fi_enosys,
 	.ops_open = usdf_fabric_ops_open,
 };
 
@@ -949,7 +949,7 @@ static struct fi_ops_fabric usdf_ops_fabric = {
 	.domain = usdf_domain_open,
 	.passive_ep = usdf_pep_open,
 	.eq_open = usdf_eq_open,
-	.wait_open = fi_no_wait_open,
+	.wait_open = fi_enosys,
 };
 
 static int

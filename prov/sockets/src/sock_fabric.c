@@ -297,9 +297,9 @@ static int sock_fabric_close(fid_t fid)
 static struct fi_ops sock_fab_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_fabric_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.bind = fi_enosys,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 static int sock_fabric(struct fi_fabric_attr *attr,

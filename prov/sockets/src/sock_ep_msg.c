@@ -848,9 +848,9 @@ struct fi_ops_cm sock_ep_cm_ops = {
 	.getname = sock_ep_cm_getname,
 	.getpeer = sock_ep_cm_getpeer,
 	.connect = sock_ep_cm_connect,
-	.listen = fi_no_listen,
+	.listen = fi_enosys,
 	.accept = sock_ep_cm_accept,
-	.reject = fi_no_reject,
+	.reject = fi_enosys,
 	.shutdown = sock_ep_cm_shutdown,
 };
 
@@ -972,8 +972,8 @@ static struct fi_ops sock_pep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_pep_fi_close,
 	.bind = sock_pep_fi_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.control = fi_enosys,
+	.ops_open = fi_enosys,
 };
 
 static struct fi_info * sock_ep_msg_process_info(struct sock_conn_req *req)
@@ -1192,12 +1192,12 @@ static struct fi_ops_cm sock_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = sock_ep_cm_setname,
 	.getname = sock_ep_cm_getname,
-	.getpeer = fi_no_getpeer,
-	.connect = fi_no_connect,
+	.getpeer = fi_enosys,
+	.connect = fi_enosys,
 	.listen = sock_pep_listen,
-	.accept = fi_no_accept,
+	.accept = fi_enosys,
 	.reject = sock_pep_reject,
-	.shutdown = fi_no_shutdown,
+	.shutdown = fi_enosys,
 };
 
 int sock_msg_sep(struct fid_domain *domain, struct fi_info *info,

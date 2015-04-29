@@ -247,9 +247,9 @@ int sock_wait_close(fid_t fid)
 static struct fi_ops sock_wait_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_wait_close,
-	.bind = fi_no_bind,
+	.bind = fi_enosys,
 	.control = sock_wait_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 static int sock_verify_wait_attr(struct fi_wait_attr *attr)

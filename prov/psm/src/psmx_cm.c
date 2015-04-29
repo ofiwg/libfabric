@@ -54,11 +54,11 @@ static int psmx_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 struct fi_ops_cm psmx_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.getname = psmx_cm_getname,
-	.getpeer = fi_no_getpeer,
-	.connect = fi_no_connect,
-	.listen = fi_no_listen,
-	.accept = fi_no_accept,
-	.reject = fi_no_reject,
-	.shutdown = fi_no_shutdown,
+	.getpeer = fi_enosys,
+	.connect = fi_enosys,
+	.listen = fi_enosys,
+	.accept = fi_enosys,
+	.reject = fi_enosys,
+	.shutdown = fi_enosys,
 };
 

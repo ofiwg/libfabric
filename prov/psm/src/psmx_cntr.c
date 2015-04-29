@@ -342,9 +342,9 @@ static int psmx_cntr_control(fid_t fid, int command, void *arg)
 static struct fi_ops psmx_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx_cntr_close,
-	.bind = fi_no_bind,
+	.bind = fi_enosys,
 	.control = psmx_cntr_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 static struct fi_ops_cntr psmx_cntr_ops = {

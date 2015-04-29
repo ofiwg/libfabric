@@ -260,9 +260,9 @@ static struct fi_ops_cntr sock_cntr_ops = {
 static struct fi_ops sock_cntr_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_cntr_close,
-	.bind = fi_no_bind,
+	.bind = fi_enosys,
 	.control = sock_cntr_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = fi_enosys,
 };
 
 static int sock_cntr_verify_attr(struct fi_cntr_attr *attr)
