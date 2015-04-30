@@ -3352,8 +3352,6 @@ err:
 
 static int fi_ibv_fabric_close(fid_t fid)
 {
-	fi_freeinfo(verbs_info);
-	verbs_info = NULL;
 	free(fid);
 	return 0;
 }
@@ -3407,6 +3405,7 @@ static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric
 
 static void fi_ibv_fini(void)
 {
+	fi_freeinfo(verbs_info);
 }
 
 VERBS_INI
