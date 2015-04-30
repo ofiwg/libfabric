@@ -210,7 +210,50 @@ ssize_t
 usdf_msg_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
                  size_t count, fi_addr_t src_addr, void *context)
 {
-	return -FI_ENOSYS;
+	struct usdf_ep *ep;
+	struct usdf_rx *rx;
+	struct usdf_msg_qe *rqe;
+	struct usdf_domain *udp;
+	size_t tot_len;
+	uint64_t op_flags;
+	uint32_t i;
+
+	ep = ep_ftou(fep);
+	rx = ep->ep_rx;
+	udp = ep->ep_domain;
+
+	if (TAILQ_EMPTY(&rx->r.msg.rx_free_rqe)) {
+		return -FI_EAGAIN;
+	}
+
+	pthread_spin_lock(&udp->dom_progress_lock);
+
+	rqe = TAILQ_FIRST(&rx->r.msg.rx_free_rqe);
+	TAILQ_REMOVE(&rx->r.msg.rx_free_rqe, rqe, ms_link);
+	--rx->r.msg.rx_num_free_rqe;
+
+	rqe->ms_context = context;
+	tot_len = 0;
+	for (i = 0; i < count; ++i) {
+		rqe->ms_iov[i].iov_base = (void *)iov[i].iov_base;
+		rqe->ms_iov[i].iov_len = iov[i].iov_len;
+		tot_len += iov[i].iov_len;
+	}
+	rqe->ms_last_iov = count - 1;
+	rqe->ms_cur_iov = 0;
+	rqe->ms_cur_ptr = iov[0].iov_base;
+	rqe->ms_iov_resid = iov[0].iov_len;
+	rqe->ms_resid = tot_len;
+	rqe->ms_length = tot_len;
+
+	op_flags = ep->ep_rx->rx_attr.op_flags;
+	rqe->ms_signal_comp = ep->ep_rx_dflt_signal_comp ||
+		(op_flags & FI_COMPLETION) ? 1 : 0;
+
+	TAILQ_INSERT_TAIL(&rx->r.msg.rx_posted_rqe, rqe, ms_link);
+	pthread_spin_unlock(&udp->dom_progress_lock);
+
+	return 0;
 }
 
 ssize_t
@@ -466,9 +509,59 @@ usdf_msg_inject(struct fid_ep *fep, const void *buf, size_t len,
 }
 
 ssize_t
-usdf_msg_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+usdf_msg_recvmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 {
-	return -FI_ENOSYS;
+	int i;
+	struct usdf_ep *ep;
+	struct usdf_rx *rx;
+	struct usdf_msg_qe *rqe;
+	struct usdf_domain *udp;
+	size_t tot_len;
+	const struct iovec *iov;
+
+	ep = ep_ftou(fep);
+	rx = ep->ep_rx;
+	udp = ep->ep_domain;
+	iov = msg->msg_iov;
+
+	if (TAILQ_EMPTY(&rx->r.msg.rx_free_rqe)) {
+		return -FI_EAGAIN;
+	}
+
+	if (flags & ~USDF_MSG_SUPP_RECVMSG_FLAGS) {
+		USDF_DBG("one or more flags in 0x%llx not supported\n", flags);
+		return -FI_EOPNOTSUPP;
+	}
+
+	pthread_spin_lock(&udp->dom_progress_lock);
+
+	rqe = TAILQ_FIRST(&rx->r.msg.rx_free_rqe);
+	TAILQ_REMOVE(&rx->r.msg.rx_free_rqe, rqe, ms_link);
+	--rx->r.msg.rx_num_free_rqe;
+
+	rqe->ms_context = msg->context;
+	tot_len = 0;
+	for (i = 0; i < msg->iov_count; ++i) {
+		rqe->ms_iov[i].iov_base = (void *)iov[i].iov_base;
+		rqe->ms_iov[i].iov_len = iov[i].iov_len;
+		tot_len += iov[i].iov_len;
+	}
+	rqe->ms_last_iov = msg->iov_count - 1;
+
+	rqe->ms_cur_iov = 0;
+	rqe->ms_resid = tot_len;
+	rqe->ms_length = tot_len;
+	rqe->ms_cur_ptr = iov[0].iov_base;
+	rqe->ms_iov_resid = iov[0].iov_len;
+
+	rqe->ms_signal_comp = ep->ep_rx_dflt_signal_comp ||
+		(flags & FI_COMPLETION) ? 1 : 0;
+
+	TAILQ_INSERT_TAIL(&rx->r.msg.rx_posted_rqe, rqe, ms_link);
+
+	pthread_spin_unlock(&udp->dom_progress_lock);
+
+	return 0;
 }
 
 static void
