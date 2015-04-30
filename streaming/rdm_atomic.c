@@ -254,7 +254,6 @@ static int run_op(void)
 	switch (op_type) {
 	case FI_MIN:
 	case FI_MAX:
-	case FI_ATOMIC_READ:
 	case FI_ATOMIC_WRITE:
 		ret = is_valid_base_atomic_op(op_type);
 		if (ret > 0) {
@@ -264,7 +263,7 @@ static int run_op(void)
 					break;
 			}
 		}
-
+	case FI_ATOMIC_READ:
 		ret = is_valid_fetch_atomic_op(op_type);
 		if (ret > 0) {
 			for (i = 0; i < opts.iterations; i++) {
@@ -296,10 +295,10 @@ static int run_op(void)
 
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
-				op_type == FI_CSWAP ? 1 : 2, opts.argc, opts.argv);
+				(op_type == FI_CSWAP || op_type == FI_ATOMIC_READ) ? 1 : 2, opts.argc, opts.argv);
 	else
 		show_perf(test_name, opts.transfer_size, opts.iterations, 
-				&start, &end, op_type == FI_CSWAP ? 1 : 2);
+				&start, &end, (op_type == FI_CSWAP || op_type == FI_ATOMIC_READ) ? 1 : 2);
 
 	ret = 0;
 out:
