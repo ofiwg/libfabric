@@ -1,4 +1,4 @@
-.TH fi_atomic 3 "2015\-03\-31" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_atomic 3 "2015\-04\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_atomic - Remote atomic functions
@@ -413,6 +413,10 @@ struct\ fi_rma_ioc\ {
 };
 \f[]
 .fi
+.PP
+The following list of atomic operations are usable with base atomic
+operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD, FI_LOR, FI_LAND, FI_BOR,
+FI_BAND, FI_LXOR, FI_BXOR, and FI_ATOMIC_WRITE.
 .SS Fetch-Atomic Functions
 .PP
 The fetch atomic functions -- fi_fetch_atomic, fi_fetch_atomicv, and
@@ -425,10 +429,9 @@ The initial value is read into the user provided result buffer.
 The target buffer of fetch-atomic operations must be enabled for remote
 read access.
 .PP
-The following list of atomic operations are usable with both the base
-atomic and fetch atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
-FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR, FI_ATOMIC_READ, and
-FI_ATOMIC_WRITE.
+The following list of atomic operations are usable with fetch atomic
+operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD, FI_LOR, FI_LAND, FI_BOR,
+FI_BAND, FI_LXOR, FI_BXOR, FI_ATOMIC_READ, and FI_ATOMIC_WRITE.
 .SS Compare-Atomic Functions
 .PP
 The compare atomic functions -- fi_compare_atomic, fi_compare_atomicv,
