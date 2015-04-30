@@ -395,6 +395,11 @@ struct fi_rma_ioc {
 };
 {% endhighlight %}
 
+The following list of atomic operations are usable with base
+atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
+FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR,
+and FI_ATOMIC_WRITE.
+
 ## Fetch-Atomic Functions
 
 The fetch atomic functions -- fi_fetch_atomic, fi_fetch_atomicv,
@@ -405,8 +410,8 @@ value that was stored at the target to the user.  The initial value is
 read into the user provided result buffer.  The target buffer of
 fetch-atomic operations must be enabled for remote read access.
 
-The following list of atomic operations are usable with both the base
-atomic and fetch atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
+The following list of atomic operations are usable with
+fetch atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
 FI_LOR, FI_LAND, FI_BOR, FI_BAND, FI_LXOR, FI_BXOR, FI_ATOMIC_READ,
 and FI_ATOMIC_WRITE.
 
