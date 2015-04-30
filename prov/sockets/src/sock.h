@@ -702,7 +702,8 @@ struct sock_pe_entry {
 	uint8_t type;
 	uint8_t is_complete;
 	uint8_t is_error;
-	uint8_t reserved[5];
+	uint8_t mr_checked;
+	uint8_t reserved[4];
 
 	uint64_t done_len;
 	uint64_t total_len;
