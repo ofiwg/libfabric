@@ -108,6 +108,10 @@ static ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;
 
+	if (sock_ep_check_write_completion(&tx_ctx->comp, flags) &&
+	    !sock_cq_check_size_ok(tx_ctx->comp.write_cq))
+		return -FI_EAGAIN;
+
 	src_len = 0;
 	datatype_sz = fi_datatype_size(msg->datatype);
 	if (flags & FI_INJECT) {

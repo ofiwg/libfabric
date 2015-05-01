@@ -877,6 +877,10 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
 int sock_ep_enable(struct fid_ep *ep);
 int sock_ep_disable(struct fid_ep *ep);
+int sock_ep_check_send_completion(struct sock_comp *comp, uint64_t flags);
+int sock_ep_check_recv_completion(struct sock_comp *comp, uint64_t flags);
+int sock_ep_check_write_completion(struct sock_comp *comp, uint64_t flags);
+int sock_ep_check_read_completion(struct sock_comp *comp, uint64_t flags);
 
 
 int sock_stx_ctx(struct fid_domain *domain,
@@ -890,6 +894,7 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
 			 size_t olen, int err, int prov_errno, void *err_data);
 int sock_cq_progress(struct sock_cq *cq);
+int sock_cq_check_size_ok(struct sock_cq *cq);
 
 
 int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,

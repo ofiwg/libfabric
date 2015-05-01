@@ -588,3 +588,14 @@ out:
 	return ret;
 }
 
+int sock_cq_check_size_ok(struct sock_cq *cq)
+{
+	int ret = 1;
+	fastlock_acquire(&cq->lock);
+	if (rbfdavail(&cq->cq_rbfd) < sock_cq_entry_size(cq)) {
+		ret = 0;
+		SOCK_LOG_ERROR("Not enough space in CQ\n");
+	}
+	fastlock_release(&cq->lock);
+	return ret;
+}
