@@ -254,6 +254,21 @@ int ft_send_dgram(void)
 	return ret;
 }
 
+int ft_send_dgram_flood(void)
+{
+	int i, ret = 0;
+
+	ft_tx.seqno = 0;
+	*(uint8_t*) ft_tx.buf = 0;
+	for (i = 0; i < ft.xfer_iter - 1; i++) {
+		ret = ft_send_msg();
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
 int ft_recv_dgram(void)
 {
 	struct timespec s, e;
@@ -290,47 +305,23 @@ int ft_recv_dgram(void)
 	return -FI_ETIMEDOUT;
 }
 
-int ft_recv_dgram_flood(void)
+int ft_recv_dgram_flood(size_t *recv_cnt)
 {
-	struct timespec s, e;
-	int credits, ret;
-	int64_t poll_time = 0;
-	int expected = ft.xfer_iter;
-	int got = 0;
+	int ret;
+	size_t cnt = 0;
 
 	do {
-		if (ft_rx.credits > (ft_rx.max_credits >> 1)) {
-			ret = ft_post_recv_bufs();
-			if (ret)
-				return ret;
-		}
-
-		credits = ft_rx.credits;
+		ret = ft_post_recv_bufs();
+		if (ret)
+			break;
 
 		ret = ft_comp_rx();
-		if (ret)
-			return ret;
+		cnt += ft_rx.credits;
 
-		if (credits != ft_rx.credits) {
-			poll_time = 0;
-			got += ft_rx.credits - credits;
-		}
+	} while (!ret && (*(uint8_t *) ft_rx.buf != (uint8_t) ~0));
 
-		if (got >= expected)
-			return 0;
-
-		if (!poll_time)
-			clock_gettime(CLOCK_MONOTONIC, &s);
-
-		clock_gettime(CLOCK_MONOTONIC, &e);
-		poll_time = get_elapsed(&s, &e, MILLI);
-
-	} while (poll_time < 1);
-
-	if (expected != got)
-		fprintf(stderr, "Warn: lost %d dgrams\n", expected - got);
-
-	return -FI_ETIMEDOUT;
+	*recv_cnt = cnt;
+	return ret;
 }
 
 int ft_sendrecv_dgram(void)

@@ -227,7 +227,8 @@ int ft_send_msg();
 int ft_send_dgram();
 int ft_send_dgram_done();
 int ft_recv_dgram();
-int ft_recv_dgram_flood();
+int ft_recv_dgram_flood(size_t *recv_cnt);
+int ft_send_dgram_flood();
 int ft_sendrecv_dgram();
 
 int ft_run_test();

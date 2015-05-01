@@ -139,6 +139,8 @@ int ft_reset_ep(void)
 			return ret;
 	}
 
+	memset(ft_tx.buf, 0, ft_tx.msg_size);
+	memset(ft_rx.buf, 0, ft_rx.msg_size);
 	ret = ft_post_recv_bufs();
 	if (ret)
 		return ret;

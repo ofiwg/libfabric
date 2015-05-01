@@ -299,29 +299,50 @@ static int ft_bw(void)
 			return ret;
 	}
 
-	while (ft_tx.credits < ft_tx.max_credits) {
-		ret = ft_comp_tx();
-		if (ret)
-			return ret;
-	}
-
 	return 0;
 }
 
-static int ft_bw_dgram(void)
+/*
+ * The datagram streaming test sends datagrams with the initial byte
+ * of the message cleared until we're ready to end the test.  The first
+ * byte is then set to 0xFF.  On the receive side, we count the number
+ * of completions until that message is seen.  Only the receiving side
+ * reports any performance data.  The sender does not know how many
+ * packets were dropped in flight.
+ *
+ * Because we re-use the same buffer for all messages, the receiving
+ * side can notice that the first byte has changed and end the test
+ * before the completion associated with the last message has been
+ * written to the CQ.  As a result, the number of messages that were
+ * counted as received may be slightly lower than the number of messages
+ * that were actually received.
+ *
+ * For a significantly large number of transfers, this falls into the
+ * noise, but it is visible if the number of iterations is small, such
+ * as when running the quick test.  The fix for this would either to use
+ * CQ data to exchange the end of test marker, or to allocate separate
+ * buffers for each receive operation.
+ *
+ * The message with the end of test marker is retried until until the
+ * receiver acknowledges it.  If the receiver ack message is lost, the
+ * bandwidth test will hang.  However, this is the only message that the
+ * receiver sends, so there's a reasonably good chance of it being transmitted
+ * successfully.
+ */
+static int ft_bw_dgram(size_t *recv_cnt)
 {
-	int ret, i;
+	int ret;
 
 	if (listen_sock < 0) {
-		for (i = 0; i < ft.xfer_iter; i++) {
-			ret = ft_send_dgram();
-			if (ret)
-				return ret;
-		}
+		*recv_cnt = 0;
+		ret = ft_send_dgram_flood();
+		if (ret)
+			return ret;
 
+		ft_tx.seqno = ~0;
 		ret = ft_sendrecv_dgram();
 	} else {
-		ret = ft_recv_dgram_flood();
+		ret = ft_recv_dgram_flood(recv_cnt);
 		if (ret)
 			return ret;
 
@@ -333,6 +354,7 @@ static int ft_bw_dgram(void)
 
 static int ft_run_bandwidth(void)
 {
+	size_t recv_cnt;
 	int ret, i;
 
 	for (i = 0; i < ft.size_cnt; i += ft.inc_step) {
@@ -342,6 +364,7 @@ static int ft_run_bandwidth(void)
 
 		ft.xfer_iter = test_info.test_flags & FT_FLAG_QUICKTEST ?
 				5 : size_to_count(ft_tx.msg_size);
+		recv_cnt = ft.xfer_iter;
 
 		ret = ft_sync_test(0);
 		if (ret)
@@ -349,12 +372,12 @@ static int ft_run_bandwidth(void)
 
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		ret = (test_info.ep_type == FI_EP_DGRAM) ?
-			ft_bw_dgram() : ft_bw();
+			ft_bw_dgram(&recv_cnt) : ft_bw();
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		if (ret)
 			return ret;
 
-		show_perf("bw", ft_tx.msg_size, ft.xfer_iter, &start, &end, 1);
+		show_perf("bw", ft_tx.msg_size, recv_cnt, &start, &end, 1);
 	}
 
 	return 0;
