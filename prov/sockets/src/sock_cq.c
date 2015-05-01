@@ -214,20 +214,10 @@ static void sock_cq_set_report_fn(struct sock_cq *sock_cq)
 	}
 }
 
-static inline ssize_t sock_cq_rbuf_read(struct sock_cq *cq, void *buf,
-					size_t count, fi_addr_t *src_addr,
-					size_t cq_entry_len)
+static inline void sock_cq_copy_overflow_list(struct sock_cq *cq, size_t count)
 {
 	ssize_t i;
-	fi_addr_t addr;
 	struct sock_cq_overflow_entry_t *overflow_entry;
-
-	rbfdread(&cq->cq_rbfd, buf, cq_entry_len * count);
-	for (i = 0; i < count; i++) {
-		rbread(&cq->addr_rb, &addr, sizeof(addr));
-		if (src_addr)
-			src_addr[i] = addr;
-	}
 
 	for (i = 0; i < count && !dlist_empty(&cq->overflow_list); i++) {
 		overflow_entry = container_of(cq->overflow_list.next, 
@@ -241,6 +231,22 @@ static inline ssize_t sock_cq_rbuf_read(struct sock_cq *cq, void *buf,
 		dlist_remove(&overflow_entry->entry);
 		free(overflow_entry);
 	}
+}
+
+static inline ssize_t sock_cq_rbuf_read(struct sock_cq *cq, void *buf,
+					size_t count, fi_addr_t *src_addr,
+					size_t cq_entry_len)
+{
+	ssize_t i;
+	fi_addr_t addr;
+
+	rbfdread(&cq->cq_rbfd, buf, cq_entry_len * count);
+	for (i = 0; i < count; i++) {
+		rbread(&cq->addr_rb, &addr, sizeof(addr));
+		if (src_addr)
+			src_addr[i] = addr;
+	}
+	sock_cq_copy_overflow_list(cq, count); 
 	return count;
 }
 

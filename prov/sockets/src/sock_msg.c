@@ -90,9 +90,10 @@ static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= rx_ctx->attr.op_flags;
 
-	if (sock_ep_check_recv_completion(&rx_ctx->comp, flags) &&
-	    !sock_cq_check_size_ok(rx_ctx->comp.recv_cq))
+	if (sock_ep_is_recv_cq_low(&rx_ctx->comp, flags)) {
+		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
+	}
 
 	if (flags & FI_PEEK) {
 		return sock_rx_peek_recv(rx_ctx, msg->addr, 0L, ~0ULL,
@@ -213,9 +214,10 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;
 
-	if (sock_ep_check_send_completion(&tx_ctx->comp, flags) &&
-	    !sock_cq_check_size_ok(tx_ctx->comp.send_cq))
+	if (sock_ep_is_send_cq_low(&tx_ctx->comp, flags)) {
+		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
+	}
 
 	memset(&tx_op, 0, sizeof(struct sock_op));
 	tx_op.op = SOCK_OP_SEND;
@@ -407,9 +409,10 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 		flags |= rx_ctx->attr.op_flags;
 	flags &= ~FI_MULTI_RECV;
 
-	if (sock_ep_check_recv_completion(&rx_ctx->comp, flags) &&
-	    !sock_cq_check_size_ok(rx_ctx->comp.recv_cq))
+	if (sock_ep_is_recv_cq_low(&rx_ctx->comp, flags)) {
+		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
+	}
 
 	if (flags & FI_PEEK) {
 		return sock_rx_peek_recv(rx_ctx, msg->addr, 
@@ -535,9 +538,10 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;
 
-	if (sock_ep_check_send_completion(&tx_ctx->comp, flags) &&
-	    !sock_cq_check_size_ok(tx_ctx->comp.send_cq))
+	if (sock_ep_is_send_cq_low(&tx_ctx->comp, flags)) {
+		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
+	}
 
 	memset(&tx_op, 0, sizeof(tx_op));
 	tx_op.op = SOCK_OP_TSEND;

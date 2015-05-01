@@ -885,10 +885,10 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
 int sock_ep_enable(struct fid_ep *ep);
 int sock_ep_disable(struct fid_ep *ep);
-int sock_ep_check_send_completion(struct sock_comp *comp, uint64_t flags);
-int sock_ep_check_recv_completion(struct sock_comp *comp, uint64_t flags);
-int sock_ep_check_write_completion(struct sock_comp *comp, uint64_t flags);
-int sock_ep_check_read_completion(struct sock_comp *comp, uint64_t flags);
+int sock_ep_is_send_cq_low(struct sock_comp *comp, uint64_t flags);
+int sock_ep_is_recv_cq_low(struct sock_comp *comp, uint64_t flags);
+int sock_ep_is_write_cq_low(struct sock_comp *comp, uint64_t flags);
+int sock_ep_is_read_cq_low(struct sock_comp *comp, uint64_t flags);
 
 
 int sock_stx_ctx(struct fid_domain *domain,
