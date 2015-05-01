@@ -740,6 +740,13 @@ struct sock_pe {
 typedef int (*sock_cq_report_fn) (struct sock_cq *cq, fi_addr_t addr,
 				  struct sock_pe_entry *pe_entry);
 
+struct sock_cq_overflow_entry_t {
+	size_t len;
+	fi_addr_t addr;
+	struct dlist_entry entry;
+	char cq_entry[0];
+};
+
 struct sock_cq {
 	struct fid_cq cq_fid;
 	struct sock_domain *domain;
@@ -750,6 +757,7 @@ struct sock_cq {
 	struct ringbuf addr_rb;
 	struct ringbuffd cq_rbfd;
 	struct ringbuf cqerr_rb;
+	struct dlist_entry overflow_list;
 	fastlock_t lock;
 	fastlock_t list_lock;
 

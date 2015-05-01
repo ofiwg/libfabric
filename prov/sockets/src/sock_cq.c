@@ -111,11 +111,22 @@ static ssize_t _sock_cq_write(struct sock_cq *cq, fi_addr_t addr,
 			      const void *buf, size_t len)
 {
 	ssize_t ret;
+	struct sock_cq_overflow_entry_t *overflow_entry;
 
 	fastlock_acquire(&cq->lock);
 	if (rbfdavail(&cq->cq_rbfd) < len) {
-		ret = -FI_ENOSPC;
 		SOCK_LOG_ERROR("Not enough space in CQ\n");
+		overflow_entry = calloc(1, sizeof (*overflow_entry) + len);
+		if (!overflow_entry) {
+			ret = -FI_ENOSPC;
+			goto out;
+		}
+
+		memcpy(&overflow_entry->cq_entry[0], buf, len);
+		overflow_entry->len = len;
+		overflow_entry->addr = addr;
+		dlist_insert_tail(&overflow_entry->entry, &cq->overflow_list);
+		ret = len;
 		goto out;
 	}
 
@@ -209,12 +220,26 @@ static inline ssize_t sock_cq_rbuf_read(struct sock_cq *cq, void *buf,
 {
 	ssize_t i;
 	fi_addr_t addr;
+	struct sock_cq_overflow_entry_t *overflow_entry;
 
 	rbfdread(&cq->cq_rbfd, buf, cq_entry_len * count);
 	for (i = 0; i < count; i++) {
 		rbread(&cq->addr_rb, &addr, sizeof(addr));
 		if (src_addr)
 			src_addr[i] = addr;
+	}
+
+	for (i = 0; i < count && !dlist_empty(&cq->overflow_list); i++) {
+		overflow_entry = container_of(cq->overflow_list.next, 
+					      struct sock_cq_overflow_entry_t,
+					      entry);
+		rbwrite(&cq->addr_rb, &overflow_entry->addr, sizeof(fi_addr_t));
+		rbcommit(&cq->addr_rb);
+
+		rbfdwrite(&cq->cq_rbfd, &overflow_entry->cq_entry[0], overflow_entry->len);
+		rbfdcommit(&cq->cq_rbfd);
+		dlist_remove(&overflow_entry->entry);
+		free(overflow_entry);
 	}
 	return count;
 }
@@ -482,6 +507,7 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	dlist_init(&sock_cq->tx_list);
 	dlist_init(&sock_cq->rx_list);
 	dlist_init(&sock_cq->ep_list);
+	dlist_init(&sock_cq->overflow_list);
 
 	if ((ret = rbfdinit(&sock_cq->cq_rbfd, sock_cq->attr.size *
 		    sock_cq->cq_entry_size)))
