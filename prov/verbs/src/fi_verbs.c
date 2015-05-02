@@ -2221,13 +2221,18 @@ static struct fi_ibv_msg_ep *fi_ibv_alloc_msg_ep()
 
 	ep->tx_attr = calloc(1, sizeof *(ep->tx_attr));
 	if (!ep->tx_attr)
-		return NULL;
+		goto err1;
 
 	ep->rx_attr = calloc(1, sizeof *(ep->rx_attr));
 	if (!ep->rx_attr)
-		return NULL;
+		goto err2;
 
 	return ep;
+err2:
+	free(ep->tx_attr);
+err1:
+	free(ep);
+	return NULL;
 }
 
 static void fi_ibv_free_msg_ep(struct fi_ibv_msg_ep *ep)
@@ -2340,8 +2345,10 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
 	_ep->ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
 
-	*(_ep->tx_attr) = *(info->tx_attr);
-	*(_ep->rx_attr) = *(info->rx_attr);
+	if (info->tx_attr)
+		*(_ep->tx_attr) = *(info->tx_attr);
+	if (info->rx_attr)
+		*(_ep->rx_attr) = *(info->rx_attr);
 
 	*ep = &_ep->ep_fid;
 	return 0;
