@@ -47,7 +47,8 @@ static struct ft_set test_sets[] = {
 		.service = "2224",
 		.prov_name = "sockets",
 		.test_type = {
-			FT_TEST_LATENCY
+			FT_TEST_LATENCY,
+			FT_TEST_BANDWIDTH
 		},
 		.class_function = {
 			FT_FUNC_SEND,
