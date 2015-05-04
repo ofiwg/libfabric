@@ -816,7 +816,7 @@ err:
 static int fi_ibv_init_info()
 {
 	struct ibv_context **ctx_list;
-	struct fi_info *fi, *tail;
+	struct fi_info *fi = NULL, *tail = NULL;
 	int ret = 0, i, num_devices;
 
 	if (verbs_info)
