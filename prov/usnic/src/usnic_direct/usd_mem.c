@@ -122,10 +122,12 @@ usd_alloc_mr(
     struct usd_mr *mr;
     size_t true_size;
     size_t metadata_size;
+    size_t madv_size;
     int ret;
 
-    metadata_size = sizeof(struct usd_mr) + 2 * sizeof(uintptr_t);
-    true_size = size + metadata_size + sysconf(_SC_PAGESIZE) - 1;
+    metadata_size = sizeof(struct usd_mr) + 3 * sizeof(uintptr_t);
+    madv_size = ALIGN(size, sysconf(_SC_PAGESIZE));
+    true_size = madv_size + metadata_size + sysconf(_SC_PAGESIZE) - 1;
     base_addr = mmap(NULL, true_size, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (base_addr == NULL || base_addr == MAP_FAILED) {
@@ -138,17 +140,43 @@ usd_alloc_mr(
                        sysconf(_SC_PAGESIZE));
     ((uintptr_t *) vaddr)[-1] = (uintptr_t) mr;
     ((uintptr_t *) vaddr)[-2] = true_size;
+    ((uintptr_t *) vaddr)[-3] = madv_size;
+
+    /*
+     * Disable copy-on-write for memories internally used by USD.
+     * For application buffers, disabling copy-on-write should be provided by
+     * usd wrapper such as libfabric or verbs plugin if fork is supported.
+     * The memory to be registered starts from page-aligned address, and ends
+     * at page boundary, so it's impossible for a page to be updated
+     * with multiple madvise calls when each call reference different VAs on
+     * the same page. This allows to avoid the need to reference count
+     * the pages that get updated with mutiple madvise calls. For details,
+     * see libibverbs ibv_dont_forkrange implementations.
+     */
+    ret = madvise(vaddr, madv_size, MADV_DONTFORK);
+    if (ret != 0) {
+        usd_err("Failed to disable child's access to memory %p size %lu\n",
+                vaddr, size);
+        ret = errno;
+        goto err_unmap;
+    }
 
     ret = usd_ib_cmd_reg_mr(dev, vaddr, size, mr);
-    if (ret == 0) {
-        mr->umr_dev = dev;
-    } else {
-        munmap(base_addr, true_size);
-        return ret;
+    if (ret != 0) {
+        usd_err("Failed to register memory region %p, size %lu\n",
+                vaddr, size);
+        goto err_madvise;
     }
+    mr->umr_dev = dev;
 
     *vaddr_o = vaddr;
     return 0;
+
+err_madvise:
+    madvise(vaddr, ALIGN(size, sysconf(_SC_PAGESIZE)), MADV_DOFORK);
+err_unmap:
+    munmap(base_addr, true_size);
+    return ret;
 }
 
 /*
@@ -161,14 +189,18 @@ usd_free_mr(
 {
     struct usd_mr *mr;
     size_t true_size;
+    size_t madv_size;
     int ret;
 
     mr = (struct usd_mr *) ((uintptr_t *) vaddr)[-1];
     true_size = ((uintptr_t *) vaddr)[-2];
+    madv_size = ((uintptr_t *) vaddr)[-3];
 
     ret = usd_ib_cmd_dereg_mr(mr->umr_dev, mr);
-    if (ret == 0)
+    if (ret == 0) {
+        madvise(vaddr, madv_size, MADV_DOFORK);
         munmap(mr, true_size);
+    }
 
     return ret;
 }
