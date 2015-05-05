@@ -43,6 +43,9 @@
 #include "sock.h"
 #include "sock_util.h"
 
+#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_DATA, __VA_ARGS__)
+#define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
+
 const struct fi_cntr_attr sock_cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
 	.wait_obj = FI_WAIT_MUTEX_COND,
@@ -76,6 +79,78 @@ int sock_cntr_progress(struct sock_cntr *cntr)
 	return 0;
 }
 
+void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
+{
+	struct sock_trigger *trigger;
+	struct dlist_entry *entry;
+	int ret = 0;
+
+	fastlock_acquire(&cntr->trigger_lock);
+	for (entry = cntr->trigger_list.next;
+	     entry != &cntr->trigger_list;) {
+		
+		trigger = container_of(entry, struct sock_trigger, entry);
+		entry = entry->next;
+
+		if (atomic_get(&cntr->value) < trigger->threshold)
+			continue;
+
+		switch (trigger->op_type) {
+		case SOCK_OP_SEND:
+			ret = sock_ep_sendmsg(trigger->ep, &trigger->op.msg.msg, 
+					trigger->flags);
+			break;
+
+		case SOCK_OP_RECV:
+			ret = sock_ep_recvmsg(trigger->ep, &trigger->op.msg.msg,
+					trigger->flags);
+			break;
+
+		case SOCK_OP_TSEND:
+			ret = sock_ep_tsendmsg(trigger->ep, &trigger->op.tmsg.msg, 
+					trigger->flags);
+			break;
+
+		case SOCK_OP_TRECV:
+			ret = sock_ep_trecvmsg(trigger->ep, &trigger->op.tmsg.msg, 
+					trigger->flags);
+			break;
+
+		case SOCK_OP_WRITE:
+			ret = sock_ep_rma_writemsg(trigger->ep, &trigger->op.rma.msg,
+					     trigger->flags);
+			break;
+
+		case SOCK_OP_READ:
+			ret = sock_ep_rma_readmsg(trigger->ep, &trigger->op.rma.msg,
+					     trigger->flags);
+			break;
+
+		case SOCK_OP_ATOMIC:
+			ret = sock_ep_tx_atomic(trigger->ep, &trigger->op.atomic.msg,
+					  trigger->op.atomic.comparev, 
+					  NULL,
+					  trigger->op.atomic.compare_count,
+					  trigger->op.atomic.resultv,
+					  NULL,
+					  trigger->op.atomic.result_count,
+					  trigger->flags);
+			break;
+			
+		default:
+			SOCK_LOG_ERROR("unsupported op\n");
+			ret = 0;
+			break;
+		}
+
+		if (ret != -FI_EAGAIN) {
+			dlist_remove(&trigger->entry);
+			free(trigger);
+		}
+	}	
+	fastlock_release(&cntr->trigger_lock);
+}
+
 static uint64_t sock_cntr_read(struct fid_cntr *cntr)
 {
 	struct sock_cntr *_cntr;
@@ -91,6 +166,7 @@ int sock_cntr_inc(struct sock_cntr *cntr)
 	if (atomic_get(&cntr->value) >= atomic_get(&cntr->threshold))
 		pthread_cond_signal(&cntr->cond);
 	pthread_mutex_unlock(&cntr->mut);
+	sock_cntr_check_trigger_list(cntr);
 	return 0;
 }
 
@@ -113,6 +189,7 @@ static int sock_cntr_add(struct fid_cntr *cntr, uint64_t value)
 	if (atomic_get(&_cntr->value) >= atomic_get(&_cntr->threshold))
 		pthread_cond_signal(&_cntr->cond);
 	pthread_mutex_unlock(&_cntr->mut);
+	sock_cntr_check_trigger_list(_cntr);
 	return 0;
 }
 
@@ -126,6 +203,7 @@ static int sock_cntr_set(struct fid_cntr *cntr, uint64_t value)
 	if (atomic_get(&_cntr->value) >= atomic_get(&_cntr->threshold))
 		pthread_cond_signal(&_cntr->cond);
 	pthread_mutex_unlock(&_cntr->mut);
+	sock_cntr_check_trigger_list(_cntr);
 	return 0;
 }
 
@@ -160,7 +238,7 @@ static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 		while (atomic_get(&_cntr->value) < threshold) {
 			sock_cntr_progress(_cntr);
 			if (timeout >= 0 && fi_gettime_ms() >= end_ms) {
-				ret = -FI_ETIMEDOUT;
+				ret = FI_ETIMEDOUT;
 				break;
 			}
 		}
@@ -172,6 +250,7 @@ static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 	_cntr->is_waiting = 0;
 	atomic_set(&_cntr->threshold, ~0);
 	pthread_mutex_unlock(&_cntr->mut);
+	sock_cntr_check_trigger_list(_cntr);
 	return -ret;
 }		
 
@@ -232,6 +311,7 @@ static int sock_cntr_close(struct fid *fid)
 	
 	pthread_mutex_destroy(&cntr->mut);
 	fastlock_destroy(&cntr->list_lock);
+	fastlock_destroy(&cntr->trigger_lock);
 
 	pthread_cond_destroy(&cntr->cond);
 	atomic_dec(&cntr->domain->ref);
@@ -366,6 +446,9 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	dlist_init(&_cntr->tx_list);
 	dlist_init(&_cntr->rx_list);
+
+	dlist_init(&_cntr->trigger_list);
+	fastlock_init(&_cntr->trigger_lock);
 
 	_cntr->cntr_fid.fid.fclass = FI_CLASS_CNTR;
 	_cntr->cntr_fid.fid.context = context;

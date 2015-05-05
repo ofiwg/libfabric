@@ -59,9 +59,8 @@
 #define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_DATA, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
-static ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, 
-					const struct fi_msg_rma *msg, 
-					uint64_t flags)
+ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, 
+			    uint64_t flags)
 {
 	int ret, i;
 	struct sock_op tx_op;
@@ -103,22 +102,26 @@ static ssize_t sock_ep_rma_readmsg(struct fid_ep *ep,
 	if (!conn)
 		return -FI_EAGAIN;
 
-	total_len = sizeof(struct sock_op_send) + 
-		(msg->iov_count * sizeof(union sock_iov)) +
-		(msg->rma_iov_count * sizeof(union sock_iov));
-
-	sock_tx_ctx_start(tx_ctx);
-	if (rbfdavail(&tx_ctx->rbfd) < total_len) {
-		ret = -FI_EAGAIN;
-		goto err;
-	}
-
 	SOCK_EP_SET_TX_OP_FLAGS(flags);
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;	
 
 	if (sock_ep_is_read_cq_low(&tx_ctx->comp, flags)) {
 		SOCK_LOG_ERROR("CQ size low\n");
+		return -FI_EAGAIN;
+	}
+
+	if ((flags & FI_TRIGGER) && 
+	    (ret = sock_queue_rma_op(ep, msg, flags, SOCK_OP_READ)) != 1) {
+		return ret;
+	}
+
+	total_len = sizeof(struct sock_op_send) + 
+		(msg->iov_count * sizeof(union sock_iov)) +
+		(msg->rma_iov_count * sizeof(union sock_iov));
+	
+	sock_tx_ctx_start(tx_ctx);
+	if (rbfdavail(&tx_ctx->rbfd) < total_len) {
 		ret = -FI_EAGAIN;
 		goto err;
 	}
@@ -218,9 +221,8 @@ static ssize_t sock_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 	return sock_ep_rma_readmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
-static ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, 
-				     const struct fi_msg_rma *msg, 
-				     uint64_t flags)
+ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg, 
+			     uint64_t flags)
 {
 	int ret, i;
 	struct sock_op tx_op;
@@ -269,6 +271,11 @@ static ssize_t sock_ep_rma_writemsg(struct fid_ep *ep,
 	if (sock_ep_is_write_cq_low(&tx_ctx->comp, flags)) {
 		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
+	}
+
+	if ((flags & FI_TRIGGER) && 
+	    (ret = sock_queue_rma_op(ep, msg, flags, SOCK_OP_WRITE)) != 1) {
+		return ret;
 	}
 
 	memset(&tx_op, 0, sizeof(struct sock_op));
