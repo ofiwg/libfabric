@@ -1,4 +1,4 @@
-.TH fi_trigger 3 "2015\-04\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_trigger 3 "2015\-05\-04" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_trigger - Triggered operations
@@ -22,8 +22,8 @@ FI_TRIGGER flag.
 Such an endpoint is referred to as a trigger-able endpoint.
 All data transfer operations on a trigger-able endpoint are deferred.
 .PP
-Any data transfer operation is potentially trigger-able, subject to
-provider constraints.
+Any data transfer operation (except inject operations) is potentially
+trigger-able, subject to provider constraints.
 Trigger-able endpoints are initialized such that only those interfaces
 supported by the provider which are trigger-able are available.
 .PP
