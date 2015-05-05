@@ -80,7 +80,6 @@ _sockets_files = \
 	prov/sockets/src/sock_msg.c \
 	prov/sockets/src/sock_rma.c \
 	prov/sockets/src/sock_atomic.c \
-	prov/sockets/src/sock_trigger.c \
 	prov/sockets/src/sock_util.h \
 	prov/sockets/src/indexer.c
 

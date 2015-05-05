@@ -27,10 +27,10 @@ be created and configured with the FI_TRIGGER flag.  Such an endpoint
 is referred to as a trigger-able endpoint.  All data transfer
 operations on a trigger-able endpoint are deferred.
 
-Any data transfer operation (except inject operations) is potentially
-trigger-able, subject to provider constraints.  Trigger-able endpoints
-are initialized such that only those interfaces supported by the
-provider which are trigger-able are available.
+Any data transfer operation is potentially trigger-able, subject to
+provider constraints.  Trigger-able endpoints are initialized such that
+only those interfaces supported by the provider which are trigger-able
+are available.
 
 Triggered operations require that applications use struct
 fi_triggered_context as their per operation context parameter.  The

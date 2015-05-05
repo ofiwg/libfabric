@@ -59,11 +59,11 @@
 #define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_DATA, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
-ssize_t sock_ep_tx_atomic(struct fid_ep *ep, 
-			  const struct fi_msg_atomic *msg, 
-			  const struct fi_ioc *comparev, void **compare_desc, 
-			  size_t compare_count, struct fi_ioc *resultv, 
-			  void **result_desc, size_t result_count, uint64_t flags)
+static ssize_t sock_ep_tx_atomic(struct fid_ep *ep, 
+				  const struct fi_msg_atomic *msg, 
+				  const struct fi_ioc *comparev, void **compare_desc, 
+				  size_t compare_count, struct fi_ioc *resultv, 
+				  void **result_desc, size_t result_count, uint64_t flags)
 {
 	int i, ret;
 	size_t datatype_sz;
@@ -111,13 +111,6 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	if (sock_ep_is_write_cq_low(&tx_ctx->comp, flags)) {
 		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
-	}
-
-	if ((flags & FI_TRIGGER) &&
-	    (ret = sock_queue_atomic_op(ep, msg, comparev, compare_count,
-					resultv, result_count, flags, 
-					SOCK_OP_ATOMIC)) != 1) {
-		return ret;
 	}
 
 	src_len = 0;
