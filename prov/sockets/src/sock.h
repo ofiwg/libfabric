@@ -192,43 +192,6 @@ struct sock_domain {
 	struct fi_domain_attr attr;
 };
 
-struct sock_trigger {
-	uint8_t op_type;
-	size_t threshold;
-	struct dlist_entry entry;
-
-	struct fid_ep	*ep;
-	uint64_t flags;
-	
-	union {
-		struct {
-			struct fi_msg msg;
-			struct iovec msg_iov[SOCK_EP_MAX_IOV_LIMIT];
-		} msg;
-
-		struct {
-			struct fi_msg_tagged msg;
-			struct iovec msg_iov[SOCK_EP_MAX_IOV_LIMIT];
-		} tmsg;
-
-		struct {
-			struct fi_msg_rma msg;
-			struct iovec msg_iov[SOCK_EP_MAX_IOV_LIMIT];
-			struct fi_rma_iov rma_iov[SOCK_EP_MAX_IOV_LIMIT];
-		} rma;
-		
-		struct {
-			struct fi_msg_atomic msg;
-			struct fi_ioc msg_iov[SOCK_EP_MAX_IOV_LIMIT];
-			struct fi_rma_ioc rma_iov[SOCK_EP_MAX_IOV_LIMIT];
-			struct fi_ioc comparev[SOCK_EP_MAX_IOV_LIMIT];
-			size_t compare_count;
-			struct fi_ioc resultv[SOCK_EP_MAX_IOV_LIMIT];
-			size_t result_count;
-		} atomic;
-	} op;
-};
-
 struct sock_cntr {
 	struct fid_cntr cntr_fid;
 	struct sock_domain *domain;
@@ -243,9 +206,6 @@ struct sock_cntr {
 	struct dlist_entry rx_list;
 	struct dlist_entry tx_list;
 	fastlock_t list_lock;
-
-	fastlock_t trigger_lock;
-	struct dlist_entry trigger_list;
 
 	struct fid_wait *waitset;
 	int signal;
@@ -862,7 +822,6 @@ struct sock_conn_req_handle {
 	struct sock_conn_req *req;
 };
 
-
 int sock_verify_info(struct fi_info *hints);
 int sock_verify_fabric_attr(struct fi_fabric_attr *attr);
 int sock_verify_domain_attr(struct fi_domain_attr *attr);
@@ -1069,36 +1028,5 @@ ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len);
 ssize_t sock_comm_discard(struct sock_conn *conn, size_t len);
 ssize_t sock_comm_data_avail(struct sock_conn *conn);
 ssize_t sock_comm_flush(struct sock_conn *conn);
-
-ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, 
-			uint64_t flags);
-ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, 
-			uint64_t flags);
-ssize_t sock_ep_trecvmsg(struct fid_ep *ep, 
-			 const struct fi_msg_tagged *msg, uint64_t flags);
-ssize_t sock_ep_tsendmsg(struct fid_ep *ep, 
-			 const struct fi_msg_tagged *msg, uint64_t flags);
-ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, 
-			    uint64_t flags);
-ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg, 
-			     uint64_t flags);
-ssize_t sock_ep_tx_atomic(struct fid_ep *ep, 
-			  const struct fi_msg_atomic *msg, 
-			  const struct fi_ioc *comparev, void **compare_desc, 
-			  size_t compare_count, struct fi_ioc *resultv, 
-			  void **result_desc, size_t result_count, uint64_t flags);
-
-
-ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg, 
-			  uint64_t flags, uint8_t op_type);
-ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg, 
-			     const struct fi_ioc *comparev, size_t compare_count, 
-			     struct fi_ioc *resultv, size_t result_count, 
-			     uint64_t flags, uint8_t op_type);
-ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
-			   uint64_t flags, uint8_t op_type);
-ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg, 
-			  uint64_t flags, uint8_t op_type);
-
 
 #endif

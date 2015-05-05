@@ -59,10 +59,10 @@
 #define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_DATA, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
-ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, 
-			uint64_t flags)
+static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, 
+				uint64_t flags)
 {
-	int i, ret;
+	int i;
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_rx_entry *rx_entry;
 	struct sock_ep *sock_ep;
@@ -93,11 +93,6 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (sock_ep_is_recv_cq_low(&rx_ctx->comp, flags)) {
 		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
-	}
-
-	if ((flags & FI_TRIGGER) &&
-	    (ret = sock_queue_msg_op(ep, msg, flags, SOCK_OP_RECV)) != 1) {
-		return ret;
 	}
 
 	if (flags & FI_PEEK) {
@@ -170,8 +165,8 @@ static ssize_t sock_ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 	return sock_ep_recvmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
-ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, 
-			uint64_t flags)
+static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, 
+				uint64_t flags)
 {
 	int ret, i;
 	uint64_t total_len;
@@ -222,11 +217,6 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (sock_ep_is_send_cq_low(&tx_ctx->comp, flags)) {
 		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
-	}
-
-	if ((flags & FI_TRIGGER) &&
-	    (ret = sock_queue_msg_op(ep, msg, flags, SOCK_OP_SEND)) != 1) {
-		return ret;
 	}
 
 	memset(&tx_op, 0, sizeof(struct sock_op));
@@ -387,10 +377,10 @@ struct fi_ops_msg sock_ep_msg_ops = {
 	.injectdata = sock_ep_injectdata
 };
 
-ssize_t sock_ep_trecvmsg(struct fid_ep *ep, 
-			 const struct fi_msg_tagged *msg, uint64_t flags)
+static ssize_t sock_ep_trecvmsg(struct fid_ep *ep, 
+				 const struct fi_msg_tagged *msg, uint64_t flags)
 {
-	int i, ret;
+	int i;
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_rx_entry *rx_entry;
 	struct sock_ep *sock_ep;
@@ -422,11 +412,6 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	if (sock_ep_is_recv_cq_low(&rx_ctx->comp, flags)) {
 		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
-	}
-
-	if ((flags & FI_TRIGGER) &&
-	    (ret = sock_queue_tmsg_op(ep, msg, flags, SOCK_OP_TRECV)) != 1) {
-		return ret;
 	}
 
 	if (flags & FI_PEEK) {
@@ -507,8 +492,8 @@ static ssize_t sock_ep_trecvv(struct fid_ep *ep, const struct iovec *iov,
 	return sock_ep_trecvmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
-ssize_t sock_ep_tsendmsg(struct fid_ep *ep, 
-			 const struct fi_msg_tagged *msg, uint64_t flags)
+static ssize_t sock_ep_tsendmsg(struct fid_ep *ep, 
+				 const struct fi_msg_tagged *msg, uint64_t flags)
 {
 	int ret, i;
 	uint64_t total_len;
@@ -556,11 +541,6 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	if (sock_ep_is_send_cq_low(&tx_ctx->comp, flags)) {
 		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
-	}
-
-	if ((flags & FI_TRIGGER) &&
-	    (ret = sock_queue_tmsg_op(ep, msg, flags, SOCK_OP_TSEND)) != 1) {
-		return ret;
 	}
 
 	memset(&tx_op, 0, sizeof(tx_op));
