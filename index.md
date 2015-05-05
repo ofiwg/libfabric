@@ -5,7 +5,9 @@ tagline: OpenFabrics
 ---
 {% include JB/setup %}
 
-The Open Fabrics Interfaces (OFI) is a framework focused on exporting fabric communication services to applications.  Libfabric is a software library instantiation of OFI.
+OpenFabrics Interfaces (OFI) is a framework focused on exporting fabric communication services to applications.  OFI is best described as a collection of libraries and applications used to export fabric services.  The key components of OFI are: application interfaces, provider libraries, kernel services, daemons, and test applications. 
+
+Libfabric is a core component of OFI.  It is the library that defines and exports the user-space API of OFI, and is typically the only software that applications deal with directly.  It works in conjunction with provider libraries, which are often integrated directly into libfabric.
 
 Libfabric has the following objectives:
 
@@ -19,18 +21,18 @@ The charter of the OFIWG is:
 
 > Develop an extensible, open source framework and interfaces aligned with upper-layer protocols and application needs for high-performance fabric services.
 
-The goal of OFI and libfabric is to define interfaces that enable a tight semantic map between applications and underlying fabric services.  Specifically, libfabric software interfaces have been co-designed with fabric hardware providers and application developers, with a focus on the needs of HPC users.  OFI supports multiple interface semantics, is fabric and hardware implementation agnostic, and leverages and expands the existing RDMA open source community.  A high-level view of the libfabric architecture is shown below.
+The goal of OFI, and libfabric specifically, is to define interfaces that enable a tight semantic map between applications and underlying fabric services.  Specifically, libfabric software interfaces have been co-designed with fabric hardware providers and application developers, with a focus on the needs of HPC users.  Libfabric supports multiple interface semantics, is fabric and hardware implementation agnostic, and leverages and expands the existing RDMA open source community.  A high-level view of the libfabric architecture is shown below.
 
 ![Fabric interface groups](images/fabric-interface-groups.png)
 
 Libfabric is designed to minimize the impedance mismatch between applications, including middleware such as MPI, SHMEM, and PGAS, and fabric communication hardware.  Its interfaces target high-bandwidth, low-latency NICs, with a goal to scale to tens of thousands of nodes.
 
-OFI targets support for the Linux operating system.  A reasonable effort is made to support all major, modern Linux distributions; however, validation is limited to the most recent 2-3 releases of RedHat Enterprise Linux (RHEL)and SUSE Linux Enterprise Server (SLES).  OFI aligns its supported distributions with the most current OpenFabrics Enterprise Distribution (OFED) software releases.  With the exception of the sockets provider, which is provided for development purposes, distro support for a specific provider is vendor specific.
+Libfabric targets support for the Linux operating system.  A reasonable effort is made to support all major, modern Linux distributions; however, validation is limited to the most recent 2-3 releases of RedHat Enterprise Linux (RHEL)and SUSE Linux Enterprise Server (SLES).  Libfabric aligns its supported distributions with the most current OpenFabrics Enterprise Distribution (OFED) software releases.  With the exception of the sockets provider, which is provided for development purposes, distro support for a specific provider is vendor specific.
 
-Overview of OFI / libfabric
-===========================
+Overview of libfabric
+=====================
 
-The following document provides an introduction to the OFI architecture.
+The following document provides an introduction to the libfabric architecture.
 
 
 <div align="center">
@@ -55,7 +57,7 @@ How do I get involved?
 
 First, [read the documentation](master/man).
 
-A set of Linux man pages are being carefully written to exactly specify the libfabric APIs.  Read through these man pages to get a sense of the libfabric APIs.
+A set of Linux man pages have been carefully written to specify the libfabric API.  Read through these man pages to get a sense of the libfabric API.  A [set of example applications](https://github.com/ofiwg/fabtests) have been developed to highlight how an application might use various aspects of libfabric.
 
 Second, [get the code](https://github.com/ofiwg/libfabric).
 
