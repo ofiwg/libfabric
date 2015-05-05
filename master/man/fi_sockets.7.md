@@ -44,15 +44,12 @@ Key features include:
 
 # LIMITATIONS
 
-Sockets provider currently do not support triggered operations. This
-will be added in future releases.
-
-Sockets provider attempts to emulate the entire API set (except the
-triggered operations), including all defined options. In order to
-support development on a wide range of systems, it is implemented over
-TCP sockets. As a result, the performance numbers are lower compared
-to other providers implemented over high-speed fabric, and lower than
-what an application might see implementing to sockets directly.
+Sockets provider attempts to emulate the entire API set, including all
+defined options. In order to support development on a wide range of
+systems, it is implemented over TCP sockets. As a result, the
+performance numbers are lower compared to other providers implemented
+over high-speed fabric, and lower than what an application might see
+implementing to sockets directly.
 
 # SEE ALSO
 
