@@ -40,15 +40,9 @@ int usdf_cq_is_soft(struct usdf_cq *cq);
 int usdf_cq_make_soft(struct usdf_cq *cq);
 int usdf_cq_create_cq(struct usdf_cq *cq);
 
-void usdf_progress_hard_cq_context(struct usdf_cq_hard *hcq);
-void usdf_progress_hard_cq_msg(struct usdf_cq_hard *hcq);
-void usdf_progress_hard_cq_data(struct usdf_cq_hard *hcq);
+void usdf_progress_hard_cq(struct usdf_cq_hard *hcq);
 
-void usdf_cq_post_soft_context(struct usdf_cq_hard *hcq, void *context,
-		size_t len);
-void usdf_cq_post_soft_msg(struct usdf_cq_hard *hcq, void *context,
-		size_t len);
-void usdf_cq_post_soft_data(struct usdf_cq_hard *hcq, void *context,
-		size_t len);
+void usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context,
+		size_t len, int prov_errno);
 
 #endif /* _USDF_CQ_H_ */

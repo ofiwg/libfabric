@@ -91,9 +91,9 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 
 	cq = container_of(fcq, struct usdf_cq, cq_fid);
 
-	// If top entry has no error, return 0
+	// The return values are analogous to sockets cq_readerr
 	if (cq->cq_comp.uc_status == 0) {
-		return 0;
+		return -FI_EAGAIN;
 	}
 
 	entry->op_context = cq->cq_comp.uc_context;
@@ -119,7 +119,34 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 
 	cq->cq_comp.uc_status = 0;
 
-	return sizeof(*entry);
+	return 1;
+}
+
+static ssize_t
+usdf_cq_readerr_soft(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
+		uint64_t flags)
+{
+	struct usdf_cq *cq;
+	struct usdf_cq_soft_entry *tail;
+
+	USDF_TRACE_SYS(CQ, "\n");
+
+	cq = container_of(fcq, struct usdf_cq, cq_fid);
+
+	tail = cq->c.soft.cq_tail;
+
+	entry->op_context = tail->cse_context;
+	entry->flags = 0;
+	entry->err = FI_EIO;
+	entry->prov_errno = tail->cse_prov_errno;
+
+	tail++;
+	if (tail == cq->c.soft.cq_end) {
+		tail = cq->c.soft.cq_comps;
+	}
+	cq->c.soft.cq_tail = tail;
+
+	return 1;
 }
 
 static ssize_t
@@ -304,16 +331,12 @@ usdf_cq_readfrom_context(struct fid_cq *fcq, void *buf, size_t count,
  * "soft" CQ support
  *****************************************************************/
 
-static inline void
-usdf_progress_hard_cq(struct usdf_cq_hard *hcq, enum fi_cq_format format)
+void
+usdf_progress_hard_cq(struct usdf_cq_hard *hcq)
 {
 	int ret;
 	struct usd_completion comp;
-	void *entry;
-	size_t entry_size;
-	struct fi_cq_entry *ctx_entry;
-	struct fi_cq_msg_entry *msg_entry;
-	struct fi_cq_data_entry *data_entry;
+	struct usdf_cq_soft_entry *entry;
 	struct usdf_cq *cq;
 
 	cq = hcq->cqh_cq;
@@ -322,34 +345,14 @@ usdf_progress_hard_cq(struct usdf_cq_hard *hcq, enum fi_cq_format format)
 		ret = usd_poll_cq(hcq->cqh_ucq, &comp);
 		if (ret == 0) {
 			entry = cq->c.soft.cq_head;
-			switch (format) {
-			case FI_CQ_FORMAT_CONTEXT:
-				entry_size = sizeof(*ctx_entry);
-				ctx_entry = (struct fi_cq_entry *)entry;
-				ctx_entry->op_context = cq->cq_comp.uc_context;
-				break;
-			case FI_CQ_FORMAT_MSG:
-				entry_size = sizeof(*msg_entry);
-				msg_entry = (struct fi_cq_msg_entry *)entry;
-				msg_entry->op_context = cq->cq_comp.uc_context;
-				msg_entry->flags = 0;
-				msg_entry->len = cq->cq_comp.uc_bytes;
-				break;
-			case FI_CQ_FORMAT_DATA:
-				entry_size = sizeof(*data_entry);
-				data_entry = (struct fi_cq_data_entry *)entry;
-				data_entry->op_context = cq->cq_comp.uc_context;
-				data_entry->flags = 0;
-				data_entry->len = cq->cq_comp.uc_bytes;
-				data_entry->buf = 0; /* XXX */
-				data_entry->data = 0;
-				break;
-			default:
-				return;
-			}
+			entry->cse_context = cq->cq_comp.uc_context;
+			entry->cse_flags = 0;
+			entry->cse_len = cq->cq_comp.uc_bytes;
+			entry->cse_buf = 0;		 /* XXX TODO */
+			entry->cse_data = 0;
 
 			/* update with wrap */
-			entry = (uint8_t *)entry + entry_size;
+			entry++;
 			if (entry != cq->c.soft.cq_end) {
 				cq->c.soft.cq_head = entry;
 			} else {
@@ -360,65 +363,21 @@ usdf_progress_hard_cq(struct usdf_cq_hard *hcq, enum fi_cq_format format)
 }
 
 void
-usdf_progress_hard_cq_context(struct usdf_cq_hard *hcq)
-{
-	usdf_progress_hard_cq(hcq, FI_CQ_FORMAT_CONTEXT);
-}
-
-void
-usdf_progress_hard_cq_msg(struct usdf_cq_hard *hcq)
-{
-	usdf_progress_hard_cq(hcq, FI_CQ_FORMAT_MSG);
-}
-
-void
-usdf_progress_hard_cq_data(struct usdf_cq_hard *hcq)
-{
-	usdf_progress_hard_cq(hcq, FI_CQ_FORMAT_DATA);
-}
-
-static inline void
 usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
-		enum fi_cq_format format)
+		int prov_errno)
 {
-	void *entry;
-	size_t entry_size;
-	struct fi_cq_entry *ctx_entry;
-	struct fi_cq_msg_entry *msg_entry;
-	struct fi_cq_data_entry *data_entry;
+	struct usdf_cq_soft_entry *entry;
 	struct usdf_cq *cq;
 
 	cq = hcq->cqh_cq;
 
 	entry = cq->c.soft.cq_head;
-	switch (format) {
-	case FI_CQ_FORMAT_CONTEXT:
-		entry_size = sizeof(*ctx_entry);
-		ctx_entry = (struct fi_cq_entry *)entry;
-		ctx_entry->op_context = context;
-		break;
-	case FI_CQ_FORMAT_MSG:
-		entry_size = sizeof(*msg_entry);
-		msg_entry = (struct fi_cq_msg_entry *)entry;
-		msg_entry->op_context = context;
-		msg_entry->flags = 0;
-		msg_entry->len = len;
-		break;
-	case FI_CQ_FORMAT_DATA:
-		entry_size = sizeof(*data_entry);
-		data_entry = (struct fi_cq_data_entry *)entry;
-		data_entry->op_context = context;
-		data_entry->flags = 0;
-		data_entry->len = len;
-		data_entry->buf = NULL;
-		data_entry->data = 0;
-		break;
-	default:
-		return;
-	}
+	entry->cse_context = context;
+	entry->cse_len = len;
+	entry->cse_prov_errno = prov_errno;
 
 	/* update with wrap */
-	entry = (uint8_t *)entry + entry_size;
+	entry++;
 	if (entry != cq->c.soft.cq_end) {
 		cq->c.soft.cq_head = entry;
 	} else {
@@ -427,29 +386,46 @@ usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 
 }
 
-void
-usdf_cq_post_soft_context(struct usdf_cq_hard *hcq, void *context, size_t len)
-{
-	usdf_cq_post_soft(hcq, context, len, FI_CQ_FORMAT_CONTEXT);
-}
-
-void
-usdf_cq_post_soft_msg(struct usdf_cq_hard *hcq, void *context, size_t len)
-{
-	usdf_cq_post_soft(hcq, context, len, FI_CQ_FORMAT_MSG);
-}
-
-void
-usdf_cq_post_soft_data(struct usdf_cq_hard *hcq, void *context, size_t len)
-{
-	usdf_cq_post_soft(hcq, context, len, FI_CQ_FORMAT_DATA);
-}
-
 static ssize_t
 usdf_cq_sread_soft(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 		int timeout)
 {
 	return -FI_ENOSYS;
+}
+
+static inline ssize_t
+usdf_cq_copy_soft_entry(void *dst, const struct usdf_cq_soft_entry *src,
+			enum fi_cq_format dst_format)
+{
+	struct fi_cq_entry *ctx_entry;
+	struct fi_cq_msg_entry *msg_entry;
+	struct fi_cq_data_entry *data_entry;
+
+	switch (dst_format) {
+	case FI_CQ_FORMAT_CONTEXT:
+		ctx_entry = (struct fi_cq_entry *)dst;
+		ctx_entry->op_context = src->cse_context;
+		break;
+	case FI_CQ_FORMAT_MSG:
+		msg_entry = (struct fi_cq_msg_entry *)dst;
+		msg_entry->op_context = src->cse_context;
+		msg_entry->flags = src->cse_flags;
+		msg_entry->len = src->cse_len;
+		break;
+	case FI_CQ_FORMAT_DATA:
+		data_entry = (struct fi_cq_data_entry *)dst;
+		data_entry->op_context = src->cse_context;
+		data_entry->flags = src->cse_flags;
+		data_entry->len = src->cse_len;
+		data_entry->buf = src->cse_buf;
+		data_entry->data = src->cse_data;
+		break;
+	default:
+		USDF_WARN("unexpected CQ format, internal error\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	return FI_SUCCESS;
 }
 
 /*
@@ -466,8 +442,9 @@ usdf_cq_read_common_soft(struct fid_cq *fcq, void *buf, size_t count,
 	struct usdf_cq *cq;
 	uint8_t *entry;
 	uint8_t *last;
-	void *tail;
+	struct usdf_cq_soft_entry *tail;
 	size_t entry_len;
+	ssize_t ret;
 
 	cq = cq_ftou(fcq);
 	if (cq->cq_comp.uc_status != 0) {
@@ -496,12 +473,16 @@ usdf_cq_read_common_soft(struct fid_cq *fcq, void *buf, size_t count,
 	last = entry + (entry_len * count);
 	tail = cq->c.soft.cq_tail;
 
-	// XXX ... handle error comps
 	while (entry < last && tail != cq->c.soft.cq_head) {
-		memcpy(entry, tail, entry_len);
+		if (tail->cse_prov_errno > 0) {
+			return -FI_EAVAIL;
+		}
+		ret = usdf_cq_copy_soft_entry(entry, tail, format);
+		if (ret < 0) {
+			return ret;
+		}
 		entry += entry_len;
-
-		tail = (uint8_t *)tail + entry_len;
+		tail++;
 		if (tail == cq->c.soft.cq_end) {
 			tail = cq->c.soft.cq_comps;
 		}
@@ -610,9 +591,12 @@ static const char *
 usdf_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 		 char *buf, size_t len)
 {
-	strncpy(buf, "CQ Error", len-1);
-	buf[len-1] = '\0';
-	return buf;
+	if (buf && len) {
+		strncpy(buf, fi_strerror(prov_errno), len);
+		buf[len-1] = '\0';
+		return buf;
+	}
+	return fi_strerror(prov_errno);
 }
 
 static int
@@ -679,7 +663,7 @@ static struct fi_ops_cq usdf_cq_context_soft_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = usdf_cq_read_context_soft,
 	.readfrom = usdf_cq_readfrom_context_soft,
-	.readerr = usdf_cq_readerr,
+	.readerr = usdf_cq_readerr_soft,
 	.sread = usdf_cq_sread_soft,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
@@ -701,7 +685,7 @@ static struct fi_ops_cq usdf_cq_msg_soft_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = usdf_cq_read_msg_soft,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
-	.readerr = usdf_cq_readerr,
+	.readerr = usdf_cq_readerr_soft,
 	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
@@ -723,7 +707,7 @@ static struct fi_ops_cq usdf_cq_data_soft_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = usdf_cq_read_data_soft,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
-	.readerr = usdf_cq_readerr,
+	.readerr = usdf_cq_readerr_soft,
 	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
@@ -770,31 +754,26 @@ usdf_cq_make_soft(struct usdf_cq *cq)
         struct fi_ops_cq *soft_ops;
 	struct usdf_cq_hard *hcq;
 	struct usd_cq *ucq;
-	size_t comp_size;
 	void (*rtn)(struct usdf_cq_hard *hcq);
 
         switch (cq->cq_attr.format) {
         case FI_CQ_FORMAT_CONTEXT:
                 hard_ops = &usdf_cq_context_ops;
                 soft_ops = &usdf_cq_context_soft_ops;
-		comp_size = sizeof(struct fi_cq_entry);
-		rtn = usdf_progress_hard_cq_context;
                 break;
         case FI_CQ_FORMAT_MSG:
                 hard_ops = &usdf_cq_msg_ops;
                 soft_ops = &usdf_cq_msg_soft_ops;
-		comp_size = sizeof(struct fi_cq_msg_entry);
-		rtn = usdf_progress_hard_cq_msg;
                 break;
         case FI_CQ_FORMAT_DATA:
                 hard_ops = &usdf_cq_data_ops;
                 soft_ops = &usdf_cq_data_soft_ops;
-		comp_size = sizeof(struct fi_cq_data_entry);
-		rtn = usdf_progress_hard_cq_data;
                 break;
 	default:
 		return 0;
         }
+
+	rtn = usdf_progress_hard_cq;
 
         if (cq->cq_fid.ops == hard_ops) {
 
@@ -803,12 +782,12 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 
 		/* fill in the soft part of union */
 		TAILQ_INIT(&cq->c.soft.cq_list);
-		cq->c.soft.cq_comps = calloc(cq->cq_attr.size, comp_size);
+		cq->c.soft.cq_comps = calloc(cq->cq_attr.size,
+					sizeof(struct usdf_cq_soft_entry));
 		if (cq->c.soft.cq_comps == NULL) {
 			return -FI_ENOMEM;
 		}
-		cq->c.soft.cq_end = (void *)((uintptr_t)cq->c.soft.cq_comps +
-				(cq->cq_attr.size * comp_size));
+		cq->c.soft.cq_end = cq->c.soft.cq_comps + cq->cq_attr.size;
 		cq->c.soft.cq_head = cq->c.soft.cq_comps;
 		cq->c.soft.cq_tail = cq->c.soft.cq_comps;
 
