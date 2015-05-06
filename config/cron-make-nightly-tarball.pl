@@ -36,6 +36,7 @@ my $source_dir_arg;
 my $download_dir_arg;
 my $coverity_token_arg;
 my $logfile_dir_arg;
+my $no_git_actions_arg = 0;
 my $help_arg;
 my $verbose_arg;
 my $debug_arg;
@@ -44,6 +45,7 @@ my $ok = Getopt::Long::GetOptions("source-dir=s" => \$source_dir_arg,
                                   "download-dir=s" => \$download_dir_arg,
                                   "coverity-token=s" => \$coverity_token_arg,
                                   "logfile-dir=s" => \$logfile_dir_arg,
+                                  "no-git-actions!" => \$no_git_actions_arg,
                                   "verbose" => \$verbose_arg,
                                   "debug" => \$debug_arg,
                                   "help|h" => \$help_arg,
@@ -108,12 +110,15 @@ sub verbose {
 
 #####################################################################
 
-# Git pull to get the latest; ensure we have a totally clean tree
-verbose("*** Ensuring we have a clean git tree...\n");
 chdir($source_dir_arg);
-doit(0, "git clean -dfx", "git-clean");
-doit(0, "git reset --hard HEAD", "git-reset");
-doit(0, "git pull", "git-pull");
+
+if (!$no_git_actions_arg) {
+    # Git pull to get the latest; ensure we have a totally clean tree
+    verbose("*** Ensuring we have a clean git tree...\n");
+    doit(0, "git clean -dfx", "git-clean");
+    doit(0, "git reset --hard HEAD", "git-reset");
+    doit(0, "git pull", "git-pull");
+}
 
 # Get a git describe id (minus the initial 'v' in the tag name, if any)
 my $gd = `git describe --tags --always`;
