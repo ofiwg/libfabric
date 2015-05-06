@@ -57,29 +57,35 @@ if (-d ".git") {
     open(GIT_STATUS, "git status --porcelain|") ||
         die "Can't run git status to verify that the source tree is clean";
     my $clean = 1;
+
+    # Allow the caller to specify a list of dirty files that can be
+    # skipped in this git cleanliness check.  The nightly tarball
+    # script uses this mechanism (because it needs to modify the
+    # version in configure.ac).  Others may use this mechanism, too --
+    # it allows them the safety of checking that the *rest* of their
+    # tree is git clean (e.g., perhaps they have modified
+    # libfabric.spec.in with a local release number).
+    my @dirty_files;
+    @dirty_files = split(/\s+/, $ENV{'LIBFABRIC_DISTSCRIPT_DIRTY_FILES'})
+        if (exists($ENV{'LIBFABRIC_DISTSCRIPT_DIRTY_FILES'}));
+
     while (<GIT_STATUS>) {
         chomp;
         if ($_ =~ m/^([^?! ].|.[^?! ]) (.+)$/) {
             my $file = $2;
             print "*** WARNING: found modified file in source tree: $file\n";
 
-            # There is one exception that is allowed: the nightly
-            # tarball script changes configure.ac to set the correct
-            # version number.  In this case, the nightly tarball
-            # script will set a magic environment variable with the
-            # SHA1 hash of the ok-to-be-modified file.  See if it is
-            # set, and if the SHA1 hash agrees.
-            if (exists($ENV{"LIBFABRIC_DISTSCRIPT_SHA1_$file"})) {
-                my $sha1 = `sha1sum $file`;
-                chomp($sha1);
-                if ($sha1 eq $ENV{"LIBFABRIC_DISTSCRIPT_SHA1_$file"}) {
+            my $found = 0;
+            foreach my $dirty_file (@dirty_files) {
+                if ($file eq $dirty_file) {
                     print "*** ...but an environment variable override says that this is ok!\n";
-                } else {
-                    $clean = 0;
+                    $found = 1;
+                    last;
                 }
-            } else {
-                $clean = 0;
             }
+
+            $clean = 0
+                if (!$found);
         }
     }
     close(GIT_STATUS);
