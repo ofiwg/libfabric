@@ -47,6 +47,7 @@
 extern "C" {
 #endif
 
+#define FT_SREAD_TO 10000 // milliseconds
 
 extern int listen_sock, sock;
 

@@ -404,22 +404,22 @@ int ft_run_test()
 
 	ret = ft_init_control();
 	if (ret)
-		return ret;
+		goto cleanup;
 
 	ret = ft_open_control();
 	if (ret)
-		return ret;
+		goto cleanup;
 
 	if (test_info.ep_type == FI_EP_MSG && listen_sock >= 0)
 		ret = ft_open_passive();
 	else
 		ret = ft_open_active();
 	if (ret)
-		return ret;
+		goto cleanup;
 
 	ret = ft_enable_comm();
 	if (ret)
-		return ret;
+		goto cleanup;
 
 	switch (test_info.test_type) {
 	case FT_TEST_LATENCY:
@@ -434,6 +434,7 @@ int ft_run_test()
 	}
 
 	ft_sync_test(0);
+cleanup:
 	ft_cleanup();
 
 	return ret ? ret : -ft.error;
