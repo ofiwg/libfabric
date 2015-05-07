@@ -65,6 +65,7 @@
 #include "usdf_dgram.h"
 #include "usdf_av.h"
 #include "usdf_cq.h"
+#include "usdf_cm.h"
 
 static int
 usdf_ep_dgram_enable(struct fid_ep *fep)
@@ -325,7 +326,7 @@ static struct fi_ops_msg usdf_dgram_prefix_ops = {
 static struct fi_ops_cm usdf_cm_dgram_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_no_setname,
-	.getname = fi_no_getname,
+	.getname = usdf_cm_dgram_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
 	.listen = fi_no_listen,
@@ -371,11 +372,26 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 	struct usdf_domain *udp;
 	struct usdf_ep *ep;
 	int ret;
+	struct usdf_pep *parent_pep;
+	struct sockaddr *src_addr;
+	int is_bound;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
+	parent_pep = NULL;
+	src_addr = NULL;
+
 	if ((info->caps & ~USDF_DGRAM_CAPS) != 0) {
 		return -FI_EBADF;
+	}
+
+	if (info->handle != NULL) {
+		if (info->handle->fclass != FI_CLASS_PEP) {
+			USDF_WARN_SYS(EP_CTRL,
+				"\"handle\" should be a PEP (or NULL)\n");
+			return -FI_EINVAL;
+		}
+		parent_pep = pep_fidtou(info->handle);
 	}
 
 	udp = dom_ftou(domain);
@@ -385,16 +401,35 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 		return -FI_ENOMEM;
 	}
 
-	ep->e.dg.ep_sock = socket(AF_INET, SOCK_DGRAM, 0);
-	if (ep->e.dg.ep_sock == -1) {
-		ret = -errno;
-		goto fail;
+	is_bound = 0;
+	if (parent_pep != NULL) {
+		ret = usdf_pep_steal_socket(parent_pep, &is_bound, &ep->e.dg.ep_sock);
+		if (ret) {
+			goto fail;
+		}
+	} else {
+		ep->e.dg.ep_sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if (ep->e.dg.ep_sock == -1) {
+			ret = -errno;
+			goto fail;
+		}
 	}
-	if (info->src_addr != NULL) {
-		if (info->addr_format == FI_SOCKADDR ||
-		    info->addr_format == FI_SOCKADDR_IN) {
-			ret = usdf_ep_port_bind(ep, info);
-			if (ret != 0) {
+
+	if (!is_bound) {
+		if (info->src_addr != NULL) {
+			if (!usdf_cm_addr_is_valid_sin(info->src_addr,
+					info->src_addrlen, info->addr_format)) {
+				ret = -FI_EINVAL;
+				goto fail;
+			}
+			src_addr = info->src_addr;
+		}
+
+		if (src_addr != NULL) {
+			ret = bind(ep->e.dg.ep_sock, src_addr,
+				sizeof(struct sockaddr_in));
+			if (ret == -1) {
+				ret = -errno;
 				goto fail;
 			}
 		}

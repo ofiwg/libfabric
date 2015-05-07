@@ -638,7 +638,7 @@ static struct fi_ops_ep usdf_base_msg_ops = {
 static struct fi_ops_cm usdf_cm_msg_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_no_setname,
-	.getname = fi_no_getname,
+	.getname = usdf_cm_msg_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = usdf_cm_msg_connect,
 	.listen = fi_no_listen,
@@ -690,6 +690,39 @@ static struct fi_ops usdf_ep_msg_ops = {
 	.ops_open = fi_no_ops_open
 };
 
+/* update the EP's local address field based on the current state of the EP */
+int usdf_msg_upd_lcl_addr(struct usdf_ep *ep)
+{
+	int ret;
+	int lower_sockfd;
+	socklen_t slen;
+
+	if (ep->e.msg.ep_connreq == NULL) {
+		/* might be -1 if no parent PEP was passed at open time */
+		lower_sockfd = ep->e.msg.ep_cm_sock;
+	} else {
+		lower_sockfd = ep->e.msg.ep_connreq->cr_sockfd;
+	}
+
+	if (lower_sockfd == -1) {
+		USDF_DBG_SYS(EP_CTRL, "no CM socket yet, use fabric addr\n");
+		ep->e.msg.ep_lcl_addr.sin_family = AF_INET;
+		ep->e.msg.ep_lcl_addr.sin_addr.s_addr =
+			ep->ep_domain->dom_fabric->fab_dev_attrs->uda_ipaddr_be;
+		ep->e.msg.ep_lcl_addr.sin_port = 0;
+	} else {
+		slen = sizeof(ep->e.msg.ep_lcl_addr);
+		ret = getsockname(lower_sockfd, &ep->e.msg.ep_lcl_addr, &slen);
+		if (ret == -1) {
+			return -errno;
+		}
+		assert(((struct sockaddr *)&ep->e.msg.ep_lcl_addr)->sa_family == AF_INET);
+		assert(slen == sizeof(ep->e.msg.ep_lcl_addr));
+	}
+
+	return 0;
+}
+
 int
 usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 	    struct fid_ep **ep_o, void *context)
@@ -700,14 +733,35 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 	struct usdf_rx *rx;
 	struct usdf_ep *ep;
 	int ret;
+	struct usdf_connreq *connreq;
+	struct usdf_pep *parent_pep;
+	int is_bound;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
+
+	connreq = NULL;
+	parent_pep = NULL;
 
 	ep = NULL;
 	rx = NULL;
 	tx = NULL;
 	if ((info->caps & ~USDF_MSG_CAPS) != 0) {
 		return -FI_EBADFLAGS;
+	}
+
+	if (info->handle != NULL) {
+		switch (info->handle->fclass) {
+		case FI_CLASS_CONNREQ:
+			connreq = (struct usdf_connreq *)info->handle;
+			break;
+		case FI_CLASS_PEP:
+			parent_pep = pep_fidtou(info->handle);
+			break;
+		default:
+			USDF_WARN_SYS(EP_CTRL,
+				"\"handle\" should be a PEP, CONNREQ (or NULL)\n");
+			return -FI_EINVAL;
+		}
 	}
 
 	udp = dom_ftou(domain);
@@ -737,7 +791,8 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 	ep->ep_domain = udp;
 	ep->ep_caps = info->caps;
 	ep->ep_mode = info->mode;
-	ep->e.msg.ep_connreq = (struct usdf_connreq *)info->handle;
+	ep->e.msg.ep_connreq = connreq;
+	ep->e.msg.ep_cm_sock = -1;
 	ep->ep_tx_dflt_signal_comp = 1;
 	ep->ep_rx_dflt_signal_comp = 1;
 
@@ -745,6 +800,23 @@ usdf_ep_msg_open(struct fid_domain *domain, struct fi_info *info,
 	TAILQ_INIT(&ep->e.msg.ep_posted_wqe);
 	TAILQ_INIT(&ep->e.msg.ep_sent_wqe);
 	--ep->e.msg.ep_last_rx_ack;
+
+	ep->e.msg.ep_lcl_addr.sin_family = AF_INET;
+	ep->e.msg.ep_lcl_addr.sin_addr.s_addr =
+		ep->ep_domain->dom_fabric->fab_dev_attrs->uda_ipaddr_be;
+	ep->e.msg.ep_lcl_addr.sin_port = 0;
+
+	if (parent_pep != NULL) {
+		ret = usdf_pep_steal_socket(parent_pep, &is_bound,
+			&ep->e.msg.ep_cm_sock);
+		if (ret) {
+			goto fail;
+		}
+	}
+
+	ret = usdf_msg_upd_lcl_addr(ep);
+	if (ret)
+		goto fail;
 
 	ret = usdf_timer_alloc(usdf_msg_ep_timeout, ep,
 			&ep->e.msg.ep_ack_timer);

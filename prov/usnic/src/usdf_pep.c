@@ -42,11 +42,14 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -228,7 +231,7 @@ usdf_pep_read_connreq(void *v)
 			usdf_cm_msg_connreq_failed(crp, ret);
 			return 0;
 		}
-	
+
 		/* create CONNREQ EQ entry */
 		entry_len = sizeof(*entry) + reqp->creq_datalen;
 		entry = malloc(entry_len);
@@ -328,10 +331,39 @@ usdf_pep_listen(struct fid_pep *fpep)
 	pep = pep_ftou(fpep);
 	fp = pep->pep_fabric;
 
+	switch (pep->pep_state) {
+	case USDF_PEP_UNBOUND:
+	case USDF_PEP_BOUND:
+		break;
+	case USDF_PEP_LISTENING:
+		USDF_WARN_SYS(EP_CTRL, "PEP already LISTENING!\n");
+		return -FI_EOPBADSTATE;
+	case USDF_PEP_ROBBED:
+		USDF_WARN_SYS(EP_CTRL,
+			"PEP already consumed, you may only fi_close() now\n");
+		return -FI_EOPBADSTATE;
+	default:
+		USDF_WARN_SYS(EP_CTRL, "unhandled case!\n");
+		abort();
+	}
+
+	/* we could already be bound if the user called fi_setname() or if we
+	 * already did the bind in a previous call to usdf_pep_listen() and the
+	 * listen(2) call failed */
+	if (pep->pep_state == USDF_PEP_UNBOUND) {
+		ret = bind(pep->pep_sock, (struct sockaddr *)&pep->pep_src_addr,
+				sizeof(struct sockaddr_in));
+		if (ret == -1) {
+			return -errno;
+		}
+		pep->pep_state = USDF_PEP_BOUND;
+	}
+
 	ret = listen(pep->pep_sock, pep->pep_backlog);
 	if (ret != 0) {
 		return -errno;
 	}
+	pep->pep_state = USDF_PEP_LISTENING;
 
 	pep->pep_pollitem.pi_rtn = usdf_pep_listen_cb;
 	pep->pep_pollitem.pi_context = pep;
@@ -414,11 +446,97 @@ usdf_pep_close(fid_t fid)
 
 	usdf_pep_free_cr_lists(pep);
 	close(pep->pep_sock);
+	pep->pep_sock = -1;
 	if (pep->pep_eq != NULL) {
 		atomic_dec(&pep->pep_eq->eq_refcnt);
 	}
 	atomic_dec(&pep->pep_fabric->fab_refcnt);
 	free(pep);
+
+	return 0;
+}
+
+static int usdf_pep_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	int ret;
+	struct usdf_pep *pep;
+	size_t copylen;
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
+	ret = 0;
+	pep = pep_fidtou(fid);
+
+	copylen = sizeof(pep->pep_src_addr);
+	memcpy(addr, &pep->pep_src_addr, copylen);
+
+	if (*addrlen < copylen) {
+		USDF_WARN_SYS(EP_CTRL, "*addrlen is too short\n");
+		ret = -FI_ETOOSMALL;
+	}
+	*addrlen = copylen;
+	return ret;
+}
+
+static int usdf_pep_setname(fid_t fid, void *addr, size_t addrlen)
+{
+	int ret;
+	struct usdf_pep *pep;
+	uint32_t req_addr_be;
+	socklen_t socklen;
+	char namebuf[INET_ADDRSTRLEN];
+	char servbuf[INET_ADDRSTRLEN];
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
+	pep = pep_fidtou(fid);
+	if (pep->pep_state != USDF_PEP_UNBOUND) {
+		USDF_WARN_SYS(EP_CTRL, "PEP cannot be bound\n");
+		return -FI_EOPBADSTATE;
+	}
+	if (((struct sockaddr *)addr)->sa_family != AF_INET) {
+		USDF_WARN_SYS(EP_CTRL, "non-AF_INET address given\n");
+		return -FI_EINVAL;
+	}
+	if (addrlen != sizeof(struct sockaddr_in)) {
+		USDF_WARN_SYS(EP_CTRL, "unexpected src_addrlen\n");
+		return -FI_EINVAL;
+	}
+
+	req_addr_be = ((struct sockaddr_in *)addr)->sin_addr.s_addr;
+
+	namebuf[0] = '\0';
+	servbuf[0] = '\0';
+	ret = getnameinfo((struct sockaddr*)addr, addrlen,
+		namebuf, sizeof(namebuf),
+		servbuf, sizeof(servbuf),
+		NI_NUMERICHOST|NI_NUMERICSERV);
+	if (ret != 0)
+		USDF_WARN_SYS(EP_CTRL, "unable to getnameinfo(0x%x)\n",
+			req_addr_be);
+
+	if (req_addr_be != pep->pep_fabric->fab_dev_attrs->uda_ipaddr_be) {
+		USDF_WARN_SYS(EP_CTRL, "requested addr (%s:%s) does not match fabric addr\n",
+			namebuf, servbuf);
+		return -FI_EADDRNOTAVAIL;
+	}
+
+	ret = bind(pep->pep_sock, (struct sockaddr *)addr,
+		sizeof(struct sockaddr_in));
+	if (ret == -1) {
+		return -errno;
+	}
+	pep->pep_state = USDF_PEP_BOUND;
+
+	/* store the resulting port so that can implement getname() properly */
+	socklen = sizeof(pep->pep_src_addr);
+	ret = getsockname(pep->pep_sock, &pep->pep_src_addr, &socklen);
+	if (ret == -1) {
+		ret = -errno;
+		USDF_WARN_SYS(EP_CTRL, "getsockname failed %d (%s), PEP may be in bad state\n",
+			ret, strerror(-ret));
+		return ret;
+	}
 
 	return 0;
 }
@@ -444,8 +562,8 @@ static struct fi_ops_ep usdf_pep_base_ops = {
 
 static struct fi_ops_cm usdf_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
-	.getname = fi_no_getname,
+	.setname = usdf_pep_setname,
+	.getname = usdf_pep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
 	.listen = usdf_pep_listen,
@@ -473,6 +591,25 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_EBADF;
 	}
 
+	switch (info->addr_format) {
+	case FI_SOCKADDR:
+		if (((struct sockaddr *)info->src_addr)->sa_family != AF_INET) {
+			USDF_WARN_SYS(EP_CTRL, "non-AF_INET src_addr specified\n");
+			return -FI_EINVAL;
+		}
+		break;
+	case FI_SOCKADDR_IN:
+		break;
+	default:
+		USDF_WARN_SYS(EP_CTRL, "unknown/unsupported addr_format\n");
+		return -FI_EINVAL;
+	}
+
+	if (info->src_addrlen != sizeof(struct sockaddr_in)) {
+		USDF_WARN_SYS(EP_CTRL, "unexpected src_addrlen\n");
+		return -FI_EINVAL;
+	}
+
 	fp = fab_ftou(fabric);
 
 	pep = calloc(1, sizeof(*pep));
@@ -487,6 +624,7 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 	pep->pep_fid.cm = &usdf_pep_cm_ops;
 	pep->pep_fabric = fp;
 
+	pep->pep_state = USDF_PEP_UNBOUND;
 	pep->pep_sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (pep->pep_sock == -1) {
 		ret = -errno;
@@ -513,12 +651,8 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto fail;
 	}
 
-	ret = bind(pep->pep_sock, (struct sockaddr *)info->src_addr,
-			info->src_addrlen);
-	if (ret == -1) {
-		ret = -errno;
-		goto fail;
-	}
+	memcpy(&pep->pep_src_addr, (struct sockaddr_in *)info->src_addr,
+		sizeof(pep->pep_src_addr));
 
 	/* initialize connreq freelist */
 	ret = pthread_spin_init(&pep->pep_cr_lock, PTHREAD_PROCESS_PRIVATE);
@@ -549,4 +683,36 @@ fail:
 		free(pep);
 	}
 	return ret;
+}
+
+/* Steals the socket underpinning the PEP for use by an active endpoint.  After
+ * this call, the only valid action a user may take on this PEP is to close it.
+ * Sets "*is_bound=1" if the socket was already bound to an address,
+ * "*is_bound=0" if not bound, or "*is_bound" will be undefined if this function
+ * returns a non-zero error code. */
+int usdf_pep_steal_socket(struct usdf_pep *pep, int *is_bound, int *sock_o)
+{
+	switch (pep->pep_state) {
+	case USDF_PEP_UNBOUND:
+		if (is_bound != NULL)
+			*is_bound = 0;
+		break;
+	case USDF_PEP_BOUND:
+		if (is_bound != NULL)
+			*is_bound = 1;
+		break;
+	case USDF_PEP_LISTENING:
+		USDF_WARN_SYS(EP_CTRL,
+			"PEP already listening, cannot use as \"handle\" in fi_endpoint()\n");
+		return -FI_EOPBADSTATE;
+	case USDF_PEP_ROBBED:
+		USDF_WARN_SYS(EP_CTRL,
+			"PEP already consumed, you may only fi_close() now\n");
+		return -FI_EOPBADSTATE;
+	}
+
+	*sock_o = pep->pep_sock;
+	pep->pep_sock = -1;
+	pep->pep_state = USDF_PEP_ROBBED;
+	return 0;
 }

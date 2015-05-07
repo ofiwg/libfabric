@@ -62,30 +62,6 @@
 #include "usdf_endpoint.h"
 
 int
-usdf_ep_port_bind(struct usdf_ep *ep, struct fi_info *info)
-{
-	struct sockaddr_in *sin;
-	socklen_t addrlen;
-	int ret;
-
-	USDF_TRACE_SYS(EP_CTRL, "\n");
-
-	sin = (struct sockaddr_in *)info->src_addr;
-	ret = bind(ep->e.dg.ep_sock, (struct sockaddr *)sin, sizeof(*sin));
-	if (ret == -1) {
-		return -errno;
-	}
-
-	addrlen = sizeof(*sin);
-	ret = getsockname(ep->e.dg.ep_sock, (struct sockaddr *)sin, &addrlen);
-	if (ret == -1) {
-		return -errno;
-	}
-
-	return 0;
-}
-
-int
 usdf_endpoint_open(struct fid_domain *domain, struct fi_info *info,
 	    struct fid_ep **ep_o, void *context)
 {

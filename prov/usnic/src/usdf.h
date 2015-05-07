@@ -159,12 +159,24 @@ struct usdf_domain {
 #define dom_utof(DOM) (&(DOM)->dom_fid)
 #define dom_fidtou(FID) container_of(FID, struct usdf_domain, dom_fid.fid)
 
+enum usdf_pep_state {
+	USDF_PEP_UNBOUND,
+	USDF_PEP_BOUND,
+	USDF_PEP_LISTENING,
+
+	/* A "ROBBED" PEP has had its socket stolen.  The only valid operation
+	 * to call on a ROBBED PEP is fi_close(). */
+	USDF_PEP_ROBBED
+};
+
 struct usdf_pep {
 	struct fid_pep pep_fid;
 	atomic_t pep_refcnt;
 	struct usdf_fabric *pep_fabric;
 	struct usdf_eq *pep_eq;
 	int pep_sock;
+	struct sockaddr_in pep_src_addr;
+	enum usdf_pep_state pep_state;
 	struct usdf_poll_item pep_pollitem;
 
 	pthread_spinlock_t pep_cr_lock;
@@ -287,8 +299,9 @@ struct usdf_ep {
 			struct usd_udp_hdr **ep_hdr_ptr;
 		} dg;
 		struct {
-
 			struct usdf_connreq *ep_connreq;
+			int ep_cm_sock;
+			struct sockaddr_in ep_lcl_addr;
 			struct usd_dest *ep_dest;
 			uint32_t ep_rem_peer_id;
 			uint32_t ep_lcl_peer_id;
@@ -435,5 +448,8 @@ int usdf_reg_mr(struct fid *fid, const void *buf, size_t len,
 
 /* Fake IBV provider */
 void usdf_setup_fake_ibv_provider(void);
+
+/* passive endpoint functions */
+int usdf_pep_steal_socket(struct usdf_pep *pep, int *is_bound, int *sock_o);
 
 #endif /* _USDF_H_ */

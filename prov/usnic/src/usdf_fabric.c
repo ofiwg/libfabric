@@ -297,6 +297,8 @@ usdf_fill_info_dgram(
 			ret = -FI_ENODATA;
 			goto fail;
 		}
+
+		fi->handle = hints->handle;
 	} else {
 		fi->mode = USDF_DGRAM_SUPP_MODE;
 		addr_format = FI_FORMAT_UNSPEC;
@@ -461,6 +463,8 @@ usdf_fill_info_msg(
 			ret = -FI_ENODATA;
 			goto fail;
 		}
+
+		fi->handle = hints->handle;
 	} else {
 		fi->mode = USDF_MSG_SUPP_MODE;
 		addr_format = FI_FORMAT_UNSPEC;
@@ -567,6 +571,8 @@ usdf_fill_info_rdm(
 			ret = -FI_ENODATA;
 			goto fail;
 		}
+
+		fi->handle = hints->handle;
 	} else {
 		fi->mode = USDF_RDM_SUPP_MODE;
 		addr_format = FI_FORMAT_UNSPEC;
