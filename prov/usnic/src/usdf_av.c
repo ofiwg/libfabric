@@ -356,6 +356,8 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 		u_dest = NULL;
 		ret = usdf_av_alloc_dest(&dest);
 		if (ret == 0) {
+			USDF_DBG_SYS(AV, "usd_create_dest(addr=0x%x, port=0x%x)\n",
+				ntohl(sin->sin_addr.s_addr), ntohs(sin->sin_port));
 			ret = usd_create_dest(av->av_domain->dom_dev,
 				sin->sin_addr.s_addr, sin->sin_port,
 				&u_dest);

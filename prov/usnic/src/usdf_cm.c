@@ -222,6 +222,8 @@ usdf_cm_msg_connreq_failed(struct usdf_connreq *crp, int error)
 	fid_t fid;
         struct fi_eq_err_entry err;
 
+	USDF_DBG_SYS(EP_CTRL, "error=%d (%s)\n", error, fi_strerror(-error));
+
         pep = crp->cr_pep;
         ep = crp->cr_ep;
 	if (ep != NULL) {
