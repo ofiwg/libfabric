@@ -535,7 +535,8 @@ static int fi_ibv_check_hints(const struct fi_info *hints,
 
 	if ((hints->mode & info->mode) != info->mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Required mode bits not set\n");
+			"Required hints mode bits not set. Expected:0x%llx"
+			" Given:0x%llx\n", info->mode, hints->mode);
 		return -FI_ENODATA;
 	}
 
@@ -726,7 +727,7 @@ static int fi_ibv_have_device(void)
 {
 	struct ibv_device **devs;
 	struct ibv_context *verbs;
-	int i;
+	int i, ret = 0;
 
 	devs = ibv_get_device_list(NULL);
 	if (!devs)
@@ -736,11 +737,13 @@ static int fi_ibv_have_device(void)
 		verbs = ibv_open_device(devs[i]);
 		if (verbs) {
 			ibv_close_device(verbs);
-			return 1;
+			ret = 1;
+			break;
 		}
 	}
 
-	return 0;
+	ibv_free_device_list(devs);
+	return ret;
 }
 
 static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info)
@@ -813,7 +816,7 @@ err:
 	return ret;
 }
 
-static int fi_ibv_init_info()
+static int fi_ibv_init_info(void)
 {
 	struct ibv_context **ctx_list;
 	struct fi_info *fi = NULL, *tail = NULL;
@@ -2211,7 +2214,7 @@ static struct fi_ops_ep fi_ibv_msg_ep_base_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static struct fi_ibv_msg_ep *fi_ibv_alloc_msg_ep()
+static struct fi_ibv_msg_ep *fi_ibv_alloc_msg_ep(void)
 {
 	struct fi_ibv_msg_ep *ep;
 
