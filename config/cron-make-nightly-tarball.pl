@@ -160,11 +160,8 @@ doit(0, "./configure", "configure");
 
 # Note that distscript.pl, invoked by "make dist", checks for a dirty
 # git tree.  We have to tell it that a modified configure.ac is ok.
-# So take the sha1sum of configure.ac and put it in a magic
-# environment variable.
-my $sha1 = `sha1sum configure.ac`;
-chomp($sha1);
-$ENV{'LIBFABRIC_DISTSCRIPT_SHA1_configure.ac'} = $sha1;
+# Put the name "configure.ac" in a magic environment variable.
+$ENV{'LIBFABRIC_DISTSCRIPT_DIRTY_FILES'} = "configure.ac";
 
 verbose("*** Running make distcheck...\n");
 doit(0, "AM_MAKEFLAGS=-j32 make distcheck", "distcheck");
