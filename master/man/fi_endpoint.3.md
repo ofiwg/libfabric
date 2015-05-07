@@ -681,7 +681,7 @@ details.
 
 # TRANSMIT CONTEXT ATTRIBUTES
 
-Attribute specific to the transmit capabilities of an endpoint are
+Attributes specific to the transmit capabilities of an endpoint are
 specified using struct fi_tx_attr.
 
 {% highlight c %}
@@ -805,7 +805,7 @@ completed transfers, allow acknowledgments to be sent over different
 fabric paths, and support more sophisticated retry mechanisms.
 This can result in lower-latency completions, particularly when
 using unconnected endpoints.  Strict completion ordering may require
-that providers queue completed operations or limit available optimizations
+that providers queue completed operations or limit available optimizations.
 
 For transmit requests, completion ordering depends on the endpoint
 communication type.  For unreliable communication, completion ordering
@@ -860,7 +860,7 @@ IO vectors that may be carried in a single request from a remote endpoint.
 
 # RECEIVE CONTEXT ATTRIBUTES
 
-Attribute specific to the receive capabilities of an endpoint are
+Attributes specific to the receive capabilities of an endpoint are
 specified using struct fi_rx_attr.
 
 {% highlight c %}
