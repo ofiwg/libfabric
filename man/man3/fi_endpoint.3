@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-04\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-05\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -721,7 +721,7 @@ See the scalable endpoint and shared contexts sections for additional
 details.
 .SH TRANSMIT CONTEXT ATTRIBUTES
 .PP
-Attribute specific to the transmit capabilities of an endpoint are
+Attributes specific to the transmit capabilities of an endpoint are
 specified using struct fi_tx_attr.
 .IP
 .nf
@@ -846,7 +846,7 @@ and support more sophisticated retry mechanisms.
 This can result in lower-latency completions, particularly when using
 unconnected endpoints.
 Strict completion ordering may require that providers queue completed
-operations or limit available optimizations
+operations or limit available optimizations.
 .PP
 For transmit requests, completion ordering depends on the endpoint
 communication type.
@@ -901,7 +901,7 @@ as the maximum number of IO vectors that may be carried in a single
 request from a remote endpoint.
 .SH RECEIVE CONTEXT ATTRIBUTES
 .PP
-Attribute specific to the receive capabilities of an endpoint are
+Attributes specific to the receive capabilities of an endpoint are
 specified using struct fi_rx_attr.
 .IP
 .nf
