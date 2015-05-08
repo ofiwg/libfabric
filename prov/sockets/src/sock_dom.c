@@ -168,11 +168,10 @@ static int sock_dom_close(struct fid *fid)
 		return -FI_EBUSY;
 	}
 
+	sock_pe_finalize(dom->pe);
 	if (dom->r_cmap.size)
 		sock_conn_map_destroy(&dom->r_cmap);
 	fastlock_destroy(&dom->r_cmap.lock);
-
-	sock_pe_finalize(dom->pe);
 	fastlock_destroy(&dom->lock);
 	sock_dom_remove_from_list(dom);
 	free(dom);
