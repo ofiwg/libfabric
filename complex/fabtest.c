@@ -81,9 +81,14 @@ static char *ft_strptr(char *str)
 
 static void ft_show_test_info(void)
 {
+	printf("[%s] ", test_info.prov_name);
+
 	switch (test_info.test_type) {
 	case FT_TEST_LATENCY:
 		printf("latency");
+		break;
+	case FT_TEST_BANDWIDTH:
+		printf("bandwidth");
 		break;
 	default:
 		break;

@@ -241,6 +241,7 @@ void fts_next(struct ft_series *series)
 
 	if (set->test_type[++series->cur_type])
 		return;
+	series->cur_type = 0;
 
 	series->cur_set++;
 }
