@@ -157,13 +157,9 @@ void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt)
 		ctrl->iov_iter = 0;
 }
 
-static int ft_sync_test(int value)
+static int ft_sync(int value)
 {
-	int ret, result = -FI_EOTHER;
-
-	ret = ft_reset_ep();
-	if (ret)
-		return ret;
+	int result = -FI_EOTHER;
 
 	if (listen_sock < 0) {
 		ft_fw_send(sock, &value,  sizeof value);
@@ -174,6 +170,17 @@ static int ft_sync_test(int value)
 	}
 
 	return result;
+}
+
+static int ft_sync_test(int value)
+{
+	int ret;
+
+	ret = ft_reset_ep();
+	if (ret)
+		return ret;
+
+	return ft_sync(value);
 }
 
 static int ft_pingpong(void)
@@ -404,22 +411,24 @@ int ft_run_test()
 
 	ret = ft_init_control();
 	if (ret)
-		return ret;
+		goto cleanup;
 
 	ret = ft_open_control();
 	if (ret)
-		return ret;
+		goto cleanup;
 
 	if (test_info.ep_type == FI_EP_MSG && listen_sock >= 0)
 		ret = ft_open_passive();
 	else
 		ret = ft_open_active();
 	if (ret)
-		return ret;
+		goto cleanup;
+
+	ft_sync(0);
 
 	ret = ft_enable_comm();
 	if (ret)
-		return ret;
+		goto cleanup;
 
 	switch (test_info.test_type) {
 	case FT_TEST_LATENCY:
@@ -434,6 +443,7 @@ int ft_run_test()
 	}
 
 	ft_sync_test(0);
+cleanup:
 	ft_cleanup();
 
 	return ret ? ret : -ft.error;

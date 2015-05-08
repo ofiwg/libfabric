@@ -78,6 +78,33 @@ static struct ft_set test_sets[] = {
 		},
 		.test_flags = FT_FLAG_QUICKTEST
 	},
+	{
+		.node = "127.0.0.1",
+		.service = "2224",
+		.prov_name = "verbs",
+		.test_type = {
+			FT_TEST_LATENCY,
+			FT_TEST_BANDWIDTH
+		},
+		.class_function = {
+			FT_FUNC_SEND,
+			FT_FUNC_SENDV,
+			FT_FUNC_SENDMSG
+		},
+		.ep_type = {
+			FI_EP_MSG,
+		},
+		.comp_type = {
+			FT_COMP_QUEUE
+		},
+		.mode = {
+			FT_MODE_ALL
+		},
+		.caps = {
+			FT_CAP_MSG,
+		},
+		.test_flags = FT_FLAG_QUICKTEST
+	},
 };
 
 static struct ft_series test_series;
@@ -214,6 +241,7 @@ void fts_next(struct ft_series *series)
 
 	if (set->test_type[++series->cur_type])
 		return;
+	series->cur_type = 0;
 
 	series->cur_set++;
 }
