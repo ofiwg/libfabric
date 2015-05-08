@@ -1055,21 +1055,31 @@ int main(int argc, char **argv)
 	hints->mode = ~0;
 	hints->addr_format = FI_SOCKADDR;
 
+	hints->ep_attr->type = FI_EP_RDM;
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
-	if (ret != 0) {
+	if (ret != 0 && ret != -FI_ENODATA) {
 		printf("fi_getinfo %s\n", fi_strerror(-ret));
-		goto err;
+		goto err1;
+	}
+
+	if (ret == -FI_ENODATA) {
+		hints->ep_attr->type = FI_EP_DGRAM;
+		ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+		if (ret != 0) {
+			printf("fi_getinfo %s\n", fi_strerror(-ret));
+			goto err1;
+		}
 	}
 
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret != 0) {
 		printf("fi_fabric %s\n", fi_strerror(-ret));
-		goto err;
+		goto err2;
 	}
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret != 0) {
 		printf("fi_domain %s\n", fi_strerror(-ret));
-		goto err;
+		goto err2;
 	}
 
 	eq_attr.size = 1024;
@@ -1077,7 +1087,7 @@ int main(int argc, char **argv)
 	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
 	if (ret != 0) {
 		printf("fi_eq_open %s\n", fi_strerror(-ret));
-		goto err;
+		goto err2;
 	}
 
 	printf("Testing AVs on fabric %s\n", fi->fabric_attr->name);
@@ -1106,22 +1116,25 @@ int main(int argc, char **argv)
 	ret = fi_close(&eq->fid);
 	if (ret != 0) {
 		printf("Error %d closing EQ: %s\n", ret, fi_strerror(-ret));
-		goto err;
+		goto err2;
 	}
 	ret = fi_close(&domain->fid);
 	if (ret != 0) {
 		printf("Error %d closing domain: %s\n", ret, fi_strerror(-ret));
-		goto err;
+		goto err2;
 	}
 	ret = fi_close(&fabric->fid);
 	if (ret != 0) {
 		printf("Error %d closing fabric: %s\n", ret, fi_strerror(-ret));
-		goto err;
+		goto err2;
 	}
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
 
 	return (failed > 0);
-err:
+err2:
+	fi_freeinfo(fi);
+err1:
+	fi_freeinfo(hints);
 	return -ret;
 }
