@@ -55,7 +55,10 @@ The next presentation highlights some of the low-level details of the libfabric 
 How do I get involved?
 ======================
 
-First, [read the documentation](master/man).
+First, read the documentation:
+
+* [Man pages for v1.0.0](v1.0.0/man/)
+* [Man pages for current head of development](master/man/)
 
 A set of Linux man pages have been carefully written to specify the libfabric API.  Read through these man pages to get a sense of the libfabric API.  A [set of example applications](https://github.com/ofiwg/fabtests) have been developed to highlight how an application might use various aspects of libfabric.
 
