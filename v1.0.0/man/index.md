@@ -1,6 +1,6 @@
 ---
 layout: page
-title: Libfabric v1.0.0 man pages
+title: Libfabric man pages
 tagline: v1.0.0 release
 ---
 {% include JB/setup %}
@@ -8,7 +8,7 @@ tagline: v1.0.0 release
 # Man pages
 
 These man pages are from [libfabric 
-v1.0.0](https://www.openfabrics.org/downloads/ofiwg/nightly_tarballs/libfabric-1.0.0.tar.bz2).
+v1.0.0](https://www.openfabrics.org/downloads/ofi/libfabric-1.0.0.tar.bz2).
 
 * [fabric(7)](fabric.7.html)
 * [fi_atomic(3)](fi_atomic.3.html)
