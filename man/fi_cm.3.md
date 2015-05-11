@@ -152,8 +152,8 @@ The fi_setname call may be used to modify or assign the address of the
 local endpoint.  It is conceptually similar to the socket bind operation.
 An endpoint may be assigned an address on its creation,
 through the fi_info structure.  The fi_setname call allows an endpoint to
-be created without being associated with a specific service (i.e. port
-number) and/or node (i.e. network) address, with the addressing assigned
+be created without being associated with a specific service (e.g., port
+number) and/or node (e.g., network) address, with the addressing assigned
 dynamically.  The format of the specified addressing data must match that
 specified through the fi_info structure when the endpoint was created.
 
