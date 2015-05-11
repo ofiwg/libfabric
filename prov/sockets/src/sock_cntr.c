@@ -176,6 +176,8 @@ int sock_cntr_err_inc(struct sock_cntr *cntr)
 {
 	pthread_mutex_lock(&cntr->mut);
 	atomic_inc(&cntr->err_cnt);
+	if (!cntr->err_flag)
+		cntr->err_flag = 1;
 	pthread_cond_signal(&cntr->cond);
 	pthread_mutex_unlock(&cntr->mut);
 	return 0;
@@ -217,14 +219,20 @@ static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 	
 	_cntr = container_of(cntr, struct sock_cntr, cntr_fid);
 	pthread_mutex_lock(&_cntr->mut);
+
+	if (_cntr->err_flag) {
+		ret = -FI_EAVAIL;
+		goto out;
+	}
+	
 	if (atomic_get(&_cntr->value) >= threshold) {
-		pthread_mutex_unlock(&_cntr->mut);
-		return 0;
+		ret = 0;
+		goto out;
 	}
 
 	if (_cntr->is_waiting) {
-		pthread_mutex_unlock(&_cntr->mut);
-		return -FI_EBUSY;
+		ret = -FI_EBUSY;
+		goto out;
 	}
 	
 	_cntr->is_waiting = 1;
@@ -253,8 +261,12 @@ static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 	atomic_set(&_cntr->threshold, ~0);
 	pthread_mutex_unlock(&_cntr->mut);
 	sock_cntr_check_trigger_list(_cntr);
-	return -ret;
-}		
+	return (_cntr->err_flag) ? -FI_EAVAIL : -ret;
+
+out:
+	pthread_mutex_unlock(&_cntr->mut);
+	return ret;
+}
 
 static int sock_cntr_control(struct fid *fid, int command, void *arg)
 {
@@ -327,6 +339,8 @@ static uint64_t sock_cntr_readerr(struct fid_cntr *cntr)
 	_cntr = container_of(cntr, struct sock_cntr, cntr_fid);
 	if (_cntr->domain->progress_mode == FI_PROGRESS_MANUAL)
 		sock_cntr_progress(_cntr);
+	if (_cntr->err_flag)
+		_cntr->err_flag = 0;
 	return atomic_get(&_cntr->err_cnt);
 }
 
