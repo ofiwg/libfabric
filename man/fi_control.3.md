@@ -1,6 +1,6 @@
 ---
 layout: page
-title: fi_errno(3)
+title: fi_control(3)
 tagline: Libfabric Programmer's Manual
 ---
 {% include JB/setup %}
