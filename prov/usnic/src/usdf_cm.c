@@ -222,6 +222,8 @@ usdf_cm_msg_connreq_failed(struct usdf_connreq *crp, int error)
 	fid_t fid;
         struct fi_eq_err_entry err;
 
+	USDF_DBG_SYS(EP_CTRL, "error=%d (%s)\n", error, fi_strerror(-error));
+
         pep = crp->cr_pep;
         ep = crp->cr_ep;
 	if (ep != NULL) {
@@ -394,12 +396,19 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 		ret = -errno;
 		goto fail;
 	}
+	ep->e.msg.ep_connreq = crp;
 
 	crp->handle.fclass = FI_CLASS_CONNREQ;
-	crp->cr_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (crp->cr_sockfd == -1) {
-		ret = -errno;
-		goto fail;
+
+	if (ep->e.msg.ep_cm_sock == -1) {
+		crp->cr_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+		if (crp->cr_sockfd == -1) {
+			ret = -errno;
+			goto fail;
+		}
+	} else {
+		crp->cr_sockfd = ep->e.msg.ep_cm_sock;
+		ep->e.msg.ep_cm_sock = -1;
 	}
 
 	ret = fcntl(crp->cr_sockfd, F_GETFL, 0);
@@ -425,6 +434,12 @@ usdf_cm_msg_connect(struct fid_ep *fep, const void *addr,
 		ret = -errno;
 		goto fail;
 	}
+
+	/* If cr_sockfd was previously unbound, connect(2) will do a a bind(2)
+	 * for us.  Update our snapshot of the locally bound address. */
+	ret = usdf_msg_upd_lcl_addr(ep);
+	if (ret)
+		goto fail;
 
 	/* register for notification when connect completes */
 	crp->cr_pollitem.pi_rtn = usdf_cm_msg_connect_cb_wr;
@@ -464,6 +479,7 @@ fail:
 			close(crp->cr_sockfd);
 		}
 		free(crp);
+		ep->e.msg.ep_connreq = NULL;
 	}
 	usdf_ep_msg_release_queues(ep);
 	return ret;
@@ -512,5 +528,97 @@ int usdf_cm_rdm_getname(fid_t fid, void *addr, size_t *addrlen)
 		return -FI_ETOOSMALL;
 	} else {
 		return 0;
+	}
+}
+
+int usdf_cm_dgram_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	int ret;
+	struct usdf_ep *ep;
+	struct sockaddr_in sin;
+	socklen_t slen;
+	size_t copylen;
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
+	ep = ep_fidtou(fid);
+
+	copylen = MIN(sizeof(sin), *addrlen);
+	*addrlen = sizeof(sin);
+
+	memset(&sin, 0, sizeof(sin));
+	if (ep->e.dg.ep_qp == NULL) {
+		sin.sin_family = AF_INET;
+		sin.sin_addr.s_addr =
+			ep->ep_domain->dom_fabric->fab_dev_attrs->uda_ipaddr_be;
+		sin.sin_port = 0;
+	} else {
+		slen = sizeof(sin);
+		ret = getsockname(ep->e.dg.ep_sock, (struct sockaddr *)&sin, &slen);
+		if (ret == -1) {
+			return -errno;
+		}
+		assert(((struct sockaddr *)&sin)->sa_family == AF_INET);
+		assert(slen == sizeof(sin));
+		assert(sin.sin_addr.s_addr ==
+			ep->ep_domain->dom_fabric->fab_dev_attrs->uda_ipaddr_be);
+	}
+	memcpy(addr, &sin, copylen);
+
+	if (copylen < sizeof(sin))
+		return -FI_ETOOSMALL;
+	else
+		return 0;
+}
+
+int usdf_cm_msg_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	struct usdf_ep *ep;
+	size_t copylen;
+
+	USDF_TRACE_SYS(EP_CTRL, "\n");
+
+	ep = ep_fidtou(fid);
+
+	copylen = MIN(sizeof(ep->e.msg.ep_lcl_addr), *addrlen);
+	*addrlen = sizeof(ep->e.msg.ep_lcl_addr);
+	memcpy(addr, &ep->e.msg.ep_lcl_addr, copylen);
+
+	if (copylen < sizeof(ep->e.msg.ep_lcl_addr))
+		return -FI_ETOOSMALL;
+	else
+		return 0;
+}
+
+/* Checks that the given address is actually a sockaddr_in of appropriate
+ * length.  "addr_format" is an FI_ constant like FI_SOCKADDR_IN indicating the
+ * claimed type of the given address.
+ *
+ * Returns true if address is actually a sockaddr_in, false otherwise.
+ *
+ * Upon successful return, "addr" can be safely cast to either
+ * "struct sockaddr_in *" or "struct sockaddr *".
+ *
+ * "addr" should not be NULL.
+ */
+bool usdf_cm_addr_is_valid_sin(void *addr, size_t addrlen, uint32_t addr_format)
+{
+	assert(addr != NULL);
+
+	switch (addr_format) {
+	case FI_SOCKADDR_IN:
+	case FI_SOCKADDR:
+		if (addrlen != sizeof(struct sockaddr_in)) {
+			USDF_WARN("addrlen is incorrect\n");
+			return false;
+		}
+		if (((struct sockaddr *)addr)->sa_family != AF_INET) {
+			USDF_WARN("unknown/unsupported addr_format\n");
+			return false;
+		}
+		return true;
+	default:
+		USDF_WARN("unknown/unsupported addr_format\n");
+		return false;
 	}
 }

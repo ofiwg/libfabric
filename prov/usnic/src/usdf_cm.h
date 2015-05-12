@@ -36,6 +36,7 @@
 #ifndef _USDF_CM_H_
 #define _USDF_CM_H_
 
+#include <stdbool.h>
 #include <sys/queue.h>
 
 #define USDF_MAX_CONN_DATA 256
@@ -71,5 +72,9 @@ struct usdf_connreq {
 void usdf_cm_msg_connreq_failed(struct usdf_connreq *crp, int error);
 
 int usdf_cm_rdm_getname(fid_t fid, void *addr, size_t *addrlen);
+int usdf_cm_dgram_getname(fid_t fid, void *addr, size_t *addrlen);
+int usdf_cm_msg_getname(fid_t fid, void *addr, size_t *addrlen);
+
+bool usdf_cm_addr_is_valid_sin(void *addr, size_t addrlen, uint32_t addr_format);
 
 #endif /* _USDF_CM_H_ */

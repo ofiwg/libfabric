@@ -222,6 +222,8 @@ usdf_eq_read(struct fid_eq *feq, uint32_t *event, void *buf, size_t len,
 	struct usdf_eq *eq;
 	int ret;
 
+	USDF_DBG_SYS(EQ, "\n");
+
 	eq = eq_ftou(feq);
 
 	ret = -FI_EAGAIN;
@@ -247,6 +249,8 @@ usdf_eq_write(struct fid_eq *feq, uint32_t event, const void *buf,
 {
 	struct usdf_eq *eq;
 	int ret;
+
+	USDF_DBG_SYS(EQ, "\n");
 
 	eq = eq_ftou(feq);
 
@@ -275,6 +279,8 @@ usdf_eq_read_fd(struct fid_eq *feq, uint32_t *event, void *buf, size_t len,
 	struct usdf_eq *eq;
 	uint64_t val;
 	int ret;
+
+	USDF_DBG_SYS(EQ, "\n");
 
 	eq = eq_ftou(feq);
 
@@ -318,6 +324,8 @@ usdf_eq_sread_fd(struct fid_eq *feq, uint32_t *event, void *buf, size_t len,
 	uint64_t val;
 	struct pollfd pfd;
 	int ret;
+
+	USDF_DBG_SYS(EQ, "\n");
 
 	eq = eq_ftou(feq);
 
@@ -368,6 +376,8 @@ usdf_eq_write_fd(struct fid_eq *feq, uint32_t event, const void *buf,
 	int ret;
 	int n;
 
+	USDF_DBG_SYS(EQ, "\n");
+
 	eq = eq_ftou(feq);
 
 	pthread_spin_lock(&eq->eq_lock);
@@ -402,6 +412,8 @@ usdf_eq_write_internal(struct usdf_eq *eq, uint32_t event, const void *buf,
 	uint64_t val;
 	int ret;
 	int n;
+
+	USDF_DBG_SYS(EQ, "event=0x%x flags=0x%llx\n", event, flags);
 
 	pthread_spin_lock(&eq->eq_lock);
 
