@@ -250,6 +250,7 @@ struct sock_cntr {
 	struct fid_wait *waitset;
 	int signal;
 	int is_waiting;
+	int err_flag;
 };
 
 struct sock_mr {
