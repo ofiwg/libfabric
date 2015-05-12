@@ -60,6 +60,8 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
+#include <infiniband/verbs.h>
+#include <infiniband/kern-abi.h>
 #include "fi.h"
 #include "fi_enosys.h"
 #include "prov.h"
@@ -74,6 +76,7 @@
 #include "usdf_dgram.h"
 #include "usdf_msg.h"
 #include "usdf_rdm.h"
+#include "usd_ib_cmd.h"
 
 struct usdf_usnic_info *__usdf_devinfo;
 
@@ -916,9 +919,178 @@ usdf_usnic_getinfo(uint32_t version, struct fid_fabric *fabric,
 	return 0;
 }
 
+
+static int
+verbs_compat_get_data_structure(uint8_t sub_op, void *context, void *out)
+{
+       struct ibv_device_attr device_attr;
+       struct ibv_port_attr port_attr;
+       struct usdf_fabric *fp;
+       struct usdf_domain *dom;
+       struct usd_device_attrs *dap;
+       struct usd_device *dev;
+       struct ibv_query_device_resp dresp;
+       struct ibv_query_port_resp presp;
+       int ret;
+       int copy_size;
+
+       if ((sub_op > VERBS_DATA_MAX) ||
+           !context || !out) {
+               fprintf(stderr, "\n%s - Unknown sub-op(%d)\n",
+                       __FUNCTION__, sub_op);
+               return -EINVAL;
+       }
+
+       dom = (struct usdf_domain*)context;
+       fp = dom->dom_fabric;
+       dap = fp->fab_dev_attrs;
+       dev = dom->dom_dev;
+
+        if (!fp || !dap || !dev) {
+                fprintf(stderr, "\n%s - Unable to get fab_dev_attrs from usdf_fabric\n", __FUNCTION__);
+                return -EINVAL;
+        }
+       switch(sub_op) {
+       case VERBS_DATA_IBV_DEVICE_ATTR:
+               // XXX: it may make sense to cache the result of this call in usd_ib_query_dev
+               //      and here simply return that cached info (after massaging it if needed)
+               //      (parameters like "state" may not be cached)
+               // XXX: should we call ibv_cmd_query_device directly instead? (I guess not)
+               ret = usd_ib_cmd_query_device(dev, &dresp);
+               if (ret)
+                       return ret;
+
+               /* Copied from ibv_cmd_query_device */
+               memset(&device_attr, 0, sizeof device_attr);
+               //device_attr.fw_ver                    = dresp.fw_ver;
+
+               if (sizeof(dresp.fw_ver) < sizeof(device_attr.fw_ver))
+                       copy_size =  sizeof(dresp.fw_ver);
+               else
+                       copy_size =  sizeof(device_attr.fw_ver)-1;
+               memcpy(&device_attr.fw_ver[0], &dresp.fw_ver, copy_size);
+
+               device_attr.node_guid                 = dresp.node_guid;
+               device_attr.sys_image_guid            = dresp.sys_image_guid;
+               device_attr.max_mr_size               = dresp.max_mr_size;
+               device_attr.page_size_cap             = dresp.page_size_cap;
+               device_attr.vendor_id                 = dresp.vendor_id;
+               device_attr.vendor_part_id            = dresp.vendor_part_id;
+               device_attr.hw_ver                    = dresp.hw_ver;
+               device_attr.max_qp                    = dresp.max_qp;
+               device_attr.max_qp_wr                 = dresp.max_qp_wr;
+               device_attr.device_cap_flags          = dresp.device_cap_flags;
+               device_attr.max_sge                   = dresp.max_sge;
+               device_attr.max_sge_rd                = dresp.max_sge_rd;
+               device_attr.max_cq                    = dresp.max_cq;
+               device_attr.max_cqe                   = dresp.max_cqe;
+               device_attr.max_mr                    = dresp.max_mr;
+               device_attr.max_pd                    = dresp.max_pd;
+               device_attr.max_qp_rd_atom            = dresp.max_qp_rd_atom;
+               device_attr.max_ee_rd_atom            = dresp.max_ee_rd_atom;
+               device_attr.max_res_rd_atom           = dresp.max_res_rd_atom;
+               device_attr.max_qp_init_rd_atom       = dresp.max_qp_init_rd_atom;
+               device_attr.max_ee_init_rd_atom       = dresp.max_ee_init_rd_atom;
+               device_attr.atomic_cap                = dresp.atomic_cap;
+               device_attr.max_ee                    = dresp.max_ee;
+               device_attr.max_rdd                   = dresp.max_rdd;
+               device_attr.max_mw                    = dresp.max_mw;
+               device_attr.max_raw_ipv6_qp           = dresp.max_raw_ipv6_qp;
+               device_attr.max_raw_ethy_qp           = dresp.max_raw_ethy_qp;
+               device_attr.max_mcast_grp             = dresp.max_mcast_grp;
+               device_attr.max_mcast_qp_attach       = dresp.max_mcast_qp_attach;
+               device_attr.max_total_mcast_qp_attach = dresp.max_total_mcast_qp_attach;
+               device_attr.max_ah                    = dresp.max_ah;
+               device_attr.max_fmr                   = dresp.max_fmr;
+               device_attr.max_map_per_fmr           = dresp.max_map_per_fmr;
+               device_attr.max_srq                   = dresp.max_srq;
+               device_attr.max_srq_wr                = dresp.max_srq_wr;
+               device_attr.max_srq_sge               = dresp.max_srq_sge;
+               device_attr.max_pkeys                 = dresp.max_pkeys;
+               device_attr.local_ca_ack_delay        = dresp.local_ca_ack_delay;
+               device_attr.phys_port_cnt             = dresp.phys_port_cnt;
+
+               // XXX: Do we need to modify anything before we return them?
+#if 0
+               device_attr.max_cqe = (1 << 16) - 1; // USNIC_MAX_CQE; (see usdf_discover_device_attrs)
+               device_attr.max_sge = 1;
+               device_attr.max_sge_rd = 0;
+               device_attr.phys_port_cnt = 1;
+               device_attr.max_cq = dap->uda_max_cq;
+               device_attr.max_qp = dap->uda_max_qp;
+               device_attr.vendor_id = dap->uda_vendor_id;
+               device_attr.vendor_part_id = dap->uda_vendor_part_id;
+               device_attr.hw_ver = dap->uda_device_id;
+#endif
+               *((struct ibv_device_attr *)out) = device_attr;
+               break;
+
+       case VERBS_DATA_IBV_PORT_ATTR:
+
+               ret = usd_ib_cmd_query_port(dev, &presp);
+               if (ret != 0)
+                       return ret;
+
+               memset(&port_attr, 0, sizeof(port_attr));
+               /* Copied from ibv_cmd_query_port */
+               port_attr.state           = presp.state;
+               port_attr.max_mtu         = presp.max_mtu;    // XXX: why is this wrong???
+               port_attr.active_mtu      = presp.active_mtu; // XXX: why is this wrong???
+               port_attr.gid_tbl_len     = presp.gid_tbl_len;
+               port_attr.port_cap_flags  = presp.port_cap_flags;
+               port_attr.max_msg_sz      = presp.max_msg_sz;
+               port_attr.bad_pkey_cntr   = presp.bad_pkey_cntr;
+               port_attr.qkey_viol_cntr  = presp.qkey_viol_cntr;
+               port_attr.pkey_tbl_len    = presp.pkey_tbl_len;
+               port_attr.lid             = presp.lid;
+               port_attr.sm_lid          = presp.sm_lid;
+               port_attr.lmc             = presp.lmc;
+               port_attr.max_vl_num      = presp.max_vl_num;
+               port_attr.sm_sl           = presp.sm_sl;
+               port_attr.subnet_timeout  = presp.subnet_timeout;
+               port_attr.init_type_reply = presp.init_type_reply;
+               port_attr.active_width    = presp.active_width;
+               port_attr.active_speed    = presp.active_speed;
+               port_attr.phys_state      = presp.phys_state;
+               port_attr.link_layer      = presp.link_layer;
+
+               // XXX: Do we need o modify anything before we return them?
+#if 0
+               // port_attr.max_msg_size = XXX;
+#endif
+               *((struct ibv_port_attr *)out) = port_attr;
+               break;
+       default:
+               fprintf(stderr, "\n%s - Unsupported sub-op(%d)\n", __FUNCTION__, sub_op);
+               return -EOPNOTSUPP;
+       }
+
+       return 0;
+}
+static int
+usdf_verbs_compat(uint8_t op, uint8_t sub_op, void *context, void *out)
+{
+       if (op > VERBS_COMPAT_OP_MAX) {
+               fprintf(stderr, "\n%s - Unknown op(%d)\n", __FUNCTION__, op);
+               return -EINVAL;
+       }
+
+       switch(op) {
+       case VERBS_COMPAT_OP_GET_DATA_STRUCTURE:
+               return verbs_compat_get_data_structure(sub_op, context, out);
+       default:
+               fprintf(stderr, "\n%s - EOPNOTSUPP\n", __FUNCTION__);
+               return -EOPNOTSUPP;
+       }
+       return 0;
+}
+
+
+
 static struct fi_usnic_ops_fabric usdf_usnic_ops_fabric = {
 	.size = sizeof(struct fi_usnic_ops_fabric),
-	.getinfo = usdf_usnic_getinfo
+        .getinfo = usdf_usnic_getinfo,
+        .verbs_compat = usdf_verbs_compat,
 };
 
 static int

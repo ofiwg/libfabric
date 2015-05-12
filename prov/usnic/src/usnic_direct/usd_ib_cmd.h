@@ -44,6 +44,7 @@
 #define _USD_IB_CMD_
 
 #include "usd.h"
+#include <infiniband/kern-abi.h>
 
 int usd_ib_cmd_get_context(struct usd_device *dev);
 int usd_ib_cmd_alloc_pd(struct usd_device *dev, uint32_t * pd_handle_o);
@@ -59,4 +60,10 @@ int usd_ib_cmd_modify_qp(struct usd_device *dev, struct usd_qp_impl *qp,
 int usd_ib_cmd_destroy_qp(struct usd_device *dev, struct usd_qp_impl *qp);
 
 int usd_ib_query_dev(struct usd_device *dev);
+int usd_ib_cmd_query_port(struct usd_device *dev,
+                         struct ibv_query_port_resp *irp);
+int usd_ib_cmd_query_device(struct usd_device *dev,
+                           struct ibv_query_device_resp *irp);
+
+
 #endif /* _USD_IB_CMD_ */

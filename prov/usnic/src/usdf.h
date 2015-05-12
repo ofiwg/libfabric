@@ -67,7 +67,7 @@ extern struct fi_provider usdf_ops;
 #define USDF_INFO(...) USDF_INFO_SYS(FABRIC, __VA_ARGS__)
 #define USDF_DBG(...)  USDF_DBG_SYS(FABRIC, __VA_ARGS__)
 
-#define USDF_HDR_BUF_ENTRY 64
+#define USDF_HDR_BUF_ENTRY 42
 #define USDF_EP_CAP_PIO (1ULL << 63)
 
 #define USDF_MAX_PEERS (16 * 1024)
