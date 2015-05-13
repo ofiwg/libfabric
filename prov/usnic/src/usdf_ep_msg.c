@@ -76,7 +76,7 @@ usdf_tx_msg_enable(struct usdf_tx *tx)
 	struct usdf_cq_hard *hcq;
 	struct usd_filter filt;
 	int ret;
-	int i;
+	size_t i;
 
 	udp = tx->tx_domain;
 
@@ -164,7 +164,7 @@ usdf_rx_msg_enable(struct usdf_rx *rx)
 	uint8_t *ptr;
 	size_t mtu;
 	int ret;
-	int i;
+	size_t i;
 
 	udp = rx->rx_domain;
 

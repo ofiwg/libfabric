@@ -102,7 +102,7 @@ usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 	struct usd_recv_desc rxd;
 	struct usd_qp_impl *qp;
 	uint32_t index;
-	int i;
+	size_t i;
 
 	ep = ep_ftou(fep);
 	qp = to_qpi(ep->e.dg.ep_qp);
@@ -223,7 +223,7 @@ usdf_dgram_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 	uint8_t *copybuf;
 	size_t len;
 	struct iovec send_iov[USDF_DGRAM_MAX_SGE];
-	int i;
+	size_t i;
 
 	ep = ep_ftou(fep);
 	dest = (struct usd_dest *)(uintptr_t) dest_addr;
@@ -396,7 +396,7 @@ usdf_dgram_prefix_recvv(struct fid_ep *fep, const struct iovec *iov,
 	struct usd_recv_desc rxd;
 	struct usd_qp_impl *qp;
 	uint32_t index;
-	int i;
+	size_t i;
 
 	ep = ep_ftou(fep);
 	qp = to_qpi(ep->e.dg.ep_qp);
