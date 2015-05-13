@@ -46,7 +46,8 @@ static int max_credits = 128;
 static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
-static void *buf;
+static void *recv_buf;
+static void *send_buf;
 static size_t buffer_size;
 
 static struct fi_info *hints;
@@ -57,7 +58,10 @@ static struct fid_domain *dom;
 static struct fid_ep *ep;
 static struct fid_eq *cmeq;
 static struct fid_cq *rcq, *scq;
-static struct fid_mr *mr;
+static struct fid_mr *recv_mr;
+static struct fid_mr *send_mr;
+
+static int verify_data = 0;
 
 static int send_xfer(int size)
 {
@@ -80,7 +84,10 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), 0, NULL);
+	if (verify_data)
+		ft_fill_buf(send_buf, size);
+
+	ret = fi_send(ep, send_buf, (size_t) size, fi_mr_desc(send_mr), 0, NULL);
 	if (ret)
 		FT_PRINTERR("fi_send", ret);
 
@@ -104,8 +111,13 @@ static int recv_xfer(int size)
 		}
 	} while (ret == -FI_EAGAIN);
 
+	if (verify_data) {
+		ret = ft_check_buf(recv_buf, size);
+		if (ret)
+			return ret;
+	}
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
+	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(recv_mr), 0, recv_buf);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
 
@@ -182,10 +194,12 @@ static int alloc_cm_res(void)
 static void free_ep_res(void)
 {
 	fi_close(&ep->fid);
-	fi_close(&mr->fid);
+	fi_close(&recv_mr->fid);
+	fi_close(&send_mr->fid);
 	fi_close(&rcq->fid);
 	fi_close(&scq->fid);
-	free(buf);
+	free(recv_buf);
+	free(send_buf);
 }
 
 static int alloc_ep_res(struct fi_info *fi)
@@ -195,8 +209,15 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	buffer_size = opts.user_options & FT_OPT_SIZE ?
 			opts.transfer_size : test_size[TEST_CNT - 1].size;
-	buf = malloc(buffer_size);
-	if (!buf) {
+
+	recv_buf = malloc(buffer_size);
+	if (!recv_buf) {
+		perror("malloc");
+		return -1;
+	}
+
+	send_buf = malloc(buffer_size);
+	if (!send_buf) {
 		perror("malloc");
 		return -1;
 	}
@@ -217,7 +238,13 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err2;
 	}
 
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(dom, recv_buf, buffer_size, FI_RECV, 0, 0, 0, &recv_mr, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_mr_reg", ret);
+		goto err3;
+	}
+
+	ret = fi_mr_reg(dom, send_buf, buffer_size, FI_SEND, 0, 1, 0, &send_mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
@@ -238,13 +265,15 @@ static int alloc_ep_res(struct fi_info *fi)
 	return 0;
 
 err4:
-	fi_close(&mr->fid);
+	fi_close(&recv_mr->fid);
+	fi_close(&send_mr->fid);
 err3:
 	fi_close(&rcq->fid);
 err2:
 	fi_close(&scq->fid);
 err1:
-	free(buf);
+	free(recv_buf);
+	free(send_buf);
 	return ret;
 }
 
@@ -277,7 +306,7 @@ static int bind_ep_res(void)
 	}
 
 	/* Post the first recv buffer */
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
+	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(recv_mr), 0, recv_buf);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
 
@@ -547,8 +576,11 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "vh" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
+		case 'v':
+			verify_data = 1;
+			break;
 		default:
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
@@ -556,6 +588,7 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Ping pong client and server using message endpoints.");
+			FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
 			return EXIT_FAILURE;
 		}
 	}
