@@ -372,8 +372,6 @@ static int common_setup(void)
 		goto err5;
 	}
 
-	free(hints->src_addr);
-
 	return 0;
 
 err5:
@@ -383,7 +381,6 @@ err4:
 err2:
 	fi_close(&fab->fid);
 err1:
-	free(hints->src_addr);
 
 	return ret;
 }
