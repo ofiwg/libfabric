@@ -89,6 +89,8 @@ void ft_parse_addr_opts(int op, char *optarg, struct cs_opts *opts);
 void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts);
 void ft_usage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);
+void ft_fill_buf(void *buf, int size);
+int ft_check_buf(void *buf, int size);
 #define ADDR_OPTS "b:p:s:"
 #define INFO_OPTS "n:f:"
 #define CS_OPTS ADDR_OPTS "I:S:m"
