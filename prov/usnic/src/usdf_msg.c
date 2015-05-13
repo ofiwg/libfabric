@@ -953,7 +953,7 @@ usdf_msg_process_ack(struct usdf_ep *ep, uint16_t seq)
 		wqe = TAILQ_FIRST(&ep->e.msg.ep_sent_wqe);
 		if (RUDP_SEQ_LE(wqe->ms_last_seq, seq)) {
 			TAILQ_REMOVE(&ep->e.msg.ep_sent_wqe, wqe, ms_link);
-			USDF_DBG_SYS(EP_DATA, "send complete, signal_comp=%u\n", wqe->ms_signal_comp); // XXX DJG
+			USDF_DBG_SYS(EP_DATA, "send complete, signal_comp=%u\n", wqe->ms_signal_comp);
 			if (wqe->ms_signal_comp)
 				hcq->cqh_post(hcq, wqe->ms_context,
 						wqe->ms_length, FI_SUCCESS);
