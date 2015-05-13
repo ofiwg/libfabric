@@ -310,7 +310,7 @@ usdf_cm_msg_connect_cb_rd(void *v)
 		ret = usdf_eq_write_internal(ep->ep_eq, FI_CONNECTED, entry,
 				entry_len, 0);
 		free(entry);
-		if (ret != entry_len) {
+		if (ret != (int)entry_len) {
 			free(ep->e.msg.ep_dest);
 			ep->e.msg.ep_dest = NULL;
 			usdf_cm_msg_connreq_failed(crp, ret);

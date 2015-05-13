@@ -76,7 +76,7 @@ usdf_tx_rdm_enable(struct usdf_tx *tx)
 	struct usdf_cq_hard *hcq;
 	struct usd_filter filt;
 	int ret;
-	int i;
+	size_t i;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
@@ -163,7 +163,7 @@ usdf_rx_rdm_enable(struct usdf_rx *rx)
 	uint8_t *ptr;
 	size_t mtu;
 	int ret;
-	int i;
+	size_t i;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 

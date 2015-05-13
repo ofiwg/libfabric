@@ -231,7 +231,7 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 	struct usdf_av *av;
 	struct usdf_fabric *fp;
 	int ret;
-	int i;
+	size_t i;
 
 	USDF_TRACE_SYS(AV, "\n");
 
@@ -337,7 +337,7 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 	struct usdf_dest *dest;
 	int ret_count;
 	int ret;
-	int i;
+	size_t i;
 
 	USDF_TRACE_SYS(AV, "\n");
 

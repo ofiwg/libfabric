@@ -251,7 +251,7 @@ usdf_pep_read_connreq(void *v)
 		ret = usdf_eq_write_internal(pep->pep_eq, FI_CONNREQ, entry,
 				entry_len, 0);
 		free(entry);
-		if (ret != entry_len) {
+		if (ret != (int)entry_len) {
 			usdf_cm_msg_connreq_failed(crp, ret);
 			return 0;
 		}
