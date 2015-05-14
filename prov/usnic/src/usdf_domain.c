@@ -43,6 +43,8 @@
 #include <errno.h>
 #include <unistd.h>
 
+#include <arpa/inet.h>
+
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
@@ -225,6 +227,9 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct sockaddr_in *sin;
 	size_t addrlen;
 	int ret;
+#if ENABLE_DEBUG
+	char requested[INET_ADDRSTRLEN], actual[INET_ADDRSTRLEN];
+#endif
 
 	USDF_TRACE_SYS(DOMAIN, "\n");
 
@@ -269,6 +274,12 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	sin = info->src_addr;
 	if (info->src_addrlen != addrlen || sin->sin_family != AF_INET ||
 	    sin->sin_addr.s_addr != fp->fab_dev_attrs->uda_ipaddr_be) {
+		USDF_DBG_SYS(DOMAIN, "requested src_addr (%s) != fabric addr (%s)\n",
+			inet_ntop(AF_INET, &sin->sin_addr.s_addr,
+				requested, sizeof(requested)),
+			inet_ntop(AF_INET, &fp->fab_dev_attrs->uda_ipaddr_be,
+				actual, sizeof(actual)));
+
 		ret = -FI_EINVAL;
 		goto fail;
 	}

@@ -134,6 +134,9 @@ usdf_fill_addr_info(struct fi_info *fi, uint32_t addr_format,
 {
 	struct sockaddr_in *sin;
 	int ret;
+#if ENABLE_DEBUG
+	char requested[INET_ADDRSTRLEN], actual[INET_ADDRSTRLEN];
+#endif
 
 	if (addr_format != FI_FORMAT_UNSPEC) {
 		fi->addr_format = addr_format;
@@ -147,6 +150,12 @@ usdf_fill_addr_info(struct fi_info *fi, uint32_t addr_format,
 		if (src != NULL &&
 		    src->sin_addr.s_addr != INADDR_ANY &&
 		    src->sin_addr.s_addr != dap->uda_ipaddr_be) {
+			USDF_DBG("src addr (%s) does not match device addr (%s)\n",
+			inet_ntop(AF_INET, &src->sin_addr.s_addr,
+				requested, sizeof(requested)),
+			inet_ntop(AF_INET, &dap->uda_ipaddr_be,
+				actual, sizeof(actual)));
+
 			ret = -FI_ENODATA;
 			goto fail;
 		}
@@ -754,6 +763,8 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 	if (node != NULL || service != NULL) {
 		ret = getaddrinfo(node, service, NULL, &ai);
 		if (ret != 0) {
+			USDF_DBG("getaddrinfo failed, likely bad node/service specified (%s:%s)\n",
+				node, service);
 			ret = -errno;
 			goto fail;
 		}
