@@ -66,6 +66,10 @@ struct fi_usnic_info {
 	} ui;
 };
 
+struct fi_usnic_shdom {
+	uint32_t handle;
+};
+
 /*
  * usNIC-specific fabric ops
  */
@@ -76,6 +80,9 @@ struct fi_usnic_ops_fabric {
 				struct fi_usnic_info *info);
 	int (*verbs_compat)(uint8_t op, uint8_t sub_op, void *context,
 				void *out);
+	int (*share_domain)(struct fid_fabric *fabric, struct fi_info *info,
+				struct fi_usnic_shdom *shdom, uint64_t share_key,
+				struct fid_domain **domain, void *context);
 };
 
 enum verbs_compat_op {
@@ -100,6 +107,16 @@ enum verbs_data_structure {
 struct fi_usnic_ops_av {
 	size_t size;
 	int (*get_distance)(struct fid_av *av, void *addr, int *metric);
+};
+
+/*
+ * usNIC-specific domain ops
+ */
+#define FI_USNIC_DOMAIN_OPS_1 "domain_ops 1"
+struct fi_usnic_ops_domain {
+	size_t size;
+	int (*alloc_shdom)(struct fid_domain *domain, uint64_t share_key,
+				struct fi_usnic_shdom *shdom);
 };
 
 #endif /* _FI_EXT_USNIC_H_ */

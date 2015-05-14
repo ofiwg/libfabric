@@ -1091,6 +1091,7 @@ static struct fi_usnic_ops_fabric usdf_usnic_ops_fabric = {
 	.size = sizeof(struct fi_usnic_ops_fabric),
         .getinfo = usdf_usnic_getinfo,
         .verbs_compat = usdf_verbs_compat,
+	.share_domain = usdf_share_domain,
 };
 
 static int
