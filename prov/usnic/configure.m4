@@ -105,6 +105,8 @@ AC_DEFUN([FI_USNIC_CONFIGURE],[
 	  [AC_CHECK_HEADER([infiniband/verbs.h], [usnic_happy=1])
 	   AS_IF([test $usnic_happy -eq 1],
 	       [USNIC_CHECK_LIBNL_SADNESS])
+	   AS_IF([test $usnic_happy -eq 1],
+	       [USNIC_CHECK_SHPD])
 	  ])
 ])
 
@@ -309,4 +311,28 @@ AC_DEFUN([USNIC_CHECK_LIBNL],[
 	AS_IF([test $usnic_libnl_happy -eq 1],
 	      [$2_LIBS="-lnl -lm"
 	       HAVE_LIBNL3=0])
+])
+
+dnl
+dnl Check if libibverbs header contains shared PD definitions
+dnl
+dnl
+AC_DEFUN([USNIC_CHECK_SHPD],[
+        AC_MSG_CHECKING([for IB_USER_VERBS_CMD_ALLOC_SHPD and IB_USER_VERBS_CMD_SHARE_PD])
+        AC_COMPILE_IFELSE(
+                [AC_LANG_PROGRAM([[
+#include <infiniband/kern-abi.h>
+        ]], [[
+        int cmd1 = IB_USER_VERBS_CMD_ALLOC_SHPD;
+        int cmd2 = IB_USER_VERBS_CMD_SHARE_PD;
+        return cmd1 + cmd2;
+        ]])],
+                          [AC_MSG_RESULT([yes])
+                                USNIC_HAVE_SHPD=1],
+                          [AC_MSG_RESULT([no])
+                                USNIC_HAVE_SHPD=0])
+
+	AC_SUBST(USNIC_HAVE_SHPD)
+	AC_DEFINE_UNQUOTED([USNIC_HAVE_SHPD], [$USNIC_HAVE_SHPD],
+	      [Whether support share PD or not])
 ])

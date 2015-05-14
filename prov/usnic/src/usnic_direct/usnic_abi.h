@@ -64,6 +64,7 @@
 enum usnic_mmap_type {
 	USNIC_MMAP_BAR			= 0,
 	USNIC_MMAP_RES			= 1,
+	USNIC_MMAP_IOVA			= 2,
 };
 
 enum usnic_transport_type {
@@ -168,6 +169,7 @@ enum usnic_capability {
 	USNIC_CAP_CQ_SHARING,	/* CQ sharing version */
 	USNIC_CAP_MAP_PER_RES,	/* Map individual RES */
 	USNIC_CAP_PIO,		/* PIO send */
+	USNIC_CAP_SHARE_PD,	/* share PD */
 	USNIC_CAP_CNT
 };
 
@@ -180,6 +182,54 @@ struct usnic_ib_get_context_resp {
 	u32 resp_version;	/* response version returned */
 	u32 num_caps;		/* number of capabilities returned */
 	u32 cap_info[USNIC_CAP_CNT];
+};
+
+#define USNIC_IB_REG_MR_CMD_VERSION 	1
+#define USNIC_IB_REG_MR_RESP_VERSION 	1
+
+struct usnic_ib_reg_mr_cmd {
+	u32 cmd_version;
+	union {
+		struct {
+			u32 hw_addr_type;	/* Address space for addresses to be
+						 * programmed to HW and IOMMU */
+#define USNIC_REGMR_HWADDR_VA		0	/* address programmed to HW is same as
+						 * process va */
+#define USNIC_REGMR_HWADDR_IOVA		1	/* address programmed to HW is obtained
+						 * from a specially allocated address
+						 * (called io va) */
+			u32 vfid;
+			u32 mr_type;
+#define USNIC_MR_WQ_RING		0
+#define USNIC_MR_RQ_RING		1
+#define USNIC_MR_CQ_RING		2
+#define USNIC_MR_WQ_COPYBUF		3
+#define USNIC_MR_MAX			4
+			u32 queue_index;
+		} v1;
+		/* Add future version fields here */
+	};
+};
+
+struct usnic_ib_reg_mr_resp {
+	u32 resp_version;
+	union {
+		struct {
+			u64 iova;	/* translated virtual address to programmed to HW */
+		} v1;
+	};
+};
+
+#define USNIC_IB_ALLOC_SHPD_CMD_VERSION		1
+
+struct usnic_ib_alloc_shpd_cmd {
+	u32 cmd_version;
+	union {
+		struct {
+			u64 iova_start;
+			u64 iova_length;
+		} v1;
+	};
 };
 
 #endif /* USNIC_ABI_H */

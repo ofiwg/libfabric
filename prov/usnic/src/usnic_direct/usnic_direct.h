@@ -682,4 +682,11 @@ void usd_dest_set_udp_ports(struct usd_dest *dest, struct usd_qp *src_qp,
 int usd_create_ip_dest(struct usd_device *dev, uint32_t dest_ip_be,
         struct usd_dest **dest_o);
 
+/* Create a share protection domain from default pd */
+int usd_alloc_shpd(struct usd_device *dev, uint64_t share_key,
+                    uint32_t *shpd_handle);
+
+/* Open a usd device with share pd */
+int usd_open_with_shpd(const char *dev_name, int cmd_fd, uint32_t shpd_handle,
+                        uint64_t share_key, struct usd_device **dev_o);
 #endif /* _USNIC_DIRECT_H_ */

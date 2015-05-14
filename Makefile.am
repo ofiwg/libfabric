@@ -230,6 +230,7 @@ endif
 _usnic_cppflags = \
         -D__LIBUSNIC__ -DWANT_DEBUG_MSGS=0 \
         -DHAVE_LIBNL3=$(HAVE_LIBNL3) $(usnic_nl_CPPFLAGS) \
+	-DUSNIC_HAVE_SHPD=$(USNIC_HAVE_SHPD) \
         -I$(top_srcdir)/prov/usnic/src/usnic_direct
 
 rdmainclude_HEADERS += \

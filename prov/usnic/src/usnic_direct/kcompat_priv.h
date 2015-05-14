@@ -51,6 +51,10 @@ typedef uint64_t dma_addr_t;
 struct usd_device;
 
 int usd_alloc_mr(struct usd_device *dev, size_t size, void **vaddr_o);
+int usd_alloc_iova_mr(struct usd_device *dev, size_t size, uint32_t vfid,
+                            uint32_t mr_type, uint32_t queue_index,
+                            void **vaddr_o, void **iova_o);
+
 int usd_free_mr(void *);
 char *pci_name(struct pci_dev *pdev);
 

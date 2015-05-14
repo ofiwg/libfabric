@@ -88,6 +88,7 @@ struct usd_device {
 
     /* PD for this device */
     uint32_t ud_pd_handle;
+    int is_pd_shared;
 
     /* destination related */
     int ud_arp_sockfd;          /* for ARP */
@@ -95,6 +96,7 @@ struct usd_device {
     TAILQ_HEAD(, usd_dest_req) ud_completed_reqs;
 
     TAILQ_ENTRY(usd_device) ud_link;
+    LIST_ENTRY(usd_device) iova_link;
 };
 
 /*
@@ -107,6 +109,7 @@ struct usd_mr {
     uint32_t umr_lkey;
     uint32_t umr_rkey;
     size_t umr_length;
+    uint64_t umr_iova;
 };
 
 /*
@@ -175,6 +178,8 @@ struct usd_cq_impl {
 
     void *ucq_desc_ring;
     uint32_t ucq_next_desc;
+    void *ucq_desc_ring_iova;           /* descriptor io virtual addr written
+                                         * into VIC cq control register */
     uint32_t ucq_last_color;
 
     uint32_t ucq_index;
@@ -204,6 +209,8 @@ struct usd_rq {
     uint32_t urq_recv_credits;  /* number of available descriptors */
     struct rq_enet_desc *urq_desc_ring;
     struct rq_enet_desc *urq_next_desc;
+    void *urq_desc_ring_iova;           /* descriptor io virtual addr written
+                                         * into VIC rq control register */
     uint32_t urq_post_index;    /* next rxbuf to post */
     uint32_t urq_post_index_mask;
     uint32_t urq_last_comp;
@@ -226,13 +233,18 @@ struct usd_wq {
     uint32_t uwq_index;
     uint32_t uwq_num_entries;
     uint32_t uwq_send_credits;
-    struct wq_enet_desc *uwq_desc_ring;
+    struct wq_enet_desc *uwq_desc_ring; /* descriptor ring host virtual addr */
     struct wq_enet_desc *uwq_next_desc;
+    void *uwq_desc_ring_iova;           /* descriptor io virtual addr written
+                                         * into VIC wq control register */
     uint32_t uwq_post_index;
     uint32_t uwq_post_index_mask;
     uint32_t uwq_last_comp;
 
     uint8_t *uwq_copybuf;
+    void *uwq_copybuf_iova;             /* copy buffer virtual address written
+                                         * into WQ descriptors to be fetched
+                                         * by VIC */
     struct usd_wq_post_info *uwq_post_info;
 
     /* used only for PIO QPs */

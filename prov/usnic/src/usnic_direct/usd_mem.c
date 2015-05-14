@@ -111,15 +111,16 @@ usd_dereg_mr(
  *   true length and pointer to usd_mr
  *   page aligned buffer for user
  */
-int
-usd_alloc_mr(
-    struct usd_device *dev,
+static int
+_usd_alloc_mr(
     size_t size,
-    void **vaddr_o)
+    void **vaddr_o,
+    void **base_addr_o,
+    size_t *true_size_o,
+    size_t *madv_size_o)
 {
     void *vaddr;
     void *base_addr;
-    struct usd_mr *mr;
     size_t true_size;
     size_t metadata_size;
     size_t madv_size;
@@ -134,11 +135,10 @@ usd_alloc_mr(
         usd_err("Failed to mmap region of size %lu\n", true_size);
         return -errno;
     }
-    mr = base_addr;
     vaddr =
         (void *) ALIGN((uintptr_t) base_addr + metadata_size,
                        sysconf(_SC_PAGESIZE));
-    ((uintptr_t *) vaddr)[-1] = (uintptr_t) mr;
+    ((uintptr_t *) vaddr)[-1] = (uintptr_t) base_addr;
     ((uintptr_t *) vaddr)[-2] = true_size;
     ((uintptr_t *) vaddr)[-3] = madv_size;
 
@@ -157,26 +157,102 @@ usd_alloc_mr(
     if (ret != 0) {
         usd_err("Failed to disable child's access to memory %p size %lu\n",
                 vaddr, size);
-        ret = errno;
-        goto err_unmap;
+        munmap(base_addr, true_size);
+        return errno;
     }
 
+    *vaddr_o = vaddr;
+    *base_addr_o = base_addr;
+    *true_size_o = true_size;
+    *madv_size_o = madv_size;
+
+    return 0;
+}
+
+static void
+_usd_free_mr(void *vaddr, void *base_addr, size_t true_size,
+                size_t madv_size)
+{
+    madvise(vaddr, madv_size, MADV_DOFORK);
+    munmap(base_addr, true_size);
+}
+
+int
+usd_alloc_mr(
+    struct usd_device *dev,
+    size_t size,
+    void **vaddr_o)
+{
+    void *vaddr = NULL;
+    void *base_addr = NULL;
+    struct usd_mr *mr;
+    size_t true_size = 0;
+    size_t madv_size = 0;
+    int ret;
+
+    ret = _usd_alloc_mr(size, &vaddr, &base_addr, &true_size, &madv_size);
+    if (ret != 0)
+        return ret;
+
+    mr = base_addr;
     ret = usd_ib_cmd_reg_mr(dev, vaddr, size, mr);
     if (ret != 0) {
         usd_err("Failed to register memory region %p, size %lu\n",
                 vaddr, size);
-        goto err_madvise;
+        _usd_free_mr(vaddr, base_addr, true_size, madv_size);
+        return ret;
     }
     mr->umr_dev = dev;
 
     *vaddr_o = vaddr;
     return 0;
 
-err_madvise:
-    madvise(vaddr, ALIGN(size, sysconf(_SC_PAGESIZE)), MADV_DOFORK);
-err_unmap:
-    munmap(base_addr, true_size);
     return ret;
+}
+
+/*
+ * Allocate memory and register mr that uses addresses from pre-allocated
+ * iova address space for programming iommu and HW.
+ * it returns the requested buffer virutal adress and the iova to be programmed
+ * to HW.
+ */
+int usd_alloc_iova_mr(
+    struct usd_device *dev,
+    size_t size,
+    uint32_t vfid,
+    uint32_t mr_type,
+    uint32_t queue_index,
+    void **vaddr_o,
+    void **iova_o)
+{
+    void *vaddr = NULL;
+    void *base_addr = NULL;
+    struct usd_mr *mr;
+    size_t true_size = 0;
+    size_t madv_size = 0;
+    int ret;
+
+    ret = _usd_alloc_mr(size, &vaddr, &base_addr, &true_size, &madv_size);
+    if (ret != 0)
+        return ret;
+
+    mr = base_addr;
+    ret = usd_ib_cmd_reg_mr_v1(dev, vaddr, size, USNIC_REGMR_HWADDR_IOVA,
+                                vfid, mr_type, queue_index, mr);
+    if (ret == 0) {
+        mr->umr_dev = dev;
+    } else {
+        usd_err("Failed to register iova memory region %p size %lu "
+                "vfid %u mr_type %u queue_index %u\n",
+                vaddr, size, vfid, mr_type, queue_index);
+        _usd_free_mr(vaddr, base_addr, true_size, madv_size);
+        return ret;
+    }
+
+    *vaddr_o = vaddr;
+    *iova_o = (void*)mr->umr_iova;
+
+    return 0;
 }
 
 /*
@@ -198,8 +274,7 @@ usd_free_mr(
 
     ret = usd_ib_cmd_dereg_mr(mr->umr_dev, mr);
     if (ret == 0) {
-        madvise(vaddr, madv_size, MADV_DOFORK);
-        munmap(mr, true_size);
+        _usd_free_mr(vaddr, mr, true_size, madv_size);
     }
 
     return ret;
