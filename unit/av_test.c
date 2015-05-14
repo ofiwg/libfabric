@@ -1012,7 +1012,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:p:d:D:n:")) != -1) {
+	while ((op = getopt(argc, argv, "f:p:d:D:n:a:")) != -1) {
 		switch (op) {
 		case 'd':
 			good_address = optarg;
@@ -1034,7 +1034,7 @@ int main(int argc, char **argv)
 			printf("\t[-d good_address]\n");
 			printf("\t[-D bad_address]\n");
 			printf("\t[-a fabric_name]\n");
-			printf("\t[-n num_good_addr (max=%d]\n", MAX_ADDR - 1);
+			printf("\t[-n num_good_addr (max=%d)]\n", MAX_ADDR - 1);
 			printf("\t[-f provider_name]\n");
 			return EXIT_FAILURE;
 			
