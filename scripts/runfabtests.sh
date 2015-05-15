@@ -249,7 +249,7 @@ function usage {
 	errcho "Run fabtests on given nodes, report pass/fail/notrun status."
 	errcho
 	errcho "Options:"
-	errcho -e " -g\tgood IP address from <client>'s perspective (default $GOOD_ADDR)"
+	errcho -e " -g\tgood IP address from <host>'s perspective (default $GOOD_ADDR)"
 	errcho -e " -v..\tprint output of failing/notrun/passing"
 	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short (default quick)"
 	errcho -e " -p\tpath to test bins (default PATH)"
