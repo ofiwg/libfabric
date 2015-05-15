@@ -323,7 +323,7 @@ int fi_fd_nonblock(int fd);
 #endif
 
 /* symbol -> external symbol mappings */
-#ifdef HAVE_SYMVER_SUPPORT
+#if HAVE_SYMVER_SUPPORT
 
 #  define SYMVER(name, api, ver) \
         asm(".symver " #name "," #api "@" #ver)

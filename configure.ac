@@ -136,45 +136,66 @@ AC_CHECK_HEADER(valgrind/memcheck.h, [],
 fi
 
 AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,
-    if test -n "`$LD --help < /dev/null 2>/dev/null | grep version-script`"; then
+    [if test -n "`$LD --help < /dev/null 2>/dev/null | grep version-script`"; then
         ac_cv_version_script=yes
     else
         ac_cv_version_script=no
-    fi)
+    fi])
 
 AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 
-dnl Disable symbol versioning with icc + ipo, with it ipo is disabled by icc.
+dnl Disable symbol versioning when -ipo is in CFLAGS or ipo is disabled by icc.
 dnl The gcc equivalent ipo (-fwhole-program) seems to work fine.
-AS_IF([case "$CFLAGS" in
-         *-ipo*) true ;;
-         *)      false ;;
-        esac],
-      [AC_MSG_NOTICE([disabling symbol versioning support with -ipo CFLAG])],
+AS_CASE([$CFLAGS],
+	[*-ipo*],[
+		AC_MSG_NOTICE([disabling symbol versioning support with -ipo CFLAG])
+		icc_symver_hack=1
+		ac_asm_symver_support=0
+	],
+	[]
+)
+
+dnl Check for symbol versioning compiler + linker support.
+dnl If icc + ipo, then print disabled and skip check
+AC_MSG_CHECKING(for .symver assembler support)
+AS_IF([test "$icc_symver_hack"],
+	[AC_MSG_RESULT(disabled)],
 [
 
-AC_CACHE_CHECK(for .symver assembler support, ac_cv_asm_symver_support,
-	[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]],
-		[[asm("symbol:\n.symver symbol, api@ABI\n");]])],
-		[ac_cv_asm_symver_support=yes],
-		[ac_cv_asm_symver_support=no])])
+AC_TRY_LINK([],
+	[__asm__(".symver main_, main@@ABIVER_1.0");],
+	[
+		AC_MSG_RESULT(yes)
+		ac_asm_symver_support=1
+	],
+	[
+		AC_MSG_RESULT(no)
+		ac_asm_symver_support=0
+	])
 
-]) dnl AS_IF
+]) dnl AS_IF icc_symver_hack
 
-if test x$ac_cv_asm_symver_support = xyes; then
-	AC_DEFINE([HAVE_SYMVER_SUPPORT], 1, [assembler has .symver support])
-fi
+AC_DEFINE_UNQUOTED([HAVE_SYMVER_SUPPORT], [$ac_asm_symver_support],
+	  	   [Define to 1 if compiler/linker support symbol versioning.])
 
-AC_LINK_IFELSE(
-	[AC_LANG_SOURCE[
+AC_MSG_CHECKING(for __alias__ attribute support)
+AC_TRY_LINK(
+	[
 		int foo(int arg);
 		int foo(int arg) { return arg + 3; };
 		int foo2(int arg) __attribute__ (( __alias__("foo")));
-	]],
-	[ac_cv_prog_cc_alias_symbols=1],
-	[ac_cv_prog_cc_alias_symbols=0])
+	],
+	[ /* empty main */ ],
+	[
+		AC_MSG_RESULT(yes)
+		ac_prog_cc_alias_symbols=1
+	],
+	[
+		AC_MSG_RESULT(no)
+		ac_prog_cc_alias_symbols=0
+	])
 
-AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [$ac_cv_prog_cc_alias_symbols],
+AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [$ac_prog_cc_alias_symbols],
 	  	   [Define to 1 if the linker supports alias attribute.])
 
 dnl Provider-specific checks
