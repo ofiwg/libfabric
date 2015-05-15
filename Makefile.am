@@ -27,8 +27,7 @@ rdmainclude_HEADERS =
 # internal utility functions shared by in-tree providers:
 common_srcs = \
 	src/common.c \
-	src/enosys.c \
-	src/log.c
+	src/enosys.c
 
 # ensure dl-built providers link back to libfabric
 linkback = $(top_builddir)/src/libfabric.la
@@ -42,6 +41,7 @@ src_libfabric_la_SOURCES = \
 	include/prov.h \
 	src/fabric.c \
 	src/fi_tostr.c \
+	src/log.c \
 	$(common_srcs)
 
 if MACOS
