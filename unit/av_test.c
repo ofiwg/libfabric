@@ -61,6 +61,7 @@ static struct fi_eq_attr eq_attr;
 char *good_address;
 int num_good_addr;
 char *bad_address;
+static char *src_addr_str = NULL;
 
 static enum fi_av_type av_type;
 
@@ -1012,7 +1013,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:p:d:D:n:a:")) != -1) {
+	while ((op = getopt(argc, argv, "f:p:d:D:n:a:s:")) != -1) {
 		switch (op) {
 		case 'd':
 			good_address = optarg;
@@ -1029,6 +1030,9 @@ int main(int argc, char **argv)
 		case 'f':
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
+		case 's':
+			src_addr_str = strdup(optarg);
+			break;
 		default:
 			printf("usage: %s\n", argv[0]);
 			printf("\t[-d good_address]\n");
@@ -1036,6 +1040,7 @@ int main(int argc, char **argv)
 			printf("\t[-a fabric_name]\n");
 			printf("\t[-n num_good_addr (max=%d)]\n", MAX_ADDR - 1);
 			printf("\t[-f provider_name]\n");
+			printf("\t[-s source_address]\n");
 			return EXIT_FAILURE;
 			
 		}
@@ -1056,7 +1061,8 @@ int main(int argc, char **argv)
 	hints->addr_format = FI_SOCKADDR;
 
 	hints->ep_attr->type = FI_EP_RDM;
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(FI_VERSION(1, 0), src_addr_str, 0, FI_SOURCE, hints,
+				&fi);
 	if (ret != 0 && ret != -FI_ENODATA) {
 		printf("fi_getinfo %s\n", fi_strerror(-ret));
 		goto err1;
@@ -1064,7 +1070,8 @@ int main(int argc, char **argv)
 
 	if (ret == -FI_ENODATA) {
 		hints->ep_attr->type = FI_EP_DGRAM;
-		ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+		ret = fi_getinfo(FI_VERSION(1, 0), src_addr_str, 0, FI_SOURCE,
+					hints, &fi);
 		if (ret != 0) {
 			printf("fi_getinfo %s\n", fi_strerror(-ret));
 			goto err1;

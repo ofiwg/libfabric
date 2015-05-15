@@ -75,7 +75,7 @@ standard_tests=(
 )
 
 unit_tests=(
-	"av_test -d GOOD_ADDR -n 1"
+	"av_test -d GOOD_ADDR -n 1 -s SERVER_ADDR"
 	"dom_test -n 2"
 	"eq_test"	
 	"size_left_test"
@@ -110,7 +110,8 @@ function cleanup_and_exit {
 function unit_test {
 	local test=$1
 	local ret1=0
-	local test_exe=$(echo "fi_${test} -f $PROV" | sed -e "s/GOOD_ADDR/$GOOD_ADDR/")
+	local test_exe=$(echo "fi_${test} -f $PROV" | \
+	    sed -e "s/GOOD_ADDR/$GOOD_ADDR/g" -e "s/SERVER_ADDR/${SERVER}/g")
 	local SO=""
 
 	${ssh} ${SERVER} ${BIN_PATH} "${test_exe}" &> $s_outp &
