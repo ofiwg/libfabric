@@ -149,37 +149,55 @@ usdf_cq_readerr_soft(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 	return 1;
 }
 
-static ssize_t
-usdf_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
-		int timeout)
+static inline ssize_t
+usdf_cq_copy_cq_entry(void *dst, struct usd_completion *src,
+			enum fi_cq_format format)
 {
-	USDF_TRACE_SYS(CQ, "\n"); /* XXX delete once implemented */
-	return -FI_ENOSYS;
+	struct fi_cq_entry *ctx_entry;
+	struct fi_cq_msg_entry *msg_entry;
+	struct fi_cq_data_entry *data_entry;
+
+	switch (format) {
+	case FI_CQ_FORMAT_CONTEXT:
+		ctx_entry = (struct fi_cq_entry *)dst;
+		ctx_entry->op_context = src->uc_context;
+		break;
+	case FI_CQ_FORMAT_MSG:
+		msg_entry = (struct fi_cq_msg_entry *)dst;
+		msg_entry->op_context = src->uc_context;
+		msg_entry->flags = usdf_cqe_to_flags(src);
+		msg_entry->len = src->uc_bytes;
+		break;
+	case FI_CQ_FORMAT_DATA:
+		data_entry = (struct fi_cq_data_entry *)dst;
+		data_entry->op_context = src->uc_context;
+		data_entry->flags = usdf_cqe_to_flags(src);
+		data_entry->len = src->uc_bytes;
+		data_entry->buf = 0; /* XXX */
+		data_entry->data = 0;
+		break;
+	default:
+		USDF_WARN("unexpected CQ format, internal error\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	return FI_SUCCESS;
 }
 
-/*
- * poll a hard CQ
- * Since this routine is an inline and is always called with format as
- * a constant, I am counting on the compiler optimizing away all the switches
- * on format.
- */
 static inline ssize_t
-usdf_cq_read_common(struct fid_cq *fcq, void *buf, size_t count,
-		enum fi_cq_format format)
+usdf_cq_sread_common(struct fid_cq *fcq, void *buf, size_t count, const void *cond,
+			int timeout, enum fi_cq_format format)
 {
 	struct usdf_cq *cq;
 	uint8_t *entry;
 	uint8_t *last;
 	size_t entry_len;
-	struct fi_cq_entry *ctx_entry;
-	struct fi_cq_msg_entry *msg_entry;
-	struct fi_cq_data_entry *data_entry;
 	ssize_t ret;
+	size_t time_spent = 0;
 
 	cq = cq_ftou(fcq);
-	if (cq->cq_comp.uc_status != 0) {
+	if (cq->cq_comp.uc_status != 0)
 		return -FI_EAVAIL;
-	}
 
 	switch (format) {
 	case FI_CQ_FORMAT_CONTEXT:
@@ -202,42 +220,113 @@ usdf_cq_read_common(struct fid_cq *fcq, void *buf, size_t count,
 	while (entry < last) {
 		ret = usd_poll_cq(cq->c.hard.cq_cq, &cq->cq_comp);
 		if (ret == -EAGAIN) {
-			break;
+			if (entry > (uint8_t *)buf)
+				break;
+			if (timeout >= 0 && time_spent >= timeout)
+				break;
+			usleep(1000 * SREAD_SLEEP_TIME_MS);
+			time_spent += SREAD_SLEEP_TIME_MS;
+			continue;
 		}
+		if (cq->cq_comp.uc_status != 0) {
+			if (entry > (uint8_t *) buf)
+				break;
+			else
+				return -FI_EAVAIL;
+		}
+
+		ret = usdf_cq_copy_cq_entry(entry, &cq->cq_comp, format);
+		if (ret < 0)
+			return ret;
+
+		entry += entry_len;
+	}
+
+	if (entry > (uint8_t *)buf)
+		return (entry - (uint8_t *)buf) / entry_len;
+	return -FI_EAGAIN;
+}
+
+static ssize_t
+usdf_cq_sread_context(struct fid_cq *fcq, void *buf, size_t count,
+			const void *cond, int timeout)
+{
+	return usdf_cq_sread_common(fcq, buf, count, cond, timeout, 
+					FI_CQ_FORMAT_CONTEXT);
+}
+
+static ssize_t
+usdf_cq_sread_msg(struct fid_cq *fcq, void *buf, size_t count,
+			const void *cond, int timeout)
+{
+	return usdf_cq_sread_common(fcq, buf, count, cond, timeout,
+					FI_CQ_FORMAT_MSG);
+}
+
+static ssize_t
+usdf_cq_sread_data(struct fid_cq *fcq, void *buf, size_t count,
+			const void *cond, int timeout)
+{
+	return usdf_cq_sread_common(fcq, buf, count, cond, timeout,
+					FI_CQ_FORMAT_DATA);
+}
+
+/*
+ * poll a hard CQ
+ * Since this routine is an inline and is always called with format as
+ * a constant, I am counting on the compiler optimizing away all the switches
+ * on format.
+ */
+static inline ssize_t
+usdf_cq_read_common(struct fid_cq *fcq, void *buf, size_t count,
+		enum fi_cq_format format)
+{
+	struct usdf_cq *cq;
+	uint8_t *entry;
+	uint8_t *last;
+	size_t entry_len;
+	ssize_t ret;
+
+	cq = cq_ftou(fcq);
+	if (cq->cq_comp.uc_status != 0)
+		return -FI_EAVAIL;
+
+	switch (format) {
+	case FI_CQ_FORMAT_CONTEXT:
+		entry_len = sizeof(struct fi_cq_entry);
+		break;
+	case FI_CQ_FORMAT_MSG:
+		entry_len = sizeof(struct fi_cq_msg_entry);
+		break;
+	case FI_CQ_FORMAT_DATA:
+		entry_len = sizeof(struct fi_cq_data_entry);
+		break;
+	default:
+		return 0;
+	}
+
+	ret = 0;
+	entry = buf;
+	last = entry + (entry_len * count);
+
+	while (entry < last) {
+		ret = usd_poll_cq(cq->c.hard.cq_cq, &cq->cq_comp);
+		if (ret == -EAGAIN)
+			break;
 		if (cq->cq_comp.uc_status != 0) {
 			ret = -FI_EAVAIL;
 			break;
 		}
-		switch (format) {
-		case FI_CQ_FORMAT_CONTEXT:
-			ctx_entry = (struct fi_cq_entry *)entry;
-			ctx_entry->op_context = cq->cq_comp.uc_context;
-			break;
-		case FI_CQ_FORMAT_MSG:
-			msg_entry = (struct fi_cq_msg_entry *)entry;
-			msg_entry->op_context = cq->cq_comp.uc_context;
-			msg_entry->flags = usdf_cqe_to_flags(&cq->cq_comp);
-			msg_entry->len = cq->cq_comp.uc_bytes;
-			break;
-		case FI_CQ_FORMAT_DATA:
-			data_entry = (struct fi_cq_data_entry *)entry;
-			data_entry->op_context = cq->cq_comp.uc_context;
-			data_entry->flags = usdf_cqe_to_flags(&cq->cq_comp);
-			data_entry->len = cq->cq_comp.uc_bytes;
-			data_entry->buf = 0; /* XXX */
-			data_entry->data = 0;
-			break;
-		default:
-			return 0;
-		}
+		ret = usdf_cq_copy_cq_entry(entry, &cq->cq_comp, format);
+		if (ret < 0)
+			return ret;
 		entry += entry_len;
 	}
 
-	if (entry > (uint8_t *)buf) {
+	if (entry > (uint8_t *)buf)
 		return (entry - (uint8_t *)buf) / entry_len;
-	} else {
+	else
 		return ret;
-	}
 }
 
 static ssize_t
@@ -386,13 +475,6 @@ usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 
 }
 
-static ssize_t
-usdf_cq_sread_soft(struct fid_cq *cq, void *buf, size_t count, const void *cond,
-		int timeout)
-{
-	return -FI_ENOSYS;
-}
-
 static inline ssize_t
 usdf_cq_copy_soft_entry(void *dst, const struct usdf_cq_soft_entry *src,
 			enum fi_cq_format dst_format)
@@ -426,6 +508,100 @@ usdf_cq_copy_soft_entry(void *dst, const struct usdf_cq_soft_entry *src,
 	}
 
 	return FI_SUCCESS;
+}
+
+static ssize_t
+usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const void *cond,
+		int timeout, enum fi_cq_format format)
+{
+	struct usdf_cq *cq;
+	uint8_t *entry;
+	uint8_t *last;
+	struct usdf_cq_soft_entry *tail;
+	size_t entry_len;
+	size_t time_spent = 0;
+	ssize_t ret;
+
+	cq = cq_ftou(fcq);
+
+	switch (format) {
+	case FI_CQ_FORMAT_CONTEXT:
+		entry_len = sizeof(struct fi_cq_entry);
+		break;
+	case FI_CQ_FORMAT_MSG:
+		entry_len = sizeof(struct fi_cq_msg_entry);
+		break;
+	case FI_CQ_FORMAT_DATA:
+		entry_len = sizeof(struct fi_cq_data_entry);
+		break;
+	default:
+		USDF_WARN("unexpected CQ format, internal error\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	entry = buf;
+	last = entry + (entry_len * count);
+
+	while (1) {
+		/* progress... */
+		usdf_domain_progress(cq->cq_domain);
+
+		tail = cq->c.soft.cq_tail;
+
+		while (entry < last && tail != cq->c.soft.cq_head) {
+			if (tail->cse_prov_errno > 0) {
+				if (entry > (uint8_t *)buf)
+					break;
+				else
+					return -FI_EAVAIL;
+			}
+
+			ret = usdf_cq_copy_soft_entry(entry, tail, format);
+			if (ret < 0)
+				return ret;
+
+			entry += entry_len;
+			tail++;
+			if (tail == cq->c.soft.cq_end)
+				tail = cq->c.soft.cq_comps;
+		}
+
+		if (entry > (uint8_t *)buf) {
+			cq->c.soft.cq_tail = tail;
+			return (entry - (uint8_t *)buf) / entry_len;
+		} else {
+			if (timeout >= 0 && time_spent >= timeout)
+				break;
+			usleep(1000 * SREAD_SLEEP_TIME_MS);
+			time_spent += SREAD_SLEEP_TIME_MS;
+		}
+	}
+
+	return -FI_EAGAIN;
+}
+
+static ssize_t
+usdf_cq_sread_context_soft(struct fid_cq *fcq, void *buf, size_t count,
+		const void *cond, int timeout)
+{
+	return usdf_cq_sread_common_soft(fcq, buf, count, cond, timeout,
+					FI_CQ_FORMAT_CONTEXT);
+}
+
+static ssize_t
+usdf_cq_sread_msg_soft(struct fid_cq *fcq, void *buf, size_t count,
+		const void *cond, int timeout)
+{
+	return usdf_cq_sread_common_soft(fcq, buf, count, cond, timeout,
+					FI_CQ_FORMAT_MSG);
+}
+
+static ssize_t
+usdf_cq_sread_data_soft(struct fid_cq *fcq, void *buf, size_t count,
+		const void *cond, int timeout)
+{
+	return usdf_cq_sread_common_soft(fcq, buf, count, cond, timeout,
+					FI_CQ_FORMAT_DATA);
 }
 
 /*
@@ -653,7 +829,7 @@ static struct fi_ops_cq usdf_cq_context_ops = {
 	.read = usdf_cq_read_context,
 	.readfrom = usdf_cq_readfrom_context,
 	.readerr = usdf_cq_readerr,
-	.sread = usdf_cq_sread,
+	.sread = usdf_cq_sread_context,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -664,7 +840,7 @@ static struct fi_ops_cq usdf_cq_context_soft_ops = {
 	.read = usdf_cq_read_context_soft,
 	.readfrom = usdf_cq_readfrom_context_soft,
 	.readerr = usdf_cq_readerr_soft,
-	.sread = usdf_cq_sread_soft,
+	.sread = usdf_cq_sread_context_soft,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -675,7 +851,7 @@ static struct fi_ops_cq usdf_cq_msg_ops = {
 	.read = usdf_cq_read_msg,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr,
-	.sread = usdf_cq_sread,
+	.sread = usdf_cq_sread_msg,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -686,7 +862,7 @@ static struct fi_ops_cq usdf_cq_msg_soft_ops = {
 	.read = usdf_cq_read_msg_soft,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr_soft,
-	.sread = usdf_cq_sread,
+	.sread = usdf_cq_sread_msg_soft,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -697,7 +873,7 @@ static struct fi_ops_cq usdf_cq_data_ops = {
 	.read = usdf_cq_read_data,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr,
-	.sread = usdf_cq_sread,
+	.sread = usdf_cq_sread_data,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -708,7 +884,7 @@ static struct fi_ops_cq usdf_cq_data_soft_ops = {
 	.read = usdf_cq_read_data_soft,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr_soft,
-	.sread = usdf_cq_sread,
+	.sread = usdf_cq_sread_data_soft,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
