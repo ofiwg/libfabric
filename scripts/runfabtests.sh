@@ -142,6 +142,17 @@ function cleanup_and_exit {
 	exit 1
 }
 
+# compute the duration in seconds between two floating point seconds values
+# measured since the start of the UNIX epoch and print the result to stdout
+function compute_duration {
+	local s=$1
+	local e=$2
+
+	# just use perl, bc is fragile and forgets to include leading 0s when
+	# numbers are <1.0
+	perl -e "printf \"%.6f\n\", ($e - $s)"
+}
+
 function unit_test {
 	local test=$1
 	local ret1=0
@@ -160,7 +171,7 @@ function unit_test {
 	ret1=$?
 
 	end_time=$(date '+%s.%N')
-	test_time=$( echo "$end_time - $start_time" | bc )
+	test_time=$(compute_duration "$start_time" "$end_time")
 
 	if [ "$ret1" == "61" ]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp"
@@ -202,7 +213,7 @@ function cs_test {
 	ret2=$?
 
 	end_time=$(date '+%s.%N')
-	test_time=$( echo "$end_time - $start_time" | bc )
+	test_time=$(compute_duration "$start_time" "$end_time")
 
 	if [ "$ret1" == "61" -a "$ret2" == "61" ]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$c_outp"
