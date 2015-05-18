@@ -35,7 +35,12 @@ if HAVE_EPOLL
 bin_PROGRAMS += simple/fi_msg_epoll
 endif
 
-dist_bin_SCRIPTS=scripts/runfabtests.sh
+dist_bin_SCRIPTS = \
+	scripts/runfabtests.sh \
+	scripts/rft_yaml_to_junit_xml
+
+dist_noinst_SCRIPTS = \
+	scripts/parseyaml.py
 
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = common/shared.c
