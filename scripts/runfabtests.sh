@@ -90,10 +90,45 @@ function print_border {
 	echo "# --------------------------------------------------------------"
 }
 
-# TODO: prefix with something, check for "" input
 function print_results {
-	#echo "$1" | sed ':a;N;$!ba;s/\n/\n  # /g'
-	echo "$1" | sed 's/^/  # /g'
+	local test_name=$1
+	local test_result=$2
+	local test_time=$3
+	local server_out_file=$4
+	local client_out_file=$5
+
+	if [ $VERBOSE -eq 0 ] ; then
+		# print a simple, single-line format that is still valid YAML
+		printf "%-50s%10s\n" "$test_exe:" "$test_result"
+	else
+		# Print a more detailed YAML format that is not a superset of
+		# the non-verbose output.  See ofiwg/fabtests#259 for a
+		# rationale.
+		emit_stdout=0
+		case $test_result in
+			Pass)
+				[ $VERBOSE -ge 3 ] && emit_stdout=1
+				;;
+			Notrun)
+				[ $VERBOSE -ge 2 ] && emit_stdout=1
+				;;
+			Fail)
+				[ $VERBOSE -ge 1 ] && emit_stdout=1
+				;;
+		esac
+
+		printf -- "- name:   %s\n" "$test_exe"
+		printf -- "  result: %s\n" "$test_result"
+		printf -- "  time:   %s\n" "$test_time"
+		if [ $emit_stdout -eq 1 ] ; then
+			printf -- "  server_stdout: |\n"
+			sed -e 's/^/    /' < $server_out_file
+			if [ -n "$client_out_file" ] ; then
+				printf -- "  client_stdout: |\n"
+				sed -e 's/^/    /' < $client_out_file
+			fi
+		fi
+	fi
 }
 
 function cleanup {
@@ -112,7 +147,11 @@ function unit_test {
 	local ret1=0
 	local test_exe=$(echo "fi_${test} -f $PROV" | \
 	    sed -e "s/GOOD_ADDR/$GOOD_ADDR/g" -e "s/SERVER_ADDR/${SERVER}/g")
-	local SO=""
+	local start_time
+	local end_time
+	local test_time
+
+	start_time=$(date '+%s.%N')
 
 	${ssh} ${SERVER} ${BIN_PATH} "${test_exe}" &> $s_outp &
 	p1=$!
@@ -120,23 +159,20 @@ function unit_test {
 	wait $p1
 	ret1=$?
 
-	SO=$(cat $s_outp)
+	end_time=$(date '+%s.%N')
+	test_time=$( echo "$end_time - $start_time" | bc )
 
 	if [ "$ret1" == "61" ]; then
-		printf "%-50s%10s\n" "$test_exe:" "Notrun"
-		[ "$VERBOSE" -gt "1" ] && print_results "$SO"
+		print_results "$test_exe" "Notrun" "$test_time" "$s_outp"
 		skip_count+=1
-	
 	elif [ "$ret1" != "0" ]; then
+		print_results "$test_exe" "Fail" "$test_time" "$s_outp"
 		if [ $ret1 == 124 ]; then
 			cleanup
 		fi
-		printf "%-50s%10s\n" "$test_exe:" "Fail"
-		[ "$VERBOSE" -gt "0" ] && print_results "$SO"
 		fail_count+=1
 	else
-		printf "%-50s%10s\n" "$test_exe:" "Pass"
-		[ "$VERBOSE" -gt "2" ] && print_results "$SO"
+		print_results "$test_exe" "Pass" "$test_time" "$s_outp"
 		pass_count+=1
 	fi
 }
@@ -146,8 +182,11 @@ function cs_test {
 	local ret1=0
 	local ret2=0
 	local test_exe="fi_${test} -f $PROV"
-	local SO=""
-	local CO=""
+	local start_time
+	local end_time
+	local test_time
+
+	start_time=$(date '+%s.%N')
 
 	${ssh} ${SERVER} ${BIN_PATH} "${test_exe} -s $SERVER" &> $s_outp &
 	p1=$!
@@ -162,24 +201,20 @@ function cs_test {
 	wait $p2
 	ret2=$?
 
-	SO=$(cat $s_outp)
-	CO=$(cat $c_outp)
+	end_time=$(date '+%s.%N')
+	test_time=$( echo "$end_time - $start_time" | bc )
 
 	if [ "$ret1" == "61" -a "$ret2" == "61" ]; then
-		printf "%-50s%10s\n" "$test_exe:" "Notrun"
-		[ "$VERBOSE" -gt "1" ] && print_results "$SO" && print_results "$CO"
+		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$c_outp"
 		skip_count+=1
-	
 	elif [ "$ret1" != "0" -o "$ret2" != "0" ]; then
+		print_results "$test_exe" "Fail" "$test_time" "$s_outp" "$c_outp"
 		if [ $ret1 == 124 -o $ret2 == 124 ]; then
 			cleanup
 		fi
-		printf "%-50s%10s\n" "$test_exe:" "Fail"
-		[ "$VERBOSE" -gt "0" ] && print_results "$SO" && print_results "$CO"
 		fail_count+=1
 	else
-		printf "%-50s%10s\n" "$test_exe:" "Pass"
-		[ "$VERBOSE" -gt "2" ] && print_results "$SO" && print_results "$CO"
+		print_results "$test_exe" "Pass" "$test_time" "$s_outp" "$c_outp"
 		pass_count+=1
 	fi
 }
@@ -191,8 +226,10 @@ function main {
 		local -r tests=$(echo $1 | sed 's/all/unit,simple,standard/g' | tr ',' ' ')
 	fi
 
-	printf "# %-50s%10s\n" "Test" "Result"
-	print_border
+	if [ $VERBOSE -eq 0 ] ; then
+		printf "# %-50s%10s\n" "Test" "Result"
+		print_border
+	fi
 
 	for ts in ${tests}; do
 	ssh=${sssh}
@@ -250,7 +287,9 @@ function usage {
 	errcho
 	errcho "Options:"
 	errcho -e " -g\tgood IP address from <host>'s perspective (default $GOOD_ADDR)"
-	errcho -e " -v..\tprint output of failing/notrun/passing"
+	errcho -e " -v\tprint output of failing"
+	errcho -e " -vv\tprint output of failing/notrun"
+	errcho -e " -vvv\tprint output of failing/notrun/passing"
 	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short (default quick)"
 	errcho -e " -p\tpath to test bins (default PATH)"
 	exit 1
