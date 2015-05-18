@@ -36,6 +36,8 @@
 #ifndef _USDF_CQ_H_
 #define _USDF_CQ_H_
 
+#define SREAD_SLEEP_TIME_MS 5
+
 int usdf_cq_is_soft(struct usdf_cq *cq);
 int usdf_cq_make_soft(struct usdf_cq *cq);
 int usdf_cq_create_cq(struct usdf_cq *cq);
