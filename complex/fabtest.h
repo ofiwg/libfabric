@@ -66,6 +66,7 @@ extern struct fid_pep	 *pep;
 
 extern struct ft_info test_info;
 extern struct fi_info *fabric_info;
+extern struct cs_opts opts;
 
 extern size_t sm_size_array[];
 extern size_t med_size_array[];
