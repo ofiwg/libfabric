@@ -269,6 +269,7 @@ int usd_alloc_iova_mr_with_qp(
 {
     struct usd_qp_impl *qp;
     uint32_t queue_index;
+    int ret;
 
     qp  = to_qpi(uqp);
 
@@ -284,9 +285,18 @@ int usd_alloc_iova_mr_with_qp(
             usd_err("failed due to invalid mr_type %d\n", mr_type);
             return -EINVAL;
     }
-    return usd_alloc_iova_mr(qp->uq_dev, size, qp->uq_vf->vf_id,
+
+    if (qp->uq_dev->is_pd_shared == 0) {
+        ret = usd_alloc_mr(qp->uq_dev, size, vaddr_o);
+        if (ret == 0)
+            *iova_o = *vaddr_o;
+    } else {
+        ret = usd_alloc_iova_mr(qp->uq_dev, size, qp->uq_vf->vf_id,
                                 mr_type, queue_index,
                                 vaddr_o, iova_o);
+    }
+
+    return ret;
 }
 
 /*
