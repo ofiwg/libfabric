@@ -330,7 +330,7 @@ static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const cha
 	}
 
 	strcatf(buf, "%sfi_ep_attr:\n", prefix);
-	strcatf(buf, "%sep_type: ", TAB);
+	strcatf(buf, "%s%sep_type: ", prefix, TAB);
 	fi_tostr_ep_type(buf, attr->type);
 	strcatf(buf, "\n");
 	strcatf(buf, "%s%sprotocol: ", prefix, TAB);
