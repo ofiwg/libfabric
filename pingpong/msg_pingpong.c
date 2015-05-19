@@ -464,24 +464,18 @@ static int client_connect(void)
 		goto err2;
 	}
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		goto err3;
-	}
-
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;
 
 	ret = bind_ep_res();
 	if (ret)
-		goto err5;
+		goto err4;
 
 	ret = fi_connect(ep, fi->dest_addr, NULL, 0);
 	if (ret) {
 		FT_PRINTERR("fi_connect", ret);
-		goto err5;
+		goto err4;
 	}
 
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
@@ -497,20 +491,21 @@ static int client_connect(void)
 		} else {
 			FT_PRINTERR("fi_eq_sread", rd);
 		}
-		return (int) rd;
+		ret = (int) rd;
+		goto err4;
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
 		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
 			event, entry.fid, ep);
 		ret = -FI_EOTHER;
-		goto err5;
+		goto err4;
 	}
 
 	fi_freeinfo(fi);
 	return 0;
 
-err5:
+err4:
 	free_ep_res();
 err3:
 	fi_close(&dom->fid);
