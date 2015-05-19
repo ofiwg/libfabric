@@ -60,6 +60,16 @@ enum usd_link_state {
     USD_LINK_UP
 };
 
+/*
+ * Types of QP internal buffers allocated by usd_alloc_iova_with_qp
+ * The values should be consistent with usnic internal ones defined
+ */
+enum usd_mr_type {
+    USD_MR_RQ_HDRBUF    =   4,	/* Created in usdf DGRAM EP */
+    USD_MR_WQ_INJECTBUF =   5,	/* Created in usdf RDM and MSG EP */
+    USD_MR_RQ_RXBUF     =   6,    /* created in usdf RDM and MSG EP */
+};
+
 /* forward structure defs */
 struct usd_qp;
 struct usd_device;
@@ -400,6 +410,9 @@ unsigned usd_get_recv_credits(struct usd_qp *uqp);
 
 int usd_reg_mr(struct usd_device *dev,
         void *buffer, size_t size, struct usd_mr **mr_o);
+int usd_alloc_iova_mr_with_qp(struct usd_qp *uqp, size_t size,
+                                enum usd_mr_type mr_type, void **vaddr_o,
+                                void **iova_o);
 int usd_dereg_mr(struct usd_mr *mr);
 
 int usd_alloc_mr(struct usd_device *dev, size_t size, void **vaddr_o);

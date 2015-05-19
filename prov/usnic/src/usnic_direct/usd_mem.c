@@ -256,6 +256,40 @@ int usd_alloc_iova_mr(
 }
 
 /*
+ * Allocate IOVA MR with QP created. This API
+ * is used by external client of USD, such as
+ * libfabric
+ */
+int usd_alloc_iova_mr_with_qp(
+    struct usd_qp *uqp,
+    size_t size,
+    enum usd_mr_type mr_type,
+    void **vaddr_o,
+    void **iova_o)
+{
+    struct usd_qp_impl *qp;
+    uint32_t queue_index;
+
+    qp  = to_qpi(uqp);
+
+    switch (mr_type) {
+        case USNIC_MR_RQ_HDRBUF:
+        case USNIC_MR_RQ_RXBUF:
+            queue_index = qp->uq_rq.urq_index;
+            break;
+        case USNIC_MR_WQ_INJECTBUF:
+            queue_index = qp->uq_wq.uwq_index;
+            break;
+        default:
+            usd_err("failed due to invalid mr_type %d\n", mr_type);
+            return -EINVAL;
+    }
+    return usd_alloc_iova_mr(qp->uq_dev, size, qp->uq_vf->vf_id,
+                                mr_type, queue_index,
+                                vaddr_o, iova_o);
+}
+
+/*
  * See usd_alloc_mr() for explanation of:
  *  mr = (struct usd_mr *)((uintptr_t *)vaddr)[-1];
  */

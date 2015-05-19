@@ -204,7 +204,10 @@ struct usnic_ib_reg_mr_cmd {
 #define USNIC_MR_RQ_RING		1
 #define USNIC_MR_CQ_RING		2
 #define USNIC_MR_WQ_COPYBUF		3
-#define USNIC_MR_MAX			4
+#define USNIC_MR_RQ_HDRBUF		4	/* Created in usdf DGRAM EP */
+#define USNIC_MR_WQ_INJECTBUF		5	/* Created in usdf RDM and MSG EP */
+#define USNIC_MR_RQ_RXBUF		6	/* created in usdf RDM and MSG EP */
+#define USNIC_MR_MAX			7
 			u32 queue_index;
 		} v1;
 		/* Add future version fields here */
