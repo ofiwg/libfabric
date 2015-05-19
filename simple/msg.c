@@ -164,7 +164,7 @@ static int server_listen(void)
 	int ret;
 
 	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, NULL, opts.src_port, FI_SOURCE, hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
