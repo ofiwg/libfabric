@@ -49,16 +49,22 @@
 
 /* Print fi_info and related structs, enums, OR_able flags, addresses.
  * 
- * Each printable type should be mostly well formatted YAML.
+ * Each printable type should be well formatted YAML.
  *
  * A struct is a dictionary containing one key named after the struct tag 
- * which contains a dictionary of member-value mappings.
+ * which contains a dictionary of member-value mappings. The struct member
+ * keys are the field names (not the types).
  *
  * Enum values are currently just bare strings.
  * OR-able flags are a list of the values, ie: [ VAL1, VAL2 ]
  *
  * YAML does not contain tabs.
  * Indentation delineates lists and dictionaries (or they can be inline).
+ *
+ * Printing functions are generally named after this pattern:
+ *
+ * struct fi_info : fi_tostr_info(..., struct fi_info, ...)
+ * fi_info->caps  : fi_tostr_caps(..., typeof(caps), ...)
  */
 
 #define FI_BUFSIZ 8192
@@ -108,7 +114,7 @@ static void fi_tostr_flags(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_TRIGGER);
 	IFFLAGSTR(flags, FI_FENCE);
 
-	IFFLAGSTR(flags, FI_EVENT);
+	IFFLAGSTR(flags, FI_COMPLETION);
 	IFFLAGSTR(flags, FI_INJECT);
 	IFFLAGSTR(flags, FI_INJECT_COMPLETE);
 	IFFLAGSTR(flags, FI_TRANSMIT_COMPLETE);
@@ -164,6 +170,7 @@ static void fi_tostr_threading(char *buf, enum fi_threading threading)
 
 static void fi_tostr_order(char *buf, uint64_t flags)
 {
+	IFFLAGSTR(flags, FI_ORDER_NONE);
 	IFFLAGSTR(flags, FI_ORDER_RAR);
 	IFFLAGSTR(flags, FI_ORDER_RAW);
 	IFFLAGSTR(flags, FI_ORDER_RAS);
@@ -173,15 +180,18 @@ static void fi_tostr_order(char *buf, uint64_t flags)
 	IFFLAGSTR(flags, FI_ORDER_SAR);
 	IFFLAGSTR(flags, FI_ORDER_SAW);
 	IFFLAGSTR(flags, FI_ORDER_SAS);
+	IFFLAGSTR(flags, FI_ORDER_STRICT);
+	IFFLAGSTR(flags, FI_ORDER_DATA);
 
 	fi_remove_comma(buf);
 }
 
 static void fi_tostr_caps(char *buf, uint64_t caps)
 {
+	IFFLAGSTR(caps, FI_NUMERICHOST);
 	IFFLAGSTR(caps, FI_RMA_EVENT);
-	IFFLAGSTR(caps, FI_NAMED_RX_CTX);
 	IFFLAGSTR(caps, FI_SOURCE);
+	IFFLAGSTR(caps, FI_NAMED_RX_CTX);
 	IFFLAGSTR(caps, FI_DIRECTED_RECV);
 	fi_tostr_flags(buf, caps);
 
@@ -210,6 +220,7 @@ static void fi_tostr_protocol(char *buf, uint32_t protocol)
 	CASEENUMSTR(FI_PROTO_IB_UD);
 	CASEENUMSTR(FI_PROTO_PSMX);
 	CASEENUMSTR(FI_PROTO_UDP);
+	CASEENUMSTR(FI_PROTO_SOCK_TCP);
 	default:
 		if (protocol & FI_PROV_SPECIFIC)
 			strcatf(buf, "Provider specific");
@@ -222,10 +233,10 @@ static void fi_tostr_protocol(char *buf, uint32_t protocol)
 static void fi_tostr_mode(char *buf, uint64_t mode)
 {
 	IFFLAGSTR(mode, FI_CONTEXT);
-	IFFLAGSTR(mode, FI_LOCAL_MR);
 	IFFLAGSTR(mode, FI_MSG_PREFIX);
 	IFFLAGSTR(mode, FI_ASYNC_IOV);
 	IFFLAGSTR(mode, FI_RX_CQ_DATA);
+	IFFLAGSTR(mode, FI_LOCAL_MR);
 
 	fi_remove_comma(buf);
 }
@@ -283,6 +294,10 @@ static void fi_tostr_tx_attr(char *buf, const struct fi_tx_attr *attr,
 	fi_tostr_caps(buf, attr->caps);
 	strcatf(buf, " ]\n");
 
+	strcatf(buf, "%s%smode: [ ", prefix, TAB);
+	fi_tostr_mode(buf, attr->mode);
+	strcatf(buf, " ]\n");
+
 	strcatf(buf, "%s%sop_flags: [ ", prefix, TAB);
 	fi_tostr_flags(buf, attr->op_flags);
 	strcatf(buf, " ]\n");
@@ -291,9 +306,14 @@ static void fi_tostr_tx_attr(char *buf, const struct fi_tx_attr *attr,
 	fi_tostr_order(buf, attr->msg_order);
 	strcatf(buf, " ]\n");
 
+	strcatf(buf, "%s%scomp_order: [ ", prefix, TAB);
+	fi_tostr_order(buf, attr->comp_order);
+	strcatf(buf, " ]\n");
+
 	strcatf(buf, "%s%sinject_size: %zd\n", prefix, TAB, attr->inject_size);
 	strcatf(buf, "%s%ssize: %zd\n", prefix, TAB, attr->size);
 	strcatf(buf, "%s%siov_limit: %zd\n", prefix, TAB, attr->iov_limit);
+	strcatf(buf, "%s%srma_iov_limit: %zd\n", prefix, TAB, attr->rma_iov_limit);
 }
 
 static void fi_tostr_rx_attr(char *buf, const struct fi_rx_attr *attr,
@@ -309,12 +329,20 @@ static void fi_tostr_rx_attr(char *buf, const struct fi_rx_attr *attr,
 	fi_tostr_caps(buf, attr->caps);
 	strcatf(buf, " ]\n");
 
+	strcatf(buf, "%s%smode: [ ", prefix, TAB);
+	fi_tostr_mode(buf, attr->mode);
+	strcatf(buf, " ]\n");
+
 	strcatf(buf, "%s%sop_flags: [ ", prefix, TAB);
 	fi_tostr_flags(buf, attr->op_flags);
 	strcatf(buf, " ]\n");
 
 	strcatf(buf, "%s%smsg_order: [ ", prefix, TAB);
 	fi_tostr_order(buf, attr->msg_order);
+	strcatf(buf, " ]\n");
+
+	strcatf(buf, "%s%scomp_order: [ ", prefix, TAB);
+	fi_tostr_order(buf, attr->comp_order);
 	strcatf(buf, " ]\n");
 
 	strcatf(buf, "%s%stotal_buffered_recv: %zd\n", prefix, TAB, attr->total_buffered_recv);
@@ -330,13 +358,15 @@ static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const cha
 	}
 
 	strcatf(buf, "%sfi_ep_attr:\n", prefix);
-	strcatf(buf, "%s%sep_type: ", prefix, TAB);
+	strcatf(buf, "%s%stype: ", prefix, TAB);
 	fi_tostr_ep_type(buf, attr->type);
 	strcatf(buf, "\n");
 	strcatf(buf, "%s%sprotocol: ", prefix, TAB);
 	fi_tostr_protocol(buf, attr->protocol);
 	strcatf(buf, "\n");
+	strcatf(buf, "%s%sprotocol_version: %d\n", prefix, TAB, attr->protocol_version);
 	strcatf(buf, "%s%smax_msg_size: %zd\n", prefix, TAB, attr->max_msg_size);
+	strcatf(buf, "%s%smsg_prefix_size: %zd\n", prefix, TAB, attr->msg_prefix_size);
 	strcatf(buf, "%s%smax_order_raw_size: %zd\n", prefix, TAB, attr->max_order_raw_size);
 	strcatf(buf, "%s%smax_order_war_size: %zd\n", prefix, TAB, attr->max_order_war_size);
 	strcatf(buf, "%s%smax_order_waw_size: %zd\n", prefix, TAB, attr->max_order_waw_size);
@@ -370,6 +400,18 @@ static void fi_tostr_av_type(char *buf, enum fi_av_type type)
 	}
 }
 
+static void fi_tostr_mr_mode(char *buf, enum fi_mr_mode type)
+{
+	switch (type) {
+	CASEENUMSTR(FI_MR_UNSPEC);
+	CASEENUMSTR(FI_MR_BASIC);
+	CASEENUMSTR(FI_MR_SCALABLE);
+	default:
+		strcatf(buf, "Unknown");
+		break;
+	}
+}
+
 static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 				 const char *prefix)
 {
@@ -379,6 +421,9 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	}
 
 	strcatf(buf, "%sfi_domain_attr:\n", prefix);
+
+	strcatf(buf, "%s%sdomain: 0x%x\n", prefix, TAB, attr->domain);
+
 	strcatf(buf, "%s%sname: %s\n", prefix, TAB, attr->name);
 	strcatf(buf, "%s%sthreading: ", prefix, TAB);
 	fi_tostr_threading(buf, attr->threading);
@@ -396,14 +441,20 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcatf(buf, "%s%sav_type: ", prefix, TAB);
 	fi_tostr_av_type(buf, attr->av_type);
 	strcatf(buf, "\n");
+	strcatf(buf, "%s%smr_mode: ", prefix, TAB);
+	fi_tostr_mr_mode(buf, attr->mr_mode);
+	strcatf(buf, "\n");
 
 	strcatf(buf, "%s%smr_key_size: %zd\n", prefix, TAB, attr->mr_key_size);
 	strcatf(buf, "%s%scq_data_size: %zd\n", prefix, TAB, attr->cq_data_size);
+	strcatf(buf, "%s%scq_cnt: %zd\n", prefix, TAB, attr->cq_cnt);
 	strcatf(buf, "%s%sep_cnt: %zd\n", prefix, TAB, attr->ep_cnt);
 	strcatf(buf, "%s%stx_ctx_cnt: %zd\n", prefix, TAB, attr->tx_ctx_cnt);
 	strcatf(buf, "%s%srx_ctx_cnt: %zd\n", prefix, TAB, attr->rx_ctx_cnt);
 	strcatf(buf, "%s%smax_ep_tx_ctx: %zd\n", prefix, TAB, attr->max_ep_tx_ctx);
 	strcatf(buf, "%s%smax_ep_rx_ctx: %zd\n", prefix, TAB, attr->max_ep_rx_ctx);
+	strcatf(buf, "%s%smax_ep_stx_ctx: %zd\n", prefix, TAB, attr->max_ep_stx_ctx);
+	strcatf(buf, "%s%smax_ep_srx_ctx: %zd\n", prefix, TAB, attr->max_ep_srx_ctx);
 }
 
 static void fi_tostr_fabric_attr(char *buf, const struct fi_fabric_attr *attr,
@@ -432,7 +483,7 @@ static void fi_tostr_info(char *buf, const struct fi_info *info)
 	fi_tostr_mode(buf, info->mode);
 	strcatf(buf, " ]\n");
 
-	strcatf(buf, "%sfi_addr_format: ", TAB);
+	strcatf(buf, "%saddr_format: ", TAB);
 	fi_tostr_addr_format(buf, info->addr_format);
 	strcatf(buf, "\n");
 
