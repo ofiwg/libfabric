@@ -122,6 +122,7 @@ int ft_finalize(struct fid_ep *tx_ep, struct fid_cq *scq, struct fid_cq *rcq,
 int wait_for_data_completion(struct fid_cq *cq, int num_completions);
 int wait_for_completion(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, char *cq_str);
+void eq_readerr(struct fid_eq *eq, char *eq_str);
 
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a, 
 		enum precision p);
@@ -135,6 +136,21 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 
 #define FT_ERR(fmt, ...) \
 	do { fprintf(stderr, "%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__); } while (0)
+
+#define FT_PROCESS_QUEUE_ERR(readerr, rd, queue, fn, str)	\
+	do {							\
+		if (rd == -FI_EAVAIL) {				\
+			readerr(queue, fn " " str);		\
+		} else {					\
+			FT_PRINTERR(fn, rd);			\
+		}						\
+	} while (0)
+
+#define FT_PROCESS_EQ_ERR(rd, eq, fn, str) \
+	FT_PROCESS_QUEUE_ERR(eq_readerr, rd, eq, fn, str)
+
+#define FT_PROCESS_CQ_ERR(rd, cq, fn, str) \
+	FT_PROCESS_QUEUE_ERR(cq_readerr, rd, cq, fn, str)
 
 #define FT_PRINT_OPTS_USAGE(opt, desc) fprintf(stderr, " %-20s %s\n", opt, desc)
 
