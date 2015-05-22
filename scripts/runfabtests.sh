@@ -7,6 +7,7 @@ declare PROV
 declare TEST_TYPE="quick"
 declare SERVER
 declare CLIENT
+declare EXCLUDE
 declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
 
@@ -153,6 +154,16 @@ function compute_duration {
 	perl -e "printf \"%.6f\n\", ($e - $s)"
 }
 
+function is_excluded {
+    local e=$(echo $EXCLUDE | sed -e s/$1//)
+    if [[ "$EXCLUDE" != "$e" ]]; then
+        echo 1
+    else
+        echo 0
+    fi
+    return
+}
+
 function unit_test {
 	local test=$1
 	local ret1=0
@@ -161,6 +172,13 @@ function unit_test {
 	local start_time
 	local end_time
 	local test_time
+
+	local e=$(is_excluded $test)
+	if [ $e -eq 1 ]; then
+		print_results "$test_exe" "Notrun" "0" "" ""
+		skip_count+=1
+		return
+	fi
 
 	start_time=$(date '+%s.%N')
 
@@ -196,6 +214,13 @@ function cs_test {
 	local start_time
 	local end_time
 	local test_time
+
+	local e=$(is_excluded $test)
+	if [ $e -eq 1 ]; then
+		print_results "$test_exe" "Notrun" "0" "" ""
+		skip_count+=1
+		return
+	fi
 
 	start_time=$(date '+%s.%N')
 
@@ -302,11 +327,12 @@ function usage {
 	errcho -e " -vv\tprint output of failing/notrun"
 	errcho -e " -vvv\tprint output of failing/notrun/passing"
 	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short (default quick)"
+	errcho -e " -e\texclude tests: cq_data,dgram_dgram_waitset,..."
 	errcho -e " -p\tpath to test bins (default PATH)"
 	exit 1
 }
 
-while getopts ":vt:p:g:" opt; do
+while getopts ":vt:p:g:e:" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -315,6 +341,8 @@ case ${opt} in
 	p) BIN_PATH="PATH=${OPTARG}:${PATH}"
 	;;
 	g) GOOD_ADDR=${OPTARG}
+	;;
+	e) EXCLUDE=${OPTARG}
 	;;
 	:|\?) usage
 	;;
