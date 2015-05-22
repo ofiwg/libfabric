@@ -232,7 +232,7 @@ function cs_test {
 
 function main {
 	if [[ $1 == "quick" ]]; then
-		local -r tests=$(echo $1 | sed 's/quick/unit,simple,short/g' | tr ',' ' ')
+		local -r tests="unit simple short"
 	else
 		local -r tests=$(echo $1 | sed 's/all/unit,simple,standard/g' | tr ',' ' ')
 	fi
