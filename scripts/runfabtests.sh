@@ -77,7 +77,7 @@ standard_tests=(
 unit_tests=(
 	"av_test -d GOOD_ADDR -n 1 -s SERVER_ADDR"
 	"dom_test -n 2"
-	"eq_test"	
+	"eq_test"
 	"size_left_test"
 	"info"
 )
@@ -230,7 +230,7 @@ function cs_test {
 	fi
 }
 
-function main {	
+function main {
 	if [[ $1 == "quick" ]]; then
 		local -r tests=$(echo $1 | sed 's/quick/unit,simple,short/g' | tr ',' ' ')
 	else
