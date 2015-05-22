@@ -42,6 +42,11 @@
 #include <stdint.h>
 #include <net/if.h>
 
+#define FI_USNIC_SKIP_HWALLOC	(1ULL << 60) 	/* Flag to indicate not allocating
+						 * hardware resource for fi_domain
+						 * used in fi_info->caps field
+						 */
+
 #define FI_PROTO_RUDP 100
 
 #define FI_EXT_USNIC_INFO_VERSION 1

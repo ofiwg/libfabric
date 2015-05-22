@@ -295,6 +295,9 @@ usdf_fill_info_dgram(
 			goto fail;
 		}
 
+		/* Check if skipping hardware allocation is required */
+		fi->caps |= (hints->caps & FI_USNIC_SKIP_HWALLOC);
+
 		/* app must support these modes */
 		if ((hints->mode & USDF_DGRAM_REQ_MODE) != USDF_DGRAM_REQ_MODE) {
 			ret = -FI_ENODATA;
@@ -459,6 +462,9 @@ usdf_fill_info_msg(
 			goto fail;
 		}
 
+		/* Check if skipping hardware allocation is required */
+		fi->caps |= (hints->caps & FI_USNIC_SKIP_HWALLOC);
+
 		/* app must support these modes */
 		if ((hints->mode & USDF_MSG_REQ_MODE) != USDF_MSG_REQ_MODE) {
 			ret = -FI_ENODATA;
@@ -564,6 +570,9 @@ usdf_fill_info_rdm(
 			ret = -FI_ENODATA;
 			goto fail;
 		}
+
+		/* Check if skipping hardware allocation is required */
+		fi->caps |= (hints->caps & FI_USNIC_SKIP_HWALLOC);
 
 		/* app must support these modes */
 		if ((hints->mode & USDF_RDM_REQ_MODE) != USDF_RDM_REQ_MODE) {

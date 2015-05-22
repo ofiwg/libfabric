@@ -308,7 +308,7 @@ usd_open(
     const char *dev_name,
     struct usd_device **dev_o)
 {
-    return usd_open_with_fd(dev_name, -1, 1, dev_o);
+    return usd_open_with_fd(dev_name, -1, 1, 1, dev_o);
 }
 
 /*
@@ -319,7 +319,7 @@ usd_open_for_attrs(
     const char *dev_name,
     struct usd_device **dev_o)
 {
-    return usd_open_with_fd(dev_name, -1, 0, dev_o);
+    return usd_open_with_fd(dev_name, -1, 0, 0, dev_o);
 }
 
 /*
@@ -330,6 +330,7 @@ usd_open_with_fd(
     const char *dev_name,
     int cmd_fd,
     int check_ready,
+    int alloc_vf,
     struct usd_device **dev_o)
 {
     struct usd_ib_dev *idp;
@@ -390,9 +391,12 @@ usd_open_with_fd(
     if (ret != 0) {
         goto out;
     }
-    ret = usd_ib_cmd_alloc_pd(dev, &dev->ud_pd_handle);
-    if (ret != 0) {
-        goto out;
+
+    if (alloc_vf) {
+        ret = usd_ib_cmd_alloc_pd(dev, &dev->ud_pd_handle);
+        if (ret != 0) {
+            goto out;
+        }
     }
 
     ret = usd_discover_device_attrs(dev, dev_name);

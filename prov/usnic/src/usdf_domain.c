@@ -373,7 +373,12 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	USDF_TRACE_SYS(DOMAIN, "\n");
 
 	fp = fab_fidtou(fabric);
-	ret = usd_open(fp->fab_dev_attrs->uda_devname, &dom_dev);
+
+	if ((info->caps & FI_USNIC_SKIP_HWALLOC) == 0)
+		ret = usd_open(fp->fab_dev_attrs->uda_devname, &dom_dev);
+	else
+		ret = usd_open_for_attrs(fp->fab_dev_attrs->uda_devname,
+						&dom_dev);
 	if (ret != 0) {
 		return ret;
 	}

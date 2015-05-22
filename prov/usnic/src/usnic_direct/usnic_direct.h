@@ -685,7 +685,7 @@ const char *usd_capability(enum usd_capability cap);
 
 /* open, but use caller's fd for commands */
 int usd_open_with_fd(const char *devname, int cmd_fd, int check_ready,
-        struct usd_device **dev_o);
+        int alloc_pd, struct usd_device **dev_o);
 
 /* modify the destination UDP port in a usd_dest */
 void usd_dest_set_udp_ports(struct usd_dest *dest, struct usd_qp *src_qp,
