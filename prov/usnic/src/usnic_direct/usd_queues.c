@@ -222,7 +222,8 @@ usd_map_vf(
                 goto out;
         }
 
-        ret = vnic_dev_cmd_init(vf->vf_vdev, 1);
+        /* ret = vnic_dev_cmd_init(vf->vf_vdev, 1); */
+	ret = vnic_dev_init_devcmdorig(vf->vf_vdev);
         if (ret)
             goto out;
 
