@@ -173,12 +173,12 @@ function unit_test {
 	end_time=$(date '+%s.%N')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
-	if [ "$ret1" == "61" ]; then
+	if [ $ret1 -eq 61 ]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp"
 		skip_count+=1
-	elif [ "$ret1" != "0" ]; then
+	elif [ $ret1 -ne 0 ]; then
 		print_results "$test_exe" "Fail" "$test_time" "$s_outp"
-		if [ $ret1 == 124 ]; then
+		if [ $ret1 -eq 124 ]; then
 			cleanup
 		fi
 		fail_count+=1
@@ -215,12 +215,12 @@ function cs_test {
 	end_time=$(date '+%s.%N')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
-	if [ "$ret1" == "61" -a "$ret2" == "61" ]; then
+	if [ $ret1 -eq 61 -a $ret2 -eq 61 ]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$c_outp"
 		skip_count+=1
-	elif [ "$ret1" != "0" -o "$ret2" != "0" ]; then
+	elif [ $ret1 -ne 0 -o $ret2 -ne 0 ]; then
 		print_results "$test_exe" "Fail" "$test_time" "$s_outp" "$c_outp"
-		if [ $ret1 == 124 -o $ret2 == 124 ]; then
+		if [ $ret1 -eq 124 -o $ret2 -eq 124 ]; then
 			cleanup
 		fi
 		fail_count+=1
@@ -325,7 +325,7 @@ done
 # shift past options
 shift $((OPTIND-1))
 
-if [[ "$#" != "3" ]]; then
+if [[ $# -ne 3 ]]; then
 	usage
 fi
 
