@@ -170,11 +170,11 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
 	int rc = 0;
-	int rd = 0;
+	ssize_t rd;
 
 	rd = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PRINTERR("fi_eq_sread", rd);
+		FT_PROCESS_EQ_ERR(rd, ctx->eq, "fi_eq_sread", "listen");
 		goto err;
 	}
 
@@ -228,7 +228,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 
 	rd = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PRINTERR("fi_eq_sread", rd);
+		FT_PROCESS_EQ_ERR(rd, ctx->eq, "fi_eq_sread", "accept");
 		goto err;
 	}
 
@@ -251,6 +251,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
 	int rc = 0;
+	ssize_t rd;
 
 	/* Open domain */
 	rc = fi_domain(ctx->fabric, ctx->info, &ctx->dom, NULL);
@@ -303,9 +304,9 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 		goto err;
 	}
 
-	rc = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
-	if (rc != sizeof entry) {
-		FT_PRINTERR("fi_eq_sread", rc);
+	rd = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
+	if (rd != sizeof entry) {
+		FT_PROCESS_EQ_ERR(rd, ctx->eq, "fi_eq_sread", "connect");
 		goto err;
 	}
 

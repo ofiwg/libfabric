@@ -227,7 +227,7 @@ static int server_connect(void)
 	/* Wait for connection request from client */
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PRINTERR("fi_eq_sread", rd);
+		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "listen");
 		return (int) rd;
 	}
 
@@ -262,7 +262,8 @@ static int server_connect(void)
 	/* Wait for the connection to be established */
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PRINTERR("fi_eq_sread", rd);
+		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "accept");
+		ret = (int) rd;
 		goto err3;
 	}
 
@@ -334,8 +335,9 @@ static int client_connect(void)
 	/* Wait for the connection to be established */
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PRINTERR("fi_eq_sread", rd);
-		return (int) rd;
+		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "connect");
+		ret = (int) rd;
+		goto err6;
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {

@@ -245,11 +245,33 @@ void cq_readerr(struct fid_cq *cq, char *cq_str)
 	int ret;
 
 	ret = fi_cq_readerr(cq, &cq_err, 0);
-	if (ret < 0)
+	if (ret < 0) {
 		FT_PRINTERR("fi_cq_readerr", ret);
+	} else {
+		err_str = fi_cq_strerror(cq, cq_err.prov_errno, cq_err.err_data, NULL, 0);
+		fprintf(stderr, "%s: %d %s\n", cq_str, cq_err.err,
+				fi_strerror(cq_err.err));
+		fprintf(stderr, "%s: prov_err: %s (%d)\n", cq_str, err_str,
+				cq_err.prov_errno);
+	}
+}
 
-	err_str = fi_cq_strerror(cq, cq_err.prov_errno, cq_err.err_data, NULL, 0);
-	fprintf(stderr, "%s %s (%d)\n", cq_str, err_str, cq_err.prov_errno);
+void eq_readerr(struct fid_eq *eq, char *eq_str)
+{
+	struct fi_eq_err_entry eq_err;
+	const char *err_str;
+	int rd;
+
+	rd = fi_eq_readerr(eq, &eq_err, 0);
+	if (rd != sizeof(eq_err)) {
+		FT_PRINTERR("fi_eq_readerr", rd);
+	} else {
+		err_str = fi_eq_strerror(eq, eq_err.prov_errno, eq_err.err_data, NULL, 0);
+		fprintf(stderr, "%s: %d %s\n", eq_str, eq_err.err,
+				fi_strerror(eq_err.err));
+		fprintf(stderr, "%s: prov_err: %s (%d)\n", eq_str, err_str,
+				eq_err.prov_errno);
+	}
 }
 
 int ft_finalize(struct fid_ep *tx_ep, struct fid_cq *scq, struct fid_cq *rcq,

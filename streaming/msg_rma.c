@@ -445,7 +445,7 @@ static int server_connect(void)
 
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PRINTERR("fi_eq_sread", rd);
+		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "listen");
 		return (int) rd;
 	}
 
@@ -485,10 +485,11 @@ static int server_connect(void)
 	}
 
 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
- 	if (rd != sizeof entry) {
-		FT_PRINTERR("fi_eq_sread", rd);
+	if (rd != sizeof entry) {
+		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "accept");
+		ret = (int) rd;
 		goto err3;
- 	}
+	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
 		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
@@ -496,7 +497,7 @@ static int server_connect(void)
  		ret = -FI_EOTHER;
  		goto err3;
  	}
- 
+
  	fi_freeinfo(info);
  	return 0;
 
@@ -551,31 +552,32 @@ static int client_connect(void)
 
 	ret = bind_ep_res();
 	if (ret)
-		goto err5;
+		goto err4;
 
 	ret = fi_connect(ep, fi->dest_addr, NULL, 0);
 	if (ret) {
 		FT_PRINTERR("fi_connect", ret);
-		goto err5;
+		goto err4;
 	}
 
  	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PRINTERR("fi_eq_sread", rd);
-		return (int) rd;
+		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "connect");
+		ret = (int) rd;
+		goto err4;
 	}
 
  	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
  		fprintf(stderr, "Unexpected CM event %d fid %p (ep %p)\n",
  			event, entry.fid, ep);
  		ret = -FI_EOTHER;
- 		goto err1;
+		goto err4;
  	}
 
 	fi_freeinfo(fi);
 	return 0;
 
-err5:
+err4:
 	free_ep_res();
 err3:
 	fi_close(&dom->fid);
