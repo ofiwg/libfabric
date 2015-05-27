@@ -7,6 +7,7 @@ declare PROV
 declare TEST_TYPE="quick"
 declare SERVER
 declare CLIENT
+declare EXCLUDE
 declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
 
@@ -77,7 +78,7 @@ standard_tests=(
 unit_tests=(
 	"av_test -d GOOD_ADDR -n 1 -s SERVER_ADDR"
 	"dom_test -n 2"
-	"eq_test"	
+	"eq_test"
 	"size_left_test"
 	"info"
 )
@@ -153,6 +154,16 @@ function compute_duration {
 	perl -e "printf \"%.6f\n\", ($e - $s)"
 }
 
+function is_excluded {
+    local e=$(echo $EXCLUDE | sed -e s/$1//)
+    if [[ "$EXCLUDE" != "$e" ]]; then
+        echo 1
+    else
+        echo 0
+    fi
+    return
+}
+
 function unit_test {
 	local test=$1
 	local ret1=0
@@ -161,6 +172,13 @@ function unit_test {
 	local start_time
 	local end_time
 	local test_time
+
+	local e=$(is_excluded $test)
+	if [ $e -eq 1 ]; then
+		print_results "$test_exe" "Notrun" "0" "" ""
+		skip_count+=1
+		return
+	fi
 
 	start_time=$(date '+%s.%N')
 
@@ -173,12 +191,12 @@ function unit_test {
 	end_time=$(date '+%s.%N')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
-	if [ "$ret1" == "61" ]; then
+	if [ $ret1 -eq 61 ]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp"
 		skip_count+=1
-	elif [ "$ret1" != "0" ]; then
+	elif [ $ret1 -ne 0 ]; then
 		print_results "$test_exe" "Fail" "$test_time" "$s_outp"
-		if [ $ret1 == 124 ]; then
+		if [ $ret1 -eq 124 ]; then
 			cleanup
 		fi
 		fail_count+=1
@@ -196,6 +214,13 @@ function cs_test {
 	local start_time
 	local end_time
 	local test_time
+
+	local e=$(is_excluded $test)
+	if [ $e -eq 1 ]; then
+		print_results "$test_exe" "Notrun" "0" "" ""
+		skip_count+=1
+		return
+	fi
 
 	start_time=$(date '+%s.%N')
 
@@ -215,12 +240,12 @@ function cs_test {
 	end_time=$(date '+%s.%N')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
-	if [ "$ret1" == "61" -a "$ret2" == "61" ]; then
+	if [ $ret1 -eq 61 -a $ret2 -eq 61 ]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$c_outp"
 		skip_count+=1
-	elif [ "$ret1" != "0" -o "$ret2" != "0" ]; then
+	elif [ $ret1 -ne 0 -o $ret2 -ne 0 ]; then
 		print_results "$test_exe" "Fail" "$test_time" "$s_outp" "$c_outp"
-		if [ $ret1 == 124 -o $ret2 == 124 ]; then
+		if [ $ret1 -eq 124 -o $ret2 -eq 124 ]; then
 			cleanup
 		fi
 		fail_count+=1
@@ -230,9 +255,9 @@ function cs_test {
 	fi
 }
 
-function main {	
+function main {
 	if [[ $1 == "quick" ]]; then
-		local -r tests=$(echo $1 | sed 's/quick/unit,simple,short/g' | tr ',' ' ')
+		local -r tests="unit simple short"
 	else
 		local -r tests=$(echo $1 | sed 's/all/unit,simple,standard/g' | tr ',' ' ')
 	fi
@@ -302,11 +327,12 @@ function usage {
 	errcho -e " -vv\tprint output of failing/notrun"
 	errcho -e " -vvv\tprint output of failing/notrun/passing"
 	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short (default quick)"
+	errcho -e " -e\texclude tests: cq_data,dgram_dgram_waitset,..."
 	errcho -e " -p\tpath to test bins (default PATH)"
 	exit 1
 }
 
-while getopts ":vt:p:g:" opt; do
+while getopts ":vt:p:g:e:" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -315,6 +341,8 @@ case ${opt} in
 	p) BIN_PATH="PATH=${OPTARG}:${PATH}"
 	;;
 	g) GOOD_ADDR=${OPTARG}
+	;;
+	e) EXCLUDE=${OPTARG}
 	;;
 	:|\?) usage
 	;;
@@ -325,7 +353,7 @@ done
 # shift past options
 shift $((OPTIND-1))
 
-if [[ "$#" != "3" ]]; then
+if [[ $# -ne 3 ]]; then
 	usage
 fi
 
