@@ -832,7 +832,7 @@ static ssize_t psmx_atomic_writemsg(struct fid_ep *ep,
 				const struct fi_msg_atomic *msg,
 				uint64_t flags)
 {
-	if (!msg || msg->iov_count != 1)
+	if (!msg || msg->iov_count != 1 || !msg->msg_iov || !msg->rma_iov)
 		return -FI_EINVAL;
 
 	return _psmx_atomic_write(ep, msg->msg_iov[0].addr,
@@ -1031,18 +1031,18 @@ static ssize_t psmx_atomic_readwritemsg(struct fid_ep *ep,
 	void *buf;
 	size_t count;
 
-	if (!msg)
+	if (!msg || !msg->rma_iov)
 		return -FI_EINVAL;
 
 	if (msg->op == FI_ATOMIC_READ) {
-		if (result_count != 1)
+		if (result_count != 1 || !resultv)
 			return -FI_EINVAL;
 
 		buf = NULL;
 		count = resultv[0].count;
 	}
 	else {
-		if (msg->iov_count != 1)
+		if (msg->iov_count != 1 || !msg->msg_iov)
 			return -FI_EINVAL;
 
 		buf = msg->msg_iov[0].addr;
@@ -1068,7 +1068,7 @@ static ssize_t psmx_atomic_readwritev(struct fid_ep *ep,
 				  enum fi_datatype datatype,
 				  enum fi_op op, void *context)
 {
-	if (!iov || count != 1)
+	if (!iov || count != 1 || !resultv)
 		return -FI_EINVAL;
 
 	return psmx_atomic_readwrite(ep, iov->addr, iov->count,
@@ -1250,7 +1250,7 @@ static ssize_t psmx_atomic_compwritemsg(struct fid_ep *ep,
 				    size_t result_count,
 				    uint64_t flags)
 {
-	if (!msg || msg->iov_count != 1)
+	if (!msg || msg->iov_count != 1 || !msg->msg_iov || !msg->rma_iov || !resultv)
 		return -FI_EINVAL;
 
 	return _psmx_atomic_compwrite(ep, msg->msg_iov[0].addr,
@@ -1279,7 +1279,7 @@ static ssize_t psmx_atomic_compwritev(struct fid_ep *ep,
 				  enum fi_datatype datatype,
 				  enum fi_op op, void *context)
 {
-	if (!iov || count != 1)
+	if (!iov || count != 1 || !comparev || !resultv)
 		return -FI_EINVAL;
 
 	return psmx_atomic_compwrite(ep, iov->addr, iov->count,

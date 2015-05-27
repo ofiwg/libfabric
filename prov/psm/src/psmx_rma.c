@@ -617,7 +617,7 @@ static ssize_t psmx_read(struct fid_ep *ep, void *buf, size_t len,
 static ssize_t psmx_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			uint64_t flags)
 {
-	if (!msg || msg->iov_count != 1)
+	if (!msg || msg->iov_count != 1 || !msg->msg_iov || !msg->rma_iov)
 		return -FI_EINVAL;
 
 	return _psmx_read(ep, msg->msg_iov[0].iov_base,
@@ -837,7 +837,7 @@ static ssize_t psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 static ssize_t psmx_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			 uint64_t flags)
 {
-	if (!msg || msg->iov_count != 1)
+	if (!msg || msg->iov_count != 1 || !msg->msg_iov || !msg->rma_iov)
 		return -FI_EINVAL;
 
 	return _psmx_write(ep, msg->msg_iov[0].iov_base,
