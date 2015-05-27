@@ -43,8 +43,6 @@
 
 static struct ft_set test_sets[] = {
 	{
-		.node = "127.0.0.1",
-		.service = "2224",
 		.prov_name = "sockets",
 		.test_type = {
 			FT_TEST_LATENCY,
@@ -79,8 +77,6 @@ static struct ft_set test_sets[] = {
 		.test_flags = FT_FLAG_QUICKTEST
 	},
 	{
-		.node = "127.0.0.1",
-		.service = "2224",
 		.prov_name = "verbs",
 		.test_type = {
 			FT_TEST_LATENCY,
@@ -272,7 +268,7 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->av_type = set->av_type[series->cur_av];
 	info->comp_type = set->comp_type[series->cur_comp];
 
-	memcpy(info->node, set->node, FI_NAME_MAX);
-	memcpy(info->service, set->service, FI_NAME_MAX);
+	memcpy(info->node, set->node[0] ? set->node : opts.dst_addr, FI_NAME_MAX);
+	memcpy(info->service, set->service[0] ? set->service : opts.dst_port, FI_NAME_MAX);
 	memcpy(info->prov_name, set->prov_name, FI_NAME_MAX);
 }

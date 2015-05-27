@@ -55,6 +55,7 @@ struct ft_info test_info;
 struct fi_info *fabric_info;
 struct ft_xcontrol ft_rx, ft_tx;
 struct ft_control ft;
+struct cs_opts opts;
 
 size_t recv_size, send_size;
 
@@ -442,27 +443,30 @@ static void ft_fw_show_results(void)
 
 static void ft_fw_usage(char *program)
 {
-	printf("usage: %s [server_node]\n", program);
-	printf("\t[-f test_config_file]\n");
-	printf("\t[-p service_port]\n");
-	printf("\t[-x]   exit after test run\n");
-	printf("\t[-y start_test_index]\n");
-	printf("\t[-z end_test_index]\n");
+	fprintf(stderr, "usage: %s [server_node]\n", program);
+	fprintf(stderr, "\nOptions:\n");
+	FT_PRINT_OPTS_USAGE("-f <test_config_file>", "");
+	FT_PRINT_OPTS_USAGE("-q <service_port>", "Management port for test");
+	FT_PRINT_OPTS_USAGE("-p <dst_port>", "destination port number");
+	FT_PRINT_OPTS_USAGE("-x", "exit after test run");
+	FT_PRINT_OPTS_USAGE("-y <start_test_index>", "");
+	FT_PRINT_OPTS_USAGE("-z <end_test_index>", "");
+	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 }
 
 int main(int argc, char **argv)
 {
-	char *node;
 	char *service = "2710";
 	char *filename = NULL;
+	opts = INIT_OPTS;
 	int ret, op;
 
-	while ((op = getopt(argc, argv, "f:p:xy:z:")) != -1) {
+	while ((op = getopt(argc, argv, "f:q:p:xy:z:")) != -1) {
 		switch (op) {
 		case 'f':
 			filename = optarg;
 			break;
-		case 'p':
+		case 'q':
 			service = optarg;
 			break;
 		case 'x':
@@ -475,6 +479,9 @@ int main(int argc, char **argv)
 			test_end_index = atoi(optarg);
 			break;
 		default:
+			ft_parse_addr_opts(op, optarg, &opts);
+		case '?':
+		case 'h':
 			ft_fw_usage(argv[0]);
 			exit(1);
 		}
@@ -485,14 +492,14 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	node = (optind == argc - 1) ? argv[optind] : NULL;
+	opts.dst_addr = (optind == argc - 1) ? argv[optind] : NULL;
 
-	if (node) {
+	if (opts.dst_addr) {
 		series = fts_load(filename);
 		if (!series)
 			exit(1);
 
-		ret = ft_fw_connect(node, service);
+		ret = ft_fw_connect(opts.dst_addr, service);
 		if (ret)
 			goto out;
 
@@ -521,7 +528,7 @@ int main(int argc, char **argv)
 
 	ft_fw_show_results();
 out:
-	if (node)
+	if (opts.dst_addr)
 		fts_close(series);
 	return ret;
 }
