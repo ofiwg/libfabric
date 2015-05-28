@@ -1142,7 +1142,7 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe, struct sock_rx_ctx *rx_
 	pe_entry->mr_checked = 1;
 
 	/* src data */
-	if (pe_entry->pe.rx.rx_op.src_iov_len) {
+	if (pe_entry->pe.rx.rx_op.atomic.op != FI_ATOMIC_READ && pe_entry->pe.rx.rx_op.src_iov_len) {
 		if (sock_pe_recv_field(pe_entry, &pe_entry->pe.rx.atomic_src[0], 
 				       entry_len, len))
 			return 0;
@@ -1705,11 +1705,15 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 		len += pe_entry->pe.tx.tx_op.src_iov_len;
 	} else {
 		for (i=0; i < pe_entry->pe.tx.tx_op.src_iov_len; i++) {
-			if (sock_pe_send_field(pe_entry,
+			if (pe_entry->pe.tx.tx_op.atomic.op != FI_ATOMIC_READ) {	
+				if (sock_pe_send_field(pe_entry,
 				    (void *) (uintptr_t) pe_entry->pe.tx.tx_iov[i].src.ioc.addr,
 				    pe_entry->pe.tx.tx_iov[i].src.ioc.count * 
 				    datatype_sz, len))
-				return 0;
+					return 0;
+			} else {
+				pe_entry->done_len += pe_entry->pe.tx.tx_iov[i].src.ioc.count * datatype_sz;
+			}
 			len += (pe_entry->pe.tx.tx_iov[i].src.ioc.count * datatype_sz);
 		}
 	}
