@@ -390,8 +390,14 @@ static ssize_t sock_ep_atomic_readwrite(struct fid_ep *ep,
 	struct fi_ioc msg_iov;
 	struct fi_rma_ioc rma_iov;
 	struct fi_ioc resultv;
+	
+	if (!buf && op != FI_ATOMIC_READ)
+		return -FI_EINVAL;
+	if(op == FI_ATOMIC_READ)
+		msg_iov.addr = NULL;
+	else
+		msg_iov.addr = (void *)buf;
 
-	msg_iov.addr = (void *)buf;
 	msg_iov.count = count;
 	msg.msg_iov = &msg_iov;
 
