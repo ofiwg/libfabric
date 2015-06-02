@@ -154,8 +154,9 @@ fi_inject function behaves as if the FI_INJECT transfer flag were
 set, and FI_COMPLETION were not.  That is, the data buffer is
 available for reuse immediately on returning from from fi_inject, and
 no completion event will be generated for this send.  The completion
-event will be suppressed even if the endpoint has not been configured
-with FI_COMPLETION.  See the flags discussion below for more details.
+event will be suppressed even if the CQ was bound without
+FI_SELECTIVE_COMPLETION or the endpoint's op_flags contain
+FI_COMPLETION.  See the flags discussion below for more details.
 
 ## fi_senddata
 
