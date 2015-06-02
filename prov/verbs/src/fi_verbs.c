@@ -1708,7 +1708,7 @@ fi_ibv_msg_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 	wr.next = NULL;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
-	wr.send_flags = IBV_SEND_FENCE; 
+	wr.send_flags = IBV_SEND_FENCE;
 	if (VERBS_INJECT(_ep, sizeof(uint64_t)))
 		wr.send_flags |= IBV_SEND_INLINE;
 	if (VERBS_COMP(_ep))
@@ -1787,7 +1787,7 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 	wr.next = NULL;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
-	wr.send_flags = IBV_SEND_FENCE; 
+	wr.send_flags = IBV_SEND_FENCE;
 	if (VERBS_INJECT_FLAGS(_ep, sizeof(uint64_t), flags))
 		wr.send_flags |= IBV_SEND_INLINE;
 	if (VERBS_COMP_FLAGS(_ep, flags))
@@ -1845,7 +1845,7 @@ fi_ibv_msg_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 	wr.next = NULL;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
-	wr.send_flags = IBV_SEND_FENCE; 
+	wr.send_flags = IBV_SEND_FENCE;
 	if (VERBS_INJECT(_ep, sizeof(uint64_t)))
 		wr.send_flags |= IBV_SEND_INLINE;
 	if (VERBS_COMP(_ep))
@@ -1923,7 +1923,7 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 	wr.next = NULL;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
-	wr.send_flags = IBV_SEND_FENCE; 
+	wr.send_flags = IBV_SEND_FENCE;
 	if (VERBS_INJECT_FLAGS(_ep, sizeof(uint64_t), flags))
 		wr.send_flags |= IBV_SEND_INLINE;
 	if (VERBS_COMP_FLAGS(_ep, flags))
@@ -2973,6 +2973,13 @@ static int fi_ibv_cq_close(fid_t fid)
 		ret = ibv_destroy_cq(cq->cq);
 		if (ret)
 			return -ret;
+	}
+
+	if (cq->signal_fd[0]) {
+		close(cq->signal_fd[0]);
+	}
+	if (cq->signal_fd[1]) {
+		close(cq->signal_fd[1]);
 	}
 
 	if (cq->channel)
