@@ -521,10 +521,10 @@ static int run(void)
 		if (ret)
 			goto out;
 	}
-	
+
 	while (credits < max_credits)
 		poll_all_sends();
-	
+
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	free_ep_res();
