@@ -488,7 +488,7 @@ err:
 
 static int run(void)
 {
-	int i, ret = 0;
+	int i, ret = 0, ret2;
 
 	ret = opts.dst_addr ? client_connect() : server_connect();
 	if (ret)
@@ -517,17 +517,17 @@ static int run(void)
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	free_ep_res();
-	ret = fi_close(&av->fid);
-	if (ret != 0) {
-		FT_PRINTERR("fi_close", ret);
+	ret2 = fi_close(&av->fid);
+	if (ret2 != 0) {
+		FT_PRINTERR("fi_close", ret2);
 	}
-	ret = fi_close(&dom->fid);
-	if (ret != 0) {
-		FT_PRINTERR("fi_close", ret);
+	ret2 = fi_close(&dom->fid);
+	if (ret2 != 0) {
+		FT_PRINTERR("fi_close", ret2);
 	}
-	ret = fi_close(&fab->fid);
-	if (ret != 0) {
-		FT_PRINTERR("fi_close", ret);
+	ret2 = fi_close(&fab->fid);
+	if (ret2 != 0) {
+		FT_PRINTERR("fi_close", ret2);
 	}
 
 	return ret;
