@@ -101,7 +101,7 @@ struct sock_conn *sock_av_lookup_addr(struct sock_ep *ep,
 				      struct sock_av *av, 
 				      fi_addr_t addr)
 {
-	int idx;
+	int idx, ret;
 	int index = ((uint64_t)addr & av->mask);
 	struct sock_av_addr *av_addr;
 
@@ -120,13 +120,13 @@ struct sock_conn *sock_av_lookup_addr(struct sock_ep *ep,
 	av_addr = idm_lookup(&av->addr_idm, index);
 	idx = av_addr - &av->table[0];
 	if (!av->key[idx]) {
-		av->key[idx] = sock_conn_map_match_or_connect(
+		ret = sock_conn_map_match_or_connect(
 			ep, av->domain, av->cmap, 
-			(struct sockaddr_in*)&av_addr->addr);
-		if (!av->key[idx]) {
+			(struct sockaddr_in*)&av_addr->addr,
+			&av->key[idx]);
+		if (ret) {
 			SOCK_LOG_ERROR("failed to match or connect to addr %"
 					PRIu64 "\n", addr);
-			errno = EINVAL;
 			return NULL;
 		}
 	}
@@ -269,7 +269,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 
 		av_addr = &_av->table[_av->table_hdr->stored];		
 		memcpy(sa_ip, inet_ntoa((&addr[i])->sin_addr), INET_ADDRSTRLEN);
-		SOCK_LOG_INFO("AV-INSERT:src_addr: family: %d, IP is %s, port: %d\n",
+		SOCK_LOG_INFO("AV-INSERT:dst_addr: family: %d, IP is %s, port: %d\n",
 			      ((struct sockaddr_in*)&addr[i])->sin_family, sa_ip,
 			      ntohs(((struct sockaddr_in*)&addr[i])->sin_port));
 		
