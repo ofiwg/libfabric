@@ -452,6 +452,7 @@ static ssize_t sock_rx_ctx_cancel(struct sock_rx_ctx *rx_ctx, void *context)
 	struct dlist_entry *entry;
 	ssize_t ret = -FI_ENOENT;
 	struct sock_rx_entry *rx_entry;
+	struct sock_pe_entry pe_entry;
 
 	fastlock_acquire(&rx_ctx->lock);
 	for (entry = rx_ctx->rx_entry_list.next;
@@ -462,6 +463,25 @@ static ssize_t sock_rx_ctx_cancel(struct sock_rx_ctx *rx_ctx, void *context)
 			continue;
 		
 		if ((uintptr_t) context == rx_entry->context) {
+			if (rx_ctx->comp.recv_cq) {
+				memset(&pe_entry, 0, sizeof (pe_entry));
+				pe_entry.comp = &rx_ctx->comp;
+				pe_entry.tag = rx_entry->tag;
+				pe_entry.context = rx_entry->context;
+				pe_entry.flags = (FI_MSG | FI_RECV);
+				if (rx_entry->is_tagged)
+					pe_entry.flags |= FI_TAGGED;
+				
+				if (!sock_cq_report_error(pe_entry.comp->recv_cq, 
+							  &pe_entry, 0, FI_ECANCELED, 
+							  -FI_ECANCELED, NULL)) {
+					SOCK_LOG_ERROR("failed to report error\n");
+				}
+			}
+			
+			if (rx_ctx->comp.recv_cntr)
+				sock_cntr_err_inc(rx_ctx->comp.recv_cntr);
+
 			dlist_remove(&rx_entry->entry);
 			sock_rx_release_entry(rx_entry);
 			ret = 0;
