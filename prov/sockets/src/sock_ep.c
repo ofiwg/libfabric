@@ -472,7 +472,7 @@ static ssize_t sock_rx_ctx_cancel(struct sock_rx_ctx *rx_ctx, void *context)
 				if (rx_entry->is_tagged)
 					pe_entry.flags |= FI_TAGGED;
 				
-				if (!sock_cq_report_error(pe_entry.comp->recv_cq, 
+				if (sock_cq_report_error(pe_entry.comp->recv_cq, 
 							  &pe_entry, 0, FI_ECANCELED, 
 							  -FI_ECANCELED, NULL)) {
 					SOCK_LOG_ERROR("failed to report error\n");
