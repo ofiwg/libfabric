@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _MACH_CLOCK_GETTIME_H_
-#define _MACH_CLOCK_GETTIME_H_
+#ifndef _FABTESTS_OSX_OSD_H_
+#define _FABTESTS_OSX_OSD_H_
 
 #include <sys/time.h>
 #include <time.h>
@@ -51,4 +51,4 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp);
 }
 #endif
 
-#endif
+#endif // FABTESTS_OSX_OSD_H
