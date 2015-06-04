@@ -57,6 +57,7 @@ static void *buf_ptr;
 static size_t buffer_size;
 static size_t prefix_len;
 static size_t max_msg_size = 0;
+static int timeout = 5;
 
 static struct fi_info *hints;
 static fi_addr_t remote_fi_addr;
@@ -113,14 +114,24 @@ post:
 
 static int recv_xfer(int size)
 {
+	struct timespec a, b;
 	struct fi_cq_entry comp;
 	int ret;
 
+	clock_gettime(CLOCK_REALTIME_COARSE, &a);
 	do {
 		ret = fi_cq_read(rcq, &comp, sizeof comp);
-		if (ret < 0 && ret != -FI_EAGAIN) {
-			FT_PRINTERR("fi_cq_read", ret);
-			return ret;
+		if (ret < 0) {
+			if (ret != -FI_EAGAIN) {
+				FT_PRINTERR("fi_cq_read", ret);
+				return ret;
+			} else if (timeout > 0) {
+				clock_gettime(CLOCK_REALTIME_COARSE, &b);
+				if (a.tv_sec - b.tv_sec > timeout) {
+					FT_PRINTERR("receive timeout", ret);
+					exit(-FI_ENODATA);
+				}
+			}
 		}
 	} while (ret == -FI_EAGAIN);
 
@@ -488,7 +499,7 @@ err:
 
 static int run(void)
 {
-	int i, ret = 0;
+	int i, ret = 0, ret2;
 
 	ret = opts.dst_addr ? client_connect() : server_connect();
 	if (ret)
@@ -510,24 +521,24 @@ static int run(void)
 		if (ret)
 			goto out;
 	}
-	
+
 	while (credits < max_credits)
 		poll_all_sends();
-	
+
 	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	free_ep_res();
-	ret = fi_close(&av->fid);
-	if (ret != 0) {
-		FT_PRINTERR("fi_close", ret);
+	ret2 = fi_close(&av->fid);
+	if (ret2 != 0) {
+		FT_PRINTERR("fi_close", ret2);
 	}
-	ret = fi_close(&dom->fid);
-	if (ret != 0) {
-		FT_PRINTERR("fi_close", ret);
+	ret2 = fi_close(&dom->fid);
+	if (ret2 != 0) {
+		FT_PRINTERR("fi_close", ret2);
 	}
-	ret = fi_close(&fab->fid);
-	if (ret != 0) {
-		FT_PRINTERR("fi_close", ret);
+	ret2 = fi_close(&fab->fid);
+	if (ret2 != 0) {
+		FT_PRINTERR("fi_close", ret2);
 	}
 
 	return ret;
@@ -542,8 +553,11 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "ht:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
+		case 't':
+			timeout = atoi(optarg);
+			break;
 		default:
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
@@ -564,6 +578,11 @@ int main(int argc, char **argv)
 	hints->addr_format = FI_SOCKADDR;
 
 	ret = run();
+	// If the test timed out, return FI_ENODAT (i.e., 61) so that
+	// runtests.sh will indicate that this test was (effectively)
+	// not run.
+	if (ret == -FI_ETIMEDOUT)
+		ret = -FI_ENODATA;
 
 	fi_freeinfo(hints);
 	fi_freeinfo(fi);

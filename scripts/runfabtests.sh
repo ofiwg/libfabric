@@ -121,7 +121,7 @@ function print_results {
 		printf -- "- name:   %s\n" "$test_exe"
 		printf -- "  result: %s\n" "$test_result"
 		printf -- "  time:   %s\n" "$test_time"
-		if [ $emit_stdout -eq 1 ] ; then
+		if [ $emit_stdout -eq 1 -a "$server_out_file" != "" ] ; then
 			printf -- "  server_stdout: |\n"
 			sed -e 's/^/    /' < $server_out_file
 			if [ -n "$client_out_file" ] ; then
@@ -303,6 +303,7 @@ function main {
 	print_border
 
 	printf "# %-50s%10d\n" "Total Pass" $pass_count
+	printf "# %-50s%10d\n" "Total Notrun" $skip_count
 	printf "# %-50s%10d\n" "Total Fail" $fail_count
 
 	if [[ "$total" > "0" ]]; then
