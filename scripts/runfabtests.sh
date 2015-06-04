@@ -303,6 +303,7 @@ function main {
 	print_border
 
 	printf "# %-50s%10d\n" "Total Pass" $pass_count
+	printf "# %-50s%10d\n" "Total Notrun" $skip_count
 	printf "# %-50s%10d\n" "Total Fail" $fail_count
 
 	if [[ "$total" > "0" ]]; then
