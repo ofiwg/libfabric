@@ -36,8 +36,9 @@
 #include <sys/time.h>
 #include <time.h>
 
-#define CLOCK_REALTIME CALENDAR_CLOCK
-#define CLOCK_MONOTONIC SYSTEM_CLOCK
+#define CLOCK_REALTIME 0
+#define CLOCK_REALTIME_COARSE 0
+#define CLOCK_MONOTONIC 0
 
 typedef int clockid_t;
 
