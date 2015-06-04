@@ -1014,16 +1014,18 @@ int sock_compare_addr(struct sockaddr_in *addr1,
 
 struct sock_conn *sock_conn_map_lookup_key(struct sock_conn_map *conn_map, 
 					   uint16_t key);
-uint16_t sock_conn_map_connect(struct sock_ep *ep,
+int sock_conn_map_connect(struct sock_ep *ep,
 			       struct sock_domain *dom,
 			       struct sock_conn_map *map, 
-			       struct sockaddr_in *addr);
+			       struct sockaddr_in *addr,
+			       uint16_t *index);
 uint16_t sock_conn_map_lookup(struct sock_conn_map *map,
 			      struct sockaddr_in *addr);
-uint16_t sock_conn_map_match_or_connect(struct sock_ep *ep,
+int sock_conn_map_match_or_connect(struct sock_ep *ep,
 					struct sock_domain *dom,
 					struct sock_conn_map *map, 
-					struct sockaddr_in *addr);
+					struct sockaddr_in *addr,
+					uint16_t *index);
 int sock_conn_listen(struct sock_ep *ep);
 int sock_conn_map_clear_pe_entry(struct sock_conn *conn_entry, uint16_t key);
 void sock_conn_map_destroy(struct sock_conn_map *cmap);

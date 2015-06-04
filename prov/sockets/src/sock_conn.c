@@ -178,10 +178,11 @@ void sock_set_sockopts(int sock)
 	fd_set_nonblock(sock);
 }
 
-uint16_t sock_conn_map_connect(struct sock_ep *ep,
+int sock_conn_map_connect(struct sock_ep *ep,
 			       struct sock_domain *dom,
 			       struct sock_conn_map *map, 
-			       struct sockaddr_in *addr)
+			       struct sockaddr_in *addr,
+			       uint16_t *index)
 {
 	int conn_fd, optval = 0, ret;
 	char use_conn;
@@ -190,25 +191,29 @@ uint16_t sock_conn_map_connect(struct sock_ep *ep,
 	fd_set fds;
 	struct sockaddr_in src_addr;
 
+	*index = 0;
 	conn_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (conn_fd < 0) {
 		SOCK_LOG_ERROR("failed to create conn_fd, errno: %d\n", errno);
-		return 0;
+		errno = FI_EOTHER;
+		return -errno;
 	}
 
 	memcpy(&src_addr, ep->src_addr, sizeof src_addr);
 	src_addr.sin_port = 0;
-	optlen = sizeof src_addr;
 
 	sock_set_sockopt_reuseaddr(conn_fd);
-	if (bind(conn_fd, (struct sockaddr*) &src_addr, optlen)) {
+	if (bind(conn_fd, (struct sockaddr*) &src_addr, sizeof(src_addr))) {
 		SOCK_LOG_ERROR("bind failed : %s\n", strerror(errno));
 		close(conn_fd);
-		return 0;
+		errno = FI_EOTHER;
+		return -errno;
 	}
 	
-	SOCK_LOG_INFO("Connecting to: %s:%d from %s\n", inet_ntoa(addr->sin_addr),
-		      ntohs(addr->sin_port), inet_ntoa(src_addr.sin_addr));
+	SOCK_LOG_INFO("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
+		      ntohs(addr->sin_port));
+	SOCK_LOG_INFO("Connecting using address:%s\n",
+			inet_ntoa(src_addr.sin_addr));
 
 	if (connect(conn_fd, (struct sockaddr *) addr, sizeof *addr) < 0) {
 		if (errno == EINPROGRESS) {
@@ -273,26 +278,33 @@ uint16_t sock_conn_map_connect(struct sock_ep *ep,
 		SOCK_LOG_INFO("got accept\n");
 	}
 
-	return ret;
-
+	*index = ret;
+	return 0;
 err:
 	close(conn_fd);
-	return 0;
+	errno = FI_EOTHER;
+	return -errno;
 }
 
-uint16_t sock_conn_map_match_or_connect(struct sock_ep *ep,
+int sock_conn_map_match_or_connect(struct sock_ep *ep,
 					struct sock_domain *dom,
 					struct sock_conn_map *map, 
-					struct sockaddr_in *addr)
+					struct sockaddr_in *addr,
+					uint16_t *index)
 {
-	uint16_t index;
+	int ret;
 	fastlock_acquire(&map->lock);
-	index = sock_conn_map_lookup(map, addr);
+	*index = sock_conn_map_lookup(map, addr);
 	fastlock_release(&map->lock);
 
-	if (!index)
-		index = sock_conn_map_connect(ep, dom, map, addr);
-	return index;
+	if (! *index) {
+		ret = sock_conn_map_connect(ep, dom, map, addr, index);
+		if (ret) {
+			SOCK_LOG_ERROR("connect failed\n");
+			return -errno;
+		}
+	}
+	return 0;
 }
 
 static void *_sock_conn_listen(void *arg)

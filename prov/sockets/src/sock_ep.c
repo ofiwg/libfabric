@@ -37,6 +37,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
 
 #include "sock.h"
 #include "sock_util.h"
@@ -1542,10 +1545,12 @@ err:
 
 struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep)
 {
+	int ret;
 	if (!ep->key) {
-		ep->key = sock_conn_map_match_or_connect(
-			ep, ep->domain, &ep->domain->r_cmap, ep->dest_addr);
-		if (!ep->key) {
+		ret = sock_conn_map_match_or_connect(
+			ep, ep->domain, &ep->domain->r_cmap, ep->dest_addr,
+			&ep->key);
+		if (ret) {
 			SOCK_LOG_ERROR("failed to match or connect to addr\n");
 			errno = EINVAL;
 			return NULL;
