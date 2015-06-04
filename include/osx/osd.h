@@ -35,8 +35,6 @@
 
 #include <sys/time.h>
 #include <time.h>
-#include <mach/clock.h>
-#include <mach/mach.h>
 
 #define CLOCK_REALTIME CALENDAR_CLOCK
 #define CLOCK_MONOTONIC SYSTEM_CLOCK

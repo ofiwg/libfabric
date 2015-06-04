@@ -32,18 +32,18 @@
 
 #include "osx/osd.h"
 
+// clock_gettime() does not exist on OS X.  Instead, simply use
+// gettimeofday(), which is apparently fairly efficient on OS X (i.e.,
+// ignore the clk_id that is passed in and always return the system
+// clock time).
 int clock_gettime(clockid_t clk_id, struct timespec *tp) {
 	int retval;
+	struct timeval tv;
 
-	clock_serv_t cclock;
-	mach_timespec_t mts;
+	retval = gettimeofday(&tv, NULL);
 
-	host_get_clock_service(mach_host_self(), clk_id, &cclock);
-	retval = clock_get_time(cclock, &mts);
-	mach_port_deallocate(mach_task_self(), cclock);
-
-	tp->tv_sec = mts.tv_sec;
-	tp->tv_nsec = mts.tv_nsec;
+	tp->tv_sec = tv.tv_sec;
+	tp->tv_nsec = tv.tv_usec * 1000;
 
 	return retval;
 }
