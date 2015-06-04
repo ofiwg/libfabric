@@ -509,6 +509,10 @@ static ssize_t sock_ep_cancel(fid_t fid, void *context)
 		sock_ep = rx_ctx->ep;
 		break;
 
+	case FI_CLASS_TX_CTX:
+	case FI_CLASS_STX_CTX:
+		return -FI_ENOENT;
+
 	default:
 		SOCK_LOG_ERROR("Invalid ep type\n");
 		return -FI_EINVAL;
