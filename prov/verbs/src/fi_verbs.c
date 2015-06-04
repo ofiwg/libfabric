@@ -916,6 +916,7 @@ fi_ibv_create_ep(const char *node, const char *service,
 				"likely usnic bug, skipping verbs provider.\n");
 			ret = -FI_ENODATA;
 		}
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unable to create rdma_cm id\n");
 		goto err;
 	}
 
@@ -945,7 +946,7 @@ static void fi_ibv_msg_ep_qp_init_attr(struct fi_ibv_msg_ep *ep,
 	attr->recv_cq = ep->rcq->cq;
 }
 
-static struct fi_info *fi_ibv_find_info(const char *fabric_name,
+static struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
 		const char *domain_name)
 {
 	struct fi_info *info;
@@ -960,12 +961,58 @@ static struct fi_info *fi_ibv_find_info(const char *fabric_name,
 	return NULL;
 }
 
+static int fi_ibv_get_matching_info(struct fi_info *check_info,
+		struct fi_info *hints, struct rdma_addrinfo *rai,
+		struct fi_info **info)
+{
+
+	int ret;
+	struct fi_info *fi, *tail;
+
+	*info = tail = NULL;
+
+	for (; check_info; check_info = check_info->next) {
+		if (hints) {
+			ret = fi_ibv_check_hints(hints, check_info);
+			if (ret)
+				continue;
+		}
+
+		if (!(fi = fi_dupinfo(check_info))) {
+			ret = -FI_ENOMEM;
+			goto err1;
+		}
+
+		ret = fi_ibv_rai_to_fi(rai, fi);
+		if (ret)
+			goto err2;
+
+		fi_ibv_update_info(hints, fi);
+
+		if (!*info)
+			*info = fi;
+		else
+			tail->next = fi;
+		tail = fi;
+	}
+
+	if (!*info)
+		return -FI_ENODATA;
+
+	return 0;
+err2:
+	fi_freeinfo(fi);
+err1:
+	fi_freeinfo(*info);
+	return ret;
+}
+
 static int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 			  uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	struct rdma_cm_id *id;
 	struct rdma_addrinfo *rai;
-	struct fi_info *fi, *check_info;
+	struct fi_info *check_info;
 	int ret;
 
 	ret = fi_ibv_init_info();
@@ -976,45 +1023,16 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 	if (ret)
 		return ret;
 
-	if (id->verbs) {
-		check_info = fi_ibv_find_info(NULL, ibv_get_device_name(id->verbs->device));
-	} else {
-		check_info = verbs_info;
-	}
+	check_info = id->verbs ? fi_ibv_search_verbs_info(NULL,
+			ibv_get_device_name(id->verbs->device)) : verbs_info;
 
 	if (!check_info) {
 		ret = -FI_ENODATA;
-		goto err1;
+		goto err;
 	}
 
-	if (!(fi = fi_dupinfo(check_info))) {
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
-
-	ret = fi_ibv_rai_to_fi(rai, fi);
-	if (ret)
-		goto err2;
-
-	if (hints) {
-		/* TODO if we do not bind to a specific device return the fi_info
-		 * structures that match hints.
-		 */
-		ret = fi_ibv_check_hints(hints, check_info);
-		if (ret)
-			goto err2;
-	}
-
-	fi_ibv_update_info(hints, fi);
-
-	*info = fi;
-
-	rdma_destroy_ep(id);
-	rdma_freeaddrinfo(rai);
-	return 0;
-err2:
-	fi_freeinfo(fi);
-err1:
+	ret = fi_ibv_get_matching_info(check_info, hints, rai, info);
+err:
 	rdma_destroy_ep(id);
 	rdma_freeaddrinfo(rai);
 	return ret;
@@ -2299,7 +2317,7 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (strcmp(dom->verbs->device->name, info->domain_attr->name))
 		return -FI_EINVAL;
 
-	fi = fi_ibv_find_info(NULL, info->domain_attr->name);
+	fi = fi_ibv_search_verbs_info(NULL, info->domain_attr->name);
 	if (!fi)
 		return -FI_EINVAL;
 
@@ -2388,7 +2406,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 		return NULL;
 	}
 
-	fi = fi_ibv_find_info(NULL, ibv_get_device_name(event->id->verbs->device));
+	fi = fi_ibv_search_verbs_info(NULL, ibv_get_device_name(event->id->verbs->device));
 	if (!fi)
 		return NULL;
 
@@ -3238,7 +3256,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct fi_info *fi;
 	int ret;
 
-	fi = fi_ibv_find_info(NULL, info->domain_attr->name);
+	fi = fi_ibv_search_verbs_info(NULL, info->domain_attr->name);
 	if (!fi)
 		return -FI_EINVAL;
 
@@ -3402,7 +3420,7 @@ static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric
 	if (ret)
 		return ret;
 
-	info = fi_ibv_find_info(attr->name, NULL);
+	info = fi_ibv_search_verbs_info(attr->name, NULL);
 	if (!info)
 		return -FI_ENODATA;
 
