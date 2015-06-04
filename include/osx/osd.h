@@ -30,16 +30,15 @@
  * SOFTWARE.
  */
 
-#ifndef _MACH_CLOCK_GETTIME_H_
-#define _MACH_CLOCK_GETTIME_H_
+#ifndef _FABTESTS_OSX_OSD_H_
+#define _FABTESTS_OSX_OSD_H_
 
 #include <sys/time.h>
 #include <time.h>
-#include <mach/clock.h>
-#include <mach/mach.h>
 
-#define CLOCK_REALTIME CALENDAR_CLOCK
-#define CLOCK_MONOTONIC SYSTEM_CLOCK
+#define CLOCK_REALTIME 0
+#define CLOCK_REALTIME_COARSE 0
+#define CLOCK_MONOTONIC 0
 
 typedef int clockid_t;
 
@@ -53,4 +52,4 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp);
 }
 #endif
 
-#endif
+#endif // FABTESTS_OSX_OSD_H
