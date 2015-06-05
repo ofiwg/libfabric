@@ -49,6 +49,7 @@
 #include <net/if.h>
 #include <ifaddrs.h>
 #include <poll.h>
+#include <limits.h>
 
 #include "sock.h"
 #include "sock_util.h"
@@ -396,11 +397,37 @@ int sock_conn_listen(struct sock_ep *ep)
 	struct sockaddr_in addr;
 	struct sock_conn_listener *listener = &ep->listener;
 	struct sock_domain *domain = ep->domain;	
+	struct addrinfo ai, *rai = NULL;
+	char hostname[HOST_NAME_MAX] = {0};
+	char service[NI_MAXSERV] = {0};
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
+
+	if (ep->src_addr->sin_addr.s_addr == 0) {
+		memset(&ai, 0, sizeof(ai));
+		ai.ai_family = AF_INET;
+		ai.ai_socktype = SOCK_STREAM;
+
+		if (ep->src_addr->sin_port)
+			sprintf(service, "%d", ntohs(ep->src_addr->sin_port));
+		
+		if (gethostname(hostname, sizeof hostname) != 0) {
+			SOCK_LOG_INFO("gethostname failed!\n");
+			return -FI_EINVAL;
+		}
+		ret = getaddrinfo(hostname, ep->src_addr->sin_port ? 
+				  service : NULL, &ai, &rai);
+		if (ret) {
+			SOCK_LOG_INFO("getaddrinfo failed!\n");
+			return -FI_EINVAL;
+		}
+		memcpy(ep->src_addr, (struct sockaddr_in *)rai->ai_addr,
+		       sizeof *ep->src_addr);
+		freeaddrinfo(rai);
+	}
 
 	if (getnameinfo((void*)ep->src_addr, sizeof (*ep->src_addr),
 			NULL, 0, listener->service, 
