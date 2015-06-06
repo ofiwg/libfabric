@@ -449,16 +449,26 @@ static int server_connect(void)
 {
 	int ret;
 	struct fi_cq_entry comp;
+	struct timespec a, b;
 
 	ret = common_setup();
 	if (ret != 0)
 		goto err;
 
+	clock_gettime(CLOCK_REALTIME_COARSE, &a);
 	do {
 		ret = fi_cq_read(rcq, &comp, 1);
-		if (ret < 0 && ret != -FI_EAGAIN) {
-			FT_PRINTERR("fi_cq_read", ret);
-			return ret;
+		if (ret < 0) {
+			if (ret != -FI_EAGAIN) {
+				FT_PRINTERR("fi_cq_read", ret);
+				return ret;
+			} else if (timeout > 0) {
+				clock_gettime(CLOCK_REALTIME_COARSE, &b);
+				if (a.tv_sec - b.tv_sec > timeout) {
+					FT_PRINTERR("server connect timeout", ret);
+					exit(-FI_ENODATA);
+				}
+			}
 		}
 	} while (ret == -FI_EAGAIN);
 
