@@ -12,7 +12,7 @@ declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
 
 # base ssh,  "short" and "long" timeout variants:
-declare -r bssh="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
+declare -r bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
 declare -r sssh="timeout 60s ${bssh}"
 declare -r lssh="timeout 90s ${bssh}"
 declare ssh=${sssh}
