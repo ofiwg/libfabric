@@ -450,37 +450,31 @@ struct fi_provider psmx_prov = {
 	.cleanup = psmx_fini
 };
 
-static int psmx_get_int_env(char *name, int default_value)
-{
-	char *s;
-
-	s = getenv(name);
-	if (s) {
-		if (s[0]>='0' && s[0]<='9')
-			return atoi(s);
-
-		if (!strcasecmp(s, "yes") || !strcasecmp(s, "on"))
-			return 1;
-
-		if (!strcasecmp(s, "no") || !strcasecmp(s, "off"))
-			return 0;
-	}
-
-	return default_value;
-}
-
 PSM_INI
 {
 	int major, minor;
 	int check_version;
 	int err;
 
-	psmx_env.name_server	= psmx_get_int_env("OFI_PSM_NAME_SERVER", 1);
-	psmx_env.am_msg		= psmx_get_int_env("OFI_PSM_AM_MSG", 0);
-	psmx_env.tagged_rma	= psmx_get_int_env("OFI_PSM_TAGGED_RMA", 1);
-	psmx_env.uuid		= getenv("OFI_PSM_UUID");
-	if (!psmx_env.uuid)
-		psmx_env.uuid	= PSMX_DEFAULT_UUID;
+	psmx_env.name_server = 1;
+	fi_var_register(&psmx_prov, "name_server",
+			"Whether to turn on the name server or not");
+	fi_var_get_bool(&psvx_prov, "name_server", &psmx_env.name_server);
+
+	psmx_env.am_msg = 0;
+	fi_var_register(&psmx_prov, "am_msg",
+			"Whether to use active message based messaging or not (default: no)");
+	fi_var_get_bool(&psvx_prov, "am_msg", &psmx_env.am_msg);
+
+	psmx_env.tagged_rma = 1;
+	fi_var_register(&psmx_prov, "tagged_rma",
+			"Whether to use tagged messages for large size RMA or not (default: yes)");
+	fi_var_get_bool(&psmx_prov, "tagged_rma", &psmx_env.tagged_rma);
+
+	psmx_env.uuid = PSMX_DEFAULT_UUID;
+	fi_var_register(&psmx_prov, "uuid",
+			"Unique Job ID required by the PSM fabric");
+	fi_var_get_str(&psmx_prov, "uuid", &psmx_env.uuid);
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
@@ -501,7 +495,10 @@ PSM_INI
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"PSM library version = (%d, %d)\n", major, minor);
 
-	check_version = psmx_get_int_env("OFI_PSM_VERSION_CHECK", 1);
+	check_version = 1;
+	fi_var_register(&psmx_prov, "check_version",
+			"Whether to check PSM version number compatibility");
+	fi_var_get_bool(&psmx_prov, "check_version", &check_version);
 
 	if (check_version && major != PSM_VERNO_MAJOR) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
