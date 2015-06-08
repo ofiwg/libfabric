@@ -127,7 +127,7 @@ static int recv_xfer(int size)
 				return ret;
 			} else if (timeout > 0) {
 				clock_gettime(CLOCK_REALTIME_COARSE, &b);
-				if (a.tv_sec - b.tv_sec > timeout) {
+				if (b.tv_sec - a.tv_sec > timeout) {
 					FT_PRINTERR("receive timeout", ret);
 					exit(-FI_ENODATA);
 				}
@@ -464,7 +464,7 @@ static int server_connect(void)
 				return ret;
 			} else if (timeout > 0) {
 				clock_gettime(CLOCK_REALTIME_COARSE, &b);
-				if (a.tv_sec - b.tv_sec > timeout) {
+				if (b.tv_sec - a.tv_sec > timeout) {
 					FT_PRINTERR("server connect timeout", ret);
 					exit(-FI_ENODATA);
 				}
