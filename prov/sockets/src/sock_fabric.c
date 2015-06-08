@@ -43,6 +43,7 @@
 #include <limits.h>
 
 #include "prov.h"
+#include <rdma/fi_var.h>
 
 #include "sock.h"
 #include "sock_util.h"
@@ -55,7 +56,7 @@ const char sock_fab_name[] = "IP";
 const char sock_dom_name[] = "sockets";
 const char sock_prov_name[] = "sockets";
 #if ENABLE_DEBUG
-int sock_dgram_drop_rate = 0;
+long sock_dgram_drop_rate = 0;
 #endif
 
 const struct fi_fabric_attr sock_fabric_attr = {
@@ -578,22 +579,17 @@ struct fi_provider sock_prov = {
 
 SOCKETS_INI
 {
-	char *value;
+	fi_var_register(&sock_prov, "pe_waittime",
+                        "How many miliseconds to spin while waiting for progress");
+	fi_var_get_int(&sock_prov, "pe_waittime", &sock_pe_waittime);
 
-	if ((value = getenv("SOCK_PE_WAITTIME"))) {
-		sock_pe_waittime = atoi(value);
-		SOCK_LOG_INFO("SOCK_PE_WAITTIME = %d\n", sock_pe_waittime);
-	}
-	
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
 	dlist_init(&sock_dom_list);
 #if ENABLE_DEBUG
-	if(getenv("SOCK_DGRAM_DROP_RATE") != NULL) {
-		sock_dgram_drop_rate =  strtol(getenv("SOCK_DGRAM_DROP_RATE"), NULL, 10);
-		if(sock_dgram_drop_rate)
-			SOCK_LOG_INFO("SOCK_DGRAM_DROP_RATE = %d\n", sock_dgram_drop_rate);
-	}
+	fi_var_register(&sock_prov, "dgram_drop_rate",
+			"Drop every Nth dgram frame (debug only)");
+	fi_var_get_long(&sock_prov, "dgram_drop_rate", &sock_dgram_drop_rate);
 #endif
 	return (&sock_prov);
 }
