@@ -1363,7 +1363,6 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		if (rem) {
 			SOCK_LOG_INFO("Not enough space in posted recv buffer\n");
 			sock_pe_report_rx_error(&pe_entry, rem);
-			return 0;
 		} else {
 			sock_pe_report_rx_completion(&pe_entry);
 		}
