@@ -248,7 +248,7 @@ addr[i] = (addr[i] || buf[i])
 {% endhighlight %}
 
 *FI_LAND*
-: Logical AN
+: Logical AND
 {% highlight c %}
 addr[i] = (addr[i] && buf[i])
 {% endhighlight %}
