@@ -129,7 +129,7 @@ static int recv_xfer(int size)
 				clock_gettime(CLOCK_REALTIME_COARSE, &b);
 				if (b.tv_sec - a.tv_sec > timeout) {
 					FT_PRINTERR("receive timeout", ret);
-					exit(-FI_ENODATA);
+					exit(FI_ENODATA);
 				}
 			}
 		}
@@ -466,7 +466,7 @@ static int server_connect(void)
 				clock_gettime(CLOCK_REALTIME_COARSE, &b);
 				if (b.tv_sec - a.tv_sec > timeout) {
 					FT_PRINTERR("server connect timeout", ret);
-					exit(-FI_ENODATA);
+					exit(FI_ENODATA);
 				}
 			}
 		}
@@ -588,11 +588,6 @@ int main(int argc, char **argv)
 	hints->addr_format = FI_SOCKADDR;
 
 	ret = run();
-	// If the test timed out, return FI_ENODAT (i.e., 61) so that
-	// runtests.sh will indicate that this test was (effectively)
-	// not run.
-	if (ret == -FI_ETIMEDOUT)
-		ret = -FI_ENODATA;
 
 	fi_freeinfo(hints);
 	fi_freeinfo(fi);
