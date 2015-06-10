@@ -1288,7 +1288,7 @@ static int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 	struct dlist_entry *entry;
 	struct sock_pe_entry pe_entry;
 	struct sock_rx_entry *rx_buffered, *rx_posted;
-	int i, rem = 0, offset, len, used_len, dst_offset;
+	size_t i, rem = 0, offset, len, used_len, dst_offset;
 	
 	if (dlist_empty(&rx_ctx->rx_entry_list) ||
 	    dlist_empty(&rx_ctx->rx_buffered_list)) 
