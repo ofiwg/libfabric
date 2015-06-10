@@ -667,7 +667,7 @@ const char *DEFAULT_SYMVER_PRE(fi_strerror)(int errnum)
 {
 	if (errnum < FI_ERRNO_OFFSET)
 		return strerror(errnum);
-	else if (errnum < FI_ERRNO_MAX)
+	else if (errno < FI_ERRNO_MAX)
 		return errstr[errnum - FI_ERRNO_OFFSET];
 	else
 		return errstr[FI_EOTHER - FI_ERRNO_OFFSET];
