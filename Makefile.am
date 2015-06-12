@@ -356,6 +356,7 @@ real_man_pages = \
 dummy_man_pages = \
         man/man3/fi_accept.3 \
         man/man3/fi_alias.3 \
+        man/man3/fi_atomic.3 \
         man/man3/fi_atomic_valid.3 \
         man/man3/fi_atomicmsg.3 \
         man/man3/fi_atomicv.3 \
