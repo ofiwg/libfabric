@@ -40,7 +40,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_CORE, __VA_ARGS__)
+#define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_CORE, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_CORE, __VA_ARGS__)
 
 static int sock_poll_add(struct fid_poll *pollset, struct fid *event_fid, 

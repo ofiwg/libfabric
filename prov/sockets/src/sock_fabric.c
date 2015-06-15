@@ -48,7 +48,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_FABRIC, __VA_ARGS__)
+#define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_FABRIC, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_FABRIC, __VA_ARGS__)
 
 int sock_pe_waittime = SOCK_PE_WAITTIME;
@@ -233,7 +233,7 @@ int sock_verify_info(struct fi_info *hints)
 		return ret;
 
 	if ((caps | hints->caps) != caps) {
-		SOCK_LOG_INFO("Unsupported capabilities\n");
+		SOCK_LOG_DBG("Unsupported capabilities\n");
 		return -FI_ENODATA;
 	}
 
@@ -250,7 +250,7 @@ int sock_verify_info(struct fi_info *hints)
 		domain = container_of(hints->domain_attr->domain,
 				      struct sock_domain, dom_fid);
 		if (!sock_dom_check_list(domain)) {
-			SOCK_LOG_INFO("no matching domain\n");
+			SOCK_LOG_DBG("no matching domain\n");
 			return -FI_ENODATA;
 		}
 	}
@@ -262,7 +262,7 @@ int sock_verify_info(struct fi_info *hints)
 		fabric = container_of(hints->fabric_attr->fabric,
 				      struct sock_fabric, fab_fid);
 		if (!sock_fab_check_list(fabric)) {
-			SOCK_LOG_INFO("no matching fabric\n");
+			SOCK_LOG_DBG("no matching fabric\n");
 			return -FI_ENODATA;
 		}
 	}
@@ -397,7 +397,7 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 	len = sizeof(*dest_addr);
 	ret = connect(sock, (struct sockaddr*)dest_addr, len);
 	if (ret) {
-		SOCK_LOG_INFO("Failed to connect udp socket\n");
+		SOCK_LOG_DBG("Failed to connect udp socket\n");
 		ret = -errno;
 		goto out;
 	}
@@ -405,7 +405,7 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 	ret = getsockname(sock, (struct sockaddr *) src_addr, &len);
 	src_addr->sin_port = 0;
 	if (ret) {
-		SOCK_LOG_INFO("getsockname failed\n");
+		SOCK_LOG_DBG("getsockname failed\n");
 		ret = -errno;
 	}
 out:
@@ -432,7 +432,7 @@ static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags
 		ai.ai_flags |= AI_PASSIVE;
 		ret = getaddrinfo(node, service, &ai, &rai);
 		if (ret) {
-			SOCK_LOG_INFO("getaddrinfo failed!\n");
+			SOCK_LOG_DBG("getaddrinfo failed!\n");
 			return -FI_ENODATA;
 		}
 		src_addr = (struct sockaddr_in *) rai->ai_addr;
@@ -443,7 +443,7 @@ static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags
 		if (node || service) {
 			ret = getaddrinfo(node, service, &ai, &rai);
 			if (ret) {
-				SOCK_LOG_INFO("getaddrinfo failed!\n");
+				SOCK_LOG_DBG("getaddrinfo failed!\n");
 				return -FI_ENODATA;
 			}
 			dest_addr = (struct sockaddr_in *) rai->ai_addr;
@@ -462,9 +462,9 @@ static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags
 	}
 
 	if (src_addr)
-		SOCK_LOG_INFO("src_addr: %s\n", inet_ntoa(src_addr->sin_addr));
+		SOCK_LOG_DBG("src_addr: %s\n", inet_ntoa(src_addr->sin_addr));
 	if (dest_addr)
-		SOCK_LOG_INFO("dest_addr: %s\n", inet_ntoa(dest_addr->sin_addr));
+		SOCK_LOG_DBG("dest_addr: %s\n", inet_ntoa(dest_addr->sin_addr));
 
 	switch (ep_type) {
 	case FI_EP_MSG:

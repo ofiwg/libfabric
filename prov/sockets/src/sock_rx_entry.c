@@ -46,7 +46,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_DATA, __VA_ARGS__)
+#define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
 /* FIXME: pool of rx_entry */
@@ -59,7 +59,7 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 		return NULL;
 	
 	rx_entry->is_tagged = 0;
-	SOCK_LOG_INFO("New rx_entry: %p, ctx: %p\n", rx_entry, rx_ctx);
+	SOCK_LOG_DBG("New rx_entry: %p, ctx: %p\n", rx_entry, rx_ctx);
 	dlist_init(&rx_entry->entry);
 
 	fastlock_acquire(&rx_ctx->lock);
@@ -71,7 +71,7 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry)
 {
-	SOCK_LOG_INFO("Releasing rx_entry: %p\n", rx_entry);
+	SOCK_LOG_DBG("Releasing rx_entry: %p\n", rx_entry);
 	free(rx_entry);
 }
 
@@ -88,7 +88,7 @@ struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,
 	if (!rx_entry)
 		return NULL;
 
-	SOCK_LOG_INFO("New buffered entry:%p len: %lu, ctx: %p\n", 
+	SOCK_LOG_DBG("New buffered entry:%p len: %lu, ctx: %p\n", 
 		       rx_entry, len, rx_ctx);
 
 	rx_entry->is_busy = 1;

@@ -49,7 +49,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_AV, __VA_ARGS__)
+#define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_AV, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_AV, __VA_ARGS__)
 
 fi_addr_t sock_av_lookup_key(struct sock_av *av, int key)
@@ -63,12 +63,12 @@ fi_addr_t sock_av_lookup_key(struct sock_av *av, int key)
 		av_addr = &av->table[i];
 		if (sock_compare_addr(&cmap->table[key].addr, 
 				      (struct sockaddr_in*)&av_addr->addr)) {
-			SOCK_LOG_INFO("LOOKUP: (%d->%d)\n", key, i);
+			SOCK_LOG_DBG("LOOKUP: (%d->%d)\n", key, i);
 			return i;
 		}
 	}
 	
-	SOCK_LOG_INFO("Reverse-LOOKUP failed: %d, %s:%d\n", key,
+	SOCK_LOG_DBG("Reverse-LOOKUP failed: %d, %s:%d\n", key,
 		       inet_ntoa(cmap->table[key].addr.sin_addr),
 		       ntohs(cmap->table[key].addr.sin_port));
 	return FI_ADDR_NOTAVAIL;
@@ -191,7 +191,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 
 				if (memcmp(&av_addr->addr, &addr[i], 
 					   sizeof(struct sockaddr_in)) == 0) {
-					SOCK_LOG_INFO("Found addr in shared av\n");
+					SOCK_LOG_DBG("Found addr in shared av\n");
 					if (idm_set(&_av->addr_idm, _av->key[j], av_addr) < 0) {
 						if (fi_addr)
 							fi_addr[i] = FI_ADDR_NOTAVAIL;
@@ -269,7 +269,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 
 		av_addr = &_av->table[_av->table_hdr->stored];		
 		memcpy(sa_ip, inet_ntoa((&addr[i])->sin_addr), INET_ADDRSTRLEN);
-		SOCK_LOG_INFO("AV-INSERT:dst_addr: family: %d, IP is %s, port: %d\n",
+		SOCK_LOG_DBG("AV-INSERT:dst_addr: family: %d, IP is %s, port: %d\n",
 			      ((struct sockaddr_in*)&addr[i])->sin_family, sa_ip,
 			      ntohs(((struct sockaddr_in*)&addr[i])->sin_port));
 		
@@ -576,7 +576,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			if (_av->name[i] == ' ')
 				_av->name[i] = '_';
 		
-		SOCK_LOG_INFO("Creating shm segment :%s (size: %lu)\n",
+		SOCK_LOG_DBG("Creating shm segment :%s (size: %lu)\n",
 			      _av->name, table_sz);
 		
 		_av->shared_fd = shm_open(_av->name, flags, S_IRUSR | S_IWUSR);

@@ -56,7 +56,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 const struct fi_ep_attr sock_rdm_ep_attr = {
@@ -101,32 +101,32 @@ static int sock_rdm_verify_rx_attr(const struct fi_rx_attr *attr)
 		return 0;
 
 	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
-		SOCK_LOG_INFO("Unsupported RDM rx caps\n");
+		SOCK_LOG_DBG("Unsupported RDM rx caps\n");
 		return -FI_ENODATA;
 	}
 
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER) {
-		SOCK_LOG_INFO("Unsuported rx message order\n");
+		SOCK_LOG_DBG("Unsuported rx message order\n");
 		return -FI_ENODATA;
 	}
 
 	if ((attr->comp_order | SOCK_EP_COMP_ORDER) != SOCK_EP_COMP_ORDER) {
-		SOCK_LOG_INFO("Unsuported rx completion order\n");
+		SOCK_LOG_DBG("Unsuported rx completion order\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->total_buffered_recv > sock_rdm_rx_attr.total_buffered_recv) {
-		SOCK_LOG_INFO("Buffered receive size too large\n");
+		SOCK_LOG_DBG("Buffered receive size too large\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->size > sock_rdm_rx_attr.size) {
-		SOCK_LOG_INFO("Rx size too large\n");
+		SOCK_LOG_DBG("Rx size too large\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->iov_limit > sock_rdm_rx_attr.iov_limit) {
-		SOCK_LOG_INFO("Rx iov limit too large\n");
+		SOCK_LOG_DBG("Rx iov limit too large\n");
 		return -FI_ENODATA;
 	}
 
@@ -139,32 +139,32 @@ static int sock_rdm_verify_tx_attr(const struct fi_tx_attr *attr)
 		return 0;
 
 	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
-		SOCK_LOG_INFO("Unsupported RDM tx caps\n");
+		SOCK_LOG_DBG("Unsupported RDM tx caps\n");
 		return -FI_ENODATA;
 	}
 
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER) {
-		SOCK_LOG_INFO("Unsupported tx message order\n");
+		SOCK_LOG_DBG("Unsupported tx message order\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->inject_size > sock_rdm_tx_attr.inject_size) {
-		SOCK_LOG_INFO("Inject size too large\n");
+		SOCK_LOG_DBG("Inject size too large\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->size > sock_rdm_tx_attr.size) {
-		SOCK_LOG_INFO("Tx size too large\n");
+		SOCK_LOG_DBG("Tx size too large\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->iov_limit > sock_rdm_tx_attr.iov_limit) {
-		SOCK_LOG_INFO("Tx iov limit too large\n");
+		SOCK_LOG_DBG("Tx iov limit too large\n");
 		return -FI_ENODATA;
 	}
 
 	if (attr->rma_iov_limit > sock_rdm_tx_attr.rma_iov_limit) {
-		SOCK_LOG_INFO("RMA iov limit too large\n");
+		SOCK_LOG_DBG("RMA iov limit too large\n");
 		return -FI_ENODATA;
 	}
 
@@ -183,40 +183,40 @@ int sock_rdm_verify_ep_attr(struct fi_ep_attr *ep_attr,
 		case FI_PROTO_SOCK_TCP:
 			break;
 		default:
-			SOCK_LOG_INFO("Unsupported protocol\n");
+			SOCK_LOG_DBG("Unsupported protocol\n");
 			return -FI_ENODATA;
 		}
 
 		if (ep_attr->protocol_version != sock_rdm_ep_attr.protocol_version) {
-			SOCK_LOG_INFO("Invalid protocol version\n");
+			SOCK_LOG_DBG("Invalid protocol version\n");
 			return -FI_ENODATA;
 		}
 
 		if (ep_attr->max_msg_size > sock_rdm_ep_attr.max_msg_size) {
-			SOCK_LOG_INFO("Message size too large\n");
+			SOCK_LOG_DBG("Message size too large\n");
 			return -FI_ENODATA;
 		}
 
 		if (ep_attr->msg_prefix_size > sock_rdm_ep_attr.msg_prefix_size) {
-			SOCK_LOG_INFO("Msg prefix size not supported\n");
+			SOCK_LOG_DBG("Msg prefix size not supported\n");
 			return -FI_ENODATA;
 		}
 
 		if (ep_attr->max_order_raw_size >
 		   sock_rdm_ep_attr.max_order_raw_size) {
-			SOCK_LOG_INFO("RAW order size too large\n");
+			SOCK_LOG_DBG("RAW order size too large\n");
 			return -FI_ENODATA;
 		}
 
 		if (ep_attr->max_order_war_size >
 		   sock_rdm_ep_attr.max_order_war_size) {
-			SOCK_LOG_INFO("WAR order size too large\n");
+			SOCK_LOG_DBG("WAR order size too large\n");
 			return -FI_ENODATA;
 		}
 
 		if (ep_attr->max_order_waw_size > 
 		   sock_rdm_ep_attr.max_order_waw_size) {
-			SOCK_LOG_INFO("WAW order size too large\n");
+			SOCK_LOG_DBG("WAW order size too large\n");
 			return -FI_ENODATA;
 		}
 

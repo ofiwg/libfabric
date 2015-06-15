@@ -55,7 +55,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_DATA, __VA_ARGS__)
+#define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
 static ssize_t sock_comm_send_socket(struct sock_conn *conn, const void *buf, size_t len)
@@ -64,11 +64,11 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn, const void *buf, si
 
 	ret = write(conn->sock_fd, buf, len);
 	if (ret < 0) {
-		SOCK_LOG_INFO("write %s\n", strerror(errno));
+		SOCK_LOG_DBG("write %s\n", strerror(errno));
 		ret = 0;
 	}
 
-	SOCK_LOG_INFO("wrote to network: %lu\n", ret);
+	SOCK_LOG_DBG("wrote to network: %lu\n", ret);
 	return ret;
 }
 
@@ -122,7 +122,7 @@ ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len)
 	ret = MIN(rbavail(&conn->outbuf), len);
 	rbwrite(&conn->outbuf, buf, ret);
 	rbcommit(&conn->outbuf);
-	SOCK_LOG_INFO("buffered %lu\n", ret);
+	SOCK_LOG_DBG("buffered %lu\n", ret);
 	return ret;
 }
 
@@ -132,12 +132,12 @@ static ssize_t sock_comm_recv_socket(struct sock_conn *conn, void *buf, size_t l
 	
 	ret = read(conn->sock_fd, buf, len);
 	if (ret < 0) {
-		SOCK_LOG_INFO("read %s\n", strerror(errno));
+		SOCK_LOG_DBG("read %s\n", strerror(errno));
 		ret = 0;
 	}
 
 	if (ret > 0)
-		SOCK_LOG_INFO("read from network: %lu\n", ret);
+		SOCK_LOG_DBG("read from network: %lu\n", ret);
 	return ret;
 }
 
@@ -187,7 +187,7 @@ ssize_t sock_comm_recv(struct sock_conn *conn, void *buf, size_t len)
 			ret = 0;
 		sock_comm_recv_buffer(conn);
 	}
-	SOCK_LOG_INFO("read from buffer: %lu\n", ret + read_len);
+	SOCK_LOG_DBG("read from buffer: %lu\n", ret + read_len);
 	return ret + read_len;
 }
 
@@ -229,11 +229,11 @@ int sock_comm_buffer_init(struct sock_conn *conn)
 		SOCK_LOG_ERROR("setsockopt SO_SNDBUF failed\n");
 
 	if (!getsockopt(conn->sock_fd, SOL_SOCKET, SO_RCVBUF, &size, &optlen))
-		SOCK_LOG_INFO("SO_RCVBUF: %d\n", size);
+		SOCK_LOG_DBG("SO_RCVBUF: %d\n", size);
 	
 	optlen = sizeof(socklen_t);
 	if (!getsockopt(conn->sock_fd, SOL_SOCKET, SO_SNDBUF, &size, &optlen))
-		SOCK_LOG_INFO("SO_SNDBUF: %d\n", size);
+		SOCK_LOG_DBG("SO_SNDBUF: %d\n", size);
 	return 0;
 }
 

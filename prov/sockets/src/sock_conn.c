@@ -54,7 +54,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 int sock_conn_map_init(struct sock_conn_map *map, int init_size)
@@ -211,9 +211,9 @@ int sock_conn_map_connect(struct sock_ep *ep,
 		return -errno;
 	}
 	
-	SOCK_LOG_INFO("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
+	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
 		      ntohs(addr->sin_port));
-	SOCK_LOG_INFO("Connecting using address:%s\n",
+	SOCK_LOG_DBG("Connecting using address:%s\n",
 			inet_ntoa(src_addr.sin_addr));
 
 	if (connect(conn_fd, (struct sockaddr *) addr, sizeof *addr) < 0) {
@@ -262,7 +262,7 @@ int sock_conn_map_connect(struct sock_ep *ep,
 		goto err;
 	}
 
-	SOCK_LOG_INFO("Connect response: %d\n", use_conn);
+	SOCK_LOG_DBG("Connect response: %d\n", use_conn);
 
 	if (use_conn) {
 		fastlock_acquire(&map->lock);
@@ -270,13 +270,13 @@ int sock_conn_map_connect(struct sock_ep *ep,
 		fastlock_release(&map->lock);
 	} else {
 		close(conn_fd);
-		SOCK_LOG_INFO("waiting for an accept\n");
+		SOCK_LOG_DBG("waiting for an accept\n");
 		for (ret = 0; !ret; ) {
 			fastlock_acquire(&map->lock);
 			ret = sock_conn_map_lookup(map, addr);
 			fastlock_release(&map->lock);
 		}
-		SOCK_LOG_INFO("got accept\n");
+		SOCK_LOG_DBG("got accept\n");
 	}
 
 	*index = ret;
@@ -342,13 +342,13 @@ static void *_sock_conn_listen(void *arg)
 
 		addr_size = sizeof(remote);
 		conn_fd = accept(listener->sock, (struct sockaddr *) &remote, &addr_size);
-		SOCK_LOG_INFO("CONN: accepted conn-req: %d\n", conn_fd);
+		SOCK_LOG_DBG("CONN: accepted conn-req: %d\n", conn_fd);
 		if (conn_fd < 0) {
 			SOCK_LOG_ERROR("failed to accept: %d\n", errno);
 			goto err;
 		}
 
-		SOCK_LOG_INFO("ACCEPT: %s, %d\n", inet_ntoa(remote.sin_addr),
+		SOCK_LOG_DBG("ACCEPT: %s, %d\n", inet_ntoa(remote.sin_addr),
 				ntohs(remote.sin_port));
 
 		do {
@@ -358,7 +358,7 @@ static void *_sock_conn_listen(void *arg)
 		if (ret != sizeof(remote.sin_port))
 			SOCK_LOG_ERROR("Cannot exchange port\n");
 
-		SOCK_LOG_INFO("Remote port: %d\n", ntohs(remote.sin_port));
+		SOCK_LOG_DBG("Remote port: %d\n", ntohs(remote.sin_port));
 
 		fastlock_acquire(&map->lock);
 		index = sock_conn_map_lookup(map, &remote);
@@ -384,7 +384,7 @@ static void *_sock_conn_listen(void *arg)
 
 err:
 	close(listener->sock);
-	SOCK_LOG_INFO("Listener thread exited\n");
+	SOCK_LOG_DBG("Listener thread exited\n");
 	return NULL;
 }
 
@@ -415,13 +415,13 @@ int sock_conn_listen(struct sock_ep *ep)
 			sprintf(service, "%d", ntohs(ep->src_addr->sin_port));
 		
 		if (gethostname(hostname, sizeof hostname) != 0) {
-			SOCK_LOG_INFO("gethostname failed!\n");
+			SOCK_LOG_DBG("gethostname failed!\n");
 			return -FI_EINVAL;
 		}
 		ret = getaddrinfo(hostname, ep->src_addr->sin_port ? 
 				  service : NULL, &ai, &rai);
 		if (ret) {
-			SOCK_LOG_INFO("getaddrinfo failed!\n");
+			SOCK_LOG_DBG("getaddrinfo failed!\n");
 			return -FI_EINVAL;
 		}
 		memcpy(ep->src_addr, (struct sockaddr_in *)rai->ai_addr,
@@ -449,7 +449,7 @@ int sock_conn_listen(struct sock_ep *ep)
 		return -FI_EINVAL;
 	}
 
-	SOCK_LOG_INFO("Binding listener thread to port: %s\n", listener->service);
+	SOCK_LOG_DBG("Binding listener thread to port: %s\n", listener->service);
 	for (p = s_res; p; p = p->ai_next) {
 		listen_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (listen_fd >= 0) {
@@ -475,7 +475,7 @@ int sock_conn_listen(struct sock_ep *ep)
 			goto err;
 		snprintf(listener->service, sizeof listener->service, "%d",
 			 ntohs(addr.sin_port));
-		SOCK_LOG_INFO("Bound to port: %s\n", listener->service);
+		SOCK_LOG_DBG("Bound to port: %s\n", listener->service);
 	}
 
 	if (listen(listen_fd, 0)) {
