@@ -41,6 +41,9 @@
 #include <rdma/fi_var.h>
 #include <rdma/fi_log.h>
 
+#include "fi.h"
+
+/* internal setting representation */
 struct fi_var_t {
 	const struct fi_provider *provider;
 	char *var_name;
@@ -53,8 +56,98 @@ struct fi_var_t {
 
 static struct fi_var_t *fi_vars = NULL;
 
+static int fi_var_get(const struct fi_provider *provider, const char *var_name,
+		char **value)
+{
+	struct fi_var_t *v;
 
-int fi_var_register(const struct fi_provider *provider, const char *var_name,
+	// Check for bozo cases
+	if (var_name == NULL || value == NULL) {
+		FI_DBG(provider, FI_LOG_CORE,
+			"Failed to read %s variable: provider coding error\n",
+			var_name);
+		return -FI_EINVAL;
+	}
+
+	for (v = fi_vars; v; v = v->next) {
+		if (strcmp(v->provider->name, provider->name) == 0 &&
+			strcmp(v->var_name, var_name) == 0) {
+			*value = getenv(v->env_var_name);
+
+			return FI_SUCCESS;
+		}
+	}
+
+	FI_DBG(provider, FI_LOG_CORE,
+		"Failed to read %s variable: was not registered\n", var_name);
+	return -FI_ENOENT;
+}
+
+__attribute__((visibility ("default")))
+int DEFAULT_SYMVER_PRE(fi_getsettings)(struct fi_setting **vars, int *count) {
+
+	struct fi_setting *vhead = NULL;
+	struct fi_var_t *ptr;
+	int ret, len = 0, i = 0;
+	char *tmp = NULL;
+
+	// just get a count
+	for (ptr = fi_vars; ptr; ptr = ptr->next, ++len)
+		continue;
+
+	if (len == 0)
+		goto no_vars;
+
+	// last extra entry will be all NULL
+	vhead = calloc(len+1, sizeof (*vhead));
+
+	if (!vhead)
+		return -FI_ENOMEM;
+
+	for (ptr = fi_vars; ptr; ptr = ptr->next, ++i, tmp = NULL) {
+		vhead[i].prov_name = strdup(ptr->provider->name);
+		vhead[i].var_name = strdup(ptr->var_name);
+		vhead[i].env_var_name = strdup(ptr->env_var_name);
+		vhead[i].help_string = strdup(ptr->help_string);
+
+		// ignore error for now, maybe skip in the future?
+		ret = fi_var_get(ptr->provider, ptr->var_name, &tmp);
+
+		if (ret == FI_SUCCESS && tmp)
+			vhead[i].value = strdup(tmp);
+
+		// check if any allocs failed and bail
+		if (!vhead[i].prov_name ||
+		    !vhead[i].var_name ||
+		    !vhead[i].env_var_name ||
+		    !vhead[i].help_string) {
+			fi_freesettings(vhead);
+			ret = -FI_ENOMEM;
+			goto no_vars;
+		}
+	}
+
+no_vars:
+	*count = len;
+	*vars = vhead;
+	return ret;
+}
+DEFAULT_SYMVER(fi_getsettings_, fi_getsettings);
+
+void DEFAULT_SYMVER_PRE(fi_freesettings)(struct fi_setting *var) {
+	for (int i = 0; var[i].prov_name; ++i) {
+		free((void*)var[i].prov_name);
+		free((void*)var[i].var_name);
+		free((void*)var[i].env_var_name);
+		free((void*)var[i].help_string);
+		free((void*)var[i].value);
+	}
+	free (var);
+}
+DEFAULT_SYMVER(fi_freesettings_, fi_freesettings);
+
+__attribute__((visibility ("default")))
+int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider, const char *var_name,
 		const char *help_string)
 {
 	int i;
@@ -99,35 +192,10 @@ int fi_var_register(const struct fi_provider *provider, const char *var_name,
 
 	return FI_SUCCESS;
 }
+DEFAULT_SYMVER(fi_var_register_, fi_var_register);
 
-static int fi_var_get(struct fi_provider *provider, const char *var_name,
-		char **value)
-{
-	struct fi_var_t *v;
-
-	// Check for bozo cases
-	if (var_name == NULL || value == NULL) {
-		FI_DBG(provider, FI_LOG_CORE,
-			"Failed to read %s variable: provider coding error\n",
-			var_name);
-		return -FI_EINVAL;
-	}
-
-	for (v = fi_vars; v; v = v->next) {
-		if (strcmp(v->provider->name, provider->name) == 0 &&
-			strcmp(v->var_name, var_name) == 0) {
-			*value = getenv(v->env_var_name);
-
-			return FI_SUCCESS;
-		}
-	}
-
-	FI_DBG(provider, FI_LOG_CORE,
-		"Failed to read %s variable: was not registered\n", var_name);
-	return -FI_ENOENT;
-}
-
-int fi_var_get_str(struct fi_provider *provider, const char *var_name,
+__attribute__((visibility ("default")))
+int DEFAULT_SYMVER_PRE(fi_var_get_str)(struct fi_provider *provider, const char *var_name,
 		char **value)
 {
 	int ret;
@@ -147,8 +215,10 @@ int fi_var_get_str(struct fi_provider *provider, const char *var_name,
 
 	return ret;
 }
+DEFAULT_SYMVER(fi_var_get_str_, fi_var_get_str);
 
-int fi_var_get_int(struct fi_provider *provider, const char *var_name,
+__attribute__((visibility ("default")))
+int DEFAULT_SYMVER_PRE(fi_var_get_int)(struct fi_provider *provider, const char *var_name,
 		int *value)
 {
 	int ret;
@@ -170,8 +240,10 @@ int fi_var_get_int(struct fi_provider *provider, const char *var_name,
 
 	return ret;
 }
+DEFAULT_SYMVER(fi_var_get_int_, fi_var_get_int);
 
-int fi_var_get_long(struct fi_provider *provider, const char *var_name,
+__attribute__((visibility ("default")))
+int DEFAULT_SYMVER_PRE(fi_var_get_long)(struct fi_provider *provider, const char *var_name,
 		long *value)
 {
 	int ret;
@@ -193,8 +265,10 @@ int fi_var_get_long(struct fi_provider *provider, const char *var_name,
 
 	return ret;
 }
+DEFAULT_SYMVER(fi_var_get_long_, fi_var_get_long);
 
-int fi_var_get_bool(struct fi_provider *provider, const char *var_name,
+__attribute__((visibility ("default")))
+int DEFAULT_SYMVER_PRE(fi_var_get_bool)(struct fi_provider *provider, const char *var_name,
 		int *value)
 {
 	int ret;
@@ -233,6 +307,7 @@ int fi_var_get_bool(struct fi_provider *provider, const char *var_name,
 
 	return ret;
 }
+DEFAULT_SYMVER(fi_var_get_bool_, fi_var_get_bool);
 
 void fi_var_fini(void)
 {

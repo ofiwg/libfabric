@@ -40,6 +40,14 @@
 extern "C" {
 #endif
 
+struct fi_setting {
+	const char *prov_name;
+	const char *var_name;
+	const char *env_var_name;
+	const char *help_string;
+	const char *value;
+};
+
 /* Registers a configuration variable for use with libfabric.
  *
  * Example: fi_register_var(provider, "foo", "Very important help
@@ -111,6 +119,11 @@ int fi_var_get_bool(struct fi_provider *provider, const char *var_name,
 /* Clean up any resources used by the var system
  */
 void fi_var_fini(void);
+
+/* Get and free current settings.
+ */
+int fi_getsettings(struct fi_setting **settings, int *count);
+void fi_freesettings(struct fi_setting *settings);
 
 #ifdef __cplusplus
 }

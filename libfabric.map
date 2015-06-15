@@ -9,5 +9,12 @@ FABRIC_1.0 {
 		fi_tostr;
 		fi_log_enabled;
 		fi_log;
+		fi_var_register;
+		fi_var_get_str;
+		fi_var_get_int;
+		fi_var_get_long;
+		fi_var_get_bool;
+		fi_getsettings;
+		fi_freesettings;
 	local: *;
 };
