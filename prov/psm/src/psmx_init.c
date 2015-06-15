@@ -33,6 +33,7 @@
 #include "psmx.h"
 #include "fi.h"
 #include "prov.h"
+#include <rdma/fi_var.h>
 
 struct psmx_env psmx_env;
 volatile int psmx_init_count = 0;
@@ -459,12 +460,12 @@ PSM_INI
 	psmx_env.name_server = 1;
 	fi_var_register(&psmx_prov, "name_server",
 			"Whether to turn on the name server or not");
-	fi_var_get_bool(&psvx_prov, "name_server", &psmx_env.name_server);
+	fi_var_get_bool(&psmx_prov, "name_server", &psmx_env.name_server);
 
 	psmx_env.am_msg = 0;
 	fi_var_register(&psmx_prov, "am_msg",
 			"Whether to use active message based messaging or not (default: no)");
-	fi_var_get_bool(&psvx_prov, "am_msg", &psmx_env.am_msg);
+	fi_var_get_bool(&psmx_prov, "am_msg", &psmx_env.am_msg);
 
 	psmx_env.tagged_rma = 1;
 	fi_var_register(&psmx_prov, "tagged_rma",
