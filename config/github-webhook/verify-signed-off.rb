@@ -43,8 +43,9 @@ post '/' do
   # commits to examine, such as if this is a test webhook ping from
   # github), then just return HTTP status 200 (i.e., success) with a
   # handy message that you can see in the Github webhook debug logs.
-  if push['action'] == nil || push['action'] != 'synchronize' then
-    return [200, 'This is not a pull request synchronize push; nothing for this bot to do!']
+  if push['action'] == nil || (push['action'] != 'synchronize' &&
+                               push['action'] != 'opened') then
+    return [200, 'This is not a pull request opened or synchronize push; nothing for this bot to do!']
   end
 
   # This webhook will have only delivered the *new* commits on this
