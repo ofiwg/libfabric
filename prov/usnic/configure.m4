@@ -266,7 +266,8 @@ AC_DEFUN([USNIC_CHECK_LIBNL3],[
 #error "LIBNL_VER_MAJ != 3, I am sad"
 #endif
 		]])],
-		[AC_MSG_RESULT([yes])],
+		[FI_BUILD_REQUIRES="libnl3-devel $FI_BUILD_REQUIRES"
+		 AC_MSG_RESULT([yes])],
 		[AC_MSG_RESULT([no])
 		 usnic_libnl3_happy=0]
 		)])
@@ -307,6 +308,7 @@ AC_DEFUN([USNIC_CHECK_LIBNL],[
 			[usnic_libnl_happy=0])
 
 	AS_IF([test $usnic_libnl_happy -eq 1],
-	      [$2_LIBS="-lnl -lm"
+	      [FI_BUILD_REQUIRES="libnl-devel $FI_BUILD_REQUIRES"
+	       $2_LIBS="-lnl -lm"
 	       HAVE_LIBNL3=0])
 ])

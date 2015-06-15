@@ -24,5 +24,8 @@ AC_DEFUN([FI_PSM_CONFIGURE],[
 	AS_IF([test x"$psm_happy" = x"1"],
    	      [AC_CHECK_TYPE([psm_epconn_t], [], [psm_happy=0], [[#include <psm.h>]])])
 
-	AS_IF([test $psm_happy -eq 1], [$1], [$2])
+	AS_IF([test $psm_happy -eq 1],
+	       [FI_BUILD_REQUIRES="infinipath-psm-devel $FI_BUILD_REQUIRES"
+	        $1],
+	       [$2])
 ])
