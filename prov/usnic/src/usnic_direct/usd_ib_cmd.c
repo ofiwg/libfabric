@@ -151,6 +151,93 @@ usd_ib_cmd_alloc_pd(
     return 0;
 }
 
+#if USNIC_HAVE_SHPD
+/*
+ * Create a share protection domain
+ */
+int
+usd_ib_cmd_alloc_shpd(
+    struct usd_device *dev,
+    uint32_t pd_handle,
+    uint64_t share_key,
+    void *iova_start,
+    size_t iova_len,
+    uint32_t *handle_o)
+{
+    struct usnic_alloc_shpd cmd;
+    struct usnic_alloc_shpd_resp resp;
+    struct ibv_alloc_shpd *icp;
+    struct ibv_alloc_shpd_resp *irp;
+    struct usnic_ib_alloc_shpd_cmd *ucp;
+    int n;
+
+    memset(&cmd, 0, sizeof(cmd));
+    memset(&resp, 0, sizeof(resp));
+
+    icp = &cmd.ibv_cmd;
+    icp->command = IB_USER_VERBS_CMD_ALLOC_SHPD;
+    icp->pd_handle = pd_handle;
+    icp->share_key = share_key;
+    icp->in_words = sizeof(cmd) / 4;    /* Assuming no additional data */
+    icp->out_words = sizeof(resp) / 4;  /* Assuming no additional data */
+    icp->response = (uintptr_t) & resp;
+
+    ucp = &cmd.usnic_cmd;
+    ucp->cmd_version = USNIC_IB_ALLOC_SHPD_CMD_VERSION;
+    ucp->v1.iova_start = (u64)iova_start;
+    ucp->v1.iova_length = (u64)iova_len;
+    n = write(dev->ud_ib_dev_fd, &cmd, sizeof(cmd));
+    if (n != sizeof(cmd)) {
+        return -errno;
+    }
+
+    /* process response */
+    irp = &resp.ibv_resp;
+    *handle_o = irp->shpd_handle;
+
+    return 0;
+}
+
+/*
+ * create a pd from a shpd
+ */
+int
+usd_ib_cmd_share_pd(
+    struct usd_device *dev,
+    uint32_t shpd_handle,
+    uint64_t share_key,
+    uint32_t *handle_o)
+{
+    struct usnic_share_pd cmd;
+    struct usnic_share_pd_resp resp;
+    struct ibv_share_pd *icp;
+    struct ibv_share_pd_resp *irp;
+    int n;
+
+    memset(&cmd, 0, sizeof(cmd));
+    memset(&resp, 0, sizeof(resp));
+
+    icp = &cmd.ibv_cmd;
+    icp->command = IB_USER_VERBS_CMD_SHARE_PD;
+    icp->shpd_handle = shpd_handle;
+    icp->share_key = share_key;
+    icp->in_words = sizeof(cmd) / 4;    /* Assuming no additional data */
+    icp->out_words = sizeof(resp) / 4;  /* Assuming no additional data */
+    icp->response = (uintptr_t) & resp;
+
+    n = write(dev->ud_ib_dev_fd, &cmd, sizeof(cmd));
+    if (n != sizeof(cmd)) {
+        return -errno;
+    }
+
+    /* process response */
+    irp = &resp.ibv_resp;
+    *handle_o = irp->pd_handle;
+
+    return 0;
+}
+#endif
+
 int
 usd_ib_cmd_reg_mr(
     struct usd_device *dev,
@@ -190,6 +277,66 @@ usd_ib_cmd_reg_mr(
     mr->umr_handle = irp->mr_handle;
     mr->umr_lkey = irp->lkey;
     mr->umr_rkey = irp->rkey;
+
+    return 0;
+}
+
+int usd_ib_cmd_reg_mr_v1(
+    struct usd_device *dev,
+    void *vaddr,
+    size_t length,
+    uint32_t reg_op,
+    uint32_t vfid,
+    uint32_t mr_type,
+    uint32_t queue_index,
+    struct usd_mr *mr)
+{
+    struct usnic_reg_mr cmd;
+    struct usnic_reg_mr_resp resp;
+    struct ibv_reg_mr *icp;
+    struct ibv_reg_mr_resp *irp;
+    struct usnic_ib_reg_mr_cmd *ucp;
+    struct usnic_ib_reg_mr_resp *urp;
+    int n;
+
+    memset(&cmd, 0, sizeof(cmd));
+    memset(&resp, 0, sizeof(resp));
+
+    icp = &cmd.ibv_cmd;
+    icp->command = IB_USER_VERBS_CMD_REG_MR;
+    icp->in_words = sizeof(cmd) / 4;
+    icp->out_words = sizeof(resp) / 4;
+    icp->response = (uintptr_t) &resp;
+
+    icp->start = (uintptr_t) vaddr;
+    icp->length = length;
+    icp->hca_va = (uintptr_t) vaddr;
+    icp->pd_handle = dev->ud_pd_handle;
+    icp->access_flags = IBV_ACCESS_LOCAL_WRITE;
+
+    ucp = &cmd.usnic_cmd;
+    ucp->cmd_version = 1;
+    ucp->v1.hw_addr_type = reg_op;
+    ucp->v1.vfid = vfid;
+    ucp->v1.mr_type = mr_type;
+    ucp->v1.queue_index = queue_index;
+
+    /* Issue command to IB driver */
+    n = write(dev->ud_ib_dev_fd, &cmd, sizeof(cmd));
+    if (n != sizeof(cmd)) {
+        return errno;
+    }
+
+    /* process response */
+    irp = &resp.ibv_resp;
+    mr->umr_handle = irp->mr_handle;
+    mr->umr_lkey = irp->lkey;
+    mr->umr_rkey = irp->rkey;
+
+    urp = &resp.usnic_resp;
+    if (urp->resp_version >= 1) {
+        mr->umr_iova = urp->v1.iova;
+    }
 
     return 0;
 }
@@ -519,7 +666,7 @@ usd_ib_cmd_destroy_qp(
     return 0;
 }
 
-static int
+int
 usd_ib_cmd_query_device(
     struct usd_device *dev,
     struct ibv_query_device_resp *irp)
@@ -548,7 +695,7 @@ usd_ib_cmd_query_device(
     return 0;
 }
 
-static int
+int
 usd_ib_cmd_query_port(
     struct usd_device *dev,
     struct ibv_query_port_resp *irp)

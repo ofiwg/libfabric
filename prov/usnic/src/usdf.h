@@ -43,6 +43,7 @@
 
 #include "usdf_progress.h"
 #include "usd.h"
+#include "fi_ext_usnic.h"
 
 
 #define USDF_PROV_NAME "usnic"
@@ -67,7 +68,7 @@ extern struct fi_provider usdf_ops;
 #define USDF_INFO(...) USDF_INFO_SYS(FABRIC, __VA_ARGS__)
 #define USDF_DBG(...)  USDF_DBG_SYS(FABRIC, __VA_ARGS__)
 
-#define USDF_HDR_BUF_ENTRY 64
+#define USDF_HDR_BUF_ENTRY 42
 #define USDF_EP_CAP_PIO (1ULL << 63)
 
 #define USDF_MAX_PEERS (16 * 1024)
@@ -296,6 +297,7 @@ struct usdf_ep {
 			struct usdf_av *ep_av;
 
 			void *ep_hdr_buf;
+			void *ep_hdr_buf_iova;
 			struct usd_udp_hdr **ep_hdr_ptr;
 		} dg;
 		struct {
@@ -427,6 +429,9 @@ ssize_t usdf_eq_write_internal(struct usdf_eq *eq, uint32_t event,
 /* fi_ops_fabric */
 int usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct fid_domain **domain, void *context);
+int usdf_share_domain(struct fid_fabric *fabric, struct fi_info *info,
+			struct fi_usnic_shdom *shdom, uint64_t share_key,
+			struct fid_domain **domain, void *context);
 int usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	struct fid_eq **eq, void *context);
 int usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
@@ -453,3 +458,4 @@ void usdf_setup_fake_ibv_provider(void);
 int usdf_pep_steal_socket(struct usdf_pep *pep, int *is_bound, int *sock_o);
 
 #endif /* _USDF_H_ */
+

@@ -59,11 +59,14 @@ usd_post_send_one_udp_normal(
     struct usd_wq *wq;
     uint32_t last_post;
     uint8_t *copybuf;
+    void *copybuf_iova;
     struct usd_wq_post_info *info;
 
     qp = to_qpi(uqp);
     wq = &qp->uq_wq;
     copybuf = wq->uwq_copybuf + wq->uwq_post_index * USD_SEND_MAX_COPY;
+    copybuf_iova = wq->uwq_copybuf_iova +
+                        wq->uwq_post_index * USD_SEND_MAX_COPY;
 
     hdr = (struct usd_udp_hdr *)copybuf;
     memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
@@ -77,8 +80,8 @@ usd_post_send_one_udp_normal(
     hdr->uh_udp.source =
         qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
 
-    last_post = _usd_post_send_two(wq, hdr, sizeof(*hdr), buf, len,
-                           USD_SF_ISSET(flags, SIGNAL));
+    last_post = _usd_post_send_two(wq, copybuf_iova, sizeof(*hdr), buf, len,
+                                   USD_SF_ISSET(flags, SIGNAL));
 
     info = &wq->uwq_post_info[last_post];
     info->wp_context = context;
@@ -102,11 +105,14 @@ usd_post_send_one_vlan_udp_normal(
     struct usd_wq *wq;
     uint32_t last_post;
     uint8_t *copybuf;
+    void *copybuf_iova;
     struct usd_wq_post_info *info;
 
     qp = to_qpi(uqp);
     wq = &qp->uq_wq;
     copybuf = wq->uwq_copybuf + wq->uwq_post_index * USD_SEND_MAX_COPY;
+    copybuf_iova = wq->uwq_copybuf_iova +
+                        wq->uwq_post_index * USD_SEND_MAX_COPY;
 
     hdr = (struct usd_udp_hdr *)copybuf;
     memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
@@ -120,7 +126,7 @@ usd_post_send_one_vlan_udp_normal(
     hdr->uh_udp.source =
         qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
 
-    last_post = _usd_post_send_two_vlan(wq, hdr, sizeof(*hdr), buf, len,
+    last_post = _usd_post_send_two_vlan(wq, copybuf_iova, sizeof(*hdr), buf, len,
                             USD_SF_ISSET(flags, SIGNAL), vlan);
 
     info = &wq->uwq_post_info[last_post];
@@ -143,12 +149,15 @@ usd_post_send_one_copy_udp_normal(
     struct usd_udp_hdr *hdr;
     struct usd_wq *wq;
     uint8_t *copybuf;
+    void *copybuf_iova;
     uint32_t last_post;
     struct usd_wq_post_info *info;
 
     qp = to_qpi(uqp);
     wq = &qp->uq_wq;
     copybuf = wq->uwq_copybuf + wq->uwq_post_index * USD_SEND_MAX_COPY;
+    copybuf_iova = wq->uwq_copybuf_iova +
+                        wq->uwq_post_index * USD_SEND_MAX_COPY;
 
     hdr = (struct usd_udp_hdr *) copybuf;
     memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
@@ -164,7 +173,7 @@ usd_post_send_one_copy_udp_normal(
         qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
 
     last_post =
-        _usd_post_send_one(wq, hdr, len + sizeof(struct usd_udp_hdr),
+        _usd_post_send_one(wq, copybuf_iova, len + sizeof(struct usd_udp_hdr),
                            USD_SF_ISSET(flags, SIGNAL));
 
     info = &wq->uwq_post_info[last_post];
@@ -233,6 +242,7 @@ usd_post_send_two_copy_udp_normal(
     struct usd_udp_hdr *hdr;
     struct usd_wq *wq;
     uint8_t *copybuf;
+    void *copybuf_iova;
     size_t tot_ulen;
     uint32_t last_post;
     struct usd_wq_post_info *info;
@@ -240,6 +250,8 @@ usd_post_send_two_copy_udp_normal(
     qp = to_qpi(uqp);
     wq = &qp->uq_wq;
     copybuf = wq->uwq_copybuf + wq->uwq_post_index * USD_SEND_MAX_COPY;
+    copybuf_iova = wq->uwq_copybuf_iova +
+                        wq->uwq_post_index * USD_SEND_MAX_COPY;
 
     hdr = (struct usd_udp_hdr *) copybuf;
     memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
@@ -257,7 +269,7 @@ usd_post_send_two_copy_udp_normal(
         qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
 
     last_post =
-        _usd_post_send_one(wq, hdr, uhdrlen + sizeof(*hdr) + pktlen,
+        _usd_post_send_one(wq, copybuf_iova, uhdrlen + sizeof(*hdr) + pktlen,
                            USD_SF_ISSET(flags, SIGNAL));
 
     info = &wq->uwq_post_info[last_post];
@@ -277,6 +289,7 @@ usd_post_send_iov_udp_normal(struct usd_qp *uqp,
     struct usd_wq *wq;
     uint32_t last_post;
     uint8_t *copybuf;
+    void *copybuf_iova;
     struct usd_wq_post_info *info;
     struct iovec send_iov[USD_SEND_MAX_SGE + 1];
     size_t len;
@@ -285,6 +298,8 @@ usd_post_send_iov_udp_normal(struct usd_qp *uqp,
     qp = to_qpi(uqp);
     wq = &qp->uq_wq;
     copybuf = wq->uwq_copybuf + wq->uwq_post_index * USD_SEND_MAX_COPY;
+    copybuf_iova = wq->uwq_copybuf_iova +
+                        wq->uwq_post_index * USD_SEND_MAX_COPY;
 
     for (i = 0, len = 0; i < iov_count; i++) {
             len += iov[i].iov_len;
@@ -302,7 +317,7 @@ usd_post_send_iov_udp_normal(struct usd_qp *uqp,
     hdr->uh_udp.source =
         qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
 
-    send_iov[0].iov_base = hdr;
+    send_iov[0].iov_base = copybuf_iova;
     send_iov[0].iov_len = sizeof(*hdr);
     memcpy(&send_iov[1], iov, sizeof(struct iovec) * iov_count);
 

@@ -44,11 +44,15 @@
 #define _USD_IB_CMD_
 
 #include "usd.h"
+#include <infiniband/kern-abi.h>
 
 int usd_ib_cmd_get_context(struct usd_device *dev);
 int usd_ib_cmd_alloc_pd(struct usd_device *dev, uint32_t * pd_handle_o);
 int usd_ib_cmd_reg_mr(struct usd_device *dev, void *vaddr, size_t length,
-                      struct usd_mr *mr);
+                        struct usd_mr *mr);
+int usd_ib_cmd_reg_mr_v1(struct usd_device *dev, void *vaddr, size_t length,
+                        uint32_t reg_op, uint32_t vfid, uint32_t mr_type,
+                        uint32_t queue_index, struct usd_mr *mr);
 int usd_ib_cmd_dereg_mr(struct usd_device *dev, struct usd_mr *mr);
 int usd_ib_cmd_create_cq(struct usd_device *dev, struct usd_cq_impl *cq);
 int usd_ib_cmd_destroy_cq(struct usd_device *dev, struct usd_cq_impl *cq);
@@ -59,4 +63,15 @@ int usd_ib_cmd_modify_qp(struct usd_device *dev, struct usd_qp_impl *qp,
 int usd_ib_cmd_destroy_qp(struct usd_device *dev, struct usd_qp_impl *qp);
 
 int usd_ib_query_dev(struct usd_device *dev);
+int usd_ib_cmd_query_port(struct usd_device *dev,
+                         struct ibv_query_port_resp *irp);
+int usd_ib_cmd_query_device(struct usd_device *dev,
+                           struct ibv_query_device_resp *irp);
+#if USNIC_HAVE_SHPD
+int usd_ib_cmd_alloc_shpd(struct usd_device *dev, uint32_t pd_handle,
+                            uint64_t share_key, void *iova_start,
+                            size_t iova_len, uint32_t *handle_o);
+int usd_ib_cmd_share_pd(struct usd_device *dev, uint32_t shpd_handle,
+                        uint64_t share_key, uint32_t *handle_o);
+#endif
 #endif /* _USD_IB_CMD_ */

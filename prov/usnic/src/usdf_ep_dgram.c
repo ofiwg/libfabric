@@ -133,9 +133,10 @@ usdf_ep_dgram_enable(struct fid_ep *fep)
 		goto fail;
 	}
 
-	ret = usd_alloc_mr(ep->ep_domain->dom_dev,
+	ret = usd_alloc_iova_mr_with_qp(ep->e.dg.ep_qp,
 		usd_get_recv_credits(ep->e.dg.ep_qp) * USDF_HDR_BUF_ENTRY,
-			&ep->e.dg.ep_hdr_buf);
+		USD_MR_RQ_HDRBUF, &ep->e.dg.ep_hdr_buf,
+		&ep->e.dg.ep_hdr_buf_iova);
 	if (ret != 0) {
 		goto fail;
 	}

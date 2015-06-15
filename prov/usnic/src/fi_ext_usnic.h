@@ -13,13 +13,13 @@
  *     conditions are met:
  *
  *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer.
  *
  *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer in the documentation and/or other materials
+ *	  provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -41,6 +41,11 @@
 
 #include <stdint.h>
 #include <net/if.h>
+
+#define FI_USNIC_SKIP_HWALLOC	(1ULL << 60) 	/* Flag to indicate not allocating
+						 * hardware resource for fi_domain
+						 * used in fi_info->caps field
+						 */
 
 #define FI_PROTO_RUDP 100
 
@@ -66,6 +71,10 @@ struct fi_usnic_info {
 	} ui;
 };
 
+struct fi_usnic_shdom {
+	uint32_t handle;
+};
+
 /*
  * usNIC-specific fabric ops
  */
@@ -74,7 +83,27 @@ struct fi_usnic_ops_fabric {
 	size_t size;
 	int (*getinfo)(uint32_t version, struct fid_fabric *fabric,
 				struct fi_usnic_info *info);
+	int (*verbs_compat)(uint8_t op, uint8_t sub_op, void *context,
+				void *out);
+	int (*share_domain)(struct fid_fabric *fabric, struct fi_info *info,
+				struct fi_usnic_shdom *shdom, uint64_t share_key,
+				struct fid_domain **domain, void *context);
 };
+
+enum verbs_compat_op {
+	VERBS_COMPAT_OP_GET_DATA_STRUCTURE = 0,
+	__VERBS_COMPAT_OP_MAX,
+};
+#define VERBS_COMPAT_OP_MAX (__VERBS_COMPAT_OP_MAX - 1)
+
+
+enum verbs_data_structure {
+	VERBS_DATA_IBV_DEVICE_ATTR = 0,
+	VERBS_DATA_IBV_PORT_ATTR,
+	__VERBS_DATA_MAX,
+};
+#define VERBS_DATA_MAX (__VERBS_DATA_MAX -1)
+
 
 /*
  * usNIC-specific AV ops
@@ -83,6 +112,16 @@ struct fi_usnic_ops_fabric {
 struct fi_usnic_ops_av {
 	size_t size;
 	int (*get_distance)(struct fid_av *av, void *addr, int *metric);
+};
+
+/*
+ * usNIC-specific domain ops
+ */
+#define FI_USNIC_DOMAIN_OPS_1 "domain_ops 1"
+struct fi_usnic_ops_domain {
+	size_t size;
+	int (*alloc_shdom)(struct fid_domain *domain, uint64_t share_key,
+				struct fi_usnic_shdom *shdom);
 };
 
 #endif /* _FI_EXT_USNIC_H_ */

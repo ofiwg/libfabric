@@ -222,7 +222,8 @@ usd_map_vf(
                 goto out;
         }
 
-        ret = vnic_dev_cmd_init(vf->vf_vdev, 1);
+        /* ret = vnic_dev_cmd_init(vf->vf_vdev, 1); */
+	ret = vnic_dev_init_devcmdorig(vf->vf_vdev);
         if (ret)
             goto out;
 
@@ -335,11 +336,20 @@ usd_create_wq_normal(
 
     /* Allocate resources for WQ */
     ring_size = sizeof(struct wq_enet_desc) * wq->uwq_num_entries;
-    ret = usd_alloc_mr(qp->uq_dev, ring_size, (void **)&wq->uwq_desc_ring);
+    if (qp->uq_dev->is_pd_shared == 0) {
+        ret = usd_alloc_mr(qp->uq_dev, ring_size, (void **)&wq->uwq_desc_ring);
+        if (ret == 0)
+            wq->uwq_desc_ring_iova = wq->uwq_desc_ring;
+    } else {
+        ret = usd_alloc_iova_mr(qp->uq_dev, ring_size, qp->uq_vf->vf_id,
+                                USNIC_MR_WQ_RING, wq->uwq_index,
+                                (void **)&wq->uwq_desc_ring,
+                                (void **)&wq->uwq_desc_ring_iova);
+    }
     if (ret != 0)
         return ret;
 
-    ret = usd_vnic_wq_init(wq, qp->uq_vf, (uint64_t)wq->uwq_desc_ring);
+    ret = usd_vnic_wq_init(wq, qp->uq_vf, (uint64_t)wq->uwq_desc_ring_iova);
     if (ret != 0)
         goto out;
 
@@ -523,11 +533,20 @@ usd_create_rq(struct usd_qp_impl *qp)
 
     /* Allocate resources for RQ */
     ring_size = sizeof(struct rq_enet_desc) * rq->urq_num_entries;
-    ret = usd_alloc_mr(qp->uq_dev, ring_size, (void **)&rq->urq_desc_ring);
+    if (qp->uq_dev->is_pd_shared == 0) {
+        ret = usd_alloc_mr(qp->uq_dev, ring_size, (void **)&rq->urq_desc_ring);
+        if (ret == 0)
+            rq->urq_desc_ring_iova = rq->urq_desc_ring;
+    } else {
+        ret = usd_alloc_iova_mr(qp->uq_dev, ring_size, qp->uq_vf->vf_id,
+                                USNIC_MR_RQ_RING, rq->urq_index,
+                                (void **)&rq->urq_desc_ring,
+                                (void **)&rq->urq_desc_ring_iova);
+    }
     if (ret != 0)
         return ret;
 
-    ret = usd_vnic_rq_init(rq, qp->uq_vf, (uint64_t)rq->urq_desc_ring);
+    ret = usd_vnic_rq_init(rq, qp->uq_vf, (uint64_t)rq->urq_desc_ring_iova);
     if (ret != 0)
         goto out;
 
@@ -673,7 +692,6 @@ usd_create_cq(
     unsigned qp_per_vf;
     struct usd_cq *ucq;
     struct usd_cq_impl *cq;
-    unsigned ring_size;
     int ret;
 
     /* Make sure device ready */
@@ -714,14 +732,7 @@ usd_create_cq(
     if (num_entries < 64) {
         num_entries = 64;
     }
-
     cq->ucq_num_entries = num_entries;
-
-    ring_size = sizeof(struct cq_desc) * num_entries;
-    ret = usd_alloc_mr(dev, ring_size, &cq->ucq_desc_ring);
-    if (ret != 0)
-        goto out;
-    memset(cq->ucq_desc_ring, 0, ring_size);
 
     ret = usd_ib_cmd_create_cq(dev, cq);
     if (ret != 0)
@@ -756,6 +767,8 @@ usd_finish_create_cq(
     struct usd_vf *vf)
 {
     struct vnic_cq *vcq;
+    unsigned ring_size;
+    int ret;
 
     if (cq->ucq_state & USD_QS_VNIC_INITIALIZED) {
         if (cq->ucq_vf == vf) {
@@ -778,6 +791,21 @@ usd_finish_create_cq(
     usd_get_vf(vf);     /* bump the reference count */
     cq->ucq_state |= USD_QS_VF_MAPPED;
 
+    ring_size = sizeof(struct cq_desc) * cq->ucq_num_entries;
+    if (cq->ucq_dev->is_pd_shared == 0) {
+        ret = usd_alloc_mr(cq->ucq_dev, ring_size, &cq->ucq_desc_ring);
+        if (ret == 0)
+            cq->ucq_desc_ring_iova = cq->ucq_desc_ring;
+    } else {
+        ret = usd_alloc_iova_mr(cq->ucq_dev, ring_size, cq->ucq_vf->vf_id,
+                                USNIC_MR_CQ_RING, cq->ucq_index,
+                                (void **)&cq->ucq_desc_ring,
+                                (void **)&cq->ucq_desc_ring_iova);
+    }
+    if (ret != 0)
+        return ret;
+    memset(cq->ucq_desc_ring, 0, ring_size);
+
     /*
      * Tell the VIC about this CQ
      */
@@ -793,7 +821,7 @@ usd_finish_create_cq(
         unsigned int cq_intr_offset = 0;
         uint64_t cq_msg_addr = 0;
 
-        cq->ucq_vnic_cq.ring.base_addr = (uintptr_t)cq->ucq_desc_ring;
+        cq->ucq_vnic_cq.ring.base_addr = (uintptr_t)cq->ucq_desc_ring_iova;
         cq->ucq_vnic_cq.ring.desc_count = cq->ucq_num_entries;
 
         vnic_cq_init(&cq->ucq_vnic_cq, cq_flow_control_enable,
@@ -1034,7 +1062,16 @@ usd_create_qp_normal(
      * mr under shared PD
      */
     copybuf_size = USD_SEND_MAX_COPY * num_wq_entries;
-    ret = usd_alloc_mr(dev, copybuf_size, (void **)&wq->uwq_copybuf);
+    if (dev->is_pd_shared == 0) {
+        ret = usd_alloc_mr(dev, copybuf_size, (void **)&wq->uwq_copybuf);
+        if (ret == 0)
+            wq->uwq_copybuf_iova = wq->uwq_copybuf;
+    } else {
+        ret = usd_alloc_iova_mr(dev, copybuf_size, vf_info.vi_vfid,
+                                USNIC_MR_WQ_COPYBUF, wq->uwq_index,
+                                (void **)&wq->uwq_copybuf,
+                                (void **)&wq->uwq_copybuf_iova);
+    }
     if (ret != 0)
         goto fail;
 

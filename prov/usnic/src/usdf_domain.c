@@ -59,6 +59,7 @@
 #include "usdf.h"
 #include "usdf_rdm.h"
 #include "usdf_timer.h"
+#include "fi_ext_usnic.h"
 
 static int
 usdf_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
@@ -191,12 +192,49 @@ usdf_domain_close(fid_t fid)
 	return 0;
 }
 
+static int
+usdf_alloc_shdom(struct fid_domain *domain, uint64_t share_key,
+				struct fi_usnic_shdom *shdom)
+{
+	struct usdf_domain *udp;
+
+	USDF_TRACE_SYS(DOMAIN, "\n");
+
+	udp = dom_ftou(domain);
+
+	if (udp->dom_dev == NULL) {
+		return -FI_EINVAL;
+	}
+
+	return usd_alloc_shpd(udp->dom_dev, share_key, &shdom->handle);
+}
+
+static struct fi_usnic_ops_domain usdf_usnic_ops_domain = {
+	.size = sizeof(struct fi_usnic_ops_domain),
+	.alloc_shdom = usdf_alloc_shdom,
+};
+
+static int
+usdf_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
+		void **ops, void *context)
+{
+	USDF_TRACE("\n");
+
+	if (strcmp(ops_name, FI_USNIC_DOMAIN_OPS_1) == 0) {
+		*ops = &usdf_usnic_ops_domain;
+	} else {
+		return -FI_EINVAL;
+	}
+
+	return 0;
+}
+
 static struct fi_ops usdf_fid_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = usdf_domain_close,
 	.bind = usdf_domain_bind,
 	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = usdf_domain_ops_open,
 };
 
 static struct fi_ops_mr usdf_domain_mr_ops = {
@@ -218,9 +256,10 @@ static struct fi_ops_domain usdf_domain_ops = {
 	.srx_ctx = fi_no_srx_context,
 };
 
-int
-usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-	   struct fid_domain **domain, void *context)
+static int
+_usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+			struct usd_device *dom_dev, struct fid_domain **domain,
+			void *context)
 {
 	struct usdf_fabric *fp;
 	struct usdf_domain *udp;
@@ -284,11 +323,6 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto fail;
 	}
 
-	ret = usd_open(fp->fab_dev_attrs->uda_devname, &udp->dom_dev);
-	if (ret != 0) {
-		goto fail;
-	}
-
 	udp->dom_fid.fid.fclass = FI_CLASS_DOMAIN;
 	udp->dom_fid.fid.context = context;
 	udp->dom_fid.fid.ops = &usdf_fid_ops;
@@ -324,6 +358,7 @@ usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	atomic_initialize(&udp->dom_refcnt, 0);
 	atomic_inc(&fp->fab_refcnt);
 
+	udp->dom_dev = dom_dev;
 	*domain = &udp->dom_fid;
 	return 0;
 
@@ -332,11 +367,67 @@ fail:
 		if (udp->dom_info != NULL) {
 			fi_freeinfo(udp->dom_info);
 		}
-		if (udp->dom_dev != NULL) {
-			usd_close(udp->dom_dev);
-		}
 		usdf_dom_rdc_free_data(udp);
 		free(udp);
 	}
 	return ret;
+}
+
+int
+usdf_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+	   struct fid_domain **domain, void *context)
+{
+	struct usdf_fabric *fp;
+	struct usd_device *dom_dev;
+	int ret;
+
+	USDF_TRACE_SYS(DOMAIN, "\n");
+
+	fp = fab_fidtou(fabric);
+
+	if ((info->caps & FI_USNIC_SKIP_HWALLOC) == 0)
+		ret = usd_open(fp->fab_dev_attrs->uda_devname, &dom_dev);
+	else
+		ret = usd_open_for_attrs(fp->fab_dev_attrs->uda_devname,
+						&dom_dev);
+	if (ret != 0) {
+		return ret;
+	}
+
+	ret = _usdf_domain_open(fabric, info, dom_dev, domain, context);
+	if (ret != 0) {
+		usd_close(dom_dev);
+		return ret;
+	}
+
+	return 0;
+}
+
+int
+usdf_share_domain(struct fid_fabric *fabric, struct fi_info *info,
+			struct fi_usnic_shdom *shdom, uint64_t share_key,
+			struct fid_domain **domain, void *context)
+{
+	struct usdf_fabric *fp;
+	struct usd_device *dom_dev;
+	int ret;
+
+	USDF_TRACE_SYS(DOMAIN, "\n");
+
+	fp = fab_fidtou(fabric);
+	ret = usd_open_with_shpd(fp->fab_dev_attrs->uda_devname, -1,
+					shdom->handle, share_key,
+					&dom_dev);
+	if (ret != 0) {
+		USDF_WARN("usd_open_with_shpd failed, err %d\n", ret);
+		return ret;
+	}
+
+	ret = _usdf_domain_open(fabric, info, dom_dev, domain, context);
+	if (ret != 0) {
+		usd_close(dom_dev);
+		return ret;
+	}
+
+	return 0;
 }

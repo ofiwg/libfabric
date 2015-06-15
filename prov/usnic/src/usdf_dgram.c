@@ -71,6 +71,7 @@ usdf_dgram_recv(struct fid_ep *fep, void *buf, size_t len,
 	struct usdf_ep *ep;
 	struct usd_qp_impl *qp;
 	struct usd_recv_desc rxd;
+	struct usd_udp_hdr *hdr_ptr;
 	uint32_t index;
 
 	ep = ep_ftou(fep);
@@ -78,7 +79,7 @@ usdf_dgram_recv(struct fid_ep *fep, void *buf, size_t len,
 
 	index = qp->uq_rq.urq_post_index;
 	rxd.urd_context = context;
-	rxd.urd_iov[0].iov_base = (uint8_t *)ep->e.dg.ep_hdr_buf +
+	rxd.urd_iov[0].iov_base = (uint8_t *)ep->e.dg.ep_hdr_buf_iova +
 		(index * USDF_HDR_BUF_ENTRY) +
 		(USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr));
 	rxd.urd_iov[0].iov_len = sizeof(struct usd_udp_hdr);
@@ -87,9 +88,12 @@ usdf_dgram_recv(struct fid_ep *fep, void *buf, size_t len,
 	rxd.urd_iov_cnt = 2;
 	rxd.urd_next = NULL;
 
-	ep->e.dg.ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
+	hdr_ptr = (struct usd_udp_hdr*) (ep->e.dg.ep_hdr_buf +
+			(index * USDF_HDR_BUF_ENTRY) +
+			(USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr)));
+	ep->e.dg.ep_hdr_ptr[index] = hdr_ptr;
 	index = (index + 1) & qp->uq_rq.urq_post_index_mask;
-	ep->e.dg.ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
+	ep->e.dg.ep_hdr_ptr[index] = hdr_ptr;
 
 	return usd_post_recv(ep->e.dg.ep_qp, &rxd);
 }
@@ -101,6 +105,7 @@ usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 	struct usdf_ep *ep;
 	struct usd_recv_desc rxd;
 	struct usd_qp_impl *qp;
+	struct usd_udp_hdr *hdr_ptr;
 	uint32_t index;
 	size_t i;
 
@@ -108,16 +113,18 @@ usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 	qp = to_qpi(ep->e.dg.ep_qp);
 
 	rxd.urd_context = context;
-	rxd.urd_iov[0].iov_base = ep->e.dg.ep_hdr_buf +
+	rxd.urd_iov[0].iov_base = ep->e.dg.ep_hdr_buf_iova +
 		qp->uq_rq.urq_post_index * USDF_HDR_BUF_ENTRY;
 	rxd.urd_iov[0].iov_len = sizeof(struct usd_udp_hdr);
 	memcpy(&rxd.urd_iov[1], iov, sizeof(*iov) * count);
 	rxd.urd_iov_cnt = count + 1;
 	rxd.urd_next = NULL;
 
+	hdr_ptr = (struct usd_udp_hdr*) (ep->e.dg.ep_hdr_buf +
+		qp->uq_rq.urq_post_index * USDF_HDR_BUF_ENTRY);
 	index = qp->uq_rq.urq_post_index;
 	for (i = 0; i < count; ++i) {
-		ep->e.dg.ep_hdr_ptr[index] = rxd.urd_iov[0].iov_base;
+		ep->e.dg.ep_hdr_ptr[index] = hdr_ptr;
 		index = (index + 1) & qp->uq_rq.urq_post_index_mask;
 	}
 

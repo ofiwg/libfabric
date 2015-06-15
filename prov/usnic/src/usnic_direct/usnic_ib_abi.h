@@ -80,12 +80,18 @@ struct usnic_alloc_pd_resp {
 
 struct usnic_reg_mr {
 	struct ibv_reg_mr		ibv_cmd;
-	__u64				reserved;
+	struct usnic_ib_reg_mr_cmd	usnic_cmd;
 };
 
-struct usnic_reg_mr_resp {
+/*
+ * This structure needs to be packed because size of struct ibv_reg_mr_resp
+ * is not 64bit aligned, while ib_copy_udata_to() expects driver output
+ * data(usnic_resp) immediately follows verbs data, which is not true if
+ * this structure is not packed.
+ */
+struct __attribute__((__packed__)) usnic_reg_mr_resp {
 	struct ibv_reg_mr_resp		ibv_resp;
-	__u64				reserved;
+	struct usnic_ib_reg_mr_resp	usnic_resp;
 };
 
 struct usnic_create_cq {
@@ -103,5 +109,24 @@ struct usnic_create_qp {
 	struct usnic_ib_create_qp_cmd	usnic_cmd;
 	__u64				reserved[8];
 };
+
+#if USNIC_HAVE_SHPD
+struct __attribute__((__packed__)) usnic_alloc_shpd {
+	struct ibv_alloc_shpd		ibv_cmd;
+	struct usnic_ib_alloc_shpd_cmd	usnic_cmd;
+};
+
+struct usnic_alloc_shpd_resp {
+	struct ibv_alloc_shpd_resp	ibv_resp;
+};
+
+struct usnic_share_pd {
+	struct ibv_share_pd		ibv_cmd;
+};
+
+struct usnic_share_pd_resp {
+	struct ibv_share_pd_resp	ibv_resp;
+};
+#endif
 
 #endif /* USNIC_IB_ABI_H */
