@@ -1,0 +1,73 @@
+This directory contains the Github webhook for verifying that all
+commits on an ofiwg PR contain a "Signed-off-by" line, and its
+relevant configuration.
+
+The bot runs as a Ruby Sinatra server on flatbed.openfabrics.org.  It
+was initially heavily inspired by
+http://git-scm.com/book/en/v2/GitHub-Scripting-GitHub.
+
+There are 3 important files in this directory:
+
+1. github-webhook-ofiwg-init.d
+
+The /etc/init.d/github-webhook-ofiwg script that starts and stops the
+Ruby Sinatra server script that actually listens for the incoming
+Github webhook pings.
+
+2. verify-signed-off.rb
+
+The Ruby Sinatra server (i.e., a Ruby script that uses the Sinatra
+framework for listening for incoming HTTP requests) that listens for
+Github webhook pings.  When it gets an incoming ping, if it's for a
+pull request, the script gets a listing of all the commits on that
+pull request and verifies that they all have a "Signed-off-by" line in
+them.  If they all do, all commits have a "success" status set (at
+Github).  If any are missing this line, then those commits have a
+"failed" status set, and the last commit on the PR also has a "failed"
+status set (because Github shows the overall status of the PR as the
+last commit's status).
+
+Every time commits are pushed to the PR, all the commits will be
+checked again.  This ensures that even if you replace all the commits,
+we'll check them all (it's one HTTP request to get all the commit
+messages, anyway, so it's not like it makes the check take
+significantly longer).
+
+Note that the Ruby Sinatra server listens on localhost port 5000; it
+is not directly accessible to the outside world.
+
+On flatbed.openfabrics.org, the file is located in
+/var/www/github-webhooks/ofiwg/verify-signed-off.rb.
+
+3. apache-config.txt
+
+This is a snipit from
+flatbed.openfabrics.org:/etc/httpd/conf.d/20-ssl.conf inserted in the
+SSL version of www.openfabrics.org config to enable the reverse proxy
+(i.e., incoming web requests to
+https://www.openfabrics.org/github-webhooks/ofiwg get routed
+internally to http://localhost:5000/ -- i.e., the Ruby Sinatra
+server).
+
+===================
+
+There is one additional file needed on flatbed.openfabrics.org:
+/etc/sysconfig/github-webhook-ofiwg.  The init.d script will source
+this file; it needs to set an environment variable that
+verify-signed-off.rb will look for: $GITHUB_AUTH_TOKEN.
+
+Specifically, this file should contain a line like this:
+
+export GITHUB_AUTH_TOKEN="...the token..."
+
+(this /etc/sysconfig file is not here in the git repo, of course --
+because then everyone could see our auth token!)
+
+A Github auth token can be obtained from
+https://github.com/settings/tokens of a user who has commit access to
+the target Github repo(s).  The token needs to have the following
+permissions when you create it:
+
+- repo
+- public_repo
+- repo:status
