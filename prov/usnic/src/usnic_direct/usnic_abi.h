@@ -61,6 +61,8 @@
 	  (((uint64_t)res_type_bar_id & 0xffff) << 32) | \
 	  ((uint64_t)vfid & ((1ULL << 32) - 1))) * sysconf(_SC_PAGE_SIZE))
 
+#define USNIC_UDEVCMD_NARGS 		15   /* VNIC_DEVCMD_NARGS */
+
 enum usnic_mmap_type {
 	USNIC_MMAP_BAR			= 0,
 	USNIC_MMAP_RES			= 1,
@@ -71,6 +73,33 @@ enum usnic_transport_type {
 	USNIC_TRANSPORT_ROCE_CUSTOM	= 1,
 	USNIC_TRANSPORT_IPV4_UDP	= 2,
 	USNIC_TRANSPORT_MAX		= 3,
+};
+
+enum usnic_ucmd_type {
+	USNIC_USER_CMD_DEVCMD,
+	USNIC_USER_CMD_MAX,
+};
+
+struct usnic_user_cmd {
+	u32			ucmd;
+	u32			pad_to_8byte;
+	u64			inbuf;
+	u64			outbuf;
+	u32			inlen;
+	u32			outlen;
+};
+
+struct usnic_udevcmd_cmd {
+	u32			vnic_idx;
+	u32			devcmd;
+	u32			wait;
+	u32			num_args;
+	u64			args[USNIC_UDEVCMD_NARGS];
+};
+
+struct usnic_udevcmd_resp {
+	u32			num_args;
+	u64			args[USNIC_UDEVCMD_NARGS];
 };
 
 struct usnic_transport_spec {
@@ -153,11 +182,27 @@ struct usnic_ib_create_qp_resp {
 	u32				reserved[6];
 };
 
-#define USNIC_CTX_RESP_VERSION 1
+#define USNIC_CTX_RESP_VERSION 2
 
-struct usnic_ib_get_context_cmd	{
+/*
+ * Make this structure packed in order to make sure v1.num_caps not aligned
+ * at 8 byte boundary, hence still being able to support user libary
+ * requesting version 1 response.
+ */
+struct __attribute__((__packed__)) usnic_ib_get_context_cmd {
 	u32 resp_version;	/* response version requested */
-	u32 num_caps;		/* number of capabilities requested */
+	union {
+		struct {
+			u32 num_caps;	/* number of capabilities requested */
+		} v1;
+		struct {
+			u32 encap_subcmd;	/* whether encapsulate subcmd */
+			union {
+				u32 num_caps;
+				struct usnic_user_cmd usnic_ucmd;
+			};
+		} v2;
+	};
 };
 
 /*

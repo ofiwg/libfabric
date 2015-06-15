@@ -83,8 +83,21 @@ usd_ib_cmd_get_context(
     icp->response = (uintptr_t) & resp;
 
     ucp = &cmd.usnic_cmd;
+
+/*
+ *  Because usnic_verbs kernel module with USNIC_CTX_RESP_VERSION as 1
+ *  silently returns success even it receives resp_version larger than 1,
+ *  without filling in capbility information, here we still fill in
+ *  command with resp_version as 1 in order to retrive cababiltiy information.
+ *  Later when we decide to drop support for this version of kernel
+ *  module, we should replace the next two lines of code with commented-out
+ *  code below.
     ucp->resp_version = USNIC_CTX_RESP_VERSION;
-    ucp->num_caps = USNIC_CAP_CNT;
+    ucp->v2.encap_subcmd = 0;
+    ucp->v2.num_caps = USNIC_CAP_CNT;
+*/
+    ucp->resp_version = 1;
+    ucp->v1.num_caps = USNIC_CAP_CNT;
 
     n = write(dev->ud_ib_dev_fd, &cmd, sizeof(cmd));
     if (n != sizeof(cmd)) {
@@ -97,7 +110,12 @@ usd_ib_cmd_get_context(
 
     urp = &resp.usnic_resp;
 
+/*
+ * Replace the code below with the commented-out line if dropping
+ * support for kernel module with resp_version support as 1
     if (urp->resp_version == USNIC_CTX_RESP_VERSION) {
+ */
+    if (urp->resp_version == 1) {
         if (urp->num_caps > USNIC_CAP_CQ_SHARING &&
             urp->cap_info[USNIC_CAP_CQ_SHARING] > 0) {
             dev->ud_caps[USD_CAP_CQ_SHARING] = 1;
@@ -111,6 +129,84 @@ usd_ib_cmd_get_context(
             dev->ud_caps[USD_CAP_PIO] = 1;
         }
     }
+
+    return 0;
+}
+
+int
+usd_ib_cmd_devcmd(
+    struct usd_device *dev,
+    enum vnic_devcmd_cmd devcmd,
+    u64 *a0, u64 *a1, int wait)
+{
+    struct usnic_get_context cmd;
+    struct usnic_get_context_resp resp;
+    struct ibv_get_context *icp;
+    struct usnic_ib_get_context_cmd *ucp;
+    struct usnic_ib_get_context_resp *urp;
+    struct usnic_udevcmd_cmd udevcmd;
+    struct usnic_udevcmd_resp udevcmd_resp;
+    int n;
+
+    if (dev->ucmd_ib_dev_fd < 0)
+        return -ENOENT;
+
+    /* clear cmd and response */
+    memset(&cmd, 0, sizeof(cmd));
+    memset(&resp, 0, sizeof(resp));
+    memset(&udevcmd, 0, sizeof(udevcmd));
+    memset(&udevcmd_resp, 0, sizeof(udevcmd_resp));
+
+    /* fill in the command struct */
+    icp = &cmd.ibv_cmd;
+    icp->command = IB_USER_VERBS_CMD_GET_CONTEXT;
+    icp->in_words = sizeof(cmd) / 4;
+    icp->out_words = sizeof(resp) / 4;
+    icp->response = (uintptr_t) & resp;
+
+    /* fill in usnic devcmd struct */
+    udevcmd.vnic_idx = dev->ud_vf_list->vf_id;
+    udevcmd.devcmd = devcmd;
+    udevcmd.wait = wait;
+    udevcmd.num_args = 2;
+    udevcmd.args[0] = *a0;
+    udevcmd.args[1] = *a1;
+
+    ucp = &cmd.usnic_cmd;
+    ucp->resp_version = USNIC_CTX_RESP_VERSION;
+    ucp->v2.encap_subcmd = 1;
+    ucp->v2.usnic_ucmd.ucmd = USNIC_USER_CMD_DEVCMD;
+    ucp->v2.usnic_ucmd.inbuf = (uintptr_t) &udevcmd;
+    ucp->v2.usnic_ucmd.inlen = (u32)sizeof(udevcmd);
+    ucp->v2.usnic_ucmd.outbuf = (uintptr_t) &udevcmd_resp;
+    ucp->v2.usnic_ucmd.outlen = (u32)sizeof(udevcmd_resp);
+
+    n = write(dev->ucmd_ib_dev_fd, &cmd, sizeof(cmd));
+    urp = &resp.usnic_resp;
+    /*
+     * If returns success, it's an old kernel who does not understand
+     * version 2 command, then we need to close the command FD to
+     * release the created ucontext object
+     */
+    if (n == sizeof(cmd)) {
+        usd_err(
+            "The running usnic_verbs kernel module does not support "
+            "encapsulating devcmd through IB GET_CONTEXT command\n");
+        close(dev->ucmd_ib_dev_fd);
+        dev->ucmd_ib_dev_fd = -1;
+        return -ENOTSUP;
+    } else if (errno != ECHILD) {
+        return -errno;
+    } else if (urp->resp_version != USNIC_CTX_RESP_VERSION) {
+        /* Kernel needs to make sure it returns response with a format
+         * understandable by the library. */
+        usd_err(
+            "The returned resp version does not match with requested\n");
+        return -ENOTSUP;
+    }
+
+    *a0 = udevcmd_resp.args[0];
+    *a1 = udevcmd_resp.args[1];
 
     return 0;
 }

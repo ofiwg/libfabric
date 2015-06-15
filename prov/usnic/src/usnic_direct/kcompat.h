@@ -157,6 +157,20 @@
 #define RHEL_RELEASE_VERSION(a, b) 0
 #endif
 
+#define SLES_VERSION READ_SLE_VERSION
+#define SLES_PATCHLEVEL READ_SLE_PATCHLEVEL
+
+#if RHEL_RELEASE_CODE || defined(__VMKLNX__)
+#undef SLES_VERSION
+#undef SLES_PATCHLEVEL
+#define SLES_VERSION 0
+#define SLES_PATCHLEVEL 0
+#endif
+
+
+#define SLES_RELEASE_VERSION(a,b) (((a) << 8) + (b))
+#define SLES_RELEASE_CODE SLES_RELEASE_VERSION(SLES_VERSION, SLES_PATCHLEVEL)
+
 /* Non-kernel version-specific definitions */
 #ifndef IFLA_VF_PORT_MAX
 #define PORT_PROFILE_MAX 40
@@ -207,12 +221,14 @@ static inline bool skb_flow_dissect(const struct sk_buff *skb, struct flow_keys 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0))
 #if (!RHEL_RELEASE_CODE || (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6, 6)))
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 0))
+#if (!SLES_RELEASE_CODE || SLES_RELEASE_CODE < SLES_RELEASE_VERSION(11, 4))
 enum pkt_hash_types {
 	PKT_HASH_TYPE_NONE,	/* Undefined type */
 	PKT_HASH_TYPE_L2,	/* Input: src_MAC, dest_MAC */
 	PKT_HASH_TYPE_L3,	/* Input: src_IP, dst_IP */
 	PKT_HASH_TYPE_L4,	/* Input: src_IP, dst_IP, src_port, dst_port */
 };
+#endif /* sles > sles11sp3 */
 #endif /*kernel < 3.13 */
 #endif /*  !rhel or rhel < 6.6 */
 #define skb_get_hash_raw(skb) (skb)->rxhash
@@ -262,13 +278,14 @@ enum pkt_hash_types {
 
 #ifndef __VMKLNX__
 #if ((LINUX_VERSION_CODE <= KERNEL_VERSION(3, 4, 0)) &&		\
-     (!RHEL_RELEASE_CODE || RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6, 0)))
+     (!RHEL_RELEASE_CODE || RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6, 0)) &&	\
+     (!SLES_RELEASE_CODE || SLES_RELEASE_CODE < SLES_RELEASE_VERSION(11, 4)))
 #define net_warn_ratelimited(fmt, ...)			\
 	do {						\
 		if (net_ratelimit())			\
 			pr_warn(fmt, ##__VA_ARGS__);	\
 	} while (0)
-#endif /* kernel <= 3.4 && rhel < 6.0 */
+#endif /* kernel <= 3.4 && rhel < 6.0 && sles < 11.4 */
 
 #if (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 26))
 #define enic_pci_dma_mapping_error(pdev, dma) pci_dma_mapping_error(dma)

@@ -64,7 +64,7 @@
 #include "usd_vnic.h"
 #include "usd_device.h"
 
-static int usd_create_qp_normal(struct usd_qp_impl *qp);
+static int usd_create_qp_ud(struct usd_qp_impl *qp);
 
 /*
  * Remove a usecount on a VF, free it if it goes to zero
@@ -222,10 +222,6 @@ usd_map_vf(
                 goto out;
         }
 
-        ret = vnic_dev_cmd_init(vf->vf_vdev, 1);
-        if (ret)
-            goto out;
-
         /* link it in */
         vf->vf_next = dev->ud_vf_list;
         dev->ud_vf_list = vf;
@@ -321,10 +317,10 @@ usd_vnic_wq_init(
 }
 
 /*
- * Allocate the resources for a previously created WQ for normal QP
+ * Allocate the resources for a previously created WQ for UD QP
  */
 static int
-usd_create_wq_normal(
+usd_create_wq_ud(
     struct usd_qp_impl *qp)
 {
     struct usd_wq *wq;
@@ -380,7 +376,7 @@ usd_create_wq_pio(
     pio_memsize = vnic_dev_get_res_count(qp->uq_vf->vf_vdev, RES_TYPE_MEM);
     pio_vaddr = vnic_dev_get_res(qp->uq_vf->vf_vdev, RES_TYPE_MEM, 0);
 
-    ret = usd_get_devspec(qp);
+    ret = usd_get_piopa(qp);
     if (ret != 0)
         return ret;
     pio_paddr = qp->uq_attrs.uqa_pio_paddr;
@@ -451,11 +447,11 @@ usd_create_wq(
     int ret;
 
     switch (qp->uq_attrs.uqa_qtype) {
-    case USD_QTY_PIO:
+    case USD_QTY_UD_PIO:
         ret = usd_create_wq_pio(qp);
         break;
-    case USD_QTY_NORMAL:
-        ret = usd_create_wq_normal(qp);
+    case USD_QTY_UD:
+        ret = usd_create_wq_ud(qp);
         break;
     default:
         ret = -1;
@@ -819,14 +815,14 @@ usd_qp_get_ops(
     tt = USD_TT(qp->uq_attrs.uqa_transport, qp->uq_attrs.uqa_qtype);
 
     switch (tt) {
-    case USD_TT(USD_QTR_UDP, USD_QTY_NORMAL):
-        qp->uq_qp.uq_ops = usd_qp_ops_udp_normal;
+    case USD_TT(USD_QTR_UDP, USD_QTY_UD):
+        qp->uq_qp.uq_ops = usd_qp_ops_ud_udp;
         break;
-    case USD_TT(USD_QTR_UDP, USD_QTY_PIO):
-        qp->uq_qp.uq_ops = usd_qp_ops_udp_pio;
+    case USD_TT(USD_QTR_UDP, USD_QTY_UD_PIO):
+        qp->uq_qp.uq_ops = usd_qp_ops_ud_pio_udp;
         break;
-    case USD_TT(USD_QTR_RAW, USD_QTY_NORMAL):
-        qp->uq_qp.uq_ops = usd_qp_ops_raw_normal;
+    case USD_TT(USD_QTR_RAW, USD_QTY_UD):
+        qp->uq_qp.uq_ops = usd_qp_ops_ud_raw;
         break;
     default:
         return -EINVAL;
@@ -972,10 +968,10 @@ usd_destroy_qp(
 }
 
 /*
- * Create a normal or PIO QP
+ * Create a normal or PIO UD QP
  */
 static int
-usd_create_qp_normal(
+usd_create_qp_ud(
     struct usd_qp_impl *qp)
 {
     struct usd_device *dev;
@@ -1191,9 +1187,9 @@ usd_create_qp(
      * Now, do the type-specific configuration
      */
     switch (qtype) {
-    case USD_QTY_NORMAL:
-    case USD_QTY_PIO:
-        ret = usd_create_qp_normal(qp);
+    case USD_QTY_UD:
+    case USD_QTY_UD_PIO:
+        ret = usd_create_qp_ud(qp);
         if (ret != 0) {
             goto fail;
         }

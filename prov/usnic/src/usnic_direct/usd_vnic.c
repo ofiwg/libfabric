@@ -50,10 +50,11 @@
 #include "usd.h"
 #include "usd_util.h"
 #include "usd_vnic.h"
+#include "usd_ib_cmd.h"
 
 #define GET_CONFIG(m) \
         do { \
-                ret = vnic_dev_spec(qp->uq_vf->vf_vdev, \
+                ret = usd_dev_spec(qp->uq_dev, \
                         usd_offset_of(struct vnic_enet_config, m), \
                         sizeof(c->m), &c->m); \
                 if (ret) { \
@@ -63,6 +64,12 @@
                 } \
         } while (0)
 
+
+int usd_vnic_dev_cmd(struct usd_device *dev, enum vnic_devcmd_cmd cmd,
+			u64 *a0, u64 *a1, int wait)
+{
+	return usd_ib_cmd_devcmd(dev, cmd, a0, a1, wait);
+}
 
 #if 0
 /*
@@ -107,6 +114,7 @@ usd_dump_devspec(
 /*
  * Get some QP settings from devspec
  */
+/*
 int
 usd_get_devspec(
     struct usd_qp_impl *qp)
@@ -117,6 +125,61 @@ usd_get_devspec(
 
     offset = usd_offset_of(struct vnic_enet_config, mem_paddr);
     ret = vnic_dev_spec(qp->uq_vf->vf_vdev, offset,
+            sizeof(config.mem_paddr), &config.mem_paddr);
+    if (ret != 0) {
+        return ret;
+    }
+
+    qp->uq_attrs.uqa_pio_paddr = config.mem_paddr;
+
+    return 0;
+}
+*/
+
+/*
+ * general dev_spec function to replace vnic_dev_spec
+ */
+int usd_dev_spec(struct usd_device *dev, unsigned int offset,
+                size_t size, void *value)
+{
+    u64 a0, a1;
+    int wait = 1000;
+    int err;
+
+    a0 = offset;
+    a1 = size;
+
+    err = usd_vnic_dev_cmd(dev, CMD_DEV_SPEC, &a0, &a1, wait);
+
+    switch (size) {
+    case 1:
+        *(u8 *)value = (u8)a0;
+        break;
+    case 2:
+        *(u16 *)value = (u16)a0;
+        break;
+    case 4:
+        *(u32 *)value = (u32)a0;
+        break;
+    case 8:
+        *(u64 *)value = a0;
+        break;
+    default:
+        return -EINVAL;
+        break;
+    }
+
+    return err;
+}
+
+int usd_get_piopa(struct usd_qp_impl *qp)
+{
+    struct vnic_enet_config config;
+    unsigned int offset;
+    int ret;
+
+    offset = usd_offset_of(struct vnic_enet_config, mem_paddr);
+    ret = usd_dev_spec(qp->uq_dev, offset,
             sizeof(config.mem_paddr), &config.mem_paddr);
     if (ret != 0) {
         return ret;
@@ -139,7 +202,7 @@ usd_vnic_hang_notify(
     int ret;
 
     qp = to_qpi(uqp);
-    ret = vnic_dev_cmd(qp->uq_vf->vf_vdev, CMD_HANG_NOTIFY,
+    ret = usd_vnic_dev_cmd(qp->uq_dev, CMD_HANG_NOTIFY,
             &a0, &a0, 1000);
     if (ret != 0) {
         fprintf(stderr, "hang_notify ret = %d\n", ret);

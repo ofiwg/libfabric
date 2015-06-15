@@ -43,8 +43,11 @@
 #ifndef _USD_VNIC_H_
 #define _USD_VNIC_H_
 
-int usd_get_devspec(struct usd_qp_impl *qp);
-
+int usd_vnic_dev_cmd(struct usd_device *dev, enum vnic_devcmd_cmd cmd,
+			            u64 *a0, u64 *a1, int wait);
+int usd_dev_spec(struct usd_device *dev, unsigned int offset,
+                size_t size, void *value);
+int usd_get_piopa(struct usd_qp_impl *qp);
 int usd_vnic_hang_notify(struct usd_qp *uqp);
 
 #endif /* _USD_VNIC_H_ */

@@ -77,6 +77,9 @@
 struct usd_device {
     struct usd_ib_dev *ud_ib_dev;       /* parent IB dev */
     int ud_ib_dev_fd;           /* file desc for IB dev */
+    int ucmd_ib_dev_fd;         /* Another open file descriptor for IB dev
+                                 * used for encapusulating user commands through
+                                 * GET_CONTEXT IB command */
 
     uint32_t ud_flags;
     struct usd_device_attrs ud_attrs;
@@ -270,7 +273,7 @@ struct usd_dest {
     } ds_dest;
 };
 
-extern struct usd_qp_ops usd_qp_ops_udp_normal;
-extern struct usd_qp_ops usd_qp_ops_udp_pio;
-extern struct usd_qp_ops usd_qp_ops_raw_normal;
+extern struct usd_qp_ops usd_qp_ops_ud_udp;
+extern struct usd_qp_ops usd_qp_ops_ud_pio_udp;
+extern struct usd_qp_ops usd_qp_ops_ud_raw;
 #endif /* _USD_H_ */
