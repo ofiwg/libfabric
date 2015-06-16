@@ -519,7 +519,11 @@ static int run(void)
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
+
 			opts.transfer_size = test_size[i].size;
+			if (opts.transfer_size > buffer_size)
+				continue;
+
 			init_test(&opts, test_name, sizeof(test_name));
 			ret = run_test();
 			if (ret)
@@ -583,6 +587,8 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->ep_attr->type = FI_EP_DGRAM;
+	if (opts.user_options & FT_OPT_SIZE)
+		hints->ep_attr->max_msg_size = opts.transfer_size;
 	hints->caps = FI_MSG;
 	hints->mode = FI_LOCAL_MR | FI_MSG_PREFIX;
 	hints->addr_format = FI_SOCKADDR;
