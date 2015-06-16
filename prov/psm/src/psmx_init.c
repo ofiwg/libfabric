@@ -39,6 +39,40 @@ struct psmx_env psmx_env;
 volatile int psmx_init_count = 0;
 struct psmx_fid_fabric *psmx_active_fabric = NULL;
 
+static void psmx_init_env(void)
+{
+	psmx_env.name_server = 1;
+	fi_var_register(&psmx_prov, "name_server",
+			"Whether to turn on the name server or not "
+			"(default: yes)");
+	fi_var_get_bool(&psmx_prov, "name_server", &psmx_env.name_server);
+	FI_INFO(&psmx_prov, FI_LOG_CORE,
+		"FI_PSM_NAME_SERVER = %d\n", psmx_env.name_server);
+
+	psmx_env.am_msg = 0;
+	fi_var_register(&psmx_prov, "am_msg",
+			"Whether to use active message based messaging "
+			"or not (default: no)");
+	fi_var_get_bool(&psmx_prov, "am_msg", &psmx_env.am_msg);
+	FI_INFO(&psmx_prov, FI_LOG_CORE,
+		"FI_PSM_AM_MSG = %d\n", psmx_env.am_msg);
+
+	psmx_env.tagged_rma = 1;
+	fi_var_register(&psmx_prov, "tagged_rma",
+			"Whether to use tagged messages for large size "
+			"RMA or not (default: yes)");
+	fi_var_get_bool(&psmx_prov, "tagged_rma", &psmx_env.tagged_rma);
+	FI_INFO(&psmx_prov, FI_LOG_CORE,
+		"FI_PSM_TAGGED_RMA = %d\n", psmx_env.tagged_rma);
+
+	psmx_env.uuid = PSMX_DEFAULT_UUID;
+	fi_var_register(&psmx_prov, "uuid",
+			"Unique Job ID required by the PSM fabric");
+	fi_var_get_str(&psmx_prov, "uuid", &psmx_env.uuid);
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "FI_PSM_UUID = %s\n",
+		psmx_env.uuid);
+}
+
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 {
 	int reserved_bits = 0;
@@ -56,8 +90,8 @@ static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 				"unable to reserve tag bit for FI_MSG support.\n"
 				"ADVICE: please reduce the asked max_tag_value, "
 				"or remove FI_MSG from the asked capabilities, "
-				"or set OFI_PSM_AM_MSG=1 to use an alternative (but less "
-				"optimized) message queue implementation.\n");
+				"or set FI_PSM_AM_MSG=1 to use an alternative (but "
+				"less optimized) message queue implementation.\n");
 			return -1;
 		}
 		else {
@@ -65,8 +99,8 @@ static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 				"unable to reserve tag bit for FI_MSG support. "
 				"FI_MSG is removed from the capabilities.\n"
 				"ADVICE: please reduce the asked max_tag_value, "
-				"or set OFI_PSM_AM_MSG=1 to use an alternative (but less "
-				  "optimized) message queue implementation.\n");
+				"or set FI_PSM_AM_MSG=1 to use an alternative (but "
+				"less optimized) message queue implementation.\n");
 			ret_caps &= ~FI_MSG;
 		}
 	}
@@ -78,17 +112,17 @@ static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 		else if (ask_caps) {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
 				"unable to reserve tag bit for tagged RMA acceleration.\n"
-				"ADVICE: please reduce the asked max_tag_value, "
-				"or remove FI_RMA from the asked capabilities, "
-				"or set OFI_PSM_TAGGED_RMA=0 to disable RMA acceleration.\n");
+				"ADVICE: please reduce the asked max_tag_value, or "
+				"remove FI_RMA from the asked capabilities, or set "
+				"FI_PSM_TAGGED_RMA=0 to disable RMA acceleration.\n");
 			return -1;
 		}
 		else {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
 				"unable to reserve tag bit for tagged RMA acceleration. "
 				"FI_RMA is removed from the capabilities.\n"
-				"ADVICE: please reduce the asked max_tag_value, "
-				"or set OFI_PSM_TAGGED_RMA=0 to disable RMA acceleration.\n");
+				"ADVICE: please reduce the asked max_tag_value, or "
+				"set FI_PSM_TAGGED_RMA=0 to disable RMA acceleration.\n");
 			ret_caps &= ~FI_RMA;
 		}
 	}
@@ -122,6 +156,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			"no PSM device is found.\n");
 		return -FI_ENODATA;
 	}
+
+	psmx_init_env();
 
 	if (node && !(flags & FI_SOURCE))
 		dest_addr = psmx_resolve_name(node, 0);
@@ -457,26 +493,6 @@ PSM_INI
 	int check_version;
 	int err;
 
-	psmx_env.name_server = 1;
-	fi_var_register(&psmx_prov, "name_server",
-			"Whether to turn on the name server or not");
-	fi_var_get_bool(&psmx_prov, "name_server", &psmx_env.name_server);
-
-	psmx_env.am_msg = 0;
-	fi_var_register(&psmx_prov, "am_msg",
-			"Whether to use active message based messaging or not (default: no)");
-	fi_var_get_bool(&psmx_prov, "am_msg", &psmx_env.am_msg);
-
-	psmx_env.tagged_rma = 1;
-	fi_var_register(&psmx_prov, "tagged_rma",
-			"Whether to use tagged messages for large size RMA or not (default: yes)");
-	fi_var_get_bool(&psmx_prov, "tagged_rma", &psmx_env.tagged_rma);
-
-	psmx_env.uuid = PSMX_DEFAULT_UUID;
-	fi_var_register(&psmx_prov, "uuid",
-			"Unique Job ID required by the PSM fabric");
-	fi_var_get_str(&psmx_prov, "uuid", &psmx_env.uuid);
-
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
@@ -497,27 +513,18 @@ PSM_INI
 		"PSM library version = (%d, %d)\n", major, minor);
 
 	check_version = 1;
-	fi_var_register(&psmx_prov, "check_version",
+	fi_var_register(&psmx_prov, "version_check",
 			"Whether to check PSM version number compatibility");
-	fi_var_get_bool(&psmx_prov, "check_version", &check_version);
+	fi_var_get_bool(&psmx_prov, "version_check", &check_version);
 
 	if (check_version && major != PSM_VERNO_MAJOR) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
 			"PSM version mismatch: header %d.%d, library %d.%d.\n",
 			PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
-			"\tSet envar OFI_PSM_VERSION_CHECK=0 to bypass version check.\n");
+			"\tSet envar FI_PSM_VERSION_CHECK=0 to bypass version check.\n");
 		return NULL;
 	}
-
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"OFI_PSM_NAME_SERVER = %d\n", psmx_env.name_server);
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"OFI_PSM_AM_MSG = %d\n", psmx_env.am_msg);
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"OFI_PSM_TAGGED_RMA = %d\n", psmx_env.tagged_rma);
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"OFI_PSM_UUID = %s\n", psmx_env.uuid);
 
 	psmx_init_count++;
 	return (&psmx_prov);
