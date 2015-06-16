@@ -2196,6 +2196,8 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 void sock_pe_signal(struct sock_pe *pe)
 {
 	char c = 0;
+	if (pe->domain->progress_mode != FI_PROGRESS_AUTO)
+		return;
 	if (write(pe->signal_fds[SOCK_SIGNAL_WR_FD], &c, 1) != 1) {
 		SOCK_LOG_ERROR("Failed to signal\n");
 	}
@@ -2454,20 +2456,14 @@ do_wait:
 	}
 }
 
-static void sock_pe_set_affinity(void)
-{
 #ifndef __APPLE__
+static void sock_thread_set_affinity(char *s)
+{
 	char *saveptra, *saveptrb, *saveptrc;
-	char *a, *b, *c, *s;
+	char *a, *b, *c;
 	int j, first, last,stride;
 	cpu_set_t mycpuset;
 	pthread_t mythread;
-
-	fi_var_register(&sock_prov, "pe_affinity",
-		"Which logical core(s) to be used for binding the progress thread\n" \
-		"\tUsage: core_id_start[-core_id_end[:stride]][,<next_rule>]");
-	if (fi_var_get_str(&sock_prov, "pe_affinity", &s) != FI_SUCCESS)
-		return;
 
 	mythread = pthread_self();
 	CPU_ZERO(&mycpuset);
@@ -2501,6 +2497,19 @@ static void sock_pe_set_affinity(void)
 	j = pthread_setaffinity_np(mythread, sizeof(cpu_set_t), &mycpuset);
 	if (j != 0) 
 		SOCK_LOG_ERROR("pthread_setaffinity_np failed\n");
+}
+#endif
+
+static void sock_pe_set_affinity (void)
+{
+	char *s;
+	fi_var_register(&sock_prov, "pe_affinity",
+			"If specified, bind the progress thread to the indicated range(s) of Linux virtual processor ID(s). This option is currently not supported on OS X. Usage: id_start[-id_end[:stride]][,]");
+	if (fi_var_get_str(&sock_prov, "pe_affinity", &s) != FI_SUCCESS)
+		return;
+	
+#ifndef __APPLE__
+	sock_thread_set_affinity(s);
 #else
 	SOCK_LOG_ERROR("*** FI_SOCKETS_PE_AFFINITY is not supported on OS X\n");
 #endif
