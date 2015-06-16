@@ -129,7 +129,7 @@ void *psmx_name_server(void *args)
 
 	if (listenfd < 0) {
 		FI_INFO(&psmx_prov, FI_LOG_CORE,
-			"couldn't listen to port %d. try set OFI_PSM_UUID to a different value?\n", port);
+			"couldn't listen to port %d. try set FI_PSM_UUID to a different value?\n", port);
 		return NULL;
 	}
 

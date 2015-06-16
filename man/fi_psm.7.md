@@ -66,7 +66,7 @@ Unsupported features
 
 The *psm* provider checks for the following environment variables:
 
-*OFI_PSM_UUID*
+*FI_PSM_UUID*
 : PSM requires that each job has a unique ID (UUID). All the processes
   in the same job need to use the same UUID in order to be able to
   talk to each other. The PSM reference manual advises to keep UUID
@@ -79,7 +79,7 @@ The *psm* provider checks for the following environment variables:
 
   The default UUID is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF.
 
-*OFI_PSM_NAME_SERVER*
+*FI_PSM_NAME_SERVER*
 : The *psm* provider has a simple built-in name server that can be used
   to resolve an IP address or host name into a transport address needed
   by the *fi_av_insert* call. The main purpose of this name server is to
@@ -100,7 +100,7 @@ The *psm* provider checks for the following environment variables:
   variable to 0. This may save a small amount of resource since a separate
   thread is created when the name server is on.
 
-*OFI_PSM_TAGGED_RMA*
+*FI_PSM_TAGGED_RMA*
 : The RMA functions are implemented on top of the PSM Active Message functions.
   The Active Message functions has limit on the size of data can be transferred
   in a single message. Large transfers can be divided into small chunks and
@@ -112,7 +112,7 @@ The *psm* provider checks for the following environment variables:
    
   The option is on by default. To turn it off set the variable to 0.
 
-*OFI_PSM_AM_MSG*
+*FI_PSM_AM_MSG*
 : The *psm* provider implements the non-tagged message queue over the PSM
   tag-matching message queue. One tag bit is reserved for this purpose.
   Alternatively, the non-tagged message queue can be implemented over
@@ -120,7 +120,7 @@ The *psm* provider checks for the following environment variables:
 
   This option is off by default. To turn it on set the variable to 1.
 
-*OFI_PSM_VERSION_CHECK*
+*FI_PSM_VERSION_CHECK*
 : The *psm* provider checks the version of the PSM library and fails if the
   major version doesn't match with the header it is compiled with. In some
   case (e.g. testing compatibility between different versions) one may want
