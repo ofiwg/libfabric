@@ -79,10 +79,10 @@ int fi_var_register(const struct fi_provider *provider, const char *var_name,
 	v->provider = provider;
 	v->var_name = strdup(var_name);
 	v->help_string = strdup(help_string);
-	asprintf(&v->env_var_name, "FI_%s_%s",
-		v->provider->name,
-		v->var_name);
-	if (!v->var_name || !v->help_string || !v->env_var_name) {
+	if (!v->var_name || !v->help_string || !v->env_var_name ||
+		asprintf(&v->env_var_name, "FI_%s_%s",
+			v->provider->name,
+			v->var_name) < 0) {
 		free(v);
 		FI_DBG(provider, FI_LOG_CORE,
 			"Failed to register %s variable: ENOMEM\n", var_name);
