@@ -1215,7 +1215,7 @@ fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 	wr.next = NULL;
 	if (flags & FI_REMOTE_CQ_DATA) {
 		wr.opcode = IBV_WR_SEND_WITH_IMM;
-		wr.imm_data = (uint32_t) msg->data;
+		wr.imm_data = htonl((uint32_t) msg->data);
 	} else {
 		wr.opcode = IBV_WR_SEND;
 	}
@@ -1401,7 +1401,7 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	wr.opcode = IBV_WR_RDMA_WRITE;
 	if (flags & FI_REMOTE_CQ_DATA) {
 		wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
-		wr.imm_data = (uint32_t) msg->data;
+		wr.imm_data = htonl((uint32_t) msg->data);
 	}
 
 	wr.wr.rdma.remote_addr = msg->rma_iov->addr;
@@ -1529,7 +1529,7 @@ fi_ibv_msg_ep_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 		wr.send_flags |= IBV_SEND_INLINE;
 	if (VERBS_COMP(_ep))
 		wr.send_flags |= IBV_SEND_SIGNALED;
-	wr.imm_data = (uint32_t) data;
+	wr.imm_data = htonl((uint32_t) data);
 
 	wr.wr.rdma.remote_addr = addr;
 	wr.wr.rdma.rkey = (uint32_t) key;
@@ -1642,7 +1642,7 @@ fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
 	case FI_ATOMIC_WRITE:
 		if (flags & FI_REMOTE_CQ_DATA) {
 			wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
-			wr.imm_data = (uint32_t) msg->data;
+			wr.imm_data = htonl((uint32_t) msg->data);
 		} else {
 			wr.opcode = IBV_WR_RDMA_WRITE;
 		}
@@ -1811,7 +1811,7 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if (VERBS_COMP_FLAGS(_ep, flags))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
-		wr.imm_data = (uint32_t) msg->data;
+		wr.imm_data = htonl((uint32_t) msg->data);
 
 	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
@@ -1947,7 +1947,7 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 	if (VERBS_COMP_FLAGS(_ep, flags))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
-		wr.imm_data = (uint32_t) msg->data;
+		wr.imm_data = htonl((uint32_t) msg->data);
 
 	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
 }
@@ -2886,7 +2886,7 @@ static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t count)
 		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
 		entry->flags = fi_ibv_comp_flags(&_cq->wc);
 		if (_cq->wc.wc_flags & IBV_WC_WITH_IMM) {
-			entry->data = _cq->wc.imm_data;
+			entry->data = ntohl(_cq->wc.imm_data);
 		} else {
 			entry->data = 0;
 		}
