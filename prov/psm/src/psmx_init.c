@@ -35,42 +35,22 @@
 #include "prov.h"
 #include <rdma/fi_var.h>
 
-struct psmx_env psmx_env;
 volatile int psmx_init_count = 0;
 struct psmx_fid_fabric *psmx_active_fabric = NULL;
 
+struct psmx_env psmx_env = {
+	.name_server	= 1,
+	.am_msg		= 0,
+	.tagged_rma	= 1,
+	.uuid		= PSMX_DEFAULT_UUID,
+};
+
 static void psmx_init_env(void)
 {
-	psmx_env.name_server = 1;
-	fi_var_register(&psmx_prov, "name_server",
-			"Whether to turn on the name server or not "
-			"(default: yes)");
 	fi_var_get_bool(&psmx_prov, "name_server", &psmx_env.name_server);
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"FI_PSM_NAME_SERVER = %d\n", psmx_env.name_server);
-
-	psmx_env.am_msg = 0;
-	fi_var_register(&psmx_prov, "am_msg",
-			"Whether to use active message based messaging "
-			"or not (default: no)");
 	fi_var_get_bool(&psmx_prov, "am_msg", &psmx_env.am_msg);
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"FI_PSM_AM_MSG = %d\n", psmx_env.am_msg);
-
-	psmx_env.tagged_rma = 1;
-	fi_var_register(&psmx_prov, "tagged_rma",
-			"Whether to use tagged messages for large size "
-			"RMA or not (default: yes)");
 	fi_var_get_bool(&psmx_prov, "tagged_rma", &psmx_env.tagged_rma);
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"FI_PSM_TAGGED_RMA = %d\n", psmx_env.tagged_rma);
-
-	psmx_env.uuid = PSMX_DEFAULT_UUID;
-	fi_var_register(&psmx_prov, "uuid",
-			"Unique Job ID required by the PSM fabric");
 	fi_var_get_str(&psmx_prov, "uuid", &psmx_env.uuid);
-	FI_INFO(&psmx_prov, FI_LOG_CORE, "FI_PSM_UUID = %s\n",
-		psmx_env.uuid);
 }
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
@@ -490,10 +470,29 @@ struct fi_provider psmx_prov = {
 PSM_INI
 {
 	int major, minor;
-	int check_version;
+	int check_version = 1;
 	int err;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
+
+	fi_var_register(&psmx_prov, "name_server",
+			"Whether to turn on the name server or not "
+			"(default: yes)");
+
+	fi_var_register(&psmx_prov, "am_msg",
+			"Whether to use active message based messaging "
+			"or not (default: no)");
+
+	fi_var_register(&psmx_prov, "tagged_rma",
+			"Whether to use tagged messages for large size "
+			"RMA or not (default: yes)");
+
+	fi_var_register(&psmx_prov, "uuid",
+			"Unique Job ID required by the PSM fabric");
+
+	fi_var_register(&psmx_prov, "version_check",
+			"Whether to check PSM version number compatibility "
+			"or not (default: yes)");
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
 
@@ -512,11 +511,7 @@ PSM_INI
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"PSM library version = (%d, %d)\n", major, minor);
 
-	check_version = 1;
-	fi_var_register(&psmx_prov, "version_check",
-			"Whether to check PSM version number compatibility");
 	fi_var_get_bool(&psmx_prov, "version_check", &check_version);
-
 	if (check_version && major != PSM_VERNO_MAJOR) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
 			"PSM version mismatch: header %d.%d, library %d.%d.\n",
