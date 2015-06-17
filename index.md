@@ -62,7 +62,7 @@ First, read the documentation:
 
 A set of Linux man pages have been carefully written to specify the libfabric API.  Read through these man pages to get a sense of the libfabric API.  A [set of example applications](https://github.com/ofiwg/fabtests) have been developed to highlight how an application might use various aspects of libfabric.
 
-Second, [get the code](https://github.com/ofiwg/libfabric).
+Second, [download the latest release](http://downloads.openfabrics.org/downloads/ofi).
 
 The bulk of the libfabric code base is being developed in [the main OFIWG libfabric GitHub repository](https://github.com/ofiwg/libfabric).
 
