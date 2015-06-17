@@ -72,11 +72,6 @@ extern struct fi_provider usdf_ops;
 
 #define USDF_MAX_PEERS (16 * 1024)
 
-#define USDF_DGRAM_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
-
-#define USDF_DGRAM_SUPP_MODE (FI_LOCAL_MR | FI_MSG_PREFIX)
-#define USDF_DGRAM_REQ_MODE (FI_LOCAL_MR)
-
 /* usdf event flags */
 #define USDF_EVENT_FLAG_ERROR (1ULL << 62)
 #define USDF_EVENT_FLAG_FREE_BUF (1ULL << 63)
