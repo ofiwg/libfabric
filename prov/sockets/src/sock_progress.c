@@ -1476,7 +1476,6 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 
 	pe_entry->is_complete = 1;
 	rx_entry->is_complete = 1;
-	rx_entry->is_busy = 0;
 
 	pe_entry->flags = rx_entry->flags;
 	if (pe_entry->msg_hdr.op_type == SOCK_OP_TSEND) 
@@ -1497,6 +1496,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 		if (!rx_entry->is_buffered)
 			dlist_remove(&rx_entry->entry);
 	}
+	rx_entry->is_busy = 0;
 	fastlock_release(&rx_ctx->lock);
 
 	/* report error, if any */
