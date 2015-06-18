@@ -26,7 +26,6 @@ These tests are a mix of very basic tests and major features of libfabric. All o
 	fi_cq_data: A client-server example that tranfers CQ data
 	fi_dgram: A basic DGRAM client-server example
 	fi_dgram_waitset: A basic DGRAM client-server example that uses waitset
-	fi_info: An example (non client-server) that prints fabric interface information obtained by fi_getinfo call
 	fi_msg: A basic MSG client-server example
 	fi_msg_pingpong: A ping-pong client-server example using MSG endpoints
 	fi_msg_rma: A ping pong client-server example using RMA operations between MSG endpoints
