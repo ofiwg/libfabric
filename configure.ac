@@ -70,6 +70,7 @@ AC_ARG_ENABLE([direct],
 
 dnl Checks for programs
 AC_PROG_CC_C99
+AM_PROG_CC_C_O
 
 dnl Checks for header files.
 AC_HEADER_STDC
