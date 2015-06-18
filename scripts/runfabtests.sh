@@ -80,7 +80,6 @@ unit_tests=(
 	"dom_test -n 2"
 	"eq_test"
 	"size_left_test"
-	"info"
 )
 
 function errcho() {
