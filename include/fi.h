@@ -235,6 +235,20 @@ static inline void atomic_initialize(atomic_t *atomic, int value)
 #endif
 }
 
+static inline int atomic_add(atomic_t *atomic, int val)
+{
+	ATOMIC_IS_INITIALIZED(atomic);
+	return atomic_fetch_add_explicit(&atomic->val,
+			val, memory_order_acq_rel) + 1;
+}
+
+static inline int atomic_sub(atomic_t *atomic, int val)
+{
+	ATOMIC_IS_INITIALIZED(atomic);
+	return atomic_fetch_sub_explicit(&atomic->val,
+			val, memory_order_acq_rel) - 1;
+}
+
 #else
 
 typedef struct {
@@ -290,6 +304,30 @@ static inline int atomic_get(atomic_t *atomic)
 {
 	ATOMIC_IS_INITIALIZED(atomic);
 	return atomic->val;
+}
+
+static inline int atomic_add(atomic_t *atomic, int val)
+{
+	int v;
+
+	ATOMIC_IS_INITIALIZED(atomic);
+	fastlock_acquire(&atomic->lock);
+	atomic->val += val;
+	v = atomic->val;
+	fastlock_release(&atomic->lock);
+	return v;
+}
+
+static inline int atomic_sub(atomic_t *atomic, int val)
+{
+	int v;
+
+	ATOMIC_IS_INITIALIZED(atomic);
+	fastlock_acquire(&atomic->lock);
+	atomic->val -= val;
+	v = atomic->val;
+	fastlock_release(&atomic->lock);
+	return v;
 }
 
 #endif // HAVE_ATOMICS
