@@ -43,14 +43,18 @@
 
 #define USDF_MSG_SUPP_SENDMSG_FLAGS \
 	(FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | FI_INJECT | FI_COMPLETION)
+#define USDF_MSG_SUPP_RECVMSG_FLAGS (FI_COMPLETION)
 
-#define USDF_MSG_SUPP_RECVMSG_FLAGS \
-	(FI_COMPLETION)
+#define USDF_MSG_MSG_ORDER (FI_ORDER_NONE)
+#define USDF_MSG_COMP_ORDER (FI_ORDER_NONE)
 
 #define USDF_MSG_MAX_SGE 8
 #define USDF_MSG_DFLT_SGE 8
 #define USDF_MSG_MAX_CTX_SIZE 1024
 #define USDF_MSG_DFLT_CTX_SIZE 512
+
+#define USDF_MSG_IOV_LIMIT (USDF_MSG_DFLT_SGE)
+#define USDF_MSG_RMA_IOV_LIMIT 0
 
 #define USDF_MSG_MAX_MSG UINT_MAX
 
@@ -84,8 +88,13 @@ struct usdf_msg_qe {
 };
 
 int usdf_msg_post_recv(struct usdf_rx *rx, void *buf, size_t len);
-int usdf_msg_fill_tx_attr(struct fi_tx_attr *txattr);
-int usdf_msg_fill_rx_attr(struct fi_rx_attr *rxattr);
+
+int usdf_msg_fill_tx_attr(struct fi_info *hints, struct fi_info *fi);
+int usdf_msg_fill_rx_attr(struct fi_info *hints, struct fi_info *fi);
+int usdf_msg_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
+		struct usd_device_attrs *dap);
+int usdf_msg_fill_dom_attr(struct fi_info *hints, struct fi_info *fi);
+
 void usdf_msg_ep_timeout(void *vep);
 
 void usdf_msg_hcq_progress(struct usdf_cq_hard *hcq);
