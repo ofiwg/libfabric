@@ -575,7 +575,7 @@ static int fi_ibv_check_hints(const struct fi_info *hints,
 
 static int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags, struct rdma_addrinfo *rai)
 {
-	memset(rai, 0, sizeof *rai);
+	memset(rai, 0, sizeof rai);
 	if (flags & FI_SOURCE)
 		rai->ai_flags = RAI_PASSIVE;
 	if (flags & FI_NUMERICHOST)
