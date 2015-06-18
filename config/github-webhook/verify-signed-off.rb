@@ -83,7 +83,7 @@ post '/' do
     }
 
     # Look for a Signed-off-by string in this commit
-    if /Signed-off-by/.match commit['commit']['message']
+    if /Signed-off-by/i.match commit['commit']['message']
       status['state']       = 'success'
       status['description'] = 'This commit is signed off'
     else
