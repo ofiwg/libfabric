@@ -301,10 +301,6 @@ usdf_fill_info_msg(
 {
 	struct fi_info *fi;
 	struct fi_fabric_attr *fattrp;
-	struct fi_domain_attr *dattrp;
-	struct fi_tx_attr *txattr;
-	struct fi_rx_attr *rxattr;
-	struct fi_ep_attr *eattrp;
 	uint32_t addr_format;
 	int ret;
 
@@ -353,34 +349,21 @@ usdf_fill_info_msg(
 		goto fail;
 	}
 
-	/* TX attrs */
-	txattr = fi->tx_attr;
-	if (hints != NULL && hints->tx_attr != NULL) {
-		*txattr = *hints->tx_attr;
-	}
-	usdf_msg_fill_tx_attr(txattr);
+	ret = usdf_msg_fill_ep_attr(hints, fi, dap);
+	if (ret)
+		goto fail;
 
-	/* RX attrs */
-	rxattr = fi->rx_attr;
-	if (hints != NULL && hints->rx_attr != NULL) {
-		*rxattr = *hints->rx_attr;
-	}
-	usdf_msg_fill_rx_attr(rxattr);
+	ret = usdf_msg_fill_dom_attr(hints, fi);
+	if (ret)
+		goto fail;
 
-	/* endpoint attrs */
-	eattrp = fi->ep_attr;
-	eattrp->max_msg_size = USDF_MSG_MAX_MSG;
-	eattrp->protocol = FI_PROTO_RUDP;
-	eattrp->tx_ctx_cnt = 1;
-	eattrp->rx_ctx_cnt = 1;
+	ret = usdf_msg_fill_tx_attr(hints, fi);
+	if (ret)
+		goto fail;
 
-	/* domain attrs */
-	dattrp = fi->domain_attr;
-	dattrp->threading = FI_THREAD_UNSPEC;
-	dattrp->control_progress = FI_PROGRESS_AUTO;
-	dattrp->data_progress = FI_PROGRESS_MANUAL;
-	dattrp->resource_mgmt = FI_RM_DISABLED;
-	dattrp->mr_mode = FI_MR_BASIC;
+	ret = usdf_msg_fill_rx_attr(hints, fi);
+	if (ret)
+		goto fail;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
