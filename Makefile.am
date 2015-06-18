@@ -2,8 +2,7 @@ AM_CFLAGS = -g -Wall -D_GNU_SOURCE -I$(srcdir)/include
 ACLOCAL_AMFLAGS = -I config
 
 bin_PROGRAMS = \
-	simple/fi_info \
-	simple/fi_msg\
+	simple/fi_msg \
 	simple/fi_rdm \
 	simple/fi_rdm_rma_simple \
 	simple/fi_dgram \
@@ -53,10 +52,6 @@ endif
 simple_fi_msg_epoll_SOURCES = \
 	simple/msg_epoll.c
 simple_fi_msg_epoll_LDADD = libfabtests.la
-
-simple_fi_info_SOURCES = \
-	simple/info.c
-simple_fi_info_LDADD = libfabtests.la
 
 simple_fi_msg_SOURCES = \
 	simple/msg.c
