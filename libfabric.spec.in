@@ -49,6 +49,7 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root,-)
 %{_libdir}/lib*.so.*
+%{_bindir}/fi_info
 %dir %{_libdir}/libfabric/
 %doc AUTHORS COPYING README
 

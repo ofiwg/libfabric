@@ -32,6 +32,13 @@ common_srcs = \
 # ensure dl-built providers link back to libfabric
 linkback = $(top_builddir)/src/libfabric.la
 
+bin_PROGRAMS = \
+	util/fi_info
+
+util_fi_info_SOURCES = \
+	util/info.c
+util_fi_info_LDADD = $(linkback)
+
 src_libfabric_la_SOURCES = \
 	include/fi.h \
 	include/fi_enosys.h \
