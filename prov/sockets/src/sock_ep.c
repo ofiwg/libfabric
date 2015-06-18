@@ -44,7 +44,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 extern struct fi_ops_rma sock_ep_rma;
@@ -608,7 +608,7 @@ static int sock_ep_close(struct fid *fid)
 	if (sock_ep->ep_type == FI_EP_MSG) {
 		sock_ep->cm.do_listen = 0;
 		if (write(sock_ep->cm.signal_fds[0], &c, 1) != 1) {
-			SOCK_LOG_INFO("Failed to signal\n");
+			SOCK_LOG_DBG("Failed to signal\n");
 		}
 		if (sock_ep->cm.listener_thread && 
 		    pthread_join(sock_ep->cm.listener_thread, NULL)) {
@@ -624,7 +624,7 @@ static int sock_ep_close(struct fid *fid)
 	
 	sock_ep->listener.do_listen = 0;
 	if (write(sock_ep->listener.signal_fds[0], &c, 1) != 1) {
-		SOCK_LOG_INFO("Failed to signal\n");
+		SOCK_LOG_DBG("Failed to signal\n");
 	}
 	
 	if (sock_ep->listener.listener_thread && 
@@ -1381,12 +1381,12 @@ static int sock_ep_assign_src_addr(struct sock_ep *sock_ep, struct fi_info *info
 		ai.ai_socktype = SOCK_STREAM;
 		
 		if (gethostname(hostname, sizeof hostname) != 0) {
-			SOCK_LOG_INFO("gethostname failed!\n");
+			SOCK_LOG_DBG("gethostname failed!\n");
 			return -FI_EINVAL;
 		}
 		ret = getaddrinfo(hostname, NULL, &ai, &rai);
 		if (ret) {
-			SOCK_LOG_INFO("getaddrinfo failed!\n");
+			SOCK_LOG_DBG("getaddrinfo failed!\n");
 			return -FI_EINVAL;
 		}
 		memcpy(sock_ep->src_addr, (struct sockaddr_in *)rai->ai_addr,
@@ -1408,7 +1408,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (info) {
 		ret = sock_verify_info(info);
 		if (ret) {
-			SOCK_LOG_INFO("Cannot support requested options!\n");
+			SOCK_LOG_DBG("Cannot support requested options!\n");
 			return -FI_EINVAL;
 		}
 	}

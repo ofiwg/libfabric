@@ -40,7 +40,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_DOMAIN, __VA_ARGS__)
+#define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_DOMAIN, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_DOMAIN, __VA_ARGS__)
 
 const struct fi_domain_attr sock_domain_attr = {
@@ -81,7 +81,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 	case FI_THREAD_ENDPOINT:
 		break;
 	default:
-		SOCK_LOG_INFO("Invalid threading model!\n");
+		SOCK_LOG_DBG("Invalid threading model!\n");
 		return -FI_ENODATA;
 	}
 
@@ -92,7 +92,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		break;
 
 	default:
-		SOCK_LOG_INFO("Control progress mode not supported!\n");
+		SOCK_LOG_DBG("Control progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
 
@@ -103,7 +103,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		break;
 
 	default:
-		SOCK_LOG_INFO("Data progress mode not supported!\n");
+		SOCK_LOG_DBG("Data progress mode not supported!\n");
 		return -FI_ENODATA;
 	}
 
@@ -114,7 +114,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		break;
 
 	default:
-		SOCK_LOG_INFO("Resource mgmt not supported!\n");
+		SOCK_LOG_DBG("Resource mgmt not supported!\n");
 		return -FI_ENODATA;
 	}
 
@@ -125,7 +125,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		break;
 
 	default:
-		SOCK_LOG_INFO("AV type not supported!\n");
+		SOCK_LOG_DBG("AV type not supported!\n");
 		return -FI_ENODATA;
 	}
 
@@ -135,7 +135,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 	case FI_MR_SCALABLE:
 		break;
 	default:
-		SOCK_LOG_INFO("MR mode not supported\n");
+		SOCK_LOG_DBG("MR mode not supported\n");
 		return -FI_ENODATA;
 	}
 

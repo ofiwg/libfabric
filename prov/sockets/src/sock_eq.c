@@ -47,7 +47,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EQ, __VA_ARGS__)
+#define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EQ, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EQ, __VA_ARGS__)
 
 static void sock_eq_clean_err_data_list(struct sock_eq *eq, int free_all)
@@ -83,7 +83,7 @@ static ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf, size
 	
 	if (dlistfd_empty(&sock_eq->list)) {
 		if(!timeout) {
-			SOCK_LOG_INFO("Nothing to read from eq!\n");
+			SOCK_LOG_DBG("Nothing to read from eq!\n");
 			return -FI_EAGAIN;
 		}
 		ret = dlistfd_wait_avail(&sock_eq->list, timeout);
@@ -357,9 +357,9 @@ int sock_eq_openwait(struct sock_eq *eq, const char *service)
 	struct addrinfo hints;
 	int ret;
 
-	SOCK_LOG_INFO("enter\n");
+	SOCK_LOG_DBG("enter\n");
 	if (eq->wait_fd > 0 && !strncmp((char *) &eq->service, service, NI_MAXSERV)) {
-		SOCK_LOG_INFO("eq already opened for the service %s\n", service);
+		SOCK_LOG_DBG("eq already opened for the service %s\n", service);
 		return 0;
 	}
 
@@ -399,7 +399,7 @@ int sock_eq_openwait(struct sock_eq *eq, const char *service)
 	}
 
 	memcpy(&eq->service, service, NI_MAXSERV);
-	SOCK_LOG_INFO("open udp successfully\n");
+	SOCK_LOG_DBG("open udp successfully\n");
 	return 0;
 }
 

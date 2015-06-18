@@ -56,7 +56,7 @@
 #include "sock.h"
 #include "sock_util.h"
 
-#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_DATA, __VA_ARGS__)
+#define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
 ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, 
@@ -130,7 +130,7 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		rx_entry->total_len += rx_entry->iov[i].iov.len;
 	}
 
-	SOCK_LOG_INFO("New rx_entry: %p (ctx: %p)\n", rx_entry, rx_ctx);
+	SOCK_LOG_DBG("New rx_entry: %p (ctx: %p)\n", rx_entry, rx_ctx);
 	fastlock_acquire(&rx_ctx->lock);
 	dlist_insert_tail(&rx_entry->entry, &rx_ctx->rx_entry_list);
 	fastlock_release(&rx_ctx->lock);
@@ -216,7 +216,7 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!conn)
 		return -FI_EAGAIN;
 	
-	SOCK_LOG_INFO("New sendmsg on TX: %p using conn: %p\n", 
+	SOCK_LOG_DBG("New sendmsg on TX: %p using conn: %p\n", 
 		      tx_ctx, conn);
 
 	SOCK_EP_SET_TX_OP_FLAGS(flags);
@@ -466,7 +466,7 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	}
 
 	fastlock_acquire(&rx_ctx->lock);
-	SOCK_LOG_INFO("New rx_entry: %p (ctx: %p)\n", rx_entry, rx_ctx);
+	SOCK_LOG_DBG("New rx_entry: %p (ctx: %p)\n", rx_entry, rx_ctx);
 	dlist_insert_tail(&rx_entry->entry, &rx_ctx->rx_entry_list);
 	fastlock_release(&rx_ctx->lock);
 	return 0;
