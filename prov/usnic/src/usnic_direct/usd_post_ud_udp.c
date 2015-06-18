@@ -46,7 +46,7 @@
 #include "usd_post.h"
 
 static int
-usd_post_send_one_udp_normal(
+usd_post_send_one_ud_udp(
     struct usd_qp *uqp,
     struct usd_dest *dest,
     const void *buf,
@@ -88,7 +88,7 @@ usd_post_send_one_udp_normal(
 }
 
 static int
-usd_post_send_one_vlan_udp_normal(
+usd_post_send_one_vlan_ud_udp(
     struct usd_qp *uqp,
     struct usd_dest *dest,
     const void *buf,
@@ -131,7 +131,7 @@ usd_post_send_one_vlan_udp_normal(
 }
 
 static int
-usd_post_send_one_copy_udp_normal(
+usd_post_send_one_copy_ud_udp(
     struct usd_qp *uqp,
     struct usd_dest *dest,
     const void *buf,
@@ -175,7 +175,7 @@ usd_post_send_one_copy_udp_normal(
 }
 
 static int
-usd_post_send_one_prefixed_udp_normal(
+usd_post_send_one_prefixed_ud_udp(
     struct usd_qp *uqp,
     struct usd_dest *dest,
     const void *buf,
@@ -219,7 +219,7 @@ usd_post_send_one_prefixed_udp_normal(
  * 2 WQEs - our header plus user header in 1st one, user packet in 2nd
  */
 static int
-usd_post_send_two_copy_udp_normal(
+usd_post_send_two_copy_ud_udp(
     struct usd_qp *uqp,
     struct usd_dest *dest,
     const void *uhdr,
@@ -268,7 +268,7 @@ usd_post_send_two_copy_udp_normal(
 }
 
 static int
-usd_post_send_iov_udp_normal(struct usd_qp *uqp,
+usd_post_send_iov_ud_udp(struct usd_qp *uqp,
             struct usd_dest *dest, const struct iovec* iov,
             size_t iov_count, uint32_t flags, void *context)
 {
@@ -315,11 +315,11 @@ usd_post_send_iov_udp_normal(struct usd_qp *uqp,
     return 0;
 }
 
-struct usd_qp_ops usd_qp_ops_udp_normal = {
-    .qo_post_send_one = usd_post_send_one_udp_normal,
-    .qo_post_send_one_prefixed = usd_post_send_one_prefixed_udp_normal,
-    .qo_post_send_one_copy = usd_post_send_one_copy_udp_normal,
-    .qo_post_send_two_copy = usd_post_send_two_copy_udp_normal,
-    .qo_post_send_iov = usd_post_send_iov_udp_normal,
-    .qo_post_send_one_vlan = usd_post_send_one_vlan_udp_normal,
+struct usd_qp_ops usd_qp_ops_ud_udp = {
+    .qo_post_send_one = usd_post_send_one_ud_udp,
+    .qo_post_send_one_prefixed = usd_post_send_one_prefixed_ud_udp,
+    .qo_post_send_one_copy = usd_post_send_one_copy_ud_udp,
+    .qo_post_send_two_copy = usd_post_send_two_copy_ud_udp,
+    .qo_post_send_iov = usd_post_send_iov_ud_udp,
+    .qo_post_send_one_vlan = usd_post_send_one_vlan_ud_udp,
 };

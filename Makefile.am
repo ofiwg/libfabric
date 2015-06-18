@@ -152,9 +152,9 @@ libusnic_direct_sources = \
 	prov/usnic/src/usnic_direct/usd_poll.c \
 	prov/usnic/src/usnic_direct/usd_post.c \
 	prov/usnic/src/usnic_direct/usd_post.h \
-	prov/usnic/src/usnic_direct/usd_post_raw_normal.c \
-	prov/usnic/src/usnic_direct/usd_post_udp_normal.c \
-	prov/usnic/src/usnic_direct/usd_post_udp_pio.c \
+	prov/usnic/src/usnic_direct/usd_post_ud_raw.c \
+	prov/usnic/src/usnic_direct/usd_post_ud_udp.c \
+	prov/usnic/src/usnic_direct/usd_post_ud_pio_udp.c \
 	prov/usnic/src/usnic_direct/usd_queue.h \
 	prov/usnic/src/usnic_direct/usd_queues.c \
 	prov/usnic/src/usnic_direct/usd_socket.c \

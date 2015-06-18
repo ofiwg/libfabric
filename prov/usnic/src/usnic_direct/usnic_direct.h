@@ -221,8 +221,8 @@ enum usd_qp_transport {
 };
 
 enum usd_qp_type {
-    USD_QTY_NORMAL,
-    USD_QTY_PIO,
+    USD_QTY_UD,
+    USD_QTY_UD_PIO,
 };
 
 /*

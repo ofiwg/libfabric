@@ -94,7 +94,7 @@ usdf_ep_dgram_enable(struct fid_ep *fep)
 	if (ep->ep_caps & USDF_EP_CAP_PIO) {
 		ret = usd_create_qp(ep->ep_domain->dom_dev,
 				USD_QTR_UDP,
-				USD_QTY_PIO,
+				USD_QTY_UD_PIO,
 				ep->e.dg.ep_wcq->c.hard.cq_cq,
 				ep->e.dg.ep_rcq->c.hard.cq_cq,
 				127,	// XXX
@@ -108,7 +108,7 @@ usdf_ep_dgram_enable(struct fid_ep *fep)
 	if (ret != 0) {
 		ret = usd_create_qp(ep->ep_domain->dom_dev,
 				USD_QTR_UDP,
-				USD_QTY_NORMAL,
+				USD_QTY_UD,
 				ep->e.dg.ep_wcq->c.hard.cq_cq,
 				ep->e.dg.ep_rcq->c.hard.cq_cq,
 				ep->ep_wqe,

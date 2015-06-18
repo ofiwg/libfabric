@@ -96,8 +96,8 @@ const char *usd_qp_transport_str(enum usd_qp_transport qpt)
 const char *usd_qp_type_str(enum usd_qp_type qpt)
 {
     switch (qpt) {
-    case USD_QTY_NORMAL: return "USD_QTY_NORMAL";
-    case USD_QTY_PIO:    return "USD_QTY_PIO";
+    case USD_QTY_UD: return "USD_QTY_UD";
+    case USD_QTY_UD_PIO:    return "USD_QTY_UD_PIO";
     default:             return "UNKNOWN";
     }
 }

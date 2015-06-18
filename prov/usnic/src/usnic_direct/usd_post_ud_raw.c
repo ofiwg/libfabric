@@ -44,7 +44,7 @@
 #include "usd_post.h"
 
 static int
-usd_post_send_one_prefixed_raw_normal(
+usd_post_send_one_prefixed_ud_raw(
     struct usd_qp *uqp,
     struct usd_dest __attribute__ ((unused)) * dest,
     const void *buf,
@@ -70,6 +70,6 @@ usd_post_send_one_prefixed_raw_normal(
     return 0;
 }
 
-struct usd_qp_ops usd_qp_ops_raw_normal = {
-    .qo_post_send_one_prefixed = usd_post_send_one_prefixed_raw_normal,
+struct usd_qp_ops usd_qp_ops_ud_raw = {
+    .qo_post_send_one_prefixed = usd_post_send_one_prefixed_ud_raw,
 };

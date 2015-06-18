@@ -192,6 +192,8 @@ usd_close(
     /* XXX - verify all other resources closed out */
     if (dev->ud_flags & USD_DEVF_CLOSE_CMD_FD)
         close(dev->ud_ib_dev_fd);
+    if (dev->ucmd_ib_dev_fd != -1)
+        close(dev->ucmd_ib_dev_fd);
     if (dev->ud_arp_sockfd != -1)
         close(dev->ud_arp_sockfd);
 
@@ -265,6 +267,7 @@ usd_open_with_fd(
         goto out;
     }
     dev->ud_ib_dev_fd = -1;
+    dev->ucmd_ib_dev_fd = -1;
     dev->ud_arp_sockfd = -1;
     dev->ud_flags = 0;
     TAILQ_INIT(&dev->ud_pending_reqs);
@@ -283,6 +286,18 @@ usd_open_with_fd(
         dev->ud_flags |= USD_DEVF_CLOSE_CMD_FD;
     } else {
         dev->ud_ib_dev_fd = cmd_fd;
+    }
+
+    /*
+     * Open another fd to send encapsulated user commands through
+     * CMD_GET_CONTEXT call. The reason to open an additional fd is
+     * that ib core does not allow multiple get_context call on one
+     * file descriptor.
+     */
+    dev->ucmd_ib_dev_fd = open(idp->id_dev_path, O_RDWR | O_CLOEXEC);
+    if (dev->ucmd_ib_dev_fd == -1) {
+        ret = -ENODEV;
+        goto out;
     }
 
     /* allocate a context from driver */
@@ -316,6 +331,8 @@ usd_open_with_fd(
         if (dev->ud_flags & USD_DEVF_CLOSE_CMD_FD
             && dev->ud_ib_dev_fd != -1)
             close(dev->ud_ib_dev_fd);
+        if (dev->ucmd_ib_dev_fd != -1)
+            close(dev->ucmd_ib_dev_fd);
         free(dev);
     }
     return ret;

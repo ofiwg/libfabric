@@ -91,7 +91,7 @@ usdf_tx_msg_enable(struct usdf_tx *tx)
 	filt.uf_filter.uf_udp.u_port = 0;
 	ret = usd_create_qp(udp->dom_dev,
 			USD_QTR_UDP,
-			USD_QTY_NORMAL,
+			USD_QTY_UD,
 			hcq->cqh_ucq,
 			hcq->cqh_ucq,
 			udp->dom_fabric->fab_dev_attrs->uda_max_send_credits,
@@ -179,7 +179,7 @@ usdf_rx_msg_enable(struct usdf_rx *rx)
 	filt.uf_filter.uf_udp.u_port = 0;
 	ret = usd_create_qp(udp->dom_dev,
 			USD_QTR_UDP,
-			USD_QTY_NORMAL,
+			USD_QTY_UD,
 			hcq->cqh_ucq,
 			hcq->cqh_ucq,
 			udp->dom_fabric->fab_dev_attrs->uda_max_send_credits,

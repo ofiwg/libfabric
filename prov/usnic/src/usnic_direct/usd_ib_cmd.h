@@ -59,4 +59,6 @@ int usd_ib_cmd_modify_qp(struct usd_device *dev, struct usd_qp_impl *qp,
 int usd_ib_cmd_destroy_qp(struct usd_device *dev, struct usd_qp_impl *qp);
 
 int usd_ib_query_dev(struct usd_device *dev);
+int usd_ib_cmd_devcmd(struct usd_device *dev, enum vnic_devcmd_cmd devcmd,
+                        u64 *a0, u64 *a1, int wait);
 #endif /* _USD_IB_CMD_ */

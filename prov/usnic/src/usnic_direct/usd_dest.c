@@ -241,6 +241,11 @@ usd_create_udp_dest_start(
     uint32_t first_hop_daddr_be;
     int ret;
 
+    /* catch a mistake that will almost always lead to hung programs */
+    if (daddr_be == 0 || dport_be == 0) {
+        return -EINVAL;
+    }
+
     req = calloc(sizeof(*req), 1);
     dest = calloc(sizeof(*dest), 1);
     if (req == NULL || dest == NULL) {

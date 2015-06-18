@@ -46,7 +46,7 @@
 #include "usd_post.h"
 
 static int
-usd_post_send_one_udp_pio(
+usd_post_send_one_ud_pio_udp(
     struct usd_qp *uqp,
     struct usd_dest *dest,
     const void *buf,
@@ -144,7 +144,7 @@ usd_post_send_one_udp_pio(
  * 2 WQEs - our header plus user header in 1st one, user packet in 2nd
  */
 static int
-usd_post_send_two_udp_pio(
+usd_post_send_two_ud_pio_udp(
     struct usd_qp *uqp,
     struct usd_dest *dest,
     const void *uhdr,
@@ -243,9 +243,9 @@ usd_post_send_two_udp_pio(
     return 0;
 }
 
-struct usd_qp_ops usd_qp_ops_udp_pio = {
-    .qo_post_send_one = usd_post_send_one_udp_pio,
-    .qo_post_send_one_prefixed = usd_post_send_one_udp_pio,
-    .qo_post_send_one_copy = usd_post_send_one_udp_pio,
-    .qo_post_send_two_copy = usd_post_send_two_udp_pio,
+struct usd_qp_ops usd_qp_ops_ud_pio_udp = {
+    .qo_post_send_one = usd_post_send_one_ud_pio_udp,
+    .qo_post_send_one_prefixed = usd_post_send_one_ud_pio_udp,
+    .qo_post_send_one_copy = usd_post_send_one_ud_pio_udp,
+    .qo_post_send_two_copy = usd_post_send_two_ud_pio_udp,
 };
