@@ -29,7 +29,7 @@ bin_PROGRAMS = \
 	unit/fi_dom_test \
 	ported/libibverbs/fi_rc_pingpong \
 	ported/librdmacm/fi_cmatose \
-	complex/fabtest
+	complex/fi_ubertest
 
 if HAVE_EPOLL
 bin_PROGRAMS += simple/fi_msg_epoll
@@ -167,8 +167,8 @@ ported_librdmacm_fi_cmatose_SOURCES = \
 	ported/librdmacm/cmatose.c
 ported_librdmacm_fi_cmatose_LDADD = libfabtests.la
 
-complex_fabtest_SOURCES = \
-	complex/fabtest.c \
+complex_fi_ubertest_SOURCES = \
+	complex/ft_main.c \
 	complex/ft_comm.c \
 	complex/ft_comp.c \
 	complex/ft_config.c \
@@ -176,7 +176,7 @@ complex_fabtest_SOURCES = \
 	complex/ft_endpoint.c \
 	complex/ft_msg.c \
 	complex/ft_test.c
-complex_fabtest_LDADD = libfabtests.la
+complex_fi_ubertest_LDADD = libfabtests.la
 
 man_MANS = man/fabtests.7
 
