@@ -501,7 +501,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 								req->buf,
 								FI_MULTI_RECV,
 								req->len,
-								req->len - req->offset, /* data */
+								psm_status.nbytes, /* data */
 								0,	/* tag */
 								0,	/* olen */
 								0);	/* err */
