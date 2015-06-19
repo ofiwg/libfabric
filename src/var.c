@@ -88,7 +88,7 @@ int DEFAULT_SYMVER_PRE(fi_getsettings)(struct fi_setting **vars, int *count) {
 
 	struct fi_setting *vhead = NULL;
 	struct fi_var_t *ptr;
-	int ret, len = 0, i = 0;
+	int ret = FI_SUCCESS, len = 0, i = 0;
 	char *tmp = NULL;
 
 	// just get a count
