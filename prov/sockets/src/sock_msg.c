@@ -81,8 +81,10 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		return -FI_EINVAL;
 	}
 
+#ifdef ENABLE_DEBUG
 	if (msg->iov_count > SOCK_EP_MAX_IOV_LIMIT)
 		return -FI_EINVAL;
+#endif
 
 	if (!rx_ctx->enabled)
 		return -FI_EOPBADSTATE;
@@ -195,8 +197,10 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		return -FI_EINVAL;
 	}
 
+#ifdef ENABLE_DEBUG
 	if (msg->iov_count > SOCK_EP_MAX_IOV_LIMIT)
 		return -FI_EINVAL;
+#endif
 
 	if (!tx_ctx->enabled)
 		return -FI_EOPBADSTATE;	
@@ -413,8 +417,10 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
+#ifdef ENABLE_DEBUG
 	if (msg->iov_count > SOCK_EP_MAX_IOV_LIMIT)
 		return -FI_EINVAL;
+#endif
 
 	if (!rx_ctx->enabled)
 		return -FI_EOPBADSTATE;
@@ -536,8 +542,10 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
+#ifdef ENABLE_DEBUG
 	if (msg->iov_count > SOCK_EP_MAX_IOV_LIMIT)
 		return -FI_EINVAL;
+#endif
 
 	if (!tx_ctx->enabled)
 		return -FI_EOPBADSTATE;

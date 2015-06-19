@@ -180,10 +180,12 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		}
 	}
 
+#ifdef ENABLE_DEBUG
 	if (src_len > SOCK_EP_MAX_ATOMIC_SZ) {
 		ret = -FI_EINVAL;
 		goto err;
 	}
+#endif
 
 	dst_len = 0;
 	for (i = 0; i< msg->rma_iov_count; i++) {
@@ -210,11 +212,13 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		dst_len += (tx_iov.ioc.count * datatype_sz);
 	}
 
+#ifdef ENABLE_DEBUG
 	if (result_count && (dst_len != src_len)) {
 		SOCK_LOG_ERROR("Buffer length mismatch\n");
 		ret = -FI_EINVAL;
 		goto err;
 	}
+#endif
 
 	dst_len = 0;
 	for (i = 0; i< compare_count; i++) {
@@ -224,11 +228,13 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		dst_len += (tx_iov.ioc.count * datatype_sz);
 	}
 
+#ifdef ENABLE_DEBUG
 	if (compare_count && (dst_len != src_len)) {
 		SOCK_LOG_ERROR("Buffer length mismatch\n");
 		ret = -FI_EINVAL;
 		goto err;
 	}
+#endif
 	
 	sock_tx_ctx_commit(tx_ctx);
 	return 0;
@@ -242,6 +248,7 @@ err:
 static ssize_t sock_ep_atomic_writemsg(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg, uint64_t flags)
 {
+#if ENABLE_DEBUG
 	switch (msg->op) {
 	case FI_MIN:
 	case FI_MAX: 
@@ -259,7 +266,7 @@ static ssize_t sock_ep_atomic_writemsg(struct fid_ep *ep,
 		SOCK_LOG_ERROR("Invalid operation type\n");
 		return -FI_EINVAL;
 	}
-
+#endif
 	return sock_ep_tx_atomic(ep, msg, NULL, NULL, 0,
 				  NULL, NULL, 0, flags);
 }
