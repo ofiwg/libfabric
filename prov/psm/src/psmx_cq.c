@@ -158,6 +158,8 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		req = PSMX_CTXT_USER(fi_context);
 		buf = req->buf + req->offset;
 		flags = FI_RECV | FI_MSG;
+		if (req->offset + psm_status->nbytes + req->min_buf_size > req->len)
+			flags |= FI_MULTI_RECV;	/* buffer used up */
 		is_recv = 1;
 		break;
 	case PSMX_TSEND_CONTEXT:
@@ -494,25 +496,6 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 					PSMX_CTXT_REQ(fi_context) = psm_req;
 				}
 				else {
-					if (tmp_cq) {
-						event = psmx_cq_create_event(
-								tmp_cq,
-								req->context,
-								req->buf,
-								FI_MULTI_RECV,
-								req->len,
-								req->len - req->offset, /* data */
-								0,	/* tag */
-								0,	/* olen */
-								0);	/* err */
-						if (!event)
-							return -FI_ENOMEM;
-
-						psmx_cq_enqueue_event(tmp_cq, event);
-						if (tmp_cq == cq)
-							read_more = 0;
-					}
-
 					free(req);
 				}
 			}
