@@ -61,12 +61,261 @@
 #include "usd.h"
 #include "usdf.h"
 #include "usdf_endpoint.h"
+#include "fi_ext_usnic.h"
 #include "usdf_rudp.h"
 #include "usdf_cq.h"
 #include "usdf_cm.h"
 #include "usdf_av.h"
 #include "usdf_timer.h"
 #include "usdf_rdm.h"
+
+
+/*******************************************************************************
+ * Default values for rdm attributes
+ ******************************************************************************/
+static const struct fi_tx_attr rdm_dflt_tx_attr = {
+	.caps = USDF_RDM_CAPS,
+	.mode = USDF_RDM_SUPP_MODE,
+	.size = USDF_RDM_DFLT_CTX_SIZE,
+	.op_flags = 0,
+	.msg_order = USDF_RDM_MSG_ORDER,
+	.comp_order = USDF_RDM_COMP_ORDER,
+	.inject_size = USDF_RDM_MAX_INJECT_SIZE,
+	.iov_limit = USDF_RDM_IOV_LIMIT,
+	.rma_iov_limit = USDF_RDM_RMA_IOV_LIMIT
+};
+
+static const struct fi_rx_attr rdm_dflt_rx_attr = {
+	.caps = USDF_RDM_CAPS,
+	.mode = USDF_RDM_SUPP_MODE,
+	.size = USDF_RDM_DFLT_CTX_SIZE,
+	.op_flags = 0,
+	.msg_order = USDF_RDM_MSG_ORDER,
+	.comp_order = USDF_RDM_COMP_ORDER,
+	.total_buffered_recv = 0,
+	.iov_limit = USDF_RDM_DFLT_SGE
+};
+
+static const struct fi_ep_attr rdm_dflt_ep_attr = {
+	.type = FI_EP_RDM,
+	.protocol = FI_PROTO_UDP,
+	.max_msg_size = USDF_RDM_MAX_MSG,
+	.msg_prefix_size = 0,
+	.max_order_raw_size = 0,
+	.max_order_war_size = 0,
+	.max_order_waw_size = 0,
+	.mem_tag_format = 0,
+	.tx_ctx_cnt = 1,
+	.rx_ctx_cnt = 1
+};
+
+static const struct fi_domain_attr rdm_dflt_domain_attr = {
+	.threading = FI_THREAD_ENDPOINT,
+	.control_progress = FI_PROGRESS_AUTO,
+	.data_progress = FI_PROGRESS_MANUAL,
+	.resource_mgmt = FI_RM_DISABLED,
+	.mr_mode = FI_MR_BASIC
+};
+
+/*******************************************************************************
+ * Fill functions for attributes
+ ******************************************************************************/
+int usdf_rdm_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
+		struct usd_device_attrs *dap)
+{
+	struct fi_ep_attr defaults;
+
+	defaults = rdm_dflt_ep_attr;
+
+	if (!hints || !hints->ep_attr)
+		goto out;
+
+	if (hints->ep_attr->max_msg_size > defaults.max_msg_size)
+		return -FI_ENODATA;
+
+	switch (hints->ep_attr->protocol) {
+	case FI_PROTO_UNSPEC:
+	case FI_PROTO_RUDP:
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+	if (hints->ep_attr->tx_ctx_cnt > defaults.tx_ctx_cnt)
+		return -FI_ENODATA;
+
+	if (hints->ep_attr->rx_ctx_cnt > defaults.rx_ctx_cnt)
+		return -FI_ENODATA;
+
+	if (hints->ep_attr->max_order_raw_size > defaults.max_order_raw_size)
+		return -FI_ENODATA;
+
+	if (hints->ep_attr->max_order_war_size > defaults.max_order_war_size)
+		return -FI_ENODATA;
+
+	if (hints->ep_attr->max_order_waw_size > defaults.max_order_waw_size)
+		return -FI_ENODATA;
+
+out:
+	*fi->ep_attr = defaults;
+
+	return FI_SUCCESS;
+
+}
+
+int usdf_rdm_fill_dom_attr(struct fi_info *hints, struct fi_info *fi)
+{
+	struct fi_domain_attr defaults;
+
+	defaults = rdm_dflt_domain_attr;
+
+	if (!hints || !hints->domain_attr)
+		goto out;
+
+	/* how to handle fi_thread_fid, fi_thread_completion, etc?
+	 */
+	switch (hints->domain_attr->threading) {
+	case FI_THREAD_UNSPEC:
+	case FI_THREAD_ENDPOINT:
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+	/* how to handle fi_progress_manual?
+	 */
+	switch (hints->domain_attr->control_progress) {
+	case FI_PROGRESS_UNSPEC:
+	case FI_PROGRESS_AUTO:
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+	switch (hints->domain_attr->data_progress) {
+	case FI_PROGRESS_UNSPEC:
+	case FI_PROGRESS_MANUAL:
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+	switch (hints->domain_attr->resource_mgmt) {
+	case FI_RM_UNSPEC:
+	case FI_RM_DISABLED:
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+	switch (hints->domain_attr->mr_mode) {
+	case FI_MR_UNSPEC:
+	case FI_MR_BASIC:
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+out:
+	*fi->domain_attr = defaults;
+
+	return FI_SUCCESS;
+}
+
+int usdf_rdm_fill_tx_attr(struct fi_info *hints, struct fi_info *fi)
+{
+	struct fi_tx_attr defaults;
+
+	defaults = rdm_dflt_tx_attr;
+
+	if (!hints || !hints->tx_attr)
+		goto out;
+
+	/* make sure we can support the caps that are requested*/
+	if (hints->tx_attr->caps & ~USDF_RDM_CAPS)
+		return -FI_ENODATA;
+
+	/* clear the mode bits the app doesn't support */
+	if (hints->tx_attr->mode)
+		defaults.mode &= hints->tx_attr->mode;
+
+	/* make sure the app supports our required mode bits */
+	if ((defaults.mode & USDF_RDM_REQ_MODE) != USDF_RDM_REQ_MODE)
+		return -FI_ENODATA;
+
+	defaults.op_flags |= hints->tx_attr->op_flags;
+
+	if ((hints->tx_attr->msg_order | USDF_RDM_MSG_ORDER) !=
+			USDF_RDM_MSG_ORDER)
+		return -FI_ENODATA;
+
+	if ((hints->tx_attr->comp_order | USDF_RDM_COMP_ORDER) !=
+			USDF_RDM_COMP_ORDER)
+		return -FI_ENODATA;
+
+	if (hints->tx_attr->inject_size > defaults.inject_size)
+		return -FI_ENODATA;
+
+	if (hints->tx_attr->iov_limit > defaults.iov_limit)
+		return -FI_ENODATA;
+
+	if (hints->tx_attr->rma_iov_limit > defaults.rma_iov_limit)
+		return -FI_ENODATA;
+
+	if (hints->tx_attr->size > defaults.size)
+		return -FI_ENODATA;
+
+out:
+	*fi->tx_attr = defaults;
+
+	return FI_SUCCESS;
+}
+
+int usdf_rdm_fill_rx_attr(struct fi_info *hints, struct fi_info *fi)
+{
+	struct fi_rx_attr defaults;
+
+	defaults = rdm_dflt_rx_attr;
+
+	if (!hints || !hints->rx_attr)
+		goto out;
+
+	/* make sure we can support the capabilities that are requested */
+	if (hints->rx_attr->caps & ~USDF_RDM_CAPS)
+		return -FI_ENODATA;
+
+	/* clear the mode bits the app doesn't support */
+	if (hints->rx_attr->mode)
+		defaults.mode &= hints->rx_attr->mode;
+
+	/* make sure the app supports our required mode bits */
+	if ((defaults.mode & USDF_RDM_REQ_MODE) != USDF_RDM_REQ_MODE)
+		return -FI_ENODATA;
+
+	defaults.op_flags |= hints->rx_attr->op_flags;
+
+	if ((hints->rx_attr->msg_order | USDF_RDM_MSG_ORDER) !=
+			USDF_RDM_MSG_ORDER)
+		return -FI_ENODATA;
+	if ((hints->rx_attr->comp_order | USDF_RDM_COMP_ORDER) !=
+			USDF_RDM_COMP_ORDER)
+		return -FI_ENODATA;
+
+	if (hints->rx_attr->total_buffered_recv >
+			defaults.total_buffered_recv)
+		return -FI_ENODATA;
+
+	if (hints->rx_attr->iov_limit > defaults.iov_limit)
+		return -FI_ENODATA;
+
+	if (hints->rx_attr->size > defaults.size)
+		return -FI_ENODATA;
+
+out:
+	*fi->rx_attr = defaults;
+
+	return FI_SUCCESS;
+}
 
 static int
 usdf_tx_rdm_enable(struct usdf_tx *tx)
@@ -336,47 +585,6 @@ usdf_ep_rdm_cancel(fid_t fid, void *context)
 {
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 	/* XXX should this have a non-empty implementation? */
-	return 0;
-}
-
-int
-usdf_rdm_fill_tx_attr(struct fi_tx_attr *txattr)
-{
-	if (txattr->size > USDF_RDM_MAX_CTX_SIZE ||
-	    txattr->iov_limit > USDF_RDM_MAX_SGE) {
-		return -FI_ENODATA;
-	}
-
-	if (txattr->size == 0) {
-		txattr->size = USDF_RDM_DFLT_CTX_SIZE;
-	}
-	if (txattr->iov_limit == 0) {
-		txattr->iov_limit = USDF_RDM_DFLT_SGE;
-	}
-
-	if (txattr->op_flags & ~USDF_RDM_SUPP_SENDMSG_FLAGS) {
-		USDF_WARN("one or more flags in 0x%llx not supported\n",
-			txattr->op_flags);
-		return -FI_EOPNOTSUPP;
-	}
-
-	return 0;
-}
-
-int
-usdf_rdm_fill_rx_attr(struct fi_rx_attr *rxattr)
-{
-	if (rxattr->size > USDF_RDM_MAX_CTX_SIZE ||
-	    rxattr->iov_limit > USDF_RDM_MAX_SGE) {
-		return -FI_ENODATA;
-	}
-
-	if (rxattr->size == 0) {
-		rxattr->size = USDF_RDM_DFLT_CTX_SIZE;
-	}
-	if (rxattr->iov_limit == 0) {
-		rxattr->iov_limit = USDF_RDM_DFLT_SGE;
-	}
 	return 0;
 }
 
@@ -795,18 +1003,12 @@ usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
 		atomic_initialize(&tx->t.rdm.tx_next_msg_id, 1);
 		atomic_inc(&udp->dom_refcnt);
 
-		if (info->tx_attr != NULL) {
-			ret = usdf_rdm_fill_tx_attr(info->tx_attr);
-			if (ret != 0) {
-				goto fail;
-			}
-			tx->tx_attr = *info->tx_attr;
-		} else {
-			ret = usdf_rdm_fill_tx_attr(&tx->tx_attr);
-			if (ret != 0) {
-				goto fail;
-			}
-		}
+		/* info is both hints and output */
+		ret = usdf_rdm_fill_tx_attr(info, info);
+		if (ret)
+			goto fail;
+		tx->tx_attr = *info->tx_attr;
+
 		TAILQ_INIT(&tx->t.rdm.tx_free_wqe);
 		TAILQ_INIT(&tx->t.rdm.tx_rdc_ready);
 		TAILQ_INIT(&tx->t.rdm.tx_rdc_have_acks);
@@ -832,22 +1034,17 @@ usdf_ep_rdm_open(struct fid_domain *domain, struct fi_info *info,
 		atomic_inc(&udp->dom_refcnt);
 
 		ret = usdf_rx_rdm_port_bind(rx, info);
-		if (ret != 0) {
+		if (ret) {
 			goto fail;
 		}
 
-		if (info->rx_attr != NULL) {
-			ret = usdf_rdm_fill_rx_attr(info->rx_attr);
-			if (ret != 0) {
-				goto fail;
-			}
-			rx->rx_attr = *info->rx_attr;
-		} else {
-			ret = usdf_rdm_fill_rx_attr(&rx->rx_attr);
-			if (ret != 0) {
-				goto fail;
-			}
+		/* info is both hints and output */
+		ret = usdf_rdm_fill_rx_attr(info, info);
+		if (ret) {
+			goto fail;
 		}
+		rx->rx_attr = *info->rx_attr;
+
 		TAILQ_INIT(&rx->r.rdm.rx_free_rqe);
 		TAILQ_INIT(&rx->r.rdm.rx_posted_rqe);
 

@@ -43,6 +43,7 @@
 
 #define USDF_RDM_SUPP_SENDMSG_FLAGS \
 	(FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | FI_INJECT | FI_COMPLETION)
+#define USDF_RDM_SUPP_RECVMSG_FLAGS (FI_COMPLETION)
 
 #define USDF_RDM_MAX_SGE 8
 #define USDF_RDM_DFLT_SGE 8
@@ -52,6 +53,11 @@
 #define USDF_RDM_MAX_MSG UINT_MAX
 
 #define USDF_RDM_MAX_INJECT_SIZE 64
+#define USDF_RDM_IOV_LIMIT (USDF_RDM_DFLT_SGE)
+#define USDF_RDM_RMA_IOV_LIMIT 0
+
+#define USDF_RDM_MSG_ORDER (FI_ORDER_NONE)
+#define USDF_RDM_COMP_ORDER (FI_ORDER_NONE)
 
 #define USDF_RDM_FREE_BLOCK (16 * 1024)
 #define USDF_RDM_HASH_SIZE (64 * 1024)
@@ -132,9 +138,14 @@ struct usdf_rdm_connection {
 	struct usdf_rdm_connection *dc_hash_next;
 };
 
+
+int usdf_rdm_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
+		struct usd_device_attrs *dap);
+int usdf_rdm_fill_dom_attr(struct fi_info *hints, struct fi_info *fi);
+int usdf_rdm_fill_tx_attr(struct fi_info *hints, struct fi_info *fi);
+int usdf_rdm_fill_rx_attr(struct fi_info *hints, struct fi_info *fi);
+
 int usdf_rdm_post_recv(struct usdf_rx *rx, void *buf, size_t len);
-int usdf_rdm_fill_tx_attr(struct fi_tx_attr *txattr);
-int usdf_rdm_fill_rx_attr(struct fi_rx_attr *rxattr);
 int usdf_cq_rdm_poll(struct usd_cq *ucq, struct usd_completion *comp);
 void usdf_rdm_rdc_timeout(void *vrdc);
 
