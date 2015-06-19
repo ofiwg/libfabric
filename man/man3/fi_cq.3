@@ -1,4 +1,4 @@
-.TH fi_cq 3 "2015\-04\-03" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_cq 3 "2015\-06\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cq - Completion queue operations
@@ -424,8 +424,24 @@ available as part of the completion.
 .PP
 \f[I]FI_MULTI_RECV\f[] : This flag applies to receive buffers that were
 posted with the FI_MULTI_RECV flag set.
-This completion flag indicates that the receive buffer referenced by the
-completion has been consumed and was released by the provider.
+This completion flag indicates that the original receive buffer
+referenced by the completion has been consumed and was released by the
+provider.
+Providers may set this flag on the last message that is received into
+the multi- recv buffer, or may generate a separate completion that
+indicates that the buffer has been freed.
+.PP
+Applications can distinguish between these two cases by examining the
+completion entry flags field.
+If additional flags, such as FI_RECV, are set, the completion is
+associated with a received message.
+In this case, the buf field will reference the location where the
+received message was placed into the multi-recv buffer.
+Other fields in the completion entry will be determined based on the
+received message.
+If other flag bits are zero, the provider is reporting that the
+multi-recv buffer has been freed, and the completion entry is not
+associated with a received message.
 .SH RETURN VALUES
 .PP
 fi_cq_open / fi_cq_signal : Returns 0 on success.
