@@ -702,13 +702,18 @@ struct fi_tx_attr {
 
 The requested capabilities of the context.  The capabilities must be
 a subset of those requested of the associated endpoint.  See the
-CAPABILITIES section if fi_getinfo(3) for capability details.
+CAPABILITIES section if fi_getinfo(3) for capability details.  If
+the caps field is 0 on input to fi_getinfo(3), the caps value from the
+fi_info structure will be used.
 
 ## mode
 
 The operational mode bits of the context.  The mode bits will be a
 subset of those associated with the endpoint.  See the MODE section
-of fi_getinfo(3) for details.
+of fi_getinfo(3) for details.  A mode value of 0 will be ignored on
+input to fi_getinfo(3), with the mode value of the fi_info structure
+used instead.  On return from fi_getinfo(3), the mode will be set
+only to those constraints specific to transmit operations.
 
 ## op_flags - Default transmit operation flags
 
@@ -880,13 +885,18 @@ struct fi_rx_attr {
 
 The requested capabilities of the context.  The capabilities must be
 a subset of those requested of the associated endpoint.  See the
-CAPABILITIES section if fi_getinfo(3) for capability details.
+CAPABILITIES section if fi_getinfo(3) for capability details.  If
+the caps field is 0 on input to fi_getinfo(3), the caps value from the
+fi_info structure will be used.
 
 ## mode
 
 The operational mode bits of the context.  The mode bits will be a
 subset of those associated with the endpoint.  See the MODE section
-of fi_getinfo(3) for details.
+of fi_getinfo(3) for details.  A mode value of 0 will be ignored on
+input to fi_getinfo(3), with the mode value of the fi_info structure
+used instead.  On return from fi_getinfo(3), the mode will be set
+only to those constraints specific to receive operations.
 
 ## op_flags - Default receive operation flags
 
