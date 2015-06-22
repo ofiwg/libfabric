@@ -226,7 +226,8 @@ av_create_addr_sockaddr_in(char *first_address, int index, void *addr)
 	}
 
 	hints.ai_family = AF_INET;
-	ret = getaddrinfo(first_address, NULL, &hints, &ai);
+	/* port doesn't matter, set port to discard port */
+	ret = getaddrinfo(first_address, "discard", &hints, &ai);
 	if (ret != 0) {
 		sprintf(err_buf, "getaddrinfo: %s", gai_strerror(ret));
 		return -1;
