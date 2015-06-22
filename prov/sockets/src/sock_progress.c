@@ -2459,7 +2459,7 @@ do_wait:
 #ifndef __APPLE__
 static void sock_thread_set_affinity(char *s)
 {
-	char *saveptra, *saveptrb, *saveptrc;
+	char *saveptra = NULL, *saveptrb = NULL, *saveptrc = NULL;
 	char *a, *b, *c;
 	int j, first, last,stride;
 	cpu_set_t mycpuset;
