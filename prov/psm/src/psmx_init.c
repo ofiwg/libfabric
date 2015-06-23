@@ -470,7 +470,6 @@ struct fi_provider psmx_prov = {
 PSM_INI
 {
 	int major, minor;
-	int check_version = 1;
 	int err;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
@@ -490,10 +489,6 @@ PSM_INI
 	fi_var_register(&psmx_prov, "uuid",
 			"Unique Job ID required by the PSM fabric");
 
-	fi_var_register(&psmx_prov, "version_check",
-			"Whether to check PSM version number compatibility "
-			"or not (default: yes)");
-
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
 
 	major = PSM_VERNO_MAJOR;
@@ -511,13 +506,10 @@ PSM_INI
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"PSM library version = (%d, %d)\n", major, minor);
 
-	fi_var_get_bool(&psmx_prov, "version_check", &check_version);
-	if (check_version && major != PSM_VERNO_MAJOR) {
+	if (major != PSM_VERNO_MAJOR) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
 			"PSM version mismatch: header %d.%d, library %d.%d.\n",
 			PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
-		FI_WARN(&psmx_prov, FI_LOG_CORE,
-			"\tSet envar FI_PSM_VERSION_CHECK=0 to bypass version check.\n");
 		return NULL;
 	}
 
