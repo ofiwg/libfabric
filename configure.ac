@@ -199,6 +199,9 @@ AC_TRY_LINK(
 AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [$ac_prog_cc_alias_symbols],
 	  	   [Define to 1 if the linker supports alias attribute.])
 
+dnl What will be substituted into the BuildRequires RPM specfile line
+FI_BUILD_REQUIRES=
+
 dnl Provider-specific checks
 FI_PROVIDER_INIT
 FI_PROVIDER_SETUP([psm])
@@ -206,6 +209,8 @@ FI_PROVIDER_SETUP([sockets])
 FI_PROVIDER_SETUP([verbs])
 FI_PROVIDER_SETUP([usnic])
 FI_PROVIDER_FINI
+
+AC_SUBST(FI_BUILD_REQUIRES)
 
 # If the user requested to build in direct mode, but
 # we have more than one provider, error.

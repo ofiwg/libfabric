@@ -8,10 +8,7 @@ Url: http://www.github.com/ofiwg/libfabric
 Source: http://www.openfabrics.org/downloads/fabrics/%{name}-%{version}.tar.bz2
 Prefix: ${_prefix}
 
-BuildRequires: libnl-devel
-BuildRequires: librdmacm-devel
-BuildRequires: libibverbs-devel
-BuildRequires: infinipath-psm-devel
+BuildRequires: @FI_BUILD_REQUIRES@
 
 %description
 libfabric provides a user-space API to access high-performance fabric

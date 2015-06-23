@@ -34,5 +34,8 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	      ])
 
 	AS_IF([test $verbs_ibverbs_happy -eq 1 && \
-	       test $verbs_rdmacm_happy -eq 1], [$1], [$2])
+	       test $verbs_rdmacm_happy -eq 1],
+	      [FI_BUILD_REQUIRES="librdmacm-devel libibverbs-devel $FI_BUILD_REQUIRES"
+	       $1],
+	      [$2])
 ])
