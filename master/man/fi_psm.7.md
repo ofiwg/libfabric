@@ -120,13 +120,6 @@ The *psm* provider checks for the following environment variables:
 
   This option is off by default. To turn it on set the variable to 1.
 
-*FI_PSM_VERSION_CHECK*
-: The *psm* provider checks the version of the PSM library and fails if the
-  major version doesn't match with the header it is compiled with. In some
-  case (e.g. testing compatibility between different versions) one may want
-  to continue even if the versions don't match. For that purpose the
-  variable can be set to 0.
-
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
