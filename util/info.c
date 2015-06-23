@@ -37,11 +37,12 @@
 
 #include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
+#include <rdma/fi_var.h>
 
 static struct fi_info *hints;
 static char *node, *port;
 static int ver = 0;
-static int verbose = 0;
+static int verbose = 0, env = 0;
 
 /* options and matching help strings need to be kept in sync */
 
@@ -53,6 +54,7 @@ static const struct option longopts[] = {
 	{"ep_type", required_argument, NULL, 't'},
 	{"addr_format", required_argument, NULL, 'a'},
 	{"provider", required_argument, NULL, 'f'},
+	{"env", no_argument, NULL, 'e'},
 	{"verbose", no_argument, NULL, 'v'},
 	{"version", no_argument, &ver, 1},
 	{0,0,0,0}
@@ -66,6 +68,7 @@ static const char *help_strings[][2] = {
 	{"EPTYPE", "\t\tspecify single endpoint type: FI_EP_MSG, FI_EP_DGRAM..."},
 	{"FMT", "\t\tspecify accepted address format: FI_FORMAT_UNSPEC, FI_SOCKADDR..."},
 	{"PROV", "\t\tspecify provider explicitly"},
+	{"", "\t\tprint libfabric environment variables"},
 	{"", "\t\tverbose output"},
 	{"", "\t\tprint version info and exit"},
 	{"", ""}
@@ -171,6 +174,34 @@ uint64_t tokparse(char *caps, uint64_t (*str2flag) (char *inputstr))
 	return flags;
 }
 
+int print_vars() {
+	int ret, count;
+	struct fi_setting *env;
+	char delim;
+
+	ret = fi_getsettings(&env, &count);
+
+	if (ret)
+		return ret;
+
+	for (int i = 0; i < count; ++i) {
+		printf("# %s: %s\n", env[i].prov_name, env[i].help_string);
+
+		if (env[i].value) {
+			delim = strchr(env[i].value, ' ') ? '"' : '\0';
+			printf("%s=%c%s%c\n", env[i].env_var_name, delim,
+				env[i].value, delim);
+		} else {
+			printf("# %s\n", env[i].env_var_name);
+		}
+
+		printf("\n");
+	}
+
+	fi_freesettings(env);
+	return ret;
+}
+
 int print_short_info(struct fi_info *info) {
 	for (struct fi_info *cur = info; cur; cur = cur->next) {
 		printf("%s: %s\n", cur->fabric_attr->prov_name, cur->fabric_attr->name);
@@ -200,7 +231,9 @@ static int run(struct fi_info *hints, char *node, char *port)
 		return ret;
 	}
 
-	if (verbose)
+	if (env)
+		ret = print_vars();
+	else if (verbose)
 		ret = print_long_info(info);
 	else
 		ret = print_short_info(info);
@@ -251,6 +284,9 @@ int main(int argc, char **argv)
 		case 'f':
 			hints->fabric_attr->prov_name = strdup(optarg);
 			use_hints = 1;
+			break;
+		case 'e':
+			env = 1;
 			break;
 		case 'v':
 			verbose = 1;
