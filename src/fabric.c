@@ -647,9 +647,6 @@ uint32_t DEFAULT_SYMVER_PRE(fi_version)(void)
 }
 DEFAULT_SYMVER(fi_version_, fi_version);
 
-#define FI_ERRNO_OFFSET	256
-#define FI_ERRNO_MAX	FI_ENOCQ
-
 static const char *const errstr[] = {
 	[FI_EOTHER - FI_ERRNO_OFFSET] = "Unspecified error",
 	[FI_ETOOSMALL - FI_ERRNO_OFFSET] = "Provided buffer is too small",

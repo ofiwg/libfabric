@@ -177,18 +177,22 @@ extern "C" {
 //#define	FI_ENOTRECOVERABLE	ENOTRECOVERABLE	/* State not recoverable */
 
 /* FI specific return values: >= 256 */
+#define FI_ERRNO_OFFSET	256
 
-#define FI_EOTHER		256		/* Unspecified error */
-#define FI_ETOOSMALL		257		/* Provided buffer is too small */
-#define FI_EOPBADSTATE		258		/* Operation not permitted in current state */
-#define FI_EAVAIL		259		/* Error available */
-#define FI_EBADFLAGS		260		/* Flags not supported */
-#define FI_ENOEQ		261		/* Missing or unavailable event queue */
-#define FI_EDOMAIN		262		/* Invalid resource domain */
-#define FI_ENOCQ		263		/* Missing or unavailable completion queue */
-#define FI_ECRC			264		/* CRC error */
-#define FI_ETRUNC		265		/* Truncation error */
-#define FI_ENOKEY		266		/* Required key not available */
+enum {
+	FI_EOTHER        = FI_ERRNO_OFFSET, /* Unspecified error */
+	FI_ETOOSMALL     = 257, /* Provided buffer is too small */
+	FI_EOPBADSTATE   = 258, /* Operation not permitted in current state */
+	FI_EAVAIL        = 259, /* Error available */
+	FI_EBADFLAGS     = 260, /* Flags not supported */
+	FI_ENOEQ         = 261, /* Missing or unavailable event queue */
+	FI_EDOMAIN       = 262, /* Invalid resource domain */
+	FI_ENOCQ         = 263, /* Missing or unavailable completion queue */
+	FI_ECRC          = 264, /* CRC error */
+	FI_ETRUNC        = 265, /* Truncation error */
+	FI_ENOKEY        = 266, /* Required key not available */
+	FI_ERRNO_MAX
+};
 
 const char *fi_strerror(int errnum);
 
