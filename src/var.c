@@ -125,6 +125,8 @@ no_vars:
 }
 DEFAULT_SYMVER(fi_getsettings_, fi_getsettings);
 
+
+__attribute__((visibility ("default")))
 void DEFAULT_SYMVER_PRE(fi_freesettings)(struct fi_setting *var)
 {
 	for (int i = 0; var[i].prov_name; ++i) {
