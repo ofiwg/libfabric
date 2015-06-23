@@ -1,4 +1,4 @@
-.TH fi_psm 7 "2015\-06\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_psm 7 "2015\-06\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The PSM Fabric Provider
@@ -126,14 +126,6 @@ This experimental feature has slightly larger latency.
 .PP
 This option is off by default.
 To turn it on set the variable to 1.
-.PP
-\f[I]FI_PSM_VERSION_CHECK\f[] : The \f[I]psm\f[] provider checks the
-version of the PSM library and fails if the major version doesn\[aq]t
-match with the header it is compiled with.
-In some case (e.g.
-testing compatibility between different versions) one may want to
-continue even if the versions don\[aq]t match.
-For that purpose the variable can be set to 0.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
