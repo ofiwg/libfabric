@@ -1403,10 +1403,10 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 			return 0;
 		len += SOCK_CQ_DATA_SIZE;
 	}
-
-	if (pe_entry->done_len == len && !pe_entry->pe.rx.rx_entry) {
-		data_len = pe_entry->msg_hdr.msg_len - len;
-
+	
+	data_len = pe_entry->msg_hdr.msg_len - len;
+	
+	if (pe_entry->done_len == len && !pe_entry->pe.rx.rx_entry) {	
 		fastlock_acquire(&rx_ctx->lock);
 		sock_pe_progress_buffered_rx(rx_ctx);
 		
@@ -1429,7 +1429,6 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 			rx_entry->data = pe_entry->data;
 			rx_entry->ignore = 0;
 			rx_entry->comp = pe_entry->comp;
-			pe_entry->context = rx_entry->context;
 
 			if (pe_entry->msg_hdr.flags & FI_REMOTE_CQ_DATA)
 				rx_entry->flags |= FI_REMOTE_CQ_DATA;
@@ -1445,7 +1444,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe, struct sock_rx_ctx *rx_ct
 	
 	rx_entry = pe_entry->pe.rx.rx_entry;
 	done_data = pe_entry->done_len - len;
-	pe_entry->data_len = pe_entry->msg_hdr.msg_len - len;
+	pe_entry->data_len = data_len;
 	rem = pe_entry->data_len - done_data;
 	used = rx_entry->used;
 
@@ -2464,6 +2463,11 @@ static void sock_thread_set_affinity(char *s)
 	int j, first, last,stride;
 	cpu_set_t mycpuset;
 	pthread_t mythread;
+ 	
+	if(!s) {
+		SOCK_LOG_DBG("Invalid FI_SOCKETS_PE_AFFINITY value\n");
+		return;
+	}
 
 	mythread = pthread_self();
 	CPU_ZERO(&mycpuset);
