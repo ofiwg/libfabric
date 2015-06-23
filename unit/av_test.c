@@ -1032,7 +1032,7 @@ int main(int argc, char **argv)
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		case 's':
-			src_addr_str = strdup(optarg);
+			src_addr_str = optarg;
 			break;
 		default:
 			printf("usage: %s\n", argv[0]);
