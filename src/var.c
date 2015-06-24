@@ -43,7 +43,6 @@
 
 #include "fi.h"
 
-/* internal setting representation */
 struct fi_var {
 	const struct fi_provider *provider;
 	char *var_name;
@@ -68,10 +67,9 @@ static int fi_var_get(const struct fi_provider *provider, const char *var_name,
 	}
 
 	for (v = var_list; v; v = v->next) {
-		if (strcmp(v->provider->name, provider->name) == 0 &&
-			strcmp(v->var_name, var_name) == 0) {
+		if (v->provider == provider &&
+		    strcmp(v->var_name, var_name) == 0) {
 			*value = getenv(v->env_var_name);
-
 			return FI_SUCCESS;
 		}
 	}
@@ -85,12 +83,12 @@ __attribute__((visibility ("default")))
 int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 {
 	struct fi_param *vhead = NULL;
-	struct fi_var *ptr;
-	int ret = FI_SUCCESS, len = 0, i = 0;
+	struct fi_var *v;
+	int ret, len = 0, i;
 	char *tmp = NULL;
 
 	// just get a count
-	for (ptr = var_list; ptr; ptr = ptr->next, ++len)
+	for (v = var_list; v; v = v->next, ++len)
 		continue;
 
 	if (len == 0)
@@ -101,12 +99,12 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 	if (!vhead)
 		return -FI_ENOMEM;
 
-	for (ptr = var_list; ptr; ptr = ptr->next, ++i, tmp = NULL) {
-		vhead[i].prov_name = strdup(ptr->provider->name);
-		vhead[i].name = strdup(ptr->env_var_name);
-		vhead[i].help_string = strdup(ptr->help_string);
+	for (v = var_list, i = 0; v; v = v->next, ++i, tmp = NULL) {
+		vhead[i].prov_name = strdup(v->provider->name);
+		vhead[i].name = strdup(v->env_var_name);
+		vhead[i].help_string = strdup(v->help_string);
 
-		ret = fi_var_get(ptr->provider, ptr->var_name, &tmp);
+		ret = fi_var_get(v->provider, v->var_name, &tmp);
 		if (ret == FI_SUCCESS && tmp)
 			vhead[i].value = strdup(tmp);
 
@@ -120,7 +118,7 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 out:
 	*count = len;
 	*params = vhead;
-	return ret;
+	return FI_SUCCESS;
 }
 DEFAULT_SYMVER(fi_getparams_, fi_getparams);
 
@@ -146,7 +144,7 @@ int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 
 	// Check for bozo cases
 	if (provider == NULL || var_name == NULL || help_string == NULL ||
-		*help_string == '\0') {
+	    *help_string == '\0') {
 		FI_DBG(provider, FI_LOG_CORE,
 			"Failed to register %s variable: provider coding error\n",
 			var_name);
@@ -164,9 +162,8 @@ int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 	v->var_name = strdup(var_name);
 	v->help_string = strdup(help_string);
 	if (!v->var_name || !v->help_string || 
-		asprintf(&v->env_var_name, "FI_%s_%s",
-			v->provider->name,
-			v->var_name) < 0) {
+	    asprintf(&v->env_var_name, "FI_%s_%s",
+		     v->provider->name, v->var_name) < 0) {
 		free(v);
 		FI_DBG(provider, FI_LOG_CORE,
 			"Failed to register %s variable: ENOMEM\n", var_name);
