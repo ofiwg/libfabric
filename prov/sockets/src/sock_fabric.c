@@ -43,7 +43,6 @@
 #include <limits.h>
 
 #include "prov.h"
-#include <rdma/fi_var.h>
 
 #include "sock.h"
 #include "sock_util.h"

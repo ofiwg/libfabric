@@ -37,7 +37,6 @@
 
 #include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_var.h>
 
 static struct fi_info *hints;
 static char *node, *port;

@@ -53,7 +53,6 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <inttypes.h>
-#include <rdma/fi_var.h>
 
 #include "sock.h"
 #include "sock_util.h"

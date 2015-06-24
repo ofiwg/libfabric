@@ -313,7 +313,6 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fi_domain.h \
 	$(top_srcdir)/include/rdma/fi_eq.h \
 	$(top_srcdir)/include/rdma/fi_log.h \
-	$(top_srcdir)/include/rdma/fi_var.h \
 	$(top_srcdir)/include/rdma/fi_prov.h \
 	$(top_srcdir)/include/rdma/fi_rma.h \
 	$(top_srcdir)/include/rdma/fi_endpoint.h \

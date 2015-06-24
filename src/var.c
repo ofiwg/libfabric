@@ -38,7 +38,7 @@
 #include <ctype.h>
 
 #include <rdma/fi_errno.h>
-#include <rdma/fi_var.h>
+#include <rdma/fi_prov.h>
 #include <rdma/fi_log.h>
 
 #include "fi.h"

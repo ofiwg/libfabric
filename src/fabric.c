@@ -46,7 +46,6 @@
 #include "fi.h"
 #include "prov.h"
 #include <rdma/fi_log.h>
-#include <rdma/fi_var.h>
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>

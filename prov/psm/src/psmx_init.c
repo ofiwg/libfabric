@@ -33,7 +33,6 @@
 #include "psmx.h"
 #include "fi.h"
 #include "prov.h"
-#include <rdma/fi_var.h>
 
 volatile int psmx_init_count = 0;
 struct psmx_fid_fabric *psmx_active_fabric = NULL;
