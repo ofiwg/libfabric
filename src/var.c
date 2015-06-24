@@ -82,9 +82,9 @@ static int fi_var_get(const struct fi_provider *provider, const char *var_name,
 }
 
 __attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_getsettings)(struct fi_setting **vars, int *count)
+int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 {
-	struct fi_setting *vhead = NULL;
+	struct fi_param *vhead = NULL;
 	struct fi_var_t *ptr;
 	int ret = FI_SUCCESS, len = 0, i = 0;
 	char *tmp = NULL;
@@ -94,7 +94,7 @@ int DEFAULT_SYMVER_PRE(fi_getsettings)(struct fi_setting **vars, int *count)
 		continue;
 
 	if (len == 0)
-		goto no_vars;
+		goto out;
 
 	// last extra entry will be all NULL
 	vhead = calloc(len + 1, sizeof (*vhead));
@@ -103,7 +103,7 @@ int DEFAULT_SYMVER_PRE(fi_getsettings)(struct fi_setting **vars, int *count)
 
 	for (ptr = fi_vars; ptr; ptr = ptr->next, ++i, tmp = NULL) {
 		vhead[i].prov_name = strdup(ptr->provider->name);
-		vhead[i].var_name = strdup(ptr->var_name);
+		vhead[i].param_name = strdup(ptr->var_name);
 		vhead[i].env_var_name = strdup(ptr->env_var_name);
 		vhead[i].help_string = strdup(ptr->help_string);
 
@@ -111,34 +111,33 @@ int DEFAULT_SYMVER_PRE(fi_getsettings)(struct fi_setting **vars, int *count)
 		if (ret == FI_SUCCESS && tmp)
 			vhead[i].value = strdup(tmp);
 
-		if (!vhead[i].prov_name || !vhead[i].var_name ||
+		if (!vhead[i].prov_name || !vhead[i].param_name ||
 		    !vhead[i].env_var_name || !vhead[i].help_string) {
-			fi_freesettings(vhead);
+			fi_freeparams(vhead);
 			return -FI_ENOMEM;
 		}
 	}
 
-no_vars:
+out:
 	*count = len;
-	*vars = vhead;
+	*params = vhead;
 	return ret;
 }
-DEFAULT_SYMVER(fi_getsettings_, fi_getsettings);
-
+DEFAULT_SYMVER(fi_getparams_, fi_getparams);
 
 __attribute__((visibility ("default")))
-void DEFAULT_SYMVER_PRE(fi_freesettings)(struct fi_setting *var)
+void DEFAULT_SYMVER_PRE(fi_freeparams)(struct fi_param *params)
 {
-	for (int i = 0; var[i].prov_name; ++i) {
-		free((void*)var[i].prov_name);
-		free((void*)var[i].var_name);
-		free((void*)var[i].env_var_name);
-		free((void*)var[i].help_string);
-		free((void*)var[i].value);
+	for (int i = 0; params[i].prov_name; ++i) {
+		free((void*) params[i].prov_name);
+		free((void*) params[i].param_name);
+		free((void*) params[i].env_var_name);
+		free((void*) params[i].help_string);
+		free((void*) params[i].value);
 	}
-	free (var);
+	free(params);
 }
-DEFAULT_SYMVER(fi_freesettings_, fi_freesettings);
+DEFAULT_SYMVER(fi_freeparams_, fi_freeparams);
 
 __attribute__((visibility ("default")))
 int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,

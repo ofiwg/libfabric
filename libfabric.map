@@ -14,7 +14,7 @@ FABRIC_1.0 {
 		fi_var_get_int;
 		fi_var_get_long;
 		fi_var_get_bool;
-		fi_getsettings;
-		fi_freesettings;
+		fi_getparams;
+		fi_freeparams;
 	local: *;
 };

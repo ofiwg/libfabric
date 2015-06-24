@@ -457,16 +457,16 @@ enum fi_type {
 
 char *fi_tostr(const void *data, enum fi_type datatype);
 
-struct fi_setting {
+struct fi_param {
 	const char *prov_name;
-	const char *var_name;
+	const char *param_name;
 	const char *env_var_name;
 	const char *help_string;
 	const char *value;
 };
 
-int fi_getsettings(struct fi_setting **settings, int *count);
-void fi_freesettings(struct fi_setting *settings);
+int fi_getparams(struct fi_param **params, int *count);
+void fi_freeparams(struct fi_param *params);
 
 
 #ifndef FABRIC_DIRECT

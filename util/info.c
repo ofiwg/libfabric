@@ -175,29 +175,29 @@ uint64_t tokparse(char *caps, uint64_t (*str2flag) (char *inputstr))
 
 int print_vars() {
 	int ret, count;
-	struct fi_setting *env;
+	struct fi_param *params;
 	char delim;
 
-	ret = fi_getsettings(&env, &count);
+	ret = fi_getparams(&params, &count);
 
 	if (ret)
 		return ret;
 
 	for (int i = 0; i < count; ++i) {
-		printf("# %s: %s\n", env[i].prov_name, env[i].help_string);
+		printf("# %s: %s\n", params[i].prov_name, params[i].help_string);
 
-		if (env[i].value) {
-			delim = strchr(env[i].value, ' ') ? '"' : '\0';
-			printf("%s=%c%s%c\n", env[i].env_var_name, delim,
-				env[i].value, delim);
+		if (params[i].value) {
+			delim = strchr(params[i].value, ' ') ? '"' : '\0';
+			printf("%s=%c%s%c\n", params[i].env_var_name, delim,
+				params[i].value, delim);
 		} else {
-			printf("# %s\n", env[i].env_var_name);
+			printf("# %s\n", params[i].env_var_name);
 		}
 
 		printf("\n");
 	}
 
-	fi_freesettings(env);
+	fi_freeparams(params);
 	return ret;
 }
 
