@@ -188,10 +188,10 @@ int print_vars() {
 
 		if (params[i].value) {
 			delim = strchr(params[i].value, ' ') ? '"' : '\0';
-			printf("%s=%c%s%c\n", params[i].env_var_name, delim,
+			printf("%s=%c%s%c\n", params[i].name, delim,
 				params[i].value, delim);
 		} else {
-			printf("# %s\n", params[i].env_var_name);
+			printf("# %s\n", params[i].name);
 		}
 
 		printf("\n");
