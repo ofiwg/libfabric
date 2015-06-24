@@ -144,10 +144,6 @@ int fi_var_get_long(struct fi_provider *provider, const char *var_name,
 int fi_var_get_bool(struct fi_provider *provider, const char *var_name,
 		    int *value);
 
-/* Clean up any resources used by the var system
- */
-void fi_var_fini(void);
-
 #ifdef __cplusplus
 }
 #endif
