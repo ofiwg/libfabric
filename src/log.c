@@ -38,6 +38,7 @@
 
 #include <rdma/fi_errno.h>
 #include <rdma/fi_log.h>
+#include <rdma/fi_var.h>
 
 #include "fi.h"
 
@@ -62,6 +63,8 @@ static const char * const log_levels[] = {
 	[FI_LOG_MAX] = NULL
 };
 
+extern struct fi_provider fi_core_prov;
+
 enum {
 	FI_LOG_SUBSYS_OFFSET	= FI_LOG_MAX,
 	FI_LOG_PROV_OFFSET	= FI_LOG_SUBSYS_OFFSET + FI_LOG_SUBSYS_MAX,
@@ -80,18 +83,13 @@ enum {
 uint64_t log_mask;
 struct fi_filter prov_log_filter;
 
-
-static int fi_read_value(const char *env_name, const char * const names[])
+static int fi_read_value(const char *env_val)
 {
-	const char *value;
-	int i;
-
-	value = getenv(env_name);
-	if (!value)
+	if (!env_val)
 		return -1;
 
-	for (i = 0; names[i]; i++) {
-		if (!strcasecmp(value, names[i]))
+	for (int i = 0; log_levels[i]; ++i) {
+		if (!strcasecmp(env_val, log_levels[i]))
 			return i;
 	}
 	return 0;
@@ -100,16 +98,38 @@ static int fi_read_value(const char *env_name, const char * const names[])
 void fi_log_init(void)
 {
 	struct fi_filter subsys_filter;
-	int level, i;
+	int level, i, ret;
+	char *levelstr = NULL, *provstr = NULL, *subsysstr = NULL;
 
-	level = fi_read_value("FI_LOG_LEVEL", log_levels);
+	ret = fi_var_register(NULL, "log_level",
+		"Specify logging level: warn, trace, info, debug (default: warn)");
+
+	if (ret == FI_SUCCESS &&
+	    fi_var_get_str(NULL, "log_level", &levelstr) == -FI_ENOENT)
+		fprintf(stderr, "failed to initialize logging level from FI_LOG_LEVEL\n");
+
+	level = fi_read_value(levelstr);
 	if (level >= 0)
 		log_mask = ((1 << (level + 1)) - 1);
 
-	fi_create_filter(&prov_log_filter, "FI_LOG_PROV");
+	ret = fi_var_register(NULL, "log_prov",
+		"Specify specific provider to log (default: all)");
+
+	if (ret == FI_SUCCESS &&
+	    fi_var_get_str(NULL, "log_prov", &provstr) == -FI_ENOENT)
+		fprintf(stderr, "failed to initialize logging provider from FI_LOG_PROV\n");
+
+	fi_create_filter(&prov_log_filter, provstr);
 	/* providers are selectively disabled */
 
-	fi_create_filter(&subsys_filter, "FI_LOG_SUBSYS");
+	ret = fi_var_register(NULL, "log_subsys",
+		"Specify specific subsystem to log (default: all)");
+
+	if (ret == FI_SUCCESS &&
+	    fi_var_get_str(NULL, "log_subsys", &subsysstr) == -FI_ENOENT)
+		fprintf(stderr, "failed to initialize logging subsystem from FI_LOG_SUBSYS\n");
+
+	fi_create_filter(&subsys_filter, subsysstr);
 	for (i = 0; i < FI_LOG_SUBSYS_MAX; i++) {
 		if (!fi_apply_filter(&subsys_filter, log_subsys[i]))
 			log_mask |= (1 << (i + FI_LOG_SUBSYS_OFFSET));
