@@ -1183,8 +1183,10 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 
 		if (compare != buf + len) {
 			tmp_buf = malloc(len * 2);
-			if (!tmp_buf)
+			if (!tmp_buf) {
+				free(req);
 				return -FI_ENOMEM;
+			}
 
 			memcpy(tmp_buf, buf, len);
 			memcpy(tmp_buf + len, compare, len);
