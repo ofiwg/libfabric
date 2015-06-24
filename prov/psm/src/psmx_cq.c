@@ -119,6 +119,7 @@ struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 	default:
 		FI_WARN(&psmx_prov, FI_LOG_CQ,
 			"unsupported CQ format %d\n", cq->format);
+		slist_insert_tail(&event->list_entry, &cq->free_list);
 		return NULL;
 	}
 

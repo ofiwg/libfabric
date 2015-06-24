@@ -417,8 +417,10 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	}
 
 	cntr_priv = (struct psmx_fid_cntr *) calloc(1, sizeof *cntr_priv);
-	if (!cntr_priv)
-		return -FI_ENOMEM;
+	if (!cntr_priv) {
+		err = -FI_ENOMEM;
+		goto fail;
+	}
 
 	cntr_priv->domain = domain_priv;
 	cntr_priv->events = events;
@@ -434,5 +436,9 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	*cntr = &cntr_priv->cntr;
 	return 0;
+fail:
+	if (wait && wait_is_local)
+		fi_close(&wait->wait.fid);
+	return err;
 }
 
