@@ -76,7 +76,7 @@ int main(int argc, char **argv)
 	if (hints == NULL)
 		exit(EXIT_FAILURE);
 
-	while ((op = getopt(argc, argv, "f:p:n:")) != -1) {
+	while ((op = getopt(argc, argv, "f:a:n:")) != -1) {
 		switch (op) {
 		case 'a':
 			fabric_hints.name = strdup(optarg);

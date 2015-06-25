@@ -453,7 +453,7 @@ int main(int argc, char *argv[])
 	while (1) {
 		int c;
 
-		c = getopt(argc, argv, "i:S:m:r:n:e:" ADDR_OPTS INFO_OPTS);
+		c = getopt(argc, argv, "S:m:r:n:e:h" ADDR_OPTS INFO_OPTS);
 		if (c == -1)
 			break;
 
