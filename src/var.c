@@ -44,6 +44,9 @@
 #include "fi.h"
 
 
+/* When given a NULL provider pointer, use core for logging and settings. */
+extern struct fi_provider core_prov;
+
 struct fi_param_entry {
 	const struct fi_provider *provider;
 	char *name;
@@ -58,6 +61,9 @@ static int fi_param_get(const struct fi_provider *provider, const char *param_na
 		char **value)
 {
 	struct fi_param_entry *v;
+
+	if (!provider)
+		provider = &core_prov;
 
 	// Check for bozo cases
 	if (param_name == NULL || value == NULL) {
@@ -148,9 +154,11 @@ int DEFAULT_SYMVER_PRE(fi_param_register)(const struct fi_provider *provider,
 	int i, ret;
 	struct fi_param_entry *v;
 
+	if (!provider)
+		provider = &core_prov;
+
 	// Check for bozo cases
-	if (provider == NULL || param_name == NULL || help_string == NULL ||
-	    *help_string == '\0') {
+	if (param_name == NULL || help_string == NULL || *help_string == '\0') {
 		FI_DBG(provider, FI_LOG_CORE,
 			"Failed to register %s variable: provider coding error\n",
 			param_name);
@@ -166,13 +174,21 @@ int DEFAULT_SYMVER_PRE(fi_param_register)(const struct fi_provider *provider,
 
 	v->provider = provider;
 	v->name = strdup(param_name);
-	ret = asprintf(&v->help_string, "%s: %s", provider->name, help_string);
-	if (ret < 0)
-		v->help_string = NULL;
-	ret = asprintf(&v->env_var_name, "FI_%s_%s", provider->name, param_name);
-	if (ret < 0)
-		v->env_var_name = NULL;
-
+	if (provider != &core_prov) {
+		ret = asprintf(&v->help_string, "%s: %s", provider->name, help_string);
+		if (ret < 0)
+			v->help_string = NULL;
+		ret = asprintf(&v->env_var_name, "FI_%s_%s", provider->name, param_name);
+		if (ret < 0)
+			v->env_var_name = NULL;
+	} else {
+		ret = asprintf(&v->help_string, "%s", help_string);
+		if (ret < 0)
+			v->help_string = NULL;
+		ret = asprintf(&v->env_var_name, "FI_%s", param_name);
+		if (ret < 0)
+			v->env_var_name = NULL;
+	}
 	if (!v->name || !v->help_string || !v->env_var_name) {
 		fi_free_param(v);
 		FI_DBG(provider, FI_LOG_CORE,
@@ -198,6 +214,9 @@ int DEFAULT_SYMVER_PRE(fi_param_get_str)(struct fi_provider *provider,
 {
 	int ret;
 
+	if (!provider)
+		provider = &core_prov;
+
 	ret = fi_param_get(provider, param_name, value);
 	if (ret == FI_SUCCESS) {
 		if (*value) {
@@ -221,6 +240,9 @@ int DEFAULT_SYMVER_PRE(fi_param_get_int)(struct fi_provider *provider,
 {
 	int ret;
 	char *str_value;
+
+	if (!provider)
+		provider = &core_prov;
 
 	ret = fi_param_get(provider, param_name, &str_value);
 	if (ret == FI_SUCCESS) {
@@ -247,6 +269,9 @@ int DEFAULT_SYMVER_PRE(fi_param_get_long)(struct fi_provider *provider,
 	int ret;
 	char *str_value;
 
+	if (!provider)
+		provider = &core_prov;
+
 	ret = fi_param_get(provider, param_name, &str_value);
 	if (ret == FI_SUCCESS) {
 		if (str_value) {
@@ -271,6 +296,9 @@ int DEFAULT_SYMVER_PRE(fi_param_get_bool)(struct fi_provider *provider,
 {
 	int ret;
 	char *str_value;
+
+	if (!provider)
+		provider = &core_prov;
 
 	ret = fi_param_get(provider, param_name, &str_value);
 	if (ret == FI_SUCCESS) {
