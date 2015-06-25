@@ -110,7 +110,7 @@ int fi_apply_filter(struct fi_filter *filter, const char *name);
 
 void fi_log_init(void);
 void fi_log_fini(void);
-void fi_var_fini(void);
+void fi_param_fini(void);
 
 
 /* flsll is defined on BSD systems, but is different. */

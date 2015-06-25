@@ -401,7 +401,7 @@ static void __attribute__((destructor)) fi_fini(void)
 	}
 
 	fi_free_filter(&prov_filter);
-	fi_var_fini();
+	fi_param_fini();
 	fi_log_fini();
 }
 

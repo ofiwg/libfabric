@@ -578,17 +578,17 @@ struct fi_provider sock_prov = {
 
 SOCKETS_INI
 {
-	fi_var_register(&sock_prov, "pe_waittime",
+	fi_param_register(&sock_prov, "pe_waittime",
                         "How many milliseconds to spin while waiting for progress");
-	fi_var_get_int(&sock_prov, "pe_waittime", &sock_pe_waittime);
+	fi_param_get_int(&sock_prov, "pe_waittime", &sock_pe_waittime);
 
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
 	dlist_init(&sock_dom_list);
 #if ENABLE_DEBUG
-	fi_var_register(&sock_prov, "dgram_drop_rate",
+	fi_param_register(&sock_prov, "dgram_drop_rate",
 			"Drop every Nth dgram frame (debug only)");
-	fi_var_get_long(&sock_prov, "dgram_drop_rate", &sock_dgram_drop_rate);
+	fi_param_get_long(&sock_prov, "dgram_drop_rate", &sock_dgram_drop_rate);
 #endif
 	return (&sock_prov);
 }

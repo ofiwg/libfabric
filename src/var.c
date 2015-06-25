@@ -53,29 +53,29 @@ struct fi_var {
 
 static struct fi_var *var_list;
 
-static int fi_var_get(const struct fi_provider *provider, const char *var_name,
+static int fi_param_get(const struct fi_provider *provider, const char *param_name,
 		char **value)
 {
 	struct fi_var *v;
 
 	// Check for bozo cases
-	if (var_name == NULL || value == NULL) {
+	if (param_name == NULL || value == NULL) {
 		FI_DBG(provider, FI_LOG_CORE,
 			"Failed to read %s variable: provider coding error\n",
-			var_name);
+			param_name);
 		return -FI_EINVAL;
 	}
 
 	for (v = var_list; v; v = v->next) {
 		if (v->provider == provider &&
-		    strcmp(v->var_name, var_name) == 0) {
+		    strcmp(v->var_name, param_name) == 0) {
 			*value = getenv(v->env_var_name);
 			return FI_SUCCESS;
 		}
 	}
 
 	FI_DBG(provider, FI_LOG_CORE,
-		"Failed to read %s variable: was not registered\n", var_name);
+		"Failed to read %s variable: was not registered\n", param_name);
 	return -FI_ENOENT;
 }
 
@@ -103,7 +103,7 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 		vhead[i].name = strdup(v->env_var_name);
 		vhead[i].help_string = strdup(v->help_string);
 
-		ret = fi_var_get(v->provider, v->var_name, &tmp);
+		ret = fi_param_get(v->provider, v->var_name, &tmp);
 		if (ret == FI_SUCCESS && tmp)
 			vhead[i].value = strdup(tmp);
 
@@ -141,41 +141,41 @@ static void fi_free_var(struct fi_var *var)
 }
 
 __attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
-		const char *var_name, const char *help_string)
+int DEFAULT_SYMVER_PRE(fi_param_register)(const struct fi_provider *provider,
+		const char *param_name, const char *help_string)
 {
 	int i, ret;
 	struct fi_var *v;
 
 	// Check for bozo cases
-	if (provider == NULL || var_name == NULL || help_string == NULL ||
+	if (provider == NULL || param_name == NULL || help_string == NULL ||
 	    *help_string == '\0') {
 		FI_DBG(provider, FI_LOG_CORE,
 			"Failed to register %s variable: provider coding error\n",
-			var_name);
+			param_name);
 		return -FI_EINVAL;
 	}
 
 	v = calloc(1, sizeof(*v));
 	if (!v) {
 		FI_DBG(provider, FI_LOG_CORE,
-			"Failed to register %s variable: ENOMEM\n", var_name);
+			"Failed to register %s variable: ENOMEM\n", param_name);
 		return -FI_ENOMEM;
 	}
 
 	v->provider = provider;
-	v->var_name = strdup(var_name);
+	v->var_name = strdup(param_name);
 	ret = asprintf(&v->help_string, "%s: %s", provider->name, help_string);
 	if (ret < 0)
 		v->help_string = NULL;
-	ret = asprintf(&v->env_var_name, "FI_%s_%s", provider->name, var_name);
+	ret = asprintf(&v->env_var_name, "FI_%s_%s", provider->name, param_name);
 	if (ret < 0)
 		v->env_var_name = NULL;
 
 	if (!v->var_name || !v->help_string || !v->env_var_name) {
 		fi_free_var(v);
 		FI_DBG(provider, FI_LOG_CORE,
-			"Failed to register %s variable: ENOMEM\n", var_name);
+			"Failed to register %s variable: ENOMEM\n", param_name);
 		return -FI_ENOMEM;
 	}
 
@@ -185,129 +185,129 @@ int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 	v->next = var_list;
 	var_list = v;
 
-	FI_INFO(provider, FI_LOG_CORE, "registered var %s\n", var_name);
+	FI_INFO(provider, FI_LOG_CORE, "registered var %s\n", param_name);
 
 	return FI_SUCCESS;
 }
-DEFAULT_SYMVER(fi_var_register_, fi_var_register);
+DEFAULT_SYMVER(fi_param_register_, fi_param_register);
 
 __attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_var_get_str)(struct fi_provider *provider,
-		const char *var_name, char **value)
+int DEFAULT_SYMVER_PRE(fi_param_get_str)(struct fi_provider *provider,
+		const char *param_name, char **value)
 {
 	int ret;
 
-	ret = fi_var_get(provider, var_name, value);
+	ret = fi_param_get(provider, param_name, value);
 	if (ret == FI_SUCCESS) {
 		if (*value) {
 			FI_INFO(provider, FI_LOG_CORE,
-				"read string var %s=%s\n", var_name, *value);
+				"read string var %s=%s\n", param_name, *value);
 			ret = FI_SUCCESS;
 		} else {
 			FI_INFO(provider, FI_LOG_CORE,
-				"read string var %s=<not set>\n", var_name);
+				"read string var %s=<not set>\n", param_name);
 			ret = -FI_ENODATA;
 		}
 	}
 
 	return ret;
 }
-DEFAULT_SYMVER(fi_var_get_str_, fi_var_get_str);
+DEFAULT_SYMVER(fi_param_get_str_, fi_param_get_str);
 
 __attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_var_get_int)(struct fi_provider *provider,
-		const char *var_name, int *value)
+int DEFAULT_SYMVER_PRE(fi_param_get_int)(struct fi_provider *provider,
+		const char *param_name, int *value)
 {
 	int ret;
 	char *str_value;
 
-	ret = fi_var_get(provider, var_name, &str_value);
+	ret = fi_param_get(provider, param_name, &str_value);
 	if (ret == FI_SUCCESS) {
 		if (str_value) {
 			*value = atoi(str_value);
 			FI_INFO(provider, FI_LOG_CORE,
-				"read int var %s=%d\n", var_name, *value);
+				"read int var %s=%d\n", param_name, *value);
 			ret = FI_SUCCESS;
 		} else {
 			FI_INFO(provider, FI_LOG_CORE,
-				"read int var %s=<not set>\n", var_name);
+				"read int var %s=<not set>\n", param_name);
 			ret = -FI_ENODATA;
 		}
 	}
 
 	return ret;
 }
-DEFAULT_SYMVER(fi_var_get_int_, fi_var_get_int);
+DEFAULT_SYMVER(fi_param_get_int_, fi_param_get_int);
 
 __attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_var_get_long)(struct fi_provider *provider,
-		const char *var_name, long *value)
+int DEFAULT_SYMVER_PRE(fi_param_get_long)(struct fi_provider *provider,
+		const char *param_name, long *value)
 {
 	int ret;
 	char *str_value;
 
-	ret = fi_var_get(provider, var_name, &str_value);
+	ret = fi_param_get(provider, param_name, &str_value);
 	if (ret == FI_SUCCESS) {
 		if (str_value) {
 			*value = strtol(str_value, NULL, 10);
 			FI_INFO(provider, FI_LOG_CORE,
-				"read long var %s=%ld\n", var_name, *value);
+				"read long var %s=%ld\n", param_name, *value);
 			ret = FI_SUCCESS;
 		} else {
 			FI_INFO(provider, FI_LOG_CORE,
-				"read long var %s=<not set>\n", var_name);
+				"read long var %s=<not set>\n", param_name);
 			ret = -FI_ENODATA;
 		}
 	}
 
 	return ret;
 }
-DEFAULT_SYMVER(fi_var_get_long_, fi_var_get_long);
+DEFAULT_SYMVER(fi_param_get_long_, fi_param_get_long);
 
 __attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_var_get_bool)(struct fi_provider *provider,
-		const char *var_name, int *value)
+int DEFAULT_SYMVER_PRE(fi_param_get_bool)(struct fi_provider *provider,
+		const char *param_name, int *value)
 {
 	int ret;
 	char *str_value;
 
-	ret = fi_var_get(provider, var_name, &str_value);
+	ret = fi_param_get(provider, param_name, &str_value);
 	if (ret == FI_SUCCESS) {
 		if (str_value) {
-			if (strcmp(var_name, "0") == 0 ||
-				strcasecmp(var_name, "false") == 0 ||
-				strcasecmp(var_name, "no") == 0 ||
-				strcasecmp(var_name, "off") == 0) {
+			if (strcmp(param_name, "0") == 0 ||
+				strcasecmp(param_name, "false") == 0 ||
+				strcasecmp(param_name, "no") == 0 ||
+				strcasecmp(param_name, "off") == 0) {
 				*value = 0;
 				FI_INFO(provider, FI_LOG_CORE,
-					"read boolean var %s=false\n", var_name);
+					"read boolean var %s=false\n", param_name);
 				ret = FI_SUCCESS;
-			} else if (strcmp(var_name, "1") == 0 ||
-				strcasecmp(var_name, "true") == 0 ||
-				strcasecmp(var_name, "yes") == 0 ||
-				strcasecmp(var_name, "on") == 0) {
+			} else if (strcmp(param_name, "1") == 0 ||
+				strcasecmp(param_name, "true") == 0 ||
+				strcasecmp(param_name, "yes") == 0 ||
+				strcasecmp(param_name, "on") == 0) {
 				*value = 1;
 				FI_INFO(provider, FI_LOG_CORE,
-					"read boolean var %s=true\n", var_name);
+					"read boolean var %s=true\n", param_name);
 				ret = FI_SUCCESS;
 			} else {
 				FI_INFO(provider, FI_LOG_CORE,
 					"read boolean var %s=<unknown> (%s)\n",
-					var_name, str_value);
+					param_name, str_value);
 				ret = -FI_EINVAL;
 			}
 		} else {
 			FI_INFO(provider, FI_LOG_CORE,
-				"read boolean var %s=<not set>\n", var_name);
+				"read boolean var %s=<not set>\n", param_name);
 			ret = -FI_ENODATA;
 		}
 	}
 
 	return ret;
 }
-DEFAULT_SYMVER(fi_var_get_bool_, fi_var_get_bool);
+DEFAULT_SYMVER(fi_param_get_bool_, fi_param_get_bool);
 
-void fi_var_fini(void)
+void fi_param_fini(void)
 {
 	struct fi_var *v, *v2;
 

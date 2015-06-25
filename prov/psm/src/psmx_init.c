@@ -46,10 +46,10 @@ struct psmx_env psmx_env = {
 
 static void psmx_init_env(void)
 {
-	fi_var_get_bool(&psmx_prov, "name_server", &psmx_env.name_server);
-	fi_var_get_bool(&psmx_prov, "am_msg", &psmx_env.am_msg);
-	fi_var_get_bool(&psmx_prov, "tagged_rma", &psmx_env.tagged_rma);
-	fi_var_get_str(&psmx_prov, "uuid", &psmx_env.uuid);
+	fi_param_get_bool(&psmx_prov, "name_server", &psmx_env.name_server);
+	fi_param_get_bool(&psmx_prov, "am_msg", &psmx_env.am_msg);
+	fi_param_get_bool(&psmx_prov, "tagged_rma", &psmx_env.tagged_rma);
+	fi_param_get_str(&psmx_prov, "uuid", &psmx_env.uuid);
 }
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
@@ -473,19 +473,19 @@ PSM_INI
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
-	fi_var_register(&psmx_prov, "name_server",
+	fi_param_register(&psmx_prov, "name_server",
 			"Whether to turn on the name server or not "
 			"(default: yes)");
 
-	fi_var_register(&psmx_prov, "am_msg",
+	fi_param_register(&psmx_prov, "am_msg",
 			"Whether to use active message based messaging "
 			"or not (default: no)");
 
-	fi_var_register(&psmx_prov, "tagged_rma",
+	fi_param_register(&psmx_prov, "tagged_rma",
 			"Whether to use tagged messages for large size "
 			"RMA or not (default: yes)");
 
-	fi_var_register(&psmx_prov, "uuid",
+	fi_param_register(&psmx_prov, "uuid",
 			"Unique Job ID required by the fabric");
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
