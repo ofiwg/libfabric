@@ -52,7 +52,7 @@ struct fi_var {
 	struct fi_var *next;
 };
 
-static struct fi_var *fi_vars = NULL;
+static struct fi_var *var_list;
 
 static int fi_var_get(const struct fi_provider *provider, const char *var_name,
 		char **value)
@@ -67,7 +67,7 @@ static int fi_var_get(const struct fi_provider *provider, const char *var_name,
 		return -FI_EINVAL;
 	}
 
-	for (v = fi_vars; v; v = v->next) {
+	for (v = var_list; v; v = v->next) {
 		if (strcmp(v->provider->name, provider->name) == 0 &&
 			strcmp(v->var_name, var_name) == 0) {
 			*value = getenv(v->env_var_name);
@@ -90,7 +90,7 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 	char *tmp = NULL;
 
 	// just get a count
-	for (ptr = fi_vars; ptr; ptr = ptr->next, ++len)
+	for (ptr = var_list; ptr; ptr = ptr->next, ++len)
 		continue;
 
 	if (len == 0)
@@ -101,7 +101,7 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 	if (!vhead)
 		return -FI_ENOMEM;
 
-	for (ptr = fi_vars; ptr; ptr = ptr->next, ++i, tmp = NULL) {
+	for (ptr = var_list; ptr; ptr = ptr->next, ++i, tmp = NULL) {
 		vhead[i].prov_name = strdup(ptr->provider->name);
 		vhead[i].name = strdup(ptr->env_var_name);
 		vhead[i].help_string = strdup(ptr->help_string);
@@ -176,8 +176,8 @@ int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 	for (i = 0; v->env_var_name[i]; ++i)
 		v->env_var_name[i] = toupper(v->env_var_name[i]);
 
-	v->next = fi_vars;
-	fi_vars = v;
+	v->next = var_list;
+	var_list = v;
 
 	FI_INFO(provider, FI_LOG_CORE, "registered var %s\n", var_name);
 
@@ -305,7 +305,7 @@ void fi_var_fini(void)
 {
 	struct fi_var *v, *v2;
 
-	for (v = fi_vars; v; v = v2) {
+	for (v = var_list; v; v = v2) {
 		free(v->var_name);
 		free(v->help_string);
 		free(v->env_var_name);
