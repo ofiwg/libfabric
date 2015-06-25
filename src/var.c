@@ -43,6 +43,10 @@
 
 #include "fi.h"
 
+/* when given a NULL provider pointer, use the
+ * core for logging and settings. */
+extern struct fi_provider fi_core_prov;
+
 /* internal setting representation */
 struct fi_var_t {
 	const struct fi_provider *provider;
@@ -58,25 +62,34 @@ static int fi_var_get(const struct fi_provider *provider, const char *var_name,
 		char **value)
 {
 	struct fi_var_t *v;
+	const struct fi_provider *lprovider = provider ? provider : &fi_core_prov;
 
 	// Check for bozo cases
 	if (var_name == NULL || value == NULL) {
-		FI_DBG(provider, FI_LOG_CORE,
+		FI_DBG(lprovider, FI_LOG_CORE,
 			"Failed to read %s variable: provider coding error\n",
 			var_name);
 		return -FI_EINVAL;
 	}
 
 	for (v = fi_vars; v; v = v->next) {
+		if (v->provider == NULL || provider == NULL) {
+			if (strcmp(v->var_name, var_name) == 0) {
+				*value = getenv(v->env_var_name);
+				return FI_SUCCESS;
+			} else {
+				continue;
+			}
+		}
+
 		if (strcmp(v->provider->name, provider->name) == 0 &&
 			strcmp(v->var_name, var_name) == 0) {
 			*value = getenv(v->env_var_name);
-
 			return FI_SUCCESS;
 		}
 	}
 
-	FI_DBG(provider, FI_LOG_CORE,
+	FI_DBG(lprovider, FI_LOG_CORE,
 		"Failed to read %s variable: was not registered\n", var_name);
 	return -FI_ENOENT;
 }
@@ -102,7 +115,10 @@ int DEFAULT_SYMVER_PRE(fi_getsettings)(struct fi_setting **vars, int *count)
 		return -FI_ENOMEM;
 
 	for (ptr = fi_vars; ptr; ptr = ptr->next, ++i, tmp = NULL) {
-		vhead[i].prov_name = strdup(ptr->provider->name);
+		if (ptr->provider == NULL)
+			vhead[i].prov_name = strdup(fi_core_prov.name);
+		else
+			vhead[i].prov_name = strdup(ptr->provider->name);
 		vhead[i].var_name = strdup(ptr->var_name);
 		vhead[i].env_var_name = strdup(ptr->env_var_name);
 		vhead[i].help_string = strdup(ptr->help_string);
@@ -146,11 +162,12 @@ int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 {
 	int i;
 	struct fi_var_t *v;
+	const struct fi_provider *lprovider = provider ? provider : &fi_core_prov;
 
 	// Check for bozo cases
-	if (provider == NULL || var_name == NULL || help_string == NULL ||
+	if (var_name == NULL || help_string == NULL ||
 		*help_string == '\0') {
-		FI_DBG(provider, FI_LOG_CORE,
+		FI_DBG(lprovider, FI_LOG_CORE,
 			"Failed to register %s variable: provider coding error\n",
 			var_name);
 		return -FI_EINVAL;
@@ -158,7 +175,7 @@ int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 
 	v = calloc(1, sizeof(*v));
 	if (!v) {
-		FI_DBG(provider, FI_LOG_CORE,
+		FI_DBG(lprovider, FI_LOG_CORE,
 			"Failed to register %s variable: ENOMEM\n", var_name);
 		return -FI_ENOMEM;
 	}
@@ -166,12 +183,19 @@ int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 	v->provider = provider;
 	v->var_name = strdup(var_name);
 	v->help_string = strdup(help_string);
-	if (!v->var_name || !v->help_string || 
-		asprintf(&v->env_var_name, "FI_%s_%s",
+
+	// NULL providers get treated specially
+	if (provider)
+		i = asprintf(&v->env_var_name, "FI_%s_%s",
 			v->provider->name,
-			v->var_name) < 0) {
+			v->var_name);
+	else
+		i = asprintf(&v->env_var_name, "FI_%s",
+			v->var_name);
+
+	if (!v->var_name || !v->help_string || i == -1) {
 		free(v);
-		FI_DBG(provider, FI_LOG_CORE,
+		FI_DBG(lprovider, FI_LOG_CORE,
 			"Failed to register %s variable: ENOMEM\n", var_name);
 		return -FI_ENOMEM;
 	}
@@ -182,7 +206,7 @@ int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 	v->next = fi_vars;
 	fi_vars = v;
 
-	FI_INFO(provider, FI_LOG_CORE, "registered var %s\n", var_name);
+	FI_INFO(lprovider, FI_LOG_CORE, "registered var %s\n", var_name);
 
 	return FI_SUCCESS;
 }
@@ -193,15 +217,16 @@ int DEFAULT_SYMVER_PRE(fi_var_get_str)(struct fi_provider *provider,
 		const char *var_name, char **value)
 {
 	int ret;
+	const struct fi_provider *lprovider = provider ? provider : &fi_core_prov;
 
 	ret = fi_var_get(provider, var_name, value);
 	if (ret == FI_SUCCESS) {
 		if (*value) {
-			FI_INFO(provider, FI_LOG_CORE,
+			FI_INFO(lprovider, FI_LOG_CORE,
 				"read string var %s=%s\n", var_name, *value);
 			ret = FI_SUCCESS;
 		} else {
-			FI_INFO(provider, FI_LOG_CORE,
+			FI_INFO(lprovider, FI_LOG_CORE,
 				"read string var %s=<not set>\n", var_name);
 			ret = -FI_ENODATA;
 		}
@@ -217,16 +242,17 @@ int DEFAULT_SYMVER_PRE(fi_var_get_int)(struct fi_provider *provider,
 {
 	int ret;
 	char *str_value;
+	const struct fi_provider *lprovider = provider ? provider : &fi_core_prov;
 
 	ret = fi_var_get(provider, var_name, &str_value);
 	if (ret == FI_SUCCESS) {
 		if (str_value) {
 			*value = atoi(str_value);
-			FI_INFO(provider, FI_LOG_CORE,
+			FI_INFO(lprovider, FI_LOG_CORE,
 				"read int var %s=%d\n", var_name, *value);
 			ret = FI_SUCCESS;
 		} else {
-			FI_INFO(provider, FI_LOG_CORE,
+			FI_INFO(lprovider, FI_LOG_CORE,
 				"read int var %s=<not set>\n", var_name);
 			ret = -FI_ENODATA;
 		}
@@ -242,16 +268,17 @@ int DEFAULT_SYMVER_PRE(fi_var_get_long)(struct fi_provider *provider,
 {
 	int ret;
 	char *str_value;
+	const struct fi_provider *lprovider = provider ? provider : &fi_core_prov;
 
 	ret = fi_var_get(provider, var_name, &str_value);
 	if (ret == FI_SUCCESS) {
 		if (str_value) {
 			*value = strtol(str_value, NULL, 10);
-			FI_INFO(provider, FI_LOG_CORE,
+			FI_INFO(lprovider, FI_LOG_CORE,
 				"read long var %s=%ld\n", var_name, *value);
 			ret = FI_SUCCESS;
 		} else {
-			FI_INFO(provider, FI_LOG_CORE,
+			FI_INFO(lprovider, FI_LOG_CORE,
 				"read long var %s=<not set>\n", var_name);
 			ret = -FI_ENODATA;
 		}
@@ -267,6 +294,7 @@ int DEFAULT_SYMVER_PRE(fi_var_get_bool)(struct fi_provider *provider,
 {
 	int ret;
 	char *str_value;
+	const struct fi_provider *lprovider = provider ? provider : &fi_core_prov;
 
 	ret = fi_var_get(provider, var_name, &str_value);
 	if (ret == FI_SUCCESS) {
@@ -276,7 +304,7 @@ int DEFAULT_SYMVER_PRE(fi_var_get_bool)(struct fi_provider *provider,
 				strcasecmp(var_name, "no") == 0 ||
 				strcasecmp(var_name, "off") == 0) {
 				*value = 0;
-				FI_INFO(provider, FI_LOG_CORE,
+				FI_INFO(lprovider, FI_LOG_CORE,
 					"read boolean var %s=false\n", var_name);
 				ret = FI_SUCCESS;
 			} else if (strcmp(var_name, "1") == 0 ||
@@ -284,17 +312,17 @@ int DEFAULT_SYMVER_PRE(fi_var_get_bool)(struct fi_provider *provider,
 				strcasecmp(var_name, "yes") == 0 ||
 				strcasecmp(var_name, "on") == 0) {
 				*value = 1;
-				FI_INFO(provider, FI_LOG_CORE,
+				FI_INFO(lprovider, FI_LOG_CORE,
 					"read boolean var %s=true\n", var_name);
 				ret = FI_SUCCESS;
 			} else {
-				FI_INFO(provider, FI_LOG_CORE,
+				FI_INFO(lprovider, FI_LOG_CORE,
 					"read boolean var %s=<unknown> (%s)\n",
 					var_name, str_value);
 				ret = -FI_EINVAL;
 			}
 		} else {
-			FI_INFO(provider, FI_LOG_CORE,
+			FI_INFO(lprovider, FI_LOG_CORE,
 				"read boolean var %s=<not set>\n", var_name);
 			ret = -FI_ENODATA;
 		}
