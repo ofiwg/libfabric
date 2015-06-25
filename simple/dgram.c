@@ -77,7 +77,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buf = malloc(buffer_size);
+	buf = calloc(1, buffer_size);
 	if (!buf) {
 		perror("malloc");
 		return -1;
