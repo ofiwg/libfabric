@@ -37,7 +37,6 @@
 
 #include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_var.h>
 
 static struct fi_info *hints;
 static char *node, *port;
@@ -176,36 +175,37 @@ uint64_t tokparse(char *caps, uint64_t (*str2flag) (char *inputstr))
 
 int print_vars() {
 	int ret, count;
-	struct fi_setting *env;
+	struct fi_param *params;
 	char delim;
 
-	ret = fi_getsettings(&env, &count);
+	ret = fi_getparams(&params, &count);
 
 	if (ret)
 		return ret;
 
 	for (int i = 0; i < count; ++i) {
-		printf("# %s: %s\n", env[i].prov_name, env[i].help_string);
+		printf("# %s\n", params[i].help_string);
 
-		if (env[i].value) {
-			delim = strchr(env[i].value, ' ') ? '"' : '\0';
-			printf("%s=%c%s%c\n", env[i].env_var_name, delim,
-				env[i].value, delim);
+		if (params[i].value) {
+			delim = strchr(params[i].value, ' ') ? '"' : '\0';
+			printf("%s=%c%s%c\n", params[i].name, delim,
+				params[i].value, delim);
 		} else {
-			printf("# %s\n", env[i].env_var_name);
+			printf("# %s\n", params[i].name);
 		}
 
 		printf("\n");
 	}
 
-	fi_freesettings(env);
+	fi_freeparams(params);
 	return ret;
 }
 
 int print_short_info(struct fi_info *info) {
 	for (struct fi_info *cur = info; cur; cur = cur->next) {
 		printf("%s: %s\n", cur->fabric_attr->prov_name, cur->fabric_attr->name);
-		printf("    version: %d.%d\n", FI_MAJOR(cur->fabric_attr->prov_version), FI_MINOR(cur->fabric_attr->prov_version));
+		printf("    version: %d.%d\n", FI_MAJOR(cur->fabric_attr->prov_version),
+			FI_MINOR(cur->fabric_attr->prov_version));
 		printf("    type: %s\n", fi_tostr(&cur->ep_attr->type, FI_TYPE_EP_TYPE));
 		printf("    protocol: %s\n", fi_tostr(&cur->ep_attr->protocol, FI_TYPE_PROTOCOL));
 	}

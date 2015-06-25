@@ -71,6 +71,79 @@ struct fi_provider {
 	void	(*cleanup)(void);
 };
 
+/*
+ * Registers a configuration parameter for use with libfabric.
+ *
+ * Example: fi_param_register(provider, "foo", "Very important help
+ * string");
+ *
+ * This registers the configuration variable "foo" in the specified
+ * provider.
+ *
+ * The help string cannot be NULL or empty.
+ *
+ * The param_name and help_string parameters will be copied internally;
+ * they can be freed upon return from fi_param_register().
+ */
+int fi_param_register(const struct fi_provider *provider, const char *param_name,
+		      const char *help_string);
+
+/*
+ * Get the string value of a configuration variable.
+ *
+ * Currently, configuration parameter will only be read from the
+ * environment.  The environment variable names will be of the form
+ * upper_case(FI_<provider_name>_<param_name>).
+ *
+ * Someday this call could be expanded to also check config files.
+ *
+ * If the parameter was previously registered and the user set a value,
+ * FI_SUCCESS is returned and (*value) points to the user's
+ * \0-terminated string value.  NOTE: The caller should not modify or
+ * free (*value).
+ *
+ * If the parameter name was previously registered, but the user did
+ * not set a value, -FI_ENODATA is returned and the value of (*value)
+ * is unchanged.
+ *
+ * If the variable name was not previously registered via
+ * fi_var_register(), -FI_ENOENT will be returned and the value of
+ * (*value) is unchanged.
+ */
+int fi_param_get_str(struct fi_provider *provider, const char *param_name,
+		     char **value);
+
+/*
+ * Similar to fi_param_get_str(), but the value is converted to an int.
+ * No checking is done to ensure that the value the user set is
+ * actually an integer -- atoi() is simply called on whatever value
+ * the user sets.
+ */
+int fi_param_get_int(struct fi_provider *provider, const char *param_name,
+		     int *value);
+
+/*
+ * Similar to fi_param_get_str(), but the value is converted to a long.
+ * No checking is done to ensure that the value the user set is
+ * actually an integer -- strtol() is simply called on whatever value
+ * the user sets.
+ */
+int fi_param_get_long(struct fi_provider *provider, const char *param_name,
+		    long *value);
+
+/*
+ * Similar to fi_param_get_str(), but the value is converted to an
+ * boolean (0 or 1) and returned in an int.  Accepted user values are:
+ *
+ * 0, off, false, no: these will all return 0 in (*value)
+ * 1, on, true, yes: these will all return 1 in (*value)
+ *
+ * Any other user value will return -FI_EINVAL, and (*value) will be
+ * unchanged.
+ */
+int fi_param_get_bool(struct fi_provider *provider, const char *param_name,
+		      int *value);
+
 #ifdef __cplusplus
 }
 #endif

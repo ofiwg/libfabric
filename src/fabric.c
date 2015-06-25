@@ -46,7 +46,6 @@
 #include "fi.h"
 #include "prov.h"
 #include <rdma/fi_log.h>
-#include <rdma/fi_var.h>
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
@@ -402,7 +401,7 @@ static void __attribute__((destructor)) fi_fini(void)
 	}
 
 	fi_free_filter(&prov_filter);
-	fi_var_fini();
+	fi_param_fini();
 	fi_log_fini();
 }
 
