@@ -100,7 +100,6 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 		return -FI_ENOMEM;
 
 	for (v = var_list, i = 0; v; v = v->next, ++i, tmp = NULL) {
-		vhead[i].prov_name = strdup(v->provider->name);
 		vhead[i].name = strdup(v->env_var_name);
 		vhead[i].help_string = strdup(v->help_string);
 
@@ -108,8 +107,7 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 		if (ret == FI_SUCCESS && tmp)
 			vhead[i].value = strdup(tmp);
 
-		if (!vhead[i].prov_name || !vhead[i].name ||
-		    !vhead[i].help_string) {
+		if (!vhead[i].name || !vhead[i].help_string) {
 			fi_freeparams(vhead);
 			return -FI_ENOMEM;
 		}
@@ -125,8 +123,7 @@ DEFAULT_SYMVER(fi_getparams_, fi_getparams);
 __attribute__((visibility ("default")))
 void DEFAULT_SYMVER_PRE(fi_freeparams)(struct fi_param *params)
 {
-	for (int i = 0; params[i].prov_name; ++i) {
-		free((void*) params[i].prov_name);
+	for (int i = 0; params[i].name; ++i) {
 		free((void*) params[i].name);
 		free((void*) params[i].help_string);
 		free((void*) params[i].value);

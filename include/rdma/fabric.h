@@ -458,7 +458,6 @@ enum fi_type {
 char *fi_tostr(const void *data, enum fi_type datatype);
 
 struct fi_param {
-	const char *prov_name;
 	const char *name;
 	const char *help_string;
 	const char *value;

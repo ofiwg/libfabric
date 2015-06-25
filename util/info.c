@@ -184,7 +184,7 @@ int print_vars() {
 		return ret;
 
 	for (int i = 0; i < count; ++i) {
-		printf("# %s: %s\n", params[i].prov_name, params[i].help_string);
+		printf("# %s\n", params[i].help_string);
 
 		if (params[i].value) {
 			delim = strchr(params[i].value, ' ') ? '"' : '\0';
@@ -204,7 +204,8 @@ int print_vars() {
 int print_short_info(struct fi_info *info) {
 	for (struct fi_info *cur = info; cur; cur = cur->next) {
 		printf("%s: %s\n", cur->fabric_attr->prov_name, cur->fabric_attr->name);
-		printf("    version: %d.%d\n", FI_MAJOR(cur->fabric_attr->prov_version), FI_MINOR(cur->fabric_attr->prov_version));
+		printf("    version: %d.%d\n", FI_MAJOR(cur->fabric_attr->prov_version),
+			FI_MINOR(cur->fabric_attr->prov_version));
 		printf("    type: %s\n", fi_tostr(&cur->ep_attr->type, FI_TYPE_EP_TYPE));
 		printf("    protocol: %s\n", fi_tostr(&cur->ep_attr->protocol, FI_TYPE_PROTOCOL));
 	}
