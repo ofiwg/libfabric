@@ -2501,7 +2501,8 @@ static void sock_pe_set_affinity (void)
 {
 	char *s;
 	fi_var_register(&sock_prov, "pe_affinity",
-			"If specified, bind the progress thread to the indicated range(s) of Linux virtual processor ID(s). This option is currently not supported on OS X. Usage: id_start[-id_end[:stride]][,]");
+			"If specified, bind the progress thread to the indicated range(s) of Linux virtual processor ID(s). "
+			"This option is currently not supported on OS X. Usage: id_start[-id_end[:stride]][,]");
 	if (fi_var_get_str(&sock_prov, "pe_affinity", &s) != FI_SUCCESS)
 		return;
 	

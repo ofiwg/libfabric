@@ -579,7 +579,7 @@ struct fi_provider sock_prov = {
 SOCKETS_INI
 {
 	fi_var_register(&sock_prov, "pe_waittime",
-                        "How many miliseconds to spin while waiting for progress");
+                        "How many milliseconds to spin while waiting for progress");
 	fi_var_get_int(&sock_prov, "pe_waittime", &sock_pe_waittime);
 
 	fastlock_init(&sock_list_lock);

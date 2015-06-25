@@ -486,7 +486,7 @@ PSM_INI
 			"RMA or not (default: yes)");
 
 	fi_var_register(&psmx_prov, "uuid",
-			"Unique Job ID required by the PSM fabric");
+			"Unique Job ID required by the fabric");
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
 
