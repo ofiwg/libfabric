@@ -348,6 +348,7 @@ static void fi_ini(void)
 	if (init)
 		goto unlock;
 
+	fi_param_init();
 	fi_log_init();
 
 	fi_param_register(NULL, "provider",
@@ -407,8 +408,8 @@ static void __attribute__((destructor)) fi_fini(void)
 	}
 
 	fi_free_filter(&prov_filter);
-	fi_param_fini();
 	fi_log_fini();
+	fi_param_fini();
 }
 
 static struct fi_prov *fi_getprov(const char *prov_name)

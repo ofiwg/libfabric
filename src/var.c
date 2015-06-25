@@ -42,6 +42,7 @@
 #include <rdma/fi_log.h>
 
 #include "fi.h"
+#include "fi_list.h"
 
 
 /* When given a NULL provider pointer, use core for logging and settings. */
@@ -52,15 +53,17 @@ struct fi_param_entry {
 	char *name;
 	char *help_string;
 	char *env_var_name;
-	struct fi_param_entry *next;
+	struct dlist_entry entry;
 };
 
-static struct fi_param_entry *param_list;
+static struct dlist_entry param_list;
+
 
 static int fi_param_get(const struct fi_provider *provider, const char *param_name,
 		char **value)
 {
-	struct fi_param_entry *v;
+	struct fi_param_entry *param;
+	struct dlist_entry *entry;
 
 	if (!provider)
 		provider = &core_prov;
@@ -73,10 +76,11 @@ static int fi_param_get(const struct fi_provider *provider, const char *param_na
 		return -FI_EINVAL;
 	}
 
-	for (v = param_list; v; v = v->next) {
-		if (v->provider == provider &&
-		    strcmp(v->name, param_name) == 0) {
-			*value = getenv(v->env_var_name);
+	for (entry = param_list.next; entry != &param_list; entry = entry->next) {
+		param = container_of(entry, struct fi_param_entry, entry);
+		if (param->provider == provider &&
+		    strcmp(param->name, param_name) == 0) {
+			*value = getenv(param->env_var_name);
 			return FI_SUCCESS;
 		}
 	}
@@ -90,12 +94,14 @@ __attribute__((visibility ("default")))
 int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 {
 	struct fi_param *vhead = NULL;
-	struct fi_param_entry *v;
+	struct fi_param_entry *param;
+	struct dlist_entry *entry;
 	int ret, len = 0, i;
-	char *tmp = NULL;
+	char *tmp;
 
 	// just get a count
-	for (v = param_list; v; v = v->next, ++len)
+	for (entry = param_list.next; entry != &param_list;
+	     entry = entry->next, len++)
 		continue;
 
 	if (len == 0)
@@ -106,11 +112,14 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 	if (!vhead)
 		return -FI_ENOMEM;
 
-	for (v = param_list, i = 0; v; v = v->next, ++i, tmp = NULL) {
-		vhead[i].name = strdup(v->env_var_name);
-		vhead[i].help_string = strdup(v->help_string);
+	for (entry = param_list.next, i = 0; entry != &param_list;
+	     entry = entry->next, i++) {
+		param = container_of(entry, struct fi_param_entry, entry);
+		vhead[i].name = strdup(param->env_var_name);
+		vhead[i].help_string = strdup(param->help_string);
 
-		ret = fi_param_get(v->provider, v->name, &tmp);
+		tmp = NULL;
+		ret = fi_param_get(param->provider, param->name, &tmp);
 		if (ret == FI_SUCCESS && tmp)
 			vhead[i].value = strdup(tmp);
 
@@ -199,11 +208,9 @@ int DEFAULT_SYMVER_PRE(fi_param_register)(const struct fi_provider *provider,
 	for (i = 0; v->env_var_name[i]; ++i)
 		v->env_var_name[i] = toupper(v->env_var_name[i]);
 
-	v->next = param_list;
-	param_list = v;
+	dlist_insert_tail(&v->entry, &param_list);
 
 	FI_INFO(provider, FI_LOG_CORE, "registered var %s\n", param_name);
-
 	return FI_SUCCESS;
 }
 DEFAULT_SYMVER(fi_param_register_, fi_param_register);
@@ -336,12 +343,20 @@ int DEFAULT_SYMVER_PRE(fi_param_get_bool)(struct fi_provider *provider,
 }
 DEFAULT_SYMVER(fi_param_get_bool_, fi_param_get_bool);
 
+void fi_param_init(void)
+{
+	dlist_init(&param_list);
+}
+
 void fi_param_fini(void)
 {
-	struct fi_param_entry *v, *v2;
+	struct fi_param_entry *param;
+	struct dlist_entry *entry;
 
-	for (v = param_list; v; v = v2) {
-		v2 = v->next;
-		fi_free_param(v);
+	while (!dlist_empty(&param_list)) {
+		entry = param_list.next;
+		param = container_of(entry, struct fi_param_entry, entry);
+		dlist_remove(entry);
+		fi_free_param(param);
 	}
 }
