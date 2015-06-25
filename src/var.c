@@ -43,20 +43,21 @@
 
 #include "fi.h"
 
-struct fi_var {
+
+struct fi_param_entry {
 	const struct fi_provider *provider;
-	char *var_name;
+	char *name;
 	char *help_string;
 	char *env_var_name;
-	struct fi_var *next;
+	struct fi_param_entry *next;
 };
 
-static struct fi_var *var_list;
+static struct fi_param_entry *param_list;
 
 static int fi_param_get(const struct fi_provider *provider, const char *param_name,
 		char **value)
 {
-	struct fi_var *v;
+	struct fi_param_entry *v;
 
 	// Check for bozo cases
 	if (param_name == NULL || value == NULL) {
@@ -66,9 +67,9 @@ static int fi_param_get(const struct fi_provider *provider, const char *param_na
 		return -FI_EINVAL;
 	}
 
-	for (v = var_list; v; v = v->next) {
+	for (v = param_list; v; v = v->next) {
 		if (v->provider == provider &&
-		    strcmp(v->var_name, param_name) == 0) {
+		    strcmp(v->name, param_name) == 0) {
 			*value = getenv(v->env_var_name);
 			return FI_SUCCESS;
 		}
@@ -83,12 +84,12 @@ __attribute__((visibility ("default")))
 int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 {
 	struct fi_param *vhead = NULL;
-	struct fi_var *v;
+	struct fi_param_entry *v;
 	int ret, len = 0, i;
 	char *tmp = NULL;
 
 	// just get a count
-	for (v = var_list; v; v = v->next, ++len)
+	for (v = param_list; v; v = v->next, ++len)
 		continue;
 
 	if (len == 0)
@@ -99,11 +100,11 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 	if (!vhead)
 		return -FI_ENOMEM;
 
-	for (v = var_list, i = 0; v; v = v->next, ++i, tmp = NULL) {
+	for (v = param_list, i = 0; v; v = v->next, ++i, tmp = NULL) {
 		vhead[i].name = strdup(v->env_var_name);
 		vhead[i].help_string = strdup(v->help_string);
 
-		ret = fi_param_get(v->provider, v->var_name, &tmp);
+		ret = fi_param_get(v->provider, v->name, &tmp);
 		if (ret == FI_SUCCESS && tmp)
 			vhead[i].value = strdup(tmp);
 
@@ -132,12 +133,12 @@ void DEFAULT_SYMVER_PRE(fi_freeparams)(struct fi_param *params)
 }
 DEFAULT_SYMVER(fi_freeparams_, fi_freeparams);
 
-static void fi_free_var(struct fi_var *var)
+static void fi_free_param(struct fi_param_entry *param)
 {
-	free(var->var_name);
-	free(var->help_string);
-	free(var->env_var_name);
-	free(var);
+	free(param->name);
+	free(param->help_string);
+	free(param->env_var_name);
+	free(param);
 }
 
 __attribute__((visibility ("default")))
@@ -145,7 +146,7 @@ int DEFAULT_SYMVER_PRE(fi_param_register)(const struct fi_provider *provider,
 		const char *param_name, const char *help_string)
 {
 	int i, ret;
-	struct fi_var *v;
+	struct fi_param_entry *v;
 
 	// Check for bozo cases
 	if (provider == NULL || param_name == NULL || help_string == NULL ||
@@ -164,7 +165,7 @@ int DEFAULT_SYMVER_PRE(fi_param_register)(const struct fi_provider *provider,
 	}
 
 	v->provider = provider;
-	v->var_name = strdup(param_name);
+	v->name = strdup(param_name);
 	ret = asprintf(&v->help_string, "%s: %s", provider->name, help_string);
 	if (ret < 0)
 		v->help_string = NULL;
@@ -172,8 +173,8 @@ int DEFAULT_SYMVER_PRE(fi_param_register)(const struct fi_provider *provider,
 	if (ret < 0)
 		v->env_var_name = NULL;
 
-	if (!v->var_name || !v->help_string || !v->env_var_name) {
-		fi_free_var(v);
+	if (!v->name || !v->help_string || !v->env_var_name) {
+		fi_free_param(v);
 		FI_DBG(provider, FI_LOG_CORE,
 			"Failed to register %s variable: ENOMEM\n", param_name);
 		return -FI_ENOMEM;
@@ -182,8 +183,8 @@ int DEFAULT_SYMVER_PRE(fi_param_register)(const struct fi_provider *provider,
 	for (i = 0; v->env_var_name[i]; ++i)
 		v->env_var_name[i] = toupper(v->env_var_name[i]);
 
-	v->next = var_list;
-	var_list = v;
+	v->next = param_list;
+	param_list = v;
 
 	FI_INFO(provider, FI_LOG_CORE, "registered var %s\n", param_name);
 
@@ -309,10 +310,10 @@ DEFAULT_SYMVER(fi_param_get_bool_, fi_param_get_bool);
 
 void fi_param_fini(void)
 {
-	struct fi_var *v, *v2;
+	struct fi_param_entry *v, *v2;
 
-	for (v = var_list; v; v = v2) {
+	for (v = param_list; v; v = v2) {
 		v2 = v->next;
-		fi_free_var(v);
+		fi_free_param(v);
 	}
 }
