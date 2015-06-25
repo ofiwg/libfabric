@@ -135,11 +135,19 @@ void DEFAULT_SYMVER_PRE(fi_freeparams)(struct fi_param *params)
 }
 DEFAULT_SYMVER(fi_freeparams_, fi_freeparams);
 
+static void fi_free_var(struct fi_var *var)
+{
+	free(var->var_name);
+	free(var->help_string);
+	free(var->env_var_name);
+	free(var);
+}
+
 __attribute__((visibility ("default")))
 int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 		const char *var_name, const char *help_string)
 {
-	int i;
+	int i, ret;
 	struct fi_var *v;
 
 	// Check for bozo cases
@@ -161,10 +169,12 @@ int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 	v->provider = provider;
 	v->var_name = strdup(var_name);
 	v->help_string = strdup(help_string);
-	if (!v->var_name || !v->help_string || 
-	    asprintf(&v->env_var_name, "FI_%s_%s",
-		     v->provider->name, v->var_name) < 0) {
-		free(v);
+	ret = asprintf(&v->env_var_name, "FI_%s_%s", provider->name, var_name);
+	if (ret < 0)
+		v->env_var_name = NULL;
+
+	if (!v->var_name || !v->help_string || !v->env_var_name) {
+		fi_free_var(v);
 		FI_DBG(provider, FI_LOG_CORE,
 			"Failed to register %s variable: ENOMEM\n", var_name);
 		return -FI_ENOMEM;
@@ -303,11 +313,7 @@ void fi_var_fini(void)
 	struct fi_var *v, *v2;
 
 	for (v = var_list; v; v = v2) {
-		free(v->var_name);
-		free(v->help_string);
-		free(v->env_var_name);
-
 		v2 = v->next;
-		free(v);
+		fi_free_var(v);
 	}
 }
