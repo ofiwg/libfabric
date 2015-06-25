@@ -165,7 +165,9 @@ int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 
 	v->provider = provider;
 	v->var_name = strdup(var_name);
-	v->help_string = strdup(help_string);
+	ret = asprintf(&v->help_string, "%s: %s", provider->name, help_string);
+	if (ret < 0)
+		v->help_string = NULL;
 	ret = asprintf(&v->env_var_name, "FI_%s_%s", provider->name, var_name);
 	if (ret < 0)
 		v->env_var_name = NULL;
