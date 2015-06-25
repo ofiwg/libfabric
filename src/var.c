@@ -44,20 +44,20 @@
 #include "fi.h"
 
 /* internal setting representation */
-struct fi_var_t {
+struct fi_var {
 	const struct fi_provider *provider;
 	char *var_name;
 	char *help_string;
 	char *env_var_name;
-	struct fi_var_t *next;
+	struct fi_var *next;
 };
 
-static struct fi_var_t *fi_vars = NULL;
+static struct fi_var *fi_vars = NULL;
 
 static int fi_var_get(const struct fi_provider *provider, const char *var_name,
 		char **value)
 {
-	struct fi_var_t *v;
+	struct fi_var *v;
 
 	// Check for bozo cases
 	if (var_name == NULL || value == NULL) {
@@ -85,7 +85,7 @@ __attribute__((visibility ("default")))
 int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 {
 	struct fi_param *vhead = NULL;
-	struct fi_var_t *ptr;
+	struct fi_var *ptr;
 	int ret = FI_SUCCESS, len = 0, i = 0;
 	char *tmp = NULL;
 
@@ -142,7 +142,7 @@ int DEFAULT_SYMVER_PRE(fi_var_register)(const struct fi_provider *provider,
 		const char *var_name, const char *help_string)
 {
 	int i;
-	struct fi_var_t *v;
+	struct fi_var *v;
 
 	// Check for bozo cases
 	if (provider == NULL || var_name == NULL || help_string == NULL ||
@@ -303,7 +303,7 @@ DEFAULT_SYMVER(fi_var_get_bool_, fi_var_get_bool);
 
 void fi_var_fini(void)
 {
-	struct fi_var_t *v, *v2;
+	struct fi_var *v, *v2;
 
 	for (v = fi_vars; v; v = v2) {
 		free(v->var_name);
