@@ -57,38 +57,27 @@ struct fi_param_entry {
 	struct dlist_entry entry;
 };
 
+/* TODO: Add locking around param_list when adding dynamic removal */
 static struct dlist_entry param_list;
 
 
-static int fi_param_get(const struct fi_provider *provider, const char *param_name,
-		char **value)
+static struct fi_param_entry *
+fi_find_param(const struct fi_provider *provider, const char *param_name)
 {
 	struct fi_param_entry *param;
 	struct dlist_entry *entry;
-
-	if (!provider)
-		provider = &core_prov;
-
-	// Check for bozo cases
-	if (param_name == NULL || value == NULL) {
-		FI_DBG(provider, FI_LOG_CORE,
-			"Failed to read %s variable: provider coding error\n",
-			param_name);
-		return -FI_EINVAL;
-	}
 
 	for (entry = param_list.next; entry != &param_list; entry = entry->next) {
 		param = container_of(entry, struct fi_param_entry, entry);
 		if (param->provider == provider &&
 		    strcmp(param->name, param_name) == 0) {
-			*value = getenv(param->env_var_name);
-			return FI_SUCCESS;
+			return param;
 		}
 	}
 
 	FI_DBG(provider, FI_LOG_CORE,
-		"Failed to read %s variable: was not registered\n", param_name);
-	return -FI_ENOENT;
+		"Failed to find parameter %s: was not defined\n", param_name);
+	return NULL;
 }
 
 __attribute__((visibility ("default")))
@@ -97,7 +86,7 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 	struct fi_param *vhead = NULL;
 	struct fi_param_entry *param;
 	struct dlist_entry *entry;
-	int ret, cnt, i;
+	int cnt, i;
 	char *tmp;
 
 	for (entry = param_list.next, cnt = 0; entry != &param_list;
@@ -119,9 +108,7 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 		vhead[i].type = param->type;
 		vhead[i].help_string = strdup(param->help_string);
 
-		tmp = NULL;
-		ret = fi_param_get(param->provider, param->name, &tmp);
-		if (ret == FI_SUCCESS && tmp)
+		if ((tmp = getenv(param->env_var_name)))
 			vhead[i].value = strdup(tmp);
 
 		if (!vhead[i].name || !vhead[i].help_string) {
@@ -218,133 +205,81 @@ int DEFAULT_SYMVER_PRE(fi_param_define)(const struct fi_provider *provider,
 }
 DEFAULT_SYMVER(fi_param_define_, fi_param_define);
 
-__attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_param_get_str)(struct fi_provider *provider,
-		const char *param_name, char **value)
+static int fi_parse_bool(const char *str_value)
 {
-	int ret;
-
-	if (!provider)
-		provider = &core_prov;
-
-	ret = fi_param_get(provider, param_name, value);
-	if (ret == FI_SUCCESS) {
-		if (*value) {
-			FI_INFO(provider, FI_LOG_CORE,
-				"read string var %s=%s\n", param_name, *value);
-			ret = FI_SUCCESS;
-		} else {
-			FI_INFO(provider, FI_LOG_CORE,
-				"read string var %s=<not set>\n", param_name);
-			ret = -FI_ENODATA;
-		}
+	if (strcmp(str_value, "0") == 0 ||
+	    strcasecmp(str_value, "false") == 0 ||
+	    strcasecmp(str_value, "no") == 0 ||
+	    strcasecmp(str_value, "off") == 0) {
+		return 0;
 	}
 
-	return ret;
+	if (strcmp(str_value, "1") == 0 ||
+	    strcasecmp(str_value, "true") == 0 ||
+	    strcasecmp(str_value, "yes") == 0 ||
+	    strcasecmp(str_value, "on") == 0) {
+		return 1;
+	}
+
+	return -1;
 }
-DEFAULT_SYMVER(fi_param_get_str_, fi_param_get_str);
 
 __attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_param_get_int)(struct fi_provider *provider,
-		const char *param_name, int *value)
+int DEFAULT_SYMVER_PRE(fi_param_get)(struct fi_provider *provider,
+		const char *param_name, void *value)
 {
-	int ret;
+	struct fi_param_entry *param;
 	char *str_value;
+	int ret = FI_SUCCESS;
 
 	if (!provider)
 		provider = &core_prov;
 
-	ret = fi_param_get(provider, param_name, &str_value);
-	if (ret == FI_SUCCESS) {
-		if (str_value) {
-			*value = atoi(str_value);
-			FI_INFO(provider, FI_LOG_CORE,
-				"read int var %s=%d\n", param_name, *value);
-			ret = FI_SUCCESS;
-		} else {
-			FI_INFO(provider, FI_LOG_CORE,
-				"read int var %s=<not set>\n", param_name);
-			ret = -FI_ENODATA;
-		}
+	if (!param_name || !value) {
+		FI_DBG(provider, FI_LOG_CORE,
+			"Failed to read %s variable: provider coding error\n",
+			param_name);
+		return -FI_EINVAL;
 	}
 
-	return ret;
-}
-DEFAULT_SYMVER(fi_param_get_int_, fi_param_get_int);
+	param = fi_find_param(provider, param_name);
+	if (!param)
+		return -FI_ENOENT;
 
-__attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_param_get_long)(struct fi_provider *provider,
-		const char *param_name, long *value)
-{
-	int ret;
-	char *str_value;
-
-	if (!provider)
-		provider = &core_prov;
-
-	ret = fi_param_get(provider, param_name, &str_value);
-	if (ret == FI_SUCCESS) {
-		if (str_value) {
-			*value = strtol(str_value, NULL, 10);
-			FI_INFO(provider, FI_LOG_CORE,
-				"read long var %s=%ld\n", param_name, *value);
-			ret = FI_SUCCESS;
-		} else {
-			FI_INFO(provider, FI_LOG_CORE,
-				"read long var %s=<not set>\n", param_name);
-			ret = -FI_ENODATA;
-		}
+	str_value = getenv(param->env_var_name);
+	if (!str_value) {
+		FI_INFO(provider, FI_LOG_CORE,
+			"variable %s=<not set>\n", param_name);
+		ret = -FI_ENODATA;
+		goto out;
 	}
 
-	return ret;
-}
-DEFAULT_SYMVER(fi_param_get_long_, fi_param_get_long);
-
-__attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_param_get_bool)(struct fi_provider *provider,
-		const char *param_name, int *value)
-{
-	int ret;
-	char *str_value;
-
-	if (!provider)
-		provider = &core_prov;
-
-	ret = fi_param_get(provider, param_name, &str_value);
-	if (ret == FI_SUCCESS) {
-		if (str_value) {
-			if (strcmp(param_name, "0") == 0 ||
-				strcasecmp(param_name, "false") == 0 ||
-				strcasecmp(param_name, "no") == 0 ||
-				strcasecmp(param_name, "off") == 0) {
-				*value = 0;
-				FI_INFO(provider, FI_LOG_CORE,
-					"read boolean var %s=false\n", param_name);
-				ret = FI_SUCCESS;
-			} else if (strcmp(param_name, "1") == 0 ||
-				strcasecmp(param_name, "true") == 0 ||
-				strcasecmp(param_name, "yes") == 0 ||
-				strcasecmp(param_name, "on") == 0) {
-				*value = 1;
-				FI_INFO(provider, FI_LOG_CORE,
-					"read boolean var %s=true\n", param_name);
-				ret = FI_SUCCESS;
-			} else {
-				FI_INFO(provider, FI_LOG_CORE,
-					"read boolean var %s=<unknown> (%s)\n",
-					param_name, str_value);
-				ret = -FI_EINVAL;
-			}
-		} else {
-			FI_INFO(provider, FI_LOG_CORE,
-				"read boolean var %s=<not set>\n", param_name);
-			ret = -FI_ENODATA;
-		}
+	switch (param->type) {
+	default:
+	case FI_PARAM_STRING:
+		* ((char **) value) = str_value;
+		FI_INFO(provider, FI_LOG_CORE,
+			"read string var %s=%s\n", param_name, *(char **) value);
+		break;
+	case FI_PARAM_INT:
+		* ((int *) value) = strtol(str_value, NULL, 0);
+		FI_INFO(provider, FI_LOG_CORE,
+			"read int var %s=%d\n", param_name, *(int *) value);
+		break;
+	case FI_PARAM_BOOL:
+		* ((int *) value) = fi_parse_bool(str_value);
+		FI_INFO(provider, FI_LOG_CORE,
+			"read bool var %s=%d\n", param_name, *(int *) value);
+		if (*(int *) value == -1)
+			ret = -FI_EINVAL;
+		break;
 	}
 
+out:
 	return ret;
 }
-DEFAULT_SYMVER(fi_param_get_bool_, fi_param_get_bool);
+DEFAULT_SYMVER(fi_param_get_, fi_param_get);
+
 
 void fi_param_init(void)
 {
