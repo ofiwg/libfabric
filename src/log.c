@@ -62,6 +62,8 @@ static const char * const log_levels[] = {
 	[FI_LOG_MAX] = NULL
 };
 
+extern struct fi_provider core_prov;
+
 enum {
 	FI_LOG_SUBSYS_OFFSET	= FI_LOG_MAX,
 	FI_LOG_PROV_OFFSET	= FI_LOG_SUBSYS_OFFSET + FI_LOG_SUBSYS_MAX,
@@ -80,18 +82,15 @@ enum {
 uint64_t log_mask;
 struct fi_filter prov_log_filter;
 
-
-static int fi_read_value(const char *env_name, const char * const names[])
+static int fi_convert_log_str(const char *value)
 {
-	const char *value;
 	int i;
 
-	value = getenv(env_name);
 	if (!value)
 		return -1;
 
-	for (i = 0; names[i]; i++) {
-		if (!strcasecmp(value, names[i]))
+	for (i = 0; log_levels[i]; i++) {
+		if (!strcasecmp(value, log_levels[i]))
 			return i;
 	}
 	return 0;
@@ -101,15 +100,24 @@ void fi_log_init(void)
 {
 	struct fi_filter subsys_filter;
 	int level, i;
+	char *levelstr = NULL, *provstr = NULL, *subsysstr = NULL;
 
-	level = fi_read_value("FI_LOG_LEVEL", log_levels);
+	fi_param_define(NULL, "log_level", FI_PARAM_STRING,
+			"Specify logging level: warn, trace, info, debug (default: warn)");
+	fi_param_get_str(NULL, "log_level", &levelstr);
+	level = fi_convert_log_str(levelstr);
 	if (level >= 0)
 		log_mask = ((1 << (level + 1)) - 1);
 
-	fi_create_filter(&prov_log_filter, "FI_LOG_PROV");
-	/* providers are selectively disabled */
+	fi_param_define(NULL, "log_prov", FI_PARAM_STRING,
+			"Specify specific provider to log (default: all)");
+	fi_param_get_str(NULL, "log_prov", &provstr);
+	fi_create_filter(&prov_log_filter, provstr);
 
-	fi_create_filter(&subsys_filter, "FI_LOG_SUBSYS");
+	fi_param_define(NULL, "log_subsys", FI_PARAM_STRING,
+			"Specify specific subsystem to log (default: all)");
+	fi_param_get_str(NULL, "log_subsys", &subsysstr);
+	fi_create_filter(&subsys_filter, subsysstr);
 	for (i = 0; i < FI_LOG_SUBSYS_MAX; i++) {
 		if (!fi_apply_filter(&subsys_filter, log_subsys[i]))
 			log_mask |= (1 << (i + FI_LOG_SUBSYS_OFFSET));

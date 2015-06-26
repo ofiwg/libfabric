@@ -55,7 +55,7 @@ const char sock_fab_name[] = "IP";
 const char sock_dom_name[] = "sockets";
 const char sock_prov_name[] = "sockets";
 #if ENABLE_DEBUG
-long sock_dgram_drop_rate = 0;
+int sock_dgram_drop_rate = 0;
 #endif
 
 const struct fi_fabric_attr sock_fabric_attr = {
@@ -578,7 +578,7 @@ struct fi_provider sock_prov = {
 
 SOCKETS_INI
 {
-	fi_param_register(&sock_prov, "pe_waittime",
+	fi_param_define(&sock_prov, "pe_waittime", FI_PARAM_INT,
                         "How many milliseconds to spin while waiting for progress");
 	fi_param_get_int(&sock_prov, "pe_waittime", &sock_pe_waittime);
 
@@ -586,9 +586,9 @@ SOCKETS_INI
 	dlist_init(&sock_fab_list);
 	dlist_init(&sock_dom_list);
 #if ENABLE_DEBUG
-	fi_param_register(&sock_prov, "dgram_drop_rate",
+	fi_param_define(&sock_prov, "dgram_drop_rate", FI_PARAM_INT,
 			"Drop every Nth dgram frame (debug only)");
-	fi_param_get_long(&sock_prov, "dgram_drop_rate", &sock_dgram_drop_rate);
+	fi_param_get_int(&sock_prov, "dgram_drop_rate", &sock_dgram_drop_rate);
 #endif
 	return (&sock_prov);
 }

@@ -9,11 +9,8 @@ FABRIC_1.0 {
 		fi_tostr;
 		fi_log_enabled;
 		fi_log;
-		fi_param_register;
-		fi_param_get_str;
-		fi_param_get_int;
-		fi_param_get_long;
-		fi_param_get_bool;
+		fi_param_define;
+		fi_param_get;
 		fi_getparams;
 		fi_freeparams;
 	local: *;

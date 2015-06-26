@@ -68,7 +68,7 @@ static struct fi_filter prov_filter;
 struct fi_provider core_prov = {
 	.name = "core",
 	.version = 1,
-	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION)
 };
 
 
@@ -276,12 +276,9 @@ void fi_free_filter(struct fi_filter *filter)
 	free_string_array(filter->names);
 }
 
-void fi_create_filter(struct fi_filter *filter, const char *env_name)
+void fi_create_filter(struct fi_filter *filter, const char *raw_filter)
 {
-	const char *raw_filter;
-
 	memset(filter, 0, sizeof *filter);
-	raw_filter = getenv(env_name);
 	if (raw_filter == NULL)
 		return;
 
@@ -293,7 +290,7 @@ void fi_create_filter(struct fi_filter *filter, const char *env_name)
 	filter->names = split_and_alloc(raw_filter, ",");
 	if (!filter->names)
 		FI_WARN(&core_prov, FI_LOG_CORE,
-			"unable to parse %s env var\n", env_name);
+			"unable to parse filter from: %s\n", raw_filter);
 }
 
 #ifdef HAVE_LIBDL
@@ -344,18 +341,25 @@ libdl_done:
 
 static void fi_ini(void)
 {
+	char *param_val = NULL;
+
 	pthread_mutex_lock(&ini_lock);
 
 	if (init)
 		goto unlock;
 
+	fi_param_init();
 	fi_log_init();
-	fi_create_filter(&prov_filter, "FI_PROVIDER");
+
+	fi_param_define(NULL, "provider", FI_PARAM_STRING,
+			"Only use specified provider (default: all available)");
+	fi_param_get_str(NULL, "provider", &param_val);
+	fi_create_filter(&prov_filter, param_val);
 
 #ifdef HAVE_LIBDL
 	int n = 0;
 	char **dirs;
-	char *provdir;
+	char *provdir = NULL;
 	void *dlhandle;
 
 	/* If dlopen fails, assume static linking and just return
@@ -366,9 +370,12 @@ static void fi_ini(void)
 	}
 	dlclose(dlhandle);
 
-	provdir = getenv("FI_PROVIDER_PATH");
+	fi_param_define(NULL, "provider_path", FI_PARAM_STRING,
+			"Search for providers in specific path (default: " PROVDLDIR ")");
+	fi_param_get_str(NULL, "provider_path", &provdir);
 	if (!provdir)
 		provdir = PROVDLDIR;
+
 	dirs = split_and_alloc(provdir, ":");
 	for (n = 0; dirs[n]; ++n) {
 		fi_ini_dir(dirs[n]);
@@ -401,8 +408,8 @@ static void __attribute__((destructor)) fi_fini(void)
 	}
 
 	fi_free_filter(&prov_filter);
-	fi_param_fini();
 	fi_log_fini();
+	fi_param_fini();
 }
 
 static struct fi_prov *fi_getprov(const char *prov_name)

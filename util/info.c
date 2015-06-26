@@ -73,7 +73,7 @@ static const char *help_strings[][2] = {
 	{"", ""}
 };
 
-void usage()
+static void usage(void)
 {
 	int i = 0;
 	const struct option *ptr = longopts;
@@ -93,7 +93,7 @@ void usage()
 #define ORCASE(SYM) \
 	do { if (strcmp(#SYM, inputstr) == 0) return SYM; } while (0);
 
-uint64_t str2cap(char *inputstr)
+static uint64_t str2cap(char *inputstr)
 {
 	ORCASE(FI_MSG);
 	ORCASE(FI_RMA);
@@ -128,7 +128,7 @@ uint64_t str2cap(char *inputstr)
 	return 0;
 }
 
-uint64_t str2mode(char *inputstr)
+static uint64_t str2mode(char *inputstr)
 {
 	ORCASE(FI_CONTEXT);
 	ORCASE(FI_LOCAL_MR);
@@ -139,7 +139,7 @@ uint64_t str2mode(char *inputstr)
 	return 0;
 }
 
-enum fi_ep_type str2ep_type(char *inputstr)
+static enum fi_ep_type str2ep_type(char *inputstr)
 {
 	ORCASE(FI_EP_UNSPEC);
 	ORCASE(FI_EP_MSG);
@@ -150,7 +150,7 @@ enum fi_ep_type str2ep_type(char *inputstr)
 	return FI_EP_UNSPEC;
 }
 
-uint32_t str2addr_format(char *inputstr)
+static uint32_t str2addr_format(char *inputstr)
 {
 	ORCASE(FI_FORMAT_UNSPEC);
 	ORCASE(FI_SOCKADDR);
@@ -162,7 +162,7 @@ uint32_t str2addr_format(char *inputstr)
 	return FI_FORMAT_UNSPEC;
 }
 
-uint64_t tokparse(char *caps, uint64_t (*str2flag) (char *inputstr))
+static uint64_t tokparse(char *caps, uint64_t (*str2flag) (char *inputstr))
 {
 	uint64_t flags = 0;
 	char *tok;
@@ -173,25 +173,38 @@ uint64_t tokparse(char *caps, uint64_t (*str2flag) (char *inputstr))
 	return flags;
 }
 
-int print_vars() {
+static const char *param_type(enum fi_param_type type)
+{
+	switch (type) {
+	case FI_PARAM_STRING:
+		return "String";
+	case FI_PARAM_INT:
+		return "Integer";
+	case FI_PARAM_BOOL:
+		return "Boolean (0/1, on/off, true/false, yes/no)";
+	default:
+		return "Unknown";
+	}
+}
+
+static int print_vars(void)
+{
 	int ret, count;
 	struct fi_param *params;
 	char delim;
 
 	ret = fi_getparams(&params, &count);
-
 	if (ret)
 		return ret;
 
 	for (int i = 0; i < count; ++i) {
+		printf("# %s: %s\n", params[i].name, param_type(params[i].type));
 		printf("# %s\n", params[i].help_string);
 
 		if (params[i].value) {
 			delim = strchr(params[i].value, ' ') ? '"' : '\0';
 			printf("%s=%c%s%c\n", params[i].name, delim,
 				params[i].value, delim);
-		} else {
-			printf("# %s\n", params[i].name);
 		}
 
 		printf("\n");
@@ -201,7 +214,8 @@ int print_vars() {
 	return ret;
 }
 
-int print_short_info(struct fi_info *info) {
+static int print_short_info(struct fi_info *info)
+{
 	for (struct fi_info *cur = info; cur; cur = cur->next) {
 		printf("%s: %s\n", cur->fabric_attr->prov_name, cur->fabric_attr->name);
 		printf("    version: %d.%d\n", FI_MAJOR(cur->fabric_attr->prov_version),
@@ -212,7 +226,8 @@ int print_short_info(struct fi_info *info) {
 	return EXIT_SUCCESS;
 }
 
-int print_long_info(struct fi_info *info) {
+static int print_long_info(struct fi_info *info)
+{
 	for (struct fi_info *cur = info; cur; cur = cur->next) {
 		printf("---\n");
 		printf("%s", fi_tostr(cur, FI_TYPE_INFO));
