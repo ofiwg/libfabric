@@ -540,7 +540,7 @@ int main(int argc, char **argv)
 	hints->tx_attr->size = 10;
 	hints->rx_attr->size = 10;
 
-	while ((op = getopt(argc, argv, "c:C:S:" ADDR_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "c:C:S:h" ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		case 'c':
 			connections = atoi(optarg);

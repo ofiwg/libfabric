@@ -1014,7 +1014,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "f:p:d:D:n:a:s:")) != -1) {
+	while ((op = getopt(argc, argv, "f:d:D:n:a:s:")) != -1) {
 		switch (op) {
 		case 'd':
 			good_address = optarg;
@@ -1032,7 +1032,7 @@ int main(int argc, char **argv)
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		case 's':
-			src_addr_str = strdup(optarg);
+			src_addr_str = optarg;
 			break;
 		default:
 			printf("usage: %s\n", argv[0]);

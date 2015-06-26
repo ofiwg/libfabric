@@ -356,7 +356,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		exit(1);
 
-	while ((op = getopt(argc, argv, "f:p:")) != -1) {
+	while ((op = getopt(argc, argv, "f:a:")) != -1) {
 		switch (op) {
 		case 'a':
 			hints->fabric_attr->name = strdup(optarg);

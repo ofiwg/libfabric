@@ -232,9 +232,9 @@ static int alloc_ep_res(struct fi_info *fi)
 		buffer_size = fi->src_addrlen;
 	}
 	buffer_size += prefix_len;
-	buf = malloc(buffer_size);
+	buf = calloc(1, buffer_size);
 	if (!buf) {
-		perror("malloc");
+		perror("calloc");
 		return -1;
 	}
 	buf_ptr = (char *)buf + prefix_len;

@@ -461,7 +461,7 @@ int main(int argc, char **argv)
 	opts = INIT_OPTS;
 	int ret, op;
 
-	while ((op = getopt(argc, argv, "f:q:p:xy:z:")) != -1) {
+	while ((op = getopt(argc, argv, "f:q:p:xy:z:h")) != -1) {
 		switch (op) {
 		case 'f':
 			filename = optarg;
