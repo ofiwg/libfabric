@@ -473,19 +473,19 @@ PSM_INI
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
-	fi_param_register(&psmx_prov, "name_server",
+	fi_param_define(&psmx_prov, "name_server", FI_PARAM_BOOL,
 			"Whether to turn on the name server or not "
 			"(default: yes)");
 
-	fi_param_register(&psmx_prov, "am_msg",
+	fi_param_define(&psmx_prov, "am_msg", FI_PARAM_BOOL,
 			"Whether to use active message based messaging "
 			"or not (default: no)");
 
-	fi_param_register(&psmx_prov, "tagged_rma",
+	fi_param_define(&psmx_prov, "tagged_rma", FI_PARAM_BOOL,
 			"Whether to use tagged messages for large size "
 			"RMA or not (default: yes)");
 
-	fi_param_register(&psmx_prov, "uuid",
+	fi_param_define(&psmx_prov, "uuid", FI_PARAM_INT,
 			"Unique Job ID required by the fabric");
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);

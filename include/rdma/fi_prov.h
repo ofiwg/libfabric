@@ -71,11 +71,9 @@ struct fi_provider {
 	void	(*cleanup)(void);
 };
 
+
 /*
- * Registers a configuration parameter for use with libfabric.
- *
- * Example: fi_param_register(provider, "foo", "Very important help
- * string");
+ * Defines a configuration parameter for use with libfabric.
  *
  * This registers the configuration variable "foo" in the specified
  * provider.
@@ -83,10 +81,10 @@ struct fi_provider {
  * The help string cannot be NULL or empty.
  *
  * The param_name and help_string parameters will be copied internally;
- * they can be freed upon return from fi_param_register().
+ * they can be freed upon return from fi_param_define().
  */
-int fi_param_register(const struct fi_provider *provider, const char *param_name,
-		      const char *help_string);
+int fi_param_define(const struct fi_provider *provider, const char *param_name,
+		    enum fi_param_type type, const char *help_string);
 
 /*
  * Get the string value of a configuration variable.

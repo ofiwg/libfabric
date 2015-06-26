@@ -51,6 +51,7 @@ extern struct fi_provider core_prov;
 struct fi_param_entry {
 	const struct fi_provider *provider;
 	char *name;
+	enum fi_param_type type;
 	char *help_string;
 	char *env_var_name;
 	struct dlist_entry entry;
@@ -115,6 +116,7 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 	     entry = entry->next, i++) {
 		param = container_of(entry, struct fi_param_entry, entry);
 		vhead[i].name = strdup(param->env_var_name);
+		vhead[i].type = param->type;
 		vhead[i].help_string = strdup(param->help_string);
 
 		tmp = NULL;
@@ -156,8 +158,9 @@ static void fi_free_param(struct fi_param_entry *param)
 }
 
 __attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_param_register)(const struct fi_provider *provider,
-		const char *param_name, const char *help_string)
+int DEFAULT_SYMVER_PRE(fi_param_define)(const struct fi_provider *provider,
+		const char *param_name, enum fi_param_type type,
+		const char *help_string)
 {
 	int i, ret;
 	struct fi_param_entry *v;
@@ -182,6 +185,7 @@ int DEFAULT_SYMVER_PRE(fi_param_register)(const struct fi_provider *provider,
 
 	v->provider = provider;
 	v->name = strdup(param_name);
+	v->type = type;
 	if (provider != &core_prov) {
 		ret = asprintf(&v->help_string, "%s: %s", provider->name, help_string);
 		if (ret < 0)
@@ -212,7 +216,7 @@ int DEFAULT_SYMVER_PRE(fi_param_register)(const struct fi_provider *provider,
 	FI_INFO(provider, FI_LOG_CORE, "registered var %s\n", param_name);
 	return FI_SUCCESS;
 }
-DEFAULT_SYMVER(fi_param_register_, fi_param_register);
+DEFAULT_SYMVER(fi_param_define_, fi_param_define);
 
 __attribute__((visibility ("default")))
 int DEFAULT_SYMVER_PRE(fi_param_get_str)(struct fi_provider *provider,

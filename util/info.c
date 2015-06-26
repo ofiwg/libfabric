@@ -173,6 +173,20 @@ static uint64_t tokparse(char *caps, uint64_t (*str2flag) (char *inputstr))
 	return flags;
 }
 
+static const char *param_type(enum fi_param_type type)
+{
+	switch (type) {
+	case FI_PARAM_STRING:
+		return "String";
+	case FI_PARAM_INT:
+		return "Integer";
+	case FI_PARAM_BOOL:
+		return "Boolean (0/1, on/off, true/false, yes/no)";
+	default:
+		return "Unknown";
+	}
+}
+
 static int print_vars(void)
 {
 	int ret, count;
@@ -180,19 +194,17 @@ static int print_vars(void)
 	char delim;
 
 	ret = fi_getparams(&params, &count);
-
 	if (ret)
 		return ret;
 
 	for (int i = 0; i < count; ++i) {
+		printf("# %s: %s\n", params[i].name, param_type(params[i].type));
 		printf("# %s\n", params[i].help_string);
 
 		if (params[i].value) {
 			delim = strchr(params[i].value, ' ') ? '"' : '\0';
 			printf("%s=%c%s%c\n", params[i].name, delim,
 				params[i].value, delim);
-		} else {
-			printf("# %s\n", params[i].name);
 		}
 
 		printf("\n");

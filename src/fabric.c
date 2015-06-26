@@ -351,7 +351,7 @@ static void fi_ini(void)
 	fi_param_init();
 	fi_log_init();
 
-	fi_param_register(NULL, "provider",
+	fi_param_define(NULL, "provider", FI_PARAM_STRING,
 			"Only use specified provider (default: all available)");
 	fi_param_get_str(NULL, "provider", &param_val);
 	fi_create_filter(&prov_filter, param_val);
@@ -370,7 +370,7 @@ static void fi_ini(void)
 	}
 	dlclose(dlhandle);
 
-	fi_param_register(NULL, "provider_path",
+	fi_param_define(NULL, "provider_path", FI_PARAM_STRING,
 			"Search for providers in specific path (default: " PROVDLDIR ")");
 	fi_param_get_str(NULL, "provider_path", &provdir);
 	if (!provdir)

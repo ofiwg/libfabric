@@ -102,19 +102,19 @@ void fi_log_init(void)
 	int level, i;
 	char *levelstr = NULL, *provstr = NULL, *subsysstr = NULL;
 
-	fi_param_register(NULL, "log_level",
+	fi_param_define(NULL, "log_level", FI_PARAM_STRING,
 			"Specify logging level: warn, trace, info, debug (default: warn)");
 	fi_param_get_str(NULL, "log_level", &levelstr);
 	level = fi_convert_log_str(levelstr);
 	if (level >= 0)
 		log_mask = ((1 << (level + 1)) - 1);
 
-	fi_param_register(NULL, "log_prov",
+	fi_param_define(NULL, "log_prov", FI_PARAM_STRING,
 			"Specify specific provider to log (default: all)");
 	fi_param_get_str(NULL, "log_prov", &provstr);
 	fi_create_filter(&prov_log_filter, provstr);
 
-	fi_param_register(NULL, "log_subsys",
+	fi_param_define(NULL, "log_subsys", FI_PARAM_STRING,
 			"Specify specific subsystem to log (default: all)");
 	fi_param_get_str(NULL, "log_subsys", &subsysstr);
 	fi_create_filter(&subsys_filter, subsysstr);
