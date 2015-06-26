@@ -96,19 +96,18 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 	struct fi_param *vhead = NULL;
 	struct fi_param_entry *param;
 	struct dlist_entry *entry;
-	int ret, len = 0, i;
+	int ret, cnt, i;
 	char *tmp;
 
-	// just get a count
-	for (entry = param_list.next; entry != &param_list;
-	     entry = entry->next, len++)
-		continue;
+	for (entry = param_list.next, cnt = 0; entry != &param_list;
+	     entry = entry->next)
+		cnt++;
 
-	if (len == 0)
+	if (cnt == 0)
 		goto out;
 
 	// last extra entry will be all NULL
-	vhead = calloc(len + 1, sizeof (*vhead));
+	vhead = calloc(cnt + 1, sizeof (*vhead));
 	if (!vhead)
 		return -FI_ENOMEM;
 
@@ -130,7 +129,7 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 	}
 
 out:
-	*count = len;
+	*count = cnt;
 	*params = vhead;
 	return FI_SUCCESS;
 }
