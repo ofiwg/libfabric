@@ -658,6 +658,7 @@ static int sock_ep_close(struct fid *fid)
 				   atoi(sock_ep->listener.service));
 
 	atomic_dec(&sock_ep->domain->ref);
+	fastlock_destroy(&sock_ep->lock);
 	free(sock_ep);
 	return 0;
 }
@@ -1494,6 +1495,8 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	atomic_initialize(&sock_ep->ref, 0);
 	atomic_initialize(&sock_ep->num_tx_ctx, 0);
 	atomic_initialize(&sock_ep->num_rx_ctx, 0);
+	fastlock_init(&sock_ep->lock);
+	dlist_init(&sock_ep->conn_list);
 
 	if (sock_ep->ep_attr.tx_ctx_cnt == FI_SHARED_CONTEXT)
 		sock_ep->tx_shared = 1;

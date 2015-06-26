@@ -2009,7 +2009,7 @@ static int sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	if (ep->ep_type == FI_EP_MSG || !ep->av)
 		pe_entry->addr = FI_ADDR_NOTAVAIL;
 	else
-		pe_entry->addr = sock_av_lookup_key(ep->av, key);
+		pe_entry->addr = conn->av_index;
 
 	if (rx_ctx->ctx.fid.fclass == FI_CLASS_SRX_CTX) 
 		pe_entry->comp = &ep->comp;
