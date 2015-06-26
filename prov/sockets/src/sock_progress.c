@@ -1986,8 +1986,7 @@ out:
 }
 
 static int sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
-				struct sock_ep *ep, struct sock_conn *conn, 
-				int key)
+				struct sock_ep *ep, struct sock_conn *conn)
 {
 	int ret;
 	struct sock_pe_entry *pe_entry;	
@@ -2235,48 +2234,78 @@ void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx)
 static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 				  struct sock_rx_ctx *rx_ctx)
 {
-	struct sock_conn *conn;
-	struct sock_conn_map *map;
-	int i, ret = 0, data_avail;
-	
-	map = &ep->domain->r_cmap;
-	assert(map != NULL);
+	int ret = 0, data_avail = 0;
+	struct dlist_entry *entry;
+ 	struct sock_conn *conn;
+	fd_set rfds;
+	int max_fd = 0, nfds = 0;
+	struct timeval tv;
+	FD_ZERO(&rfds);
 
-	fastlock_acquire(&map->lock);
-	for (i = 0; i < map->used; i++) {
-		conn = &map->table[i];
-		
-		if (rbused(&conn->outbuf))
-			sock_comm_flush(conn);
-		
-		if (ep != conn->ep)
+	fastlock_acquire(&ep->lock);
+
+	for (entry = ep->conn_list.next; 
+	     entry != &ep->conn_list ; entry = entry->next) {
+
+		conn = container_of(entry, struct sock_conn, ep_entry);
+ 		if (rbused(&conn->outbuf))
+ 			sock_comm_flush(conn);
+ 
+		if (conn->rx_pe_entry)
 			continue;
 
-		data_avail = 0;
-		if (rbused(&conn->inbuf) > 0) {
-			data_avail = 1;
-		} else {
-			ret = fi_poll_fd(conn->sock_fd, 0);
-			if (ret < 0 && errno != EINTR) {
-				SOCK_LOG_DBG("Error polling fd: %d\n", 
-					      conn->sock_fd);
-				goto out;
-			}
-			data_avail = (ret == 1 && sock_comm_data_avail(conn));
-		}
+ 		data_avail = 0;
+ 		if (rbused(&conn->inbuf) > 0) {
+ 			data_avail = 1;
+ 		} else {
+			FD_SET(conn->sock_fd, &rfds);
+			nfds++;
+			max_fd = MAX(conn->sock_fd, max_fd);
+			data_avail = sock_comm_data_avail(conn);
+ 		}
+ 		
+		if (data_avail && !dlist_empty(&pe->free_list)) {
+			ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn);
+ 			if (ret < 0)
+ 				goto out;
+ 		}
+ 	}
+
+	if (nfds == 0)
+		goto out;
+
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	ret = select(max_fd + 1, &rfds, NULL, NULL, &tv);
+	if (ret < 0) {
+		SOCK_LOG_ERROR("Error in select\n");
+		goto out;
+	}
+
+	if (ret == 0)
+		goto out;
+
+	for (entry = ep->conn_list.next; 
+	     entry != &ep->conn_list ; entry = entry->next) {
 		
-		if (data_avail && conn->rx_pe_entry == NULL &&
-		    !dlist_empty(&pe->free_list)) {
-			/* new RX PE entry */
-			ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn, i);
-			if (ret < 0)
-				goto out;
+		conn = container_of(entry, struct sock_conn, ep_entry);
+		if (conn->rx_pe_entry)
+			continue;
+
+		if (FD_ISSET(conn->sock_fd, &rfds)) {
+			if (!dlist_empty(&pe->free_list)) {
+				/* new RX PE entry */
+				ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn);
+				if (ret < 0)
+					goto out;
+			}
 		}
 	}
-	ret = 0;
-out:
-	fastlock_release(&map->lock);
-	return ret;
+
+ 	ret = 0;
+ out:
+	fastlock_release(&ep->lock);
+ 	return ret;
 }
 
 int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)

@@ -620,6 +620,7 @@ struct sock_tx_ctx {
 	struct dlist_entry ep_list;
 
 	struct fi_tx_attr attr;
+	fastlock_t lock;
 };
 
 struct sock_msg_hdr {
