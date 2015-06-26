@@ -123,15 +123,6 @@ int fi_param_get_int(struct fi_provider *provider, const char *param_name,
 		     int *value);
 
 /*
- * Similar to fi_param_get_str(), but the value is converted to a long.
- * No checking is done to ensure that the value the user set is
- * actually an integer -- strtol() is simply called on whatever value
- * the user sets.
- */
-int fi_param_get_long(struct fi_provider *provider, const char *param_name,
-		    long *value);
-
-/*
  * Similar to fi_param_get_str(), but the value is converted to an
  * boolean (0 or 1) and returned in an int.  Accepted user values are:
  *

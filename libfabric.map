@@ -12,7 +12,6 @@ FABRIC_1.0 {
 		fi_param_register;
 		fi_param_get_str;
 		fi_param_get_int;
-		fi_param_get_long;
 		fi_param_get_bool;
 		fi_getparams;
 		fi_freeparams;

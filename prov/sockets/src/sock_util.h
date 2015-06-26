@@ -43,7 +43,7 @@ extern const char sock_prov_name[];
 extern struct fi_provider sock_prov;
 extern int sock_pe_waittime;
 #if ENABLE_DEBUG
-extern long sock_dgram_drop_rate;
+extern int sock_dgram_drop_rate;
 #endif
 
 #define _SOCK_LOG_DBG(subsys, ...) FI_DBG(&sock_prov, subsys, __VA_ARGS__);
