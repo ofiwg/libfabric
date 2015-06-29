@@ -97,6 +97,7 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 	
 	fastlock_init(&tx_ctx->rlock);
 	fastlock_init(&tx_ctx->wlock);
+	fastlock_init(&tx_ctx->lock);
 
 	switch (fclass) {
 	case FI_CLASS_TX_CTX:
@@ -129,6 +130,7 @@ void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx)
 {
 	fastlock_destroy(&tx_ctx->rlock);
 	fastlock_destroy(&tx_ctx->wlock);
+	fastlock_destroy(&tx_ctx->lock);
 	rbfdfree(&tx_ctx->rbfd);
 	free(tx_ctx);
 }

@@ -1077,13 +1077,6 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe, struct sock_rx_ctx *rx_
 	uint64_t offset, len, entry_len;
 	
 
-	if (pe->pe_atomic){
-		if (pe->pe_atomic != pe_entry)
-			return 0;
-	} else {
-		pe->pe_atomic = pe_entry;
-	}
-
 	len = sizeof(struct sock_msg_hdr);
 	if (sock_pe_recv_field(pe_entry, &pe_entry->pe.rx.rx_op, 
 			       sizeof(struct sock_op), len))
@@ -1147,6 +1140,13 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe, struct sock_rx_ctx *rx_
 				       entry_len, len))
 			return 0;
 		len += entry_len;
+	}
+
+	if (pe->pe_atomic){
+		if (pe->pe_atomic != pe_entry)
+			return 0;
+	} else {
+		pe->pe_atomic = pe_entry;
 	}
 		
 	offset = 0;
@@ -1986,8 +1986,7 @@ out:
 }
 
 static int sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
-				struct sock_ep *ep, struct sock_conn *conn, 
-				int key)
+				struct sock_ep *ep, struct sock_conn *conn)
 {
 	int ret;
 	struct sock_pe_entry *pe_entry;	
@@ -2009,7 +2008,7 @@ static int sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	if (ep->ep_type == FI_EP_MSG || !ep->av)
 		pe_entry->addr = FI_ADDR_NOTAVAIL;
 	else
-		pe_entry->addr = sock_av_lookup_key(ep->av, key);
+		pe_entry->addr = conn->av_index;
 
 	if (rx_ctx->ctx.fid.fclass == FI_CLASS_SRX_CTX) 
 		pe_entry->comp = &ep->comp;
@@ -2235,48 +2234,78 @@ void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx)
 static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 				  struct sock_rx_ctx *rx_ctx)
 {
-	struct sock_conn *conn;
-	struct sock_conn_map *map;
-	int i, ret = 0, data_avail;
-	
-	map = &ep->domain->r_cmap;
-	assert(map != NULL);
+	int ret = 0, data_avail = 0;
+	struct dlist_entry *entry;
+ 	struct sock_conn *conn;
+	fd_set rfds;
+	int max_fd = 0, nfds = 0;
+	struct timeval tv;
+	FD_ZERO(&rfds);
 
-	fastlock_acquire(&map->lock);
-	for (i = 0; i < map->used; i++) {
-		conn = &map->table[i];
-		
-		if (rbused(&conn->outbuf))
-			sock_comm_flush(conn);
-		
-		if (ep != conn->ep)
+	fastlock_acquire(&ep->lock);
+
+	for (entry = ep->conn_list.next; 
+	     entry != &ep->conn_list ; entry = entry->next) {
+
+		conn = container_of(entry, struct sock_conn, ep_entry);
+ 		if (rbused(&conn->outbuf))
+ 			sock_comm_flush(conn);
+ 
+		if (conn->rx_pe_entry)
 			continue;
 
-		data_avail = 0;
-		if (rbused(&conn->inbuf) > 0) {
-			data_avail = 1;
-		} else {
-			ret = fi_poll_fd(conn->sock_fd, 0);
-			if (ret < 0 && errno != EINTR) {
-				SOCK_LOG_DBG("Error polling fd: %d\n", 
-					      conn->sock_fd);
-				goto out;
-			}
-			data_avail = (ret == 1 && sock_comm_data_avail(conn));
-		}
+ 		data_avail = 0;
+ 		if (rbused(&conn->inbuf) > 0) {
+ 			data_avail = 1;
+ 		} else {
+			FD_SET(conn->sock_fd, &rfds);
+			nfds++;
+			max_fd = MAX(conn->sock_fd, max_fd);
+			data_avail = sock_comm_data_avail(conn);
+ 		}
+ 		
+		if (data_avail && !dlist_empty(&pe->free_list)) {
+			ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn);
+ 			if (ret < 0)
+ 				goto out;
+ 		}
+ 	}
+
+	if (nfds == 0)
+		goto out;
+
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	ret = select(max_fd + 1, &rfds, NULL, NULL, &tv);
+	if (ret < 0) {
+		SOCK_LOG_ERROR("Error in select\n");
+		goto out;
+	}
+
+	if (ret == 0)
+		goto out;
+
+	for (entry = ep->conn_list.next; 
+	     entry != &ep->conn_list ; entry = entry->next) {
 		
-		if (data_avail && conn->rx_pe_entry == NULL &&
-		    !dlist_empty(&pe->free_list)) {
-			/* new RX PE entry */
-			ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn, i);
-			if (ret < 0)
-				goto out;
+		conn = container_of(entry, struct sock_conn, ep_entry);
+		if (conn->rx_pe_entry)
+			continue;
+
+		if (FD_ISSET(conn->sock_fd, &rfds)) {
+			if (!dlist_empty(&pe->free_list)) {
+				/* new RX PE entry */
+				ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn);
+				if (ret < 0)
+					goto out;
+			}
 		}
 	}
-	ret = 0;
-out:
-	fastlock_release(&map->lock);
-	return ret;
+
+ 	ret = 0;
+ out:
+	fastlock_release(&ep->lock);
+ 	return ret;
 }
 
 int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
@@ -2500,7 +2529,7 @@ static void sock_thread_set_affinity(char *s)
 static void sock_pe_set_affinity (void)
 {
 	char *s;
-	fi_param_define(&sock_prov, "pe_affinity", FI_PARAM_INT,
+	fi_param_define(&sock_prov, "pe_affinity", FI_PARAM_STRING,
 			"If specified, bind the progress thread to the indicated range(s) of Linux virtual processor ID(s). "
 			"This option is currently not supported on OS X. Usage: id_start[-id_end[:stride]][,]");
 	if (fi_param_get_str(&sock_prov, "pe_affinity", &s) != FI_SUCCESS)

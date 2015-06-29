@@ -164,6 +164,8 @@ struct sock_conn {
 	struct ringbuf inbuf;
 	struct ringbuf outbuf;
 	struct sock_ep *ep;
+	fi_addr_t av_index;
+	struct dlist_entry ep_entry;
 };
 
 struct sock_conn_map {
@@ -513,6 +515,8 @@ struct sock_ep {
 	int is_disabled;
 	struct sock_cm_entry cm;
 	struct sock_conn_listener listener;
+	struct dlist_entry conn_list;
+	fastlock_t lock;
 };
 
 struct sock_pep {
@@ -616,6 +620,7 @@ struct sock_tx_ctx {
 	struct dlist_entry ep_list;
 
 	struct fi_tx_attr attr;
+	fastlock_t lock;
 };
 
 struct sock_msg_hdr {

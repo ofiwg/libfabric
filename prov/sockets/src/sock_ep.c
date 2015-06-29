@@ -621,6 +621,18 @@ static int sock_ep_close(struct fid *fid)
 			atomic_dec(&sock_ep->av->ref);
 		}
 	}
+
+	if (sock_ep->tx_shared) {
+		fastlock_acquire(&sock_ep->tx_ctx->lock);
+		dlist_remove(&sock_ep->tx_ctx_entry);
+		fastlock_release(&sock_ep->tx_ctx->lock);
+	}
+	
+	if (sock_ep->rx_shared) {
+		fastlock_acquire(&sock_ep->rx_ctx->lock);
+		dlist_remove(&sock_ep->rx_ctx_entry);
+		fastlock_release(&sock_ep->rx_ctx->lock);
+	}
 	
 	sock_ep->listener.do_listen = 0;
 	if (write(sock_ep->listener.signal_fds[0], &c, 1) != 1) {
@@ -658,6 +670,7 @@ static int sock_ep_close(struct fid *fid)
 				   atoi(sock_ep->listener.service));
 
 	atomic_dec(&sock_ep->domain->ref);
+	fastlock_destroy(&sock_ep->lock);
 	free(sock_ep);
 	return 0;
 }
@@ -864,14 +877,18 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	case FI_CLASS_STX_CTX:
 		tx_ctx = container_of(bfid, struct sock_tx_ctx, fid.stx.fid);
+		fastlock_acquire(&tx_ctx->lock);
 		dlist_insert_tail(&ep->tx_ctx_entry, &tx_ctx->ep_list);
+		fastlock_release(&tx_ctx->lock);
 		ep->tx_ctx = tx_ctx;
 		ep->tx_array[0] = tx_ctx;
 		break;
 
 	case FI_CLASS_SRX_CTX:
 		rx_ctx = container_of(bfid, struct sock_rx_ctx, ctx);
+		fastlock_acquire(&rx_ctx->lock);
 		dlist_insert_tail(&ep->rx_ctx_entry, &rx_ctx->ep_list);
+		fastlock_release(&rx_ctx->lock);
 		ep->rx_ctx = rx_ctx;
 		ep->rx_array[0] = rx_ctx;
 		break;
@@ -1494,6 +1511,8 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	atomic_initialize(&sock_ep->ref, 0);
 	atomic_initialize(&sock_ep->num_tx_ctx, 0);
 	atomic_initialize(&sock_ep->num_rx_ctx, 0);
+	fastlock_init(&sock_ep->lock);
+	dlist_init(&sock_ep->conn_list);
 
 	if (sock_ep->ep_attr.tx_ctx_cnt == FI_SHARED_CONTEXT)
 		sock_ep->tx_shared = 1;

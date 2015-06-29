@@ -140,6 +140,14 @@ static int sock_conn_map_insert(struct sock_conn_map *map,
 	map->table[index].sock_fd = conn_fd;
 	map->table[index].ep = ep;
 	sock_comm_buffer_init(&map->table[index]);
+	map->table[index].av_index = (ep->av) ?
+		sock_av_lookup_key(ep->av, index):
+		FI_ADDR_NOTAVAIL;
+
+	fastlock_acquire(&ep->lock);
+	dlist_insert_tail(&map->table[index].ep_entry, &ep->conn_list);
+	fastlock_release(&ep->lock);
+
 	map->used++;
 	sock_pe_signal(ep->domain->pe);
 	return index + 1;
