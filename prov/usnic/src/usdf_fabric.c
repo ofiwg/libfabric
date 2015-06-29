@@ -399,7 +399,7 @@ usdf_fill_info_dgram(
 
 	/* endpoint attrs */
 	eattrp = fi->ep_attr;
-	if (fi->mode & FI_MSG_PREFIX) {
+	if (fi->mode & (FI_MSG_PREFIX | FI_MSG_PREFIX_DEPRECATED)) {
 		eattrp->msg_prefix_size = USDF_HDR_BUF_ENTRY;
 	}
 	eattrp->max_msg_size = dap->uda_mtu -
