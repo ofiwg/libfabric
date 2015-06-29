@@ -591,7 +591,6 @@ int main(int argc, char **argv)
 		hints->ep_attr->max_msg_size = opts.transfer_size;
 	hints->caps = FI_MSG;
 	hints->mode = FI_LOCAL_MR | FI_MSG_PREFIX;
-	hints->addr_format = FI_SOCKADDR;
 
 	ret = run();
 
