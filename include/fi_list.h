@@ -55,6 +55,9 @@ struct dlist_entry {
 	struct dlist_entry	*prev;
 };
 
+#define DLIST_INIT(addr) { addr, addr }
+#define DEFINE_LIST(name) struct dlist_entry name = DLIST_INIT(&name)
+
 static inline void dlist_init(struct dlist_entry *head)
 {
 	head->next = head;
