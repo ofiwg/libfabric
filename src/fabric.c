@@ -400,6 +400,9 @@ static void __attribute__((destructor)) fi_fini(void)
 {
 	struct fi_prov *prov;
 
+	if (!init)
+		return;
+
 	while (prov_head) {
 		prov = prov_head;
 		prov_head = prov->next;
