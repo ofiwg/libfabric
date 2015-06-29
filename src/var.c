@@ -58,7 +58,7 @@ struct fi_param_entry {
 };
 
 /* TODO: Add locking around param_list when adding dynamic removal */
-static struct dlist_entry param_list;
+static DEFINE_LIST(param_list);
 
 
 static struct fi_param_entry *
