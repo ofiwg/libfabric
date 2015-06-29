@@ -1077,13 +1077,6 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe, struct sock_rx_ctx *rx_
 	uint64_t offset, len, entry_len;
 	
 
-	if (pe->pe_atomic){
-		if (pe->pe_atomic != pe_entry)
-			return 0;
-	} else {
-		pe->pe_atomic = pe_entry;
-	}
-
 	len = sizeof(struct sock_msg_hdr);
 	if (sock_pe_recv_field(pe_entry, &pe_entry->pe.rx.rx_op, 
 			       sizeof(struct sock_op), len))
@@ -1147,6 +1140,13 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe, struct sock_rx_ctx *rx_
 				       entry_len, len))
 			return 0;
 		len += entry_len;
+	}
+
+	if (pe->pe_atomic){
+		if (pe->pe_atomic != pe_entry)
+			return 0;
+	} else {
+		pe->pe_atomic = pe_entry;
 	}
 		
 	offset = 0;
