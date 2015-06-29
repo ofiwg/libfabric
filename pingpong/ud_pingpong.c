@@ -337,17 +337,9 @@ static int common_setup(void)
 	uint64_t flags = 0;
 	char *node, *service;
 
-	if (opts.dst_addr) {
-		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
-		if (ret)
-			return ret;
-		node = opts.dst_addr;
-		service = opts.dst_port;
-	} else {
-		node = opts.src_addr;
-		service = opts.src_port;
-		flags = FI_SOURCE;
-	}
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
 
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
