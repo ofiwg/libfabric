@@ -291,7 +291,6 @@ int sock_conn_map_connect(struct sock_ep *ep,
 	return 0;
 err:
 	close(conn_fd);
-	errno = FI_EOTHER;
 	return -errno;
 }
 

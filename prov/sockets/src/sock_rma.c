@@ -99,6 +99,10 @@ ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		conn = sock_ep_lookup_conn(sock_ep);
 	} else {
 		conn = sock_av_lookup_addr(sock_ep, tx_ctx->av, msg->addr);
+		if (!conn) {
+                        SOCK_LOG_ERROR("Address lookup failed\n");
+                        return -errno;
+                }
 	}
 
 	if (!conn)
@@ -265,6 +269,10 @@ ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		conn = sock_ep_lookup_conn(sock_ep);
 	} else {
 		conn = sock_av_lookup_addr(sock_ep, tx_ctx->av, msg->addr);
+		if (!conn) {
+                        SOCK_LOG_ERROR("Address lookup failed\n");
+                        return -errno;
+                }
 	}
 
 	if (!conn)
