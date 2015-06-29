@@ -135,8 +135,10 @@ static int send_msg(int size)
 	
 	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, 
 			&fi_ctx_send);
-	if (ret)
+	if (ret) {
 		FT_PRINTERR("fi_send", ret);
+		return ret;
+	}
 
 	return wait_for_completion(scq, 1);
 }
