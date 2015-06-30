@@ -442,6 +442,7 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 	ep->ep_domain = udp;
 	ep->ep_caps = info->caps;
 	ep->ep_mode = info->mode;
+	ep->api_version = info->version;
 	if (info->tx_attr != NULL && info->tx_attr->size != 0) {
 		ep->ep_wqe = info->tx_attr->size;
 	} else {

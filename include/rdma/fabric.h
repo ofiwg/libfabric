@@ -49,7 +49,7 @@ extern "C" {
 
 enum {
 	FI_MAJOR_VERSION	= 1,
-	FI_MINOR_VERSION	= 0,
+	FI_MINOR_VERSION	= 1,
 	FI_PATH_MAX		= 256,
 	FI_NAME_MAX		= 64,
 	FI_VERSION_MAX		= 64
@@ -297,6 +297,7 @@ struct fi_info {
 	uint64_t		caps;
 	uint64_t		mode;
 	uint32_t		addr_format;
+	uint32_t		version;
 	size_t			src_addrlen;
 	size_t			dest_addrlen;
 	void			*src_addr;
