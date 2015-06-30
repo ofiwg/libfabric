@@ -1062,8 +1062,7 @@ int main(int argc, char **argv)
 	hints->addr_format = FI_SOCKADDR;
 
 	hints->ep_attr->type = FI_EP_RDM;
-	ret = fi_getinfo(FI_VERSION(1, 0), src_addr_str, 0, FI_SOURCE, hints,
-				&fi);
+	ret = fi_getinfo(FT_FIVERSION, src_addr_str, 0, FI_SOURCE, hints, &fi);
 	if (ret != 0 && ret != -FI_ENODATA) {
 		printf("fi_getinfo %s\n", fi_strerror(-ret));
 		goto err1;
@@ -1071,8 +1070,7 @@ int main(int argc, char **argv)
 
 	if (ret == -FI_ENODATA) {
 		hints->ep_attr->type = FI_EP_DGRAM;
-		ret = fi_getinfo(FI_VERSION(1, 0), src_addr_str, 0, FI_SOURCE,
-					hints, &fi);
+		ret = fi_getinfo(FT_FIVERSION, src_addr_str, 0, FI_SOURCE, hints, &fi);
 		if (ret != 0) {
 			printf("fi_getinfo %s\n", fi_strerror(-ret));
 			goto err1;

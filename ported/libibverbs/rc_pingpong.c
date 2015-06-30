@@ -514,7 +514,7 @@ int main(int argc, char *argv[])
 	if (rc)
 		return 1;
 	
-	rc = fi_getinfo(FI_VERSION(1, 0), node, service, flags, hints, &info);
+	rc = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &info);
 	if (rc) {
 		FT_PRINTERR("fi_getinfo", rc);
 		return -rc;

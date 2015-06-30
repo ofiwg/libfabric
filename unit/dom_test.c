@@ -99,7 +99,7 @@ int main(int argc, char **argv)
 	hints->fabric_attr = &fabric_hints;
 	hints->mode = ~0;
 
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &fi);
 	if (ret != 0) {
 		printf("fi_getinfo %s\n", fi_strerror(-ret));
 		goto err;

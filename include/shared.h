@@ -45,8 +45,10 @@
 extern "C" {
 #endif
 
-/* all tests should work with 1.0 API */
-#define FT_FIVERSION FI_VERSION(1,0)
+/* all tests should work with 1.0 API or newer */
+#ifndef FT_FIVERSION
+#define FT_FIVERSION FI_VERSION(1,1)
+#endif
 
 #ifdef __APPLE__
 #include "osx/osd.h"
