@@ -60,7 +60,7 @@ struct fi_prov {
 static struct fi_prov *fi_getprov(const char *prov_name);
 
 static struct fi_prov *prov_head, *prov_tail;
-static volatile int init = 0;
+int init = 0;
 static pthread_mutex_t ini_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static struct fi_filter prov_filter;
@@ -339,7 +339,7 @@ libdl_done:
 }
 #endif
 
-static void fi_ini(void)
+void fi_ini(void)
 {
 	char *param_val = NULL;
 
