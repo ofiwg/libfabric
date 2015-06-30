@@ -571,6 +571,8 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Ping pong client and server using UD.");
+			FT_PRINT_OPTS_USAGE("-t <timeout>",
+					"seconds before timeout on receive");
 			return EXIT_FAILURE;
 		}
 	}
