@@ -77,7 +77,7 @@ static void fi_ibv_fini(void);
 static struct fi_provider fi_ibv_prov = {
 	.name = VERBS_PROV_NAME,
 	.version = VERBS_PROV_VERS,
-	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+	.fi_version = FI_VERSION(1, 1),
 	.getinfo = fi_ibv_getinfo,
 	.fabric = fi_ibv_fabric,
 	.cleanup = fi_ibv_fini

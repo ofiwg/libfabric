@@ -1102,7 +1102,7 @@ static void usdf_fini(void)
 struct fi_provider usdf_ops = {
 	.name = USDF_PROV_NAME,
 	.version = USDF_PROV_VERSION,
-	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+	.fi_version = FI_VERSION(1, 1),
 	.getinfo = usdf_getinfo,
 	.fabric = usdf_fabric_open,
 	.cleanup =  usdf_fini
