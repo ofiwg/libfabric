@@ -68,44 +68,62 @@ const unsigned int test_cnt = (sizeof test_size / sizeof test_size[0]);
 static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
 
-static int getaddr(char *node, char *service, void **addr,
-			size_t *len)
+static int dupaddr(void **dst_addr, size_t *dst_addrlen,
+		void *src_addr, size_t src_addrlen)
 {
-	struct addrinfo *ai;
+	*dst_addr = malloc(src_addrlen);
+	if (!*dst_addr) {
+		FT_ERR("address allocation failed\n");
+		return EAI_MEMORY;
+	}
+	*dst_addrlen = src_addrlen;
+	memcpy(*dst_addr, src_addr, src_addrlen);
+	return 0;
+}
+
+static int getaddr(char *node, char *service,
+			struct fi_info *hints, uint64_t flags)
+{
 	int ret;
+	struct fi_info *fi;
 
 	if (!node) {
-		*addr = NULL;
-		*len = 0;
+		if (flags & FI_SOURCE) {
+			hints->src_addr = NULL;
+			hints->src_addrlen = 0;
+		} else {
+			hints->dest_addr = NULL;
+			hints->dest_addrlen = 0;
+		}
 		return 0;
 	}
 
-	ret = getaddrinfo(node, service, NULL, &ai);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, NULL, &fi);
 	if (ret) {
-		FT_ERR("getaddrinfo error %s\n", gai_strerror(ret));
+		FT_ERR("fi_getinfo error %s\n", fi_strerror(ret));
 		return ret;
 	}
+	hints->addr_format = fi->addr_format;
 
-	if ((*addr = malloc(ai->ai_addrlen))) {
-		memcpy(*addr, ai->ai_addr, ai->ai_addrlen);
-		*len = (size_t)ai->ai_addrlen;
+	if (flags & FI_SOURCE) {
+		ret = dupaddr(&hints->src_addr, &hints->src_addrlen,
+				fi->src_addr, fi->src_addrlen);
 	} else {
-		FT_ERR("addr allocation failed\n");
-		ret = EAI_MEMORY;
+		ret = dupaddr(&hints->dest_addr, &hints->dest_addrlen,
+				fi->dest_addr, fi->dest_addrlen);
 	}
 
-	freeaddrinfo(ai);
 	return ret;
 }
 
 int ft_getsrcaddr(char *node, char *service, struct fi_info *hints)
 {
-	return getaddr(node, service, &hints->src_addr, &hints->src_addrlen);
+	return getaddr(node, service, hints, FI_SOURCE);
 }
 
 int ft_getdestaddr(char *node, char *service, struct fi_info *hints)
 {
-	return getaddr(node, service, &hints->dest_addr, &hints->dest_addrlen);
+	return getaddr(node, service, hints, 0);
 }
 
 int ft_read_addr_opts(char **node, char **service, struct fi_info *hints, 
