@@ -61,6 +61,8 @@ enum {
 #define FI_VERSION_GE(v1, v2)   ((FI_MAJOR(v1) > FI_MAJOR(v2)) || \
 				 (FI_MAJOR(v1) == FI_MAJOR(v2) && FI_MINOR(v1) == FI_MINOR(v2)) || \
 				 (FI_MAJOR(v1) == FI_MAJOR(v2) && FI_MINOR(v1) > FI_MINOR(v2)))
+#define FI_VERSION_LT(v1, v2)	((FI_MAJOR(v1) < FI_MAJOR(v2)) || \
+				 (FI_MAJOR(v1) == FI_MAJOR(v2) && FI_MINOR(v1) < FI_MINOR(v2)))
 
 uint32_t fi_version(void);
 
