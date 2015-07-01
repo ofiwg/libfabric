@@ -1951,7 +1951,10 @@ static int sock_pe_progress_rx_pe_entry(struct sock_pe *pe,
 					struct sock_pe_entry *pe_entry,
 					struct sock_rx_ctx *rx_ctx)
 {
-	int ret; 
+	int ret;
+
+	if (!rbused(&pe_entry->conn->inbuf) && pe_entry->conn->disconnected)
+		return 0;
 
 	if (pe_entry->pe.rx.pending_send) {
 		sock_pe_progress_pending_ack(pe, pe_entry);
@@ -1989,7 +1992,7 @@ static int sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 				struct sock_ep *ep, struct sock_conn *conn)
 {
 	int ret;
-	struct sock_pe_entry *pe_entry;	
+	struct sock_pe_entry *pe_entry;
 
 	pe_entry = sock_pe_acquire_entry(pe);
 	if (!pe_entry) {
@@ -2454,8 +2457,10 @@ static void sock_pe_poll(struct sock_pe *pe)
 			return;
 		}
 		
-		FD_SET(conn->sock_fd, &rfds);
-		max_fds = MAX(conn->sock_fd, max_fds);
+		if (!conn->disconnected) {
+			FD_SET(conn->sock_fd, &rfds);
+			max_fds = MAX(conn->sock_fd, max_fds);
+		}
 	}
 	fastlock_release(&map->lock);
 

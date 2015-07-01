@@ -158,6 +158,7 @@ struct sock_fabric {
 
 struct sock_conn {
         int sock_fd;
+        int disconnected;
         struct sockaddr_in addr;
         struct sock_pe_entry *rx_pe_entry;
         struct sock_pe_entry *tx_pe_entry;
