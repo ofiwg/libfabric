@@ -1518,8 +1518,8 @@ out:
 	if (!rx_entry->is_buffered &&
 	    (!(rx_entry->flags & FI_MULTI_RECV) ||
 	     (pe_entry->flags & FI_MULTI_RECV))) {
-		sock_rx_release_entry(rx_entry);
 		fastlock_acquire(&rx_ctx->lock);
+		sock_rx_release_entry(rx_entry);
 		rx_ctx->num_left++;
 		fastlock_release(&rx_ctx->lock);
 	}

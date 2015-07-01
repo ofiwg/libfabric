@@ -89,6 +89,7 @@ void sock_conn_map_destroy(struct sock_conn_map *cmap)
 
 	for (i = 0; i < cmap->used; i++) {
 		sock_comm_buffer_finalize(&cmap->table[i]);
+		close(cmap->table[i].sock_fd);
 	}
 	free(cmap->table);
 	cmap->table = NULL;

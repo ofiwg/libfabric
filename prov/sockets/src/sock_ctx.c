@@ -71,6 +71,7 @@ struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr, void *conte
 void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx)
 {
 	fastlock_destroy(&rx_ctx->lock);
+	free(rx_ctx->rx_entry_pool);
 	free(rx_ctx);
 }
 
