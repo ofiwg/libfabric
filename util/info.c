@@ -246,9 +246,7 @@ static int run(struct fi_info *hints, char *node, char *port)
 		return ret;
 	}
 
-	if (env)
-		ret = print_vars();
-	else if (verbose)
+	if (verbose)
 		ret = print_long_info(info);
 	else
 		ret = print_short_info(info);
@@ -321,7 +319,13 @@ int main(int argc, char **argv)
 		return EXIT_SUCCESS;
 	}
 
+	if (env) {
+		ret = print_vars();
+		goto out;
+	}
+
 	ret = run(use_hints ? hints : NULL, node, port);
+out:
 	fi_freeinfo(hints);
 	return -ret;
 }

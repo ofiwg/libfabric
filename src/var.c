@@ -48,6 +48,9 @@
 /* When given a NULL provider pointer, use core for logging and settings. */
 extern struct fi_provider core_prov;
 
+extern int init;
+extern void fi_ini();
+
 struct fi_param_entry {
 	const struct fi_provider *provider;
 	char *name;
@@ -88,6 +91,9 @@ int DEFAULT_SYMVER_PRE(fi_getparams)(struct fi_param **params, int *count)
 	struct dlist_entry *entry;
 	int cnt, i;
 	char *tmp;
+
+	if (!init)
+		fi_ini();
 
 	for (entry = param_list.next, cnt = 0; entry != &param_list;
 	     entry = entry->next)
