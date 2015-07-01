@@ -493,9 +493,6 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	char hostname[HOST_NAME_MAX];
 	int ret;
 
-	if (version != FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION))
-		return -FI_ENODATA;
-
 	if (!(flags & FI_SOURCE) && hints && hints->src_addr &&
 	    (hints->src_addrlen != sizeof(struct sockaddr_in)))
 		return -FI_ENODATA;
