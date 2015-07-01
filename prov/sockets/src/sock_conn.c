@@ -413,29 +413,6 @@ int sock_conn_listen(struct sock_ep *ep)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	if (ep->src_addr->sin_addr.s_addr == 0) {
-		memset(&ai, 0, sizeof(ai));
-		ai.ai_family = AF_INET;
-		ai.ai_socktype = SOCK_STREAM;
-
-		if (ep->src_addr->sin_port)
-			sprintf(service, "%d", ntohs(ep->src_addr->sin_port));
-		
-		if (gethostname(hostname, sizeof hostname) != 0) {
-			SOCK_LOG_DBG("gethostname failed!\n");
-			return -FI_EINVAL;
-		}
-		ret = getaddrinfo(hostname, ep->src_addr->sin_port ? 
-				  service : NULL, &ai, &rai);
-		if (ret) {
-			SOCK_LOG_DBG("getaddrinfo failed!\n");
-			return -FI_EINVAL;
-		}
-		memcpy(ep->src_addr, (struct sockaddr_in *)rai->ai_addr,
-		       sizeof *ep->src_addr);
-		freeaddrinfo(rai);
-	}
-
 	if (getnameinfo((void*)ep->src_addr, sizeof (*ep->src_addr),
 			NULL, 0, listener->service, 
 			sizeof(listener->service), NI_NUMERICSERV)) {
@@ -483,6 +460,26 @@ int sock_conn_listen(struct sock_ep *ep)
 		snprintf(listener->service, sizeof listener->service, "%d",
 			 ntohs(addr.sin_port));
 		SOCK_LOG_DBG("Bound to port: %s\n", listener->service);
+	}
+
+	if (ep->src_addr->sin_addr.s_addr == 0) {
+		memset(&ai, 0, sizeof(ai));
+		ai.ai_family = AF_INET;
+		ai.ai_socktype = SOCK_STREAM;
+
+		sprintf(service, "%s", listener->service);
+		if (gethostname(hostname, sizeof hostname) != 0) {
+			SOCK_LOG_DBG("gethostname failed!\n");
+			return -FI_EINVAL;
+		}
+		ret = getaddrinfo(hostname, service, &ai, &rai);
+		if (ret) {
+			SOCK_LOG_DBG("getaddrinfo failed!\n");
+			return -FI_EINVAL;
+		}
+		memcpy(ep->src_addr, (struct sockaddr_in *)rai->ai_addr,
+		       sizeof *ep->src_addr);
+		freeaddrinfo(rai);
 	}
 
 	if (listen(listen_fd, 0)) {
