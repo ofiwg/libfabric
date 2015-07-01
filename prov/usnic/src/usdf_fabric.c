@@ -745,6 +745,9 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 	src = NULL;
 	dest = NULL;
 
+	if (!FI_VERSION_GE(fi_version(), version))
+		return -FI_ENODATA;
+
 	/*
 	 * Get and cache usNIC device info
 	 */
