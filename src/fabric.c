@@ -96,8 +96,12 @@ int fi_apply_filter(struct fi_filter *filter, const char *name)
 
 static void cleanup_provider(struct fi_provider *provider, void *dlhandle)
 {
-	if (provider && provider->cleanup)
-		provider->cleanup();
+	if (provider) {
+		fi_param_undefine(provider);
+
+		if (provider->cleanup)
+			provider->cleanup();
+	}
 
 #ifdef HAVE_LIBDL
 	if (dlhandle)

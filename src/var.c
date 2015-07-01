@@ -150,6 +150,21 @@ static void fi_free_param(struct fi_param_entry *param)
 	free(param);
 }
 
+void fi_param_undefine(const struct fi_provider *provider)
+{
+	struct fi_param_entry *param;
+	struct dlist_entry *entry;
+
+	for (entry = param_list.next; entry != &param_list; entry = entry->next) {
+		param = container_of(entry, struct fi_param_entry, entry);
+		if (param->provider == provider) {
+			FI_DBG(provider, FI_LOG_CORE, "Removing param: %s\n", param->name);
+			dlist_remove(entry);
+			fi_free_param(param);
+		}
+	}
+}
+
 __attribute__((visibility ("default")))
 int DEFAULT_SYMVER_PRE(fi_param_define)(const struct fi_provider *provider,
 		const char *param_name, enum fi_param_type type,

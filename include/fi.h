@@ -112,7 +112,7 @@ void fi_log_init(void);
 void fi_log_fini(void);
 void fi_param_init(void);
 void fi_param_fini(void);
-
+void fi_param_undefine(const struct fi_provider *provider);
 
 /* flsll is defined on BSD systems, but is different. */
 static inline int fi_flsll(long long int i)
