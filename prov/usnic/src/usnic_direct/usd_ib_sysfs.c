@@ -320,6 +320,20 @@ usd_get_usnic_config(
         return ret;
     dev->ud_attrs.uda_cq_per_vf = v;
 
+    ret = usd_ib_sysfs_get_int(dev, "intr_per_vf", &v);
+    if (ret != 0) {
+        /* older kernels did not export this sysfs node */
+        if (ret == -ENOENT) {
+            dev->ud_attrs.uda_intr_per_vf = 0;
+            ret = 0;
+        }
+        else {
+            return ret;
+        }
+    } else {
+        dev->ud_attrs.uda_intr_per_vf = v;
+    }
+
     return ret;
 }
 

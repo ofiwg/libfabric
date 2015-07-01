@@ -1407,6 +1407,9 @@ int vnic_dev_deinit(struct vnic_dev *vdev)
 	return vnic_dev_cmd(vdev, CMD_DEINIT, &a0, &a1, wait);
 }
 
+#ifdef EXPORT_SYMBOL_FOR_USNIC
+EXPORT_SYMBOL(vnic_dev_intr_coal_timer_info_default);
+#endif
 void vnic_dev_intr_coal_timer_info_default(struct vnic_dev *vdev)
 {
 	/* Default: hardware intr coal timer is in units of 1.5 usecs */
@@ -1524,12 +1527,18 @@ u32 vnic_dev_perbi_rebuild_cnt(struct vnic_dev *vdev)
 }
 
 #endif
+#ifdef EXPORT_SYMBOL_FOR_USNIC
+EXPORT_SYMBOL(vnic_dev_set_intr_mode);
+#endif
 void vnic_dev_set_intr_mode(struct vnic_dev *vdev,
 	enum vnic_dev_intr_mode intr_mode)
 {
 	vdev->intr_mode = intr_mode;
 }
 
+#ifdef EXPORT_SYMBOL_FOR_USNIC
+EXPORT_SYMBOL(vnic_dev_get_intr_mode);
+#endif
 enum vnic_dev_intr_mode vnic_dev_get_intr_mode(
 	struct vnic_dev *vdev)
 {

@@ -66,9 +66,8 @@
 
 #define USD_DEVF_CLOSE_CMD_FD (1<<0)
 
-/* JMS Reset this back to 0 before production */
 #ifndef USD_DEBUG
-#define USD_DEBUG 1
+#define USD_DEBUG 0
 #endif
 
 /*

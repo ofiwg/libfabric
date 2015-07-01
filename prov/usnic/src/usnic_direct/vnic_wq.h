@@ -308,6 +308,7 @@ void vnic_wq_init(struct vnic_wq *wq, unsigned int cq_index,
 	unsigned int error_interrupt_offset);
 void vnic_wq_error_out(struct vnic_wq *wq, unsigned int error);
 unsigned int vnic_wq_error_status(struct vnic_wq *wq);
+unsigned int vnic_wq_ctrl_error_status(struct vnic_wq_ctrl *ctrl);
 void vnic_wq_enable(struct vnic_wq *wq);
 int vnic_wq_disable(struct vnic_wq *wq);
 void vnic_wq_clean(struct vnic_wq *wq,
