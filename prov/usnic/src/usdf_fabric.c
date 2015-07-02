@@ -267,6 +267,7 @@ static int usdf_fill_domain_attr_dgram(
 
 static int
 usdf_fill_info_dgram(
+	uint32_t version,
 	struct fi_info *hints,
 	struct sockaddr_in *src,
 	struct sockaddr_in *dest,
@@ -290,6 +291,7 @@ usdf_fill_info_dgram(
 	}
 
 	fi->caps = USDF_DGRAM_CAPS;
+	fi->version = version;
 
 	if (hints != NULL) {
 		fi->mode = hints->mode & USDF_DGRAM_SUPP_MODE;
@@ -433,6 +435,7 @@ fail:
 
 static int
 usdf_fill_info_msg(
+	uint32_t version,
 	struct fi_info *hints,
 	struct sockaddr_in *src,
 	struct sockaddr_in *dest,
@@ -456,6 +459,7 @@ usdf_fill_info_msg(
 	}
 
 	fi->caps = USDF_MSG_CAPS;
+	fi->version = version;
 
 	if (hints != NULL) {
 		fi->mode = hints->mode & USDF_MSG_SUPP_MODE;
@@ -542,6 +546,7 @@ fail:
 
 static int
 usdf_fill_info_rdm(
+	uint32_t version,
 	struct fi_info *hints,
 	struct sockaddr_in *src,
 	struct sockaddr_in *dest,
@@ -565,6 +570,7 @@ usdf_fill_info_rdm(
 	}
 
 	fi->caps = USDF_RDM_CAPS;
+	fi->version = version;
 
 	if (hints != NULL) {
 		fi->mode = hints->mode & USDF_RDM_SUPP_MODE;
@@ -825,15 +831,15 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		if (ep_type == FI_EP_DGRAM || ep_type == FI_EP_UNSPEC) {
-			ret = usdf_fill_info_dgram(hints, src, dest, dap,
-					&fi_first, &fi_last);
+			ret = usdf_fill_info_dgram(version, hints, src, dest,
+					dap, &fi_first, &fi_last);
 			if (ret != 0 && ret != -FI_ENODATA) {
 				goto fail;
 			}
 		}
 
 		if (ep_type == FI_EP_MSG || ep_type == FI_EP_UNSPEC) {
-			ret = usdf_fill_info_msg(hints, src, dest, dap,
+			ret = usdf_fill_info_msg(version, hints, src, dest, dap,
 					&fi_first, &fi_last);
 			if (ret != 0 && ret != -FI_ENODATA) {
 				goto fail;
@@ -841,7 +847,7 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		if (ep_type == FI_EP_RDM || ep_type == FI_EP_UNSPEC) {
-			ret = usdf_fill_info_rdm(hints, src, dest, dap,
+			ret = usdf_fill_info_rdm(version, hints, src, dest, dap,
 					&fi_first, &fi_last);
 			if (ret != 0 && ret != -FI_ENODATA) {
 				goto fail;

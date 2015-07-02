@@ -47,7 +47,7 @@
 
 #define USDF_PROV_NAME "usnic"
 #define USDF_MAJOR_VERS 1
-#define USDF_MINOR_VERS 0
+#define USDF_MINOR_VERS 1
 #define USDF_PROV_VERSION FI_VERSION(USDF_MAJOR_VERS, USDF_MINOR_VERS)
 
 extern struct fi_provider usdf_ops;
@@ -278,6 +278,8 @@ struct usdf_ep {
 
 	uint32_t ep_wqe;	/* requested queue sizes */
 	uint32_t ep_rqe;
+
+	uint32_t api_version;
 
 	struct usd_qp_attrs ep_qp_attrs;
 

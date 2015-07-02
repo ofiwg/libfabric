@@ -427,6 +427,13 @@ below.
   provider generated packets that do not contain application data.
   Such received messages will indicate a transfer size of 0 bytes.
 
+  If using API version (1, 0) or older, then the pointer given to all send
+  operations must point to the start of the payload. Send operations in API
+  version (1, 1) or newer expect the buffer pointer to point to the start
+  of the prefix region of the buffer (as opposed to the payload). The
+  receive operations on both version expect a pointer to the start of the
+  prefix region of the buffer.
+
 *FI_ASYNC_IOV*
 : Applications can reference multiple data buffers as part of a single
   transmit operation through the use of IO vectors (SGEs).  Typically,

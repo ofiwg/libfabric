@@ -299,6 +299,7 @@ struct fi_info {
 	uint64_t		caps;
 	uint64_t		mode;
 	uint32_t		addr_format;
+	uint32_t		version;
 	size_t			src_addrlen;
 	size_t			dest_addrlen;
 	void			*src_addr;

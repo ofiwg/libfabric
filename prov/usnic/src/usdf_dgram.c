@@ -64,6 +64,16 @@
 #include "usdf_dgram.h"
 #include "usdf_av.h"
 
+#define GET_HDR(_version, _hdr, _buf)                                          \
+	do {                                                                   \
+		if ((_version) == FI_VERSION(1, 0))                            \
+			(_hdr) = (struct usd_udp_hdr *) (_buf) - 1;            \
+		else                                                           \
+			(_hdr) = (struct usd_udp_hdr *) ((char *) (_buf) +     \
+				(USDF_HDR_BUF_ENTRY -                          \
+				 sizeof(struct usd_udp_hdr)));                 \
+	} while (0)
+
 ssize_t
 usdf_dgram_recv(struct fid_ep *fep, void *buf, size_t len,
 		void *desc, fi_addr_t src_addr, void *context)
@@ -445,7 +455,8 @@ usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
 	qp = to_qpi(ep->e.dg.ep_qp);
 	wq = &qp->uq_wq;
 
-	hdr = (struct usd_udp_hdr *) buf - 1;
+	GET_HDR(ep->api_version, hdr, buf);
+
 	memcpy(hdr, &dest->ds_dest.ds_dest.ds_udp.u_hdr, sizeof(*hdr));
 
 	/* adjust lengths and insert source port */
@@ -493,7 +504,9 @@ usdf_dgram_prefix_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc
 	if (len + sizeof(struct usd_udp_hdr) > USD_SEND_MAX_COPY) {
 		qp = to_qpi(ep->e.dg.ep_qp);
 		wq = &qp->uq_wq;
-		hdr = (struct usd_udp_hdr *) iov[0].iov_base - 1;
+
+		GET_HDR(ep->api_version, hdr, iov[0].iov_base);
+
 		memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
 
 		/* adjust lengths and insert source port */
