@@ -1,4 +1,4 @@
-.TH fi_usnic 7 "2015\-04\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_usnic 7 "2015\-07\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The usNIC Fabric Provider
@@ -74,6 +74,9 @@ Address vectors only support \f[C]FI_AV_MAP\f[].
 No counters are supported.
 .IP \[bu] 2
 The tag matching interface is not supported.
+.IP \[bu] 2
+\f[I]FI_MSG_PREFIX\f[] is only supported on \f[I]FI_EP_DGRAM\f[] and
+usage is limited to the 1.1 release.
 .RE
 .IP \[bu] 2
 The usnic libfabric provider supports extensions that provide

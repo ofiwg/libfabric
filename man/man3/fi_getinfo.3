@@ -1,4 +1,4 @@
-.TH fi_getinfo 3 "2015\-04\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_getinfo 3 "2015\-07\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo - Obtain / free fabric interface information
@@ -443,6 +443,10 @@ Providers are required to define a msg_prefix_size that is a multiple of
 Additionally, applications may receive provider generated packets that
 do not contain application data.
 Such received messages will indicate a transfer size of 0 bytes.
+.PP
+The buffer pointer given to all send and receive operations must point
+to the start of the prefix region of the buffer (as opposed to the
+payload).
 .PP
 \f[I]FI_ASYNC_IOV\f[] : Applications can reference multiple data buffers
 as part of a single transmit operation through the use of IO vectors
