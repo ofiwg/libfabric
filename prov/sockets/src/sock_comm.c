@@ -130,7 +130,12 @@ static ssize_t sock_comm_recv_socket(struct sock_conn *conn, void *buf, size_t l
 {
 	ssize_t ret;
 	
-	ret = read(conn->sock_fd, buf, len);
+	ret = recv(conn->sock_fd, buf, len, 0);
+	if (ret == 0) {
+		conn->disconnected = 1;
+		return ret;
+	}
+
 	if (ret < 0) {
 		SOCK_LOG_DBG("read %s\n", strerror(errno));
 		ret = 0;
