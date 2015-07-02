@@ -302,7 +302,7 @@ endif !HAVE_PSM_DL
 
 endif HAVE_PSM
 
-src_libfabric_la_LDFLAGS += -version-info 1 -export-dynamic \
+src_libfabric_la_LDFLAGS += -version-info 2:0:1 -export-dynamic \
 			   $(libfabric_version_script)
 src_libfabric_la_DEPENDENCIES = $(srcdir)/libfabric.map
 
