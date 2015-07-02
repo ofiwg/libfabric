@@ -61,6 +61,8 @@ low latency and other offload capabilities on Ethernet networks.
     * Address vectors only support `FI_AV_MAP`.
     * No counters are supported.
     * The tag matching interface is not supported.
+    * *FI_MSG_PREFIX* is only supported on *FI_EP_DGRAM* and usage
+      is limited to the 1.1 release.
   * The usnic libfabric provider supports extensions that provide
     information and functionality beyond the standard libfabric
     interface.  See the "USNIC EXTENSIONS" section, below.

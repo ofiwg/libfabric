@@ -267,6 +267,7 @@ static int usdf_fill_domain_attr_dgram(
 
 static int
 usdf_fill_info_dgram(
+	uint32_t version,
 	struct fi_info *hints,
 	struct sockaddr_in *src,
 	struct sockaddr_in *dest,
@@ -399,9 +400,14 @@ usdf_fill_info_dgram(
 
 	/* endpoint attrs */
 	eattrp = fi->ep_attr;
+
 	if (fi->mode & FI_MSG_PREFIX) {
-		eattrp->msg_prefix_size = USDF_HDR_BUF_ENTRY;
+		if (FI_VERSION_GE(version, FI_VERSION(1, 1)))
+			eattrp->msg_prefix_size = USDF_HDR_BUF_ENTRY;
+		else
+			fi->mode &= ~FI_MSG_PREFIX;
 	}
+
 	eattrp->max_msg_size = dap->uda_mtu -
 		sizeof(struct usd_udp_hdr);
 	eattrp->protocol = FI_PROTO_UDP;
@@ -825,8 +831,8 @@ usdf_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		if (ep_type == FI_EP_DGRAM || ep_type == FI_EP_UNSPEC) {
-			ret = usdf_fill_info_dgram(hints, src, dest, dap,
-					&fi_first, &fi_last);
+			ret = usdf_fill_info_dgram(version, hints, src, dest,
+					dap, &fi_first, &fi_last);
 			if (ret != 0 && ret != -FI_ENODATA) {
 				goto fail;
 			}
