@@ -106,7 +106,7 @@ usd_ib_cmd_get_context(
 
     irp = &resp.ibv_resp;
     dev->ud_attrs.uda_event_fd = irp->async_fd;
-    //dev->ud_num_comp_vectors = irp->num_comp_vectors;
+    dev->ud_attrs.uda_num_comp_vectors = irp->num_comp_vectors;
 
     urp = &resp.usnic_resp;
 
@@ -127,6 +127,10 @@ usd_ib_cmd_get_context(
         if (urp->num_caps > USNIC_CAP_PIO &&
             urp->cap_info[USNIC_CAP_PIO] > 0) {
             dev->ud_caps[USD_CAP_PIO] = 1;
+        }
+        if (urp->num_caps > USNIC_CAP_CQ_INTR &&
+            urp->cap_info[USNIC_CAP_CQ_INTR] > 0) {
+            dev->ud_caps[USD_CAP_CQ_INTR] = 1;
         }
     }
 
@@ -323,7 +327,9 @@ usd_ib_cmd_dereg_mr(
 int
 usd_ib_cmd_create_cq(
     struct usd_device *dev,
-    struct usd_cq_impl *cq)
+    struct usd_cq_impl *cq,
+    int comp_channel,
+    int comp_vector)
 {
     struct usnic_create_cq cmd;
     struct usnic_create_cq_resp resp;
@@ -342,8 +348,11 @@ usd_ib_cmd_create_cq(
 
     icp->user_handle = (uintptr_t) cq;
     icp->cqe = cq->ucq_num_entries;
-    icp->comp_channel = -1;
-    icp->comp_vector = 0;
+    icp->comp_channel = comp_channel;
+    icp->comp_vector = comp_vector;
+
+    cmd.usnic_cmd.resp_version = USNIC_IB_CREATE_CQ_VERSION;
+    cmd.usnic_cmd.intr_arm_mode = USNIC_CQ_INTR_ARM_MODE_CONTINUOUS;
 
     /* Issue command to IB driver */
     n = write(dev->ud_ib_dev_fd, &cmd, sizeof(cmd));
@@ -442,7 +451,14 @@ usd_ib_cmd_create_qp(
     icp->reserved = 0;
 
     ucp = &cmd.usnic_cmd;
-    ucp->cmd_version = USNIC_IB_CREATE_QP_VERSION;
+
+    /* CQ interrupt support was added in v2 */
+    if (usd_get_cap(dev, USD_CAP_CQ_INTR)) {
+        ucp->cmd_version = USNIC_IB_CREATE_QP_VERSION;
+    } else {
+        ucp->cmd_version = 1;
+    }
+
     qfilt = &qp->uq_filter;
     if (qfilt->qf_type == USD_FTY_UDP ||
             qfilt->qf_type == USD_FTY_UDP_SOCK) {
@@ -453,14 +469,14 @@ usd_ib_cmd_create_qp(
         goto out;
     }
 
-    ucp->u.v1.resources_len = RES_TYPE_MAX * sizeof(*resources);
+    ucp->u.cur.resources_len = RES_TYPE_MAX * sizeof(*resources);
     resources = calloc(RES_TYPE_MAX, sizeof(*resources));
     if (resources == NULL) {
         usd_err("unable to allocate resources array\n");
         ret = -ENOMEM;
         goto out;
     }
-    ucp->u.v1.resources = (u64)(uintptr_t)resources;
+    ucp->u.cur.resources = (u64)(uintptr_t)resources;
 
     /* Issue command to IB driver */
     n = write(dev->ud_ib_dev_fd, &cmd, sizeof(cmd));
@@ -490,10 +506,10 @@ usd_ib_cmd_create_qp(
     vfip->vi_bar_bus_addr = urp->bar_bus_addr;
     vfip->vi_bar_len = urp->bar_len;
 
-    if (urp->cmd_version == USNIC_IB_CREATE_QP_VERSION) {
+    if (urp->cmd_version == ucp->cmd_version) {
         /* got expected version */
         if (dev->ud_caps[USD_CAP_MAP_PER_RES] > 0) {
-            for (i = 0; i < MIN(RES_TYPE_MAX, urp->u.v1.num_barres); i++) {
+            for (i = 0; i < MIN(RES_TYPE_MAX, urp->u.cur.num_barres); i++) {
                 enum vnic_res_type type = resources[i].type;
                 if (type < RES_TYPE_MAX) {
                     vfip->barres[type].type = type;
@@ -751,6 +767,38 @@ usd_ib_query_dev(
 
     dap->uda_max_qp = dresp.max_qp;
     dap->uda_max_cq = dresp.max_cq;
+
+    return 0;
+}
+
+
+int
+usd_ib_cmd_create_comp_channel(
+    struct usd_device *dev,
+    int *comp_fd_o)
+{
+    int n;
+    struct ibv_create_comp_channel cmd;
+    struct ibv_create_comp_channel_resp resp;
+    struct ibv_create_comp_channel *icp;
+    struct ibv_create_comp_channel_resp *irp;
+
+    memset(&cmd, 0, sizeof(cmd));
+
+    icp = &cmd;
+    icp->command = IB_USER_VERBS_CMD_CREATE_COMP_CHANNEL;
+    icp->in_words = sizeof(cmd) / 4;
+    icp->out_words = sizeof(resp) / 4;
+    icp->response = (uintptr_t) & resp;
+
+    /* Issue command to IB driver */
+    n = write(dev->ud_ib_dev_fd, &cmd, sizeof(cmd));
+    if (n != sizeof(cmd)) {
+        return -errno;
+    }
+
+    irp = &resp;
+    *comp_fd_o = irp->fd;
 
     return 0;
 }

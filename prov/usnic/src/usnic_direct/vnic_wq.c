@@ -255,7 +255,15 @@ void vnic_wq_error_out(struct vnic_wq *wq, unsigned int error)
 
 unsigned int vnic_wq_error_status(struct vnic_wq *wq)
 {
-	return ioread32(&wq->ctrl->error_status);
+        return vnic_wq_ctrl_error_status(wq->ctrl);
+}
+
+#ifdef EXPORT_SYMBOL_FOR_USNIC
+EXPORT_SYMBOL(vnic_wq_ctrl_error_status);
+#endif
+unsigned int vnic_wq_ctrl_error_status(struct vnic_wq_ctrl *ctrl)
+{
+	return ioread32(&ctrl->error_status);
 }
 
 void vnic_wq_enable(struct vnic_wq *wq)

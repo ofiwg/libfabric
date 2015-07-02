@@ -660,10 +660,11 @@ usd_enable_qp(
  * that uses this CQ.  We will finish configuring the CQ at that time.
  */
 int
-usd_create_cq(
+usd_create_cq_with_cv(
     struct usd_device *dev,
     unsigned num_entries,
     int comp_fd,
+    int comp_vec,
     struct usd_cq **cq_o)
 {
     unsigned qp_per_vf;
@@ -678,14 +679,17 @@ usd_create_cq(
         return ret;
     }
 
-    /* XXX need driver support for completion FDs */
-    if (comp_fd != -1) {
-        usd_err("create_cq does not support comp_fd yet\n");
+    if (num_entries > dev->ud_attrs.uda_max_cqe) {
         return -EINVAL;
     }
 
-    if (num_entries > dev->ud_attrs.uda_max_cqe) {
-        return -EINVAL;
+    if (comp_fd != -1) {
+        if (dev->ud_caps[USD_CAP_CQ_INTR] == 0 ||
+            comp_vec >= (int)dev->ud_attrs.uda_num_comp_vectors) {
+            usd_err("too large comp_vec (%d) requested, num_comp_vectors=%d\n",
+                    comp_vec, (int)dev->ud_attrs.uda_num_comp_vectors);
+            return -EINVAL;
+        }
     }
 
     cq = (struct usd_cq_impl *)calloc(sizeof(*cq), 1);
@@ -719,7 +723,14 @@ usd_create_cq(
         goto out;
     memset(cq->ucq_desc_ring, 0, ring_size);
 
-    ret = usd_ib_cmd_create_cq(dev, cq);
+    /*
+     * kernel currently has no support for handling negative comp_vec values,
+     * just use 0 which is guaranteed to be available
+     */
+    if (comp_vec < 0)
+        comp_vec = 0;
+
+    ret = usd_ib_cmd_create_cq(dev, cq, comp_fd, comp_vec);
     if (ret != 0)
         goto out;
 
@@ -739,6 +750,16 @@ out:
         usd_destroy_cq(to_usdcq(cq));
     }
     return ret;
+}
+
+int
+usd_create_cq(
+    struct usd_device *dev,
+    unsigned num_entries,
+    int comp_fd,
+    struct usd_cq **cq_o)
+{
+    return usd_create_cq_with_cv(dev, num_entries, comp_fd, -1, cq_o);
 }
 
 /*
@@ -1222,5 +1243,24 @@ usd_get_qp_attrs(
 
     qp = to_qpi(uqp);
     *qattrs = qp->uq_attrs;
+    return 0;
+}
+
+int usd_get_completion_fd(struct usd_device *dev, int *comp_fd_o)
+{
+    if (dev == NULL || comp_fd_o == NULL)
+        return -EINVAL;
+
+    return usd_ib_cmd_create_comp_channel(dev, comp_fd_o);
+}
+
+int usd_put_completion_fd(struct usd_device *dev, int comp_fd)
+{
+    if (dev == NULL || comp_fd < 0)
+        return -EINVAL;
+
+    if (close(comp_fd) == -1)
+        return -errno;
+
     return 0;
 }

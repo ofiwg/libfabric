@@ -114,7 +114,7 @@ struct usnic_transport_spec {
 	};
 };
 
-#define USNIC_IB_CREATE_QP_VERSION 1
+#define USNIC_IB_CREATE_QP_VERSION 2
 
 struct usnic_ib_create_qp_cmd_v0 {
 	struct usnic_transport_spec	spec;
@@ -130,7 +130,7 @@ struct usnic_ib_create_qp_cmd {
 
 			/* ptr to array of struct usnic_vnic_barres_info */
 			u64		resources;
-		} v1;
+		} cur; /* v1 and v2 cmd */
 	} u;
 };
 
@@ -175,11 +175,19 @@ struct usnic_ib_create_qp_resp {
 			u32 num_barres;
 			u32 pad_to_8byte;
 		} v1;
+		struct {
+			u32 num_barres;
+			u32 wq_err_intr_offset;
+			u32 rq_err_intr_offset;
+			u32 wcq_intr_offset;
+			u32 rcq_intr_offset;
+			u32 pad_to_8byte;
+		} cur; /* v2 */
 	} u;
 
 	/* v0 had a "reserved[9]" field, must not shrink the response or we can
 	 * corrupt newer clients running on older kernels */
-	u32				reserved[6];
+	u32				reserved[2];
 };
 
 #define USNIC_CTX_RESP_VERSION 2
@@ -213,6 +221,7 @@ enum usnic_capability {
 	USNIC_CAP_CQ_SHARING,	/* CQ sharing version */
 	USNIC_CAP_MAP_PER_RES,	/* Map individual RES */
 	USNIC_CAP_PIO,		/* PIO send */
+	USNIC_CAP_CQ_INTR,	/* CQ interrupts (via comp channels) */
 	USNIC_CAP_CNT
 };
 
@@ -225,6 +234,32 @@ struct usnic_ib_get_context_resp {
 	u32 resp_version;	/* response version returned */
 	u32 num_caps;		/* number of capabilities returned */
 	u32 cap_info[USNIC_CAP_CNT];
+};
+
+#define USNIC_IB_CREATE_CQ_VERSION 1
+
+enum usnic_cq_intr_arm_mode {
+	USNIC_CQ_INTR_ARM_MODE_CONTINUOUS,   /* continuously armed after
+						CQ(+QP) creation */
+	USNIC_CQ_INTR_ARM_MODE_CNT
+};
+
+struct usnic_ib_create_cq_v0 {
+	u64 reserved;
+};
+
+struct usnic_ib_create_cq {
+	u32 resp_version; /* response version requested */
+	u32 intr_arm_mode;
+};
+
+struct usnic_ib_create_cq_resp_v0 {
+	u64 reserved;
+};
+
+struct usnic_ib_create_cq_resp {
+	u32 resp_version; /* response version returned */
+	u32 pad_to_8byte;
 };
 
 #endif /* USNIC_ABI_H */

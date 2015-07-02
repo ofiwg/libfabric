@@ -50,7 +50,8 @@ int usd_ib_cmd_alloc_pd(struct usd_device *dev, uint32_t * pd_handle_o);
 int usd_ib_cmd_reg_mr(struct usd_device *dev, void *vaddr, size_t length,
                       struct usd_mr *mr);
 int usd_ib_cmd_dereg_mr(struct usd_device *dev, struct usd_mr *mr);
-int usd_ib_cmd_create_cq(struct usd_device *dev, struct usd_cq_impl *cq);
+int usd_ib_cmd_create_cq(struct usd_device *dev, struct usd_cq_impl *cq,
+                         int comp_channel, int comp_vector);
 int usd_ib_cmd_destroy_cq(struct usd_device *dev, struct usd_cq_impl *cq);
 int usd_ib_cmd_create_qp(struct usd_device *dev, struct usd_qp_impl *qp,
                          struct usd_vf_info *vfip);
@@ -61,4 +62,8 @@ int usd_ib_cmd_destroy_qp(struct usd_device *dev, struct usd_qp_impl *qp);
 int usd_ib_query_dev(struct usd_device *dev);
 int usd_ib_cmd_devcmd(struct usd_device *dev, enum vnic_devcmd_cmd devcmd,
                         u64 *a0, u64 *a1, int wait);
+
+int usd_ib_cmd_create_comp_channel(struct usd_device *dev, int *comp_fd_o);
+int usd_ib_cmd_destroy_comp_channel(struct usd_device *dev, int comp_fd);
+
 #endif /* _USD_IB_CMD_ */

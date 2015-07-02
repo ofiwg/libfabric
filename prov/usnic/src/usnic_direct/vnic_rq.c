@@ -222,7 +222,15 @@ void vnic_rq_error_out(struct vnic_rq *rq, unsigned int error)
 
 unsigned int vnic_rq_error_status(struct vnic_rq *rq)
 {
-	return ioread32(&rq->ctrl->error_status);
+        return vnic_rq_ctrl_error_status(rq->ctrl);
+}
+
+#ifdef EXPORT_SYMBOL_FOR_USNIC
+EXPORT_SYMBOL(vnic_rq_ctrl_error_status);
+#endif
+unsigned int vnic_rq_ctrl_error_status(struct vnic_rq_ctrl *ctrl)
+{
+	return ioread32(&ctrl->error_status);
 }
 
 void vnic_rq_enable(struct vnic_rq *rq)
@@ -254,16 +262,15 @@ void vnic_rq_clean(struct vnic_rq *rq,
 	struct vnic_rq_buf *buf;
 	u32 fetch_index;
 	unsigned int count = rq->ring.desc_count;
+	size_t i;
 
 	buf = rq->to_clean;
 
-	while (vnic_rq_desc_used(rq) > 0) {
-
+	for (i = 0; i < rq->ring.desc_count; i++) {
 		(*buf_clean)(rq, buf);
-
-		buf = rq->to_clean = buf->next;
-		rq->ring.desc_avail++;
+		buf = buf->next;
 	}
+	rq->ring.desc_avail = rq->ring.desc_count - 1;
 
 	/* Use current fetch_index as the ring starting point */
 	fetch_index = ioread32(&rq->ctrl->fetch_index);
