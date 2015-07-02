@@ -85,6 +85,11 @@ static int sock_conn_map_increase(struct sock_conn_map *map, int new_size)
 
 void sock_conn_map_destroy(struct sock_conn_map *cmap)
 {
+	int i;
+
+	for (i = 0; i < cmap->used; i++) {
+		sock_comm_buffer_finalize(&cmap->table[i]);
+	}
 	free(cmap->table);
 	cmap->table = NULL;
 	cmap->used = cmap->size = 0;
