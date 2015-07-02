@@ -150,7 +150,8 @@ struct fi_cq_attr {
   the application to select one of several completion formats,
   indicating the structure of the data that the completion queue
   should return when read.  Supported formats and the structures that
-  correspond to each are listed below.
+  correspond to each are listed below.  The meaning of the CQ entry
+  fields are defined in the _Completion Fields_ section.
 
 - *FI_CQ_FORMAT_UNSPEC*
 : If an unspecified format is requested, then the CQ will use a
@@ -381,6 +382,72 @@ The fi_cq_signal call will unblock any thread waiting in fi_cq_sread
 or fi_cq_sreadfrom.  This may be used to wake-up a thread
 that is blocked waiting to read a completion operation.  The fi_cq_signal
 operation is only available if the CQ was configured with a wait object.
+
+# COMPLETION FIELDS
+
+The CQ entry data structures share many of the same fields.  The meanings
+of these fields are the same for all CQ entry structure formats.
+
+*op_context*
+: The operation context is the application specified context value that
+  was provided with an asynchronous operation.  The op_context field is
+  valid for all completions.
+  
+*flags*
+: This specifies flags associated with the completed operation.  The
+  _Completion Flags_ section below lists valid flag values.  Flags are
+  set for all relevant completions.
+
+*len*
+: This len field only applies to completed receive operations.  It indicates
+  the size of received message data -- i.e. how many data bytes were
+  actually placed into the associated receive buffer.  If an endpoint has
+  been configured with the FI_MSG_PREFIX mode, the len also reflects the size
+  of the prefix buffer.
+
+*buf*
+: The buf field is only valid for completed receive operations, and only
+  applies when the receive buffer was posted with the FI_MULTI_RECV flag.
+  In this case, buf points to the starting location where the receive
+  data was placed.
+
+*data*
+: The data field is only valid if the FI_REMOTE_CQ_DATA completion flag
+  is set, and only applies to receive completions.  If FI_REMOTE_CQ_DATA
+  is set, this field will contain the completion data provided by the peer
+  as part of their transmit request.  The completion data will be given
+  in host byte order.
+
+*tag*
+: A tag applies only to received messages that occur using the tagged
+  interfaces.  This field contains the tag that was included with the
+  received message.  The tag will be in host byte order.
+
+*olen*
+: The olen field applies to received messages.  It is used to indicate
+  that a received message has overrun the available buffer space and
+  has been truncated.  The olen specifies the amount of data that did
+  not fit into the available receive buffer and was discarded.
+
+*err*
+: This err code is a positive fabric errno associated with a completion.
+  The err value indicates the general reason for an error, if one occurred.
+  See fi_errno.3 for a list of possible error codes.
+
+*prov_errno*
+: On an error, prov_errno may contain a provider specific error code.  The
+  use of this field and its meaning is provider specific.  It is intended
+  to be used as a debugging aid.  See fi_cq_strerror for additional details
+  on converting this error value into a human readable string.
+
+*err_data*
+: On an error, err_data may reference a provider specific amount of data
+  associated with an error.  The use of this field and its meaning is
+  provider specific.  It is intended to be used as a debugging aid.  See
+  fi_cq_strerror for additional details on converting this error data into
+  a human readable string.  Providers are allowed to reuse a single internal
+  buffer to store additional error information.  As a result, error data
+  is only guaranteed to be available until the next time the CQ is read.
 
 # COMPLETION FLAGS
 
