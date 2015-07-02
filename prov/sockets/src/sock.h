@@ -768,7 +768,7 @@ struct sock_pe {
 	int num_free_entries;
 	struct sock_pe_entry pe_table[SOCK_PE_MAX_ENTRIES];
 	fastlock_t lock;
-	pthread_mutex_t list_lock;
+	fastlock_t list_lock;
 	int signal_fds[2];
 	uint64_t waittime;
 
