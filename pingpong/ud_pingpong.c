@@ -53,7 +53,7 @@ static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *buf;
-static void *buf_ptr;
+static void *payload;
 static size_t buffer_size;
 static size_t prefix_len;
 static size_t max_msg_size = 0;
@@ -104,7 +104,7 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_send(ep, buf_ptr, (size_t) size, fi_mr_desc(mr),
+	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr),
 			remote_fi_addr, NULL);
 	if (ret)
 		FT_PRINTERR("fi_send", ret);
@@ -237,7 +237,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		perror("calloc");
 		return -1;
 	}
-	buf_ptr = (char *)buf + prefix_len;
+	payload = (char *) buf + prefix_len;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -405,7 +405,7 @@ static int client_connect(void)
 
 	// send initial message to server with our local address
 	addrlen = buffer_size;
-	ret = fi_getname(&ep->fid, buf_ptr, &addrlen);
+	ret = fi_getname(&ep->fid, payload, &addrlen);
 	if (ret) {
 		FT_PRINTERR("fi_getname", ret);
 		return ret;
@@ -458,11 +458,12 @@ static int server_connect(void)
 		}
 	} while (ret == -FI_EAGAIN);
 
-	ret = fi_av_insert(av, buf_ptr, 1, &remote_fi_addr, 0, NULL);
+	ret = fi_av_insert(av, payload, 1, &remote_fi_addr, 0, NULL);
 	if (ret != 1) {
 		if (ret == 0) {
 			fprintf(stderr, "Unable to resolve remote address 0x%x 0x%x\n",
-				((uint32_t *)buf)[0], ((uint32_t *)buf)[1]);
+				((uint32_t *) payload)[0],
+				((uint32_t *) payload)[1]);
 			ret = -FI_EINVAL;
 		} else {
 			FT_PRINTERR("fi_av_insert", ret);
