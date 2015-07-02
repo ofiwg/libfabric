@@ -493,9 +493,6 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 	char hostname[HOST_NAME_MAX];
 	int ret;
 
-	if (version != FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION))
-		return -FI_ENODATA;
-
 	if (!(flags & FI_SOURCE) && hints && hints->src_addr &&
 	    (hints->src_addrlen != sizeof(struct sockaddr_in)))
 		return -FI_ENODATA;
@@ -570,7 +567,7 @@ static void fi_sockets_fini(void)
 struct fi_provider sock_prov = {
 	.name = sock_prov_name,
 	.version = FI_VERSION(SOCK_MAJOR_VERSION, SOCK_MINOR_VERSION), 
-	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+	.fi_version = FI_VERSION(1, 1),
 	.getinfo = sock_getinfo,
 	.fabric = sock_fabric,
 	.cleanup = fi_sockets_fini

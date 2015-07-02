@@ -240,7 +240,7 @@ static int run(struct fi_info *hints, char *node, char *port)
 	struct fi_info *info;
 	int ret;
 
-	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), node, port, 0, hints, &info);
+	ret = fi_getinfo(FI_VERSION(1, 1), node, port, 0, hints, &info);
 	if (ret) {
 		fprintf(stderr, "fi_getinfo: %d\n", ret);
 		return ret;

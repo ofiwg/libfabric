@@ -49,7 +49,7 @@ extern "C" {
 
 enum {
 	FI_MAJOR_VERSION	= 1,
-	FI_MINOR_VERSION	= 0,
+	FI_MINOR_VERSION	= 1,
 	FI_PATH_MAX		= 256,
 	FI_NAME_MAX		= 64,
 	FI_VERSION_MAX		= 64
@@ -61,6 +61,8 @@ enum {
 #define FI_VERSION_GE(v1, v2)   ((FI_MAJOR(v1) > FI_MAJOR(v2)) || \
 				 (FI_MAJOR(v1) == FI_MAJOR(v2) && FI_MINOR(v1) == FI_MINOR(v2)) || \
 				 (FI_MAJOR(v1) == FI_MAJOR(v2) && FI_MINOR(v1) > FI_MINOR(v2)))
+#define FI_VERSION_LT(v1, v2)	((FI_MAJOR(v1) < FI_MAJOR(v2)) || \
+				 (FI_MAJOR(v1) == FI_MAJOR(v2) && FI_MINOR(v1) < FI_MINOR(v2)))
 
 uint32_t fi_version(void);
 

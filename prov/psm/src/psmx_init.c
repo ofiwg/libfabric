@@ -460,7 +460,7 @@ static void psmx_fini(void)
 struct fi_provider psmx_prov = {
 	.name = PSMX_PROV_NAME,
 	.version = FI_VERSION(0, 9),
-	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+	.fi_version = FI_VERSION(1, 1),
 	.getinfo = psmx_getinfo,
 	.fabric = psmx_fabric,
 	.cleanup = psmx_fini

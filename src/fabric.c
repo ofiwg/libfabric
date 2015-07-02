@@ -465,6 +465,12 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const cha
 	if (!init)
 		fi_ini();
 
+	if (FI_VERSION_LT(fi_version(), version)) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Requested version is newer than library\n");
+		return -FI_ENOSYS;
+	}
+
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
 		if (!prov->provider->getinfo)
