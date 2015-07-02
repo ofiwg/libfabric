@@ -427,6 +427,10 @@ below.
   provider generated packets that do not contain application data.
   Such received messages will indicate a transfer size of 0 bytes.
 
+  The buffer pointer given to all send and receive operations must point
+  to the start of the prefix region of the buffer (as opposed to the
+  payload).
+
 *FI_ASYNC_IOV*
 : Applications can reference multiple data buffers as part of a single
   transmit operation through the use of IO vectors (SGEs).  Typically,
