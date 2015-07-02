@@ -85,6 +85,12 @@ static int sock_conn_map_increase(struct sock_conn_map *map, int new_size)
 
 void sock_conn_map_destroy(struct sock_conn_map *cmap)
 {
+	int i;
+
+	for (i = 0; i < cmap->used; i++) {
+		sock_comm_buffer_finalize(&cmap->table[i]);
+		close(cmap->table[i].sock_fd);
+	}
 	free(cmap->table);
 	cmap->table = NULL;
 	cmap->used = cmap->size = 0;
@@ -470,12 +476,12 @@ int sock_conn_listen(struct sock_ep *ep)
 		sprintf(service, "%s", listener->service);
 		if (gethostname(hostname, sizeof hostname) != 0) {
 			SOCK_LOG_DBG("gethostname failed!\n");
-			return -FI_EINVAL;
+			goto err;
 		}
 		ret = getaddrinfo(hostname, service, &ai, &rai);
 		if (ret) {
 			SOCK_LOG_DBG("getaddrinfo failed!\n");
-			return -FI_EINVAL;
+			goto err;
 		}
 		memcpy(ep->src_addr, (struct sockaddr_in *)rai->ai_addr,
 		       sizeof *ep->src_addr);

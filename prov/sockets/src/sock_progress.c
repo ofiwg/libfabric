@@ -1518,8 +1518,8 @@ out:
 	if (!rx_entry->is_buffered &&
 	    (!(rx_entry->flags & FI_MULTI_RECV) ||
 	     (pe_entry->flags & FI_MULTI_RECV))) {
-		sock_rx_release_entry(rx_entry);
 		fastlock_acquire(&rx_ctx->lock);
+		sock_rx_release_entry(rx_entry);
 		rx_ctx->num_left++;
 		fastlock_release(&rx_ctx->lock);
 	}
@@ -2204,34 +2204,34 @@ void sock_pe_signal(struct sock_pe *pe)
 
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx)
 {
-	pthread_mutex_lock(&pe->list_lock);
+	fastlock_acquire(&pe->list_lock);
 	dlistfd_insert_tail(&ctx->pe_entry, &pe->tx_list);
 	sock_pe_signal(pe);
-	pthread_mutex_unlock(&pe->list_lock);
+	fastlock_release(&pe->list_lock);
 	SOCK_LOG_DBG("TX ctx added to PE\n");
 }
 
 void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx)
 {
-	pthread_mutex_lock(&pe->list_lock);
+	fastlock_acquire(&pe->list_lock);
 	dlistfd_insert_tail(&ctx->pe_entry, &pe->rx_list);
 	sock_pe_signal(pe);
-	pthread_mutex_unlock(&pe->list_lock);
+	fastlock_release(&pe->list_lock);
 	SOCK_LOG_DBG("RX ctx added to PE\n");
 }
 
 void sock_pe_remove_tx_ctx(struct sock_tx_ctx *tx_ctx)
 {
-	pthread_mutex_lock(&tx_ctx->domain->pe->list_lock);
+	fastlock_acquire(&tx_ctx->domain->pe->list_lock);
 	dlist_remove(&tx_ctx->pe_entry);
-	pthread_mutex_unlock(&tx_ctx->domain->pe->list_lock);
+	fastlock_release(&tx_ctx->domain->pe->list_lock);
 }
 
 void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx)
 {
-	pthread_mutex_lock(&rx_ctx->domain->pe->list_lock);
+	fastlock_acquire(&rx_ctx->domain->pe->list_lock);
 	dlist_remove(&rx_ctx->pe_entry);
-	pthread_mutex_unlock(&rx_ctx->domain->pe->list_lock);
+	fastlock_release(&rx_ctx->domain->pe->list_lock);
 }
 
 static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
@@ -2419,14 +2419,14 @@ static void sock_pe_poll(struct sock_pe *pe)
 	if (dlistfd_empty(&pe->tx_list) && dlistfd_empty(&pe->rx_list))
 		goto do_wait;
 
-	pthread_mutex_lock(&pe->list_lock);
+	fastlock_acquire(&pe->list_lock);
 	if (!dlistfd_empty(&pe->tx_list)) {
 		for (entry = pe->tx_list.list.next;
 		     entry != &pe->tx_list.list; entry = entry->next) {
 			tx_ctx = container_of(entry, struct sock_tx_ctx, pe_entry);
 			if (!rbfdempty(&tx_ctx->rbfd) ||
 			    !dlist_empty(&tx_ctx->pe_entry_list)) {
-				pthread_mutex_unlock(&pe->list_lock);
+				fastlock_release(&pe->list_lock);
 				return;
 			}
 			FD_SET(tx_ctx->rbfd.fd[RB_READ_FD], &rfds);
@@ -2440,12 +2440,12 @@ static void sock_pe_poll(struct sock_pe *pe)
 			rx_ctx = container_of(entry, struct sock_rx_ctx, pe_entry);
 			if (!dlist_empty(&rx_ctx->rx_buffered_list) ||
 			    !dlist_empty(&rx_ctx->pe_entry_list)) {
-				pthread_mutex_unlock(&pe->list_lock);
+				fastlock_release(&pe->list_lock);
 				return;
 			}
 		}
 	}
-	pthread_mutex_unlock(&pe->list_lock);
+	fastlock_release(&pe->list_lock);
 
 	map = &pe->domain->r_cmap;
 	fastlock_acquire(&map->lock);
@@ -2562,7 +2562,7 @@ static void *sock_pe_progress_thread(void *data)
 		if (pe->domain->progress_mode == FI_PROGRESS_AUTO)
 			sock_pe_poll(pe);
 		
-		pthread_mutex_lock(&pe->list_lock);		
+		fastlock_acquire(&pe->list_lock);		
 		if (!dlistfd_empty(&pe->tx_list)) {
 			for (entry = pe->tx_list.list.next;
 			     entry != &pe->tx_list.list; entry = entry->next) {
@@ -2571,7 +2571,7 @@ static void *sock_pe_progress_thread(void *data)
 				ret = sock_pe_progress_tx_ctx(pe, tx_ctx);
 				if (ret < 0) {
 					SOCK_LOG_ERROR("failed to progress TX\n");
-					pthread_mutex_unlock(&pe->list_lock);
+					fastlock_release(&pe->list_lock);
 					return NULL;
 				}
 			}
@@ -2585,12 +2585,12 @@ static void *sock_pe_progress_thread(void *data)
 				ret = sock_pe_progress_rx_ctx(pe, rx_ctx);
 				if (ret < 0) {
 					SOCK_LOG_ERROR("failed to progress RX\n");
-					pthread_mutex_unlock(&pe->list_lock);
+					fastlock_release(&pe->list_lock);
 					return NULL;
 				}
 			}
 		}
-		pthread_mutex_unlock(&pe->list_lock);
+		fastlock_release(&pe->list_lock);
 	}
 	
 	SOCK_LOG_DBG("Progress thread terminated\n");
@@ -2627,7 +2627,7 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 	dlistfd_head_init(&pe->tx_list);
 	dlistfd_head_init(&pe->rx_list);
 	fastlock_init(&pe->lock);
-	pthread_mutex_init(&pe->list_lock, NULL);
+	fastlock_init(&pe->list_lock);
 	pe->domain = domain;
 
 	if (domain->progress_mode == FI_PROGRESS_AUTO) {
@@ -2667,7 +2667,7 @@ void sock_pe_finalize(struct sock_pe *pe)
 	}
 	
 	fastlock_destroy(&pe->lock);
-	pthread_mutex_destroy(&pe->list_lock);
+	fastlock_destroy(&pe->list_lock);
 	dlistfd_head_free(&pe->tx_list);
 	dlistfd_head_free(&pe->rx_list);
 	free(pe);

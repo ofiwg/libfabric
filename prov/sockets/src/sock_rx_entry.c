@@ -49,30 +49,54 @@
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
-/* FIXME: pool of rx_entry */
 struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 {
 	struct sock_rx_entry *rx_entry;
+	struct slist_entry *entry;
+	int i;
 
-	rx_entry = calloc(1, sizeof(*rx_entry));
-	if (!rx_entry)
-		return NULL;
+	if (rx_ctx->rx_entry_pool == NULL) {
+		rx_ctx->rx_entry_pool = calloc(rx_ctx->attr.size, sizeof (*rx_entry));
+		slist_init(&rx_ctx->pool_list);
+		
+		for (i = 0; i < rx_ctx->attr.size; i++) {
+			slist_insert_tail(&rx_ctx->rx_entry_pool[i].pool_entry,
+					  &rx_ctx->pool_list);
+			rx_ctx->rx_entry_pool[i].is_pool_entry = 1;
+		}
+	}
+
+	if (!slist_empty(&rx_ctx->pool_list)) {
+		entry = slist_remove_head(&rx_ctx->pool_list);
+		rx_entry = container_of(entry, struct sock_rx_entry, pool_entry);
+		rx_entry->rx_ctx = rx_ctx;
+		entry = slist_remove_head(&rx_ctx->pool_list);
+	} else {
+		rx_entry = calloc(1, sizeof(*rx_entry));
+		if (!rx_entry)
+			return NULL;
+	}
 	
 	rx_entry->is_tagged = 0;
 	SOCK_LOG_DBG("New rx_entry: %p, ctx: %p\n", rx_entry, rx_ctx);
 	dlist_init(&rx_entry->entry);
-
-	fastlock_acquire(&rx_ctx->lock);
 	rx_ctx->num_left--;
-	fastlock_release(&rx_ctx->lock);
-	
 	return rx_entry;
 }
 
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry)
 {
+	struct sock_rx_ctx *rx_ctx;
 	SOCK_LOG_DBG("Releasing rx_entry: %p\n", rx_entry);
-	free(rx_entry);
+	if (rx_entry->is_pool_entry) {
+		rx_ctx = rx_entry->rx_ctx;
+		memset(rx_entry, 0, sizeof *rx_entry);
+		rx_entry->rx_ctx =  rx_ctx;
+		rx_entry->is_pool_entry = 1;
+		slist_insert_head(&rx_entry->pool_entry, &rx_ctx->pool_list);
+	} else {
+		free(rx_entry);
+	}
 }
 
 struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,

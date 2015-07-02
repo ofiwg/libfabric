@@ -111,7 +111,9 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 					  msg->msg_iov, msg->iov_count);
 	}
 
+	fastlock_acquire(&rx_ctx->lock);
 	rx_entry = sock_rx_new_entry(rx_ctx);
+	fastlock_release(&rx_ctx->lock);
 	if (!rx_entry)
 		return -FI_ENOMEM;
 
@@ -449,7 +451,9 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 					  msg->msg_iov, msg->iov_count);
 	}
 
+	fastlock_acquire(&rx_ctx->lock);
 	rx_entry = sock_rx_new_entry(rx_ctx);
+	fastlock_release(&rx_ctx->lock);
 	if (!rx_entry)
 		return -FI_ENOMEM;
 

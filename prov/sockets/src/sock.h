@@ -537,7 +537,8 @@ struct sock_rx_entry {
 	uint8_t is_claimed;
 	uint8_t is_complete;
 	uint8_t is_tagged;
-	uint8_t reserved[3];
+	uint8_t is_pool_entry;
+	uint8_t reserved[2];
 
 	uint64_t used;
 	uint64_t total_len;
@@ -552,6 +553,8 @@ struct sock_rx_entry {
 	
 	union sock_iov iov[SOCK_EP_MAX_IOV_LIMIT];
 	struct dlist_entry entry;
+	struct slist_entry pool_entry;
+	struct sock_rx_ctx *rx_ctx;
 };
 
 struct sock_rx_ctx {
@@ -588,6 +591,8 @@ struct sock_rx_ctx {
 	fastlock_t lock;
 
 	struct fi_rx_attr attr;
+	struct sock_rx_entry *rx_entry_pool;
+	struct slist pool_list;
 };
 
 struct sock_tx_ctx {
@@ -769,7 +774,7 @@ struct sock_pe {
 	int num_free_entries;
 	struct sock_pe_entry pe_table[SOCK_PE_MAX_ENTRIES];
 	fastlock_t lock;
-	pthread_mutex_t list_lock;
+	fastlock_t list_lock;
 	int signal_fds[2];
 	uint64_t waittime;
 
