@@ -584,6 +584,23 @@ static int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags, struct rdm
 	rai->ai_qp_type = IBV_QPT_RC;
 	rai->ai_port_space = RDMA_PS_TCP;
 
+	switch(fi->addr_format) {
+	case FI_SOCKADDR_IN:
+		rai->ai_family = AF_INET;
+		break;
+	case FI_SOCKADDR_IN6:
+		rai->ai_family = AF_INET6;
+		break;
+	case FI_SOCKADDR_IB:
+		rai->ai_family = AF_IB;
+		break;
+	case FI_SOCKADDR:
+	case FI_FORMAT_UNSPEC:
+		break;
+	default:
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown fi->addr_format\n");
+	}
+
 	if (fi && fi->src_addrlen) {
 		if (!(rai->ai_src_addr = malloc(fi->src_addrlen)))
 			return -FI_ENOMEM;
@@ -602,19 +619,31 @@ static int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags, struct rdm
 
 static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
 {
- 	if (rai->ai_src_len) {
+	switch(rai->ai_family) {
+	case AF_INET:
+		fi->addr_format = FI_SOCKADDR_IN;
+		break;
+	case AF_INET6:
+		fi->addr_format = FI_SOCKADDR_IN6;
+		break;
+	case AF_IB:
+		fi->addr_format = FI_SOCKADDR_IB;
+		break;
+	default:
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown rai->ai_family\n");
+	}
+
+	if (rai->ai_src_len) {
  		if (!(fi->src_addr = malloc(rai->ai_src_len)))
  			return -FI_ENOMEM;
  		memcpy(fi->src_addr, rai->ai_src_addr, rai->ai_src_len);
  		fi->src_addrlen = rai->ai_src_len;
- 		fi->addr_format = FI_SOCKADDR;
  	}
  	if (rai->ai_dst_len) {
  		if (!(fi->dest_addr = malloc(rai->ai_dst_len)))
  			return -FI_ENOMEM;
  		memcpy(fi->dest_addr, rai->ai_dst_addr, rai->ai_dst_len);
  		fi->dest_addrlen = rai->ai_dst_len;
- 		fi->addr_format = FI_SOCKADDR;
  	}
 
  	return 0;
@@ -799,7 +828,7 @@ static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info)
 		fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP;
 		break;
 	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown transport type");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown transport type\n");
 		ret = -FI_ENODATA;
 		goto err;
 	}
@@ -889,6 +918,7 @@ fi_ibv_create_ep(const char *node, const char *service,
 		 struct rdma_addrinfo **rai, struct rdma_cm_id **id)
 {
 	struct rdma_addrinfo rai_hints, *_rai;
+	struct rdma_addrinfo **rai_current;
 	int ret;
 
 	ret = fi_ibv_fi_to_rai(hints, flags, &rai_hints);
@@ -906,6 +936,21 @@ fi_ibv_create_ep(const char *node, const char *service,
 				&rai_hints, &_rai);
 	if (ret)
 		return (errno == ENODEV) ? -FI_ENODATA : -errno;
+
+	/* Remove ib_rai entries added by IBACM to prevent wrong
+	 * ib_connect_hdr from being sent in connect request.
+	 * TODO Choose ib_rai if we came here from fi_endpoint */
+	for (rai_current = &_rai; *rai_current;) {
+		struct rdma_addrinfo *rai_next;
+		if ((*rai_current)->ai_family == AF_IB) {
+			rai_next = (*rai_current)->ai_next;
+			(*rai_current)->ai_next = NULL;
+			rdma_freeaddrinfo(*rai_current);
+			*rai_current = rai_next;
+			continue;
+		}
+		rai_current = &(*rai_current)->ai_next;
+	}
 
 	ret = rdma_create_ep(id, _rai, NULL, NULL);
 	if (ret) {
