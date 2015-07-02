@@ -427,6 +427,19 @@ below.
   provider generated packets that do not contain application data.
   Such received messages will indicate a transfer size of 0 bytes.
 
+  The buffer pointer given to all send and receive operations must point
+  to the start of the prefix region of the buffer (as opposed to the
+  payload).
+
+*FI_MSG_PREFIX_DEPRECATED*
+: Mimics the behavior of the FI_MSG_PREFIX flag in the 1.0 release.
+  The buffer pointer given to all receive operations must point to the
+  start of the allocated buffer, while the pointer given to all send
+  operations must point to the start of the payload.
+
+  FI_MSG_PREFIX_DEPRECATED is defined using the same value held by
+  FI_MSG_PREFIX in previous releases to maintain binary compatibility.
+
 *FI_ASYNC_IOV*
 : Applications can reference multiple data buffers as part of a single
   transmit operation through the use of IO vectors (SGEs).  Typically,

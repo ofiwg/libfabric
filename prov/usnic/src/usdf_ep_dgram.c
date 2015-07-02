@@ -455,7 +455,7 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 			udp->dom_fabric->fab_dev_attrs->uda_max_recv_credits;
 	}
 
-	if (ep->ep_mode & FI_MSG_PREFIX) {
+	if (ep->ep_mode & (FI_MSG_PREFIX | FI_MSG_PREFIX_DEPRECATED)) {
 		if (info->ep_attr == NULL) {
 			ret = -FI_EBADF;
 			goto fail;

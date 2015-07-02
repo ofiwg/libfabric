@@ -561,8 +561,8 @@ operation.
 ## msg_prefix_size - Message Prefix Size
 
 Specifies the size of any required message prefix buffer space.  This
-field will be 0 unless the FI_MSG_PREFIX mode is enabled.  If
-msg_prefix_size is > 0 the specified value will be a multiple of
+field will be 0 unless the FI_MSG_PREFIX or FI_MSG_PREFIX_DEPRECATED modes are
+enabled.  If msg_prefix_size is > 0 the specified value will be a multiple of
 8-bytes.
 
 ## Max RMA Ordered Size
