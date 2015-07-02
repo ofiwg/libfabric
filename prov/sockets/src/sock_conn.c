@@ -470,12 +470,12 @@ int sock_conn_listen(struct sock_ep *ep)
 		sprintf(service, "%s", listener->service);
 		if (gethostname(hostname, sizeof hostname) != 0) {
 			SOCK_LOG_DBG("gethostname failed!\n");
-			return -FI_EINVAL;
+			goto err;
 		}
 		ret = getaddrinfo(hostname, service, &ai, &rai);
 		if (ret) {
 			SOCK_LOG_DBG("getaddrinfo failed!\n");
-			return -FI_EINVAL;
+			goto err;
 		}
 		memcpy(ep->src_addr, (struct sockaddr_in *)rai->ai_addr,
 		       sizeof *ep->src_addr);
