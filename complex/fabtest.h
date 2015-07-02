@@ -107,9 +107,6 @@ struct ft_control {
 extern struct ft_xcontrol ft_rx, ft_tx;
 extern struct ft_control ft;
 
-/* Test must support all available versions */
-#define FT_VERSION	FI_VERSION(1, 0)
-
 enum {
 	FT_MAX_CAPS		= 64,
 	FT_MAX_EP_TYPES		= 8,

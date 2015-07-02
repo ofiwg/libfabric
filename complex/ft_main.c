@@ -323,7 +323,7 @@ static int ft_fw_server(void)
 		printf("Starting test %d-%d: ", test_info.test_index,
 			test_info.test_subindex);
 		ft_show_test_info();
-		ret = fi_getinfo(FT_VERSION, ft_strptr(test_info.node),
+		ret = fi_getinfo(FT_FIVERSION, ft_strptr(test_info.node),
 				 ft_strptr(test_info.service), FI_SOURCE,
 				 hints, &info);
 		if (ret) {
@@ -409,7 +409,7 @@ static int ft_fw_client(void)
 		ft_fw_convert_info(hints, &test_info);
 
 		printf("Starting test %d / %d\n", test_info.test_index, series->test_count);
-		ret = fi_getinfo(FT_VERSION, ft_strptr(test_info.node),
+		ret = fi_getinfo(FT_FIVERSION, ft_strptr(test_info.node),
 				 ft_strptr(test_info.service), 0, hints, &info);
 		if (ret) {
 			FT_PRINTERR("fi_getinfo", ret);
