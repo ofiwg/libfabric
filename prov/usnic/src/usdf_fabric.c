@@ -680,7 +680,7 @@ usdf_get_devinfo(void)
 	for (d = 0; d < dp->uu_num_devs; ++d) {
 		dep = &dp->uu_info[d];
 
-		ret = usd_open(dp->uu_devs[d].ude_devname, &dep->ue_dev);
+		ret = usd_open_for_attrs(dp->uu_devs[d].ude_devname, &dep->ue_dev);
 		if (ret != 0) {
 			continue;
 		}
