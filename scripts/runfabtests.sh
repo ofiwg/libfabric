@@ -358,7 +358,7 @@ if [[ $# -ne 3 ]]; then
 fi
 
 PROV=$1
-CLIENT=$2
-SERVER=$3
+SERVER=$2
+CLIENT=$3
 
 main ${TEST_TYPE}
