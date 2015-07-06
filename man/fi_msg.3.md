@@ -248,6 +248,15 @@ fi_sendmsg.
   known as the fenced operation, be deferred until all previous operations
   targeting the same target endpoint have completed.
 
+# NOTES
+
+If an endpoint has been configured with FI_MSG_PREFIX, the application
+must include buffer space of size msg_prefix_size, as specified by the
+endpoint attributes.  The prefix buffer must occur at the start of the
+data referenced by the buf parameter, or be referenced by the first IO vector.
+Message prefix space cannot be split between multiple IO vectors.  The size
+of the prefix buffer should be included as part of the total buffer length.
+
 # RETURN VALUE
 
 Returns 0 on success. On error, a negative value corresponding to fabric
