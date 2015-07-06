@@ -584,6 +584,9 @@ static int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags, struct rdm
 	rai->ai_qp_type = IBV_QPT_RC;
 	rai->ai_port_space = RDMA_PS_TCP;
 
+	if (!fi)
+		return 0;
+
 	switch(fi->addr_format) {
 	case FI_SOCKADDR_IN:
 		rai->ai_family = AF_INET;
@@ -601,13 +604,13 @@ static int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags, struct rdm
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown fi->addr_format\n");
 	}
 
-	if (fi && fi->src_addrlen) {
+	if (fi->src_addrlen) {
 		if (!(rai->ai_src_addr = malloc(fi->src_addrlen)))
 			return -FI_ENOMEM;
 		memcpy(rai->ai_src_addr, fi->src_addr, fi->src_addrlen);
 		rai->ai_src_len = fi->src_addrlen;
 	}
-	if (fi && fi->dest_addrlen) {
+	if (fi->dest_addrlen) {
 		if (!(rai->ai_dst_addr = malloc(fi->dest_addrlen)))
 			return -FI_ENOMEM;
 		memcpy(rai->ai_dst_addr, fi->dest_addr, fi->dest_addrlen);
@@ -640,8 +643,8 @@ static int fi_ibv_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
  		fi->src_addrlen = rai->ai_src_len;
  	}
  	if (rai->ai_dst_len) {
- 		if (!(fi->dest_addr = malloc(rai->ai_dst_len)))
- 			return -FI_ENOMEM;
+		if (!(fi->dest_addr = malloc(rai->ai_dst_len)))
+			return -FI_ENOMEM;
  		memcpy(fi->dest_addr, rai->ai_dst_addr, rai->ai_dst_len);
  		fi->dest_addrlen = rai->ai_dst_len;
  	}
@@ -923,7 +926,7 @@ fi_ibv_create_ep(const char *node, const char *service,
 
 	ret = fi_ibv_fi_to_rai(hints, flags, &rai_hints);
 	if (ret)
-		return ret;
+		goto out;
 
 	if (!node && !rai_hints.ai_dst_addr) {
 		if (!rai_hints.ai_src_addr) {
@@ -934,8 +937,10 @@ fi_ibv_create_ep(const char *node, const char *service,
 
 	ret = rdma_getaddrinfo((char *) node, (char *) service,
 				&rai_hints, &_rai);
-	if (ret)
-		return (errno == ENODEV) ? -FI_ENODATA : -errno;
+	if (ret) {
+		ret = (errno == ENODEV) ? -FI_ENODATA : -errno;
+		goto out;
+	}
 
 	/* Remove ib_rai entries added by IBACM to prevent wrong
 	 * ib_connect_hdr from being sent in connect request.
@@ -967,10 +972,15 @@ fi_ibv_create_ep(const char *node, const char *service,
 
 	if (rai) {
 		*rai = _rai;
-		return 0;
+		goto out;
 	}
 err:
 	rdma_freeaddrinfo(_rai);
+out:
+	if (rai_hints.ai_src_addr)
+		free(rai_hints.ai_src_addr);
+	if (rai_hints.ai_dst_addr)
+		free(rai_hints.ai_dst_addr);
 	return ret;
 }
 
