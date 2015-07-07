@@ -430,7 +430,9 @@ below.
 
   The buffer pointer given to all send and receive operations must point
   to the start of the prefix region of the buffer (as opposed to the
-  payload).
+  payload).  For scatter-gather send/recv operations, the prefix buffer
+  must be a contiguous region, though it may or may not be directly
+  adjacent to the payload portion of the buffer.
 
 *FI_ASYNC_IOV*
 : Applications can reference multiple data buffers as part of a single
