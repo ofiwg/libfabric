@@ -164,7 +164,7 @@ AS_IF([test "$icc_symver_hack"],
 [
 
 AC_TRY_LINK([],
-	[__asm__(".symver main_, main@@ABIVER_1.0");],
+	[__asm__(".symver main_, main@ABIVER_1.0");],
 	[
 		AC_MSG_RESULT(yes)
 		ac_asm_symver_support=1
