@@ -425,11 +425,14 @@ below.
   Providers are required to define a msg_prefix_size that is a
   multiple of 8 bytes.  Additionally, applications may receive
   provider generated packets that do not contain application data.
-  Such received messages will indicate a transfer size of 0 bytes.
+  Such received messages will indicate a transfer size of that is
+  equal to or smaller than msg_prefix_size.
 
   The buffer pointer given to all send and receive operations must point
   to the start of the prefix region of the buffer (as opposed to the
-  payload).
+  payload).  For scatter-gather send/recv operations, the prefix buffer
+  must be a contiguous region, though it may or may not be directly
+  adjacent to the payload portion of the buffer.
 
 *FI_ASYNC_IOV*
 : Applications can reference multiple data buffers as part of a single
