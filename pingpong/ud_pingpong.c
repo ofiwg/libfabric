@@ -104,7 +104,7 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr),
+	ret = fi_send(ep, buf, (size_t) size + prefix_len, fi_mr_desc(mr),
 			remote_fi_addr, NULL);
 	if (ret)
 		FT_PRINTERR("fi_send", ret);
@@ -554,8 +554,11 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "ht:" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "ht:P" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
+		case 'P':
+			hints->mode |= FI_MSG_PREFIX;
+			break;
 		case 't':
 			timeout = atoi(optarg);
 			break;
@@ -568,6 +571,7 @@ int main(int argc, char **argv)
 			ft_csusage(argv[0], "Ping pong client and server using UD.");
 			FT_PRINT_OPTS_USAGE("-t <timeout>",
 					"seconds before timeout on receive");
+			FT_PRINT_OPTS_USAGE("-P", "enable prefix mode");
 			return EXIT_FAILURE;
 		}
 	}
@@ -579,7 +583,7 @@ int main(int argc, char **argv)
 	if (opts.user_options & FT_OPT_SIZE)
 		hints->ep_attr->max_msg_size = opts.transfer_size;
 	hints->caps = FI_MSG;
-	hints->mode = FI_LOCAL_MR | FI_MSG_PREFIX;
+	hints->mode |= FI_LOCAL_MR;
 
 	ret = run();
 
