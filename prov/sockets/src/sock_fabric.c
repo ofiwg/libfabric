@@ -512,7 +512,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 		node = hostname;
 	}
 
-	if (!node && !service && !(flags & FI_SOURCE)) {
+	if (!node && !service && !(flags & FI_SOURCE) && !hints->dest_addr) {
 		gethostname(hostname, sizeof hostname);
 		node = hostname;
 	}
