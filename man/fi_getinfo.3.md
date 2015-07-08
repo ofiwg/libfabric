@@ -422,11 +422,10 @@ below.
   Applications that support prefix mode must supply buffer space
   before their own message data.  The size of space that must be
   provided is specified by the msg_prefix_size endpoint attribute.
-  Providers are required to define a msg_prefix_size that is a
-  multiple of 8 bytes.  Additionally, applications may receive
-  provider generated packets that do not contain application data.
-  Such received messages will indicate a transfer size of that is
-  equal to or smaller than msg_prefix_size.
+  Additionally, applications may receive provider generated packets
+  that do not contain application data.  Such received messages will
+  indicate a transfer size of that is equal to or smaller than
+  msg_prefix_size.
 
   The buffer pointer given to all send and receive operations must point
   to the start of the prefix region of the buffer (as opposed to the
