@@ -438,28 +438,26 @@ usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
 	struct usd_wq *wq;
 	uint32_t last_post;
 	struct usd_wq_post_info *info;
+	size_t padding;
 
 	ep = ep_ftou(fep);
 	dest = (struct usdf_dest *)(uintptr_t)dest_addr;
+	padding = USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
 
 	qp = to_qpi(ep->e.dg.ep_qp);
 	wq = &qp->uq_wq;
 
-	hdr = (struct usd_udp_hdr *) ((char *) buf +
-			(USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr)));
+	hdr = (struct usd_udp_hdr *) ((char *) buf + padding);
 	memcpy(hdr, &dest->ds_dest.ds_dest.ds_udp.u_hdr, sizeof(*hdr));
 
 	/* adjust lengths and insert source port */
-	hdr->uh_ip.tot_len = htons(len + sizeof(struct usd_udp_hdr) -
-		sizeof(struct ether_header));
-	hdr->uh_udp.len = htons((sizeof(struct usd_udp_hdr) -
-		sizeof(struct ether_header) -
-		sizeof(struct iphdr)) + len);
+	hdr->uh_ip.tot_len = htons(len - padding - sizeof(struct ether_header));
+	hdr->uh_udp.len = htons(len - padding - sizeof(struct ether_header) -
+				sizeof(struct iphdr));
 	hdr->uh_udp.source =
 		qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
 
-	last_post = _usd_post_send_one(wq, hdr,
-			len + sizeof(struct usd_udp_hdr), 1);
+	last_post = _usd_post_send_one(wq, hdr, len - padding, 1);
 
 	info = &wq->uwq_post_info[last_post];
 	info->wp_context = context;
