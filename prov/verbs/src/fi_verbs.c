@@ -178,7 +178,6 @@ static char def_rx_iov_limit[16] = "4";
 static char def_inject_size[16] = "64";
 
 const struct fi_fabric_attr verbs_fabric_attr = {
-	.name			= VERBS_PROV_NAME,
 	.prov_version		= VERBS_PROV_VERS,
 };
 
@@ -2468,6 +2467,10 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	info = fi_dupinfo(fi);
 	if (!info)
 		return NULL;
+
+	info->fabric_attr->fabric = &fab->fabric_fid;
+	if (!(info->fabric_attr->prov_name = strdup(VERBS_PROV_NAME)))
+		goto err;
 
 	fi_ibv_update_info(NULL, info);
 
