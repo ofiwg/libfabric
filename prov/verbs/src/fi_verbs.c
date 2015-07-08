@@ -2312,6 +2312,8 @@ err1:
 
 static void fi_ibv_free_msg_ep(struct fi_ibv_msg_ep *ep)
 {
+	if (ep->id)
+		rdma_destroy_ep(ep->id);
 	free(ep->tx_attr);
 	free(ep->rx_attr);
 	free(ep);
