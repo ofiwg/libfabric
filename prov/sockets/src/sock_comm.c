@@ -61,13 +61,15 @@
 static ssize_t sock_comm_send_socket(struct sock_conn *conn, const void *buf, size_t len)
 {
 	ssize_t ret;
-
-	ret = write(conn->sock_fd, buf, len);
+	
+	ret = send(conn->sock_fd, buf, len, 0);
 	if (ret < 0) {
-		SOCK_LOG_DBG("write %s\n", strerror(errno));
-		ret = 0;
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			ret = 0;
+		} else {
+			SOCK_LOG_DBG("write %s\n", strerror(errno));
+		}
 	}
-
 	SOCK_LOG_DBG("wrote to network: %lu\n", ret);
 	return ret;
 }
