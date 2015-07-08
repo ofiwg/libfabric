@@ -318,7 +318,7 @@ static struct fi_ops_msg usdf_dgram_prefix_ops = {
 	.send = usdf_dgram_prefix_send,
 	.sendv = usdf_dgram_prefix_sendv,
 	.sendmsg = usdf_dgram_prefix_sendmsg,
-	.inject = usdf_dgram_inject,
+	.inject = usdf_dgram_prefix_inject,
 	.senddata = usdf_dgram_senddata,
 	.injectdata = fi_no_msg_injectdata,
 };

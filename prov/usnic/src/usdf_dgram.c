@@ -317,6 +317,13 @@ usdf_dgram_inject(struct fid_ep *fep, const void *buf, size_t len,
 	return 0;
 }
 
+ssize_t usdf_dgram_prefix_inject(struct fid_ep *fep, const void *buf,
+		size_t len, fi_addr_t dest_addr)
+{
+	return usdf_dgram_inject(fep, buf + USDF_HDR_BUF_ENTRY,
+			len - USDF_HDR_BUF_ENTRY, dest_addr);
+}
+
 ssize_t usdf_dgram_rx_size_left(struct fid_ep *fep)
 {
 	struct usdf_ep *ep;
