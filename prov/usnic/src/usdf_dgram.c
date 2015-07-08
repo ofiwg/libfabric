@@ -516,8 +516,17 @@ usdf_dgram_prefix_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc
 		info->wp_context = context;
 		info->wp_len = len;
 	} else {
-		_usdf_dgram_send_iov_copy(ep, dest, iov, count, context);
+		/* _usdf_dgram_send_iov_copy isn't prefix aware and allocates
+		 * its own prefix. reorganize iov[0] base to point to data and
+		 * len to reflect data length.
+		 */
+		memcpy(send_iov, iov, sizeof(struct iovec) * count);
+		send_iov[0].iov_base = ((char *) send_iov[0].iov_base +
+				USDF_HDR_BUF_ENTRY);
+		send_iov[0].iov_len -= USDF_HDR_BUF_ENTRY;
+		_usdf_dgram_send_iov_copy(ep, dest, send_iov, count, context);
 	}
+
 	return 0;
 }
 
