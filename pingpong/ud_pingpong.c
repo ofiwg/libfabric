@@ -104,7 +104,7 @@ static int send_xfer(int size)
 
 	credits--;
 post:
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr),
+	ret = fi_send(ep, buf, (size_t) size + prefix_len, fi_mr_desc(mr),
 			remote_fi_addr, NULL);
 	if (ret)
 		FT_PRINTERR("fi_send", ret);
