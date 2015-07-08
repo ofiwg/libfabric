@@ -149,6 +149,30 @@ usdf_cq_readerr_soft(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 	return 1;
 }
 
+/* Completion lengths should reflect the length given by the application to the
+ * send/recv call. This means we need to update the lengths for both prefix and
+ * non-prefix send paths.
+ *
+ * Non-prefix: the application isn't aware of the usd_udp_hdr struct. Default
+ * completion semantics include this in the completion length since it is part
+ * of the send.
+ *
+ * Prefix: the application has allocated a buffer that includes the advertised
+ * prefix size. For performance reasons our advertised prefix size is not the
+ * same size as hour headers. To reflect the correct size we need to add the
+ * size of the padding.
+ */
+static inline void usdf_cq_adjust_len(struct usd_completion *src,
+		size_t *len)
+{
+	struct usdf_ep *ep = src->uc_qp->uq_context;
+
+	if (ep->ep_mode & FI_MSG_PREFIX)
+		*len += (USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr));
+	else
+		*len -= sizeof(struct usd_udp_hdr);
+}
+
 static inline ssize_t
 usdf_cq_copy_cq_entry(void *dst, struct usd_completion *src,
 			enum fi_cq_format format)
@@ -167,6 +191,9 @@ usdf_cq_copy_cq_entry(void *dst, struct usd_completion *src,
 		msg_entry->op_context = src->uc_context;
 		msg_entry->flags = usdf_cqe_to_flags(src);
 		msg_entry->len = src->uc_bytes;
+
+		usdf_cq_adjust_len(src, &msg_entry->len);
+
 		break;
 	case FI_CQ_FORMAT_DATA:
 		data_entry = (struct fi_cq_data_entry *)dst;
@@ -175,6 +202,9 @@ usdf_cq_copy_cq_entry(void *dst, struct usd_completion *src,
 		data_entry->len = src->uc_bytes;
 		data_entry->buf = 0; /* XXX */
 		data_entry->data = 0;
+
+		usdf_cq_adjust_len(src, &msg_entry->len);
+
 		break;
 	default:
 		USDF_WARN("unexpected CQ format, internal error\n");
