@@ -148,7 +148,11 @@ void sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len)
 
 void sock_tx_ctx_commit(struct sock_tx_ctx *tx_ctx)
 {
-	rbfdcommit(&tx_ctx->rbfd);
+	if (tx_ctx->domain->progress_mode == FI_PROGRESS_MANUAL) {
+		rbcommit(&tx_ctx->rbfd.rb);
+	} else {
+		rbfdcommit(&tx_ctx->rbfd);
+	}
 	fastlock_release(&tx_ctx->wlock);
 }
 

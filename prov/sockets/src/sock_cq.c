@@ -135,7 +135,11 @@ static ssize_t _sock_cq_write(struct sock_cq *cq, fi_addr_t addr,
 	rbcommit(&cq->addr_rb);
 
 	rbfdwrite(&cq->cq_rbfd, buf, len);
-	rbfdcommit(&cq->cq_rbfd);
+	if (cq->domain->progress_mode == FI_PROGRESS_MANUAL) {
+		rbcommit(&cq->cq_rbfd.rb);
+	} else {
+		rbfdcommit(&cq->cq_rbfd);
+	}
 	ret = len;
 
 	if (cq->signal) 
@@ -227,7 +231,11 @@ static inline void sock_cq_copy_overflow_list(struct sock_cq *cq, size_t count)
 		rbcommit(&cq->addr_rb);
 
 		rbfdwrite(&cq->cq_rbfd, &overflow_entry->cq_entry[0], overflow_entry->len);
-		rbfdcommit(&cq->cq_rbfd);
+		if (cq->domain->progress_mode == FI_PROGRESS_MANUAL) {
+			rbcommit(&cq->cq_rbfd.rb);
+		} else {
+			rbfdcommit(&cq->cq_rbfd);
+		}
 		dlist_remove(&overflow_entry->entry);
 		free(overflow_entry);
 	}
