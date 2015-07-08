@@ -2468,6 +2468,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	if (!info)
 		return NULL;
 
+	info->fabric_attr->fabric = &fab->fabric_fid;
 	if (!(info->fabric_attr->prov_name = strdup(VERBS_PROV_NAME)))
 		goto err;
 
