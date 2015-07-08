@@ -424,9 +424,11 @@ static void sock_pe_progress_pending_ack(struct sock_pe *pe,
 	}
 	
 	if (pe_entry->total_len == pe_entry->done_len && !pe_entry->rem) {
+		sock_comm_flush(pe_entry->conn);
+		if (!sock_comm_tx_done(pe_entry->conn))
+			return;
 		pe_entry->is_complete = 1;
 		pe_entry->pe.rx.pending_send = 0;
-		sock_comm_flush(pe_entry->conn);
 		pe_entry->conn->tx_pe_entry = NULL;
 	}
 }
@@ -1714,13 +1716,16 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 			len += (pe_entry->pe.tx.tx_iov[i].src.ioc.count * datatype_sz);
 		}
 	}
+
+	sock_comm_flush(pe_entry->conn);
+	if (!sock_comm_tx_done(pe_entry->conn))
+		return 0;
 	
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
 		pe_entry->conn->tx_pe_entry = NULL;
 		SOCK_LOG_DBG("Send complete\n");		
 	}
-	sock_comm_flush(pe_entry->conn);
 
 	pe_entry->flags |= FI_ATOMIC;
 	if (pe_entry->pe.tx.tx_op.atomic.op == FI_ATOMIC_READ)
@@ -1780,12 +1785,15 @@ static int sock_pe_progress_tx_write(struct sock_pe *pe,
 		}
 	}
 
+	sock_comm_flush(pe_entry->conn);
+	if (!sock_comm_tx_done(pe_entry->conn))
+		return 0;
+
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
 		pe_entry->conn->tx_pe_entry = NULL;
 		SOCK_LOG_DBG("Send complete\n");		
 	}
-	sock_comm_flush(pe_entry->conn);
 	pe_entry->flags |= (FI_RMA | FI_WRITE);
 	pe_entry->msg_hdr.flags = pe_entry->flags;
 	return 0;
@@ -1817,12 +1825,15 @@ static int sock_pe_progress_tx_read(struct sock_pe *pe,
 		return 0;
 	len += src_iov_len;
 
+	sock_comm_flush(pe_entry->conn);
+	if (!sock_comm_tx_done(pe_entry->conn))
+		return 0;
+
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
 		pe_entry->conn->tx_pe_entry = NULL;
 		SOCK_LOG_DBG("Send complete\n");		
 	}
-	sock_comm_flush(pe_entry->conn);
 	pe_entry->flags |= (FI_RMA | FI_READ);
 	pe_entry->msg_hdr.flags = pe_entry->flags;
 	return 0;
@@ -1871,6 +1882,9 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 	}
 	
 	sock_comm_flush(pe_entry->conn);
+	if (!sock_comm_tx_done(pe_entry->conn))
+		return 0;
+
 	if (pe_entry->pe.tx.tx_op.op == SOCK_OP_TSEND)
 		pe_entry->flags |= FI_TAGGED;
 	pe_entry->flags |= (FI_MSG | FI_SEND);

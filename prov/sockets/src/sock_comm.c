@@ -102,6 +102,11 @@ ssize_t sock_comm_flush(struct sock_conn *conn)
 	return (ret1 > 0) ? ret1 + ret2 : 0;
 }
 
+int sock_comm_tx_done(struct sock_conn *conn)
+{
+	return rbempty(&conn->outbuf);
+}
+
 ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len)
 {
 	ssize_t ret, used;

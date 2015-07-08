@@ -1083,6 +1083,7 @@ ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len);
 ssize_t sock_comm_discard(struct sock_conn *conn, size_t len);
 ssize_t sock_comm_data_avail(struct sock_conn *conn);
 ssize_t sock_comm_flush(struct sock_conn *conn);
+int sock_comm_tx_done(struct sock_conn *conn);
 
 ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, 
 			uint64_t flags);
