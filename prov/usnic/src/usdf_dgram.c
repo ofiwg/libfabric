@@ -131,30 +131,31 @@ usdf_dgram_recvmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 		msg->iov_count, (fi_addr_t)msg->addr, msg->context);
 }
 
-static inline ssize_t
-_usdf_dgram_send(struct usdf_ep *ep, struct usdf_dest *dest,
-		const void *buf, size_t len,  void *context)
-{
-	if (len <= USD_SEND_MAX_COPY - sizeof(struct usd_udp_hdr)) {
-		return usd_post_send_one_copy(ep->e.dg.ep_qp,
-			&dest->ds_dest, buf, len, USD_SF_SIGNAL, context);
-	} else {
-		return usd_post_send_one(ep->e.dg.ep_qp, &dest->ds_dest,
-			buf, len, USD_SF_SIGNAL, context);
-	}
-}
-
 ssize_t
 usdf_dgram_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, void *context)
 {
-	struct usdf_ep *ep;
 	struct usdf_dest *dest;
+	struct usdf_ep *ep;
 
 	ep = ep_ftou(fep);
-
 	dest = (struct usdf_dest *)(uintptr_t) dest_addr;
-	return _usdf_dgram_send(ep, dest, buf, len, context);
+
+	if (len + sizeof(struct usd_udp_hdr) <= USD_SEND_MAX_COPY) {
+		return usd_post_send_one_copy(ep->e.dg.ep_qp, &dest->ds_dest,
+						buf, len, ep->ep_tx_completion,
+						context);
+	} else if (ep->e.dg.tx_op_flags & FI_INJECT) {
+		USDF_DBG_SYS(EP_DATA,
+				"given inject length (%zu) exceeds max inject length (%d)\n",
+				len + sizeof(struct usd_udp_hdr),
+				USD_SEND_MAX_COPY);
+
+		return -FI_ENOSPC;
+	}
+
+	return usd_post_send_one(ep->e.dg.ep_qp, &dest->ds_dest, buf, len,
+				ep->ep_tx_completion, context);
 }
 
 ssize_t
