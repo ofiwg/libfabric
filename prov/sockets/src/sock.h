@@ -570,6 +570,7 @@ struct sock_rx_ctx {
 	uint16_t buffered_len;
 	uint16_t min_multi_recv;
 	uint16_t num_left;
+	uint8_t is_ctrl_ctx;
 	uint8_t reserved[5];
 
 	uint64_t addr;
@@ -612,6 +613,7 @@ struct sock_tx_ctx {
 
 	uint64_t addr;
 	struct sock_comp comp;
+	struct sock_rx_ctx *rx_ctrl_ctx;
 
 	struct sock_ep *ep;
 	struct sock_av *av;
@@ -985,6 +987,7 @@ struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr, void *conte
 void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx);
 
 struct sock_tx_ctx *sock_tx_ctx_alloc(const struct fi_tx_attr *attr, void *context);
+struct sock_tx_ctx *sock_stx_ctx_alloc(const struct fi_tx_attr *attr, void *context);
 void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx);
 void sock_tx_ctx_start(struct sock_tx_ctx *tx_ctx);
 void sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len);

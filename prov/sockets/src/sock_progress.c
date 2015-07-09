@@ -64,6 +64,22 @@
 #define SOCK_GET_RX_ID(_addr, _bits) ((_bits) == 0) ? 0 : \
 	(((uint64_t)_addr) >> (64 - _bits))
 
+static inline int sock_pe_is_data_msg(int msg_id)
+{
+	switch (msg_id) {
+	case SOCK_OP_SEND:
+	case SOCK_OP_TSEND:
+	case SOCK_OP_WRITE:
+	case SOCK_OP_READ:
+	case SOCK_OP_ATOMIC:
+		return 1;
+	default:
+		goto out;
+	}
+out:
+	return 0;
+}
+
 static inline ssize_t sock_pe_send_field(struct sock_pe_entry *pe_entry,
 					 void * field, size_t field_len, 
 					 size_t start_offset)
@@ -1627,7 +1643,11 @@ static int sock_pe_read_hdr(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	if (sock_pe_peek_hdr(pe, pe_entry))
 		return 0;
 	
-	if (msg_hdr->rx_id != rx_ctx->rx_id)
+	if (rx_ctx->is_ctrl_ctx && sock_pe_is_data_msg(msg_hdr->op_type))
+		return -1;
+	
+	if (sock_pe_is_data_msg(msg_hdr->op_type) &&  
+	    msg_hdr->rx_id != rx_ctx->rx_id)
 		return -1;
 	
 	if (sock_pe_recv_field(pe_entry, (void*)msg_hdr, 
@@ -2085,7 +2105,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 		msg_hdr->msg_len += sizeof(pe_entry->tag);
 	}
 
-	if (ep && tx_ctx->fid.stx.fid.fclass == FI_CLASS_STX_CTX)
+	if (ep && tx_ctx->fclass == FI_CLASS_STX_CTX)
 		pe_entry->comp = &ep->comp;
 	else
 		pe_entry->comp = &tx_ctx->comp;
@@ -2374,6 +2394,32 @@ out:
 	return ret;
 }
 
+void sock_pe_progress_rx_ctrl_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
+				  struct sock_tx_ctx *tx_ctx)
+{
+	struct sock_ep *ep;
+	struct dlist_entry *entry;
+	struct sock_pe_entry *pe_entry;
+
+	/* check for incoming data */
+	if (tx_ctx->fclass == FI_CLASS_STX_CTX) {
+		for (entry = tx_ctx->ep_list.next; entry != &tx_ctx->ep_list; ) {
+			ep = container_of(entry, struct sock_ep, tx_ctx_entry);
+			entry = entry->next;
+			sock_pe_progress_rx_ep(pe, ep, tx_ctx->rx_ctrl_ctx);
+		}
+	} else {
+		sock_pe_progress_rx_ep(pe, tx_ctx->ep, tx_ctx->rx_ctrl_ctx);
+	}
+	
+	for (entry = rx_ctx->pe_entry_list.next;
+	     entry != &rx_ctx->pe_entry_list;) {
+		pe_entry = container_of(entry, struct sock_pe_entry, ctx_entry);
+		entry = entry->next;
+		sock_pe_progress_rx_pe_entry(pe, pe_entry, rx_ctx);
+	}
+}
+
 int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 {
 	int ret = 0;
@@ -2408,9 +2454,10 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 		if (pe_entry->is_complete) {
 			sock_pe_release_entry(pe, pe_entry);
 			SOCK_LOG_DBG("[%p] TX done\n", pe_entry);
+		} else if (pe_entry->pe.tx.send_done) {
+			sock_pe_progress_rx_ctrl_ctx(pe, tx_ctx->rx_ctrl_ctx, tx_ctx);
 		}
 	}
-		
 out:	
 	if (ret < 0) 
 		SOCK_LOG_ERROR("failed to progress TX ctx\n");

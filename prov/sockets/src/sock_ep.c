@@ -1195,13 +1195,11 @@ int sock_stx_ctx(struct fid_domain *domain,
 
 	dom = container_of(domain, struct sock_domain, dom_fid);
 	
-	tx_ctx = sock_tx_ctx_alloc(attr ? attr : &sock_stx_attr, context);
+	tx_ctx = sock_stx_ctx_alloc(attr ? attr : &sock_stx_attr, context);
 	if (!tx_ctx)
 		return -FI_ENOMEM;
 
 	tx_ctx->domain = dom;
-	tx_ctx->fid.stx.fid.fclass = FI_CLASS_STX_CTX;
-
 	tx_ctx->fid.stx.fid.ops = &sock_ctx_ops;
 	tx_ctx->fid.stx.ops = &sock_ep_ops;
 	atomic_inc(&dom->ref);

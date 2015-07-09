@@ -71,7 +71,8 @@ struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr, void *conte
 void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx)
 {
 	fastlock_destroy(&rx_ctx->lock);
-	free(rx_ctx->rx_entry_pool);
+	if (rx_ctx->rx_entry_pool)
+		free(rx_ctx->rx_entry_pool);
 	free(rx_ctx);
 }
 
@@ -79,6 +80,7 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 					     void *context, size_t fclass)
 {
 	struct sock_tx_ctx *tx_ctx;
+	struct fi_rx_attr rx_attr = {0};
 
 	tx_ctx = calloc(sizeof(*tx_ctx), 1);
 	if (!tx_ctx)
@@ -104,16 +106,23 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 	case FI_CLASS_TX_CTX:
 		tx_ctx->fid.ctx.fid.fclass = FI_CLASS_TX_CTX;
 		tx_ctx->fid.ctx.fid.context = context;
+		tx_ctx->fclass = FI_CLASS_TX_CTX;
 		break;
 	case FI_CLASS_STX_CTX:
 		tx_ctx->fid.stx.fid.fclass = FI_CLASS_STX_CTX;
 		tx_ctx->fid.stx.fid.context = context;
+		tx_ctx->fclass = FI_CLASS_STX_CTX;
 		break;
 	default:
 		goto err;
 	}
 	tx_ctx->attr = *attr;		
 	tx_ctx->attr.op_flags |= FI_TRANSMIT_COMPLETE;
+
+	tx_ctx->rx_ctrl_ctx = sock_rx_ctx_alloc(&rx_attr, NULL);
+	if (!tx_ctx->rx_ctrl_ctx)
+		goto err;
+	tx_ctx->rx_ctrl_ctx->is_ctrl_ctx = 1;
 	return tx_ctx;
 
 err:
@@ -127,12 +136,18 @@ struct sock_tx_ctx *sock_tx_ctx_alloc(const struct fi_tx_attr *attr, void *conte
 	return sock_tx_context_alloc(attr, context, FI_CLASS_TX_CTX);
 }
 
+struct sock_tx_ctx *sock_stx_ctx_alloc(const struct fi_tx_attr *attr, void *context)
+{
+	return sock_tx_context_alloc(attr, context, FI_CLASS_STX_CTX);
+}
+
 void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx)
 {
 	fastlock_destroy(&tx_ctx->rlock);
 	fastlock_destroy(&tx_ctx->wlock);
 	fastlock_destroy(&tx_ctx->lock);
 	rbfdfree(&tx_ctx->rbfd);
+	sock_rx_ctx_free(tx_ctx->rx_ctrl_ctx);
 	free(tx_ctx);
 }
 
