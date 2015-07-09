@@ -281,7 +281,6 @@ usdf_fill_info_dgram(
 	struct fi_rx_attr *rxattr;
 	struct fi_ep_attr *eattrp;
 	uint32_t addr_format;
-	size_t entries;
 	int ret;
 
 	fi = fi_allocinfo();
@@ -333,33 +332,13 @@ usdf_fill_info_dgram(
 	txattr->iov_limit = USDF_DGRAM_DFLT_SGE;
 	txattr->size = dap->uda_max_send_credits / USDF_DGRAM_DFLT_SGE;
 	if (hints != NULL && hints->tx_attr != NULL) {
-		if (hints->tx_attr->iov_limit > USDF_MSG_MAX_SGE) {
+		if (hints->tx_attr->iov_limit > USDF_MSG_DFLT_SGE) {
 			ret = -FI_ENODATA;
 			goto fail;
 		}
-		if (hints->tx_attr->iov_limit != 0) {
-			txattr->iov_limit = hints->tx_attr->iov_limit;
-			entries = hints->tx_attr->size * txattr->iov_limit;
-			if (entries > dap->uda_max_send_credits) {
-				ret = -FI_ENODATA;
-				goto fail;
-			} else if (entries == 0) {
-				txattr->size = dap->uda_max_send_credits /
-					txattr->iov_limit;
-			} else {
-				txattr->size = hints->tx_attr->size;
-			}
-		} else if (hints->tx_attr->size != 0) {
-			txattr->size = hints->tx_attr->size;
-			if (txattr->size > dap->uda_max_send_credits) {
-				ret = -FI_ENODATA;
-				goto fail;
-			}
-			entries = txattr->size * txattr->iov_limit;
-			if (entries > dap->uda_max_send_credits) {
-				txattr->iov_limit = dap->uda_max_send_credits /
-					txattr->size;
-			}
+		if (hints->tx_attr->size > dap->uda_max_send_credits) {
+			ret = -FI_ENODATA;
+			goto fail;
 		}
 		txattr->op_flags = hints->tx_attr->op_flags;
 	}
@@ -369,33 +348,13 @@ usdf_fill_info_dgram(
 	rxattr->iov_limit = USDF_DGRAM_DFLT_SGE;
 	rxattr->size = dap->uda_max_recv_credits / USDF_DGRAM_DFLT_SGE;
 	if (hints != NULL && hints->rx_attr != NULL) {
-		if (hints->rx_attr->iov_limit > USDF_MSG_MAX_SGE) {
+		if (hints->rx_attr->iov_limit > USDF_MSG_DFLT_SGE) {
 			ret = -FI_ENODATA;
 			goto fail;
 		}
-		if (hints->rx_attr->iov_limit != 0) {
-			rxattr->iov_limit = hints->rx_attr->iov_limit;
-			entries = hints->rx_attr->size * rxattr->iov_limit;
-			if (entries > dap->uda_max_recv_credits) {
-				ret = -FI_ENODATA;
-				goto fail;
-			} else if (entries == 0) {
-				rxattr->size = dap->uda_max_recv_credits /
-					rxattr->iov_limit;
-			} else {
-				rxattr->size = hints->rx_attr->size;
-			}
-		} else if (hints->rx_attr->size != 0) {
-			rxattr->size = hints->rx_attr->size;
-			if (rxattr->size > dap->uda_max_recv_credits) {
-				ret = -FI_ENODATA;
-				goto fail;
-			}
-			entries = rxattr->size * rxattr->iov_limit;
-			if (entries > dap->uda_max_recv_credits) {
-				rxattr->iov_limit = dap->uda_max_recv_credits /
-					rxattr->size;
-			}
+		if (hints->rx_attr->size > dap->uda_max_recv_credits) {
+			ret = -FI_ENODATA;
+			goto fail;
 		}
 		rxattr->op_flags = hints->rx_attr->op_flags;
 	}
