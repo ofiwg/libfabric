@@ -491,7 +491,7 @@ static int run(void)
 
 	run_test();
 	/* TODO: Add a local finalize applicable to shared ctx */
-	//ft_finalize(ep[0], scq, rcq, remote_fi_addr[0]);
+	//ft_finalize(ep[0], scq, rcq, remote_fi_addr[0], 0);
 out:
 	free_ep_res();
 	fi_close(&dom->fid);
