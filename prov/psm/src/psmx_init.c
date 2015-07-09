@@ -485,7 +485,7 @@ PSM_INI
 			"Whether to use tagged messages for large size "
 			"RMA or not (default: yes)");
 
-	fi_param_define(&psmx_prov, "uuid", FI_PARAM_INT,
+	fi_param_define(&psmx_prov, "uuid", FI_PARAM_STRING,
 			"Unique Job ID required by the fabric");
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
