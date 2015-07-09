@@ -80,6 +80,8 @@ static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 	struct psmx_fid_ep *ep;
 	psm_mq_status_t status;
 	struct fi_context *fi_context = context;
+	uint64_t flags;
+	struct psmx_cq_event *event;
 	int err;
 
 	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
@@ -89,9 +91,38 @@ static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 	if (!fi_context)
 		return -FI_EINVAL;
 
+	switch (PSMX_CTXT_TYPE(fi_context)) {
+	case PSMX_TRECV_CONTEXT:
+		flags = FI_RECV | FI_TAGGED;
+		break;
+	case PSMX_RECV_CONTEXT:
+	case PSMX_MULTI_RECV_CONTEXT:
+		flags = FI_RECV | FI_MSG;
+		break;
+	default:
+		return  -FI_EOPNOTSUPP;
+	}
+
 	err = psm_mq_cancel((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context));
-	if (err == PSM_OK)
+	if (err == PSM_OK) {
 		err = psm_mq_test((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context), &status);
+		if (err == PSM_OK && ep->recv_cq) {
+			event = psmx_cq_create_event(
+					ep->recv_cq,
+					status.context,
+					NULL,	/* buf */
+					flags,
+					0,	/* len */
+					0,	/* data */
+					0,	/* tag */
+					0	/* olen */,
+					-FI_ECANCELED);
+			if (event)
+				psmx_cq_enqueue_event(ep->recv_cq, event);
+			else
+				return -FI_ENOMEM;
+		}
+	}
 
 	return psmx_errno(err);
 }
