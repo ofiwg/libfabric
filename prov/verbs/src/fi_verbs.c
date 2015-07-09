@@ -37,6 +37,7 @@
 #include <asm/types.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <stdio.h>
@@ -1086,6 +1087,7 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 	}
 
 	ret = fi_ibv_get_matching_info(check_info, hints, rai, info);
+
 err:
 	rdma_destroy_ep(id);
 	rdma_freeaddrinfo(rai);
@@ -2149,6 +2151,7 @@ fi_ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
 {
 	struct fi_ibv_msg_ep *_ep;
 	struct rdma_conn_param conn_param;
+	struct sockaddr *src_addr, *dst_addr;
 	int ret;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
@@ -2166,6 +2169,20 @@ fi_ibv_msg_ep_connect(struct fid_ep *ep, const void *addr,
 	conn_param.flow_control = 1;
 	conn_param.retry_count = 15;
 	conn_param.rnr_retry_count = 7;
+
+	src_addr = rdma_get_local_addr(_ep->id);
+	if (src_addr) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "src_addr: %s:%d\n",
+			inet_ntoa(((struct sockaddr_in *)src_addr)->sin_addr),
+			ntohs(((struct sockaddr_in *)src_addr)->sin_port));
+	}
+
+	dst_addr = rdma_get_peer_addr(_ep->id);
+	if (dst_addr) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "dst_addr: %s:%d\n",
+			inet_ntoa(((struct sockaddr_in *)dst_addr)->sin_addr),
+			ntohs(((struct sockaddr_in *)dst_addr)->sin_port));
+	}
 
 	return rdma_connect(_ep->id, &conn_param) ? -errno : 0;
 }
@@ -2370,12 +2387,16 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	int ret;
 
 	dom = container_of(domain, struct fi_ibv_domain, domain_fid);
-	if (strcmp(dom->verbs->device->name, info->domain_attr->name))
+	if (strcmp(dom->verbs->device->name, info->domain_attr->name)) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Invalid info->domain_attr->name\n");
 		return -FI_EINVAL;
+	}
 
 	fi = fi_ibv_search_verbs_info(NULL, info->domain_attr->name);
-	if (!fi)
+	if (!fi) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to find matching verbs_info\n");
 		return -FI_EINVAL;
+	}
 
 	if (info->ep_attr) {
 		ret = fi_ibv_check_ep_attr(info->ep_attr, fi);
@@ -2485,6 +2506,14 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	if (!(info->dest_addr = malloc(info->dest_addrlen)))
 		goto err;
 	memcpy(info->dest_addr, rdma_get_peer_addr(event->id), info->dest_addrlen);
+
+	FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "src_addr: %s:%d\n",
+		inet_ntoa(((struct sockaddr_in *)info->src_addr)->sin_addr),
+		ntohs(((struct sockaddr_in *)info->src_addr)->sin_port));
+
+	FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "dst_addr: %s:%d\n",
+		inet_ntoa(((struct sockaddr_in *)info->dest_addr)->sin_addr),
+		ntohs(((struct sockaddr_in *)info->dest_addr)->sin_port));
 
 	connreq = calloc(1, sizeof *connreq);
 	if (!connreq)
@@ -3364,8 +3393,17 @@ static int fi_ibv_pep_getname(fid_t pep, void *addr, size_t *addrlen)
 static int fi_ibv_pep_listen(struct fid_pep *pep)
 {
 	struct fi_ibv_pep *_pep;
+	struct sockaddr *addr;
 
 	_pep = container_of(pep, struct fi_ibv_pep, pep_fid);
+
+	addr = rdma_get_local_addr(_pep->id);
+	if (addr) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Listening on %s:%d\n",
+			inet_ntoa(((struct sockaddr_in *)addr)->sin_addr),
+			ntohs(((struct sockaddr_in *)addr)->sin_port));
+	}
+
 	return rdma_listen(_pep->id, 0) ? -errno : 0;
 }
 
