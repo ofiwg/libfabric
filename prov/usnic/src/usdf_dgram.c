@@ -230,37 +230,27 @@ _usdf_dgram_send_iov_copy(struct usdf_ep *ep, struct usd_dest *dest,
  	struct usd_qp_impl *qp;
 	struct usd_udp_hdr *hdr;
 	uint32_t last_post;
-	struct usd_wq_post_info *info;
-	uint8_t *copybuf;
 	size_t len;
 	unsigned i;
 
 	qp = to_qpi(ep->e.dg.ep_qp);
 	wq = &qp->uq_wq;
-	copybuf = wq->uwq_copybuf +
-			wq->uwq_post_index * USD_SEND_MAX_COPY;
 
-	hdr = (struct usd_udp_hdr *)copybuf;
+	hdr = _usdf_find_hdr(wq);
 	memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
-	hdr->uh_udp.source =
-		qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
 
-	len = sizeof(*hdr);
+	len = 0;
 	for (i = 0; i < count; i++) {
-		memcpy(copybuf + len, iov[i].iov_base, iov[i].iov_len);
+		memcpy((char *) hdr + sizeof(*hdr) + len, iov[i].iov_base,
+				iov[i].iov_len);
 		len += iov[i].iov_len;
 	}
 
-	/* adjust lengths */
-	hdr->uh_ip.tot_len = htons(len - sizeof(struct ether_header));
-	hdr->uh_udp.len = htons(len - sizeof(struct ether_header) -
-			sizeof(struct iphdr));
+	_usdf_adjust_hdr(hdr, qp, len);
 
-	last_post = _usd_post_send_one(wq, hdr, len, cq_entry);
+	last_post = _usd_post_send_one(wq, hdr, len + sizeof(*hdr), cq_entry);
 
-	info = &wq->uwq_post_info[last_post];
-	info->wp_context = context;
-	info->wp_len = len;
+	_usdf_adjust_post_info(wq, last_post, context, len + sizeof(*hdr));
 
 	return 0;
 }
