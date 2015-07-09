@@ -62,7 +62,7 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn, const void *buf, si
 {
 	ssize_t ret;
 	
-	ret = send(conn->sock_fd, buf, len, 0);
+	ret = write(conn->sock_fd, buf, len);
 	if (ret < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			ret = 0;

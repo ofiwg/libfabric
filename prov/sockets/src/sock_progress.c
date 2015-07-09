@@ -74,10 +74,8 @@ static inline int sock_pe_is_data_msg(int msg_id)
 	case SOCK_OP_ATOMIC:
 		return 1;
 	default:
-		goto out;
+		return 0;
 	}
-out:
-	return 0;
 }
 
 static inline ssize_t sock_pe_send_field(struct sock_pe_entry *pe_entry,

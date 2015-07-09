@@ -266,6 +266,7 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 	struct addrinfo hints;
 	char sa_ip[INET_ADDRSTRLEN] = {0};
 	char sa_port[NI_MAXSERV] = {0};
+	char hostname[HOST_NAME_MAX] = {0};
 
 	pep->cm.do_listen = 1;
 
@@ -316,6 +317,26 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 			return -FI_EINVAL;
 		pep->src_addr.sin_port = addr.sin_port;
 	}
+
+	if (pep->src_addr.sin_addr.s_addr == 0) {
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+
+		if (gethostname(hostname, sizeof hostname) != 0) {
+			SOCK_LOG_DBG("gethostname failed!\n");
+			return -FI_EINVAL;
+		}
+		ret = getaddrinfo(hostname, sa_port, &hints, &s_res);
+		if (ret) {
+			SOCK_LOG_DBG("getaddrinfo failed!\n");
+			return -FI_EINVAL;
+		}
+		memcpy(&pep->src_addr, (struct sockaddr_in *)s_res->ai_addr,
+		       sizeof pep->src_addr);
+		freeaddrinfo(s_res);
+	}
+
 	
 	SOCK_LOG_DBG("Listener thread bound to %s:%d\n",
 		      sa_ip, ntohs(pep->src_addr.sin_port));
