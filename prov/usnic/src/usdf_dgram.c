@@ -516,18 +516,33 @@ ssize_t
 usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
 		void *desc, fi_addr_t dest_addr, void *context)
 {
-	struct usdf_ep *ep;
-	struct usdf_dest *dest;
-	struct usd_qp_impl *qp;
 	struct usd_udp_hdr *hdr;
+	struct usd_qp_impl *qp;
+	struct usdf_dest *dest;
+	struct usdf_ep *ep;
 	struct usd_wq *wq;
 	uint32_t last_post;
-	struct usd_wq_post_info *info;
+	uint32_t flags;
 	size_t padding;
 
 	ep = ep_ftou(fep);
-	dest = (struct usdf_dest *)(uintptr_t)dest_addr;
+	dest = (struct usdf_dest *)(uintptr_t) dest_addr;
 	padding = USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
+	flags = (ep->ep_tx_completion) ? USD_SF_SIGNAL : 0;
+
+	if (ep->e.dg.tx_op_flags & FI_INJECT) {
+		if ((len - padding) > USD_SEND_MAX_COPY) {
+			USDF_DBG_SYS(EP_DATA,
+					"given inject length (%zu) exceeds max inject length (%d)\n",
+					len, USD_SEND_MAX_COPY);
+			return -FI_ENOSPC;
+		}
+
+		return usd_post_send_one_copy(ep->e.dg.ep_qp, &dest->ds_dest,
+				buf + USDF_HDR_BUF_ENTRY, len -
+				USDF_HDR_BUF_ENTRY, flags,
+				context);
+	}
 
 	qp = to_qpi(ep->e.dg.ep_qp);
 	wq = &qp->uq_wq;
@@ -535,72 +550,75 @@ usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
 	hdr = (struct usd_udp_hdr *) ((char *) buf + padding);
 	memcpy(hdr, &dest->ds_dest.ds_dest.ds_udp.u_hdr, sizeof(*hdr));
 
-	/* adjust lengths and insert source port */
-	hdr->uh_ip.tot_len = htons(len - padding - sizeof(struct ether_header));
-	hdr->uh_udp.len = htons(len - padding - sizeof(struct ether_header) -
-				sizeof(struct iphdr));
-	hdr->uh_udp.source =
-		qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
+	_usdf_adjust_prefix_hdr(hdr, qp, len, padding);
 
-	last_post = _usd_post_send_one(wq, hdr, len - padding, 1);
+	last_post = _usd_post_send_one(wq, hdr, len - padding,
+			ep->ep_tx_completion);
 
-	info = &wq->uwq_post_info[last_post];
-	info->wp_context = context;
-	info->wp_len = len;
+	_usdf_adjust_post_info(wq, last_post, context, len - padding);
 
-	return 0;
+	return FI_SUCCESS;
+}
+
+static ssize_t
+_usdf_dgram_send_iov_prefix(struct usdf_ep *ep,
+		struct usd_dest *dest, const struct iovec *iov,
+		size_t count, void *context, uint8_t cq_entry)
+{
+	struct iovec send_iov[USDF_DGRAM_MAX_SGE];
+	struct usd_udp_hdr *hdr;
+	struct usd_qp_impl *qp;
+	uint32_t last_post;
+	struct usd_wq *wq;
+	size_t padding;
+	size_t len;
+
+	qp = to_qpi(ep->e.dg.ep_qp);
+	wq = &qp->uq_wq;
+
+	len = _usdf_iov_len(iov, count);
+	padding = USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
+
+	hdr = (struct usd_udp_hdr *) ((char *) iov[0].iov_base +
+			padding);
+	memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
+
+	_usdf_adjust_prefix_hdr(hdr, qp, len, padding);
+
+	memcpy(send_iov, iov, sizeof(struct iovec) * count);
+	send_iov[0].iov_base = hdr;
+	send_iov[0].iov_len -= padding;
+
+	last_post = _usd_post_send_iov(wq, send_iov, count, cq_entry);
+	_usdf_adjust_post_info(wq, last_post, context, len - padding);
+
+	return FI_SUCCESS;
 }
 
 ssize_t
-usdf_dgram_prefix_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t dest_addr, void *context)
+usdf_dgram_prefix_sendv(struct fid_ep *fep, const struct iovec *iov,
+		void **desc, size_t count, fi_addr_t dest_addr, void *context)
 {
-	struct usdf_ep *ep;
-	struct usd_dest *dest;
-	struct usd_wq *wq;
- 	struct usd_qp_impl *qp;
-	struct usd_udp_hdr *hdr;
-	uint32_t last_post;
-	struct usd_wq_post_info *info;
 	struct iovec send_iov[USDF_DGRAM_MAX_SGE];
+	struct usd_dest *dest;
+	struct usdf_ep *ep;
 	size_t len;
-	unsigned i;
 	size_t padding;
 
 	ep = ep_ftou(fep);
 	dest = (struct usd_dest *)(uintptr_t) dest_addr;
+	len = _usdf_iov_len(iov, count);
 	padding = USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
 
-	len = 0;
-	for (i = 0; i < count; i++) {
-		len += iov[i].iov_len;
+	/*
+	 * USDF_DGRAM_DFLT_SGE is the advertised iov_limit.
+	 */
+	if (count > USDF_DGRAM_DFLT_SGE) {
+		USDF_DBG_SYS(EP_DATA, "max iov count exceeded: %zu\n", count);
+		return -FI_ENOSPC;
 	}
 
-	if (len + sizeof(struct usd_udp_hdr) > USD_SEND_MAX_COPY) {
-		qp = to_qpi(ep->e.dg.ep_qp);
-		wq = &qp->uq_wq;
-		hdr = (struct usd_udp_hdr *) ((char *) iov[0].iov_base +
-				padding);
-		memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
-
-		/* adjust lengths and insert source port */
-		hdr->uh_ip.tot_len = htons(len - padding -
-				sizeof(struct ether_header));
-		hdr->uh_udp.len = htons(len - padding -
-				sizeof(struct ether_header) -
-				sizeof(struct iphdr));
-		hdr->uh_udp.source =
-			qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
-
-		memcpy(send_iov, iov, sizeof(struct iovec) * count);
-		send_iov[0].iov_base = hdr;
-		send_iov[0].iov_len -= padding;
-
-		last_post = _usd_post_send_iov(wq, send_iov, count, 1);
-		info = &wq->uwq_post_info[last_post];
-		info->wp_context = context;
-		info->wp_len = len;
-	} else {
+	if ((len - padding) <= USD_SEND_MAX_COPY) {
 		/* _usdf_dgram_send_iov_copy isn't prefix aware and allocates
 		 * its own prefix. reorganize iov[0] base to point to data and
 		 * len to reflect data length.
@@ -609,18 +627,67 @@ usdf_dgram_prefix_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc
 		send_iov[0].iov_base = ((char *) send_iov[0].iov_base +
 				USDF_HDR_BUF_ENTRY);
 		send_iov[0].iov_len -= USDF_HDR_BUF_ENTRY;
-		_usdf_dgram_send_iov_copy(ep, dest, send_iov, count, context,
-				1);
+
+		return _usdf_dgram_send_iov_copy(ep, dest, send_iov, count,
+				context, ep->ep_tx_completion);
+	} else if (ep->e.dg.tx_op_flags & FI_INJECT) {
+		USDF_DBG_SYS(EP_DATA,
+				"given inject length (%zu) exceeds max inject length (%d)\n",
+				len, USD_SEND_MAX_COPY);
+		return -FI_ENOSPC;
 	}
 
-	return 0;
+	return _usdf_dgram_send_iov_prefix(ep, dest, iov, count, context,
+					   ep->ep_tx_completion);
 }
 
 ssize_t
-usdf_dgram_prefix_sendmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
+usdf_dgram_prefix_sendmsg(struct fid_ep *fep, const struct fi_msg *msg,
+	uint64_t flags)
 {
-	return usdf_dgram_prefix_sendv(fep, msg->msg_iov, msg->desc, msg->iov_count,
-				(fi_addr_t)msg->addr, msg->context);
+	struct iovec send_iov[USDF_DGRAM_MAX_SGE];
+	struct usd_dest *dest;
+	struct usdf_ep *ep;
+	uint8_t completion;
+	size_t len;
+	size_t padding;
+
+	ep = ep_ftou(fep);
+	dest = (struct usd_dest *)(uintptr_t) msg->addr;
+	len = _usdf_iov_len(msg->msg_iov, msg->iov_count);
+	completion = ep->ep_tx_dflt_signal_comp || (flags & FI_COMPLETION);
+	padding = USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
+
+	/* USDF_DGRAM_DFLT_SGE is the advertised iov_limit.
+	 */
+	if (msg->iov_count > USDF_DGRAM_DFLT_SGE) {
+		USDF_DBG_SYS(EP_DATA, "max iov count exceeded: %zu\n",
+				msg->iov_count);
+		return -FI_ENOSPC;
+	}
+
+	if ((len - padding) <= USD_SEND_MAX_COPY) {
+		/* _usdf_dgram_send_iov_copy isn't prefix aware and allocates
+		 * its own prefix. reorganize iov[0] base to point to data and
+		 * len to reflect data length.
+		 */
+		memcpy(send_iov, msg->msg_iov,
+				sizeof(struct iovec) * msg->iov_count);
+		send_iov[0].iov_base = ((char *) send_iov[0].iov_base +
+				USDF_HDR_BUF_ENTRY);
+		send_iov[0].iov_len -= USDF_HDR_BUF_ENTRY;
+
+		return _usdf_dgram_send_iov_copy(ep, dest, send_iov,
+				msg->iov_count, msg->context, completion);
+	} else if (flags & FI_INJECT) {
+		USDF_DBG_SYS(EP_DATA,
+				"given inject length (%zu) exceeds max inject length (%d)\n",
+				len, USD_SEND_MAX_COPY);
+		return -FI_ENOSPC;
+	}
+
+	return _usdf_dgram_send_iov_prefix(ep, dest, msg->msg_iov,
+			msg->iov_count, msg->context, completion);
 }
 
 ssize_t usdf_dgram_prefix_rx_size_left(struct fid_ep *fep)
