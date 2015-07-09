@@ -64,6 +64,48 @@
 #include "usdf_dgram.h"
 #include "usdf_av.h"
 
+static inline size_t _usdf_iov_len(const struct iovec *iov, size_t count)
+{
+	size_t len;
+	size_t i;
+
+	for (i = 0, len = 0; i < count; i++)
+		len += iov[i].iov_len;
+
+	return len;
+}
+
+static inline struct usd_udp_hdr *_usdf_find_hdr(struct usd_wq *wq)
+{
+	uint8_t *copybuf;
+
+	copybuf = wq->uwq_copybuf + (wq->uwq_post_index * USD_SEND_MAX_COPY);
+
+	return (struct usd_udp_hdr *) copybuf;
+}
+
+static inline void _usdf_adjust_hdr(struct usd_udp_hdr *hdr,
+		struct usd_qp_impl *qp, size_t len)
+{
+	hdr->uh_ip.tot_len = htons(len + sizeof(struct usd_udp_hdr) -
+				sizeof(struct ether_header));
+	hdr->uh_udp.len = htons(len + sizeof(struct usd_udp_hdr) -
+				sizeof(struct ether_header) -
+				sizeof(struct iphdr));
+	hdr->uh_udp.source =
+		qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
+}
+
+static inline void _usdf_adjust_post_info(struct usd_wq *wq, uint32_t last_post,
+		void *context, size_t len)
+{
+	struct usd_wq_post_info *info;
+
+	info = &wq->uwq_post_info[last_post];
+	info->wp_context = context;
+	info->wp_len = len;
+}
+
 ssize_t
 usdf_dgram_recv(struct fid_ep *fep, void *buf, size_t len,
 		void *desc, fi_addr_t src_addr, void *context)
