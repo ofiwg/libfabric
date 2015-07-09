@@ -276,6 +276,9 @@ struct usdf_ep {
 	uint8_t ep_tx_dflt_signal_comp;
 	uint8_t ep_rx_dflt_signal_comp;
 
+	uint8_t ep_tx_completion;
+	uint8_t ep_rx_completion;
+
 	uint32_t ep_wqe;	/* requested queue sizes */
 	uint32_t ep_rqe;
 
@@ -294,6 +297,12 @@ struct usdf_ep {
 
 			int ep_sock;
 			struct usdf_av *ep_av;
+
+			/* TODO: Remove in favor of accessing op flags through
+			 * ep_tx and ep_rx. Update once tx/rx context support
+			 * is added to dgram */
+			uint64_t tx_op_flags;
+			uint64_t rx_op_flags;
 
 			void *ep_hdr_buf;
 			struct usd_udp_hdr **ep_hdr_ptr;

@@ -361,6 +361,7 @@ usdf_fill_info_dgram(
 					txattr->size;
 			}
 		}
+		txattr->op_flags = hints->tx_attr->op_flags;
 	}
 
 	/* RX attrs */
@@ -396,6 +397,7 @@ usdf_fill_info_dgram(
 					rxattr->size;
 			}
 		}
+		rxattr->op_flags = hints->rx_attr->op_flags;
 	}
 
 	/* endpoint attrs */

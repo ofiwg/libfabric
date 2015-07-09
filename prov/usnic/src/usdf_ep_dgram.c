@@ -194,6 +194,13 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (ep->e.dg.ep_wcq != NULL) {
 				return -FI_EINVAL;
 			}
+
+			ep->ep_tx_dflt_signal_comp =
+				(flags & FI_SELECTIVE_COMPLETION) ? 0 : 1;
+
+			ep->ep_tx_completion = (ep->ep_tx_dflt_signal_comp ||
+					(ep->e.dg.tx_op_flags & FI_COMPLETION));
+
 			ep->e.dg.ep_wcq = cq;
 			atomic_inc(&cq->cq_refcnt);
 		}
@@ -202,6 +209,13 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (ep->e.dg.ep_rcq != NULL) {
 				return -FI_EINVAL;
 			}
+
+			ep->ep_rx_dflt_signal_comp =
+				(flags & FI_SELECTIVE_COMPLETION) ? 0 : 1;
+
+			ep->ep_rx_completion = (ep->ep_rx_dflt_signal_comp ||
+					(ep->e.dg.rx_op_flags & FI_COMPLETION));
+
 			ep->e.dg.ep_rcq = cq;
 			atomic_inc(&cq->cq_refcnt);
 		}
@@ -454,6 +468,16 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 		ep->ep_rqe =
 			udp->dom_fabric->fab_dev_attrs->uda_max_recv_credits;
 	}
+
+	/*
+	 * TODO: Add better management of tx_attr/rx_attr to getinfo and dgram
+	 * open.
+	 */
+	if (info->tx_attr)
+		ep->e.dg.tx_op_flags = info->tx_attr->op_flags;
+
+	if (info->rx_attr)
+		ep->e.dg.rx_op_flags = info->rx_attr->op_flags;
 
 	if (ep->ep_mode & FI_MSG_PREFIX) {
 		if (info->ep_attr == NULL) {
