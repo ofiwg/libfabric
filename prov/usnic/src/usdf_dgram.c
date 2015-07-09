@@ -250,7 +250,7 @@ _usdf_dgram_send_iov_copy(struct usdf_ep *ep, struct usd_dest *dest,
 
 	last_post = _usd_post_send_one(wq, hdr, len + sizeof(*hdr), cq_entry);
 
-	_usdf_adjust_post_info(wq, last_post, context, len + sizeof(*hdr));
+	_usdf_adjust_post_info(wq, last_post, context, len);
 
 	return 0;
 }
@@ -280,7 +280,7 @@ static ssize_t _usdf_dgram_send_iov(struct usdf_ep *ep, struct usd_dest *dest,
 
 	last_post = _usd_post_send_iov(wq, send_iov, count + 1,
 					cq_entry);
-	_usdf_adjust_post_info(wq, last_post, context, len + sizeof(*hdr));
+	_usdf_adjust_post_info(wq, last_post, context, len);
 
 	return FI_SUCCESS;
 }
@@ -545,7 +545,7 @@ usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
 	last_post = _usd_post_send_one(wq, hdr, len - padding,
 			ep->ep_tx_completion);
 
-	_usdf_adjust_post_info(wq, last_post, context, len - padding);
+	_usdf_adjust_post_info(wq, last_post, context, len - USDF_HDR_BUF_ENTRY);
 
 	return FI_SUCCESS;
 }
@@ -580,7 +580,7 @@ _usdf_dgram_send_iov_prefix(struct usdf_ep *ep,
 	send_iov[0].iov_len -= padding;
 
 	last_post = _usd_post_send_iov(wq, send_iov, count, cq_entry);
-	_usdf_adjust_post_info(wq, last_post, context, len - padding);
+	_usdf_adjust_post_info(wq, last_post, context, len - USDF_HDR_BUF_ENTRY);
 
 	return FI_SUCCESS;
 }
