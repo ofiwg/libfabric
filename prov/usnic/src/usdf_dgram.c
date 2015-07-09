@@ -253,6 +253,36 @@ _usdf_dgram_send_iov_copy(struct usdf_ep *ep, struct usd_dest *dest,
 	return 0;
 }
 
+static ssize_t _usdf_dgram_send_iov(struct usdf_ep *ep, struct usd_dest *dest,
+		const struct iovec *iov, size_t count, void *context, uint8_t
+		cq_entry)
+{
+	struct iovec send_iov[USDF_DGRAM_MAX_SGE];
+	struct usd_udp_hdr *hdr;
+	struct usd_qp_impl *qp;
+	struct usd_wq *wq;
+	uint32_t last_post;
+	size_t len;
+
+	qp = to_qpi(ep->e.dg.ep_qp);
+	wq = &qp->uq_wq;
+
+	len = _usdf_iov_len(iov, count);
+	hdr = _usdf_find_hdr(wq);
+	memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
+	_usdf_adjust_hdr(hdr, qp, len);
+
+	send_iov[0].iov_base = hdr;
+	send_iov[0].iov_len = sizeof(*hdr);
+	memcpy(&send_iov[1], iov, sizeof(struct iovec) * count);
+
+	last_post = _usd_post_send_iov(wq, send_iov, count + 1,
+					cq_entry);
+	_usdf_adjust_post_info(wq, last_post, context, len + sizeof(*hdr));
+
+	return FI_SUCCESS;
+}
+
 ssize_t
 usdf_dgram_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 		 size_t count, fi_addr_t dest_addr, void *context)
