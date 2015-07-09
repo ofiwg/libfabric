@@ -96,6 +96,17 @@ static inline void _usdf_adjust_hdr(struct usd_udp_hdr *hdr,
 		qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
 }
 
+static inline void _usdf_adjust_prefix_hdr(struct usd_udp_hdr *hdr,
+		struct usd_qp_impl *qp, size_t len, size_t padding)
+{
+
+	hdr->uh_ip.tot_len = htons(len - padding - sizeof(struct ether_header));
+	hdr->uh_udp.len = htons(len - padding - sizeof(struct ether_header) -
+				sizeof(struct iphdr));
+	hdr->uh_udp.source =
+		qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
+}
+
 static inline void _usdf_adjust_post_info(struct usd_wq *wq, uint32_t last_post,
 		void *context, size_t len)
 {
