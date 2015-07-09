@@ -211,7 +211,8 @@ usdf_dgram_senddata(struct fid_ep *fep, const void *buf, size_t len,
 
 static ssize_t
 _usdf_dgram_send_iov_copy(struct usdf_ep *ep, struct usd_dest *dest,
-		const struct iovec *iov, size_t count, void *context)
+		const struct iovec *iov, size_t count, void *context,
+		uint8_t cq_entry)
 {
 	struct usd_wq *wq;
  	struct usd_qp_impl *qp;
@@ -243,7 +244,7 @@ _usdf_dgram_send_iov_copy(struct usdf_ep *ep, struct usd_dest *dest,
 	hdr->uh_udp.len = htons(len - sizeof(struct ether_header) -
 			sizeof(struct iphdr));
 
-	last_post = _usd_post_send_one(wq, hdr, len, 1);
+	last_post = _usd_post_send_one(wq, hdr, len, cq_entry);
 
 	info = &wq->uwq_post_info[last_post];
 	info->wp_context = context;
@@ -301,7 +302,7 @@ usdf_dgram_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 		info->wp_context = context;
 		info->wp_len = len;
 	} else {
-		_usdf_dgram_send_iov_copy(ep, dest, iov, count, context);
+		_usdf_dgram_send_iov_copy(ep, dest, iov, count, context, 1);
 	}
 	return 0;
 }
@@ -574,7 +575,8 @@ usdf_dgram_prefix_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc
 		send_iov[0].iov_base = ((char *) send_iov[0].iov_base +
 				USDF_HDR_BUF_ENTRY);
 		send_iov[0].iov_len -= USDF_HDR_BUF_ENTRY;
-		_usdf_dgram_send_iov_copy(ep, dest, send_iov, count, context);
+		_usdf_dgram_send_iov_copy(ep, dest, send_iov, count, context,
+				1);
 	}
 
 	return 0;
