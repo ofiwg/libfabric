@@ -203,7 +203,7 @@ usdf_cq_copy_cq_entry(void *dst, struct usd_completion *src,
 		data_entry->buf = 0; /* XXX */
 		data_entry->data = 0;
 
-		usdf_cq_adjust_len(src, &msg_entry->len);
+		usdf_cq_adjust_len(src, &data_entry->len);
 
 		break;
 	default:
