@@ -44,20 +44,19 @@ low latency and other offload capabilities on Ethernet networks.
   * *FI_EP_MSG* and *FI_EP_RDM* endpoints are implemented, but are
     only lightly tested.  It is likely that there are still some bugs
     in these endpoint types.  RMA is not yet supported.
+  * *FI_EP_RDM* support is not 100% robust and occasionally leads to hangs in
+    the `fi_rdm_pingpong` test from fabtests.
   * [`fi_provider`(7)](fi_provider.7.html) lists requirements for all
     providers.  The following limitations exist in the *usnic*
     provider:
-    * *fi_getname* is not supported on *FI_EP_DGRAM*, *FI_EP_MSG*, and
-      passive endpoints.
     * multicast operations are not supported on *FI_EP_DGRAM* and
       *FI_EP_RDM* endpoints.
-    * *FI_EP_MSG* endpoints only support connect, accept, and shutdown
-      CM operations.
-    * Passive endpoints only support listen CM operations.
+    * *FI_EP_MSG* endpoints only support connect, accept, getname, and
+      shutdown CM operations.
+    * Passive endpoints only support listen, setname, and getname CM
+      operations.
     * *FI_EP_DGRAM* endpoints support `fi_sendmsg()` and
       `fi_recvmsg()`, but all flags are ignored.
-    * *FI_EP_RDM* and *FI_EP_MSG* endpoints do not support
-      `fi_sendmsg()` and `fi_recvmsg()`.
     * Address vectors only support `FI_AV_MAP`.
     * No counters are supported.
     * The tag matching interface is not supported.
