@@ -153,6 +153,8 @@ usdf_cq_readerr_soft(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
  * send/recv call. This means we need to update the lengths for both prefix and
  * non-prefix send paths.
  *
+ * RECEIVE COMPLETIONS
+ *
  * Non-prefix: the application isn't aware of the usd_udp_hdr struct. Default
  * completion semantics include this in the completion length since it is part
  * of the send.
@@ -161,16 +163,30 @@ usdf_cq_readerr_soft(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
  * prefix size. For performance reasons our advertised prefix size is not the
  * same size as hour headers. To reflect the correct size we need to add the
  * size of the padding.
+ *
+ * SEND COMPLETIONS
+ * The send completions are dependent upon the wp_len value that is set by the
+ * library when using the underscore prefixed variants of the usd functions or
+ * by the usd library when using the non-underscore prefixed variants.
+ * Currently all send functions have been unified to report wp_len as the
+ * length of the payload. This means that adjustments need to be made when in
+ * libfabric prefix mode.
  */
 static inline void usdf_cq_adjust_len(struct usd_completion *src,
 		size_t *len)
 {
 	struct usdf_ep *ep = src->uc_qp->uq_context;
 
-	if (ep->ep_mode & FI_MSG_PREFIX)
-		*len += (USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr));
-	else
-		*len -= sizeof(struct usd_udp_hdr);
+	if (src->uc_type == USD_COMPTYPE_RECV) {
+		if (ep->ep_mode & FI_MSG_PREFIX)
+			*len += (USDF_HDR_BUF_ENTRY -
+					sizeof(struct usd_udp_hdr));
+		else
+			*len -= sizeof(struct usd_udp_hdr);
+	} else {
+		if (ep->ep_mode & FI_MSG_PREFIX)
+			*len += USDF_HDR_BUF_ENTRY;
+	}
 }
 
 static inline ssize_t
