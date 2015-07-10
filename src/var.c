@@ -154,8 +154,10 @@ void fi_param_undefine(const struct fi_provider *provider)
 {
 	struct fi_param_entry *param;
 	struct dlist_entry *entry;
+	struct dlist_entry *next;
 
-	for (entry = param_list.next; entry != &param_list; entry = entry->next) {
+	for (entry = param_list.next; entry != &param_list; entry = next) {
+		next = entry->next;
 		param = container_of(entry, struct fi_param_entry, entry);
 		if (param->provider == provider) {
 			FI_DBG(provider, FI_LOG_CORE, "Removing param: %s\n", param->name);
