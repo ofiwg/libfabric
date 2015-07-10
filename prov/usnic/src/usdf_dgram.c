@@ -179,25 +179,26 @@ usdf_dgram_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 {
 	struct usdf_dest *dest;
 	struct usdf_ep *ep;
+	uint32_t flags;
 
 	ep = ep_ftou(fep);
 	dest = (struct usdf_dest *)(uintptr_t) dest_addr;
+	flags = (ep->ep_tx_completion) ? USD_SF_SIGNAL : 0;
 
 	if (len + sizeof(struct usd_udp_hdr) <= USD_SEND_MAX_COPY) {
 		return usd_post_send_one_copy(ep->e.dg.ep_qp, &dest->ds_dest,
-						buf, len, ep->ep_tx_completion,
+						buf, len, flags,
 						context);
 	} else if (ep->e.dg.tx_op_flags & FI_INJECT) {
 		USDF_DBG_SYS(EP_DATA,
 				"given inject length (%zu) exceeds max inject length (%d)\n",
 				len + sizeof(struct usd_udp_hdr),
 				USD_SEND_MAX_COPY);
-
 		return -FI_ENOSPC;
 	}
 
 	return usd_post_send_one(ep->e.dg.ep_qp, &dest->ds_dest, buf, len,
-				ep->ep_tx_completion, context);
+				flags, context);
 }
 
 ssize_t
@@ -287,108 +288,100 @@ ssize_t
 usdf_dgram_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 		 size_t count, fi_addr_t dest_addr, void *context)
 {
-	struct usdf_ep *ep;
 	struct usd_dest *dest;
-	struct usd_wq *wq;
- 	struct usd_qp_impl *qp;
-	struct usd_udp_hdr *hdr;
-	uint32_t last_post;
-	struct usd_wq_post_info *info;
-	uint8_t *copybuf;
+	struct usdf_ep *ep;
 	size_t len;
-	struct iovec send_iov[USDF_DGRAM_MAX_SGE];
-	size_t i;
 
 	ep = ep_ftou(fep);
+	len = sizeof(struct usd_udp_hdr);
 	dest = (struct usd_dest *)(uintptr_t) dest_addr;
 
-	len = 0;
-	for (i = 0; i < count; i++) {
-		len += iov[i].iov_len;
+	len += _usdf_iov_len(iov, count);
+
+	if (len <= USD_SEND_MAX_COPY) {
+		return _usdf_dgram_send_iov_copy(ep, dest, iov, count, context,
+						ep->ep_tx_completion);
+	} else if (ep->e.dg.tx_op_flags & FI_INJECT) {
+		USDF_DBG_SYS(EP_DATA,
+				"given inject length (%zu) exceeds max inject length (%d)\n",
+				len, USD_SEND_MAX_COPY);
+		return -FI_ENOSPC;
 	}
 
-	if (len + sizeof(struct usd_udp_hdr) > USD_SEND_MAX_COPY) {
-		qp = to_qpi(ep->e.dg.ep_qp);
-		wq = &qp->uq_wq;
-		copybuf = wq->uwq_copybuf +
-				wq->uwq_post_index * USD_SEND_MAX_COPY;
-		hdr = (struct usd_udp_hdr *)copybuf;
-		memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
-
-		/* adjust lengths and insert source port */
-		hdr->uh_ip.tot_len = htons(len + sizeof(struct usd_udp_hdr) -
-			sizeof(struct ether_header));
-		hdr->uh_udp.len = htons((sizeof(struct usd_udp_hdr) -
-			sizeof(struct ether_header) -
-			sizeof(struct iphdr)) + len);
-		hdr->uh_udp.source =
-			qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
-
-		send_iov[0].iov_base = hdr;
-		send_iov[0].iov_len = sizeof(*hdr);
-		memcpy(&send_iov[1], iov, sizeof(struct iovec) * count);
-		last_post = _usd_post_send_iov(wq, send_iov, count + 1, 1);
-		info = &wq->uwq_post_info[last_post];
-		info->wp_context = context;
-		info->wp_len = len;
-	} else {
-		_usdf_dgram_send_iov_copy(ep, dest, iov, count, context, 1);
+	/* Advertised iov_limit is USDF_DGRAM_DFLT_SGE. Header takes up one
+	 * space.
+	 */
+	if (count > (USDF_DGRAM_DFLT_SGE - 1)) {
+		USDF_DBG_SYS(EP_DATA, "max iov count exceeded: %zu\n", count);
+		return -FI_ENOSPC;
 	}
-	return 0;
+
+	return _usdf_dgram_send_iov(ep, dest, iov, count, context,
+					ep->ep_tx_completion);
 }
 
 ssize_t
 usdf_dgram_sendmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 {
-	USDF_DBG_SYS(EP_DATA, "flags ignored!");
-	return usdf_dgram_sendv(fep, msg->msg_iov, msg->desc, msg->iov_count,
-				(fi_addr_t)msg->addr, msg->context);
+	struct usd_dest *dest;
+	struct usdf_ep *ep;
+	uint8_t completion;
+	size_t len;
+
+	ep = ep_ftou(fep);
+	len = sizeof(struct usd_udp_hdr);
+	dest = (struct usd_dest *)(uintptr_t) msg->addr;
+	completion = ep->ep_tx_dflt_signal_comp || (flags & FI_COMPLETION);
+
+	len += _usdf_iov_len(msg->msg_iov, msg->iov_count);
+
+	if (len <= USD_SEND_MAX_COPY) {
+		return _usdf_dgram_send_iov_copy(ep, dest, msg->msg_iov,
+							msg->iov_count,
+							msg->context,
+							completion);
+	} else if (flags & FI_INJECT) {
+		USDF_DBG_SYS(EP_DATA,
+				"given inject length (%zu) exceeds max inject length (%d)\n",
+				len, USD_SEND_MAX_COPY);
+		return -FI_ENOSPC;
+	}
+
+	/* Advertised iov_limit is USDF_DGRAM_DFLT_SGE. Header takes up one.
+	 */
+	if (msg->iov_count > (USDF_DGRAM_DFLT_SGE - 1)) {
+		USDF_DBG_SYS(EP_DATA, "max iov count exceeded: %zu\n",
+				msg->iov_count);
+		return -FI_ENOSPC;
+	}
+
+	return _usdf_dgram_send_iov(ep, dest, msg->msg_iov, msg->iov_count,
+					msg->context, completion);
 }
 
 ssize_t
 usdf_dgram_inject(struct fid_ep *fep, const void *buf, size_t len,
 		  fi_addr_t dest_addr)
 {
-	struct usdf_ep *ep;
 	struct usdf_dest *dest;
-	struct usd_wq *wq;
- 	struct usd_qp_impl *qp;
-	struct usd_udp_hdr *hdr;
-	uint32_t last_post;
-	struct usd_wq_post_info *info;
-	uint8_t *copybuf;
+	struct usdf_ep *ep;
+
+	ep = ep_ftou(fep);
+	dest = (struct usdf_dest *)(uintptr_t) dest_addr;
 
 	if (len + sizeof(struct usd_udp_hdr) > USD_SEND_MAX_COPY) {
+		USDF_DBG_SYS(EP_DATA,
+				"given inject length (%zu) exceeds max inject length (%d)\n",
+				len + sizeof(struct usd_udp_hdr),
+				USD_SEND_MAX_COPY);
 		return -FI_ENOSPC;
 	}
 
-	ep = ep_ftou(fep);
-	dest = (struct usdf_dest *)(uintptr_t)dest_addr;
-
-	qp = to_qpi(ep->e.dg.ep_qp);
-	wq = &qp->uq_wq;
-	copybuf = wq->uwq_copybuf +
-			wq->uwq_post_index * USD_SEND_MAX_COPY;
-
-	hdr = (struct usd_udp_hdr *)copybuf;
-	memcpy(hdr, &dest->ds_dest.ds_dest.ds_udp.u_hdr, sizeof(*hdr));
-	hdr->uh_udp.source =
-		qp->uq_attrs.uqa_local_addr.ul_addr.ul_udp.u_addr.sin_port;
-	hdr->uh_ip.tot_len = htons(len + sizeof(*hdr)
-				- sizeof(struct ether_header));
-	hdr->uh_udp.len = htons(len + sizeof(*hdr) -
-				sizeof(struct ether_header) -
-				sizeof(struct iphdr));
-
-	memcpy(hdr + 1, buf, len);
-
-	last_post = _usd_post_send_one(wq, hdr, len + sizeof(*hdr), 1);
-
-	info = &wq->uwq_post_info[last_post];
-	info->wp_context = NULL;
-	info->wp_len = len;
-
-	return 0;
+	/*
+	 * fi_inject never generates a completion
+	 */
+	return usd_post_send_one_copy(ep->e.dg.ep_qp, &dest->ds_dest, buf, len,
+					0, NULL);
 }
 
 ssize_t usdf_dgram_prefix_inject(struct fid_ep *fep, const void *buf,
