@@ -498,7 +498,7 @@ usdf_dgram_prefix_recvv(struct fid_ep *fep, const struct iovec *iov,
 ssize_t
 usdf_dgram_prefix_recvmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 {
-	return usdf_dgram_recvv(fep, msg->msg_iov, msg->desc,
+	return usdf_dgram_prefix_recvv(fep, msg->msg_iov, msg->desc,
 		msg->iov_count, (fi_addr_t)msg->addr, msg->context);
 }
 
