@@ -61,13 +61,15 @@
 static ssize_t sock_comm_send_socket(struct sock_conn *conn, const void *buf, size_t len)
 {
 	ssize_t ret;
-
+	
 	ret = write(conn->sock_fd, buf, len);
 	if (ret < 0) {
-		SOCK_LOG_DBG("write %s\n", strerror(errno));
-		ret = 0;
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			ret = 0;
+		} else {
+			SOCK_LOG_DBG("write %s\n", strerror(errno));
+		}
 	}
-
 	SOCK_LOG_DBG("wrote to network: %lu\n", ret);
 	return ret;
 }
@@ -98,6 +100,11 @@ ssize_t sock_comm_flush(struct sock_conn *conn)
 	}
 
 	return (ret1 > 0) ? ret1 + ret2 : 0;
+}
+
+int sock_comm_tx_done(struct sock_conn *conn)
+{
+	return rbempty(&conn->outbuf);
 }
 
 ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len)
@@ -208,13 +215,11 @@ ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len)
 
 ssize_t sock_comm_discard(struct sock_conn *conn, size_t len)
 {
-	sock_comm_recv_buffer(conn);
 	return rbdiscard(&conn->inbuf, len);
 }
 
 ssize_t sock_comm_data_avail(struct sock_conn *conn)
 {
-	sock_comm_recv_buffer(conn);
 	return rbused(&conn->inbuf);
 }
 
