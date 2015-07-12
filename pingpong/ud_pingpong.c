@@ -526,7 +526,7 @@ static int run(void)
 	while (credits < max_credits)
 		poll_all_sends();
 
-	ft_finalize(ep, scq, rcq, remote_fi_addr);
+	ft_finalize(fi, ep, scq, rcq, remote_fi_addr);
 out:
 	free_ep_res();
 	ret2 = fi_close(&av->fid);

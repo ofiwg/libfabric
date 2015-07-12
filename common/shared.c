@@ -292,17 +292,32 @@ void eq_readerr(struct fid_eq *eq, char *eq_str)
 	}
 }
 
-int ft_finalize(struct fid_ep *tx_ep, struct fid_cq *scq, struct fid_cq *rcq,
-		fi_addr_t addr)
+int ft_finalize(
+	struct fi_info *fi,
+	struct fid_ep *tx_ep,
+	struct fid_cq *scq,
+	struct fid_cq *rcq,
+	fi_addr_t addr)
 {
 	struct fi_msg msg;
 	struct iovec iov;
 	struct fi_context tx_ctx;
-	char buf[4] = "fin";
+	char message[4] = "fin";
+	size_t buf_size;
+	char *buf;
 	int ret;
 
+	buf_size = sizeof(message) + fi->ep_attr->msg_prefix_size;
+	buf = calloc(1, buf_size);
+	if (!buf) {
+		perror("calloc");
+		return -1;
+	}
+
+	sprintf(buf + fi->ep_attr->msg_prefix_size, "%s", message);
+
 	iov.iov_base = buf;
-	iov.iov_len = sizeof buf;
+	iov.iov_len = buf_size;
 	msg.msg_iov = &iov;
 	msg.desc = NULL;
 	msg.iov_count = 1;
@@ -313,12 +328,15 @@ int ft_finalize(struct fid_ep *tx_ep, struct fid_cq *scq, struct fid_cq *rcq,
 	ret = fi_sendmsg(tx_ep, &msg, FI_INJECT | FI_TRANSMIT_COMPLETE);
 	if (ret) {
 		FT_PRINTERR("fi_sendmsg", ret);
-		return ret;
+		goto err;
 	}
 
 	wait_for_data_completion(scq, 1);
 	wait_for_data_completion(rcq, 1);
-	return 0;
+
+err:
+	free(buf);
+	return ret;
 }
 
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a,

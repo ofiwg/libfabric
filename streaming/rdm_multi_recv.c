@@ -573,7 +573,7 @@ static int run(void)
 
 	ret = run_test();	
 	/* Finalize before closing ep */
-	ft_finalize(ep, scq, rcq, remote_fi_addr);
+	ft_finalize(fi, ep, scq, rcq, remote_fi_addr);
 out:
 	free_ep_res();
 
