@@ -51,7 +51,6 @@ static void *send_buf;
 static size_t buffer_size;
 
 static struct fi_info *hints;
-static struct fi_info *fi = NULL;
 
 static struct fid_fabric *fab;
 static struct fid_pep *pep;
@@ -316,6 +315,7 @@ static int bind_ep_res(void)
 
 static int server_listen(void)
 {
+	struct fi_info *fi;
 	int ret;
 
 	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE,
@@ -438,6 +438,7 @@ static int client_connect(void)
 {
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
+	struct fi_info *fi;
 	ssize_t rd;
 	int ret;
 
@@ -540,7 +541,7 @@ static int run(void)
 
 	ret = wait_for_completion(scq, max_credits - credits);
 	/* Finalize before closing ep */
-	ft_finalize(fi, ep, scq, rcq, FI_ADDR_UNSPEC);
+	ft_finalize(ep, scq, rcq, FI_ADDR_UNSPEC);
 out:
 	fi_shutdown(ep, 0);
 	free_ep_res();
