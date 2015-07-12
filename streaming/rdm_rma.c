@@ -551,7 +551,7 @@ static int run(void)
 			goto out;
 	}
 	/* Finalize before closing ep */
-	ft_finalize(fi, ep, scq, rcq, remote_fi_addr);
+	ft_finalize(ep, scq, rcq, remote_fi_addr);
 out:
 	free_ep_res();
 	fi_close(&dom->fid);
