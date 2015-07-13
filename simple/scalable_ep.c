@@ -464,7 +464,7 @@ static int run(void)
 
 	run_test();
 	/*TODO: Add a local finalize applicable for scalable ep */
-	//ft_finalize(tx_ep[0], scq[0], rcq[0], remote_rx_addr[0]);
+	//ft_finalize(fi, tx_ep[0], scq[0], rcq[0], remote_rx_addr[0]);
 out:
 	free_ep_res();
 	fi_close(&sep->fid);
