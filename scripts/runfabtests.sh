@@ -72,6 +72,7 @@ standard_tests=(
 	"rdm_rma -o writedata"
 	"rdm_tagged_pingpong"
 	"ud_pingpong"
+	"ud_pingpong -P"
 	"rc_pingpong"
 )
 
