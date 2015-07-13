@@ -117,7 +117,7 @@ usd_map_one_res(struct usd_device *dev, struct usd_vf *vf,
 
     offset = USNIC_ENCODE_PGOFF(vf->vf_id, USNIC_MMAP_RES, barres->type);
     iomap->vaddr = mmap64(NULL, iomap->len, PROT_READ + PROT_WRITE,
-                        MAP_SHARED, dev->ud_ib_dev_fd, offset);
+                        MAP_SHARED, dev->ud_ctx->ucx_ib_dev_fd, offset);
     if (iomap->vaddr == MAP_FAILED) {
         usd_err("Failed to map res type %d, bus_addr 0x%lx, len 0x%lx\n",
                 barres->type, iomap->bus_addr, iomap->len);
@@ -199,7 +199,7 @@ usd_map_vf(
         offset = USNIC_ENCODE_PGOFF(vf->vf_id, USNIC_MMAP_BAR, 0);
         vf->vf_bar0.vaddr = mmap64(NULL, vf->vf_bar0.len,
                                  PROT_READ + PROT_WRITE, MAP_SHARED,
-                                 dev->ud_ib_dev_fd,
+                                 dev->ud_ctx->ucx_ib_dev_fd,
                                  offset);
         if (vf->vf_bar0.vaddr == MAP_FAILED) {
             usd_err("Failed to map bar0\n");
@@ -216,7 +216,7 @@ usd_map_vf(
         }
 
         /* map individual vnic resource seperately */
-        if (dev->ud_caps[USNIC_CAP_MAP_PER_RES] > 0) {
+        if (dev->ud_ctx->ucx_caps[USNIC_CAP_MAP_PER_RES] > 0) {
             ret = usd_map_vnic_res(dev, vf, vfip);
             if (ret)
                 goto out;
@@ -367,7 +367,7 @@ usd_create_wq_pio(
     int ret;
 
     dev = qp->uq_dev;
-    if (dev->ud_caps[USNIC_CAP_PIO] == 0 ||
+    if (dev->ud_ctx->ucx_caps[USNIC_CAP_PIO] == 0 ||
         vnic_dev_get_res_bus_addr(qp->uq_vf->vf_vdev, RES_TYPE_MEM, 0) == 0) {
         usd_err("dev does not support PIO\n");
         return -ENODEV;
@@ -665,6 +665,7 @@ usd_create_cq_with_cv(
     unsigned num_entries,
     int comp_fd,
     int comp_vec,
+    void *ibv_cq,
     struct usd_cq **cq_o)
 {
     unsigned qp_per_vf;
@@ -684,7 +685,7 @@ usd_create_cq_with_cv(
     }
 
     if (comp_fd != -1) {
-        if (dev->ud_caps[USD_CAP_CQ_INTR] == 0 ||
+        if (dev->ud_ctx->ucx_caps[USD_CAP_CQ_INTR] == 0 ||
             comp_vec >= (int)dev->ud_attrs.uda_num_comp_vectors) {
             usd_err("too large comp_vec (%d) requested, num_comp_vectors=%d\n",
                     comp_vec, (int)dev->ud_attrs.uda_num_comp_vectors);
@@ -730,7 +731,7 @@ usd_create_cq_with_cv(
     if (comp_vec < 0)
         comp_vec = 0;
 
-    ret = usd_ib_cmd_create_cq(dev, cq, comp_fd, comp_vec);
+    ret = usd_ib_cmd_create_cq(dev, cq, ibv_cq, comp_fd, comp_vec);
     if (ret != 0)
         goto out;
 
@@ -739,6 +740,8 @@ usd_create_cq_with_cv(
     /* initialize polling variables */
     cq->ucq_cqe_mask = num_entries - 1;
     cq->ucq_color_shift = msbit(num_entries) - 1;
+    cq->comp_fd = comp_fd;
+    cq->comp_vec = comp_vec;
 
     ucq = to_usdcq(cq);
     ucq->ucq_num_entries = num_entries - 1;
@@ -759,7 +762,7 @@ usd_create_cq(
     int comp_fd,
     struct usd_cq **cq_o)
 {
-    return usd_create_cq_with_cv(dev, num_entries, comp_fd, -1, cq_o);
+    return usd_create_cq_with_cv(dev, num_entries, comp_fd, -1, NULL, cq_o);
 }
 
 /*
@@ -804,11 +807,16 @@ usd_finish_create_cq(
         unsigned int cq_head = 0;
         unsigned int cq_tail = 0;
         unsigned int cq_tail_color = 1;
-        unsigned int cq_intr_enable = 0;
         unsigned int cq_entry_enable = 1;
         unsigned int cq_msg_enable = 0;
+        unsigned int cq_intr_enable = 0;
         unsigned int cq_intr_offset = 0;
         uint64_t cq_msg_addr = 0;
+
+        if (cq->comp_fd != -1) {
+            cq_intr_enable = 1;
+            cq_intr_offset = cq->intr_offset;
+        }
 
         cq->ucq_vnic_cq.ring.base_addr = (uintptr_t)cq->ucq_desc_ring;
         cq->ucq_vnic_cq.ring.desc_count = cq->ucq_num_entries;

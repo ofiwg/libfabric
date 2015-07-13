@@ -61,6 +61,7 @@ enum usd_link_state {
 };
 
 /* forward structure defs */
+struct usd_context;
 struct usd_qp;
 struct usd_device;
 struct usd_dest;
@@ -347,9 +348,12 @@ int usd_create_cq(struct usd_device *dev, unsigned num_cqe,
  *   comp_vec - value in the range of 0..uda_num_comp_vectors-1 indicating which
  *              underlying completion vector should be used for signaling
  *              comp_fd, or -1 for "don't care"
+ *   ibv_cq - The pointer of ibv_cq if verbs layer is implemented on top
+ *           needed for passing correct correct user cq pointer to kernel
  */
 int usd_create_cq_with_cv(struct usd_device *dev, unsigned num_entries,
-                          int comp_fd, int comp_vec, struct usd_cq **cq_o);
+                          int comp_fd, int comp_vec, void *ibv_cq,
+                            struct usd_cq **cq_o);
 
 int usd_destroy_cq(struct usd_cq *cq);
 
@@ -686,10 +690,19 @@ const char *usd_capability(enum usd_capability cap);
 /****************************************************************
  * special API holes punched for implementing verbs
  ****************************************************************/
+/* open a context, mapped to a verbs open_device call */
+int usd_open_context(const char *dev_name, int cmd_fd,
+                        struct usd_context **ctx_o);
+
+int usd_close_context(struct usd_context *ctx);
 
 /* open, but use caller's fd for commands */
 int usd_open_with_fd(const char *devname, int cmd_fd, int check_ready,
-        struct usd_device **dev_o);
+                    int alloc_pd, struct usd_device **dev_o);
+
+/* Generic usd device open function */
+int usd_open_with_ctx(struct usd_context *context, int alloc_pd,
+                        int check_ready, struct usd_device **dev_o);
 
 /* modify the destination UDP port in a usd_dest */
 void usd_dest_set_udp_ports(struct usd_dest *dest, struct usd_qp *src_qp,

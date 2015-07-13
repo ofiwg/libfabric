@@ -64,26 +64,40 @@
 #define USD_MAX_CQ_GROUP 1024
 #define USD_MAX_PRESEND 4
 
-#define USD_DEVF_CLOSE_CMD_FD (1<<0)
+#define USD_CTXF_CLOSE_CMD_FD (1u << 0)
+#define USD_DEVF_CLOSE_CTX (1u << 0)
 
 #ifndef USD_DEBUG
 #define USD_DEBUG 0
 #endif
 
 /*
+ * Instance of a usd context, corresponding to an
+ * opened libibverbs context
+ */
+struct usd_context {
+    struct usd_ib_dev *ucx_ib_dev;  /* parent IB dev */
+    int ucx_ib_dev_fd;              /* file desc for IB dev */
+    int ucmd_ib_dev_fd;             /* Another open file descriptor for IB dev
+                                     * used for encapusulating user commands
+                                     * through GET_CONTEXT IB command */
+
+    uint32_t ucx_flags;
+    int ucx_caps[USD_CAP_MAX];          /* device capablities */
+
+    /* Remove these after moving ud_attrs here */
+    int event_fd;
+    unsigned num_comp_vectors;
+};
+
+/*
  * Instance of a device opened by user
  */
 struct usd_device {
-    struct usd_ib_dev *ud_ib_dev;       /* parent IB dev */
-    int ud_ib_dev_fd;           /* file desc for IB dev */
-    int ucmd_ib_dev_fd;         /* Another open file descriptor for IB dev
-                                 * used for encapusulating user commands through
-                                 * GET_CONTEXT IB command */
+    struct usd_context *ud_ctx;
 
     uint32_t ud_flags;
-    struct usd_device_attrs ud_attrs;
-
-    int ud_caps[USD_CAP_MAX];     /* device capablities */
+    struct usd_device_attrs ud_attrs;   /* TODO move this to usd_ctx */
 
     /* VFs we have associated with this device */
     struct usd_vf *ud_vf_list;
@@ -92,7 +106,7 @@ struct usd_device {
     uint32_t ud_pd_handle;
 
     /* destination related */
-    int ud_arp_sockfd;          /* for ARP */
+    int ud_arp_sockfd;              /* for ARP */
     TAILQ_HEAD(, usd_dest_req) ud_pending_reqs;
     TAILQ_HEAD(, usd_dest_req) ud_completed_reqs;
 
@@ -184,6 +198,10 @@ struct usd_cq_impl {
     uint32_t ucq_cqe_mask;
     uint32_t ucq_color_shift;
     uint32_t ucq_handle;
+
+    int comp_fd;
+    int comp_vec;
+    uint32_t intr_offset;
 
     struct usd_rq **ucq_rq_map;
     struct usd_wq **ucq_wq_map;
