@@ -300,12 +300,15 @@ static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		}while (ret == 0);
 	} else {
 		ret = rbfdwait(&sock_cq->cq_rbfd, timeout);
-		fastlock_acquire(&sock_cq->lock);
-		if (ret != -FI_ETIMEDOUT && (avail = rbfdused(&sock_cq->cq_rbfd)))
-			ret = sock_cq_rbuf_read(sock_cq, buf, 
-						MIN(threshold, avail / cq_entry_len),
-						src_addr, cq_entry_len);
-		fastlock_release(&sock_cq->lock);
+		if (ret > 0) {
+			fastlock_acquire(&sock_cq->lock);
+			ret = 0;
+			if ((avail = rbfdused(&sock_cq->cq_rbfd)))
+				ret = sock_cq_rbuf_read(sock_cq, buf, 
+							MIN(threshold, avail / cq_entry_len),
+							src_addr, cq_entry_len);
+			fastlock_release(&sock_cq->lock);
+		}
 	}
 	return (ret == 0 || ret == -FI_ETIMEDOUT) ? -FI_EAGAIN : ret;
 }
