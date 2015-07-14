@@ -299,6 +299,9 @@ struct usdf_ep {
 			uint64_t tx_op_flags;
 			uint64_t rx_op_flags;
 
+			size_t tx_iov_limit;
+			size_t rx_iov_limit;
+
 			void *ep_hdr_buf;
 			struct usd_udp_hdr **ep_hdr_ptr;
 		} dg;

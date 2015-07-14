@@ -309,10 +309,7 @@ usdf_dgram_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 		return -FI_ENOSPC;
 	}
 
-	/* Advertised iov_limit is USDF_DGRAM_DFLT_SGE. Header takes up one
-	 * space.
-	 */
-	if (count > (USDF_DGRAM_DFLT_SGE - 1)) {
+	if (count > ep->e.dg.tx_iov_limit) {
 		USDF_DBG_SYS(EP_DATA, "max iov count exceeded: %zu\n", count);
 		return -FI_ENOSPC;
 	}
@@ -348,9 +345,7 @@ usdf_dgram_sendmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 		return -FI_ENOSPC;
 	}
 
-	/* Advertised iov_limit is USDF_DGRAM_DFLT_SGE. Header takes up one.
-	 */
-	if (msg->iov_count > (USDF_DGRAM_DFLT_SGE - 1)) {
+	if (msg->iov_count > ep->e.dg.tx_iov_limit) {
 		USDF_DBG_SYS(EP_DATA, "max iov count exceeded: %zu\n",
 				msg->iov_count);
 		return -FI_ENOSPC;
@@ -406,14 +401,8 @@ ssize_t usdf_dgram_rx_size_left(struct fid_ep *fep)
 	if (ep->e.dg.ep_qp == NULL)
 		return -FI_EOPBADSTATE; /* EP not enabled */
 
-	/* NOTE-SIZE-LEFT: divide by constant right now, rather than keeping
-	 * track of the rx_attr->iov_limit value we gave to the user.  This
-	 * sometimes under-reports the number of RX ops that could be posted,
-	 * but it avoids touching a cache line that we don't otherwise need.
-	 *
-	 * sendv/recvv could potentially post iov_limit+1 descriptors
-	 */
-	return usd_get_recv_credits(ep->e.dg.ep_qp) / (USDF_DGRAM_DFLT_SGE + 1);
+	return usd_get_recv_credits(ep->e.dg.ep_qp) /
+		(ep->e.dg.rx_iov_limit + 1);
 }
 
 ssize_t usdf_dgram_tx_size_left(struct fid_ep *fep)
@@ -430,8 +419,8 @@ ssize_t usdf_dgram_tx_size_left(struct fid_ep *fep)
 	if (ep->e.dg.ep_qp == NULL)
 		return -FI_EOPBADSTATE; /* EP not enabled */
 
-	/* see NOTE-SIZE-LEFT */
-	return usd_get_send_credits(ep->e.dg.ep_qp) / (USDF_DGRAM_DFLT_SGE + 1);
+	return usd_get_send_credits(ep->e.dg.ep_qp) /
+		(ep->e.dg.tx_iov_limit + 1);
 }
 
 /*
@@ -600,10 +589,7 @@ usdf_dgram_prefix_sendv(struct fid_ep *fep, const struct iovec *iov,
 	len = _usdf_iov_len(iov, count);
 	padding = USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
 
-	/*
-	 * USDF_DGRAM_DFLT_SGE is the advertised iov_limit.
-	 */
-	if (count > USDF_DGRAM_DFLT_SGE) {
+	if (count > ep->e.dg.tx_iov_limit) {
 		USDF_DBG_SYS(EP_DATA, "max iov count exceeded: %zu\n", count);
 		return -FI_ENOSPC;
 	}
@@ -648,9 +634,7 @@ usdf_dgram_prefix_sendmsg(struct fid_ep *fep, const struct fi_msg *msg,
 	completion = ep->ep_tx_dflt_signal_comp || (flags & FI_COMPLETION);
 	padding = USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
 
-	/* USDF_DGRAM_DFLT_SGE is the advertised iov_limit.
-	 */
-	if (msg->iov_count > USDF_DGRAM_DFLT_SGE) {
+	if (msg->iov_count > ep->e.dg.tx_iov_limit) {
 		USDF_DBG_SYS(EP_DATA, "max iov count exceeded: %zu\n",
 				msg->iov_count);
 		return -FI_ENOSPC;
@@ -695,9 +679,8 @@ ssize_t usdf_dgram_prefix_rx_size_left(struct fid_ep *fep)
 		return -FI_EOPBADSTATE; /* EP not enabled */
 
 	/* prefix_recvv can post up to iov_limit descriptors
-	 *
-	 * also see NOTE-SIZE-LEFT */
-	return (usd_get_recv_credits(ep->e.dg.ep_qp) / USDF_DGRAM_DFLT_SGE);
+	 */
+	return (usd_get_recv_credits(ep->e.dg.ep_qp) / ep->e.dg.rx_iov_limit);
 }
 
 ssize_t usdf_dgram_prefix_tx_size_left(struct fid_ep *fep)
@@ -715,9 +698,6 @@ ssize_t usdf_dgram_prefix_tx_size_left(struct fid_ep *fep)
 		return -FI_EOPBADSTATE; /* EP not enabled */
 
 	/* prefix_sendvcan post up to iov_limit descriptors
-	 *
-	 * also see NOTE-SIZE-LEFT */
-	return (usd_get_send_credits(ep->e.dg.ep_qp) / USDF_DGRAM_DFLT_SGE);
+	 */
+	return (usd_get_send_credits(ep->e.dg.ep_qp) / ep->e.dg.tx_iov_limit);
 }
-
-
