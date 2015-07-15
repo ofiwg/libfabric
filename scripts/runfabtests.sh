@@ -155,13 +155,14 @@ function compute_duration {
 }
 
 function is_excluded {
-    local e=$(echo $EXCLUDE | sed -e s/$1//)
-    if [[ "$EXCLUDE" != "$e" ]]; then
-        echo 1
-    else
-        echo 0
-    fi
-    return
+	for i in $(echo "$EXCLUDE" | tr -s "," " "); do
+		if [[ "$i" = "$1" ]]; then
+			echo 1
+			return
+		fi
+	done
+
+	echo 0
 }
 
 function unit_test {
@@ -173,7 +174,7 @@ function unit_test {
 	local end_time
 	local test_time
 
-	local e=$(is_excluded $test)
+	local e=$(is_excluded $(echo "fi_${test}" | cut -d " " -f 1))
 	if [ $e -eq 1 ]; then
 		print_results "$test_exe" "Notrun" "0" "" ""
 		skip_count+=1
@@ -215,7 +216,7 @@ function cs_test {
 	local end_time
 	local test_time
 
-	local e=$(is_excluded $test)
+	local e=$(is_excluded $(echo "fi_${test}" | cut -d " " -f 1))
 	if [ $e -eq 1 ]; then
 		print_results "$test_exe" "Notrun" "0" "" ""
 		skip_count+=1
