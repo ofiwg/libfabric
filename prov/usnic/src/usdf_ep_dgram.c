@@ -694,6 +694,8 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 	struct usdf_pep *parent_pep;
 	struct sockaddr *src_addr;
 	int is_bound;
+	size_t tx_size;
+	size_t rx_size;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
@@ -762,13 +764,13 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 	ep->ep_caps = info->caps;
 	ep->ep_mode = info->mode;
 
-	ep->ep_wqe =
-		udp->dom_fabric->fab_dev_attrs->uda_max_send_credits;
 	ep->e.dg.tx_iov_limit = USDF_DGRAM_IOV_LIMIT;
+	tx_size = udp->dom_fabric->fab_dev_attrs->uda_max_send_credits /
+		ep->e.dg.tx_iov_limit;
 
-	ep->ep_rqe =
-		udp->dom_fabric->fab_dev_attrs->uda_max_recv_credits;
 	ep->e.dg.rx_iov_limit = USDF_DGRAM_IOV_LIMIT;
+	rx_size = udp->dom_fabric->fab_dev_attrs->uda_max_recv_credits /
+		ep->e.dg.rx_iov_limit;
 
 	/*
 	 * TODO: Add better management of tx_attr/rx_attr to getinfo and dgram
@@ -778,28 +780,24 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 		ep->e.dg.tx_op_flags = info->tx_attr->op_flags;
 		if (info->tx_attr->iov_limit)
 			ep->e.dg.tx_iov_limit = info->tx_attr->iov_limit;
-		if (info->tx_attr->size) {
-			if (!(ep->ep_mode & FI_MSG_PREFIX))
-				ep->ep_wqe = info->tx_attr->size *
-					(ep->e.dg.tx_iov_limit + 1);
-			else
-				ep->ep_wqe = info->tx_attr->size *
-					ep->e.dg.tx_iov_limit;
-		}
+		if (info->tx_attr->size)
+			tx_size = info->tx_attr->size;
 	}
 
 	if (info->rx_attr) {
 		ep->e.dg.rx_op_flags = info->rx_attr->op_flags;
 		if (info->rx_attr->iov_limit)
 			ep->e.dg.rx_iov_limit = info->rx_attr->iov_limit;
-		if (info->rx_attr->size) {
-			if (!(ep->ep_mode & FI_MSG_PREFIX))
-				ep->ep_rqe = info->rx_attr->size *
-					(ep->e.dg.rx_iov_limit + 1);
-			else
-				ep->ep_rqe = info->rx_attr->size *
-					ep->e.dg.rx_iov_limit;
-		}
+		if (info->rx_attr->size)
+			rx_size = info->rx_attr->size;
+	}
+
+	if (ep->ep_mode & FI_MSG_PREFIX) {
+		ep->ep_wqe = tx_size * ep->e.dg.tx_iov_limit;
+		ep->ep_rqe = rx_size * ep->e.dg.rx_iov_limit;
+	} else {
+		ep->ep_wqe = tx_size * (ep->e.dg.tx_iov_limit + 1);
+		ep->ep_rqe = rx_size * (ep->e.dg.rx_iov_limit + 1);
 	}
 
 	/* Check that the requested credit size is less than the max credit
