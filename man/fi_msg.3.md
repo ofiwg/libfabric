@@ -205,9 +205,9 @@ fi_sendmsg.
 
 *FI_COMPLETION*
 : Indicates that a completion entry should be generated for the
-  specified operation.  The endpoint must be bound to a completion queue
-  with FI_COMPLETION that corresponds to the specified operation, or
-  this flag is ignored.
+  specified operation.  The endpoint must be bound to a completion
+  queue with FI_SELECTIVE_COMPLETION that corresponds to the
+  specified operation, or this flag is ignored.
 
 *FI_MORE*
 : Indicates that the user has additional requests that will
