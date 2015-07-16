@@ -171,7 +171,7 @@ interfaces are defined by libfabric.
 # LOGGING INTERFACE
 
 Logging can be controlled using the FI_LOG_LEVEL, FI_LOG_PROV, and
-FI_LOG_SUBSYSTEMS environment variables.
+FI_LOG_SUBSYS environment variables.
 
 *FI_LOG_LEVEL*
 : FI_LOG_LEVEL controls the amount of logging data that is output.  The
