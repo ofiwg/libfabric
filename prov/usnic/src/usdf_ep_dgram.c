@@ -210,6 +210,9 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				return -FI_EINVAL;
 			}
 
+			if (flags & FI_SELECTIVE_COMPLETION)
+				return -FI_EOPNOTSUPP;
+
 			ep->ep_rx_dflt_signal_comp =
 				(flags & FI_SELECTIVE_COMPLETION) ? 0 : 1;
 
