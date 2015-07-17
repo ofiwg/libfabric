@@ -39,6 +39,28 @@
 #define USDF_DGRAM_MAX_SGE 8
 #define USDF_DGRAM_DFLT_SGE 4
 
+#define USDF_DGRAM_CAPS (FI_MSG | FI_SOURCE | FI_SEND | FI_RECV)
+#define USDF_DGRAM_SUPP_MODE (FI_LOCAL_MR | FI_MSG_PREFIX)
+#define USDF_DGRAM_REQ_MODE (FI_LOCAL_MR)
+#define USDF_DGRAM_MSG_ORDER (FI_ORDER_NONE)
+#define USDF_DGRAM_COMP_ORDER (FI_ORDER_NONE)
+#define USDF_DGRAM_INJECT_SIZE                                                 \
+	(USD_SEND_MAX_COPY - sizeof(struct usd_udp_hdr))
+#define USDF_DGRAM_SUPP_SENDMSG_FLAGS                                          \
+	(FI_INJECT | FI_COMPLETION | FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE)
+#define USDF_DGRAM_SUPP_RECVMSG_FLAGS (FI_COMPLETION)
+#define USDF_DGRAM_IOV_LIMIT (USDF_DGRAM_DFLT_SGE)
+#define USDF_DGRAM_RMA_IOV_LIMIT 0
+
+
+int usdf_dgram_fill_rx_attr(struct fi_info *hints,
+		struct fi_info *fi, struct usd_device_attrs *dap);
+int usdf_dgram_fill_tx_attr(struct fi_info *hints, struct fi_info *fi,
+		struct usd_device_attrs *dap);
+int usdf_dgram_fill_dom_attr(struct fi_info *hints, struct fi_info *fi);
+int usdf_dgram_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
+		struct usd_device_attrs *dap);
+
 /* fi_ops_msg for DGRAM */
 ssize_t usdf_dgram_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	fi_addr_t src_addr, void *context);
