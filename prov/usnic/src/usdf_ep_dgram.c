@@ -807,10 +807,14 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 	 * counts. If the fi_info struct was acquired from fi_getinfo then this
 	 * will always be the case.
 	 */
-	if (ep->ep_wqe > udp->dom_fabric->fab_dev_attrs->uda_max_send_credits)
-		return -FI_EINVAL;
-	if (ep->ep_rqe > udp->dom_fabric->fab_dev_attrs->uda_max_recv_credits)
-		return -FI_EINVAL;
+	if (ep->ep_wqe > udp->dom_fabric->fab_dev_attrs->uda_max_send_credits) {
+		ret = -FI_EINVAL;
+		goto fail;
+	}
+	if (ep->ep_rqe > udp->dom_fabric->fab_dev_attrs->uda_max_recv_credits) {
+		ret = -FI_EINVAL;
+		goto fail;
+	}
 
 	if (ep->ep_mode & FI_MSG_PREFIX) {
 		if (info->ep_attr == NULL) {
