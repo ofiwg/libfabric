@@ -110,7 +110,6 @@ static int mlxm_ep_control(fid_t fid, int command, void *arg)
         default:
 		return -FI_ENOSYS;
         }
-        return 0;
 }
 
 static struct fi_ops_ep mlxm_ep_ops = {
