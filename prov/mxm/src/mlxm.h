@@ -63,7 +63,7 @@ extern "C" {
 #include <fi_list.h>
 #include <mxm/api/mxm_api.h>
 #include "mpool.h"
-
+#include "uthash.h"
 static int mlxm_errno_table[MXM_ERR_LAST] = {
 	0,			/* MXM_OK = 0, */
 	-FI_ENOMSG,		/* MXM_ERR_NO_MESSAGE, */
@@ -128,33 +128,15 @@ struct mlxm_req {
         uint16_t   mq_id;
 };
 
-#define MLXM_MQ_STORAGE_LIST 0
-#define MLXM_MQ_STORAGE_ARRAY 1
-#define MLXM_MQ_STORAGE_TYPE MLXM_MQ_STORAGE_ARRAY
-#ifndef MLXM_MQ_STORAGE_TYPE
-#error Incorrect MQ storage definition
-#endif
 
 struct mlxm_mq_entry {
-#if MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_LIST
-        struct dlist_entry list_entry;
         uint16_t mq_key;
-#endif
-        union{
-                mxm_mq_h mq;
-                uint64_t is_set;
-                // TODO: static assert those are equal
-        };
+        mxm_mq_h mq;
+        UT_hash_handle hh;
 };
 
 struct mlxm_mq_storage{
-#if MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_LIST
-        struct dlist_entry mq_list;
-#elif MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_ARRAY
-        /* MXM mq id is uint16_t so the max number of different MQs
-           is 1 << 16. */
-        struct mlxm_mq_entry mq_entries[1<<16];
-#endif
+        struct mlxm_mq_entry *hash;
 };
 
 struct mlxm_globals{
@@ -165,30 +147,22 @@ struct mlxm_globals{
 };
 extern struct mlxm_globals mlxm_globals;
 
+#define HASH_FIND_INT16(head,findint,out)                                        \
+    HASH_FIND(hh,head,findint,sizeof(uint16_t),out)
+#define HASH_ADD_INT16(head,intfield,add)                                        \
+    HASH_ADD(hh,head,intfield,sizeof(uint16_t),add)
+
 static inline
 int mlxm_find_mq(struct mlxm_mq_storage *storage,
                  uint16_t id, mxm_mq_h *mq) {
-#if MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_LIST
-        struct dlist_entry *p, *head;
-        struct mlxm_mq_entry *mq_entry;
-
-        head = &storage->mq_list;
-
-        for (p = head->next; p != head; p = p->next) {
-                mq_entry = (struct mlxm_mq_entry*)p;
-                if (mq_entry->mq_key == id) {
-                        *mq = mq_entry->mq;
-                        return 0;
-                }
-        }
-#elif MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_ARRAY
-        if (storage->mq_entries[id].is_set != 0) {
-                *mq = storage->mq_entries[id].mq;
+        struct mlxm_mq_entry *mq_e = NULL;
+        HASH_FIND_INT16(storage->hash, &id, mq_e);
+        if (mq_e) {
+                *mq = mq_e->mq;
                 return 0;
+        } else {
+                return 1;
         }
-#endif
-        return 1;
-
 };
 
 static inline
@@ -196,11 +170,7 @@ int mlxm_mq_add_to_storage(struct mlxm_mq_storage *storage,
                            uint16_t id, mxm_mq_h *mq) {
         int mxm_err;
         struct mlxm_mq_entry *mq_entry;
-#if MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_LIST
         mq_entry = (struct mlxm_mq_entry*)malloc(sizeof(*mq_entry));
-#elif MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_ARRAY
-        mq_entry = &storage->mq_entries[id];
-#endif
         mxm_err = mxm_mq_create(mlxm_globals.mxm_context,
 				id,
                                 &mq_entry->mq);
@@ -213,42 +183,26 @@ int mlxm_mq_add_to_storage(struct mlxm_mq_storage *storage,
         FI_INFO(&mlxm_prov,FI_LOG_CORE,
                 "MXM mq created, id 0x%x, %p\n",id , mq_entry->mq);
 
-#if MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_LIST
         mq_entry->mq_key = id;
-        dlist_insert_after((struct dlist_entry *)mq_entry,
-                           (struct dlist_entry *)storage);
-#endif
+        HASH_ADD_INT16(storage->hash, mq_key, mq_entry);
         *mq = mq_entry->mq;
         return 0;
 };
 
 static inline
 void mlxm_mq_storage_init() {
-#if MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_LIST
-        dlist_init(&mlxm_globals.mq_storage.mq_list);
-#elif MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_ARRAY
-        memset(mlxm_globals.mq_storage.mq_entries,0,
-               sizeof(mlxm_globals.mq_storage.mq_entries));
-#endif
+        mlxm_globals.mq_storage.hash = NULL;
 }
 
 static inline
 void mlxm_mq_storage_fini(mlxm_fid_ep_t *fid_ep) {
-#if MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_LIST
-        struct dlist_entry *p, *head, *next;;
-        struct mlxm_mq_entry *mq_entry;
-
-        head = &mlxm_globals.mq_storage.mq_list;
-        p = head->next;
-        while (p != head) {
-                next = p->next;
-                mq_entry = (struct mlxm_mq_entry*)p;
-                mxm_mq_destroy(mq_entry->mq);
-                dlist_remove(p);
-                free(mq_entry);
-                p = next;
+        struct mlxm_mq_entry *mq_e, *tmp;
+        HASH_ITER(hh, mlxm_globals.mq_storage.hash, mq_e, tmp) {
+                mxm_mq_destroy(mq_e->mq);
+                HASH_DEL(mlxm_globals.mq_storage.hash,
+                         mq_e);
+                free(mq_e);
         }
-#endif
 }
 
 struct mlxm_fid_domain {
