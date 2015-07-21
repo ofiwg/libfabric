@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -35,18 +35,18 @@
 static int mlxm_av_insert(struct fid_av *av, const void *addr, size_t count,
                           fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	mlxm_fid_av_t	*fid_av;
-	mlxm_fid_ep_t	*fid_ep;
-	mxm_error_t		mxm_err;
-	void                *mxm_addr;
-	size_t	        mxm_addrlen;
-	int i, err;
+        mlxm_fid_av_t *fid_av;
+        mlxm_fid_ep_t *fid_ep;
+        mxm_error_t    mxm_err;
+        void          *mxm_addr;
+        size_t	       mxm_addrlen;
+        int            i, err;
 
         fid_av = container_of(av, mlxm_fid_av_t, av);
 	fid_ep = fid_av->ep;
 	mxm_addrlen = fid_av->domain->mxm_addrlen;
 
-	for (i = 0; i < count; ++i) {
+        for (i = 0; i < count; ++i) {
                 mxm_addr = (void*)&((char *)addr)[i*mxm_addrlen];
                 mxm_err = mxm_ep_connect(mlxm_globals.mxm_ep, mxm_addr,
 					 (mxm_conn_h*)&fi_addr[i]);
@@ -57,11 +57,8 @@ static int mlxm_av_insert(struct fid_av *av, const void *addr, size_t count,
                 FI_INFO(&mlxm_prov, FI_LOG_AV, "connected to %s, conn %p\n",
                         (char*)mxm_addr+8,
                         *((mxm_conn_h*)&fi_addr[i]));
-
-	}
-
-	return 0;
-
+        }
+        return 0;
 err_out:
 	return err;
 }
@@ -69,8 +66,8 @@ err_out:
 static int mlxm_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			  uint64_t flags)
 {
-	mxm_error_t	mxm_err;
-	int		i;
+        mxm_error_t   mxm_err;
+        int           i;
 	mlxm_fid_av_t *fid_av;
         fid_av = container_of(av, mlxm_fid_av_t, av.fid);
 
@@ -100,7 +97,6 @@ static int mlxm_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	/* no need to bind an EQ since insert/remove is synchronous */
         return -FI_ENOSYS;
 }
-
 
 static struct fi_ops mlxm_fi_ops = {
 	.size  = sizeof(struct fi_ops),
@@ -142,8 +138,7 @@ int mlxm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	fid_av->type	= type;
 	fid_av->addrlen = sizeof(mxm_conn_h);
 	fid_av->count   = count;
-
-	fid_av->av.fid.fclass  = FI_CLASS_AV;
+        fid_av->av.fid.fclass  = FI_CLASS_AV;
 	fid_av->av.fid.context = context;
 	fid_av->av.fid.ops     = &mlxm_fi_ops;
 	fid_av->av.ops         = &mlxm_av_ops;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -102,9 +102,7 @@ int mlxm_errno(int err)
 
 #define MLXM_SUPPORTED_FLAGS ( FI_SEND | FI_RECV )
 #define MLXM_DEFAULT_FLAGS   (0)
-
 extern struct fi_provider mlxm_prov;
-
 
 typedef struct mlxm_cq_entry       mlxm_cq_entry_t;
 typedef struct mlxm_fid_cq         mlxm_fid_cq_t;
@@ -115,34 +113,27 @@ typedef struct mlxm_fid_av         mlxm_fid_av_t;
 typedef struct mlxm_fid_ep         mlxm_fid_ep_t;
 typedef struct mlxm_fid_fabric     mlxm_fid_fabric_t;
 
-
 struct mlxm_cq_entry {
         void				*ptr;
 	mxm_conn_h			src_addr;
         mlxm_cq_entry_t 		*next;
 };
 
-
-
 struct mlxm_req {
         union {
 		mxm_send_req_t	sreq;
 		mxm_recv_req_t	rreq;
         } mxm_req;
-    struct mpool* pool;
+        struct mpool* pool;
         uint16_t   mq_id;
 };
 
-
 #define MLXM_MQ_STORAGE_LIST 0
 #define MLXM_MQ_STORAGE_ARRAY 1
-
 #define MLXM_MQ_STORAGE_TYPE MLXM_MQ_STORAGE_ARRAY
-
 #ifndef MLXM_MQ_STORAGE_TYPE
 #error Incorrect MQ storage definition
 #endif
-
 
 struct mlxm_mq_entry {
 #if MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_LIST
@@ -156,8 +147,6 @@ struct mlxm_mq_entry {
         };
 };
 
-
-
 struct mlxm_mq_storage{
 #if MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_LIST
         struct dlist_entry mq_list;
@@ -168,12 +157,11 @@ struct mlxm_mq_storage{
 #endif
 };
 
-
 struct mlxm_globals{
         mxm_h mxm_context;
         mxm_ep_h mxm_ep;
         struct mlxm_mq_storage mq_storage;
-    struct mpool *req_pool;
+        struct mpool *req_pool;
 };
 extern struct mlxm_globals mlxm_globals;
 
@@ -213,27 +201,23 @@ int mlxm_mq_add_to_storage(struct mlxm_mq_storage *storage,
 #elif MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_ARRAY
         mq_entry = &storage->mq_entries[id];
 #endif
-
         mxm_err = mxm_mq_create(mlxm_globals.mxm_context,
 				id,
                                 &mq_entry->mq);
-
         if (mxm_err) {
                 FI_WARN(&mlxm_prov,FI_LOG_CORE,
                         "mxm_mq_create failed: mq_id %d, errno %d:%s\n",
                         id, mxm_err, mxm_error_string(mxm_err));
                 return mlxm_errno(mxm_err);
 	}
-
         FI_INFO(&mlxm_prov,FI_LOG_CORE,
                 "MXM mq created, id 0x%x, %p\n",id , mq_entry->mq);
 
 #if MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_LIST
-                mq_entry->mq_key = id;
-                dlist_insert_after((struct dlist_entry *)mq_entry,
-                                   (struct dlist_entry *)storage);
+        mq_entry->mq_key = id;
+        dlist_insert_after((struct dlist_entry *)mq_entry,
+                           (struct dlist_entry *)storage);
 #endif
-
         *mq = mq_entry->mq;
         return 0;
 };
@@ -241,10 +225,10 @@ int mlxm_mq_add_to_storage(struct mlxm_mq_storage *storage,
 static inline
 void mlxm_mq_storage_init() {
 #if MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_LIST
-    dlist_init(&mlxm_globals.mq_storage.mq_list);
+        dlist_init(&mlxm_globals.mq_storage.mq_list);
 #elif MLXM_MQ_STORAGE_TYPE == MLXM_MQ_STORAGE_ARRAY
-    memset(mlxm_globals.mq_storage.mq_entries,0,
-                sizeof(mlxm_globals.mq_storage.mq_entries));
+        memset(mlxm_globals.mq_storage.mq_entries,0,
+               sizeof(mlxm_globals.mq_storage.mq_entries));
 #endif
 }
 
@@ -272,7 +256,6 @@ struct mlxm_fid_domain {
         size_t		        mxm_addrlen;
 };
 
-
 struct mlxm_cq_entry_queue {
 	size_t			size;
 	size_t			n;
@@ -280,40 +263,41 @@ struct mlxm_cq_entry_queue {
 	struct mlxm_cq_entry	*tail;
 };
 
-
 struct mlxm_fid_cq {
         struct fid_cq cq;
         mxm_h mxm_context;
-    struct {
-        void *head;
-        void *tail;
-    } ok_q;
-    struct {
-        void *head;
-        void *tail;
-    } err_q;
+        struct {
+                void *head;
+                void *tail;
+        } ok_q;
+        struct {
+                void *head;
+                void *tail;
+        } err_q;
 };
 
-#define MLXM_CQ_ENQUEUE(_queue, __ctx) do{                      \
-        if (_queue.head == NULL) {                              \
-            _queue.head = __ctx->internal[0];                   \
-            _queue.tail = __ctx->internal[0];                   \
-        } else {                                                \
-            ((struct fi_context *)(_queue.tail))->internal[0] = \
-                __ctx;                                          \
-            _queue.tail = __ctx;                                \
-        }                                                       \
-    }while(0)
+#define MLXM_CQ_ENQUEUE(_queue, __ctx)                                  \
+        do{                                                             \
+                if (_queue.head == NULL) {                              \
+                        _queue.head = __ctx->internal[0];               \
+                        _queue.tail = __ctx->internal[0];               \
+                } else {                                                \
+                        ((struct fi_context *)(_queue.tail))->internal[0] = \
+                                __ctx;                                  \
+                        _queue.tail = __ctx;                            \
+                }                                                       \
+        }while(0)
 
-#define MLXM_CQ_DEQUEUE(_queue, __ctx) do{              \
-        __ctx = (struct fi_context*)(_queue.head);      \
-        assert(__ctx);                                  \
-        if (__ctx->internal[0] == __ctx) {              \
-            _queue.head = NULL;                         \
-        } else {                                        \
-            _queue.head = __ctx->internal[0];           \
-        }                                               \
-    }while(0)
+#define MLXM_CQ_DEQUEUE(_queue, __ctx)                          \
+        do{                                                     \
+                __ctx = (struct fi_context*)(_queue.head);      \
+                assert(__ctx);                                  \
+                if (__ctx->internal[0] == __ctx) {              \
+                        _queue.head = NULL;                     \
+                } else {                                        \
+                        _queue.head = __ctx->internal[0];       \
+                }                                               \
+        }while(0)
 
 struct mlxm_fid_av {
 	struct fid_av		av;
@@ -323,8 +307,6 @@ struct mlxm_fid_av {
 	size_t count;
         size_t			addrlen;
 };
-
-
 
 struct mlxm_fid_ep {
 	struct fid_ep		ep;
@@ -351,23 +333,17 @@ extern struct fi_ops_cm		mlxm_cm_ops;
 extern struct fi_ops_tagged	mlxm_tagged_ops;
 extern struct fi_ops_mr	        mlxm_mr_ops;
 
-
 #define MLXM_MEM_TAG_FORMAT (0xFFFF00000000LLU) /* MXM support 16 bit field for MQ, and 32 more bits for tag */
+extern uint64_t mlxm_mem_tag_format;
 
-    extern uint64_t mlxm_mem_tag_format;
-extern struct mlxm_tag_fields_t mlxm_tag_fields;
-
-
-
-int	mlxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-                         struct fid_domain **fid, void *context);
-int	mlxm_ep_open(struct fid_domain *domain, struct fi_info *info,
-		     struct fid_ep **fid, void *context);
-int	mlxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		     struct fid_cq **cq, void *context);
-int	mlxm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-		     struct fid_av **av, void *context);
-
+        int mlxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+                             struct fid_domain **fid, void *context);
+        int mlxm_ep_open(struct fid_domain *domain, struct fi_info *info,
+                         struct fid_ep **fid, void *context);
+        int mlxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+                         struct fid_cq **cq, void *context);
+        int mlxm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+                         struct fid_av **av, void *context);
 
 #ifdef __cplusplus
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -29,25 +29,21 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
 #include "mlxm.h"
-
 
 static ssize_t mlxm_ep_cancel(fid_t fid, void *ctx)
 {
-	mlxm_fid_ep_t     *fid_ep;
-	mlxm_req_t        *req;
+        mlxm_fid_ep_t     *fid_ep;
+        mlxm_req_t        *req;
         struct fi_context *context = (struct fi_context*)ctx;
 	int err;
 
         fid_ep = container_of(fid, mlxm_fid_ep_t, ep.fid);
 	if (!fid_ep->domain)
 		return -EBADF;
-
-	if (!context)
+        if (!context)
 		return -EINVAL;
-
-	if (context->internal[0] == NULL)
+        if (context->internal[0] == NULL)
                 return -FI_EINVAL;
 
         req =(mlxm_req_t *)context->internal[1];
@@ -63,13 +59,13 @@ static ssize_t mlxm_ep_cancel(fid_t fid, void *ctx)
 }
 
 static int mlxm_ep_getopt(fid_t fid, int level, int optname,
-			    void *optval, size_t *optlen)
+                          void *optval, size_t *optlen)
 {
 	return -ENOSYS;
 }
 
 static int mlxm_ep_setopt(fid_t fid, int level, int optname,
-			    const void *optval, size_t optlen)
+                          const void *optval, size_t optlen)
 {
         return 0;
 }
@@ -85,29 +81,24 @@ static int mlxm_ep_close(fid_t fid)
 
 static int mlxm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-    mlxm_fid_ep_t	*fid_ep;
-    int			err;
+        mlxm_fid_ep_t *fid_ep;
+        int           err = 0;
+        fid_ep = container_of(fid, mlxm_fid_ep_t, ep.fid);
 
-
-    fid_ep = container_of(fid, mlxm_fid_ep_t, ep.fid);
-
-    switch (bfid->fclass) {
-    case FI_CLASS_CQ:
-        /* TODO: check ress flags for send/recv ECs */
-        fid_ep->cq = container_of(bfid, mlxm_fid_cq_t, cq.fid);
-        break;
-    case FI_CLASS_AV:
-        fid_ep->av = container_of(bfid, mlxm_fid_av_t, av.fid);
-        fid_ep->domain = fid_ep->av->domain;
-        fid_ep->av->ep = fid_ep;
-        break;
-    default:
-        return -ENOSYS;
-    }
-
-    return 0;
-
-    return err;
+        switch (bfid->fclass) {
+        case FI_CLASS_CQ:
+                /* TODO: check ress flags for send/recv ECs */
+                fid_ep->cq = container_of(bfid, mlxm_fid_cq_t, cq.fid);
+                break;
+        case FI_CLASS_AV:
+                fid_ep->av = container_of(bfid, mlxm_fid_av_t, av.fid);
+                fid_ep->domain = fid_ep->av->domain;
+                fid_ep->av->ep = fid_ep;
+                break;
+        default:
+                return -ENOSYS;
+        }
+        return err;
 }
 
 
@@ -116,16 +107,10 @@ static int mlxm_ep_control(fid_t fid, int command, void *arg)
         switch (command) {
 	case FI_ENABLE:
 		return 0;
-
-	default:
+        default:
 		return -FI_ENOSYS;
-
         }
         return 0;
-}
-
-static int mlxm_ep_enable(struct fid_ep *ep) {
-	return 0;
 }
 
 static struct fi_ops_ep mlxm_ep_ops = {
@@ -142,29 +127,27 @@ static struct fi_ops mlxm_fi_ops = {
         .control = mlxm_ep_control,
 };
 
-
 static inline
 int mlxm_check_mem_tag_format(uint64_t format) {
-    if (format == MLXM_MEM_TAG_FORMAT)
-        return 0;
-    else
-        return 1;
+        if (format == MLXM_MEM_TAG_FORMAT)
+                return 0;
+        else
+                return 1;
 }
-
 
 int mlxm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **fid, void *context)
 {
-        mlxm_fid_ep_t	*fid_ep;
+        mlxm_fid_ep_t     *fid_ep;
         mlxm_fid_domain_t *mlxm_domain;
 
         if (mlxm_check_mem_tag_format(mlxm_mem_tag_format)) {
-                FI_WARN(&mlxm_prov, FI_LOG_CORE, "unsupported mem_tag_format: 0x%llx, supported: 0x%llx\n",
+                FI_WARN(&mlxm_prov, FI_LOG_CORE,
+                        "unsupported mem_tag_format: 0x%llx, supported: 0x%llx\n",
                         (long long unsigned)mlxm_mem_tag_format,
                         MLXM_MEM_TAG_FORMAT);
                 return -EINVAL;
         }
-
         fid_ep = (mlxm_fid_ep_t *) calloc(1, sizeof *fid_ep);
 	if (!fid_ep)
 		return -ENOMEM;
@@ -191,9 +174,7 @@ int mlxm_ep_open(struct fid_domain *domain, struct fi_info *info,
                          * TODO: clarify this flow */
                 }
 	}
-
         *fid = &fid_ep->ep;
-
         mpool_init(&mlxm_globals.req_pool, sizeof(struct mlxm_req), 32*4);
         fid_ep->mxm_mqs = &mlxm_globals.mq_storage;
         return 0;
