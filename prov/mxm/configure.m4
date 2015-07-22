@@ -15,8 +15,19 @@ AC_DEFUN([FI_MXM_CONFIGURE],[
                 [Enable MXM provider @<:@default=no@:>@])
 		],
 		[],
-		[enable_mxm=no])
-	AC_ARG_WITH([mxm],
+                [enable_mxm=no])
+        AC_CHECK_SIZEOF([void *])
+
+        AS_IF([test x"$enable_mxm" = x"yes"],
+              [AS_IF([test x"$ac_cv_sizeof_void_p" = x"8"],
+                     [],
+                     [
+                         enable_mxm=no
+                         AC_MSG_WARN([MXM OFI provider does not support 32 bit target platform])
+                     ])],
+              [])
+
+        AC_ARG_WITH([mxm],
                 [AS_HELP_STRING([--with-mxm=@<:@MXM installation path@:>@],
                         [Provide path to MXM installation])
 		],
