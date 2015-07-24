@@ -147,16 +147,11 @@ struct mlxm_globals{
 };
 extern struct mlxm_globals mlxm_globals;
 
-#define HASH_FIND_INT16(head,findint,out)               \
-        HASH_FIND(hh,head,findint,sizeof(uint16_t),out)
-#define HASH_ADD_INT16(head,intfield,add)               \
-        HASH_ADD(hh,head,intfield,sizeof(uint16_t),add)
-
 static inline
 int mlxm_find_mq(struct mlxm_mq_storage *storage,
                  uint16_t id, mxm_mq_h *mq) {
         struct mlxm_mq_entry *mq_e = NULL;
-        HASH_FIND_INT16(storage->hash, &id, mq_e);
+        HASH_FIND(hh, storage->hash, &id, sizeof(uint16_t), mq_e);
         if (mq_e) {
                 *mq = mq_e->mq;
                 return 0;
@@ -184,7 +179,7 @@ int mlxm_mq_add_to_storage(struct mlxm_mq_storage *storage,
                 "MXM mq created, id 0x%x, %p\n",id , mq_entry->mq);
 
         mq_entry->mq_key = id;
-        HASH_ADD_INT16(storage->hash, mq_key, mq_entry);
+        HASH_ADD(hh, storage->hash, mq_key, sizeof(uint16_t), mq_entry);
         *mq = mq_entry->mq;
         return 0;
 };
