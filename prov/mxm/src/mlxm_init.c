@@ -37,7 +37,31 @@
 #define MLXM_EP_CAP     (MLXM_EP_CAP_BASE)
 uint64_t mlxm_mem_tag_format;
 struct mlxm_globals mlxm_globals = {0,0};
-
+int mlxm_errno_table[MXM_ERR_LAST];
+static int mlxm_init_errcodes() {
+        mlxm_errno_table[MXM_OK]                        = 0;
+        mlxm_errno_table[MXM_ERR_NO_MESSAGE]            = -FI_ENOMSG;
+        mlxm_errno_table[MXM_ERR_WOULD_BLOCK]           = -EWOULDBLOCK;
+        mlxm_errno_table[MXM_ERR_IO_ERROR]              = -FI_EIO;
+        mlxm_errno_table[MXM_ERR_NO_MEMORY]             = -FI_ENOMEM;
+        mlxm_errno_table[MXM_ERR_INVALID_PARAM]         = -FI_EINVAL;
+        mlxm_errno_table[MXM_ERR_UNREACHABLE]           = -FI_ENETUNREACH;
+        mlxm_errno_table[MXM_ERR_INVALID_ADDR]          = -FI_EINVAL;
+        mlxm_errno_table[MXM_ERR_NOT_IMPLEMENTED]       = -FI_ENOSYS;
+        mlxm_errno_table[MXM_ERR_MESSAGE_TRUNCATED]     = -FI_EMSGSIZE;
+        mlxm_errno_table[MXM_ERR_NO_PROGRESS]           = 0;
+        mlxm_errno_table[MXM_ERR_BUFFER_TOO_SMALL]      = -FI_ETOOSMALL;
+        mlxm_errno_table[MXM_ERR_NO_ELEM]               = -FI_ENOENT;
+        mlxm_errno_table[MXM_ERR_SOME_CONNECTS_FAILED]  = -FI_EIO;
+        mlxm_errno_table[MXM_ERR_NO_DEVICE]             = -FI_ENODEV;
+        mlxm_errno_table[MXM_ERR_BUSY]                  = -FI_EBUSY;
+        mlxm_errno_table[MXM_ERR_CANCELED]              = -FI_ECANCELED;
+        mlxm_errno_table[MXM_ERR_SHMEM_SEGMENT]         = -FI_EINVAL;
+        mlxm_errno_table[MXM_ERR_ALREADY_EXISTS]        = -EEXIST;
+        mlxm_errno_table[MXM_ERR_OUT_OF_RANGE]          = -FI_EINVAL;
+        mlxm_errno_table[MXM_ERR_TIMED_OUT]             = -FI_ETIMEDOUT;
+        return 0;
+}
 static int mlxm_getinfo(uint32_t version, const char *node,
                         const char *service, uint64_t flags,
                         struct fi_info *hints, struct fi_info **info)
@@ -244,6 +268,8 @@ MXM_INI
         mxm_context_opts_t *context_opts;
         mxm_ep_opts_t      *ep_opts;
         mxm_error_t        mxm_err;
+
+        mlxm_init_errcodes();
         mxm_err = mxm_config_read_opts(&context_opts, &ep_opts, NULL, NULL, 0);
         if (mxm_err != MXM_OK) {
                 FI_WARN(&mlxm_prov, FI_LOG_DOMAIN,

@@ -64,31 +64,7 @@ extern "C" {
 #include <mxm/api/mxm_api.h>
 #include "mpool.h"
 #include "uthash.h"
-static int mlxm_errno_table[MXM_ERR_LAST] = {
-        0,                      /* MXM_OK = 0, */
-        -FI_ENOMSG,             /* MXM_ERR_NO_MESSAGE, */
-        -EWOULDBLOCK,           /* MXM_ERR_WOULD_BLOCK, */
-        -FI_EIO,                /* MXM_ERR_IO_ERROR, */
-        -FI_ENOMEM,             /* MXM_ERR_NO_MEMORY, */
-        -FI_EINVAL,             /* MXM_ERR_INVALID_PARAM, */
-        -FI_ENETUNREACH,        /* MXM_ERR_UNREACHABLE, */
-        -FI_EINVAL,             /* MXM_ERR_INVALID_ADDR, */
-        -FI_ENOSYS,             /* MXM_ERR_NOT_IMPLEMENTED, */
-        -FI_EMSGSIZE,           /* MXM_ERR_MESSAGE_TRUNCATED, */
-        0,                      /* MXM_ERR_NO_PROGRESS, */
-        -FI_ETOOSMALL,          /* MXM_ERR_BUFFER_TOO_SMALL, */
-        -FI_ENOENT,             /* MXM_ERR_NO_ELEM, */
-        -FI_EIO,                /* MXM_ERR_SOME_CONNECTS_FAILED, */
-        -FI_ENODEV,             /* MXM_ERR_NO_DEVICE, */
-        -FI_EBUSY,              /* MXM_ERR_BUSY, */
-        -FI_ECANCELED,          /* MXM_ERR_CANCELED, */
-        -FI_EINVAL,             /* MXM_ERR_SHMEM_SEGMENT, */
-        -EEXIST,                /* MXM_ERR_ALREADY_EXISTS, */
-        -FI_EINVAL,             /* MXM_ERR_OUT_OF_RANGE, */
-        -FI_ETIMEDOUT           /* MXM_ERR_TIMED_OUT, */
-        /* MXM_ERR_LAST */
-};
-
+extern int mlxm_errno_table[MXM_ERR_LAST];
 static inline
 int mlxm_errno(int err)
 {
