@@ -88,6 +88,7 @@ typedef struct mlxm_cq_entry_queue mlxm_cq_entry_queue_t;
 typedef struct mlxm_fid_av         mlxm_fid_av_t;
 typedef struct mlxm_fid_ep         mlxm_fid_ep_t;
 typedef struct mlxm_fid_fabric     mlxm_fid_fabric_t;
+typedef struct mlxm_fid_mr         mlxm_fid_mr_t;
 
 struct mlxm_cq_entry {
         void                            *ptr;
@@ -246,13 +247,13 @@ struct mlxm_fid_fabric {
         struct fid_fabric       fabric;
 };
 
-typedef struct mlxm_fid_mr {
+struct mlxm_fid_mr {
         struct fid_mr           mr;
         struct mlxm_fid_domain  *domain;
         mxm_mem_key_t mxm_key;
         size_t iov_count;
         struct iovec            iov[0]; /* must be the last field */
-}mlxm_fid_mr_t;
+};
 
 extern struct fi_ops_cm         mlxm_cm_ops;
 extern struct fi_ops_tagged     mlxm_tagged_ops;
