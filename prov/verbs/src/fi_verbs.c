@@ -88,6 +88,7 @@ static struct fi_provider fi_ibv_prov = {
 #define VERBS_IWARP_FABRIC "Ethernet-iWARP"
 #define VERBS_ANY_FABRIC "Any RDMA fabric"
 #define VERBS_CM_DATA_SIZE 56
+#define VERBS_RESOLVE_TIMEOUT 2000	// ms
 
 #define VERBS_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
 		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
@@ -129,6 +130,8 @@ struct fi_ibv_pep {
 	struct fid_pep		pep_fid;
 	struct fi_ibv_eq	*eq;
 	struct rdma_cm_id	*id;
+	int			bound;
+	size_t			src_addrlen;
 };
 
 struct fi_ibv_domain {
@@ -164,6 +167,9 @@ struct fi_ibv_msg_ep {
 	struct fi_tx_attr	*tx_attr;
 	struct fi_rx_attr	*rx_attr;
 	uint64_t		ep_flags;
+	void			*dst_addr;
+	size_t			dst_addrlen;
+	size_t			src_addrlen;
 };
 
 struct fi_ibv_connreq {
@@ -909,6 +915,9 @@ static inline void fi_ibv_update_info(const struct fi_info *hints, struct fi_inf
 
 		if (hints->rx_attr)
 			info->rx_attr->op_flags = hints->rx_attr->op_flags;
+
+		if (hints->handle)
+			info->handle = hints->handle;
 	} else {
 		info->tx_attr->op_flags = 0;
 		info->rx_attr->op_flags = 0;
@@ -2125,6 +2134,55 @@ static int fi_ibv_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr)
 	return 0;
 }
 
+static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
+{
+	struct fi_ibv_msg_ep *ep;
+	struct fi_info info;
+	struct rdma_cm_id *id;
+	int ret;
+
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+
+	if (addrlen != ep->src_addrlen) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_EP_CTRL,"addrlen expected: %d, got: %d.\n",
+				ep->src_addrlen, addrlen);
+		return -FI_EINVAL;
+	}
+
+	info.src_addr = calloc(1, addrlen);
+	if (!info.src_addr)
+		return -FI_ENOMEM;
+
+	memcpy(info.src_addr, addr, addrlen);
+	info.src_addrlen = addrlen;
+
+	if (ep->dst_addr) {
+		info.dest_addrlen = ep->dst_addrlen;
+		info.dest_addr = calloc(1, info.dest_addrlen);
+		if (!info.dest_addr) {
+			ret = -FI_ENOMEM;
+			goto err1;
+		}
+
+		memcpy(info.dest_addr, ep->dst_addr, info.dest_addrlen);
+	}
+
+	ret = fi_ibv_create_ep(NULL, NULL, 0, &info, NULL, &id);
+	if (ret)
+		goto err2;
+
+	if (ep->id)
+		rdma_destroy_ep(ep->id);
+
+	ep->id = id;
+
+err2:
+	free(info.dest_addr);
+err1:
+	free(info.src_addr);
+	return ret;
+}
+
 static int fi_ibv_msg_ep_getname(fid_t ep, void *addr, size_t *addrlen)
 {
 	struct fi_ibv_msg_ep *_ep;
@@ -2234,7 +2292,7 @@ static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 
 static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
+	.setname = fi_ibv_msg_ep_setname,
 	.getname = fi_ibv_msg_ep_getname,
 	.getpeer = fi_ibv_msg_ep_getpeer,
 	.connect = fi_ibv_msg_ep_connect,
@@ -2319,7 +2377,13 @@ static struct fi_ibv_msg_ep *fi_ibv_alloc_msg_ep(void)
 	if (!ep->rx_attr)
 		goto err2;
 
+	ep->dst_addr = calloc(1, sizeof *(ep->dst_addr));
+	if (!ep->dst_addr)
+		goto err3;
+
 	return ep;
+err3:
+	free(ep->rx_attr);
 err2:
 	free(ep->tx_attr);
 err1:
@@ -2331,6 +2395,7 @@ static void fi_ibv_free_msg_ep(struct fi_ibv_msg_ep *ep)
 {
 	if (ep->id)
 		rdma_destroy_ep(ep->id);
+	free(ep->dst_addr);
 	free(ep->tx_attr);
 	free(ep->rx_attr);
 	free(ep);
@@ -2383,6 +2448,7 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	struct fi_ibv_domain *dom;
 	struct fi_ibv_msg_ep *_ep;
 	struct fi_ibv_connreq *connreq;
+	struct fi_ibv_pep *pep;
 	struct fi_info *fi;
 	int ret;
 
@@ -2428,10 +2494,27 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
 		_ep->id = connreq->id;
 		free(connreq);
+        } else if (info->handle->fclass == FI_CLASS_PEP) {
+		pep = container_of(info->handle, struct fi_ibv_pep, pep_fid.fid);
+		_ep->id = pep->id;
+		pep->id = NULL;
+
+		if (rdma_resolve_addr(_ep->id, info->src_addr, info->dest_addr, VERBS_RESOLVE_TIMEOUT)) {
+			ret = -errno;
+			FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
+			goto err;
+		}
+
+		if (rdma_resolve_route(_ep->id, VERBS_RESOLVE_TIMEOUT)) {
+			ret = -errno;
+			FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to rdma_resolve_route\n");
+			goto err;
+		}
 	} else {
 		ret = -FI_ENOSYS;
 		goto err;
 	}
+
 	_ep->id->context = &_ep->ep_fid.fid;
 
 	_ep->ep_fid.fid.fclass = FI_CLASS_EP;
@@ -2448,7 +2531,12 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (info->rx_attr)
 		*(_ep->rx_attr) = *(info->rx_attr);
 
+	memcpy(_ep->dst_addr, info->dest_addr, sizeof(*(_ep->dst_addr)));
+	_ep->dst_addrlen = info->dest_addrlen;
+	_ep->src_addrlen = info->src_addrlen;
+
 	*ep = &_ep->ep_fid;
+
 	return 0;
 err:
 	fi_ibv_free_msg_ep(_ep);
@@ -3380,6 +3468,42 @@ err:
 	return ret;
 }
 
+static int fi_ibv_pep_setname(fid_t pep_fid, void *addr, size_t addrlen)
+{
+	struct fi_ibv_pep *pep;
+	int ret;
+
+	pep = container_of(pep_fid, struct fi_ibv_pep, pep_fid);
+
+	if (addrlen != pep->src_addrlen) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "addrlen expected: %d, got: %d.\n",
+				pep->src_addrlen, addrlen);
+		return -FI_EINVAL;
+	}
+
+	/* Re-create id if already bound */
+	if (pep->bound) {
+		ret = rdma_destroy_id(pep->id);
+		if (ret) {
+			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "Unable to destroy previous rdma_cm_id\n");
+			return -errno;
+		}
+		ret = rdma_create_id(NULL, &pep->id, NULL, RDMA_PS_TCP);
+		if (ret) {
+			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "Unable to create rdma_cm_id\n");
+			return -errno;
+		}
+	}
+
+	ret = rdma_bind_addr(pep->id, (struct sockaddr *)addr);
+	if (ret) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "Unable to bind addres to rdma_cm_id\n");
+		return -errno;
+	}
+
+	return 0;
+}
+
 static int fi_ibv_pep_getname(fid_t pep, void *addr, size_t *addrlen)
 {
 	struct fi_ibv_pep *_pep;
@@ -3390,26 +3514,26 @@ static int fi_ibv_pep_getname(fid_t pep, void *addr, size_t *addrlen)
 	return fi_ibv_copy_addr(addr, addrlen, sa);
 }
 
-static int fi_ibv_pep_listen(struct fid_pep *pep)
+static int fi_ibv_pep_listen(struct fid_pep *pep_fid)
 {
-	struct fi_ibv_pep *_pep;
+	struct fi_ibv_pep *pep;
 	struct sockaddr *addr;
 
-	_pep = container_of(pep, struct fi_ibv_pep, pep_fid);
+	pep = container_of(pep_fid, struct fi_ibv_pep, pep_fid);
 
-	addr = rdma_get_local_addr(_pep->id);
+	addr = rdma_get_local_addr(pep->id);
 	if (addr) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Listening on %s:%d\n",
 			inet_ntoa(((struct sockaddr_in *)addr)->sin_addr),
 			ntohs(((struct sockaddr_in *)addr)->sin_port));
 	}
 
-	return rdma_listen(_pep->id, 0) ? -errno : 0;
+	return rdma_listen(pep->id, 0) ? -errno : 0;
 }
 
 static struct fi_ops_cm fi_ibv_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
+	.setname = fi_ibv_pep_setname,
 	.getname = fi_ibv_pep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
@@ -3467,9 +3591,20 @@ fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if (!_pep)
 		return -FI_ENOMEM;
 
-	ret = fi_ibv_create_ep(NULL, NULL, FI_SOURCE, info, NULL, &_pep->id);
-	if (ret)
+	ret = rdma_create_id(NULL, &_pep->id, NULL, RDMA_PS_TCP);
+	if (ret) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to create rdma_cm_id\n");
 		goto err;
+	}
+
+	if (info->src_addr) {
+		ret = rdma_bind_addr(_pep->id, (struct sockaddr *)info->src_addr);
+		if (ret) {
+			FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to bind addres to rdma_cm_id\n");
+			return ret;
+		}
+		_pep->bound = 1;
+	}
 
 	_pep->id->context = &_pep->pep_fid.fid;
 
@@ -3477,6 +3612,8 @@ fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->pep_fid.fid.context = context;
 	_pep->pep_fid.fid.ops = &fi_ibv_pep_ops;
 	_pep->pep_fid.cm = &fi_ibv_pep_cm_ops;
+
+	_pep->src_addrlen = info->src_addrlen;
 
 	*pep = &_pep->pep_fid;
 	return 0;
