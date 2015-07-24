@@ -34,7 +34,7 @@
 #include "prov.h"
 
 #define MLXM_EP_CAP_BASE (FI_TAGGED | FI_SEND | FI_RECV)
-#define MLXM_EP_CAP	(MLXM_EP_CAP_BASE)
+#define MLXM_EP_CAP     (MLXM_EP_CAP_BASE)
 uint64_t mlxm_mem_tag_format;
 struct mlxm_globals mlxm_globals = {0,0};
 
@@ -42,7 +42,7 @@ static int mlxm_getinfo(uint32_t version, const char *node,
                         const char *service, uint64_t flags,
                         struct fi_info *hints, struct fi_info **info)
 {
-        struct fi_info	*mlxm_info;
+        struct fi_info  *mlxm_info;
         int type = FI_EP_RDM;
         int ep_cap = 0;
         int err = -ENODATA;
@@ -141,10 +141,10 @@ static int mlxm_getinfo(uint32_t version, const char *node,
                 }
                 if ((hints->mode & FI_CONTEXT) != FI_CONTEXT) {
                         FI_INFO(&mlxm_prov, FI_LOG_CORE,
-				"hints->mode=0x%llx, required=0x%llx\n",
+                                "hints->mode=0x%llx, required=0x%llx\n",
                                 hints->mode, FI_CONTEXT);
-			goto err_out;
-		}
+                        goto err_out;
+                }
                 ep_cap = hints->caps;
         }
         mlxm_info = fi_allocinfo();
@@ -185,7 +185,7 @@ static int mlxm_getinfo(uint32_t version, const char *node,
         mlxm_info->rx_attr->msg_order            = FI_ORDER_SAS;
         mlxm_info->rx_attr->comp_order           = FI_ORDER_NONE;
         mlxm_info->rx_attr->total_buffered_recv  = ~(0ULL); /*TODO: clarify  */
-	mlxm_info->rx_attr->size = UINT64_MAX;
+        mlxm_info->rx_attr->size = UINT64_MAX;
         mlxm_info->rx_attr->iov_limit = 1; /*TODO */
         *info = mlxm_info;
         return 0;
@@ -199,7 +199,7 @@ static int mlxm_fabric_close(fid_t fid)
         mxm_ep_destroy(mlxm_globals.mxm_ep);
         mxm_cleanup(mlxm_globals.mxm_context);
         free(fid);
-	return 0;
+        return 0;
 }
 
 static struct fi_ops mlxm_fabric_fi_ops = {
@@ -213,22 +213,22 @@ static struct fi_ops_fabric mlxm_fabric_ops = {
 };
 
 static int mlxm_fabric(struct fi_fabric_attr *attr,
-		       struct fid_fabric **fabric, void *context)
+                       struct fid_fabric **fabric, void *context)
 {
         mlxm_fid_fabric_t *fabric_priv;
         FI_INFO(&mlxm_prov, FI_LOG_CORE, "\n");
         if (strncmp(attr->name, "mxm", 3))
-		return -FI_ENODATA;
+                return -FI_ENODATA;
 
-	fabric_priv = calloc(1, sizeof(*fabric_priv));
-	if (!fabric_priv)
-		return -FI_ENOMEM;
+        fabric_priv = calloc(1, sizeof(*fabric_priv));
+        if (!fabric_priv)
+                return -FI_ENOMEM;
         fabric_priv->fabric.fid.fclass  = FI_CLASS_FABRIC;
-	fabric_priv->fabric.fid.context = context;
+        fabric_priv->fabric.fid.context = context;
         fabric_priv->fabric.fid.ops     = &mlxm_fabric_fi_ops;
         fabric_priv->fabric.ops         = &mlxm_fabric_ops;
         *fabric                         = &fabric_priv->fabric;
-	return 0;
+        return 0;
 }
 
 struct fi_provider mlxm_prov = {

@@ -169,7 +169,7 @@ static inline ssize_t _mlxm_tagged_sendto(struct fid_ep *ep, const void *buf, si
                                           uint64_t tag, void *context, uint64_t flags,
                                           uint32_t data, const int is_blocking)
 {
-        mlxm_fid_ep_t	*fid_ep;
+        mlxm_fid_ep_t   *fid_ep;
         mxm_mq_h mq = NULL;
         uint32_t mxm_tag;
         uint16_t mq_id = 0;
@@ -193,7 +193,7 @@ static inline ssize_t _mlxm_tagged_sendto_v(struct fid_ep *ep, const int iov_num
                                             uint64_t tag, void *context, uint64_t flags,
                                             uint32_t data, const int is_blocking)
 {
-        mlxm_fid_ep_t	*fid_ep;
+        mlxm_fid_ep_t   *fid_ep;
         mxm_mq_h mq = NULL;
         uint32_t mxm_tag;
         uint16_t mq_id = 0;
@@ -238,8 +238,8 @@ static ssize_t mlxm_tagged_injectdata(struct fid_ep *ep, const void *buf, size_t
 }
 
 static ssize_t mlxm_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
-				  void *desc, fi_addr_t dest_addr,
-				  uint64_t tag, void *context)
+                                  void *desc, fi_addr_t dest_addr,
+                                  uint64_t tag, void *context)
 {
         return _mlxm_tagged_sendto(ep, buf, len, desc, dest_addr, tag, context,
                                    0, 0, 0);

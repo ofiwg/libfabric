@@ -64,7 +64,7 @@ mpool_init(struct mpool **mpool, size_t el_size, int num) {
         return 0;
 }
 
-#define MPOOL_ALLOC(_mpool, _type, _ptr) \
+#define MPOOL_ALLOC(_mpool, _type, _ptr)                                \
         do{                                                             \
                 int __i;                                                \
                 int __pos = -1;                                         \

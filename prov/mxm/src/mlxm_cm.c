@@ -61,5 +61,5 @@ struct fi_ops_cm mlxm_cm_ops = {
         .listen   = fi_no_listen,
         .accept   = fi_no_accept,
         .reject   = fi_no_reject,
-	.shutdown = fi_no_shutdown,
+        .shutdown = fi_no_shutdown,
 };

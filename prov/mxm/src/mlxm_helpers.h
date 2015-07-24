@@ -96,25 +96,25 @@ static inline int _mlxm_do_send(mlxm_fid_ep_t *fid_ep, mxm_mq_h mq,
         } else {
                 mxm_req = &stack_req;
         }
-        mxm_req->base.state			= MXM_REQ_NEW;
-        mxm_req->base.mq			= mq;
-        mxm_req->base.conn			= conn;
-        mxm_req->flags		        	=
+        mxm_req->base.state                     = MXM_REQ_NEW;
+        mxm_req->base.mq                        = mq;
+        mxm_req->base.conn                      = conn;
+        mxm_req->flags                          =
                 is_blocking ? MXM_REQ_SEND_FLAG_BLOCKING : 0;
-        mxm_req->base.data_type			= MXM_REQ_DATA_BUFFER;
-        mxm_req->base.data.buffer.ptr		= (void *)buf;
-        mxm_req->base.data.buffer.length	= len;
-        mxm_req->base.data.buffer.memh		= MXM_INVALID_MEM_HANDLE;
-        mxm_req->opcode				= MXM_REQ_OP_SEND;
-        mxm_req->op.send.tag			= mxm_tag;
-        mxm_req->op.send.imm_data		= (mxm_imm_t) data;
+        mxm_req->base.data_type                 = MXM_REQ_DATA_BUFFER;
+        mxm_req->base.data.buffer.ptr           = (void *)buf;
+        mxm_req->base.data.buffer.length        = len;
+        mxm_req->base.data.buffer.memh          = MXM_INVALID_MEM_HANDLE;
+        mxm_req->opcode                         = MXM_REQ_OP_SEND;
+        mxm_req->op.send.tag                    = mxm_tag;
+        mxm_req->op.send.imm_data               = (mxm_imm_t) data;
 
         if (is_blocking) {
-                mxm_req->base.completed_cb	= NULL;
-                mxm_req->base.context		= NULL;
+                mxm_req->base.completed_cb      = NULL;
+                mxm_req->base.context           = NULL;
         } else {
-                mxm_req->base.completed_cb	= mlxm_completion_cb;
-                mxm_req->base.context		= (void *)context;
+                mxm_req->base.completed_cb      = mlxm_completion_cb;
+                mxm_req->base.context           = (void *)context;
                 ((struct fi_context *)context)->internal[0] = context;
                 ((struct fi_context *)context)->internal[1] = mlxm_req;
                 ((struct fi_context *)context)->internal[2] = fid_cq;
@@ -159,21 +159,21 @@ static int _mlxm_do_recv(mlxm_fid_ep_t *fid_ep, void *buf, size_t len,
 
         mlxm_req->mq_id         = mq_id;
         mxm_req = &mlxm_req->mxm_req.rreq;
-        mxm_req->base.state			= MXM_REQ_NEW;
-        mxm_req->base.mq			= mq;
-        mxm_req->base.conn			= conn;
-        mxm_req->base.data_type			= MXM_REQ_DATA_BUFFER;
-        mxm_req->base.data.buffer.ptr		= buf;
-        mxm_req->base.data.buffer.length	= len;
-        mxm_req->base.data.buffer.memh		= MXM_INVALID_MEM_HANDLE;
-        mxm_req->base.completed_cb		= mlxm_completion_cb;
-        mxm_req->base.context		= (void *)context;
+        mxm_req->base.state                     = MXM_REQ_NEW;
+        mxm_req->base.mq                        = mq;
+        mxm_req->base.conn                      = conn;
+        mxm_req->base.data_type                 = MXM_REQ_DATA_BUFFER;
+        mxm_req->base.data.buffer.ptr           = buf;
+        mxm_req->base.data.buffer.length        = len;
+        mxm_req->base.data.buffer.memh          = MXM_INVALID_MEM_HANDLE;
+        mxm_req->base.completed_cb              = mlxm_completion_cb;
+        mxm_req->base.context           = (void *)context;
         ((struct fi_context *)context)->internal[0] = context;
         ((struct fi_context *)context)->internal[1] = mlxm_req;
         ((struct fi_context *)context)->internal[2] = fid_cq;
         ((struct fi_context *)context)->internal[3] = (void*)FI_RECV;
-        mxm_req->tag				= mxm_tag;
-        mxm_req->tag_mask			= mxm_tagmask;
+        mxm_req->tag                            = mxm_tag;
+        mxm_req->tag_mask                       = mxm_tagmask;
         FI_DBG(&mlxm_prov,FI_LOG_CORE,
                "recv mq 0x%x, conn %p, buf %p,"
                "len %zd, tag 0x%x, tagmask 0x%x\n",
@@ -221,12 +221,12 @@ static inline int _mlxm_do_send_v(mlxm_fid_ep_t *fid_ep, mxm_mq_h mq,
         } else {
                 mxm_req = &stack_req;
         }
-        mxm_req->base.state			= MXM_REQ_NEW;
-        mxm_req->base.mq			= mq;
-        mxm_req->base.conn			= conn;
-        mxm_req->flags		        	=
+        mxm_req->base.state                     = MXM_REQ_NEW;
+        mxm_req->base.mq                        = mq;
+        mxm_req->base.conn                      = conn;
+        mxm_req->flags                          =
                 is_blocking ? MXM_REQ_SEND_FLAG_BLOCKING : 0;
-        mxm_req->base.data_type			= MXM_REQ_DATA_IOV;
+        mxm_req->base.data_type                 = MXM_REQ_DATA_IOV;
         mxm_req->base.data.iov.count = iov_num;
         mxm_req->base.data.iov.vector =
                 (mxm_req_buffer_t*)malloc(iov_num*sizeof(mxm_req_buffer_t));
@@ -239,16 +239,16 @@ static inline int _mlxm_do_send_v(mlxm_fid_ep_t *fid_ep, mxm_mq_h mq,
                 mxm_req->base.data.iov.vector[i].memh =
                         MXM_INVALID_MEM_HANDLE;
         }
-        mxm_req->opcode				= MXM_REQ_OP_SEND;
-        mxm_req->op.send.tag			= mxm_tag;
-        mxm_req->op.send.imm_data		= (mxm_imm_t) data;
+        mxm_req->opcode                         = MXM_REQ_OP_SEND;
+        mxm_req->op.send.tag                    = mxm_tag;
+        mxm_req->op.send.imm_data               = (mxm_imm_t) data;
 
         if (is_blocking) {
-                mxm_req->base.completed_cb	= NULL;
-                mxm_req->base.context		= NULL;
+                mxm_req->base.completed_cb      = NULL;
+                mxm_req->base.context           = NULL;
         } else {
-                mxm_req->base.completed_cb	= mlxm_completion_cb_v;
-                mxm_req->base.context		= (void *)context;
+                mxm_req->base.completed_cb      = mlxm_completion_cb_v;
+                mxm_req->base.context           = (void *)context;
                 ((struct fi_context *)context)->internal[0] = context;
                 ((struct fi_context *)context)->internal[1] = mlxm_req;
                 ((struct fi_context *)context)->internal[2] = fid_cq;
@@ -296,10 +296,10 @@ static int _mlxm_do_recv_v(mlxm_fid_ep_t *fid_ep, const int iov_num,
 
         mlxm_req->mq_id         = mq_id;
         mxm_req = &mlxm_req->mxm_req.rreq;
-        mxm_req->base.state			= MXM_REQ_NEW;
-        mxm_req->base.mq			= mq;
-        mxm_req->base.conn			= conn;
-        mxm_req->base.data_type			= MXM_REQ_DATA_IOV;
+        mxm_req->base.state                     = MXM_REQ_NEW;
+        mxm_req->base.mq                        = mq;
+        mxm_req->base.conn                      = conn;
+        mxm_req->base.data_type                 = MXM_REQ_DATA_IOV;
         mxm_req->base.data.iov.count = iov_num;
         mxm_req->base.data.iov.vector =
                 (mxm_req_buffer_t*)malloc(iov_num*sizeof(mxm_req_buffer_t));
@@ -312,14 +312,14 @@ static int _mlxm_do_recv_v(mlxm_fid_ep_t *fid_ep, const int iov_num,
                 mxm_req->base.data.iov.vector[i].memh =
                         MXM_INVALID_MEM_HANDLE;
         }
-        mxm_req->base.completed_cb		= mlxm_completion_cb_v;
-        mxm_req->base.context		= (void *)context;
+        mxm_req->base.completed_cb              = mlxm_completion_cb_v;
+        mxm_req->base.context           = (void *)context;
         ((struct fi_context *)context)->internal[0] = context;
         ((struct fi_context *)context)->internal[1] = mlxm_req;
         ((struct fi_context *)context)->internal[2] = fid_cq;
         ((struct fi_context *)context)->internal[3] = (void*)FI_RECV;
-        mxm_req->tag				= mxm_tag;
-        mxm_req->tag_mask			= mxm_tagmask;
+        mxm_req->tag                            = mxm_tag;
+        mxm_req->tag_mask                       = mxm_tagmask;
         FI_DBG(&mlxm_prov,FI_LOG_CORE,
                "recv mq 0x%x, conn %p, iov_num %d,"
                "tag 0x%x, tagmask 0x%x\n",
@@ -354,16 +354,16 @@ _mlxm_do_probe(mlxm_fid_ep_t *fid_ep, mxm_mq_h mq,
 
         mlxm_req->mq_id         = mq_id;
         mxm_req = &mlxm_req->mxm_req.rreq;
-        mxm_req->base.state			= MXM_REQ_NEW;
-        mxm_req->base.mq			= mq;
-        mxm_req->base.conn			= conn;
-        mxm_req->base.context		= (void *)context;
+        mxm_req->base.state                     = MXM_REQ_NEW;
+        mxm_req->base.mq                        = mq;
+        mxm_req->base.conn                      = conn;
+        mxm_req->base.context           = (void *)context;
         ((struct fi_context *)context)->internal[0] = context;
         ((struct fi_context *)context)->internal[1] = mlxm_req;
         ((struct fi_context *)context)->internal[2] = fid_ep->cq;
         ((struct fi_context *)context)->internal[3] = (void*)FI_RECV;
-        mxm_req->tag				= mxm_tag;
-        mxm_req->tag_mask			= mxm_tagmask;
+        mxm_req->tag                            = mxm_tag;
+        mxm_req->tag_mask                       = mxm_tagmask;
         mxm_err = mxm_req_probe(mxm_req);
         switch (mxm_err) {
         case MXM_OK:

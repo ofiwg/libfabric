@@ -53,26 +53,26 @@ static ssize_t mlxm_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 
         MLXM_CQ_DEQUEUE(fid_cq->ok_q, ctx);
         mlxm_req = ctx->internal[1];
-        cqe->flags	= 0;
-        cqe->op_context	= ctx;
+        cqe->flags      = 0;
+        cqe->op_context = ctx;
 
         if ((uint64_t)(ctx->internal[3]) == FI_SEND) {
                 mxm_sreq = &mlxm_req->mxm_req.sreq;
                 assert (mxm_sreq->base.error == MXM_OK);
-                cqe->flags	|= FI_SEND;
-                cqe->len	= mxm_sreq->base.data.buffer.length;
-                cqe->data	= mxm_sreq->op.send.imm_data;
-                cqe->tag	= mxm_sreq->op.send.tag;
+                cqe->flags      |= FI_SEND;
+                cqe->len        = mxm_sreq->base.data.buffer.length;
+                cqe->data       = mxm_sreq->op.send.imm_data;
+                cqe->tag        = mxm_sreq->op.send.tag;
                 if (src_addr) {
                         memcpy(src_addr, &(mxm_sreq->base.conn), sizeof(mxm_conn_h));
                 }
         } else {
                 mxm_rreq = &mlxm_req->mxm_req.rreq;
                 assert(mxm_rreq->base.error != MXM_OK);
-                cqe->flags	|= FI_RECV;
-                cqe->len	= mxm_rreq->completion.actual_len;
-                cqe->data	= mxm_rreq->completion.sender_imm;
-                cqe->tag	= mxm_rreq->completion.sender_tag;
+                cqe->flags      |= FI_RECV;
+                cqe->len        = mxm_rreq->completion.actual_len;
+                cqe->data       = mxm_rreq->completion.sender_imm;
+                cqe->tag        = mxm_rreq->completion.sender_tag;
                 if (src_addr) {
                         memcpy(src_addr, &(mxm_rreq->completion.source), sizeof(mxm_conn_h));
                 }
@@ -89,19 +89,19 @@ static ssize_t mlxm_cq_read(struct fid_cq *cq, void *buf, size_t len)
 
 static int mlxm_cq_close(fid_t fid)
 {
-	mlxm_fid_cq_t	*fid_cq;
-	fid_cq = container_of(fid, mlxm_fid_cq_t, cq.fid);
+        mlxm_fid_cq_t   *fid_cq;
+        fid_cq = container_of(fid, mlxm_fid_cq_t, cq.fid);
         free(fid_cq);
         return 0;
 }
 
-static ssize_t	mlxm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+static ssize_t  mlxm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
                                 uint64_t flags)
 {
-	struct mlxm_fid_cq		*fid_cq;
-        mlxm_req_t   			*mlxm_req;
-	mxm_send_req_t			*mxm_sreq = NULL;
-	mxm_recv_req_t			*mxm_rreq = NULL;
+        struct mlxm_fid_cq              *fid_cq;
+        mlxm_req_t                      *mlxm_req;
+        mxm_send_req_t                  *mxm_sreq = NULL;
+        mxm_recv_req_t                  *mxm_rreq = NULL;
         struct fi_context *ctx;
         struct fi_cq_err_entry *cqe =
                 (struct fi_cq_err_entry *) buf;
@@ -112,27 +112,27 @@ static ssize_t	mlxm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 
         MLXM_CQ_DEQUEUE(fid_cq->err_q, ctx);
         mlxm_req = ctx->internal[1];
-        cqe->op_context	= ctx;
-        cqe->flags	= FI_TAGGED;
+        cqe->op_context = ctx;
+        cqe->flags      = FI_TAGGED;
         cqe->buf = NULL;
         if ((uint64_t)(ctx->internal[3]) == FI_SEND) {
                 mxm_sreq = &mlxm_req->mxm_req.sreq;
                 assert(mxm_sreq->base.error != MXM_OK);
                 cqe->prov_errno = mxm_sreq->base.error;
-                cqe->len	= mxm_sreq->base.data.buffer.length;
+                cqe->len        = mxm_sreq->base.data.buffer.length;
                 cqe->olen       = 0;
-                cqe->data	= mxm_sreq->op.send.imm_data;
-                cqe->tag	= mxm_sreq->op.send.tag;
+                cqe->data       = mxm_sreq->op.send.imm_data;
+                cqe->tag        = mxm_sreq->op.send.tag;
                 cqe->flags |= FI_SEND;
         } else {
                 mxm_rreq = &mlxm_req->mxm_req.rreq;
                 assert(mxm_rreq->base.error != MXM_OK);
                 cqe->prov_errno = mxm_sreq->base.error;
-                cqe->len	= mxm_rreq->completion.actual_len;
+                cqe->len        = mxm_rreq->completion.actual_len;
                 cqe->olen       = mxm_rreq->completion.sender_len -
                         cqe->len;
-                cqe->data	= mxm_rreq->completion.sender_imm;
-                cqe->tag	= mxm_rreq->completion.sender_tag;
+                cqe->data       = mxm_rreq->completion.sender_imm;
+                cqe->tag        = mxm_rreq->completion.sender_tag;
                 cqe->flags |= FI_RECV;
         }
         cqe->err = -mlxm_errno(cqe->prov_errno);
@@ -146,40 +146,40 @@ static ssize_t	mlxm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 static const char *mlxm_cq_strerror(struct fid_cq *cq, int prov_errno,
                                     const void *prov_data, char *buf, size_t len)
 {
-	return mxm_error_string(prov_errno);
+        return mxm_error_string(prov_errno);
 }
 
 
 static int mlxm_cq_control(fid_t fid, int command, void *arg)
 {
-	return -ENOSYS;
+        return -ENOSYS;
 }
 
 static struct fi_ops mlxm_fi_ops = {
-	.size    = sizeof(struct fi_ops),
-	.close   = mlxm_cq_close,
+        .size    = sizeof(struct fi_ops),
+        .close   = mlxm_cq_close,
         .control = mlxm_cq_control,
 };
 
 static struct fi_ops_cq mlxm_cq_ops = {
-	.size     = sizeof(struct fi_ops_cq),
-	.readfrom = mlxm_cq_readfrom,
-	.read     = mlxm_cq_read,
-	.readerr  = mlxm_cq_readerr,
+        .size     = sizeof(struct fi_ops_cq),
+        .readfrom = mlxm_cq_readfrom,
+        .read     = mlxm_cq_read,
+        .readerr  = mlxm_cq_readerr,
         .strerror = mlxm_cq_strerror,
 };
 
 int mlxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
                  struct fid_cq **cq, void *context)
 {
-        mlxm_fid_cq_t 	*fid_cq;
+        mlxm_fid_cq_t   *fid_cq;
         fid_cq = (mlxm_fid_cq_t *) calloc(1, sizeof *fid_cq);
-	if (!fid_cq)
-		return -ENOMEM;
-        fid_cq->cq.fid.fclass	= FI_CLASS_CQ;
-	fid_cq->cq.fid.context	= context;
-	fid_cq->cq.fid.ops	        = &mlxm_fi_ops;
-	fid_cq->cq.ops		= &mlxm_cq_ops;
+        if (!fid_cq)
+                return -ENOMEM;
+        fid_cq->cq.fid.fclass   = FI_CLASS_CQ;
+        fid_cq->cq.fid.context  = context;
+        fid_cq->cq.fid.ops              = &mlxm_fi_ops;
+        fid_cq->cq.ops          = &mlxm_cq_ops;
         fid_cq->mxm_context     = mlxm_globals.mxm_context;
         fid_cq->ok_q.head = NULL;
         fid_cq->ok_q.tail = NULL;
@@ -187,5 +187,5 @@ int mlxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
         fid_cq->err_q.tail = NULL;
 
         *cq = &fid_cq->cq;
-	return 0;
+        return 0;
 }

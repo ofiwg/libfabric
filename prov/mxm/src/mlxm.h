@@ -11,14 +11,14 @@
  *     without modification, are permitted provided that the following
  *     conditions are met:
  *
- *	- Redistributions of source code must retain the above
- *	  copyright notice, this list of conditions and the following
- *	  disclaimer.
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
  *
- *	- Redistributions in binary form must reproduce the above
- *	  copyright notice, this list of conditions and the following
- *	  disclaimer in the documentation and/or other materials
- *	  provided with the distribution.
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -65,27 +65,27 @@ extern "C" {
 #include "mpool.h"
 #include "uthash.h"
 static int mlxm_errno_table[MXM_ERR_LAST] = {
-	0,			/* MXM_OK = 0, */
-	-FI_ENOMSG,		/* MXM_ERR_NO_MESSAGE, */
-	-EWOULDBLOCK,		/* MXM_ERR_WOULD_BLOCK, */
-	-FI_EIO,		/* MXM_ERR_IO_ERROR, */
-	-FI_ENOMEM,		/* MXM_ERR_NO_MEMORY, */
-	-FI_EINVAL,		/* MXM_ERR_INVALID_PARAM, */
-	-FI_ENETUNREACH,	/* MXM_ERR_UNREACHABLE, */
-	-FI_EINVAL,		/* MXM_ERR_INVALID_ADDR, */
-	-FI_ENOSYS,		/* MXM_ERR_NOT_IMPLEMENTED, */
-	-FI_EMSGSIZE,		/* MXM_ERR_MESSAGE_TRUNCATED, */
-	0,			/* MXM_ERR_NO_PROGRESS, */
-	-FI_ETOOSMALL,		/* MXM_ERR_BUFFER_TOO_SMALL, */
-	-FI_ENOENT,		/* MXM_ERR_NO_ELEM, */
-	-FI_EIO,		/* MXM_ERR_SOME_CONNECTS_FAILED, */
-	-FI_ENODEV,		/* MXM_ERR_NO_DEVICE, */
-	-FI_EBUSY,		/* MXM_ERR_BUSY, */
-	-FI_ECANCELED,		/* MXM_ERR_CANCELED, */
-	-FI_EINVAL,		/* MXM_ERR_SHMEM_SEGMENT, */
-	-EEXIST,		/* MXM_ERR_ALREADY_EXISTS, */
-	-FI_EINVAL,		/* MXM_ERR_OUT_OF_RANGE, */
-	-FI_ETIMEDOUT		/* MXM_ERR_TIMED_OUT, */
+        0,                      /* MXM_OK = 0, */
+        -FI_ENOMSG,             /* MXM_ERR_NO_MESSAGE, */
+        -EWOULDBLOCK,           /* MXM_ERR_WOULD_BLOCK, */
+        -FI_EIO,                /* MXM_ERR_IO_ERROR, */
+        -FI_ENOMEM,             /* MXM_ERR_NO_MEMORY, */
+        -FI_EINVAL,             /* MXM_ERR_INVALID_PARAM, */
+        -FI_ENETUNREACH,        /* MXM_ERR_UNREACHABLE, */
+        -FI_EINVAL,             /* MXM_ERR_INVALID_ADDR, */
+        -FI_ENOSYS,             /* MXM_ERR_NOT_IMPLEMENTED, */
+        -FI_EMSGSIZE,           /* MXM_ERR_MESSAGE_TRUNCATED, */
+        0,                      /* MXM_ERR_NO_PROGRESS, */
+        -FI_ETOOSMALL,          /* MXM_ERR_BUFFER_TOO_SMALL, */
+        -FI_ENOENT,             /* MXM_ERR_NO_ELEM, */
+        -FI_EIO,                /* MXM_ERR_SOME_CONNECTS_FAILED, */
+        -FI_ENODEV,             /* MXM_ERR_NO_DEVICE, */
+        -FI_EBUSY,              /* MXM_ERR_BUSY, */
+        -FI_ECANCELED,          /* MXM_ERR_CANCELED, */
+        -FI_EINVAL,             /* MXM_ERR_SHMEM_SEGMENT, */
+        -EEXIST,                /* MXM_ERR_ALREADY_EXISTS, */
+        -FI_EINVAL,             /* MXM_ERR_OUT_OF_RANGE, */
+        -FI_ETIMEDOUT           /* MXM_ERR_TIMED_OUT, */
         /* MXM_ERR_LAST */
 };
 
@@ -94,8 +94,8 @@ int mlxm_errno(int err)
 {
         if (err>=0 && err < MXM_ERR_LAST)
                 return mlxm_errno_table[err];
-	else
-		return -FI_EOTHER;
+        else
+                return -FI_EOTHER;
 }
 
 
@@ -114,15 +114,15 @@ typedef struct mlxm_fid_ep         mlxm_fid_ep_t;
 typedef struct mlxm_fid_fabric     mlxm_fid_fabric_t;
 
 struct mlxm_cq_entry {
-        void				*ptr;
-	mxm_conn_h			src_addr;
-        mlxm_cq_entry_t 		*next;
+        void                            *ptr;
+        mxm_conn_h                      src_addr;
+        mlxm_cq_entry_t                 *next;
 };
 
 struct mlxm_req {
         union {
-		mxm_send_req_t	sreq;
-		mxm_recv_req_t	rreq;
+                mxm_send_req_t  sreq;
+                mxm_recv_req_t  rreq;
         } mxm_req;
         struct mpool* pool;
         uint16_t   mq_id;
@@ -147,10 +147,10 @@ struct mlxm_globals{
 };
 extern struct mlxm_globals mlxm_globals;
 
-#define HASH_FIND_INT16(head,findint,out)                                        \
-    HASH_FIND(hh,head,findint,sizeof(uint16_t),out)
-#define HASH_ADD_INT16(head,intfield,add)                                        \
-    HASH_ADD(hh,head,intfield,sizeof(uint16_t),add)
+#define HASH_FIND_INT16(head,findint,out)               \
+        HASH_FIND(hh,head,findint,sizeof(uint16_t),out)
+#define HASH_ADD_INT16(head,intfield,add)               \
+        HASH_ADD(hh,head,intfield,sizeof(uint16_t),add)
 
 static inline
 int mlxm_find_mq(struct mlxm_mq_storage *storage,
@@ -172,14 +172,14 @@ int mlxm_mq_add_to_storage(struct mlxm_mq_storage *storage,
         struct mlxm_mq_entry *mq_entry;
         mq_entry = (struct mlxm_mq_entry*)malloc(sizeof(*mq_entry));
         mxm_err = mxm_mq_create(mlxm_globals.mxm_context,
-				id,
+                                id,
                                 &mq_entry->mq);
         if (mxm_err) {
                 FI_WARN(&mlxm_prov,FI_LOG_CORE,
                         "mxm_mq_create failed: mq_id %d, errno %d:%s\n",
                         id, mxm_err, mxm_error_string(mxm_err));
                 return mlxm_errno(mxm_err);
-	}
+        }
         FI_INFO(&mlxm_prov,FI_LOG_CORE,
                 "MXM mq created, id 0x%x, %p\n",id , mq_entry->mq);
 
@@ -206,15 +206,15 @@ void mlxm_mq_storage_fini(mlxm_fid_ep_t *fid_ep) {
 }
 
 struct mlxm_fid_domain {
-	struct fid_domain	domain;
-        size_t		        mxm_addrlen;
+        struct fid_domain       domain;
+        size_t                  mxm_addrlen;
 };
 
 struct mlxm_cq_entry_queue {
-	size_t			size;
-	size_t			n;
-	struct mlxm_cq_entry	*head;
-	struct mlxm_cq_entry	*tail;
+        size_t                  size;
+        size_t                  n;
+        struct mlxm_cq_entry    *head;
+        struct mlxm_cq_entry    *tail;
 };
 
 struct mlxm_fid_cq {
@@ -254,50 +254,50 @@ struct mlxm_fid_cq {
         }while(0)
 
 struct mlxm_fid_av {
-	struct fid_av		av;
-        mlxm_fid_domain_t	*domain;
-        mlxm_fid_ep_t   	*ep;
-	int			type;
-	size_t count;
-        size_t			addrlen;
+        struct fid_av           av;
+        mlxm_fid_domain_t       *domain;
+        mlxm_fid_ep_t           *ep;
+        int                     type;
+        size_t count;
+        size_t                  addrlen;
 };
 
 struct mlxm_fid_ep {
-	struct fid_ep		ep;
-        mlxm_fid_domain_t	*domain;
-        mlxm_fid_cq_t   	*cq;
-        mlxm_fid_av_t   	*av;
-	uint64_t		flags;
-        struct mlxm_mq_storage*	mxm_mqs;
+        struct fid_ep           ep;
+        mlxm_fid_domain_t       *domain;
+        mlxm_fid_cq_t           *cq;
+        mlxm_fid_av_t           *av;
+        uint64_t                flags;
+        struct mlxm_mq_storage* mxm_mqs;
 };
 
 struct mlxm_fid_fabric {
-	struct fid_fabric	fabric;
+        struct fid_fabric       fabric;
 };
 
 typedef struct mlxm_fid_mr {
-	struct fid_mr		mr;
-        struct mlxm_fid_domain	*domain;
+        struct fid_mr           mr;
+        struct mlxm_fid_domain  *domain;
         mxm_mem_key_t mxm_key;
         size_t iov_count;
-        struct iovec		iov[0];	/* must be the last field */
+        struct iovec            iov[0]; /* must be the last field */
 }mlxm_fid_mr_t;
 
-extern struct fi_ops_cm		mlxm_cm_ops;
-extern struct fi_ops_tagged	mlxm_tagged_ops;
-extern struct fi_ops_mr	        mlxm_mr_ops;
+extern struct fi_ops_cm         mlxm_cm_ops;
+extern struct fi_ops_tagged     mlxm_tagged_ops;
+extern struct fi_ops_mr         mlxm_mr_ops;
 
 #define MLXM_MEM_TAG_FORMAT (0xFFFF00000000LLU) /* MXM support 16 bit field for MQ, and 32 more bits for tag */
 extern uint64_t mlxm_mem_tag_format;
 
-        int mlxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-                             struct fid_domain **fid, void *context);
-        int mlxm_ep_open(struct fid_domain *domain, struct fi_info *info,
-                         struct fid_ep **fid, void *context);
-        int mlxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-                         struct fid_cq **cq, void *context);
-        int mlxm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-                         struct fid_av **av, void *context);
+int mlxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+                     struct fid_domain **fid, void *context);
+int mlxm_ep_open(struct fid_domain *domain, struct fi_info *info,
+                 struct fid_ep **fid, void *context);
+int mlxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+                 struct fid_cq **cq, void *context);
+int mlxm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+                 struct fid_av **av, void *context);
 
 #ifdef __cplusplus
 }

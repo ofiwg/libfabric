@@ -36,13 +36,13 @@ static ssize_t mlxm_ep_cancel(fid_t fid, void *ctx)
         mlxm_fid_ep_t     *fid_ep;
         mlxm_req_t        *req;
         struct fi_context *context = (struct fi_context*)ctx;
-	int err;
+        int err;
 
         fid_ep = container_of(fid, mlxm_fid_ep_t, ep.fid);
-	if (!fid_ep->domain)
-		return -EBADF;
+        if (!fid_ep->domain)
+                return -EBADF;
         if (!context)
-		return -EINVAL;
+                return -EINVAL;
         if (context->internal[0] == NULL)
                 return -FI_EINVAL;
 
@@ -55,13 +55,13 @@ static ssize_t mlxm_ep_cancel(fid_t fid, void *ctx)
         if (err == MXM_OK) {
                 mxm_req_wait(&req->mxm_req.rreq.base);
         }
-	return mlxm_errno(err);
+        return mlxm_errno(err);
 }
 
 static int mlxm_ep_getopt(fid_t fid, int level, int optname,
                           void *optval, size_t *optlen)
 {
-	return -ENOSYS;
+        return -ENOSYS;
 }
 
 static int mlxm_ep_setopt(fid_t fid, int level, int optname,
@@ -72,7 +72,7 @@ static int mlxm_ep_setopt(fid_t fid, int level, int optname,
 
 static int mlxm_ep_close(fid_t fid)
 {
-	mlxm_fid_ep_t   	*fid_ep;
+        mlxm_fid_ep_t           *fid_ep;
         fid_ep = container_of(fid, mlxm_fid_ep_t, ep.fid);
         mlxm_mq_storage_fini(fid_ep);
         free(fid_ep);
@@ -105,24 +105,24 @@ static int mlxm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 static int mlxm_ep_control(fid_t fid, int command, void *arg)
 {
         switch (command) {
-	case FI_ENABLE:
-		return 0;
+        case FI_ENABLE:
+                return 0;
         default:
-		return -FI_ENOSYS;
+                return -FI_ENOSYS;
         }
 }
 
 static struct fi_ops_ep mlxm_ep_ops = {
-	.size   = sizeof(struct fi_ops_ep),
-	.cancel = mlxm_ep_cancel,
-	.getopt = mlxm_ep_getopt,
-	.setopt = mlxm_ep_setopt,
+        .size   = sizeof(struct fi_ops_ep),
+        .cancel = mlxm_ep_cancel,
+        .getopt = mlxm_ep_getopt,
+        .setopt = mlxm_ep_setopt,
 };
 
 static struct fi_ops mlxm_fi_ops = {
-	.size    = sizeof(struct fi_ops),
-	.close   = mlxm_ep_close,
-	.bind    = mlxm_ep_bind,
+        .size    = sizeof(struct fi_ops),
+        .close   = mlxm_ep_close,
+        .bind    = mlxm_ep_bind,
         .control = mlxm_ep_control,
 };
 
@@ -135,7 +135,7 @@ int mlxm_check_mem_tag_format(uint64_t format) {
 }
 
 int mlxm_ep_open(struct fid_domain *domain, struct fi_info *info,
-		 struct fid_ep **fid, void *context)
+                 struct fid_ep **fid, void *context)
 {
         mlxm_fid_ep_t     *fid_ep;
         mlxm_fid_domain_t *mlxm_domain;
@@ -148,17 +148,17 @@ int mlxm_ep_open(struct fid_domain *domain, struct fi_info *info,
                 return -EINVAL;
         }
         fid_ep = (mlxm_fid_ep_t *) calloc(1, sizeof *fid_ep);
-	if (!fid_ep)
-		return -ENOMEM;
+        if (!fid_ep)
+                return -ENOMEM;
 
         mlxm_domain = container_of(domain, mlxm_fid_domain_t, domain);
-        fid_ep->ep.fid.fclass	= FI_CLASS_EP;
-	fid_ep->ep.fid.context	= context;
-	fid_ep->ep.fid.ops	= &mlxm_fi_ops;
-	fid_ep->ep.ops		= &mlxm_ep_ops;
-	fid_ep->ep.cm		= &mlxm_cm_ops;
-        fid_ep->ep.tagged	= &mlxm_tagged_ops;
-        fid_ep->domain		= mlxm_domain;
+        fid_ep->ep.fid.fclass   = FI_CLASS_EP;
+        fid_ep->ep.fid.context  = context;
+        fid_ep->ep.fid.ops      = &mlxm_fi_ops;
+        fid_ep->ep.ops          = &mlxm_ep_ops;
+        fid_ep->ep.cm           = &mlxm_cm_ops;
+        fid_ep->ep.tagged       = &mlxm_tagged_ops;
+        fid_ep->domain          = mlxm_domain;
 
         if (info) {
                 if (info->tx_attr)
@@ -166,13 +166,13 @@ int mlxm_ep_open(struct fid_domain *domain, struct fi_info *info,
                 if (info->rx_attr)
                         fid_ep->flags |= info->rx_attr->op_flags;
                 
-		if (info->dest_addr) {
-			/* Connected mode: store the address until bind() */
-			/* The user passes
-			 * hints.dest_addr = <address given by mxm_ep_address()>
+                if (info->dest_addr) {
+                        /* Connected mode: store the address until bind() */
+                        /* The user passes
+                         * hints.dest_addr = <address given by mxm_ep_address()>
                          * TODO: clarify this flow */
                 }
-	}
+        }
         *fid = &fid_ep->ep;
         mpool_init(&mlxm_globals.req_pool, sizeof(struct mlxm_req), 32*4);
         fid_ep->mxm_mqs = &mlxm_globals.mq_storage;

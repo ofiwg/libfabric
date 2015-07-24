@@ -52,9 +52,9 @@ static struct fi_ops_domain mlxm_domain_ops = {
 };
 
 int mlxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-		     struct fid_domain **domain, void *context)
+                     struct fid_domain **domain, void *context)
 {
-        mlxm_fid_domain_t	*fid_domain;
+        mlxm_fid_domain_t       *fid_domain;
         FI_INFO(&mlxm_prov, FI_LOG_DOMAIN, "\n");
 
         if (!info->domain_attr->name ||
