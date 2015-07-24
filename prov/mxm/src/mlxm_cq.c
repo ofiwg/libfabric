@@ -31,8 +31,9 @@
  */
 #include "mlxm.h"
 
-static ssize_t mlxm_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
-                                fi_addr_t *src_addr)
+static inline
+ssize_t _mlxm_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
+                          fi_addr_t *src_addr)
 {
         mlxm_fid_cq_t     *fid_cq;
         mlxm_req_t        *mlxm_req;
@@ -83,9 +84,14 @@ static ssize_t mlxm_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
         return 1;
 }
 
+static ssize_t mlxm_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
+                                fi_addr_t *src_addr)
+{
+        return _mlxm_cq_readfrom(cq, buf, len, src_addr);
+}
 static ssize_t mlxm_cq_read(struct fid_cq *cq, void *buf, size_t len)
 {
-        return mlxm_cq_readfrom(cq, buf, len, NULL);
+        return _mlxm_cq_readfrom(cq, buf, len, NULL);
 }
 
 static int mlxm_cq_close(fid_t fid)
