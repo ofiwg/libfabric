@@ -95,7 +95,7 @@ static int mlxm_cq_close(fid_t fid)
         return 0;
 }
 
-static ssize_t  mlxm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+static ssize_t  mlxm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *cqe,
                                 uint64_t flags)
 {
         struct mlxm_fid_cq              *fid_cq;
@@ -103,8 +103,6 @@ static ssize_t  mlxm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
         mxm_send_req_t                  *mxm_sreq = NULL;
         mxm_recv_req_t                  *mxm_rreq = NULL;
         struct fi_context *ctx;
-        struct fi_cq_err_entry *cqe =
-                (struct fi_cq_err_entry *) buf;
         fid_cq = container_of(cq, mlxm_fid_cq_t, cq);
         if (!fid_cq->err_q.head) {
                 return 0;
