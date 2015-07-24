@@ -53,6 +53,7 @@ static ssize_t mlxm_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
 
         MLXM_CQ_DEQUEUE(fid_cq->ok_q, ctx);
         mlxm_req = ctx->internal[1];
+        ctx->internal[1] = NULL;
         cqe->flags      = 0;
         cqe->op_context = ctx;
 
@@ -110,6 +111,7 @@ static ssize_t  mlxm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *cqe,
 
         MLXM_CQ_DEQUEUE(fid_cq->err_q, ctx);
         mlxm_req = ctx->internal[1];
+        ctx->internal[1] = NULL;
         cqe->op_context = ctx;
         cqe->flags      = FI_TAGGED;
         cqe->buf = NULL;

@@ -43,7 +43,7 @@ static ssize_t mlxm_ep_cancel(fid_t fid, void *ctx)
                 return -EBADF;
         if (!context)
                 return -EINVAL;
-        if (context->internal[0] == NULL)
+        if (context->internal[1] == NULL)
                 return -FI_EINVAL;
 
         req =(mlxm_req_t *)context->internal[1];

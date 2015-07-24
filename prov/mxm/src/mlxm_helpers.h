@@ -64,6 +64,7 @@ static void mlxm_completion_cb_v(void *context)
         if (err == MXM_OK) {
                 MLXM_CQ_ENQUEUE(fid_cq->ok_q, ctx);
         } else if (err == MXM_ERR_CANCELED) {
+                ctx->internal[1] = NULL;
                 MPOOL_RETURN(mlxm_globals.req_pool, struct mlxm_req, mlxm_req);
         } else {
                 MLXM_CQ_ENQUEUE(fid_cq->err_q, ctx);
