@@ -130,9 +130,9 @@ int mlxm_find_mq(struct mlxm_mq_storage *storage,
         HASH_FIND(hh, storage->hash, &id, sizeof(uint16_t), mq_e);
         if (mq_e) {
                 *mq = mq_e->mq;
-                return 0;
-        } else {
                 return 1;
+        } else {
+                return 0;
         }
 };
 

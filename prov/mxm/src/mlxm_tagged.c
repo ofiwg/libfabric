@@ -57,7 +57,7 @@ static inline ssize_t _mlxm_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
         GET_MQ_ID(tag, mq_id);
         GET_32BIT_TAG(tag, mxm_tag);
         GET_32BIT_TAG((~ignore), mxm_tagmask);
-        if(mlxm_find_mq(fid_ep->mxm_mqs, mq_id, &mq)) {
+        if(!mlxm_find_mq(fid_ep->mxm_mqs, mq_id, &mq)) {
                 mlxm_mq_add_to_storage(fid_ep->mxm_mqs, mq_id, &mq);
         }
         return _mlxm_do_recv(fid_ep, buf, len, mq,
@@ -84,7 +84,7 @@ static inline ssize_t _mlxm_tagged_recvfrom_v(struct fid_ep *ep, const int iov_n
         GET_MQ_ID(tag, mq_id);
         GET_32BIT_TAG(tag, mxm_tag);
         GET_32BIT_TAG((~ignore), mxm_tagmask);
-        if(mlxm_find_mq(fid_ep->mxm_mqs, mq_id, &mq)) {
+        if(!mlxm_find_mq(fid_ep->mxm_mqs, mq_id, &mq)) {
                 mlxm_mq_add_to_storage(fid_ep->mxm_mqs, mq_id, &mq);
         }
         return _mlxm_do_recv_v(fid_ep, iov_num, iov, mq,
@@ -119,7 +119,7 @@ ssize_t _mlxm_tagged_peek(struct fid_ep *ep, const struct fi_msg_tagged *msg,
         GET_MQ_ID(msg->tag, mq_id);
         GET_32BIT_TAG(msg->tag, mxm_tag);
         GET_32BIT_TAG((~(msg->ignore)), mxm_tagmask);
-        if(mlxm_find_mq(fid_ep->mxm_mqs, mq_id, &mq)) {
+        if(!mlxm_find_mq(fid_ep->mxm_mqs, mq_id, &mq)) {
                 mlxm_mq_add_to_storage(fid_ep->mxm_mqs, mq_id, &mq);
         }
         return _mlxm_do_probe(fid_ep, mq, mq_id,
@@ -179,7 +179,7 @@ static inline ssize_t _mlxm_tagged_sendto(struct fid_ep *ep, const void *buf, si
 
         GET_MQ_ID(tag, mq_id);
         GET_32BIT_TAG(tag, mxm_tag);
-        if(mlxm_find_mq(fid_ep->mxm_mqs, mq_id, &mq)) {
+        if(!mlxm_find_mq(fid_ep->mxm_mqs, mq_id, &mq)) {
                 mlxm_mq_add_to_storage(fid_ep->mxm_mqs, mq_id, &mq);
         }
         return _mlxm_do_send(fid_ep, mq, mq_id,
@@ -203,7 +203,7 @@ static inline ssize_t _mlxm_tagged_sendto_v(struct fid_ep *ep, const int iov_num
 
         GET_MQ_ID(tag, mq_id);
         GET_32BIT_TAG(tag, mxm_tag);
-        if(mlxm_find_mq(fid_ep->mxm_mqs, mq_id, &mq)) {
+        if(!mlxm_find_mq(fid_ep->mxm_mqs, mq_id, &mq)) {
                 mlxm_mq_add_to_storage(fid_ep->mxm_mqs, mq_id, &mq);
         }
         return _mlxm_do_send_v(fid_ep, mq, mq_id,
