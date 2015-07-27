@@ -239,7 +239,7 @@ static struct fi_ops_fabric mlxm_fabric_ops = {
 static int mlxm_fabric(struct fi_fabric_attr *attr,
                        struct fid_fabric **fabric, void *context)
 {
-        mlxm_fid_fabric_t *fabric_priv;
+        struct mlxm_fid_fabric *fabric_priv;
         FI_INFO(&mlxm_prov, FI_LOG_CORE, "\n");
         if (strncmp(attr->name, "mxm", 3))
                 return -FI_ENODATA;

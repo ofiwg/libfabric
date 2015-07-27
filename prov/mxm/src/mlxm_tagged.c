@@ -43,7 +43,7 @@ static inline ssize_t _mlxm_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
                                             void *desc, fi_addr_t src_addr, uint64_t tag,
                                             uint64_t ignore, void *context, uint64_t flags)
 {
-        mlxm_fid_ep_t *fid_ep;
+        struct mlxm_fid_ep *fid_ep;
         mxm_mq_h       mq = NULL;
         uint32_t mxm_tag;
         uint32_t mxm_tagmask;
@@ -51,7 +51,7 @@ static inline ssize_t _mlxm_tagged_recvfrom(struct fid_ep *ep, void *buf, size_t
         mxm_conn_h conn = (FI_ADDR_UNSPEC == src_addr) ?
                 NULL : (mxm_conn_h)src_addr;
 
-        fid_ep = container_of(ep, mlxm_fid_ep_t, ep);
+        fid_ep = container_of(ep, struct mlxm_fid_ep, ep);
         assert(fid_ep->domain);
 
         GET_MQ_ID(tag, mq_id);
@@ -70,7 +70,7 @@ static inline ssize_t _mlxm_tagged_recvfrom_v(struct fid_ep *ep, const int iov_n
                                               void *desc, fi_addr_t src_addr, uint64_t tag,
                                               uint64_t ignore, void *context, uint64_t flags)
 {
-        mlxm_fid_ep_t *fid_ep;
+        struct mlxm_fid_ep *fid_ep;
         mxm_mq_h       mq = NULL;
         uint32_t mxm_tag;
         uint32_t mxm_tagmask;
@@ -78,7 +78,7 @@ static inline ssize_t _mlxm_tagged_recvfrom_v(struct fid_ep *ep, const int iov_n
         mxm_conn_h conn = (FI_ADDR_UNSPEC == src_addr) ?
                 NULL : (mxm_conn_h)src_addr;
 
-        fid_ep = container_of(ep, mlxm_fid_ep_t, ep);
+        fid_ep = container_of(ep, struct mlxm_fid_ep, ep);
         assert(fid_ep->domain);
 
         GET_MQ_ID(tag, mq_id);
@@ -114,7 +114,7 @@ ssize_t _mlxm_tagged_peek(struct fid_ep *ep, const struct fi_msg_tagged *msg,
         if (flags & (FI_CLAIM | FI_DISCARD))
                 return -FI_EOPNOTSUPP;
 
-        fid_ep = container_of(ep, mlxm_fid_ep_t, ep);
+        fid_ep = container_of(ep, struct mlxm_fid_ep, ep);
         assert(fid_ep->domain);
         GET_MQ_ID(msg->tag, mq_id);
         GET_32BIT_TAG(msg->tag, mxm_tag);
@@ -169,11 +169,11 @@ static inline ssize_t _mlxm_tagged_sendto(struct fid_ep *ep, const void *buf, si
                                           uint64_t tag, void *context, uint64_t flags,
                                           uint32_t data, const int is_blocking)
 {
-        mlxm_fid_ep_t   *fid_ep;
+        struct mlxm_fid_ep   *fid_ep;
         mxm_mq_h mq = NULL;
         uint32_t mxm_tag;
         uint16_t mq_id = 0;
-        fid_ep = container_of(ep, mlxm_fid_ep_t, ep);
+        fid_ep = container_of(ep, struct mlxm_fid_ep, ep);
         assert(fid_ep->domain);
         assert(dest_addr != FI_ADDR_UNSPEC);
 
@@ -193,11 +193,11 @@ static inline ssize_t _mlxm_tagged_sendto_v(struct fid_ep *ep, const int iov_num
                                             uint64_t tag, void *context, uint64_t flags,
                                             uint32_t data, const int is_blocking)
 {
-        mlxm_fid_ep_t   *fid_ep;
+        struct mlxm_fid_ep   *fid_ep;
         mxm_mq_h mq = NULL;
         uint32_t mxm_tag;
         uint16_t mq_id = 0;
-        fid_ep = container_of(ep, mlxm_fid_ep_t, ep);
+        fid_ep = container_of(ep, struct mlxm_fid_ep, ep);
         assert(fid_ep->domain);
         assert(dest_addr != FI_ADDR_UNSPEC);
 

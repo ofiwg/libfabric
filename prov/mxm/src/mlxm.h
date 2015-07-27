@@ -80,20 +80,65 @@ int mlxm_errno(int err)
 #define MLXM_DEFAULT_FLAGS   (0)
 extern struct fi_provider mlxm_prov;
 
-typedef struct mlxm_cq_entry       mlxm_cq_entry_t;
-typedef struct mlxm_fid_cq         mlxm_fid_cq_t;
-typedef struct mlxm_req            mlxm_req_t;
-typedef struct mlxm_fid_domain     mlxm_fid_domain_t;
-typedef struct mlxm_cq_entry_queue mlxm_cq_entry_queue_t;
-typedef struct mlxm_fid_av         mlxm_fid_av_t;
-typedef struct mlxm_fid_ep         mlxm_fid_ep_t;
-typedef struct mlxm_fid_fabric     mlxm_fid_fabric_t;
-typedef struct mlxm_fid_mr         mlxm_fid_mr_t;
+struct mlxm_fid_domain {
+        struct fid_domain       domain;
+        size_t                  mxm_addrlen;
+};
+
+struct mlxm_fid_ep {
+        struct fid_ep           ep;
+        struct mlxm_fid_domain  *domain;
+        struct mlxm_fid_cq      *cq;
+        struct mlxm_fid_av      *av;
+        uint64_t                flags;
+        struct mlxm_mq_storage* mxm_mqs;
+};
+
+struct mlxm_fid_av {
+        struct fid_av           av;
+        struct mlxm_fid_domain  *domain;
+        struct mlxm_fid_ep      *ep;
+        int                     type;
+        size_t                  count;
+        size_t                  addrlen;
+};
+
+struct mlxm_fid_fabric {
+        struct fid_fabric       fabric;
+};
+
+struct mlxm_fid_mr {
+        struct fid_mr           mr;
+        struct mlxm_fid_domain  *domain;
+        mxm_mem_key_t mxm_key;
+        size_t iov_count;
+        struct iovec            iov[0]; /* must be the last field */
+};
+
+struct mlxm_cq_entry_queue {
+        size_t                  size;
+        size_t                  n;
+        struct mlxm_cq_entry    *head;
+        struct mlxm_cq_entry    *tail;
+};
+
+struct mlxm_fid_cq {
+        struct fid_cq cq;
+        mxm_h mxm_context;
+        struct {
+                void *head;
+                void *tail;
+        } ok_q;
+        struct {
+                void *head;
+                void *tail;
+        } err_q;
+};
 
 struct mlxm_cq_entry {
-        void                            *ptr;
-        mxm_conn_h                      src_addr;
-        mlxm_cq_entry_t                 *next;
+        void                 *ptr;
+        mxm_conn_h            src_addr;
+        struct mlxm_cq_entry *next;
 };
 
 struct mlxm_req {
@@ -104,7 +149,6 @@ struct mlxm_req {
         struct mpool* pool;
         uint16_t   mq_id;
 };
-
 
 struct mlxm_mq_entry {
         uint16_t mq_key;
@@ -167,7 +211,7 @@ void mlxm_mq_storage_init() {
 }
 
 static inline
-void mlxm_mq_storage_fini(mlxm_fid_ep_t *fid_ep) {
+void mlxm_mq_storage_fini(struct mlxm_fid_ep *fid_ep) {
         struct mlxm_mq_entry *mq_e, *tmp;
         HASH_ITER(hh, mlxm_globals.mq_storage.hash, mq_e, tmp) {
                 mxm_mq_destroy(mq_e->mq);
@@ -176,31 +220,6 @@ void mlxm_mq_storage_fini(mlxm_fid_ep_t *fid_ep) {
                 free(mq_e);
         }
 }
-
-struct mlxm_fid_domain {
-        struct fid_domain       domain;
-        size_t                  mxm_addrlen;
-};
-
-struct mlxm_cq_entry_queue {
-        size_t                  size;
-        size_t                  n;
-        struct mlxm_cq_entry    *head;
-        struct mlxm_cq_entry    *tail;
-};
-
-struct mlxm_fid_cq {
-        struct fid_cq cq;
-        mxm_h mxm_context;
-        struct {
-                void *head;
-                void *tail;
-        } ok_q;
-        struct {
-                void *head;
-                void *tail;
-        } err_q;
-};
 
 #define MLXM_CQ_ENQUEUE(_queue, __ctx)                                  \
         do{                                                             \
@@ -224,36 +243,6 @@ struct mlxm_fid_cq {
                         _queue.head = __ctx->internal[0];       \
                 }                                               \
         }while(0)
-
-struct mlxm_fid_av {
-        struct fid_av           av;
-        mlxm_fid_domain_t       *domain;
-        mlxm_fid_ep_t           *ep;
-        int                     type;
-        size_t count;
-        size_t                  addrlen;
-};
-
-struct mlxm_fid_ep {
-        struct fid_ep           ep;
-        mlxm_fid_domain_t       *domain;
-        mlxm_fid_cq_t           *cq;
-        mlxm_fid_av_t           *av;
-        uint64_t                flags;
-        struct mlxm_mq_storage* mxm_mqs;
-};
-
-struct mlxm_fid_fabric {
-        struct fid_fabric       fabric;
-};
-
-struct mlxm_fid_mr {
-        struct fid_mr           mr;
-        struct mlxm_fid_domain  *domain;
-        mxm_mem_key_t mxm_key;
-        size_t iov_count;
-        struct iovec            iov[0]; /* must be the last field */
-};
 
 extern struct fi_ops_cm         mlxm_cm_ops;
 extern struct fi_ops_tagged     mlxm_tagged_ops;

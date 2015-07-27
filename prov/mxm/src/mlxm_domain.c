@@ -33,8 +33,9 @@
 
 static int mlxm_domain_close(fid_t fid)
 {
-        mlxm_fid_domain_t *fid_domain;
-        fid_domain = container_of(fid, mlxm_fid_domain_t, domain.fid);
+        struct mlxm_fid_domain *fid_domain;
+        fid_domain = container_of(fid,
+                                  struct mlxm_fid_domain, domain.fid);
         free(fid_domain);
         return 0;
 }
@@ -54,13 +55,13 @@ static struct fi_ops_domain mlxm_domain_ops = {
 int mlxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
                      struct fid_domain **domain, void *context)
 {
-        mlxm_fid_domain_t       *fid_domain;
+        struct mlxm_fid_domain *fid_domain;
         FI_INFO(&mlxm_prov, FI_LOG_DOMAIN, "\n");
 
         if (!info->domain_attr->name ||
             strncmp(info->domain_attr->name, "mxm", 3))
                 return -FI_EINVAL;
-        fid_domain = (mlxm_fid_domain_t*) calloc(1, sizeof(*fid_domain));
+        fid_domain = (struct mlxm_fid_domain *) calloc(1, sizeof(*fid_domain));
         if (!fid_domain)
                 return -ENOMEM;
         fid_domain->domain.fid.fclass  = FI_CLASS_DOMAIN;

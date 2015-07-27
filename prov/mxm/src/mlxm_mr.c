@@ -35,13 +35,14 @@
 static int mlxm_mr_reg(struct fid *domain, const void *buf, size_t len,
                        uint64_t access, uint64_t offset, uint64_t requested_key,
                        uint64_t flags, struct fid_mr **mr, void *context) {
-        mlxm_fid_domain_t *domain_priv;
-        mlxm_fid_mr_t *mr_priv = NULL;
+        struct mlxm_fid_domain *domain_priv;
+        struct mlxm_fid_mr     *mr_priv = NULL;
         uint64_t key;
-        int err;
-        domain_priv = container_of(domain, mlxm_fid_domain_t, domain);
+        int      err;
+        domain_priv = container_of(domain, struct mlxm_fid_domain, domain);
 
-        mr_priv = (mlxm_fid_mr_t *) calloc(1, sizeof(*mr_priv) + sizeof(struct iovec));
+        mr_priv = (struct mlxm_fid_mr *)
+                calloc(1, sizeof(*mr_priv) + sizeof(struct iovec));
         if (!mr_priv)
                 return -ENOMEM;
         mr_priv->mr.fid.fclass = FI_CLASS_MR;

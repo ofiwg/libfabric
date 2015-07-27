@@ -32,18 +32,20 @@
 #include "mlxm.h"
 
 static inline
-ssize_t _mlxm_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
+ssize_t
+__attribute__((always_inline))
+_mlxm_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
                           fi_addr_t *src_addr)
 {
-        mlxm_fid_cq_t     *fid_cq;
-        mlxm_req_t        *mlxm_req;
+        struct mlxm_fid_cq     *fid_cq;
+        struct mlxm_req        *mlxm_req;
         mxm_send_req_t    *mxm_sreq;
         mxm_recv_req_t    *mxm_rreq;
         struct fi_context *ctx;
         struct fi_cq_tagged_entry *cqe =
                 (struct fi_cq_tagged_entry *) buf;
 
-        fid_cq = container_of(cq, mlxm_fid_cq_t, cq);
+        fid_cq = container_of(cq, struct mlxm_fid_cq, cq);
         if (fid_cq->err_q.head)
                 return -FI_EAVAIL;
         mxm_progress(fid_cq->mxm_context);
@@ -96,8 +98,8 @@ static ssize_t mlxm_cq_read(struct fid_cq *cq, void *buf, size_t len)
 
 static int mlxm_cq_close(fid_t fid)
 {
-        mlxm_fid_cq_t   *fid_cq;
-        fid_cq = container_of(fid, mlxm_fid_cq_t, cq.fid);
+        struct mlxm_fid_cq   *fid_cq;
+        fid_cq = container_of(fid, struct mlxm_fid_cq, cq.fid);
         free(fid_cq);
         return 0;
 }
@@ -106,11 +108,11 @@ static ssize_t  mlxm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *cqe,
                                 uint64_t flags)
 {
         struct mlxm_fid_cq              *fid_cq;
-        mlxm_req_t                      *mlxm_req;
+        struct mlxm_req                 *mlxm_req;
         mxm_send_req_t                  *mxm_sreq = NULL;
         mxm_recv_req_t                  *mxm_rreq = NULL;
         struct fi_context *ctx;
-        fid_cq = container_of(cq, mlxm_fid_cq_t, cq);
+        fid_cq = container_of(cq, struct mlxm_fid_cq, cq);
         if (!fid_cq->err_q.head) {
                 return 0;
         }
@@ -178,8 +180,8 @@ static struct fi_ops_cq mlxm_cq_ops = {
 int mlxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
                  struct fid_cq **cq, void *context)
 {
-        mlxm_fid_cq_t   *fid_cq;
-        fid_cq = (mlxm_fid_cq_t *) calloc(1, sizeof *fid_cq);
+        struct mlxm_fid_cq   *fid_cq;
+        fid_cq = (struct mlxm_fid_cq *) calloc(1, sizeof *fid_cq);
         if (!fid_cq)
                 return -ENOMEM;
         fid_cq->cq.fid.fclass   = FI_CLASS_CQ;

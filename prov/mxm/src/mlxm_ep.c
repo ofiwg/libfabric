@@ -33,12 +33,12 @@
 
 static ssize_t mlxm_ep_cancel(fid_t fid, void *ctx)
 {
-        mlxm_fid_ep_t     *fid_ep;
-        mlxm_req_t        *req;
-        struct fi_context *context = (struct fi_context*)ctx;
+        struct mlxm_fid_ep *fid_ep;
+        struct mlxm_req    *req;
+        struct fi_context  *context = (struct fi_context*)ctx;
         int err;
 
-        fid_ep = container_of(fid, mlxm_fid_ep_t, ep.fid);
+        fid_ep = container_of(fid, struct mlxm_fid_ep, ep.fid);
         if (!fid_ep->domain)
                 return -EBADF;
         if (!context)
@@ -46,7 +46,7 @@ static ssize_t mlxm_ep_cancel(fid_t fid, void *ctx)
         if (context->internal[1] == NULL)
                 return -FI_EINVAL;
 
-        req =(mlxm_req_t *)context->internal[1];
+        req =(struct mlxm_req *)context->internal[1];
         if (FI_RECV == (uint64_t)(context->internal[3])) {
                 err = mxm_req_cancel_recv(&req->mxm_req.rreq);
         } else {
@@ -72,8 +72,8 @@ static int mlxm_ep_setopt(fid_t fid, int level, int optname,
 
 static int mlxm_ep_close(fid_t fid)
 {
-        mlxm_fid_ep_t           *fid_ep;
-        fid_ep = container_of(fid, mlxm_fid_ep_t, ep.fid);
+        struct mlxm_fid_ep *fid_ep;
+        fid_ep = container_of(fid, struct mlxm_fid_ep, ep.fid);
         mlxm_mq_storage_fini(fid_ep);
         free(fid_ep);
         return 0;
@@ -81,17 +81,17 @@ static int mlxm_ep_close(fid_t fid)
 
 static int mlxm_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-        mlxm_fid_ep_t *fid_ep;
+        struct mlxm_fid_ep *fid_ep;
         int           err = 0;
-        fid_ep = container_of(fid, mlxm_fid_ep_t, ep.fid);
+        fid_ep = container_of(fid, struct mlxm_fid_ep, ep.fid);
 
         switch (bfid->fclass) {
         case FI_CLASS_CQ:
                 /* TODO: check ress flags for send/recv ECs */
-                fid_ep->cq = container_of(bfid, mlxm_fid_cq_t, cq.fid);
+                fid_ep->cq = container_of(bfid, struct mlxm_fid_cq, cq.fid);
                 break;
         case FI_CLASS_AV:
-                fid_ep->av = container_of(bfid, mlxm_fid_av_t, av.fid);
+                fid_ep->av = container_of(bfid, struct mlxm_fid_av, av.fid);
                 fid_ep->domain = fid_ep->av->domain;
                 fid_ep->av->ep = fid_ep;
                 break;
@@ -137,8 +137,8 @@ int mlxm_check_mem_tag_format(uint64_t format) {
 int mlxm_ep_open(struct fid_domain *domain, struct fi_info *info,
                  struct fid_ep **fid, void *context)
 {
-        mlxm_fid_ep_t     *fid_ep;
-        mlxm_fid_domain_t *mlxm_domain;
+        struct mlxm_fid_ep     *fid_ep;
+        struct mlxm_fid_domain *mlxm_domain;
 
         if (mlxm_check_mem_tag_format(mlxm_mem_tag_format)) {
                 FI_WARN(&mlxm_prov, FI_LOG_CORE,
@@ -147,11 +147,11 @@ int mlxm_ep_open(struct fid_domain *domain, struct fi_info *info,
                         MLXM_MEM_TAG_FORMAT);
                 return -EINVAL;
         }
-        fid_ep = (mlxm_fid_ep_t *) calloc(1, sizeof *fid_ep);
+        fid_ep = (struct mlxm_fid_ep *) calloc(1, sizeof *fid_ep);
         if (!fid_ep)
                 return -ENOMEM;
 
-        mlxm_domain = container_of(domain, mlxm_fid_domain_t, domain);
+        mlxm_domain = container_of(domain, struct mlxm_fid_domain, domain);
         fid_ep->ep.fid.fclass   = FI_CLASS_EP;
         fid_ep->ep.fid.context  = context;
         fid_ep->ep.fid.ops      = &mlxm_fi_ops;

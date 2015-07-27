@@ -35,11 +35,11 @@
 
 static void mlxm_completion_cb(void *context)
 {
-        struct fi_context *ctx = (struct fi_context *)context;
-        mlxm_req_t        *mlxm_req = (mlxm_req_t*)ctx->internal[1];
-        mlxm_fid_cq_t     *fid_cq =
-                (mlxm_fid_cq_t *) ctx->internal[2];
-        int               err =
+        struct fi_context  *ctx      = (struct fi_context *)context;
+        struct mlxm_req    *mlxm_req = (struct mlxm_req*)ctx->internal[1];
+        struct mlxm_fid_cq *fid_cq   =
+                (struct mlxm_fid_cq *) ctx->internal[2];
+        int err =
                 ((mxm_req_base_t*)&mlxm_req->mxm_req)->error;
 
         if (err == MXM_OK) {
@@ -53,10 +53,10 @@ static void mlxm_completion_cb(void *context)
 
 static void mlxm_completion_cb_v(void *context)
 {
-        struct fi_context *ctx = (struct fi_context *)context;
-        mlxm_fid_cq_t     *fid_cq =
-                (mlxm_fid_cq_t *) ctx->internal[2];
-        mlxm_req_t *mlxm_req = (mlxm_req_t*)ctx->internal[1];
+        struct fi_context  *ctx      = (struct fi_context *)context;
+        struct mlxm_fid_cq *fid_cq   =
+                (struct mlxm_fid_cq *) ctx->internal[2];
+        struct mlxm_req    *mlxm_req = (struct mlxm_req*)ctx->internal[1];
         int err;
 
         free(((mxm_req_base_t*)&mlxm_req->mxm_req)->data.iov.vector);
@@ -71,19 +71,19 @@ static void mlxm_completion_cb_v(void *context)
         }
 }
 
-static inline int _mlxm_do_send(mlxm_fid_ep_t *fid_ep, mxm_mq_h mq,
+static inline int _mlxm_do_send(struct mlxm_fid_ep *fid_ep, mxm_mq_h mq,
                                 int mq_id,
                                 const void *buf, size_t len,
                                 mxm_conn_h conn, uint32_t mxm_tag,
                                 void *context, uint32_t data,
                                 const int is_blocking)
 {
-        mlxm_fid_cq_t  *fid_cq;
-        mlxm_req_t     *mlxm_req = NULL;
-        mxm_send_req_t *mxm_req = NULL;
-        mxm_error_t    mxm_err;
-        int            err;
-        mxm_send_req_t stack_req;
+        struct mlxm_fid_cq  *fid_cq;
+        struct mlxm_req     *mlxm_req = NULL;
+        mxm_send_req_t      *mxm_req = NULL;
+        mxm_error_t          mxm_err;
+        int                  err;
+        mxm_send_req_t       stack_req;
         assert(fid_ep->domain);
         fid_cq = fid_ep->cq;
 
@@ -143,16 +143,16 @@ err_out_destroy_req:
         return err;
 }
 
-static int _mlxm_do_recv(mlxm_fid_ep_t *fid_ep, void *buf, size_t len,
+static int _mlxm_do_recv(struct mlxm_fid_ep *fid_ep, void *buf, size_t len,
                          mxm_mq_h mq, int mq_id, mxm_conn_h conn,
                          uint32_t mxm_tag,
                          uint32_t mxm_tagmask, void *context)
 {
-        mlxm_fid_cq_t  *fid_cq;
-        mlxm_req_t     *mlxm_req = NULL;
-        mxm_recv_req_t *mxm_req = NULL;
-        mxm_error_t     mxm_err;
-        int             err;
+        struct mlxm_fid_cq  *fid_cq;
+        struct mlxm_req     *mlxm_req = NULL;
+        mxm_recv_req_t      *mxm_req = NULL;
+        mxm_error_t          mxm_err;
+        int                  err;
         fid_cq = fid_ep->cq;
         MPOOL_ALLOC(mlxm_globals.req_pool, struct mlxm_req, mlxm_req);
         if (!mlxm_req)
@@ -195,7 +195,7 @@ err_out_destroy_req:
 }
 
 
-static inline int _mlxm_do_send_v(mlxm_fid_ep_t *fid_ep, mxm_mq_h mq,
+static inline int _mlxm_do_send_v(struct mlxm_fid_ep *fid_ep, mxm_mq_h mq,
                                   int mq_id,
                                   const int iov_num,
                                   const struct iovec * iov,
@@ -203,12 +203,12 @@ static inline int _mlxm_do_send_v(mlxm_fid_ep_t *fid_ep, mxm_mq_h mq,
                                   void *context, uint32_t data,
                                   const int is_blocking)
 {
-        mlxm_fid_cq_t  *fid_cq;
-        mlxm_req_t     *mlxm_req = NULL;
-        mxm_send_req_t *mxm_req = NULL;
-        mxm_error_t     mxm_err;
-        int             err;
-        mxm_send_req_t  stack_req;
+        struct mlxm_fid_cq  *fid_cq;
+        struct mlxm_req     *mlxm_req = NULL;
+        mxm_send_req_t      *mxm_req = NULL;
+        mxm_error_t          mxm_err;
+        int                  err;
+        mxm_send_req_t       stack_req;
         int i;
         assert(fid_ep->domain);
         fid_cq = fid_ep->cq;
@@ -278,17 +278,17 @@ err_out_destroy_req:
         return err;
 }
 
-static int _mlxm_do_recv_v(mlxm_fid_ep_t *fid_ep, const int iov_num,
+static int _mlxm_do_recv_v(struct mlxm_fid_ep *fid_ep, const int iov_num,
                            const struct iovec *iov,
                            mxm_mq_h mq, int mq_id, mxm_conn_h conn,
                            uint32_t mxm_tag,
                            uint32_t mxm_tagmask, void *context)
 {
-        mlxm_fid_cq_t  *fid_cq;
-        mlxm_req_t     *mlxm_req = NULL;
-        mxm_recv_req_t *mxm_req = NULL;
-        mxm_error_t     mxm_err;
-        int             err, i;
+        struct mlxm_fid_cq  *fid_cq;
+        struct mlxm_req     *mlxm_req = NULL;
+        mxm_recv_req_t      *mxm_req = NULL;
+        mxm_error_t          mxm_err;
+        int                  err, i;
 
         fid_cq = fid_ep->cq;
         MPOOL_ALLOC(mlxm_globals.req_pool, struct mlxm_req, mlxm_req);
@@ -341,14 +341,14 @@ err_out_destroy_req:
 }
 
 static ssize_t
-_mlxm_do_probe(mlxm_fid_ep_t *fid_ep, mxm_mq_h mq,
+_mlxm_do_probe(struct mlxm_fid_ep *fid_ep, mxm_mq_h mq,
                int mq_id, mxm_conn_h conn,
                uint32_t mxm_tag, uint32_t mxm_tagmask,
                void *context)
 {
-        mxm_error_t     mxm_err;
-        mlxm_req_t     *mlxm_req = NULL;
-        mxm_recv_req_t *mxm_req = NULL;
+        mxm_error_t        mxm_err;
+        struct mlxm_req   *mlxm_req = NULL;
+        mxm_recv_req_t    *mxm_req = NULL;
         MPOOL_ALLOC(mlxm_globals.req_pool, struct mlxm_req, mlxm_req);
         if (!mlxm_req)
                 return -ENOMEM;

@@ -35,14 +35,14 @@
 static int mlxm_av_insert(struct fid_av *av, const void *addr, size_t count,
                           fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-        mlxm_fid_av_t *fid_av;
-        mlxm_fid_ep_t *fid_ep;
+        struct mlxm_fid_av *fid_av;
+        struct mlxm_fid_ep *fid_ep;
         mxm_error_t    mxm_err;
         void          *mxm_addr;
         size_t         mxm_addrlen;
         int            i, err;
 
-        fid_av = container_of(av, mlxm_fid_av_t, av);
+        fid_av = container_of(av, struct mlxm_fid_av, av);
         fid_ep = fid_av->ep;
         mxm_addrlen = fid_av->domain->mxm_addrlen;
 
@@ -68,8 +68,8 @@ static int mlxm_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 {
         mxm_error_t   mxm_err;
         int           i;
-        mlxm_fid_av_t *fid_av;
-        fid_av = container_of(av, mlxm_fid_av_t, av.fid);
+        struct mlxm_fid_av *fid_av;
+        fid_av = container_of(av, struct mlxm_fid_av, av.fid);
 
         if (mlxm_globals.mxm_ep) {
                 for (i = 0; i < count; ++i) {
@@ -86,8 +86,8 @@ static int mlxm_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 
 static int mlxm_av_close(fid_t fid)
 {
-        mlxm_fid_av_t *fid_av;
-        fid_av = container_of(fid, mlxm_fid_av_t, av.fid);
+        struct mlxm_fid_av *fid_av;
+        fid_av = container_of(fid, struct mlxm_fid_av, av.fid);
         free(fid_av);
         return 0;
 }
@@ -113,11 +113,11 @@ static struct fi_ops_av mlxm_av_ops = {
 int mlxm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
                  struct fid_av **av, void *context)
 {
-        mlxm_fid_domain_t *fid_domain;
-        mlxm_fid_av_t *fid_av;
+        struct mlxm_fid_domain *fid_domain;
+        struct mlxm_fid_av *fid_av;
         int type = FI_AV_MAP;
         size_t count = 64;
-        fid_domain = container_of(domain, mlxm_fid_domain_t, domain);
+        fid_domain = container_of(domain, struct mlxm_fid_domain, domain);
 
         if (attr) {
                 switch (attr->type) {
@@ -130,7 +130,7 @@ int mlxm_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
                 count = attr->count;
         }
 
-        fid_av = (mlxm_fid_av_t *) calloc(1, sizeof *fid_av);
+        fid_av = (struct mlxm_fid_av *) calloc(1, sizeof *fid_av);
         if (!fid_av)
                 return -ENOMEM;
 

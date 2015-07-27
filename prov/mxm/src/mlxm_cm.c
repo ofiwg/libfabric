@@ -33,7 +33,7 @@
 #include "fi_enosys.h"
 static int mlxm_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-        mlxm_fid_ep_t *fid_ep;
+        struct mlxm_fid_ep *fid_ep;
         mxm_error_t   mxm_err;
         size_t        mxm_addrlen = *addrlen;
 
