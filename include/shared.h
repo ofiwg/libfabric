@@ -160,6 +160,17 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define ARRAY_SIZE(A) (sizeof(A)/sizeof(*A))
 
+#define TEST_ENUM_SET_N_RETURN(str, enum_val, type, data)	\
+	TEST_SET_N_RETURN(str, #enum_val, enum_val, type, data)
+
+#define TEST_SET_N_RETURN(str, val_str, val, type, data)	\
+	do {							\
+		if (!strncmp(str, val_str, strlen(val_str))) {	\
+			*(type *)(data) = val;			\
+			return 0;				\
+		}						\
+	} while (0)
+
 /* for RMA tests --- we want to be able to select fi_writedata, but there is no
  * constant in libfabric for this */
 enum ft_rma_opcodes {
