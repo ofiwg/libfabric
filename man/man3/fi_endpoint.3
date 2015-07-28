@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-06\-22" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-07\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -228,6 +228,12 @@ This is useful for applications that need to reserve the fabric address
 of an endpoint prior to knowing if the endpoint will be used on the
 active or passive side of a connection.
 For example, this feature is useful for simulating socket semantics.
+Once an active endpoint acquires the properties of a passive endpoint,
+the passive endpoint is no longer bound to any fabric resources and must
+no longer be used.
+The user is expected to close the passive endpoint after opening the
+active endpoint in order to free up any lingering resources that had
+been used.
 .SS fi_close
 .PP
 Closes an endpoint and release all resources associated with it.
