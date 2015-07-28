@@ -34,7 +34,7 @@ AC_DEFUN([FI_MXM_CONFIGURE],[
 		[AS_CASE([$with_mxm],
                         [yes|no], [AC_DEFINE([HAVE_MXM], [1], [Define if MXM is enabled])],
                         [CPPFLAGS="-I$with_mxm/include $CPPFLAGS"
-			LDFLAGS="-L$with_mxm/lib -Wl,-rpath=$with_mxm/lib $LDFLAGS"
+                        LDFLAGS="-L$with_mxm/lib $LDFLAGS"
 			LIBS="-lmxm $LIBS"
                         AC_DEFINE([HAVE_MXM], [1], [Define if MXM is enabled])])
                 ])
@@ -56,7 +56,7 @@ AC_DEFUN([FI_MXM_CONFIGURE],[
 		],
 		[AS_CASE([$with_mxm_lib],
 			[yes|no], [],
-			[LDFLAGS="-L$with_mxm_lib -Wl,-rpath=$with_mxm_lib $LDFLAGS"
+                        [LDFLAGS="-L$with_mxm_lib $LDFLAGS"
 			LIBS="-lmxm $LIBS"
 			AC_DEFINE([HAVE_MXM], [1], [Define if MXM is enabled])
 			])
