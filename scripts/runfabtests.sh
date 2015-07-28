@@ -33,6 +33,7 @@ simple_tests=(
 	"poll"
 	"rdm"
 	"rdm_rma_simple"
+	"rdm_rma_trigger"
 	"rdm_shared_ctx"
 	"rdm_tagged_peek"
 	"scalable_ep"
