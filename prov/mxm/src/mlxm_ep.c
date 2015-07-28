@@ -74,7 +74,6 @@ static int mlxm_ep_close(fid_t fid)
 {
         struct mlxm_fid_ep *fid_ep;
         fid_ep = container_of(fid, struct mlxm_fid_ep, ep.fid);
-        mlxm_mq_storage_fini(fid_ep);
         free(fid_ep);
         return 0;
 }

@@ -32,7 +32,7 @@
 #include <assert.h>
 #include "mlxm.h"
 #include "mlxm_helpers.h"
-
+#include "mlxm_mq_storage.h"
 #define GET_MQ_ID(_tag, _mq_id)  do{                                    \
                 (_mq_id) =  (( (_tag) & MLXM_MEM_TAG_FORMAT) >> 32);    \
         }while(0)

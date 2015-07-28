@@ -33,7 +33,7 @@
 #include "mlxm.h"
 #include "fi.h"
 #include "prov.h"
-
+#include "mlxm_mq_storage.h"
 
 #define MLXM_EP_CAP_BASE (FI_TAGGED | FI_SEND | FI_RECV)
 #define MLXM_EP_CAP     (MLXM_EP_CAP_BASE)
@@ -221,6 +221,7 @@ err_out:
 
 static int mlxm_fabric_close(fid_t fid)
 {
+        mlxm_mq_storage_fini();
         mxm_ep_powerdown(mlxm_globals.mxm_ep);
         mxm_ep_destroy(mlxm_globals.mxm_ep);
         mxm_cleanup(mlxm_globals.mxm_context);
