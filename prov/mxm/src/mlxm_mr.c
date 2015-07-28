@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 #include "mlxm.h"
-#include "fi_enosys.h"
 
 static int mlxm_mr_reg(struct fid *domain, const void *buf, size_t len,
                        uint64_t access, uint64_t offset, uint64_t requested_key,

@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 #include "mlxm.h"
-#include "fi_enosys.h"
+
 static int mlxm_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
         struct mlxm_fid_ep *fid_ep;

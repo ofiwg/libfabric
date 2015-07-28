@@ -29,7 +29,20 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include <assert.h>
 #include "mlxm.h"
+
+#define MLXM_CQ_DEQUEUE(_queue, __ctx)                          \
+        do{                                                     \
+                __ctx = (struct fi_context*)(_queue.head);      \
+                assert(__ctx);                                  \
+                if (__ctx->internal[0] == __ctx) {              \
+                        _queue.head = NULL;                     \
+                } else {                                        \
+                        _queue.head = __ctx->internal[0];       \
+                }                                               \
+        }while(0)
+
 
 static inline
 ssize_t

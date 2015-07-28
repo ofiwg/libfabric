@@ -31,7 +31,20 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include <assert.h>
 #include "mlxm.h"
+
+#define MLXM_CQ_ENQUEUE(_queue, __ctx)                                  \
+        do{                                                             \
+                if (_queue.head == NULL) {                              \
+                        _queue.head = __ctx->internal[0];               \
+                        _queue.tail = __ctx->internal[0];               \
+                } else {                                                \
+                        ((struct fi_context *)(_queue.tail))->internal[0] = \
+                                __ctx;                                  \
+                        _queue.tail = __ctx;                            \
+                }                                                       \
+        }while(0)
 
 static void mlxm_completion_cb(void *context)
 {

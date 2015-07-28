@@ -29,9 +29,11 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include <errno.h>
 #include "mlxm.h"
 #include "fi.h"
 #include "prov.h"
+
 
 #define MLXM_EP_CAP_BASE (FI_TAGGED | FI_SEND | FI_RECV)
 #define MLXM_EP_CAP     (MLXM_EP_CAP_BASE)

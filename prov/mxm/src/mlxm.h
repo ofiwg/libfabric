@@ -43,14 +43,7 @@ extern "C" {
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <errno.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <pthread.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_prov.h>
 #include <rdma/fi_domain.h>
@@ -60,7 +53,7 @@ extern "C" {
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_log.h>
-#include <fi_list.h>
+#include "fi_enosys.h"
 #include <mxm/api/mxm_api.h>
 #include "mpool.h"
 #include "uthash.h"
@@ -221,28 +214,6 @@ void mlxm_mq_storage_fini(struct mlxm_fid_ep *fid_ep) {
         }
 }
 
-#define MLXM_CQ_ENQUEUE(_queue, __ctx)                                  \
-        do{                                                             \
-                if (_queue.head == NULL) {                              \
-                        _queue.head = __ctx->internal[0];               \
-                        _queue.tail = __ctx->internal[0];               \
-                } else {                                                \
-                        ((struct fi_context *)(_queue.tail))->internal[0] = \
-                                __ctx;                                  \
-                        _queue.tail = __ctx;                            \
-                }                                                       \
-        }while(0)
-
-#define MLXM_CQ_DEQUEUE(_queue, __ctx)                          \
-        do{                                                     \
-                __ctx = (struct fi_context*)(_queue.head);      \
-                assert(__ctx);                                  \
-                if (__ctx->internal[0] == __ctx) {              \
-                        _queue.head = NULL;                     \
-                } else {                                        \
-                        _queue.head = __ctx->internal[0];       \
-                }                                               \
-        }while(0)
 
 extern struct fi_ops_cm         mlxm_cm_ops;
 extern struct fi_ops_tagged     mlxm_tagged_ops;
