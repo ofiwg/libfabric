@@ -34,17 +34,20 @@
 #include <assert.h>
 #include "mlxm.h"
 
-#define MLXM_CQ_ENQUEUE(_queue, __ctx)                                  \
-        do{                                                             \
-                if (_queue.head == NULL) {                              \
-                        _queue.head = __ctx->internal[0];               \
-                        _queue.tail = __ctx->internal[0];               \
-                } else {                                                \
-                        ((struct fi_context *)(_queue.tail))->internal[0] = \
-                                __ctx;                                  \
-                        _queue.tail = __ctx;                            \
-                }                                                       \
-        }while(0)
+static inline void
+__attribute__((always_inline))
+mlxm_cq_enqueue(struct mlxm_completion_queue *queue,
+                struct fi_context *ctx)
+{
+        if (queue->head == NULL) {
+                queue->head = ctx->internal[0];
+                queue->tail = ctx->internal[0];
+        } else {
+                ((struct fi_context *)(queue->tail))->internal[0] =
+                        ctx;
+                queue->tail = ctx;
+        }
+}
 
 static void mlxm_completion_cb(void *context)
 {
@@ -56,11 +59,11 @@ static void mlxm_completion_cb(void *context)
                 ((mxm_req_base_t*)&mlxm_req->mxm_req)->error;
 
         if (err == MXM_OK) {
-                MLXM_CQ_ENQUEUE(fid_cq->ok_q, ctx);
+                mlxm_cq_enqueue(&fid_cq->ok_q, ctx);
         } else if (err == MXM_ERR_CANCELED) {
                 MPOOL_RETURN(mlxm_globals.req_pool, struct mlxm_req, mlxm_req);
         } else {
-                MLXM_CQ_ENQUEUE(fid_cq->err_q, ctx);
+                mlxm_cq_enqueue(&fid_cq->err_q, ctx);
         }
 }
 
@@ -75,12 +78,12 @@ static void mlxm_completion_cb_v(void *context)
         free(((mxm_req_base_t*)&mlxm_req->mxm_req)->data.iov.vector);
         err = ((mxm_req_base_t*)&mlxm_req->mxm_req)->error;
         if (err == MXM_OK) {
-                MLXM_CQ_ENQUEUE(fid_cq->ok_q, ctx);
+                mlxm_cq_enqueue(&fid_cq->ok_q, ctx);
         } else if (err == MXM_ERR_CANCELED) {
                 ctx->internal[1] = NULL;
                 MPOOL_RETURN(mlxm_globals.req_pool, struct mlxm_req, mlxm_req);
         } else {
-                MLXM_CQ_ENQUEUE(fid_cq->err_q, ctx);
+                mlxm_cq_enqueue(&fid_cq->err_q, ctx);
         }
 }
 

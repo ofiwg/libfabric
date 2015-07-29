@@ -32,20 +32,21 @@
 #include <assert.h>
 #include "mlxm.h"
 
-#define MLXM_CQ_DEQUEUE(_queue, __ctx)                          \
-        do{                                                     \
-                __ctx = (struct fi_context*)(_queue.head);      \
-                assert(__ctx);                                  \
-                if (__ctx->internal[0] == __ctx) {              \
-                        _queue.head = NULL;                     \
-                } else {                                        \
-                        _queue.head = __ctx->internal[0];       \
-                }                                               \
-        }while(0)
+static inline void
+__attribute__((always_inline))
+mlxm_cq_dequeue(struct mlxm_completion_queue *queue,
+                struct fi_context **ctx)
+{
+        *ctx = (struct fi_context*)(queue->head);
+        assert(*ctx);
+        if ((*ctx)->internal[0] == *ctx) {
+                queue->head = NULL;
+        } else {
+                queue->head = (*ctx)->internal[0];
+        }
+}
 
-
-static inline
-ssize_t
+static inline ssize_t
 __attribute__((always_inline))
 _mlxm_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
                           fi_addr_t *src_addr)
@@ -67,7 +68,7 @@ _mlxm_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
                 return 0;
         }
 
-        MLXM_CQ_DEQUEUE(fid_cq->ok_q, ctx);
+        mlxm_cq_dequeue(&fid_cq->ok_q, &ctx);
         mlxm_req = ctx->internal[1];
         ctx->internal[1] = NULL;
         cqe->flags      = 0;
@@ -85,7 +86,7 @@ _mlxm_cq_readfrom(struct fid_cq *cq, void *buf, size_t len,
                 }
         } else {
                 mxm_rreq = &mlxm_req->mxm_req.rreq;
-                assert(mxm_rreq->base.error != MXM_OK);
+                assert(mxm_rreq->base.error == MXM_OK);
                 cqe->flags      |= FI_RECV;
                 cqe->len        = mxm_rreq->completion.actual_len;
                 cqe->data       = mxm_rreq->completion.sender_imm;
@@ -130,7 +131,7 @@ static ssize_t  mlxm_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *cqe,
                 return 0;
         }
 
-        MLXM_CQ_DEQUEUE(fid_cq->err_q, ctx);
+        mlxm_cq_dequeue(&fid_cq->err_q, &ctx);
         mlxm_req = ctx->internal[1];
         ctx->internal[1] = NULL;
         cqe->op_context = ctx;

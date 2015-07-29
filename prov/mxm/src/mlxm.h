@@ -117,17 +117,16 @@ struct mlxm_cq_entry_queue {
         struct mlxm_cq_entry    *tail;
 };
 
+struct mlxm_completion_queue {
+        void *head;
+        void *tail;
+};
+
 struct mlxm_fid_cq {
         struct fid_cq cq;
         mxm_h mxm_context;
-        struct {
-                void *head;
-                void *tail;
-        } ok_q;
-        struct {
-                void *head;
-                void *tail;
-        } err_q;
+        struct mlxm_completion_queue ok_q;
+        struct mlxm_completion_queue err_q;
 };
 
 struct mlxm_cq_entry {
