@@ -605,7 +605,8 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_EINVAL;
 	}
 
-	if (info->src_addrlen != sizeof(struct sockaddr_in)) {
+	if (info->src_addrlen &&
+			info->src_addrlen != sizeof(struct sockaddr_in)) {
 		USDF_WARN_SYS(EP_CTRL, "unexpected src_addrlen\n");
 		return -FI_EINVAL;
 	}
@@ -651,8 +652,11 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto fail;
 	}
 
+	/* info->src_addrlen can only be 0 or sizeof(struct sockaddr_in) which
+	 * is the same as sizeof(pep->pep_src_addr).
+	 */
 	memcpy(&pep->pep_src_addr, (struct sockaddr_in *)info->src_addr,
-		sizeof(pep->pep_src_addr));
+		info->src_addrlen);
 
 	/* initialize connreq freelist */
 	ret = pthread_spin_init(&pep->pep_cr_lock, PTHREAD_PROCESS_PRIVATE);
