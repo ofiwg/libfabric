@@ -98,32 +98,32 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 		switch (trigger->op_type) {
 		case SOCK_OP_SEND:
 			ret = sock_ep_sendmsg(trigger->ep, &trigger->op.msg.msg, 
-					trigger->flags);
+					trigger->flags & ~FI_TRIGGER);
 			break;
 
 		case SOCK_OP_RECV:
 			ret = sock_ep_recvmsg(trigger->ep, &trigger->op.msg.msg,
-					trigger->flags);
+					trigger->flags & ~FI_TRIGGER);
 			break;
 
 		case SOCK_OP_TSEND:
 			ret = sock_ep_tsendmsg(trigger->ep, &trigger->op.tmsg.msg, 
-					trigger->flags);
+					trigger->flags & ~FI_TRIGGER);
 			break;
 
 		case SOCK_OP_TRECV:
 			ret = sock_ep_trecvmsg(trigger->ep, &trigger->op.tmsg.msg, 
-					trigger->flags);
+					trigger->flags & ~FI_TRIGGER);
 			break;
 
 		case SOCK_OP_WRITE:
 			ret = sock_ep_rma_writemsg(trigger->ep, &trigger->op.rma.msg,
-					     trigger->flags);
+					     trigger->flags & ~FI_TRIGGER);
 			break;
 
 		case SOCK_OP_READ:
 			ret = sock_ep_rma_readmsg(trigger->ep, &trigger->op.rma.msg,
-					     trigger->flags);
+					     trigger->flags & ~FI_TRIGGER);
 			break;
 
 		case SOCK_OP_ATOMIC:
@@ -134,7 +134,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 					  trigger->op.atomic.resultv,
 					  NULL,
 					  trigger->op.atomic.result_count,
-					  trigger->flags);
+					  trigger->flags & ~FI_TRIGGER);
 			break;
 			
 		default:

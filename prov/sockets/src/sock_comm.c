@@ -158,12 +158,23 @@ static ssize_t sock_comm_recv_buffer(struct sock_conn *conn)
 	int ret;
 	size_t endlen;
 
-	endlen = conn->inbuf.size - (conn->inbuf.wpos & conn->inbuf.size_mask);
-	ret = sock_comm_recv_socket(conn,(char*) conn->inbuf.buf +
-					 (conn->inbuf.wpos & conn->inbuf.size_mask), 
-					 endlen);
-	if (ret <= 0)
+	if (rbavail(&conn->inbuf) == 0)
 		return 0;
+
+	endlen = conn->inbuf.size - (conn->inbuf.wpos & conn->inbuf.size_mask);
+	if (rbavail(&conn->inbuf) <= endlen) {
+		ret = sock_comm_recv_socket(conn,(char*) conn->inbuf.buf +
+					    (conn->inbuf.wpos & conn->inbuf.size_mask),
+					    rbavail(&conn->inbuf));
+		conn->inbuf.wpos += ret;
+		rbcommit(&conn->inbuf);
+                return 0;
+	} else {
+		ret = sock_comm_recv_socket(conn,(char*) conn->inbuf.buf +
+					    (conn->inbuf.wpos & conn->inbuf.size_mask), endlen);
+		if (ret <= 0)
+			return 0;
+	}
 
 	conn->inbuf.wpos += ret;
 	rbcommit(&conn->inbuf);
