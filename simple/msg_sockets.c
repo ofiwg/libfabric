@@ -35,7 +35,6 @@
 #include <unistd.h>
 #include <netdb.h>
 
-#include <infiniband/ib.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
@@ -521,9 +520,6 @@ static int setup_handle(void)
 		break;
 	case AF_INET6:
 		hints->addr_format = FI_SOCKADDR_IN6;
-		break;
-	case AF_IB:
-		hints->addr_format = FI_SOCKADDR_IB;
 		break;
 	}
 
