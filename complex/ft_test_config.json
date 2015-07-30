@@ -1,0 +1,57 @@
+{
+	"prov_name": "sockets",
+	"test_type": [
+		"FT_TEST_LATENCY",
+		"FT_TEST_BANDWIDTH",
+	],
+	"class_function": [
+		"FT_FUNC_SEND",
+		"FT_FUNC_SENDV",
+		"FT_FUNC_SENDMSG"
+	],
+	"ep_type": [
+		"FI_EP_MSG",
+		"FI_EP_DGRAM",
+		"FI_EP_RDM"
+	],
+	"av_type": [
+		"FI_AV_TABLE",
+		"FI_AV_MAP"
+	],
+	"comp_type": [
+		"FT_COMP_QUEUE"
+	],
+	"mode": [
+		"FT_MODE_ALL"
+	],
+	"caps": [
+		"FT_CAP_MSG",
+		"FT_CAP_TAGGED"
+	],
+	"test_flags": "FT_FLAG_QUICKTEST"
+},
+{
+	"prov_name": "verbs",
+	"test_type": [
+		"FT_TEST_LATENCY",
+		"FT_TEST_BANDWIDTH",
+	],
+	"class_function": [
+		"FT_FUNC_SEND",
+		"FT_FUNC_SENDV",
+		"FT_FUNC_SENDMSG"
+	],
+	"ep_type": [
+		"FI_EP_MSG",
+	],
+	"comp_type": [
+		"FT_COMP_QUEUE"
+	],
+	"mode": [
+		"FT_MODE_ALL"
+	],
+	"caps": [
+		"FT_CAP_MSG",
+	],
+	"test_flags": "FT_FLAG_QUICKTEST"
+},

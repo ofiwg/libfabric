@@ -43,7 +43,9 @@ dist_noinst_SCRIPTS = \
 	scripts/parseyaml.py
 
 noinst_LTLIBRARIES = libfabtests.la
-libfabtests_la_SOURCES = common/shared.c
+libfabtests_la_SOURCES = \
+	common/shared.c \
+	common/jsmn.c
 
 if MACOS
 libfabtests_la_SOURCES += include/osx/osd.h
@@ -183,6 +185,7 @@ man_MANS = man/fabtests.7
 EXTRA_DIST = \
 	include/shared.h \
 	include/unit_common.h \
+	include/jsmn.h \
 	complex/fabtest.h \
 	fabtests.spec.in $(man_MANS)
 
