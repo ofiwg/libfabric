@@ -30,6 +30,7 @@ simple_tests=(
 	"dgram_waitset"
 	"msg"
 	"msg_epoll"
+	"msg_sockets"
 	"poll"
 	"rdm"
 	"rdm_rma_simple"

@@ -29,6 +29,7 @@ These tests are a mix of very basic tests and major features of libfabric. All o
 	fi_msg: A basic MSG client-server example
 	fi_msg_pingpong: A ping-pong client-server example using MSG endpoints
 	fi_msg_rma: A ping pong client-server example using RMA operations between MSG endpoints
+	fi_msg_sockets: Verifies transitioning a passive endpoint into an active one as required by sockets-over-RDMA implementations
 	fi_poll: A basic RDM client-server example that uses poll
 	fi_rdm: A basic RDM client-server example
 	fi_rdm_atomic: An RDM ping pong client-server using atomic operations
