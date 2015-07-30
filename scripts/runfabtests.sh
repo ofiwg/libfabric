@@ -30,7 +30,7 @@ simple_tests=(
 	"dgram_waitset"
 	"msg"
 	"msg_epoll"
-	"msg_sockets"
+	"msg_sockets -s CLIENT_ADDR"
 	"poll"
 	"rdm"
 	"rdm_rma_simple"
@@ -212,7 +212,8 @@ function cs_test {
 	local test=$1
 	local ret1=0
 	local ret2=0
-	local test_exe="fi_${test} -f $PROV"
+	local test_exe=$(echo "fi_${test} -f $PROV" | \
+	    sed -e "s/CLIENT_ADDR/${CLIENT}/g")
 	local start_time
 	local end_time
 	local test_time
