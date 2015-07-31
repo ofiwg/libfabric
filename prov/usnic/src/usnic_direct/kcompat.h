@@ -270,6 +270,8 @@ enum pkt_hash_types {
 #define napi_hash_del(napi) do {} while(0)
 #define napi_hash_add(napi) do {} while(0)
 #define skb_mark_napi_id(skb, napi) do {} while(0)
+#elif (RHEL_RELEASE_CODE && (RHEL_RELEASE_CODE == RHEL_RELEASE_VERSION(6, 6)))
+#define napi_gro_flush(a, b) napi_gro_flush(a)
 #endif /*CONFIG_NET_RX_BUSY_POLL*/
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 00))

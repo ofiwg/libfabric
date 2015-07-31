@@ -62,26 +62,6 @@ usd_get_cap(
         return 0;
     }
 
-    return dev->ud_caps[cap];
+    return dev->ud_ctx->ucx_caps[cap];
 }
 
-/*
- * go to various places to learn what capabilities we can export
- */
-#if 0
-int
-usd_read_caps(
-    struct usd_device *dev)
-{
-    int ret;
-
-    ret = usd_read_cap_ver(dev, "cq_sharing",
-            &dev->ud_caps[USD_CAP_CQ_SHARING]);
-    if (ret != 0) {
-        return ret;
-    }
-dev->ud_caps[USD_CAP_CQ_SHARING] = 1;
-
-    return 0;
-}
-#endif
