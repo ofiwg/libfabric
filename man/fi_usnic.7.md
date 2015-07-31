@@ -62,8 +62,6 @@ low latency and other offload capabilities on Ethernet networks.
     * The tag matching interface is not supported.
     * *FI_MSG_PREFIX* is only supported on *FI_EP_DGRAM* and usage
       is limited to the 1.1 release.
-    * Posting a send operation with a buffer smaller than 18 bytes may
-      result in an incorrect completion length on the receiving end.
   * The usnic libfabric provider supports extensions that provide
     information and functionality beyond the standard libfabric
     interface.  See the "USNIC EXTENSIONS" section, below.
