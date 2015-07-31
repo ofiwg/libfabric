@@ -274,6 +274,9 @@ struct psmx_fid_domain {
 	struct psmx_req_queue	recv_queue;
 	struct psmx_req_queue	unexp_queue;
 
+	/* triggered operations that are ready to be processed */
+	struct psmx_req_queue	trigger_queue;
+
 	/* certain bits in the tag space can be reserved for non tag-matching
 	 * purpose. The tag-matching functions automatically treat these bits
 	 * as 0. This field is a bit mask, with reserved bits valued as "1".
@@ -481,7 +484,8 @@ struct psmx_trigger {
 			uint64_t	flags;
 		} atomic_compwrite;
 	};
-	struct psmx_trigger *next;
+	struct psmx_trigger *next;	/* used for randomly accessed trigger list */
+	struct slist_entry list_entry;	/* used for ready-to-fire trigger queue */
 };
 
 struct psmx_fid_cntr {
@@ -636,6 +640,8 @@ int	psmx_am_process_send(struct psmx_fid_domain *domain,
 				struct psmx_am_request *req);
 int	psmx_am_process_rma(struct psmx_fid_domain *domain,
 				struct psmx_am_request *req);
+int	psmx_process_trigger(struct psmx_fid_domain *domain,
+				struct psmx_trigger *trigger);
 int	psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
 int	psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,

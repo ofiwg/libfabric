@@ -47,6 +47,7 @@ int psmx_am_progress(struct psmx_fid_domain *domain)
 {
 	struct slist_entry *item;
 	struct psmx_am_request *req;
+	struct psmx_trigger *trigger;
 
 #if PSMX_AM_USE_SEND_QUEUE
 	pthread_mutex_lock(&domain->send_queue.lock);
@@ -76,6 +77,16 @@ int psmx_am_progress(struct psmx_fid_domain *domain)
 		}
 		pthread_mutex_unlock(&domain->rma_queue.lock);
 	}
+
+	pthread_mutex_lock(&domain->trigger_queue.lock);
+	while (!slist_empty(&domain->trigger_queue.list)) {
+		item = slist_remove_head(&domain->trigger_queue.list);
+		trigger = container_of(item, struct psmx_trigger, list_entry);
+		pthread_mutex_unlock(&domain->trigger_queue.lock);
+		psmx_process_trigger(domain, trigger);
+		pthread_mutex_lock(&domain->trigger_queue.lock);
+	}
+	pthread_mutex_unlock(&domain->trigger_queue.lock);
 
 	return 0;
 }
@@ -142,9 +153,11 @@ int psmx_am_init(struct psmx_fid_domain *domain)
 	slist_init(&domain->rma_queue.list);
 	slist_init(&domain->recv_queue.list);
 	slist_init(&domain->unexp_queue.list);
+	slist_init(&domain->trigger_queue.list);
 	pthread_mutex_init(&domain->rma_queue.lock, NULL);
 	pthread_mutex_init(&domain->recv_queue.lock, NULL);
 	pthread_mutex_init(&domain->unexp_queue.lock, NULL);
+	pthread_mutex_init(&domain->trigger_queue.lock, NULL);
 #if PSMX_AM_USE_SEND_QUEUE
 	slist_init(&domain->send_queue.list);
 	pthread_mutex_init(&domain->send_queue.lock, NULL);
