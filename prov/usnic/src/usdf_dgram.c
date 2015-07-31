@@ -180,8 +180,55 @@ usdf_dgram_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 ssize_t
 usdf_dgram_recvmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 {
-	return usdf_dgram_recvv(fep, msg->msg_iov, msg->desc,
-		msg->iov_count, (fi_addr_t)msg->addr, msg->context);
+	struct usdf_ep *ep;
+	struct usd_qp_impl *qp;
+	struct usd_rq *rq;
+	struct vnic_rq *vrq;
+	struct rq_enet_desc *desc;
+	const struct iovec *iovp;
+	uint8_t *hdr_ptr;
+	uint32_t index;
+	unsigned i;
+
+	ep = ep_ftou(fep);
+	qp = to_qpi(ep->e.dg.ep_qp);
+	rq = &qp->uq_rq;
+	vrq = &rq->urq_vnic_rq;
+	desc = rq->urq_next_desc;
+	index = rq->urq_post_index;
+
+	iovp = msg->msg_iov;
+	rq->urq_context[index] = msg->context;
+	hdr_ptr = ep->e.dg.ep_hdr_buf + (index * USDF_HDR_BUF_ENTRY);
+	rq_enet_desc_enc(desc, (dma_addr_t) hdr_ptr,
+			RQ_ENET_TYPE_ONLY_SOP, sizeof(struct usd_udp_hdr));
+	ep->e.dg.ep_hdr_ptr[index] = (struct usd_udp_hdr *) hdr_ptr;
+
+	index = (index + 1) & rq->urq_post_index_mask;
+	desc = (struct rq_enet_desc *)
+		((uintptr_t)rq->urq_desc_ring + (index << 4));
+
+	for (i = 0; i < msg->iov_count; ++i) {
+		rq->urq_context[index] = msg->context;
+		rq_enet_desc_enc(desc, (dma_addr_t) iovp[i].iov_base,
+			     RQ_ENET_TYPE_NOT_SOP, iovp[i].iov_len);
+		ep->e.dg.ep_hdr_ptr[index] = (struct usd_udp_hdr *) hdr_ptr;
+
+		index = (index + 1) & rq->urq_post_index_mask;
+		desc = (struct rq_enet_desc *)
+			((uintptr_t)rq->urq_desc_ring + (index << 4));
+	}
+
+	if ((flags & FI_MORE) == 0) {
+		wmb();
+		iowrite32(index, &vrq->ctrl->posted_index);
+	}
+
+	rq->urq_next_desc = desc;
+	rq->urq_post_index = index;
+	rq->urq_recv_credits -= msg->iov_count + 1;
+
+	return 0;
 }
 
 ssize_t
@@ -487,8 +534,58 @@ usdf_dgram_prefix_recvv(struct fid_ep *fep, const struct iovec *iov,
 ssize_t
 usdf_dgram_prefix_recvmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 {
-	return usdf_dgram_prefix_recvv(fep, msg->msg_iov, msg->desc,
-		msg->iov_count, (fi_addr_t)msg->addr, msg->context);
+	struct usdf_ep *ep;
+	struct usd_qp_impl *qp;
+	struct usd_rq *rq;
+	struct vnic_rq *vrq;
+	struct rq_enet_desc *desc;
+	uint8_t *hdr_ptr;
+	const struct iovec *iovp;
+	uint32_t index;
+	unsigned i;
+
+	ep = ep_ftou(fep);
+	qp = to_qpi(ep->e.dg.ep_qp);
+	rq = &qp->uq_rq;
+	vrq = &rq->urq_vnic_rq;
+	desc = rq->urq_next_desc;
+	index = rq->urq_post_index;
+
+	iovp = msg->msg_iov;
+	rq->urq_context[index] = msg->context;
+	hdr_ptr = iovp[0].iov_base +
+		(USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr));
+	rq_enet_desc_enc(desc, (dma_addr_t) hdr_ptr,
+			 RQ_ENET_TYPE_ONLY_SOP,
+			 iovp[0].iov_len -
+			  (USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr)));
+	ep->e.dg.ep_hdr_ptr[index] = (struct usd_udp_hdr *) hdr_ptr;
+
+	index = (index+1) & rq->urq_post_index_mask;
+	desc = (struct rq_enet_desc *) ((uintptr_t)rq->urq_desc_ring
+					    + (index<<4));
+
+	for (i = 1; i < msg->iov_count; ++i) {
+		rq->urq_context[index] = msg->context;
+		rq_enet_desc_enc(desc, (dma_addr_t) iovp[i].iov_base,
+			     RQ_ENET_TYPE_NOT_SOP, iovp[i].iov_len);
+		ep->e.dg.ep_hdr_ptr[index] = (struct usd_udp_hdr *) hdr_ptr;
+
+		index = (index+1) & rq->urq_post_index_mask;
+		desc = (struct rq_enet_desc *) ((uintptr_t)rq->urq_desc_ring
+					    + (index<<4));
+	}
+
+	if ((flags & FI_MORE) == 0) {
+		wmb();
+		iowrite32(index, &vrq->ctrl->posted_index);
+	}
+
+	rq->urq_next_desc = desc;
+	rq->urq_post_index = index;
+	rq->urq_recv_credits -= msg->iov_count;
+
+	return 0;
 }
 
 ssize_t
