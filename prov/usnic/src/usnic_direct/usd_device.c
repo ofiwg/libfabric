@@ -381,7 +381,7 @@ usd_open_for_attrs(
     const char *dev_name,
     struct usd_device **dev_o)
 {
-    return usd_open_with_fd(dev_name, -1, 0, 0, dev_o);
+    return usd_open_with_fd(dev_name, -1, 1, 0, dev_o);
 }
 
 /*
