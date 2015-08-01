@@ -596,14 +596,25 @@ static int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags, struct rdm
 	switch(fi->addr_format) {
 	case FI_SOCKADDR_IN:
 		rai->ai_family = AF_INET;
+		rai->ai_flags |= RAI_FAMILY;
 		break;
 	case FI_SOCKADDR_IN6:
 		rai->ai_family = AF_INET6;
+		rai->ai_flags |= RAI_FAMILY;
 		break;
 	case FI_SOCKADDR_IB:
 		rai->ai_family = AF_IB;
+		rai->ai_flags |= RAI_FAMILY;
 		break;
 	case FI_SOCKADDR:
+		if (fi->src_addrlen) {
+			rai->ai_family = ((struct sockaddr *)fi->src_addr)->sa_family;
+			rai->ai_flags |= RAI_FAMILY;
+		} else if (fi->dest_addrlen) {
+			rai->ai_family = ((struct sockaddr *)fi->dest_addr)->sa_family;
+			rai->ai_flags |= RAI_FAMILY;
+		}
+		break;
 	case FI_FORMAT_UNSPEC:
 		break;
 	default:
@@ -954,16 +965,18 @@ fi_ibv_create_ep(const char *node, const char *service,
 	/* Remove ib_rai entries added by IBACM to prevent wrong
 	 * ib_connect_hdr from being sent in connect request.
 	 * TODO Choose ib_rai if we came here from fi_endpoint */
-	for (rai_current = &_rai; *rai_current;) {
-		struct rdma_addrinfo *rai_next;
-		if ((*rai_current)->ai_family == AF_IB) {
-			rai_next = (*rai_current)->ai_next;
-			(*rai_current)->ai_next = NULL;
-			rdma_freeaddrinfo(*rai_current);
-			*rai_current = rai_next;
-			continue;
+	if (hints->addr_format != FI_SOCKADDR_IB) {
+		for (rai_current = &_rai; *rai_current;) {
+			struct rdma_addrinfo *rai_next;
+			if ((*rai_current)->ai_family == AF_IB) {
+				rai_next = (*rai_current)->ai_next;
+				(*rai_current)->ai_next = NULL;
+				rdma_freeaddrinfo(*rai_current);
+				*rai_current = rai_next;
+				continue;
+			}
+			rai_current = &(*rai_current)->ai_next;
 		}
-		rai_current = &(*rai_current)->ai_next;
 	}
 
 	ret = rdma_create_ep(id, _rai, NULL, NULL);
