@@ -57,7 +57,7 @@ static void *payload;
 static size_t buffer_size;
 static size_t prefix_len;
 static size_t max_msg_size = 0;
-static int timeout = 30;
+static int timeout = 5;
 
 static struct fi_info *hints;
 static fi_addr_t remote_fi_addr;
@@ -448,10 +448,10 @@ static int server_connect(void)
 			if (ret != -FI_EAGAIN) {
 				FT_PRINTERR("fi_cq_read", ret);
 				return ret;
-			} else if (timeout > 0) {
+			} else if (timeout * 10 > 0) {
 				clock_gettime(CLOCK_REALTIME_COARSE, &b);
-				if (b.tv_sec - a.tv_sec > timeout) {
-					fprintf(stderr, "%ds timeout expired waiting for message from fi_ud_pingpong client, exiting\n", timeout);
+				if (b.tv_sec - a.tv_sec > timeout * 10) {
+					fprintf(stderr, "%ds timeout expired waiting for message from fi_ud_pingpong client, exiting\n", timeout *10);
 					exit(FI_ENODATA);
 				}
 			}
