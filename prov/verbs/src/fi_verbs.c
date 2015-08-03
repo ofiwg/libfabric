@@ -3489,7 +3489,7 @@ static int fi_ibv_pep_setname(fid_t pep_fid, void *addr, size_t addrlen)
 
 	pep = container_of(pep_fid, struct fi_ibv_pep, pep_fid);
 
-	if (addrlen != pep->src_addrlen) {
+	if (pep->src_addrlen && (addrlen != pep->src_addrlen)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "addrlen expected: %d, got: %d.\n",
 				pep->src_addrlen, addrlen);
 		return -FI_EINVAL;
