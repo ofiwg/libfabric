@@ -8,16 +8,6 @@ Url: http://www.github.com/ofiwg/libfabric
 Source: http://www.openfabrics.org/downloads/fabrics/%{name}-%{version}.tar.bz2
 Prefix: ${_prefix}
 
-%if 0%{?configopts:1}
-# skip BuildRequires for custom build
-%else
-%global configopts --enable-sockets --enable-verbs --enable-usnic --enable-psm
-BuildRequires: librdmacm-devel
-BuildRequires: libibverbs-devel
-BuildRequires: libnl-devel
-BuildRequires: infinipath-psm-devel
-%endif
-
 %description
 libfabric provides a user-space API to access high-performance fabric
 services, such as RDMA.
