@@ -965,7 +965,7 @@ fi_ibv_create_ep(const char *node, const char *service,
 	/* Remove ib_rai entries added by IBACM to prevent wrong
 	 * ib_connect_hdr from being sent in connect request.
 	 * TODO Choose ib_rai if we came here from fi_endpoint */
-	if (hints->addr_format != FI_SOCKADDR_IB) {
+	if (hints && hints->addr_format != FI_SOCKADDR_IB) {
 		for (rai_current = &_rai; *rai_current;) {
 			struct rdma_addrinfo *rai_next;
 			if ((*rai_current)->ai_family == AF_IB) {
@@ -2162,6 +2162,7 @@ static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 		return -FI_EINVAL;
 	}
 
+	memset(&info, 0, sizeof info);
 	info.src_addr = calloc(1, addrlen);
 	if (!info.src_addr)
 		return -FI_ENOMEM;
@@ -3607,14 +3608,14 @@ fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	ret = rdma_create_id(NULL, &_pep->id, NULL, RDMA_PS_TCP);
 	if (ret) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to create rdma_cm_id\n");
-		goto err;
+		goto err1;
 	}
 
 	if (info->src_addr) {
 		ret = rdma_bind_addr(_pep->id, (struct sockaddr *)info->src_addr);
 		if (ret) {
 			FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to bind addres to rdma_cm_id\n");
-			return ret;
+			goto err2;
 		}
 		_pep->bound = 1;
 	}
@@ -3630,7 +3631,10 @@ fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 	*pep = &_pep->pep_fid;
 	return 0;
-err:
+
+err2:
+	rdma_destroy_id(_pep->id);
+err1:
 	free(_pep);
 	return ret;
 }
