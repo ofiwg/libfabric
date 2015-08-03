@@ -3608,14 +3608,14 @@ fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	ret = rdma_create_id(NULL, &_pep->id, NULL, RDMA_PS_TCP);
 	if (ret) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to create rdma_cm_id\n");
-		goto err;
+		goto err1;
 	}
 
 	if (info->src_addr) {
 		ret = rdma_bind_addr(_pep->id, (struct sockaddr *)info->src_addr);
 		if (ret) {
 			FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to bind addres to rdma_cm_id\n");
-			return ret;
+			goto err2;
 		}
 		_pep->bound = 1;
 	}
@@ -3631,7 +3631,10 @@ fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 	*pep = &_pep->pep_fid;
 	return 0;
-err:
+
+err2:
+	rdma_destroy_id(_pep->id);
+err1:
 	free(_pep);
 	return ret;
 }
