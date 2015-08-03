@@ -965,7 +965,7 @@ fi_ibv_create_ep(const char *node, const char *service,
 	/* Remove ib_rai entries added by IBACM to prevent wrong
 	 * ib_connect_hdr from being sent in connect request.
 	 * TODO Choose ib_rai if we came here from fi_endpoint */
-	if (hints->addr_format != FI_SOCKADDR_IB) {
+	if (hints && hints->addr_format != FI_SOCKADDR_IB) {
 		for (rai_current = &_rai; *rai_current;) {
 			struct rdma_addrinfo *rai_next;
 			if ((*rai_current)->ai_family == AF_IB) {
