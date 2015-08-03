@@ -2162,6 +2162,7 @@ static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 		return -FI_EINVAL;
 	}
 
+	memset(&info, 0, sizeof info);
 	info.src_addr = calloc(1, addrlen);
 	if (!info.src_addr)
 		return -FI_ENOMEM;
