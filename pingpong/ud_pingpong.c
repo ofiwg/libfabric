@@ -118,7 +118,7 @@ static int recv_xfer(int size)
 	struct fi_cq_entry comp;
 	int ret;
 
-	clock_gettime(CLOCK_REALTIME_COARSE, &a);
+	clock_gettime(CLOCK_MONOTONIC, &a);
 	do {
 		ret = fi_cq_read(rcq, &comp, sizeof comp);
 		if (ret < 0) {
@@ -126,7 +126,7 @@ static int recv_xfer(int size)
 				FT_PRINTERR("fi_cq_read", ret);
 				return ret;
 			} else if (timeout > 0) {
-				clock_gettime(CLOCK_REALTIME_COARSE, &b);
+				clock_gettime(CLOCK_MONOTONIC, &b);
 				if (b.tv_sec - a.tv_sec > timeout) {
 					fprintf(stderr, "%ds timeout expired waiting to receive message, exiting\n", timeout);
 					exit(FI_ENODATA);
@@ -441,7 +441,7 @@ static int server_connect(void)
 	if (ret != 0)
 		return ret;
 
-	clock_gettime(CLOCK_REALTIME_COARSE, &a);
+	clock_gettime(CLOCK_MONOTONIC, &a);
 	do {
 		ret = fi_cq_read(rcq, &comp, 1);
 		if (ret < 0) {
@@ -449,7 +449,7 @@ static int server_connect(void)
 				FT_PRINTERR("fi_cq_read", ret);
 				return ret;
 			} else if (timeout * 10 > 0) {
-				clock_gettime(CLOCK_REALTIME_COARSE, &b);
+				clock_gettime(CLOCK_MONOTONIC, &b);
 				if (b.tv_sec - a.tv_sec > timeout * 10) {
 					fprintf(stderr, "%ds timeout expired waiting for message from fi_ud_pingpong client, exiting\n", timeout *10);
 					exit(FI_ENODATA);
