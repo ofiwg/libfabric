@@ -98,7 +98,7 @@ static int getaddr(char *node, char *service,
 		return 0;
 	}
 
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, NULL, &fi);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_ERR("fi_getinfo error %s\n", fi_strerror(ret));
 		return ret;
