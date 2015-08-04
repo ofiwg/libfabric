@@ -2253,6 +2253,7 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	struct fi_ibv_msg_ep *_ep;
 	struct rdma_conn_param conn_param;
+	struct fi_ibv_connreq *connreq;
 	int ret;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
@@ -2270,7 +2271,14 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	conn_param.flow_control = 1;
 	conn_param.rnr_retry_count = 7;
 
-	return rdma_accept(_ep->id, &conn_param) ? -errno : 0;
+	ret = rdma_accept(_ep->id, &conn_param);
+	if (ret)
+		return -errno;
+
+	connreq = container_of(_ep->info->handle, struct fi_ibv_connreq, handle);
+	free(connreq);
+
+	return 0;
 }
 
 static int
@@ -2480,7 +2488,6 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
 		connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
 		_ep->id = connreq->id;
-		free(connreq);
         } else if (info->handle->fclass == FI_CLASS_PEP) {
 		pep = container_of(info->handle, struct fi_ibv_pep, pep_fid.fid);
 		_ep->id = pep->id;
