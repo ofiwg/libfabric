@@ -45,13 +45,13 @@
 
 #include "usd.h"
 
-int usd_ib_cmd_get_context(struct usd_device *dev);
+int usd_ib_cmd_get_context(struct usd_context *uctx);
 int usd_ib_cmd_alloc_pd(struct usd_device *dev, uint32_t * pd_handle_o);
 int usd_ib_cmd_reg_mr(struct usd_device *dev, void *vaddr, size_t length,
                       struct usd_mr *mr);
 int usd_ib_cmd_dereg_mr(struct usd_device *dev, struct usd_mr *mr);
 int usd_ib_cmd_create_cq(struct usd_device *dev, struct usd_cq_impl *cq,
-                         int comp_channel, int comp_vector);
+                        void *ibv_cq, int comp_channel, int comp_vector);
 int usd_ib_cmd_destroy_cq(struct usd_device *dev, struct usd_cq_impl *cq);
 int usd_ib_cmd_create_qp(struct usd_device *dev, struct usd_qp_impl *qp,
                          struct usd_vf_info *vfip);

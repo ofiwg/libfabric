@@ -123,12 +123,11 @@ out:
  * Allocate a context from the driver
  */
 static int
-usd_get_context(
-    struct usd_device *dev)
+usd_open_ibctx(struct usd_context *uctx)
 {
     int ret;
 
-    ret = usd_ib_cmd_get_context(dev);
+    ret = usd_ib_cmd_get_context(uctx);
     return ret;
 }
 
@@ -180,63 +179,101 @@ usd_discover_device_attrs(
     return 0;
 }
 
-/*
- * Close a raw USNIC device
- */
-int
-usd_close(
-    struct usd_device *dev)
+static void
+usd_dev_free(struct usd_device *dev)
 {
-    TAILQ_REMOVE(&usd_device_list, dev, ud_link);
-
-    /* XXX - verify all other resources closed out */
-    if (dev->ud_flags & USD_DEVF_CLOSE_CMD_FD)
-        close(dev->ud_ib_dev_fd);
-    if (dev->ucmd_ib_dev_fd != -1)
-        close(dev->ucmd_ib_dev_fd);
     if (dev->ud_arp_sockfd != -1)
         close(dev->ud_arp_sockfd);
 
+    if (dev->ud_ctx != NULL &&
+            (dev->ud_flags & USD_DEVF_CLOSE_CTX)) {
+        usd_close_context(dev->ud_ctx);
+    }
     free(dev);
+}
+
+/*
+ * Allocate a usd_device without allocating a PD
+ */
+static int
+usd_dev_alloc_init(struct usd_context *context, const char *dev_name, int cmd_fd,
+                    int check_ready, struct usd_device **dev_o)
+{
+    struct usd_device *dev = NULL;
+    int ret;
+
+    dev = calloc(sizeof(*dev), 1);
+    if (dev == NULL) {
+        ret = -errno;
+        goto out;
+    }
+
+    dev->ud_flags = 0;
+    if (context == NULL) {
+        ret = usd_open_context(dev_name, cmd_fd, &dev->ud_ctx);
+        if (ret != 0) {
+            goto out;
+        }
+        dev->ud_flags |= USD_DEVF_CLOSE_CTX;
+    } else {
+        dev->ud_ctx = context;
+    }
+
+    dev->ud_arp_sockfd = -1;
+
+    TAILQ_INIT(&dev->ud_pending_reqs);
+    TAILQ_INIT(&dev->ud_completed_reqs);
+
+    if (context == NULL)
+        ret = usd_discover_device_attrs(dev, dev_name);
+    else
+        ret = usd_discover_device_attrs(dev, context->ucx_ib_dev->id_usnic_name);
+    if (ret != 0)
+        goto out;
+
+    dev->ud_attrs.uda_event_fd = dev->ud_ctx->event_fd;
+    dev->ud_attrs.uda_num_comp_vectors = dev->ud_ctx->num_comp_vectors;
+
+    if (check_ready) {
+        ret = usd_device_ready(dev);
+        if (ret != 0) {
+            goto out;
+        }
+    }
+
+    *dev_o = dev;
+    return 0;
+
+out:
+    if (dev != NULL)
+        usd_dev_free(dev);
+    return ret;
+}
+
+int
+usd_close_context(struct usd_context *ctx)
+{
+    /* XXX - verify all other resources closed out */
+    if (ctx->ucx_flags & USD_CTXF_CLOSE_CMD_FD)
+        close(ctx->ucx_ib_dev_fd);
+    if (ctx->ucmd_ib_dev_fd != -1)
+        close(ctx->ucmd_ib_dev_fd);
+
+    free(ctx);
 
     return 0;
 }
 
-/*
- * Open a raw USNIC device
- */
 int
-usd_open(
-    const char *dev_name,
-    struct usd_device **dev_o)
+usd_open_context(const char *dev_name, int cmd_fd,
+                struct usd_context **ctx_o)
 {
-    return usd_open_with_fd(dev_name, -1, 1, dev_o);
-}
-
-/*
- * Open a raw USNIC device
- */
-int
-usd_open_for_attrs(
-    const char *dev_name,
-    struct usd_device **dev_o)
-{
-    return usd_open_with_fd(dev_name, -1, 0, dev_o);
-}
-
-/*
- * Open a raw USNIC device
- */
-int
-usd_open_with_fd(
-    const char *dev_name,
-    int cmd_fd,
-    int check_ready,
-    struct usd_device **dev_o)
-{
+    struct usd_context *ctx = NULL;
     struct usd_ib_dev *idp;
-    struct usd_device *dev = NULL;
     int ret;
+
+    if (dev_name == NULL)
+        return -EINVAL;
 
     ret = usd_init();
     if (ret != 0) {
@@ -261,31 +298,28 @@ usd_open_with_fd(
     /*
      * Found matching device, open an instance
      */
-    dev = calloc(sizeof(*dev), 1);
-    if (dev == NULL) {
+    ctx = calloc(sizeof(*ctx), 1);
+    if (ctx == NULL) {
         ret = -errno;
         goto out;
     }
-    dev->ud_ib_dev_fd = -1;
-    dev->ucmd_ib_dev_fd = -1;
-    dev->ud_arp_sockfd = -1;
-    dev->ud_flags = 0;
-    TAILQ_INIT(&dev->ud_pending_reqs);
-    TAILQ_INIT(&dev->ud_completed_reqs);
+    ctx->ucx_ib_dev_fd = -1;
+    ctx->ucmd_ib_dev_fd = -1;
+    ctx->ucx_flags = 0;
 
     /* Save pointer to IB device */
-    dev->ud_ib_dev = idp;
+    ctx->ucx_ib_dev = idp;
 
     /* Open the fd we will be using for IB commands */
     if (cmd_fd == -1) {
-        dev->ud_ib_dev_fd = open(idp->id_dev_path, O_RDWR);
-        if (dev->ud_ib_dev_fd == -1) {
+        ctx->ucx_ib_dev_fd = open(idp->id_dev_path, O_RDWR);
+        if (ctx->ucx_ib_dev_fd == -1) {
             ret = -ENODEV;
             goto out;
         }
-        dev->ud_flags |= USD_DEVF_CLOSE_CMD_FD;
+        ctx->ucx_flags |= USD_CTXF_CLOSE_CMD_FD;
     } else {
-        dev->ud_ib_dev_fd = cmd_fd;
+        ctx->ucx_ib_dev_fd = cmd_fd;
     }
 
     /*
@@ -294,28 +328,83 @@ usd_open_with_fd(
      * that ib core does not allow multiple get_context call on one
      * file descriptor.
      */
-    dev->ucmd_ib_dev_fd = open(idp->id_dev_path, O_RDWR | O_CLOEXEC);
-    if (dev->ucmd_ib_dev_fd == -1) {
+    ctx->ucmd_ib_dev_fd = open(idp->id_dev_path, O_RDWR | O_CLOEXEC);
+    if (ctx->ucmd_ib_dev_fd == -1) {
         ret = -ENODEV;
         goto out;
     }
 
     /* allocate a context from driver */
-    ret = usd_get_context(dev);
-    if (ret != 0) {
-        goto out;
-    }
-    ret = usd_ib_cmd_alloc_pd(dev, &dev->ud_pd_handle);
+    ret = usd_open_ibctx(ctx);
     if (ret != 0) {
         goto out;
     }
 
-    ret = usd_discover_device_attrs(dev, dev_name);
-    if (ret != 0)
-        goto out;
+    *ctx_o = ctx;
+    return 0;
 
-    if (check_ready) {
-        ret = usd_device_ready(dev);
+out:
+    if (ctx != NULL)
+        usd_close_context(ctx);
+    return ret;
+}
+
+/*
+ * Close a raw USNIC device
+ */
+int
+usd_close(
+    struct usd_device *dev)
+{
+    TAILQ_REMOVE(&usd_device_list, dev, ud_link);
+    usd_dev_free(dev);
+
+    return 0;
+}
+
+/*
+ * Open a raw USNIC device
+ */
+int
+usd_open(
+    const char *dev_name,
+    struct usd_device **dev_o)
+{
+    return usd_open_with_fd(dev_name, -1, 1, 1, dev_o);
+}
+
+/*
+ * Open a raw USNIC device
+ */
+int
+usd_open_for_attrs(
+    const char *dev_name,
+    struct usd_device **dev_o)
+{
+    return usd_open_with_fd(dev_name, -1, 1, 0, dev_o);
+}
+
+/*
+ * previous generic usd open function, used by libusnic_verbs_d
+ */
+int
+usd_open_with_fd(
+    const char *dev_name,
+    int cmd_fd,
+    int check_ready,
+    int alloc_pd,
+    struct usd_device **dev_o)
+{
+    struct usd_device *dev = NULL;
+    int ret;
+
+    ret = usd_dev_alloc_init(NULL, dev_name, cmd_fd, check_ready, &dev);
+    if (ret != 0) {
+        goto out;
+    }
+
+    if (alloc_pd) {
+        ret = usd_ib_cmd_alloc_pd(dev, &dev->ud_pd_handle);
         if (ret != 0) {
             goto out;
         }
@@ -323,18 +412,44 @@ usd_open_with_fd(
 
     TAILQ_INSERT_TAIL(&usd_device_list, dev, ud_link);
     *dev_o = dev;
-
     return 0;
 
-  out:
-    if (dev != NULL) {
-        if (dev->ud_flags & USD_DEVF_CLOSE_CMD_FD
-            && dev->ud_ib_dev_fd != -1)
-            close(dev->ud_ib_dev_fd);
-        if (dev->ucmd_ib_dev_fd != -1)
-            close(dev->ucmd_ib_dev_fd);
-        free(dev);
+out:
+    if (dev != NULL)
+        usd_dev_free(dev);
+    return ret;
+
+}
+
+/*
+ * Most generic usd device open function
+ */
+int
+usd_open_with_ctx(struct usd_context *context, int alloc_pd, int check_ready,
+                    struct usd_device **dev_o)
+{
+    struct usd_device *dev = NULL;
+    int ret;
+
+    ret = usd_dev_alloc_init(context, NULL, -1, check_ready, &dev);
+    if (ret != 0) {
+        goto out;
     }
+
+    if (alloc_pd) {
+        ret = usd_ib_cmd_alloc_pd(dev, &dev->ud_pd_handle);
+        if (ret != 0) {
+            goto out;
+        }
+    }
+
+    TAILQ_INSERT_TAIL(&usd_device_list, dev, ud_link);
+    *dev_o = dev;
+    return 0;
+
+out:
+    if (dev != NULL)
+        usd_dev_free(dev);
     return ret;
 }
 

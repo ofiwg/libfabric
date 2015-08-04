@@ -191,80 +191,6 @@ fail:
 	return ret;		// fi_freeinfo() in caller frees all
 }
 
-static int usdf_fill_domain_attr_dgram(
-	struct fi_domain_attr *dhints,
-	struct fi_domain_attr *dattrp)
-{
-	switch (dhints ? dhints->threading : FI_THREAD_UNSPEC) {
-	case FI_THREAD_UNSPEC:
-	case FI_THREAD_ENDPOINT:
-		/* this is our natural thread safety level */
-		dattrp->threading = FI_THREAD_ENDPOINT;
-		break;
-	case FI_THREAD_FID:
-	case FI_THREAD_COMPLETION:
-	case FI_THREAD_DOMAIN:
-		/* subsets of _ENDPOINT, so supported */
-		dattrp->threading = dhints->threading;
-		break;
-	default:
-		USDF_INFO("cannot support threading=%d\n",
-				dhints->threading);
-		return -FI_ENODATA;
-	}
-
-	switch (dhints ? dhints->control_progress : FI_PROGRESS_UNSPEC) {
-	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_AUTO:
-		dattrp->control_progress = FI_PROGRESS_AUTO;
-		break;
-	case FI_PROGRESS_MANUAL:
-		/* we still behave the same as _AUTO, but we answer _MANUAL as
-		 * requested by the user */
-		dattrp->control_progress = FI_PROGRESS_MANUAL;
-		break;
-	default:
-		USDF_INFO("cannot support control_progress=%d\n",
-				dhints->control_progress);
-		return -FI_ENODATA;
-	}
-
-	switch (dhints ? dhints->data_progress : FI_PROGRESS_UNSPEC) {
-	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_MANUAL:
-		dattrp->data_progress = FI_PROGRESS_MANUAL;
-		break;
-	default:
-		USDF_INFO("cannot support data_progress=%d\n",
-				dhints->data_progress);
-		return -FI_ENODATA;
-	}
-
-	switch (dhints ? dhints->resource_mgmt : FI_RM_UNSPEC) {
-	case FI_RM_UNSPEC:
-	case FI_RM_DISABLED:
-		dattrp->resource_mgmt = FI_RM_DISABLED;
-		break;
-	default:
-		USDF_INFO("cannot support resource_mgmt=%d\n",
-				dhints->resource_mgmt);
-		return -FI_ENODATA;
-	}
-
-	switch (dhints ? dhints->mr_mode : FI_MR_UNSPEC) {
-	case FI_MR_UNSPEC:
-	case FI_MR_BASIC:
-		dattrp->mr_mode = FI_MR_BASIC;
-		break;
-	default:
-		USDF_INFO("cannot support mr_mode=%d\n",
-			dhints->mr_mode);
-		return -FI_ENODATA;
-	}
-
-	return 0;
-}
-
 static int
 usdf_fill_info_dgram(
 	uint32_t version,
@@ -277,9 +203,6 @@ usdf_fill_info_dgram(
 {
 	struct fi_info *fi;
 	struct fi_fabric_attr *fattrp;
-	struct fi_tx_attr *txattr;
-	struct fi_rx_attr *rxattr;
-	struct fi_ep_attr *eattrp;
 	uint32_t addr_format;
 	int ret;
 
@@ -327,58 +250,27 @@ usdf_fill_info_dgram(
 		goto fail;
 	}
 
-	/* TX attrs */
-	txattr = fi->tx_attr;
-	txattr->iov_limit = USDF_DGRAM_DFLT_SGE;
-	txattr->size = dap->uda_max_send_credits / USDF_DGRAM_DFLT_SGE;
-	if (hints != NULL && hints->tx_attr != NULL) {
-		if (hints->tx_attr->iov_limit > USDF_MSG_DFLT_SGE) {
-			ret = -FI_ENODATA;
-			goto fail;
-		}
-		if (hints->tx_attr->size > dap->uda_max_send_credits) {
-			ret = -FI_ENODATA;
-			goto fail;
-		}
-		txattr->op_flags = hints->tx_attr->op_flags;
-	}
-
-	/* RX attrs */
-	rxattr = fi->rx_attr;
-	rxattr->iov_limit = USDF_DGRAM_DFLT_SGE;
-	rxattr->size = dap->uda_max_recv_credits / USDF_DGRAM_DFLT_SGE;
-	if (hints != NULL && hints->rx_attr != NULL) {
-		if (hints->rx_attr->iov_limit > USDF_MSG_DFLT_SGE) {
-			ret = -FI_ENODATA;
-			goto fail;
-		}
-		if (hints->rx_attr->size > dap->uda_max_recv_credits) {
-			ret = -FI_ENODATA;
-			goto fail;
-		}
-		rxattr->op_flags = hints->rx_attr->op_flags;
-	}
-
-	/* endpoint attrs */
-	eattrp = fi->ep_attr;
-
 	if (fi->mode & FI_MSG_PREFIX) {
 		if (FI_VERSION_GE(version, FI_VERSION(1, 1)))
-			eattrp->msg_prefix_size = USDF_HDR_BUF_ENTRY;
+			fi->ep_attr->msg_prefix_size = USDF_HDR_BUF_ENTRY;
 		else
 			fi->mode &= ~FI_MSG_PREFIX;
 	}
 
-	eattrp->max_msg_size = dap->uda_mtu -
-		sizeof(struct usd_udp_hdr);
-	eattrp->protocol = FI_PROTO_UDP;
-	eattrp->tx_ctx_cnt = 1;
-	eattrp->rx_ctx_cnt = 1;
+	ret = usdf_dgram_fill_ep_attr(hints, fi, dap);
+	if (ret)
+		goto fail;
 
-	/* domain attrs */
-	ret = usdf_fill_domain_attr_dgram(hints ? hints->domain_attr : NULL,
-						fi->domain_attr);
-	if (ret != 0)
+	ret = usdf_dgram_fill_dom_attr(hints, fi);
+	if (ret)
+		goto fail;
+
+	ret = usdf_dgram_fill_tx_attr(hints, fi, dap);
+	if (ret)
+		goto fail;
+
+	ret = usdf_dgram_fill_rx_attr(hints, fi, dap);
+	if (ret)
 		goto fail;
 
 	/* add to tail of list */
@@ -409,10 +301,6 @@ usdf_fill_info_msg(
 {
 	struct fi_info *fi;
 	struct fi_fabric_attr *fattrp;
-	struct fi_domain_attr *dattrp;
-	struct fi_tx_attr *txattr;
-	struct fi_rx_attr *rxattr;
-	struct fi_ep_attr *eattrp;
 	uint32_t addr_format;
 	int ret;
 
@@ -461,34 +349,21 @@ usdf_fill_info_msg(
 		goto fail;
 	}
 
-	/* TX attrs */
-	txattr = fi->tx_attr;
-	if (hints != NULL && hints->tx_attr != NULL) {
-		*txattr = *hints->tx_attr;
-	}
-	usdf_msg_fill_tx_attr(txattr);
+	ret = usdf_msg_fill_ep_attr(hints, fi, dap);
+	if (ret)
+		goto fail;
 
-	/* RX attrs */
-	rxattr = fi->rx_attr;
-	if (hints != NULL && hints->rx_attr != NULL) {
-		*rxattr = *hints->rx_attr;
-	}
-	usdf_msg_fill_rx_attr(rxattr);
+	ret = usdf_msg_fill_dom_attr(hints, fi);
+	if (ret)
+		goto fail;
 
-	/* endpoint attrs */
-	eattrp = fi->ep_attr;
-	eattrp->max_msg_size = USDF_MSG_MAX_MSG;
-	eattrp->protocol = FI_PROTO_RUDP;
-	eattrp->tx_ctx_cnt = 1;
-	eattrp->rx_ctx_cnt = 1;
+	ret = usdf_msg_fill_tx_attr(hints, fi);
+	if (ret)
+		goto fail;
 
-	/* domain attrs */
-	dattrp = fi->domain_attr;
-	dattrp->threading = FI_THREAD_UNSPEC;
-	dattrp->control_progress = FI_PROGRESS_AUTO;
-	dattrp->data_progress = FI_PROGRESS_MANUAL;
-	dattrp->resource_mgmt = FI_RM_DISABLED;
-	dattrp->mr_mode = FI_MR_BASIC;
+	ret = usdf_msg_fill_rx_attr(hints, fi);
+	if (ret)
+		goto fail;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
@@ -518,10 +393,6 @@ usdf_fill_info_rdm(
 {
 	struct fi_info *fi;
 	struct fi_fabric_attr *fattrp;
-	struct fi_domain_attr *dattrp;
-	struct fi_tx_attr *txattr;
-	struct fi_rx_attr *rxattr;
-	struct fi_ep_attr *eattrp;
 	uint32_t addr_format;
 	int ret;
 
@@ -568,34 +439,21 @@ usdf_fill_info_rdm(
 		goto fail;
 	}
 
-	/* TX attrs */
-	txattr = fi->tx_attr;
-	if (hints != NULL && hints->tx_attr != NULL) {
-		*txattr = *hints->tx_attr;
-	}
-	usdf_rdm_fill_tx_attr(txattr);
+	ret = usdf_rdm_fill_ep_attr(hints, fi, dap);
+	if (ret)
+		goto fail;
 
-	/* RX attrs */
-	rxattr = fi->rx_attr;
-	if (hints != NULL && hints->rx_attr != NULL) {
-		*rxattr = *hints->rx_attr;
-	}
-	usdf_rdm_fill_rx_attr(rxattr);
+	ret = usdf_rdm_fill_dom_attr(hints, fi);
+	if (ret)
+		goto fail;
 
-	/* endpoint attrs */
-	eattrp = fi->ep_attr;
-	eattrp->max_msg_size = USDF_RDM_MAX_MSG;
-	eattrp->protocol = FI_PROTO_RUDP;
-	eattrp->tx_ctx_cnt = 1;
-	eattrp->rx_ctx_cnt = 1;
+	ret = usdf_rdm_fill_tx_attr(hints, fi);
+	if (ret)
+		goto fail;
 
-	/* domain attrs */
-	dattrp = fi->domain_attr;
-	dattrp->threading = FI_THREAD_UNSPEC;
-	dattrp->control_progress = FI_PROGRESS_AUTO;
-	dattrp->data_progress = FI_PROGRESS_MANUAL;
-	dattrp->resource_mgmt = FI_RM_DISABLED;
-	dattrp->mr_mode = FI_MR_BASIC;
+	ret = usdf_rdm_fill_rx_attr(hints, fi);
+	if (ret)
+		goto fail;
 
 	/* add to tail of list */
 	if (*fi_first == NULL) {
@@ -641,7 +499,7 @@ usdf_get_devinfo(void)
 	for (d = 0; d < dp->uu_num_devs; ++d) {
 		dep = &dp->uu_info[d];
 
-		ret = usd_open(dp->uu_devs[d].ude_devname, &dep->ue_dev);
+		ret = usd_open_for_attrs(dp->uu_devs[d].ude_devname, &dep->ue_dev);
 		if (ret != 0) {
 			continue;
 		}

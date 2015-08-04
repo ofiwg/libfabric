@@ -210,6 +210,9 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				return -FI_EINVAL;
 			}
 
+			if (flags & FI_SELECTIVE_COMPLETION)
+				return -FI_EOPNOTSUPP;
+
 			ep->ep_rx_dflt_signal_comp =
 				(flags & FI_SELECTIVE_COMPLETION) ? 0 : 1;
 
@@ -349,6 +352,311 @@ static struct fi_ops_cm usdf_cm_dgram_ops = {
 	.shutdown = fi_no_shutdown,
 };
 
+/*******************************************************************************
+ * Default values for dgram attributes
+ ******************************************************************************/
+static const struct fi_tx_attr dgram_dflt_tx_attr = {
+	.caps = USDF_DGRAM_CAPS,
+	.mode = USDF_DGRAM_SUPP_MODE,
+	.op_flags = 0,
+	.msg_order = USDF_DGRAM_MSG_ORDER,
+	.comp_order = USDF_DGRAM_COMP_ORDER,
+	.inject_size = USDF_DGRAM_INJECT_SIZE,
+	.iov_limit = USDF_DGRAM_IOV_LIMIT,
+	.rma_iov_limit = USDF_DGRAM_RMA_IOV_LIMIT
+};
+
+static const struct fi_rx_attr dgram_dflt_rx_attr = {
+	.caps = USDF_DGRAM_CAPS,
+	.mode = USDF_DGRAM_SUPP_MODE,
+	.op_flags = 0,
+	.msg_order = USDF_DGRAM_MSG_ORDER,
+	.comp_order = USDF_DGRAM_COMP_ORDER,
+	.total_buffered_recv = 0,
+	.iov_limit = USDF_DGRAM_IOV_LIMIT
+};
+
+static const struct fi_ep_attr dgram_dflt_ep_attr = {
+	.type = FI_EP_DGRAM,
+	.protocol = FI_PROTO_UDP,
+	.msg_prefix_size = 0,
+	.max_order_raw_size = 0,
+	.max_order_war_size = 0,
+	.max_order_waw_size = 0,
+	.mem_tag_format = 0,
+	.tx_ctx_cnt = 1,
+	.rx_ctx_cnt = 1
+};
+
+static const struct fi_domain_attr dgram_dflt_domain_attr = {
+	.threading = FI_THREAD_ENDPOINT,
+	.control_progress = FI_PROGRESS_AUTO,
+	.data_progress = FI_PROGRESS_MANUAL,
+	.resource_mgmt = FI_RM_DISABLED,
+	.mr_mode = FI_MR_BASIC
+};
+
+/*******************************************************************************
+ * Fill functions for attributes
+ ******************************************************************************/
+int usdf_dgram_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
+		struct usd_device_attrs *dap)
+{
+	struct fi_ep_attr defaults;
+
+	defaults = dgram_dflt_ep_attr;
+
+	defaults.max_msg_size = dap->uda_mtu - sizeof(struct usd_udp_hdr);
+
+	if (!hints || !hints->ep_attr)
+		goto out;
+
+	if (hints->mode & FI_MSG_PREFIX)
+		defaults.msg_prefix_size = USDF_HDR_BUF_ENTRY;
+
+	if (hints->ep_attr->max_msg_size > defaults.max_msg_size)
+		return -FI_ENODATA;
+
+	switch (hints->ep_attr->protocol) {
+	case FI_PROTO_UNSPEC:
+	case FI_PROTO_UDP:
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+	if (hints->ep_attr->tx_ctx_cnt > defaults.tx_ctx_cnt)
+		return -FI_ENODATA;
+	if (hints->ep_attr->rx_ctx_cnt > defaults.rx_ctx_cnt)
+		return -FI_ENODATA;
+
+	if (hints->ep_attr->max_order_raw_size > defaults.max_order_raw_size)
+		return -FI_ENODATA;
+	if (hints->ep_attr->max_order_war_size > defaults.max_order_war_size)
+		return -FI_ENODATA;
+	if (hints->ep_attr->max_order_waw_size > defaults.max_order_waw_size)
+		return -FI_ENODATA;
+
+out:
+	*fi->ep_attr = defaults;
+
+	return FI_SUCCESS;
+}
+
+int usdf_dgram_fill_dom_attr(struct fi_info *hints, struct fi_info *fi)
+{
+	struct fi_domain_attr defaults;
+
+	defaults = dgram_dflt_domain_attr;
+
+	if (!hints || !hints->domain_attr)
+		goto out;
+
+	switch (hints->domain_attr->threading) {
+	case FI_THREAD_UNSPEC:
+	case FI_THREAD_ENDPOINT:
+		break;
+	case FI_THREAD_FID:
+	case FI_THREAD_COMPLETION:
+	case FI_THREAD_DOMAIN:
+		defaults.threading = hints->domain_attr->threading;
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+	switch (hints->domain_attr->control_progress) {
+	case FI_PROGRESS_UNSPEC:
+	case FI_PROGRESS_AUTO:
+		break;
+	case FI_PROGRESS_MANUAL:
+		defaults.control_progress =
+			hints->domain_attr->control_progress;
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+	switch (hints->domain_attr->data_progress) {
+	case FI_PROGRESS_UNSPEC:
+	case FI_PROGRESS_MANUAL:
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+	switch (hints->domain_attr->resource_mgmt) {
+	case FI_RM_UNSPEC:
+	case FI_RM_DISABLED:
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+	switch (hints->domain_attr->mr_mode) {
+	case FI_MR_UNSPEC:
+	case FI_MR_BASIC:
+		break;
+	default:
+		return -FI_ENODATA;
+	}
+
+out:
+	*fi->domain_attr = defaults;
+
+	return FI_SUCCESS;
+}
+
+int usdf_dgram_fill_tx_attr(struct fi_info *hints, struct fi_info *fi,
+		struct usd_device_attrs *dap)
+{
+	struct fi_tx_attr defaults;
+	size_t entries;
+
+	defaults = dgram_dflt_tx_attr;
+
+	defaults.size = dap->uda_max_send_credits / defaults.iov_limit;
+
+	if (!hints || !hints->tx_attr)
+		goto out;
+
+	/* make sure we can support the capabilities that are requested */
+	if (hints->tx_attr->caps & ~USDF_DGRAM_CAPS)
+		return -FI_ENODATA;
+
+	/* clear the mode bits the app doesn't support */
+	if (hints->tx_attr->mode)
+		defaults.mode &= hints->tx_attr->mode;
+
+	/* make sure the app supports our required mode bits */
+	if ((defaults.mode & USDF_DGRAM_REQ_MODE) != USDF_DGRAM_REQ_MODE)
+		return -FI_ENODATA;
+
+	defaults.op_flags |= hints->tx_attr->op_flags;
+
+	if ((hints->tx_attr->msg_order | USDF_DGRAM_MSG_ORDER) !=
+			USDF_DGRAM_MSG_ORDER)
+		return -FI_ENODATA;
+	if ((hints->tx_attr->comp_order | USDF_DGRAM_COMP_ORDER) !=
+			USDF_DGRAM_COMP_ORDER)
+		return -FI_ENODATA;
+
+	if (hints->tx_attr->inject_size > defaults.inject_size)
+		return -FI_ENODATA;
+
+	if (hints->tx_attr->iov_limit > USDF_DGRAM_MAX_SGE)
+		return -FI_ENODATA;
+
+	/* make sure the values for iov_limit and size are within appropriate
+	 * bounds. if only one of the two was given, then set the other based
+	 * on:
+	 * 	max_credits = size * iov_limit;
+	 */
+	if (hints->tx_attr->iov_limit && hints->tx_attr->size) {
+		defaults.size = hints->tx_attr->size;
+		defaults.iov_limit = hints->tx_attr->iov_limit;
+	} else if (hints->tx_attr->iov_limit) {
+		defaults.iov_limit = hints->tx_attr->iov_limit;
+		defaults.size =
+			dap->uda_max_send_credits / defaults.iov_limit;
+	} else if (hints->tx_attr->size) {
+		defaults.size = hints->tx_attr->size;
+		defaults.iov_limit =
+			dap->uda_max_send_credits / defaults.size;
+	}
+
+	entries = defaults.size * defaults.iov_limit;
+	if (entries > dap->uda_max_send_credits)
+		return -FI_ENODATA;
+
+	if (hints->tx_attr->rma_iov_limit > defaults.rma_iov_limit)
+		return -FI_ENODATA;
+
+out:
+	/* Non-prefix mode requires extra descriptor for header.
+	 */
+	if (!hints || (hints && !(hints->mode & FI_MSG_PREFIX)))
+		defaults.iov_limit -= 1;
+
+	*fi->tx_attr = defaults;
+
+	return FI_SUCCESS;
+}
+
+int usdf_dgram_fill_rx_attr(struct fi_info *hints, struct fi_info *fi,
+		struct usd_device_attrs *dap)
+{
+	struct fi_rx_attr defaults;
+	size_t entries;
+
+	defaults = dgram_dflt_rx_attr;
+
+	defaults.size = dap->uda_max_recv_credits / defaults.iov_limit;
+
+	if (!hints || !hints->rx_attr)
+		goto out;
+
+	/* make sure we can support the capabilities that are requested */
+	if (hints->rx_attr->caps & ~USDF_DGRAM_CAPS)
+		return -FI_ENODATA;
+
+	/* clear the mode bits the app doesn't support */
+	if (hints->rx_attr->mode)
+		defaults.mode &= hints->rx_attr->mode;
+
+	/* make sure the app supports our required mode bits */
+	if ((defaults.mode & USDF_DGRAM_REQ_MODE) != USDF_DGRAM_REQ_MODE)
+		return -FI_ENODATA;
+
+	defaults.op_flags |= hints->rx_attr->op_flags;
+
+	if ((hints->rx_attr->msg_order | USDF_DGRAM_MSG_ORDER) !=
+			USDF_DGRAM_MSG_ORDER)
+		return -FI_ENODATA;
+	if ((hints->rx_attr->comp_order | USDF_DGRAM_COMP_ORDER) !=
+			USDF_DGRAM_COMP_ORDER)
+		return -FI_ENODATA;
+
+	if (hints->rx_attr->total_buffered_recv >
+			defaults.total_buffered_recv)
+		return -FI_ENODATA;
+
+	if (hints->rx_attr->iov_limit > USDF_DGRAM_MAX_SGE)
+		return -FI_ENODATA;
+
+	/* make sure the values for iov_limit and size are within appropriate
+	 * bounds. if only one of the two was given, then set the other based
+	 * on:
+	 * 	max_credits = size * iov_limit;
+	 */
+	if (hints->rx_attr->iov_limit && hints->rx_attr->size) {
+		defaults.size = hints->rx_attr->size;
+		defaults.iov_limit = hints->rx_attr->iov_limit;
+	} else if (hints->rx_attr->iov_limit) {
+		defaults.iov_limit = hints->rx_attr->iov_limit;
+		defaults.size =
+			dap->uda_max_recv_credits / defaults.iov_limit;
+	} else if (hints->rx_attr->size) {
+		defaults.size = hints->rx_attr->size;
+		defaults.iov_limit =
+			dap->uda_max_recv_credits / defaults.size;
+	}
+
+	entries = defaults.size * defaults.iov_limit;
+	if (entries > dap->uda_max_recv_credits)
+		return -FI_ENODATA;
+
+out:
+	/* Non-prefix mode requires extra descriptor for header.
+	 */
+	if (!hints || (hints && !(hints->mode & FI_MSG_PREFIX)))
+		defaults.iov_limit -= 1;
+
+	*fi->rx_attr = defaults;
+
+	return FI_SUCCESS;
+}
+
 static int usdf_ep_dgram_control(struct fid *fid, int command, void *arg)
 {
 	struct fid_ep *ep;
@@ -389,6 +697,8 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 	struct usdf_pep *parent_pep;
 	struct sockaddr *src_addr;
 	int is_bound;
+	size_t tx_size;
+	size_t rx_size;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
@@ -456,28 +766,55 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 	ep->ep_domain = udp;
 	ep->ep_caps = info->caps;
 	ep->ep_mode = info->mode;
-	if (info->tx_attr != NULL && info->tx_attr->size != 0) {
-		ep->ep_wqe = info->tx_attr->size;
-	} else {
-		ep->ep_wqe =
-			udp->dom_fabric->fab_dev_attrs->uda_max_send_credits;
-	}
-	if (info->rx_attr != NULL && info->rx_attr->size != 0) {
-		ep->ep_rqe = info->rx_attr->size;
-	} else {
-		ep->ep_rqe =
-			udp->dom_fabric->fab_dev_attrs->uda_max_recv_credits;
-	}
+
+	ep->e.dg.tx_iov_limit = USDF_DGRAM_IOV_LIMIT;
+	tx_size = udp->dom_fabric->fab_dev_attrs->uda_max_send_credits /
+		ep->e.dg.tx_iov_limit;
+
+	ep->e.dg.rx_iov_limit = USDF_DGRAM_IOV_LIMIT;
+	rx_size = udp->dom_fabric->fab_dev_attrs->uda_max_recv_credits /
+		ep->e.dg.rx_iov_limit;
 
 	/*
 	 * TODO: Add better management of tx_attr/rx_attr to getinfo and dgram
 	 * open.
 	 */
-	if (info->tx_attr)
+	if (info->tx_attr) {
 		ep->e.dg.tx_op_flags = info->tx_attr->op_flags;
+		if (info->tx_attr->iov_limit)
+			ep->e.dg.tx_iov_limit = info->tx_attr->iov_limit;
+		if (info->tx_attr->size)
+			tx_size = info->tx_attr->size;
+	}
 
-	if (info->rx_attr)
+	if (info->rx_attr) {
 		ep->e.dg.rx_op_flags = info->rx_attr->op_flags;
+		if (info->rx_attr->iov_limit)
+			ep->e.dg.rx_iov_limit = info->rx_attr->iov_limit;
+		if (info->rx_attr->size)
+			rx_size = info->rx_attr->size;
+	}
+
+	if (ep->ep_mode & FI_MSG_PREFIX) {
+		ep->ep_wqe = tx_size * ep->e.dg.tx_iov_limit;
+		ep->ep_rqe = rx_size * ep->e.dg.rx_iov_limit;
+	} else {
+		ep->ep_wqe = tx_size * (ep->e.dg.tx_iov_limit + 1);
+		ep->ep_rqe = rx_size * (ep->e.dg.rx_iov_limit + 1);
+	}
+
+	/* Check that the requested credit size is less than the max credit
+	 * counts. If the fi_info struct was acquired from fi_getinfo then this
+	 * will always be the case.
+	 */
+	if (ep->ep_wqe > udp->dom_fabric->fab_dev_attrs->uda_max_send_credits) {
+		ret = -FI_EINVAL;
+		goto fail;
+	}
+	if (ep->ep_rqe > udp->dom_fabric->fab_dev_attrs->uda_max_recv_credits) {
+		ret = -FI_EINVAL;
+		goto fail;
+	}
 
 	if (ep->ep_mode & FI_MSG_PREFIX) {
 		if (info->ep_attr == NULL) {

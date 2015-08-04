@@ -47,6 +47,34 @@
 #include "usd_util.h"
 #include "cq_enet_desc.h"
 
+static inline void
+find_rx_lengths(
+    struct usd_rq *rq,
+    uint16_t q_index,
+    size_t *posted_len_o,
+    size_t *len_in_pkt_o)
+{
+    dma_addr_t bus_addr;
+    u16 len;
+    u8 type;
+    size_t rcvbuf_len;
+    uint16_t i;
+
+    i = q_index;
+    rcvbuf_len = 0;
+    do {
+        rq_enet_desc_dec( (struct rq_enet_desc *)
+                ((uintptr_t)rq->urq_desc_ring + (i<<4)),
+                &bus_addr, &type, &len);
+        rcvbuf_len += len;
+        i = (i - 1) & rq->urq_post_index_mask;
+    } while (type == RQ_ENET_TYPE_NOT_SOP);
+
+    *posted_len_o = rcvbuf_len;
+    *len_in_pkt_o = ntohs(((struct usd_udp_hdr *)bus_addr)->uh_ip.tot_len) +
+                          sizeof(struct ether_header);
+}
+
 static inline int
 usd_desc_to_rq_comp(
     struct usd_cq_impl *cq,
@@ -63,6 +91,8 @@ usd_desc_to_rq_comp(
     uint32_t ci_flags;
     uint32_t ipudpok;
     unsigned credits;
+    size_t len_in_pkt;
+    size_t rcvbuf_len;
 
     edesc = (struct cq_enet_rq_desc *)desc;
     rq = cq->ucq_rq_map[qid];
@@ -85,41 +115,46 @@ usd_desc_to_rq_comp(
 
     ipudpok = CQ_ENET_RQ_DESC_FLAGS_IPV4_CSUM_OK |
         CQ_ENET_RQ_DESC_FLAGS_TCP_UDP_CSUM_OK;
+
     if (bytes_written_flags & CQ_ENET_RQ_DESC_FLAGS_TRUNCATED ||
             (edesc->flags & ipudpok) != ipudpok) {
         if (((edesc->flags & CQ_ENET_RQ_DESC_FLAGS_FCS_OK) == 0) &&
                 bytes_written == 0) {
-            size_t rcvbuf_len;
-            dma_addr_t bus_addr;
-            u16 len;
-            u8 type;
-            uint16_t i;
-
-            i = q_index;
-            rcvbuf_len = 0;
-            do {
-                rq_enet_desc_dec( (struct rq_enet_desc *)
-                        ((uintptr_t)rq->urq_desc_ring + (i<<4)),
-                        &bus_addr, &type, &len);
-                rcvbuf_len += len;
-                i = (i - 1) & rq->urq_post_index_mask;
-            } while (type == RQ_ENET_TYPE_NOT_SOP);
+            find_rx_lengths(rq, q_index, &rcvbuf_len, &len_in_pkt);
 
             /*
              * If only the paddings to meet 64-byte minimum eth frame
              * requirement are truncated, do not mark packet as
              * error due to truncation.
              * The usnic hdr should not be split into multiple receive buffer
+             *
+             * If we could afford the extra cycles, we would also compute the
+             * UDP checksum here and compare it to the UDP header.
              */
-            if (ntohs(((struct usd_udp_hdr *)bus_addr)->uh_ip.tot_len)
-                        + sizeof(struct ether_header) > rcvbuf_len)
+            if (rcvbuf_len >= 60 || len_in_pkt > rcvbuf_len) {
                 comp->uc_status = USD_COMPSTAT_ERROR_TRUNC;
-            else
+            }
+            else {
                 comp->uc_status = USD_COMPSTAT_SUCCESS;
+                /* TRUNC means bytes_written==0, so fix this too */
+                comp->uc_bytes = len_in_pkt;
+            }
         } else {
             comp->uc_status = USD_COMPSTAT_ERROR_CRC;
         }
     } else {
+        if (comp->uc_bytes == 60) {
+            /*
+             * The sender may have attempted to send a small frame (<64-bytes)
+             * that was padded out to 64-bytes by the sending VIC.
+             * If we posted a recv buffer >= 60 bytes then we wouldn't see
+             * truncation, but the bytes_written by the VIC will be larger than
+             * the bytes the sender actually requested to send.  Fix that up
+             * here.
+             */
+            find_rx_lengths(rq, q_index, &rcvbuf_len, &len_in_pkt);
+            comp->uc_bytes = len_in_pkt;
+        }
         comp->uc_status = USD_COMPSTAT_SUCCESS;
     }
 

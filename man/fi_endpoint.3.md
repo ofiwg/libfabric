@@ -213,7 +213,11 @@ the fi_info handle field to the passive endpoint fabric descriptor.  This is
 useful for applications that need to reserve the fabric address of an
 endpoint prior to knowing if the endpoint will be used on the active or passive
 side of a connection.  For example, this feature is useful for simulating
-socket semantics.
+socket semantics.  Once an active endpoint acquires the properties of a passive
+endpoint, the passive endpoint is no longer bound to any fabric resources and
+must no longer be used. The user is expected to close the passive endpoint
+after opening the active endpoint in order to free up any lingering resources
+that had been used.
 
 ## fi_close
 
