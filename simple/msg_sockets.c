@@ -633,6 +633,9 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	if (opts.dst_addr && (opts.src_port == opts.dst_port))
+		opts.src_port = "9229";
+
 	ret = setup_handle();
 	if (ret)
 		return -ret;
