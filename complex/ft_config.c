@@ -407,13 +407,14 @@ err:
 struct ft_series *fts_load(char *filename)
 {
 	int nsets = 0;
+	char *config;
+	FILE *fp;
 
 	if (filename) {
-		char *config;
 		int size;
-		FILE *fp = fopen(filename, "rb");
 		struct ft_set *test_sets = NULL;
 
+		fp = fopen(filename, "rb");
 		if (!fp) {
 			FT_ERR("Unable to open file\n");
 			return NULL;
@@ -424,19 +425,27 @@ struct ft_series *fts_load(char *filename)
 		fseek(fp, 0, SEEK_SET);
 
 		config = (char *)malloc(size + 1);
-		fread(config, size, 1, fp);
-		config[size] = 0;
+		if (!config) {
+			FT_ERR("Unable to allocate memory\n");
+			goto err1;
+		}
 
-		fclose(fp);
+		if (fread(config, size, 1, fp) != 1) {
+			FT_ERR("Error reading config file\n");
+			goto err2;
+		}
+
+		config[size] = 0;
 
 		if (ft_parse_config(config, size, &test_sets, &nsets)) {
 			FT_ERR("Unable to parse file\n");
-			return NULL;
+			goto err2;
 		}
 
 		test_series.sets = test_sets;
 		test_series.nsets = nsets;
 		free(config);
+		fclose(fp);
 	} else {
 		printf("No config file given. Using default tests.\n");
 		test_series.sets = test_sets_default;
@@ -450,6 +459,12 @@ struct ft_series *fts_load(char *filename)
 
 	printf("Test configurations loaded: %d\n", test_series.test_count);
 	return &test_series;
+
+err2:
+	free(config);
+err1:
+	fclose(fp);
+	return NULL;
 }
 
 void fts_close(struct ft_series *series)
