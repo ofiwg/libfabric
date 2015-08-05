@@ -2452,10 +2452,9 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 		if (pe_entry->is_complete) {
 			sock_pe_release_entry(pe, pe_entry);
 			SOCK_LOG_DBG("[%p] TX done\n", pe_entry);
-		} else if (pe_entry->pe.tx.send_done) {
-			sock_pe_progress_rx_ctrl_ctx(pe, tx_ctx->rx_ctrl_ctx, tx_ctx);
 		}
 	}
+	sock_pe_progress_rx_ctrl_ctx(pe, tx_ctx->rx_ctrl_ctx, tx_ctx);
 out:	
 	if (ret < 0) 
 		SOCK_LOG_ERROR("failed to progress TX ctx\n");
