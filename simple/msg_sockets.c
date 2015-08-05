@@ -55,36 +55,41 @@ static struct fid_eq *cmeq;
 static struct fid_cq *rcq, *scq;
 static struct fid_mr *mr;
 
-static struct sockaddr_storage addr_storage;
-static struct sockaddr *bound_addr = (struct sockaddr *)&addr_storage;
-static size_t bound_addr_len = sizeof addr_storage;
+union sockaddr_any {
+	struct sockaddr		sa;
+	struct sockaddr_in	sin;
+	struct sockaddr_in6	sin6;
+	struct sockaddr_storage	ss;
+};
+
+static union sockaddr_any bound_addr;
+static size_t bound_addr_len = sizeof bound_addr;
 
 
 /* Wrapper for memcmp for sockaddr.  Note that the sockaddr structure may
  * contain holes, so sockaddr's are expected to have been initialized to all
  * zeroes prior to being filled with an address. */
 static int
-sockaddrcmp(const struct sockaddr *actual, socklen_t actual_len,
-		const struct sockaddr *expected, socklen_t expected_len)
+sockaddrcmp(const union sockaddr_any *actual, socklen_t actual_len,
+	    const union sockaddr_any *expected, socklen_t expected_len)
 {
-	if (actual->sa_family != expected->sa_family) {
-		return actual->sa_family - expected->sa_family;
+	if (actual->sa.sa_family != expected->sa.sa_family) {
+		return actual->sa.sa_family - expected->sa.sa_family;
 	} else if (actual_len != expected_len) {
 		return actual_len - expected_len;
 	}
 
 	/* Handle binds to wildcard addresses, for address types we know
 	 * about */
-	switch (expected->sa_family) {
+	switch (expected->sa.sa_family) {
 	case AF_INET:
-		if (((struct sockaddr_in *)expected)->sin_addr.s_addr
-								== INADDR_ANY) {
+		if (expected->sin.sin_addr.s_addr == INADDR_ANY) {
 			return 0;
 		}
 		break;
 	case AF_INET6:
-		if (!memcmp(&((struct sockaddr_in6 *)expected)->sin6_addr,
-					&in6addr_any, sizeof(struct in6_addr))) {
+		if (!memcmp(&expected->sin6.sin6_addr,
+			    &in6addr_any, sizeof(struct in6_addr))) {
 			return 0;
 		}
 		break;
@@ -96,13 +101,13 @@ sockaddrcmp(const struct sockaddr *actual, socklen_t actual_len,
  * static buffer so it is not reentrant or thread-safe.  Returns the string on
  * success and NULL on failure. */
 static const char *
-sockaddrstr(const struct sockaddr *sa, socklen_t salen, char *buf, size_t buflen)
+sockaddrstr(const union sockaddr_any *addr, socklen_t len, char *buf, size_t buflen)
 {
 	static char namebuf[BUFSIZ];
 	static char servbuf[BUFSIZ];
 	int errcode;
 
-	if ((errcode = getnameinfo(sa, salen, namebuf, BUFSIZ,
+	if ((errcode = getnameinfo(&addr->sa, len, namebuf, BUFSIZ,
 				servbuf, BUFSIZ,
 				NI_NUMERICHOST | NI_NUMERICSERV))) {
 		if (errcode != EAI_SYSTEM) {
@@ -121,25 +126,22 @@ sockaddrstr(const struct sockaddr *sa, socklen_t salen, char *buf, size_t buflen
 static int check_address(struct fid *fid, const char *message)
 {
 	char buf1[BUFSIZ], buf2[BUFSIZ];
-	struct sockaddr_storage tmp;
+	union sockaddr_any tmp;
 	size_t tmplen;
 	int ret;
 
 	memset(&tmp, 0, sizeof tmp);
 	tmplen = sizeof tmp;
-	ret = fi_getname(fid, (struct sockaddr *)&tmp, &tmplen);
+	ret = fi_getname(fid, &tmp, &tmplen);
 	if (ret) {
 		FT_PRINTERR("fi_getname", ret);
 	}
 
-	if (sockaddrcmp((struct sockaddr *)&tmp, tmplen,
-				bound_addr, bound_addr_len)) {
+	if (sockaddrcmp(&tmp, tmplen, &bound_addr, bound_addr_len)) {
 		FT_ERR("address changed after %s: got %s expected %s\n",
-				message,
-				sockaddrstr((struct sockaddr *)&tmp, tmplen,
-					buf1, BUFSIZ),
-				sockaddrstr((struct sockaddr *)bound_addr,
-					bound_addr_len, buf2, BUFSIZ));
+			message,
+			sockaddrstr(&tmp, tmplen, buf1, BUFSIZ),
+			sockaddrstr(&bound_addr, bound_addr_len, buf2, BUFSIZ));
 		return -FI_EINVAL;
 	}
 
@@ -524,8 +526,7 @@ static int setup_handle(void)
 	}
 
 	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, NULL, FI_SOURCE,
-								hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, NULL, FI_SOURCE, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto free_ai;
@@ -554,7 +555,7 @@ static int setup_handle(void)
 		goto free_pep;
 	}
 
-	ret = fi_getname(&pep->fid, bound_addr, &bound_addr_len);
+	ret = fi_getname(&pep->fid, &bound_addr, &bound_addr_len);
 	if (ret) {
 		FT_PRINTERR("fi_getname", ret);
 		goto free_pep;
@@ -563,14 +564,14 @@ static int setup_handle(void)
 	/* Verify port number */
 	switch (ai->ai_family) {
 	case AF_INET:
-		if (((struct sockaddr_in *)bound_addr)->sin_port == 0) {
+		if (bound_addr.sin.sin_port == 0) {
 			FT_ERR("port number is 0 after fi_setname()\n");
 			ret = -FI_EINVAL;
 			goto free_pep;
 		}
 		break;
 	case AF_INET6:
-		if (((struct sockaddr_in6 *)bound_addr)->sin6_port == 0) {
+		if (bound_addr.sin6.sin6_port == 0) {
 			FT_ERR("port number is 0 after fi_setname()\n");
 			ret = -FI_EINVAL;
 			goto free_pep;
@@ -579,7 +580,7 @@ static int setup_handle(void)
 	}
 
 	printf("bound_addr: \"%s\"\n",
-			sockaddrstr(bound_addr, bound_addr_len, buf, BUFSIZ));
+		sockaddrstr(&bound_addr, bound_addr_len, buf, BUFSIZ));
 
 	hints->handle = &pep->fid;
 	goto free_fi;
