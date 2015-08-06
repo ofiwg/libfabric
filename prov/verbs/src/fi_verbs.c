@@ -101,18 +101,18 @@ static struct fi_provider fi_ibv_prov = {
 		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
 
 #define VERBS_INJECT_FLAGS(ep, len, flags) (flags & FI_INJECT) || \
-	(len <= ep->tx_attr->inject_size)
-#define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, ep->tx_attr->op_flags)
+	(len <= ep->info->tx_attr->inject_size)
+#define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, ep->info->tx_attr->op_flags)
 
 #define VERBS_SELECTIVE_COMP(ep) (ep->ep_flags & FI_SELECTIVE_COMPLETION)
 
 #define VERBS_COMP_FLAGS(ep, flags) (!VERBS_SELECTIVE_COMP(ep) || \
 		(flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
-#define VERBS_COMP(ep) VERBS_COMP_FLAGS(ep, ep->tx_attr->op_flags)
+#define VERBS_COMP(ep) VERBS_COMP_FLAGS(ep, ep->info->tx_attr->op_flags)
 
 #define VERBS_COMP_READ_FLAGS(ep, flags) (!VERBS_SELECTIVE_COMP(ep) || \
 		(flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)))
-#define VERBS_COMP_READ(ep) VERBS_COMP_READ_FLAGS(ep, ep->tx_attr->op_flags)
+#define VERBS_COMP_READ(ep) VERBS_COMP_READ_FLAGS(ep, ep->info->tx_attr->op_flags)
 
 struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
@@ -164,12 +164,8 @@ struct fi_ibv_msg_ep {
 	struct fi_ibv_eq	*eq;
 	struct fi_ibv_cq	*rcq;
 	struct fi_ibv_cq	*scq;
-	struct fi_tx_attr	*tx_attr;
-	struct fi_rx_attr	*rx_attr;
 	uint64_t		ep_flags;
-	void			*dst_addr;
-	size_t			dst_addrlen;
-	size_t			src_addrlen;
+	struct fi_info		*info;
 };
 
 struct fi_ibv_connreq {
@@ -1009,11 +1005,11 @@ out:
 static void fi_ibv_msg_ep_qp_init_attr(struct fi_ibv_msg_ep *ep,
 		struct ibv_qp_init_attr *attr)
 {
-	attr->cap.max_send_wr		= ep->tx_attr->size;
-	attr->cap.max_recv_wr		= ep->rx_attr->size;
-	attr->cap.max_send_sge		= ep->tx_attr->iov_limit;
-	attr->cap.max_recv_sge		= ep->rx_attr->iov_limit;
-	attr->cap.max_inline_data	= ep->tx_attr->inject_size;
+	attr->cap.max_send_wr		= ep->info->tx_attr->size;
+	attr->cap.max_recv_wr		= ep->info->rx_attr->size;
+	attr->cap.max_send_sge		= ep->info->tx_attr->iov_limit;
+	attr->cap.max_recv_sge		= ep->info->rx_attr->iov_limit;
+	attr->cap.max_inline_data	= ep->info->tx_attr->inject_size;
 
 	attr->srq = NULL;
 	attr->qp_type = IBV_QPT_RC;
@@ -1153,7 +1149,7 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->ep_flags |= FI_SELECTIVE_COMPLETION;
 			else
-				ep->tx_attr->op_flags |= FI_COMPLETION;
+				ep->info->tx_attr->op_flags |= FI_COMPLETION;
 		}
 		break;
 	case FI_CLASS_EQ:
@@ -1319,7 +1315,7 @@ fi_ibv_msg_ep_send(struct fid_ep *ep, const void *buf, size_t len,
 	msg.context = context;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	return fi_ibv_msg_ep_sendmsg(ep, &msg, _ep->tx_attr->op_flags);
+	return fi_ibv_msg_ep_sendmsg(ep, &msg, _ep->info->tx_attr->op_flags);
 }
 
 static ssize_t
@@ -1342,7 +1338,7 @@ fi_ibv_msg_ep_senddata(struct fid_ep *ep, const void *buf, size_t len,
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
 	return fi_ibv_msg_ep_sendmsg(ep, &msg,
-					FI_REMOTE_CQ_DATA | _ep->tx_attr->op_flags);
+					FI_REMOTE_CQ_DATA | _ep->info->tx_attr->op_flags);
 }
 
 static ssize_t
@@ -1359,7 +1355,7 @@ fi_ibv_msg_ep_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	msg.context = context;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	return fi_ibv_msg_ep_sendmsg(ep, &msg, _ep->tx_attr->op_flags);
+	return fi_ibv_msg_ep_sendmsg(ep, &msg, _ep->info->tx_attr->op_flags);
 }
 
 static struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
@@ -1430,7 +1426,7 @@ fi_ibv_msg_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc
 		sge[i].addr = (uintptr_t) iov[i].iov_base;
 		sge[i].length = (uint32_t) iov[i].iov_len;
 		len += iov[i].iov_len;
-		if (!(_ep->tx_attr->op_flags & FI_INJECT))
+		if (!(_ep->info->tx_attr->op_flags & FI_INJECT))
 			sge[i].lkey = (uint32_t) (uintptr_t) desc[i];
 	}
 
@@ -2150,38 +2146,29 @@ static int fi_ibv_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr)
 static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 {
 	struct fi_ibv_msg_ep *ep;
-	struct fi_info info;
+	void *save_addr;
 	struct rdma_cm_id *id;
 	int ret;
 
 	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
 
-	if (addrlen != ep->src_addrlen) {
+	if (addrlen != ep->info->src_addrlen) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_EP_CTRL,"addrlen expected: %d, got: %d.\n",
-				ep->src_addrlen, addrlen);
+				ep->info->src_addrlen, addrlen);
 		return -FI_EINVAL;
 	}
 
-	memset(&info, 0, sizeof info);
-	info.src_addr = calloc(1, addrlen);
-	if (!info.src_addr)
-		return -FI_ENOMEM;
+	save_addr = ep->info->src_addr;
 
-	memcpy(info.src_addr, addr, addrlen);
-	info.src_addrlen = addrlen;
-
-	if (ep->dst_addr) {
-		info.dest_addrlen = ep->dst_addrlen;
-		info.dest_addr = calloc(1, info.dest_addrlen);
-		if (!info.dest_addr) {
-			ret = -FI_ENOMEM;
-			goto err1;
-		}
-
-		memcpy(info.dest_addr, ep->dst_addr, info.dest_addrlen);
+	ep->info->src_addr = malloc(ep->info->src_addrlen);
+	if (!ep->info->src_addr) {
+		ret = -FI_ENOMEM;
+		goto err1;
 	}
 
-	ret = fi_ibv_create_ep(NULL, NULL, 0, &info, NULL, &id);
+	memcpy(ep->info->src_addr, addr, ep->info->src_addrlen);
+
+	ret = fi_ibv_create_ep(NULL, NULL, 0, ep->info, NULL, &id);
 	if (ret)
 		goto err2;
 
@@ -2189,11 +2176,13 @@ static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 		rdma_destroy_ep(ep->id);
 
 	ep->id = id;
+	free(save_addr);
 
+	return 0;
 err2:
-	free(info.dest_addr);
+	free(ep->info->src_addr);
 err1:
-	free(info.src_addr);
+	ep->info->src_addr = save_addr;
 	return ret;
 }
 
@@ -2264,6 +2253,7 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	struct fi_ibv_msg_ep *_ep;
 	struct rdma_conn_param conn_param;
+	struct fi_ibv_connreq *connreq;
 	int ret;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
@@ -2281,7 +2271,14 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	conn_param.flow_control = 1;
 	conn_param.rnr_retry_count = 7;
 
-	return rdma_accept(_ep->id, &conn_param) ? -errno : 0;
+	ret = rdma_accept(_ep->id, &conn_param);
+	if (ret)
+		return -errno;
+
+	connreq = container_of(_ep->info->handle, struct fi_ibv_connreq, handle);
+	free(connreq);
+
+	return 0;
 }
 
 static int
@@ -2375,7 +2372,7 @@ static struct fi_ops_ep fi_ibv_msg_ep_base_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static struct fi_ibv_msg_ep *fi_ibv_alloc_msg_ep(void)
+static struct fi_ibv_msg_ep *fi_ibv_alloc_msg_ep(struct fi_info *info)
 {
 	struct fi_ibv_msg_ep *ep;
 
@@ -2383,24 +2380,12 @@ static struct fi_ibv_msg_ep *fi_ibv_alloc_msg_ep(void)
 	if (!ep)
 		return NULL;
 
-	ep->tx_attr = calloc(1, sizeof *(ep->tx_attr));
-	if (!ep->tx_attr)
-		goto err1;
-
-	ep->rx_attr = calloc(1, sizeof *(ep->rx_attr));
-	if (!ep->rx_attr)
-		goto err2;
-
-	ep->dst_addr = calloc(1, sizeof *(ep->dst_addr));
-	if (!ep->dst_addr)
-		goto err3;
+	ep->info = fi_dupinfo(info);
+	if (!ep->info)
+		goto err;
 
 	return ep;
-err3:
-	free(ep->rx_attr);
-err2:
-	free(ep->tx_attr);
-err1:
+err:
 	free(ep);
 	return NULL;
 }
@@ -2409,9 +2394,7 @@ static void fi_ibv_free_msg_ep(struct fi_ibv_msg_ep *ep)
 {
 	if (ep->id)
 		rdma_destroy_ep(ep->id);
-	free(ep->dst_addr);
-	free(ep->tx_attr);
-	free(ep->rx_attr);
+	fi_freeinfo(ep->info);
 	free(ep);
 }
 
@@ -2420,10 +2403,8 @@ static int fi_ibv_msg_ep_close(fid_t fid)
 	struct fi_ibv_msg_ep *ep;
 
 	ep = container_of(fid, struct fi_ibv_msg_ep, ep_fid.fid);
-	if (ep->id)
-		rdma_destroy_ep(ep->id);
-
 	fi_ibv_free_msg_ep(ep);
+
 	return 0;
 }
 
@@ -2496,7 +2477,7 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 			return ret;
 	}
 
-	_ep = fi_ibv_alloc_msg_ep();
+	_ep = fi_ibv_alloc_msg_ep(info);
 	if (!_ep)
 		return -FI_ENOMEM;
 
@@ -2507,7 +2488,6 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
 		connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
 		_ep->id = connreq->id;
-		free(connreq);
         } else if (info->handle->fclass == FI_CLASS_PEP) {
 		pep = container_of(info->handle, struct fi_ibv_pep, pep_fid.fid);
 		_ep->id = pep->id;
@@ -2539,15 +2519,6 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
 	_ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
 	_ep->ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
-
-	if (info->tx_attr)
-		*(_ep->tx_attr) = *(info->tx_attr);
-	if (info->rx_attr)
-		*(_ep->rx_attr) = *(info->rx_attr);
-
-	memcpy(_ep->dst_addr, info->dest_addr, sizeof(*(_ep->dst_addr)));
-	_ep->dst_addrlen = info->dest_addrlen;
-	_ep->src_addrlen = info->src_addrlen;
 
 	*ep = &_ep->ep_fid;
 
