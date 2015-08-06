@@ -50,15 +50,6 @@ static struct timespec start, end;
 static void *send_buf, *recv_buf;
 static size_t buffer_size;
 
-static struct fi_info *fi, *hints;
-
-static struct fid_fabric *fab;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
-static struct fid_cq *rcq;
-static struct fid_cq *scq;
-static struct fid_av *av;
-static struct fid_mr *mr;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
@@ -145,7 +136,7 @@ static int run_test(void)
 {
 	int ret, i;
 
-	if (opts.transfer_size > max_inject_size) 
+	if (opts.transfer_size > max_inject_size)
 		return 0;
 
 	ret = sync_test();
@@ -308,7 +299,7 @@ static int init_fabric(void)
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
-	
+
 	/* check max msg size */
 	max_inject_size = fi->tx_attr->inject_size;
 	if ((opts.user_options & FT_OPT_SIZE) &&
@@ -362,7 +353,7 @@ static int init_av(void)
 	int ret;
 
 	if (opts.dst_addr) {
-		/* Get local address blob. Find the addrlen first. We set addrlen 
+		/* Get local address blob. Find the addrlen first. We set addrlen
 		 * as 0 and fi_getname will return the actual addrlen. */
 		addrlen = 0;
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
@@ -378,7 +369,7 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
 				&fi_ctx_av);
 		if (ret != 1) {
 			FT_PRINTERR("fi_av_insert", ret);
@@ -407,7 +398,7 @@ static int init_av(void)
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, recv_buf + sizeof(size_t), addrlen);
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
 				&fi_ctx_av);
 		if (ret != 1) {
 			FT_PRINTERR("fi_av_insert", ret);

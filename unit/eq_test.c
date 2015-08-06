@@ -48,10 +48,6 @@
 #include "unit_common.h"
 #include "shared.h"
 
-struct fi_info *hints;
-
-static struct fid_fabric *fabric;
-static struct fid_eq *eq;
 
 static char err_buf[512];
 
@@ -148,7 +144,7 @@ eq_write_read_self()
 		event = ~0;
 		memset(&entry, 0, sizeof(entry));
 		ret = fi_eq_read(eq, &event, &entry, sizeof(entry),
-				(i & 1) ? 0 : FI_PEEK); 
+				(i & 1) ? 0 : FI_PEEK);
 		if (ret != sizeof(entry)) {
 			sprintf(err_buf, "fi_eq_read ret=%d, %s", ret, fi_strerror(-ret));
 			goto fail;

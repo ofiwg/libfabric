@@ -54,17 +54,6 @@ struct fi_rma_iov remote;
 static uint64_t cq_data = 1;
 static enum fi_mr_mode mr_mode;
 
-static struct fi_info *hints;
-static struct fi_info *fi = NULL;
-
-static struct fid_fabric *fab;
-static struct fid_pep *pep;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
-static struct fid_eq *cmeq;
-static struct fid_cq *rcq, *scq;
-static struct fid_mr *mr;
-
 static int send_xfer(int size)
 {
 	struct fi_cq_data_entry comp;
@@ -121,7 +110,7 @@ static int read_data(size_t size)
 {
 	int ret;
 
-	ret = fi_read(ep, buf, size, fi_mr_desc(mr), 
+	ret = fi_read(ep, buf, size, fi_mr_desc(mr),
 		      0, remote.addr, remote.key, ep);
 	if (ret) {
 		FT_PRINTERR("fi_read", ret);
@@ -148,7 +137,7 @@ static int write_data(size_t size)
 {
 	int ret;
 
-	ret = fi_write(ep, buf, size, fi_mr_desc(mr),  
+	ret = fi_write(ep, buf, size, fi_mr_desc(mr),
 		       0, remote.addr, remote.key, ep);
 	if (ret) {
 		FT_PRINTERR("fi_write", ret);
@@ -229,7 +218,7 @@ static int run_test(void)
 			ret = wait_remote_writedata_completion();
 			break;
 		case FT_RMA_READ:
-			ret = read_data(opts.transfer_size); 
+			ret = read_data(opts.transfer_size);
 			break;
 		}
 		if (ret)
@@ -241,10 +230,10 @@ static int run_test(void)
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
 				1, opts.argc, opts.argv);
 	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, 
+		show_perf(test_name, opts.transfer_size, opts.iterations,
 				&start, &end, 1);
 
 	return 0;
@@ -307,7 +296,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
-	
+
 	switch (op_type) {
 	case FT_RMA_READ:
 		access_mode = FI_REMOTE_READ;
@@ -321,7 +310,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		ret = -FI_EINVAL;
 		goto err3;
 	}
-	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)), 
+	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)),
 			access_mode, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
@@ -374,7 +363,7 @@ static int bind_ep_res(void)
 		FT_PRINTERR("fi_enable", ret);
 		return ret;
 	}
-	
+
 	/* Post the first recv buffer */
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)

@@ -51,16 +51,9 @@ extern "C" {
 
 extern int listen_sock, sock;
 
-extern struct fid_fabric *fabric;
-extern struct fid_domain *domain;
-extern struct fid_av	 *av;
 //extern struct fid_wait	 *waitset;
 //extern struct fid_poll	 *pollset;
-extern struct fid_eq	 *eq;
-extern struct fid_cq	 *txcq, *rxcq;
 //extern struct fid_cntr	 *txcntr, *rxcntr;
-extern struct fid_ep	 *ep;
-extern struct fid_pep	 *pep;
 //extern struct fid_stx	 *stx;
 //extern struct fid_sep	 *sep;
 

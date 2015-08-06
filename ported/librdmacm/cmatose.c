@@ -66,16 +66,13 @@ enum CQ_INDEX {
 };
 
 static struct cs_opts 		opts;
-static struct fid_fabric	*fabric;
-static struct fid_eq		*eq;
-static struct fid_pep		*pep;
 static struct cma_node		*nodes;
 static int			conn_index;
 static int			connects_left;
 static int			disconnects_left;
 static int			connections = 1;
 
-static struct fi_info		*hints, *info;
+static struct fi_info		*info;
 
 
 static int post_recvs(struct cma_node *node)
@@ -564,13 +561,13 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
-	
+
 	connects_left = connections;
 
 	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (ret)
 		return ret;
-	
+
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &info);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);

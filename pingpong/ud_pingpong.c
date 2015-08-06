@@ -59,16 +59,7 @@ static size_t prefix_len;
 static size_t max_msg_size = 0;
 static int timeout = 5;
 
-static struct fi_info *hints;
 static fi_addr_t remote_fi_addr;
-
-static struct fi_info *fi = NULL;
-static struct fid_fabric *fab;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
-static struct fid_cq *rcq, *scq;
-static struct fid_mr *mr;
-static struct fid_av *av;
 
 static int poll_all_sends(void)
 {

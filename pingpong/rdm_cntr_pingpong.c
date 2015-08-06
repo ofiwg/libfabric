@@ -51,14 +51,7 @@ static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
 
-static struct fi_info *fi, *hints;
-
-static struct fid_fabric *fab;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
 static struct fid_cntr *rcntr, *scntr;
-static struct fid_av *av;
-static struct fid_mr *mr;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
@@ -94,7 +87,7 @@ static int send_xfer(int size)
 	}
 
 	credits--;
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr, 
+	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
 			&fi_ctx_send);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
@@ -115,7 +108,7 @@ static int recv_xfer(int size)
 		return ret;
 	}
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr, 
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
 			&fi_ctx_recv);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
@@ -144,7 +137,7 @@ static int send_msg(int size)
 	return ret;
 }
 
-static int recv_msg(void) 
+static int recv_msg(void)
 {
 	int ret;
 
@@ -381,7 +374,7 @@ static int init_av(void)
 	int ret;
 
 	if (opts.dst_addr) {
-		/* Get local address blob. Find the addrlen first. We set addrlen 
+		/* Get local address blob. Find the addrlen first. We set addrlen
 		 * as 0 and fi_getname will return the actual addrlen. */
 		addrlen = 0;
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
@@ -397,7 +390,7 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
 				&fi_ctx_av);
 		if (ret != 1) {
 			FT_PRINTERR("fi_av_insert", ret);
@@ -426,7 +419,7 @@ static int init_av(void)
 		remote_addr = malloc(addrlen);
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
 				&fi_ctx_av);
 		if (ret != 1) {
 			FT_PRINTERR("fi_av_insert", ret);

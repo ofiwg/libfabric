@@ -32,8 +32,6 @@
 #include "fabtest.h"
 
 
-struct fid_ep	*ep;
-struct fid_pep	*pep;
 //struct fid_stx	 *stx;
 //struct fid_sep	 *sep;
 

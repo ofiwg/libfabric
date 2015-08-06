@@ -46,15 +46,6 @@ static void *buf;
 static size_t buffer_size = 1024;
 static int rx_depth = 512;
 
-static struct fi_info *hints;
-static struct fid_fabric *fab;
-static struct fid_pep *pep;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
-static struct fid_eq *cmeq;
-static struct fid_cq *rcq, *scq;
-static struct fid_mr *mr;
-
 union sockaddr_any {
 	struct sockaddr		sa;
 	struct sockaddr_in	sin;

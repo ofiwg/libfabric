@@ -32,7 +32,6 @@
 #include "fabtest.h"
 
 
-struct fid_cq *txcq, *rxcq;
 //struct fid_cntr *txcntr, *rxcntr;
 
 static size_t comp_entry_cnt[] = {

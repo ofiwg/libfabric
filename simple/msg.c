@@ -42,15 +42,6 @@ static void *buf;
 static size_t buffer_size = 1024;
 static int rx_depth = 512;
 
-static struct fi_info *hints;
-static struct fid_fabric *fab;
-static struct fid_pep *pep;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
-static struct fid_eq *cmeq;
-static struct fid_cq *rcq, *scq;
-static struct fid_mr *mr;
-
 static int alloc_cm_res(void)
 {
 	struct fi_eq_attr cm_attr = { 0 };
@@ -243,7 +234,7 @@ static int server_connect(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
-	
+
 	ret = alloc_ep_res(info);
 	if (ret)
 		 goto err1;
@@ -312,7 +303,7 @@ static int client_connect(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
 	}
-	
+
 	ret = alloc_cm_res();
 	if (ret)
 		goto err4;
@@ -371,7 +362,7 @@ static int send_recv()
 	if (opts.dst_addr) {
 		/* Client */
 		fprintf(stdout, "Posting a send...\n");
-		sprintf(buf, "Hello World!"); 
+		sprintf(buf, "Hello World!");
 		ret = fi_send(ep, buf, sizeof("Hello World!"), fi_mr_desc(mr), 0, buf);
 		if (ret) {
 			FT_PRINTERR("fi_send", ret);
@@ -423,7 +414,7 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 
 	while ((op = getopt(argc, argv, "h" ADDR_OPTS INFO_OPTS)) != -1) {
-		switch (op) {					
+		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints);
@@ -434,7 +425,7 @@ int main(int argc, char **argv)
 			return EXIT_FAILURE;
 		}
 	}
-		
+
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
