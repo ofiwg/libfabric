@@ -50,15 +50,6 @@ static void *recv_buf;
 static void *send_buf;
 static size_t buffer_size;
 
-static struct fi_info *hints;
-static struct fi_info *fi = NULL;
-
-static struct fid_fabric *fab;
-static struct fid_pep *pep;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
-static struct fid_eq *cmeq;
-static struct fid_cq *rcq, *scq;
 static struct fid_mr *recv_mr;
 static struct fid_mr *send_mr;
 

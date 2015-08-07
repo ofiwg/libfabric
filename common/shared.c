@@ -36,6 +36,16 @@
 
 #include <shared.h>
 
+struct fi_info *fi, *hints;
+struct fid_fabric *fab, *fabric; /* dups */
+struct fid_domain *dom, *domain; /* dups */
+struct fid_pep *pep;
+struct fid_ep *ep;
+struct fid_cq *rcq, *scq, *txcq, *rxcq; /* dups */
+struct fid_mr *mr;
+struct fid_av *av;
+struct fid_eq *cmeq, *eq; /* dups */
+
 struct test_size_param test_size[] = {
 	{ 1 <<  1, 1 }, { (1 <<  1) + (1 <<  0), 2},
 	{ 1 <<  2, 2 }, { (1 <<  2) + (1 <<  1), 2},
@@ -126,7 +136,7 @@ int ft_getdestaddr(char *node, char *service, struct fi_info *hints)
 	return getaddr(node, service, hints, 0);
 }
 
-int ft_read_addr_opts(char **node, char **service, struct fi_info *hints, 
+int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 		uint64_t *flags, struct cs_opts *opts)
 {
 	int ret;
@@ -257,7 +267,7 @@ int wait_for_completion(struct fid_cq *cq, int num_completions)
 }
 
 void cq_readerr(struct fid_cq *cq, char *cq_str)
-{ 
+{
 	struct fi_cq_err_entry cq_err;
 	const char *err_str;
 	int ret;
@@ -354,7 +364,7 @@ int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
     return elapsed / p;
 }
 
-void show_perf(char *name, int tsize, int iters, struct timespec *start, 
+void show_perf(char *name, int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter)
 {
 	static int header = 1;

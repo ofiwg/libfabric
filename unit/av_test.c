@@ -55,7 +55,6 @@
 
 #define MAX_ADDR 256
 
-static struct fi_info *hints;
 static struct fi_eq_attr eq_attr;
 
 char *good_address;
@@ -64,11 +63,6 @@ char *bad_address;
 static char *src_addr_str = NULL;
 
 static enum fi_av_type av_type;
-
-static struct fi_info *fi;
-static struct fid_fabric *fabric;
-static struct fid_domain *domain;
-static struct fid_eq *eq;
 
 static char err_buf[512];
 
@@ -996,7 +990,7 @@ run_test_set()
 	if (bad_address != NULL) {
 		printf("Testing with bad_address = \"%s\"\n", bad_address);
 		failed += run_tests(test_array_bad, err_buf);
-	}	
+	}
 
 	bad_address = NULL;
 	printf("Testing with invalid address\n");
@@ -1043,17 +1037,17 @@ int main(int argc, char **argv)
 			printf("\t[-f provider_name]\n");
 			printf("\t[-s source_address]\n");
 			return EXIT_FAILURE;
-			
+
 		}
 	}
 
 	if (good_address == NULL ||  num_good_addr == 0) {
-		printf("Test requires -d  and -n\n");	
+		printf("Test requires -d  and -n\n");
 		return EXIT_FAILURE;
 	}
 
 	if (num_good_addr > MAX_ADDR - 1) {
-		printf("num_good_addr = %d is too big, dropped to %d\n", 
+		printf("num_good_addr = %d is too big, dropped to %d\n",
 				num_good_addr, MAX_ADDR);
 		num_good_addr = MAX_ADDR - 1;
 	}

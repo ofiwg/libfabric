@@ -53,14 +53,6 @@ static size_t buffer_size;
 struct fi_rma_iov remote;
 static uint64_t cq_data = 1;
 
-static struct fi_info *fi, *hints;
-
-static struct fid_fabric *fab;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
-static struct fid_cq *rcq, *scq;
-static struct fid_av *av;
-static struct fid_mr *mr;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
@@ -106,7 +98,7 @@ static int read_data(size_t size)
 {
 	int ret;
 
-	ret = fi_read(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 
+	ret = fi_read(ep, buf, size, fi_mr_desc(mr), remote_fi_addr,
 		      remote.addr, remote.key, &fi_ctx_read);
 	if (ret){
 		FT_PRINTERR("fi_read", ret);
@@ -134,7 +126,7 @@ static int write_data(size_t size)
 {
 	int ret;
 
-	ret = fi_write(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 
+	ret = fi_write(ep, buf, size, fi_mr_desc(mr), remote_fi_addr,
 		       remote.addr, remote.key, &fi_ctx_write);
 	if (ret){
 		FT_PRINTERR("fi_write", ret);
@@ -209,7 +201,7 @@ static int run_test(void)
 			ret = wait_remote_writedata_completion();
 			break;
 		case FT_RMA_READ:
-			ret = read_data(opts.transfer_size); 
+			ret = read_data(opts.transfer_size);
 			break;
 		}
 		if (ret)
@@ -221,10 +213,10 @@ static int run_test(void)
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
 				1, opts.argc, opts.argv);
 	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, 
+		show_perf(test_name, opts.transfer_size, opts.iterations,
 				&start, &end, 1);
 
 	return 0;
@@ -270,7 +262,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
-	
+
 	switch (op_type) {
 	case FT_RMA_READ:
 		access_mode = FI_REMOTE_READ;
@@ -284,7 +276,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		FT_PRINTERR("invalid op_type", ret);
 		exit(1);
 	}
-	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)), 
+	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)),
 			access_mode, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
@@ -413,7 +405,7 @@ static int init_av(void)
 	int ret;
 
 	if (opts.dst_addr) {
-		/* Get local address blob. Find the addrlen first. We set addrlen 
+		/* Get local address blob. Find the addrlen first. We set addrlen
 		 * as 0 and fi_getname will return the actual addrlen. */
 		addrlen = 0;
 		ret = fi_getname(&ep->fid, local_addr, &addrlen);
@@ -429,7 +421,7 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
 				&fi_ctx_av);
 		if (ret != 1) {
 			FT_PRINTERR("fi_av_insert", ret);
@@ -459,7 +451,7 @@ static int init_av(void)
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
 
 
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
 				&fi_ctx_av);
 		if (ret != 1) {
 			FT_PRINTERR("fi_av_insert", ret);
@@ -471,7 +463,7 @@ static int init_av(void)
 		if (ret)
 			return ret;
 	}
-	
+
 	/* Post the first recv buffer */
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret) {
@@ -581,7 +573,7 @@ int main(int argc, char **argv)
 				ft_csusage(argv[0], "Ping pong client and server using rma.");
 				fprintf(stderr, "  -o <op>\trma op type: read|write (default: write)]\n");
 				return EXIT_FAILURE;
-			}	
+			}
 			break;
 		default:
 			ft_parseinfo(op, optarg, hints);
@@ -597,11 +589,11 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
-	
+
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_RMA;
 	hints->mode = FI_CONTEXT | FI_LOCAL_MR | FI_RX_CQ_DATA;
-	
+
 	ret =run();
 
 	fi_freeinfo(hints);

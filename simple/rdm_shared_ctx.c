@@ -55,17 +55,9 @@ static size_t buffer_size = 1024;
 static size_t transfer_size = 1000;
 static int rx_depth = 512;
 
-static struct fi_info *fi, *hints;
-
 static int ep_cnt = 2;
-static struct fid_fabric *fab;
-static struct fid_domain *dom;
-static struct fid_ep **ep, *srx_ctx;
+static struct fid_ep **ep_array, *srx_ctx;
 static struct fid_stx *stx_ctx;
-static struct fid_cq *scq;
-static struct fid_cq *rcq;
-static struct fid_mr *mr;
-static struct fid_av *av;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t *remote_fi_addr;
@@ -77,7 +69,7 @@ static int send_msg(int size)
 {
 	int ret;
 
-	ret = fi_send(ep[0], buf, (size_t) size, fi_mr_desc(mr),
+	ret = fi_send(ep_array[0], buf, (size_t) size, fi_mr_desc(mr),
 			remote_fi_addr[0], &fi_ctx_send);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
@@ -106,7 +98,7 @@ static int recv_msg(void)
 
 static void free_ep_res(void)
 {
-	FT_CLOSEV(ep, ep_cnt);
+	FT_CLOSEV(ep_array, ep_cnt);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&rcq->fid);
@@ -139,10 +131,10 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 	cq_attr.size = rx_depth;
-	
+
 	memset(&tx_attr, 0, sizeof tx_attr);
 	memset(&rx_attr, 0, sizeof rx_attr);
-	
+
 	ret = fi_stx_context(dom, &tx_attr, &stx_ctx, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_stx_context", ret);
@@ -154,7 +146,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
-	
+
 	ret = fi_srx_context(dom, &rx_attr, &srx_ctx, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_srx_context", ret);
@@ -184,13 +176,13 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err6;
 	}
 
-	ep = calloc(ep_cnt, sizeof(*ep));
-	if (!ep) {
+	ep_array = calloc(ep_cnt, sizeof(*ep_array));
+	if (!ep_array) {
 		perror("malloc");
 		goto err7;
 	}
 	for (i = 0; i < ep_cnt; i++) {
-		ret = fi_endpoint(dom, fi, &ep[i], NULL);
+		ret = fi_endpoint(dom, fi, &ep_array[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_endpoint", ret);
 			goto err8;
@@ -200,7 +192,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	return 0;
 
 err8:
-	FT_CLOSEV(ep, ep_cnt);
+	FT_CLOSEV(ep_array, ep_cnt);
 err7:
 	fi_close(&av->fid);
 err6:
@@ -222,39 +214,39 @@ err1:
 static int bind_ep_res(void)
 {
 	int i, ret;
-	
+
 	for (i = 0; i < ep_cnt; i++) {
-		ret = fi_ep_bind(ep[i], &stx_ctx->fid, 0);
+		ret = fi_ep_bind(ep_array[i], &stx_ctx->fid, 0);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
-		ret = fi_ep_bind(ep[i], &srx_ctx->fid, 0);
+		ret = fi_ep_bind(ep_array[i], &srx_ctx->fid, 0);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
-		ret = fi_ep_bind(ep[i], &scq->fid, FI_SEND);
+		ret = fi_ep_bind(ep_array[i], &scq->fid, FI_SEND);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
-		ret = fi_ep_bind(ep[i], &rcq->fid, FI_RECV);
+		ret = fi_ep_bind(ep_array[i], &rcq->fid, FI_RECV);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
-		ret = fi_ep_bind(ep[i], &av->fid, 0);
+		ret = fi_ep_bind(ep_array[i], &av->fid, 0);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
-		ret = fi_enable(ep[i]);
+		ret = fi_enable(ep_array[i]);
 		if (ret) {
 			FT_PRINTERR("fi_enable", ret);
 			return ret;
@@ -283,8 +275,8 @@ static int run_test()
 		/* Post sends addressed to remote EPs */
 		for (i = 0; i < ep_cnt; i++) {
 			fprintf(stdout, "Posting send to remote ctx: %d\n", i);
-			ret = fi_send(ep[i], buf, transfer_size, fi_mr_desc(mr),
-					remote_fi_addr[i], NULL); 
+			ret = fi_send(ep_array[i], buf, transfer_size, fi_mr_desc(mr),
+					remote_fi_addr[i], NULL);
 			if (ret) {
 				FT_PRINTERR("fi_send", ret);
 				return ret;
@@ -303,8 +295,8 @@ static int run_test()
 		/* Post sends addressed to remote EPs */
 		for (i = 0; i < ep_cnt; i++) {
 			fprintf(stdout, "Posting send to remote ctx: %d\n", i);
-			ret = fi_send(ep[i], buf, transfer_size, fi_mr_desc(mr),
-					remote_fi_addr[i], NULL); 
+			ret = fi_send(ep_array[i], buf, transfer_size, fi_mr_desc(mr),
+					remote_fi_addr[i], NULL);
 			if (ret) {
 				FT_PRINTERR("fi_send", ret);
 				return ret;
@@ -326,7 +318,7 @@ static int init_fabric(void)
 	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (ret)
 		return ret;
-	
+
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
@@ -386,10 +378,10 @@ static int init_av(void)
 	int ret;
 	int i;
 
-	/* Get local address blob. Find the addrlen first. We set addrlen 
+	/* Get local address blob. Find the addrlen first. We set addrlen
 	 * as 0 and fi_getname will return the actual addrlen. */
 	addrlen = 0;
-	ret = fi_getname(&ep[0]->fid, local_addr, &addrlen);
+	ret = fi_getname(&ep_array[0]->fid, local_addr, &addrlen);
 	if (ret != -FI_ETOOSMALL) {
 		FT_PRINTERR("fi_getname", ret);
 		return ret;
@@ -399,7 +391,7 @@ static int init_av(void)
 
 	/* Get local addresses for all EPs */
 	for (i = 0; i < ep_cnt; i++) {
-		ret = fi_getname(&ep[i]->fid, local_addr + addrlen * i, &addrlen);
+		ret = fi_getname(&ep_array[i]->fid, local_addr + addrlen * i, &addrlen);
 		if (ret) {
 			FT_PRINTERR("fi_getname", ret);
 			return ret;
@@ -428,9 +420,9 @@ static int init_av(void)
 		memcpy(&addrlen, buf, sizeof(size_t));
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen * ep_cnt);
 
-		/* Insert remote addresses into AV 
+		/* Insert remote addresses into AV
 		 * Skip the first address since we already have it in AV */
-		ret = fi_av_insert(av, remote_addr + addrlen, ep_cnt - 1, 
+		ret = fi_av_insert(av, remote_addr + addrlen, ep_cnt - 1,
 				remote_fi_addr + 1, 0, &fi_ctx_av);
 		if (ret != ep_cnt - 1) {
 			FT_PRINTERR("fi_av_insert", ret);
@@ -458,7 +450,7 @@ static int init_av(void)
 			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
-	
+
 		/* Send local EP addresses to one of the remote endpoints */
 		memcpy(buf, &addrlen, sizeof(size_t));
 		memcpy(buf + sizeof(size_t), local_addr, addrlen * ep_cnt);
@@ -491,7 +483,7 @@ static int run(void)
 
 	run_test();
 	/* TODO: Add a local finalize applicable to shared ctx */
-	//ft_finalize(fi, ep[0], scq, rcq, remote_fi_addr[0]);
+	//ft_finalize(fi, ep_array[0], scq, rcq, remote_fi_addr[0]);
 out:
 	free_ep_res();
 	fi_close(&dom->fid);
@@ -523,7 +515,7 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
-	
+
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_NAMED_RX_CTX;
 	hints->mode = FI_CONTEXT | FI_LOCAL_MR;

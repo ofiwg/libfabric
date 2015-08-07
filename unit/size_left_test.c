@@ -56,19 +56,12 @@
 
 int fabtests_debug = 0;
 
-static struct fi_info *fi, *hints;
 static struct fi_eq_attr eq_attr;
-
-static struct fid_fabric *fabric;
-static struct fid_domain *domain;
-static struct fid_eq *eq;
 
 static char err_buf[512];
 
 /* per-test fixture variables */
 static struct fid_cq *wcq = NULL;
-static struct fid_cq *rcq = NULL;
-static struct fid_av *av = NULL;
 
 /* returns 0 on success or a negative value that can be stringified with
  * fi_strerror on error.

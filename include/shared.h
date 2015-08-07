@@ -86,6 +86,18 @@ enum {
 	FT_OPT_SIZE = 1 << 1
 };
 
+
+extern struct fi_info *fi, *hints;
+extern struct fid_fabric *fab, *fabric; /* dups */
+extern struct fid_domain *dom, *domain; /* dups */
+extern struct fid_pep *pep;
+extern struct fid_ep *ep;
+extern struct fid_cq *rcq, *scq, *txcq, *rxcq; /* dups */
+extern struct fid_mr *mr;
+extern struct fid_av *av;
+extern struct fid_eq *cmeq, *eq; /* dups */
+
+
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints);
 void ft_parse_addr_opts(int op, char *optarg, struct cs_opts *opts);
 void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts);
@@ -110,7 +122,7 @@ const unsigned int test_cnt;
 
 int ft_getsrcaddr(char *node, char *service, struct fi_info *hints);
 int ft_getdestaddr(char *node, char *service, struct fi_info *hints);
-int ft_read_addr_opts(char **node, char **service, struct fi_info *hints, 
+int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 		uint64_t *flags, struct cs_opts *opts);
 char *size_str(char str[FT_STR_LEN], long long size);
 char *cnt_str(char str[FT_STR_LEN], long long cnt);
@@ -126,11 +138,11 @@ int wait_for_completion(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, char *cq_str);
 void eq_readerr(struct fid_eq *eq, char *eq_str);
 
-int64_t get_elapsed(const struct timespec *b, const struct timespec *a, 
+int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
 		enum precision p);
-void show_perf(char *name, int tsize, int iters, struct timespec *start, 
+void show_perf(char *name, int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter);
-void show_perf_mr(int tsize, int iters, struct timespec *start, 
+void show_perf_mr(int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter, int argc, char *argv[]);
 
 #define FT_PRINTERR(call, retv) \

@@ -50,13 +50,6 @@ static void *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
 
-static struct fi_info *fi, *hints;
-static struct fid_fabric *fab;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
-static struct fid_av *av;
-static struct fid_cq *rcq, *scq;
-static struct fid_mr *mr;
 struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
@@ -160,7 +153,7 @@ static int bind_ep_res(void)
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
-	
+
 	/* Bind AV with the endpoint to map addresses */
 	ret = fi_ep_bind(ep, &av->fid, 0);
 	if (ret) {
@@ -181,18 +174,18 @@ static int init_fabric(void)
 	char *node, *service;
 	uint64_t flags = 0;
 	int ret;
-	
+
 	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (ret)
 		return ret;
-	
+
 	/* Get fabric info */
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto err0;
 	}
-	
+
 	/* Get remote address of the server */
 	if (opts.dst_addr) {
 		addrlen = fi->dest_addrlen;
@@ -213,7 +206,7 @@ static int init_fabric(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
 	}
-	
+
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err4;
@@ -221,10 +214,10 @@ static int init_fabric(void)
 	ret = bind_ep_res();
 	if (ret)
 		goto err5;
-	
+
 	if (opts.dst_addr) {
-		/* Insert address to the AV and get the fabric address back */ 	
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, 
+		/* Insert address to the AV and get the fabric address back */
+		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
 				&fi_ctx_av);
 		if (ret != 1) {
 			FT_PRINTERR("fi_av_insert", ret);
@@ -255,8 +248,8 @@ static int send_recv()
 	if (opts.dst_addr) {
 		/* Client */
 		fprintf(stdout, "Posting a send...\n");
-		sprintf(buf, "Hello from Client!"); 
-		ret = fi_send(ep, buf, sizeof("Hello from Client!"), 
+		sprintf(buf, "Hello from Client!");
+		ret = fi_send(ep, buf, sizeof("Hello from Client!"),
 				fi_mr_desc(mr), remote_fi_addr, &fi_ctx_send);
 		if (ret) {
 			FT_PRINTERR("fi_send", ret);
@@ -276,7 +269,7 @@ static int send_recv()
 	} else {
 		/* Server */
 		fprintf(stdout, "Posting a recv...\n");
-		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, 
+		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0,
 				&fi_ctx_recv);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
@@ -303,7 +296,7 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 	opts = INIT_OPTS;
-	
+
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
@@ -323,7 +316,7 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
-	
+
 	hints->ep_attr->type	= FI_EP_DGRAM;
 	hints->caps		= FI_MSG;
 	hints->mode		= FI_CONTEXT | FI_LOCAL_MR;

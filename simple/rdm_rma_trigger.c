@@ -47,13 +47,7 @@ static struct cs_opts opts;
 static void *buf;
 static size_t buffer_size;
 
-static struct fi_info *fi, *hints;
-static struct fid_fabric *fab;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
 static struct fid_cntr *rcntr, *scntr;
-static struct fid_av *av;
-static struct fid_mr *mr;
 static void *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
@@ -63,7 +57,7 @@ static uint64_t user_defined_key = 45678;
 static char *welcome_text1 = "Hello1 from Client!";
 static char *welcome_text2 = "Hello2 from Client!";
 
-static int rma_write(void *src, size_t size, 
+static int rma_write(void *src, size_t size,
 		     void *context, uint64_t flags)
 {
 	int ret;
@@ -86,7 +80,7 @@ static int rma_write(void *src, size_t size,
 	msg.addr = remote_fi_addr;
 	msg.rma_iov = &rma_iov;
 	msg.context = context;
- 	
+
  	/* Using specified base address and MR key for RMA write */
 	ret = fi_writemsg(ep, &msg, flags);
  	if (ret){
@@ -144,7 +138,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		FT_PRINTERR("fi_cntr_open", ret);
 		goto err2;
 	}
-	
+
 	ret = fi_mr_reg(dom, buf, buffer_size, FI_WRITE | FI_REMOTE_WRITE, 0,
 			user_defined_key, 0, &mr, NULL);
 	if (ret) {
@@ -251,7 +245,7 @@ static int init_fabric(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
-	
+
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err3;
@@ -259,7 +253,7 @@ static int init_fabric(void)
 	ret = bind_ep_res();
 	if (ret)
 		goto err4;
-	
+
 	if(opts.dst_addr) {
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, NULL);
 		if (ret != 1) {
@@ -306,7 +300,7 @@ static int run_test(void)
 		ret = rma_write(ptr1, strlen(welcome_text1), NULL, 0);
 		if (ret)
 			goto out;
-	
+
 		ret = fi_cntr_wait(scntr, 2, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
@@ -314,7 +308,7 @@ static int run_test(void)
 		}
 
 		fprintf(stdout, "Received completion events for RMA write operations\n");
-	} else {	
+	} else {
 		/* Server waits for message from Client */
 		ret = fi_cntr_wait(rcntr, 2, -1);
 		if (ret < 0) {
@@ -343,7 +337,7 @@ out:
 int main(int argc, char **argv)
 {
 	int op, ret;
-		
+
 	opts = INIT_OPTS;
 	hints = fi_allocinfo();
 	if (!hints)

@@ -47,16 +47,6 @@ static size_t buffer_size;
 static int rx_depth = 500;
 static size_t cq_data_size;
 
-static struct fi_info *hints;
-
-static struct fid_fabric *fab;
-static struct fid_pep *pep;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
-static struct fid_eq *cmeq;
-static struct fid_cq *rcq, *scq;
-static struct fid_mr *mr;
-
 static void free_lres(void)
 {
 	fi_close(&cmeq->fid);
@@ -170,7 +160,7 @@ static int bind_ep_res(void)
 	ret = fi_enable(ep);
 	if (ret)
 		return ret;
-	
+
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
@@ -333,7 +323,7 @@ static int client_connect(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
 	}
-	
+
 	ret = alloc_ep_res(fi);
 	if (ret)
 		goto err4;
@@ -383,7 +373,7 @@ static int run_test()
 	size_t size = 1000;
 	uint64_t remote_cq_data;
 	struct fi_cq_data_entry comp;
-	
+
 	/* Set remote_cq_data based on the cq_data_size we got from fi_getinfo */
 	remote_cq_data = 0x0123456789abcdef & ((0x1ULL << (cq_data_size * 8)) - 1);
 
@@ -424,7 +414,7 @@ static int run_test()
 				remote_cq_data, comp.data);
 		}
 	}
-	
+
 	return 0;
 }
 
@@ -475,7 +465,7 @@ int main(int argc, char **argv)
 			return EXIT_FAILURE;
 		}
 	}
-	
+
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 

@@ -48,14 +48,6 @@ static void *buf;
 static size_t buffer_size = 1024;
 static int rx_depth = 512;
 
-static struct fi_info *fi, *hints;
-
-static struct fid_fabric *fab;
-static struct fid_domain *dom;
-static struct fid_ep *ep;
-static struct fid_cq *rcq, *scq;
-static struct fid_av *av;
-static struct fid_mr *mr;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
@@ -416,7 +408,7 @@ static int run(void)
 		fprintf(stdout, "Searching msg with tag [%" PRIu64 "]\n", tag_data);
 		tagged_peek(tag_data);
 
-		fprintf(stdout, "Posting buffer for msg with tag [%" PRIu64 "]\n", 
+		fprintf(stdout, "Posting buffer for msg with tag [%" PRIu64 "]\n",
 				tag_data + 1);
 		ret = post_recv(tag_data + 1);
 		if (ret)
