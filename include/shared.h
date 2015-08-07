@@ -65,9 +65,7 @@ enum precision {
 	MILLI = 1000000,
 };
 
-/* client-server common options and option parsing */
-
-struct cs_opts {
+struct ft_opts {
 	int iterations;
 	int transfer_size;
 	char *src_port;
@@ -98,12 +96,12 @@ extern struct fid_mr *mr;
 extern struct fid_av *av;
 extern struct fid_eq *eq;
 
-extern struct cs_opts opts;
+extern struct ft_opts opts;
 
 
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints);
-void ft_parse_addr_opts(int op, char *optarg, struct cs_opts *opts);
-void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts);
+void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts);
+void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts);
 void ft_usage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);
 void ft_fill_buf(void *buf, int size);
@@ -112,7 +110,7 @@ int ft_check_buf(void *buf, int size);
 #define INFO_OPTS "n:f:"
 #define CS_OPTS ADDR_OPTS "I:S:m"
 
-#define INIT_OPTS (struct cs_opts) { .iterations = 1000, \
+#define INIT_OPTS (struct ft_opts) { .iterations = 1000, \
 				     .transfer_size = 1024, \
 				     .src_port = "9228", \
 				     .dst_port = "9228", \
@@ -126,12 +124,12 @@ const unsigned int test_cnt;
 int ft_getsrcaddr(char *node, char *service, struct fi_info *hints);
 int ft_getdestaddr(char *node, char *service, struct fi_info *hints);
 int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
-		uint64_t *flags, struct cs_opts *opts);
+		uint64_t *flags, struct ft_opts *opts);
 char *size_str(char str[FT_STR_LEN], long long size);
 char *cnt_str(char str[FT_STR_LEN], long long cnt);
 int size_to_count(int size);
 
-void init_test(struct cs_opts *opts, char *test_name, size_t test_name_len);
+void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);
 int ft_finalize(struct fi_info *fi, struct fid_ep *tx_ep, struct fid_cq *txcq,
 		struct fid_cq *rxcq, fi_addr_t addr);
 
