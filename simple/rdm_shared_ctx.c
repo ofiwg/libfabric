@@ -76,7 +76,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	ret = wait_for_completion(scq, 1);
+	ret = wait_for_completion(txcq, 1);
 
 	return ret;
 }
@@ -91,7 +91,7 @@ static int recv_msg(void)
 		return ret;
 	}
 
-	ret = wait_for_completion(rcq, 1);
+	ret = wait_for_completion(rxcq, 1);
 
 	return ret;
 }
@@ -101,9 +101,9 @@ static void free_ep_res(void)
 	FT_CLOSEV(ep_array, ep_cnt);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 	fi_close(&srx_ctx->fid);
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 	fi_close(&stx_ctx->fid);
 	free(buf);
 	free(remote_fi_addr);
@@ -141,7 +141,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err1;
 	}
 
-	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
@@ -153,7 +153,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err3;
 	}
 
-	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err4;
@@ -198,11 +198,11 @@ err7:
 err6:
 	fi_close(&mr->fid);
 err5:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err4:
 	fi_close(&srx_ctx->fid);
 err3:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err2:
 	fi_close(&stx_ctx->fid);
 err1:
@@ -228,13 +228,13 @@ static int bind_ep_res(void)
 			return ret;
 		}
 
-		ret = fi_ep_bind(ep_array[i], &scq->fid, FI_SEND);
+		ret = fi_ep_bind(ep_array[i], &txcq->fid, FI_SEND);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
-		ret = fi_ep_bind(ep_array[i], &rcq->fid, FI_RECV);
+		ret = fi_ep_bind(ep_array[i], &rxcq->fid, FI_RECV);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
@@ -282,13 +282,13 @@ static int run_test()
 				return ret;
 			}
 
-			wait_for_completion(scq, 1);
+			wait_for_completion(txcq, 1);
 		}
 	}
 
 	/* Wait for recv completions */
 	for (i = 0; i < ep_cnt; i++) {
-		wait_for_completion(rcq, 1);
+		wait_for_completion(rxcq, 1);
 	}
 
 	if (!opts.dst_addr) {
@@ -302,7 +302,7 @@ static int run_test()
 				return ret;
 			}
 
-			wait_for_completion(scq, 1);
+			wait_for_completion(txcq, 1);
 		}
 	}
 
@@ -483,7 +483,7 @@ static int run(void)
 
 	run_test();
 	/* TODO: Add a local finalize applicable to shared ctx */
-	//ft_finalize(fi, ep_array[0], scq, rcq, remote_fi_addr[0]);
+	//ft_finalize(fi, ep_array[0], txcq, rxcq, remote_fi_addr[0]);
 out:
 	free_ep_res();
 	fi_close(&domain->fid);

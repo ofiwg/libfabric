@@ -61,8 +61,8 @@ static void free_ep_res(void)
 {
 	fi_close(&ep->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rxcq->fid);
+	fi_close(&txcq->fid);
 	free(buf);
 }
 
@@ -82,14 +82,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = rx_depth;
 
 	/* Open completion queue for send completions */
-	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	/* Open completion queue for recv completions */
-	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
@@ -113,9 +113,9 @@ static int alloc_ep_res(struct fi_info *fi)
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err1:
 	free(buf);
 	return ret;
@@ -133,14 +133,14 @@ static int bind_ep_res(void)
 	}
 
 	/* Bind Send CQ with endpoint to collect send completions */
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	/* Bind Recv CQ with endpoint to collect recv completions */
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -371,7 +371,7 @@ static int send_recv()
 
 		/* Read send queue */
 		do {
-			ret = fi_cq_read(scq, &comp, 1);
+			ret = fi_cq_read(txcq, &comp, 1);
 			if (ret < 0 && ret != -FI_EAGAIN) {
 				FT_PRINTERR("fi_cq_read", ret);
 				return ret;
@@ -391,7 +391,7 @@ static int send_recv()
 		/* Read recv queue */
 		fprintf(stdout, "Waiting for client...\n");
 		do {
-			ret = fi_cq_read(rcq, &comp, 1);
+			ret = fi_cq_read(rxcq, &comp, 1);
 			if (ret < 0 && ret != -FI_EAGAIN) {
 				FT_PRINTERR("fi_cq_read", ret);
 				return ret;

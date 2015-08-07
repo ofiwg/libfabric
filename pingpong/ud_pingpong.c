@@ -67,7 +67,7 @@ static int poll_all_sends(void)
 	int ret;
 
 	do {
-		ret = fi_cq_read(scq, &comp, 1);
+		ret = fi_cq_read(txcq, &comp, 1);
 		if (ret > 0) {
 			credits++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
@@ -84,7 +84,7 @@ static int send_xfer(int size)
 	int ret;
 
 	while (!credits) {
-		ret = fi_cq_read(scq, &comp, 1);
+		ret = fi_cq_read(txcq, &comp, 1);
 		if (ret > 0) {
 			goto post;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
@@ -111,7 +111,7 @@ static int recv_xfer(int size)
 
 	clock_gettime(CLOCK_MONOTONIC, &a);
 	do {
-		ret = fi_cq_read(rcq, &comp, sizeof comp);
+		ret = fi_cq_read(rxcq, &comp, sizeof comp);
 		if (ret < 0) {
 			if (ret != -FI_EAGAIN) {
 				FT_PRINTERR("fi_cq_read", ret);
@@ -193,14 +193,14 @@ static void free_ep_res(void)
 			FT_PRINTERR("fi_close", ret);
 		}
 	}
-	if (rcq) {
-		ret = fi_close(&rcq->fid);
+	if (rxcq) {
+		ret = fi_close(&rxcq->fid);
 		if (ret != 0) {
 			FT_PRINTERR("fi_close", ret);
 		}
 	}
-	if (scq) {
-		ret = fi_close(&scq->fid);
+	if (txcq) {
+		ret = fi_close(&txcq->fid);
 		if (ret != 0) {
 			FT_PRINTERR("fi_close", ret);
 		}
@@ -234,13 +234,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 	cq_attr.size = max_credits << 1;
-	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
-	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
@@ -276,9 +276,9 @@ err5:
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err1:
 	free(buf);
 	return ret;
@@ -288,13 +288,13 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -434,7 +434,7 @@ static int server_connect(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &a);
 	do {
-		ret = fi_cq_read(rcq, &comp, 1);
+		ret = fi_cq_read(rxcq, &comp, 1);
 		if (ret < 0) {
 			if (ret != -FI_EAGAIN) {
 				FT_PRINTERR("fi_cq_read", ret);
@@ -517,7 +517,7 @@ static int run(void)
 	while (credits < max_credits)
 		poll_all_sends();
 
-	ft_finalize(fi, ep, scq, rcq, remote_fi_addr);
+	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
 	free_ep_res();
 	ret2 = fi_close(&av->fid);

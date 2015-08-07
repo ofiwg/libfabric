@@ -41,7 +41,7 @@ struct fid_fabric *fabric;
 struct fid_domain *domain;
 struct fid_pep *pep;
 struct fid_ep *ep;
-struct fid_cq *rcq, *scq, *txcq, *rxcq; /* dups */
+struct fid_cq *txcq, *rxcq;
 struct fid_mr *mr;
 struct fid_av *av;
 struct fid_eq *eq;
@@ -305,8 +305,8 @@ void eq_readerr(struct fid_eq *eq, char *eq_str)
 int ft_finalize(
 	struct fi_info *fi,
 	struct fid_ep *tx_ep,
-	struct fid_cq *scq,
-	struct fid_cq *rcq,
+	struct fid_cq *txcq,
+	struct fid_cq *rxcq,
 	fi_addr_t addr)
 {
 	struct fi_msg msg;
@@ -346,8 +346,8 @@ int ft_finalize(
 		goto err;
 	}
 
-	wait_for_data_completion(scq, 1);
-	wait_for_data_completion(rcq, 1);
+	wait_for_data_completion(txcq, 1);
+	wait_for_data_completion(rxcq, 1);
 
 err:
 	free(buf);

@@ -70,8 +70,8 @@ static void free_ep_res(void)
 	fi_close(&ep->fid);
 	fi_close(&mr->fid);
 	close(epfd);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rxcq->fid);
+	fi_close(&txcq->fid);
 	free(buf);
 }
 
@@ -93,14 +93,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = rx_depth;
 
 	/* Open completion queue for send completions */
-	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	/* Open completion queue for recv completions */
-	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
@@ -115,7 +115,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	/* Retrieve receive queue wait object */
-	ret = fi_control (&rcq->fid, FI_GETWAIT, (void *) &fd);
+	ret = fi_control (&rxcq->fid, FI_GETWAIT, (void *) &fd);
 	if (ret) {
 		FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
 		goto err4;
@@ -124,7 +124,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	/* Add receive queue wait object to epoll set */
 	memset((void *)&event, 0, sizeof event);
 	event.events = EPOLLIN;
-	event.data.ptr = (void *)&rcq->fid;
+	event.data.ptr = (void *)&rxcq->fid;
 	ret = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &event);
 	if (ret) {
 		ret = -errno;
@@ -133,7 +133,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	/* Retrieve send queue wait object */
-	ret = fi_control (&scq->fid, FI_GETWAIT, (void *) &fd);
+	ret = fi_control (&txcq->fid, FI_GETWAIT, (void *) &fd);
 	if (ret) {
 		FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
 		goto err4;
@@ -142,7 +142,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	/* Add send queue wait object to epoll set */
 	memset((void *)&event, 0, sizeof event);
 	event.events = EPOLLIN;
-	event.data.ptr = (void *)&scq->fid;
+	event.data.ptr = (void *)&txcq->fid;
 	ret = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &event);
 	if (ret) {
 		ret = -errno;
@@ -170,9 +170,9 @@ err5:
 err4:
 	close(epfd);
 err3:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err1:
 	free(buf);
 	return ret;
@@ -190,14 +190,14 @@ static int bind_ep_res(void)
 	}
 
 	/* Bind Send CQ with endpoint to collect send completions */
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	/* Bind Recv CQ with endpoint to collect recv completions */
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -437,14 +437,14 @@ static int send_recv()
 			return ret;
 		}
 
-		if (event.data.ptr != &scq->fid) {
+		if (event.data.ptr != &txcq->fid) {
 			fprintf(stdout, "unexpected event!\n");
 		}
 
 		/* Read send queue */
-		ret = fi_cq_sread(scq, &comp, 1, NULL, 0);
+		ret = fi_cq_sread(txcq, &comp, 1, NULL, 0);
 		if (ret < 0) {
-			FT_PROCESS_CQ_ERR(ret, scq, "fi_cq_sread", "scq");
+			FT_PROCESS_CQ_ERR(ret, txcq, "fi_cq_sread", "txcq");
 			return ret;
 		}
 
@@ -468,14 +468,14 @@ static int send_recv()
 			return ret;
 		}
 
-		if (event.data.ptr != &rcq->fid) {
+		if (event.data.ptr != &rxcq->fid) {
 			fprintf(stdout, "unexpected event!\n");
 		}
 
 		/* Read recv queue */
-		ret = fi_cq_sread(rcq, &comp, 1, NULL, 0);
+		ret = fi_cq_sread(rxcq, &comp, 1, NULL, 0);
 		if (ret < 0) {
-			FT_PROCESS_CQ_ERR(ret, rcq, "fi_cq_sread", "rcq");
+			FT_PROCESS_CQ_ERR(ret, rxcq, "fi_cq_sread", "rxcq");
 			return ret;
 		}
 

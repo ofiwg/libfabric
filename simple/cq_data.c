@@ -70,8 +70,8 @@ static void free_ep_res(void)
 {
 	fi_close(&ep->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rxcq->fid);
+	fi_close(&txcq->fid);
 	free(buf);
 }
 
@@ -91,14 +91,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_UNSPEC;
 	cq_attr.size = rx_depth;
-	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
@@ -127,9 +127,9 @@ static int alloc_ep_res(struct fi_info *fi)
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err2:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err1:
 	free(buf);
 	return ret;
@@ -145,13 +145,13 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -388,14 +388,14 @@ static int run_test()
 			return ret;
 		}
 
-		wait_for_completion(scq, 1);
+		wait_for_completion(txcq, 1);
 		fprintf(stdout, "Done\n");
 	} else {
 		fprintf(stdout, "Waiting for immediate data from client\n");
-		ret = fi_cq_sread(rcq, &comp, 1, NULL, -1);
+		ret = fi_cq_sread(rxcq, &comp, 1, NULL, -1);
 		if (ret < 0) {
 			if (ret == -FI_EAVAIL) {
-				cq_readerr(rcq, "rcq");
+				cq_readerr(rxcq, "rxcq");
 			} else {
 				FT_PRINTERR("fi_cq_sread", ret);
 			}

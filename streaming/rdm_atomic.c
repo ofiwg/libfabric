@@ -118,7 +118,7 @@ static int post_recv(void)
 		return ret;
 	}
 
-	return wait_for_completion(rcq, 1);
+	return wait_for_completion(rxcq, 1);
 }
 
 static int send_msg(int size)
@@ -132,7 +132,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	return wait_for_completion(scq, 1);
+	return wait_for_completion(txcq, 1);
 }
 
 static int sync_test(void)
@@ -198,7 +198,7 @@ static int execute_base_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_atomic", ret);
 	} else {
-		ret = wait_for_completion(scq, 1);
+		ret = wait_for_completion(txcq, 1);
 	}
 
 	return ret;
@@ -214,7 +214,7 @@ static int execute_fetch_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_fetch_atomic", ret);
 	} else {
-		ret = wait_for_completion(scq, 1);
+		ret = wait_for_completion(txcq, 1);
 	}
 
 	return ret;
@@ -231,7 +231,7 @@ static int execute_compare_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_compare_atomic", ret);
 	} else {
-		ret = wait_for_completion(scq, 1);
+		ret = wait_for_completion(txcq, 1);
 	}
 
 	return ret;
@@ -344,8 +344,8 @@ static void free_ep_res(void)
 	fi_close(&mr->fid);
 	fi_close(&mr_result->fid);
 	fi_close(&mr_compare->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rxcq->fid);
+	fi_close(&txcq->fid);
 	free(buf);
 	free(result);
 	free(compare);
@@ -389,13 +389,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 	cq_attr.size = 128;
-	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
-	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
@@ -459,9 +459,9 @@ err5:
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err1:
 	free(buf);
 	free(result);
@@ -474,13 +474,13 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND | FI_READ | FI_WRITE);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND | FI_READ | FI_WRITE);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", -ret);
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", -ret);
 		return ret;
@@ -697,7 +697,7 @@ static int run(void)
 			goto out;
 	}
 	/* Finalize before closing ep */
-	ft_finalize(fi, ep, scq, rcq, remote_fi_addr);
+	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
 	free_ep_res();
 	fi_close(&domain->fid);

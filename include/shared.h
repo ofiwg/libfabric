@@ -92,7 +92,7 @@ extern struct fid_fabric *fabric;
 extern struct fid_domain *domain;
 extern struct fid_pep *pep;
 extern struct fid_ep *ep;
-extern struct fid_cq *rcq, *scq, *txcq, *rxcq; /* dups */
+extern struct fid_cq *txcq, *rxcq;
 extern struct fid_mr *mr;
 extern struct fid_av *av;
 extern struct fid_eq *eq;
@@ -129,8 +129,8 @@ char *cnt_str(char str[FT_STR_LEN], long long cnt);
 int size_to_count(int size);
 
 void init_test(struct cs_opts *opts, char *test_name, size_t test_name_len);
-int ft_finalize(struct fi_info *fi, struct fid_ep *tx_ep, struct fid_cq *scq,
-		struct fid_cq *rcq, fi_addr_t addr);
+int ft_finalize(struct fi_info *fi, struct fid_ep *tx_ep, struct fid_cq *txcq,
+		struct fid_cq *rxcq, fi_addr_t addr);
 
 
 int wait_for_data_completion(struct fid_cq *cq, int num_completions);

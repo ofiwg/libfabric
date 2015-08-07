@@ -67,8 +67,8 @@ static void free_ep_res(void)
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
 	fi_close(&pollset->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rxcq->fid);
+	fi_close(&txcq->fid);
 	free(buf);
 	fi_close(&ep->fid);
 }
@@ -92,14 +92,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = rx_depth;
 
 	/* Open completion queue for send completions */
-	ret = fi_cq_open(domain, &cq_attr, &scq, (void *)CQ_SEND);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, (void *)CQ_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	/* Open completion queue for recv completions */
-	ret = fi_cq_open(domain, &cq_attr, &rcq, (void *)CQ_RECV);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, (void *)CQ_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
@@ -114,14 +114,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	/* Add send CQ to the polling set */
-	ret = fi_poll_add(pollset, &scq->fid, 0);
+	ret = fi_poll_add(pollset, &txcq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_poll_add", ret);
 		goto err3;
 	}
 
 	/* Add recv CQ to the polling set */
-	ret = fi_poll_add(pollset, &rcq->fid, 0);
+	ret = fi_poll_add(pollset, &rxcq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_poll_add", ret);
 		goto err3;
@@ -160,11 +160,11 @@ err6:
 err5:
 	fi_close(&mr->fid);
 err4:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err3:
 	fi_close(&pollset->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err1:
 	free(buf);
 	return ret;
@@ -175,13 +175,13 @@ static int bind_ep_res(void)
 	int ret;
 
 	/* Bind AV and CQs with endpoint */
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -213,7 +213,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	ret = wait_for_completion(scq, 1);
+	ret = wait_for_completion(txcq, 1);
 
 	return ret;
 }
@@ -228,7 +228,7 @@ static int recv_msg(void)
 		return ret;
 	}
 
-	ret = wait_for_completion(rcq, 1);
+	ret = wait_for_completion(rxcq, 1);
 
 	return ret;
 }
@@ -399,12 +399,12 @@ static int send_recv()
 			switch((enum comp_type)context[i]) {
 			case CQ_SEND:
 				printf("Send completion received\n");
-				cq = scq;
+				cq = txcq;
 				send_pending--;
 				break;
 			case CQ_RECV:
 				printf("Recv completion received\n");
-				cq = rcq;
+				cq = rxcq;
 				recv_pending--;
 				break;
 			default:

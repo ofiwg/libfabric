@@ -86,7 +86,7 @@ static int send_msg(int size, uint64_t tag)
 	if (ret)
 		FT_PRINTERR("fi_tsend", ret);
 
-	ret = wait_for_tagged_completion(scq, 1);
+	ret = wait_for_tagged_completion(txcq, 1);
 
 	return ret;
 }
@@ -100,7 +100,7 @@ static int recv_msg(uint64_t tag)
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
 
-	ret = wait_for_tagged_completion(rcq, 1);
+	ret = wait_for_tagged_completion(rxcq, 1);
 	return ret;
 }
 
@@ -134,8 +134,8 @@ static void free_ep_res(void)
 	fi_close(&ep->fid);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rxcq->fid);
+	fi_close(&txcq->fid);
 	free(buf);
 }
 
@@ -155,13 +155,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 	cq_attr.size = rx_depth;
-	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
-	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
@@ -198,9 +198,9 @@ err5:
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err1:
 	free(buf);
 	return ret;
@@ -210,13 +210,13 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -384,7 +384,7 @@ static int tagged_peek(uint64_t tag)
 	} else {
 		// search was initiated asynchronously, so wait for
 		// the completion event
-		ret = wait_for_tagged_completion(rcq, 1);
+		ret = wait_for_tagged_completion(rxcq, 1);
 	}
 
 	return ret;
@@ -421,7 +421,7 @@ static int run(void)
 			goto out;
 
 		// wait for the completion event of the next tag
-		ret = wait_for_tagged_completion(rcq, 1);
+		ret = wait_for_tagged_completion(rxcq, 1);
 		if (ret)
 			goto out;
 		fprintf(stdout, "Received completion event for msg with tag "
@@ -456,7 +456,7 @@ static int run(void)
 			goto out;
 	}
 	/* Finalize before closing ep */
-	ft_finalize(fi, ep, scq, rcq, remote_fi_addr);
+	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
 	free_ep_res();
 	fi_close(&domain->fid);

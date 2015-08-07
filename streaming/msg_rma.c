@@ -60,12 +60,12 @@ static int send_xfer(int size)
 	int ret;
 
 	while (!credits) {
-		ret = fi_cq_read(scq, &comp, 1);
+		ret = fi_cq_read(txcq, &comp, 1);
 		if (ret > 0) {
 			goto post;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
-				cq_readerr(scq, "scq");
+				cq_readerr(txcq, "txcq");
 			} else {
 				FT_PRINTERR("fi_cq_read", ret);
 			}
@@ -88,10 +88,10 @@ static int recv_xfer(int size)
 	int ret;
 
 	do {
-		ret = fi_cq_read(rcq, &comp, 1);
+		ret = fi_cq_read(rxcq, &comp, 1);
 		if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
-				cq_readerr(rcq, "rcq");
+				cq_readerr(rxcq, "rxcq");
 			} else {
 				FT_PRINTERR("fi_cq_read", ret);
 			}
@@ -150,7 +150,7 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = wait_for_data_completion(scq, max_credits - credits);
+	ret = wait_for_data_completion(txcq, max_credits - credits);
 	if (ret) {
 		return ret;
 	}
@@ -170,10 +170,10 @@ static int wait_remote_writedata_completion(void)
 	int ret;
 
 	do {
-		ret = fi_cq_read(rcq, &comp, 1);
+		ret = fi_cq_read(rxcq, &comp, 1);
 		if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
-				cq_readerr(rcq, "rcq");
+				cq_readerr(rxcq, "rxcq");
 			} else {
 				FT_PRINTERR("fi_cq_read", ret);
 			}
@@ -223,7 +223,7 @@ static int run_test(void)
 		}
 		if (ret)
 			return ret;
-		ret = wait_for_data_completion(scq, 1);
+		ret = wait_for_data_completion(txcq, 1);
 		if (ret)
 			return ret;
 	}
@@ -262,8 +262,8 @@ static void free_ep_res(void)
 {
 	fi_close(&ep->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rxcq->fid);
+	fi_close(&txcq->fid);
 	free(buf);
 }
 
@@ -285,13 +285,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 	cq_attr.size = max_credits << 1;
-	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
-	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
@@ -328,9 +328,9 @@ static int alloc_ep_res(struct fi_info *fi)
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err1:
 	free(buf);
 	return ret;
@@ -346,13 +346,13 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -638,9 +638,9 @@ static int run(void)
 	}
 
 	sync_test();
-	wait_for_data_completion(scq, max_credits - credits);
+	wait_for_data_completion(txcq, max_credits - credits);
 	/* Finalize before closing ep */
-	ft_finalize(fi, ep, scq, rcq, FI_ADDR_UNSPEC);
+	ft_finalize(fi, ep, txcq, rxcq, FI_ADDR_UNSPEC);
 out:
 	fi_shutdown(ep, 0);
 	free_ep_res();
