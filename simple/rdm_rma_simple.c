@@ -42,7 +42,7 @@
 #include <rdma/fi_errno.h>
 #include <shared.h>
 
-static struct cs_opts opts;
+
 static void *buf;
 static size_t buffer_size;
 struct fi_rma_iov local, remote;

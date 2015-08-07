@@ -41,7 +41,7 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
-static struct cs_opts opts;
+
 static int max_credits = 128;
 static int credits = 128;
 static int send_count = 0;

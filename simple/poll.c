@@ -48,7 +48,7 @@ enum comp_type {
 	CQ_RECV = 2
 };
 
-static struct cs_opts opts;
+
 static void *buf;
 static size_t buffer_size = 1024;
 static int transfer_size = 1000;

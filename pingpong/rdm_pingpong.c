@@ -42,7 +42,7 @@
 
 #include "shared.h"
 
-static struct cs_opts opts;
+
 static int max_credits = 128;
 static int credits = 128;
 static char test_name[10] = "custom";

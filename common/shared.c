@@ -47,6 +47,9 @@ struct fid_mr *mr;
 struct fid_av *av;
 struct fid_eq *eq;
 
+struct cs_opts opts;
+
+
 struct test_size_param test_size[] = {
 	{ 1 <<  1, 1 }, { (1 <<  1) + (1 <<  0), 2},
 	{ 1 <<  2, 2 }, { (1 <<  2) + (1 <<  1), 2},

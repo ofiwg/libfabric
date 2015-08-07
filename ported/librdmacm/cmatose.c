@@ -65,7 +65,6 @@ enum CQ_INDEX {
 	RECV_CQ_INDEX
 };
 
-static struct cs_opts 		opts;
 static struct cma_node		*nodes;
 static int			conn_index;
 static int			connects_left;

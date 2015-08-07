@@ -98,6 +98,8 @@ extern struct fid_mr *mr;
 extern struct fid_av *av;
 extern struct fid_eq *eq;
 
+extern struct cs_opts opts;
+
 
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints);
 void ft_parse_addr_opts(int op, char *optarg, struct cs_opts *opts);

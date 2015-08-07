@@ -65,7 +65,6 @@
 	} while (0)
 
 static int page_size;
-static struct cs_opts opts;
 
 enum {
 	PINGPONG_RECV_WCID = 1,

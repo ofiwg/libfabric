@@ -43,7 +43,7 @@
 #include <rdma/fi_trigger.h>
 #include <shared.h>
 
-static struct cs_opts opts;
+
 static void *buf;
 static size_t buffer_size;
 
