@@ -152,7 +152,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 			goto err1;
 		}
 
-		ret = fi_cq_open(dom, &cq_attr, &scq_array[i], NULL);
+		ret = fi_cq_open(domain, &cq_attr, &scq_array[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
 			goto err2;
@@ -167,14 +167,14 @@ static int alloc_ep_res(struct fid_ep *sep)
 			goto err3;
 		}
 
-		ret = fi_cq_open(dom, &cq_attr, &rcq_array[i], NULL);
+		ret = fi_cq_open(domain, &cq_attr, &rcq_array[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
 			goto err4;
 		}
 	}
 
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err5;
@@ -191,7 +191,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 	av_attr.rx_ctx_bits = rx_ctx_bits;
 
 	/* Open Address Vector */
-	ret = fi_av_open(dom, &av_attr, &av, NULL);
+	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
 		goto err6;
@@ -332,13 +332,13 @@ static int init_fabric(void)
 		memcpy(remote_addr, fi->dest_addr, addrlen);
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto err0;
 	}
 
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
@@ -348,7 +348,7 @@ static int init_fabric(void)
 	fi->ep_attr->tx_ctx_cnt = ctx_cnt;
 	fi->ep_attr->rx_ctx_cnt = ctx_cnt;
 
-	ret = fi_scalable_ep(dom, fi, &sep, NULL);
+	ret = fi_scalable_ep(domain, fi, &sep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_scalable_ep", ret);
 		goto err2;
@@ -369,9 +369,9 @@ err4:
 err3:
 	fi_close(&sep->fid);
 err2:
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 err1:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 err0:
 	return ret;
 }
@@ -462,8 +462,8 @@ static int run(void)
 out:
 	free_ep_res();
 	fi_close(&sep->fid);
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	fi_close(&domain->fid);
+	fi_close(&fabric->fid);
 	return ret;
 }
 

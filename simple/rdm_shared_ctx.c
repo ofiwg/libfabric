@@ -76,7 +76,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	ret = wait_for_completion(scq, 1);
+	ret = wait_for_completion(txcq, 1);
 
 	return ret;
 }
@@ -91,7 +91,7 @@ static int recv_msg(void)
 		return ret;
 	}
 
-	ret = wait_for_completion(rcq, 1);
+	ret = wait_for_completion(rxcq, 1);
 
 	return ret;
 }
@@ -101,9 +101,9 @@ static void free_ep_res(void)
 	FT_CLOSEV(ep_array, ep_cnt);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 	fi_close(&srx_ctx->fid);
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 	fi_close(&stx_ctx->fid);
 	free(buf);
 	free(remote_fi_addr);
@@ -135,31 +135,31 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&tx_attr, 0, sizeof tx_attr);
 	memset(&rx_attr, 0, sizeof rx_attr);
 
-	ret = fi_stx_context(dom, &tx_attr, &stx_ctx, NULL);
+	ret = fi_stx_context(domain, &tx_attr, &stx_ctx, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_stx_context", ret);
 		goto err1;
 	}
 
-	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
-	ret = fi_srx_context(dom, &rx_attr, &srx_ctx, NULL);
+	ret = fi_srx_context(domain, &rx_attr, &srx_ctx, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_srx_context", ret);
 		goto err3;
 	}
 
-	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err4;
 	}
 
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err5;
@@ -170,7 +170,7 @@ static int alloc_ep_res(struct fi_info *fi)
 			fi->domain_attr->av_type : FI_AV_MAP;
 	av_attr.count = ep_cnt;
 
-	ret = fi_av_open(dom, &av_attr, &av, NULL);
+	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
 		goto err6;
@@ -182,7 +182,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err7;
 	}
 	for (i = 0; i < ep_cnt; i++) {
-		ret = fi_endpoint(dom, fi, &ep_array[i], NULL);
+		ret = fi_endpoint(domain, fi, &ep_array[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_endpoint", ret);
 			goto err8;
@@ -198,11 +198,11 @@ err7:
 err6:
 	fi_close(&mr->fid);
 err5:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err4:
 	fi_close(&srx_ctx->fid);
 err3:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err2:
 	fi_close(&stx_ctx->fid);
 err1:
@@ -228,13 +228,13 @@ static int bind_ep_res(void)
 			return ret;
 		}
 
-		ret = fi_ep_bind(ep_array[i], &scq->fid, FI_SEND);
+		ret = fi_ep_bind(ep_array[i], &txcq->fid, FI_SEND);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
 		}
 
-		ret = fi_ep_bind(ep_array[i], &rcq->fid, FI_RECV);
+		ret = fi_ep_bind(ep_array[i], &rxcq->fid, FI_RECV);
 		if (ret) {
 			FT_PRINTERR("fi_ep_bind", ret);
 			return ret;
@@ -282,13 +282,13 @@ static int run_test()
 				return ret;
 			}
 
-			wait_for_completion(scq, 1);
+			wait_for_completion(txcq, 1);
 		}
 	}
 
 	/* Wait for recv completions */
 	for (i = 0; i < ep_cnt; i++) {
-		wait_for_completion(rcq, 1);
+		wait_for_completion(rxcq, 1);
 	}
 
 	if (!opts.dst_addr) {
@@ -302,7 +302,7 @@ static int run_test()
 				return ret;
 			}
 
-			wait_for_completion(scq, 1);
+			wait_for_completion(txcq, 1);
 		}
 	}
 
@@ -338,13 +338,13 @@ static int init_fabric(void)
 		memcpy(remote_addr, fi->dest_addr, addrlen);
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto err0;
 	}
 
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
@@ -366,9 +366,9 @@ static int init_fabric(void)
 err4:
 	free_ep_res();
 err3:
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 err1:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 err0:
 	return ret;
 }
@@ -483,11 +483,11 @@ static int run(void)
 
 	run_test();
 	/* TODO: Add a local finalize applicable to shared ctx */
-	//ft_finalize(fi, ep_array[0], scq, rcq, remote_fi_addr[0]);
+	//ft_finalize(fi, ep_array[0], txcq, rxcq, remote_fi_addr[0]);
 out:
 	free_ep_res();
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	fi_close(&domain->fid);
+	fi_close(&fabric->fid);
 	return ret;
 }
 

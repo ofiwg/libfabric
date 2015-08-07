@@ -147,7 +147,7 @@ static int alloc_cm_res(void)
 	cm_attr.wait_obj = FI_WAIT_FD;
 
 	/* Open EQ to receive CM events */
-	ret = fi_eq_open(fab, &cm_attr, &cmeq, NULL);
+	ret = fi_eq_open(fabric, &cm_attr, &eq, NULL);
 	if (ret)
 		FT_PRINTERR("fi_eq_open", ret);
 
@@ -158,8 +158,8 @@ static void free_ep_res(void)
 {
 	fi_close(&ep->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rxcq->fid);
+	fi_close(&txcq->fid);
 	free(buf);
 }
 
@@ -179,27 +179,27 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = rx_depth;
 
 	/* Open completion queue for send completions */
-	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	/* Open completion queue for recv completions */
-	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
 	/* Register memory */
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
 	}
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
+	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
 		goto err4;
@@ -210,9 +210,9 @@ static int alloc_ep_res(struct fi_info *fi)
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err1:
 	free(buf);
 	return ret;
@@ -223,21 +223,21 @@ static int bind_ep_res(void)
 	int ret;
 
 	/* Bind EQ with endpoint */
-	ret = fi_ep_bind(ep, &cmeq->fid, 0);
+	ret = fi_ep_bind(ep, &eq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	/* Bind Send CQ with endpoint to collect send completions */
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
 	/* Bind Recv CQ with endpoint to collect recv completions */
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -256,7 +256,7 @@ static int server_listen(void)
 		goto err2;
 
 	/* Bind EQ to passive endpoint */
-	ret = fi_pep_bind(pep, &cmeq->fid, 0);
+	ret = fi_pep_bind(pep, &eq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_pep_bind", ret);
 		goto err3;
@@ -271,10 +271,10 @@ static int server_listen(void)
 
 	return 0;
 err3:
-	fi_close(&cmeq->fid);
+	fi_close(&eq->fid);
 err2:
 	fi_close(&pep->fid);
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 	return ret;
 }
 
@@ -287,7 +287,7 @@ static int server_connect(void)
 	int ret;
 
 	/* Wait for connection request from client */
-	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
 		FT_PRINTERR("fi_eq_sread", rd);
 		return (int) rd;
@@ -300,7 +300,7 @@ static int server_connect(void)
 		goto err1;
 	}
 
-	ret = fi_domain(fab, info, &dom, NULL);
+	ret = fi_domain(fabric, info, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
@@ -322,7 +322,7 @@ static int server_connect(void)
 	}
 
 	/* Wait for the connection to be established */
-	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
 		FT_PRINTERR("fi_eq_sread", rd);
 		goto err3;
@@ -366,7 +366,7 @@ static int client_connect(void)
 	}
 
 	/* Open domain */
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
@@ -407,7 +407,7 @@ static int client_connect(void)
 	}
 
 	/* Wait for the connection to be established */
-	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
 		FT_PRINTERR("fi_eq_sread", rd);
 		return (int) rd;
@@ -430,9 +430,9 @@ static int client_connect(void)
 err6:
 	free_ep_res();
 err5:
-	fi_close(&cmeq->fid);
+	fi_close(&eq->fid);
 err4:
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 err2:
 	fi_freeinfo(fi);
 err0:
@@ -456,7 +456,7 @@ static int send_recv()
 
 		/* Read send queue */
 		do {
-			ret = fi_cq_read(scq, &comp, 1);
+			ret = fi_cq_read(txcq, &comp, 1);
 			if (ret < 0 && ret != -FI_EAGAIN) {
 				FT_PRINTERR("fi_cq_read", ret);
 				return ret;
@@ -476,7 +476,7 @@ static int send_recv()
 		/* Read recv queue */
 		fprintf(stdout, "Waiting for client...\n");
 		do {
-			ret = fi_cq_read(rcq, &comp, 1);
+			ret = fi_cq_read(rxcq, &comp, 1);
 			if (ret < 0 && ret != -FI_EAGAIN) {
 				FT_PRINTERR("fi_cq_read", ret);
 				return ret;
@@ -527,14 +527,14 @@ static int setup_handle(void)
 	fi->src_addrlen = 0;
 
 	/* Open the fabric */
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto free_fi;
 	}
 
 	/* Open a passive endpoint */
-	ret = fi_passive_ep(fab, fi, &pep, NULL);
+	ret = fi_passive_ep(fabric, fi, &pep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_passive_ep", ret);
 		goto free_fabric;
@@ -579,7 +579,7 @@ static int setup_handle(void)
 free_pep:
 	fi_close(&pep->fid);
 free_fabric:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 
 free_fi:
 	fi_freeinfo(fi);
@@ -648,9 +648,9 @@ int main(int argc, char **argv)
 
 	fi_shutdown(ep, 0);
 	free_ep_res();
-	fi_close(&cmeq->fid);
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	fi_close(&eq->fid);
+	fi_close(&domain->fid);
+	fi_close(&fabric->fid);
 
 	return ret;
 }

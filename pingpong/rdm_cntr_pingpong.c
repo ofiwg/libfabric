@@ -232,19 +232,19 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&cntr_attr, 0, sizeof cntr_attr);
 	cntr_attr.events = FI_CNTR_EVENTS_COMP;
 
-	ret = fi_cntr_open(dom, &cntr_attr, &scntr, NULL);
+	ret = fi_cntr_open(domain, &cntr_attr, &scntr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cntr_open", ret);
 		goto err1;
 	}
 
-	ret = fi_cntr_open(dom, &cntr_attr, &rcntr, NULL);
+	ret = fi_cntr_open(domain, &cntr_attr, &rcntr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cntr_open", ret);
 		goto err2;
 	}
 
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
@@ -256,13 +256,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	av_attr.count = 1;
 	av_attr.name = NULL;
 
-	ret = fi_av_open(dom, &av_attr, &av, NULL);
+	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
 		goto err4;
 	}
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
+	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
 		goto err5;
@@ -337,13 +337,13 @@ static int init_fabric(void)
 		memcpy(remote_addr, fi->dest_addr, addrlen);
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto err0;
 	}
 
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
@@ -362,9 +362,9 @@ static int init_fabric(void)
 err4:
 	free_ep_res();
 err3:
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 err1:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 err0:
 	return ret;
 }
@@ -475,8 +475,8 @@ static int run(void)
 	/* TODO: need support for finalize operation to sync test */
 out:
 	free_ep_res();
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	fi_close(&domain->fid);
+	fi_close(&fabric->fid);
 	return ret;
 }
 

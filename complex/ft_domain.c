@@ -32,11 +32,6 @@
 #include "fabtest.h"
 
 
-struct fid_fabric *fabric;
-struct fid_domain *domain;
-struct fid_eq *eq;
-
-
 static int ft_open_fabric(void)
 {
 	int ret;

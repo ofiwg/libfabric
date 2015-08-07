@@ -60,12 +60,12 @@ static int send_xfer(int size)
 	int ret;
 
 	while (!credits) {
-		ret = fi_cq_read(scq, &comp, 1);
+		ret = fi_cq_read(txcq, &comp, 1);
 		if (ret > 0) {
 			goto post;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
-				cq_readerr(scq, "scq");
+				cq_readerr(txcq, "txcq");
 			} else {
 				FT_PRINTERR("fi_cq_read", ret);
 			}
@@ -88,10 +88,10 @@ static int recv_xfer(int size)
 	int ret;
 
 	do {
-		ret = fi_cq_read(rcq, &comp, 1);
+		ret = fi_cq_read(rxcq, &comp, 1);
 		if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
-				cq_readerr(rcq, "rcq");
+				cq_readerr(rxcq, "rxcq");
 			} else {
 				FT_PRINTERR("fi_cq_read", ret);
 			}
@@ -150,7 +150,7 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = wait_for_data_completion(scq, max_credits - credits);
+	ret = wait_for_data_completion(txcq, max_credits - credits);
 	if (ret) {
 		return ret;
 	}
@@ -170,10 +170,10 @@ static int wait_remote_writedata_completion(void)
 	int ret;
 
 	do {
-		ret = fi_cq_read(rcq, &comp, 1);
+		ret = fi_cq_read(rxcq, &comp, 1);
 		if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
-				cq_readerr(rcq, "rcq");
+				cq_readerr(rxcq, "rxcq");
 			} else {
 				FT_PRINTERR("fi_cq_read", ret);
 			}
@@ -223,7 +223,7 @@ static int run_test(void)
 		}
 		if (ret)
 			return ret;
-		ret = wait_for_data_completion(scq, 1);
+		ret = wait_for_data_completion(txcq, 1);
 		if (ret)
 			return ret;
 	}
@@ -241,7 +241,7 @@ static int run_test(void)
 
 static void free_lres(void)
 {
-	fi_close(&cmeq->fid);
+	fi_close(&eq->fid);
 }
 
 static int alloc_cm_res(void)
@@ -251,7 +251,7 @@ static int alloc_cm_res(void)
 
 	memset(&cm_attr, 0, sizeof cm_attr);
 	cm_attr.wait_obj = FI_WAIT_FD;
-	ret = fi_eq_open(fab, &cm_attr, &cmeq, NULL);
+	ret = fi_eq_open(fabric, &cm_attr, &eq, NULL);
 	if (ret)
 		FT_PRINTERR("fi_eq_open", ret);
 
@@ -262,8 +262,8 @@ static void free_ep_res(void)
 {
 	fi_close(&ep->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rxcq->fid);
+	fi_close(&txcq->fid);
 	free(buf);
 }
 
@@ -285,13 +285,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 	cq_attr.size = max_credits << 1;
-	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
-	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
@@ -310,14 +310,14 @@ static int alloc_ep_res(struct fi_info *fi)
 		ret = -FI_EINVAL;
 		goto err3;
 	}
-	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)),
+	ret = fi_mr_reg(domain, buf, MAX(buffer_size, sizeof(uint64_t)),
 			access_mode, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
 	}
 
-	if (!cmeq) {
+	if (!eq) {
 		ret = alloc_cm_res();
 		if (ret)
 			goto err4;
@@ -328,9 +328,9 @@ static int alloc_ep_res(struct fi_info *fi)
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err1:
 	free(buf);
 	return ret;
@@ -340,19 +340,19 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_ep_bind(ep, &cmeq->fid, 0);
+	ret = fi_ep_bind(ep, &eq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -383,13 +383,13 @@ static int server_listen(void)
 		return ret;
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto err0;
 	}
 
-	ret = fi_passive_ep(fab, fi, &pep, NULL);
+	ret = fi_passive_ep(fabric, fi, &pep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_passive_ep", ret);
 		goto err1;
@@ -399,7 +399,7 @@ static int server_listen(void)
 	if (ret)
 		goto err2;
 
-	ret = fi_pep_bind(pep, &cmeq->fid, 0);
+	ret = fi_pep_bind(pep, &eq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_pep_bind", ret);
 		goto err3;
@@ -418,7 +418,7 @@ err3:
 err2:
 	fi_close(&pep->fid);
 err1:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 err0:
 	fi_freeinfo(fi);
 	return ret;
@@ -432,9 +432,9 @@ static int server_connect(void)
 	ssize_t rd;
 	int ret;
 
-	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "listen");
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "listen");
 		return (int) rd;
 	}
 
@@ -446,14 +446,14 @@ static int server_connect(void)
 	}
 
 	mr_mode = info->domain_attr->mr_mode;
-	ret = fi_domain(fab, info, &dom, NULL);
+	ret = fi_domain(fabric, info, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
 	}
 
 
-	ret = fi_endpoint(dom, info, &ep, NULL);
+	ret = fi_endpoint(domain, info, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", -ret);
 		goto err1;
@@ -473,9 +473,9 @@ static int server_connect(void)
 		goto err3;
 	}
 
-	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "accept");
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "accept");
 		ret = (int) rd;
 		goto err3;
 	}
@@ -515,20 +515,20 @@ static int client_connect(void)
 		goto err0;
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto err1;
 	}
 
 	mr_mode = fi->domain_attr->mr_mode;
- 	ret = fi_domain(fab, fi, &dom, NULL);
+ 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
 	}
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
+	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
 		goto err3;
@@ -548,9 +548,9 @@ static int client_connect(void)
 		goto err4;
 	}
 
- 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+ 	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "connect");
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "connect");
 		ret = (int) rd;
 		goto err4;
 	}
@@ -568,9 +568,9 @@ static int client_connect(void)
 err4:
 	free_ep_res();
 err3:
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 err2:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 err1:
 	fi_freeinfo(fi);
 err0:
@@ -638,16 +638,16 @@ static int run(void)
 	}
 
 	sync_test();
-	wait_for_data_completion(scq, max_credits - credits);
+	wait_for_data_completion(txcq, max_credits - credits);
 	/* Finalize before closing ep */
-	ft_finalize(fi, ep, scq, rcq, FI_ADDR_UNSPEC);
+	ft_finalize(fi, ep, txcq, rxcq, FI_ADDR_UNSPEC);
 out:
 	fi_shutdown(ep, 0);
 	free_ep_res();
 	if (!opts.dst_addr)
 		free_lres();
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	fi_close(&domain->fid);
+	fi_close(&fabric->fid);
 	return ret;
 }
 

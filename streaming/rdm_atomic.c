@@ -118,7 +118,7 @@ static int post_recv(void)
 		return ret;
 	}
 
-	return wait_for_completion(rcq, 1);
+	return wait_for_completion(rxcq, 1);
 }
 
 static int send_msg(int size)
@@ -132,7 +132,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	return wait_for_completion(scq, 1);
+	return wait_for_completion(txcq, 1);
 }
 
 static int sync_test(void)
@@ -198,7 +198,7 @@ static int execute_base_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_atomic", ret);
 	} else {
-		ret = wait_for_completion(scq, 1);
+		ret = wait_for_completion(txcq, 1);
 	}
 
 	return ret;
@@ -214,7 +214,7 @@ static int execute_fetch_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_fetch_atomic", ret);
 	} else {
-		ret = wait_for_completion(scq, 1);
+		ret = wait_for_completion(txcq, 1);
 	}
 
 	return ret;
@@ -231,7 +231,7 @@ static int execute_compare_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_compare_atomic", ret);
 	} else {
-		ret = wait_for_completion(scq, 1);
+		ret = wait_for_completion(txcq, 1);
 	}
 
 	return ret;
@@ -344,8 +344,8 @@ static void free_ep_res(void)
 	fi_close(&mr->fid);
 	fi_close(&mr_result->fid);
 	fi_close(&mr_compare->fid);
-	fi_close(&rcq->fid);
-	fi_close(&scq->fid);
+	fi_close(&rxcq->fid);
+	fi_close(&txcq->fid);
 	free(buf);
 	free(result);
 	free(compare);
@@ -389,13 +389,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 	cq_attr.size = 128;
-	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
-	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
@@ -403,7 +403,7 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	// registers local data buffer buff that specifies
 	// the first operand of the atomic operation
-	ret = fi_mr_reg(dom, buf, MAX(buffer_size, sizeof(uint64_t)),
+	ret = fi_mr_reg(domain, buf, MAX(buffer_size, sizeof(uint64_t)),
 		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
 		get_mr_key(), 0, &mr, NULL);
 	if (ret) {
@@ -413,7 +413,7 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	// registers local data buffer that stores initial value of
 	// the remote buffer
-	ret = fi_mr_reg(dom, result, MAX(buffer_size, sizeof(uint64_t)),
+	ret = fi_mr_reg(domain, result, MAX(buffer_size, sizeof(uint64_t)),
 		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
 		get_mr_key(), 0, &mr_result, NULL);
 	if (ret) {
@@ -422,7 +422,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	// registers local data buffer that contains comparison data
-	ret = fi_mr_reg(dom, compare, MAX(buffer_size, sizeof(uint64_t)),
+	ret = fi_mr_reg(domain, compare, MAX(buffer_size, sizeof(uint64_t)),
 		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
 		get_mr_key(), 0, &mr_compare, NULL);
 	if (ret) {
@@ -436,13 +436,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	av_attr.count = 1;
 	av_attr.name = NULL;
 
-	ret = fi_av_open(dom, &av_attr, &av, NULL);
+	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
 		goto err6;
 	}
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
+	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
 		goto err7;
@@ -459,9 +459,9 @@ err5:
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcq->fid);
+	fi_close(&rxcq->fid);
 err2:
-	fi_close(&scq->fid);
+	fi_close(&txcq->fid);
 err1:
 	free(buf);
 	free(result);
@@ -474,13 +474,13 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_ep_bind(ep, &scq->fid, FI_SEND | FI_READ | FI_WRITE);
+	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND | FI_READ | FI_WRITE);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", -ret);
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &rcq->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", -ret);
 		return ret;
@@ -531,13 +531,13 @@ static int init_fabric(void)
 		memcpy(remote_addr, fi->dest_addr, addrlen);
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto err0;
 	}
 
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
@@ -556,9 +556,9 @@ static int init_fabric(void)
 err4:
 	free_ep_res();
 err3:
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 err1:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 err0:
 	return ret;
 }
@@ -697,11 +697,11 @@ static int run(void)
 			goto out;
 	}
 	/* Finalize before closing ep */
-	ft_finalize(fi, ep, scq, rcq, remote_fi_addr);
+	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
 	free_ep_res();
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	fi_close(&domain->fid);
+	fi_close(&fabric->fid);
 
 	return ret;
 }
