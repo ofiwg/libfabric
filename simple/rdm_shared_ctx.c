@@ -135,31 +135,31 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&tx_attr, 0, sizeof tx_attr);
 	memset(&rx_attr, 0, sizeof rx_attr);
 
-	ret = fi_stx_context(dom, &tx_attr, &stx_ctx, NULL);
+	ret = fi_stx_context(domain, &tx_attr, &stx_ctx, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_stx_context", ret);
 		goto err1;
 	}
 
-	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
-	ret = fi_srx_context(dom, &rx_attr, &srx_ctx, NULL);
+	ret = fi_srx_context(domain, &rx_attr, &srx_ctx, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_srx_context", ret);
 		goto err3;
 	}
 
-	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err4;
 	}
 
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err5;
@@ -170,7 +170,7 @@ static int alloc_ep_res(struct fi_info *fi)
 			fi->domain_attr->av_type : FI_AV_MAP;
 	av_attr.count = ep_cnt;
 
-	ret = fi_av_open(dom, &av_attr, &av, NULL);
+	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
 		goto err6;
@@ -182,7 +182,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err7;
 	}
 	for (i = 0; i < ep_cnt; i++) {
-		ret = fi_endpoint(dom, fi, &ep_array[i], NULL);
+		ret = fi_endpoint(domain, fi, &ep_array[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_endpoint", ret);
 			goto err8;
@@ -344,7 +344,7 @@ static int init_fabric(void)
 		goto err0;
 	}
 
-	ret = fi_domain(fabric, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
@@ -366,7 +366,7 @@ static int init_fabric(void)
 err4:
 	free_ep_res();
 err3:
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 err1:
 	fi_close(&fabric->fid);
 err0:
@@ -486,7 +486,7 @@ static int run(void)
 	//ft_finalize(fi, ep_array[0], scq, rcq, remote_fi_addr[0]);
 out:
 	free_ep_res();
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 	fi_close(&fabric->fid);
 	return ret;
 }

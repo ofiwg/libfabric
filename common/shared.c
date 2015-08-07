@@ -38,7 +38,7 @@
 
 struct fi_info *fi, *hints;
 struct fid_fabric *fabric;
-struct fid_domain *dom, *domain; /* dups */
+struct fid_domain *domain;
 struct fid_pep *pep;
 struct fid_ep *ep;
 struct fid_cq *rcq, *scq, *txcq, *rxcq; /* dups */

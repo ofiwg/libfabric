@@ -82,27 +82,27 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = rx_depth;
 
 	/* Open completion queue for send completions */
-	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	/* Open completion queue for recv completions */
-	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
 	/* Register memory */
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
 	}
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
+	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
 		goto err4;
@@ -229,7 +229,7 @@ static int server_connect(void)
 		goto err1;
 	}
 
-	ret = fi_domain(fabric, info, &dom, NULL);
+	ret = fi_domain(fabric, info, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
@@ -298,7 +298,7 @@ static int client_connect(void)
 	}
 
 	/* Open domain */
-	ret = fi_domain(fabric, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
@@ -345,7 +345,7 @@ err6:
 err5:
 	fi_close(&cmeq->fid);
 err4:
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 err2:
 	fi_close(&fabric->fid);
 err1:
@@ -452,7 +452,7 @@ int main(int argc, char **argv)
 	fi_shutdown(ep, 0);
 	free_ep_res();
 	fi_close(&cmeq->fid);
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 	fi_close(&fabric->fid);
 
 	return ret;

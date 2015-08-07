@@ -91,20 +91,20 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_UNSPEC;
 	cq_attr.size = rx_depth;
-	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
@@ -116,7 +116,7 @@ static int alloc_ep_res(struct fi_info *fi)
 			goto err4;
 	}
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
+	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
 		goto err4;
@@ -246,7 +246,7 @@ static int server_connect(void)
 		goto err1;
 	}
 
-	ret = fi_domain(fabric, info, &dom, NULL);
+	ret = fi_domain(fabric, info, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
@@ -318,7 +318,7 @@ static int client_connect(void)
 		goto err1;
 	}
 
-	ret = fi_domain(fabric, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
@@ -358,7 +358,7 @@ static int client_connect(void)
 err5:
 	free_ep_res();
 err4:
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 err2:
 	fi_close(&fabric->fid);
 err1:
@@ -439,7 +439,7 @@ static int run(void)
 	free_ep_res();
 	if (!opts.dst_addr)
 		free_lres();
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 	fi_close(&fabric->fid);
 	return ret;
 }

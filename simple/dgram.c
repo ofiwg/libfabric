@@ -82,21 +82,21 @@ static int alloc_ep_res(struct fi_info *fi)
 	cq_attr.size = rx_depth;
 
 	/* Open completion queue for send completions */
-	ret = fi_cq_open(dom, &cq_attr, &scq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &scq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err1;
 	}
 
 	/* Open completion queue for recv completions */
-	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	ret = fi_cq_open(domain, &cq_attr, &rcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		goto err2;
 	}
 
 	/* Register memory */
-	ret = fi_mr_reg(dom, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
@@ -109,13 +109,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	av_attr.name = NULL;
 
 	/* Open address vector (AV) for mapping address */
-	ret = fi_av_open(dom, &av_attr, &av, NULL);
+	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
 		 goto err4;
 	 }
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
+	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
 		goto err5;
@@ -201,7 +201,7 @@ static int init_fabric(void)
 	}
 
 	/* Open domain */
-	ret = fi_domain(fabric, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
@@ -231,7 +231,7 @@ static int init_fabric(void)
 err5:
 	free_ep_res();
 err4:
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 err2:
 	fi_close(&fabric->fid);
 err1:
@@ -330,7 +330,7 @@ int main(int argc, char **argv)
 	ret = send_recv();
 
 	free_ep_res();
-	fi_close(&dom->fid);
+	fi_close(&domain->fid);
 	fi_close(&fabric->fid);
 	fi_freeinfo(hints);
 
