@@ -531,13 +531,13 @@ static int init_fabric(void)
 		memcpy(remote_addr, fi->dest_addr, addrlen);
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto err0;
 	}
 
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &dom, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
@@ -558,7 +558,7 @@ err4:
 err3:
 	fi_close(&dom->fid);
 err1:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 err0:
 	return ret;
 }
@@ -701,7 +701,7 @@ static int run(void)
 out:
 	free_ep_res();
 	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 
 	return ret;
 }

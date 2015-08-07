@@ -88,7 +88,7 @@ enum {
 
 
 extern struct fi_info *fi, *hints;
-extern struct fid_fabric *fab, *fabric; /* dups */
+extern struct fid_fabric *fabric;
 extern struct fid_domain *dom, *domain; /* dups */
 extern struct fid_pep *pep;
 extern struct fid_ep *ep;

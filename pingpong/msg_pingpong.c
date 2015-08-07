@@ -176,7 +176,7 @@ static int alloc_cm_res(void)
 
 	memset(&cm_attr, 0, sizeof cm_attr);
 	cm_attr.wait_obj = FI_WAIT_FD;
-	ret = fi_eq_open(fab, &cm_attr, &cmeq, NULL);
+	ret = fi_eq_open(fabric, &cm_attr, &cmeq, NULL);
 	if (ret)
 		FT_PRINTERR("fi_eq_open", ret);
 
@@ -316,13 +316,13 @@ static int server_listen(void)
 		return ret;
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto err0;
 	}
 
-	ret = fi_passive_ep(fab, fi, &pep, NULL);
+	ret = fi_passive_ep(fabric, fi, &pep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_passive_ep", ret);
 		goto err1;
@@ -351,7 +351,7 @@ err3:
 err2:
 	fi_close(&pep->fid);
 err1:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 err0:
 	fi_freeinfo(fi);
 	return ret;
@@ -378,7 +378,7 @@ static int server_connect(void)
 		goto err1;
 	}
 
-	ret = fi_domain(fab, info, &dom, NULL);
+	ret = fi_domain(fabric, info, &dom, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
@@ -442,13 +442,13 @@ static int client_connect(void)
 		goto err0;
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto err1;
 	}
 
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &dom, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
@@ -490,7 +490,7 @@ err4:
 err3:
 	fi_close(&dom->fid);
 err2:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 err1:
 	fi_freeinfo(fi);
 err0:
@@ -538,7 +538,7 @@ out:
 	if (!opts.dst_addr)
 		free_lres();
 	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 	return ret;
 }
 

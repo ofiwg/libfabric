@@ -194,14 +194,14 @@ static int init_fabric(void)
 	}
 
 	/* Open fabric */
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto err1;
 	}
 
 	/* Open domain */
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &dom, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
@@ -233,7 +233,7 @@ err5:
 err4:
 	fi_close(&dom->fid);
 err2:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 err1:
 	fi_freeinfo(fi);
 err0:
@@ -331,7 +331,7 @@ int main(int argc, char **argv)
 
 	free_ep_res();
 	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 	fi_freeinfo(hints);
 
 	return ret;

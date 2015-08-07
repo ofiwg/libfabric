@@ -37,7 +37,7 @@
 #include <shared.h>
 
 struct fi_info *fi, *hints;
-struct fid_fabric *fab, *fabric; /* dups */
+struct fid_fabric *fabric;
 struct fid_domain *dom, *domain; /* dups */
 struct fid_pep *pep;
 struct fid_ep *ep;

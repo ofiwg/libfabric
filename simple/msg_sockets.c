@@ -147,7 +147,7 @@ static int alloc_cm_res(void)
 	cm_attr.wait_obj = FI_WAIT_FD;
 
 	/* Open EQ to receive CM events */
-	ret = fi_eq_open(fab, &cm_attr, &cmeq, NULL);
+	ret = fi_eq_open(fabric, &cm_attr, &cmeq, NULL);
 	if (ret)
 		FT_PRINTERR("fi_eq_open", ret);
 
@@ -274,7 +274,7 @@ err3:
 	fi_close(&cmeq->fid);
 err2:
 	fi_close(&pep->fid);
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 	return ret;
 }
 
@@ -300,7 +300,7 @@ static int server_connect(void)
 		goto err1;
 	}
 
-	ret = fi_domain(fab, info, &dom, NULL);
+	ret = fi_domain(fabric, info, &dom, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err1;
@@ -366,7 +366,7 @@ static int client_connect(void)
 	}
 
 	/* Open domain */
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_domain(fabric, fi, &dom, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err2;
@@ -527,14 +527,14 @@ static int setup_handle(void)
 	fi->src_addrlen = 0;
 
 	/* Open the fabric */
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto free_fi;
 	}
 
 	/* Open a passive endpoint */
-	ret = fi_passive_ep(fab, fi, &pep, NULL);
+	ret = fi_passive_ep(fabric, fi, &pep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_passive_ep", ret);
 		goto free_fabric;
@@ -579,7 +579,7 @@ static int setup_handle(void)
 free_pep:
 	fi_close(&pep->fid);
 free_fabric:
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 
 free_fi:
 	fi_freeinfo(fi);
@@ -650,7 +650,7 @@ int main(int argc, char **argv)
 	free_ep_res();
 	fi_close(&cmeq->fid);
 	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	fi_close(&fabric->fid);
 
 	return ret;
 }
