@@ -50,7 +50,7 @@ static int alloc_cm_res(void)
 	cm_attr.wait_obj = FI_WAIT_FD;
 
 	/* Open EQ to receive CM events */
-	ret = fi_eq_open(fabric, &cm_attr, &cmeq, NULL);
+	ret = fi_eq_open(fabric, &cm_attr, &eq, NULL);
 	if (ret)
 		FT_PRINTERR("fi_eq_open", ret);
 
@@ -126,7 +126,7 @@ static int bind_ep_res(void)
 	int ret;
 
 	/* Bind EQ with endpoint */
-	ret = fi_ep_bind(ep, &cmeq->fid, 0);
+	ret = fi_ep_bind(ep, &eq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -181,7 +181,7 @@ static int server_listen(void)
 		goto err2;
 
 	/* Bind EQ to passive endpoint */
-	ret = fi_pep_bind(pep, &cmeq->fid, 0);
+	ret = fi_pep_bind(pep, &eq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_pep_bind", ret);
 		goto err3;
@@ -197,7 +197,7 @@ static int server_listen(void)
 	fi_freeinfo(fi);
 	return 0;
 err3:
-	fi_close(&cmeq->fid);
+	fi_close(&eq->fid);
 err2:
 	fi_close(&pep->fid);
 err1:
@@ -216,9 +216,9 @@ static int server_connect(void)
 	int ret;
 
 	/* Wait for connection request from client */
-	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "listen");
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "listen");
 		return (int) rd;
 	}
 
@@ -251,9 +251,9 @@ static int server_connect(void)
 	}
 
 	/* Wait for the connection to be established */
-	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "accept");
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "accept");
 		ret = (int) rd;
 		goto err3;
 	}
@@ -324,9 +324,9 @@ static int client_connect(void)
 	}
 
 	/* Wait for the connection to be established */
-	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "connect");
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "connect");
 		ret = (int) rd;
 		goto err6;
 	}
@@ -343,7 +343,7 @@ static int client_connect(void)
 err6:
 	free_ep_res();
 err5:
-	fi_close(&cmeq->fid);
+	fi_close(&eq->fid);
 err4:
 	fi_close(&domain->fid);
 err2:
@@ -451,7 +451,7 @@ int main(int argc, char **argv)
 
 	fi_shutdown(ep, 0);
 	free_ep_res();
-	fi_close(&cmeq->fid);
+	fi_close(&eq->fid);
 	fi_close(&domain->fid);
 	fi_close(&fabric->fid);
 

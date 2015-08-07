@@ -241,7 +241,7 @@ static int run_test(void)
 
 static void free_lres(void)
 {
-	fi_close(&cmeq->fid);
+	fi_close(&eq->fid);
 }
 
 static int alloc_cm_res(void)
@@ -251,7 +251,7 @@ static int alloc_cm_res(void)
 
 	memset(&cm_attr, 0, sizeof cm_attr);
 	cm_attr.wait_obj = FI_WAIT_FD;
-	ret = fi_eq_open(fabric, &cm_attr, &cmeq, NULL);
+	ret = fi_eq_open(fabric, &cm_attr, &eq, NULL);
 	if (ret)
 		FT_PRINTERR("fi_eq_open", ret);
 
@@ -317,7 +317,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err3;
 	}
 
-	if (!cmeq) {
+	if (!eq) {
 		ret = alloc_cm_res();
 		if (ret)
 			goto err4;
@@ -340,7 +340,7 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_ep_bind(ep, &cmeq->fid, 0);
+	ret = fi_ep_bind(ep, &eq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -399,7 +399,7 @@ static int server_listen(void)
 	if (ret)
 		goto err2;
 
-	ret = fi_pep_bind(pep, &cmeq->fid, 0);
+	ret = fi_pep_bind(pep, &eq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_pep_bind", ret);
 		goto err3;
@@ -432,9 +432,9 @@ static int server_connect(void)
 	ssize_t rd;
 	int ret;
 
-	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "listen");
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "listen");
 		return (int) rd;
 	}
 
@@ -473,9 +473,9 @@ static int server_connect(void)
 		goto err3;
 	}
 
-	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "accept");
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "accept");
 		ret = (int) rd;
 		goto err3;
 	}
@@ -548,9 +548,9 @@ static int client_connect(void)
 		goto err4;
 	}
 
- 	rd = fi_eq_sread(cmeq, &event, &entry, sizeof entry, -1, 0);
+ 	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
-		FT_PROCESS_EQ_ERR(rd, cmeq, "fi_eq_sread", "connect");
+		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "connect");
 		ret = (int) rd;
 		goto err4;
 	}

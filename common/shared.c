@@ -44,7 +44,7 @@ struct fid_ep *ep;
 struct fid_cq *rcq, *scq, *txcq, *rxcq; /* dups */
 struct fid_mr *mr;
 struct fid_av *av;
-struct fid_eq *cmeq, *eq; /* dups */
+struct fid_eq *eq;
 
 struct test_size_param test_size[] = {
 	{ 1 <<  1, 1 }, { (1 <<  1) + (1 <<  0), 2},
