@@ -47,7 +47,6 @@ static void *buf;
 static size_t buffer_size;
 struct fi_rma_iov local, remote;
 
-static struct fid_cntr *rcntr, *scntr;
 static void *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
@@ -79,8 +78,8 @@ static void free_ep_res(void)
 	fi_close(&ep->fid);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcntr->fid);
-	fi_close(&scntr->fid);
+	fi_close(&rxcntr->fid);
+	fi_close(&txcntr->fid);
 	free(buf);
 }
 
@@ -101,13 +100,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&cntr_attr, 0, sizeof cntr_attr);
 	cntr_attr.events = FI_CNTR_EVENTS_COMP;
 
-	ret = fi_cntr_open(domain, &cntr_attr, &scntr, NULL);
+	ret = fi_cntr_open(domain, &cntr_attr, &txcntr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cntr_open", ret);
 		goto err1;
 	}
 
-	ret = fi_cntr_open(domain, &cntr_attr, &rcntr, NULL);
+	ret = fi_cntr_open(domain, &cntr_attr, &rxcntr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cntr_open", ret);
 		goto err2;
@@ -145,9 +144,9 @@ err5:
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcntr->fid);
+	fi_close(&rxcntr->fid);
 err2:
-	fi_close(&scntr->fid);
+	fi_close(&txcntr->fid);
 err1:
 	free(buf);
 	return ret;
@@ -157,7 +156,7 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_ep_bind(ep, &scntr->fid, FI_WRITE);
+	ret = fi_ep_bind(ep, &txcntr->fid, FI_WRITE);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -165,7 +164,7 @@ static int bind_ep_res(void)
 
 	/* Use FI_REMOTE_WRITE flag so that remote side can get completion event
 	 *  for RMA write operation */
-	ret = fi_ep_bind(ep, &rcntr->fid, FI_REMOTE_WRITE);
+	ret = fi_ep_bind(ep, &rxcntr->fid, FI_REMOTE_WRITE);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
@@ -265,7 +264,7 @@ static int run_test(void)
 		if (ret)
 			return ret;
 
-		ret = fi_cntr_wait(scntr, 1, -1);
+		ret = fi_cntr_wait(txcntr, 1, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			return ret;
@@ -274,7 +273,7 @@ static int run_test(void)
 		fprintf(stdout, "Received a completion event for RMA write\n");
 	} else {
 		/* Server waits for message from Client */
-		ret = fi_cntr_wait(rcntr, 1, -1);
+		ret = fi_cntr_wait(rxcntr, 1, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			return ret;

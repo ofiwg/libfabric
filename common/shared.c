@@ -42,6 +42,7 @@ struct fid_domain *domain;
 struct fid_pep *pep;
 struct fid_ep *ep;
 struct fid_cq *txcq, *rxcq;
+struct fid_cntr *txcntr, *rxcntr;
 struct fid_mr *mr;
 struct fid_av *av;
 struct fid_eq *eq;

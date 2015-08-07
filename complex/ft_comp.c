@@ -32,8 +32,6 @@
 #include "fabtest.h"
 
 
-//struct fid_cntr *txcntr, *rxcntr;
-
 static size_t comp_entry_cnt[] = {
 	[FI_CQ_FORMAT_UNSPEC] = 0,
 	[FI_CQ_FORMAT_CONTEXT] = FT_COMP_BUF_SIZE / sizeof(struct fi_cq_entry),

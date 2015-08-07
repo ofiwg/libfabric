@@ -53,7 +53,6 @@ extern int listen_sock, sock;
 
 //extern struct fid_wait	 *waitset;
 //extern struct fid_poll	 *pollset;
-//extern struct fid_cntr	 *txcntr, *rxcntr;
 //extern struct fid_stx	 *stx;
 //extern struct fid_sep	 *sep;
 

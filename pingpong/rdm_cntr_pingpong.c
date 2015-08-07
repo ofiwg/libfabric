@@ -51,7 +51,6 @@ static struct timespec start, end;
 static void *buf;
 static size_t buffer_size;
 
-static struct fid_cntr *rcntr, *scntr;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
@@ -63,7 +62,7 @@ static int get_send_completions()
 {
 	int ret;
 
-	ret = fi_cntr_wait(scntr, send_count, -1);
+	ret = fi_cntr_wait(txcntr, send_count, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 		return ret;
@@ -79,7 +78,7 @@ static int send_xfer(int size)
 	int ret;
 
 	if (!credits) {
-		ret = fi_cntr_wait(scntr, send_count, -1);
+		ret = fi_cntr_wait(txcntr, send_count, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			return ret;
@@ -102,7 +101,7 @@ static int recv_xfer(int size)
 {
 	int ret;
 
-	ret = fi_cntr_wait(rcntr, recv_outs, -1);
+	ret = fi_cntr_wait(rxcntr, recv_outs, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 		return ret;
@@ -129,7 +128,7 @@ static int send_msg(int size)
 	}
 	send_count++;
 
-	ret = fi_cntr_wait(scntr, send_count, -1);
+	ret = fi_cntr_wait(txcntr, send_count, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 	}
@@ -148,7 +147,7 @@ static int recv_msg(void)
 	}
 	recv_outs++;
 
-	ret = fi_cntr_wait(rcntr, recv_outs, -1);
+	ret = fi_cntr_wait(rxcntr, recv_outs, -1);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cntr_wait", ret);
 		return ret;
@@ -210,8 +209,8 @@ static void free_ep_res(void)
 	fi_close(&ep->fid);
 	fi_close(&av->fid);
 	fi_close(&mr->fid);
-	fi_close(&rcntr->fid);
-	fi_close(&scntr->fid);
+	fi_close(&rxcntr->fid);
+	fi_close(&txcntr->fid);
 	free(buf);
 }
 
@@ -232,13 +231,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	memset(&cntr_attr, 0, sizeof cntr_attr);
 	cntr_attr.events = FI_CNTR_EVENTS_COMP;
 
-	ret = fi_cntr_open(domain, &cntr_attr, &scntr, NULL);
+	ret = fi_cntr_open(domain, &cntr_attr, &txcntr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cntr_open", ret);
 		goto err1;
 	}
 
-	ret = fi_cntr_open(domain, &cntr_attr, &rcntr, NULL);
+	ret = fi_cntr_open(domain, &cntr_attr, &rxcntr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cntr_open", ret);
 		goto err2;
@@ -275,9 +274,9 @@ err5:
 err4:
 	fi_close(&mr->fid);
 err3:
-	fi_close(&rcntr->fid);
+	fi_close(&rxcntr->fid);
 err2:
-	fi_close(&scntr->fid);
+	fi_close(&txcntr->fid);
 err1:
 	free(buf);
 	return ret;
@@ -287,13 +286,13 @@ static int bind_ep_res(void)
 {
 	int ret;
 
-	ret = fi_ep_bind(ep, &scntr->fid, FI_SEND);
+	ret = fi_ep_bind(ep, &txcntr->fid, FI_SEND);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
 	}
 
-	ret = fi_ep_bind(ep, &rcntr->fid, FI_RECV);
+	ret = fi_ep_bind(ep, &rxcntr->fid, FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
 		return ret;
