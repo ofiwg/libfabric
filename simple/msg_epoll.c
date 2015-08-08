@@ -208,7 +208,6 @@ static int bind_ep_res(void)
 
 static int server_listen(void)
 {
-	struct fi_info *fi;
 	int ret;
 
 	/* Get fabric info */
@@ -337,7 +336,6 @@ static int client_connect(void)
 {
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
-	struct fi_info *fi;
 	ssize_t rd;
 	int ret;
 

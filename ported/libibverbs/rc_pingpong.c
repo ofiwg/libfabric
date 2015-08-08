@@ -423,8 +423,6 @@ static void usage(char *argv0)
 
 int main(int argc, char *argv[])
 {
-	struct 		fi_info				*info;
-	struct 		fi_info 			*hints;
 	uint64_t 	flags 				= 0;
 	char 		*service 			= NULL;
 	char 		*node 				= NULL;
@@ -513,14 +511,14 @@ int main(int argc, char *argv[])
 	if (rc)
 		return 1;
 	
-	rc = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &info);
+	rc = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (rc) {
 		FT_PRINTERR("fi_getinfo", rc);
 		return -rc;
 	}
 	fi_freeinfo(hints);
 
-	ctx = pp_init_ctx(info, size, rx_depth, use_event);
+	ctx = pp_init_ctx(fi, size, rx_depth, use_event);
 	if (!ctx)
 		return 1;
 

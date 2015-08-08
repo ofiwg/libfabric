@@ -354,7 +354,6 @@ static int client_connect(void)
 {
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
-	struct fi_info *fi;
 	ssize_t rd;
 	int ret;
 
@@ -493,7 +492,6 @@ static int setup_handle(void)
 {
 	static char buf[BUFSIZ];
 	struct addrinfo *ai, aihints;
-	struct fi_info *fi;
 	int ret;
 
 	memset(&aihints, 0, sizeof aihints);

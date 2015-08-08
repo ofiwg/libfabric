@@ -341,7 +341,6 @@ static int bind_ep_res(void)
 
 static int init_fabric(void)
 {
-	struct fi_info *fi;
 	uint64_t flags = 0;
 	char *node, *service;
 	int ret;
