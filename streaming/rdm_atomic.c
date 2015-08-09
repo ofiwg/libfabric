@@ -54,7 +54,7 @@
 
 #include "shared.h"
 
-static struct cs_opts opts;
+
 static enum fi_op op_type = FI_MIN;
 static char test_name[10] = "custom";
 static struct timespec start, end;

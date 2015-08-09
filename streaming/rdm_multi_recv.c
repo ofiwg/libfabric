@@ -50,7 +50,7 @@
 #define DEFAULT_MULTI_BUF_SIZE 1024*1024
 #define SYNC_DATA_SIZE 16
 
-static struct cs_opts opts;
+
 static int max_credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;

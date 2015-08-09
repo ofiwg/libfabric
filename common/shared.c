@@ -42,9 +42,13 @@ struct fid_domain *domain;
 struct fid_pep *pep;
 struct fid_ep *ep;
 struct fid_cq *txcq, *rxcq;
+struct fid_cntr *txcntr, *rxcntr;
 struct fid_mr *mr;
 struct fid_av *av;
 struct fid_eq *eq;
+
+struct ft_opts opts;
+
 
 struct test_size_param test_size[] = {
 	{ 1 <<  1, 1 }, { (1 <<  1) + (1 <<  0), 2},
@@ -137,7 +141,7 @@ int ft_getdestaddr(char *node, char *service, struct fi_info *hints)
 }
 
 int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
-		uint64_t *flags, struct cs_opts *opts)
+		uint64_t *flags, struct ft_opts *opts)
 {
 	int ret;
 
@@ -214,7 +218,7 @@ int size_to_count(int size)
 		return 100000;
 }
 
-void init_test(struct cs_opts *opts, char *test_name, size_t test_name_len)
+void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 {
 	char sstr[FT_STR_LEN];
 
@@ -493,7 +497,7 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints)
 	}
 }
 
-void ft_parse_addr_opts(int op, char *optarg, struct cs_opts *opts)
+void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 {
 	switch (op) {
 	case 's':
@@ -511,7 +515,7 @@ void ft_parse_addr_opts(int op, char *optarg, struct cs_opts *opts)
 	}
 }
 
-void ft_parsecsopts(int op, char *optarg, struct cs_opts *opts)
+void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 {
 	ft_parse_addr_opts(op, optarg, opts);
 

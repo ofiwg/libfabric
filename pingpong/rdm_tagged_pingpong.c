@@ -43,7 +43,7 @@
 
 #include "shared.h"
 
-static struct cs_opts opts;
+
 static int max_credits = 128;
 static int credits = 128;
 static char test_name[10] = "custom";
@@ -341,7 +341,6 @@ static int bind_ep_res(void)
 
 static int init_fabric(void)
 {
-	struct fi_info *fi;
 	uint64_t flags = 0;
 	char *node, *service;
 	int ret;

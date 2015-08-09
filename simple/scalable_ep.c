@@ -51,7 +51,7 @@
 		}				\
 	} while (0)
 
-static struct cs_opts opts;
+
 static void *buf;
 static size_t buffer_size = 1024;
 static size_t transfer_size = 1000;

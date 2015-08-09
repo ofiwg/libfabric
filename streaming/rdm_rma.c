@@ -43,7 +43,7 @@
 #include <rdma/fi_errno.h>
 #include <shared.h>
 
-static struct cs_opts opts;
+
 static uint64_t op_type = FT_RMA_WRITE;
 static int max_credits = 128;
 static char test_name[10] = "custom";

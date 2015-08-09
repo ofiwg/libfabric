@@ -41,17 +41,15 @@
 
 #include "shared.h"
 
-static struct cs_opts opts;
+
 static int max_credits = 128;
 static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
+static void *buf;
 static void *recv_buf;
 static void *send_buf;
 static size_t buffer_size;
-
-static struct fid_mr *recv_mr;
-static struct fid_mr *send_mr;
 
 static int verify_data = 0;
 
@@ -79,7 +77,7 @@ post:
 	if (verify_data)
 		ft_fill_buf(send_buf, size);
 
-	ret = fi_send(ep, send_buf, (size_t) size, fi_mr_desc(send_mr), 0, NULL);
+	ret = fi_send(ep, send_buf, (size_t) size, fi_mr_desc(mr), 0, NULL);
 	if (ret)
 		FT_PRINTERR("fi_send", ret);
 
@@ -109,7 +107,7 @@ static int recv_xfer(int size)
 			return ret;
 	}
 
-	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(recv_mr), 0, recv_buf);
+	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), 0, recv_buf);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
 
@@ -186,12 +184,10 @@ static int alloc_cm_res(void)
 static void free_ep_res(void)
 {
 	fi_close(&ep->fid);
-	fi_close(&recv_mr->fid);
-	fi_close(&send_mr->fid);
+	fi_close(&mr->fid);
 	fi_close(&rxcq->fid);
 	fi_close(&txcq->fid);
-	free(recv_buf);
-	free(send_buf);
+	free(buf);
 }
 
 static int alloc_ep_res(struct fi_info *fi)
@@ -202,17 +198,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	buffer_size = opts.user_options & FT_OPT_SIZE ?
 			opts.transfer_size : test_size[TEST_CNT - 1].size;
 
-	recv_buf = malloc(buffer_size);
-	if (!recv_buf) {
+	buf = malloc(buffer_size * 2);
+	if (!buf) {
 		perror("malloc");
 		return -1;
 	}
 
-	send_buf = malloc(buffer_size);
-	if (!send_buf) {
-		perror("malloc");
-		return -1;
-	}
+	recv_buf = buf;
+	send_buf = (char *) buf + buffer_size;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -230,13 +223,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err2;
 	}
 
-	ret = fi_mr_reg(domain, recv_buf, buffer_size, FI_RECV, 0, 0, 0, &recv_mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		goto err3;
-	}
-
-	ret = fi_mr_reg(domain, send_buf, buffer_size, FI_SEND, 0, 1, 0, &send_mr, NULL);
+	ret = fi_mr_reg(domain, buf, buffer_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
@@ -257,15 +244,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	return 0;
 
 err4:
-	fi_close(&recv_mr->fid);
-	fi_close(&send_mr->fid);
+	fi_close(&mr->fid);
 err3:
 	fi_close(&rxcq->fid);
 err2:
 	fi_close(&txcq->fid);
 err1:
-	free(recv_buf);
-	free(send_buf);
+	free(buf);
 	return ret;
 }
 
@@ -298,7 +283,7 @@ static int bind_ep_res(void)
 	}
 
 	/* Post the first recv buffer */
-	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(recv_mr), 0, recv_buf);
+	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), 0, recv_buf);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
 

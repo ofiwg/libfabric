@@ -55,7 +55,6 @@ struct ft_info test_info;
 struct fi_info *fabric_info;
 struct ft_xcontrol ft_rx, ft_tx;
 struct ft_control ft;
-struct cs_opts opts;
 
 size_t recv_size, send_size;
 

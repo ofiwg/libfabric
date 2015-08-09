@@ -53,13 +53,11 @@ extern int listen_sock, sock;
 
 //extern struct fid_wait	 *waitset;
 //extern struct fid_poll	 *pollset;
-//extern struct fid_cntr	 *txcntr, *rxcntr;
 //extern struct fid_stx	 *stx;
 //extern struct fid_sep	 *sep;
 
 extern struct ft_info test_info;
 extern struct fi_info *fabric_info;
-extern struct cs_opts opts;
 
 extern size_t sm_size_array[];
 extern size_t med_size_array[];

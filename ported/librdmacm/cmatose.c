@@ -65,14 +65,11 @@ enum CQ_INDEX {
 	RECV_CQ_INDEX
 };
 
-static struct cs_opts 		opts;
 static struct cma_node		*nodes;
 static int			conn_index;
 static int			connects_left;
 static int			disconnects_left;
 static int			connections = 1;
-
-static struct fi_info		*info;
 
 
 static int post_recvs(struct cma_node *node)
@@ -106,7 +103,7 @@ static int create_messages(struct cma_node *node)
 		return -1;
 	}
 
-	if (info->mode & FI_LOCAL_MR) {
+	if (fi->mode & FI_LOCAL_MR) {
 		ret = fi_mr_reg(node->domain, node->mem, hints->ep_attr->max_msg_size,
 				FI_SEND | FI_RECV, 0, 0, 0, &node->mr, NULL);
 		if (ret) {
@@ -241,7 +238,7 @@ static int alloc_nodes(void)
 	for (i = 0; i < connections; i++) {
 		nodes[i].id = i;
 		if (opts.dst_addr) {
-			ret = init_node(nodes + i, info);
+			ret = init_node(nodes + i, fi);
 			if (ret)
 				goto err;
 		}
@@ -395,7 +392,7 @@ static int run_server(void)
 	int i, ret;
 
 	printf("cmatose: starting server\n");
-	ret = fi_passive_ep(fabric, info, &pep, NULL);
+	ret = fi_passive_ep(fabric, fi, &pep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_passive_ep", ret);
 		return ret;
@@ -463,7 +460,7 @@ static int run_client(void)
 
 	printf("cmatose: connecting\n");
 	for (i = 0; i < connections; i++) {
-		ret = fi_connect(nodes[i].ep, info->dest_addr, NULL, 0);
+		ret = fi_connect(nodes[i].ep, fi->dest_addr, NULL, 0);
 		if (ret) {
 			FT_PRINTERR("fi_connect", ret);
 			connects_left--;
@@ -568,14 +565,14 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &info);
+	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto exit0;
 	}
 
-	printf("using provider: %s\n", info->fabric_attr->prov_name);
-	ret = fi_fabric(info->fabric_attr, &fabric, NULL);
+	printf("using provider: %s\n", fi->fabric_attr->prov_name);
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto exit1;
@@ -603,7 +600,7 @@ exit3:
 exit2:
 	fi_close(&fabric->fid);
 exit1:
-	fi_freeinfo(info);
+	fi_freeinfo(fi);
 exit0:
 	fi_freeinfo(hints);
 	return -ret;

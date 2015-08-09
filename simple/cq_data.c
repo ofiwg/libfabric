@@ -41,7 +41,7 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
-static struct cs_opts opts;
+
 static void *buf;
 static size_t buffer_size;
 static int rx_depth = 500;
@@ -172,7 +172,6 @@ static int bind_ep_res(void)
 
 static int server_listen(void)
 {
-	struct fi_info *fi;
 	int ret;
 
 	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE, hints,
@@ -296,7 +295,6 @@ static int client_connect(void)
 {
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
-	struct fi_info *fi;
 	ssize_t rd;
 	int ret;
 

@@ -241,12 +241,9 @@ rx_size_left_err(void)
 	int ret;
 	int testret;
 	struct fid_ep *ep;
-	struct fi_info *myfi;
 
 	testret = FAIL;
 	ep = NULL;
-
-	myfi = fi_dupinfo(fi);
 
 	/* datapath operation, not expected to be caught by libfabric */
 #if 0
@@ -256,7 +253,7 @@ rx_size_left_err(void)
 	}
 #endif
 
-	ret = fi_endpoint(domain, myfi, &ep, NULL);
+	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret != 0) {
 		printf("fi_endpoint %s\n", fi_strerror(-ret));
 		goto fail;
@@ -272,9 +269,6 @@ fail:
 		if (ret != 0)
 			printf("fi_close %s\n", fi_strerror(-ret));
 		ep = NULL;
-	}
-	if (myfi != NULL) {
-		fi_freeinfo(myfi);
 	}
 	return testret;
 }

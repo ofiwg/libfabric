@@ -410,7 +410,6 @@ struct test_entry test_array[] = {
 int main(int argc, char **argv)
 {
 	int op, ret;
-	struct fi_info *fi;
 	int failed;
 
 	hints = fi_allocinfo();
