@@ -48,8 +48,6 @@ static uint64_t op_type = FT_RMA_WRITE;
 static int max_credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
-static void *buf;
-static size_t buffer_size;
 struct fi_rma_iov remote;
 static uint64_t cq_data = 1;
 

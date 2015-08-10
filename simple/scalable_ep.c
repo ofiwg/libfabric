@@ -52,8 +52,6 @@
 	} while (0)
 
 
-static void *buf;
-static size_t buffer_size = 1024;
 static size_t transfer_size = 1000;
 static int rx_depth = 512;
 

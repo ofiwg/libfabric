@@ -43,8 +43,6 @@
 #include <shared.h>
 
 
-static void *buf;
-static size_t buffer_size;
 struct fi_rma_iov local, remote;
 
 static void *remote_addr;

@@ -48,7 +48,6 @@ static int max_credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *send_buf, *recv_buf;
-static size_t buffer_size;
 
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;

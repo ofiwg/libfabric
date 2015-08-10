@@ -46,10 +46,8 @@ static int max_credits = 128;
 static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
-static void *buf;
 static void *recv_buf;
 static void *send_buf;
-static size_t buffer_size;
 
 static int verify_data = 0;
 

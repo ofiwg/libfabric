@@ -49,8 +49,6 @@ enum comp_type {
 };
 
 
-static void *buf;
-static size_t buffer_size = 1024;
 static int transfer_size = 1000;
 static int rx_depth = 512;
 

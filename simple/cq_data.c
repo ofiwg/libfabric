@@ -42,8 +42,6 @@
 #include <shared.h>
 
 
-static void *buf;
-static size_t buffer_size;
 static int rx_depth = 500;
 static size_t cq_data_size;
 
