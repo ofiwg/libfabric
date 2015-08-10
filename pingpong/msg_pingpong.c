@@ -223,7 +223,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		goto err2;
 	}
 
-	ret = fi_mr_reg(domain, buf, buffer_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buffer_size * 2, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		goto err3;
