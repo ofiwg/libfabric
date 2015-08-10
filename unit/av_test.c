@@ -332,9 +332,7 @@ av_good_sync()
 
 	testret = PASS;
 fail:
-	if (av != NULL) {
-		fi_close(&av->fid);
-	}
+	FT_CLOSE_FID(av);
 	return testret;
 }
 
@@ -390,9 +388,7 @@ av_bad_sync()
 
 	testret = PASS;
 fail:
-	if (av != NULL) {
-		fi_close(&av->fid);
-	}
+	FT_CLOSE_FID(av);
 	return testret;
 }
 
@@ -463,9 +459,7 @@ av_goodbad_vector_sync()
 
 	testret = PASS;
 fail:
-	if (av != NULL) {
-		fi_close(&av->fid);
-	}
+	FT_CLOSE_FID(av);
 	return testret;
 }
 
@@ -539,9 +533,7 @@ av_good_vector_async()
 
 	testret = PASS;
 fail:
-	if (av != NULL) {
-		fi_close(&av->fid);
-	}
+	FT_CLOSE_FID(av);
 	return testret;
 }
 
@@ -593,9 +585,7 @@ av_zero_async()
 
 	testret = PASS;
 fail:
-	if (av != NULL) {
-		fi_close(&av->fid);
-	}
+	FT_CLOSE_FID(av);
 	return testret;
 }
 
@@ -703,9 +693,7 @@ av_good_2vector_async()
 
 	testret = PASS;
 fail:
-	if (av != NULL) {
-		fi_close(&av->fid);
-	}
+	FT_CLOSE_FID(av);
 	return testret;
 }
 
@@ -803,9 +791,7 @@ av_goodbad_vector_async()
 
 	testret = PASS;
 fail:
-	if (av != NULL) {
-		fi_close(&av->fid);
-	}
+	FT_CLOSE_FID(av);
 	return testret;
 }
 
@@ -956,9 +942,7 @@ av_goodbad_2vector_async()
 
 	testret = PASS;
 fail:
-	if (av != NULL) {
-		fi_close(&av->fid);
-	}
+	FT_CLOSE_FID(av);
 	return testret;
 }
 
@@ -1059,7 +1043,7 @@ int main(int argc, char **argv)
 	ret = fi_getinfo(FT_FIVERSION, src_addr_str, 0, FI_SOURCE, hints, &fi);
 	if (ret != 0 && ret != -FI_ENODATA) {
 		printf("fi_getinfo %s\n", fi_strerror(-ret));
-		goto err1;
+		goto err;
 	}
 
 	if (ret == -FI_ENODATA) {
@@ -1067,19 +1051,19 @@ int main(int argc, char **argv)
 		ret = fi_getinfo(FT_FIVERSION, src_addr_str, 0, FI_SOURCE, hints, &fi);
 		if (ret != 0) {
 			printf("fi_getinfo %s\n", fi_strerror(-ret));
-			goto err1;
+			goto err;
 		}
 	}
 
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret != 0) {
 		printf("fi_fabric %s\n", fi_strerror(-ret));
-		goto err2;
+		goto err;
 	}
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret != 0) {
 		printf("fi_domain %s\n", fi_strerror(-ret));
-		goto err2;
+		goto err;
 	}
 
 	eq_attr.size = 1024;
@@ -1087,7 +1071,7 @@ int main(int argc, char **argv)
 	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
 	if (ret != 0) {
 		printf("fi_eq_open %s\n", fi_strerror(-ret));
-		goto err2;
+		goto err;
 	}
 
 	printf("Testing AVs on fabric %s\n", fi->fabric_attr->name);
@@ -1113,28 +1097,9 @@ int main(int argc, char **argv)
 		printf("Summary: all tests passed\n");
 	}
 
-	ret = fi_close(&eq->fid);
-	if (ret != 0) {
-		printf("Error %d closing EQ: %s\n", ret, fi_strerror(-ret));
-		goto err2;
-	}
-	ret = fi_close(&domain->fid);
-	if (ret != 0) {
-		printf("Error %d closing domain: %s\n", ret, fi_strerror(-ret));
-		goto err2;
-	}
-	ret = fi_close(&fabric->fid);
-	if (ret != 0) {
-		printf("Error %d closing fabric: %s\n", ret, fi_strerror(-ret));
-		goto err2;
-	}
-	fi_freeinfo(fi);
-	fi_freeinfo(hints);
-
+	ft_free_res();
 	return (failed > 0);
-err2:
-	fi_freeinfo(fi);
-err1:
-	fi_freeinfo(hints);
+err:
+	ft_free_res();
 	return -ret;
 }

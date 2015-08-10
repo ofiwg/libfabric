@@ -178,10 +178,7 @@ eq_write_read_self()
 	testret = PASS;
 
 fail:
-	if (eq != NULL) {
-		fi_close(&eq->fid);
-		eq = NULL;
-	}
+	FT_CLOSE_FID(eq);
 	return testret;
 }
 
@@ -225,10 +222,7 @@ eq_write_overflow()
 	testret = PASS;
 
 fail:
-	if (eq != NULL) {
-		fi_close(&eq->fid);
-		eq = NULL;
-	}
+	FT_CLOSE_FID(eq);
 	return testret;
 }
 
@@ -298,10 +292,7 @@ eq_wait_fd_poll()
 
 	testret = PASS;
 fail:
-	if (eq != NULL) {
-		fi_close(&eq->fid);
-		eq = NULL;
-	}
+	FT_CLOSE_FID(eq);
 	return testret;
 }
 
@@ -391,10 +382,7 @@ eq_wait_fd_sread()
 
 	testret = PASS;
 fail:
-	if (eq != NULL) {
-		fi_close(&eq->fid);
-		eq = NULL;
-	}
+	FT_CLOSE_FID(eq);
 	return testret;
 }
 
@@ -455,13 +443,6 @@ int main(int argc, char **argv)
 		printf("Summary: all tests passed\n");
 	}
 
-	ret = fi_close(&fabric->fid);
-	if (ret != 0) {
-		printf("Error %d closing fabric: %s\n", ret, fi_strerror(-ret));
-		exit(1);
-	}
-	fi_freeinfo(fi);
-	fi_freeinfo(hints);
-
+	ft_free_res();
 	exit(failed > 0);
 }

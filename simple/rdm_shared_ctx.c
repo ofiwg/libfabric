@@ -40,16 +40,6 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
-#define FT_CLOSEV(FID_C, NUM)			\
-	do {					\
-		int i;				\
-		for (i = 0; i < NUM; i++) {	\
-			if (FID_C[i])		\
-				fi_close(&FID_C[i]->fid); \
-		}				\
-	} while (0)
-
-
 
 static size_t transfer_size = 1000;
 static int rx_depth = 512;
@@ -95,19 +85,6 @@ static int recv_msg(void)
 	return ret;
 }
 
-static void free_ep_res(void)
-{
-	FT_CLOSEV(ep_array, ep_cnt);
-	fi_close(&av->fid);
-	fi_close(&mr->fid);
-	fi_close(&rxcq->fid);
-	fi_close(&srx_ctx->fid);
-	fi_close(&txcq->fid);
-	fi_close(&stx_ctx->fid);
-	free(buf);
-	free(remote_fi_addr);
-}
-
 static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
@@ -123,7 +100,7 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	if (!buf || !remote_fi_addr) {
 		perror("malloc");
-		goto err1;
+		return -FI_ENOMEM;
 	}
 
 	memset(&cq_attr, 0, sizeof cq_attr);
@@ -137,31 +114,31 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_stx_context(domain, &tx_attr, &stx_ctx, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_stx_context", ret);
-		goto err1;
+		return ret;
 	}
 
 	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err2;
+		return ret;
 	}
 
 	ret = fi_srx_context(domain, &rx_attr, &srx_ctx, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_srx_context", ret);
-		goto err3;
+		return ret;
 	}
 
 	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err4;
+		return ret;
 	}
 
 	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
-		goto err5;
+		return ret;
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
@@ -172,42 +149,23 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
-		goto err6;
+		return ret;
 	}
 
 	ep_array = calloc(ep_cnt, sizeof(*ep_array));
 	if (!ep_array) {
 		perror("malloc");
-		goto err7;
+		return ret;
 	}
 	for (i = 0; i < ep_cnt; i++) {
 		ret = fi_endpoint(domain, fi, &ep_array[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_endpoint", ret);
-			goto err8;
+			return ret;
 		}
 	}
 
 	return 0;
-
-err8:
-	FT_CLOSEV(ep_array, ep_cnt);
-err7:
-	fi_close(&av->fid);
-err6:
-	fi_close(&mr->fid);
-err5:
-	fi_close(&rxcq->fid);
-err4:
-	fi_close(&srx_ctx->fid);
-err3:
-	fi_close(&txcq->fid);
-err2:
-	fi_close(&stx_ctx->fid);
-err1:
-	free(buf);
-	free(remote_fi_addr);
-	return ret;
 }
 
 static int bind_ep_res(void)
@@ -340,13 +298,13 @@ static int init_fabric(void)
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
-		goto err0;
+		return ret;
 	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		goto err1;
+		return ret;
 	}
 
 	fi->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
@@ -354,22 +312,13 @@ static int init_fabric(void)
 
 	ret = alloc_ep_res(fi);
 	if (ret)
-		goto err3;
+		return ret;
 
 	ret = bind_ep_res();
 	if (ret)
-		goto err4;
+		return ret;
 
 	return 0;
-
-err4:
-	free_ep_res();
-err3:
-	fi_close(&domain->fid);
-err1:
-	fi_close(&fabric->fid);
-err0:
-	return ret;
 }
 
 static int init_av(void)
@@ -484,9 +433,6 @@ static int run(void)
 	/* TODO: Add a local finalize applicable to shared ctx */
 	//ft_finalize(fi, ep_array[0], txcq, rxcq, remote_fi_addr[0]);
 out:
-	free_ep_res();
-	fi_close(&domain->fid);
-	fi_close(&fabric->fid);
 	return ret;
 }
 
@@ -521,7 +467,12 @@ int main(int argc, char **argv)
 	hints->addr_format = FI_SOCKADDR;
 
 	ret = run();
-	fi_freeinfo(hints);
-	fi_freeinfo(fi);
+
+	FT_CLOSEV_FID(ep_array, ep_cnt);
+	FT_CLOSE_FID(srx_ctx);
+	FT_CLOSE_FID(stx_ctx);
+	ft_free_res();
+	free(remote_fi_addr);
+	free(ep_array);
 	return -ret;
 }
