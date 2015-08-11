@@ -9,6 +9,7 @@ use File::Basename;
 
 my $filename_arg;
 my $coverity_token_arg;
+my $project_arg = "ofiwg%2Flibfabric";
 my $dry_run_arg = 0;
 my $verbose_arg = 0;
 my $debug_arg = 0;
@@ -20,6 +21,7 @@ my $help_arg = 0;
 &Getopt::Long::Configure("bundling");
 my $ok = Getopt::Long::GetOptions("filename=s" => \$filename_arg,
                                   "coverity-token=s" => \$coverity_token_arg,
+                                  "project=s" => \$project_arg,
                                   "logfile-dir=s" => \$logfile_dir_arg,
                                   "configure-args=s" => \$configure_args,
                                   "make-args=s" => \$make_args,
@@ -90,7 +92,7 @@ verbose "*** Working in $dir\n";
 # Get the coverity tool, put it in our path
 
 verbose "*** Downloading coverity tool\n";
-doit(0, "wget https://scan.coverity.com/download/linux-64 --post-data \"token=$coverity_token_arg\&project=ofiwg%2Flibfabric\" -O coverity_tool.tgz");
+doit(0, "wget https://scan.coverity.com/download/linux-64 --post-data \"token=$coverity_token_arg\&project=$project_arg\" -O coverity_tool.tgz");
 doit(0, "tar xf coverity_tool.tgz");
 opendir(my $dh, ".") ||
     die "Can't opendir .";
@@ -102,24 +104,26 @@ $ENV{PATH} = "$cov_dir:$ENV{PATH}";
 
 ######################################################################
 
-# Expand the libfabric tarball, build it
+# Expand the tarball, build it
 
-verbose "*** Extracting libfabric tarball\n";
+verbose "*** Extracting tarball\n";
 doit(0, "tar xf $filename_arg");
+my $base_name = $project_arg;
+$base_name =~ s/^ofiwg(%2F|-)([a-z]+)$/$2/;
 my $tarball_filename = basename($filename_arg);
-$tarball_filename =~ m/^libfabric-(.+)\.tar.+$/;
-my $libfabric_ver = $1;
-chdir("libfabric-$libfabric_ver");
+$tarball_filename =~ m/^\Q$base_name\E-(.+)\.tar.+$/;
+my $version = $1;
+chdir("$base_name-$version");
 
-verbose "*** Configuring libfabric tarball\n";
+verbose "*** Configuring tarball\n";
 doit(0, "./configure $configure_args", "coverity-configure");
 
-verbose "*** Building libfabric tarball\n";
+verbose "*** Building libtarball\n";
 doit(0, "cov-build --dir cov-int make $make_args", "coverity-build");
 
 # Tar up the Coverity results
 verbose "*** Tarring up results\n";
-doit(0, "tar jcf $libfabric_ver-analyzed.tar.bz2 cov-int");
+doit(0, "tar jcf $version-analyzed.tar.bz2 cov-int");
 
 # If not dry-run, submit to Coverity
 if ($dry_run_arg) {
@@ -128,10 +132,10 @@ if ($dry_run_arg) {
     verbose "*** Submitting results\n";
     doit(0, "curl --form token=$coverity_token_arg " .
          "--form email=ofiwg-bot\@openfabrics.org " .
-         "--form file=\@$libfabric_ver-analyzed.tar.bz2 " .
-         "--form version=$libfabric_ver " .
+         "--form file=\@$version-analyzed.tar.bz2 " .
+         "--form version=$version " .
          "--form description=nightly-master " .
-         "https://scan.coverity.com/builds?project=ofiwg%2Flibfabric",
+         "https://scan.coverity.com/builds?project=$project_arg",
          "coverity-submit");
 }
 
