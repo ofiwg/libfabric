@@ -34,16 +34,20 @@ use File::Basename;
 use Getopt::Long;
 
 my $source_dir_arg;
+my $fabtests_dir_arg;
 my $download_dir_arg;
-my $coverity_token_arg;
+my $libfabric_coverity_token_arg;
+my $fabtests_coverity_token_arg;
 my $logfile_dir_arg;
 my $help_arg;
 my $verbose_arg;
 my $debug_arg;
 
 my $ok = Getopt::Long::GetOptions("source-dir=s" => \$source_dir_arg,
+                                  "fabtests-source-dir=s" => \$fabtests_dir_arg,
                                   "download-dir=s" => \$download_dir_arg,
-                                  "coverity-token=s" => \$coverity_token_arg,
+                                  "coverity-token=s" => \$libfabric_coverity_token_arg,
+                                  "fabtests-coverity-token=s" => \$fabtests_coverity_token_arg,
                                   "logfile-dir=s" => \$logfile_dir_arg,
                                   "verbose" => \$verbose_arg,
                                   "debug" => \$debug_arg,
@@ -233,29 +237,43 @@ sub submit_to_coverity {
 # Create a temporary directory to install into
 my $installdir = tempdir(CLEANUP => 1);
 
+verbose("*** Building libfabric...\n");
 chdir($source_dir_arg);
 git_cleanup();
-my $version = get_git_version();
+my $libfabric_version = get_git_version();
 my $rebuilt_libfabric = make_tarball("libfabric", $source_dir_arg,
-    $version, $installdir);
+    $libfabric_version, $installdir);
+
+verbose("\n\n*** Building fabtests...\n");
+chdir($fabtests_dir_arg);
+git_cleanup();
+my $fabtests_version = get_git_version();
+my $rebuilt_fabtests = make_tarball("fabtests", $fabtests_dir_arg,
+    $fabtests_version, $installdir);
 
 # Re-generate hashes
 verbose("*** Re-generating md5/sha1sums...\n");
-doit(0, "md5sum libfabric*tar* > md5sums.txt");
-doit(0, "sha1sum libfabric*tar* > sha1sums.txt");
+chdir($download_dir_arg);
+doit(0, "md5sum libfabric*tar* fabtests*tar* > md5sums.txt");
+doit(0, "sha1sum libfabric*tar* fabtests*tar* > sha1sums.txt");
 
 # Re-write latest.txt
 verbose("*** Re-creating latest.txt...\n");
 unlink("latest.txt");
 open(OUT, ">latest.txt") || die "Can't write to latest.txt";
-print OUT "libfabric-$version\n";
+print OUT "libfabric-$libfabric_version\n";
 close(OUT);
 
 # Run the coverity script if requested
-if (defined($coverity_token_arg) && $rebuilt_libfabric) {
-    submit_to_coverity("ofiwg%2Flibfabric", $version,
+if (defined($libfabric_coverity_token_arg) && $rebuilt_libfabric) {
+    submit_to_coverity("ofiwg%2Flibfabric", $libfabric_version,
             "--enable-sockets --enable-verbs --enable-psm --enable-usnic",
-            $coverity_token_arg);
+            $libfabric_coverity_token_arg);
+}
+if (defined($fabtests_coverity_token_arg) && $rebuilt_fabtests) {
+    submit_to_coverity("ofiwg-fabtests", $fabtests_version,
+            "CPPFLAGS=-I$installdir/include LDFLAGS=-L$installdir/lib",
+            $fabtests_coverity_token_arg);
 }
 
 # All done
