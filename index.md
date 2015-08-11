@@ -64,6 +64,7 @@ First, read the documentation:
 A set of Linux man pages have been carefully written to specify the libfabric API.  Read through these man pages to get a sense of the libfabric API.  A [set of example applications](https://github.com/ofiwg/fabtests) have been developed to highlight how an application might use various aspects of libfabric.
 
 Second, download the latest releases:
+
 * The libfabric library itself (including documentation): [libfabric-1.1.0.tar.bz2](http://downloads.openfabrics.org/downloads/ofi/libfabric-1.1.0.tar.bz2) (or [see all prior releases][http://downloads.openfabrics.org/downloads/ofi/])
 * Examples and unit tests: [fabtests-1.1.0.tar.bz2](http://downloads.openfabrics.org/downloads/ofi/fabtests-1.1.0.tar.bz2) (or [see all prior releases][http://downloads.openfabrics.org/downloads/ofi/])
 
