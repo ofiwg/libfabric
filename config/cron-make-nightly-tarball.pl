@@ -106,14 +106,18 @@ sub verbose {
         if ($verbose_arg);
 }
 
+sub git_cleanup {
+    verbose("*** Ensuring we have a clean git tree...\n");
+
+    doit(0, "git clean -dfx", "git-clean");
+    doit(0, "git reset --hard HEAD", "git-reset");
+    doit(0, "git pull", "git-pull");
+}
+
 #####################################################################
 
-# Git pull to get the latest; ensure we have a totally clean tree
-verbose("*** Ensuring we have a clean git tree...\n");
 chdir($source_dir_arg);
-doit(0, "git clean -dfx", "git-clean");
-doit(0, "git reset --hard HEAD", "git-reset");
-doit(0, "git pull", "git-pull");
+git_cleanup();
 
 # Get a git describe id (minus the initial 'v' in the tag name, if any)
 my $gd = `git describe --tags --always`;
