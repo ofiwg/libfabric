@@ -125,71 +125,80 @@ sub get_git_version {
     return $version;
 }
 
+sub make_tarball {
+    my $base_name = shift;
+    my $source_dir = shift;
+    my $version = shift;
+
+    # Read in configure.ac
+    verbose("*** Reading version number from configure.ac...\n");
+    open(IN, "configure.ac") || die "Can't open configure.ac for reading";
+    my $config;
+    $config .= $_
+    while(<IN>);
+    close(IN);
+
+    # Get the original version number
+    $config =~ m/AC_INIT\(\[\Q$base_name\E\], \[(.+?)\]/;
+    my $orig_version = $1;
+    verbose("*** Replacing configure.ac version: $orig_version\n");
+    verbose("*** Nightly tarball version: $version\n");
+
+    # Update the version number with the output from "git describe"
+    verbose("*** Re-writing configure.ac with git describe results...\n");
+    $config =~ s/(AC_INIT\(\[\Q$base_name\E\], \[).+?\]/$1$version]/;
+    open(OUT, ">configure.ac");
+    print OUT $config;
+    close(OUT);
+
+    # Now make the tarball
+    verbose("*** Running autogen.sh...\n");
+    doit(0, "./autogen.sh", "autogen");
+    verbose("*** Running configure...\n");
+    doit(0, "./configure", "configure");
+
+    # Is there already a tarball of this version in the download
+    # directory?  If so, just exit now without doing anything.
+    if (-f "$download_dir_arg/$base_name-$version.tar.gz") {
+        verbose("*** Target tarball already exists: $base_name-$version.tar.gz\n");
+        return 0;
+    }
+
+    # Note that distscript.pl, invoked by "make dist", checks for a dirty
+    # git tree.  We have to tell it that a modified configure.ac is ok.
+    # Put the name "configure.ac" in a magic environment variable.
+    $ENV{'LIBFABRIC_DISTSCRIPT_DIRTY_FILES'} = "configure.ac";
+
+    verbose("*** Running make distcheck...\n");
+    doit(0, "AM_MAKEFLAGS=V=1 DISTCHECK_CONFIGURE_FLAGS=\"$configure_args\" make distcheck", "distcheck");
+
+    delete $ENV{'LIBFABRIC_DISTSCRIPT_DIRTY_FILES'};
+
+    # Restore configure.ac
+    verbose("*** Restoring configure.ac...\n");
+    doit(0, "git checkout configure.ac");
+
+    # Move the resulting tarballs to the downloads directory
+    verbose("*** Placing tarballs in download directory...\n");
+    doit(0, "mv $base_name-$version.tar.gz $base_name-$version.tar.bz2 $download_dir_arg");
+
+    # Make sym links to these newest tarballs
+    chdir($download_dir_arg);
+    unlink("$base_name-latest.tar.gz");
+    unlink("$base_name-latest.tar.bz2");
+    doit(0, "ln -s $base_name-$version.tar.gz $base_name-latest.tar.gz");
+    doit(0, "ln -s $base_name-$version.tar.bz2 $base_name-latest.tar.bz2");
+
+    return 1;
+}
+
 #####################################################################
 
 chdir($source_dir_arg);
 git_cleanup();
 my $version = get_git_version();
-
-# Read in configure.ac
-verbose("*** Reading version number from configure.ac...\n");
-open(IN, "configure.ac") || die "Can't open configure.ac for reading";
-my $config;
-$config .= $_
-    while(<IN>);
-close(IN);
-
-# Get the original version number
-$config =~ m/AC_INIT\(\[libfabric\], \[(.+?)\]/;
-my $orig_version = $1;
-verbose("*** Replacing configure.ac version: $orig_version\n");
-verbose("*** Nightly tarball version: $version\n");
-
-# Is there already a tarball of this version in the download
-# directory?  If so, just exit now without doing anything.
-if (-f "$download_dir_arg/libfabric-$version.tar.gz") {
-    verbose("*** Target tarball already exists: libfabric-$version.tar.gz\n");
-    verbose("*** Exiting without doing anything\n");
-    exit(0);
-}
-
-# Update the version number with the output from "git describe"
-verbose("*** Re-writing configure.ac with git describe results...\n");
-$config =~ s/(AC_INIT\(\[libfabric\], \[).+?\]/$1$version]/;
-open(OUT, ">configure.ac");
-print OUT $config;
-close(OUT);
-
-# Now make the tarball
-verbose("*** Running autogen.sh...\n");
-doit(0, "./autogen.sh", "autogen");
-verbose("*** Running configure...\n");
-doit(0, "./configure", "configure");
-
-# Note that distscript.pl, invoked by "make dist", checks for a dirty
-# git tree.  We have to tell it that a modified configure.ac is ok.
-# Put the name "configure.ac" in a magic environment variable.
-$ENV{'LIBFABRIC_DISTSCRIPT_DIRTY_FILES'} = "configure.ac";
-
-verbose("*** Running make distcheck...\n");
-doit(0, "AM_MAKEFLAGS=-j32 make distcheck", "distcheck");
-
-delete $ENV{'LIBFABRIC_DISTSCRIPT_SHA1_configure.ac'};
-
-# Restore configure.ac
-verbose("*** Restoring configure.ac...\n");
-doit(0, "git checkout configure.ac");
-
-# Move the resulting tarballs to the downloads directory
-verbose("*** Placing tarballs in download directory...\n");
-doit(0, "mv libfabric-$version.tar.gz libfabric-$version.tar.bz2 $download_dir_arg");
-
-# Make sym links to these newest tarballs
-chdir($download_dir_arg);
-unlink("libfabric-latest.tar.gz");
-unlink("libfabric-latest.tar.bz2");
-doit(0, "ln -s libfabric-$version.tar.gz libfabric-latest.tar.gz");
-doit(0, "ln -s libfabric-$version.tar.bz2 libfabric-latest.tar.bz2");
+my $rebuilt_libfabric = make_tarball("libfabric", $source_dir_arg,
+    $version);
 
 # Re-generate hashes
 verbose("*** Re-generating md5/sha1sums...\n");
@@ -204,7 +213,7 @@ print OUT "libfabric-$version\n";
 close(OUT);
 
 # Run the coverity script if requested
-if (defined($coverity_token_arg)) {
+if (defined($coverity_token_arg) && $rebuilt_libfabric) {
     verbose("*** Perparing/submitting to Coverity...\n");
 
     # The coverity script will be in the same directory as this script
