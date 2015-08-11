@@ -192,6 +192,36 @@ sub make_tarball {
     return 1;
 }
 
+sub submit_to_coverity {
+    my $project_name = shift;
+    my $version = shift;
+    my $configure_args = shift;
+    my $coverity_token = shift;
+
+    verbose("*** Preparing/submitting to Coverity...\n");
+
+    # The coverity script will be in the same directory as this script
+    my $dir = dirname($0);
+    my $base_name = $project_name;
+    $base_name =~ s/^ofiwg(%2F|-)([a-z]+)$/$2/;
+    my $cmd = "$dir/cron-submit-coverity.pl " .
+        "--filename $download_dir_arg/$base_name-$version.tar.bz2 " .
+        "--coverity-token $coverity_token " .
+        "--make-args=-j8 " .
+        "--configure-args=\"$configure_args\" " .
+        "--project=$project_name ";
+
+    $cmd .= "--verbose "
+        if ($verbose_arg);
+    $cmd .= "--debug "
+        if ($debug_arg);
+    $cmd .= "--logfile-dir=$logfile_dir_arg"
+        if (defined($logfile_dir_arg));
+
+    # Coverity script will do its own logging
+    doit(0, $cmd);
+}
+
 #####################################################################
 
 chdir($source_dir_arg);
@@ -214,25 +244,9 @@ close(OUT);
 
 # Run the coverity script if requested
 if (defined($coverity_token_arg) && $rebuilt_libfabric) {
-    verbose("*** Perparing/submitting to Coverity...\n");
-
-    # The coverity script will be in the same directory as this script
-    my $dir = dirname($0);
-    my $cmd = "$dir/cron-submit-coverity.pl " .
-        "--filename $download_dir_arg/libfabric-$version.tar.bz2 " .
-        "--coverity-token $coverity_token_arg " .
-        "--make-args=-j8 " .
-        "--configure-args=\"--enable-sockets --enable-verbs --enable-psm --enable-usnic\" ";
-
-    $cmd .= "--verbose "
-        if ($verbose_arg);
-    $cmd .= "--debug "
-        if ($debug_arg);
-    $cmd .= "--logfile-dir=$logfile_dir_arg"
-        if (defined($logfile_dir_arg));
-
-    # Coverity script will do its own logging
-    doit(0, $cmd);
+    submit_to_coverity("ofiwg%2Flibfabric", $version,
+            "--enable-sockets --enable-verbs --enable-psm --enable-usnic",
+            $coverity_token_arg);
 }
 
 # All done
