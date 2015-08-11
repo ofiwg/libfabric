@@ -495,8 +495,8 @@ static int setup_handle(void)
 	aihints.ai_flags = AI_PASSIVE;
 	ret = getaddrinfo(opts.src_addr, opts.src_port, &aihints, &ai);
 	if (ret == EAI_SYSTEM) {
-		fprintf("getaddrinfo for %s:%s: %s\n",
-				opts.src_addr, opts.src_port, strerror(errno));
+		FT_ERR("getaddrinfo for %s:%s: %s\n",
+			opts.src_addr, opts.src_port, strerror(errno));
 		return -ret;
 	} else if (ret) {
 		FT_ERR("getaddrinfo: %s\n", gai_strerror(ret));
