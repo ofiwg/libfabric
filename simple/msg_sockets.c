@@ -104,9 +104,8 @@ sockaddrstr(const union sockaddr_any *addr, socklen_t len, char *buf, size_t buf
 		if (errcode != EAI_SYSTEM) {
 			fprintf(stderr, "getnameinfo: %s\n", gai_strerror(errcode));
 		} else {
-			fprintf(stderr, "getnameinfo: %s\n", strerror(errcode));
+			fprintf(stderr, "getnameinfo: %s\n", strerror(errno));
 		}
-		errno = errcode;
 		return NULL;
 	}
 
@@ -498,7 +497,8 @@ static int setup_handle(void)
 	aihints.ai_flags = AI_PASSIVE;
 	ret = getaddrinfo(opts.src_addr, opts.src_port, &aihints, &ai);
 	if (ret == EAI_SYSTEM) {
-		FT_PRINTERR("getaddrinfo", -ret);
+		fprintf("getaddrinfo for %s:%s: %s\n",
+				opts.src_addr, opts.src_port, strerror(errno));
 		return -ret;
 	} else if (ret) {
 		FT_ERR("getaddrinfo: %s\n", gai_strerror(ret));
