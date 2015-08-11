@@ -57,17 +57,20 @@ How do I get involved?
 
 First, read the documentation:
 
-* [Man pages for v1.0.0](v1.0.0/man/)
+* [Man pages for v1.1.0](v1.1.0/man/)
+  * Older: [Man pages for v1.0.0](v1.0.0/man/)
 * [Man pages for current head of development](master/man/)
 
 A set of Linux man pages have been carefully written to specify the libfabric API.  Read through these man pages to get a sense of the libfabric API.  A [set of example applications](https://github.com/ofiwg/fabtests) have been developed to highlight how an application might use various aspects of libfabric.
 
-Second, [download the latest release](http://downloads.openfabrics.org/downloads/ofi).
+Second, download the latest releases:
+* The libfabric library itself (including documentation): [libfabric-1.1.0.tar.bz2](http://downloads.openfabrics.org/downloads/ofi/libfabric-1.1.0.tar.bz2) (or [see all prior releases][http://downloads.openfabrics.org/downloads/ofi/])
+* Examples and unit tests: [fabtests-1.1.0.tar.bz2](http://downloads.openfabrics.org/downloads/ofi/fabtests-1.1.0.tar.bz2) (or [see all prior releases][http://downloads.openfabrics.org/downloads/ofi/])
 
 The bulk of the libfabric code base is being developed in [the main OFIWG libfabric GitHub repository](https://github.com/ofiwg/libfabric).
 
 Third: [become part of the conversation](http://lists.openfabrics.org/mailman/listinfo/ofiwg)
 
-[Join the ofiwg mailing list](http://lists.openfabrics.org/mailman/listinfo/ofiwg).  Notices of the Tuesday-weekly OFIWG Webexes are sent on this list; anyone can join the calls to listen and participate in the design of libfabric.
+[Join the ofiwg mailing list](http://lists.openfabrics.org/mailman/listinfo/ofiwg).  Notices of the every-other-Tuesday OFIWG Webexes are sent on this list; anyone can join the calls to listen and participate in the design of libfabric.
 
-Although OFI targets Linux as its primary operating system, portability for non-Linux platforms is provided as a convenience to our development community.  Currently, OFI has been ported to OS-X.
+Although OFI targets Linux as its primary operating system, portability for non-Linux platforms is provided as a convenience to our development community.  Currently, OFI has been ported to OS X.
