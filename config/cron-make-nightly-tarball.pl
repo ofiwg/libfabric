@@ -29,6 +29,7 @@
 use strict;
 use warnings;
 
+use File::Temp qw/ tempdir /;
 use File::Basename;
 use Getopt::Long;
 
@@ -129,6 +130,9 @@ sub make_tarball {
     my $base_name = shift;
     my $source_dir = shift;
     my $version = shift;
+    my $installdir = shift;
+
+    my $configure_args = "CPPFLAGS=-I$installdir/include LDFLAGS=-L$installdir/lib";
 
     # Read in configure.ac
     verbose("*** Reading version number from configure.ac...\n");
@@ -155,7 +159,9 @@ sub make_tarball {
     verbose("*** Running autogen.sh...\n");
     doit(0, "./autogen.sh", "autogen");
     verbose("*** Running configure...\n");
-    doit(0, "./configure", "configure");
+    doit(0, "./configure $configure_args --prefix=$installdir", "configure");
+    verbose("*** Running make install...\n");
+    doit(0, "make install", "make-install");
 
     # Is there already a tarball of this version in the download
     # directory?  If so, just exit now without doing anything.
@@ -224,11 +230,14 @@ sub submit_to_coverity {
 
 #####################################################################
 
+# Create a temporary directory to install into
+my $installdir = tempdir(CLEANUP => 1);
+
 chdir($source_dir_arg);
 git_cleanup();
 my $version = get_git_version();
 my $rebuilt_libfabric = make_tarball("libfabric", $source_dir_arg,
-    $version);
+    $version, $installdir);
 
 # Re-generate hashes
 verbose("*** Re-generating md5/sha1sums...\n");
