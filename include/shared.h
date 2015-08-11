@@ -87,7 +87,9 @@ enum {
 
 extern struct fi_info *fi, *hints;
 extern struct fid_fabric *fabric;
+extern struct fid_wait *waitset;
 extern struct fid_domain *domain;
+extern struct fid_poll *pollset;
 extern struct fid_pep *pep;
 extern struct fid_ep *ep;
 extern struct fid_cq *txcq, *rxcq;
@@ -132,6 +134,26 @@ char *size_str(char str[FT_STR_LEN], long long size);
 char *cnt_str(char str[FT_STR_LEN], long long cnt);
 int size_to_count(int size);
 
+
+#define FT_CLOSE_FID(fd)			\
+	do {					\
+		if ((fd)) {			\
+			fi_close(&(fd)->fid);	\
+			fd = NULL;		\
+		}				\
+	} while (0)
+
+#define FT_CLOSEV_FID(fd, cnt)			\
+	do {					\
+		int i;				\
+		if (!(fd))			\
+			break;			\
+		for (i = 0; i < (cnt); i++) {	\
+			FT_CLOSE_FID((fd)[i]);	\
+		}				\
+	} while (0)
+
+void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);
 int ft_finalize(struct fi_info *fi, struct fid_ep *tx_ep, struct fid_cq *txcq,
 		struct fid_cq *rxcq, fi_addr_t addr);

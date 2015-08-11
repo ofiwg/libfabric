@@ -252,25 +252,25 @@ out:
 	return ret;
 }
 
-static void free_ep_res(void)
+static void free_res(void)
 {
-	if (ep)
-		fi_close(&ep->fid);
-	if (av)
-		fi_close(&av->fid);
-	if (mr)
-		fi_close(&mr->fid);
-	if (mr_multi_recv)
-		fi_close(&mr_multi_recv->fid);
-	if (rxcq)
-		fi_close(&rxcq->fid);
-	if (txcq)
-		fi_close(&txcq->fid);
-
-	free(ctx_send);
-	free(ctx_multi_recv);
-	free(send_buf);
-	free(multi_recv_buf);
+	FT_CLOSE_FID(mr_multi_recv);
+	if (ctx_send) {
+		free(ctx_send);
+		ctx_send = NULL;
+	}
+	if (ctx_multi_recv) {
+		free(ctx_multi_recv);
+		ctx_multi_recv = NULL;
+	}
+	if (send_buf) {
+		free(send_buf);
+		send_buf = NULL;
+	}
+	if (multi_recv_buf) {
+		free(multi_recv_buf);
+		multi_recv_buf = NULL;
+	}
 }
 
 static int alloc_ep_res(struct fi_info *fi)
@@ -300,7 +300,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_mr_reg(domain, send_buf, max_send_buf_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
-		goto err1;
+		return ret;
 	}
 
 	// set the multi buffer size to be allocated
@@ -309,15 +309,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	multi_recv_buf = malloc(multi_buf_size);
 	if (!multi_recv_buf) {
 		fprintf(stderr, "Cannot allocate multi_recv_buf\n");
-		ret = -1;
-		goto err1;
+		return -1;
 	}
 
 	ret = fi_mr_reg(domain, multi_recv_buf, multi_buf_size, 0, 0, 1, 0,
 			&mr_multi_recv, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
-		goto err2;
+		return ret;
 	}
 
 	memset(&cq_attr, 0, sizeof cq_attr);
@@ -327,13 +326,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err3;
+		return ret;
 	}
 
 	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err4;
+		return ret;
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
@@ -345,32 +344,16 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
-		goto err5;
+		return ret;
 	}
 
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
-		goto err6;
+		return ret;
 	}
 
 	return 0;
-
-err6:
-	fi_close(&av->fid);
-err5:
-	fi_close(&rxcq->fid);
-err4:
-	fi_close(&txcq->fid);
-err3:
-	fi_close(&mr_multi_recv->fid);
-err2:
-	free(multi_recv_buf);
-	fi_close(&mr->fid);
-err1:
-	free(send_buf);
-
-	return ret;
 }
 
 static int set_min_multi_recv()
@@ -445,22 +428,22 @@ static int init_fabric(void)
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
-		goto err0;
+		return ret;
 	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		goto err1;
+		return ret;
 	}
 
 	ret = alloc_ep_res(fi);
 	if (ret)
-		goto err3;
+		return ret;
 
 	ret = bind_ep_res();
 	if (ret)
-		goto err4;
+		return ret;
 
 	// set the value of FI_OPT_MIN_MULTI_RECV which defines the minimum
 	// receive buffer space available when the receive buffer is
@@ -469,18 +452,6 @@ static int init_fabric(void)
 
 	// post the initial receive buffers to get MULTI_RECV data
 	ret = post_multi_recv_buffer();
-
-	if(ret)
-		goto err4;
-	return 0;
-
-err4:
-	free_ep_res();
-err3:
-	fi_close(&domain->fid);
-err1:
-	fi_close(&fabric->fid);
-err0:
 	return ret;
 }
 
@@ -568,13 +539,6 @@ static int run(void)
 	/* Finalize before closing ep */
 	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
-	free_ep_res();
-
-	if (domain)
-		fi_close(&domain->fid);
-	if (fabric)
-		fi_close(&fabric->fid);
-
 	return ret;
 }
 
@@ -609,7 +573,7 @@ int main(int argc, char **argv)
 
 	ret = run();
 
-	fi_freeinfo(hints);
-	fi_freeinfo(fi);
+	free_res();
+	ft_free_res();
 	return -ret;
 }

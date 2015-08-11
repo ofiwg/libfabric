@@ -335,18 +335,18 @@ static int run_test(void)
 	return run_all_ops ? run_ops() : run_op();
 }
 
-static void free_ep_res(void)
+static void free_res(void)
 {
-	fi_close(&ep->fid);
-	fi_close(&av->fid);
-	fi_close(&mr->fid);
-	fi_close(&mr_result->fid);
-	fi_close(&mr_compare->fid);
-	fi_close(&rxcq->fid);
-	fi_close(&txcq->fid);
-	free(buf);
-	free(result);
-	free(compare);
+	FT_CLOSE_FID(mr_result);
+	FT_CLOSE_FID(mr_compare);
+	if (result) {
+		free(result);
+		result = NULL;
+	}
+	if (compare) {
+		free(compare);
+		compare = NULL;
+	}
 }
 
 static uint64_t get_mr_key()
@@ -390,13 +390,13 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err1;
+		return ret;
 	}
 
 	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err2;
+		return ret;
 	}
 
 	// registers local data buffer buff that specifies
@@ -406,7 +406,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		get_mr_key(), 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
-		goto err3;
+		return ret;
 	}
 
 	// registers local data buffer that stores initial value of
@@ -416,7 +416,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		get_mr_key(), 0, &mr_result, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", -ret);
-		goto err4;
+		return ret;
 	}
 
 	// registers local data buffer that contains comparison data
@@ -425,7 +425,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		get_mr_key(), 0, &mr_compare, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
-		goto err5;
+		return ret;
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
@@ -437,35 +437,16 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
-		goto err6;
+		return ret;
 	}
 
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
-		goto err7;
+		return ret;
 	}
 
 	return 0;
-
-err7:
-	fi_close(&av->fid);
-err6:
-	fi_close(&mr_compare->fid);
-err5:
-	fi_close(&mr_result->fid);
-err4:
-	fi_close(&mr->fid);
-err3:
-	fi_close(&rxcq->fid);
-err2:
-	fi_close(&txcq->fid);
-err1:
-	free(buf);
-	free(result);
-	free(compare);
-
-	return ret;
 }
 
 static int bind_ep_res(void)
@@ -532,33 +513,24 @@ static int init_fabric(void)
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
-		goto err0;
+		return ret;
 	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		goto err1;
+		return ret;
 	}
 
 	ret = alloc_ep_res(fi);
 	if (ret)
-		goto err3;
+		return ret;
 
 	ret = bind_ep_res();
 	if (ret)
-		goto err4;
+		return ret;
 
 	return 0;
-
-err4:
-	free_ep_res();
-err3:
-	fi_close(&domain->fid);
-err1:
-	fi_close(&fabric->fid);
-err0:
-	return ret;
 }
 
 static int init_av(void)
@@ -697,10 +669,6 @@ static int run(void)
 	/* Finalize before closing ep */
 	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
-	free_ep_res();
-	fi_close(&domain->fid);
-	fi_close(&fabric->fid);
-
 	return ret;
 }
 
@@ -749,7 +717,7 @@ int main(int argc, char **argv)
 
 	ret = run();
 
-	fi_freeinfo(hints);
-	fi_freeinfo(fi);
+	free_res();
+	ft_free_res();
 	return -ret;
 }

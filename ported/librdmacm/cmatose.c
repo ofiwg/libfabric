@@ -206,23 +206,15 @@ static int post_sends(struct cma_node *node)
 
 static void destroy_node(struct cma_node *node)
 {
-	if (node->ep)
-		fi_close(&node->ep->fid);
-
-	if (node->cq[SEND_CQ_INDEX])
-		fi_close(&node->cq[SEND_CQ_INDEX]->fid);
-
-	if (node->cq[RECV_CQ_INDEX])
-		fi_close(&node->cq[RECV_CQ_INDEX]->fid);
-
-	if (node->mr)
-		fi_close(&node->mr->fid);
+	FT_CLOSE_FID(node->ep);
+	FT_CLOSE_FID(node->cq[SEND_CQ_INDEX]);
+	FT_CLOSE_FID(node->cq[RECV_CQ_INDEX]);
+	FT_CLOSE_FID(node->mr);
 
 	if (node->mem)
 		free(node->mem);
 
-	if (node->domain)
-		fi_close(&node->domain->fid);
+	FT_CLOSE_FID(node->domain);
 }
 
 static int alloc_nodes(void)
@@ -448,7 +440,7 @@ static int run_server(void)
  	printf("disconnected\n");
 
 out:
-	fi_close(&pep->fid);
+	FT_CLOSE_FID(pep);
 	return ret;
 }
 
@@ -568,14 +560,14 @@ int main(int argc, char **argv)
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
-		goto exit0;
+		goto out;
 	}
 
 	printf("using provider: %s\n", fi->fabric_attr->prov_name);
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
-		goto exit1;
+		goto out;
 	}
 
 	memset(&eq_attr, 0, sizeof eq_attr);
@@ -583,25 +575,18 @@ int main(int argc, char **argv)
 	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_eq_open", ret);
-		goto exit2;
+		goto out;
 	}
 
 	if (alloc_nodes())
-		goto exit3;
+		goto out;
 
 	ret = opts.dst_addr ? run_client() : run_server();
 
 	printf("test complete\n");
 	destroy_nodes();
 
-
-exit3:
-	fi_close(&eq->fid);
-exit2:
-	fi_close(&fabric->fid);
-exit1:
-	fi_freeinfo(fi);
-exit0:
-	fi_freeinfo(hints);
+out:
+	ft_free_res();
 	return -ret;
 }

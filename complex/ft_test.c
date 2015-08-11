@@ -35,15 +35,6 @@
 static struct timespec start, end;
 
 
-#define FT_CLOSE_FID(fd) \
-	do { \
-		if (fd) { \
-			fi_close(&fd->fid); \
-			fd = NULL; \
-		} \
-	} while (0)
-
-
 void ft_record_error(int error)
 {
 	if (!ft.error) {
@@ -392,14 +383,7 @@ static int ft_run_bandwidth(void)
 
 static void ft_cleanup(void)
 {
-	FT_CLOSE_FID(ep);
-	FT_CLOSE_FID(pep);
-	FT_CLOSE_FID(rxcq);
-	FT_CLOSE_FID(txcq);
-	FT_CLOSE_FID(av);
-	FT_CLOSE_FID(eq);
-	FT_CLOSE_FID(domain);
-	FT_CLOSE_FID(fabric);
+	ft_free_res();
 	ft_cleanup_xcontrol(&ft_rx);
 	ft_cleanup_xcontrol(&ft_tx);
 	memset(&ft, 0, sizeof ft);

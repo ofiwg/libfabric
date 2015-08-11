@@ -45,24 +45,12 @@
 static int transfer_size = 1000;
 static int rx_depth = 512;
 
-static struct fid_wait *waitset;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;
 struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
-
-static void free_ep_res(void)
-{
-	fi_close(&ep->fid);
-	fi_close(&av->fid);
-	fi_close(&mr->fid);
-	fi_close(&rxcq->fid);
-	fi_close(&txcq->fid);
-	fi_close(&waitset->fid);
-	free(buf);
-}
 
 static int alloc_ep_res(struct fi_info *fi)
 {
@@ -83,7 +71,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_wait_open(fabric, &wait_attr, &waitset);
 	if (ret) {
 		FT_PRINTERR("fi_wait_open", ret);
-		goto err1;
+		return ret;
 	}
 
 	memset(&cq_attr, 0, sizeof cq_attr);
@@ -97,21 +85,21 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err2;
+		return ret;
 	}
 
 	/* Open completion queue for recv completions */
 	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err3;
+		return ret;
 	}
 
 	/* Register memory */
 	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
-		goto err4;
+		return ret;
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
@@ -124,30 +112,16 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
-		goto err5;
+		return ret;
 	}
 
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
-		goto err6;
+		return ret;
 	}
 
 	return 0;
-
-err6:
-	fi_close(&av->fid);
-err5:
-	fi_close(&mr->fid);
-err4:
-	fi_close(&rxcq->fid);
-err3:
-	fi_close(&txcq->fid);
-err2:
-	fi_close(&waitset->fid);
-err1:
-	free(buf);
-	return ret;
 }
 
 static int bind_ep_res(void)
@@ -239,35 +213,24 @@ static int init_fabric(void)
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
-		goto err0;
+		return ret;
 	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		goto err1;
+		return ret;
 	}
 
 	ret = alloc_ep_res(fi);
 	if (ret)
-		goto err3;
+		return ret;
 
 	ret = bind_ep_res();
 	if (ret)
-		goto err4;
+		return ret;
 
 	return 0;
-
-err4:
-	free_ep_res();
-err3:
-	fi_close(&domain->fid);
-err1:
-	fi_close(&fabric->fid);
-err0:
-	fi_freeinfo(fi);
-
-	return ret;
 }
 
 static int init_av(void)
@@ -440,11 +403,6 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	free_ep_res();
-	fi_close(&domain->fid);
-	fi_close(&fabric->fid);
-	fi_freeinfo(hints);
-	fi_freeinfo(fi);
-
+	ft_free_res();
 	return ret;
 }

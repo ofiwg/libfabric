@@ -52,15 +52,6 @@ struct fi_context fi_ctx_send;
 struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_av;
 
-static void free_ep_res(void)
-{
-	fi_close(&ep->fid);
-	fi_close(&av->fid);
-	fi_close(&mr->fid);
-	fi_close(&rxcq->fid);
-	fi_close(&txcq->fid);
-	free(buf);
-}
 
 static int alloc_ep_res(struct fi_info *fi)
 {
@@ -83,21 +74,21 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err1;
+		return ret;
 	}
 
 	/* Open completion queue for recv completions */
 	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err2;
+		return ret;
 	}
 
 	/* Register memory */
 	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
-		goto err3;
+		return ret;
 	}
 
 	memset(&av_attr, 0, sizeof av_attr);
@@ -110,28 +101,16 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
-		 goto err4;
+		return ret;
 	 }
 
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
-		goto err5;
+		return ret;
 	}
 
 	return 0;
-
-err5:
-	fi_close(&av->fid);
-err4:
-	fi_close(&mr->fid);
-err3:
-	fi_close(&rxcq->fid);
-err2:
-	fi_close(&txcq->fid);
-err1:
-	free(buf);
-	return ret;
 }
 
 static int bind_ep_res(void)
@@ -181,7 +160,7 @@ static int init_fabric(void)
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
-		goto err0;
+		return ret;
 	}
 
 	/* Get remote address of the server */
@@ -195,23 +174,23 @@ static int init_fabric(void)
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
-		goto err1;
+		return ret;
 	}
 
 	/* Open domain */
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		goto err2;
+		return ret;
 	}
 
 	ret = alloc_ep_res(fi);
 	if (ret)
-		goto err4;
+		return ret;
 
 	ret = bind_ep_res();
 	if (ret)
-		goto err5;
+		return ret;
 
 	if (opts.dst_addr) {
 		/* Insert address to the AV and get the fabric address back */
@@ -223,19 +202,7 @@ static int init_fabric(void)
 		}
 	}
 
-	fi_freeinfo(fi);
 	return 0;
-
-err5:
-	free_ep_res();
-err4:
-	fi_close(&domain->fid);
-err2:
-	fi_close(&fabric->fid);
-err1:
-	fi_freeinfo(fi);
-err0:
-	return ret;
 }
 
 static int send_recv()
@@ -327,10 +294,6 @@ int main(int argc, char **argv)
 	/* Exchange data */
 	ret = send_recv();
 
-	free_ep_res();
-	fi_close(&domain->fid);
-	fi_close(&fabric->fid);
-	fi_freeinfo(hints);
-
+	ft_free_res();
 	return ret;
 }

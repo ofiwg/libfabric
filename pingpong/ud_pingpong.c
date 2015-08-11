@@ -175,37 +175,6 @@ static int run_test(void)
 	return 0;
 }
 
-static void free_ep_res(void)
-{
-	int ret;
-
-	if (ep) {
-		ret = fi_close(&ep->fid);
-		if (ret != 0) {
-			FT_PRINTERR("fi_close", ret);
-		}
-	}
-	if (mr) {
-		ret = fi_close(&mr->fid);
-		if (ret != 0) {
-			FT_PRINTERR("fi_close", ret);
-		}
-	}
-	if (rxcq) {
-		ret = fi_close(&rxcq->fid);
-		if (ret != 0) {
-			FT_PRINTERR("fi_close", ret);
-		}
-	}
-	if (txcq) {
-		ret = fi_close(&txcq->fid);
-		if (ret != 0) {
-			FT_PRINTERR("fi_close", ret);
-		}
-	}
-	free(buf);
-}
-
 static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
@@ -235,19 +204,19 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err1;
+		return ret;
 	}
 
 	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err2;
+		return ret;
 	}
 
 	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
-		goto err3;
+		return ret;
 	}
 
 	memset(&av_attr, 0, sizeof(av_attr));
@@ -258,28 +227,16 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
-		goto err4;
+		return ret;
 	}
 
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
-		goto err5;
+		return ret;
 	}
 
 	return 0;
-
-err5:
-	fi_close(&av->fid);
-err4:
-	fi_close(&mr->fid);
-err3:
-	fi_close(&rxcq->fid);
-err2:
-	fi_close(&txcq->fid);
-err1:
-	free(buf);
-	return ret;
 }
 
 static int bind_ep_res(void)
@@ -333,7 +290,7 @@ static int common_setup(void)
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
-		goto err1;
+		return ret;
 	}
 	if (fi->ep_attr->max_msg_size) {
 		max_msg_size = fi->ep_attr->max_msg_size;
@@ -342,7 +299,7 @@ static int common_setup(void)
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
-		goto err1;
+		return ret;
 	}
 	if (fi->mode & FI_MSG_PREFIX) {
 		prefix_len = fi->ep_attr->msg_prefix_size;
@@ -351,30 +308,20 @@ static int common_setup(void)
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		goto err2;
+		return ret;
 	}
 
 	ret = alloc_ep_res(fi);
 	if (ret) {
-		goto err4;
+		return ret;
 	}
 
 	ret = bind_ep_res();
 	if (ret) {
-		goto err5;
+		return ret;
 	}
 
 	return 0;
-
-err5:
-	free_ep_res();
-err4:
-	fi_close(&domain->fid);
-err2:
-	fi_close(&fabric->fid);
-err1:
-
-	return ret;
 }
 
 static int client_connect(void)
@@ -389,7 +336,7 @@ static int client_connect(void)
 	ret = fi_av_insert(av, fi->dest_addr, 1, &remote_fi_addr, 0, NULL);
 	if (ret != 1) {
 		FT_PRINTERR("fi_av_insert", ret);
-		goto err;
+		return ret;
 	}
 
 	// send initial message to server with our local address
@@ -402,22 +349,14 @@ static int client_connect(void)
 
 	ret = send_xfer(addrlen);
 	if (ret != 0)
-		goto err;
+		return ret;
 
 	// wait for reply to know server is ready
 	ret = recv_xfer(4);
 	if (ret != 0)
-		goto err;
+		return ret;
 
 	return 0;
-
-err:
-	free_ep_res();
-	fi_close(&av->fid);
-	fi_close(&domain->fid);
-	fi_close(&fabric->fid);
-
-	return ret;
 }
 
 static int server_connect(void)
@@ -457,35 +396,25 @@ static int server_connect(void)
 		} else {
 			FT_PRINTERR("fi_av_insert", ret);
 		}
-		goto err;
+		return ret;
 	}
 
 	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret != 0) {
 		FT_PRINTERR("fi_recv", ret);
-		goto err;
+		return ret;
 	}
 
 	ret = send_xfer(4);
 	if (ret != 0)
-		goto err;
+		return ret;
 
 	return 0;
-
-err:
-	free_ep_res();
-	if (domain)
-		fi_close(&domain->fid);
-
-	if (fabric)
-		fi_close(&fabric->fid);
-
-	return ret;
 }
 
 static int run(void)
 {
-	int i, ret = 0, ret2;
+	int i, ret;
 
 	ret = opts.dst_addr ? client_connect() : server_connect();
 	if (ret)
@@ -517,20 +446,6 @@ static int run(void)
 
 	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
-	free_ep_res();
-	ret2 = fi_close(&av->fid);
-	if (ret2 != 0) {
-		FT_PRINTERR("fi_close", ret2);
-	}
-	ret2 = fi_close(&domain->fid);
-	if (ret2 != 0) {
-		FT_PRINTERR("fi_close", ret2);
-	}
-	ret2 = fi_close(&fabric->fid);
-	if (ret2 != 0) {
-		FT_PRINTERR("fi_close", ret2);
-	}
-
 	return ret;
 }
 
@@ -576,7 +491,6 @@ int main(int argc, char **argv)
 
 	ret = run();
 
-	fi_freeinfo(hints);
-	fi_freeinfo(fi);
+	ft_free_res();
 	return -ret;
 }

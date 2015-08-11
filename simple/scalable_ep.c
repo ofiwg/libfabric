@@ -42,15 +42,6 @@
 #include <shared.h>
 #include <math.h>
 
-#define FT_CLOSEV(FID_C, NUM)			\
-	do {					\
-		int i;				\
-		for (i = 0; i < NUM; i++) {	\
-			if (FID_C[i])		\
-				fi_close(&FID_C[i]->fid); \
-		}				\
-	} while (0)
-
 
 static size_t transfer_size = 1000;
 static int rx_depth = 512;
@@ -101,19 +92,28 @@ static int recv_msg(void)
 	return ret;
 }
 
-static void free_ep_res(void)
+static void free_res(void)
 {
-	fi_close(&av->fid);
-	fi_close(&mr->fid);
-	FT_CLOSEV(rx_ep, ctx_cnt);
-	FT_CLOSEV(tx_ep, ctx_cnt);
-	FT_CLOSEV(rcq_array, ctx_cnt);
-	FT_CLOSEV(scq_array, ctx_cnt);
-	free(buf);
-	free(rcq_array);
-	free(scq_array);
-	free(tx_ep);
-	free(rx_ep);
+	if (rx_ep) {
+		FT_CLOSEV_FID(rx_ep, ctx_cnt);
+		free(rx_ep);
+		rx_ep = NULL;
+	}
+	if (tx_ep) {
+		FT_CLOSEV_FID(tx_ep, ctx_cnt);
+		free(tx_ep);
+		tx_ep = NULL;
+	}
+	if (rcq_array) {
+		FT_CLOSEV_FID(rcq_array, ctx_cnt);
+		free(rcq_array);
+		rcq_array = NULL;
+	}
+	if (scq_array) {
+		FT_CLOSEV_FID(scq_array, ctx_cnt);
+		free(scq_array);
+		scq_array = NULL;
+	}
 }
 
 static int alloc_ep_res(struct fid_ep *sep)
@@ -147,13 +147,13 @@ static int alloc_ep_res(struct fid_ep *sep)
 		ret = fi_tx_context(sep, i, NULL, &tx_ep[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_tx_context", ret);
-			goto err1;
+			return ret;
 		}
 
 		ret = fi_cq_open(domain, &cq_attr, &scq_array[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
-			goto err2;
+			return ret;
 		}
 	}
 
@@ -162,20 +162,20 @@ static int alloc_ep_res(struct fid_ep *sep)
 		ret = fi_rx_context(sep, i, NULL, &rx_ep[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_tx_context", ret);
-			goto err3;
+			return ret;
 		}
 
 		ret = fi_cq_open(domain, &cq_attr, &rcq_array[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
-			goto err4;
+			return ret;
 		}
 	}
 
 	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
-		goto err5;
+		return ret;
 	}
 
 	/* Get number of bits needed to represent ctx_cnt */
@@ -192,29 +192,10 @@ static int alloc_ep_res(struct fid_ep *sep)
 	ret = fi_av_open(domain, &av_attr, &av, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_av_open", ret);
-		goto err6;
+		return ret;
 	}
 
 	return 0;
-
-err6:
-	fi_close(&mr->fid);
-err5:
-	FT_CLOSEV(rcq_array, ctx_cnt);
-err4:
-	FT_CLOSEV(rx_ep, ctx_cnt);
-err3:
-	FT_CLOSEV(scq_array, ctx_cnt);
-err2:
-	FT_CLOSEV(tx_ep, ctx_cnt);
-err1:
-	free(buf);
-	free(rcq_array);
-	free(scq_array);
-	free(tx_ep);
-	free(rx_ep);
-	free(remote_rx_addr);
-	return ret;
 }
 
 static int bind_ep_res(void)
@@ -256,10 +237,7 @@ static int bind_ep_res(void)
 		return ret;
 	}
 
-	if (ret)
-		return ret;
-
-	return ret;
+	return 0;
 }
 
 static int run_test()
@@ -333,13 +311,13 @@ static int init_fabric(void)
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
-		goto err0;
+		return ret;
 	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		goto err1;
+		return ret;
 	}
 
 	/* Set the required number of TX and RX context counts */
@@ -349,28 +327,14 @@ static int init_fabric(void)
 	ret = fi_scalable_ep(domain, fi, &sep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_scalable_ep", ret);
-		goto err2;
+		return ret;
 	}
 
 	ret = alloc_ep_res(sep);
 	if (ret)
-		goto err3;
+		return ret;
 
 	ret = bind_ep_res();
-	if (ret)
-		goto err4;
-
-	return 0;
-
-err4:
-	free_ep_res();
-err3:
-	fi_close(&sep->fid);
-err2:
-	fi_close(&domain->fid);
-err1:
-	fi_close(&fabric->fid);
-err0:
 	return ret;
 }
 
@@ -452,16 +416,13 @@ static int run(void)
 
 	ret = init_av();
 	if (ret)
-		goto out;
+		return ret;
 
-	run_test();
+	ret = run_test();
+
 	/*TODO: Add a local finalize applicable for scalable ep */
 	//ft_finalize(fi, tx_ep[0], scq_array[0], rcq_array[0], remote_rx_addr[0]);
-out:
-	free_ep_res();
-	fi_close(&sep->fid);
-	fi_close(&domain->fid);
-	fi_close(&fabric->fid);
+
 	return ret;
 }
 
@@ -496,7 +457,8 @@ int main(int argc, char **argv)
 	hints->addr_format = FI_SOCKADDR;
 
 	ret = run();
-	fi_freeinfo(hints);
-	fi_freeinfo(fi);
+
+	free_res();
+	ft_free_res();
 	return -ret;
 }

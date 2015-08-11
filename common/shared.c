@@ -38,7 +38,9 @@
 
 struct fi_info *fi, *hints;
 struct fid_fabric *fabric;
+struct fid_wait *waitset;
 struct fid_domain *domain;
+struct fid_poll *pollset;
 struct fid_pep *pep;
 struct fid_ep *ep;
 struct fid_cq *txcq, *rxcq;
@@ -84,6 +86,41 @@ const unsigned int test_cnt = (sizeof test_size / sizeof test_size[0]);
 #define INTEG_SEED 7
 static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
+
+
+static void ft_close_fids(void)
+{
+	FT_CLOSE_FID(mr);
+	FT_CLOSE_FID(ep);
+	FT_CLOSE_FID(pep);
+	FT_CLOSE_FID(rxcq);
+	FT_CLOSE_FID(txcq);
+	FT_CLOSE_FID(rxcntr);
+	FT_CLOSE_FID(txcntr);
+	FT_CLOSE_FID(av);
+	FT_CLOSE_FID(eq);
+	FT_CLOSE_FID(pollset);
+	FT_CLOSE_FID(domain);
+	FT_CLOSE_FID(waitset);
+	FT_CLOSE_FID(fabric);
+}
+
+void ft_free_res(void)
+{
+	ft_close_fids();
+	if (buf) {
+		free(buf);
+		buf = NULL;
+	}
+	if (fi) {
+		fi_freeinfo(fi);
+		fi = NULL;
+	}
+	if (hints) {
+		fi_freeinfo(hints);
+		hints = NULL;
+	}
+}
 
 static int dupaddr(void **dst_addr, size_t *dst_addrlen,
 		void *src_addr, size_t src_addrlen)

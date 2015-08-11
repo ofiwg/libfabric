@@ -55,15 +55,6 @@ static int alloc_cm_res(void)
 	return ret;
 }
 
-static void free_ep_res(void)
-{
-	fi_close(&ep->fid);
-	fi_close(&mr->fid);
-	fi_close(&rxcq->fid);
-	fi_close(&txcq->fid);
-	free(buf);
-}
-
 static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr = { 0 };
@@ -83,40 +74,30 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err1;
+		return ret;
 	}
 
 	/* Open completion queue for recv completions */
 	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
-		goto err2;
+		return ret;
 	}
 
 	/* Register memory */
 	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
-		goto err3;
+		return ret;
 	}
 
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
-		goto err4;
+		return ret;
 	}
 
 	return 0;
-
-err4:
-	fi_close(&mr->fid);
-err3:
-	fi_close(&rxcq->fid);
-err2:
-	fi_close(&txcq->fid);
-err1:
-	free(buf);
-	return ret;
 }
 
 static int bind_ep_res(void)
@@ -162,46 +143,36 @@ static int server_listen(void)
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
-		goto err0;
+		return ret;
 	}
 
 	/* Open a passive endpoint */
 	ret = fi_passive_ep(fabric, fi, &pep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_passive_ep", ret);
-		goto err1;
+		return ret;
 	}
 
 	/* Allocate connection management resources */
 	ret = alloc_cm_res();
 	if (ret)
-		goto err2;
+		return ret;
 
 	/* Bind EQ to passive endpoint */
 	ret = fi_pep_bind(pep, &eq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_pep_bind", ret);
-		goto err3;
+		return ret;
 	}
 
 	/* Listen for incoming connections */
 	ret = fi_listen(pep);
 	if (ret) {
 		FT_PRINTERR("fi_listen", ret);
-		goto err3;
+		return ret;
 	}
 
-	fi_freeinfo(fi);
 	return 0;
-err3:
-	fi_close(&eq->fid);
-err2:
-	fi_close(&pep->fid);
-err1:
-	fi_close(&fabric->fid);
-err0:
-	fi_freeinfo(fi);
-	return ret;
 }
 
 static int server_connect(void)
@@ -223,28 +194,28 @@ static int server_connect(void)
 	if (event != FI_CONNREQ) {
 		FT_ERR("Unexpected CM event %d\n", event);
 		ret = -FI_EOTHER;
-		goto err1;
+		goto err;
 	}
 
 	ret = fi_domain(fabric, info, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		goto err1;
+		goto err;
 	}
 
 	ret = alloc_ep_res(info);
 	if (ret)
-		 goto err1;
+		 goto err;
 
 	ret = bind_ep_res();
 	if (ret)
-		goto err3;
+		goto err;
 
 	/* Accept the incoming connection. Also transitions endpoint to active state */
 	ret = fi_accept(ep, NULL, 0);
 	if (ret) {
 		FT_PRINTERR("fi_accept", ret);
-		goto err3;
+		goto err;
 	}
 
 	/* Wait for the connection to be established */
@@ -252,21 +223,19 @@ static int server_connect(void)
 	if (rd != sizeof entry) {
 		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "accept");
 		ret = (int) rd;
-		goto err3;
+		goto err;
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
 		FT_ERR("Unexpected CM event %d fid %p (ep %p)\n", event, entry.fid, ep);
 		ret = -FI_EOTHER;
-		goto err3;
+		goto err;
 	}
 
 	fi_freeinfo(info);
 	return 0;
 
-err3:
-	free_ep_res();
-err1:
+err:
 	fi_reject(pep, info->handle, NULL, 0);
 	fi_freeinfo(info);
 	return ret;
@@ -283,71 +252,55 @@ static int client_connect(void)
 	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
-		goto err0;
+		return ret;
 	}
 
 	/* Open fabric */
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
-		goto err1;
+		return ret;
 	}
 
 	/* Open domain */
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		goto err2;
+		return ret;
 	}
 
 	ret = alloc_cm_res();
 	if (ret)
-		goto err4;
+		return ret;
 
 	ret = alloc_ep_res(fi);
 	if (ret)
-		goto err5;
+		return ret;
 
 	ret = bind_ep_res();
 	if (ret)
-		goto err6;
+		return ret;
 
 	/* Connect to server */
 	ret = fi_connect(ep, fi->dest_addr, NULL, 0);
 	if (ret) {
 		FT_PRINTERR("fi_connect", ret);
-		goto err6;
+		return ret;
 	}
 
 	/* Wait for the connection to be established */
 	rd = fi_eq_sread(eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
 		FT_PROCESS_EQ_ERR(rd, eq, "fi_eq_sread", "connect");
-		ret = (int) rd;
-		goto err6;
+		return (int) rd;
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
 		FT_ERR("Unexpected CM event %d fid %p (ep %p)\n", event, entry.fid, ep);
-		ret = -FI_EOTHER;
-		goto err6;
+		return -FI_EOTHER;
 	}
 
-	fi_freeinfo(fi);
 	return 0;
-
-err6:
-	free_ep_res();
-err5:
-	fi_close(&eq->fid);
-err4:
-	fi_close(&domain->fid);
-err2:
-	fi_close(&fabric->fid);
-err1:
-	fi_freeinfo(fi);
-err0:
-	return ret;
 }
 
 static int send_recv()
@@ -446,10 +399,6 @@ int main(int argc, char **argv)
 	ret = send_recv();
 
 	fi_shutdown(ep, 0);
-	free_ep_res();
-	fi_close(&eq->fid);
-	fi_close(&domain->fid);
-	fi_close(&fabric->fid);
-
+	ft_free_res();
 	return ret;
 }
