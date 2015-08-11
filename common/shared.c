@@ -47,6 +47,9 @@ struct fid_mr *mr;
 struct fid_av *av;
 struct fid_eq *eq;
 
+void *buf;
+size_t buffer_size = 1024;
+
 struct ft_opts opts;
 
 

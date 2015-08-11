@@ -96,6 +96,9 @@ extern struct fid_mr *mr;
 extern struct fid_av *av;
 extern struct fid_eq *eq;
 
+extern void *buf;
+extern size_t buffer_size;
+
 extern struct ft_opts opts;
 
 

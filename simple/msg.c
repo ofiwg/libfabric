@@ -38,8 +38,6 @@
 #include "shared.h"
 
 
-static void *buf;
-static size_t buffer_size = 1024;
 static int rx_depth = 512;
 
 static int alloc_cm_res(void)

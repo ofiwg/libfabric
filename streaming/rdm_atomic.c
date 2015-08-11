@@ -58,10 +58,8 @@
 static enum fi_op op_type = FI_MIN;
 static char test_name[10] = "custom";
 static struct timespec start, end;
-static void *buf;
 static void *result;
 static void *compare;
-static size_t buffer_size;
 struct fi_rma_iov remote;
 
 static struct fid_mr *mr_result;

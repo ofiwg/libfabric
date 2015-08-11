@@ -44,9 +44,6 @@
 #include <shared.h>
 
 
-static void *buf;
-static size_t buffer_size;
-
 static void *remote_addr;
 static size_t addrlen = 0;
 static fi_addr_t remote_fi_addr;

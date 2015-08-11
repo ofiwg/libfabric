@@ -48,8 +48,6 @@ static int send_count = 0;
 static int recv_outs = 0;	/* Outstanding recvs */
 static char test_name[10] = "custom";
 static struct timespec start, end;
-static void *buf;
-static size_t buffer_size;
 
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
