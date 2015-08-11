@@ -114,16 +114,22 @@ sub git_cleanup {
     doit(0, "git pull", "git-pull");
 }
 
+sub get_git_version {
+    # Get a git describe id (minus the initial 'v' in the tag name, if any)
+    my $version = `git describe --tags --always`;
+    chomp($version);
+
+    verbose("*** Git describe: $version\n");
+    $version =~ s/^v//;
+    $version =~ y/-/./;
+    return $version;
+}
+
 #####################################################################
 
 chdir($source_dir_arg);
 git_cleanup();
-
-# Get a git describe id (minus the initial 'v' in the tag name, if any)
-my $gd = `git describe --tags --always`;
-chomp($gd);
-$gd =~ s/^v//;
-verbose("*** Git describe: $gd\n");
+my $version = get_git_version();
 
 # Read in configure.ac
 verbose("*** Reading version number from configure.ac...\n");
@@ -137,8 +143,6 @@ close(IN);
 $config =~ m/AC_INIT\(\[libfabric\], \[(.+?)\]/;
 my $orig_version = $1;
 verbose("*** Replacing configure.ac version: $orig_version\n");
-my $version = $gd;
-$version =~ y/-/./;
 verbose("*** Nightly tarball version: $version\n");
 
 # Is there already a tarball of this version in the download
