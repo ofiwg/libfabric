@@ -88,6 +88,60 @@ static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEF
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
 
 
+#define FT_EP_BIND(ep, fd, flags)					\
+	do {								\
+		int ret;						\
+		if ((fd)) {						\
+			ret = fi_ep_bind((ep), &(fd)->fid, (flags));	\
+			if (ret) {					\
+				FT_PRINTERR("fi_ep_bind", ret);		\
+				return ret;				\
+			}						\
+		}							\
+	} while (0)
+
+int ft_init_ep(void *recv_ctx)
+{
+	int flags, ret;
+
+	FT_EP_BIND(ep, eq, 0);
+	FT_EP_BIND(ep, av, 0);
+	FT_EP_BIND(ep, txcq, FI_TRANSMIT);
+	FT_EP_BIND(ep, rxcq, FI_RECV);
+
+	/* TODO: use control structure to select counter bindings explicitly */
+	if (hints->caps & (FI_WRITE | FI_READ))
+		flags = hints->caps & (FI_WRITE | FI_READ);
+	else if (hints->caps & FI_RMA)
+		flags = FI_WRITE | FI_READ;
+	else
+		flags = FI_SEND;
+	FT_EP_BIND(ep, txcntr, flags);
+	if (hints->caps & (FI_REMOTE_WRITE | FI_REMOTE_READ))
+		flags = hints->caps & (FI_REMOTE_WRITE | FI_REMOTE_READ);
+	else if (hints->caps & FI_RMA)
+		flags = FI_REMOTE_WRITE | FI_REMOTE_READ;
+	else
+		flags = FI_RECV;
+	FT_EP_BIND(ep, rxcntr, flags);
+
+	ret = fi_enable(ep);
+	if (ret) {
+		FT_PRINTERR("fi_enable", ret);
+		return ret;
+	}
+
+	if (recv_ctx) {
+		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, recv_ctx);
+		if (ret) {
+			FT_PRINTERR("fi_recv", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static void ft_close_fids(void)
 {
 	FT_CLOSE_FID(mr);

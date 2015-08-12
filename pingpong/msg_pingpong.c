@@ -46,7 +46,6 @@ static int max_credits = 128;
 static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
-static void *recv_buf;
 static void *send_buf;
 
 static int verify_data = 0;
@@ -100,12 +99,12 @@ static int recv_xfer(int size)
 	} while (ret == -FI_EAGAIN);
 
 	if (verify_data) {
-		ret = ft_check_buf(recv_buf, size);
+		ret = ft_check_buf(buf, size);
 		if (ret)
 			return ret;
 	}
 
-	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), 0, recv_buf);
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
 
@@ -188,7 +187,6 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
-	recv_buf = buf;
 	send_buf = (char *) buf + buffer_size;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
@@ -226,42 +224,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	return 0;
-}
-
-static int bind_ep_res(void)
-{
-	int ret;
-
-	ret = fi_ep_bind(ep, &eq->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_enable(ep);
-	if (ret) {
-		FT_PRINTERR("fi_enable", ret);
-		return ret;
-	}
-
-	/* Post the first recv buffer */
-	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), 0, recv_buf);
-	if (ret)
-		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
 }
 
 static int server_listen(void)
@@ -337,7 +299,7 @@ static int server_connect(void)
 	if (ret)
 		 goto err;
 
-	ret = bind_ep_res();
+	ret = ft_init_ep(buf);
 	if (ret)
 		goto err;
 
@@ -403,7 +365,7 @@ static int client_connect(void)
 	if (ret)
 		return ret;
 
-	ret = bind_ep_res();
+	ret = ft_init_ep(buf);
 	if (ret)
 		return ret;
 
