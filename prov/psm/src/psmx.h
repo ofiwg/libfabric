@@ -668,7 +668,8 @@ static inline void psmx_progress(struct psmx_fid_domain *domain)
 {
 	if (domain) {
 		psmx_cq_poll_mq(NULL, domain, NULL, 0, NULL);
-		psmx_am_progress(domain);
+		if (domain->am_initialized)
+			psmx_am_progress(domain);
 	}
 }
 
