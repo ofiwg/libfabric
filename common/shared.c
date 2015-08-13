@@ -92,6 +92,25 @@ static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEF
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
 
 
+int ft_open_fabric_res(void)
+{
+	int ret;
+
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_fabric", ret);
+		return ret;
+	}
+
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 #define FT_EP_BIND(ep, fd, flags)					\
 	do {								\
 		int ret;						\

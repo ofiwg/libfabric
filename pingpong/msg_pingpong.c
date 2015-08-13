@@ -134,17 +134,9 @@ static int server_listen(void)
 		return ret;
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
-
-	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_eq_open", ret);
-		return ret;
-	}
 
 	if (fi->mode & FI_MSG_PREFIX)
 		prefix_len = fi->ep_attr->msg_prefix_size;
@@ -254,17 +246,9 @@ static int client_connect(void)
 	if (fi->mode & FI_MSG_PREFIX)
 		prefix_len = fi->ep_attr->msg_prefix_size;
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
-
-	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_eq_open", ret);
-		return ret;
-	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {

@@ -300,17 +300,9 @@ int main(int argc, char **argv)
 		fi->fabric_attr->prov_name,
 		fi->fabric_attr->name);
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret != 0) {
-		printf("fi_fabric %s\n", fi_strerror(-ret));
-		exit(1);
-	}
-
-	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_eq_open", ret);
-		exit(1);
-	}
+	ret = ft_open_fabric_res();
+	if (ret)
+		return ret;
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret != 0) {

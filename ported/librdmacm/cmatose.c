@@ -563,17 +563,9 @@ int main(int argc, char **argv)
 	}
 
 	printf("using provider: %s\n", fi->fabric_attr->prov_name);
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		goto out;
-	}
-
-	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_eq_open", ret);
-		goto out;
-	}
 
 	if (alloc_nodes())
 		goto out;

@@ -97,18 +97,9 @@ static int server_listen(void)
 		return ret;
 	}
 
-	/* Open the fabric */
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
-
-	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_eq_open", ret);
-		return ret;
-	}
 
 	/* Open a passive endpoint */
 	ret = fi_passive_ep(fabric, fi, &pep, NULL);
@@ -214,18 +205,9 @@ static int client_connect(void)
 		return ret;
 	}
 
-	/* Open fabric */
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
-
-	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_eq_open", ret);
-		return ret;
-	}
 
 	/* Open domain */
 	ret = fi_domain(fabric, fi, &domain, NULL);

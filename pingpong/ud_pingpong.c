@@ -168,14 +168,12 @@ static int common_setup(void)
 		max_msg_size = fi->ep_attr->max_msg_size;
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
-		return ret;
-	}
-
 	if (fi->mode & FI_MSG_PREFIX)
 		prefix_len = fi->ep_attr->msg_prefix_size;
+
+	ret = ft_open_fabric_res();
+	if (ret)
+		return ret;
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {

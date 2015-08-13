@@ -103,17 +103,9 @@ static int server_listen(void)
 
 	cq_data_size = fi->domain_attr->cq_data_size;
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
-
-	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_eq_open", ret);
-		return ret;
-	}
 
 	ret = fi_passive_ep(fabric, fi, &pep, NULL);
 	if (ret) {
@@ -219,17 +211,9 @@ static int client_connect(void)
 
 	cq_data_size = fi->domain_attr->cq_data_size;
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
-
-	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_eq_open", ret);
-		return ret;
-	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {

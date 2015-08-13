@@ -394,11 +394,9 @@ static int init_fabric(void)
 	// set FI_MULTI_RECV flag for all recv operations
 	fi->rx_attr->op_flags = FI_MULTI_RECV;
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
