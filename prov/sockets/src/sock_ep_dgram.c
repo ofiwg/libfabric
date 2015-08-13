@@ -73,7 +73,7 @@ const struct fi_ep_attr sock_dgram_ep_attr = {
 };
 
 const struct fi_tx_attr sock_dgram_tx_attr = {
-	.caps = SOCK_EP_DGRAM_CAP,
+	.caps = SOCK_EP_DGRAM_PRI_CAP | SOCK_EP_DGRAM_SEC_CAP,
 	.mode = SOCK_MODE,
 	.op_flags = SOCK_EP_DEFAULT_OP_FLAGS,
 	.msg_order = SOCK_EP_MSG_ORDER,
@@ -84,7 +84,7 @@ const struct fi_tx_attr sock_dgram_tx_attr = {
 };
 
 const struct fi_rx_attr sock_dgram_rx_attr = {
-	.caps = SOCK_EP_DGRAM_CAP,
+	.caps = SOCK_EP_DGRAM_PRI_CAP | SOCK_EP_DGRAM_SEC_CAP,
 	.mode = SOCK_MODE,
 	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
@@ -99,7 +99,7 @@ static int sock_dgram_verify_rx_attr(const struct fi_rx_attr *attr)
 	if (!attr)
 		return 0;
 
-	if ((attr->caps | SOCK_EP_DGRAM_CAP) != SOCK_EP_DGRAM_CAP)
+	if ((attr->caps | SOCK_EP_DGRAM_PRI_CAP | SOCK_EP_DGRAM_SEC_CAP) != (SOCK_EP_DGRAM_PRI_CAP | SOCK_EP_DGRAM_SEC_CAP))
 		return -FI_ENODATA;
 
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
@@ -125,7 +125,7 @@ static int sock_dgram_verify_tx_attr(const struct fi_tx_attr *attr)
 	if (!attr)
 		return 0;
 
-	if ((attr->caps | SOCK_EP_DGRAM_CAP) != SOCK_EP_DGRAM_CAP)
+	if ((attr->caps | SOCK_EP_DGRAM_PRI_CAP | SOCK_EP_DGRAM_SEC_CAP) != (SOCK_EP_DGRAM_PRI_CAP | SOCK_EP_DGRAM_SEC_CAP))
 		return -FI_ENODATA;
 
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
@@ -215,20 +215,20 @@ int sock_dgram_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 
 	if (hints && hints->rx_attr) {
 		(*info)->rx_attr->op_flags |= hints->rx_attr->op_flags;
-		if(hints->rx_attr->caps)
-			(*info)->rx_attr->caps = hints->rx_attr->caps;
+		if (hints->rx_attr->caps)
+			(*info)->rx_attr->caps = SOCK_EP_DGRAM_SEC_CAP | hints->rx_attr->caps;
 	}
 
 	if (hints && hints->tx_attr) {
 		(*info)->tx_attr->op_flags |= hints->tx_attr->op_flags;
-		if(hints->tx_attr->caps)
-			(*info)->tx_attr->caps = hints->tx_attr->caps;
+		if (hints->tx_attr->caps)
+			(*info)->tx_attr->caps = SOCK_EP_DGRAM_SEC_CAP | hints->tx_attr->caps;
 	}
 
-	(*info)->caps = SOCK_EP_DGRAM_CAP |
+	(*info)->caps = SOCK_EP_DGRAM_PRI_CAP | SOCK_EP_DGRAM_SEC_CAP |
                        (*info)->rx_attr->caps | (*info)->tx_attr->caps;
-        if(hints->caps)
-                (*info)->caps = hints->caps;
+        if (hints->caps)
+                (*info)->caps = SOCK_EP_DGRAM_SEC_CAP | hints->caps;
 
 	return 0;
 }
