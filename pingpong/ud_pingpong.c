@@ -59,23 +59,6 @@ static int timeout = 5;
 
 static fi_addr_t remote_fi_addr;
 
-static int poll_all_sends(void)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	do {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret > 0) {
-			credits++;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			FT_PRINTERR("fi_cq_read", ret);
-			return ret;
-		}
-	} while (ret != -FI_EAGAIN);
-	return 0;
-}
-
 static int send_xfer(int size)
 {
 	struct fi_cq_entry comp;
@@ -135,8 +118,10 @@ static int sync_test(void)
 {
 	int ret;
 
-	while (credits < max_credits)
-		poll_all_sends();
+	ret = wait_for_completion(txcq, max_credits - credits);
+	if (ret)
+		return ret;
+	credits = max_credits;
 
 	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
 	if (ret)
@@ -403,8 +388,10 @@ static int run(void)
 			goto out;
 	}
 
-	while (credits < max_credits)
-		poll_all_sends();
+	ret = wait_for_completion(txcq, max_credits - credits);
+	if (ret)
+		return ret;
+	credits = max_credits;
 
 	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
