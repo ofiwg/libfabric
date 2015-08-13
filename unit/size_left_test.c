@@ -56,8 +56,6 @@
 
 int fabtests_debug = 0;
 
-static struct fi_eq_attr eq_attr;
-
 static char err_buf[512];
 
 
@@ -307,17 +305,16 @@ int main(int argc, char **argv)
 		printf("fi_fabric %s\n", fi_strerror(-ret));
 		exit(1);
 	}
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret != 0) {
-		printf("fi_domain %s\n", fi_strerror(-ret));
+
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
 		exit(1);
 	}
 
-	eq_attr.size = 1024;
-	eq_attr.wait_obj = FI_WAIT_UNSPEC;
-	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret != 0) {
-		printf("fi_eq_open %s\n", fi_strerror(-ret));
+		printf("fi_domain %s\n", fi_strerror(-ret));
 		exit(1);
 	}
 

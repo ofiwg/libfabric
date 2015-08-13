@@ -47,21 +47,6 @@ static int rx_depth = 512;
 
 static int epfd;
 
-static int alloc_cm_res(void)
-{
-	struct fi_eq_attr cm_attr;
-	int ret;
-
-	memset(&cm_attr, 0, sizeof cm_attr);
-	cm_attr.wait_obj = FI_WAIT_FD;
-
-	/* Open EQ to receive CM events */
-	ret = fi_eq_open(fabric, &cm_attr, &eq, NULL);
-	if (ret)
-		FT_PRINTERR("fi_eq_open", ret);
-
-	return ret;
-}
 
 static int alloc_ep_res(struct fi_info *fi)
 {
@@ -121,7 +106,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	/* Retrieve send queue wait object */
-	ret = fi_control (&txcq->fid, FI_GETWAIT, (void *) &fd);
+	ret = fi_control(&txcq->fid, FI_GETWAIT, (void *) &fd);
 	if (ret) {
 		FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
 		return ret;
@@ -172,17 +157,18 @@ static int server_listen(void)
 		return ret;
 	}
 
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
+		return ret;
+	}
+
 	/* Open a passive endpoint */
 	ret = fi_passive_ep(fabric, fi, &pep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_passive_ep", ret);
 		return ret;
 	}
-
-	/* Allocate connection management resources */
-	ret = alloc_cm_res();
-	if (ret)
-		return ret;
 
 	/* Bind EQ to passive endpoint */
 	ret = fi_pep_bind(pep, &eq->fid, 0);
@@ -289,16 +275,18 @@ static int client_connect(void)
 		return ret;
 	}
 
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
+		return ret;
+	}
+
 	/* Open domain */
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		return ret;
 	}
-
-	ret = alloc_cm_res();
-	if (ret)
-		return ret;
 
 	ret = alloc_ep_res(fi);
 	if (ret)
@@ -410,6 +398,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
+
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;

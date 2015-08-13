@@ -75,20 +75,6 @@ static int run_test()
 	return 0;
 }
 
-static int alloc_cm_res(void)
-{
-	struct fi_eq_attr cm_attr;
-	int ret;
-
-	memset(&cm_attr, 0, sizeof cm_attr);
-	cm_attr.wait_obj = FI_WAIT_FD;
-	ret = fi_eq_open(fabric, &cm_attr, &eq, NULL);
-	if (ret)
-		FT_PRINTERR("fi_eq_open", ret);
-
-	return ret;
-}
-
 static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
@@ -128,12 +114,6 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	if (!eq) {
-		ret = alloc_cm_res();
-		if (ret)
-			return ret;
-	}
-
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
@@ -160,6 +140,12 @@ static int server_listen(void)
 		return ret;
 	}
 
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
+		return ret;
+	}
+
 	if (fi->mode & FI_MSG_PREFIX)
 		prefix_len = fi->ep_attr->msg_prefix_size;
 
@@ -168,10 +154,6 @@ static int server_listen(void)
 		FT_PRINTERR("fi_passive_ep", ret);
 		return ret;
 	}
-
-	ret = alloc_cm_res();
-	if (ret)
-		return ret;
 
 	ret = fi_pep_bind(pep, &eq->fid, 0);
 	if (ret) {
@@ -269,14 +251,20 @@ static int client_connect(void)
 		return ret;
 	}
 
+	if (fi->mode & FI_MSG_PREFIX)
+		prefix_len = fi->ep_attr->msg_prefix_size;
+
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		return ret;
 	}
 
-	if (fi->mode & FI_MSG_PREFIX)
-		prefix_len = fi->ep_attr->msg_prefix_size;
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
+		return ret;
+	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
@@ -358,6 +346,7 @@ out:
 int main(int argc, char **argv)
 {
 	int op, ret;
+
 	opts = INIT_OPTS;
 
 	hints = fi_allocinfo();

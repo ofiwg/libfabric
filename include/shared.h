@@ -101,6 +101,8 @@ extern struct fid_eq *eq;
 extern void *buf;
 extern size_t buffer_size;
 
+extern struct fi_eq_attr eq_attr;
+
 extern struct ft_opts opts;
 
 

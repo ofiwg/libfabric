@@ -236,20 +236,6 @@ static int run_test(void)
 	return 0;
 }
 
-static int alloc_cm_res(void)
-{
-	struct fi_eq_attr cm_attr;
-	int ret;
-
-	memset(&cm_attr, 0, sizeof cm_attr);
-	cm_attr.wait_obj = FI_WAIT_FD;
-	ret = fi_eq_open(fabric, &cm_attr, &eq, NULL);
-	if (ret)
-		FT_PRINTERR("fi_eq_open", ret);
-
-	return ret;
-}
-
 static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
@@ -299,12 +285,6 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	if (!eq) {
-		ret = alloc_cm_res();
-		if (ret)
-			return ret;
-	}
-
 	return 0;
 }
 
@@ -325,15 +305,17 @@ static int server_listen(void)
 		return ret;
 	}
 
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
+		return ret;
+	}
+
 	ret = fi_passive_ep(fabric, fi, &pep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_passive_ep", ret);
 		return ret;
 	}
-
-	ret = alloc_cm_res();
-	if (ret)
-		return ret;
 
 	ret = fi_pep_bind(pep, &eq->fid, 0);
 	if (ret) {
@@ -377,7 +359,6 @@ static int server_connect(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err;
 	}
-
 
 	ret = fi_endpoint(domain, info, &ep, NULL);
 	if (ret) {
@@ -442,6 +423,12 @@ static int client_connect(void)
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
+		return ret;
+	}
+
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
 		return ret;
 	}
 
@@ -559,6 +546,7 @@ out:
 int main(int argc, char **argv)
 {
 	int op, ret;
+
 	opts = INIT_OPTS;
 
 	hints = fi_allocinfo();
