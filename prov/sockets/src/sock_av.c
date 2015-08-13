@@ -556,7 +556,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	_av->key = calloc(_av->attr.count, sizeof(uint16_t));
 	if (!_av->key) {
 		ret = -FI_ENOMEM;
-		goto err;
+		goto err1;
 	}
 
 	table_sz = sizeof(struct sock_av_table_hdr) +
@@ -566,7 +566,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		_av->name = calloc(1, FI_NAME_MAX);
 		if(!_av->name) {
 			ret = -FI_ENOMEM;
-			goto err;
+			goto err2;
 		}
 		strcpy(_av->name, attr->name);
 		if (!(attr->flags & FI_READ))
@@ -583,14 +583,14 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		if (_av->shared_fd < 0) {
 			SOCK_LOG_ERROR("shm_open failed\n");
 			ret = -FI_EINVAL;
-			goto err;
+			goto err2;
 		}
 		
 		if (ftruncate(_av->shared_fd, table_sz) == -1) {
 			SOCK_LOG_ERROR("ftruncate failed\n");
 			shm_unlink(_av->name);
 			ret = -FI_EINVAL;
-			goto err;
+			goto err2;
 		}
 		
 		_av->table_hdr = mmap(NULL, table_sz, PROT_READ | PROT_WRITE, 
@@ -598,7 +598,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		if (attr->flags & FI_READ) {
 			if (_av->table_hdr->size != _av->attr.count) {
 				ret = -FI_EINVAL;
-				goto err;
+				goto err2;
 			}
 		} else {
 			_av->table_hdr->size = _av->attr.count;
@@ -609,13 +609,13 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			SOCK_LOG_ERROR("mmap failed\n");
 			shm_unlink(_av->name);
 			ret = -FI_EINVAL;
-			goto err;
+			goto err2;
 		}
 	} else {
 		_av->table_hdr = calloc(1, table_sz);
 		if (!_av->table_hdr) {
 			ret = -FI_ENOMEM;
-			goto err;
+			goto err3;
 		}
 		_av->table_hdr->size = _av->attr.count;
 		_av->table_hdr->req_sz = attr->count;
@@ -636,7 +636,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		break;
 	default:
 		ret = -FI_EINVAL;
-		goto err;
+		goto err3;
 	}
 
 	atomic_initialize(&_av->ref, 0);
@@ -649,14 +649,21 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	default:
 		SOCK_LOG_ERROR("Invalid address format: only IPv4 supported\n");
 		ret = -FI_EINVAL;
-		goto err;
+		goto err3;
 	}
 	_av->rx_ctx_bits = attr->rx_ctx_bits;
 	_av->mask = attr->rx_ctx_bits ? 
 		((uint64_t)1<<(64 - attr->rx_ctx_bits + 1))-1 : ~0;
 	*av = &_av->av_fid;
 	return 0;
-err:
+
+err3:
+	free(_av->table_hdr);
+err2:
+	free(_av->name);
+err1:
+	free(_av->key);
 	free(_av);
+	
 	return ret;
 }
