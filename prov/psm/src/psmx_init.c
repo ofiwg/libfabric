@@ -46,6 +46,9 @@ struct psmx_env psmx_env = {
 
 static void psmx_init_env(void)
 {
+	if (getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK"))
+		psmx_env.name_server = 0;
+
 	fi_param_get_bool(&psmx_prov, "name_server", &psmx_env.name_server);
 	fi_param_get_bool(&psmx_prov, "am_msg", &psmx_env.am_msg);
 	fi_param_get_bool(&psmx_prov, "tagged_rma", &psmx_env.tagged_rma);
