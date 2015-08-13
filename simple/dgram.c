@@ -113,39 +113,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	return 0;
 }
 
-static int bind_ep_res(void)
-{
-	int ret;
-
-	/* Bind Send CQ with endpoint to collect send completions */
-	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	/* Bind Recv CQ with endpoint to collect recv completions */
-	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	/* Bind AV with the endpoint to map addresses */
-	ret = fi_ep_bind(ep, &av->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-	ret = fi_enable(ep);
-	if (ret) {
-		FT_PRINTERR("fi_enable", ret);
-		return ret;
-	 }
-
-	return ret;
-}
-
 static int init_fabric(void)
 {
 	char *node, *service;
@@ -188,7 +155,7 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = bind_ep_res();
+	ret = ft_init_ep(NULL);
 	if (ret)
 		return ret;
 

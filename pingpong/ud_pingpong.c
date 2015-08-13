@@ -239,44 +239,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	return 0;
 }
 
-static int bind_ep_res(void)
-{
-	int ret;
-
-	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_ep_bind(ep, &av->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_enable(ep);
-	if (ret) {
-		FT_PRINTERR("fi_enable", ret);
-		return ret;
-	}
-
-	/* Post the first recv buffer */
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
-	}
-
-	return ret;
-}
-
-
 static int common_setup(void)
 {
 	int ret;
@@ -316,7 +278,7 @@ static int common_setup(void)
 		return ret;
 	}
 
-	ret = bind_ep_res();
+	ret = ft_init_ep(buf);
 	if (ret) {
 		return ret;
 	}

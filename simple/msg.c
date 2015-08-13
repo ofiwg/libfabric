@@ -100,34 +100,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	return 0;
 }
 
-static int bind_ep_res(void)
-{
-	int ret;
-
-	/* Bind EQ with endpoint */
-	ret = fi_ep_bind(ep, &eq->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	/* Bind Send CQ with endpoint to collect send completions */
-	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	/* Bind Recv CQ with endpoint to collect recv completions */
-	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	return ret;
-}
-
 static int server_listen(void)
 {
 	int ret;
@@ -207,7 +179,7 @@ static int server_connect(void)
 	if (ret)
 		 goto err;
 
-	ret = bind_ep_res();
+	ret = ft_init_ep(NULL);
 	if (ret)
 		goto err;
 
@@ -277,7 +249,7 @@ static int client_connect(void)
 	if (ret)
 		return ret;
 
-	ret = bind_ep_res();
+	ret = ft_init_ep(NULL);
 	if (ret)
 		return ret;
 

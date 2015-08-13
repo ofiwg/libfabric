@@ -449,44 +449,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	return 0;
 }
 
-static int bind_ep_res(void)
-{
-	int ret;
-
-	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND | FI_READ | FI_WRITE);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", -ret);
-		return ret;
-	}
-
-	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", -ret);
-		return ret;
-	}
-
-	ret = fi_ep_bind(ep, &av->fid, FI_RECV);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_enable(ep);
-	if(ret) {
-		FT_PRINTERR("fi_enable", ret);
-		return ret;
-	}
-
-	/* Post the first recv buffer */
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
-
-	return ret;
-}
-
 static int init_fabric(void)
 {
 	uint64_t flags = 0;
@@ -526,7 +488,7 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = bind_ep_res();
+	ret = ft_init_ep(&fi_ctx_recv);
 	if (ret)
 		return ret;
 

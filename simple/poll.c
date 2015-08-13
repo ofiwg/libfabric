@@ -143,38 +143,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	return 0;
 }
 
-static int bind_ep_res(void)
-{
-	int ret;
-
-	/* Bind AV and CQs with endpoint */
-	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_ep_bind(ep, &av->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_enable(ep);
-	if (ret) {
-		FT_PRINTERR("fi_enable", ret);
-		return ret;
-	}
-
-	return ret;
-}
-
 static int send_msg(int size)
 {
 	int ret;
@@ -245,7 +213,7 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = bind_ep_res();
+	ret = ft_init_ep(NULL);
 	if (ret)
 		return ret;
 
