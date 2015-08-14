@@ -220,12 +220,12 @@ static int client_connect(void)
 		return ret;
 	}
 
-	ret = send_xfer(addrlen);
+	ret = send_msg(addrlen);
 	if (ret != 0)
 		return ret;
 
 	// wait for reply to know server is ready
-	ret = recv_xfer(4);
+	ret = recv_msg();
 	if (ret != 0)
 		return ret;
 
@@ -278,11 +278,9 @@ static int server_connect(void)
 		return ret;
 	}
 
-	ret = send_xfer(4);
-	if (ret != 0)
-		return ret;
+	ret = send_msg(4);
 
-	return 0;
+	return ret;
 }
 
 static int run(void)
