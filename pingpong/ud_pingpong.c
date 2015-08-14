@@ -46,89 +46,13 @@
 #include <rdma/fi_cm.h>
 
 #include "shared.h"
+#include "pingpong_shared.h"
 
-
-static int max_credits = 128;
-static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *payload;
-static size_t prefix_len;
 static size_t max_msg_size = 0;
 static int timeout = 5;
-
-static fi_addr_t remote_fi_addr;
-
-static int send_xfer(int size)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	while (!credits) {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret > 0) {
-			goto post;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			FT_PRINTERR("fi_cq_read", ret);
-			return ret;
-		}
-	}
-
-	credits--;
-post:
-	ret = fi_send(ep, buf, (size_t) size + prefix_len, fi_mr_desc(mr),
-			remote_fi_addr, NULL);
-	if (ret)
-		FT_PRINTERR("fi_send", ret);
-
-	return ret;
-}
-
-static int recv_xfer(int size)
-{
-	struct timespec a, b;
-	struct fi_cq_entry comp;
-	int ret;
-
-	clock_gettime(CLOCK_MONOTONIC, &a);
-	do {
-		ret = fi_cq_read(rxcq, &comp, sizeof comp);
-		if (ret < 0) {
-			if (ret != -FI_EAGAIN) {
-				FT_PRINTERR("fi_cq_read", ret);
-				return ret;
-			} else if (timeout > 0) {
-				clock_gettime(CLOCK_MONOTONIC, &b);
-				if (b.tv_sec - a.tv_sec > timeout) {
-					fprintf(stderr, "%ds timeout expired waiting to receive message, exiting\n", timeout);
-					exit(FI_ENODATA);
-				}
-			}
-		}
-	} while (ret == -FI_EAGAIN);
-
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
-	if (ret)
-		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
-}
-
-static int sync_test(void)
-{
-	int ret;
-
-	ret = wait_for_completion(txcq, max_credits - credits);
-	if (ret)
-		return ret;
-	credits = max_credits;
-
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
-	if (ret)
-		return ret;
-
-	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
-}
 
 static int run_test(void)
 {
@@ -181,6 +105,8 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 	payload = (char *) buf + prefix_len;
+	send_buf = buf;
+	recv_buf = buf;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -346,7 +272,7 @@ static int server_connect(void)
 		return ret;
 	}
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
+	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), 0, NULL);
 	if (ret != 0) {
 		FT_PRINTERR("fi_recv", ret);
 		return ret;

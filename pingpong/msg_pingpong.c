@@ -40,94 +40,10 @@
 #include <rdma/fi_cm.h>
 
 #include "shared.h"
+#include "pingpong_shared.h"
 
-
-static int max_credits = 128;
-static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
-static void *send_buf;
-
-static int verify_data = 0;
-
-static int send_xfer(int size)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	while (!credits) {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret > 0) {
-			goto post;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(txcq, "txcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	}
-
-	credits--;
-post:
-	if (verify_data)
-		ft_fill_buf(send_buf, size);
-
-	ret = fi_send(ep, send_buf, (size_t) size, fi_mr_desc(mr), 0, NULL);
-	if (ret)
-		FT_PRINTERR("fi_send", ret);
-
-	return ret;
-}
-
-static int recv_xfer(int size)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	do {
-		ret = fi_cq_read(rxcq, &comp, 1);
-		if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(rxcq, "rxcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	} while (ret == -FI_EAGAIN);
-
-	if (verify_data) {
-		ret = ft_check_buf(buf, size);
-		if (ret)
-			return ret;
-	}
-
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
-	if (ret)
-		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
-}
-
-static int sync_test(void)
-{
-	int ret;
-
-	ret = wait_for_completion(txcq, max_credits - credits);
-	if (ret) {
-		return ret;
-	}
-	credits = max_credits;
-
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
-	if (ret) {
-		return ret;
-	}
-
-	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
-}
 
 static int run_test()
 {
@@ -187,6 +103,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
+	recv_buf = buf;
 	send_buf = (char *) buf + buffer_size;
 
 	memset(&cq_attr, 0, sizeof cq_attr);

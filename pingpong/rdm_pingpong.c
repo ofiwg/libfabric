@@ -41,80 +41,20 @@
 #include <rdma/fi_cm.h>
 
 #include "shared.h"
+#include "pingpong_shared.h"
 
-
-static int max_credits = 128;
-static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
-static fi_addr_t remote_fi_addr;
-struct fi_context fi_ctx_send;
-struct fi_context fi_ctx_recv;
-struct fi_context fi_ctx_av;
-
-static int send_xfer(int size)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	while (!credits) {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret > 0) {
-			goto post;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(txcq, "txcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	}
-
-	credits--;
-post:
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			&fi_ctx_send);
-	if (ret)
-		FT_PRINTERR("fi_send", ret);
-
-	return ret;
-}
-
-static int recv_xfer(int size)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	do {
-		ret = fi_cq_read(rxcq, &comp, 1);
-		if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(rxcq, "rxcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	} while (ret == -FI_EAGAIN);
-
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-			&fi_ctx_recv);
-	if (ret)
-		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
-}
 
 static int send_msg(int size)
 {
 	int ret;
 
 	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			&fi_ctx_send);
+			NULL);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
 		return ret;
@@ -129,7 +69,7 @@ static int recv_msg(void)
 {
 	int ret;
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
 		return ret;
@@ -138,23 +78,6 @@ static int recv_msg(void)
 	ret = wait_for_completion(rxcq, 1);
 
 	return ret;
-}
-
-static int sync_test(void)
-{
-	int ret;
-
-	ret = wait_for_completion(txcq, max_credits - credits);
-	if (ret) {
-		return ret;
-	}
-	credits = max_credits;
-
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
-	if (ret)
-		return ret;
-
-	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
 }
 
 static int run_test(void)
@@ -203,6 +126,9 @@ static int alloc_ep_res(struct fi_info *fi)
 		perror("malloc");
 		return -1;
 	}
+
+	send_buf = buf;
+	recv_buf = buf;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -315,15 +241,15 @@ static int init_av(void)
 		}
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				&fi_ctx_av);
+				NULL);
 		if (ret != 1) {
 			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
 		}
 
 		/* Send local addr size and local addr */
-		memcpy(buf, &addrlen, sizeof(size_t));
-		memcpy(buf + sizeof(size_t), local_addr, addrlen);
+		memcpy(send_buf, &addrlen, sizeof(size_t));
+		memcpy(send_buf + sizeof(size_t), local_addr, addrlen);
 		ret = send_msg(sizeof(size_t) + addrlen);
 		if (ret)
 			return ret;
@@ -339,12 +265,12 @@ static int init_av(void)
 		if (ret)
 			return ret;
 
-		memcpy(&addrlen, buf, sizeof(size_t));
+		memcpy(&addrlen, recv_buf, sizeof(size_t));
 		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
+		memcpy(remote_addr, recv_buf + sizeof(size_t), addrlen);
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				&fi_ctx_av);
+				NULL);
 		if (ret != 1) {
 			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -357,8 +283,8 @@ static int init_av(void)
 	}
 
 	/* Post first recv */
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
-			&fi_ctx_recv);
+	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+			NULL);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
 
