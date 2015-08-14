@@ -272,8 +272,13 @@ int sock_conn_map_connect(struct sock_ep *ep,
 		ret = recv(conn_fd, &use_conn, sizeof(use_conn), 0);
 	} while(ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
 	if (ret != sizeof(use_conn)) {
-		SOCK_LOG_ERROR("Cannot exchange port: %d\n", ret);
-		goto err;
+		if (ret == 0) {
+			SOCK_LOG_DBG("Peer reset, use incoming connection\n");
+			use_conn = 0;
+		} else {
+			SOCK_LOG_ERROR("Cannot exchange port: %d\n", ret);
+			goto err;
+		}
 	}
 
 	SOCK_LOG_DBG("Connect response: %d\n", use_conn);
