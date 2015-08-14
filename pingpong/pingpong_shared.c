@@ -48,6 +48,26 @@ int verify_data;
 void *send_buf;
 void *recv_buf;
 
+void ft_parsepongopts(int op)
+{
+	switch (op) {
+	case 'v':
+		verify_data = 1;
+		break;
+	case 'P':
+		hints->mode |= FI_MSG_PREFIX;
+		break;
+	default:
+		break;
+	}
+}
+
+void ft_pongusage(void)
+{
+	FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
+	FT_PRINT_OPTS_USAGE("-P", "enable prefix mode");
+}
+
 int send_xfer(int size)
 {
 	int ret;
@@ -61,7 +81,7 @@ int send_xfer(int size)
 	}
 
 	if (verify_data)
-		ft_fill_buf(send_buf, size);
+		ft_fill_buf((char *) send_buf + prefix_len, size);
 
 	ret = fi_send(ep, send_buf, (size_t) size + prefix_len, fi_mr_desc(mr),
 			remote_fi_addr, NULL);
@@ -75,7 +95,7 @@ int send_msg(int size)
 {
 	int ret;
 
-	ret = fi_send(ep, send_buf, (size_t) size, fi_mr_desc(mr),
+	ret = fi_send(ep, send_buf, (size_t) size + prefix_len, fi_mr_desc(mr),
 			remote_fi_addr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
@@ -96,7 +116,7 @@ int recv_xfer(int size)
 		return ret;
 
 	if (verify_data) {
-		ret = ft_check_buf(recv_buf, size);
+		ret = ft_check_buf((char *) recv_buf + prefix_len, size);
 		if (ret)
 			return ret;
 	}

@@ -174,9 +174,9 @@ static int common_setup(void)
 		FT_PRINTERR("fi_fabric", ret);
 		return ret;
 	}
-	if (fi->mode & FI_MSG_PREFIX) {
+
+	if (fi->mode & FI_MSG_PREFIX)
 		prefix_len = fi->ep_attr->msg_prefix_size;
-	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
@@ -331,24 +331,23 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "ht:P" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "ht:" CS_OPTS INFO_OPTS PONG_OPTS)) !=
+			-1) {
 		switch (op) {
-		case 'P':
-			hints->mode |= FI_MSG_PREFIX;
-			break;
 		case 't':
 			timeout = atoi(optarg);
 			break;
 		default:
+			ft_parsepongopts(op);
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Ping pong client and server using UD.");
+			ft_pongusage();
 			FT_PRINT_OPTS_USAGE("-t <timeout>",
 					"seconds before timeout on receive");
-			FT_PRINT_OPTS_USAGE("-P", "enable prefix mode");
 			return EXIT_FAILURE;
 		}
 	}

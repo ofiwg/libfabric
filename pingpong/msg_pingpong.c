@@ -160,6 +160,9 @@ static int server_listen(void)
 		return ret;
 	}
 
+	if (fi->mode & FI_MSG_PREFIX)
+		prefix_len = fi->ep_attr->msg_prefix_size;
+
 	ret = fi_passive_ep(fabric, fi, &pep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_passive_ep", ret);
@@ -272,6 +275,9 @@ static int client_connect(void)
 		return ret;
 	}
 
+	if (fi->mode & FI_MSG_PREFIX)
+		prefix_len = fi->ep_attr->msg_prefix_size;
+
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
@@ -358,19 +364,18 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "vh" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS PONG_OPTS)) !=
+			-1) {
 		switch (op) {
-		case 'v':
-			verify_data = 1;
-			break;
 		default:
+			ft_parsepongopts(op);
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Ping pong client and server using message endpoints.");
-			FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
+			ft_pongusage();
 			return EXIT_FAILURE;
 		}
 	}
