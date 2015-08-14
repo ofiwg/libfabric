@@ -71,6 +71,22 @@ int send_xfer(int size)
 	return ret;
 }
 
+int send_msg(int size)
+{
+	int ret;
+
+	ret = fi_send(ep, send_buf, (size_t) size, fi_mr_desc(mr),
+			remote_fi_addr, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_send", ret);
+		return ret;
+	}
+
+	ret = wait_for_completion(txcq, 1);
+
+	return ret;
+}
+
 int recv_xfer(int size)
 {
 	int ret;
@@ -89,6 +105,21 @@ int recv_xfer(int size)
 			NULL);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
+
+	return ret;
+}
+
+int recv_msg(void)
+{
+	int ret;
+
+	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), 0, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
+
+	ret = wait_for_completion(rxcq, 1);
 
 	return ret;
 }

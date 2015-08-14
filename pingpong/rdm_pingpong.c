@@ -49,37 +49,6 @@ static struct timespec start, end;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
 
-static int send_msg(int size)
-{
-	int ret;
-
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			NULL);
-	if (ret) {
-		FT_PRINTERR("fi_send", ret);
-		return ret;
-	}
-
-	ret = wait_for_completion(txcq, 1);
-
-	return ret;
-}
-
-static int recv_msg(void)
-{
-	int ret;
-
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
-
-	ret = wait_for_completion(rxcq, 1);
-
-	return ret;
-}
-
 static int run_test(void)
 {
 	int ret, i;

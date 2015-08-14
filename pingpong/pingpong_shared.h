@@ -46,7 +46,9 @@ extern void *send_buf;
 extern void *recv_buf;
 
 int send_xfer(int size);
+int send_msg(int size);
 int recv_xfer(int size);
+int recv_msg(void);
 int sync_test(void);
 
 #ifdef __cplusplus
