@@ -53,18 +53,18 @@ static int run_test(void)
 {
 	int ret, i;
 
-	ret = sync_test();
+	ret = sync_test(false);
 	if (ret)
 		goto out;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < opts.iterations; i++) {
 		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
-				 recv_xfer(opts.transfer_size);
+				 recv_xfer(opts.transfer_size, false);
 		if (ret)
 			goto out;
 
-		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
+		ret = opts.dst_addr ? recv_xfer(opts.transfer_size, false) :
 				 send_xfer(opts.transfer_size);
 		if (ret)
 			goto out;
@@ -227,13 +227,13 @@ static int init_av(void)
 			return ret;
 
 		/* Receive ACK from server */
-		ret = recv_msg();
+		ret = recv_msg(16, false);
 		if (ret)
 			return ret;
 
 	} else {
 		/* Post a recv to get the remote address */
-		ret = recv_msg();
+		ret = recv_msg(buffer_size, false);
 		if (ret)
 			return ret;
 

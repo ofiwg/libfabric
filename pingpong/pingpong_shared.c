@@ -31,6 +31,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_errno.h>
@@ -47,6 +48,7 @@ int credits = 128;
 int verify_data;
 void *send_buf;
 void *recv_buf;
+int timeout;
 
 void ft_parsepongopts(int op)
 {
@@ -66,6 +68,39 @@ void ft_pongusage(void)
 {
 	FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
 	FT_PRINT_OPTS_USAGE("-P", "enable prefix mode");
+}
+
+int wait_for_completion_timeout(struct fid_cq *cq, int num_completions)
+{
+	int ret;
+	struct timespec a, b;
+	struct fi_cq_entry comp;
+
+	clock_gettime(CLOCK_MONOTONIC, &a);
+	while (num_completions > 0) {
+		ret = fi_cq_read(cq, &comp, 1);
+		if (ret > 0) {
+			clock_gettime(CLOCK_MONOTONIC, &a);
+			num_completions--;
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
+			if (ret == -FI_EAVAIL) {
+				cq_readerr(cq, "cq");
+			} else {
+				FT_PRINTERR("fi_cq_read", ret);
+			}
+			return ret;
+		} else if (timeout > 0) {
+			clock_gettime(CLOCK_MONOTONIC, &b);
+			if ((b.tv_sec - a.tv_sec) > timeout) {
+				fprintf(stderr,
+					"%ds timeout expired waiting to receive message, exiting\n",
+					timeout);
+				exit(FI_ENODATA);
+			}
+		}
+	}
+
+	return 0;
 }
 
 int send_xfer(int size)
@@ -107,11 +142,15 @@ int send_msg(int size)
 	return ret;
 }
 
-int recv_xfer(int size)
+int recv_xfer(int size, bool enable_timeout)
 {
 	int ret;
 
-	ret = wait_for_completion(rxcq, 1);
+	if (enable_timeout)
+		ret = wait_for_completion_timeout(rxcq, 1);
+	else
+		ret = wait_for_completion(rxcq, 1);
+
 	if (ret)
 		return ret;
 
@@ -129,7 +168,7 @@ int recv_xfer(int size)
 	return ret;
 }
 
-int recv_msg(void)
+int recv_msg(int size, bool enable_timeout)
 {
 	int ret;
 
@@ -139,12 +178,15 @@ int recv_msg(void)
 		return ret;
 	}
 
-	ret = wait_for_completion(rxcq, 1);
+	if (enable_timeout)
+		ret = wait_for_completion_timeout(rxcq, 1);
+	else
+		ret = wait_for_completion(rxcq, 1);
 
 	return ret;
 }
 
-int sync_test(void)
+int sync_test(bool enable_timeout)
 {
 	int ret;
 
@@ -153,9 +195,9 @@ int sync_test(void)
 		return ret;
 	credits = max_credits;
 
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
+	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16, enable_timeout);
 	if (ret)
 		return ret;
 
-	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
+	return opts.dst_addr ? recv_xfer(16, enable_timeout) : send_xfer(16);
 }

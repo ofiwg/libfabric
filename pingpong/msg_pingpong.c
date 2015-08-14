@@ -49,18 +49,18 @@ static int run_test()
 {
 	int ret, i;
 
-	ret = sync_test();
+	ret = sync_test(false);
 	if (ret)
 		return ret;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < opts.iterations; i++) {
 		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
-				 recv_xfer(opts.transfer_size);
+				 recv_xfer(opts.transfer_size, false);
 		if (ret)
 			return ret;
 
-		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
+		ret = opts.dst_addr ? recv_xfer(opts.transfer_size, false) :
 				 send_xfer(opts.transfer_size);
 		if (ret)
 			return ret;

@@ -52,24 +52,23 @@ static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *payload;
 static size_t max_msg_size = 0;
-static int timeout = 5;
 
 static int run_test(void)
 {
 	int ret, i;
 
-	ret = sync_test();
+	ret = sync_test(true);
 	if (ret)
 		return ret;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < opts.iterations; i++) {
 		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
-				 recv_xfer(opts.transfer_size);
+				 recv_xfer(opts.transfer_size, true);
 		if (ret)
 			return ret;
 
-		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
+		ret = opts.dst_addr ? recv_xfer(opts.transfer_size, true) :
 				 send_xfer(opts.transfer_size);
 		if (ret)
 			return ret;
@@ -225,7 +224,7 @@ static int client_connect(void)
 		return ret;
 
 	// wait for reply to know server is ready
-	ret = recv_msg();
+	ret = recv_msg(4, true);
 	if (ret != 0)
 		return ret;
 
@@ -326,6 +325,8 @@ int main(int argc, char **argv)
 {
 	int ret, op;
 	opts = INIT_OPTS;
+
+	timeout = 5;
 
 	hints = fi_allocinfo();
 	if (!hints)
