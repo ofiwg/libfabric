@@ -33,7 +33,7 @@ use File::Temp qw/ tempdir /;
 use File::Basename;
 use Getopt::Long;
 
-my $source_dir_arg;
+my $libfabric_dir_arg;
 my $fabtests_dir_arg;
 my $download_dir_arg;
 my $libfabric_coverity_token_arg;
@@ -43,10 +43,10 @@ my $help_arg;
 my $verbose_arg;
 my $debug_arg;
 
-my $ok = Getopt::Long::GetOptions("source-dir=s" => \$source_dir_arg,
+my $ok = Getopt::Long::GetOptions("libfabric-source-dir=s" => \$libfabric_dir_arg,
                                   "fabtests-source-dir=s" => \$fabtests_dir_arg,
                                   "download-dir=s" => \$download_dir_arg,
-                                  "coverity-token=s" => \$libfabric_coverity_token_arg,
+                                  "libfabric-coverity-token=s" => \$libfabric_coverity_token_arg,
                                   "fabtests-coverity-token=s" => \$fabtests_coverity_token_arg,
                                   "logfile-dir=s" => \$logfile_dir_arg,
                                   "verbose" => \$verbose_arg,
@@ -55,18 +55,19 @@ my $ok = Getopt::Long::GetOptions("source-dir=s" => \$source_dir_arg,
                                   );
 
 if ($help_arg || !$ok) {
-    print "$0 --source-dir libfabric_git_tree --download-dir download_tree\n";
+    print "$0 --libfabric-source-dir libfabric_git_tree --fabtests-source-dir fabtests_git_tree --download-dir download_tree\n";
     exit(0);
 }
 
 # Sanity checks
-die "Must specify both --source-dir and --download-dir"
-    if (!defined($source_dir_arg) || $source_dir_arg eq "" ||
+die "Must specify --libfabric-source-dir, --fabtests-source-dir, and --download-dir"
+    if (!defined($libfabric_dir_arg) || $libfabric_dir_arg eq "" ||
+        !defined($fabtests_dir_arg) || $fabtests_dir_arg eq "" ||
         !defined($download_dir_arg) || $download_dir_arg eq "");
-die "$source_dir_arg is not a valid directory"
-    if (! -d $source_dir_arg);
-die "$source_dir_arg is not libfabric git clone"
-    if (! -d "$source_dir_arg/.git" || ! -f "$source_dir_arg/src/fi_tostr.c");
+die "$libfabric_dir_arg is not a valid directory"
+    if (! -d $libfabric_dir_arg);
+die "$libfabric_dir_arg is not libfabric git clone"
+    if (! -d "$libfabric_dir_arg/.git" || ! -f "$libfabric_dir_arg/src/fi_tostr.c");
 die "$download_dir_arg is not a valid directory"
     if (! -d $download_dir_arg);
 
@@ -95,7 +96,7 @@ sub doit {
         # If we die/fail, ensure to a) restore the git tree to a clean
         # state, and b) change out of the temp tree so that it can be
         # removed upon exit.
-        chdir($source_dir_arg);
+        chdir($libfabric_dir_arg);
         system("git clean -dfx");
         system("git reset --hard HEAD");
         chdir("/");
@@ -238,10 +239,10 @@ sub submit_to_coverity {
 my $installdir = tempdir(CLEANUP => 1);
 
 verbose("*** Building libfabric...\n");
-chdir($source_dir_arg);
+chdir($libfabric_dir_arg);
 git_cleanup();
 my $libfabric_version = get_git_version();
-my $rebuilt_libfabric = make_tarball("libfabric", $source_dir_arg,
+my $rebuilt_libfabric = make_tarball("libfabric", $libfabric_dir_arg,
     $libfabric_version, $installdir);
 
 verbose("\n\n*** Building fabtests...\n");
