@@ -252,18 +252,22 @@ my $fabtests_version = get_git_version();
 my $rebuilt_fabtests = make_tarball("fabtests", $fabtests_dir_arg,
     $fabtests_version, $installdir);
 
-# Re-generate hashes
-verbose("*** Re-generating md5/sha1sums...\n");
-chdir($download_dir_arg);
-doit(0, "md5sum libfabric*tar* fabtests*tar* > md5sums.txt");
-doit(0, "sha1sum libfabric*tar* fabtests*tar* > sha1sums.txt");
+if ($rebuilt_libfabric || $rebuilt_fabtests) {
+    # Re-generate hashes
+    verbose("*** Re-generating md5/sha1sums...\n");
+    chdir($download_dir_arg);
+    doit(0, "md5sum libfabric*tar* fabtests*tar* > md5sums.txt");
+    doit(0, "sha1sum libfabric*tar* fabtests*tar* > sha1sums.txt");
+}
 
-# Re-write latest.txt
-verbose("*** Re-creating latest.txt...\n");
-unlink("latest.txt");
-open(OUT, ">latest.txt") || die "Can't write to latest.txt";
-print OUT "libfabric-$libfabric_version\n";
-close(OUT);
+if ($rebuilt_libfabric) {
+    # Re-write latest.txt
+    verbose("*** Re-creating latest.txt...\n");
+    unlink("latest.txt");
+    open(OUT, ">latest.txt") || die "Can't write to latest.txt";
+    print OUT "libfabric-$libfabric_version\n";
+    close(OUT);
+}
 
 # Run the coverity script if requested
 if (defined($libfabric_coverity_token_arg) && $rebuilt_libfabric) {
