@@ -31,6 +31,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <rdma/fi_cm.h>
+#include <rdma/fi_domain.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 
@@ -105,6 +107,42 @@ int ft_open_fabric_res(void)
 	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_eq_open", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+int ft_start_server(void)
+{
+	int ret;
+
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE,
+			 hints, &fi);
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
+		return ret;
+	}
+
+	ret = ft_open_fabric_res();
+	if (ret)
+		return ret;
+
+	ret = fi_passive_ep(fabric, fi, &pep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_passive_ep", ret);
+		return ret;
+	}
+
+	ret = fi_pep_bind(pep, &eq->fid, 0);
+	if (ret) {
+		FT_PRINTERR("fi_pep_bind", ret);
+		return ret;
+	}
+
+	ret = fi_listen(pep);
+	if (ret) {
+		FT_PRINTERR("fi_listen", ret);
 		return ret;
 	}
 

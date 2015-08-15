@@ -123,45 +123,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	return 0;
 }
 
-static int server_listen(void)
-{
-	int ret;
-
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE,
-			hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
-
-	if (fi->mode & FI_MSG_PREFIX)
-		prefix_len = fi->ep_attr->msg_prefix_size;
-
-	ret = fi_passive_ep(fabric, fi, &pep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_passive_ep", ret);
-		return ret;
-	}
-
-	ret = fi_pep_bind(pep, &eq->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_pep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_listen(pep);
-	if (ret) {
-		FT_PRINTERR("fi_listen", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
 static int server_connect(void)
 {
 	struct fi_eq_cm_entry entry;
@@ -243,9 +204,6 @@ static int client_connect(void)
 		return ret;
 	}
 
-	if (fi->mode & FI_MSG_PREFIX)
-		prefix_len = fi->ep_attr->msg_prefix_size;
-
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
@@ -292,7 +250,7 @@ static int run(void)
 	int i, ret = 0;
 
 	if (!opts.dst_addr) {
-		ret = server_listen();
+		ret = ft_start_server();
 		if (ret)
 			return ret;
 	}

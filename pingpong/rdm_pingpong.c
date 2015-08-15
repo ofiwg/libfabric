@@ -169,9 +169,6 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	if (fi->mode & FI_MSG_PREFIX)
-		prefix_len = fi->ep_attr->msg_prefix_size;
-
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);

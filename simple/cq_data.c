@@ -43,7 +43,6 @@
 
 
 static int rx_depth = 500;
-static size_t cq_data_size;
 
 
 static int alloc_ep_res(struct fi_info *fi)
@@ -84,44 +83,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
-static int server_listen(void)
-{
-	int ret;
-
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE, hints,
-			&fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
-	cq_data_size = fi->domain_attr->cq_data_size;
-
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
-
-	ret = fi_passive_ep(fabric, fi, &pep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_passive_ep", ret);
-		return ret;
-	}
-
-	ret = fi_pep_bind(pep, &eq->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_pep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_listen(pep);
-	if (ret) {
-		FT_PRINTERR("fi_listen", ret);
 		return ret;
 	}
 
@@ -209,8 +170,6 @@ static int client_connect(void)
 		return ret;
 	}
 
-	cq_data_size = fi->domain_attr->cq_data_size;
-
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
@@ -258,7 +217,8 @@ static int run_test()
 	struct fi_cq_data_entry comp;
 
 	/* Set remote_cq_data based on the cq_data_size we got from fi_getinfo */
-	remote_cq_data = 0x0123456789abcdef & ((0x1ULL << (cq_data_size * 8)) - 1);
+	remote_cq_data = 0x0123456789abcdef &
+			((0x1ULL << (fi->domain_attr->cq_data_size * 8)) - 1);
 
 	if (opts.dst_addr) {
 		fprintf(stdout,
@@ -306,7 +266,7 @@ static int run(void)
 	int ret = 0;
 
 	if (!opts.dst_addr) {
-		ret = server_listen();
+		ret = ft_start_server();
 		if (ret)
 			return ret;
 	}
