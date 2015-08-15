@@ -122,11 +122,13 @@ streaming_fi_rdm_rma_SOURCES = \
 streaming_fi_rdm_rma_LDADD = libfabtests.la
 
 pingpong_fi_msg_pingpong_SOURCES = \
-	pingpong/msg_pingpong.c
+	pingpong/msg_pingpong.c \
+	pingpong/pingpong_shared.c
 pingpong_fi_msg_pingpong_LDADD = libfabtests.la
 
 pingpong_fi_ud_pingpong_SOURCES = \
-	pingpong/ud_pingpong.c
+	pingpong/ud_pingpong.c \
+	pingpong/pingpong_shared.c
 pingpong_fi_ud_pingpong_LDADD = libfabtests.la
 
 pingpong_fi_rdm_cntr_pingpong_SOURCES = \
@@ -134,7 +136,8 @@ pingpong_fi_rdm_cntr_pingpong_SOURCES = \
 pingpong_fi_rdm_cntr_pingpong_LDADD = libfabtests.la
 
 pingpong_fi_rdm_pingpong_SOURCES = \
-	pingpong/rdm_pingpong.c
+	pingpong/rdm_pingpong.c \
+	pingpong/pingpong_shared.c
 pingpong_fi_rdm_pingpong_LDADD = libfabtests.la
 
 pingpong_fi_rdm_tagged_pingpong_SOURCES = \

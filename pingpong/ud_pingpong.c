@@ -46,121 +46,29 @@
 #include <rdma/fi_cm.h>
 
 #include "shared.h"
+#include "pingpong_shared.h"
 
-
-static int max_credits = 128;
-static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *payload;
-static size_t prefix_len;
 static size_t max_msg_size = 0;
-static int timeout = 5;
-
-static fi_addr_t remote_fi_addr;
-
-static int poll_all_sends(void)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	do {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret > 0) {
-			credits++;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			FT_PRINTERR("fi_cq_read", ret);
-			return ret;
-		}
-	} while (ret != -FI_EAGAIN);
-	return 0;
-}
-
-static int send_xfer(int size)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	while (!credits) {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret > 0) {
-			goto post;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			FT_PRINTERR("fi_cq_read", ret);
-			return ret;
-		}
-	}
-
-	credits--;
-post:
-	ret = fi_send(ep, buf, (size_t) size + prefix_len, fi_mr_desc(mr),
-			remote_fi_addr, NULL);
-	if (ret)
-		FT_PRINTERR("fi_send", ret);
-
-	return ret;
-}
-
-static int recv_xfer(int size)
-{
-	struct timespec a, b;
-	struct fi_cq_entry comp;
-	int ret;
-
-	clock_gettime(CLOCK_MONOTONIC, &a);
-	do {
-		ret = fi_cq_read(rxcq, &comp, sizeof comp);
-		if (ret < 0) {
-			if (ret != -FI_EAGAIN) {
-				FT_PRINTERR("fi_cq_read", ret);
-				return ret;
-			} else if (timeout > 0) {
-				clock_gettime(CLOCK_MONOTONIC, &b);
-				if (b.tv_sec - a.tv_sec > timeout) {
-					fprintf(stderr, "%ds timeout expired waiting to receive message, exiting\n", timeout);
-					exit(FI_ENODATA);
-				}
-			}
-		}
-	} while (ret == -FI_EAGAIN);
-
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
-	if (ret)
-		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
-}
-
-static int sync_test(void)
-{
-	int ret;
-
-	while (credits < max_credits)
-		poll_all_sends();
-
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
-	if (ret)
-		return ret;
-
-	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
-}
 
 static int run_test(void)
 {
 	int ret, i;
 
-	ret = sync_test();
+	ret = sync_test(true);
 	if (ret)
 		return ret;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < opts.iterations; i++) {
 		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
-				 recv_xfer(opts.transfer_size);
+				 recv_xfer(opts.transfer_size, true);
 		if (ret)
 			return ret;
 
-		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
+		ret = opts.dst_addr ? recv_xfer(opts.transfer_size, true) :
 				 send_xfer(opts.transfer_size);
 		if (ret)
 			return ret;
@@ -196,6 +104,8 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 	payload = (char *) buf + prefix_len;
+	send_buf = buf;
+	recv_buf = buf;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -263,9 +173,9 @@ static int common_setup(void)
 		FT_PRINTERR("fi_fabric", ret);
 		return ret;
 	}
-	if (fi->mode & FI_MSG_PREFIX) {
+
+	if (fi->mode & FI_MSG_PREFIX)
 		prefix_len = fi->ep_attr->msg_prefix_size;
-	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
@@ -309,12 +219,12 @@ static int client_connect(void)
 		return ret;
 	}
 
-	ret = send_xfer(addrlen);
+	ret = send_msg(addrlen);
 	if (ret != 0)
 		return ret;
 
 	// wait for reply to know server is ready
-	ret = recv_xfer(4);
+	ret = recv_msg(4, true);
 	if (ret != 0)
 		return ret;
 
@@ -361,17 +271,15 @@ static int server_connect(void)
 		return ret;
 	}
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
+	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), 0, NULL);
 	if (ret != 0) {
 		FT_PRINTERR("fi_recv", ret);
 		return ret;
 	}
 
-	ret = send_xfer(4);
-	if (ret != 0)
-		return ret;
+	ret = send_msg(4);
 
-	return 0;
+	return ret;
 }
 
 static int run(void)
@@ -403,8 +311,10 @@ static int run(void)
 			goto out;
 	}
 
-	while (credits < max_credits)
-		poll_all_sends();
+	ret = wait_for_completion(txcq, max_credits - credits);
+	if (ret)
+		return ret;
+	credits = max_credits;
 
 	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
@@ -416,28 +326,29 @@ int main(int argc, char **argv)
 	int ret, op;
 	opts = INIT_OPTS;
 
+	timeout = 5;
+
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "ht:P" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "ht:" CS_OPTS INFO_OPTS PONG_OPTS)) !=
+			-1) {
 		switch (op) {
-		case 'P':
-			hints->mode |= FI_MSG_PREFIX;
-			break;
 		case 't':
 			timeout = atoi(optarg);
 			break;
 		default:
+			ft_parsepongopts(op);
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Ping pong client and server using UD.");
+			ft_pongusage();
 			FT_PRINT_OPTS_USAGE("-t <timeout>",
 					"seconds before timeout on receive");
-			FT_PRINT_OPTS_USAGE("-P", "enable prefix mode");
 			return EXIT_FAILURE;
 		}
 	}

@@ -40,111 +40,27 @@
 #include <rdma/fi_cm.h>
 
 #include "shared.h"
+#include "pingpong_shared.h"
 
-
-static int max_credits = 128;
-static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
-static void *send_buf;
-
-static int verify_data = 0;
-
-static int send_xfer(int size)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	while (!credits) {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret > 0) {
-			goto post;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(txcq, "txcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	}
-
-	credits--;
-post:
-	if (verify_data)
-		ft_fill_buf(send_buf, size);
-
-	ret = fi_send(ep, send_buf, (size_t) size, fi_mr_desc(mr), 0, NULL);
-	if (ret)
-		FT_PRINTERR("fi_send", ret);
-
-	return ret;
-}
-
-static int recv_xfer(int size)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	do {
-		ret = fi_cq_read(rxcq, &comp, 1);
-		if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(rxcq, "rxcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	} while (ret == -FI_EAGAIN);
-
-	if (verify_data) {
-		ret = ft_check_buf(buf, size);
-		if (ret)
-			return ret;
-	}
-
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
-	if (ret)
-		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
-}
-
-static int sync_test(void)
-{
-	int ret;
-
-	ret = wait_for_completion(txcq, max_credits - credits);
-	if (ret) {
-		return ret;
-	}
-	credits = max_credits;
-
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
-	if (ret) {
-		return ret;
-	}
-
-	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
-}
 
 static int run_test()
 {
 	int ret, i;
 
-	ret = sync_test();
+	ret = sync_test(false);
 	if (ret)
 		return ret;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < opts.iterations; i++) {
 		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
-				 recv_xfer(opts.transfer_size);
+				 recv_xfer(opts.transfer_size, false);
 		if (ret)
 			return ret;
 
-		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
+		ret = opts.dst_addr ? recv_xfer(opts.transfer_size, false) :
 				 send_xfer(opts.transfer_size);
 		if (ret)
 			return ret;
@@ -187,6 +103,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
+	recv_buf = buf;
 	send_buf = (char *) buf + buffer_size;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
@@ -242,6 +159,9 @@ static int server_listen(void)
 		FT_PRINTERR("fi_fabric", ret);
 		return ret;
 	}
+
+	if (fi->mode & FI_MSG_PREFIX)
+		prefix_len = fi->ep_attr->msg_prefix_size;
 
 	ret = fi_passive_ep(fabric, fi, &pep, NULL);
 	if (ret) {
@@ -355,6 +275,9 @@ static int client_connect(void)
 		return ret;
 	}
 
+	if (fi->mode & FI_MSG_PREFIX)
+		prefix_len = fi->ep_attr->msg_prefix_size;
+
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
@@ -441,19 +364,18 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "vh" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS PONG_OPTS)) !=
+			-1) {
 		switch (op) {
-		case 'v':
-			verify_data = 1;
-			break;
 		default:
+			ft_parsepongopts(op);
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Ping pong client and server using message endpoints.");
-			FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
+			ft_pongusage();
 			return EXIT_FAILURE;
 		}
 	}
