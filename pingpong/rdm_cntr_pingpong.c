@@ -84,7 +84,7 @@ static int send_xfer(int size)
 	}
 
 	credits--;
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_send(ep, tx_buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
 			&fi_ctx_send);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
@@ -105,7 +105,7 @@ static int recv_xfer(int size)
 		return ret;
 	}
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
 			&fi_ctx_recv);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
@@ -118,7 +118,7 @@ static int send_msg(int size)
 {
 	int ret;
 
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_send(ep, tx_buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
 			&fi_ctx_send);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
@@ -138,7 +138,7 @@ static int recv_msg(void)
 {
 	int ret;
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
 		return ret;
@@ -208,13 +208,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = opts.user_options & FT_OPT_SIZE ?
-			opts.transfer_size : test_size[TEST_CNT - 1].size;
-	buf = malloc(buffer_size);
-	if (!buf) {
-		perror("malloc");
-		return -1;
-	}
+	ret = ft_alloc_bufs();
+	if (ret)
+		return ret;
 
 	memset(&cntr_attr, 0, sizeof cntr_attr);
 	cntr_attr.events = FI_CNTR_EVENTS_COMP;
@@ -231,7 +227,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
@@ -331,8 +327,8 @@ static int init_av(void)
 		}
 
 		/* Send local addr size and local addr */
-		memcpy(buf, &addrlen, sizeof(size_t));
-		memcpy(buf + sizeof(size_t), local_addr, addrlen);
+		memcpy(tx_buf, &addrlen, sizeof(size_t));
+		memcpy(tx_buf + sizeof(size_t), local_addr, addrlen);
 		ret = send_msg(sizeof(size_t) + addrlen);
 		if (ret)
 			return ret;
@@ -348,9 +344,9 @@ static int init_av(void)
 		if (ret)
 			return ret;
 
-		memcpy(&addrlen, buf, sizeof(size_t));
+		memcpy(&addrlen, rx_buf, sizeof(size_t));
 		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
+		memcpy(remote_addr, rx_buf + sizeof(size_t), addrlen);
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
 				&fi_ctx_av);
@@ -366,7 +362,7 @@ static int init_av(void)
 	}
 
 	/* Post first recv */
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
 			&fi_ctx_recv);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);

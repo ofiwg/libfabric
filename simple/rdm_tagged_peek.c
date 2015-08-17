@@ -93,7 +93,7 @@ static int recv_msg(uint64_t tag)
 {
 	int ret;
 
-	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
 			tag, 0, &fi_ctx_recv);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
@@ -106,7 +106,7 @@ static int post_recv(uint64_t tag)
 {
 	int ret;
 
-	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
 			tag, 0, &fi_ctx_recv);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
@@ -133,11 +133,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buf = malloc(buffer_size);
-	if (!buf) {
-		perror("malloc");
-		return -1;
-	}
+	ret = ft_alloc_bufs();
+	if (ret)
+		return ret;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -155,7 +153,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
@@ -331,7 +329,7 @@ static int run(void)
 	// Receiver
 	if (opts.dst_addr) {
 		// search for initial tag, it should fail since the sender
-		// hasn't sent anyting
+		// hasn't sent anything
 		fprintf(stdout, "Searching msg with tag [%" PRIu64 "]\n", tag_data);
 		tagged_peek(tag_data);
 
@@ -391,7 +389,9 @@ out:
 int main(int argc, char **argv)
 {
 	int ret, op;
+
 	opts = INIT_OPTS;
+	opts.user_options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints) {
@@ -415,7 +415,7 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->rx_attr->total_buffered_recv = buffer_size;
+	hints->rx_attr->total_buffered_recv = 1024;
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_TAGGED;
 	hints->mode = FI_CONTEXT | FI_LOCAL_MR;

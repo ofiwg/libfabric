@@ -74,7 +74,7 @@ static int recv_msg(void)
 {
 	int ret;
 
-	ret = fi_recv(srx_ctx, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	ret = fi_recv(srx_ctx, buf, rx_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
 		return ret;
@@ -93,8 +93,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int i, ret = 0;
 
-	buffer_size = test_size[TEST_CNT - 1].size;
-	buf = malloc(buffer_size);
+	ret = ft_alloc_bufs();
+	if (ret)
+		return ret;
 
 	remote_fi_addr = (fi_addr_t *)malloc(sizeof(*remote_fi_addr) * ep_cnt);
 
@@ -135,7 +136,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
@@ -220,7 +221,7 @@ static int run_test()
 	/* Post recvs */
 	for (i = 0; i < ep_cnt; i++) {
 		fprintf(stdout, "Posting recv for ctx: %d\n", i);
-		ret = fi_recv(srx_ctx, buf, buffer_size, fi_mr_desc(mr),
+		ret = fi_recv(srx_ctx, buf, rx_size, fi_mr_desc(mr),
 				FI_ADDR_UNSPEC, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
@@ -437,7 +438,9 @@ out:
 int main(int argc, char **argv)
 {
 	int op, ret;
+
 	opts = INIT_OPTS;
+	opts.user_options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints)

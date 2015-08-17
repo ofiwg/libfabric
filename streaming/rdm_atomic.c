@@ -110,7 +110,7 @@ static int post_recv(void)
 {
 	int ret;
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret){
 		FT_PRINTERR("fi_recv", ret);
 		return ret;
@@ -363,21 +363,17 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = opts.user_options & FT_OPT_SIZE ?
-			opts.transfer_size : test_size[TEST_CNT - 1].size;
-	buf = malloc(MAX(buffer_size, sizeof(uint64_t)));
-	if (!buf) {
-		perror("malloc");
-		return -1;
-	}
+	ret = ft_alloc_bufs();
+	if (ret)
+		return ret;
 
-	result = malloc(MAX(buffer_size, sizeof(uint64_t)));
+	result = malloc(buf_size);
 	if (!result) {
 		perror("malloc");
 		return -1;
 	}
 
-	compare = malloc(MAX(buffer_size, sizeof(uint64_t)));
+	compare = malloc(buf_size);
 	if (!compare) {
 		perror("malloc");
 		return -1;
@@ -401,7 +397,7 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	// registers local data buffer buff that specifies
 	// the first operand of the atomic operation
-	ret = fi_mr_reg(domain, buf, MAX(buffer_size, sizeof(uint64_t)),
+	ret = fi_mr_reg(domain, buf, buf_size,
 		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
 		get_mr_key(), 0, &mr, NULL);
 	if (ret) {
@@ -411,7 +407,7 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	// registers local data buffer that stores initial value of
 	// the remote buffer
-	ret = fi_mr_reg(domain, result, MAX(buffer_size, sizeof(uint64_t)),
+	ret = fi_mr_reg(domain, result, buf_size,
 		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
 		get_mr_key(), 0, &mr_result, NULL);
 	if (ret) {
@@ -420,7 +416,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	// registers local data buffer that contains comparison data
-	ret = fi_mr_reg(domain, compare, MAX(buffer_size, sizeof(uint64_t)),
+	ret = fi_mr_reg(domain, compare, buf_size,
 		FI_REMOTE_READ | FI_REMOTE_WRITE, 0,
 		get_mr_key(), 0, &mr_compare, NULL);
 	if (ret) {

@@ -45,8 +45,6 @@ extern fi_addr_t remote_fi_addr;
 extern int max_credits;
 extern int credits;
 extern int verify_data;
-extern void *send_buf;
-extern void *recv_buf;
 extern int timeout;
 
 void ft_parsepongopts(int op);

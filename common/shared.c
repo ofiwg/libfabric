@@ -51,8 +51,8 @@ struct fid_mr *mr;
 struct fid_av *av;
 struct fid_eq *eq;
 
-void *buf;
-size_t buffer_size = 1024;
+void *buf, *tx_buf, *rx_buf;
+size_t buf_size, tx_size, rx_size;
 
 struct fi_eq_attr eq_attr = {
 	.wait_obj = FI_WAIT_UNSPEC
@@ -93,6 +93,25 @@ const unsigned int test_cnt = (sizeof test_size / sizeof test_size[0]);
 static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
 
+
+int ft_alloc_bufs(void)
+{
+	tx_size = opts.user_options & FT_OPT_SIZE ?
+		  opts.transfer_size : test_size[TEST_CNT - 1].size;
+	rx_size = tx_size;
+	buf_size = tx_size + rx_size;
+
+	buf = malloc(buf_size);
+	if (!buf) {
+		perror("malloc");
+		return -FI_ENOMEM;
+	}
+
+	rx_buf = buf;
+	tx_buf = (char *) buf + (rx_size >> 1);
+
+	return 0;
+}
 
 int ft_open_fabric_res(void)
 {
@@ -193,7 +212,7 @@ int ft_init_ep(void *recv_ctx)
 	}
 
 	if (recv_ctx) {
-		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, recv_ctx);
+		ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, recv_ctx);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
 			return ret;
@@ -225,7 +244,8 @@ void ft_free_res(void)
 	ft_close_fids();
 	if (buf) {
 		free(buf);
-		buf = NULL;
+		buf = rx_buf = tx_buf = NULL;
+		buf_size = rx_size = tx_size = 0;
 	}
 	if (fi) {
 		fi_freeinfo(fi);

@@ -81,7 +81,7 @@ static int recv_msg(void)
 	int ret;
 
 	/* Messages sent to scalable EP fi_addr are received in context 0 */
-	ret = fi_recv(rx_ep[0], buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	ret = fi_recv(rx_ep[0], buf, rx_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
 		return ret;
@@ -122,8 +122,9 @@ static int alloc_ep_res(struct fid_ep *sep)
 	struct fi_av_attr av_attr;
 	int i, ret;
 
-	buffer_size = test_size[TEST_CNT - 1].size;
-	buf = malloc(buffer_size);
+	ret = ft_alloc_bufs();
+	if (ret)
+		return ret;
 
 	scq_array = calloc(ctx_cnt, sizeof *scq_array);
 	rcq_array = calloc(ctx_cnt, sizeof *rcq_array);
@@ -172,7 +173,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 		}
 	}
 
-	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
@@ -247,7 +248,7 @@ static int run_test()
 	/* Post recvs */
 	for (i = 0; i < ctx_cnt; i++) {
 		fprintf(stdout, "Posting recv for ctx: %d\n", i);
-		ret = fi_recv(rx_ep[i], buf, buffer_size, fi_mr_desc(mr), 0, NULL);
+		ret = fi_recv(rx_ep[i], buf, rx_size, fi_mr_desc(mr), 0, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
 			return ret;
@@ -427,7 +428,9 @@ static int run(void)
 int main(int argc, char **argv)
 {
 	int ret, op;
+
 	opts = INIT_OPTS;
+	opts.user_options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints)

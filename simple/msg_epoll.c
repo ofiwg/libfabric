@@ -54,11 +54,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct epoll_event event;
 	int ret, fd;
 
-	buf = malloc(buffer_size);
-	if (!buf) {
-		perror("malloc");
-		return -1;
-	}
+	ret = ft_alloc_bufs();
+	if (ret)
+		return ret;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -124,7 +122,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	/* Register memory */
-	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
@@ -303,7 +301,7 @@ static int send_recv()
 	} else {
 		/* Server */
 		fprintf(stdout, "Posting a recv...\n");
-		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
+		ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, buf);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
 			return ret;
@@ -341,6 +339,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
+	opts.user_options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints)
