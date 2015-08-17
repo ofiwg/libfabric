@@ -269,12 +269,6 @@ static int server_connect(void)
 		return ret;
 	}
 
-	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, NULL);
-	if (ret != 0) {
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
-
 	ret = send_msg(4);
 
 	return ret;
@@ -287,6 +281,12 @@ static int run(void)
 	ret = opts.dst_addr ? client_connect() : server_connect();
 	if (ret)
 		return ret;
+
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, NULL);
+	if (ret != 0) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
 
 	if (!(opts.user_options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
