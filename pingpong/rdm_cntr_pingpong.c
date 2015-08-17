@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -42,8 +42,6 @@
 #include <shared.h>
 
 
-static int max_credits = 128;
-static int credits = 128;
 static int send_count = 0;
 static int recv_outs = 0;	/* Outstanding recvs */
 static char test_name[10] = "custom";
@@ -66,7 +64,7 @@ static int get_send_completions()
 		return ret;
 	}
 
-	credits = max_credits;
+	tx_credits = fi->tx_attr->size;
 
 	return ret;
 }
@@ -75,7 +73,7 @@ static int send_xfer(int size)
 {
 	int ret;
 
-	if (!credits) {
+	if (!tx_credits) {
 		ret = fi_cntr_wait(txcntr, send_count, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
@@ -83,9 +81,9 @@ static int send_xfer(int size)
 		}
 	}
 
-	credits--;
+	tx_credits--;
 	ret = fi_send(ep, tx_buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			&fi_ctx_send);
+		      &fi_ctx_send);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
 		return ret;
@@ -204,52 +202,15 @@ out:
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cntr_attr cntr_attr;
-	struct fi_av_attr av_attr;
 	int ret;
 
 	ret = ft_alloc_bufs();
 	if (ret)
 		return ret;
 
-	memset(&cntr_attr, 0, sizeof cntr_attr);
-	cntr_attr.events = FI_CNTR_EVENTS_COMP;
-
-	ret = fi_cntr_open(domain, &cntr_attr, &txcntr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cntr_open", ret);
+	ret = ft_alloc_active_res(fi);
+	if (ret)
 		return ret;
-	}
-
-	ret = fi_cntr_open(domain, &cntr_attr, &rxcntr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cntr_open", ret);
-		return ret;
-	}
-
-	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
-	}
-
-	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = fi->domain_attr->av_type ?
-			fi->domain_attr->av_type : FI_AV_MAP;
-	av_attr.count = 1;
-	av_attr.name = NULL;
-
-	ret = fi_av_open(domain, &av_attr, &av, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_av_open", ret);
-		return ret;
-	}
-
-	ret = fi_endpoint(domain, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		return ret;
-	}
 
 	return 0;
 }
@@ -383,7 +344,7 @@ static int run(void)
 	if (ret)
 		goto out;
 
-	if (!(opts.user_options & FT_OPT_SIZE)) {
+	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
@@ -409,7 +370,9 @@ out:
 int main(int argc, char **argv)
 {
 	int op, ret;
+
 	opts = INIT_OPTS;
+	opts.options = FT_OPT_RX_CNTR | FT_OPT_TX_CNTR;
 
 	hints = fi_allocinfo();
 	if (!hints)

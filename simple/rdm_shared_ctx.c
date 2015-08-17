@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -40,9 +40,6 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
-
-static size_t transfer_size = 1000;
-static int rx_depth = 512;
 
 static int ep_cnt = 2;
 static struct fid_ep **ep_array, *srx_ctx;
@@ -87,27 +84,28 @@ static int recv_msg(void)
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cq_attr cq_attr;
 	struct fi_rx_attr rx_attr;
 	struct fi_tx_attr tx_attr;
-	struct fi_av_attr av_attr;
 	int i, ret = 0;
 
 	ret = ft_alloc_bufs();
 	if (ret)
 		return ret;
 
-	remote_fi_addr = (fi_addr_t *)malloc(sizeof(*remote_fi_addr) * ep_cnt);
-
-	if (!buf || !remote_fi_addr) {
+	remote_fi_addr = malloc(sizeof(*remote_fi_addr) * ep_cnt);
+	if (!remote_fi_addr) {
 		perror("malloc");
 		return -FI_ENOMEM;
 	}
 
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = rx_depth;
+	av_attr.count = ep_cnt;
+
+	ret = ft_alloc_active_res(fi);
+	if (ret)
+		return ret;
+
+	/* TODO: avoid allocating EP when EP array is used. */
+	FT_CLOSE_FID(ep);
 
 	memset(&tx_attr, 0, sizeof tx_attr);
 	memset(&rx_attr, 0, sizeof rx_attr);
@@ -118,38 +116,9 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
-	}
-
 	ret = fi_srx_context(domain, &rx_attr, &srx_ctx, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_srx_context", ret);
-		return ret;
-	}
-
-	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
-	}
-
-	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
-	}
-
-	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = fi->domain_attr->av_type ?
-			fi->domain_attr->av_type : FI_AV_MAP;
-	av_attr.count = ep_cnt;
-
-	ret = fi_av_open(domain, &av_attr, &av, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_av_open", ret);
 		return ret;
 	}
 
@@ -221,7 +190,7 @@ static int run_test()
 	/* Post recvs */
 	for (i = 0; i < ep_cnt; i++) {
 		fprintf(stdout, "Posting recv for ctx: %d\n", i);
-		ret = fi_recv(srx_ctx, buf, rx_size, fi_mr_desc(mr),
+		ret = fi_recv(srx_ctx, rx_buf, rx_size, fi_mr_desc(mr),
 				FI_ADDR_UNSPEC, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
@@ -233,7 +202,7 @@ static int run_test()
 		/* Post sends addressed to remote EPs */
 		for (i = 0; i < ep_cnt; i++) {
 			fprintf(stdout, "Posting send to remote ctx: %d\n", i);
-			ret = fi_send(ep_array[i], buf, transfer_size, fi_mr_desc(mr),
+			ret = fi_send(ep_array[i], tx_buf, tx_size, fi_mr_desc(mr),
 					remote_fi_addr[i], NULL);
 			if (ret) {
 				FT_PRINTERR("fi_send", ret);
@@ -253,7 +222,7 @@ static int run_test()
 		/* Post sends addressed to remote EPs */
 		for (i = 0; i < ep_cnt; i++) {
 			fprintf(stdout, "Posting send to remote ctx: %d\n", i);
-			ret = fi_send(ep_array[i], buf, transfer_size, fi_mr_desc(mr),
+			ret = fi_send(ep_array[i], tx_buf, tx_size, fi_mr_desc(mr),
 					remote_fi_addr[i], NULL);
 			if (ret) {
 				FT_PRINTERR("fi_send", ret);
@@ -440,7 +409,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.user_options |= FT_OPT_SIZE;
+	opts.options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints)

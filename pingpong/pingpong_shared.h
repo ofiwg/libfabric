@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -42,8 +43,6 @@ extern "C" {
 #define PONG_OPTS "vP"
 
 extern fi_addr_t remote_fi_addr;
-extern int max_credits;
-extern int credits;
 extern int verify_data;
 extern int timeout;
 

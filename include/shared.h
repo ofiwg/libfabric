@@ -65,6 +65,15 @@ enum precision {
 	MILLI = 1000000,
 };
 
+enum {
+	FT_OPT_ITER		= 1 << 0,
+	FT_OPT_SIZE		= 1 << 1,
+	FT_OPT_RX_CQ		= 1 << 2,
+	FT_OPT_TX_CQ		= 1 << 3,
+	FT_OPT_RX_CNTR		= 1 << 4,
+	FT_OPT_TX_CNTR		= 1 << 5,
+};
+
 struct ft_opts {
 	int iterations;
 	int transfer_size;
@@ -73,17 +82,11 @@ struct ft_opts {
 	char *src_addr;
 	char *dst_addr;
 	int size_option;
-	int user_options;
+	int options;
 	int machr;
 	int argc;
 	char **argv;
 };
-
-enum {
-	FT_OPT_ITER = 1 << 0,
-	FT_OPT_SIZE = 1 << 1
-};
-
 
 extern struct fi_info *fi, *hints;
 extern struct fid_fabric *fabric;
@@ -101,7 +104,11 @@ extern struct fid_eq *eq;
 extern void *buf, *tx_buf, *rx_buf;
 extern size_t buf_size, tx_size, rx_size;
 
+extern size_t tx_credits;
+extern struct fi_av_attr av_attr;
 extern struct fi_eq_attr eq_attr;
+extern struct fi_cq_attr cq_attr;
+extern struct fi_cntr_attr cntr_attr;
 
 extern struct ft_opts opts;
 
@@ -117,11 +124,14 @@ int ft_check_buf(void *buf, int size);
 #define INFO_OPTS "n:f:"
 #define CS_OPTS ADDR_OPTS "I:S:m"
 
-#define INIT_OPTS (struct ft_opts) { .iterations = 1000, \
-				     .transfer_size = 1024, \
-				     .src_port = "9228", \
-				     .dst_port = "9228", \
-				     .argc = argc, .argv = argv }
+#define INIT_OPTS (struct ft_opts) \
+	{	.options = FT_OPT_RX_CQ | FT_OPT_TX_CQ, \
+		.iterations = 1000, \
+		.transfer_size = 1024, \
+		.src_port = "9228", \
+		.dst_port = "9228", \
+		.argc = argc, .argv = argv \
+	}
 
 extern struct test_size_param test_size[];
 const unsigned int test_cnt;
@@ -158,6 +168,7 @@ int size_to_count(int size);
 int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_start_server();
+int ft_alloc_active_res(struct fi_info *fi);
 int ft_init_ep(void *recv_ctx);
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);

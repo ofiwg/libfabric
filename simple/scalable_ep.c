@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -42,9 +42,6 @@
 #include <shared.h>
 #include <math.h>
 
-
-static size_t transfer_size = 1000;
-static int rx_depth = 512;
 
 static int ctx_cnt = 2;
 static int rx_ctx_bits = 0;
@@ -118,33 +115,36 @@ static void free_res(void)
 
 static int alloc_ep_res(struct fid_ep *sep)
 {
-	struct fi_cq_attr cq_attr;
-	struct fi_av_attr av_attr;
 	int i, ret;
 
 	ret = ft_alloc_bufs();
 	if (ret)
 		return ret;
 
+	/* Get number of bits needed to represent ctx_cnt */
+	while (ctx_cnt >> ++rx_ctx_bits)
+		;
+
+	av_attr.rx_ctx_bits = rx_ctx_bits;
+
+	ret = ft_alloc_active_res(fi);
+	if (ret)
+		return ret;
+
+	FT_CLOSE_FID(ep);
+
 	scq_array = calloc(ctx_cnt, sizeof *scq_array);
 	rcq_array = calloc(ctx_cnt, sizeof *rcq_array);
-
 	tx_ep = calloc(ctx_cnt, sizeof *tx_ep);
 	rx_ep = calloc(ctx_cnt, sizeof *rx_ep);
-
 	remote_rx_addr = calloc(ctx_cnt, sizeof *remote_rx_addr);
+
 	if (!buf || !scq_array || !rcq_array || !tx_ep || !rx_ep || !remote_rx_addr) {
 		perror("malloc");
 		return -1;
 	}
 
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = rx_depth;
-
 	for (i = 0; i < ctx_cnt; i++) {
-		/* Create TX contexts: tx_ep */
 		ret = fi_tx_context(sep, i, NULL, &tx_ep[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_tx_context", ret);
@@ -156,10 +156,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 			FT_PRINTERR("fi_cq_open", ret);
 			return ret;
 		}
-	}
 
-	for (i = 0; i < ctx_cnt; i++) {
-		/* Create RX contexts: rx_ep */
 		ret = fi_rx_context(sep, i, NULL, &rx_ep[i], NULL);
 		if (ret) {
 			FT_PRINTERR("fi_tx_context", ret);
@@ -171,29 +168,6 @@ static int alloc_ep_res(struct fid_ep *sep)
 			FT_PRINTERR("fi_cq_open", ret);
 			return ret;
 		}
-	}
-
-	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
-	}
-
-	/* Get number of bits needed to represent ctx_cnt */
-	while (ctx_cnt >> ++rx_ctx_bits)
-		;
-
-	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = fi->domain_attr->av_type ?
-			fi->domain_attr->av_type : FI_AV_MAP;
-	av_attr.count = 1;
-	av_attr.rx_ctx_bits = rx_ctx_bits;
-
-	/* Open Address Vector */
-	ret = fi_av_open(domain, &av_attr, &av, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_av_open", ret);
-		return ret;
 	}
 
 	return 0;
@@ -259,7 +233,7 @@ static int run_test()
 		/* Post sends directly to each of the recv contexts */
 		for (i = 0; i < ctx_cnt; i++) {
 			fprintf(stdout, "Posting send for ctx: %d\n", i);
-			ret = fi_send(tx_ep[i], buf, transfer_size, fi_mr_desc(mr),
+			ret = fi_send(tx_ep[i], buf, tx_size, fi_mr_desc(mr),
 					remote_rx_addr[i], NULL);
 			if (ret) {
 				FT_PRINTERR("fi_recv", ret);
@@ -430,7 +404,7 @@ int main(int argc, char **argv)
 	int ret, op;
 
 	opts = INIT_OPTS;
-	opts.user_options |= FT_OPT_SIZE;
+	opts.options = FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints)

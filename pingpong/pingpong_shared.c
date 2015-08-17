@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -42,8 +43,6 @@
 #include "pingpong_shared.h"
 
 fi_addr_t remote_fi_addr;
-int max_credits = 128;
-int credits = 128;
 int verify_data;
 int timeout;
 
@@ -104,12 +103,12 @@ int send_xfer(int size)
 {
 	int ret;
 
-	if (!credits) {
+	if (!tx_credits) {
 		ret = wait_for_completion(txcq, 1);
 		if (ret)
 			return ret;
 	} else {
-		credits--;
+		tx_credits--;
 	}
 
 	if (verify_data)
@@ -190,10 +189,10 @@ int sync_test(bool enable_timeout)
 {
 	int ret;
 
-	ret = wait_for_completion(txcq, max_credits - credits);
+	ret = wait_for_completion(txcq, fi->tx_attr->size - tx_credits);
 	if (ret)
 		return ret;
-	credits = max_credits;
+	tx_credits = fi->tx_attr->size;
 
 	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16, enable_timeout);
 	if (ret)
