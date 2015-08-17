@@ -208,7 +208,7 @@ static int getaddr(char *node, char *service,
 
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {
-		FT_ERR("fi_getinfo error %s\n", fi_strerror(ret));
+		FT_ERR("fi_getinfo error %s\n", fi_strerror(-ret));
 		return ret;
 	}
 	hints->addr_format = fi->addr_format;
