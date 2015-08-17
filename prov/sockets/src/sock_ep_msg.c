@@ -75,7 +75,7 @@ static const struct fi_ep_attr sock_msg_ep_attr = {
 };
 
 static const struct fi_tx_attr sock_msg_tx_attr = {
-	.caps = SOCK_EP_MSG_PRI_CAP | SOCK_EP_MSG_SEC_CAP,
+	.caps = SOCK_EP_MSG_CAP,
 	.mode = SOCK_MODE,
 	.op_flags = SOCK_EP_DEFAULT_OP_FLAGS,
 	.msg_order = SOCK_EP_MSG_ORDER,
@@ -86,7 +86,7 @@ static const struct fi_tx_attr sock_msg_tx_attr = {
 };
 
 static const struct fi_rx_attr sock_msg_rx_attr = {
-	.caps = SOCK_EP_MSG_PRI_CAP | SOCK_EP_MSG_SEC_CAP,
+	.caps = SOCK_EP_MSG_CAP,
 	.mode = SOCK_MODE,
 	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
@@ -101,7 +101,7 @@ static int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
 	if (!attr)
 		return 0;
 
-	if ((attr->caps | SOCK_EP_MSG_PRI_CAP | SOCK_EP_MSG_SEC_CAP) != (SOCK_EP_MSG_PRI_CAP | SOCK_EP_MSG_SEC_CAP))
+	if ((attr->caps | SOCK_EP_MSG_CAP) != SOCK_EP_MSG_CAP)
 		return -FI_ENODATA;
 
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
@@ -127,7 +127,7 @@ static int sock_msg_verify_tx_attr(const struct fi_tx_attr *attr)
 	if (!attr)
 		return 0;
 
-	if ((attr->caps | SOCK_EP_MSG_PRI_CAP | SOCK_EP_MSG_SEC_CAP) != (SOCK_EP_MSG_PRI_CAP | SOCK_EP_MSG_SEC_CAP))
+	if ((attr->caps | SOCK_EP_MSG_CAP) != SOCK_EP_MSG_CAP)
 		return -FI_ENODATA;
 
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
@@ -227,7 +227,7 @@ int sock_msg_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 			(*info)->tx_attr->caps = SOCK_EP_MSG_SEC_CAP | hints->tx_attr->caps;
 	}
 
-	(*info)->caps = SOCK_EP_MSG_PRI_CAP | SOCK_EP_MSG_SEC_CAP |
+	(*info)->caps = SOCK_EP_MSG_CAP |
                        (*info)->rx_attr->caps | (*info)->tx_attr->caps;
         if (hints->caps)
                 (*info)->caps = SOCK_EP_MSG_SEC_CAP | hints->caps;
