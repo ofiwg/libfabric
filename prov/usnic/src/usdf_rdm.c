@@ -446,6 +446,7 @@ usdf_rdm_recv(struct fid_ep *fep, void *buf, size_t len,
 	rqe->rd_cur_ptr = buf;
 	rqe->rd_iov_resid = len;
 	rqe->rd_length = 0;
+	rqe->rd_resid = len;
 	USDF_DBG_SYS(EP_DATA, "RECV post rqe=%p len=%lu\n", rqe, len);
 
 	TAILQ_INSERT_TAIL(&rx->r.rdm.rx_posted_rqe, rqe, rd_link);
@@ -1462,6 +1463,7 @@ usdf_rdm_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 	uint8_t *rqe_ptr;
 	size_t cur_iov;
 	size_t iov_resid;
+	size_t rd_resid;
 	size_t rxlen;
 	size_t copylen;
 
@@ -1506,12 +1508,14 @@ usdf_rdm_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 	rqe_ptr = (uint8_t *)rqe->rd_cur_ptr;
 	iov_resid = rqe->rd_iov_resid;
 	cur_iov = rqe->rd_cur_iov;
+	rd_resid = rqe->rd_resid;
 	while (rxlen > 0) {
 		copylen = MIN(rxlen, iov_resid);
 		memcpy(rqe_ptr, rx_ptr, copylen);
 		rx_ptr += copylen;
 		rxlen -= copylen;
 		iov_resid -= copylen;
+		rd_resid -= copylen;
 		if (iov_resid == 0) {
 			if (cur_iov == rqe->rd_last_iov) {
 				break;
@@ -1523,6 +1527,11 @@ usdf_rdm_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 			rqe_ptr += copylen;
 		}
 	}
+
+	rqe->rd_cur_ptr = rqe_ptr;
+	rqe->rd_iov_resid = iov_resid;
+	rqe->rd_cur_iov = cur_iov;
+	rqe->rd_resid = rd_resid;
 
 	if (rxlen > 0) {
 		rqe->rd_length -= rxlen;
