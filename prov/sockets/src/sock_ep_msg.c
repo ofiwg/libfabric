@@ -229,7 +229,7 @@ int sock_msg_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 
 	(*info)->caps = SOCK_EP_MSG_CAP |
                        (*info)->rx_attr->caps | (*info)->tx_attr->caps;
-        if (hints->caps)
+        if (hints && hints->caps)
                 (*info)->caps = SOCK_EP_MSG_SEC_CAP | hints->caps;
 
 	return 0;
