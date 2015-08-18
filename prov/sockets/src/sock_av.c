@@ -563,12 +563,11 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		_av->attr.count * sizeof(struct sock_av_addr);
 	
 	if (attr->name) {
-		_av->name = calloc(1, FI_NAME_MAX);
+		_av->name = strdup(attr->name);
 		if(!_av->name) {
 			ret = -FI_ENOMEM;
 			goto err2;
 		}
-		strcpy(_av->name, attr->name);
 		if (!(attr->flags & FI_READ))
 			flags |= O_CREAT;
 		
