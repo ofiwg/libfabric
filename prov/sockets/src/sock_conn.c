@@ -432,8 +432,6 @@ int sock_conn_listen(struct sock_ep *ep)
 	struct sockaddr_in addr;
 	struct sock_conn_listener *listener = &ep->listener;
 	struct sock_domain *domain = ep->domain;	
-	struct addrinfo ai, *rai = NULL;
-	char hostname[HOST_NAME_MAX] = {0};
 	char service[NI_MAXSERV] = {0};
 
 	memset(&hints, 0, sizeof(hints));
@@ -491,23 +489,10 @@ int sock_conn_listen(struct sock_ep *ep)
 	}
 
 	if (ep->src_addr->sin_addr.s_addr == 0) {
-		memset(&ai, 0, sizeof(ai));
-		ai.ai_family = AF_INET;
-		ai.ai_socktype = SOCK_STREAM;
-
 		sprintf(service, "%s", listener->service);
-		if (gethostname(hostname, sizeof hostname) != 0) {
-			SOCK_LOG_DBG("gethostname failed!\n");
+		ret = sock_get_src_addr_from_hostname(ep->src_addr, service);
+		if (ret)
 			goto err;
-		}
-		ret = getaddrinfo(hostname, service, &ai, &rai);
-		if (ret) {
-			SOCK_LOG_DBG("getaddrinfo failed!\n");
-			goto err;
-		}
-		memcpy(ep->src_addr, (struct sockaddr_in *)rai->ai_addr,
-		       sizeof *ep->src_addr);
-		freeaddrinfo(rai);
 	}
 
 	if (listen(listen_fd, SOCK_CM_DEF_BACKLOG)) {
