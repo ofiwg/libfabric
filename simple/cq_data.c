@@ -43,22 +43,7 @@
 
 
 static int rx_depth = 500;
-static size_t cq_data_size;
 
-
-static int alloc_cm_res(void)
-{
-	struct fi_eq_attr cm_attr;
-	int ret;
-
-	memset(&cm_attr, 0, sizeof cm_attr);
-	cm_attr.wait_obj = FI_WAIT_FD;
-	ret = fi_eq_open(fabric, &cm_attr, &eq, NULL);
-	if (ret)
-		FT_PRINTERR("fi_eq_open", ret);
-
-	return ret;
-}
 
 static int alloc_ep_res(struct fi_info *fi)
 {
@@ -95,59 +80,9 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	if (!eq) {
-		ret = alloc_cm_res();
-		if (ret)
-			return ret;
-	}
-
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
-static int server_listen(void)
-{
-	int ret;
-
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE, hints,
-			&fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
-	cq_data_size = fi->domain_attr->cq_data_size;
-
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
-		return ret;
-	}
-
-	ret = fi_passive_ep(fabric, fi, &pep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_passive_ep", ret);
-		return ret;
-	}
-
-	ret = alloc_cm_res();
-	if (ret)
-		return ret;
-
-	ret = fi_pep_bind(pep, &eq->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_pep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_listen(pep);
-	if (ret) {
-		FT_PRINTERR("fi_listen", ret);
 		return ret;
 	}
 
@@ -235,13 +170,9 @@ static int client_connect(void)
 		return ret;
 	}
 
-	cq_data_size = fi->domain_attr->cq_data_size;
-
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
@@ -286,7 +217,8 @@ static int run_test()
 	struct fi_cq_data_entry comp;
 
 	/* Set remote_cq_data based on the cq_data_size we got from fi_getinfo */
-	remote_cq_data = 0x0123456789abcdef & ((0x1ULL << (cq_data_size * 8)) - 1);
+	remote_cq_data = 0x0123456789abcdef &
+			((0x1ULL << (fi->domain_attr->cq_data_size * 8)) - 1);
 
 	if (opts.dst_addr) {
 		fprintf(stdout,
@@ -334,7 +266,7 @@ static int run(void)
 	int ret = 0;
 
 	if (!opts.dst_addr) {
-		ret = server_listen();
+		ret = ft_start_server();
 		if (ret)
 			return ret;
 	}
@@ -353,6 +285,7 @@ static int run(void)
 int main(int argc, char **argv)
 {
 	int op, ret;
+
 	opts = INIT_OPTS;
 
 	hints = fi_allocinfo();

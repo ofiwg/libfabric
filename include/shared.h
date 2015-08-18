@@ -101,6 +101,8 @@ extern struct fid_eq *eq;
 extern void *buf;
 extern size_t buffer_size;
 
+extern struct fi_eq_attr eq_attr;
+
 extern struct ft_opts opts;
 
 
@@ -153,6 +155,8 @@ int size_to_count(int size);
 		}				\
 	} while (0)
 
+int ft_open_fabric_res();
+int ft_start_server();
 int ft_init_ep(void *recv_ctx);
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);

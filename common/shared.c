@@ -31,6 +31,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <rdma/fi_cm.h>
+#include <rdma/fi_domain.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 
@@ -51,6 +53,10 @@ struct fid_eq *eq;
 
 void *buf;
 size_t buffer_size = 1024;
+
+struct fi_eq_attr eq_attr = {
+	.wait_obj = FI_WAIT_UNSPEC
+};
 
 struct ft_opts opts;
 
@@ -87,6 +93,61 @@ const unsigned int test_cnt = (sizeof test_size / sizeof test_size[0]);
 static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
 
+
+int ft_open_fabric_res(void)
+{
+	int ret;
+
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_fabric", ret);
+		return ret;
+	}
+
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+int ft_start_server(void)
+{
+	int ret;
+
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE,
+			 hints, &fi);
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
+		return ret;
+	}
+
+	ret = ft_open_fabric_res();
+	if (ret)
+		return ret;
+
+	ret = fi_passive_ep(fabric, fi, &pep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_passive_ep", ret);
+		return ret;
+	}
+
+	ret = fi_pep_bind(pep, &eq->fid, 0);
+	if (ret) {
+		FT_PRINTERR("fi_pep_bind", ret);
+		return ret;
+	}
+
+	ret = fi_listen(pep);
+	if (ret) {
+		FT_PRINTERR("fi_listen", ret);
+		return ret;
+	}
+
+	return 0;
+}
 
 #define FT_EP_BIND(ep, fd, flags)					\
 	do {								\

@@ -165,14 +165,9 @@ static int init_fabric(void)
 		memcpy(remote_addr, fi->dest_addr, addrlen);
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
-
-	if (fi->mode & FI_MSG_PREFIX)
-		prefix_len = fi->ep_attr->msg_prefix_size;
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {

@@ -55,8 +55,6 @@
 
 #define MAX_ADDR 256
 
-static struct fi_eq_attr eq_attr;
-
 char *good_address;
 int num_good_addr;
 char *bad_address;
@@ -65,6 +63,7 @@ static char *src_addr_str = NULL;
 static enum fi_av_type av_type;
 
 static char err_buf[512];
+
 
 static int
 check_eq_readerr(struct fid_eq *eq, fid_t fid, void *context, int index)
@@ -1055,22 +1054,13 @@ int main(int argc, char **argv)
 		}
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret != 0) {
-		printf("fi_fabric %s\n", fi_strerror(-ret));
-		goto err;
-	}
+	ret = ft_open_fabric_res();
+	if (ret)
+		return ret;
+
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret != 0) {
 		printf("fi_domain %s\n", fi_strerror(-ret));
-		goto err;
-	}
-
-	eq_attr.size = 1024;
-	eq_attr.wait_obj = FI_WAIT_UNSPEC;
-	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
-	if (ret != 0) {
-		printf("fi_eq_open %s\n", fi_strerror(-ret));
 		goto err;
 	}
 

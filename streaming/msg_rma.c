@@ -236,20 +236,6 @@ static int run_test(void)
 	return 0;
 }
 
-static int alloc_cm_res(void)
-{
-	struct fi_eq_attr cm_attr;
-	int ret;
-
-	memset(&cm_attr, 0, sizeof cm_attr);
-	cm_attr.wait_obj = FI_WAIT_FD;
-	ret = fi_eq_open(fabric, &cm_attr, &eq, NULL);
-	if (ret)
-		FT_PRINTERR("fi_eq_open", ret);
-
-	return ret;
-}
-
 static int alloc_ep_res(struct fi_info *fi)
 {
 	struct fi_cq_attr cq_attr;
@@ -299,54 +285,6 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	if (!eq) {
-		ret = alloc_cm_res();
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
-
-static int server_listen(void)
-{
-	int ret;
-
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, opts.src_port, FI_SOURCE,
-			hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
-		return ret;
-	}
-
-	ret = fi_passive_ep(fabric, fi, &pep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_passive_ep", ret);
-		return ret;
-	}
-
-	ret = alloc_cm_res();
-	if (ret)
-		return ret;
-
-	ret = fi_pep_bind(pep, &eq->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_pep_bind", ret);
-		return ret;
-	}
-
-	ret = fi_listen(pep);
-	if (ret) {
-		FT_PRINTERR("fi_listen", ret);
-		return ret;
-	}
-
 	return 0;
 }
 
@@ -377,7 +315,6 @@ static int server_connect(void)
 		FT_PRINTERR("fi_domain", ret);
 		goto err;
 	}
-
 
 	ret = fi_endpoint(domain, info, &ep, NULL);
 	if (ret) {
@@ -439,11 +376,9 @@ static int client_connect(void)
 		return ret;
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
 
 	mr_mode = fi->domain_attr->mr_mode;
  	ret = fi_domain(fabric, fi, &domain, NULL);
@@ -517,7 +452,7 @@ static int run(void)
 	int i, ret = 0;
 
 	if (!opts.dst_addr) {
-		ret = server_listen();
+		ret = ft_start_server();
 		if (ret)
 			return ret;
 	}
@@ -559,6 +494,7 @@ out:
 int main(int argc, char **argv)
 {
 	int op, ret;
+
 	opts = INIT_OPTS;
 
 	hints = fi_allocinfo();

@@ -97,13 +97,15 @@ static int alloc_ep_res(struct fi_info *fi)
 	if (buffer_size < fi->src_addrlen) {
 		buffer_size = fi->src_addrlen;
 	}
-	buffer_size += prefix_len;
+	buffer_size += fi->ep_attr->msg_prefix_size;
 	buf = calloc(1, buffer_size);
 	if (!buf) {
 		perror("calloc");
 		return -1;
 	}
-	payload = (char *) buf + prefix_len;
+
+	/* TODO: Prefix mode may differ for send/recv */
+	payload = (char *) buf + fi->ep_attr->msg_prefix_size;
 	send_buf = buf;
 	recv_buf = buf;
 
@@ -168,14 +170,9 @@ static int common_setup(void)
 		max_msg_size = fi->ep_attr->max_msg_size;
 	}
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
-
-	if (fi->mode & FI_MSG_PREFIX)
-		prefix_len = fi->ep_attr->msg_prefix_size;
 
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {

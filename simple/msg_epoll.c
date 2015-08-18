@@ -47,21 +47,6 @@ static int rx_depth = 512;
 
 static int epfd;
 
-static int alloc_cm_res(void)
-{
-	struct fi_eq_attr cm_attr;
-	int ret;
-
-	memset(&cm_attr, 0, sizeof cm_attr);
-	cm_attr.wait_obj = FI_WAIT_FD;
-
-	/* Open EQ to receive CM events */
-	ret = fi_eq_open(fabric, &cm_attr, &eq, NULL);
-	if (ret)
-		FT_PRINTERR("fi_eq_open", ret);
-
-	return ret;
-}
 
 static int alloc_ep_res(struct fi_info *fi)
 {
@@ -121,7 +106,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	/* Retrieve send queue wait object */
-	ret = fi_control (&txcq->fid, FI_GETWAIT, (void *) &fd);
+	ret = fi_control(&txcq->fid, FI_GETWAIT, (void *) &fd);
 	if (ret) {
 		FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
 		return ret;
@@ -148,53 +133,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	ret = fi_endpoint(domain, fi, &ep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
-static int server_listen(void)
-{
-	int ret;
-
-	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, NULL, opts.src_port, FI_SOURCE, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
-	/* Open the fabric */
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
-		return ret;
-	}
-
-	/* Open a passive endpoint */
-	ret = fi_passive_ep(fabric, fi, &pep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_passive_ep", ret);
-		return ret;
-	}
-
-	/* Allocate connection management resources */
-	ret = alloc_cm_res();
-	if (ret)
-		return ret;
-
-	/* Bind EQ to passive endpoint */
-	ret = fi_pep_bind(pep, &eq->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_pep_bind", ret);
-		return ret;
-	}
-
-	/* Listen for incoming connections */
-	ret = fi_listen(pep);
-	if (ret) {
-		FT_PRINTERR("fi_listen", ret);
 		return ret;
 	}
 
@@ -282,12 +220,9 @@ static int client_connect(void)
 		return ret;
 	}
 
-	/* Open fabric */
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_fabric", ret);
+	ret = ft_open_fabric_res();
+	if (ret)
 		return ret;
-	}
 
 	/* Open domain */
 	ret = fi_domain(fabric, fi, &domain, NULL);
@@ -295,10 +230,6 @@ static int client_connect(void)
 		FT_PRINTERR("fi_domain", ret);
 		return ret;
 	}
-
-	ret = alloc_cm_res();
-	if (ret)
-		return ret;
 
 	ret = alloc_ep_res(fi);
 	if (ret)
@@ -410,6 +341,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
+
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
@@ -439,7 +371,7 @@ int main(int argc, char **argv)
 
 	/* Fabric and connection setup */
 	if (!opts.dst_addr) {
-		ret = server_listen();
+		ret = ft_start_server();
 		if (ret)
 			return -ret;
 	}
