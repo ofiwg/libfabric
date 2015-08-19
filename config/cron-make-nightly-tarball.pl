@@ -276,7 +276,7 @@ if (defined($libfabric_coverity_token_arg) && $rebuilt_libfabric) {
             $libfabric_coverity_token_arg);
 }
 if (defined($fabtests_coverity_token_arg) && $rebuilt_fabtests) {
-    submit_to_coverity("ofiwg-fabtests", $fabtests_version,
+    submit_to_coverity("ofiwg%2Ffabtests", $fabtests_version,
             "CPPFLAGS=-I$installdir/include LDFLAGS=-L$installdir/lib",
             $fabtests_coverity_token_arg);
 }
