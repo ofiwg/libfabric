@@ -42,7 +42,6 @@ extern "C" {
 
 #define PONG_OPTS "vP"
 
-extern fi_addr_t remote_fi_addr;
 extern int verify_data;
 extern int timeout;
 
@@ -51,10 +50,8 @@ void ft_pongusage(void);
 
 int wait_for_completion_timeout(struct fid_cq *cq, int num_completions);
 
-int send_xfer(int size);
-int send_msg(int size);
-int recv_xfer(int size, bool enable_timeout);
-int recv_msg(int size, bool enable_timeout);
+int send_xfer(size_t size);
+int recv_xfer(size_t size, bool enable_timeout);
 int sync_test(bool enable_timeout);
 
 #ifdef __cplusplus

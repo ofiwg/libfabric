@@ -82,39 +82,6 @@ static int run_test(void)
 	return 0;
 }
 
-static int alloc_ep_res(struct fi_info *fi)
-{
-	int ret;
-
-	/* TODO: Use shared code */
-	tx_size = opts.options & FT_OPT_SIZE ?
-			opts.transfer_size : test_size[TEST_CNT - 1].size;
-	if (max_msg_size > 0 && tx_size > max_msg_size) {
-		tx_size = max_msg_size;
-	}
-	if (tx_size < fi->src_addrlen) {
-		tx_size = fi->src_addrlen;
-	}
-	tx_size += fi->ep_attr->msg_prefix_size;
-	rx_size = tx_size;
-	buf_size = tx_size + rx_size;
-	buf = calloc(1, buf_size);
-	if (!buf) {
-		perror("calloc");
-		return -1;
-	}
-
-	/* TODO: Prefix mode may differ for send/recv */
-	rx_buf = buf;
-	tx_buf = (char *) buf + rx_size;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int common_setup(void)
 {
 	int ret;
@@ -130,9 +97,8 @@ static int common_setup(void)
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
-	if (fi->ep_attr->max_msg_size) {
-		max_msg_size = fi->ep_attr->max_msg_size;
-	}
+
+	max_msg_size = fi->ep_attr->max_msg_size;
 
 	ret = ft_open_fabric_res();
 	if (ret)
@@ -144,112 +110,28 @@ static int common_setup(void)
 		return ret;
 	}
 
-	ret = alloc_ep_res(fi);
-	if (ret) {
-		return ret;
-	}
-
-	ret = ft_init_ep(buf);
-	if (ret) {
-		return ret;
-	}
-
-	return 0;
-}
-
-static int client_connect(void)
-{
-	size_t addrlen;
-	int ret;
-
-	ret = common_setup();
-	if (ret != 0)
+	ret = ft_alloc_active_res(fi);
+	if (ret)
 		return ret;
 
-	ret = fi_av_insert(av, fi->dest_addr, 1, &remote_fi_addr, 0, NULL);
-	if (ret != 1) {
-		FT_PRINTERR("fi_av_insert", ret);
-		return ret;
-	}
-
-	// send initial message to server with our local address
-	addrlen = tx_size;
-	ret = fi_getname(&ep->fid, (char *) tx_buf + fi->ep_attr->msg_prefix_size,
-			 &addrlen);
-	if (ret) {
-		FT_PRINTERR("fi_getname", ret);
-		return ret;
-	}
-
-	ret = send_msg(addrlen);
-	if (ret != 0)
+	ret = ft_init_ep();
+	if (ret)
 		return ret;
 
-	// wait for reply to know server is ready
-	ret = recv_msg(4, true);
-	if (ret != 0)
+	ret = ft_init_av();
+	if (ret)
 		return ret;
 
 	return 0;
-}
-
-static int server_connect(void)
-{
-	int ret;
-	struct fi_cq_entry comp;
-	struct timespec a, b;
-
-	ret = common_setup();
-	if (ret != 0)
-		return ret;
-
-	clock_gettime(CLOCK_MONOTONIC, &a);
-	do {
-		ret = fi_cq_read(rxcq, &comp, 1);
-		if (ret < 0) {
-			if (ret != -FI_EAGAIN) {
-				FT_PRINTERR("fi_cq_read", ret);
-				return ret;
-			} else if (timeout * 10 > 0) {
-				clock_gettime(CLOCK_MONOTONIC, &b);
-				if (b.tv_sec - a.tv_sec > timeout * 10) {
-					fprintf(stderr, "%ds timeout expired waiting for message from fi_ud_pingpong client, exiting\n", timeout *10);
-					exit(FI_ENODATA);
-				}
-			}
-		}
-	} while (ret == -FI_EAGAIN);
-
-	ret = fi_av_insert(av, (char *) rx_buf + fi->ep_attr->msg_prefix_size,
-			   1, &remote_fi_addr, 0, NULL);
-	if (ret != 1) {
-		if (ret == 0) {
-			fprintf(stderr, "Unable to resolve remote address\n");
-			ret = -FI_EINVAL;
-		} else {
-			FT_PRINTERR("fi_av_insert", ret);
-		}
-		return ret;
-	}
-
-	ret = send_msg(4);
-
-	return ret;
 }
 
 static int run(void)
 {
 	int i, ret;
 
-	ret = opts.dst_addr ? client_connect() : server_connect();
+	ret = common_setup();
 	if (ret)
 		return ret;
-
-	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, NULL);
-	if (ret != 0) {
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
 
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {

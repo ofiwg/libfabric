@@ -46,17 +46,15 @@ static struct fid_ep **ep_array, *srx_ctx;
 static struct fid_stx *stx_ctx;
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
-static fi_addr_t *remote_fi_addr;
-struct fi_context fi_ctx_send;
-struct fi_context fi_ctx_recv;
-struct fi_context fi_ctx_av;
+static fi_addr_t *addr_array;
+
 
 static int send_msg(int size)
 {
 	int ret;
 
 	ret = fi_send(ep_array[0], buf, (size_t) size, fi_mr_desc(mr),
-			remote_fi_addr[0], &fi_ctx_send);
+			addr_array[0], &tx_ctx);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
 		return ret;
@@ -71,7 +69,7 @@ static int recv_msg(void)
 {
 	int ret;
 
-	ret = fi_recv(srx_ctx, buf, rx_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	ret = fi_recv(srx_ctx, buf, rx_size, fi_mr_desc(mr), 0, &rx_ctx);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
 		return ret;
@@ -88,12 +86,8 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_tx_attr tx_attr;
 	int i, ret = 0;
 
-	ret = ft_alloc_bufs();
-	if (ret)
-		return ret;
-
-	remote_fi_addr = malloc(sizeof(*remote_fi_addr) * ep_cnt);
-	if (!remote_fi_addr) {
+	addr_array = calloc(ep_cnt, sizeof(*addr_array));
+	if (!addr_array) {
 		perror("malloc");
 		return -FI_ENOMEM;
 	}
@@ -203,7 +197,7 @@ static int run_test()
 		for (i = 0; i < ep_cnt; i++) {
 			fprintf(stdout, "Posting send to remote ctx: %d\n", i);
 			ret = fi_send(ep_array[i], tx_buf, tx_size, fi_mr_desc(mr),
-					remote_fi_addr[i], NULL);
+					addr_array[i], NULL);
 			if (ret) {
 				FT_PRINTERR("fi_send", ret);
 				return ret;
@@ -223,7 +217,7 @@ static int run_test()
 		for (i = 0; i < ep_cnt; i++) {
 			fprintf(stdout, "Posting send to remote ctx: %d\n", i);
 			ret = fi_send(ep_array[i], tx_buf, tx_size, fi_mr_desc(mr),
-					remote_fi_addr[i], NULL);
+					addr_array[i], NULL);
 			if (ret) {
 				FT_PRINTERR("fi_send", ret);
 				return ret;
@@ -315,7 +309,7 @@ static int init_av(void)
 	}
 
 	if (opts.dst_addr) {
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr[0], 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, 1, &addr_array[0], 0, NULL);
 		if (ret != 1) {
 			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -339,7 +333,7 @@ static int init_av(void)
 		/* Insert remote addresses into AV
 		 * Skip the first address since we already have it in AV */
 		ret = fi_av_insert(av, remote_addr + addrlen, ep_cnt - 1,
-				remote_fi_addr + 1, 0, &fi_ctx_av);
+				addr_array + 1, 0, NULL);
 		if (ret != ep_cnt - 1) {
 			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -361,7 +355,7 @@ static int init_av(void)
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen * ep_cnt);
 
 		/* Insert remote addresses into AV */
-		ret = fi_av_insert(av, remote_addr, ep_cnt, remote_fi_addr, 0, &fi_ctx_av);
+		ret = fi_av_insert(av, remote_addr, ep_cnt, addr_array, 0, NULL);
 		if (ret != ep_cnt) {
 			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -399,7 +393,7 @@ static int run(void)
 
 	ret = run_test();
 	/* TODO: Add a local finalize applicable to shared ctx */
-	//ft_finalize(fi, ep_array[0], txcq, rxcq, remote_fi_addr[0]);
+	//ft_finalize(fi, ep_array[0], txcq, rxcq, addr_array[0]);
 out:
 	return ret;
 }
@@ -442,7 +436,7 @@ int main(int argc, char **argv)
 	FT_CLOSE_FID(srx_ctx);
 	FT_CLOSE_FID(stx_ctx);
 	ft_free_res();
-	free(remote_fi_addr);
+	free(addr_array);
 	free(ep_array);
 	return -ret;
 }

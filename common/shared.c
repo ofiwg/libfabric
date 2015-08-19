@@ -51,7 +51,10 @@ struct fid_mr *mr;
 struct fid_av *av;
 struct fid_eq *eq;
 
+struct fi_context tx_ctx, rx_ctx;
+
 size_t tx_credits;
+fi_addr_t remote_fi_addr;
 void *buf, *tx_buf, *rx_buf;
 size_t buf_size, tx_size, rx_size;
 
@@ -70,7 +73,6 @@ struct fi_cntr_attr cntr_attr = {
 };
 
 struct ft_opts opts;
-
 
 struct test_size_param test_size[] = {
 	{ 1 <<  1, 1 }, { (1 <<  1) + (1 <<  0), 2},
@@ -105,12 +107,38 @@ static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEF
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
 
 
-int ft_alloc_bufs(void)
+size_t ft_tx_prefix_size()
 {
+	return (fi->tx_attr->mode & FI_MSG_PREFIX) ?
+		fi->ep_attr->msg_prefix_size : 0;
+}
+
+size_t ft_rx_prefix_size()
+{
+	return (fi->rx_attr->mode & FI_MSG_PREFIX) ?
+		fi->ep_attr->msg_prefix_size : 0;
+}
+
+/*
+ * Include FI_MSG_PREFIX space in the allocated buffer, and ensure that the
+ * buffer is large enough for a control message used to exchange addressing
+ * data.
+ */
+int ft_alloc_msgs(void)
+{
+	int ret;
+
+	/* TODO: support multi-recv tests */
+	if (fi->rx_attr->op_flags == FI_MULTI_RECV)
+		return 0;
+
 	tx_size = opts.options & FT_OPT_SIZE ?
 		  opts.transfer_size : test_size[TEST_CNT - 1].size;
-	rx_size = tx_size;
-	buf_size = tx_size + rx_size;
+	if (tx_size > fi->ep_attr->max_msg_size)
+		tx_size = fi->ep_attr->max_msg_size;
+	rx_size = tx_size + ft_rx_prefix_size();
+	tx_size += ft_tx_prefix_size();
+	buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) + MAX(rx_size, FT_MAX_CTRL_MSG);
 
 	buf = malloc(buf_size);
 	if (!buf) {
@@ -119,7 +147,14 @@ int ft_alloc_bufs(void)
 	}
 
 	rx_buf = buf;
-	tx_buf = (char *) buf + rx_size;
+	tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG);
+
+	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND,
+			0, 0, 0, &mr, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_mr_reg", ret);
+		return ret;
+	}
 
 	return 0;
 }
@@ -146,6 +181,10 @@ int ft_open_fabric_res(void)
 int ft_alloc_active_res(struct fi_info *fi)
 {
 	int ret;
+
+	ret = ft_alloc_msgs();
+	if (ret)
+		return ret;
 
 	if (cq_attr.format == FI_CQ_FORMAT_UNSPEC) {
 		if (fi->caps & FI_TAGGED)
@@ -184,15 +223,6 @@ int ft_alloc_active_res(struct fi_info *fi)
 		ret = fi_cntr_open(domain, &cntr_attr, &rxcntr, &rxcntr);
 		if (ret) {
 			FT_PRINTERR("fi_cntr_open", ret);
-			return ret;
-		}
-	}
-
-	if (!mr && buf) {
-		ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND,
-				0, 0, 0, &mr, NULL);
-		if (ret) {
-			FT_PRINTERR("fi_mr_reg", ret);
 			return ret;
 		}
 	}
@@ -266,7 +296,7 @@ int ft_start_server(void)
 		}							\
 	} while (0)
 
-int ft_init_ep(void *recv_ctx)
+int ft_init_ep(void)
 {
 	int flags, ret;
 
@@ -277,19 +307,17 @@ int ft_init_ep(void *recv_ctx)
 	FT_EP_BIND(ep, rxcq, FI_RECV);
 
 	/* TODO: use control structure to select counter bindings explicitly */
+	flags = !txcq ? FI_SEND : 0;
 	if (hints->caps & (FI_WRITE | FI_READ))
-		flags = hints->caps & (FI_WRITE | FI_READ);
+		flags |= hints->caps & (FI_WRITE | FI_READ);
 	else if (hints->caps & FI_RMA)
-		flags = FI_WRITE | FI_READ;
-	else
-		flags = FI_SEND;
+		flags |= FI_WRITE | FI_READ;
 	FT_EP_BIND(ep, txcntr, flags);
+	flags = !rxcq ? FI_RECV : 0;
 	if (hints->caps & (FI_REMOTE_WRITE | FI_REMOTE_READ))
-		flags = hints->caps & (FI_REMOTE_WRITE | FI_REMOTE_READ);
+		flags |= hints->caps & (FI_REMOTE_WRITE | FI_REMOTE_READ);
 	else if (hints->caps & FI_RMA)
-		flags = FI_REMOTE_WRITE | FI_REMOTE_READ;
-	else
-		flags = FI_RECV;
+		flags |= FI_REMOTE_WRITE | FI_REMOTE_READ;
 	FT_EP_BIND(ep, rxcntr, flags);
 
 	ret = fi_enable(ep);
@@ -298,8 +326,10 @@ int ft_init_ep(void *recv_ctx)
 		return ret;
 	}
 
-	if (recv_ctx) {
-		ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, recv_ctx);
+	if (fi->rx_attr->op_flags != FI_MULTI_RECV) {
+		/* Initial receive will get remote address for unconnected EPs */
+		ret = fi_recv(ep, rx_buf, MAX(rx_size, FT_MAX_CTRL_MSG),
+				fi_mr_desc(mr), 0, &rx_ctx);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
 			return ret;
@@ -307,6 +337,69 @@ int ft_init_ep(void *recv_ctx)
 	}
 
 	return 0;
+}
+
+/* TODO: retry send for unreliable endpoints */
+int ft_init_av(void)
+{
+	size_t addrlen;
+	int ret;
+
+	if (opts.dst_addr) {
+		ret = fi_av_insert(av, fi->dest_addr, 1, &remote_fi_addr, 0, NULL);
+		if (ret != 1) {
+			FT_PRINTERR("fi_av_insert", ret);
+			return ret;
+		}
+
+		addrlen = FT_MAX_CTRL_MSG;
+		ret = fi_getname(&ep->fid, (char *) tx_buf + ft_tx_prefix_size(),
+				 &addrlen);
+		if (ret) {
+			FT_PRINTERR("fi_getname", ret);
+			return ret;
+		}
+
+		ret = fi_send(ep, tx_buf, addrlen + ft_tx_prefix_size(),
+				fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
+		if (ret) {
+			FT_PRINTERR("fi_send", ret);
+			return ret;
+		}
+
+		ret = ft_get_rx_comp(1);
+		if (ret)
+			return ret;
+	} else {
+		ret = ft_get_rx_comp(1);
+		if (ret)
+			return ret;
+
+		ret = fi_av_insert(av, (char *) rx_buf + ft_rx_prefix_size(),
+				   1, &remote_fi_addr, 0, NULL);
+		if (ret != 1) {
+			FT_PRINTERR("fi_av_insert", ret);
+			return ret;
+		}
+
+		ret = fi_send(ep, tx_buf, ft_tx_prefix_size() + 1,
+				fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
+		if (ret) {
+			FT_PRINTERR("fi_send", ret);
+			return ret;
+		}
+	}
+
+	ret = ft_get_tx_comp(1);
+	if (ret)
+		return ret;
+
+	ret = fi_recv(ep, rx_buf, rx_size + ft_rx_prefix_size(), fi_mr_desc(mr),
+			0, &rx_ctx);
+	if (ret)
+		FT_PRINTERR("fi_recv", ret);
+
+	return ret;
 }
 
 static void ft_close_fids(void)
@@ -514,6 +607,36 @@ int ft_wait_for_comp(struct fid_cq *cq, int num_completions)
 	return 0;
 }
 
+int ft_get_rx_comp(int count)
+{
+	int ret;
+
+	if (rxcq) {
+		ret = ft_wait_for_comp(rxcq, count);
+	} else {
+		/* TODO: keep count of last known value */
+		ret = fi_cntr_wait(rxcntr, count, -1);
+		if (ret)
+			FT_PRINTERR("fi_cntr_wait", ret);
+	}
+	return ret;
+}
+
+int ft_get_tx_comp(int count)
+{
+	int ret;
+
+	if (txcq) {
+		ret = ft_wait_for_comp(txcq, count);
+	} else {
+		/* TODO: keep count of last known value s*/
+		ret = fi_cntr_wait(txcntr, count, -1);
+		if (ret)
+			FT_PRINTERR("fi_cntr_wait", ret);
+	}
+	return ret;
+}
+
 void cq_readerr(struct fid_cq *cq, const char *cq_str)
 {
 	struct fi_cq_err_entry cq_err;
@@ -550,12 +673,8 @@ void eq_readerr(struct fid_eq *eq, const char *eq_str)
 	}
 }
 
-int ft_finalize(
-	struct fi_info *fi,
-	struct fid_ep *tx_ep,
-	struct fid_cq *txcq,
-	struct fid_cq *rxcq,
-	fi_addr_t addr)
+int ft_finalize(struct fi_info *fi, struct fid_ep *tx_ep, struct fid_cq *txcq,
+	struct fid_cq *rxcq, fi_addr_t addr)
 {
 	struct fi_msg msg;
 	struct iovec iov;

@@ -101,8 +101,11 @@ extern struct fid_mr *mr;
 extern struct fid_av *av;
 extern struct fid_eq *eq;
 
+extern fi_addr_t remote_fi_addr;
 extern void *buf, *tx_buf, *rx_buf;
 extern size_t buf_size, tx_size, rx_size;
+
+extern struct fi_context tx_ctx, rx_ctx;
 
 extern size_t tx_credits;
 extern struct fi_av_attr av_attr;
@@ -137,6 +140,8 @@ extern struct test_size_param test_size[];
 const unsigned int test_cnt;
 #define TEST_CNT test_cnt
 #define FT_STR_LEN 32
+#define FT_MAX_CTRL_MSG 64
+#define FT_MR_KEY 0xC0DE
 
 int ft_getsrcaddr(char *node, char *service, struct fi_info *hints);
 int ft_getdestaddr(char *node, char *service, struct fi_info *hints);
@@ -169,12 +174,18 @@ int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_start_server();
 int ft_alloc_active_res(struct fi_info *fi);
-int ft_init_ep(void *recv_ctx);
+int ft_init_ep();
+int ft_init_av();
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);
 int ft_finalize(struct fi_info *fi, struct fid_ep *tx_ep, struct fid_cq *txcq,
 		struct fid_cq *rxcq, fi_addr_t addr);
 
+size_t ft_rx_prefix_size();
+size_t ft_tx_prefix_size();
+
+int ft_get_rx_comp(int count);
+int ft_get_tx_comp(int count);
 
 int ft_wait_for_comp(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, const char *cq_str);

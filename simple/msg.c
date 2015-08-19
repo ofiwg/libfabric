@@ -38,21 +38,6 @@
 #include "shared.h"
 
 
-static int alloc_ep_res(struct fi_info *fi)
-{
-	int ret;
-
-	ret = ft_alloc_bufs();
-	if (ret)
-		return ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int server_connect(void)
 {
 	struct fi_eq_cm_entry entry;
@@ -81,11 +66,11 @@ static int server_connect(void)
 		goto err;
 	}
 
-	ret = alloc_ep_res(info);
+	ret = ft_alloc_active_res(info);
 	if (ret)
 		 goto err;
 
-	ret = ft_init_ep(NULL);
+	ret = ft_init_ep();
 	if (ret)
 		goto err;
 
@@ -144,11 +129,11 @@ static int client_connect(void)
 		return ret;
 	}
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(NULL);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
 
@@ -180,8 +165,7 @@ static int send_recv()
 	int ret;
 
 	if (opts.dst_addr) {
-		/* Client */
-		fprintf(stdout, "Posting a send...\n");
+		fprintf(stdout, "Sending message...\n");
 		sprintf(buf, "Hello World!");
 		ret = fi_send(ep, buf, sizeof("Hello World!"), fi_mr_desc(mr), 0, buf);
 		if (ret) {
@@ -189,7 +173,6 @@ static int send_recv()
 			return ret;
 		}
 
-		/* Read send queue */
 		do {
 			ret = fi_cq_read(txcq, &comp, 1);
 			if (ret < 0 && ret != -FI_EAGAIN) {
@@ -200,16 +183,7 @@ static int send_recv()
 
 		fprintf(stdout, "Send completion received\n");
 	} else {
-		/* Server */
-		fprintf(stdout, "Posting a recv...\n");
-		ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, buf);
-		if (ret) {
-			FT_PRINTERR("fi_recv", ret);
-			return ret;
-		}
-
-		/* Read recv queue */
-		fprintf(stdout, "Waiting for client...\n");
+		fprintf(stdout, "Waiting to receive client message...\n");
 		do {
 			ret = fi_cq_read(rxcq, &comp, 1);
 			if (ret < 0 && ret != -FI_EAGAIN) {

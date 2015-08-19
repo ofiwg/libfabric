@@ -51,12 +51,6 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct epoll_event event;
 	int ret, fd;
 
-	ret = ft_alloc_bufs();
-	if (ret)
-		return ret;
-
-	cq_attr.wait_obj = FI_WAIT_FD;
-
 	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
@@ -135,7 +129,7 @@ static int server_connect(void)
 	if (ret)
 		 goto err;
 
-	ret = ft_init_ep(NULL);
+	ret = ft_init_ep();
 	if (ret)
 		goto err;
 
@@ -199,7 +193,7 @@ static int client_connect(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(NULL);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
 
@@ -333,6 +327,8 @@ int main(int argc, char **argv)
 	hints->caps		= FI_MSG;
 	hints->mode		= FI_LOCAL_MR;
 	hints->addr_format	= FI_SOCKADDR;
+
+	cq_attr.wait_obj = FI_WAIT_FD;
 
 	/* Fabric and connection setup */
 	if (!opts.dst_addr) {

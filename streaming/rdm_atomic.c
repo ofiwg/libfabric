@@ -64,18 +64,13 @@ struct fi_rma_iov remote;
 
 static struct fid_mr *mr_result;
 static struct fid_mr *mr_compare;
-static void *local_addr, *remote_addr;
-static size_t addrlen = 0;
-static fi_addr_t remote_fi_addr;
-static struct fi_context fi_ctx_send;
-static struct fi_context fi_ctx_recv;
 static struct fi_context fi_ctx_atomic;
-static struct fi_context fi_ctx_av;
 
-// performing atmics operation on UINT_64 as an example
+// performing aotmics operation on UINT_64 as an example
 static enum fi_datatype datatype = FI_UINT64;
 static size_t *count;
 static int run_all_ops = 1;
+
 
 static const char* get_fi_op_name(enum fi_op op)
 {
@@ -110,7 +105,7 @@ static int post_recv(void)
 {
 	int ret;
 
-	ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, &rx_ctx);
 	if (ret){
 		FT_PRINTERR("fi_recv", ret);
 		return ret;
@@ -124,7 +119,7 @@ static int send_msg(int size)
 	int ret;
 
 	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			&fi_ctx_send);
+			&tx_ctx);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
 		return ret;
@@ -351,7 +346,7 @@ static void free_res(void)
 
 static uint64_t get_mr_key()
 {
-	static uint64_t user_key;
+	static uint64_t user_key = FT_MR_KEY;
 
 	return fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 		user_key++ : 0;
@@ -361,7 +356,7 @@ static int alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
 
-	ret = ft_alloc_bufs();
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
@@ -406,10 +401,6 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
 	return 0;
 }
 
@@ -429,13 +420,6 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	// get remote address
-	if (opts.dst_addr) {
-		addrlen = fi->dest_addrlen;
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, fi->dest_addr, addrlen);
-	}
-
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
@@ -450,76 +434,11 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(&fi_ctx_recv);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
 
 	return 0;
-}
-
-static int init_av(void)
-{
-	int ret;
-
-	if (opts.dst_addr) {
-		// get local address blob. Find the addrlen first. We set
-		// addrlen as 0 and fi_getname will return the actual addrlen
-		addrlen = 0;
-		ret = fi_getname(&ep->fid, local_addr, &addrlen);
-		if (ret != -FI_ETOOSMALL) {
-			FT_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		local_addr = malloc(addrlen);
-		ret = fi_getname(&ep->fid, local_addr, &addrlen);
-		if (ret) {
-			FT_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				&fi_ctx_av);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-
-		// send local addr size and local addr
-		memcpy(buf, &addrlen, sizeof(size_t));
-		memcpy(buf + sizeof(size_t), local_addr, addrlen);
-		ret = send_msg(sizeof(size_t) + addrlen);
-		if (ret)
-			return ret;
-
-		// receive ACK from server
-		ret = post_recv();
-		if (ret)
-			return ret;
-	} else {
-		// post a recv to get the remote address
-		ret = post_recv();
-		if (ret)
-			return ret;
-
-		memcpy(&addrlen, buf, sizeof(size_t));
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
-
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				&fi_ctx_av);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-
-		// send ACK
-		ret = send_msg(16);
-		if (ret)
-			return ret;
-	}
-
-	return ret;
 }
 
 static int exchange_addr_key(void)
@@ -566,7 +485,7 @@ static int run(void)
 	if (ret)
 			return ret;
 
-	ret = init_av();
+	ret = ft_init_av();
 	if (ret)
 			goto out;
 

@@ -240,7 +240,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	uint64_t access_mode;
 	int ret;
 
-	ret = ft_alloc_bufs();
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
@@ -257,15 +257,11 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -FI_EINVAL;
 	}
 	ret = fi_mr_reg(domain, buf, buf_size,
-			access_mode, 0, 0, 0, &mr, NULL);
+			access_mode, 0, FT_MR_KEY, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
 	}
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
 
 	return 0;
 }
@@ -302,7 +298,7 @@ static int server_connect(void)
 	if (ret)
 		 goto err;
 
-	ret = ft_init_ep(buf);
+	ret = ft_init_ep();
 	if (ret)
 		goto err;
 
@@ -367,7 +363,7 @@ static int client_connect(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(buf);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
 

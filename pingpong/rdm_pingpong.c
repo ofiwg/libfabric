@@ -46,8 +46,6 @@
 static char test_name[10] = "custom";
 static struct timespec start, end;
 
-static void *local_addr, *remote_addr;
-static size_t addrlen = 0;
 
 static int run_test(void)
 {
@@ -82,21 +80,6 @@ out:
 	return ret;
 }
 
-static int alloc_ep_res(struct fi_info *fi)
-{
-	int ret;
-
-	ret = ft_alloc_bufs();
-	if (ret)
-		return ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int init_fabric(void)
 {
 	uint64_t flags = 0;
@@ -113,13 +96,6 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	/* Get remote address */
-	if (opts.dst_addr) {
-		addrlen = fi->dest_addrlen;
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, fi->dest_addr, addrlen);
-	}
-
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
@@ -130,87 +106,15 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(NULL);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
 
 	return 0;
-}
-
-static int init_av(void)
-{
-	int ret;
-
-	if (opts.dst_addr) {
-		/* Get local address blob. Find the addrlen first. We set
-		 * addrlen as 0 and fi_getname will return the actual addrlen. */
-		addrlen = 0;
-		ret = fi_getname(&ep->fid, local_addr, &addrlen);
-		if (ret != -FI_ETOOSMALL) {
-			FT_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		local_addr = malloc(addrlen);
-		ret = fi_getname(&ep->fid, local_addr, &addrlen);
-		if (ret) {
-			FT_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				NULL);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-
-		/* Send local addr size and local addr */
-		memcpy(tx_buf, &addrlen, sizeof(size_t));
-		memcpy(tx_buf + sizeof(size_t), local_addr, addrlen);
-		ret = send_msg(sizeof(size_t) + addrlen);
-		if (ret)
-			return ret;
-
-		/* Receive ACK from server */
-		ret = recv_msg(16, false);
-		if (ret)
-			return ret;
-
-	} else {
-		/* Post a recv to get the remote address */
-		ret = recv_msg(rx_size, false);
-		if (ret)
-			return ret;
-
-		memcpy(&addrlen, rx_buf, sizeof(size_t));
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, rx_buf + sizeof(size_t), addrlen);
-
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				NULL);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-
-		/* Send ACK */
-		ret = send_msg(16);
-		if (ret)
-			return ret;
-	}
-
-	/* Post first recv */
-	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
-			NULL);
-	if (ret)
-		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
 }
 
 static int run(void)
@@ -221,7 +125,7 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	ret = init_av();
+	ret = ft_init_av();
 	if (ret)
 		goto out;
 

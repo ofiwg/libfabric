@@ -42,7 +42,6 @@
 #include "shared.h"
 #include "pingpong_shared.h"
 
-fi_addr_t remote_fi_addr;
 int verify_data;
 int timeout;
 
@@ -99,7 +98,7 @@ int wait_for_completion_timeout(struct fid_cq *cq, int num_completions)
 	return 0;
 }
 
-int send_xfer(int size)
+int send_xfer(size_t size)
 {
 	int ret;
 
@@ -112,9 +111,9 @@ int send_xfer(int size)
 	}
 
 	if (verify_data)
-		ft_fill_buf((char *) tx_buf + fi->ep_attr->msg_prefix_size, size);
+		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
 
-	ret = fi_send(ep, tx_buf, (size_t) size + fi->ep_attr->msg_prefix_size,
+	ret = fi_send(ep, tx_buf, size + ft_tx_prefix_size(),
 			fi_mr_desc(mr), remote_fi_addr, NULL);
 	if (ret)
 		FT_PRINTERR("fi_send", ret);
@@ -122,24 +121,7 @@ int send_xfer(int size)
 	return ret;
 }
 
-int send_msg(int size)
-{
-	int ret;
-
-	/* TODO: Prefix mode may differ for send/recv */
-	ret = fi_send(ep, tx_buf, (size_t) size + fi->ep_attr->msg_prefix_size,
-			fi_mr_desc(mr), remote_fi_addr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_send", ret);
-		return ret;
-	}
-
-	ret = ft_wait_for_comp(txcq, 1);
-
-	return ret;
-}
-
-int recv_xfer(int size, bool enable_timeout)
+int recv_xfer(size_t size, bool enable_timeout)
 {
 	int ret;
 
@@ -151,36 +133,15 @@ int recv_xfer(int size, bool enable_timeout)
 	if (ret)
 		return ret;
 
-	/* TODO: Prefix mode may differ for send/recv */
 	if (verify_data) {
-		ret = ft_check_buf((char *) rx_buf + fi->ep_attr->msg_prefix_size,
-				   size);
+		ret = ft_check_buf((char *) rx_buf + ft_rx_prefix_size(), size);
 		if (ret)
 			return ret;
 	}
 
-	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
-			NULL);
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr, NULL);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
-}
-
-int recv_msg(int size, bool enable_timeout)
-{
-	int ret;
-
-	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
-
-	if (enable_timeout)
-		ret = wait_for_completion_timeout(rxcq, 1);
-	else
-		ret = ft_wait_for_comp(rxcq, 1);
 
 	return ret;
 }
