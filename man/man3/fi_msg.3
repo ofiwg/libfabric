@@ -1,4 +1,4 @@
-.TH fi_msg 3 "2015\-07\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_msg 3 "2015\-08\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_msg - Message data transfer operations
@@ -42,6 +42,9 @@ ssize_t\ fi_inject(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,
 
 ssize_t\ fi_senddata(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,
 \ \ \ \ void\ *desc,\ uint64_t\ data,\ fi_addr_t\ dest_addr,\ void\ *context);
+
+ssize_t\ fi_injectdata(struct\ fid_ep\ *ep,\ void\ *buf,\ size_t\ len,
+\ \ \ \ uint64_t\ data,\ fi_addr_t\ dest_addr);
 \f[]
 .fi
 .SH ARGUMENTS
@@ -151,6 +154,10 @@ See the flags discussion below for more details.
 .PP
 The send data call is similar to fi_send, but allows for the sending of
 remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the transfer.
+.SS fi_injectdata
+.PP
+The inject data call is similar to fi_inject, but allows for the sending
+of remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the transfer.
 .SS fi_recv
 .PP
 The fi_recv call posts a data buffer to the receive queue of the
