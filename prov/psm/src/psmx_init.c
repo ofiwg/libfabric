@@ -57,7 +57,7 @@ static void psmx_init_env(void)
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 {
-	int reserved_bits = 0;
+	uint64_t reserved_bits = 0;
 	int ret_caps;
 	int ask_caps = *caps;
 
@@ -364,8 +364,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 	psmx_info->rx_attr->caps = psmx_info->caps;
 	psmx_info->rx_attr->mode = psmx_info->mode;
-	psmx_info->rx_attr->op_flags = (hints && hints->rx_attr && hints->tx_attr->op_flags)
-					? hints->tx_attr->op_flags : 0;
+	psmx_info->rx_attr->op_flags = (hints && hints->rx_attr && hints->rx_attr->op_flags)
+					? hints->rx_attr->op_flags : 0;
 	psmx_info->rx_attr->msg_order = FI_ORDER_SAS;
 	psmx_info->rx_attr->comp_order = FI_ORDER_NONE;
 	psmx_info->rx_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
@@ -376,6 +376,9 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	return 0;
 
 err_out:
+	if (dest_addr)
+		free(dest_addr);
+
 	return err;
 }
 
