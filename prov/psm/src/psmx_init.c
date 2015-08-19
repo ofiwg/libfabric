@@ -57,7 +57,7 @@ static void psmx_init_env(void)
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 {
-	int reserved_bits = 0;
+	uint64_t reserved_bits = 0;
 	int ret_caps;
 	int ask_caps = *caps;
 
