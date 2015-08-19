@@ -44,6 +44,9 @@ ssize_t fi_inject(struct fid_ep *ep, void *buf, size_t len,
 
 ssize_t fi_senddata(struct fid_ep *ep, void *buf, size_t len,
 	void *desc, uint64_t data, fi_addr_t dest_addr, void *context);
+
+ssize_t fi_injectdata(struct fid_ep *ep, void *buf, size_t len,
+	uint64_t data, fi_addr_t dest_addr);
 {% endhighlight %}
 
 # ARGUMENTS
@@ -161,6 +164,12 @@ FI_COMPLETION.  See the flags discussion below for more details.
 ## fi_senddata
 
 The send data call is similar to fi_send, but allows for the sending
+of remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the
+transfer.
+
+## fi_injectdata
+
+The inject data call is similar to fi_inject, but allows for the sending
 of remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the
 transfer.
 
