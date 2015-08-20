@@ -60,7 +60,9 @@ short_tests=(
 )
 
 standard_tests=(
+	"msg_pingpong"
 	"msg_pingpong -v"
+	"msg_pingpong -P"
 	"msg_pingpong -P -v"
 	"msg_rma -o write"
 	"msg_rma -o read"
@@ -69,13 +71,17 @@ standard_tests=(
 	"rdm_cntr_pingpong"
 	"rdm_inject_pingpong"
 	"rdm_multi_recv"
+	"rdm_pingpong"
 	"rdm_pingpong -v"
+	"rdm_pingpong -P"
 	"rdm_pingpong -P -v"
 	"rdm_rma -o write"
 	"rdm_rma -o read"
 	"rdm_rma -o writedata"
 	"rdm_tagged_pingpong"
+	"ud_pingpong"
 	"ud_pingpong -v"
+	"ud_pingpong -P"
 	"ud_pingpong -P -v"
 	"rc_pingpong"
 )
