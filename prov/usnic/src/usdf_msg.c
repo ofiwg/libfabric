@@ -66,6 +66,45 @@
 #include "usdf_timer.h"
 #include "usdf_progress.h"
 
+/* Functions to add and remove entries from the free list for the transmit and
+ * receive work queues.
+ */
+static struct usdf_msg_qe *usdf_msg_get_tx_wqe(struct usdf_tx *tx)
+{
+	struct usdf_msg_qe *entry;
+
+	entry = TAILQ_FIRST(&tx->t.msg.tx_free_wqe);
+	TAILQ_REMOVE(&tx->t.msg.tx_free_wqe, entry, ms_link);
+	tx->t.msg.tx_num_free_wqe -= 1;
+
+	return entry;
+}
+
+static void usdf_msg_put_tx_wqe(struct usdf_tx *tx, struct usdf_msg_qe *wqe)
+{
+	TAILQ_INSERT_HEAD(&tx->t.msg.tx_free_wqe, wqe, ms_link);
+	tx->t.msg.tx_num_free_wqe += 1;
+}
+
+static struct usdf_msg_qe *usdf_msg_get_rx_rqe(struct usdf_rx *rx)
+{
+	struct usdf_msg_qe *entry;
+
+	entry = TAILQ_FIRST(&rx->r.msg.rx_free_rqe);
+	TAILQ_REMOVE(&rx->r.msg.rx_free_rqe, entry, ms_link);
+	rx->r.msg.rx_num_free_rqe -= 1;
+
+	return entry;
+}
+
+static void usdf_msg_put_rx_rqe(struct usdf_rx *rx, struct usdf_msg_qe *rqe)
+{
+	TAILQ_INSERT_HEAD(&rx->r.msg.rx_free_rqe, rqe, ms_link);
+	rx->r.msg.rx_num_free_rqe += 1;
+}
+
+/******************************************************************************/
+
 static inline void
 usdf_msg_ep_ready(struct usdf_ep *ep)
 {
@@ -184,9 +223,7 @@ usdf_msg_recv(struct fid_ep *fep, void *buf, size_t len,
 
 	pthread_spin_lock(&udp->dom_progress_lock);
 
-	rqe = TAILQ_FIRST(&rx->r.msg.rx_free_rqe);
-	TAILQ_REMOVE(&rx->r.msg.rx_free_rqe, rqe, ms_link);
-	--rx->r.msg.rx_num_free_rqe;
+	rqe = usdf_msg_get_rx_rqe(rx);
 
 	rqe->ms_context = context;
 	rqe->ms_iov[0].iov_base = buf;
@@ -228,9 +265,7 @@ usdf_msg_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 
 	pthread_spin_lock(&udp->dom_progress_lock);
 
-	rqe = TAILQ_FIRST(&rx->r.msg.rx_free_rqe);
-	TAILQ_REMOVE(&rx->r.msg.rx_free_rqe, rqe, ms_link);
-	--rx->r.msg.rx_num_free_rqe;
+	rqe = usdf_msg_get_rx_rqe(rx);
 
 	rqe->ms_context = context;
 	tot_len = 0;
@@ -276,8 +311,7 @@ usdf_msg_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 
 	pthread_spin_lock(&udp->dom_progress_lock);
 
-	wqe = TAILQ_FIRST(&tx->t.msg.tx_free_wqe);
-	TAILQ_REMOVE(&tx->t.msg.tx_free_wqe, wqe, ms_link);
+	wqe = usdf_msg_get_tx_wqe(tx);
 
 	wqe->ms_context = context;
 	wqe->ms_iov[0].iov_base = (void *)buf;
@@ -334,8 +368,7 @@ usdf_msg_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 
 	pthread_spin_lock(&udp->dom_progress_lock);
 
-	wqe = TAILQ_FIRST(&tx->t.msg.tx_free_wqe);
-	TAILQ_REMOVE(&tx->t.msg.tx_free_wqe, wqe, ms_link);
+	wqe = usdf_msg_get_tx_wqe(tx);
 
 	wqe->ms_context = context;
 	tot_len = 0;
@@ -409,8 +442,7 @@ usdf_msg_sendmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 
 	pthread_spin_lock(&udp->dom_progress_lock);
 
-	wqe = TAILQ_FIRST(&tx->t.msg.tx_free_wqe);
-	TAILQ_REMOVE(&tx->t.msg.tx_free_wqe, wqe, ms_link);
+	wqe = usdf_msg_get_tx_wqe(tx);
 
 	wqe->ms_context = msg->context;
 	if (flags & FI_INJECT) {
@@ -479,8 +511,7 @@ usdf_msg_inject(struct fid_ep *fep, const void *buf, size_t len,
 
 	pthread_spin_lock(&udp->dom_progress_lock);
 
-	wqe = TAILQ_FIRST(&tx->t.msg.tx_free_wqe);
-	TAILQ_REMOVE(&tx->t.msg.tx_free_wqe, wqe, ms_link);
+	wqe = usdf_msg_get_tx_wqe(tx);
 
 	wqe->ms_context = NULL;
 	memcpy(wqe->ms_inject_buf, buf, len);
@@ -535,9 +566,7 @@ usdf_msg_recvmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 
 	pthread_spin_lock(&udp->dom_progress_lock);
 
-	rqe = TAILQ_FIRST(&rx->r.msg.rx_free_rqe);
-	TAILQ_REMOVE(&rx->r.msg.rx_free_rqe, rqe, ms_link);
-	--rx->r.msg.rx_num_free_rqe;
+	rqe = usdf_msg_get_rx_rqe(rx);
 
 	rqe->ms_context = msg->context;
 	tot_len = 0;
@@ -870,11 +899,10 @@ usdf_msg_recv_complete_err(struct usdf_ep *ep, struct usdf_msg_qe *rqe,
 	struct usdf_rx *rx;
 
 	rx = ep->ep_rx;
-	hcq = ep->ep_rx->r.msg.rx_hcq;
-	hcq->cqh_post(hcq, rqe->ms_context, rqe->ms_length, status);
+	hcq = rx->r.msg.rx_hcq;
 
-	TAILQ_INSERT_HEAD(&rx->r.msg.rx_free_rqe, rqe, ms_link);
-	++rx->r.msg.rx_num_free_rqe;
+	hcq->cqh_post(hcq, rqe->ms_context, rqe->ms_length, status);
+	usdf_msg_put_rx_rqe(rx, rqe);
 }
 
 static void inline
@@ -887,9 +915,7 @@ usdf_msg_recv_complete(struct usdf_ep *ep, struct usdf_msg_qe *rqe)
 	hcq = rx->r.msg.rx_hcq;
 
 	hcq->cqh_post(hcq, rqe->ms_context, rqe->ms_length, FI_SUCCESS);
-
-	TAILQ_INSERT_HEAD(&rx->r.msg.rx_free_rqe, rqe, ms_link);
-	++rx->r.msg.rx_num_free_rqe;
+	usdf_msg_put_rx_rqe(rx, rqe);
 }
 
 static inline void
@@ -939,8 +965,11 @@ usdf_msg_process_ack(struct usdf_ep *ep, uint16_t seq)
 {
 	struct usdf_cq_hard *hcq;
 	struct usdf_msg_qe *wqe;
+	struct usdf_tx *tx;
 	uint16_t max_ack;
 	unsigned credits;
+
+	tx = ep->ep_tx;
 
 	/* don't try to ACK what we don't think we've sent */
 	max_ack = ep->e.msg.ep_next_tx_seq - 1;
@@ -948,7 +977,7 @@ usdf_msg_process_ack(struct usdf_ep *ep, uint16_t seq)
 		seq = max_ack;
 	}
 
-	hcq = ep->ep_tx->t.msg.tx_hcq;
+	hcq = tx->t.msg.tx_hcq;
 	while (!TAILQ_EMPTY(&ep->e.msg.ep_sent_wqe)) {
 		wqe = TAILQ_FIRST(&ep->e.msg.ep_sent_wqe);
 		if (RUDP_SEQ_LE(wqe->ms_last_seq, seq)) {
@@ -958,8 +987,7 @@ usdf_msg_process_ack(struct usdf_ep *ep, uint16_t seq)
 				hcq->cqh_post(hcq, wqe->ms_context,
 						wqe->ms_length, FI_SUCCESS);
 
-			TAILQ_INSERT_HEAD(&ep->ep_tx->t.msg.tx_free_wqe,
-					wqe, ms_link);
+			usdf_msg_put_tx_wqe(tx, wqe);
 		} else {
 			break;
 		}
