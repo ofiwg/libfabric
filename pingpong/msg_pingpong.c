@@ -80,17 +80,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_cq_attr cq_attr;
 	int ret;
 
-	buffer_size = opts.user_options & FT_OPT_SIZE ?
-			opts.transfer_size : test_size[TEST_CNT - 1].size;
-
-	buf = malloc(buffer_size * 2);
-	if (!buf) {
-		perror("malloc");
-		return -1;
-	}
-
-	recv_buf = buf;
-	send_buf = (char *) buf + buffer_size;
+	ret = ft_alloc_bufs();
+	if (ret)
+		return ret;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -108,7 +100,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	ret = fi_mr_reg(domain, buf, buffer_size * 2, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;

@@ -124,7 +124,7 @@ static int recv_xfer(int size)
 	} while (ret == -FI_EAGAIN);
 
 	/* Posting recv for next send. Hence tag_data + 1 */
-	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
 			tag_data + 1, 0, &fi_ctx_trecv);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
@@ -152,7 +152,7 @@ static int recv_msg(void)
 {
 	int ret;
 
-	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
 		       tag_control, 0, &fi_ctx_trecv);
 	if (ret) {
 		FT_PRINTERR("fi_trecv", ret);
@@ -226,13 +226,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = opts.user_options & FT_OPT_SIZE ?
-			opts.transfer_size : test_size[TEST_CNT - 1].size;
-	buf = malloc(buffer_size);
-	if (!buf) {
-		perror("malloc");
-		return -1;
-	}
+	ret = ft_alloc_bufs();
+	if (ret)
+		return ret;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -250,7 +246,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
@@ -385,7 +381,7 @@ static int init_av(void)
 	}
 
 	/* Post first recv */
-	ret = fi_trecv(ep, buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
 			tag_data, 0, &fi_ctx_trecv);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);

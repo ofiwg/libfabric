@@ -45,8 +45,6 @@ fi_addr_t remote_fi_addr;
 int max_credits = 128;
 int credits = 128;
 int verify_data;
-void *send_buf;
-void *recv_buf;
 int timeout;
 
 void ft_parsepongopts(int op)
@@ -115,9 +113,9 @@ int send_xfer(int size)
 	}
 
 	if (verify_data)
-		ft_fill_buf((char *) send_buf + fi->ep_attr->msg_prefix_size, size);
+		ft_fill_buf((char *) tx_buf + fi->ep_attr->msg_prefix_size, size);
 
-	ret = fi_send(ep, send_buf, (size_t) size + fi->ep_attr->msg_prefix_size,
+	ret = fi_send(ep, tx_buf, (size_t) size + fi->ep_attr->msg_prefix_size,
 			fi_mr_desc(mr), remote_fi_addr, NULL);
 	if (ret)
 		FT_PRINTERR("fi_send", ret);
@@ -130,7 +128,7 @@ int send_msg(int size)
 	int ret;
 
 	/* TODO: Prefix mode may differ for send/recv */
-	ret = fi_send(ep, send_buf, (size_t) size + fi->ep_attr->msg_prefix_size,
+	ret = fi_send(ep, tx_buf, (size_t) size + fi->ep_attr->msg_prefix_size,
 			fi_mr_desc(mr), remote_fi_addr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
@@ -156,13 +154,13 @@ int recv_xfer(int size, bool enable_timeout)
 
 	/* TODO: Prefix mode may differ for send/recv */
 	if (verify_data) {
-		ret = ft_check_buf((char *) recv_buf + fi->ep_attr->msg_prefix_size,
+		ret = ft_check_buf((char *) rx_buf + fi->ep_attr->msg_prefix_size,
 				   size);
 		if (ret)
 			return ret;
 	}
 
-	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
 			NULL);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
@@ -174,7 +172,7 @@ int recv_msg(int size, bool enable_timeout)
 {
 	int ret;
 
-	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), 0, NULL);
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
 		return ret;

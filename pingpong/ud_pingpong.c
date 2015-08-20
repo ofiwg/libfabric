@@ -50,7 +50,6 @@
 
 static char test_name[10] = "custom";
 static struct timespec start, end;
-static void *payload;
 static size_t max_msg_size = 0;
 
 static int run_test(void)
@@ -89,25 +88,27 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = opts.user_options & FT_OPT_SIZE ?
+	/* TODO: Use shared code */
+	tx_size = opts.user_options & FT_OPT_SIZE ?
 			opts.transfer_size : test_size[TEST_CNT - 1].size;
-	if (max_msg_size > 0 && buffer_size > max_msg_size) {
-		buffer_size = max_msg_size;
+	if (max_msg_size > 0 && tx_size > max_msg_size) {
+		tx_size = max_msg_size;
 	}
-	if (buffer_size < fi->src_addrlen) {
-		buffer_size = fi->src_addrlen;
+	if (tx_size < fi->src_addrlen) {
+		tx_size = fi->src_addrlen;
 	}
-	buffer_size += fi->ep_attr->msg_prefix_size;
-	buf = calloc(1, buffer_size);
+	tx_size += fi->ep_attr->msg_prefix_size;
+	rx_size = tx_size;
+	buf_size = tx_size + rx_size;
+	buf = calloc(1, buf_size);
 	if (!buf) {
 		perror("calloc");
 		return -1;
 	}
 
 	/* TODO: Prefix mode may differ for send/recv */
-	payload = (char *) buf + fi->ep_attr->msg_prefix_size;
-	send_buf = buf;
-	recv_buf = buf;
+	rx_buf = buf;
+	tx_buf = (char *) buf + rx_size;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -125,7 +126,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	ret = fi_mr_reg(domain, buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, buf, buf_size, FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
@@ -209,8 +210,9 @@ static int client_connect(void)
 	}
 
 	// send initial message to server with our local address
-	addrlen = buffer_size;
-	ret = fi_getname(&ep->fid, payload, &addrlen);
+	addrlen = tx_size;
+	ret = fi_getname(&ep->fid, (char *) tx_buf + fi->ep_attr->msg_prefix_size,
+			 &addrlen);
 	if (ret) {
 		FT_PRINTERR("fi_getname", ret);
 		return ret;
@@ -255,12 +257,11 @@ static int server_connect(void)
 		}
 	} while (ret == -FI_EAGAIN);
 
-	ret = fi_av_insert(av, payload, 1, &remote_fi_addr, 0, NULL);
+	ret = fi_av_insert(av, (char *) rx_buf + fi->ep_attr->msg_prefix_size,
+			   1, &remote_fi_addr, 0, NULL);
 	if (ret != 1) {
 		if (ret == 0) {
-			fprintf(stderr, "Unable to resolve remote address 0x%x 0x%x\n",
-				((uint32_t *) payload)[0],
-				((uint32_t *) payload)[1]);
+			fprintf(stderr, "Unable to resolve remote address\n");
 			ret = -FI_EINVAL;
 		} else {
 			FT_PRINTERR("fi_av_insert", ret);
@@ -268,7 +269,7 @@ static int server_connect(void)
 		return ret;
 	}
 
-	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), 0, NULL);
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, NULL);
 	if (ret != 0) {
 		FT_PRINTERR("fi_recv", ret);
 		return ret;
@@ -293,7 +294,7 @@ static int run(void)
 				continue;
 
 			opts.transfer_size = test_size[i].size;
-			if (opts.transfer_size > buffer_size)
+			if (opts.transfer_size > max_msg_size)
 				continue;
 
 			init_test(&opts, test_name, sizeof(test_name));

@@ -96,7 +96,7 @@ static int recv_xfer(int size)
 		}
 	} while (ret == -FI_EAGAIN);
 
-	ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
+	ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, buf);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
 
@@ -186,7 +186,7 @@ static int wait_remote_writedata_completion(void)
 	assert(comp.op_context == buf || comp.op_context == NULL);
 	if (comp.op_context == buf) {
 		/* We need to repost the receive */
-		ret = fi_recv(ep, buf, buffer_size, fi_mr_desc(mr), 0, buf);
+		ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, buf);
 		if (ret)
 			FT_PRINTERR("fi_recv", ret);
 	}
@@ -242,13 +242,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	uint64_t access_mode;
 	int ret;
 
-	buffer_size = opts.user_options & FT_OPT_SIZE ?
-			opts.transfer_size : test_size[TEST_CNT - 1].size;
-	buf = malloc(MAX(buffer_size, sizeof(uint64_t)));
-	if (!buf) {
-		perror("malloc");
-		return -1;
-	}
+	ret = ft_alloc_bufs();
+	if (ret)
+		return ret;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_DATA;
@@ -278,7 +274,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		assert(0);
 		return -FI_EINVAL;
 	}
-	ret = fi_mr_reg(domain, buf, MAX(buffer_size, sizeof(uint64_t)),
+	ret = fi_mr_reg(domain, buf, buf_size,
 			access_mode, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);

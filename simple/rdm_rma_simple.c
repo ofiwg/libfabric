@@ -77,9 +77,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = MAX(sizeof(char *) * strlen(welcome_text),
+	buf_size = MAX(sizeof(char *) * strlen(welcome_text),
 			sizeof(uint64_t));
-	buf = malloc(buffer_size);
+	buf = malloc(buf_size);
 	if (!buf) {
 		perror("malloc");
 		return -1;
@@ -100,7 +100,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	ret = fi_mr_reg(domain, buf, buffer_size, FI_WRITE | FI_REMOTE_WRITE, 0,
+	ret = fi_mr_reg(domain, buf, buf_size, FI_WRITE | FI_REMOTE_WRITE, 0,
 			user_defined_key, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
@@ -223,6 +223,8 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
+	opts.user_options |= FT_OPT_SIZE;
+
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;

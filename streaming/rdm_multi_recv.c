@@ -512,7 +512,9 @@ out:
 int main(int argc, char **argv)
 {
 	int op, ret;
+
 	opts = INIT_OPTS;
+	opts.user_options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints)

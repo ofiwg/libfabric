@@ -98,8 +98,8 @@ extern struct fid_mr *mr;
 extern struct fid_av *av;
 extern struct fid_eq *eq;
 
-extern void *buf;
-extern size_t buffer_size;
+extern void *buf, *tx_buf, *rx_buf;
+extern size_t buf_size, tx_size, rx_size;
 
 extern struct fi_eq_attr eq_attr;
 
@@ -155,6 +155,7 @@ int size_to_count(int size);
 		}				\
 	} while (0)
 
+int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_start_server();
 int ft_init_ep(void *recv_ctx);

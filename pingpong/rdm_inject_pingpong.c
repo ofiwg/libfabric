@@ -47,7 +47,6 @@ static int max_inject_size;
 static int max_credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
-static void *send_buf, *recv_buf;
 
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
@@ -60,7 +59,12 @@ static int send_xfer(int size)
 {
 	int ret;
 
-	ret = fi_inject(ep, send_buf, (size_t) size, remote_fi_addr);
+	if (size > max_inject_size) {
+		FT_PRINTERR("send too large", -FI_EINVAL);
+		return -FI_EINVAL;
+	}
+
+	ret = fi_inject(ep, tx_buf, (size_t) size, remote_fi_addr);
 	if (ret)
 		FT_PRINTERR("fi_inject", ret);
 
@@ -84,23 +88,10 @@ static int recv_xfer(int size)
 		}
 	} while (ret == -FI_EAGAIN);
 
-	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
 			&fi_ctx_recv);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
-}
-
-static int send_msg(int size)
-{
-	int ret;
-
-	ret = fi_inject(ep, send_buf, (size_t) size, remote_fi_addr);
-	if (ret) {
-		FT_PRINTERR("fi_inject", ret);
-		return ret;
-	}
 
 	return ret;
 }
@@ -109,7 +100,7 @@ static int recv_msg(void)
 {
 	int ret;
 
-	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, &fi_ctx_recv);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
 		return ret;
@@ -173,14 +164,9 @@ static int alloc_ep_res(struct fi_info *fi)
 	struct fi_av_attr av_attr;
 	int ret;
 
-	buffer_size = opts.user_options & FT_OPT_SIZE ?
-			opts.transfer_size : test_size[TEST_CNT - 1].size;
-	send_buf = malloc(buffer_size);
-	recv_buf = malloc(buffer_size);
-	if (!send_buf || !recv_buf) {
-		perror("malloc");
-		return -1;
-	}
+	ret = ft_alloc_bufs();
+	if (ret)
+		return ret;
 
 	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -201,7 +187,7 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	/* Memory registration not required for send_buf since we use fi_inject.
 	 * fi_inject copies the buffer of data that needs to be sent. */
-	ret = fi_mr_reg(domain, recv_buf, buffer_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, rx_buf, rx_size, FI_RECV, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_cq_open", ret);
 		return ret;
@@ -309,9 +295,9 @@ static int init_av(void)
 		}
 
 		/* Send local addr size and local addr */
-		memcpy(send_buf, &addrlen, sizeof(size_t));
-		memcpy(send_buf + sizeof(size_t), local_addr, addrlen);
-		ret = send_msg(sizeof(size_t) + addrlen);
+		memcpy(tx_buf, &addrlen, sizeof(size_t));
+		memcpy(tx_buf + sizeof(size_t), local_addr, addrlen);
+		ret = send_xfer(sizeof(size_t) + addrlen);
 		if (ret)
 			return ret;
 
@@ -326,9 +312,9 @@ static int init_av(void)
 		if (ret)
 			return ret;
 
-		memcpy(&addrlen, recv_buf, sizeof(size_t));
+		memcpy(&addrlen, rx_buf, sizeof(size_t));
 		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, recv_buf + sizeof(size_t), addrlen);
+		memcpy(remote_addr, rx_buf + sizeof(size_t), addrlen);
 
 		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
 				&fi_ctx_av);
@@ -338,13 +324,13 @@ static int init_av(void)
 		}
 
 		/* Send ACK */
-		ret = send_msg(16);
+		ret = send_xfer(16);
 		if (ret)
 			return ret;
 	}
 
 	/* Post first recv */
-	ret = fi_recv(ep, recv_buf, buffer_size, fi_mr_desc(mr), remote_fi_addr,
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
 			&fi_ctx_recv);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
@@ -427,7 +413,5 @@ int main(int argc, char **argv)
 	ret = run();
 
 	ft_free_res();
-	free(send_buf);
-	free(recv_buf);
 	return -ret;
 }
