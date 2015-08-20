@@ -184,7 +184,8 @@ int ft_init_ep(void *recv_ctx)
 {
 	int flags, ret;
 
-	FT_EP_BIND(ep, eq, 0);
+	if (fi->ep_attr->type == FI_EP_MSG)
+		FT_EP_BIND(ep, eq, 0);
 	FT_EP_BIND(ep, av, 0);
 	FT_EP_BIND(ep, txcq, FI_TRANSMIT);
 	FT_EP_BIND(ep, rxcq, FI_RECV);
