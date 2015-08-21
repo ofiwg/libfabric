@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -43,14 +43,11 @@
 #include <shared.h>
 
 
-static int rx_depth = 512;
-
 static int epfd;
 
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cq_attr cq_attr;
 	struct epoll_event event;
 	int ret, fd;
 
@@ -58,26 +55,12 @@ static int alloc_ep_res(struct fi_info *fi)
 	if (ret)
 		return ret;
 
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	cq_attr.wait_obj = FI_WAIT_FD;
-	cq_attr.size = rx_depth;
 
-	/* Open completion queue for send completions */
-	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
+	ret = ft_alloc_active_res(fi);
+	if (ret)
 		return ret;
-	}
 
-	/* Open completion queue for recv completions */
-	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
-	}
-
-	/* Create epoll set */
 	epfd = epoll_create1(0);
 	if (epfd < 0) {
 		ret = -errno;
@@ -85,17 +68,15 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	/* Retrieve receive queue wait object */
-	ret = fi_control (&rxcq->fid, FI_GETWAIT, (void *) &fd);
+	ret = fi_control(&rxcq->fid, FI_GETWAIT, (void *) &fd);
 	if (ret) {
 		FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
 		return ret;
 	}
 
-	/* Add receive queue wait object to epoll set */
-	memset((void *)&event, 0, sizeof event);
+	memset((void *) &event, 0, sizeof event);
 	event.events = EPOLLIN;
-	event.data.ptr = (void *)&rxcq->fid;
+	event.data.ptr = (void *) &rxcq->fid;
 	ret = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &event);
 	if (ret) {
 		ret = -errno;
@@ -103,34 +84,19 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	/* Retrieve send queue wait object */
 	ret = fi_control(&txcq->fid, FI_GETWAIT, (void *) &fd);
 	if (ret) {
 		FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
 		return ret;
 	}
 
-	/* Add send queue wait object to epoll set */
 	memset((void *)&event, 0, sizeof event);
 	event.events = EPOLLIN;
-	event.data.ptr = (void *)&txcq->fid;
+	event.data.ptr = (void *) &txcq->fid;
 	ret = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &event);
 	if (ret) {
 		ret = -errno;
 		FT_PRINTERR("epoll_ctl", ret);
-		return ret;
-	}
-
-	/* Register memory */
-	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
-	}
-
-	ret = fi_endpoint(domain, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
 		return ret;
 	}
 
@@ -339,7 +305,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.user_options |= FT_OPT_SIZE;
+	opts.options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints)

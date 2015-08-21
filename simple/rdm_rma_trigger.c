@@ -98,8 +98,6 @@ static int rma_write_trigger(void *src, size_t size,
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cntr_attr cntr_attr;
-	struct fi_av_attr av_attr;
 	int ret;
 
 	buf_size = strlen(welcome_text1) + strlen(welcome_text2);
@@ -109,21 +107,6 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
-	memset(&cntr_attr, 0, sizeof cntr_attr);
-	cntr_attr.events = FI_CNTR_EVENTS_COMP;
-
-	ret = fi_cntr_open(domain, &cntr_attr, &txcntr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cntr_open", ret);
-		return ret;
-	}
-
-	ret = fi_cntr_open(domain, &cntr_attr, &rxcntr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cntr_open", ret);
-		return ret;
-	}
-
 	ret = fi_mr_reg(domain, buf, buf_size, FI_WRITE | FI_REMOTE_WRITE, 0,
 			user_defined_key, 0, &mr, NULL);
 	if (ret) {
@@ -131,23 +114,9 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = fi->domain_attr->av_type ?
-			fi->domain_attr->av_type : FI_AV_MAP;
-	av_attr.count = 1;
-	av_attr.name = NULL;
-
-	ret = fi_av_open(domain, &av_attr, &av, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_av_open", ret);
+	ret = ft_alloc_active_res(fi);
+	if (ret)
 		return ret;
-	}
-
-	ret = fi_endpoint(domain, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		return ret;
-	}
 
 	return 0;
 }
@@ -265,7 +234,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.user_options |= FT_OPT_SIZE;
+	opts.options = FT_OPT_SIZE | FT_OPT_RX_CNTR | FT_OPT_TX_CNTR;
 
 	hints = fi_allocinfo();
 	if (!hints)

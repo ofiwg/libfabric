@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  * Copyright (c) 2015 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
@@ -41,16 +41,8 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
+
 #define MAX_POLL_CNT 10
-
-enum comp_type {
-	CQ_SEND = 1,
-	CQ_RECV = 2
-};
-
-
-static int transfer_size = 1000;
-static int rx_depth = 512;
 
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
@@ -62,8 +54,6 @@ struct fi_context fi_ctx_av;
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cq_attr cq_attr;
-	struct fi_av_attr av_attr;
 	struct fi_poll_attr poll_attr;
 	int ret;
 
@@ -71,26 +61,10 @@ static int alloc_ep_res(struct fi_info *fi)
 	if (ret)
 		return ret;
 
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = rx_depth;
-
-	/* Open completion queue for send completions */
-	ret = fi_cq_open(domain, &cq_attr, &txcq, (void *)CQ_SEND);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
+	ret = ft_alloc_active_res(fi);
+	if (ret)
 		return ret;
-	}
 
-	/* Open completion queue for recv completions */
-	ret = fi_cq_open(domain, &cq_attr, &rxcq, (void *)CQ_RECV);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
-	}
-
-	/* Open a polling set */
 	memset(&poll_attr, 0, sizeof poll_attr);
 	ret = fi_poll_open(domain, &poll_attr, &pollset);
 	if (ret) {
@@ -98,43 +72,15 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	/* Add send CQ to the polling set */
 	ret = fi_poll_add(pollset, &txcq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_poll_add", ret);
 		return ret;
 	}
 
-	/* Add recv CQ to the polling set */
 	ret = fi_poll_add(pollset, &rxcq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_poll_add", ret);
-		return ret;
-	}
-
-	/* Register memory */
-	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
-	}
-
-	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = fi->domain_attr->av_type ?
-			fi->domain_attr->av_type : FI_AV_MAP;
-	av_attr.count = 1;
-	av_attr.name = NULL;
-
-	/* Open Address Vector */
-	ret = fi_av_open(domain, &av_attr, &av, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_av_open", ret);
-		return ret;
-	}
-
-	ret = fi_endpoint(domain, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
 		return ret;
 	}
 
@@ -291,7 +237,7 @@ static int send_recv()
 	int i;
 
 	fprintf(stdout, "Posting a recv...\n");
-	ret = fi_recv(ep, buf, transfer_size, fi_mr_desc(mr),
+	ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr),
 			remote_fi_addr, &fi_ctx_recv);
 	if (ret) {
 		FT_PRINTERR("fi_recv", ret);
@@ -300,7 +246,7 @@ static int send_recv()
 	recv_pending++;
 
 	fprintf(stdout, "Posting a send...\n");
-	ret = fi_send(ep, buf, transfer_size, fi_mr_desc(mr),
+	ret = fi_send(ep, buf, tx_size, fi_mr_desc(mr),
 			remote_fi_addr, &fi_ctx_send);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
@@ -322,18 +268,15 @@ static int send_recv()
 		fprintf(stdout, "Retreived %d event(s)\n", ret_count);
 
 		for (i = 0; i < ret_count; i++) {
-			switch((enum comp_type)context[i]) {
-			case CQ_SEND:
+			if (context[i] == &txcq) {
 				printf("Send completion received\n");
 				cq = txcq;
 				send_pending--;
-				break;
-			case CQ_RECV:
+			} else if (context[i] == &rxcq) {
 				printf("Recv completion received\n");
 				cq = rxcq;
 				recv_pending--;
-				break;
-			default:
+			} else {
 				printf("Unknown completion received\n");
 				return -1;
 			}
@@ -359,7 +302,7 @@ int main(int argc, char **argv)
 	int op, ret = 0;
 
 	opts = INIT_OPTS;
-	opts.user_options |= FT_OPT_SIZE;
+	opts.options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints)

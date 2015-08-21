@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -51,7 +51,6 @@
 #define SYNC_DATA_SIZE 16
 
 
-static int max_credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 static void *send_buf, *multi_recv_buf;
@@ -275,17 +274,13 @@ static void free_res(void)
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cq_attr cq_attr;
-	struct fi_av_attr av_attr;
 	int ret;
-
-	// size of the local address that needs to be exchanged later
 	int data_size = sizeof(size_t);
 
 	// maximum size of the buffer that needs to allocated
 	max_send_buf_size = MAX(MAX(data_size, SYNC_DATA_SIZE), opts.transfer_size);
 
-	if(max_send_buf_size > fi->ep_attr->max_msg_size) {
+	if (max_send_buf_size > fi->ep_attr->max_msg_size) {
 		fprintf(stderr, "transfer size is larger than the maximum size "
 				"of the data transfer supported by the provider\n");
 		return -1;
@@ -297,7 +292,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
-	ret = fi_mr_reg(domain, send_buf, max_send_buf_size, 0, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, send_buf, max_send_buf_size, FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
@@ -312,46 +307,17 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
-	ret = fi_mr_reg(domain, multi_recv_buf, multi_buf_size, 0, 0, 1, 0,
+	ret = fi_mr_reg(domain, multi_recv_buf, multi_buf_size, FI_RECV, 0, 1, 0,
 			&mr_multi_recv, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
 	}
 
-	memset(&cq_attr, 0, sizeof cq_attr);
 	cq_attr.format = FI_CQ_FORMAT_DATA;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = max_credits << 1;
-	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
+	ret = ft_alloc_active_res(fi);
+	if (ret)
 		return ret;
-	}
-
-	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
-	}
-
-	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = fi->domain_attr->av_type ?
-			fi->domain_attr->av_type : FI_AV_MAP;
-	av_attr.count = 1;
-	av_attr.name = NULL;
-
-	ret = fi_av_open(domain, &av_attr, &av, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_av_open", ret);
-		return ret;
-	}
-
-	ret = fi_endpoint(domain, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		return ret;
-	}
 
 	return 0;
 }
@@ -514,7 +480,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.user_options |= FT_OPT_SIZE;
+	opts.options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints)

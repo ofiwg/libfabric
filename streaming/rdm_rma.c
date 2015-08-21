@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -45,7 +45,6 @@
 
 
 static uint64_t op_type = FT_RMA_WRITE;
-static int max_credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 struct fi_rma_iov remote;
@@ -222,30 +221,12 @@ static int run_test(void)
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cq_attr cq_attr;
-	struct fi_av_attr av_attr;
 	uint64_t access_mode;
 	int ret;
 
 	ret = ft_alloc_bufs();
 	if (ret)
 		return ret;
-
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_DATA;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = max_credits << 1;
-	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
-	}
-
-	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
-	}
 
 	switch (op_type) {
 	case FT_RMA_READ:
@@ -267,17 +248,9 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = fi->domain_attr->av_type ?
-			fi->domain_attr->av_type : FI_AV_MAP;
-	av_attr.count = 1;
-	av_attr.name = NULL;
-
-	ret = fi_av_open(domain, &av_attr, &av, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_av_open", ret);
+	ret = ft_alloc_active_res(fi);
+	if (ret)
 		return ret;
-	}
 
 	return 0;
 }
@@ -312,12 +285,6 @@ static int init_fabric(void)
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		return ret;
-	}
-
-	ret = fi_endpoint(domain, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
 		return ret;
 	}
 
@@ -458,7 +425,7 @@ static int run(void)
 	if (ret)
 		goto out;
 
-	if (!(opts.user_options & FT_OPT_SIZE)) {
+	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
@@ -483,6 +450,7 @@ out:
 int main(int argc, char **argv)
 {
 	int op, ret;
+
 	opts = INIT_OPTS;
 
 	hints = fi_allocinfo();

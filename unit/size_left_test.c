@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -46,13 +47,11 @@
 #include "shared.h"
 #include "unit_common.h"
 
+
 #define DEBUG(...) \
 	if (fabtests_debug) { \
 		fprintf(stderr, __VA_ARGS__); \
 	}
-
-#define RX_CQ_DEPTH (128)
-#define TX_CQ_DEPTH (128)
 
 int fabtests_debug = 0;
 
@@ -73,72 +72,14 @@ static void teardown_ep_fixture(void)
 static int setup_ep_fixture(void)
 {
 	int ret;
-	struct fi_av_attr av_attr;
-	struct fi_cq_attr cq_attr;
 
-	ret = fi_endpoint(domain, fi, &ep, NULL);
-	if (ret != 0) {
-		printf("fi_endpoint %s\n", fi_strerror(-ret));
+	ret = ft_alloc_active_res(fi);
+	if (ret)
 		return ret;
-	}
 
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = TX_CQ_DEPTH;
-
-	ret = fi_cq_open(domain, &cq_attr, &txcq, /*context=*/NULL);
-	if (ret != 0) {
-		printf("fi_cq_open %s\n", fi_strerror(-ret));
+	ret = ft_init_ep(NULL);
+	if (ret)
 		return ret;
-	}
-
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = RX_CQ_DEPTH;
-
-	ret = fi_cq_open(domain, &cq_attr, &rxcq, /*context=*/NULL);
-	if (ret != 0) {
-		printf("fi_cq_open %s\n", fi_strerror(-ret));
-		return ret;
-	}
-
-	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = fi->domain_attr->av_type ?
-			fi->domain_attr->av_type : FI_AV_MAP;
-	av_attr.count = 1;
-	av_attr.name = NULL;
-
-	ret = fi_av_open(domain, &av_attr, &av, NULL);
-	if (ret != 0) {
-		printf("fi_av_open %s\n", fi_strerror(-ret));
-		return ret;
-	}
-
-	ret = fi_ep_bind(ep, &txcq->fid, FI_SEND);
-	if (ret != 0) {
-		printf("fi_ep_bind(wcq) %s\n", fi_strerror(-ret));
-		return ret;
-	}
-
-	ret = fi_ep_bind(ep, &rxcq->fid, FI_RECV);
-	if (ret != 0) {
-		printf("fi_ep_bind(rxcq) %s\n", fi_strerror(-ret));
-		return ret;
-	}
-
-	ret = fi_ep_bind(ep, &av->fid, 0);
-	if (ret != 0) {
-		printf("fi_ep_bind(av) %s\n", fi_strerror(-ret));
-		return ret;
-	}
-
-	ret = fi_enable(ep);
-	if (ret != 0) {
-		printf("fi_enable %s\n", fi_strerror(-ret));
-		return ret;
-	}
 
 	return 0;
 }
@@ -164,9 +105,7 @@ rx_size_left(void)
 		goto fail;
 	}
 
-	/* TODO: once fi_rx_attr's size field meaning has been fixed to refer to
-	 * queue depth instead of number of bytes, we can do a little basic
-	 * sanity checking here */
+	/* TODO: add basic sanity checking here */
 
 	testret = PASS;
 fail:
@@ -247,6 +186,10 @@ struct test_entry test_tx_size_left[] = {
 	{ NULL, "" }
 };
 
+/* TODO: Rewrite test to use size_left() during data transfers and check
+ * that posted sends complete when indicated and check for proper failures
+ * when size_left() returns 0.
+ */
 int run_test_set(void)
 {
 	int failed;
@@ -262,6 +205,9 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 	int failed;
+
+	opts = INIT_OPTS;
+	opts.options |= FT_OPT_SIZE;
 
 	if (getenv("FABTESTS_DEBUG")) {
 		fabtests_debug = atoi(getenv("FABTESTS_DEBUG"));

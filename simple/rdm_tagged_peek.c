@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -43,8 +43,6 @@
 #include <rdma/fi_tagged.h>
 #include <shared.h>
 
-
-static int rx_depth = 512;
 
 static void *local_addr, *remote_addr;
 static size_t addrlen = 0;
@@ -129,53 +127,15 @@ static int sync_test(void)
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cq_attr cq_attr;
-	struct fi_av_attr av_attr;
 	int ret;
 
 	ret = ft_alloc_bufs();
 	if (ret)
 		return ret;
 
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = rx_depth;
-	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
+	ret = ft_alloc_active_res(fi);
+	if (ret)
 		return ret;
-	}
-
-	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
-	}
-
-	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
-	}
-
-	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = fi->domain_attr->av_type ?
-			fi->domain_attr->av_type : FI_AV_MAP;
-	av_attr.count = 1;
-	av_attr.name = NULL;
-
-	ret = fi_av_open(domain, &av_attr, &av, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_av_open", ret);
-		return ret;
-	}
-
-	ret = fi_endpoint(domain, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		return ret;
-	}
 
 	return 0;
 }
@@ -391,7 +351,7 @@ int main(int argc, char **argv)
 	int ret, op;
 
 	opts = INIT_OPTS;
-	opts.user_options |= FT_OPT_SIZE;
+	opts.options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints) {

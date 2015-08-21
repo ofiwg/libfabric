@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013,2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -51,11 +51,22 @@ struct fid_mr *mr;
 struct fid_av *av;
 struct fid_eq *eq;
 
+size_t tx_credits;
 void *buf, *tx_buf, *rx_buf;
 size_t buf_size, tx_size, rx_size;
 
+struct fi_av_attr av_attr = {
+	.type = FI_AV_MAP,
+	.count = 1
+};
 struct fi_eq_attr eq_attr = {
 	.wait_obj = FI_WAIT_UNSPEC
+};
+struct fi_cq_attr cq_attr = {
+	.wait_obj = FI_WAIT_NONE
+};
+struct fi_cntr_attr cntr_attr = {
+	.events = FI_CNTR_EVENTS_COMP
 };
 
 struct ft_opts opts;
@@ -96,7 +107,7 @@ static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_a
 
 int ft_alloc_bufs(void)
 {
-	tx_size = opts.user_options & FT_OPT_SIZE ?
+	tx_size = opts.options & FT_OPT_SIZE ?
 		  opts.transfer_size : test_size[TEST_CNT - 1].size;
 	rx_size = tx_size;
 	buf_size = tx_size + rx_size;
@@ -128,6 +139,81 @@ int ft_open_fabric_res(void)
 		FT_PRINTERR("fi_eq_open", ret);
 		return ret;
 	}
+
+	return 0;
+}
+
+int ft_alloc_active_res(struct fi_info *fi)
+{
+	int ret;
+
+	if (cq_attr.format == FI_CQ_FORMAT_UNSPEC) {
+		if (fi->caps & FI_TAGGED)
+			cq_attr.format = FI_CQ_FORMAT_TAGGED;
+		else
+			cq_attr.format = FI_CQ_FORMAT_CONTEXT;
+	}
+
+	if (opts.options & FT_OPT_TX_CQ) {
+		cq_attr.size = fi->tx_attr->size;
+		ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
+		if (ret) {
+			FT_PRINTERR("fi_cq_open", ret);
+			return ret;
+		}
+	}
+
+	if (opts.options & FT_OPT_TX_CNTR) {
+		ret = fi_cntr_open(domain, &cntr_attr, &txcntr, &txcntr);
+		if (ret) {
+			FT_PRINTERR("fi_cntr_open", ret);
+			return ret;
+		}
+	}
+
+	if (opts.options & FT_OPT_RX_CQ) {
+		cq_attr.size = fi->rx_attr->size;
+		ret = fi_cq_open(domain, &cq_attr, &rxcq, &rxcq);
+		if (ret) {
+			FT_PRINTERR("fi_cq_open", ret);
+			return ret;
+		}
+	}
+
+	if (opts.options & FT_OPT_RX_CNTR) {
+		ret = fi_cntr_open(domain, &cntr_attr, &rxcntr, &rxcntr);
+		if (ret) {
+			FT_PRINTERR("fi_cntr_open", ret);
+			return ret;
+		}
+	}
+
+	if (!mr && buf) {
+		ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND,
+				0, 0, 0, &mr, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_mr_reg", ret);
+			return ret;
+		}
+	}
+
+	if (fi->ep_attr->type == FI_EP_RDM || fi->ep_attr->type == FI_EP_DGRAM) {
+		if (fi->domain_attr->av_type != FI_AV_UNSPEC)
+			av_attr.type = fi->domain_attr->av_type;
+
+		ret = fi_av_open(domain, &av_attr, &av, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_av_open", ret);
+			return ret;
+		}
+	}
+
+	ret = fi_endpoint(domain, fi, &ep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		return ret;
+	}
+	tx_credits = fi->tx_attr->size;
 
 	return 0;
 }
@@ -400,7 +486,7 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 
 	size_str(sstr, opts->transfer_size);
 	snprintf(test_name, test_name_len, "%s_lat", sstr);
-	if (!(opts->user_options & FT_OPT_ITER))
+	if (!(opts->options & FT_OPT_ITER))
 		opts->iterations = size_to_count(opts->transfer_size);
 }
 
@@ -697,14 +783,14 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 
 	switch (op) {
 	case 'I':
-		opts->user_options |= FT_OPT_ITER;
+		opts->options |= FT_OPT_ITER;
 		opts->iterations = atoi(optarg);
 		break;
 	case 'S':
 		if (!strncasecmp("all", optarg, 3)) {
 			opts->size_option = 1;
 		} else {
-			opts->user_options |= FT_OPT_SIZE;
+			opts->options |= FT_OPT_SIZE;
 			opts->transfer_size = atoi(optarg);
 		}
 		break;

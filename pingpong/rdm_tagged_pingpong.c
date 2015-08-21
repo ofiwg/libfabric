@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -44,8 +44,6 @@
 #include "shared.h"
 
 
-static int max_credits = 128;
-static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 
@@ -79,10 +77,10 @@ int wait_for_completion_tagged(struct fid_cq *cq, int num_completions)
 
 static int send_xfer(int size)
 {
-	struct fi_cq_entry comp;
+	struct fi_cq_tagged_entry comp;
 	int ret;
 
-	while (!credits) {
+	while (!tx_credits) {
 		ret = fi_cq_read(txcq, &comp, 1);
 		if (ret > 0) {
 			goto post;
@@ -96,7 +94,7 @@ static int send_xfer(int size)
 		}
 	}
 
-	credits--;
+	tx_credits--;
 post:
 	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
 			tag_data, &fi_ctx_tsend);
@@ -168,11 +166,11 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = wait_for_completion_tagged(txcq, max_credits - credits);
+	ret = wait_for_completion_tagged(txcq, fi->tx_attr->size - tx_credits);
 	if (ret) {
 		return ret;
 	}
-	credits = max_credits;
+	tx_credits = fi->tx_attr->size;
 
 	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
 	if (ret)
@@ -222,53 +220,15 @@ out:
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cq_attr cq_attr;
-	struct fi_av_attr av_attr;
 	int ret;
 
 	ret = ft_alloc_bufs();
 	if (ret)
 		return ret;
 
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = max_credits << 1;
-	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
+	ret = ft_alloc_active_res(fi);
+	if (ret)
 		return ret;
-	}
-
-	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
-	}
-
-	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND, 0, 0, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
-	}
-
-	memset(&av_attr, 0, sizeof av_attr);
-	av_attr.type = fi->domain_attr->av_type ?
-			fi->domain_attr->av_type : FI_AV_MAP;
-	av_attr.count = 1;
-	av_attr.name = NULL;
-
-	ret = fi_av_open(domain, &av_attr, &av, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_av_open", ret);
-		return ret;
-	}
-
-	ret = fi_endpoint(domain, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		return ret;
-	}
 
 	return 0;
 }
@@ -401,7 +361,7 @@ static int run(void)
 	if (ret)
 		goto out;
 
-	if (!(opts.user_options & FT_OPT_SIZE)) {
+	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
@@ -418,7 +378,7 @@ static int run(void)
 			goto out;
 	}
 
-	wait_for_completion_tagged(txcq, max_credits - credits);
+	wait_for_completion_tagged(txcq, fi->tx_attr->size - tx_credits);
 	/* Finalize before closing ep */
 	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
@@ -428,6 +388,7 @@ out:
 int main(int argc, char **argv)
 {
 	int op, ret;
+
 	opts = INIT_OPTS;
 
 	hints = fi_allocinfo();
@@ -452,7 +413,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_TAGGED;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
+	hints->mode = FI_LOCAL_MR;
 
 	ret = run();
 

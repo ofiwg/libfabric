@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -43,8 +43,6 @@
 #include <shared.h>
 
 static enum ft_rma_opcodes op_type = FT_RMA_WRITE;
-static int max_credits = 128;
-static int credits = 128;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 struct fi_rma_iov remote;
@@ -56,7 +54,7 @@ static int send_xfer(int size)
 	struct fi_cq_data_entry comp;
 	int ret;
 
-	while (!credits) {
+	while (!tx_credits) {
 		ret = fi_cq_read(txcq, &comp, 1);
 		if (ret > 0) {
 			goto post;
@@ -70,7 +68,7 @@ static int send_xfer(int size)
 		}
 	}
 
-	credits--;
+	tx_credits--;
 post:
 	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), 0, ep);
 	if (ret)
@@ -147,11 +145,11 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = wait_for_data_completion(txcq, max_credits - credits);
+	ret = wait_for_data_completion(txcq, fi->tx_attr->size - tx_credits);
 	if (ret) {
 		return ret;
 	}
-	credits = max_credits;
+	tx_credits = fi->tx_attr->size;
 
 	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
 	if (ret) {
@@ -238,29 +236,12 @@ static int run_test(void)
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	struct fi_cq_attr cq_attr;
 	uint64_t access_mode;
 	int ret;
 
 	ret = ft_alloc_bufs();
 	if (ret)
 		return ret;
-
-	memset(&cq_attr, 0, sizeof cq_attr);
-	cq_attr.format = FI_CQ_FORMAT_DATA;
-	cq_attr.wait_obj = FI_WAIT_NONE;
-	cq_attr.size = max_credits << 1;
-	ret = fi_cq_open(domain, &cq_attr, &txcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
-	}
-
-	ret = fi_cq_open(domain, &cq_attr, &rxcq, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_cq_open", ret);
-		return ret;
-	}
 
 	switch (op_type) {
 	case FT_RMA_READ:
@@ -280,6 +261,10 @@ static int alloc_ep_res(struct fi_info *fi)
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
 	}
+
+	ret = ft_alloc_active_res(fi);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -309,12 +294,6 @@ static int server_connect(void)
 	ret = fi_domain(fabric, info, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		goto err;
-	}
-
-	ret = fi_endpoint(domain, info, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", -ret);
 		goto err;
 	}
 
@@ -380,12 +359,6 @@ static int client_connect(void)
  	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
-		return ret;
-	}
-
-	ret = fi_endpoint(domain, fi, &ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
 		return ret;
 	}
 
@@ -461,7 +434,7 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	if (!(opts.user_options & FT_OPT_SIZE)) {
+	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
@@ -479,7 +452,7 @@ static int run(void)
 	}
 
 	sync_test();
-	wait_for_data_completion(txcq, max_credits - credits);
+	wait_for_data_completion(txcq, fi->tx_attr->size - tx_credits);
 	/* Finalize before closing ep */
 	ft_finalize(fi, ep, txcq, rxcq, FI_ADDR_UNSPEC);
 out:
