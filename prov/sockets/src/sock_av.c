@@ -373,7 +373,7 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 	char tmp_port[FI_NAME_MAX] = {0};
 	int hostlen, offset = 0, fmt, i, j;
 
-	if (!node || !service) {
+	if (!node || !service || node[0] == '\0') {
 		SOCK_LOG_ERROR("Node/service not provided\n");
 		return -FI_EINVAL;
 	}
