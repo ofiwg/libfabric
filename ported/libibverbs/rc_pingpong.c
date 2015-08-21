@@ -432,7 +432,8 @@ int main(int argc, char *argv[])
 	// No provider support yet
 	//enum ibv_mtu		 mtu = IBV_MTU_1024;
 	//size_t					 mtu = 1024;
-	int                      rx_depth = 500;
+	int                      rx_depth_default = 500;
+	int			 rx_depth = 0;
 	int                      iters = 1000;
 	int                      use_event = 0;
 	int                      routs;
@@ -509,7 +510,7 @@ int main(int argc, char *argv[])
 
 	rc = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (rc)
-		return 1;
+		return rc;
 	
 	rc = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (rc) {
@@ -518,14 +519,30 @@ int main(int argc, char *argv[])
 	}
 	fi_freeinfo(hints);
 
+	if (rx_depth) {
+		if (rx_depth > fi->rx_attr->size) {
+			fprintf(stderr, "rx_depth requested: %d, "
+				"rx_depth supported: %zd\n", rx_depth, fi->rx_attr->size);
+			rc = 1;
+			goto err1;
+		}
+	} else {
+		rx_depth = (rx_depth_default > fi->rx_attr->size) ?
+			fi->rx_attr->size : rx_depth_default;
+	}
+
 	ctx = pp_init_ctx(fi, size, rx_depth, use_event);
-	if (!ctx)
-		return 1;
+	if (!ctx) {
+		rc = 1;
+		goto err1;
+	}
 
 	if (opts.dst_addr) {
 		/* client connect */
-		if (pp_connect_ctx(ctx))
-			return 1;
+		if (pp_connect_ctx(ctx)) {
+			rc = 1;
+			goto err2;
+		}
 	} else {
 		/* server listen and accept */
 		pp_listen_ctx(ctx);
@@ -535,7 +552,8 @@ int main(int argc, char *argv[])
 	routs = pp_post_recv(ctx, ctx->rx_depth);
 	if (routs < ctx->rx_depth) {
 		fprintf(stderr, "Couldn't post receive (%d)\n", routs);
-		return 1;
+		rc = 1;
+		goto err3;
 	}
 
 	ctx->pending = PINGPONG_RECV_WCID;
@@ -543,14 +561,16 @@ int main(int argc, char *argv[])
 	if (opts.dst_addr) {
 		if (pp_post_send(ctx)) {
 			fprintf(stderr, "Couldn't post send\n");
-			return 1;
+			rc = 1;
+			goto err3;
 		}
 		ctx->pending |= PINGPONG_SEND_WCID;
 	}
 
 	if (gettimeofday(&start, NULL)) {
 		perror("gettimeofday");
-		return 1;
+		rc = 1;
+		goto err3;
 	}
 
 	rcnt = scnt = 0;
@@ -573,7 +593,8 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "cq fi_cq_readerr() %s (%d)\n", 
 				fi_cq_strerror(ctx->cq, cq_err.err, cq_err.err_data, NULL, 0),
 				cq_err.err);
-			return 1;
+			rc = rd;
+			goto err3;
 		}
 
 		switch ((int) (uintptr_t) wc.op_context) {
@@ -588,7 +609,8 @@ int main(int argc, char *argv[])
 					fprintf(stderr,
 						"Couldn't post receive (%d)\n",
 						routs);
-					return 1;
+					rc = 1;
+					goto err3;
 				}
 			}
 
@@ -598,14 +620,16 @@ int main(int argc, char *argv[])
 		default:
 			fprintf(stderr, "Completion for unknown wc_id %d\n",
 				(int) (uintptr_t) wc.op_context);
-			return 1;
+			rc = 1;
+			goto err3;
 		}
 
 		ctx->pending &= ~(int) (uintptr_t) wc.op_context;
 		if (scnt < iters && !ctx->pending) {
 			if (pp_post_send(ctx)) {
 				fprintf(stderr, "Couldn't post send\n");
-				return 1;
+				rc = 1;
+				goto err3;
 			}
 			ctx->pending = PINGPONG_RECV_WCID | PINGPONG_SEND_WCID;
 		}
@@ -613,7 +637,8 @@ int main(int argc, char *argv[])
 
 	if (gettimeofday(&end, NULL)) {
 		perror("gettimeofday");
-		return 1;
+		rc = 1;
+		goto err3;
 	}
 
 	{
@@ -627,10 +652,12 @@ int main(int argc, char *argv[])
 		       iters, usec / 1000000., usec / iters);
 	}
 
-	/* Close the connection */
+err3:
 	fi_shutdown(ctx->ep, 0);
-	if (pp_close_ctx(ctx))
-		return 1;
+err2:
+	pp_close_ctx(ctx);
+err1:
+	fi_freeinfo(fi);
 
-	return 0;
+	return rc;
 }
