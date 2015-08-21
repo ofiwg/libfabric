@@ -272,23 +272,10 @@ static void sock_pe_report_remote_write(struct sock_rx_ctx *rx_ctx,
 	pe_entry->buf = pe_entry->pe.rx.rx_iov[0].iov.addr;
 	pe_entry->data_len = pe_entry->pe.rx.rx_iov[0].iov.len;
 	
-	if ((!pe_entry->comp->rem_write_cq && !pe_entry->comp->rem_write_cntr &&
+	if ((!pe_entry->comp->rem_write_cntr &&
 	     !(pe_entry->msg_hdr.flags & FI_REMOTE_WRITE)))
 		return;
-	
-	if (pe_entry->comp->rem_write_cq) {
-		if (pe_entry->comp->rem_write_cq_event) {
-			if ( pe_entry->flags & FI_COMPLETION)
-				pe_entry->comp->rem_write_cq->report_completion(
-					pe_entry->comp->rem_write_cq, 
-					pe_entry->addr, pe_entry);
-		} else {
-			pe_entry->comp->rem_write_cq->report_completion(
-				pe_entry->comp->rem_write_cq, 
-				pe_entry->addr, pe_entry);
-		}
-	}
-	
+		
 	if (pe_entry->comp->rem_write_cntr)
 		sock_cntr_inc(pe_entry->comp->rem_write_cntr);
 }
@@ -296,15 +283,7 @@ static void sock_pe_report_remote_write(struct sock_rx_ctx *rx_ctx,
 static void sock_pe_report_write_completion(struct sock_pe_entry *pe_entry)
 {
 	if (!(pe_entry->flags & SOCK_NO_COMPLETION)) {
-		sock_pe_report_tx_completion(pe_entry);
-	
-		if (pe_entry->comp->write_cq && 
-		    (pe_entry->comp->send_cq != pe_entry->comp->write_cq) &&
-		    (!pe_entry->comp->write_cq_event || 
-		     (pe_entry->comp->write_cq_event && 
-		      (pe_entry->msg_hdr.flags & FI_COMPLETION)))) 
-			pe_entry->comp->write_cq->report_completion(
-				pe_entry->comp->write_cq, pe_entry->addr, pe_entry);
+		sock_pe_report_tx_completion(pe_entry);	
 	}
 	
 	if (pe_entry->comp->write_cntr && 
@@ -318,23 +297,10 @@ static void sock_pe_report_remote_read(struct sock_rx_ctx *rx_ctx,
 	pe_entry->buf = pe_entry->pe.rx.rx_iov[0].iov.addr;
 	pe_entry->data_len = pe_entry->pe.rx.rx_iov[0].iov.len;
 	
-	if ((!pe_entry->comp->rem_read_cq && !pe_entry->comp->rem_read_cntr &&
+	if ((!pe_entry->comp->rem_read_cntr &&
 	     !(pe_entry->msg_hdr.flags & FI_REMOTE_READ)))
 		return;
-	
-	if (pe_entry->comp->rem_read_cq) {
-		if (pe_entry->comp->rem_read_cq_event) {
-			if ( pe_entry->flags & FI_COMPLETION)
-				pe_entry->comp->rem_read_cq->report_completion(
-					pe_entry->comp->rem_read_cq, 
-					pe_entry->addr, pe_entry);
-		} else {
-			pe_entry->comp->rem_read_cq->report_completion(
-				pe_entry->comp->rem_read_cq, 
-				pe_entry->addr, pe_entry);
-		}
-	}
-	
+		
 	if (pe_entry->comp->rem_read_cntr)
 		sock_cntr_inc(pe_entry->comp->rem_read_cntr);
 }
@@ -342,15 +308,7 @@ static void sock_pe_report_remote_read(struct sock_rx_ctx *rx_ctx,
 static void sock_pe_report_read_completion(struct sock_pe_entry *pe_entry)
 {
 	if (!(pe_entry->flags & SOCK_NO_COMPLETION)) {
-		sock_pe_report_tx_completion(pe_entry);
-		
-		if (pe_entry->comp->read_cq && 
-		    (pe_entry->comp->read_cq != pe_entry->comp->send_cq) &&
-		    (!pe_entry->comp->read_cq_event || 
-		     (pe_entry->comp->read_cq_event && 
-		      (pe_entry->msg_hdr.flags & FI_COMPLETION)))) 
-			pe_entry->comp->read_cq->report_completion(
-				pe_entry->comp->read_cq, pe_entry->addr, pe_entry);
+		sock_pe_report_tx_completion(pe_entry);	
 	}
 	
 	if (pe_entry->comp->read_cntr &&
@@ -371,8 +329,8 @@ static void sock_pe_report_tx_rma_read_err(struct sock_pe_entry *pe_entry, int e
 {
 	if (pe_entry->comp->read_cntr)
 		sock_cntr_err_inc(pe_entry->comp->read_cntr);
-	if (pe_entry->comp->read_cq)
-		sock_cq_report_error(pe_entry->comp->read_cq, pe_entry, 0, 
+	if (pe_entry->comp->send_cq)
+		sock_cq_report_error(pe_entry->comp->send_cq, pe_entry, 0, 
 				     err, -err, NULL);
 }
 
@@ -380,8 +338,8 @@ static void sock_pe_report_tx_rma_write_err(struct sock_pe_entry *pe_entry, int 
 {
 	if (pe_entry->comp->write_cntr)
 		sock_cntr_err_inc(pe_entry->comp->write_cntr);
-	if (pe_entry->comp->write_cq)
-		sock_cq_report_error(pe_entry->comp->write_cq, pe_entry, 0, 
+	if (pe_entry->comp->send_cq)
+		sock_cq_report_error(pe_entry->comp->send_cq, pe_entry, 0, 
 				     err, -err, NULL);
 }
 

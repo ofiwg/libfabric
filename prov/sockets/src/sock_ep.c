@@ -141,18 +141,6 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 				tx_ctx->comp.send_cq_event = 1;
 		}
 
-		if (flags & FI_READ) {
-			tx_ctx->comp.read_cq = sock_cq;
-			if (flags & FI_SELECTIVE_COMPLETION)
-				tx_ctx->comp.read_cq_event = 1;
-		}
-
-		if (flags & FI_WRITE) {
-			tx_ctx->comp.write_cq = sock_cq;
-			if (flags & FI_SELECTIVE_COMPLETION)
-				tx_ctx->comp.write_cq_event = 1;
-		}
-
 		fastlock_acquire(&sock_cq->list_lock);
 		dlist_insert_tail(&tx_ctx->cq_entry, &sock_cq->tx_list);
 		fastlock_release(&sock_cq->list_lock);
@@ -177,18 +165,6 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 			tx_ctx->comp.send_cq = sock_cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.send_cq_event = 1;
-		}
-
-		if (flags & FI_READ) {
-			tx_ctx->comp.read_cq = sock_cq;
-			if (flags & FI_SELECTIVE_COMPLETION)
-				tx_ctx->comp.read_cq_event = 1;
-		}
-
-		if (flags & FI_WRITE) {
-			tx_ctx->comp.write_cq = sock_cq;
-			if (flags & FI_SELECTIVE_COMPLETION)
-				tx_ctx->comp.write_cq_event = 1;
 		}
 
 		fastlock_acquire(&sock_cq->list_lock);
@@ -719,25 +695,13 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				ep->comp.send_cq_event = 1;
 		}
 
-		if (flags & FI_READ) {
-			ep->comp.read_cq = cq;
-			if (flags & FI_SELECTIVE_COMPLETION)
-				ep->comp.read_cq_event = 1;
-		}
-
-		if (flags & FI_WRITE) {
-			ep->comp.write_cq = cq;
-			if (flags & FI_SELECTIVE_COMPLETION)
-				ep->comp.write_cq_event = 1;
-		}
-
 		if (flags & FI_RECV) {
 			ep->comp.recv_cq = cq;
 			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->comp.recv_cq_event = 1;
 		}
 
-		if (flags & FI_SEND || flags & FI_WRITE || flags & FI_READ) {
+		if (flags & FI_SEND) {
 			for (i=0; i < ep->ep_attr.tx_ctx_cnt; i++) {
 				tx_ctx = ep->tx_array[i];
 				
@@ -1614,20 +1578,4 @@ int sock_ep_is_recv_cq_low(struct sock_comp *comp, uint64_t flags)
 	    (!comp->recv_cq_event || 
 	     (comp->recv_cq_event && (flags & FI_COMPLETION)))) &&
 		!sock_cq_check_size_ok(comp->recv_cq);
-}
-
-int sock_ep_is_write_cq_low(struct sock_comp *comp, uint64_t flags)
-{
-	return (comp && comp->write_cq && !(flags & SOCK_NO_COMPLETION) &&
-	    (!comp->write_cq_event || 
-	     (comp->write_cq_event && (flags & FI_COMPLETION)))) &&
-		!sock_cq_check_size_ok(comp->write_cq);
-}
-
-int sock_ep_is_read_cq_low(struct sock_comp *comp, uint64_t flags)
-{
-	return (comp && comp->read_cq && !(flags & SOCK_NO_COMPLETION) &&
-	    (!comp->read_cq_event || 
-	     (comp->read_cq_event && (flags & FI_COMPLETION)))) &&
-		!sock_cq_check_size_ok(comp->read_cq);
 }
