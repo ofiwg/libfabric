@@ -381,11 +381,19 @@ struct usdf_cq {
 			struct usdf_cq_soft_entry *cq_end;
 			struct usdf_cq_soft_entry *cq_head;
 			struct usdf_cq_soft_entry *cq_tail;
+			/* Last operation used to distinguish full vs empty. */
+			uint8_t cq_last_op;
 			TAILQ_HEAD(,usdf_cq_hard) cq_list;
 		} soft;
 	} c;
 	struct usd_completion cq_comp;
 };
+
+enum {
+	USDF_SOFT_CQ_READ,
+	USDF_SOFT_CQ_WRITE
+};
+
 #define cq_ftou(FCQ) container_of(FCQ, struct usdf_cq, cq_fid)
 #define cq_fidtou(FID) container_of(FID, struct usdf_cq, cq_fid.fid)
 #define cq_utof(CQ) (&(CQ)->cq_fid)

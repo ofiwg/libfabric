@@ -480,6 +480,17 @@ usdf_progress_hard_cq(struct usdf_cq_hard *hcq)
 		ret = usd_poll_cq(hcq->cqh_ucq, &comp);
 		if (ret == 0) {
 			entry = cq->c.soft.cq_head;
+
+			/* If the current entry is equal to the tail and the
+			 * last operation was a write, then we have filled the
+			 * queue and we just drop whatever there isn't space
+			 * for.
+			 */
+			if ((entry == cq->c.soft.cq_tail) &&
+					(cq->c.soft.cq_last_op ==
+						USDF_SOFT_CQ_WRITE))
+				return;
+
 			entry->cse_context = cq->cq_comp.uc_context;
 			entry->cse_flags = 0;
 			entry->cse_len = cq->cq_comp.uc_bytes;
@@ -493,6 +504,8 @@ usdf_progress_hard_cq(struct usdf_cq_hard *hcq)
 			} else {
 				cq->c.soft.cq_head = cq->c.soft.cq_comps;
 			}
+
+			cq->c.soft.cq_last_op = USDF_SOFT_CQ_WRITE;
 		}
 	} while (ret != -EAGAIN);
 }
@@ -507,6 +520,16 @@ usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 	cq = hcq->cqh_cq;
 
 	entry = cq->c.soft.cq_head;
+
+	/* If the current entry is equal to the tail and the
+	 * last operation was a write, then we have filled the
+	 * queue and we just drop whatever there isn't space
+	 * for.
+	 */
+	if ((entry == cq->c.soft.cq_tail) &&
+			(cq->c.soft.cq_last_op == USDF_SOFT_CQ_WRITE))
+		return;
+
 	entry->cse_context = context;
 	entry->cse_len = len;
 	entry->cse_prov_errno = prov_errno;
@@ -519,6 +542,7 @@ usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 		cq->c.soft.cq_head = cq->c.soft.cq_comps;
 	}
 
+	cq->c.soft.cq_last_op = USDF_SOFT_CQ_WRITE;
 }
 
 static inline ssize_t
@@ -594,7 +618,16 @@ usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const voi
 
 		tail = cq->c.soft.cq_tail;
 
-		while (entry < last && tail != cq->c.soft.cq_head) {
+		while (entry < last) {
+			/* If the head and tail are equal and the last
+			 * operation was a read then that means we have an
+			 * empty queue.
+			 */
+			if ((tail == cq->c.soft.cq_head) &&
+					(cq->c.soft.cq_last_op ==
+					 USDF_SOFT_CQ_READ))
+				break;
+
 			if (tail->cse_prov_errno > 0) {
 				if (entry > (uint8_t *)buf)
 					break;
@@ -610,6 +643,8 @@ usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const voi
 			tail++;
 			if (tail == cq->c.soft.cq_end)
 				tail = cq->c.soft.cq_comps;
+
+			cq->c.soft.cq_last_op = USDF_SOFT_CQ_READ;
 		}
 
 		if (entry > (uint8_t *)buf) {
@@ -695,7 +730,15 @@ usdf_cq_read_common_soft(struct fid_cq *fcq, void *buf, size_t count,
 	last = entry + (entry_len * count);
 	tail = cq->c.soft.cq_tail;
 
-	while (entry < last && tail != cq->c.soft.cq_head) {
+	while (entry < last) {
+		/* If the head and tail are equal and the last
+		 * operation was a read then that means we have an
+		 * empty queue.
+		 */
+		if ((tail == cq->c.soft.cq_head) &&
+				(cq->c.soft.cq_last_op == USDF_SOFT_CQ_READ))
+			break;
+
 		if (tail->cse_prov_errno > 0) {
 			return -FI_EAVAIL;
 		}
@@ -708,6 +751,8 @@ usdf_cq_read_common_soft(struct fid_cq *fcq, void *buf, size_t count,
 		if (tail == cq->c.soft.cq_end) {
 			tail = cq->c.soft.cq_comps;
 		}
+
+		cq->c.soft.cq_last_op = USDF_SOFT_CQ_READ;
 	}
 	cq->c.soft.cq_tail = tail;
 
