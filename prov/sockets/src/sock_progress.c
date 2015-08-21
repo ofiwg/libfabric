@@ -524,7 +524,7 @@ static int sock_pe_handle_error(struct sock_pe *pe, struct sock_pe_entry *pe_ent
 	response = &pe_entry->response;
 	assert(response->pe_entry_id <= SOCK_PE_MAX_ENTRIES);
 	waiting_entry = &pe->pe_table[response->pe_entry_id];
-	SOCK_LOG_DBG("Received error for PE entry %p (index: %d)\n", 
+	SOCK_LOG_ERROR("Received error for PE entry %p (index: %d)\n", 
 		      waiting_entry, response->pe_entry_id);
 	
 	assert(waiting_entry->type == SOCK_PE_TX);
