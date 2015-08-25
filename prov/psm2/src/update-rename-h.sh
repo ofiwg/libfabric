@@ -1,3 +1,8 @@
+#!/bin/sh
+
+OUTFILE=rename.h
+
+cat <<EOF >$OUTFILE
 /*
  * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
@@ -30,35 +35,17 @@
  * SOFTWARE.
  */
 
-#include "psmx.h"
+#ifndef _FI_PSM_RENAME_H_
+#define _FI_PSM_RENAME_H_
 
-static int psmx_cm_getname(fid_t fid, void *addr, size_t *addrlen)
-{
-	struct psmx_fid_ep *ep;
+EOF
 
-	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
-	if (!ep->domain)
-		return -FI_EBADF;
+LIST=`grep --only-match --no-filename '[a-zA-Z0-9_]*psmx_[a-zA-Z0-9_]*' psmx*.[ch] | sort | uniq`
 
-	if (*addrlen < sizeof(psm_epid_t)) {
-		*addrlen = sizeof(psm_epid_t);
-		return -FI_ETOOSMALL;
-	}
+for ITEM in $LIST ; do
+	echo '#define' $ITEM ${ITEM/psmx_/psmx2_} >>$OUTFILE
+done
 
-	*(psm_epid_t *)addr = ep->domain->psm_epid;
-	*addrlen = sizeof(psm_epid_t);
-
-	return 0;
-}
-
-struct fi_ops_cm psmx_cm_ops = {
-	.size = sizeof(struct fi_ops_cm),
-	.getname = psmx_cm_getname,
-	.getpeer = fi_no_getpeer,
-	.connect = fi_no_connect,
-	.listen = fi_no_listen,
-	.accept = fi_no_accept,
-	.reject = fi_no_reject,
-	.shutdown = fi_no_shutdown,
-};
+echo >>$OUTFILE
+echo '#endif' >>$OUTFILE
 

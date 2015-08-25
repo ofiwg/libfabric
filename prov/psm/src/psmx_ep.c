@@ -78,7 +78,11 @@ static void psmx_ep_optimize_ops(struct psmx_fid_ep *ep)
 static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 {
 	struct psmx_fid_ep *ep;
+#if (PSM_VERNO_MAJOR >= 2)
+	psm_mq_status2_t status;
+#else
 	psm_mq_status_t status;
+#endif
 	struct fi_context *fi_context = context;
 	uint64_t flags;
 	struct psmx_cq_event *event;
@@ -105,7 +109,11 @@ static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 
 	err = psm_mq_cancel((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context));
 	if (err == PSM_OK) {
+#if (PSM_VERNO_MAJOR >= 2)
+		err = psm_mq_test2((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context), &status);
+#else
 		err = psm_mq_test((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context), &status);
+#endif
 		if (err == PSM_OK && ep->recv_cq) {
 			event = psmx_cq_create_event(
 					ep->recv_cq,

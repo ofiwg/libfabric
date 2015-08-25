@@ -71,6 +71,17 @@ PSM_INI ;
 #  define PSM_INIT NULL
 #endif
 
+#if (HAVE_PSM2) && (HAVE_PSM2_DL)
+#  define PSM2_INI FI_EXT_INI
+#  define PSM2_INIT NULL
+#elif (HAVE_PSM2)
+#  define PSM2_INI INI_SIG(fi_psm2_ini)
+#  define PSM2_INIT fi_psm2_ini()
+PSM2_INI ;
+#else
+#  define PSM2_INIT NULL
+#endif
+
 #if (HAVE_SOCKETS) && (HAVE_SOCKETS_DL)
 #  define SOCKETS_INI FI_EXT_INI
 #  define SOCKETS_INIT NULL

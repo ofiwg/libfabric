@@ -127,6 +127,15 @@ out:
 	return event;
 }
 
+#if (PSM_VERNO_MAJOR >= 2)
+static struct psmx_cq_event *psmx_cq_create_event_from_status(
+				struct psmx_fid_cq *cq,
+				psm_mq_status2_t *psm_status,
+				uint64_t data,
+				struct psmx_cq_event *event_in,
+				int count,
+				fi_addr_t *src_addr)
+#else
 static struct psmx_cq_event *psmx_cq_create_event_from_status(
 				struct psmx_fid_cq *cq,
 				psm_mq_status_t *psm_status,
@@ -134,6 +143,7 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 				struct psmx_cq_event *event_in,
 				int count,
 				fi_addr_t *src_addr)
+#endif
 {
 	struct psmx_cq_event *event;
 	struct psmx_multi_recv *req;
@@ -229,7 +239,11 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		event->cqe.err.flags = flags;
 		event->cqe.err.err = -psmx_errno(psm_status->error_code);
 		event->cqe.err.prov_errno = psm_status->error_code;
+#if (PSM_VERNO_MAJOR >= 2)
+		event->cqe.err.tag = psm_status->msg_tag.tag0 | (((uint64_t)psm_status->msg_tag.tag1) << 32);
+#else
 		event->cqe.err.tag = psm_status->msg_tag;
+#endif
 		event->cqe.err.olen = psm_status->msg_length - psm_status->nbytes;
 		if (data)
 			event->cqe.err.data = data;
@@ -252,6 +266,9 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		event->cqe.data.buf = buf;
 		event->cqe.data.flags = flags;
 		event->cqe.data.len = psm_status->nbytes;
+#if (PSM_VERNO_MAJOR >= 2)
+		event->cqe.data.data = psm_status->msg_tag.tag2;
+#endif
 		if (data)
 			event->cqe.data.data = data;
 		break;
@@ -261,7 +278,12 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		event->cqe.tagged.buf = buf;
 		event->cqe.tagged.flags = flags;
 		event->cqe.tagged.len = psm_status->nbytes;
+#if (PSM_VERNO_MAJOR >= 2)
+		event->cqe.data.data = psm_status->msg_tag.tag2;
+		event->cqe.tagged.tag = psm_status->msg_tag.tag0 | (((uint64_t)psm_status->msg_tag.tag1) << 32);
+#else
 		event->cqe.tagged.tag = psm_status->msg_tag;
+#endif
 		if (data)
 			event->cqe.tagged.data = data;
 		break;
@@ -280,6 +302,9 @@ out:
 	if (is_recv) {
 		if (event == event_in) {
 			if (src_addr) {
+#if (PSM_VERNO_MAJOR >= 2)
+				*src_addr = (fi_addr_t) psm_status->msg_peer;
+#else
 				int err = -FI_ENODATA;
 				if (cq->domain->reserved_tag_bits & PSMX_MSG_BIT & psm_status->msg_tag) {
 					err = psmx_epid_to_epaddr(cq->domain,
@@ -288,10 +313,15 @@ out:
 				}
 				if (err)
 					*src_addr = FI_ADDR_NOTAVAIL;
+#endif
 			}
 		}
 		else {
+#if (PSM_VERNO_MAJOR >= 2)
+			event->source = (uint64_t) psm_status->msg_peer;
+#else
 			event->source = psm_status->msg_tag;
+#endif
 		}
 	}
 
@@ -302,11 +332,16 @@ static int psmx_cq_get_event_src_addr(struct psmx_fid_cq *cq,
 				      struct psmx_cq_event *event,
 				      fi_addr_t *src_addr)
 {
+#if (PSM_VERNO_MAJOR < 2)
 	int err;
+#endif
 
 	if (!src_addr)
 		return 0;
 
+#if (PSM_VERNO_MAJOR >= 2)
+	*src_addr = (fi_addr_t) event->source;
+#else
 	if ((cq->domain->reserved_tag_bits & PSMX_MSG_BIT) &&
 		(event->source & PSMX_MSG_BIT)) {
 		err = psmx_epid_to_epaddr(cq->domain,
@@ -317,6 +352,7 @@ static int psmx_cq_get_event_src_addr(struct psmx_fid_cq *cq,
 
 		return 0;
 	}
+#endif
 
 	return -FI_ENODATA;
 }
@@ -325,7 +361,11 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 		    struct psmx_cq_event *event_in, int count, fi_addr_t *src_addr)
 {
 	psm_mq_req_t psm_req;
+#if (PSM_VERNO_MAJOR >= 2)
+	psm_mq_status2_t psm_status;
+#else
 	psm_mq_status_t psm_status;
+#endif
 	struct fi_context *fi_context;
 	struct psmx_fid_ep *tmp_ep;
 	struct psmx_fid_cq *tmp_cq;
@@ -341,7 +381,11 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 		err = psm_mq_ipeek(domain->psm_mq, &psm_req, NULL);
 
 		if (err == PSM_OK) {
+#if (PSM_VERNO_MAJOR >= 2)
+			err = psm_mq_test2(&psm_req, &psm_status);
+#else
 			err = psm_mq_test(&psm_req, &psm_status);
+#endif
 
 			fi_context = psm_status.context;
 

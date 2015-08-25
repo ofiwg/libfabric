@@ -20,9 +20,33 @@ AC_DEFUN([FI_PSM_CONFIGURE],[
 				[],
 				[psm_happy=1],
 				[psm_happy=0])
+	       AS_IF([test $psm_happy -eq 1],
+		     [AC_MSG_CHECKING([if PSM version is 1.x])
+		      AC_RUN_IFELSE([AC_LANG_SOURCE(
+						    [[
+						    #include <psm.h>
+						    int main()
+						    {
+							return PSM_VERNO_MAJOR < 2 ? 0 : 1;
+						    }
+						    ]]
+						   )],
+				    [AC_MSG_RESULT([yes])],
+				    [AC_MSG_RESULT([no]); psm_happy=0])
+		     ])
+	       AS_IF([test $psm_happy -eq 1],
+		     [AC_CHECK_TYPE([psm_epconn_t],
+		                    [],
+				    [psm_happy=0],
+				    [[#include <psm.h>]])])
 	      ])
-	AS_IF([test x"$psm_happy" = x"1"],
-   	      [AC_CHECK_TYPE([psm_epconn_t], [], [psm_happy=0], [[#include <psm.h>]])])
 
 	AS_IF([test $psm_happy -eq 1], [$1], [$2])
+
+	psm_CPPFLAGS="$CPPFLAGS $psm_CPPFLAGS"
+	psm_LDFLAGS="$LDFLAGS $psm_LDFLAGS"
+	psm_LIBS="$LIBS $psm_LIBS"
+	CPPFLAGS=
+	LDFLAGS=
+	LIBS=
 ])

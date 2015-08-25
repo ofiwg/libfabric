@@ -30,35 +30,10 @@
  * SOFTWARE.
  */
 
-#include "psmx.h"
+#ifndef _FI_PSM_VERSION_H_
+#define _FI_PSM_VERSION_H_
 
-static int psmx_cm_getname(fid_t fid, void *addr, size_t *addrlen)
-{
-	struct psmx_fid_ep *ep;
+#define PSMX_VERSION	1
 
-	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
-	if (!ep->domain)
-		return -FI_EBADF;
-
-	if (*addrlen < sizeof(psm_epid_t)) {
-		*addrlen = sizeof(psm_epid_t);
-		return -FI_ETOOSMALL;
-	}
-
-	*(psm_epid_t *)addr = ep->domain->psm_epid;
-	*addrlen = sizeof(psm_epid_t);
-
-	return 0;
-}
-
-struct fi_ops_cm psmx_cm_ops = {
-	.size = sizeof(struct fi_ops_cm),
-	.getname = psmx_cm_getname,
-	.getpeer = fi_no_getpeer,
-	.connect = fi_no_connect,
-	.listen = fi_no_listen,
-	.accept = fi_no_accept,
-	.reject = fi_no_reject,
-	.shutdown = fi_no_shutdown,
-};
+#endif
 
