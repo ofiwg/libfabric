@@ -89,7 +89,8 @@ void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 #define FI_DBG(prov, subsystem, ...)					\
 	FI_LOG(prov, FI_LOG_DEBUG, subsystem, __VA_ARGS__)
 #else
-#define FI_DBG(prov_name, subsystem, ...)
+#define FI_DBG(prov_name, subsystem, ...)				\
+	do {} while (0)
 #endif
 
 #ifdef __cplusplus

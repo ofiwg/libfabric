@@ -46,8 +46,8 @@ extern int sock_pe_waittime;
 extern int sock_dgram_drop_rate;
 #endif
 
-#define _SOCK_LOG_DBG(subsys, ...) FI_DBG(&sock_prov, subsys, __VA_ARGS__);
-#define _SOCK_LOG_ERROR(subsys, ...) FI_WARN(&sock_prov, subsys, __VA_ARGS__);
+#define _SOCK_LOG_DBG(subsys, ...) FI_DBG(&sock_prov, subsys, __VA_ARGS__)
+#define _SOCK_LOG_ERROR(subsys, ...) FI_WARN(&sock_prov, subsys, __VA_ARGS__)
 
 static inline int sock_drop_packet(struct sock_ep *sock_ep)
 {	
