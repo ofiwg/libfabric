@@ -51,6 +51,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 
 	cq_attr.format = FI_CQ_FORMAT_DATA;
+	cq_attr.wait_obj = FI_WAIT_UNSPEC;
 
 	ret = ft_alloc_active_res(fi);
 	if (ret)
@@ -186,9 +187,12 @@ static int run_test()
 	uint64_t remote_cq_data;
 	struct fi_cq_data_entry comp;
 
-	/* Set remote_cq_data based on the cq_data_size we got from fi_getinfo */
-	remote_cq_data = 0x0123456789abcdef &
+	if (fi->domain_attr->cq_data_size >= sizeof(uint64_t)) {
+		remote_cq_data = 0x0123456789abcdefULL;
+	} else {
+		remote_cq_data = 0x0123456789abcdef &
 			((0x1ULL << (fi->domain_attr->cq_data_size * 8)) - 1);
+	}
 
 	if (opts.dst_addr) {
 		fprintf(stdout,
