@@ -116,6 +116,12 @@ static struct fi_provider fi_ibv_prov = {
 		(flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)))
 #define VERBS_COMP_READ(ep) VERBS_COMP_READ_FLAGS(ep, ep->info->tx_attr->op_flags)
 
+#define VERBS_DBG(subsys, ...) FI_DBG(&fi_ibv_prov, subsys, __VA_ARGS__)
+#define VERBS_INFO(subsys, ...) FI_INFO(&fi_ibv_prov, subsys, __VA_ARGS__)
+
+#define VERBS_INFO_ERRNO(subsys, fn, errno) VERBS_INFO(subsys, fn ": %s(%d)\n",	\
+		strerror(errno), errno)
+
 struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
 };
@@ -626,7 +632,7 @@ static int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags, struct rdm
 	case FI_FORMAT_UNSPEC:
 		break;
 	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown fi->addr_format\n");
+		VERBS_INFO(FI_LOG_FABRIC, "Unknown fi->addr_format\n");
 	}
 
 	if (fi->src_addrlen) {
@@ -688,11 +694,14 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	int ret = 0;
 
 	pd = ibv_alloc_pd(ctx);
-	if (!pd)
+	if (!pd) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_alloc_pd", errno);
 		return -errno;
+	}
 
 	cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
 	if (!cq) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_create_cq", errno);
 		ret = -errno;
 		goto err1;
 	}
@@ -722,6 +731,7 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 
 	qp = ibv_create_qp(pd, &init_attr);
 	if (!qp) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_create_qp", errno);
 		ret = -errno;
 		goto err2;
 	}
@@ -749,8 +759,10 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx, struct fi_info *info
 	int ret = 0;
 
 	ret = ibv_query_device(ctx, &device_attr);
-	if (ret)
+	if (ret) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_device", errno);
 		return -errno;
+	}
 
 	info->domain_attr->cq_cnt 		= device_attr.max_cq;
 	info->domain_attr->ep_cnt 		= device_attr.max_qp;
@@ -764,8 +776,10 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx, struct fi_info *info
 		return ret;
 
 	ret = ibv_query_port(ctx, 1, &port_attr);
-	if (ret)
+	if (ret) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_port", errno);
 		return -errno;
+	}
 
 	info->ep_attr->max_msg_size 		= port_attr.max_msg_sz;
 	info->ep_attr->max_order_raw_size 	= port_attr.max_msg_sz;
@@ -829,6 +843,7 @@ static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info)
 	switch (ctx->device->transport_type) {
 	case IBV_TRANSPORT_IB:
 		if(ibv_query_gid(ctx, 1, 0, &gid)) {
+			VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_gid", errno);
 			ret = -errno;
 			goto err;
 		}
@@ -887,13 +902,15 @@ static int fi_ibv_init_info(void)
 		goto unlock;
 
 	if (!fi_ibv_have_device()) {
+		VERBS_INFO(FI_LOG_FABRIC, "No RDMA devices found\n");
 		ret = -FI_ENODATA;
 		goto unlock;
 	}
 
 	ctx_list = rdma_get_devices(&num_devices);
 	if (!num_devices) {
-		ret = (errno == ENODEV) ? -FI_ENODATA : -errno;
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_get_devices", errno);
+		ret = -errno;
 		goto unlock;
 	}
 
@@ -908,10 +925,7 @@ static int fi_ibv_init_info(void)
 		}
 	}
 
-	if (!verbs_info)
-		ret = -FI_ENODATA;
-	else
-		ret = 0;
+	ret = verbs_info ? 0 : ret;
 
 	rdma_free_devices(ctx_list);
 unlock:
@@ -966,7 +980,8 @@ fi_ibv_create_ep(const char *node, const char *service,
 	ret = rdma_getaddrinfo((char *) node, (char *) service,
 				&rai_hints, &_rai);
 	if (ret) {
-		ret = (errno == ENODEV) ? -FI_ENODATA : -errno;
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_getaddrinfo", errno);
+		ret = -errno;
 		goto out;
 	}
 
@@ -990,14 +1005,8 @@ fi_ibv_create_ep(const char *node, const char *service,
 
 	ret = rdma_create_ep(id, _rai, NULL, NULL);
 	if (ret) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_create_ep", errno);
 		ret = -errno;
-		if (ret == -ENOENT) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_CORE,
-				"rdma_create_ep()-->ENOENT; "
-				"likely usnic bug, skipping verbs provider.\n");
-			ret = -FI_ENODATA;
-		}
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unable to create rdma_cm id\n");
 		goto err;
 	}
 
@@ -1113,6 +1122,7 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 			ibv_get_device_name(id->verbs->device)) : verbs_info;
 
 	if (!check_info) {
+		VERBS_DBG(FI_LOG_FABRIC, "Unable to find check_info\n");
 		ret = -FI_ENODATA;
 		goto err2;
 	}
