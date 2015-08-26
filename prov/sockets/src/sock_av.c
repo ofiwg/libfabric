@@ -366,7 +366,7 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 		      const char *service, size_t svccnt, fi_addr_t *fi_addr,
 		      uint64_t flags, void *context)
 {
-	int ret = 0, success = 0, err_code = 0;
+	int ret = 0, success = 0, err_code = 0, len1, len2;
 	int var_port, var_host;
 	char base_host[FI_NAME_MAX] = {0};
 	char tmp_host[FI_NAME_MAX] = {0};
@@ -386,20 +386,26 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 		fmt = 0;
 	else 
 		fmt = offset;
-
+	
+	assert((hostlen-offset) < FI_NAME_MAX);
 	strncpy(base_host, node, hostlen - (offset));
 	var_port = atoi(service);
 	var_host = atoi(node + hostlen - offset);
 	
 	for (i = 0; i < nodecnt; i++) {
 		for (j = 0; j < svccnt; j++) {
-			sprintf(tmp_host, "%s%0*d", base_host, fmt, var_host + i);
-			sprintf(tmp_port, "%d", var_port + j);
-			if ((ret = _sock_av_insertsvc(av, tmp_host, tmp_port, fi_addr, flags, 
+			len1 = snprintf(tmp_host, FI_NAME_MAX, "%s%0*d", base_host, fmt, var_host + i);
+			len2 = snprintf(tmp_port, FI_NAME_MAX,  "%d", var_port + j);
+			if (len1 > 0 && len1 < FI_NAME_MAX && len2 > 0 && len2 < FI_NAME_MAX) {
+				if ((ret = _sock_av_insertsvc(av, tmp_host, tmp_port, fi_addr, flags, 
 						      context, i * nodecnt + j)) == 1) {
-				success++;
+					success++;
+				} else {
+					err_code = ret;
+				}	
 			} else {
-				err_code = ret;
+				SOCK_LOG_ERROR("Node/service value is not valid\n");
+				err_code = FI_ETOOSMALL;
 			}
 		}
 	}
