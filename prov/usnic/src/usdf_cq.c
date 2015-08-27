@@ -740,7 +740,10 @@ usdf_cq_read_common_soft(struct fid_cq *fcq, void *buf, size_t count,
 			break;
 
 		if (tail->cse_prov_errno > 0) {
-			return -FI_EAVAIL;
+			if (entry > (uint8_t *) buf)
+				break;
+			else
+				return -FI_EAVAIL;
 		}
 		ret = usdf_cq_copy_soft_entry(entry, tail, format);
 		if (ret < 0) {
