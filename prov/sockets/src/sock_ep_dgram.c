@@ -215,14 +215,21 @@ int sock_dgram_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 
 	if (hints && hints->rx_attr) {
 		(*info)->rx_attr->op_flags |= hints->rx_attr->op_flags;
+		if (hints->rx_attr->caps)
+			(*info)->rx_attr->caps = SOCK_EP_DGRAM_SEC_CAP | hints->rx_attr->caps;
 	}
 
 	if (hints && hints->tx_attr) {
 		(*info)->tx_attr->op_flags |= hints->tx_attr->op_flags;
+		if (hints->tx_attr->caps)
+			(*info)->tx_attr->caps = SOCK_EP_DGRAM_SEC_CAP | hints->tx_attr->caps;
 	}
 
-	(*info)->caps = SOCK_EP_DGRAM_CAP|
-			(*info)->rx_attr->caps | (*info)->tx_attr->caps;
+	(*info)->caps = SOCK_EP_DGRAM_CAP |
+                       (*info)->rx_attr->caps | (*info)->tx_attr->caps;
+        if (hints && hints->caps)
+                (*info)->caps = SOCK_EP_DGRAM_SEC_CAP | hints->caps;
+
 	return 0;
 }
 

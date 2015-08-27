@@ -269,6 +269,10 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 	default:
 		FI_WARN(&psmx_prov, FI_LOG_CQ,
 			"unsupported EQ format %d\n", cq->format);
+		if (event != event_in) {
+			memset(event, 0, sizeof(*event));
+			slist_insert_tail(&event->list_entry, &cq->free_list);
+		}
 		return NULL;
 	}
 
@@ -531,7 +535,8 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		if (ret > 0)
 			return ret;
 
-		psmx_am_progress(cq_priv->domain);
+		if (cq_priv->domain->am_initialized)
+			psmx_am_progress(cq_priv->domain);
 	}
 
 	if (cq_priv->pending_error)
@@ -589,10 +594,10 @@ static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 		memcpy(buf, &cq_priv->pending_error->cqe, sizeof *buf);
 		free(cq_priv->pending_error);
 		cq_priv->pending_error = NULL;
-		return sizeof *buf;
+		return 1;
 	}
 
-	return 0;
+	return -FI_EAGAIN;
 }
 
 static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,

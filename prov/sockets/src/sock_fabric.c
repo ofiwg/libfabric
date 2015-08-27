@@ -388,6 +388,8 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 {
 	int sock, ret;
 	socklen_t len;
+	struct addrinfo ai, *rai = NULL;
+	char hostname[HOST_NAME_MAX];
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0)
@@ -397,7 +399,24 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 	ret = connect(sock, (struct sockaddr*)dest_addr, len);
 	if (ret) {
 		SOCK_LOG_DBG("Failed to connect udp socket\n");
-		ret = -errno;
+
+		if (gethostname(hostname, sizeof hostname) != 0) {
+			SOCK_LOG_DBG("gethostname failed!\n");
+			ret = -FI_EINVAL;
+			goto out;
+		}
+
+		ret = getaddrinfo(hostname, NULL, &ai, &rai);
+		if (ret) {
+			SOCK_LOG_DBG("getaddrinfo failed!\n");
+			ret = -FI_EINVAL;
+			goto out;
+		}
+
+		memcpy(src_addr, (struct sockaddr_in *)rai->ai_addr,
+		       sizeof *src_addr);
+		freeaddrinfo(rai);
+		ret = 0;
 		goto out;
 	}
 

@@ -441,7 +441,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psmx_atomic_do_readwrite(addr, src, tmp_buf,
 							 datatype, op, count);
 			else
-				err = -FI_ENOMEM;
+				op_error = -FI_ENOMEM;
 
 			target_ep = mr->domain->atomics_ep;
 			if (op == FI_ATOMIC_READ) {
@@ -491,7 +491,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psmx_atomic_do_compwrite(addr, src, src + len,
 							 tmp_buf, datatype, op, count);
 			else
-				err = -FI_ENOMEM;
+				op_error = -FI_ENOMEM;
 
 			target_ep = mr->domain->atomics_ep;
 			cntr = target_ep->remote_write_cntr;
@@ -961,7 +961,7 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 	if (len > chunk_size)
 		return -FI_EMSGSIZE;
 
-	if (flags & FI_INJECT) {
+	if ((flags & FI_INJECT) && op != FI_ATOMIC_READ) {
 		req = malloc(sizeof(*req) + len);
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req+sizeof(*req), (void *)buf, len);
