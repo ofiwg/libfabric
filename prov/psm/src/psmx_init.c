@@ -373,6 +373,9 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	return 0;
 
 err_out:
+	if (dest_addr)
+		free(dest_addr);
+
 	return err;
 }
 
