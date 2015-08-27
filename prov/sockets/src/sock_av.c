@@ -395,7 +395,7 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 		for (j = 0; j < svccnt; j++) {
 			sprintf(tmp_host, "%s%0*d", base_host, fmt, var_host + i);
 			sprintf(tmp_port, "%d", var_port + j);
-			if ((ret = _sock_av_insertsvc(av, node, service, fi_addr, flags, 
+			if ((ret = _sock_av_insertsvc(av, tmp_host, tmp_port, fi_addr, flags, 
 						      context, i * nodecnt + j)) == 1) {
 				success++;
 			} else {
