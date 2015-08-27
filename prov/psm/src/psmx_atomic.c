@@ -441,7 +441,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psmx_atomic_do_readwrite(addr, src, tmp_buf,
 							 datatype, op, count);
 			else
-				err = -FI_ENOMEM;
+				op_error = -FI_ENOMEM;
 
 			target_ep = mr->domain->atomics_ep;
 			if (op == FI_ATOMIC_READ) {
