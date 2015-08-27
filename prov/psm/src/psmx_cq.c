@@ -594,10 +594,10 @@ static ssize_t psmx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 		memcpy(buf, &cq_priv->pending_error->cqe, sizeof *buf);
 		free(cq_priv->pending_error);
 		cq_priv->pending_error = NULL;
-		return sizeof *buf;
+		return 1;
 	}
 
-	return 0;
+	return -FI_EAGAIN;
 }
 
 static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
