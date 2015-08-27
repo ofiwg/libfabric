@@ -217,6 +217,9 @@ int sock_conn_map_connect(struct sock_ep *ep,
 	int do_retry = 5;
 
 	*index = 0;
+	memcpy(&src_addr, ep->src_addr, sizeof src_addr);
+
+bind_retry:
 	conn_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (conn_fd < 0) {
 		SOCK_LOG_ERROR("failed to create conn_fd, errno: %d\n", errno);
@@ -224,9 +227,7 @@ int sock_conn_map_connect(struct sock_ep *ep,
 		return -errno;
 	}
 
-	memcpy(&src_addr, ep->src_addr, sizeof src_addr);
 	src_addr.sin_port = 0;
-
 	sock_set_sockopt_reuseaddr(conn_fd);
 	if (bind(conn_fd, (struct sockaddr*) &src_addr, sizeof(src_addr))) {
 		SOCK_LOG_ERROR("bind failed : %s\n", strerror(errno));
@@ -267,6 +268,12 @@ retry:
 			SOCK_LOG_ERROR("Connect timed out, retrying - %s\n",
 				       strerror(errno));
 			goto retry;
+		} else if (errno == EADDRNOTAVAIL && do_retry) {
+			do_retry--;
+			SOCK_LOG_ERROR("Connect failed with address not available, retrying - %s\n",
+				       strerror(errno));
+			close(conn_fd);
+			goto bind_retry;
 		} else {
 			SOCK_LOG_ERROR("Error connecting %d - %s\n", errno,
 				       strerror(errno));
