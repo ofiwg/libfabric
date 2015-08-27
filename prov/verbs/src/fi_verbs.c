@@ -1090,26 +1090,30 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 
 	ret = fi_ibv_init_info();
 	if (ret)
-		return ret;
+		goto err1;
 
 	ret = fi_ibv_create_ep(node, service, flags, hints, &rai, &id);
 	if (ret)
-		return ret;
+		goto err1;
 
 	check_info = id->verbs ? fi_ibv_search_verbs_info(NULL,
 			ibv_get_device_name(id->verbs->device)) : verbs_info;
 
 	if (!check_info) {
 		ret = -FI_ENODATA;
-		goto err;
+		goto err2;
 	}
 
 	ret = fi_ibv_get_matching_info(check_info, hints, rai, info);
 
-err:
+err2:
 	rdma_destroy_ep(id);
 	rdma_freeaddrinfo(rai);
-	return ret;
+err1:
+	if (!ret || ret == -FI_ENOMEM)
+		return ret;
+	else
+		return -FI_ENODATA;
 }
 
 static int fi_ibv_msg_ep_create_qp(struct fi_ibv_msg_ep *ep)
