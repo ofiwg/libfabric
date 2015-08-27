@@ -535,7 +535,8 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		if (ret > 0)
 			return ret;
 
-		psmx_am_progress(cq_priv->domain);
+		if (cq_priv->domain->am_initialized)
+			psmx_am_progress(cq_priv->domain);
 	}
 
 	if (cq_priv->pending_error)
