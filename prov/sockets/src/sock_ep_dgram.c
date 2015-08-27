@@ -227,7 +227,7 @@ int sock_dgram_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 
 	(*info)->caps = SOCK_EP_DGRAM_CAP |
                        (*info)->rx_attr->caps | (*info)->tx_attr->caps;
-        if (hints->caps)
+        if (hints && hints->caps)
                 (*info)->caps = SOCK_EP_DGRAM_SEC_CAP | hints->caps;
 
 	return 0;
