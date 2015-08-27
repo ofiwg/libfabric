@@ -269,6 +269,10 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 	default:
 		FI_WARN(&psmx_prov, FI_LOG_CQ,
 			"unsupported EQ format %d\n", cq->format);
+		if (event != event_in) {
+			memset(event, 0, sizeof(*event));
+			slist_insert_tail(&event->list_entry, &cq->free_list);
+		}
 		return NULL;
 	}
 
