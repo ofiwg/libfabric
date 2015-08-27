@@ -333,6 +333,8 @@ int psmx_am_process_send(struct psmx_fid_domain *domain, struct psmx_am_request 
 					PSMX_AM_MSG_HANDLER, args, 4,
 					req->send.buf+offset, chunk_size,
 					am_flags, NULL, NULL);
+		if (err)
+			return psmx_errno(err);
 
 		len -= chunk_size;
 		offset += chunk_size;
