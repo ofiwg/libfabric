@@ -389,6 +389,7 @@ libdl_done:
 #endif
 
 	fi_register_provider(PSM_INIT, NULL);
+	fi_register_provider(PSM2_INIT, NULL);
 	fi_register_provider(USNIC_INIT, NULL);
 	fi_register_provider(VERBS_INIT, NULL);
         /* Initialize the sockets provider last.  This will result in

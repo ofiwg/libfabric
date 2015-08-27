@@ -202,6 +202,7 @@ AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [$ac_prog_cc_alias_symbols],
 dnl Provider-specific checks
 FI_PROVIDER_INIT
 FI_PROVIDER_SETUP([psm])
+FI_PROVIDER_SETUP([psm2])
 FI_PROVIDER_SETUP([sockets])
 FI_PROVIDER_SETUP([verbs])
 FI_PROVIDER_SETUP([usnic])

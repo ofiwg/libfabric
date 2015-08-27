@@ -11,6 +11,8 @@ lib_LTLIBRARIES = src/libfabric.la
 
 pkglib_LTLIBRARIES = $(DL_PROVIDERS)
 
+noinst_LTLIBRARIES =
+
 ACLOCAL_AMFLAGS = -I config
 AM_CFLAGS = -g -Wall
 
@@ -64,6 +66,7 @@ endif
 src_libfabric_la_CPPFLAGS = $(AM_CPPFLAGS)
 src_libfabric_la_LDFLAGS =
 src_libfabric_la_LIBADD =
+src_libfabric_la_DEPENDENCIES = $(srcdir)/libfabric.map
 
 if HAVE_SOCKETS
 _sockets_files = \
@@ -263,9 +266,9 @@ endif HAVE_USNIC
 
 if HAVE_PSM
 _psm_files = \
+	prov/psm/src/version.h \
 	prov/psm/src/psm_am.h \
 	prov/psm/src/psmx.h \
-	prov/psm/src/psm_am.h \
 	prov/psm/src/psmx_init.c \
 	prov/psm/src/psmx_domain.c \
 	prov/psm/src/psmx_cq.c \
@@ -294,18 +297,63 @@ libpsmx_fi_la_LDFLAGS = \
 libpsmx_fi_la_LIBADD = $(linkback) $(psm_LIBS)
 libpsmx_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_PSM_DL
-src_libfabric_la_SOURCES += $(_psm_files)
-src_libfabric_la_CPPFLAGS += $(psm_CPPFLAGS)
-src_libfabric_la_LDFLAGS += $(psm_LDFLAGS)
-src_libfabric_la_LIBADD += $(psm_LIBS)
+noinst_LTLIBRARIES += libpsmx.la
+libpsmx_la_SOURCES = $(_psm_files)
+libpsmx_la_CPPFLAGS = $(src_libfabric_la_CPPFLAGS) $(psm_CPPFLAGS)
+libpsmx_la_LDFLAGS = $(psm_LDFLAGS)
+libpsmx_la_LIBADD = $(psm_LIBS)
+src_libfabric_la_LIBADD += libpsmx.la
+src_libfabric_la_DEPENDENCIES += libpsmx.la
 endif !HAVE_PSM_DL
 
 endif HAVE_PSM
 
+if HAVE_PSM2
+_psm2_files = \
+	prov/psm2/src/makefile \
+	prov/psm2/src/version.h \
+	prov/psm2/src/psmx.h \
+	prov/psm2/src/psmx_init.c \
+	prov/psm2/src/psmx_domain.c \
+	prov/psm2/src/psmx_cq.c \
+	prov/psm2/src/psmx_eq.c \
+	prov/psm2/src/psmx_cntr.c \
+	prov/psm2/src/psmx_av.c \
+	prov/psm2/src/psmx_ep.c \
+	prov/psm2/src/psmx_cm.c \
+	prov/psm2/src/psmx_tagged.c \
+	prov/psm2/src/psmx_msg.c \
+	prov/psm2/src/psmx_msg2.c \
+	prov/psm2/src/psmx_rma.c \
+	prov/psm2/src/psmx_atomic.c \
+	prov/psm2/src/psmx_am.c \
+	prov/psm2/src/psmx_mr.c \
+	prov/psm2/src/psmx_wait.c \
+	prov/psm2/src/psmx_poll.c \
+	prov/psm2/src/psmx_util.c
+
+if HAVE_PSM2_DL
+pkglib_LTLIBRARIES += libpsmx2-fi.la
+libpsmx2_fi_la_SOURCES = $(_psm2_files) $(common_srcs)
+libpsmx2_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(psm2_CPPFLAGS)
+libpsmx2_fi_la_LDFLAGS = \
+    -module -avoid-version -shared -export-dynamic $(psm2_LDFLAGS)
+libpsmx2_fi_la_LIBADD = $(linkback) $(psm2_LIBS)
+libpsmx2_fi_la_DEPENDENCIES = $(linkback)
+else !HAVE_PSM2_DL
+noinst_LTLIBRARIES += libpsmx2.la
+libpsmx2_la_SOURCES = $(_psm2_files)
+libpsmx2_la_CPPFLAGS = $(src_libfabric_la_CPPFLAGS) $(psm2_CPPFLAGS)
+libpsmx2_la_LDFLAGS = $(psm2_LDFLAGS)
+libpsmx2_la_LIBADD = $(psm2_LIBS)
+src_libfabric_la_LIBADD += libpsmx2.la
+src_libfabric_la_DEPENDENCIES += libpsmx2.la
+endif !HAVE_PSM2_DL
+
+endif HAVE_PSM2
+
 src_libfabric_la_LDFLAGS += -version-info 2:0:1 -export-dynamic \
 			   $(libfabric_version_script)
-src_libfabric_la_DEPENDENCIES = $(srcdir)/libfabric.map
-
 rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fabric.h \
 	$(top_srcdir)/include/rdma/fi_atomic.h \

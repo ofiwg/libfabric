@@ -11,7 +11,7 @@ The PSM Fabric Provider
 
 # OVERVIEW
 
-The *psm* provider runs over the PSM interface that is currently
+The *psm* provider runs over the PSM 1.x interface that is currently
 supported by the Intel TrueScale Fabric. PSM provides tag-matching
 message queue functions that are optimized for MPI implementations.
 PSM also has limited Active Message support, which is not officially
@@ -20,6 +20,18 @@ published but is quite stable and well documented in the source code
 tag-matching message queue functions and the Active Message functions
 to support a variety of libfabric data transfer APIs, including tagged
 message queue, message queue, RMA, and atomic operations.
+
+The *psm2* provider runs over the PSM 2.0 interface that is
+supported by the Intel Omni-Path Fabric. PSM 2.0 is fully backward
+compatible with PSM 1.x and adds some new functions with enhanced
+capability. PSM 2.0 also makes the Active Message support official.
+However, the official Active Message API is slightly different from
+the PSM 1.x version. As a result, the *psm2* provider only works with
+PSM 2.0 and the *psm* provider only works with PSM 1.x.
+
+Unless specifically indicated, the description of the *psm* provider
+in the remaining part of this document also applies to the *psm2*
+provider.
 
 # LIMITATIONS
 
@@ -43,7 +55,8 @@ Endpoint capabilities
 
   *FI_MULTI_RECV* is supported for non-tagged message queue only.
 
-  Other supported capabilities include *FI_TRIGGER*.
+  Other supported capabilities include *FI_TRIGGER*. The *psm2* provider
+  also supports *FI_REMOTE_CQ_DATA*.
 
 Modes
 : *FI_CONTEXT* is required. That means, all the requests that generate
@@ -64,9 +77,11 @@ Unsupported features
 
 # RUNTIME PARAMETERS
 
-The *psm* provider checks for the following environment variables:
+The *psm* provider checks for the following environment variables (
+different variable names are used for the *psm* provider and the
+*psm2* provider):
 
-*FI_PSM_UUID*
+*FI_PSM_UUID* / *FI_PSM2_UUID*
 : PSM requires that each job has a unique ID (UUID). All the processes
   in the same job need to use the same UUID in order to be able to
   talk to each other. The PSM reference manual advises to keep UUID
@@ -79,7 +94,7 @@ The *psm* provider checks for the following environment variables:
 
   The default UUID is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF.
 
-*FI_PSM_NAME_SERVER*
+*FI_PSM_NAME_SERVER* / *FI_PSM2_NAME_SERVER*
 : The *psm* provider has a simple built-in name server that can be used
   to resolve an IP address or host name into a transport address needed
   by the *fi_av_insert* call. The main purpose of this name server is to
@@ -100,7 +115,10 @@ The *psm* provider checks for the following environment variables:
   variable to 0. This may save a small amount of resource since a separate
   thread is created when the name server is on.
 
-*FI_PSM_TAGGED_RMA*
+  The provider detects OpenMPI and MPICH runs and changes the default setting
+  to off.
+
+*FI_PSM_TAGGED_RMA* / *FI_PSM2_TAGGED_RMA*
 : The RMA functions are implemented on top of the PSM Active Message functions.
   The Active Message functions has limit on the size of data can be transferred
   in a single message. Large transfers can be divided into small chunks and
@@ -112,7 +130,7 @@ The *psm* provider checks for the following environment variables:
    
   The option is on by default. To turn it off set the variable to 0.
 
-*FI_PSM_AM_MSG*
+*FI_PSM_AM_MSG* / *FI_PSM2_AM_MSG*
 : The *psm* provider implements the non-tagged message queue over the PSM
   tag-matching message queue. One tag bit is reserved for this purpose.
   Alternatively, the non-tagged message queue can be implemented over

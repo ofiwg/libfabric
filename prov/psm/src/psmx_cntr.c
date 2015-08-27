@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,6 +36,16 @@ int psmx_process_trigger(struct psmx_fid_domain *domain, struct psmx_trigger *tr
 {
 	switch (trigger->op) {
 	case PSMX_TRIGGERED_SEND:
+#if (PSM_VERNO_MAJOR >= 2)
+		_psmx_send(trigger->send.ep,
+			   trigger->send.buf,
+			   trigger->send.len,
+			   trigger->send.desc,
+			   trigger->send.dest_addr,
+			   trigger->send.context,
+			   trigger->send.flags,
+			   trigger->send.data);
+#else
 		_psmx_send(trigger->send.ep,
 			   trigger->send.buf,
 			   trigger->send.len,
@@ -43,6 +53,7 @@ int psmx_process_trigger(struct psmx_fid_domain *domain, struct psmx_trigger *tr
 			   trigger->send.dest_addr,
 			   trigger->send.context,
 			   trigger->send.flags);
+#endif
 		break;
 	case PSMX_TRIGGERED_RECV:
 		_psmx_recv(trigger->recv.ep,
@@ -54,6 +65,17 @@ int psmx_process_trigger(struct psmx_fid_domain *domain, struct psmx_trigger *tr
 			   trigger->recv.flags);
 		break;
 	case PSMX_TRIGGERED_TSEND:
+#if (PSM_VERNO_MAJOR >= 2)
+			_psmx_tagged_send(trigger->tsend.ep,
+					  trigger->tsend.buf,
+					  trigger->tsend.len,
+					  trigger->tsend.desc,
+					  trigger->tsend.dest_addr,
+					  trigger->tsend.tag,
+					  trigger->tsend.context,
+					  trigger->tsend.flags,
+					  trigger->tsend.data);
+#else
 		_psmx_tagged_send(trigger->tsend.ep,
 				  trigger->tsend.buf,
 				  trigger->tsend.len,
@@ -62,6 +84,7 @@ int psmx_process_trigger(struct psmx_fid_domain *domain, struct psmx_trigger *tr
 				  trigger->tsend.tag,
 				  trigger->tsend.context,
 				  trigger->tsend.flags);
+#endif
 		break;
 	case PSMX_TRIGGERED_TRECV:
 		_psmx_tagged_recv(trigger->trecv.ep,

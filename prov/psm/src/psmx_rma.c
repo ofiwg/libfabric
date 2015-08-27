@@ -72,8 +72,13 @@ static inline void psmx_am_enqueue_rma(struct psmx_fid_domain *domain,
  *	args[2].u64	offset
  */
 
+#if (PSM_VERNO_MAJOR >= 2)
+int psmx_am_rma_handler(psm_am_token_t token,
+			psm_amarg_t *args, int nargs, void *src, uint32_t len)
+#else
 int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			psm_amarg_t *args, int nargs, void *src, uint32_t len)
+#endif
 {
 	psm_amarg_t rep_args[8];
 	void *rma_addr;
@@ -86,6 +91,11 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	struct psmx_cq_event *event;
 	uint64_t offset;
 	struct psmx_fid_mr *mr;
+#if (PSM_VERNO_MAJOR >= 2)
+	psm_epaddr_t epaddr;
+
+	psm_am_get_source(token, &epaddr);
+#endif
 
 	cmd = args[0].u32w0 & PSMX_AM_OP_MASK;
 	eom = args[0].u32w0 & PSMX_AM_EOM;
