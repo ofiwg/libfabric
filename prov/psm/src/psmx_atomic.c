@@ -961,7 +961,7 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 	if (len > chunk_size)
 		return -FI_EMSGSIZE;
 
-	if (flags & FI_INJECT) {
+	if ((flags & FI_INJECT) && op != FI_ATOMIC_READ) {
 		req = malloc(sizeof(*req) + len);
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req+sizeof(*req), (void *)buf, len);
