@@ -208,19 +208,19 @@ int sock_verify_info(struct fi_info *hints)
 	switch (ep_type) {
 	case FI_EP_UNSPEC:
 	case FI_EP_MSG:
-		caps = SOCK_EP_MSG_PRI_CAP | SOCK_EP_MSG_SEC_CAP;
+		caps = SOCK_EP_MSG_CAP;
 		ret = sock_msg_verify_ep_attr(hints->ep_attr,
 					      hints->tx_attr,
 					      hints->rx_attr);
 		break;
 	case FI_EP_DGRAM:
-		caps = SOCK_EP_DGRAM_PRI_CAP | SOCK_EP_DGRAM_SEC_CAP;
+		caps = SOCK_EP_DGRAM_CAP;
 		ret = sock_dgram_verify_ep_attr(hints->ep_attr,
 						hints->tx_attr,
 						hints->rx_attr);
 		break;
 	case FI_EP_RDM:
-		caps = SOCK_EP_RDM_PRI_CAP | SOCK_EP_RDM_SEC_CAP;
+		caps = SOCK_EP_RDM_CAP;
 		ret = sock_rdm_verify_ep_attr(hints->ep_attr,
 					      hints->tx_attr,
 					      hints->rx_attr);
