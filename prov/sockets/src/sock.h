@@ -443,18 +443,10 @@ struct sock_eq {
 struct sock_comp {
 	uint8_t send_cq_event;
 	uint8_t recv_cq_event;
-	uint8_t read_cq_event;
-	uint8_t write_cq_event;
-	uint8_t rem_read_cq_event;
-	uint8_t rem_write_cq_event;
 	char reserved[2];
 
 	struct sock_cq	*send_cq;
 	struct sock_cq	*recv_cq;
-	struct sock_cq	*read_cq;
-	struct sock_cq	*write_cq;
-	struct sock_cq *rem_read_cq;
-	struct sock_cq *rem_write_cq;
 
 	struct sock_cntr *send_cntr;
 	struct sock_cntr *recv_cntr;
@@ -580,8 +572,6 @@ struct sock_rx_ctx {
 	uint8_t progress;
 
 	uint8_t recv_cq_event;
-	uint8_t rem_read_cq_event;
-	uint8_t rem_write_cq_event;
 	uint16_t buffered_len;
 	uint16_t min_multi_recv;
 	uint16_t num_left;
@@ -957,9 +947,6 @@ int sock_ep_enable(struct fid_ep *ep);
 int sock_ep_disable(struct fid_ep *ep);
 int sock_ep_is_send_cq_low(struct sock_comp *comp, uint64_t flags);
 int sock_ep_is_recv_cq_low(struct sock_comp *comp, uint64_t flags);
-int sock_ep_is_write_cq_low(struct sock_comp *comp, uint64_t flags);
-int sock_ep_is_read_cq_low(struct sock_comp *comp, uint64_t flags);
-
 
 int sock_stx_ctx(struct fid_domain *domain,
 		 struct fi_tx_attr *attr, struct fid_stx **stx, void *context);
