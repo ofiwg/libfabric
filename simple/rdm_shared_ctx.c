@@ -397,7 +397,7 @@ static int run(void)
 	if (ret)
 		goto out;
 
-	run_test();
+	ret = run_test();
 	/* TODO: Add a local finalize applicable to shared ctx */
 	//ft_finalize(fi, ep_array[0], txcq, rxcq, remote_fi_addr[0]);
 out:

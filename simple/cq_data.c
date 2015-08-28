@@ -250,7 +250,7 @@ static int run(void)
 		return ret;
 	}
 
-	run_test();
+	ret = run_test();
 
 	fi_shutdown(ep, 0);
 	return ret;
