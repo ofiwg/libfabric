@@ -205,7 +205,7 @@ static int run_test()
 			return ret;
 		}
 
-		wait_for_completion(txcq, 1);
+		wait_for_data_completion(txcq, 1);
 		fprintf(stdout, "Done\n");
 	} else {
 		fprintf(stdout, "Waiting for immediate data from client\n");
