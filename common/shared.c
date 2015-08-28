@@ -119,7 +119,7 @@ int ft_alloc_bufs(void)
 	}
 
 	rx_buf = buf;
-	tx_buf = (char *) buf + (rx_size >> 1);
+	tx_buf = (char *) buf + rx_size;
 
 	return 0;
 }
