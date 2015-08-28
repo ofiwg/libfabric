@@ -145,7 +145,7 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = wait_for_data_completion(txcq, fi->tx_attr->size - tx_credits);
+	ret = ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
 	if (ret) {
 		return ret;
 	}
@@ -218,7 +218,8 @@ static int run_test(void)
 		}
 		if (ret)
 			return ret;
-		ret = wait_for_data_completion(txcq, 1);
+
+		ret = ft_wait_for_comp(txcq, 1);
 		if (ret)
 			return ret;
 	}
@@ -452,7 +453,7 @@ static int run(void)
 	}
 
 	sync_test();
-	wait_for_data_completion(txcq, fi->tx_attr->size - tx_credits);
+	ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
 	/* Finalize before closing ep */
 	ft_finalize(fi, ep, txcq, rxcq, FI_ADDR_UNSPEC);
 out:

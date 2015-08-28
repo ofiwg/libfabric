@@ -244,7 +244,7 @@ static int run(void)
 			goto out;
 	}
 
-	ret = wait_for_completion(txcq, fi->tx_attr->size - tx_credits);
+	ret = ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
 	/* Finalize before closing ep */
 	ft_finalize(fi, ep, txcq, rxcq, FI_ADDR_UNSPEC);
 out:

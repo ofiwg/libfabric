@@ -242,7 +242,7 @@ static int run(void)
 			goto out;
 	}
 
-	wait_for_completion(txcq, fi->tx_attr->size - tx_credits);
+	ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
 	/* Finalize before closing ep */
 	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:

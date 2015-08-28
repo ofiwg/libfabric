@@ -71,7 +71,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	ret = wait_for_data_completion(txcq, 1);
+	ret = ft_wait_for_comp(txcq, 1);
 
 	return ret;
 }
@@ -86,7 +86,7 @@ static int recv_msg(void)
 		return ret;
 	}
 
-	ret = wait_for_data_completion(rxcq, 1);
+	ret = ft_wait_for_comp(rxcq, 1);
 
 	return ret;
 }
@@ -203,7 +203,8 @@ static int run_test(void)
 		}
 		if (ret)
 			return ret;
-		ret = wait_for_data_completion(txcq, 1);
+
+		ret = ft_wait_for_comp(txcq, 1);
 		if (ret)
 			return ret;
 	}

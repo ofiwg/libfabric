@@ -58,22 +58,6 @@ struct fi_context fi_ctx_av;
 static uint64_t tag_data = 0;
 static uint64_t tag_control = 0x12345678;
 
-int wait_for_completion_tagged(struct fid_cq *cq, int num_completions)
-{
-	int ret;
-	struct fi_cq_tagged_entry comp;
-
-	while (num_completions > 0) {
-		ret = fi_cq_read(cq, &comp, 1);
-		if (ret > 0) {
-			num_completions--;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			FT_PRINTERR("fi_cq_read", ret);
-			return ret;
-		}
-	}
-	return 0;
-}
 
 static int send_xfer(int size)
 {
@@ -141,7 +125,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	ret = wait_for_completion_tagged(txcq, 1);
+	ret = ft_wait_for_comp(txcq, 1);
 
 	return ret;
 }
@@ -157,7 +141,7 @@ static int recv_msg(void)
 		return ret;
 	}
 
-	ret = wait_for_completion_tagged(rxcq, 1);
+	ret = ft_wait_for_comp(rxcq, 1);
 
 	return ret;
 }
@@ -166,7 +150,7 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = wait_for_completion_tagged(txcq, fi->tx_attr->size - tx_credits);
+	ret = ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
 	if (ret) {
 		return ret;
 	}
@@ -378,7 +362,7 @@ static int run(void)
 			goto out;
 	}
 
-	wait_for_completion_tagged(txcq, fi->tx_attr->size - tx_credits);
+	ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
 	/* Finalize before closing ep */
 	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
