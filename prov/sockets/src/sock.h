@@ -87,6 +87,7 @@
 #define SOCK_EQ_DEF_SZ (1<<8)
 #define SOCK_CQ_DEF_SZ (1<<8)
 #define SOCK_AV_DEF_SZ (1<<8)
+#define SOCK_CMAP_DEF_SZ (1<<10)
 
 #define SOCK_CQ_DATA_SIZE (sizeof(uint64_t))
 #define SOCK_TAG_SIZE (sizeof(uint64_t))
@@ -1048,6 +1049,10 @@ void sock_conn_map_destroy(struct sock_conn_map *cmap);
 void sock_set_sockopts(int sock);
 int fd_set_nonblock(int fd);
 int sock_conn_map_init(struct sock_conn_map *map, int init_size);
+void sock_set_sockopt_reuseaddr(int sock);
+#ifdef HAVE_SO_REUSEPORT
+int sock_set_sockopt_reuseport(int sock);
+#endif
 
 struct sock_pe *sock_pe_init(struct sock_domain *domain);
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);

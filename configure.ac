@@ -143,6 +143,13 @@ AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,
         ac_cv_version_script=no
     fi])
 
+AC_CHECK_DECL([SO_REUSEPORT],
+    AC_DEFINE(HAVE_SO_REUSEPORT,1,[Define to 1 if you have SO_REUSEPORT]),
+    ,[
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    ])
+
 AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 
 dnl Disable symbol versioning when -ipo is in CFLAGS or ipo is disabled by icc.

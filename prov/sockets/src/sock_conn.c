@@ -173,13 +173,26 @@ int fd_set_nonblock(int fd)
 	return ret;
 }
 
-static void sock_set_sockopt_reuseaddr(int sock)
+void sock_set_sockopt_reuseaddr(int sock)
 {
 	int optval;
 	optval = 1;
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval))
 		SOCK_LOG_ERROR("setsockopt reuseaddr failed\n");
 }
+
+#ifdef HAVE_SO_REUSEPORT
+int sock_set_sockopt_reuseport(int sock)
+{
+	int optval;
+	optval = 1;
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof optval)) {
+		SOCK_LOG_DBG("setsockopt reuseport failed\n");
+		return -1;
+	}
+	return 0;
+}
+#endif
 
 void sock_set_sockopts_conn(int sock)
 {
@@ -201,6 +214,24 @@ void sock_set_sockopts(int sock)
 
 	fd_set_nonblock(sock);
 }
+
+static int sock_conn_bind_port(struct sockaddr_in *src_addr, int conn_fd)
+{
+#ifdef HAVE_SO_REUSEPORT
+	if (sock_set_sockopt_reuseport(conn_fd))
+#endif
+	{
+		src_addr->sin_port = 0;
+		if (bind(conn_fd, src_addr, sizeof(*src_addr))) {
+			SOCK_LOG_ERROR("bind failed : %s\n", strerror(errno));
+			close(conn_fd);
+			errno = FI_EOTHER;
+			return -errno;
+		}
+	}
+	return 0;
+}
+
 
 int sock_conn_map_connect(struct sock_ep *ep,
 			       struct sock_domain *dom,
@@ -226,16 +257,12 @@ bind_retry:
 		errno = FI_EOTHER;
 		return -errno;
 	}
-
-	src_addr.sin_port = 0;
 	sock_set_sockopt_reuseaddr(conn_fd);
-	if (bind(conn_fd, (struct sockaddr*) &src_addr, sizeof(src_addr))) {
-		SOCK_LOG_ERROR("bind failed : %s\n", strerror(errno));
-		close(conn_fd);
-		errno = FI_EOTHER;
-		return -errno;
+	ret = sock_conn_bind_port(&src_addr, conn_fd);
+	if (ret) {
+		return ret;
 	}
-	
+
 	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
 		      ntohs(addr->sin_port));
 	SOCK_LOG_DBG("Connecting using address:%s\n",
@@ -473,7 +500,10 @@ int sock_conn_listen(struct sock_ep *ep)
 		listen_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (listen_fd >= 0) {
 			sock_set_sockopts(listen_fd);
-			
+#ifdef HAVE_SO_REUSEPORT
+			if (sock_set_sockopt_reuseport(listen_fd))
+				SOCK_LOG_DBG("reuseport sockopt failed\n");
+#endif			
 			if (!bind(listen_fd, s_res->ai_addr, s_res->ai_addrlen))
 				break;
 			close(listen_fd);
