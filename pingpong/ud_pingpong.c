@@ -272,7 +272,7 @@ static int run(void)
 			goto out;
 	}
 
-	ret = wait_for_completion(txcq, fi->tx_attr->size - tx_credits);
+	ret = ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
 	if (ret)
 		return ret;
 	tx_credits = fi->tx_attr->size;

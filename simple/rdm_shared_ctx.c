@@ -62,7 +62,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	ret = wait_for_completion(txcq, 1);
+	ret = ft_wait_for_comp(txcq, 1);
 
 	return ret;
 }
@@ -77,7 +77,7 @@ static int recv_msg(void)
 		return ret;
 	}
 
-	ret = wait_for_completion(rxcq, 1);
+	ret = ft_wait_for_comp(rxcq, 1);
 
 	return ret;
 }
@@ -209,13 +209,13 @@ static int run_test()
 				return ret;
 			}
 
-			wait_for_completion(txcq, 1);
+			ft_wait_for_comp(txcq, 1);
 		}
 	}
 
 	/* Wait for recv completions */
 	for (i = 0; i < ep_cnt; i++) {
-		wait_for_completion(rxcq, 1);
+		ft_wait_for_comp(rxcq, 1);
 	}
 
 	if (!opts.dst_addr) {
@@ -229,7 +229,7 @@ static int run_test()
 				return ret;
 			}
 
-			wait_for_completion(txcq, 1);
+			ft_wait_for_comp(txcq, 1);
 		}
 	}
 

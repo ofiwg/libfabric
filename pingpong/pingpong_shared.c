@@ -104,7 +104,7 @@ int send_xfer(int size)
 	int ret;
 
 	if (!tx_credits) {
-		ret = wait_for_completion(txcq, 1);
+		ret = ft_wait_for_comp(txcq, 1);
 		if (ret)
 			return ret;
 	} else {
@@ -134,7 +134,7 @@ int send_msg(int size)
 		return ret;
 	}
 
-	ret = wait_for_completion(txcq, 1);
+	ret = ft_wait_for_comp(txcq, 1);
 
 	return ret;
 }
@@ -146,7 +146,7 @@ int recv_xfer(int size, bool enable_timeout)
 	if (enable_timeout)
 		ret = wait_for_completion_timeout(rxcq, 1);
 	else
-		ret = wait_for_completion(rxcq, 1);
+		ret = ft_wait_for_comp(rxcq, 1);
 
 	if (ret)
 		return ret;
@@ -180,7 +180,7 @@ int recv_msg(int size, bool enable_timeout)
 	if (enable_timeout)
 		ret = wait_for_completion_timeout(rxcq, 1);
 	else
-		ret = wait_for_completion(rxcq, 1);
+		ret = ft_wait_for_comp(rxcq, 1);
 
 	return ret;
 }
@@ -189,7 +189,7 @@ int sync_test(bool enable_timeout)
 {
 	int ret;
 
-	ret = wait_for_completion(txcq, fi->tx_attr->size - tx_credits);
+	ret = ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
 	if (ret)
 		return ret;
 	tx_credits = fi->tx_attr->size;

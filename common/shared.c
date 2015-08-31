@@ -490,31 +490,13 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 		opts->iterations = size_to_count(opts->transfer_size);
 }
 
-int wait_for_data_completion(struct fid_cq *cq, int num_completions)
+/*
+ * fi_cq_err_entry can be cast to any CQ entry format.
+ */
+int ft_wait_for_comp(struct fid_cq *cq, int num_completions)
 {
+	struct fi_cq_err_entry comp;
 	int ret;
-	struct fi_cq_data_entry comp;
-
-	while (num_completions > 0) {
-		ret = fi_cq_read(cq, &comp, 1);
-		if (ret > 0) {
-			num_completions--;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(cq, "cq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	}
-	return 0;
-}
-
-int wait_for_completion(struct fid_cq *cq, int num_completions)
-{
-	int ret;
-	struct fi_cq_entry comp;
 
 	while (num_completions > 0) {
 		ret = fi_cq_read(cq, &comp, 1);
@@ -612,8 +594,8 @@ int ft_finalize(
 		goto err;
 	}
 
-	wait_for_data_completion(txcq, 1);
-	wait_for_data_completion(rxcq, 1);
+	ft_wait_for_comp(txcq, 1);
+	ft_wait_for_comp(rxcq, 1);
 
 err:
 	free(buf);

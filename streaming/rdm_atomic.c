@@ -116,7 +116,7 @@ static int post_recv(void)
 		return ret;
 	}
 
-	return wait_for_completion(rxcq, 1);
+	return ft_wait_for_comp(rxcq, 1);
 }
 
 static int send_msg(int size)
@@ -130,7 +130,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	return wait_for_completion(txcq, 1);
+	return ft_wait_for_comp(txcq, 1);
 }
 
 static int sync_test(void)
@@ -196,7 +196,7 @@ static int execute_base_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_atomic", ret);
 	} else {
-		ret = wait_for_completion(txcq, 1);
+		ret = ft_wait_for_comp(txcq, 1);
 	}
 
 	return ret;
@@ -212,7 +212,7 @@ static int execute_fetch_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_fetch_atomic", ret);
 	} else {
-		ret = wait_for_completion(txcq, 1);
+		ret = ft_wait_for_comp(txcq, 1);
 	}
 
 	return ret;
@@ -229,7 +229,7 @@ static int execute_compare_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_compare_atomic", ret);
 	} else {
-		ret = wait_for_completion(txcq, 1);
+		ret = ft_wait_for_comp(txcq, 1);
 	}
 
 	return ret;

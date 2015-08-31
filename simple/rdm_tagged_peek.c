@@ -56,22 +56,6 @@ static uint64_t tag_data = 1;
 static uint64_t tag_control = 0x12345678;
 static uint64_t tag_param = 0x87654321;
 
-int wait_for_tagged_completion(struct fid_cq *cq, int num_completions)
-{
-	int ret;
-	struct fi_cq_tagged_entry comp;
-
-	while (num_completions > 0) {
-		ret = fi_cq_read(cq, &comp, 1);
-		if (ret > 0) {
-			num_completions--;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			FT_PRINTERR("fi_cq_read", ret);
-			return ret;
-		}
-	}
-	return 0;
-}
 
 static int send_msg(int size, uint64_t tag)
 {
@@ -82,7 +66,7 @@ static int send_msg(int size, uint64_t tag)
 	if (ret)
 		FT_PRINTERR("fi_tsend", ret);
 
-	ret = wait_for_tagged_completion(txcq, 1);
+	ret = ft_wait_for_comp(txcq, 1);
 
 	return ret;
 }
@@ -96,7 +80,7 @@ static int recv_msg(uint64_t tag)
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
 
-	ret = wait_for_tagged_completion(rxcq, 1);
+	ret = ft_wait_for_comp(rxcq, 1);
 	return ret;
 }
 
@@ -269,7 +253,7 @@ static int tagged_peek(uint64_t tag)
 	} else {
 		// search was initiated asynchronously, so wait for
 		// the completion event
-		ret = wait_for_tagged_completion(rxcq, 1);
+		ret = ft_wait_for_comp(rxcq, 1);
 	}
 
 	return ret;
@@ -305,8 +289,7 @@ static int run(void)
 		if (ret)
 			goto out;
 
-		// wait for the completion event of the next tag
-		ret = wait_for_tagged_completion(rxcq, 1);
+		ret = ft_wait_for_comp(rxcq, 1);
 		if (ret)
 			goto out;
 		fprintf(stdout, "Received completion event for msg with tag "

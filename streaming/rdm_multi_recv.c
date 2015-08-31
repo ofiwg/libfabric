@@ -74,23 +74,6 @@ enum data_type {
 	CONTROL
 };
 
-int wait_for_send_completion(int num_completions)
-{
-	int ret;
-	struct fi_cq_data_entry comp = {0};
-
-	while (num_completions > 0) {
-	 	memset(&comp, 0, sizeof(comp));
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret > 0) {
-			num_completions--;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			FT_PRINTERR("fi_cq_read", ret);
-			return ret;
-		}
-	}
-	return 0;
-}
 
 int wait_for_recv_completion(void **recv_data, enum data_type type,
 		int num_completions)
@@ -147,7 +130,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	ret = wait_for_send_completion(1);
+	ret = ft_wait_for_comp(txcq, 1);
 
 	return ret;
 }
@@ -204,7 +187,7 @@ static int send_multi_recv_msg()
 			FT_PRINTERR("fi_send", ret);
 			return ret;
 		}
-		ret = wait_for_send_completion(1);
+		ret = ft_wait_for_comp(txcq, 1);
 	}
 	return ret;
 }
