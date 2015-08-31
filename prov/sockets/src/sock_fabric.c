@@ -54,6 +54,7 @@ int sock_pe_waittime = SOCK_PE_WAITTIME;
 const char sock_fab_name[] = "IP";
 const char sock_dom_name[] = "sockets";
 const char sock_prov_name[] = "sockets";
+int sock_conn_retry = SOCK_CM_DEF_RETRY;
 #if ENABLE_DEBUG
 int sock_dgram_drop_rate = 0;
 #endif
@@ -597,6 +598,10 @@ SOCKETS_INI
 	fi_param_define(&sock_prov, "pe_waittime", FI_PARAM_INT,
                         "How many milliseconds to spin while waiting for progress");
 	fi_param_get_int(&sock_prov, "pe_waittime", &sock_pe_waittime);
+
+	fi_param_define(&sock_prov, "conn_retry_attempts", FI_PARAM_INT,
+			"Number of connection retries before reporting as failure");
+	fi_param_get_int(&sock_prov, "conn_retry_attempts", &sock_conn_retry);
 
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
