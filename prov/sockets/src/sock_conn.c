@@ -227,15 +227,7 @@ bind_retry:
 		return -errno;
 	}
 
-	src_addr.sin_port = 0;
-	sock_set_sockopt_reuseaddr(conn_fd);
-	if (bind(conn_fd, (struct sockaddr*) &src_addr, sizeof(src_addr))) {
-		SOCK_LOG_ERROR("bind failed : %s\n", strerror(errno));
-		close(conn_fd);
-		errno = FI_EOTHER;
-		return -errno;
-	}
-	
+	sock_set_sockopt_reuseaddr(conn_fd);	
 	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
 		      ntohs(addr->sin_port));
 	SOCK_LOG_DBG("Connecting using address:%s\n",
