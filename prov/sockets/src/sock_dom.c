@@ -496,7 +496,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err;
 	}
 
-	if (sock_conn_map_init(&sock_domain->r_cmap, SOCK_CMAP_DEF_SZ))
+	if (sock_conn_map_init(&sock_domain->r_cmap, sock_cm_def_map_sz))
 		goto err;
 
 	sock_domain->r_cmap.domain = sock_domain;

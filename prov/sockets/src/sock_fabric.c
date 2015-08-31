@@ -55,6 +55,8 @@ const char sock_fab_name[] = "IP";
 const char sock_dom_name[] = "sockets";
 const char sock_prov_name[] = "sockets";
 int sock_conn_retry = SOCK_CM_DEF_RETRY;
+int sock_cm_def_map_sz = SOCK_CMAP_DEF_SZ;
+int sock_av_def_sz = SOCK_AV_DEF_SZ;
 #if ENABLE_DEBUG
 int sock_dgram_drop_rate = 0;
 #endif
@@ -602,6 +604,14 @@ SOCKETS_INI
 	fi_param_define(&sock_prov, "conn_retry_attempts", FI_PARAM_INT,
 			"Number of connection retries before reporting as failure");
 	fi_param_get_int(&sock_prov, "conn_retry_attempts", &sock_conn_retry);
+
+	fi_param_define(&sock_prov, "def_conn_map_sz", FI_PARAM_INT,
+			"Default connection map size");
+	fi_param_get_int(&sock_prov, "def_conn_map_sz", &sock_cm_def_map_sz);
+
+	fi_param_define(&sock_prov, "def_av_sz", FI_PARAM_INT,
+			"Default address vector size");
+	fi_param_get_int(&sock_prov, "def_av_sz", &sock_av_def_sz);
 
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
