@@ -42,6 +42,7 @@ extern const char sock_dom_name[];
 extern const char sock_prov_name[];
 extern struct fi_provider sock_prov;
 extern int sock_pe_waittime;
+extern int sock_conn_retry;
 #if ENABLE_DEBUG
 extern int sock_dgram_drop_rate;
 #endif

@@ -266,7 +266,7 @@ static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 
 static int sock_pep_create_listener(struct sock_pep *pep)
 {
-	int ret;
+	int optval, ret;
 	socklen_t addr_size;
 	struct sockaddr_in addr;
 	struct addrinfo *s_res = NULL, *p;
@@ -297,11 +297,11 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 		pep->cm.sock = socket(p->ai_family, p->ai_socktype,
 				     p->ai_protocol);
 		if (pep->cm.sock >= 0) {
-			sock_set_sockopt_reuseaddr(pep->cm.sock);
-#ifdef HAVE_SO_REUSEPORT
-			if (sock_set_sockopt_reuseport(pep->cm.sock))
-				SOCK_LOG_DBG("reuseport sockopt failed\n");
-#endif
+			optval = 1;
+			if (setsockopt(pep->cm.sock, SOL_SOCKET, SO_REUSEADDR, &optval, 
+				       sizeof optval))
+				SOCK_LOG_ERROR("setsockopt failed\n");
+			
 			if (!bind(pep->cm.sock, s_res->ai_addr, s_res->ai_addrlen))
 				break;
 			close(pep->cm.sock);
@@ -312,8 +312,12 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 	freeaddrinfo(s_res);
 	if (pep->cm.sock < 0)
 		return -FI_EIO;
-
-	sock_set_sockopt_reuseaddr(pep->cm.sock);	
+	
+	optval = 1;
+	if (setsockopt(pep->cm.sock, SOL_SOCKET, SO_REUSEADDR, &optval, 
+		       sizeof optval))
+		SOCK_LOG_ERROR("setsockopt failed\n");
+	
 	if (pep->src_addr.sin_port == 0) {
 		addr_size = sizeof(addr);
 		if (getsockname(pep->cm.sock, (struct sockaddr*)&addr, &addr_size))
@@ -392,12 +396,15 @@ static int sock_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 
 static int sock_ep_cm_create_socket(void)
 {
-	int sock;
+	int sock, optval;
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0)
 		return 0;
 	
-	sock_set_sockopt_reuseaddr(sock);
+	optval = 1;
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, 
+		       &optval, sizeof optval))
+		SOCK_LOG_ERROR("setsockopt failed\n");
 	return sock;
 }
 

@@ -97,6 +97,7 @@
 #define SOCK_EP_MAX_RETRY (5)
 #define SOCK_EP_MAX_CM_DATA_SZ (256)
 #define SOCK_CM_DEF_BACKLOG (128)
+#define SOCK_CM_DEF_RETRY (5)
 
 #define SOCK_EP_RDM_PRI_CAP (FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS |	\
 			 FI_NAMED_RX_CTX | \
@@ -1049,10 +1050,6 @@ void sock_conn_map_destroy(struct sock_conn_map *cmap);
 void sock_set_sockopts(int sock);
 int fd_set_nonblock(int fd);
 int sock_conn_map_init(struct sock_conn_map *map, int init_size);
-void sock_set_sockopt_reuseaddr(int sock);
-#ifdef HAVE_SO_REUSEPORT
-int sock_set_sockopt_reuseport(int sock);
-#endif
 
 struct sock_pe *sock_pe_init(struct sock_domain *domain);
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);
