@@ -57,6 +57,8 @@ const char sock_prov_name[] = "sockets";
 int sock_conn_retry = SOCK_CM_DEF_RETRY;
 int sock_cm_def_map_sz = SOCK_CMAP_DEF_SZ;
 int sock_av_def_sz = SOCK_AV_DEF_SZ;
+int sock_cq_def_sz = SOCK_CQ_DEF_SZ;
+int sock_eq_def_sz = SOCK_EQ_DEF_SZ;
 #if ENABLE_DEBUG
 int sock_dgram_drop_rate = 0;
 #endif
@@ -601,9 +603,9 @@ SOCKETS_INI
                         "How many milliseconds to spin while waiting for progress");
 	fi_param_get_int(&sock_prov, "pe_waittime", &sock_pe_waittime);
 
-	fi_param_define(&sock_prov, "conn_retry_attempts", FI_PARAM_INT,
+	fi_param_define(&sock_prov, "max_conn_retry", FI_PARAM_INT,
 			"Number of connection retries before reporting as failure");
-	fi_param_get_int(&sock_prov, "conn_retry_attempts", &sock_conn_retry);
+	fi_param_get_int(&sock_prov, "max_conn_retry", &sock_conn_retry);
 
 	fi_param_define(&sock_prov, "def_conn_map_sz", FI_PARAM_INT,
 			"Default connection map size");
@@ -612,6 +614,14 @@ SOCKETS_INI
 	fi_param_define(&sock_prov, "def_av_sz", FI_PARAM_INT,
 			"Default address vector size");
 	fi_param_get_int(&sock_prov, "def_av_sz", &sock_av_def_sz);
+
+	fi_param_define(&sock_prov, "def_cq_sz", FI_PARAM_INT,
+			"Default completion queue size");
+	fi_param_get_int(&sock_prov, "def_cq_sz", &sock_cq_def_sz);
+
+	fi_param_define(&sock_prov, "def_eq_sz", FI_PARAM_INT,
+			"Default event queue size");
+	fi_param_get_int(&sock_prov, "def_eq_sz", &sock_eq_def_sz);
 
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
