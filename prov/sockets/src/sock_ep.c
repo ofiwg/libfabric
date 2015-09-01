@@ -1342,12 +1342,33 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 	return info;
 }
 
-static int sock_ep_assign_src_addr(struct sock_ep *sock_ep, struct fi_info *info)
+int sock_get_src_addr_from_hostname(struct sockaddr_in *src_addr, const char *service)
 {
 	int ret;
 	struct addrinfo ai, *rai = NULL;
 	char hostname[HOST_NAME_MAX];
 
+	memset(&ai, 0, sizeof(ai));
+	ai.ai_family = AF_INET;
+	ai.ai_socktype = SOCK_STREAM;
+	
+	if (gethostname(hostname, sizeof hostname) != 0) {
+		SOCK_LOG_DBG("gethostname failed!\n");
+		return -FI_EINVAL;
+	}
+	ret = getaddrinfo(hostname, service, &ai, &rai);
+	if (ret) {
+		SOCK_LOG_DBG("getaddrinfo failed!\n");
+		return -FI_EINVAL;
+	}
+	memcpy(src_addr, (struct sockaddr_in *)rai->ai_addr,
+		sizeof *src_addr);
+	freeaddrinfo(rai);
+	return 0;
+}
+
+static int sock_ep_assign_src_addr(struct sock_ep *sock_ep, struct fi_info *info)
+{
 	sock_ep->src_addr = calloc(1, sizeof(struct sockaddr_in));
 	if (!sock_ep->src_addr)
 		return -FI_ENOMEM;
@@ -1355,24 +1376,8 @@ static int sock_ep_assign_src_addr(struct sock_ep *sock_ep, struct fi_info *info
 	if (info && info->dest_addr) {
 		return sock_get_src_addr(info->dest_addr, sock_ep->src_addr);
 	} else {
-		memset(&ai, 0, sizeof(ai));
-		ai.ai_family = AF_INET;
-		ai.ai_socktype = SOCK_STREAM;
-		
-		if (gethostname(hostname, sizeof hostname) != 0) {
-			SOCK_LOG_DBG("gethostname failed!\n");
-			return -FI_EINVAL;
-		}
-		ret = getaddrinfo(hostname, NULL, &ai, &rai);
-		if (ret) {
-			SOCK_LOG_DBG("getaddrinfo failed!\n");
-			return -FI_EINVAL;
-		}
-		memcpy(sock_ep->src_addr, (struct sockaddr_in *)rai->ai_addr,
-			sizeof *sock_ep->src_addr);
-		freeaddrinfo(rai);
+		return sock_get_src_addr_from_hostname(sock_ep->src_addr, NULL);
 	}
-	return 0;
 }
 
 int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
