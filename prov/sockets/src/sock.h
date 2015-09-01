@@ -87,6 +87,7 @@
 #define SOCK_EQ_DEF_SZ (1<<8)
 #define SOCK_CQ_DEF_SZ (1<<8)
 #define SOCK_AV_DEF_SZ (1<<8)
+#define SOCK_CMAP_DEF_SZ (1<<10)
 
 #define SOCK_CQ_DATA_SIZE (sizeof(uint64_t))
 #define SOCK_TAG_SIZE (sizeof(uint64_t))
@@ -96,6 +97,7 @@
 #define SOCK_EP_MAX_RETRY (5)
 #define SOCK_EP_MAX_CM_DATA_SZ (256)
 #define SOCK_CM_DEF_BACKLOG (128)
+#define SOCK_CM_DEF_RETRY (5)
 
 #define SOCK_EP_RDM_PRI_CAP (FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS |	\
 			 FI_NAMED_RX_CTX | \
