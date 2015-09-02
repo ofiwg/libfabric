@@ -186,6 +186,20 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 						((psm_epaddr_t *) fi_addr)[i]);
 		}
 		else {
+			psm_epconn_t epconn;
+
+			/* If duplicated addresses are passed to psm_ep_connect(), all but one will fail
+			 * with error "Endpoint could not be reached". They should be treated as already
+			 * connected.
+			 */
+			if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
+				epaddr_context = psm_epaddr_getctxt(epconn.addr);
+				if (epaddr_context && epaddr_context->epid  == ((psm_epid_t *) addr)[i]) {
+					((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
+					continue;
+				}
+			}
+
 			FI_INFO(&psmx_prov, FI_LOG_AV,
 				"%d: psm_ep_connect returned %s. remote epid=%lx.\n",
 				i, psm_error_get_string(errors[i]),
