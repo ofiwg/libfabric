@@ -54,6 +54,11 @@ int sock_pe_waittime = SOCK_PE_WAITTIME;
 const char sock_fab_name[] = "IP";
 const char sock_dom_name[] = "sockets";
 const char sock_prov_name[] = "sockets";
+int sock_conn_retry = SOCK_CM_DEF_RETRY;
+int sock_cm_def_map_sz = SOCK_CMAP_DEF_SZ;
+int sock_av_def_sz = SOCK_AV_DEF_SZ;
+int sock_cq_def_sz = SOCK_CQ_DEF_SZ;
+int sock_eq_def_sz = SOCK_EQ_DEF_SZ;
 #if ENABLE_DEBUG
 int sock_dgram_drop_rate = 0;
 #endif
@@ -388,8 +393,6 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 {
 	int sock, ret;
 	socklen_t len;
-	struct addrinfo ai, *rai = NULL;
-	char hostname[HOST_NAME_MAX];
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0)
@@ -399,24 +402,8 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 	ret = connect(sock, (struct sockaddr*)dest_addr, len);
 	if (ret) {
 		SOCK_LOG_DBG("Failed to connect udp socket\n");
-
-		if (gethostname(hostname, sizeof hostname) != 0) {
-			SOCK_LOG_DBG("gethostname failed!\n");
-			ret = -FI_EINVAL;
-			goto out;
-		}
-
-		ret = getaddrinfo(hostname, NULL, &ai, &rai);
-		if (ret) {
-			SOCK_LOG_DBG("getaddrinfo failed!\n");
-			ret = -FI_EINVAL;
-			goto out;
-		}
-
-		memcpy(src_addr, (struct sockaddr_in *)rai->ai_addr,
-		       sizeof *src_addr);
-		freeaddrinfo(rai);
-		ret = 0;
+		
+		ret = sock_get_src_addr_from_hostname(src_addr, NULL);
 		goto out;
 	}
 
@@ -597,6 +584,26 @@ SOCKETS_INI
 	fi_param_define(&sock_prov, "pe_waittime", FI_PARAM_INT,
                         "How many milliseconds to spin while waiting for progress");
 	fi_param_get_int(&sock_prov, "pe_waittime", &sock_pe_waittime);
+
+	fi_param_define(&sock_prov, "max_conn_retry", FI_PARAM_INT,
+			"Number of connection retries before reporting as failure");
+	fi_param_get_int(&sock_prov, "max_conn_retry", &sock_conn_retry);
+
+	fi_param_define(&sock_prov, "def_conn_map_sz", FI_PARAM_INT,
+			"Default connection map size");
+	fi_param_get_int(&sock_prov, "def_conn_map_sz", &sock_cm_def_map_sz);
+
+	fi_param_define(&sock_prov, "def_av_sz", FI_PARAM_INT,
+			"Default address vector size");
+	fi_param_get_int(&sock_prov, "def_av_sz", &sock_av_def_sz);
+
+	fi_param_define(&sock_prov, "def_cq_sz", FI_PARAM_INT,
+			"Default completion queue size");
+	fi_param_get_int(&sock_prov, "def_cq_sz", &sock_cq_def_sz);
+
+	fi_param_define(&sock_prov, "def_eq_sz", FI_PARAM_INT,
+			"Default event queue size");
+	fi_param_get_int(&sock_prov, "def_eq_sz", &sock_eq_def_sz);
 
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);

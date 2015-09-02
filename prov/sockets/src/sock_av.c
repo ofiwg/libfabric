@@ -551,7 +551,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		return -FI_ENOMEM;
 
 	_av->attr = *attr;
-	_av->attr.count = (attr->count) ? attr->count : SOCK_AV_DEF_SZ;
+	_av->attr.count = (attr->count) ? attr->count : sock_av_def_sz;
 
 	_av->key = calloc(_av->attr.count, sizeof(uint16_t));
 	if (!_av->key) {
