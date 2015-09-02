@@ -59,10 +59,10 @@
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
-ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
-			  const struct fi_msg_atomic *msg,
-			  const struct fi_ioc *comparev, void **compare_desc,
-			  size_t compare_count, struct fi_ioc *resultv,
+ssize_t sock_ep_tx_atomic(struct fid_ep *ep, 
+			  const struct fi_msg_atomic *msg, 
+			  const struct fi_ioc *comparev, void **compare_desc, 
+			  size_t compare_count, struct fi_ioc *resultv, 
 			  void **result_desc, size_t result_count, uint64_t flags)
 {
 	int i, ret;
@@ -88,10 +88,10 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	if (msg->iov_count > SOCK_EP_MAX_IOV_LIMIT ||
+	if (msg->iov_count > SOCK_EP_MAX_IOV_LIMIT || 
 	    msg->rma_iov_count > SOCK_EP_MAX_IOV_LIMIT)
 		return -FI_EINVAL;
-
+	
 	if (!tx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
@@ -119,7 +119,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 
 	if ((flags & FI_TRIGGER) &&
 	    (ret = sock_queue_atomic_op(ep, msg, comparev, compare_count,
-					resultv, result_count, flags,
+					resultv, result_count, flags, 
 					SOCK_OP_ATOMIC)) != 1) {
 		return ret;
 	}
@@ -141,7 +141,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	total_len += (sizeof(struct sock_op_send) +
 		      (msg->rma_iov_count * sizeof(union sock_iov)) +
 		      (result_count * sizeof (union sock_iov)));
-
+	
 	sock_tx_ctx_start(tx_ctx);
 	if (rbfdavail(&tx_ctx->rbfd) < total_len) {
 		ret = -FI_EAGAIN;
@@ -158,7 +158,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 
 	if (flags & FI_INJECT)
 		tx_op.src_iov_len = src_len;
-	else
+	else 
 		tx_op.src_iov_len = msg->iov_count;
 
 	sock_tx_ctx_write_op_send(tx_ctx, &tx_op, flags, (uintptr_t) msg->context,
@@ -167,7 +167,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	if (flags & FI_REMOTE_CQ_DATA) {
 		sock_tx_ctx_write(tx_ctx, &msg->data, sizeof(uint64_t));
 	}
-
+	
 	src_len = 0;
 	if (flags & FI_INJECT) {
 		for (i=0; i< msg->iov_count; i++) {
@@ -199,7 +199,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		sock_tx_ctx_write(tx_ctx, &tx_iov, sizeof(tx_iov));
 		dst_len += (tx_iov.ioc.count * datatype_sz);
 	}
-
+	
 	if (msg->iov_count && dst_len != src_len) {
 		SOCK_LOG_ERROR("Buffer length mismatch\n");
 		ret = -FI_EINVAL;
@@ -239,7 +239,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		goto err;
 	}
 #endif
-
+	
 	sock_tx_ctx_commit(tx_ctx);
 	return 0;
 
@@ -255,14 +255,14 @@ static ssize_t sock_ep_atomic_writemsg(struct fid_ep *ep,
 #if ENABLE_DEBUG
 	switch (msg->op) {
 	case FI_MIN:
-	case FI_MAX:
+	case FI_MAX: 
 	case FI_SUM:
 	case FI_PROD:
 	case FI_LOR:
 	case FI_LAND:
 	case FI_BOR:
 	case FI_BAND:
-	case FI_LXOR:
+	case FI_LXOR: 
 	case FI_BXOR:
 	case FI_ATOMIC_WRITE:
 		break;
@@ -277,8 +277,8 @@ static ssize_t sock_ep_atomic_writemsg(struct fid_ep *ep,
 
 static ssize_t sock_ep_atomic_write(struct fid_ep *ep,
 				     const void *buf, size_t count, void *desc,
-				     fi_addr_t dest_addr, uint64_t addr,
-				     uint64_t key, enum fi_datatype datatype,
+				     fi_addr_t dest_addr, uint64_t addr, 
+				     uint64_t key, enum fi_datatype datatype, 
 				     enum fi_op op, void *context)
 {
 	struct fi_msg_atomic msg;
@@ -358,25 +358,25 @@ static ssize_t sock_ep_atomic_inject(struct fid_ep *ep, const void *buf, size_t 
 	msg.op = op;
 	msg.data = 0;
 
-	return sock_ep_atomic_writemsg(ep, &msg, FI_INJECT |
+	return sock_ep_atomic_writemsg(ep, &msg, FI_INJECT | 
 				       SOCK_NO_COMPLETION | SOCK_USE_OP_FLAGS);
 }
 
-static ssize_t sock_ep_atomic_readwritemsg(struct fid_ep *ep,
+static ssize_t sock_ep_atomic_readwritemsg(struct fid_ep *ep, 
 					    const struct fi_msg_atomic *msg,
-					    struct fi_ioc *resultv, void **result_desc,
+					    struct fi_ioc *resultv, void **result_desc, 
 					    size_t result_count, uint64_t flags)
 {
 	switch (msg->op) {
 	case FI_MIN:
-	case FI_MAX:
+	case FI_MAX: 
 	case FI_SUM:
 	case FI_PROD:
 	case FI_LOR:
 	case FI_LAND:
 	case FI_BOR:
 	case FI_BAND:
-	case FI_LXOR:
+	case FI_LXOR: 
 	case FI_BXOR:
 	case FI_ATOMIC_READ:
 	case FI_ATOMIC_WRITE:
@@ -401,7 +401,7 @@ static ssize_t sock_ep_atomic_readwrite(struct fid_ep *ep,
 	struct fi_ioc msg_iov;
 	struct fi_rma_ioc rma_iov;
 	struct fi_ioc resultv;
-
+	
 	if (!buf && op != FI_ATOMIC_READ)
 		return -FI_EINVAL;
 	if(op == FI_ATOMIC_READ)
@@ -424,11 +424,11 @@ static ssize_t sock_ep_atomic_readwrite(struct fid_ep *ep,
 	msg.datatype = datatype;
 	msg.op = op;
 	msg.context = context;
-
+	
 	resultv.addr = result;
 	resultv.count = 1;
-
-	return sock_ep_atomic_readwritemsg(ep, &msg,
+    
+	return sock_ep_atomic_readwritemsg(ep, &msg, 
 					    &resultv, &result_desc, 1, SOCK_USE_OP_FLAGS);
 }
 
@@ -455,9 +455,9 @@ static ssize_t sock_ep_atomic_readwritev(struct fid_ep *ep,
 	msg.datatype = datatype;
 	msg.op = op;
 	msg.context = context;
-
-	return sock_ep_atomic_readwritemsg(ep, &msg,
-					   resultv, result_desc, result_count,
+	
+	return sock_ep_atomic_readwritemsg(ep, &msg, 
+					   resultv, result_desc, result_count, 
 					   SOCK_USE_OP_FLAGS);
 }
 
@@ -515,14 +515,14 @@ static ssize_t sock_ep_atomic_compwrite(struct fid_ep *ep,
 	msg.datatype = datatype;
 	msg.op = op;
 	msg.context = context;
-
+	
 	resultv.addr = result;
 	resultv.count = 1;
 	comparev.addr = (void*)compare;
 	comparev.count = 1;
 
 	return sock_ep_atomic_compwritemsg(ep, &msg, &comparev, &compare_desc, 1,
-					   &resultv, &result_desc, 1,
+					   &resultv, &result_desc, 1, 
 					   SOCK_USE_OP_FLAGS);
 }
 
@@ -550,13 +550,13 @@ static ssize_t sock_ep_atomic_compwritev(struct fid_ep *ep,
 	msg.datatype = datatype;
 	msg.op = op;
 	msg.context = context;
-
+	
 	return sock_ep_atomic_compwritemsg(ep, &msg, comparev, compare_desc, 1,
-					   resultv, result_desc, 1,
+					   resultv, result_desc, 1, 
 					   SOCK_USE_OP_FLAGS);
 }
 
-static int sock_ep_atomic_valid(struct fid_ep *ep, enum fi_datatype datatype,
+static int sock_ep_atomic_valid(struct fid_ep *ep, enum fi_datatype datatype, 
 			      enum fi_op op, size_t *count)
 {
 	size_t datatype_sz;
