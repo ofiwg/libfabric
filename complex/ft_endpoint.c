@@ -127,12 +127,12 @@ int ft_reset_ep(void)
 {
 	int ret;
 
-	ret = ft_comp_rx();
+	ret = ft_comp_rx(0);
 	if (ret)
 		return ret;
 
 	while (ft_tx.credits < ft_tx.max_credits) {
-		ret = ft_comp_tx();
+		ret = ft_comp_tx(0);
 		if (ret)
 			return ret;
 	}

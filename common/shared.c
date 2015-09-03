@@ -514,7 +514,7 @@ int ft_wait_for_comp(struct fid_cq *cq, int num_completions)
 	return 0;
 }
 
-void cq_readerr(struct fid_cq *cq, char *cq_str)
+void cq_readerr(struct fid_cq *cq, const char *cq_str)
 {
 	struct fi_cq_err_entry cq_err;
 	const char *err_str;
@@ -532,7 +532,7 @@ void cq_readerr(struct fid_cq *cq, char *cq_str)
 	}
 }
 
-void eq_readerr(struct fid_eq *eq, char *eq_str)
+void eq_readerr(struct fid_eq *eq, const char *eq_str)
 {
 	struct fi_eq_err_entry eq_err;
 	const char *err_str;

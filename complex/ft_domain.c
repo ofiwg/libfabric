@@ -61,7 +61,7 @@ static int ft_open_eq(void)
 		return 0;
 
 	memset(&attr, 0, sizeof attr);
-	attr.wait_obj = FI_WAIT_FD;
+	attr.wait_obj = test_info.eq_wait_obj;
 	ret = fi_eq_open(fabric, &attr, &eq, NULL);
 	if (ret)
 		FT_PRINTERR("fi_eq_open", ret);
@@ -90,12 +90,35 @@ ssize_t ft_get_event(uint32_t *event, void *buf, size_t len,
 {
 	ssize_t ret;
 
-	ret = fi_eq_sread(eq, event, buf, len, FT_SREAD_TO, 0);
-	if (ret == -FI_EAVAIL) {
-		return ft_eq_readerr();
-	} else if (ret < 0) {
-		FT_PRINTERR("fi_eq_sread", ret);
-		return ret;
+	switch(test_info.eq_wait_obj) {
+	case FI_WAIT_NONE:
+		do {
+			ret = fi_eq_read(eq, event, buf, len, 0);
+			if (ret == -FI_EAVAIL) {
+				return ft_eq_readerr();
+			} else if (ret < 0 && ret != -FI_EAGAIN) {
+				FT_PRINTERR("fi_eq_read", ret);
+				return ret;
+			}
+		} while (ret == -FI_EAGAIN);
+		break;
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_FD:
+	case FI_WAIT_MUTEX_COND:
+		ret = fi_eq_sread(eq, event, buf, len, FT_SREAD_TO, 0);
+		if (ret == -FI_EAVAIL) {
+			return ft_eq_readerr();
+		} else if (ret < 0) {
+			FT_PRINTERR("fi_eq_sread", ret);
+			return ret;
+		}
+		break;
+	case FI_WAIT_SET:
+		FT_ERR("fi_ubertest: Unsupported eq wait object\n");
+		return -1;
+	default:
+		FT_ERR("Unknown eq wait object\n");
+		return -1;
 	}
 
 	if (event_check && event_check != *event) {
