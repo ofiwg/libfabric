@@ -118,53 +118,71 @@ int ft_bind_comp(struct fid_ep *ep, uint64_t flags)
 	return 0;
 }
 
-int ft_comp_rx(void)
+/* Read CQ until there are no more completions */
+#define ft_cq_read(cq_read, cq, buf, count, completions, str,	\
+		ret, ...)					\
+	do {							\
+		ret = cq_read(cq, buf, count, ##__VA_ARGS__);	\
+		if (ret < 0) {					\
+			if (ret == -FI_EAGAIN)			\
+				break;				\
+			if (ret == -FI_EAVAIL) {		\
+				cq_readerr(cq, str);		\
+			} else {				\
+				FT_PRINTERR(#cq_read, ret);	\
+			}					\
+			return ret;				\
+		} else {					\
+			completions += ret;			\
+		}						\
+	} while (ret == count)
+
+static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
+		const char *x_str, int timeout)
 {
 	uint8_t buf[FT_COMP_BUF_SIZE];
+	struct timespec s, e;
+	int poll_time = 0;
 	int ret;
 
-	do {
-		ret = fi_cq_read(rxcq, buf, comp_entry_cnt[ft_rx.cq_format]);
-		if (ret < 0) {
-			if (ret == -FI_EAGAIN)
-				break;
+	switch(test_info.cq_wait_obj) {
+	case FI_WAIT_NONE:
+		do {
+			if (!poll_time)
+				clock_gettime(CLOCK_MONOTONIC, &s);
 
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(rxcq, "rxcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		} else {
-			ft_rx.credits += ret;
-		}
-	} while (ret == comp_entry_cnt[ft_rx.cq_format]);
+			ft_cq_read(fi_cq_read, cq, buf, comp_entry_cnt[ft_x->cq_format],
+					ft_x->credits, x_str, ret);
 
-	return 0;
+			clock_gettime(CLOCK_MONOTONIC, &e);
+			poll_time = get_elapsed(&s, &e, MILLI);
+		} while (ret == -FI_EAGAIN && poll_time < timeout);
+
+		break;
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_FD:
+	case FI_WAIT_MUTEX_COND:
+		ft_cq_read(fi_cq_sread, cq, buf, comp_entry_cnt[ft_x->cq_format],
+			ft_x->credits, x_str, ret, NULL, timeout);
+		break;
+	case FI_WAIT_SET:
+		FT_ERR("fi_ubertest: Unsupported cq wait object\n");
+		return -1;
+	default:
+		FT_ERR("Unknown cq wait object\n");
+		return -1;
+	}
+
+	return (ret == -FI_EAGAIN && timeout) ? ret : 0;
+}
+
+int ft_comp_rx(int timeout)
+{
+	return ft_comp_x(rxcq, &ft_rx, "rxcq", timeout);
 }
 
 
-int ft_comp_tx(void)
+int ft_comp_tx(int timeout)
 {
-	uint8_t buf[FT_COMP_BUF_SIZE];
-	int ret;
-
-	do {
-		ret = fi_cq_read(txcq, buf, comp_entry_cnt[ft_tx.cq_format]);
-		if (ret < 0) {
-			if (ret == -FI_EAGAIN)
-				break;
-
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(txcq, "txcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		} else {
-			ft_tx.credits += ret;
-		}
-	} while (ret == comp_entry_cnt[ft_tx.cq_format]);
-
-	return 0;
+	return ft_comp_x(txcq, &ft_tx, "txcq", timeout);
 }

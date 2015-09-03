@@ -205,7 +205,7 @@ int ft_recv_msg(void)
 
 	credits = ft_rx.credits;
 	do {
-		ret = ft_comp_rx();
+		ret = ft_comp_rx(FT_COMP_TO);
 		if (ret)
 			return ret;
 	} while (credits == ft_rx.credits);
@@ -218,7 +218,7 @@ int ft_send_msg(void)
 	int ret;
 
 	while (!ft_tx.credits) {
-		ret = ft_comp_tx();
+		ret = ft_comp_tx(FT_COMP_TO);
 		if (ret)
 			return ret;
 	}
@@ -237,7 +237,7 @@ int ft_send_msg(void)
 	}
 
 	if (!ft_tx.credits) {
-		ret = ft_comp_tx();
+		ret = ft_comp_tx(0);
 		if (ret)
 			return ret;
 	}
@@ -271,9 +271,7 @@ int ft_send_dgram_flood(void)
 
 int ft_recv_dgram(void)
 {
-	struct timespec s, e;
 	int credits, ret;
-	int64_t poll_time = 0;
 
 	do {
 		if (ft_rx.credits > (ft_rx.max_credits >> 1)) {
@@ -284,25 +282,15 @@ int ft_recv_dgram(void)
 
 		credits = ft_rx.credits;
 
-		ret = ft_comp_rx();
+		ret = ft_comp_rx(FT_DGRAM_POLL_TO);
 		if ((credits != ft_rx.credits) &&
 		    (*(uint8_t *) ft_rx.buf == ft_rx.seqno)) {
 			ft_rx.seqno++;
 			return 0;
 		}
+	} while (!ret);
 
-		if (ret)
-			return ret;
-
-		if (!poll_time)
-			clock_gettime(CLOCK_MONOTONIC, &s);
-
-		clock_gettime(CLOCK_MONOTONIC, &e);
-		poll_time = get_elapsed(&s, &e, MILLI);
-
-	} while (poll_time < 1);
-
-	return -FI_ETIMEDOUT;
+	return (ret == -FI_EAGAIN) ? -FI_ETIMEDOUT : ret;
 }
 
 int ft_recv_dgram_flood(size_t *recv_cnt)
@@ -315,7 +303,7 @@ int ft_recv_dgram_flood(size_t *recv_cnt)
 		if (ret)
 			break;
 
-		ret = ft_comp_rx();
+		ret = ft_comp_rx(0);
 		cnt += ft_rx.credits;
 
 	} while (!ret && (*(uint8_t *) ft_rx.buf != (uint8_t) ~0));

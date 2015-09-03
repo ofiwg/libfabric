@@ -210,6 +210,18 @@ static struct key_t keys[] = {
 		.val_size = sizeof(((struct ft_set *)0)->comp_type) / FT_MAX_COMP,
 	},
 	{
+		.str = "eq_wait_obj",
+		.offset = offsetof(struct ft_set, eq_wait_obj),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->eq_wait_obj) / FT_MAX_WAIT_OBJ,
+	},
+	{
+		.str = "cq_wait_obj",
+		.offset = offsetof(struct ft_set, cq_wait_obj),
+		.val_type = VAL_NUM,
+		.val_size = sizeof(((struct ft_set *)0)->cq_wait_obj) / FT_MAX_WAIT_OBJ,
+	},
+	{
 		.str = "mode",
 		.offset = offsetof(struct ft_set, mode),
 		.val_type = VAL_NUM,
@@ -250,6 +262,12 @@ static int ft_parse_num(char *str, struct key_t *key, void *buf)
 		TEST_SET_N_RETURN(str, "FT_CAP_TAGGED", FT_CAP_TAGGED, uint64_t, buf);
 		TEST_SET_N_RETURN(str, "FT_CAP_RMA", FT_CAP_RMA, uint64_t, buf);
 		TEST_SET_N_RETURN(str, "FT_CAP_ATOMIC", FT_CAP_ATOMIC, uint64_t, buf);
+	} else if (!strncmp(key->str, "eq_wait_obj", strlen("eq_wait_obj")) ||
+		!strncmp(key->str, "cq_wait_obj", strlen("cq_wait_obj"))) {
+		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_NONE, enum fi_wait_obj, buf);
+		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_UNSPEC, enum fi_wait_obj, buf);
+		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_FD, enum fi_wait_obj, buf);
+		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_MUTEX_COND, enum fi_wait_obj, buf);
 	} else {
 		TEST_ENUM_SET_N_RETURN(str, FT_COMP_QUEUE, enum ft_comp_type, buf);
 		TEST_SET_N_RETURN(str, "FT_MODE_ALL", FT_MODE_ALL, uint64_t, buf);
@@ -480,6 +498,8 @@ void fts_start(struct ft_series *series, int index)
 	series->cur_ep = 0;
 	series->cur_av = 0;
 	series->cur_comp = 0;
+	series->cur_eq_wait_obj = 0;
+	series->cur_cq_wait_obj = 0;
 	series->cur_mode = 0;
 	series->cur_caps = 0;
 
@@ -515,6 +535,14 @@ void fts_next(struct ft_series *series)
 	if (set->comp_type[++series->cur_comp])
 		return;
 	series->cur_comp = 0;
+
+	if (set->eq_wait_obj[++series->cur_eq_wait_obj])
+		return;
+	series->cur_eq_wait_obj = 0;
+
+	if (set->cq_wait_obj[++series->cur_cq_wait_obj])
+		return;
+	series->cur_cq_wait_obj = 0;
 
 	if (set->ep_type[series->cur_ep] == FI_EP_RDM ||
 	    set->ep_type[series->cur_ep] == FI_EP_DGRAM) {
@@ -559,6 +587,8 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->ep_type = set->ep_type[series->cur_ep];
 	info->av_type = set->av_type[series->cur_av];
 	info->comp_type = set->comp_type[series->cur_comp];
+	info->eq_wait_obj = set->eq_wait_obj[series->cur_eq_wait_obj];
+	info->cq_wait_obj = set->cq_wait_obj[series->cur_cq_wait_obj];
 
 	memcpy(info->node, set->node[0] ? set->node : opts.dst_addr, FI_NAME_MAX);
 	memcpy(info->service, set->service[0] ? set->service : opts.dst_port, FI_NAME_MAX);
