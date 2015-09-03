@@ -388,7 +388,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 #if (PSM_VERNO_MAJOR >= 2)
 	psm_epaddr_t epaddr;
 
-	psm_am_get_source(token, &epaddr);
+	PSMX_CALL(psm_am_get_source)(token, &epaddr);
 #endif
 
 	switch (args[0].u32w0 & PSMX_AM_OP_MASK) {
@@ -423,7 +423,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		rep_args[0].u32w0 = PSMX_AM_REP_ATOMIC_WRITE;
 		rep_args[0].u32w1 = op_error;
 		rep_args[1].u64 = args[1].u64;
-		err = psm_am_reply_short(token, PSMX_AM_ATOMIC_HANDLER,
+		err = PSMX_CALL(psm_am_reply_short)(token, PSMX_AM_ATOMIC_HANDLER,
 				rep_args, 2, NULL, 0, 0,
 				NULL, NULL );
 		break;
@@ -476,7 +476,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		rep_args[0].u32w0 = PSMX_AM_REP_ATOMIC_READWRITE;
 		rep_args[0].u32w1 = op_error;
 		rep_args[1].u64 = args[1].u64;
-		err = psm_am_reply_short(token, PSMX_AM_ATOMIC_HANDLER,
+		err = PSMX_CALL(psm_am_reply_short)(token, PSMX_AM_ATOMIC_HANDLER,
 				rep_args, 2, tmp_buf, (tmp_buf?len:0), 0,
 				psmx_am_atomic_completion, tmp_buf );
 		break;
@@ -521,7 +521,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		rep_args[0].u32w0 = PSMX_AM_REP_ATOMIC_READWRITE;
 		rep_args[0].u32w1 = op_error;
 		rep_args[1].u64 = args[1].u64;
-		err = psm_am_reply_short(token, PSMX_AM_ATOMIC_HANDLER,
+		err = PSMX_CALL(psm_am_reply_short)(token, PSMX_AM_ATOMIC_HANDLER,
 				rep_args, 2, tmp_buf, (tmp_buf?len:0), 0,
 				psmx_am_atomic_completion, tmp_buf );
 		break;
@@ -772,7 +772,7 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	epaddr_context = psm_epaddr_getctxt((void *)dest_addr);
+	epaddr_context = PSMX_CALL(psm_epaddr_getctxt)((void *)dest_addr);
 	if (epaddr_context->epid == ep_priv->domain->psm_epid)
 		return psmx_atomic_self(PSMX_AM_REQ_ATOMIC_WRITE,
 					ep_priv, buf, count, desc,
@@ -816,7 +816,7 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 	args[3].u64 = key;
 	args[4].u32w0 = datatype;
 	args[4].u32w1 = op;
-	psm_am_request_short((psm_epaddr_t) dest_addr,
+	PSMX_CALL(psm_am_request_short)((psm_epaddr_t) dest_addr,
 				PSMX_AM_ATOMIC_HANDLER, args, 5,
 				(void *)buf, len, am_flags, NULL, NULL);
 
@@ -959,7 +959,7 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	epaddr_context = psm_epaddr_getctxt((void *)dest_addr);
+	epaddr_context = PSMX_CALL(psm_epaddr_getctxt)((void *)dest_addr);
 	if (epaddr_context->epid == ep_priv->domain->psm_epid)
 		return psmx_atomic_self(PSMX_AM_REQ_ATOMIC_READWRITE,
 					ep_priv, buf, count, desc,
@@ -1007,7 +1007,7 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 	args[3].u64 = key;
 	args[4].u32w0 = datatype;
 	args[4].u32w1 = op;
-	psm_am_request_short((psm_epaddr_t) dest_addr,
+	PSMX_CALL(psm_am_request_short)((psm_epaddr_t) dest_addr,
 				PSMX_AM_ATOMIC_HANDLER, args, 5,
 				(void *)buf, (buf?len:0), am_flags, NULL, NULL);
 
@@ -1165,7 +1165,7 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
-	epaddr_context = psm_epaddr_getctxt((void *)dest_addr);
+	epaddr_context = PSMX_CALL(psm_epaddr_getctxt)((void *)dest_addr);
 	if (epaddr_context->epid == ep_priv->domain->psm_epid)
 		return psmx_atomic_self(PSMX_AM_REQ_ATOMIC_COMPWRITE,
 					ep_priv, buf, count, desc,
@@ -1224,7 +1224,7 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 	args[3].u64 = key;
 	args[4].u32w0 = datatype;
 	args[4].u32w1 = op;
-	psm_am_request_short((psm_epaddr_t) dest_addr,
+	PSMX_CALL(psm_am_request_short)((psm_epaddr_t) dest_addr,
 				PSMX_AM_ATOMIC_HANDLER, args, 5,
 				tmp_buf ? tmp_buf : (void *)buf,
 				len * 2, am_flags,

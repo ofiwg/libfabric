@@ -107,12 +107,12 @@ static ssize_t psmx_ep_cancel(fid_t fid, void *context)
 		return  -FI_EOPNOTSUPP;
 	}
 
-	err = psm_mq_cancel((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context));
+	err = PSMX_CALL(psm_mq_cancel)((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context));
 	if (err == PSM_OK) {
 #if (PSM_VERNO_MAJOR >= 2)
-		err = psm_mq_test2((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context), &status);
+		err = PSMX_CALL(psm_mq_test2)((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context), &status);
 #else
-		err = psm_mq_test((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context), &status);
+		err = PSMX_CALL(psm_mq_test)((psm_mq_req_t *)&PSMX_CTXT_REQ(fi_context), &status);
 #endif
 		if (err == PSM_OK && ep->recv_cq) {
 			event = psmx_cq_create_event(

@@ -291,7 +291,7 @@ static ssize_t psmx_eq_write(struct fid_eq *eq, uint32_t event_num, const void *
 static const char *psmx_eq_strerror(struct fid_eq *eq, int prov_errno,
 				    const void *err_data, char *buf, size_t len)
 {
-	return psm_error_get_string(prov_errno);
+	return PSMX_CALL(psm_error_get_string)(prov_errno);
 }
 
 static int psmx_eq_close(fid_t fid)

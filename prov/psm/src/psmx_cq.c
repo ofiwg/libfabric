@@ -378,13 +378,13 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 	void *event_buffer = count ? event_in : NULL;
 
 	while (1) {
-		err = psm_mq_ipeek(domain->psm_mq, &psm_req, NULL);
+		err = PSMX_CALL(psm_mq_ipeek)(domain->psm_mq, &psm_req, NULL);
 
 		if (err == PSM_OK) {
 #if (PSM_VERNO_MAJOR >= 2)
-			err = psm_mq_test2(&psm_req, &psm_status);
+			err = PSMX_CALL(psm_mq_test2)(&psm_req, &psm_status);
 #else
-			err = psm_mq_test(&psm_req, &psm_status);
+			err = PSMX_CALL(psm_mq_test)(&psm_req, &psm_status);
 #endif
 
 			fi_context = psm_status.context;
@@ -534,7 +534,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				req = PSMX_CTXT_USER(fi_context);
 				req->offset += psm_status.nbytes;
 				if (req->offset + req->min_buf_size <= req->len) {
-					err = psm_mq_irecv(tmp_ep->domain->psm_mq,
+					err = PSMX_CALL(psm_mq_irecv)(tmp_ep->domain->psm_mq,
 							   req->tag, req->tagsel, req->flag,
 							   req->buf + req->offset, 
 							   req->len - req->offset,
@@ -711,7 +711,7 @@ static int psmx_cq_signal(struct fid_cq *cq)
 static const char *psmx_cq_strerror(struct fid_cq *cq, int prov_errno, const void *prov_data,
 				    char *buf, size_t len)
 {
-	return psm_error_get_string(prov_errno);
+	return PSMX_CALL(psm_error_get_string)(prov_errno);
 }
 
 static int psmx_cq_close(fid_t fid)

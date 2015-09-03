@@ -10,6 +10,7 @@ dnl
 AC_DEFUN([FI_PSM2_CONFIGURE],[
 	# Determine if we can support the psm2 provider
 	psm2_happy=0
+	psm2_orig_LIBS=$psm2_LIBS
 	AS_IF([test x"$enable_psm2" != x"no"],
 	      [FI_CHECK_PACKAGE([psm2],
 				[psm2.h],
@@ -24,9 +25,22 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 
 	AS_IF([test $psm2_happy -eq 1], [$1], [$2])
 
+	AC_MSG_CHECKING([if use dlopen to load PSM2 library])
+	AC_RUN_IFELSE([AC_LANG_SOURCE(
+				      [[
+				      int main()
+				      {
+					#ifndef PSMX_DL
+					#define PSMX_DL 1
+					#endif
+					return PSMX_DL ? 0 : 1;
+				      }
+				      ]]
+				     )],
+			[AC_MSG_RESULT([yes]); psm2_LIBS=$psm2_orig_LIBS],
+			[AC_MSG_RESULT([no]); psm2_LDFLAGS="$LDFLAGS $psm2_LDFLAGS"])
+
 	psm2_CPPFLAGS="$CPPFLAGS $psm2_CPPFLAGS"
-	psm2_LDFLAGS="$LDFLAGS $psm2_LDFLAGS"
-	psm2_LIBS="$LIBS $psm2_LIBS"
 	CPPFLAGS="$psm2_orig_CPPFLAGS"
 	LDFLAGS="$psm2_orig_LDFLAGS"
 ])

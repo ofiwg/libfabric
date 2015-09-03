@@ -127,12 +127,12 @@ int psmx_am_init(struct psmx_fid_domain *domain)
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
 	if (!psmx_am_handlers_initialized) {
-		err = psm_am_get_parameters(psm_ep, &psmx_am_param,
+		err = PSMX_CALL(psm_am_get_parameters)(psm_ep, &psmx_am_param,
 						sizeof(psmx_am_param), &size);
 		if (err)
 			return psmx_errno(err);
 
-		err = psm_am_register_handlers(psm_ep, psmx_am_handlers, 3,
+		err = PSMX_CALL(psm_am_register_handlers)(psm_ep, psmx_am_handlers, 3,
 						psmx_am_handlers_idx);
 		if (err)
 			return psmx_errno(err);

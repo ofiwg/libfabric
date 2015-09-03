@@ -120,6 +120,8 @@
 #define psmx_cq_sread psmx2_cq_sread
 #define psmx_cq_sreadfrom psmx2_cq_sreadfrom
 #define psmx_cq_strerror psmx2_cq_strerror
+#define psmx_dl_close psmx2_dl_close
+#define psmx_dl_open psmx2_dl_open
 #define psmx_domain_check_features psmx2_domain_check_features
 #define psmx_domain_close psmx2_domain_close
 #define psmx_domain_disable_ep psmx2_domain_disable_ep
@@ -182,6 +184,8 @@
 #define psmx_init_env psmx2_init_env
 #define psmx_inject psmx2_inject
 #define psmx_inject2 psmx2_inject2
+#define psmx_lib psmx2_lib
+#define psmx_lib_handle psmx2_lib_handle
 #define psmx_mr_bind psmx2_mr_bind
 #define psmx_mr_close psmx2_mr_close
 #define psmx_mr_hash psmx2_mr_hash
