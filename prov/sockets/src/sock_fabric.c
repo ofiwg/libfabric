@@ -59,6 +59,7 @@ int sock_cm_def_map_sz = SOCK_CMAP_DEF_SZ;
 int sock_av_def_sz = SOCK_AV_DEF_SZ;
 int sock_cq_def_sz = SOCK_CQ_DEF_SZ;
 int sock_eq_def_sz = SOCK_EQ_DEF_SZ;
+char *sock_pe_affinity_str = NULL;
 #if ENABLE_DEBUG
 int sock_dgram_drop_rate = 0;
 #endif
@@ -73,6 +74,7 @@ const struct fi_fabric_attr sock_fabric_attr = {
 static struct dlist_entry sock_fab_list;
 static struct dlist_entry sock_dom_list;
 static fastlock_t sock_list_lock;
+static int read_default_params = 0;
 
 void sock_dom_add_to_list(struct sock_domain *domain)
 {
@@ -307,6 +309,23 @@ static struct fi_ops sock_fab_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static void sock_read_default_params() {
+	if (!read_default_params) {
+		fi_param_get_int(&sock_prov, "pe_waittime", &sock_pe_waittime);
+		fi_param_get_int(&sock_prov, "max_conn_retry", &sock_conn_retry);
+		fi_param_get_int(&sock_prov, "def_conn_map_sz", &sock_cm_def_map_sz);
+		fi_param_get_int(&sock_prov, "def_av_sz", &sock_av_def_sz);
+		fi_param_get_int(&sock_prov, "def_cq_sz", &sock_cq_def_sz);
+		fi_param_get_int(&sock_prov, "def_eq_sz", &sock_eq_def_sz);
+		if(fi_param_get_str(&sock_prov, "pe_affinity", &sock_pe_affinity_str) != FI_SUCCESS)
+			sock_pe_affinity_str = NULL;
+#if ENABLE_DEBUG
+		fi_param_get_int(&sock_prov, "dgram_drop_rate", &sock_dgram_drop_rate);
+#endif
+		read_default_params = 1;
+	}
+}
+
 static int sock_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric, void *context)
 {
@@ -318,6 +337,8 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	fab = calloc(1, sizeof(*fab));
 	if (!fab)
 		return -FI_ENOMEM;
+
+	sock_read_default_params();
 
 	fastlock_init(&fab->lock);
 	dlist_init(&fab->service_list);
@@ -583,27 +604,25 @@ SOCKETS_INI
 {
 	fi_param_define(&sock_prov, "pe_waittime", FI_PARAM_INT,
                         "How many milliseconds to spin while waiting for progress");
-	fi_param_get_int(&sock_prov, "pe_waittime", &sock_pe_waittime);
 
 	fi_param_define(&sock_prov, "max_conn_retry", FI_PARAM_INT,
 			"Number of connection retries before reporting as failure");
-	fi_param_get_int(&sock_prov, "max_conn_retry", &sock_conn_retry);
 
 	fi_param_define(&sock_prov, "def_conn_map_sz", FI_PARAM_INT,
 			"Default connection map size");
-	fi_param_get_int(&sock_prov, "def_conn_map_sz", &sock_cm_def_map_sz);
 
 	fi_param_define(&sock_prov, "def_av_sz", FI_PARAM_INT,
 			"Default address vector size");
-	fi_param_get_int(&sock_prov, "def_av_sz", &sock_av_def_sz);
 
 	fi_param_define(&sock_prov, "def_cq_sz", FI_PARAM_INT,
 			"Default completion queue size");
-	fi_param_get_int(&sock_prov, "def_cq_sz", &sock_cq_def_sz);
 
 	fi_param_define(&sock_prov, "def_eq_sz", FI_PARAM_INT,
 			"Default event queue size");
-	fi_param_get_int(&sock_prov, "def_eq_sz", &sock_eq_def_sz);
+	
+	fi_param_define(&sock_prov, "pe_affinity", FI_PARAM_STRING,
+                        "If specified, bind the progress thread to the indicated range(s) of Linux virtual processor ID(s). "
+                        "This option is currently not supported on OS X. Usage: id_start[-id_end[:stride]][,]");
 
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
@@ -611,7 +630,6 @@ SOCKETS_INI
 #if ENABLE_DEBUG
 	fi_param_define(&sock_prov, "dgram_drop_rate", FI_PARAM_INT,
 			"Drop every Nth dgram frame (debug only)");
-	fi_param_get_int(&sock_prov, "dgram_drop_rate", &sock_dgram_drop_rate);
 #endif
 	return (&sock_prov);
 }
