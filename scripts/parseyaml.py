@@ -8,7 +8,7 @@ from optparse import OptionParser
 try:
 	import yaml
 except ImportError:
-	print ("PyYAML library missing, try: yum install pyyaml")
+	print ("PyYAML library missing, try: yum install PyYAML")
 	sys.exit(1)
 
 # diff two list-of dicts for perf numbers
@@ -22,7 +22,7 @@ def _diff(a,b):
 			if k == 'xfer_size':
 				d[k] = v2[k]
 			elif k == 'Gb/sec' or k == 'usec/xfer':
-				d[k] = v2[k] - v1[k]
+				d[k] = float((v2[k] - v1[k])) / float(v1[k]) * 100
 			else:
 				continue
 
@@ -58,8 +58,8 @@ def perfprint(d):
 		print k, ":"
 		for i in v:
 			print 'xfer_size: ', i['xfer_size'],
-			print ', Gb/sec: %+f' % i['Gb/sec'],
-			print ', usec/xfer: %+f' % i['usec/xfer']
+			print ', Gb/sec: %.2f' % i['Gb/sec'] + '%',
+			print ', usec/xfer: %.2f' % i['usec/xfer'] + '%'
 	
 
 def main(argv=None):
