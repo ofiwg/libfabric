@@ -53,6 +53,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <inttypes.h>
+#include <complex.h>
 
 #include "sock.h"
 #include "sock_util.h"
@@ -941,6 +942,58 @@ out:
 	}								\
 	}while(0)								
 
+#define SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst) do {		\
+        _cmp = cmp, _dst = dst, _src = src;			        \
+	switch (op) {							\
+	case FI_SUM:							\
+		*_cmp = *_dst;						\
+		*_dst = *_dst + *_src;					\
+		break;							\
+									\
+	case FI_PROD:							\
+		*_cmp = *_dst;						\
+		*_dst = *_dst * *_src;					\
+		break;							\
+									\
+	case FI_LOR:							\
+		*_cmp = *_dst;						\
+		*_dst = *_dst || *_src;					\
+		break;							\
+									\
+	case FI_LAND:							\
+		*_cmp = *_dst;						\
+		*_dst = *_dst && *_src;					\
+		break;							\
+									\
+	case FI_ATOMIC_READ:						\
+		*_cmp = *_dst;						\
+		break;							\
+									\
+	case FI_ATOMIC_WRITE:						\
+		*_cmp = *_dst;						\
+		*_dst = *_src;						\
+		break;							\
+									\
+	case FI_CSWAP:							\
+		if (*_cmp == *_dst)					\
+			*_dst = *_src;					\
+		else							\
+			*_cmp = *_dst;					\
+		break;							\
+									\
+	case FI_CSWAP_NE:						\
+		if (*_cmp != *_dst)					\
+			*_dst = *_src;					\
+		else							\
+			*_cmp = *_dst;					\
+		break;							\
+									\
+	default:							\
+		SOCK_LOG_ERROR("Atomic operation type not supported\n");\
+		break;							\
+	}								\
+	}while(0)
+
 
 static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
 				 enum fi_datatype datatype, enum fi_op op)
@@ -1031,6 +1084,30 @@ static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
 		long double *_cmp, *_dst, *_src;
 		_cmp = cmp, _src = src, _dst = dst;
 		SOCK_ATOMIC_UPDATE_FLOAT(_cmp, _src, _dst);
+		break;
+	}
+
+	case FI_DOUBLE_COMPLEX:
+	{
+		double complex *_cmp, *_dst, *_src;
+		_cmp = cmp, _src = src, _dst = dst;
+		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
+		break;
+	}
+
+	case FI_FLOAT_COMPLEX:
+	{
+		float complex *_cmp, *_dst, *_src;
+		_cmp = cmp, _src = src, _dst = dst;
+		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
+		break;
+	}
+
+	case FI_LONG_DOUBLE_COMPLEX:
+	{
+		long double complex *_cmp, *_dst, *_src;
+		_cmp = cmp, _src = src, _dst = dst;
+		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
 		break;
 	}
 
