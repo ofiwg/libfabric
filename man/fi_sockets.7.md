@@ -51,6 +51,38 @@ performance numbers are lower compared to other providers implemented
 over high-speed fabric, and lower than what an application might see
 implementing to sockets directly.
 
+# RUNTIME PARAMETERS
+
+The sockets provider checks for the following environment variables -
+
+*FI_SOCKETS_PE_WAITTIME*
+: An integer value that specifies how many milliseconds to spin while waiting for progress in *FI_PROGRESS_AUTO* mode.
+
+*FI_SOCKETS_MAX_CONN_RETRY*
+: An integer value that specifies the number of socket connection retries before reporting as failure.
+
+*FI_SOCKETS_DEF_CONN_MAP_SZ*
+: An integer to specify the default connection map size. 
+
+*FI_SOCKETS_DEF_AV_SZ*
+: An integer to specify the default address vector size.
+
+*FI_SOCKETS_DEF_CQ_SZ*
+: An integer to specify the default completion queue size.
+
+*FI_SOCKETS_DEF_EQ_SZ*
+: An integer to specify the default event queue size.
+
+*FI_SOCKETS_DGRAM_DROP_RATE*
+: An integer value to specify the drop rate of dgram frame when endpoint is *FI_EP_DGRAM*. This is for debugging purpose only.
+
+*FI_SOCKETS_PE_AFFINITY*
+: If specified, progress thread is bound to the indicated range(s) of Linux virtual processor ID(s). This option is currently not supported on OS X. The usage is - id_start[-id_end[:stride]][,].
+
+# LARGE SCALE JOBS
+ 
+For large scale runs one can use these environment variables to set the default parameters e.g. size of the address vector(AV), completion queue (CQ), connection map etc. that satisfies the requriment of the particular benchmark. The recommended parameters for large scale runs are *FI_SOCKETS_MAX_CONN_RETRY*, *FI_SOCKETS_DEF_CONN_MAP_SZ*, *FI_SOCKETS_DEF_AV_SZ*, *FI_SOCKETS_DEF_CQ_SZ*, *FI_SOCKETS_DEF_EQ_SZ*.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
