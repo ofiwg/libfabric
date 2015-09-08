@@ -150,7 +150,7 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			pthread_mutex_lock(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) { \
 				r[i] = d[i]; \
-				if (d[i] CMP_OP c[i]) \
+				if (c[i] CMP_OP d[i]) \
 					d[i] = s[i]; \
 			} \
 			pthread_mutex_unlock(&psmx_atomic_lock); \
