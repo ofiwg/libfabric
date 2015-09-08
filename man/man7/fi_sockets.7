@@ -1,4 +1,4 @@
-.TH fi_sockets 7 "2015\-05\-05" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_sockets 7 "2015\-09\-08" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Sockets Fabric Provider
@@ -44,6 +44,48 @@ implemented over TCP sockets.
 As a result, the performance numbers are lower compared to other
 providers implemented over high-speed fabric, and lower than what an
 application might see implementing to sockets directly.
+.SH RUNTIME PARAMETERS
+.PP
+The sockets provider checks for the following environment variables -
+.PP
+\f[I]FI_SOCKETS_PE_WAITTIME\f[] : An integer value that specifies how
+many milliseconds to spin while waiting for progress in
+\f[I]FI_PROGRESS_AUTO\f[] mode.
+.PP
+\f[I]FI_SOCKETS_MAX_CONN_RETRY\f[] : An integer value that specifies the
+number of socket connection retries before reporting as failure.
+.PP
+\f[I]FI_SOCKETS_DEF_CONN_MAP_SZ\f[] : An integer to specify the default
+connection map size.
+.PP
+\f[I]FI_SOCKETS_DEF_AV_SZ\f[] : An integer to specify the default
+address vector size.
+.PP
+\f[I]FI_SOCKETS_DEF_CQ_SZ\f[] : An integer to specify the default
+completion queue size.
+.PP
+\f[I]FI_SOCKETS_DEF_EQ_SZ\f[] : An integer to specify the default event
+queue size.
+.PP
+\f[I]FI_SOCKETS_DGRAM_DROP_RATE\f[] : An integer value to specify the
+drop rate of dgram frame when endpoint is \f[I]FI_EP_DGRAM\f[].
+This is for debugging purpose only.
+.PP
+\f[I]FI_SOCKETS_PE_AFFINITY\f[] : If specified, progress thread is bound
+to the indicated range(s) of Linux virtual processor ID(s).
+This option is currently not supported on OS X.
+The usage is - id_start[-id_end[:stride]][,].
+.SH LARGE SCALE JOBS
+.PP
+For large scale runs one can use these environment variables to set the
+default parameters e.g.
+size of the address vector(AV), completion queue (CQ), connection map
+etc.
+that satisfies the requriment of the particular benchmark.
+The recommended parameters for large scale runs are
+\f[I]FI_SOCKETS_MAX_CONN_RETRY\f[], \f[I]FI_SOCKETS_DEF_CONN_MAP_SZ\f[],
+\f[I]FI_SOCKETS_DEF_AV_SZ\f[], \f[I]FI_SOCKETS_DEF_CQ_SZ\f[],
+\f[I]FI_SOCKETS_DEF_EQ_SZ\f[].
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7), \f[C]fi_getinfo\f[](3)
