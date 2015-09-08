@@ -132,10 +132,12 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			TYPE *d = (dst); \
 			TYPE *s = (src); \
 			TYPE *r = (res); \
+			TYPE tmp; \
 			pthread_mutex_lock(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) {\
-				r[i] = d[i]; \
+				tmp = d[i]; \
 				OP(d[i],s[i]); \
+				r[i] = tmp; \
 			} \
 			pthread_mutex_unlock(&psmx_atomic_lock); \
 		} while (0)
@@ -147,11 +149,13 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			TYPE *s = (src); \
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
+			TYPE tmp; \
 			pthread_mutex_lock(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) { \
-				r[i] = d[i]; \
-				if (d[i] CMP_OP c[i]) \
+				tmp = d[i]; \
+				if (c[i] CMP_OP d[i]) \
 					d[i] = s[i]; \
+				r[i] = tmp; \
 			} \
 			pthread_mutex_unlock(&psmx_atomic_lock); \
 		} while (0)
@@ -163,10 +167,12 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			TYPE *s = (src); \
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
+			TYPE tmp; \
 			pthread_mutex_lock(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) { \
-				r[i] = d[i]; \
+				tmp = d[i]; \
 				d[i] = (s[i] & c[i]) | (d[i] & ~c[i]); \
+				r[i] = tmp; \
 			} \
 			pthread_mutex_unlock(&psmx_atomic_lock); \
 		} while (0)
