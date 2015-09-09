@@ -13,7 +13,7 @@ The Verbs Fabric Provider
 
 The verbs provider enables applications using OFI to be run over any verbs
 hardware (Infiniband, iWarp, etc). It uses the Linux Verbs API for network
-transport and provides a translation OFI calls to appropriate verbs API calls.
+transport and provides a translation of OFI calls to appropriate verbs API calls.
 It uses librdmacm for communication management and libibverbs for other control
 and data transfer operations.
 
@@ -69,9 +69,6 @@ The verbs provider supports a subset of OFI features.
 
 *CQ*
 : cq_readfrom operations are not supported.
-
-*CM*
-: fi_setname is not yet supported.
 
 *EQ*
 : fi_eq_write is not supported.
