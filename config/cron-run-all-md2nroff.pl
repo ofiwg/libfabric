@@ -34,8 +34,6 @@ die "Must specify a git repo"
     if (!defined($repo_arg));
 die "Must specify a git source branch"
     if (!defined($source_branch_arg));
-die "Must specify a git pages branch"
-    if (!defined($pages_branch_arg));
 
 #####################################################################
 
@@ -99,8 +97,10 @@ chdir($tmpdir);
 doit(0, "git clone --single-branch --branch $source_branch_arg $repo_arg source", "git-clone");
 
 # Next, git clone the pages branch of repo
-verbose("*** Cloning repo: $repo_arg / $pages_branch_arg...\n");
-doit(0, "git clone --single-branch --branch $pages_branch_arg $repo_arg pages", "git-clone2");
+if (defined($pages_branch_arg)) {
+    verbose("*** Cloning repo: $repo_arg / $pages_branch_arg...\n");
+    doit(0, "git clone --single-branch --branch $pages_branch_arg $repo_arg pages", "git-clone2");
+}
 
 #####################################################################
 
@@ -114,29 +114,31 @@ verbose("Found: @markdown_files\n");
 #####################################################################
 
 # Copy each of the markdown files to the pages branch checkout
-chdir("pages/master");
-foreach my $file (@markdown_files) {
-    doit(0, "cp ../../source/man/$file man/$file", "loop-cp");
+if (defined($pages_branch_arg)) {
+    chdir("pages/master");
+    foreach my $file (@markdown_files) {
+        doit(0, "cp ../../source/man/$file man/$file", "loop-cp");
 
-    # Is there a new man page?  If so, we need to "git add" it.
-    my $out = `git status --porcelain man/$file`;
-    doit(0, "git add man/$file", "loop-git-add")
-        if ($out =~ /^\?\?/);
+        # Is there a new man page?  If so, we need to "git add" it.
+        my $out = `git status --porcelain man/$file`;
+        doit(0, "git add man/$file", "loop-git-add")
+            if ($out =~ /^\?\?/);
+    }
+
+    # Git commit those files in the pages repo and push them to the
+    # upstream repo so that they go live.  If nothing changed, the commit
+    # and push will be no-ops.
+    chdir("..");
+    doit(1, "git commit --no-verify -a -m \"Updated Markdown man pages from $source_branch_arg\"",
+         "git-commit-first");
+    doit(1, "git push", "git-push-first");
 }
-
-# Git commit those files in the pages repo and push them to the
-# upstream repo so that they go live.  If nothing changed, the commit
-# and push will be no-ops.
-chdir("..");
-doit(1, "git commit --no-verify -a -m \"Updated Markdown man pages from $source_branch_arg\"",
-     "git-commit-first");
-doit(1, "git push", "git-push-first");
 
 #####################################################################
 
 # Now process each of the Markdown files in the source repo and
 # generate new nroff man pages.
-chdir("../source/man");
+chdir("$tmpdir/source/man");
 foreach my $file (@markdown_files) {
     doit(0, "../config/md2nroff.pl --source $file", "loop2-md2nroff");
 
