@@ -1,4 +1,4 @@
-.TH fi_atomic 3 "2015\-06\-08" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_atomic 3 "2015\-09\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_atomic - Remote atomic functions
@@ -292,7 +292,7 @@ addr[i]\ =\ buf[i]
 .IP
 .nf
 \f[C]
-if\ (addr[i]\ ==\ compare[i])
+if\ (compare[i]\ ==\ addr[i])
 \ \ \ \ addr[i]\ =\ buf[i]
 \f[]
 .fi
@@ -301,7 +301,7 @@ if\ (addr[i]\ ==\ compare[i])
 .IP
 .nf
 \f[C]
-if\ (addr[i]\ !=\ compare[i])
+if\ (compare[i]\ !=\ addr[i])
 \ \ \ \ addr[i]\ =\ buf[i]
 \f[]
 .fi
@@ -311,7 +311,7 @@ with data
 .IP
 .nf
 \f[C]
-if\ (addr[i]\ <=\ compare[i])
+if\ (compare[i]\ <=\ addr[i])
 \ \ \ \ addr[i]\ =\ buf[i]
 \f[]
 .fi
@@ -320,7 +320,7 @@ if\ (addr[i]\ <=\ compare[i])
 .IP
 .nf
 \f[C]
-if\ (addr[i]\ <\ compare[i])
+if\ (compare[i]\ <\ addr[i])
 \ \ \ \ addr[i]\ =\ buf[i]
 \f[]
 .fi
@@ -330,7 +330,7 @@ with data
 .IP
 .nf
 \f[C]
-if\ (addr[i]\ >=\ compare[i])
+if\ (compare[i]\ >=\ addr[i])
 \ \ \ \ addr[i]\ =\ buf[i]
 \f[]
 .fi
@@ -339,7 +339,7 @@ if\ (addr[i]\ >=\ compare[i])
 .IP
 .nf
 \f[C]
-if\ (addr[i]\ >\ compare[i])
+if\ (compare[i]\ >\ addr[i])
 \ \ \ \ addr[i]\ =\ buf[i]
 \f[]
 .fi
