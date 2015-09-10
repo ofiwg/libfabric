@@ -47,6 +47,7 @@ extern int sock_cm_def_map_sz;
 extern int sock_av_def_sz;
 extern int sock_cq_def_sz;
 extern int sock_eq_def_sz;
+extern char *sock_pe_affinity_str;
 #if ENABLE_DEBUG
 extern int sock_dgram_drop_rate;
 #endif

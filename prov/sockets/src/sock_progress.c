@@ -53,6 +53,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <inttypes.h>
+#include <complex.h>
 
 #include "sock.h"
 #include "sock_util.h"
@@ -941,6 +942,58 @@ out:
 	}								\
 	}while(0)								
 
+#define SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst) do {		\
+        _cmp = cmp, _dst = dst, _src = src;			        \
+	switch (op) {							\
+	case FI_SUM:							\
+		*_cmp = *_dst;						\
+		*_dst = *_dst + *_src;					\
+		break;							\
+									\
+	case FI_PROD:							\
+		*_cmp = *_dst;						\
+		*_dst = *_dst * *_src;					\
+		break;							\
+									\
+	case FI_LOR:							\
+		*_cmp = *_dst;						\
+		*_dst = *_dst || *_src;					\
+		break;							\
+									\
+	case FI_LAND:							\
+		*_cmp = *_dst;						\
+		*_dst = *_dst && *_src;					\
+		break;							\
+									\
+	case FI_ATOMIC_READ:						\
+		*_cmp = *_dst;						\
+		break;							\
+									\
+	case FI_ATOMIC_WRITE:						\
+		*_cmp = *_dst;						\
+		*_dst = *_src;						\
+		break;							\
+									\
+	case FI_CSWAP:							\
+		if (*_cmp == *_dst)					\
+			*_dst = *_src;					\
+		else							\
+			*_cmp = *_dst;					\
+		break;							\
+									\
+	case FI_CSWAP_NE:						\
+		if (*_cmp != *_dst)					\
+			*_dst = *_src;					\
+		else							\
+			*_cmp = *_dst;					\
+		break;							\
+									\
+	default:							\
+		SOCK_LOG_ERROR("Atomic operation type not supported\n");\
+		break;							\
+	}								\
+	}while(0)
+
 
 static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
 				 enum fi_datatype datatype, enum fi_op op)
@@ -1031,6 +1084,30 @@ static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
 		long double *_cmp, *_dst, *_src;
 		_cmp = cmp, _src = src, _dst = dst;
 		SOCK_ATOMIC_UPDATE_FLOAT(_cmp, _src, _dst);
+		break;
+	}
+
+	case FI_DOUBLE_COMPLEX:
+	{
+		double complex *_cmp, *_dst, *_src;
+		_cmp = cmp, _src = src, _dst = dst;
+		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
+		break;
+	}
+
+	case FI_FLOAT_COMPLEX:
+	{
+		float complex *_cmp, *_dst, *_src;
+		_cmp = cmp, _src = src, _dst = dst;
+		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
+		break;
+	}
+
+	case FI_LONG_DOUBLE_COMPLEX:
+	{
+		long double complex *_cmp, *_dst, *_src;
+		_cmp = cmp, _src = src, _dst = dst;
+		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
 		break;
 	}
 
@@ -2547,17 +2624,13 @@ static void sock_thread_set_affinity(char *s)
 }
 #endif
 
-static void sock_pe_set_affinity (void)
+static void sock_pe_set_affinity(void)
 {
-	char *s;
-	fi_param_define(&sock_prov, "pe_affinity", FI_PARAM_STRING,
-			"If specified, bind the progress thread to the indicated range(s) of Linux virtual processor ID(s). "
-			"This option is currently not supported on OS X. Usage: id_start[-id_end[:stride]][,]");
-	if (fi_param_get_str(&sock_prov, "pe_affinity", &s) != FI_SUCCESS)
+	if (sock_pe_affinity_str == NULL)
 		return;
 	
 #ifndef __APPLE__
-	sock_thread_set_affinity(s);
+	sock_thread_set_affinity(sock_pe_affinity_str);
 #else
 	SOCK_LOG_ERROR("*** FI_SOCKETS_PE_AFFINITY is not supported on OS X\n");
 #endif
