@@ -135,10 +135,16 @@ int DEFAULT_SYMVER_PRE(fi_log_enabled)(const struct fi_provider *prov, enum fi_l
 		   enum fi_log_subsys subsys)
 {
 	struct fi_prov_context *ctx;
+	int ret = 1;
 
-	ctx = (struct fi_prov_context *) &prov->context;
-	return ((FI_LOG_TAG(ctx->disable_logging, level, subsys) & log_mask) ==
-		FI_LOG_TAG(ctx->disable_logging, level, subsys));
+	if (prov != NULL) {
+		ctx = (struct fi_prov_context *) &prov->context;
+		uint64_t tag = FI_LOG_TAG(ctx->disable_logging, level, subsys);
+
+		ret = (tag & log_mask) == tag;
+	}
+
+	return ret;
 }
 DEFAULT_SYMVER(fi_log_enabled_, fi_log_enabled);
 
@@ -149,11 +155,17 @@ void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_leve
 {
 	char buf[1024];
 	int size;
+	const char *provname =
+		prov == NULL
+			? "<unknown provider>"
+			: prov->name == NULL
+				? "<unnamed provider>"
+				: prov->name;
 
 	va_list vargs;
 
 	size = snprintf(buf, sizeof(buf), "%s:%s:%s:%s():%d<%s> ", PACKAGE,
-			prov->name, log_subsys[subsys], func, line,
+			provname, log_subsys[subsys], func, line,
 			log_levels[level]);
 
 	va_start(vargs, fmt);
