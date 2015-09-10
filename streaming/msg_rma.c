@@ -478,6 +478,7 @@ int main(int argc, char **argv)
 				op_type = FT_RMA_READ;
 			} else if (!strcmp(optarg, "writedata")) {
 				op_type = FT_RMA_WRITEDATA;
+				cq_attr.format = FI_CQ_FORMAT_DATA;
 			} else if (!strcmp(optarg, "write")) {
 				op_type = FT_RMA_WRITE;
 			} else {
