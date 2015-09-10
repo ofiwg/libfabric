@@ -160,7 +160,7 @@ struct fi_msg_rma {
 	const struct iovec *msg_iov;     /* local scatter-gather array */
 	void               **desc;       /* operation descriptor */
 	size_t             iov_count;    /* # elements in msg_iov */
-	const void         *addr;        /* optional endpoint address */
+	fi_addr_t          addr;        /* optional endpoint address */
 	const struct fi_rma_iov *rma_iov;/* remote SGL */
 	size_t             rma_iov_count;/* # elements in rma_iov */
 	void               *context;     /* user-defined context */
