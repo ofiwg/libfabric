@@ -45,17 +45,11 @@
 
 struct fi_rma_iov local, remote;
 
-static void *remote_addr;
-static size_t addrlen = 0;
-static fi_addr_t remote_fi_addr;
-struct fi_context fi_ctx_send;
-struct fi_context fi_ctx_recv;
 struct fi_context fi_ctx_write;
 struct fi_context fi_ctx_read;
-struct fi_context fi_ctx_av;
 
-static uint64_t user_defined_key = 45678;
 static char * welcome_text = "Hello from Client!";
+
 
 static int rma_write(size_t size)
 {
@@ -63,7 +57,7 @@ static int rma_write(size_t size)
 
 	/* Using specified base address and MR key for RMA write */
 	ret = fi_write(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 0,
-			user_defined_key, &fi_ctx_write);
+			FT_MR_KEY, &fi_ctx_write);
 	if (ret){
 		FT_PRINTERR("fi_write", ret);
 		return ret;
@@ -75,24 +69,16 @@ static int alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
 
-	buf_size = MAX(sizeof(char *) * strlen(welcome_text),
-			sizeof(uint64_t));
-	buf = malloc(buf_size);
-	if (!buf) {
-		perror("malloc");
-		return -1;
-	}
+	ret = ft_alloc_active_res(fi);
+	if (ret)
+		return ret;
 
 	ret = fi_mr_reg(domain, buf, buf_size, FI_WRITE | FI_REMOTE_WRITE, 0,
-			user_defined_key, 0, &mr, NULL);
+			FT_MR_KEY, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
 	}
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
 
 	return 0;
 }
@@ -113,12 +99,6 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	if (opts.dst_addr) {
-		addrlen = fi->dest_addrlen;
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, fi->dest_addr, addrlen);
-	}
-
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
@@ -133,18 +113,9 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(NULL);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
-
-	if(opts.dst_addr) {
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				&fi_ctx_av);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-	}
 
 	return 0;
 }
@@ -157,6 +128,10 @@ static int run_test(void)
 	if (ret)
 		return ret;
 
+	ret = ft_init_av();
+	if (ret)
+		return ret;
+
 	if (opts.dst_addr) {
 		/* Execute RMA write operation from Client */
 		fprintf(stdout, "RMA write to server\n");
@@ -165,7 +140,7 @@ static int run_test(void)
 		if (ret)
 			return ret;
 
-		ret = fi_cntr_wait(txcntr, 1, -1);
+		ret = fi_cntr_wait(txcntr, 2, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			return ret;
@@ -174,7 +149,7 @@ static int run_test(void)
 		fprintf(stdout, "Received a completion event for RMA write\n");
 	} else {
 		/* Server waits for message from Client */
-		ret = fi_cntr_wait(rxcntr, 1, -1);
+		ret = fi_cntr_wait(rxcntr, 2, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			return ret;

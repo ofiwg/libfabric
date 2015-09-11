@@ -44,12 +44,8 @@
 #include <shared.h>
 
 
-static void *remote_addr;
-static size_t addrlen = 0;
-static fi_addr_t remote_fi_addr;
-struct fi_context fi_ctx_write;
+struct fi_triggered_context triggered_ctx;
 
-static uint64_t user_defined_key = 45678;
 static char *welcome_text1 = "Hello1 from Client!";
 static char *welcome_text2 = "Hello2 from Client!";
 
@@ -67,7 +63,7 @@ static int rma_write(void *src, size_t size,
 
 	rma_iov.addr = 0;
 	rma_iov.len = size;
-	rma_iov.key = user_defined_key;
+	rma_iov.key = FT_MR_KEY;
 
 	msg.msg_iov = &msg_iov;
 	msg.desc = &desc;
@@ -77,7 +73,6 @@ static int rma_write(void *src, size_t size,
 	msg.rma_iov = &rma_iov;
 	msg.context = context;
 
- 	/* Using specified base address and MR key for RMA write */
 	ret = fi_writemsg(ep, &msg, flags);
  	if (ret){
  		FT_PRINTERR("fi_write", ret);
@@ -89,7 +84,6 @@ static int rma_write(void *src, size_t size,
 static int rma_write_trigger(void *src, size_t size,
 			     struct fid_cntr *cntr, size_t threshold)
 {
-	struct fi_triggered_context triggered_ctx;
 	triggered_ctx.event_type = FI_TRIGGER_THRESHOLD;
 	triggered_ctx.trigger.threshold.cntr = cntr;
 	triggered_ctx.trigger.threshold.threshold = threshold;
@@ -100,23 +94,16 @@ static int alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
 
-	buf_size = strlen(welcome_text1) + strlen(welcome_text2);
-	buf = malloc(buf_size);
-	if (!buf) {
-		perror("malloc");
-		return -1;
-	}
+	ret = ft_alloc_active_res(fi);
+	if (ret)
+		return ret;
 
 	ret = fi_mr_reg(domain, buf, buf_size, FI_WRITE | FI_REMOTE_WRITE, 0,
-			user_defined_key, 0, &mr, NULL);
+			FT_MR_KEY, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
 	}
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
 
 	return 0;
 }
@@ -137,12 +124,6 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	if (opts.dst_addr) {
-		addrlen = fi->dest_addrlen;
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, fi->dest_addr, addrlen);
-	}
-
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
@@ -157,17 +138,9 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(NULL);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
-
-	if(opts.dst_addr) {
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0, NULL);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-	}
 
 	return 0;
 }
@@ -175,31 +148,30 @@ static int init_fabric(void)
 static int run_test(void)
 {
 	int ret = 0;
-	char *ptr1, *ptr2;
 
 	ret = init_fabric();
 	if (ret)
 		return ret;
 
+	ret = ft_init_av();
+	if (ret)
+		return ret;
+
 	if (opts.dst_addr) {
-		ptr1 = buf;
-		sprintf(ptr1, "%s", welcome_text1);
-		ptr2 = ptr1 + strlen(welcome_text1);
-		sprintf(ptr2, "%s", welcome_text2);
+		sprintf(tx_buf, "%s%s", welcome_text1, welcome_text2);
 
 		fprintf(stdout, "Triggered RMA write to server\n");
-		/* Post triggered RMA write operation */
-		ret = rma_write_trigger(ptr2, strlen(welcome_text2), txcntr, 1);
+		ret = rma_write_trigger((char *) tx_buf + strlen(welcome_text1),
+					strlen(welcome_text2), txcntr, 2);
 		if (ret)
 			goto out;
 
-		/* Execute RMA write operation from Client */
 		fprintf(stdout, "RMA write to server\n");
-		ret = rma_write(ptr1, strlen(welcome_text1), NULL, 0);
+		ret = rma_write(tx_buf, strlen(welcome_text1), &tx_ctx, 0);
 		if (ret)
 			goto out;
 
-		ret = fi_cntr_wait(txcntr, 2, -1);
+		ret = fi_cntr_wait(txcntr, 3, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			goto out;
@@ -207,15 +179,14 @@ static int run_test(void)
 
 		fprintf(stdout, "Received completion events for RMA write operations\n");
 	} else {
-		/* Server waits for message from Client */
-		ret = fi_cntr_wait(rxcntr, 2, -1);
+		ret = fi_cntr_wait(rxcntr, 3, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			goto out;
 		}
 
-		fprintf(stdout, "Received data from Client: %s\n", (char *)buf);
-		if (strncmp(buf, welcome_text2, strlen(welcome_text2))) {
+		fprintf(stdout, "Received data from Client: %s\n", (char *) rx_buf);
+		if (strncmp(rx_buf, welcome_text2, strlen(welcome_text2))) {
 			fprintf(stderr, "*** Data corruption\n");
 			ret = -1;
 			goto out;
@@ -235,6 +206,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options = FT_OPT_SIZE | FT_OPT_RX_CNTR | FT_OPT_TX_CNTR;
+	opts.transfer_size = strlen(welcome_text1) + strlen(welcome_text2);
 
 	hints = fi_allocinfo();
 	if (!hints)

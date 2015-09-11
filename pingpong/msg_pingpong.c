@@ -75,21 +75,6 @@ static int run_test()
 	return 0;
 }
 
-static int alloc_ep_res(struct fi_info *fi)
-{
-	int ret;
-
-	ret = ft_alloc_bufs();
-	if (ret)
-		return ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int server_connect(void)
 {
 	struct fi_eq_cm_entry entry;
@@ -117,11 +102,11 @@ static int server_connect(void)
 		goto err;
 	}
 
-	ret = alloc_ep_res(info);
+	ret = ft_alloc_active_res(info);
 	if (ret)
 		 goto err;
 
-	ret = ft_init_ep(buf);
+	ret = ft_init_ep();
 	if (ret)
 		goto err;
 
@@ -181,11 +166,11 @@ static int client_connect(void)
 		return ret;
 	}
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(buf);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
 

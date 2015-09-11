@@ -60,11 +60,16 @@ static char err_buf[512];
 
 static void teardown_ep_fixture(void)
 {
+	FT_CLOSE_FID(mr);
 	FT_CLOSE_FID(ep);
 	FT_CLOSE_FID(txcq);
 	FT_CLOSE_FID(rxcq);
 	FT_CLOSE_FID(av);
-
+	if (buf) {
+		free(buf);
+		buf = rx_buf = tx_buf = NULL;
+		buf_size = rx_size = tx_size = 0;
+	}
 }
 
 /* returns 0 on success or a negative value that can be stringified with
@@ -77,7 +82,7 @@ static int setup_ep_fixture(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(NULL);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
 

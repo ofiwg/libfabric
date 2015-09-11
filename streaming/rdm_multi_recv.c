@@ -47,17 +47,13 @@
 // feature efficiently, we need to have a large recv buffer so that we don't
 // to repost the buffer often to get the remaining data when the buffer is full
 #define MULTI_BUF_SIZE_FACTOR 4
-#define DEFAULT_MULTI_BUF_SIZE 1024*1024
+#define DEFAULT_MULTI_BUF_SIZE (1024 * 1024)
 
 
 static char test_name[10] = "custom";
 static struct timespec start, end;
-static void *send_buf, *multi_recv_buf;
-static size_t max_send_buf_size, multi_buf_size;
 
 static struct fid_mr *mr_multi_recv;
-static fi_addr_t remote_fi_addr;
-struct fi_context ctx_send;
 struct fi_context ctx_multi_recv[2];
 
 
@@ -82,8 +78,8 @@ int wait_for_recv_completion(int num_completions)
 		if (comp.flags & FI_MULTI_RECV) {
 			i = (comp.op_context == &ctx_multi_recv[0]) ? 0 : 1;
 
-			ret = fi_recv(ep, multi_recv_buf + (multi_buf_size / 2) * i,
-					multi_buf_size / 2, fi_mr_desc(mr_multi_recv),
+			ret = fi_recv(ep, rx_buf + (rx_size / 2) * i,
+					rx_size / 2, fi_mr_desc(mr_multi_recv),
 					0, &ctx_multi_recv[i]);
 			if (ret) {
 				FT_PRINTERR("fi_recv", ret);
@@ -98,7 +94,7 @@ static int send_msg(size_t size)
 {
 	int ret;
 
-	ret = fi_send(ep, send_buf, size, fi_mr_desc(mr), remote_fi_addr, &ctx_send);
+	ret = fi_send(ep, tx_buf, size, fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
 	if (ret) {
 		FT_PRINTERR("fi_send", ret);
 		return ret;
@@ -128,8 +124,8 @@ static int post_multi_recv_buffer()
 	int ret, i;
 
 	for (i = 0; i < 2; i++) {
-		ret = fi_recv(ep, multi_recv_buf + (multi_buf_size / 2) * i,
-			   	multi_buf_size / 2, fi_mr_desc(mr_multi_recv),
+		ret = fi_recv(ep, rx_buf + (rx_size / 2) * i,
+				rx_size / 2, fi_mr_desc(mr_multi_recv),
 				0, &ctx_multi_recv[i]);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
@@ -179,13 +175,13 @@ out:
 static void free_res(void)
 {
 	FT_CLOSE_FID(mr_multi_recv);
-	if (send_buf) {
-		free(send_buf);
-		send_buf = NULL;
+	if (tx_buf) {
+		free(tx_buf);
+		tx_buf = NULL;
 	}
-	if (multi_recv_buf) {
-		free(multi_recv_buf);
-		multi_recv_buf = NULL;
+	if (rx_buf) {
+		free(rx_buf);
+		rx_buf = NULL;
 	}
 }
 
@@ -193,42 +189,41 @@ static int alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
 
-	max_send_buf_size = MAX(64, opts.transfer_size);
-	if (max_send_buf_size > fi->ep_attr->max_msg_size) {
+	tx_size = MAX(FT_MAX_CTRL_MSG, opts.transfer_size);
+	if (tx_size > fi->ep_attr->max_msg_size) {
 		fprintf(stderr, "transfer size is larger than the maximum size "
 				"of the data transfer supported by the provider\n");
 		return -1;
 	}
 
-	send_buf = malloc(max_send_buf_size);
-	if (!send_buf) {
-		fprintf(stderr, "Cannot allocate send_buf\n");
+	tx_buf = malloc(tx_size);
+	if (!tx_buf) {
+		fprintf(stderr, "Cannot allocate tx_buf\n");
 		return -1;
 	}
 
-	ret = fi_mr_reg(domain, send_buf, max_send_buf_size, FI_SEND, 0, 0, 0, &mr, NULL);
+	ret = fi_mr_reg(domain, tx_buf, tx_size, FI_SEND,
+			0, FT_MR_KEY, 0, &mr, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
 	}
 
 	// set the multi buffer size to be allocated
-	multi_buf_size = MAX(max_send_buf_size, DEFAULT_MULTI_BUF_SIZE) *
-		MULTI_BUF_SIZE_FACTOR;
-	multi_recv_buf = malloc(multi_buf_size);
-	if (!multi_recv_buf) {
-		fprintf(stderr, "Cannot allocate multi_recv_buf\n");
+	rx_size = MAX(tx_size, DEFAULT_MULTI_BUF_SIZE) * MULTI_BUF_SIZE_FACTOR;
+	rx_buf = malloc(rx_size);
+	if (!rx_buf) {
+		fprintf(stderr, "Cannot allocate rx_buf\n");
 		return -1;
 	}
 
-	ret = fi_mr_reg(domain, multi_recv_buf, multi_buf_size, FI_RECV, 0, 1, 0,
+	ret = fi_mr_reg(domain, rx_buf, rx_size, FI_RECV, 0, FT_MR_KEY + 1, 0,
 			&mr_multi_recv, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
 	}
 
-	cq_attr.format = FI_CQ_FORMAT_DATA;
 	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
@@ -269,12 +264,12 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(NULL);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
 
 	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
-			&max_send_buf_size, sizeof(max_send_buf_size));
+			&tx_size, sizeof(tx_size));
 	if (ret)
 		return ret;
 
@@ -296,7 +291,7 @@ static int init_av(void)
 		}
 
 		addrlen = 64;
-		ret = fi_getname(&ep->fid, send_buf, &addrlen);
+		ret = fi_getname(&ep->fid, tx_buf, &addrlen);
 		if (ret) {
 			FT_PRINTERR("fi_getname", ret);
 			return ret;
@@ -310,7 +305,7 @@ static int init_av(void)
 		if (ret)
 			return ret;
 
-		ret = fi_av_insert(av, multi_recv_buf, 1, &remote_fi_addr, 0, NULL);
+		ret = fi_av_insert(av, rx_buf, 1, &remote_fi_addr, 0, NULL);
 		if (ret != 1) {
 			FT_PRINTERR("fi_av_insert", ret);
 			return ret;
@@ -368,6 +363,8 @@ int main(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_MULTI_RECV;
 	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
+
+	cq_attr.format = FI_CQ_FORMAT_DATA;
 
 	ret = run();
 

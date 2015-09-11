@@ -47,16 +47,11 @@
 static char test_name[10] = "custom";
 static struct timespec start, end;
 
-static void *local_addr, *remote_addr;
-static size_t addrlen = 0;
-static fi_addr_t remote_fi_addr;
 struct fi_context fi_ctx_tsend;
 struct fi_context fi_ctx_trecv;
-struct fi_context fi_ctx_recv;
-struct fi_context fi_ctx_av;
 
 static uint64_t tag_data = 0;
-static uint64_t tag_control = 0x12345678;
+
 
 
 static int send_xfer(int size)
@@ -114,57 +109,48 @@ static int recv_xfer(int size)
 	return ret;
 }
 
-static int send_msg(int size)
-{
-	int ret;
-
-	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			tag_control, &fi_ctx_tsend);
-	if (ret) {
-		FT_PRINTERR("fi_tsend", ret);
-		return ret;
-	}
-
-	ret = ft_wait_for_comp(txcq, 1);
-
-	return ret;
-}
-
-static int recv_msg(void)
-{
-	int ret;
-
-	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
-		       tag_control, 0, &fi_ctx_trecv);
-	if (ret) {
-		FT_PRINTERR("fi_trecv", ret);
-		return ret;
-	}
-
-	ret = ft_wait_for_comp(rxcq, 1);
-
-	return ret;
-}
-
 static int sync_test(void)
 {
 	int ret;
 
 	ret = ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
-	if (ret) {
-		return ret;
-	}
-	tx_credits = fi->tx_attr->size;
-
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
 	if (ret)
 		return ret;
 
-	ret = opts.dst_addr ? recv_xfer(16) : send_xfer(16);
+	tx_credits = fi->tx_attr->size;
 
-	tag_data++;
+	if (opts.dst_addr) {
+		ret = fi_send(ep, tx_buf, 1, fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
+		if (ret) {
+			FT_PRINTERR("fi_send", ret);
+			return ret;
+		}
+	}
 
-	return ret;
+	ret = ft_get_rx_comp(1);
+	if (ret)
+		return ret;
+
+	if (!opts.dst_addr) {
+		ret = fi_send(ep, tx_buf, 1, fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
+		if (ret) {
+			FT_PRINTERR("fi_send", ret);
+			return ret;
+		}
+
+	}
+
+	ret = ft_get_tx_comp(1);
+	if (ret)
+		return ret;
+
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, &rx_ctx);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
+
+	return 0;
 }
 
 static int run_test(void)
@@ -202,21 +188,6 @@ out:
 	return ret;
 }
 
-static int alloc_ep_res(struct fi_info *fi)
-{
-	int ret;
-
-	ret = ft_alloc_bufs();
-	if (ret)
-		return ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int init_fabric(void)
 {
 	uint64_t flags = 0;
@@ -233,13 +204,6 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	/* Get remote address */
-	if (opts.dst_addr) {
-		addrlen = fi->dest_addrlen;
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, fi->dest_addr, addrlen);
-	}
-
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
@@ -250,87 +214,25 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(&fi_ctx_recv);
+	ret = ft_init_ep();
+	if (ret)
+		return ret;
+
+	/* TODO: use msg interface for control transfers, or switch to tagged */
+	ret = ft_init_av();
+	if (ret)
+		return ret;
+
+	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
+			tag_data, 0, &fi_ctx_trecv);
 	if (ret)
 		return ret;
 
 	return 0;
-}
-
-static int init_av(void)
-{
-	int ret;
-
-	if (opts.dst_addr) {
-		/* Get local address blob. Find the addrlen first. We set addrlen
-		 * as 0 and fi_getname will return the actual addrlen. */
-		addrlen = 0;
-		ret = fi_getname(&ep->fid, local_addr, &addrlen);
-		if (ret != -FI_ETOOSMALL) {
-			FT_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		local_addr = malloc(addrlen);
-		ret = fi_getname(&ep->fid, local_addr, &addrlen);
-		if (ret) {
-			FT_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				&fi_ctx_av);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-
-		/* Send local addr size and local addr */
-		memcpy(buf, &addrlen, sizeof(size_t));
-		memcpy(buf + sizeof(size_t), local_addr, addrlen);
-		ret = send_msg(sizeof(size_t) + addrlen);
-		if (ret)
-			return ret;
-
-		/* Receive ACK from server */
-		ret = recv_msg();
-		if (ret)
-			return ret;
-
-	} else {
-		/* Post a recv to get the remote address */
-		ret = recv_msg();
-		if (ret)
-			return ret;
-
-		memcpy(&addrlen, buf, sizeof(size_t));
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
-
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				&fi_ctx_av);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-
-		/* Send ACK */
-		ret = send_msg(16);
-		if (ret)
-			return ret;
-	}
-
-	/* Post first recv */
-	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data, 0, &fi_ctx_trecv);
-	if (ret)
-		FT_PRINTERR("fi_trecv", ret);
-
-	return ret;
 }
 
 static int run(void)
@@ -340,10 +242,6 @@ static int run(void)
 	ret = init_fabric();
 	if (ret)
 		return ret;
-
-	ret = init_av();
-	if (ret)
-		goto out;
 
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {

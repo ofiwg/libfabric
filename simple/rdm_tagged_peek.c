@@ -43,18 +43,11 @@
 #include <rdma/fi_tagged.h>
 #include <shared.h>
 
-
-static void *local_addr, *remote_addr;
-static size_t addrlen = 0;
-static fi_addr_t remote_fi_addr;
-struct fi_context fi_ctx_send;
-struct fi_context fi_ctx_recv;
-struct fi_context fi_ctx_av;
 struct fi_context fi_ctx_search;
 
 static uint64_t tag_data = 1;
 static uint64_t tag_control = 0x12345678;
-static uint64_t tag_param = 0x87654321;
+
 
 
 static int send_msg(int size, uint64_t tag)
@@ -62,7 +55,7 @@ static int send_msg(int size, uint64_t tag)
 	int ret;
 
 	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			tag, &fi_ctx_send);
+			tag, &tx_ctx);
 	if (ret)
 		FT_PRINTERR("fi_tsend", ret);
 
@@ -76,7 +69,7 @@ static int recv_msg(uint64_t tag)
 	int ret;
 
 	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
-			tag, 0, &fi_ctx_recv);
+			tag, 0, &rx_ctx);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
 
@@ -89,7 +82,7 @@ static int post_recv(uint64_t tag)
 	int ret;
 
 	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
-			tag, 0, &fi_ctx_recv);
+			tag, 0, &rx_ctx);
 	if (ret)
 		FT_PRINTERR("fi_trecv", ret);
 
@@ -109,21 +102,6 @@ static int sync_test(void)
 	return ret;
 }
 
-static int alloc_ep_res(struct fi_info *fi)
-{
-	int ret;
-
-	ret = ft_alloc_bufs();
-	if (ret)
-		return ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int init_fabric(void)
 {
 	uint64_t flags = 0;
@@ -140,13 +118,6 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	// get remote address
-	if (opts.dst_addr) {
-		addrlen = fi->dest_addrlen;
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, fi->dest_addr, addrlen);
-	}
-
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
@@ -157,81 +128,15 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(&fi_ctx_recv);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
 
 	return 0;
-}
-
-static int init_av(void)
-{
-	int ret;
-
-	if (opts.dst_addr) {
-		// get local address blob. Find the addrlen first. We set
-		// addrlen as 0 and fi_getname will return the actual addrlen.
-		addrlen = 0;
-		ret = fi_getname(&ep->fid, local_addr, &addrlen);
-		if (ret != -FI_ETOOSMALL) {
-			FT_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		local_addr = malloc(addrlen);
-		ret = fi_getname(&ep->fid, local_addr, &addrlen);
-		if (ret) {
-			FT_PRINTERR("fi_getname", ret);
-			return ret;
-		}
-
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				&fi_ctx_av);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-
-		// send local addr size and local addr
-		memcpy(buf, &addrlen, sizeof(size_t));
-		memcpy(buf + sizeof(size_t), local_addr, addrlen);
-		ret = send_msg(sizeof(size_t) + addrlen, tag_param);
-		if (ret)
-			return ret;
-
-		// receive ACK from server
-		ret = recv_msg(tag_param + 1);
-		if (ret)
-			return ret;
-
-	} else {
-		// post a recv to get the remote address
-		ret = recv_msg(tag_param);
-		if (ret)
-			return ret;
-
-		memcpy(&addrlen, buf, sizeof(size_t));
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, buf + sizeof(size_t), addrlen);
-
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				&fi_ctx_av);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-
-		// send ACK
-		ret = send_msg(16, tag_param + 1);
-		if (ret)
-			return ret;
-	}
-
-	return ret;
 }
 
 static int tagged_peek(uint64_t tag)
@@ -266,7 +171,7 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	ret = init_av();
+	ret = ft_init_av();
 	if (ret)
 		goto out;
 

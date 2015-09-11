@@ -42,30 +42,6 @@
 #include <shared.h>
 
 
-static void *remote_addr;
-static size_t addrlen = 0;
-static fi_addr_t remote_fi_addr;
-
-struct fi_context fi_ctx_send;
-struct fi_context fi_ctx_recv;
-struct fi_context fi_ctx_av;
-
-
-static int alloc_ep_res(struct fi_info *fi)
-{
-	int ret;
-
-	ret = ft_alloc_bufs();
-	if (ret)
-		return ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 static int init_fabric(void)
 {
 	char *node, *service;
@@ -83,13 +59,6 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	/* Get remote address of the server */
-	if (opts.dst_addr) {
-		addrlen = fi->dest_addrlen;
-		remote_addr = malloc(addrlen);
-		memcpy(remote_addr, fi->dest_addr, addrlen);
-	}
-
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
@@ -101,23 +70,13 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
-	ret = ft_init_ep(NULL);
+	ret = ft_init_ep();
 	if (ret)
 		return ret;
-
-	if (opts.dst_addr) {
-		/* Insert address to the AV and get the fabric address back */
-		ret = fi_av_insert(av, remote_addr, 1, &remote_fi_addr, 0,
-				&fi_ctx_av);
-		if (ret != 1) {
-			FT_PRINTERR("fi_av_insert", ret);
-			return ret;
-		}
-	}
 
 	return 0;
 }
@@ -128,17 +87,15 @@ static int send_recv()
 	int ret;
 
 	if (opts.dst_addr) {
-		/* Client */
-		fprintf(stdout, "Posting a send...\n");
+		fprintf(stdout, "Sending message...\n");
 		sprintf(buf, "Hello from Client!");
 		ret = fi_send(ep, buf, sizeof("Hello from Client!"),
-				fi_mr_desc(mr), remote_fi_addr, &fi_ctx_send);
+				fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
 		if (ret) {
 			FT_PRINTERR("fi_send", ret);
 			return ret;
 		}
 
-		/* Read send queue */
 		do {
 			ret = fi_cq_read(txcq, &comp, 1);
 			if (ret < 0 && ret != -FI_EAGAIN) {
@@ -149,17 +106,7 @@ static int send_recv()
 
 		fprintf(stdout, "Send completion received\n");
 	} else {
-		/* Server */
-		fprintf(stdout, "Posting a recv...\n");
-		ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0,
-				&fi_ctx_recv);
-		if (ret) {
-			FT_PRINTERR("fi_recv", ret);
-			return ret;
-		}
-
-		/* Read recv queue */
-		fprintf(stdout, "Waiting for client...\n");
+		fprintf(stdout, "Waiting for message from client...\n");
 		do {
 			ret = fi_cq_read(rxcq, &comp, 1);
 			if (ret < 0 && ret != -FI_EAGAIN) {
@@ -205,10 +152,13 @@ int main(int argc, char **argv)
 	hints->caps		= FI_MSG;
 	hints->mode		= FI_CONTEXT | FI_LOCAL_MR;
 
-	/* Fabric initialization */
 	ret = init_fabric();
-	if(ret)
+	if (ret)
 		return -ret;
+
+	ret = ft_init_av();
+	if (ret)
+		return ret;
 
 	/* Exchange data */
 	ret = send_recv();
