@@ -351,6 +351,28 @@ endif !HAVE_PSM2_DL
 
 endif HAVE_PSM2
 
+if HAVE_MXM
+_mxm_files = prov/mxm/src/mlxm.h \
+	prov/mxm/src/mlxm_init.c \
+	prov/mxm/src/mlxm_domain.c \
+	prov/mxm/src/mlxm_cq.c \
+	prov/mxm/src/mlxm_av.c \
+	prov/mxm/src/mlxm_ep.c \
+	prov/mxm/src/mlxm_cm.c \
+	prov/mxm/src/mlxm_tagged.c \
+	prov/mxm/src/mlxm_mr.c
+
+
+if HAVE_MXM_DL
+pkglib_LTLIBRARIES += libmlxm-fi.la
+libmlxm_fi_la_SOURCES = $(_mxm_files) $(common_srcs)
+libmlxm_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic $(linkback)
+else
+src_libfabric_la_SOURCES += $(_mxm_files)
+endif
+
+endif #HAVE_MXM
+
 src_libfabric_la_LDFLAGS += -version-info 2:0:1 -export-dynamic \
 			   $(libfabric_version_script)
 rdmainclude_HEADERS += \
