@@ -114,7 +114,7 @@ int send_xfer(size_t size)
 		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
 
 	ret = fi_send(ep, tx_buf, size + ft_tx_prefix_size(),
-			fi_mr_desc(mr), remote_fi_addr, NULL);
+			fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
 	if (ret)
 		FT_PRINTERR("fi_send", ret);
 
@@ -139,7 +139,7 @@ int recv_xfer(size_t size, bool enable_timeout)
 			return ret;
 	}
 
-	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr, NULL);
+	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr, &rx_ctx);
 	if (ret)
 		FT_PRINTERR("fi_recv", ret);
 
