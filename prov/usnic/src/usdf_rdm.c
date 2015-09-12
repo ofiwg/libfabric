@@ -1510,6 +1510,9 @@ usdf_rdm_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 	}
 //printf("RX opcode=%u\n", opcode);
 
+	if (comp->uc_status != USD_COMPSTAT_SUCCESS)
+		goto repost;
+
 	switch (opcode) {
 	case RUDP_OP_ACK:
 		usdf_rdm_rx_ack(rdc, rx->r.rdm.rx_tx, pkt);
