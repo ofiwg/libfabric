@@ -1,48 +1,46 @@
-.TH fi_mxm 7 "2015\-06\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_mxm 7 "2015\-09\-14" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The MXM Fabric Provider
 .SH OVERVIEW
 .PP
-The \f[I]mxm\f[] provider runs over the MXM (Mellanox messaging) interface
-that is currently supported by the Mellanox infiniband fabrics.
+The \f[I]mxm\f[] provider runs over the MXM (Mellanox messaging)
+interface that is currently supported by the Mellanox infiniband
+fabrics.
 The \f[I]mxm\f[] provider makes use of MXM tag matching API in order to
 implement a limited set of the libfabric data transfer APIs, namely,
 tagged message queue.
 .SH LIMITATIONS
 .PP
-The \f[I]mxm\f[] provider doesn\[aq]t support all the features defined in the
-libfabric API. Here are some of the limitations:
+The \f[I]mxm\f[] provider doesn\[aq]t support all the features defined
+in the libfabric API.
+Here are some of the limitations:
 .PP
-Endpoint types
-: Only supported type:  \f[I]FI_RDM\f[]
+Endpoint types : Only supported type: \f[I]FI_RDM\f[]
 .PP
-Endpoint capabilities
-: Endpoints can support the only data transfer capability
-  \f[I]FI_TAGGED\f[].
+Endpoint capabilities : Endpoints can support the only data transfer
+capability \f[I]FI_TAGGED\f[].
 .PP
-Modes
-: \f[I]FI_CONTEXT\f[] is required. That means, all the requests that generate
-  completions must have a valid pointer to type \f[I]struct fi_context\f[]
-  passed as the operation context.
+Modes : \f[I]FI_CONTEXT\f[] is required.
+That means, all the requests that generate completions must have a valid
+pointer to type \f[I]struct fi_context\f[] passed as the operation
+context.
 .PP
-Threading
-: The supported mode is \f[I]FI_THREAD_DOMAIN\f[], i.e. the \f[I]mxm\f[] provider is not thread safe.
+Threading : The supported mode is FI_THREAD_DOMAIN, i.e.
+the \f[I]mxm\f[] provider is not thread safe.
 .PP
-Unsupported features
-: These features are unsupported: connection management, event queue, 
-  scalable endpoint, passive endpoint, shared receive context,
-  rma, atomics.
+Unsupported features : These features are unsupported: connection
+management, event queue, scalable endpoint, passive endpoint, shared
+receive context, rma, atomics.
 .PP
-Mem tag format
-: MXM library provides a tag matching interface with just 32 bits wide tag.
-  Another 16 bits are available for matching via specifying an MXM MQ. Hence
-  total maximum available matching bits equal 48. This is why the only allowed
-  mem_tag_format is 0xFFFF00000000.
-.PP
+Mem tag format : MXM library provides a tag matching interface with just
+32 bits wide tag.
+Another 16 bits are available for matching via specifying an MXM MQ.
+Hence total maximum available matching bits equal 48.
+This is why the only allowed mem_tag_format is 0xFFFF00000000.
 .SH RUNTIME PARAMETERS
-.PP
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
-
+.SH AUTHORS
+OpenFabrics.
