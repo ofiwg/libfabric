@@ -246,35 +246,42 @@ static int ft_parse_num(char *str, struct key_t *key, void *buf)
 	if (!strncmp(key->str, "test_type", strlen("test_type"))) {
 		TEST_ENUM_SET_N_RETURN(str, FT_TEST_LATENCY, enum ft_test_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, FT_TEST_BANDWIDTH, enum ft_test_type, buf);
+		FT_ERR("Unknown test_type\n");
 	} else if (!strncmp(key->str, "class_function", strlen("class_function"))) {
 		TEST_ENUM_SET_N_RETURN(str, FT_FUNC_SENDMSG, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, FT_FUNC_SENDV, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, FT_FUNC_SEND, enum ft_class_function, buf);
+		FT_ERR("Unknown class_function\n");
 	} else if (!strncmp(key->str, "ep_type", strlen("ep_type"))) {
 		TEST_ENUM_SET_N_RETURN(str, FI_EP_MSG, enum fi_ep_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_EP_DGRAM, enum fi_ep_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_EP_RDM, enum fi_ep_type, buf);
+		FT_ERR("Unknown ep_type\n");
 	} else if (!strncmp(key->str, "av_type", strlen("av_type"))) {
 		TEST_ENUM_SET_N_RETURN(str, FI_AV_MAP, enum fi_av_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_AV_TABLE, enum fi_av_type, buf);
+		FT_ERR("Unknown av_type\n");
 	} else if (!strncmp(key->str, "caps", strlen("caps"))) {
 		TEST_SET_N_RETURN(str, "FT_CAP_MSG", FT_CAP_MSG, uint64_t, buf);
 		TEST_SET_N_RETURN(str, "FT_CAP_TAGGED", FT_CAP_TAGGED, uint64_t, buf);
 		TEST_SET_N_RETURN(str, "FT_CAP_RMA", FT_CAP_RMA, uint64_t, buf);
 		TEST_SET_N_RETURN(str, "FT_CAP_ATOMIC", FT_CAP_ATOMIC, uint64_t, buf);
+		FT_ERR("Unknown caps\n");
 	} else if (!strncmp(key->str, "eq_wait_obj", strlen("eq_wait_obj")) ||
 		!strncmp(key->str, "cq_wait_obj", strlen("cq_wait_obj"))) {
 		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_NONE, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_UNSPEC, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_FD, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_MUTEX_COND, enum fi_wait_obj, buf);
+		FT_ERR("Unknown (eq/cq)_wait_obj\n");
 	} else {
 		TEST_ENUM_SET_N_RETURN(str, FT_COMP_QUEUE, enum ft_comp_type, buf);
 		TEST_SET_N_RETURN(str, "FT_MODE_ALL", FT_MODE_ALL, uint64_t, buf);
 		TEST_SET_N_RETURN(str, "FT_FLAG_QUICKTEST", FT_FLAG_QUICKTEST, uint64_t, buf);
+		FT_ERR("Unknown comp_type/mode/test_flags\n");
 	}
 
-	return 1;
+	return -1;
 }
 
 static int ft_parse_key_val(char *config, jsmntok_t *token, char *test_set)
@@ -317,11 +324,13 @@ static int ft_parse_key_val(char *config, jsmntok_t *token, char *test_set)
 					val_token[i].end - val_token[i].start);
 			break;
 		case VAL_NUM:
-			ft_parse_num(config + val_token[i].start, key,
-					test_set + key->offset + key->val_size * i);
+			if (ft_parse_num(config + val_token[i].start, key,
+					test_set + key->offset + key->val_size * i) < 0)
+				return -1;
 			break;
 		default:
-			return 1;
+			FT_ERR("Invalid key->val_type\n");
+			return -1;
 		}
 		parsed++;
 	}
