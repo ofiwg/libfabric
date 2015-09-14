@@ -353,12 +353,6 @@ static int client_connect(void)
 		return ret;
 
 	mr_mode = fi->domain_attr->mr_mode;
- 	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
-		return ret;
-	}
-
 	ret = alloc_ep_res(fi);
 	if (ret)
 		return ret;

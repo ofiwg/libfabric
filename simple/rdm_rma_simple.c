@@ -103,12 +103,6 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
-		return ret;
-	}
-
 	ret = alloc_ep_res(fi);
 	if (ret)
 		return ret;

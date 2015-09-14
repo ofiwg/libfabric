@@ -255,12 +255,6 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret != 0) {
-		printf("fi_domain %s\n", fi_strerror(-ret));
-		exit(1);
-	}
-
 	failed = run_test_set();
 
 	if (failed > 0) {

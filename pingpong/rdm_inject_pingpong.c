@@ -164,12 +164,6 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
-		return ret;
-	}
-
 	/* TODO:
 	 * Memory registration not required for send_buf since we use fi_inject.
 	 * fi_inject copies the buffer of data that needs to be sent.
