@@ -48,39 +48,6 @@
 #include "shared.h"
 #include "pingpong_shared.h"
 
-static char test_name[10] = "custom";
-static struct timespec start, end;
-static size_t max_msg_size = 0;
-
-static int run_test(void)
-{
-	int ret, i;
-
-	ret = sync_test(true);
-	if (ret)
-		return ret;
-
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	for (i = 0; i < opts.iterations; i++) {
-		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
-				 recv_xfer(opts.transfer_size, true);
-		if (ret)
-			return ret;
-
-		ret = opts.dst_addr ? recv_xfer(opts.transfer_size, true) :
-				 send_xfer(opts.transfer_size);
-		if (ret)
-			return ret;
-	}
-	clock_gettime(CLOCK_MONOTONIC, &end);
-
-	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
-	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
-
-	return 0;
-}
 
 static int common_setup(void)
 {
@@ -97,8 +64,6 @@ static int common_setup(void)
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
-
-	max_msg_size = fi->ep_attr->max_msg_size;
 
 	ret = ft_open_fabric_res();
 	if (ret)
@@ -133,27 +98,22 @@ static int run(void)
 				continue;
 
 			opts.transfer_size = test_size[i].size;
-			if (opts.transfer_size > max_msg_size)
+			if (opts.transfer_size > fi->ep_attr->max_msg_size)
 				continue;
 
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = run_test();
+			ret = pingpong();
 			if (ret)
 				goto out;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = run_test();
+		ret = pingpong();
 		if (ret)
 			goto out;
 	}
 
-	ret = ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
-	if (ret)
-		return ret;
-	tx_credits = fi->tx_attr->size;
-
-	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
+	ft_finalize();
 out:
 	return ret;
 }

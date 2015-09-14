@@ -49,10 +49,6 @@
 #define MULTI_BUF_SIZE_FACTOR 4
 #define DEFAULT_MULTI_BUF_SIZE (1024 * 1024)
 
-
-static char test_name[10] = "custom";
-static struct timespec start, end;
-
 static struct fid_mr *mr_multi_recv;
 struct fi_context ctx_multi_recv[2];
 
@@ -90,29 +86,16 @@ int wait_for_recv_completion(int num_completions)
 	return 0;
 }
 
-static int send_msg(size_t size)
-{
-	int ret;
-
-	ret = fi_send(ep, tx_buf, size, fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_send", ret);
-		return ret;
-	}
-
-	ret = ft_wait_for_comp(txcq, 1);
-	return ret;
-}
-
 static int sync_test(void)
 {
 	int ret;
 
-	ret = opts.dst_addr ? send_msg(16) : wait_for_recv_completion(1);
+	ret = opts.dst_addr ? ft_tx(1) : wait_for_recv_completion(1);
 	if (ret)
 		return ret;
 
-	return opts.dst_addr ? wait_for_recv_completion(1) : send_msg(16);
+	ret = opts.dst_addr ? wait_for_recv_completion(1) : ft_tx(1);
+	return ret;
 }
 
 /*
@@ -146,10 +129,10 @@ static int run_test(void)
 		goto out;
 	}
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	ft_start();
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.iterations; i++) {
-			ret = send_msg(opts.transfer_size);
+			ret = ft_tx(opts.transfer_size);
 			if (ret)
 				goto out;
 		}
@@ -158,8 +141,7 @@ static int run_test(void)
 		if (ret)
 			goto out;
 	}
-
-	clock_gettime(CLOCK_MONOTONIC, &end);
+	ft_stop();
 
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations,
@@ -267,7 +249,6 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	// post the initial receive buffers to get MULTI_RECV data
 	ret = post_multi_recv_buffer();
 	return ret;
 }
@@ -294,7 +275,7 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = send_msg(addrlen);
+		ret = ft_tx(addrlen);
 		if (ret)
 			return ret;
 	} else {
@@ -328,6 +309,8 @@ static int run(void)
 		goto out;
 
 	ret = run_test();
+
+	rx_seq++;
 	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
 	return ret;
@@ -368,7 +351,7 @@ int main(int argc, char **argv)
 
 	ret = run();
 
-	free_res();
 	ft_free_res();
+	free_res();
 	return -ret;
 }

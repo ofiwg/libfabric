@@ -43,64 +43,6 @@
 #include <rdma/fi_tagged.h>
 #include <shared.h>
 
-struct fi_context fi_ctx_search;
-
-static uint64_t tag_data = 1;
-static uint64_t tag_control = 0x12345678;
-
-
-
-static int send_msg(int size, uint64_t tag)
-{
-	int ret;
-
-	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			tag, &tx_ctx);
-	if (ret)
-		FT_PRINTERR("fi_tsend", ret);
-
-	ret = ft_wait_for_comp(txcq, 1);
-
-	return ret;
-}
-
-static int recv_msg(uint64_t tag)
-{
-	int ret;
-
-	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
-			tag, 0, &rx_ctx);
-	if (ret)
-		FT_PRINTERR("fi_trecv", ret);
-
-	ret = ft_wait_for_comp(rxcq, 1);
-	return ret;
-}
-
-static int post_recv(uint64_t tag)
-{
-	int ret;
-
-	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
-			tag, 0, &rx_ctx);
-	if (ret)
-		FT_PRINTERR("fi_trecv", ret);
-
-	return ret;
-}
-
-static int sync_test(void)
-{
-	int ret;
-
-	ret = opts.dst_addr ? send_msg(16, tag_control) : recv_msg(tag_control);
-	if (ret)
-		return ret;
-
-	ret = opts.dst_addr ? recv_msg(tag_control) : send_msg(16, tag_control);
-
-	return ret;
-}
 
 static int init_fabric(void)
 {
@@ -135,97 +77,95 @@ static int init_fabric(void)
 
 static int tagged_peek(uint64_t tag)
 {
-	int ret;
+	struct fi_cq_tagged_entry comp;
 	struct fi_msg_tagged msg;
+	int ret;
 
 	memset(&msg, 0, sizeof msg);
 	msg.tag = tag;
-	msg.context = &fi_ctx_search;
+	msg.context = &rx_ctx;
+
 	ret = fi_trecvmsg(ep, &msg, FI_PEEK);
-	if (ret < 0) {
-		if (ret == -ENOMSG)
-			fprintf(stdout,
-				"No match found with tag [%" PRIu64 "]\n",
-				tag);
-		else
-			FT_PRINTERR("fi_tsearch", ret);
-	} else {
-		// search was initiated asynchronously, so wait for
-		// the completion event
-		ret = ft_wait_for_comp(rxcq, 1);
+	if (ret) {
+		FT_PRINTERR("FI_PEEK", ret);
+		return ret;
 	}
 
+	ret = fi_cq_sread(rxcq, &comp, 1, NULL, -1);
+	if (ret != 1) {
+		if (ret == -FI_EAVAIL)
+			ret = ft_cq_readerr(rxcq);
+		else
+			FT_PRINTERR("fi_cq_read", ret);
+	}
 	return ret;
 }
 
 static int run(void)
 {
-	int ret = 0;
+	int ret;
+
 	ret = init_fabric();
 	if (ret)
 		return ret;
 
 	ret = ft_init_av();
 	if (ret)
-		goto out;
+		return ret;
 
-	// Receiver
 	if (opts.dst_addr) {
-		// search for initial tag, it should fail since the sender
-		// hasn't sent anything
-		fprintf(stdout, "Searching msg with tag [%" PRIu64 "]\n", tag_data);
-		tagged_peek(tag_data);
+		printf("Searching for a bad msg\n");
+		ret = tagged_peek(0xbad);
+		if (ret != -FI_ENOMSG) {
+			FT_PRINTERR("FI_PEEK", ret);
+			return ret;
+		}
 
-		fprintf(stdout, "Posting buffer for msg with tag [%" PRIu64 "]\n",
-				tag_data + 1);
-		ret = post_recv(tag_data + 1);
+		printf("Synchronizing with sender..\n");
+		ret = ft_sync();
 		if (ret)
-			goto out;
+			return ret;
 
-		// synchronize with sender
-		fprintf(stdout, "\nSynchronizing with sender..\n\n");
-		ret = sync_test();
+		printf("Searching for a good msg\n");
+		ret = tagged_peek(0x900d);
+		if (ret != 1) {
+			FT_PRINTERR("FI_PEEK", ret);
+			return ret;
+		}
+
+		printf("Receiving msg\n");
+		ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
+				0x900d, 0, &rx_ctx);
+		if (ret) {
+			FT_PRINTERR("fi_trecv", ret);
+			return ret;
+		}
+
+		printf("Completing recv\n");
+		ret = ft_get_rx_comp(++rx_seq);
 		if (ret)
-			goto out;
+			return ret;
 
-		ret = ft_wait_for_comp(rxcq, 1);
-		if (ret)
-			goto out;
-		fprintf(stdout, "Received completion event for msg with tag "
-				"[%" PRIu64 "]\n", tag_data + 1);
-
-		// search again for the initial tag, and wait for completion,  it should be successful now
-		fprintf(stdout,
-			"Searching msg with initial tag [%" PRIu64 "]\n",
-			tag_data);
-		tagged_peek(tag_data);
-
-		fprintf(stdout, "Posted buffer and received completion event for"
-			       " msg with tag [%" PRIu64 "]\n", tag_data);
 	} else {
-		// Sender
-		// synchronize with receiver
-		fprintf(stdout, "Synchronizing with receiver..\n\n");
-		ret = sync_test();
+		printf("Sending tagged message\n");
+		ret = fi_tsend(ep, tx_buf, tx_size, fi_mr_desc(mr),
+				remote_fi_addr, 0x900d, &tx_ctx);
 		if (ret)
-			goto out;
+			return ret;
 
-		fprintf(stdout, "Sending msg with tag [%" PRIu64 "]\n",
-			tag_data);
-		ret = send_msg(16, tag_data);
+		printf("Synchronizing with receiver..\n");
+		ret = ft_sync();
 		if (ret)
-			goto out;
+			return ret;
 
-		fprintf(stdout, "Sending msg with tag [%" PRIu64 "]\n",
-			tag_data + 1);
-		ret = send_msg(16, tag_data + 1);
+		printf("Getting send completion\n");
+		ret = ft_get_tx_comp(tx_seq + 1);
 		if (ret)
-			goto out;
+			return ret;
 	}
-	/* Finalize before closing ep */
-	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
-out:
-	return ret;
+
+	ft_finalize();
+	return 0;
 }
 
 int main(int argc, char **argv)

@@ -41,152 +41,9 @@
 #include <rdma/fi_cm.h>
 #include <rdma/fi_tagged.h>
 
-#include "shared.h"
+#include <shared.h>
+#include "pingpong_shared.h"
 
-
-static char test_name[10] = "custom";
-static struct timespec start, end;
-
-struct fi_context fi_ctx_tsend;
-struct fi_context fi_ctx_trecv;
-
-static uint64_t tag_data = 0;
-
-
-
-static int send_xfer(int size)
-{
-	struct fi_cq_tagged_entry comp;
-	int ret;
-
-	while (!tx_credits) {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret > 0) {
-			goto post;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(txcq, "txcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	}
-
-	tx_credits--;
-post:
-	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data, &fi_ctx_tsend);
-	if (ret)
-		FT_PRINTERR("fi_tsend", ret);
-
-	return ret;
-}
-
-static int recv_xfer(int size)
-{
-	struct fi_cq_tagged_entry comp;
-	int ret;
-
-	do {
-		ret = fi_cq_read(rxcq, &comp, 1);
-		if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(rxcq, "rxcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	} while (ret == -FI_EAGAIN);
-
-	/* Posting recv for next send. Hence tag_data + 1 */
-	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data + 1, 0, &fi_ctx_trecv);
-	if (ret)
-		FT_PRINTERR("fi_trecv", ret);
-
-	return ret;
-}
-
-static int sync_test(void)
-{
-	int ret;
-
-	ret = ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
-	if (ret)
-		return ret;
-
-	tx_credits = fi->tx_attr->size;
-
-	if (opts.dst_addr) {
-		ret = fi_send(ep, tx_buf, 1, fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
-		if (ret) {
-			FT_PRINTERR("fi_send", ret);
-			return ret;
-		}
-	}
-
-	ret = ft_get_rx_comp(1);
-	if (ret)
-		return ret;
-
-	if (!opts.dst_addr) {
-		ret = fi_send(ep, tx_buf, 1, fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
-		if (ret) {
-			FT_PRINTERR("fi_send", ret);
-			return ret;
-		}
-
-	}
-
-	ret = ft_get_tx_comp(1);
-	if (ret)
-		return ret;
-
-	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), 0, &rx_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
-static int run_test(void)
-{
-	int ret, i;
-
-	ret = sync_test();
-	if (ret)
-		goto out;
-
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	for (i = 0; i < opts.iterations; i++) {
-		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
-				 recv_xfer(opts.transfer_size);
-		if (ret)
-			goto out;
-
-		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
-				 send_xfer(opts.transfer_size);
-		if (ret)
-			goto out;
-
-		tag_data++;
-	}
-	clock_gettime(CLOCK_MONOTONIC, &end);
-
-	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
-	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
-
-	ret = 0;
-
-out:
-	return ret;
-}
 
 static int init_fabric(void)
 {
@@ -216,13 +73,7 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	/* TODO: use msg interface for control transfers, or switch to tagged */
 	ret = ft_init_av();
-	if (ret)
-		return ret;
-
-	ret = fi_trecv(ep, buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
-			tag_data, 0, &fi_ctx_trecv);
 	if (ret)
 		return ret;
 
@@ -243,20 +94,18 @@ static int run(void)
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = run_test();
+			ret = pingpong();
 			if (ret)
 				goto out;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = run_test();
+		ret = pingpong();
 		if (ret)
 			goto out;
 	}
 
-	ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
-	/* Finalize before closing ep */
-	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
+	ft_finalize();
 out:
 	return ret;
 }

@@ -100,27 +100,14 @@ static int init_fabric(void)
 static int send_recv()
 {
 	struct fi_cq_entry comp;
-	int ret, send_pending = 0, recv_pending = 0;
-
-	fprintf(stdout, "Posting a recv...\n");
-	ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr),
-			remote_fi_addr, &rx_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
-	recv_pending++;
+	int ret;
 
 	fprintf(stdout, "Posting a send...\n");
-	ret = fi_send(ep, buf, tx_size, fi_mr_desc(mr),
-			remote_fi_addr, &tx_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_send", ret);
+	ret = ft_post_tx(tx_size);
+	if (ret)
 		return ret;
-	}
-	send_pending++;
 
-	while (send_pending || recv_pending) {
+	while ((tx_cq_cntr < tx_seq) || (rx_cq_cntr < rx_seq)) {
 		/* Wait for completion events on CQs */
 		ret = fi_wait(waitset, -1);
 		if (ret < 0) {
@@ -130,31 +117,29 @@ static int send_recv()
 
 		/* Read the send completion entry */
 		ret = fi_cq_read(txcq, &comp, 1);
-		if(ret > 0) {
-			send_pending--;
+		if (ret > 0) {
+			tx_cq_cntr++;
 			fprintf(stdout, "Received send completion event!\n");
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
-				cq_readerr(txcq, "txcq");
+				ret = ft_cq_readerr(txcq);
 			} else {
 				FT_PRINTERR("fi_cq_read", ret);
 			}
-
 			return ret;
 		}
 
 		/* Read the recv completion entry */
 		ret = fi_cq_read(rxcq, &comp, 1);
-		if(ret > 0) {
-			recv_pending--;
+		if (ret > 0) {
+			rx_cq_cntr++;
 			fprintf(stdout, "Received recv completion event!\n");
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			if (ret == -FI_EAVAIL) {
-				cq_readerr(rxcq, "rxcq");
+				ret = ft_cq_readerr(rxcq);
 			} else {
 				FT_PRINTERR("fi_cq_read", ret);
 			}
-
 			return ret;
 		}
 	}
@@ -201,7 +186,6 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	/* Exchange data */
 	ret = send_recv();
 
 	ft_free_res();

@@ -42,14 +42,12 @@
 #include "shared.h"
 #include "pingpong_shared.h"
 
-int verify_data;
-int timeout;
 
 void ft_parsepongopts(int op)
 {
 	switch (op) {
 	case 'v':
-		verify_data = 1;
+		opts.options |= FT_OPT_VERIFY_DATA;
 		break;
 	case 'P':
 		hints->mode |= FI_MSG_PREFIX;
@@ -65,99 +63,32 @@ void ft_pongusage(void)
 	FT_PRINT_OPTS_USAGE("-P", "enable prefix mode");
 }
 
-int wait_for_completion_timeout(struct fid_cq *cq, int num_completions)
+int pingpong(void)
 {
-	int ret;
-	struct timespec a, b;
-	struct fi_cq_entry comp;
+	int ret, i;
 
-	clock_gettime(CLOCK_MONOTONIC, &a);
-	while (num_completions > 0) {
-		ret = fi_cq_read(cq, &comp, 1);
-		if (ret > 0) {
-			clock_gettime(CLOCK_MONOTONIC, &a);
-			num_completions--;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(cq, "cq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
+	ret = ft_sync();
+	if (ret)
+		return ret;
+
+	ft_start();
+	for (i = 0; i < opts.iterations; i++) {
+		ret = opts.dst_addr ?
+			ft_tx(opts.transfer_size) : ft_rx(opts.transfer_size);
+		if (ret)
 			return ret;
-		} else if (timeout > 0) {
-			clock_gettime(CLOCK_MONOTONIC, &b);
-			if ((b.tv_sec - a.tv_sec) > timeout) {
-				fprintf(stderr,
-					"%ds timeout expired waiting to receive message, exiting\n",
-					timeout);
-				exit(FI_ENODATA);
-			}
-		}
+
+		ret = opts.dst_addr ?
+			ft_rx(opts.transfer_size) : ft_tx(opts.transfer_size);
+		if (ret)
+			return ret;
 	}
+	ft_stop();
+
+	if (opts.machr)
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
+	else
+		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
 
 	return 0;
-}
-
-int send_xfer(size_t size)
-{
-	int ret;
-
-	if (!tx_credits) {
-		ret = ft_wait_for_comp(txcq, 1);
-		if (ret)
-			return ret;
-	} else {
-		tx_credits--;
-	}
-
-	if (verify_data)
-		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
-
-	ret = fi_send(ep, tx_buf, size + ft_tx_prefix_size(),
-			fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
-	if (ret)
-		FT_PRINTERR("fi_send", ret);
-
-	return ret;
-}
-
-int recv_xfer(size_t size, bool enable_timeout)
-{
-	int ret;
-
-	if (enable_timeout)
-		ret = wait_for_completion_timeout(rxcq, 1);
-	else
-		ret = ft_wait_for_comp(rxcq, 1);
-
-	if (ret)
-		return ret;
-
-	if (verify_data) {
-		ret = ft_check_buf((char *) rx_buf + ft_rx_prefix_size(), size);
-		if (ret)
-			return ret;
-	}
-
-	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr, &rx_ctx);
-	if (ret)
-		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
-}
-
-int sync_test(bool enable_timeout)
-{
-	int ret;
-
-	ret = ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
-	if (ret)
-		return ret;
-	tx_credits = fi->tx_attr->size;
-
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16, enable_timeout);
-	if (ret)
-		return ret;
-
-	return opts.dst_addr ? recv_xfer(16, enable_timeout) : send_xfer(16);
 }

@@ -76,39 +76,23 @@ static int init_fabric(void)
 
 static int send_recv()
 {
-	struct fi_cq_entry comp;
 	int ret;
 
 	if (opts.dst_addr) {
 		fprintf(stdout, "Sending message...\n");
-		sprintf(buf, "Hello from Client!");
-		ret = fi_send(ep, buf, sizeof("Hello from Client!"),
-				fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
-		if (ret) {
-			FT_PRINTERR("fi_send", ret);
+		sprintf(tx_buf, "Hello from Client!");
+		ret = ft_tx(sizeof("Hello from Client!"));
+		if (ret)
 			return ret;
-		}
-
-		do {
-			ret = fi_cq_read(txcq, &comp, 1);
-			if (ret < 0 && ret != -FI_EAGAIN) {
-				FT_PRINTERR("fi_cq_read", ret);
-				return ret;
-			}
-		} while (ret == -FI_EAGAIN);
 
 		fprintf(stdout, "Send completion received\n");
 	} else {
 		fprintf(stdout, "Waiting for message from client...\n");
-		do {
-			ret = fi_cq_read(rxcq, &comp, 1);
-			if (ret < 0 && ret != -FI_EAGAIN) {
-				FT_PRINTERR("fi_cq_read", ret);
-				return ret;
-			}
-		} while (ret == -FI_EAGAIN);
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
 
-		fprintf(stdout, "Received data from client: %s\n", (char *)buf);
+		fprintf(stdout, "Received data from client: %s\n", (char *) rx_buf);
 	}
 
 	return 0;
@@ -153,7 +137,6 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	/* Exchange data */
 	ret = send_recv();
 
 	ft_free_res();

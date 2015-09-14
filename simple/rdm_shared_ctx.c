@@ -60,8 +60,7 @@ static int send_msg(int size)
 		return ret;
 	}
 
-	ret = ft_wait_for_comp(txcq, 1);
-
+	ret = ft_get_tx_comp(++tx_seq);
 	return ret;
 }
 
@@ -75,8 +74,7 @@ static int recv_msg(void)
 		return ret;
 	}
 
-	ret = ft_wait_for_comp(rxcq, 1);
-
+	ret = ft_get_rx_comp(++rx_seq);
 	return ret;
 }
 
@@ -190,6 +188,7 @@ static int run_test()
 			FT_PRINTERR("fi_recv", ret);
 			return ret;
 		}
+		rx_seq++;
 	}
 
 	if (opts.dst_addr) {
@@ -203,14 +202,14 @@ static int run_test()
 				return ret;
 			}
 
-			ft_wait_for_comp(txcq, 1);
+			ret = ft_get_tx_comp(++tx_seq);
+			if (ret)
+				return ret;
 		}
 	}
 
 	/* Wait for recv completions */
-	for (i = 0; i < ep_cnt; i++) {
-		ft_wait_for_comp(rxcq, 1);
-	}
+	ft_get_rx_comp(rx_seq);
 
 	if (!opts.dst_addr) {
 		/* Post sends addressed to remote EPs */
@@ -223,7 +222,9 @@ static int run_test()
 				return ret;
 			}
 
-			ft_wait_for_comp(txcq, 1);
+			ret = ft_get_tx_comp(++tx_seq);
+			if (ret)
+				return ret;
 		}
 	}
 
@@ -395,6 +396,7 @@ static int run(void)
 		goto out;
 
 	ret = run_test();
+
 	/* TODO: Add a local finalize applicable to shared ctx */
 	//ft_finalize(fi, ep_array[0], txcq, rxcq, addr_array[0]);
 out:

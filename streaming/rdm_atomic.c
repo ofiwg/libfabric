@@ -56,8 +56,6 @@
 
 
 static enum fi_op op_type = FI_MIN;
-static char test_name[10] = "custom";
-static struct timespec start, end;
 static void *result;
 static void *compare;
 struct fi_rma_iov remote;
@@ -99,44 +97,6 @@ static enum fi_op get_fi_op(char *op) {
 		fprintf(stderr, "Not supported by the example\n");
 		return FI_ATOMIC_OP_LAST;
 	}
-}
-
-static int post_recv(void)
-{
-	int ret;
-
-	ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, &rx_ctx);
-	if (ret){
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
-
-	return ft_wait_for_comp(rxcq, 1);
-}
-
-static int send_msg(int size)
-{
-	int ret;
-
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			&tx_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_send", ret);
-		return ret;
-	}
-
-	return ft_wait_for_comp(txcq, 1);
-}
-
-static int sync_test(void)
-{
-	int ret;
-
-	ret = opts.dst_addr ? send_msg(16) : post_recv();
-	if (ret)
-		return ret;
-
-	return opts.dst_addr ? post_recv() : send_msg(16);
 }
 
 static int is_valid_base_atomic_op(enum fi_op op)
@@ -191,7 +151,7 @@ static int execute_base_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_atomic", ret);
 	} else {
-		ret = ft_wait_for_comp(txcq, 1);
+		ret = ft_get_tx_comp(++tx_seq);
 	}
 
 	return ret;
@@ -207,7 +167,7 @@ static int execute_fetch_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_fetch_atomic", ret);
 	} else {
-		ret = ft_wait_for_comp(txcq, 1);
+		ret = ft_get_tx_comp(++tx_seq);
 	}
 
 	return ret;
@@ -224,7 +184,7 @@ static int execute_compare_atomic_op(enum fi_op op)
 	if (ret) {
 		FT_PRINTERR("fi_compare_atomic", ret);
 	} else {
-		ret = ft_wait_for_comp(txcq, 1);
+		ret = ft_get_tx_comp(++tx_seq);
 	}
 
 	return ret;
@@ -235,9 +195,10 @@ static int run_op(void)
 	int ret, i;
 
 	count = (size_t *) malloc(sizeof(size_t));
-	sync_test();
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	ft_sync();
 
+
+	ft_start();
 	switch (op_type) {
 	case FI_MIN:
 	case FI_MAX:
@@ -274,18 +235,19 @@ static int run_op(void)
 		ret = -EINVAL;
 		goto out;
 	}
-
-	clock_gettime(CLOCK_MONOTONIC, &end);
+	ft_stop();
 
 	if (ret)
 		goto out;
 
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
-				(op_type == FI_CSWAP || op_type == FI_ATOMIC_READ) ? 1 : 2, opts.argc, opts.argv);
+			(op_type == FI_CSWAP || op_type == FI_ATOMIC_READ) ?
+			1 : 2, opts.argc, opts.argv);
 	else
 		show_perf(test_name, opts.transfer_size, opts.iterations,
-				&start, &end, (op_type == FI_CSWAP || op_type == FI_ATOMIC_READ) ? 1 : 2);
+			&start, &end,
+			(op_type == FI_CSWAP || op_type == FI_ATOMIC_READ) ? 1 : 2);
 
 	ret = 0;
 out:
@@ -435,55 +397,19 @@ static int init_fabric(void)
 	return 0;
 }
 
-static int exchange_addr_key(void)
-{
-	struct fi_rma_iov *rma_iov;
-	int ret;
-
-	rma_iov = buf;
-
-	if (opts.dst_addr) {
-		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
-				0 : (uintptr_t) buf;
-		rma_iov->key = fi_mr_key(mr);
-		ret = send_msg(sizeof *rma_iov);
-		if (ret)
-			return ret;
-
-		ret = post_recv();
-		if (ret)
-			return ret;
-		remote = *rma_iov;
-	} else {
-		ret = post_recv();
-		if (ret)
-			return ret;
-		remote = *rma_iov;
-
-		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
-				0 : (uintptr_t) buf;
-		rma_iov->key = fi_mr_key(mr);
-		ret = send_msg(sizeof *rma_iov);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
-
 static int run(void)
 {
-	int i, ret = 0;
+	int i, ret;
 
 	ret = init_fabric();
 	if (ret)
-			return ret;
+		return ret;
 
 	ret = ft_init_av();
 	if (ret)
-			goto out;
+		goto out;
 
-	ret = exchange_addr_key();
+	ret = ft_exchange_keys(&remote);
 	if (ret)
 		goto out;
 
@@ -503,7 +429,8 @@ static int run(void)
 		if (ret)
 			goto out;
 	}
-	/* Finalize before closing ep */
+
+	ft_sync();
 	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
 out:
 	return ret;

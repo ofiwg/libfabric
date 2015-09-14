@@ -98,8 +98,8 @@ struct ft_control {
 	int			error;
 };
 
-extern struct ft_xcontrol ft_rx, ft_tx;
-extern struct ft_control ft;
+extern struct ft_xcontrol ft_rx_ctrl, ft_tx_ctrl;
+extern struct ft_control ft_ctrl;
 
 enum {
 	FT_MAX_CAPS		= 64,

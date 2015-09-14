@@ -43,42 +43,6 @@
 #include "shared.h"
 #include "pingpong_shared.h"
 
-static char test_name[10] = "custom";
-static struct timespec start, end;
-
-
-static int run_test(void)
-{
-	int ret, i;
-
-	ret = sync_test(false);
-	if (ret)
-		goto out;
-
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	for (i = 0; i < opts.iterations; i++) {
-		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
-				 recv_xfer(opts.transfer_size, false);
-		if (ret)
-			goto out;
-
-		ret = opts.dst_addr ? recv_xfer(opts.transfer_size, false) :
-				 send_xfer(opts.transfer_size);
-		if (ret)
-			goto out;
-	}
-	clock_gettime(CLOCK_MONOTONIC, &end);
-
-	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
-	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
-
-	ret = 0;
-
-out:
-	return ret;
-}
 
 static int init_fabric(void)
 {
@@ -129,20 +93,18 @@ static int run(void)
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = run_test();
+			ret = pingpong();
 			if (ret)
 				goto out;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = run_test();
+		ret = pingpong();
 		if (ret)
 			goto out;
 	}
 
-	ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
-	/* Finalize before closing ep */
-	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
+	ft_finalize();
 out:
 	return ret;
 }

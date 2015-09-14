@@ -43,87 +43,27 @@
 #include "shared.h"
 
 
-static int max_inject_size;
-static char test_name[10] = "custom";
-static struct timespec start, end;
-
-
-static int send_xfer(int size)
-{
-	int ret;
-
-	if (size > max_inject_size) {
-		FT_PRINTERR("send too large", -FI_EINVAL);
-		return -FI_EINVAL;
-	}
-
-	ret = fi_inject(ep, tx_buf, (size_t) size, remote_fi_addr);
-	if (ret)
-		FT_PRINTERR("fi_inject", ret);
-
-	return ret;
-}
-
-static int recv_xfer(int size)
-{
-	struct fi_cq_entry comp;
-	int ret;
-
-	do {
-		ret = fi_cq_read(rxcq, &comp, 1);
-		if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(rxcq, "rxcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	} while (ret == -FI_EAGAIN);
-
-	ret = fi_recv(ep, rx_buf, rx_size, fi_mr_desc(mr), remote_fi_addr,
-			&rx_ctx);
-	if (ret)
-		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
-}
-
-static int sync_test(void)
-{
-	int ret;
-
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
-	if (ret)
-		return ret;
-
-	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
-}
-
 static int run_test(void)
 {
 	int ret, i;
 
-	if (opts.transfer_size > max_inject_size)
-		return 0;
-
-	ret = sync_test();
+	ret = ft_sync();
 	if (ret)
 		goto out;
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	ft_start();
 	for (i = 0; i < opts.iterations; i++) {
-		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
-				 recv_xfer(opts.transfer_size);
+		ret = opts.dst_addr ? fi_inject(ep, tx_buf, opts.transfer_size, remote_fi_addr) :
+				 ft_rx(opts.transfer_size);
 		if (ret)
 			goto out;
 
-		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
-				 send_xfer(opts.transfer_size);
+		ret = opts.dst_addr ? ft_rx(opts.transfer_size) :
+				fi_inject(ep, tx_buf, opts.transfer_size, remote_fi_addr);
 		if (ret)
 			goto out;
 	}
-	clock_gettime(CLOCK_MONOTONIC, &end);
+	ft_stop();
 
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
@@ -152,10 +92,7 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	/* check max msg size */
-	max_inject_size = fi->tx_attr->inject_size;
-	if ((opts.options & FT_OPT_SIZE) &&
-	    (opts.transfer_size > max_inject_size)) {
+	if (opts.transfer_size > fi->tx_attr->inject_size) {
 		fprintf(stderr, "Msg size greater than max inject size\n");
 		return -FI_EINVAL;
 	}
@@ -196,7 +133,11 @@ static int run(void)
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
+
 			opts.transfer_size = test_size[i].size;
+			if (opts.transfer_size > fi->tx_attr->inject_size)
+				break;
+
 			init_test(&opts, test_name, sizeof(test_name));
 			ret = run_test();
 			if (ret)
@@ -209,8 +150,7 @@ static int run(void)
 			goto out;
 	}
 
-	/* Finalize before closing ep */
-	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
+	ft_finalize();
 out:
 	return ret;
 }
@@ -247,11 +187,7 @@ int main(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
-
-	if (opts.transfer_size)
-		hints->tx_attr->inject_size = opts.transfer_size;
-	else
-		hints->tx_attr->inject_size = 16;
+	hints->tx_attr->inject_size = opts.transfer_size;
 
 	ret = run();
 

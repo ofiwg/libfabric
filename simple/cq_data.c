@@ -172,7 +172,7 @@ static int run_test()
 
 	if (opts.dst_addr) {
 		fprintf(stdout,
-			"Posting send with immediate data: 0x%" PRIx64 "\n",
+			"Posting send with CQ data: 0x%" PRIx64 "\n",
 			remote_cq_data);
 		ret = fi_senddata(ep, buf, size, fi_mr_desc(mr), remote_cq_data,
 				0, buf);
@@ -181,34 +181,37 @@ static int run_test()
 			return ret;
 		}
 
-		ft_wait_for_comp(txcq, 1);
+		ret = ft_get_tx_comp(++tx_seq);
 		fprintf(stdout, "Done\n");
 	} else {
-		fprintf(stdout, "Waiting for immediate data from client\n");
+		fprintf(stdout, "Waiting for CQ data from client\n");
 		ret = fi_cq_sread(rxcq, &comp, 1, NULL, -1);
 		if (ret < 0) {
 			if (ret == -FI_EAVAIL) {
-				cq_readerr(rxcq, "rxcq");
+				ret = ft_cq_readerr(rxcq);
 			} else {
 				FT_PRINTERR("fi_cq_sread", ret);
 			}
 			return ret;
 		}
 
-		/* Verify completion data */
 		if (comp.flags & FI_REMOTE_CQ_DATA) {
-			if (comp.data == remote_cq_data)
+			if (comp.data == remote_cq_data) {
 				fprintf(stdout, "remote_cq_data: success\n");
-			else
-				fprintf(stdout, "remote_cq_data: failure\n");
-
-			fprintf(stdout, "Expected data:0x%" PRIx64
-				", Received data:0x%" PRIx64 "\n",
-				remote_cq_data, comp.data);
+				ret = 0;
+			} else {
+				fprintf(stdout, "error, Expected data:0x%" PRIx64
+					", Received data:0x%" PRIx64 "\n",
+					remote_cq_data, comp.data);
+				ret = -FI_EIO;
+			}
+		} else {
+			fprintf(stdout, "error, CQ data flag not set\n");
+			ret = -FI_EBADFLAGS;
 		}
 	}
 
-	return 0;
+	return ret;
 }
 
 static int run(void)

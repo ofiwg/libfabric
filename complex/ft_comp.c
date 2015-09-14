@@ -58,9 +58,9 @@ static int ft_open_cqs(void)
 
 	if (!txcq) {
 		memset(&attr, 0, sizeof attr);
-		attr.format = ft_tx.cq_format;
-		attr.wait_obj = ft_tx.comp_wait;
-		attr.size = ft_tx.max_credits;
+		attr.format = ft_tx_ctrl.cq_format;
+		attr.wait_obj = ft_tx_ctrl.comp_wait;
+		attr.size = ft_tx_ctrl.max_credits;
 
 		ret = fi_cq_open(domain, &attr, &txcq, NULL);
 		if (ret) {
@@ -71,9 +71,9 @@ static int ft_open_cqs(void)
 
 	if (!rxcq) {
 		memset(&attr, 0, sizeof attr);
-		attr.format = ft_rx.cq_format;
-		attr.wait_obj = ft_rx.comp_wait;
-		attr.size = ft_rx.max_credits;
+		attr.format = ft_rx_ctrl.cq_format;
+		attr.wait_obj = ft_rx_ctrl.comp_wait;
+		attr.size = ft_rx_ctrl.max_credits;
 
 		ret = fi_cq_open(domain, &attr, &rxcq, NULL);
 		if (ret) {
@@ -119,15 +119,14 @@ int ft_bind_comp(struct fid_ep *ep, uint64_t flags)
 }
 
 /* Read CQ until there are no more completions */
-#define ft_cq_read(cq_read, cq, buf, count, completions, str,	\
-		ret, ...)					\
+#define ft_cq_read(cq_read, cq, buf, count, completions, str, ret, ...)	\
 	do {							\
 		ret = cq_read(cq, buf, count, ##__VA_ARGS__);	\
 		if (ret < 0) {					\
 			if (ret == -FI_EAGAIN)			\
 				break;				\
 			if (ret == -FI_EAVAIL) {		\
-				cq_readerr(cq, str);		\
+				ret = ft_cq_readerr(cq);	\
 			} else {				\
 				FT_PRINTERR(#cq_read, ret);	\
 			}					\
@@ -178,11 +177,11 @@ static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 
 int ft_comp_rx(int timeout)
 {
-	return ft_comp_x(rxcq, &ft_rx, "rxcq", timeout);
+	return ft_comp_x(rxcq, &ft_rx_ctrl, "rxcq", timeout);
 }
 
 
 int ft_comp_tx(int timeout)
 {
-	return ft_comp_x(txcq, &ft_tx, "txcq", timeout);
+	return ft_comp_x(txcq, &ft_tx_ctrl, "txcq", timeout);
 }

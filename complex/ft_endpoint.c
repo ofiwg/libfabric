@@ -89,8 +89,8 @@ int ft_open_active(void)
 		return ret;
 	}
 
-	ft_rx.ep = ep;
-	ft_tx.ep = ep;
+	ft_rx_ctrl.ep = ep;
+	ft_tx_ctrl.ep = ep;
 
 	ret = fi_ep_bind(ep, &eq->fid, 0);
 	if (ret) {
@@ -131,14 +131,14 @@ int ft_reset_ep(void)
 	if (ret)
 		return ret;
 
-	while (ft_tx.credits < ft_tx.max_credits) {
+	while (ft_tx_ctrl.credits < ft_tx_ctrl.max_credits) {
 		ret = ft_comp_tx(0);
 		if (ret)
 			return ret;
 	}
 
-	memset(ft_tx.buf, 0, ft_tx.msg_size);
-	memset(ft_rx.buf, 0, ft_rx.msg_size);
+	memset(ft_tx_ctrl.buf, 0, ft_tx_ctrl.msg_size);
+	memset(ft_rx_ctrl.buf, 0, ft_rx_ctrl.msg_size);
 	ret = ft_post_recv_bufs();
 	if (ret)
 		return ret;
