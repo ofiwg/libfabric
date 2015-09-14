@@ -245,12 +245,6 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
-		return ret;
-	}
-
 	/* Set the required number of TX and RX context counts */
 	fi->ep_attr->tx_ctx_cnt = ctx_cnt;
 	fi->ep_attr->rx_ctx_cnt = ctx_cnt;

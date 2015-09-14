@@ -1058,12 +1058,6 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret != 0) {
-		printf("fi_domain %s\n", fi_strerror(-ret));
-		goto err;
-	}
-
 	printf("Testing AVs on fabric %s\n", fi->fabric_attr->name);
 	failed = 0;
 

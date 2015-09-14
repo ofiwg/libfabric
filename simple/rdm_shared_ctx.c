@@ -263,12 +263,6 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
-		return ret;
-	}
-
 	fi->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
 	fi->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 

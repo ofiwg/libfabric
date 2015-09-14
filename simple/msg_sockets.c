@@ -138,14 +138,12 @@ static int server_listen(void)
 {
 	int ret;
 
-	/* Bind EQ to passive endpoint */
 	ret = fi_pep_bind(pep, &eq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_pep_bind", ret);
 		return ret;
 	}
 
-	/* Listen for incoming connections */
 	ret = fi_listen(pep);
 	if (ret) {
 		FT_PRINTERR("fi_listen", ret);
@@ -232,14 +230,12 @@ static int client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	/* Get fabric info */
 	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 
-	/* Open domain */
 	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
@@ -381,9 +377,17 @@ static int setup_handle(void)
 	fi->src_addr = NULL;
 	fi->src_addrlen = 0;
 
-	ret = ft_open_fabric_res();
-	if (ret)
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_fabric", ret);
 		return ret;
+	}
+
+	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
+		return ret;
+	}
 
 	/* Open a passive endpoint */
 	ret = fi_passive_ep(fabric, fi, &pep, NULL);

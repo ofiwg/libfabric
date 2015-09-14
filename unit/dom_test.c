@@ -109,7 +109,8 @@ int main(int argc, char **argv)
 		goto out;
 	}
 
-	for (i = 0; i < num_domains; i++) {
+	/* Common code will open one domain */
+	for (i = 1; i < num_domains; i++) {
 		ret = fi_domain(fabric, fi, &domain_vec[i], NULL);
 		if (ret != FI_SUCCESS) {
 			printf("fi_domain num %d %s\n", i, fi_strerror(-ret));
@@ -117,7 +118,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	while (--i >= 0) {
+	while (--i > 0) {
 		ret = fi_close(&domain_vec[i]->fid);
 		if (ret != FI_SUCCESS) {
 			printf("Error %d closing domain num %d: %s\n", ret,

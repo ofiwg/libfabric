@@ -122,13 +122,6 @@ static int client_connect(void)
 	if (ret)
 		return ret;
 
-	/* Open domain */
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
-		return ret;
-	}
-
 	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
