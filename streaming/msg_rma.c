@@ -49,33 +49,6 @@ struct fi_rma_iov remote;
 static uint64_t cq_data = 1;
 static enum fi_mr_mode mr_mode;
 
-static int send_xfer(int size)
-{
-	struct fi_cq_data_entry comp;
-	int ret;
-
-	while (!tx_credits) {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret > 0) {
-			goto post;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(txcq, "txcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	}
-
-	tx_credits--;
-post:
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), 0, ep);
-	if (ret)
-		FT_PRINTERR("fi_send", ret);
-
-	return ret;
-}
 
 static int recv_xfer(int size)
 {
@@ -151,12 +124,12 @@ static int sync_test(void)
 	}
 	tx_credits = fi->tx_attr->size;
 
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
+	ret = opts.dst_addr ? ft_sendmsg(1) : recv_xfer(16);
 	if (ret) {
 		return ret;
 	}
 
-	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
+	return opts.dst_addr ? recv_xfer(16) : ft_sendmsg(1);
 }
 
 static int wait_remote_writedata_completion(void)
@@ -386,12 +359,13 @@ static int exchange_addr_key(void)
 {
 	struct fi_rma_iov *rma_iov;
 
+	/* FIXME: Rx/Tx buffers overlap */
 	rma_iov = buf;
 	if (opts.dst_addr) {
 		rma_iov->addr = mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) buf;
 		rma_iov->key = fi_mr_key(mr);
-		send_xfer(sizeof *rma_iov);
+		ft_sendmsg(sizeof *rma_iov);
 		recv_xfer(sizeof *rma_iov);
 		remote = *rma_iov;
 	} else {
@@ -401,7 +375,7 @@ static int exchange_addr_key(void)
 		rma_iov->addr = mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) buf;
 		rma_iov->key = fi_mr_key(mr);
-		send_xfer(sizeof *rma_iov);
+		ft_sendmsg(sizeof *rma_iov);
 	}
 
 	return 0;
