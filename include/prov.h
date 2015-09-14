@@ -104,4 +104,15 @@ USNIC_INI ;
 #  define USNIC_INIT NULL
 #endif
 
+#if (HAVE_MXM) && (HAVE_MXM_DL)
+#  define MXM_INI FI_EXT_INI
+#  define MXM_INIT NULL
+#elif (HAVE_MXM)
+#  define MXM_INI INI_SIG(fi_mxm_ini)
+#  define MXM_INIT fi_mxm_ini()
+MXM_INI ;
+#else
+#  define MXM_INIT NULL
+#endif
+
 #endif /* _PROV_H_ */
