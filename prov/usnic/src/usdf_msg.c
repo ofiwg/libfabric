@@ -1127,6 +1127,9 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 	}
 	rx = ep->ep_rx;
 
+	if (comp->uc_status != USD_COMPSTAT_SUCCESS)
+		goto dropit;
+
 	switch (opcode) {
 	case RUDP_OP_ACK:
 		usdf_msg_rx_ack(ep, pkt);
