@@ -272,8 +272,8 @@ The following flags may be used with fi_trecvmsg.
   allocated buffering enabled (see fi_rx_attr total_buffered_recv).
   Unlike standard receive operations, a receive operation with the FI_PEEK
   flag set does not remain queued with the provider until the peek completes
-  successfully.  If no data is available, the FI_PEEK receive will complete
-  with a status of FI_ENOMSG.
+  successfully.  If no data is available, the FI_PEEK receive will result in
+  a completion queue error entry with err field set to FI_ENOMSG.
 
   If a peek request locates a matching message, the operation will complete
   successfully.  The returned completion data will indicate the meta-data
