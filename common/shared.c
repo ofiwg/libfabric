@@ -842,7 +842,6 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-I <number>", "number of iterations");
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
-	FT_PRINT_OPTS_USAGE("-v", "display versions and exit");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
 	return;
