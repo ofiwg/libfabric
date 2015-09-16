@@ -83,7 +83,25 @@ ssize_t _psmx_tagged_peek(struct fid_ep *ep, void *buf, size_t len,
 		return 0;
 
 	case PSM_MQ_NO_COMPLETIONS:
-		return -FI_ENOMSG;
+		if (ep_priv->recv_cq) {
+			event = psmx_cq_create_event(
+					ep_priv->recv_cq,
+					context,		/* op_context */
+					NULL,			/* buf */
+					flags|FI_RECV|FI_TAGGED,/* flags */
+					len,			/* len */
+					0,			/* data */
+					tag,			/* tag */
+					len,			/* olen */
+					-FI_ENOMSG);		/* err */
+
+			if (!event)
+				return -FI_ENOMEM;
+
+			event->source = 0;
+			psmx_cq_enqueue_event(ep_priv->recv_cq, event);
+		}
+		return 0;
 
 	default:
 		return psmx_errno(err);
