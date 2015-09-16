@@ -67,6 +67,45 @@
 #include "usdf_av.h"
 #include "usdf_progress.h"
 
+/* Functions to add and remove entries from the free list for the transmit and
+ * receive work queues.
+ */
+static struct usdf_rdm_qe *usdf_rdm_get_tx_wqe(struct usdf_tx *tx)
+{
+	struct usdf_rdm_qe *entry;
+
+	entry = TAILQ_FIRST(&tx->t.rdm.tx_free_wqe);
+	TAILQ_REMOVE(&tx->t.rdm.tx_free_wqe, entry, rd_link);
+	tx->t.rdm.tx_num_free_wqe -= 1;
+
+	return entry;
+}
+
+static void usdf_rdm_put_tx_wqe(struct usdf_tx *tx, struct usdf_rdm_qe *wqe)
+{
+	TAILQ_INSERT_HEAD(&tx->t.rdm.tx_free_wqe, wqe, rd_link);
+	tx->t.rdm.tx_num_free_wqe += 1;
+}
+
+static struct usdf_rdm_qe *usdf_rdm_get_rx_rqe(struct usdf_rx *rx)
+{
+	struct usdf_rdm_qe *entry;
+
+	entry = TAILQ_FIRST(&rx->r.rdm.rx_free_rqe);
+	TAILQ_REMOVE(&rx->r.rdm.rx_free_rqe, entry, rd_link);
+	rx->r.rdm.rx_num_free_rqe -= 1;
+
+	return entry;
+}
+
+static void usdf_rdm_put_rx_rqe(struct usdf_rx *rx, struct usdf_rdm_qe *rqe)
+{
+	TAILQ_INSERT_HEAD(&rx->r.rdm.rx_free_rqe, rqe, rd_link);
+	rx->r.rdm.rx_num_free_rqe += 1;
+}
+
+/******************************************************************************/
+
 static inline void
 usdf_rdm_rdc_ready(struct usdf_rdm_connection *rdc, struct usdf_tx *tx)
 {
@@ -433,9 +472,7 @@ usdf_rdm_recv(struct fid_ep *fep, void *buf, size_t len,
 
 	pthread_spin_lock(&udp->dom_progress_lock);
 
-	rqe = TAILQ_FIRST(&rx->r.rdm.rx_free_rqe);
-	TAILQ_REMOVE(&rx->r.rdm.rx_free_rqe, rqe, rd_link);
-	--rx->r.msg.rx_num_free_rqe;
+	rqe = usdf_rdm_get_rx_rqe(rx);
 
 	rqe->rd_context = context;
 	rqe->rd_iov[0].iov_base = buf;
@@ -446,6 +483,7 @@ usdf_rdm_recv(struct fid_ep *fep, void *buf, size_t len,
 	rqe->rd_cur_ptr = buf;
 	rqe->rd_iov_resid = len;
 	rqe->rd_length = 0;
+	rqe->rd_resid = len;
 	USDF_DBG_SYS(EP_DATA, "RECV post rqe=%p len=%lu\n", rqe, len);
 
 	TAILQ_INSERT_TAIL(&rx->r.rdm.rx_posted_rqe, rqe, rd_link);
@@ -492,9 +530,7 @@ usdf_rdm_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 		return -FI_EAGAIN;
 	}
 
-	wqe = TAILQ_FIRST(&tx->t.rdm.tx_free_wqe);
-	TAILQ_REMOVE(&tx->t.rdm.tx_free_wqe, wqe, rd_link);
-	--tx->t.rdm.tx_num_free_wqe;
+	wqe = usdf_rdm_get_tx_wqe(tx);
 
 	wqe->rd_context = context;
 
@@ -1101,7 +1137,7 @@ usdf_rdm_tx_progress(struct usdf_tx *tx)
 	}
 }
 
-static void inline
+static inline void
 usdf_rdm_recv_complete(struct usdf_rx *rx, struct usdf_rdm_connection *rdc,
 		struct usdf_rdm_qe *rqe)
 {
@@ -1111,8 +1147,7 @@ usdf_rdm_recv_complete(struct usdf_rx *rx, struct usdf_rdm_connection *rdc,
 	hcq = rx->r.rdm.rx_hcq;
 	hcq->cqh_post(hcq, rqe->rd_context, rqe->rd_length, FI_SUCCESS);
 
-	TAILQ_INSERT_HEAD(&rx->r.rdm.rx_free_rqe, rqe, rd_link);
-	++rx->r.msg.rx_num_free_rqe;
+	usdf_rdm_put_rx_rqe(rx, rqe);
 
 	rdc->dc_cur_rqe = NULL;
 }
@@ -1286,9 +1321,7 @@ usdf_rdm_process_ack(struct usdf_rdm_connection *rdc,
 					hcq->cqh_post(hcq, wqe->rd_context,
 							wqe->rd_length, FI_SUCCESS);
 
-				TAILQ_INSERT_HEAD(&tx->t.rdm.tx_free_wqe,
-					wqe, rd_link);
-				++tx->t.rdm.tx_num_free_wqe;
+				usdf_rdm_put_tx_wqe(tx, wqe);
 
 				/* prepare for next message */
 				rdc->dc_next_tx_seq = 0;
@@ -1462,6 +1495,7 @@ usdf_rdm_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 	uint8_t *rqe_ptr;
 	size_t cur_iov;
 	size_t iov_resid;
+	size_t rd_resid;
 	size_t rxlen;
 	size_t copylen;
 
@@ -1506,12 +1540,14 @@ usdf_rdm_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 	rqe_ptr = (uint8_t *)rqe->rd_cur_ptr;
 	iov_resid = rqe->rd_iov_resid;
 	cur_iov = rqe->rd_cur_iov;
+	rd_resid = rqe->rd_resid;
 	while (rxlen > 0) {
 		copylen = MIN(rxlen, iov_resid);
 		memcpy(rqe_ptr, rx_ptr, copylen);
 		rx_ptr += copylen;
 		rxlen -= copylen;
 		iov_resid -= copylen;
+		rd_resid -= copylen;
 		if (iov_resid == 0) {
 			if (cur_iov == rqe->rd_last_iov) {
 				break;
@@ -1523,6 +1559,11 @@ usdf_rdm_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 			rqe_ptr += copylen;
 		}
 	}
+
+	rqe->rd_cur_ptr = rqe_ptr;
+	rqe->rd_iov_resid = iov_resid;
+	rqe->rd_cur_iov = cur_iov;
+	rqe->rd_resid = rd_resid;
 
 	if (rxlen > 0) {
 		rqe->rd_length -= rxlen;

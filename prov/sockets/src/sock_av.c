@@ -366,14 +366,14 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 		      const char *service, size_t svccnt, fi_addr_t *fi_addr,
 		      uint64_t flags, void *context)
 {
-	int ret = 0, success = 0, err_code = 0;
+	int ret = 0, success = 0, err_code = 0, len1, len2;
 	int var_port, var_host;
 	char base_host[FI_NAME_MAX] = {0};
 	char tmp_host[FI_NAME_MAX] = {0};
 	char tmp_port[FI_NAME_MAX] = {0};
 	int hostlen, offset = 0, fmt, i, j;
 
-	if (!node || !service) {
+	if (!node || !service || node[0] == '\0') {
 		SOCK_LOG_ERROR("Node/service not provided\n");
 		return -FI_EINVAL;
 	}
@@ -386,20 +386,26 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 		fmt = 0;
 	else 
 		fmt = offset;
-
+	
+	assert((hostlen-offset) < FI_NAME_MAX);
 	strncpy(base_host, node, hostlen - (offset));
 	var_port = atoi(service);
 	var_host = atoi(node + hostlen - offset);
 	
 	for (i = 0; i < nodecnt; i++) {
 		for (j = 0; j < svccnt; j++) {
-			sprintf(tmp_host, "%s%0*d", base_host, fmt, var_host + i);
-			sprintf(tmp_port, "%d", var_port + j);
-			if ((ret = _sock_av_insertsvc(av, node, service, fi_addr, flags, 
+			len1 = snprintf(tmp_host, FI_NAME_MAX, "%s%0*d", base_host, fmt, var_host + i);
+			len2 = snprintf(tmp_port, FI_NAME_MAX,  "%d", var_port + j);
+			if (len1 > 0 && len1 < FI_NAME_MAX && len2 > 0 && len2 < FI_NAME_MAX) {
+				if ((ret = _sock_av_insertsvc(av, tmp_host, tmp_port, fi_addr, flags, 
 						      context, i * nodecnt + j)) == 1) {
-				success++;
+					success++;
+				} else {
+					err_code = ret;
+				}	
 			} else {
-				err_code = ret;
+				SOCK_LOG_ERROR("Node/service value is not valid\n");
+				err_code = FI_ETOOSMALL;
 			}
 		}
 	}
@@ -551,24 +557,23 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		return -FI_ENOMEM;
 
 	_av->attr = *attr;
-	_av->attr.count = (attr->count) ? attr->count : SOCK_AV_DEF_SZ;
+	_av->attr.count = (attr->count) ? attr->count : sock_av_def_sz;
 
 	_av->key = calloc(_av->attr.count, sizeof(uint16_t));
 	if (!_av->key) {
 		ret = -FI_ENOMEM;
-		goto err;
+		goto err1;
 	}
 
 	table_sz = sizeof(struct sock_av_table_hdr) +
 		_av->attr.count * sizeof(struct sock_av_addr);
 	
 	if (attr->name) {
-		_av->name = calloc(1, FI_NAME_MAX);
+		_av->name = strdup(attr->name);
 		if(!_av->name) {
 			ret = -FI_ENOMEM;
-			goto err;
+			goto err2;
 		}
-		strcpy(_av->name, attr->name);
 		if (!(attr->flags & FI_READ))
 			flags |= O_CREAT;
 		
@@ -583,14 +588,14 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		if (_av->shared_fd < 0) {
 			SOCK_LOG_ERROR("shm_open failed\n");
 			ret = -FI_EINVAL;
-			goto err;
+			goto err2;
 		}
 		
 		if (ftruncate(_av->shared_fd, table_sz) == -1) {
 			SOCK_LOG_ERROR("ftruncate failed\n");
 			shm_unlink(_av->name);
 			ret = -FI_EINVAL;
-			goto err;
+			goto err2;
 		}
 		
 		_av->table_hdr = mmap(NULL, table_sz, PROT_READ | PROT_WRITE, 
@@ -598,7 +603,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		if (attr->flags & FI_READ) {
 			if (_av->table_hdr->size != _av->attr.count) {
 				ret = -FI_EINVAL;
-				goto err;
+				goto err2;
 			}
 		} else {
 			_av->table_hdr->size = _av->attr.count;
@@ -609,13 +614,13 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			SOCK_LOG_ERROR("mmap failed\n");
 			shm_unlink(_av->name);
 			ret = -FI_EINVAL;
-			goto err;
+			goto err2;
 		}
 	} else {
 		_av->table_hdr = calloc(1, table_sz);
 		if (!_av->table_hdr) {
 			ret = -FI_ENOMEM;
-			goto err;
+			goto err3;
 		}
 		_av->table_hdr->size = _av->attr.count;
 		_av->table_hdr->req_sz = attr->count;
@@ -636,7 +641,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		break;
 	default:
 		ret = -FI_EINVAL;
-		goto err;
+		goto err3;
 	}
 
 	atomic_initialize(&_av->ref, 0);
@@ -649,14 +654,21 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	default:
 		SOCK_LOG_ERROR("Invalid address format: only IPv4 supported\n");
 		ret = -FI_EINVAL;
-		goto err;
+		goto err3;
 	}
 	_av->rx_ctx_bits = attr->rx_ctx_bits;
 	_av->mask = attr->rx_ctx_bits ? 
 		((uint64_t)1<<(64 - attr->rx_ctx_bits + 1))-1 : ~0;
 	*av = &_av->av_fid;
 	return 0;
-err:
+
+err3:
+	free(_av->table_hdr);
+err2:
+	free(_av->name);
+err1:
+	free(_av->key);
 	free(_av);
+	
 	return ret;
 }

@@ -59,6 +59,11 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	      [],
 	      [enable_$1=auto])
 
+	# Save CPPFLAGS and LDFLAGS before they are modified by FI_CHECK_PREFIX_DIR
+	# Provider's local macros could use the value if needed.
+	$1_orig_CPPFLAGS=$CPPFLAGS
+	$1_orig_LDFLAGS=$LDFLAGS
+
 	# Check the --enable-<$1> value
 	$1_dl=0
 	AS_CASE([$enable_$1],

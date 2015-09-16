@@ -71,6 +71,17 @@ PSM_INI ;
 #  define PSM_INIT NULL
 #endif
 
+#if (HAVE_PSM2) && (HAVE_PSM2_DL)
+#  define PSM2_INI FI_EXT_INI
+#  define PSM2_INIT NULL
+#elif (HAVE_PSM2)
+#  define PSM2_INI INI_SIG(fi_psm2_ini)
+#  define PSM2_INIT fi_psm2_ini()
+PSM2_INI ;
+#else
+#  define PSM2_INIT NULL
+#endif
+
 #if (HAVE_SOCKETS) && (HAVE_SOCKETS_DL)
 #  define SOCKETS_INI FI_EXT_INI
 #  define SOCKETS_INIT NULL
@@ -91,6 +102,17 @@ SOCKETS_INI ;
 USNIC_INI ;
 #else
 #  define USNIC_INIT NULL
+#endif
+
+#if (HAVE_MXM) && (HAVE_MXM_DL)
+#  define MXM_INI FI_EXT_INI
+#  define MXM_INIT NULL
+#elif (HAVE_MXM)
+#  define MXM_INI INI_SIG(fi_mxm_ini)
+#  define MXM_INIT fi_mxm_ini()
+MXM_INI ;
+#else
+#  define MXM_INIT NULL
 #endif
 
 #endif /* _PROV_H_ */

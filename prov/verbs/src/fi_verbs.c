@@ -46,6 +46,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <pthread.h>
+#include <sys/epoll.h>
 
 #include <infiniband/ib.h>
 #include <infiniband/verbs.h>
@@ -64,6 +65,7 @@
 #include "fi_enosys.h"
 #include <rdma/fi_log.h>
 #include "prov.h"
+#include "fi_list.h"
 
 
 static int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
@@ -114,16 +116,32 @@ static struct fi_provider fi_ibv_prov = {
 		(flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)))
 #define VERBS_COMP_READ(ep) VERBS_COMP_READ_FLAGS(ep, ep->info->tx_attr->op_flags)
 
+#define VERBS_DBG(subsys, ...) FI_DBG(&fi_ibv_prov, subsys, __VA_ARGS__)
+#define VERBS_INFO(subsys, ...) FI_INFO(&fi_ibv_prov, subsys, __VA_ARGS__)
+
+#define VERBS_INFO_ERRNO(subsys, fn, errno) VERBS_INFO(subsys, fn ": %s(%d)\n",	\
+		strerror(errno), errno)
+
 struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
+};
+
+struct fi_ibv_eq_entry {
+	struct dlist_entry	item;
+	uint32_t		event;
+	size_t			len;
+	char 			eq_entry[0];
 };
 
 struct fi_ibv_eq {
 	struct fid_eq		eq_fid;
 	struct fi_ibv_fabric	*fab;
+	fastlock_t		lock;
+	struct dlistfd_head	list_head;
 	struct rdma_event_channel *channel;
 	uint64_t		flags;
 	struct fi_eq_err_entry	err;
+	int			epfd;
 };
 
 struct fi_ibv_pep {
@@ -614,7 +632,7 @@ static int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags, struct rdm
 	case FI_FORMAT_UNSPEC:
 		break;
 	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown fi->addr_format\n");
+		VERBS_INFO(FI_LOG_FABRIC, "Unknown fi->addr_format\n");
 	}
 
 	if (fi->src_addrlen) {
@@ -676,11 +694,14 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 	int ret = 0;
 
 	pd = ibv_alloc_pd(ctx);
-	if (!pd)
+	if (!pd) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_alloc_pd", errno);
 		return -errno;
+	}
 
 	cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
 	if (!cq) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_create_cq", errno);
 		ret = -errno;
 		goto err1;
 	}
@@ -710,6 +731,7 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 
 	qp = ibv_create_qp(pd, &init_attr);
 	if (!qp) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_create_qp", errno);
 		ret = -errno;
 		goto err2;
 	}
@@ -737,8 +759,10 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx, struct fi_info *info
 	int ret = 0;
 
 	ret = ibv_query_device(ctx, &device_attr);
-	if (ret)
+	if (ret) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_device", errno);
 		return -errno;
+	}
 
 	info->domain_attr->cq_cnt 		= device_attr.max_cq;
 	info->domain_attr->ep_cnt 		= device_attr.max_qp;
@@ -752,8 +776,10 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx, struct fi_info *info
 		return ret;
 
 	ret = ibv_query_port(ctx, 1, &port_attr);
-	if (ret)
+	if (ret) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_port", errno);
 		return -errno;
+	}
 
 	info->ep_attr->max_msg_size 		= port_attr.max_msg_sz;
 	info->ep_attr->max_order_raw_size 	= port_attr.max_msg_sz;
@@ -817,6 +843,7 @@ static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info)
 	switch (ctx->device->transport_type) {
 	case IBV_TRANSPORT_IB:
 		if(ibv_query_gid(ctx, 1, 0, &gid)) {
+			VERBS_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_gid", errno);
 			ret = -errno;
 			goto err;
 		}
@@ -875,13 +902,15 @@ static int fi_ibv_init_info(void)
 		goto unlock;
 
 	if (!fi_ibv_have_device()) {
+		VERBS_INFO(FI_LOG_FABRIC, "No RDMA devices found\n");
 		ret = -FI_ENODATA;
 		goto unlock;
 	}
 
 	ctx_list = rdma_get_devices(&num_devices);
 	if (!num_devices) {
-		ret = (errno == ENODEV) ? -FI_ENODATA : -errno;
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_get_devices", errno);
+		ret = -errno;
 		goto unlock;
 	}
 
@@ -896,10 +925,7 @@ static int fi_ibv_init_info(void)
 		}
 	}
 
-	if (!verbs_info)
-		ret = -FI_ENODATA;
-	else
-		ret = 0;
+	ret = verbs_info ? 0 : ret;
 
 	rdma_free_devices(ctx_list);
 unlock:
@@ -954,14 +980,16 @@ fi_ibv_create_ep(const char *node, const char *service,
 	ret = rdma_getaddrinfo((char *) node, (char *) service,
 				&rai_hints, &_rai);
 	if (ret) {
-		ret = (errno == ENODEV) ? -FI_ENODATA : -errno;
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_getaddrinfo", errno);
+		ret = -errno;
 		goto out;
 	}
 
-	/* Remove ib_rai entries added by IBACM to prevent wrong
-	 * ib_connect_hdr from being sent in connect request.
-	 * TODO Choose ib_rai if we came here from fi_endpoint */
-	if (hints && hints->addr_format != FI_SOCKADDR_IB) {
+	/*
+	 * If caller requested rai, remove ib_rai entries added by IBACM to
+	 * prevent wrong ib_connect_hdr from being sent in connect request.
+	 */
+	if (rai && hints && (hints->addr_format != FI_SOCKADDR_IB)) {
 		for (rai_current = &_rai; *rai_current;) {
 			struct rdma_addrinfo *rai_next;
 			if ((*rai_current)->ai_family == AF_IB) {
@@ -977,14 +1005,8 @@ fi_ibv_create_ep(const char *node, const char *service,
 
 	ret = rdma_create_ep(id, _rai, NULL, NULL);
 	if (ret) {
+		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_create_ep", errno);
 		ret = -errno;
-		if (ret == -ENOENT) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_CORE,
-				"rdma_create_ep()-->ENOENT; "
-				"likely usnic bug, skipping verbs provider.\n");
-			ret = -FI_ENODATA;
-		}
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unable to create rdma_cm id\n");
 		goto err;
 	}
 
@@ -1090,26 +1112,31 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 
 	ret = fi_ibv_init_info();
 	if (ret)
-		return ret;
+		goto err1;
 
 	ret = fi_ibv_create_ep(node, service, flags, hints, &rai, &id);
 	if (ret)
-		return ret;
+		goto err1;
 
 	check_info = id->verbs ? fi_ibv_search_verbs_info(NULL,
 			ibv_get_device_name(id->verbs->device)) : verbs_info;
 
 	if (!check_info) {
+		VERBS_DBG(FI_LOG_FABRIC, "Unable to find check_info\n");
 		ret = -FI_ENODATA;
-		goto err;
+		goto err2;
 	}
 
 	ret = fi_ibv_get_matching_info(check_info, hints, rai, info);
 
-err:
+err2:
 	rdma_destroy_ep(id);
 	rdma_freeaddrinfo(rai);
-	return ret;
+err1:
+	if (!ret || ret == -FI_ENOMEM)
+		return ret;
+	else
+		return -FI_ENODATA;
 }
 
 static int fi_ibv_msg_ep_create_qp(struct fi_ibv_msg_ep *ep)
@@ -2661,44 +2688,122 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq, struct rdma_cm_event *cma_event
 	return sizeof(*entry) + datalen;
 }
 
-static ssize_t
-fi_ibv_eq_read(struct fid_eq *eq, uint32_t *event,
-	       void *buf, size_t len, uint64_t flags)
+static ssize_t fi_ibv_eq_write_event(struct fi_ibv_eq *eq, uint32_t event,
+		const void *buf, size_t len)
 {
-	struct fi_ibv_eq *_eq;
-	struct fi_eq_cm_entry *entry;
-	struct rdma_cm_event *cma_event;
+	struct fi_ibv_eq_entry *entry;
+
+	entry = calloc(1, sizeof(struct fi_ibv_eq_entry) + len);
+	if (!entry)
+		return -FI_ENOMEM;
+
+	entry->event = event;
+	entry->len = len;
+	memcpy(entry->eq_entry, buf, len);
+
+	fastlock_acquire(&eq->lock);
+	dlistfd_insert_tail(&entry->item, &eq->list_head);
+	fastlock_release(&eq->lock);
+
+	return len;
+}
+
+ssize_t fi_ibv_eq_write(struct fid_eq *eq_fid, uint32_t event,
+		const void *buf, size_t len, uint64_t flags)
+{
+	struct fi_ibv_eq *eq;
+
+	eq = container_of(eq_fid, struct fi_ibv_eq, eq_fid.fid);
+	if (!(eq->flags & FI_WRITE))
+		return -FI_EINVAL;
+
+	return fi_ibv_eq_write_event(eq, event, buf, len);
+}
+
+static size_t fi_ibv_eq_read_event(struct fi_ibv_eq *eq, uint32_t *event,
+		void *buf, size_t len, uint64_t flags)
+{
+	struct fi_ibv_eq_entry *entry;
 	ssize_t ret = 0;
 
-	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
-	entry = (struct fi_eq_cm_entry *) buf;
-	if (_eq->err.err)
-		return -FI_EAVAIL;
+	fastlock_acquire(&eq->lock);
 
-	ret = rdma_get_cm_event(_eq->channel, &cma_event);
-	if (ret)
-		return -errno;
+	if (dlistfd_empty(&eq->list_head))
+		goto out;
 
-	ret = fi_ibv_eq_cm_process_event(_eq, cma_event, event, entry, len);
-	rdma_ack_cm_event(cma_event);
+	entry = container_of(eq->list_head.list.next, struct fi_ibv_eq_entry, item);
+	if (entry->len > len) {
+		ret = -FI_ETOOSMALL;
+		goto out;
+	}
+
+	ret = entry->len;
+	*event = entry->event;
+	memcpy(buf, entry->eq_entry, entry->len);
+
+	if (!(flags & FI_PEEK)) {
+		dlistfd_remove(eq->list_head.list.next, &eq->list_head);
+		free(entry);
+	}
+
+out:
+	fastlock_release(&eq->lock);
 	return ret;
 }
 
 static ssize_t
-fi_ibv_eq_sread(struct fid_eq *eq, uint32_t *event,
+fi_ibv_eq_read(struct fid_eq *eq_fid, uint32_t *event,
+	       void *buf, size_t len, uint64_t flags)
+{
+	struct fi_ibv_eq *eq;
+	struct rdma_cm_event *cma_event;
+	ssize_t ret = 0;
+
+	eq = container_of(eq_fid, struct fi_ibv_eq, eq_fid.fid);
+
+	if (eq->err.err)
+		return -FI_EAVAIL;
+
+	if ((ret = fi_ibv_eq_read_event(eq, event, buf, len, flags)))
+		return ret;
+
+	if (eq->channel) {
+		ret = rdma_get_cm_event(eq->channel, &cma_event);
+		if (ret)
+			return -errno;
+
+		if (len < sizeof(struct fi_eq_cm_entry))
+			return -FI_ETOOSMALL;
+
+		ret = fi_ibv_eq_cm_process_event(eq, cma_event, event,
+				(struct fi_eq_cm_entry *)buf, len);
+
+		if (flags & FI_PEEK)
+			fi_ibv_eq_write_event(eq, *event, buf, len);
+
+		rdma_ack_cm_event(cma_event);
+		return ret;
+	}
+
+	return -FI_EAGAIN;
+}
+
+static ssize_t
+fi_ibv_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 		void *buf, size_t len, int timeout, uint64_t flags)
 {
-	struct fi_ibv_eq *_eq;
+	struct fi_ibv_eq *eq;
+	struct epoll_event events[2];
 	ssize_t ret;
 
-	_eq = container_of(eq, struct fi_ibv_eq, eq_fid.fid);
+	eq = container_of(eq_fid, struct fi_ibv_eq, eq_fid.fid);
 
 	while (1) {
-		ret = fi_ibv_eq_read(eq, event, buf, len, flags);
+		ret = fi_ibv_eq_read(eq_fid, event, buf, len, flags);
 		if (ret && (ret != -FI_EAGAIN))
 			return ret;
 
-		ret = fi_poll_fd(_eq->channel->fd, timeout);
+		ret = epoll_wait(eq->epfd, events, 2, timeout);
 		if (ret == 0)
 			return -FI_EAGAIN;
 		else if (ret < 0)
@@ -2719,7 +2824,7 @@ static struct fi_ops_eq fi_ibv_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = fi_ibv_eq_read,
 	.readerr = fi_ibv_eq_readerr,
-	.write = fi_no_eq_write,
+	.write = fi_ibv_eq_write,
 	.sread = fi_ibv_eq_sread,
 	.strerror = fi_ibv_eq_strerror
 };
@@ -2732,11 +2837,11 @@ static int fi_ibv_eq_control(fid_t fid, int command, void *arg)
 	eq = container_of(fid, struct fi_ibv_eq, eq_fid.fid);
 	switch (command) {
 	case FI_GETWAIT:
-		if (!eq->channel) {
+		if (!eq->epfd) {
 			ret = -FI_ENODATA;
 			break;
 		}
-		*(int *) arg = eq->channel->fd;
+		*(int *) arg = eq->epfd;
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -2749,12 +2854,26 @@ static int fi_ibv_eq_control(fid_t fid, int command, void *arg)
 static int fi_ibv_eq_close(fid_t fid)
 {
 	struct fi_ibv_eq *eq;
+	struct fi_ibv_eq_entry *entry;
 
 	eq = container_of(fid, struct fi_ibv_eq, eq_fid.fid);
+
 	if (eq->channel)
 		rdma_destroy_event_channel(eq->channel);
 
+	close(eq->epfd);
+
+	fastlock_acquire(&eq->lock);
+	while(!dlistfd_empty(&eq->list_head)) {
+		entry = container_of(eq->list_head.list.next, struct fi_ibv_eq_entry, item);
+		dlistfd_remove(eq->list_head.list.next, &eq->list_head);
+		free(entry);
+	}
+
+	dlistfd_head_free(&eq->list_head);
+	fastlock_destroy(&eq->lock);
 	free(eq);
+
 	return 0;
 }
 
@@ -2771,7 +2890,7 @@ fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	       struct fid_eq **eq, void *context)
 {
 	struct fi_ibv_eq *_eq;
-	long flags = 0;
+	struct epoll_event event;
 	int ret;
 
 	_eq = calloc(1, sizeof *_eq);
@@ -2780,26 +2899,46 @@ fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 	_eq->fab = container_of(fabric, struct fi_ibv_fabric, fabric_fid);
 
+	fastlock_init(&_eq->lock);
+	ret = dlistfd_head_init(&_eq->list_head);
+	if (ret) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_EQ, "Unable to initialize dlistfd\n");
+		goto err1;
+	}
+
+	_eq->epfd = epoll_create1(0);
+	if (_eq->epfd < 0) {
+		ret = -errno;
+		goto err2;
+	}
+
+	memset(&event, 0, sizeof(event));
+	event.events = EPOLLIN;
+
+	if (epoll_ctl(_eq->epfd, EPOLL_CTL_ADD, _eq->list_head.fd[LIST_READ_FD], &event)) {
+		ret = -errno;
+		goto err3;
+	}
+
 	switch (attr->wait_obj) {
+	case FI_WAIT_NONE:
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 		_eq->channel = rdma_create_event_channel();
 		if (!_eq->channel) {
 			ret = -errno;
-			goto err1;
+			goto err3;
 		}
-		flags = fcntl(_eq->channel->fd, F_GETFL);
-		if (flags < 0) {
+
+		ret = fi_fd_nonblock(_eq->channel->fd);
+		if (ret)
+			goto err4;
+
+		if (epoll_ctl(_eq->epfd, EPOLL_CTL_ADD, _eq->channel->fd, &event)) {
 			ret = -errno;
-			goto err2;
+			goto err4;
 		}
-		ret = fcntl(_eq->channel->fd, F_SETFL, flags | O_NONBLOCK);
-		if (ret) {
-			ret = -errno;
-			goto err2;
-		}
-		break;
-	case FI_WAIT_NONE:
+
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -2814,10 +2953,15 @@ fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 	*eq = &_eq->eq_fid;
 	return 0;
-err2:
+err4:
 	if (_eq->channel)
 		rdma_destroy_event_channel(_eq->channel);
+err3:
+	close(_eq->epfd);
+err2:
+	dlistfd_head_free(&_eq->list_head);
 err1:
+	fastlock_destroy(&_eq->lock);
 	free(_eq);
 	return ret;
 }

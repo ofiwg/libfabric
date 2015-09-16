@@ -132,10 +132,12 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			TYPE *d = (dst); \
 			TYPE *s = (src); \
 			TYPE *r = (res); \
+			TYPE tmp; \
 			pthread_mutex_lock(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) {\
-				r[i] = d[i]; \
+				tmp = d[i]; \
 				OP(d[i],s[i]); \
+				r[i] = tmp; \
 			} \
 			pthread_mutex_unlock(&psmx_atomic_lock); \
 		} while (0)
@@ -147,11 +149,13 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			TYPE *s = (src); \
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
+			TYPE tmp; \
 			pthread_mutex_lock(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) { \
-				r[i] = d[i]; \
-				if (d[i] CMP_OP c[i]) \
+				tmp = d[i]; \
+				if (c[i] CMP_OP d[i]) \
 					d[i] = s[i]; \
+				r[i] = tmp; \
 			} \
 			pthread_mutex_unlock(&psmx_atomic_lock); \
 		} while (0)
@@ -163,10 +167,12 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			TYPE *s = (src); \
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
+			TYPE tmp; \
 			pthread_mutex_lock(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) { \
-				r[i] = d[i]; \
+				tmp = d[i]; \
 				d[i] = (s[i] & c[i]) | (d[i] & ~c[i]); \
+				r[i] = tmp; \
 			} \
 			pthread_mutex_unlock(&psmx_atomic_lock); \
 		} while (0)
@@ -361,9 +367,15 @@ static void psmx_am_atomic_completion(void *buf)
 		free(buf);
 }
 
+#if (PSM_VERNO_MAJOR >= 2)
+int psmx_am_atomic_handler(psm_am_token_t token,
+			   psm_amarg_t *args, int nargs, void *src,
+			   uint32_t len)
+#else
 int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			   psm_amarg_t *args, int nargs, void *src,
 			   uint32_t len)
+#endif
 {
 	psm_amarg_t rep_args[8];
 	int count;
@@ -379,6 +391,11 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	struct psmx_fid_cntr *cntr = NULL;
 	struct psmx_fid_cntr *mr_cntr = NULL;
 	void *tmp_buf;
+#if (PSM_VERNO_MAJOR >= 2)
+	psm_epaddr_t epaddr;
+
+	psm_am_get_source(token, &epaddr);
+#endif
 
 	switch (args[0].u32w0 & PSMX_AM_OP_MASK) {
 	case PSMX_AM_REQ_ATOMIC_WRITE:
@@ -441,7 +458,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psmx_atomic_do_readwrite(addr, src, tmp_buf,
 							 datatype, op, count);
 			else
-				err = -FI_ENOMEM;
+				op_error = -FI_ENOMEM;
 
 			target_ep = mr->domain->atomics_ep;
 			if (op == FI_ATOMIC_READ) {
@@ -491,7 +508,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psmx_atomic_do_compwrite(addr, src, src + len,
 							 tmp_buf, datatype, op, count);
 			else
-				err = -FI_ENOMEM;
+				op_error = -FI_ENOMEM;
 
 			target_ep = mr->domain->atomics_ep;
 			cntr = target_ep->remote_write_cntr;
@@ -961,7 +978,7 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 	if (len > chunk_size)
 		return -FI_EMSGSIZE;
 
-	if (flags & FI_INJECT) {
+	if ((flags & FI_INJECT) && op != FI_ATOMIC_READ) {
 		req = malloc(sizeof(*req) + len);
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req+sizeof(*req), (void *)buf, len);

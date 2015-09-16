@@ -48,6 +48,9 @@ ssize_t fi_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 ssize_t fi_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	void *desc, uint64_t data, fi_addr_t dest_addr, uint64_t addr,
 	uint64_t key, void *context);
+
+ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
+	uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key);
 {% endhighlight %}
 
 # ARGUMENTS
@@ -157,7 +160,7 @@ struct fi_msg_rma {
 	const struct iovec *msg_iov;     /* local scatter-gather array */
 	void               **desc;       /* operation descriptor */
 	size_t             iov_count;    /* # elements in msg_iov */
-	const void         *addr;        /* optional endpoint address */
+	fi_addr_t          addr;        /* optional endpoint address */
 	const struct fi_rma_iov *rma_iov;/* remote SGL */
 	size_t             rma_iov_count;/* # elements in rma_iov */
 	void               *context;     /* user-defined context */
@@ -185,6 +188,12 @@ below for more details.
 ## fi_writedata
 
 The write data call is similar to fi_write, but allows for the sending
+of remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the
+transfer.
+
+## fi_inject_writedata
+
+The inject write data call is similar to fi_inject_write, but allows for the sending
 of remote CQ data (see FI_REMOTE_CQ_DATA flag) as part of the
 transfer.
 

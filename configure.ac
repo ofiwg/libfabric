@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.60])
-AC_INIT([libfabric], [1.1.0], [ofiwg@lists.openfabrics.org])
+AC_INIT([libfabric], [1.2.0], [ofiwg@lists.openfabrics.org])
 AC_CONFIG_SRCDIR([src/fabric.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
@@ -202,9 +202,11 @@ AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [$ac_prog_cc_alias_symbols],
 dnl Provider-specific checks
 FI_PROVIDER_INIT
 FI_PROVIDER_SETUP([psm])
+FI_PROVIDER_SETUP([psm2])
 FI_PROVIDER_SETUP([sockets])
 FI_PROVIDER_SETUP([verbs])
 FI_PROVIDER_SETUP([usnic])
+FI_PROVIDER_SETUP([mxm])
 FI_PROVIDER_FINI
 
 # If the user requested to build in direct mode, but

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -116,7 +116,8 @@ void *psmx_name_server(void *args)
 		listenfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (listenfd >= 0) {
 			n = 1;
-			setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &n, sizeof(n));
+			if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &n, sizeof(n)) == -1)
+				FI_WARN(&psmx_prov, FI_LOG_CORE, "setsockopt: %s\n", strerror(errno));
 			if (!bind(listenfd, p->ai_addr, p->ai_addrlen))
 				break;
 			close(listenfd);

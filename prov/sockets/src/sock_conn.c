@@ -181,6 +181,15 @@ static void sock_set_sockopt_reuseaddr(int sock)
 		SOCK_LOG_ERROR("setsockopt reuseaddr failed\n");
 }
 
+void sock_set_sockopts_conn(int sock)
+{
+	int optval;
+	optval = 1;
+	sock_set_sockopt_reuseaddr(sock);
+	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof optval))
+		SOCK_LOG_ERROR("setsockopt nodelay failed\n");
+}
+
 void sock_set_sockopts(int sock)
 {
 	int optval;
@@ -205,8 +214,12 @@ int sock_conn_map_connect(struct sock_ep *ep,
 	socklen_t optlen;
 	fd_set fds;
 	struct sockaddr_in src_addr;
+	int do_retry = sock_conn_retry;
 
 	*index = 0;
+	memcpy(&src_addr, ep->src_addr, sizeof src_addr);
+
+bind_retry:
 	conn_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (conn_fd < 0) {
 		SOCK_LOG_ERROR("failed to create conn_fd, errno: %d\n", errno);
@@ -214,22 +227,13 @@ int sock_conn_map_connect(struct sock_ep *ep,
 		return -errno;
 	}
 
-	memcpy(&src_addr, ep->src_addr, sizeof src_addr);
-	src_addr.sin_port = 0;
-
-	sock_set_sockopt_reuseaddr(conn_fd);
-	if (bind(conn_fd, (struct sockaddr*) &src_addr, sizeof(src_addr))) {
-		SOCK_LOG_ERROR("bind failed : %s\n", strerror(errno));
-		close(conn_fd);
-		errno = FI_EOTHER;
-		return -errno;
-	}
-	
+	sock_set_sockopt_reuseaddr(conn_fd);	
 	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
 		      ntohs(addr->sin_port));
 	SOCK_LOG_DBG("Connecting using address:%s\n",
 			inet_ntoa(src_addr.sin_addr));
 
+retry:
 	if (connect(conn_fd, (struct sockaddr *) addr, sizeof *addr) < 0) {
 		if (errno == EINPROGRESS) {
 			/* timeout after 5 secs */
@@ -251,6 +255,17 @@ int sock_conn_map_connect(struct sock_ep *ep,
 						optval, strerror(optval));
 				goto err;
 			}
+		} else if (errno == ETIMEDOUT && do_retry) {
+			do_retry--;
+			SOCK_LOG_ERROR("Connect timed out, retrying - %s\n",
+				       strerror(errno));
+			goto retry;
+		} else if (errno == EADDRNOTAVAIL && do_retry) {
+			do_retry--;
+			SOCK_LOG_ERROR("Connect failed with address not available, retrying - %s\n",
+				       strerror(errno));
+			close(conn_fd);
+			goto bind_retry;
 		} else {
 			SOCK_LOG_ERROR("Error connecting %d - %s\n", errno,
 				       strerror(errno));
@@ -269,11 +284,12 @@ int sock_conn_map_connect(struct sock_ep *ep,
 	}
 
 	do {
-		ret = recv(conn_fd, &use_conn, sizeof(use_conn), 0);
+		ret = recv(conn_fd, &use_conn, sizeof(use_conn), MSG_WAITALL);
 	} while(ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
 	if (ret != sizeof(use_conn)) {
-		SOCK_LOG_ERROR("Cannot exchange port: %d\n", ret);
-		goto err;
+		SOCK_LOG_ERROR("Cannot exchange port: %d - %s\n",
+			       ret, strerror(errno));
+		use_conn = 0;
 	}
 
 	SOCK_LOG_DBG("Connect response: %d\n", use_conn);
@@ -361,15 +377,19 @@ static void *_sock_conn_listen(void *arg)
 			goto err;
 		}
 
+		sock_set_sockopts_conn(conn_fd);
 		SOCK_LOG_DBG("ACCEPT: %s, %d\n", inet_ntoa(remote.sin_addr),
 				ntohs(remote.sin_port));
 
 		do {
 			ret = recv(conn_fd, &remote.sin_port, 
-				   sizeof(remote.sin_port), 0);
+				   sizeof(remote.sin_port), MSG_WAITALL);
 		} while(ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
-		if (ret != sizeof(remote.sin_port))
-			SOCK_LOG_ERROR("Cannot exchange port\n");
+		if (ret != sizeof(remote.sin_port)) {
+			SOCK_LOG_ERROR("Cannot exchange port: %d - %s\n", ret, strerror(errno));
+			close(conn_fd);
+			continue;
+		}
 
 		SOCK_LOG_DBG("Remote port: %d\n", ntohs(remote.sin_port));
 
@@ -393,6 +413,7 @@ static void *_sock_conn_listen(void *arg)
 			shutdown(conn_fd, SHUT_RDWR);
 			close(conn_fd);
 		}
+		SOCK_LOG_DBG("Use conn: %d\n", use_conn);
 	}
 
 err:
@@ -410,8 +431,6 @@ int sock_conn_listen(struct sock_ep *ep)
 	struct sockaddr_in addr;
 	struct sock_conn_listener *listener = &ep->listener;
 	struct sock_domain *domain = ep->domain;	
-	struct addrinfo ai, *rai = NULL;
-	char hostname[HOST_NAME_MAX] = {0};
 	char service[NI_MAXSERV] = {0};
 
 	memset(&hints, 0, sizeof(hints));
@@ -469,26 +488,13 @@ int sock_conn_listen(struct sock_ep *ep)
 	}
 
 	if (ep->src_addr->sin_addr.s_addr == 0) {
-		memset(&ai, 0, sizeof(ai));
-		ai.ai_family = AF_INET;
-		ai.ai_socktype = SOCK_STREAM;
-
 		sprintf(service, "%s", listener->service);
-		if (gethostname(hostname, sizeof hostname) != 0) {
-			SOCK_LOG_DBG("gethostname failed!\n");
+		ret = sock_get_src_addr_from_hostname(ep->src_addr, service);
+		if (ret)
 			goto err;
-		}
-		ret = getaddrinfo(hostname, service, &ai, &rai);
-		if (ret) {
-			SOCK_LOG_DBG("getaddrinfo failed!\n");
-			goto err;
-		}
-		memcpy(ep->src_addr, (struct sockaddr_in *)rai->ai_addr,
-		       sizeof *ep->src_addr);
-		freeaddrinfo(rai);
 	}
 
-	if (listen(listen_fd, 0)) {
+	if (listen(listen_fd, SOCK_CM_DEF_BACKLOG)) {
 		SOCK_LOG_ERROR("failed to listen socket: %s\n", strerror(errno));
 		goto err;
 	}

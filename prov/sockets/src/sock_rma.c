@@ -112,7 +112,7 @@ ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;	
 
-	if (sock_ep_is_read_cq_low(&tx_ctx->comp, flags)) {
+	if (sock_ep_is_send_cq_low(&tx_ctx->comp, flags)) {
 		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
 	}
@@ -282,7 +282,7 @@ ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;
 
-	if (sock_ep_is_write_cq_low(&tx_ctx->comp, flags)) {
+	if (sock_ep_is_send_cq_low(&tx_ctx->comp, flags)) {
 		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
 	}
