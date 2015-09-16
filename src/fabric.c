@@ -492,14 +492,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const cha
 			FI_WARN(&core_prov, FI_LOG_CORE,
 			       "fi_getinfo: provider %s returned -%d (%s)\n",
 			       prov->provider->name, -ret, fi_strerror(-ret));
-			if (ret == -FI_ENODATA) {
-				continue;
-			} else {
-				/* a provider has an error, clean up and bail */
-				fi_freeinfo(*info);
-				*info = NULL;
-				return ret;
-			}
+			continue;
 		}
 
 		if (!*info)
