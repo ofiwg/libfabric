@@ -286,6 +286,7 @@ _psm_files = \
 	prov/psm/src/psmx_mr.c \
 	prov/psm/src/psmx_wait.c \
 	prov/psm/src/psmx_poll.c \
+	prov/psm/src/psmx_dl.c \
 	prov/psm/src/psmx_util.c
 
 if HAVE_PSM_DL
@@ -329,6 +330,7 @@ _psm2_files = \
 	prov/psm2/src/psmx_mr.c \
 	prov/psm2/src/psmx_wait.c \
 	prov/psm2/src/psmx_poll.c \
+	prov/psm2/src/psmx_dl.c \
 	prov/psm2/src/psmx_util.c
 
 if HAVE_PSM2_DL

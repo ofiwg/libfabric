@@ -51,7 +51,7 @@ static int psmx_domain_close(fid_t fid)
 	 * when trying to dereference the MQ pointer. There is no mechanism
 	 * to properly shutdown AM. The workaround is to keep MQ valid.
 	 */
-	psm_mq_finalize(domain->psm_mq);
+	PSMX_CALL(psm_mq_finalize)(domain->psm_mq);
 #endif
 
 	/* workaround for:
@@ -59,10 +59,10 @@ static int psmx_domain_close(fid_t fid)
 	 */
 	sleep(psmx_env.delay);
 
-	err = psm_ep_close(domain->psm_ep, PSM_EP_CLOSE_GRACEFUL,
+	err = PSMX_CALL(psm_ep_close)(domain->psm_ep, PSM_EP_CLOSE_GRACEFUL,
 			   (int64_t) PSMX_TIME_OUT * 1000000000LL);
 	if (err != PSM_OK)
-		psm_ep_close(domain->psm_ep, PSM_EP_CLOSE_FORCE, 0);
+		PSMX_CALL(psm_ep_close)(domain->psm_ep, PSM_EP_CLOSE_FORCE, 0);
 
 	domain->fabric->active_domain = NULL;
 	free(domain);
@@ -124,9 +124,9 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->caps = info->caps;
 	domain_priv->fabric = fabric_priv;
 
-	psm_ep_open_opts_get_defaults(&opts);
+	PSMX_CALL(psm_ep_open_opts_get_defaults)(&opts);
 
-	err = psm_ep_open(fabric_priv->uuid, &opts,
+	err = PSMX_CALL(psm_ep_open)(fabric_priv->uuid, &opts,
 			  &domain_priv->psm_ep, &domain_priv->psm_epid);
 	if (err != PSM_OK) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
@@ -135,7 +135,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err_out_free_domain;
 	}
 
-	err = psm_mq_init(domain_priv->psm_ep, PSM_MQ_ORDERMASK_ALL,
+	err = PSMX_CALL(psm_mq_init)(domain_priv->psm_ep, PSM_MQ_ORDERMASK_ALL,
 			  NULL, 0, &domain_priv->psm_mq);
 	if (err != PSM_OK) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
@@ -145,7 +145,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	if (psmx_domain_enable_ep(domain_priv, NULL) < 0) {
-		psm_mq_finalize(domain_priv->psm_mq);
+		PSMX_CALL(psm_mq_finalize)(domain_priv->psm_mq);
 		goto err_out_close_ep;
 	}
 
@@ -155,9 +155,9 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	return 0;
 
 err_out_close_ep:
-	if (psm_ep_close(domain_priv->psm_ep, PSM_EP_CLOSE_GRACEFUL,
+	if (PSMX_CALL(psm_ep_close)(domain_priv->psm_ep, PSM_EP_CLOSE_GRACEFUL,
 			 (int64_t) PSMX_TIME_OUT * 1000000000LL) != PSM_OK)
-		psm_ep_close(domain_priv->psm_ep, PSM_EP_CLOSE_FORCE, 0);
+		PSMX_CALL(psm_ep_close)(domain_priv->psm_ep, PSM_EP_CLOSE_FORCE, 0);
 
 err_out_free_domain:
 	free(domain_priv);

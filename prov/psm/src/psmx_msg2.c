@@ -154,10 +154,10 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 #if (PSM_VERNO_MAJOR >= 2)
 	psm_epaddr_t epaddr;
 
-	psm_am_get_source(token, &epaddr);
+	PSMX_CALL(psm_am_get_source)(token, &epaddr);
 #endif
 
-	epaddr_context = psm_epaddr_getctxt(epaddr);
+	epaddr_context = PSMX_CALL(psm_epaddr_getctxt)(epaddr);
 	if (!epaddr_context) {
 		FI_WARN(&psmx_prov, FI_LOG_EP_DATA,
 			"NULL context for epaddr %p\n", epaddr);
@@ -208,7 +208,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				rep_args[0].u32w1 = 0;
 				rep_args[1].u64 = args[1].u64;
 				rep_args[2].u64 = (uint64_t)(uintptr_t)req;
-				err = psm_am_reply_short(token, PSMX_AM_MSG_HANDLER,
+				err = PSMX_CALL(psm_am_reply_short)(token, PSMX_AM_MSG_HANDLER,
 						rep_args, 3, NULL, 0, 0,
 						NULL, NULL );
 			}
@@ -256,7 +256,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			rep_args[0].u32w1 = op_error;
 			rep_args[1].u64 = args[1].u64;
 			rep_args[2].u64 = 0; /* done */
-			err = psm_am_reply_short(token, PSMX_AM_MSG_HANDLER,
+			err = PSMX_CALL(psm_am_reply_short)(token, PSMX_AM_MSG_HANDLER,
 					rep_args, 3, NULL, 0, 0,
 					NULL, NULL );
 		}
@@ -339,7 +339,7 @@ int psmx_am_process_send(struct psmx_fid_domain *domain, struct psmx_am_request 
 		args[2].u64 = (uint64_t)(uintptr_t)req->send.peer_context;
 		args[3].u64 = offset;
 
-		err = psm_am_request_short((psm_epaddr_t) req->send.dest_addr,
+		err = PSMX_CALL(psm_am_request_short)((psm_epaddr_t) req->send.dest_addr,
 					PSMX_AM_MSG_HANDLER, args, 4,
 					req->send.buf+offset, chunk_size,
 					am_flags, NULL, NULL);
@@ -357,7 +357,7 @@ int psmx_am_process_send(struct psmx_fid_domain *domain, struct psmx_am_request 
 	args[3].u64 = offset;
 
 	req->send.len_sent = offset + len;
-	err = psm_am_request_short((psm_epaddr_t) req->send.dest_addr,
+	err = PSMX_CALL(psm_am_request_short)((psm_epaddr_t) req->send.dest_addr,
 				PSMX_AM_MSG_HANDLER, args, 4,
 				(void *)req->send.buf+offset, len,
 				am_flags, NULL, NULL);
@@ -430,7 +430,7 @@ static ssize_t _psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 		args[0].u32w1 = 0;
 		args[1].u64 = unexp->sender_context;
 		args[2].u64 = recv_done ? 0 : (uint64_t)(uintptr_t)req;
-		err = psm_am_request_short(unexp->sender_addr,
+		err = PSMX_CALL(psm_am_request_short)(unexp->sender_addr,
 					   PSMX_AM_MSG_HANDLER,
 					   args, 3, NULL, 0, 0,
 					   NULL, NULL );
@@ -580,14 +580,14 @@ static ssize_t _psmx_send2(struct fid_ep *ep, const void *buf, size_t len,
 	args[2].u64 = 0;
 	args[3].u64 = 0;
 
-	err = psm_am_request_short((psm_epaddr_t) dest_addr,
+	err = PSMX_CALL(psm_am_request_short)((psm_epaddr_t) dest_addr,
 				PSMX_AM_MSG_HANDLER, args, 4,
 				(void *)buf, msg_size, am_flags, NULL, NULL);
 
 #if ! PSMX_AM_USE_SEND_QUEUE
 	if (len > msg_size) {
 		while (!req->send.peer_ready)
-			psm_poll(ep_priv->domain->psm_ep);
+			PSMX_CALL(psm_poll)(ep_priv->domain->psm_ep);
 
 		psmx_am_process_send(ep_priv->domain, req);
 	}

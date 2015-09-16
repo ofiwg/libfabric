@@ -37,7 +37,7 @@ static void psmx_set_epaddr_context(struct psmx_fid_domain *domain,
 {
 	struct psmx_epaddr_context *context;
 
-	context = (void *)psm_epaddr_getctxt(epaddr);
+	context = (void *)PSMX_CALL(psm_epaddr_getctxt)(epaddr);
 	if (context) {
 		if (context->domain != domain || context->epid != epid) {
 			FI_WARN(&psmx_prov, FI_LOG_AV,
@@ -58,7 +58,7 @@ static void psmx_set_epaddr_context(struct psmx_fid_domain *domain,
 
 	context->domain = domain;
 	context->epid = epid;
-	psm_epaddr_setctxt(epaddr, context);
+	PSMX_CALL(psm_epaddr_setctxt)(epaddr, context);
 }
 
 int psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
@@ -69,16 +69,16 @@ int psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 	psm_epconn_t epconn;
 	struct psmx_epaddr_context *context;
 
-	err = psm_ep_epid_lookup(epid, &epconn);
+	err = PSMX_CALL(psm_ep_epid_lookup)(epid, &epconn);
 	if (err == PSM_OK) {
-		context = psm_epaddr_getctxt(epconn.addr);
+		context = PSMX_CALL(psm_epaddr_getctxt)(epconn.addr);
 		if (context && context->epid  == epid) {
 			*epaddr = epconn.addr;
 			return 0;
 		}
 	}
 
-        err = psm_ep_connect(domain->psm_ep, 1, &epid, NULL, &errors, epaddr, 30*1e9);
+        err = PSMX_CALL(psm_ep_connect)(domain->psm_ep, 1, &epid, NULL, &errors, epaddr, 30*1e9);
         if (err != PSM_OK)
                 return psmx_errno(err);
 
@@ -160,8 +160,8 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 	/* prevent connecting to the same ep twice, which is fatal in PSM */
 	for (i=0; i<count; i++) {
 		psm_epconn_t epconn;
-		if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
-			epaddr_context = psm_epaddr_getctxt(epconn.addr);
+		if (PSMX_CALL(psm_ep_epid_lookup)(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
+			epaddr_context = PSMX_CALL(psm_epaddr_getctxt)(epconn.addr);
 			if (epaddr_context && epaddr_context->epid  == ((psm_epid_t *) addr)[i])
 				((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
 			else
@@ -172,7 +172,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		}
 	}
 
-	psm_ep_connect(av_priv->domain->psm_ep, count, 
+	PSMX_CALL(psm_ep_connect)(av_priv->domain->psm_ep, count,
 			(psm_epid_t *) addr, mask, errors,
 			(psm_epaddr_t *) fi_addr, 30*1e9);
 
@@ -192,8 +192,8 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			 * with error "Endpoint could not be reached". They should be treated as already
 			 * connected.
 			 */
-			if (psm_ep_epid_lookup(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
-				epaddr_context = psm_epaddr_getctxt(epconn.addr);
+			if (PSMX_CALL(psm_ep_epid_lookup)(((psm_epid_t *) addr)[i], &epconn) == PSM_OK) {
+				epaddr_context = PSMX_CALL(psm_epaddr_getctxt)(epconn.addr);
 				if (epaddr_context && epaddr_context->epid  == ((psm_epid_t *) addr)[i]) {
 					((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
 					continue;
@@ -202,7 +202,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 
 			FI_INFO(&psmx_prov, FI_LOG_AV,
 				"%d: psm_ep_connect returned %s. remote epid=%lx.\n",
-				i, psm_error_get_string(errors[i]),
+				i, PSMX_CALL(psm_error_get_string)(errors[i]),
 				((psm_epid_t *)addr)[i]);
 			if (((psm_epid_t *)addr)[i] == 0)
 				FI_INFO(&psmx_prov, FI_LOG_AV,
@@ -294,7 +294,7 @@ static int psmx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 		epid = av_priv->psm_epids[idx];
 	}
 	else {
-		context = psm_epaddr_getctxt((void *)fi_addr);
+		context = PSMX_CALL(psm_epaddr_getctxt)((void *)fi_addr);
 		epid = context->epid;
 	}
 

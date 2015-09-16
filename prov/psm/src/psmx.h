@@ -84,7 +84,128 @@ extern "C" {
 #include "fi_enosys.h"
 #include "fi_list.h"
 
+#ifndef PSMX_DL
+#define PSMX_DL			1
+#endif
+
+#if PSMX_DL
+#include <dlfcn.h>
+#define PSMX_CALL(func)	(*psmx_lib.func)
+struct psmx_lib {
+	psm_error_t	(*psm_init)(int *major, int *minor);
+	psm_error_t	(*psm_finalize)(void);
+	psm_error_t 	(*psm_error_register_handler)(psm_ep_t ep,
+				const psm_ep_errhandler_t errhandler);
+	psm_error_t	(*psm_error_defer)(psm_error_token_t err_token);
+	const char *	(*psm_error_get_string)(psm_error_t error);
+	uint64_t	(*psm_epid_nid)(psm_epid_t epid);
+	uint64_t	(*psm_epid_context)(psm_epid_t epid);
+	uint64_t	(*psm_epid_port)(psm_epid_t epid);
+	psm_error_t	(*psm_ep_num_devunits)(uint32_t *num_units);
+	void		(*psm_uuid_generate)(psm_uuid_t uuid);
+	psm_error_t	(*psm_ep_open)(const psm_uuid_t uuid,
+				       const struct psm_ep_open_opts *opts,
+				       psm_ep_t *ep, psm_epid_t *epid);
+	psm_error_t	(*psm_ep_open_opts_get_defaults)(struct psm_ep_open_opts *opts);
+	psm_error_t	(*psm_ep_epid_share_memory)(psm_ep_t ep, psm_epid_t epid,
+						    int *result);
+	psm_error_t	(*psm_ep_close)(psm_ep_t ep, int mode, int64_t timeout);
+	psm_error_t	(*psm_map_nid_hostname)(int num, const uint64_t *nids,
+						const char **hostnames);
+	psm_error_t	(*psm_ep_connect)(psm_ep_t ep, int num,
+					  const psm_epid_t *epids, const int *masks,
+					  psm_error_t *errors, psm_epaddr_t *epaddrs,
+					  int64_t timeout);
+	psm_error_t	(*psm_poll)(psm_ep_t ep);
+	void		(*psm_epaddr_setlabel)(psm_epaddr_t epaddr, const char *label);
+	void		(*psm_epaddr_setctxt)(psm_epaddr_t epaddr, void *ctxt);
+	void *		(*psm_epaddr_getctxt)(psm_epaddr_t epaddr);
+	psm_error_t	(*psm_setopt)(psm_component_t component,
+				      const void *obj, int optname,
+				      const void *optval, uint64_t optlen);
+	psm_error_t	(*psm_getopt)(psm_component_t component,
+				      const void *obj, int optname, void *optval,
+				      uint64_t *optlen);
+	psm_error_t	(*psm_ep_query)(int *num, psm_epinfo_t *epinfos);
+	psm_error_t	(*psm_ep_epid_lookup)(psm_epid_t epid, psm_epconn_t *epconn);
+	psm_error_t	(*psm_mq_init)(psm_ep_t ep, uint64_t tag_order_mask,
+				       const struct psm_optkey *opts, int numopts,
+				       psm_mq_t *mq);
+	psm_error_t	(*psm_mq_finalize)(psm_mq_t mq);
+	psm_error_t	(*psm_mq_getopt)(psm_mq_t mq, int opt, void *val);
+	psm_error_t	(*psm_mq_setopt)(psm_mq_t mq, int opt, const void *val);
+	psm_error_t	(*psm_mq_irecv)(psm_mq_t mq, uint64_t rtag,
+				        uint64_t rtagsel, uint32_t flags, void *buf,
+				        uint32_t len, void *ctxt, psm_mq_req_t *req);
+	psm_error_t	(*psm_mq_send)(psm_mq_t mq, psm_epaddr_t dest,
+				       uint32_t flags, uint64_t stag, const void *buf,
+				       uint32_t len);
+	psm_error_t	(*psm_mq_isend)(psm_mq_t mq, psm_epaddr_t dest,
+					uint32_t flags, uint64_t stag, const void *buf,
+					uint32_t len, void *ctxt, psm_mq_req_t *req);
+	psm_error_t	(*psm_mq_iprobe)(psm_mq_t mq, uint64_t rtag,
+					 uint64_t rtagsel, psm_mq_status_t *status);
+	psm_error_t	(*psm_mq_ipeek)(psm_mq_t mq, psm_mq_req_t *req,
+					psm_mq_status_t *status);
+	psm_error_t	(*psm_mq_wait)(psm_mq_req_t *req, psm_mq_status_t *status);
+	psm_error_t	(*psm_mq_test)(psm_mq_req_t *req, psm_mq_status_t *status);
+	psm_error_t	(*psm_mq_cancel)(psm_mq_req_t *req);
+	void		(*psm_mq_get_stats)(psm_mq_t mq, psm_mq_stats_t *stats);
+	psm_error_t	(*psm_am_register_handlers)(psm_ep_t ep,
+					const psm_am_handler_fn_t *handlers,
+					int num_handlers, int *handlers_idx);
+	psm_error_t	(*psm_am_request_short)(psm_epaddr_t epaddr, psm_handler_t handler,
+						psm_amarg_t *args, int nargs, void *src,
+						size_t len, int flags,
+						psm_am_completion_fn_t completion_fn,
+						void *completion_ctxt);
+	psm_error_t	(*psm_am_reply_short)(psm_am_token_t token, psm_handler_t handler,
+					      psm_amarg_t *args, int nargs, void *src,
+					      size_t len, int flags,
+					      psm_am_completion_fn_t completion_fn,
+					      void *completion_ctxt);
+	psm_error_t	(*psm_am_get_parameters)(psm_ep_t ep, struct psm_am_parameters *params,
+						 size_t sizeof_parameters_in,
+						 size_t *sizeof_parameters_out);
 #if (PSM_VERNO_MAJOR >= 2)
+	psm_error_t	(*psm_mq_irecv2)(psm_mq_t mq, psm_epaddr_t src,
+					 psm_mq_tag_t *rtag, psm_mq_tag_t *rtagsel,
+					 uint32_t flags, void *buf, uint32_t len,
+					 void *ctxt, psm_mq_req_t *req);
+	psm_error_t	(*psm_mq_imrecv)(psm_mq_t mq, uint32_t flags, void *buf,
+					 uint32_t len, void *ctxt, psm_mq_req_t *req);
+	psm_error_t	(*psm_mq_send2)(psm_mq_t mq, psm_epaddr_t dest,
+					uint32_t flags, psm_mq_tag_t *stag,
+					const void *buf, uint32_t len);
+	psm_error_t	(*psm_mq_isend2)(psm_mq_t mq, psm_epaddr_t dest,
+					 uint32_t flags, psm_mq_tag_t *stag,
+					 const void *buf, uint32_t len, void *ctxt,
+					 psm_mq_req_t *req);
+	psm_error_t	(*psm_mq_iprobe2)(psm_mq_t mq, psm_epaddr_t src,
+					  psm_mq_tag_t *rtag, psm_mq_tag_t *rtagsel,
+					  psm_mq_status2_t *status);
+	psm_error_t	(*psm_mq_improbe)(psm_mq_t mq, uint64_t rtag,
+					  uint64_t rtagsel, psm_mq_req_t *req,
+					  psm_mq_status_t *status);
+	psm_error_t	(*psm_mq_improbe2)(psm_mq_t mq, psm_epaddr_t src,
+					   psm_mq_tag_t *rtag, psm_mq_tag_t *rtagsel,
+					   psm_mq_req_t *req, psm_mq_status2_t *status);
+	psm_error_t	(*psm_mq_ipeek2)(psm_mq_t mq, psm_mq_req_t *req,
+					 psm_mq_status2_t *status);
+	psm_error_t	(*psm_mq_wait2)(psm_mq_req_t *req, psm_mq_status2_t *status);
+	psm_error_t	(*psm_mq_test2)(psm_mq_req_t *req, psm_mq_status2_t *status);
+	psm_error_t	(*psm_am_get_source)(psm_am_token_t token, psm_epaddr_t *epaddr_out);
+#endif
+};
+extern struct psmx_lib	psmx_lib;
+int	psmx_dl_open(void);
+void	psmx_dl_close(void);
+#else
+#define PSMX_CALL(func)	func
+#endif
+
+#if (PSM_VERNO_MAJOR >= 2)
+#define PSMX_LIB_NAME		"libpsm2.so"
 #define PSMX_PROV_NAME		"psm2"
 #define PSMX_PROV_NAME_LEN	4
 #define PSMX_DOMAIN_NAME	"psm2"
@@ -92,6 +213,7 @@ extern "C" {
 #define PSMX_FABRIC_NAME	"psm2"
 #define PSMX_FABRIC_NAME_LEN	4
 #else
+#define PSMX_LIB_NAME		"libpsm_infinipath.so"
 #define PSMX_PROV_NAME		"psm"
 #define PSMX_PROV_NAME_LEN	3
 #define PSMX_DOMAIN_NAME	"psm"

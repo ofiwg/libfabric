@@ -84,7 +84,7 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 
 			src_addr = (fi_addr_t)av->psm_epaddrs[idx];
 		}
-		epaddr_context = psm_epaddr_getctxt((void *)src_addr);
+		epaddr_context = PSMX_CALL(psm_epaddr_getctxt)((void *)src_addr);
 		psm_tag = epaddr_context->epid | PSMX_MSG_BIT;
 		psm_tagsel = -1ULL;
 	}
@@ -131,12 +131,12 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 	PSMX_SET_TAG(psm_tag2, psm_tag, 0);
 	PSMX_SET_TAG(psm_tagsel2, psm_tagsel, 0);
 
-	err = psm_mq_irecv2(ep_priv->domain->psm_mq,
+	err = PSMX_CALL(psm_mq_irecv2)(ep_priv->domain->psm_mq,
 			    (psm_epaddr_t)src_addr,
 			    &psm_tag2, &psm_tagsel2, recv_flag,
 			    buf, len, (void *)fi_context, &psm_req);
 #else
-	err = psm_mq_irecv(ep_priv->domain->psm_mq,
+	err = PSMX_CALL(psm_mq_irecv)(ep_priv->domain->psm_mq,
 			   psm_tag, psm_tagsel, recv_flag,
 			   buf, len, (void *)fi_context, &psm_req);
 #endif
@@ -289,10 +289,10 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 			return -FI_EMSGSIZE;
 
 #if (PSM_VERNO_MAJOR >= 2)
-		err = psm_mq_send2(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
+		err = PSMX_CALL(psm_mq_send2)(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
 				   &psm_tag2, buf, len);
 #else
-		err = psm_mq_send(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
+		err = PSMX_CALL(psm_mq_send)(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
 				  psm_tag, buf, len);
 #endif
 
@@ -337,10 +337,10 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 #if (PSM_VERNO_MAJOR >= 2)
-	err = psm_mq_isend2(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
+	err = PSMX_CALL(psm_mq_isend2)(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
 				&psm_tag2, buf, len, (void *)fi_context, &psm_req);
 #else
-	err = psm_mq_isend(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
+	err = PSMX_CALL(psm_mq_isend)(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
 				psm_tag, buf, len, (void *)fi_context, &psm_req);
 #endif
 

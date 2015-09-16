@@ -135,7 +135,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 	*info = NULL;
 
-	if (psm_ep_num_devunits(&cnt) || !cnt) {
+	if (PSMX_CALL(psm_ep_num_devunits)(&cnt) || !cnt) {
 		FI_INFO(&psmx_prov, FI_LOG_CORE,
 			"no PSM device is found.\n");
 		return -FI_ENODATA;
@@ -461,8 +461,12 @@ static void psmx_fini(void)
 {
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
-	if (! --psmx_init_count)
-		psm_finalize();
+	if (! --psmx_init_count) {
+		PSMX_CALL(psm_finalize)();
+#if PSMX_DL
+		psmx_dl_close();
+#endif
+	}
 }
 
 struct fi_provider psmx_prov = {
@@ -503,15 +507,26 @@ PSM_INI
 	fi_param_define(&psmx_prov, "delay", FI_PARAM_INT,
 			"Delay (seconds) before finalization (for debugging)");
 
-        psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
+#if PSMX_DL
+	if (psmx_dl_open()) {
+		psmx_dl_close();
+		return NULL;
+	}
+#endif
+
+        PSMX_CALL(psm_error_register_handler)(NULL, PSM_ERRHANDLER_NO_HANDLER);
 
 	major = PSM_VERNO_MAJOR;
 	minor = PSM_VERNO_MINOR;
 
-        err = psm_init(&major, &minor);
+        err = PSMX_CALL(psm_init)(&major, &minor);
 	if (err != PSM_OK) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
-			"psm_init failed: %s\n", psm_error_get_string(err));
+			"psm_init failed: %s\n", PSMX_CALL(psm_error_get_string(err)));
+#if PSMX_DL
+		if (!psmx_init_count)
+			psmx_dl_close();
+#endif
 		return NULL;
 	}
 
@@ -524,6 +539,10 @@ PSM_INI
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
 			"PSM version mismatch: header %d.%d, library %d.%d.\n",
 			PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
+#if PSMX_DL
+		if (!psmx_init_count)
+			psmx_dl_close();
+#endif
 		return NULL;
 	}
 
