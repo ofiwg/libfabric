@@ -107,9 +107,12 @@ static int ft_load_av(void)
 		return ret;
 
 	ret = fi_av_insert(av, msg.data, 1, &ft_tx.addr, 0, NULL);
-	if (ret != 1) {
+	if (ret < 0) {
 		FT_PRINTERR("fi_av_insert", ret);
 		return ret;
+	} else if (ret != 1) {
+		FT_ERR("fi_av_insert: number of inserted address = %d\n", ret);
+		return -1;
 	}
 
 	return 0;
