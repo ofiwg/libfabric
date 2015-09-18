@@ -75,6 +75,21 @@ int psmx_uuid_to_port(psm_uuid_t uuid)
 	return (int)port;
 }
 
+char *psmx_uuid_to_string(psm_uuid_t uuid)
+{
+	static char s[40];
+
+	sprintf(s,
+		"%02hhX%02hhX%02hhX%02hhX-"
+		"%02hhX%02hhX-%02hhX%02hhX-%02hhX%02hhX-"
+		"%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX",
+		uuid[0], uuid[1], uuid[2], uuid[3],
+		uuid[4], uuid[5], uuid[6], uuid[7], uuid[8], uuid[9],
+		uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]);
+
+	return s;
+}
+
 /*************************************************************
  * A simple name resolution mechanism for client-server style
  * applications. The server side has to run first. The client
