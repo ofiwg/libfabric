@@ -502,7 +502,7 @@ static int psmx_fabric_close(fid_t fid)
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
 	fabric = container_of(fid, struct psmx_fid_fabric, fabric.fid);
-	if (--fabric->refcnt) {
+	if (! --fabric->refcnt) {
 		if (fabric->active_domain)
 			fi_close(&fabric->active_domain->domain.fid);
 		assert(fabric == psmx_active_fabric);
