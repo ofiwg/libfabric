@@ -43,6 +43,7 @@ struct psmx_env psmx_env = {
 	.tagged_rma	= 1,
 	.uuid		= PSMX_DEFAULT_UUID,
 	.delay		= 1,
+	.timeout	= PSMX_TIME_OUT,
 };
 
 static void psmx_init_env(void)
@@ -55,6 +56,7 @@ static void psmx_init_env(void)
 	fi_param_get_bool(&psmx_prov, "tagged_rma", &psmx_env.tagged_rma);
 	fi_param_get_str(&psmx_prov, "uuid", &psmx_env.uuid);
 	fi_param_get_int(&psmx_prov, "delay", &psmx_env.delay);
+	fi_param_get_int(&psmx_prov, "timeout", &psmx_env.timeout);
 }
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
@@ -611,6 +613,9 @@ PSM_INI
 
 	fi_param_define(&psmx_prov, "delay", FI_PARAM_INT,
 			"Delay (seconds) before finalization (for debugging)");
+
+	fi_param_define(&psmx_prov, "timeout", FI_PARAM_INT,
+			"Timeout (seconds) for gracefully closing the PSM endpoint");
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
 
