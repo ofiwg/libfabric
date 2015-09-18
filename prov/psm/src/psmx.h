@@ -620,6 +620,7 @@ struct psmx_env {
 	int tagged_rma;
 	char *uuid;
 	int delay;
+	int timeout;
 };
 
 extern struct fi_ops_mr		psmx_mr_ops;

@@ -60,7 +60,7 @@ static int psmx_domain_close(fid_t fid)
 	sleep(psmx_env.delay);
 
 	err = psm_ep_close(domain->psm_ep, PSM_EP_CLOSE_GRACEFUL,
-			   (int64_t) PSMX_TIME_OUT * 1000000000LL);
+			   (int64_t) psmx_env.timeout * 1000000000LL);
 	if (err != PSM_OK)
 		psm_ep_close(domain->psm_ep, PSM_EP_CLOSE_FORCE, 0);
 
@@ -156,7 +156,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 err_out_close_ep:
 	if (psm_ep_close(domain_priv->psm_ep, PSM_EP_CLOSE_GRACEFUL,
-			 (int64_t) PSMX_TIME_OUT * 1000000000LL) != PSM_OK)
+			 (int64_t) psmx_env.timeout * 1000000000LL) != PSM_OK)
 		psm_ep_close(domain_priv->psm_ep, PSM_EP_CLOSE_FORCE, 0);
 
 err_out_free_domain:
