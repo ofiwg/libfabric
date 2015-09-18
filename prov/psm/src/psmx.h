@@ -125,10 +125,6 @@ union psmx_pi {
 #define PSMX_AM_DATA		0x20000000
 #define PSMX_AM_FORCE_ACK	0x10000000
 
-#ifndef PSMX_AM_USE_SEND_QUEUE
-#define PSMX_AM_USE_SEND_QUEUE	0
-#endif
-
 enum {
 	PSMX_AM_REQ_WRITE = 1,
 	PSMX_AM_REQ_WRITE_LONG,
@@ -144,13 +140,6 @@ enum {
 	PSMX_AM_REP_ATOMIC_READWRITE,
 	PSMX_AM_REQ_ATOMIC_COMPWRITE,
 	PSMX_AM_REP_ATOMIC_COMPWRITE,
-};
-
-enum {
-	PSMX_AM_STATE_NEW,
-	PSMX_AM_STATE_QUEUED,
-	PSMX_AM_STATE_PROCESSED,
-	PSMX_AM_STATE_DONE
 };
 
 struct psmx_am_request {
@@ -203,7 +192,6 @@ struct psmx_am_request {
 	uint64_t cq_flags;
 	struct fi_context fi_context;
 	struct psmx_fid_ep *ep;
-	int state;
 	int no_event;
 	int error;
 	struct slist_entry list_entry;
@@ -239,6 +227,7 @@ struct psmx_fid_fabric {
 	int			refcnt;
 	struct psmx_fid_domain	*active_domain;
 	psm_uuid_t		uuid;
+	pthread_t		name_server_thread;
 };
 
 struct psmx_fid_domain {
@@ -258,19 +247,11 @@ struct psmx_fid_domain {
 
 	int			am_initialized;
 
-#if PSMX_AM_USE_SEND_QUEUE
-	pthread_cond_t		progress_cond;
-	pthread_mutex_t		progress_mutex;
-	pthread_t		progress_thread;
-#endif
-
 	/* incoming req queue for AM based RMA request. */
 	struct psmx_req_queue	rma_queue;
 
-#if PSMX_AM_USE_SEND_QUEUE
 	/* send queue for AM based messages. */
 	struct psmx_req_queue	send_queue;
-#endif
 
 	/* recv queue for AM based messages. */
 	struct psmx_req_queue	recv_queue;
@@ -565,6 +546,7 @@ struct psmx_env {
 	int am_msg;
 	int tagged_rma;
 	char *uuid;
+	int timeout;
 };
 
 extern struct fi_ops_mr		psmx_mr_ops;
@@ -612,6 +594,7 @@ void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername, int port);
 void	psmx_get_uuid(psm_uuid_t uuid);
 int	psmx_uuid_to_port(psm_uuid_t uuid);
+char	*psmx_uuid_to_string(psm_uuid_t uuid);
 int	psmx_errno(int err);
 int	psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 			    psm_epid_t epid, psm_epaddr_t *epaddr);

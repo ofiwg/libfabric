@@ -42,6 +42,7 @@ struct psmx_env psmx_env = {
 	.am_msg		= 0,
 	.tagged_rma	= 1,
 	.uuid		= PSMX_DEFAULT_UUID,
+	.timeout	= PSMX_TIME_OUT,
 };
 
 static void psmx_init_env(void)
@@ -53,6 +54,7 @@ static void psmx_init_env(void)
 	fi_param_get_bool(&psmx_prov, "am_msg", &psmx_env.am_msg);
 	fi_param_get_bool(&psmx_prov, "tagged_rma", &psmx_env.tagged_rma);
 	fi_param_get_str(&psmx_prov, "uuid", &psmx_env.uuid);
+	fi_param_get_int(&psmx_prov, "timeout", &psmx_env.timeout);
 }
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
@@ -494,11 +496,32 @@ err_out:
 static int psmx_fabric_close(fid_t fid)
 {
 	struct psmx_fid_fabric *fabric;
+	void *exit_code;
+	int ret;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
 	fabric = container_of(fid, struct psmx_fid_fabric, fabric.fid);
-	if (--fabric->refcnt) {
+	if (! --fabric->refcnt) {
+		if (psmx_env.name_server &&
+		    !pthread_equal(fabric->name_server_thread, pthread_self())) {
+			ret = pthread_cancel(fabric->name_server_thread);
+			if (ret) {
+				FI_INFO(&psmx_prov, FI_LOG_CORE,
+					"pthread_cancel returns %d\n", ret);
+			}
+			ret = pthread_join(fabric->name_server_thread, &exit_code);
+			if (ret) {
+				FI_INFO(&psmx_prov, FI_LOG_CORE,
+					"pthread_join returns %d\n", ret);
+			}
+			else {
+				FI_INFO(&psmx_prov, FI_LOG_CORE,
+					"name server thread exited with code %ld (%s)\n",
+					(uintptr_t)exit_code,
+					(exit_code == PTHREAD_CANCELED) ? "PTHREAD_CANCELED" : "?");
+			}
+		}
 		if (fabric->active_domain)
 			fi_close(&fabric->active_domain->domain.fid);
 		assert(fabric == psmx_active_fabric);
@@ -526,8 +549,7 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric, void *context)
 {
 	struct psmx_fid_fabric *fabric_priv;
-	pthread_t thread;
-	pthread_attr_t thread_attr;
+	int ret;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
@@ -552,9 +574,13 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 	psmx_get_uuid(fabric_priv->uuid);
 
 	if (psmx_env.name_server) {
-		pthread_attr_init(&thread_attr);
-		pthread_attr_setdetachstate(&thread_attr,PTHREAD_CREATE_DETACHED);
-		pthread_create(&thread, &thread_attr, psmx_name_server, (void *)fabric_priv);
+		ret = pthread_create(&fabric_priv->name_server_thread, NULL,
+				     psmx_name_server, (void *)fabric_priv);
+		if (ret) {
+			FI_INFO(&psmx_prov, FI_LOG_CORE, "pthread_create returns %d\n", ret);
+			/* use the main thread's ID as invalid value for the new thread */
+			fabric_priv->name_server_thread = pthread_self();
+		}
 	}
 
 	psmx_query_mpi();
@@ -602,6 +628,9 @@ PSM_INI
 
 	fi_param_define(&psmx_prov, "uuid", FI_PARAM_STRING,
 			"Unique Job ID required by the fabric");
+
+	fi_param_define(&psmx_prov, "timeout", FI_PARAM_INT,
+			"Timeout (seconds) for gracefully closing the PSM endpoint");
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
 

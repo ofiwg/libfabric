@@ -49,22 +49,17 @@ int psmx_am_progress(struct psmx_fid_domain *domain)
 	struct psmx_am_request *req;
 	struct psmx_trigger *trigger;
 
-#if PSMX_AM_USE_SEND_QUEUE
-	pthread_mutex_lock(&domain->send_queue.lock);
-	while (!slist_empty(&domain->send_queue.list)) {
-		item = slist_remove_head(&domain->send_queue.list);
-		req = container_of(item, struct psmx_am_request, list_entry);
-		if (req->state == PSMX_AM_STATE_DONE) {
-			free(req);
-		}
-		else {
+	if (psmx_env.am_msg) {
+		pthread_mutex_lock(&domain->send_queue.lock);
+		while (!slist_empty(&domain->send_queue.list)) {
+			item = slist_remove_head(&domain->send_queue.list);
+			req = container_of(item, struct psmx_am_request, list_entry);
 			pthread_mutex_unlock(&domain->send_queue.lock);
 			psmx_am_process_send(domain, req);
 			pthread_mutex_lock(&domain->send_queue.lock);
 		}
+		pthread_mutex_unlock(&domain->send_queue.lock);
 	}
-	pthread_mutex_unlock(&domain->send_queue.lock);
-#endif
 
 	if (psmx_env.tagged_rma) {
 		pthread_mutex_lock(&domain->rma_queue.lock);
@@ -91,33 +86,6 @@ int psmx_am_progress(struct psmx_fid_domain *domain)
 	return 0;
 }
 
-#if PSMX_AM_USE_SEND_QUEUE
-static void *psmx_am_async_progress(void *args)
-{
-	struct psmx_fid_domain *domain = args;
-	struct timespec timeout;
-
-	timeout.tv_sec = 1;
-	timeout.tv_nsec = 1000;
-
-	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
-
-	while (1) {
-		pthread_mutex_lock(&domain->progress_mutex);
-		pthread_cond_wait(&domain->progress_cond, &domain->progress_mutex);
-		pthread_mutex_unlock(&domain->progress_mutex);
-		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-
-		psmx_am_progress(domain);
-
-		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-	}
-
-	return NULL;
-}
-#endif
-
 int psmx_am_init(struct psmx_fid_domain *domain)
 {
 	psm_ep_t psm_ep = domain->psm_ep;
@@ -141,7 +109,7 @@ int psmx_am_init(struct psmx_fid_domain *domain)
 		    (psmx_am_handlers_idx[1] != PSMX_AM_MSG_HANDLER) ||
 		    (psmx_am_handlers_idx[2] != PSMX_AM_ATOMIC_HANDLER)) {
 			FI_WARN(&psmx_prov, FI_LOG_CORE,
-				"failed to register one or mroe AM handlers "
+				"failed to register one or more AM handlers "
 				"at indecies %d, %d, %d\n", PSMX_AM_RMA_HANDLER,
 				PSMX_AM_MSG_HANDLER, PSMX_AM_ATOMIC_HANDLER);
 			return -FI_EBUSY;
@@ -154,32 +122,18 @@ int psmx_am_init(struct psmx_fid_domain *domain)
 	slist_init(&domain->recv_queue.list);
 	slist_init(&domain->unexp_queue.list);
 	slist_init(&domain->trigger_queue.list);
+	slist_init(&domain->send_queue.list);
 	pthread_mutex_init(&domain->rma_queue.lock, NULL);
 	pthread_mutex_init(&domain->recv_queue.lock, NULL);
 	pthread_mutex_init(&domain->unexp_queue.lock, NULL);
 	pthread_mutex_init(&domain->trigger_queue.lock, NULL);
-#if PSMX_AM_USE_SEND_QUEUE
-	slist_init(&domain->send_queue.list);
 	pthread_mutex_init(&domain->send_queue.lock, NULL);
-	pthread_mutex_init(&domain->progress_mutex, NULL);
-	pthread_cond_init(&domain->progress_cond, NULL);
-	err = pthread_create(&domain->progress_thread, NULL, psmx_am_async_progress, (void *)domain);
-#endif
 
 	return err;
 }
 
 int psmx_am_fini(struct psmx_fid_domain *domain)
 {
-#if PSMX_AM_USE_SEND_QUEUE
-        if (domain->progress_thread) {
-                pthread_cancel(domain->progress_thread);
-                pthread_join(domain->progress_thread, NULL);
-		pthread_mutex_destroy(&domain->progress_mutex);
-		pthread_cond_destroy(&domain->progress_cond);
-        }
-#endif
-
 	return 0;
 }
 
