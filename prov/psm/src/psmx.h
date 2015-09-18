@@ -545,6 +545,7 @@ struct psmx_env {
 	int am_msg;
 	int tagged_rma;
 	char *uuid;
+	int timeout;
 };
 
 extern struct fi_ops_mr		psmx_mr_ops;
