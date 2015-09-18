@@ -32,16 +32,13 @@
 
 #include "psmx.h"
 
-#if PSMX_AM_USE_SEND_QUEUE
 static inline void psmx_am_enqueue_send(struct psmx_fid_domain *domain,
 					struct psmx_am_request *req)
 {
 	pthread_mutex_lock(&domain->send_queue.lock);
-	req->state = PSMX_AM_STATE_QUEUED;
 	slist_insert_tail(&req->list_entry, &domain->send_queue.list);
 	pthread_mutex_unlock(&domain->send_queue.lock);
 }
-#endif
 
 static inline void psmx_am_enqueue_recv(struct psmx_fid_domain *domain,
 					struct psmx_am_request *req)
@@ -260,16 +257,10 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		if (args[2].u64) { /* more to send */
 			req->send.peer_context = (void *)(uintptr_t)args[2].u64;
 
-#if PSMX_AM_USE_SEND_QUEUE
 			/* psm_am_request_short() can't be called inside the handler.
 			 * put the request into a queue and process it later.
 			 */
 			psmx_am_enqueue_send(req->ep->domain, req);
-			if (req->ep->domain->progress_thread)
-				pthread_cond_signal(&req->ep->domain->progress_cond);
-#else
-			req->send.peer_ready = 1;
-#endif
 		}
 		else { /* done */
 			if (req->ep->send_cq && !req->no_event) {
@@ -292,10 +283,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			if (req->ep->send_cntr)
 				psmx_cntr_inc(req->ep->send_cntr);
 
-			if (req->state == PSMX_AM_STATE_QUEUED)
-				req->state = PSMX_AM_STATE_DONE;
-			else
-				free(req);
+			free(req);
 		}
 		break;
 
@@ -314,8 +302,6 @@ int psmx_am_process_send(struct psmx_fid_domain *domain, struct psmx_am_request 
 	size_t len;
 	uint64_t offset;
 	int err;
-
-	req->state = PSMX_AM_STATE_PROCESSED;
 
 	offset = req->send.len_sent;
 	len = req->send.len - offset;
@@ -573,15 +559,6 @@ static ssize_t _psmx_send2(struct fid_ep *ep, const void *buf, size_t len,
 	err = psm_am_request_short((psm_epaddr_t) dest_addr,
 				PSMX_AM_MSG_HANDLER, args, 4,
 				(void *)buf, msg_size, am_flags, NULL, NULL);
-
-#if ! PSMX_AM_USE_SEND_QUEUE
-	if (len > msg_size) {
-		while (!req->send.peer_ready)
-			psm_poll(ep_priv->domain->psm_ep);
-
-		psmx_am_process_send(ep_priv->domain, req);
-	}
-#endif
 
 	return psmx_errno(err);
 
