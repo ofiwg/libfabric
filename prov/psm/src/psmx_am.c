@@ -109,7 +109,7 @@ int psmx_am_init(struct psmx_fid_domain *domain)
 		    (psmx_am_handlers_idx[1] != PSMX_AM_MSG_HANDLER) ||
 		    (psmx_am_handlers_idx[2] != PSMX_AM_ATOMIC_HANDLER)) {
 			FI_WARN(&psmx_prov, FI_LOG_CORE,
-				"failed to register one or mroe AM handlers "
+				"failed to register one or more AM handlers "
 				"at indecies %d, %d, %d\n", PSMX_AM_RMA_HANDLER,
 				PSMX_AM_MSG_HANDLER, PSMX_AM_ATOMIC_HANDLER);
 			return -FI_EBUSY;
