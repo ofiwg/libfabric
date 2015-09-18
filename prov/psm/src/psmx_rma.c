@@ -36,7 +36,6 @@ static inline void psmx_am_enqueue_rma(struct psmx_fid_domain *domain,
 				       struct psmx_am_request *req)
 {
 	pthread_mutex_lock(&domain->rma_queue.lock);
-	req->state = PSMX_AM_STATE_QUEUED;
 	slist_insert_tail(&req->list_entry, &domain->rma_queue.list);
 	pthread_mutex_unlock(&domain->rma_queue.lock);
 }

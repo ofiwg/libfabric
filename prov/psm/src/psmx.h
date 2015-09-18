@@ -193,10 +193,6 @@ union psmx_pi {
 #define PSMX_AM_DATA		0x20000000
 #define PSMX_AM_FORCE_ACK	0x10000000
 
-#ifndef PSMX_AM_USE_SEND_QUEUE
-#define PSMX_AM_USE_SEND_QUEUE	0
-#endif
-
 enum {
 	PSMX_AM_REQ_WRITE = 1,
 	PSMX_AM_REQ_WRITE_LONG,
@@ -212,13 +208,6 @@ enum {
 	PSMX_AM_REP_ATOMIC_READWRITE,
 	PSMX_AM_REQ_ATOMIC_COMPWRITE,
 	PSMX_AM_REP_ATOMIC_COMPWRITE,
-};
-
-enum {
-	PSMX_AM_STATE_NEW,
-	PSMX_AM_STATE_QUEUED,
-	PSMX_AM_STATE_PROCESSED,
-	PSMX_AM_STATE_DONE
 };
 
 struct psmx_am_request {
@@ -271,7 +260,6 @@ struct psmx_am_request {
 	uint64_t cq_flags;
 	struct fi_context fi_context;
 	struct psmx_fid_ep *ep;
-	int state;
 	int no_event;
 	int error;
 	struct slist_entry list_entry;
@@ -326,19 +314,11 @@ struct psmx_fid_domain {
 
 	int			am_initialized;
 
-#if PSMX_AM_USE_SEND_QUEUE
-	pthread_cond_t		progress_cond;
-	pthread_mutex_t		progress_mutex;
-	pthread_t		progress_thread;
-#endif
-
 	/* incoming req queue for AM based RMA request. */
 	struct psmx_req_queue	rma_queue;
 
-#if PSMX_AM_USE_SEND_QUEUE
 	/* send queue for AM based messages. */
 	struct psmx_req_queue	send_queue;
-#endif
 
 	/* recv queue for AM based messages. */
 	struct psmx_req_queue	recv_queue;
