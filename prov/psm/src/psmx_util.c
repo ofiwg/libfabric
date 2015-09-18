@@ -236,7 +236,8 @@ void *psmx_resolve_name(const char *servername, int port)
 	}
 
 	if (read(sockfd, dest_addr, sizeof(psm_epid_t)) != sizeof(psm_epid_t)) {
-		perror(__func__);
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"error reading response from %s:%d\n", servername, port);
 		free(dest_addr);
 		close(sockfd);
 		return NULL;
