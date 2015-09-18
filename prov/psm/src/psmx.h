@@ -668,6 +668,7 @@ void 	*psmx_name_server(void *args);
 void	*psmx_resolve_name(const char *servername, int port);
 void	psmx_get_uuid(psm_uuid_t uuid);
 int	psmx_uuid_to_port(psm_uuid_t uuid);
+char	*psmx_uuid_to_string(psm_uuid_t uuid);
 int	psmx_errno(int err);
 int	psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 			    psm_epid_t epid, psm_epaddr_t *epaddr);

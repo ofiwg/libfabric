@@ -126,6 +126,8 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	psm_ep_open_opts_get_defaults(&opts);
 
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "uuid: %s\n", psmx_uuid_to_string(fabric_priv->uuid));
+
 	err = psm_ep_open(fabric_priv->uuid, &opts,
 			  &domain_priv->psm_ep, &domain_priv->psm_epid);
 	if (err != PSM_OK) {
@@ -134,6 +136,8 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		err = psmx_errno(err);
 		goto err_out_free_domain;
 	}
+
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "epid: 0x%016lx\n", domain_priv->psm_epid);
 
 	err = psm_mq_init(domain_priv->psm_ep, PSM_MQ_ORDERMASK_ALL,
 			  NULL, 0, &domain_priv->psm_mq);
