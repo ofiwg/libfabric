@@ -258,9 +258,6 @@ static void sock_pe_report_mr_completion(struct sock_domain *domain,
 		pe_entry->buf = pe_entry->pe.rx.rx_iov[i].iov.addr;
 		pe_entry->data_len = pe_entry->pe.rx.rx_iov[i].iov.len;
 		
-		if (mr->cq)
-			mr->cq->report_completion(mr->cq, 
-						  pe_entry->addr, pe_entry);
 		if (mr->cntr)
 			sock_cntr_inc(mr->cntr);
 	}
