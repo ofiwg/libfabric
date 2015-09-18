@@ -295,6 +295,7 @@ struct psmx_fid_fabric {
 	int			refcnt;
 	struct psmx_fid_domain	*active_domain;
 	psm_uuid_t		uuid;
+	pthread_t		name_server_thread;
 };
 
 struct psmx_fid_domain {

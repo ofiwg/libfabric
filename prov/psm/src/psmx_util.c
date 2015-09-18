@@ -98,6 +98,12 @@ char *psmx_uuid_to_string(psm_uuid_t uuid)
  * have the transport address of the server in the "dest_addr"
  * field. Both sides have to use the same UUID.
  *************************************************************/
+static void psmx_name_server_cleanup(void *arg)
+{
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
+	close((uintptr_t)arg);
+}
+
 void *psmx_name_server(void *args)
 {
 	struct psmx_fid_fabric *fabric;
@@ -115,6 +121,8 @@ void *psmx_name_server(void *args)
 
 	fabric = args;
 	port = psmx_uuid_to_port(fabric->uuid);
+
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "port: %d\n", port);
 
 	if (asprintf(&service, "%d", port) < 0)
 		return NULL;
@@ -151,6 +159,9 @@ void *psmx_name_server(void *args)
 
 	listen(listenfd, 256);
 
+	pthread_cleanup_push(psmx_name_server_cleanup, (void *)(uintptr_t)listenfd);
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "Start working ...\n");
+
 	while (1) {
 		connfd = accept(listenfd, NULL, 0);
 		if (connfd >= 0) {
@@ -164,6 +175,8 @@ void *psmx_name_server(void *args)
 			close(connfd);
 		}
 	}
+
+	pthread_cleanup_pop(1);
 
 	return NULL;
 }
