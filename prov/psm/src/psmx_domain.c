@@ -60,7 +60,7 @@ static int psmx_domain_close(fid_t fid)
 	sleep(psmx_env.delay);
 
 	err = psm_ep_close(domain->psm_ep, PSM_EP_CLOSE_GRACEFUL,
-			   (int64_t) PSMX_TIME_OUT * 1000000000LL);
+			   (int64_t) psmx_env.timeout * 1000000000LL);
 	if (err != PSM_OK)
 		psm_ep_close(domain->psm_ep, PSM_EP_CLOSE_FORCE, 0);
 
@@ -126,6 +126,8 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	psm_ep_open_opts_get_defaults(&opts);
 
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "uuid: %s\n", psmx_uuid_to_string(fabric_priv->uuid));
+
 	err = psm_ep_open(fabric_priv->uuid, &opts,
 			  &domain_priv->psm_ep, &domain_priv->psm_epid);
 	if (err != PSM_OK) {
@@ -134,6 +136,8 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		err = psmx_errno(err);
 		goto err_out_free_domain;
 	}
+
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "epid: 0x%016lx\n", domain_priv->psm_epid);
 
 	err = psm_mq_init(domain_priv->psm_ep, PSM_MQ_ORDERMASK_ALL,
 			  NULL, 0, &domain_priv->psm_mq);
@@ -156,7 +160,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 err_out_close_ep:
 	if (psm_ep_close(domain_priv->psm_ep, PSM_EP_CLOSE_GRACEFUL,
-			 (int64_t) PSMX_TIME_OUT * 1000000000LL) != PSM_OK)
+			 (int64_t) psmx_env.timeout * 1000000000LL) != PSM_OK)
 		psm_ep_close(domain_priv->psm_ep, PSM_EP_CLOSE_FORCE, 0);
 
 err_out_free_domain:

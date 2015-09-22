@@ -35,7 +35,6 @@
 
 #define psmx_active_fabric psmx2_active_fabric
 #define psmx_am_ack_rma psmx2_am_ack_rma
-#define psmx_am_async_progress psmx2_am_async_progress
 #define psmx_am_atomic_completion psmx2_am_atomic_completion
 #define psmx_am_atomic_handler psmx2_am_atomic_handler
 #define psmx_am_enqueue_recv psmx2_am_enqueue_recv
@@ -199,6 +198,7 @@
 #define psmx_msg_ops psmx2_msg_ops
 #define psmx_multi_recv psmx2_multi_recv
 #define psmx_name_server psmx2_name_server
+#define psmx_name_server_cleanup psmx2_name_server_cleanup
 #define psmx_pi psmx2_pi
 #define psmx_poll_add psmx2_poll_add
 #define psmx_poll_close psmx2_poll_close
@@ -285,6 +285,7 @@
 #define psmx_tx_size_left psmx2_tx_size_left
 #define psmx_unexp psmx2_unexp
 #define psmx_uuid_to_port psmx2_uuid_to_port
+#define psmx_uuid_to_string psmx2_uuid_to_string
 #define psmx_wait_close psmx2_wait_close
 #define psmx_wait_cond psmx2_wait_cond
 #define psmx_wait_get_obj psmx2_wait_get_obj

@@ -1236,7 +1236,6 @@ ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr,
 			  uint64_t tag, uint64_t ignore, void *context, 
 			  uint64_t flags, uint8_t is_tagged)
 {
-	ssize_t ret = 0;
 	struct sock_rx_entry *rx_buffered;
 	struct sock_pe_entry pe_entry;
 
@@ -1245,16 +1244,18 @@ ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr,
 					(rx_ctx->attr.caps & FI_DIRECTED_RECV) ?
 						 addr : FI_ADDR_UNSPEC, 
 						 tag, ignore, is_tagged);
+
+	memset(&pe_entry, 0, sizeof pe_entry);
+	pe_entry.comp = &rx_ctx->comp;
+	pe_entry.context = (uintptr_t)context;
+	pe_entry.flags = (flags | FI_MSG | FI_RECV);
+	if (is_tagged)
+		pe_entry.flags |= FI_TAGGED;
+
 	if (rx_buffered) {
-		memset(&pe_entry, 0, sizeof pe_entry);
-		pe_entry.comp = &rx_ctx->comp;
 		pe_entry.data_len = rx_buffered->total_len;
 		pe_entry.tag = rx_buffered->tag;
-		pe_entry.context = rx_buffered->context = (uintptr_t)context;
-		pe_entry.flags = (flags | FI_MSG | FI_RECV);
-		if (is_tagged)
-			pe_entry.flags |= FI_TAGGED;
-		
+		rx_buffered->context = (uintptr_t)context;
 		if (flags & FI_CLAIM)
 			rx_buffered->is_claimed = 1;
 		
@@ -1264,10 +1265,11 @@ ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr,
 		}
 		sock_pe_report_rx_completion(&pe_entry);
 	} else {
-		ret = -FI_ENOMSG;
+		sock_cq_report_error(rx_ctx->comp.recv_cq, &pe_entry, 0, 
+				     FI_ENOMSG, -FI_ENOMSG, NULL);
 	}
 	fastlock_release(&rx_ctx->lock);
-	return ret;
+	return 0;
 }
 
 ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context, uint64_t flags, 

@@ -75,6 +75,21 @@ int psmx_uuid_to_port(psm_uuid_t uuid)
 	return (int)port;
 }
 
+char *psmx_uuid_to_string(psm_uuid_t uuid)
+{
+	static char s[40];
+
+	sprintf(s,
+		"%02hhX%02hhX%02hhX%02hhX-"
+		"%02hhX%02hhX-%02hhX%02hhX-%02hhX%02hhX-"
+		"%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX",
+		uuid[0], uuid[1], uuid[2], uuid[3],
+		uuid[4], uuid[5], uuid[6], uuid[7], uuid[8], uuid[9],
+		uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]);
+
+	return s;
+}
+
 /*************************************************************
  * A simple name resolution mechanism for client-server style
  * applications. The server side has to run first. The client
@@ -83,6 +98,12 @@ int psmx_uuid_to_port(psm_uuid_t uuid)
  * have the transport address of the server in the "dest_addr"
  * field. Both sides have to use the same UUID.
  *************************************************************/
+static void psmx_name_server_cleanup(void *arg)
+{
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
+	close((uintptr_t)arg);
+}
+
 void *psmx_name_server(void *args)
 {
 	struct psmx_fid_fabric *fabric;
@@ -100,6 +121,8 @@ void *psmx_name_server(void *args)
 
 	fabric = args;
 	port = psmx_uuid_to_port(fabric->uuid);
+
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "port: %d\n", port);
 
 	if (asprintf(&service, "%d", port) < 0)
 		return NULL;
@@ -136,6 +159,9 @@ void *psmx_name_server(void *args)
 
 	listen(listenfd, 256);
 
+	pthread_cleanup_push(psmx_name_server_cleanup, (void *)(uintptr_t)listenfd);
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "Start working ...\n");
+
 	while (1) {
 		connfd = accept(listenfd, NULL, 0);
 		if (connfd >= 0) {
@@ -149,6 +175,8 @@ void *psmx_name_server(void *args)
 			close(connfd);
 		}
 	}
+
+	pthread_cleanup_pop(1);
 
 	return NULL;
 }
@@ -208,7 +236,8 @@ void *psmx_resolve_name(const char *servername, int port)
 	}
 
 	if (read(sockfd, dest_addr, sizeof(psm_epid_t)) != sizeof(psm_epid_t)) {
-		perror(__func__);
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"error reading response from %s:%d\n", servername, port);
 		free(dest_addr);
 		close(sockfd);
 		return NULL;
