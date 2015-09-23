@@ -1,4 +1,4 @@
-.TH fi_getinfo 3 "2015\-09\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_getinfo 3 "2015\-09\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo - Obtain / free fabric interface information
@@ -338,8 +338,6 @@ This flag requires that FI_RMA and/or FI_ATOMIC be set.
 \f[I]FI_RMA_EVENT\f[] : Requests that an endpoint support the generation
 of completion events when it is the target of an RMA and/or atomic
 operation.
-If set, the provider will support both completion queue and counter
-events.
 This flag requires that FI_REMOTE_READ and/or FI_REMOTE_WRITE be enabled
 on the endpoint.
 .PP
