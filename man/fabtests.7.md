@@ -15,35 +15,45 @@ Fabtests is a set of examples for fabric providers that demonstrates various fea
 
 # OVERVIEW
   
-Libfabric defines sets of interface that fabric providers can support. The purpose of Fabtests examples is to demonstrate some of the major features. The goal is to familiarize users with different functionalities libfabric offers and how to use them.
+Libfabric defines sets of interface that fabric providers can support. The purpose of Fabtests examples is to demonstrate some of the major features. The goal is to familiarize users with different functionalities libfabric offers and how to use them. Although these tests report performance numbers, they are designed to test functionality and not performance.
 
-The tests are divided into four categories:
+The tests are divided into the following six categories. Except the unit tests all of them are client-server tests.
 
 ## Simple
 
-These tests are a mix of very basic tests and major features of libfabric. All of the tests except info.c are designed to run as client-server processes. A server is started first and then a client process connects to the server and performs various operations.
+These tests are a mix of very basic tests and tests that show major features of libfabric.
 
 	fi_cq_data: A client-server example that tranfers CQ data
 	fi_dgram: A basic DGRAM client-server example
 	fi_dgram_waitset: A basic DGRAM client-server example that uses waitset
 	fi_msg: A basic MSG client-server example
-	fi_msg_pingpong: A ping-pong client-server example using MSG endpoints
-	fi_msg_rma: A ping pong client-server example using RMA operations between MSG endpoints
 	fi_msg_sockets: Verifies transitioning a passive endpoint into an active one as required by sockets-over-RDMA implementations
 	fi_poll: A basic RDM client-server example that uses poll
 	fi_rdm: A basic RDM client-server example
-	fi_rdm_atomic: An RDM ping pong client-server using atomic operations
-	fi_rdm_cntr_pingpong: An RDM ping pong client-server using counters
-	fi_rdm_inject_pingpong: An RDM ping pong client-server example using inject
-	fi_rdm_multi_recv: An RDM ping pong client-server example using multi recv buffer
-	fi_rdm_pingpong: A ping pong client-server example using RDM endpoints
-	fi_rdm_rma: A ping pong client-server example using RMA operations
 	fi_rdm_rma_simple: A simple RDM client-sever RMA example
 	fi_rdm_shared_ctx: An RDM client-server example that uses shared context
-	fi_rdm_tagged_pingpong: A ping pong client-server example using tagged messages
 	fi_rdm_tagged_peek: An RDM client-server example that uses tagged FI_PEEK
 	fi_scalable_ep: An RDM client-server example with scalable endpoints
+
+## Pingpong
+
+The client and the server exchange messages in a ping-pong manner for various messages sizes.
+
+	fi_msg_pingpong: A ping-pong client-server example using MSG endpoints
+	fi_rdm_pingpong: A ping pong client-server example using RDM endpoints
+	fi_rdm_cntr_pingpong: An RDM ping pong client-server using counters
+	fi_rdm_inject_pingpong: An RDM ping pong client-server example using inject
+	fi_rdm_tagged_pingpong: A ping pong client-server example using tagged messages
 	fi_ud_pingpong: A ping-pong client-server example using DGRAM endpoints
+
+## Streaming
+
+These are one way streaming data tests.
+
+	fi_msg_rma: A streaming client-server example using RMA operations between MSG endpoints
+	fi_rdm_rma: A streaming client-server example using RMA operations
+	fi_rdm_atomic: An RDM streaming client-server using atomic operations
+	fi_rdm_multi_recv: An RDM streaming client-server example using multi recv buffer
 
 ## Unit
 	 fi_eq_test: Unit tests for evet queue
@@ -55,8 +65,12 @@ These tests are a mix of very basic tests and major features of libfabric. All o
 	 fi_cmatose: A librdmacm client-server example
 	 fi_rc_pingpong: A libibverbs ping pong client-server example
 
-## Complex
-	 Under development
+## Complex / Ubertest
+
+These are comprehensive latency and bandwidth tests that can handle a variety of test configurations.
+
+	fi_ubertest: This single test binary takes as input a test configuration file to run different tests.
+		     Example test configurations are at complex/test_configs.
 
 # HOW TO RUN TESTS
 (1) Fabtests requires that libfabric be installed on the system, and at least one provider be usable.
@@ -100,29 +114,19 @@ These tests are a mix of very basic tests and major features of libfabric. All o
 *-i*
 : Prints hints structure and exits.
 
-*-v*
-: Displays versions and exits.
-
 *-h*
 : Displays help output for the test.
 
 # USAGE EXAMPLES
 
-To run basic tests: fi_dgram, fi_msg, fi_rdm, fi_rdm_rma_simple
+1. A simple example:
 
-	run server: ./<basic_test_name> -f <provider_name>
-		e.g.	./fi_dgram -f sockets
-	run client: ./<basic_test_name> <server_addr> -f <provider_name>
-		e.g.	./fi_dgram 192.168.0.123 -f sockets
-
-To run non-basic tests:
-
-	run server: ./<non_basic_test_name> -f <provider_name> -s <source_addr>
+	run server: ./<test_name> -f <provider_name> -s <source_addr>
 		e.g.	./fi_msg_rma -f sockets -s 192.168.0.123
-	run client: ./<non_basic_test_name> <server_addr> -f <provider_name>
+	run client: ./<test_name> <server_addr> -f <provider_name>
 		e.g.	./fi_msg_rma 192.168.0.123 -f sockets
 
-To run tests with different options:
+2. An example with various options:
 
 	run server: ./fi_rdm_atomic -f psm -s 192.168.0.123 -I 1000 -S 1024
 	run client: ./fi_rdm_atomic 192.168.0.123 -f psm -I 1000 -S 1024
@@ -132,3 +136,8 @@ This will run the RDM example "fi_rdm_atomic" with
 	- PSM provider
 	- 1000 iterations
 	- 1024 bytes message size
+
+3. fi_ubertest:
+	run server: e.g. ./fi_ubertest
+	run client: ./fi_ubertest -f <config_file> <server>
+		    e.g. ./fi_ubertest -f complex/test_configs/sockets.json 192.168.0.123
