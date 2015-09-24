@@ -310,6 +310,7 @@ endif HAVE_PSM
 
 if HAVE_PSM2
 _psm2_files = \
+	prov/psm2/src/rename.h \
 	prov/psm2/src/version.h \
 	prov/psm2/src/psmx.h \
 	prov/psm2/src/psmx_init.c \
