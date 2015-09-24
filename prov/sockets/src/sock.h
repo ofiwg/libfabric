@@ -485,12 +485,11 @@ struct sock_ep {
 	size_t fclass;
 	uint64_t op_flags;
 
-	uint8_t connected;
-	char reserved[1];
-	uint8_t tx_shared;
-	uint8_t rx_shared;
-	uint16_t buffered_len;
-	uint16_t min_multi_recv;
+	int connected;
+	int tx_shared;
+	int rx_shared;
+	size_t buffered_len;
+	size_t min_multi_recv;
 
 	atomic_t ref;
 	struct sock_comp comp;
@@ -570,16 +569,14 @@ struct sock_rx_ctx {
 	struct fid_ep ctx;
 
 	uint16_t rx_id;
-	uint8_t enabled;
-	uint8_t progress;
+	int enabled;
+	int progress;
+	int is_ctrl_ctx;
+	int recv_cq_event;
 
-	uint8_t recv_cq_event;
-	uint16_t buffered_len;
-	uint16_t min_multi_recv;
-	uint16_t num_left;
-	uint8_t is_ctrl_ctx;
-	uint8_t reserved[5];
-
+	size_t num_left;
+	size_t buffered_len;
+	size_t min_multi_recv;
 	uint64_t addr;
 	struct sock_comp comp;
 
