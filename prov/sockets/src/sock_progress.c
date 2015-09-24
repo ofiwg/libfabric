@@ -259,9 +259,6 @@ static void sock_pe_report_mr_completion(struct sock_domain *domain,
 		pe_entry->buf = pe_entry->pe.rx.rx_iov[i].iov.addr;
 		pe_entry->data_len = pe_entry->pe.rx.rx_iov[i].iov.len;
 		
-		if (mr->cq)
-			mr->cq->report_completion(mr->cq, 
-						  pe_entry->addr, pe_entry);
 		if (mr->cntr)
 			sock_cntr_inc(mr->cntr);
 	}
@@ -804,38 +801,38 @@ out:
 		break;							\
 									\
 	case FI_CSWAP_NE:						\
+		_tmp = *_dst;						\
 		if (*_cmp != *_dst)					\
 			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
+		*_cmp = _tmp;						\
 		break;							\
 									\
 	case FI_CSWAP_LE:						\
+		_tmp = *_dst;						\
 		if (*_cmp <= *_dst)					\
 			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
+		*_cmp = _tmp;						\
 		break;							\
 									\
 	case FI_CSWAP_LT:						\
+		_tmp = *_dst;						\
 		if (*_cmp < *_dst)					\
 			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
+		*_cmp = _tmp;						\
 		break;							\
 									\
 	case FI_CSWAP_GE:						\
+		_tmp = *_dst;						\
 		if (*_cmp >= *_dst)					\
 			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
+		*_cmp = _tmp;						\
 		break;							\
 									\
 	case FI_CSWAP_GT:						\
+		_tmp = *_dst;						\
 		if (*_cmp > *_dst)					\
 			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
+		*_cmp = _tmp;						\
 		break;							\
 									\
 	case FI_MSWAP:							\
@@ -902,38 +899,38 @@ out:
 		break;							\
 									\
 	case FI_CSWAP_NE:						\
+		_tmp = *_dst;						\
 		if (*_cmp != *_dst)					\
 			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
+		*_cmp = _tmp;						\
 		break;							\
 									\
 	case FI_CSWAP_LE:						\
+		_tmp = *_dst;						\
 		if (*_cmp <= *_dst)					\
 			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
+		*_cmp = _tmp;						\
 		break;							\
 									\
 	case FI_CSWAP_LT:						\
+		_tmp = *_dst;						\
 		if (*_cmp < *_dst)					\
 			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
+		*_cmp = _tmp;						\
 		break;							\
 									\
 	case FI_CSWAP_GE:						\
+		_tmp = *_dst;						\
 		if (*_cmp >= *_dst)					\
 			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
+		*_cmp = _tmp;						\
 		break;							\
 									\
 	case FI_CSWAP_GT:						\
+		_tmp = *_dst;						\
 		if (*_cmp > *_dst)					\
 			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
+		*_cmp = _tmp;						\
 		break;							\
 									\
 	default:							\
@@ -982,10 +979,10 @@ out:
 		break;							\
 									\
 	case FI_CSWAP_NE:						\
+		_tmp = *_dst;						\
 		if (*_cmp != *_dst)					\
 			*_dst = *_src;					\
-		else							\
-			*_cmp = *_dst;					\
+		*_cmp = _tmp;						\
 		break;							\
 									\
 	default:							\
@@ -1065,7 +1062,7 @@ static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
 
 	case FI_FLOAT:
 	{
-		float *_cmp, *_dst, *_src;
+		float *_cmp, *_dst, *_src, _tmp;
 		_cmp = cmp, _src = src, _dst = dst;
 		SOCK_ATOMIC_UPDATE_FLOAT(_cmp, _src, _dst);
 		break;
@@ -1073,7 +1070,7 @@ static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
 
 	case FI_DOUBLE:
 	{
-		double *_cmp, *_dst, *_src;
+		double *_cmp, *_dst, *_src, _tmp;
 		_cmp = cmp, _src = src, _dst = dst;
 		SOCK_ATOMIC_UPDATE_FLOAT(_cmp, _src, _dst);
 		break;
@@ -1081,7 +1078,7 @@ static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
 
 	case FI_LONG_DOUBLE:
 	{
-		long double *_cmp, *_dst, *_src;
+		long double *_cmp, *_dst, *_src, _tmp;
 		_cmp = cmp, _src = src, _dst = dst;
 		SOCK_ATOMIC_UPDATE_FLOAT(_cmp, _src, _dst);
 		break;
@@ -1089,7 +1086,7 @@ static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
 
 	case FI_DOUBLE_COMPLEX:
 	{
-		double complex *_cmp, *_dst, *_src;
+		double complex *_cmp, *_dst, *_src, _tmp;
 		_cmp = cmp, _src = src, _dst = dst;
 		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
 		break;
@@ -1097,7 +1094,7 @@ static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
 
 	case FI_FLOAT_COMPLEX:
 	{
-		float complex *_cmp, *_dst, *_src;
+		float complex *_cmp, *_dst, *_src, _tmp;
 		_cmp = cmp, _src = src, _dst = dst;
 		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
 		break;
@@ -1105,7 +1102,7 @@ static int sock_pe_update_atomic(void *cmp, void *dst, void *src,
 
 	case FI_LONG_DOUBLE_COMPLEX:
 	{
-		long double complex *_cmp, *_dst, *_src;
+		long double complex *_cmp, *_dst, *_src, _tmp;
 		_cmp = cmp, _src = src, _dst = dst;
 		SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst);
 		break;
