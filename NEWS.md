@@ -5,24 +5,6 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.2.0, TBD
-=======================
-
-## General notes
-
-- Added PSM2 provider
-
-## PSM provider notes
-
-## PSM2 provider notes
-
-## Sockets provider notes
-
-## usNIC provider notes
-
-## Verbs provider notes
-
-
 v1.1.1, TBD
 =======================
 
