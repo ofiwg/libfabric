@@ -479,7 +479,12 @@ nroff:
 	    config/md2nroff.pl --source=$$source.md; \
 	done
 
-EXTRA_DIST = libfabric.map libfabric.spec.in config/distscript.pl $(man_MANS)
+EXTRA_DIST = \
+        NEWS.md \
+        libfabric.map \
+        libfabric.spec.in \
+        config/distscript.pl \
+        $(man_MANS)
 
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
