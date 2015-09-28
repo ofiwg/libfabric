@@ -20,13 +20,13 @@ low latency and other offload capabilities on Ethernet networks.
 
 * The *usnic* libfabric provider requires the use of the "libnl"
   library.
-    * There are two versions of libnl generally available: v1 and v3;
+    - There are two versions of libnl generally available: v1 and v3;
       the usnic provider can use either version.
-    * If you are building libfabric/the usnic provider from source, you
+    - If you are building libfabric/the usnic provider from source, you
       will need to have the libnl header files available (e.g., if you
       are installing libnl from RPM or other packaging system, install
       the "-devel" versions of the package).
-    * If you have libnl (either v1 or v3) installed in a non-standard
+    - If you have libnl (either v1 or v3) installed in a non-standard
       location (e.g., not in /usr/lib or /usr/lib64), you may need to
       tell libfabric's configure where to find libnl via the
       `--with-libnl=DIR` command line option (where DIR is the
@@ -37,16 +37,16 @@ low latency and other offload capabilities on Ethernet networks.
   anything about libfabric or usnic in this use case -- the MPI
   implementation hides all these details from the application.
 * If you are writing applications directly to the libfabric API:
-    * *FI_EP_DGRAM* endpoints are the best supported method of utilizing
+    - *FI_EP_DGRAM* endpoints are the best supported method of utilizing
       the usNIC interface.  Specifically, the *FI_EP_DGRAM* endpoint
       type has been extensively tested as the underlying layer for Open
       MPI's *usnic* BTL.
-    * *FI_EP_MSG* and *FI_EP_RDM* endpoints are implemented, but are
+    - *FI_EP_MSG* and *FI_EP_RDM* endpoints are implemented, but are
       only lightly tested.  It is likely that there are still some bugs
       in these endpoint types.  RMA is not yet supported.
-    * *FI_EP_RDM* support is not 100% robust and occasionally leads to hangs in
+    - *FI_EP_RDM* support is not 100% robust and occasionally leads to hangs in
       the `fi_rdm_pingpong` test from fabtests.
-    * [`fi_provider`(7)](fi_provider.7.html) lists requirements for all
+    - [`fi_provider`(7)](fi_provider.7.html) lists requirements for all
       providers.  The following limitations exist in the *usnic*
       provider:
         * multicast operations are not supported on *FI_EP_DGRAM* and
@@ -62,7 +62,7 @@ low latency and other offload capabilities on Ethernet networks.
         * The tag matching interface is not supported.
         * *FI_MSG_PREFIX* is only supported on *FI_EP_DGRAM* and usage
           is limited to the 1.1 release.
-    * The usnic libfabric provider supports extensions that provide
+    - The usnic libfabric provider supports extensions that provide
       information and functionality beyond the standard libfabric
       interface.  See the "USNIC EXTENSIONS" section, below.
 
