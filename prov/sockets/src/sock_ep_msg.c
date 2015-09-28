@@ -243,29 +243,26 @@ static int sock_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct sock_ep *sock_ep = NULL;
 	struct sock_pep *sock_pep = NULL;
+	size_t len;
 
-	if (*addrlen == 0) {
-		*addrlen = sizeof(struct sockaddr_in);
-		return -FI_ETOOSMALL;
-	}
-
-	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
-
+	len = MIN(*addrlen, sizeof(struct sockaddr_in));
 	switch(fid->fclass) {
 	case FI_CLASS_EP:
 	case FI_CLASS_SEP:
 		sock_ep = container_of(fid, struct sock_ep, ep.fid);
-		memcpy(addr, sock_ep->src_addr, *addrlen);
+		memcpy(addr, sock_ep->src_addr, len);
 		break;
 	case FI_CLASS_PEP:
 		sock_pep = container_of(fid, struct sock_pep, pep.fid);
-		memcpy(addr, &sock_pep->src_addr, *addrlen);
+		memcpy(addr, &sock_pep->src_addr, len);
 		break;
 	default:
 		SOCK_LOG_ERROR("Invalid argument\n");
 		return -FI_EINVAL;
 	}
-	return (*addrlen == sizeof(struct sockaddr_in)) ? 0 : -FI_ETOOSMALL;
+
+	*addrlen = sizeof(struct sockaddr_in);
+	return (len == sizeof(struct sockaddr_in)) ? 0 : -FI_ETOOSMALL;
 }
 
 static int sock_pep_create_listener(struct sock_pep *pep)
@@ -371,16 +368,13 @@ static int sock_ep_cm_setname(fid_t fid, void *addr, size_t addrlen)
 static int sock_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 {
 	struct sock_ep *sock_ep;
-
-	if (*addrlen == 0) {
-		*addrlen = sizeof(struct sockaddr_in);
-		return -FI_ETOOSMALL;
-	}
+	size_t len;
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
-	*addrlen = MIN(*addrlen, sizeof(struct sockaddr_in));
-	memcpy(addr, sock_ep->dest_addr, *addrlen);
-	return (*addrlen == sizeof(struct sockaddr_in)) ? 0 : -FI_ETOOSMALL;
+	len = MIN(*addrlen, sizeof(struct sockaddr_in));
+	memcpy(addr, sock_ep->dest_addr, len);
+	*addrlen = sizeof(struct sockaddr_in);
+	return (len == sizeof(struct sockaddr_in)) ? 0 : -FI_ETOOSMALL;
 }
 
 static int sock_ep_cm_create_socket(void)
