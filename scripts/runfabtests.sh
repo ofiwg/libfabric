@@ -2,6 +2,9 @@
 
 trap cleanup_and_exit SIGINT
 
+#
+# Default behavior with no args will use sockets provider with loopback
+#
 declare BIN_PATH
 declare PROV
 declare TEST_TYPE="quick"
@@ -13,12 +16,19 @@ declare -i VERBOSE=0
 
 # base ssh,  "short" and "long" timeout variants:
 declare -r bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
-declare -r sssh="timeout 60s ${bssh}"
-declare -r lssh="timeout 90s ${bssh}"
+declare TIMEOUT=`which timeout`
+if [ -z "$TIMEOUT" ]; then
+	# forego timeout
+	declare -r sssh="${bssh}"
+	declare -r lssh="${bssh}"
+else
+	declare -r sssh="timeout 60s ${bssh}"
+	declare -r lssh="timeout 90s ${bssh}"# else
+fi
 declare ssh=${sssh}
 
-declare -r c_outp=$(mktemp)
-declare -r s_outp=$(mktemp)
+declare -r c_outp=$(mktemp fabtests.c_outp.XXXXXX)
+declare -r s_outp=$(mktemp fabtests.s_outp.XXXXXX)
 
 declare -i skip_count=0
 declare -i pass_count=0
@@ -143,8 +153,8 @@ function print_results {
 }
 
 function cleanup {
-	$ssh ${CLIENT} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs -r kill -9"
-	$ssh ${SERVER} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs -r kill -9"
+	$ssh ${CLIENT} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs kill -9" >& /dev/null
+	$ssh ${SERVER} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs kill -9" >& /dev/null
 	rm -f $c_outp $s_outp
 }
 
@@ -191,7 +201,7 @@ function unit_test {
 		return
 	fi
 
-	start_time=$(date '+%s.%N')
+	start_time=$(date '+%s')
 
 	${ssh} ${SERVER} ${BIN_PATH} "${test_exe}" &> $s_outp &
 	p1=$!
@@ -199,7 +209,7 @@ function unit_test {
 	wait $p1
 	ret1=$?
 
-	end_time=$(date '+%s.%N')
+	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
 	if [ $ret1 -eq 61 ]; then
@@ -234,7 +244,7 @@ function cs_test {
 		return
 	fi
 
-	start_time=$(date '+%s.%N')
+	start_time=$(date '+%s')
 
 	${ssh} ${SERVER} ${BIN_PATH} "${test_exe} -s $SERVER" &> $s_outp &
 	p1=$!
@@ -249,7 +259,7 @@ function cs_test {
 	wait $p2
 	ret2=$?
 
-	end_time=$(date '+%s.%N')
+	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
 	if [ $ret1 -eq 61 -a $ret2 -eq 61 ]; then
