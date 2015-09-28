@@ -32,6 +32,21 @@ v1.1.1, TBD
 
 ## Sockets provider notes
 
+- General clean-up and restructuring
+- Add fallback mechanism for getting source address
+- Fix fi_getinfo to use user provided capabilities from hints
+- Fix hostname and port number and added checks in sock_av_insertsym
+- Add retry for connection timeout
+- Release av resources in the error path
+- Remove separate read/write CQ to be consistent with the man page
+- Increase default connection map size and added environment variable to specify 
+  AV, CQ, EQ and connection map size to run large scale tests
+- Fix FI_PEEK operation to be consistent with the man page
+- Fix remote write event not to generate CQ event
+- Fix CSWAP operation to return initial value
+- Use size_t for min_multi_recv and buffered_len
+- Set address size correctly in fi_getname/fi_getpeer
+
 ## usNIC provider notes
 
 - Fix EP_RDM reassembly issue for large messages
