@@ -18,6 +18,9 @@ v1.1.1, TBD
 
 - Fix EP_RDM reassembly issue for large messages
 - Return correct number of read completions on error
+- Fix EP_RDM and EP_MSG data corruption issue when packets are actually
+  corrupted on the wire
+- Fix EP_RDM and EP_MSG fi_tx_size_left/fi_rx_size_left functions
 
 ## Verbs provider notes
 
