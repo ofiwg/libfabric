@@ -6,18 +6,19 @@ trap cleanup_and_exit SIGINT
 # Default behavior with no args will use sockets provider with loopback
 #
 declare BIN_PATH
-declare PROV
+declare PROV="sockets"
 declare TEST_TYPE="quick"
-declare SERVER
-declare CLIENT
+declare SERVER="127.0.0.1"
+declare SSH_SERVER="eval"
+declare CLIENT="127.0.0.1"
+declare SSH_CLIENT="eval"
 declare EXCLUDE
 declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
 
 # base ssh,  "short" and "long" timeout variants:
 declare -r bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
-declare TIMEOUT=`which timeout`
-if [ -z "$TIMEOUT" ]; then
+if [ -z "$(which timeout 2> /dev/null)" ]; then
 	# forego timeout
 	declare -r sssh="${bssh}"
 	declare -r lssh="${bssh}"
@@ -153,8 +154,8 @@ function print_results {
 }
 
 function cleanup {
-	$ssh ${CLIENT} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs kill -9" >& /dev/null
-	$ssh ${SERVER} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs kill -9" >& /dev/null
+	${SSH_CLIENT} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs kill -9" >& /dev/null
+	${SSH_SERVER} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs kill -9" >& /dev/null
 	rm -f $c_outp $s_outp
 }
 
@@ -203,7 +204,7 @@ function unit_test {
 
 	start_time=$(date '+%s')
 
-	${ssh} ${SERVER} ${BIN_PATH} "${test_exe}" &> $s_outp &
+	${SSH_SERVER} ${BIN_PATH} "${test_exe}" &> $s_outp &
 	p1=$!
 
 	wait $p1
@@ -246,11 +247,11 @@ function cs_test {
 
 	start_time=$(date '+%s')
 
-	${ssh} ${SERVER} ${BIN_PATH} "${test_exe} -s $SERVER" &> $s_outp &
+	${SSH_SERVER} ${BIN_PATH} "${test_exe} -s $SERVER" &> $s_outp &
 	p1=$!
 	sleep 1s
 
-	${ssh} ${CLIENT} ${BIN_PATH} "${test_exe} $SERVER" &> $c_outp &
+	${SSH_CLIENT} ${BIN_PATH} "${test_exe} $SERVER" &> $c_outp &
 	p2=$!
 
 	wait $p1
@@ -340,9 +341,10 @@ function main {
 
 function usage {
 	errcho "Usage:"
-	errcho "  $0 [OPTIONS] provider <host> <client>"
+	errcho "  $0 [OPTIONS] [provider] [host] [client]"
 	errcho
-	errcho "Run fabtests on given nodes, report pass/fail/notrun status."
+	errcho "Run fabtests using provider between host and client (default"
+	errcho "'sockets' provider in loopback-mode).  Report pass/fail/notrun status."
 	errcho
 	errcho "Options:"
 	errcho -e " -g\tgood IP address from <host>'s perspective (default $GOOD_ADDR)"
@@ -376,12 +378,22 @@ done
 # shift past options
 shift $((OPTIND-1))
 
-if [[ $# -ne 3 ]]; then
+if [[ $# -ge 4 ]]; then
 	usage
 fi
 
-PROV=$1
-SERVER=$2
-CLIENT=$3
+if [[ $# -ge 1 ]]; then
+	PROV=$1
+fi
+
+if [[ $# -ge 2 ]]; then
+	SERVER=$2
+	SSH_SERVER="${ssh} ${SERVER}"
+fi
+
+if [[ $# -ge 3 ]]; then
+	CLIENT=$3
+	SSH_CLIENT="${ssh} ${CLIENT}"
+fi
 
 main ${TEST_TYPE}
