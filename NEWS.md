@@ -30,6 +30,19 @@ v1.1.1, TBD
 
 ## PSM provider notes
 
+- General bug fixes
+- Proper termination of the name server thread
+- Add UUID and PSM epid to debug output
+- Add environment variable to control psm_ep_close timeout
+- Code refactoring of AM-based messaging
+- Check more fields of the hints passed to fi_getinfo
+- Generate error CQ entries for empty result of recv with FI_SEEK flag
+- Correctly handle overlapped local buffers in atomics
+- Handle duplicated addresses in fi_av_insert
+- Fix the return value of fi_cq_readerr
+- Call AM progress function only when AM is used
+- Detect MPI runs and turns off name server thread automatically
+
 ## Sockets provider notes
 
 ## usNIC provider notes
@@ -55,6 +68,13 @@ v1.1.0, Wed Aug 5, 2015
 - Fixed configure issues with the clang/llvm compiler suite
 
 ## PSM provider notes
+
+- General bug fixes
+- Move processing of triggered ops outside of AM handlers
+- Generate CQ entries for cancelled operations
+- Remove environment variable FI_PSM_VERSION_CHECK
+- Fix multi-recv completion generation
+- Environment variable tweaks
 
 ## Sockets provider notes
 
