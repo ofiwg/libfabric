@@ -42,6 +42,8 @@ v1.1.1, TBD
 
 ## Verbs provider notes
 
+- Add more logging for errors
+- Bug fixes
 
 v1.1.0, Wed Aug 5, 2015
 =======================
@@ -71,6 +73,10 @@ v1.1.0, Wed Aug 5, 2015
 
 ## Verbs provider notes
 
+- AF_IB addreses can now be passed as node argument to fi_getinfo
+- Added support for fi_setname and migrating passive EP to active EP
+- Detect and report multiple verbs devices if present
+- Bug fixes
 
 v1.0.0, Sun May 3, 2015
 =======================
