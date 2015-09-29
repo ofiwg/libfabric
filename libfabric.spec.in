@@ -1,3 +1,5 @@
+%{!?configopts: %global configopts %{nil}}
+
 Name: libfabric
 Version: @VERSION@
 Release: 1%{?dist}
