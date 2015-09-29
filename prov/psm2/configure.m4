@@ -14,7 +14,7 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 	      [FI_CHECK_PACKAGE([psm2],
 				[psm2.h],
 				[psm2],
-				[psm_init],
+				[psm2_init],
 				[],
 				[],
 				[],
