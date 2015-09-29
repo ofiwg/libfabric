@@ -73,6 +73,24 @@ v1.1.0, Wed Aug 5, 2015
 
 ## Sockets provider notes
 
+- General bug fixes and code cleanup
+- Add triggered operation suppport
+- Generate error completion event for successful fi_cancel
+- Support fi_cancel for tx operations
+- Enable option for setting affinity to progress thread
+- Improve error handling during connection management
+- Avoid reverse lookup for every received message
+- Avoid polling all connections while checking for incoming message
+- Use fast_lock for progress engine's list_lock
+- Handle disconnected sockets
+- Add rx entry pool
+- Mark tx entry as completed only if data is sent out to wire
+- Add rx control context for every tx context for progressing control messages
+- Set source address when addressing information is not passed by the application
+- Reset return value after polling CQ ring buffer
+- Reset FI_TRIGGER flag while triggering triggered operations
+- Ensure progress of control context
+
 ## usNIC provider notes
 
 - General bug fixes
