@@ -1788,6 +1788,8 @@ fi_ibv_msg_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 		return -FI_EINVAL;
 	}
 
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+
 	switch (op) {
 	case FI_ATOMIC_READ:
 		wr.opcode = IBV_WR_RDMA_READ;
@@ -1795,6 +1797,12 @@ fi_ibv_msg_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 		wr.wr.rdma.rkey = (uint32_t) (uintptr_t) key;
 		break;
 	case FI_SUM:
+		if (_ep->info->tx_attr->op_flags & FI_INJECT) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA,"FI_INJECT not "
+				"supported for fi_fetch_atomic with FI_SUM op\n");
+			return -FI_EINVAL;
+		}
+
 		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
 		wr.wr.atomic.remote_addr = addr;
 		wr.wr.atomic.compare_add = (uintptr_t) buf;
@@ -1809,15 +1817,11 @@ fi_ibv_msg_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 	sge.length = (uint32_t) sizeof(uint64_t);
 	sge.lkey = (uint32_t) (uintptr_t) result_desc;
 
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.send_flags = IBV_SEND_FENCE;
-	if (VERBS_INJECT(_ep, sizeof(uint64_t)))
-		wr.send_flags |= IBV_SEND_INLINE;
 	if (VERBS_COMP(_ep))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
@@ -1865,6 +1869,8 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 	}
 
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+
 	switch (msg->op) {
 	case FI_ATOMIC_READ:
 		wr.opcode = IBV_WR_RDMA_READ;
@@ -1872,6 +1878,12 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 		wr.wr.rdma.rkey = (uint32_t) (uintptr_t) msg->rma_iov->key;
 		break;
 	case FI_SUM:
+		if ((flags & FI_INJECT) || (_ep->info->tx_attr->op_flags & FI_INJECT)) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA,"FI_INJECT not "
+				"supported fi_fetch_atomicmsg with FI_SUM op\n");
+			return -FI_EINVAL;
+		}
+
 		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
 		wr.wr.atomic.remote_addr = msg->rma_iov->addr;
 		wr.wr.atomic.compare_add = (uintptr_t) msg->addr;
@@ -1884,19 +1896,13 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 
 	sge.addr = (uintptr_t) resultv->addr;
 	sge.length = (uint32_t) sizeof(uint64_t);
-	if (!(flags & FI_INJECT)) {
-		sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
-	}
-
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+	sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
 
 	wr.wr_id = (uintptr_t) msg->context;
 	wr.next = NULL;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.send_flags = IBV_SEND_FENCE;
-	if (VERBS_INJECT_FLAGS(_ep, sizeof(uint64_t), flags))
-		wr.send_flags |= IBV_SEND_INLINE;
 	if (VERBS_COMP_FLAGS(_ep, flags))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
@@ -1917,6 +1923,14 @@ fi_ibv_msg_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 	struct fi_ibv_msg_ep *_ep;
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
+
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+
+	if (_ep->info->tx_attr->op_flags & FI_INJECT) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA, "FI_INJECT not supported "
+			"for fi_compare_atomic\n");
+		return -FI_EINVAL;
+	}
 
 	if (op != FI_CSWAP)
 		return -ENOSYS;
@@ -1946,15 +1960,11 @@ fi_ibv_msg_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 	sge.length = (uint32_t) sizeof(uint64_t);
 	sge.lkey = (uint32_t) (uintptr_t) result_desc;
 
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-
 	wr.wr_id = (uintptr_t) context;
 	wr.next = NULL;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.send_flags = IBV_SEND_FENCE;
-	if (VERBS_INJECT(_ep, sizeof(uint64_t)))
-		wr.send_flags |= IBV_SEND_INLINE;
 	if (VERBS_COMP(_ep))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
@@ -1994,6 +2004,14 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 	struct ibv_send_wr wr, *bad;
 	struct ibv_sge sge;
 
+	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+
+	if ((flags & FI_INJECT) || (_ep->info->tx_attr->op_flags & FI_INJECT)) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA, "FI_INJECT not supported "
+			"for fi_compare_atomic\n");
+		return -FI_EINVAL;
+	}
+
 	if (msg->op != FI_CSWAP)
 		return -ENOSYS;
 
@@ -2020,19 +2038,13 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 
 	sge.addr = (uintptr_t) resultv->addr;
 	sge.length = (uint32_t) sizeof(uint64_t);
-	if (!(flags & FI_INJECT)) {
-		sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
-	}
-
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+	sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
 
 	wr.wr_id = (uintptr_t) msg->context;
 	wr.next = NULL;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
 	wr.send_flags = IBV_SEND_FENCE;
-	if (VERBS_INJECT_FLAGS(_ep, sizeof(uint64_t), flags))
-		wr.send_flags |= IBV_SEND_INLINE;
 	if (VERBS_COMP_FLAGS(_ep, flags))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
@@ -2073,9 +2085,17 @@ static int
 fi_ibv_msg_ep_atomic_readwritevalid(struct fid_ep *ep, enum fi_datatype datatype,
 				enum fi_op op, size_t *count)
 {
+	struct fi_ibv_msg_ep *_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+
 	switch (op) {
 	case FI_ATOMIC_READ:
+		break;
 	case FI_SUM:
+		if (_ep->info->tx_attr->op_flags & FI_INJECT) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA,"FI_INJECT not "
+				"supported for fi_fetch_atomic with FI_SUM op\n");
+			return -FI_EINVAL;
+		}
 		break;
 	default:
 		return -FI_ENOSYS;
@@ -2102,8 +2122,16 @@ static int
 fi_ibv_msg_ep_atomic_compwritevalid(struct fid_ep *ep, enum fi_datatype datatype,
 				enum fi_op op, size_t *count)
 {
+	struct fi_ibv_msg_ep *_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+
 	if (op != FI_CSWAP)
 		return -FI_ENOSYS;
+
+	if (_ep->info->tx_attr->op_flags & FI_INJECT) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA, "FI_INJECT not supported "
+			"for fi_compare_atomic\n");
+		return -FI_EINVAL;
+	}
 
 	switch (datatype) {
 	case FI_INT64:
@@ -3340,9 +3368,7 @@ fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	if (access & FI_REMOTE_READ)
 		fi_ibv_access |= IBV_ACCESS_REMOTE_READ;
 	if (access & FI_REMOTE_WRITE)
-		fi_ibv_access |= IBV_ACCESS_REMOTE_WRITE;
-	if ((access & FI_READ) || (access & FI_WRITE))
-		fi_ibv_access |= IBV_ACCESS_REMOTE_ATOMIC;
+		fi_ibv_access |= IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
 
 	md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len, fi_ibv_access);
 	if (!md->mr)
