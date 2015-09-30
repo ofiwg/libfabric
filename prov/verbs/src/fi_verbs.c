@@ -1404,6 +1404,35 @@ fi_ibv_msg_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	return fi_ibv_send_iov(ep, &wr, iov, desc, count, context, 0, VERBS_COMP(ep));
 }
 
+static ssize_t fi_ibv_msg_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
+		fi_addr_t dest_addr)
+{
+	struct fi_ibv_msg_ep *ep;
+	struct ibv_send_wr wr;
+
+	memset(&wr, 0, sizeof(wr));
+	wr.opcode = IBV_WR_SEND;
+
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+
+	return fi_ibv_send_buf(ep, &wr, buf, len, NULL, NULL, 1, 0);
+}
+
+static ssize_t fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
+		    uint64_t data, fi_addr_t dest_addr)
+{
+	struct fi_ibv_msg_ep *ep;
+	struct ibv_send_wr wr;
+
+	memset(&wr, 0, sizeof(wr));
+	wr.opcode = IBV_WR_SEND_WITH_IMM;
+	wr.imm_data = htonl((uint32_t)data);
+
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+
+	return fi_ibv_send_buf(ep, &wr, buf, len, NULL, NULL, 1, 0);
+}
+
 static struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = fi_ibv_msg_ep_recv,
@@ -1412,9 +1441,9 @@ static struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.send = fi_ibv_msg_ep_send,
 	.sendv = fi_ibv_msg_ep_sendv,
 	.sendmsg = fi_ibv_msg_ep_sendmsg,
-	.inject = fi_no_msg_inject,
+	.inject = fi_ibv_msg_ep_inject,
 	.senddata = fi_ibv_msg_ep_senddata,
-	.injectdata = fi_no_msg_injectdata,
+	.injectdata = fi_ibv_msg_ep_injectdata,
 };
 
 static ssize_t
@@ -1553,6 +1582,41 @@ fi_ibv_msg_ep_rma_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 			VERBS_INJECT(ep, len), VERBS_COMP(ep));
 }
 
+static ssize_t
+fi_ibv_msg_ep_rma_inject_write(struct fid_ep *ep_fid, const void *buf, size_t len,
+		     fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+{
+	struct fi_ibv_msg_ep *ep;
+	struct ibv_send_wr wr;
+
+	memset(&wr, 0, sizeof(wr));
+	wr.opcode = IBV_WR_RDMA_WRITE;
+	wr.wr.rdma.remote_addr = addr;
+	wr.wr.rdma.rkey = (uint32_t) key;
+
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+
+	return fi_ibv_send_buf(ep, &wr, buf, len, NULL, NULL, 0, 0);
+}
+
+static ssize_t
+fi_ibv_msg_ep_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
+			uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+			uint64_t key)
+{
+	struct fi_ibv_msg_ep *ep;
+	struct ibv_send_wr wr;
+
+	memset(&wr, 0, sizeof(wr));
+	wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+	wr.imm_data = htonl((uint32_t)data);
+	wr.wr.rdma.remote_addr = addr;
+	wr.wr.rdma.rkey = (uint32_t) key;
+
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+	return fi_ibv_send_buf(ep, &wr, buf, len, NULL, NULL, 0, 0);
+}
+
 static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = fi_ibv_msg_ep_rma_read,
@@ -1561,9 +1625,9 @@ static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 	.write = fi_ibv_msg_ep_rma_write,
 	.writev = fi_ibv_msg_ep_rma_writev,
 	.writemsg = fi_ibv_msg_ep_rma_writemsg,
-	.inject = fi_no_rma_inject,
+	.inject = fi_ibv_msg_ep_rma_inject_write,
 	.writedata = fi_ibv_msg_ep_rma_writedata,
-	.injectdata = fi_no_rma_injectdata,
+	.injectdata = fi_ibv_msg_ep_rma_inject_writedata,
 };
 
 static int
