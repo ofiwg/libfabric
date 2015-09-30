@@ -1270,28 +1270,11 @@ fi_ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	return fi_ibv_msg_ep_recvmsg(ep, &msg, 0);
 }
 
-static inline int
-fi_ibv_post_send(struct ibv_qp *qp, struct ibv_send_wr *wr,
-		struct ibv_send_wr **bad_wr)
-{
-	int ret;
-	ret = ibv_post_send(qp, wr, bad_wr);
-	switch (ret) {
-	case ENOMEM:
-		return -FI_EAGAIN;
-	case -1:
-		/* Deal with non-compliant libibverbs drivers which set errno
-		 * instead of directly returning the error value */
-		return (errno == ENOMEM) ? -FI_EAGAIN : -errno;
-	default:
-		return -ret;
-	}
-}
-
 static ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len,
 		int count, void *context, int inject, int comp)
 {
 	struct ibv_send_wr *bad_wr;
+	int ret;
 
 	wr->num_sge = count;
 	wr->wr_id = (uintptr_t) context;
@@ -1302,7 +1285,17 @@ static ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, siz
 	if (comp)
 		wr->send_flags |= IBV_SEND_SIGNALED;
 
-	return fi_ibv_post_send(ep->id->qp, wr, &bad_wr);
+	ret = ibv_post_send(ep->id->qp, wr, &bad_wr);
+	switch (ret) {
+	case ENOMEM:
+		return -FI_EAGAIN;
+	case -1:
+		/* Deal with non-compliant libibverbs drivers which set errno
+		 * instead of directly returning the error value */
+		return (errno == ENOMEM) ? -FI_EAGAIN : -errno;
+	default:
+		return -ret;
+	}
 }
 
 static ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
@@ -1573,420 +1566,6 @@ static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 	.injectdata = fi_no_rma_injectdata,
 };
 
-static ssize_t
-fi_ibv_msg_ep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
-			void *desc, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-			enum fi_datatype datatype, enum fi_op op, void *context)
-{
-	struct fi_ibv_msg_ep *_ep;
-	struct ibv_send_wr wr, *bad;
-	struct ibv_sge sge;
-
-	if (count != 1)
-		return -FI_E2BIG;
-
-	switch (datatype) {
-	case FI_INT64:
-	case FI_UINT64:
-#if __BITS_PER_LONG == 64
-	case FI_DOUBLE:
-	case FI_FLOAT:
-#endif
-		break;
-	default:
-		return -FI_EINVAL;
-	}
-
-	switch (op) {
-	case FI_ATOMIC_WRITE:
-		wr.opcode = IBV_WR_RDMA_WRITE;
-		wr.wr.rdma.remote_addr = addr;
-		wr.wr.rdma.rkey = (uint32_t) (uintptr_t) key;
-		break;
-	default:
-		return -ENOSYS;
-	}
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-
-	sge.addr = (uintptr_t) buf;
-	sge.length = (uint32_t) sizeof(uint64_t);
-	sge.lkey = (uint32_t) (uintptr_t) desc;
-
-	wr.wr_id = (uintptr_t) context;
-	wr.next = NULL;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IBV_SEND_FENCE;
-	if (VERBS_INJECT(_ep, sizeof(uint64_t)))
-		wr.send_flags |= IBV_SEND_INLINE;
-	if (VERBS_COMP(_ep))
-		wr.send_flags |= IBV_SEND_SIGNALED;
-
-	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
-}
-
-static ssize_t
-fi_ibv_msg_ep_atomic_writev(struct fid_ep *ep,
-                        const struct fi_ioc *iov, void **desc, size_t count,
-                        fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-                        enum fi_datatype datatype, enum fi_op op, void *context)
-{
-	if (iov->count != 1)
-		return -FI_E2BIG;
-
-	return fi_ibv_msg_ep_atomic_write(ep, iov->addr, count, desc[0],
-			dest_addr, addr, key, datatype, op, context);
-}
-
-static ssize_t
-fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
-                        const struct fi_msg_atomic *msg, uint64_t flags)
-{
-	struct fi_ibv_msg_ep *_ep;
-	struct ibv_send_wr wr, *bad;
-	struct ibv_sge sge;
-
-	if (msg->iov_count != 1 || msg->msg_iov->count != 1)
-		return -FI_E2BIG;
-
-	switch (msg->datatype) {
-	case FI_INT64:
-	case FI_UINT64:
-#if __BITS_PER_LONG == 64
-	case FI_DOUBLE:
-	case FI_FLOAT:
-#endif
-		break;
-	default:
-		return -FI_EINVAL;
-	}
-
-	switch (msg->op) {
-	case FI_ATOMIC_WRITE:
-		if (flags & FI_REMOTE_CQ_DATA) {
-			wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
-			wr.imm_data = htonl((uint32_t) msg->data);
-		} else {
-			wr.opcode = IBV_WR_RDMA_WRITE;
-		}
-		wr.wr.rdma.remote_addr = msg->rma_iov->addr;
-		wr.wr.rdma.rkey = (uint32_t) (uintptr_t) msg->rma_iov->key;
-		break;
-	default:
-		return -ENOSYS;
-	}
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-
-	sge.addr = (uintptr_t) msg->msg_iov->addr;
-	sge.length = (uint32_t) sizeof(uint64_t);
-	if (!(flags & FI_INJECT)) {
-		sge.lkey = (uint32_t) (uintptr_t) msg->desc[0];
-	}
-
-	wr.wr_id = (uintptr_t) msg->context;
-	wr.next = NULL;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IBV_SEND_FENCE;
-	if (VERBS_INJECT_FLAGS(_ep, sizeof(uint64_t), flags))
-		wr.send_flags |= IBV_SEND_INLINE;
-	if (VERBS_COMP_FLAGS(_ep, flags))
-		wr.send_flags |= IBV_SEND_SIGNALED;
-
-	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
-}
-
-static ssize_t
-fi_ibv_msg_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
-			void *desc, void *result, void *result_desc,
-			fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-			enum fi_datatype datatype,
-			enum fi_op op, void *context)
-{
-	struct fi_ibv_msg_ep *_ep;
-	struct ibv_send_wr wr, *bad;
-	struct ibv_sge sge;
-
-	if (count != 1)
-		return -FI_E2BIG;
-
-	switch (datatype) {
-	case FI_INT64:
-	case FI_UINT64:
-#if __BITS_PER_LONG == 64
-	case FI_DOUBLE:
-	case FI_FLOAT:
-#endif
-		break;
-	default:
-		return -FI_EINVAL;
-	}
-
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-
-	switch (op) {
-	case FI_ATOMIC_READ:
-		wr.opcode = IBV_WR_RDMA_READ;
-		wr.wr.rdma.remote_addr = addr;
-		wr.wr.rdma.rkey = (uint32_t) (uintptr_t) key;
-		break;
-	case FI_SUM:
-		if (_ep->info->tx_attr->op_flags & FI_INJECT) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA,"FI_INJECT not "
-				"supported for fi_fetch_atomic with FI_SUM op\n");
-			return -FI_EINVAL;
-		}
-
-		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
-		wr.wr.atomic.remote_addr = addr;
-		wr.wr.atomic.compare_add = (uintptr_t) buf;
-		wr.wr.atomic.swap = 0;
-		wr.wr.atomic.rkey = (uint32_t) (uintptr_t) key;
-		break;
-	default:
-		return -ENOSYS;
-	}
-
-	sge.addr = (uintptr_t) result;
-	sge.length = (uint32_t) sizeof(uint64_t);
-	sge.lkey = (uint32_t) (uintptr_t) result_desc;
-
-	wr.wr_id = (uintptr_t) context;
-	wr.next = NULL;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IBV_SEND_FENCE;
-	if (VERBS_COMP(_ep))
-		wr.send_flags |= IBV_SEND_SIGNALED;
-
-	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
-}
-
-static ssize_t
-fi_ibv_msg_ep_atomic_readwritev(struct fid_ep *ep, const struct fi_ioc *iov,
-			void **desc, size_t count,
-			struct fi_ioc *resultv, void **result_desc,
-			size_t result_count, fi_addr_t dest_addr, uint64_t addr,
-			uint64_t key, enum fi_datatype datatype,
-			enum fi_op op, void *context)
-{
-	if (iov->count != 1)
-		return -FI_E2BIG;
-
-        return fi_ibv_msg_ep_atomic_readwrite(ep, iov->addr, count,
-			desc[0], resultv->addr, result_desc[0],
-			dest_addr, addr, key, datatype, op, context);
-}
-
-static ssize_t
-fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
-				const struct fi_msg_atomic *msg,
-				struct fi_ioc *resultv, void **result_desc,
-				size_t result_count, uint64_t flags)
-{
-	struct fi_ibv_msg_ep *_ep;
-	struct ibv_send_wr wr, *bad;
-	struct ibv_sge sge;
-
-	if (msg->iov_count != 1 || msg->msg_iov->count != 1)
-		return -FI_E2BIG;
-
-	switch (msg->datatype) {
-	case FI_INT64:
-	case FI_UINT64:
-#if __BITS_PER_LONG == 64
-	case FI_DOUBLE:
-	case FI_FLOAT:
-#endif
-		break;
-	default:
-		return -FI_EINVAL;
-	}
-
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-
-	switch (msg->op) {
-	case FI_ATOMIC_READ:
-		wr.opcode = IBV_WR_RDMA_READ;
-		wr.wr.rdma.remote_addr = msg->rma_iov->addr;
-		wr.wr.rdma.rkey = (uint32_t) (uintptr_t) msg->rma_iov->key;
-		break;
-	case FI_SUM:
-		if ((flags & FI_INJECT) || (_ep->info->tx_attr->op_flags & FI_INJECT)) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA,"FI_INJECT not "
-				"supported fi_fetch_atomicmsg with FI_SUM op\n");
-			return -FI_EINVAL;
-		}
-
-		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
-		wr.wr.atomic.remote_addr = msg->rma_iov->addr;
-		wr.wr.atomic.compare_add = (uintptr_t) msg->addr;
-		wr.wr.atomic.swap = 0;
-		wr.wr.atomic.rkey = (uint32_t) (uintptr_t) msg->rma_iov->key;
-		break;
-	default:
-		return -ENOSYS;
-	}
-
-	sge.addr = (uintptr_t) resultv->addr;
-	sge.length = (uint32_t) sizeof(uint64_t);
-	sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
-
-	wr.wr_id = (uintptr_t) msg->context;
-	wr.next = NULL;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IBV_SEND_FENCE;
-	if (VERBS_COMP_FLAGS(_ep, flags))
-		wr.send_flags |= IBV_SEND_SIGNALED;
-	if (flags & FI_REMOTE_CQ_DATA)
-		wr.imm_data = htonl((uint32_t) msg->data);
-
-	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
-}
-
-static ssize_t
-fi_ibv_msg_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
-			void *desc, const void *compare,
-			void *compare_desc, void *result,
-			void *result_desc,
-			fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-			enum fi_datatype datatype,
-			enum fi_op op, void *context)
-{
-	struct fi_ibv_msg_ep *_ep;
-	struct ibv_send_wr wr, *bad;
-	struct ibv_sge sge;
-
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-
-	if (_ep->info->tx_attr->op_flags & FI_INJECT) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA, "FI_INJECT not supported "
-			"for fi_compare_atomic\n");
-		return -FI_EINVAL;
-	}
-
-	if (op != FI_CSWAP)
-		return -ENOSYS;
-
-	if (count != 1)
-		return -FI_E2BIG;
-
-	switch (datatype) {
-	case FI_INT64:
-	case FI_UINT64:
-#if __BITS_PER_LONG == 64
-	case FI_DOUBLE:
-	case FI_FLOAT:
-#endif
-		break;
-	default:
-		return -FI_EINVAL;
-	}
-
-	wr.opcode = IBV_WR_ATOMIC_CMP_AND_SWP;
-	wr.wr.atomic.remote_addr = addr;
-	wr.wr.atomic.compare_add = (uintptr_t) compare;
-	wr.wr.atomic.swap = (uintptr_t) buf;
-	wr.wr.atomic.rkey = (uint32_t) (uintptr_t) key;
-
-	sge.addr = (uintptr_t) result;
-	sge.length = (uint32_t) sizeof(uint64_t);
-	sge.lkey = (uint32_t) (uintptr_t) result_desc;
-
-	wr.wr_id = (uintptr_t) context;
-	wr.next = NULL;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IBV_SEND_FENCE;
-	if (VERBS_COMP(_ep))
-		wr.send_flags |= IBV_SEND_SIGNALED;
-
-	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
-}
-
-static ssize_t
-fi_ibv_msg_ep_atomic_compwritev(struct fid_ep *ep, const struct fi_ioc *iov,
-				void **desc, size_t count,
-				const struct fi_ioc *comparev,
-				void **compare_desc, size_t compare_count,
-				struct fi_ioc *resultv, void **result_desc,
-				size_t result_count,
-				fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-				enum fi_datatype datatype,
-				enum fi_op op, void *context)
-{
-	if (iov->count != 1)
-		return -FI_E2BIG;
-
-	return fi_ibv_msg_ep_atomic_compwrite(ep, iov->addr, count, desc[0],
-				comparev->addr, compare_desc[0], resultv->addr,
-				result_desc[0], dest_addr, addr, key,
-                        	datatype, op, context);
-}
-
-static ssize_t
-fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
-				const struct fi_msg_atomic *msg,
-				const struct fi_ioc *comparev,
-				void **compare_desc, size_t compare_count,
-				struct fi_ioc *resultv,
-				void **result_desc, size_t result_count,
-				uint64_t flags)
-{
-	struct fi_ibv_msg_ep *_ep;
-	struct ibv_send_wr wr, *bad;
-	struct ibv_sge sge;
-
-	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-
-	if ((flags & FI_INJECT) || (_ep->info->tx_attr->op_flags & FI_INJECT)) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA, "FI_INJECT not supported "
-			"for fi_compare_atomic\n");
-		return -FI_EINVAL;
-	}
-
-	if (msg->op != FI_CSWAP)
-		return -ENOSYS;
-
-	if (msg->iov_count != 1 || msg->msg_iov->count != 1)
-		return -FI_E2BIG;
-
-	switch(msg->datatype) {
-	case FI_INT64:
-	case FI_UINT64:
-#if __BITS_PER_LONG == 64
-	case FI_DOUBLE:
-	case FI_FLOAT:
-#endif
-		break;
-	default:
-		return -FI_EINVAL;
-	}
-
-	wr.opcode = IBV_WR_ATOMIC_CMP_AND_SWP;
-	wr.wr.atomic.remote_addr = msg->rma_iov->addr;
-	wr.wr.atomic.compare_add = (uintptr_t) comparev->addr;
-	wr.wr.atomic.swap = (uintptr_t) msg->addr;
-	wr.wr.atomic.rkey = (uint32_t) (uintptr_t) msg->rma_iov->key;
-
-	sge.addr = (uintptr_t) resultv->addr;
-	sge.length = (uint32_t) sizeof(uint64_t);
-	sge.lkey = (uint32_t) (uintptr_t) result_desc[0];
-
-	wr.wr_id = (uintptr_t) msg->context;
-	wr.next = NULL;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IBV_SEND_FENCE;
-	if (VERBS_COMP_FLAGS(_ep, flags))
-		wr.send_flags |= IBV_SEND_SIGNALED;
-	if (flags & FI_REMOTE_CQ_DATA)
-		wr.imm_data = htonl((uint32_t) msg->data);
-
-	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
-}
-
 static int
 fi_ibv_msg_ep_atomic_writevalid(struct fid_ep *ep, enum fi_datatype datatype,
 				enum fi_op op, size_t *count)
@@ -2026,7 +1605,7 @@ fi_ibv_msg_ep_atomic_readwritevalid(struct fid_ep *ep, enum fi_datatype datatype
 		break;
 	case FI_SUM:
 		if (_ep->info->tx_attr->op_flags & FI_INJECT) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA,"FI_INJECT not "
+			FI_INFO(&fi_ibv_prov, FI_LOG_EP_DATA,"FI_INJECT not "
 				"supported for fi_fetch_atomic with FI_SUM op\n");
 			return -FI_EINVAL;
 		}
@@ -2062,7 +1641,7 @@ fi_ibv_msg_ep_atomic_compwritevalid(struct fid_ep *ep, enum fi_datatype datatype
 		return -FI_ENOSYS;
 
 	if (_ep->info->tx_attr->op_flags & FI_INJECT) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA, "FI_INJECT not supported "
+		FI_INFO(&fi_ibv_prov, FI_LOG_EP_DATA, "FI_INJECT not supported "
 			"for fi_compare_atomic\n");
 		return -FI_EINVAL;
 	}
@@ -2084,6 +1663,314 @@ fi_ibv_msg_ep_atomic_compwritevalid(struct fid_ep *ep, enum fi_datatype datatype
 	return 0;
 }
 
+static ssize_t
+fi_ibv_msg_ep_atomic_write(struct fid_ep *ep_fid, const void *buf, size_t count,
+			void *desc, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+			enum fi_datatype datatype, enum fi_op op, void *context)
+{
+	struct fi_ibv_msg_ep *ep;
+	struct ibv_send_wr wr;
+	size_t count_copy;
+	int ret;
+
+	if (count != 1)
+		return -FI_E2BIG;
+
+	count_copy = count;
+
+	ret = fi_ibv_msg_ep_atomic_writevalid(ep_fid, datatype, op, &count_copy);
+	if (ret)
+		return ret;
+
+	memset(&wr, 0, sizeof(wr));
+
+	switch(op) {
+	case FI_ATOMIC_WRITE:
+		wr.opcode = IBV_WR_RDMA_WRITE;
+		wr.wr.rdma.remote_addr = addr;
+		wr.wr.rdma.rkey = (uint32_t) (uintptr_t) key;
+		break;
+	default:
+		return -ENOSYS;
+	}
+
+	wr.send_flags = IBV_SEND_FENCE;
+
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+	return fi_ibv_send_buf(ep, &wr, buf, sizeof(uint64_t), desc, context,
+			VERBS_INJECT(ep, sizeof(uint64_t)), VERBS_COMP(ep));
+}
+
+static ssize_t
+fi_ibv_msg_ep_atomic_writev(struct fid_ep *ep,
+                        const struct fi_ioc *iov, void **desc, size_t count,
+                        fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+                        enum fi_datatype datatype, enum fi_op op, void *context)
+{
+	if (iov->count != 1)
+		return -FI_E2BIG;
+
+	return fi_ibv_msg_ep_atomic_write(ep, iov->addr, count, desc[0],
+			dest_addr, addr, key, datatype, op, context);
+}
+
+static ssize_t
+fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep_fid,
+                        const struct fi_msg_atomic *msg, uint64_t flags)
+{
+	struct fi_ibv_msg_ep *ep;
+	struct ibv_send_wr wr;
+	size_t count_copy;
+	int ret;
+
+	if (msg->iov_count != 1 || msg->msg_iov->count != 1)
+		return -FI_E2BIG;
+
+	count_copy = msg->iov_count;
+
+	ret = fi_ibv_msg_ep_atomic_writevalid(ep_fid, msg->datatype, msg->op,
+			&count_copy);
+	if (ret)
+		return ret;
+
+	memset(&wr, 0, sizeof(wr));
+
+	switch (msg->op) {
+	case FI_ATOMIC_WRITE:
+		if (flags & FI_REMOTE_CQ_DATA) {
+			wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+			wr.imm_data = htonl((uint32_t)msg->data);
+		} else {
+			wr.opcode = IBV_WR_RDMA_WRITE;
+		}
+		wr.wr.rdma.remote_addr = msg->rma_iov->addr;
+		wr.wr.rdma.rkey = (uint32_t) (uintptr_t) msg->rma_iov->key;
+		break;
+	default:
+		return -ENOSYS;
+	}
+
+	wr.send_flags = IBV_SEND_FENCE;
+
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+	return fi_ibv_send_buf(ep, &wr, msg->msg_iov->addr, sizeof(uint64_t),
+			msg->desc[0], msg->context, flags & FI_INJECT,
+			VERBS_COMP_FLAGS(ep, flags));
+}
+
+static ssize_t
+fi_ibv_msg_ep_atomic_readwrite(struct fid_ep *ep_fid, const void *buf, size_t count,
+			void *desc, void *result, void *result_desc,
+			fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+			enum fi_datatype datatype,
+			enum fi_op op, void *context)
+{
+	struct fi_ibv_msg_ep *ep;
+	struct ibv_send_wr wr;
+	size_t count_copy;
+	int ret;
+
+	if (count != 1)
+		return -FI_E2BIG;
+
+	count_copy = count;
+
+	ret = fi_ibv_msg_ep_atomic_readwritevalid(ep_fid, datatype, op,
+			&count_copy);
+	if (ret)
+		return ret;
+
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+	memset(&wr, 0, sizeof(wr));
+
+	switch (op) {
+	case FI_ATOMIC_READ:
+		wr.opcode = IBV_WR_RDMA_READ;
+		wr.wr.rdma.remote_addr = addr;
+		wr.wr.rdma.rkey = (uint32_t) (uintptr_t) key;
+		break;
+	case FI_SUM:
+		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
+		wr.wr.atomic.remote_addr = addr;
+		wr.wr.atomic.compare_add = (uintptr_t) buf;
+		wr.wr.atomic.swap = 0;
+		wr.wr.atomic.rkey = (uint32_t) (uintptr_t) key;
+		break;
+	default:
+		return -ENOSYS;
+	}
+
+	wr.send_flags = IBV_SEND_FENCE;
+
+	return fi_ibv_send_buf(ep, &wr, result, sizeof(uint64_t), result_desc,
+		context, 0, VERBS_COMP(ep));
+}
+
+static ssize_t
+fi_ibv_msg_ep_atomic_readwritev(struct fid_ep *ep, const struct fi_ioc *iov,
+			void **desc, size_t count,
+			struct fi_ioc *resultv, void **result_desc,
+			size_t result_count, fi_addr_t dest_addr, uint64_t addr,
+			uint64_t key, enum fi_datatype datatype,
+			enum fi_op op, void *context)
+{
+	if (iov->count != 1)
+		return -FI_E2BIG;
+
+        return fi_ibv_msg_ep_atomic_readwrite(ep, iov->addr, count,
+			desc[0], resultv->addr, result_desc[0],
+			dest_addr, addr, key, datatype, op, context);
+}
+
+static ssize_t
+fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep_fid,
+				const struct fi_msg_atomic *msg,
+				struct fi_ioc *resultv, void **result_desc,
+				size_t result_count, uint64_t flags)
+{
+	struct fi_ibv_msg_ep *ep;
+	struct ibv_send_wr wr;
+	size_t count_copy;
+	int ret;
+
+	if (msg->iov_count != 1 || msg->msg_iov->count != 1)
+		return -FI_E2BIG;
+
+	count_copy = msg->iov_count;
+
+	ret = fi_ibv_msg_ep_atomic_readwritevalid(ep_fid, msg->datatype, msg->op,
+		       &count_copy);
+	if (ret)
+		return ret;
+
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+
+	memset(&wr, 0, sizeof(wr));
+
+	switch (msg->op) {
+	case FI_ATOMIC_READ:
+		wr.opcode = IBV_WR_RDMA_READ;
+		wr.wr.rdma.remote_addr = msg->rma_iov->addr;
+		wr.wr.rdma.rkey = (uint32_t) (uintptr_t) msg->rma_iov->key;
+		break;
+	case FI_SUM:
+		wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
+		wr.wr.atomic.remote_addr = msg->rma_iov->addr;
+		wr.wr.atomic.compare_add = (uintptr_t) msg->addr;
+		wr.wr.atomic.swap = 0;
+		wr.wr.atomic.rkey = (uint32_t) (uintptr_t) msg->rma_iov->key;
+		break;
+	default:
+		return -ENOSYS;
+	}
+
+	wr.send_flags = IBV_SEND_FENCE;
+	if (flags & FI_REMOTE_CQ_DATA)
+		wr.imm_data = htonl((uint32_t) msg->data);
+
+	return fi_ibv_send_buf(ep, &wr, resultv->addr, sizeof(uint64_t),
+			result_desc[0], msg->context, 0,
+			VERBS_COMP_FLAGS(ep, flags));
+}
+
+static ssize_t
+fi_ibv_msg_ep_atomic_compwrite(struct fid_ep *ep_fid, const void *buf, size_t count,
+			void *desc, const void *compare,
+			void *compare_desc, void *result,
+			void *result_desc,
+			fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+			enum fi_datatype datatype,
+			enum fi_op op, void *context)
+{
+	struct fi_ibv_msg_ep *ep;
+	struct ibv_send_wr wr;
+	size_t count_copy;
+	int ret;
+
+	if (count != 1)
+		return -FI_E2BIG;
+
+	count_copy = count;
+
+	ret = fi_ibv_msg_ep_atomic_compwritevalid(ep_fid, datatype, op, &count_copy);
+	if (ret)
+		return ret;
+
+	memset(&wr, 0, sizeof(wr));
+
+	wr.opcode = IBV_WR_ATOMIC_CMP_AND_SWP;
+	wr.wr.atomic.remote_addr = addr;
+	wr.wr.atomic.compare_add = (uintptr_t) compare;
+	wr.wr.atomic.swap = (uintptr_t) buf;
+	wr.wr.atomic.rkey = (uint32_t) (uintptr_t) key;
+
+	wr.send_flags = IBV_SEND_FENCE;
+
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+	return fi_ibv_send_buf(ep, &wr, result, sizeof(uint64_t), result_desc,
+		context, 0, VERBS_COMP(ep));
+}
+
+static ssize_t
+fi_ibv_msg_ep_atomic_compwritev(struct fid_ep *ep, const struct fi_ioc *iov,
+				void **desc, size_t count,
+				const struct fi_ioc *comparev,
+				void **compare_desc, size_t compare_count,
+				struct fi_ioc *resultv, void **result_desc,
+				size_t result_count,
+				fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+				enum fi_datatype datatype,
+				enum fi_op op, void *context)
+{
+	if (iov->count != 1)
+		return -FI_E2BIG;
+
+	return fi_ibv_msg_ep_atomic_compwrite(ep, iov->addr, count, desc[0],
+				comparev->addr, compare_desc[0], resultv->addr,
+				result_desc[0], dest_addr, addr, key,
+                        	datatype, op, context);
+}
+
+static ssize_t
+fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep_fid,
+				const struct fi_msg_atomic *msg,
+				const struct fi_ioc *comparev,
+				void **compare_desc, size_t compare_count,
+				struct fi_ioc *resultv,
+				void **result_desc, size_t result_count,
+				uint64_t flags)
+{
+	struct fi_ibv_msg_ep *ep;
+	struct ibv_send_wr wr;
+	size_t count_copy;
+	int ret;
+
+	if (msg->iov_count != 1 || msg->msg_iov->count != 1)
+		return -FI_E2BIG;
+
+	count_copy = msg->iov_count;
+
+	ret = fi_ibv_msg_ep_atomic_compwritevalid(ep_fid, msg->datatype, msg->op,
+		       &count_copy);
+	if (ret)
+		return ret;
+
+	memset(&wr, 0, sizeof(wr));
+
+	wr.opcode = IBV_WR_ATOMIC_CMP_AND_SWP;
+	wr.wr.atomic.remote_addr = msg->rma_iov->addr;
+	wr.wr.atomic.compare_add = (uintptr_t) comparev->addr;
+	wr.wr.atomic.swap = (uintptr_t) msg->addr;
+	wr.wr.atomic.rkey = (uint32_t) (uintptr_t) msg->rma_iov->key;
+
+	wr.send_flags = IBV_SEND_FENCE;
+	if (flags & FI_REMOTE_CQ_DATA)
+		wr.imm_data = htonl((uint32_t) msg->data);
+
+	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
+	return fi_ibv_send_buf(ep, &wr, resultv->addr, sizeof(uint64_t),
+			result_desc[0], msg->context, 0, VERBS_COMP_FLAGS(ep, flags));
+}
 
 static struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops = {
 	.size		= sizeof(struct fi_ops_atomic),
