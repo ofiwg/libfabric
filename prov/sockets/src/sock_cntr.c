@@ -88,7 +88,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 	fastlock_acquire(&cntr->trigger_lock);
 	for (entry = cntr->trigger_list.next;
 	     entry != &cntr->trigger_list;) {
-		
+
 		trigger = container_of(entry, struct sock_trigger, entry);
 		entry = entry->next;
 
@@ -97,7 +97,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 
 		switch (trigger->op_type) {
 		case SOCK_OP_SEND:
-			ret = sock_ep_sendmsg(trigger->ep, &trigger->op.msg.msg, 
+			ret = sock_ep_sendmsg(trigger->ep, &trigger->op.msg.msg,
 					trigger->flags & ~FI_TRIGGER);
 			break;
 
@@ -107,36 +107,41 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 			break;
 
 		case SOCK_OP_TSEND:
-			ret = sock_ep_tsendmsg(trigger->ep, &trigger->op.tmsg.msg, 
+			ret = sock_ep_tsendmsg(trigger->ep,
+					&trigger->op.tmsg.msg,
 					trigger->flags & ~FI_TRIGGER);
 			break;
 
 		case SOCK_OP_TRECV:
-			ret = sock_ep_trecvmsg(trigger->ep, &trigger->op.tmsg.msg, 
+			ret = sock_ep_trecvmsg(trigger->ep,
+					&trigger->op.tmsg.msg,
 					trigger->flags & ~FI_TRIGGER);
 			break;
 
 		case SOCK_OP_WRITE:
-			ret = sock_ep_rma_writemsg(trigger->ep, &trigger->op.rma.msg,
-					     trigger->flags & ~FI_TRIGGER);
+			ret = sock_ep_rma_writemsg(trigger->ep,
+						&trigger->op.rma.msg,
+						trigger->flags & ~FI_TRIGGER);
 			break;
 
 		case SOCK_OP_READ:
-			ret = sock_ep_rma_readmsg(trigger->ep, &trigger->op.rma.msg,
-					     trigger->flags & ~FI_TRIGGER);
+			ret = sock_ep_rma_readmsg(trigger->ep,
+						&trigger->op.rma.msg,
+						trigger->flags & ~FI_TRIGGER);
 			break;
 
 		case SOCK_OP_ATOMIC:
-			ret = sock_ep_tx_atomic(trigger->ep, &trigger->op.atomic.msg,
-					  trigger->op.atomic.comparev, 
-					  NULL,
-					  trigger->op.atomic.compare_count,
-					  trigger->op.atomic.resultv,
-					  NULL,
-					  trigger->op.atomic.result_count,
-					  trigger->flags & ~FI_TRIGGER);
+			ret = sock_ep_tx_atomic(trigger->ep,
+					&trigger->op.atomic.msg,
+					trigger->op.atomic.comparev,
+					NULL,
+					trigger->op.atomic.compare_count,
+					trigger->op.atomic.resultv,
+					NULL,
+					trigger->op.atomic.result_count,
+					trigger->flags & ~FI_TRIGGER);
 			break;
-			
+
 		default:
 			SOCK_LOG_ERROR("unsupported op\n");
 			ret = 0;
@@ -149,7 +154,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 		} else {
 			break;
 		}
-	}	
+	}
 	fastlock_release(&cntr->trigger_lock);
 }
 
@@ -211,12 +216,13 @@ static int sock_cntr_set(struct fid_cntr *cntr, uint64_t value)
 	return 0;
 }
 
-static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
+static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
+				int timeout)
 {
 	int ret = 0;
 	uint64_t start_ms = 0, end_ms = 0;
 	struct sock_cntr *_cntr;
-	
+
 	_cntr = container_of(cntr, struct sock_cntr, cntr_fid);
 	pthread_mutex_lock(&_cntr->mut);
 
@@ -224,7 +230,7 @@ static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 		ret = -FI_EAVAIL;
 		goto out;
 	}
-	
+
 	if (atomic_get(&_cntr->value) >= threshold) {
 		ret = 0;
 		goto out;
@@ -234,7 +240,7 @@ static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 		ret = -FI_EBUSY;
 		goto out;
 	}
-	
+
 	_cntr->is_waiting = 1;
 	atomic_set(&_cntr->threshold, threshold);
 
@@ -244,7 +250,7 @@ static int sock_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 			start_ms = fi_gettime_ms();
 			end_ms = start_ms + timeout;
 		}
-		
+
 		while (atomic_get(&_cntr->value) < threshold) {
 			sock_cntr_progress(_cntr);
 			if (timeout >= 0 && fi_gettime_ms() >= end_ms) {
@@ -272,9 +278,9 @@ static int sock_cntr_control(struct fid *fid, int command, void *arg)
 {
 	int ret = 0;
 	struct sock_cntr *cntr;
-	
+
 	cntr = container_of(fid, struct sock_cntr, cntr_fid);
-	
+
 	switch (command) {
 	case FI_GETWAIT:
 		switch (cntr->attr.wait_obj) {
@@ -282,15 +288,15 @@ static int sock_cntr_control(struct fid *fid, int command, void *arg)
 		case FI_WAIT_UNSPEC:
 		case FI_WAIT_MUTEX_COND:
 			memcpy(arg, &cntr->mut, sizeof(cntr->mut));
-			memcpy((char*)arg + sizeof(cntr->mut), &cntr->cond, 
+			memcpy((char *)arg + sizeof(cntr->mut), &cntr->cond,
 			       sizeof(cntr->cond));
 			break;
-			
+
 		case FI_WAIT_SET:
 		case FI_WAIT_FD:
 			sock_wait_get_obj(cntr->waitset, arg);
 			break;
-		
+
 		default:
 			ret = -FI_EINVAL;
 			break;
@@ -322,7 +328,7 @@ static int sock_cntr_close(struct fid *fid)
 
 	if (cntr->signal && cntr->attr.wait_obj == FI_WAIT_FD)
 		sock_wait_close(&cntr->waitset->fid);
-	
+
 	pthread_mutex_destroy(&cntr->mut);
 	fastlock_destroy(&cntr->list_lock);
 	fastlock_destroy(&cntr->trigger_lock);
@@ -394,7 +400,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	struct fi_wait_attr wait_attr;
 	struct sock_fid_list *list_entry;
 	struct sock_wait *wait;
-	
+
 	dom = container_of(domain, struct sock_domain, dom_fid);
 	if (attr && sock_cntr_verify_attr(attr))
 		return -FI_ENOSYS;
@@ -407,11 +413,11 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	if (ret)
 		goto err;
 
-	if(attr == NULL)
+	if (attr == NULL)
 		memcpy(&_cntr->attr, &sock_cntr_add, sizeof(sock_cntr_attr));
-	else 
+	else
 		memcpy(&_cntr->attr, attr, sizeof(sock_cntr_attr));
-	
+
 	switch (_cntr->attr.wait_obj) {
 
 	case FI_WAIT_NONE:
@@ -431,7 +437,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		}
 		_cntr->signal = 1;
 		break;
-		
+
 	case FI_WAIT_SET:
 		if (!attr) {
 			ret = FI_EINVAL;
@@ -446,7 +452,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		list_entry->fid = &_cntr->cntr_fid.fid;
 		dlist_insert_after(&list_entry->entry, &wait->fid_list);
 		break;
-		
+
 	default:
 		break;
 	}

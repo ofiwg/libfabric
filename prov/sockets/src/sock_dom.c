@@ -64,15 +64,15 @@ const struct fi_domain_attr sock_domain_attr = {
 
 int sock_verify_domain_attr(struct fi_domain_attr *attr)
 {
-	if(!attr)
+	if (!attr)
 		return 0;
 
-	if(attr->name){
+	if (attr->name) {
 		if (strcmp(attr->name, sock_dom_name))
 			return -FI_ENODATA;
 	}
 
-	switch(attr->threading){
+	switch (attr->threading) {
 	case FI_THREAD_UNSPEC:
 	case FI_THREAD_SAFE:
 	case FI_THREAD_FID:
@@ -85,7 +85,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	switch (attr->control_progress){
+	switch (attr->control_progress) {
 	case FI_PROGRESS_UNSPEC:
 	case FI_PROGRESS_AUTO:
 	case FI_PROGRESS_MANUAL:
@@ -96,7 +96,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	switch (attr->data_progress){
+	switch (attr->data_progress) {
 	case FI_PROGRESS_UNSPEC:
 	case FI_PROGRESS_AUTO:
 	case FI_PROGRESS_MANUAL:
@@ -107,7 +107,7 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	switch (attr->resource_mgmt){
+	switch (attr->resource_mgmt) {
 	case FI_RM_UNSPEC:
 	case FI_RM_DISABLED:
 	case FI_RM_ENABLED:
@@ -139,22 +139,22 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 		return -FI_ENODATA;
 	}
 
-	if(attr->mr_key_size > sock_domain_attr.mr_key_size)
-		return -FI_ENODATA;
-	
-	if(attr->cq_data_size > sock_domain_attr.cq_data_size)
+	if (attr->mr_key_size > sock_domain_attr.mr_key_size)
 		return -FI_ENODATA;
 
-	if(attr->cq_cnt > sock_domain_attr.cq_cnt)
+	if (attr->cq_data_size > sock_domain_attr.cq_data_size)
 		return -FI_ENODATA;
 
-	if(attr->ep_cnt > sock_domain_attr.ep_cnt)
+	if (attr->cq_cnt > sock_domain_attr.cq_cnt)
 		return -FI_ENODATA;
 
-	if(attr->max_ep_tx_ctx > sock_domain_attr.max_ep_tx_ctx)
+	if (attr->ep_cnt > sock_domain_attr.ep_cnt)
 		return -FI_ENODATA;
 
-	if(attr->max_ep_rx_ctx > sock_domain_attr.max_ep_rx_ctx)
+	if (attr->max_ep_tx_ctx > sock_domain_attr.max_ep_tx_ctx)
+		return -FI_ENODATA;
+
+	if (attr->max_ep_rx_ctx > sock_domain_attr.max_ep_rx_ctx)
 		return -FI_ENODATA;
 
 	return 0;
@@ -164,9 +164,8 @@ static int sock_dom_close(struct fid *fid)
 {
 	struct sock_domain *dom;
 	dom = container_of(fid, struct sock_domain, dom_fid.fid);
-	if (atomic_get(&dom->ref)) {
+	if (atomic_get(&dom->ref))
 		return -FI_EBUSY;
-	}
 
 	sock_pe_finalize(dom->pe);
 	if (dom->r_cmap.size)
@@ -244,27 +243,27 @@ static struct fi_ops sock_mr_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-struct sock_mr * sock_mr_get_entry(struct sock_domain *domain, uint16_t key)
+struct sock_mr *sock_mr_get_entry(struct sock_domain *domain, uint16_t key)
 {
 	return (struct sock_mr *)idm_lookup(&domain->mr_idm, key);
 }
 
-struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key, 
+struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key,
 				   void *buf, size_t len, uint64_t access)
 {
 	int i;
 	struct sock_mr *mr;
 	mr = idm_lookup(&domain->mr_idm, key);
-	
+
 	if (!mr)
 		return NULL;
 
 	if (domain->attr.mr_mode == FI_MR_SCALABLE)
-		buf = (char*)buf + mr->offset;
-	
+		buf = (char *)buf + mr->offset;
+
 	for (i = 0; i < mr->iov_count; i++) {
 		if ((uintptr_t)buf >= (uintptr_t)mr->mr_iov[i].iov_base &&
-		    ((uintptr_t)buf + len <= (uintptr_t) mr->mr_iov[i].iov_base + 
+		    ((uintptr_t)buf + len <= (uintptr_t) mr->mr_iov[i].iov_base +
 		     mr->mr_iov[i].iov_len)) {
 			if ((access & mr->access) == access)
 				return mr;
@@ -274,7 +273,7 @@ struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key,
 	return NULL;
 }
 
-struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc, 
+struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc,
 			void *buf, size_t len, uint64_t access)
 {
 	uint64_t key = (uintptr_t) desc;
@@ -300,8 +299,8 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	    ((attr->requested_key > IDX_MAX_INDEX) ||
 	     idm_lookup(&dom->mr_idm, (int) attr->requested_key)))
 		return -FI_ENOKEY;
-	
-	_mr = calloc(1, sizeof(*_mr) + 
+
+	_mr = calloc(1, sizeof(*_mr) +
 		     sizeof(_mr->mr_iov) * (attr->iov_count - 1));
 	if (!_mr)
 		return -FI_ENOMEM;
@@ -314,7 +313,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	_mr->access = attr->access;
 	_mr->flags = flags;
 	_mr->offset = (dom->attr.mr_mode == FI_MR_SCALABLE) ?
-		(uintptr_t) attr->mr_iov[0].iov_base + attr->offset : 
+		(uintptr_t) attr->mr_iov[0].iov_base + attr->offset :
 		(uintptr_t) attr->mr_iov[0].iov_base;
 
 	fastlock_acquire(&dom->lock);
@@ -458,13 +457,13 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	int ret;
 
 	fab = container_of(fabric, struct sock_fabric, fab_fid);
-	if(info && info->domain_attr){
+	if (info && info->domain_attr) {
 		ret = sock_verify_domain_attr(info->domain_attr);
-		if(ret)
+		if (ret)
 			return ret;
 	}
 
-	sock_domain = calloc(1, sizeof *sock_domain);
+	sock_domain = calloc(1, sizeof(*sock_domain));
 	if (!sock_domain)
 		return -FI_ENOMEM;
 
@@ -484,14 +483,14 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	sock_domain->dom_fid.ops = &sock_dom_ops;
 	sock_domain->dom_fid.mr = &sock_dom_mr_ops;
 
-	if (!info || !info->domain_attr || 
+	if (!info || !info->domain_attr ||
 	    info->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
 		sock_domain->progress_mode = FI_PROGRESS_AUTO;
 	else
 		sock_domain->progress_mode = info->domain_attr->data_progress;
 
 	sock_domain->pe = sock_pe_init(sock_domain);
-	if (!sock_domain->pe){
+	if (!sock_domain->pe) {
 		SOCK_LOG_ERROR("Failed to init PE\n");
 		goto err;
 	}

@@ -43,7 +43,7 @@
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_CORE, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_CORE, __VA_ARGS__)
 
-static int sock_poll_add(struct fid_poll *pollset, struct fid *event_fid, 
+static int sock_poll_add(struct fid_poll *pollset, struct fid *event_fid,
 			 uint64_t flags)
 {
 	struct sock_poll *poll;
@@ -60,7 +60,7 @@ static int sock_poll_add(struct fid_poll *pollset, struct fid *event_fid,
 	return 0;
 }
 
-static int sock_poll_del(struct fid_poll *pollset, struct fid *event_fid, 
+static int sock_poll_del(struct fid_poll *pollset, struct fid *event_fid,
 			 uint64_t flags)
 {
 	struct sock_poll *poll;
@@ -97,7 +97,8 @@ static int sock_poll_poll(struct fid_poll *pollset, void **context, int count)
 		list_item = container_of(p, struct sock_fid_list, entry);
 		switch (list_item->fid->fclass) {
 		case FI_CLASS_CQ:
-			cq = container_of(list_item->fid, struct sock_cq, cq_fid);
+			cq = container_of(list_item->fid, struct sock_cq,
+						cq_fid);
 			sock_cq_progress(cq);
 			fastlock_acquire(&cq->lock);
 			if (rbfdused(&cq->cq_rbfd) || rbused(&cq->cqerr_rb)) {
@@ -108,10 +109,12 @@ static int sock_poll_poll(struct fid_poll *pollset, void **context, int count)
 			break;
 
 		case FI_CLASS_CNTR:
-			cntr = container_of(list_item->fid, struct sock_cntr, cntr_fid);
+			cntr = container_of(list_item->fid, struct sock_cntr,
+						cntr_fid);
 			sock_cntr_progress(cntr);
 			pthread_mutex_lock(&cntr->mut);
-			if (atomic_get(&cntr->value) >= atomic_get(&cntr->threshold)) {
+			if (atomic_get(&cntr->value) >=
+				atomic_get(&cntr->threshold)) {
 				*context++ = cntr->cntr_fid.fid.context;
 				ret_count++;
 			}
@@ -121,7 +124,8 @@ static int sock_poll_poll(struct fid_poll *pollset, void **context, int count)
 		case FI_CLASS_EQ:
 			eq = container_of(list_item->fid, struct sock_eq, eq);
 			fastlock_acquire(&eq->lock);
-			if (!dlistfd_empty(&eq->list) || !dlistfd_empty(&eq->err_list)) {
+			if (!dlistfd_empty(&eq->list) ||
+				!dlistfd_empty(&eq->err_list)) {
 				*context++ = eq->eq.fid.context;
 				ret_count++;
 			}
@@ -192,7 +196,7 @@ int sock_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 	poll = calloc(1, sizeof(*poll));
 	if (!poll)
 		return -FI_ENOMEM;
-	
+
 	dlist_init(&poll->fid_list);
 	poll->poll_fid.fid.fclass = FI_CLASS_POLL;
 	poll->poll_fid.fid.context = 0;
