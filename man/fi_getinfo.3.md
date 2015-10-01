@@ -442,7 +442,8 @@ below.
   IOV buffering may have a negative impact on performance and memory
   consumption.  The FI_ASYNC_IOV mode indicates that the application
   must provide the buffering needed for the IO vectors.  When set,
-  an application must not modify an IO vector until the associated
+  an application must not modify an IO vector, including any
+  related memory descriptor array, until the associated
   operation has completed.
 
 *FI_RX_CQ_DATA*
