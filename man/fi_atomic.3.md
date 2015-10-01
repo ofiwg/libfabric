@@ -102,7 +102,8 @@ int fi_compare_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
 : Vectored data buffer(s).
 
 *count / compare_count / result_count*
-: Count of vectored data entries.
+: Count of vectored data entries.  The number of elements referenced,
+  where each element is the indicated datatype.
 
 *addr*
 : Address of remote memory to access.
