@@ -43,26 +43,9 @@
 #include "shared.h"
 
 
-static int max_inject_size;
 static char test_name[10] = "custom";
 static struct timespec start, end;
 
-
-static int send_xfer(int size)
-{
-	int ret;
-
-	if (size > max_inject_size) {
-		FT_PRINTERR("send too large", -FI_EINVAL);
-		return -FI_EINVAL;
-	}
-
-	ret = fi_inject(ep, tx_buf, (size_t) size, remote_fi_addr);
-	if (ret)
-		FT_PRINTERR("fi_inject", ret);
-
-	return ret;
-}
 
 static int recv_xfer(int size)
 {
@@ -93,19 +76,16 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
+	ret = opts.dst_addr ? ft_sendmsg(1) : recv_xfer(16);
 	if (ret)
 		return ret;
 
-	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
+	return opts.dst_addr ? recv_xfer(16) : ft_sendmsg(1);
 }
 
 static int run_test(void)
 {
 	int ret, i;
-
-	if (opts.transfer_size > max_inject_size)
-		return 0;
 
 	ret = sync_test();
 	if (ret)
@@ -113,13 +93,13 @@ static int run_test(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < opts.iterations; i++) {
-		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
+		ret = opts.dst_addr ? fi_inject(ep, tx_buf, opts.transfer_size, remote_fi_addr) :
 				 recv_xfer(opts.transfer_size);
 		if (ret)
 			goto out;
 
 		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
-				 send_xfer(opts.transfer_size);
+				fi_inject(ep, tx_buf, opts.transfer_size, remote_fi_addr);
 		if (ret)
 			goto out;
 	}
@@ -152,10 +132,7 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	/* check max msg size */
-	max_inject_size = fi->tx_attr->inject_size;
-	if ((opts.options & FT_OPT_SIZE) &&
-	    (opts.transfer_size > max_inject_size)) {
+	if (opts.transfer_size > fi->tx_attr->inject_size) {
 		fprintf(stderr, "Msg size greater than max inject size\n");
 		return -FI_EINVAL;
 	}
@@ -196,7 +173,11 @@ static int run(void)
 		for (i = 0; i < TEST_CNT; i++) {
 			if (test_size[i].option > opts.size_option)
 				continue;
+
 			opts.transfer_size = test_size[i].size;
+			if (opts.transfer_size > fi->tx_attr->inject_size)
+				break;
+
 			init_test(&opts, test_name, sizeof(test_name));
 			ret = run_test();
 			if (ret)
@@ -247,11 +228,7 @@ int main(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
-
-	if (opts.transfer_size)
-		hints->tx_attr->inject_size = opts.transfer_size;
-	else
-		hints->tx_attr->inject_size = 16;
+	hints->tx_attr->inject_size = opts.transfer_size;
 
 	ret = run();
 

@@ -50,20 +50,6 @@ static uint64_t tag_control = 0x12345678;
 
 
 
-static int send_msg(int size, uint64_t tag)
-{
-	int ret;
-
-	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
-			tag, &tx_ctx);
-	if (ret)
-		FT_PRINTERR("fi_tsend", ret);
-
-	ret = ft_wait_for_comp(txcq, 1);
-
-	return ret;
-}
-
 static int recv_msg(uint64_t tag)
 {
 	int ret;
@@ -93,11 +79,11 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = opts.dst_addr ? send_msg(16, tag_control) : recv_msg(tag_control);
+	ret = opts.dst_addr ? ft_tsendmsg(1, tag_control) : recv_msg(tag_control);
 	if (ret)
 		return ret;
 
-	ret = opts.dst_addr ? recv_msg(tag_control) : send_msg(16, tag_control);
+	ret = opts.dst_addr ? recv_msg(tag_control) : ft_tsendmsg(1, tag_control);
 
 	return ret;
 }
@@ -212,13 +198,13 @@ static int run(void)
 
 		fprintf(stdout, "Sending msg with tag [%" PRIu64 "]\n",
 			tag_data);
-		ret = send_msg(16, tag_data);
+		ret = ft_tsendmsg(1, tag_data);
 		if (ret)
 			goto out;
 
 		fprintf(stdout, "Sending msg with tag [%" PRIu64 "]\n",
 			tag_data + 1);
-		ret = send_msg(16, tag_data + 1);
+		ret = ft_tsendmsg(1, tag_data + 1);
 		if (ret)
 			goto out;
 	}

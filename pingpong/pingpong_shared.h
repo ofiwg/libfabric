@@ -42,7 +42,6 @@ extern "C" {
 
 #define PONG_OPTS "vP"
 
-extern int verify_data;
 extern int timeout;
 
 void ft_parsepongopts(int op);
@@ -50,7 +49,6 @@ void ft_pongusage(void);
 
 int wait_for_completion_timeout(struct fid_cq *cq, int num_completions);
 
-int send_xfer(size_t size);
 int recv_xfer(size_t size, bool enable_timeout);
 int sync_test(bool enable_timeout);
 

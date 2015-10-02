@@ -57,13 +57,13 @@ static int run_test(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < opts.iterations; i++) {
-		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
+		ret = opts.dst_addr ? ft_sendmsg(opts.transfer_size) :
 				 recv_xfer(opts.transfer_size, false);
 		if (ret)
 			goto out;
 
 		ret = opts.dst_addr ? recv_xfer(opts.transfer_size, false) :
-				 send_xfer(opts.transfer_size);
+				ft_sendmsg(opts.transfer_size);
 		if (ret)
 			goto out;
 	}
