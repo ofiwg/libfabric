@@ -56,9 +56,10 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 	int i;
 
 	if (rx_ctx->rx_entry_pool == NULL) {
-		rx_ctx->rx_entry_pool = calloc(rx_ctx->attr.size, sizeof (*rx_entry));
+		rx_ctx->rx_entry_pool = calloc(rx_ctx->attr.size,
+						sizeof(*rx_entry));
 		slist_init(&rx_ctx->pool_list);
-		
+
 		for (i = 0; i < rx_ctx->attr.size; i++) {
 			slist_insert_tail(&rx_ctx->rx_entry_pool[i].pool_entry,
 					  &rx_ctx->pool_list);
@@ -76,7 +77,7 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 		if (!rx_entry)
 			return NULL;
 	}
-	
+
 	rx_entry->is_tagged = 0;
 	SOCK_LOG_DBG("New rx_entry: %p, ctx: %p\n", rx_entry, rx_ctx);
 	dlist_init(&rx_entry->entry);
@@ -90,7 +91,7 @@ void sock_rx_release_entry(struct sock_rx_entry *rx_entry)
 	SOCK_LOG_DBG("Releasing rx_entry: %p\n", rx_entry);
 	if (rx_entry->is_pool_entry) {
 		rx_ctx = rx_entry->rx_ctx;
-		memset(rx_entry, 0, sizeof *rx_entry);
+		memset(rx_entry, 0, sizeof(*rx_entry));
 		rx_entry->rx_ctx =  rx_ctx;
 		rx_entry->is_pool_entry = 1;
 		slist_insert_head(&rx_entry->pool_entry, &rx_ctx->pool_list);
@@ -104,15 +105,14 @@ struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,
 {
 	struct sock_rx_entry *rx_entry;
 
-	if (rx_ctx->buffered_len + len >= rx_ctx->attr.total_buffered_recv) {
+	if (rx_ctx->buffered_len + len >= rx_ctx->attr.total_buffered_recv)
 		SOCK_LOG_ERROR("Exceeded buffered recv limit\n");
-	}
 
 	rx_entry = calloc(1, sizeof(*rx_entry) + len);
 	if (!rx_entry)
 		return NULL;
 
-	SOCK_LOG_DBG("New buffered entry:%p len: %lu, ctx: %p\n", 
+	SOCK_LOG_DBG("New buffered entry:%p len: %lu, ctx: %p\n",
 		       rx_entry, len, rx_ctx);
 
 	rx_entry->is_busy = 1;
@@ -121,7 +121,7 @@ struct sock_rx_entry *sock_rx_new_buffered_entry(struct sock_rx_ctx *rx_ctx,
 	rx_entry->iov[0].iov.len = len;
 	rx_entry->iov[0].iov.addr = (uintptr_t) (rx_entry + 1);
 	rx_entry->total_len = len;
-	
+
 	rx_ctx->buffered_len += len;
 	dlist_insert_tail(&rx_entry->entry, &rx_ctx->rx_buffered_list);
 	rx_entry->is_busy = 1;
@@ -135,8 +135,8 @@ inline size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry)
 	return rx_entry->total_len - rx_entry->used;
 }
 
-struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx, 
-					uint64_t addr, uint64_t tag, 
+struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx,
+					uint64_t addr, uint64_t tag,
 					uint8_t is_tagged)
 {
 	struct dlist_entry *entry;
@@ -150,9 +150,9 @@ struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx,
 			continue;
 
 		if (((rx_entry->tag & ~rx_entry->ignore) == (tag & ~rx_entry->ignore)) &&
-		    (rx_entry->addr == FI_ADDR_UNSPEC || addr == FI_ADDR_UNSPEC || 
+		    (rx_entry->addr == FI_ADDR_UNSPEC || addr == FI_ADDR_UNSPEC ||
 		     rx_entry->addr == addr ||
-		     (rx_ctx->av && 
+		     (rx_ctx->av &&
 		      !sock_av_compare_addr(rx_ctx->av, addr, rx_entry->addr)))) {
 			rx_entry->is_busy = 1;
 			return rx_entry;
@@ -161,25 +161,26 @@ struct sock_rx_entry *sock_rx_get_entry(struct sock_rx_ctx *rx_ctx,
 	return NULL;
 }
 
-struct sock_rx_entry *sock_rx_get_buffered_entry(struct sock_rx_ctx *rx_ctx, 
-						 uint64_t addr, uint64_t tag, 
-						 uint64_t ignore, uint8_t is_tagged)
+struct sock_rx_entry *sock_rx_get_buffered_entry(struct sock_rx_ctx *rx_ctx,
+						uint64_t addr, uint64_t tag,
+						uint64_t ignore,
+						uint8_t is_tagged)
 {
 	struct dlist_entry *entry;
 	struct sock_rx_entry *rx_entry;
 
 	for (entry = rx_ctx->rx_buffered_list.next;
 	     entry != &rx_ctx->rx_buffered_list; entry = entry->next) {
-		
+
 		rx_entry = container_of(entry, struct sock_rx_entry, entry);
 		if (rx_entry->is_busy || (is_tagged != rx_entry->is_tagged) ||
 		    rx_entry->is_claimed)
 			continue;
 
 		if (((rx_entry->tag & ~ignore) == (tag & ~ignore)) &&
-		    (rx_entry->addr == FI_ADDR_UNSPEC || addr == FI_ADDR_UNSPEC || 
+		    (rx_entry->addr == FI_ADDR_UNSPEC || addr == FI_ADDR_UNSPEC ||
 		     rx_entry->addr == addr ||
-		     (rx_ctx->av && 
+		     (rx_ctx->av &&
 		      !sock_av_compare_addr(rx_ctx->av, addr, rx_entry->addr)))) {
 			return rx_entry;
 		}

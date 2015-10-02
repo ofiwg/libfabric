@@ -161,7 +161,7 @@ int sock_dgram_verify_ep_attr(struct fi_ep_attr *ep_attr,
 
 		if (ep_attr->protocol_version != sock_dgram_ep_attr.protocol_version)
 			return -FI_ENODATA;
-		
+
 		if (ep_attr->max_msg_size > sock_dgram_ep_attr.max_msg_size)
 			return -FI_ENODATA;
 
@@ -176,7 +176,7 @@ int sock_dgram_verify_ep_attr(struct fi_ep_attr *ep_attr,
 		   sock_dgram_ep_attr.max_order_war_size)
 			return -FI_ENODATA;
 
-		if (ep_attr->max_order_waw_size > 
+		if (ep_attr->max_order_waw_size >
 		   sock_dgram_ep_attr.max_order_waw_size)
 			return -FI_ENODATA;
 
@@ -189,7 +189,8 @@ int sock_dgram_verify_ep_attr(struct fi_ep_attr *ep_attr,
 			return -FI_ENODATA;
 	}
 
-	if (sock_dgram_verify_tx_attr(tx_attr) || sock_dgram_verify_rx_attr(rx_attr))
+	if (sock_dgram_verify_tx_attr(tx_attr) ||
+			sock_dgram_verify_rx_attr(rx_attr))
 		return -FI_ENODATA;
 
 	return 0;
@@ -201,7 +202,7 @@ int sock_dgram_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 	*info = sock_fi_info(FI_EP_DGRAM, hints, src_addr, dest_addr);
 	if (!*info)
 		return -FI_ENOMEM;
-	
+
 	*(*info)->tx_attr = sock_dgram_tx_attr;
 	*(*info)->rx_attr = sock_dgram_rx_attr;
 	*(*info)->ep_attr = sock_dgram_ep_attr;
@@ -216,19 +217,21 @@ int sock_dgram_fi_info(void *src_addr, void *dest_addr, struct fi_info *hints,
 	if (hints && hints->rx_attr) {
 		(*info)->rx_attr->op_flags |= hints->rx_attr->op_flags;
 		if (hints->rx_attr->caps)
-			(*info)->rx_attr->caps = SOCK_EP_DGRAM_SEC_CAP | hints->rx_attr->caps;
+			(*info)->rx_attr->caps = SOCK_EP_DGRAM_SEC_CAP |
+							hints->rx_attr->caps;
 	}
 
 	if (hints && hints->tx_attr) {
 		(*info)->tx_attr->op_flags |= hints->tx_attr->op_flags;
 		if (hints->tx_attr->caps)
-			(*info)->tx_attr->caps = SOCK_EP_DGRAM_SEC_CAP | hints->tx_attr->caps;
+			(*info)->tx_attr->caps = SOCK_EP_DGRAM_SEC_CAP |
+							hints->tx_attr->caps;
 	}
 
 	(*info)->caps = SOCK_EP_DGRAM_CAP |
-                       (*info)->rx_attr->caps | (*info)->tx_attr->caps;
-        if (hints && hints->caps) {
-                (*info)->caps = SOCK_EP_DGRAM_SEC_CAP | hints->caps;
+			(*info)->rx_attr->caps | (*info)->tx_attr->caps;
+	if (hints && hints->caps) {
+		(*info)->caps = SOCK_EP_DGRAM_SEC_CAP | hints->caps;
 		(*info)->rx_attr->caps = SOCK_EP_DGRAM_SEC_CAP |
 			((*info)->rx_attr->caps & (*info)->caps);
 		(*info)->tx_attr->caps = SOCK_EP_DGRAM_SEC_CAP |
@@ -263,12 +266,12 @@ static int sock_dgram_endpoint(struct fid_domain *domain, struct fi_info *info,
 				return ret;
 		}
 	}
-	
+
 	ret = sock_alloc_endpoint(domain, info, ep, context, fclass);
 	if (ret)
 		return ret;
 
-	if (!info || !info->ep_attr) 
+	if (!info || !info->ep_attr)
 		(*ep)->ep_attr = sock_dgram_ep_attr;
 
 	if (!info || !info->tx_attr)
@@ -276,7 +279,7 @@ static int sock_dgram_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	if (!info || !info->rx_attr)
 		(*ep)->rx_attr = sock_dgram_rx_attr;
-	
+
 	return 0;
 }
 
@@ -285,7 +288,7 @@ int sock_dgram_ep(struct fid_domain *domain, struct fi_info *info,
 {
 	int ret;
 	struct sock_ep *endpoint;
-	
+
 	ret = sock_dgram_endpoint(domain, info, &endpoint, context, FI_CLASS_EP);
 	if (ret)
 		return ret;
@@ -299,7 +302,7 @@ int sock_dgram_sep(struct fid_domain *domain, struct fi_info *info,
 {
 	int ret;
 	struct sock_ep *endpoint;
-	
+
 	ret = sock_dgram_endpoint(domain, info, &endpoint, context, FI_CLASS_SEP);
 	if (ret)
 		return ret;

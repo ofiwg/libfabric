@@ -43,7 +43,8 @@
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr, void *context)
+struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr,
+					void *context)
 {
 	struct sock_rx_ctx *rx_ctx;
 	rx_ctx = calloc(1, sizeof(*rx_ctx));
@@ -75,7 +76,7 @@ void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx)
 	free(rx_ctx);
 }
 
-static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr, 
+static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 					     void *context, size_t fclass)
 {
 	struct sock_tx_ctx *tx_ctx;
@@ -85,18 +86,18 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 	if (!tx_ctx)
 		return NULL;
 
-	if (rbfdinit(&tx_ctx->rbfd, 
-		     (attr->size) ? attr->size * SOCK_EP_TX_ENTRY_SZ: 
-		     SOCK_EP_TX_SZ * SOCK_EP_TX_ENTRY_SZ))
+	if (rbfdinit(&tx_ctx->rbfd,
+		(attr->size) ? attr->size * SOCK_EP_TX_ENTRY_SZ :
+		SOCK_EP_TX_SZ * SOCK_EP_TX_ENTRY_SZ))
 		goto err;
 
 	dlist_init(&tx_ctx->cq_entry);
 	dlist_init(&tx_ctx->cntr_entry);
 	dlist_init(&tx_ctx->pe_entry);
-	
+
 	dlist_init(&tx_ctx->pe_entry_list);
 	dlist_init(&tx_ctx->ep_list);
-	
+
 	fastlock_init(&tx_ctx->rlock);
 	fastlock_init(&tx_ctx->wlock);
 	fastlock_init(&tx_ctx->lock);
@@ -115,7 +116,7 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 	default:
 		goto err;
 	}
-	tx_ctx->attr = *attr;		
+	tx_ctx->attr = *attr;
 	tx_ctx->attr.op_flags |= FI_TRANSMIT_COMPLETE;
 
 	tx_ctx->rx_ctrl_ctx = sock_rx_ctx_alloc(&rx_attr, NULL);
@@ -130,12 +131,14 @@ err:
 }
 
 
-struct sock_tx_ctx *sock_tx_ctx_alloc(const struct fi_tx_attr *attr, void *context)
+struct sock_tx_ctx *sock_tx_ctx_alloc(const struct fi_tx_attr *attr,
+					void *context)
 {
 	return sock_tx_context_alloc(attr, context, FI_CLASS_TX_CTX);
 }
 
-struct sock_tx_ctx *sock_stx_ctx_alloc(const struct fi_tx_attr *attr, void *context)
+struct sock_tx_ctx *sock_stx_ctx_alloc(const struct fi_tx_attr *attr,
+					void *context)
 {
 	return sock_tx_context_alloc(attr, context, FI_CLASS_STX_CTX);
 }
@@ -162,11 +165,11 @@ void sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len)
 
 void sock_tx_ctx_commit(struct sock_tx_ctx *tx_ctx)
 {
-	if (tx_ctx->domain->progress_mode == FI_PROGRESS_MANUAL) {
+	if (tx_ctx->domain->progress_mode == FI_PROGRESS_MANUAL)
 		rbcommit(&tx_ctx->rbfd.rb);
-	} else {
+	else
 		rbfdcommit(&tx_ctx->rbfd);
-	}
+
 	fastlock_release(&tx_ctx->wlock);
 }
 
@@ -181,13 +184,13 @@ void sock_tx_ctx_write_op_send(struct sock_tx_ctx *tx_ctx,
 		uint64_t dest_addr, uint64_t buf, struct sock_ep *ep,
 		struct sock_conn *conn)
 {
-	sock_tx_ctx_write(tx_ctx, op, sizeof *op);
-	sock_tx_ctx_write(tx_ctx, &flags, sizeof flags);
-	sock_tx_ctx_write(tx_ctx, &context, sizeof context);
-	sock_tx_ctx_write(tx_ctx, &dest_addr, sizeof dest_addr);
-	sock_tx_ctx_write(tx_ctx, &buf, sizeof buf);
-	sock_tx_ctx_write(tx_ctx, &ep, sizeof ep);
-	sock_tx_ctx_write(tx_ctx, &conn, sizeof conn);
+	sock_tx_ctx_write(tx_ctx, op, sizeof(*op));
+	sock_tx_ctx_write(tx_ctx, &flags, sizeof(flags));
+	sock_tx_ctx_write(tx_ctx, &context, sizeof(context));
+	sock_tx_ctx_write(tx_ctx, &dest_addr, sizeof(dest_addr));
+	sock_tx_ctx_write(tx_ctx, &buf, sizeof(buf));
+	sock_tx_ctx_write(tx_ctx, &ep, sizeof(ep));
+	sock_tx_ctx_write(tx_ctx, &conn, sizeof(conn));
 }
 
 void sock_tx_ctx_write_op_tsend(struct sock_tx_ctx *tx_ctx,
@@ -197,7 +200,7 @@ void sock_tx_ctx_write_op_tsend(struct sock_tx_ctx *tx_ctx,
 {
 	sock_tx_ctx_write_op_send(tx_ctx, op, flags, context, dest_addr,
 			buf, ep, conn);
-	sock_tx_ctx_write(tx_ctx, &tag, sizeof tag);
+	sock_tx_ctx_write(tx_ctx, &tag, sizeof(tag));
 }
 
 void sock_tx_ctx_read_op_send(struct sock_tx_ctx *tx_ctx,
@@ -205,11 +208,11 @@ void sock_tx_ctx_read_op_send(struct sock_tx_ctx *tx_ctx,
 		uint64_t *dest_addr, uint64_t *buf, struct sock_ep **ep,
 		struct sock_conn **conn)
 {
-	rbfdread(&tx_ctx->rbfd, op, sizeof *op);
-	rbfdread(&tx_ctx->rbfd, flags, sizeof *flags);
-	rbfdread(&tx_ctx->rbfd, context, sizeof *context);
-	rbfdread(&tx_ctx->rbfd, dest_addr, sizeof *dest_addr);
-	rbfdread(&tx_ctx->rbfd, buf, sizeof *buf);
-	rbfdread(&tx_ctx->rbfd, ep, sizeof *ep);
-	rbfdread(&tx_ctx->rbfd, conn, sizeof *conn);
+	rbfdread(&tx_ctx->rbfd, op, sizeof(*op));
+	rbfdread(&tx_ctx->rbfd, flags, sizeof(*flags));
+	rbfdread(&tx_ctx->rbfd, context, sizeof(*context));
+	rbfdread(&tx_ctx->rbfd, dest_addr, sizeof(*dest_addr));
+	rbfdread(&tx_ctx->rbfd, buf, sizeof(*buf));
+	rbfdread(&tx_ctx->rbfd, ep, sizeof(*ep));
+	rbfdread(&tx_ctx->rbfd, conn, sizeof(*conn));
 }
