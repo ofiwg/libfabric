@@ -138,7 +138,7 @@ struct fi_cq_attr {
 {% endhighlight %}
 
 *size*
-: Specifies the minimum size of an event queue. A value of 0 indicates that
+: Specifies the minimum size of a completion queue. A value of 0 indicates that
   the provider may choose a default value.
 
 *flags*
