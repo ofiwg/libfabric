@@ -55,6 +55,22 @@ struct fi_context fi_ctx_writedata;
 struct fi_context fi_ctx_read;
 
 
+static int send_msg(int size)
+{
+	int ret;
+
+	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
+			&tx_ctx);
+	if (ret) {
+		FT_PRINTERR("fi_send", ret);
+		return ret;
+	}
+
+	ret = ft_wait_for_comp(txcq, 1);
+
+	return ret;
+}
+
 static int recv_msg(void)
 {
 	int ret;
@@ -149,11 +165,11 @@ static int sync_test(void)
 {
 	int ret;
 
-	ret = opts.dst_addr ? ft_sendmsg(1) : recv_msg();
+	ret = opts.dst_addr ? send_msg(16) : recv_msg();
 	if (ret)
 		return ret;
 
-	return opts.dst_addr ? recv_msg() : ft_sendmsg(1);
+	return opts.dst_addr ? recv_msg() : send_msg(16);
 }
 
 static int run_test(void)
@@ -267,14 +283,13 @@ static int exchange_addr_key(void)
 	struct fi_rma_iov *rma_iov;
 	int ret;
 
-	/* FIXME: Rx/Tx buffers overlap */
 	rma_iov = buf;
 
 	if (opts.dst_addr) {
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) buf;
 		rma_iov->key = fi_mr_key(mr);
-		ret = ft_sendmsg(sizeof *rma_iov);
+		ret = send_msg(sizeof *rma_iov);
 		if (ret)
 			return ret;
 
@@ -291,7 +306,7 @@ static int exchange_addr_key(void)
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) buf;
 		rma_iov->key = fi_mr_key(mr);
-		ret = ft_sendmsg(sizeof *rma_iov);
+		ret = send_msg(sizeof *rma_iov);
 		if (ret)
 			return ret;
 	}

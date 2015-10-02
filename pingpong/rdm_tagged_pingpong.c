@@ -53,6 +53,36 @@ struct fi_context fi_ctx_trecv;
 static uint64_t tag_data = 0;
 
 
+
+static int send_xfer(int size)
+{
+	struct fi_cq_tagged_entry comp;
+	int ret;
+
+	while (!tx_credits) {
+		ret = fi_cq_read(txcq, &comp, 1);
+		if (ret > 0) {
+			goto post;
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
+			if (ret == -FI_EAVAIL) {
+				cq_readerr(txcq, "txcq");
+			} else {
+				FT_PRINTERR("fi_cq_read", ret);
+			}
+			return ret;
+		}
+	}
+
+	tx_credits--;
+post:
+	ret = fi_tsend(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
+			tag_data, &fi_ctx_tsend);
+	if (ret)
+		FT_PRINTERR("fi_tsend", ret);
+
+	return ret;
+}
+
 static int recv_xfer(int size)
 {
 	struct fi_cq_tagged_entry comp;
@@ -133,13 +163,13 @@ static int run_test(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < opts.iterations; i++) {
-		ret = opts.dst_addr ? ft_tsendmsg(opts.transfer_size) :
+		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
 				 recv_xfer(opts.transfer_size);
 		if (ret)
 			goto out;
 
 		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
-				ft_tsendmsg(opts.transfer_size);
+				 send_xfer(opts.transfer_size);
 		if (ret)
 			goto out;
 

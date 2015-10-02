@@ -90,15 +90,29 @@ int wait_for_recv_completion(int num_completions)
 	return 0;
 }
 
+static int send_msg(size_t size)
+{
+	int ret;
+
+	ret = fi_send(ep, tx_buf, size, fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
+	if (ret) {
+		FT_PRINTERR("fi_send", ret);
+		return ret;
+	}
+
+	ret = ft_wait_for_comp(txcq, 1);
+	return ret;
+}
+
 static int sync_test(void)
 {
 	int ret;
 
-	ret = opts.dst_addr ? ft_sendmsg(1) : wait_for_recv_completion(1);
+	ret = opts.dst_addr ? send_msg(16) : wait_for_recv_completion(1);
 	if (ret)
 		return ret;
 
-	return opts.dst_addr ? wait_for_recv_completion(1) : ft_sendmsg(1);
+	return opts.dst_addr ? wait_for_recv_completion(1) : send_msg(16);
 }
 
 /*
@@ -135,7 +149,7 @@ static int run_test(void)
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.iterations; i++) {
-			ret = ft_sendmsg(opts.transfer_size);
+			ret = send_msg(opts.transfer_size);
 			if (ret)
 				goto out;
 		}
@@ -280,7 +294,7 @@ static int init_av(void)
 			return ret;
 		}
 
-		ret = ft_sendmsg(addrlen);
+		ret = send_msg(addrlen);
 		if (ret)
 			return ret;
 	} else {

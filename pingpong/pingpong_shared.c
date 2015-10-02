@@ -98,6 +98,29 @@ int wait_for_completion_timeout(struct fid_cq *cq, int num_completions)
 	return 0;
 }
 
+int send_xfer(size_t size)
+{
+	int ret;
+
+	if (!tx_credits) {
+		ret = ft_wait_for_comp(txcq, 1);
+		if (ret)
+			return ret;
+	} else {
+		tx_credits--;
+	}
+
+	if (verify_data)
+		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+
+	ret = fi_send(ep, tx_buf, size + ft_tx_prefix_size(),
+			fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
+	if (ret)
+		FT_PRINTERR("fi_send", ret);
+
+	return ret;
+}
+
 int recv_xfer(size_t size, bool enable_timeout)
 {
 	int ret;
@@ -132,9 +155,9 @@ int sync_test(bool enable_timeout)
 		return ret;
 	tx_credits = fi->tx_attr->size;
 
-	ret = opts.dst_addr ? ft_sendmsg(1) : recv_xfer(16, enable_timeout);
+	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16, enable_timeout);
 	if (ret)
 		return ret;
 
-	return opts.dst_addr ? recv_xfer(16, enable_timeout) : ft_sendmsg(1);
+	return opts.dst_addr ? recv_xfer(16, enable_timeout) : send_xfer(16);
 }

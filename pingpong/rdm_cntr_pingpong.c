@@ -114,11 +114,11 @@ static int sync_test(void)
 	if (ret)
 		return ret;
 
-	ret = opts.dst_addr ? ft_sendmsg(1) : recv_xfer(16);
+	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
 	if (ret)
 		return ret;
 
-	return opts.dst_addr ? recv_xfer(16) : ft_sendmsg(1);
+	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
 }
 
 static int run_test(void)
@@ -131,13 +131,13 @@ static int run_test(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < opts.iterations; i++) {
-		ret = opts.dst_addr ? ft_sendmsg(opts.transfer_size) :
+		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
 				 recv_xfer(opts.transfer_size);
 		if (ret)
 			goto out;
 
 		ret = opts.dst_addr ? recv_xfer(opts.transfer_size) :
-				ft_sendmsg(opts.transfer_size);
+				 send_xfer(opts.transfer_size);
 		if (ret)
 			goto out;
 	}
