@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013,2014 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -72,7 +72,6 @@ enum {
 	FT_OPT_TX_CQ		= 1 << 3,
 	FT_OPT_RX_CNTR		= 1 << 4,
 	FT_OPT_TX_CNTR		= 1 << 5,
-	FT_OPT_VERIFY_DATA	= 1 << 6,
 };
 
 struct ft_opts {
@@ -108,7 +107,7 @@ extern size_t buf_size, tx_size, rx_size;
 
 extern struct fi_context tx_ctx, rx_ctx;
 
-extern uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
+extern size_t tx_credits;
 extern struct fi_av_attr av_attr;
 extern struct fi_eq_attr eq_attr;
 extern struct fi_cq_attr cq_attr;
@@ -179,19 +178,14 @@ int ft_init_ep();
 int ft_init_av();
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);
-int ft_sync();
 int ft_finalize(struct fi_info *fi, struct fid_ep *tx_ep, struct fid_cq *txcq,
 		struct fid_cq *rxcq, fi_addr_t addr);
 
 size_t ft_rx_prefix_size();
 size_t ft_tx_prefix_size();
-ssize_t ft_rx();
-ssize_t ft_tx(size_t size);
-ssize_t ft_rx_tag(uint64_t tag);
-ssize_t ft_tx_tag(size_t size, uint64_t tag);
 
-int ft_get_rx_comp(uint64_t total);
-int ft_get_tx_comp(uint64_t total);
+int ft_get_rx_comp(int count);
+int ft_get_tx_comp(int count);
 
 int ft_wait_for_comp(struct fid_cq *cq, int num_completions);
 void cq_readerr(struct fid_cq *cq, const char *cq_str);

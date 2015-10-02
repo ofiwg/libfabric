@@ -114,15 +114,29 @@ static int post_recv(void)
 	return ft_wait_for_comp(rxcq, 1);
 }
 
+static int send_msg(int size)
+{
+	int ret;
+
+	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), remote_fi_addr,
+			&tx_ctx);
+	if (ret) {
+		FT_PRINTERR("fi_send", ret);
+		return ret;
+	}
+
+	return ft_wait_for_comp(txcq, 1);
+}
+
 static int sync_test(void)
 {
 	int ret;
 
-	ret = opts.dst_addr ? ft_sendmsg(1) : post_recv();
+	ret = opts.dst_addr ? send_msg(16) : post_recv();
 	if (ret)
 		return ret;
 
-	return opts.dst_addr ? post_recv() : ft_sendmsg(1);
+	return opts.dst_addr ? post_recv() : send_msg(16);
 }
 
 static int is_valid_base_atomic_op(enum fi_op op)
@@ -426,14 +440,13 @@ static int exchange_addr_key(void)
 	struct fi_rma_iov *rma_iov;
 	int ret;
 
-	/* FIXME: Tx/Rx buffers are overlapping */
 	rma_iov = buf;
 
 	if (opts.dst_addr) {
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) buf;
 		rma_iov->key = fi_mr_key(mr);
-		ret = ft_sendmsg(sizeof *rma_iov);
+		ret = send_msg(sizeof *rma_iov);
 		if (ret)
 			return ret;
 
@@ -450,7 +463,7 @@ static int exchange_addr_key(void)
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) buf;
 		rma_iov->key = fi_mr_key(mr);
-		ret = ft_sendmsg(sizeof *rma_iov);
+		ret = send_msg(sizeof *rma_iov);
 		if (ret)
 			return ret;
 	}
