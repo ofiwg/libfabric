@@ -71,6 +71,15 @@ extern "C" {
 #   define VALGRIND_MAKE_MEM_DEFINED(addr, len)
 #endif
 
+static inline void *mem_dup(const void *src, size_t size)
+{
+	void *dest;
+
+	if ((dest = malloc(size)))
+		memcpy(dest, src, size);
+	return dest;
+}
+
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 #ifndef htonll
 static inline uint64_t htonll(uint64_t x) { return bswap_64(x); }
