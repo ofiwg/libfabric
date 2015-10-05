@@ -46,6 +46,7 @@ src_libfabric_la_SOURCES = \
 	include/fi_enosys.h \
 	include/fi_indexer.h \
 	include/fi_list.h \
+	include/fi_signal.h \
 	include/fi_rbuf.h \
 	include/prov.h \
 	src/fabric.c \
