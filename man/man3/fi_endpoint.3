@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-07\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-10\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -408,7 +408,8 @@ canceled.
 If multiple outstanding operations match the context parameter, only one
 will be canceled.
 In this case, the operation which is canceled is provider specific.
-The cancel operation will complete within a bounded period of time.
+The cancel operation is asynchronous, but will complete within a bounded
+period of time.
 .SS fi_alias
 .PP
 This call creates an alias to the specified endpoint.
@@ -1232,6 +1233,8 @@ generate a completion event.
 .PP
 Returns 0 on success.
 On error, a negative value corresponding to fabric errno is returned.
+For fi_cancel, a return value of 0 indicates that the cancel request was
+submitted for processing.
 .PP
 Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 .SH ERRORS

@@ -1,4 +1,4 @@
-.TH fi_atomic 3 "2015\-09\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_atomic 3 "2015\-10\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_atomic - Remote atomic functions
@@ -94,6 +94,8 @@ operation
 .PP
 \f[I]count / compare_count / result_count\f[] : Count of vectored data
 entries.
+The number of elements referenced, where each element is the indicated
+datatype.
 .PP
 \f[I]addr\f[] : Address of remote memory to access.
 .PP

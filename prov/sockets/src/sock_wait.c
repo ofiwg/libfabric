@@ -55,23 +55,23 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 	struct sock_wait *wait;
 
 	wait = container_of(fid, struct sock_wait, wait_fid.fid);
-	
+
 	switch (wait->type) {
 	case FI_WAIT_FD:
-		memcpy(arg,&wait->wobj.fd[WAIT_READ_FD], sizeof(int));
+		memcpy(arg, &wait->wobj.fd[WAIT_READ_FD], sizeof(int));
 		break;
-		
+
 	case FI_WAIT_MUTEX_COND:
 		mut_cond.mutex = &wait->wobj.mutex_cond.mutex;
 		mut_cond.cond = &wait->wobj.mutex_cond.cond;
 		memcpy(arg, &mut_cond, sizeof(mut_cond));
 		break;
-		
+
 	default:
 		SOCK_LOG_ERROR("Invalid wait obj type\n");
 		return -FI_EINVAL;
 	}
-	
+
 	return 0;
 }
 
@@ -80,12 +80,12 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 	int ret;
 
 	wait->type = type;
-	
+
 	switch (type) {
 	case FI_WAIT_FD:
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, wait->wobj.fd))
 			return -errno;
-		
+
 		ret = fd_set_nonblock(wait->wobj.fd[WAIT_READ_FD]);
 		if (ret) {
 			close(wait->wobj.fd[WAIT_READ_FD]);
@@ -93,16 +93,16 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 			return ret;
 		}
 		break;
-		
+
 	case FI_WAIT_MUTEX_COND:
 		pthread_mutex_init(&wait->wobj.mutex_cond.mutex, NULL);
 		pthread_cond_init(&wait->wobj.mutex_cond.cond, NULL);
 		break;
-		
+
 	default:
 		SOCK_LOG_ERROR("Invalid wait object type\n");
 		return -FI_EINVAL;
-	}	
+	}
 	return 0;
 }
 
@@ -116,7 +116,7 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 	double start_ms = 0.0, end_ms = 0.0;
 	struct dlist_entry *p, *head;
 	struct sock_fid_list *list_item;
-	
+
 	wait = container_of(wait_fid, struct sock_wait, wait_fid);
 	if (timeout > 0) {
 		gettimeofday(&now, NULL);
@@ -132,9 +132,8 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 			cq = container_of(list_item->fid,
 					  struct sock_cq, cq_fid);
 			sock_cq_progress(cq);
-			if (rbused(&cq->cqerr_rb)) {
+			if (rbused(&cq->cqerr_rb))
 				return 1;
-			}
 			break;
 
 		case FI_CLASS_CNTR:
@@ -160,12 +159,12 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 		else if (err == 0)
 			err = -FI_ETIMEDOUT;
 		break;
-		
+
 	case FI_WAIT_MUTEX_COND:
 		err = fi_wait_cond(&wait->wobj.mutex_cond.cond,
 				   &wait->wobj.mutex_cond.mutex, timeout);
 		break;
-		
+
 	default:
 		SOCK_LOG_ERROR("Invalid wait object type\n");
 		return -FI_EINVAL;
@@ -187,7 +186,7 @@ void sock_wait_signal(struct fid_wait *wait_fid)
 		if (ret != 1)
 			SOCK_LOG_ERROR("failed to signal\n");
 		break;
-		
+
 	case FI_WAIT_MUTEX_COND:
 		pthread_cond_signal(&wait->wobj.mutex_cond.cond);
 		break;
@@ -259,7 +258,7 @@ static int sock_verify_wait_attr(struct fi_wait_attr *attr)
 	case FI_WAIT_FD:
 	case FI_WAIT_MUTEX_COND:
 		break;
-		
+
 	default:
 		SOCK_LOG_ERROR("Invalid wait object type\n");
 		return -FI_EINVAL;
@@ -279,17 +278,17 @@ int sock_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 
 	if (attr && sock_verify_wait_attr(attr))
 		return -FI_EINVAL;
-	
+
 	fab = container_of(fabric, struct sock_fabric, fab_fid);
 	if (!attr || attr->wait_obj == FI_WAIT_UNSPEC)
 		wait_obj_type = FI_WAIT_FD;
-	else 
+	else
 		wait_obj_type = attr->wait_obj;
-	
+
 	wait = calloc(1, sizeof(*wait));
 	if (!wait)
 		return -FI_ENOMEM;
-	
+
 	err = sock_wait_init(wait, wait_obj_type);
 	if (err) {
 		free(wait);

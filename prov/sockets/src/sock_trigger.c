@@ -53,7 +53,7 @@ ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	struct fi_triggered_context *trigger_context;
 	struct fi_trigger_threshold *threshold;
 
-	trigger_context = (struct fi_triggered_context*)msg->context;
+	trigger_context = (struct fi_triggered_context *) msg->context;
 	if ((trigger_context->event_type != FI_TRIGGER_THRESHOLD) ||
 	    (flags & FI_INJECT))
 		return -FI_EINVAL;
@@ -63,31 +63,31 @@ ssize_t sock_queue_rma_op(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	if (atomic_get(&cntr->value) >= threshold->threshold)
 		return 1;
 
-	trigger = calloc(1, sizeof *trigger);
+	trigger = calloc(1, sizeof(*trigger));
 	if (!trigger)
 		return -FI_ENOMEM;
-	
+
 	trigger->threshold = threshold->threshold;
-	memcpy(&trigger->op.rma.msg, msg, sizeof *msg);
+	memcpy(&trigger->op.rma.msg, msg, sizeof(*msg));
 	trigger->op.rma.msg.msg_iov = &trigger->op.rma.msg_iov[0];
 	trigger->op.rma.msg.rma_iov = &trigger->op.rma.rma_iov[0];
-	
+
 	memcpy(&trigger->op.rma.msg_iov[0], &msg->msg_iov[0],
-	       msg->iov_count * sizeof (struct iovec));
+	       msg->iov_count * sizeof(struct iovec));
 	memcpy(&trigger->op.rma.rma_iov[0], &msg->rma_iov[0],
-	       msg->rma_iov_count * sizeof (struct fi_rma_iov));
+	       msg->rma_iov_count * sizeof(struct fi_rma_iov));
 
 	trigger->op_type = op_type;
 	trigger->ep = ep;
 	trigger->flags = flags;
-	
+
 	fastlock_acquire(&cntr->trigger_lock);
 	dlist_insert_tail(&trigger->entry, &cntr->trigger_list);
 	fastlock_release(&cntr->trigger_lock);
 	return 0;
 }
 
-ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg, 
+ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 			  uint64_t flags, uint8_t op_type)
 {
 	struct sock_cntr *cntr;
@@ -95,7 +95,7 @@ ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 	struct fi_triggered_context *trigger_context;
 	struct fi_trigger_threshold *threshold;
 
-	trigger_context = (struct fi_triggered_context*)msg->context;
+	trigger_context = (struct fi_triggered_context *) msg->context;
 	if ((trigger_context->event_type != FI_TRIGGER_THRESHOLD) ||
 	    (flags & FI_INJECT))
 		return -FI_EINVAL;
@@ -105,21 +105,21 @@ ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 	if (atomic_get(&cntr->value) >= threshold->threshold)
 		return 1;
 
-	trigger = calloc(1, sizeof *trigger);
+	trigger = calloc(1, sizeof(*trigger));
 	if (!trigger)
 		return -FI_ENOMEM;
-	
+
 	trigger->threshold = threshold->threshold;
 
-	memcpy(&trigger->op.msg.msg, msg, sizeof *msg);
+	memcpy(&trigger->op.msg.msg, msg, sizeof(*msg));
 	trigger->op.msg.msg.msg_iov = &trigger->op.msg.msg.msg_iov[0];
-	memcpy((void*)&trigger->op.msg.msg.msg_iov[0], &msg->msg_iov[0],
-	       msg->iov_count * sizeof (struct iovec));
+	memcpy((void *) &trigger->op.msg.msg.msg_iov[0], &msg->msg_iov[0],
+	       msg->iov_count * sizeof(struct iovec));
 
 	trigger->op_type = op_type;
 	trigger->ep = ep;
 	trigger->flags = flags;
-	
+
 	fastlock_acquire(&cntr->trigger_lock);
 	dlist_insert_tail(&trigger->entry, &cntr->trigger_list);
 	fastlock_release(&cntr->trigger_lock);
@@ -134,7 +134,7 @@ ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	struct fi_triggered_context *trigger_context;
 	struct fi_trigger_threshold *threshold;
 
-	trigger_context = (struct fi_triggered_context*)msg->context;
+	trigger_context = (struct fi_triggered_context *) msg->context;
 	if ((trigger_context->event_type != FI_TRIGGER_THRESHOLD) ||
 	    (flags & FI_INJECT))
 		return -FI_EINVAL;
@@ -144,30 +144,30 @@ ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	if (atomic_get(&cntr->value) >= threshold->threshold)
 		return 1;
 
-	trigger = calloc(1, sizeof *trigger);
+	trigger = calloc(1, sizeof(*trigger));
 	if (!trigger)
 		return -FI_ENOMEM;
-	
+
 	trigger->threshold = threshold->threshold;
-	
-	memcpy(&trigger->op.tmsg.msg, msg, sizeof *msg);
+
+	memcpy(&trigger->op.tmsg.msg, msg, sizeof(*msg));
 	trigger->op.tmsg.msg.msg_iov = &trigger->op.tmsg.msg.msg_iov[0];
-	memcpy((void*)&trigger->op.tmsg.msg.msg_iov[0], &msg->msg_iov[0],
-	       msg->iov_count * sizeof (struct iovec));
+	memcpy((void *) &trigger->op.tmsg.msg.msg_iov[0], &msg->msg_iov[0],
+	       msg->iov_count * sizeof(struct iovec));
 
 	trigger->op_type = op_type;
 	trigger->ep = ep;
 	trigger->flags = flags;
-	
+
 	fastlock_acquire(&cntr->trigger_lock);
 	dlist_insert_tail(&trigger->entry, &cntr->trigger_list);
 	fastlock_release(&cntr->trigger_lock);
 	return 0;
 }
 
-ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg, 
-			     const struct fi_ioc *comparev, size_t compare_count, 
-			     struct fi_ioc *resultv, size_t result_count, 
+ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
+			     const struct fi_ioc *comparev, size_t compare_count,
+			     struct fi_ioc *resultv, size_t result_count,
 			     uint64_t flags, uint8_t op_type)
 {
 	struct sock_cntr *cntr;
@@ -175,7 +175,7 @@ ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	struct fi_triggered_context *trigger_context;
 	struct fi_trigger_threshold *threshold;
 
-	trigger_context = (struct fi_triggered_context*)msg->context;
+	trigger_context = (struct fi_triggered_context *) msg->context;
 	if ((trigger_context->event_type != FI_TRIGGER_THRESHOLD) ||
 	    (flags & FI_INJECT))
 		return -FI_EINVAL;
@@ -185,34 +185,34 @@ ssize_t sock_queue_atomic_op(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	if (atomic_get(&cntr->value) >= threshold->threshold)
 		return 1;
 
-	trigger = calloc(1, sizeof *trigger);
+	trigger = calloc(1, sizeof(*trigger));
 	if (!trigger)
 		return -FI_ENOMEM;
-	
+
 	trigger->threshold = threshold->threshold;
-	memcpy(&trigger->op.atomic.msg, msg, sizeof *msg);
+	memcpy(&trigger->op.atomic.msg, msg, sizeof(*msg));
 	trigger->op.atomic.msg.msg_iov = &trigger->op.atomic.msg_iov[0];
 	trigger->op.atomic.msg.rma_iov = &trigger->op.atomic.rma_iov[0];
 
 	memcpy(&trigger->op.atomic.msg_iov[0], &msg->msg_iov[0],
-	       msg->iov_count * sizeof (struct fi_ioc));
+	       msg->iov_count * sizeof(struct fi_ioc));
 	memcpy(&trigger->op.atomic.rma_iov[0], &msg->rma_iov[0],
-	       msg->iov_count * sizeof (struct fi_rma_ioc));
+	       msg->iov_count * sizeof(struct fi_rma_ioc));
 
 	if (comparev) {
 		memcpy(&trigger->op.atomic.comparev[0], &comparev[0],
-		       compare_count * sizeof (struct fi_ioc));
+		       compare_count * sizeof(struct fi_ioc));
 	}
 
 	if (resultv) {
 		memcpy(&trigger->op.atomic.resultv[0], &resultv[0],
-		       result_count * sizeof (struct fi_ioc));
-	}	
-	
+		       result_count * sizeof(struct fi_ioc));
+	}
+
 	trigger->op_type = op_type;
 	trigger->ep = ep;
 	trigger->flags = flags;
-	
+
 	fastlock_acquire(&cntr->trigger_lock);
 	dlist_insert_tail(&trigger->entry, &cntr->trigger_list);
 	fastlock_release(&cntr->trigger_lock);

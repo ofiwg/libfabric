@@ -382,8 +382,8 @@ Canceling an operation causes the fabric provider to search for the
 operation and, if it is still pending, complete it as having been
 canceled.  If multiple outstanding operations match the context
 parameter, only one will be canceled.  In this case, the operation
-which is canceled is provider specific.  The cancel operation will
-complete within a bounded period of time.
+which is canceled is provider specific.  The cancel operation is
+asynchronous, but will complete within a bounded period of time.
 
 ## fi_alias
 
@@ -1173,7 +1173,8 @@ increment the error counter and generate a completion event.
 # RETURN VALUES
 
 Returns 0 on success.  On error, a negative value corresponding to
-fabric errno is returned.
+fabric errno is returned.  For fi_cancel, a return value of 0
+indicates that the cancel request was submitted for processing.
 
 Fabric errno values are defined in `rdma/fi_errno.h`.
 

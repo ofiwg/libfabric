@@ -1,4 +1,4 @@
-.TH fi_getinfo 3 "2015\-09\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_getinfo 3 "2015\-10\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo - Obtain / free fabric interface information
@@ -460,8 +460,9 @@ However, when a large number of IOV entries are supported, IOV buffering
 may have a negative impact on performance and memory consumption.
 The FI_ASYNC_IOV mode indicates that the application must provide the
 buffering needed for the IO vectors.
-When set, an application must not modify an IO vector until the
-associated operation has completed.
+When set, an application must not modify an IO vector, including any
+related memory descriptor array, until the associated operation has
+completed.
 .PP
 \f[I]FI_RX_CQ_DATA\f[] : This mode bit only applies to data transfers
 that set FI_REMOTE_CQ_DATA.

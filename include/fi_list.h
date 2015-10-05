@@ -250,7 +250,7 @@ static inline void dlistfd_signal(struct dlistfd_head *head)
 static inline void dlistfd_reset(struct dlistfd_head *head)
 {
 	char c;
-	if (dlistfd_empty(head) && (head->fdrcnt < head->fdwcnt)) {
+	if (dlistfd_empty(head) && (head->fdrcnt != head->fdwcnt)) {
 		if (read(head->fd[LIST_READ_FD], &c, sizeof c) == sizeof c)
 			head->fdrcnt++;
 	}
