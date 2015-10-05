@@ -229,7 +229,7 @@ static inline void rbfdreset(struct ringbuffd *rbfd)
 {
 	char c;
 
-	if (rbfdempty(rbfd) && (rbfd->fdrcnt < rbfd->fdwcnt)) {
+	if (rbfdempty(rbfd) && (rbfd->fdrcnt != rbfd->fdwcnt)) {
 		if (read(rbfd->fd[RB_READ_FD], &c, sizeof c) == sizeof c)
 			rbfd->fdrcnt++;
 	}
