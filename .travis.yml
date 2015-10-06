@@ -1,2 +1,6 @@
 install: ./autogen.sh
+script: ./configure && make && sudo make install
 language: c
+compiler:
+    - clang
+    - gcc
