@@ -115,7 +115,7 @@ Removes an event queue or counter from a poll set.
 ## fi_poll
 
 Progresses all event queues and counters associated with a poll set
-and checks for events.  If events has occurred, contexts associated
+and checks for events.  If events have occurred, contexts associated
 with the event queues and/or counters are returned.  The number of
 contexts is limited to the size of the context array, indicated by the
 count parameter.
