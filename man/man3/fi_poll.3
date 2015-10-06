@@ -1,4 +1,4 @@
-.TH fi_poll 3 "2015\-01\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_poll 3 "2015\-10\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_poll - Polling and wait set operations
@@ -93,8 +93,8 @@ Removes an event queue or counter from a poll set.
 .PP
 Progresses all event queues and counters associated with a poll set and
 checks for events.
-If events has occurred, contexts associated with the event queues and/or
-counters are returned.
+If events have occurred, contexts associated with the event queues
+and/or counters are returned.
 The number of contexts is limited to the size of the context array,
 indicated by the count parameter.
 .SS fi_wait_open
