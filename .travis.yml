@@ -1,5 +1,11 @@
 sudo: false
 install: ./autogen.sh
+script:
+        - ./configure --prefix=${PWD}/install && make && make test && make install
+        - git clone --branch master --depth 1 https://github.com/ofiwg/fabtests.git
+        - cd fabtests
+        - ./autogen.sh && ./configure --prefix=${PWD} --with-libfabric=${PWD}/../install && make && make install
+        - ./scripts/runfabtests.sh -v -p bin/ -t quick sockets localhost localhost
 language: c
 compiler:
     - clang
