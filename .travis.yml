@@ -1,2 +1,2 @@
-install: ./autogen.sh
+install: ./autogen.sh && ./configure && make && make install
 language: c
