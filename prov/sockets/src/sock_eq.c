@@ -351,59 +351,6 @@ static struct fi_eq_attr _sock_eq_def_attr = {
 	.wait_set = NULL,
 };
 
-int sock_eq_openwait(struct sock_eq *eq, const char *service)
-{
-	struct addrinfo *s_res, *p;
-	struct addrinfo hints;
-	int ret;
-
-	SOCK_LOG_DBG("enter\n");
-	if (eq->wait_fd > 0 && !strncmp((char *) &eq->service, service, NI_MAXSERV)) {
-		SOCK_LOG_DBG("eq already opened for the service %s\n", service);
-		return 0;
-	}
-
-	if (eq->wait_fd > 0)
-		close(eq->wait_fd);
-
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_DGRAM;
-	hints.ai_flags = AI_PASSIVE;
-	hints.ai_protocol = IPPROTO_UDP;
-
-	ret = getaddrinfo(NULL, service, &hints, &s_res);
-	if (ret) {
-		SOCK_LOG_ERROR("no available AF_INET address service:%s, %s\n",
-				service, gai_strerror(ret));
-		return -FI_EINVAL;
-	}
-
-	for (p = s_res; p; p = p->ai_next) {
-		eq->wait_fd = socket(p->ai_family, p->ai_socktype,
-					p->ai_protocol);
-		if (eq->wait_fd < 0)
-			continue;
-
-		sock_set_sockopts(eq->wait_fd);
-		if (!bind(eq->wait_fd, s_res->ai_addr, s_res->ai_addrlen))
-			break;
-
-		close(eq->wait_fd);
-		eq->wait_fd = -1;
-	}
-
-	freeaddrinfo(s_res);
-	if (eq->wait_fd < 0) {
-		SOCK_LOG_ERROR("failed to open udp sock on port: %s\n", service);
-		return -FI_EINVAL;
-	}
-
-	memcpy(&eq->service, service, NI_MAXSERV);
-	SOCK_LOG_DBG("open udp successfully\n");
-	return 0;
-}
-
 int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context)
 {
