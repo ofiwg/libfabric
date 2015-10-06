@@ -560,3 +560,6 @@ EXTRA_DIST = \
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
 	"$(top_srcdir)/config/distscript.pl" "$(distdir)" "$(PACKAGE_VERSION)"
+
+test:
+	./util/fi_info
