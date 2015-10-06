@@ -296,7 +296,7 @@ static int sock_eq_control(struct fid *fid, int command, void *arg)
 		case FI_WAIT_NONE:
 		case FI_WAIT_UNSPEC:
 		case FI_WAIT_FD:
-			memcpy(arg, &eq->list.fd[LIST_READ_FD], sizeof(int));
+			memcpy(arg, &eq->list.signal.fd[FI_READ_FD], sizeof(int));
 			break;
 		case FI_WAIT_SET:
 		case FI_WAIT_MUTEX_COND:

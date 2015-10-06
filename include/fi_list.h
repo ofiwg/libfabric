@@ -45,6 +45,8 @@
 #include <rdma/fi_errno.h>
 
 #include "fi.h"
+#include "fi_signal.h"
+
 
 /*
  * Double-linked list
@@ -193,44 +195,20 @@ slist_remove_first_match(struct slist *list, slist_match_func_t *match, const vo
  * Double-linked list with blocking wait-until-avail support
  */
 
-enum {
-	LIST_READ_FD = 0,
-	LIST_WRITE_FD
-};
-
 struct dlistfd_head {
 	struct dlist_entry list;
-	int		fdrcnt;
-	int		fdwcnt;
-	int		fd[2];
+	struct fd_signal   signal;
 };
 
 static inline int dlistfd_head_init(struct dlistfd_head *head)
 {
-	int ret;
-
 	dlist_init(&head->list);
-
-	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, head->fd);
-	if (ret < 0)
-		return -errno;
-
-	ret = fcntl(head->fd[LIST_READ_FD], F_SETFL, O_NONBLOCK);
-	if (ret < 0)
-		goto err;
-
-	return 0;
-
-err:
-	close(head->fd[0]);
-	close(head->fd[1]);
-	return -errno;
+	return fd_signal_init(&head->signal);
 }
 
 static inline void dlistfd_head_free(struct dlistfd_head *head)
 {
-	close(head->fd[0]);
-	close(head->fd[1]);
+	fd_signal_free(&head->signal);
 }
 
 static inline int dlistfd_empty(struct dlistfd_head *head)
@@ -240,20 +218,13 @@ static inline int dlistfd_empty(struct dlistfd_head *head)
 
 static inline void dlistfd_signal(struct dlistfd_head *head)
 {
-	char c = 0;
-	if (head->fdwcnt == head->fdrcnt) {
-		if (write(head->fd[LIST_WRITE_FD], &c, sizeof c) == sizeof c)
-			head->fdwcnt++;
-	}
+	fd_signal_set(&head->signal);
 }
 
 static inline void dlistfd_reset(struct dlistfd_head *head)
 {
-	char c;
-	if (dlistfd_empty(head) && (head->fdrcnt != head->fdwcnt)) {
-		if (read(head->fd[LIST_READ_FD], &c, sizeof c) == sizeof c)
-			head->fdrcnt++;
-	}
+	if (dlistfd_empty(head))
+		fd_signal_reset(&head->signal);
 }
 
 static inline void
@@ -280,14 +251,11 @@ static inline int dlistfd_wait_avail(struct dlistfd_head *head, int timeout)
 {
 	int ret;
 
-	if(!dlistfd_empty(head))
+	if (!dlistfd_empty(head))
 		return 1;
 	
-	ret = fi_poll_fd(head->fd[LIST_READ_FD], timeout);
-	if(ret < 0)
-		return ret;
-
-	return (ret == 0) ? -FI_ETIMEDOUT : !dlistfd_empty(head);
+	ret = fd_signal_poll(&head->signal, timeout);
+	return ret ? ret : !dlistfd_empty(head);
 }
 
 #endif /* LIST_H */

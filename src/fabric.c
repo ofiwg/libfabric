@@ -543,11 +543,10 @@ struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 	if (!info)
 		return fi_allocinfo_internal();
 
-	dup = calloc(1, sizeof(*dup));
+	dup = mem_dup(info, sizeof(*dup));
 	if (dup == NULL) {
 		return NULL;
 	}
-	*dup = *info;
 	dup->src_addr = NULL;
 	dup->dest_addr = NULL;
 	dup->tx_attr = NULL;
@@ -558,73 +557,55 @@ struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 	dup->next = NULL;
 
 	if (info->src_addr != NULL) {
-		dup->src_addr = calloc(1, dup->src_addrlen);
-		if (dup->src_addr == NULL) {
+		dup->src_addr = mem_dup(info->src_addr, info->src_addrlen);
+		if (dup->src_addr == NULL)
 			goto fail;
-		}
-		memcpy(dup->src_addr, info->src_addr, info->src_addrlen);
 	}
 	if (info->dest_addr != NULL) {
-		dup->dest_addr = calloc(1, dup->dest_addrlen);
-		if (dup->dest_addr == NULL) {
+		dup->dest_addr = mem_dup(info->dest_addr, info->dest_addrlen);
+		if (dup->dest_addr == NULL)
 			goto fail;
-		}
-		memcpy(dup->dest_addr, info->dest_addr, info->dest_addrlen);
 	}
 	if (info->tx_attr != NULL) {
-		dup->tx_attr = calloc(1, sizeof(*dup->tx_attr));
-		if (dup->tx_attr == NULL) {
+		dup->tx_attr = mem_dup(info->tx_attr, sizeof(*info->tx_attr));
+		if (dup->tx_attr == NULL)
 			goto fail;
-		}
-		*dup->tx_attr = *info->tx_attr;
 	}
 	if (info->rx_attr != NULL) {
-		dup->rx_attr = calloc(1, sizeof(*dup->rx_attr));
-		if (dup->rx_attr == NULL) {
+		dup->rx_attr = mem_dup(info->rx_attr, sizeof(*info->rx_attr));
+		if (dup->rx_attr == NULL)
 			goto fail;
-		}
-		*dup->rx_attr = *info->rx_attr;
 	}
 	if (info->ep_attr != NULL) {
-		dup->ep_attr = calloc(1, sizeof(*dup->ep_attr));
-		if (dup->ep_attr == NULL) {
+		dup->ep_attr = mem_dup(info->ep_attr, sizeof(*info->ep_attr));
+		if (dup->ep_attr == NULL)
 			goto fail;
-		}
-		*dup->ep_attr = *info->ep_attr;
 	}
 	if (info->domain_attr) {
-		dup->domain_attr = calloc(1, sizeof(*dup->domain_attr));
-		if (dup->domain_attr == NULL) {
+		dup->domain_attr = mem_dup(info->domain_attr, sizeof(*info->domain_attr));
+		if (dup->domain_attr == NULL)
 			goto fail;
-		}
-		*dup->domain_attr = *info->domain_attr;
 		if (info->domain_attr->name != NULL) {
-			dup->domain_attr->name =
-				strdup(info->domain_attr->name);
-			if (dup->domain_attr->name == NULL) {
+			dup->domain_attr->name = strdup(info->domain_attr->name);
+			if (dup->domain_attr->name == NULL)
 				goto fail;
-			}
 		}
 	}
 	if (info->fabric_attr) {
-		dup->fabric_attr = calloc(1, sizeof(*dup->fabric_attr));
-		if (dup->fabric_attr == NULL) {
+		dup->fabric_attr = mem_dup(info->fabric_attr, sizeof(*info->fabric_attr));
+		if (dup->fabric_attr == NULL)
 			goto fail;
-		}
-		*dup->fabric_attr = *info->fabric_attr;
+		dup->fabric_attr->name = NULL;
+		dup->fabric_attr->prov_name = NULL;
 		if (info->fabric_attr->name != NULL) {
-			dup->fabric_attr->name =
-				strdup(info->fabric_attr->name);
-			if (dup->fabric_attr->name == NULL) {
+			dup->fabric_attr->name = strdup(info->fabric_attr->name);
+			if (dup->fabric_attr->name == NULL)
 				goto fail;
-			}
 		}
 		if (info->fabric_attr->prov_name != NULL) {
-			dup->fabric_attr->prov_name =
-				strdup(info->fabric_attr->prov_name);
-			if (dup->fabric_attr->prov_name == NULL) {
+			dup->fabric_attr->prov_name = strdup(info->fabric_attr->prov_name);
+			if (dup->fabric_attr->prov_name == NULL)
 				goto fail;
-			}
 		}
 	}
 	return dup;
