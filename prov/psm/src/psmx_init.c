@@ -587,6 +587,8 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 
 	fabric_priv->refcnt = 1;
 	*fabric = &fabric_priv->fabric;
+	psmx_active_fabric = fabric_priv;
+
 	return 0;
 }
 
