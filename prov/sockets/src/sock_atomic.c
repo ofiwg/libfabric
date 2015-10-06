@@ -112,6 +112,10 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 	if (flags & SOCK_USE_OP_FLAGS)
 		flags |= tx_ctx->attr.op_flags;
 
+	if (msg->op == FI_ATOMIC_READ) {
+		flags &= ~FI_INJECT;
+	}
+
 	if (sock_ep_is_send_cq_low(&tx_ctx->comp, flags)) {
 		SOCK_LOG_ERROR("CQ size low\n");
 		return -FI_EAGAIN;
