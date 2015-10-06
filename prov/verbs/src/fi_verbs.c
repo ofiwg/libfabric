@@ -66,6 +66,7 @@
 #include <rdma/fi_log.h>
 #include "prov.h"
 #include "fi_list.h"
+#include "fi_signal.h"
 
 
 static int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
@@ -2832,7 +2833,8 @@ fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	memset(&event, 0, sizeof(event));
 	event.events = EPOLLIN;
 
-	if (epoll_ctl(_eq->epfd, EPOLL_CTL_ADD, _eq->list_head.fd[LIST_READ_FD], &event)) {
+	if (epoll_ctl(_eq->epfd, EPOLL_CTL_ADD,
+		      _eq->list_head.signal.fd[FI_READ_FD], &event)) {
 		ret = -errno;
 		goto err3;
 	}
