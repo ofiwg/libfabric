@@ -10,10 +10,18 @@ matrix:
   exclude:
     - os: osx
       compiler: gcc
-  fast_finish: true
-
-before_install:
-    - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew update; fi
-install: ./autogen.sh
-script: ./configure --prefix=${TRAVIS_BUILD_DIR}/install_dir &&
-         make install V=1 && ${TRAVIS_BUILD_DIR}/install_dir/bin/fi_info -v
+install:
+        - ./autogen.sh
+        - ./configure --prefix=$HOME
+        - make
+        - make install
+        - make test
+        - make distcheck
+script:
+        - git clone https://github.com/ofiwg/fabtests.git
+        - cd fabtests
+        - ./autogen.sh
+        - ./configure --prefix=$HOME --with-libfabric=$HOME
+        - make
+        - make install
+        - make test
