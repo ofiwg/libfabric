@@ -1,10 +1,17 @@
 sudo: false
+env:
+        - CFLAGS=-I${TRAVIS_BUILD_DIR}/install/include LDFLAGS=-L${TRAVIS_BUILD_DIR}/install/lib LD_LIBRARY_PATH=${TRAVIS_BUILD_DIR}/install/lib
 install: ./autogen.sh
+before_script:
+        - pushd /tmp && apt-get source libnl-dev && cd libnl* && ./configure --prefix=${TRAVIS_BUILD_DIR}/install && make -j && make install && popd
+        # the system provided libibverbs and rdmacm is too old
+        - pushd /tmp && wget https://www.openfabrics.org/downloads/verbs/libibverbs-1.1.8.tar.gz && tar xvfz libibverbs-1.1.8.tar.gz && cd libibverbs-1.1.8 && ./configure --prefix=${TRAVIS_BUILD_DIR}/install && make -j && make install && popd
+        - pushd /tmp && wget https://www.openfabrics.org/downloads/rdmacm/librdmacm-1.0.21.tar.gz && tar xvfz librdmacm-1.0.21.tar.gz && cd librdmacm-1.0.21 && ./configure --prefix=${TRAVIS_BUILD_DIR}/install CC=gcc && make -j && make install && popd
 script:
-        - ./configure --prefix=${PWD}/install && make && make test && make install
+        - ./configure --prefix=${TRAVIS_BUILD_DIR}/install && make && make test && make install
         - git clone --branch master --depth 1 https://github.com/ofiwg/fabtests.git
         - cd fabtests
-        - ./autogen.sh && ./configure --prefix=${PWD} --with-libfabric=${PWD}/../install && make && make install
+        - ./autogen.sh && ./configure --prefix=${TRAVIS_BUILD_DIR}/install --with-libfabric=${TRAVIS_BUILD_DIR}/install && make && make install
         - ./scripts/runfabtests.sh -v -p bin/ -t quick sockets localhost localhost
 language: c
 compiler:
