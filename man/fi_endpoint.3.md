@@ -940,10 +940,12 @@ the _Transmit Context Attribute_ section.
 
 ## total_buffered_recv
 
-Defines the total available space allocated by the provider to
-buffer messages that are received for which there is no matching
-receive operation.  If set to 0, any messages that arrive before a
-receive buffer has been posted are lost.
+Defines the total available space allocated by the provider to buffer messages
+that are received for which there is no matching receive operation.  If set to
+0, and the domain does not support FI_RM_ENABLED, any messages that arrive
+before a receive buffer has been posted are lost. When the domain supports
+FI_RM_ENABLED, the actual amount of buffering provided may exceed the value
+specified in total_buffered_recv.
 
 ## size
 
