@@ -149,6 +149,26 @@ static struct fi_provider fi_ibv_prov = {
 		}							\
 	} while (0)
 
+#define fi_ibv_set_sge_inline(sge, buf, len)	\
+	do {					\
+		sge.addr = (uintptr_t)buf;	\
+		sge.length = (uint32_t)len;	\
+	} while (0)
+
+#define fi_ibv_set_sge_iov_inline(sg_list, iov, count, len)		\
+	do {								\
+		int i;							\
+		if (count) {						\
+			sg_list = alloca(sizeof(*sg_list) * count);	\
+			for (i = 0; i < count; i++) {			\
+				fi_ibv_set_sge_inline(sg_list[i],	\
+						iov[i].iov_base,	\
+						iov[i].iov_len);	\
+				len += iov[i].iov_len;			\
+			}						\
+		}							\
+	} while (0)
+
 struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
 };
@@ -1323,13 +1343,27 @@ static ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	return fi_ibv_send(ep, wr, len, 1, context);
 }
 
+static ssize_t fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
+		const void *buf, size_t len)
+{
+	struct ibv_sge sge;
+
+	fi_ibv_set_sge_inline(sge, buf, len);
+	wr->sg_list = &sge;
+
+	return fi_ibv_send(ep, wr, len, 1, NULL);
+}
+
 static ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 		const struct iovec *iov, void **desc, int count, void *context,
 		uint64_t flags)
 {
 	size_t len = 0;
 
-	fi_ibv_set_sge_iov(wr->sg_list, iov, count, desc, len);
+	if (!desc)
+		fi_ibv_set_sge_iov_inline(wr->sg_list, iov, count, len);
+	else
+		fi_ibv_set_sge_iov(wr->sg_list, iov, count, desc, len);
 
 	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags) | VERBS_COMP_FLAGS(ep, flags);
 
@@ -1421,7 +1455,7 @@ static ssize_t fi_ibv_msg_ep_inject(struct fid_ep *ep_fid, const void *buf, size
 
 	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
 
-	return fi_ibv_send_buf(ep, &wr, buf, len, NULL, NULL);
+	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
 static ssize_t fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -1437,7 +1471,7 @@ static ssize_t fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, 
 
 	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
 
-	return fi_ibv_send_buf(ep, &wr, buf, len, NULL, NULL);
+	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
 static struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
@@ -1609,7 +1643,7 @@ fi_ibv_msg_ep_rma_inject_write(struct fid_ep *ep_fid, const void *buf, size_t le
 
 	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
 
-	return fi_ibv_send_buf(ep, &wr, buf, len, NULL, NULL);
+	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
 static ssize_t
@@ -1628,7 +1662,7 @@ fi_ibv_msg_ep_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_
 	wr.send_flags = IBV_SEND_INLINE;
 
 	ep = container_of(ep_fid, struct fi_ibv_msg_ep, ep_fid);
-	return fi_ibv_send_buf(ep, &wr, buf, len, NULL, NULL);
+	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
 static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
