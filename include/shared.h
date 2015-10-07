@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013,2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -35,9 +35,11 @@
 
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <inttypes.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_eq.h>
+#include <rdma/fi_rma.h>
 
 #include <time.h>
 
@@ -66,12 +68,14 @@ enum precision {
 };
 
 enum {
-	FT_OPT_ITER		= 1 << 0,
-	FT_OPT_SIZE		= 1 << 1,
-	FT_OPT_RX_CQ		= 1 << 2,
-	FT_OPT_TX_CQ		= 1 << 3,
-	FT_OPT_RX_CNTR		= 1 << 4,
-	FT_OPT_TX_CNTR		= 1 << 5,
+	FT_OPT_ACTIVE		= 1 << 0,
+	FT_OPT_ITER		= 1 << 1,
+	FT_OPT_SIZE		= 1 << 2,
+	FT_OPT_RX_CQ		= 1 << 3,
+	FT_OPT_TX_CQ		= 1 << 4,
+	FT_OPT_RX_CNTR		= 1 << 5,
+	FT_OPT_TX_CNTR		= 1 << 6,
+	FT_OPT_VERIFY_DATA	= 1 << 7,
 };
 
 struct ft_opts {
@@ -104,15 +108,18 @@ extern struct fid_eq *eq;
 extern fi_addr_t remote_fi_addr;
 extern void *buf, *tx_buf, *rx_buf;
 extern size_t buf_size, tx_size, rx_size;
+extern int timeout;
 
 extern struct fi_context tx_ctx, rx_ctx;
 
-extern size_t tx_credits;
+extern uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 extern struct fi_av_attr av_attr;
 extern struct fi_eq_attr eq_attr;
 extern struct fi_cq_attr cq_attr;
 extern struct fi_cntr_attr cntr_attr;
 
+extern char test_name[10];
+extern struct timespec start, end;
 extern struct ft_opts opts;
 
 
@@ -176,19 +183,34 @@ int ft_start_server();
 int ft_alloc_active_res(struct fi_info *fi);
 int ft_init_ep();
 int ft_init_av();
+int ft_exchange_keys(struct fi_rma_iov *peer_iov);
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);
-int ft_finalize(struct fi_info *fi, struct fid_ep *tx_ep, struct fid_cq *txcq,
-		struct fid_cq *rxcq, fi_addr_t addr);
+
+static inline void ft_start(void)
+{
+	opts.options |= FT_OPT_ACTIVE;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+}
+static inline void ft_stop(void)
+{
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	opts.options &= ~FT_OPT_ACTIVE;
+}
+int ft_sync();
+int ft_finalize();
 
 size_t ft_rx_prefix_size();
 size_t ft_tx_prefix_size();
+ssize_t ft_post_rx(size_t size);
+ssize_t ft_post_tx(size_t size);
+ssize_t ft_rx(size_t size);
+ssize_t ft_tx(size_t size);
 
-int ft_get_rx_comp(int count);
-int ft_get_tx_comp(int count);
+int ft_cq_readerr(struct fid_cq *cq);
+int ft_get_rx_comp(uint64_t total);
+int ft_get_tx_comp(uint64_t total);
 
-int ft_wait_for_comp(struct fid_cq *cq, int num_completions);
-void cq_readerr(struct fid_cq *cq, const char *cq_str);
 void eq_readerr(struct fid_eq *eq, const char *eq_str);
 
 
@@ -216,9 +238,6 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 
 #define FT_PROCESS_EQ_ERR(rd, eq, fn, str) \
 	FT_PROCESS_QUEUE_ERR(eq_readerr, rd, eq, fn, str)
-
-#define FT_PROCESS_CQ_ERR(rd, cq, fn, str) \
-	FT_PROCESS_QUEUE_ERR(cq_readerr, rd, cq, fn, str)
 
 #define FT_PRINT_OPTS_USAGE(opt, desc) fprintf(stderr, " %-20s %s\n", opt, desc)
 

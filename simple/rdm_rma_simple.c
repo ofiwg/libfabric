@@ -51,20 +51,6 @@ struct fi_context fi_ctx_read;
 static char * welcome_text = "Hello from Client!";
 
 
-static int rma_write(size_t size)
-{
-	int ret;
-
-	/* Using specified base address and MR key for RMA write */
-	ret = fi_write(ep, buf, size, fi_mr_desc(mr), remote_fi_addr, 0,
-			FT_MR_KEY, &fi_ctx_write);
-	if (ret){
-		FT_PRINTERR("fi_write", ret);
-		return ret;
-	}
-	return 0;
-}
-
 static int alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
@@ -127,29 +113,24 @@ static int run_test(void)
 		return ret;
 
 	if (opts.dst_addr) {
-		/* Execute RMA write operation from Client */
 		fprintf(stdout, "RMA write to server\n");
 		sprintf(buf, "%s", welcome_text);
-		ret = rma_write(sizeof(char *) * strlen(buf));
+		ret = fi_write(ep, buf, sizeof(char *) * strlen(buf), fi_mr_desc(mr),
+				remote_fi_addr, 0, FT_MR_KEY, &fi_ctx_write);
 		if (ret)
 			return ret;
 
-		ret = fi_cntr_wait(txcntr, 2, -1);
-		if (ret < 0) {
-			FT_PRINTERR("fi_cntr_wait", ret);
+		ret = ft_get_tx_comp(++tx_seq);
+		if (ret)
 			return ret;
-		}
 
 		fprintf(stdout, "Received a completion event for RMA write\n");
 	} else {
-		/* Server waits for message from Client */
-		ret = fi_cntr_wait(rxcntr, 2, -1);
-		if (ret < 0) {
-			FT_PRINTERR("fi_cntr_wait", ret);
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
 			return ret;
-		}
 
-		fprintf(stdout, "Received data from Client: %s\n", (char *)buf);
+		fprintf(stdout, "Received data from Client: %s\n", (char *) rx_buf);
 	}
 
 	/* TODO: need support for finalize operation to sync test */

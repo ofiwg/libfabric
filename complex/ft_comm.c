@@ -106,7 +106,7 @@ static int ft_load_av(void)
 	if (ret)
 		return ret;
 
-	ret = fi_av_insert(av, msg.data, 1, &ft_tx.addr, 0, NULL);
+	ret = fi_av_insert(av, msg.data, 1, &ft_tx_ctrl.addr, 0, NULL);
 	if (ret < 0) {
 		FT_PRINTERR("fi_av_insert", ret);
 		return ret;

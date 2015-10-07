@@ -42,38 +42,6 @@
 #include "shared.h"
 #include "pingpong_shared.h"
 
-static char test_name[10] = "custom";
-static struct timespec start, end;
-
-static int run_test()
-{
-	int ret, i;
-
-	ret = sync_test(false);
-	if (ret)
-		return ret;
-
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	for (i = 0; i < opts.iterations; i++) {
-		ret = opts.dst_addr ? send_xfer(opts.transfer_size) :
-				 recv_xfer(opts.transfer_size, false);
-		if (ret)
-			return ret;
-
-		ret = opts.dst_addr ? recv_xfer(opts.transfer_size, false) :
-				 send_xfer(opts.transfer_size);
-		if (ret)
-			return ret;
-	}
-	clock_gettime(CLOCK_MONOTONIC, &end);
-
-	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
-	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
-
-	return 0;
-}
 
 static int server_connect(void)
 {
@@ -212,20 +180,18 @@ static int run(void)
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = run_test();
+			ret = pingpong();
 			if (ret)
 				goto out;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = run_test();
+		ret = pingpong();
 		if (ret)
 			goto out;
 	}
 
-	ret = ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
-	/* Finalize before closing ep */
-	ft_finalize(fi, ep, txcq, rxcq, FI_ADDR_UNSPEC);
+	ft_finalize();
 out:
 	fi_shutdown(ep, 0);
 	return ret;

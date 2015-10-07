@@ -181,7 +181,7 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 	size_t size;
 	int i, ret;
 
-	size = ft.size_array[ft.size_cnt - 1];
+	size = ft_ctrl.size_array[ft_ctrl.size_cnt - 1];
 	if (!ctrl->buf) {
 		ctrl->buf = calloc(1, size);
 		if (!ctrl->buf)
@@ -198,7 +198,7 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 		ctrl->memdesc = fi_mr_desc(ctrl->mr);
 	}
 
-	for (i = 0; i < ft.iov_cnt; i++)
+	for (i = 0; i < ft_ctrl.iov_cnt; i++)
 		ctrl->iov_desc[i] = ctrl->memdesc;
 
 	return 0;
@@ -208,11 +208,11 @@ static int ft_setup_bufs(void)
 {
 	int ret;
 
-	ret = ft_setup_xcontrol_bufs(&ft_rx);
+	ret = ft_setup_xcontrol_bufs(&ft_rx_ctrl);
 	if (ret)
 		return ret;
 
-	ret = ft_setup_xcontrol_bufs(&ft_tx);
+	ret = ft_setup_xcontrol_bufs(&ft_tx_ctrl);
 	if (ret)
 		return ret;
 

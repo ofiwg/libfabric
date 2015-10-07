@@ -292,49 +292,24 @@ static int client_connect(void)
 
 static int send_recv()
 {
-	struct fi_cq_entry comp;
 	int ret;
 
 	if (opts.dst_addr) {
 		/* Client */
-		fprintf(stdout, "Posting a send...\n");
-		sprintf(buf, "Hello World!");
-		ret = fi_send(ep, buf, sizeof("Hello World!"), fi_mr_desc(mr), 0, buf);
-		if (ret) {
-			FT_PRINTERR("fi_send", ret);
+		fprintf(stdout, "Sending message to server...\n");
+		sprintf(tx_buf, "Hello World!");
+		ret = ft_tx(sizeof("Hello World!"));
+		if (ret)
 			return ret;
-		}
 
-		/* Read send queue */
-		do {
-			ret = fi_cq_read(txcq, &comp, 1);
-			if (ret < 0 && ret != -FI_EAGAIN) {
-				FT_PRINTERR("fi_cq_read", ret);
-				return ret;
-			}
-		} while (ret == -FI_EAGAIN);
-
-		fprintf(stdout, "Send completion received\n");
+		fprintf(stdout, "Send completed\n");
 	} else {
-		/* Server */
-		fprintf(stdout, "Posting a recv...\n");
-		ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, buf);
-		if (ret) {
-			FT_PRINTERR("fi_recv", ret);
-			return ret;
-		}
-
-		/* Read recv queue */
 		fprintf(stdout, "Waiting for client...\n");
-		do {
-			ret = fi_cq_read(rxcq, &comp, 1);
-			if (ret < 0 && ret != -FI_EAGAIN) {
-				FT_PRINTERR("fi_cq_read", ret);
-				return ret;
-			}
-		} while (ret == -FI_EAGAIN);
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
 
-		fprintf(stdout, "Received data from client: %s\n", (char *)buf);
+		fprintf(stdout, "Received data from client: %s\n", (char *) rx_buf);
 	}
 
 	return 0;
@@ -488,11 +463,9 @@ int main(int argc, char **argv)
 	}
 
 	ret = opts.dst_addr ? client_connect() : server_connect();
-	if (ret) {
+	if (ret)
 		return -ret;
-	}
 
-	/* Exchange data */
 	ret = send_recv();
 
 	fi_shutdown(ep, 0);

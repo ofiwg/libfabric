@@ -53,8 +53,8 @@ static struct ft_series *series;
 static int test_start_index, test_end_index = INT_MAX;
 struct ft_info test_info;
 struct fi_info *fabric_info;
-struct ft_xcontrol ft_rx, ft_tx;
-struct ft_control ft;
+struct ft_xcontrol ft_rx_ctrl, ft_tx_ctrl;
+struct ft_control ft_ctrl;
 
 size_t recv_size, send_size;
 

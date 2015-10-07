@@ -40,27 +40,27 @@ static int ft_post_recv(void)
 
 	switch (test_info.class_function) {
 	case FT_FUNC_SENDV:
-		ft_format_iov(ft_rx.iov, ft.iov_array[ft_rx.iov_iter],
-				ft_rx.buf, ft_rx.msg_size);
-		ret = fi_recvv(ft_rx.ep, ft_rx.iov, ft_rx.iov_desc,
-				ft.iov_array[ft_rx.iov_iter], ft_rx.addr, NULL);
-		ft_next_iov_cnt(&ft_rx, fabric_info->rx_attr->iov_limit);
+		ft_format_iov(ft_rx_ctrl.iov, ft_ctrl.iov_array[ft_rx_ctrl.iov_iter],
+				ft_rx_ctrl.buf, ft_rx_ctrl.msg_size);
+		ret = fi_recvv(ft_rx_ctrl.ep, ft_rx_ctrl.iov, ft_rx_ctrl.iov_desc,
+				ft_ctrl.iov_array[ft_rx_ctrl.iov_iter], ft_rx_ctrl.addr, NULL);
+		ft_next_iov_cnt(&ft_rx_ctrl, fabric_info->rx_attr->iov_limit);
 		break;
 	case FT_FUNC_SENDMSG:
-		ft_format_iov(ft_rx.iov, ft.iov_array[ft_rx.iov_iter],
-				ft_rx.buf, ft_rx.msg_size);
-		msg.msg_iov = ft_rx.iov;
-		msg.desc = ft_rx.iov_desc;
-		msg.iov_count = ft.iov_array[ft_rx.iov_iter];
-		msg.addr = ft_rx.addr;
+		ft_format_iov(ft_rx_ctrl.iov, ft_ctrl.iov_array[ft_rx_ctrl.iov_iter],
+				ft_rx_ctrl.buf, ft_rx_ctrl.msg_size);
+		msg.msg_iov = ft_rx_ctrl.iov;
+		msg.desc = ft_rx_ctrl.iov_desc;
+		msg.iov_count = ft_ctrl.iov_array[ft_rx_ctrl.iov_iter];
+		msg.addr = ft_rx_ctrl.addr;
 		msg.context = NULL;
 		msg.data = 0;
-		ret = fi_recvmsg(ft_rx.ep, &msg, 0);
-		ft_next_iov_cnt(&ft_rx, fabric_info->rx_attr->iov_limit);
+		ret = fi_recvmsg(ft_rx_ctrl.ep, &msg, 0);
+		ft_next_iov_cnt(&ft_rx_ctrl, fabric_info->rx_attr->iov_limit);
 		break;
 	default:
-		ret = fi_recv(ft_rx.ep, ft_rx.buf, ft_rx.msg_size,
-				ft_rx.memdesc, ft_rx.addr, NULL);
+		ret = fi_recv(ft_rx_ctrl.ep, ft_rx_ctrl.buf, ft_rx_ctrl.msg_size,
+				ft_rx_ctrl.memdesc, ft_rx_ctrl.addr, NULL);
 		break;
 	}
 
@@ -74,29 +74,29 @@ static int ft_post_trecv(void)
 
 	switch (test_info.class_function) {
 	case FT_FUNC_SENDV:
-		ft_format_iov(ft_rx.iov, ft.iov_array[ft_rx.iov_iter],
-				ft_rx.buf, ft_rx.msg_size);
-		ret = fi_trecvv(ft_rx.ep, ft_rx.iov, ft_rx.iov_desc,
-				ft.iov_array[ft_rx.iov_iter], ft_rx.addr,
-				ft_rx.tag, 0, NULL);
-		ft_next_iov_cnt(&ft_rx, fabric_info->rx_attr->iov_limit);
+		ft_format_iov(ft_rx_ctrl.iov, ft_ctrl.iov_array[ft_rx_ctrl.iov_iter],
+				ft_rx_ctrl.buf, ft_rx_ctrl.msg_size);
+		ret = fi_trecvv(ft_rx_ctrl.ep, ft_rx_ctrl.iov, ft_rx_ctrl.iov_desc,
+				ft_ctrl.iov_array[ft_rx_ctrl.iov_iter], ft_rx_ctrl.addr,
+				ft_rx_ctrl.tag, 0, NULL);
+		ft_next_iov_cnt(&ft_rx_ctrl, fabric_info->rx_attr->iov_limit);
 		break;
 	case FT_FUNC_SENDMSG:
-		ft_format_iov(ft_rx.iov, ft.iov_array[ft_rx.iov_iter],
-				ft_rx.buf, ft_rx.msg_size);
-		msg.msg_iov = ft_rx.iov;
-		msg.desc = ft_rx.iov_desc;
-		msg.iov_count = ft.iov_array[ft_rx.iov_iter];
-		msg.addr = ft_rx.addr;
-		msg.tag = ft_rx.tag;
+		ft_format_iov(ft_rx_ctrl.iov, ft_ctrl.iov_array[ft_rx_ctrl.iov_iter],
+				ft_rx_ctrl.buf, ft_rx_ctrl.msg_size);
+		msg.msg_iov = ft_rx_ctrl.iov;
+		msg.desc = ft_rx_ctrl.iov_desc;
+		msg.iov_count = ft_ctrl.iov_array[ft_rx_ctrl.iov_iter];
+		msg.addr = ft_rx_ctrl.addr;
+		msg.tag = ft_rx_ctrl.tag;
 		msg.ignore = 0;
 		msg.context = NULL;
-		ret = fi_trecvmsg(ft_rx.ep, &msg, 0);
-		ft_next_iov_cnt(&ft_rx, fabric_info->rx_attr->iov_limit);
+		ret = fi_trecvmsg(ft_rx_ctrl.ep, &msg, 0);
+		ft_next_iov_cnt(&ft_rx_ctrl, fabric_info->rx_attr->iov_limit);
 		break;
 	default:
-		ret = fi_trecv(ft_rx.ep, ft_rx.buf, ft_rx.msg_size,
-				ft_rx.memdesc, ft_rx.addr, ft_rx.tag, 0, NULL);
+		ret = fi_trecv(ft_rx_ctrl.ep, ft_rx_ctrl.buf, ft_rx_ctrl.msg_size,
+				ft_rx_ctrl.memdesc, ft_rx_ctrl.addr, ft_rx_ctrl.tag, 0, NULL);
 		break;
 	}
 	return ret;
@@ -109,27 +109,27 @@ static int ft_post_send(void)
 
 	switch (test_info.class_function) {
 	case FT_FUNC_SENDV:
-		ft_format_iov(ft_tx.iov, ft.iov_array[ft_tx.iov_iter],
-				ft_tx.buf, ft_tx.msg_size);
-		ret = fi_sendv(ft_tx.ep, ft_tx.iov, ft_tx.iov_desc,
-				ft.iov_array[ft_tx.iov_iter], ft_tx.addr, NULL);
-		ft_next_iov_cnt(&ft_tx, fabric_info->tx_attr->iov_limit);
+		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
+				ft_tx_ctrl.buf, ft_tx_ctrl.msg_size);
+		ret = fi_sendv(ft_tx_ctrl.ep, ft_tx_ctrl.iov, ft_tx_ctrl.iov_desc,
+				ft_ctrl.iov_array[ft_tx_ctrl.iov_iter], ft_tx_ctrl.addr, NULL);
+		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 		break;
 	case FT_FUNC_SENDMSG:
-		ft_format_iov(ft_tx.iov, ft.iov_array[ft_tx.iov_iter],
-				ft_tx.buf, ft_tx.msg_size);
-		msg.msg_iov = ft_tx.iov;
-		msg.desc = ft_tx.iov_desc;
-		msg.iov_count = ft.iov_array[ft_tx.iov_iter];
-		msg.addr = ft_tx.addr;
+		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
+				ft_tx_ctrl.buf, ft_tx_ctrl.msg_size);
+		msg.msg_iov = ft_tx_ctrl.iov;
+		msg.desc = ft_tx_ctrl.iov_desc;
+		msg.iov_count = ft_ctrl.iov_array[ft_tx_ctrl.iov_iter];
+		msg.addr = ft_tx_ctrl.addr;
 		msg.context = NULL;
 		msg.data = 0;
-		ret = fi_sendmsg(ft_tx.ep, &msg, 0);
-		ft_next_iov_cnt(&ft_tx, fabric_info->tx_attr->iov_limit);
+		ret = fi_sendmsg(ft_tx_ctrl.ep, &msg, 0);
+		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 		break;
 	default:
-		ret = fi_send(ft_tx.ep, ft_tx.buf, ft_tx.msg_size,
-				ft_tx.memdesc, ft_tx.addr, NULL);
+		ret = fi_send(ft_tx_ctrl.ep, ft_tx_ctrl.buf, ft_tx_ctrl.msg_size,
+				ft_tx_ctrl.memdesc, ft_tx_ctrl.addr, NULL);
 		break;
 	}
 
@@ -143,29 +143,29 @@ static int ft_post_tsend(void)
 
 	switch (test_info.class_function) {
 	case FT_FUNC_SENDV:
-		ft_format_iov(ft_tx.iov, ft.iov_array[ft_tx.iov_iter],
-				ft_tx.buf, ft_tx.msg_size);
-		ret = fi_tsendv(ft_tx.ep, ft_tx.iov, ft_tx.iov_desc,
-				ft.iov_array[ft_tx.iov_iter], ft_tx.addr,
-				ft_tx.tag, NULL);
-		ft_next_iov_cnt(&ft_tx, fabric_info->tx_attr->iov_limit);
+		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
+				ft_tx_ctrl.buf, ft_tx_ctrl.msg_size);
+		ret = fi_tsendv(ft_tx_ctrl.ep, ft_tx_ctrl.iov, ft_tx_ctrl.iov_desc,
+				ft_ctrl.iov_array[ft_tx_ctrl.iov_iter], ft_tx_ctrl.addr,
+				ft_tx_ctrl.tag, NULL);
+		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 		break;
 	case FT_FUNC_SENDMSG:
-		ft_format_iov(ft_tx.iov, ft.iov_array[ft_tx.iov_iter],
-				ft_tx.buf, ft_tx.msg_size);
-		msg.msg_iov = ft_tx.iov;
-		msg.desc = ft_tx.iov_desc;
-		msg.iov_count = ft.iov_array[ft_tx.iov_iter];
-		msg.addr = ft_tx.addr;
-		msg.tag = ft_tx.tag;
+		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
+				ft_tx_ctrl.buf, ft_tx_ctrl.msg_size);
+		msg.msg_iov = ft_tx_ctrl.iov;
+		msg.desc = ft_tx_ctrl.iov_desc;
+		msg.iov_count = ft_ctrl.iov_array[ft_tx_ctrl.iov_iter];
+		msg.addr = ft_tx_ctrl.addr;
+		msg.tag = ft_tx_ctrl.tag;
 		msg.context = NULL;
 		msg.data = 0;
-		ret = fi_tsendmsg(ft_tx.ep, &msg, 0);
-		ft_next_iov_cnt(&ft_tx, fabric_info->tx_attr->iov_limit);
+		ret = fi_tsendmsg(ft_tx_ctrl.ep, &msg, 0);
+		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
 		break;
 	default:
-		ret = fi_tsend(ft_tx.ep, ft_tx.buf, ft_tx.msg_size,
-				ft_tx.memdesc, ft_tx.addr, ft_tx.tag, NULL);
+		ret = fi_tsend(ft_tx_ctrl.ep, ft_tx_ctrl.buf, ft_tx_ctrl.msg_size,
+				ft_tx_ctrl.memdesc, ft_tx_ctrl.addr, ft_tx_ctrl.tag, NULL);
 		break;
 	}
 	return ret;
@@ -175,13 +175,13 @@ int ft_post_recv_bufs(void)
 {
 	int ret;
 
-	for (; ft_rx.credits; ft_rx.credits--) {
+	for (; ft_rx_ctrl.credits; ft_rx_ctrl.credits--) {
 		if (test_info.caps & FI_MSG) {
 			ret = ft_post_recv();
 		} else {
 			ret = ft_post_trecv();
 			if (!ret)
-				ft_rx.tag++;
+				ft_rx_ctrl.tag++;
 		}
 		if (ret) {
 			if (ret == -FI_EAGAIN)
@@ -197,18 +197,18 @@ int ft_recv_msg(void)
 {
 	int credits, ret;
 
-	if (ft_rx.credits > (ft_rx.max_credits >> 1)) {
+	if (ft_rx_ctrl.credits > (ft_rx_ctrl.max_credits >> 1)) {
 		ret = ft_post_recv_bufs();
 		if (ret)
 			return ret;
 	}
 
-	credits = ft_rx.credits;
+	credits = ft_rx_ctrl.credits;
 	do {
 		ret = ft_comp_rx(FT_COMP_TO);
 		if (ret)
 			return ret;
-	} while (credits == ft_rx.credits);
+	} while (credits == ft_rx_ctrl.credits);
 
 	return 0;
 }
@@ -217,26 +217,26 @@ int ft_send_msg(void)
 {
 	int ret;
 
-	while (!ft_tx.credits) {
+	while (!ft_tx_ctrl.credits) {
 		ret = ft_comp_tx(FT_COMP_TO);
 		if (ret)
 			return ret;
 	}
 
-	ft_tx.credits--;
+	ft_tx_ctrl.credits--;
 	if (test_info.caps & FI_MSG) {
 		ret = ft_post_send();
 	} else {
 		ret = ft_post_tsend();
 		if (!ret)
-			ft_tx.tag++;
+			ft_tx_ctrl.tag++;
 	}
 	if (ret) {
 		FT_PRINTERR("send", ret);
 		return ret;
 	}
 
-	if (!ft_tx.credits) {
+	if (!ft_tx_ctrl.credits) {
 		ret = ft_comp_tx(0);
 		if (ret)
 			return ret;
@@ -249,7 +249,7 @@ int ft_send_dgram(void)
 {
 	int ret;
 
-	*(uint8_t*) ft_tx.buf = ft_tx.seqno++;
+	*(uint8_t*) ft_tx_ctrl.buf = ft_tx_ctrl.seqno++;
 	ret = ft_send_msg();
 	return ret;
 }
@@ -258,9 +258,9 @@ int ft_send_dgram_flood(void)
 {
 	int i, ret = 0;
 
-	ft_tx.seqno = 0;
-	*(uint8_t*) ft_tx.buf = 0;
-	for (i = 0; i < ft.xfer_iter - 1; i++) {
+	ft_tx_ctrl.seqno = 0;
+	*(uint8_t*) ft_tx_ctrl.buf = 0;
+	for (i = 0; i < ft_ctrl.xfer_iter - 1; i++) {
 		ret = ft_send_msg();
 		if (ret)
 			break;
@@ -274,18 +274,18 @@ int ft_recv_dgram(void)
 	int credits, ret;
 
 	do {
-		if (ft_rx.credits > (ft_rx.max_credits >> 1)) {
+		if (ft_rx_ctrl.credits > (ft_rx_ctrl.max_credits >> 1)) {
 			ret = ft_post_recv_bufs();
 			if (ret)
 				return ret;
 		}
 
-		credits = ft_rx.credits;
+		credits = ft_rx_ctrl.credits;
 
 		ret = ft_comp_rx(FT_DGRAM_POLL_TO);
-		if ((credits != ft_rx.credits) &&
-		    (*(uint8_t *) ft_rx.buf == ft_rx.seqno)) {
-			ft_rx.seqno++;
+		if ((credits != ft_rx_ctrl.credits) &&
+		    (*(uint8_t *) ft_rx_ctrl.buf == ft_rx_ctrl.seqno)) {
+			ft_rx_ctrl.seqno++;
 			return 0;
 		}
 	} while (!ret);
@@ -304,9 +304,9 @@ int ft_recv_dgram_flood(size_t *recv_cnt)
 			break;
 
 		ret = ft_comp_rx(0);
-		cnt += ft_rx.credits;
+		cnt += ft_rx_ctrl.credits;
 
-	} while (!ret && (*(uint8_t *) ft_rx.buf != (uint8_t) ~0));
+	} while (!ret && (*(uint8_t *) ft_rx_ctrl.buf != (uint8_t) ~0));
 
 	*recv_cnt = cnt;
 	return ret;
@@ -327,8 +327,8 @@ int ft_sendrecv_dgram(void)
 
 		/* resend */
 		if (test_info.caps & FI_TAGGED)
-			ft_tx.tag--;
-		ft_tx.seqno--;
+			ft_tx_ctrl.tag--;
+		ft_tx_ctrl.seqno--;
 	}
 
 	return ret;

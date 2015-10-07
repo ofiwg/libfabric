@@ -111,30 +111,23 @@ static int send_recv()
 {
 	void *context[MAX_POLL_CNT];
 	struct fi_cq_entry comp;
-	int ret, send_pending = 0, recv_pending = 0;
+	int ret;
 	int ret_count = 0;
 	int i;
 
-	fprintf(stdout, "Posting a recv...\n");
-	ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr),
-			remote_fi_addr, &rx_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
-	recv_pending++;
+//	fprintf(stdout, "Posting a recv...\n");
+//	ret = ft_post_rx(rx_size);
+//	if (ret)
+//		return ret;
 
 	fprintf(stdout, "Posting a send...\n");
-	ret = fi_send(ep, buf, tx_size, fi_mr_desc(mr),
-			remote_fi_addr, &tx_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_send", ret);
+	ret = ft_post_tx(tx_size);
+	if (ret)
 		return ret;
-	}
-	send_pending++;
 
-	while (send_pending || recv_pending) {
+	while ((tx_cq_cntr < tx_seq) || (rx_cq_cntr < rx_seq)) {
 		struct fid_cq *cq;
+
 		/* Poll send and recv CQs */
 		do {
 			ret_count = fi_poll(pollset, context, MAX_POLL_CNT);
@@ -144,27 +137,27 @@ static int send_recv()
 			}
 		} while (!ret_count);
 
-		fprintf(stdout, "Retreived %d event(s)\n", ret_count);
+		fprintf(stdout, "Retrieved %d event(s)\n", ret_count);
 
 		for (i = 0; i < ret_count; i++) {
 			if (context[i] == &txcq) {
 				printf("Send completion received\n");
 				cq = txcq;
-				send_pending--;
+				tx_cq_cntr++;
 			} else if (context[i] == &rxcq) {
 				printf("Recv completion received\n");
 				cq = rxcq;
-				recv_pending--;
+				rx_cq_cntr++;
 			} else {
 				printf("Unknown completion received\n");
 				return -1;
 			}
 
 			/* Read the completion entry */
-			ret = fi_cq_sread(cq, &comp, 1, NULL, -1);
+			ret = fi_cq_read(cq, &comp, 1);
 			if (ret < 0) {
 				if (ret == -FI_EAVAIL) {
-					cq_readerr(cq, "cq");
+					ret = ft_cq_readerr(cq);
 				} else {
 					FT_PRINTERR("fi_cq_sread", ret);
 				}
@@ -215,7 +208,6 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	/* Exchange data */
 	ret = send_recv();
 
 	ft_free_res();

@@ -225,11 +225,9 @@ static int send_recv()
 		/* Client */
 		fprintf(stdout, "Posting a send...\n");
 		sprintf(buf, "Hello World!");
-		ret = fi_send(ep, buf, sizeof("Hello World!"), fi_mr_desc(mr), 0, buf);
-		if (ret) {
-			FT_PRINTERR("fi_send", ret);
+		ret = ft_post_tx(sizeof("Hello World!"));
+		if (ret)
 			return ret;
-		}
 
 		memset((void *)&event, 0, sizeof event);
 		ret = TEMP_FAILURE_RETRY(epoll_wait(epfd, &event, 1, -1));
@@ -246,7 +244,8 @@ static int send_recv()
 		/* Read send queue */
 		ret = fi_cq_sread(txcq, &comp, 1, NULL, 0);
 		if (ret < 0) {
-			FT_PROCESS_CQ_ERR(ret, txcq, "fi_cq_sread", "txcq");
+			if (ret == -FI_EAVAIL)
+				ret = ft_cq_readerr(txcq);
 			return ret;
 		}
 
@@ -254,11 +253,9 @@ static int send_recv()
 	} else {
 		/* Server */
 		fprintf(stdout, "Posting a recv...\n");
-		ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, buf);
-		if (ret) {
-			FT_PRINTERR("fi_recv", ret);
+		ret = ft_post_rx(rx_size);
+		if (ret)
 			return ret;
-		}
 
 		fprintf(stdout, "Waiting for client...\n");
 
@@ -277,7 +274,8 @@ static int send_recv()
 		/* Read recv queue */
 		ret = fi_cq_sread(rxcq, &comp, 1, NULL, 0);
 		if (ret < 0) {
-			FT_PROCESS_CQ_ERR(ret, rxcq, "fi_cq_sread", "rxcq");
+			if (ret == -FI_EAVAIL)
+				ret = ft_cq_readerr(rxcq);
 			return ret;
 		}
 
@@ -335,7 +333,6 @@ int main(int argc, char **argv)
 		return -ret;
 	}
 
-	/* Exchange data */
 	ret = send_recv();
 
 	fi_shutdown(ep, 0);

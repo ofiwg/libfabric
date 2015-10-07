@@ -43,187 +43,50 @@
 #include <shared.h>
 
 static enum ft_rma_opcodes op_type = FT_RMA_WRITE;
-static char test_name[10] = "custom";
-static struct timespec start, end;
 struct fi_rma_iov remote;
 static uint64_t cq_data = 1;
-static enum fi_mr_mode mr_mode;
 
-static int send_xfer(int size)
-{
-	struct fi_cq_data_entry comp;
-	int ret;
-
-	while (!tx_credits) {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret > 0) {
-			goto post;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(txcq, "txcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	}
-
-	tx_credits--;
-post:
-	ret = fi_send(ep, buf, (size_t) size, fi_mr_desc(mr), 0, ep);
-	if (ret)
-		FT_PRINTERR("fi_send", ret);
-
-	return ret;
-}
-
-static int recv_xfer(int size)
-{
-	struct fi_cq_data_entry comp;
-	int ret;
-
-	do {
-		ret = fi_cq_read(rxcq, &comp, 1);
-		if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(rxcq, "rxcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	} while (ret == -FI_EAGAIN);
-
-	ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, buf);
-	if (ret)
-		FT_PRINTERR("fi_recv", ret);
-
-	return ret;
-}
-
-static int read_data(size_t size)
-{
-	int ret;
-
-	ret = fi_read(ep, buf, size, fi_mr_desc(mr),
-		      0, remote.addr, remote.key, ep);
-	if (ret) {
-		FT_PRINTERR("fi_read", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
-static int write_data_with_cq_data(size_t size)
-{
-	int ret;
-
-	ret = fi_writedata(ep, buf, size, fi_mr_desc(mr),
-		       cq_data, 0, remote.addr, remote.key, ep);
-	if (ret) {
-		FT_PRINTERR("fi_writedata", ret);
-		return ret;
-	}
-	return 0;
-}
-
-static int write_data(size_t size)
-{
-	int ret;
-
-	ret = fi_write(ep, buf, size, fi_mr_desc(mr),
-		       0, remote.addr, remote.key, ep);
-	if (ret) {
-		FT_PRINTERR("fi_write", ret);
-		return ret;
-	}
-	return 0;
-}
-
-static int sync_test(void)
-{
-	int ret;
-
-	ret = ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
-	if (ret) {
-		return ret;
-	}
-	tx_credits = fi->tx_attr->size;
-
-	ret = opts.dst_addr ? send_xfer(16) : recv_xfer(16);
-	if (ret) {
-		return ret;
-	}
-
-	return opts.dst_addr ? recv_xfer(16) : send_xfer(16);
-}
-
-static int wait_remote_writedata_completion(void)
-{
-	struct fi_cq_data_entry comp;
-	int ret;
-
-	do {
-		ret = fi_cq_read(rxcq, &comp, 1);
-		if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				cq_readerr(rxcq, "rxcq");
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
-			return ret;
-		}
-	} while (ret == -FI_EAGAIN);
-
-	ret = 0;
-	if (comp.data != cq_data) {
-		fprintf(stderr, "Got unexpected completion data %" PRIu64 "\n",
-			comp.data);
-	}
-	assert(comp.op_context == buf || comp.op_context == NULL);
-	if (comp.op_context == buf) {
-		/* We need to repost the receive */
-		ret = fi_recv(ep, buf, rx_size, fi_mr_desc(mr), 0, buf);
-		if (ret)
-			FT_PRINTERR("fi_recv", ret);
-	}
-
-	return ret;
-}
 
 static int run_test(void)
 {
 	int ret, i;
 
-	ret = sync_test();
+	ret = ft_sync();
 	if (ret)
 		return ret;
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	ft_start();
 	for (i = 0; i < opts.iterations; i++) {
 		switch (op_type) {
 		case FT_RMA_WRITE:
-			ret = write_data(opts.transfer_size);
+			ret = fi_write(ep, buf, opts.transfer_size, fi_mr_desc(mr),
+				       0, remote.addr, remote.key, ep);
+			if (ret)
+				FT_PRINTERR("fi_write", ret);
 			break;
 		case FT_RMA_WRITEDATA:
-			ret = write_data_with_cq_data(opts.transfer_size);
+			ret = fi_writedata(ep, buf, opts.transfer_size, fi_mr_desc(mr),
+				       cq_data, 0, remote.addr, remote.key, ep);
 			if (ret)
-				return ret;
-			ret = wait_remote_writedata_completion();
+				FT_PRINTERR("fi_writedata", ret);
+
+			ret = ft_rx(0);
 			break;
 		case FT_RMA_READ:
-			ret = read_data(opts.transfer_size);
+			ret = fi_read(ep, buf, opts.transfer_size, fi_mr_desc(mr),
+				      0, remote.addr, remote.key, ep);
+			if (ret)
+				FT_PRINTERR("fi_read", ret);
 			break;
 		}
 		if (ret)
 			return ret;
 
-		ret = ft_wait_for_comp(txcq, 1);
+		ret = ft_get_tx_comp(++tx_seq);
 		if (ret)
 			return ret;
 	}
-	clock_gettime(CLOCK_MONOTONIC, &end);
+	ft_stop();
 
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
@@ -287,7 +150,6 @@ static int server_connect(void)
 		goto err;
 	}
 
-	mr_mode = info->domain_attr->mr_mode;
 	ret = fi_domain(fabric, info, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
@@ -352,7 +214,6 @@ static int client_connect(void)
 	if (ret)
 		return ret;
 
-	mr_mode = fi->domain_attr->mr_mode;
 	ret = alloc_ep_res(fi);
 	if (ret)
 		return ret;
@@ -382,31 +243,6 @@ static int client_connect(void)
 	return 0;
 }
 
-static int exchange_addr_key(void)
-{
-	struct fi_rma_iov *rma_iov;
-
-	rma_iov = buf;
-	if (opts.dst_addr) {
-		rma_iov->addr = mr_mode == FI_MR_SCALABLE ?
-				0 : (uintptr_t) buf;
-		rma_iov->key = fi_mr_key(mr);
-		send_xfer(sizeof *rma_iov);
-		recv_xfer(sizeof *rma_iov);
-		remote = *rma_iov;
-	} else {
-		recv_xfer(sizeof *rma_iov);
-		remote = *rma_iov;
-
-		rma_iov->addr = mr_mode == FI_MR_SCALABLE ?
-				0 : (uintptr_t) buf;
-		rma_iov->key = fi_mr_key(mr);
-		send_xfer(sizeof *rma_iov);
-	}
-
-	return 0;
-}
-
 static int run(void)
 {
 	int i, ret = 0;
@@ -421,7 +257,7 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	ret = exchange_addr_key();
+	ret = ft_exchange_keys(&remote);
 	if (ret)
 		return ret;
 
@@ -442,10 +278,8 @@ static int run(void)
 			goto out;
 	}
 
-	sync_test();
-	ft_wait_for_comp(txcq, fi->tx_attr->size - tx_credits);
-	/* Finalize before closing ep */
-	ft_finalize(fi, ep, txcq, rxcq, FI_ADDR_UNSPEC);
+	ft_sync();
+	ft_finalize();
 out:
 	fi_shutdown(ep, 0);
 	return ret;

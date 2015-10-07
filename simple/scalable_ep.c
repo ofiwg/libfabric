@@ -136,6 +136,12 @@ static int bind_ep_res(void)
 {
 	int i, ret;
 
+	ret = fi_scalable_ep_bind(sep, &av->fid, 0);
+	if (ret) {
+		FT_PRINTERR("fi_ep_bind", ret);
+		return ret;
+	}
+
 	for (i = 0; i < ctx_cnt; i++) {
 		ret = fi_ep_bind(tx_ep[i], &txcq_array[i]->fid, FI_SEND);
 		if (ret) {
@@ -162,59 +168,59 @@ static int bind_ep_res(void)
 			FT_PRINTERR("fi_enable", ret);
 			return ret;
 		}
-	}
 
-	ret = fi_scalable_ep_bind(sep, &av->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		return ret;
-	}
-
-	/* control message exchange is on tx/rx context 0 */
-	ret = fi_recv(rx_ep[0], rx_buf, MAX(rx_size, FT_MAX_CTRL_MSG),
-			fi_mr_desc(mr), 0, &rx_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_recv", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
-static int run_test()
-{
-	int ret, i;
-
-	/* TODO: This is racy -- assumes flow control if send is received first. */
-	for (i = 0; i < ctx_cnt; i++) {
-		fprintf(stdout, "Posting recv for ctx: %d\n", i);
-		ret = fi_recv(rx_ep[i], buf, rx_size, fi_mr_desc(mr), 0, NULL);
+		ret = fi_recv(rx_ep[i], rx_buf, MAX(rx_size, FT_MAX_CTRL_MSG),
+				fi_mr_desc(mr), 0, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_recv", ret);
 			return ret;
 		}
 	}
 
+	return 0;
+}
+
+static int wait_for_comp(struct fid_cq *cq)
+{
+	struct fi_cq_entry comp;
+	int ret;
+
+	do {
+		ret = fi_cq_read(cq, &comp, 1);
+	} while (ret < 0 && ret == -FI_EAGAIN);
+
+	if (ret != 1)
+		FT_PRINTERR("fi_cq_read", ret);
+	else
+		ret = 0;
+
+	return ret;
+}
+
+static int run_test()
+{
+	int ret = 0, i;
+
 	if (opts.dst_addr) {
-		for (i = 0; i < ctx_cnt; i++) {
+		for (i = 0; i < ctx_cnt && !ret; i++) {
 			fprintf(stdout, "Posting send for ctx: %d\n", i);
 			ret = fi_send(tx_ep[i], buf, tx_size, fi_mr_desc(mr),
 					remote_rx_addr[i], NULL);
 			if (ret) {
-				FT_PRINTERR("fi_recv", ret);
+				FT_PRINTERR("fi_send", ret);
 				return ret;
 			}
 
-			ft_wait_for_comp(txcq_array[i], 1);
+			ret = wait_for_comp(txcq_array[i]);
 		}
 	} else {
-		for (i = 0; i < ctx_cnt; i++) {
+		for (i = 0; i < ctx_cnt && !ret; i++) {
 			fprintf(stdout, "wait for recv completion for ctx: %d\n", i);
-			ft_wait_for_comp(rxcq_array[i], 1);
+			ret = wait_for_comp(rxcq_array[i]);
 		}
 	}
 
-	return 0;
+	return ret;
 }
 
 static int init_fabric(void)
@@ -241,13 +247,12 @@ static int init_fabric(void)
 		return 1;
 	}
 
+	fi->ep_attr->tx_ctx_cnt = ctx_cnt;
+	fi->ep_attr->rx_ctx_cnt = ctx_cnt;
+
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
-
-	/* Set the required number of TX and RX context counts */
-	fi->ep_attr->tx_ctx_cnt = ctx_cnt;
-	fi->ep_attr->rx_ctx_cnt = ctx_cnt;
 
 	ret = fi_scalable_ep(domain, fi, &sep, NULL);
 	if (ret) {
@@ -286,17 +291,17 @@ static int init_av(void)
 		}
 
 		ret = fi_send(tx_ep[0], tx_buf, addrlen,
-				fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
+				fi_mr_desc(mr), remote_fi_addr, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_send", ret);
 			return ret;
 		}
 
-		ret = ft_wait_for_comp(rxcq_array[0], 1);
+		ret = wait_for_comp(rxcq_array[0]);
 		if (ret)
 			return ret;
 	} else {
-		ret = ft_wait_for_comp(rxcq_array[0], 1);
+		ret = wait_for_comp(rxcq_array[0]);
 		if (ret)
 			return ret;
 
@@ -310,7 +315,7 @@ static int init_av(void)
 		}
 
 		ret = fi_send(tx_ep[0], tx_buf, 1,
-				fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
+				fi_mr_desc(mr), remote_fi_addr, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_send", ret);
 			return ret;
@@ -320,7 +325,13 @@ static int init_av(void)
 	for (i = 0; i < ctx_cnt; i++)
 		remote_rx_addr[i] = fi_rx_addr(remote_fi_addr, i, rx_ctx_bits);
 
-	ret = ft_wait_for_comp(txcq_array[0], 1);
+	ret = fi_recv(rx_ep[0], rx_buf, rx_size, fi_mr_desc(mr), 0, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
+
+	ret = wait_for_comp(txcq_array[0]);
 	return ret;
 }
 
@@ -374,7 +385,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_NAMED_RX_CTX;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
+	hints->mode = FI_LOCAL_MR;
 	hints->addr_format = FI_SOCKADDR;
 
 	ret = run();
