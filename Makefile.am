@@ -208,3 +208,6 @@ EXTRA_DIST = \
 
 dist-hook: fabtests.spec
 	cp fabtests.spec $(distdir)
+
+test:
+	./scripts/runfabtests.sh
