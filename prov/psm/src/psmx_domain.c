@@ -46,6 +46,11 @@ static int psmx_domain_close(fid_t fid)
 
 	psmx_am_fini(domain);
 
+	err = pthread_spin_destroy(&domain->poll_lock);
+	if (err)
+		FI_WARN(&psmx_prov, FI_LOG_CORE,
+			"pthread_spin_destroy returns %d\n", err);
+
 #if 0
 	/* AM messages could arrive after MQ is finalized, causing segfault
 	 * when trying to dereference the MQ pointer. There is no mechanism
@@ -148,15 +153,23 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err_out_close_ep;
 	}
 
-	if (psmx_domain_enable_ep(domain_priv, NULL) < 0) {
-		psm_mq_finalize(domain_priv->psm_mq);
-		goto err_out_close_ep;
+	if (psmx_domain_enable_ep(domain_priv, NULL) < 0)
+		goto err_out_finalize_mq;
+
+	err = pthread_spin_init(&domain_priv->poll_lock, PTHREAD_PROCESS_SHARED);
+	if (err) {
+		FI_WARN(&psmx_prov, FI_LOG_CORE,
+			"pthread_spin_init returns %d\n", err);
+		goto err_out_finalize_mq;
 	}
 
 	domain_priv->refcnt = 1;
 	fabric_priv->active_domain = domain_priv;
 	*domain = &domain_priv->domain;
 	return 0;
+
+err_out_finalize_mq:
+	psm_mq_finalize(domain_priv->psm_mq);
 
 err_out_close_ep:
 	if (psm_ep_close(domain_priv->psm_ep, PSM_EP_CLOSE_GRACEFUL,
