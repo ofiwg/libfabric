@@ -336,6 +336,9 @@ struct psmx_fid_domain {
 	 * interleaved in a multithreaded environment.
 	 */
 	pthread_spinlock_t	poll_lock;
+
+	int			progress_thread_enabled;
+	pthread_t		progress_thread;
 };
 
 struct psmx_cq_event {
