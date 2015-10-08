@@ -628,6 +628,7 @@ struct psmx_env {
 	char *uuid;
 	int delay;
 	int timeout;
+	int prog_intv;
 };
 
 extern struct fi_ops_mr		psmx_mr_ops;

@@ -37,10 +37,11 @@ static void *psmx_progress_func(void *args)
 	struct psmx_fid_domain *domain = args;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
+
 	while (1) {
 		psmx_progress(domain);
 		pthread_testcancel();
-		usleep(1);
+		usleep(psmx_env.prog_intv);
 	}
 
 	return NULL;
