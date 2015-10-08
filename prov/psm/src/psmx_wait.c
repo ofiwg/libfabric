@@ -80,6 +80,9 @@ static void psmx_wait_start_progress(struct psmx_fid_domain *domain)
 	if (!domain)
 		return;
 
+	if (domain->progress_thread_enabled && domain->progress_thread != pthread_self())
+		return;
+
 	if (!psmx_wait_thread) {
 		pthread_mutex_init(&psmx_wait_mutex, NULL);
 		pthread_cond_init(&psmx_wait_cond, NULL);
