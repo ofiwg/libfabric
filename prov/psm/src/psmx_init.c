@@ -43,7 +43,7 @@ struct psmx_env psmx_env = {
 	.tagged_rma	= 1,
 	.uuid		= PSMX_DEFAULT_UUID,
 	.delay		= 1,
-	.timeout	= PSMX_TIME_OUT,
+	.timeout	= 5,
 };
 
 static void psmx_init_env(void)

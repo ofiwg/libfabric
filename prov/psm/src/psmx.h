@@ -104,8 +104,6 @@ extern "C" {
 
 extern struct fi_provider psmx_prov;
 
-#define PSMX_TIME_OUT	120
-
 #define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
 			 FI_TRIGGER | FI_INJECT_COMPLETE | \
 			 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)
