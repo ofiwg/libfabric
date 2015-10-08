@@ -24,4 +24,4 @@ script:
         - ./configure --prefix=$HOME --with-libfabric=$HOME
         - make
         - make install
-        - make test
+        - if [ "$TRAVIS_OS_NAME" = "linux" ]; then make test; fi
