@@ -1,6 +1,27 @@
 sudo: false
-install: ./autogen.sh
 language: c
 compiler:
     - clang
     - gcc
+os:
+    - linux
+    - osx
+matrix:
+  exclude:
+    - os: osx
+      compiler: gcc
+install:
+        - ./autogen.sh
+        - ./configure --prefix=$HOME
+        - make
+        - make install
+        - make test
+        - make distcheck
+script:
+        - git clone https://github.com/ofiwg/fabtests.git
+        - cd fabtests
+        - ./autogen.sh
+        - ./configure --prefix=$HOME --with-libfabric=$HOME
+        - make
+        - make install
+        - if [ "$TRAVIS_OS_NAME" = "linux" ]; then make test; fi
