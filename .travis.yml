@@ -1,5 +1,18 @@
 sudo: false
-install: ./autogen.sh
+install:
+        - ./autogen.sh
+        - ./configure --prefix=$HOME
+        - make
+        - make install
+        - make test
+script:
+        - git clone https://github.com/ofiwg/fabtests.git
+        - cd fabtests
+        - ./autogen.sh
+        - ./configure --prefix=$HOME --with-libfabric=$HOME
+        - make
+        - make install
+        - make test
 language: c
 compiler:
     - clang
