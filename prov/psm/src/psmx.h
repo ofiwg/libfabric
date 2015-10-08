@@ -331,6 +331,11 @@ struct psmx_fid_domain {
 	 * as 0. This field is a bit mask, with reserved bits valued as "1".
 	 */
 	uint64_t		reserved_tag_bits; 
+
+	/* lock to prevent the sequence of psm_mq_ipeek and psm_mq_test be
+	 * interleaved in a multithreaded environment.
+	 */
+	pthread_spinlock_t	poll_lock;
 };
 
 struct psmx_cq_event {
