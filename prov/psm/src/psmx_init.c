@@ -129,6 +129,9 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	int ep_type = FI_EP_RDM;
 	int av_type = FI_AV_UNSPEC;
 	enum fi_mr_mode mr_mode = FI_MR_SCALABLE;
+	enum fi_threading threading = FI_THREAD_COMPLETION;
+	enum fi_progress control_progress = FI_PROGRESS_MANUAL;
+	enum fi_progress data_progress = FI_PROGRESS_MANUAL;
 	int caps = 0;
 	uint64_t max_tag_value = 0;
 	int err = -FI_ENODATA;
@@ -294,38 +297,49 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 			switch (hints->domain_attr->threading) {
 			case FI_THREAD_UNSPEC:
+				break;
+			case FI_THREAD_FID:
+			case FI_THREAD_ENDPOINT:
 			case FI_THREAD_COMPLETION:
 			case FI_THREAD_DOMAIN:
+				threading = hints->domain_attr->threading;
 				break;
 			default:
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->domain_attr->threading=%d, supported=%d %d %d\n",
+					"hints->domain_attr->threading=%d, supported=%d %d %d %d %d\n",
 					hints->domain_attr->threading, FI_THREAD_UNSPEC,
-					FI_THREAD_COMPLETION, FI_THREAD_DOMAIN);
+					FI_THREAD_FID, FI_THREAD_ENDPOINT, FI_THREAD_COMPLETION,
+					FI_THREAD_DOMAIN);
 				goto err_out;
 			}
 
 			switch (hints->domain_attr->control_progress) {
 			case FI_PROGRESS_UNSPEC:
+				break;
 			case FI_PROGRESS_MANUAL:
+			case FI_PROGRESS_AUTO:
+				control_progress = hints->domain_attr->control_progress;
 				break;
 			default:
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->domain_attr->control_progress=%d, supported=%d %d\n",
+					"hints->domain_attr->control_progress=%d, supported=%d %d %d\n",
 					hints->domain_attr->control_progress, FI_PROGRESS_UNSPEC,
-					FI_PROGRESS_MANUAL);
+					FI_PROGRESS_MANUAL, FI_PROGRESS_AUTO);
 				goto err_out;
 			}
 
 			switch (hints->domain_attr->data_progress) {
 			case FI_PROGRESS_UNSPEC:
+				break;
 			case FI_PROGRESS_MANUAL:
+			case FI_PROGRESS_AUTO:
+				data_progress = hints->domain_attr->data_progress;
 				break;
 			default:
 				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"hints->domain_attr->data_progress=%d, supported=%d %d\n",
+					"hints->domain_attr->data_progress=%d, supported=%d %d %d\n",
 					hints->domain_attr->data_progress, FI_PROGRESS_UNSPEC,
-					FI_PROGRESS_MANUAL);
+					FI_PROGRESS_MANUAL, FI_PROGRESS_AUTO);
 				goto err_out;
 			}
 		}
@@ -435,9 +449,9 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->ep_attr->tx_ctx_cnt = 1;
 	psmx_info->ep_attr->rx_ctx_cnt = 1;
 
-	psmx_info->domain_attr->threading = FI_THREAD_COMPLETION;
-	psmx_info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
-	psmx_info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	psmx_info->domain_attr->threading = threading;
+	psmx_info->domain_attr->control_progress = control_progress;
+	psmx_info->domain_attr->data_progress = data_progress;
 	psmx_info->domain_attr->name = strdup(PSMX_DOMAIN_NAME);
 	psmx_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	psmx_info->domain_attr->av_type = av_type;
