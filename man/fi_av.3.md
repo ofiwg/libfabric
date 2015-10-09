@@ -223,14 +223,13 @@ struct fi_av_attr {
   of the failed address.  There will be one error completion returned
   for each address that fails to insert into the AV.
 
-: &nbsp;
-: If an AV is opened with FI_EVENT, any insertions attempted before an
+  If an AV is opened with FI_EVENT, any insertions attempted before an
   EQ is bound to the AV will fail with -FI_ENOEQ.
-: &nbsp;
-: Error completions for failed insertions will contain the index of
+
+  Error completions for failed insertions will contain the index of
   the failed address in the index field of the error completion entry.
-: &nbsp;
-: Note that the order of delivery of insert completions may not match
+
+  Note that the order of delivery of insert completions may not match
   the order in which the calls to fi_av_insert were made.  The only
   guarantee is that all error completions for a given call to
   fi_av_insert will precede the single associated non-error
