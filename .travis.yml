@@ -1,4 +1,10 @@
 sudo: false
+addons:
+  ssh_known_hosts:
+        - flatbed.openfabrics.org
+        - git.kernel.org
+env:
+        - CFLAGS=-I$HOME/include LDFLAGS=-L$HOME/lib LD_LIBRARY_PATH=$HOME/lib
 language: c
 compiler:
     - clang
@@ -10,6 +16,14 @@ matrix:
   exclude:
     - os: osx
       compiler: gcc
+before_install:
+        - apt-get source libnl-dev && cd libnl* && ./configure --prefix=$HOME && make && make install && cd ..
+        - apt-get source libnl-route-3-dev && cd libnl3* && ./configure --prefix=$HOME && make && make install && cd ..
+        # Using latest libibverbs and rdmacm as the system provided versions are old
+        - git clone https://git.kernel.org/pub/scm/libs/infiniband/libibverbs.git
+        - cd libibverbs && ./autogen.sh && ./configure --prefix=$HOME LIBNL_CFLAGS=$CFLAGS LIBNL_LIBS=$LDFLAGS LIBNL_ROUTE3_CFLAGS=-I$HOME/include/libnl3 LIBNL_ROUTE3_LIBS=-L$HOME/lib/libnl3 && make && make install && cd ..
+        - git clone git://flatbed.openfabrics.org/~shefty/librdmacm.git
+        - cd librdmacm && ./autogen.sh && ./configure --prefix=$HOME CC=gcc && make && make install
 install:
         - ./autogen.sh
         - ./configure --prefix=$HOME
