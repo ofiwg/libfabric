@@ -1,4 +1,10 @@
 sudo: false
+language: c
+compiler:
+    - gcc
+    - clang
+os:
+    - linux
 before_install:
     - git clone https://github.com/ofiwg/libfabric.git
     - cd libfabric
@@ -15,6 +21,3 @@ install:
     - make
     - make install
     - make test
-language: c
-compiler:
-    - gcc
