@@ -88,7 +88,6 @@ struct pingpong_context {
 	int			use_event;
 };
 
-int pp_close_ctx(struct pingpong_context *ctx);
 
 static int pp_eq_create(struct pingpong_context *ctx)
 {
@@ -141,27 +140,23 @@ static int pp_listen_ctx(struct pingpong_context *ctx)
 	rc = pp_eq_create(ctx);
 	if (rc) {
 		fprintf(stderr, "Unable to allocate listener resources\n");
-		goto err;
+		return 1;
 	}
 
 	rc = fi_pep_bind(ctx->lep, &ctx->eq->fid, 0);
 	if (rc) {
 		FT_PRINTERR("fi_pep_bind", rc);
-		goto err;
+		return 1;
 	}
 
 	rc = fi_listen(ctx->lep);
 	if (rc) {
 		FT_PRINTERR("fi_listen", rc);
-		goto err;
+		return 1;
 	}
 
 	printf("Listening for incoming connections...\n");
 	return 0;
-
-err:
-	pp_close_ctx(ctx);
-	return 1;
 }
 
 static int pp_accept_ctx(struct pingpong_context *ctx)
@@ -174,75 +169,71 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 	rd = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
 		FT_PROCESS_EQ_ERR(rd, ctx->eq, "fi_eq_sread", "listen");
-		goto err;
+		return 1;
 	}
 
 	if (event != FI_CONNREQ) {
 		fprintf(stderr, "Unexpected CM event %d\n", event);
-		goto err;
+		return 1;
 	}
 
 	rc = fi_domain(ctx->fabric, entry.info, &ctx->dom, NULL);
 	if (rc) {
 		FT_PRINTERR("fi_fdomain", rc);
-		goto err;
+		return 1;
 	}
 
 
 	rc = fi_mr_reg(ctx->dom, ctx->buf, ctx->size, FI_SEND | FI_RECV, 0, 0, 0, &ctx->mr, NULL);
 	if (rc) {
 		FT_PRINTERR("fi_mr_reg", rc);
-		goto err;
+		return 1;
 	}
 
 	rc = fi_endpoint(ctx->dom, entry.info, &ctx->ep, NULL);
 	if (rc) {
 		FT_PRINTERR("fi_endpoint", rc);
-		goto err;
+		return 1;
 	}
 
 	/* Create event queue */
 	if (pp_cq_create(ctx)) {
 		fprintf(stderr, "Unable to create event queue\n");
-		goto err;
+		return 1;
 	}
 
 	rc = fi_ep_bind(ctx->ep, &ctx->cq->fid, FI_SEND | FI_RECV);
 	if (rc) {
 		FT_PRINTERR("fi_ep_bind", rc);
-		goto err;
+		return 1;
 	}
 
 	rc = fi_ep_bind(ctx->ep, &ctx->eq->fid, 0);
 	if (rc) {
 		FT_PRINTERR("fi_ep_bind", rc);
-		goto err;
+		return 1;
 	}
 
 	rc = fi_accept(ctx->ep, NULL, 0);
 	if (rc) {
 		FT_PRINTERR("fi_accept", rc);
-		goto err;
+		return 1;
 	}
 
 	rd = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
 		FT_PROCESS_EQ_ERR(rd, ctx->eq, "fi_eq_sread", "accept");
-		goto err;
+		return 1;
 	}
 
 	if (event != FI_CONNECTED) {
 		fprintf(stderr, "Unexpected CM event %d\n", event);
-		goto err;
+		return 1;
 	}
 	printf("Connection accepted\n");
 
 	fi_freeinfo(entry.info);
 	return 0;
-
-err:
-	pp_close_ctx(ctx);
-	return 1;
 }
 
 static int pp_connect_ctx(struct pingpong_context *ctx)
@@ -256,70 +247,66 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 	rc = fi_domain(ctx->fabric, ctx->info, &ctx->dom, NULL);
 	if (rc) {
 		FT_PRINTERR("fi_fdomain", rc);
-		goto err;
+		return 1;
 	}
 
 	if (pp_eq_create(ctx)) {
 		fprintf(stderr, "Unable to create event queue\n");
-		goto err;
+		return 1;
 	}
 	
 	rc = fi_mr_reg(ctx->dom, ctx->buf, ctx->size, FI_SEND | FI_RECV, 0, 0, 0, &ctx->mr, NULL);
 	if (rc) {
 		FT_PRINTERR("fi_mr_reg", rc);
-		goto err;
+		return 1;
 	}
 
 	/* Open endpoint */
 	rc = fi_endpoint(ctx->dom, ctx->info, &ctx->ep, NULL);
 	if (rc) {
 		FT_PRINTERR("fi_endpoint", rc);
-		goto err;
+		return 1;
 	}
 	
 	/* Create event queue */
 	if (pp_cq_create(ctx)) {
 		fprintf(stderr, "Unable to create event queue\n");
-		goto err;
+		return 1;
 	}
 	
 	/* Bind eq to ep */
 	rc = fi_ep_bind(ctx->ep, &ctx->cq->fid, FI_SEND | FI_RECV);
 	if (rc) {
 		FT_PRINTERR("fi_ep_bind", rc);
-		goto err;
+		return 1;
 	}	
 
 	rc = fi_ep_bind(ctx->ep, &ctx->eq->fid, 0);
 	if (rc) {
 		FT_PRINTERR("fi_ep_bind", rc);
-		goto err;
+		return 1;
 	}
 
 	printf("Connecting to server\n");
 	rc = fi_connect(ctx->ep, ctx->info->dest_addr, NULL, 0);
 	if (rc) {
 		FT_PRINTERR("fi_connect", rc);
-		goto err;
+		return 1;
 	}
 
 	rd = fi_eq_sread(ctx->eq, &event, &entry, sizeof entry, -1, 0);
 	if (rd != sizeof entry) {
 		FT_PROCESS_EQ_ERR(rd, ctx->eq, "fi_eq_sread", "connect");
-		goto err;
+		return 1;
 	}
 
 	if (event != FI_CONNECTED) {
 		fprintf(stderr, "Unexpected CM event %d\n", event);
-		goto err;
+		return 1;
 	}
 
 	printf("Connection successful\n");
 	return 0;
-
-err:
-	pp_close_ctx(ctx);
-	return 1;
 }
 
 static struct pingpong_context *pp_init_ctx(struct fi_info *info, int size,
@@ -349,14 +336,13 @@ static struct pingpong_context *pp_init_ctx(struct fi_info *info, int size,
 	rc = fi_fabric(info->fabric_attr, &ctx->fabric, NULL);
 	if (rc) {
 		FT_PRINTERR("fi_fabric", rc);
-		return NULL;
+		goto clean_ctx;
 	}
 
 	return ctx;
 
 clean_ctx:
 	free(ctx);
-
 	return NULL;
 }
 
@@ -372,9 +358,7 @@ int pp_close_ctx(struct pingpong_context *ctx)
 
 	if (ctx->buf)
 		free(ctx->buf);
-	if (ctx)
-		free(ctx);
-
+	free(ctx);
 	return 0;
 }
 
@@ -423,9 +407,9 @@ static void usage(char *argv0)
 
 int main(int argc, char *argv[])
 {
-	uint64_t 	flags 				= 0;
-	char 		*service 			= NULL;
-	char 		*node 				= NULL;
+	uint64_t flags 				= 0;
+	char 	*service 			= NULL;
+	char 	*node 				= NULL;
 	struct pingpong_context *ctx;
 	struct timeval           start, end;
 	int                      size = 4096;
@@ -438,7 +422,7 @@ int main(int argc, char *argv[])
 	int                      use_event = 0;
 	int                      routs;
 	int                      rcnt, scnt;
-	int						 rc = 0;
+	int			 ret, rc = 0;
 
 	srand48(getpid() * time(NULL));
 
@@ -655,9 +639,10 @@ int main(int argc, char *argv[])
 err3:
 	fi_shutdown(ctx->ep, 0);
 err2:
-	pp_close_ctx(ctx);
+	ret = pp_close_ctx(ctx);
+	if (!rc)
+		rc = ret;
 err1:
 	fi_freeinfo(fi);
-
 	return rc;
 }

@@ -209,7 +209,9 @@ static int run_test()
 	}
 
 	/* Wait for recv completions */
-	ft_get_rx_comp(rx_seq);
+	ret = ft_get_rx_comp(rx_seq);
+	if (ret)
+		return ret;
 
 	if (!opts.dst_addr) {
 		/* Post sends addressed to remote EPs */

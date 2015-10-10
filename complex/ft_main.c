@@ -145,31 +145,29 @@ static int ft_fw_listen(char *service)
 	if (listen_sock < 0) {
 		perror("socket");
 		ret = listen_sock;
-		goto free;
+		goto out;
 	}
 
 	val = 1;
 	ret = setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof val);
 	if (ret) {
 		perror("setsockopt SO_REUSEADDR");
-		goto close;
+		goto out;
 	}
 
 	ret = bind(listen_sock, ai->ai_addr, ai->ai_addrlen);
 	if (ret) {
 		perror("bind");
-		goto close;
+		goto out;
 	}
 
 	ret = listen(listen_sock, 0);
 	if (ret)
 		perror("listen");
 
-	return 0;
-
-close:
-	close(listen_sock);
-free:
+out:
+	if (ret && listen_sock >= 0)
+		close(listen_sock);
 	freeaddrinfo(ai);
 	return ret;
 }
@@ -193,7 +191,9 @@ static int ft_fw_connect(char *node, char *service)
 	}
 
 	ret = 1;
-	setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (void *) &ret, sizeof(ret));
+	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (void *) &ret, sizeof(ret));
+	if (ret)
+		perror("setsockopt");
 
 	ret = connect(sock, ai->ai_addr, ai->ai_addrlen);
 	if (ret) {
@@ -278,11 +278,11 @@ ft_fw_update_info(struct ft_info *test_info, struct fi_info *info, int subindex)
 	if (info->fabric_attr) {
 		if (info->fabric_attr->prov_name) {
 			strncpy(test_info->prov_name, info->fabric_attr->prov_name,
-				sizeof test_info->prov_name);
+				sizeof test_info->prov_name - 1);
 		}
 		if (info->fabric_attr->name) {
 			strncpy(test_info->fabric_name, info->fabric_attr->name,
-				sizeof test_info->fabric_name);
+				sizeof test_info->fabric_name - 1);
 		}
 	}
 }
@@ -317,6 +317,11 @@ static int ft_fw_server(void)
 				ret = 0;
 			break;
 		}
+
+		test_info.node[sizeof(test_info.node) - 1] = '\0';
+		test_info.service[sizeof(test_info.service) - 1] = '\0';
+		test_info.prov_name[sizeof(test_info.prov_name) - 1] = '\0';
+		test_info.fabric_name[sizeof(test_info.fabric_name) - 1] = '\0';
 
 		ft_fw_convert_info(hints, &test_info);
 		printf("Starting test %d-%d: ", test_info.test_index,
@@ -479,6 +484,7 @@ int main(int argc, char **argv)
 			break;
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
+			break;
 		case '?':
 		case 'h':
 			ft_fw_usage(argv[0]);
@@ -514,11 +520,14 @@ int main(int argc, char **argv)
 			if (sock < 0) {
 				ret = sock;
 				perror("accept");
+				goto out;
 			}
 
 			op = 1;
-			setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
-				   (void *) &op, sizeof(op));
+			ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
+					 (void *) &op, sizeof(op));
+			if (ret)
+				perror("setsockopt");
 
 			ret = ft_fw_server();
 			ft_fw_shutdown(sock);

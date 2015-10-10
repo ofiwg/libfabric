@@ -350,7 +350,7 @@ static int ft_parse_config(char *config, int size,
 	jsmn_init(&parser);
 	num_tokens = jsmn_parse(&parser, config, size, NULL, 0);
 
-	tokens = (jsmntok_t *)malloc(sizeof(jsmntok_t) * num_tokens);
+	tokens = malloc(sizeof(jsmntok_t) * num_tokens);
 
 	/* jsmn parser returns a list of JSON tokens (jsmntok_t)
 	 * e.g. JSMN_OBJECT
@@ -383,13 +383,14 @@ static int ft_parse_config(char *config, int size,
 			break;
 		default:
 			FT_ERR("[jsmn] Unknown error!\n");
+			break;
 		}
-		return 1;
+		goto err1;
 	}
 
 	if (ret != num_tokens) {
 		FT_ERR("[jsmn] Expected # of tokens: %d, Got: %d\n", num_tokens, ret);
-		return 1;
+		goto err1;
 	}
 
 	for (i = 0, ts_count = 0; i < num_tokens; i++) {
@@ -410,13 +411,13 @@ static int ft_parse_config(char *config, int size,
 					(char *)(test_sets + ts_index));
 		        if (num_tokens_parsed <= 0)	{
 				FT_ERR("Error parsing config!\n");
-				goto err;
+				goto err2;
 			}
 			i += num_tokens_parsed;
 			break;
 		default:
 			FT_ERR("[jsmn] Unknown token!\n");
-			goto err;
+			goto err2;
 		}
 	}
 
@@ -425,8 +426,9 @@ static int ft_parse_config(char *config, int size,
 
 	free(tokens);
 	return 0;
-err:
+err2:
 	free(test_sets);
+err1:
 	free(tokens);
 	return 1;
 }
@@ -449,6 +451,10 @@ struct ft_series *fts_load(char *filename)
 
 		fseek(fp, 0, SEEK_END);
 		size = ftell(fp);
+		if (size < 0) {
+			FT_ERR("ftell error");
+			return NULL;
+		}
 		fseek(fp, 0, SEEK_SET);
 
 		config = (char *)malloc(size + 1);

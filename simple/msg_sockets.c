@@ -355,13 +355,13 @@ static int setup_handle(void)
 	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
-		return ret;
+		goto out;
 	}
 
 	ret = fi_eq_open(fabric, &eq_attr, &eq, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_eq_open", ret);
-		return ret;
+		goto out;
 	}
 
 	/* Open a passive endpoint */
