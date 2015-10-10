@@ -254,7 +254,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "A client-server example that tranfers CQ data.\n");
+			ft_usage(argv[0], "A client-server example that transfers CQ data.\n");
 			return EXIT_FAILURE;
 		}
 	}
