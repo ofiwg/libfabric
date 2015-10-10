@@ -541,11 +541,6 @@ int ft_getsrcaddr(char *node, char *service, struct fi_info *hints)
 	return getaddr(node, service, hints, FI_SOURCE);
 }
 
-int ft_getdestaddr(char *node, char *service, struct fi_info *hints)
-{
-	return getaddr(node, service, hints, 0);
-}
-
 int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 		uint64_t *flags, struct ft_opts *opts)
 {

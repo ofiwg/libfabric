@@ -151,7 +151,6 @@ const unsigned int test_cnt;
 #define FT_MR_KEY 0xC0DE
 
 int ft_getsrcaddr(char *node, char *service, struct fi_info *hints);
-int ft_getdestaddr(char *node, char *service, struct fi_info *hints);
 int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 		uint64_t *flags, struct ft_opts *opts);
 char *size_str(char str[FT_STR_LEN], long long size);
