@@ -287,6 +287,8 @@ static int send_recv()
 
 int main(int argc, char **argv)
 {
+	char *node, *service;
+	uint64_t flags;
 	int op, ret;
 
 	opts = INIT_OPTS;
@@ -321,7 +323,10 @@ int main(int argc, char **argv)
 
 	cq_attr.wait_obj = FI_WAIT_FD;
 
-	/* Fabric and connection setup */
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
+
 	if (!opts.dst_addr) {
 		ret = ft_start_server();
 		if (ret)

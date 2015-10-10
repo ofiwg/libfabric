@@ -134,12 +134,12 @@ int ft_check_buf(void *buf, int size);
 #define INFO_OPTS "n:f:"
 #define CS_OPTS ADDR_OPTS "I:S:m"
 
+extern char default_port[8];
+
 #define INIT_OPTS (struct ft_opts) \
 	{	.options = FT_OPT_RX_CQ | FT_OPT_TX_CQ, \
 		.iterations = 1000, \
 		.transfer_size = 1024, \
-		.src_port = "9228", \
-		.dst_port = "9228", \
 		.argc = argc, .argv = argv \
 	}
 

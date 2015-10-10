@@ -413,6 +413,8 @@ out:
 
 int main(int argc, char **argv)
 {
+	char *node, *service;
+	uint64_t flags;
 	int op, ret;
 
 	opts = INIT_OPTS;
@@ -443,14 +445,17 @@ int main(int argc, char **argv)
 	hints->mode		= FI_LOCAL_MR;
 	hints->addr_format	= FI_SOCKADDR;
 
-	/* Fabric and connection setup */
-	if (!opts.src_addr || !opts.src_port) {
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
+
+	if (!opts.src_port)
+		opts.src_port = "9229";
+
+	if (!opts.src_addr) {
 		fprintf(stderr, "Source address (-s) is required for this test\n");
 		return EXIT_FAILURE;
 	}
-
-	if (opts.dst_addr && (opts.src_port == opts.dst_port))
-		opts.src_port = "9229";
 
 	ret = setup_handle();
 	if (ret)
