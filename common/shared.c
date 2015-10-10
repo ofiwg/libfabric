@@ -507,7 +507,7 @@ static int getaddr(char *node, char *service,
 	int ret;
 	struct fi_info *fi;
 
-	if (!node) {
+	if (!node && !service) {
 		if (flags & FI_SOURCE) {
 			hints->src_addr = NULL;
 			hints->src_addrlen = 0;
