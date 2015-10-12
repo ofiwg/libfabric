@@ -349,8 +349,12 @@ static int ft_parse_config(char *config, int size,
 
 	jsmn_init(&parser);
 	num_tokens = jsmn_parse(&parser, config, size, NULL, 0);
+	if (num_tokens <= 0)
+		return 1;
 
 	tokens = malloc(sizeof(jsmntok_t) * num_tokens);
+	if (!tokens)
+		return 1;
 
 	/* jsmn parser returns a list of JSON tokens (jsmntok_t)
 	 * e.g. JSMN_OBJECT
