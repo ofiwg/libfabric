@@ -210,4 +210,4 @@ dist-hook: fabtests.spec
 	cp fabtests.spec $(distdir)
 
 test:
-	./scripts/runfabtests.sh
+	./scripts/runfabtests.sh -vvv
