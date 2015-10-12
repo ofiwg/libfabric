@@ -246,11 +246,11 @@ function cs_test {
 
 	start_time=$(date '+%s')
 
-	${SSH_SERVER} ${BIN_PATH} "set -x; ${test_exe} -s $S_INTERFACE" &> $s_outp &
+	${SSH_SERVER} ${BIN_PATH} "${test_exe} -s $S_INTERFACE" &> $s_outp &
 	p1=$!
 	sleep 1s
 
-	${SSH_CLIENT} ${BIN_PATH} "set -x; ${test_exe} -s $C_INTERFACE $S_INTERFACE" &> $c_outp &
+	${SSH_CLIENT} ${BIN_PATH} "${test_exe} -s $C_INTERFACE $S_INTERFACE" &> $c_outp &
 	p2=$!
 
 	wait $p1
