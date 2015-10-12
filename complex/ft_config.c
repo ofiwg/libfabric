@@ -609,7 +609,13 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->eq_wait_obj = set->eq_wait_obj[series->cur_eq_wait_obj];
 	info->cq_wait_obj = set->cq_wait_obj[series->cur_cq_wait_obj];
 
-	memcpy(info->node, set->node[0] ? set->node : opts.dst_addr, FI_NAME_MAX);
-	memcpy(info->service, set->service[0] ? set->service : opts.dst_port, FI_NAME_MAX);
-	memcpy(info->prov_name, set->prov_name, FI_NAME_MAX);
+	if (set->node[0])
+		strncpy(info->node, set->node, sizeof info->node);
+	else if (opts.dst_addr)
+		strncpy(info->node, opts.dst_addr, sizeof info->node);
+	if (set->service[0])
+		strncpy(info->service, set->service, sizeof info->node);
+	else if (opts.dst_port)
+		strncpy(info->service, opts.dst_port, sizeof info->node);
+	strncpy(info->prov_name, set->prov_name, FI_NAME_MAX);
 }
