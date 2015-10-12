@@ -200,10 +200,6 @@ static int client_connect(void)
 	ssize_t rd;
 	int ret;
 
-	ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
-	if (ret)
-		return ret;
-
 	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
@@ -245,7 +241,13 @@ static int client_connect(void)
 
 static int run(void)
 {
-	int i, ret = 0;
+	char *node, *service;
+	uint64_t flags;
+	int i, ret;
+
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
 
 	if (!opts.dst_addr) {
 		ret = ft_start_server();

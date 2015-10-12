@@ -216,7 +216,13 @@ static int run_test()
 
 static int run(void)
 {
-	int ret = 0;
+	char *node, *service;
+	uint64_t flags;
+	int ret;
+
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
 
 	if (!opts.dst_addr) {
 		ret = ft_start_server();
@@ -254,7 +260,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "A client-server example that tranfers CQ data.\n");
+			ft_usage(argv[0], "A client-server example that transfers CQ data.\n");
 			return EXIT_FAILURE;
 		}
 	}

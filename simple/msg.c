@@ -178,6 +178,8 @@ static int send_recv()
 
 int main(int argc, char **argv)
 {
+	char *node, *service;
+	uint64_t flags;
 	int op, ret;
 
 	opts = INIT_OPTS;
@@ -208,7 +210,10 @@ int main(int argc, char **argv)
 	hints->mode		= FI_LOCAL_MR;
 	hints->addr_format	= FI_SOCKADDR;
 
-	/* Fabric and connection setup */
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
+
 	if (!opts.dst_addr) {
 		ret = ft_start_server();
 		if (ret)

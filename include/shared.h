@@ -134,12 +134,12 @@ int ft_check_buf(void *buf, int size);
 #define INFO_OPTS "n:f:"
 #define CS_OPTS ADDR_OPTS "I:S:m"
 
+extern char default_port[8];
+
 #define INIT_OPTS (struct ft_opts) \
 	{	.options = FT_OPT_RX_CQ | FT_OPT_TX_CQ, \
 		.iterations = 1000, \
 		.transfer_size = 1024, \
-		.src_port = "9228", \
-		.dst_port = "9228", \
 		.argc = argc, .argv = argv \
 	}
 
@@ -151,7 +151,6 @@ const unsigned int test_cnt;
 #define FT_MR_KEY 0xC0DE
 
 int ft_getsrcaddr(char *node, char *service, struct fi_info *hints);
-int ft_getdestaddr(char *node, char *service, struct fi_info *hints);
 int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 		uint64_t *flags, struct ft_opts *opts);
 char *size_str(char str[FT_STR_LEN], long long size);

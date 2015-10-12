@@ -60,6 +60,7 @@ uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
 void *buf, *tx_buf, *rx_buf;
 size_t buf_size, tx_size, rx_size;
+char default_port[8] = "9228";
 
 char test_name[10] = "custom";
 int timeout = -1;
@@ -507,7 +508,7 @@ static int getaddr(char *node, char *service,
 	int ret;
 	struct fi_info *fi;
 
-	if (!node) {
+	if (!node && !service) {
 		if (flags & FI_SOURCE) {
 			hints->src_addr = NULL;
 			hints->src_addrlen = 0;
@@ -541,23 +542,24 @@ int ft_getsrcaddr(char *node, char *service, struct fi_info *hints)
 	return getaddr(node, service, hints, FI_SOURCE);
 }
 
-int ft_getdestaddr(char *node, char *service, struct fi_info *hints)
-{
-	return getaddr(node, service, hints, 0);
-}
-
 int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 		uint64_t *flags, struct ft_opts *opts)
 {
 	int ret;
 
 	if (opts->dst_addr) {
+		if (!opts->dst_port)
+			opts->dst_port = default_port;
+
 		ret = ft_getsrcaddr(opts->src_addr, opts->src_port, hints);
 		if (ret)
 			return ret;
 		*node = opts->dst_addr;
 		*service = opts->dst_port;
 	} else {
+		if (!opts->src_port)
+			opts->src_port = default_port;
+
 		*node = opts->src_addr;
 		*service = opts->src_port;
 		*flags = FI_SOURCE;
