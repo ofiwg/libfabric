@@ -453,11 +453,11 @@ struct ft_series *fts_load(char *filename)
 		size = ftell(fp);
 		if (size < 0) {
 			FT_ERR("ftell error");
-			return NULL;
+			goto err1;
 		}
 		fseek(fp, 0, SEEK_SET);
 
-		config = (char *)malloc(size + 1);
+		config = malloc(size + 1);
 		if (!config) {
 			FT_ERR("Unable to allocate memory\n");
 			goto err1;
