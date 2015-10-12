@@ -41,7 +41,7 @@ simple_tests=(
 	"dgram_waitset"
 	"msg"
 	"msg_epoll"
-	"msg_sockets -s CLIENT_ADDR"
+	"msg_sockets"
 	"poll"
 	"rdm"
 	"rdm_rma_simple"
@@ -232,8 +232,7 @@ function cs_test {
 	local test=$1
 	local ret1=0
 	local ret2=0
-	local test_exe=$(echo "fi_${test} -f $PROV" | \
-	    sed -e "s/CLIENT_ADDR/${CLIENT}/g")
+	local test_exe="fi_${test} -f ${PROV}"
 	local start_time
 	local end_time
 	local test_time
@@ -247,11 +246,11 @@ function cs_test {
 
 	start_time=$(date '+%s')
 
-	${SSH_SERVER} ${BIN_PATH} "${test_exe} -s $SERVER" &> $s_outp &
+	${SSH_SERVER} ${BIN_PATH} "set -x; ${test_exe} -s $S_INTERFACE" &> $s_outp &
 	p1=$!
 	sleep 1s
 
-	${SSH_CLIENT} ${BIN_PATH} "${test_exe} $SERVER" &> $c_outp &
+	${SSH_CLIENT} ${BIN_PATH} "set -x; ${test_exe} -s $C_INTERFACE $S_INTERFACE" &> $c_outp &
 	p2=$!
 
 	wait $p1
@@ -354,10 +353,12 @@ function usage {
 	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short (default quick)"
 	errcho -e " -e\texclude tests: cq_data,dgram_dgram_waitset,..."
 	errcho -e " -p\tpath to test bins (default PATH)"
+	errcho -e " -c\tclient interface"
+	errcho -e " -s\tserver/host interface"
 	exit 1
 }
 
-while getopts ":vt:p:g:e:" opt; do
+while getopts ":vt:p:g:e:c:s:" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -368,6 +369,10 @@ case ${opt} in
 	g) GOOD_ADDR=${OPTARG}
 	;;
 	e) EXCLUDE=${OPTARG}
+	;;
+	c) C_INTERFACE=${OPTARG}
+	;;
+	s) S_INTERFACE=${OPTARG}
 	;;
 	:|\?) usage
 	;;
@@ -395,5 +400,8 @@ if [[ $# -ge 3 ]]; then
 	CLIENT=$3
 	SSH_CLIENT="${ssh} ${CLIENT}"
 fi
+
+[ -z $C_INTERFACE ] && C_INTERFACE=$CLIENT
+[ -z $S_INTERFACE ] && S_INTERFACE=$SERVER
 
 main ${TEST_TYPE}
