@@ -38,6 +38,31 @@ static void *psmx_progress_func(void *args)
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
+	if (psmx_env.prog_affinity) {
+		cpu_set_t cpuset;
+		int core_id;
+		int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+
+		if (psmx_env.prog_affinity > 0)
+			core_id = psmx_env.prog_affinity - 1;
+		else
+			core_id = psmx_env.prog_affinity + num_cores;
+
+		if (core_id >= num_cores)
+			core_id = num_cores - 1;
+		else if (core_id < 0)
+			core_id = 0;
+
+		CPU_ZERO(&cpuset);
+		CPU_SET(core_id, &cpuset);
+		pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+
+		FI_INFO(&psmx_prov, FI_LOG_CORE, "progress thread affinity set to core %d\n", core_id);
+	}
+	else {
+		FI_INFO(&psmx_prov, FI_LOG_CORE, "progress thread affinity not set\n");
+	}
+
 	while (1) {
 		psmx_progress(domain);
 		pthread_testcancel();
