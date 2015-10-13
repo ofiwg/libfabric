@@ -31,6 +31,8 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#if HAVE_EPOLL == 1
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,10 +48,7 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
-#if HAVE_EPOLL == 1
-
 static int epfd;
-
 
 static int alloc_ep_res(struct fi_info *fi)
 {
@@ -350,6 +349,6 @@ int main(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-	return -FI_ENOSYS;
+	return FI_ENODATA;
 }
 #endif
