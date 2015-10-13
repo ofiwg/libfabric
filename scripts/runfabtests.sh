@@ -35,6 +35,17 @@ declare -i skip_count=0
 declare -i pass_count=0
 declare -i fail_count=0
 
+# OS X defines NODATA differently than Linux, this
+# is a hack to work around that.
+function no_data_num {
+	if [[ "$(uname)" != "Linux" ]]; then
+		echo 96
+	else
+		echo 61
+	fi
+}
+declare -ri FI_ENODATA=$(no_data_num)
+
 simple_tests=(
 	"cq_data"
 	"dgram"
@@ -104,7 +115,7 @@ unit_tests=(
 	"size_left_test"
 )
 
-function errcho() {
+function errcho {
 	>&2 echo $*
 }
 
@@ -164,15 +175,12 @@ function cleanup_and_exit {
 	exit 1
 }
 
-# compute the duration in seconds between two floating point seconds values
+# compute the duration in seconds between two integer values
 # measured since the start of the UNIX epoch and print the result to stdout
 function compute_duration {
-	local s=$1
-	local e=$2
-
-	# just use perl, bc is fragile and forgets to include leading 0s when
-	# numbers are <1.0
-	perl -e "printf \"%.6f\n\", ($e - $s)"
+	local -i s=$1
+	local -i e=$2
+	echo $(( $2 - $1))
 }
 
 function is_excluded {
@@ -213,7 +221,7 @@ function unit_test {
 	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
-	if [ $ret1 -eq 61 ]; then
+	if [ $ret1 -eq $FI_ENODATA ]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp"
 		skip_count+=1
 	elif [ $ret1 -ne 0 ]; then
@@ -262,7 +270,7 @@ function cs_test {
 	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
 
-	if [ $ret1 -eq 61 -a $ret2 -eq 61 ]; then
+	if [ $ret1 -eq $FI_ENODATA -a $ret2 -eq $FI_ENODATA ]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$c_outp"
 		skip_count+=1
 	elif [ $ret1 -ne 0 -o $ret2 -ne 0 ]; then

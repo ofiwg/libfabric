@@ -4,6 +4,7 @@ compiler:
     - gcc
     - clang
 os:
+    - osx
     - linux
 before_install:
     - git clone https://github.com/ofiwg/libfabric.git
