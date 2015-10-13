@@ -6,14 +6,10 @@ compiler:
 os:
     - linux
     - osx
-matrix:
-  exclude:
-    - os: osx
-      compiler: gcc
 install:
         - ./autogen.sh
         - ./configure --prefix=$HOME
-        - make
+        - make -j2
         - make install
         - make test
         - make distcheck
@@ -22,6 +18,6 @@ script:
         - cd fabtests
         - ./autogen.sh
         - ./configure --prefix=$HOME --with-libfabric=$HOME
-        - make
+        - make -j2
         - make install
-        - if [ "$TRAVIS_OS_NAME" = "linux" ]; then make test; fi
+        - make test
