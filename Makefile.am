@@ -14,6 +14,7 @@ bin_PROGRAMS = \
 	simple/fi_poll \
 	simple/fi_scalable_ep \
 	simple/fi_rdm_shared_ctx \
+	simple/fi_msg_epoll \
 	streaming/fi_msg_rma \
 	streaming/fi_rdm_atomic \
 	streaming/fi_rdm_multi_recv \
@@ -31,10 +32,6 @@ bin_PROGRAMS = \
 	ported/libibverbs/fi_rc_pingpong \
 	ported/librdmacm/fi_cmatose \
 	complex/fi_ubertest
-
-if HAVE_EPOLL
-bin_PROGRAMS += simple/fi_msg_epoll
-endif
 
 dist_bin_SCRIPTS = \
 	scripts/runfabtests.sh \
