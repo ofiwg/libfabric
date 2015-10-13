@@ -27,6 +27,10 @@
  * SOFTWARE.
  */
 
+#if HAVE_CONFIG_H
+#  include <config.h>
+#endif /* HAVE_CONFIG_H */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +46,7 @@
 #include <rdma/fi_cm.h>
 #include <shared.h>
 
+#if HAVE_EPOLL == 1
 
 static int epfd;
 
@@ -345,3 +350,13 @@ int main(int argc, char **argv)
 	close(epfd);
 	return ret;
 }
+
+#else
+
+#include <rdma/fi_errno.h>
+
+int main(int argc, char **argv)
+{
+	return -FI_ENOSYS;
+}
+#endif
