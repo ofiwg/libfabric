@@ -641,7 +641,6 @@ ssize_t ft_post_tx(size_t size)
 	ssize_t ret;
 
 	if (hints->caps & FI_TAGGED) {
-printf("sending tag %" PRIu64 "\n", tx_seq);
 		ret = fi_tsend(ep, tx_buf, size + ft_tx_prefix_size(),
 				fi_mr_desc(mr), remote_fi_addr, tx_seq, &tx_ctx);
 	} else {
