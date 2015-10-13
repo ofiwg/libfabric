@@ -222,7 +222,6 @@ static int send_recv()
 	int ret;
 
 	if (opts.dst_addr) {
-		/* Client */
 		fprintf(stdout, "Posting a send...\n");
 		sprintf(buf, "Hello World!");
 		ret = ft_post_tx(sizeof("Hello World!"));
@@ -251,12 +250,6 @@ static int send_recv()
 
 		fprintf(stdout, "Send completion received\n");
 	} else {
-		/* Server */
-		fprintf(stdout, "Posting a recv...\n");
-		ret = ft_post_rx(rx_size);
-		if (ret)
-			return ret;
-
 		fprintf(stdout, "Waiting for client...\n");
 
 		memset((void *)&event, 0, sizeof event);
