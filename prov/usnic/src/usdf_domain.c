@@ -67,6 +67,12 @@ usdf_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	USDF_TRACE_SYS(DOMAIN, "\n");
 
+	if (flags & FI_REG_MR) {
+		USDF_WARN_SYS(DOMAIN,
+			"FI_REG_MR for EQs is not supported by the usnic provider");
+		return -FI_EOPNOTSUPP;
+	}
+
         udp = dom_fidtou(fid);
 
         switch (bfid->fclass) {
