@@ -629,6 +629,7 @@ struct psmx_env {
 	int delay;
 	int timeout;
 	int prog_intv;
+	int prog_affinity;
 };
 
 extern struct fi_ops_mr		psmx_mr_ops;

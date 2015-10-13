@@ -45,6 +45,7 @@ struct psmx_env psmx_env = {
 	.delay		= 1,
 	.timeout	= 5,
 	.prog_intv	= 1000,
+	.prog_affinity	= -1,
 };
 
 static void psmx_init_env(void)
@@ -59,6 +60,7 @@ static void psmx_init_env(void)
 	fi_param_get_int(&psmx_prov, "delay", &psmx_env.delay);
 	fi_param_get_int(&psmx_prov, "timeout", &psmx_env.timeout);
 	fi_param_get_int(&psmx_prov, "prog_intv", &psmx_env.prog_intv);
+	fi_param_get_int(&psmx_prov, "prog_affinity", &psmx_env.prog_affinity);
 }
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
@@ -662,6 +664,13 @@ PSM_INI
 	fi_param_define(&psmx_prov, "prog_intv", FI_PARAM_INT,
 			"Interval (microseconds) between progress calls made in the "
 			"progress thread (default: 1000)");
+
+	fi_param_define(&psmx_prov, "prog_affinity", FI_PARAM_INT,
+			"CPU affinity setting for the progress thread. The value <n> can be:\n"
+			"0:  no affinity;\n"
+			">0: pin to the <n>th core from the lowest core numer;\n"
+			"<0: pin to the <n>th core from the highest core number;\n"
+			"(default: -1)\n");
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
 
