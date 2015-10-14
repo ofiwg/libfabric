@@ -332,7 +332,7 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 	struct sock_fabric *fab;
 
 	if (strcmp(attr->name, sock_fab_name))
-		return -FI_ENODATA;
+		return -FI_EINVAL;
 
 	fab = calloc(1, sizeof(*fab));
 	if (!fab)
