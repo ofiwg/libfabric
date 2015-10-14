@@ -32,36 +32,78 @@
 
 #include "psmx.h"
 
+static inline int normalize_core_id(int core_id, int num_cores)
+{
+	if (core_id < 0)
+		core_id += num_cores;
+
+	if (core_id < 0)
+		core_id = 0;
+
+	if (core_id >= num_cores)
+		core_id = num_cores - 1;
+
+	return core_id;
+}
+
+static void psmx_progress_set_affinity(char *affinity)
+{
+	int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+	int core_id;
+	cpu_set_t cpuset;
+	char *triplet;
+	int n, start, end, stride;
+	int set_count = 0;
+
+	if (!affinity) {
+		FI_INFO(&psmx_prov, FI_LOG_CORE, "progress thread affinity not set\n");
+		return;
+	}
+
+	CPU_ZERO(&cpuset);
+
+	for (triplet = affinity; triplet; triplet = strchr(triplet, 'c')) {
+		if (triplet[0] == ',')
+			triplet++;
+
+		stride = 1;
+		n = sscanf(triplet, "%d:%d:%d", &start, &end, &stride);
+		if (n < 1)
+			continue;
+
+		if (n < 2)
+			end = start;
+	
+		if (stride < 1)
+			stride = 1;
+
+		start = normalize_core_id(start, num_cores);
+		end = normalize_core_id(end, num_cores);
+
+		for (core_id = start; core_id <= end; core_id += stride) {
+			CPU_SET(core_id, &cpuset);
+			set_count++;
+		}
+
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"core set [%d:%d:%d] added to progress thread affinity set\n",
+			start, end, stride);
+	}
+
+	if (set_count)
+		pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+	else
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"progress thread affinity not set due to invalid format\n");
+}
+
 static void *psmx_progress_func(void *args)
 {
 	struct psmx_fid_domain *domain = args;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
-	if (psmx_env.prog_affinity) {
-		cpu_set_t cpuset;
-		int core_id;
-		int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
-
-		if (psmx_env.prog_affinity > 0)
-			core_id = psmx_env.prog_affinity - 1;
-		else
-			core_id = psmx_env.prog_affinity + num_cores;
-
-		if (core_id >= num_cores)
-			core_id = num_cores - 1;
-		else if (core_id < 0)
-			core_id = 0;
-
-		CPU_ZERO(&cpuset);
-		CPU_SET(core_id, &cpuset);
-		pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-
-		FI_INFO(&psmx_prov, FI_LOG_CORE, "progress thread affinity set to core %d\n", core_id);
-	}
-	else {
-		FI_INFO(&psmx_prov, FI_LOG_CORE, "progress thread affinity not set\n");
-	}
+	psmx_progress_set_affinity(psmx_env.prog_affinity);
 
 	while (1) {
 		psmx_progress(domain);

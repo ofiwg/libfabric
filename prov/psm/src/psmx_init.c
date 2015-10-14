@@ -45,7 +45,7 @@ struct psmx_env psmx_env = {
 	.delay		= 1,
 	.timeout	= 5,
 	.prog_intv	= 1000,
-	.prog_affinity	= -1,
+	.prog_affinity	= NULL,
 };
 
 static void psmx_init_env(void)
@@ -60,7 +60,7 @@ static void psmx_init_env(void)
 	fi_param_get_int(&psmx_prov, "delay", &psmx_env.delay);
 	fi_param_get_int(&psmx_prov, "timeout", &psmx_env.timeout);
 	fi_param_get_int(&psmx_prov, "prog_intv", &psmx_env.prog_intv);
-	fi_param_get_int(&psmx_prov, "prog_affinity", &psmx_env.prog_affinity);
+	fi_param_get_str(&psmx_prov, "prog_affinity", &psmx_env.prog_affinity);
 }
 
 static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
@@ -666,11 +666,13 @@ PSM_INI
 			"progress thread (default: 1000)");
 
 	fi_param_define(&psmx_prov, "prog_affinity", FI_PARAM_INT,
-			"CPU affinity setting for the progress thread. The value <n> can be:\n"
-			"0:  no affinity;\n"
-			">0: pin to the <n>th core from the lowest core numer;\n"
-			"<0: pin to the <n>th core from the highest core number;\n"
-			"(default: -1)\n");
+			"When set, specify the set of CPU cores to set the progress "
+			"thread affinity to. The format is "
+			"<start>[:<end>[:<stride>]][,<start>[:<end>[:<stride>]]]*, "
+			"where each triplet <start>:<end>:<stride> defines a block "
+			"of core_ids. Both <start> and <end> can be either the core_id "
+			"(when >=0) or core_id - num_cores (when <0). "
+			"(default: affinity not set)");
 
         psm_error_register_handler(NULL, PSM_ERRHANDLER_NO_HANDLER);
 
