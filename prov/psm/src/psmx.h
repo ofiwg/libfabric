@@ -628,7 +628,7 @@ struct psmx_env {
 	char *uuid;
 	int delay;
 	int timeout;
-	int prog_intv;
+	int prog_interval;
 	char *prog_affinity;
 };
 
