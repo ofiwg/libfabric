@@ -251,19 +251,19 @@ static int sock_dgram_endpoint(struct fid_domain *domain, struct fi_info *info,
 						      info->tx_attr,
 						      info->rx_attr);
 			if (ret)
-				return ret;
+				return -FI_EINVAL;
 		}
 
 		if (info->tx_attr) {
 			ret = sock_dgram_verify_tx_attr(info->tx_attr);
 			if (ret)
-				return ret;
+				return -FI_EINVAL;
 		}
 
 		if (info->rx_attr) {
 			ret = sock_dgram_verify_rx_attr(info->rx_attr);
 			if (ret)
-				return ret;
+				return -FI_EINVAL;
 		}
 	}
 
