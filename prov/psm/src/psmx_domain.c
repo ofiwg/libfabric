@@ -103,7 +103,8 @@ static void *psmx_progress_func(void *args)
 {
 	struct psmx_fid_domain *domain = args;
 	int affinity_set;
-	int sleep_time;
+	int sleep_usec;
+	struct timespec ts;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
@@ -113,17 +114,20 @@ static void *psmx_progress_func(void *args)
 	 * If affinity is set, sleep a short time to get better latency.
 	 * If affinity is not set, short sleep time doesn't make difference.
 	 */
-	sleep_time = psmx_env.prog_interval;
-	if (sleep_time < 0) {
+	sleep_usec = psmx_env.prog_interval;
+	if (sleep_usec < 0) {
 		if (affinity_set)
-			sleep_time = 1;
+			sleep_usec = 1;
 		else
-			sleep_time = 1000;
+			sleep_usec = 1000;
 	}
+
+	ts.tv_sec = sleep_usec / 1000000;
+	ts.tv_nsec = (sleep_usec % 1000000) * 1000;
 
 	while (1) {
 		psmx_progress(domain);
-		usleep(sleep_time);
+		nanosleep(&ts, NULL);
 	}
 
 	return NULL;
