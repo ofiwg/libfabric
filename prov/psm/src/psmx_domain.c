@@ -46,7 +46,7 @@ static inline int normalize_core_id(int core_id, int num_cores)
 	return core_id;
 }
 
-static void psmx_progress_set_affinity(char *affinity)
+static int psmx_progress_set_affinity(char *affinity)
 {
 	int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
 	int core_id;
@@ -57,7 +57,7 @@ static void psmx_progress_set_affinity(char *affinity)
 
 	if (!affinity) {
 		FI_INFO(&psmx_prov, FI_LOG_CORE, "progress thread affinity not set\n");
-		return;
+		return 0;
 	}
 
 	CPU_ZERO(&cpuset);
@@ -95,20 +95,35 @@ static void psmx_progress_set_affinity(char *affinity)
 	else
 		FI_INFO(&psmx_prov, FI_LOG_CORE,
 			"progress thread affinity not set due to invalid format\n");
+
+	return set_count;
 }
 
 static void *psmx_progress_func(void *args)
 {
 	struct psmx_fid_domain *domain = args;
+	int affinity_set;
+	int sleep_time;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
-	psmx_progress_set_affinity(psmx_env.prog_affinity);
+	affinity_set = psmx_progress_set_affinity(psmx_env.prog_affinity);
+
+	/* Negative sleep time means let the system choose the default.
+	 * If affinity is set, sleep a short time to get better latency.
+	 * If affinity is not set, short sleep time doesn't make difference.
+	 */
+	sleep_time = psmx_env.prog_interval;
+	if (sleep_time < 0) {
+		if (affinity_set)
+			sleep_time = 1;
+		else
+			sleep_time = 1000;
+	}
 
 	while (1) {
 		psmx_progress(domain);
-		pthread_testcancel();
-		usleep(psmx_env.prog_intv);
+		usleep(sleep_time);
 	}
 
 	return NULL;

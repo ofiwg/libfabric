@@ -44,7 +44,7 @@ struct psmx_env psmx_env = {
 	.uuid		= PSMX_DEFAULT_UUID,
 	.delay		= 1,
 	.timeout	= 5,
-	.prog_intv	= 1000,
+	.prog_interval	= -1,
 	.prog_affinity	= NULL,
 };
 
@@ -59,7 +59,7 @@ static void psmx_init_env(void)
 	fi_param_get_str(&psmx_prov, "uuid", &psmx_env.uuid);
 	fi_param_get_int(&psmx_prov, "delay", &psmx_env.delay);
 	fi_param_get_int(&psmx_prov, "timeout", &psmx_env.timeout);
-	fi_param_get_int(&psmx_prov, "prog_intv", &psmx_env.prog_intv);
+	fi_param_get_int(&psmx_prov, "prog_interval", &psmx_env.prog_interval);
 	fi_param_get_str(&psmx_prov, "prog_affinity", &psmx_env.prog_affinity);
 }
 
@@ -661,9 +661,9 @@ PSM_INI
 	fi_param_define(&psmx_prov, "timeout", FI_PARAM_INT,
 			"Timeout (seconds) for gracefully closing the PSM endpoint");
 
-	fi_param_define(&psmx_prov, "prog_intv", FI_PARAM_INT,
+	fi_param_define(&psmx_prov, "prog_interval", FI_PARAM_INT,
 			"Interval (microseconds) between progress calls made in the "
-			"progress thread (default: 1000)");
+			"progress thread (default: 1 if affinity is set, 1000 if not)");
 
 	fi_param_define(&psmx_prov, "prog_affinity", FI_PARAM_INT,
 			"When set, specify the set of CPU cores to set the progress "
