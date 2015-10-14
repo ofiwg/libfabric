@@ -665,7 +665,7 @@ PSM_INI
 			"Interval (microseconds) between progress calls made in the "
 			"progress thread (default: 1 if affinity is set, 1000 if not)");
 
-	fi_param_define(&psmx_prov, "prog_affinity", FI_PARAM_INT,
+	fi_param_define(&psmx_prov, "prog_affinity", FI_PARAM_STRING,
 			"When set, specify the set of CPU cores to set the progress "
 			"thread affinity to. The format is "
 			"<start>[:<end>[:<stride>]][,<start>[:<end>[:<stride>]]]*, "
