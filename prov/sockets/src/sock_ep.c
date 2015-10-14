@@ -1245,7 +1245,7 @@ static void sock_set_fabric_attr(const struct fi_fabric_attr *hint_attr,
 		attr->fabric = fabric ? &fabric->fab_fid : NULL;
 	}
 	attr->name = strdup(sock_fab_name);
-	attr->prov_name = strdup(sock_prov_name);
+	attr->prov_name = NULL;
 }
 
 static void sock_set_domain_attr(const struct fi_domain_attr *hint_attr,
