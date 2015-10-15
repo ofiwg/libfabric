@@ -610,12 +610,16 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->cq_wait_obj = set->cq_wait_obj[series->cur_cq_wait_obj];
 
 	if (set->node[0])
-		strncpy(info->node, set->node, sizeof info->node);
+		strncpy(info->node, set->node, sizeof(info->node) - 1);
 	else if (opts.dst_addr)
-		strncpy(info->node, opts.dst_addr, sizeof info->node);
+		strncpy(info->node, opts.dst_addr, sizeof(info->node) - 1);
 	if (set->service[0])
-		strncpy(info->service, set->service, sizeof info->node);
+		strncpy(info->service, set->service, sizeof(info->service) - 1);
 	else if (opts.dst_port)
-		strncpy(info->service, opts.dst_port, sizeof info->node);
-	strncpy(info->prov_name, set->prov_name, FI_NAME_MAX);
+		strncpy(info->service, opts.dst_port, sizeof(info->service) - 1);
+	strncpy(info->prov_name, set->prov_name, sizeof(info->prov_name) - 1);
+
+	info->node[sizeof(info->node) - 1] = '\0';
+	info->service[sizeof(info->service) - 1] = '\0';
+	info->prov_name[sizeof(info->prov_name) - 1] = '\0';
 }
