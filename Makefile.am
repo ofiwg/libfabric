@@ -563,3 +563,6 @@ dist-hook: libfabric.spec
 
 test:
 	./util/fi_info
+
+rpm: dist
+	rpmbuild -ta libfabric-*.tar.bz2

@@ -6,6 +6,10 @@ compiler:
 os:
     - linux
     - osx
+addons:
+        apt:
+                packages:
+                        - rpm
 install:
         - ./autogen.sh
         - ./configure --prefix=$HOME
@@ -13,6 +17,7 @@ install:
         - make install
         - make test
         - make distcheck
+        - if [ "$TRAVIS_OS_NAME" = "linux" ]; then make rpm; fi
 script:
         - git clone https://github.com/ofiwg/fabtests.git
         - cd fabtests
