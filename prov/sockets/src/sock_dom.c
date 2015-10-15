@@ -460,7 +460,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (info && info->domain_attr) {
 		ret = sock_verify_domain_attr(info->domain_attr);
 		if (ret)
-			return ret;
+			return -FI_EINVAL;
 	}
 
 	sock_domain = calloc(1, sizeof(*sock_domain));
