@@ -1,6 +1,17 @@
+fabtests
+========
+
+Fabtests provides a set of examples that uses libfabric - a high-performance fabric software library.
+
+Building
+--------
+
 To make this directory, run:
 
     ./autogen.sh && ./configure && make && make install
 
 Typically the autogen and configure steps only need be done the first
 time, unless configure.ac changes.
+
+Running
+Reporting issues
