@@ -9,9 +9,7 @@ declare BIN_PATH
 declare PROV="sockets"
 declare TEST_TYPE="quick"
 declare SERVER="127.0.0.1"
-declare SSH_SERVER="eval"
 declare CLIENT="127.0.0.1"
-declare SSH_CLIENT="eval"
 declare EXCLUDE
 declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
@@ -20,13 +18,12 @@ declare -i VERBOSE=0
 declare -r bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
 if [ -z "$(which timeout 2> /dev/null)" ]; then
 	# forego timeout
-	declare -r sssh="${bssh}"
-	declare -r lssh="${bssh}"
+	declare SERVER_CMD="eval"
+	declare CLIENT_CMD="eval"
 else
-	declare -r sssh="timeout 60s ${bssh}"
-	declare -r lssh="timeout 90s ${bssh}"# else
+	declare SERVER_CMD="eval timeout 90s"
+	declare CLIENT_CMD="eval timeout 90s"
 fi
-declare ssh=${sssh}
 
 declare -r c_outp=$(mktemp fabtests.c_outp.XXXXXX)
 declare -r s_outp=$(mktemp fabtests.s_outp.XXXXXX)
@@ -165,8 +162,8 @@ function print_results {
 }
 
 function cleanup {
-	${SSH_CLIENT} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs kill -9" >& /dev/null
-	${SSH_SERVER} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs kill -9" >& /dev/null
+	${CLIENT_CMD} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs kill -9" >& /dev/null
+	${SERVER_CMD} "ps -eo comm,pid | grep '^fi_' | awk '{print \$2}' | xargs kill -9" >& /dev/null
 	rm -f $c_outp $s_outp
 }
 
@@ -212,7 +209,7 @@ function unit_test {
 
 	start_time=$(date '+%s')
 
-	${SSH_SERVER} ${BIN_PATH} "${test_exe}" &> $s_outp &
+	${SERVER_CMD} "${BIN_PATH}${test_exe}" &> $s_outp &
 	p1=$!
 
 	wait $p1
@@ -254,11 +251,11 @@ function cs_test {
 
 	start_time=$(date '+%s')
 
-	${SSH_SERVER} ${BIN_PATH} "${test_exe} -s $S_INTERFACE" &> $s_outp &
+	${SERVER_CMD} "${BIN_PATH}${test_exe} -s $S_INTERFACE" &> $s_outp &
 	p1=$!
 	sleep 1s
 
-	${SSH_CLIENT} ${BIN_PATH} "${test_exe} -s $C_INTERFACE $S_INTERFACE" &> $c_outp &
+	${CLIENT_CMD} "${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE" &> $c_outp &
 	p2=$!
 
 	wait $p1
@@ -298,7 +295,6 @@ function main {
 	fi
 
 	for ts in ${tests}; do
-	ssh=${sssh}
 	case ${ts} in
 		unit)
 			for test in "${unit_tests[@]}"; do
@@ -316,7 +312,6 @@ function main {
 			done
 		;;
 		standard)
-			ssh=${lssh}
 			for test in "${standard_tests[@]}"; do
 				cs_test "$test"
 			done
@@ -372,7 +367,7 @@ case ${opt} in
 	;;
 	v) VERBOSE+=1
 	;;
-	p) BIN_PATH="PATH=${OPTARG}:${PATH}"
+	p) BIN_PATH="${OPTARG}/"
 	;;
 	g) GOOD_ADDR=${OPTARG}
 	;;
@@ -401,12 +396,12 @@ fi
 
 if [[ $# -ge 2 ]]; then
 	SERVER=$2
-	SSH_SERVER="${ssh} ${SERVER}"
+	SERVER_CMD="${bssh} ${SERVER}"
 fi
 
 if [[ $# -ge 3 ]]; then
 	CLIENT=$3
-	SSH_CLIENT="${ssh} ${CLIENT}"
+	CLIENT_CMD="${bssh} ${CLIENT}"
 fi
 
 [ -z $C_INTERFACE ] && C_INTERFACE=$CLIENT
