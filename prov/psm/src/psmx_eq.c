@@ -85,17 +85,18 @@ static struct psmx_eq_event *psmx_eq_alloc_event(struct psmx_fid_eq *eq)
 {
 	struct psmx_eq_event *event;
 
+	pthread_mutex_lock(&eq->mutex);
 	if (!slist_empty(&eq->free_list)) {
 		event = container_of(slist_remove_head(&eq->free_list),
 				     struct psmx_eq_event, list_entry);
+		pthread_mutex_unlock(&eq->mutex);
+		return event;
 	}
-	else {
-		event = calloc(1, sizeof(*event));
-		if (!event) {
-			FI_WARN(&psmx_prov, FI_LOG_EQ, "out of memory.\n");
-			return NULL;
-		}
-	}
+
+	pthread_mutex_unlock(&eq->mutex);
+	event = calloc(1, sizeof(*event));
+	if (!event)
+		FI_WARN(&psmx_prov, FI_LOG_EQ, "out of memory.\n");
 
 	return event;
 }
@@ -103,7 +104,10 @@ static struct psmx_eq_event *psmx_eq_alloc_event(struct psmx_fid_eq *eq)
 static void psmx_eq_free_event(struct psmx_fid_eq *eq, struct psmx_eq_event *event)
 {
 	memset(event, 0, sizeof(*event));
+
+	pthread_mutex_lock(&eq->mutex);
 	slist_insert_tail(&event->list_entry, &eq->free_list);
+	pthread_mutex_unlock(&eq->mutex);
 }
 
 struct psmx_eq_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
