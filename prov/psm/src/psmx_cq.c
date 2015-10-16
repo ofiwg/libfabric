@@ -58,6 +58,36 @@ static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_fid_cq *cq)
 	return container_of(entry, struct psmx_cq_event, list_entry);
 }
 
+static struct psmx_cq_event *psmx_cq_alloc_event(struct psmx_fid_cq *cq)
+{
+	struct psmx_cq_event *event;
+
+	pthread_mutex_lock(&cq->mutex);
+	if (!slist_empty(&cq->free_list)) {
+		event = container_of(slist_remove_head(&cq->free_list),
+				     struct psmx_cq_event, list_entry);
+		pthread_mutex_unlock(&cq->mutex);
+		return event;
+	}
+
+	pthread_mutex_unlock(&cq->mutex);
+	event = calloc(1, sizeof(*event));
+	if (!event)
+		FI_WARN(&psmx_prov, FI_LOG_CQ, "out of memory.\n");
+
+	return event;
+}
+
+static void psmx_cq_free_event(struct psmx_fid_cq *cq,
+				      struct psmx_cq_event *event)
+{
+	memset(event, 0, sizeof(*event));
+
+	pthread_mutex_lock(&cq->mutex);
+	slist_insert_tail(&event->list_entry, &cq->free_list);
+	pthread_mutex_unlock(&cq->mutex);
+}
+
 struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 					   void *op_context, void *buf,
 					   uint64_t flags, size_t len,
@@ -66,17 +96,9 @@ struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 {
 	struct psmx_cq_event *event;
 
-	if (!slist_empty(&cq->free_list)) {
-		event = container_of(slist_remove_head(&cq->free_list),
-				     struct psmx_cq_event, list_entry);
-	}
-	else {
-		event = calloc(1, sizeof(*event));
-		if (!event) {
-			FI_WARN(&psmx_prov, FI_LOG_CQ, "out of memory.\n");
-			exit(-1);
-		}
-	}
+	event = psmx_cq_alloc_event(cq);
+	if (!event)
+		return NULL;
 
 	if ((event->error = !!err)) {
 		event->cqe.err.op_context = op_context;
@@ -119,7 +141,7 @@ struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
 	default:
 		FI_WARN(&psmx_prov, FI_LOG_CQ,
 			"unsupported CQ format %d\n", cq->format);
-		slist_insert_tail(&event->list_entry, &cq->free_list);
+		psmx_cq_free_event(cq, event);
 		return NULL;
 	}
 
@@ -218,18 +240,9 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 		event = event_in;
 	}
 	else {
-		if (!slist_empty(&cq->free_list)) {
-			event = container_of(slist_remove_head(&cq->free_list),
-					     struct psmx_cq_event, list_entry);
-		}
-		else {
-			event = calloc(1, sizeof(*event));
-			if (!event) {
-				FI_WARN(&psmx_prov, FI_LOG_CQ,
-					"out of memory.\n");
-				exit(-1);
-			}
-		}
+		event = psmx_cq_alloc_event(cq);
+		if (!event)
+			return NULL;
 
 		event->error = !!psm_status->error_code;
 	}
@@ -290,11 +303,9 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 
 	default:
 		FI_WARN(&psmx_prov, FI_LOG_CQ,
-			"unsupported EQ format %d\n", cq->format);
-		if (event != event_in) {
-			memset(event, 0, sizeof(*event));
-			slist_insert_tail(&event->list_entry, &cq->free_list);
-		}
+			"unsupported CQ format %d\n", cq->format);
+		if (event != event_in)
+			psmx_cq_free_event(cq, event);
 		return NULL;
 	}
 
@@ -611,8 +622,7 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 				if (psmx_cq_get_event_src_addr(cq_priv, event, src_addr))
 					*src_addr = FI_ADDR_NOTAVAIL;
 
-				memset(event, 0, sizeof(*event));
-				slist_insert_tail(&event->list_entry, &cq_priv->free_list);
+				psmx_cq_free_event(cq_priv, event);
 
 				read_count++;
 				buf += cq_priv->entry_size;
