@@ -21,18 +21,10 @@ AC_DEFUN([FI_PSM_CONFIGURE],[
 				[psm_happy=1],
 				[psm_happy=0])
 	       AS_IF([test $psm_happy -eq 1],
-		     [AC_MSG_CHECKING([if PSM version is 1.x])
-		      AC_RUN_IFELSE([AC_LANG_SOURCE(
-						    [[
-						    #include <psm.h>
-						    int main()
-						    {
-							return PSM_VERNO_MAJOR < 2 ? 0 : 1;
-						    }
-						    ]]
-						   )],
-				    [AC_MSG_RESULT([yes])],
-				    [AC_MSG_RESULT([no]); psm_happy=0])
+		     [AC_CHECK_LIB([psm_infinipath],
+				   [psm_am_get_source],
+				   [AC_MSG_RESULT([PSM version is not 1.x]); psm_happy=0],
+				   [AC_MSG_RESULT([PSM version is 1.x])])
 		     ])
 	       AS_IF([test $psm_happy -eq 1],
 		     [AC_CHECK_TYPE([psm_epconn_t],
