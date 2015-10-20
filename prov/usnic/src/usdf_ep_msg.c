@@ -234,8 +234,7 @@ int usdf_msg_fill_tx_attr(struct fi_info *hints, struct fi_info *fi)
 		return -FI_ENODATA;
 
 	/* clear the mode bits the app doesn't support */
-	if (hints->tx_attr->mode)
-		defaults.mode &= hints->tx_attr->mode;
+	defaults.mode &= (hints->mode | hints->tx_attr->mode);
 
 	/* make sure the app supports our required mode bits */
 	if ((defaults.mode & USDF_MSG_REQ_MODE) != USDF_MSG_REQ_MODE)
@@ -283,8 +282,7 @@ int usdf_msg_fill_rx_attr(struct fi_info *hints, struct fi_info *fi)
 		return -FI_ENODATA;
 
 	/* clear the mode bits the app doesn't support */
-	if (hints->rx_attr->mode)
-		defaults.mode &= hints->rx_attr->mode;
+	defaults.mode &= (hints->mode | hints->rx_attr->mode);
 
 	/* make sure the app supports our required mode bits */
 	if ((defaults.mode & USDF_MSG_REQ_MODE) != USDF_MSG_REQ_MODE)
