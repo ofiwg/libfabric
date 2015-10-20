@@ -98,6 +98,7 @@ _sockets_files = \
 	prov/sockets/src/sock_rma.c \
 	prov/sockets/src/sock_atomic.c \
 	prov/sockets/src/sock_trigger.c \
+	prov/sockets/src/sock_epoll.c \
 	prov/sockets/src/sock_util.h
 
 if HAVE_SOCKETS_DL

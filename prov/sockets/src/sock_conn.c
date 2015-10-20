@@ -61,6 +61,12 @@ int sock_conn_map_init(struct sock_conn_map *map, int init_size)
 	if (!map->table)
 		return -FI_ENOMEM;
 
+	if (sock_epoll_create(&map->epoll_set, init_size) < 0) {
+                SOCK_LOG_ERROR("failed to create epoll set\n");
+                free(map->table);
+                return -FI_ENOMEM;
+        }
+
 	map->used = 0;
 	map->size = init_size;
 	return 0;
@@ -92,6 +98,7 @@ void sock_conn_map_destroy(struct sock_conn_map *cmap)
 	free(cmap->table);
 	cmap->table = NULL;
 	cmap->used = cmap->size = 0;
+	sock_epoll_close(&cmap->epoll_set);
 }
 
 struct sock_conn *
@@ -149,6 +156,14 @@ static int sock_conn_map_insert(struct sock_conn_map *map,
 	fastlock_acquire(&ep->lock);
 	dlist_insert_tail(&map->table[index].ep_entry, &ep->conn_list);
 	fastlock_release(&ep->lock);
+
+	if (idm_set(&ep->conn_idm, conn_fd, &map->table[index]) < 0)
+                SOCK_LOG_ERROR("idm_set failed\n");
+
+	if (sock_epoll_add(&map->epoll_set, conn_fd))
+                SOCK_LOG_ERROR("failed to add to epoll set: %d\n", conn_fd);
+
+	sock_pe_poll_add(ep->domain->pe, conn_fd);
 
 	map->used++;
 	sock_pe_signal(ep->domain->pe);

@@ -161,6 +161,21 @@ struct sock_service_entry {
 	struct dlist_entry entry;
 };
 
+#ifdef HAVE_EPOLL
+struct sock_epoll_set {
+	int fd;
+	int size;
+	int used;
+	struct epoll_event *events;
+};
+#else
+struct sock_epoll_set {
+	struct pollfd *pollfds;
+	int size;
+	int used;
+};
+#endif
+
 struct sock_fabric {
 	struct fid_fabric fab_fid;
 	atomic_t ref;
@@ -187,6 +202,7 @@ struct sock_conn {
 
 struct sock_conn_map {
         struct sock_conn *table;
+	struct sock_epoll_set epoll_set;
         int used;
         int size;
 	struct sock_domain *domain;
@@ -525,6 +541,9 @@ struct sock_ep {
 	struct sock_conn_listener listener;
 	struct dlist_entry conn_list;
 	fastlock_t lock;
+
+	struct index_map conn_idm;
+	struct sock_conn_map cmap;
 };
 
 struct sock_pep {
@@ -779,6 +798,7 @@ struct sock_pe {
 	int num_free_entries;
 	struct sock_pe_entry pe_table[SOCK_PE_MAX_ENTRIES];
 	fastlock_t lock;
+	fastlock_t signal_lock;
 	pthread_mutex_t list_lock;
 	int signal_fds[2];
 	uint64_t waittime;
@@ -792,6 +812,7 @@ struct sock_pe {
 	pthread_t progress_thread;
 	volatile int do_progress;
 	struct sock_pe_entry *pe_atomic;
+	struct sock_epoll_set epoll_set;
 };
 
 typedef int (*sock_cq_report_fn) (struct sock_cq *cq, fi_addr_t addr,
@@ -1056,6 +1077,7 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain);
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);
 void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx);
 void sock_pe_signal(struct sock_pe *pe);
+void sock_pe_poll_add(struct sock_pe *pe, int fd);
 int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx);
 int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx);
 void sock_pe_remove_tx_ctx(struct sock_tx_ctx *tx_ctx);
@@ -1123,5 +1145,11 @@ ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 			  uint64_t flags, uint8_t op_type);
 
+int sock_epoll_create(struct sock_epoll_set *set, int size);
+int sock_epoll_add(struct sock_epoll_set *set, int fd);
+int sock_epoll_del(struct sock_epoll_set *set, int fd);
+int sock_epoll_wait(struct sock_epoll_set *set, int timeout);
+int sock_epoll_get_fd_at_index(struct sock_epoll_set *set, int index);
+void sock_epoll_close(struct sock_epoll_set *set);
 
 #endif

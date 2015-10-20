@@ -2272,6 +2272,14 @@ void sock_pe_signal(struct sock_pe *pe)
 		SOCK_LOG_ERROR("Failed to signal\n");
 }
 
+void sock_pe_poll_add(struct sock_pe *pe, int fd)
+{
+        fastlock_acquire(&pe->signal_lock);
+        if (sock_epoll_add(&pe->epoll_set, fd))
+                SOCK_LOG_ERROR("failed to add to epoll set: %d, size: %d, used: %d\n", fd, pe->epoll_set.size, pe->epoll_set.used);
+        fastlock_release(&pe->signal_lock);
+}
+
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx)
 {
 	pthread_mutex_lock(&pe->list_lock);
@@ -2307,75 +2315,40 @@ void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx)
 static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 					struct sock_rx_ctx *rx_ctx)
 {
-	int ret = 0, data_avail = 0;
-	struct dlist_entry *entry;
+	int ret = 0, i, fd;
 	struct sock_conn *conn;
-	fd_set rfds;
-	int max_fd = 0, nfds = 0;
-	struct timeval tv;
-	FD_ZERO(&rfds);
+	struct sock_conn_map *map;
 
-	fastlock_acquire(&ep->lock);
+	map = &ep->cmap;
 
-	for (entry = ep->conn_list.next;
-	     entry != &ep->conn_list; entry = entry->next) {
-		conn = container_of(entry, struct sock_conn, ep_entry);
-		if (rbused(&conn->outbuf))
-			sock_comm_flush(conn);
+        if (!map->used)
+                return 0;
 
-		if (conn->rx_pe_entry)
+        ret = sock_epoll_wait(&map->epoll_set, 0);
+        if (ret < 0 || ret == 0) {
+                if (ret < 0)
+                        SOCK_LOG_ERROR("poll failed: %s\n", strerror(errno));
+                return ret;
+        }
+
+	fastlock_acquire(&map->lock);
+	for (i = 0; i < ret; i++) {
+		fd = sock_epoll_get_fd_at_index(&map->epoll_set, i);
+		conn = idm_lookup(&ep->conn_idm, fd);
+		if (!conn)
+			SOCK_LOG_ERROR("idm_lookup failed\n");
+
+		if (!conn || conn->rx_pe_entry)
 			continue;
-
-		data_avail = 0;
-		if (rbused(&conn->inbuf) > 0) {
-			data_avail = 1;
-		} else {
-			FD_SET(conn->sock_fd, &rfds);
-			nfds++;
-			max_fd = MAX(conn->sock_fd, max_fd);
-			data_avail = sock_comm_data_avail(conn);
-		}
-
-		if (data_avail && !dlist_empty(&pe->free_list)) {
+		if (!dlist_empty(&pe->free_list)) {
 			ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn);
 			if (ret < 0)
 				goto out;
 		}
 	}
 
-	if (nfds == 0)
-		goto out;
-
-	tv.tv_sec = 0;
-	tv.tv_usec = 0;
-	ret = select(max_fd + 1, &rfds, NULL, NULL, &tv);
-	if (ret < 0) {
-		SOCK_LOG_ERROR("Error in select\n");
-		goto out;
-	}
-
-	if (ret == 0)
-		goto out;
-
-	for (entry = ep->conn_list.next;
-	     entry != &ep->conn_list; entry = entry->next) {
-		conn = container_of(entry, struct sock_conn, ep_entry);
-		if (conn->rx_pe_entry)
-			continue;
-
-		if (FD_ISSET(conn->sock_fd, &rfds)) {
-			if (!dlist_empty(&pe->free_list)) {
-				/* new RX PE entry */
-				ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn);
-				if (ret < 0)
-					goto out;
-			}
-		}
-	}
-
-	ret = 0;
 out:
-	fastlock_release(&ep->lock);
+	fastlock_release(&map->lock);
 	return ret;
 }
 
@@ -2495,6 +2468,7 @@ out:
 static void sock_pe_poll(struct sock_pe *pe)
 {
 	char tmp;
+	int ret;
 	fd_set rfds;
 	int i, max_fds = 0;
 	struct dlist_entry *entry;
@@ -2536,6 +2510,10 @@ static void sock_pe_poll(struct sock_pe *pe)
 		}
 	}
 	pthread_mutex_unlock(&pe->list_lock);
+
+	ret = sock_epoll_wait(&pe->epoll_set, -1);
+        if (ret < 0)
+                SOCK_LOG_ERROR("poll failed : %s\n", strerror(errno));
 
 	map = &pe->domain->r_cmap;
 	fastlock_acquire(&map->lock);
@@ -2711,27 +2689,37 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 	dlistfd_head_init(&pe->tx_list);
 	dlistfd_head_init(&pe->rx_list);
 	fastlock_init(&pe->lock);
+	fastlock_init(&pe->signal_lock);
 	pthread_mutex_init(&pe->list_lock, NULL);
 	pe->domain = domain;
 
+	if (sock_epoll_create(&pe->epoll_set, sock_cm_def_map_sz) < 0) {
+                SOCK_LOG_ERROR("failed to create epoll set\n");
+                goto err1;
+        }
+
 	if (domain->progress_mode == FI_PROGRESS_AUTO) {
-		if (socketpair(AF_UNIX, SOCK_STREAM, 0, pe->signal_fds) < 0) {
-			goto err1;
-		}
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, pe->signal_fds) < 0)
+			goto err2;
+
 		fd_set_nonblock(pe->signal_fds[SOCK_SIGNAL_RD_FD]);
+		sock_epoll_add(&pe->epoll_set, pe->signal_fds[SOCK_SIGNAL_RD_FD]);
+
 		pe->do_progress = 1;
 		if (pthread_create(&pe->progress_thread, NULL,
 				   sock_pe_progress_thread, (void *)pe)) {
 			SOCK_LOG_ERROR("Couldn't create progress thread\n");
-			goto err2;
+			goto err3;
 		}
 	}
 	SOCK_LOG_DBG("PE init: OK\n");
 	return pe;
 
-err2:
+err3:
 	close(pe->signal_fds[0]);
 	close(pe->signal_fds[1]);
+err2:
+	sock_epoll_close(&pe->epoll_set);
 err1:
 	fastlock_destroy(&pe->lock);
 	dlistfd_head_free(&pe->tx_list);
@@ -2751,9 +2739,11 @@ void sock_pe_finalize(struct sock_pe *pe)
 	}
 
 	fastlock_destroy(&pe->lock);
+	fastlock_destroy(&pe->signal_lock);
 	pthread_mutex_destroy(&pe->list_lock);
 	dlistfd_head_free(&pe->tx_list);
 	dlistfd_head_free(&pe->rx_list);
+	sock_epoll_close(&pe->epoll_set);
 	free(pe);
 	SOCK_LOG_DBG("Progress engine finalize: OK\n");
 }
