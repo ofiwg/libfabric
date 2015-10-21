@@ -806,8 +806,8 @@ struct sock_pe {
 	struct dlist_entry free_list;
 	struct dlist_entry busy_list;
 
-	struct dlistfd_head tx_list;
-	struct dlistfd_head rx_list;
+	struct dlist_entry tx_list;
+	struct dlist_entry rx_list;
 
 	pthread_t progress_thread;
 	volatile int do_progress;

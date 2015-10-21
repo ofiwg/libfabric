@@ -2283,7 +2283,7 @@ void sock_pe_poll_add(struct sock_pe *pe, int fd)
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx)
 {
 	pthread_mutex_lock(&pe->list_lock);
-	dlistfd_insert_tail(&ctx->pe_entry, &pe->tx_list);
+	dlist_insert_tail(&ctx->pe_entry, &pe->tx_list);
 	sock_pe_signal(pe);
 	pthread_mutex_unlock(&pe->list_lock);
 	SOCK_LOG_DBG("TX ctx added to PE\n");
@@ -2292,7 +2292,7 @@ void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx)
 void sock_pe_add_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *ctx)
 {
 	pthread_mutex_lock(&pe->list_lock);
-	dlistfd_insert_tail(&ctx->pe_entry, &pe->rx_list);
+	dlist_insert_tail(&ctx->pe_entry, &pe->rx_list);
 	sock_pe_signal(pe);
 	pthread_mutex_unlock(&pe->list_lock);
 	SOCK_LOG_DBG("RX ctx added to PE\n");
@@ -2478,13 +2478,13 @@ static void sock_pe_poll(struct sock_pe *pe)
 	struct sock_conn *conn;
 
 	FD_ZERO(&rfds);
-	if (dlistfd_empty(&pe->tx_list) && dlistfd_empty(&pe->rx_list))
+	if (dlist_empty(&pe->tx_list) && dlist_empty(&pe->rx_list))
 		goto do_wait;
 
 	pthread_mutex_lock(&pe->list_lock);
-	if (!dlistfd_empty(&pe->tx_list)) {
-		for (entry = pe->tx_list.list.next;
-		     entry != &pe->tx_list.list; entry = entry->next) {
+	if (!dlist_empty(&pe->tx_list)) {
+		for (entry = pe->tx_list.next;
+		     entry != &pe->tx_list; entry = entry->next) {
 			tx_ctx = container_of(entry, struct sock_tx_ctx,
 						pe_entry);
 			if (!rbfdempty(&tx_ctx->rbfd) ||
@@ -2497,9 +2497,9 @@ static void sock_pe_poll(struct sock_pe *pe)
 		}
 	}
 
-	if (!dlistfd_empty(&pe->rx_list)) {
-		for (entry = pe->rx_list.list.next;
-		     entry != &pe->rx_list.list; entry = entry->next) {
+	if (!dlist_empty(&pe->rx_list)) {
+		for (entry = pe->rx_list.next;
+		     entry != &pe->rx_list; entry = entry->next) {
 			rx_ctx = container_of(entry, struct sock_rx_ctx,
 						pe_entry);
 			if (!dlist_empty(&rx_ctx->rx_buffered_list) ||
@@ -2625,9 +2625,9 @@ static void *sock_pe_progress_thread(void *data)
 			sock_pe_poll(pe);
 
 		pthread_mutex_lock(&pe->list_lock);
-		if (!dlistfd_empty(&pe->tx_list)) {
-			for (entry = pe->tx_list.list.next;
-			     entry != &pe->tx_list.list; entry = entry->next) {
+		if (!dlist_empty(&pe->tx_list)) {
+			for (entry = pe->tx_list.next;
+			     entry != &pe->tx_list; entry = entry->next) {
 				tx_ctx = container_of(entry, struct sock_tx_ctx,
 						      pe_entry);
 				ret = sock_pe_progress_tx_ctx(pe, tx_ctx);
@@ -2639,9 +2639,9 @@ static void *sock_pe_progress_thread(void *data)
 			}
 		}
 
-		if (!dlistfd_empty(&pe->rx_list)) {
-			for (entry = pe->rx_list.list.next;
-			     entry != &pe->rx_list.list; entry = entry->next) {
+		if (!dlist_empty(&pe->rx_list)) {
+			for (entry = pe->rx_list.next;
+			     entry != &pe->rx_list; entry = entry->next) {
 				rx_ctx = container_of(entry, struct sock_rx_ctx,
 						      pe_entry);
 				ret = sock_pe_progress_rx_ctx(pe, rx_ctx);
@@ -2686,8 +2686,8 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 		return NULL;
 
 	sock_pe_init_table(pe);
-	dlistfd_head_init(&pe->tx_list);
-	dlistfd_head_init(&pe->rx_list);
+	dlist_init(&pe->tx_list);
+	dlist_init(&pe->rx_list);
 	fastlock_init(&pe->lock);
 	fastlock_init(&pe->signal_lock);
 	pthread_mutex_init(&pe->list_lock, NULL);
@@ -2722,8 +2722,6 @@ err2:
 	sock_epoll_close(&pe->epoll_set);
 err1:
 	fastlock_destroy(&pe->lock);
-	dlistfd_head_free(&pe->tx_list);
-	dlistfd_head_free(&pe->rx_list);
 	free(pe);
 	return NULL;
 }
@@ -2741,8 +2739,6 @@ void sock_pe_finalize(struct sock_pe *pe)
 	fastlock_destroy(&pe->lock);
 	fastlock_destroy(&pe->signal_lock);
 	pthread_mutex_destroy(&pe->list_lock);
-	dlistfd_head_free(&pe->tx_list);
-	dlistfd_head_free(&pe->rx_list);
 	sock_epoll_close(&pe->epoll_set);
 	free(pe);
 	SOCK_LOG_DBG("Progress engine finalize: OK\n");
