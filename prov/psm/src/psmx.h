@@ -591,8 +591,8 @@ struct psmx_fid_ep {
 	struct psmx_fid_cntr	*read_cntr;
 	struct psmx_fid_cntr	*remote_write_cntr;
 	struct psmx_fid_cntr	*remote_read_cntr;
-	int			send_selective_completion:1;
-	int			recv_selective_completion:1;
+	unsigned		send_selective_completion:1;
+	unsigned		recv_selective_completion:1;
 	uint64_t		flags;
 	uint64_t		caps;
 	struct fi_context	nocomp_send_context;
