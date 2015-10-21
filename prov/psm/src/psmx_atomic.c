@@ -793,6 +793,8 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 
 	if (flags & FI_INJECT) {
 		req = malloc(sizeof(*req) + len);
+		if (!req)
+			return -FI_ENOMEM;
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req+sizeof(*req), (void *)buf, len);
 		buf = (void *)req + sizeof(*req);
@@ -980,6 +982,8 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 
 	if ((flags & FI_INJECT) && op != FI_ATOMIC_READ) {
 		req = malloc(sizeof(*req) + len);
+		if (!req)
+			return -FI_ENOMEM;
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req+sizeof(*req), (void *)buf, len);
 		buf = (void *)req + sizeof(*req);
@@ -1187,6 +1191,8 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 
 	if (flags & FI_INJECT) {
 		req = malloc(sizeof(*req) + len + len);
+		if (!req)
+			return -FI_ENOMEM;
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req + sizeof(*req), (void *)buf, len);
 		memcpy((void *)req + sizeof(*req) + len, (void *)compare, len);
