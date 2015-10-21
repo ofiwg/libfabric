@@ -392,9 +392,6 @@ static void sock_pe_progress_pending_ack(struct sock_pe *pe,
 	}
 
 	if (pe_entry->total_len == pe_entry->done_len && !pe_entry->rem) {
-		sock_comm_flush(pe_entry->conn);
-		if (!sock_comm_tx_done(pe_entry->conn))
-			return;
 		pe_entry->is_complete = 1;
 		pe_entry->pe.rx.pending_send = 0;
 		pe_entry->conn->tx_pe_entry = NULL;
@@ -1770,9 +1767,6 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 		}
 	}
 
-	sock_comm_flush(pe_entry->conn);
-	if (!sock_comm_tx_done(pe_entry->conn))
-		return 0;
 
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
@@ -1838,10 +1832,6 @@ static int sock_pe_progress_tx_write(struct sock_pe *pe,
 		}
 	}
 
-	sock_comm_flush(pe_entry->conn);
-	if (!sock_comm_tx_done(pe_entry->conn))
-		return 0;
-
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
 		pe_entry->conn->tx_pe_entry = NULL;
@@ -1877,10 +1867,6 @@ static int sock_pe_progress_tx_read(struct sock_pe *pe,
 	if (sock_pe_send_field(pe_entry, &src_iov[0], src_iov_len, len))
 		return 0;
 	len += src_iov_len;
-
-	sock_comm_flush(pe_entry->conn);
-	if (!sock_comm_tx_done(pe_entry->conn))
-		return 0;
 
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
@@ -1934,8 +1920,8 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 		}
 	}
 
-	sock_comm_flush(pe_entry->conn);
-	if (!sock_comm_tx_done(pe_entry->conn))
+	sock_pe_flush_comm_buf(pe_entry);
+	if (pe_entry->used > 0)
 		return 0;
 
 	pe_entry->tag = 0;
@@ -2520,7 +2506,6 @@ static void sock_pe_poll(struct sock_pe *pe)
 	for (i = 0; i < map->used; i++) {
 		conn = &map->table[i];
 		if (rbused(&conn->outbuf) || rbused(&conn->inbuf)) {
-			sock_comm_flush(conn);
 			fastlock_release(&map->lock);
 			return;
 		}

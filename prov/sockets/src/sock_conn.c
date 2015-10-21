@@ -92,7 +92,6 @@ void sock_conn_map_destroy(struct sock_conn_map *cmap)
 	int i;
 
 	for (i = 0; i < cmap->used; i++) {
-		sock_comm_buffer_finalize(&cmap->table[i]);
 		close(cmap->table[i].sock_fd);
 	}
 	free(cmap->table);
@@ -148,7 +147,7 @@ static int sock_conn_map_insert(struct sock_conn_map *map,
 	map->table[index].addr = *addr;
 	map->table[index].sock_fd = conn_fd;
 	map->table[index].ep = ep;
-	sock_comm_buffer_init(&map->table[index]);
+	sock_set_sockopts(conn_fd);
 	map->table[index].av_index = (ep->av) ?
 		sock_av_lookup_key(ep->av, index) :
 		FI_ADDR_NOTAVAIL;

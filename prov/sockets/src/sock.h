@@ -143,9 +143,6 @@
 #define SOCK_NO_COMPLETION (1ULL << 60)
 #define SOCK_USE_OP_FLAGS (1ULL << 61)
 
-#define SOCK_COMM_BUF_SZ (1<<20)
-#define SOCK_COMM_THRESHOLD (128 * 1024)
-
 enum {
 	SOCK_SIGNAL_RD_FD = 0,
 	SOCK_SIGNAL_WR_FD
@@ -1104,16 +1101,10 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry);
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry);
 
-
-int sock_comm_buffer_init(struct sock_conn *conn);
-void sock_comm_buffer_finalize(struct sock_conn *conn);
 ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len);
 ssize_t sock_comm_recv(struct sock_conn *conn, void *buf, size_t len);
 ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len);
 ssize_t sock_comm_discard(struct sock_conn *conn, size_t len);
-ssize_t sock_comm_data_avail(struct sock_conn *conn);
-ssize_t sock_comm_flush(struct sock_conn *conn);
-int sock_comm_tx_done(struct sock_conn *conn);
 
 ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags);
