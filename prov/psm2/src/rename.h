@@ -63,6 +63,8 @@
 #define psmx_atomic_do_compwrite psmx2_atomic_do_compwrite
 #define psmx_atomic_do_readwrite psmx2_atomic_do_readwrite
 #define psmx_atomic_do_write psmx2_atomic_do_write
+#define psmx_atomic_fini psmx2_atomic_fini
+#define psmx_atomic_init psmx2_atomic_init
 #define psmx_atomic_inject psmx2_atomic_inject
 #define psmx_atomic_lock psmx2_atomic_lock
 #define psmx_atomic_ops psmx2_atomic_ops
@@ -101,6 +103,7 @@
 #define psmx_cntr_set psmx2_cntr_set
 #define psmx_cntr_wait psmx2_cntr_wait
 #define psmx_context_type psmx2_context_type
+#define psmx_cq_alloc_event psmx2_cq_alloc_event
 #define psmx_cq_close psmx2_cq_close
 #define psmx_cq_control psmx2_cq_control
 #define psmx_cq_create_event psmx2_cq_create_event
@@ -108,6 +111,7 @@
 #define psmx_cq_dequeue_event psmx2_cq_dequeue_event
 #define psmx_cq_enqueue_event psmx2_cq_enqueue_event
 #define psmx_cq_event psmx2_cq_event
+#define psmx_cq_free_event psmx2_cq_free_event
 #define psmx_cq_get_event_src_addr psmx2_cq_get_event_src_addr
 #define psmx_cq_open psmx2_cq_open
 #define psmx_cq_ops psmx2_cq_ops
@@ -125,6 +129,8 @@
 #define psmx_domain_enable_ep psmx2_domain_enable_ep
 #define psmx_domain_open psmx2_domain_open
 #define psmx_domain_ops psmx2_domain_ops
+#define psmx_domain_start_progress psmx2_domain_start_progress
+#define psmx_domain_stop_progress psmx2_domain_stop_progress
 #define psmx_env psmx2_env
 #define psmx_epaddr_context psmx2_epaddr_context
 #define psmx_ep_bind psmx2_ep_bind
@@ -209,6 +215,8 @@
 #define psmx_poll_poll psmx2_poll_poll
 #define psmx_process_trigger psmx2_process_trigger
 #define psmx_progress psmx2_progress
+#define psmx_progress_func psmx2_progress_func
+#define psmx_progress_set_affinity psmx2_progress_set_affinity
 #define psmx_prov psmx2_prov
 #define psmx_query_mpi psmx2_query_mpi
 #define _psmx_read _psmx2_read

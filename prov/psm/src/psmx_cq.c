@@ -34,10 +34,10 @@
 
 void psmx_cq_enqueue_event(struct psmx_fid_cq *cq, struct psmx_cq_event *event)
 {
-	pthread_mutex_lock(&cq->mutex);
+	fastlock_acquire(&cq->lock);
 	slist_insert_tail(&event->list_entry, &cq->event_queue);
 	cq->event_count++;
-	pthread_mutex_unlock(&cq->mutex);
+	fastlock_release(&cq->lock);
 
 	if (cq->wait)
 		psmx_wait_signal((struct fid_wait *)cq->wait);
@@ -50,10 +50,10 @@ static struct psmx_cq_event *psmx_cq_dequeue_event(struct psmx_fid_cq *cq)
 	if (slist_empty(&cq->event_queue))
 		return NULL;
 
-	pthread_mutex_lock(&cq->mutex);
+	fastlock_acquire(&cq->lock);
 	entry = slist_remove_head(&cq->event_queue);
 	cq->event_count--;
-	pthread_mutex_unlock(&cq->mutex);
+	fastlock_release(&cq->lock);
 
 	return container_of(entry, struct psmx_cq_event, list_entry);
 }
@@ -62,15 +62,15 @@ static struct psmx_cq_event *psmx_cq_alloc_event(struct psmx_fid_cq *cq)
 {
 	struct psmx_cq_event *event;
 
-	pthread_mutex_lock(&cq->mutex);
+	fastlock_acquire(&cq->lock);
 	if (!slist_empty(&cq->free_list)) {
 		event = container_of(slist_remove_head(&cq->free_list),
 				     struct psmx_cq_event, list_entry);
-		pthread_mutex_unlock(&cq->mutex);
+		fastlock_release(&cq->lock);
 		return event;
 	}
 
-	pthread_mutex_unlock(&cq->mutex);
+	fastlock_release(&cq->lock);
 	event = calloc(1, sizeof(*event));
 	if (!event)
 		FI_WARN(&psmx_prov, FI_LOG_CQ, "out of memory.\n");
@@ -83,9 +83,9 @@ static void psmx_cq_free_event(struct psmx_fid_cq *cq,
 {
 	memset(event, 0, sizeof(*event));
 
-	pthread_mutex_lock(&cq->mutex);
+	fastlock_acquire(&cq->lock);
 	slist_insert_tail(&event->list_entry, &cq->free_list);
-	pthread_mutex_unlock(&cq->mutex);
+	fastlock_release(&cq->lock);
 }
 
 struct psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
@@ -751,7 +751,7 @@ static int psmx_cq_close(fid_t fid)
 		free(item);
 	}
 
-	pthread_mutex_destroy(&cq->mutex);
+	fastlock_destroy(&cq->lock);
 
 	if (cq->wait && cq->wait_is_local)
 		fi_close((fid_t)cq->wait);
@@ -910,7 +910,7 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	slist_init(&cq_priv->event_queue);
 	slist_init(&cq_priv->free_list);
-	pthread_mutex_init(&cq_priv->mutex, NULL);
+	fastlock_init(&cq_priv->lock);
 
 #define PSMX_FREE_LIST_SIZE	64
 	for (i=0; i<PSMX_FREE_LIST_SIZE; i++) {

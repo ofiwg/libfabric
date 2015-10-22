@@ -49,7 +49,17 @@
  *	args[1].u64	req
  */
 
-static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
+static fastlock_t psmx_atomic_lock;
+
+void psmx_atomic_init(void)
+{
+	fastlock_init(&psmx_atomic_lock);
+}
+
+void psmx_atomic_fini(void)
+{
+	fastlock_destroy(&psmx_atomic_lock);
+}
 
 #define CASE_INT_TYPE(FUNC,...) \
 		case FI_INT8:	FUNC(__VA_ARGS__,int8_t); break; \
@@ -109,10 +119,10 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			int i; \
 			TYPE *d = (dst); \
 			TYPE *r = (res); \
-			pthread_mutex_lock(&psmx_atomic_lock); \
+			fastlock_acquire(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) \
 				r[i] = d[i]; \
-			pthread_mutex_unlock(&psmx_atomic_lock); \
+			fastlock_release(&psmx_atomic_lock); \
 		} while (0)
 
 #define PSMX_ATOMIC_WRITE(dst,src,cnt,OP,TYPE) \
@@ -120,10 +130,10 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			int i; \
 			TYPE *d = (dst); \
 			TYPE *s = (src); \
-			pthread_mutex_lock(&psmx_atomic_lock); \
+			fastlock_acquire(&psmx_atomic_lock); \
 			for (i=0; i<cnt; i++) \
 				OP(d[i],s[i]); \
-			pthread_mutex_unlock(&psmx_atomic_lock); \
+			fastlock_release(&psmx_atomic_lock); \
 		} while (0)
 
 #define PSMX_ATOMIC_READWRITE(dst,src,res,cnt,OP,TYPE) \
@@ -133,13 +143,13 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			TYPE *s = (src); \
 			TYPE *r = (res); \
 			TYPE tmp; \
-			pthread_mutex_lock(&psmx_atomic_lock); \
+			fastlock_acquire(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) {\
 				tmp = d[i]; \
 				OP(d[i],s[i]); \
 				r[i] = tmp; \
 			} \
-			pthread_mutex_unlock(&psmx_atomic_lock); \
+			fastlock_release(&psmx_atomic_lock); \
 		} while (0)
 
 #define PSMX_ATOMIC_CSWAP(dst,src,cmp,res,cnt,CMP_OP,TYPE) \
@@ -150,14 +160,14 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
 			TYPE tmp; \
-			pthread_mutex_lock(&psmx_atomic_lock); \
+			fastlock_acquire(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) { \
 				tmp = d[i]; \
 				if (c[i] CMP_OP d[i]) \
 					d[i] = s[i]; \
 				r[i] = tmp; \
 			} \
-			pthread_mutex_unlock(&psmx_atomic_lock); \
+			fastlock_release(&psmx_atomic_lock); \
 		} while (0)
 
 #define PSMX_ATOMIC_MSWAP(dst,src,cmp,res,cnt,TYPE) \
@@ -168,13 +178,13 @@ static pthread_mutex_t	psmx_atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
 			TYPE tmp; \
-			pthread_mutex_lock(&psmx_atomic_lock); \
+			fastlock_acquire(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) { \
 				tmp = d[i]; \
 				d[i] = (s[i] & c[i]) | (d[i] & ~c[i]); \
 				r[i] = tmp; \
 			} \
-			pthread_mutex_unlock(&psmx_atomic_lock); \
+			fastlock_release(&psmx_atomic_lock); \
 		} while (0)
 
 static int psmx_atomic_do_write(void *dest, void *src,

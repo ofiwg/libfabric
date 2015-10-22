@@ -197,9 +197,9 @@ void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
 		cntr->trigger = trigger->next;
 
 		if (domain->am_initialized) {
-			pthread_mutex_lock(&domain->trigger_queue.lock);
+			fastlock_acquire(&domain->trigger_queue.lock);
 			slist_insert_tail(&trigger->list_entry, &domain->trigger_queue.list);
-			pthread_mutex_unlock(&domain->trigger_queue.lock);
+			fastlock_release(&domain->trigger_queue.lock);
 		}
 		else {
 			psmx_process_trigger(domain, trigger);
