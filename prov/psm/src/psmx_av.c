@@ -222,8 +222,11 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 							     errors[i],			/* prov_errno */
 							     NULL,			/* err_data */
 							     0);			/* err_data_size */
-				if (!event)
+				if (!event) {
+					free(mask);
+					free(errors);
 					return -FI_ENOMEM;
+				}
 
 				psmx_eq_enqueue_event(av_priv->eq, event);
 			}
