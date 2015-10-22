@@ -263,7 +263,7 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		total_len += sizeof(uint64_t);
 
 	sock_tx_ctx_start(tx_ctx);
-	if (rbfdavail(&tx_ctx->rbfd) < total_len) {
+	if (rbavail(&tx_ctx->rb) < total_len) {
 		ret = -FI_EAGAIN;
 		goto err;
 	}
@@ -608,7 +608,7 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 		total_len += sizeof(uint64_t);
 
 	sock_tx_ctx_start(tx_ctx);
-	if (rbfdavail(&tx_ctx->rbfd) < total_len) {
+	if (rbavail(&tx_ctx->rb) < total_len) {
 		ret = -FI_EAGAIN;
 		goto err;
 	}

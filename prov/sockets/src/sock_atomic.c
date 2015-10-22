@@ -146,7 +146,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		      (result_count * sizeof(union sock_iov)));
 
 	sock_tx_ctx_start(tx_ctx);
-	if (rbfdavail(&tx_ctx->rbfd) < total_len) {
+	if (rbavail(&tx_ctx->rb) < total_len) {
 		ret = -FI_EAGAIN;
 		goto err;
 	}
