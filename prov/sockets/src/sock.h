@@ -190,8 +190,6 @@ struct sock_conn {
         struct sockaddr_in addr;
         struct sock_pe_entry *rx_pe_entry;
         struct sock_pe_entry *tx_pe_entry;
-	struct ringbuf inbuf;
-	struct ringbuf outbuf;
 	struct sock_ep *ep;
 	fi_addr_t av_index;
 	struct dlist_entry ep_entry;
@@ -797,6 +795,7 @@ struct sock_pe {
 	fastlock_t lock;
 	fastlock_t signal_lock;
 	pthread_mutex_t list_lock;
+	int wcnt, rcnt;
 	int signal_fds[2];
 	uint64_t waittime;
 

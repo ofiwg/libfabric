@@ -2007,7 +2007,7 @@ static int sock_pe_progress_rx_pe_entry(struct sock_pe *pe,
 {
 	int ret;
 
-	if (!rbused(&pe_entry->conn->inbuf) && pe_entry->conn->disconnected)
+	if (pe_entry->conn->disconnected)
 		return 0;
 
 	if (pe_entry->pe.rx.pending_send) {
@@ -2254,8 +2254,15 @@ void sock_pe_signal(struct sock_pe *pe)
 	char c = 0;
 	if (pe->domain->progress_mode != FI_PROGRESS_AUTO)
 		return;
-	if (write(pe->signal_fds[SOCK_SIGNAL_WR_FD], &c, 1) != 1)
-		SOCK_LOG_ERROR("Failed to signal\n");
+
+	fastlock_acquire(&pe->signal_lock);
+	if (pe->wcnt == pe->rcnt) {
+		if (write(pe->signal_fds[SOCK_SIGNAL_WR_FD], &c, 1) != 1)
+			SOCK_LOG_ERROR("Failed to signal\n");
+		else
+			pe->wcnt++;
+	}
+	fastlock_release(&pe->signal_lock);
 }
 
 void sock_pe_poll_add(struct sock_pe *pe, int fd)
@@ -2455,17 +2462,15 @@ static void sock_pe_poll(struct sock_pe *pe)
 {
 	char tmp;
 	int ret;
-	fd_set rfds;
-	int i, max_fds = 0;
 	struct dlist_entry *entry;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
-	struct sock_conn_map *map;
-	struct sock_conn *conn;
 
-	FD_ZERO(&rfds);
+	if (pe->waittime && ((fi_gettime_ms() - pe->waittime) < sock_pe_waittime))
+		return;
+
 	if (dlist_empty(&pe->tx_list) && dlist_empty(&pe->rx_list))
-		goto do_wait;
+		return;
 
 	pthread_mutex_lock(&pe->list_lock);
 	if (!dlist_empty(&pe->tx_list)) {
@@ -2478,8 +2483,6 @@ static void sock_pe_poll(struct sock_pe *pe)
 				pthread_mutex_unlock(&pe->list_lock);
 				return;
 			}
-			FD_SET(tx_ctx->rbfd.fd[RB_READ_FD], &rfds);
-			max_fds = MAX(tx_ctx->rbfd.fd[RB_READ_FD], max_fds);
 		}
 	}
 
@@ -2501,43 +2504,15 @@ static void sock_pe_poll(struct sock_pe *pe)
         if (ret < 0)
                 SOCK_LOG_ERROR("poll failed : %s\n", strerror(errno));
 
-	map = &pe->domain->r_cmap;
-	fastlock_acquire(&map->lock);
-	for (i = 0; i < map->used; i++) {
-		conn = &map->table[i];
-		if (rbused(&conn->outbuf) || rbused(&conn->inbuf)) {
-			fastlock_release(&map->lock);
-			return;
-		}
-
-		if (!conn->disconnected) {
-			FD_SET(conn->sock_fd, &rfds);
-			max_fds = MAX(conn->sock_fd, max_fds);
-		}
+	fastlock_acquire(&pe->signal_lock);
+	if (pe->rcnt != pe->wcnt) {
+		if (read(pe->signal_fds[SOCK_SIGNAL_RD_FD], &tmp, 1) == 1)
+			pe->rcnt++;
+		else
+			SOCK_LOG_ERROR("Invalid signal\n");
 	}
-	fastlock_release(&map->lock);
-
-do_wait:
-	if (!pe->waittime) {
-		pe->waittime = fi_gettime_ms();
-		return;
-	}
-
-	if (fi_gettime_ms() - pe->waittime < sock_pe_waittime)
-		return;
-
-	pe->waittime = 0;
-	FD_SET(pe->signal_fds[SOCK_SIGNAL_RD_FD], &rfds);
-	max_fds = MAX(pe->signal_fds[SOCK_SIGNAL_RD_FD], max_fds);
-
-	if (select(max_fds + 1, &rfds, NULL, NULL, NULL) < 0) {
-		SOCK_LOG_ERROR("select failed\n");
-		return;
-	}
-
-	if (FD_ISSET(pe->signal_fds[SOCK_SIGNAL_RD_FD], &rfds))
-		while (read(pe->signal_fds[SOCK_SIGNAL_RD_FD], &tmp, 1) == 1) {
-		}
+	fastlock_release(&pe->signal_lock);
+	pe->waittime = fi_gettime_ms();
 }
 
 #ifndef __APPLE__
