@@ -134,6 +134,12 @@ int psmx_am_init(struct psmx_fid_domain *domain)
 
 int psmx_am_fini(struct psmx_fid_domain *domain)
 {
+	pthread_mutex_destroy(&domain->rma_queue.lock);
+	pthread_mutex_destroy(&domain->recv_queue.lock);
+	pthread_mutex_destroy(&domain->unexp_queue.lock);
+	pthread_mutex_destroy(&domain->trigger_queue.lock);
+	pthread_mutex_destroy(&domain->send_queue.lock);
+
 	return 0;
 }
 

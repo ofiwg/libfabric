@@ -751,6 +751,8 @@ static int psmx_cq_close(fid_t fid)
 		free(item);
 	}
 
+	pthread_mutex_destroy(&cq->mutex);
+
 	if (cq->wait && cq->wait_is_local)
 		fi_close((fid_t)cq->wait);
 

@@ -312,6 +312,8 @@ static int psmx_eq_close(fid_t fid)
 		free(item);
 	}
 
+	pthread_mutex_destroy(&eq->mutex);
+
 	if (eq->wait && eq->wait_is_local)
 		fi_close((fid_t)eq->wait);
 
