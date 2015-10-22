@@ -50,38 +50,38 @@ int psmx_am_progress(struct psmx_fid_domain *domain)
 	struct psmx_trigger *trigger;
 
 	if (psmx_env.am_msg) {
-		pthread_mutex_lock(&domain->send_queue.lock);
+		fastlock_acquire(&domain->send_queue.lock);
 		while (!slist_empty(&domain->send_queue.list)) {
 			item = slist_remove_head(&domain->send_queue.list);
 			req = container_of(item, struct psmx_am_request, list_entry);
-			pthread_mutex_unlock(&domain->send_queue.lock);
+			fastlock_release(&domain->send_queue.lock);
 			psmx_am_process_send(domain, req);
-			pthread_mutex_lock(&domain->send_queue.lock);
+			fastlock_acquire(&domain->send_queue.lock);
 		}
-		pthread_mutex_unlock(&domain->send_queue.lock);
+		fastlock_release(&domain->send_queue.lock);
 	}
 
 	if (psmx_env.tagged_rma) {
-		pthread_mutex_lock(&domain->rma_queue.lock);
+		fastlock_acquire(&domain->rma_queue.lock);
 		while (!slist_empty(&domain->rma_queue.list)) {
 			item = slist_remove_head(&domain->rma_queue.list);
 			req = container_of(item, struct psmx_am_request, list_entry);
-			pthread_mutex_unlock(&domain->rma_queue.lock);
+			fastlock_release(&domain->rma_queue.lock);
 			psmx_am_process_rma(domain, req);
-			pthread_mutex_lock(&domain->rma_queue.lock);
+			fastlock_acquire(&domain->rma_queue.lock);
 		}
-		pthread_mutex_unlock(&domain->rma_queue.lock);
+		fastlock_release(&domain->rma_queue.lock);
 	}
 
-	pthread_mutex_lock(&domain->trigger_queue.lock);
+	fastlock_acquire(&domain->trigger_queue.lock);
 	while (!slist_empty(&domain->trigger_queue.list)) {
 		item = slist_remove_head(&domain->trigger_queue.list);
 		trigger = container_of(item, struct psmx_trigger, list_entry);
-		pthread_mutex_unlock(&domain->trigger_queue.lock);
+		fastlock_release(&domain->trigger_queue.lock);
 		psmx_process_trigger(domain, trigger);
-		pthread_mutex_lock(&domain->trigger_queue.lock);
+		fastlock_acquire(&domain->trigger_queue.lock);
 	}
-	pthread_mutex_unlock(&domain->trigger_queue.lock);
+	fastlock_release(&domain->trigger_queue.lock);
 
 	return 0;
 }
@@ -93,6 +93,8 @@ int psmx_am_init(struct psmx_fid_domain *domain)
 	int err = 0;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
+
+	psmx_atomic_init();
 
 	if (!psmx_am_handlers_initialized) {
 		err = psm_am_get_parameters(psm_ep, &psmx_am_param,
@@ -123,22 +125,24 @@ int psmx_am_init(struct psmx_fid_domain *domain)
 	slist_init(&domain->unexp_queue.list);
 	slist_init(&domain->trigger_queue.list);
 	slist_init(&domain->send_queue.list);
-	pthread_mutex_init(&domain->rma_queue.lock, NULL);
-	pthread_mutex_init(&domain->recv_queue.lock, NULL);
-	pthread_mutex_init(&domain->unexp_queue.lock, NULL);
-	pthread_mutex_init(&domain->trigger_queue.lock, NULL);
-	pthread_mutex_init(&domain->send_queue.lock, NULL);
+	fastlock_init(&domain->rma_queue.lock);
+	fastlock_init(&domain->recv_queue.lock);
+	fastlock_init(&domain->unexp_queue.lock);
+	fastlock_init(&domain->trigger_queue.lock);
+	fastlock_init(&domain->send_queue.lock);
 
 	return err;
 }
 
 int psmx_am_fini(struct psmx_fid_domain *domain)
 {
-	pthread_mutex_destroy(&domain->rma_queue.lock);
-	pthread_mutex_destroy(&domain->recv_queue.lock);
-	pthread_mutex_destroy(&domain->unexp_queue.lock);
-	pthread_mutex_destroy(&domain->trigger_queue.lock);
-	pthread_mutex_destroy(&domain->send_queue.lock);
+	fastlock_destroy(&domain->rma_queue.lock);
+	fastlock_destroy(&domain->recv_queue.lock);
+	fastlock_destroy(&domain->unexp_queue.lock);
+	fastlock_destroy(&domain->trigger_queue.lock);
+	fastlock_destroy(&domain->send_queue.lock);
+
+	psmx_atomic_fini();
 
 	return 0;
 }

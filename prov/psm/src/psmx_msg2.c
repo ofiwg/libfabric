@@ -35,17 +35,17 @@
 static inline void psmx_am_enqueue_send(struct psmx_fid_domain *domain,
 					struct psmx_am_request *req)
 {
-	pthread_mutex_lock(&domain->send_queue.lock);
+	fastlock_acquire(&domain->send_queue.lock);
 	slist_insert_tail(&req->list_entry, &domain->send_queue.list);
-	pthread_mutex_unlock(&domain->send_queue.lock);
+	fastlock_release(&domain->send_queue.lock);
 }
 
 static inline void psmx_am_enqueue_recv(struct psmx_fid_domain *domain,
 					struct psmx_am_request *req)
 {
-	pthread_mutex_lock(&domain->recv_queue.lock);
+	fastlock_acquire(&domain->recv_queue.lock);
 	slist_insert_tail(&req->list_entry, &domain->recv_queue.list);
-	pthread_mutex_unlock(&domain->recv_queue.lock);
+	fastlock_release(&domain->recv_queue.lock);
 }
 
 static int match_recv(struct slist_entry *item, const void *src_addr)
@@ -65,10 +65,10 @@ static struct psmx_am_request *psmx_am_search_and_dequeue_recv(
 {
 	struct slist_entry *item;
 
-	pthread_mutex_lock(&domain->recv_queue.lock);
+	fastlock_acquire(&domain->recv_queue.lock);
 	item = slist_remove_first_match(&domain->recv_queue.list,
 					match_recv, src_addr);
-	pthread_mutex_unlock(&domain->recv_queue.lock);
+	fastlock_release(&domain->recv_queue.lock);
 
 	if (!item)
 		return NULL;
@@ -79,9 +79,9 @@ static struct psmx_am_request *psmx_am_search_and_dequeue_recv(
 static inline void psmx_am_enqueue_unexp(struct psmx_fid_domain *domain,
 					 struct psmx_unexp *unexp)
 {
-	pthread_mutex_lock(&domain->unexp_queue.lock);
+	fastlock_acquire(&domain->unexp_queue.lock);
 	slist_insert_tail(&unexp->list_entry, &domain->unexp_queue.list);
-	pthread_mutex_unlock(&domain->unexp_queue.lock);
+	fastlock_release(&domain->unexp_queue.lock);
 }
 
 static int match_unexp(struct slist_entry *item, const void *src_addr)
@@ -102,10 +102,10 @@ static struct psmx_unexp *psmx_am_search_and_dequeue_unexp(
 {
 	struct slist_entry *item;
 
-	pthread_mutex_lock(&domain->unexp_queue.lock);
+	fastlock_acquire(&domain->unexp_queue.lock);
 	item = slist_remove_first_match(&domain->unexp_queue.list,
 					match_unexp, src_addr);
-	pthread_mutex_unlock(&domain->unexp_queue.lock);
+	fastlock_release(&domain->unexp_queue.lock);
 
 	if (!item)
 		return NULL;

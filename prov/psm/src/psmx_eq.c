@@ -34,12 +34,12 @@
 
 void psmx_eq_enqueue_event(struct psmx_fid_eq *eq, struct psmx_eq_event *event)
 {
-	pthread_mutex_lock(&eq->mutex);
+	fastlock_acquire(&eq->lock);
 	if (event->error)
 		slist_insert_tail(&event->list_entry, &eq->error_queue);
 	else
 		slist_insert_tail(&event->list_entry, &eq->event_queue);
-	pthread_mutex_unlock(&eq->mutex);
+	fastlock_release(&eq->lock);
 
 	if (eq->wait)
 		psmx_wait_signal((struct fid_wait *)eq->wait);
@@ -52,9 +52,9 @@ static struct psmx_eq_event *psmx_eq_dequeue_event(struct psmx_fid_eq *eq)
 	if (slist_empty(&eq->event_queue))
 		return NULL;
 
-	pthread_mutex_lock(&eq->mutex);
+	fastlock_acquire(&eq->lock);
 	entry = slist_remove_head(&eq->event_queue);
-	pthread_mutex_unlock(&eq->mutex);
+	fastlock_release(&eq->lock);
 
 	return container_of(entry, struct psmx_eq_event, list_entry);
 }
@@ -66,9 +66,9 @@ static struct psmx_eq_event *psmx_eq_dequeue_error(struct psmx_fid_eq *eq)
 	if (slist_empty(&eq->error_queue))
 		return NULL;
 
-	pthread_mutex_lock(&eq->mutex);
+	fastlock_acquire(&eq->lock);
 	entry = slist_remove_head(&eq->error_queue);
-	pthread_mutex_unlock(&eq->mutex);
+	fastlock_release(&eq->lock);
 
 	return container_of(entry, struct psmx_eq_event, list_entry);
 }
@@ -85,15 +85,15 @@ static struct psmx_eq_event *psmx_eq_alloc_event(struct psmx_fid_eq *eq)
 {
 	struct psmx_eq_event *event;
 
-	pthread_mutex_lock(&eq->mutex);
+	fastlock_acquire(&eq->lock);
 	if (!slist_empty(&eq->free_list)) {
 		event = container_of(slist_remove_head(&eq->free_list),
 				     struct psmx_eq_event, list_entry);
-		pthread_mutex_unlock(&eq->mutex);
+		fastlock_release(&eq->lock);
 		return event;
 	}
 
-	pthread_mutex_unlock(&eq->mutex);
+	fastlock_release(&eq->lock);
 	event = calloc(1, sizeof(*event));
 	if (!event)
 		FI_WARN(&psmx_prov, FI_LOG_EQ, "out of memory.\n");
@@ -105,9 +105,9 @@ static void psmx_eq_free_event(struct psmx_fid_eq *eq, struct psmx_eq_event *eve
 {
 	memset(event, 0, sizeof(*event));
 
-	pthread_mutex_lock(&eq->mutex);
+	fastlock_acquire(&eq->lock);
 	slist_insert_tail(&event->list_entry, &eq->free_list);
-	pthread_mutex_unlock(&eq->mutex);
+	fastlock_release(&eq->lock);
 }
 
 struct psmx_eq_event *psmx_eq_create_event(struct psmx_fid_eq *eq,
@@ -312,7 +312,7 @@ static int psmx_eq_close(fid_t fid)
 		free(item);
 	}
 
-	pthread_mutex_destroy(&eq->mutex);
+	fastlock_destroy(&eq->lock);
 
 	if (eq->wait && eq->wait_is_local)
 		fi_close((fid_t)eq->wait);
@@ -422,7 +422,7 @@ int psmx_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	slist_init(&eq_priv->event_queue);
 	slist_init(&eq_priv->error_queue);
 	slist_init(&eq_priv->free_list);
-	pthread_mutex_init(&eq_priv->mutex, NULL);
+	fastlock_init(&eq_priv->lock);
 
 #define PSMX_FREE_LIST_SIZE	64
 	for (i=0; i<PSMX_FREE_LIST_SIZE; i++) {
