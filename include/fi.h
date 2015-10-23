@@ -154,6 +154,7 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 #define fastlock_init_(lock) pthread_spin_init(lock, PTHREAD_PROCESS_PRIVATE)
 #define fastlock_destroy_(lock) pthread_spin_destroy(lock)
 #define fastlock_acquire_(lock) pthread_spin_lock(lock)
+#define fastlock_tryacquire_(lock) pthread_spin_trylock(lock)
 #define fastlock_release_(lock) pthread_spin_unlock(lock)
 
 #else
@@ -162,6 +163,7 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 #define fastlock_init_(lock) pthread_mutex_init(lock, NULL)
 #define fastlock_destroy_(lock) pthread_mutex_destroy(lock)
 #define fastlock_acquire_(lock) pthread_mutex_lock(lock)
+#define fastlock_tryacquire_(lock) pthread_mutex_trylock(lock)
 #define fastlock_release_(lock) pthread_mutex_unlock(lock)
 
 #endif /* PT_LOCK_SPIN */
@@ -192,6 +194,12 @@ static inline int fastlock_acquire(fastlock_t *lock)
 	return fastlock_acquire_(&lock->impl);
 }
 
+static inline int fastlock_tryacquire(fastlock_t *lock)
+{
+	assert(lock->is_initialized);
+	return fastlock_tryacquire_(&lock->impl);
+}
+
 #  define fastlock_release(lock)                  \
 	do {                                      \
 		assert((lock)->is_initialized);   \
@@ -204,6 +212,7 @@ static inline int fastlock_acquire(fastlock_t *lock)
 #  define fastlock_init(lock) fastlock_init_(lock)
 #  define fastlock_destroy(lock) fastlock_destroy_(lock)
 #  define fastlock_acquire(lock) fastlock_acquire_(lock)
+#  define fastlock_tryacquire(lock) fastlock_tryacquire_(lock)
 #  define fastlock_release(lock) fastlock_release_(lock)
 
 #endif
