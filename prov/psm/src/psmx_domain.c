@@ -191,7 +191,7 @@ static int psmx_domain_close(fid_t fid)
 
 	psmx_am_fini(domain);
 
-	err = pthread_spin_destroy(&domain->poll_lock);
+	err = fastlock_destroy(&domain->poll_lock);
 	if (err)
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
 			"pthread_spin_destroy returns %d\n", err);
@@ -303,7 +303,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (psmx_domain_enable_ep(domain_priv, NULL) < 0)
 		goto err_out_finalize_mq;
 
-	err = pthread_spin_init(&domain_priv->poll_lock, PTHREAD_PROCESS_SHARED);
+	err = fastlock_init(&domain_priv->poll_lock);
 	if (err) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
 			"pthread_spin_init returns %d\n", err);
