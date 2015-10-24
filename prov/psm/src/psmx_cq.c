@@ -396,7 +396,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 		 * freed because the two psm_mq_ipeek calls may return the
 		 * same request. Use a lock to ensure that won't happen.
 		 */
-		if (pthread_spin_trylock(&domain->poll_lock))
+		if (fastlock_tryacquire(&domain->poll_lock))
 			return read_count;
 
 		err = psm_mq_ipeek(domain->psm_mq, &psm_req, NULL);
@@ -407,7 +407,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 #else
 			err = psm_mq_test(&psm_req, &psm_status);
 #endif
-			pthread_spin_unlock(&domain->poll_lock);
+			fastlock_release(&domain->poll_lock);
 
 			fi_context = psm_status.context;
 
@@ -577,11 +577,11 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 			return read_count;
 		}
 		else if (err == PSM_MQ_NO_COMPLETIONS) {
-			pthread_spin_unlock(&domain->poll_lock);
+			fastlock_release(&domain->poll_lock);
 			return read_count;
 		}
 		else {
-			pthread_spin_unlock(&domain->poll_lock);
+			fastlock_release(&domain->poll_lock);
 			return psmx_errno(err);
 		}
 	}

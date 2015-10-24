@@ -335,7 +335,7 @@ struct psmx_fid_domain {
 	/* lock to prevent the sequence of psm_mq_ipeek and psm_mq_test be
 	 * interleaved in a multithreaded environment.
 	 */
-	pthread_spinlock_t	poll_lock;
+	fastlock_t		poll_lock;
 
 	int			progress_thread_enabled;
 	pthread_t		progress_thread;
