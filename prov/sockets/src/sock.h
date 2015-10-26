@@ -97,6 +97,7 @@
 #define SOCK_EP_MAX_CM_DATA_SZ (256)
 #define SOCK_CM_DEF_BACKLOG (128)
 #define SOCK_CM_DEF_RETRY (5)
+#define SOCK_CM_CONN_IN_PROGRESS ((struct sock_conn *)(0x1L))
 
 #define SOCK_EP_RDM_PRI_CAP (FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS |	\
 			 FI_NAMED_RX_CTX | \
@@ -187,6 +188,7 @@ struct sock_fabric {
 struct sock_conn {
         int sock_fd;
         int disconnected;
+	int address_published;
         struct sockaddr_in addr;
         struct sock_pe_entry *rx_pe_entry;
         struct sock_pe_entry *tx_pe_entry;
@@ -200,7 +202,6 @@ struct sock_conn_map {
 	struct sock_epoll_set epoll_set;
         int used;
         int size;
-	struct sock_domain *domain;
 	fastlock_t lock;
 };
 
@@ -217,7 +218,6 @@ struct sock_domain {
 	enum fi_progress progress_mode;
 	RbtHandle mr_heap;
 	struct sock_pe *pe;
-	struct sock_conn_map r_cmap;
 	struct dlist_entry dom_list_entry;
 	struct fi_domain_attr attr;
 };
@@ -315,13 +315,10 @@ struct sock_av {
 	struct fi_av_attr attr;
 	uint64_t mask;
 	int rx_ctx_bits;
-	struct index_map addr_idm;
 	socklen_t addrlen;
-	struct sock_conn_map *cmap;
 	struct sock_eq *eq;
 	struct sock_av_table_hdr *table_hdr;
 	struct sock_av_addr *table;
-	uint16_t *key;
 	char *name;
 	int shared_fd;
 };
@@ -368,6 +365,8 @@ enum {
 	SOCK_OP_ATOMIC = 9,
 	SOCK_OP_ATOMIC_COMPLETE = 10,
 	SOCK_OP_ATOMIC_ERROR = 11,
+
+	SOCK_OP_CONN_MSG = 12,
 
 	/* internal */
 	SOCK_OP_RECV,
@@ -538,6 +537,7 @@ struct sock_ep {
 	fastlock_t lock;
 
 	struct index_map conn_idm;
+	struct index_map av_idm;
 	struct sock_conn_map cmap;
 };
 
@@ -942,7 +942,6 @@ struct sock_fabric *sock_fab_list_head(void);
 
 int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			struct sock_ep **ep, void *context, size_t fclass);
-struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep);
 int sock_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
 int sock_rdm_sep(struct fid_domain *domain, struct fi_info *info,
@@ -994,11 +993,7 @@ int sock_cntr_err_inc(struct sock_cntr *cntr);
 int sock_cntr_progress(struct sock_cntr *cntr);
 
 
-<<<<<<< HEAD
 struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key, 
-=======
-struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key,
->>>>>>> cef9ae9... prov/sockets: Fixed formatting issues
 				   void *buf, size_t len, uint64_t access);
 struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc,
 				    void *buf, size_t len, uint64_t access);
@@ -1039,35 +1034,21 @@ int sock_wait_close(fid_t fid);
 
 int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context);
-fi_addr_t _sock_av_lookup(struct sock_av *av, struct sockaddr *addr);
-fi_addr_t sock_av_get_fiaddr(struct sock_av *av, struct sock_conn *conn);
-fi_addr_t sock_av_lookup_key(struct sock_av *av, int key);
-struct sock_conn *sock_av_lookup_addr(struct sock_ep *ep,
-				      struct sock_av *av, fi_addr_t addr);
 int sock_av_compare_addr(struct sock_av *av, fi_addr_t addr1, fi_addr_t addr2);
-int sock_compare_addr(struct sockaddr_in *addr1,
-		      struct sockaddr_in *addr2);
+int sock_compare_addr(struct sockaddr_in *addr1, struct sockaddr_in *addr2);
+int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr);
 
-struct sock_conn *sock_conn_map_lookup_key(struct sock_conn_map *conn_map,
-					   uint16_t key);
-int sock_conn_map_connect(struct sock_ep *ep,
-			       struct sock_domain *dom,
-			       struct sock_conn_map *map,
-			       struct sockaddr_in *addr,
-			       uint16_t *index);
-uint16_t sock_conn_map_lookup(struct sock_conn_map *map,
-			      struct sockaddr_in *addr);
-int sock_conn_map_match_or_connect(struct sock_ep *ep,
-					struct sock_domain *dom,
-					struct sock_conn_map *map,
-					struct sockaddr_in *addr,
-					uint16_t *index);
+struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep, fi_addr_t index,
+                                      struct sockaddr_in *addr);
+int sock_ep_get_conn(struct sock_ep *ep, fi_addr_t index,
+                     struct sock_conn **pconn);
+struct sock_conn *sock_ep_connect(struct sock_ep *ep, fi_addr_t index);
+ssize_t sock_conn_send_src_addr(struct sock_ep *sock_ep, struct sock_conn *conn);
 int sock_conn_listen(struct sock_ep *ep);
-int sock_conn_map_clear_pe_entry(struct sock_conn *conn_entry, uint16_t key);
 void sock_conn_map_destroy(struct sock_conn_map *cmap);
 void sock_set_sockopts(int sock);
 int fd_set_nonblock(int fd);
-int sock_conn_map_init(struct sock_conn_map *map, int init_size);
+int sock_conn_map_init(struct sock_ep *ep, int init_size);
 
 struct sock_pe *sock_pe_init(struct sock_domain *domain);
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx);

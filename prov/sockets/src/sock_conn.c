@@ -55,8 +55,47 @@
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-int sock_conn_map_init(struct sock_conn_map *map, int init_size)
+ssize_t sock_conn_send_src_addr(struct sock_ep *sock_ep, struct sock_conn *conn)
 {
+	int ret;
+	uint64_t total_len;
+	struct sock_op tx_op;
+	struct sock_tx_ctx *tx_ctx;
+
+	if (sock_ep->ep.fid.fclass == FI_CLASS_SEP)
+		tx_ctx = sock_ep->tx_array[0];
+	else
+		tx_ctx = sock_ep->tx_ctx;
+
+	memset(&tx_op, 0, sizeof(struct sock_op));
+	tx_op.op = SOCK_OP_CONN_MSG;
+	SOCK_LOG_DBG("New conn msg on TX: %p using conn: %p\n", tx_ctx, conn);
+
+	total_len = 0;
+	tx_op.src_iov_len = sizeof(struct sockaddr_in);
+	total_len = tx_op.src_iov_len + sizeof(struct sock_op_send);
+
+	sock_tx_ctx_start(tx_ctx);
+	if (rbavail(&tx_ctx->rb) < total_len) {
+		ret = -FI_EAGAIN;
+		goto err;
+	}
+
+	sock_tx_ctx_write_op_send(tx_ctx, &tx_op, 0, (uintptr_t) NULL, 0, 0, sock_ep,
+					conn);
+	sock_tx_ctx_write(tx_ctx, sock_ep->src_addr, sizeof(struct sockaddr_in));
+	sock_tx_ctx_commit(tx_ctx);
+	conn->address_published = 1;
+	return 0;
+
+err:
+	sock_tx_ctx_abort(tx_ctx);
+	return ret;
+}
+
+int sock_conn_map_init(struct sock_ep *ep, int init_size)
+{
+	struct sock_conn_map *map = &ep->cmap;
 	map->table = calloc(init_size, sizeof(*map->table));
 	if (!map->table)
 		return -FI_ENOMEM;
@@ -67,6 +106,7 @@ int sock_conn_map_init(struct sock_conn_map *map, int init_size)
                 return -FI_ENOMEM;
         }
 
+	fastlock_init(&map->lock);
 	map->used = 0;
 	map->size = init_size;
 	return 0;
@@ -76,14 +116,15 @@ static int sock_conn_map_increase(struct sock_conn_map *map, int new_size)
 {
 	void *_table;
 
-	if (map->used + new_size > map->size) {
-		_table = realloc(map->table, new_size * sizeof(*map->table));
-		if (!_table)
-			return -FI_ENOMEM;
-
-		map->size = new_size;
-		map->table = _table;
+	_table = realloc(map->table, new_size * sizeof(*map->table));
+	if (!_table) {
+		SOCK_LOG_ERROR("*** realloc failed, use FI_SOCKETS_DEF_CONN_MAP_SZ for"
+			"specifying conn-map-size\n");
+		return -FI_ENOMEM;
 	}
+
+	map->size = new_size;
+	map->table = _table;
 	return 0;
 }
 
@@ -98,45 +139,15 @@ void sock_conn_map_destroy(struct sock_conn_map *cmap)
 	cmap->table = NULL;
 	cmap->used = cmap->size = 0;
 	sock_epoll_close(&cmap->epoll_set);
+	fastlock_destroy(&cmap->lock);
 }
 
-struct sock_conn *
-sock_conn_map_lookup_key(struct sock_conn_map *conn_map, uint16_t key)
-{
-	if (key > conn_map->used) {
-		SOCK_LOG_ERROR("requested key is larger than conn_map size\n");
-		errno = EINVAL;
-		return NULL;
-	}
-
-	return &conn_map->table[key - 1];
-}
-
-int sock_compare_addr(struct sockaddr_in *addr1,
-			     struct sockaddr_in *addr2)
-{
-	return ((addr1->sin_addr.s_addr == addr2->sin_addr.s_addr) &&
-		(addr1->sin_port == addr2->sin_port));
-}
-
-uint16_t sock_conn_map_lookup(struct sock_conn_map *map,
-			      struct sockaddr_in *addr)
-{
-	int i;
-
-	for (i = 0; i < map->used; i++) {
-		if (sock_compare_addr(&map->table[i].addr, addr))
-			return i + 1;
-	}
-	return 0;
-}
-
-static int sock_conn_map_insert(struct sock_conn_map *map,
-				struct sockaddr_in *addr,
-				struct sock_ep *ep,
-				int conn_fd)
+static struct sock_conn *sock_conn_map_insert(struct sock_ep *ep,
+				struct sockaddr_in *addr, int conn_fd,
+				int addr_published)
 {
 	int index;
+	struct sock_conn_map *map = &ep->cmap;
 
 	if (map->size == map->used) {
 		if (sock_conn_map_increase(map, map->size * 2))
@@ -144,13 +155,12 @@ static int sock_conn_map_insert(struct sock_conn_map *map,
 	}
 
 	index = map->used;
+	map->used++;
+
 	map->table[index].addr = *addr;
 	map->table[index].sock_fd = conn_fd;
 	map->table[index].ep = ep;
 	sock_set_sockopts(conn_fd);
-	map->table[index].av_index = (ep->av) ?
-		sock_av_lookup_key(ep->av, index) :
-		FI_ADDR_NOTAVAIL;
 
 	fastlock_acquire(&ep->lock);
 	dlist_insert_tail(&map->table[index].ep_entry, &ep->conn_list);
@@ -162,11 +172,9 @@ static int sock_conn_map_insert(struct sock_conn_map *map,
 	if (sock_epoll_add(&map->epoll_set, conn_fd))
                 SOCK_LOG_ERROR("failed to add to epoll set: %d\n", conn_fd);
 
+	map->table[index].address_published = addr_published;
 	sock_pe_poll_add(ep->domain->pe, conn_fd);
-
-	map->used++;
-	sock_pe_signal(ep->domain->pe);
-	return index + 1;
+	return &map->table[index];
 }
 
 int fd_set_nonblock(int fd)
@@ -212,155 +220,17 @@ void sock_set_sockopts(int sock)
 	fd_set_nonblock(sock);
 }
 
-int sock_conn_map_connect(struct sock_ep *ep,
-			       struct sock_domain *dom,
-			       struct sock_conn_map *map,
-			       struct sockaddr_in *addr,
-			       uint16_t *index)
-{
-	int conn_fd, optval = 0, ret;
-	char use_conn;
-	struct timeval tv;
-	socklen_t optlen;
-	fd_set fds;
-	struct sockaddr_in src_addr;
-	int do_retry = sock_conn_retry;
-
-	*index = 0;
-	memcpy(&src_addr, ep->src_addr, sizeof(src_addr));
-
-bind_retry:
-	conn_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (conn_fd < 0) {
-		SOCK_LOG_ERROR("failed to create conn_fd, errno: %d\n", errno);
-		errno = FI_EOTHER;
-		return -errno;
-	}
-
-	sock_set_sockopt_reuseaddr(conn_fd);
-	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
-		      ntohs(addr->sin_port));
-	SOCK_LOG_DBG("Connecting using address:%s\n",
-			inet_ntoa(src_addr.sin_addr));
-
-retry:
-	if (connect(conn_fd, (struct sockaddr *) addr, sizeof(*addr)) < 0) {
-		if (errno == EINPROGRESS) {
-			/* timeout after 5 secs */
-			tv.tv_sec = 5;
-			tv.tv_usec = 0;
-			FD_ZERO(&fds);
-			FD_SET(conn_fd, &fds);
-			if (select(conn_fd+1, NULL, &fds, NULL, &tv) > 0) {
-				optlen = sizeof(int);
-				getsockopt(conn_fd, SOL_SOCKET, SO_ERROR,
-					   &optval, &optlen);
-				if (optval) {
-					SOCK_LOG_ERROR("failed to connect %d - %s\n",
-							optval, strerror(optval));
-					goto err;
-				}
-			} else {
-				SOCK_LOG_ERROR("Timeout or error to connect %d - %s\n",
-						optval, strerror(optval));
-				goto err;
-			}
-		} else if (errno == ETIMEDOUT && do_retry) {
-			do_retry--;
-			SOCK_LOG_ERROR("Connect timed out, retrying - %s\n",
-				       strerror(errno));
-			goto retry;
-		} else if (errno == EADDRNOTAVAIL && do_retry) {
-			do_retry--;
-			SOCK_LOG_ERROR("Connect failed with address not available, retrying - %s\n",
-				       strerror(errno));
-			close(conn_fd);
-			goto bind_retry;
-		} else {
-			SOCK_LOG_ERROR("Error connecting %d - %s\n", errno,
-				       strerror(errno));
-			goto err;
-		}
-	}
-
-	do {
-		ret = send(conn_fd,
-			   &((struct sockaddr_in *) ep->src_addr)->sin_port,
-			   sizeof(((struct sockaddr_in *) ep->src_addr)->sin_port), 0);
-	} while (ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
-
-	if (ret != sizeof(((struct sockaddr_in *) ep->src_addr)->sin_port)) {
-		SOCK_LOG_ERROR("Cannot exchange port\n");
-		goto err;
-	}
-
-	do {
-		ret = recv(conn_fd, &use_conn, sizeof(use_conn), MSG_WAITALL);
-	} while (ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
-
-	if (ret != sizeof(use_conn)) {
-		SOCK_LOG_ERROR("Cannot exchange port: %d - %s\n",
-			       ret, strerror(errno));
-		use_conn = 0;
-	}
-
-	SOCK_LOG_DBG("Connect response: %d\n", use_conn);
-
-	if (use_conn) {
-		fastlock_acquire(&map->lock);
-		ret = sock_conn_map_insert(map, addr, ep, conn_fd);
-		fastlock_release(&map->lock);
-	} else {
-		close(conn_fd);
-		SOCK_LOG_DBG("waiting for an accept\n");
-		for (ret = 0; !ret; ) {
-			fastlock_acquire(&map->lock);
-			ret = sock_conn_map_lookup(map, addr);
-			fastlock_release(&map->lock);
-		}
-		SOCK_LOG_DBG("got accept\n");
-	}
-
-	*index = ret;
-	return 0;
-err:
-	close(conn_fd);
-	return -errno;
-}
-
-int sock_conn_map_match_or_connect(struct sock_ep *ep,
-					struct sock_domain *dom,
-					struct sock_conn_map *map,
-					struct sockaddr_in *addr,
-					uint16_t *index)
-{
-	int ret;
-	fastlock_acquire(&map->lock);
-	*index = sock_conn_map_lookup(map, addr);
-	fastlock_release(&map->lock);
-
-	if (!(*index)) {
-		ret = sock_conn_map_connect(ep, dom, map, addr, index);
-		if (ret) {
-			SOCK_LOG_ERROR("connect failed\n");
-			return -errno;
-		}
-	}
-	return 0;
-}
-
 static void *_sock_conn_listen(void *arg)
 {
-	uint16_t index;
 	int conn_fd, ret;
-	char tmp, use_conn;
+	char tmp;
 	socklen_t addr_size;
 	struct sockaddr_in remote;
 	struct pollfd poll_fds[2];
 
 	struct sock_ep *ep = (struct sock_ep *)arg;
 	struct sock_conn_listener *listener = &ep->listener;
-	struct sock_conn_map *map = &ep->domain->r_cmap;
+	struct sock_conn_map *map = &ep->cmap;
 
 	poll_fds[0].fd = listener->sock;
 	poll_fds[1].fd = listener->signal_fds[1];
@@ -390,46 +260,13 @@ static void *_sock_conn_listen(void *arg)
 			goto err;
 		}
 
-		sock_set_sockopts_conn(conn_fd);
 		SOCK_LOG_DBG("ACCEPT: %s, %d\n", inet_ntoa(remote.sin_addr),
 				ntohs(remote.sin_port));
 
-		do {
-			ret = recv(conn_fd, &remote.sin_port,
-				   sizeof(remote.sin_port), MSG_WAITALL);
-		} while (ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
-
-		if (ret != sizeof(remote.sin_port)) {
-			SOCK_LOG_ERROR("Cannot exchange port: %d - %s\n", ret,
-					strerror(errno));
-			close(conn_fd);
-			continue;
-		}
-
-		SOCK_LOG_DBG("Remote port: %d\n", ntohs(remote.sin_port));
-
 		fastlock_acquire(&map->lock);
-		index = sock_conn_map_lookup(map, &remote);
-		if (!index) {
-			sock_conn_map_insert(map, &remote, ep, conn_fd);
-			use_conn = 1;
-		} else {
-			use_conn = 0;
-		}
+		sock_conn_map_insert(ep, &remote, conn_fd, 1);
 		fastlock_release(&map->lock);
-
-		do {
-			ret = send(conn_fd, &use_conn, sizeof(use_conn), 0);
-		} while (ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
-
-		if (ret != sizeof(use_conn))
-			SOCK_LOG_ERROR("Cannot exchange port\n");
-
-		if (!use_conn) {
-			shutdown(conn_fd, SHUT_RDWR);
-			close(conn_fd);
-		}
-		SOCK_LOG_DBG("Use conn: %d\n", use_conn);
+		sock_pe_signal(ep->domain->pe);
 	}
 
 err:
@@ -500,7 +337,7 @@ int sock_conn_listen(struct sock_ep *ep)
 			goto err;
 		snprintf(listener->service, sizeof listener->service, "%d",
 			 ntohs(addr.sin_port));
-		SOCK_LOG_DBG("Bound to port: %s\n", listener->service);
+		SOCK_LOG_DBG("Bound to port: %s - %d\n", listener->service, getpid());
 	}
 
 	if (ep->src_addr->sin_addr.s_addr == 0) {
@@ -510,7 +347,7 @@ int sock_conn_listen(struct sock_ep *ep)
 			goto err;
 	}
 
-	if (listen(listen_fd, SOCK_CM_DEF_BACKLOG)) {
+	if (listen(listen_fd, sock_cm_def_map_sz)) {
 		SOCK_LOG_ERROR("failed to listen socket: %s\n", strerror(errno));
 		goto err;
 	}
@@ -536,3 +373,122 @@ err:
 		close(listen_fd);
 	return -FI_EINVAL;
 }
+
+struct sock_conn *sock_ep_connect(struct sock_ep *ep, fi_addr_t index)
+{
+	int conn_fd, ret;
+	int do_retry = sock_conn_retry;
+	struct sock_conn *conn, *new_conn;
+	uint16_t idx;
+	struct sockaddr_in *addr;
+	socklen_t lon;
+	int valopt = 0;
+	struct pollfd poll_fd;
+
+	if (ep->connected) {
+		idx = 0;
+		addr = ep->dest_addr;
+	} else {
+		idx = index & ep->av->mask;
+		addr = (struct sockaddr_in *)&ep->av->table[idx].addr;
+	}
+
+do_connect:
+	fastlock_acquire(&ep->cmap.lock);
+	conn = sock_ep_lookup_conn(ep, index, addr);
+	fastlock_release(&ep->cmap.lock);
+
+	if (conn != SOCK_CM_CONN_IN_PROGRESS)
+		return conn;
+
+	conn_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (conn_fd <= 0) {
+		SOCK_LOG_ERROR("failed to create conn_fd, errno: %d\n", errno);
+		errno = FI_EOTHER;
+		return NULL;
+	}
+
+	ret = fd_set_nonblock(conn_fd);
+	if (ret) {
+		SOCK_LOG_ERROR("failed to set conn_fd nonblocking, errno: %d\n", errno);
+		errno = FI_EOTHER;
+                return NULL;
+	}
+
+	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
+			ntohs(addr->sin_port));
+	SOCK_LOG_DBG("Connecting using address:%s\n",
+			inet_ntoa(ep->src_addr->sin_addr));
+
+	ret = connect(conn_fd, (struct sockaddr *) addr, sizeof *addr);
+	if (ret < 0) {
+		if (errno == EINPROGRESS) {
+			poll_fd.fd = conn_fd;
+			poll_fd.events = POLLOUT;
+
+			ret = poll(&poll_fd, 1, 15 * 1000);
+			if (ret < 0) {
+				SOCK_LOG_DBG("poll failed\n");
+				goto retry;
+			}
+
+			lon = sizeof(int);
+			ret = getsockopt(conn_fd, SOL_SOCKET, SO_ERROR, (void*)(&valopt), &lon);
+			if (ret < 0) {
+				SOCK_LOG_DBG("getsockopt failed: %d, %d\n", ret, conn_fd);
+				goto retry;
+			}
+
+			if (valopt) {
+				SOCK_LOG_DBG("Error in connection() %d - %s - %d\n", valopt, strerror(valopt), conn_fd);
+				SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
+						ntohs(addr->sin_port));
+				SOCK_LOG_DBG("Connecting using address:%s\n",
+				inet_ntoa(ep->src_addr->sin_addr));
+				goto retry;
+			} else {
+				goto out;
+			}
+		} else {
+			SOCK_LOG_DBG("Timeout or error() - %s: %d\n", strerror(errno), conn_fd);
+			SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
+					ntohs(addr->sin_port));
+			SOCK_LOG_DBG("Connecting using address:%s\n",
+					inet_ntoa(ep->src_addr->sin_addr));
+			goto retry;
+		}
+		goto retry;
+	} else {
+		goto out;
+	}
+
+retry:
+	do_retry--;
+	sleep(10);
+	if (!do_retry)
+		goto err;
+
+	SOCK_LOG_ERROR("Connect error, retrying - %s - %d\n", strerror(errno), conn_fd);
+	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
+			ntohs(addr->sin_port));
+	SOCK_LOG_DBG("Connecting using address:%s\n",
+			inet_ntoa(ep->src_addr->sin_addr));
+        goto do_connect;
+
+out:
+	fastlock_acquire(&ep->cmap.lock);
+	new_conn = sock_conn_map_insert(ep, addr, conn_fd, 0);
+	new_conn->av_index = ep->connected ? FI_ADDR_NOTAVAIL : (fi_addr_t) idx;
+	conn = idm_lookup(&ep->av_idm, index);
+	if (conn == SOCK_CM_CONN_IN_PROGRESS) {
+		idm_set(&ep->av_idm, index, new_conn);
+		conn = new_conn;
+	}
+	fastlock_release(&ep->cmap.lock);
+	return conn;
+
+err:
+	close(conn_fd);
+	return NULL;
+}
+

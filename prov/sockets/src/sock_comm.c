@@ -91,7 +91,7 @@ ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len)
 	ret = recv(conn->sock_fd, buf, len, MSG_PEEK);
 	if (ret == 0) {
 		conn->disconnected = 1;
-		SOCK_LOG_ERROR("Disconnected\n");
+		SOCK_LOG_DBG("Disconnected\n");
 		return ret;
 	}
 

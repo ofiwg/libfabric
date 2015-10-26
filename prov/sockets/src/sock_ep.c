@@ -643,6 +643,7 @@ static int sock_ep_close(struct fid *fid)
 	sock_fabric_remove_service(sock_ep->domain->fab,
 				   atoi(sock_ep->listener.service));
 
+	sock_conn_map_destroy(&sock_ep->cmap);
 	atomic_dec(&sock_ep->domain->ref);
 	fastlock_destroy(&sock_ep->lock);
 	free(sock_ep);
@@ -818,7 +819,6 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 
 		ep->av = av;
-		av->cmap = &av->domain->r_cmap;
 		atomic_inc(&av->ref);
 
 		if (ep->tx_ctx &&
@@ -1548,6 +1548,11 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			SOCK_LOG_ERROR("fcntl failed");
 	}
 
+	if (sock_conn_map_init(sock_ep, sock_cm_def_map_sz)) {
+		SOCK_LOG_ERROR("failed to init connection map: %s\n", strerror(errno));
+		goto err;
+	}
+
 	atomic_inc(&sock_dom->ref);
 	return 0;
 
@@ -1560,20 +1565,54 @@ err:
 	return -FI_EINVAL;
 }
 
-struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep)
+struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep, fi_addr_t index,
+					struct sockaddr_in *addr)
 {
-	int ret;
-	if (!ep->key) {
-		ret = sock_conn_map_match_or_connect(
-			ep, ep->domain, &ep->domain->r_cmap, ep->dest_addr,
-			&ep->key);
-		if (ret) {
-			SOCK_LOG_ERROR("failed to match or connect to addr\n");
-			errno = EINVAL;
-			return NULL;
-		}
+	int i;
+	uint16_t idx;
+	struct sock_conn *conn;
+
+	idx = (ep->connected) ? index : index & ep->av->mask;
+	conn = idm_lookup(&ep->av_idm, idx);
+	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS &&
+		sock_compare_addr(&conn->addr, addr))
+		return conn;
+
+	for (i = 0; i < ep->cmap.used; i++) {
+		if (sock_compare_addr(&ep->cmap.table[i].addr, addr))
+			return &ep->cmap.table[i];
 	}
-	return sock_conn_map_lookup_key(&ep->domain->r_cmap, ep->key);
+	return conn;
+}
+
+int sock_ep_get_conn(struct sock_ep *ep, fi_addr_t index,
+			struct sock_conn **pconn)
+{
+	struct sock_conn *conn;
+	uint64_t av_index = ep->connected ? 0 : index;
+	struct sockaddr_in *addr;
+
+	if (ep->connected)
+		addr = ep->dest_addr;
+	else
+		addr = (struct sockaddr_in *)&ep->av->table[av_index].addr;
+
+	fastlock_acquire(&ep->cmap.lock);
+	conn = sock_ep_lookup_conn(ep, av_index, addr);
+	if (!conn && conn != SOCK_CM_CONN_IN_PROGRESS) {
+		conn = SOCK_CM_CONN_IN_PROGRESS;
+		idm_set(&ep->av_idm, av_index, conn);
+	}
+	fastlock_release(&ep->cmap.lock);
+
+	if (conn == SOCK_CM_CONN_IN_PROGRESS)
+		conn = sock_ep_connect(ep, av_index);
+
+	if (!conn)
+		return -errno;
+
+	*pconn = conn;
+	return conn->address_published ? 0 : sock_conn_send_src_addr(ep, conn);
 }
 
 int sock_ep_is_send_cq_low(struct sock_comp *comp, uint64_t flags)

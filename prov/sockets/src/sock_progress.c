@@ -52,6 +52,8 @@
 #include <pthread.h>
 #include <inttypes.h>
 #include <complex.h>
+#include <arpa/inet.h>
+#include <net/if.h>
 
 #include "sock.h"
 #include "sock_util.h"
@@ -1577,6 +1579,55 @@ out:
 	return ret;
 }
 
+static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
+					struct sock_rx_ctx *rx_ctx,
+					struct sock_pe_entry *pe_entry)
+{
+	uint64_t len, data_len;
+	struct sock_ep *ep;
+	struct sock_conn_map *map;
+	struct sockaddr_in *addr;
+	struct sock_conn *conn;
+	uint64_t index;
+
+	if (!pe_entry->buf)
+		pe_entry->buf = (uint64_t) calloc(1, sizeof(struct sockaddr_in));
+
+	len = sizeof(struct sock_msg_hdr);
+	data_len = sizeof(struct sockaddr_in);
+	if (sock_pe_recv_field(pe_entry, (void *)pe_entry->buf, data_len, len)) {
+		return 0;
+	}
+
+	SOCK_LOG_DBG("got conn msg from %s:%d\n",
+		inet_ntoa(((struct sockaddr_in *)&pe_entry->conn->addr)->sin_addr),
+		ntohs(((struct sockaddr_in *)&pe_entry->conn->addr)->sin_port));
+	SOCK_LOG_DBG("on behalf of %s:%d\n",
+		inet_ntoa(((struct sockaddr_in *)pe_entry->buf)->sin_addr),
+		ntohs(((struct sockaddr_in *)pe_entry->buf)->sin_port));
+
+	ep = pe_entry->conn->ep;
+	map = &ep->cmap;
+	addr = (struct sockaddr_in *) pe_entry->buf;
+	pe_entry->conn->addr = *addr;
+
+	index = ep->connected ? 0 : sock_av_get_addr_index(ep->av, addr);
+	if (index != -1) {
+		fastlock_acquire(&map->lock);
+		conn = sock_ep_lookup_conn(ep, index, addr);
+		if (conn == NULL || conn == SOCK_CM_CONN_IN_PROGRESS)
+			idm_set(&ep->av_idm, index, pe_entry->conn);
+		fastlock_release(&map->lock);
+	}
+	pe_entry->conn->av_index = (ep->connected || index == -1) ?
+		FI_ADDR_NOTAVAIL : index;
+
+	pe_entry->is_complete = 1;
+	pe_entry->pe.rx.pending_send = 0;
+	free((void *)pe_entry->buf);
+	return 0;
+}
+
 static int sock_pe_process_recv(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 				struct sock_pe_entry *pe_entry)
 {
@@ -1620,6 +1671,9 @@ static int sock_pe_process_recv(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	case SOCK_OP_READ_ERROR:
 	case SOCK_OP_ATOMIC_ERROR:
 		ret = sock_pe_handle_error(pe, pe_entry);
+		break;
+	case SOCK_OP_CONN_MSG:
+		ret = sock_pe_process_rx_conn_msg(pe, rx_ctx, pe_entry);
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -1944,6 +1998,31 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 	return 0;
 }
 
+static int sock_pe_progress_tx_conn_msg(struct sock_pe *pe,
+					struct sock_pe_entry *pe_entry,
+					struct sock_conn *conn)
+{
+	size_t len;
+	if (pe_entry->pe.tx.send_done)
+		return 0;
+
+	len = sizeof(struct sock_msg_hdr);
+
+	if (sock_pe_send_field(pe_entry, pe_entry->pe.tx.inject,
+                               pe_entry->pe.tx.tx_op.src_iov_len, len))
+		return 0;
+	len += pe_entry->pe.tx.tx_op.src_iov_len;
+	pe_entry->data_len = pe_entry->pe.tx.tx_op.src_iov_len;
+
+	if (pe_entry->done_len == pe_entry->total_len) {
+		pe_entry->pe.tx.send_done = 1;
+		pe_entry->conn->tx_pe_entry = NULL;
+		SOCK_LOG_DBG("Send complete\n");
+		pe_entry->is_complete = 1;
+	}
+	return 0;
+}
+
 static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 				     struct sock_tx_ctx *tx_ctx,
 				     struct sock_pe_entry *pe_entry)
@@ -1991,6 +2070,9 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 		break;
 	case SOCK_OP_ATOMIC:
 		ret = sock_pe_progress_tx_atomic(pe, pe_entry, conn);
+		break;
+	case SOCK_OP_CONN_MSG:
+		ret = sock_pe_progress_tx_conn_msg(pe, pe_entry, conn);
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -2045,7 +2127,6 @@ out:
 static int sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 				struct sock_ep *ep, struct sock_conn *conn)
 {
-	int ret;
 	struct sock_pe_entry *pe_entry;
 
 	pe_entry = sock_pe_acquire_entry(pe);
@@ -2079,8 +2160,7 @@ static int sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 		      pe_entry, pe_entry->conn);
 
 	dlist_insert_tail(&pe_entry->ctx_entry, &rx_ctx->pe_entry_list);
-	ret = sock_pe_progress_rx_pe_entry(pe, pe_entry, rx_ctx);
-	return ret;
+	return 0;
 }
 
 static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
@@ -2221,6 +2301,11 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 				pe_entry->pe.tx.tx_iov[i].cmp.ioc.count;
 		}
 		msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.dest_iov_len;
+		break;
+	case SOCK_OP_CONN_MSG:
+		rbread(&tx_ctx->rb, &pe_entry->pe.tx.inject[0],
+			pe_entry->pe.tx.tx_op.src_iov_len);
+		msg_hdr->msg_len += pe_entry->pe.tx.tx_op.src_iov_len;
 		break;
 	default:
 		SOCK_LOG_ERROR("Invalid operation type\n");
