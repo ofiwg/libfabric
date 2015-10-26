@@ -98,6 +98,8 @@ requested value or fail the operation with -FI_ENODATA.  With the
 exception of mode bits, hints that are set to zero are treated as
 a wildcard.  A zeroed hint value results in providers either returning
 a default value or a value that works best for their implementation.
+Mode bits that are set to zero indicate the application does not support
+any modes.
 
 The caller must call fi_freeinfo to release fi_info structures returned
 by this call.
@@ -374,7 +376,8 @@ support.  On output, providers will clear mode bits that are not
 necessary to achieve high-performance.  Mode bits that remain set
 indicate application requirements for using the fabric interfaces
 created using the returned fi_info.  The set of modes are listed
-below.
+below.  If a NULL hints structure is provided, then the provider's
+supported set of modes will be returned in the info structure(s).
 
 *FI_CONTEXT*
 : Specifies that the provider requires that applications use struct
