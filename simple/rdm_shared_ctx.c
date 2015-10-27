@@ -306,14 +306,9 @@ static int init_av(void)
 	}
 
 	if (opts.dst_addr) {
-		ret = fi_av_insert(av, remote_addr, 1, &addr_array[0], 0, NULL);
-		if (ret < 0) {
-			FT_PRINTERR("fi_av_insert", ret);
+		ret = ft_av_insert(av, remote_addr, 1, &addr_array[0], 0, NULL);
+		if (ret)
 			return ret;
-		} else if (ret != 1) {
-			FT_ERR("fi_av_insert: number of inserted address = %d\n", ret);
-			return -1;
-		}
 
 		/* Send local EP addresses to one of the remote endpoints */
 		memcpy(buf, &addrlen, sizeof(size_t));
@@ -332,15 +327,10 @@ static int init_av(void)
 
 		/* Insert remote addresses into AV
 		 * Skip the first address since we already have it in AV */
-		ret = fi_av_insert(av, remote_addr + addrlen, ep_cnt - 1,
+		ret = ft_av_insert(av, remote_addr + addrlen, ep_cnt - 1,
 				addr_array + 1, 0, NULL);
-		if (ret < 0) {
-			FT_PRINTERR("fi_av_insert", ret);
+		if (ret)
 			return ret;
-		} else if (ret != (ep_cnt - 1)) {
-			FT_ERR("fi_av_insert: number of inserted address = %d\n", ret);
-			return -1;
-		}
 
 		/* Send ACK */
 		ret = send_msg(16);
@@ -358,14 +348,9 @@ static int init_av(void)
 		memcpy(remote_addr, buf + sizeof(size_t), addrlen * ep_cnt);
 
 		/* Insert remote addresses into AV */
-		ret = fi_av_insert(av, remote_addr, ep_cnt, addr_array, 0, NULL);
-		if (ret < 0) {
-			FT_PRINTERR("fi_av_insert", ret);
+		ret = ft_av_insert(av, remote_addr, ep_cnt, addr_array, 0, NULL);
+		if (ret)
 			return ret;
-		} else if (ret != ep_cnt) {
-			FT_ERR("fi_av_insert: number of inserted address = %d\n", ret);
-			return -1;
-		}
 
 		/* Send local EP addresses to one of the remote endpoints */
 		memcpy(buf, &addrlen, sizeof(size_t));

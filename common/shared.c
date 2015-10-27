@@ -362,6 +362,24 @@ int ft_init_ep(void)
 	return 0;
 }
 
+int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
+		uint64_t flags, void *context)
+{
+	int ret;
+
+	ret = fi_av_insert(av, addr, count, fi_addr, flags, context);
+	if (ret < 0) {
+		FT_PRINTERR("fi_av_insert", ret);
+		return ret;
+	} else if (ret != count) {
+		FT_ERR("fi_av_insert: number of addresses inserted = %d;"
+			       " number of addresses given = %zd\n", ret, count);
+		return -EXIT_FAILURE;
+	}
+
+	return 0;
+}
+
 /* TODO: retry send for unreliable endpoints */
 int ft_init_av(void)
 {
@@ -369,14 +387,9 @@ int ft_init_av(void)
 	int ret;
 
 	if (opts.dst_addr) {
-		ret = fi_av_insert(av, fi->dest_addr, 1, &remote_fi_addr, 0, NULL);
-		if (ret < 0) {
-			FT_PRINTERR("fi_av_insert", ret);
+		ret = ft_av_insert(av, fi->dest_addr, 1, &remote_fi_addr, 0, NULL);
+		if (ret)
 			return ret;
-		} else if (ret != 1) {
-			FT_ERR("fi_av_insert: number of inserted address = %d\n", ret);
-			return -1;
-		}
 
 		addrlen = FT_MAX_CTRL_MSG;
 		ret = fi_getname(&ep->fid, (char *) tx_buf + ft_tx_prefix_size(),
@@ -396,15 +409,10 @@ int ft_init_av(void)
 		if (ret)
 			return ret;
 
-		ret = fi_av_insert(av, (char *) rx_buf + ft_rx_prefix_size(),
+		ret = ft_av_insert(av, (char *) rx_buf + ft_rx_prefix_size(),
 				   1, &remote_fi_addr, 0, NULL);
-		if (ret < 0) {
-			FT_PRINTERR("fi_av_insert", ret);
+		if (ret)
 			return ret;
-		} else if (ret != 1) {
-			FT_ERR("fi_av_insert: number of inserted address = %d\n", ret);
-			return -1;
-		}
 
 		ret = (int) ft_tx(1);
 	}
