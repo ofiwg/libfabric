@@ -381,10 +381,12 @@ void fi_ini(void)
 		provdir = PROVDLDIR;
 
 	dirs = split_and_alloc(provdir, ":");
-	for (n = 0; dirs[n]; ++n) {
-		fi_ini_dir(dirs[n]);
+	if (dirs) {
+		for (n = 0; dirs[n]; ++n) {
+			fi_ini_dir(dirs[n]);
+		}
+		free_string_array(dirs);
 	}
-	free_string_array(dirs);
 libdl_done:
 #endif
 
