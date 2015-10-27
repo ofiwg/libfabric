@@ -295,6 +295,7 @@ int main(int argc, char **argv)
 			use_hints = 1;
 			break;
 		case 'f':
+			free(hints->fabric_attr->prov_name);
 			hints->fabric_attr->prov_name = strdup(optarg);
 			use_hints = 1;
 			break;
