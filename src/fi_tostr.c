@@ -79,6 +79,8 @@
 static void fi_remove_comma(char *buffer)
 {
 	size_t sz = strlen(buffer);
+	if (sz < 2)
+		return;
 	if (strcmp(&buffer[sz-2], ", ") == 0)
 		buffer[sz-2] = '\0';
 }
