@@ -15,7 +15,7 @@ declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
 
 # base ssh,  "short" and "long" timeout variants:
-declare -r bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
+declare bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
 if [ -z "$(which timeout 2> /dev/null)" ]; then
 	# forego timeout
 	declare SERVER_CMD="eval"
@@ -23,6 +23,7 @@ if [ -z "$(which timeout 2> /dev/null)" ]; then
 else
 	declare SERVER_CMD="eval timeout 90s"
 	declare CLIENT_CMD="eval timeout 90s"
+	bssh="timeout 90s ${bssh}"
 fi
 
 declare -r c_outp=$(mktemp fabtests.c_outp.XXXXXX)
