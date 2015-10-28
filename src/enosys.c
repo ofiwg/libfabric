@@ -408,6 +408,12 @@ int fi_no_cq_signal(struct fid_cq *cq)
 	return -FI_ENOSYS;
 }
 
+const char * fi_no_cq_strerror(struct fid_cq *cq, int prov_errno,
+		const void *err_data, char *buf, size_t len)
+{
+	return NULL;
+}
+
 /*
  * struct fi_ops_cntr
  */
