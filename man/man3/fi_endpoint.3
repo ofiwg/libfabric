@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-10\-07" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-10\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -1215,9 +1215,9 @@ fabric endpoint.
 Endpoints allocated with the FI_CONTEXT mode set must typically provide
 struct fi_context as their per operation context parameter.
 (See fi_getinfo.3 for details.)
- However, when FI_COMPLETION is enabled to suppress completion entries,
-and an operation is initiated without FI_COMPLETION flag set, then the
-context parameter is ignored.
+ However, when FI_SELECTIVE_COMPLETION is enabled to suppress completion
+entries, and an operation is initiated without FI_COMPLETION flag set,
+then the context parameter is ignored.
 An application does not need to pass in a valid struct fi_context into
 such data transfers.
 .PP
