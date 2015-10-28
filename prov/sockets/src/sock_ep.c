@@ -1042,7 +1042,7 @@ static int sock_ep_setopt(fid_t fid, int level, int optname,
 	case FI_OPT_MIN_MULTI_RECV:
 
 		sock_ep->min_multi_recv = *(size_t *)optval;
-		for (i = 0; i < sock_ep->ep_attr.rx_ctx_cnt + 1; i++) {
+		for (i = 0; i < sock_ep->ep_attr.rx_ctx_cnt; i++) {
 			if (sock_ep->rx_array[i] != NULL) {
 				sock_ep->rx_array[i]->min_multi_recv =
 					sock_ep->min_multi_recv;
