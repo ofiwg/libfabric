@@ -438,7 +438,7 @@ supported set of modes will be returned in the info structure(s).
 
 *FI_ASYNC_IOV*
 : Applications can reference multiple data buffers as part of a single
-  transmit operation through the use of IO vectors (SGEs).  Typically,
+  operation through the use of IO vectors (SGEs).  Typically,
   the contents of an IO vector are copied by the provider into an
   internal buffer area, or directly to the underlying hardware.
   However, when a large number of IOV entries are supported,
