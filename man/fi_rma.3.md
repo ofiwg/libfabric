@@ -222,7 +222,7 @@ struct fi_msg_rma as input.
 The fi_readmsg and fi_writemsg calls allow the user to specify flags
 which can change the default data transfer operation.  Flags specified
 with fi_readmsg / fi_writemsg override most flags previously
-configured with the endpoint, except where noted (see fi_endpoint).
+configured with the endpoint, except where noted (see fi_endpoint.3).
 The following list of flags are usable with fi_readmsg and/or
 fi_writemsg.
 
@@ -259,6 +259,10 @@ fi_writemsg.
 : Applies to fi_writemsg.  Indicates that a completion should not be
   generated until the operation has been successfully transmitted and
   is no longer being tracked by the provider.
+
+*FI_DELIVERY_COMPLETE*
+: Applies to fi_writemsg.  Indicates that a completion should be
+  generated when the operation has been processed by the destination.
 
 *FI_FENCE*
 : Indicates that the requested operation, also
