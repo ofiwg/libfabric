@@ -1,4 +1,4 @@
-.TH fi_msg 3 "2015\-08\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_msg 3 "2015\-10\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_msg - Message data transfer operations
@@ -187,7 +187,7 @@ The fi_recvmsg and fi_sendmsg calls allow the user to specify flags
 which can change the default message handling of the endpoint.
 Flags specified with fi_recvmsg / fi_sendmsg override most flags
 previously configured with the endpoint, except where noted (see
-fi_endpoint).
+fi_endpoint.3).
 The following list of flags are usable with fi_recvmsg and/or
 fi_sendmsg.
 .PP
@@ -235,6 +235,10 @@ buffer(s) may be reused.
 Indicates that a completion should not be generated until the operation
 has been successfully transmitted and is no longer being tracked by the
 provider.
+.PP
+\f[I]FI_DELIVERY_COMPLETE\f[] : Applies to fi_sendmsg.
+Indicates that a completion should be generated when the operation has
+been processed by the destination.
 .PP
 \f[I]FI_FENCE\f[] : Applies to transmits.
 Indicates that the requested operation, also known as the fenced
