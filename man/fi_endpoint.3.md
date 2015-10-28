@@ -195,6 +195,14 @@ data and protocol options.  This allows the underlying provider to
 redirect function calls to implementations optimized to meet the
 desired application behavior.
 
+If an endpoint experiences a critical error, it will transition back
+into a disabled state.  Critical errors are reported through the
+event queue associated with the EP.  In certain cases, a disabled endpoint may
+be re-enabled.  The ability to transition back into an enabled
+state is provider specific and depends on the type of error that
+the endpoint experienced.  When an endpoint is disabled as a result
+of a critical error, all pending operations are discarded.
+
 ## fi_endpoint / fi_passive_ep / fi_scalable_ep
 
 fi_endpoint allocates a new active endpoint.  fi_passive_ep allocates a
@@ -373,7 +381,9 @@ Calling connect or accept on an endpoint will implicitly enable an
 endpoint if it has not already been enabled.
 
 Fi_enable may also be used to re-enable an endpoint that has been
-disabled as a result of experiencing an asynchronous error.
+disabled as a result of experiencing a critical error.  Applications
+should check the return value from fi_enable to see if a disabled
+endpoint has successfully be re-enabled.
 
 ## fi_cancel
 
