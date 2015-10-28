@@ -274,14 +274,9 @@ static int init_av(void)
 	int ret, i;
 
 	if (opts.dst_addr) {
-		ret = fi_av_insert(av, fi->dest_addr, 1, &remote_fi_addr, 0, NULL);
-		if (ret < 0) {
-			FT_PRINTERR("fi_av_insert", ret);
+		ret = ft_av_insert(av, fi->dest_addr, 1, &remote_fi_addr, 0, NULL);
+		if (ret)
 			return ret;
-		} else if (ret != 1) {
-			FT_ERR("fi_av_insert: number of inserted address = %d\n", ret);
-			return -1;
-		}
 
 		addrlen = FT_MAX_CTRL_MSG;
 		ret = fi_getname(&sep->fid, tx_buf, &addrlen);
@@ -305,14 +300,9 @@ static int init_av(void)
 		if (ret)
 			return ret;
 
-		ret = fi_av_insert(av, rx_buf, 1, &remote_fi_addr, 0, NULL);
-		if (ret < 0) {
-			FT_PRINTERR("fi_av_insert", ret);
+		ret = ft_av_insert(av, rx_buf, 1, &remote_fi_addr, 0, NULL);
+		if (ret)
 			return ret;
-		} else if (ret != 1) {
-			FT_ERR("fi_av_insert: number of inserted address = %d\n", ret);
-			return -1;
-		}
 
 		ret = fi_send(tx_ep[0], tx_buf, 1,
 				fi_mr_desc(mr), remote_fi_addr, NULL);

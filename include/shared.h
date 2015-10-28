@@ -181,6 +181,8 @@ int ft_open_fabric_res();
 int ft_start_server();
 int ft_alloc_active_res(struct fi_info *fi);
 int ft_init_ep();
+int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
+		uint64_t flags, void *context);
 int ft_init_av();
 int ft_exchange_keys(struct fi_rma_iov *peer_iov);
 void ft_free_res();
