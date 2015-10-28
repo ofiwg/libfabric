@@ -1156,7 +1156,7 @@ fabric endpoint.
 
 Endpoints allocated with the FI_CONTEXT mode set must typically
 provide struct fi_context as their per operation context parameter.
-(See fi_getinfo.3 for details.)  However, when FI_COMPLETION is
+(See fi_getinfo.3 for details.)  However, when FI_SELECTIVE_COMPLETION is
 enabled to suppress completion entries, and an operation is initiated
 without FI_COMPLETION flag set, then the context parameter is ignored.
 An application does not need to pass in a valid struct fi_context into
