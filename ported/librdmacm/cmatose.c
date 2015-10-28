@@ -554,7 +554,7 @@ int main(int argc, char **argv)
 
 	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (ret)
-		return ret;
+		goto out;
 
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (ret) {

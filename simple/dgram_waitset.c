@@ -147,6 +147,21 @@ static int send_recv()
 	return 0;
 }
 
+static int run(void)
+{
+	int ret;
+
+	ret = init_fabric();
+	if (ret)
+		return ret;
+
+	ret = ft_init_av();
+	if (ret)
+		return ret;
+
+	return send_recv();
+}
+
 int main(int argc, char **argv)
 {
 	int op, ret = 0;
@@ -178,16 +193,8 @@ int main(int argc, char **argv)
 	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
 
-	ret = init_fabric();
-	if (ret)
-		return -ret;
-
-	ret = ft_init_av();
-	if (ret)
-		return ret;
-
-	ret = send_recv();
+	ret = run();
 
 	ft_free_res();
-	return ret;
+	return -ret;
 }

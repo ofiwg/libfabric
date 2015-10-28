@@ -410,11 +410,47 @@ out:
 	return ret;
 }
 
-
-int main(int argc, char **argv)
+static int run(void)
 {
 	char *node, *service;
 	uint64_t flags;
+	int ret;
+
+	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
+	if (ret)
+		return ret;
+
+	if (!opts.src_port)
+		opts.src_port = "9229";
+
+	if (!opts.src_addr) {
+		fprintf(stderr, "Source address (-s) is required for this test\n");
+		return -EXIT_FAILURE;
+	}
+
+	ret = setup_handle();
+	if (ret)
+		return ret;
+
+	if (!opts.dst_addr) {
+		ret = server_listen();
+		if (ret)
+			return ret;
+	}
+
+	ret = opts.dst_addr ? client_connect() : server_connect();
+	if (ret) {
+		return ret;
+	}
+
+	ret = send_recv();
+
+	fi_shutdown(ep, 0);
+	return ret;
+}
+
+int main(int argc, char **argv)
+{
 	int op, ret;
 
 	opts = INIT_OPTS;
@@ -445,35 +481,8 @@ int main(int argc, char **argv)
 	hints->mode		= FI_LOCAL_MR;
 	hints->addr_format	= FI_SOCKADDR;
 
-	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
-	if (ret)
-		return ret;
+	ret = run();
 
-	if (!opts.src_port)
-		opts.src_port = "9229";
-
-	if (!opts.src_addr) {
-		fprintf(stderr, "Source address (-s) is required for this test\n");
-		return EXIT_FAILURE;
-	}
-
-	ret = setup_handle();
-	if (ret)
-		return -ret;
-
-	if (!opts.dst_addr) {
-		ret = server_listen();
-		if (ret)
-			return -ret;
-	}
-
-	ret = opts.dst_addr ? client_connect() : server_connect();
-	if (ret)
-		return -ret;
-
-	ret = send_recv();
-
-	fi_shutdown(ep, 0);
 	ft_free_res();
-	return ret;
+	return -ret;
 }

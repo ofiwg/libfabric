@@ -494,7 +494,7 @@ int main(int argc, char *argv[])
 
 	rc = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (rc)
-		return rc;
+		return -rc;
 	
 	rc = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
 	if (rc) {
