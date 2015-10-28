@@ -202,7 +202,7 @@ takes a struct fi_msg as input.
 The fi_recvmsg and fi_sendmsg calls allow the user to specify flags
 which can change the default message handling of the endpoint.  Flags
 specified with fi_recvmsg / fi_sendmsg override most flags previously
-configured with the endpoint, except where noted (see fi_endpoint).
+configured with the endpoint, except where noted (see fi_endpoint.3).
 The following list of flags are usable with fi_recvmsg and/or
 fi_sendmsg.
 
@@ -251,6 +251,10 @@ fi_sendmsg.
 : Applies to fi_sendmsg.  Indicates that a completion should not be
   generated until the operation has been successfully transmitted and
   is no longer being tracked by the provider.
+
+*FI_DELIVERY_COMPLETE*
+: Applies to fi_sendmsg.  Indicates that a completion should be
+  generated when the operation has been processed by the destination.
 
 *FI_FENCE*
 : Applies to transmits.  Indicates that the requested operation, also
