@@ -1,4 +1,4 @@
-.TH fi_getinfo 3 "2015\-10\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_getinfo 3 "2015\-10\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo - Obtain / free fabric interface information
@@ -456,8 +456,7 @@ contiguous region, though it may or may not be directly adjacent to the
 payload portion of the buffer.
 .PP
 \f[I]FI_ASYNC_IOV\f[] : Applications can reference multiple data buffers
-as part of a single transmit operation through the use of IO vectors
-(SGEs).
+as part of a single operation through the use of IO vectors (SGEs).
 Typically, the contents of an IO vector are copied by the provider into
 an internal buffer area, or directly to the underlying hardware.
 However, when a large number of IOV entries are supported, IOV buffering
