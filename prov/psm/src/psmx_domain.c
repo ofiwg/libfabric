@@ -209,8 +209,12 @@ static int psmx_domain_close(fid_t fid)
 	 */
 	sleep(psmx_env.delay);
 
-	err = psm_ep_close(domain->psm_ep, PSM_EP_CLOSE_GRACEFUL,
-			   (int64_t) psmx_env.timeout * 1000000000LL);
+	if (psmx_env.timeout)
+		err = psm_ep_close(domain->psm_ep, PSM_EP_CLOSE_GRACEFUL,
+				   (int64_t) psmx_env.timeout * 1000000000LL);
+	else
+		err = PSM_EP_CLOSE_TIMEOUT;
+
 	if (err != PSM_OK)
 		psm_ep_close(domain->psm_ep, PSM_EP_CLOSE_FORCE, 0);
 
