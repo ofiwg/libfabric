@@ -181,7 +181,8 @@ set, and FI_COMPLETION were not.  That is, the data buffer is
 available for reuse immediately on returning from from fi_tinject, and
 no completion event will be generated for this send.  The completion
 event will be suppressed even if the endpoint has not been configured
-with FI_COMPLETION.  See the flags discussion below for more details.
+with FI_SELECTIVE_COMPLETION.  See the flags discussion below for more
+details.
 
 ## fi_tsenddata
 
@@ -233,9 +234,9 @@ and/or fi_tsendmsg.
 
 *FI_COMPLETION*
 : Indicates that a completion entry should be generated for the
-  specified operation.  The endpoint must be bound to an event queue
-  with FI_COMPLETION that corresponds to the specified operation, or
-  this flag is ignored.
+  specified operation.  The endpoint must be bound to a completion queue
+  with FI_SELECTIVE_COMPLETION that corresponds to the specified operation,
+  or this flag is ignored.
 
 *FI_MORE*
 : Indicates that the user has additional requests that will
