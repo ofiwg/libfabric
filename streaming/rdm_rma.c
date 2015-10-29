@@ -66,21 +66,23 @@ static int run_test(void)
 		switch (op_type) {
 		case FT_RMA_WRITE:
 			ret = fi_write(ep, buf, opts.transfer_size, fi_mr_desc(mr),
-				       0, remote.addr, remote.key, ep);
+				       remote_fi_addr, remote.addr, remote.key, ep);
 			if (ret)
 				FT_PRINTERR("fi_write", ret);
 			break;
 		case FT_RMA_WRITEDATA:
 			ret = fi_writedata(ep, buf, opts.transfer_size, fi_mr_desc(mr),
-				       cq_data, 0, remote.addr, remote.key, ep);
-			if (ret)
+				       cq_data, remote_fi_addr, remote.addr, remote.key, ep);
+			if (ret) {
 				FT_PRINTERR("fi_writedata", ret);
+				return ret;
+			}
 
 			ret = ft_rx(0);
 			break;
 		case FT_RMA_READ:
 			ret = fi_read(ep, buf, opts.transfer_size, fi_mr_desc(mr),
-				      0, remote.addr, remote.key, ep);
+				      remote_fi_addr, remote.addr, remote.key, ep);
 			if (ret)
 				FT_PRINTERR("fi_read", ret);
 			break;
