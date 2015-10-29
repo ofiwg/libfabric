@@ -306,7 +306,8 @@ static void fi_ini_dir(const char *dir)
 	struct dirent **liblist = NULL;
 	struct fi_provider* (*inif)(void);
 
-	n = scandir(dir, &liblist, lib_filter, NULL);
+        n = scandir(dir, &liblist, lib_filter, NULL);
+
 	if (n < 0)
 		goto libdl_done;
 
