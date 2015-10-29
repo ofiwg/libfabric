@@ -33,9 +33,20 @@
 #ifndef _FI_PSM_VERSION_H_
 #define _FI_PSM_VERSION_H_
 
-#define PSMX_VERSION	2
-
+#include <psm2.h>
+#include <psm2_mq.h>
+#include <psm2_am.h>
 #include "rename.h"
+
+#define PSMX_PROV_NAME		"psm2"
+#define PSMX_PROV_NAME_LEN	4
+#define PSMX_DOMAIN_NAME	"psm2"
+#define PSMX_DOMAIN_NAME_LEN	4
+#define PSMX_FABRIC_NAME	"psm2"
+#define PSMX_FABRIC_NAME_LEN	4
+
+#define PSMX_DEFAULT_UUID	"00FF00FF-0000-0000-0000-00FF00FF00FF"
+#define PROVIDER_INI		PSM2_INI
 
 #endif
 

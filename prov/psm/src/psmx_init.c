@@ -629,11 +629,7 @@ struct fi_provider psmx_prov = {
 	.cleanup = psmx_fini
 };
 
-#if (PSM_VERNO_MAJOR >= 2)
-PSM2_INI
-#else
-PSM_INI
-#endif
+PROVIDER_INI
 {
 	int major, minor;
 	int err;

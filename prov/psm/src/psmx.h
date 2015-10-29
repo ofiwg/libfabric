@@ -65,42 +65,10 @@ extern "C" {
 #include <rdma/fi_cm.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_log.h>
-
-#include "version.h"
-#if (PSMX_VERSION >= 2)
-#include <psm2.h>
-#include <psm2_mq.h>
-#include <psm2_am.h>
-#else
-#include <psm.h>
-#include <psm_mq.h>
-#include "psm_am.h"
-#if (PSM_VERNO_MAJOR >= 2)
-#error "building PSM provider against PSM2 is not supported"
-#endif
-#endif
-
 #include "fi.h"
 #include "fi_enosys.h"
 #include "fi_list.h"
-
-#if (PSM_VERNO_MAJOR >= 2)
-#define PSMX_PROV_NAME		"psm2"
-#define PSMX_PROV_NAME_LEN	4
-#define PSMX_DOMAIN_NAME	"psm2"
-#define PSMX_DOMAIN_NAME_LEN	4
-#define PSMX_FABRIC_NAME	"psm2"
-#define PSMX_FABRIC_NAME_LEN	4
-#else
-#define PSMX_PROV_NAME		"psm"
-#define PSMX_PROV_NAME_LEN	3
-#define PSMX_DOMAIN_NAME	"psm"
-#define PSMX_DOMAIN_NAME_LEN	3
-#define PSMX_FABRIC_NAME	"psm"
-#define PSMX_FABRIC_NAME_LEN	3
-#endif
-
-#define PSMX_DEFAULT_UUID	"0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF"
+#include "version.h"
 
 extern struct fi_provider psmx_prov;
 
