@@ -33,7 +33,22 @@
 #ifndef _FI_PSM_VERSION_H_
 #define _FI_PSM_VERSION_H_
 
-#define PSMX_VERSION	1
+#include <psm.h>
+#include <psm_mq.h>
+#include "psm_am.h"
+#if (PSM_VERNO_MAJOR >= 2)
+#error "building PSM provider against PSM2 is not supported"
+#endif
+
+#define PSMX_PROV_NAME		"psm"
+#define PSMX_PROV_NAME_LEN	3
+#define PSMX_DOMAIN_NAME	"psm"
+#define PSMX_DOMAIN_NAME_LEN	3
+#define PSMX_FABRIC_NAME	"psm"
+#define PSMX_FABRIC_NAME_LEN	3
+
+#define PSMX_DEFAULT_UUID	"0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF"
+#define PROVIDER_INI		PSM_INI
 
 #endif
 

@@ -40,10 +40,29 @@ cat <<EOF >$OUTFILE
 
 EOF
 
-LIST=`grep --only-match --no-filename '[a-zA-Z0-9_]*psmx_[a-zA-Z0-9_]*' psmx*.[ch] | sort | uniq`
+# rename symbols beginning with 'psmx_' or '_psmx_'
+LIST=`grep --only-match --no-filename '_*psmx_[a-zA-Z0-9_]*' psmx*.[ch] | sort | uniq`
 
 for ITEM in $LIST ; do
 	echo '#define' $ITEM ${ITEM/psmx_/psmx2_} >>$OUTFILE
+done
+
+echo >>$OUTFILE
+
+# rename symbols beginning with 'psm_'
+LIST=`grep --only-match --no-filename -E '(^|[^a-zA-Z0-9_])psm_[a-zA-Z0-9_]*' psmx*.[ch] | sed 's/[^a-zA-Z0-9_]//' | sort | uniq`
+
+for ITEM in $LIST ; do
+	echo '#define' $ITEM ${ITEM/psm_/psm2_} >>$OUTFILE
+done
+
+echo >>$OUTFILE
+
+# rename symbols beginning with 'PSM_'
+LIST=`grep --only-match --no-filename -E '(^|[^a-zA-Z0-9_])PSM_[a-zA-Z0-9_]*' psmx*.[ch] | sed 's/[^a-zA-Z0-9_]//' | sort | uniq`
+
+for ITEM in $LIST ; do
+	echo '#define' $ITEM ${ITEM/PSM_/PSM2_} >>$OUTFILE
 done
 
 echo >>$OUTFILE
