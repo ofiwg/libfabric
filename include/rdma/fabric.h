@@ -404,14 +404,10 @@ enum {
 	FI_SETFIDFLAG,		/* uint64_t flags */
 	FI_GETOPSFLAG,		/* uint64_t flags */
 	FI_SETOPSFLAG,		/* uint64_t flags */
-
-	/* Duplicate a fid_t.  This allows for 2 fids that refer to a single
-	 * HW resource.  Each fid may reference functions that are optimized
-	 * for different use cases.
-	 */
 	FI_ALIAS,		/* struct fi_alias * */
 	FI_GETWAIT,		/* void * wait object */
 	FI_ENABLE,		/* NULL */
+	FI_BACKLOG,		/* integer * */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)
