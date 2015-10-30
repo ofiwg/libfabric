@@ -30,4 +30,75 @@
  * SOFTWARE.
  */
 
+static struct fi_provider fi_ibv_prov = {
+	.name = VERBS_PROV_NAME,
+	.version = VERBS_PROV_VERS,
+	.fi_version = FI_VERSION(1, 1),
+	.getinfo = fi_ibv_getinfo,
+	.fabric = fi_ibv_fabric,
+	.cleanup = fi_ibv_fini
+};
+
+static int fi_ibv_fabric_close(fid_t fid)
+{
+	free(fid);
+	return 0;
+}
+
+static struct fi_ops fi_ibv_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = fi_ibv_fabric_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+static struct fi_ops_fabric fi_ibv_ops_fabric = {
+	.size = sizeof(struct fi_ops_fabric),
+	.domain = fi_ibv_domain,
+	.passive_ep = fi_ibv_passive_ep,
+	.eq_open = fi_ibv_eq_open,
+	.wait_open = fi_no_wait_open,
+};
+
+static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+			 void *context)
+{
+	struct fi_ibv_fabric *fab;
+	struct fi_info *info;
+	int ret;
+
+	ret = fi_ibv_init_info();
+	if (ret)
+		return ret;
+
+	info = fi_ibv_search_verbs_info(attr->name, NULL);
+	if (!info)
+		return -FI_ENODATA;
+
+	ret = fi_ibv_check_fabric_attr(attr, info);
+	if (ret)
+		return -FI_ENODATA;
+
+	fab = calloc(1, sizeof(*fab));
+	if (!fab)
+		return -FI_ENOMEM;
+
+	fab->fabric_fid.fid.fclass = FI_CLASS_FABRIC;
+	fab->fabric_fid.fid.context = context;
+	fab->fabric_fid.fid.ops = &fi_ibv_fi_ops;
+	fab->fabric_fid.ops = &fi_ibv_ops_fabric;
+	*fabric = &fab->fabric_fid;
+	return 0;
+}
+
+static void fi_ibv_fini(void)
+{
+	fi_freeinfo(verbs_info);
+}
+
+VERBS_INI
+{
+	return &fi_ibv_prov;
+}
 

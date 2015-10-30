@@ -30,4 +30,21 @@
  * SOFTWARE.
  */
 
+static int fi_ibv_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr)
+{
+	size_t src_addrlen = fi_ibv_sockaddr_len(src_addr);
+
+	if (*dst_addrlen == 0) {
+		*dst_addrlen = src_addrlen;
+		return -FI_ETOOSMALL;
+	}
+
+	if (*dst_addrlen < src_addrlen) {
+		memcpy(dst_addr, src_addr, *dst_addrlen);
+	} else {
+		memcpy(dst_addr, src_addr, src_addrlen);
+	}
+	*dst_addrlen = src_addrlen;
+	return 0;
+}
 

@@ -30,6 +30,49 @@
  * SOFTWARE.
  */
 
+#define VERBS_PROV_NAME "verbs"
+#define VERBS_PROV_VERS FI_VERSION(1,0)
+
+#define VERBS_IB_PREFIX "IB-0x"
+#define VERBS_IWARP_FABRIC "Ethernet-iWARP"
+#define VERBS_ANY_FABRIC "Any RDMA fabric"
+#define VERBS_CM_DATA_SIZE 56
+#define VERBS_RESOLVE_TIMEOUT 2000	// ms
+
+#define VERBS_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
+		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
+#define VERBS_MODE (FI_LOCAL_MR)
+#define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
+#define VERBS_TX_OP_FLAGS_IWARP (FI_INJECT | FI_COMPLETION)
+#define VERBS_TX_MODE VERBS_MODE
+#define VERBS_RX_MODE (FI_LOCAL_MR | FI_RX_CQ_DATA)
+#define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
+		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
+
+#define VERBS_INJECT_FLAGS(ep, len, flags) (((flags & FI_INJECT) || \
+		len <= ep->info->tx_attr->inject_size) ? IBV_SEND_INLINE : 0)
+#define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, ep->info->tx_attr->op_flags)
+
+#define VERBS_SELECTIVE_COMP(ep) (ep->ep_flags & FI_SELECTIVE_COMPLETION)
+
+#define VERBS_COMP_FLAGS(ep, flags) ((!VERBS_SELECTIVE_COMP(ep) || \
+		(flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE))) ? \
+		IBV_SEND_SIGNALED : 0)
+
+#define VERBS_COMP(ep) VERBS_COMP_FLAGS(ep, ep->info->tx_attr->op_flags)
+
+#define VERBS_COMP_READ_FLAGS(ep, flags) ((!VERBS_SELECTIVE_COMP(ep) || \
+		(flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))) ? \
+		IBV_SEND_SIGNALED : 0)
+
+#define VERBS_COMP_READ(ep) VERBS_COMP_READ_FLAGS(ep, ep->info->tx_attr->op_flags)
+
+#define VERBS_DBG(subsys, ...) FI_DBG(&fi_ibv_prov, subsys, __VA_ARGS__)
+#define VERBS_INFO(subsys, ...) FI_INFO(&fi_ibv_prov, subsys, __VA_ARGS__)
+
+#define VERBS_INFO_ERRNO(subsys, fn, errno) VERBS_INFO(subsys, fn ": %s(%d)\n",	\
+		strerror(errno), errno)
+
 struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
 };
@@ -82,5 +125,20 @@ struct fi_ibv_mem_desc {
 	struct fid_mr		mr_fid;
 	struct ibv_mr		*mr;
 	struct fi_ibv_domain	*domain;
+};
+
+struct fi_ibv_msg_ep {
+	struct fid_ep		ep_fid;
+	struct rdma_cm_id	*id;
+	struct fi_ibv_eq	*eq;
+	struct fi_ibv_cq	*rcq;
+	struct fi_ibv_cq	*scq;
+	uint64_t		ep_flags;
+	struct fi_info		*info;
+};
+
+struct fi_ibv_connreq {
+	struct fid		handle;
+	struct rdma_cm_id	*id;
 };
 
