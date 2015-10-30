@@ -238,6 +238,62 @@ FI_LOG_SUBSYS environment variables.
 - *mr*
 : Provides output specific to memory registration.
 
+# PARAMETER CONFIGRATION FILE INTERFACE
+
+Libfabric defines a set of file system interfaces that may be used to
+set global or provider specific parameters.  Conceptually, this interface
+is similar to the /proc interfaces used by ip(7) and tcp(7).
+Parameters can be accessed by reading or writing files in
+%SYSCONFDIR%/rdma/fabric.  The parameter files are typically found at
+/etc/rdma/fabric or /usr/local/etc/rdma/fabric.
+The exact location of the files is controllable through build parameters,
+but for simplicity, the following documentation assumes that they are found
+under /etc/rdma/fabric.  The files do not exist by default and must be
+created by the administrator or Linux distro.
+
+Parameter files located under /etc/rdma/fabric are treated as global and
+apply to all relevant providers.  Provider specific parameters may be set
+by writing to a file by the same name, but in a provider specific
+subdirectory.  For example, parameter files under /etc/rdma/fabric/verbs
+will apply only to the verbs provider.
+
+Most files are associated with a single value, with the data type
+shown in the descriptions below.  Administrators can set and get the values
+using a method similar to this example:
+
+% mkdir /etc/rdma
+% mkdir /etc/rdma/fabric
+% echo 64 > /etc/rdma/fabric/def_inject_size
+% cat /etc/rdma/fabric/def_inject_size
+  64
+
+In some cases, parameter files may conflict with libfabric or provider
+environment variables.  Parameter files, which may be secure, take precedence.
+In situations where parameter values are invalid or not supported by a
+provider, providers will fail any related operation (e.g. fi_getinfo).
+Parameter files are read once at library initialization.
+
+*conn_timeout - Connection Request Timeout (integer)*
+: Specifies the total time, in milliseconds, before a connection operation
+  times out.
+
+*def_inject_size - Default Inject Size (integer)*
+: Specifies the default maximum size of inject operations.
+
+*def_rx_ctx_size - Default Receive Context Size (integer)*
+: Specifies the default size allocated for a receive context.
+
+*def_rx_iov_limit - Default Receive IOV Limit (integer)*
+: Specifies the default maximum number of IO vectors that may be posted to
+  a receive context.
+
+*def_tx_ctx_size - Default Transmit Context Size (integer)*
+: Specifies the default size allocated for a transmit context.
+
+*def_tx_iov_limit - Default Transmit IOV Limit (integer)*
+: Specifies the default maximum number of IO vectors that may be posted to
+  a transmit context.
+
 # SEE ALSO
 
 [`fi_provider`(7)](fi_provider.7.html),
