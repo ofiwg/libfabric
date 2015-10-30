@@ -54,7 +54,10 @@ Libfabric provides a general framework for supporting multiple types
 of fabric objects and their related interfaces.  Fabric providers have
 a large amount of flexibility in selecting which components they are
 able and willing to support, based on specific hardware constraints.
-To assist in the development of applications, libfabric specifies the
+Provider developers should refer to docs/provider for information on
+functionaliy supplied by the framework to assist in provider
+implementation.  To assist in the development of applications,
+libfabric specifies the
 following requirements that must be met by any fabric provider, if
 requested by an application.
 
