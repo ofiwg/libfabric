@@ -1,4 +1,4 @@
-.TH fi_provider 7 "2015\-04\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_provider 7 "2015\-10\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 Fabric Interface Providers
@@ -46,6 +46,9 @@ fabric objects and their related interfaces.
 Fabric providers have a large amount of flexibility in selecting which
 components they are able and willing to support, based on specific
 hardware constraints.
+Provider developers should refer to docs/provider for information on
+functionaliy supplied by the framework to assist in provider
+implementation.
 To assist in the development of applications, libfabric specifies the
 following requirements that must be met by any fabric provider, if
 requested by an application.
