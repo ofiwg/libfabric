@@ -195,6 +195,7 @@ struct fi_ibv_pep {
 	struct fid_pep		pep_fid;
 	struct fi_ibv_eq	*eq;
 	struct rdma_cm_id	*id;
+	int			backlog;
 	int			bound;
 	size_t			src_addrlen;
 };
@@ -3608,7 +3609,7 @@ static int fi_ibv_pep_listen(struct fid_pep *pep_fid)
 			ntohs(((struct sockaddr_in *)addr)->sin_port));
 	}
 
-	return rdma_listen(pep->id, 0) ? -errno : 0;
+	return rdma_listen(pep->id, pep->backlog) ? -errno : 0;
 }
 
 static struct fi_ops_cm fi_ibv_pep_cm_ops = {
@@ -3640,6 +3641,33 @@ static int fi_ibv_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+static int fi_ibv_pep_control(struct fid *fid, int command, void *arg)
+{
+	struct fi_ibv_pep *pep;
+	int ret = 0;
+
+	switch (fid->fclass) {
+	case FI_CLASS_PEP:
+		pep = container_of(fid, struct fi_ibv_pep, pep_fid.fid);
+		switch (command) {
+		case FI_BACKLOG:
+			if (!arg)
+				return -FI_EINVAL;
+			pep->backlog = *(int *) arg;
+			break;
+		default:
+			ret = -FI_ENOSYS;
+			break;
+		}
+		break;
+	default:
+		ret = -FI_ENOSYS;
+		break;
+	}
+
+	return ret;
+}
+
 static int fi_ibv_pep_close(fid_t fid)
 {
 	struct fi_ibv_pep *pep;
@@ -3656,7 +3684,7 @@ static struct fi_ops fi_ibv_pep_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = fi_ibv_pep_close,
 	.bind = fi_ibv_pep_bind,
-	.control = fi_no_control,
+	.control = fi_ibv_pep_control,
 	.ops_open = fi_no_ops_open,
 };
 
