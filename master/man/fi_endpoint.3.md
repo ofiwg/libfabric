@@ -430,6 +430,10 @@ assigned to an endpoint.
   the type of data transfer that the flags should apply to, with other
   flags OR'ed in.  Valid control flags are defined below.
 
+**FI_BACKLOG - int *value**
+: This option only applies to passive endpoints.  It is used to set the
+  connection request backlog for listening endpoints.
+
 ## fi_getopt / fi_setopt
 
 Endpoint protocol operations may be retrieved using fi_getopt or set
