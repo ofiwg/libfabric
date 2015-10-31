@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-10\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2015\-10\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -459,6 +459,11 @@ transfer operation flags associated with an endpoint.
 The FI_READ, FI_WRITE, FI_SEND, FI_RECV flags indicate the type of data
 transfer that the flags should apply to, with other flags OR\[aq]ed in.
 Valid control flags are defined below.
+.PP
+**FI_BACKLOG - int \f[I]value\f[]* : This option only applies to passive
+endpoints.
+It is used to set the connection request backlog for listening
+endpoints.
 .SS fi_getopt / fi_setopt
 .PP
 Endpoint protocol operations may be retrieved using fi_getopt or set
