@@ -132,7 +132,7 @@ static int alloc_ep_res(struct fi_info *fi)
 
 static int bind_ep_res(void)
 {
-	int i, ret;
+	int i, ret = 0;
 
 	for (i = 0; i < ep_cnt; i++) {
 		ret = fi_ep_bind(ep_array[i], &stx_ctx->fid, 0);
@@ -294,6 +294,10 @@ static int init_av(void)
 		return ret;
 	}
 
+	if (ep_cnt <= 0) {
+		fprintf(stderr, "ep_cnt needs to be greater than 0\n");
+		return -EXIT_FAILURE;
+	}
 	local_addr = malloc(addrlen * ep_cnt);
 
 	/* Get local addresses for all EPs */

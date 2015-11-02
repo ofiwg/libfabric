@@ -47,6 +47,9 @@
 #include <sys/time.h>
 #include <getopt.h>
 #include <time.h>
+#include <limits.h>
+#include <errno.h>
+
 #include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_domain.h>
@@ -412,7 +415,7 @@ int main(int argc, char *argv[])
 	char 	*node 				= NULL;
 	struct pingpong_context *ctx;
 	struct timeval           start, end;
-	int                      size = 4096;
+	unsigned long                      size = 4096;
 	// No provider support yet
 	//enum ibv_mtu		 mtu = IBV_MTU_1024;
 	//size_t					 mtu = 1024;
@@ -424,6 +427,7 @@ int main(int argc, char *argv[])
 	int                      rcnt, scnt;
 	int			 ret, rc = 0;
 
+	char * ptr;
 	srand48(getpid() * time(NULL));
 
 	opts = INIT_OPTS;
@@ -441,9 +445,15 @@ int main(int argc, char *argv[])
 
 		switch (c) {
 		case 'S':
-			size = strtol(optarg, NULL, 0);
+			errno = 0;
+			size = strtol(optarg, &ptr, 10);
+                        if (ptr == optarg || *ptr != '\0' ||
+				((size == LONG_MIN || size == LONG_MAX) && errno == ERANGE)) {
+                                fprintf(stderr, "Cannot convert from string to long\n");
+				rc = 1;
+                                goto err1;
+                        }
 			break;
-
 		// No provider support yet
 		/*case 'm':
 			mtu = strtol(optarg, NULL, 0);
