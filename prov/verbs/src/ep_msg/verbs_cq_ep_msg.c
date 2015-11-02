@@ -467,6 +467,7 @@ fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		_cq->cq_fid.ops = &fi_ibv_cq_context_ops;
 		_cq->entry_size = sizeof(struct fi_cq_entry);
 		break;
+    case FI_CQ_FORMAT_TAGGED:
 	case FI_CQ_FORMAT_MSG:
 		_cq->cq_fid.ops = &fi_ibv_cq_msg_ops;
 		_cq->entry_size = sizeof(struct fi_cq_msg_entry);
