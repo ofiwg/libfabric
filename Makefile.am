@@ -127,7 +127,13 @@ _verbs_files = prov/verbs/src/verbs_av.c \
 	prov/verbs/src/ep_msg/verbs_ep_msg.c \
 	prov/verbs/src/ep_msg/verbs_msg_cm.c \
 	prov/verbs/src/ep_msg/verbs_msg_ep_msg.c \
-	prov/verbs/src/ep_msg/verbs_rma_ep_msg.c
+	prov/verbs/src/ep_msg/verbs_rma_ep_msg.c \
+	prov/verbs/src/ep_rdm/verbs_av_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_cq_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_rdm_cm.c \
+	prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm_states.c
 
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libverbs-fi.la
