@@ -2167,6 +2167,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 				msg_hdr->msg_len += pe_entry->pe.tx.tx_iov[i].src.iov.len;
 			}
 		}
+		msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.dest_iov_len;
 		break;
 	case SOCK_OP_WRITE:
 		if (pe_entry->flags & FI_INJECT) {
@@ -2186,6 +2187,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 				 sizeof(pe_entry->pe.tx.tx_iov[i].dst));
 		}
 		msg_hdr->msg_len += sizeof(union sock_iov) * i;
+		msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.dest_iov_len;
 		break;
 	case SOCK_OP_READ:
 		for (i = 0; i < pe_entry->pe.tx.tx_op.src_iov_len; i++) {
@@ -2198,6 +2200,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 			rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.tx_iov[i].dst,
 				 sizeof(pe_entry->pe.tx.tx_iov[i].dst));
 		}
+		msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.src_iov_len;
 		break;
 	case SOCK_OP_ATOMIC:
 		msg_hdr->msg_len += sizeof(struct sock_op);
@@ -2233,6 +2236,7 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 				pe_entry->pe.tx.tx_iov[i].cmp.ioc.count;
 		}
 		break;
+		msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.dest_iov_len;
 	default:
 		SOCK_LOG_ERROR("Invalid operation type\n");
 		return -FI_EINVAL;
@@ -2253,7 +2257,6 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	if (pe_entry->flags & FI_INJECT_COMPLETE)
 		pe_entry->flags &= ~FI_TRANSMIT_COMPLETE;
 
-	msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.dest_iov_len;
 	msg_hdr->flags = htonll(pe_entry->flags);
 	pe_entry->total_len = msg_hdr->msg_len;
 	msg_hdr->msg_len = htonll(msg_hdr->msg_len);
