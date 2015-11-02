@@ -232,11 +232,17 @@ static int mlxm_fabric_close(fid_t fid)
 static struct fi_ops mlxm_fabric_fi_ops = {
         .size  = sizeof(struct fi_ops),
         .close = mlxm_fabric_close    ,
+        .bind     = fi_no_bind           ,
+        .control  = fi_no_control        ,
+        .ops_open = fi_no_ops_open       ,
 };
 
 static struct fi_ops_fabric mlxm_fabric_ops = {
         .size   = sizeof(struct fi_ops_fabric),
         .domain = mlxm_domain_open            ,
+        .passive_ep = fi_no_passive_ep            ,
+        .eq_open    = fi_no_eq_open               ,
+        .wait_open  = fi_no_wait_open             ,
 };
 
 static int mlxm_fabric(struct fi_fabric_attr *attr,
