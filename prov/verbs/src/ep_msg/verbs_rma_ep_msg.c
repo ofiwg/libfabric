@@ -30,6 +30,16 @@
  * SOFTWARE.
  */
 
+#include <string.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <infiniband/ib.h>
+#include <infiniband/verbs.h>
+
+#include <rdma/fabric.h>
+#include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/verbs_utils.h>
+
 static ssize_t
 fi_ibv_msg_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 		     void *desc, fi_addr_t dest_addr,
@@ -208,7 +218,7 @@ fi_ibv_msg_ep_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_
 	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
-static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
+struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = fi_ibv_msg_ep_rma_read,
 	.readv = fi_ibv_msg_ep_rma_readv,

@@ -30,6 +30,20 @@
  * SOFTWARE.
  */
 
+#include <stdlib.h>
+
+#include <arpa/inet.h>
+#include <rdma/rdma_cma.h>
+
+#include <fi_enosys.h>
+#include <rdma/fabric.h>
+#include <rdma/fi_cm.h>
+#include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/verbs_ep.h>
+#include <prov/verbs/src/verbs_utils.h>
+
+extern struct fi_provider fi_ibv_prov;
+
 static int fi_ibv_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 {
 	struct fi_ibv_msg_ep *ep;
@@ -168,19 +182,6 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	return 0;
 }
 
-static int
-fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
-		  const void *param, size_t paramlen)
-{
-	struct fi_ibv_connreq *connreq;
-	int ret;
-
-	connreq = container_of(handle, struct fi_ibv_connreq, handle);
-	ret = rdma_reject(connreq->id, param, (uint8_t) paramlen) ? -errno : 0;
-	free(connreq);
-	return ret;
-}
-
 static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 {
 	struct fi_ibv_msg_ep *_ep;
@@ -188,7 +189,7 @@ static int fi_ibv_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 	return rdma_disconnect(_ep->id) ? -errno : 0;
 }
 
-static struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
+struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_ibv_msg_ep_setname,
 	.getname = fi_ibv_msg_ep_getname,

@@ -30,6 +30,21 @@
  * SOFTWARE.
  */
 
+#include <stdlib.h>
+
+#include <arpa/inet.h>
+#include <rdma/rdma_cma.h>
+
+#include <fi_enosys.h>
+#include <rdma/fabric.h>
+#include <rdma/fi_log.h>
+#include <rdma/fi_cm.h>
+
+#include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/verbs_utils.h>
+
+extern struct fi_provider fi_ibv_prov;
+
 static int fi_ibv_pep_setname(fid_t pep_fid, void *addr, size_t addrlen)
 {
 	struct fi_ibv_pep *pep;
@@ -93,6 +108,19 @@ static int fi_ibv_pep_listen(struct fid_pep *pep_fid)
 	return rdma_listen(pep->id, 0) ? -errno : 0;
 }
 
+static int
+fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
+		  const void *param, size_t paramlen)
+{
+	struct fi_ibv_connreq *connreq;
+	int ret;
+
+	connreq = container_of(handle, struct fi_ibv_connreq, handle);
+	ret = rdma_reject(connreq->id, param, (uint8_t) paramlen) ? -errno : 0;
+	free(connreq);
+	return ret;
+}
+
 static struct fi_ops_cm fi_ibv_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_ibv_pep_setname,
@@ -142,8 +170,7 @@ static struct fi_ops fi_ibv_pep_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int
-fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
+int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_pep **pep, void *context)
 {
 	struct fi_ibv_pep *_pep;

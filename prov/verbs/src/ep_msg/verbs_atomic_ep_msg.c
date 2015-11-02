@@ -30,6 +30,18 @@
  * SOFTWARE.
  */
 
+#include <stddef.h>
+
+#include <netinet/in.h>
+#include <infiniband/ib.h>
+
+#include <fi_enosys.h>
+#include <rdma/fi_atomic.h>
+#include <rdma/fi_errno.h>
+#include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/verbs_utils.h>
+
+extern struct fi_provider fi_ibv_prov;
 
 static int
 fi_ibv_msg_ep_atomic_writevalid(struct fid_ep *ep, enum fi_datatype datatype,
@@ -440,7 +452,7 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep_fid,
 			result_desc[0], msg->context);
 }
 
-static struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops = {
+struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops = {
 	.size		= sizeof(struct fi_ops_atomic),
 	.write		= fi_ibv_msg_ep_atomic_write,
 	.writev		= fi_ibv_msg_ep_atomic_writev,

@@ -30,6 +30,55 @@
  * SOFTWARE.
  */
 
+#include <fi_enosys.h>
+#include <rdma/fabric.h>
+
+#include <stdlib.h>
+#include <rdma/rdma_cma.h>
+
+#include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/verbs_checks.h>
+
+/* TODO: verbs_info.h> */
+struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
+		const char *domain_name);
+
+int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+	    struct fid_cq **cq, void *context);
+int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
+	    struct fid_ep **ep, void *context);
+int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
+	      struct fid_pep **pep, void *context);
+int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+	       struct fid_eq **eq, void *context);
+
+
+extern struct fi_provider fi_ibv_prov;
+extern struct fi_ops_mr fi_ibv_domain_mr_ops;
+
+static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *name)
+{
+	struct ibv_context **dev_list;
+	int i, ret = -FI_ENODEV;
+
+	if (!name)
+		return -FI_EINVAL;
+
+	dev_list = rdma_get_devices(NULL);
+	if (!dev_list)
+		return -errno;
+
+	for (i = 0; dev_list[i]; i++) {
+		if (!strcmp(name, ibv_get_device_name(dev_list[i]->device))) {
+			domain->verbs = dev_list[i];
+			ret = 0;
+			break;
+		}
+	}
+	rdma_free_devices(dev_list);
+	return ret;
+}
+
 static int fi_ibv_close(fid_t fid)
 {
 	struct fi_ibv_domain *domain;
@@ -55,29 +104,6 @@ static struct fi_ops fi_ibv_fid_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *name)
-{
-	struct ibv_context **dev_list;
-	int i, ret = -FI_ENODEV;
-
-	if (!name)
-		return -FI_EINVAL;
-
-	dev_list = rdma_get_devices(NULL);
-	if (!dev_list)
-		return -errno;
-
-	for (i = 0; dev_list[i]; i++) {
-		if (!strcmp(name, ibv_get_device_name(dev_list[i]->device))) {
-			domain->verbs = dev_list[i];
-			ret = 0;
-			break;
-		}
-	}
-	rdma_free_devices(dev_list);
-	return ret;
-}
-
 static struct fi_ops_domain fi_ibv_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = fi_no_av_open,
@@ -90,8 +116,7 @@ static struct fi_ops_domain fi_ibv_domain_ops = {
 	.srx_ctx = fi_no_srx_context,
 };
 
-static int
-fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
+int fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	   struct fid_domain **domain, void *context)
 {
 	struct fi_ibv_domain *_domain;

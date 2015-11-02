@@ -30,6 +30,18 @@
  * SOFTWARE.
  */
 
+#ifndef _FI_VERBS_H
+#define _FI_VERBS_H
+
+#if HAVE_CONFIG_H
+#include <config.h>
+#endif /* HAVE_CONFIG_H */
+
+#include <infiniband/verbs.h>
+
+#include <fi_list.h>
+#include <rdma/fabric.h>
+
 #define VERBS_PROV_NAME "verbs"
 #define VERBS_PROV_VERS FI_VERSION(1,0)
 
@@ -142,3 +154,4 @@ struct fi_ibv_connreq {
 	struct rdma_cm_id	*id;
 };
 
+#endif /* _FI_VERBS_H */

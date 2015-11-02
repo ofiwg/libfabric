@@ -30,47 +30,15 @@
  * SOFTWARE.
  */
 
-#define fi_ibv_set_sge(sge, buf, len, desc)		\
-	do {						\
-		sge.addr = (uintptr_t)buf;		\
-		sge.length = (uint32_t)len;		\
-		sge.lkey = (uint32_t)(uintptr_t)desc;	\
-	} while (0)
+#include <alloca.h>
+#include <stdint.h>
+#include <sys/types.h>
+#include <infiniband/verbs.h>
+#include <rdma/rdma_cma.h>
 
-#define fi_ibv_set_sge_iov(sg_list, iov, count, desc, len)		\
-	do {								\
-		int i;							\
-		if (count) {						\
-			sg_list = alloca(sizeof(*sg_list) * count);	\
-			for (i = 0; i < count; i++) {			\
-				fi_ibv_set_sge(sg_list[i],		\
-						iov[i].iov_base,	\
-						iov[i].iov_len,		\
-						desc[i]);		\
-				len += iov[i].iov_len;			\
-			}						\
-		}							\
-	} while (0)
-
-#define fi_ibv_set_sge_inline(sge, buf, len)	\
-	do {					\
-		sge.addr = (uintptr_t)buf;	\
-		sge.length = (uint32_t)len;	\
-	} while (0)
-
-#define fi_ibv_set_sge_iov_inline(sg_list, iov, count, len)		\
-	do {								\
-		int i;							\
-		if (count) {						\
-			sg_list = alloca(sizeof(*sg_list) * count);	\
-			for (i = 0; i < count; i++) {			\
-				fi_ibv_set_sge_inline(sg_list[i],	\
-						iov[i].iov_base,	\
-						iov[i].iov_len);	\
-				len += iov[i].iov_len;			\
-			}						\
-		}							\
-	} while (0)
+#include <rdma/fi_endpoint.h>
+#include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/verbs_utils.h>
 
 static ssize_t
 fi_ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
@@ -142,74 +110,6 @@ fi_ibv_msg_ep_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 	return fi_ibv_msg_ep_recvmsg(ep, &msg, 0);
 }
-
-static ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len,
-		int count, void *context)
-{
-	struct ibv_send_wr *bad_wr;
-	int ret;
-
-	wr->num_sge = count;
-	wr->wr_id = (uintptr_t) context;
-
-	ret = ibv_post_send(ep->id->qp, wr, &bad_wr);
-	switch (ret) {
-	case ENOMEM:
-		return -FI_EAGAIN;
-	case -1:
-		/* Deal with non-compliant libibverbs drivers which set errno
-		 * instead of directly returning the error value */
-		return (errno == ENOMEM) ? -FI_EAGAIN : -errno;
-	default:
-		return -ret;
-	}
-}
-
-static ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
-		const void *buf, size_t len, void *desc, void *context)
-{
-	struct ibv_sge sge;
-
-	fi_ibv_set_sge(sge, buf, len, desc);
-	wr->sg_list = &sge;
-
-	return fi_ibv_send(ep, wr, len, 1, context);
-}
-
-static ssize_t fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
-		const void *buf, size_t len)
-{
-	struct ibv_sge sge;
-
-	fi_ibv_set_sge_inline(sge, buf, len);
-	wr->sg_list = &sge;
-
-	return fi_ibv_send(ep, wr, len, 1, NULL);
-}
-
-static ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
-		const struct iovec *iov, void **desc, int count, void *context,
-		uint64_t flags)
-{
-	size_t len = 0;
-
-	if (!desc)
-		fi_ibv_set_sge_iov_inline(wr->sg_list, iov, count, len);
-	else
-		fi_ibv_set_sge_iov(wr->sg_list, iov, count, desc, len);
-
-	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags) | VERBS_COMP_FLAGS(ep, flags);
-
-	return fi_ibv_send(ep, wr, len, count, context);
-}
-
-#define fi_ibv_send_iov(ep, wr, iov, desc, count, context)	\
-	fi_ibv_send_iov_flags(ep, wr, iov, desc, count, context,\
-			ep->info->tx_attr->op_flags)
-
-#define fi_ibv_send_msg(ep, wr, msg, flags)					\
-	fi_ibv_send_iov_flags(ep, wr, msg->msg_iov, msg->desc, msg->iov_count,	\
-			msg->context, flags)
 
 static ssize_t
 fi_ibv_msg_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
@@ -307,7 +207,7 @@ static ssize_t fi_ibv_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, 
 	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
 }
 
-static struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
+struct fi_ops_msg fi_ibv_msg_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = fi_ibv_msg_ep_recv,
 	.recvv = fi_ibv_msg_ep_recvv,

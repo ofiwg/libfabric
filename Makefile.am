@@ -110,7 +110,24 @@ endif !HAVE_SOCKETS_DL
 endif HAVE_SOCKETS
 
 if HAVE_VERBS
-_verbs_files = prov/verbs/src/fi_verbs.c
+#_verbs_files = prov/verbs/src/fi_verbs.c
+_verbs_files = prov/verbs/src/verbs_av.c \
+	prov/verbs/src/verbs_checks.c \
+	prov/verbs/src/verbs_cq.c \
+	prov/verbs/src/verbs_domain.c \
+	prov/verbs/src/verbs_ep.c \
+	prov/verbs/src/verbs_eq.c \
+	prov/verbs/src/verbs_fabric.c \
+	prov/verbs/src/verbs_info.c \
+	prov/verbs/src/verbs_mr.c \
+	prov/verbs/src/verbs_pep.c \
+	prov/verbs/src/verbs_utils.c \
+	prov/verbs/src/ep_msg/verbs_atomic_ep_msg.c \
+	prov/verbs/src/ep_msg/verbs_cq_ep_msg.c \
+	prov/verbs/src/ep_msg/verbs_ep_msg.c \
+	prov/verbs/src/ep_msg/verbs_msg_cm.c \
+	prov/verbs/src/ep_msg/verbs_msg_ep_msg.c \
+	prov/verbs/src/ep_msg/verbs_rma_ep_msg.c
 
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libverbs-fi.la

@@ -30,13 +30,20 @@
  * SOFTWARE.
  */
 
-#include <fi_enosys.h>
-#include <prov/verbs/src/fi_verbs.h>
+#ifndef _VERBS_EP_H
+#define _VERBS_EP_H
 
-#include <stdlib.h>
-#include <sys/poll.h>
+#include <stdint.h>
 
+struct rdma_addrinfo;
+struct rdma_cm_id;
+struct fi_info;
 
+struct fi_ibv_msg_ep *fi_ibv_alloc_msg_ep(struct fi_info *info);
+void fi_ibv_free_msg_ep(struct fi_ibv_msg_ep *ep);
 
+int fi_ibv_create_ep(const char *node, const char *service,
+		 uint64_t flags, const struct fi_info *hints,
+		 struct rdma_addrinfo **rai, struct rdma_cm_id **id);
 
-
+#endif /* _VERBS_EP_H */

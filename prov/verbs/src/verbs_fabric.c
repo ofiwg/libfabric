@@ -30,14 +30,36 @@
  * SOFTWARE.
  */
 
-static struct fi_provider fi_ibv_prov = {
-	.name = VERBS_PROV_NAME,
-	.version = VERBS_PROV_VERS,
-	.fi_version = FI_VERSION(1, 1),
-	.getinfo = fi_ibv_getinfo,
-	.fabric = fi_ibv_fabric,
-	.cleanup = fi_ibv_fini
-};
+#include <stdlib.h>
+#include <sys/epoll.h>
+
+#include <rdma/rdma_cma.h>
+
+#include <prov.h>
+#include <fi_enosys.h>
+#include <rdma/fi_prov.h>
+#include <prov/verbs/src/fi_verbs.h>
+
+#include <prov/verbs/src/verbs_checks.h>
+
+extern struct fi_info *verbs_info;
+
+/* TODO: verbs_info.h> */
+int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
+			  uint64_t flags, struct fi_info *hints, struct fi_info **info);
+int fi_ibv_init_info(void);
+struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
+		const char *domain_name);
+
+static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+			 void *context);
+
+int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+            struct fid_eq **eq, void *context);
+int fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
+            struct fid_domain **domain, void *context);
+int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
+	      struct fid_pep **pep, void *context);
 
 static int fi_ibv_fabric_close(fid_t fid)
 {
@@ -51,6 +73,20 @@ static struct fi_ops fi_ibv_fi_ops = {
 	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
+};
+
+static void fi_ibv_fini(void)
+{
+	fi_freeinfo(verbs_info);
+}
+
+struct fi_provider fi_ibv_prov = {
+	.name = VERBS_PROV_NAME,
+	.version = VERBS_PROV_VERS,
+	.fi_version = FI_VERSION(1, 1),
+	.getinfo = fi_ibv_getinfo,
+	.fabric = fi_ibv_fabric,
+	.cleanup = fi_ibv_fini
 };
 
 static struct fi_ops_fabric fi_ibv_ops_fabric = {
@@ -90,11 +126,6 @@ static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric
 	fab->fabric_fid.ops = &fi_ibv_ops_fabric;
 	*fabric = &fab->fabric_fid;
 	return 0;
-}
-
-static void fi_ibv_fini(void)
-{
-	fi_freeinfo(verbs_info);
 }
 
 VERBS_INI

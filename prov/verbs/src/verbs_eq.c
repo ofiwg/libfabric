@@ -30,22 +30,25 @@
  * SOFTWARE.
  */
 
-static int fi_ibv_sockaddr_len(struct sockaddr *addr)
-{
-	if (!addr)
-		return 0;
+#include <stdlib.h>
+#include <sys/epoll.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <infiniband/ib.h>
 
-	switch (addr->sa_family) {
-	case AF_INET:
-		return sizeof(struct sockaddr_in);
-	case AF_INET6:
-		return sizeof(struct sockaddr_in6);
-	case AF_IB:
-		return sizeof(struct sockaddr_ib);
-	default:
-		return 0;
-	}
-}
+#include <rdma/rdma_cma.h>
+
+#include <fi_enosys.h>
+#include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/verbs_utils.h>
+
+int fi_ibv_init_info(void); /* TODO: verbs_info.h ?*/
+struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
+		const char *domain_name);
+void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info);
+
+extern struct fi_provider fi_ibv_prov;
 
 static ssize_t
 fi_ibv_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
@@ -377,7 +380,7 @@ static struct fi_ops fi_ibv_eq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int
+int
 fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	       struct fid_eq **eq, void *context)
 {

@@ -30,13 +30,4 @@
  * SOFTWARE.
  */
 
-#include <fi_enosys.h>
-#include <prov/verbs/src/fi_verbs.h>
-
-#include <stdlib.h>
-#include <sys/poll.h>
-
-
-
-
 

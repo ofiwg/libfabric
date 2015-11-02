@@ -30,6 +30,12 @@
  * SOFTWARE.
  */
 
+#include <stdlib.h>
+
+#include <fi_enosys.h>
+#include <rdma/fabric.h>
+#include <prov/verbs/src/fi_verbs.h>
+
 static int fi_ibv_mr_close(fid_t fid)
 {
 	struct fi_ibv_mem_desc *mr;
@@ -41,6 +47,14 @@ static int fi_ibv_mr_close(fid_t fid)
 		free(mr);
 	return ret;
 }
+
+static struct fi_ops fi_ibv_mr_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = fi_ibv_mr_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
 
 static int
 fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
@@ -88,15 +102,7 @@ err:
 	return -errno;
 }
 
-static struct fi_ops fi_ibv_mr_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = fi_ibv_mr_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
-};
-
-static struct fi_ops_mr fi_ibv_domain_mr_ops = {
+struct fi_ops_mr fi_ibv_domain_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
 	.reg = fi_ibv_mr_reg,
 	.regv = fi_no_mr_regv,
