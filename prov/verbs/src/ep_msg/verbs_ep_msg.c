@@ -84,6 +84,13 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
+    {
+        struct fi_ibv_cq * cq =
+                container_of(bfid, struct fi_ibv_cq, cq_fid.fid);
+        ret = fi_ibv_set_cq_ops_ep_msg(cq);
+        if (ret) {
+            return ret;
+        }
 		/* Must bind a CQ to either RECV or SEND completions, and
 		 * the FI_SELECTIVE_COMPLETION flag is only valid when binding the
 		 * FI_SEND CQ. */
@@ -106,6 +113,7 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			else
 				ep->info->tx_attr->op_flags |= FI_COMPLETION;
 		}
+    }
 		break;
 	case FI_CLASS_EQ:
 		ep->eq = container_of(bfid, struct fi_ibv_eq, eq_fid.fid);

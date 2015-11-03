@@ -469,13 +469,15 @@ int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
     int ret = 0;
 
     _domain = container_of(domain, struct fi_ibv_domain, domain_fid);
-    if (strcmp(_domain->verbs->device->name, info->domain_attr->name))
+    if (strcmp(_domain->verbs->device->name, info->domain_attr->name)) {
         return -FI_EINVAL;
+    }
 
     struct fi_ibv_rdm_ep *_ep;
     _ep = calloc(1, sizeof *_ep);
-    if (!_ep)
+    if (!_ep) {
         return -FI_ENOMEM;
+    }
 
     _ep->domain = _domain;
     _ep->ep_fid.fid.fclass = FI_CLASS_EP;
@@ -604,6 +606,9 @@ int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
     if (ret) {
         FI_IBV_ERROR("Failed to launch CM progress thread, err :%d\n", ret);
     }
+
+    FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Successfully done: %d\n", ret);
+
     return ret;
  err:
     free(_ep);

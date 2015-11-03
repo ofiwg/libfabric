@@ -441,12 +441,14 @@ fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err3;
 	}
 
-	_cq->cq = ibv_create_cq(_cq->domain->verbs, attr->size, _cq,
-				_cq->channel, attr->signaling_vector);
-	if (!_cq->cq) {
-		ret = -errno;
-		goto err3;
-	}
+    if (attr->size) {
+        _cq->cq = ibv_create_cq(_cq->domain->verbs, attr->size, _cq,
+                    _cq->channel, attr->signaling_vector);
+        if (!_cq->cq) {
+            ret = -errno;
+            goto err3;
+        }
+    }
 
 	if (_cq->channel) {
 		ret = ibv_req_notify_cq(_cq->cq, 0);
@@ -456,33 +458,21 @@ fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		}
 	}
 
-	_cq->flags |= attr->flags;
-	_cq->wait_cond = attr->wait_cond;
-	_cq->cq_fid.fid.fclass = FI_CLASS_CQ;
-	_cq->cq_fid.fid.context = context;
-	_cq->cq_fid.fid.ops = &fi_ibv_cq_fi_ops;
+    _cq->flags |= attr->flags;
+    _cq->wait_cond = attr->wait_cond;
+    _cq->cq_fid.fid.fclass = FI_CLASS_CQ;
+    _cq->cq_fid.fid.context = context;
+    _cq->cq_fid.fid.ops = &fi_ibv_cq_fi_ops;
+    _cq->format = attr->format;
+    /* the following ops and entry size can be EP specific.
+     * hence we are going to set this pointer on the
+     * subsequent ep_bind call
+     */
+    _cq->cq_fid.ops = NULL;
+    _cq->entry_size = 0;
 
-	switch (attr->format) {
-	case FI_CQ_FORMAT_CONTEXT:
-		_cq->cq_fid.ops = &fi_ibv_cq_context_ops;
-		_cq->entry_size = sizeof(struct fi_cq_entry);
-		break;
-    case FI_CQ_FORMAT_TAGGED:
-	case FI_CQ_FORMAT_MSG:
-		_cq->cq_fid.ops = &fi_ibv_cq_msg_ops;
-		_cq->entry_size = sizeof(struct fi_cq_msg_entry);
-		break;
-	case FI_CQ_FORMAT_DATA:
-		_cq->cq_fid.ops = &fi_ibv_cq_data_ops;
-		_cq->entry_size = sizeof(struct fi_cq_data_entry);
-		break;
-	default:
-		ret = -FI_ENOSYS;
-		goto err4;
-	}
-
-	*cq = &_cq->cq_fid;
-	return 0;
+    *cq = &_cq->cq_fid;
+    return 0;
 
 err4:
 	ibv_destroy_cq(_cq->cq);
@@ -497,3 +487,23 @@ err1:
 	return ret;
 }
 
+int fi_ibv_set_cq_ops_ep_msg(struct fi_ibv_cq *cq) {
+        switch (cq->format) {
+        case FI_CQ_FORMAT_CONTEXT:
+                cq->cq_fid.ops = &fi_ibv_cq_context_ops;
+                cq->entry_size = sizeof(struct fi_cq_entry);
+                break;
+        case FI_CQ_FORMAT_TAGGED:
+        case FI_CQ_FORMAT_MSG:
+                cq->cq_fid.ops = &fi_ibv_cq_msg_ops;
+                cq->entry_size = sizeof(struct fi_cq_msg_entry);
+                break;
+        case FI_CQ_FORMAT_DATA:
+                cq->cq_fid.ops = &fi_ibv_cq_data_ops;
+                cq->entry_size = sizeof(struct fi_cq_data_entry);
+                break;
+        default:
+                return  -FI_ENOSYS;
+        }
+        return 0;
+}

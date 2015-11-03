@@ -56,6 +56,7 @@ static char def_rx_iov_limit[16] = "4";
 static char def_inject_size[16] = "64";
 
 const struct fi_fabric_attr verbs_fabric_attr = {
+    .name = VERBS_PROV_NAME,
 	.prov_version		= VERBS_PROV_VERS,
 };
 

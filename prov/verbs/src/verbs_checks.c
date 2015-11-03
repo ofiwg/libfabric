@@ -147,8 +147,6 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
         check_mode = VERBS_EP_RDM_MODE;
     }
 
-	check_mode = (hints->caps & FI_RMA) ?
-		     info->rx_attr->mode : VERBS_MODE;
 	if ((compare_mode & check_mode) != check_mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given rx_attr->mode not supported\n");
@@ -251,6 +249,7 @@ int fi_ibv_check_domain_attr(const struct fi_domain_attr *attr,
 	case FI_THREAD_FID:
 	case FI_THREAD_DOMAIN:
 	case FI_THREAD_COMPLETION:
+	case FI_THREAD_ENDPOINT:
 		break;
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
