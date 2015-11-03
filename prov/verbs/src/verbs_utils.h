@@ -47,6 +47,8 @@ struct iovec;
 struct sockaddr;
 struct fi_ibv_msg_ep;
 
+extern struct fi_provider fi_ibv_prov;
+
 #define fi_ibv_set_sge(sge, buf, len, desc)		\
 	do {						\
 		sge.addr = (uintptr_t)buf;		\
@@ -92,17 +94,9 @@ struct fi_ibv_msg_ep;
 ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len,
 		int count, void *context);
 
-inline ssize_t
+ssize_t
 fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
-		const void *buf, size_t len)
-{
-	struct ibv_sge sge;
-
-	fi_ibv_set_sge_inline(sge, buf, len);
-	wr->sg_list = &sge;
-
-	return fi_ibv_send(ep, wr, len, 1, NULL);
-}
+		const void *buf, size_t len);
 
 int fi_ibv_sockaddr_len(struct sockaddr *addr);
 int fi_ibv_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr);

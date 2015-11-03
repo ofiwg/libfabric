@@ -101,6 +101,18 @@ ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len
 	}
 }
 
+ssize_t
+fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
+		const void *buf, size_t len)
+{
+	struct ibv_sge sge;
+
+	fi_ibv_set_sge_inline(sge, buf, len);
+	wr->sg_list = &sge;
+
+	return fi_ibv_send(ep, wr, len, 1, NULL);
+}
+
 ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 		const void *buf, size_t len, void *desc, void *context)
 {
