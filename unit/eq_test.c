@@ -406,9 +406,11 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, "f:a:")) != -1) {
 		switch (op) {
 		case 'a':
+			free(hints->fabric_attr->name);
 			hints->fabric_attr->name = strdup(optarg);
 			break;
 		case 'f':
+			free(hints->fabric_attr->prov_name);
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		default:
