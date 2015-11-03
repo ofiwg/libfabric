@@ -37,6 +37,7 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <stdlib.h>
 #include <netinet/in.h>
 #include <infiniband/verbs.h>
 
@@ -530,6 +531,7 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 int fi_ibv_rdm_tagged_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
                                       struct fi_ibv_rdm_ep *ep,
                                       int num_to_post);
+int fi_ibv_set_cq_ops_ep_msg(struct fi_ibv_cq *cq);
 
 
 #define FI_IBV_RDM_CONN_SELF ((struct fi_ibv_rdm_tagged_conn *)0x1)

@@ -487,7 +487,8 @@ err1:
 	return ret;
 }
 
-int fi_ibv_set_cq_ops_ep_msg(struct fi_ibv_cq *cq) {
+int fi_ibv_set_cq_ops_ep_msg(struct fi_ibv_cq *cq)
+{
         switch (cq->format) {
         case FI_CQ_FORMAT_CONTEXT:
                 cq->cq_fid.ops = &fi_ibv_cq_context_ops;
