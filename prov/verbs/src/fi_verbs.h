@@ -69,9 +69,10 @@
 #include "fi_signal.h"
 
 
+#define VERBS_PROV_NAME "verbs"
+
 #define VERBS_DBG(subsys, ...) FI_DBG(&fi_ibv_prov, subsys, __VA_ARGS__)
 #define VERBS_INFO(subsys, ...) FI_INFO(&fi_ibv_prov, subsys, __VA_ARGS__)
-
 #define VERBS_INFO_ERRNO(subsys, fn, errno) VERBS_INFO(subsys, fn ": %s(%d)\n",	\
 		strerror(errno), errno)
 
@@ -100,6 +101,9 @@ struct fi_ibv_eq {
 	struct fi_eq_err_entry	err;
 	int			epfd;
 };
+
+int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+		   struct fid_eq **eq, void *context);
 
 struct fi_ibv_pep {
 	struct fid_pep		pep_fid;
@@ -152,3 +156,10 @@ struct fi_ibv_connreq {
 	struct fid		handle;
 	struct rdma_cm_id	*id;
 };
+
+int fi_ibv_sockaddr_len(struct sockaddr *addr);
+
+
+struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
+					 const char *domain_name);
+void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info);
