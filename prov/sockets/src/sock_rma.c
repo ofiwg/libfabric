@@ -86,7 +86,7 @@ ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		return -FI_EINVAL;
 	}
 
-#ifdef ENABLE_DEBUG
+#if ENABLE_DEBUG
 	if (msg->iov_count > SOCK_EP_MAX_IOV_LIMIT ||
 		msg->rma_iov_count > SOCK_EP_MAX_IOV_LIMIT)
 		return -FI_EINVAL;
@@ -160,7 +160,7 @@ ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		dst_len += tx_iov.iov.len;
 	}
 
-#ifdef ENABLE_DEBUG
+#if ENABLE_DEBUG
 	if (dst_len != src_len) {
 		SOCK_LOG_ERROR("Buffer length mismatch\n");
 		ret = -FI_EINVAL;
@@ -259,7 +259,7 @@ ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		return -FI_EINVAL;
 	}
 
-#ifdef ENABLE_DEBUG
+#if ENABLE_DEBUG
 	if (msg->iov_count > SOCK_EP_MAX_IOV_LIMIT ||
 		msg->rma_iov_count > SOCK_EP_MAX_IOV_LIMIT)
 		return -FI_EINVAL;
@@ -355,7 +355,7 @@ ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		dst_len += tx_iov.iov.len;
 	}
 
-#ifdef ENABLE_DEBUG
+#if ENABLE_DEBUG
 	if (dst_len != src_len) {
 		SOCK_LOG_ERROR("Buffer length mismatch\n");
 		ret = -FI_EINVAL;

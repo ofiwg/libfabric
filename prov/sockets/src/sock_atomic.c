@@ -189,7 +189,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		}
 	}
 
-#ifdef ENABLE_DEBUG
+#if ENABLE_DEBUG
 	if (src_len > SOCK_EP_MAX_ATOMIC_SZ) {
 		ret = -FI_EINVAL;
 		goto err;
@@ -221,7 +221,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		dst_len += (tx_iov.ioc.count * datatype_sz);
 	}
 
-#ifdef ENABLE_DEBUG
+#if ENABLE_DEBUG
 	if (result_count && (dst_len != src_len)) {
 		SOCK_LOG_ERROR("Buffer length mismatch\n");
 		ret = -FI_EINVAL;
@@ -237,7 +237,7 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		dst_len += (tx_iov.ioc.count * datatype_sz);
 	}
 
-#ifdef ENABLE_DEBUG
+#if ENABLE_DEBUG
 	if (compare_count && (dst_len != src_len)) {
 		SOCK_LOG_ERROR("Buffer length mismatch\n");
 		ret = -FI_EINVAL;
