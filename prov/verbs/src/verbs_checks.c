@@ -63,6 +63,7 @@ int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 	switch (attr->type) {
 	case FI_EP_UNSPEC:
 	case FI_EP_MSG:
+    case FI_EP_RDM:
 		break;
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
@@ -139,6 +140,13 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 	}
 
 	compare_mode = attr->mode ? attr->mode : hints->mode;
+
+    if (info->ep_attr->type == FI_EP_MSG) {
+        check_mode = (hints->caps & FI_RMA) ? info->rx_attr->mode : VERBS_MODE;
+    } else {
+        check_mode = VERBS_EP_RDM_MODE;
+    }
+
 	check_mode = (hints->caps & FI_RMA) ?
 		     info->rx_attr->mode : VERBS_MODE;
 	if ((compare_mode & check_mode) != check_mode) {

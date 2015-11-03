@@ -217,3 +217,94 @@ struct fi_ops fi_ibv_msg_ep_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+int
+fi_ibv_msg_open_ep(struct fid_domain *domain, struct fi_info *info,
+	    struct fid_ep **ep, void *context)
+{
+	struct fi_ibv_domain *dom;
+	struct fi_ibv_msg_ep *_ep;
+	struct fi_ibv_connreq *connreq;
+	struct fi_ibv_pep *pep;
+	struct fi_info *fi;
+	int ret;
+
+	dom = container_of(domain, struct fi_ibv_domain, domain_fid);
+	if (strcmp(dom->verbs->device->name, info->domain_attr->name)) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Invalid info->domain_attr->name\n");
+		return -FI_EINVAL;
+	}
+
+	fi = fi_ibv_search_verbs_info(NULL, info->domain_attr->name);
+	if (!fi) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to find matching verbs_info\n");
+		return -FI_EINVAL;
+	}
+
+	if (info->ep_attr) {
+		ret = fi_ibv_check_ep_attr(info->ep_attr, fi);
+		if (ret)
+			return ret;
+	}
+
+	if (info->tx_attr) {
+		ret = fi_ibv_check_tx_attr(info->tx_attr, info, fi);
+		if (ret)
+			return ret;
+	}
+
+	if (info->rx_attr) {
+		ret = fi_ibv_check_rx_attr(info->rx_attr, info, fi);
+		if (ret)
+			return ret;
+	}
+
+	_ep = fi_ibv_alloc_msg_ep(info);
+	if (!_ep)
+		return -FI_ENOMEM;
+
+	if (!info->handle) {
+		ret = fi_ibv_create_ep(NULL, NULL, 0, info, NULL, &_ep->id);
+		if (ret)
+			goto err;
+	} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
+		connreq = container_of(info->handle, struct fi_ibv_connreq, handle);
+		_ep->id = connreq->id;
+        } else if (info->handle->fclass == FI_CLASS_PEP) {
+		pep = container_of(info->handle, struct fi_ibv_pep, pep_fid.fid);
+		_ep->id = pep->id;
+		pep->id = NULL;
+
+		if (rdma_resolve_addr(_ep->id, info->src_addr, info->dest_addr, VERBS_RESOLVE_TIMEOUT)) {
+			ret = -errno;
+			FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
+			goto err;
+		}
+
+		if (rdma_resolve_route(_ep->id, VERBS_RESOLVE_TIMEOUT)) {
+			ret = -errno;
+			FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to rdma_resolve_route\n");
+			goto err;
+		}
+	} else {
+		ret = -FI_ENOSYS;
+		goto err;
+	}
+
+	_ep->id->context = &_ep->ep_fid.fid;
+
+	_ep->ep_fid.fid.fclass = FI_CLASS_EP;
+	_ep->ep_fid.fid.context = context;
+	_ep->ep_fid.fid.ops = &fi_ibv_msg_ep_ops;
+	_ep->ep_fid.ops = &fi_ibv_msg_ep_base_ops;
+	_ep->ep_fid.msg = &fi_ibv_msg_ep_msg_ops;
+	_ep->ep_fid.cm = &fi_ibv_msg_ep_cm_ops;
+	_ep->ep_fid.rma = &fi_ibv_msg_ep_rma_ops;
+	_ep->ep_fid.atomic = &fi_ibv_msg_ep_atomic_ops;
+
+	*ep = &_ep->ep_fid;
+
+	return 0;
+err:
+	fi_ibv_free_msg_ep(_ep);
+	return ret;
+}

@@ -45,7 +45,7 @@ struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
 
 int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	    struct fid_cq **cq, void *context);
-int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
+int fi_ibv_msg_open_ep(struct fid_domain *domain, struct fi_info *info,
 	    struct fid_ep **ep, void *context);
 int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_pep **pep, void *context);
@@ -103,6 +103,19 @@ static struct fi_ops fi_ibv_fid_ops = {
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
+
+static int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
+                          struct fid_ep **ep, void *context)
+{
+    assert(info);
+    assert(info->ep_attr);
+    assert(info->domain_attr);
+    if (info->ep_attr->type == FI_EP_RDM) {
+        return fi_ibv_rdm_tagged_open_ep(domain, info, ep, context);
+    } else {
+        return fi_ibv_msg_open_ep(domain, info, ep, context);
+    }
+}
 
 static struct fi_ops_domain fi_ibv_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),

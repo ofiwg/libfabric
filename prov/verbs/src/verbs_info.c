@@ -109,6 +109,28 @@ static int fi_ibv_check_hints(const struct fi_info *hints,
 		return -FI_ENODATA;
 	}
 
+    if (info->ep_attr->type == FI_EP_RDM && hints->caps & ~(VERBS_EP_RDM_CAPS))
+    {
+        FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+                "Unsupported capabilities for FI_EP_RDM\n");
+        return -FI_ENODATA;
+    }
+
+    if (info->ep_attr->type == FI_EP_MSG && hints->caps & ~(VERBS_EP_MSG_CAPS))
+    {
+        FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+                "Unsupported capabilities for FI_EP_MSG\n");
+        return -FI_ENODATA;
+    }
+
+    if (info->ep_attr->type == FI_EP_MSG &&
+        (hints->mode & info->mode) != info->mode) {
+        FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
+                "Required hints mode bits not set. Expected:0x%llx"
+                " Given:0x%llx\n", info->mode, hints->mode);
+        return -FI_ENODATA;
+    }
+
 	if ((hints->mode & info->mode) != info->mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Required hints mode bits not set. Expected:0x%llx"
@@ -315,7 +337,8 @@ static int fi_ibv_have_device(void)
 	return ret;
 }
 
-static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info)
+static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info,
+                               int init_ep_type)
 {
 	struct fi_info *fi;
 	union ibv_gid gid;
@@ -326,17 +349,26 @@ static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info)
 		return -FI_ENOMEM;
 
 	fi->caps		= VERBS_CAPS;
-	fi->mode		= VERBS_MODE;
+	fi->mode		= (init_ep_type == FI_EP_RDM)
+                    ? VERBS_EP_RDM_MODE : VERBS_MODE;
 	fi->handle		= NULL;
 	*(fi->tx_attr)		= verbs_tx_attr;
 	*(fi->rx_attr)		= verbs_rx_attr;
 	*(fi->ep_attr)		= verbs_ep_attr;
+    fi->ep_attr->type   = init_ep_type;
 	*(fi->domain_attr)	= verbs_domain_attr;
 	*(fi->fabric_attr)	= verbs_fabric_attr;
+    fi->fabric_attr->name = strdup(verbs_fabric_attr.name);
 
 	ret = fi_ibv_get_device_attrs(ctx, fi);
 	if (ret)
 		goto err;
+
+    if (init_ep_type == FI_EP_RDM) {
+        fi->tx_attr->mode &= ~FI_LOCAL_MR;
+        fi->rx_attr->mode &= ~FI_LOCAL_MR;
+        fi->tx_attr->inject_size = 0;
+    }
 
 	switch (ctx->device->transport_type) {
 	case IBV_TRANSPORT_IB:
@@ -386,7 +418,7 @@ err:
 	return ret;
 }
 
-int fi_ibv_init_info(void)
+int fi_ibv_init_info(int init_ep_type)
 {
 	struct ibv_context **ctx_list;
 	struct fi_info *fi = NULL, *tail = NULL;
@@ -413,7 +445,7 @@ int fi_ibv_init_info(void)
 	}
 
 	for (i = 0; i < num_devices; i++) {
-		ret = fi_ibv_get_info_ctx(ctx_list[i], &fi);
+		ret = fi_ibv_get_info_ctx(ctx_list[i], &fi, init_ep_type);
 		if (!ret) {
 			if (!verbs_info)
 				verbs_info = fi;
@@ -523,8 +555,20 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	struct rdma_addrinfo *rai;
 	struct fi_info *check_info;
 	int ret;
+    int init_ep_type = FI_EP_UNSPEC;
 
-	ret = fi_ibv_init_info();
+    if (hints && hints->ep_attr) {
+        if (hints->ep_attr->type == FI_EP_UNSPEC) {
+            FI_WARN(&fi_ibv_prov, FI_LOG_CORE,
+                    "hints->ep_attr->type is set to FI_EP_UNSPEC."
+                    "Default ep_type will be FI_EP_MSG\n");
+            init_ep_type = FI_EP_MSG;
+        } else {
+            init_ep_type = hints->ep_attr->type;
+        }
+    }
+
+    ret = fi_ibv_init_info(init_ep_type);
 	if (ret)
 		goto err1;
 
