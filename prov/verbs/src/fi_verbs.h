@@ -125,6 +125,8 @@ struct fi_ibv_pep {
 	size_t			src_addrlen;
 };
 
+struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep);
+
 struct fi_ibv_domain {
 	struct fid_domain	domain_fid;
 	struct ibv_context	*verbs;
@@ -163,9 +165,14 @@ struct fi_ibv_msg_ep {
 	struct fi_info		*info;
 };
 
+int ibv_create_ep(const char *node, const char *service,
+		  uint64_t flags, const struct fi_info *hints,
+		  struct rdma_addrinfo **rai, struct rdma_cm_id **id);
+
 ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			const void *buf, size_t len, void *desc, void *context);
 struct fi_ops_atomic *fi_ibv_msg_ep_ops_atomic(struct fi_ibv_msg_ep *ep);
+struct fi_ops_cm *fi_ibv_msg_ep_ops_cm(struct fi_ibv_msg_ep *ep);
 
 
 struct fi_ibv_connreq {
