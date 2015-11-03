@@ -2425,11 +2425,6 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	struct fi_info *info, *fi;
 	struct fi_ibv_connreq *connreq;
 
-	if (fi_ibv_init_info()) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unable to initialize verbs_info\n");
-		return NULL;
-	}
-
 	fi = fi_ibv_search_verbs_info(NULL, ibv_get_device_name(event->id->verbs->device));
 	if (!fi)
 		return NULL;
