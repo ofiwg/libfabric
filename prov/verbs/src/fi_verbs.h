@@ -77,6 +77,17 @@
 		strerror(errno), errno)
 
 
+#define VERBS_INJECT_FLAGS(ep, len, flags) (((flags & FI_INJECT) || \
+		len <= ep->info->tx_attr->inject_size) ? IBV_SEND_INLINE : 0)
+#define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, ep->info->tx_attr->op_flags)
+
+#define VERBS_SELECTIVE_COMP(ep) (ep->ep_flags & FI_SELECTIVE_COMPLETION)
+#define VERBS_COMP_FLAGS(ep, flags) ((!VERBS_SELECTIVE_COMP(ep) || \
+		(flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE))) ? \
+		IBV_SEND_SIGNALED : 0)
+#define VERBS_COMP(ep) VERBS_COMP_FLAGS(ep, ep->info->tx_attr->op_flags)
+
+
 extern struct fi_provider fi_ibv_prov;
 
 
@@ -151,6 +162,11 @@ struct fi_ibv_msg_ep {
 	uint64_t		ep_flags;
 	struct fi_info		*info;
 };
+
+ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
+			const void *buf, size_t len, void *desc, void *context);
+struct fi_ops_atomic *fi_ibv_msg_ep_ops_atomic(struct fi_ibv_msg_ep *ep);
+
 
 struct fi_ibv_connreq {
 	struct fid		handle;
