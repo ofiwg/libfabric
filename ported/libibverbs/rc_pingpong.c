@@ -329,7 +329,7 @@ static struct pingpong_context *pp_init_ctx(struct fi_info *info, int size,
 
 	if (posix_memalign(&(ctx->buf), page_size, size)) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
-		goto clean_ctx;
+		goto err1;
 	}
 
 	/* FIXME memset(ctx->buf, 0, size); */
@@ -339,12 +339,14 @@ static struct pingpong_context *pp_init_ctx(struct fi_info *info, int size,
 	rc = fi_fabric(info->fabric_attr, &ctx->fabric, NULL);
 	if (rc) {
 		FT_PRINTERR("fi_fabric", rc);
-		goto clean_ctx;
+		goto err2;
 	}
 
 	return ctx;
 
-clean_ctx:
+err2:
+	free(ctx->buf);
+err1:
 	free(ctx);
 	return NULL;
 }

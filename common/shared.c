@@ -1076,7 +1076,7 @@ void ft_fill_buf(void *buf, int size)
 {
 	char *msg_buf;
 	int msg_index;
-	static int iter = 0;
+	static unsigned int iter = 0;
 	int i;
 
 	msg_index = ((iter++)*INTEG_SEED) % integ_alphabet_length;
@@ -1092,7 +1092,7 @@ int ft_check_buf(void *buf, int size)
 {
 	char *recv_data;
 	char c;
-	static int iter = 0;
+	static unsigned int iter = 0;
 	int msg_index;
 	int i;
 
