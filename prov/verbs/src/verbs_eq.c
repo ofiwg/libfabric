@@ -43,11 +43,6 @@
 #include <prov/verbs/src/fi_verbs.h>
 #include <prov/verbs/src/verbs_utils.h>
 
-int fi_ibv_init_info(void); /* TODO: verbs_info.h ?*/
-struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
-		const char *domain_name);
-void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info);
-
 extern struct fi_provider fi_ibv_prov;
 
 static ssize_t
@@ -73,7 +68,7 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	struct fi_info *info, *fi;
 	struct fi_ibv_connreq *connreq;
 
-	if (fi_ibv_init_info()) {
+	if (fi_ibv_init_info(FI_EP_UNSPEC)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unable to initialize verbs_info\n");
 		return NULL;
 	}

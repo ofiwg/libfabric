@@ -39,26 +39,11 @@
 #include <prov/verbs/src/fi_verbs.h>
 #include <prov/verbs/src/verbs_checks.h>
 
-/* TODO: verbs_info.h> */
-struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
-		const char *domain_name);
-int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-	    struct fid_cq **cq, void *context);
-int fi_ibv_msg_open_ep(struct fid_domain *domain, struct fi_info *info,
-	    struct fid_ep **ep, void *context);
-int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
-	      struct fid_pep **pep, void *context);
-int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-	       struct fid_eq **eq, void *context);
-int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-                   struct fid_av **av, void *context);
-int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
-                              struct fid_ep **ep, void *context);
-
 extern struct fi_provider fi_ibv_prov;
 extern struct fi_ops_mr fi_ibv_domain_mr_ops;
 
-static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *name)
+static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain,
+                                      const char *name)
 {
 	struct ibv_context **dev_list;
 	int i, ret = -FI_ENODEV;

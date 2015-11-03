@@ -135,7 +135,8 @@ ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 	else
 		fi_ibv_set_sge_iov(wr->sg_list, iov, count, desc, len);
 
-	wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags) | VERBS_COMP_FLAGS(ep, flags);
+	wr->send_flags
+        = VERBS_INJECT_FLAGS(ep, len, flags) | VERBS_COMP_FLAGS(ep, flags);
 
 	return fi_ibv_send(ep, wr, len, count, context);
 }

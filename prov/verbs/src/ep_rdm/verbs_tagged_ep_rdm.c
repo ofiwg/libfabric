@@ -172,10 +172,12 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 
     if (request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES) {
         if (fi_ibv_rdm_tagged_prepare_send_resources(request, ep)) {
-            ret = fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_READY, &data);
+            ret = fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_READY,
+                                             &data);
         }
     } else {
-        ret = fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_RECV_START, &data);
+        ret = fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_RECV_START,
+                                         &data);
     }
 
  out:
@@ -292,7 +294,8 @@ static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
                                             fi_addr_t dest_addr, uint64_t tag,
                                             void *context)
 {
-    struct fi_ibv_rdm_tagged_conn *conn = (struct fi_ibv_rdm_tagged_conn *)dest_addr;
+    struct fi_ibv_rdm_tagged_conn *conn =
+        (struct fi_ibv_rdm_tagged_conn *)dest_addr;
 
 #if defined(__ICC) || defined(__INTEL_COMPILER) || \
     defined(__GNUC__) || defined(__GNUG__)

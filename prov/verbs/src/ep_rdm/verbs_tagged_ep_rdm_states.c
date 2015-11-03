@@ -96,6 +96,7 @@ fi_rdm_tagged_req_hndl_ret_t fi_ibv_rdm_tagged_req_hndls_init()
     fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_SEND_WAIT4LC]  [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_SEND_GOT_LC]                  = fi_ibv_rdm_tagged_eager_send_lc;
     fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_READY_TO_FREE] [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_SEND_GOT_LC]                  = fi_ibv_rdm_tagged_eager_send_lc;
 
+    // EAGER_RECV stuff
     fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]         [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_START]                   = fi_ibv_rdm_tagged_init_recv_request;
     fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]         [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_GOT_PKT_PROCESS]         = fi_ibv_rdm_tagged_init_unexp_recv_request;
     fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_WAIT4PKT] [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RECV_GOT_PKT_PROCESS]         = fi_ibv_rdm_tagged_eager_recv_got_pkt;

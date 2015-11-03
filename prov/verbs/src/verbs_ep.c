@@ -50,9 +50,6 @@ extern struct fi_ops_atomic fi_ibv_msg_ep_atomic_ops;
 
 static const char *local_node = "localhost";
 
-struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
-		const char *domain_name);
-
 struct fi_ibv_msg_ep *fi_ibv_alloc_msg_ep(struct fi_info *info)
 {
 	struct fi_ibv_msg_ep *ep;
@@ -79,7 +76,8 @@ void fi_ibv_free_msg_ep(struct fi_ibv_msg_ep *ep)
 	free(ep);
 }
 
-static int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags, struct rdma_addrinfo *rai)
+static int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
+                            struct rdma_addrinfo *rai)
 {
 	memset(rai, 0, sizeof *rai);
 	if (flags & FI_SOURCE)

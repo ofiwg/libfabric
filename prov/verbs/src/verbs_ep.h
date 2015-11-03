@@ -41,7 +41,6 @@ struct fi_info;
 
 struct fi_ibv_msg_ep *fi_ibv_alloc_msg_ep(struct fi_info *info);
 void fi_ibv_free_msg_ep(struct fi_ibv_msg_ep *ep);
-
 int fi_ibv_create_ep(const char *node, const char *service,
 		 uint64_t flags, const struct fi_info *hints,
 		 struct rdma_addrinfo **rai, struct rdma_cm_id **id);

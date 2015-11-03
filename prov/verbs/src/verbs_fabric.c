@@ -44,23 +44,6 @@
 
 extern struct fi_info *verbs_info;
 
-/* TODO: verbs_info.h> */
-int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
-			  uint64_t flags, struct fi_info *hints, struct fi_info **info);
-int fi_ibv_init_info(void);
-struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
-		const char *domain_name);
-
-static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-			 void *context);
-
-int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-            struct fid_eq **eq, void *context);
-int fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
-            struct fid_domain **domain, void *context);
-int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
-	      struct fid_pep **pep, void *context);
-
 static int fi_ibv_fabric_close(fid_t fid)
 {
 	free(fid);
@@ -104,7 +87,7 @@ static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric
 	struct fi_info *info;
 	int ret;
 
-	ret = fi_ibv_init_info();
+	ret = fi_ibv_init_info(FI_EP_UNSPEC);
 	if (ret)
 		return ret;
 

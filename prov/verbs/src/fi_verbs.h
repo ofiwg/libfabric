@@ -178,6 +178,15 @@ struct fi_ibv_av {
     size_t count;
 };
 
+#define FI_IBV_RDM_CONN_SELF ((struct fi_ibv_rdm_tagged_conn *)0x1)
+
+#define FI_IBV_RDM_ADDR_STR_FORMAT "[%02x:%02x:%02x:%02x:%02x:%02x]"
+
+#define FI_IBV_RDM_ADDR_STR(addr)                               \
+        *((unsigned char*)addr),*((unsigned char*)addr+1),      \
+        *((unsigned char*)addr+2),*((unsigned char*)addr+3),    \
+        *((unsigned char*)addr+4),*((unsigned char*)addr+5)
+
 #define FI_IBV_RDM_ST_PKTTYPE_MASK  ((uint32_t)0xFF)
 #define FI_IBV_RDM_EAGER_PKT            0
 #define FI_IBV_RDM_RNDV_RTS_PKT         1
@@ -518,6 +527,28 @@ fi_ibv_rdm_tagged_buffer_lists_init(struct fi_ibv_rdm_tagged_conn *conn,
     }
 }
 
+/* Common */
+int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
+                   uint64_t flags, struct fi_info *hints,
+                   struct fi_info **info);
+int fi_ibv_init_info(int init_ep_type);
+void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info);
+struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
+                                         const char *domain_name);
+int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+                  void *context);
+int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+                   struct fid_eq **eq, void *context);
+int fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
+                  struct fid_domain **domain, void *context);
+int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
+                      struct fid_pep **pep, void *context);
+int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+                   struct fid_cq **cq, void *context);
+int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+                   struct fid_av **av, void *context);
+
+/* RDM/TAGGED */
 int fi_ibv_rdm_tagged_poll(struct fi_ibv_rdm_ep *ep);
 int fi_ibv_rdm_tagged_set_cq_ops(struct fi_ibv_cq *cq);
 int fi_ibv_rdm_set_av_ops(struct fi_ibv_av *av);
@@ -531,16 +562,12 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 int fi_ibv_rdm_tagged_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
                                       struct fi_ibv_rdm_ep *ep,
                                       int num_to_post);
+int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
+                              struct fid_ep **ep, void *context);
+
+/* EP_MSG */
 int fi_ibv_set_cq_ops_ep_msg(struct fi_ibv_cq *cq);
-
-
-#define FI_IBV_RDM_CONN_SELF ((struct fi_ibv_rdm_tagged_conn *)0x1)
-
-#define FI_IBV_RDM_ADDR_STR_FORMAT "[%02x:%02x:%02x:%02x:%02x:%02x]"
-
-#define FI_IBV_RDM_ADDR_STR(addr)                               \
-        *((unsigned char*)addr),*((unsigned char*)addr+1),      \
-        *((unsigned char*)addr+2),*((unsigned char*)addr+3),    \
-        *((unsigned char*)addr+4),*((unsigned char*)addr+5)
+int fi_ibv_msg_open_ep(struct fid_domain *domain, struct fi_info *info,
+                       struct fid_ep **ep, void *context);
 
 #endif /* _FI_VERBS_H */

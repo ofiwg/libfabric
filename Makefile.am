@@ -113,7 +113,6 @@ if HAVE_VERBS
 #_verbs_files = prov/verbs/src/fi_verbs.c
 _verbs_files = prov/verbs/src/verbs_av.c \
 	prov/verbs/src/verbs_checks.c \
-	prov/verbs/src/verbs_cq.c \
 	prov/verbs/src/verbs_domain.c \
 	prov/verbs/src/verbs_ep.c \
 	prov/verbs/src/verbs_eq.c \

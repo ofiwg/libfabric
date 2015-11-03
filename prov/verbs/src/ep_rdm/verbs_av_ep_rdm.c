@@ -116,7 +116,8 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 
         if (!conn) {
             /* IF addr_i is not found in HASH then we malloc it.
-             * It could be found if the connection was initiated by the remote side.
+             * It could be found if the connection was initiated by the remote
+             * side.
              */
             conn = (struct fi_ibv_rdm_tagged_conn *)
                 memalign(64, sizeof(struct fi_ibv_rdm_tagged_conn));
