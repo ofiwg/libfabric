@@ -70,6 +70,7 @@
 
 
 #define VERBS_PROV_NAME "verbs"
+#define VERBS_PROV_VERS FI_VERSION(1,0)
 
 #define VERBS_DBG(subsys, ...) FI_DBG(&fi_ibv_prov, subsys, __VA_ARGS__)
 #define VERBS_INFO(subsys, ...) FI_INFO(&fi_ibv_prov, subsys, __VA_ARGS__)
@@ -187,9 +188,15 @@ struct fi_ibv_connreq {
 int fi_ibv_sockaddr_len(struct sockaddr *addr);
 
 
+int fi_ibv_init_info();
+void fi_ibv_free_info();
+int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
+		   uint64_t flags, struct fi_info *hints, struct fi_info **info);
 struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
 					 const char *domain_name);
 void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info);
+int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
+		     struct rdma_addrinfo *rai);
 
 int fi_ibv_check_fabric_attr(const struct fi_fabric_attr *attr,
 			     const struct fi_info *info);
