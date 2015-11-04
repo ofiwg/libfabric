@@ -243,7 +243,7 @@ ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 	psm_tag = tag & (~ep_priv->domain->reserved_tag_bits);
 	psm_tagsel = (~ignore) | ep_priv->domain->reserved_tag_bits;
 
-	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION) && !context) {
+	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION)) {
 		fi_context = &ep_priv->nocomp_recv_context;
 	}
 	else {

@@ -94,7 +94,7 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 		src_addr = 0;
 	}
 
-	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION) && !context) {
+	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION)) {
 		fi_context = &ep_priv->nocomp_recv_context;
 	}
 	else {
