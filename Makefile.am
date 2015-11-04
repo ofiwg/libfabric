@@ -118,7 +118,8 @@ _verbs_files = \
 	prov/verbs/src/verbs_cq.c \
 	prov/verbs/src/verbs_eq.c \
 	prov/verbs/src/verbs_msg.c \
-	prov/verbs/src/verbs_msg_ep.c
+	prov/verbs/src/verbs_msg_ep.c \
+	prov/verbs/src/verbs_rma.c
 
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libverbs-fi.la
