@@ -2235,8 +2235,8 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 			msg_hdr->msg_len += datatype_sz *
 				pe_entry->pe.tx.tx_iov[i].cmp.ioc.count;
 		}
-		break;
 		msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.dest_iov_len;
+		break;
 	default:
 		SOCK_LOG_ERROR("Invalid operation type\n");
 		return -FI_EINVAL;
