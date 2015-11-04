@@ -306,7 +306,7 @@ static struct fi_ops_cm fi_ibv_pep_cm_ops = {
 	.shutdown = fi_no_shutdown,
 };
 
-struct fi_ops_cm *fi_ibv_msg_pep_ops_cm(struct fi_ibv_pep *pep)
+struct fi_ops_cm *fi_ibv_pep_ops_cm(struct fi_ibv_pep *pep)
 {
 	return &fi_ibv_pep_cm_ops;
 }

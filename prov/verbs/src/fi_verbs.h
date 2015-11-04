@@ -165,14 +165,20 @@ struct fi_ibv_msg_ep {
 	struct fi_info		*info;
 };
 
-int ibv_create_ep(const char *node, const char *service,
-		  uint64_t flags, const struct fi_info *hints,
-		  struct rdma_addrinfo **rai, struct rdma_cm_id **id);
+int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
+		   struct fid_ep **ep, void *context);
+int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
+		      struct fid_pep **pep, void *context);
+int fi_ibv_create_ep(const char *node, const char *service,
+		     uint64_t flags, const struct fi_info *hints,
+		     struct rdma_addrinfo **rai, struct rdma_cm_id **id);
 
 ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			const void *buf, size_t len, void *desc, void *context);
 struct fi_ops_atomic *fi_ibv_msg_ep_ops_atomic(struct fi_ibv_msg_ep *ep);
 struct fi_ops_cm *fi_ibv_msg_ep_ops_cm(struct fi_ibv_msg_ep *ep);
+struct fi_ops_msg *fi_ibv_msg_ep_ops_msg(struct fi_ibv_msg_ep *ep);
+struct fi_ops_rma *fi_ibv_msg_ep_ops_rma(struct fi_ibv_msg_ep *ep);
 
 
 struct fi_ibv_connreq {
@@ -186,3 +192,14 @@ int fi_ibv_sockaddr_len(struct sockaddr *addr);
 struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
 					 const char *domain_name);
 void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info);
+
+int fi_ibv_check_fabric_attr(const struct fi_fabric_attr *attr,
+			     const struct fi_info *info);
+int fi_ibv_check_domain_attr(const struct fi_domain_attr *attr,
+			     const struct fi_info *info);
+int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
+			 const struct fi_info *info);
+int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
+			 const struct fi_info *hints, const struct fi_info *info);
+int fi_ibv_check_tx_attr(const struct fi_tx_attr *attr,
+			 const struct fi_info *hints, const struct fi_info *info);
