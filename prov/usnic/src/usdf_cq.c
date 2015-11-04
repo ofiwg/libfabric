@@ -232,14 +232,17 @@ usdf_cq_copy_cq_entry(void *dst, struct usd_completion *src,
 
 static inline ssize_t
 usdf_cq_sread_common(struct fid_cq *fcq, void *buf, size_t count, const void *cond,
-			int timeout, enum fi_cq_format format)
+			int timeout_ms, enum fi_cq_format format)
 {
 	struct usdf_cq *cq;
 	uint8_t *entry;
 	uint8_t *last;
 	size_t entry_len;
 	ssize_t ret;
-	size_t time_spent = 0;
+	size_t sleep_time_us;
+	size_t time_spent_us = 0;
+
+	sleep_time_us = SREAD_INIT_SLEEP_TIME_US;
 
 	cq = cq_ftou(fcq);
 	if (cq->cq_comp.uc_status != 0)
@@ -268,10 +271,19 @@ usdf_cq_sread_common(struct fid_cq *fcq, void *buf, size_t count, const void *co
 		if (ret == -EAGAIN) {
 			if (entry > (uint8_t *)buf)
 				break;
-			if (timeout >= 0 && time_spent >= timeout)
+			if (timeout_ms >= 0 &&
+				(time_spent_us >= 1000 * timeout_ms))
 				break;
-			usleep(1000 * SREAD_SLEEP_TIME_MS);
-			time_spent += SREAD_SLEEP_TIME_MS;
+
+			usleep(sleep_time_us);
+			time_spent_us += sleep_time_us;
+
+			/* exponentially back off up to a limit */
+			if (sleep_time_us < SREAD_MAX_SLEEP_TIME_US)
+				sleep_time_us *= SREAD_EXP_BASE;
+			sleep_time_us = MIN(sleep_time_us,
+						SREAD_MAX_SLEEP_TIME_US);
+
 			continue;
 		}
 		if (cq->cq_comp.uc_status != 0) {
@@ -582,17 +594,19 @@ usdf_cq_copy_soft_entry(void *dst, const struct usdf_cq_soft_entry *src,
 
 static ssize_t
 usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const void *cond,
-		int timeout, enum fi_cq_format format)
+		int timeout_ms, enum fi_cq_format format)
 {
 	struct usdf_cq *cq;
 	uint8_t *entry;
 	uint8_t *last;
 	struct usdf_cq_soft_entry *tail;
 	size_t entry_len;
-	size_t time_spent = 0;
+	size_t sleep_time_us;
+	size_t time_spent_us = 0;
 	ssize_t ret;
 
 	cq = cq_ftou(fcq);
+	sleep_time_us = SREAD_INIT_SLEEP_TIME_US;
 
 	switch (format) {
 	case FI_CQ_FORMAT_CONTEXT:
@@ -651,10 +665,18 @@ usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const voi
 			cq->c.soft.cq_tail = tail;
 			return (entry - (uint8_t *)buf) / entry_len;
 		} else {
-			if (timeout >= 0 && time_spent >= timeout)
+			if (timeout_ms >= 0 &&
+				(time_spent_us >= 1000 * timeout_ms))
 				break;
-			usleep(1000 * SREAD_SLEEP_TIME_MS);
-			time_spent += SREAD_SLEEP_TIME_MS;
+
+			usleep(sleep_time_us);
+			time_spent_us += sleep_time_us;
+
+			/* exponentially back off up to a limit */
+			if (sleep_time_us < SREAD_MAX_SLEEP_TIME_US)
+				sleep_time_us *= SREAD_EXP_BASE;
+			sleep_time_us = MIN(sleep_time_us,
+						SREAD_MAX_SLEEP_TIME_US);
 		}
 	}
 
