@@ -102,6 +102,23 @@ static int ft_post_trecv(void)
 	return ret;
 }
 
+#define ft_send_retry(ret, send, ep, ...)				\
+	do {								\
+		int rc;							\
+		ret = send(ep, ##__VA_ARGS__);				\
+		if (!ret || ret != -FI_EAGAIN)				\
+			break;						\
+									\
+		do {							\
+			ft_comp_tx(0);					\
+			rc = fi_tx_size_left(ep);			\
+			if (rc < 0) {					\
+				FT_PRINTERR("fi_tx_size_left", rc);	\
+				ret = rc;				\
+			}						\
+		} while (!rc);						\
+	} while (ret == -FI_EAGAIN)
+
 static int ft_post_send(void)
 {
 	struct fi_msg msg;
@@ -111,9 +128,11 @@ static int ft_post_send(void)
 	case FT_FUNC_SENDV:
 		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
 				ft_tx_ctrl.buf, ft_tx_ctrl.msg_size);
-		ret = fi_sendv(ft_tx_ctrl.ep, ft_tx_ctrl.iov, ft_tx_ctrl.iov_desc,
-				ft_ctrl.iov_array[ft_tx_ctrl.iov_iter], ft_tx_ctrl.addr, NULL);
+		ft_send_retry(ret, fi_sendv, ft_tx_ctrl.ep, ft_tx_ctrl.iov,
+				ft_tx_ctrl.iov_desc, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
+				ft_tx_ctrl.addr, NULL);
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
+		ft_tx_ctrl.credits--;
 		break;
 	case FT_FUNC_SENDMSG:
 		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
@@ -124,12 +143,24 @@ static int ft_post_send(void)
 		msg.addr = ft_tx_ctrl.addr;
 		msg.context = NULL;
 		msg.data = 0;
-		ret = fi_sendmsg(ft_tx_ctrl.ep, &msg, 0);
+		ft_send_retry(ret, fi_sendmsg, ft_tx_ctrl.ep, &msg, 0);
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
+		ft_tx_ctrl.credits--;
+		break;
+	case FT_FUNC_INJECT:
+		ft_send_retry(ret, fi_inject, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
+				ft_tx_ctrl.msg_size, ft_tx_ctrl.addr);
+		break;
+	case FT_FUNC_INJECTDATA:
+		ft_send_retry(ret, fi_injectdata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
+				ft_tx_ctrl.msg_size, ft_tx_ctrl.remote_cq_data,
+				ft_tx_ctrl.addr);
 		break;
 	default:
-		ret = fi_send(ft_tx_ctrl.ep, ft_tx_ctrl.buf, ft_tx_ctrl.msg_size,
-				ft_tx_ctrl.memdesc, ft_tx_ctrl.addr, NULL);
+		ft_send_retry(ret, fi_send, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
+				ft_tx_ctrl.msg_size, ft_tx_ctrl.memdesc,
+				ft_tx_ctrl.addr, NULL);
+		ft_tx_ctrl.credits--;
 		break;
 	}
 
@@ -145,10 +176,11 @@ static int ft_post_tsend(void)
 	case FT_FUNC_SENDV:
 		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
 				ft_tx_ctrl.buf, ft_tx_ctrl.msg_size);
-		ret = fi_tsendv(ft_tx_ctrl.ep, ft_tx_ctrl.iov, ft_tx_ctrl.iov_desc,
-				ft_ctrl.iov_array[ft_tx_ctrl.iov_iter], ft_tx_ctrl.addr,
-				ft_tx_ctrl.tag, NULL);
+		ft_send_retry(ret, fi_tsendv, ft_tx_ctrl.ep, ft_tx_ctrl.iov,
+				ft_tx_ctrl.iov_desc, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
+				ft_tx_ctrl.addr, ft_tx_ctrl.tag, NULL);
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
+		ft_tx_ctrl.credits--;
 		break;
 	case FT_FUNC_SENDMSG:
 		ft_format_iov(ft_tx_ctrl.iov, ft_ctrl.iov_array[ft_tx_ctrl.iov_iter],
@@ -160,12 +192,24 @@ static int ft_post_tsend(void)
 		msg.tag = ft_tx_ctrl.tag;
 		msg.context = NULL;
 		msg.data = 0;
-		ret = fi_tsendmsg(ft_tx_ctrl.ep, &msg, 0);
+		ft_send_retry(ret, fi_tsendmsg, ft_tx_ctrl.ep, &msg, 0);
 		ft_next_iov_cnt(&ft_tx_ctrl, fabric_info->tx_attr->iov_limit);
+		ft_tx_ctrl.credits--;
+		break;
+	case FT_FUNC_INJECT:
+		ft_send_retry(ret, fi_tinject, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
+				ft_tx_ctrl.msg_size, ft_tx_ctrl.addr, ft_tx_ctrl.tag);
+		break;
+	case FT_FUNC_INJECTDATA:
+		ft_send_retry(ret, fi_tinjectdata, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
+				ft_tx_ctrl.msg_size, ft_tx_ctrl.remote_cq_data,
+				ft_tx_ctrl.addr, ft_tx_ctrl.tag);
 		break;
 	default:
-		ret = fi_tsend(ft_tx_ctrl.ep, ft_tx_ctrl.buf, ft_tx_ctrl.msg_size,
-				ft_tx_ctrl.memdesc, ft_tx_ctrl.addr, ft_tx_ctrl.tag, NULL);
+		ft_send_retry(ret, fi_tsend, ft_tx_ctrl.ep, ft_tx_ctrl.buf,
+				ft_tx_ctrl.msg_size, ft_tx_ctrl.memdesc,
+				ft_tx_ctrl.addr, ft_tx_ctrl.tag, NULL);
+		ft_tx_ctrl.credits--;
 		break;
 	}
 	return ret;
@@ -208,6 +252,10 @@ int ft_recv_msg(void)
 		ret = ft_comp_rx(FT_COMP_TO);
 		if (ret)
 			return ret;
+		// handle manual progress. we should progress sends if
+		// we don't get any recv completions. the send could have
+		// been lost.
+		// ft_comp_tx(0);
 	} while (credits == ft_rx_ctrl.credits);
 
 	return 0;
@@ -223,7 +271,6 @@ int ft_send_msg(void)
 			return ret;
 	}
 
-	ft_tx_ctrl.credits--;
 	if (test_info.caps & FI_MSG) {
 		ret = ft_post_send();
 	} else {

@@ -163,12 +163,7 @@ static int run_test()
 	uint64_t remote_cq_data;
 	struct fi_cq_data_entry comp;
 
-	if (fi->domain_attr->cq_data_size >= sizeof(uint64_t)) {
-		remote_cq_data = 0x0123456789abcdefULL;
-	} else {
-		remote_cq_data = 0x0123456789abcdef &
-			((0x1ULL << (fi->domain_attr->cq_data_size * 8)) - 1);
-	}
+	remote_cq_data = ft_init_cq_data(fi);
 
 	if (opts.dst_addr) {
 		fprintf(stdout,

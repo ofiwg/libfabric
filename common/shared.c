@@ -1106,3 +1106,13 @@ int ft_check_buf(void *buf, int size)
 
 	return 0;
 }
+
+uint64_t ft_init_cq_data(struct fi_info *info)
+{
+	if (info->domain_attr->cq_data_size >= sizeof(uint64_t)) {
+		return 0x0123456789abcdefULL;
+	} else {
+		return 0x0123456789abcdef &
+			((0x1ULL << (info->domain_attr->cq_data_size * 8)) - 1);
+	}
+}
