@@ -96,6 +96,9 @@ struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
 };
 
+int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+		  void *context);
+
 struct fi_ibv_eq_entry {
 	struct dlist_entry	item;
 	uint32_t		event;

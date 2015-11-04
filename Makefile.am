@@ -116,6 +116,7 @@ _verbs_files = \
 	prov/verbs/src/verbs_atomic.c \
 	prov/verbs/src/verbs_cm.c \
 	prov/verbs/src/verbs_cq.c \
+	prov/verbs/src/verbs_domain.c \
 	prov/verbs/src/verbs_eq.c \
 	prov/verbs/src/verbs_info.c \
 	prov/verbs/src/verbs_msg.c \
