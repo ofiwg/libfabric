@@ -117,6 +117,7 @@ _verbs_files = \
 	prov/verbs/src/verbs_cm.c \
 	prov/verbs/src/verbs_cq.c \
 	prov/verbs/src/verbs_eq.c \
+	prov/verbs/src/verbs_msg.c \
 	prov/verbs/src/verbs_msg_ep.c
 
 if HAVE_VERBS_DL

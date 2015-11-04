@@ -175,6 +175,19 @@ int fi_ibv_create_ep(const char *node, const char *service,
 
 ssize_t fi_ibv_send_buf(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			const void *buf, size_t len, void *desc, void *context);
+ssize_t fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
+			       const void *buf, size_t len);
+ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
+			      const struct iovec *iov, void **desc, int count,
+			      void *context, uint64_t flags);
+#define fi_ibv_send_iov(ep, wr, iov, desc, count, context)	\
+	fi_ibv_send_iov_flags(ep, wr, iov, desc, count, context,\
+			ep->info->tx_attr->op_flags)
+#define fi_ibv_send_msg(ep, wr, msg, flags)					\
+	fi_ibv_send_iov_flags(ep, wr, msg->msg_iov, msg->desc, msg->iov_count,	\
+			msg->context, flags)
+
+
 struct fi_ops_atomic *fi_ibv_msg_ep_ops_atomic(struct fi_ibv_msg_ep *ep);
 struct fi_ops_cm *fi_ibv_msg_ep_ops_cm(struct fi_ibv_msg_ep *ep);
 struct fi_ops_msg *fi_ibv_msg_ep_ops_msg(struct fi_ibv_msg_ep *ep);
