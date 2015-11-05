@@ -36,7 +36,10 @@
 #ifndef _USDF_CQ_H_
 #define _USDF_CQ_H_
 
-#define SREAD_SLEEP_TIME_MS 5
+/* exponential backoff settings for fi_cq_sread */
+#define SREAD_EXP_BASE 2
+#define SREAD_INIT_SLEEP_TIME_US 1
+#define SREAD_MAX_SLEEP_TIME_US 5000
 
 int usdf_cq_is_soft(struct usdf_cq *cq);
 int usdf_cq_make_soft(struct usdf_cq *cq);
