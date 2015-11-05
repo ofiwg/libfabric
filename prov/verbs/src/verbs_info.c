@@ -864,7 +864,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 {
 	struct rdma_cm_id *id;
 	struct rdma_addrinfo *rai;
-	struct fi_info *check_info;
+	struct fi_info *check_info, *fi;
 	int ret;
 
 	ret = fi_ibv_init_info();
@@ -875,16 +875,27 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		goto err1;
 
-	check_info = id->verbs ? fi_ibv_search_verbs_info(NULL,
-			ibv_get_device_name(id->verbs->device)) : verbs_info;
+	if (id->verbs) {
+		fi = fi_ibv_search_verbs_info(NULL,
+				ibv_get_device_name(id->verbs->device));
+		if (!fi) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "No matching"
+					"verbs_info for given verbs device\n");
+			ret = -FI_ENODATA;
+			goto err2;
+		}
 
-	if (!check_info) {
-		VERBS_DBG(FI_LOG_FABRIC, "Unable to find check_info\n");
-		ret = -FI_ENODATA;
-		goto err2;
+		check_info = fi_dupinfo(fi);
+		if (!check_info) {
+			ret = -FI_ENOMEM;
+			goto err2;
+		}
+
+		ret = fi_ibv_get_matching_info(check_info, hints, rai, info);
+		fi_freeinfo(check_info);
+	} else {
+		ret = fi_ibv_get_matching_info(verbs_info, hints, rai, info);
 	}
-
-	ret = fi_ibv_get_matching_info(check_info, hints, rai, info);
 
 err2:
 	rdma_destroy_ep(id);
