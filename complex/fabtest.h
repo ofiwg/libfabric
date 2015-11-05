@@ -86,6 +86,7 @@ struct ft_xcontrol {
 	uint8_t			seqno;
 	enum fi_cq_format	cq_format;
 	enum fi_wait_obj	comp_wait;  /* must be NONE */
+	uint64_t		remote_cq_data;
 };
 
 struct ft_control {
@@ -130,6 +131,8 @@ enum ft_class_function {
 	FT_FUNC_SEND,
 	FT_FUNC_SENDV,
 	FT_FUNC_SENDMSG,
+	FT_FUNC_INJECT,
+	FT_FUNC_INJECTDATA,
 	FT_MAX_FUNCTIONS
 };
 

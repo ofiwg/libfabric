@@ -107,6 +107,16 @@ static void ft_show_test_info(void)
 	case FT_FUNC_SENDMSG:
 		printf(" sendmsg");
 		break;
+	case FT_FUNC_INJECT:
+		printf(" inject");
+		if (fabric_info && fabric_info->tx_attr)
+			printf(" [inject_size: %zd]", fabric_info->tx_attr->inject_size);
+		break;
+	case FT_FUNC_INJECTDATA:
+		printf(" injectdata");
+		if (fabric_info && fabric_info->tx_attr)
+			printf(" [inject_size: %zd]", fabric_info->tx_attr->inject_size);
+		break;
 	default:
 		break;
 	}

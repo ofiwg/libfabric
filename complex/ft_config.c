@@ -248,9 +248,13 @@ static int ft_parse_num(char *str, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, FT_TEST_BANDWIDTH, enum ft_test_type, buf);
 		FT_ERR("Unknown test_type\n");
 	} else if (!strncmp(key->str, "class_function", strlen("class_function"))) {
+		/* This should be in descending order of enum string length to
+		 * prevent incorrect matching with substrings */
 		TEST_ENUM_SET_N_RETURN(str, FT_FUNC_SENDMSG, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, FT_FUNC_SENDV, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, FT_FUNC_SEND, enum ft_class_function, buf);
+		TEST_ENUM_SET_N_RETURN(str, FT_FUNC_INJECTDATA, enum ft_class_function, buf);
+		TEST_ENUM_SET_N_RETURN(str, FT_FUNC_INJECT, enum ft_class_function, buf);
 		FT_ERR("Unknown class_function\n");
 	} else if (!strncmp(key->str, "ep_type", strlen("ep_type"))) {
 		TEST_ENUM_SET_N_RETURN(str, FI_EP_MSG, enum fi_ep_type, buf);

@@ -87,6 +87,7 @@ static int ft_init_tx_control(void)
 		return ret;
 
 	ft_tx_ctrl.cq_format = FI_CQ_FORMAT_CONTEXT;
+	ft_tx_ctrl.remote_cq_data = ft_init_cq_data(fabric_info);
 	return 0;
 }
 
@@ -245,6 +246,11 @@ static int ft_run_latency(void)
 		if (ft_tx_ctrl.msg_size > fabric_info->ep_attr->max_msg_size)
 			break;
 
+		if (((test_info.class_function == FT_FUNC_INJECT) ||
+			(test_info.class_function == FT_FUNC_INJECTDATA)) &&
+			(ft_tx_ctrl.msg_size > fabric_info->tx_attr->inject_size))
+			break;
+
 		ft_ctrl.xfer_iter = test_info.test_flags & FT_FLAG_QUICKTEST ?
 				5 : size_to_count(ft_tx_ctrl.msg_size);
 
@@ -356,6 +362,11 @@ static int ft_run_bandwidth(void)
 	for (i = 0; i < ft_ctrl.size_cnt; i += ft_ctrl.inc_step) {
 		ft_tx_ctrl.msg_size = ft_ctrl.size_array[i];
 		if (ft_tx_ctrl.msg_size > fabric_info->ep_attr->max_msg_size)
+			break;
+
+		if (((test_info.class_function == FT_FUNC_INJECT) ||
+			(test_info.class_function == FT_FUNC_INJECTDATA)) &&
+			(ft_tx_ctrl.msg_size > fabric_info->tx_attr->inject_size))
 			break;
 
 		ft_ctrl.xfer_iter = test_info.test_flags & FT_FLAG_QUICKTEST ?

@@ -7,7 +7,9 @@
 	"class_function": [
 		"FT_FUNC_SEND",
 		"FT_FUNC_SENDV",
-		"FT_FUNC_SENDMSG"
+		"FT_FUNC_SENDMSG",
+		"FT_FUNC_INJECT",
+		"FT_FUNC_INJECTDATA",
 	],
 	"ep_type": [
 		"FI_EP_MSG",
