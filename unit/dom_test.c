@@ -43,6 +43,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <inttypes.h>
+#include <limits.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
@@ -64,8 +65,10 @@ static struct fid_domain **domain_vec = NULL;
 
 int main(int argc, char **argv)
 {
-	int i;
-	int op, ret, num_domains = 1;
+	unsigned long i;
+	int op, ret = 0;
+	unsigned long num_domains = 1;
+	char *ptr;
 
 	hints = fi_allocinfo();
 	if (hints == NULL)
@@ -74,12 +77,20 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, "f:a:n:")) != -1) {
 		switch (op) {
 		case 'a':
+			free(hints->fabric_attr->name);
 			hints->fabric_attr->name = strdup(optarg);
 			break;
 		case 'n':
-			num_domains = atoi(optarg);
+			errno = 0;
+			num_domains = strtol(optarg, &ptr, 10);
+			if (ptr == optarg || *ptr != '\0' ||
+				((num_domains == LONG_MIN || num_domains == LONG_MAX) && errno == ERANGE)) {
+				fprintf(stderr, "Cannot convert from string to long\n");
+				goto out;
+			}
 			break;
 		case 'f':
+			free(hints->fabric_attr->prov_name);
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		default:
@@ -113,7 +124,7 @@ int main(int argc, char **argv)
 	for (i = 1; i < num_domains; i++) {
 		ret = fi_domain(fabric, fi, &domain_vec[i], NULL);
 		if (ret != FI_SUCCESS) {
-			printf("fi_domain num %d %s\n", i, fi_strerror(-ret));
+			printf("fi_domain num %lu %s\n", i, fi_strerror(-ret));
 			break;
 		}
 	}
@@ -121,7 +132,7 @@ int main(int argc, char **argv)
 	while (--i > 0) {
 		ret = fi_close(&domain_vec[i]->fid);
 		if (ret != FI_SUCCESS) {
-			printf("Error %d closing domain num %d: %s\n", ret,
+			printf("Error %d closing domain num %lu: %s\n", ret,
 				i, fi_strerror(-ret));
 			break;
 		}

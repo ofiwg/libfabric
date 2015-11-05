@@ -114,6 +114,7 @@ static int check_address(struct fid *fid, const char *message)
 	char buf1[BUFSIZ], buf2[BUFSIZ];
 	union sockaddr_any tmp;
 	size_t tmplen;
+	const char *ep_addr, *addr_expected;
 	int ret;
 
 	memset(&tmp, 0, sizeof tmp);
@@ -124,10 +125,20 @@ static int check_address(struct fid *fid, const char *message)
 	}
 
 	if (sockaddrcmp(&tmp, tmplen, &bound_addr, bound_addr_len)) {
+		ep_addr = sockaddrstr(&tmp, tmplen, buf1, BUFSIZ);
+		if (!ep_addr) {
+			FT_ERR("Unable to get ep_addr as string!\n");
+			return -FI_EINVAL;
+		}
+
+		addr_expected = sockaddrstr(&bound_addr, bound_addr_len, buf2, BUFSIZ);
+		if (!addr_expected) {
+			FT_ERR("Unable to get addr_expected as string!\n");
+			return -FI_EINVAL;
+		}
+
 		FT_ERR("address changed after %s: got %s expected %s\n",
-			message,
-			sockaddrstr(&tmp, tmplen, buf1, BUFSIZ),
-			sockaddrstr(&bound_addr, bound_addr_len, buf2, BUFSIZ));
+			message, ep_addr, addr_expected);
 		return -FI_EINVAL;
 	}
 
@@ -319,6 +330,7 @@ static int setup_handle(void)
 {
 	static char buf[BUFSIZ];
 	struct addrinfo *ai, aihints;
+	const char *bound_addr_str;
 	int ret;
 
 	memset(&aihints, 0, sizeof aihints);
@@ -401,8 +413,13 @@ static int setup_handle(void)
 		break;
 	}
 
-	printf("bound_addr: \"%s\"\n",
-		sockaddrstr(&bound_addr, bound_addr_len, buf, BUFSIZ));
+	bound_addr_str = sockaddrstr(&bound_addr, bound_addr_len, buf, BUFSIZ);
+	if (!bound_addr_str) {
+		FT_ERR("Unable to get bound_addr as string!\n");
+		ret = -FI_EINVAL;
+		goto out;
+	}
+	printf("bound_addr: \"%s\"\n", bound_addr_str);
 
 	hints->handle = &pep->fid;
 out:

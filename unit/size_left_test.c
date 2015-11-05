@@ -210,12 +210,14 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 	int failed;
+	char *debug_str;
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
 
-	if (getenv("FABTESTS_DEBUG")) {
-		fabtests_debug = atoi(getenv("FABTESTS_DEBUG"));
+	debug_str = getenv("FABTESTS_DEBUG");
+	if (debug_str) {
+		fabtests_debug = atoi(debug_str);
 	}
 
 	hints = fi_allocinfo();
@@ -225,9 +227,11 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, "f:a:")) != -1) {
 		switch (op) {
 		case 'a':
+			free(hints->fabric_attr->name);
 			hints->fabric_attr->name = strdup(optarg);
 			break;
 		case 'f':
+			free(hints->fabric_attr->prov_name);
 			hints->fabric_attr->prov_name = strdup(optarg);
 			break;
 		default:
