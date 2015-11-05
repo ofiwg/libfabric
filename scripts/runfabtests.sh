@@ -77,6 +77,7 @@ short_tests=(
 	"rdm_tagged_pingpong -I 5"
 	"ud_pingpong -I 5"
 	"rc_pingpong -n 5"
+	"rc_pingpong -n 5 -e"
 )
 
 standard_tests=(
@@ -196,7 +197,7 @@ function unit_test {
 	local test=$1
 	local ret1=0
 	local test_exe=$(echo "fi_${test} -f $PROV" | \
-	    sed -e "s/GOOD_ADDR/$GOOD_ADDR/g" -e "s/SERVER_ADDR/${SERVER}/g")
+	    sed -e "s/GOOD_ADDR/$GOOD_ADDR/g" -e "s/SERVER_ADDR/${S_INTERFACE}/g")
 	local start_time
 	local end_time
 	local test_time
