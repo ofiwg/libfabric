@@ -655,7 +655,9 @@ field to all 0 or all 1.  When negotiating tag fields, an application
 can request a specific number of fields of a given size.  A provider
 must return a tag format that supports the requested number of fields,
 with each field being at least the size requested, or fail the
-request.  A provider may increase the size of the fields.
+request.  A provider may increase the size of the fields. When reporting
+completions (see FI_CQ_FORMAT_TAGGED), the provider must provide the 
+exact value of the recieved tag, clearing out any unsupported tag bits. 
 
 It is recommended that field sizes be ordered from smallest to
 largest.  A generic, unstructured tag and mask can be achieved by
