@@ -1942,6 +1942,7 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 	if (!sock_comm_tx_done(pe_entry->conn))
 		return 0;
 
+	pe_entry->tag = 0;
 	if (pe_entry->pe.tx.tx_op.op == SOCK_OP_TSEND)
 		pe_entry->flags |= FI_TAGGED;
 	pe_entry->flags |= (FI_MSG | FI_SEND);
