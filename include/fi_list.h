@@ -98,19 +98,45 @@ static inline void dlist_remove(struct dlist_entry *item)
 typedef int dlist_match_func_t(struct dlist_entry *item, const void *arg);
 
 static inline struct dlist_entry *
-dlist_remove_first_match(struct dlist_entry *head, dlist_match_func_t *match,
-			 const void *arg)
+dlist_find_first_match(struct dlist_entry *head, dlist_match_func_t *match,
+                       const void *arg)
 {
 	struct dlist_entry *item;
 
 	for (item = head->next; item != head; item = item->next) {
 		if (match(item, arg)) {
-			dlist_remove(item);
 			return item;
 		}
 	}
 
 	return NULL;
+}
+
+static inline struct dlist_entry *
+dlist_remove_first_match(struct dlist_entry *head, dlist_match_func_t *match,
+			 const void *arg)
+{
+	struct dlist_entry *item = dlist_find_first_match(head, match, arg);
+
+    if (item) {
+        dlist_remove(item);
+    }
+
+    return item;
+}
+
+typedef void dlist_foreach_op_t(struct dlist_entry *item, const void *arg);
+
+static inline void
+dlist_foreach(struct dlist_entry *head, dlist_foreach_op_t *op, const void *arg)
+{
+	struct dlist_entry *item, *iter;
+
+	for (item = head->next, iter = head->next; iter != head; item = iter)
+    {
+        iter = iter->next;
+        op(item, arg);
+	}
 }
 
 /*
