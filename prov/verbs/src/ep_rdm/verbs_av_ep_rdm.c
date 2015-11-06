@@ -122,6 +122,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
             conn = (struct fi_ibv_rdm_tagged_conn *)
                 memalign(64, sizeof(struct fi_ibv_rdm_tagged_conn));
             fi_ibv_memset(conn, 0, sizeof(struct fi_ibv_rdm_tagged_conn));
+            dlist_init(&conn->postponed_requests_head);
             conn->state = FI_VERBS_CONN_ALLOCATED;
             fi_ibv_memcpy(conn->addr, addr_i, FI_IBV_RDM_DFLT_ADDRLEN);
             HASH_ADD(hh, fi_ibv_rdm_tagged_conn_hash, addr,

@@ -42,6 +42,7 @@
 #include <infiniband/verbs.h>
 
 #include <rdma/fi_log.h>
+#include <prov/verbs/src/fi_verbs.h>
 
 struct iovec;
 struct sockaddr;
@@ -300,5 +301,25 @@ do {                                                                        \
 #define FI_IBV_RDM_TAGGED_DBG_REQUEST(prefix, request, level)
 
 #endif                          // ENABLE_DEBUG
+
+/* dlist comparators, operators, etc
+ */
+
+typedef struct {
+    struct fi_ibv_rdm_tagged_conn *conn;
+    uint64_t                       tag;
+    size_t                         tagmask;
+} fi_verbs_rdm_tagged_request_minfo_t;
+
+int fi_ibv_rdm_tagged_match_requests(struct dlist_entry *item,
+                                     const void *other);
+int fi_verbs_rdm_tagged_match_request_by_minfo(struct dlist_entry *item,
+                                               const void *other);
+int fi_verbs_rdm_tagged_match_request_by_minfo_with_tagmask
+    (struct dlist_entry *item, const void *other);
+void fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
+                                              const void *arg);
+
+
 
 #endif /* _VERBS_UTILS_H */

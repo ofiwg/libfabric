@@ -30,9 +30,11 @@
  * SOFTWARE.
  */
 
+#include <stdlib.h>
+
 #include <fi_enosys.h>
+#include <fi_list.h>
 #include <prov/verbs/src/fi_verbs.h>
-#include <prov/verbs/src/utlist.h>
 #include <prov/verbs/src/ep_rdm/verbs_queuing.h>
 
 extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_request_pool;
@@ -43,11 +45,16 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
     struct fi_ibv_cq *_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
     struct fi_cq_tagged_entry *entry = buf;
 
-    size_t i = 0;;
-    for (; i < count && fi_ibv_rdm_tagged_request_ready_queue; ++i) {
+    size_t i;
+    for (i = 0;
+         i < count && !dlist_empty(&fi_ibv_rdm_tagged_request_ready_queue);
+         ++i)
+    {
 
-        struct fi_ibv_rdm_tagged_request *completed_req =
-                fi_ibv_rdm_tagged_request_ready_queue;
+        struct fi_ibv_rdm_tagged_request *completed_req = 
+            container_of(fi_ibv_rdm_tagged_request_ready_queue.next,
+                         struct fi_ibv_rdm_tagged_request, queue_entry);
+
         fi_ibv_rdm_tagged_remove_from_ready_queue(completed_req);
 
         FI_DBG(&fi_ibv_prov, FI_LOG_CQ,

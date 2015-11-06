@@ -31,15 +31,14 @@
  */
 
 #include <inttypes.h>
+#include <stdlib.h>
 
+#include <fi_list.h>
+#include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/ep_rdm/verbs_queuing.h>
 #include <prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm_states.h>
 
-#include <prov/verbs/src/fi_verbs.h>
-#include <prov/verbs/src/utlist.h>
-#include <prov/verbs/src/ep_rdm/verbs_queuing.h>
-
-extern struct fi_ibv_rdm_tagged_postponed_entry *
-        fi_ibv_rdm_tagged_send_postponed_queue;
+extern struct dlist_entry fi_ibv_rdm_tagged_send_postponed_queue;
 extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_request_pool;
 extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_unexp_buffers_pool;
 
@@ -516,62 +515,64 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
     FI_VERBS_DBG("conn %p, tag 0x%llx, len %d\n", request->conn, request->tag,
                  request->len);
 
-    struct fi_ibv_rdm_tagged_request *iter = NULL;
-    int found = 0;
+    fi_verbs_rdm_tagged_request_minfo_t minfo = {
+        .conn = p->conn,
+        .tag = p->tag,
+        .tagmask = p->tagmask
+    };
 
-    DL_FOREACH(fi_ibv_rdm_tagged_recv_unexp_queue, iter) {
-        assert(iter && request);
-        if (((request->conn == NULL) || (request->conn == iter->conn)) &&
-            ((request->tag & request->tagmask) ==
-             (iter->tag & request->tagmask))) {
+    struct dlist_entry *found_entry =
+        dlist_find_first_match(&fi_ibv_rdm_tagged_recv_unexp_queue,
+            fi_verbs_rdm_tagged_match_request_by_minfo_with_tagmask, &minfo);
 
-            if (request->len < iter->len) {
-                FI_IBV_ERROR("%s: %d RECV TRUNCATE, to_del->len=%d, "
-                             "to_cq->len=%d, conn %p, tag 0x%llx, "
-                             "tagmask %llx, found %d\n",
-                             __FUNCTION__, __LINE__, iter->len, request->len,
-                             request->conn,
-                             (long long unsigned int)request->tag,
-                             (long long unsigned int)request->tagmask, found);
-                abort();
-            }
+    if (found_entry) {
 
-            request->tag = iter->tag;
-            request->len = iter->len;
-            request->conn = iter->conn;
-            request->unexp_rbuf = iter->unexp_rbuf;
-            request->state.eager = iter->state.eager;
-            request->state.rndv = iter->state.rndv;
+        struct fi_ibv_rdm_tagged_request *found_request =
+            container_of(found_entry, struct fi_ibv_rdm_tagged_request,
+                         queue_entry);
 
-            assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV);
-            if (request->state.rndv != FI_IBV_STATE_RNDV_NOT_USED) {
-                assert(request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES);
-
-                request->rndv_remote_key = iter->rndv_remote_key;
-                request->rndv_id = iter->rndv_id;
-                request->src_addr = iter->src_addr;
-            }
-            FI_VERBS_DBG("found req: len = %d, eager_state = %s, "
-                         "rndv_state = %s \n",
-                         iter->len,
-                         fi_ibv_rdm_tagged_req_eager_state_to_str
-                            (iter->state. eager),
-                         fi_ibv_rdm_tagged_req_rndv_state_to_str
-                            (iter->state.rndv));
-
-            FI_IBV_RDM_TAGGED_HANDLER_LOG();
-            found = 1;
-
-            break;
+        if (request->len < found_request->len) {
+            FI_IBV_ERROR("%s: %d RECV TRUNCATE, unexp len %d, "
+                         "req->len=%d, conn %p, tag 0x%llx, "
+                         "tagmask %llx\n",
+                         __FUNCTION__, __LINE__, found_request->len,
+                         request->len, request->conn,
+                         (long long unsigned int)request->tag,
+                         (long long unsigned int)request->tagmask);
+            abort();
         }
-    }
 
-    if (found) {
-        fi_ibv_rdm_tagged_remove_from_unexp_queue(iter);
+        request->tag = found_request->tag;
+        request->len = found_request->len;
+        request->conn = found_request->conn;
+        request->unexp_rbuf = found_request->unexp_rbuf;
+        request->state.eager = found_request->state.eager;
+        request->state.rndv = found_request->state.rndv;
 
-        assert(iter->send_completions_wait == 0);
+        assert(request->state.eager == FI_IBV_STATE_EAGER_RECV_WAIT4RECV);
+        if (request->state.rndv != FI_IBV_STATE_RNDV_NOT_USED) {
+            assert(request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES);
+
+            request->rndv_remote_key = found_request->rndv_remote_key;
+            request->rndv_id = found_request->rndv_id;
+            request->src_addr = found_request->src_addr;
+        }
+        FI_VERBS_DBG("found req: len = %d, eager_state = %s, "
+                     "rndv_state = %s \n",
+                     found_request->len,
+                     fi_ibv_rdm_tagged_req_eager_state_to_str
+                        (found_request->state. eager),
+                     fi_ibv_rdm_tagged_req_rndv_state_to_str
+                        (found_request->state.rndv));
+
+        FI_IBV_RDM_TAGGED_HANDLER_LOG();
+
+        fi_ibv_rdm_tagged_remove_from_unexp_queue(found_request);
+
+        assert(found_request->send_completions_wait == 0);
         FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request, FI_LOG_DEBUG);
-        fi_ibv_mem_pool_return(&iter->mpe, &fi_ibv_rdm_tagged_request_pool);
+        fi_ibv_mem_pool_return(&found_request->mpe,
+                               &fi_ibv_rdm_tagged_request_pool);
 
         if (request->state.rndv == FI_IBV_STATE_RNDV_RECV_WAIT4RES) {
             request->state.eager = FI_IBV_STATE_EAGER_RECV_END;

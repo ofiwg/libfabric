@@ -31,18 +31,19 @@
  */
 
 #include <ifaddrs.h>
+#include <stdlib.h>
 #include <arpa/inet.h>
 #include <rdma/rdma_cma.h>
 
+#include <fi_list.h>
 #include <fi_enosys.h>
 #include <prov/verbs/src/fi_verbs.h>
 #include <prov/verbs/src/ep_rdm/verbs_queuing.h>
 #include <prov/verbs/src/verbs_utils.h>
-#include <prov/verbs/src/utlist.h>
 
 extern struct fi_ops_tagged fi_ibv_rdm_tagged_ops;
 extern struct fi_ops_cm fi_ibv_rdm_tagged_ep_cm_ops;
-extern struct fi_ibv_rdm_tagged_request *fi_ibv_rdm_tagged_recv_posted_queue;
+extern struct dlist_entry fi_ibv_rdm_tagged_recv_posted_queue;
 extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_request_pool;
 extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_unexp_buffers_pool;
 extern struct fi_provider fi_ibv_prov;
@@ -156,9 +157,7 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 {
     struct fi_ibv_rdm_ep *fid_ep;
     struct fi_context *context = (struct fi_context *)ctx;
-    struct fi_ibv_rdm_tagged_request *request;
     int err = 1;
-    int found = 0;
 
     fid_ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
     if (!fid_ep->domain)
@@ -170,23 +169,22 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
     if (context->internal[0] == NULL)
         return 0;
 
-    request = (struct fi_ibv_rdm_tagged_request *)context->internal[0];
-
-    struct fi_ibv_rdm_tagged_request *iter;
+    struct fi_ibv_rdm_tagged_request *request =
+        (struct fi_ibv_rdm_tagged_request *)context->internal[0];
 
     FI_VERBS_DBG("ep_cancel, match %p, tag 0x%llx, len %d, ctx %p\n",
                  request,
                  (long long unsigned)request->tag,
                  request->len, request->context);
 
-    DL_FOREACH(fi_ibv_rdm_tagged_recv_posted_queue, iter) {
-        if (iter == request) {
-            found = 1;
-            break;
-        }
-    }
+    struct dlist_entry *found =
+        dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
+                               fi_ibv_rdm_tagged_match_requests, request);
 
     if (found) {
+        assert(container_of(found, struct fi_ibv_rdm_tagged_request,
+                            queue_entry) == request);
+
         fi_ibv_rdm_tagged_remove_from_posted_queue(request, fid_ep);
 
         assert(request->send_completions_wait == 0);

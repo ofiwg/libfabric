@@ -34,9 +34,9 @@
 
 #include <malloc.h>
 #include <rdma/rdma_cma.h>
+#include <fi_list.h>
 
 #include <prov/verbs/src/verbs_utils.h>
-#include <prov/verbs/src/utlist.h>
 
 extern struct fi_provider fi_ibv_prov;
 extern struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash ;

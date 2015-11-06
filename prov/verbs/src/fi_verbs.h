@@ -265,9 +265,8 @@ struct fi_ibv_rdm_tagged_request {
     uint32_t imm;
     struct fi_context *context;
     struct fi_ibv_rdm_tagged_conn *conn;
-
-    struct fi_ibv_rdm_tagged_request *next;
-    struct fi_ibv_rdm_tagged_request *prev;
+    /* Request can be an element of only one queue at the moment */
+    struct dlist_entry queue_entry;
 };
 
 #define fi_ibv_memcpy fi_ibv_memcpy_impl
@@ -387,7 +386,7 @@ struct fi_ibv_rdm_tagged_conn {
     char *rbuf_mem_reg;
     char *rbuf_head;
 
-    struct fi_ibv_rdm_tagged_request *postponed_requests_head;
+    struct dlist_entry postponed_requests_head;
     struct fi_ibv_rdm_tagged_postponed_entry *postponed_entry;
 
     struct ibv_mr *s_mr;
@@ -413,8 +412,7 @@ struct fi_ibv_rdm_tagged_postponed_entry {
     struct fi_ibv_mem_pool_entry mpe;
     struct fi_ibv_rdm_tagged_conn *conn;
 
-    struct fi_ibv_rdm_tagged_postponed_entry *next;
-    struct fi_ibv_rdm_tagged_postponed_entry *prev;
+    struct dlist_entry queue_entry;
 };
 
 typedef enum fi_ibv_rdm_tagged_buffer_status {
@@ -564,6 +562,8 @@ int fi_ibv_rdm_tagged_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
                                       int num_to_post);
 int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
                               struct fid_ep **ep, void *context);
+int fi_ibv_rdm_tagged_prepare_send_resources
+    (struct fi_ibv_rdm_tagged_request* request, struct fi_ibv_rdm_ep *ep);
 
 /* EP_MSG */
 int fi_ibv_set_cq_ops_ep_msg(struct fi_ibv_cq *cq);

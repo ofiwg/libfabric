@@ -31,6 +31,7 @@
  */
 
 
+#include <prov/verbs/src/fi_verbs.h>
 #include <prov/verbs/src/verbs_utils.h>
 
 #include <alloca.h>
@@ -41,8 +42,6 @@
 #include <rdma/rdma_cma.h>
 
 #include <rdma/fi_errno.h>
-
-#include <prov/verbs/src/fi_verbs.h>
 
 int fi_ibv_sockaddr_len(struct sockaddr *addr)
 {
@@ -139,4 +138,68 @@ ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
         = VERBS_INJECT_FLAGS(ep, len, flags) | VERBS_COMP_FLAGS(ep, flags);
 
 	return fi_ibv_send(ep, wr, len, count, context);
+}
+
+/* dlist comparators, operators, etc
+ */
+
+int fi_ibv_rdm_tagged_match_requests(struct dlist_entry *item,
+                                     const void *other)
+{
+    struct fi_ibv_rdm_tagged_request *req =
+        (struct fi_ibv_rdm_tagged_request *)other;
+    return (item == &req->queue_entry);
+}
+
+int fi_verbs_rdm_tagged_match_request_by_minfo(struct dlist_entry *item,
+                                               const void *other)
+{
+    struct fi_ibv_rdm_tagged_request *request =
+        container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
+
+    fi_verbs_rdm_tagged_request_minfo_t *minfo =
+        (fi_verbs_rdm_tagged_request_minfo_t *)other;
+
+    return (((request->conn == NULL) || (request->conn == minfo->conn)) &&
+            ((request->tag & request->tagmask) ==
+             (minfo->tag   & request->tagmask)));
+}
+
+int fi_verbs_rdm_tagged_match_request_by_minfo_with_tagmask
+    (struct dlist_entry *item, const void *other)
+{
+    struct fi_ibv_rdm_tagged_request *request =
+        container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
+
+    fi_verbs_rdm_tagged_request_minfo_t *minfo =
+        (fi_verbs_rdm_tagged_request_minfo_t *)other;
+
+    return (((minfo->conn == NULL) || (request->conn == minfo->conn)) &&
+            ((request->tag & minfo->tagmask) ==
+            (minfo->tag   & minfo->tagmask)));
+}
+
+void fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
+                                              const void *arg)
+{
+    fi_ibv_rdm_tagged_send_ready_data_t* send_data =
+        (fi_ibv_rdm_tagged_send_ready_data_t*)arg;
+
+    struct fi_ibv_rdm_tagged_postponed_entry *postponed_entry =
+        container_of(item, struct fi_ibv_rdm_tagged_postponed_entry,
+                     queue_entry);
+
+    if (!dlist_empty(&postponed_entry->conn->postponed_requests_head)) {
+        struct fi_ibv_rdm_tagged_request *request =
+            container_of(postponed_entry->conn->postponed_requests_head.next,
+                         struct fi_ibv_rdm_tagged_request,
+                         queue_entry);
+
+        int res = fi_ibv_rdm_tagged_prepare_send_resources(request,
+                                                           send_data->ep);
+        if (res) {
+            fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_READY,
+                                       send_data);
+        }
+    }
 }
