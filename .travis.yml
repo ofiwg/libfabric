@@ -12,12 +12,13 @@ addons:
                         - rpm
 install:
         - ./autogen.sh
+        - if [[ "$TRAVIS_OS_NAME" == "linux" && "$CC" == "gcc" ]]; then ./configure --prefix=$HOME --enable-debug && make -j2; fi
         - ./configure --prefix=$HOME
         - make -j2
         - make install
         - make test
         - make distcheck
-        - if [ "$TRAVIS_OS_NAME" = "linux" ]; then make rpm; fi
+        - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make rpm; fi
 script:
         - git clone https://github.com/ofiwg/fabtests.git
         - cd fabtests
