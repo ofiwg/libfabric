@@ -102,21 +102,11 @@ static int ft_post_trecv(void)
 	return ret;
 }
 
-#define ft_send_retry(ret, send, ep, ...)				\
-	do {								\
-		int rc;							\
-		ret = send(ep, ##__VA_ARGS__);				\
-		if (!ret || ret != -FI_EAGAIN)				\
-			break;						\
-									\
-		do {							\
-			ft_comp_tx(0);					\
-			rc = fi_tx_size_left(ep);			\
-			if (rc < 0) {					\
-				FT_PRINTERR("fi_tx_size_left", rc);	\
-				ret = rc;				\
-			}						\
-		} while (!rc);						\
+#define ft_send_retry(ret, send, ep, ...)		\
+	do {						\
+		ret = send(ep, ##__VA_ARGS__);		\
+		if (ret == -FI_EAGAIN)			\
+			ft_comp_tx(0);			\
 	} while (ret == -FI_EAGAIN)
 
 static int ft_post_send(void)
