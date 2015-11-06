@@ -191,10 +191,7 @@ static int psmx_domain_close(fid_t fid)
 
 	psmx_am_fini(domain);
 
-	err = fastlock_destroy(&domain->poll_lock);
-	if (err)
-		FI_WARN(&psmx_prov, FI_LOG_CORE,
-			"pthread_spin_destroy returns %d\n", err);
+	fastlock_destroy(&domain->poll_lock);
 
 #if 0
 	/* AM messages could arrive after MQ is finalized, causing segfault
@@ -307,12 +304,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (psmx_domain_enable_ep(domain_priv, NULL) < 0)
 		goto err_out_finalize_mq;
 
-	err = fastlock_init(&domain_priv->poll_lock);
-	if (err) {
-		FI_WARN(&psmx_prov, FI_LOG_CORE,
-			"pthread_spin_init returns %d\n", err);
-		goto err_out_finalize_mq;
-	}
+	fastlock_init(&domain_priv->poll_lock);
 
 	if (domain_priv->progress_thread_enabled)
 		psmx_domain_start_progress(domain_priv);
