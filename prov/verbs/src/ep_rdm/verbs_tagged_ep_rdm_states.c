@@ -35,6 +35,7 @@
 
 #include <fi_list.h>
 #include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/ep_rdm/verbs_rdm.h>
 #include <prov/verbs/src/ep_rdm/verbs_queuing.h>
 #include <prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm_states.h>
 

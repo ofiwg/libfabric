@@ -38,6 +38,7 @@
 
 #include <prov/verbs/src/fi_verbs.h>
 #include <prov/verbs/src/verbs_checks.h>
+#include <prov/verbs/src/ep_rdm/verbs_rdm.h>
 
 extern struct fi_provider fi_ibv_prov;
 extern struct fi_ops_mr fi_ibv_domain_mr_ops;

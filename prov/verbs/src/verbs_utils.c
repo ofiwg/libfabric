@@ -31,9 +31,6 @@
  */
 
 
-#include <prov/verbs/src/fi_verbs.h>
-#include <prov/verbs/src/verbs_utils.h>
-
 #include <alloca.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -42,6 +39,9 @@
 #include <rdma/rdma_cma.h>
 
 #include <rdma/fi_errno.h>
+#include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/verbs_utils.h>
+#include <prov/verbs/src/ep_rdm/verbs_rdm.h>
 
 int fi_ibv_sockaddr_len(struct sockaddr *addr)
 {

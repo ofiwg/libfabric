@@ -33,7 +33,7 @@
 #include <arpa/inet.h>
 #include <rdma/rdma_cma.h>
 
-#include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/ep_rdm/verbs_rdm.h>
 
 extern struct fi_provider fi_ibv_prov;
 extern struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash;

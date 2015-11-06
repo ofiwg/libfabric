@@ -35,7 +35,7 @@
 
 #include <stdlib.h>
 #include <fi_list.h>
-#include <prov/verbs/src/fi_verbs.h>
+#include <prov/verbs/src/ep_rdm/verbs_rdm.h>
 
 /* managing of queues
  */
