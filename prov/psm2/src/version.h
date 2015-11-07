@@ -39,11 +39,8 @@
 #include "rename.h"
 
 #define PSMX_PROV_NAME		"psm2"
-#define PSMX_PROV_NAME_LEN	4
 #define PSMX_DOMAIN_NAME	"psm2"
-#define PSMX_DOMAIN_NAME_LEN	4
 #define PSMX_FABRIC_NAME	"psm2"
-#define PSMX_FABRIC_NAME_LEN	4
 
 #define PSMX_DEFAULT_UUID	"00FF00FF-0000-0000-0000-00FF00FF00FF"
 #define PROVIDER_INI		PSM2_INI
