@@ -175,23 +175,32 @@ typedef struct {
 	int is_initialized;
 } fastlock_t;
 
-#  define fastlock_init(lock)                     \
-	do {                                      \
-		(lock)->is_initialized = 1;       \
-		fastlock_init_(&(lock)->impl);    \
-	} while (0)
-
-#  define fastlock_destroy(lock)                  \
-	do {                                      \
-		assert((lock)->is_initialized);   \
-		(lock)->is_initialized = 0;       \
-		fastlock_destroy_(&(lock)->impl); \
-	} while (0)
-
-static inline int fastlock_acquire(fastlock_t *lock)
+static inline int fastlock_init(fastlock_t *lock)
 {
+	int ret;
+
+	ret = fastlock_init_(&lock->impl);
+	lock->is_initialized = !ret;
+	return ret;
+}
+
+static inline void fastlock_destroy(fastlock_t *lock)
+{
+	int ret;
+
 	assert(lock->is_initialized);
-	return fastlock_acquire_(&lock->impl);
+	lock->is_initialized = 0;
+	ret = fastlock_destroy_(&lock->impl);
+	assert(!ret);
+}
+
+static inline void fastlock_acquire(fastlock_t *lock)
+{
+	int ret;
+
+	assert(lock->is_initialized);
+	ret = fastlock_acquire_(&lock->impl);
+	assert(!ret);
 }
 
 static inline int fastlock_tryacquire(fastlock_t *lock)
@@ -200,11 +209,14 @@ static inline int fastlock_tryacquire(fastlock_t *lock)
 	return fastlock_tryacquire_(&lock->impl);
 }
 
-#  define fastlock_release(lock)                  \
-	do {                                      \
-		assert((lock)->is_initialized);   \
-		fastlock_release_(&(lock)->impl); \
-	} while (0)
+static inline void fastlock_release(fastlock_t *lock)
+{
+	int ret;
+
+	assert(lock->is_initialized);
+	ret = fastlock_release_(&lock->impl);
+	assert(!ret);
+}
 
 #else /* !ENABLE_DEBUG */
 

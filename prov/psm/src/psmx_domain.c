@@ -191,10 +191,7 @@ static int psmx_domain_close(fid_t fid)
 
 	psmx_am_fini(domain);
 
-	err = fastlock_destroy(&domain->poll_lock);
-	if (err)
-		FI_WARN(&psmx_prov, FI_LOG_CORE,
-			"pthread_spin_destroy returns %d\n", err);
+	fastlock_destroy(&domain->poll_lock);
 
 #if 0
 	/* AM messages could arrive after MQ is finalized, causing segfault

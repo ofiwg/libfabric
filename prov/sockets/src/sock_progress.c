@@ -2388,8 +2388,7 @@ int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
 	struct dlist_entry *entry;
 	struct sock_pe_entry *pe_entry;
 
-	if (fastlock_acquire(&pe->lock))
-		return 0;
+	fastlock_acquire(&pe->lock);
 
 	fastlock_acquire(&rx_ctx->lock);
 	sock_pe_progress_buffered_rx(rx_ctx);
@@ -2459,8 +2458,7 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	struct dlist_entry *entry;
 	struct sock_pe_entry *pe_entry;
 
-	if (fastlock_acquire(&pe->lock))
-		return 0;
+	fastlock_acquire(&pe->lock);
 
 	fastlock_acquire(&tx_ctx->rlock);
 	if (!rbfdempty(&tx_ctx->rbfd) &&
