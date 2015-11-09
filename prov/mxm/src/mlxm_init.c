@@ -98,13 +98,13 @@ static int mlxm_getinfo(uint32_t version, const char *node,
                         if (hints->ep_attr) {
                                 switch (hints->ep_attr->protocol) {
                                 case FI_PROTO_UNSPEC:
-                                case FI_PROTO_RDMA_CM_IB_RC:
+                                case FI_PROTO_MXM:
                                         break;
                                 default:
                                         FI_WARN(&mlxm_prov, FI_LOG_CORE,
                                                 "unsupported ep protoclo required:\n hints->protocol=%d, supported=%d %d \n",
                                                 hints->ep_attr->protocol,
-                                                FI_PROTO_UNSPEC, FI_PROTO_RDMA_CM_IB_RC);
+                                                FI_PROTO_UNSPEC, FI_PROTO_MXM);
                                         goto err_out;
 
                                 }
@@ -169,7 +169,7 @@ static int mlxm_getinfo(uint32_t version, const char *node,
         if (!mlxm_info)
                 return -ENOMEM;
 
-        mlxm_info->ep_attr->protocol             = FI_PROTO_RDMA_CM_IB_RC;
+        mlxm_info->ep_attr->protocol             = FI_PROTO_MXM;
         mlxm_info->ep_attr->max_msg_size         = 0xFFFFFFFF;
         mlxm_info->ep_attr->mem_tag_format       = mlxm_mem_tag_format;
         mlxm_info->ep_attr->type                 = type;
