@@ -113,7 +113,9 @@ if HAVE_VERBS
 _verbs_files = \
 	prov/verbs/src/fi_verbs.h \
 	prov/verbs/src/fi_verbs.c \
+	prov/verbs/src/uthash.h \
 	prov/verbs/src/verbs_atomic.c \
+	prov/verbs/src/verbs_av.c \
 	prov/verbs/src/verbs_cm.c \
 	prov/verbs/src/verbs_cq.c \
 	prov/verbs/src/verbs_domain.c \
@@ -121,7 +123,18 @@ _verbs_files = \
 	prov/verbs/src/verbs_info.c \
 	prov/verbs/src/verbs_msg.c \
 	prov/verbs/src/verbs_msg_ep.c \
-	prov/verbs/src/verbs_rma.c
+	prov/verbs/src/verbs_rma.c \
+	prov/verbs/src/ep_rdm/verbs_av_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_cq_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_queuing.h \
+	prov/verbs/src/ep_rdm/verbs_rdm_cm.c \
+	prov/verbs/src/ep_rdm/verbs_rdm.h \
+	prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm_states.h \
+	prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm_states.c \
+	prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_utils.c \
+	prov/verbs/src/ep_rdm/verbs_utils.h
 
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libverbs-fi.la
