@@ -437,6 +437,7 @@ real_man_pages = \
         man/man3/fi_version.3 \
         man/man7/fabric.7 \
         man/man7/fi_provider.7 \
+        man/man7/fi_gni.7 \
         man/man7/fi_psm.7 \
         man/man7/fi_sockets.7 \
         man/man7/fi_usnic.7 \
@@ -577,3 +578,5 @@ test:
 
 rpm: dist
 	rpmbuild -ta libfabric-*.tar.bz2
+
+include prov/gni/Makefile.am
