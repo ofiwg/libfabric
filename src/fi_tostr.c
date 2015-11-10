@@ -48,10 +48,10 @@
 #include "fi.h"
 
 /* Print fi_info and related structs, enums, OR_able flags, addresses.
- * 
+ *
  * Each printable type should be well formatted YAML.
  *
- * A struct is a dictionary containing one key named after the struct tag 
+ * A struct is a dictionary containing one key named after the struct tag
  * which contains a dictionary of member-value mappings. The struct member
  * keys are the field names (not the types).
  *
@@ -134,6 +134,7 @@ static void fi_tostr_addr_format(char *buf, uint32_t addr_format)
 	CASEENUMSTR(FI_SOCKADDR_IN6);
 	CASEENUMSTR(FI_SOCKADDR_IB);
 	CASEENUMSTR(FI_ADDR_PSMX);
+	CASEENUMSTR(FI_ADDR_GNI);
 	default:
 		if (addr_format & FI_PROV_SPECIFIC)
 			strcatf(buf, "Provider specific");
@@ -223,6 +224,7 @@ static void fi_tostr_protocol(char *buf, uint32_t protocol)
 	CASEENUMSTR(FI_PROTO_PSMX);
 	CASEENUMSTR(FI_PROTO_UDP);
 	CASEENUMSTR(FI_PROTO_SOCK_TCP);
+	CASEENUMSTR(FI_PROTO_GNI);
 	default:
 		if (protocol & FI_PROV_SPECIFIC)
 			strcatf(buf, "Provider specific");
@@ -276,6 +278,9 @@ static void fi_tostr_addr(char *buf, uint32_t addr_format,
 	case FI_SOCKADDR_IN6:
 		inet_ntop(AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr,
 			p, 64);
+		break;
+	case FI_ADDR_GNI:  /*TODO: eventually something better */
+		sprintf(p, "0x%lx",*(uint64_t *)addr);
 		break;
 	default:
 		sprintf(p, "%p", addr);

@@ -43,6 +43,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <fi.h>
+#include <stdlib.h>
 
 
 /*
