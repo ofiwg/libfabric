@@ -125,6 +125,7 @@ typedef struct fid *fid_t;
 #define FI_DELIVERY_COMPLETE	(1ULL << 28)
 
 /* fi_getinfo()-specific flags/caps */
+#define FI_PROV_ATTR_ONLY	(1ULL << 54)
 #define FI_NUMERICHOST		(1ULL << 55)
 #define FI_RMA_EVENT		(1ULL << 56)
 #define FI_SOURCE		(1ULL << 57)
