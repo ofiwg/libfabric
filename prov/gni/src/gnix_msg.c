@@ -226,21 +226,32 @@ static int __gnix_send_post_err(struct gnix_tx_descriptor *txd)
 	return __gnix_send_smsg_err(txd);
 }
 
-static int __gnix_rndzv_req_snd_comp(void *arg)
+static int __gnix_rndzv_req_send_fin(void *arg)
 {
 	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
-	struct gnix_tx_descriptor *txd = req->txd;
 	struct gnix_nic *nic;
 	struct gnix_fid_ep *ep;
+	struct gnix_tx_descriptor *txd;
 	gni_return_t status;
-
-	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
+	int rc;
 
 	ep = req->gnix_ep;
 	assert(ep != NULL);
 
 	nic = ep->nic;
 	assert(nic != NULL);
+
+	txd = (struct gnix_tx_descriptor *)req->txd;
+	if (!txd) {
+		rc = _gnix_nic_tx_alloc(nic, &txd);
+		if (rc) {
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "_gnix_nic_tx_alloc() failed: %d\n",
+				  rc);
+			return -FI_EAGAIN;
+		}
+		req->txd = txd;
+	}
 
 	txd->rndzv_fin_hdr.req_addr = req->msg.rma_id;
 
@@ -254,10 +265,14 @@ static int __gnix_rndzv_req_snd_comp(void *arg)
 	fastlock_release(&nic->lock);
 
 	if (status == GNI_RC_NOT_DONE) {
+		_gnix_nic_tx_free(nic, txd);
+		req->txd = NULL;
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "GNI_SmsgSendWTag returned %s\n",
 			  gni_err_str[status]);
 	} else if (status != GNI_RC_SUCCESS) {
+		_gnix_nic_tx_free(nic, txd);
+		req->txd = NULL;
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "GNI_SmsgSendWTag returned %s\n",
 			  gni_err_str[status]);
@@ -270,14 +285,13 @@ static int __gnix_rndzv_req_snd_comp(void *arg)
 
 static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 {
-	int ret = FI_SUCCESS;
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
 	struct gnix_fab_req *req = txd->req;
+	int ret;
 
-	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
-
-	if (tx_status != GNI_RC_SUCCESS)
+	if (tx_status != GNI_RC_SUCCESS) {
 		return __gnix_send_post_err(txd);
+	}
 
 	GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV GET, req: %p\n", req);
 
@@ -287,33 +301,12 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 		fi_close(&req->msg.recv_md->mr_fid.fid);
 	}
 
-	req->send_fn = __gnix_rndzv_req_snd_comp;
 	req->txd = txd;
+	req->send_fn = __gnix_rndzv_req_send_fin;
 
-	ret = _gnix_vc_queue_tx_req(req);
+	ret = _gnix_vc_queue_req(req);
 
 	return ret;
-}
-
-static int __gnix_rndzv_req_send_fin(void *arg)
-{
-	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
-	struct gnix_fid_ep *ep = req->gnix_ep;
-	struct gnix_nic *nic = ep->nic;
-	struct gnix_tx_descriptor *txd;
-	int rc;
-
-	rc = _gnix_nic_tx_alloc(nic, &txd);
-	if (rc) {
-		GNIX_INFO(FI_LOG_EP_DATA, "_gnix_nic_tx_alloc() failed: %d\n",
-			 rc);
-		return -FI_EAGAIN;
-	}
-
-	txd->completer_fn = NULL;
-	txd->req = req;
-
-	return __gnix_rndzv_req_complete(txd, GNI_RC_SUCCESS);
 }
 
 static int __gnix_rndzv_req(void *arg)
@@ -947,7 +940,8 @@ static int  __gnix_discard_request(struct gnix_fid_ep *ep,
 		GNIX_INFO(FI_LOG_EP_DATA,
 				"returning rndzv completion for req, %p", req);
 
-		/* send completion data. */
+		/* Complete rendezvous request, skipping data transfer. */
+		req->txd = NULL;
 		req->send_fn = __gnix_rndzv_req_send_fin;
 		ret = _gnix_vc_queue_req(req);
 	} else {

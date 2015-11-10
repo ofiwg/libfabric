@@ -131,7 +131,7 @@ static int process_rx_cqe(struct gnix_nic *nic, gni_cq_entry_t cqe)
 	vc_id =  GNI_CQ_GET_INST_ID(cqe);
 	vc = __gnix_nic_elem_by_rem_id(nic, vc_id);
 
-#if 1 /* Process RX inline with arrival of an RX CQE. */
+#if 0 /* Process RX inline with arrival of an RX CQE. */
 	if (unlikely(vc->conn_state != GNIX_VC_CONNECTED)) {
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "Scheduling VC for RX processing (%p)\n",
@@ -149,6 +149,9 @@ static int process_rx_cqe(struct gnix_nic *nic, gni_cq_entry_t cqe)
 					"_gnix_vc_dqueue_smsg returned %d\n",
 					ret);
 		}
+
+		/* The RX CQE could be associated with an SMSG credit return.
+		 * Schedule the VC just in case. */
 		ret = _gnix_vc_schedule(vc);
 		assert(ret == FI_SUCCESS);
 	}
