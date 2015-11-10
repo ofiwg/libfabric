@@ -1,0 +1,46 @@
+{
+   ioctl_cq_create
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:cq_create
+   ...
+}
+{
+   ioctl_GNI_MemRegister
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_MemRegister
+   ...
+}
+{
+   ioctl_GNI_EpPostDataWId
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_EpPostDataWId
+   ...
+}
+{
+   ioctl_gni_fma_assign
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:gni_fma_assign
+   ...
+}
+{
+   GNI_EpPostDataTestById__gnix_dgram_poll
+   Memcheck:Addr4
+   fun:GNI_EpPostDataTestById
+   fun:_gnix_dgram_poll
+   ...
+}
+{
+   GNI_PostDataProbeById__gnix_dgram_poll
+   Memcheck:Addr4
+   fun:GNI_PostDataProbeById
+   fun:_gnix_dgram_poll
+   ...
+}
