@@ -142,12 +142,10 @@ void psmx_atomic_fini(void)
 			TYPE *d = (dst); \
 			TYPE *s = (src); \
 			TYPE *r = (res); \
-			TYPE tmp; \
 			fastlock_acquire(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) {\
-				tmp = d[i]; \
+				r[i] = d[i]; \
 				OP(d[i],s[i]); \
-				r[i] = tmp; \
 			} \
 			fastlock_release(&psmx_atomic_lock); \
 		} while (0)
@@ -159,13 +157,11 @@ void psmx_atomic_fini(void)
 			TYPE *s = (src); \
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
-			TYPE tmp; \
 			fastlock_acquire(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) { \
-				tmp = d[i]; \
+				r[i] = d[i]; \
 				if (c[i] CMP_OP d[i]) \
 					d[i] = s[i]; \
-				r[i] = tmp; \
 			} \
 			fastlock_release(&psmx_atomic_lock); \
 		} while (0)
@@ -177,12 +173,10 @@ void psmx_atomic_fini(void)
 			TYPE *s = (src); \
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
-			TYPE tmp; \
 			fastlock_acquire(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) { \
-				tmp = d[i]; \
+				r[i] = d[i]; \
 				d[i] = (s[i] & c[i]) | (d[i] & ~c[i]); \
-				r[i] = tmp; \
 			} \
 			fastlock_release(&psmx_atomic_lock); \
 		} while (0)
