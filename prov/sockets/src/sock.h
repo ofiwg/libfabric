@@ -978,11 +978,11 @@ int sock_cntr_err_inc(struct sock_cntr *cntr);
 int sock_cntr_progress(struct sock_cntr *cntr);
 
 
-struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key, 
+struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint32_t key, 
 				   void *buf, size_t len, uint64_t access);
 struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc, 
 				    void *buf, size_t len, uint64_t access);
-struct sock_mr * sock_mr_get_entry(struct sock_domain *domain, uint16_t key);
+struct sock_mr * sock_mr_get_entry(struct sock_domain *domain, uint32_t key);
 
 
 struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr, void *context);

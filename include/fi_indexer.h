@@ -48,30 +48,30 @@
 
 union idx_entry {
 	void *item;
-	int   next;
+	int64_t next;
 };
 
-#define IDX_INDEX_BITS 16
-#define IDX_ENTRY_BITS 10
-#define IDX_ENTRY_SIZE (1 << IDX_ENTRY_BITS)
-#define IDX_ARRAY_SIZE (1 << (IDX_INDEX_BITS - IDX_ENTRY_BITS))
-#define IDX_MAX_INDEX  ((1 << IDX_INDEX_BITS) - 1)
+#define IDX_INDEX_BITS 32
+#define IDX_ENTRY_BITS 26
+#define IDX_ENTRY_SIZE (0x1UL << IDX_ENTRY_BITS)
+#define IDX_ARRAY_SIZE (0x1UL << (IDX_INDEX_BITS - IDX_ENTRY_BITS))
+#define IDX_MAX_INDEX  ((0x1UL << IDX_INDEX_BITS) - 1)
 
 struct indexer
 {
 	union idx_entry *array[IDX_ARRAY_SIZE];
-	int		 free_list;
-	int		 size;
+	int64_t		 free_list;
+	int64_t		 size;
 };
 
 #define idx_array_index(index) (index >> IDX_ENTRY_BITS)
 #define idx_entry_index(index) (index & (IDX_ENTRY_SIZE - 1))
 
-int idx_insert(struct indexer *idx, void *item);
-void *idx_remove(struct indexer *idx, int index);
-void idx_replace(struct indexer *idx, int index, void *item);
+int64_t idx_insert(struct indexer *idx, void *item);
+void *idx_remove(struct indexer *idx, int64_t index);
+void idx_replace(struct indexer *idx, int64_t index, void *item);
 
-static inline void *idx_at(struct indexer *idx, int index)
+static inline void *idx_at(struct indexer *idx, int64_t index)
 {
 	return (idx->array[idx_array_index(index)] + idx_entry_index(index))->item;
 }
@@ -85,20 +85,20 @@ static inline void *idx_at(struct indexer *idx, int index)
 struct index_map
 {
 	void **array[IDX_ARRAY_SIZE];
-	int count[IDX_ARRAY_SIZE];
+	int64_t count[IDX_ARRAY_SIZE];
 };
 
-int idm_set(struct index_map *idm, int index, void *item);
-void *idm_clear(struct index_map *idm, int index);
+int64_t idm_set(struct index_map *idm, int64_t index, void *item);
+void *idm_clear(struct index_map *idm, int64_t index);
 
-static inline void *idm_at(struct index_map *idm, int index)
+static inline void *idm_at(struct index_map *idm, int64_t index)
 {
 	void **entry;
 	entry = idm->array[idx_array_index(index)];
 	return entry[idx_entry_index(index)];
 }
 
-static inline void *idm_lookup(struct index_map *idm, int index)
+static inline void *idm_lookup(struct index_map *idm, int64_t index)
 {
 	return ((index <= IDX_MAX_INDEX) && idm->array[idx_array_index(index)]) ?
 		idm_at(idm, index) : NULL;
