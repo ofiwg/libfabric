@@ -50,7 +50,7 @@ const struct fi_domain_attr sock_domain_attr = {
 	.data_progress = FI_PROGRESS_AUTO,
 	.resource_mgmt = FI_RM_ENABLED,
 	.mr_mode = FI_MR_SCALABLE,
-	.mr_key_size = sizeof(uint16_t),
+	.mr_key_size = sizeof(uint32_t),
 	.cq_data_size = sizeof(uint64_t),
 	.cq_cnt = SOCK_EP_MAX_CQ_CNT,
 	.ep_cnt = SOCK_EP_MAX_EP_CNT,
@@ -177,9 +177,9 @@ static int sock_dom_close(struct fid *fid)
 	return 0;
 }
 
-static uint16_t sock_get_mr_key(struct sock_domain *dom)
+static uint32_t sock_get_mr_key(struct sock_domain *dom)
 {
-	uint16_t i;
+	uint32_t i;
 
 	for (i = 1; i < IDX_MAX_INDEX; i++) {
 		if (!idm_lookup(&dom->mr_idm, i))
@@ -196,7 +196,7 @@ static int sock_mr_close(struct fid *fid)
 	mr = container_of(fid, struct sock_mr, mr_fid.fid);
 	dom = mr->domain;
 	fastlock_acquire(&dom->lock);
-	idm_clear(&dom->mr_idm , (int) mr->mr_fid.key);
+	idm_clear(&dom->mr_idm , mr->mr_fid.key);
 	fastlock_release(&dom->lock);
 	atomic_dec(&dom->ref);
 	free(mr);
@@ -243,12 +243,12 @@ static struct fi_ops sock_mr_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-struct sock_mr *sock_mr_get_entry(struct sock_domain *domain, uint16_t key)
+struct sock_mr *sock_mr_get_entry(struct sock_domain *domain, uint32_t key)
 {
 	return (struct sock_mr *)idm_lookup(&domain->mr_idm, key);
 }
 
-struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key,
+struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint32_t key,
 				   void *buf, size_t len, uint64_t access)
 {
 	int i;
@@ -297,7 +297,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	dom = container_of(domain, struct sock_domain, dom_fid);
 	if ((dom->attr.mr_mode == FI_MR_SCALABLE) &&
 	    ((attr->requested_key > IDX_MAX_INDEX) ||
-	     idm_lookup(&dom->mr_idm, (int) attr->requested_key)))
+	     idm_lookup(&dom->mr_idm, (int64_t) attr->requested_key)))
 		return -FI_ENOKEY;
 
 	_mr = calloc(1, sizeof(*_mr) +
@@ -318,7 +318,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	fastlock_acquire(&dom->lock);
 	key = (dom->attr.mr_mode == FI_MR_BASIC) ?
-		sock_get_mr_key(dom) : (uint16_t) attr->requested_key;
+		sock_get_mr_key(dom) : (uint32_t) attr->requested_key;
 	if (idm_set(&dom->mr_idm, key, _mr) < 0)
 		goto err;
 	_mr->mr_fid.key = key;
