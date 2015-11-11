@@ -99,6 +99,7 @@ struct fi_ibv_fabric {
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		  void *context);
+int fi_ibv_find_fabric(const struct fi_fabric_attr *attr);
 
 struct fi_ibv_eq_entry {
 	struct dlist_entry	item;
@@ -129,6 +130,9 @@ struct fi_ibv_av {
 	size_t			count;
 };
 
+int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+		   struct fid_av **av, void *context);
+
 struct fi_ibv_pep {
 	struct fid_pep		pep_fid;
 	struct fi_ibv_eq	*eq;
@@ -144,6 +148,7 @@ struct fi_ibv_domain {
 	struct fid_domain	domain_fid;
 	struct ibv_context	*verbs;
 	struct ibv_pd		*pd;
+	int			rdm;
 };
 
 struct fi_ibv_cq {
@@ -163,6 +168,7 @@ struct fi_ibv_cq {
 
 int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		   struct fid_cq **cq, void *context);
+struct fi_ops_cq *fi_ibv_cq_ops_tagged(struct fi_ibv_cq *cq);
 
 
 struct fi_ibv_mem_desc {
@@ -185,6 +191,8 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep, void *context);
 int fi_ibv_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_pep **pep, void *context);
+int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
+			struct fid_ep **ep, void *context);
 int fi_ibv_create_ep(const char *node, const char *service,
 		     uint64_t flags, const struct fi_info *hints,
 		     struct rdma_addrinfo **rai, struct rdma_cm_id **id);
@@ -207,11 +215,18 @@ int fi_ibv_init_info();
 void fi_ibv_free_info();
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, struct fi_info *hints, struct fi_info **info);
-struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
-					 const char *domain_name);
+struct fi_info *fi_ibv_get_verbs_info(const char *domain_name);
 void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info);
 int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		     struct rdma_addrinfo *rai);
+
+struct verbs_ep_domain {
+	char			*suffix;
+	enum fi_ep_type		type;
+	uint64_t		caps;
+};
+
+extern const struct verbs_ep_domain verbs_rdm_domain;
 
 int fi_ibv_check_fabric_attr(const struct fi_fabric_attr *attr,
 			     const struct fi_info *info);

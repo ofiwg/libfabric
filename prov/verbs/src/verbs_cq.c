@@ -455,16 +455,24 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_CONTEXT:
+		assert(!_cq->domain->rdm);
 		_cq->cq_fid.ops = &fi_ibv_cq_context_ops;
 		_cq->entry_size = sizeof(struct fi_cq_entry);
 		break;
 	case FI_CQ_FORMAT_MSG:
+		assert(!_cq->domain->rdm);
 		_cq->cq_fid.ops = &fi_ibv_cq_msg_ops;
 		_cq->entry_size = sizeof(struct fi_cq_msg_entry);
 		break;
 	case FI_CQ_FORMAT_DATA:
+		assert(!_cq->domain->rdm);
 		_cq->cq_fid.ops = &fi_ibv_cq_data_ops;
 		_cq->entry_size = sizeof(struct fi_cq_data_entry);
+		break;
+	case FI_CQ_FORMAT_TAGGED:
+		assert(_cq->domain->rdm);
+		_cq->cq_fid.ops = fi_ibv_cq_ops_tagged(_cq);
+		_cq->entry_size = sizeof(struct fi_cq_tagged_entry);
 		break;
 	default:
 		ret = -FI_ENOSYS;

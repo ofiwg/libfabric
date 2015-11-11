@@ -115,43 +115,37 @@ static int fi_ibv_rdm_tagged_ep_bind(struct fid *fid, struct fid *bfid,
 				     uint64_t flags)
 {
 	struct fi_ibv_rdm_ep *ep;
-	int ret;
+	struct fi_ibv_cq *cq;
+	struct fi_ibv_av *av;
 
 	ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
-		{
-			struct fi_ibv_cq *cq =
-			    container_of(bfid, struct fi_ibv_cq, cq_fid);
-			ret = fi_ibv_rdm_tagged_set_cq_ops(cq);
-			if (ret)
-				return ret;
+		cq = container_of(bfid, struct fi_ibv_cq, cq_fid);
 
-			if (flags & FI_RECV) {
-				if (ep->fi_rcq)
-					return -EINVAL;
-				ep->fi_rcq = cq;
-			}
-			if (flags & FI_SEND) {
-				if (ep->fi_scq)
-					return -EINVAL;
-				ep->fi_scq = cq;
-			}
-
-			cq->ep = ep;
-
-			break;
+		if (flags & FI_RECV) {
+			if (ep->fi_rcq)
+				return -EINVAL;
+			ep->fi_rcq = cq;
 		}
+		if (flags & FI_SEND) {
+			if (ep->fi_scq)
+				return -EINVAL;
+			ep->fi_scq = cq;
+		}
+
+		/* TODO: this is wrong. CQ to EP is 1:n */
+		cq->ep = ep;
+		break;
 	case FI_CLASS_AV:
-		{
-			struct fi_ibv_av *av =
-			    container_of(bfid, struct fi_ibv_av, av.fid);
-			ep->av = av;
-			ep->av->ep = ep;
-			fi_ibv_rdm_set_av_ops(av);
-			break;
-		}
+		av = container_of(bfid, struct fi_ibv_av, av.fid);
+		ep->av = av;
+
+		/* TODO: this is wrong, AV to EP is 1:n */
+		ep->av->ep = ep;
+		fi_ibv_rdm_set_av_ops(av);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -466,8 +460,8 @@ static inline int fi_ibv_rdm_tagged_find_ipoib_addr(struct fi_ibv_rdm_ep *ep,
 	return !found;
 }
 
-int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
-			      struct fid_ep **ep, void *context)
+int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
+			struct fid_ep **ep, void *context)
 {
 	struct fi_ibv_domain *_domain;
 	int ret = 0;

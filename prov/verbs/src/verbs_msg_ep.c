@@ -239,7 +239,7 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 		return -FI_EINVAL;
 	}
 
-	fi = fi_ibv_search_verbs_info(NULL, info->domain_attr->name);
+	fi = fi_ibv_get_verbs_info(info->domain_attr->name);
 	if (!fi) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_DOMAIN, "Unable to find matching verbs_info\n");
 		return -FI_EINVAL;

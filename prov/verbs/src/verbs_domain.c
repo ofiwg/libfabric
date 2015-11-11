@@ -130,12 +130,17 @@ static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *
 	if (!dev_list)
 		return -errno;
 
-	for (i = 0; dev_list[i]; i++) {
-		if (!strcmp(name, ibv_get_device_name(dev_list[i]->device))) {
-			domain->verbs = dev_list[i];
-			ret = 0;
-			break;
+	for (i = 0; dev_list[i] && ret; i++) {
+		if (domain->rdm) {
+			ret = strncmp(name, ibv_get_device_name(dev_list[i]->device),
+				      strlen(name) - strlen(verbs_rdm_domain.suffix));
+
+		} else {
+			ret = strcmp(name, ibv_get_device_name(dev_list[i]->device));
 		}
+
+		if (!ret)
+			domain->verbs = dev_list[i];
 	}
 	rdma_free_devices(dev_list);
 	return ret;
@@ -168,6 +173,18 @@ static struct fi_ops_domain fi_ibv_domain_ops = {
 	.srx_ctx = fi_no_srx_context,
 };
 
+static struct fi_ops_domain fi_ibv_rdm_domain_ops = {
+	.size = sizeof(struct fi_ops_domain),
+	.av_open = fi_ibv_av_open,
+	.cq_open = fi_ibv_cq_open,
+	.endpoint = fi_ibv_open_rdm_ep,
+	.scalable_ep = fi_no_scalable_ep,
+	.cntr_open = fi_no_cntr_open,
+	.poll_open = fi_no_poll_open,
+	.stx_ctx = fi_no_stx_context,
+	.srx_ctx = fi_no_srx_context,
+};
+
 static int
 fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	   struct fid_domain **domain, void *context)
@@ -176,7 +193,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct fi_info *fi;
 	int ret;
 
-	fi = fi_ibv_search_verbs_info(NULL, info->domain_attr->name);
+	fi = fi_ibv_get_verbs_info(info->domain_attr->name);
 	if (!fi)
 		return -FI_EINVAL;
 
@@ -188,6 +205,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!_domain)
 		return -FI_ENOMEM;
 
+	_domain->rdm = (info->ep_attr->type == FI_EP_RDM);
 	ret = fi_ibv_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)
 		goto err;
@@ -201,7 +219,8 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	_domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->domain_fid.fid.context = context;
 	_domain->domain_fid.fid.ops = &fi_ibv_fid_ops;
-	_domain->domain_fid.ops = &fi_ibv_domain_ops;
+	_domain->domain_fid.ops = _domain->rdm ? &fi_ibv_rdm_domain_ops :
+						 &fi_ibv_domain_ops;
 	_domain->domain_fid.mr = &fi_ibv_domain_mr_ops;
 
 	*domain = &_domain->domain_fid;
@@ -237,20 +256,15 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		  void *context)
 {
 	struct fi_ibv_fabric *fab;
-	struct fi_info *info;
 	int ret;
 
 	ret = fi_ibv_init_info();
 	if (ret)
 		return ret;
 
-	info = fi_ibv_search_verbs_info(attr->name, NULL);
-	if (!info)
-		return -FI_ENODATA;
-
-	ret = fi_ibv_check_fabric_attr(attr, info);
+	ret = fi_ibv_find_fabric(attr);
 	if (ret)
-		return -FI_ENODATA;
+		return ret;
 
 	fab = calloc(1, sizeof(*fab));
 	if (!fab)
