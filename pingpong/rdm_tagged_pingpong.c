@@ -137,7 +137,7 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG | FI_TAGGED;
+	hints->caps = FI_TAGGED;
 	hints->mode = FI_LOCAL_MR;
 
 	ret = run();
