@@ -54,10 +54,10 @@
  * list without taking a lock during data lookups.
  */
 
-static int idx_grow(struct indexer *idx)
+static int64_t idx_grow(struct indexer *idx)
 {
 	union idx_entry *entry;
-	int i, start_index;
+	int64_t i, start_index;
 
 	if (idx->size >= IDX_ARRAY_SIZE)
 		goto nomem;
@@ -85,10 +85,10 @@ nomem:
 	return -1;
 }
 
-int idx_insert(struct indexer *idx, void *item)
+int64_t idx_insert(struct indexer *idx, void *item)
 {
 	union idx_entry *entry;
-	int index;
+	int64_t index;
 
 	if ((index = idx->free_list) == 0) {
 		if ((index = idx_grow(idx)) <= 0)
@@ -101,7 +101,7 @@ int idx_insert(struct indexer *idx, void *item)
 	return index;
 }
 
-void *idx_remove(struct indexer *idx, int index)
+void *idx_remove(struct indexer *idx, int64_t index)
 {
 	union idx_entry *entry;
 	void *item;
@@ -113,7 +113,7 @@ void *idx_remove(struct indexer *idx, int index)
 	return item;
 }
 
-void idx_replace(struct indexer *idx, int index, void *item)
+void idx_replace(struct indexer *idx, int64_t index, void *item)
 {
 	union idx_entry *entry;
 
@@ -122,7 +122,7 @@ void idx_replace(struct indexer *idx, int index, void *item)
 }
 
 
-static int idm_grow(struct index_map *idm, int index)
+static int64_t idm_grow(struct index_map *idm, int64_t index)
 {
 	idm->array[idx_array_index(index)] = calloc(IDX_ENTRY_SIZE, sizeof(void *));
 	if (!idm->array[idx_array_index(index)])
@@ -135,7 +135,7 @@ nomem:
 	return -1;
 }
 
-int idm_set(struct index_map *idm, int index, void *item)
+int64_t idm_set(struct index_map *idm, int64_t index, void *item)
 {
 	void **entry;
 
@@ -155,7 +155,7 @@ int idm_set(struct index_map *idm, int index, void *item)
 	return index;
 }
 
-void *idm_clear(struct index_map *idm, int index)
+void *idm_clear(struct index_map *idm, int64_t index)
 {
 	void **entry;
 	void *item;
