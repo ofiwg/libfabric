@@ -50,7 +50,7 @@ const struct fi_domain_attr sock_domain_attr = {
 	.data_progress = FI_PROGRESS_AUTO,
 	.resource_mgmt = FI_RM_ENABLED,
 	.mr_mode = FI_MR_SCALABLE,
-	.mr_key_size = sizeof(uint16_t),
+	.mr_key_size = sizeof(uint32_t),
 	.cq_data_size = sizeof(uint64_t),
 	.cq_cnt = SOCK_EP_MAX_CQ_CNT,
 	.ep_cnt = SOCK_EP_MAX_EP_CNT,
@@ -243,12 +243,12 @@ static struct fi_ops sock_mr_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-struct sock_mr *sock_mr_get_entry(struct sock_domain *domain, uint16_t key)
+struct sock_mr *sock_mr_get_entry(struct sock_domain *domain, uint32_t key)
 {
 	return (struct sock_mr *)idm_lookup(&domain->mr_idm, key);
 }
 
-struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key,
+struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint32_t key,
 				   void *buf, size_t len, uint64_t access)
 {
 	int i;
