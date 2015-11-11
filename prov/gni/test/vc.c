@@ -300,9 +300,7 @@ Test(vc_management_auto, vc_connect)
 	ret = _gnix_vc_disconnect(vc_conn);
 	cr_assert_eq(ret, FI_SUCCESS);
 
-	ret = _gnix_vc_destroy(vc_conn);
-	cr_assert_eq(ret, FI_SUCCESS);
-
+	/* VC is destroyed by the EP */
 }
 
 Test(vc_management_auto, vc_connect2)
@@ -365,13 +363,8 @@ Test(vc_management_auto, vc_connect2)
 	ret = _gnix_vc_disconnect(vc_conn0);
 	cr_assert_eq(ret, FI_SUCCESS);
 
-	ret = _gnix_vc_destroy(vc_conn0);
-	cr_assert_eq(ret, FI_SUCCESS);
-
 	ret = _gnix_vc_disconnect(vc_conn1);
 	cr_assert_eq(ret, FI_SUCCESS);
 
-	ret = _gnix_vc_destroy(vc_conn1);
-	cr_assert_eq(ret, FI_SUCCESS);
-
+	/* VC is destroyed by the EP */
 }
