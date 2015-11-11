@@ -132,6 +132,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	void *dest_addr = NULL;
 	int ep_type = FI_EP_RDM;
 	int av_type = FI_AV_UNSPEC;
+	uint64_t mode = FI_CONTEXT;
 	enum fi_mr_mode mr_mode = FI_MR_SCALABLE;
 	enum fi_threading threading = FI_THREAD_COMPLETION;
 	enum fi_progress control_progress = FI_PROGRESS_MANUAL;
@@ -245,11 +246,17 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 			goto err_out;
 		}
 
-		if ((hints->mode & PSMX_MODE) != PSMX_MODE) {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"hints->mode=0x%llx, required=0x%llx\n",
-				hints->mode, PSMX_MODE);
-			goto err_out;
+		if ((hints->caps & FI_TAGGED) ||
+		    ((hints->caps & FI_MSG) && !psmx_env.am_msg)) {
+			if ((hints->mode & FI_CONTEXT) != FI_CONTEXT) {
+				FI_INFO(&psmx_prov, FI_LOG_CORE,
+					"hints->mode=0x%llx, required=0x%llx\n",
+					hints->mode, FI_CONTEXT);
+				goto err_out;
+			}
+		}
+		else {
+			mode = 0;
 		}
 
 		if (hints->fabric_attr && hints->fabric_attr->name &&
@@ -472,7 +479,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 
 	psmx_info->next = NULL;
 	psmx_info->caps = (hints && hints->caps) ? hints->caps : caps;
-	psmx_info->mode = PSMX_MODE;
+	psmx_info->mode = mode;
 	psmx_info->addr_format = FI_ADDR_PSMX;
 	psmx_info->src_addrlen = 0;
 	psmx_info->dest_addrlen = sizeof(psm_epid_t);
