@@ -404,11 +404,14 @@ Test(mbox_creation, multi_allocation)
 		     "memory not released in /proc/self/maps.");
 }
 
-Test(mbox_creation, double_free)
+Test(mbox_creation, check_errors)
 {
 	int ret;
 
+	struct gnix_mbox_alloc_handle *allocator;
+	struct gnix_slab *slab;
 	struct gnix_mbox *mail_box;
+	size_t position;
 
 	ret = _gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					  1000, 12000, &allocator);
@@ -420,17 +423,33 @@ Test(mbox_creation, double_free)
 	cr_expect_eq(ret, FI_SUCCESS, "_gnix_mbox_alloc failed.");
 
 	cr_expect(mail_box);
+
+	/* Force various error paths */
+	slab = mail_box->slab;
+	mail_box->slab = NULL;
+	ret = _gnix_mbox_free(mail_box);
+	cr_expect_eq(ret, -FI_EINVAL, "_gnix_mbox_free did not fail.");
+	mail_box->slab = slab;
+
+	allocator = mail_box->slab->allocator;
+	mail_box->slab->allocator = NULL;
+	ret = _gnix_mbox_free(mail_box);
+	cr_expect_eq(ret, -FI_EINVAL, "_gnix_mbox_free did not fail.");
+	mail_box->slab->allocator = allocator;
+
+	position = mail_box->offset / mail_box->slab->allocator->mbox_size;
+	ret = _gnix_test_and_clear_bit(mail_box->slab->used, position);
+	cr_expect_eq(ret, 1, "bitmap clear failed.");
+	ret = _gnix_mbox_free(mail_box);
+	cr_expect_eq(ret, -FI_EINVAL, "_gnix_mbox_free did not fail.");
+	ret = _gnix_test_and_set_bit(mail_box->slab->used, position);
+	cr_expect_eq(ret, 0, "bitmap set failed.");
+
 	/*
 	 * Free allocated mailboxes so we can destroy cleanly.
 	 */
 	ret = _gnix_mbox_free(mail_box);
 	cr_expect_eq(ret, FI_SUCCESS, "_gnix_mbox_free failed.");
-
-	/*
-	 * Ensure double free fails.
-	 */
-	ret = _gnix_mbox_free(mail_box);
-	cr_expect_eq(ret, -FI_EINVAL, "double free succeeded.");
 
 	ret = _gnix_mbox_allocator_destroy(allocator);
 	cr_assert_eq(ret, FI_SUCCESS, "_gnix_mbox_allocator_destroy failed.");
