@@ -261,23 +261,29 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct psmx_fid_fabric *fabric_priv;
 	struct psmx_fid_domain *domain_priv;
 	struct psm_ep_open_opts opts;
-	int err = -FI_ENOMEM;
+	int err;
 
 	FI_INFO(&psmx_prov, FI_LOG_DOMAIN, "\n");
 
 	fabric_priv = container_of(fabric, struct psmx_fid_fabric, fabric);
+	psmx_fabric_acquire(fabric_priv);
+
 	if (fabric_priv->active_domain) {
 		psmx_domain_acquire(fabric_priv->active_domain);
 		*domain = &fabric_priv->active_domain->domain;
 		return 0;
 	}
 
-	if (!info->domain_attr->name || strcmp(info->domain_attr->name, PSMX_DOMAIN_NAME))
-		return -FI_EINVAL;
+	if (!info->domain_attr->name || strcmp(info->domain_attr->name, PSMX_DOMAIN_NAME)) {
+		err = -FI_EINVAL;
+		goto err_out;
+	}
 
 	domain_priv = (struct psmx_fid_domain *) calloc(1, sizeof *domain_priv);
-	if (!domain_priv)
+	if (!domain_priv) {
+		err = -FI_ENOMEM;
 		goto err_out;
+	}
 
 	domain_priv->domain.fid.fclass = FI_CLASS_DOMAIN;
 	domain_priv->domain.fid.context = context;
@@ -315,9 +321,6 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err_out_close_ep;
 	}
 
-	if (psmx_domain_enable_ep(domain_priv, NULL) < 0)
-		goto err_out_finalize_mq;
-
 	err = fastlock_init(&domain_priv->mr_lock);
 	if (err) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
@@ -334,15 +337,26 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err_out_finalize_mq;
 	}
 
-	psmx_fabric_acquire(fabric_priv);
+	/* Set active domain before psmx_domain_enable_ep() installs the
+	 * AM handlers to ensure that psmx_active_fabric->active_domain
+	 * is always non-NULL inside the handlers. Notice that the vlaue
+	 * active_domain becomes NULL again only when the domain is closed.
+	 * At that time the AM handlers are gone with the PSM endpoint.
+	 */
+	fabric_priv->active_domain = domain_priv;
+
+	if (psmx_domain_enable_ep(domain_priv, NULL) < 0)
+		goto err_out_reset_active_domain;
 
 	if (domain_priv->progress_thread_enabled)
 		psmx_domain_start_progress(domain_priv);
 
 	domain_priv->refcnt = 1;
-	fabric_priv->active_domain = domain_priv;
 	*domain = &domain_priv->domain;
 	return 0;
+
+err_out_reset_active_domain:
+	fabric_priv->active_domain = NULL;
 
 err_out_finalize_mq:
 	psm_mq_finalize(domain_priv->psm_mq);
@@ -356,6 +370,7 @@ err_out_free_domain:
 	free(domain_priv);
 
 err_out:
+	psmx_fabric_release(fabric_priv);
 	return err;
 }
 
