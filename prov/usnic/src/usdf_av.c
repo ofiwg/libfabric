@@ -570,6 +570,9 @@ usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	USDF_TRACE_SYS(AV, "\n");
 
+	if (attr == NULL || av_o == NULL)
+		return -FI_EINVAL;
+
 	if ((attr->flags & ~(FI_EVENT | FI_READ)) != 0) {
 		return -FI_ENOSYS;
 	}
