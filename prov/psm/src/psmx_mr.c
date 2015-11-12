@@ -32,91 +32,59 @@
 
 #include "psmx.h"
 
-#define PSMX_MR_HASH_SIZE	103
-#define PSMX_MR_HASH(x)		((x) % PSMX_MR_HASH_SIZE)
+#define PSMX_MR_RESERVED ((void *)-1)
 
-static struct psmx_mr_hash_entry {
-	struct psmx_fid_mr *mr;
-	struct psmx_mr_hash_entry *next;
-} psmx_mr_hash[PSMX_MR_HASH_SIZE];
-
-static int psmx_mr_hash_add(struct psmx_fid_mr *mr)
+struct psmx_fid_mr *psmx_mr_get(struct psmx_fid_domain *domain, uint64_t key)
 {
-	int idx;
-	struct psmx_mr_hash_entry *head;
-	struct psmx_mr_hash_entry *entry;
+	struct psmx_fid_mr *mr;
 
-	idx = PSMX_MR_HASH(mr->mr.key);
-	head = &psmx_mr_hash[idx];
-	if (!head->mr) {
-		head->mr = mr;
-		head->next = NULL;
-		return 0;
+	fastlock_acquire(&domain->mr_lock);
+	mr = idm_lookup(&domain->mr_map, key);
+	fastlock_release(&domain->mr_lock);
+
+	return (mr != PSMX_MR_RESERVED) ? mr : NULL ;
+}
+
+static inline void psmx_mr_save_key(struct psmx_fid_domain *domain, uint64_t key, void *mr)
+{
+	fastlock_acquire(&domain->mr_lock);
+	idm_set(&domain->mr_map, key, mr);
+	fastlock_release(&domain->mr_lock);
+}
+
+static inline void psmx_mr_release_key(struct psmx_fid_domain *domain, uint64_t key)
+{
+	fastlock_acquire(&domain->mr_lock);
+	idm_clear(&domain->mr_map, key);
+	fastlock_release(&domain->mr_lock);
+}
+
+static int psmx_mr_reserve_key(struct psmx_fid_domain *domain, uint64_t key)
+{
+	fastlock_acquire(&domain->mr_lock);
+	if (idm_lookup(&domain->mr_map, key)) {
+		fastlock_release(&domain->mr_lock);
+		return -FI_ENOKEY;
 	}
+	idm_set(&domain->mr_map, key, PSMX_MR_RESERVED);
+	fastlock_release(&domain->mr_lock);
 
-	entry = calloc(1, sizeof(*entry));
-	if (!entry)
-		return -FI_ENOMEM;
-
-	entry->mr = mr;
-	entry->next = head->next;
-	head->next = entry;
 	return 0;
 }
 
-static int psmx_mr_hash_del(struct psmx_fid_mr *mr)
+static uint64_t psmx_mr_reserve_any_key(struct psmx_fid_domain *domain)
 {
-	int idx;
-	struct psmx_mr_hash_entry *head;
-	struct psmx_mr_hash_entry *entry;
-	struct psmx_mr_hash_entry *prev;
+	uint64_t key;
 
-	idx = PSMX_MR_HASH(mr->mr.key);
-	head = &psmx_mr_hash[idx];
+	fastlock_acquire(&domain->mr_lock);
+	key = domain->mr_reserved_key;
+	while (idm_lookup(&domain->mr_map, key))
+		key++;
+	idm_set(&domain->mr_map, key, PSMX_MR_RESERVED);
+	domain->mr_reserved_key = key + 1;
+	fastlock_release(&domain->mr_lock);
 
-	if (head->mr == mr) {
-		entry = head->next;
-		if (entry) {
-			head->mr = entry->mr;
-			head->next = entry->next;
-			free(entry);
-		}
-		else {
-			head->mr = NULL;
-		}
-		return 0;
-	}
-
-	prev = head;
-	entry = head->next;
-	while (entry) {
-		if (entry->mr == mr) {
-			prev->next = entry->next;
-			free(entry);
-			return 0;
-		}
-		prev = entry;
-		entry = entry->next;
-	}
-
-	return -FI_ENOENT;
-}
-
-struct psmx_fid_mr *psmx_mr_hash_get(uint64_t key)
-{
-	int idx;
-	struct psmx_mr_hash_entry *entry;
-
-	idx = PSMX_MR_HASH(key);
-	entry = &psmx_mr_hash[idx];
-
-	while (entry) {
-		if (entry->mr && entry->mr->mr.key == key)
-			return entry->mr;
-		entry = entry->next;
-	}
-
-	return NULL;
+	return key;
 }
 
 int psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access)
@@ -145,7 +113,7 @@ static int psmx_mr_close(fid_t fid)
 	struct psmx_fid_mr *mr;
 
 	mr = container_of(fid, struct psmx_fid_mr, mr.fid);
-	psmx_mr_hash_del(mr);
+	psmx_mr_release_key(mr->domain, mr->mr.key);
 	free(mr);
 
 	return 0;
@@ -265,28 +233,30 @@ static int psmx_mr_reg(struct fid *fid, const void *buf, size_t len,
 		return -FI_EINVAL;
 	}
 	domain = container_of(fid, struct fid_domain, fid);
-
 	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
-	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
-		if (psmx_mr_hash_get(requested_key))
-			return -FI_ENOKEY;
-	}
 
 	mr_priv = (struct psmx_fid_mr *) calloc(1, sizeof(*mr_priv) + sizeof(struct iovec));
 	if (!mr_priv)
 		return -FI_ENOMEM;
 
+	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
+		key = requested_key;
+		if (psmx_mr_reserve_key(domain_priv, key)) {
+			free(mr_priv);
+			return -FI_ENOKEY;
+		}
+	} else {
+		key = psmx_mr_reserve_any_key(domain_priv);
+	}
+
 	mr_priv->mr.fid.fclass = FI_CLASS_MR;
 	mr_priv->mr.fid.context = context;
 	mr_priv->mr.fid.ops = &psmx_fi_ops;
 	mr_priv->mr.mem_desc = mr_priv;
-	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
-		key = requested_key;
-	} else {
-		key = (uint64_t)(uintptr_t)mr_priv;
-		while (psmx_mr_hash_get(key))
-			key++;
-	}
+	mr_priv->mr.fid.fclass = FI_CLASS_MR;
+	mr_priv->mr.fid.context = context;
+	mr_priv->mr.fid.ops = &psmx_fi_ops;
+	mr_priv->mr.mem_desc = mr_priv;
 	mr_priv->mr.key = key;
 	mr_priv->domain = domain_priv;
 	mr_priv->access = access;
@@ -298,8 +268,7 @@ static int psmx_mr_reg(struct fid *fid, const void *buf, size_t len,
 				((uint64_t)mr_priv->iov[0].iov_base - offset) :
 				0;
 
-	psmx_mr_hash_add(mr_priv);
-
+	psmx_mr_save_key(domain_priv, key, mr_priv);
 	*mr = &mr_priv->mr;
 
 	return 0;
@@ -320,12 +289,7 @@ static int psmx_mr_regv(struct fid *fid,
 		return -FI_EINVAL;
 	}
 	domain = container_of(fid, struct fid_domain, fid);
-
 	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
-	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
-		if (psmx_mr_hash_get(requested_key))
-			return -FI_ENOKEY;
-	}
 
 	if (count == 0 || iov == NULL)
 		return -FI_EINVAL;
@@ -336,17 +300,20 @@ static int psmx_mr_regv(struct fid *fid,
 	if (!mr_priv)
 		return -FI_ENOMEM;
 
+	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
+		key = requested_key;
+		if (psmx_mr_reserve_key(domain_priv, key)) {
+			free(mr_priv);
+			return -FI_ENOKEY;
+		}
+	} else {
+		key = psmx_mr_reserve_any_key(domain_priv);
+	}
+
 	mr_priv->mr.fid.fclass = FI_CLASS_MR;
 	mr_priv->mr.fid.context = context;
 	mr_priv->mr.fid.ops = &psmx_fi_ops;
 	mr_priv->mr.mem_desc = mr_priv;
-	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
-		key = requested_key;
-	} else {
-		key = (uint64_t)(uintptr_t)mr_priv;
-		while (psmx_mr_hash_get(key))
-			key++;
-	}
 	mr_priv->mr.key = key;
 	mr_priv->domain = domain_priv;
 	mr_priv->access = access;
@@ -359,8 +326,7 @@ static int psmx_mr_regv(struct fid *fid,
 				((uint64_t)mr_priv->iov[0].iov_base - offset) :
 				0;
 
-	psmx_mr_hash_add(mr_priv);
-
+	psmx_mr_save_key(domain_priv, key, mr_priv);
 	*mr = &mr_priv->mr;
 
 	return 0;
@@ -379,12 +345,7 @@ static int psmx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_EINVAL;
 	}
 	domain = container_of(fid, struct fid_domain, fid);
-
 	domain_priv = container_of(domain, struct psmx_fid_domain, domain);
-	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
-		if (psmx_mr_hash_get(attr->requested_key))
-			return -FI_ENOKEY;
-	}
 
 	if (!attr)
 		return -FI_EINVAL;
@@ -398,17 +359,20 @@ static int psmx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (!mr_priv)
 		return -FI_ENOMEM;
 
+	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
+		key = attr->requested_key;
+		if (psmx_mr_reserve_key(domain_priv, key)) {
+			free(mr_priv);
+			return -FI_ENOKEY;
+		}
+	} else {
+		key = psmx_mr_reserve_any_key(domain_priv);
+	}
+
 	mr_priv->mr.fid.fclass = FI_CLASS_MR;
 	mr_priv->mr.fid.context = attr->context;
 	mr_priv->mr.fid.ops = &psmx_fi_ops;
 	mr_priv->mr.mem_desc = mr_priv;
-	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
-		key = attr->requested_key;
-	} else {
-		key = (uint64_t)(uintptr_t)mr_priv;
-		while (psmx_mr_hash_get(key))
-			key++;
-	}
 	mr_priv->mr.key = key;
 	mr_priv->domain = domain_priv;
 	mr_priv->access = attr->access;
@@ -421,8 +385,7 @@ static int psmx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 				((uint64_t)mr_priv->iov[0].iov_base - attr->offset) :
 				0;
 
-	psmx_mr_hash_add(mr_priv);
-
+	psmx_mr_save_key(domain_priv, key, mr_priv);
 	*mr = &mr_priv->mr;
 
 	return 0;

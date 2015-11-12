@@ -193,6 +193,9 @@ static int psmx_domain_close(fid_t fid)
 
 	fastlock_destroy(&domain->poll_lock);
 
+	idm_reset(&domain->mr_map);
+	fastlock_destroy(&domain->mr_lock);
+
 #if 0
 	/* AM messages could arrive after MQ is finalized, causing segfault
 	 * when trying to dereference the MQ pointer. There is no mechanism
@@ -304,10 +307,19 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (psmx_domain_enable_ep(domain_priv, NULL) < 0)
 		goto err_out_finalize_mq;
 
+	err = fastlock_init(&domain_priv->mr_lock);
+	if (err) {
+		FI_WARN(&psmx_prov, FI_LOG_CORE,
+			"fastlock_init(mr_lock) returns %d\n", err);
+		goto err_out_finalize_mq;
+	}
+	memset(&domain_priv->mr_map, 0, sizeof(struct index_map));
+	domain_priv->mr_reserved_key = 1;
+	
 	err = fastlock_init(&domain_priv->poll_lock);
 	if (err) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
-			"pthread_spin_init returns %d\n", err);
+			"fastlock_init(poll_lock) returns %d\n", err);
 		goto err_out_finalize_mq;
 	}
 

@@ -416,7 +416,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		op = args[4].u32w1;
 		assert(len == fi_datatype_size(datatype) * count);
 
-		mr = psmx_mr_hash_get(key);
+		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
 			psmx_mr_validate(mr, (uint64_t)addr, len, FI_REMOTE_WRITE) :
 			-FI_EINVAL;
@@ -456,7 +456,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 		assert(len == fi_datatype_size(datatype) * count);
 
-		mr = psmx_mr_hash_get(key);
+		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
 			psmx_mr_validate(mr, (uint64_t)addr, len, FI_REMOTE_READ|FI_REMOTE_WRITE) :
 			-FI_EINVAL;
@@ -506,7 +506,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		len /= 2;
 		assert(len == fi_datatype_size(datatype) * count);
 
-		mr = psmx_mr_hash_get(key);
+		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
 			psmx_mr_validate(mr, (uint64_t)addr, len, FI_REMOTE_READ|FI_REMOTE_WRITE) :
 			-FI_EINVAL;
@@ -636,7 +636,7 @@ static int psmx_atomic_self(int am_cmd,
 		access = FI_REMOTE_READ | FI_REMOTE_WRITE;
 
 	len = fi_datatype_size(datatype) * count;
-	mr = psmx_mr_hash_get(key);
+	mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 	op_error = mr ?  psmx_mr_validate(mr, addr, len, access) : -FI_EINVAL;
 
 	if (op_error)
