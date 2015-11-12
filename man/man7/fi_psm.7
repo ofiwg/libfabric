@@ -1,4 +1,4 @@
-.TH fi_psm 7 "2015\-08\-26" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_psm 7 "2015\-11\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The PSM Fabric Provider
@@ -16,15 +16,16 @@ queue functions and the Active Message functions to support a variety of
 libfabric data transfer APIs, including tagged message queue, message
 queue, RMA, and atomic operations.
 .PP
-The \f[I]psm2\f[] provider runs over the PSM 2.0 interface that is
+The \f[I]psm2\f[] provider runs over the PSM 2.x interface that is
 supported by the Intel Omni-Path Fabric.
-PSM 2.0 is fully backward compatible with PSM 1.x and adds some new
-functions with enhanced capability.
-PSM 2.0 also makes the Active Message support official.
-However, the official Active Message API is slightly different from the
-PSM 1.x version.
-As a result, the \f[I]psm2\f[] provider only works with PSM 2.0 and the
-\f[I]psm\f[] provider only works with PSM 1.x.
+PSM 2.x has all the PSM 1.x features plus a set of new functions with
+enhanced capability.
+Since PSM 1.x and PSM 2.x is not ABI compatible the \f[I]psm2\f[]
+provider only works with PSM 2.0 and doesn\[aq]t support Intel TrueScale
+Fabric.
+On the other hand, the \f[I]psm\f[] provider can work with the
+psm2-compat library, which exposes a PSM 1.x interface over the Intel
+Omni-Path Fabric.
 .PP
 Unless specifically indicated, the description of the \f[I]psm\f[]
 provider in the remaining part of this document also applies to the
@@ -56,23 +57,27 @@ two endpoints with \f[I]FI_RMA\f[].
 \f[I]FI_MULTI_RECV\f[] is supported for non-tagged message queue only.
 .PP
 Other supported capabilities include \f[I]FI_TRIGGER\f[].
-The \f[I]psm2\f[] provider also supports \f[I]FI_REMOTE_CQ_DATA\f[].
+The \f[I]psm2\f[] provider also supports \f[I]FI_REMOTE_CQ_DATA\f[] and
+\f[I]FI_SOURCE\f[].
 .PP
-Modes : \f[I]FI_CONTEXT\f[] is required.
+Modes : \f[I]FI_CONTEXT\f[] is required in general.
 That means, all the requests that generate completions must have a valid
 pointer to type \f[I]struct fi_context\f[] passed as the operation
 context.
+The exception is that if none of \f[I]FI_TAGGED\f[] and \f[I]FI_MSG\f[]
+is asked for, then the \f[I]FI_CONTEXT\f[] mode is not required.
 .PP
 Progress : The \f[I]psm\f[] provider requires manual progress.
 The application is expected to call \f[I]fi_cq_read\f[] or
 \f[I]fi_cntr_read\f[] function from time to time when no other libfabric
 function is called to ensure progress is made in a timely manner.
-Not doing so could result in either poor performance or no progress
-being made as all.
+The provider does support auto progress mode.
+However, the performance is signinficantly impacted if the application
+purely depends on the pprovide to make auto progress.
 .PP
 Unsupported features : These features are unsupported: connection
-management, event queue, scalable endpoint, passive endpoint, shared
-receive context, send/inject with immediate data.
+management, scalable endpoint, passive endpoint, shared receive context,
+send/inject with immediate data (supported by \f[I]psm2\f[] provider).
 .SH RUNTIME PARAMETERS
 .PP
 The \f[I]psm\f[] provider checks for the following environment variables
@@ -91,7 +96,9 @@ If running into "resource busy" or "connection failure" issues with
 unknown reason, it is advisable to manually set the UUID to a value
 different from the default.
 .PP
-The default UUID is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF.
+The default UUID is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF for the
+\f[I]psm\f[] provider and 00FF00FF-0000-0000-0000-00FF0F0F00FF for the
+\f[I]psm2\f[] provider.
 .PP
 \f[I]FI_PSM_NAME_SERVER\f[] / \f[I]FI_PSM2_NAME_SERVER\f[] : The
 \f[I]psm\f[] provider has a simple built-in name server that can be used
@@ -147,6 +154,39 @@ This experimental feature has slightly larger latency.
 .PP
 This option is off by default.
 To turn it on set the variable to 1.
+.PP
+\f[I]FI_PSM_DELAY\f[] / \f[I]FI_PSM2_DELAY\f[] : Time (seconds) to sleep
+before closing PSM endpoints.
+This is a workaround for a bug in some versions of PSM library.
+.PP
+The default setting is 1 second.
+.PP
+\f[I]FI_PSM_TIMEOUT\f[] / \f[I]FI_PSM2_TIMEOUT\f[] : Timeout (seconds)
+for gracefully closing PSM endpoints.
+A forced closing will be issued if timeout expires.
+.PP
+The default setting is 5 seconds.
+.PP
+\f[I]FI_PSM_PROG_INTERVAL\f[] / \f[I]FI_PSM2_PROG_INTERVAL\f[] : When
+auto progress is enabled (asked via the hints to \f[I]fi_getinfo\f[]), a
+progress thread is created to make progress calls from time to time.
+This option set the tnterval (microseconds) between progress calls.
+.PP
+The default setting is 1 microsecond if affininty is set, or 1000
+microseconds if not.
+See \f[I]FI_PSM_PROG_AFFINITY\f[]/\f[I]FI_PSM2_PROG_AFFINITY\f[].
+.PP
+\f[I]FI_PSM_PROG_AFFINITY\f[] / \f[I]FI_PSM2_PROG_AFFINITY\f[] : When
+set, specify the set of CPU cores to set the progress thread affinity
+to.
+The format is
+\f[C]<start>[:<end>[:<stride>]][,<start>[:<end>[:<stride>]]]*\f[], where
+each triplet \f[C]<start>:<end>:<stride>\f[] defines a block of
+core_ids.
+Both \f[C]<start>\f[] and \f[C]<end>\f[] can be either the core_id (when
+>=0) or core_id - num_cores (when <0).
+.PP
+By default affinity is not set.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
