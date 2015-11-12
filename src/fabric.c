@@ -462,6 +462,48 @@ void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 }
 DEFAULT_SYMVER(fi_freeinfo_, fi_freeinfo);
 
+/* Make a dummy info object for each provider, and copy in the
+ * provider name and version */
+static int fi_getprovinfo(struct fi_info **info)
+{
+	struct fi_prov *prov;
+	struct fi_info *tail, *cur;
+	int ret = -FI_ENODATA;
+
+	*info = tail = NULL;
+	for (prov = prov_head; prov; prov = prov->next) {
+		cur = fi_allocinfo();
+		if (!cur) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		cur->fabric_attr->prov_name =
+			strdup(prov->provider->name);
+		cur->fabric_attr->prov_version =
+			prov->provider->version;
+
+		if (!*info) {
+			*info = tail = cur;
+		} else {
+			tail->next = cur;
+		}
+		tail = cur;
+
+		ret = 0;
+	}
+
+	return ret;
+
+err:
+	while (tail) {
+		cur = tail->next;
+		fi_freeinfo(tail);
+		tail = cur;
+	}
+	return ret;
+}
+
 __attribute__((visibility ("default")))
 int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const char *service,
 	       uint64_t flags, struct fi_info *hints, struct fi_info **info)
@@ -477,6 +519,10 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const cha
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Requested version is newer than library\n");
 		return -FI_ENOSYS;
+	}
+
+	if (flags == FI_PROV_ATTR_ONLY) {
+		return fi_getprovinfo(info);
 	}
 
 	*info = tail = NULL;

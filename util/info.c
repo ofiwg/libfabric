@@ -41,6 +41,7 @@
 static struct fi_info *hints;
 static char *node, *port;
 static int ver = 0;
+static int list_providers = 0;
 static int verbose = 0, env = 0;
 
 /* options and matching help strings need to be kept in sync */
@@ -54,6 +55,7 @@ static const struct option longopts[] = {
 	{"addr_format", required_argument, NULL, 'a'},
 	{"provider", required_argument, NULL, 'f'},
 	{"env", no_argument, NULL, 'e'},
+	{"list", no_argument, NULL, 'l'},
 	{"verbose", no_argument, NULL, 'v'},
 	{"version", no_argument, &ver, 1},
 	{0,0,0,0}
@@ -68,6 +70,7 @@ static const char *help_strings[][2] = {
 	{"FMT", "\t\tspecify accepted address format: FI_FORMAT_UNSPEC, FI_SOCKADDR..."},
 	{"PROV", "\t\tspecify provider explicitly"},
 	{"", "\t\tprint libfabric environment variables"},
+	{"", "\t\tlist available libfabric providers"},
 	{"", "\t\tverbose output"},
 	{"", "\t\tprint version info and exit"},
 	{"", ""}
@@ -214,14 +217,27 @@ static int print_vars(void)
 	return ret;
 }
 
+static int print_providers(struct fi_info *info)
+{
+	for (struct fi_info *cur = info; cur; cur = cur->next) {
+		printf("%s:\n", cur->fabric_attr->prov_name);
+		printf("    version: %d.%d\n",
+			FI_MAJOR(cur->fabric_attr->prov_version),
+			FI_MINOR(cur->fabric_attr->prov_version));
+	}
+	return EXIT_SUCCESS;
+}
+
 static int print_short_info(struct fi_info *info)
 {
 	for (struct fi_info *cur = info; cur; cur = cur->next) {
 		printf("%s: %s\n", cur->fabric_attr->prov_name, cur->fabric_attr->name);
 		printf("    version: %d.%d\n", FI_MAJOR(cur->fabric_attr->prov_version),
 			FI_MINOR(cur->fabric_attr->prov_version));
-		printf("    type: %s\n", fi_tostr(&cur->ep_attr->type, FI_TYPE_EP_TYPE));
-		printf("    protocol: %s\n", fi_tostr(&cur->ep_attr->protocol, FI_TYPE_PROTOCOL));
+		if (!list_providers) {
+			printf("    type: %s\n", fi_tostr(&cur->ep_attr->type, FI_TYPE_EP_TYPE));
+			printf("    protocol: %s\n", fi_tostr(&cur->ep_attr->protocol, FI_TYPE_PROTOCOL));
+		}
 	}
 	return EXIT_SUCCESS;
 }
@@ -239,8 +255,10 @@ static int run(struct fi_info *hints, char *node, char *port)
 {
 	struct fi_info *info;
 	int ret;
+	uint64_t flags;
 
-	ret = fi_getinfo(FI_VERSION(1, 1), node, port, 0, hints, &info);
+	flags = list_providers ? FI_PROV_ATTR_ONLY : 0;
+	ret = fi_getinfo(FI_VERSION(1, 1), node, port, flags, hints, &info);
 	if (ret) {
 		fprintf(stderr, "fi_getinfo: %d\n", ret);
 		return ret;
@@ -248,6 +266,8 @@ static int run(struct fi_info *hints, char *node, char *port)
 
 	if (verbose)
 		ret = print_long_info(info);
+	else if (list_providers)
+		ret = print_providers(info);
 	else
 		ret = print_short_info(info);
 
@@ -266,7 +286,7 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 
-	while ((op = getopt_long(argc, argv, "n:p:c:m:t:a:f:ehv", longopts, &option_index)) != -1) {
+	while ((op = getopt_long(argc, argv, "n:p:c:m:t:a:f:elhv", longopts, &option_index)) != -1) {
 		switch (op) {
 		case 0:
 			/* If --verbose set a flag, do nothing. */
@@ -301,6 +321,9 @@ int main(int argc, char **argv)
 			break;
 		case 'e':
 			env = 1;
+			break;
+		case 'l':
+			list_providers = 1;
 			break;
 		case 'v':
 			verbose = 1;

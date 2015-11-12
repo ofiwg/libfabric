@@ -512,6 +512,15 @@ input flags.  Valid flags include the following.
   the node and/or service parameter must be non-NULL.  This flag is
   often used with passive endpoints.
 
+*FI_PROV_ATTR_ONLY*
+: Indicates that the caller is only querying for what providers are
+  potentially available.  All providers will return exactly one
+  fi_info struct, regardless of whether that provider is usable on the
+  current platform or not.  The returned fi_info struct will contain
+  default values for all members, with the exception of fabric_attr.
+  The fabric_attr member will have the prov_name and prov_version
+  values filled in.
+
 # RETURN VALUE
 
 fi_getinfo() returns 0 on success. On error, fi_getinfo() returns a
