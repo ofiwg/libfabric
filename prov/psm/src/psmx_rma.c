@@ -890,6 +890,19 @@ static ssize_t psmx_writedata(struct fid_ep *ep, const void *buf, size_t len, vo
 			   ep_priv->flags | FI_REMOTE_CQ_DATA, data);
 }
 
+static ssize_t psmx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+			       uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+			       uint64_t key)
+{
+	struct psmx_fid_ep *ep_priv;
+
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+
+	return _psmx_write(ep, buf, len, NULL, dest_addr, addr, key,
+			   NULL, ep_priv->flags | FI_INJECT | PSMX_NO_COMPLETION,
+			   data);
+}
+
 struct fi_ops_rma psmx_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = psmx_read,
@@ -900,6 +913,6 @@ struct fi_ops_rma psmx_rma_ops = {
 	.writemsg = psmx_writemsg,
 	.inject = psmx_inject,
 	.writedata = psmx_writedata,
-	.injectdata = fi_no_rma_injectdata,
+	.injectdata = psmx_injectdata,
 };
 
