@@ -32,11 +32,15 @@
 
 #include "psmx.h"
 
-#define PSMX_MR_RESERVED ((void *)-1)
+#define PSMX_MR_RESERVED	((void *)-1)
+#define PSMX_MR_MAX_KEY		IDX_MAX_INDEX
 
 struct psmx_fid_mr *psmx_mr_get(struct psmx_fid_domain *domain, uint64_t key)
 {
 	struct psmx_fid_mr *mr;
+
+	if (key > PSMX_MR_MAX_KEY)
+		return NULL;
 
 	fastlock_acquire(&domain->mr_lock);
 	mr = idm_lookup(&domain->mr_map, key);
@@ -61,6 +65,13 @@ static inline void psmx_mr_release_key(struct psmx_fid_domain *domain, uint64_t 
 
 static int psmx_mr_reserve_key(struct psmx_fid_domain *domain, uint64_t key)
 {
+	if (key > PSMX_MR_MAX_KEY) {
+		FI_INFO(&psmx_prov, FI_LOG_MR,
+			"request key 0x%llx is out of valid range [0..0x%x]\n",
+			key, PSMX_MR_MAX_KEY);
+		return -FI_EINVAL;
+	}
+
 	fastlock_acquire(&domain->mr_lock);
 	if (idm_lookup(&domain->mr_map, key)) {
 		fastlock_release(&domain->mr_lock);
@@ -72,19 +83,31 @@ static int psmx_mr_reserve_key(struct psmx_fid_domain *domain, uint64_t key)
 	return 0;
 }
 
-static uint64_t psmx_mr_reserve_any_key(struct psmx_fid_domain *domain)
+static int psmx_mr_reserve_any_key(struct psmx_fid_domain *domain, uint64_t *key)
 {
-	uint64_t key;
+	uint64_t try_key;
+	int err = 0;
 
 	fastlock_acquire(&domain->mr_lock);
-	key = domain->mr_reserved_key;
-	while (idm_lookup(&domain->mr_map, key))
-		key++;
-	idm_set(&domain->mr_map, key, PSMX_MR_RESERVED);
-	domain->mr_reserved_key = key + 1;
+	try_key = domain->mr_reserved_key;
+	while (idm_lookup(&domain->mr_map, try_key)) {
+		try_key = (try_key + 1) % PSMX_MR_MAX_KEY;
+		if (try_key == domain->mr_reserved_key) {
+			FI_INFO(&psmx_prov, FI_LOG_MR,
+				"running out of keys in range [0..0x%x]\n",
+				PSMX_MR_MAX_KEY);
+			err = -FI_ENOKEY;
+			break;
+		}
+	}
+	if (!err) {
+		idm_set(&domain->mr_map, try_key, PSMX_MR_RESERVED);
+		domain->mr_reserved_key = (try_key + 1) % PSMX_MR_MAX_KEY;
+		*key = try_key;
+	}
 	fastlock_release(&domain->mr_lock);
 
-	return key;
+	return err;
 }
 
 int psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access)
@@ -229,6 +252,7 @@ static int psmx_mr_reg(struct fid *fid, const void *buf, size_t len,
 	struct psmx_fid_domain *domain_priv;
 	struct psmx_fid_mr *mr_priv;
 	uint64_t key;
+	int err;
 
 	if (fid->fclass != FI_CLASS_DOMAIN) {
 		return -FI_EINVAL;
@@ -242,12 +266,14 @@ static int psmx_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
 		key = requested_key;
-		if (psmx_mr_reserve_key(domain_priv, key)) {
-			free(mr_priv);
-			return -FI_ENOKEY;
-		}
+		err = psmx_mr_reserve_key(domain_priv, key);
 	} else {
-		key = psmx_mr_reserve_any_key(domain_priv);
+		err = psmx_mr_reserve_any_key(domain_priv, &key);
+	}
+
+	if (err) {
+		free(mr_priv);
+		return err;
 	}
 
 	psmx_domain_acquire(domain_priv);
@@ -285,7 +311,7 @@ static int psmx_mr_regv(struct fid *fid,
 	struct fid_domain *domain;
 	struct psmx_fid_domain *domain_priv;
 	struct psmx_fid_mr *mr_priv;
-	int i;
+	int i, err;
 	uint64_t key;
 
 	if (fid->fclass != FI_CLASS_DOMAIN) {
@@ -305,12 +331,14 @@ static int psmx_mr_regv(struct fid *fid,
 
 	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
 		key = requested_key;
-		if (psmx_mr_reserve_key(domain_priv, key)) {
-			free(mr_priv);
-			return -FI_ENOKEY;
-		}
+		err = psmx_mr_reserve_key(domain_priv, key);
 	} else {
-		key = psmx_mr_reserve_any_key(domain_priv);
+		err = psmx_mr_reserve_any_key(domain_priv, &key);
+	}
+
+	if (err) {
+		free(mr_priv);
+		return err;
 	}
 
 	psmx_domain_acquire(domain_priv);
@@ -343,7 +371,7 @@ static int psmx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct fid_domain *domain;
 	struct psmx_fid_domain *domain_priv;
 	struct psmx_fid_mr *mr_priv;
-	int i;
+	int i, err;
 	uint64_t key;
 
 	if (fid->fclass != FI_CLASS_DOMAIN) {
@@ -366,12 +394,14 @@ static int psmx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
 		key = attr->requested_key;
-		if (psmx_mr_reserve_key(domain_priv, key)) {
-			free(mr_priv);
-			return -FI_ENOKEY;
-		}
+		err = psmx_mr_reserve_key(domain_priv, key);
 	} else {
-		key = psmx_mr_reserve_any_key(domain_priv);
+		err = psmx_mr_reserve_any_key(domain_priv, &key);
+	}
+
+	if (err) {
+		free(mr_priv);
+		return err;
 	}
 
 	psmx_domain_acquire(domain_priv);
