@@ -105,7 +105,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		rma_len = args[0].u32w1;
 		rma_addr = (void *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
-		mr = psmx_mr_hash_get(key);
+		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
 			psmx_mr_validate(mr, (uint64_t)rma_addr, len, FI_REMOTE_WRITE) :
 			-FI_EINVAL;
@@ -153,7 +153,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		rma_len = args[0].u32w1;
 		rma_addr = (void *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
-		mr = psmx_mr_hash_get(key);
+		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
 			psmx_mr_validate(mr, (uint64_t)rma_addr, rma_len, FI_REMOTE_WRITE) :
 			-FI_EINVAL;
@@ -194,7 +194,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		rma_addr = (void *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
 		offset = args[4].u64;
-		mr = psmx_mr_hash_get(key);
+		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
 			psmx_mr_validate(mr, (uint64_t)rma_addr, rma_len, FI_REMOTE_READ) :
 			-FI_EINVAL;
@@ -224,7 +224,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		rma_len = args[0].u32w1;
 		rma_addr = (void *)(uintptr_t)args[2].u64;
 		key = args[3].u64;
-		mr = psmx_mr_hash_get(key);
+		mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 		op_error = mr ?
 			psmx_mr_validate(mr, (uint64_t)rma_addr, rma_len, FI_REMOTE_READ) :
 			-FI_EINVAL;
@@ -362,7 +362,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 		return -FI_EINVAL;
 	}
 
-	mr = psmx_mr_hash_get(key);
+	mr = psmx_mr_get(psmx_active_fabric->active_domain, key);
 	op_error = mr ? psmx_mr_validate(mr, addr, len, access) : -FI_EINVAL;
 
 	if (!op_error) {
