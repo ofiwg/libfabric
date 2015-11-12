@@ -1260,6 +1260,18 @@ static ssize_t psmx_tagged_senddata(struct fid_ep *ep, const void *buf, size_t l
 	return _psmx_tagged_send(ep, buf, len, desc, dest_addr, tag, context,
 				 ep_priv->flags,  (uint32_t)data);
 }
+
+static ssize_t psmx_tagged_injectdata(struct fid_ep *ep, const void *buf, size_t len,
+				      uint64_t data, fi_addr_t dest_addr, uint64_t tag)
+{
+	struct psmx_fid_ep *ep_priv;
+
+	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
+
+	return _psmx_tagged_send(ep, buf, len, NULL, dest_addr, tag, NULL,
+				 ep_priv->flags | FI_INJECT | PSMX_NO_COMPLETION,
+				 (uint32_t)data);
+}
 #endif
 
 /* general case */
@@ -1274,10 +1286,11 @@ struct fi_ops_tagged psmx_tagged_ops = {
 	.inject = psmx_tagged_inject,
 #if (PSM_VERNO_MAJOR >= 2)
 	.senddata = psmx_tagged_senddata,
+	.injectdata = psmx_tagged_injectdata,
 #else
 	.senddata = fi_no_tagged_senddata,
-#endif
 	.injectdata = fi_no_tagged_injectdata,
+#endif
 };
 
 /* op_flags=0, no event suppression, FI_AV_MAP */
@@ -1292,10 +1305,11 @@ struct fi_ops_tagged psmx_tagged_ops_no_flag_av_map = {
 	.inject = psmx_tagged_inject_no_flag_av_map,
 #if (PSM_VERNO_MAJOR >= 2)
 	.senddata = psmx_tagged_senddata,
+	.injectdata = psmx_tagged_injectdata,
 #else
 	.senddata = fi_no_tagged_senddata,
-#endif
 	.injectdata = fi_no_tagged_injectdata,
+#endif
 };
 
 /* op_flags=0, no event suppression, FI_AV_TABLE */
@@ -1310,10 +1324,11 @@ struct fi_ops_tagged psmx_tagged_ops_no_flag_av_table = {
 	.inject = psmx_tagged_inject_no_flag_av_table,
 #if (PSM_VERNO_MAJOR >= 2)
 	.senddata = psmx_tagged_senddata,
+	.injectdata = psmx_tagged_injectdata,
 #else
 	.senddata = fi_no_tagged_senddata,
-#endif
 	.injectdata = fi_no_tagged_injectdata,
+#endif
 };
 
 /* op_flags=0, event suppression, FI_AV_MAP */
@@ -1328,10 +1343,11 @@ struct fi_ops_tagged psmx_tagged_ops_no_event_av_map = {
 	.inject = psmx_tagged_inject_no_flag_av_map,
 #if (PSM_VERNO_MAJOR >= 2)
 	.senddata = psmx_tagged_senddata,
+	.injectdata = psmx_tagged_injectdata,
 #else
 	.senddata = fi_no_tagged_senddata,
-#endif
 	.injectdata = fi_no_tagged_injectdata,
+#endif
 };
 
 /* op_flags=0, event suppression, FI_AV_TABLE */
@@ -1346,10 +1362,11 @@ struct fi_ops_tagged psmx_tagged_ops_no_event_av_table = {
 	.inject = psmx_tagged_inject_no_flag_av_table,
 #if (PSM_VERNO_MAJOR >= 2)
 	.senddata = psmx_tagged_senddata,
+	.injectdata = psmx_tagged_injectdata,
 #else
 	.senddata = fi_no_tagged_senddata,
-#endif
 	.injectdata = fi_no_tagged_injectdata,
+#endif
 };
 
 /* op_flags=0, send event suppression, FI_AV_MAP */
@@ -1364,10 +1381,11 @@ struct fi_ops_tagged psmx_tagged_ops_no_send_event_av_map = {
 	.inject = psmx_tagged_inject_no_flag_av_map,
 #if (PSM_VERNO_MAJOR >= 2)
 	.senddata = psmx_tagged_senddata,
+	.injectdata = psmx_tagged_injectdata,
 #else
 	.senddata = fi_no_tagged_senddata,
-#endif
 	.injectdata = fi_no_tagged_injectdata,
+#endif
 };
 
 /* op_flags=0, send event suppression, FI_AV_TABLE */
@@ -1382,10 +1400,11 @@ struct fi_ops_tagged psmx_tagged_ops_no_send_event_av_table = {
 	.inject = psmx_tagged_inject_no_flag_av_table,
 #if (PSM_VERNO_MAJOR >= 2)
 	.senddata = psmx_tagged_senddata,
+	.injectdata = psmx_tagged_injectdata,
 #else
 	.senddata = fi_no_tagged_senddata,
-#endif
 	.injectdata = fi_no_tagged_injectdata,
+#endif
 };
 
 /* op_flags=0, recv event suppression, FI_AV_MAP */
@@ -1400,10 +1419,11 @@ struct fi_ops_tagged psmx_tagged_ops_no_recv_event_av_map = {
 	.inject = psmx_tagged_inject_no_flag_av_map,
 #if (PSM_VERNO_MAJOR >= 2)
 	.senddata = psmx_tagged_senddata,
+	.injectdata = psmx_tagged_injectdata,
 #else
 	.senddata = fi_no_tagged_senddata,
-#endif
 	.injectdata = fi_no_tagged_injectdata,
+#endif
 };
 
 /* op_flags=0, recv event suppression, FI_AV_TABLE */
@@ -1418,8 +1438,9 @@ struct fi_ops_tagged psmx_tagged_ops_no_recv_event_av_table = {
 	.inject = psmx_tagged_inject_no_flag_av_table,
 #if (PSM_VERNO_MAJOR >= 2)
 	.senddata = psmx_tagged_senddata,
+	.injectdata = psmx_tagged_injectdata,
 #else
 	.senddata = fi_no_tagged_senddata,
-#endif
 	.injectdata = fi_no_tagged_injectdata,
+#endif
 };
