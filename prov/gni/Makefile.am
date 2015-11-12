@@ -66,8 +66,8 @@ _gni_headers = \
 
 if HAVE_CRITERION
 bin_PROGRAMS += prov/gni/test/gnitest
-dist_bin_SCRIPTS = prov/gni/test/run_gnitest
-prov_gni_test_gnitest_SOURCES = \
+bin_SCRIPTS += prov/gni/test/run_gnitest
+nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/allocator.c \
 	prov/gni/test/av.c \
 	prov/gni/test/bitmap.c \
