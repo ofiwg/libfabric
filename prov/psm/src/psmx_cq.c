@@ -745,6 +745,8 @@ static int psmx_cq_close(fid_t fid)
 
 	cq = container_of(fid, struct psmx_fid_cq, cq.fid);
 
+	psmx_domain_release(cq->domain);
+
 	while (!slist_empty(&cq->free_list)) {
 		entry = slist_remove_head(&cq->free_list);
 		item = container_of(entry, struct psmx_cq_event, list_entry);
@@ -894,6 +896,8 @@ int psmx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			free(wait);
 		return -FI_ENOMEM;
 	}
+
+	psmx_domain_acquire(domain_priv);
 
 	cq_priv->domain = domain_priv;
 	cq_priv->format = attr->format;

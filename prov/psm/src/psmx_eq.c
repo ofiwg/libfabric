@@ -306,6 +306,8 @@ static int psmx_eq_close(fid_t fid)
 
 	eq = container_of(fid, struct psmx_fid_eq, eq.fid);
 
+	psmx_fabric_release(eq->fabric);
+
 	while (!slist_empty(&eq->free_list)) {
 		entry = slist_remove_head(&eq->free_list);
 		item = container_of(entry, struct psmx_eq_event, list_entry);
@@ -409,6 +411,8 @@ int psmx_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 			free(wait);
 		return -FI_ENOMEM;
 	}
+
+	psmx_fabric_acquire(fabric_priv);
 
 	eq_priv->fabric = fabric_priv;
 	eq_priv->wait = wait;

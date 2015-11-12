@@ -209,6 +209,8 @@ static int psmx_wait_close(fid_t fid)
 	struct psmx_fid_wait *wait;
 
 	wait = container_of(fid, struct psmx_fid_wait, wait.fid);
+	psmx_fabric_release(wait->fabric);
+
 	if (wait->type == FI_WAIT_FD) {
 		close(wait->fd[0]);
 		close(wait->fd[1]);
@@ -278,6 +280,7 @@ static int psmx_wait_init(struct psmx_fid_wait *wait, int type)
 int psmx_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset)
 {
+	struct psmx_fid_fabric *fabric_priv;
 	struct psmx_fid_wait *wait_priv;
 	int type = FI_WAIT_FD;
 	int err;
@@ -311,7 +314,10 @@ int psmx_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		return err;
 	}
 
-	wait_priv->fabric = container_of(fabric, struct psmx_fid_fabric, fabric);
+	fabric_priv = container_of(fabric, struct psmx_fid_fabric, fabric);
+	psmx_fabric_acquire(fabric_priv);
+
+	wait_priv->fabric = fabric_priv;
 	wait_priv->wait.fid.fclass = FI_CLASS_WAIT;
 	wait_priv->wait.fid.context = 0;
 	wait_priv->wait.fid.ops = &psmx_fi_ops;

@@ -188,6 +188,8 @@ static int psmx_ep_close(fid_t fid)
 
 	psmx_domain_disable_ep(ep->domain, ep);
 
+	psmx_domain_release(ep->domain);
+
 	free(ep);
 
 	return 0;
@@ -400,6 +402,8 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 		return err;
 	}
 
+	psmx_domain_acquire(domain_priv);
+
 	if (info) {
 		if (info->tx_attr)
 			ep_priv->flags = info->tx_attr->op_flags;
@@ -423,6 +427,7 @@ static int psmx_stx_close(fid_t fid)
 	struct psmx_fid_stx *stx;
 
 	stx = container_of(fid, struct psmx_fid_stx, stx.fid);
+	psmx_domain_release(stx->domain);
 	free(stx);
 
 	return 0;
@@ -438,18 +443,23 @@ static struct fi_ops psmx_fi_ops_stx = {
 int psmx_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 		 struct fid_stx **stx, void *context)
 {
+	struct psmx_fid_domain *domain_priv;
 	struct psmx_fid_stx *stx_priv;
 
 	FI_INFO(&psmx_prov, FI_LOG_EP_DATA, "\n");
+
+	domain_priv = container_of(domain, struct psmx_fid_domain, domain.fid);
 
 	stx_priv = (struct psmx_fid_stx *) calloc(1, sizeof *stx_priv);
 	if (!stx_priv)
 		return -FI_ENOMEM;
 
+	psmx_domain_acquire(domain_priv);
+
 	stx_priv->stx.fid.fclass = FI_CLASS_STX_CTX;
 	stx_priv->stx.fid.context = context;
 	stx_priv->stx.fid.ops = &psmx_fi_ops_stx;
-	stx_priv->domain = container_of(domain, struct psmx_fid_domain, domain.fid);
+	stx_priv->domain = domain_priv;
 
 	*stx = &stx_priv->stx;
 	return 0;

@@ -120,6 +120,8 @@ static int psmx_poll_close(fid_t fid)
 
 	poll = container_of(fid, struct psmx_fid_poll, poll.fid);
 
+	psmx_domain_release(poll->domain);
+
 	head = &poll->poll_list_head;
 	while (!dlist_empty(head)) {
 		p = head->next;
@@ -159,6 +161,8 @@ int psmx_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 	if (!poll_priv)
 		return -FI_ENOMEM;
 	
+	psmx_domain_acquire(domain_priv);
+
 	dlist_init(&poll_priv->poll_list_head);
 	poll_priv->poll.fid.fclass = FI_CLASS_POLL;
 	poll_priv->poll.fid.context = 0;
