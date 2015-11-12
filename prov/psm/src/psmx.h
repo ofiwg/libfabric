@@ -78,7 +78,7 @@ extern struct fi_provider psmx_prov;
 			 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)
 
 #if (PSM_VERNO_MAJOR >= 2)
-#define PSMX_CAP_EXT	(FI_REMOTE_CQ_DATA)
+#define PSMX_CAP_EXT	(FI_REMOTE_CQ_DATA | FI_SOURCE)
 #else
 #define PSMX_CAP_EXT	(0)
 #endif
