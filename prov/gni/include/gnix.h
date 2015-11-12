@@ -396,10 +396,6 @@ struct gnix_fid_domain {
 	uint32_t addr_format;
 	/* user tunable parameters accessed via open_ops functions */
 	struct gnix_ops_domain params;
-	/* size of gni tx cqs for this domain */
-	uint32_t gni_tx_cq_size;
-	/* size of gni rx cqs for this domain */
-	uint32_t gni_rx_cq_size;
 	/* additional gni cq modes to use for this domain */
 	gni_cq_mode_t gni_cq_modes;
 	/* additional gni cq modes to use for this domain */

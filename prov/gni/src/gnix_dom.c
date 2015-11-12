@@ -634,6 +634,8 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->params.mbox_num_per_slab = default_mbox_num_per_slab;
 	domain->params.mbox_maxcredit = default_mbox_maxcredit;
 	domain->params.mbox_msg_maxsize = default_mbox_msg_maxsize;
+	domain->params.rx_cq_size = default_rx_cq_size;
+	domain->params.tx_cq_size = default_tx_cq_size;
 	domain->params.max_retransmits = default_max_retransmits;
 	domain->params.err_inject_count = default_err_inject_count;
 #if HAVE_XPMEM
@@ -644,8 +646,6 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->params.dgram_progress_timeout = default_dgram_progress_timeout;
 	domain->params.eager_auto_progress = default_eager_auto_progress;
 
-	domain->gni_tx_cq_size = default_tx_cq_size;
-	domain->gni_rx_cq_size = default_rx_cq_size;
 	domain->gni_cq_modes = gnix_def_gni_cq_modes;
 	_gnix_ref_init(&domain->ref_cnt, 1, __domain_destruct);
 
