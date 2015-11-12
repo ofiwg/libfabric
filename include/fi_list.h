@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2011-2015 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -95,24 +95,35 @@ static inline void dlist_remove(struct dlist_entry *item)
 }
 
 #define dlist_foreach(head, item) \
-	for (item = head->next; item != head; item = item->next)
+	for (item = (head)->next; item != head; item = item->next)
 
-typedef int dlist_match_func_t(struct dlist_entry *item, const void *arg);
+typedef int dlist_func_t(struct dlist_entry *item, const void *arg);
 
 static inline struct dlist_entry *
-dlist_remove_first_match(struct dlist_entry *head, dlist_match_func_t *match,
-			 const void *arg)
+dlist_find_first_match(struct dlist_entry *head, dlist_func_t *match,
+		       const void *arg)
 {
 	struct dlist_entry *item;
 
 	dlist_foreach(head, item) {
-		if (match(item, arg)) {
-			dlist_remove(item);
+		if (match(item, arg))
 			return item;
-		}
 	}
 
 	return NULL;
+}
+
+static inline struct dlist_entry *
+dlist_remove_first_match(struct dlist_entry *head, dlist_func_t *match,
+			 const void *arg)
+{
+	struct dlist_entry *item;
+
+	item = dlist_find_first_match(head, match, arg);
+	if (item)
+		dlist_remove(item);
+
+	return item;
 }
 
 /*
@@ -172,10 +183,10 @@ static inline struct slist_entry *slist_remove_head(struct slist *list)
 #define slist_foreach(list, item, prev) \
 	for (prev = NULL, item = list->head; item; prev = item, item = item->next)
 
-typedef int slist_match_func_t(struct slist_entry *item, const void *arg);
+typedef int slist_func_t(struct slist_entry *item, const void *arg);
 
 static inline struct slist_entry *
-slist_remove_first_match(struct slist *list, slist_match_func_t *match, const void *arg)
+slist_remove_first_match(struct slist *list, slist_func_t *match, const void *arg)
 {
 	struct slist_entry *item, *prev;
 

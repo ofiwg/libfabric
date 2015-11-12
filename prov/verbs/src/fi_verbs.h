@@ -30,6 +30,9 @@
  * SOFTWARE.
  */
 
+#ifndef FI_VERBS_H
+#define FI_VERBS_H
+
 #if HAVE_CONFIG_H
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
@@ -120,6 +123,14 @@ struct fi_ibv_eq {
 int fi_ibv_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		   struct fid_eq **eq, void *context);
 
+struct fi_ibv_av {
+	struct fid_av		av;	/* TODO: rename to av_fid */
+	struct fi_ibv_domain	*domain;
+	struct fi_ibv_rdm_ep	*ep;	/* TODO: check usage */
+	int			type;	/* TODO: AV enum? */
+	size_t			count;
+};
+
 struct fi_ibv_pep {
 	struct fid_pep		pep_fid;
 	struct fi_ibv_eq	*eq;
@@ -147,6 +158,9 @@ struct fi_ibv_cq {
 	enum fi_cq_wait_cond	wait_cond;
 	struct ibv_wc		wc;
 	int			signal_fd[2];
+	/* RDM EP fields - TODO: check usage */
+	struct fi_ibv_rdm_ep	*ep;
+	int			format;
 };
 
 int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -272,3 +286,5 @@ ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 #define fi_ibv_send_msg(ep, wr, msg, flags)				\
 	fi_ibv_send_iov_flags(ep, wr, msg->msg_iov, msg->desc,		\
 			msg->iov_count,	msg->context, flags)
+
+#endif /* FI_VERBS_H */
