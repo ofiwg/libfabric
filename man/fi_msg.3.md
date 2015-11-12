@@ -24,7 +24,7 @@ fi_inject / fi_senddata
 ssize_t fi_recv(struct fid_ep *ep, void * buf, size_t len,
 	void *desc, fi_addr_t src_addr, void *context);
 
-ssize_t fi_recvv(struct fid_ep *ep, const struct iovec *iov, void *desc,
+ssize_t fi_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	size_t count, fi_addr_t src_addr, void *context);
 
 ssize_t fi_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
