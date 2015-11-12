@@ -37,11 +37,16 @@
 #define psmx_am_ack_rma psmx2_am_ack_rma
 #define psmx_am_atomic_completion psmx2_am_atomic_completion
 #define psmx_am_atomic_handler psmx2_am_atomic_handler
+#define psmx_am_compat_atomic_handler psmx2_am_compat_atomic_handler
+#define psmx_am_compat_mode psmx2_am_compat_mode
+#define psmx_am_compat_msg_handler psmx2_am_compat_msg_handler
+#define psmx_am_compat_rma_handler psmx2_am_compat_rma_handler
 #define psmx_am_enqueue_recv psmx2_am_enqueue_recv
 #define psmx_am_enqueue_rma psmx2_am_enqueue_rma
 #define psmx_am_enqueue_send psmx2_am_enqueue_send
 #define psmx_am_enqueue_unexp psmx2_am_enqueue_unexp
 #define psmx_am_fini psmx2_am_fini
+#define psmx_am_get_source psmx2_am_get_source
 #define psmx_am_handlers psmx2_am_handlers
 #define psmx_am_handlers_idx psmx2_am_handlers_idx
 #define psmx_am_handlers_initialized psmx2_am_handlers_initialized

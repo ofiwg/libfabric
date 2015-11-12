@@ -592,12 +592,14 @@ PROVIDER_INI
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"PSM library version = (%d, %d)\n", major, minor);
 
+#if (PSM_VERNO_MAJOR == 1)
 	if (major != PSM_VERNO_MAJOR) {
-		FI_WARN(&psmx_prov, FI_LOG_CORE,
-			"PSM version mismatch: header %d.%d, library %d.%d.\n",
+		psmx_am_compat_mode = 1;
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"PSM AM compat mode enabled: appliation %d.%d, library %d.%d.\n",
 			PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
-		return NULL;
 	}
+#endif
 
 	psmx_init_count++;
 	return (&psmx_prov);

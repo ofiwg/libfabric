@@ -73,6 +73,10 @@ extern "C" {
 
 extern struct fi_provider psmx_prov;
 
+#if (PSM_VERNO_MAJOR == 1)
+extern int psmx_am_compat_mode;
+#endif
+
 #define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
 			 FI_TRIGGER | FI_INJECT_COMPLETE | \
 			 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)
