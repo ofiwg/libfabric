@@ -121,12 +121,10 @@ static void __gnix_amo_fr_complete(struct gnix_fab_req *req,
 	}
 
 	atomic_dec(&req->vc->outstanding_tx_reqs);
-
 	_gnix_nic_tx_free(req->vc->ep->nic, txd);
 
-	/* We could have requests waiting for TXDs or FI_FENCE operations.
-	 * Schedule this VC to push any such requests. */
-	_gnix_vc_schedule_reqs(req->vc);
+	/* Schedule VC TX queue in case the VC is 'fenced'. */
+	_gnix_vc_tx_schedule(req->vc);
 
 	_gnix_fr_free(req->vc->ep, req);
 }
@@ -140,7 +138,7 @@ static int __gnix_amo_post_err(struct gnix_tx_descriptor *txd)
 	if (req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "Requeueing failed request: %p\n", req);
-		return _gnix_vc_queue_req(req);
+		return _gnix_vc_queue_work_req(req);
 	}
 
 	GNIX_INFO(FI_LOG_EP_DATA, "Failed %d transmits: %p\n",
@@ -196,7 +194,7 @@ static int __gnix_amo_send_data_req(void *arg)
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "_gnix_nic_tx_alloc() failed: %d\n",
 				  rc);
-			return -FI_EAGAIN;
+			return -FI_ENOSPC;
 		}
 		req->txd = txd;
 	}
@@ -281,8 +279,8 @@ static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
 		/* initiate immediate data transfer */
 		req->tx_failures = 0;
 		req->txd = (void *)txd;
-		req->send_fn = __gnix_amo_send_data_req;
-		_gnix_vc_queue_req(req);
+		req->work_fn = __gnix_amo_send_data_req;
+		_gnix_vc_queue_work_req(req);
 	} else {
 		/* complete request */
 		rc = __gnix_amo_send_completion(req->vc->ep, req);
@@ -387,7 +385,7 @@ int _gnix_amo_post_req(void *data)
 	if (rc) {
 		GNIX_INFO(FI_LOG_EP_DATA, "_gnix_nic_tx_alloc() failed: %d\n",
 			 rc);
-		return -FI_EAGAIN;
+		return -FI_ENOSPC;
 	}
 
 	txd->completer_fn = __gnix_amo_txd_complete;
@@ -530,7 +528,7 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	req->gnix_ep = ep;
 	req->vc = vc;
 	req->user_context = msg->context;
-	req->send_fn = _gnix_amo_post_req;
+	req->work_fn = _gnix_amo_post_req;
 
 	if (mdesc) {
 		md = container_of(mdesc, struct gnix_fid_mem_desc, mr_fid);

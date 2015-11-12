@@ -1343,6 +1343,7 @@ err:
 
 }
 
+#if 0
 static int __match_context(struct slist_entry *item, const void *arg)
 {
 	struct gnix_fab_req *req;
@@ -1351,12 +1352,14 @@ static int __match_context(struct slist_entry *item, const void *arg)
 
 	return req->user_context == arg;
 }
+#endif
 
 static inline struct gnix_fab_req *__find_tx_req(
 		struct gnix_fid_ep *ep,
 		void *context)
 {
 	struct gnix_fab_req *req = NULL;
+#if 0
 	struct slist_entry *entry;
 	struct gnix_vc *vc;
 
@@ -1368,12 +1371,12 @@ static inline struct gnix_fab_req *__find_tx_req(
 		entry = slist_remove_first_match(&vc->tx_queue,
 				__match_context, context);
 		fastlock_release(&vc->tx_queue_lock);
-		_gnix_vc_schedule(vc);
 		if (entry) {
 			req = container_of(entry, struct gnix_fab_req, slist);
 			break;
 		}
 	}
+#endif
 
 	return req;
 }

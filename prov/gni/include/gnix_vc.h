@@ -56,8 +56,9 @@ extern "C" {
 #define GNIX_VC_MODE_PEER_CONNECTED	(1U << 4)
 
 /* VC flags */
-#define GNIX_VC_FLAG_SCHEDULED		0
-#define GNIX_VC_FLAG_RX_PENDING		1
+#define GNIX_VC_FLAG_RX_SCHEDULED	0
+#define GNIX_VC_FLAG_WORK_SCHEDULED	1
+#define GNIX_VC_FLAG_TX_SCHEDULED	2
 
 /*
  * defines for connection state for gnix VC
@@ -82,9 +83,12 @@ enum gnix_vc_conn_req_type {
 /**
  * Virual Connection (VC) struct
  *
- * @var tx_queue             linked list of pending send requests to be
- *                           delivered to peer_address
- * @var tx_queue_lock        lock for serializing access to vc's tx_queue
+ * @var rx_queue             List of VCs scheduled for RX processing.
+ * @var rx_queue_lock        Lock for serializing access to the VC's rx_queue
+ * @var work_queue           List of VCs scheduled for deferred work processing.
+ * @var work_queue_lock      Lock for serializing access to VC's work_queue
+ * @var tx_queue             List of VCs scheduled for TX processing.
+ * @var tx_queue_lock        Lock for serializing access to the VC's tx_queue
  * @var entry                used internally for managing linked lists
  *                           of vc structs that require O(1) insertion/removal
  * @var peer_addr            address of peer with which this VC is connected
@@ -107,10 +111,16 @@ enum gnix_vc_conn_req_type {
  *                           the VC not pertaining to the connection state.
  */
 struct gnix_vc {
-	struct slist tx_queue;
-	fastlock_t tx_queue_lock;
-	struct slist req_queue;
-	fastlock_t req_queue_lock;
+	struct dlist_entry rx_list;	/* RX VC list entry */
+
+	struct slist work_queue;	/* Work reqs */
+	fastlock_t work_queue_lock;	/* Work req lock */
+	struct dlist_entry work_list;	/* Work VC list entry */
+
+	struct slist tx_queue;		/* TX reqs */
+	fastlock_t tx_queue_lock;	/* TX reqs lock */
+	struct dlist_entry tx_list;	/* TX VC list entry */
+
 	struct dlist_entry entry;
 	struct gnix_address peer_addr;
 	struct gnix_address peer_cm_nic_addr;
@@ -119,7 +129,6 @@ struct gnix_vc {
 	struct gnix_datagram *dgram;
 	gni_ep_handle_t gni_ep;
 	atomic_t outstanding_tx_reqs;
-	atomic_t outstanding_reqs;
 	enum gnix_vc_conn_state conn_state;
 	uint32_t post_state;
 	int vc_id;
@@ -204,31 +213,80 @@ int _gnix_vc_destroy(struct gnix_vc *vc);
  */
 int _gnix_vc_add_to_wq(struct gnix_vc *vc);
 
-/*
- * inline functions
+/**
+ * @brief Progress a VC's SMSG mailbox.
+ *
+ * Messages are dequeued from the VCs SMSG mailbox until cleared or a failure
+ * is encountered.
+ *
+ * @param[in] req The GNIX VC to progress.
  */
+int _gnix_vc_dequeue_smsg(struct gnix_vc *vc);
 
 /**
- * @brief Return connection state of a vc
+ * @brief Schedule a VC for RX progress.
  *
- * @param[in]  vc     pointer to previously allocated vc struct
- * @return connection state of vc
+ * The VC will have it's SMSG mailbox progressed while the NIC is being
+ * progressed in the near future.
+ *
+ * @param[in] vc The GNIX VC to schedule.
  */
-static inline enum gnix_vc_conn_state _gnix_vc_state(struct gnix_vc *vc)
-{
-	assert(vc);
-	return vc->conn_state;
-}
+int _gnix_vc_rx_schedule(struct gnix_vc *vc);
 
+/**
+ * @brief Queue a request with deferred work.
+ *
+ * @param[in] req The GNIX fabric request to queue.
+ */
+int _gnix_vc_queue_work_req(struct gnix_fab_req *req);
 
-int _gnix_vc_schedule(struct gnix_vc *vc);
-int _gnix_vc_schedule_reqs(struct gnix_vc *vc);
-struct gnix_vc *_gnix_nic_next_pending_vc(struct gnix_nic *nic);
-int _gnix_vc_dequeue_smsg(struct gnix_vc *vc);
-int _gnix_vc_progress(struct gnix_vc *vc);
+/**
+ * @brief Schedule a VC for TX progress.
+ *
+ * The VC will have it's tx_queue progressed while the NIC is being progressed
+ * in the near future.
+ *
+ * @param[in] vc The GNIX VC to schedule.
+ */
+int _gnix_vc_tx_schedule(struct gnix_vc *vc);
+
+/**
+ * @brief Queue a new TX request.
+ *
+ * @param[in] req The GNIX fabric request to queue.
+ */
 int _gnix_vc_queue_tx_req(struct gnix_fab_req *req);
-int _gnix_vc_force_queue_req(struct gnix_fab_req *req);
-int _gnix_vc_queue_req(struct gnix_fab_req *req);
+
+/**
+ * @brief Progress NIC VCs.
+ *
+ * There are three facets of VC progress: RX, deferred work and TX.  The NIC
+ * maintains one queue of VCs for each type of progress.  When a VC requires
+ * progress, the associated _gnix_vc_<prog_type>_schedule() function is used to
+ * schedule processing within _gnix_nic_vc_progress().  The queues are
+ * independent to prevent a stall in TX processing from delaying RX processing,
+ * and so forth.
+ *
+ * RX progress involves dequeueing SMSG messages and progressing the state of
+ * associated requests.  If receipt of a message during RX progress will
+ * trigger a new network operation (or similarly heavy or lock dependent
+ * operation), that work should be queued in the deferred work queue, which
+ * will be progressed once VC RX work is complete.  Examples of this deferred
+ * work include the start of rendezvous data transfer or freeing an automatic
+ * memory registration after an RX completion.
+ *
+ * The deferred work queue is processed after RX progress, where most deferred
+ * work will be originated, and before TX processing, giving network resource
+ * priority (specifically TXDs) to TX requests which have already been
+ * initiated.
+ *
+ * New TX requests belong in a VCs TX queue.  Ordering of the VC TX queue is
+ * enforced.  A request using the FI_FENCE flag will cause a VCs TX queue to be
+ * stalled until that request is completed.
+ *
+ * @param[in] nic The GNIX NIC to progress.
+ */
+int _gnix_nic_vc_progress(struct gnix_nic *nic);
 
 /**
  * @brief  return vc associated with a given ep/dest address, or the ep in the
@@ -248,5 +306,22 @@ int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 		    struct gnix_vc **vc_ptr);
 
 int _gnix_vc_cm_init(struct gnix_cm_nic *cm_nic);
+int _gnix_vc_schedule(struct gnix_vc *vc);
+
+/*
+ * inline functions
+ */
+
+/**
+ * @brief Return connection state of a vc
+ *
+ * @param[in]  vc     pointer to previously allocated vc struct
+ * @return connection state of vc
+ */
+static inline enum gnix_vc_conn_state _gnix_vc_state(struct gnix_vc *vc)
+{
+	assert(vc);
+	return vc->conn_state;
+}
 
 #endif /* _GNIX_VC_H_ */

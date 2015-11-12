@@ -69,16 +69,14 @@ static void __gnix_msg_queues(struct gnix_fid_ep *ep,
 	}
 }
 
-static void __gnix_msg_fr_complete(struct gnix_fab_req *req,
-				   struct gnix_tx_descriptor *txd)
+static void __gnix_msg_send_fr_complete(struct gnix_fab_req *req,
+					struct gnix_tx_descriptor *txd)
 {
 	atomic_dec(&req->vc->outstanding_tx_reqs);
-
 	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 
-	/* We could have requests waiting for TXDs or FI_FENCE operations.
-	 * Schedule this VC to push any such requests. */
-	_gnix_vc_schedule_reqs(req->vc);
+	/* Schedule VC TX queue in case the VC is 'fenced'. */
+	_gnix_vc_tx_schedule(req->vc);
 
 	_gnix_fr_free(req->gnix_ep, req);
 }
@@ -206,7 +204,7 @@ static int __gnix_send_smsg_err(struct gnix_tx_descriptor *txd)
 			  "__gnix_send_err() failed: %d\n",
 			  rc);
 
-	__gnix_msg_fr_complete(req, txd);
+	__gnix_msg_send_fr_complete(req, txd);
 	return FI_SUCCESS;
 }
 
@@ -218,7 +216,7 @@ static int __gnix_send_post_err(struct gnix_tx_descriptor *txd)
 	if (req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "Requeueing failed request: %p\n", req);
-		return _gnix_vc_queue_req(req);
+		return _gnix_vc_queue_work_req(req);
 	}
 
 	/* TODO should this be fatal? A request will sit waiting at the
@@ -248,7 +246,7 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "_gnix_nic_tx_alloc() failed: %d\n",
 				  rc);
-			return -FI_EAGAIN;
+			return -FI_ENOSPC;
 		}
 		req->txd = txd;
 	}
@@ -302,9 +300,9 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 	}
 
 	req->txd = txd;
-	req->send_fn = __gnix_rndzv_req_send_fin;
+	req->work_fn = __gnix_rndzv_req_send_fin;
 
-	ret = _gnix_vc_queue_req(req);
+	ret = _gnix_vc_queue_work_req(req);
 
 	return ret;
 }
@@ -341,7 +339,7 @@ static int __gnix_rndzv_req(void *arg)
 	if (rc) {
 		GNIX_INFO(FI_LOG_EP_DATA, "_gnix_nic_tx_alloc() failed: %d\n",
 			 rc);
-		return -FI_EAGAIN;
+		return -FI_ENOSPC;
 	}
 
 	txd->completer_fn = __gnix_rndzv_req_complete;
@@ -399,7 +397,7 @@ static int __comp_eager_msg_w_data(void *data, gni_return_t tx_status)
 			  "__gnix_send_completion() failed: %d\n",
 			  ret);
 
-	__gnix_msg_fr_complete(req, tdesc);
+	__gnix_msg_send_fr_complete(req, tdesc);
 
 	return FI_SUCCESS;
 }
@@ -458,10 +456,6 @@ static int __comp_rndzv_start(void *data, gni_return_t tx_status)
 	 * buffer. */
 	_gnix_nic_tx_free(txd->req->gnix_ep->nic, txd);
 
-	/* We could have requests waiting for TXDs.  Schedule this VC to push
-	 * any such requests. */
-	_gnix_vc_schedule_reqs(txd->req->vc);
-
 	GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV_START, req: %p\n", txd->req);
 
 	return FI_SUCCESS;
@@ -478,18 +472,25 @@ static int __comp_rndzv_fin(void *data, gni_return_t tx_status)
 	if (tx_status != GNI_RC_SUCCESS) {
 		/* TODO should this be fatal? A request will sit waiting at the
 		 * peer. */
-		return __gnix_send_smsg_err(tdesc);
+		GNIX_WARN(FI_LOG_EP_DATA, "Failed transaction: %p\n", req);
+		ret = __gnix_send_err(req->gnix_ep, req);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+					"__gnix_send_err() failed: %d\n",
+					ret);
+	} else {
+		GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV_FIN, req: %p\n",
+			  req);
+
+		ret = __gnix_recv_completion(req->gnix_ep, req);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "__gnix_recv_completion() failed: %d\n",
+				  ret);
 	}
 
-	GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV_FIN, req: %p\n", req);
-
-	ret = __gnix_recv_completion(req->gnix_ep, req);
-	if (ret != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "__gnix_recv_completion() failed: %d\n",
-			  ret);
-
-	__gnix_msg_fr_complete(req, tdesc);
+	_gnix_nic_tx_free(req->gnix_ep->nic, tdesc);
+	_gnix_fr_free(req->gnix_ep, req);
 
 	return FI_SUCCESS;
 }
@@ -577,7 +578,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		if (unlikely(req->msg.recv_addr == 0ULL)) {
 			fastlock_release(queue_lock);
 			_gnix_fr_free(ep, req);
-			return -FI_EAGAIN;
+			return -FI_ENOMEM;
 		}
 
 		GNIX_INFO(FI_LOG_EP_DATA, "New req: %p\n",
@@ -710,11 +711,9 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.rma_mdh = hdr->mdh;
 		req->msg.rma_id = hdr->req_addr;
 
-		/* Initiate pull of source data.  We already hold the NIC lock
-		 * here in the SMSG RX callback.  Force this operation to be
-		 * queued to avoid locking issues. */
-		req->send_fn = __gnix_rndzv_req;
-		ret = _gnix_vc_force_queue_req(req);
+		/* Queue request to initiate pull of source data. */
+		req->work_fn = __gnix_rndzv_req;
+		ret = _gnix_vc_queue_work_req(req);
 	} else {
 		/* Add new unexpected receive request. */
 		req = _gnix_fr_alloc(ep);
@@ -794,16 +793,13 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 
 	atomic_dec(&req->vc->outstanding_tx_reqs);
 
-	/* We could have requests waiting for TXDs or FI_FENCE operations.
-	 * Schedule this VC to push any such requests. */
-	_gnix_vc_schedule_reqs(req->vc);
+	/* Schedule VC TX queue in case the VC is 'fenced'. */
+	_gnix_vc_tx_schedule(req->vc);
 
 	if (req->msg.send_flags & FI_LOCAL_MR) {
-		/* We cannot close the auto-MR here in the SMSG RX completer,
-		 * with the NIC lock held.  Queue the request to be freed
-		 * immediately after SMSG processing */
-		req->send_fn = __gnix_rndzv_fin_cleanup;
-		ret = _gnix_vc_force_queue_req(req);
+		/* Defer freeing the MR and request. */
+		req->work_fn = __gnix_rndzv_fin_cleanup;
+		ret = _gnix_vc_queue_work_req(req);
 	} else {
 		_gnix_fr_free(ep, req);
 	}
@@ -942,8 +938,8 @@ static int  __gnix_discard_request(struct gnix_fid_ep *ep,
 
 		/* Complete rendezvous request, skipping data transfer. */
 		req->txd = NULL;
-		req->send_fn = __gnix_rndzv_req_send_fin;
-		ret = _gnix_vc_queue_req(req);
+		req->work_fn = __gnix_rndzv_req_send_fin;
+		ret = _gnix_vc_queue_work_req(req);
 	} else {
 		/* data has already been delivered, so just discard it and
 		 * generate cqe
@@ -1081,8 +1077,8 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 			}
 
 			/* Initiate pull of source data. */
-			req->send_fn = __gnix_rndzv_req;
-			ret = _gnix_vc_queue_req(req);
+			req->work_fn = __gnix_rndzv_req;
+			ret = _gnix_vc_queue_work_req(req);
 		} else {
 			/* Matched eager request.  Copy data and generate
 			 * completions. */
@@ -1199,7 +1195,7 @@ static int _gnix_send_req(void *arg)
 	if (rc != FI_SUCCESS) {
 		GNIX_INFO(FI_LOG_EP_DATA, "_gnix_nic_tx_alloc() failed: %d\n",
 			  rc);
-		return -FI_EAGAIN;
+		return -FI_ENOSPC;
 	}
 	assert(rc == FI_SUCCESS);
 
@@ -1316,7 +1312,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	req->gnix_ep = ep;
 	req->vc = vc;
 	req->user_context = context;
-	req->send_fn = _gnix_send_req;
+	req->work_fn = _gnix_send_req;
 
 	if (flags & FI_TAGGED) {
 		req->msg.tag = tag;

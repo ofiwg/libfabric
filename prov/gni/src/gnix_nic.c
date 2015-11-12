@@ -108,9 +108,6 @@ static int __nic_rx_overrun(struct gnix_nic *nic)
 		ret = _gnix_test_bit(&nic->vc_id_bitmap, i);
 		if (ret) {
 			vc = __gnix_nic_elem_by_rem_id(nic, i);
-			if (unlikely(vc->conn_state != GNIX_VC_CONNECTED))
-				_gnix_set_bit(&vc->flags,
-					      GNIX_VC_FLAG_RX_PENDING);
 			ret = _gnix_vc_dequeue_smsg(vc);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_DATA,
@@ -131,13 +128,12 @@ static int process_rx_cqe(struct gnix_nic *nic, gni_cq_entry_t cqe)
 	vc_id =  GNI_CQ_GET_INST_ID(cqe);
 	vc = __gnix_nic_elem_by_rem_id(nic, vc_id);
 
-#if 0 /* Process RX inline with arrival of an RX CQE. */
+#if 1 /* Process RX inline with arrival of an RX CQE. */
 	if (unlikely(vc->conn_state != GNIX_VC_CONNECTED)) {
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "Scheduling VC for RX processing (%p)\n",
 			  vc);
-		_gnix_set_bit(&vc->flags, GNIX_VC_FLAG_RX_PENDING);
-		ret = _gnix_vc_schedule(vc);
+		ret = _gnix_vc_rx_schedule(vc);
 		assert(ret == FI_SUCCESS);
 	} else {
 		GNIX_INFO(FI_LOG_EP_DATA,
@@ -149,15 +145,9 @@ static int process_rx_cqe(struct gnix_nic *nic, gni_cq_entry_t cqe)
 					"_gnix_vc_dqueue_smsg returned %d\n",
 					ret);
 		}
-
-		/* The RX CQE could be associated with an SMSG credit return.
-		 * Schedule the VC just in case. */
-		ret = _gnix_vc_schedule(vc);
-		assert(ret == FI_SUCCESS);
 	}
 #else /* Defer RX processing until after the RX CQ is cleared. */
-	_gnix_set_bit(&vc->flags, GNIX_VC_FLAG_RX_PENDING);
-	ret = _gnix_vc_schedule(vc);
+	ret = _gnix_vc_rx_schedule(vc);
 	assert(ret == FI_SUCCESS);
 #endif
 
@@ -329,24 +319,6 @@ static int __nic_tx_progress(struct gnix_nic *nic)
 	return ret;
 }
 
-int __nic_vc_progress(struct gnix_nic *nic)
-{
-	struct gnix_vc *vc;
-	int ret;
-
-	while ((vc = _gnix_nic_next_pending_vc(nic))) {
-		ret = _gnix_vc_progress(vc);
-		if (ret != FI_SUCCESS) {
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "Rescheduling VC (%p)\n", vc);
-			ret = _gnix_vc_schedule(vc);
-			assert(ret == FI_SUCCESS);
-		}
-	}
-
-	return FI_SUCCESS;
-}
-
 int _gnix_nic_progress(struct gnix_nic *nic)
 {
 	int ret = FI_SUCCESS;
@@ -359,7 +331,7 @@ int _gnix_nic_progress(struct gnix_nic *nic)
 	if (unlikely(ret != FI_SUCCESS))
 		return ret;
 
-	ret = __nic_vc_progress(nic);
+	ret = _gnix_nic_vc_progress(nic);
 	if (unlikely(ret != FI_SUCCESS))
 		return ret;
 
@@ -842,8 +814,12 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		if (ret != FI_SUCCESS)
 			goto err1;
 
-		fastlock_init(&nic->pending_vc_lock);
-		dlist_init(&nic->pending_vcs);
+		fastlock_init(&nic->rx_vc_lock);
+		dlist_init(&nic->rx_vcs);
+		fastlock_init(&nic->work_vc_lock);
+		dlist_init(&nic->work_vcs);
+		fastlock_init(&nic->tx_vc_lock);
+		dlist_init(&nic->tx_vcs);
 
 		_gnix_ref_init(&nic->ref_cnt, 1, __nic_destruct);
 		atomic_initialize(&nic->outstanding_fab_reqs_nic, 0);
