@@ -21,13 +21,13 @@ tag-matching message queue functions and the Active Message functions
 to support a variety of libfabric data transfer APIs, including tagged
 message queue, message queue, RMA, and atomic operations.
 
-The *psm2* provider runs over the PSM 2.0 interface that is
-supported by the Intel Omni-Path Fabric. PSM 2.0 is fully backward
-compatible with PSM 1.x and adds some new functions with enhanced
-capability. PSM 2.0 also makes the Active Message support official.
-However, the official Active Message API is slightly different from
-the PSM 1.x version. As a result, the *psm2* provider only works with
-PSM 2.0 and the *psm* provider only works with PSM 1.x.
+The *psm2* provider runs over the PSM 2.x interface that is supported
+by the Intel Omni-Path Fabric. PSM 2.x has all the PSM 1.x features
+plus a set of new functions with enhanced capability. Since PSM 1.x
+and PSM 2.x is not ABI compatible the *psm2* provider only works with
+PSM 2.0 and doesn't support Intel TrueScale Fabric. On the other hand,
+the *psm* provider can work with the psm2-compat library, which exposes
+a PSM 1.x interface over the Intel Omni-Path Fabric. 
 
 Unless specifically indicated, the description of the *psm* provider
 in the remaining part of this document also applies to the *psm2*
@@ -56,24 +56,28 @@ Endpoint capabilities
   *FI_MULTI_RECV* is supported for non-tagged message queue only.
 
   Other supported capabilities include *FI_TRIGGER*. The *psm2* provider
-  also supports *FI_REMOTE_CQ_DATA*.
+  also supports *FI_REMOTE_CQ_DATA* and *FI_SOURCE*.
 
 Modes
-: *FI_CONTEXT* is required. That means, all the requests that generate
-  completions must have a valid pointer to type *struct fi_context*
-  passed as the operation context.
+: *FI_CONTEXT* is required in general. That means, all the requests
+  that generate completions must have a valid pointer to type
+  *struct fi_context* passed as the operation context. The exception
+  is that if none of *FI_TAGGED* and *FI_MSG* is asked for, then
+  the *FI_CONTEXT* mode is not required.
   
 Progress
 : The *psm* provider requires manual progress. The application is
   expected to call *fi_cq_read* or *fi_cntr_read* function from time
   to time when no other libfabric function is called to ensure
-  progress is made in a timely manner. Not doing so could result in
-  either poor performance or no progress being made as all.
+  progress is made in a timely manner. The provider does support
+  auto progress mode. However, the performance is signinficantly
+  impacted if the application purely depends on the pprovide to
+  make auto progress.
 
 Unsupported features
-: These features are unsupported: connection management, event queue, 
+: These features are unsupported: connection management, 
   scalable endpoint, passive endpoint, shared receive context,
-  send/inject with immediate data.
+  send/inject with immediate data (supported by *psm2* provider).
 
 # RUNTIME PARAMETERS
 
@@ -92,7 +96,9 @@ different variable names are used for the *psm* provider and the
   issues with unknown reason, it is advisable to manually set the UUID
   to a value different from the default.
 
-  The default UUID is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF.
+  The default UUID is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF for the
+  *psm* provider and 00FF00FF-0000-0000-0000-00FF0F0F00FF for the
+  *psm2* provider.
 
 *FI_PSM_NAME_SERVER* / *FI_PSM2_NAME_SERVER*
 : The *psm* provider has a simple built-in name server that can be used
@@ -137,6 +143,36 @@ different variable names are used for the *psm* provider and the
   Active Message. This experimental feature has slightly larger latency.
 
   This option is off by default. To turn it on set the variable to 1.
+
+*FI_PSM_DELAY* / *FI_PSM2_DELAY*
+: Time (seconds) to sleep before closing PSM endpoints. This is a workaround
+  for a bug in some versions of PSM library.
+
+  The default setting is 1 second.
+
+*FI_PSM_TIMEOUT* / *FI_PSM2_TIMEOUT*
+: Timeout (seconds) for gracefully closing PSM endpoints. A forced closing
+  will be issued if timeout expires.
+
+  The default setting is 5 seconds.
+
+*FI_PSM_PROG_INTERVAL* / *FI_PSM2_PROG_INTERVAL*
+: When auto progress is enabled (asked via the hints to *fi_getinfo*),
+  a progress thread is created to make progress calls from time to time.
+  This option set the tnterval (microseconds) between progress calls.
+
+  The default setting is 1 microsecond if affininty is set, or 1000
+  microseconds if not. See *FI_PSM_PROG_AFFINITY*/*FI_PSM2_PROG_AFFINITY*.
+
+*FI_PSM_PROG_AFFINITY* / *FI_PSM2_PROG_AFFINITY*
+: When set, specify the set of CPU cores to set the progress thread
+  affinity to. The format is
+  `<start>[:<end>[:<stride>]][,<start>[:<end>[:<stride>]]]*`, 
+  where each triplet `<start>:<end>:<stride>` defines a block of
+  core_ids. Both `<start>` and `<end>` can be either the core_id
+  (when >=0) or core_id - num_cores (when <0). 
+
+  By default affinity is not set.
 
 # SEE ALSO
 
