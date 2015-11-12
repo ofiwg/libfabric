@@ -43,6 +43,44 @@ static psm_am_handler_fn_t psmx_am_handlers[3] = {
 static int psmx_am_handlers_idx[3];
 static int psmx_am_handlers_initialized = 0;
 
+#if (PSM_VERNO_MAJOR == 1)
+
+/* The AM handler signature is different between PSM1 and PSM2. The compat
+ * handlers are used when compiled with PSM1 headers and run over the
+ * psm2-compat library.
+ */
+
+int psmx_am_compat_mode = 0;
+static int (*psmx_am_get_source)(psm_am_token_t token, psm_epaddr_t *epaddr);
+
+static int psmx_am_compat_rma_handler(psm_am_token_t token,
+				      psm_amarg_t *args, int nargs,
+				      void *src, uint32_t len)
+{
+	psm_epaddr_t epaddr;
+	(*psmx_am_get_source)(token, &epaddr);
+	return psmx_am_rma_handler(token, epaddr, args, nargs, src, len);
+}
+
+static int psmx_am_compat_msg_handler(psm_am_token_t token,
+				      psm_amarg_t *args, int nargs,
+				      void *src, uint32_t len)
+{
+	psm_epaddr_t epaddr;
+	(*psmx_am_get_source)(token, &epaddr);
+	return psmx_am_msg_handler(token, epaddr, args, nargs, src, len);
+}
+
+static int psmx_am_compat_atomic_handler(psm_am_token_t token,
+					 psm_amarg_t *args, int nargs,
+					 void *src, uint32_t len)
+{
+	psm_epaddr_t epaddr;
+	(*psmx_am_get_source)(token, &epaddr);
+	return psmx_am_atomic_handler(token, epaddr, args, nargs, src, len);
+}
+#endif
+
 int psmx_am_progress(struct psmx_fid_domain *domain)
 {
 	struct slist_entry *item;
@@ -101,6 +139,22 @@ int psmx_am_init(struct psmx_fid_domain *domain)
 						sizeof(psmx_am_param), &size);
 		if (err)
 			return psmx_errno(err);
+
+#if (PSM_VERNO_MAJOR == 1)
+		if (psmx_am_compat_mode) {
+			void *dlsym(void*, const char *);
+			psmx_am_get_source = dlsym(NULL, "psm2_am_get_source");
+			if (!psmx_am_get_source) {
+				FI_WARN(&psmx_prov, FI_LOG_CORE,
+					"failed to load function psm2_am_get_source\n");
+				return -FI_EOTHER;
+			}
+
+			psmx_am_handlers[0] = (void *)psmx_am_compat_rma_handler;
+			psmx_am_handlers[1] = (void *)psmx_am_compat_msg_handler;
+			psmx_am_handlers[2] = (void *)psmx_am_compat_atomic_handler;
+		}
+#endif
 
 		err = psm_am_register_handlers(psm_ep, psmx_am_handlers, 3,
 						psmx_am_handlers_idx);
