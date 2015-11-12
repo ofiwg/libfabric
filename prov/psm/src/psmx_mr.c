@@ -114,6 +114,7 @@ static int psmx_mr_close(fid_t fid)
 
 	mr = container_of(fid, struct psmx_fid_mr, mr.fid);
 	psmx_mr_release_key(mr->domain, mr->mr.key);
+	psmx_domain_release(mr->domain);
 	free(mr);
 
 	return 0;
@@ -249,6 +250,8 @@ static int psmx_mr_reg(struct fid *fid, const void *buf, size_t len,
 		key = psmx_mr_reserve_any_key(domain_priv);
 	}
 
+	psmx_domain_acquire(domain_priv);
+
 	mr_priv->mr.fid.fclass = FI_CLASS_MR;
 	mr_priv->mr.fid.context = context;
 	mr_priv->mr.fid.ops = &psmx_fi_ops;
@@ -310,6 +313,8 @@ static int psmx_mr_regv(struct fid *fid,
 		key = psmx_mr_reserve_any_key(domain_priv);
 	}
 
+	psmx_domain_acquire(domain_priv);
+
 	mr_priv->mr.fid.fclass = FI_CLASS_MR;
 	mr_priv->mr.fid.context = context;
 	mr_priv->mr.fid.ops = &psmx_fi_ops;
@@ -368,6 +373,8 @@ static int psmx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	} else {
 		key = psmx_mr_reserve_any_key(domain_priv);
 	}
+
+	psmx_domain_acquire(domain_priv);
 
 	mr_priv->mr.fid.fclass = FI_CLASS_MR;
 	mr_priv->mr.fid.context = attr->context;

@@ -340,6 +340,8 @@ static int psmx_cntr_close(fid_t fid)
 
 	cntr = container_of(fid, struct psmx_fid_cntr, cntr.fid);
 
+	psmx_domain_release(cntr->domain);
+
 	if (cntr->wait && cntr->wait_is_local)
 		fi_close((fid_t)cntr->wait);
 
@@ -460,6 +462,8 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		err = -FI_ENOMEM;
 		goto fail;
 	}
+
+	psmx_domain_acquire(domain_priv);
 
 	cntr_priv->domain = domain_priv;
 	cntr_priv->events = events;

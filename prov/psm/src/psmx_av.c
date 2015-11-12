@@ -329,7 +329,9 @@ static const char *psmx_av_straddr(struct fid_av *av, const void *addr,
 static int psmx_av_close(fid_t fid)
 {
 	struct psmx_fid_av *av;
+
 	av = container_of(fid, struct psmx_fid_av, av.fid);
+	psmx_domain_release(av->domain);
 	if (av->psm_epids)
 		free(av->psm_epids);
 	if (av->psm_epaddrs)
@@ -417,6 +419,8 @@ int psmx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	av_priv = (struct psmx_fid_av *) calloc(1, sizeof *av_priv);
 	if (!av_priv)
 		return -FI_ENOMEM;
+
+	psmx_domain_acquire(domain_priv);
 
 	av_priv->domain = domain_priv;
 	av_priv->type = type;

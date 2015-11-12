@@ -123,12 +123,14 @@
 #define psmx_cq_sread psmx2_cq_sread
 #define psmx_cq_sreadfrom psmx2_cq_sreadfrom
 #define psmx_cq_strerror psmx2_cq_strerror
+#define psmx_domain_acquire psmx2_domain_acquire
 #define psmx_domain_check_features psmx2_domain_check_features
 #define psmx_domain_close psmx2_domain_close
 #define psmx_domain_disable_ep psmx2_domain_disable_ep
 #define psmx_domain_enable_ep psmx2_domain_enable_ep
 #define psmx_domain_open psmx2_domain_open
 #define psmx_domain_ops psmx2_domain_ops
+#define psmx_domain_release psmx2_domain_release
 #define psmx_domain_start_progress psmx2_domain_start_progress
 #define psmx_domain_stop_progress psmx2_domain_stop_progress
 #define psmx_env psmx2_env
@@ -163,9 +165,11 @@
 #define psmx_errno psmx2_errno
 #define psmx_errno_table psmx2_errno_table
 #define psmx_fabric psmx2_fabric
+#define psmx_fabric_acquire psmx2_fabric_acquire
 #define psmx_fabric_close psmx2_fabric_close
 #define psmx_fabric_fi_ops psmx2_fabric_fi_ops
 #define psmx_fabric_ops psmx2_fabric_ops
+#define psmx_fabric_release psmx2_fabric_release
 #define psmx_fid_av psmx2_fid_av
 #define psmx_fid_cntr psmx2_fid_cntr
 #define psmx_fid_cq psmx2_fid_cq

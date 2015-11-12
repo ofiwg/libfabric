@@ -519,41 +519,53 @@ err_out:
 	return err;
 }
 
+void psmx_fabric_release(struct psmx_fid_fabric *fabric)
+{
+	void *exit_code;
+	int ret;
+
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "refcnt=%d\n", fabric->refcnt);
+
+	if (--fabric->refcnt)
+		return;
+
+	if (psmx_env.name_server &&
+	    !pthread_equal(fabric->name_server_thread, pthread_self())) {
+		ret = pthread_cancel(fabric->name_server_thread);
+		if (ret) {
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"pthread_cancel returns %d\n", ret);
+		}
+		ret = pthread_join(fabric->name_server_thread, &exit_code);
+		if (ret) {
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"pthread_join returns %d\n", ret);
+		}
+		else {
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"name server thread exited with code %ld (%s)\n",
+				(uintptr_t)exit_code,
+				(exit_code == PTHREAD_CANCELED) ? "PTHREAD_CANCELED" : "?");
+		}
+	}
+	if (fabric->active_domain) {
+		FI_WARN(&psmx_prov, FI_LOG_CORE, "forced closing of active_domain\n");
+		fi_close(&fabric->active_domain->domain.fid);
+	}
+	assert(fabric == psmx_active_fabric);
+	psmx_active_fabric = NULL;
+	free(fabric);
+}
+
 static int psmx_fabric_close(fid_t fid)
 {
 	struct psmx_fid_fabric *fabric;
-	void *exit_code;
-	int ret;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
 	fabric = container_of(fid, struct psmx_fid_fabric, fabric.fid);
-	if (! --fabric->refcnt) {
-		if (psmx_env.name_server &&
-		    !pthread_equal(fabric->name_server_thread, pthread_self())) {
-			ret = pthread_cancel(fabric->name_server_thread);
-			if (ret) {
-				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"pthread_cancel returns %d\n", ret);
-			}
-			ret = pthread_join(fabric->name_server_thread, &exit_code);
-			if (ret) {
-				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"pthread_join returns %d\n", ret);
-			}
-			else {
-				FI_INFO(&psmx_prov, FI_LOG_CORE,
-					"name server thread exited with code %ld (%s)\n",
-					(uintptr_t)exit_code,
-					(exit_code == PTHREAD_CANCELED) ? "PTHREAD_CANCELED" : "?");
-			}
-		}
-		if (fabric->active_domain)
-			fi_close(&fabric->active_domain->domain.fid);
-		assert(fabric == psmx_active_fabric);
-		psmx_active_fabric = NULL;
-		free(fid);
-	}
+
+	psmx_fabric_release(fabric);
 
 	return 0;
 }
@@ -583,7 +595,7 @@ static int psmx_fabric(struct fi_fabric_attr *attr,
 		return -FI_ENODATA;
 
 	if (psmx_active_fabric) {
-		psmx_active_fabric->refcnt++;
+		psmx_fabric_acquire(psmx_active_fabric);
 		*fabric = &psmx_active_fabric->fabric;
 		return 0;
 	}
