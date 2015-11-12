@@ -295,6 +295,7 @@ _psm_files = \
 	prov/psm/src/psm_am.h \
 	prov/psm/src/psmx.h \
 	prov/psm/src/psmx_init.c \
+	prov/psm/src/psmx_fabric.c \
 	prov/psm/src/psmx_domain.c \
 	prov/psm/src/psmx_cq.c \
 	prov/psm/src/psmx_eq.c \
@@ -339,6 +340,7 @@ _psm2_files = \
 	prov/psm2/src/version.h \
 	prov/psm2/src/psmx.h \
 	prov/psm2/src/psmx_init.c \
+	prov/psm2/src/psmx_fabric.c \
 	prov/psm2/src/psmx_domain.c \
 	prov/psm2/src/psmx_cq.c \
 	prov/psm2/src/psmx_eq.c \
