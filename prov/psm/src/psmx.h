@@ -622,6 +622,8 @@ extern struct psm_am_parameters psmx_am_param;
 extern struct psmx_env		psmx_env;
 extern struct psmx_fid_fabric	*psmx_active_fabric;
 
+int	psmx_fabric(struct fi_fabric_attr *attr,
+		    struct fid_fabric **fabric, void *context);
 int	psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			 struct fid_domain **domain, void *context);
 int	psmx_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
