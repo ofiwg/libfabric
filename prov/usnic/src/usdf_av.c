@@ -383,6 +383,7 @@ usdf_am_remove(struct fid_av *fav, fi_addr_t *fi_addr, size_t count,
 {
 	struct usdf_dest *dest;
 	struct usdf_av *av;
+	size_t i;
 
 	USDF_TRACE_SYS(AV, "\n");
 
@@ -392,9 +393,12 @@ usdf_am_remove(struct fid_av *fav, fi_addr_t *fi_addr, size_t count,
 		return -FI_EACCES;
 	}
 
-	// XXX
-	dest = (struct usdf_dest *)(uintptr_t)fi_addr;
-	free(dest);
+	for (i = 0; i < count; ++i) {
+		if (fi_addr[i] != FI_ADDR_NOTAVAIL) {
+			dest = (struct usdf_dest *)(uintptr_t)fi_addr[i];
+			free(dest);
+		}
+	}
 
 	return 0;
 }
@@ -569,6 +573,9 @@ usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	struct usdf_av *av;
 
 	USDF_TRACE_SYS(AV, "\n");
+
+	if (attr == NULL || av_o == NULL)
+		return -FI_EINVAL;
 
 	if ((attr->flags & ~(FI_EVENT | FI_READ)) != 0) {
 		return -FI_ENOSYS;
