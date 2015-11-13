@@ -33,9 +33,7 @@
 #ifndef _FI_H_
 #define _FI_H_
 
-#if HAVE_CONFIG_H
-#  include <config.h>
-#endif /* HAVE_CONFIG_H */
+#include "config.h"
 
 #include <assert.h>
 #include <string.h>
