@@ -75,6 +75,9 @@ AM_PROG_CC_C_O
 dnl Checks for header files.
 AC_HEADER_STDC
 
+dnl Check for compiler features
+AC_C_TYPEOF
+
 LT_INIT
 
 dnl dlopen support is optional
@@ -207,6 +210,7 @@ FI_PROVIDER_SETUP([sockets])
 FI_PROVIDER_SETUP([verbs])
 FI_PROVIDER_SETUP([usnic])
 FI_PROVIDER_SETUP([mxm])
+FI_PROVIDER_SETUP([gni])
 FI_PROVIDER_FINI
 
 # If the user requested to build in direct mode, but

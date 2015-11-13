@@ -1,0 +1,152 @@
+.TH "fi_gni" "7" "2015\-10\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.SH NAME
+.PP
+The GNI Fabric Provider
+.SH OVERVIEW
+.PP
+The GNI provider runs on Cray XC (TM) systems utilizing the user\-space
+Generic Network Interface (uGNI) which provides low\-level access to the
+Aries interconnect.
+The Aries interconnect is designed for low\-latency one\-sided messaging
+and also includes direct hardware support for common atomic operations
+and optimized collectives.
+.SH REQUIREMENTS
+.PP
+The GNI provider run on Cray XC systems running CLE 5.2 UP02 or higher
+using gcc version 4.9 or higher.
+.SH SUPPORTED FEATURES
+.PP
+The GNI provider supports the following features defined for the
+libfabric API:
+.TP
+.B \f[I]Endpoint types\f[]
+The provider supports the \f[I]FI_EP_RDM\f[] endpoint type.
+.RS
+.RE
+.TP
+.B \f[I]Address vectors\f[]
+The provider implements both the \f[I]FI_AV_MAP\f[] and
+\f[I]FI_AV_TABLE\f[] address vector types.
+.RS
+.RE
+.TP
+.B \f[I]Data transfer operations\f[]
+The following data transfer interfaces are supported for a all endpoint
+types: \f[I]fi_atomic\f[], \f[I]fi_msg\f[], \f[I]fi_rma\f[],
+\f[I]fi_tagged\f[].
+.RS
+.RE
+.TP
+.B \f[I]Completion events\f[]
+The proveders supports \f[I]FI_CQ_FORMAT_CONTEXT\f[],
+\f[I]FI_CQ_FORMAT_MSG\f[], \f[I]FI_CQ_FORMAT_DATA\f[] and
+\f[I]FI_CQ_FORMAT_TAGGED\f[] with wait objects of type
+\f[I]FI_WAIT_NONE\f[], \f[I]FI_WAIT_FD\f[], and
+\f[I]FI_WAIT_MUTEX_COND\f[].
+.RS
+.RE
+.TP
+.B \f[I]Modes\f[]
+The GNI provider does not require any operation modes.
+.RS
+.RE
+.TP
+.B \f[I]Progress\f[]
+The GNI provider supports both \f[I]FI_PROGRESS_AUTO\f[] and
+\f[I]FI_PROGRESS_MANUAL\f[], with a default set to auto.
+When progress is set to auto, a background thread runs to ensure that
+progress is made for asynchronous requests.
+.RS
+.RE
+.SH CAVEATS
+.PP
+\f[I]This is where we will put caveats or things that differ from the
+convention.\f[]
+.SH GNI EXTENSIONS
+.PP
+The GNI provider exposes low\-level tuning parameters via a domain
+\f[I]fi_open_ops\f[] interface named \f[I]FI_GNI_DOMAIN_PARAMS\f[].
+The flags parameter is currently ignored.
+The fi_open_ops function takes a \f[C]struct\ fi_gni_ops_domain\f[]
+parameter and populates it with the following:
+.IP
+.nf
+\f[C]
+struct\ fi_gni_ops_domain\ {
+\ \ \ \ int\ (*set_val)(struct\ fid\ *fid,\ dom_ops_val_t\ t,\ void\ *val);
+\ \ \ \ int\ (*get_val)(struct\ fid\ *fid,\ dom_ops_val_t\ t,\ void\ *val);
+};
+\f[]
+.fi
+.PP
+The \f[C]set_val\f[] function sets the value of a given parameter; the
+\f[C]get_val\f[] function returns the current value.
+The currently supported values are:
+.TP
+.B \f[I]GNI_MSG_RENDEZVOUS_THRESHOLD\f[]
+Threshold message size at which a rendezvous protocol is used for
+\f[C]fi_msg\f[] data transfers.
+.RS
+.RE
+.TP
+.B \f[I]GNI_RMA_RDMA_THRESHOLD\f[]
+Threshold message size at which RDMA is used for \f[C]fi_rma\f[] data
+transfers.
+.RS
+.RE
+.TP
+.B \f[I]GNI_CONN_TABLE_INITIAL_SIZE\f[]
+Initial size of the internal table data structure used to manage
+connections.
+.RS
+.RE
+.TP
+.B \f[I]GNI_CONN_TABLE_MAX_SIZE\f[]
+Maximum size of the internal table data structure used to manage
+connections.
+.RS
+.RE
+.TP
+.B \f[I]GNI_CONN_TABLE_STEP_SIZE\f[]
+Step size for increasing the size of the the internal table data
+structure used to manage connections.
+.RS
+.RE
+.TP
+.B \f[I]GNI_VC_ID_TABLE_CAPACITY\f[]
+Size of the virtual channel (VC) table used for managing remote
+connections.
+.RS
+.RE
+.TP
+.B \f[I]GNI_MBOX_PAGE_SIZE\f[]
+Page size for GNI SMSG mailbox allocations.
+.RS
+.RE
+.TP
+.B \f[I]GNI_MBOX_NUM_PER_SLAB\f[]
+Number of GNI SMSG mailboxes per allocation slab.
+.RS
+.RE
+.TP
+.B \f[I]GNI_MBOX_MAX_CREDIT\f[]
+Maximum number of credits per GNI SMSG mailbox.
+.RS
+.RE
+.TP
+.B \f[I]GNI_MBOX_MSG_MAX_SIZE\f[]
+Maximum size of GNI SMSG messages.
+.RS
+.RE
+.SH SEE ALSO
+.PP
+\f[C]fabric\f[](7), \f[C]fi_open_ops\f[](3), \f[C]fi_provider\f[](7),
+\f[C]fi_getinfo\f[](3)
+.PP
+For more information on uGNI, see \f[I]Using the GNI and DMAPP APIs\f[]
+(S\-2446\-3103, Cray Inc.).
+For more information on the GNI provider, see \f[I]An Implementation of
+OFI libfabric in Support of Multithreaded PGAS Solutions\f[] (PGAS
+\[aq]15).
+.SH AUTHORS
+OpenFabrics.
