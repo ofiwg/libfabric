@@ -13,8 +13,14 @@ v1.2.0, TBD
 - Added PSM2 provider
 
 ## PSM provider notes
+- General bug fixes
+- Support auto progress mode
+- Support more threading modes
+- Only set FI_CONTEXT mode if FI_TAGGED or FI_MSG is used
+- Support Intel Omni-Path Fabric via the psm2-compat library
 
 ## PSM2 provider notes
+- Initial addition
 
 ## Sockets provider notes
 
