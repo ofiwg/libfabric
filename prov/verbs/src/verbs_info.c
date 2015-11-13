@@ -41,11 +41,14 @@
 			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
 #define VERBS_RDM_CAPS (FI_SEND | FI_RECV | FI_TAGGED)
 #define VERBS_MODE (FI_LOCAL_MR)
-/* TODO: from merge, but is this right? #define VERBS_RDM_MODE (0) */
+#define VERBS_RDM_MODE (FI_CONTEXT)
 
 #define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
 #define VERBS_TX_OP_FLAGS_IWARP (FI_INJECT | FI_COMPLETION)
+
 #define VERBS_TX_MODE VERBS_MODE
+#define VERBS_TX_RDM_MODE VERBS_RDM_MODE
+
 #define VERBS_RX_MODE (FI_LOCAL_MR | FI_RX_CQ_DATA)
 #define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
 		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
@@ -91,6 +94,14 @@ const struct fi_rx_attr verbs_rx_attr = {
 
 const struct fi_tx_attr verbs_tx_attr = {
 	.mode			= VERBS_TX_MODE,
+	.op_flags		= VERBS_TX_OP_FLAGS,
+	.msg_order		= VERBS_MSG_ORDER,
+	.inject_size		= 0,
+	.rma_iov_limit		= 1,
+};
+
+const struct fi_tx_attr verbs_tx_rdm_attr = {
+	.mode			= VERBS_TX_RDM_MODE,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
 	.inject_size		= 0,
@@ -143,6 +154,7 @@ int fi_ibv_check_domain_attr(const struct fi_domain_attr *attr,
 	case FI_THREAD_FID:
 	case FI_THREAD_DOMAIN:
 	case FI_THREAD_COMPLETION:
+    case FI_THREAD_ENDPOINT:
 		break;
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
@@ -302,8 +314,8 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 	}
 
 	compare_mode = attr->mode ? attr->mode : hints->mode;
-	check_mode = (hints->caps & FI_RMA) ?
-		     info->rx_attr->mode : VERBS_MODE;
+    check_mode = (hints->caps & FI_RMA) ? info->rx_attr->mode :
+        info->ep_attr->type == FI_EP_RDM ? VERBS_RDM_MODE : VERBS_MODE;
 	if ((compare_mode & check_mode) != check_mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given rx_attr->mode not supported\n");
@@ -679,9 +691,15 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		return -FI_ENOMEM;
 
 	fi->caps		= ep_dom->caps;
-	fi->mode		= VERBS_MODE;
 	fi->handle		= NULL;
-	*(fi->tx_attr)		= verbs_tx_attr;
+    if (ep_dom->type == FI_EP_RDM) {
+        fi->mode		= VERBS_RDM_MODE;
+        *(fi->tx_attr)	= verbs_tx_rdm_attr;
+    } else {
+        fi->mode		= VERBS_MODE;
+        *(fi->tx_attr)	= verbs_tx_attr;
+    }
+
 	*(fi->rx_attr)		= verbs_rx_attr;
 	*(fi->ep_attr)		= verbs_ep_attr;
 	*(fi->domain_attr)	= verbs_domain_attr;

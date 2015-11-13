@@ -467,7 +467,8 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	int ret = 0;
 
 	_domain = container_of(domain, struct fi_ibv_domain, domain_fid);
-	if (strcmp(_domain->verbs->device->name, info->domain_attr->name)) {
+	if (strncmp(_domain->verbs->device->name, info->domain_attr->name,
+                strlen(_domain->verbs->device->name))) {
 		return -FI_EINVAL;
 	}
 
