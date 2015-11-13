@@ -25,7 +25,7 @@ The *psm2* provider runs over the PSM 2.x interface that is supported
 by the Intel Omni-Path Fabric. PSM 2.x has all the PSM 1.x features
 plus a set of new functions with enhanced capability. Since PSM 1.x
 and PSM 2.x is not ABI compatible the *psm2* provider only works with
-PSM 2.0 and doesn't support Intel TrueScale Fabric. On the other hand,
+PSM 2.x and doesn't support Intel TrueScale Fabric. On the other hand,
 the *psm* provider can work with the psm2-compat library, which exposes
 a PSM 1.x interface over the Intel Omni-Path Fabric. 
 
@@ -59,10 +59,12 @@ Endpoint capabilities
   also supports *FI_REMOTE_CQ_DATA* and *FI_SOURCE*.
 
 Modes
-: *FI_CONTEXT* is required in general. That means, all the requests
-  that generate completions must have a valid pointer to type
-  *struct fi_context* passed as the operation context. The exception
-  is that if none of *FI_TAGGED* and *FI_MSG* is asked for, then
+: *FI_CONTEXT* is required for the *FI_TAGGED* and *FI_MSG*
+  capabilities. That means, any request belonging to these two
+  categories that generates a completion must pass as the operation
+  context a valid pointer to type *struct fi_context*, and the space
+  referenced by the pointer must remain untouched until the request
+  has completed. If none of *FI_TAGGED* and *FI_MSG* is asked for,
   the *FI_CONTEXT* mode is not required.
   
 Progress
@@ -148,29 +150,29 @@ different variable names are used for the *psm* provider and the
 : Time (seconds) to sleep before closing PSM endpoints. This is a workaround
   for a bug in some versions of PSM library.
 
-  The default setting is 1 second.
+  The default setting is 1.
 
 *FI_PSM_TIMEOUT* / *FI_PSM2_TIMEOUT*
 : Timeout (seconds) for gracefully closing PSM endpoints. A forced closing
   will be issued if timeout expires.
 
-  The default setting is 5 seconds.
+  The default setting is 5.
 
 *FI_PSM_PROG_INTERVAL* / *FI_PSM2_PROG_INTERVAL*
 : When auto progress is enabled (asked via the hints to *fi_getinfo*),
   a progress thread is created to make progress calls from time to time.
   This option set the tnterval (microseconds) between progress calls.
 
-  The default setting is 1 microsecond if affininty is set, or 1000
-  microseconds if not. See *FI_PSM_PROG_AFFINITY*/*FI_PSM2_PROG_AFFINITY*.
+  The default setting is 1 if affininty is set, or 1000 if not. See
+  *FI_PSM_PROG_AFFINITY*/*FI_PSM2_PROG_AFFINITY*.
 
 *FI_PSM_PROG_AFFINITY* / *FI_PSM2_PROG_AFFINITY*
 : When set, specify the set of CPU cores to set the progress thread
   affinity to. The format is
   `<start>[:<end>[:<stride>]][,<start>[:<end>[:<stride>]]]*`, 
   where each triplet `<start>:<end>:<stride>` defines a block of
-  core_ids. Both `<start>` and `<end>` can be either the core_id
-  (when >=0) or core_id - num_cores (when <0). 
+  core_ids. Both `<start>` and `<end>` can be either the `core_id`
+  (when >=0) or `core_id - num_cores` (when <0). 
 
   By default affinity is not set.
 
