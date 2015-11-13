@@ -33,9 +33,7 @@
 #ifndef _PROV_H_
 #define _PROV_H_
 
-#if HAVE_CONFIG_H
-#  include <config.h>
-#endif /* HAVE_CONFIG_H */
+#include "config.h"
 
 #include <rdma/fi_prov.h>
 
