@@ -36,6 +36,7 @@
 #include <alloca.h>
 #include <malloc.h>
 #include <stddef.h>
+#include <inttypes.h>
 #include <string.h>
 #include <sys/types.h>
 
@@ -134,7 +135,7 @@ fi_verbs_mem_pool_get(struct fi_ibv_mem_pool *pool)
 		rst = (struct fi_ibv_mem_pool_entry *)calloc(1, pool->entry_size);
 		rst->is_malloced = 1;
 		pool->current_size++;
-		VERBS_DBG("MALLOCED: %p, %d\n", rst, pool->current_size);
+		VERBS_DBG(FI_LOG_FABRIC, "MALLOCED: %p, %d\n", rst, pool->current_size);
 	}
 	return rst;
 }
@@ -145,7 +146,7 @@ fi_ibv_mem_pool_return(struct fi_ibv_mem_pool_entry *entry,
 {
 	if (entry->is_malloced) {
 		pool->current_size--;
-		VERBS_DBG("FREED: %p, %d\n", entry, pool->current_size);
+		VERBS_DBG(FI_LOG_FABRIC, "FREED: %p, %d\n", entry, pool->current_size);
 		free(entry);
 	} else {
 		entry->next = pool->head;
@@ -175,7 +176,7 @@ static inline void fi_ibv_mem_pool_fini(struct fi_ibv_mem_pool *pool)
             strcat(str, str2);                          \
         }                                               \
                                                         \
-        VERBS_DBG("%s\n", str);                         \
+        VERBS_DBG(FI_LOG_EP_DATA, "%s\n", str);         \
     } while(0)
 #else                           // ENABLE_DEBUG
 #define FI_IBV_PRINT_LIST(list, name)
@@ -201,8 +202,8 @@ do {                                                                        \
     const size_t max_str_len = 1024;                                        \
     char str[max_str_len];                                                  \
     snprintf(str, max_str_len,                                              \
-            "%s request: %p, eager_state: %s, rndv_state: %s, tag: 0x%llx," \
-            "len: %d context: %p, connection: %p\n",                        \
+            "%s request: %p, eager_state: %s, rndv_state: %s, "             \
+            "tag: 0x%" PRIx64 ", len: %d context: %p, connection: %p\n",    \
             prefix,                                                         \
             request,                                                        \
             fi_ibv_rdm_tagged_req_eager_state_to_str(request->state.eager), \
@@ -217,11 +218,11 @@ do {                                                                        \
         case FI_LOG_WARN:                                                   \
         case FI_LOG_TRACE:                                                  \
         case FI_LOG_INFO:                                                   \
-            fprintf(stderr, str);                                           \
+            fprintf(stderr, "%s", str);                                     \
             break;                                                          \
         case FI_LOG_DEBUG:                                                  \
         default:                                                            \
-            VERBS_DBG(str);                                                 \
+            VERBS_DBG(FI_LOG_EP_DATA, "%s", str);                           \
             break;                                                          \
     }                                                                       \
 } while (0);

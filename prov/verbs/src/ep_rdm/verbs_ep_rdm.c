@@ -177,7 +177,8 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 
 	struct fi_ibv_rdm_tagged_request *request = context->internal[0];
 
-	VERBS_DBG("ep_cancel, match %p, tag 0x%llx, len %d, ctx %p\n",
+	VERBS_DBG(FI_LOG_EP_DATA,
+		  "ep_cancel, match %p, tag 0x%llx, len %d, ctx %p\n",
 		  request, (long long unsigned)request->tag,
 		  request->len, request->context);
 
@@ -198,7 +199,8 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 		fi_ibv_mem_pool_return(&request->mpe,
 				       &fi_ibv_rdm_tagged_request_pool);
 
-		VERBS_DBG("\t\t-> SUCCESS, pend recv %d\n", fid_ep->pend_recv);
+		VERBS_DBG(FI_LOG_EP_DATA,
+			  "\t\t-> SUCCESS, pend recv %d\n", fid_ep->pend_recv);
 
 		err = 0;
 	}

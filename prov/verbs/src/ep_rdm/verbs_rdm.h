@@ -291,13 +291,13 @@ fi_ibv_rdm_tagged_push_buff_pointer(char *area_start, size_t area_size,
 {
 	char *buff_tmp = (*buff) + offset;
 
-	VERBS_DBG("old_pointer: %p, sn = %d\n", *buff,
+	VERBS_DBG(FI_LOG_EP_DATA, "old_pointer: %p, sn = %d\n", *buff,
 		  fi_ibv_rdm_tagged_get_buff_service_data(*buff)->seq_number);
 
 	(*buff) = buff_tmp < (area_start + area_size) ?
 		  buff_tmp : area_start + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE;
 
-	VERBS_DBG("new_pointer: %p, sn = %d\n", *buff,
+	VERBS_DBG(FI_LOG_EP_DATA, "new_pointer: %p, sn = %d\n", *buff,
 		  fi_ibv_rdm_tagged_get_buff_service_data(*buff)->seq_number);
 	assert(fi_ibv_rdm_tagged_get_buff_service_data(*buff)->seq_number ==
 		(((*buff) - (area_start + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE)) /
@@ -321,7 +321,7 @@ fi_ibv_rdm_tagged_get_rbuf(struct fi_ibv_rdm_tagged_conn *conn,
 	char *rbuf = (conn->rbuf_mem_reg +
 		      FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
 		      (seq_num * ep->buff_len));
-	VERBS_DBG("recv buf %d\n", seq_num);
+	VERBS_DBG(FI_LOG_EP_DATA, "recv buf %d\n", seq_num);
 	assert(fi_ibv_rdm_tagged_get_buff_service_data(rbuf)->seq_number ==
 		seq_num);
 	return (struct fi_ibv_rdm_tagged_buf *) rbuf;
