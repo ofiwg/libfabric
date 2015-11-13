@@ -21,7 +21,7 @@ supported by the Intel Omni-Path Fabric.
 PSM 2.x has all the PSM 1.x features plus a set of new functions with
 enhanced capability.
 Since PSM 1.x and PSM 2.x is not ABI compatible the \f[I]psm2\f[]
-provider only works with PSM 2.0 and doesn\[aq]t support Intel TrueScale
+provider only works with PSM 2.x and doesn\[aq]t support Intel TrueScale
 Fabric.
 On the other hand, the \f[I]psm\f[] provider can work with the
 psm2-compat library, which exposes a PSM 1.x interface over the Intel
@@ -60,12 +60,14 @@ Other supported capabilities include \f[I]FI_TRIGGER\f[].
 The \f[I]psm2\f[] provider also supports \f[I]FI_REMOTE_CQ_DATA\f[] and
 \f[I]FI_SOURCE\f[].
 .PP
-Modes : \f[I]FI_CONTEXT\f[] is required in general.
-That means, all the requests that generate completions must have a valid
-pointer to type \f[I]struct fi_context\f[] passed as the operation
-context.
-The exception is that if none of \f[I]FI_TAGGED\f[] and \f[I]FI_MSG\f[]
-is asked for, then the \f[I]FI_CONTEXT\f[] mode is not required.
+Modes : \f[I]FI_CONTEXT\f[] is required for the \f[I]FI_TAGGED\f[] and
+\f[I]FI_MSG\f[] capabilities.
+That means, any request belonging to these two categories that generates
+a completion must pass as the operation context a valid pointer to type
+\f[I]struct fi_context\f[], and the space referenced by the pointer must
+remain untouched until the request has completed.
+If none of \f[I]FI_TAGGED\f[] and \f[I]FI_MSG\f[] is asked for, the
+\f[I]FI_CONTEXT\f[] mode is not required.
 .PP
 Progress : The \f[I]psm\f[] provider requires manual progress.
 The application is expected to call \f[I]fi_cq_read\f[] or
@@ -159,21 +161,20 @@ To turn it on set the variable to 1.
 before closing PSM endpoints.
 This is a workaround for a bug in some versions of PSM library.
 .PP
-The default setting is 1 second.
+The default setting is 1.
 .PP
 \f[I]FI_PSM_TIMEOUT\f[] / \f[I]FI_PSM2_TIMEOUT\f[] : Timeout (seconds)
 for gracefully closing PSM endpoints.
 A forced closing will be issued if timeout expires.
 .PP
-The default setting is 5 seconds.
+The default setting is 5.
 .PP
 \f[I]FI_PSM_PROG_INTERVAL\f[] / \f[I]FI_PSM2_PROG_INTERVAL\f[] : When
 auto progress is enabled (asked via the hints to \f[I]fi_getinfo\f[]), a
 progress thread is created to make progress calls from time to time.
 This option set the tnterval (microseconds) between progress calls.
 .PP
-The default setting is 1 microsecond if affininty is set, or 1000
-microseconds if not.
+The default setting is 1 if affininty is set, or 1000 if not.
 See \f[I]FI_PSM_PROG_AFFINITY\f[]/\f[I]FI_PSM2_PROG_AFFINITY\f[].
 .PP
 \f[I]FI_PSM_PROG_AFFINITY\f[] / \f[I]FI_PSM2_PROG_AFFINITY\f[] : When
@@ -183,8 +184,8 @@ The format is
 \f[C]<start>[:<end>[:<stride>]][,<start>[:<end>[:<stride>]]]*\f[], where
 each triplet \f[C]<start>:<end>:<stride>\f[] defines a block of
 core_ids.
-Both \f[C]<start>\f[] and \f[C]<end>\f[] can be either the core_id (when
->=0) or core_id - num_cores (when <0).
+Both \f[C]<start>\f[] and \f[C]<end>\f[] can be either the
+\f[C]core_id\f[] (when >=0) or \f[C]core_id\ -\ num_cores\f[] (when <0).
 .PP
 By default affinity is not set.
 .SH SEE ALSO
