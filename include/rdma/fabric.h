@@ -148,6 +148,7 @@ enum {
 	FI_SOCKADDR_IN6,	/* struct sockaddr_in6 */
 	FI_SOCKADDR_IB,		/* struct sockaddr_ib */
 	FI_ADDR_PSMX,		/* uint64_t */
+	FI_ADDR_GNI
 };
 
 #define FI_ADDR_UNSPEC		UINT64_MAX
@@ -224,7 +225,8 @@ enum {
 	FI_PROTO_SOCK_TCP,
 	FI_PROTO_MXM,
 	FI_PROTO_IWARP_RDM,
-	FI_PROTO_IB_RDM
+	FI_PROTO_IB_RDM,
+	FI_PROTO_GNI
 };
 
 /* Mode bits */
