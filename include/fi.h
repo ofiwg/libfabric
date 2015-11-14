@@ -38,6 +38,7 @@
 #include <assert.h>
 #include <string.h>
 #include <pthread.h>
+#include <sys/param.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_prov.h>
@@ -78,7 +79,23 @@ static inline void *mem_dup(const void *src, size_t size)
 	return dest;
 }
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+/*
+ * OS X doesn't have __BYTE_ORDER, Linux usually has BYTE_ORDER but not under
+ * all features.h flags
+ */
+#if !defined(BYTE_ORDER)
+#  if defined(__BYTE_ORDER) && \
+      defined(__LITTLE_ENDIAN) && \
+      defined(__BIG_ENDIAN)
+#    define BYTE_ORDER __BYTE_ORDER
+#    define LITTLE_ENDIAN __LITTLE_ENDIAN
+#    define BIG_ENDIAN __BIG_ENDIAN
+#  else
+#    error "cannot determine endianness!"
+#  endif
+#endif
+
+#if BYTE_ORDER == LITTLE_ENDIAN
 #ifndef htonll
 static inline uint64_t htonll(uint64_t x) { return bswap_64(x); }
 #endif
