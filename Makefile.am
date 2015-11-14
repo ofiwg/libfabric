@@ -29,7 +29,9 @@ rdmainclude_HEADERS =
 # internal utility functions shared by in-tree providers:
 common_srcs = \
 	src/common.c \
-	src/enosys.c
+	src/enosys.c \
+	src/rbtree.c \
+	src/fasthash.c
 
 # ensure dl-built providers link back to libfabric
 linkback = $(top_builddir)/src/libfabric.la
@@ -48,6 +50,8 @@ src_libfabric_la_SOURCES = \
 	include/fi_list.h \
 	include/fi_signal.h \
 	include/fi_rbuf.h \
+	include/rbtree.h \
+	include/fasthash.h \
 	include/prov.h \
 	src/fabric.c \
 	src/fi_tostr.c \
@@ -452,6 +456,7 @@ real_man_pages = \
         man/man3/fi_version.3 \
         man/man7/fabric.7 \
         man/man7/fi_provider.7 \
+        man/man7/fi_gni.7 \
         man/man7/fi_psm.7 \
         man/man7/fi_sockets.7 \
         man/man7/fi_usnic.7 \
@@ -592,3 +597,5 @@ test:
 
 rpm: dist
 	rpmbuild -ta libfabric-*.tar.bz2
+
+include prov/gni/Makefile.am
