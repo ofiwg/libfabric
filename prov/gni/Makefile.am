@@ -51,8 +51,6 @@ _gni_headers = \
 	prov/gni/include/gnix_cq.h \
 	prov/gni/include/gnix_datagram.h \
 	prov/gni/include/gnix_ep.h \
-	prov/gni/include/gnix_ep_msg.h \
-	prov/gni/include/gnix_ep_rdm.h \
 	prov/gni/include/gnix_eq.h \
 	prov/gni/include/gnix_freelist.h \
 	prov/gni/include/gnix.h \
