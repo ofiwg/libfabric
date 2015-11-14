@@ -89,8 +89,27 @@ struct pingpong_context {
 	int			 rx_depth;
 	int			 pending;
 	int			use_event;
+	int			routs;
 };
 
+
+static int pp_post_recv(struct pingpong_context *ctx, int n)
+{
+	int rc = 0;
+	int i;
+
+
+	for (i = 0; i < n; ++i) {
+		rc = fi_recv(ctx->ep, ctx->buf, ctx->size, fi_mr_desc(ctx->mr),
+			     0, (void *)(uintptr_t)PINGPONG_RECV_WCID);
+		if (rc) {
+			FT_PRINTERR("fi_recv", rc);
+			break;
+		}
+	}
+
+	return i;
+}
 
 static int pp_eq_create(struct pingpong_context *ctx)
 {
@@ -217,6 +236,18 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 		return 1;
 	}
 
+	rc = fi_enable(ctx->ep);
+	if (rc) {
+		FT_PRINTERR("fi_enable", rc);
+		return EXIT_FAILURE;
+	}
+
+	ctx->routs = pp_post_recv(ctx, ctx->rx_depth);
+	if (ctx->routs < ctx->rx_depth) {
+		FT_ERR("Couldn't post receive (%d)\n", ctx->routs);
+		return 1;
+	}
+
 	rc = fi_accept(ctx->ep, NULL, 0);
 	if (rc) {
 		FT_PRINTERR("fi_accept", rc);
@@ -290,6 +321,18 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 		return 1;
 	}
 
+	rc = fi_enable(ctx->ep);
+	if (rc) {
+		FT_PRINTERR("fi_enable", rc);
+		return EXIT_FAILURE;
+	}
+
+	ctx->routs = pp_post_recv(ctx, ctx->rx_depth);
+	if (ctx->routs < ctx->rx_depth) {
+		FT_ERR("Couldn't post receive (%d)\n", ctx->routs);
+		return 1;
+	}
+
 	printf("Connecting to server\n");
 	rc = fi_connect(ctx->ep, ctx->info->dest_addr, NULL, 0);
 	if (rc) {
@@ -326,6 +369,7 @@ static struct pingpong_context *pp_init_ctx(struct fi_info *info, int size,
 	ctx->size       	= size;
 	ctx->rx_depth   	= rx_depth;
 	ctx->use_event   	= use_event;
+	ctx->routs		= 0;
 
 	if (posix_memalign(&(ctx->buf), page_size, size)) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
@@ -365,24 +409,6 @@ int pp_close_ctx(struct pingpong_context *ctx)
 		free(ctx->buf);
 	free(ctx);
 	return 0;
-}
-
-static int pp_post_recv(struct pingpong_context *ctx, int n)
-{
-	int rc = 0;
-	int i;
-
-
-	for (i = 0; i < n; ++i) {
-		rc = fi_recv(ctx->ep, ctx->buf, ctx->size, fi_mr_desc(ctx->mr),
-			     0, (void *)(uintptr_t)PINGPONG_RECV_WCID);
-		if (rc) {
-			FT_PRINTERR("fi_recv", rc);
-			break;
-		}
-	}
-
-	return i;
 }
 
 static int pp_post_send(struct pingpong_context *ctx)
@@ -425,7 +451,6 @@ int main(int argc, char *argv[])
 	int			 rx_depth = 0;
 	int                      iters = 1000;
 	int                      use_event = 0;
-	int                      routs;
 	int                      rcnt, scnt;
 	int			 ret, rc = 0;
 
@@ -441,7 +466,7 @@ int main(int argc, char *argv[])
 	while (1) {
 		int c;
 
-		c = getopt(argc, argv, "S:m:r:n:e:h" ADDR_OPTS INFO_OPTS);
+		c = getopt(argc, argv, "S:m:r:n:eh" ADDR_OPTS INFO_OPTS);
 		if (c == -1)
 			break;
 
@@ -545,13 +570,6 @@ int main(int argc, char *argv[])
 		pp_accept_ctx(ctx);
 	}
 
-	routs = pp_post_recv(ctx, ctx->rx_depth);
-	if (routs < ctx->rx_depth) {
-		fprintf(stderr, "Couldn't post receive (%d)\n", routs);
-		rc = 1;
-		goto err3;
-	}
-
 	ctx->pending = PINGPONG_RECV_WCID;
 
 	if (opts.dst_addr) {
@@ -577,7 +595,7 @@ int main(int argc, char *argv[])
 
 		if (use_event) {
 			/* Blocking read */
-			rd = fi_cq_sread(ctx->cq, &wc, sizeof wc, NULL, -1);
+			rd = fi_cq_sread(ctx->cq, &wc, 1, NULL, -1);
 		} else {
 			do {
 				rd = fi_cq_read(ctx->cq, &wc, 1);
@@ -599,12 +617,12 @@ int main(int argc, char *argv[])
 			break;
 
 		case PINGPONG_RECV_WCID:
-			if (--routs <= 1) {
-				routs += pp_post_recv(ctx, ctx->rx_depth - routs);
-				if (routs < ctx->rx_depth) {
+			if (--ctx->routs <= 1) {
+				ctx->routs += pp_post_recv(ctx, ctx->rx_depth - ctx->routs);
+				if (ctx->routs < ctx->rx_depth) {
 					fprintf(stderr,
 						"Couldn't post receive (%d)\n",
-						routs);
+						ctx->routs);
 					rc = 1;
 					goto err3;
 				}
