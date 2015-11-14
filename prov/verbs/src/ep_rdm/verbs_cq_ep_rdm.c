@@ -161,10 +161,7 @@ static int fi_ibv_cq_close(fid_t fid)
 }
 #endif
 
-int fi_ibv_rdm_tagged_set_cq_ops(struct fi_ibv_cq *cq)
+struct fi_ops_cq *fi_ibv_cq_ops_tagged(struct fi_ibv_cq *cq)
 {
-	assert(cq->format == FI_CQ_FORMAT_TAGGED);
-	cq->cq_fid.ops = &fi_ibv_rdm_tagged_cq_ops;
-	cq->entry_size = sizeof(struct fi_cq_tagged_entry);
-	return 0;
+	return &fi_ibv_rdm_tagged_cq_ops;
 }

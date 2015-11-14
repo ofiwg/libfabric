@@ -37,12 +37,18 @@
 #define VERBS_IWARP_FABRIC "Ethernet-iWARP"
 #define VERBS_ANY_FABRIC "Any RDMA fabric"
 
-#define VERBS_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
-		FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
+#define VERBS_MSG_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
+			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
+#define VERBS_RDM_CAPS (FI_SEND | FI_RECV | FI_TAGGED)
 #define VERBS_MODE (FI_LOCAL_MR)
+#define VERBS_RDM_MODE (FI_CONTEXT)
+
 #define VERBS_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE)
 #define VERBS_TX_OP_FLAGS_IWARP (FI_INJECT | FI_COMPLETION)
+
 #define VERBS_TX_MODE VERBS_MODE
+#define VERBS_TX_RDM_MODE VERBS_RDM_MODE
+
 #define VERBS_RX_MODE (FI_LOCAL_MR | FI_RX_CQ_DATA)
 #define VERBS_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS | \
 		FI_ORDER_WAW | FI_ORDER_WAS | FI_ORDER_SAW | FI_ORDER_SAS )
@@ -72,7 +78,6 @@ const struct fi_domain_attr verbs_domain_attr = {
 };
 
 const struct fi_ep_attr verbs_ep_attr = {
-	.type			= FI_EP_MSG,
 	.protocol_version	= 1,
 	.msg_prefix_size	= 0,
 	.max_order_war_size	= 0,
@@ -82,19 +87,37 @@ const struct fi_ep_attr verbs_ep_attr = {
 };
 
 const struct fi_rx_attr verbs_rx_attr = {
-	.caps			= VERBS_CAPS,
 	.mode			= VERBS_RX_MODE,
 	.msg_order		= VERBS_MSG_ORDER,
 	.total_buffered_recv	= 0,
 };
 
 const struct fi_tx_attr verbs_tx_attr = {
-	.caps			= VERBS_CAPS,
 	.mode			= VERBS_TX_MODE,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
 	.inject_size		= 0,
 	.rma_iov_limit		= 1,
+};
+
+const struct fi_tx_attr verbs_tx_rdm_attr = {
+	.mode			= VERBS_TX_RDM_MODE,
+	.op_flags		= VERBS_TX_OP_FLAGS,
+	.msg_order		= VERBS_MSG_ORDER,
+	.inject_size		= 0,
+	.rma_iov_limit		= 1,
+};
+
+const struct verbs_ep_domain verbs_msg_domain = {
+	.suffix			= "",
+	.type			= FI_EP_MSG,
+	.caps			= VERBS_MSG_CAPS,
+};
+
+const struct verbs_ep_domain verbs_rdm_domain = {
+	.suffix			= "-rdm",
+	.type			= FI_EP_RDM,
+	.caps			= VERBS_RDM_CAPS,
 };
 
 static struct fi_info *verbs_info = NULL;
@@ -131,6 +154,7 @@ int fi_ibv_check_domain_attr(const struct fi_domain_attr *attr,
 	case FI_THREAD_FID:
 	case FI_THREAD_DOMAIN:
 	case FI_THREAD_COMPLETION:
+    case FI_THREAD_ENDPOINT:
 		break;
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
@@ -212,11 +236,8 @@ int fi_ibv_check_domain_attr(const struct fi_domain_attr *attr,
 int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 			 const struct fi_info *info)
 {
-	switch (attr->type) {
-	case FI_EP_UNSPEC:
-	case FI_EP_MSG:
-		break;
-	default:
+	if ((attr->type != FI_EP_UNSPEC) &&
+	    (attr->type != info->ep_attr->type)) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Unsupported endpoint type\n");
 		return -FI_ENODATA;
@@ -227,6 +248,8 @@ int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 	case FI_PROTO_RDMA_CM_IB_RC:
 	case FI_PROTO_IWARP:
 	case FI_PROTO_IB_UD:
+	case FI_PROTO_IB_RDM:
+	case FI_PROTO_IWARP_RDM:
 		break;
 	default:
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
@@ -291,8 +314,8 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 	}
 
 	compare_mode = attr->mode ? attr->mode : hints->mode;
-	check_mode = (hints->caps & FI_RMA) ?
-		     info->rx_attr->mode : VERBS_MODE;
+    check_mode = (hints->caps & FI_RMA) ? info->rx_attr->mode :
+        info->ep_attr->type == FI_EP_RDM ? VERBS_RDM_MODE : VERBS_MODE;
 	if ((compare_mode & check_mode) != check_mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given rx_attr->mode not supported\n");
@@ -546,7 +569,6 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 		goto err1;
 	}
 
-
 	/* TODO: serialize access to string buffers */
 	fi_read_file(FI_CONF_DIR, "def_tx_ctx_size",
 			def_tx_ctx_size, sizeof def_tx_ctx_size);
@@ -657,7 +679,8 @@ static int fi_ibv_have_device(void)
 	return ret;
 }
 
-static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info)
+static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
+			     const struct verbs_ep_domain *ep_dom)
 {
 	struct fi_info *fi;
 	union ibv_gid gid;
@@ -667,14 +690,24 @@ static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info)
 	if (!(fi = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	fi->caps		= VERBS_CAPS;
-	fi->mode		= VERBS_MODE;
+	fi->caps		= ep_dom->caps;
 	fi->handle		= NULL;
-	*(fi->tx_attr)		= verbs_tx_attr;
+    if (ep_dom->type == FI_EP_RDM) {
+        fi->mode		= VERBS_RDM_MODE;
+        *(fi->tx_attr)	= verbs_tx_rdm_attr;
+    } else {
+        fi->mode		= VERBS_MODE;
+        *(fi->tx_attr)	= verbs_tx_attr;
+    }
+
 	*(fi->rx_attr)		= verbs_rx_attr;
 	*(fi->ep_attr)		= verbs_ep_attr;
 	*(fi->domain_attr)	= verbs_domain_attr;
 	*(fi->fabric_attr)	= verbs_fabric_attr;
+
+	fi->ep_attr->type	= ep_dom->type;
+	fi->tx_attr->caps	= ep_dom->caps;
+	fi->rx_attr->caps	= ep_dom->caps;
 
 	ret = fi_ibv_get_device_attrs(ctx, fi);
 	if (ret)
@@ -698,7 +731,8 @@ static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info)
 		snprintf(fi->fabric_attr->name, name_len, VERBS_IB_PREFIX "%lx",
 			 gid.global.subnet_prefix);
 
-		fi->ep_attr->protocol = FI_PROTO_RDMA_CM_IB_RC;
+		fi->ep_attr->protocol = (ep_dom == &verbs_msg_domain) ?
+					FI_PROTO_RDMA_CM_IB_RC : FI_PROTO_IB_RDM;
 		break;
 	case IBV_TRANSPORT_IWARP:
 		fi->fabric_attr->name = strdup(VERBS_IWARP_FABRIC);
@@ -707,7 +741,8 @@ static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info)
 			goto err;
 		}
 
-		fi->ep_attr->protocol = FI_PROTO_IWARP;
+		fi->ep_attr->protocol = (ep_dom == &verbs_msg_domain) ?
+					FI_PROTO_IWARP : FI_PROTO_IWARP_RDM;
 		fi->tx_attr->op_flags = VERBS_TX_OP_FLAGS_IWARP;
 		break;
 	default:
@@ -716,10 +751,16 @@ static int fi_ibv_get_info_ctx(struct ibv_context *ctx, struct fi_info **info)
 		goto err;
 	}
 
-	if (!(fi->domain_attr->name = strdup(ctx->device->name))) {
+	name_len = strlen(ctx->device->name) + strlen(ep_dom->suffix);
+	fi->domain_attr->name = malloc(name_len + 1);
+	if (!fi->domain_attr->name) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
+
+	snprintf(fi->domain_attr->name, name_len + 1, "%s%s",
+		 ctx->device->name, ep_dom->suffix);
+	fi->domain_attr->name[name_len] = '\0';
 
 	*info = fi;
 	return 0;
@@ -755,13 +796,20 @@ int fi_ibv_init_info(void)
 	}
 
 	for (i = 0; i < num_devices; i++) {
-		ret = fi_ibv_get_info_ctx(ctx_list[i], &fi);
+		ret = fi_ibv_alloc_info(ctx_list[i], &fi, &verbs_msg_domain);
 		if (!ret) {
 			if (!verbs_info)
 				verbs_info = fi;
 			else
 				tail->next = fi;
 			tail = fi;
+
+			ret = fi_ibv_alloc_info(ctx_list[i], &fi,
+						&verbs_rdm_domain);
+			if (!ret) {
+				tail->next = fi;
+				tail = fi;
+			}
 		}
 	}
 
@@ -797,33 +845,45 @@ void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info)
 	}
 }
 
-
-struct fi_info *fi_ibv_search_verbs_info(const char *fabric_name,
-					 const char *domain_name)
+int fi_ibv_find_fabric(const struct fi_fabric_attr *attr)
 {
-	struct fi_info *info;
+	struct fi_info *fi;
 
-	for (info = verbs_info; info; info = info->next) {
-		if ((!domain_name || !strcmp(info->domain_attr->name, domain_name)) &&
-			(!fabric_name || !strcmp(info->fabric_attr->name, fabric_name))) {
-			return info;
-		}
+	for (fi = verbs_info; fi; fi = fi->next) {
+		if (!fi_ibv_check_fabric_attr(attr, fi))
+			return 0;
+	}
+
+	return -FI_ENODATA;
+}
+
+struct fi_info *fi_ibv_get_verbs_info(const char *domain_name)
+{
+	struct fi_info *fi;
+
+	for (fi = verbs_info; fi; fi = fi->next) {
+		if (!strcmp(fi->domain_attr->name, domain_name))
+			return fi;
 	}
 
 	return NULL;
 }
 
-static int fi_ibv_get_matching_info(struct fi_info *check_info,
+static int fi_ibv_get_matching_info(const char *domain_name,
 		struct fi_info *hints, struct rdma_addrinfo *rai,
 		struct fi_info **info)
 {
-
-	int ret;
+	struct fi_info *check_info;
 	struct fi_info *fi, *tail;
+	int ret;
 
 	*info = tail = NULL;
 
-	for (; check_info; check_info = check_info->next) {
+	for (check_info = verbs_info; check_info; check_info = check_info->next) {
+		if (domain_name && strncmp(check_info->domain_attr->name,
+					   domain_name, strlen(domain_name)))
+			continue;
+
 		if (hints) {
 			ret = fi_ibv_check_hints(hints, check_info);
 			if (ret)
@@ -864,43 +924,26 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 {
 	struct rdma_cm_id *id;
 	struct rdma_addrinfo *rai;
-	struct fi_info *check_info, *fi;
 	int ret;
 
 	ret = fi_ibv_init_info();
 	if (ret)
-		goto err1;
+		goto out;
 
 	ret = fi_ibv_create_ep(node, service, flags, hints, &rai, &id);
 	if (ret)
-		goto err1;
+		goto out;
 
 	if (id->verbs) {
-		fi = fi_ibv_search_verbs_info(NULL,
-				ibv_get_device_name(id->verbs->device));
-		if (!fi) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "No matching"
-					"verbs_info for given verbs device\n");
-			ret = -FI_ENODATA;
-			goto err2;
-		}
-
-		check_info = fi_dupinfo(fi);
-		if (!check_info) {
-			ret = -FI_ENOMEM;
-			goto err2;
-		}
-
-		ret = fi_ibv_get_matching_info(check_info, hints, rai, info);
-		fi_freeinfo(check_info);
+		ret = fi_ibv_get_matching_info(ibv_get_device_name(id->verbs->device),
+					       hints, rai, info);
 	} else {
-		ret = fi_ibv_get_matching_info(verbs_info, hints, rai, info);
+		ret = fi_ibv_get_matching_info(NULL, hints, rai, info);
 	}
 
-err2:
 	rdma_destroy_ep(id);
 	rdma_freeaddrinfo(rai);
-err1:
+out:
 	if (!ret || ret == -FI_ENOMEM)
 		return ret;
 	else

@@ -221,6 +221,9 @@ static void fi_tostr_protocol(char *buf, uint32_t protocol)
 	CASEENUMSTR(FI_PROTO_PSMX);
 	CASEENUMSTR(FI_PROTO_UDP);
 	CASEENUMSTR(FI_PROTO_SOCK_TCP);
+	CASEENUMSTR(FI_PROTO_MXM);
+	CASEENUMSTR(FI_PROTO_IB_RDM);
+	CASEENUMSTR(FI_PROTO_IWARP_RDM);
 	default:
 		if (protocol & FI_PROV_SPECIFIC)
 			strcatf(buf, "Provider specific");
