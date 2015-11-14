@@ -35,7 +35,7 @@
 #include <rdma/fi_errno.h>
 
 #include "gnix_hashtable.h"
-#include "fasthash/fasthash.h"
+#include "fasthash.h"
 
 #include "gnix_util.h"
 

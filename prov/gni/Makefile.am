@@ -7,13 +7,9 @@ if HAVE_GNI
 # source code, so just add prov/gni to the include path
 # rather than prov/gni/ccan
 #
-AM_CFLAGS += -I$(top_srcdir)/prov/gni/include -I$(top_srcdir)/prov/gni/common -I$(top_srcdir)/prov/gni
+AM_CFLAGS += -I$(top_srcdir)/prov/gni/include -I$(top_srcdir)/prov/gni
 
 _gni_files = \
-	prov/gni/common/rbtree.c \
-	prov/gni/common/rbtree.h \
-	prov/gni/common/fasthash/fasthash.c \
-	prov/gni/common/fasthash/fasthash.h \
 	prov/gni/src/gnix_atomic.c \
 	prov/gni/src/gnix_av.c \
 	prov/gni/src/gnix_bitmap.c \
