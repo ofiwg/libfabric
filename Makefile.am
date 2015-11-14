@@ -340,28 +340,27 @@ endif HAVE_PSM
 
 if HAVE_PSM2
 _psm2_files = \
-	prov/psm2/src/rename.h \
 	prov/psm2/src/version.h \
-	prov/psm2/src/psmx.h \
-	prov/psm2/src/psmx_init.c \
-	prov/psm2/src/psmx_fabric.c \
-	prov/psm2/src/psmx_domain.c \
-	prov/psm2/src/psmx_cq.c \
-	prov/psm2/src/psmx_eq.c \
-	prov/psm2/src/psmx_cntr.c \
-	prov/psm2/src/psmx_av.c \
-	prov/psm2/src/psmx_ep.c \
-	prov/psm2/src/psmx_cm.c \
-	prov/psm2/src/psmx_tagged.c \
-	prov/psm2/src/psmx_msg.c \
-	prov/psm2/src/psmx_msg2.c \
-	prov/psm2/src/psmx_rma.c \
-	prov/psm2/src/psmx_atomic.c \
-	prov/psm2/src/psmx_am.c \
-	prov/psm2/src/psmx_mr.c \
-	prov/psm2/src/psmx_wait.c \
-	prov/psm2/src/psmx_poll.c \
-	prov/psm2/src/psmx_util.c
+	prov/psm2/src/psmx2.h \
+	prov/psm2/src/psmx2_init.c \
+	prov/psm2/src/psmx2_fabric.c \
+	prov/psm2/src/psmx2_domain.c \
+	prov/psm2/src/psmx2_cq.c \
+	prov/psm2/src/psmx2_eq.c \
+	prov/psm2/src/psmx2_cntr.c \
+	prov/psm2/src/psmx2_av.c \
+	prov/psm2/src/psmx2_ep.c \
+	prov/psm2/src/psmx2_cm.c \
+	prov/psm2/src/psmx2_tagged.c \
+	prov/psm2/src/psmx2_msg.c \
+	prov/psm2/src/psmx2_msg2.c \
+	prov/psm2/src/psmx2_rma.c \
+	prov/psm2/src/psmx2_atomic.c \
+	prov/psm2/src/psmx2_am.c \
+	prov/psm2/src/psmx2_mr.c \
+	prov/psm2/src/psmx2_wait.c \
+	prov/psm2/src/psmx2_poll.c \
+	prov/psm2/src/psmx2_util.c
 
 if HAVE_PSM2_DL
 pkglib_LTLIBRARIES += libpsmx2-fi.la
