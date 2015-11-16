@@ -233,6 +233,8 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 	gni_return_t status;
 	int rc;
 
+	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
+
 	ep = req->gnix_ep;
 	assert(ep != NULL);
 

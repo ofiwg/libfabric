@@ -83,12 +83,13 @@ enum gnix_vc_conn_req_type {
 /**
  * Virual Connection (VC) struct
  *
- * @var rx_queue             List of VCs scheduled for RX processing.
- * @var rx_queue_lock        Lock for serializing access to the VC's rx_queue
- * @var work_queue           List of VCs scheduled for deferred work processing.
- * @var work_queue_lock      Lock for serializing access to VC's work_queue
- * @var tx_queue             List of VCs scheduled for TX processing.
- * @var tx_queue_lock        Lock for serializing access to the VC's tx_queue
+ * @var rx_list              NIC RX VC list
+ * @var work_queue           Deferred work request queue
+ * @var work_queue_lock      Deferred work request queue lock
+ * @var work_list            NIC work VC list
+ * @var tx_queue             TX request queue
+ * @var tx_queue_lock        TX request queue lock
+ * @var tx_list              NIC TX VC list
  * @var entry                used internally for managing linked lists
  *                           of vc structs that require O(1) insertion/removal
  * @var peer_addr            address of peer with which this VC is connected

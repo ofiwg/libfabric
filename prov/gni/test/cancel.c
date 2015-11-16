@@ -271,6 +271,7 @@ Test(gnix_cancel, cancel_ep_send)
 
 	key = (gnix_ht_key_t *)&gnix_ep->my_name.gnix_addr;
 	ret = _gnix_ht_insert(gnix_ep->vc_ht, *key, vc);
+	cr_assert(!ret);
 
 	/* make a dummy request */
 	fastlock_acquire(&vc->tx_queue_lock);

@@ -1112,6 +1112,9 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 	fastlock_init(&vc_ptr->work_queue_lock);
 	slist_init(&vc_ptr->tx_queue);
 	fastlock_init(&vc_ptr->tx_queue_lock);
+	dlist_init(&vc_ptr->rx_list);
+	dlist_init(&vc_ptr->work_list);
+	dlist_init(&vc_ptr->tx_list);
 
 	atomic_initialize(&vc_ptr->outstanding_tx_reqs, 0);
 	ret = _gnix_alloc_bitmap(&vc_ptr->flags, 1);
@@ -1137,6 +1140,28 @@ err:
 	return ret;
 }
 
+static void __gnix_vc_cancel(struct gnix_vc *vc)
+{
+	struct gnix_nic *nic = vc->ep->nic;
+
+	fastlock_acquire(&nic->rx_vc_lock);
+	if (!dlist_empty(&vc->rx_list))
+		dlist_remove(&vc->rx_list);
+	fastlock_release(&nic->rx_vc_lock);
+
+	fastlock_acquire(&nic->work_vc_lock);
+	if (!dlist_empty(&vc->work_list))
+		dlist_remove(&vc->work_list);
+	fastlock_release(&nic->work_vc_lock);
+
+	fastlock_acquire(&nic->tx_vc_lock);
+	if (!dlist_empty(&vc->tx_list))
+		dlist_remove(&vc->tx_list);
+	fastlock_release(&nic->tx_vc_lock);
+}
+
+/* Destroy an unconnected VC.  More Support is needed to shutdown and destroy
+ * an active VC. */
 int _gnix_vc_destroy(struct gnix_vc *vc)
 {
 	int ret = FI_SUCCESS;
@@ -1159,17 +1184,7 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 	/*
 	 * if the vc is in a nic's work queue, remove it
 	 */
-
-#if 0
-	if (_gnix_test_and_clear_bit(&vc->flags, GNIX_VC_FLAG_SCHEDULED)) {
-		fastlock_acquire(&nic->pending_vc_lock);
-		dlist_remove(&vc->pending_list);
-		fastlock_release(&nic->pending_vc_lock);
-		GNIX_INFO(FI_LOG_EP_CTRL, "Removed VC (%p) from pending_list\n",
-			  vc);
-	}
-#endif
-
+	__gnix_vc_cancel(vc);
 
 	/*
 	 * We may eventually want to check the state of the VC, if we
@@ -1454,7 +1469,7 @@ static struct gnix_vc *__gnix_nic_next_pending_rx_vc(struct gnix_nic *nic)
 	fastlock_acquire(&nic->rx_vc_lock);
 	vc = dlist_first_entry(&nic->rx_vcs, struct gnix_vc, rx_list);
 	if (vc)
-		dlist_remove(&vc->rx_list);
+		dlist_remove_init(&vc->rx_list);
 	fastlock_release(&nic->rx_vc_lock);
 
 	if (vc) {
@@ -1578,7 +1593,7 @@ static struct gnix_vc *__gnix_nic_next_pending_work_vc(struct gnix_nic *nic)
 	fastlock_acquire(&nic->work_vc_lock);
 	vc = dlist_first_entry(&nic->work_vcs, struct gnix_vc, work_list);
 	if (vc)
-		dlist_remove(&vc->work_list);
+		dlist_remove_init(&vc->work_list);
 	fastlock_release(&nic->work_vc_lock);
 
 	if (vc) {
@@ -1774,7 +1789,7 @@ static struct gnix_vc *__gnix_nic_next_pending_tx_vc(struct gnix_nic *nic)
 	fastlock_acquire(&nic->tx_vc_lock);
 	vc = dlist_first_entry(&nic->tx_vcs, struct gnix_vc, tx_list);
 	if (vc)
-		dlist_remove(&vc->tx_list);
+		dlist_remove_init(&vc->tx_list);
 	fastlock_release(&nic->tx_vc_lock);
 
 	if (vc) {
