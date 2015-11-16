@@ -1343,7 +1343,6 @@ err:
 
 }
 
-#if 0
 static int __match_context(struct slist_entry *item, const void *arg)
 {
 	struct gnix_fab_req *req;
@@ -1352,21 +1351,22 @@ static int __match_context(struct slist_entry *item, const void *arg)
 
 	return req->user_context == arg;
 }
-#endif
 
 static inline struct gnix_fab_req *__find_tx_req(
 		struct gnix_fid_ep *ep,
 		void *context)
 {
 	struct gnix_fab_req *req = NULL;
-#if 0
 	struct slist_entry *entry;
 	struct gnix_vc *vc;
+	GNIX_HASHTABLE_ITERATOR(ep->vc_ht, iter);
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "searching VCs for the correct context to"
 			" cancel, context=%p", context);
 
-	while ((vc = _gnix_nic_next_pending_vc(ep->nic))) {
+	fastlock_acquire(&ep->vc_ht_lock);
+	while ((vc = _gnix_ht_iterator_next(&iter))) {
+		GNIX_INFO(0, "searching vc: %p\n", vc);
 		fastlock_acquire(&vc->tx_queue_lock);
 		entry = slist_remove_first_match(&vc->tx_queue,
 				__match_context, context);
@@ -1376,7 +1376,7 @@ static inline struct gnix_fab_req *__find_tx_req(
 			break;
 		}
 	}
-#endif
+	fastlock_release(&ep->vc_ht_lock);
 
 	return req;
 }
