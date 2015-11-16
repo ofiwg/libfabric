@@ -295,7 +295,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->caps = info->caps;
 	domain_priv->fabric = fabric_priv;
 	domain_priv->progress_thread_enabled =
-		(info->domain_attr->data_progress == FI_PROGRESS_AUTO);
+		(info->domain_attr->data_progress == FI_PROGRESS_AUTO && psmx_env.prog_thread);
 
 	psm_ep_open_opts_get_defaults(&opts);
 
