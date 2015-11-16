@@ -36,39 +36,40 @@
 #include "verbs_rdm.h"
 
 
-/* TODO: Use of const is inconsistent throughout call stack */
-
-int fi_ibv_rdm_tagged_match_requests(struct dlist_entry *item,
-				     const void *other)
+int fi_ibv_rdm_tagged_req_match(struct dlist_entry *item, const void *other)
 {
 	const struct fi_ibv_rdm_tagged_request *req = other;
 	return (item == &req->queue_entry);
 }
 
-int fi_verbs_rdm_tagged_match_request_by_minfo(struct dlist_entry *item,
-					       const void *other)
+int fi_ibv_rdm_tagged_req_match_by_info(struct dlist_entry *item,
+					  const void *info)
 {
 	struct fi_ibv_rdm_tagged_request *request =
 	    container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
 
-	const struct fi_verbs_rdm_tagged_request_minfo *minfo = other;
+	const struct fi_verbs_rdm_tagged_request_minfo *minfo = info;
 
 	return (((request->conn == NULL) || (request->conn == minfo->conn)) &&
 		((request->tag & request->tagmask) ==
-		 (minfo->tag & request->tagmask)));
+		 (minfo->tag   & request->tagmask)));
 }
 
-int fi_verbs_rdm_tagged_match_request_by_minfo_with_tagmask(
-		struct dlist_entry *item, const void *other)
+/*
+ * The same as fi_ibv_rdm_tagged_req_match_by_info but conn and tagmask fields
+ * if info are used for matching instead of request's ones
+ */
+int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
+					 const void *info)
 {
 	struct fi_ibv_rdm_tagged_request *request =
 	    container_of(item, struct fi_ibv_rdm_tagged_request, queue_entry);
 
-	const struct fi_verbs_rdm_tagged_request_minfo *minfo = other;
+	const struct fi_verbs_rdm_tagged_request_minfo *minfo = info;
 
 	return (((minfo->conn == NULL) || (request->conn == minfo->conn)) &&
 		((request->tag & minfo->tagmask) ==
-		 (minfo->tag & minfo->tagmask)));
+		 (minfo->tag   & minfo->tagmask)));
 }
 
 void fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,

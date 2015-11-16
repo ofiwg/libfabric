@@ -582,7 +582,7 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 
 	struct dlist_entry *found_entry =
 	    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_unexp_queue,
-				   fi_verbs_rdm_tagged_match_request_by_minfo_with_tagmask,
+				   fi_ibv_rdm_tagged_req_match_by_info2,
 				   &minfo);
 
 	if (found_entry) {

@@ -393,9 +393,6 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"GOT RNDV ACK from conn %p, id %d\n", conn, request);
 	} else {
-		const int data_len =
-		    arrived_len - sizeof(struct fi_ibv_rdm_tagged_header);
-
 		struct fi_verbs_rdm_tagged_request_minfo minfo = {
 			.conn = conn,
 			.tag = rbuf->header.tag,
@@ -404,7 +401,7 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 
 		struct dlist_entry *found_entry =
 		    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
-					   fi_verbs_rdm_tagged_match_request_by_minfo,
+					   fi_ibv_rdm_tagged_req_match_by_info,
 					   &minfo);
 
 		if (found_entry) {
@@ -412,6 +409,9 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 			    container_of(found_entry,
 					 struct fi_ibv_rdm_tagged_request,
 					 queue_entry);
+
+			const int data_len = arrived_len -
+				sizeof(struct fi_ibv_rdm_tagged_header);
 
 			if (found_request->len < data_len) {
 				FI_IBV_ERROR

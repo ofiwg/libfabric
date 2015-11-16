@@ -234,18 +234,16 @@ do {                                                                        \
 #endif                          // ENABLE_DEBUG
 
 struct fi_verbs_rdm_tagged_request_minfo {
-	struct fi_ibv_rdm_tagged_conn *conn;
-	uint64_t                       tag;
-	size_t                         tagmask;
+	struct fi_ibv_rdm_tagged_conn	*conn;
+	uint64_t			tag;
+	uint64_t			tagmask;
 } ;
 
-/* TODO: Get usable names */
-int fi_ibv_rdm_tagged_match_requests(struct dlist_entry *item,
-                                     const void *other);
-int fi_verbs_rdm_tagged_match_request_by_minfo(struct dlist_entry *item,
-                                               const void *other);
-int fi_verbs_rdm_tagged_match_request_by_minfo_with_tagmask(
-		struct dlist_entry *item, const void *other);
+int fi_ibv_rdm_tagged_req_match(struct dlist_entry *item, const void *other);
+int fi_ibv_rdm_tagged_req_match_by_info(struct dlist_entry *item,
+                                        const void *info);
+int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
+                                         const void *info);
 void fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
                                               const void *arg);
 

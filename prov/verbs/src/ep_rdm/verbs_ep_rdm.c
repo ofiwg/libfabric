@@ -178,7 +178,7 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 
 	struct dlist_entry *found =
 	    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
-				   fi_ibv_rdm_tagged_match_requests, request);
+				   fi_ibv_rdm_tagged_req_match, request);
 
 	if (found) {
 		assert(container_of(found, struct fi_ibv_rdm_tagged_request,
