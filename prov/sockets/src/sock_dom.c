@@ -170,31 +170,38 @@ static int sock_dom_close(struct fid *fid)
 		sock_conn_map_destroy(&dom->r_cmap);
 	fastlock_destroy(&dom->r_cmap.lock);
 	fastlock_destroy(&dom->lock);
+	rbtDelete(dom->mr_heap);
 	sock_dom_remove_from_list(dom);
 	free(dom);
 	return 0;
 }
 
-static uint16_t sock_get_mr_key(struct sock_domain *dom)
+static uint64_t sock_get_mr_key(struct sock_domain *dom)
 {
-	uint16_t i;
-
-	for (i = 1; i < IDX_MAX_INDEX; i++) {
-		if (!idm_lookup(&dom->mr_idm, i))
+	uint64_t i;
+	for (i = 0; i < UINT64_MAX; i++) {
+		if (!sock_mr_get_entry(dom, i))
 			return i;
 	}
-	return 0;
+	SOCK_LOG_ERROR("failed to get a free key\n");
+	return UINT64_MAX;
 }
 
 static int sock_mr_close(struct fid *fid)
 {
 	struct sock_domain *dom;
 	struct sock_mr *mr;
+	RbtIterator it;
+	RbtStatus res;
 
 	mr = container_of(fid, struct sock_mr, mr_fid.fid);
 	dom = mr->domain;
+
 	fastlock_acquire(&dom->lock);
-	idm_clear(&dom->mr_idm , (int) mr->mr_fid.key);
+	it = rbtFind(dom->mr_heap, (void *)mr->key);
+	if (!it || ((res = rbtErase(dom->mr_heap, it)) != RBT_STATUS_OK))
+		SOCK_LOG_ERROR("Invalid mr\n");
+
 	fastlock_release(&dom->lock);
 	atomic_dec(&dom->ref);
 	free(mr);
@@ -241,18 +248,26 @@ static struct fi_ops sock_mr_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-struct sock_mr *sock_mr_get_entry(struct sock_domain *domain, uint16_t key)
+struct sock_mr *sock_mr_get_entry(struct sock_domain *domain, uint64_t key)
 {
-	return (struct sock_mr *)idm_lookup(&domain->mr_idm, key);
+	RbtIterator it;
+	void *value;
+
+	it = rbtFind(domain->mr_heap, (void *)key);
+	if (!it)
+		return NULL;
+
+	rbtKeyValue(domain->mr_heap, it, (void **)&key, (void **)&value);
+	return (struct sock_mr *) value;
 }
 
-struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint16_t key,
+struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key,
 				   void *buf, size_t len, uint64_t access)
 {
 	int i;
 	struct sock_mr *mr;
-	mr = idm_lookup(&domain->mr_idm, key);
 
+	mr = sock_mr_get_entry(domain, key);
 	if (!mr)
 		return NULL;
 
@@ -286,6 +301,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct sock_mr *_mr;
 	uint64_t key;
 	struct fid_domain *domain;
+	RbtStatus res;
 
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0) {
 		return -FI_EINVAL;
@@ -293,9 +309,9 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	domain = container_of(fid, struct fid_domain, fid);
 	dom = container_of(domain, struct sock_domain, dom_fid);
-	if ((dom->attr.mr_mode == FI_MR_SCALABLE) &&
-	    ((attr->requested_key > IDX_MAX_INDEX) ||
-	     idm_lookup(&dom->mr_idm, (int) attr->requested_key)))
+
+	if (dom->attr.mr_mode == FI_MR_SCALABLE &&
+	    sock_mr_get_entry(dom, attr->requested_key) != NULL)
 		return -FI_ENOKEY;
 
 	_mr = calloc(1, sizeof(*_mr) +
@@ -316,9 +332,12 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	fastlock_acquire(&dom->lock);
 	key = (dom->attr.mr_mode == FI_MR_BASIC) ?
-		sock_get_mr_key(dom) : (uint16_t) attr->requested_key;
-	if (idm_set(&dom->mr_idm, key, _mr) < 0)
+		sock_get_mr_key(dom) : attr->requested_key;
+
+	res = rbtInsert(dom->mr_heap, (void *)key, _mr);
+	if (res != RBT_STATUS_OK)
 		goto err;
+
 	_mr->mr_fid.key = key;
 	_mr->mr_fid.mem_desc = (void *) (uintptr_t) key;
 	fastlock_release(&dom->lock);
@@ -447,6 +466,11 @@ static struct fi_ops_mr sock_dom_mr_ops = {
 	.regattr = sock_regattr,
 };
 
+static int sock_compare_mr_keys(void *key1, void *key2)
+{
+	return (uint64_t)key1 - (uint64_t)key2;
+}
+
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context)
 {
@@ -498,6 +522,11 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	sock_domain->r_cmap.domain = sock_domain;
 	fastlock_init(&sock_domain->r_cmap.lock);
+
+	sock_domain->mr_heap = rbtNew(&sock_compare_mr_keys);
+	if (!sock_domain->mr_heap) {
+		goto err;
+	}
 
 	sock_domain->fab = fab;
 	*dom = &sock_domain->dom_fid;
