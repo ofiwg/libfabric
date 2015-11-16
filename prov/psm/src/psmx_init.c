@@ -42,6 +42,7 @@ struct psmx_env psmx_env = {
 	.uuid		= PSMX_DEFAULT_UUID,
 	.delay		= 1,
 	.timeout	= 5,
+	.prog_thread	= 1,
 	.prog_interval	= -1,
 	.prog_affinity	= NULL,
 };
@@ -57,6 +58,7 @@ static void psmx_init_env(void)
 	fi_param_get_str(&psmx_prov, "uuid", &psmx_env.uuid);
 	fi_param_get_int(&psmx_prov, "delay", &psmx_env.delay);
 	fi_param_get_int(&psmx_prov, "timeout", &psmx_env.timeout);
+	fi_param_get_int(&psmx_prov, "prog_thread", &psmx_env.prog_thread);
 	fi_param_get_int(&psmx_prov, "prog_interval", &psmx_env.prog_interval);
 	fi_param_get_str(&psmx_prov, "prog_affinity", &psmx_env.prog_affinity);
 }
@@ -561,6 +563,10 @@ PROVIDER_INI
 
 	fi_param_define(&psmx_prov, "timeout", FI_PARAM_INT,
 			"Timeout (seconds) for gracefully closing the PSM endpoint");
+
+	fi_param_define(&psmx_prov, "prog_thread", FI_PARAM_BOOL,
+			"Whether to allow the creation of progress thread or not "
+			"(default: yes)");
 
 	fi_param_define(&psmx_prov, "prog_interval", FI_PARAM_INT,
 			"Interval (microseconds) between progress calls made in the "
