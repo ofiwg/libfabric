@@ -50,7 +50,7 @@ extern "C" {
 
 struct gnix_cq_entry {
 	void *the_entry;
-	fi_addr_t source;
+	fi_addr_t src_addr;
 	struct slist_entry item;
 };
 
@@ -83,7 +83,7 @@ struct gnix_fid_cq {
 
 ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, void *op_context,
 			  uint64_t flags, size_t len, void *buf,
-			  uint64_t data, uint64_t tag);
+			  uint64_t data, uint64_t tag, fi_addr_t src_addr);
 
 ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 			  uint64_t flags, size_t len, void *buf,

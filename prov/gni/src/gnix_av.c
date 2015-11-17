@@ -234,6 +234,23 @@ static int table_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
 	return FI_SUCCESS;
 }
 
+static int table_reverse_lookup(struct gnix_fid_av *int_av,
+				struct gnix_address gnix_addr,
+				fi_addr_t *fi_addr)
+{
+	struct gnix_av_addr_entry *entry;
+	int i;
+
+	for (i = 0; i < int_av->count; i++) {
+		entry = &int_av->table[i];
+		if (GNIX_ADDR_EQUAL(entry->gnix_addr, gnix_addr)) {
+			*fi_addr = i;
+			return FI_SUCCESS;
+		}
+	}
+
+	return -FI_ENOENT;
+}
 
 /*******************************************************************************
  * FI_AV_MAP specific implementations.
@@ -343,6 +360,23 @@ static int map_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
 	return FI_SUCCESS;
 }
 
+static int map_reverse_lookup(struct gnix_fid_av *int_av,
+			      struct gnix_address gnix_addr,
+			      fi_addr_t *fi_addr)
+{
+	GNIX_HASHTABLE_ITERATOR(int_av->map_ht, iter);
+	struct gnix_av_addr_entry *entry;
+
+	while ((entry = _gnix_ht_iterator_next(&iter))) {
+		if (GNIX_ADDR_EQUAL(entry->gnix_addr, gnix_addr)) {
+			*fi_addr = GNIX_HASHTABLE_ITERATOR_KEY(iter);
+			return FI_SUCCESS;
+		}
+	}
+
+	return -FI_ENOENT;
+}
+
 /*******************************************************************************
  * FI_AV API implementations.
  ******************************************************************************/
@@ -365,6 +399,35 @@ int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
 		break;
 	case FI_AV_MAP:
 		ret = map_lookup(gnix_av, fi_addr, entry_ptr);
+		break;
+	default:
+		ret = -FI_EINVAL;
+		break;
+	}
+
+err:
+	return ret;
+}
+
+int _gnix_av_reverse_lookup(struct gnix_fid_av *gnix_av,
+			    struct gnix_address gnix_addr,
+			    fi_addr_t *fi_addr)
+{
+	int ret = FI_SUCCESS;
+
+	GNIX_TRACE(FI_LOG_AV, "\n");
+
+	if (!gnix_av) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	switch (gnix_av->type) {
+	case FI_AV_TABLE:
+		ret = table_reverse_lookup(gnix_av, gnix_addr, fi_addr);
+		break;
+	case FI_AV_MAP:
+		ret = map_reverse_lookup(gnix_av, gnix_addr, fi_addr);
 		break;
 	default:
 		ret = -FI_EINVAL;

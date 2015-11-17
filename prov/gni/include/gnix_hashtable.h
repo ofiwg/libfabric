@@ -156,7 +156,7 @@ typedef struct gnix_hashtable {
 struct gnix_hashtable_iter {
 	struct gnix_hashtable *ht;
 	int cur_idx;
-	struct dlist_entry *cur_entry;
+	gnix_ht_entry_t *cur_entry;
 };
 
 #define GNIX_HASHTABLE_ITERATOR(_ht, _iter)	\
@@ -165,6 +165,7 @@ struct gnix_hashtable_iter {
 		.cur_idx = 0,			\
 		.cur_entry = NULL		\
 	}
+#define GNIX_HASHTABLE_ITERATOR_KEY(_iter)	((_iter).cur_entry->key)
 
 /**
  * Initializes the hash table with provided attributes, if any

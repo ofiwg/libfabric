@@ -1115,6 +1115,7 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 	dlist_init(&vc_ptr->rx_list);
 	dlist_init(&vc_ptr->work_list);
 	dlist_init(&vc_ptr->tx_list);
+	vc_ptr->peer_fi_addr = FI_ADDR_NOTAVAIL;
 
 	atomic_initialize(&vc_ptr->outstanding_tx_reqs, 0);
 	ret = _gnix_alloc_bitmap(&vc_ptr->flags, 1);
@@ -1953,6 +1954,27 @@ int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 	}
 
 	return FI_SUCCESS;
+}
+
+fi_addr_t _gnix_vc_peer_fi_addr(struct gnix_vc *vc)
+{
+	int rc;
+
+	/* If FI_SOURCE capability was requested, do a reverse lookup of a VC's
+	 * FI address once.  Skip translation on connected EPs (no AV). */
+	if (vc->ep->caps & FI_SOURCE &&
+	    vc->ep->av &&
+	    vc->peer_fi_addr == FI_ADDR_NOTAVAIL) {
+		rc = _gnix_av_reverse_lookup(vc->ep->av,
+					     vc->peer_addr,
+					     &vc->peer_fi_addr);
+		if (rc != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_av_reverse_lookup() failed: %d\n",
+				  rc);
+	}
+
+	return vc->peer_fi_addr;
 }
 
 int _gnix_vc_cm_init(struct gnix_cm_nic *cm_nic)

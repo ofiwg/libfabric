@@ -92,6 +92,7 @@ enum gnix_vc_conn_req_type {
  * @var tx_list              NIC TX VC list
  * @var entry                used internally for managing linked lists
  *                           of vc structs that require O(1) insertion/removal
+ * @var peer_fi_addr         FI address of peer with which this VC is connected
  * @var peer_addr            address of peer with which this VC is connected
  * @var peer_cm_nic_addr     address of the cm_nic being used by peer, this
  *                           is the address to which GNI datagrams must be
@@ -123,6 +124,7 @@ struct gnix_vc {
 	struct dlist_entry tx_list;	/* TX VC list entry */
 
 	struct dlist_entry entry;
+	fi_addr_t peer_fi_addr;
 	struct gnix_address peer_addr;
 	struct gnix_address peer_cm_nic_addr;
 	struct gnix_fid_ep *ep;
@@ -305,6 +307,15 @@ int _gnix_nic_vc_progress(struct gnix_nic *nic);
  */
 int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 		    struct gnix_vc **vc_ptr);
+
+/**
+ * @brief       Return the FI address of a VC.
+ *
+ * @param vc    The VC for to use for lookup.
+ * @return      The FI address of the input VC.  FI_ADDR_NOTAVAIL on error or
+ *              if the VC is of incompatible type.
+ */
+fi_addr_t _gnix_vc_peer_fi_addr(struct gnix_vc *vc);
 
 int _gnix_vc_cm_init(struct gnix_cm_nic *cm_nic);
 int _gnix_vc_schedule(struct gnix_vc *vc);

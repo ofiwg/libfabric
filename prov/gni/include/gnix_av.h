@@ -81,5 +81,16 @@ struct gnix_av_addr_entry {
 int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
 		    struct gnix_av_addr_entry **addr);
 
+/**
+ * @brief Return the FI address mapped to a given GNIX address.
+ *
+ * @param[in]   gnix_av   The AV to use for lookup.
+ * @param[in]   gnix_addr The GNIX address to translate.
+ * @param[out]  fi_addr   The FI address mapped to gnix_addr.
+ * @return      FI_SUCCESS on success, -FI_EINVAL or -FI_ENOENT on error.
+ */
+int _gnix_av_reverse_lookup(struct gnix_fid_av *gnix_av,
+			    struct gnix_address gnix_addr,
+			    fi_addr_t *fi_addr);
 
 #endif /* _GNIX_AV_H_ */
