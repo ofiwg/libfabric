@@ -509,7 +509,12 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 
 	int fd = _ep->cm_listener_ec->fd;
 	int flags = fcntl(fd, F_GETFL, 0);
-	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+	ret = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+	if (ret == -1) {
+		VERBS_INFO_ERRNO(FI_LOG_CORE, "fcntl", errno);
+		ret = -FI_EOTHER;
+		goto err;
+	}
 
 	if (rdma_create_id(_ep->cm_listener_ec,
 			   &_ep->cm_listener, NULL, RDMA_PS_TCP)) {
@@ -517,7 +522,6 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 			     strerror(errno));
 		ret = -FI_EOTHER;
 		goto err;
-
 	}
 
 	if (rdma_bind_addr(_ep->cm_listener,
