@@ -48,12 +48,12 @@ fi_ibv_rdm_tagged_malloc_and_register(struct fi_ibv_rdm_ep *ep, void **buf,
 				      size_t size)
 {
 	*buf = memalign(FI_IBV_RDM_MEM_ALIGNMENT, size);
-	if (!buf)
-		return NULL;
-
-	memset(*buf, 0, size);
-	return ibv_reg_mr(ep->domain->pd, *buf, size,
-			  IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
+	if (*buf) {
+		memset(*buf, 0, size);
+		return ibv_reg_mr(ep->domain->pd, *buf, size,
+				  IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
+	}
+	return NULL;
 }
 
 int fi_ibv_rdm_tagged_deregister_and_free(struct ibv_mr **mr, char **buff)
