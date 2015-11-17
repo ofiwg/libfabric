@@ -414,15 +414,14 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 				sizeof(struct fi_ibv_rdm_tagged_header);
 
 			if (found_request->len < data_len) {
-				FI_IBV_ERROR
-				    ("%s: %d RECV TRUNCATE, data_len=%d, posted_len=%d, "
-				     "conn %p, tag 0x%llx, tagmask %llx\n",
-				     __FUNCTION__, __LINE__, data_len,
-				     found_request->len, found_request->conn,
-				     (long long unsigned int)found_request->tag,
-				     (long long unsigned int)found_request->
-				     tagmask);
-				abort();
+				VERBS_INFO(FI_LOG_EP_DATA,
+					"%s: %d RECV TRUNCATE, data_len=%d, posted_len=%d, "
+					"conn %p, tag 0x%llx, tagmask %llx\n",
+					__FUNCTION__, __LINE__, data_len,
+					found_request->len, found_request->conn,
+					found_request->tag,
+					found_request->tagmask);
+//				return -FI_EOTHER;
 			}
 
 			fi_ibv_rdm_tagged_remove_from_posted_queue
@@ -490,9 +489,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 		seq_num);
 	int ret = ibv_post_send(conn->qp, &wr, &bad_wr);
 	if (ret) {
-		FI_IBV_ERROR
-		    ("ibv_post_send fail, ret %d, errno %d, strerror %s", ret,
-		     errno, strerror(errno));
+		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
 	};
 
@@ -509,7 +506,7 @@ void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 		int to_post = ep->rq_wr_depth - conn->recv_preposted;
 		if (fi_ibv_rdm_tagged_repost_receives(conn, ep, to_post) !=
 		    to_post) {
-			FI_IBV_ERROR("repost recv failed\n");
+			VERBS_INFO(FI_LOG_EP_DATA, "repost recv failed\n");
 			abort();
 		}
 		VERBS_DBG(FI_LOG_EP_DATA,
@@ -567,19 +564,18 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 	}
 
 wc_error:
-	FI_IBV_ERROR("%s: ibv_poll_cq returned %d\n", __FUNCTION__, ret);
+	VERBS_INFO(FI_LOG_EP_DATA, "ibv_poll_cq returned %d\n", ret);
 
 	if (wc[i].status != IBV_WC_SUCCESS) {
-		FI_IBV_ERROR("%s: got ibv_wc.status = %d:%s\n",
-			     __FUNCTION__, wc[i].status,
-			     ibv_wc_status_str(wc[i].status));
+		VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc.status = %d:%s\n",
+			wc[i].status, ibv_wc_status_str(wc[i].status));
 		assert(0);
 		return FI_EOTHER;
 	}
 
 	if (wc[i].opcode != IBV_WC_RECV_RDMA_WITH_IMM) {
-		FI_IBV_ERROR("%s: got ibv_wc[i].opcode = %d\n",
-			     __FUNCTION__, wc[i].opcode);
+		VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc[i].opcode = %d\n",
+			wc[i].opcode);
 	}
 
 	assert(0);
@@ -652,8 +648,8 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 wc_error:
 	if (ret < 0 || wc[i].status != IBV_WC_SUCCESS) {
 		if (ret < 0) {
-			FI_IBV_ERROR("%s: ibv_poll_cq returned %d\n",
-				     __FUNCTION__, ret);
+			VERBS_INFO(FI_LOG_EP_DATA, "ibv_poll_cq returned %d\n",
+				   ret);
 			assert(0);
 		}
 
@@ -665,11 +661,11 @@ wc_error:
 			    : ((struct fi_ibv_rdm_tagged_request *)wc[i].
 			       wr_id)->conn;
 
-			FI_IBV_ERROR
-			    ("%s: got ibv_wc.status = %d:%s, pend_send: %d, "
-			     "connection: %p\n", __FUNCTION__, wc[i].status,
-			     ibv_wc_status_str(wc[i].status), ep->pend_send,
-			     (conn));
+			VERBS_INFO(FI_LOG_EP_DATA,
+				"got ibv_wc.status = %d:%s, pend_send: %d, connection: %p\n",
+				wc[i].status,
+				ibv_wc_status_str(wc[i].status),
+				ep->pend_send, conn);
 			assert(0);
 		}
 	}

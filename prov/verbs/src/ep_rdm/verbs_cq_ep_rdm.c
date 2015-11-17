@@ -83,7 +83,7 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 	if (i == 0) {
 		int err = fi_ibv_rdm_tagged_poll(_cq->ep);
 		if (err < 0) {
-			FI_IBV_ERROR("fi_ibv_rdm_tagged_poll failed\n");
+			VERBS_INFO(FI_LOG_CQ, "fi_ibv_rdm_tagged_poll failed\n");
 		}
 	}
 

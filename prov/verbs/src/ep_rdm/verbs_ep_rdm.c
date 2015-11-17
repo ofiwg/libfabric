@@ -268,7 +268,8 @@ static void *fi_ibv_rdm_tagged_cm_progress_thread(void *ctx)
 	struct fi_ibv_rdm_ep *ep = (struct fi_ibv_rdm_ep *)ctx;
 	while (_fi_ibv_rdm_tagged_cm_progress_running) {
 		if (fi_ibv_rdm_tagged_cm_progress(ep)) {
-			FI_IBV_ERROR("fi_ibv_rdm_cm_progress error\n");
+			VERBS_INFO (FI_LOG_EP_DATA,
+			"fi_ibv_rdm_cm_progress error\n");
 			abort();
 		}
 		usleep(FI_IBV_RDM_CM_THREAD_TIMEOUT);
@@ -307,7 +308,8 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 			       conn->state != FI_VERBS_CONN_REJECTED) {
 				ret = fi_ibv_rdm_tagged_cm_progress(ep);
 				if (ret) {
-					FI_IBV_ERROR("cm progress failed\n");
+					VERBS_INFO(FI_LOG_AV,
+						"cm progress failed\n");
 					return ret;
 				}
 			}
@@ -321,7 +323,7 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 	while (ep->num_active_conns) {
 		ret = fi_ibv_rdm_tagged_cm_progress(ep);
 		if (ret) {
-			FI_IBV_ERROR("cm progress failed\n");
+			VERBS_INFO(FI_LOG_AV, "cm progress failed\n");
 			return ret;
 		}
 	}
@@ -329,7 +331,7 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 	assert(0 == HASH_COUNT(fi_ibv_rdm_tagged_conn_hash) &&
 	       NULL == fi_ibv_rdm_tagged_conn_hash);
 
-	FI_INFO(&fi_ibv_prov, FI_LOG_AV, "DISCONNECT complete\n");
+	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
 	rdma_destroy_id(ep->cm_listener);
 	ibv_destroy_cq(ep->scq);
 	ibv_destroy_cq(ep->rcq);
@@ -389,20 +391,20 @@ static inline int fi_ibv_rdm_tagged_test_addr(const char *devname,
 	struct rdma_cm_id *test_id;
 	int test = 0;
 	if (rdma_create_id(NULL, &test_id, NULL, RDMA_PS_TCP)) {
-		FI_IBV_ERROR("Failed to create test rdma cm id: %s\n",
+		VERBS_INFO(FI_LOG_CORE, "Failed to create test rdma cm id: %s\n",
 			     strerror(errno));
 		return -1;
 	}
 
 	if (rdma_bind_addr(test_id, (struct sockaddr *)addr)) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_CORE,
+		VERBS_INFO(FI_LOG_CORE,
 			"Failed to bind cm listener to  addr : %s\n",
 			strerror(errno));
 		rdma_destroy_id(test_id);
 		return 0;
 	}
 
-	FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "device name: %s %s\n",
+	VERBS_INFO(FI_LOG_CORE, "device name: %s %s\n",
 		test_id->verbs->device->name, devname);
 
 	if (!strcmp(test_id->verbs->device->name, devname)) {
@@ -489,16 +491,18 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	if (fi_ibv_rdm_tagged_find_ipoib_addr
 	    (_ep, _domain->verbs->device->name)) {
 		ret = -FI_ENODEV;
-		FI_IBV_ERROR("Failed to find correct IPoIB address\n");
+		VERBS_INFO(FI_LOG_CORE,
+			   "Failed to find correct IPoIB address\n");
 		goto err;
 	}
 
-	FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "My IPoIB: %s\n",
+	VERBS_INFO(FI_LOG_CORE, "My IPoIB: %s\n",
 		_ep->my_ipoib_addr_str);
 	_ep->cm_listener_ec = rdma_create_event_channel();
 	if (!_ep->cm_listener_ec) {
-		FI_IBV_ERROR("Failed to create listener event channel: %s\n",
-			     strerror(errno));
+		VERBS_INFO(FI_LOG_CORE,
+			"Failed to create listener event channel: %s\n",
+			strerror(errno));
 		goto err;
 	}
 
@@ -508,7 +512,7 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 
 	if (rdma_create_id(_ep->cm_listener_ec,
 			   &_ep->cm_listener, NULL, RDMA_PS_TCP)) {
-		FI_IBV_ERROR("Failed to create cm listener: %s\n",
+		VERBS_INFO(FI_LOG_CORE, "Failed to create cm listener: %s\n",
 			     strerror(errno));
 		goto err;
 
@@ -516,20 +520,20 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 
 	if (rdma_bind_addr(_ep->cm_listener,
 			   (struct sockaddr *)&_ep->my_ipoib_addr)) {
-		FI_IBV_ERROR
-		    ("Failed to bind cm listener to my IPoIB addr %s: %s\n",
-		     _ep->my_ipoib_addr_str, strerror(errno));
+		VERBS_INFO(FI_LOG_CORE,
+			"Failed to bind cm listener to my IPoIB addr %s: %s\n",
+			_ep->my_ipoib_addr_str, strerror(errno));
 		goto err;
 
 	}
 	if (rdma_listen(_ep->cm_listener, 1024)) {
-		FI_IBV_ERROR("rdma_listen failed: %s\n", strerror(errno));
+		VERBS_INFO(FI_LOG_CORE, "rdma_listen failed: %s\n",
+			strerror(errno));
 		goto err;
 	}
 
 	_ep->cm_listener_port = ntohs(rdma_get_src_port(_ep->cm_listener));
-	FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "listener port: %d\n",
-		_ep->cm_listener_port);
+	VERBS_INFO(FI_LOG_CORE, "listener port: %d\n", _ep->cm_listener_port);
 
 	size_t s1 = sizeof(_ep->my_ipoib_addr.sin_addr.s_addr);
 	size_t s2 = sizeof(_ep->cm_listener_port);
@@ -538,7 +542,7 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	memcpy(_ep->my_rdm_addr, &_ep->my_ipoib_addr.sin_addr.s_addr, s1);
 	memcpy(_ep->my_rdm_addr + s1, &_ep->cm_listener_port, s2);
 
-	FI_INFO(&fi_ibv_prov, FI_LOG_AV,
+	VERBS_INFO(FI_LOG_AV,
 		"My ep_addr: " FI_IBV_RDM_ADDR_STR_FORMAT "\n",
 		FI_IBV_RDM_ADDR_STR(_ep->my_rdm_addr));
 
@@ -583,15 +587,13 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->scq = ibv_create_cq(_ep->domain->verbs, _ep->scq_depth, _ep,
 				 NULL, 0);
 	if (_ep->scq == NULL) {
-		FI_IBV_ERROR("Failed to create EP scq: errno %d : %s\n",
-			     errno, strerror(errno));
+		VERBS_INFO_ERRNO(FI_LOG_CORE, "ibv_create_cq", errno);
 	}
 
 	_ep->rcq =
 	    ibv_create_cq(_ep->domain->verbs, _ep->rcq_depth, _ep, NULL, 0);
 	if (_ep->rcq == NULL) {
-		FI_IBV_ERROR("Failed to create EP rcq: errno %d : %s\n",
-			     errno, strerror(errno));
+		VERBS_INFO_ERRNO(FI_LOG_CORE, "ibv_create_cq", errno);
 	}
 
 	*ep = &_ep->ep_fid;
@@ -604,11 +606,9 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 			     &fi_ibv_rdm_tagged_cm_progress_thread,
 			     (void *)_ep);
 	if (ret) {
-		FI_IBV_ERROR("Failed to launch CM progress thread, err :%d\n",
-			     ret);
+		VERBS_INFO(FI_LOG_CORE,
+			"Failed to launch CM progress thread, err :%d\n", ret);
 	}
-
-	FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Successfully done: %d\n", ret);
 
 	return ret;
 err:

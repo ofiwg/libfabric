@@ -50,7 +50,7 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 		return 0;
 
 	if (ep->is_closing) {
-		FI_IBV_ERROR("Attempt to start connection with addr "
+		VERBS_INFO(FI_LOG_CORE, "Attempt to start connection with addr "
 		FI_IBV_RDM_ADDR_STR_FORMAT" when ep is closing\n",
 		FI_IBV_RDM_ADDR_STR(conn->addr));
 		return -1;

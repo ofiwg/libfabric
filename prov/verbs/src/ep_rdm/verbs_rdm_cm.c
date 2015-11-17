@@ -97,7 +97,7 @@ fi_ibv_rdm_tagged_batch_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
 		}
 
 		if (!found) {
-			FI_IBV_ERROR("Failed to post recv\n");
+			VERBS_INFO(FI_LOG_EP_DATA, "Failed to post recv\n");
 		}
 
 		ret = i;
@@ -174,18 +174,17 @@ fi_ibv_rdm_tagged_process_addr_resolved(struct rdma_cm_id *id,
 	assert(id->verbs == ep->domain->verbs);
 	fi_ibv_rdm_tagged_init_qp_attributes(&qp_attr, ep);
 	if (rdma_create_qp(id, ep->domain->pd, &qp_attr)) {
-		fprintf(stderr, "rdma_create_qp failed\n");
+		VERBS_INFO(FI_LOG_AV, "rdma_create_qp failed\n");
 	}
 
 	if (conn->is_active) {
 		assert(id == conn->id);
 		fi_ibv_rdm_tagged_prepare_conn_memory(ep, conn);
 		conn->qp = id->qp;
-		if (ep->rq_wr_depth != fi_ibv_rdm_tagged_repost_receives(conn, ep,
-						      ep->rq_wr_depth)) {
-			fprintf(stderr, "repost receives failed\n");
-			/* TODO: replace with return and proper error handling */
-			abort();
+		if (ep->rq_wr_depth != fi_ibv_rdm_tagged_repost_receives(conn,
+			ep, ep->rq_wr_depth)) {
+			VERBS_INFO(FI_LOG_AV, "repost receives failed\n");
+			return -FI_ENOMEM;
 		}
 
 	}
@@ -445,7 +444,8 @@ int fi_ibv_rdm_tagged_conn_cleanup(struct fi_ibv_rdm_ep *ep,
 
 	rdma_destroy_qp(conn->id);
 	if ((ret = rdma_destroy_id(conn->id))) {
-		FI_IBV_ERROR("rdma_destroy_id failed, ret = %d\n", ret);
+		VERBS_INFO(FI_LOG_AV, 
+			"rdma_destroy_id failed, ret = %d\n", ret);
 	}
 	fi_ibv_rdm_tagged_deregister_and_free(&conn->s_mr, &conn->sbuf_mem_reg);
 	fi_ibv_rdm_tagged_deregister_and_free(&conn->r_mr, &conn->rbuf_mem_reg);
@@ -542,7 +542,7 @@ static int fi_ibv_rdm_tagged_process_event(struct rdma_cm_event *event,
 
 	default:
 		ret = FI_EOTHER;
-		FI_IBV_ERROR("got unexpected rdmacm event, %s\n",
+		VERBS_INFO(FI_LOG_AV, "got unexpected rdmacm event, %s\n",
 			     rdma_event_str(event->event));
 		abort();
 		break;

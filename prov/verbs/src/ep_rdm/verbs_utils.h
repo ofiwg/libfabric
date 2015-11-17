@@ -73,16 +73,6 @@ struct fi_ibv_msg_ep;
 
 #define FI_IBV_RDM_CM_RESOLVEADDR_TIMEOUT (30000)
 
-/* TODO: remove */
-#define FI_IBV_ERROR(format, ...) do {                                  \
-		char _hostname[100];                                    \
-		gethostname(_hostname, sizeof(_hostname));              \
-		fprintf(stderr, "[%s:%d] libfabric:verbs:%s:%d:<error>:"format, \
-		_hostname, getpid(),                                    \
-		__FUNCTION__, __LINE__, ##__VA_ARGS__);                 \
-	} while(0)
-
-
 /* TODO: Create and use a common abstraction */
 
 /* memory pool utils
