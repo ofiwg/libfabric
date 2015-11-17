@@ -64,12 +64,13 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 	sock_addr.sin_port = htons(sock_addr.sin_port);
 	sock_addr.sin_family = AF_INET;
 
-	rdma_create_id(ep->cm_listener_ec, &id, conn, RDMA_PS_TCP);
+	if (rdma_create_id(ep->cm_listener_ec, &id, conn, RDMA_PS_TCP))
+		return -1;
+
 	if (conn->is_active)
 		conn->id = id;
 
-	rdma_resolve_addr(id, NULL, (struct sockaddr *) &sock_addr, 30000);
-	return 0;
+	return rdma_resolve_addr(id, NULL, (struct sockaddr *)&sock_addr, 30000);
 }
 
 int fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_ep *ep,
