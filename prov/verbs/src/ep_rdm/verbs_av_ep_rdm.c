@@ -123,8 +123,10 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 			 * side.
 			 */
 			conn = memalign(64, sizeof *conn);
-			if (!conn)
-				return -FI_ENOMEM;
+			if (!conn) {
+				ret = -FI_ENOMEM;
+				goto out;
+			}
 
 			memset(conn, 0, sizeof *conn);
 			dlist_init(&conn->postponed_requests_head);
@@ -143,6 +145,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 		ret++;
 	}
 
+out:
 	pthread_mutex_unlock(&ep->cm_lock);
 	return ret;
 }
