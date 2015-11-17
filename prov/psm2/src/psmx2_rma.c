@@ -459,19 +459,24 @@ int psmx2_am_process_rma(struct psmx2_fid_domain *domain,
 {
 	int err;
 	psm2_mq_req_t psm2_req;
+	psm2_mq_tag_t psm2_tag, psm2_tagsel;
 
 	if ((req->op & PSMX2_AM_OP_MASK) == PSMX2_AM_REQ_WRITE_LONG) {
-		err = psm2_mq_irecv(domain->psm2_mq,
-				    (uint64_t)req->write.context, -1ULL, 0,
-				    (void *)req->write.addr, req->write.len,
-				    (void *)&req->fi_context, &psm2_req);
+		PSMX2_SET_TAG(psm2_tag, (uint64_t)req->write.context, PSMX2_RMA_BIT);
+		PSMX2_SET_TAG(psm2_tagsel, -1ULL, -1);
+		err = psm2_mq_irecv2(domain->psm2_mq,
+				     (psm2_epaddr_t)req->write.peer_addr,
+				     &psm2_tag, &psm2_tagsel, 0,
+				     (void *)req->write.addr, req->write.len,
+				     (void *)&req->fi_context, &psm2_req);
 	}
 	else {
-		err = psm2_mq_isend(domain->psm2_mq,
-				    (psm2_epaddr_t)req->read.peer_addr,
-				    0, (uint64_t)req->read.context,
-				    (void *)req->read.addr, req->read.len,
-				    (void *)&req->fi_context, &psm2_req);
+		PSMX2_SET_TAG(psm2_tag, (uint64_t)req->read.context, PSMX2_RMA_BIT);
+		err = psm2_mq_isend2(domain->psm2_mq,
+				     (psm2_epaddr_t)req->read.peer_addr,
+				     0, &psm2_tag,
+				     (void *)req->read.addr, req->read.len,
+				     (void *)&req->fi_context, &psm2_req);
 	}
 
 	return psmx2_errno(err);
@@ -489,7 +494,7 @@ ssize_t _psmx2_read(struct fid_ep *ep, void *buf, size_t len,
 	psm2_amarg_t args[8];
 	int chunk_size;
 	size_t offset = 0;
-	uint64_t psm2_tag;
+	psm2_mq_tag_t psm2_tag, psm2_tagsel;
 	psm2_mq_req_t psm2_req;
 	size_t idx;
 
@@ -566,16 +571,18 @@ ssize_t _psmx2_read(struct fid_ep *ep, void *buf, size_t len,
 	chunk_size = MIN(PSMX2_AM_CHUNK_SIZE, psmx2_am_param.max_reply_short);
 
 	if (psmx2_env.tagged_rma && len > chunk_size) {
-		psm2_tag = PSMX2_RMA_BIT | ep_priv->domain->psm2_epid;
-		psm2_mq_irecv(ep_priv->domain->psm2_mq, psm2_tag, -1ULL,
-			      0, buf, len, (void *)&req->fi_context, &psm2_req);
+		PSMX2_SET_TAG(psm2_tag, ep_priv->domain->psm2_epid, PSMX2_RMA_BIT);
+		PSMX2_SET_TAG(psm2_tagsel, -1ULL, -1);
+		psm2_mq_irecv2(ep_priv->domain->psm2_mq,
+			       (psm2_epaddr_t) src_addr, &psm2_tag, &psm2_tagsel,
+			       0, buf, len, (void *)&req->fi_context, &psm2_req);
 
 		args[0].u32w0 = PSMX2_AM_REQ_READ_LONG;
 		args[0].u32w1 = len;
 		args[1].u64 = (uint64_t)req;
 		args[2].u64 = addr;
 		args[3].u64 = key;
-		args[4].u64 = psm2_tag;
+		args[4].u64 = PSMX2_GET_TAG64(psm2_tag);
 		psm2_am_request_short((psm2_epaddr_t) src_addr,
 				      PSMX2_AM_RMA_HANDLER, args, 5, NULL, 0,
 				      0, NULL, NULL);
@@ -660,7 +667,7 @@ ssize_t _psmx2_write(struct fid_ep *ep, const void *buf, size_t len,
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int chunk_size;
 	psm2_mq_req_t psm2_req;
-	uint64_t psm2_tag;
+	psm2_mq_tag_t psm2_tag;
 	size_t idx;
 	void *psm2_context;
 	int no_event;
@@ -758,13 +765,13 @@ ssize_t _psmx2_write(struct fid_ep *ep, const void *buf, size_t len,
 		void *payload = NULL;
 		int payload_len = 0;
 
-		psm2_tag = PSMX2_RMA_BIT | ep_priv->domain->psm2_epid;
+		PSMX2_SET_TAG(psm2_tag, ep_priv->domain->psm2_epid, PSMX2_RMA_BIT);
 		args[0].u32w0 = PSMX2_AM_REQ_WRITE_LONG;
 		args[0].u32w1 = len;
 		args[1].u64 = (uint64_t)req;
 		args[2].u64 = addr;
 		args[3].u64 = key;
-		args[4].u64 = psm2_tag;
+		args[4].u64 = PSMX2_GET_TAG64(psm2_tag);
 		nargs = 5;
 		if (flags & FI_REMOTE_CQ_DATA) {
 			args[0].u32w0 |= PSMX2_AM_DATA;
@@ -791,8 +798,8 @@ ssize_t _psmx2_write(struct fid_ep *ep, const void *buf, size_t len,
 				      payload, payload_len, am_flags,
 				      NULL, NULL);
 
-		psm2_mq_isend(ep_priv->domain->psm2_mq, (psm2_epaddr_t) dest_addr,
-			      0, psm2_tag, buf, len, psm2_context, &psm2_req);
+		psm2_mq_isend2(ep_priv->domain->psm2_mq, (psm2_epaddr_t) dest_addr,
+			       0, &psm2_tag, buf, len, psm2_context, &psm2_req);
 
 		return 0;
 	}

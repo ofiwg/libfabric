@@ -267,7 +267,9 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 		event->cqe.data.buf = buf;
 		event->cqe.data.flags = flags;
 		event->cqe.data.len = psm2_status->nbytes;
-		event->cqe.data.data = psm2_status->msg_tag.tag2;
+		event->cqe.data.data =
+			(psm2_status->msg_tag.tag2 & PSMX2_MSG_BIT) ?
+				PSMX2_GET_TAG64(psm2_status->msg_tag) : 0;
 		if (data)
 			event->cqe.data.data = data;
 		break;
@@ -277,9 +279,10 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 		event->cqe.tagged.buf = buf;
 		event->cqe.tagged.flags = flags;
 		event->cqe.tagged.len = psm2_status->nbytes;
-		event->cqe.data.data = psm2_status->msg_tag.tag2;
-		event->cqe.tagged.tag = psm2_status->msg_tag.tag0 |
-					(((uint64_t)psm2_status->msg_tag.tag1) << 32);
+		event->cqe.data.data = 
+			(psm2_status->msg_tag.tag2 & PSMX2_MSG_BIT) ?
+				PSMX2_GET_TAG64(psm2_status->msg_tag) : 0;
+		event->cqe.tagged.tag = PSMX2_GET_TAG64(psm2_status->msg_tag);
 		if (data)
 			event->cqe.tagged.data = data;
 		break;

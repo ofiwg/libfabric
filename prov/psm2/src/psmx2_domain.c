@@ -425,15 +425,6 @@ int psmx2_domain_enable_ep(struct psmx2_fid_domain *domain,
 		return -FI_EOPNOTSUPP;
 	}
 
-	if (ep_cap & FI_MSG)
-		domain->reserved_tag_bits |= PSMX2_MSG_BIT;
-
-	if (psmx2_env.am_msg)
-		domain->reserved_tag_bits &= ~PSMX2_MSG_BIT;
-
-	if ((ep_cap & FI_RMA) && psmx2_env.tagged_rma)
-		domain->reserved_tag_bits |= PSMX2_RMA_BIT;
-
 	if (((ep_cap & FI_RMA) || (ep_cap & FI_ATOMICS) || psmx2_env.am_msg) &&
 	    !domain->am_initialized) {
 		int err = psmx2_am_init(domain);

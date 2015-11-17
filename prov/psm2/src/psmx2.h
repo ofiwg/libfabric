@@ -90,8 +90,8 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_MSG_ORDER		FI_ORDER_SAS
 #define PSMX2_COMP_ORDER	FI_ORDER_NONE
 
-#define PSMX2_MSG_BIT	(0x1ULL << 63)
-#define PSMX2_RMA_BIT	(0x1ULL << 62)
+#define PSMX2_MSG_BIT	(0x1ULL << 31)
+#define PSMX2_RMA_BIT	(0x1ULL << 30)
 
 /* Bits 60 .. 63 of the flag are provider specific */
 #define PSMX2_NO_COMPLETION	(1ULL << 60)
@@ -127,6 +127,8 @@ union psmx2_pi {
 						tag96.tag1 = (uint32_t)(tag64>>32); \
 						tag96.tag2 = tag32; \
 					} while (0)
+
+#define PSMX2_GET_TAG64(tag96)		(tag96.tag0 | ((uint64_t)tag96.tag1<<32))
 
 #define PSMX2_AM_RMA_HANDLER	0
 #define PSMX2_AM_MSG_HANDLER	1
@@ -280,12 +282,6 @@ struct psmx2_fid_domain {
 	/* triggered operations that are ready to be processed */
 	struct psmx2_req_queue	trigger_queue;
 
-	/* certain bits in the tag space can be reserved for non tag-matching
-	 * purpose. The tag-matching functions automatically treat these bits
-	 * as 0. This field is a bit mask, with reserved bits valued as "1".
-	 */
-	uint64_t		reserved_tag_bits; 
-
 	/* lock to prevent the sequence of psm2_mq_ipeek and psm2_mq_test be
 	 * interleaved in a multithreaded environment.
 	 */
@@ -395,7 +391,7 @@ struct psmx2_trigger {
 			fi_addr_t	dest_addr;
 			void		*context;
 			uint64_t	flags;
-			uint32_t	data;
+			uint64_t	data;
 		} send;
 		struct {
 			struct fid_ep	*ep;
@@ -415,7 +411,7 @@ struct psmx2_trigger {
 			uint64_t	tag;
 			void		*context;
 			uint64_t	flags;
-			uint32_t	data;
+			uint64_t	data;
 		} tsend;
 		struct {
 			struct fid_ep	*ep;
@@ -710,13 +706,13 @@ static inline void psmx2_progress(struct psmx2_fid_domain *domain)
 
 ssize_t _psmx2_send(struct fid_ep *ep, const void *buf, size_t len,
 		   void *desc, fi_addr_t dest_addr, void *context,
-		   uint64_t flags, uint32_t data);
+		   uint64_t flags, uint64_t data);
 ssize_t _psmx2_recv(struct fid_ep *ep, void *buf, size_t len,
 		   void *desc, fi_addr_t src_addr, void *context,
 		   uint64_t flags);
 ssize_t _psmx2_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 			  void *desc, fi_addr_t dest_addr, uint64_t tag,
-			  void *context, uint64_t flags, uint32_t data);
+			  void *context, uint64_t flags, uint64_t data);
 ssize_t _psmx2_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 			  void *desc, fi_addr_t src_addr, uint64_t tag,
 			  uint64_t ignore, void *context, uint64_t flags);
