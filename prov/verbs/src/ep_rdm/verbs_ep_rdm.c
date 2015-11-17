@@ -313,6 +313,7 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 					return ret;
 				}
 			}
+			break;
 		case FI_VERBS_CONN_ESTABLISHED:
 			fi_ibv_rdm_start_disconnection(ep, conn);
 			break;
