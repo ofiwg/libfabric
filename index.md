@@ -49,7 +49,26 @@ The next presentation highlights some of the low-level details of the libfabric 
 
 <div align="center">
 <iframe src="https://www.slideshare.net/slideshow/embed_code/key/NbCh89SSIbKQ0U" width="476" height="400" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe>
+</div>
 
+The following presentation is a tutorial that was presented at the SC15
+conference in November 2015.
+<div align="center">
+  <iframe
+   src="https://www.slideshare.net/slideshow/embed_code/key/p0nI8BbOoDdSzj"
+   width="476"
+   height="400"
+   frameborder="0"
+   marginwidth="0"
+   marginheight="0"
+   scrolling="no"
+   allowfullscreen>
+  </iframe>
+  <div style="margin-bottom:5px">
+    <strong>
+      <a href="//www.slideshare.net/dgoodell/ofi-libfabric-tutorial" title="OFI libfabric Tutorial" target="_blank">OFI libfabric Tutorial from SC15</a>
+    </strong>
+  </div>
 </div>
 
 How do I get involved?
