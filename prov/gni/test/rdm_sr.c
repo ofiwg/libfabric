@@ -284,7 +284,7 @@ void rdm_sr_bnd_ep_setup(void)
 
 }
 
-void rdm_sr_teardown(void)
+static void rdm_sr_teardown_common(bool unreg)
 {
 	int ret = 0;
 
@@ -294,8 +294,10 @@ void rdm_sr_teardown(void)
 	free(uc_source);
 	free(uc_target);
 
-	fi_close(&loc_mr->fid);
-	fi_close(&rem_mr->fid);
+	if (unreg) {
+		fi_close(&loc_mr->fid);
+		fi_close(&rem_mr->fid);
+	}
 
 	free(target);
 	free(source);
@@ -328,6 +330,17 @@ void rdm_sr_teardown(void)
 	free(ep_name[0]);
 	free(ep_name[1]);
 }
+
+static void rdm_sr_teardown(void)
+{
+	rdm_sr_teardown_common(true);
+}
+
+static void rdm_sr_teardown_nounreg(void)
+{
+	rdm_sr_teardown_common(false);
+}
+
 
 void rdm_sr_init_data(char *buf, int len, char seed)
 {
@@ -424,7 +437,8 @@ void rdm_sr_lazy_dereg_disable(void)
 TestSuite(rdm_sr, .init = rdm_sr_setup, .fini = rdm_sr_teardown,
 	  .disabled = false);
 
-TestSuite(rdm_sr_noreg, .init = rdm_sr_setup_noreg, .fini = rdm_sr_teardown,
+TestSuite(rdm_sr_noreg, .init = rdm_sr_setup_noreg,
+	  .fini = rdm_sr_teardown_nounreg,
 	  .disabled = false);
 
 TestSuite(rdm_sr_bnd_ep, .init = rdm_sr_bnd_ep_setup, .fini = rdm_sr_teardown,
