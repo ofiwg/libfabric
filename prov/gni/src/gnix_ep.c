@@ -1359,21 +1359,24 @@ static inline struct gnix_fab_req *__find_tx_req(
 	struct gnix_fab_req *req = NULL;
 	struct slist_entry *entry;
 	struct gnix_vc *vc;
+	GNIX_HASHTABLE_ITERATOR(ep->vc_ht, iter);
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "searching VCs for the correct context to"
 			" cancel, context=%p", context);
 
-	while ((vc = _gnix_nic_next_pending_vc(ep->nic))) {
+	fastlock_acquire(&ep->vc_ht_lock);
+	while ((vc = _gnix_ht_iterator_next(&iter))) {
+		GNIX_INFO(0, "searching vc: %p\n", vc);
 		fastlock_acquire(&vc->tx_queue_lock);
 		entry = slist_remove_first_match(&vc->tx_queue,
 				__match_context, context);
 		fastlock_release(&vc->tx_queue_lock);
-		_gnix_vc_schedule(vc);
 		if (entry) {
 			req = container_of(entry, struct gnix_fab_req, slist);
 			break;
 		}
 	}
+	fastlock_release(&ep->vc_ht_lock);
 
 	return req;
 }
