@@ -500,58 +500,6 @@ Test(gnix_bitmap, bitmap_set)
 }
 
 
-Test(gnix_bitmap, performance_set_test)
-{
-	int i, j;
-	int secs, usec;
-	struct timeval start, end;
-
-	__test_initialize_bitmap_clean(test_bitmap, 8192);
-
-	gettimeofday(&start, 0);
-	for (i = 0; i < 100000; ++i) {
-		j = i % 8192;
-		_gnix_set_bit(test_bitmap, j);
-		cr_assert(_gnix_test_bit(test_bitmap, j));
-		_gnix_clear_bit(test_bitmap, j);
-		cr_assert(!_gnix_test_bit(test_bitmap, j));
-	}
-	gettimeofday(&end, 0);
-
-	calculate_time_difference(&start, &end, &secs, &usec);
-
-	cr_assert(_gnix_bitmap_empty(test_bitmap));
-
-	cr_expect(secs < 1);
-}
-
-Test(gnix_bitmap, performance_set_test_random)
-{
-	int i, j;
-	int secs, usec;
-	struct timeval start, end;
-
-	srand(time(NULL));
-
-	__test_initialize_bitmap_clean(test_bitmap, 8192);
-
-	gettimeofday(&start, 0);
-	for (i = 0; i < 100000; ++i) {
-		j = rand() % 8192;
-		_gnix_set_bit(test_bitmap, j);
-		cr_assert(_gnix_test_bit(test_bitmap, j));
-		_gnix_clear_bit(test_bitmap, j);
-		cr_assert(!_gnix_test_bit(test_bitmap, j));
-	}
-	gettimeofday(&end, 0);
-
-	calculate_time_difference(&start, &end, &secs, &usec);
-
-	cr_assert(_gnix_bitmap_empty(test_bitmap));
-
-	cr_expect(secs < 1);
-}
-
 Test(gnix_bitmap, fill_bitmap_60_ffz_eagain)
 {
 	int i;
@@ -578,5 +526,62 @@ Test(gnix_bitmap, fill_bitmap_60_ffs_eagain)
 		_gnix_set_bit(test_bitmap, i);
 
 	cr_assert(_gnix_find_first_set_bit(test_bitmap) == -FI_EAGAIN);
+}
+
+TestSuite(perf_bitmap,
+	  .init = __gnix_bitmap_test_setup,
+	  .fini = __gnix_bitmap_test_teardown,
+	  .disabled = true);
+
+Test(perf_bitmap, performance_set_test)
+{
+	int i, j;
+	int secs, usec;
+	struct timeval start, end;
+
+	__test_initialize_bitmap_clean(test_bitmap, 8192);
+
+	gettimeofday(&start, 0);
+	for (i = 0; i < 100000; ++i) {
+		j = i % 8192;
+		_gnix_set_bit(test_bitmap, j);
+		cr_assert(_gnix_test_bit(test_bitmap, j));
+		_gnix_clear_bit(test_bitmap, j);
+		cr_assert(!_gnix_test_bit(test_bitmap, j));
+	}
+	gettimeofday(&end, 0);
+
+	calculate_time_difference(&start, &end, &secs, &usec);
+
+	cr_assert(_gnix_bitmap_empty(test_bitmap));
+
+	cr_expect(secs < 1);
+}
+
+Test(perf_bitmap, performance_set_test_random)
+{
+	int i, j;
+	int secs, usec;
+	struct timeval start, end;
+
+	srand(time(NULL));
+
+	__test_initialize_bitmap_clean(test_bitmap, 8192);
+
+	gettimeofday(&start, 0);
+	for (i = 0; i < 100000; ++i) {
+		j = rand() % 8192;
+		_gnix_set_bit(test_bitmap, j);
+		cr_assert(_gnix_test_bit(test_bitmap, j));
+		_gnix_clear_bit(test_bitmap, j);
+		cr_assert(!_gnix_test_bit(test_bitmap, j));
+	}
+	gettimeofday(&end, 0);
+
+	calculate_time_difference(&start, &end, &secs, &usec);
+
+	cr_assert(_gnix_bitmap_empty(test_bitmap));
+
+	cr_expect(secs < 1);
 }
 
