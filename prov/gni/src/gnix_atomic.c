@@ -562,7 +562,6 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	req->amo.datatype = msg->datatype;
 	req->amo.op = msg->op;
 	req->flags = flags;
-	req->tx_failures = 0;
 
 	/* Inject interfaces always suppress completions.  If
 	 * SELECTIVE_COMPLETION is set, honor any setting.  Otherwise, always

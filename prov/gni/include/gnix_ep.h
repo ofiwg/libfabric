@@ -153,6 +153,10 @@ _gnix_fr_alloc(struct gnix_fid_ep *ep)
 		fr->slist.next = NULL;  /* slist stuff isn't too smart */
 	}
 
+	/* reset common fields */
+	fr->modes = 0;
+	fr->tx_failures = 0;
+
 	return fr;
 }
 
