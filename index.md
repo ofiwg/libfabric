@@ -5,6 +5,11 @@ tagline: OpenFabrics
 ---
 {% include JB/setup %}
 
+<a href="https://github.com/ofiwg/libfabric"><img style="position: absolute; top: 0; right: 0; border: 0;"
+src="https://camo.githubusercontent.com/652c5b9acfaddf3a9c326fa6bde407b87f7be0f4/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6f72616e67655f6666373630302e706e67"
+alt="Fork me on GitHub"
+data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_orange_ff7600.png"></a>
+
 OpenFabrics Interfaces (OFI) is a framework focused on exporting fabric communication services to applications.  OFI is best described as a collection of libraries and applications used to export fabric services.  The key components of OFI are: application interfaces, provider libraries, kernel services, daemons, and test applications. 
 
 Libfabric is a core component of OFI.  It is the library that defines and exports the user-space API of OFI, and is typically the only software that applications deal with directly.  It works in conjunction with provider libraries, which are often integrated directly into libfabric.
@@ -49,7 +54,26 @@ The next presentation highlights some of the low-level details of the libfabric 
 
 <div align="center">
 <iframe src="https://www.slideshare.net/slideshow/embed_code/key/NbCh89SSIbKQ0U" width="476" height="400" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe>
+</div>
 
+The following presentation is a tutorial that was presented at the SC15
+conference in November 2015.
+<div align="center">
+  <iframe
+   src="https://www.slideshare.net/slideshow/embed_code/key/p0nI8BbOoDdSzj"
+   width="476"
+   height="400"
+   frameborder="0"
+   marginwidth="0"
+   marginheight="0"
+   scrolling="no"
+   allowfullscreen>
+  </iframe>
+  <div style="margin-bottom:5px">
+    <strong>
+      <a href="//www.slideshare.net/dgoodell/ofi-libfabric-tutorial" title="OFI libfabric Tutorial" target="_blank">OFI libfabric Tutorial from SC15</a>
+    </strong>
+  </div>
 </div>
 
 How do I get involved?
