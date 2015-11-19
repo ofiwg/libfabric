@@ -208,7 +208,7 @@ do {                                                                        \
         case FI_LOG_WARN:                                                   \
         case FI_LOG_TRACE:                                                  \
         case FI_LOG_INFO:                                                   \
-            fprintf(stderr, "%s", str);                                     \
+            VERBS_INFO(FI_LOG_EP_DATA, "%s", str);                          \
             break;                                                          \
         case FI_LOG_DEBUG:                                                  \
         default:                                                            \
