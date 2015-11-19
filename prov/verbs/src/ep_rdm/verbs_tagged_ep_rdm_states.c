@@ -218,12 +218,11 @@ static enum fi_rdm_tagged_req_hndl_ret
 fi_ibv_rdm_tagged_err_hndl(struct fi_ibv_rdm_tagged_request *request,
 			   void *data)
 {
-	FI_IBV_ERROR("\t> IN\t< eager_state = %s, rndv_state = %s, len = %d\n",
-		     fi_ibv_rdm_tagged_req_eager_state_to_str
-		     (request->state.eager),
-		     fi_ibv_rdm_tagged_req_rndv_state_to_str(request->state.
-							     rndv),
-		     request->len);
+	VERBS_INFO(FI_LOG_EP_DATA,
+		"\t> IN\t< eager_state = %s, rndv_state = %s, len = %d\n",
+		fi_ibv_rdm_tagged_req_eager_state_to_str(request->state.eager),
+		fi_ibv_rdm_tagged_req_rndv_state_to_str(request->state.rndv),
+		request->len);
 
 	assert(0);
 	return FI_EP_RDM_HNDL_NOT_INIT;
@@ -351,9 +350,8 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 
 	ret = ibv_post_send(conn->qp, &wr, &bad_wr);
 	if (ret) {
-		FI_IBV_ERROR
-		    ("ibv_post_send fail, ret %d, errno %d, strerror %s", ret,
-		     errno, strerror(errno));
+		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
+
 		assert(0);
 	};
 
@@ -450,9 +448,7 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	mr = ibv_reg_mr(p->ep->domain->pd, (void *)request->src_addr,
 			request->len, IBV_ACCESS_REMOTE_READ);
 	if (NULL == mr) {
-		FI_IBV_ERROR("%s ibv_reg_mr fail, buf %p, len %d,"
-			     " errno %d:%s", __FUNCTION__, request->src_addr,
-			     (int)request->len, errno, strerror(errno));
+		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_reg_mr", errno);
 		assert(0);
 		return FI_EOTHER;
 	}
@@ -473,13 +469,11 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	     (int)wr.imm_data, p->ep->pend_send);
 
 	FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS_REQ(request, p->ep, wr.send_flags);
-	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%llx\n", sge.length,
-		     request->conn, request->tag);
+	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%llx\n",
+		sge.length, request->conn, request->tag);
 	int ret = ibv_post_send(conn->qp, &wr, &bad_wr);
 	if (ret) {
-		FI_IBV_ERROR
-		    ("ibv_post_send fail, ret %d, errno %d, strerror %s\n", ret,
-		     errno, strerror(errno));
+		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
 	};
 
@@ -540,8 +534,7 @@ fi_ibv_rdm_tagged_rndv_end(struct fi_ibv_rdm_tagged_request *request,
 
 	int ret = ibv_dereg_mr(request->rndv_mr);
 	if (ret) {
-		FI_IBV_ERROR("%s: ibv_dereg_mr failed: ret %d, errno %d : %s",
-			     __FUNCTION__, ret, errno, strerror(errno));
+		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_dereg_mr", errno);
 	}
 
 	request->state.rndv = FI_IBV_STATE_RNDV_SEND_END;
@@ -582,7 +575,7 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 
 	struct dlist_entry *found_entry =
 	    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_unexp_queue,
-				   fi_verbs_rdm_tagged_match_request_by_minfo_with_tagmask,
+				   fi_ibv_rdm_tagged_req_match_by_info2,
 				   &minfo);
 
 	if (found_entry) {
@@ -592,13 +585,12 @@ fi_ibv_rdm_tagged_init_recv_request(struct fi_ibv_rdm_tagged_request *request,
 				 queue_entry);
 
 		if (request->len < found_request->len) {
-			FI_IBV_ERROR("%s: %d RECV TRUNCATE, unexp len %d, "
-				     "req->len=%d, conn %p, tag 0x%llx, "
-				     "tagmask %llx\n",
-				     __FUNCTION__, __LINE__, found_request->len,
-				     request->len, request->conn,
-				     (long long unsigned int)request->tag,
-				     (long long unsigned int)request->tagmask);
+			VERBS_INFO(FI_LOG_EP_DATA,
+				"RECV TRUNCATE, unexp len %d, "
+				"req->len=%d, conn %p, tag 0x%llx, "
+				"tagmask %llx\n",
+				found_request->len, request->len, request->conn,
+				request->tag, request->tagmask);
 			abort();
 		}
 
@@ -689,8 +681,8 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(
 			    (struct fi_ibv_rdm_tagged_unexp_rbuff *)
 			    fi_verbs_mem_pool_get
 			    (&fi_ibv_rdm_tagged_unexp_buffers_pool);
-			memcpy(request->unexp_rbuf->payload,
-				rbuf->payload, request->len);
+			memcpy(request->unexp_rbuf->payload, rbuf->payload,
+				request->len);
 		} else {
 			request->unexp_rbuf = NULL;
 		}
@@ -720,8 +712,9 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(
 		assert(0);
 		break;
 	default:
-		FI_IBV_ERROR("Got unknown unexpected pkt: %" PRIu64
-			     "\n", p->pkt_type);
+		VERBS_INFO(FI_LOG_EP_DATA,
+			"Got unknown unexpected pkt: %" PRIu64 "\n",
+			p->pkt_type);
 		assert(0);
 	}
 
@@ -862,9 +855,7 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 		     request->conn, request->tag);
 	ret = ibv_post_send(request->conn->qp, &wr, &bad_wr);
 	if (ret) {
-		FI_IBV_ERROR
-		    ("ibv_post_send fail, ret %d, errno %d, strerror %s", ret,
-		     errno, strerror(errno));
+		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
 		return FI_EP_RDM_HNDL_ERROR;
 	};
@@ -938,9 +929,7 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_tagged_request *request,
 			"pend_send = %d\n", conn, conn->sends_outgoing,
 			p->ep->pend_send);
 	} else {
-		FI_IBV_ERROR
-		    ("ibv_post_send fail, ret %d, errno %d, strerror %s\n", ret,
-		     errno, strerror(errno));
+		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
 	}
 	request->state.eager = FI_IBV_STATE_EAGER_SEND_WAIT4LC;

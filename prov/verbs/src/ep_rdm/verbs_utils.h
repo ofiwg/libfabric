@@ -73,16 +73,6 @@ struct fi_ibv_msg_ep;
 
 #define FI_IBV_RDM_CM_RESOLVEADDR_TIMEOUT (30000)
 
-/* TODO: remove */
-#define FI_IBV_ERROR(format, ...) do {                                  \
-		char _hostname[100];                                    \
-		gethostname(_hostname, sizeof(_hostname));              \
-		fprintf(stderr, "[%s:%d] libfabric:verbs:%s:%d:<error>:"format, \
-		_hostname, getpid(),                                    \
-		__FUNCTION__, __LINE__, ##__VA_ARGS__);                 \
-	} while(0)
-
-
 /* TODO: Create and use a common abstraction */
 
 /* memory pool utils
@@ -218,7 +208,7 @@ do {                                                                        \
         case FI_LOG_WARN:                                                   \
         case FI_LOG_TRACE:                                                  \
         case FI_LOG_INFO:                                                   \
-            fprintf(stderr, "%s", str);                                     \
+            VERBS_INFO(FI_LOG_EP_DATA, "%s", str);                          \
             break;                                                          \
         case FI_LOG_DEBUG:                                                  \
         default:                                                            \
@@ -234,18 +224,16 @@ do {                                                                        \
 #endif                          // ENABLE_DEBUG
 
 struct fi_verbs_rdm_tagged_request_minfo {
-	struct fi_ibv_rdm_tagged_conn *conn;
-	uint64_t                       tag;
-	size_t                         tagmask;
+	struct fi_ibv_rdm_tagged_conn	*conn;
+	uint64_t			tag;
+	uint64_t			tagmask;
 } ;
 
-/* TODO: Get usable names */
-int fi_ibv_rdm_tagged_match_requests(struct dlist_entry *item,
-                                     const void *other);
-int fi_verbs_rdm_tagged_match_request_by_minfo(struct dlist_entry *item,
-                                               const void *other);
-int fi_verbs_rdm_tagged_match_request_by_minfo_with_tagmask(
-		struct dlist_entry *item, const void *other);
+int fi_ibv_rdm_tagged_req_match(struct dlist_entry *item, const void *other);
+int fi_ibv_rdm_tagged_req_match_by_info(struct dlist_entry *item,
+                                        const void *info);
+int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
+                                         const void *info);
 void fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
                                               const void *arg);
 

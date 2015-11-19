@@ -432,22 +432,24 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err3;
 	}
 
-    if (attr->format != FI_CQ_FORMAT_TAGGED) {
-        _cq->cq = ibv_create_cq(_cq->domain->verbs, attr->size, _cq,
-                    _cq->channel, attr->signaling_vector);
-        if (!_cq->cq) {
-            ret = -errno;
-            goto err3;
-        }
+	if (!_cq->domain->rdm) {
+		_cq->cq = ibv_create_cq(_cq->domain->verbs, attr->size, _cq,
+		_cq->channel, attr->signaling_vector);
 
-        if (_cq->channel) {
-            ret = ibv_req_notify_cq(_cq->cq, 0);
-            if (ret) {
-                FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "ibv_req_notify_cq failed\n");
-                goto err4;
-            }
-        }
-    }
+		if (!_cq->cq) {
+			ret = -errno;
+			goto err3;
+		}
+
+		if (_cq->channel) {
+			ret = ibv_req_notify_cq(_cq->cq, 0);
+			if (ret) {
+				FI_WARN(&fi_ibv_prov, FI_LOG_CQ,
+					"ibv_req_notify_cq failed\n");
+				goto err4;
+			}
+		}
+	}
 
 	_cq->flags |= attr->flags;
 	_cq->wait_cond = attr->wait_cond;
