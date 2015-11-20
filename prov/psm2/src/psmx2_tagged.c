@@ -246,11 +246,12 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 	return 0;
 }
 
-ssize_t psmx2_tagged_recv_no_flag_av_map(struct fid_ep *ep, void *buf,
-					 size_t len, void *desc,
-					 fi_addr_t src_addr,
-					 uint64_t tag, uint64_t ignore,
-					 void *context)
+/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_MAP */
+static ssize_t
+psmx2_tagged_recv_no_flag_av_map(struct fid_ep *ep, void *buf, size_t len,
+				 void *desc, fi_addr_t src_addr,
+				 uint64_t tag, uint64_t ignore,
+				 void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
 	psm2_mq_req_t psm2_req;
@@ -282,11 +283,12 @@ ssize_t psmx2_tagged_recv_no_flag_av_map(struct fid_ep *ep, void *buf,
 	return 0;
 }
 
-ssize_t psmx2_tagged_recv_no_flag_av_table(struct fid_ep *ep, void *buf,
-					   size_t len, void *desc,
-					   fi_addr_t src_addr,
-					   uint64_t tag, uint64_t ignore,
-					   void *context)
+/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_TABLE */
+static ssize_t
+psmx2_tagged_recv_no_flag_av_table(struct fid_ep *ep, void *buf, size_t len,
+				   void *desc, fi_addr_t src_addr,
+				   uint64_t tag, uint64_t ignore,
+				   void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
 	psm2_mq_req_t psm2_req;
@@ -330,11 +332,12 @@ ssize_t psmx2_tagged_recv_no_flag_av_table(struct fid_ep *ep, void *buf,
 	return 0;
 }
 
-ssize_t psmx2_tagged_recv_no_event_av_map(struct fid_ep *ep, void *buf,
-					  size_t len, void *desc,
-					  fi_addr_t src_addr,
-					  uint64_t tag, uint64_t ignore,
-					  void *context)
+/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_MAP */
+static ssize_t
+psmx2_tagged_recv_no_event_av_map(struct fid_ep *ep, void *buf, size_t len,
+				  void *desc, fi_addr_t src_addr,
+				  uint64_t tag, uint64_t ignore,
+				  void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
 	psm2_mq_req_t psm2_req;
@@ -360,11 +363,12 @@ ssize_t psmx2_tagged_recv_no_event_av_map(struct fid_ep *ep, void *buf,
 	return psmx2_errno(err);
 }
 
-ssize_t psmx2_tagged_recv_no_event_av_table(struct fid_ep *ep, void *buf,
-					    size_t len, void *desc,
-					    fi_addr_t src_addr,
-					    uint64_t tag, uint64_t ignore,
-					    void *context)
+/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_TABLE */
+static ssize_t
+psmx2_tagged_recv_no_event_av_table(struct fid_ep *ep, void *buf, size_t len,
+				    void *desc, fi_addr_t src_addr,
+				    uint64_t tag, uint64_t ignore,
+				    void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
 	psm2_mq_req_t psm2_req;
@@ -591,10 +595,12 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 	return 0;
 }
 
-ssize_t psmx2_tagged_send_no_flag_av_map(struct fid_ep *ep, const void *buf,
-					 size_t len, void *desc,
-					 fi_addr_t dest_addr, uint64_t tag,
-				         void *context)
+/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_MAP */
+static ssize_t
+psmx2_tagged_send_no_flag_av_map(struct fid_ep *ep, const void *buf,
+				 size_t len, void *desc,
+				 fi_addr_t dest_addr, uint64_t tag,
+				 void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
 	psm2_epaddr_t psm2_epaddr;
@@ -623,10 +629,12 @@ ssize_t psmx2_tagged_send_no_flag_av_map(struct fid_ep *ep, const void *buf,
 	return 0;
 }
 
-ssize_t psmx2_tagged_send_no_flag_av_table(struct fid_ep *ep, const void *buf,
-					   size_t len, void *desc,
-					   fi_addr_t dest_addr, uint64_t tag,
-					   void *context)
+/* op_flags=0, FI_SELECTIVE_COMPLETION not set, FI_AV_TABLE */
+static ssize_t
+psmx2_tagged_send_no_flag_av_table(struct fid_ep *ep, const void *buf,
+				   size_t len, void *desc,
+				   fi_addr_t dest_addr, uint64_t tag,
+				   void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
@@ -662,10 +670,12 @@ ssize_t psmx2_tagged_send_no_flag_av_table(struct fid_ep *ep, const void *buf,
 	return 0;
 }
 
-ssize_t psmx2_tagged_send_no_event_av_map(struct fid_ep *ep, const void *buf,
-					  size_t len, void *desc,
-					  fi_addr_t dest_addr, uint64_t tag,
-				          void *context)
+/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_MAP */
+static ssize_t
+psmx2_tagged_send_no_event_av_map(struct fid_ep *ep, const void *buf,
+				  size_t len, void *desc,
+				  fi_addr_t dest_addr, uint64_t tag,
+			          void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
 	psm2_epaddr_t psm2_epaddr;
@@ -690,10 +700,12 @@ ssize_t psmx2_tagged_send_no_event_av_map(struct fid_ep *ep, const void *buf,
 	return 0;
 }
 
-ssize_t psmx2_tagged_send_no_event_av_table(struct fid_ep *ep, const void *buf,
-					    size_t len, void *desc,
-					    fi_addr_t dest_addr, uint64_t tag,
-					    void *context)
+/* op_flags=0, FI_SELECTIVE_COMPLETION set, FI_AV_TABLE */
+static ssize_t
+psmx2_tagged_send_no_event_av_table(struct fid_ep *ep, const void *buf,
+				    size_t len, void *desc,
+				    fi_addr_t dest_addr, uint64_t tag,
+				    void *context)
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
@@ -725,9 +737,11 @@ ssize_t psmx2_tagged_send_no_event_av_table(struct fid_ep *ep, const void *buf,
 	return 0;
 }
 
-ssize_t psmx2_tagged_inject_no_flag_av_map(struct fid_ep *ep,
-					   const void *buf, size_t len,
-					   fi_addr_t dest_addr, uint64_t tag)
+/* op_flags=0, FI_AV_MAP */
+static ssize_t
+psmx2_tagged_inject_no_flag_av_map(struct fid_ep *ep, const void *buf,
+				   size_t len, fi_addr_t dest_addr,
+				   uint64_t tag)
 {
 	struct psmx2_fid_ep *ep_priv;
 	psm2_epaddr_t psm2_epaddr;
@@ -754,9 +768,11 @@ ssize_t psmx2_tagged_inject_no_flag_av_map(struct fid_ep *ep,
 	return 0;
 }
 
-ssize_t psmx2_tagged_inject_no_flag_av_table(struct fid_ep *ep,
-					     const void *buf, size_t len,
-					     fi_addr_t dest_addr, uint64_t tag)
+/* op_flags=0, FI_AV_TABLE */
+static ssize_t
+psmx2_tagged_inject_no_flag_av_table(struct fid_ep *ep, const void *buf,
+				     size_t len, fi_addr_t dest_addr,
+				     uint64_t tag)
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
