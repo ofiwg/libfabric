@@ -716,14 +716,14 @@ gen_local_event:
 	return err;
 }
 
-ssize_t _psmx2_atomic_write(struct fid_ep *ep,
-			    const void *buf,
-			    size_t count, void *desc,
-			    fi_addr_t dest_addr,
-			    uint64_t addr, uint64_t key,
-			    enum fi_datatype datatype,
-			    enum fi_op op, void *context,
-			    uint64_t flags)
+ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
+				   const void *buf,
+				   size_t count, void *desc,
+				   fi_addr_t dest_addr,
+				   uint64_t addr, uint64_t key,
+				   enum fi_datatype datatype,
+				   enum fi_op op, void *context,
+				   uint64_t flags)
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
@@ -849,9 +849,9 @@ static ssize_t psmx2_atomic_write(struct fid_ep *ep,
 	struct psmx2_fid_ep *ep_priv;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
-	return _psmx2_atomic_write(ep, buf, count, desc,
-				   dest_addr, addr, key,
-				   datatype, op, context, ep_priv->flags);
+	return psmx2_atomic_write_generic(ep, buf, count, desc, dest_addr,
+					  addr, key, datatype, op, context,
+					  ep_priv->flags);
 }
 
 static ssize_t psmx2_atomic_writemsg(struct fid_ep *ep,
@@ -861,12 +861,12 @@ static ssize_t psmx2_atomic_writemsg(struct fid_ep *ep,
 	if (!msg || msg->iov_count != 1 || !msg->msg_iov || !msg->rma_iov)
 		return -FI_EINVAL;
 
-	return _psmx2_atomic_write(ep, msg->msg_iov[0].addr,
-				   msg->msg_iov[0].count,
-				   msg->desc ? msg->desc[0] : NULL,
-				   msg->addr, msg->rma_iov[0].addr,
-				   msg->rma_iov[0].key, msg->datatype,
-				   msg->op, msg->context, flags);
+	return psmx2_atomic_write_generic(ep, msg->msg_iov[0].addr,
+					  msg->msg_iov[0].count,
+					  msg->desc ? msg->desc[0] : NULL,
+					  msg->addr, msg->rma_iov[0].addr,
+					  msg->rma_iov[0].key, msg->datatype,
+					  msg->op, msg->context, flags);
 }
 
 static ssize_t psmx2_atomic_writev(struct fid_ep *ep,
@@ -896,21 +896,21 @@ static ssize_t psmx2_atomic_inject(struct fid_ep *ep,
 	struct psmx2_fid_ep *ep_priv;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
-	return _psmx2_atomic_write(ep, buf, count, NULL/*desc*/,
-				   dest_addr, addr, key,
-				   datatype, op, NULL,
-				   ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION);
+	return psmx2_atomic_write_generic(ep, buf, count, NULL/*desc*/,
+					  dest_addr, addr, key,
+					  datatype, op, NULL,
+					  ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION);
 }
 
-ssize_t _psmx2_atomic_readwrite(struct fid_ep *ep,
-				const void *buf,
-				size_t count, void *desc,
-				void *result, void *result_desc,
-				fi_addr_t dest_addr,
-				uint64_t addr, uint64_t key,
-				enum fi_datatype datatype,
-				enum fi_op op, void *context,
-				uint64_t flags)
+ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
+				       const void *buf,
+				       size_t count, void *desc,
+				       void *result, void *result_desc,
+				       fi_addr_t dest_addr,
+				       uint64_t addr, uint64_t key,
+				       enum fi_datatype datatype,
+				       enum fi_op op, void *context,
+				       uint64_t flags)
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
@@ -1043,10 +1043,10 @@ static ssize_t psmx2_atomic_readwrite(struct fid_ep *ep,
 	struct psmx2_fid_ep *ep_priv;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
-	return _psmx2_atomic_readwrite(ep, buf, count, desc,
-				       result, result_desc, dest_addr,
-				       addr, key, datatype, op,
-				       context, ep_priv->flags);
+	return psmx2_atomic_readwrite_generic(ep, buf, count, desc,
+					      result, result_desc, dest_addr,
+					      addr, key, datatype, op,
+					      context, ep_priv->flags);
 }
 
 static ssize_t psmx2_atomic_readwritemsg(struct fid_ep *ep,
@@ -1077,13 +1077,13 @@ static ssize_t psmx2_atomic_readwritemsg(struct fid_ep *ep,
 		count = msg->msg_iov[0].count;
 	}
 
-	return _psmx2_atomic_readwrite(ep, buf, count,
-				       msg->desc ? msg->desc[0] : NULL,
-				       resultv[0].addr,
-				       result_desc ? result_desc[0] : NULL,
-				       msg->addr, msg->rma_iov[0].addr,
-				       msg->rma_iov[0].key, msg->datatype,
-				       msg->op, msg->context, flags);
+	return psmx2_atomic_readwrite_generic(ep, buf, count,
+					      msg->desc ? msg->desc[0] : NULL,
+					      resultv[0].addr,
+					      result_desc ? result_desc[0] : NULL,
+					      msg->addr, msg->rma_iov[0].addr,
+					      msg->rma_iov[0].key, msg->datatype,
+					      msg->op, msg->context, flags);
 }
 
 static ssize_t psmx2_atomic_readwritev(struct fid_ep *ep,
@@ -1106,16 +1106,16 @@ static ssize_t psmx2_atomic_readwritev(struct fid_ep *ep,
 				      dest_addr, addr, key, datatype, op, context);
 }
 
-ssize_t _psmx2_atomic_compwrite(struct fid_ep *ep,
-				const void *buf,
-				size_t count, void *desc,
-				const void *compare, void *compare_desc,
-				void *result, void *result_desc,
-				fi_addr_t dest_addr,
-				uint64_t addr, uint64_t key,
-				enum fi_datatype datatype,
-				enum fi_op op, void *context,
-				uint64_t flags)
+ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
+				       const void *buf,
+				       size_t count, void *desc,
+				       const void *compare, void *compare_desc,
+				       void *result, void *result_desc,
+				       fi_addr_t dest_addr,
+				       uint64_t addr, uint64_t key,
+				       enum fi_datatype datatype,
+				       enum fi_op op, void *context,
+				       uint64_t flags)
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
@@ -1265,11 +1265,11 @@ static ssize_t psmx2_atomic_compwrite(struct fid_ep *ep,
 	struct psmx2_fid_ep *ep_priv;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
-	return _psmx2_atomic_compwrite(ep, buf, count, desc,
-				       compare, compare_desc,
-				       result, result_desc,
-				       dest_addr, addr, key,
-			               datatype, op, context, ep_priv->flags);
+	return psmx2_atomic_compwrite_generic(ep, buf, count, desc,
+					      compare, compare_desc,
+					      result, result_desc,
+					      dest_addr, addr, key,
+			        	      datatype, op, context, ep_priv->flags);
 }
 
 static ssize_t psmx2_atomic_compwritemsg(struct fid_ep *ep,
@@ -1285,16 +1285,16 @@ static ssize_t psmx2_atomic_compwritemsg(struct fid_ep *ep,
 	if (!msg || msg->iov_count != 1 || !msg->msg_iov || !msg->rma_iov || !resultv)
 		return -FI_EINVAL;
 
-	return _psmx2_atomic_compwrite(ep, msg->msg_iov[0].addr,
-				       msg->msg_iov[0].count,
-				       msg->desc ? msg->desc[0] : NULL,
-				       comparev[0].addr,
-				       compare_desc ? compare_desc[0] : NULL,
-				       resultv[0].addr,
-				       result_desc ? result_desc[0] : NULL,
-				       msg->addr, msg->rma_iov[0].addr,
-				       msg->rma_iov[0].key, msg->datatype,
-				       msg->op, msg->context, flags);
+	return psmx2_atomic_compwrite_generic(ep, msg->msg_iov[0].addr,
+					      msg->msg_iov[0].count,
+					      msg->desc ? msg->desc[0] : NULL,
+					      comparev[0].addr,
+					      compare_desc ? compare_desc[0] : NULL,
+					      resultv[0].addr,
+					      result_desc ? result_desc[0] : NULL,
+					      msg->addr, msg->rma_iov[0].addr,
+					      msg->rma_iov[0].key, msg->datatype,
+					      msg->op, msg->context, flags);
 }
 
 static ssize_t psmx2_atomic_compwritev(struct fid_ep *ep,

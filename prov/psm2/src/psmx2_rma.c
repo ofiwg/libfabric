@@ -482,10 +482,10 @@ int psmx2_am_process_rma(struct psmx2_fid_domain *domain,
 	return psmx2_errno(err);
 }
 
-ssize_t _psmx2_read(struct fid_ep *ep, void *buf, size_t len,
-		    void *desc, fi_addr_t src_addr,
-		    uint64_t addr, uint64_t key, void *context,
-		    uint64_t flags)
+ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
+			   void *desc, fi_addr_t src_addr,
+			   uint64_t addr, uint64_t key, void *context,
+			   uint64_t flags)
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
@@ -624,8 +624,8 @@ static ssize_t psmx2_read(struct fid_ep *ep, void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	return _psmx2_read(ep, buf, len, desc, src_addr, addr,
-			   key, context, ep_priv->flags);
+	return psmx2_read_generic(ep, buf, len, desc, src_addr, addr,
+				  key, context, ep_priv->flags);
 }
 
 static ssize_t psmx2_readmsg(struct fid_ep *ep,
@@ -635,11 +635,12 @@ static ssize_t psmx2_readmsg(struct fid_ep *ep,
 	if (!msg || msg->iov_count != 1 || !msg->msg_iov || !msg->rma_iov)
 		return -FI_EINVAL;
 
-	return _psmx2_read(ep, msg->msg_iov[0].iov_base,
-			   msg->msg_iov[0].iov_len,
-			   msg->desc ? msg->desc[0] : NULL, msg->addr,
-			   msg->rma_iov[0].addr, msg->rma_iov[0].key,
-			   msg->context, flags);
+	return psmx2_read_generic(ep, msg->msg_iov[0].iov_base,
+				  msg->msg_iov[0].iov_len,
+				  msg->desc ? msg->desc[0] : NULL,
+				  msg->addr, msg->rma_iov[0].addr,
+				  msg->rma_iov[0].key, msg->context,
+				  flags);
 }
 
 static ssize_t psmx2_readv(struct fid_ep *ep, const struct iovec *iov,
@@ -653,10 +654,10 @@ static ssize_t psmx2_readv(struct fid_ep *ep, const struct iovec *iov,
 			  desc ? desc[0] : NULL, src_addr, addr, key, context);
 }
 
-ssize_t _psmx2_write(struct fid_ep *ep, const void *buf, size_t len,
-		     void *desc, fi_addr_t dest_addr,
-		     uint64_t addr, uint64_t key, void *context,
-		     uint64_t flags, uint64_t data)
+ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
+			    void *desc, fi_addr_t dest_addr,
+			    uint64_t addr, uint64_t key, void *context,
+			    uint64_t flags, uint64_t data)
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
@@ -845,8 +846,8 @@ static ssize_t psmx2_write(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	return _psmx2_write(ep, buf, len, desc, dest_addr, addr, key, context,
-			    ep_priv->flags, 0);
+	return psmx2_write_generic(ep, buf, len, desc, dest_addr, addr,
+				   key, context, ep_priv->flags, 0);
 }
 
 static ssize_t psmx2_writemsg(struct fid_ep *ep,
@@ -856,11 +857,11 @@ static ssize_t psmx2_writemsg(struct fid_ep *ep,
 	if (!msg || msg->iov_count != 1 || !msg->msg_iov || !msg->rma_iov)
 		return -FI_EINVAL;
 
-	return _psmx2_write(ep, msg->msg_iov[0].iov_base,
-			    msg->msg_iov[0].iov_len,
-			    msg->desc ? msg->desc[0] : NULL, msg->addr,
-			    msg->rma_iov[0].addr, msg->rma_iov[0].key,
-			    msg->context, flags, msg->data);
+	return psmx2_write_generic(ep, msg->msg_iov[0].iov_base,
+				   msg->msg_iov[0].iov_len,
+				   msg->desc ? msg->desc[0] : NULL, msg->addr,
+				   msg->rma_iov[0].addr, msg->rma_iov[0].key,
+				   msg->context, flags, msg->data);
 }
 
 static ssize_t psmx2_writev(struct fid_ep *ep, const struct iovec *iov,
@@ -881,8 +882,9 @@ static ssize_t psmx2_inject(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	return _psmx2_write(ep, buf, len, NULL, dest_addr, addr, key,
-			    NULL, ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION, 0);
+	return psmx2_write_generic(ep, buf, len, NULL, dest_addr, addr, key, NULL,
+				   ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION,
+				   0);
 }
 
 static ssize_t psmx2_writedata(struct fid_ep *ep, const void *buf, size_t len,
@@ -893,8 +895,9 @@ static ssize_t psmx2_writedata(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	return _psmx2_write(ep, buf, len, desc, dest_addr, addr, key, context,
-			    ep_priv->flags | FI_REMOTE_CQ_DATA, data);
+	return psmx2_write_generic(ep, buf, len, desc, dest_addr, addr, key,
+				   context, ep_priv->flags | FI_REMOTE_CQ_DATA,
+				   data);
 }
 
 static ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -905,9 +908,9 @@ static ssize_t psmx2_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	return _psmx2_write(ep, buf, len, NULL, dest_addr, addr, key, NULL,
-			    ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION,
-			    data);
+	return psmx2_write_generic(ep, buf, len, NULL, dest_addr, addr, key, NULL,
+				   ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION,
+				   data);
 }
 
 struct fi_ops_rma psmx2_rma_ops = {

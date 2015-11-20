@@ -704,53 +704,82 @@ static inline void psmx2_progress(struct psmx2_fid_domain *domain)
 	}
 }
 
-ssize_t _psmx2_send(struct fid_ep *ep, const void *buf, size_t len,
-		   void *desc, fi_addr_t dest_addr, void *context,
-		   uint64_t flags, uint64_t data);
-ssize_t _psmx2_recv(struct fid_ep *ep, void *buf, size_t len,
-		   void *desc, fi_addr_t src_addr, void *context,
-		   uint64_t flags);
-ssize_t _psmx2_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
-			  void *desc, fi_addr_t dest_addr, uint64_t tag,
-			  void *context, uint64_t flags, uint64_t data);
-ssize_t _psmx2_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
-			  void *desc, fi_addr_t src_addr, uint64_t tag,
-			  uint64_t ignore, void *context, uint64_t flags);
-ssize_t _psmx2_write(struct fid_ep *ep, const void *buf, size_t len,
-		    void *desc, fi_addr_t dest_addr,
-		    uint64_t addr, uint64_t key, void *context,
-		    uint64_t flags, uint64_t data);
-ssize_t _psmx2_read(struct fid_ep *ep, void *buf, size_t len,
-		   void *desc, fi_addr_t src_addr,
-		   uint64_t addr, uint64_t key, void *context,
-		   uint64_t flags);
-ssize_t _psmx2_atomic_write(struct fid_ep *ep,
-			   const void *buf,
-			   size_t count, void *desc,
-			   fi_addr_t dest_addr,
-			   uint64_t addr, uint64_t key,
-			   enum fi_datatype datatype,
-			   enum fi_op op, void *context,
-			   uint64_t flags);
-ssize_t _psmx2_atomic_readwrite(struct fid_ep *ep,
-				const void *buf,
-				size_t count, void *desc,
-				void *result, void *result_desc,
-				fi_addr_t dest_addr,
-				uint64_t addr, uint64_t key,
-				enum fi_datatype datatype,
-				enum fi_op op, void *context,
-				uint64_t flags);
-ssize_t _psmx2_atomic_compwrite(struct fid_ep *ep,
-				const void *buf,
-				size_t count, void *desc,
-				const void *compare, void *compare_desc,
-				void *result, void *result_desc,
-				fi_addr_t dest_addr,
-				uint64_t addr, uint64_t key,
-				enum fi_datatype datatype,
-				enum fi_op op, void *context,
-				uint64_t flags);
+/* The following functions are used by triggered operations */
+
+ssize_t psmx2_send_generic(
+			struct fid_ep *ep,
+			const void *buf, size_t len,
+			void *desc, fi_addr_t dest_addr,
+			void *context, uint64_t flags,
+			uint64_t data);
+
+ssize_t psmx2_recv_generic(
+			struct fid_ep *ep,
+			void *buf, size_t len, void *desc,
+			fi_addr_t src_addr, void *context,
+			uint64_t flags);
+
+ssize_t psmx2_tagged_send_generic(
+			struct fid_ep *ep,
+			const void *buf, size_t len,
+			void *desc, fi_addr_t dest_addr,
+			uint64_t tag, void *context,
+			uint64_t flags, uint64_t data);
+
+ssize_t psmx2_tagged_recv_generic(
+			struct fid_ep *ep,
+			void *buf, size_t len,
+			void *desc, fi_addr_t src_addr,
+			uint64_t tag, uint64_t ignore,
+			void *context, uint64_t flags);
+
+ssize_t psmx2_write_generic(
+			struct fid_ep *ep,
+			const void *buf, size_t len,
+			void *desc, fi_addr_t dest_addr,
+			uint64_t addr, uint64_t key,
+			void *context, uint64_t flags,
+			uint64_t data);
+
+ssize_t psmx2_read_generic(
+			struct fid_ep *ep,
+			void *buf, size_t len,
+			void *desc, fi_addr_t src_addr,
+			uint64_t addr, uint64_t key,
+			void *context, uint64_t flags);
+
+ssize_t psmx2_atomic_write_generic(
+			struct fid_ep *ep,
+			const void *buf,
+			size_t count, void *desc,
+			fi_addr_t dest_addr,
+			uint64_t addr, uint64_t key,
+			enum fi_datatype datatype,
+			enum fi_op op, void *context,
+			uint64_t flags);
+
+ssize_t psmx2_atomic_readwrite_generic(
+			struct fid_ep *ep,
+			const void *buf,
+			size_t count, void *desc,
+			void *result, void *result_desc,
+			fi_addr_t dest_addr,
+			uint64_t addr, uint64_t key,
+			enum fi_datatype datatype,
+			enum fi_op op, void *context,
+			uint64_t flags);
+
+ssize_t psmx2_atomic_compwrite_generic(
+			struct fid_ep *ep,
+			const void *buf,
+			size_t count, void *desc,
+			const void *compare, void *compare_desc,
+			void *result, void *result_desc,
+			fi_addr_t dest_addr,
+			uint64_t addr, uint64_t key,
+			enum fi_datatype datatype,
+			enum fi_op op, void *context,
+			uint64_t flags);
 
 #ifdef __cplusplus
 }

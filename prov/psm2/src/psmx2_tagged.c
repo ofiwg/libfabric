@@ -32,10 +32,11 @@
 
 #include "psmx2.h"
 
-ssize_t _psmx2_tagged_peek(struct fid_ep *ep, void *buf, size_t len,
-			   void *desc, fi_addr_t src_addr,
-			   uint64_t tag, uint64_t ignore,
-			   void *context, uint64_t flags)
+static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
+					 void *buf, size_t len,
+					 void *desc, fi_addr_t src_addr,
+					 uint64_t tag, uint64_t ignore,
+					 void *context, uint64_t flags)
 {
 	struct psmx2_fid_ep *ep_priv;
 	psm2_mq_status2_t psm2_status;
@@ -133,10 +134,11 @@ ssize_t _psmx2_tagged_peek(struct fid_ep *ep, void *buf, size_t len,
 	}
 }
 
-ssize_t _psmx2_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
-			   void *desc, fi_addr_t src_addr,
-			   uint64_t tag, uint64_t ignore,
-			   void *context, uint64_t flags)
+ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
+				  size_t len, void *desc,
+				  fi_addr_t src_addr, 
+				  uint64_t tag, uint64_t ignore,
+				  void *context, uint64_t flags)
 {
 	struct psmx2_fid_ep *ep_priv;
 	psm2_mq_req_t psm2_req;
@@ -149,8 +151,9 @@ ssize_t _psmx2_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 	if (flags & FI_PEEK)
-		return _psmx2_tagged_peek(ep, buf, len, desc, src_addr,
-					  tag, ignore, context, flags);
+		return psmx2_tagged_peek_generic(ep, buf, len, desc,
+						 src_addr, tag, ignore,
+						 context, flags);
 
 	if (flags & FI_TRIGGER) {
 		struct psmx2_trigger *trigger;
@@ -408,8 +411,8 @@ static ssize_t psmx2_tagged_recv(struct fid_ep *ep, void *buf,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	return _psmx2_tagged_recv(ep, buf, len, desc, src_addr, tag, ignore,
-				  context, ep_priv->flags);
+	return psmx2_tagged_recv_generic(ep, buf, len, desc, src_addr, tag,
+					 ignore, context, ep_priv->flags);
 }
 
 static ssize_t psmx2_tagged_recvmsg(struct fid_ep *ep,
@@ -434,10 +437,10 @@ static ssize_t psmx2_tagged_recvmsg(struct fid_ep *ep,
 		len = 0;
 	}
 
-	return _psmx2_tagged_recv(ep, buf, len,
-				  msg->desc ? msg->desc[0] : NULL,
-				  msg->addr, msg->tag, msg->ignore,
-				  msg->context, flags);
+	return psmx2_tagged_recv_generic(ep, buf, len,
+					 msg->desc ? msg->desc[0] : NULL,
+					 msg->addr, msg->tag, msg->ignore,
+					 msg->context, flags);
 }
 
 #define PSMX2_TAGGED_RECVV_FUNC(suffix)					\
@@ -470,9 +473,11 @@ PSMX2_TAGGED_RECVV_FUNC(_no_flag_av_table)
 PSMX2_TAGGED_RECVV_FUNC(_no_event_av_map)
 PSMX2_TAGGED_RECVV_FUNC(_no_event_av_table)
 
-ssize_t _psmx2_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
-			   void *desc, fi_addr_t dest_addr, uint64_t tag,
-			   void *context, uint64_t flags, uint64_t data)
+ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
+				  const void *buf, size_t len,
+				  void *desc, fi_addr_t dest_addr,
+				  uint64_t tag, void *context,
+				  uint64_t flags, uint64_t data)
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
@@ -794,8 +799,8 @@ static ssize_t psmx2_tagged_send(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	return _psmx2_tagged_send(ep, buf, len, desc, dest_addr, tag, context,
-				 ep_priv->flags, 0);
+	return psmx2_tagged_send_generic(ep, buf, len, desc, dest_addr,
+					 tag, context, ep_priv->flags, 0);
 }
 
 static ssize_t psmx2_tagged_sendmsg(struct fid_ep *ep,
@@ -820,10 +825,10 @@ static ssize_t psmx2_tagged_sendmsg(struct fid_ep *ep,
 		len = 0;
 	}
 
-	return _psmx2_tagged_send(ep, buf, len,
-				  msg->desc ? msg->desc[0] : NULL, msg->addr,
-				  msg->tag, msg->context, flags,
-				  msg->data);
+	return psmx2_tagged_send_generic(ep, buf, len,
+					 msg->desc ? msg->desc[0] : NULL,
+					 msg->addr, msg->tag, msg->context,
+					 flags, msg->data);
 }
 
 #define PSMX2_TAGGED_SENDV_FUNC(suffix)					\
@@ -863,8 +868,10 @@ static ssize_t psmx2_tagged_inject(struct fid_ep *ep,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	return _psmx2_tagged_send(ep, buf, len, NULL, dest_addr, tag, NULL,
-				  ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION, 0);
+	return psmx2_tagged_send_generic(ep, buf, len, NULL, dest_addr,
+					 tag, NULL,
+				  	 ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION,
+					 0);
 }
 
 static ssize_t psmx2_tagged_senddata(struct fid_ep *ep, const void *buf,
@@ -876,8 +883,8 @@ static ssize_t psmx2_tagged_senddata(struct fid_ep *ep, const void *buf,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	return _psmx2_tagged_send(ep, buf, len, desc, dest_addr, tag, context,
-				  ep_priv->flags,  data);
+	return psmx2_tagged_send_generic(ep, buf, len, desc, dest_addr,
+					 tag, context, ep_priv->flags, data);
 }
 
 static ssize_t psmx2_tagged_injectdata(struct fid_ep *ep, const void *buf,
@@ -888,9 +895,10 @@ static ssize_t psmx2_tagged_injectdata(struct fid_ep *ep, const void *buf,
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
-	return _psmx2_tagged_send(ep, buf, len, NULL, dest_addr, tag, NULL,
-				  ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION,
-				  data);
+	return psmx2_tagged_send_generic(ep, buf, len, NULL, dest_addr,
+					 tag, NULL,
+					 ep_priv->flags | FI_INJECT | PSMX2_NO_COMPLETION,
+					 data);
 }
 
 #define PSMX2_TAGGED_OPS(suffix,sendopt,recvopt,injopt)	\
