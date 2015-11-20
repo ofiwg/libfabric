@@ -115,7 +115,11 @@ extern "C" {
  */
 
 #define GNIX_SUPPRESS_COMPLETION	(1ULL << 60)	/* TX only flag */
+
 #define GNIX_RMA_RDMA			(1ULL << 61)	/* RMA only flag */
+#define GNIX_RMA_INDIRECT		(1ULL << 62)	/* RMA only flag */
+#define GNIX_RMA_CHAINED		(1ULL << 63)	/* RMA only flag */
+
 #define GNIX_MSG_RENDEZVOUS		(1ULL << 61)	/* MSG only flag */
 
 /*
@@ -415,6 +419,10 @@ struct gnix_fab_req_rma {
 	uint64_t                 rem_addr;
 	uint64_t                 rem_mr_key;
 	uint64_t                 imm;
+	void                     *align_buf;
+	struct gnix_fid_mem_desc *align_md;
+	atomic_t                 outstanding_txds;
+	gni_return_t             status;
 };
 
 struct gnix_fab_req_msg {

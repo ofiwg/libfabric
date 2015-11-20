@@ -257,7 +257,10 @@ struct gnix_smsg_rma_data_hdr {
 struct gnix_tx_descriptor {
 	struct dlist_entry          list;
 	union {
-		gni_post_descriptor_t            gni_desc;
+		struct {
+			gni_post_descriptor_t        gni_desc;
+			gni_ct_get_post_descriptor_t gni_ct_descs[2];
+		};
 		struct gnix_smsg_eager_hdr       eager_hdr;
 		struct gnix_smsg_rndzv_start_hdr rndzv_start_hdr;
 		struct gnix_smsg_rndzv_fin_hdr   rndzv_fin_hdr;
