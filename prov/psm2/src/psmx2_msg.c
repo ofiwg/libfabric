@@ -38,12 +38,15 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
+	psm2_epaddr_t psm2_epaddr;
+	uint8_t vlane;
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag, psm2_tagsel;
+	uint32_t tag32, tagsel32;
 	struct fi_context *fi_context;
-	int err;
 	int recv_flag = 0;
 	size_t idx;
+	int err;
 
 	ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
@@ -78,11 +81,20 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 			if (idx >= av->last)
 				return -FI_EINVAL;
 
-			src_addr = (fi_addr_t)av->psm2_epaddrs[idx];
+			psm2_epaddr = av->epaddrs[idx];
+			vlane = av->vlanes[idx];
 		}
+		else {
+			psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
+			vlane = PSMX2_ADDR_TO_VL(src_addr);
+		}
+		tag32 = PSMX2_TAG32(PSMX2_MSG_BIT, vlane, ep_priv->vlane);
+		tagsel32 = -1;
 	}
 	else {
-		src_addr = 0;
+		psm2_epaddr = 0;
+		tag32 = PSMX2_TAG32(PSMX2_MSG_BIT, 0, ep_priv->vlane);
+		tagsel32 = ~PSMX2_SRC_BITS;
 	}
 
 	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION)) {
@@ -116,13 +128,12 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 	}
 
-	PSMX2_SET_TAG(psm2_tag, 0ULL, PSMX2_MSG_BIT);
-	PSMX2_SET_TAG(psm2_tagsel, 0ULL, -1);
+	PSMX2_SET_TAG(psm2_tag, 0ULL, tag32);
+	PSMX2_SET_TAG(psm2_tagsel, 0ULL, tagsel32);
 
-	err = psm2_mq_irecv2(ep_priv->domain->psm2_mq,
-			    (psm2_epaddr_t)src_addr,
-			    &psm2_tag, &psm2_tagsel, recv_flag,
-			    buf, len, (void *)fi_context, &psm2_req);
+	err = psm2_mq_irecv2(ep_priv->domain->psm2_mq, psm2_epaddr,
+			     &psm2_tag, &psm2_tagsel, recv_flag, buf, len,
+			     (void *)fi_context, &psm2_req);
 	if (err != PSM2_OK)
 		return psmx2_errno(err);
 
@@ -201,11 +212,13 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 {
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
-	int send_flag = 0;
 	psm2_epaddr_t psm2_epaddr;
+	uint8_t vlane;
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag;
+	uint32_t tag32;
 	struct fi_context * fi_context;
+	int send_flag = 0;
 	int err;
 	size_t idx;
 	int no_completion = 0;
@@ -244,13 +257,16 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 		if (idx >= av->last)
 			return -FI_EINVAL;
 
-		psm2_epaddr = av->psm2_epaddrs[idx];
+		psm2_epaddr = av->epaddrs[idx];
+		vlane = av->vlanes[idx];
 	}
 	else  {
-		psm2_epaddr = (psm2_epaddr_t) dest_addr;
+		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
+		vlane = PSMX2_ADDR_TO_VL(dest_addr);
 	}
 
-	PSMX2_SET_TAG(psm2_tag, data, PSMX2_MSG_BIT);
+	tag32 = PSMX2_TAG32(PSMX2_MSG_BIT, ep_priv->vlane, vlane);
+	PSMX2_SET_TAG(psm2_tag, data, tag32);
 
 	if ((flags & PSMX2_NO_COMPLETION) ||
 	    (ep_priv->send_selective_completion && !(flags & FI_COMPLETION)))
@@ -260,8 +276,8 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 		if (len > PSMX2_INJECT_SIZE)
 			return -FI_EMSGSIZE;
 
-		err = psm2_mq_send2(ep_priv->domain->psm2_mq, psm2_epaddr, send_flag,
-				    &psm2_tag, buf, len);
+		err = psm2_mq_send2(ep_priv->domain->psm2_mq, psm2_epaddr,
+				    send_flag, &psm2_tag, buf, len);
 
 		if (err != PSM2_OK)
 			return psmx2_errno(err);
@@ -300,8 +316,9 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 	}
 
-	err = psm2_mq_isend2(ep_priv->domain->psm2_mq, psm2_epaddr, send_flag,
-			     &psm2_tag, buf, len, (void *)fi_context, &psm2_req);
+	err = psm2_mq_isend2(ep_priv->domain->psm2_mq, psm2_epaddr,
+			     send_flag, &psm2_tag, buf, len,
+			     (void *)fi_context, &psm2_req);
 
 	if (err != PSM2_OK)
 		return psmx2_errno(err);

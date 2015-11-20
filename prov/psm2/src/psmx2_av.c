@@ -32,6 +32,20 @@
 
 #include "psmx2.h"
 
+#define PSMX2_MIN_CONN_TIMEOUT	5
+#define PSMX2_MAX_CONN_TIMEOUT	30
+
+static inline double psmx2_conn_timeout(int sec)
+{
+	if (sec < PSMX2_MIN_CONN_TIMEOUT)
+		return PSMX2_MIN_CONN_TIMEOUT * 1e9;
+	
+	if (sec > PSMX2_MAX_CONN_TIMEOUT)
+		return PSMX2_MAX_CONN_TIMEOUT * 1e9;
+
+	return sec * 1e9;
+}
+
 static void psmx2_set_epaddr_context(struct psmx2_fid_domain *domain,
 				     psm2_epid_t epid, psm2_epaddr_t epaddr)
 {
@@ -78,7 +92,8 @@ int psmx2_epid_to_epaddr(struct psmx2_fid_domain *domain,
 		}
 	}
 
-        err = psm2_ep_connect(domain->psm2_ep, 1, &epid, NULL, &errors, epaddr, 30*1e9);
+        err = psm2_ep_connect(domain->psm2_ep, 1, &epid, NULL, &errors,
+			      epaddr, psmx2_conn_timeout(1));
         if (err != PSM2_OK)
                 return psmx2_errno(err);
 
@@ -90,84 +105,54 @@ int psmx2_epid_to_epaddr(struct psmx2_fid_domain *domain,
 static int psmx2_av_check_table_size(struct psmx2_fid_av *av, size_t count)
 {
 	size_t new_count;
-	psm2_epid_t *new_psm2_epids;
-	psm2_epaddr_t *new_psm2_epaddrs;
+	psm2_epid_t *new_epids;
+	psm2_epaddr_t *new_epaddrs;
+	uint8_t *new_vlanes;
 
 	new_count = av->count;
 	while (new_count < av->last + count)
 		new_count = new_count * 2 + 1;
 
-	if ((new_count <= av->count) && av->psm2_epids)
+	if ((new_count <= av->count) && av->epids)
 		return 0;
 
-	new_psm2_epids = realloc(av->psm2_epids,
-				 new_count * sizeof(*new_psm2_epids));
-	if (!new_psm2_epids)
+	new_epids = realloc(av->epids, new_count * sizeof(*new_epids));
+	if (!new_epids)
 		return -FI_ENOMEM;
 
-	av->psm2_epids = new_psm2_epids;
-
-	new_psm2_epaddrs = realloc(av->psm2_epaddrs,
-				   new_count * sizeof(*new_psm2_epaddrs));
-	if (!new_psm2_epaddrs)
+	av->epids = new_epids;
+	new_epaddrs = realloc(av->epaddrs, new_count * sizeof(*new_epaddrs));
+	if (!new_epaddrs)
 		return -FI_ENOMEM;
 
-	av->psm2_epaddrs = new_psm2_epaddrs;
+	av->epaddrs = new_epaddrs;
+	new_vlanes = realloc(av->vlanes, new_count * sizeof(*new_vlanes));
+	if (!new_vlanes) 
+		return -FI_ENOMEM;
+
+	av->vlanes = new_vlanes;
 	av->count = new_count;
 	return 0;
 }
 
-static int psmx2_av_insert(struct fid_av *av, const void *addr,
-			   size_t count, fi_addr_t *fi_addr,
-			   uint64_t flags, void *context)
+static int psmx2_av_connet_eps(struct psmx2_fid_av *av, size_t count,
+			       psm2_epid_t *epids, int *mask,
+			       psm2_error_t *errors,
+			       psm2_epaddr_t *epaddrs,
+			       void *context)
 {
-	struct psmx2_fid_av *av_priv;
-	psm2_error_t *errors;
-	int error_count = 0;
-	int *mask;
-	int i, j;
-	fi_addr_t *result = NULL;
+	int i;
+	psm2_epconn_t epconn;
 	struct psmx2_epaddr_context *epaddr_context;
 	struct psmx2_eq_event *event;
+	int error_count = 0;
 
-	av_priv = container_of(av, struct psmx2_fid_av, av);
-
-	if ((av_priv->flags & FI_EVENT) && !av_priv->eq)
-		return -FI_ENOEQ;
-
-	errors = (psm2_error_t *) calloc(count, sizeof *errors);
-	if (!errors)
-		return -FI_ENOMEM;
-
-	mask = (int *) calloc(count, sizeof *mask);
-	if (!mask) {
-		free(errors);
-		return -FI_ENOMEM;
-	}
-
-	if (av_priv->type == FI_AV_TABLE) {
-		if (psmx2_av_check_table_size(av_priv, count)) {
-			free(mask);
-			free(errors);
-			return -FI_ENOMEM;
-		}
-
-		for (i=0; i<count; i++)
-			av_priv->psm2_epids[av_priv->last + i] =
-				((psm2_epid_t *)addr)[i];
-
-		result = fi_addr;
-		addr = (const void *)(av_priv->psm2_epids + av_priv->last);
-		fi_addr = (fi_addr_t *)(av_priv->psm2_epaddrs + av_priv->last);
-	}
-
-	/* prevent connecting to the same ep twice, which is fatal in PSM */
+	/* set up mask to prevent connecting to an already connected ep */
 	for (i=0; i<count; i++) {
-		psm2_epconn_t epconn;
-		if (psm2_ep_epid_lookup(((psm2_epid_t *) addr)[i], &epconn) == PSM2_OK) {
+		if (psm2_ep_epid_lookup(epids[i], &epconn) == PSM2_OK) {
 			epaddr_context = psm2_epaddr_getctxt(epconn.addr);
-			if (epaddr_context && epaddr_context->epid  == ((psm2_epid_t *) addr)[i])
-				((psm2_epaddr_t *) fi_addr)[i] = epconn.addr;
+			if (epaddr_context && epaddr_context->epid == epids[i])
+				epaddrs[i] = epconn.addr;
 			else
 				mask[i] = 1;
 		}
@@ -176,83 +161,124 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 		}
 	}
 
-	psm2_ep_connect(av_priv->domain->psm2_ep, count, 
-			(psm2_epid_t *) addr, mask, errors,
-			(psm2_epaddr_t *) fi_addr, 30*1e9);
+	psm2_ep_connect(av->domain->psm2_ep, count, epids, mask, errors,
+			epaddrs, psmx2_conn_timeout(count));
 
 	for (i=0; i<count; i++){
 		if (!mask[i])
 			continue;
 
-		if (errors[i] == PSM2_OK || errors[i] == PSM2_EPID_ALREADY_CONNECTED) {
-			psmx2_set_epaddr_context(av_priv->domain,
-						 ((psm2_epid_t *) addr)[i],
-						 ((psm2_epaddr_t *) fi_addr)[i]);
+		if (errors[i] == PSM2_OK ||
+		    errors[i] == PSM2_EPID_ALREADY_CONNECTED) {
+			psmx2_set_epaddr_context(av->domain, epids[i], epaddrs[i]);
 		}
 		else {
-			psm2_epconn_t epconn;
-
-			/* If duplicated addresses are passed to psm2_ep_connect(), all but one will fail
-			 * with error "Endpoint could not be reached". They should be treated as already
-			 * connected.
+			/* If duplicated addrs are passed to psm2_ep_connect(),
+			 * all but one will fail with error "Endpoint could not
+			 * be reached". This should be treated the same as
+			 * "Endpoint already connected".
 			 */
-			if (psm2_ep_epid_lookup(((psm2_epid_t *) addr)[i], &epconn) == PSM2_OK) {
+			if (psm2_ep_epid_lookup(epids[i], &epconn) == PSM2_OK) {
 				epaddr_context = psm2_epaddr_getctxt(epconn.addr);
-				if (epaddr_context && epaddr_context->epid  == ((psm2_epid_t *) addr)[i]) {
-					((psm2_epaddr_t *) fi_addr)[i] = epconn.addr;
+				if (epaddr_context &&
+				    epaddr_context->epid == epids[i]) {
+					epaddrs[i] = epconn.addr;
 					continue;
 				}
 			}
 
 			FI_INFO(&psmx2_prov, FI_LOG_AV,
 				"%d: psm2_ep_connect returned %s. remote epid=%lx.\n",
-				i, psm2_error_get_string(errors[i]),
-				((psm2_epid_t *)addr)[i]);
-			if (((psm2_epid_t *)addr)[i] == 0)
+				i, psm2_error_get_string(errors[i]), epids[i]);
+			if (epids[i] == 0)
 				FI_INFO(&psmx2_prov, FI_LOG_AV,
 					"does the application depend on the provider"
 					"to resolve IP address into endpoint id? if so"
 					"check if the name server has started correctly"
 					"at the other side.\n");
-			fi_addr[i] = FI_ADDR_NOTAVAIL;
+			epaddrs[i] = (void *)FI_ADDR_NOTAVAIL;
 			error_count++;
 
-			if (av_priv->flags & FI_EVENT) {
-				event = psmx2_eq_create_event(av_priv->eq,
-							      FI_AV_COMPLETE,		/* event */
-							      context,			/* context */
-							      i,			/* data: failed index */
-							      psmx2_errno(errors[i]),	/* err */
-							      errors[i],		/* prov_errno */
-							      NULL,			/* err_data */
-							      0);			/* err_data_size */
-				if (!event) {
-					free(mask);
-					free(errors);
+			if (av->flags & FI_EVENT) {
+				event = psmx2_eq_create_event(
+						av->eq,
+						FI_AV_COMPLETE,		/* event */
+						context,		/* context */
+						i,			/* data: failed index */
+						psmx2_errno(errors[i]),	/* err */
+						errors[i],		/* prov_errno */
+						NULL,			/* err_data */
+						0);			/* err_data_size */
+				if (!event)
 					return -FI_ENOMEM;
-				}
 
-				psmx2_eq_enqueue_event(av_priv->eq, event);
+				psmx2_eq_enqueue_event(av->eq, event);
 			}
 		}
 	}
+
+	return error_count;
+}
+ 
+static int psmx2_av_insert(struct fid_av *av, const void *addr,
+			   size_t count, fi_addr_t *fi_addr,
+			   uint64_t flags, void *context)
+{
+	struct psmx2_fid_av *av_priv;
+	psm2_epid_t *epids;
+	uint8_t *vlanes;
+	psm2_epaddr_t *epaddrs;
+	psm2_error_t *errors;
+	int *mask;
+	struct psmx2_eq_event *event;
+	const struct psmx2_ep_name *names = addr;
+	int error_count;
+	int i;
+
+	av_priv = container_of(av, struct psmx2_fid_av, av);
+
+	if ((av_priv->flags & FI_EVENT) && !av_priv->eq)
+		return -FI_ENOEQ;
+
+	if (psmx2_av_check_table_size(av_priv, count))
+		return -FI_ENOMEM;
+
+	epids = av_priv->epids + av_priv->last;
+	epaddrs = av_priv->epaddrs + av_priv->last;
+	vlanes = av_priv->vlanes + av_priv->last;
+
+	for (i=0; i<count; i++) {
+		epids[i] = names[i].epid;
+		vlanes[i] = names[i].vlane;
+	}
+
+	errors = (psm2_error_t *) calloc(count, sizeof *errors);
+	mask = (int *) calloc(count, sizeof *mask);
+	if (!errors || !mask) {
+		free(mask);
+		free(errors);
+		return -FI_ENOMEM;
+	}
+
+	error_count = psmx2_av_connet_eps(av_priv, count, epids, mask,
+					  errors, epaddrs, context);
 
 	free(mask);
 	free(errors);
 
-	if (av_priv->type == FI_AV_TABLE) {
-		/* NOTE: unresolved addresses are left in the AV table */
-		if (result) {
-			for (i=0; i<count; i++) {
-				j = av_priv->last + i;
-				if ((fi_addr_t)av_priv->psm2_epaddrs[j] == FI_ADDR_NOTAVAIL)
-					result[i] = FI_ADDR_NOTAVAIL;
-				else
-					result[i] = j;
-			}
+	if (fi_addr) {
+		for (i=0; i<count; i++) {
+			if (epaddrs[i] == (void *)FI_ADDR_NOTAVAIL)
+				fi_addr[i] = FI_ADDR_NOTAVAIL;
+			else if (av_priv->type == FI_AV_TABLE)
+				fi_addr[i] = av_priv->last + i;
+			else
+				fi_addr[i] = PSMX2_EP_TO_ADDR(epaddrs[i], vlanes[i]);
 		}
-		av_priv->last += count;
 	}
+
+	if (av_priv->type == FI_AV_TABLE)
+		av_priv->last += count;
 
 	if (!(av_priv->flags & FI_EVENT))
 		return count - error_count;
@@ -275,9 +301,7 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 static int psmx2_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			   uint64_t flags)
 {
-	int err = PSM2_OK;
-
-	return psmx2_errno(err);
+	return 0;
 }
 
 static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
@@ -285,7 +309,7 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 {
 	struct psmx2_fid_av *av_priv;
 	struct psmx2_epaddr_context *context;
-	psm2_epid_t epid;
+	struct psmx2_ep_name name;
 	int idx;
 
 	if (!addr || !addrlen)
@@ -298,18 +322,20 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 		if (idx >= av_priv->last)
 			return -FI_EINVAL;
 
-		epid = av_priv->psm2_epids[idx];
+		name.epid = av_priv->epids[idx];
+		name.vlane = av_priv->vlanes[idx];
 	}
 	else {
 		context = psm2_epaddr_getctxt((void *)fi_addr);
-		epid = context->epid;
+		name.epid = context->epid;
+		name.vlane = PSMX2_ADDR_TO_VL(fi_addr);
 	}
 
-	if (*addrlen >= sizeof(epid))
-		*(psm2_epid_t *)addr = epid;
+	if (*addrlen >= sizeof(name))
+		*(struct psmx2_ep_name *)addr = name;
 	else
-		memcpy(addr, &epid, *addrlen);
-	*addrlen = sizeof(epid);
+		memcpy(addr, &name, *addrlen);
+	*addrlen = sizeof(name);
 
 	return 0;
 }
@@ -336,10 +362,9 @@ static int psmx2_av_close(fid_t fid)
 
 	av = container_of(fid, struct psmx2_fid_av, av.fid);
 	psmx2_domain_release(av->domain);
-	if (av->psm2_epids)
-		free(av->psm2_epids);
-	if (av->psm2_epaddrs)
-		free(av->psm2_epaddrs);
+	free(av->epids);
+	free(av->epaddrs);
+	free(av->vlanes);
 	free(av);
 	return 0;
 }

@@ -398,22 +398,6 @@ int psmx2_domain_check_features(struct psmx2_fid_domain *domain, int ep_cap)
 		return -FI_EOPNOTSUPP;
 	}
 
-	if ((ep_cap & FI_TAGGED) && domain->tagged_ep &&
-	    fi_recv_allowed(ep_cap))
-		return -FI_EBUSY;
-
-	if ((ep_cap & FI_MSG) && domain->msg_ep &&
-	    fi_recv_allowed(ep_cap))
-		return -FI_EBUSY;
-
-	if ((ep_cap & FI_RMA) && domain->rma_ep &&
-	    fi_rma_target_allowed(ep_cap))
-		return -FI_EBUSY;
-
-	if ((ep_cap & FI_ATOMICS) && domain->atomics_ep &&
-	    fi_rma_target_allowed(ep_cap))
-		return -FI_EBUSY;
-
 	return 0;
 }
 
@@ -443,37 +427,6 @@ int psmx2_domain_enable_ep(struct psmx2_fid_domain *domain,
 		domain->am_initialized = 1;
 	}
 
-	if ((ep_cap & FI_RMA) && fi_rma_target_allowed(ep_cap))
-		domain->rma_ep = ep;
-
-	if ((ep_cap & FI_ATOMICS) && fi_rma_target_allowed(ep_cap))
-		domain->atomics_ep = ep;
-
-	if ((ep_cap & FI_TAGGED) && fi_recv_allowed(ep_cap))
-		domain->tagged_ep = ep;
-
-	if ((ep_cap & FI_MSG) && fi_recv_allowed(ep_cap))
-		domain->msg_ep = ep;
-
 	return 0;
-}
-
-void psmx2_domain_disable_ep(struct psmx2_fid_domain *domain,
-			     struct psmx2_fid_ep *ep)
-{
-	if (!ep)
-		return;
-
-	if ((ep->caps & FI_RMA) && domain->rma_ep == ep)
-		domain->rma_ep = NULL;
-
-	if ((ep->caps & FI_ATOMICS) && domain->atomics_ep == ep)
-		domain->atomics_ep = NULL;
-
-	if ((ep->caps & FI_TAGGED) && domain->tagged_ep == ep)
-		domain->tagged_ep = NULL;
-
-	if ((ep->caps & FI_MSG) && domain->msg_ep == ep)
-		domain->msg_ep = NULL;
 }
 

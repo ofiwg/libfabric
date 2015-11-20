@@ -241,7 +241,6 @@ static int psmx2_ep_close(fid_t fid)
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
 
-	psmx2_domain_disable_ep(ep->domain, ep);
 	ep->domain->eps[ep->vlane] = NULL;
 	psmx2_free_vlane(ep->domain, ep->vlane);
 	psmx2_domain_release(ep->domain);

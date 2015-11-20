@@ -92,6 +92,37 @@ extern struct fi_provider psmx2_prov;
 
 #define PSMX2_MSG_BIT	(0x1ULL << 31)
 #define PSMX2_RMA_BIT	(0x1ULL << 30)
+#define PSMX2_SRC_BITS	(0x0000FF00)
+#define PSMX2_DST_BITS	(0x000000FF)
+
+#define PSMX2_TAG32(base, src, dst)	((base) | ((src)<<8) | (dst))
+#define PSMX2_TAG32_GET_SRC(tag32)	(((tag32) & PSMX2_SRC_BITS) >> 8)
+#define PSMX2_TAG32_GET_DST(tag32)	((tag32) & PSMX2_DST_BITS)
+
+#define PSMX2_SET_TAG(tag96,tag64,tag32) do { \
+						tag96.tag0 = (uint32_t)tag64; \
+						tag96.tag1 = (uint32_t)(tag64>>32); \
+						tag96.tag2 = tag32; \
+					} while (0)
+
+#define PSMX2_GET_TAG64(tag96)		(tag96.tag0 | ((uint64_t)tag96.tag1<<32))
+
+/* Canonical virtual address on X86_64 only uses 48 bits and the higher 16 bits
+ * are sign extensions. We can put vlane into part of these 16 bits of an epaddr.
+ */
+#define PSMX2_MAX_VL			(0xFF)
+#define PSMX2_EP_MASK			(0x00FFFFFFFFFFFFFFUL)
+#define PSMX2_SIGN_MASK  		(0x0080000000000000UL)
+#define PSMX2_SIGN_EXT			(0xFF00000000000000UL)
+#define PSMX2_VL_MASK			(0xFF00000000000000UL)
+ 
+#define PSMX2_EP_TO_ADDR(ep,vl)		((((uint64_t)vl) << 56) | \
+						((uint64_t)ep & PSMX2_EP_MASK))
+#define PSMX2_ADDR_TO_VL(addr)		((uint8_t)((addr & PSMX2_VL_MASK) >> 56))
+#define PSMX2_ADDR_TO_EP(addr)		((psm2_epaddr_t) \
+						((addr & PSMX2_SIGN_MASK) ? \
+                                                 (addr | PSMX2_SIGN_EXT) : \
+                                                 (addr & PSMX2_EP_MASK)))
 
 /* Bits 60 .. 63 of the flag are provider specific */
 #define PSMX2_NO_COMPLETION	(1ULL << 60)
@@ -122,16 +153,6 @@ union psmx2_pi {
 #define PSMX2_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX2_CTXT_EP(fi_context)	((fi_context)->internal[3])
 
-#define PSMX2_SET_TAG(tag96,tag64,tag32)	do { \
-						tag96.tag0 = (uint32_t)tag64; \
-						tag96.tag1 = (uint32_t)(tag64>>32); \
-						tag96.tag2 = tag32; \
-					} while (0)
-
-#define PSMX2_GET_TAG64(tag96)		(tag96.tag0 | ((uint64_t)tag96.tag1<<32))
-
-#define PSMX2_MAX_VL			(0xFF)
-
 #define PSMX2_AM_RMA_HANDLER	0
 #define PSMX2_AM_MSG_HANDLER	1
 #define PSMX2_AM_ATOMIC_HANDLER	2
@@ -139,11 +160,22 @@ union psmx2_pi {
 					 * 2032 for inter-node, 2072 for intra-node.
 					 */
 
-#define PSMX2_AM_OP_MASK		0x0000FFFF
-#define PSMX2_AM_FLAG_MASK	0xFFFF0000
+#define PSMX2_AM_OP_MASK	0x000000FF
+#define PSMX2_AM_DST_MASK	0x0000FF00
+#define PSMX2_AM_SRC_MASK	0x00FF0000
+#define PSMX2_AM_FLAG_MASK	0xFF000000
 #define PSMX2_AM_EOM		0x40000000
 #define PSMX2_AM_DATA		0x20000000
 #define PSMX2_AM_FORCE_ACK	0x10000000
+
+#define PSMX2_AM_SET_OP(u32w0,op)	do {u32w0 &= ~PSMX2_AM_OP_MASK; u32w0 |= op;} while (0)
+#define PSMX2_AM_SET_DST(u32w0,vl)	do {u32w0 &= ~PSMX2_AM_DST_MASK; u32w0 |= ((uint32_t)vl << 8);} while (0)
+#define PSMX2_AM_SET_SRC(u32w0,vl)	do {u32w0 &= ~PSMX2_AM_SRC_MASK; u32w0 |= ((uint32_t)vl << 16);} while (0)
+#define PSMX2_AM_SET_FLAG(u32w0,flag)	do {u32w0 &= ~PSMX2_AM_FLAG_MASK; u32w0 |= flag;} while (0)
+#define PSMX2_AM_GET_OP(u32w0)		(u32w0 & PSMX2_AM_OP_MASK)
+#define PSMX2_AM_GET_DST(u32w0)		((uint8_t)((u32w0 & PSMX2_AM_DST_MASK) >> 8))
+#define PSMX2_AM_GET_SRC(u32w0)		((uint8_t)((u32w0 & PSMX2_AM_SRC_MASK) >> 16))
+#define PSMX2_AM_GET_FLAG(u32w0)	(u32w0 & PSMX2_AM_FLAG_MASK)
 
 enum {
 	PSMX2_AM_REQ_WRITE = 1,
@@ -171,8 +203,9 @@ struct psmx2_am_request {
 			uint64_t addr;
 			uint64_t key;
 			void	*context;
-			void	*peer_context;
 			void	*peer_addr;
+			uint8_t	vl;
+			uint8_t	peer_vl;
 			uint64_t data;
 		} write;
 		struct {
@@ -182,6 +215,8 @@ struct psmx2_am_request {
 			uint64_t key;
 			void	*context;
 			void	*peer_addr;
+			uint8_t	vl;
+			uint8_t	peer_vl;
 			size_t	len_read;
 		} read;
 		struct {
@@ -257,10 +292,6 @@ struct psmx2_fid_domain {
 	psm2_ep_t		psm2_ep;
 	psm2_epid_t		psm2_epid;
 	psm2_mq_t		psm2_mq;
-	struct psmx2_fid_ep	*tagged_ep;
-	struct psmx2_fid_ep	*msg_ep;
-	struct psmx2_fid_ep	*rma_ep;
-	struct psmx2_fid_ep	*atomics_ep;
 	uint64_t		mode;
 	uint64_t		caps;
 
@@ -298,6 +329,11 @@ struct psmx2_fid_domain {
 	pthread_t		progress_thread;
 };
 
+struct psmx2_ep_name {
+	psm2_epid_t		epid;
+	uint8_t			vlane;
+};
+
 struct psmx2_cq_event {
 	union {
 		struct fi_cq_entry		context;
@@ -307,7 +343,7 @@ struct psmx2_cq_event {
 		struct fi_cq_err_entry		err;
 	} cqe;
 	int error;
-	uint64_t source;
+	fi_addr_t source;
 	struct slist_entry list_entry;
 };
 
@@ -528,8 +564,9 @@ struct psmx2_fid_av {
 	size_t			addrlen;
 	size_t			count;
 	size_t			last;
-	psm2_epid_t		*psm2_epids;
-	psm2_epaddr_t		*psm2_epaddrs;
+	psm2_epid_t		*epids;
+	psm2_epaddr_t		*epaddrs;
+	uint8_t			*vlanes;
 };
 
 struct psmx2_fid_ep {
@@ -641,7 +678,6 @@ static inline void psmx2_domain_acquire(struct psmx2_fid_domain *domain)
 void	psmx2_domain_release(struct psmx2_fid_domain *domain);
 int	psmx2_domain_check_features(struct psmx2_fid_domain *domain, int ep_cap);
 int	psmx2_domain_enable_ep(struct psmx2_fid_domain *domain, struct psmx2_fid_ep *ep);
-void	psmx2_domain_disable_ep(struct psmx2_fid_domain *domain, struct psmx2_fid_ep *ep);
 void 	*psmx2_name_server(void *args);
 void	*psmx2_resolve_name(const char *servername, int port);
 void	psmx2_get_uuid(psm2_uuid_t uuid);

@@ -35,18 +35,20 @@
 static int psmx2_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct psmx2_fid_ep *ep;
+	struct psmx2_ep_name *epname = addr;
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
 	if (!ep->domain)
 		return -FI_EBADF;
 
-	if (*addrlen < sizeof(psm2_epid_t)) {
-		*addrlen = sizeof(psm2_epid_t);
+	if (*addrlen < sizeof(struct psmx2_ep_name)) {
+		*addrlen = sizeof(struct psmx2_ep_name);
 		return -FI_ETOOSMALL;
 	}
 
-	*(psm2_epid_t *)addr = ep->domain->psm2_epid;
-	*addrlen = sizeof(psm2_epid_t);
+	epname->epid = ep->domain->psm2_epid;
+	epname->vlane = ep->vlane;
+	*addrlen = sizeof(struct psmx2_ep_name);
 
 	return 0;
 }

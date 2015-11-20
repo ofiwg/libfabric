@@ -116,7 +116,7 @@ psmx2_am_search_and_dequeue_unexp(struct psmx2_fid_domain *domain,
 /* Message protocol:
  *
  * Send REQ:
- *	args[0].u32w0	cmd, flag
+ *	args[0].u32w0	cmd, src, dst, flag
  *	args[0].u32w1	len
  *	args[1].u64	req
  *	args[2].u64	recv_req
@@ -144,6 +144,9 @@ int psmx2_am_msg_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	int op_error = 0;
 	struct psmx2_unexp *unexp;
 	psm2_epaddr_t epaddr;
+	uint8_t src_vl;
+	//uint8_t dst_vl;
+	fi_addr_t src_addr;
 
 	psm2_am_get_source(token, &epaddr);
 
@@ -156,7 +159,11 @@ int psmx2_am_msg_handler(psm2_am_token_t token, psm2_amarg_t *args,
 
 	domain = epaddr_context->domain;
 
-	cmd = args[0].u32w0 & PSMX2_AM_OP_MASK;
+	cmd = PSMX2_AM_GET_OP(args[0].u32w0);
+	src_vl = PSMX2_AM_GET_SRC(args[0].u32w0);
+	//dst_vl = PSMX2_AM_GET_DST(args[0].u32w0);
+	src_addr = PSMX2_EP_TO_ADDR(epaddr, src_vl);
+
 	eom = args[0].u32w0 & PSMX2_AM_EOM;
 
 	switch (cmd) {
@@ -165,11 +172,13 @@ int psmx2_am_msg_handler(psm2_am_token_t token, psm2_amarg_t *args,
                 offset = args[3].u64;
 		if (offset == 0) {
 			/* this is the first packet */
-			req = psmx2_am_search_and_dequeue_recv(domain, (const void *)epaddr);
+			req = psmx2_am_search_and_dequeue_recv(domain,
+							       (void *)src_addr);
 			if (req) {
 				copy_len = MIN(len, req->recv.len);
 				memcpy(req->recv.buf, src, len);
 				req->recv.len_received += copy_len;
+				req->recv.src_addr = (void *)src_addr;
 			}
 			else {
 				unexp = malloc(sizeof(*unexp) + len);
@@ -178,7 +187,7 @@ int psmx2_am_msg_handler(psm2_am_token_t token, psm2_amarg_t *args,
 				}
 				else  {
 					memcpy(unexp->buf, src, len);
-					unexp->sender_addr = epaddr;
+					unexp->sender_addr = (void *)src_addr;
 					unexp->sender_context = args[1].u64;
 					unexp->len_received = len;
 					unexp->done = !!eom;
@@ -229,10 +238,13 @@ int psmx2_am_msg_handler(psm2_am_token_t token, psm2_amarg_t *args,
 						0, /* tag */
 						req->recv.len - req->recv.len_received,
 						0 /* err */);
-				if (event)
+				if (event) {
+					event->source = (fi_addr_t)req->recv.src_addr;
 					psmx2_cq_enqueue_event(req->ep->recv_cq, event);
-				else
-					err = -FI_ENOMEM;
+				}
+				else {
+					op_error = -FI_ENOMEM;
+				}
 			}
 
 			if (req->ep->recv_cntr)
@@ -369,7 +381,8 @@ static ssize_t psmx2_recv2_generic(struct fid_ep *ep, void *buf,
 			if (idx >= av->last)
 				return -FI_EINVAL;
 
-			src_addr = (fi_addr_t)av->psm2_epaddrs[idx];
+			src_addr = PSMX2_EP_TO_ADDR(av->epaddrs[idx],
+						    av->vlanes[idx]);
 		}
 	}
 	else {
@@ -400,6 +413,7 @@ static ssize_t psmx2_recv2_generic(struct fid_ep *ep, void *buf,
 
 	req->recv.len_received = MIN(req->recv.len, unexp->len_received);
 	memcpy(req->recv.buf, unexp->buf, req->recv.len_received);
+	req->recv.src_addr = unexp->sender_addr;
 
 	recv_done = (req->recv.len_received >= req->recv.len);
 
@@ -431,10 +445,13 @@ static ssize_t psmx2_recv2_generic(struct fid_ep *ep, void *buf,
 					0, /* tag */
 					req->recv.len - req->recv.len_received,
 					0 /* err */);
-			if (event)
+			if (event) {
+				event->source = (fi_addr_t)req->recv.src_addr;
 				psmx2_cq_enqueue_event(req->ep->recv_cq, event);
-			else
+			}
+			else {
 				err = -FI_ENOMEM;
+			}
 		}
 
 		if (req->ep->recv_cntr)
@@ -515,6 +532,8 @@ static ssize_t psmx2_send2_generic(struct fid_ep *ep, const void *buf,
 	struct psmx2_fid_ep *ep_priv;
 	struct psmx2_fid_av *av;
 	struct psmx2_am_request *req;
+	psm2_epaddr_t psm2_epaddr;
+	uint8_t vlane;
 	psm2_amarg_t args[8];
 	int am_flags = PSM2_AM_FLAG_ASYNC;
 	int err;
@@ -532,10 +551,15 @@ static ssize_t psmx2_send2_generic(struct fid_ep *ep, const void *buf,
 		if (idx >= av->last)
 			return -FI_EINVAL;
 
-		dest_addr = (fi_addr_t) av->psm2_epaddrs[idx];
+		psm2_epaddr = av->epaddrs[idx];
+		vlane = av->vlanes[idx];
 	}
-	else if (!dest_addr) {
-		return -FI_EINVAL;
+	else {
+		if (!dest_addr)
+			return -FI_EINVAL;
+
+		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
+		vlane = PSMX2_ADDR_TO_VL(dest_addr);
 	}
 
 	chunk_size = MIN(PSMX2_AM_CHUNK_SIZE, psmx2_am_param.max_request_short);
@@ -558,15 +582,20 @@ static ssize_t psmx2_send2_generic(struct fid_ep *ep, const void *buf,
 	    (ep_priv->send_selective_completion && !(flags & FI_COMPLETION)))
 		req->no_event = 1;
 
-	args[0].u32w0 = PSMX2_AM_REQ_SEND | (msg_size == len ? PSMX2_AM_EOM : 0);
+	args[0].u32w0 = PSMX2_AM_REQ_SEND;
+	PSMX2_AM_SET_SRC(args[0].u32w0, ep_priv->vlane);
+	PSMX2_AM_SET_DST(args[0].u32w0, vlane);
+	if (msg_size == len)
+		PSMX2_AM_SET_FLAG(args[0].u32w0, PSMX2_AM_EOM);
+
 	args[0].u32w1 = msg_size;
 	args[1].u64 = (uint64_t)(uintptr_t)req;
 	args[2].u64 = 0;
 	args[3].u64 = 0;
 
-	err = psm2_am_request_short((psm2_epaddr_t) dest_addr,
-				PSMX2_AM_MSG_HANDLER, args, 4,
-				(void *)buf, msg_size, am_flags, NULL, NULL);
+	err = psm2_am_request_short(psm2_epaddr, PSMX2_AM_MSG_HANDLER,
+				    args, 4, (void *)buf, msg_size,
+				    am_flags, NULL, NULL);
 
 	return psmx2_errno(err);
 
@@ -630,8 +659,8 @@ static ssize_t psmx2_sendv2(struct fid_ep *ep, const struct iovec *iov,
 		len = 0;
 	}
 
-	return psmx2_send2(ep, buf, len, desc ? desc[0] : NULL,
-			   dest_addr, context);
+	return psmx2_send2(ep, buf, len, desc ? desc[0] : NULL, dest_addr,
+			   context);
 }
 
 static ssize_t psmx2_inject2(struct fid_ep *ep, const void *buf, size_t len,

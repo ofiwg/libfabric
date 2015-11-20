@@ -192,7 +192,7 @@ void *psmx2_resolve_name(const char *servername, int port)
 	struct addrinfo *res, *p;
 	psm2_uuid_t uuid;
 	char *service;
-	void *dest_addr;
+	struct psmx2_ep_name *dest_addr;
 	int sockfd = -1;
 	int n;
 
@@ -231,13 +231,13 @@ void *psmx2_resolve_name(const char *servername, int port)
 		return NULL;
 	}
 
-	dest_addr = calloc(1,sizeof(psm2_epid_t));
+	dest_addr = calloc(1,sizeof(struct psmx2_ep_name));
 	if (!dest_addr) {
 		close(sockfd);
 		return NULL;
 	}
 
-	if (read(sockfd, dest_addr, sizeof(psm2_epid_t)) != sizeof(psm2_epid_t)) {
+	if (read(sockfd, &dest_addr->epid, sizeof(psm2_epid_t)) != sizeof(psm2_epid_t)) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE,
 			"error reading response from %s:%d\n", servername, port);
 		free(dest_addr);

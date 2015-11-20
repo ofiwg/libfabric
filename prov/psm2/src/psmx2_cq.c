@@ -297,12 +297,14 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 
 out:
 	if (is_recv) {
+		uint8_t vlane = PSMX2_TAG32_GET_SRC(psm2_status->msg_tag.tag2);
+		fi_addr_t source = PSMX2_EP_TO_ADDR(psm2_status->msg_peer, vlane);
 		if (event == event_in) {
 			if (src_addr)
-				*src_addr = (fi_addr_t) psm2_status->msg_peer;
+				*src_addr = source;
 		}
 		else {
-			event->source = (uint64_t) psm2_status->msg_peer;
+			event->source = source;
 		}
 	}
 
@@ -412,11 +414,11 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				  }
 
 				  mr = PSMX2_CTXT_USER(fi_context);
-				  if (mr->domain->rma_ep->recv_cq && (req->cq_flags & FI_REMOTE_CQ_DATA)) {
+				  if (req->ep->recv_cq && (req->cq_flags & FI_REMOTE_CQ_DATA)) {
 					event = psmx2_cq_create_event_from_status(
-							mr->domain->rma_ep->recv_cq,
+							req->ep->recv_cq,
 							&psm2_status, req->write.data,
-							(mr->domain->rma_ep->recv_cq == cq) ?
+							(req->ep->recv_cq == cq) ?
 								event_buffer : NULL,
 							count, src_addr);
 					if (!event)
@@ -430,16 +432,16 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 							src_addr = count ? src_addr + 1 : NULL;
 					}
 					else {
-						psmx2_cq_enqueue_event(mr->domain->rma_ep->recv_cq, event);
-						if (mr->domain->rma_ep->recv_cq == cq)
+						psmx2_cq_enqueue_event(req->ep->recv_cq, event);
+						if (req->ep->recv_cq == cq)
 							read_more = 0;
 					}
 				  }
 
-				  if (mr->domain->rma_ep->remote_write_cntr)
-					psmx2_cntr_inc(mr->domain->rma_ep->remote_write_cntr);
+				  if (req->ep->remote_write_cntr)
+					psmx2_cntr_inc(req->ep->remote_write_cntr);
 
-				  if (mr->cntr && mr->cntr != mr->domain->rma_ep->remote_write_cntr)
+				  if (mr->cntr && mr->cntr != req->ep->remote_write_cntr)
 					psmx2_cntr_inc(mr->cntr);
 
 				  if (read_more)
@@ -451,10 +453,11 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 			case PSMX2_REMOTE_READ_CONTEXT:
 				{
 				  struct fi_context *fi_context = psm2_status.context;
-				  struct psmx2_fid_mr *mr;
-				  mr = PSMX2_CTXT_USER(fi_context);
-				  if (mr->domain->rma_ep->remote_read_cntr)
-					psmx2_cntr_inc(mr->domain->rma_ep->remote_read_cntr);
+				  struct psmx2_am_request *req;
+
+				  req = container_of(fi_context, struct psmx2_am_request, fi_context);
+				  if (req->ep->remote_read_cntr)
+					psmx2_cntr_inc(req->ep->remote_read_cntr);
 
 				  continue;
 				}
@@ -556,7 +559,7 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 			if (!event->error) {
 				memcpy(buf, (void *)&event->cqe, cq_priv->entry_size);
 				if (src_addr)
-					*src_addr = (fi_addr_t) event->source;
+					*src_addr = event->source;
 
 				psmx2_cq_free_event(cq_priv, event);
 
