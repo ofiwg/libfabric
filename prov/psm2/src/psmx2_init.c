@@ -61,67 +61,6 @@ static void psmx2_init_env(void)
 	fi_param_get_str(&psmx2_prov, "prog_affinity", &psmx2_env.prog_affinity);
 }
 
-static int psmx2_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
-{
-	uint64_t reserved_bits = 0;
-	int ret_caps;
-	int ask_caps = *caps;
-
-	ret_caps = ask_caps ? ask_caps : PSMX2_CAPS;
-
-	if ((ret_caps & FI_MSG) && !psmx2_env.am_msg) {
-		if (*max_tag_value < PSMX2_MSG_BIT) {
-			reserved_bits |= PSMX2_MSG_BIT;
-		}
-		else if (ask_caps) {
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"unable to reserve tag bit for FI_MSG support.\n"
-				"ADVICE: please reduce the asked max_tag_value, "
-				"or remove FI_MSG from the asked capabilities, "
-				"or set FI_PSM2_AM_MSG=1 to use an alternative (but "
-				"less optimized) message queue implementation.\n");
-			return -1;
-		}
-		else {
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"unable to reserve tag bit for FI_MSG support. "
-				"FI_MSG is removed from the capabilities.\n"
-				"ADVICE: please reduce the asked max_tag_value, "
-				"or set FI_PSM2_AM_MSG=1 to use an alternative (but "
-				"less optimized) message queue implementation.\n");
-			ret_caps &= ~FI_MSG;
-		}
-	}
-
-	if ((ret_caps & FI_RMA) && psmx2_env.tagged_rma) {
-		if (*max_tag_value < PSMX2_RMA_BIT) {
-			reserved_bits |= PSMX2_RMA_BIT;
-		}
-		else if (ask_caps) {
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"unable to reserve tag bit for tagged RMA acceleration.\n"
-				"ADVICE: please reduce the asked max_tag_value, or "
-				"remove FI_RMA from the asked capabilities, or set "
-				"FI_PSM2_TAGGED_RMA=0 to disable RMA acceleration.\n");
-			return -1;
-		}
-		else {
-			FI_INFO(&psmx2_prov, FI_LOG_CORE,
-				"unable to reserve tag bit for tagged RMA acceleration. "
-				"FI_RMA is removed from the capabilities.\n"
-				"ADVICE: please reduce the asked max_tag_value, or "
-				"set FI_PSM2_TAGGED_RMA=0 to disable RMA acceleration.\n");
-			ret_caps &= ~FI_RMA;
-		}
-	}
-
-	reserved_bits |= (reserved_bits << 1);
-
-	*caps = ret_caps;
-	*max_tag_value = ~reserved_bits;
-	return 0;
-}
-
 static int psmx2_getinfo(uint32_t version, const char *node,
 			 const char *service, uint64_t flags,
 			 struct fi_info *hints, struct fi_info **info)
@@ -136,8 +75,8 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	enum fi_threading threading = FI_THREAD_COMPLETION;
 	enum fi_progress control_progress = FI_PROGRESS_MANUAL;
 	enum fi_progress data_progress = FI_PROGRESS_MANUAL;
-	int caps = 0;
-	uint64_t max_tag_value = 0;
+	uint64_t caps = PSMX2_CAPS;
+	uint64_t max_tag_value = -1ULL;
 	int err = -FI_ENODATA;
 
 	FI_INFO(&psmx2_prov, FI_LOG_CORE,"\n");
@@ -435,13 +374,11 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			}
 		}
 
-		caps = hints->caps;
+		if (hints->caps)
+			caps = hints->caps;
 
 		/* TODO: check other fields of hints */
 	}
-
-	if (psmx2_reserve_tag_bits(&caps, &max_tag_value) < 0)
-		goto err_out;
 
 	psmx2_info = fi_allocinfo();
 	if (!psmx2_info) {
@@ -476,7 +413,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->domain_attr->max_ep_srx_ctx = 0;
 
 	psmx2_info->next = NULL;
-	psmx2_info->caps = (hints && hints->caps) ? hints->caps : caps;
+	psmx2_info->caps = caps;
 	psmx2_info->mode = mode;
 	psmx2_info->addr_format = FI_ADDR_PSMX;
 	psmx2_info->src_addrlen = 0;
