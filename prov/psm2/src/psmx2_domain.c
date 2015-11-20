@@ -334,6 +334,15 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	memset(&domain_priv->mr_map, 0, sizeof(struct index_map));
 	domain_priv->mr_reserved_key = 1;
 	
+	err = fastlock_init(&domain_priv->vl_lock);
+	if (err) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"fastlock_init(vl_lock) returns %d\n", err);
+		goto err_out_finalize_mq;
+	}
+	memset(domain_priv->vl_map, 0, sizeof(domain_priv->vl_map));
+	domain_priv->vl_alloc = 0;
+
 	err = fastlock_init(&domain_priv->poll_lock);
 	if (err) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,

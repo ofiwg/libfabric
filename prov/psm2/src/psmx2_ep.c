@@ -32,6 +32,69 @@
 
 #include "psmx2.h"
 
+#define BIT(i)		(1ULL << i)
+#define BITMAP_SIZE	(PSMX2_MAX_VL + 1)
+
+static void inline bitmap_set(uint64_t *map, unsigned id)
+{
+	int i, j;
+
+	i = id / sizeof(uint64_t);
+	j = id % sizeof(uint64_t);
+	
+	map[i] |= BIT(j);
+}
+
+static void inline bitmap_clear(uint64_t *map, unsigned id)
+{
+	int i, j;
+
+	i = id / sizeof(uint64_t);
+	j = id % sizeof(uint64_t);
+	
+	map[i] &= ~BIT(j);
+}
+
+static int inline bitmap_test(uint64_t *map, unsigned id)
+{
+	int i, j;
+
+	i = id / sizeof(uint64_t);
+	j = id % sizeof(uint64_t);
+	
+	return !!(map[i] & BIT(j));
+}
+
+static void psmx2_free_vlane(struct psmx2_fid_domain *domain, uint8_t vl)
+{
+	fastlock_acquire(&domain->vl_lock);
+	bitmap_clear(domain->vl_map, vl);
+	fastlock_release(&domain->vl_lock);
+}
+
+static int psmx2_alloc_vlane(struct psmx2_fid_domain *domain, uint8_t *vl)
+{
+	int i;
+	int id;
+
+	fastlock_acquire(&domain->vl_lock);
+	for (i=0; i<BITMAP_SIZE; i++) {
+		id = (domain->vl_alloc + i) % BITMAP_SIZE;
+		if (bitmap_test(domain->vl_map, id) == 0) {
+			bitmap_set(domain->vl_map, id);
+			domain->vl_alloc = id + 1;
+			break;
+		}
+	}
+	fastlock_release(&domain->vl_lock);
+
+	if (i >= BITMAP_SIZE)
+		return -FI_ENOSPC;
+
+	*vl = (uint8_t)id;
+	return 0;
+}
+
 static void psmx2_ep_optimize_ops(struct psmx2_fid_ep *ep)
 {
 	if (ep->ep.tagged) {
@@ -179,6 +242,8 @@ static int psmx2_ep_close(fid_t fid)
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
 
 	psmx2_domain_disable_ep(ep->domain, ep);
+	ep->domain->eps[ep->vlane] = NULL;
+	psmx2_free_vlane(ep->domain, ep->vlane);
 	psmx2_domain_release(ep->domain);
 	free(ep);
 
@@ -341,8 +406,9 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 {
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_fid_ep *ep_priv;
-	int err;
+	uint8_t vlane;
 	uint64_t ep_cap;
+	int err = -FI_EINVAL;
 
 	if (info)
 		ep_cap = info->caps;
@@ -351,15 +417,21 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	domain_priv = container_of(domain, struct psmx2_fid_domain, domain.fid);
 	if (!domain_priv)
-		return -FI_EINVAL;
+		goto errout;
 
 	err = psmx2_domain_check_features(domain_priv, ep_cap);
 	if (err)
-		return err; 
+		goto errout;
+
+	err = psmx2_alloc_vlane(domain_priv, &vlane);
+	if (err)
+		goto errout;
 
 	ep_priv = (struct psmx2_fid_ep *) calloc(1, sizeof *ep_priv);
-	if (!ep_priv)
-		return -FI_ENOMEM;
+	if (!ep_priv) {
+		err = -FI_ENOMEM;
+		goto errout_free_vlane;
+	}
 
 	ep_priv->ep.fid.fclass = FI_CLASS_EP;
 	ep_priv->ep.fid.context = context;
@@ -367,6 +439,7 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep.ops = &psmx2_ep_ops;
 	ep_priv->ep.cm = &psmx2_cm_ops;
 	ep_priv->domain = domain_priv;
+	ep_priv->vlane = vlane;
 
 	PSMX2_CTXT_TYPE(&ep_priv->nocomp_send_context) = PSMX2_NOCOMP_SEND_CONTEXT;
 	PSMX2_CTXT_EP(&ep_priv->nocomp_send_context) = ep_priv;
@@ -387,12 +460,11 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->caps = ep_cap;
 
 	err = psmx2_domain_enable_ep(domain_priv, ep_priv);
-	if (err) {
-		free(ep_priv);
-		return err;
-	}
+	if (err)
+		goto errout_free_ep;
 
 	psmx2_domain_acquire(domain_priv);
+	domain_priv->eps[ep_priv->vlane] = ep_priv;
 
 	if (info) {
 		if (info->tx_attr)
@@ -406,6 +478,15 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	*ep = &ep_priv->ep;
 
 	return 0;
+
+errout_free_ep:
+	free(ep_priv);
+
+errout_free_vlane:
+	psmx2_free_vlane(domain_priv, vlane);
+
+errout:
+	return err;
 }
 
 /* STX support is essentially no-op since PSM supports only one send/recv

@@ -130,6 +130,8 @@ union psmx2_pi {
 
 #define PSMX2_GET_TAG64(tag96)		(tag96.tag0 | ((uint64_t)tag96.tag1<<32))
 
+#define PSMX2_MAX_VL			(0xFF)
+
 #define PSMX2_AM_RMA_HANDLER	0
 #define PSMX2_AM_MSG_HANDLER	1
 #define PSMX2_AM_ATOMIC_HANDLER	2
@@ -267,6 +269,11 @@ struct psmx2_fid_domain {
 	uint64_t		mr_reserved_key;
 	struct index_map	mr_map;
 
+	fastlock_t		vl_lock;
+	uint64_t		vl_map[(PSMX2_MAX_VL+1)/sizeof(uint64_t)];
+	int			vl_alloc;
+	struct psmx2_fid_ep	*eps[PSMX2_MAX_VL+1];
+	
 	int			am_initialized;
 
 	/* incoming req queue for AM based RMA request. */
@@ -537,6 +544,7 @@ struct psmx2_fid_ep {
 	struct psmx2_fid_cntr	*read_cntr;
 	struct psmx2_fid_cntr	*remote_write_cntr;
 	struct psmx2_fid_cntr	*remote_read_cntr;
+	uint8_t			vlane;
 	unsigned		send_selective_completion:1;
 	unsigned		recv_selective_completion:1;
 	uint64_t		flags;
