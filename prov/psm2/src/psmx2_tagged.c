@@ -440,115 +440,35 @@ static ssize_t psmx2_tagged_recvmsg(struct fid_ep *ep,
 				  msg->context, flags);
 }
 
-static ssize_t psmx2_tagged_recv_no_flag(struct fid_ep *ep, void *buf,
-					 size_t len, void *desc,
-					 fi_addr_t src_addr,
-					 uint64_t tag, uint64_t ignore,
-					 void *context)
-{
-	return psmx2_tagged_recv_no_flag_av_map(
-					ep, buf, len, desc, src_addr,
-					tag, ignore, context);
+#define PSMX2_TAGGED_RECVV_FUNC(suffix)					\
+static ssize_t								\
+psmx2_tagged_recvv##suffix(struct fid_ep *ep, const struct iovec *iov,	\
+			   void **desc, size_t count,			\
+			   fi_addr_t src_addr, uint64_t tag,		\
+			   uint64_t ignore, void *context)		\
+{									\
+	void *buf;							\
+	size_t len;							\
+	if ((count && !iov) || (count > 1))				\
+		return -FI_EINVAL;					\
+	if (count) {							\
+		buf = iov[0].iov_base;					\
+		len = iov[0].iov_len;					\
+	} else {							\
+		buf = NULL;						\
+		len = 0;						\
+	}								\
+	return psmx2_tagged_recv##suffix(ep, buf, len,			\
+					 desc ? desc[0] : NULL,		\
+				 	 src_addr, tag, ignore, 	\
+					 context); 			\
 }
 
-static ssize_t psmx2_tagged_recv_no_event(struct fid_ep *ep, void *buf,
-					  size_t len, void *desc,
-					  fi_addr_t src_addr,
-					  uint64_t tag, uint64_t ignore,
-					  void *context)
-{
-	return psmx2_tagged_recv_no_event_av_map(
-					ep, buf, len, desc, src_addr,
-					tag, ignore, context);
-}
-
-static ssize_t psmx2_tagged_recvv(struct fid_ep *ep,
-				  const struct iovec *iov, void **desc,
-				  size_t count, fi_addr_t src_addr,
-				  uint64_t tag, uint64_t ignore,
-				  void *context)
-{
-	void *buf;
-	size_t len;
-
-	if (count && !iov)
-		return -FI_EINVAL;
-
-	if (count > 1) {
-		return -FI_EINVAL;
-	}
-	else if (count) {
-		buf = iov[0].iov_base;
-		len = iov[0].iov_len;
-	}
-	else {
-		buf = NULL;
-		len = 0;
-	}
-
-	return psmx2_tagged_recv(ep, buf, len, desc ? desc[0] : NULL,
-				 src_addr, tag, ignore, context);
-}
-
-static ssize_t psmx2_tagged_recvv_no_flag(struct fid_ep *ep,
-					  const struct iovec *iov,
-					  void **desc, size_t count,
-					  fi_addr_t src_addr,
-					  uint64_t tag, uint64_t ignore,
-					  void *context)
-{
-	void *buf;
-	size_t len;
-
-	if (count && !iov)
-		return -FI_EINVAL;
-
-	if (count > 1) {
-		return -FI_EINVAL;
-	}
-	else if (count) {
-		buf = iov[0].iov_base;
-		len = iov[0].iov_len;
-	}
-	else {
-		buf = NULL;
-		len = 0;
-	}
-
-	return psmx2_tagged_recv_no_flag(ep, buf, len,
-					 desc ? desc[0] : NULL, src_addr,
-					 tag, ignore, context);
-}
-
-static ssize_t psmx2_tagged_recvv_no_event(struct fid_ep *ep,
-					   const struct iovec *iov,
-					   void **desc, size_t count,
-					   fi_addr_t src_addr,
-					   uint64_t tag, uint64_t ignore,
-					   void *context)
-{
-	void *buf;
-	size_t len;
-
-	if (count && !iov)
-		return -FI_EINVAL;
-
-	if (count > 1) {
-		return -FI_EINVAL;
-	}
-	else if (count) {
-		buf = iov[0].iov_base;
-		len = iov[0].iov_len;
-	}
-	else {
-		buf = NULL;
-		len = 0;
-	}
-
-	return psmx2_tagged_recv_no_event(ep, buf, len,
-					  desc ? desc[0] : NULL, src_addr,
-					  tag, ignore, context);
-}
+PSMX2_TAGGED_RECVV_FUNC()
+PSMX2_TAGGED_RECVV_FUNC(_no_flag_av_map)
+PSMX2_TAGGED_RECVV_FUNC(_no_flag_av_table)
+PSMX2_TAGGED_RECVV_FUNC(_no_event_av_map)
+PSMX2_TAGGED_RECVV_FUNC(_no_event_av_table)
 
 ssize_t _psmx2_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 			   void *desc, fi_addr_t dest_addr, uint64_t tag,
@@ -906,148 +826,34 @@ static ssize_t psmx2_tagged_sendmsg(struct fid_ep *ep,
 				  msg->data);
 }
 
-static ssize_t psmx2_tagged_sendv(struct fid_ep *ep,
-				  const struct iovec *iov, void **desc,
-				  size_t count, fi_addr_t dest_addr,
-				  uint64_t tag, void *context)
-{
-	void *buf;
-	size_t len;
-
-	if (count && !iov)
-		return -FI_EINVAL;
-
-	if (count > 1) {
-		return -FI_EINVAL;
-	}
-	else if (count) {
-		buf = iov[0].iov_base;
-		len = iov[0].iov_len;
-	}
-	else {
-		buf = NULL;
-		len = 0;
-	}
-
-	return psmx2_tagged_send(ep, buf, len,
-				 desc ? desc[0] : NULL, dest_addr, tag, context);
+#define PSMX2_TAGGED_SENDV_FUNC(suffix)					\
+static ssize_t								\
+psmx2_tagged_sendv##suffix(struct fid_ep *ep, const struct iovec *iov,	\
+			   void **desc,size_t count,			\
+			   fi_addr_t dest_addr,	uint64_t tag,		\
+			   void *context)				\
+{									\
+	void *buf;							\
+	size_t len;							\
+	if ((count && !iov) || (count > 1))				\
+		return -FI_EINVAL;					\
+	if (count) {							\
+		buf = iov[0].iov_base;					\
+		len = iov[0].iov_len;					\
+	} else {							\
+		buf = NULL;						\
+		len = 0;						\
+	}								\
+	return psmx2_tagged_send##suffix(ep, buf, len,			\
+					 desc ? desc[0] : NULL,		\
+				 	 dest_addr, tag, context);	\
 }
 
-static ssize_t psmx2_tagged_sendv_no_flag_av_map(struct fid_ep *ep,
-						 const struct iovec *iov,
-						 void **desc, size_t count,
-						 fi_addr_t dest_addr,
-						 uint64_t tag, void *context)
-{
-	void *buf;
-	size_t len;
-
-	if (count && !iov)
-		return -FI_EINVAL;
-
-	if (count > 1) {
-		return -FI_EINVAL;
-	}
-	else if (count) {
-		buf = iov[0].iov_base;
-		len = iov[0].iov_len;
-	}
-	else {
-		buf = NULL;
-		len = 0;
-	}
-
-	return psmx2_tagged_send_no_flag_av_map(ep, buf, len,
-					        desc ? desc[0] : NULL, dest_addr,
-					        tag, context);
-}
-
-static ssize_t psmx2_tagged_sendv_no_flag_av_table(struct fid_ep *ep,
-						   const struct iovec *iov,
-						   void **desc, size_t count,
-						   fi_addr_t dest_addr,
-						   uint64_t tag, void *context)
-{
-	void *buf;
-	size_t len;
-
-	if (count && !iov)
-		return -FI_EINVAL;
-
-	if (count > 1) {
-		return -FI_EINVAL;
-	}
-	else if (count) {
-		buf = iov[0].iov_base;
-		len = iov[0].iov_len;
-	}
-	else {
-		buf = NULL;
-		len = 0;
-	}
-
-	return psmx2_tagged_send_no_flag_av_table(ep, buf, len,
-					          desc ? desc[0] : NULL, dest_addr,
-					          tag, context);
-}
-
-static ssize_t psmx2_tagged_sendv_no_event_av_map(struct fid_ep *ep,
-						  const struct iovec *iov,
-						  void **desc, size_t count,
-						  fi_addr_t dest_addr,
-						  uint64_t tag, void *context)
-{
-	void *buf;
-	size_t len;
-
-	if (count && !iov)
-		return -FI_EINVAL;
-
-	if (count > 1) {
-		return -FI_EINVAL;
-	}
-	else if (count) {
-		buf = iov[0].iov_base;
-		len = iov[0].iov_len;
-	}
-	else {
-		buf = NULL;
-		len = 0;
-	}
-
-	return psmx2_tagged_send_no_event_av_map(ep, buf, len,
-					         desc ? desc[0] : NULL, dest_addr,
-					         tag, context);
-}
-
-static ssize_t psmx2_tagged_sendv_no_event_av_table(struct fid_ep *ep,
-						    const struct iovec *iov,
-						    void **desc, size_t count,
-						    fi_addr_t dest_addr,
-						    uint64_t tag, void *context)
-{
-	void *buf;
-	size_t len;
-
-	if (count && !iov)
-		return -FI_EINVAL;
-
-	if (count > 1) {
-		return -FI_EINVAL;
-	}
-	else if (count) {
-		buf = iov[0].iov_base;
-		len = iov[0].iov_len;
-	}
-	else {
-		buf = NULL;
-		len = 0;
-	}
-
-	return psmx2_tagged_send_no_event_av_table(ep, buf, len,
-					           desc ? desc[0] : NULL,
-					           dest_addr, tag, context);
-}
+PSMX2_TAGGED_SENDV_FUNC()
+PSMX2_TAGGED_SENDV_FUNC(_no_flag_av_map)
+PSMX2_TAGGED_SENDV_FUNC(_no_flag_av_table)
+PSMX2_TAGGED_SENDV_FUNC(_no_event_av_map)
+PSMX2_TAGGED_SENDV_FUNC(_no_event_av_table)
 
 static ssize_t psmx2_tagged_inject(struct fid_ep *ep,
 				   const void *buf, size_t len,
@@ -1087,128 +893,27 @@ static ssize_t psmx2_tagged_injectdata(struct fid_ep *ep, const void *buf,
 				  data);
 }
 
-/* general case */
-struct fi_ops_tagged psmx2_tagged_ops = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = psmx2_tagged_recv,
-	.recvv = psmx2_tagged_recvv,
-	.recvmsg = psmx2_tagged_recvmsg,
-	.send = psmx2_tagged_send,
-	.sendv = psmx2_tagged_sendv,
-	.sendmsg = psmx2_tagged_sendmsg,
-	.inject = psmx2_tagged_inject,
-	.senddata = psmx2_tagged_senddata,
-	.injectdata = psmx2_tagged_injectdata,
+#define PSMX2_TAGGED_OPS(suffix,sendopt,recvopt,injopt)	\
+struct fi_ops_tagged psmx2_tagged_ops##suffix = {	\
+	.size = sizeof(struct fi_ops_tagged),		\
+	.recv = psmx2_tagged_recv##recvopt,		\
+	.recvv = psmx2_tagged_recvv##recvopt,		\
+	.recvmsg = psmx2_tagged_recvmsg,		\
+	.send = psmx2_tagged_send##sendopt,		\
+	.sendv = psmx2_tagged_sendv##sendopt,		\
+	.sendmsg = psmx2_tagged_sendmsg,		\
+	.inject = psmx2_tagged_inject##injopt,		\
+	.senddata = psmx2_tagged_senddata,		\
+	.injectdata = psmx2_tagged_injectdata,		\
 };
 
-/* op_flags=0, no event suppression, FI_AV_MAP */
-struct fi_ops_tagged psmx2_tagged_ops_no_flag_av_map = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = psmx2_tagged_recv_no_flag,
-	.recvv = psmx2_tagged_recvv_no_flag,
-	.recvmsg = psmx2_tagged_recvmsg,
-	.send = psmx2_tagged_send_no_flag_av_map,
-	.sendv = psmx2_tagged_sendv_no_flag_av_map,
-	.sendmsg = psmx2_tagged_sendmsg,
-	.inject = psmx2_tagged_inject_no_flag_av_map,
-	.senddata = psmx2_tagged_senddata,
-	.injectdata = psmx2_tagged_injectdata,
-};
+PSMX2_TAGGED_OPS(,,,)
+PSMX2_TAGGED_OPS(_no_flag_av_map, _no_flag_av_map, _no_flag_av_map, _no_flag_av_map)
+PSMX2_TAGGED_OPS(_no_flag_av_table, _no_flag_av_table, _no_flag_av_table, _no_flag_av_table)
+PSMX2_TAGGED_OPS(_no_event_av_map, _no_event_av_map, _no_event_av_map, _no_flag_av_map)
+PSMX2_TAGGED_OPS(_no_event_av_table, _no_event_av_table, _no_event_av_table, _no_flag_av_table)
+PSMX2_TAGGED_OPS(_no_send_event_av_map, _no_event_av_map, _no_flag_av_map, _no_flag_av_map)
+PSMX2_TAGGED_OPS(_no_send_event_av_table, _no_event_av_table, _no_flag_av_table, _no_flag_av_table)
+PSMX2_TAGGED_OPS(_no_recv_event_av_map, _no_flag_av_map, _no_event_av_map, _no_flag_av_map)
+PSMX2_TAGGED_OPS(_no_recv_event_av_table, _no_flag_av_table, _no_event_av_table, _no_flag_av_table)
 
-/* op_flags=0, no event suppression, FI_AV_TABLE */
-struct fi_ops_tagged psmx2_tagged_ops_no_flag_av_table = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = psmx2_tagged_recv_no_flag,
-	.recvv = psmx2_tagged_recvv_no_flag,
-	.recvmsg = psmx2_tagged_recvmsg,
-	.send = psmx2_tagged_send_no_flag_av_table,
-	.sendv = psmx2_tagged_sendv_no_flag_av_table,
-	.sendmsg = psmx2_tagged_sendmsg,
-	.inject = psmx2_tagged_inject_no_flag_av_table,
-	.senddata = psmx2_tagged_senddata,
-	.injectdata = psmx2_tagged_injectdata,
-};
-
-/* op_flags=0, event suppression, FI_AV_MAP */
-struct fi_ops_tagged psmx2_tagged_ops_no_event_av_map = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = psmx2_tagged_recv_no_event,
-	.recvv = psmx2_tagged_recvv_no_event,
-	.recvmsg = psmx2_tagged_recvmsg,
-	.send = psmx2_tagged_send_no_event_av_map,
-	.sendv = psmx2_tagged_sendv_no_event_av_map,
-	.sendmsg = psmx2_tagged_sendmsg,
-	.inject = psmx2_tagged_inject_no_flag_av_map,
-	.senddata = psmx2_tagged_senddata,
-	.injectdata = psmx2_tagged_injectdata,
-};
-
-/* op_flags=0, event suppression, FI_AV_TABLE */
-struct fi_ops_tagged psmx2_tagged_ops_no_event_av_table = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = psmx2_tagged_recv_no_event,
-	.recvv = psmx2_tagged_recvv_no_event,
-	.recvmsg = psmx2_tagged_recvmsg,
-	.send = psmx2_tagged_send_no_event_av_table,
-	.sendv = psmx2_tagged_sendv_no_event_av_table,
-	.sendmsg = psmx2_tagged_sendmsg,
-	.inject = psmx2_tagged_inject_no_flag_av_table,
-	.senddata = psmx2_tagged_senddata,
-	.injectdata = psmx2_tagged_injectdata,
-};
-
-/* op_flags=0, send event suppression, FI_AV_MAP */
-struct fi_ops_tagged psmx2_tagged_ops_no_send_event_av_map = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = psmx2_tagged_recv_no_flag,
-	.recvv = psmx2_tagged_recvv_no_flag,
-	.recvmsg = psmx2_tagged_recvmsg,
-	.send = psmx2_tagged_send_no_event_av_map,
-	.sendv = psmx2_tagged_sendv_no_event_av_map,
-	.sendmsg = psmx2_tagged_sendmsg,
-	.inject = psmx2_tagged_inject_no_flag_av_map,
-	.senddata = psmx2_tagged_senddata,
-	.injectdata = psmx2_tagged_injectdata,
-};
-
-/* op_flags=0, send event suppression, FI_AV_TABLE */
-struct fi_ops_tagged psmx2_tagged_ops_no_send_event_av_table = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = psmx2_tagged_recv_no_flag,
-	.recvv = psmx2_tagged_recvv_no_flag,
-	.recvmsg = psmx2_tagged_recvmsg,
-	.send = psmx2_tagged_send_no_event_av_table,
-	.sendv = psmx2_tagged_sendv_no_event_av_table,
-	.sendmsg = psmx2_tagged_sendmsg,
-	.inject = psmx2_tagged_inject_no_flag_av_table,
-	.senddata = psmx2_tagged_senddata,
-	.injectdata = psmx2_tagged_injectdata,
-};
-
-/* op_flags=0, recv event suppression, FI_AV_MAP */
-struct fi_ops_tagged psmx2_tagged_ops_no_recv_event_av_map = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = psmx2_tagged_recv_no_event,
-	.recvv = psmx2_tagged_recvv_no_event,
-	.recvmsg = psmx2_tagged_recvmsg,
-	.send = psmx2_tagged_send_no_flag_av_map,
-	.sendv = psmx2_tagged_sendv_no_flag_av_map,
-	.sendmsg = psmx2_tagged_sendmsg,
-	.inject = psmx2_tagged_inject_no_flag_av_map,
-	.senddata = psmx2_tagged_senddata,
-	.injectdata = psmx2_tagged_injectdata,
-};
-
-/* op_flags=0, recv event suppression, FI_AV_TABLE */
-struct fi_ops_tagged psmx2_tagged_ops_no_recv_event_av_table = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = psmx2_tagged_recv_no_event,
-	.recvv = psmx2_tagged_recvv_no_event,
-	.recvmsg = psmx2_tagged_recvmsg,
-	.send = psmx2_tagged_send_no_flag_av_table,
-	.sendv = psmx2_tagged_sendv_no_flag_av_table,
-	.sendmsg = psmx2_tagged_sendmsg,
-	.inject = psmx2_tagged_inject_no_flag_av_table,
-	.senddata = psmx2_tagged_senddata,
-	.injectdata = psmx2_tagged_injectdata,
-};
