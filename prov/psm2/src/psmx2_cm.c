@@ -1,8 +1,3 @@
-#!/bin/sh
-
-OUTFILE=rename.h
-
-cat <<EOF >$OUTFILE
 /*
  * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
@@ -35,36 +30,37 @@ cat <<EOF >$OUTFILE
  * SOFTWARE.
  */
 
-#ifndef _FI_PSM_RENAME_H_
-#define _FI_PSM_RENAME_H_
+#include "psmx2.h"
 
-EOF
+static int psmx2_cm_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	struct psmx2_fid_ep *ep;
+	struct psmx2_ep_name *epname = addr;
 
-# rename symbols beginning with 'psmx_' or '_psmx_'
-LIST=`grep --only-match --no-filename '_*psmx_[a-zA-Z0-9_]*' psmx*.[ch] | sort | uniq`
+	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
+	if (!ep->domain)
+		return -FI_EBADF;
 
-for ITEM in $LIST ; do
-	echo '#define' $ITEM ${ITEM/psmx_/psmx2_} >>$OUTFILE
-done
+	if (*addrlen < sizeof(struct psmx2_ep_name)) {
+		*addrlen = sizeof(struct psmx2_ep_name);
+		return -FI_ETOOSMALL;
+	}
 
-echo >>$OUTFILE
+	epname->epid = ep->domain->psm2_epid;
+	epname->vlane = ep->vlane;
+	*addrlen = sizeof(struct psmx2_ep_name);
 
-# rename symbols beginning with 'psm_'
-LIST=`grep --only-match --no-filename -E '(^|[^a-zA-Z0-9_])psm_[a-zA-Z0-9_]*' psmx*.[ch] | sed 's/[^a-zA-Z0-9_]//' | sort | uniq`
+	return 0;
+}
 
-for ITEM in $LIST ; do
-	echo '#define' $ITEM ${ITEM/psm_/psm2_} >>$OUTFILE
-done
-
-echo >>$OUTFILE
-
-# rename symbols beginning with 'PSM_'
-LIST=`grep --only-match --no-filename -E '(^|[^a-zA-Z0-9_])PSM_[a-zA-Z0-9_]*' psmx*.[ch] | sed 's/[^a-zA-Z0-9_]//' | sort | uniq`
-
-for ITEM in $LIST ; do
-	echo '#define' $ITEM ${ITEM/PSM_/PSM2_} >>$OUTFILE
-done
-
-echo >>$OUTFILE
-echo '#endif' >>$OUTFILE
+struct fi_ops_cm psmx2_cm_ops = {
+	.size = sizeof(struct fi_ops_cm),
+	.getname = psmx2_cm_getname,
+	.getpeer = fi_no_getpeer,
+	.connect = fi_no_connect,
+	.listen = fi_no_listen,
+	.accept = fi_no_accept,
+	.reject = fi_no_reject,
+	.shutdown = fi_no_shutdown,
+};
 
