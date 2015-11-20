@@ -401,7 +401,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	psmx2_info->domain_attr->av_type = av_type;
 	psmx2_info->domain_attr->mr_mode = mr_mode;
-	psmx2_info->domain_attr->mr_key_size = sizeof(uint16_t); /* limited by IDX_MAX_INDEX */
+	psmx2_info->domain_attr->mr_key_size = sizeof(uint64_t);
 	psmx2_info->domain_attr->cq_data_size = 4;
 	psmx2_info->domain_attr->cq_cnt = 65535;
 	psmx2_info->domain_attr->ep_cnt = 65535;

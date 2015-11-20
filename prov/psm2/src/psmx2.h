@@ -66,7 +66,7 @@ extern "C" {
 #include "fi.h"
 #include "fi_enosys.h"
 #include "fi_list.h"
-#include "fi_indexer.h"
+#include "rbtree.h"
 #include "version.h"
 
 extern struct fi_provider psmx2_prov;
@@ -298,7 +298,7 @@ struct psmx2_fid_domain {
 	enum fi_mr_mode		mr_mode;
 	fastlock_t		mr_lock;
 	uint64_t		mr_reserved_key;
-	struct index_map	mr_map;
+	RbtHandle		mr_map;
 
 	fastlock_t		vl_lock;
 	uint64_t		vl_map[(PSMX2_MAX_VL+1)/sizeof(uint64_t)];
