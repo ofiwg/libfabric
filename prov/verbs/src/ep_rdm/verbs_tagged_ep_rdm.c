@@ -421,7 +421,7 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 					found_request->len, found_request->conn,
 					found_request->tag,
 					found_request->tagmask);
-//				return -FI_EOTHER;
+				assert(0);
 			}
 
 			fi_ibv_rdm_tagged_remove_from_posted_queue
