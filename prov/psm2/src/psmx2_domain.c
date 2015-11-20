@@ -190,8 +190,8 @@ void psmx2_domain_release(struct psmx2_fid_domain *domain)
 	psmx2_am_fini(domain);
 
 	fastlock_destroy(&domain->poll_lock);
-
-	idm_reset(&domain->mr_map);
+	fastlock_destroy(&domain->vl_lock);
+	rbtDelete(domain->mr_map);
 	fastlock_destroy(&domain->mr_lock);
 
 #if 0
@@ -255,6 +255,11 @@ static struct fi_ops_domain psmx2_domain_ops = {
 	.stx_ctx = psmx2_stx_ctx,
 	.srx_ctx = fi_no_srx_context,
 };
+
+static int psmx2_key_compare(void *key1, void *key2)
+{
+	return (uint64_t)key1 - (uint64_t)key2;
+}
 
 int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_domain **domain, void *context)
@@ -331,14 +336,21 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			"fastlock_init(mr_lock) returns %d\n", err);
 		goto err_out_finalize_mq;
 	}
-	memset(&domain_priv->mr_map, 0, sizeof(struct index_map));
+
+	domain_priv->mr_map = rbtNew(&psmx2_key_compare);
+	if (!domain_priv->mr_map) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"rbtNew failed\n");
+		goto err_out_destroy_mr_lock;
+	}
+
 	domain_priv->mr_reserved_key = 1;
 	
 	err = fastlock_init(&domain_priv->vl_lock);
 	if (err) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"fastlock_init(vl_lock) returns %d\n", err);
-		goto err_out_finalize_mq;
+		goto err_out_delete_mr_map;
 	}
 	memset(domain_priv->vl_map, 0, sizeof(domain_priv->vl_map));
 	domain_priv->vl_alloc = 0;
@@ -347,7 +359,7 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (err) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE,
 			"fastlock_init(poll_lock) returns %d\n", err);
-		goto err_out_finalize_mq;
+		goto err_out_destroy_vl_lock;
 	}
 
 	/* Set active domain before psmx2_domain_enable_ep() installs the
@@ -370,6 +382,16 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 err_out_reset_active_domain:
 	fabric_priv->active_domain = NULL;
+	fastlock_destroy(&domain_priv->poll_lock);
+
+err_out_destroy_vl_lock:
+	fastlock_destroy(&domain_priv->vl_lock);
+
+err_out_delete_mr_map:
+	rbtDelete(domain_priv->mr_map);
+
+err_out_destroy_mr_lock:
+	fastlock_destroy(&domain_priv->mr_lock);
 
 err_out_finalize_mq:
 	psm2_mq_finalize(domain_priv->psm2_mq);

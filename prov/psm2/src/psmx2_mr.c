@@ -32,82 +32,65 @@
 
 #include "psmx2.h"
 
-#define PSMX2_MR_RESERVED	((void *)-1)
-#define PSMX2_MR_MAX_KEY	IDX_MAX_INDEX
-
 struct psmx2_fid_mr *psmx2_mr_get(struct psmx2_fid_domain *domain,
 				  uint64_t key)
 {
+	RbtIterator it;
 	struct psmx2_fid_mr *mr;
 
-	if (key > PSMX2_MR_MAX_KEY)
+	it = rbtFind(domain->mr_map, (void *)key);
+	if (!it)
 		return NULL;
 
-	fastlock_acquire(&domain->mr_lock);
-	mr = idm_lookup(&domain->mr_map, key);
-	fastlock_release(&domain->mr_lock);
-
-	return (mr != PSMX2_MR_RESERVED) ? mr : NULL ;
-}
-
-static inline void psmx2_mr_save_key(struct psmx2_fid_domain *domain,
-				     uint64_t key, void *mr)
-{
-	fastlock_acquire(&domain->mr_lock);
-	idm_set(&domain->mr_map, key, mr);
-	fastlock_release(&domain->mr_lock);
+	rbtKeyValue(domain->mr_map, it, (void **)&key, (void **)&mr);
+	return mr;
 }
 
 static inline void psmx2_mr_release_key(struct psmx2_fid_domain *domain,
 					uint64_t key)
 {
+	RbtIterator it;
+
 	fastlock_acquire(&domain->mr_lock);
-	idm_clear(&domain->mr_map, key);
+	it = rbtFind(domain->mr_map, (void *)key);
+	if (it)
+		rbtErase(domain->mr_map, it);
 	fastlock_release(&domain->mr_lock);
 }
 
-static int psmx2_mr_reserve_key(struct psmx2_fid_domain *domain, uint64_t key)
+static int psmx2_mr_reserve_key(struct psmx2_fid_domain *domain,
+				uint64_t requested_key,
+				uint64_t *assigned_key,
+				void *mr)
 {
-	if (key > PSMX2_MR_MAX_KEY) {
-		FI_INFO(&psmx2_prov, FI_LOG_MR,
-			"request key 0x%llx is out of valid range [0..0x%x]\n",
-			key, PSMX2_MR_MAX_KEY);
-		return -FI_EINVAL;
-	}
+	uint64_t key;
+	int i;
+	int try_count;
+	int err = -FI_ENOKEY;
 
 	fastlock_acquire(&domain->mr_lock);
-	if (idm_lookup(&domain->mr_map, key)) {
-		fastlock_release(&domain->mr_lock);
-		return -FI_ENOKEY;
+
+	if (domain->mr_mode == FI_MR_SCALABLE) {
+		key = requested_key;
+		try_count = 1;
 	}
-	idm_set(&domain->mr_map, key, PSMX2_MR_RESERVED);
-	fastlock_release(&domain->mr_lock);
+	else {
+		key = domain->mr_reserved_key;
+		try_count = 10000; /* large enough */
+	}
 
-	return 0;
-}
-
-static int psmx2_mr_reserve_any_key(struct psmx2_fid_domain *domain, uint64_t *key)
-{
-	uint64_t try_key;
-	int err = 0;
-
-	fastlock_acquire(&domain->mr_lock);
-	try_key = domain->mr_reserved_key;
-	while (idm_lookup(&domain->mr_map, try_key)) {
-		try_key = (try_key + 1) % PSMX2_MR_MAX_KEY;
-		if (try_key == domain->mr_reserved_key) {
-			FI_INFO(&psmx2_prov, FI_LOG_MR,
-				"running out of keys in range [0..0x%x]\n",
-				PSMX2_MR_MAX_KEY);
-			err = -FI_ENOKEY;
+	for (i=0; i<try_count; i++, key++) {
+		if (!rbtFind(domain->mr_map, (void *)key)) {
+			if (!rbtInsert(domain->mr_map, (void *)key, mr)) {
+				if (domain->mr_mode != FI_MR_SCALABLE)
+					domain->mr_reserved_key = key + 1;
+				*assigned_key = key;
+				err = 0;
+			}
 			break;
 		}
 	}
-	if (!err) {
-		idm_set(&domain->mr_map, try_key, PSMX2_MR_RESERVED);
-		domain->mr_reserved_key = (try_key + 1) % PSMX2_MR_MAX_KEY;
-		*key = try_key;
-	}
+
 	fastlock_release(&domain->mr_lock);
 
 	return err;
@@ -268,13 +251,7 @@ static int psmx2_mr_reg(struct fid *fid, const void *buf, size_t len,
 	if (!mr_priv)
 		return -FI_ENOMEM;
 
-	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
-		key = requested_key;
-		err = psmx2_mr_reserve_key(domain_priv, key);
-	} else {
-		err = psmx2_mr_reserve_any_key(domain_priv, &key);
-	}
-
+	err = psmx2_mr_reserve_key(domain_priv, requested_key, &key, mr_priv);
 	if (err) {
 		free(mr_priv);
 		return err;
@@ -301,9 +278,7 @@ static int psmx2_mr_reg(struct fid *fid, const void *buf, size_t len,
 				((uint64_t)mr_priv->iov[0].iov_base - offset) :
 				0;
 
-	psmx2_mr_save_key(domain_priv, key, mr_priv);
 	*mr = &mr_priv->mr;
-
 	return 0;
 }
 
@@ -334,13 +309,7 @@ static int psmx2_mr_regv(struct fid *fid,
 	if (!mr_priv)
 		return -FI_ENOMEM;
 
-	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
-		key = requested_key;
-		err = psmx2_mr_reserve_key(domain_priv, key);
-	} else {
-		err = psmx2_mr_reserve_any_key(domain_priv, &key);
-	}
-
+	err = psmx2_mr_reserve_key(domain_priv, requested_key, &key, mr_priv);
 	if (err) {
 		free(mr_priv);
 		return err;
@@ -364,9 +333,7 @@ static int psmx2_mr_regv(struct fid *fid,
 				((uint64_t)mr_priv->iov[0].iov_base - offset) :
 				0;
 
-	psmx2_mr_save_key(domain_priv, key, mr_priv);
 	*mr = &mr_priv->mr;
-
 	return 0;
 }
 
@@ -397,13 +364,7 @@ static int psmx2_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (!mr_priv)
 		return -FI_ENOMEM;
 
-	if (domain_priv->mr_mode == FI_MR_SCALABLE) {
-		key = attr->requested_key;
-		err = psmx2_mr_reserve_key(domain_priv, key);
-	} else {
-		err = psmx2_mr_reserve_any_key(domain_priv, &key);
-	}
-
+	err = psmx2_mr_reserve_key(domain_priv, attr->requested_key, &key, mr_priv);
 	if (err) {
 		free(mr_priv);
 		return err;
@@ -427,9 +388,7 @@ static int psmx2_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 				((uint64_t)mr_priv->iov[0].iov_base - attr->offset) :
 				0;
 
-	psmx2_mr_save_key(domain_priv, key, mr_priv);
 	*mr = &mr_priv->mr;
-
 	return 0;
 }
 
