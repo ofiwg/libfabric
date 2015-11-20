@@ -1,6 +1,6 @@
 #! /bin/sh
 
-if test ! -d .git && test ! -f simple/info.c; then
+if test ! -d .git && test ! -f common/shared.c; then
     echo You really need to run this script in the top-level fabtests directory
     exit 1
 fi
