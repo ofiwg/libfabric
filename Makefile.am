@@ -31,7 +31,8 @@ common_srcs = \
 	src/common.c \
 	src/enosys.c \
 	src/rbtree.c \
-	src/fasthash.c
+	src/fasthash.c \
+	src/indexer.c
 
 # ensure dl-built providers link back to libfabric
 linkback = $(top_builddir)/src/libfabric.la
@@ -97,8 +98,7 @@ _sockets_files = \
 	prov/sockets/src/sock_rma.c \
 	prov/sockets/src/sock_atomic.c \
 	prov/sockets/src/sock_trigger.c \
-	prov/sockets/src/sock_util.h \
-	prov/sockets/src/indexer.c
+	prov/sockets/src/sock_util.h
 
 if HAVE_SOCKETS_DL
 pkglib_LTLIBRARIES += libsockets-fi.la
