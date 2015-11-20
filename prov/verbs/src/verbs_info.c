@@ -692,13 +692,13 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 
 	fi->caps		= ep_dom->caps;
 	fi->handle		= NULL;
-    if (ep_dom->type == FI_EP_RDM) {
-        fi->mode		= VERBS_RDM_MODE;
-        *(fi->tx_attr)	= verbs_tx_rdm_attr;
-    } else {
-        fi->mode		= VERBS_MODE;
-        *(fi->tx_attr)	= verbs_tx_attr;
-    }
+	if (ep_dom->type == FI_EP_RDM) {
+		fi->mode	= VERBS_RDM_MODE;
+		*(fi->tx_attr)	= verbs_tx_rdm_attr;
+	} else {
+		fi->mode	= VERBS_MODE;
+		*(fi->tx_attr)	= verbs_tx_attr;
+	}
 
 	*(fi->rx_attr)		= verbs_rx_attr;
 	*(fi->ep_attr)		= verbs_ep_attr;

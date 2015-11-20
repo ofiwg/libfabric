@@ -83,7 +83,7 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 	if (i == 0) {
 		int err = fi_ibv_rdm_tagged_poll(_cq->ep);
 		if (err < 0) {
-			FI_IBV_ERROR("fi_ibv_rdm_tagged_poll failed\n");
+			VERBS_INFO(FI_LOG_CQ, "fi_ibv_rdm_tagged_poll failed\n");
 		}
 	}
 
@@ -93,8 +93,11 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 static ssize_t fi_ibv_rdm_tagged_cq_read(struct fid_cq *cq, void *buf,
                                          size_t count)
 {
-	fi_addr_t src_addr;
-	return fi_ibv_rdm_tagged_cq_readfrom(cq, buf, count, &src_addr);
+	struct fi_ibv_cq *_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
+	const size_t _count = _cq->ep->n_buffs;
+	fi_addr_t addr[_count];
+
+	return fi_ibv_rdm_tagged_cq_readfrom(cq, buf, MIN(_count, count), addr);
 }
 
 #if 0

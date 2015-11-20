@@ -50,7 +50,7 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 		return 0;
 
 	if (ep->is_closing) {
-		FI_IBV_ERROR("Attempt to start connection with addr "
+		VERBS_INFO(FI_LOG_AV, "Attempt to start connection with addr "
 		FI_IBV_RDM_ADDR_STR_FORMAT" when ep is closing\n",
 		FI_IBV_RDM_ADDR_STR(conn->addr));
 		return -1;
@@ -64,12 +64,13 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 	sock_addr.sin_port = htons(sock_addr.sin_port);
 	sock_addr.sin_family = AF_INET;
 
-	rdma_create_id(ep->cm_listener_ec, &id, conn, RDMA_PS_TCP);
+	if (rdma_create_id(ep->cm_listener_ec, &id, conn, RDMA_PS_TCP))
+		return -1;
+
 	if (conn->is_active)
 		conn->id = id;
 
-	rdma_resolve_addr(id, NULL, (struct sockaddr *) &sock_addr, 30000);
-	return 0;
+	return rdma_resolve_addr(id, NULL, (struct sockaddr *)&sock_addr, 30000);
 }
 
 int fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_ep *ep,
@@ -123,8 +124,10 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 			 * side.
 			 */
 			conn = memalign(64, sizeof *conn);
-			if (!conn)
-				return -FI_ENOMEM;
+			if (!conn) {
+				ret = -FI_ENOMEM;
+				goto out;
+			}
 
 			memset(conn, 0, sizeof *conn);
 			dlist_init(&conn->postponed_requests_head);
@@ -143,6 +146,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 		ret++;
 	}
 
+out:
 	pthread_mutex_unlock(&ep->cm_lock);
 	return ret;
 }
