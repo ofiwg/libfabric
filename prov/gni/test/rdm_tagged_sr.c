@@ -654,6 +654,7 @@ Test(rdm_tagged_sr, multi_tsend_trecv) {
 		}
 
 		for (i = 0; i < num_msgs; i++) {
+			memset(target, 0, BUF_SZ);
 			ret = fi_trecv(ep[0], target, BUF_SZ,
 				       fi_mr_desc(loc_mr),
 				       gni_addr[1], rtag, ignore, NULL);
