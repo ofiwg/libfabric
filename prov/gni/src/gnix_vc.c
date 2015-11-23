@@ -314,9 +314,10 @@ err:
 /*
  * connect to self, since we use a lock here
  * the only case we need to deal with is one
- * vc connect request with the other not yet initiated
+ * vc connect request with the peer vc not yet
+ * being set up
  */
-static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
+static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_domain *dom = NULL;
@@ -332,37 +333,34 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if ((vc->conn_state == GNIX_VC_CONNECTING) ||
-	    (vc->conn_state == GNIX_VC_CONNECTED)) {
-		return FI_SUCCESS;
-	}
-
 	ep = vc->ep;
 	if (ep == NULL)
 		return -FI_EINVAL;
 
-	fastlock_acquire(&ep->vc_ht_lock);
-
-	if ((vc->conn_state == GNIX_VC_CONNECTING) ||
-	    (vc->conn_state == GNIX_VC_CONNECTED)) {
-		fastlock_release(&ep->vc_ht_lock);
-		return FI_SUCCESS;
-	}
-
 	cm_nic = ep->cm_nic;
 	if (cm_nic == NULL) {
 		ret = -FI_EINVAL;
-		goto err;
+		goto exit;
 	}
 
 	dom = ep->domain;
 	if (dom == NULL) {
 		ret = -FI_EINVAL;
-		goto err;
+		goto exit;
 	}
 
-	vc->conn_state = GNIX_VC_CONNECTING;
+	fastlock_acquire(&ep->vc_ht_lock);
+	if ((vc->conn_state == GNIX_VC_CONNECTING) ||
+	    (vc->conn_state == GNIX_VC_CONNECTED)) {
+		fastlock_release(&ep->vc_ht_lock);
+		return FI_SUCCESS;
+	} else
+		vc->conn_state = GNIX_VC_CONNECTING;
+
+	fastlock_release(&ep->vc_ht_lock);
+
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connecting\n", vc);
+
 
 	if (vc->smsg_mbox == NULL) {
 		ret = _gnix_mbox_alloc(vc->ep->nic->mbox_hndl,
@@ -371,7 +369,7 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_mbox_alloc returned %s\n",
 				  fi_strerror(-ret));
-			goto err;
+			goto exit;
 		}
 		vc->smsg_mbox = mbox;
 	} else
@@ -392,19 +390,39 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "_gnix_ht_lookup addr_to_ep failed\n");
 		ret = -FI_ENOENT;
-		goto err;
+		goto exit;
 	}
 
 	key_ptr = (gnix_ht_key_t *)&ep->my_name.gnix_addr;
 
+	fastlock_acquire(&ep_peer->vc_ht_lock);
 	vc_peer = (struct gnix_vc *)_gnix_ht_lookup(ep_peer->vc_ht,
 						   *key_ptr);
+
+	/*
+	 * handle the special case of connecting to self
+	 */
+
+	if (vc_peer == vc) {
+		ret = __gnix_vc_smsg_init(vc, vc->vc_id, &smsg_mbox_attr);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_vc_smsg_init returned %s\n",
+				  fi_strerror(-ret));
+			goto exit_w_lock;
+		}
+		vc->conn_state = GNIX_VC_CONNECTED;
+		GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
+			   vc);
+		goto exit_w_lock;
+	}
+
 	if ((vc_peer != NULL) &&
 	    (vc_peer->conn_state != GNIX_VC_CONN_NONE)) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "_gnix_vc_connect self, vc_peer in inconsistent state\n");
 		ret = -FI_ENOSPC;
-		goto err;
+		goto exit_w_lock;
 	}
 
 	if (vc_peer == NULL) {
@@ -417,7 +435,7 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				"_gnix_vc_alloc returned %s\n",
 				fi_strerror(-ret));
-			goto err;
+			goto exit_w_lock;
 		}
 
 		ret = _gnix_ht_insert(ep_peer->vc_ht,
@@ -427,7 +445,7 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_ht_insert returned %s\n",
 				  fi_strerror(-ret));
-			goto err;
+			goto exit_w_lock;
 		}
 		vc_peer->modes |= GNIX_VC_MODE_IN_HT;
 	}
@@ -443,10 +461,10 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_mbox_alloc returned %s\n",
 				  fi_strerror(-ret));
-			goto err;
+			goto exit_w_lock;
 		}
 		vc_peer->smsg_mbox = mbox_peer;
-	} else 
+	} else
 		mbox_peer = vc_peer->smsg_mbox;
 
 	smsg_mbox_attr_peer.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
@@ -462,7 +480,7 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "_gnix_vc_smsg_init returned %s\n",
 			  fi_strerror(-ret));
-		goto err;
+		goto exit_w_lock;
 	}
 
 	ret = __gnix_vc_smsg_init(vc_peer, vc->vc_id, &smsg_mbox_attr);
@@ -470,7 +488,7 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "_gnix_vc_smsg_init returned %s\n",
 			  fi_strerror(-ret));
-		goto err;
+		goto exit_w_lock;
 	}
 
 	vc->conn_state = GNIX_VC_CONNECTED;
@@ -480,8 +498,9 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
 		   vc_peer);
 
-err:
-	fastlock_release(&ep->vc_ht_lock);
+exit_w_lock:
+	fastlock_release(&ep_peer->vc_ht_lock);
+exit:
 	return ret;
 }
 
@@ -1294,13 +1313,13 @@ int _gnix_vc_connect(struct gnix_vc *vc)
 
 	/*
 	 * have to do something special for
-	 * connect to self
+	 * connect to same cm_nic
 	 */
 
 	if (!memcmp(&vc->peer_cm_nic_addr,
 		   &cm_nic->my_name.gnix_addr,
 		   sizeof(struct gnix_address))) {
-		return  __gnix_vc_connect_to_self(vc);
+		return  __gnix_vc_connect_to_same_cm_nic(vc);
 	}
 
 	/*
@@ -1875,6 +1894,7 @@ static int __gnix_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 			  fi_strerror(-ret));
 		goto err;
 	}
+
 	GNIX_INFO(FI_LOG_EP_CTRL, "fi_addr_t: 0x%llx gnix_addr: 0x%llx\n",
 		  dest_addr, av_entry->gnix_addr);
 
