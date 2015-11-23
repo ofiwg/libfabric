@@ -1366,7 +1366,6 @@ static inline struct gnix_fab_req *__find_tx_req(
 
 	fastlock_acquire(&ep->vc_ht_lock);
 	while ((vc = _gnix_ht_iterator_next(&iter))) {
-		GNIX_INFO(0, "searching vc: %p\n", vc);
 		fastlock_acquire(&vc->tx_queue_lock);
 		entry = slist_remove_first_match(&vc->tx_queue,
 				__match_context, context);

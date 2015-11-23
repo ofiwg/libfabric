@@ -358,7 +358,7 @@ int rdm_sr_check_data(char *buf1, char *buf2, int len)
 
 	for (i = 0; i < len; i++) {
 		if (buf1[i] != buf2[i]) {
-			printf("data mismatch, elem: %d, exp: %x, act: %x\n",
+			printf("data mismatch, elem: %d, exp: %hhx, act: %hhx\n",
 			       i, buf1[i], buf2[i]);
 			return 0;
 		}
@@ -1203,4 +1203,67 @@ Test(rdm_sr, send_readfrom)
 	dbg_printf("got context events!\n");
 
 	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
+}
+
+void do_send_buf(void *s, void *t, int len)
+{
+	int ret;
+	int source_done = 0, dest_done = 0;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	ssize_t sz;
+
+	rdm_sr_init_data(s, len, 0xab);
+	rdm_sr_init_data(t, len, 0);
+
+	sz = fi_send(ep[0], s, len, loc_mr, gni_addr[1], t);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_recv(ep[1], t, len, rem_mr, gni_addr[0], s);
+	cr_assert_eq(sz, 0);
+
+	/* need to progress both CQs simultaneously for rendezvous */
+	do {
+		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+		if (ret == 1) {
+			source_done = 1;
+		}
+		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+		if (ret == 1) {
+			dest_done = 1;
+		}
+	} while (!(source_done && dest_done));
+
+	rdm_sr_check_cqe(&s_cqe, t, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_cqe(&d_cqe, s, (FI_MSG|FI_RECV), t, len, 0);
+	rdm_sr_check_cntrs(1, 1, 0, 0);
+
+	dbg_printf("got context events!\n");
+
+	cr_assert(rdm_sr_check_data(s, t, len), "Data mismatch");
+}
+
+void do_send_alignment(int len)
+{
+	int s_off, t_off, l_off;
+
+	for (s_off = 0; s_off < 7; s_off++) {
+		for (t_off = 0; t_off < 7; t_off++) {
+			for (l_off = 0; l_off < 7; l_off++) {
+				do_send_buf(source + s_off,
+					    target + t_off,
+					    len + l_off);
+			}
+		}
+	}
+}
+
+Test(rdm_sr, send_alignment)
+{
+	rdm_sr_xfer_for_each_size(do_send_alignment, 1, (BUF_SZ-1));
+}
+
+Test(rdm_sr, send_alignment_retrans)
+{
+	rdm_sr_err_inject_enable();
+	rdm_sr_xfer_for_each_size(do_send_alignment, 1, (BUF_SZ-1));
 }

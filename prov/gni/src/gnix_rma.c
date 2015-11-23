@@ -49,8 +49,6 @@
 /* Threshold to switch from indirect transfer to chained transfer to move
  * unaligned read data. */
 #define GNIX_RMA_UREAD_CHAINED_THRESH		60
-#define GNI_READ_ALIGN				4
-#define GNI_READ_ALIGN_MASK			(GNI_READ_ALIGN - 1)
 
 static int __gnix_rma_send_err(struct gnix_fid_ep *ep,
 			       struct gnix_fab_req *req)
@@ -140,7 +138,7 @@ static void __gnix_rma_copy_chained_get_data(struct gnix_fab_req *req)
 	tail_len = (req->rma.rem_addr + req->rma.len) & GNI_READ_ALIGN_MASK;
 
 	if (head_off) {
-		GNIX_INFO(0, "writing %d bytes to %p\n",
+		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to %p\n",
 			  head_len, req->rma.loc_addr);
 		memcpy((void *)req->rma.loc_addr,
 		       req->rma.align_buf + head_off,
@@ -152,7 +150,8 @@ static void __gnix_rma_copy_chained_get_data(struct gnix_fab_req *req)
 			       req->rma.len -
 			       tail_len;
 
-		GNIX_INFO(0, "writing %d bytes to %p\n", tail_len, addr);
+		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to %p\n",
+			  tail_len, addr);
 		memcpy((void *)addr,
 		       req->rma.align_buf + GNI_READ_ALIGN,
 		       tail_len);
@@ -417,7 +416,8 @@ static void __gnix_rma_fill_pd_chained_get(struct gnix_fab_req *req,
 		txd->gni_ct_descs[desc_idx].next_descr = NULL;
 	}
 
-	GNIX_INFO(0, "ct_rem_addr[0] = %p %p, ct_rem_addr[1] = %p %p\n",
+	GNIX_INFO(FI_LOG_EP_DATA,
+		  "ct_rem_addr[0] = %p %p, ct_rem_addr[1] = %p %p\n",
 		  txd->gni_ct_descs[0].remote_addr,
 		  txd->gni_ct_descs[0].local_addr,
 		  txd->gni_ct_descs[1].remote_addr,
@@ -854,8 +854,8 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 		req->flags |= GNIX_RMA_RDMA;
 	}
 
-	GNIX_INFO(0, "Queuing (%p %p %d)\n",
-		  (void *) loc_addr, (void *)rem_addr, len);
+	GNIX_INFO(FI_LOG_EP_DATA, "Queuing (%p %p %d)\n",
+		  (void *)loc_addr, (void *)rem_addr, len);
 
 	return _gnix_vc_queue_tx_req(req);
 

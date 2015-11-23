@@ -107,6 +107,13 @@ extern "C" {
 #endif
 
 /*
+ * GNI GET alignment
+ */
+
+#define GNI_READ_ALIGN		4
+#define GNI_READ_ALIGN_MASK	(GNI_READ_ALIGN - 1)
+
+/*
  * Flags
  * The 64-bit flag field is used as follows:
  * 1-grow up    common (usable with multiple operations)
@@ -440,6 +447,8 @@ struct gnix_fab_req_msg {
 	uint64_t                     imm;
 	gni_mem_handle_t             rma_mdh;
 	uint64_t                     rma_id;
+	uint32_t                     rndzv_head;
+	uint32_t                     rndzv_tail;
 };
 
 struct gnix_fab_req_amo {
