@@ -54,9 +54,9 @@ if [ ! -f "$gnitest_bin" ]; then
 fi
 
 if [ $launcher = "srun" ]; then
-    args="-N1 --exclusive"
+    args="-N1 --exclusive -t00:10:00"
 else
-    args="-n1 -N1 -j0"
+    args="-n1 -N1 -j0 -t600"
 fi
 
 # pass all command line args to gnitest
