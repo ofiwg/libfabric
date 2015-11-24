@@ -470,8 +470,18 @@ GNI_INI
 	} else {
 		GNIX_INFO(FI_LOG_FABRIC, "_gnix_nics_per_rank failed: %d\n", rc);
 	}
+
 	if (getenv("GNIX_MAX_NICS") != NULL)
 		gnix_max_nics_per_ptag = atoi(getenv("GNIX_MAX_NICS"));
+
+	/*
+	 * if for some reason we can't even allocate a single nic, bail.
+	 */
+
+	if (gnix_max_nics_per_ptag == 0) {
+		GNIX_WARN(FI_LOG_FABRIC, "Insufficient network resources\n");
+		provider = NULL;
+	}
 
 	return (provider);
 }
