@@ -36,7 +36,6 @@
 
 #include "config.h"
 
-#include <asm/types.h>
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -46,6 +45,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include "rdma/fi_errno.h"
 #include "fi_enosys.h"
@@ -375,6 +378,63 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 	return ret_count;
 }
 
+static int usdf_resolve_addr(const char *node, const char *service,
+		struct sockaddr_in *in)
+{
+	struct addrinfo *ai;
+	int ret;
+
+	struct addrinfo hints = {
+		.ai_family = AF_INET,
+	};
+
+	if (!node || !service || !in)
+		return -FI_EINVAL;
+
+	ret = getaddrinfo(node, service, &hints, &ai);
+	if (ret) {
+		USDF_DBG("getaddrinfo: %s\n", gai_strerror(ret));
+		return -FI_EINVAL;
+	}
+
+	*in = *(struct sockaddr_in *) ai->ai_addr;
+
+	assert(ai->ai_family == AF_INET);
+	assert(in->sin_family == AF_INET);
+
+	freeaddrinfo(ai);
+	return ret;
+}
+
+static int usdf_av_insertsvc(struct fid_av *fav, const char *node,
+		const char *service, fi_addr_t *fi_addr, uint64_t flags,
+		void *context)
+{
+	struct sockaddr_in *addr;
+	int ret;
+
+	USDF_TRACE_SYS(AV, "\n");
+
+	if (!fav)
+		return -FI_EINVAL;
+
+	addr = calloc(1, sizeof(*addr));
+	if (!addr) {
+		USDF_DBG("address allocation failed\n");
+		return -FI_ENOMEM;
+	}
+
+	ret = usdf_resolve_addr(node, service, addr);
+	if (ret)
+		goto fail;
+
+	ret = fav->ops->insert(fav, addr, 1, fi_addr, flags, context);
+
+fail:
+	free(addr);
+	return ret;
+}
+
 static int
 usdf_am_remove(struct fid_av *fav, fi_addr_t *fi_addr, size_t count,
 			  uint64_t flags)
@@ -546,7 +606,7 @@ static struct fi_ops usdf_av_fi_ops = {
 static struct fi_ops_av usdf_am_ops_async = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = usdf_am_insert_async,
-	.insertsvc = fi_no_av_insertsvc,
+	.insertsvc = usdf_av_insertsvc,
 	.insertsym = fi_no_av_insertsym,
 	.remove = usdf_am_remove,
 	.lookup = usdf_am_lookup,
@@ -556,7 +616,7 @@ static struct fi_ops_av usdf_am_ops_async = {
 static struct fi_ops_av usdf_am_ops_sync = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = usdf_am_insert_sync,
-	.insertsvc = fi_no_av_insertsvc,
+	.insertsvc = usdf_av_insertsvc,
 	.insertsym = fi_no_av_insertsym,
 	.remove = usdf_am_remove,
 	.lookup = usdf_am_lookup,
