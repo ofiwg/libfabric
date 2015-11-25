@@ -631,9 +631,9 @@ int _gnix_rma_post_req(void *data)
 	txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT; /* check flags */
 	txd->gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE; /* check flags */
 
-	if (indirect) {
+	if (unlikely(indirect)) {
 		__gnix_rma_fill_pd_indirect_get(fab_req, txd);
-	} else if (chained) {
+	} else if (unlikely(chained)) {
 		__gnix_rma_fill_pd_chained_get(fab_req, txd, &mdh);
 	} else {
 		txd->gni_desc.local_addr = (uint64_t)fab_req->rma.loc_addr;
@@ -771,7 +771,9 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 
 	if (fr_type == GNIX_FAB_RQ_RDMA_READ &&
 	    (rem_addr & GNI_READ_ALIGN_MASK || len & GNI_READ_ALIGN_MASK)) {
-		/* Copy unaligned data through the inject buffer. */
+		/* TODO: Copy unaligned data through the inject buffer for now.
+		 * This path would benefit from an allocator which provides
+		 * small pre-registered buffers for this use. */
 		align_buf = req->inject_buf;
 		rc = gnix_mr_reg(&ep->domain->domain_fid.fid, align_buf,
 				GNIX_INJECT_SIZE, FI_READ, 0, 0, 0, &align_mr,
