@@ -461,7 +461,7 @@ struct gnix_fab_req {
 	struct gnix_fid_ep        *gnix_ep;
 	void                      *user_context;
 	struct gnix_vc            *vc;
-	int                       (*send_fn)(void *);
+	int                       (*work_fn)(void *);
 	int                       modes;
 	int                       retries;
 	uint64_t                  flags;

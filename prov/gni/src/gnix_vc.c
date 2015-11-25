@@ -564,7 +564,7 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 		ret = _gnix_nic_progress(ep->nic);
 	else
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			"__gnix_vc_schedule returned %s\n",
+			"_gnix_vc_schedule returned %s\n",
 			fi_strerror(-ret));
 
 	return ret;
@@ -761,7 +761,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 			ret = _gnix_nic_progress(ep->nic);
 		else
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				"__gnix_vc_schedule returned %s\n",
+				"_gnix_vc_schedule returned %s\n",
 				fi_strerror(-ret));
 	}
 err:
@@ -1107,12 +1107,16 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 		vc_ptr->peer_cm_nic_addr.cdm_id = -1;
 	}
 	vc_ptr->ep = ep_priv;
+
+	slist_init(&vc_ptr->work_queue);
+	fastlock_init(&vc_ptr->work_queue_lock);
 	slist_init(&vc_ptr->tx_queue);
 	fastlock_init(&vc_ptr->tx_queue_lock);
+	dlist_init(&vc_ptr->rx_list);
+	dlist_init(&vc_ptr->work_list);
+	dlist_init(&vc_ptr->tx_list);
+
 	atomic_initialize(&vc_ptr->outstanding_tx_reqs, 0);
-	slist_init(&vc_ptr->req_queue);
-	fastlock_init(&vc_ptr->req_queue_lock);
-	atomic_initialize(&vc_ptr->outstanding_reqs, 0);
 	ret = _gnix_alloc_bitmap(&vc_ptr->flags, 1);
 	assert(!ret);
 
@@ -1136,6 +1140,28 @@ err:
 	return ret;
 }
 
+static void __gnix_vc_cancel(struct gnix_vc *vc)
+{
+	struct gnix_nic *nic = vc->ep->nic;
+
+	fastlock_acquire(&nic->rx_vc_lock);
+	if (!dlist_empty(&vc->rx_list))
+		dlist_remove(&vc->rx_list);
+	fastlock_release(&nic->rx_vc_lock);
+
+	fastlock_acquire(&nic->work_vc_lock);
+	if (!dlist_empty(&vc->work_list))
+		dlist_remove(&vc->work_list);
+	fastlock_release(&nic->work_vc_lock);
+
+	fastlock_acquire(&nic->tx_vc_lock);
+	if (!dlist_empty(&vc->tx_list))
+		dlist_remove(&vc->tx_list);
+	fastlock_release(&nic->tx_vc_lock);
+}
+
+/* Destroy an unconnected VC.  More Support is needed to shutdown and destroy
+ * an active VC. */
 int _gnix_vc_destroy(struct gnix_vc *vc)
 {
 	int ret = FI_SUCCESS;
@@ -1158,15 +1184,7 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 	/*
 	 * if the vc is in a nic's work queue, remove it
 	 */
-
-	if (_gnix_test_and_clear_bit(&vc->flags, GNIX_VC_FLAG_SCHEDULED)) {
-		fastlock_acquire(&nic->pending_vc_lock);
-		dlist_remove(&vc->pending_list);
-		fastlock_release(&nic->pending_vc_lock);
-		GNIX_INFO(FI_LOG_EP_CTRL, "Removed VC (%p) from pending_list\n",
-			  vc);
-	}
-
+	__gnix_vc_cancel(vc);
 
 	/*
 	 * We may eventually want to check the state of the VC, if we
@@ -1326,51 +1344,49 @@ int _gnix_vc_disconnect(struct gnix_vc *vc)
 	return FI_SUCCESS;
 }
 
-int _gnix_vc_schedule(struct gnix_vc *vc)
+/* Return 0 if VC is connected.  Progress VC CM if not. */
+static int __gnix_vc_connected(struct gnix_vc *vc)
+{
+	struct gnix_cm_nic *cm_nic;
+	int ret;
+
+	if (unlikely(vc->conn_state < GNIX_VC_CONNECTED)) {
+		cm_nic = vc->ep->cm_nic;
+		ret = _gnix_cm_nic_progress(cm_nic);
+		if ((ret != FI_SUCCESS) && (ret != -FI_EAGAIN))
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_cm_nic_progress() failed: %s\n",
+				   fi_strerror(-ret));
+		/* waiting to connect, check back later */
+		return -FI_EAGAIN;
+	}
+
+	return 0;
+}
+
+
+/******************************************************************************
+ *
+ * VC RX progress
+ *
+ *****************************************************************************/
+
+/* Schedule the VC for RX progress. */
+int _gnix_vc_rx_schedule(struct gnix_vc *vc)
 {
 	struct gnix_nic *nic = vc->ep->nic;
 
-	if (!_gnix_test_and_set_bit(&vc->flags, GNIX_VC_FLAG_SCHEDULED)) {
-		fastlock_acquire(&nic->pending_vc_lock);
-		dlist_insert_tail(&vc->pending_list, &nic->pending_vcs);
-		fastlock_release(&nic->pending_vc_lock);
-		GNIX_INFO(FI_LOG_EP_CTRL, "Scheduled VC (%p)\n", vc);
+	if (!_gnix_test_and_set_bit(&vc->flags, GNIX_VC_FLAG_RX_SCHEDULED)) {
+		fastlock_acquire(&nic->rx_vc_lock);
+		dlist_insert_tail(&vc->rx_list, &nic->rx_vcs);
+		fastlock_release(&nic->rx_vc_lock);
+		GNIX_INFO(FI_LOG_EP_CTRL, "Scheduled RX VC (%p)\n", vc);
 	}
 
 	return FI_SUCCESS;
 }
 
-int _gnix_vc_schedule_reqs(struct gnix_vc *vc)
-{
-	int ret __attribute__((unused));
-
-	if (!slist_empty(&vc->tx_queue) || !slist_empty(&vc->req_queue)) {
-		ret = _gnix_vc_schedule(vc);
-		assert(ret == FI_SUCCESS);
-	}
-
-	return FI_SUCCESS;
-}
-
-struct gnix_vc *_gnix_nic_next_pending_vc(struct gnix_nic *nic)
-{
-	struct gnix_vc *vc = NULL;
-
-	fastlock_acquire(&nic->pending_vc_lock);
-	vc = dlist_first_entry(&nic->pending_vcs, struct gnix_vc,
-				  pending_list);
-	if (vc)
-		dlist_remove(&vc->pending_list);
-	fastlock_release(&nic->pending_vc_lock);
-
-	if (vc) {
-		GNIX_INFO(FI_LOG_EP_CTRL, "Dequeued VC (%p)\n", vc);
-		_gnix_clear_bit(&vc->flags, GNIX_VC_FLAG_SCHEDULED);
-	}
-
-	return vc;
-}
-
+/* Process a VC's SMSG mailbox. */
 int _gnix_vc_dequeue_smsg(struct gnix_vc *vc)
 {
 	int ret = FI_SUCCESS;
@@ -1396,26 +1412,256 @@ int _gnix_vc_dequeue_smsg(struct gnix_vc *vc)
 		if (status == GNI_RC_SUCCESS) {
 			GNIX_INFO(FI_LOG_EP_DATA, "Found RX (%p)\n", vc);
 			ret = nic->smsg_callbacks[tag](vc, msg_ptr);
-			assert(ret == FI_SUCCESS);
+			if (ret != FI_SUCCESS) {
+				/* Stalled, reschedule */
+				break;
+			}
 		} else if (status == GNI_RC_NOT_DONE) {
+			/* No more work. */
+			ret = FI_SUCCESS;
 			break;
 		} else {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				"GNI_SmsgGetNextWTag returned %s\n",
 				gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
-			assert(0);
 			break;
 		}
-	} while (status != GNI_RC_NOT_DONE);
+	} while (1);
 
 	return ret;
 }
 
+/* Progress VC RXs.  Reschedule VC if more there is more work. */
+static int __gnix_vc_rx_progress(struct gnix_vc *vc)
+{
+	int ret;
+
+	ret = __gnix_vc_connected(vc);
+	if (ret) {
+		/* The CM will schedule the VC when the connection is complete.
+		 * Return success to allow continued VC RX processing. */
+		_gnix_vc_rx_schedule(vc);
+		return FI_SUCCESS;
+	}
+
+	/* Process pending RXs */
+	fastlock_acquire(&vc->ep->nic->lock);
+	ret = _gnix_vc_dequeue_smsg(vc);
+	fastlock_release(&vc->ep->nic->lock);
+
+	if (ret != FI_SUCCESS) {
+		/* We didn't finish processing RXs.  Low memory likely.
+		 * Try again later.  Return error to abort processing
+		 * other VCs. */
+		_gnix_vc_rx_schedule(vc);
+		return -FI_EAGAIN;
+	}
+
+	/* Return success to continue processing other VCs */
+	return FI_SUCCESS;
+}
+
+static struct gnix_vc *__gnix_nic_next_pending_rx_vc(struct gnix_nic *nic)
+{
+	struct gnix_vc *vc = NULL;
+
+	fastlock_acquire(&nic->rx_vc_lock);
+	vc = dlist_first_entry(&nic->rx_vcs, struct gnix_vc, rx_list);
+	if (vc)
+		dlist_remove_init(&vc->rx_list);
+	fastlock_release(&nic->rx_vc_lock);
+
+	if (vc) {
+		GNIX_INFO(FI_LOG_EP_CTRL, "Dequeued RX VC (%p)\n", vc);
+		_gnix_clear_bit(&vc->flags, GNIX_VC_FLAG_RX_SCHEDULED);
+	}
+
+	return vc;
+}
+
+/* Progress VC RXs.  Exit when all VCs are empty or if an error is encountered
+ * during progress.  Failure to process an RX on any VC likely indicates an
+ * inability to progress other VCs (due to low memory). */
+static int __gnix_nic_vc_rx_progress(struct gnix_nic *nic)
+{
+	struct gnix_vc *vc;
+	int ret;
+
+	while ((vc = __gnix_nic_next_pending_rx_vc(nic))) {
+		ret = __gnix_vc_rx_progress(vc);
+		if (ret != FI_SUCCESS)
+			break;
+	}
+
+	return FI_SUCCESS;
+}
+
+
+/******************************************************************************
+ *
+ * VC work progress
+ *
+ *****************************************************************************/
+
+/* Schedule the VC for work progress. */
+static int __gnix_vc_work_schedule(struct gnix_vc *vc)
+{
+	struct gnix_nic *nic = vc->ep->nic;
+
+	/* Don't bother scheduling if there's no work to do. */
+	if (slist_empty(&vc->work_queue))
+		return FI_SUCCESS;
+
+	if (!_gnix_test_and_set_bit(&vc->flags, GNIX_VC_FLAG_WORK_SCHEDULED)) {
+		fastlock_acquire(&nic->work_vc_lock);
+		dlist_insert_tail(&vc->work_list, &nic->work_vcs);
+		fastlock_release(&nic->work_vc_lock);
+		GNIX_INFO(FI_LOG_EP_CTRL, "Scheduled work VC (%p)\n", vc);
+	}
+
+	return FI_SUCCESS;
+}
+
+/* Schedule deferred request processing.  Usually used in RX completers. */
+int _gnix_vc_queue_work_req(struct gnix_fab_req *req)
+{
+	struct gnix_vc *vc = req->vc;
+
+	fastlock_acquire(&vc->work_queue_lock);
+	slist_insert_tail(&req->slist, &vc->work_queue);
+	__gnix_vc_work_schedule(vc);
+	fastlock_release(&vc->work_queue_lock);
+
+	return FI_SUCCESS;
+}
+
+/* Process deferred request work on the VC. */
+static int __gnix_vc_push_work_reqs(struct gnix_vc *vc)
+{
+	int ret, fi_rc = FI_SUCCESS;
+	struct slist *list;
+	struct slist_entry *item;
+	struct gnix_fab_req *req;
+
+	fastlock_acquire(&vc->work_queue_lock);
+
+	list = &vc->work_queue;
+	item = list->head;
+	while (item != NULL) {
+		req = (struct gnix_fab_req *)container_of(item,
+							  struct gnix_fab_req,
+							  slist);
+		ret = req->work_fn(req);
+		if (ret == FI_SUCCESS) {
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "Request processed: %p\n", req);
+		} else {
+			/* Work failed.  Reschedule to put this VC back on the
+			 * end of the list. */
+			__gnix_vc_work_schedule(vc);
+
+			/* FI_ENOSPC is reserved to indicate a lack of TXDs,
+			 * which are shared by all VCs on the NIC.  Return
+			 * error to stall processing of VCs in this case.  The
+			 * other likely error is a lack of SMSG credits, which
+			 * only halts this VC. */
+			if (ret == -FI_ENOSPC) {
+				fi_rc = -FI_EAGAIN;
+			} else if (ret != -FI_EAGAIN) {
+				/* TODO report error? */
+				GNIX_WARN(FI_LOG_EP_DATA,
+					  "Failed to push request %p: %s\n",
+					  req, fi_strerror(-ret));
+			} /* else return success to keep processing TX VCs */
+			break;
+		}
+
+		slist_remove_head(&vc->work_queue);
+		item = list->head;
+	}
+
+	fastlock_release(&vc->work_queue_lock);
+
+	return fi_rc;
+}
+
+static struct gnix_vc *__gnix_nic_next_pending_work_vc(struct gnix_nic *nic)
+{
+	struct gnix_vc *vc = NULL;
+
+	fastlock_acquire(&nic->work_vc_lock);
+	vc = dlist_first_entry(&nic->work_vcs, struct gnix_vc, work_list);
+	if (vc)
+		dlist_remove_init(&vc->work_list);
+	fastlock_release(&nic->work_vc_lock);
+
+	if (vc) {
+		GNIX_INFO(FI_LOG_EP_CTRL, "Dequeued work VC (%p)\n", vc);
+		_gnix_clear_bit(&vc->flags, GNIX_VC_FLAG_WORK_SCHEDULED);
+	}
+
+	return vc;
+}
+
+/* Progress VCs with deferred request work. */
+static int __gnix_nic_vc_work_progress(struct gnix_nic *nic)
+{
+	int ret;
+	struct gnix_vc *first_vc = NULL, *vc;
+
+	while ((vc = __gnix_nic_next_pending_work_vc(nic))) {
+		ret = __gnix_vc_push_work_reqs(vc);
+		if (ret != FI_SUCCESS)
+			break;
+
+		if (!first_vc) {
+			/* Record first VC processed. */
+			first_vc = vc;
+		} else if (vc == first_vc) {
+			/* VCs can self reschedule or be rescheduled in other
+			 * threads.  Exit if we loop back to the first VC. */
+			break;
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+/******************************************************************************
+ *
+ * VC TX progress
+ *
+ *****************************************************************************/
+
+/* Schedule the VC for TX progress. */
+int _gnix_vc_tx_schedule(struct gnix_vc *vc)
+{
+	struct gnix_nic *nic = vc->ep->nic;
+
+	/* Don't bother scheduling if there's no work to do. */
+	if (slist_empty(&vc->tx_queue))
+		return FI_SUCCESS;
+
+	if (!_gnix_test_and_set_bit(&vc->flags, GNIX_VC_FLAG_TX_SCHEDULED)) {
+		fastlock_acquire(&nic->tx_vc_lock);
+		dlist_insert_tail(&vc->tx_list, &nic->tx_vcs);
+		fastlock_release(&nic->tx_vc_lock);
+		GNIX_INFO(FI_LOG_EP_CTRL, "Scheduled TX VC (%p)\n", vc);
+	}
+
+	return FI_SUCCESS;
+}
+
+/* Attempt to initiate a TX request.  If the TX queue is blocked (due to low
+ * resources or a FI_FENCE request), schedule the request to be sent later. */
 int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 {
 	int rc, queue_tx = 0;
 	struct gnix_vc *vc = req->vc;
+	int connected;
+
+	connected = !__gnix_vc_connected(vc); /* 0 on success */
 
 	fastlock_acquire(&vc->tx_queue_lock);
 
@@ -1427,10 +1673,9 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "Queued FI_FENCE request (%p) on VC\n",
 			  req);
-	} else if (vc->conn_state == GNIX_VC_CONNECTED &&
-		   slist_empty(&vc->tx_queue)) {
+	} else if (connected && slist_empty(&vc->tx_queue)) {
 		/* try to initiate request */
-		rc = req->send_fn(req);
+		rc = req->work_fn(req);
 		if (rc != FI_SUCCESS) {
 			queue_tx = 1;
 			GNIX_INFO(FI_LOG_EP_DATA,
@@ -1451,7 +1696,7 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 
 	if (unlikely(queue_tx)) {
 		slist_insert_tail(&req->slist, &vc->tx_queue);
-		_gnix_vc_schedule(vc);
+		_gnix_vc_tx_schedule(vc);
 	}
 
 	fastlock_release(&vc->tx_queue_lock);
@@ -1459,15 +1704,21 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 	return FI_SUCCESS;
 }
 
-int _gnix_vc_push_tx_reqs(struct gnix_vc *vc)
+/* Push TX requests queued on the VC. */
+static int __gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 {
 	int ret, fi_rc = FI_SUCCESS;
 	struct slist *list;
 	struct slist_entry *item;
 	struct gnix_fab_req *req;
 
-	if (vc->conn_state != GNIX_VC_CONNECTED)
+	ret = __gnix_vc_connected(vc);
+	if (ret) {
+		/* The CM will schedule the VC when the connection is complete.
+		 * Return success to allow continued VC TX processing. */
+		_gnix_vc_tx_schedule(vc);
 		return FI_SUCCESS;
+	}
 
 	fastlock_acquire(&vc->tx_queue_lock);
 
@@ -1483,32 +1734,47 @@ int _gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "TX request queue stalled on FI_FENCE request: %p (%d)\n",
 				  req, atomic_get(&vc->outstanding_tx_reqs));
+			/* Success is returned to allow processing of more VCs.
+			 * This VC will be rescheduled when the fence request
+			 * is completed. */
 			break;
 		}
 
-		ret = req->send_fn(req);
+		ret = req->work_fn(req);
 		if (ret == FI_SUCCESS) {
 			atomic_inc(&vc->outstanding_tx_reqs);
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "TX request processed: %p (OTX: %d)\n",
 				  req, atomic_get(&vc->outstanding_tx_reqs));
-		} else if (ret == -FI_EAGAIN) {
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "TX request queue stalled: %p\n",
-				  req);
-			break;
 		} else {
-			GNIX_WARN(FI_LOG_EP_DATA,
+			/* Work failed.  Reschedule to put this VC back on the
+			 * end of the list. */
+			_gnix_vc_tx_schedule(vc);
+
+			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Failed to push TX request %p: %s\n",
-				  req,
-				  fi_strerror(-ret));
-			fi_rc = ret;
-			assert(0);
+				  req, fi_strerror(-ret));
+
+			/* FI_ENOSPC is reserved to indicate a lack of TXDs,
+			 * which are shared by all VCs on the NIC.  Return
+			 * error to stall processing of VCs in this case.  The
+			 * other likely error is a lack of SMSG credits, which
+			 * only halts this VC. */
+			if (ret == -FI_ENOSPC) {
+				fi_rc = -FI_EAGAIN;
+			} else if (ret != -FI_EAGAIN) {
+				/* TODO report error? */
+				GNIX_WARN(FI_LOG_EP_DATA,
+					  "Failed to push TX request %p: %s\n",
+					  req, fi_strerror(-ret));
+			} /* else return success to keep processing TX VCs */
 			break;
 		}
 
 		slist_remove_head(&vc->tx_queue);
 		item = list->head;
+
+		/* Return success if the queue is emptied. */
 	}
 
 	fastlock_release(&vc->tx_queue_lock);
@@ -1516,156 +1782,73 @@ int _gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 	return fi_rc;
 }
 
-/* Force the request to be queued, do not allow an inline send. */
-int _gnix_vc_force_queue_req(struct gnix_fab_req *req)
+static struct gnix_vc *__gnix_nic_next_pending_tx_vc(struct gnix_nic *nic)
 {
-	struct gnix_vc *vc = req->vc;
+	struct gnix_vc *vc = NULL;
 
-	fastlock_acquire(&vc->req_queue_lock);
-	slist_insert_tail(&req->slist, &vc->req_queue);
-	_gnix_vc_schedule(vc);
-	fastlock_release(&vc->req_queue_lock);
+	fastlock_acquire(&nic->tx_vc_lock);
+	vc = dlist_first_entry(&nic->tx_vcs, struct gnix_vc, tx_list);
+	if (vc)
+		dlist_remove_init(&vc->tx_list);
+	fastlock_release(&nic->tx_vc_lock);
 
-	return FI_SUCCESS;
-}
-
-int _gnix_vc_queue_req(struct gnix_fab_req *req)
-{
-	int rc, queue_req = 0;
-	struct gnix_vc *vc = req->vc;
-
-	fastlock_acquire(&vc->req_queue_lock);
-
-	if (vc->conn_state == GNIX_VC_CONNECTED) {
-		/* try to initiate request */
-		rc = req->send_fn(req);
-		if (rc != FI_SUCCESS) {
-			queue_req = 1;
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "Queued request (%p) on full VC\n",
-				  req);
-		} else {
-			atomic_inc(&vc->outstanding_reqs);
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "Request processed: %p (OREQs: %d)\n",
-				  req, atomic_get(&vc->outstanding_reqs));
-		}
-	} else {
-		queue_req = 1;
-		GNIX_INFO(FI_LOG_EP_DATA,
-			  "Queued request (%p) on busy VC\n",
-			  req);
+	if (vc) {
+		GNIX_INFO(FI_LOG_EP_CTRL, "Dequeued TX VC (%p)\n", vc);
+		_gnix_clear_bit(&vc->flags, GNIX_VC_FLAG_TX_SCHEDULED);
 	}
 
-	if (unlikely(queue_req)) {
-		slist_insert_tail(&req->slist, &vc->req_queue);
-		_gnix_vc_schedule(vc);
-	}
-
-	fastlock_release(&vc->req_queue_lock);
-
-	return FI_SUCCESS;
+	return vc;
 }
 
-int _gnix_vc_push_reqs(struct gnix_vc *vc)
-{
-	int ret, fi_rc = FI_SUCCESS;
-	struct slist *list;
-	struct slist_entry *item;
-	struct gnix_fab_req *req;
-
-	if (vc->conn_state != GNIX_VC_CONNECTED)
-		return FI_SUCCESS;
-
-	fastlock_acquire(&vc->req_queue_lock);
-
-	list = &vc->req_queue;
-	item = list->head;
-	while (item != NULL) {
-		req = (struct gnix_fab_req *)container_of(item,
-							  struct gnix_fab_req,
-							  slist);
-		ret = req->send_fn(req);
-		if (ret == FI_SUCCESS) {
-			atomic_inc(&vc->outstanding_reqs);
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "Request processed: %p (OTX: %d)\n",
-				  req, atomic_get(&vc->outstanding_reqs));
-		} else if (ret == -FI_EAGAIN) {
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "Request queue stalled: %p\n",
-				  req);
-			break;
-		} else {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "Failed to push request %p: %s\n",
-				  req,
-				  fi_strerror(-ret));
-			fi_rc = ret;
-			assert(0);
-			break;
-		}
-
-		slist_remove_head(&vc->req_queue);
-		item = list->head;
-	}
-
-	fastlock_release(&vc->req_queue_lock);
-
-	return fi_rc;
-}
-
-int _gnix_vc_progress(struct gnix_vc *vc)
+/* Progress VC TXs.  Exit when all VCs TX queues are empty or stalled. */
+static int __gnix_nic_vc_tx_progress(struct gnix_nic *nic)
 {
 	int ret;
-	struct gnix_cm_nic *cm_nic;
+	struct gnix_vc *first_vc = NULL, *vc;
 
-	if (unlikely(vc->conn_state < GNIX_VC_CONNECTED)) {
-		cm_nic = vc->ep->cm_nic;
-		ret = _gnix_cm_nic_progress(cm_nic);
-		if ((ret != FI_SUCCESS) && (ret != -FI_EAGAIN))
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_cm_nic_progress() failed: %s\n",
-				   fi_strerror(-ret));
-		/* waiting to connect, check back later */
-		return -FI_EAGAIN;
-	}
+	while ((vc = __gnix_nic_next_pending_tx_vc(nic))) {
+		ret = __gnix_vc_push_tx_reqs(vc);
+		if (ret != FI_SUCCESS)
+			break;
 
-	/* Process pending RXs */
-	if (unlikely(
-	    _gnix_test_and_clear_bit(&vc->flags, GNIX_VC_FLAG_RX_PENDING))) {
-		fastlock_acquire(&vc->ep->nic->lock);
-		ret = _gnix_vc_dequeue_smsg(vc);
-		fastlock_release(&vc->ep->nic->lock);
-		if (unlikely(ret != FI_SUCCESS)) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_vc_dequeue_smsg() failed: %s\n",
-				  fi_strerror(-ret));
-			return ret;
+		if (!first_vc) {
+			/* Record first VC processed. */
+			first_vc = vc;
+		} else if (vc == first_vc) {
+			/* VCs can self reschedule or be rescheduled in other
+			 * threads.  Exit if we loop back to the first VC. */
+			break;
 		}
 	}
 
-	/* Initiate non-TX requests */
-	if (!slist_empty(&vc->req_queue)) {
-		ret = _gnix_vc_push_reqs(vc);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_vc_push_tx_reqs() failed: %s\n",
-				  fi_strerror(-ret));
-			return ret;
-		}
-	}
+	return FI_SUCCESS;
+}
 
-	/* Initiate pending TXs */
-	if (!slist_empty(&vc->tx_queue)) {
-		ret = _gnix_vc_push_tx_reqs(vc);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_vc_push_tx_reqs() failed: %s\n",
-				  fi_strerror(-ret));
-			return ret;
-		}
-	}
+/* Progress all NIC VCs needing work. */
+int _gnix_nic_vc_progress(struct gnix_nic *nic)
+{
+	/* Process VCs with RX traffic pending */
+	__gnix_nic_vc_rx_progress(nic);
+
+	/* Process deferred request work (deferred RX processing, etc.) */
+	__gnix_nic_vc_work_progress(nic);
+
+	/* Process VCs with TX traffic pending */
+	__gnix_nic_vc_tx_progress(nic);
+
+	return FI_SUCCESS;
+}
+
+/* Schedule VC to have all work queues processed.  This should only be needed
+ * for newly connected VCs.
+ *
+ * TODO This is currently used to advance CM state.
+ */
+int _gnix_vc_schedule(struct gnix_vc *vc)
+{
+	_gnix_vc_rx_schedule(vc);
+	__gnix_vc_work_schedule(vc);
+	_gnix_vc_tx_schedule(vc);
 
 	return FI_SUCCESS;
 }
