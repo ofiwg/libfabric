@@ -1033,9 +1033,9 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 		GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connecting\n",
 			vc);
 	} else if (ret == -FI_EAGAIN) {
-		ret = _gnix_vc_schedule(vc);
 		ret = FI_SUCCESS;
 	}
+	ret = _gnix_vc_schedule(vc);
 
 err:
 	fastlock_release(&ep->vc_ht_lock);

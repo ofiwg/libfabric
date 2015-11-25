@@ -325,7 +325,7 @@ static int __gnix_rndzv_req(void *arg)
 	if (!req->msg.recv_md) {
 		rc = gnix_mr_reg(&ep->domain->domain_fid.fid,
 				 (void *)req->msg.recv_addr, req->msg.recv_len,
-				 FI_READ, 0, 0, 0, &auto_mr, NULL);
+				 FI_READ | FI_WRITE, 0, 0, 0, &auto_mr, NULL);
 		if (rc != FI_SUCCESS) {
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Failed to auto-register local buffer: %d\n",
@@ -1293,7 +1293,8 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	/* need a memory descriptor for large sends */
 	if (rendezvous && !mdesc) {
 		ret = gnix_mr_reg(&ep->domain->domain_fid.fid, (void *)loc_addr,
-				 len, FI_WRITE, 0, 0, 0, &auto_mr, NULL);
+				 len, FI_READ | FI_WRITE, 0, 0, 0,
+				 &auto_mr, NULL);
 		if (ret != FI_SUCCESS) {
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Failed to auto-register local buffer: %d\n",
