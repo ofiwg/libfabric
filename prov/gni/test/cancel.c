@@ -254,6 +254,7 @@ Test(gnix_cancel, cancel_ep_send)
 	struct fi_cq_err_entry buf;
 	struct gnix_vc *vc;
 	void *foobar_ptr = NULL;
+	gnix_ht_key_t *key;
 
 	/* simulate a posted request */
 	gnix_ep = container_of(ep[0], struct gnix_fid_ep, ep_fid);
@@ -264,14 +265,18 @@ Test(gnix_cancel, cancel_ep_send)
 	req->user_context = foobar_ptr;
 	req->type = GNIX_FAB_RQ_SEND;
 
-	/* find vc, insert request */
+	/* allocate, store vc */
 	ret = _gnix_vc_alloc(gnix_ep, NULL, &vc);
 	cr_assert(ret == FI_SUCCESS, "_gnix_vc_alloc failed");
 
+	key = (gnix_ht_key_t *)&gnix_ep->my_name.gnix_addr;
+	ret = _gnix_ht_insert(gnix_ep->vc_ht, *key, vc);
+	cr_assert(!ret);
+
+	/* make a dummy request */
 	fastlock_acquire(&vc->tx_queue_lock);
 	slist_insert_head(&req->slist, &vc->tx_queue);
 	fastlock_release(&vc->tx_queue_lock);
-	_gnix_vc_schedule(vc);
 
 	/* cancel simulated request */
 	ret = fi_cancel(&ep[0]->fid, foobar_ptr);
