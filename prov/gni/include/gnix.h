@@ -463,7 +463,6 @@ struct gnix_fab_req {
 	struct gnix_vc            *vc;
 	int                       (*work_fn)(void *);
 	int                       modes;
-	int                       retries;
 	uint64_t                  flags;
 	void                      *txd;
 	uint32_t                  tx_failures;

@@ -706,6 +706,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->addr = vc->peer_addr;
 		req->gnix_ep = ep;
 		req->vc = vc;
+		req->tx_failures = 0;
 
 		req->msg.send_addr = hdr->addr;
 		req->msg.send_len = hdr->len;

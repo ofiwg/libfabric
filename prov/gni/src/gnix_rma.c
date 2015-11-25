@@ -450,7 +450,6 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	req->rma.len = len;
 	req->rma.imm = data;
 	req->flags = flags;
-	req->tx_failures = 0;
 
 	if (req->flags & FI_INJECT) {
 		memcpy(req->inject_buf, (void *)loc_addr, len);
