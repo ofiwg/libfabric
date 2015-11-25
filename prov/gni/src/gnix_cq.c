@@ -286,7 +286,7 @@ static int __gnix_cq_progress(struct gnix_fid_cq *cq)
  ******************************************************************************/
 ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, void *op_context,
 			   uint64_t flags, size_t len, void *buf,
-			   uint64_t data, uint64_t tag)
+			   uint64_t data, uint64_t tag, fi_addr_t src_addr)
 {
 	struct gnix_cq_entry *event;
 	struct slist_entry *item;
@@ -299,13 +299,13 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, void *op_context,
 		return -FI_ENOMEM;
 	}
 
-
 	event = container_of(item, struct gnix_cq_entry, item);
 
 	assert(event->the_entry);
 
 	fill_function[cq->attr.format](event->the_entry, op_context, flags,
 			len, buf, data, tag);
+	event->src_addr = src_addr;
 
 	_gnix_queue_enqueue(cq->events, &event->item);
 	GNIX_INFO(FI_LOG_CQ, "Added event: %lx\n", op_context);
@@ -510,11 +510,12 @@ static ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 
 		assert(event->the_entry);
 		memcpy(buf, event->the_entry, cq_priv->entry_size);
+		if (src_addr)
+			memcpy(src_addr, &event->src_addr, sizeof(fi_addr_t));
 
 		_gnix_queue_enqueue_free(cq_priv->events, &event->item);
 
 		buf += cq_priv->entry_size;
-		src_addr++;
 
 		read_count++;
 	}

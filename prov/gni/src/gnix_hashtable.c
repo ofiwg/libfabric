@@ -735,10 +735,10 @@ void *__gnix_ht_lf_iter_next(struct gnix_hashtable_iter *iter)
 	/* take next entry in bin */
 	if (iter->cur_entry) {
 		head = &iter->ht->ht_lf_tbl[iter->cur_idx].head;
-		next = iter->cur_entry->next;
+		next = iter->cur_entry->entry.next;
 		if (next != head) {
-			iter->cur_entry = next;
 			ht_entry = dlist_entry(next, gnix_ht_entry_t, entry);
+			iter->cur_entry = ht_entry;
 			return ht_entry->value;
 		}
 		iter->cur_idx++;
@@ -752,7 +752,7 @@ void *__gnix_ht_lf_iter_next(struct gnix_hashtable_iter *iter)
 
 		ht_entry = dlist_first_entry(head, gnix_ht_entry_t, entry);
 		iter->cur_idx = i;
-		iter->cur_entry = &ht_entry->entry;
+		iter->cur_entry = ht_entry;
 		return ht_entry->value;
 	}
 
@@ -775,10 +775,10 @@ void *__gnix_ht_lk_iter_next(struct gnix_hashtable_iter *iter)
 
 		rwlock_rdlock(&lh->lh_lock);
 		head = &lh->head;
-		next = iter->cur_entry->next;
+		next = iter->cur_entry->entry.next;
 		if (next != head) {
-			iter->cur_entry = next;
 			ht_entry = dlist_entry(next, gnix_ht_entry_t, entry);
+			iter->cur_entry = ht_entry;
 			value = ht_entry->value;
 			rwlock_unlock(&lh->lh_lock);
 
@@ -806,7 +806,7 @@ void *__gnix_ht_lk_iter_next(struct gnix_hashtable_iter *iter)
 		rwlock_unlock(&lh->lh_lock);
 
 		iter->cur_idx = i;
-		iter->cur_entry = &ht_entry->entry;
+		iter->cur_entry = ht_entry;
 
 		rwlock_unlock(&iter->ht->ht_lock);
 		return value;

@@ -71,7 +71,7 @@ struct fi_gni_ops_domain *gni_domain_ops;
 static struct fid_ep *ep[2];
 static struct fid_av *av;
 void *ep_name[2];
-size_t gni_addr[2];
+fi_addr_t gni_addr[2];
 static struct fid_cq *msg_cq[2];
 static struct fi_info *fi[2];
 static struct fi_cq_attr cq_attr;
@@ -225,6 +225,7 @@ void rdm_sr_setup(void)
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
+	hints->caps = FI_SOURCE;
 
 	hints->fabric_attr->name = strdup("gni");
 
@@ -1162,4 +1163,44 @@ Test(rdm_sr_noreg, send_autoreg_uncached_nolazydereg)
 	rdm_sr_lazy_dereg_disable();
 	rdm_sr_xfer_for_each_size(do_send_autoreg_uncached_nolazydereg,
 				  1, BUF_SZ);
+}
+
+Test(rdm_sr, send_readfrom)
+{
+	int ret;
+	int source_done = 0, dest_done = 0;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	ssize_t sz;
+	fi_addr_t src_addr;
+	int len = 64;
+
+	rdm_sr_init_data(source, len, 0xab);
+	rdm_sr_init_data(target, len, 0);
+
+	sz = fi_send(ep[0], source, len, loc_mr, gni_addr[1], target);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
+	cr_assert_eq(sz, 0);
+
+	/* need to progress both CQs simultaneously for rendezvous */
+	do {
+		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+		if (ret == 1) {
+			source_done = 1;
+		}
+		ret = fi_cq_readfrom(msg_cq[1], &d_cqe, 1, &src_addr);
+		if (ret == 1) {
+			dest_done = 1;
+		}
+	} while (!(source_done && dest_done));
+
+	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+	rdm_sr_check_cntrs(1, 1, 0, 0);
+	cr_assert(src_addr == gni_addr[0], "src_addr mismatch");
+
+	dbg_printf("got context events!\n");
+
+	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
 }
