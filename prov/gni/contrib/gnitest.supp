@@ -44,3 +44,309 @@
    fun:_gnix_dgram_poll
    ...
 }
+
+{
+   GNI_CqGetEvent
+   Memcheck:Addr8
+   fun:GNI_CqGetEvent
+   ...
+}
+
+{
+   GNII_DlaProgress_GNI_CqGetEvent
+   Memcheck:Addr8
+   fun:GNII_DlaProgress
+   fun:GNI_CqGetEvent
+   ...
+}
+
+{
+   GNII_DlaProgress_GNI_CqGetEvent
+   Memcheck:Addr8
+   fun:GNII_DlaProgress
+   fun:GNI_CqGetEvent
+   ...
+}
+
+{
+   GNII_DLA_PROGRESS_NOLOCK_GNII_DlaProgress
+   Memcheck:Addr8
+   fun:GNII_DLA_PROGRESS_NOLOCK
+   fun:GNII_DlaProgress
+   fun:GNI_CqGetEvent
+   ...
+}
+
+{
+   gni_fma_assign_GNII_FmaGetWithMode
+   Memcheck:Addr4
+   fun:gni_fma_assign
+   fun:GNII_FmaGetWithMode
+   ...
+}
+
+{
+   gni_fma_assign_GNII_PostRdma
+   Memcheck:Addr4
+   fun:gni_fma_assign
+   fun:GNII_PostRdma
+   fun:GNI_PostRdma
+   ...
+}
+
+{
+   GNII_POST_FMA_GET_GNI_PostFma
+   Memcheck:Addr8
+   fun:GNII_POST_FMA_GET
+   fun:GNI_PostFma
+   ...
+}
+
+{
+   GNII_FmaGetWithMode_GNI_PostFma_Addr4
+   Memcheck:Addr4
+   fun:GNII_FmaGetWithMode
+   fun:GNI_PostFma
+   ...
+}
+
+{
+   GNII_FmaGetWithMode_GNI_PostFma_Addr8
+   Memcheck:Addr8
+   fun:GNII_FmaGetWithMode
+   fun:GNI_PostFma
+   ...
+}
+
+{
+   GNII_FmaGetWithMode_GNII_SmsgSend_Addr4
+   Memcheck:Addr4
+   fun:GNII_FmaGetWithMode
+   fun:GNII_SmsgSend
+   ...
+}
+
+{
+   GNII_FmaGetWithMode_GNII_SmsgSend_Addr8
+   Memcheck:Addr8
+   fun:GNII_FmaGetWithMode
+   fun:GNII_SmsgSend
+   ...
+}
+
+{
+   GNII_FmaGetWithMode_return_back_credits_Addr8
+   Memcheck:Addr8
+   fun:GNII_FmaGetWithMode
+   fun:return_back_credits
+   fun:GNII_SmsgRelease
+   ...
+}
+
+{
+   GNII_FmaGetWithMode_return_back_credits_Addr4
+   Memcheck:Addr4
+   fun:GNII_FmaGetWithMode
+   fun:return_back_credits
+   fun:GNII_SmsgRelease
+   ...
+}
+
+{
+   GNII_GenAllocSeqid_GNII_POST_FMA_GET
+   Memcheck:Addr8
+   fun:GNII_GenAllocSeqid
+   fun:GNII_POST_FMA_GET
+   fun:GNI_PostFma
+   ...
+}
+
+{
+   GNII_GenAllocSeqid_GNII_POST_FMA_PUT
+   Memcheck:Addr8
+   fun:GNII_GenAllocSeqid
+   fun:GNII_POST_FMA_PUT
+   fun:GNI_PostFma
+   ...
+}
+
+{
+   GNII_PostRdma_GNI_PostRdma_Addr4
+   Memcheck:Addr4
+   fun:GNII_PostRdma
+   fun:GNI_PostRdma
+   ...
+}
+
+{
+   GNII_PostRdma_GNI_PostRdma_Addr8
+   Memcheck:Addr8
+   fun:GNII_PostRdma
+   fun:GNI_PostRdma
+   ...
+}
+
+{
+   GNII_PostFlbte_GNII_PostRdma_Addr4
+   Memcheck:Addr4
+   fun:GNII_PostFlbte
+   fun:GNII_PostRdma
+   fun:GNI_PostRdma
+   ...
+}
+
+{
+   GNII_PostFlbte_GNII_PostRdma_Addr8
+   Memcheck:Addr8
+   fun:GNII_PostFlbte
+   fun:GNII_PostRdma
+   fun:GNI_PostRdma
+   ...
+}
+
+{
+   GNII_FmaPut_GNII_PostRdma
+   Memcheck:Addr8
+   fun:GNII_FmaPut
+   fun:GNII_PostRdma
+   fun:GNI_PostRdma
+   ...
+}
+
+{
+   GNI_PostFma
+   Memcheck:Addr8
+   fun:GNI_PostFma
+   ...
+}
+
+{
+   GNII_SmsgSend_GNI_SmsgSendWTag_Addr8
+   Memcheck:Addr8
+   fun:GNII_SmsgSend
+   fun:GNI_SmsgSendWTag
+   ...
+}
+
+{
+   GNII_SmsgSend_GNI_SmsgSendWTag_Addr4
+   Memcheck:Addr4
+   fun:GNII_SmsgSend
+   fun:GNI_SmsgSendWTag
+   ...
+}
+
+{
+   GNII_SmsgSend_GNI_SmsgSendWTag_Addr2
+   Memcheck:Addr2
+   fun:GNII_SmsgSend
+   fun:GNI_SmsgSendWTag
+   ...
+}
+
+{
+   GNII_SmsgSend_GNI_SmsgSendWTag_Addr1
+   Memcheck:Addr1
+   fun:GNII_SmsgSend
+   fun:GNI_SmsgSendWTag
+   ...
+}
+
+{
+   GNII_POST_FMA_PUT_GNI_PostFma
+   Memcheck:Addr8
+   fun:GNII_POST_FMA_PUT
+   fun:GNI_PostFma
+   ...
+}
+
+{
+   GNI_PostFma
+   Memcheck:Addr8
+   fun:GNI_PostFma
+   ...
+}
+
+{
+   GNII_PostRdma_GNI_PostRdma
+   Memcheck:Addr4
+   fun:GNII_PostRdma
+   fun:GNI_PostRdma
+   ...
+}
+
+{
+   GNII_PostFlbte_GNII_PostRdma_Addr4
+   Memcheck:Addr4
+   fun:GNII_PostFlbte
+   fun:GNII_PostRdma
+   fun:GNI_PostRdma
+   ...
+}
+
+{
+   GNII_PostFlbte_GNII_PostRdma_Addr8
+   Memcheck:Addr8
+   fun:GNII_PostFlbte
+   fun:GNII_PostRdma
+   fun:GNI_PostRdma
+   ...
+}
+
+{
+   GNII_FmaPut_GNII_PostRdma
+   Memcheck:Addr8
+   fun:GNII_FmaPut
+   fun:GNII_PostRdma
+   fun:GNI_PostRdma
+   ...
+}
+
+{
+   GNII_POST_AMO_GNI_PostFma
+   Memcheck:Addr4
+   fun:GNII_POST_AMO
+   fun:GNI_PostFma
+   ...
+}
+
+{
+   GNII_POST_AMO_GNI_PostFma
+   Memcheck:Addr8
+   fun:GNII_POST_AMO
+   fun:GNI_PostFma
+   ...
+}
+
+{
+   GNI_PostFma
+   Memcheck:Addr8
+   fun:GNI_PostFma
+   ...
+}
+
+{
+   return_back_credits_GNII_SmsgRelease
+   Memcheck:Addr8
+   fun:return_back_credits
+   fun:GNII_SmsgRelease
+   ...
+}
+
+{
+   GNII_GenAllocSeqid_return_back_credits
+   Memcheck:Addr8
+   fun:GNII_GenAllocSeqid
+   fun:return_back_credits
+   fun:GNII_SmsgRelease
+   ...
+}
+
+{
+   GNII_FmaPut_return_back_credits
+   Memcheck:Addr8
+   fun:GNII_FmaPut
+   fun:return_back_credits
+   fun:GNII_SmsgRelease
+   ...
+}
