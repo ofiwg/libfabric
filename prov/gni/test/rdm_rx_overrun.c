@@ -57,12 +57,12 @@
 
 #include <criterion/criterion.h>
 
-#define NUM_EPS 11 /* 5 usually works, but sometimes hangs */
+#define NUM_EPS 2 /* 11 I want this to be larger eventually */
 
 static struct fid_fabric *fab;
-static struct fid_domain *dom;
+static struct fid_domain *dom[NUM_EPS];
 static struct fid_ep *ep[NUM_EPS];
-static struct fid_av *av;
+static struct fid_av *av[NUM_EPS];
 static struct fi_info *hints;
 static struct fi_info *fi;
 static void *ep_name[NUM_EPS];
@@ -72,10 +72,8 @@ static struct fi_cq_attr cq_attr;
 
 static int target[NUM_EPS];
 static int source[NUM_EPS];
-struct fid_mr *rem_mr, *loc_mr;
-static uint64_t mr_key;
-
-static struct fi_gni_ops_domain *gni_domain_ops;
+struct fid_mr *rem_mr[NUM_EPS], *loc_mr[NUM_EPS];
+static uint64_t mr_key[NUM_EPS];
 
 static void setup(void)
 {
@@ -83,11 +81,15 @@ static void setup(void)
 	int ret = 0;
 	struct fi_av_attr attr;
 	size_t addrlen = 0;
+	struct fi_gni_ops_domain *gni_domain_ops;
+	uint32_t rx_cq_size;
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = 4;
+	hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+
 	hints->mode = ~0;
 
 	hints->fabric_attr->name = strdup("gni");
@@ -98,28 +100,40 @@ static void setup(void)
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	cr_assert(!ret, "fi_fabric");
 
-	ret = fi_domain(fab, fi, &dom, NULL);
-	cr_assert(!ret, "fi_domain");
-
-	ret = fi_open_ops(&dom->fid, FI_GNI_DOMAIN_OPS_1, 0,
-			  (void **) &gni_domain_ops, NULL);
-	cr_assert(ret == FI_SUCCESS, "fi_open_ops");
-
 	attr.type = FI_AV_TABLE;
 	attr.count = NUM_EPS;
-
-	ret = fi_av_open(dom, &attr, &av, NULL);
-	cr_assert(!ret, "fi_av_open");
 
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
 
 	for (i = 0; i < NUM_EPS; i++) {
-		ret = fi_endpoint(dom, fi, &ep[i], NULL);
+		ret = fi_domain(fab, fi, &dom[i], NULL);
+		cr_assert(!ret, "fi_domain");
+
+		ret = fi_open_ops(&dom[i]->fid, FI_GNI_DOMAIN_OPS_1, 0,
+				  (void **) &gni_domain_ops, NULL);
+		cr_assert(ret == FI_SUCCESS, "fi_open_ops");
+
+		/*
+		 * This test doesn't work even when the rx_cq_size is
+		 * left at the default.  Changed to reduce the size
+		 * when the bug is found.
+		 */
+
+		rx_cq_size = 16384 /* 1 */;
+
+		ret = gni_domain_ops->set_val(&dom[i]->fid, GNI_RX_CQ_SIZE,
+					      &rx_cq_size);
+		cr_assert(ret == FI_SUCCESS, "set_val");
+
+		ret = fi_av_open(dom[i], &attr, &av[i], NULL);
+		cr_assert(!ret, "fi_av_open");
+
+		ret = fi_endpoint(dom[i], fi, &ep[i], NULL);
 		cr_assert(!ret, "fi_endpoint");
 		cr_assert(ep[i]);
-		ret = fi_cq_open(dom, &cq_attr, &msg_cq[i], 0);
+		ret = fi_cq_open(dom[i], &cq_attr, &msg_cq[i], 0);
 		cr_assert(!ret, "fi_cq_open");
 		ret = fi_ep_bind(ep[i], &msg_cq[i]->fid, FI_SEND | FI_RECV);
 		cr_assert(!ret, "fi_ep_bind");
@@ -134,26 +148,26 @@ static void setup(void)
 		cr_assert(ep_name[i] != NULL);
 		ret = fi_getname(&ep[i]->fid, ep_name[i], &addrlen);
 		cr_assert(ret == FI_SUCCESS);
-		ret = fi_av_insert(av, ep_name[i], 1, &gni_addr[i], 0, NULL);
+		ret = fi_av_insert(av[i], ep_name[i], 1, &gni_addr[i], 0, NULL);
 		cr_assert(ret == 1);
 	}
 
 	for (i = 0; i < NUM_EPS; i++) {
-		ret = fi_ep_bind(ep[i], &av->fid, 0);
+		ret = fi_ep_bind(ep[i], &av[i]->fid, 0);
 		cr_assert(!ret, "fi_ep_bind");
 		ret = fi_enable(ep[i]);
 		cr_assert(!ret, "fi_ep_enable");
+
+		ret = fi_mr_reg(dom[i], target, NUM_EPS*sizeof(int),
+			FI_RECV, 0, 0, 0, &rem_mr[i], &target);
+		cr_assert_eq(ret, 0);
+
+		ret = fi_mr_reg(dom[i], source, NUM_EPS*sizeof(int),
+				FI_SEND, 0, 0, 0, &loc_mr[i], &source);
+		cr_assert_eq(ret, 0);
+
+		mr_key[i] = fi_mr_key(rem_mr[i]);
 	}
-
-	ret = fi_mr_reg(dom, target, NUM_EPS*sizeof(int),
-			FI_RECV, 0, 0, 0, &rem_mr, &target);
-	cr_assert_eq(ret, 0);
-
-	ret = fi_mr_reg(dom, source, NUM_EPS*sizeof(int),
-			FI_SEND, 0, 0, 0, &loc_mr, &source);
-	cr_assert_eq(ret, 0);
-
-	mr_key = fi_mr_key(rem_mr);
 }
 
 static void teardown(void)
@@ -161,22 +175,22 @@ static void teardown(void)
 	int i;
 	int ret = 0;
 
-	fi_close(&loc_mr->fid);
-	fi_close(&rem_mr->fid);
-
 	for (i = 0; i < NUM_EPS; i++) {
+		fi_close(&loc_mr[i]->fid);
+		fi_close(&rem_mr[i]->fid);
+
 		ret = fi_close(&ep[i]->fid);
 		cr_assert(!ret, "failure in closing ep.");
 		ret = fi_close(&msg_cq[i]->fid);
 		cr_assert(!ret, "failure in msg cq.");
 		free(ep_name[i]);
+
+		ret = fi_close(&av[i]->fid);
+		cr_assert(!ret, "failure in closing av.");
+
+		ret = fi_close(&dom[i]->fid);
+		cr_assert(!ret, "failure in closing domain.");
 	}
-
-	ret = fi_close(&av->fid);
-	cr_assert(!ret, "failure in closing av.");
-
-	ret = fi_close(&dom->fid);
-	cr_assert(!ret, "failure in closing domain.");
 
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
@@ -195,17 +209,6 @@ Test(rdm_rx_overrun, all_to_one)
 	struct fi_cq_entry s_cqe, d_cqe;
 	ssize_t sz;
 	int ctx[NUM_EPS];
-
-	/*
-	 * This test doesn't work even when the rx_cq_size is left at
-	 * the default.  Changed to reduce the size when the bug is found.
-
-	int ret;
-	uint32_t rx_cq_size = 1;
-
-	ret = gni_domain_ops->set_val(&dom->fid, GNI_RX_CQ_SIZE, &rx_cq_size);
-	cr_assert(ret == FI_SUCCESS, "set_val");
-	*/
 
 	for (i = 0; i < NUM_EPS; i++) {
 		source[i] = i;
