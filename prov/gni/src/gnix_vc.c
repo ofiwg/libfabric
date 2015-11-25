@@ -579,12 +579,6 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	fastlock_release(&ep->vc_ht_lock);
 
 	ret = _gnix_vc_schedule(vc);
-	if (ret == FI_SUCCESS)
-		ret = _gnix_nic_progress(ep->nic);
-	else
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			"_gnix_vc_schedule returned %s\n",
-			fi_strerror(-ret));
 
 	return ret;
 err:
@@ -741,8 +735,12 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 
 		fastlock_release(&ep->vc_ht_lock);
 
-		ret = _gnix_vc_schedule(vc);
+		_gnix_vc_schedule(vc);
 		ret = _gnix_cm_nic_progress(cm_nic);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				"_gnix_cm_nic_progress returned %s\n",
+				fi_strerror(-ret));
 
 	} else {
 
@@ -776,11 +774,10 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 		fastlock_release(&ep->vc_ht_lock);
 
 		ret = _gnix_vc_schedule(vc);
-		if (ret == FI_SUCCESS)
-			ret = _gnix_nic_progress(ep->nic);
-		else
+		ret = _gnix_cm_nic_progress(cm_nic);
+		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				"_gnix_vc_schedule returned %s\n",
+				"_gnix_cm_nic_progress returned %s\n",
 				fi_strerror(-ret));
 	}
 err:
@@ -1346,7 +1343,7 @@ int _gnix_vc_connect(struct gnix_vc *vc)
 	dlist_insert_before(&work_req->list, &cm_nic->cm_nic_wq);
 	fastlock_release(&cm_nic->wq_lock);
 
-	ret = _gnix_cm_nic_progress(cm_nic);
+	ret = _gnix_vc_schedule(vc);
 
 	return ret;
 }
@@ -1375,8 +1372,8 @@ static int __gnix_vc_connected(struct gnix_vc *vc)
 		ret = _gnix_cm_nic_progress(cm_nic);
 		if ((ret != FI_SUCCESS) && (ret != -FI_EAGAIN))
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_cm_nic_progress() failed: %s\n",
-				   fi_strerror(-ret));
+				"_gnix_cm_nic_progress() failed: %s\n",
+			fi_strerror(-ret));
 		/* waiting to connect, check back later */
 		return -FI_EAGAIN;
 	}

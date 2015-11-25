@@ -222,8 +222,12 @@ int _gnix_cm_nic_progress(struct gnix_cm_nic *cm_nic)
 	if (cm_nic->ctrl_progress == FI_PROGRESS_MANUAL) {
 		ret = _gnix_dgram_poll(cm_nic->dgram_hndl,
 					  GNIX_DGRAM_NOBLOCK);
-		if (ret != FI_SUCCESS)
-			goto err;
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				"_gnix_dgram_poll returned %s\n",
+				  fi_strerror(-ret));
+				goto err;
+		}
 	}
 
 	/*
@@ -334,8 +338,12 @@ int _gnix_cm_nic_send(struct gnix_cm_nic *cm_nic,
 	ret = _gnix_dgram_alloc(cm_nic->dgram_hndl,
 				GNIX_DGRAM_BND,
 				&dgram);
-	if (ret != FI_SUCCESS)
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_dgram_alloc returned %s\n",
+			  fi_strerror(-ret));
 		goto exit;
+	}
 
 	dgram->target_addr = target_addr;
 	dgram->callback_fn = __process_datagram;
