@@ -1470,7 +1470,8 @@ Test(gnix_tags_basic_posted_list, multiple_1024_ipr_random_tag)
 			make_random_tags);
 }
 
-Test(gnix_tags_basic_posted_list, multiple_8192_ipr_random_tag)
+Test(gnix_tags_basic_posted_list, multiple_8192_ipr_random_tag,
+		.disabled = true)
 {
 	__test_multiple_type_ipr_reqs(8192, &default_list_attr,
 			make_random_tags);
@@ -1494,7 +1495,8 @@ Test(gnix_tags_basic_posted_list, multiple_1024_ipr_sequential_tag)
 			make_evenly_distributed_tags);
 }
 
-Test(gnix_tags_basic_posted_list, multiple_8192_ipr_sequential_tag)
+Test(gnix_tags_basic_posted_list, multiple_8192_ipr_sequential_tag,
+		.disabled = true)
 {
 	__test_multiple_type_ipr_reqs(8192, &default_list_attr,
 			make_evenly_distributed_tags);
@@ -1607,7 +1609,8 @@ Test(gnix_tags_basic_unexpected_list, multiple_1024_ipr_random_tag)
 			make_random_tags);
 }
 
-Test(gnix_tags_basic_unexpected_list, multiple_8192_ipr_random_tag)
+Test(gnix_tags_basic_unexpected_list, multiple_8192_ipr_random_tag,
+		.disabled = true)
 {
 	__test_multiple_type_ipr_reqs(8192, &default_list_attr,
 			make_random_tags);
@@ -1631,7 +1634,8 @@ Test(gnix_tags_basic_unexpected_list, multiple_1024_ipr_sequential_tag)
 			make_evenly_distributed_tags);
 }
 
-Test(gnix_tags_basic_unexpected_list, multiple_8192_ipr_sequential_tag)
+Test(gnix_tags_basic_unexpected_list, multiple_8192_ipr_sequential_tag,
+		.disabled = true)
 {
 	__test_multiple_type_ipr_reqs(8192, &default_list_attr,
 			make_evenly_distributed_tags);
