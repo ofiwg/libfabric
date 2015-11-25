@@ -94,7 +94,8 @@ prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/tags.c \
 	prov/gni/test/utils.c \
 	prov/gni/test/vc.c \
-	prov/gni/test/wait.c
+	prov/gni/test/wait.c \
+	prov/gni/test/common.c
 
 prov_gni_test_gnitest_LDFLAGS = $(CRAY_PMI_LIBS) -static
 prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS)

@@ -38,6 +38,9 @@
 #include <poll.h>
 #include <time.h>
 #include <string.h>
+#include <stdint.h>
+#include <sys/time.h>
+
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
@@ -45,12 +48,14 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
 
 #include "gnix_cq.h"
 #include "gnix.h"
+#include "common.h"
 
 #include <criterion/criterion.h>
 
@@ -75,6 +80,8 @@ uint64_t default_access = (FI_REMOTE_READ | FI_REMOTE_WRITE
 uint64_t default_flags = 0;
 uint64_t default_req_key = 0;
 uint64_t default_offset = 0;
+
+struct timeval s1, s2;
 
 static void mr_setup(void)
 {
@@ -131,6 +138,9 @@ static void mr_teardown(void)
 TestSuite(memory_registration_bare, .init = mr_setup, .fini = mr_teardown);
 
 TestSuite(memory_registration_cache, .init = mr_setup, .fini = mr_teardown);
+
+TestSuite(perf_memory_registration, .init = mr_setup, .fini = mr_teardown,
+		.disabled = true);
 
 /* Test simple init, register and deregister */
 Test(memory_registration_bare, basic_init)
@@ -681,5 +691,235 @@ Test(memory_registration_cache, same_addr_decr_size, .disabled=true)
 		cr_assert(atomic_get(&cache->inuse_elements) == 0);
 		cr_assert(atomic_get(&cache->stale_elements) == 1);
 	}
+}
+
+Test(perf_memory_registration, non_overlapping_registration)
+{
+	int ret, i;
+	int region_len = 1 << 24;
+	int registration_width = 1 << 12;
+	int registrations = region_len / registration_width;
+	unsigned char *region = calloc(region_len, sizeof(unsigned char));
+	struct fid_mr **f_mr;
+	int reg_time, dereg_time, seconds;
+
+	cr_assert(region != NULL);
+
+	f_mr = calloc(registrations, sizeof(*f_mr));
+	cr_assert(f_mr != NULL);
+
+	/* prep the cache by adding and removing an entry before timing */
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
+			default_offset, default_req_key,
+			default_flags, &mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	gettimeofday(&s1, 0);
+	for (i = 0; i < registrations; i++) {
+		ret = fi_mr_reg(dom, (void *) (region + (registration_width * i)),
+				registration_width, default_access,
+				default_offset, default_req_key,
+				default_flags, &f_mr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+	gettimeofday(&s2, 0);
+
+	calculate_time_difference(&s1, &s2, &seconds, &reg_time);
+	reg_time += seconds * 1000000;
+
+	gettimeofday(&s1, 0);
+	for (i = 0; i < registrations; i++) {
+		ret = fi_close(&f_mr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+	gettimeofday(&s2, 0);
+
+	calculate_time_difference(&s1, &s2, &seconds, &dereg_time);
+	dereg_time += seconds * 1000000;
+
+	fprintf(stderr, "no caching: reg_time=%.3f usec dereg_time=%.3f usec\n",
+			reg_time / (registrations * 1.0),
+			dereg_time / (registrations * 1.0));
+
+	free(region);
+}
+
+Test(perf_memory_registration, repeated_registration)
+{
+	int ret, i;
+	int region_len = 1 << 24;
+	int registrations = 4096 * 16;
+	unsigned char *region = calloc(region_len, sizeof(unsigned char));
+	struct fid_mr **f_mr;
+	int reg_time, dereg_time, seconds;
+
+	cr_assert(region != NULL);
+
+	f_mr = calloc(registrations, sizeof(*f_mr));
+	cr_assert(f_mr != NULL);
+
+	ret = fi_mr_reg(dom, (void *) region,
+					region_len, default_access,
+					default_offset, default_req_key,
+					default_flags, &mr, NULL);
+
+	cache = domain->mr_cache;
+
+	gettimeofday(&s1, 0);
+	for (i = 0; i < registrations; i++) {
+		ret = fi_mr_reg(dom, (void *) region,
+				region_len, default_access,
+				default_offset, default_req_key,
+				default_flags, &f_mr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+	gettimeofday(&s2, 0);
+
+	cr_assert(atomic_get(&cache->inuse_elements) == 1);
+
+
+	calculate_time_difference(&s1, &s2, &seconds, &reg_time);
+	reg_time += seconds * 1000000;
+
+	gettimeofday(&s1, 0);
+	for (i = 0; i < registrations; i++) {
+		ret = fi_close(&f_mr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+	gettimeofday(&s2, 0);
+
+	calculate_time_difference(&s1, &s2, &seconds, &dereg_time);
+	dereg_time += seconds * 1000000;
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	fprintf(stderr, "best(repeated) case: reg_time=%.3f usec dereg_time=%.3f usec\n",
+			reg_time / (registrations * 1.0),
+			dereg_time / (registrations * 1.0));
+
+	free(region);
+}
+
+Test(perf_memory_registration, single_large_registration)
+{
+	int ret, i;
+	int region_len = 1 << 24;
+	int registration_width = 1 << 12;
+	int registrations = region_len / registration_width;
+	unsigned char *region = calloc(region_len, sizeof(unsigned char));
+	struct fid_mr **f_mr;
+	int reg_time, dereg_time, seconds;
+
+	cr_assert(region != NULL);
+
+	f_mr = calloc(registrations, sizeof(*f_mr));
+	cr_assert(f_mr != NULL);
+
+	ret = fi_mr_reg(dom, (void *) region,
+					region_len, default_access,
+					default_offset, default_req_key,
+					default_flags, &mr, NULL);
+
+	cache = domain->mr_cache;
+
+	gettimeofday(&s1, 0);
+	for (i = 0; i < registrations; i++) {
+		ret = fi_mr_reg(dom, (void *) region + (registration_width * i),
+				registration_width, default_access,
+				default_offset, default_req_key,
+				default_flags, &f_mr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+	gettimeofday(&s2, 0);
+
+	calculate_time_difference(&s1, &s2, &seconds, &reg_time);
+	reg_time += seconds * 1000000;
+
+	gettimeofday(&s1, 0);
+	for (i = 0; i < registrations; i++) {
+		ret = fi_close(&f_mr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+	gettimeofday(&s2, 0);
+
+	calculate_time_difference(&s1, &s2, &seconds, &dereg_time);
+	dereg_time += seconds * 1000000;
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	fprintf(stderr, "best(overlap) case: reg_time=%.3f usec dereg_time=%.3f usec\n",
+			reg_time / (registrations * 1.0),
+			dereg_time / (registrations * 1.0));
+
+	free(region);
+}
+
+Test(perf_memory_registration, random_analysis)
+{
+	int ret, i;
+	int region_len = 1 << 24;
+	int registration_width = 1 << 12;
+	int registrations = region_len / registration_width;
+	unsigned char *region = calloc(region_len, sizeof(unsigned char));
+	struct fid_mr **f_mr;
+	int reg_time, dereg_time, seconds;
+	void *ptr;
+	uint64_t ptr_len;
+
+	srand(0xDEADBEEF);
+	cr_assert(region != NULL);
+
+	f_mr = calloc(registrations, sizeof(*f_mr));
+	cr_assert(f_mr != NULL);
+
+	/* prep the cache by adding and removing an entry before timing */
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
+			default_offset, default_req_key,
+			default_flags, &mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+
+	gettimeofday(&s1, 0);
+	for (i = 0; i < registrations; i++) {
+		ptr = region + rand() % region_len;
+		ptr_len = registration_width;
+		if ((uint64_t) (ptr + ptr_len) > (uint64_t) (region + region_len))
+			ptr_len = ((uint64_t) region + region_len) - (uint64_t) ptr;
+
+		ret = fi_mr_reg(dom, (void *) ptr,
+				ptr_len, default_access,
+				default_offset, default_req_key,
+				default_flags, &f_mr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+	gettimeofday(&s2, 0);
+
+	calculate_time_difference(&s1, &s2, &seconds, &reg_time);
+	reg_time += seconds * 1000000;
+
+	gettimeofday(&s1, 0);
+	for (i = 0; i < registrations; i++) {
+		ret = fi_close(&f_mr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+	gettimeofday(&s2, 0);
+
+	calculate_time_difference(&s1, &s2, &seconds, &dereg_time);
+	dereg_time += seconds * 1000000;
+
+	fprintf(stderr, "random case: reg_time=%.3f usec "
+			"dereg_time=%.3f usec\n",
+			reg_time / (registrations * 1.0),
+			dereg_time / (registrations * 1.0));
+
+	free(region);
 }
 
