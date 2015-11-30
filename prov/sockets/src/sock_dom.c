@@ -469,16 +469,8 @@ static struct fi_ops_mr sock_dom_mr_ops = {
 
 static int sock_compare_mr_keys(void *key1, void *key2)
 {
-	uint64_t k1, k2;
-	k1 = (uint64_t) key1;
-	k2 = (uint64_t) key2;
-
-        if (k1 > k2)
-                return 1;
-        else if (k1 < k2)
-		return -1;
-        else
-                return 0;
+	return ((uint64_t) key1 < (uint64_t) key2) ?  -1 :
+		((uint64_t) key1 > (uint64_t) key2);
 }
 
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
