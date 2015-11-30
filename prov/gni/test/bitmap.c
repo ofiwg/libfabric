@@ -43,6 +43,7 @@
 
 #include <rdma/fi_errno.h>
 #include <gnix_bitmap.h>
+#include "common.h"
 
 #include <criterion/criterion.h>
 
@@ -77,18 +78,6 @@ static inline uint64_t __gnix_load_block(gnix_bitmap_t *bitmap, int index)
 	return ret;
 }
 #endif
-
-void calculate_time_difference(struct timeval *start, struct timeval *end,
-		int *secs_out, int *usec_out)
-{
-	*secs_out = end->tv_sec - start->tv_sec;
-	if (end->tv_usec < start->tv_usec) {
-		*secs_out = *secs_out - 1;
-		*usec_out = (1000000 + end->tv_usec) - start->tv_usec;
-	} else {
-		*usec_out = end->tv_usec - start->tv_usec;
-	}
-}
 
 void __gnix_bitmap_test_setup(void)
 {
