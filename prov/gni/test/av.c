@@ -319,11 +319,10 @@ static void straddr_test(void)
 {
 	int ret;
 	int i;
-	char *buf;
+	const char *buf;
 	char address[128];
 	fi_addr_t addresses[SIMPLE_ADDR_COUNT];
 	fi_addr_t *compare;
-	fi_addr_t found;
 	size_t addrlen = sizeof(struct gnix_ep_name);
 
 	/* insert addresses */
