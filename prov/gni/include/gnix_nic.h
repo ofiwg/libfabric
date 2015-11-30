@@ -212,6 +212,8 @@ struct gnix_smsg_eager_hdr {
  * @var addr       address of the rendezvous send buffer
  * @var len        length in bytes of the send buffer
  * @var req_addr   local request address
+ * @var head       unaligned data at the head of a rendezvous send
+ * @var tail       unaligned data at the tail of a rendezvous send
  */
 struct gnix_smsg_rndzv_start_hdr {
 	uint64_t flags;
@@ -221,6 +223,8 @@ struct gnix_smsg_rndzv_start_hdr {
 	uint64_t addr;
 	size_t len;
 	uint64_t req_addr;
+	uint32_t head;
+	uint32_t tail;
 };
 
 /**
@@ -257,7 +261,10 @@ struct gnix_smsg_rma_data_hdr {
 struct gnix_tx_descriptor {
 	struct dlist_entry          list;
 	union {
-		gni_post_descriptor_t            gni_desc;
+		struct {
+			gni_post_descriptor_t        gni_desc;
+			gni_ct_get_post_descriptor_t gni_ct_descs[2];
+		};
 		struct gnix_smsg_eager_hdr       eager_hdr;
 		struct gnix_smsg_rndzv_start_hdr rndzv_start_hdr;
 		struct gnix_smsg_rndzv_fin_hdr   rndzv_fin_hdr;

@@ -1106,3 +1106,105 @@ Test(rdm_rma, read_error)
 	xfer_for_each_size(do_read_error, 8, BUF_SZ);
 }
 
+void do_read_buf(void *s, void *t, int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+
+#define READ_CTX 0x4e3dda1aULL
+	init_data(s, len, 0);
+	init_data(t, len, 0xad);
+	sz = fi_read(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key,
+			(void *)READ_CTX);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_rma_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0);
+	rdm_rma_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got read context event!\n");
+
+	cr_assert(check_data(s, t, len), "Data mismatch");
+}
+
+void do_read_alignment(int len)
+{
+	int s_off, t_off, l_off;
+
+	for (s_off = 0; s_off < 7; s_off++) {
+		for (t_off = 0; t_off < 7; t_off++) {
+			for (l_off = 0; l_off < 7; l_off++) {
+				do_read_buf(source + s_off,
+					    target + t_off,
+					    len + l_off);
+			}
+		}
+	}
+}
+
+Test(rdm_rma, read_alignment)
+{
+	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(rdm_rma, read_alignment_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
+}
+
+void do_write_buf(void *s, void *t, int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+
+	init_data(s, len, 0xab);
+	init_data(t, len, 0);
+	sz = fi_write(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key,
+			 t);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_cntrs(1, 0, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	cr_assert(check_data(s, t, len), "Data mismatch");
+}
+
+void do_write_alignment(int len)
+{
+	int s_off, t_off, l_off;
+
+	for (s_off = 0; s_off < 7; s_off++) {
+		for (t_off = 0; t_off < 7; t_off++) {
+			for (l_off = 0; l_off < 7; l_off++) {
+				do_write_buf(source + s_off,
+					     target + t_off,
+					     len + l_off);
+			}
+		}
+	}
+}
+
+Test(rdm_rma, write_alignment)
+{
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(rdm_rma, write_alignment_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}

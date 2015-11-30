@@ -81,6 +81,46 @@ static void __gnix_msg_send_fr_complete(struct gnix_fab_req *req,
 	_gnix_fr_free(req->gnix_ep, req);
 }
 
+static int __recv_err(struct gnix_fid_ep *ep, void *context, uint64_t flags,
+		      size_t len, void *addr, uint64_t data, uint64_t tag,
+		      size_t olen, int err, int prov_errno, void *err_data)
+{
+	int rc;
+
+	if (ep->recv_cq) {
+		rc = _gnix_cq_add_error(ep->recv_cq, context, flags, len,
+					addr, data, tag, olen, err,
+					prov_errno, err_data);
+		if (rc != FI_SUCCESS)  {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_cq_add_error returned %d\n",
+				  rc);
+		}
+	}
+
+	if (ep->recv_cntr) {
+		rc = _gnix_cntr_inc_err(ep->recv_cntr);
+		if (rc != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_cntr_inc_err() failed: %d\n",
+				  rc);
+	}
+
+	return FI_SUCCESS;
+}
+
+static int __gnix_msg_recv_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
+{
+	uint64_t flags = FI_RECV | FI_MSG;
+
+	flags |= req->msg.send_flags & FI_TAGGED;
+
+	return __recv_err(ep, req->user_context, flags, req->msg.recv_len,
+			  (void *)req->msg.recv_addr, req->msg.imm,
+			  req->msg.tag, 0, FI_ECANCELED,
+			  GNI_RC_TRANSACTION_ERROR, NULL);
+}
+
 static int __recv_completion(
 		struct gnix_fid_ep *ep,
 		struct gnix_fab_req *req,
@@ -115,8 +155,8 @@ static int __recv_completion(
 	return FI_SUCCESS;
 }
 
-static inline int __gnix_recv_completion(struct gnix_fid_ep *ep,
-				  struct gnix_fab_req *req)
+static inline int __gnix_msg_recv_completion(struct gnix_fid_ep *ep,
+					     struct gnix_fab_req *req)
 {
 	uint64_t flags = FI_RECV | FI_MSG;
 
@@ -133,7 +173,7 @@ static inline int __gnix_recv_completion(struct gnix_fid_ep *ep,
 			_gnix_vc_peer_fi_addr(req->vc));
 }
 
-static int __gnix_send_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
+static int __gnix_msg_send_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
 {
 	uint64_t flags = FI_SEND | FI_MSG;
 	int rc;
@@ -162,8 +202,8 @@ static int __gnix_send_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
 	return FI_SUCCESS;
 }
 
-static int __gnix_send_completion(struct gnix_fid_ep *ep,
-				  struct gnix_fab_req *req)
+static int __gnix_msg_send_completion(struct gnix_fid_ep *ep,
+				      struct gnix_fab_req *req)
 {
 	uint64_t flags = FI_SEND | FI_MSG;
 	int rc;
@@ -192,40 +232,6 @@ static int __gnix_send_completion(struct gnix_fid_ep *ep,
 	return FI_SUCCESS;
 }
 
-static int __gnix_send_smsg_err(struct gnix_tx_descriptor *txd)
-{
-	struct gnix_fab_req *req = txd->req;
-	int rc;
-
-	/* SMSG is auto-retransmitting.  If GNI returned error, we're done. */
-
-	GNIX_INFO(FI_LOG_EP_DATA, "Failed transaction: %p\n", req);
-	rc = __gnix_send_err(req->gnix_ep, req);
-	if (rc != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "__gnix_send_err() failed: %d\n",
-			  rc);
-
-	__gnix_msg_send_fr_complete(req, txd);
-	return FI_SUCCESS;
-}
-
-static int __gnix_send_post_err(struct gnix_tx_descriptor *txd)
-{
-	struct gnix_fab_req *req = txd->req;
-
-	req->tx_failures++;
-	if (req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
-		GNIX_INFO(FI_LOG_EP_DATA,
-			  "Requeueing failed request: %p\n", req);
-		return _gnix_vc_queue_work_req(req);
-	}
-
-	/* TODO should this be fatal? A request will sit waiting at the
-	 * peer. */
-	return __gnix_send_smsg_err(txd);
-}
-
 static int __gnix_rndzv_req_send_fin(void *arg)
 {
 	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
@@ -243,16 +249,12 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 	nic = ep->nic;
 	assert(nic != NULL);
 
-	txd = (struct gnix_tx_descriptor *)req->txd;
-	if (!txd) {
-		rc = _gnix_nic_tx_alloc(nic, &txd);
-		if (rc) {
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "_gnix_nic_tx_alloc() failed: %d\n",
-				  rc);
-			return -FI_ENOSPC;
-		}
-		req->txd = txd;
+	rc = _gnix_nic_tx_alloc(nic, &txd);
+	if (rc) {
+		GNIX_INFO(FI_LOG_EP_DATA,
+				"_gnix_nic_tx_alloc() failed: %d\n",
+				rc);
+		return -FI_ENOSPC;
 	}
 
 	txd->rndzv_fin_hdr.req_addr = req->msg.rma_id;
@@ -268,13 +270,11 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 
 	if (status == GNI_RC_NOT_DONE) {
 		_gnix_nic_tx_free(nic, txd);
-		req->txd = NULL;
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "GNI_SmsgSendWTag returned %s\n",
 			  gni_err_str[status]);
 	} else if (status != GNI_RC_SUCCESS) {
 		_gnix_nic_tx_free(nic, txd);
-		req->txd = NULL;
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "GNI_SmsgSendWTag returned %s\n",
 			  gni_err_str[status]);
@@ -285,15 +285,59 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 	return gnixu_to_fi_errno(status);
 }
 
+static void __gnix_msg_copy_unaligned_get_data(struct gnix_fab_req *req)
+{
+	int head_off, head_len, tail_len;
+	void *addr;
+
+	head_off = req->msg.send_addr & GNI_READ_ALIGN_MASK;
+	head_len = head_off ? GNI_READ_ALIGN - head_off : 0;
+	tail_len = (req->msg.send_addr + req->msg.recv_len) &
+			GNI_READ_ALIGN_MASK;
+
+	if (head_off) {
+		addr = (void *)&req->msg.rndzv_head + head_off;
+
+		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to head (%p, %x)\n",
+			  head_len, req->msg.recv_addr, req->msg.rndzv_head);
+		memcpy((void *)req->msg.recv_addr, addr, head_len);
+	}
+
+	if (tail_len) {
+		addr = (void *)req->msg.recv_addr +
+			       req->msg.recv_len -
+			       tail_len;
+
+		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to tail (%p, %x)\n",
+			  tail_len, addr, req->msg.rndzv_tail);
+		memcpy((void *)addr, &req->msg.rndzv_tail, tail_len);
+	}
+}
+
 static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 {
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
 	struct gnix_fab_req *req = txd->req;
 	int ret;
 
+	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
+
 	if (tx_status != GNI_RC_SUCCESS) {
-		return __gnix_send_post_err(txd);
+		req->tx_failures++;
+		if (req->tx_failures <
+		    req->gnix_ep->domain->params.max_retransmits) {
+
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "Requeueing failed request: %p\n", req);
+			return _gnix_vc_queue_work_req(req);
+		}
+
+		/* TODO should this be fatal? A request will sit waiting at the
+		 * peer. */
+		return __gnix_msg_recv_err(req->gnix_ep, req);
 	}
+
+	__gnix_msg_copy_unaligned_get_data(req);
 
 	GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV GET, req: %p\n", req);
 
@@ -303,9 +347,7 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 		fi_close(&req->msg.recv_md->mr_fid.fid);
 	}
 
-	req->txd = txd;
 	req->work_fn = __gnix_rndzv_req_send_fin;
-
 	ret = _gnix_vc_queue_work_req(req);
 
 	return ret;
@@ -321,6 +363,7 @@ static int __gnix_rndzv_req(void *arg)
 	int rc;
 	struct fid_mr *auto_mr = NULL;
 	int inject_err = _gnix_req_inject_err(req);
+	int head_off, head_len, tail_len;
 
 	if (!req->msg.recv_md) {
 		rc = gnix_mr_reg(&ep->domain->domain_fid.fid,
@@ -352,13 +395,19 @@ static int __gnix_rndzv_req(void *arg)
 	txd->gni_desc.type = GNI_POST_RDMA_GET;
 	txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
 	txd->gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
-	txd->gni_desc.local_addr = (uint64_t)req->msg.recv_addr;
 	txd->gni_desc.local_mem_hndl = req->msg.recv_md->mem_hndl;
-	txd->gni_desc.remote_addr = (uint64_t)req->msg.send_addr;
 	txd->gni_desc.remote_mem_hndl = req->msg.rma_mdh;
-	txd->gni_desc.length = req->msg.recv_len;
 	txd->gni_desc.rdma_mode = 0;
 	txd->gni_desc.src_cq_hndl = nic->tx_cq;
+
+	head_off = req->msg.send_addr & GNI_READ_ALIGN_MASK;
+	head_len = head_off ? GNI_READ_ALIGN - head_off : 0;
+	tail_len = (req->msg.send_addr + req->msg.send_len) &
+			GNI_READ_ALIGN_MASK;
+
+	txd->gni_desc.local_addr = (uint64_t)req->msg.recv_addr + head_len;
+	txd->gni_desc.remote_addr = (uint64_t)req->msg.send_addr + head_len;
+	txd->gni_desc.length = req->msg.recv_len - head_len - tail_len;
 
 	fastlock_acquire(&nic->lock);
 
@@ -368,6 +417,7 @@ static int __gnix_rndzv_req(void *arg)
 	} else {
 		status = GNI_PostRdma(req->vc->gni_ep, &txd->gni_desc);
 		if (status != GNI_RC_SUCCESS) {
+			_gnix_nic_tx_free(nic, txd);
 			GNIX_INFO(FI_LOG_EP_DATA, "GNI_PostRdma failed: %s\n",
 				  gni_err_str[status]);
 		}
@@ -391,15 +441,20 @@ static int __comp_eager_msg_w_data(void *data, gni_return_t tx_status)
 	int ret = FI_SUCCESS;
 
 	if (tx_status != GNI_RC_SUCCESS) {
-		return __gnix_send_smsg_err(tdesc);
+		GNIX_INFO(FI_LOG_EP_DATA, "Failed transaction: %p\n", req);
+		ret = __gnix_msg_send_err(req->gnix_ep, req);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "__gnix_msg_send_err() failed: %d\n",
+				  ret);
+	} else {
+		/* Successful delivery.  Generate completions. */
+		ret = __gnix_msg_send_completion(req->gnix_ep, req);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "__gnix_msg_send_completion() failed: %d\n",
+				  ret);
 	}
-
-	/* Successful delivery.  Generate completions. */
-	ret = __gnix_send_completion(req->gnix_ep, req);
-	if (ret != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "__gnix_send_completion() failed: %d\n",
-			  ret);
 
 	__gnix_msg_send_fr_complete(req, tdesc);
 
@@ -450,17 +505,26 @@ static int __comp_rndzv_msg_recv_done(void *data, gni_return_t tx_status)
 static int __comp_rndzv_start(void *data, gni_return_t tx_status)
 {
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)data;
+	struct gnix_fab_req *req = txd->req;
+	int ret;
 
 	if (tx_status != GNI_RC_SUCCESS) {
-		return __gnix_send_smsg_err(txd);
+		GNIX_INFO(FI_LOG_EP_DATA, "Failed transaction: %p\n", txd->req);
+		ret = __gnix_msg_send_err(req->gnix_ep, req);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "__gnix_msg_send_err() failed: %d\n",
+				  ret);
+		__gnix_msg_send_fr_complete(req, txd);
+	} else {
+		/* Just free the TX descriptor for now.  The request remains
+		 * active until the remote peer notifies us that they're done
+		 * with the send buffer. */
+		_gnix_nic_tx_free(txd->req->gnix_ep->nic, txd);
+
+		GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV_START, req: %p\n",
+			  txd->req);
 	}
-
-	/* Just free the TX descriptor for now.  The request remains active
-	 * until the remote peer notifies us that they're done with the send
-	 * buffer. */
-	_gnix_nic_tx_free(txd->req->gnix_ep->nic, txd);
-
-	GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV_START, req: %p\n", txd->req);
 
 	return FI_SUCCESS;
 }
@@ -477,19 +541,19 @@ static int __comp_rndzv_fin(void *data, gni_return_t tx_status)
 		/* TODO should this be fatal? A request will sit waiting at the
 		 * peer. */
 		GNIX_WARN(FI_LOG_EP_DATA, "Failed transaction: %p\n", req);
-		ret = __gnix_send_err(req->gnix_ep, req);
+		ret = __gnix_msg_recv_err(req->gnix_ep, req);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_DATA,
-					"__gnix_send_err() failed: %d\n",
+					"__gnix_msg_recv_err() failed: %d\n",
 					ret);
 	} else {
 		GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV_FIN, req: %p\n",
 			  req);
 
-		ret = __gnix_recv_completion(req->gnix_ep, req);
+		ret = __gnix_msg_recv_completion(req->gnix_ep, req);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "__gnix_recv_completion() failed: %d\n",
+				  "__gnix_msg_recv_completion() failed: %d\n",
 				  ret);
 	}
 
@@ -568,7 +632,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		req->msg.recv_len = MIN(req->msg.send_len, req->msg.recv_len);
 		memcpy((void *)req->msg.recv_addr, data_ptr, req->msg.recv_len);
 
-		__gnix_recv_completion(ep, req);
+		__gnix_msg_recv_completion(ep, req);
 		_gnix_fr_free(ep, req);
 	} else {
 		/* Add new unexpected receive request. */
@@ -715,6 +779,8 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.imm = hdr->imm;
 		req->msg.rma_mdh = hdr->mdh;
 		req->msg.rma_id = hdr->req_addr;
+		req->msg.rndzv_head = hdr->head;
+		req->msg.rndzv_tail = hdr->tail;
 
 		/* Queue request to initiate pull of source data. */
 		req->work_fn = __gnix_rndzv_req;
@@ -742,6 +808,8 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.imm = hdr->imm;
 		req->msg.rma_mdh = hdr->mdh;
 		req->msg.rma_id = hdr->req_addr;
+		req->msg.rndzv_head = hdr->head;
+		req->msg.rndzv_tail = hdr->tail;
 
 		/* Init recv_flags to FI_COMPLETION so peeks generate CQEs */
 		req->msg.recv_flags = FI_COMPLETION;
@@ -794,7 +862,7 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 	ep = req->gnix_ep;
 	assert(ep != NULL);
 
-	__gnix_send_completion(ep, req);
+	__gnix_msg_send_completion(ep, req);
 
 	atomic_dec(&req->vc->outstanding_tx_reqs);
 
@@ -943,7 +1011,6 @@ static int  __gnix_discard_request(struct gnix_fid_ep *ep,
 				"returning rndzv completion for req, %p", req);
 
 		/* Complete rendezvous request, skipping data transfer. */
-		req->txd = NULL;
 		req->work_fn = __gnix_rndzv_req_send_fin;
 		ret = _gnix_vc_queue_work_req(req);
 	} else {
@@ -1097,7 +1164,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 			memcpy((void *)buf, tmp_buf, req->msg.recv_len);
 			free(tmp_buf);
 
-			__gnix_recv_completion(ep, req);
+			__gnix_msg_recv_completion(ep, req);
 			_gnix_fr_free(ep, req);
 		}
 	} else {
@@ -1105,23 +1172,9 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 		 * were looking for, return FI_ENOMSG
 		 */
 		if (r_flags) {
-			if (ep->recv_cq) {
-				ret = _gnix_cq_add_error(ep->recv_cq, context, flags,
-						len, (void *) buf, 0, tag, len, FI_ENOMSG,
-						FI_ENOMSG, NULL);
-				if (ret) {
-					GNIX_ERR(FI_LOG_EP_DATA, "could not add error to CQ, "
-							"cq=%p\n", ep->recv_cq);
-				}
-			}
-
-			if (ep->recv_cntr) {
-				ret = _gnix_cntr_inc_err(ep->recv_cntr);
-				if (ret) {
-					GNIX_ERR(FI_LOG_EP_DATA, "could not add error to cntr,"
-							"cntr=%p", ep->recv_cntr);
-				}
-			}
+			__recv_err(ep, context, flags, len,
+				   (void *)buf, 0, tag, len, FI_ENOMSG,
+				   FI_ENOMSG, NULL);
 
 			/* if handling trecvmsg flags, return here
 			 * Never post a receive request from this type of context
@@ -1167,6 +1220,8 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 
 		_gnix_insert_tag(posted_queue, r_tag, req, r_ignore);
 	}
+
+	GNIX_INFO(FI_LOG_EP_DATA, "Posted (%p %d)\n", buf, len);
 
 pdc_exit:
 err:
@@ -1218,6 +1273,30 @@ static int _gnix_send_req(void *arg)
 		tdesc->rndzv_start_hdr.addr = req->msg.send_addr;
 		tdesc->rndzv_start_hdr.len = req->msg.send_len;
 		tdesc->rndzv_start_hdr.req_addr = (uint64_t)req;
+
+		if (req->msg.send_addr & GNI_READ_ALIGN_MASK) {
+			tdesc->rndzv_start_hdr.head =
+				*(uint32_t *)(req->msg.send_addr &
+					      ~GNI_READ_ALIGN_MASK);
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "Sending %d unaligned head bytes (%x)\n",
+				  GNI_READ_ALIGN -
+				  (req->msg.send_addr & GNI_READ_ALIGN_MASK),
+				  tdesc->rndzv_start_hdr.head);
+		}
+
+		if ((req->msg.send_addr + req->msg.send_len) &
+		    GNI_READ_ALIGN_MASK) {
+			tdesc->rndzv_start_hdr.tail =
+				*(uint32_t *)((req->msg.send_addr +
+					       req->msg.send_len) &
+					      ~GNI_READ_ALIGN_MASK);
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "Sending %d unaligned tail bytes (%x)\n",
+				  (req->msg.send_addr + req->msg.send_len) &
+				  GNI_READ_ALIGN_MASK,
+				  tdesc->rndzv_start_hdr.tail);
+		}
 
 		hdr = &tdesc->rndzv_start_hdr;
 		hdr_len = sizeof(tdesc->rndzv_start_hdr);
@@ -1358,7 +1437,8 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		req->msg.send_flags |= GNIX_MSG_RENDEZVOUS;
 	}
 
-	GNIX_INFO(FI_LOG_EP_DATA, "Queuing TX req: %p\n", req);
+	GNIX_INFO(FI_LOG_EP_DATA, "Queuing (%p %d)\n",
+		  (void *)loc_addr, len);
 
 	return _gnix_vc_queue_tx_req(req);
 
