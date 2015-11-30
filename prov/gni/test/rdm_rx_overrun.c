@@ -77,7 +77,7 @@ static uint64_t mr_key[NUM_EPS];
 
 static void setup(void)
 {
-	int i;
+	int i, j;
 	int ret = 0;
 	struct fi_av_attr attr;
 	size_t addrlen = 0;
@@ -148,8 +148,11 @@ static void setup(void)
 		cr_assert(ep_name[i] != NULL);
 		ret = fi_getname(&ep[i]->fid, ep_name[i], &addrlen);
 		cr_assert(ret == FI_SUCCESS);
-		ret = fi_av_insert(av[i], ep_name[i], 1, &gni_addr[i], 0, NULL);
-		cr_assert(ret == 1);
+		for (j = 0; j < NUM_EPS; j++) {
+			ret = fi_av_insert(av[j], ep_name[i],
+					1, &gni_addr[i], 0, NULL);
+			cr_assert(ret == 1);
+		}
 	}
 
 	for (i = 0; i < NUM_EPS; i++) {
@@ -199,7 +202,7 @@ static void teardown(void)
 	fi_freeinfo(hints);
 }
 
-TestSuite(rdm_rx_overrun, .init = setup, .fini = teardown, .disabled = true);
+TestSuite(rdm_rx_overrun, .init = setup, .fini = teardown, .disabled = false);
 
 
 Test(rdm_rx_overrun, all_to_one)
