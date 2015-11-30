@@ -106,7 +106,7 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 
 static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 {
-	int err = 0;
+	int err = 0, ret;
 	struct sock_cq *cq;
 	struct sock_cntr *cntr;
 	struct timeval now;
@@ -114,6 +114,7 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 	double start_ms = 0.0, end_ms = 0.0;
 	struct dlist_entry *p, *head;
 	struct sock_fid_list *list_item;
+	char c;
 
 	wait = container_of(wait_fid, struct sock_wait, wait_fid);
 	if (timeout > 0) {
@@ -152,10 +153,19 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 	switch (wait->type) {
 	case FI_WAIT_FD:
 		err = fi_poll_fd(wait->wobj.fd[WAIT_READ_FD], timeout);
-		if (err > 0)
-			err = 0;
-		else if (err == 0)
+		if (err == 0) {
 			err = -FI_ETIMEDOUT;
+		} else {
+			while (err > 0) {
+				ret = read(wait->wobj.fd[WAIT_READ_FD], &c, 1);
+				if (ret != 1) {
+					SOCK_LOG_ERROR("failed to read wait_fd\n");
+					err = 0;
+					break;
+				} else
+					err--;
+			}
+		}
 		break;
 
 	case FI_WAIT_MUTEX_COND:
