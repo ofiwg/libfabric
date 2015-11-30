@@ -258,7 +258,7 @@ static struct fi_ops_domain psmx2_domain_ops = {
 
 static int psmx2_key_compare(void *key1, void *key2)
 {
-	return (key1 > key2) ?  1 : ((key1 < key2) ? -1 : 0);
+	return (key1 < key2) ?  -1 : (key1 > key2);
 }
 
 int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
