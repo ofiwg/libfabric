@@ -59,6 +59,7 @@ struct wq_hndl_conn_req {
 	int src_vc_id;
 	struct gnix_vc *vc;
 	uint64_t src_vc_ptr;
+	gni_mem_handle_t irq_mem_hndl;
 };
 
 static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr);
@@ -82,13 +83,15 @@ static int __gnix_vc_conn_ack_comp_fn(void *data);
  *                 EP to build this connection)
  * - src_smsg_attr (smsg attributes of the mbox allocated at the
  *                  originating EP for this connection)
+ * - src_irq_cq_mhdl (GNI memory handle for irq cq for originating EP)
  */
 static void __gnix_vc_pack_conn_req(char *sbuf,
 				    struct gnix_address *target_addr,
 				    struct gnix_address *src_addr,
 				    int src_vc_id,
 				    uint64_t src_vc_vaddr,
-				    gni_smsg_attr_t *src_smsg_attr)
+				    gni_smsg_attr_t *src_smsg_attr,
+				    gni_mem_handle_t *src_irq_cq_mhdl)
 {
 	size_t __attribute__((unused)) len;
 	char *cptr = sbuf;
@@ -101,7 +104,7 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 	assert(sbuf != NULL);
 
 	len = sizeof(uint8_t) + sizeof(struct gnix_address) * 2 + sizeof(int)
-		+ sizeof(gni_smsg_attr_t);
+		+ sizeof(gni_smsg_attr_t) + sizeof(gni_mem_handle_t);
 	assert(len <= GNIX_CM_NIC_MAX_MSG_SIZE);
 
 	memcpy(cptr, &rtype, sizeof(rtype));
@@ -115,6 +118,9 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 	memcpy(cptr, &src_vc_vaddr, sizeof(uint64_t));
 	cptr += sizeof(uint64_t);
 	memcpy(cptr, src_smsg_attr, sizeof(gni_smsg_attr_t));
+	cptr += sizeof(gni_smsg_attr_t);
+	memcpy(cptr, src_irq_cq_mhdl, sizeof(gni_mem_handle_t));
+
 }
 
 /*
@@ -125,7 +131,8 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
 				      struct gnix_address *src_addr,
 				      int *src_vc_id,
 				      uint64_t *src_vc_vaddr,
-				      gni_smsg_attr_t *src_smsg_attr)
+				      gni_smsg_attr_t *src_smsg_attr,
+				      gni_mem_handle_t *src_irq_cq_mhndl)
 {
 	size_t __attribute__((unused)) len;
 	uint8_t rtype;
@@ -138,7 +145,7 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
 	assert(rbuf);
 
 	len = sizeof(rtype) + sizeof(struct gnix_address) * 2 + sizeof(int)
-		+ sizeof(gni_smsg_attr_t);
+		+ sizeof(gni_smsg_attr_t) + sizeof(gni_mem_handle_t);
 	assert(len <= GNIX_CM_NIC_MAX_MSG_SIZE);
 
 	cptr += sizeof(uint8_t);
@@ -151,6 +158,8 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
 	memcpy(src_vc_vaddr, cptr, sizeof(uint64_t));
 	cptr += sizeof(uint64_t);
 	memcpy(src_smsg_attr, cptr, sizeof(gni_smsg_attr_t));
+	cptr += sizeof(gni_smsg_attr_t);
+	memcpy(src_irq_cq_mhndl, cptr, sizeof(gni_mem_handle_t));
 }
 
 /*
@@ -161,13 +170,15 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
  *          build this connection)
  * - resp_smsg_attr (smsg attributes of the mbox allocated at the
  *                   responding EP for this connection)
+ * - resp_irq_cq_mhndl (GNI memhndl for irq cq of responding EP)
  */
 
 static void __gnix_vc_pack_conn_resp(char *sbuf,
 				     uint64_t src_vc_vaddr,
 				     uint64_t resp_vc_vaddr,
 				     int resp_vc_id,
-				     gni_smsg_attr_t *resp_smsg_attr)
+				     gni_smsg_attr_t *resp_smsg_attr,
+				     gni_mem_handle_t *resp_irq_cq_mhndl)
 {
 	char *cptr = sbuf;
 	uint8_t rtype = GNIX_VC_CONN_RESP;
@@ -187,6 +198,8 @@ static void __gnix_vc_pack_conn_resp(char *sbuf,
 	memcpy(cptr, &resp_vc_id, sizeof(int));
 	cptr += sizeof(int);
 	memcpy(cptr, resp_smsg_attr, sizeof(gni_smsg_attr_t));
+	cptr += sizeof(gni_smsg_attr_t);
+	memcpy(cptr, resp_irq_cq_mhndl, sizeof(gni_mem_handle_t));
 }
 
 /*
@@ -196,7 +209,8 @@ static void __gnix_vc_unpack_resp(char *rbuf,
 				  uint64_t *src_vc_vaddr,
 				  uint64_t *resp_vc_vaddr,
 				  int *resp_vc_id,
-				  gni_smsg_attr_t *resp_smsg_attr)
+				  gni_smsg_attr_t *resp_smsg_attr,
+				  gni_mem_handle_t *resp_irq_cq_mhndl)
 {
 	char *cptr = rbuf;
 
@@ -209,6 +223,8 @@ static void __gnix_vc_unpack_resp(char *rbuf,
 	memcpy(resp_vc_id, cptr, sizeof(int));
 	cptr += sizeof(int);
 	memcpy(resp_smsg_attr, cptr, sizeof(gni_smsg_attr_t));
+	cptr += sizeof(gni_smsg_attr_t);
+	memcpy(resp_irq_cq_mhndl, cptr, sizeof(gni_mem_handle_t));
 }
 
 static void __gnix_vc_get_msg_type(char *rbuf,
@@ -219,11 +235,13 @@ static void __gnix_vc_get_msg_type(char *rbuf,
 }
 
 /*
- * helper function to initialize an SMSG connection
+ * helper function to initialize an SMSG connection, plus
+ * a mem handle to use for delivering IRQs to peer when needed
  */
 static int __gnix_vc_smsg_init(struct gnix_vc *vc,
 				int peer_id,
-				gni_smsg_attr_t *peer_smsg_attr)
+				gni_smsg_attr_t *peer_smsg_attr,
+				gni_mem_handle_t *peer_irq_mem_hndl)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_ep *ep;
@@ -301,6 +319,9 @@ static int __gnix_vc_smsg_init(struct gnix_vc *vc,
 		ret = gnixu_to_fi_errno(status);
 		goto err1;
 	}
+
+	if (peer_irq_mem_hndl != NULL)
+		vc->peer_irq_mem_hndl = *peer_irq_mem_hndl;
 
 	fastlock_release(&ep->nic->lock);
 	return ret;
@@ -404,7 +425,7 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 	 */
 
 	if (vc_peer == vc) {
-		ret = __gnix_vc_smsg_init(vc, vc->vc_id, &smsg_mbox_attr);
+		ret = __gnix_vc_smsg_init(vc, vc->vc_id, &smsg_mbox_attr, NULL);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_vc_smsg_init returned %s\n",
@@ -475,7 +496,8 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 	smsg_mbox_attr_peer.mbox_maxcredit = dom->params.mbox_maxcredit;
 	smsg_mbox_attr_peer.msg_maxsize = dom->params.mbox_msg_maxsize;
 
-	ret = __gnix_vc_smsg_init(vc, vc_peer->vc_id, &smsg_mbox_attr_peer);
+	ret = __gnix_vc_smsg_init(vc, vc_peer->vc_id, &smsg_mbox_attr_peer,
+				  &ep_peer->nic->irq_mem_hndl);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "_gnix_vc_smsg_init returned %s\n",
@@ -483,7 +505,8 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 		goto exit_w_lock;
 	}
 
-	ret = __gnix_vc_smsg_init(vc_peer, vc->vc_id, &smsg_mbox_attr);
+	ret = __gnix_vc_smsg_init(vc_peer, vc->vc_id, &smsg_mbox_attr,
+				  &ep->nic->irq_mem_hndl);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "_gnix_vc_smsg_init returned %s\n",
@@ -518,6 +541,7 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	uint64_t peer_vc_addr;
 	struct gnix_fid_ep *ep;
 	gni_smsg_attr_t peer_smsg_attr;
+	gni_mem_handle_t tmp_mem_hndl;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -529,7 +553,8 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 			      (uint64_t *)&vc,
 			      &peer_vc_addr,
 			      &peer_id,
-			      &peer_smsg_attr);
+			      &peer_smsg_attr,
+			      &tmp_mem_hndl);
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
 		"resp rx: (From Aries 0x%x Id %d src vc %p peer vc addr 0x%lx)\n",
@@ -558,7 +583,8 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	 * build the SMSG connection
 	 */
 
-	ret = __gnix_vc_smsg_init(vc, peer_id, &peer_smsg_attr);
+	ret = __gnix_vc_smsg_init(vc, peer_id, &peer_smsg_attr,
+				  &tmp_mem_hndl);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			"__gnix_vc_smsg_init returned %s\n",
@@ -604,6 +630,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 	gni_smsg_attr_t src_smsg_attr;
 	uint64_t src_vc_ptr;
 	struct wq_hndl_conn_req *data = NULL;
+	gni_mem_handle_t tmp_mem_hndl;
 
 	ssize_t __attribute__((unused)) len;
 
@@ -618,7 +645,8 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 				  &src_addr,
 				  &src_vc_id,
 				  &src_vc_ptr,
-				  &src_smsg_attr);
+				  &src_smsg_attr,
+				  &tmp_mem_hndl);
 
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
@@ -717,6 +745,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 		data->vc = vc;
 		data->src_vc_id = src_vc_id;
 		data->src_vc_ptr = src_vc_ptr;
+		data->irq_mem_hndl = tmp_mem_hndl;
 
 		work_req->progress_fn = __gnix_vc_conn_ack_prog_fn;
 		work_req->data = data;
@@ -759,7 +788,8 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 		}
 
 		ret = __gnix_vc_smsg_init(vc, src_vc_id,
-					  &src_smsg_attr);
+					  &src_smsg_attr,
+					  &tmp_mem_hndl);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_vc_smsg_init returned %s\n",
@@ -905,7 +935,8 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 				 work_req_data->src_vc_ptr,
 				 (uint64_t)vc,
 				 vc->vc_id,
-				 &smsg_mbox_attr);
+				 &smsg_mbox_attr,
+				 &ep->nic->irq_mem_hndl);
 
 	/*
 	 * try to send the message, if it succeeds,
@@ -920,7 +951,8 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 	if (ret == FI_SUCCESS) {
 		ret = __gnix_vc_smsg_init(vc,
 					  work_req_data->src_vc_id,
-					  &work_req_data->src_smsg_attr);
+					  &work_req_data->src_smsg_attr,
+					  &work_req_data->irq_mem_hndl);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_vc_smsg_init returned %s\n",
@@ -1032,7 +1064,8 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 				&ep->my_name.gnix_addr,
 				vc->vc_id,
 				(uint64_t)vc,
-				&smsg_mbox_attr);
+				&smsg_mbox_attr,
+				&ep->nic->irq_mem_hndl);
 
 	/*
 	 * try to send the message, if -FI_EAGAIN is returned, okay,
@@ -1623,6 +1656,8 @@ try_again:
 					  req, fi_strerror(-ret));
 			} /* else return success to keep processing TX VCs */
 		}
+
+		goto try_again;
 	}
 
 	return fi_rc;
@@ -1737,6 +1772,9 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 	}
 
 	if (unlikely(queue_tx)) {
+		/*
+		 * TODO: for auto progress do something here
+		 */
 		slist_insert_tail(&req->slist, &vc->tx_queue);
 		_gnix_vc_tx_schedule(vc);
 	}

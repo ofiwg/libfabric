@@ -44,6 +44,7 @@
 #include "gnix_vc.h"
 #include "gnix_cntr.h"
 #include "gnix_av.h"
+#include "gnix_rma.h"
 
 #define INVALID_PEEK_FORMAT(fmt) \
 	((fmt) == FI_CQ_FORMAT_CONTEXT || (fmt) == FI_CQ_FORMAT_MSG)
@@ -266,6 +267,9 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 	status = GNI_SmsgSendWTag(req->vc->gni_ep,
 			&txd->rndzv_fin_hdr, sizeof(txd->rndzv_fin_hdr),
 			NULL, 0, txd->id, GNIX_SMSG_T_RNDZV_FIN);
+	if ((status == GNI_RC_SUCCESS) &&
+		(ep->domain->data_progress == FI_PROGRESS_AUTO))
+		_gnix_rma_post_irq(req->vc);
 	fastlock_release(&nic->lock);
 
 	if (status == GNI_RC_NOT_DONE) {
@@ -390,6 +394,7 @@ static int __gnix_rndzv_req(void *arg)
 	struct gnix_tx_descriptor *txd, *tail_txd = NULL;
 	gni_return_t status;
 	int rc;
+	int use_tx_cq_blk = 0;
 	struct fid_mr *auto_mr = NULL;
 	int inject_err = _gnix_req_inject_err(req);
 	int head_off, head_len, tail_len;
@@ -423,13 +428,16 @@ static int __gnix_rndzv_req(void *arg)
 	txd->completer_fn = __gnix_rndzv_req_complete;
 	txd->req = req;
 
+	use_tx_cq_blk = (ep->domain->data_progress == FI_PROGRESS_AUTO) ? 1 : 0;
+
 	txd->gni_desc.type = GNI_POST_RDMA_GET;
 	txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
 	txd->gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
 	txd->gni_desc.local_mem_hndl = req->msg.recv_md->mem_hndl;
 	txd->gni_desc.remote_mem_hndl = req->msg.rma_mdh;
 	txd->gni_desc.rdma_mode = 0;
-	txd->gni_desc.src_cq_hndl = nic->tx_cq;
+	txd->gni_desc.src_cq_hndl = (use_tx_cq_blk) ?
+					nic->tx_cq_blk : nic->tx_cq;
 
 	if (req->msg.send_len > req->msg.recv_len) {
 		send_len = req->msg.recv_len;
@@ -533,6 +541,7 @@ static int __gnix_rndzv_req(void *arg)
 		/* Wait for both TXs to complete, then process the request. */
 		atomic_set(&req->msg.outstanding_txds, 2);
 		req->msg.status = 0;
+
 	}
 
 	fastlock_release(&nic->lock);
@@ -1447,6 +1456,16 @@ static int _gnix_send_req(void *arg)
 					  hdr, hdr_len, data, data_len,
 					  tdesc->id, tag);
 	}
+
+	/*
+ 	 * if this is a rendezvous message, or GNI_RC_NOT_DONE
+ 	 * returned, we might want to generate IRQ at remote
+ 	 * peer.
+ 	 */
+	if (((status == GNI_RC_SUCCESS) &&
+		(tag == GNIX_SMSG_T_RNDZV_START)) ||
+	    (status == GNI_RC_NOT_DONE))
+		_gnix_rma_post_irq(req->vc);
 
 	fastlock_release(&nic->lock);
 

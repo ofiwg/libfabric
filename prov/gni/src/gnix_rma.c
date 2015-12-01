@@ -206,6 +206,21 @@ static int __gnix_rma_post_err(struct gnix_tx_descriptor *txd)
 	return FI_SUCCESS;
 }
 
+/*
+ * completer for a GNI_PostCqWrite, for now ignore error status
+ */
+
+static int __gnix_rma_post_irq_complete(void *arg, gni_return_t tx_status)
+{
+	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
+	struct gnix_vc *vc;
+
+	vc = (struct gnix_vc *)txd->req;
+	_gnix_nic_tx_free(vc->ep->nic, txd);
+
+	return FI_SUCCESS;
+}
+
 /* __gnix_rma_txd_data_complete() should match __gnix_rma_txd_complete() except
  * for checking whether to send immediate data. */
 static int __gnix_rma_txd_data_complete(void *arg, gni_return_t tx_status)
@@ -441,6 +456,53 @@ static void __gnix_rma_fill_pd_indirect_get(struct gnix_fab_req *req,
 			(uint64_t)req->rma.rem_addr & ~GNI_READ_ALIGN_MASK;
 }
 
+int _gnix_rma_post_irq(struct gnix_vc *vc)
+{
+	int rc = FI_SUCCESS;
+	struct gnix_fid_ep *ep;
+	struct gnix_nic *nic;
+	struct gnix_tx_descriptor *txd;
+	gni_return_t status;
+
+#if 1
+	if (vc->conn_state != GNIX_VC_CONNECTED)
+		return -FI_EINVAL;
+
+	ep = vc->ep;
+	assert(ep != NULL);
+
+	nic = ep->nic;
+	assert(nic != NULL);
+
+	rc = _gnix_nic_tx_alloc(nic, &txd);
+	if (rc != FI_SUCCESS)
+		return rc;
+
+	txd->completer_fn = __gnix_rma_post_irq_complete;
+	txd->req = (void *)vc;
+	txd->gni_desc.type = GNI_POST_CQWRITE;
+	txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
+	/*
+ 	 * try to send the cq write request through the network
+ 	 * on the slow path
+ 	 */
+	txd->gni_desc.dlvr_mode = GNI_DLVMODE_IN_ORDER;
+	txd->gni_desc.remote_mem_hndl = vc->peer_irq_mem_hndl;
+	txd->gni_desc.cqwrite_value = vc->peer_id;
+	txd->gni_desc.rdma_mode = 0;
+	txd->gni_desc.src_cq_hndl = nic->tx_cq; /* check flags */
+
+	status = GNI_PostCqWrite(vc->gni_ep,
+				 &txd->gni_desc);
+	if (unlikely(status != GNI_RC_SUCCESS)) {
+		rc = gnixu_to_fi_errno(status);
+		_gnix_nic_tx_free(nic, txd);
+	}
+#endif
+
+	return rc;
+}
+
 int _gnix_rma_post_rdma_chain_req(void *data)
 {
 	struct gnix_fab_req *req = (struct gnix_fab_req *)data;
@@ -538,6 +600,10 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	}
 
 	fastlock_acquire(&nic->lock);
+
+	/*
+	 * TODO: need work here too!
+	 */
 
 	if (unlikely(inject_err)) {
 		_gnix_nic_txd_err_inject(nic, bte_txd);
