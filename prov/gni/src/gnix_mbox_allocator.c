@@ -387,7 +387,6 @@ static int __create_slab(struct gnix_mbox_alloc_handle *handle)
 
 err_memregister:
 	_gnix_free_bitmap(slab->used);
-	free(slab->used);
 err_alloc_bitmap:
 	munmap(slab->base, total_size);
 err_mmap:
