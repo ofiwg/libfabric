@@ -230,12 +230,19 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 	const size_t size = len + sizeof(struct fi_ibv_rdm_tagged_header);
 
 	if (size > ep->max_inline_rc) {
-		goto out_again;
+		return -FI_EMSGSIZE;
 	}
 
 	if (conn->state != FI_VERBS_CONN_ESTABLISHED) {
 		goto out_connect;
 	}
+
+#if defined(__ICC) || defined(__INTEL_COMPILER) || \
+    defined(__GNUC__) || defined(__GNUG__)
+	_mm_prefetch((const char *)
+		     fi_ibv_rdm_tagged_get_buff_service_data(conn->sbuf_head),
+		     _MM_HINT_T0);
+#endif /* ICC || GCC */
 
 	const int in_order = (conn->postponed_entry) ? 0 : 1;
 	if (in_order) {
@@ -283,7 +290,7 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 
 out_again:
 	fi_ibv_rdm_tagged_poll(ep);
-	return FI_EAGAIN;
+	return -FI_EAGAIN;
 
 out_connect:
 	pthread_mutex_lock(&ep->cm_lock);
