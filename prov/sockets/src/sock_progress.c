@@ -1765,10 +1765,8 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 				    pe_entry->pe.tx.tx_iov[i].src.ioc.count *
 				    datatype_sz, len))
 					return 0;
-			} else {
-				pe_entry->done_len += pe_entry->pe.tx.tx_iov[i].src.ioc.count * datatype_sz;
+				len += (pe_entry->pe.tx.tx_iov[i].src.ioc.count * datatype_sz);
 			}
-			len += (pe_entry->pe.tx.tx_iov[i].src.ioc.count * datatype_sz);
 		}
 	}
 
@@ -2212,8 +2210,10 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 			for (i = 0; i < pe_entry->pe.tx.tx_op.src_iov_len; i++) {
 				rbfdread(&tx_ctx->rbfd, &pe_entry->pe.tx.tx_iov[i].src,
 					 sizeof(pe_entry->pe.tx.tx_iov[i].src));
-				msg_hdr->msg_len += datatype_sz *
-					pe_entry->pe.tx.tx_iov[i].src.ioc.count;
+
+				if (pe_entry->pe.tx.tx_op.atomic.op != FI_ATOMIC_READ)
+					msg_hdr->msg_len += datatype_sz *
+						pe_entry->pe.tx.tx_iov[i].src.ioc.count;
 			}
 		}
 
