@@ -468,9 +468,11 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	void *mdesc = NULL;
 	uint64_t compare_operand = 0;
 	void *loc_addr = NULL;
+	int dt_len, dt_align;
 
 	if (!ep || !msg || !msg->msg_iov ||
-	    !msg->msg_iov[0].addr || msg->iov_count != 1)
+	    !msg->msg_iov[0].addr || msg->iov_count != 1 ||
+	    !msg->rma_iov || !msg->rma_iov[0].addr)
 		return -FI_EINVAL;
 
 	if (fr_type == GNIX_FAB_RQ_CAMO) {
@@ -480,7 +482,16 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		compare_operand = *(uint64_t *)comparev[0].addr;
 	}
 
-	len = fi_datatype_size(msg->datatype) * msg->msg_iov->count;
+	dt_len = fi_datatype_size(msg->datatype);
+	dt_align = dt_len - 1;
+	len = dt_len * msg->msg_iov->count;
+
+	if (msg->rma_iov->addr & dt_align) {
+		GNIX_INFO(FI_LOG_EP_DATA,
+			  "Invalid target alignment: %d (mask 0x%x)\n",
+			  msg->rma_iov->addr, dt_align);
+		return -FI_EINVAL;
+	}
 
 	/* need a memory descriptor for all fetching and comparison AMOs */
 	if (fr_type == GNIX_FAB_RQ_FAMO || fr_type == GNIX_FAB_RQ_CAMO) {
@@ -488,6 +499,14 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 			return -FI_EINVAL;
 
 		loc_addr = resultv[0].addr;
+
+		if ((uint64_t)loc_addr & dt_align) {
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "Invalid source alignment: %d (mask 0x%x)\n",
+				  loc_addr, dt_align);
+			return -FI_EINVAL;
+		}
+
 		if (!result_desc || !result_desc[0] || result_count != 1) {
 			rc = gnix_mr_reg(&ep->domain->domain_fid.fid,
 					 loc_addr, len, FI_READ | FI_WRITE,
