@@ -462,7 +462,6 @@ static inline void
 fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 				       struct fi_ibv_rdm_ep *ep, int seq_num)
 {
-	// not needed till nobody use service data of recv buffers
 	char *buff = conn->sbuf_ack_head + seq_num * ep->buff_len;
 	fi_ibv_rdm_tagged_set_buffer_status(buff, BUF_STATUS_FREE);
 #if ENABLE_DEBUG
@@ -533,7 +532,11 @@ fi_ibv_rdm_tagged_got_recv_completion(struct fi_ibv_rdm_ep *ep,
 	struct fi_ibv_rdm_tagged_buf *rbuf =
 	    fi_ibv_rdm_tagged_get_rbuf(conn, ep, imm_data);
 	fi_ibv_rdm_tagged_process_recv(ep, conn, arrived_len, imm_data, rbuf);
-	fi_ibv_rdm_tagged_release_remote_sbuff(conn, ep, imm_data);
+
+	if ((imm_data % ep->n_buffs) == 0)
+	{
+	    fi_ibv_rdm_tagged_release_remote_sbuff(conn, ep, imm_data);
+	}
 }
 
 static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
@@ -553,6 +556,13 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 				struct fi_ibv_rdm_tagged_conn *conn =
 				    (struct fi_ibv_rdm_tagged_conn *)(uintptr_t)
 				    wc[i].wr_id;
+#if defined(__ICC) || defined(__INTEL_COMPILER) || \
+    defined(__GNUC__) || defined(__GNUG__)
+				_mm_prefetch((const char *)
+					     fi_ibv_rdm_tagged_get_rbuf(conn, ep, wc[i].wr_id),
+					     _MM_HINT_T0);
+#endif /* ICC || GCC */
+
 
 				fi_ibv_rdm_tagged_got_recv_completion(ep, conn,
 								      wc[i].
@@ -725,10 +735,20 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf(struct fi_ibv_rdm_tagged_conn
 			"conn %p sbufs status before: %s\n", conn, s);
 	}
 #endif // ENABLE_DEBUG
-
+	int i = 0;
 	void *sbuf = NULL;
+
 	if (fi_ibv_rdm_tagged_get_buffer_status(conn->sbuf_head) ==
 	    BUF_STATUS_FREE) {
+
+		if ((fi_ibv_rdm_tagged_get_buff_service_data(conn->sbuf_head)->seq_number % ep->n_buffs) == 0)
+		{
+			for (i = 1; i < ep->n_buffs; ++i) {
+				fi_ibv_rdm_tagged_set_buffer_status(conn->sbuf_head +
+				i * ep->buff_len, BUF_STATUS_FREE);
+			}
+		}
+
 		fi_ibv_rdm_tagged_set_buffer_status(conn->sbuf_head,
 						    BUF_STATUS_BUSY);
 		sbuf = conn->sbuf_head;
