@@ -460,12 +460,13 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 
 static inline void
 fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
-				       struct fi_ibv_rdm_ep *ep, int seq_num)
+				       struct fi_ibv_rdm_ep *ep)
 {
-	char *buff = conn->sbuf_ack_head + seq_num * ep->buff_len;
+	char *buff = conn->sbuf_ack_head;
+	// not needed till nobody use service data of recv buffers
 	fi_ibv_rdm_tagged_set_buffer_status(buff, BUF_STATUS_FREE);
 #if ENABLE_DEBUG
-	char *rbuf = (char *)fi_ibv_rdm_tagged_get_rbuf(conn, ep, seq_num);
+	char *rbuf = (char *)fi_ibv_rdm_tagged_get_rbuf(conn, ep, 0);
 	memset(rbuf, 0,
 	      ep->buff_len - FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE);
 #endif // ENABLE_DEBUG
@@ -483,7 +484,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 	wr.num_sge = 1;
 	wr.wr.rdma.remote_addr =
 	    (uintptr_t) &fi_ibv_rdm_tagged_get_buff_service_data(
-			    conn->remote_sbuf_head + seq_num * ep->buff_len)->status;
+			    conn->remote_sbuf_head)->status;
 	wr.wr.rdma.rkey = conn->remote_sbuf_rkey;
 	wr.send_flags = IBV_SEND_INLINE;
 	wr.opcode = IBV_WR_RDMA_WRITE;	// w/o imm - do not put it into recv
@@ -533,9 +534,9 @@ fi_ibv_rdm_tagged_got_recv_completion(struct fi_ibv_rdm_ep *ep,
 	    fi_ibv_rdm_tagged_get_rbuf(conn, ep, imm_data);
 	fi_ibv_rdm_tagged_process_recv(ep, conn, arrived_len, imm_data, rbuf);
 
-	if ((imm_data % ep->n_buffs) == 0)
+	if (rbuf == fi_ibv_rdm_tagged_get_rbuf(conn, ep, 0))
 	{
-	    fi_ibv_rdm_tagged_release_remote_sbuff(conn, ep, imm_data);
+	    fi_ibv_rdm_tagged_release_remote_sbuff(conn, ep);
 	}
 }
 
@@ -559,7 +560,7 @@ static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)
 #if defined(__ICC) || defined(__INTEL_COMPILER) || \
     defined(__GNUC__) || defined(__GNUG__)
 				_mm_prefetch((const char *)
-					     fi_ibv_rdm_tagged_get_rbuf(conn, ep, wc[i].wr_id),
+					     fi_ibv_rdm_tagged_get_rbuf(conn, ep, wc[i].imm_data),
 					     _MM_HINT_T0);
 #endif /* ICC || GCC */
 
@@ -741,11 +742,14 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf(struct fi_ibv_rdm_tagged_conn
 	if (fi_ibv_rdm_tagged_get_buffer_status(conn->sbuf_head) ==
 	    BUF_STATUS_FREE) {
 
-		if ((fi_ibv_rdm_tagged_get_buff_service_data(conn->sbuf_head)->seq_number % ep->n_buffs) == 0)
+		/* We have made whole circle. Reset buffer states */
+		if (conn->sbuf_head == (conn->sbuf_mem_reg +
+		                        FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE))
 		{
 			for (i = 1; i < ep->n_buffs; ++i) {
-				fi_ibv_rdm_tagged_set_buffer_status(conn->sbuf_head +
-				i * ep->buff_len, BUF_STATUS_FREE);
+				fi_ibv_rdm_tagged_set_buffer_status(conn->sbuf_mem_reg +
+				                      FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+				                      i * ep->buff_len, BUF_STATUS_FREE);
 			}
 		}
 
