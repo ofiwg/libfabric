@@ -42,8 +42,6 @@
 #include <stdint.h>
 #include <net/if.h>
 
-#define FI_PROTO_RUDP 100
-
 #define FI_EXT_USNIC_INFO_VERSION 1
 
 /*

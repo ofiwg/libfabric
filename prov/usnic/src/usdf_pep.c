@@ -136,8 +136,8 @@ usdf_pep_conn_info(struct usdf_connreq *crp)
 		sin->sin_family = AF_INET;
 		sin->sin_addr.s_addr = dap->uda_ipaddr_be;
 		ip->src_addr = sin;
-		
-		ip->ep_attr->protocol = FI_PROTO_RUDP;
+
+		ip->ep_attr->protocol = FI_PROTO_UNSPEC;
 
 		ip->fabric_attr->fabric = fab_utof(fp);
 		ip->fabric_attr->name = strdup(fp->fab_attr.name);
