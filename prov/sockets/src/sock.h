@@ -143,6 +143,7 @@
 #define SOCK_MODE (0)
 #define SOCK_NO_COMPLETION (1ULL << 60)
 #define SOCK_USE_OP_FLAGS (1ULL << 61)
+#define SOCK_PE_COMM_BUFF_SZ (1024)
 
 enum {
 	SOCK_SIGNAL_RD_FD = 0,
@@ -786,6 +787,7 @@ struct sock_pe_entry {
 
 	struct dlist_entry entry;
 	struct dlist_entry ctx_entry;
+	struct ringbuf comm_buf;
 };
 
 struct sock_pe {
@@ -1081,10 +1083,12 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry);
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry);
 
-ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len);
-ssize_t sock_comm_recv(struct sock_conn *conn, void *buf, size_t len);
+ssize_t sock_comm_send(struct sock_pe_entry *pe_entry, const void *buf, size_t len);
+ssize_t sock_comm_recv(struct sock_pe_entry *pe_entry, void *buf, size_t len);
 ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len);
-ssize_t sock_comm_discard(struct sock_conn *conn, size_t len);
+ssize_t sock_comm_discard(struct sock_pe_entry *pe_entry, size_t len);
+int sock_comm_tx_done(struct sock_pe_entry *pe_entry);
+ssize_t sock_comm_flush(struct sock_pe_entry *pe_entry);
 
 ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags);

@@ -91,7 +91,7 @@ static inline ssize_t sock_pe_send_field(struct sock_pe_entry *pe_entry,
 
 	offset = pe_entry->done_len - start_offset;
 	data_len = field_len - offset;
-	ret = sock_comm_send(pe_entry->conn, (char *) field + offset, data_len);
+	ret = sock_comm_send(pe_entry, (char *) field + offset, data_len);
 
 	if (ret <= 0)
 		return -1;
@@ -112,7 +112,7 @@ static inline ssize_t sock_pe_recv_field(struct sock_pe_entry *pe_entry,
 
 	offset = pe_entry->done_len - start_offset;
 	data_len = field_len - offset;
-	ret = sock_comm_recv(pe_entry->conn, (char *) field + offset, data_len);
+	ret = sock_comm_recv(pe_entry, (char *) field + offset, data_len);
 	if (ret <= 0)
 		return -1;
 
@@ -127,7 +127,7 @@ static inline void sock_pe_discard_field(struct sock_pe_entry *pe_entry)
 		return;
 
 	SOCK_LOG_DBG("Remaining for %p: %ld\n", pe_entry, pe_entry->rem);
-	ret = sock_comm_discard(pe_entry->conn, pe_entry->rem);
+	ret = sock_comm_discard(pe_entry, pe_entry->rem);
 	SOCK_LOG_DBG("Discarded %ld\n", ret);
 
 	pe_entry->rem -= ret;
@@ -394,6 +394,9 @@ static void sock_pe_progress_pending_ack(struct sock_pe *pe,
 	}
 
 	if (pe_entry->total_len == pe_entry->done_len && !pe_entry->rem) {
+		sock_comm_flush(pe_entry);
+		if (!sock_comm_tx_done(pe_entry))
+			return;
 		pe_entry->is_complete = 1;
 		pe_entry->pe.rx.pending_send = 0;
 		pe_entry->conn->tx_pe_entry = NULL;
@@ -1509,7 +1512,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 
 		offset = used;
 		data_len = MIN(rx_entry->iov[i].iov.len - used, rem);
-		ret = sock_comm_recv(pe_entry->conn,
+		ret = sock_comm_recv(pe_entry,
 				     (char *) (uintptr_t) rx_entry->iov[i].iov.addr + offset,
 				     data_len);
 		if (ret <= 0)
@@ -1707,6 +1710,7 @@ static int sock_pe_peek_hdr(struct sock_pe *pe,
 	msg_hdr->msg_len = ntohll(msg_hdr->msg_len);
 	msg_hdr->flags = ntohll(msg_hdr->flags);
 	msg_hdr->pe_entry_id = ntohs(msg_hdr->pe_entry_id);
+	pe_entry->total_len = msg_hdr->msg_len;
 
 	SOCK_LOG_DBG("PE RX (Hdr peek): MsgLen:  %" PRIu64 ", TX-ID: %d, Type: %d\n",
 		      msg_hdr->msg_len, msg_hdr->rx_id, msg_hdr->op_type);
@@ -1821,6 +1825,9 @@ static int sock_pe_progress_tx_atomic(struct sock_pe *pe,
 		}
 	}
 
+	sock_comm_flush(pe_entry);
+	if (!sock_comm_tx_done(pe_entry))
+		return 0;
 
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
@@ -1886,6 +1893,10 @@ static int sock_pe_progress_tx_write(struct sock_pe *pe,
 		}
 	}
 
+	sock_comm_flush(pe_entry);
+	if (!sock_comm_tx_done(pe_entry))
+		return 0;
+
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
 		pe_entry->conn->tx_pe_entry = NULL;
@@ -1921,6 +1932,10 @@ static int sock_pe_progress_tx_read(struct sock_pe *pe,
 	if (sock_pe_send_field(pe_entry, &src_iov[0], src_iov_len, len))
 		return 0;
 	len += src_iov_len;
+
+	sock_comm_flush(pe_entry);
+	if (!sock_comm_tx_done(pe_entry))
+		return 0;
 
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
@@ -1974,8 +1989,8 @@ static int sock_pe_progress_tx_send(struct sock_pe *pe,
 		}
 	}
 
-	sock_pe_flush_comm_buf(pe_entry);
-	if (pe_entry->used > 0)
+	sock_comm_flush(pe_entry);
+	if (!sock_comm_tx_done(pe_entry))
 		return 0;
 
 	pe_entry->tag = 0;
@@ -2013,6 +2028,10 @@ static int sock_pe_progress_tx_conn_msg(struct sock_pe *pe,
 		return 0;
 	len += pe_entry->pe.tx.tx_op.src_iov_len;
 	pe_entry->data_len = pe_entry->pe.tx.tx_op.src_iov_len;
+
+	sock_comm_flush(pe_entry);
+	if (!sock_comm_tx_done(pe_entry))
+		return 0;
 
 	if (pe_entry->done_len == pe_entry->total_len) {
 		pe_entry->pe.tx.send_done = 1;
@@ -2716,6 +2735,7 @@ static void sock_pe_init_table(struct sock_pe *pe)
 
 	for (i = 0; i < SOCK_PE_MAX_ENTRIES; i++) {
 		dlist_insert_head(&pe->pe_table[i].entry, &pe->free_list);
+		rbinit(&pe->pe_table[i].comm_buf, SOCK_PE_COMM_BUFF_SZ);
 	}
 
 	pe->num_free_entries = SOCK_PE_MAX_ENTRIES;
@@ -2773,12 +2793,17 @@ err1:
 
 void sock_pe_finalize(struct sock_pe *pe)
 {
+	int i;
 	if (pe->domain->progress_mode == FI_PROGRESS_AUTO) {
 		pe->do_progress = 0;
 		sock_pe_signal(pe);
 		pthread_join(pe->progress_thread, NULL);
 		close(pe->signal_fds[0]);
 		close(pe->signal_fds[1]);
+	}
+
+	for (i = 0; i < SOCK_PE_MAX_ENTRIES; i++) {
+		rbfree(&pe->pe_table[i].comm_buf);
 	}
 
 	fastlock_destroy(&pe->lock);
