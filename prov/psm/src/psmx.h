@@ -66,7 +66,7 @@ extern "C" {
 #include "fi.h"
 #include "fi_enosys.h"
 #include "fi_list.h"
-#include "fi_indexer.h"
+#include "rbtree.h"
 #include "version.h"
 
 extern struct fi_provider psmx_prov;
@@ -282,7 +282,7 @@ struct psmx_fid_domain {
 	enum fi_mr_mode		mr_mode;
 	fastlock_t		mr_lock;
 	uint64_t		mr_reserved_key;
-	struct index_map	mr_map;
+	RbtHandle		mr_map;
 
 	int			am_initialized;
 
