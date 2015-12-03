@@ -246,7 +246,7 @@ enum fi_ibv_rdm_tagged_buffer_status {
 
 struct fi_ibv_rdm_tagged_buffer_service_data {
 	volatile enum fi_ibv_rdm_tagged_buffer_status status;
-	volatile int seq_number;
+	int seq_number;
 };
 
 #define FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE                          \
