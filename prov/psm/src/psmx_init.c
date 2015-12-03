@@ -466,7 +466,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	psmx_info->domain_attr->av_type = av_type;
 	psmx_info->domain_attr->mr_mode = mr_mode;
-	psmx_info->domain_attr->mr_key_size = sizeof(uint16_t); /* limited by IDX_MAX_INDEX */
+	psmx_info->domain_attr->mr_key_size = sizeof(uint64_t);
 	psmx_info->domain_attr->cq_data_size = 4;
 	psmx_info->domain_attr->cq_cnt = 65535;
 	psmx_info->domain_attr->ep_cnt = 65535;
