@@ -159,7 +159,8 @@ int sock_msg_verify_ep_attr(struct fi_ep_attr *ep_attr,
 			return -FI_ENODATA;
 		}
 
-		if (ep_attr->protocol_version != sock_msg_ep_attr.protocol_version)
+		if (ep_attr->protocol_version &&
+		    (ep_attr->protocol_version != sock_msg_ep_attr.protocol_version))
 			return -FI_ENODATA;
 
 		if (ep_attr->max_msg_size > sock_msg_ep_attr.max_msg_size)
@@ -1006,7 +1007,7 @@ static struct fi_info *sock_ep_msg_process_info(struct sock_conn_req *req)
 	req->info.fabric_attr->name = NULL;
 	req->info.fabric_attr->prov_name = NULL;
 	if (sock_verify_info(&req->info)) {
-		SOCK_LOG_DBG("incoming conn_req not supported\n");
+		SOCK_LOG_ERROR("incoming conn_req not supported\n");
 		errno = EINVAL;
 		return NULL;
 	}

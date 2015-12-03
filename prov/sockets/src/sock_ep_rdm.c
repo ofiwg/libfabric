@@ -185,7 +185,8 @@ int sock_rdm_verify_ep_attr(struct fi_ep_attr *ep_attr,
 			return -FI_ENODATA;
 		}
 
-		if (ep_attr->protocol_version != sock_rdm_ep_attr.protocol_version) {
+		if (ep_attr->protocol_version &&
+		    (ep_attr->protocol_version != sock_rdm_ep_attr.protocol_version)) {
 			SOCK_LOG_DBG("Invalid protocol version\n");
 			return -FI_ENODATA;
 		}

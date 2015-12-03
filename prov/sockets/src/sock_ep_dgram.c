@@ -157,7 +157,8 @@ int sock_dgram_verify_ep_attr(struct fi_ep_attr *ep_attr,
 			return -FI_ENODATA;
 		}
 
-		if (ep_attr->protocol_version != sock_dgram_ep_attr.protocol_version)
+		if (ep_attr->protocol_version &&
+		    (ep_attr->protocol_version != sock_dgram_ep_attr.protocol_version))
 			return -FI_ENODATA;
 
 		if (ep_attr->max_msg_size > sock_dgram_ep_attr.max_msg_size)

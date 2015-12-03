@@ -153,7 +153,7 @@ enum {
 #define SOCK_MAJOR_VERSION 1
 #define SOCK_MINOR_VERSION 0
 
-#define SOCK_WIRE_PROTO_VERSION (0)
+#define SOCK_WIRE_PROTO_VERSION (1)
 
 struct sock_service_entry {
 	int service;
