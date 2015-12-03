@@ -33,7 +33,7 @@
 #include "psmx.h"
 #include "prov.h"
 
-volatile int psmx_init_count = 0;
+static int psmx_init_count = 0;
 
 struct psmx_env psmx_env = {
 	.name_server	= 1,
@@ -523,8 +523,20 @@ static void psmx_fini(void)
 {
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
-	if (! --psmx_init_count)
-		psm_finalize();
+	if (! --psmx_init_count) {
+		/* This function is called from a library destructor, which is called
+		 * automatically when exit() is called. The call to psm_finalize()
+		 * might cause deadlock if the applicaiton is terminated with Ctrl-C
+		 * -- the application could be inside a PSM call, holding a lock that
+		 * psm_finalize() tries to acquire. This can be avoided by only
+		 * calling psm_finalize() when PSM is guaranteed to be unused.
+		 */
+		if (psmx_active_fabric)
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"psmx_active_fabric != NULL, skip psm_finalize\n");
+		else
+			psm_finalize();
+	}
 }
 
 struct fi_provider psmx_prov = {
