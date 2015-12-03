@@ -1,4 +1,4 @@
-.TH fi_psm 7 "2015\-11\-12" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_psm 7 "2015\-12\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The PSM Fabric Provider
@@ -20,7 +20,7 @@ The \f[I]psm2\f[] provider runs over the PSM 2.x interface that is
 supported by the Intel Omni-Path Fabric.
 PSM 2.x has all the PSM 1.x features plus a set of new functions with
 enhanced capability.
-Since PSM 1.x and PSM 2.x is not ABI compatible the \f[I]psm2\f[]
+Since PSM 1.x and PSM 2.x are not ABI compatible the \f[I]psm2\f[]
 provider only works with PSM 2.x and doesn\[aq]t support Intel TrueScale
 Fabric.
 On the other hand, the \f[I]psm\f[] provider can work with the
@@ -41,18 +41,20 @@ Endpoint types : Only support non-connection based types
 .PP
 Endpoint capabilities : Endpoints can support any combination of data
 transfer capabilities \f[I]FI_TAGGED\f[], \f[I]FI_MSG\f[],
-\f[I]FI_ATOMICS\f[], and \f[I]FI_RMA\f[]s, further refined by
-\f[I]FI_SEND\f[], \f[I]FI_RECV\f[], \f[I]FI_READ\f[], \f[I]FI_WRITE\f[],
-\f[I]FI_REMOTE_READ\f[], and \f[I]FI_REMOTE_WRITE\f[] if only one
-direction is needed.
-However, no two endpoints can have overlapping receive or RMA target
-capabilities in any of the above categories.
+\f[I]FI_ATOMICS\f[], and \f[I]FI_RMA\f[].
+These capabilities can be further refined by \f[I]FI_SEND\f[],
+\f[I]FI_RECV\f[], \f[I]FI_READ\f[], \f[I]FI_WRITE\f[],
+\f[I]FI_REMOTE_READ\f[], and \f[I]FI_REMOTE_WRITE\f[] to limit the
+direction of operations.
+For the \f[I]psm\f[] provider, no two endpoints can have overlapping
+receive or RMA target capabilities in any of the above categories.
 For example it is fine to have two endpoints with \f[I]FI_TAGGED\f[] |
 \f[I]FI_SEND\f[], one endpoint with \f[I]FI_TAGGED\f[] |
 \f[I]FI_RECV\f[], one endpoint with \f[I]FI_MSG\f[], one endpoint with
 \f[I]FI_RMA\f[] | \f[I]FI_ATOMICS\f[].
 But it is not allowed to have two endpoints with \f[I]FI_TAGGED\f[], or
 two endpoints with \f[I]FI_RMA\f[].
+The \f[I]psm2\f[] provider doesn\[aq]t have such limitation.
 .PP
 \f[I]FI_MULTI_RECV\f[] is supported for non-tagged message queue only.
 .PP
@@ -79,7 +81,9 @@ purely depends on the pprovide to make auto progress.
 .PP
 Unsupported features : These features are unsupported: connection
 management, scalable endpoint, passive endpoint, shared receive context,
-send/inject with immediate data (supported by \f[I]psm2\f[] provider).
+send/inject with immediate data.
+The \f[I]psm2\f[] provider supports send/inject with immediate data over
+non-tagged message queue only.
 .SH RUNTIME PARAMETERS
 .PP
 The \f[I]psm\f[] provider checks for the following environment variables
