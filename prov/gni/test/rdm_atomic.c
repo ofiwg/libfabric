@@ -1324,6 +1324,316 @@ Test(rdm_atomic, atomic_alignment)
 	}
 }
 
+
+Test(rdm_atomic, atomicv)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t min;
+	float min_fp;
+	double min_dp;
+	struct fi_ioc iov;
+
+	iov.addr = source;
+	iov.count = 1;
+
+	/* i64 */
+	*((int64_t *)source) = SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	sz = fi_atomicv(ep[0], &iov, (void **)&loc_mr, 1, gni_addr[1],
+			(uint64_t)target, mr_key, FI_INT64, FI_MIN, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+	rdm_atomic_check_cntrs(1, 0, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min = ((int64_t)SOURCE_DATA < (int64_t)TARGET_DATA) ?
+			SOURCE_DATA : TARGET_DATA;
+	ret = *((int64_t *)target) == min;
+	cr_assert(ret, "Data mismatch");
+
+	/* i32 */
+	*((int64_t *)source) = SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	sz = fi_atomicv(ep[0], &iov, (void **)&loc_mr, 1, gni_addr[1],
+			(uint64_t)target, mr_key, FI_INT32, FI_MIN, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+	rdm_atomic_check_cntrs(1, 0, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min = ((int32_t)SOURCE_DATA < (int32_t)TARGET_DATA) ?
+			SOURCE_DATA : TARGET_DATA;
+	min = (min & U32_MASK) | (TARGET_DATA & (U32_MASK << 32));
+	ret = *((int64_t *)target) == min;
+	cr_assert(ret, "Data mismatch");
+
+	/* float */
+	*((float *)source) = SOURCE_DATA_FP;
+	*((float *)target) = TARGET_DATA_FP;
+	sz = fi_atomicv(ep[0], &iov, (void **)&loc_mr, 1, gni_addr[1],
+			(uint64_t)target, mr_key, FI_FLOAT, FI_MIN, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+	rdm_atomic_check_cntrs(1, 0, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min_fp = (float)SOURCE_DATA_FP < (float)TARGET_DATA_FP ?
+			SOURCE_DATA_FP : TARGET_DATA_FP;
+	ret = *((float *)target) == min_fp;
+	cr_assert(ret, "Data mismatch");
+
+	/* double */
+	*((double *)source) = SOURCE_DATA_FP;
+	*((double *)target) = TARGET_DATA_FP;
+	sz = fi_atomicv(ep[0], &iov, (void **)&loc_mr, 1, gni_addr[1],
+			(uint64_t)target, mr_key, FI_DOUBLE, FI_MIN, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+	rdm_atomic_check_cntrs(1, 0, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min_dp = (double)SOURCE_DATA_FP < (double)TARGET_DATA_FP ?
+			SOURCE_DATA_FP : TARGET_DATA_FP;
+	ret = *((double *)target) == min_dp;
+	cr_assert(ret, "Data mismatch");
+}
+
+Test(rdm_atomic, atomicmsg)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t min;
+	float min_fp;
+	double min_dp;
+	struct fi_msg_atomic msg;
+	struct fi_ioc msg_iov;
+	struct fi_rma_ioc rma_iov;
+
+	msg_iov.addr = source;
+	msg_iov.count = 1;
+	msg.msg_iov = &msg_iov;
+	msg.desc = (void **)&loc_mr;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[1];
+	rma_iov.addr = (uint64_t)target;
+	rma_iov.count = 1;
+	rma_iov.key = mr_key;
+	msg.rma_iov = &rma_iov;
+	msg.context = target;
+	msg.op = FI_MIN;
+
+	/* i64 */
+	*((int64_t *)source) = SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	msg.datatype = FI_INT64;
+	sz = fi_atomicmsg(ep[0], &msg, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+	rdm_atomic_check_cntrs(1, 0, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min = ((int64_t)SOURCE_DATA < (int64_t)TARGET_DATA) ?
+			SOURCE_DATA : TARGET_DATA;
+	ret = *((int64_t *)target) == min;
+	cr_assert(ret, "Data mismatch");
+
+	/* i32 */
+	*((int64_t *)source) = SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	msg.datatype = FI_INT32;
+	sz = fi_atomicmsg(ep[0], &msg, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+	rdm_atomic_check_cntrs(1, 0, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min = ((int32_t)SOURCE_DATA < (int32_t)TARGET_DATA) ?
+			SOURCE_DATA : TARGET_DATA;
+	min = (min & U32_MASK) | (TARGET_DATA & (U32_MASK << 32));
+	ret = *((int64_t *)target) == min;
+	cr_assert(ret, "Data mismatch");
+
+	/* float */
+	*((float *)source) = SOURCE_DATA_FP;
+	*((float *)target) = TARGET_DATA_FP;
+	msg.datatype = FI_FLOAT;
+	sz = fi_atomicmsg(ep[0], &msg, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+	rdm_atomic_check_cntrs(1, 0, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min_fp = (float)SOURCE_DATA_FP < (float)TARGET_DATA_FP ?
+			SOURCE_DATA_FP : TARGET_DATA_FP;
+	ret = *((float *)target) == min_fp;
+	cr_assert(ret, "Data mismatch");
+
+	/* double */
+	*((double *)source) = SOURCE_DATA_FP;
+	*((double *)target) = TARGET_DATA_FP;
+	msg.datatype = FI_DOUBLE;
+	sz = fi_atomicmsg(ep[0], &msg, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+	rdm_atomic_check_cntrs(1, 0, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min_dp = (double)SOURCE_DATA_FP < (double)TARGET_DATA_FP ?
+			SOURCE_DATA_FP : TARGET_DATA_FP;
+	ret = *((double *)target) == min_dp;
+	cr_assert(ret, "Data mismatch");
+}
+
+Test(rdm_atomic, atomicinject)
+{
+	int ret, loops;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t min;
+	float min_fp;
+	double min_dp;
+
+	/* i64 */
+	*((int64_t *)source) = SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	sz = fi_inject_atomic(ep[0], source, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_INT64, FI_MIN);
+	cr_assert_eq(sz, 0);
+
+	min = ((int64_t)SOURCE_DATA < (int64_t)TARGET_DATA) ?
+			SOURCE_DATA : TARGET_DATA;
+	loops = 0;
+	while (*((int64_t *)target) != min) {
+		ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
+		cr_assert(ret == -EAGAIN,
+			  "Received unexpected event\n");
+
+		pthread_yield();
+		cr_assert(++loops < 10000, "Data mismatch");
+	}
+
+	/* i32 */
+	*((int64_t *)source) = SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	sz = fi_inject_atomic(ep[0], source, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_INT32, FI_MIN);
+	cr_assert_eq(sz, 0);
+
+	min = ((int32_t)SOURCE_DATA < (int32_t)TARGET_DATA) ?
+			SOURCE_DATA : TARGET_DATA;
+	min = (min & U32_MASK) | (TARGET_DATA & (U32_MASK << 32));
+	loops = 0;
+	while (*((int64_t *)target) != min) {
+		ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
+		cr_assert(ret == -EAGAIN,
+			  "Received unexpected event\n");
+
+		pthread_yield();
+		cr_assert(++loops < 10000, "Data mismatch");
+	}
+
+	/* float */
+	*((float *)source) = SOURCE_DATA_FP;
+	*((float *)target) = TARGET_DATA_FP;
+	sz = fi_inject_atomic(ep[0], source, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_FLOAT, FI_MIN);
+	cr_assert_eq(sz, 0);
+
+	min_fp = (float)SOURCE_DATA_FP < (float)TARGET_DATA_FP ?
+			SOURCE_DATA_FP : TARGET_DATA_FP;
+	loops = 0;
+	while (*((float *)target) != min_fp) {
+		ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
+		cr_assert(ret == -EAGAIN,
+			  "Received unexpected event\n");
+
+		pthread_yield();
+		cr_assert(++loops < 10000, "Data mismatch");
+	}
+
+	/* double */
+	*((double *)source) = SOURCE_DATA_FP;
+	*((double *)target) = TARGET_DATA_FP;
+	sz = fi_inject_atomic(ep[0], source, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_DOUBLE, FI_MIN);
+	cr_assert_eq(sz, 0);
+
+	min_dp = (double)SOURCE_DATA_FP < (double)TARGET_DATA_FP ?
+			SOURCE_DATA_FP : TARGET_DATA_FP;
+	loops = 0;
+	while (*((double *)target) != min_dp) {
+		ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
+		cr_assert(ret == -EAGAIN,
+			  "Received unexpected event\n");
+
+		pthread_yield();
+		cr_assert(++loops < 10000, "Data mismatch");
+	}
+}
+
 /******************************************************************************
  *
  * Fetching atomics
@@ -2595,6 +2905,274 @@ Test(rdm_atomic, atomic_fetch_alignment)
 	}
 }
 
+Test(rdm_atomic, fatomicv)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t min;
+	float min_fp;
+	double min_dp;
+	uint64_t operand = SOURCE_DATA;
+	float operand_fp;
+	double operand_dp;
+	struct fi_ioc iov, r_iov;
+
+	iov.count = 1;
+	r_iov.count = 1;
+
+	/* i64 */
+	*((int64_t *)source) = FETCH_SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	iov.addr = &operand;
+	r_iov.addr = source;
+	sz = fi_fetch_atomicv(ep[0], &iov, NULL, 1,
+			 &r_iov, (void **)&loc_mr, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_INT64, FI_MIN, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min = ((int64_t)SOURCE_DATA < (int64_t)TARGET_DATA) ?
+			SOURCE_DATA : TARGET_DATA;
+	ret = *((int64_t *)target) == min;
+	cr_assert(ret, "Data mismatch");
+	ret = *((int64_t *)source) == TARGET_DATA;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* i32 */
+	*((int64_t *)source) = FETCH_SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	iov.addr = &operand;
+	r_iov.addr = source;
+	sz = fi_fetch_atomicv(ep[0], &iov, NULL, 1,
+			 &r_iov, (void **)&loc_mr, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_INT32, FI_MIN, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min = ((int32_t)SOURCE_DATA < (int32_t)TARGET_DATA) ?
+			SOURCE_DATA : TARGET_DATA;
+	min = (min & U32_MASK) | (TARGET_DATA & (U32_MASK << 32));
+	ret = *((int64_t *)target) == min;
+	cr_assert(ret, "Data mismatch");
+	min = (TARGET_DATA & U32_MASK) | (FETCH_SOURCE_DATA & (U32_MASK << 32));
+	ret = *((int64_t *)source) == min;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* float */
+	*((float *)&operand_fp) = SOURCE_DATA_FP;
+	*((float *)source) = FETCH_SOURCE_DATA;
+	*((float *)target) = TARGET_DATA_FP;
+	iov.addr = &operand_fp;
+	r_iov.addr = source;
+	sz = fi_fetch_atomicv(ep[0], &iov, NULL, 1,
+			 &r_iov, (void **)&loc_mr, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_FLOAT, FI_MIN, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min_fp = (float)SOURCE_DATA_FP < (float)TARGET_DATA_FP ?
+			SOURCE_DATA_FP : TARGET_DATA_FP;
+	ret = *((float *)target) == min_fp;
+	cr_assert(ret, "Data mismatch");
+	ret = *((float *)source) == (float)TARGET_DATA_FP;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* double */
+	*((double *)&operand_dp) = SOURCE_DATA_FP;
+	*((double *)source) = SOURCE_DATA_FP;
+	*((double *)target) = TARGET_DATA_FP;
+	iov.addr = &operand_dp;
+	r_iov.addr = source;
+	sz = fi_fetch_atomicv(ep[0], &iov, NULL, 1,
+			 &r_iov, (void **)&loc_mr, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_DOUBLE, FI_MIN, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min_dp = (double)SOURCE_DATA_FP < (double)TARGET_DATA_FP ?
+			SOURCE_DATA_FP : TARGET_DATA_FP;
+	ret = *((double *)target) == min_dp;
+	cr_assert(ret, "Data mismatch");
+	ret = *((double *)source) == (double)TARGET_DATA_FP;
+	cr_assert(ret, "Fetch data mismatch");
+}
+
+Test(rdm_atomic, fatomicmsg)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t min;
+	float min_fp;
+	double min_dp;
+	uint64_t operand = SOURCE_DATA;
+	float operand_fp;
+	double operand_dp;
+	struct fi_msg_atomic msg;
+	struct fi_ioc msg_iov, res_iov;
+	struct fi_rma_ioc rma_iov;
+
+	msg_iov.count = 1;
+	msg.msg_iov = &msg_iov;
+	msg.desc = (void **)&loc_mr;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[1];
+	rma_iov.addr = (uint64_t)target;
+	rma_iov.count = 1;
+	rma_iov.key = mr_key;
+	msg.rma_iov = &rma_iov;
+	msg.context = target;
+	msg.op = FI_MIN;
+
+	res_iov.addr = source;
+	res_iov.count = 1;
+
+	/* i64 */
+	*((int64_t *)source) = FETCH_SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	msg_iov.addr = &operand;
+	msg.datatype = FI_INT64;
+	sz = fi_fetch_atomicmsg(ep[0], &msg, &res_iov, (void **)&loc_mr, 1, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min = ((int64_t)SOURCE_DATA < (int64_t)TARGET_DATA) ?
+			SOURCE_DATA : TARGET_DATA;
+	ret = *((int64_t *)target) == min;
+	cr_assert(ret, "Data mismatch");
+	ret = *((int64_t *)source) == TARGET_DATA;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* i32 */
+	*((int64_t *)source) = FETCH_SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	msg_iov.addr = &operand;
+	msg.datatype = FI_INT32;
+	sz = fi_fetch_atomicmsg(ep[0], &msg, &res_iov, (void **)&loc_mr, 1, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min = ((int32_t)SOURCE_DATA < (int32_t)TARGET_DATA) ?
+			SOURCE_DATA : TARGET_DATA;
+	min = (min & U32_MASK) | (TARGET_DATA & (U32_MASK << 32));
+	ret = *((int64_t *)target) == min;
+	cr_assert(ret, "Data mismatch");
+	min = (TARGET_DATA & U32_MASK) | (FETCH_SOURCE_DATA & (U32_MASK << 32));
+	ret = *((int64_t *)source) == min;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* float */
+	*((float *)&operand_fp) = SOURCE_DATA_FP;
+	*((float *)source) = FETCH_SOURCE_DATA;
+	*((float *)target) = TARGET_DATA_FP;
+	msg_iov.addr = &operand_fp;
+	msg.datatype = FI_FLOAT;
+	sz = fi_fetch_atomicmsg(ep[0], &msg, &res_iov, (void **)&loc_mr, 1, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min_fp = (float)SOURCE_DATA_FP < (float)TARGET_DATA_FP ?
+			SOURCE_DATA_FP : TARGET_DATA_FP;
+	ret = *((float *)target) == min_fp;
+	cr_assert(ret, "Data mismatch");
+	ret = *((float *)source) == (float)TARGET_DATA_FP;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* double */
+	*((double *)&operand_dp) = SOURCE_DATA_FP;
+	*((double *)source) = SOURCE_DATA_FP;
+	*((double *)target) = TARGET_DATA_FP;
+	msg_iov.addr = &operand_dp;
+	msg.datatype = FI_DOUBLE;
+	sz = fi_fetch_atomicmsg(ep[0], &msg, &res_iov, (void **)&loc_mr, 1, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	min_dp = (double)SOURCE_DATA_FP < (double)TARGET_DATA_FP ?
+			SOURCE_DATA_FP : TARGET_DATA_FP;
+	ret = *((double *)target) == min_dp;
+	cr_assert(ret, "Data mismatch");
+	ret = *((double *)source) == (double)TARGET_DATA_FP;
+	cr_assert(ret, "Fetch data mismatch");
+}
+
 /******************************************************************************
  *
  * Compare atomics
@@ -3186,5 +3764,402 @@ Test(rdm_atomic, atomic_compare_alignment)
 			do_cswap_buf(source + s_off, target + t_off);
 		}
 	}
+}
+
+Test(rdm_atomic, catomicv)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand = SOURCE_DATA, op2 = TARGET_DATA;
+	float operand_fp, op2_fp;
+	double operand_dp, op2_dp;
+	struct fi_ioc iov, r_iov, c_iov;
+
+	iov.count = 1;
+	r_iov.count = 1;
+	c_iov.count = 1;
+
+	/* u64 */
+	*((uint64_t *)source) = FETCH_SOURCE_DATA;
+	*((uint64_t *)target) = TARGET_DATA;
+	iov.addr = &operand;
+	r_iov.addr = source;
+	c_iov.addr = &op2;
+	sz = fi_compare_atomicv(ep[0],
+			 &iov, NULL, 1,
+			 &c_iov, NULL, 1,
+			 &r_iov, (void **)&loc_mr, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_UINT64, FI_CSWAP, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((uint64_t *)target) == SOURCE_DATA;
+	cr_assert(ret, "Data mismatch");
+	ret = *((uint64_t *)source) == TARGET_DATA;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* U32 */
+	*((uint64_t *)source) = FETCH_SOURCE_DATA;
+	*((uint64_t *)target) = TARGET_DATA;
+	iov.addr = &operand;
+	r_iov.addr = source;
+	c_iov.addr = &op2;
+	sz = fi_compare_atomicv(ep[0],
+			 &iov, NULL, 1,
+			 &c_iov, NULL, 1,
+			 &r_iov, (void **)&loc_mr, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_UINT32, FI_CSWAP, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((uint64_t *)target) ==
+			(uint64_t)((SOURCE_DATA & U32_MASK) |
+				   (TARGET_DATA & (U32_MASK << 32)));
+	cr_assert(ret, "Data mismatch");
+	ret = *((uint64_t *)source) ==
+			(uint64_t)((TARGET_DATA & U32_MASK) |
+				   (FETCH_SOURCE_DATA & (U32_MASK << 32)));
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* i64 */
+	*((uint64_t *)source) = FETCH_SOURCE_DATA;
+	*((uint64_t *)target) = TARGET_DATA;
+	iov.addr = &operand;
+	r_iov.addr = source;
+	c_iov.addr = &op2;
+	sz = fi_compare_atomicv(ep[0],
+			 &iov, NULL, 1,
+			 &c_iov, NULL, 1,
+			 &r_iov, (void **)&loc_mr, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_INT64, FI_CSWAP, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((uint64_t *)target) == SOURCE_DATA;
+	cr_assert(ret, "Data mismatch");
+	ret = *((uint64_t *)source) == TARGET_DATA;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* i32 */
+	*((uint64_t *)source) = FETCH_SOURCE_DATA;
+	*((uint64_t *)target) = TARGET_DATA;
+	iov.addr = &operand;
+	r_iov.addr = source;
+	c_iov.addr = &op2;
+	sz = fi_compare_atomicv(ep[0],
+			 &iov, NULL, 1,
+			 &c_iov, NULL, 1,
+			 &r_iov, (void **)&loc_mr, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_INT32, FI_CSWAP, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((uint64_t *)target) ==
+			(uint64_t)((SOURCE_DATA & U32_MASK) |
+				   (TARGET_DATA & (U32_MASK << 32)));
+	cr_assert(ret, "Data mismatch");
+	ret = *((uint64_t *)source) ==
+			(uint64_t)((TARGET_DATA & U32_MASK) |
+				   (FETCH_SOURCE_DATA & (U32_MASK << 32)));
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* float */
+	*((float *)&operand_fp) = SOURCE_DATA_FP;
+	*((float *)&op2_fp) = TARGET_DATA_FP;
+	*((float *)source) = FETCH_SOURCE_DATA;
+	*((float *)target) = TARGET_DATA_FP;
+	iov.addr = &operand_fp;
+	r_iov.addr = source;
+	c_iov.addr = &op2_fp;
+	sz = fi_compare_atomicv(ep[0],
+			 &iov, NULL, 1,
+			 &c_iov, NULL, 1,
+			 &r_iov, (void **)&loc_mr, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_FLOAT, FI_CSWAP, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((float *)target) == (float)SOURCE_DATA_FP;
+	cr_assert(ret, "Data mismatch");
+	ret = *((float *)source) == (float)TARGET_DATA_FP;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* double */
+	*((double *)&operand_dp) = SOURCE_DATA_FP;
+	*((double *)&op2_dp) = TARGET_DATA_FP;
+	*((double *)source) = FETCH_SOURCE_DATA;
+	*((double *)target) = TARGET_DATA_FP;
+	iov.addr = &operand_dp;
+	r_iov.addr = source;
+	c_iov.addr = &op2_dp;
+	sz = fi_compare_atomicv(ep[0],
+			 &iov, NULL, 1,
+			 &c_iov, NULL, 1,
+			 &r_iov, (void **)&loc_mr, 1,
+			 gni_addr[1], (uint64_t)target, mr_key,
+			 FI_DOUBLE, FI_CSWAP, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((double *)target) == (double)SOURCE_DATA_FP;
+	cr_assert(ret, "Data mismatch");
+	ret = *((double *)source) == (double)TARGET_DATA_FP;
+	cr_assert(ret, "Fetch data mismatch");
+}
+
+Test(rdm_atomic, catomicmsg)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand = SOURCE_DATA, op2 = TARGET_DATA;
+	float operand_fp, op2_fp;
+	double operand_dp, op2_dp;
+	struct fi_msg_atomic msg;
+	struct fi_ioc msg_iov, res_iov, cmp_iov;
+	struct fi_rma_ioc rma_iov;
+
+	msg_iov.count = 1;
+	msg.msg_iov = &msg_iov;
+	msg.desc = (void **)&loc_mr;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[1];
+	rma_iov.addr = (uint64_t)target;
+	rma_iov.count = 1;
+	rma_iov.key = mr_key;
+	msg.rma_iov = &rma_iov;
+	msg.context = target;
+	msg.op = FI_CSWAP;
+
+	res_iov.count = 1;
+	cmp_iov.count = 1;
+
+	/* u64 */
+	*((uint64_t *)source) = FETCH_SOURCE_DATA;
+	*((uint64_t *)target) = TARGET_DATA;
+	msg_iov.addr = &operand;
+	msg.datatype = FI_UINT64;
+	res_iov.addr = source;
+	cmp_iov.addr = &op2;
+	sz = fi_compare_atomicmsg(ep[0], &msg, &cmp_iov, NULL, 1,
+				  &res_iov, (void **)&loc_mr, 1, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((uint64_t *)target) == SOURCE_DATA;
+	cr_assert(ret, "Data mismatch");
+	ret = *((uint64_t *)source) == TARGET_DATA;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* U32 */
+	*((uint64_t *)source) = FETCH_SOURCE_DATA;
+	*((uint64_t *)target) = TARGET_DATA;
+	msg_iov.addr = &operand;
+	msg.datatype = FI_UINT32;
+	res_iov.addr = source;
+	cmp_iov.addr = &op2;
+	sz = fi_compare_atomicmsg(ep[0], &msg, &cmp_iov, NULL, 1,
+				  &res_iov, (void **)&loc_mr, 1, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((uint64_t *)target) ==
+			(uint64_t)((SOURCE_DATA & U32_MASK) |
+				   (TARGET_DATA & (U32_MASK << 32)));
+	cr_assert(ret, "Data mismatch");
+	ret = *((uint64_t *)source) ==
+			(uint64_t)((TARGET_DATA & U32_MASK) |
+				   (FETCH_SOURCE_DATA & (U32_MASK << 32)));
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* i64 */
+	*((uint64_t *)source) = FETCH_SOURCE_DATA;
+	*((uint64_t *)target) = TARGET_DATA;
+	msg_iov.addr = &operand;
+	msg.datatype = FI_INT64;
+	res_iov.addr = source;
+	cmp_iov.addr = &op2;
+	sz = fi_compare_atomicmsg(ep[0], &msg, &cmp_iov, NULL, 1,
+				  &res_iov, (void **)&loc_mr, 1, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((uint64_t *)target) == SOURCE_DATA;
+	cr_assert(ret, "Data mismatch");
+	ret = *((uint64_t *)source) == TARGET_DATA;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* i32 */
+	*((uint64_t *)source) = FETCH_SOURCE_DATA;
+	*((uint64_t *)target) = TARGET_DATA;
+	msg_iov.addr = &operand;
+	msg.datatype = FI_INT32;
+	res_iov.addr = source;
+	cmp_iov.addr = &op2;
+	sz = fi_compare_atomicmsg(ep[0], &msg, &cmp_iov, NULL, 1,
+				  &res_iov, (void **)&loc_mr, 1, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((uint64_t *)target) ==
+			(uint64_t)((SOURCE_DATA & U32_MASK) |
+				   (TARGET_DATA & (U32_MASK << 32)));
+	cr_assert(ret, "Data mismatch");
+	ret = *((uint64_t *)source) ==
+			(uint64_t)((TARGET_DATA & U32_MASK) |
+				   (FETCH_SOURCE_DATA & (U32_MASK << 32)));
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* float */
+	*((float *)&operand_fp) = SOURCE_DATA_FP;
+	*((float *)&op2_fp) = TARGET_DATA_FP;
+	*((float *)source) = FETCH_SOURCE_DATA;
+	*((float *)target) = TARGET_DATA_FP;
+	msg_iov.addr = &operand_fp;
+	msg.datatype = FI_FLOAT;
+	res_iov.addr = source;
+	cmp_iov.addr = &op2_fp;
+	sz = fi_compare_atomicmsg(ep[0], &msg, &cmp_iov, NULL, 1,
+				  &res_iov, (void **)&loc_mr, 1, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((float *)target) == (float)SOURCE_DATA_FP;
+	cr_assert(ret, "Data mismatch");
+	ret = *((float *)source) == (float)TARGET_DATA_FP;
+	cr_assert(ret, "Fetch data mismatch");
+
+	/* double */
+	*((double *)&operand_dp) = SOURCE_DATA_FP;
+	*((double *)&op2_dp) = TARGET_DATA_FP;
+	*((double *)source) = FETCH_SOURCE_DATA;
+	*((double *)target) = TARGET_DATA_FP;
+	msg_iov.addr = &operand_dp;
+	msg.datatype = FI_DOUBLE;
+	res_iov.addr = source;
+	cmp_iov.addr = &op2_dp;
+	sz = fi_compare_atomicmsg(ep[0], &msg, &cmp_iov, NULL, 1,
+				  &res_iov, (void **)&loc_mr, 1, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
+	rdm_atomic_check_cntrs(0, 1, 0, 0);
+
+	dbg_printf("got write context event!\n");
+
+	ret = *((double *)target) == (double)SOURCE_DATA_FP;
+	cr_assert(ret, "Data mismatch");
+	ret = *((double *)source) == (double)TARGET_DATA_FP;
+	cr_assert(ret, "Fetch data mismatch");
 }
 

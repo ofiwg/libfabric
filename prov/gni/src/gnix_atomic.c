@@ -451,7 +451,7 @@ int _gnix_amo_post_req(void *data)
 
 ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		     enum gnix_fab_req_type fr_type,
-		     struct fi_msg_atomic *msg,
+		     const struct fi_msg_atomic *msg,
 		     const struct fi_ioc *comparev,
 		     void **compare_desc,
 		     size_t compare_count,
@@ -471,7 +471,9 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	int dt_len, dt_align;
 
 	if (!ep || !msg || !msg->msg_iov ||
-	    !msg->msg_iov[0].addr || msg->iov_count != 1 ||
+	    !msg->msg_iov[0].addr ||
+	    msg->msg_iov[0].count != 1 ||
+	    msg->iov_count != 1 ||
 	    !msg->rma_iov || !msg->rma_iov[0].addr)
 		return -FI_EINVAL;
 
@@ -507,7 +509,7 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 			return -FI_EINVAL;
 		}
 
-		if (!result_desc || !result_desc[0] || result_count != 1) {
+		if (!result_desc || !result_desc[0]) {
 			rc = gnix_mr_reg(&ep->domain->domain_fid.fid,
 					 loc_addr, len, FI_READ | FI_WRITE,
 					 0, 0, 0, &auto_mr, NULL);

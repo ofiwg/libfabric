@@ -38,7 +38,7 @@ int _gnix_atomic_cmd(enum fi_datatype dt, enum fi_op op,
 		     enum gnix_fab_req_type fr_type);
 ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		     enum gnix_fab_req_type fr_type,
-		     struct fi_msg_atomic *msg,
+		     const struct fi_msg_atomic *msg,
 		     const struct fi_ioc *comparev,
 		     void **compare_desc,
 		     size_t compare_count,
