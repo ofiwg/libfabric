@@ -4163,3 +4163,134 @@ Test(rdm_atomic, catomicmsg)
 	cr_assert(ret, "Fetch data mismatch");
 }
 
+/******************************************************************************
+ *
+ * Other
+ *
+ *****************************************************************************/
+
+Test(rdm_atomic, atomic_err)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry err_cqe;
+
+	rdm_atomic_err_inject_enable();
+
+	/* i64 */
+	*((int64_t *)source) = SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	sz = fi_atomic(ep[0], source, 1,
+			 loc_mr, gni_addr[1], (uint64_t)target, mr_key,
+			 FI_INT64, FI_MIN, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+	cr_assert_eq(ret, -FI_EAVAIL);
+
+	ret = fi_cq_readerr(send_cq, &err_cqe, 0);
+	cr_assert_eq(ret, 1);
+
+	cr_assert((uint64_t)err_cqe.op_context == (uint64_t)target,
+		  "Bad error context");
+	cr_assert(err_cqe.flags == (FI_ATOMIC | FI_WRITE));
+	cr_assert(err_cqe.len == 0, "Bad error len");
+	cr_assert(err_cqe.buf == 0, "Bad error buf");
+	cr_assert(err_cqe.data == 0, "Bad error data");
+	cr_assert(err_cqe.tag == 0, "Bad error tag");
+	cr_assert(err_cqe.olen == 0, "Bad error olen");
+	cr_assert(err_cqe.err == FI_ECANCELED, "Bad error errno");
+	cr_assert(err_cqe.prov_errno == GNI_RC_TRANSACTION_ERROR,
+		  "Bad prov errno");
+	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
+
+	rdm_atomic_check_cntrs(0, 0, 1, 0);
+}
+
+Test(rdm_atomic, fetch_atomic_err)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand = SOURCE_DATA;
+	struct fi_cq_err_entry err_cqe;
+
+	rdm_atomic_err_inject_enable();
+
+	/* i64 */
+	*((int64_t *)source) = FETCH_SOURCE_DATA;
+	*((int64_t *)target) = TARGET_DATA;
+	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
+			 source, loc_mr, gni_addr[1], (uint64_t)target, mr_key,
+			 FI_INT64, FI_MIN, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+	cr_assert_eq(ret, -FI_EAVAIL);
+
+	ret = fi_cq_readerr(send_cq, &err_cqe, 0);
+	cr_assert_eq(ret, 1);
+
+	cr_assert((uint64_t)err_cqe.op_context == (uint64_t)target,
+		  "Bad error context");
+	cr_assert(err_cqe.flags == (FI_ATOMIC | FI_READ));
+	cr_assert(err_cqe.len == 0, "Bad error len");
+	cr_assert(err_cqe.buf == 0, "Bad error buf");
+	cr_assert(err_cqe.data == 0, "Bad error data");
+	cr_assert(err_cqe.tag == 0, "Bad error tag");
+	cr_assert(err_cqe.olen == 0, "Bad error olen");
+	cr_assert(err_cqe.err == FI_ECANCELED, "Bad error errno");
+	cr_assert(err_cqe.prov_errno == GNI_RC_TRANSACTION_ERROR,
+		  "Bad prov errno");
+	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
+
+	rdm_atomic_check_cntrs(0, 0, 0, 1);
+}
+
+Test(rdm_atomic, compare_atomic_err)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand = SOURCE_DATA, op2 = TARGET_DATA;
+	struct fi_cq_err_entry err_cqe;
+
+	rdm_atomic_err_inject_enable();
+
+	/* u64 */
+	*((uint64_t *)source) = FETCH_SOURCE_DATA;
+	*((uint64_t *)target) = TARGET_DATA;
+	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
+			 source, loc_mr, gni_addr[1], (uint64_t)target, mr_key,
+			 FI_UINT64, FI_CSWAP, target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+	cr_assert_eq(ret, -FI_EAVAIL);
+
+	ret = fi_cq_readerr(send_cq, &err_cqe, 0);
+	cr_assert_eq(ret, 1);
+
+	cr_assert((uint64_t)err_cqe.op_context == (uint64_t)target,
+		  "Bad error context");
+	cr_assert(err_cqe.flags == (FI_ATOMIC | FI_READ));
+	cr_assert(err_cqe.len == 0, "Bad error len");
+	cr_assert(err_cqe.buf == 0, "Bad error buf");
+	cr_assert(err_cqe.data == 0, "Bad error data");
+	cr_assert(err_cqe.tag == 0, "Bad error tag");
+	cr_assert(err_cqe.olen == 0, "Bad error olen");
+	cr_assert(err_cqe.err == FI_ECANCELED, "Bad error errno");
+	cr_assert(err_cqe.prov_errno == GNI_RC_TRANSACTION_ERROR,
+		  "Bad prov errno");
+	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
+
+	rdm_atomic_check_cntrs(0, 0, 0, 1);
+}
+

@@ -59,13 +59,14 @@ static int __gnix_amo_send_err(struct gnix_fid_ep *ep,
 		}
 	}
 
-	if ((req->type == GNIX_FAB_RQ_RDMA_WRITE) &&
-	    ep->write_cntr)
+	if ((req->type == GNIX_FAB_RQ_AMO) &&
+	    ep->write_cntr) {
 		cntr = ep->write_cntr;
-
-	if ((req->type == GNIX_FAB_RQ_RDMA_READ) &&
-	    ep->read_cntr)
+	} else if ((req->type == GNIX_FAB_RQ_FAMO ||
+		    req->type == GNIX_FAB_RQ_CAMO) &&
+		   ep->read_cntr) {
 		cntr = ep->read_cntr;
+	}
 
 	if (cntr) {
 		rc = _gnix_cntr_inc_err(cntr);
@@ -98,8 +99,9 @@ static int __gnix_amo_send_completion(struct gnix_fid_ep *ep,
 		cntr = ep->write_cntr;
 	} else if ((req->type == GNIX_FAB_RQ_FAMO ||
 		    req->type == GNIX_FAB_RQ_CAMO) &&
-		   ep->read_cntr)
+		   ep->read_cntr) {
 		cntr = ep->read_cntr;
+	}
 
 	if (cntr) {
 		rc = _gnix_cntr_inc(cntr);
