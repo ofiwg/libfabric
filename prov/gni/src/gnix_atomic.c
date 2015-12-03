@@ -134,15 +134,6 @@ static int __gnix_amo_post_err(struct gnix_tx_descriptor *txd)
 	struct gnix_fab_req *req = txd->req;
 	int rc;
 
-	req->tx_failures++;
-	if (req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
-		GNIX_INFO(FI_LOG_EP_DATA,
-			  "Requeueing failed request: %p\n", req);
-		return _gnix_vc_queue_work_req(req);
-	}
-
-	GNIX_INFO(FI_LOG_EP_DATA, "Failed %d transmits: %p\n",
-			req->tx_failures, req);
 	rc = __gnix_amo_send_err(req->vc->ep, req);
 	if (rc != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_DATA,
@@ -151,95 +142,6 @@ static int __gnix_amo_post_err(struct gnix_tx_descriptor *txd)
 
 	__gnix_amo_fr_complete(req, txd);
 	return FI_SUCCESS;
-}
-
-/* __gnix_amo_txd_data_complete() should match __gnix_amo_txd_complete() except
- * for checking whether to send immediate data. */
-static int __gnix_amo_txd_data_complete(void *arg, gni_return_t tx_status)
-{
-	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
-	struct gnix_fab_req *req = txd->req;
-	int rc;
-
-	if (tx_status != GNI_RC_SUCCESS) {
-		return __gnix_amo_post_err(txd);
-	}
-
-	/* Successful data delivery.  Generate local completion. */
-	rc = __gnix_amo_send_completion(req->gnix_ep, req);
-	if (rc != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "__gnix_amo_send_completion() failed: %d\n",
-			  rc);
-
-	__gnix_amo_fr_complete(req, txd);
-
-	return FI_SUCCESS;
-}
-
-static int __gnix_amo_send_data_req(void *arg)
-{
-	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
-	struct gnix_fid_ep *ep = req->gnix_ep;
-	struct gnix_nic *nic = ep->nic;
-	struct gnix_tx_descriptor *txd;
-	gni_return_t status;
-	int rc;
-	int inject_err = _gnix_req_inject_err(req);
-
-	txd = (struct gnix_tx_descriptor *)req->txd;
-	if (!txd) {
-		rc = _gnix_nic_tx_alloc(nic, &txd);
-		if (rc) {
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "_gnix_nic_tx_alloc() failed: %d\n",
-				  rc);
-			return -FI_ENOSPC;
-		}
-		req->txd = txd;
-	}
-
-	txd->req = req;
-	txd->completer_fn = __gnix_amo_txd_data_complete;
-
-	txd->rma_data_hdr.flags = FI_ATOMIC | FI_REMOTE_CQ_DATA;
-	if (req->type == GNIX_FAB_RQ_AMO) {
-		txd->rma_data_hdr.flags |= FI_REMOTE_WRITE;
-	} else {
-		txd->rma_data_hdr.flags |= FI_REMOTE_READ;
-	}
-	txd->rma_data_hdr.data = req->rma.imm;
-
-	fastlock_acquire(&nic->lock);
-	if (inject_err) {
-		_gnix_nic_txd_err_inject(nic, txd);
-		status = GNI_RC_SUCCESS;
-	} else {
-		status = GNI_SmsgSendWTag(req->vc->gni_ep,
-					  &txd->rma_data_hdr,
-					  sizeof(txd->rma_data_hdr),
-					  NULL, 0, txd->id,
-					  GNIX_SMSG_T_RMA_DATA);
-	}
-	fastlock_release(&nic->lock);
-
-	if (status == GNI_RC_NOT_DONE) {
-		_gnix_nic_tx_free(nic, txd);
-		req->txd = NULL;
-		GNIX_INFO(FI_LOG_EP_DATA,
-			  "GNI_SmsgSendWTag returned %s\n",
-			  gni_err_str[status]);
-	} else if (status != GNI_RC_SUCCESS) {
-		_gnix_nic_tx_free(nic, txd);
-		req->txd = NULL;
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "GNI_SmsgSendWTag returned %s\n",
-			  gni_err_str[status]);
-	} else {
-		GNIX_INFO(FI_LOG_EP_DATA, "Sent AMO CQ data, req: %p\n", req);
-	}
-
-	return gnixu_to_fi_errno(status);
 }
 
 static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
@@ -274,23 +176,14 @@ static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
 		}
 	}
 
-	/* Successful delivery.  Progress request. */
-	if (req->flags & FI_REMOTE_CQ_DATA) {
-		/* initiate immediate data transfer */
-		req->tx_failures = 0;
-		req->txd = (void *)txd;
-		req->work_fn = __gnix_amo_send_data_req;
-		_gnix_vc_queue_work_req(req);
-	} else {
-		/* complete request */
-		rc = __gnix_amo_send_completion(req->vc->ep, req);
-		if (rc != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "__gnix_amo_send_completion() failed: %d\n",
-				  rc);
+	/* complete request */
+	rc = __gnix_amo_send_completion(req->vc->ep, req);
+	if (rc != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "__gnix_amo_send_completion() failed: %d\n",
+			  rc);
 
-		__gnix_amo_fr_complete(req, txd);
-	}
+	__gnix_amo_fr_complete(req, txd);
 
 	return FI_SUCCESS;
 }
