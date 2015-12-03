@@ -366,7 +366,113 @@ int fi_ibv_rdm_tagged_repost_receives(struct fi_ibv_rdm_tagged_conn *conn,
                                       int num_to_post);
 int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
                               struct fid_ep **ep, void *context);
-int fi_ibv_rdm_tagged_prepare_send_resources(
+int fi_ibv_rdm_tagged_prepare_send_request(
 	struct fi_ibv_rdm_tagged_request *request, struct fi_ibv_rdm_ep *ep);
+
+static inline void *fi_ibv_rdm_tagged_get_sbuf(struct fi_ibv_rdm_tagged_conn
+					       *conn, struct fi_ibv_rdm_ep *ep)
+{
+	assert(conn);
+
+#if ENABLE_DEBUG
+	{
+		int i;
+		char s[1024];
+		char *p = s;
+		sprintf(p, "N:%1d ", ep->n_buffs);
+		p += 4;
+		for (i = 0; i < ep->n_buffs; ++i, p += 4) {
+			sprintf(p, "%1d:%1d ",
+				fi_ibv_rdm_tagged_get_buff_service_data(
+					conn->sbuf_mem_reg +
+					FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+					i * ep->buff_len)->seq_number,
+				fi_ibv_rdm_tagged_get_buffer_status(
+					conn->sbuf_mem_reg +
+					FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+					i * ep->buff_len));
+		}
+		VERBS_DBG(FI_LOG_EP_DATA,
+			"conn %p sbufs status before: %s\n", conn, s);
+	}
+#endif // ENABLE_DEBUG
+	int i = 0;
+	void *sbuf = NULL;
+
+	if (fi_ibv_rdm_tagged_get_buffer_status(conn->sbuf_head) ==
+	    BUF_STATUS_FREE) {
+
+	/* We have made whole circle. Reset buffer states */
+	if (conn->sbuf_head ==
+	    (conn->sbuf_mem_reg + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE))
+		{
+			for (i = 1; i < ep->n_buffs; ++i) {
+				fi_ibv_rdm_tagged_set_buffer_status(
+				    conn->sbuf_mem_reg +
+				    FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+				    i * ep->buff_len, BUF_STATUS_FREE);
+			}
+		}
+
+		fi_ibv_rdm_tagged_set_buffer_status(conn->sbuf_head,
+						    BUF_STATUS_BUSY);
+
+		sbuf = conn->sbuf_head;
+		fi_ibv_rdm_tagged_push_sbuff_head(conn, ep);
+	}
+#if ENABLE_DEBUG
+	assert(sbuf
+	       ? (fi_ibv_rdm_tagged_get_buffer_status(sbuf) == BUF_STATUS_BUSY)
+	       : 1);
+	{
+		int i;
+		char s[1024];
+		char *p = s;
+		sprintf(p, "N:%1d ", ep->n_buffs);
+		p += 4;
+		for (i = 0; i < ep->n_buffs; ++i, p += 4) {
+			sprintf(p, "%1d:%1d ",
+				fi_ibv_rdm_tagged_get_buff_service_data(
+					conn->sbuf_mem_reg +
+					FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+					i * ep->buff_len)->seq_number,
+				fi_ibv_rdm_tagged_get_buffer_status(
+					conn->sbuf_mem_reg +
+					FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+					i * ep->buff_len));
+		}
+		VERBS_DBG(FI_LOG_EP_DATA,
+			"conn %p sbufs status after:  %s\n", conn, s);
+	}
+#endif // ENABLE_DEBUG
+
+	VERBS_DBG(FI_LOG_EP_DATA,
+		     "conn %p sbuf allocated: %d:%p, head: %p, begin: %p\n",
+		     conn,
+		     (sbuf) ?
+		     fi_ibv_rdm_tagged_get_buff_service_data(sbuf)->
+		     seq_number : -1, sbuf, conn->sbuf_head,
+		     conn->sbuf_mem_reg);
+
+	return sbuf;
+}
+
+static inline void *
+fi_ibv_rdm_tagged_prepare_send_resources(struct fi_ibv_rdm_tagged_conn *conn,
+					 struct fi_ibv_rdm_ep *ep)
+{
+	if (conn->state != FI_VERBS_CONN_ESTABLISHED) {
+		pthread_mutex_lock(&ep->cm_lock);
+		if (conn->state == FI_VERBS_CONN_ALLOCATED) {
+			fi_ibv_rdm_start_connection(ep, conn);
+		}
+		pthread_mutex_unlock(&ep->cm_lock);
+		usleep(1000);
+		return NULL;
+	}
+
+	return (!SEND_RESOURCES_IS_BUSY(conn, ep)) ?
+		fi_ibv_rdm_tagged_get_sbuf(conn, ep) : 0;
+}
 
 #endif /* _VERBS_RDM_H */
