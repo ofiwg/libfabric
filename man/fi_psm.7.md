@@ -24,7 +24,7 @@ message queue, message queue, RMA, and atomic operations.
 The *psm2* provider runs over the PSM 2.x interface that is supported
 by the Intel Omni-Path Fabric. PSM 2.x has all the PSM 1.x features
 plus a set of new functions with enhanced capability. Since PSM 1.x
-and PSM 2.x is not ABI compatible the *psm2* provider only works with
+and PSM 2.x are not ABI compatible the *psm2* provider only works with
 PSM 2.x and doesn't support Intel TrueScale Fabric. On the other hand,
 the *psm* provider can work with the psm2-compat library, which exposes
 a PSM 1.x interface over the Intel Omni-Path Fabric. 
@@ -43,15 +43,16 @@ Endpoint types
 
 Endpoint capabilities
 : Endpoints can support any combination of data transfer capabilities
-  *FI_TAGGED*, *FI_MSG*, *FI_ATOMICS*, and *FI_RMA*s, further
-  refined by *FI_SEND*, *FI_RECV*, *FI_READ*, *FI_WRITE*,
-  *FI_REMOTE_READ*, and *FI_REMOTE_WRITE* if only one direction is
-  needed. However, no two endpoints can have overlapping receive
-  or RMA target capabilities in any of the above categories. For
+  *FI_TAGGED*, *FI_MSG*, *FI_ATOMICS*, and *FI_RMA*. These capabilities
+  can be further refined by *FI_SEND*, *FI_RECV*, *FI_READ*, *FI_WRITE*,
+  *FI_REMOTE_READ*, and *FI_REMOTE_WRITE* to limit the direction of
+  operations. For the *psm* provider, no two endpoints can have overlapping
+  receive or RMA target capabilities in any of the above categories. For
   example it is fine to have two endpoints with *FI_TAGGED* | *FI_SEND*,
   one endpoint with *FI_TAGGED* | *FI_RECV*, one endpoint with *FI_MSG*,
   one endpoint with *FI_RMA* | *FI_ATOMICS*. But it is not allowed to
   have two endpoints with *FI_TAGGED*, or two endpoints with *FI_RMA*.
+  The *psm2* provider doesn't have such limitation.
 
   *FI_MULTI_RECV* is supported for non-tagged message queue only.
 
@@ -79,7 +80,9 @@ Progress
 Unsupported features
 : These features are unsupported: connection management, 
   scalable endpoint, passive endpoint, shared receive context,
-  send/inject with immediate data (supported by *psm2* provider).
+  send/inject with immediate data. The *psm2* provider supports
+  send/inject with immediate data over non-tagged message queue
+  only.
 
 # RUNTIME PARAMETERS
 
