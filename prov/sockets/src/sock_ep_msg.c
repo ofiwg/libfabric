@@ -554,7 +554,6 @@ static void sock_ep_cm_handle_ack(struct sock_cm_entry *cm,
 				SOCK_LOG_DBG("Got ack for SOCK_CONN_ACCEPT\n");
 				memset(&cm_entry, 0, sizeof(cm_entry));
 				cm_entry.fid = &sock_ep->ep.fid;
-				sock_ep->connected = 1;
 				sock_ep_enable(&sock_ep->ep);
 
 				if (sock_eq_report_event(sock_ep->eq,
@@ -673,7 +672,6 @@ static void *sock_msg_ep_listener_thread(void *data)
 			if (ep->is_disabled || ep->cm.shutdown_received)
 				break;
 
-			ep->connected = 1;
 			((struct sockaddr_in *) ep->dest_addr)->sin_port =
 				conn_response->hdr.s_port;
 

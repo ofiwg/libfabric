@@ -495,7 +495,6 @@ struct sock_ep {
 	size_t fclass;
 	uint64_t op_flags;
 
-	int connected;
 	int tx_shared;
 	int rx_shared;
 	size_t buffered_len;

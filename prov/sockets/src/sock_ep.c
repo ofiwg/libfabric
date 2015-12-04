@@ -1572,7 +1572,7 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep, fi_addr_t index,
 	uint16_t idx;
 	struct sock_conn *conn;
 
-	idx = (ep->connected) ? index : index & ep->av->mask;
+	idx = (ep->ep_type == FI_EP_MSG) ? index : index & ep->av->mask;
 	conn = idm_lookup(&ep->av_idm, idx);
 	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS &&
 		sock_compare_addr(&conn->addr, addr))
@@ -1589,10 +1589,10 @@ int sock_ep_get_conn(struct sock_ep *ep, fi_addr_t index,
 			struct sock_conn **pconn)
 {
 	struct sock_conn *conn;
-	uint64_t av_index = ep->connected ? 0 : index;
+	uint64_t av_index = (ep->ep_type == FI_EP_MSG) ? 0 : index;
 	struct sockaddr_in *addr;
 
-	if (ep->connected)
+	if (ep->ep_type == FI_EP_MSG)
 		addr = ep->dest_addr;
 	else
 		addr = (struct sockaddr_in *)&ep->av->table[av_index].addr;

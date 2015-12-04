@@ -385,7 +385,7 @@ struct sock_conn *sock_ep_connect(struct sock_ep *ep, fi_addr_t index)
 	int valopt = 0;
 	struct pollfd poll_fd;
 
-	if (ep->connected) {
+	if (ep->ep_type == FI_EP_MSG) {
 		idx = 0;
 		addr = ep->dest_addr;
 	} else {
@@ -478,7 +478,7 @@ retry:
 out:
 	fastlock_acquire(&ep->cmap.lock);
 	new_conn = sock_conn_map_insert(ep, addr, conn_fd, 0);
-	new_conn->av_index = ep->connected ? FI_ADDR_NOTAVAIL : (fi_addr_t) idx;
+	new_conn->av_index = (ep->ep_type == FI_EP_MSG) ? FI_ADDR_NOTAVAIL : (fi_addr_t) idx;
 	conn = idm_lookup(&ep->av_idm, index);
 	if (conn == SOCK_CM_CONN_IN_PROGRESS) {
 		idm_set(&ep->av_idm, index, new_conn);

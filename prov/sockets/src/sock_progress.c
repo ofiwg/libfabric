@@ -1614,7 +1614,7 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 	addr = (struct sockaddr_in *) pe_entry->buf;
 	pe_entry->conn->addr = *addr;
 
-	index = ep->connected ? 0 : sock_av_get_addr_index(ep->av, addr);
+	index = (ep->ep_type == FI_EP_MSG) ? 0 : sock_av_get_addr_index(ep->av, addr);
 	if (index != -1) {
 		fastlock_acquire(&map->lock);
 		conn = sock_ep_lookup_conn(ep, index, addr);
@@ -1622,7 +1622,7 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 			idm_set(&ep->av_idm, index, pe_entry->conn);
 		fastlock_release(&map->lock);
 	}
-	pe_entry->conn->av_index = (ep->connected || index == -1) ?
+	pe_entry->conn->av_index = (ep->ep_type == FI_EP_MSG || index == -1) ?
 		FI_ADDR_NOTAVAIL : index;
 
 	pe_entry->is_complete = 1;
