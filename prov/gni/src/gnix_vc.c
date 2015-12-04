@@ -1199,6 +1199,45 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 	}
 
 	/*
+	 * move vc state to terminating
+	 */
+
+	vc->conn_state = GNIX_VC_CONN_TERMINATING;
+
+	/*
+	 * try to unbind the gni_ep if non-NULL.
+	 * If there are SMSG or PostFMA/RDMA outstanding
+	 * wait here for them to complete
+	 */
+
+	if (vc->gni_ep != NULL) {
+		while (status == GNI_RC_NOT_DONE) {
+
+			fastlock_acquire(&nic->lock);
+			status = GNI_EpUnbind(vc->gni_ep);
+			fastlock_release(&nic->lock);
+
+			if ((status != GNI_RC_NOT_DONE) &&
+				(status != GNI_RC_SUCCESS)) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					"GNI_EpUnBind returned %s\n",
+					  gni_err_str[status]);
+				break;
+			}
+
+			if (status == GNI_RC_NOT_DONE)
+				_gnix_nic_progress(nic);
+		}
+		fastlock_acquire(&nic->lock);
+		status = GNI_EpDestroy(vc->gni_ep);
+		fastlock_release(&nic->lock);
+		if (status != GNI_RC_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				"GNI_EpDestroy returned %s\n",
+				  gni_err_str[status]);
+	}
+
+	/*
 	 * if the vc is in a nic's work queue, remove it
 	 */
 	__gnix_vc_cancel(vc);
@@ -1229,19 +1268,6 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 	}
 
 	fastlock_destroy(&vc->tx_queue_lock);
-
-	if (vc->gni_ep != NULL) {
-		fastlock_acquire(&nic->lock);
-		status = GNI_EpDestroy(vc->gni_ep);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL, "GNI_EpDestroy returned %s\n",
-				  gni_err_str[status]);
-			ret = gnixu_to_fi_errno(status);
-			fastlock_release(&nic->lock);
-			return ret;
-		}
-		fastlock_release(&nic->lock);
-	}
 
 	if (vc->smsg_mbox != NULL) {
 		ret = _gnix_mbox_free(vc->smsg_mbox);

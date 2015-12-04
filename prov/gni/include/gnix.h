@@ -369,8 +369,6 @@ struct gnix_fid_ep {
 	int enabled;
 	int send_selective_completion;
 	int recv_selective_completion;
-	/* num. active read and write fab_reqs associated with this ep */
-	atomic_t active_fab_reqs;
 	/* note this free list will be initialized for thread safe */
 	struct gnix_s_freelist fr_freelist;
 	struct gnix_reference ref_cnt;

@@ -1054,6 +1054,32 @@ static void __ep_destruct(void *obj)
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
+	/*
+	 * clean up any vc hash table or vector,
+	 * remove entry from addr_to_ep ht.
+	 * any outstanding GNI internal requests on
+	 * the VC's will be completed prior to
+	 * destroying the VC entries in the ht.
+	 */
+
+	if (ep->type == FI_EP_RDM) {
+
+		key_ptr = (gnix_ht_key_t *)&ep->my_name.gnix_addr;
+		ret =  _gnix_ht_remove(ep->cm_nic->addr_to_ep_ht,
+				       *key_ptr);
+		if (ep->vc_ht != NULL) {
+			ret = _gnix_ht_destroy(ep->vc_ht);
+			if (ret == FI_SUCCESS) {
+				free(ep->vc_ht);
+				ep->vc_ht = NULL;
+			} else {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					"_gnix_ht_destroy returned %s\n",
+					  fi_strerror(-ret));
+			}
+		}
+	}
+
 	if (ep->send_cq) {
 		_gnix_cq_poll_nic_rem(ep->send_cq, ep->nic);
 		_gnix_ref_put(ep->send_cq);
@@ -1098,29 +1124,6 @@ static void __ep_destruct(void *obj)
 	if (av != NULL)
 		_gnix_ref_put(av);
 
-	/*
-	 * clean up any vc hash table or vector,
-	 * remove entry from addr_to_ep ht.
-	 */
-
-	if (ep->type == FI_EP_RDM) {
-
-		key_ptr = (gnix_ht_key_t *)&ep->my_name.gnix_addr;
-		ret =  _gnix_ht_remove(ep->cm_nic->addr_to_ep_ht,
-				       *key_ptr);
-		if (ep->vc_ht != NULL) {
-			ret = _gnix_ht_destroy(ep->vc_ht);
-			if (ret == FI_SUCCESS) {
-				free(ep->vc_ht);
-				ep->vc_ht = NULL;
-			} else {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					"_gnix_ht_destroy returned %s\n",
-					  fi_strerror(-ret));
-			}
-		}
-	}
-
 	/* There is no other choice here, we need to assert if we can't free */
 	ret = _gnix_nic_free(nic);
 	assert(ret == FI_SUCCESS);
@@ -1134,11 +1137,7 @@ static void __ep_destruct(void *obj)
 	/*
 	 * Free fab_reqs
 	 */
-	if (atomic_get(&ep->active_fab_reqs) != 0) {
-		/* Should we just assert here? */
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Active requests while closing an endpoint.");
-	}
+
 	__fr_freelist_destroy(ep);
 
 	free(ep);
@@ -1385,7 +1384,6 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->domain = domain_priv;
 	ep_priv->type = info->ep_attr->type;
 
-	atomic_initialize(&ep_priv->active_fab_reqs, 0);
 	_gnix_ref_init(&ep_priv->ref_cnt, 1, __ep_destruct);
 
 	fastlock_init(&ep_priv->recv_comp_lock);

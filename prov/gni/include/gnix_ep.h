@@ -156,6 +156,7 @@ _gnix_fr_alloc(struct gnix_fid_ep *ep)
 	/* reset common fields */
 	fr->modes = 0;
 	fr->tx_failures = 0;
+	_gnix_ref_get(ep);
 
 	return fr;
 }
@@ -165,6 +166,7 @@ _gnix_fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
 {
 	assert(fr->gnix_ep == ep);
 	_gnix_sfe_free(&fr->slist, &ep->fr_freelist);
+	_gnix_ref_put(ep);
 }
 
 static inline int

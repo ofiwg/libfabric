@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -106,8 +107,6 @@ Test(endpoint, open_close)
 
 		/* Check fields (fill in as implemented) */
 		cr_assert(ep->nic, "NIC not allocated");
-		cr_assert_eq(atomic_get(&ep->active_fab_reqs), 0,
-			     "active_fab_reqs not initialized");
 		cr_assert(!_gnix_sfl_empty(&ep->fr_freelist),
 			  "gnix_fab_req freelist empty");
 	}
