@@ -59,13 +59,14 @@ static int __gnix_amo_send_err(struct gnix_fid_ep *ep,
 		}
 	}
 
-	if ((req->type == GNIX_FAB_RQ_RDMA_WRITE) &&
-	    ep->write_cntr)
+	if ((req->type == GNIX_FAB_RQ_AMO) &&
+	    ep->write_cntr) {
 		cntr = ep->write_cntr;
-
-	if ((req->type == GNIX_FAB_RQ_RDMA_READ) &&
-	    ep->read_cntr)
+	} else if ((req->type == GNIX_FAB_RQ_FAMO ||
+		    req->type == GNIX_FAB_RQ_CAMO) &&
+		   ep->read_cntr) {
 		cntr = ep->read_cntr;
+	}
 
 	if (cntr) {
 		rc = _gnix_cntr_inc_err(cntr);
@@ -98,8 +99,9 @@ static int __gnix_amo_send_completion(struct gnix_fid_ep *ep,
 		cntr = ep->write_cntr;
 	} else if ((req->type == GNIX_FAB_RQ_FAMO ||
 		    req->type == GNIX_FAB_RQ_CAMO) &&
-		   ep->read_cntr)
+		   ep->read_cntr) {
 		cntr = ep->read_cntr;
+	}
 
 	if (cntr) {
 		rc = _gnix_cntr_inc(cntr);
@@ -134,15 +136,6 @@ static int __gnix_amo_post_err(struct gnix_tx_descriptor *txd)
 	struct gnix_fab_req *req = txd->req;
 	int rc;
 
-	req->tx_failures++;
-	if (req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
-		GNIX_INFO(FI_LOG_EP_DATA,
-			  "Requeueing failed request: %p\n", req);
-		return _gnix_vc_queue_work_req(req);
-	}
-
-	GNIX_INFO(FI_LOG_EP_DATA, "Failed %d transmits: %p\n",
-			req->tx_failures, req);
 	rc = __gnix_amo_send_err(req->vc->ep, req);
 	if (rc != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_DATA,
@@ -151,95 +144,6 @@ static int __gnix_amo_post_err(struct gnix_tx_descriptor *txd)
 
 	__gnix_amo_fr_complete(req, txd);
 	return FI_SUCCESS;
-}
-
-/* __gnix_amo_txd_data_complete() should match __gnix_amo_txd_complete() except
- * for checking whether to send immediate data. */
-static int __gnix_amo_txd_data_complete(void *arg, gni_return_t tx_status)
-{
-	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
-	struct gnix_fab_req *req = txd->req;
-	int rc;
-
-	if (tx_status != GNI_RC_SUCCESS) {
-		return __gnix_amo_post_err(txd);
-	}
-
-	/* Successful data delivery.  Generate local completion. */
-	rc = __gnix_amo_send_completion(req->gnix_ep, req);
-	if (rc != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "__gnix_amo_send_completion() failed: %d\n",
-			  rc);
-
-	__gnix_amo_fr_complete(req, txd);
-
-	return FI_SUCCESS;
-}
-
-static int __gnix_amo_send_data_req(void *arg)
-{
-	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
-	struct gnix_fid_ep *ep = req->gnix_ep;
-	struct gnix_nic *nic = ep->nic;
-	struct gnix_tx_descriptor *txd;
-	gni_return_t status;
-	int rc;
-	int inject_err = _gnix_req_inject_err(req);
-
-	txd = (struct gnix_tx_descriptor *)req->txd;
-	if (!txd) {
-		rc = _gnix_nic_tx_alloc(nic, &txd);
-		if (rc) {
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "_gnix_nic_tx_alloc() failed: %d\n",
-				  rc);
-			return -FI_ENOSPC;
-		}
-		req->txd = txd;
-	}
-
-	txd->req = req;
-	txd->completer_fn = __gnix_amo_txd_data_complete;
-
-	txd->rma_data_hdr.flags = FI_ATOMIC | FI_REMOTE_CQ_DATA;
-	if (req->type == GNIX_FAB_RQ_AMO) {
-		txd->rma_data_hdr.flags |= FI_REMOTE_WRITE;
-	} else {
-		txd->rma_data_hdr.flags |= FI_REMOTE_READ;
-	}
-	txd->rma_data_hdr.data = req->rma.imm;
-
-	fastlock_acquire(&nic->lock);
-	if (inject_err) {
-		_gnix_nic_txd_err_inject(nic, txd);
-		status = GNI_RC_SUCCESS;
-	} else {
-		status = GNI_SmsgSendWTag(req->vc->gni_ep,
-					  &txd->rma_data_hdr,
-					  sizeof(txd->rma_data_hdr),
-					  NULL, 0, txd->id,
-					  GNIX_SMSG_T_RMA_DATA);
-	}
-	fastlock_release(&nic->lock);
-
-	if (status == GNI_RC_NOT_DONE) {
-		_gnix_nic_tx_free(nic, txd);
-		req->txd = NULL;
-		GNIX_INFO(FI_LOG_EP_DATA,
-			  "GNI_SmsgSendWTag returned %s\n",
-			  gni_err_str[status]);
-	} else if (status != GNI_RC_SUCCESS) {
-		_gnix_nic_tx_free(nic, txd);
-		req->txd = NULL;
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "GNI_SmsgSendWTag returned %s\n",
-			  gni_err_str[status]);
-	} else {
-		GNIX_INFO(FI_LOG_EP_DATA, "Sent AMO CQ data, req: %p\n", req);
-	}
-
-	return gnixu_to_fi_errno(status);
 }
 
 static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
@@ -274,23 +178,14 @@ static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
 		}
 	}
 
-	/* Successful delivery.  Progress request. */
-	if (req->flags & FI_REMOTE_CQ_DATA) {
-		/* initiate immediate data transfer */
-		req->tx_failures = 0;
-		req->txd = (void *)txd;
-		req->work_fn = __gnix_amo_send_data_req;
-		_gnix_vc_queue_work_req(req);
-	} else {
-		/* complete request */
-		rc = __gnix_amo_send_completion(req->vc->ep, req);
-		if (rc != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "__gnix_amo_send_completion() failed: %d\n",
-				  rc);
+	/* complete request */
+	rc = __gnix_amo_send_completion(req->vc->ep, req);
+	if (rc != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "__gnix_amo_send_completion() failed: %d\n",
+			  rc);
 
-		__gnix_amo_fr_complete(req, txd);
-	}
+	__gnix_amo_fr_complete(req, txd);
 
 	return FI_SUCCESS;
 }
@@ -451,7 +346,7 @@ int _gnix_amo_post_req(void *data)
 
 ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		     enum gnix_fab_req_type fr_type,
-		     struct fi_msg_atomic *msg,
+		     const struct fi_msg_atomic *msg,
 		     const struct fi_ioc *comparev,
 		     void **compare_desc,
 		     size_t compare_count,
@@ -468,9 +363,13 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	void *mdesc = NULL;
 	uint64_t compare_operand = 0;
 	void *loc_addr = NULL;
+	int dt_len, dt_align;
 
 	if (!ep || !msg || !msg->msg_iov ||
-	    !msg->msg_iov[0].addr || msg->iov_count != 1)
+	    !msg->msg_iov[0].addr ||
+	    msg->msg_iov[0].count != 1 ||
+	    msg->iov_count != 1 ||
+	    !msg->rma_iov || !msg->rma_iov[0].addr)
 		return -FI_EINVAL;
 
 	if (fr_type == GNIX_FAB_RQ_CAMO) {
@@ -480,7 +379,16 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 		compare_operand = *(uint64_t *)comparev[0].addr;
 	}
 
-	len = fi_datatype_size(msg->datatype) * msg->msg_iov->count;
+	dt_len = fi_datatype_size(msg->datatype);
+	dt_align = dt_len - 1;
+	len = dt_len * msg->msg_iov->count;
+
+	if (msg->rma_iov->addr & dt_align) {
+		GNIX_INFO(FI_LOG_EP_DATA,
+			  "Invalid target alignment: %d (mask 0x%x)\n",
+			  msg->rma_iov->addr, dt_align);
+		return -FI_EINVAL;
+	}
 
 	/* need a memory descriptor for all fetching and comparison AMOs */
 	if (fr_type == GNIX_FAB_RQ_FAMO || fr_type == GNIX_FAB_RQ_CAMO) {
@@ -488,7 +396,15 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 			return -FI_EINVAL;
 
 		loc_addr = resultv[0].addr;
-		if (!result_desc || !result_desc[0] || result_count != 1) {
+
+		if ((uint64_t)loc_addr & dt_align) {
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "Invalid source alignment: %d (mask 0x%x)\n",
+				  loc_addr, dt_align);
+			return -FI_EINVAL;
+		}
+
+		if (!result_desc || !result_desc[0]) {
 			rc = gnix_mr_reg(&ep->domain->domain_fid.fid,
 					 loc_addr, len, FI_READ | FI_WRITE,
 					 0, 0, 0, &auto_mr, NULL);
