@@ -96,7 +96,7 @@ static const struct fi_rx_attr rdm_dflt_rx_attr = {
 
 static const struct fi_ep_attr rdm_dflt_ep_attr = {
 	.type = FI_EP_RDM,
-	.protocol = FI_PROTO_UDP,
+	.protocol = FI_PROTO_UNSPEC,
 	.max_msg_size = USDF_RDM_MAX_MSG,
 	.msg_prefix_size = 0,
 	.max_order_raw_size = 0,
@@ -133,7 +133,6 @@ int usdf_rdm_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
 
 	switch (hints->ep_attr->protocol) {
 	case FI_PROTO_UNSPEC:
-	case FI_PROTO_RUDP:
 		break;
 	default:
 		return -FI_ENODATA;

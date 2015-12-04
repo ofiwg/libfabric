@@ -103,7 +103,6 @@ usdf_validate_hints(struct fi_info *hints, struct usd_device_attrs *dap)
 		switch (hints->ep_attr->protocol) {
 		case FI_PROTO_UNSPEC:
 		case FI_PROTO_UDP:
-		case FI_PROTO_RUDP:
 			break;
 		default:
 			return -FI_ENODATA;
