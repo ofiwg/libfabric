@@ -209,17 +209,9 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (sock_drop_packet(sock_ep))
 		return 0;
 
-	if (sock_ep->connected) {
-		conn = sock_ep_lookup_conn(sock_ep);
-	} else {
-		conn = sock_av_lookup_addr(sock_ep, tx_ctx->av, msg->addr);
-		if (!conn) {
-			SOCK_LOG_ERROR("Address lookup failed\n");
-			return -errno;
-		}
-	}
-	if (!conn)
-		return -FI_EAGAIN;
+	ret = sock_ep_get_conn(sock_ep, msg->addr, &conn);
+	if (ret)
+		return ret;
 
 	SOCK_LOG_DBG("New sendmsg on TX: %p using conn: %p\n",
 		      tx_ctx, conn);
@@ -263,7 +255,7 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		total_len += sizeof(uint64_t);
 
 	sock_tx_ctx_start(tx_ctx);
-	if (rbfdavail(&tx_ctx->rbfd) < total_len) {
+	if (rbavail(&tx_ctx->rb) < total_len) {
 		ret = -FI_EAGAIN;
 		goto err;
 	}
@@ -558,17 +550,9 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	if (sock_drop_packet(sock_ep))
 		return 0;
 
-	if (sock_ep->connected) {
-		conn = sock_ep_lookup_conn(sock_ep);
-	} else {
-		conn = sock_av_lookup_addr(sock_ep, tx_ctx->av, msg->addr);
-		if (!conn) {
-			SOCK_LOG_ERROR("Address lookup failed\n");
-			return -errno;
-		}
-	}
-	if (!conn)
-		return -FI_EAGAIN;
+	ret = sock_ep_get_conn(sock_ep, msg->addr, &conn);
+	if (ret)
+		return ret;
 
 	SOCK_EP_SET_TX_OP_FLAGS(flags);
 	if (flags & SOCK_USE_OP_FLAGS)
@@ -608,7 +592,7 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 		total_len += sizeof(uint64_t);
 
 	sock_tx_ctx_start(tx_ctx);
-	if (rbfdavail(&tx_ctx->rbfd) < total_len) {
+	if (rbavail(&tx_ctx->rb) < total_len) {
 		ret = -FI_EAGAIN;
 		goto err;
 	}

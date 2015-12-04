@@ -50,28 +50,26 @@
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_AV, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_AV, __VA_ARGS__)
 
-fi_addr_t sock_av_lookup_key(struct sock_av *av, int key)
+int sock_compare_addr(struct sockaddr_in *addr1,
+			     struct sockaddr_in *addr2)
+{
+	return ((addr1->sin_addr.s_addr == addr2->sin_addr.s_addr) &&
+		(addr1->sin_port == addr2->sin_port));
+}
+
+int sock_av_get_addr_index(struct sock_av *av, struct sockaddr_in *addr)
 {
 	int i;
 	struct sock_av_addr *av_addr;
-	struct sock_conn_map *cmap;
 
-	cmap = av->cmap;
 	for (i = 0; i < av->table_hdr->stored; i++) {
 		av_addr = &av->table[i];
-		if (sock_compare_addr(&cmap->table[key].addr,
-				      (struct sockaddr_in *)&av_addr->addr)) {
-			SOCK_LOG_DBG("LOOKUP: (%d->%d)\n", key, i);
+		if (sock_compare_addr(addr, (struct sockaddr_in *)&av_addr->addr))
 			return i;
-		}
 	}
-
-	SOCK_LOG_DBG("Reverse-LOOKUP failed: %d, %s:%d\n", key,
-		       inet_ntoa(cmap->table[key].addr.sin_addr),
-		       ntohs(cmap->table[key].addr.sin_port));
-	return FI_ADDR_NOTAVAIL;
+	SOCK_LOG_DBG("failed to get index in AV\n");
+	return -1;
 }
-
 
 int sock_av_compare_addr(struct sock_av *av,
 			 fi_addr_t addr1, fi_addr_t addr2)
@@ -88,47 +86,11 @@ int sock_av_compare_addr(struct sock_av *av,
 		return -1;
 	}
 
-	av_addr1 = idm_lookup(&av->addr_idm, index1);
-	av_addr2 = idm_lookup(&av->addr_idm, index2);
+	av_addr1 = &av->table[index1];
+	av_addr2 = &av->table[index2];
 
 	return memcmp(&av_addr1->addr, &av_addr2->addr,
 		      sizeof(struct sockaddr_in));
-}
-
-struct sock_conn *sock_av_lookup_addr(struct sock_ep *ep,
-				      struct sock_av *av,
-				      fi_addr_t addr)
-{
-	int idx, ret;
-	int index = ((uint64_t)addr & av->mask);
-	struct sock_av_addr *av_addr;
-
-	if (index >= av->table_hdr->stored || index < 0) {
-		SOCK_LOG_ERROR("requested rank is larger than av table\n");
-		errno = EINVAL;
-		return NULL;
-	}
-
-	if (!av->cmap) {
-		SOCK_LOG_ERROR("EP with no AV bound\n");
-		errno = EINVAL;
-		return NULL;
-	}
-
-	av_addr = idm_lookup(&av->addr_idm, index);
-	idx = av_addr - &av->table[0];
-	if (!av->key[idx]) {
-		ret = sock_conn_map_match_or_connect(
-			ep, av->domain, av->cmap,
-			(struct sockaddr_in *)&av_addr->addr,
-			&av->key[idx]);
-		if (ret) {
-			SOCK_LOG_ERROR("failed to match or connect to addr %"
-					PRIu64 "\n", addr);
-			return NULL;
-		}
-	}
-	return sock_conn_map_lookup_key(av->cmap, av->key[idx]);
 }
 
 static inline void sock_av_report_success(struct sock_av *av, void *context,
@@ -187,22 +149,11 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 				}
 
 				av_addr = &_av->table[j];
-
 				if (memcmp(&av_addr->addr, &addr[i],
 					   sizeof(struct sockaddr_in)) == 0) {
 					SOCK_LOG_DBG("Found addr in shared av\n");
-					if (idm_set(&_av->addr_idm, _av->key[j],
-							 av_addr) < 0) {
-						if (fi_addr)
-							fi_addr[i] = FI_ADDR_NOTAVAIL;
-						sock_av_report_error(_av,
-							context, i, FI_EINVAL);
-						continue;
-					}
-
 					if (fi_addr)
 						fi_addr[i] = (fi_addr_t)j;
-
 					ret++;
 				}
 			}
@@ -212,7 +163,6 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 	}
 
 	for (i = 0, ret = 0; i < count; i++) {
-
 		if (_av->table_hdr->stored == _av->table_hdr->size) {
 			if (_av->table_hdr->req_sz) {
 				if (fi_addr)
@@ -222,16 +172,6 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 				continue;
 			} else{
 				new_count = _av->table_hdr->size * 2;
-				_av->key = realloc(_av->key,
-						   sizeof(uint16_t) * new_count);
-				if (!_av->key) {
-					if (fi_addr)
-						fi_addr[i] = FI_ADDR_NOTAVAIL;
-					sock_av_report_error(_av, context, i,
-								FI_ENOMEM);
-					continue;
-				}
-
 				table_sz = sizeof(struct sock_av_table_hdr) +
 					new_count * sizeof(struct sock_av_addr);
 				old_sz = sizeof(struct sock_av_table_hdr) +
@@ -281,13 +221,6 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 				sa_ip, ntohs(((struct sockaddr_in *)&addr[i])->sin_port));
 
 		memcpy(&av_addr->addr, &addr[i], sizeof(struct sockaddr_in));
-		if (idm_set(&_av->addr_idm, _av->table_hdr->stored, av_addr) < 0) {
-			if (fi_addr)
-				fi_addr[i] = FI_ADDR_NOTAVAIL;
-			sock_av_report_error(_av, context, i, FI_EINVAL);
-			continue;
-		}
-
 		if (fi_addr)
 			fi_addr[i] = (fi_addr_t)_av->table_hdr->stored;
 
@@ -322,7 +255,7 @@ static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 		return -EINVAL;
 	}
 
-	av_addr = idm_lookup(&_av->addr_idm, index);
+	av_addr = &_av->table[index];
 	memcpy(addr, &av_addr->addr, MIN(*addrlen, _av->addrlen));
 	*addrlen = _av->addrlen;
 	return 0;
@@ -468,16 +401,9 @@ static int sock_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 static int sock_av_close(struct fid *fid)
 {
 	struct sock_av *av;
-	int i;
-
 	av = container_of(fid, struct sock_av, av_fid.fid);
 	if (atomic_get(&av->ref))
 		return -FI_EBUSY;
-
-	for (i = 0; i < av->table_hdr->stored; i++) {
-		if (idm_lookup(&av->addr_idm, i))
-			idm_clear(&av->addr_idm, i);
-	}
 
 	if (!av->name)
 		free(av->table_hdr);
@@ -490,7 +416,6 @@ static int sock_av_close(struct fid *fid)
 	}
 
 	atomic_dec(&av->domain->ref);
-	free(av->key);
 	free(av);
 	return 0;
 }
@@ -567,12 +492,6 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	_av->attr = *attr;
 	_av->attr.count = (attr->count) ? attr->count : sock_av_def_sz;
 
-	_av->key = calloc(_av->attr.count, sizeof(uint16_t));
-	if (!_av->key) {
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
-
 	table_sz = sizeof(struct sock_av_table_hdr) +
 		_av->attr.count * sizeof(struct sock_av_addr);
 
@@ -580,7 +499,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		_av->name = strdup(attr->name);
 		if (!_av->name) {
 			ret = -FI_ENOMEM;
-			goto err2;
+			goto err1;
 		}
 		if (!(attr->flags & FI_READ))
 			flags |= O_CREAT;
@@ -675,7 +594,6 @@ err3:
 err2:
 	free(_av->name);
 err1:
-	free(_av->key);
 	free(_av);
 
 	return ret;

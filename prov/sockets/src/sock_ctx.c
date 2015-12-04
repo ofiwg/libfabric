@@ -84,7 +84,7 @@ static struct sock_tx_ctx *sock_tx_context_alloc(const struct fi_tx_attr *attr,
 	if (!tx_ctx)
 		return NULL;
 
-	if (rbfdinit(&tx_ctx->rbfd,
+	if (rbinit(&tx_ctx->rb,
 		(attr->size) ? attr->size * SOCK_EP_TX_ENTRY_SZ :
 		SOCK_EP_TX_SZ * SOCK_EP_TX_ENTRY_SZ))
 		goto err;
@@ -146,7 +146,7 @@ void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx)
 	fastlock_destroy(&tx_ctx->rlock);
 	fastlock_destroy(&tx_ctx->wlock);
 	fastlock_destroy(&tx_ctx->lock);
-	rbfdfree(&tx_ctx->rbfd);
+	rbfree(&tx_ctx->rb);
 	sock_rx_ctx_free(tx_ctx->rx_ctrl_ctx);
 	free(tx_ctx);
 }
@@ -158,22 +158,19 @@ void sock_tx_ctx_start(struct sock_tx_ctx *tx_ctx)
 
 void sock_tx_ctx_write(struct sock_tx_ctx *tx_ctx, const void *buf, size_t len)
 {
-	rbfdwrite(&tx_ctx->rbfd, buf, len);
+	rbwrite(&tx_ctx->rb, buf, len);
 }
 
 void sock_tx_ctx_commit(struct sock_tx_ctx *tx_ctx)
 {
-	if (tx_ctx->domain->progress_mode == FI_PROGRESS_MANUAL)
-		rbcommit(&tx_ctx->rbfd.rb);
-	else
-		rbfdcommit(&tx_ctx->rbfd);
-
+	rbcommit(&tx_ctx->rb);
+	sock_pe_signal(tx_ctx->domain->pe);
 	fastlock_release(&tx_ctx->wlock);
 }
 
 void sock_tx_ctx_abort(struct sock_tx_ctx *tx_ctx)
 {
-	rbfdabort(&tx_ctx->rbfd);
+	rbabort(&tx_ctx->rb);
 	fastlock_release(&tx_ctx->wlock);
 }
 
@@ -206,11 +203,11 @@ void sock_tx_ctx_read_op_send(struct sock_tx_ctx *tx_ctx,
 		uint64_t *dest_addr, uint64_t *buf, struct sock_ep **ep,
 		struct sock_conn **conn)
 {
-	rbfdread(&tx_ctx->rbfd, op, sizeof(*op));
-	rbfdread(&tx_ctx->rbfd, flags, sizeof(*flags));
-	rbfdread(&tx_ctx->rbfd, context, sizeof(*context));
-	rbfdread(&tx_ctx->rbfd, dest_addr, sizeof(*dest_addr));
-	rbfdread(&tx_ctx->rbfd, buf, sizeof(*buf));
-	rbfdread(&tx_ctx->rbfd, ep, sizeof(*ep));
-	rbfdread(&tx_ctx->rbfd, conn, sizeof(*conn));
+	rbread(&tx_ctx->rb, op, sizeof(*op));
+	rbread(&tx_ctx->rb, flags, sizeof(*flags));
+	rbread(&tx_ctx->rb, context, sizeof(*context));
+	rbread(&tx_ctx->rb, dest_addr, sizeof(*dest_addr));
+	rbread(&tx_ctx->rb, buf, sizeof(*buf));
+	rbread(&tx_ctx->rb, ep, sizeof(*ep));
+	rbread(&tx_ctx->rb, conn, sizeof(*conn));
 }

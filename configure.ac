@@ -105,6 +105,11 @@ AC_DEFINE_UNQUOTED([PT_LOCK_SPIN], [$have_spinlock],
 have_clock_gettime=0
 have_host_get_clock_service=0
 
+AC_CHECK_FUNCS([epoll_create])
+if test "$ac_cv_func_epoll_create" = yes; then
+  AC_DEFINE([HAVE_EPOLL], [1], [Define if you have epoll support.])
+fi
+
 AC_SEARCH_LIBS([clock_gettime],[rt],
 		[have_clock_gettime=1],
 		[AC_CHECK_FUNCS([host_get_clock_service],
