@@ -1557,15 +1557,15 @@ int _gnix_vc_queue_work_req(struct gnix_fab_req *req)
 static int __gnix_vc_push_work_reqs(struct gnix_vc *vc)
 {
 	int ret, fi_rc = FI_SUCCESS;
-	struct slist *list;
 	struct slist_entry *item;
 	struct gnix_fab_req *req;
 
+try_again:
 	fastlock_acquire(&vc->work_queue_lock);
 
-	list = &vc->work_queue;
-	item = list->head;
-	while (item != NULL) {
+	item = slist_remove_head(&vc->work_queue);
+	fastlock_release(&vc->work_queue_lock);
+	if (item != NULL) {
 		req = (struct gnix_fab_req *)container_of(item,
 							  struct gnix_fab_req,
 							  slist);
@@ -1573,10 +1573,15 @@ static int __gnix_vc_push_work_reqs(struct gnix_vc *vc)
 		if (ret == FI_SUCCESS) {
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Request processed: %p\n", req);
+			goto try_again;
 		} else {
 			/* Work failed.  Reschedule to put this VC back on the
 			 * end of the list. */
 			__gnix_vc_work_schedule(vc);
+
+			fastlock_acquire(&vc->work_queue_lock);
+			slist_insert_tail(item, &vc->work_queue);
+			fastlock_release(&vc->work_queue_lock);
 
 			/* FI_ENOSPC is reserved to indicate a lack of TXDs,
 			 * which are shared by all VCs on the NIC.  Return
@@ -1591,14 +1596,8 @@ static int __gnix_vc_push_work_reqs(struct gnix_vc *vc)
 					  "Failed to push request %p: %s\n",
 					  req, fi_strerror(-ret));
 			} /* else return success to keep processing TX VCs */
-			break;
 		}
-
-		slist_remove_head(&vc->work_queue);
-		item = list->head;
 	}
-
-	fastlock_release(&vc->work_queue_lock);
 
 	return fi_rc;
 }
