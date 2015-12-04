@@ -768,6 +768,7 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	req->vc = vc;
 	req->user_context = context;
 	req->work_fn = _gnix_rma_post_req;
+	atomic_initialize(&req->rma.outstanding_txds, 0);
 
 	if (fr_type == GNIX_FAB_RQ_RDMA_READ &&
 	    (rem_addr & GNI_READ_ALIGN_MASK || len & GNI_READ_ALIGN_MASK)) {
