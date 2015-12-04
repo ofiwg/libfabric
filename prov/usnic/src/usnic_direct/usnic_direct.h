@@ -274,6 +274,17 @@ enum usd_send_flag_shift {
 };
 #define USD_SF_SIGNAL (1 << USD_SFS_SIGNAL)
 
+ /*
+ * cq creation parameters
+ */
+struct usd_cq_init_attr {
+    unsigned num_entries;           /* number of requested cq elements */
+    int comp_fd;                    /* completion fd */
+    int comp_vec;                   /* requested completion vector */
+    int comp_req_notify;            /* whether need to request notify for each completion */
+    void *ibv_cq;                   /* verbs userspace cq object if signaling through uverbs */
+};
+
 /*
  * Headers for defined transport types
  */
@@ -283,6 +294,17 @@ struct usd_udp_hdr {
     struct udphdr uh_udp;
 } __attribute__ ((__packed__));
 
+/*
+ * Struct and defines for usd open parameters
+ */
+#define UOPF_SKIP_LINK_CHECK 0x1
+#define UOPF_SKIP_PD_ALLOC  0x2
+
+struct usd_open_params {
+    int flags;
+    int cmd_fd;
+    struct usd_context *context;
+};
 
 /*
  ****************************************************************
@@ -294,7 +316,9 @@ int usd_get_device_list(struct usd_device_entry *dev_array,
 
 int usd_open(const char *devname, struct usd_device **dev_o);
 
-int usd_open_for_attrs(const char *devname, struct usd_device **dev_o);
+int usd_open_with_params(const char *dev_name,
+                            struct usd_open_params *uop_param,
+                            struct usd_device **dev_o);
 
 int usd_close(struct usd_device *dev);
 
@@ -309,6 +333,7 @@ enum usd_capability {
     USD_CAP_MAP_PER_RES,
     USD_CAP_PIO,
     USD_CAP_CQ_INTR,
+    USD_CAP_GRP_INTR,
     USD_CAP_MAX
 };
 int usd_get_cap(struct usd_device *dev, enum usd_capability cap);
@@ -318,8 +343,6 @@ int usd_get_cap(struct usd_device *dev, enum usd_capability cap);
  * Queue management
  ****************************************************************
  */
-
-#define USD_CQ_NO_GROUP (NULL)
 
 /*
  * Get a file descriptor which can be used to poll for completions.  The
@@ -334,26 +357,10 @@ int usd_put_completion_fd(struct usd_device *dev, int comp_fd);
 /*
  * Request a CQ with specified attributes:
  *   dev - device on which to create this CQ
- *   num_cqe - number of CQ entries
- *   comp_fd - completions will be signalled on this fd or -1 for none
+ *   init_attr - CQ creation parameters
  */
-int usd_create_cq(struct usd_device *dev, unsigned num_cqe,
-        int comp_fd, struct usd_cq **cq_o);
-
-/*
- * Request a CQ with specified attributes:
- *   dev - device on which to create this CQ
- *   num_cqe - number of CQ entries
- *   comp_fd - completions will be signalled on this fd or -1 for none
- *   comp_vec - value in the range of 0..uda_num_comp_vectors-1 indicating which
- *              underlying completion vector should be used for signaling
- *              comp_fd, or -1 for "don't care"
- *   ibv_cq - The pointer of ibv_cq if verbs layer is implemented on top
- *           needed for passing correct correct user cq pointer to kernel
- */
-int usd_create_cq_with_cv(struct usd_device *dev, unsigned num_entries,
-                          int comp_fd, int comp_vec, void *ibv_cq,
-                            struct usd_cq **cq_o);
+int usd_create_cq(struct usd_device *dev, struct usd_cq_init_attr *init_attr,
+                    struct usd_cq **cq_o);
 
 int usd_destroy_cq(struct usd_cq *cq);
 
@@ -537,6 +544,7 @@ int usd_post_recv(struct usd_qp *qp,
 int usd_poll_cq_multi(struct usd_cq *cq, int max_comps,
         struct usd_completion *comps);
 int usd_poll_cq(struct usd_cq *cq, struct usd_completion *comp);
+int usd_poll_req_notify(struct usd_cq *ucq);
 
 unsigned usd_get_send_credits(struct usd_qp *qp);
 
@@ -695,14 +703,6 @@ int usd_open_context(const char *dev_name, int cmd_fd,
                         struct usd_context **ctx_o);
 
 int usd_close_context(struct usd_context *ctx);
-
-/* open, but use caller's fd for commands */
-int usd_open_with_fd(const char *devname, int cmd_fd, int check_ready,
-                    int alloc_pd, struct usd_device **dev_o);
-
-/* Generic usd device open function */
-int usd_open_with_ctx(struct usd_context *context, int alloc_pd,
-                        int check_ready, struct usd_device **dev_o);
 
 /* modify the destination UDP port in a usd_dest */
 void usd_dest_set_udp_ports(struct usd_dest *dest, struct usd_qp *src_qp,

@@ -636,12 +636,17 @@ usdf_ep_rdm_bind_cq(struct usdf_ep *ep, struct usdf_cq *cq, uint64_t flags)
 	/* Use existing rdm CQ if present */
 	hcq = usdf_ep_rdm_find_cqh(cq);
 	if (hcq == NULL) {
+		struct usd_cq_init_attr attr;
 		hcq = malloc(sizeof(*hcq));
 		if (hcq == NULL) {
 			return -errno;
 		}
-		ret = usd_create_cq(cq->cq_domain->dom_dev, 8195, /* XXX */
-				-1, &hcq->cqh_ucq);
+
+		memset(&attr, 0, sizeof(attr));
+		attr.num_entries = 8195, /* XXX */
+		attr.comp_fd = -1;
+		ret = usd_create_cq(cq->cq_domain->dom_dev, &attr,
+					&hcq->cqh_ucq);
 		if (ret != 0) {
 			goto fail;
 		}

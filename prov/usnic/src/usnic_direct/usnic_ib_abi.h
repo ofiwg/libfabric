@@ -70,12 +70,16 @@ struct usnic_get_context_resp {
 
 struct usnic_alloc_pd {
 	struct ibv_alloc_pd		ibv_cmd;
-	__u64				reserved;
+	struct usnic_ib_alloc_pd_cmd	usnic_cmd;
 };
 
 struct usnic_alloc_pd_resp {
 	struct ibv_alloc_pd_resp	ibv_resp;
-	__u64				reserved;
+	struct usnic_ib_alloc_pd_resp	usnic_resp;
+};
+
+struct usnic_dealloc_pd {
+	struct ibv_dealloc_pd		ibv_cmd;
 };
 
 struct usnic_reg_mr {

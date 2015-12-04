@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2010 Cisco Systems, Inc.  All rights reserved.
+* Copyright 2008-2010 Cisco Systems, Inc.  All rights reserved.
  * Copyright 2007 Nuova Systems, Inc.  All rights reserved.
  *
  * LICENSE_BEGIN
@@ -60,37 +60,38 @@ enum vnic_res_type {
 	RES_TYPE_CQ,			/* Completion queues */
 	RES_TYPE_MEM,			/* Window to dev memory */
 	RES_TYPE_NIC_CFG,		/* Enet NIC config registers */
-#ifndef NOT_FOR_OPEN_SOURCE
 	RES_TYPE_RSS_KEY,		/* Enet RSS secret key */
 	RES_TYPE_RSS_CPU,		/* Enet RSS indirection table */
 	RES_TYPE_TX_STATS,		/* Netblock Tx statistic regs */
 	RES_TYPE_RX_STATS,		/* Netblock Rx statistic regs */
-#else
-	RES_TYPE_RSVD2,
-	RES_TYPE_RSVD3,
-	RES_TYPE_RSVD4,
-	RES_TYPE_RSVD5,
-#endif
 	RES_TYPE_INTR_CTRL,		/* Interrupt ctrl table */
 	RES_TYPE_INTR_TABLE,		/* MSI/MSI-X Interrupt table */
 	RES_TYPE_INTR_PBA,		/* MSI/MSI-X PBA table */
 	RES_TYPE_INTR_PBA_LEGACY,	/* Legacy intr status */
-#ifndef NOT_FOR_OPEN_SOURCE
 	RES_TYPE_DEBUG,			/* Debug-only info */
 	RES_TYPE_DEV,			/* Device-specific region */
-#else
-	RES_TYPE_RSVD6,
-	RES_TYPE_RSVD7,
-#endif
 	RES_TYPE_DEVCMD,		/* Device command region */
 	RES_TYPE_PASS_THRU_PAGE,	/* Pass-thru page */
-	RES_TYPE_SUBVNIC,               /* subvnic resource type */
-	RES_TYPE_MQ_WQ,                 /* MQ Work queues */
-	RES_TYPE_MQ_RQ,                 /* MQ Receive queues */
-	RES_TYPE_MQ_CQ,                 /* MQ Completion queues */
-	RES_TYPE_DEPRECATED1,           /* Old version of devcmd 2 */
-	RES_TYPE_DEPRECATED2,           /* Old version of devcmd 2 */
-	RES_TYPE_DEVCMD2,               /* Device control region */
+	RES_TYPE_SUBVNIC,		/* subvnic resource type */
+	RES_TYPE_MQ_WQ,			/* MQ Work queues */
+	RES_TYPE_MQ_RQ,			/* MQ Receive queues */
+	RES_TYPE_MQ_CQ,			/* MQ Completion queues */
+	RES_TYPE_DEPRECATED1,		/* Old version of devcmd 2 */
+	RES_TYPE_DEPRECATED2,		/* Old version of devcmd 2 */
+	RES_TYPE_DEVCMD2,		/* Device control region */
+	RES_TYPE_RDMA_WQ,		/* RDMA WQ */
+	RES_TYPE_RDMA_RQ,		/* RDMA RQ */
+	RES_TYPE_RDMA_CQ,		/* RDMA CQ */
+	RES_TYPE_RDMA_RKEY_TABLE,	/* RDMA RKEY table */
+	RES_TYPE_RDMA_RQ_HEADER_TABLE,	/* RDMA RQ Header Table */
+	RES_TYPE_RDMA_RQ_TABLE,		/* RDMA RQ Table */
+	RES_TYPE_RDMA_RD_RESP_HEADER_TABLE,	/* RDMA Read Response Header Table */
+	RES_TYPE_RDMA_RD_RESP_TABLE,	/* RDMA Read Response Table */
+	RES_TYPE_RDMA_QP_STATS_TABLE,	/* RDMA per QP stats table */
+	RES_TYPE_WQ_MREGS,		/* XXX snic proto only */
+	RES_TYPE_GRPMBR_INTR,		/* Group member interrupt control */
+	RES_TYPE_BOD1,			/* reserved for bodega-dev */
+
 	RES_TYPE_MAX,			/* Count of resource types */
 };
 

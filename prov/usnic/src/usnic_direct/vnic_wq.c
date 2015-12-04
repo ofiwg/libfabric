@@ -41,7 +41,6 @@
  *
  */
 
-#ifndef ENIC_PMD
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -49,10 +48,7 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 
-#ifndef FOR_UPSTREAM_KERNEL
 #include "kcompat.h"
-#endif
-#endif
 #include "vnic_dev.h"
 #include "vnic_wq.h"
 
@@ -70,16 +66,7 @@ static inline
 int vnic_wq_alloc_ring(struct vnic_dev *vdev, struct vnic_wq *wq,
 				unsigned int desc_count, unsigned int desc_size)
 {
-#ifdef ENIC_PMD
-	char res_name[NAME_MAX];
-	static int instance;
-
-	snprintf(res_name, sizeof(res_name), "%d-wq-%d", instance++, wq->index);
-	return vnic_dev_alloc_desc_ring(vdev, &wq->ring, desc_count, desc_size,
-		wq->socket_id, res_name);
-#else
 	return vnic_dev_alloc_desc_ring(vdev, &wq->ring, desc_count, desc_size);
-#endif
 }
 
 static int vnic_wq_alloc_bufs(struct vnic_wq *wq)
@@ -102,18 +89,18 @@ static int vnic_wq_alloc_bufs(struct vnic_wq *wq)
 				wq->ring.desc_size * buf->index;
 			if (buf->index + 1 == count) {
 				buf->next = wq->bufs[0];
-#ifndef __VMKLNX__
+#if (!defined __VMKLNX__) && (!defined ENIC_PMD)
 				buf->next->prev = buf;
 #endif
 				break;
 			} else if (j + 1 == VNIC_WQ_BUF_BLK_ENTRIES(count)) {
 				buf->next = wq->bufs[i + 1];
-#ifndef __VMKLNX__
+#if (!defined __VMKLNX__) && (!defined ENIC_PMD)
 				buf->next->prev = buf;
 #endif
 			} else {
 				buf->next = buf + 1;
-#ifndef __VMKLNX__
+#if (!defined __VMKLNX__) && (!defined ENIC_PMD)
 				buf->next->prev = buf;
 #endif
 				buf++;
@@ -190,7 +177,6 @@ int vnic_wq_alloc(struct vnic_dev *vdev, struct vnic_wq *wq, unsigned int index,
 	return 0;
 }
 
-#ifndef ENIC_PMD
 int vnic_wq_devcmd2_alloc(struct vnic_dev *vdev, struct vnic_wq *wq,
 	unsigned int desc_count, unsigned int desc_size)
 {
@@ -211,12 +197,7 @@ int vnic_wq_devcmd2_alloc(struct vnic_dev *vdev, struct vnic_wq *wq,
 		return err;
 	return 0;
 }
-#endif
-#ifdef FOR_UPSTREAM_KERNEL
-static void vnic_wq_init_start(struct vnic_wq *wq, unsigned int cq_index,
-#else
 void vnic_wq_init_start(struct vnic_wq *wq, unsigned int cq_index,
-#endif
 	unsigned int fetch_index, unsigned int posted_index,
 	unsigned int error_interrupt_enable,
 	unsigned int error_interrupt_offset)
@@ -258,9 +239,6 @@ unsigned int vnic_wq_error_status(struct vnic_wq *wq)
         return vnic_wq_ctrl_error_status(wq->ctrl);
 }
 
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_wq_ctrl_error_status);
-#endif
 unsigned int vnic_wq_ctrl_error_status(struct vnic_wq_ctrl *ctrl)
 {
 	return ioread32(&ctrl->error_status);

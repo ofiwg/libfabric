@@ -143,7 +143,7 @@ usd_desc_to_rq_comp(
             comp->uc_status = USD_COMPSTAT_ERROR_CRC;
         }
     } else {
-        if (comp->uc_bytes == 60) {
+        if (comp->uc_bytes <= 60) {
             /*
              * The sender may have attempted to send a small frame (<64-bytes)
              * that was padded out to 64-bytes by the sending VIC.
@@ -264,4 +264,30 @@ retry:
         }
         return 0;
     }
+}
+
+/*
+ * Allow application to unmask interrupt explicitly
+ */
+int usd_poll_req_notify(struct usd_cq *ucq)
+{
+    struct usd_cq_impl *cq;
+
+    cq = to_cqi(ucq);
+
+    /*
+     * application uses a signal thread waiting for one completion FD,
+     * then calling this function to unmask the interrupt source. If multiple
+     * cqs are associated with the FD/interrupt, this may be unneccesarilly
+     * called for subsequent cqs at each poll/wait, but it's OK. A lock isn't
+     * used here to prevent simultaneous unmasking among multiple threads as
+     * it's not a valid use case.
+     * Also this call happens at data path, it's assumed that removing a
+     * interrupt source from cq happens at control path tear down stage, when
+     * data path is already finished.
+     */
+    if (cq->comp_fd != -1 && cq->ucq_intr != NULL)
+        vnic_intr_unmask(&cq->ucq_intr->uci_vintr);
+
+    return 0;
 }

@@ -53,12 +53,10 @@ enum cq_desc_types {
 	CQ_DESC_TYPE_WQ_EXCH = 2,
 	CQ_DESC_TYPE_RQ_ENET = 3,
 	CQ_DESC_TYPE_RQ_FCP = 4,
-#ifndef NOT_FOR_OPEN_SOURCE
 	CQ_DESC_TYPE_IOMMU_MISS = 5,
 	CQ_DESC_TYPE_SGL = 6,
 	CQ_DESC_TYPE_CLASSIFIER = 7,
 	CQ_DESC_TYPE_TEST = 127,
-#endif
 };
 
 /* Completion queue descriptor: 16B
@@ -83,7 +81,6 @@ struct cq_desc {
 #define CQ_DESC_COMP_NDX_BITS    12
 #define CQ_DESC_COMP_NDX_MASK    ((1 << CQ_DESC_COMP_NDX_BITS) - 1)
 
-#ifndef NOT_FOR_OPEN_SOURCE
 static inline void cq_color_enc(struct cq_desc *desc, const u8 color)
 {
 	if (color)
@@ -103,7 +100,6 @@ static inline void cq_desc_enc(struct cq_desc *desc,
 		CQ_DESC_COMP_NDX_MASK);
 }
 
-#endif
 static inline void cq_desc_dec(const struct cq_desc *desc_arg,
 	u8 *type, u8 *color, u16 *q_number, u16 *completed_index)
 {
@@ -130,7 +126,6 @@ static inline void cq_desc_dec(const struct cq_desc *desc_arg,
 		CQ_DESC_COMP_NDX_MASK;
 }
 
-#ifndef NOT_FOR_OPEN_SOURCE
 static inline void cq_color_dec(const struct cq_desc *desc_arg, u8 *color)
 {
 	volatile const struct cq_desc *desc = desc_arg;
@@ -138,5 +133,4 @@ static inline void cq_color_dec(const struct cq_desc *desc_arg, u8 *color)
 	*color = (desc->type_color >> CQ_DESC_COLOR_SHIFT) & CQ_DESC_COLOR_MASK;
 }
 
-#endif
 #endif /* _CQ_DESC_H_ */

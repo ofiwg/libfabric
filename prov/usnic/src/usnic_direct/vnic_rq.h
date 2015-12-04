@@ -121,10 +121,6 @@ struct vnic_rq {
 #ifdef CONFIG_NET_RX_BUSY_POLL
 	atomic_t bpoll_state;
 #endif /*CONFIG_NET_RX_BUSY_POLL*/
-#ifdef ENIC_PMD
-	unsigned int socket_id;
-	struct rte_mempool *mp;
-#endif
 };
 
 static inline unsigned int vnic_rq_desc_avail(struct vnic_rq *rq)
@@ -187,7 +183,6 @@ static inline void vnic_rq_post(struct vnic_rq *rq,
 	}
 }
 
-#ifndef NOT_FOR_OPEN_SOURCE
 static inline void vnic_rq_post_commit(struct vnic_rq *rq,
 	void *os_buf, unsigned int os_buf_index,
 	dma_addr_t dma_addr, unsigned int len)
@@ -215,7 +210,6 @@ static inline void vnic_rq_post_commit(struct vnic_rq *rq,
 	iowrite32(buf->index, &rq->ctrl->posted_index);
 }
 
-#endif /* NOT_FOR_OPEN_SOURCE */
 static inline void vnic_rq_return_descs(struct vnic_rq *rq, unsigned int count)
 {
 	rq->ring.desc_avail += count;
@@ -226,37 +220,21 @@ enum desc_return_options {
 	VNIC_RQ_DEFER_RETURN_DESC,
 };
 
-#ifdef ENIC_PMD
-static inline int vnic_rq_service(struct vnic_rq *rq,
-	struct cq_desc *cq_desc, u16 completed_index,
-	int desc_return, int (*buf_service)(struct vnic_rq *rq,
-	struct cq_desc *cq_desc, struct vnic_rq_buf *buf,
-	int skipped, void *opaque), void *opaque)
-#else
 static inline void vnic_rq_service(struct vnic_rq *rq,
 	struct cq_desc *cq_desc, u16 completed_index,
 	int desc_return, void (*buf_service)(struct vnic_rq *rq,
 	struct cq_desc *cq_desc, struct vnic_rq_buf *buf,
 	int skipped, void *opaque), void *opaque)
-#endif
 {
 	struct vnic_rq_buf *buf;
 	int skipped;
-#ifdef ENIC_PMD
-	int eop = 0;
-#endif
 
 	buf = rq->to_clean;
 	while (1) {
 
 		skipped = (buf->index != completed_index);
 
-#ifdef ENIC_PMD
-		if ((*buf_service)(rq, cq_desc, buf, skipped, opaque))
-			eop++;
-#else
 		(*buf_service)(rq, cq_desc, buf, skipped, opaque);
-#endif
 
 		if (desc_return == VNIC_RQ_RETURN_DESC)
 			rq->ring.desc_avail++;
@@ -268,9 +246,6 @@ static inline void vnic_rq_service(struct vnic_rq *rq,
 
 		buf = rq->to_clean;
 	}
-#ifdef ENIC_PMD
-	return eop;
-#endif
 }
 
 static inline int vnic_rq_fill(struct vnic_rq *rq,
@@ -288,7 +263,6 @@ static inline int vnic_rq_fill(struct vnic_rq *rq,
 	return 0;
 }
 
-#ifndef NOT_FOR_OPEN_SOURCE
 static inline int vnic_rq_fill_count(struct vnic_rq *rq,
 	int (*buf_fill)(struct vnic_rq *rq), unsigned int count)
 {
@@ -304,16 +278,13 @@ static inline int vnic_rq_fill_count(struct vnic_rq *rq,
 	return 0;
 }
 
-#endif /* NOT_FOR_OPEN_SOURCE */
 void vnic_rq_free(struct vnic_rq *rq);
 int vnic_rq_alloc(struct vnic_dev *vdev, struct vnic_rq *rq, unsigned int index,
 	unsigned int desc_count, unsigned int desc_size);
-#ifndef FOR_UPSTREAM_KERNEL
 void vnic_rq_init_start(struct vnic_rq *rq, unsigned int cq_index,
 	unsigned int fetch_index, unsigned int posted_index,
 	unsigned int error_interrupt_enable,
 	unsigned int error_interrupt_offset);
-#endif
 void vnic_rq_init(struct vnic_rq *rq, unsigned int cq_index,
 	unsigned int error_interrupt_enable,
 	unsigned int error_interrupt_offset);

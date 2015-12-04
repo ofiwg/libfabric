@@ -506,6 +506,30 @@ enum vnic_devcmd_cmd {
 	 * in: (u16) a2 = unsigned short int port information
 	 */
 	CMD_OVERLAY_OFFLOAD_CFG = _CMDC(_CMD_DIR_WRITE, _CMD_VTYPE_ENET, 73),
+
+	/*
+	 * Enable group interrupt for the VF
+	 * in: (u32) a0 = GRPINTR_ENABLE : enable
+	 *           a0 = GRPINTR_DISABLE : disable
+	 *           a0 = GRPINTR_UPD_VECT: update group vector addr
+	 * in: (u32) a1 = interrupt group count
+	 *     (u64) a2 = Start of host buffer address for DMAing group
+	 *           vector bitmap
+	 *     (u64) a3 = Stride between group vectors
+	 */
+	CMD_CONFIG_GRPINTR = _CMDC(_CMD_DIR_WRITE, _CMD_VTYPE_ENET, 75),
+
+    /*
+     * Set cq arrary base and size in a list of consective wqs and
+     * rqs for a device
+     * in: (u16) a0 = the wq relative index in the device.
+     *              -1 indicates skipping wq configuration
+     * in: (u16) a1 = the wcq relative index in the device
+     * in: (u16) a2 = the rq relative index in the device
+     *              -1 indicates skipping rq configuration
+     * in: (u16) a3 = the rcq relative index in the device
+     */
+    CMD_CONFIG_CQ_ARRAY = _CMDC(_CMD_DIR_WRITE, _CMD_VTYPE_ENET, 76),
 };
 
 /* CMD_ENABLE2 flags */
@@ -572,14 +596,12 @@ struct vnic_devcmd_fw_info {
 	u16 asic_rev;
 };
 
-#ifndef FOR_UPSTREAM_KERNEL
 enum fwinfo_asic_type {
 	FWINFO_ASIC_TYPE_UNKNOWN,
 	FWINFO_ASIC_TYPE_PALO,
 	FWINFO_ASIC_TYPE_SERENO,
 };
 
-#endif
 
 struct vnic_devcmd_notify {
 	u32 csum;		/* checksum over following words */
@@ -801,5 +823,14 @@ typedef enum {
 	VIC_FEATURE_VXLAN,
 	VIC_FEATURE_MAX,
 } vic_feature_t;
-	
+
+/*
+ * CMD_CONFIG_GRPINTR subcommands
+ */
+typedef enum {
+	GRPINTR_ENABLE = 1,
+	GRPINTR_DISABLE,
+	GRPINTR_UPD_VECT,
+} grpintr_subcmd_t;
+
 #endif /* _VNIC_DEVCMD_H_ */

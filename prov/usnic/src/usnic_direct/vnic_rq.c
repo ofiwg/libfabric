@@ -41,7 +41,6 @@
  *
  */
 
-#ifndef ENIC_PMD
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -51,10 +50,7 @@
 #include <linux/slab.h>
 #endif
 
-#ifndef FOR_UPSTREAM_KERNEL
 #include "kcompat.h"
-#endif
-#endif
 #include "vnic_dev.h"
 #include "vnic_rq.h"
 
@@ -131,10 +127,6 @@ int vnic_rq_alloc(struct vnic_dev *vdev, struct vnic_rq *rq, unsigned int index,
 	unsigned int desc_count, unsigned int desc_size)
 {
 	int err;
-#ifdef ENIC_PMD
-	char res_name[NAME_MAX];
-	static int instance;
-#endif
 
 	rq->index = index;
 	rq->vdev = vdev;
@@ -147,13 +139,7 @@ int vnic_rq_alloc(struct vnic_dev *vdev, struct vnic_rq *rq, unsigned int index,
 
 	vnic_rq_disable(rq);
 
-#ifdef ENIC_PMD
-	snprintf(res_name, sizeof(res_name), "%d-rq-%d", instance++, index);
-	err = vnic_dev_alloc_desc_ring(vdev, &rq->ring, desc_count, desc_size,
-		rq->socket_id, res_name);
-#else
 	err = vnic_dev_alloc_desc_ring(vdev, &rq->ring, desc_count, desc_size);
-#endif
 	if (err)
 		return err;
 
@@ -166,11 +152,7 @@ int vnic_rq_alloc(struct vnic_dev *vdev, struct vnic_rq *rq, unsigned int index,
 	return 0;
 }
 
-#ifdef FOR_UPSTREAM_KERNEL
-static void vnic_rq_init_start(struct vnic_rq *rq, unsigned int cq_index,
-#else
 void vnic_rq_init_start(struct vnic_rq *rq, unsigned int cq_index,
-#endif
 	unsigned int fetch_index, unsigned int posted_index,
 	unsigned int error_interrupt_enable,
 	unsigned int error_interrupt_offset)
@@ -225,9 +207,6 @@ unsigned int vnic_rq_error_status(struct vnic_rq *rq)
         return vnic_rq_ctrl_error_status(rq->ctrl);
 }
 
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_rq_ctrl_error_status);
-#endif
 unsigned int vnic_rq_ctrl_error_status(struct vnic_rq_ctrl *ctrl)
 {
 	return ioread32(&ctrl->error_status);

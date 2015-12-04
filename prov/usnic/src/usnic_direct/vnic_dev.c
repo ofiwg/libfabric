@@ -48,9 +48,7 @@
 #include <linux/delay.h>
 #include <linux/if_ether.h>
 
-#ifndef FOR_UPSTREAM_KERNEL
 #include "kcompat.h"
-#endif
 #include "vnic_resource.h"
 #include "vnic_devcmd.h"
 #include "vnic_dev.h"
@@ -66,6 +64,7 @@ struct devcmd2_controller {
 	u16 next_result;
 	u16 result_size;
 	int color;
+	u32 posted;
 };
 
 enum vnic_proxy_type {
@@ -122,13 +121,11 @@ void *vnic_dev_priv(struct vnic_dev *vdev)
 	return vdev->priv;
 }
 
-#ifndef NOT_FOR_OPEN_SOURCE
 int vnic_dev_get_size(void)
 {
 	return sizeof(struct vnic_dev);
 }
 
-#endif
 
 static int vnic_dev_discover_res(struct vnic_dev *vdev,
 	struct vnic_dev_bar *bar, unsigned int num_bars)
@@ -192,6 +189,7 @@ static int vnic_dev_discover_res(struct vnic_dev *vdev,
 		case RES_TYPE_RQ:
 		case RES_TYPE_CQ:
 		case RES_TYPE_INTR_CTRL:
+		case RES_TYPE_GRPMBR_INTR:
 			/* each count is stride bytes long */
 			len = count * VNIC_RES_STRIDE;
 			if (len + bar_offset > bar[bar_num].len) {
@@ -257,18 +255,12 @@ void vnic_dev_upd_res_vaddr(struct vnic_dev *vdev,
 					(vdev->res[i].bus_addr - map->bus_addr);
 	}
 }
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_upd_res_vaddr);
-#endif
 
 unsigned int vnic_dev_get_res_count(struct vnic_dev *vdev,
 	enum vnic_res_type type)
 {
 	return vdev->res[type].count;
 }
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_get_res_count);
-#endif
 
 void __iomem *vnic_dev_get_res(struct vnic_dev *vdev, enum vnic_res_type type,
 	unsigned int index)
@@ -281,15 +273,13 @@ void __iomem *vnic_dev_get_res(struct vnic_dev *vdev, enum vnic_res_type type,
 	case RES_TYPE_RQ:
 	case RES_TYPE_CQ:
 	case RES_TYPE_INTR_CTRL:
+	case RES_TYPE_GRPMBR_INTR:
 		return (char __iomem *)vdev->res[type].vaddr +
 			index * VNIC_RES_STRIDE;
 	default:
 		return (char __iomem *)vdev->res[type].vaddr;
 	}
 }
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_get_res);
-#endif
 
 dma_addr_t vnic_dev_get_res_bus_addr(struct vnic_dev *vdev,
 	enum vnic_res_type type, unsigned int index)
@@ -299,24 +289,19 @@ dma_addr_t vnic_dev_get_res_bus_addr(struct vnic_dev *vdev,
 	case RES_TYPE_RQ:
 	case RES_TYPE_CQ:
 	case RES_TYPE_INTR_CTRL:
+	case RES_TYPE_GRPMBR_INTR:
 		return vdev->res[type].bus_addr +
 			index * VNIC_RES_STRIDE;
 	default:
 		return vdev->res[type].bus_addr;
 	}
 }
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_get_res_bus_addr);
-#endif
 
 uint8_t vnic_dev_get_res_bar(struct vnic_dev *vdev,
 	enum vnic_res_type type)
 {
 	return vdev->res[type].bar_num;
 }
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_get_res_bar);
-#endif
 
 uint32_t vnic_dev_get_res_offset(struct vnic_dev *vdev,
 	enum vnic_res_type type, unsigned int index)
@@ -326,15 +311,13 @@ uint32_t vnic_dev_get_res_offset(struct vnic_dev *vdev,
 	case RES_TYPE_RQ:
 	case RES_TYPE_CQ:
 	case RES_TYPE_INTR_CTRL:
+	case RES_TYPE_GRPMBR_INTR:
 		return vdev->res[type].bar_offset +
 			index * VNIC_RES_STRIDE;
 	default:
 		return vdev->res[type].bar_offset;
 	}
 }
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_get_res_offset);
-#endif
 
 /*
  * Get the length of the res type
@@ -344,15 +327,8 @@ unsigned long vnic_dev_get_res_type_len(struct vnic_dev *vdev,
 {
 	return vdev->res[type].len;
 }
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_get_res_type_len);
-#endif
 
-#ifdef FOR_UPSTREAM_KERNEL
-static unsigned int vnic_dev_desc_ring_size(struct vnic_dev_ring *ring,
-#else
 unsigned int vnic_dev_desc_ring_size(struct vnic_dev_ring *ring,
-#endif
 	unsigned int desc_count, unsigned int desc_size)
 {
 	/* The base address of the desc rings must be 512 byte aligned.
@@ -519,13 +495,12 @@ static int _vnic_dev_cmd2(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
 	int delay;
 	int err;
 	u32 fetch_index;
-	u32 posted;
+	u32 posted = dc2c->posted;
 	u32 new_posted;
 
-	posted = ioread32(&dc2c->wq_ctrl->posted_index);
 	fetch_index = ioread32(&dc2c->wq_ctrl->fetch_index);
 
-	if (posted == 0xFFFFFFFF || fetch_index == 0xFFFFFFFF) { /* check for hardware gone  */
+	if (fetch_index == 0xFFFFFFFF) { /* check for hardware gone  */
 		/* Hardware surprise removal: return error */
 		return -ENODEV;
 
@@ -559,6 +534,7 @@ static int _vnic_dev_cmd2(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
 	 */
 	wmb();
 	iowrite32(new_posted, &dc2c->wq_ctrl->posted_index);
+	dc2c->posted = new_posted;
 
 	if (dc2c->cmd_ring[posted].flags & DEVCMD2_FNORESULT)
 		return 0;
@@ -580,7 +556,6 @@ static int _vnic_dev_cmd2(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
 				return err;
 			}
 			if (_CMD_DIR(cmd) & _CMD_DIR_READ) {
-				rmb();
 				for (i = 0; i < VNIC_DEVCMD_NARGS; i++)
 					vdev->args[i] = result->results[i];
 			}
@@ -595,7 +570,7 @@ static int _vnic_dev_cmd2(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
 #endif
 }
 
-int vnic_dev_init_devcmdorig(struct vnic_dev *vdev)
+int vnic_dev_init_devcmd1(struct vnic_dev *vdev)
 {
 #if !defined(CONFIG_MIPS) && !defined(MGMT_VNIC)
 	vdev->devcmd = vnic_dev_get_res(vdev, RES_TYPE_DEVCMD, 0);
@@ -641,6 +616,7 @@ static int vnic_dev_init_devcmd2(struct vnic_dev *vdev)
 	 * when setting up the WQ for devmcd2.
 	 */
 	vnic_wq_init_start(&vdev->devcmd2->wq, 0, fetch_index, fetch_index, 0, 0);
+	vdev->devcmd2->posted = fetch_index;
 	vnic_wq_enable(&vdev->devcmd2->wq);
 	
 	err = vnic_dev_alloc_desc_ring(vdev, &vdev->devcmd2->results_ring,
@@ -687,45 +663,29 @@ static void vnic_dev_deinit_devcmd2(struct vnic_dev *vdev)
 	vnic_wq_disable(&vdev->devcmd2->wq);
 	vnic_wq_free(&vdev->devcmd2->wq);
 	kfree(vdev->devcmd2);
-	vdev->devcmd2 = NULL;
-	vdev->devcmd_rtn = &_vnic_dev_cmd;
 #endif
-}
-
-int vnic_dev_cmd_args(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
-               u64 *args, int nargs, int wait)
-{
-       int err;
-       int i;
-
-       if (nargs > VNIC_DEVCMD_NARGS) {
-               nargs = VNIC_DEVCMD_NARGS;
-       }
-       for (i = 0; i < nargs; ++i) {
-               vdev->args[i] = args[i];
-       }
-
-       err = _vnic_dev_cmd(vdev, cmd, wait);
-
-       for (i = 0; i < nargs; ++i) {
-               args[i] = vdev->args[i];
-       }
-       return err;
 }
 
 static int vnic_dev_cmd_proxy(struct vnic_dev *vdev,
 	enum vnic_devcmd_cmd proxy_cmd, enum vnic_devcmd_cmd cmd,
-	u64 *a0, u64 *a1, int wait)
+	u64 *args, int nargs, int wait)
 {
 	u32 status;
 	int err;
 
+	/*
+	 * Proxy command consumes 2 arguments. One for proxy index,
+	 * the other is for command to be proxied
+	 */
+	if (nargs > VNIC_DEVCMD_NARGS - 2) {
+		pr_err("number of args %d exceeds the maximum\n", nargs);
+		return -EINVAL;
+	}
 	memset(vdev->args, 0, sizeof(vdev->args));
 
 	vdev->args[0] = vdev->proxy_index;
 	vdev->args[1] = cmd;
-	vdev->args[2] = *a0;
-	vdev->args[3] = *a1;
+	memcpy(&vdev->args[2], args, nargs * sizeof(args[0]));
 
 	err = (*vdev->devcmd_rtn)(vdev, proxy_cmd, wait);
 	if (err)
@@ -740,24 +700,26 @@ static int vnic_dev_cmd_proxy(struct vnic_dev *vdev,
 		return err;
 	}
 
-	*a0 = vdev->args[1];
-	*a1 = vdev->args[2];
+	memcpy(args, &vdev->args[1], nargs * sizeof(args[0]));
 
 	return 0;
 }
 
 static int vnic_dev_cmd_no_proxy(struct vnic_dev *vdev,
-	enum vnic_devcmd_cmd cmd, u64 *a0, u64 *a1, int wait)
+	enum vnic_devcmd_cmd cmd, u64 *args, int nargs, int wait)
 {
 	int err;
 
-	vdev->args[0] = *a0;
-	vdev->args[1] = *a1;
+	if (nargs > VNIC_DEVCMD_NARGS) {
+		pr_err("number of args %d exceeds the maximum\n", nargs);
+		return -EINVAL;
+	}
+	memset(vdev->args, 0, sizeof(vdev->args));
+	memcpy(vdev->args, args, nargs * sizeof(args[0]));
 
 	err = (*vdev->devcmd_rtn)(vdev, cmd, wait);
 
-	*a0 = vdev->args[0];
-	*a1 = vdev->args[1];
+	memcpy(args, vdev->args, nargs * sizeof(args[0]));
 
 	return err;
 }
@@ -768,14 +730,12 @@ void vnic_dev_cmd_proxy_by_index_start(struct vnic_dev *vdev, u16 index)
 	vdev->proxy_index = index;
 }
 
-#ifndef FOR_UPSTREAM_KERNEL
 void vnic_dev_cmd_proxy_by_bdf_start(struct vnic_dev *vdev, u16 bdf)
 {
 	vdev->proxy = PROXY_BY_BDF;
 	vdev->proxy_index = bdf;
 }
 
-#endif
 void vnic_dev_cmd_proxy_end(struct vnic_dev *vdev)
 {
 	vdev->proxy = PROXY_NONE;
@@ -785,18 +745,49 @@ void vnic_dev_cmd_proxy_end(struct vnic_dev *vdev)
 int vnic_dev_cmd(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
 	u64 *a0, u64 *a1, int wait)
 {
+	u64 args[2];
+	int err;
+
+	args[0] = *a0;
+	args[1] = *a1;
 	memset(vdev->args, 0, sizeof(vdev->args));
 
 	switch (vdev->proxy) {
 	case PROXY_BY_INDEX:
-		return vnic_dev_cmd_proxy(vdev, CMD_PROXY_BY_INDEX, cmd,
-				a0, a1, wait);
+		err =  vnic_dev_cmd_proxy(vdev, CMD_PROXY_BY_INDEX, cmd,
+				args, ARRAY_SIZE(args), wait);
+		break;
 	case PROXY_BY_BDF:
-		return vnic_dev_cmd_proxy(vdev, CMD_PROXY_BY_BDF, cmd,
-				a0, a1, wait);
+		err =  vnic_dev_cmd_proxy(vdev, CMD_PROXY_BY_BDF, cmd,
+				args, ARRAY_SIZE(args), wait);
+		break;
 	case PROXY_NONE:
 	default:
-		return vnic_dev_cmd_no_proxy(vdev, cmd, a0, a1, wait);
+		err = vnic_dev_cmd_no_proxy(vdev, cmd, args, 2, wait);
+		break;
+	}
+
+	if (err == 0) {
+		*a0 = args[0];
+		*a1 = args[1];
+	}
+
+	return err;
+}
+
+int vnic_dev_cmd_args(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
+               u64 *args, int nargs, int wait)
+{
+	switch (vdev->proxy) {
+	case PROXY_BY_INDEX:
+		return vnic_dev_cmd_proxy(vdev, CMD_PROXY_BY_INDEX, cmd,
+				args, nargs, wait);
+	case PROXY_BY_BDF:
+		return vnic_dev_cmd_proxy(vdev, CMD_PROXY_BY_BDF, cmd,
+				args, nargs, wait);
+	case PROXY_NONE:
+	default:
+		return vnic_dev_cmd_no_proxy(vdev, cmd, args, nargs, wait);
 	}
 }
 
@@ -844,7 +835,6 @@ int vnic_dev_fw_info(struct vnic_dev *vdev,
 	return err;
 }
 
-#ifndef FOR_UPSTREAM_KERNEL
 int vnic_dev_asic_info(struct vnic_dev *vdev, u16 *asic_type, u16 *asic_rev)
 {
 	struct vnic_devcmd_fw_info *fw_info;
@@ -860,7 +850,6 @@ int vnic_dev_asic_info(struct vnic_dev *vdev, u16 *asic_type, u16 *asic_rev)
 	return 0;
 }
 
-#endif
 int vnic_dev_spec(struct vnic_dev *vdev, unsigned int offset, unsigned int size,
 	void *value)
 {
@@ -922,7 +911,6 @@ int vnic_dev_spec(struct vnic_dev *vdev, unsigned int offset, unsigned int size,
 #endif
 }
 
-#ifndef FOR_UPSTREAM_KERNEL
 int vnic_dev_stats_clear(struct vnic_dev *vdev)
 {
 	u64 a0 = 0, a1 = 0;
@@ -930,7 +918,6 @@ int vnic_dev_stats_clear(struct vnic_dev *vdev)
 	return vnic_dev_cmd(vdev, CMD_STATS_CLEAR, &a0, &a1, wait);
 }
 
-#endif
 int vnic_dev_stats_dump(struct vnic_dev *vdev, struct vnic_stats **stats)
 {
 	u64 a0, a1;
@@ -957,7 +944,6 @@ int vnic_dev_close(struct vnic_dev *vdev)
 	return vnic_dev_cmd(vdev, CMD_CLOSE, &a0, &a1, wait);
 }
 
-#ifndef FOR_UPSTREAM_KERNEL
 /** Deprecated.  @see vnic_dev_enable_wait */
 int vnic_dev_enable(struct vnic_dev *vdev)
 {
@@ -966,7 +952,6 @@ int vnic_dev_enable(struct vnic_dev *vdev)
 	return vnic_dev_cmd(vdev, CMD_ENABLE, &a0, &a1, wait);
 }
 
-#endif
 int vnic_dev_enable_wait(struct vnic_dev *vdev)
 {
 	u64 a0 = 0, a1 = 0;
@@ -1009,22 +994,15 @@ int vnic_dev_open_done(struct vnic_dev *vdev, int *done)
 	return 0;
 }
 
-#ifdef FOR_UPSTREAM_KERNEL
-static int vnic_dev_soft_reset(struct vnic_dev *vdev, int arg)
-#else
 int vnic_dev_soft_reset(struct vnic_dev *vdev, int arg)
-#endif
 {
 	u64 a0 = (u32)arg, a1 = 0;
 	int wait = 1000;
+
 	return vnic_dev_cmd(vdev, CMD_SOFT_RESET, &a0, &a1, wait);
 }
 
-#ifdef FOR_UPSTREAM_KERNEL
-static int vnic_dev_soft_reset_done(struct vnic_dev *vdev, int *done)
-#else
 int vnic_dev_soft_reset_done(struct vnic_dev *vdev, int *done)
-#endif
 {
 	u64 a0 = 0, a1 = 0;
 	int wait = 1000;
@@ -1132,7 +1110,6 @@ int vnic_dev_packet_filter(struct vnic_dev *vdev, int directed, int multicast,
 	return err;
 }
 
-#ifndef FOR_UPSTREAM_KERNEL
 int vnic_dev_packet_filter_all(struct vnic_dev *vdev, int directed,
 	int multicast, int broadcast, int promisc, int allmulti)
 {
@@ -1153,7 +1130,6 @@ int vnic_dev_packet_filter_all(struct vnic_dev *vdev, int directed,
 	return err;
 }
 
-#endif
 int vnic_dev_add_addr(struct vnic_dev *vdev, u8 *addr)
 {
 	u64 a0 = 0, a1 = 0;
@@ -1205,7 +1181,6 @@ int vnic_dev_set_ig_vlan_rewrite_mode(struct vnic_dev *vdev,
 		return 0;
 }
 
-#ifndef FOR_UPSTREAM_KERNEL
 int vnic_dev_raise_intr(struct vnic_dev *vdev, u16 intr)
 {
 	u64 a0 = intr, a1 = 0;
@@ -1219,12 +1194,7 @@ int vnic_dev_raise_intr(struct vnic_dev *vdev, u16 intr)
 	return err;
 }
 
-#endif
-#ifdef FOR_UPSTREAM_KERNEL
-static int vnic_dev_notify_setcmd(struct vnic_dev *vdev,
-#else
 int vnic_dev_notify_setcmd(struct vnic_dev *vdev,
-#endif
 	void *notify_addr, dma_addr_t notify_pa, u16 intr)
 {
 	u64 a0, a1;
@@ -1263,11 +1233,7 @@ int vnic_dev_notify_set(struct vnic_dev *vdev, u16 intr)
 	return vnic_dev_notify_setcmd(vdev, notify_addr, notify_pa, intr);
 }
 
-#ifdef FOR_UPSTREAM_KERNEL
-static int vnic_dev_notify_unsetcmd(struct vnic_dev *vdev)
-#else
 int vnic_dev_notify_unsetcmd(struct vnic_dev *vdev)
-#endif
 {
 	u64 a0, a1;
 	int wait = 1000;
@@ -1355,7 +1321,6 @@ int vnic_dev_init(struct vnic_dev *vdev, int arg)
 	return r;
 }
 
-#ifndef FOR_UPSTREAM_KERNEL
 int vnic_dev_init_done(struct vnic_dev *vdev, int *done, int *err)
 {
 	u64 a0 = 0, a1 = 0;
@@ -1398,7 +1363,6 @@ int vnic_dev_init_prov(struct vnic_dev *vdev, u8 *buf, u32 len)
 	return ret;
 }
 
-#endif
 int vnic_dev_deinit(struct vnic_dev *vdev)
 {
 	u64 a0 = 0, a1 = 0;
@@ -1407,9 +1371,6 @@ int vnic_dev_deinit(struct vnic_dev *vdev)
 	return vnic_dev_cmd(vdev, CMD_DEINIT, &a0, &a1, wait);
 }
 
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_intr_coal_timer_info_default);
-#endif
 void vnic_dev_intr_coal_timer_info_default(struct vnic_dev *vdev)
 {
 	/* Default: hardware intr coal timer is in units of 1.5 usecs */
@@ -1491,7 +1452,6 @@ u32 vnic_dev_mtu(struct vnic_dev *vdev)
 #endif
 }
 
-#ifndef FOR_UPSTREAM_KERNEL
 u32 vnic_dev_link_down_cnt(struct vnic_dev *vdev)
 {
 	if (!vnic_dev_notify_ready(vdev))
@@ -1516,8 +1476,6 @@ u32 vnic_dev_uif(struct vnic_dev *vdev)
 	return vdev->notify_copy.uif;
 }
 
-#endif
-#ifndef NOT_FOR_OPEN_SOURCE
 u32 vnic_dev_perbi_rebuild_cnt(struct vnic_dev *vdev)
 {
 	if (!vnic_dev_notify_ready(vdev))
@@ -1526,19 +1484,12 @@ u32 vnic_dev_perbi_rebuild_cnt(struct vnic_dev *vdev)
 	return vdev->notify_copy.perbi_rebuild_cnt;
 }
 
-#endif
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_set_intr_mode);
-#endif
 void vnic_dev_set_intr_mode(struct vnic_dev *vdev,
 	enum vnic_dev_intr_mode intr_mode)
 {
 	vdev->intr_mode = intr_mode;
 }
 
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_get_intr_mode);
-#endif
 enum vnic_dev_intr_mode vnic_dev_get_intr_mode(
 	struct vnic_dev *vdev)
 {
@@ -1584,9 +1535,6 @@ void vnic_dev_unregister(struct vnic_dev *vdev)
 		kfree(vdev);
 	}
 }
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_unregister);
-#endif
 
 struct vnic_dev *vnic_dev_alloc_discover(struct vnic_dev *vdev,
 	void *priv, struct pci_dev *pdev, struct vnic_dev_bar *bar,
@@ -1610,9 +1558,6 @@ err_out:
 	vnic_dev_unregister(vdev);
 	return NULL;
 }
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_alloc_discover);
-#endif
 
 struct vnic_dev *vnic_dev_register(struct vnic_dev *vdev,
 	void *priv, struct pci_dev *pdev, struct vnic_dev_bar *bar,
@@ -1622,7 +1567,7 @@ struct vnic_dev *vnic_dev_register(struct vnic_dev *vdev,
 	if (!vdev)
 		goto err_out;
 
-	if (vnic_dev_init_devcmdorig(vdev))
+	if (vnic_dev_init_devcmd1(vdev))
 		goto err_free;
 
 	return vdev;
@@ -1632,19 +1577,13 @@ err_free:
 err_out:
 	return NULL;
 }
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_register);
-#endif
 
 struct pci_dev *vnic_dev_get_pdev(struct vnic_dev *vdev)
 {
 	return vdev->pdev;
 }
-#ifdef EXPORT_SYMBOL_FOR_USNIC
-EXPORT_SYMBOL(vnic_dev_get_pdev);
-#endif
 
-int vnic_dev_cmd_init(struct vnic_dev *vdev, int fallback)
+int vnic_devcmd_init(struct vnic_dev *vdev, int fallback)
 {
 #if !defined(CONFIG_MIPS) && !defined(MGMT_VNIC)
 	int err;
@@ -1655,7 +1594,7 @@ int vnic_dev_cmd_init(struct vnic_dev *vdev, int fallback)
 		err = vnic_dev_init_devcmd2(vdev);
 	else if (fallback) {
 		pr_warning("DEVCMD2 resource not found, fall back to devcmd\n");
-		err = vnic_dev_init_devcmdorig(vdev);
+		err = vnic_dev_init_devcmd1(vdev);
 	} else {
 		pr_err("DEVCMD2 resource not found, no fall back to devcmd allowed\n");
 		err = -ENODEV;
@@ -1667,7 +1606,6 @@ int vnic_dev_cmd_init(struct vnic_dev *vdev, int fallback)
 #endif
 }
 
-#ifndef NOT_FOR_OPEN_SOURCE
 int vnic_dev_int13(struct vnic_dev *vdev, u64 arg, u32 op)
 {
 	u64 a0 = arg, a1 = op;
@@ -1689,7 +1627,6 @@ int vnic_dev_perbi(struct vnic_dev *vdev, u64 arg, u32 op)
 	return r;
 }
 
-#endif
 int vnic_dev_init_prov2(struct vnic_dev *vdev, u8 *buf, u32 len)
 {
 	u64 a0, a1 = len;

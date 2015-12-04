@@ -90,7 +90,7 @@ usd_unmap_vf(
         if (vf->vf_vdev != NULL)
             vnic_dev_unregister(vf->vf_vdev);
         if (vf->vf_bar0.vaddr != MAP_FAILED) {
-            munmap(vf->vf_bar0.vaddr, vf->vf_bar0.len);
+            munmap(vf->vf_bar0.vaddr, vf->vf_bar_map_len);
         }
         for (i = 0; i < sizeof(vf->iomaps)/sizeof(vf->iomaps[0]); i++) {
             if (vf->iomaps[i].bus_addr != 0 &&
@@ -136,7 +136,7 @@ usd_map_vnic_res(struct usd_device *dev, struct usd_vf *vf,
 
     /* unmap bar0 */
     if (vf->vf_bar0.vaddr != MAP_FAILED) {
-        munmap(vf->vf_bar0.vaddr, vf->vf_bar0.len);
+        munmap(vf->vf_bar0.vaddr, vf->vf_bar_map_len);
         vf->vf_bar0.vaddr = MAP_FAILED;
     }
 
@@ -195,9 +195,15 @@ usd_map_vf(
         vf->vf_bar0.bus_addr = vfip->vi_bar_bus_addr;
         vf->vf_bar0.len = vfip->vi_bar_len;
 
-        /* map BAR0 first to get res info */
-        offset = USNIC_ENCODE_PGOFF(vf->vf_id, USNIC_MMAP_BAR, 0);
-        vf->vf_bar0.vaddr = mmap64(NULL, vf->vf_bar0.len,
+        /* map BAR0 HEAD first to get res info */
+        if (vfip->vi_barhead_len > 0) {
+            offset = USNIC_ENCODE_PGOFF(vf->vf_id, USNIC_MMAP_BARHEAD, 0);
+            vf->vf_bar_map_len = vfip->vi_barhead_len;
+        } else {
+            offset = USNIC_ENCODE_PGOFF(vf->vf_id, USNIC_MMAP_BAR, 0);
+            vf->vf_bar_map_len = vfip->vi_bar_len;
+        }
+        vf->vf_bar0.vaddr = mmap64(NULL, vf->vf_bar_map_len,
                                  PROT_READ + PROT_WRITE, MAP_SHARED,
                                  dev->ud_ctx->ucx_ib_dev_fd,
                                  offset);
@@ -253,6 +259,87 @@ usd_get_vf(
 }
 
 /*
+ * Get a cq interrupt source
+ */
+static struct usd_cq_comp_intr *
+usd_get_cq_intr(
+    struct usd_cq_impl *cq,
+    struct usd_vf *vf)
+{
+    struct usd_context *uctx;
+    struct usd_cq_comp_intr *intr;
+    int ret;
+
+    uctx = cq->ucq_dev->ud_ctx;
+
+    pthread_mutex_lock(&uctx->ucx_mutex);
+    LIST_FOREACH(intr, &uctx->ucx_intr_list, uci_ctx_link) {
+        if (intr->uci_offset == cq->intr_offset) {
+            intr->uci_refcnt ++;
+            goto out;
+        }
+    }
+
+    intr = calloc(sizeof(*intr), 1);
+    if (intr != NULL) {
+        ret = vnic_grpmbrintr_alloc(vf->vf_vdev, &intr->uci_vintr,
+                                        cq->intr_offset);
+        if (ret) {
+            usd_err("Failed to alloc cq completion intr\n");
+            free(intr);
+            pthread_mutex_unlock(&uctx->ucx_mutex);
+            return NULL;
+        }
+
+        /* init host interrupt registers */
+        iowrite32(0, &intr->uci_vintr.ctrl->coalescing_timer);
+        iowrite32(0, &intr->uci_vintr.ctrl->coalescing_type);
+        iowrite32(1, &intr->uci_vintr.ctrl->mask_on_assertion);
+        iowrite32(0, &intr->uci_vintr.ctrl->int_credits);
+        iowrite32(0, &intr->uci_vintr.ctrl->mask);    /* unmask */
+
+        intr->uci_offset = cq->intr_offset;
+        intr->uci_refcnt = 1;
+        LIST_INSERT_HEAD(&uctx->ucx_intr_list, intr, uci_ctx_link);
+    }
+
+out:
+    pthread_mutex_unlock(&uctx->ucx_mutex);
+    return intr;
+}
+
+/*
+ * put a cq interrupt source
+ */
+static void
+usd_put_cq_intr(
+    struct usd_cq_impl *cq)
+{
+    struct usd_context *uctx;
+    struct usd_cq_comp_intr *intr;
+
+    uctx = cq->ucq_dev->ud_ctx;
+
+    pthread_mutex_lock(&uctx->ucx_mutex);
+    LIST_FOREACH(intr, &uctx->ucx_intr_list, uci_ctx_link) {
+        if (intr->uci_offset == cq->intr_offset) {
+            intr->uci_refcnt--;
+            if (intr->uci_refcnt == 0)
+                vnic_grpmbrintr_free(&intr->uci_vintr);
+            break;
+        }
+    }
+
+    if (intr != NULL) {
+        LIST_REMOVE(intr, uci_ctx_link);
+        free(intr);
+    }
+    pthread_mutex_unlock(&uctx->ucx_mutex);
+}
+
+
+
+/*
  * Function that does whatever is needed to make a CQ go away
  */
 int
@@ -263,6 +350,10 @@ usd_destroy_cq(
 
     cq = to_cqi(ucq);
 
+    if (cq->ucq_intr != NULL) {
+        usd_put_cq_intr(cq);
+        cq->ucq_intr = NULL;
+    }
     if (cq->ucq_state & USD_QS_VERBS_CREATED)
         usd_ib_cmd_destroy_cq(cq->ucq_dev, cq);
 
@@ -660,19 +751,24 @@ usd_enable_qp(
  * that uses this CQ.  We will finish configuring the CQ at that time.
  */
 int
-usd_create_cq_with_cv(
+usd_create_cq(
     struct usd_device *dev,
-    unsigned num_entries,
-    int comp_fd,
-    int comp_vec,
-    void *ibv_cq,
+    struct usd_cq_init_attr *init_attr,
     struct usd_cq **cq_o)
 {
+    unsigned num_entries;
+    int comp_vec;
     unsigned qp_per_vf;
     struct usd_cq *ucq;
     struct usd_cq_impl *cq;
     unsigned ring_size;
     int ret;
+
+    if (init_attr == NULL)
+        return -EINVAL;
+
+    num_entries = init_attr->num_entries;
+    comp_vec = init_attr->comp_vec;
 
     /* Make sure device ready */
     ret = usd_device_ready(dev);
@@ -684,9 +780,12 @@ usd_create_cq_with_cv(
         return -EINVAL;
     }
 
-    if (comp_fd != -1) {
-        if (dev->ud_ctx->ucx_caps[USD_CAP_CQ_INTR] == 0 ||
-            comp_vec >= (int)dev->ud_attrs.uda_num_comp_vectors) {
+    if (init_attr->comp_fd != -1) {
+        if (dev->ud_ctx->ucx_caps[USD_CAP_GRP_INTR] == 0) {
+            usd_err("CQ completion event is not supported\n");
+            return -EINVAL;
+        }
+        if (comp_vec >= (int)dev->ud_attrs.uda_num_comp_vectors) {
             usd_err("too large comp_vec (%d) requested, num_comp_vectors=%d\n",
                     comp_vec, (int)dev->ud_attrs.uda_num_comp_vectors);
             return -EINVAL;
@@ -731,7 +830,8 @@ usd_create_cq_with_cv(
     if (comp_vec < 0)
         comp_vec = 0;
 
-    ret = usd_ib_cmd_create_cq(dev, cq, ibv_cq, comp_fd, comp_vec);
+    ret = usd_ib_cmd_create_cq(dev, cq, init_attr->ibv_cq, init_attr->comp_fd,
+                                comp_vec);
     if (ret != 0)
         goto out;
 
@@ -740,8 +840,9 @@ usd_create_cq_with_cv(
     /* initialize polling variables */
     cq->ucq_cqe_mask = num_entries - 1;
     cq->ucq_color_shift = msbit(num_entries) - 1;
-    cq->comp_fd = comp_fd;
+    cq->comp_fd = init_attr->comp_fd;
     cq->comp_vec = comp_vec;
+    cq->comp_req_notify = init_attr->comp_req_notify;
 
     ucq = to_usdcq(cq);
     ucq->ucq_num_entries = num_entries - 1;
@@ -753,16 +854,6 @@ out:
         usd_destroy_cq(to_usdcq(cq));
     }
     return ret;
-}
-
-int
-usd_create_cq(
-    struct usd_device *dev,
-    unsigned num_entries,
-    int comp_fd,
-    struct usd_cq **cq_o)
-{
-    return usd_create_cq_with_cv(dev, num_entries, comp_fd, -1, NULL, cq_o);
 }
 
 /*
@@ -814,8 +905,14 @@ usd_finish_create_cq(
         uint64_t cq_msg_addr = 0;
 
         if (cq->comp_fd != -1) {
-            cq_intr_enable = 1;
-            cq_intr_offset = cq->intr_offset;
+            cq->ucq_intr = usd_get_cq_intr(cq, vf);
+            if (cq->ucq_intr == NULL) {
+                usd_err("Failed to alloc cq completion intr\n");
+                return -ENOMEM;
+            } else {
+                cq_intr_enable = 1;
+                cq_intr_offset = cq->intr_offset;
+            }
         }
 
         cq->ucq_vnic_cq.ring.base_addr = (uintptr_t)cq->ucq_desc_ring;
