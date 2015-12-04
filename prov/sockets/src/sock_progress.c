@@ -2735,7 +2735,8 @@ static void sock_pe_init_table(struct sock_pe *pe)
 
 	for (i = 0; i < SOCK_PE_MAX_ENTRIES; i++) {
 		dlist_insert_head(&pe->pe_table[i].entry, &pe->free_list);
-		rbinit(&pe->pe_table[i].comm_buf, SOCK_PE_COMM_BUFF_SZ);
+		if (rbinit(&pe->pe_table[i].comm_buf, SOCK_PE_COMM_BUFF_SZ))
+			SOCK_LOG_ERROR("failed to init comm-cache\n");
 	}
 
 	pe->num_free_entries = SOCK_PE_MAX_ENTRIES;
