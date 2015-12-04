@@ -376,7 +376,7 @@ err:
 
 struct sock_conn *sock_ep_connect(struct sock_ep *ep, fi_addr_t index)
 {
-	int conn_fd, ret;
+	int conn_fd = -1, ret;
 	int do_retry = sock_conn_retry;
 	struct sock_conn *conn, *new_conn;
 	uint16_t idx;
@@ -402,7 +402,7 @@ do_connect:
 		return conn;
 
 	conn_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (conn_fd <= 0) {
+	if (conn_fd == -1) {
 		SOCK_LOG_ERROR("failed to create conn_fd, errno: %d\n", errno);
 		errno = FI_EOTHER;
 		return NULL;
@@ -412,6 +412,7 @@ do_connect:
 	if (ret) {
 		SOCK_LOG_ERROR("failed to set conn_fd nonblocking, errno: %d\n", errno);
 		errno = FI_EOTHER;
+		close(conn_fd);
                 return NULL;
 	}
 
@@ -446,9 +447,8 @@ do_connect:
 				SOCK_LOG_DBG("Connecting using address:%s\n",
 				inet_ntoa(ep->src_addr->sin_addr));
 				goto retry;
-			} else {
-				goto out;
 			}
+			goto out;
 		} else {
 			SOCK_LOG_DBG("Timeout or error() - %s: %d\n", strerror(errno), conn_fd);
 			SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
@@ -457,7 +457,6 @@ do_connect:
 					inet_ntoa(ep->src_addr->sin_addr));
 			goto retry;
 		}
-		goto retry;
 	} else {
 		goto out;
 	}
@@ -467,6 +466,11 @@ retry:
 	sleep(10);
 	if (!do_retry)
 		goto err;
+
+	if (conn_fd != -1) {
+		close(conn_fd);
+		conn_fd = -1;
+	}
 
 	SOCK_LOG_ERROR("Connect error, retrying - %s - %d\n", strerror(errno), conn_fd);
 	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
