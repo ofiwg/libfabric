@@ -322,7 +322,7 @@ int psmx2_am_process_send(struct psmx2_fid_domain *domain,
 	offset = req->send.len_sent;
 	len = req->send.len - offset;
 
-	chunk_size = MIN(PSMX2_AM_CHUNK_SIZE, psmx2_am_param.max_request_short);
+	chunk_size = psmx2_am_param.max_request_short;
 
 	while (len > chunk_size) {
 		args[0].u32w0 = PSMX2_AM_REQ_SEND;
@@ -562,7 +562,7 @@ static ssize_t psmx2_send2_generic(struct fid_ep *ep, const void *buf,
 		vlane = PSMX2_ADDR_TO_VL(dest_addr);
 	}
 
-	chunk_size = MIN(PSMX2_AM_CHUNK_SIZE, psmx2_am_param.max_request_short);
+	chunk_size = psmx2_am_param.max_request_short;
 	msg_size = MIN(len, chunk_size);
 
 	req = calloc(1, sizeof(*req));
