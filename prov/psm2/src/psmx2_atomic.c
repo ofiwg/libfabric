@@ -805,7 +805,7 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 					 NULL, addr, key, datatype, op,
 					 context, flags);
 
-	chunk_size = MIN(PSMX2_AM_CHUNK_SIZE, psmx2_am_param.max_request_short);
+	chunk_size = psmx2_am_param.max_request_short;
 	len = fi_datatype_size(datatype)* count;
 	if (len > chunk_size)
 		return -FI_EMSGSIZE;
@@ -1002,7 +1002,7 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 					 result_desc, addr, key, datatype, op,
 					 context, flags);
 
-	chunk_size = MIN(PSMX2_AM_CHUNK_SIZE, psmx2_am_param.max_request_short);
+	chunk_size = psmx2_am_param.max_request_short;
 	len = fi_datatype_size(datatype) * count;
 	if (len > chunk_size)
 		return -FI_EMSGSIZE;
@@ -1219,7 +1219,7 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 					 addr, key, datatype, op,
 					 context, flags);
 
-	chunk_size = MIN(PSMX2_AM_CHUNK_SIZE, psmx2_am_param.max_request_short);
+	chunk_size = psmx2_am_param.max_request_short;
 	len = fi_datatype_size(datatype) * count;
 	if (len * 2 > chunk_size)
 		return -FI_EMSGSIZE;
@@ -1380,8 +1380,7 @@ static int psmx2_atomic_writevalid(struct fid_ep *ep,
 	}
 
 	if (count) {
-		chunk_size = MIN(PSMX2_AM_CHUNK_SIZE,
-				 psmx2_am_param.max_request_short);
+		chunk_size = psmx2_am_param.max_request_short;
 		*count = chunk_size / fi_datatype_size(datatype);
 	}
 	return 0;
@@ -1416,8 +1415,7 @@ static int psmx2_atomic_readwritevalid(struct fid_ep *ep,
 	}
 
 	if (count) {
-		chunk_size = MIN(PSMX2_AM_CHUNK_SIZE,
-				 psmx2_am_param.max_request_short);
+		chunk_size = psmx2_am_param.max_request_short;
 		*count = chunk_size / fi_datatype_size(datatype);
 	}
 	return 0;
@@ -1462,8 +1460,7 @@ static int psmx2_atomic_compwritevalid(struct fid_ep *ep,
 	}
 
 	if (count) {
-		chunk_size = MIN(PSMX2_AM_CHUNK_SIZE,
-				 psmx2_am_param.max_request_short);
+		chunk_size = psmx2_am_param.max_request_short;
 		*count = chunk_size / (2 * fi_datatype_size(datatype));
 	}
 	return 0;

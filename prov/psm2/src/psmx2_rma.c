@@ -595,7 +595,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 		req->no_event = 1;
 	}
 
-	chunk_size = MIN(PSMX2_AM_CHUNK_SIZE, psmx2_am_param.max_reply_short);
+	chunk_size = psmx2_am_param.max_reply_short;
 
 	args[0].u32w0 = 0;
 	PSMX2_AM_SET_SRC(args[0].u32w0, ep_priv->vlane);
@@ -797,7 +797,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	PSMX2_CTXT_USER(&req->fi_context) = context;
 	PSMX2_CTXT_EP(&req->fi_context) = ep_priv;
 
-	chunk_size = MIN(PSMX2_AM_CHUNK_SIZE, psmx2_am_param.max_request_short);
+	chunk_size = psmx2_am_param.max_request_short;
 
 	args[0].u32w0 = 0;
 	PSMX2_AM_SET_SRC(args[0].u32w0, ep_priv->vlane);

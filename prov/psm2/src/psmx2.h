@@ -156,9 +156,6 @@ union psmx2_pi {
 #define PSMX2_AM_RMA_HANDLER	0
 #define PSMX2_AM_MSG_HANDLER	1
 #define PSMX2_AM_ATOMIC_HANDLER	2
-#define PSMX2_AM_CHUNK_SIZE	2032	/* The maximum that's actually working:
-					 * 2032 for inter-node, 2072 for intra-node.
-					 */
 
 #define PSMX2_AM_OP_MASK	0x000000FF
 #define PSMX2_AM_DST_MASK	0x0000FF00
