@@ -142,12 +142,10 @@ void psmx_atomic_fini(void)
 			TYPE *d = (dst); \
 			TYPE *s = (src); \
 			TYPE *r = (res); \
-			TYPE tmp; \
 			fastlock_acquire(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) {\
-				tmp = d[i]; \
+				r[i] = d[i]; \
 				OP(d[i],s[i]); \
-				r[i] = tmp; \
 			} \
 			fastlock_release(&psmx_atomic_lock); \
 		} while (0)
@@ -159,13 +157,11 @@ void psmx_atomic_fini(void)
 			TYPE *s = (src); \
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
-			TYPE tmp; \
 			fastlock_acquire(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) { \
-				tmp = d[i]; \
+				r[i] = d[i]; \
 				if (c[i] CMP_OP d[i]) \
 					d[i] = s[i]; \
-				r[i] = tmp; \
 			} \
 			fastlock_release(&psmx_atomic_lock); \
 		} while (0)
@@ -177,12 +173,10 @@ void psmx_atomic_fini(void)
 			TYPE *s = (src); \
 			TYPE *c = (cmp); \
 			TYPE *r = (res); \
-			TYPE tmp; \
 			fastlock_acquire(&psmx_atomic_lock); \
 			for (i=0; i<(cnt); i++) { \
-				tmp = d[i]; \
+				r[i] = d[i]; \
 				d[i] = (s[i] & c[i]) | (d[i] & ~c[i]); \
-				r[i] = tmp; \
 			} \
 			fastlock_release(&psmx_atomic_lock); \
 		} while (0)
@@ -623,6 +617,7 @@ static int psmx_atomic_self(int am_cmd,
 	struct psmx_fid_ep *target_ep;
 	struct psmx_fid_cntr *cntr = NULL;
 	struct psmx_fid_cntr *mr_cntr = NULL;
+	void *tmp_buf;
 	size_t len;
 	int no_event;
 	int err = 0;
@@ -652,9 +647,25 @@ static int psmx_atomic_self(int am_cmd,
 		break;
 
 	case PSMX_AM_REQ_ATOMIC_READWRITE:
-		err = psmx_atomic_do_readwrite((void *)addr, (void *)buf,
-					       (void *)result, (int)datatype,
-					       (int)op, (int)count);
+		if (result != buf) {
+			err = psmx_atomic_do_readwrite((void *)addr, (void *)buf,
+						       (void *)result, (int)datatype,
+						       (int)op, (int)count);
+		}
+		else {
+			tmp_buf = malloc(len);
+			if (tmp_buf) {
+				memcpy(tmp_buf, result, len);
+				err = psmx_atomic_do_readwrite((void *)addr, (void *)buf,
+							       tmp_buf, (int)datatype,
+							       (int)op, (int)count);
+				memcpy(result, tmp_buf, len);
+				free(tmp_buf);
+			}
+			else {
+				err = -FI_ENOMEM;
+			}
+		}
 		if (op == FI_ATOMIC_READ)
 			cq_flags = FI_READ | FI_ATOMIC;
 		else
@@ -662,9 +673,25 @@ static int psmx_atomic_self(int am_cmd,
 		break;
 
 	case PSMX_AM_REQ_ATOMIC_COMPWRITE:
-		err = psmx_atomic_do_compwrite((void *)addr, (void *)buf,
-					       (void *)compare, (void *)result,
-					       (int)datatype, (int)op, (int)count);
+		if (result != buf && result != compare) {
+			err = psmx_atomic_do_compwrite((void *)addr, (void *)buf,
+						       (void *)compare, (void *)result,
+						       (int)datatype, (int)op, (int)count);
+		}
+		else {
+			tmp_buf = malloc(len);
+			if (tmp_buf) {
+				memcpy(tmp_buf, result, len);
+				err = psmx_atomic_do_compwrite((void *)addr, (void *)buf,
+							       (void *)compare, tmp_buf,
+							       (int)datatype, (int)op, (int)count);
+				memcpy(result, tmp_buf, len);
+				free(tmp_buf);
+			}
+			else {
+				err = -FI_ENOMEM;
+			}
+		}
 		cq_flags = FI_WRITE | FI_ATOMIC;
 		break;
 	}
