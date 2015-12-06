@@ -402,15 +402,15 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf(struct fi_ibv_rdm_tagged_conn
 	if (fi_ibv_rdm_tagged_get_buffer_status(conn->sbuf_head) ==
 	    BUF_STATUS_FREE) {
 
-	/* We have made whole circle. Reset buffer states */
-	if (conn->sbuf_head ==
-	    (conn->sbuf_mem_reg + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE))
-		{
+		/* We have made whole circle. Reset buffer states */
+		if (conn->sbuf_head ==
+		    (conn->sbuf_mem_reg +
+		     FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE)) {
 			for (i = 1; i < ep->n_buffs; ++i) {
 				fi_ibv_rdm_tagged_set_buffer_status(
-				    conn->sbuf_mem_reg +
-				    FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
-				    i * ep->buff_len, BUF_STATUS_FREE);
+				conn->sbuf_mem_reg +
+				FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+				i * ep->buff_len, BUF_STATUS_FREE);
 			}
 		}
 

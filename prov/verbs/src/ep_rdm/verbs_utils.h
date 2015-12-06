@@ -48,10 +48,6 @@
 #if defined(__ICC) || defined(__INTEL_COMPILER) || \
  defined(__GNUC__) || defined(__GNUG__)
 #include "xmmintrin.h"
-#endif /* ICC || GCC */
-
-#if defined(__ICC) || defined(__INTEL_COMPILER) || \
- defined(__GNUC__) || defined(__GNUG__)
 #define FI_IBV_PREFETCH_ADDR(_addr) {                    \
         _mm_prefetch((const char *)(_addr), _MM_HINT_T0);\
 }
