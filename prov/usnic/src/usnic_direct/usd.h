@@ -51,6 +51,7 @@
 #include "vnic_cq.h"
 #include "wq_enet_desc.h"
 #include "rq_enet_desc.h"
+#include "vnic_intr.h"
 
 #include "usnic_abi.h"
 #include "usnic_direct.h"
@@ -61,7 +62,6 @@
     ((flags >> USD_SFS_##flagname) & 1)
 
 #define USD_SEND_MAX_COPY 992
-#define USD_MAX_CQ_GROUP 1024
 #define USD_MAX_PRESEND 4
 
 #define USD_CTXF_CLOSE_CMD_FD (1u << 0)
@@ -70,6 +70,25 @@
 #ifndef USD_DEBUG
 #define USD_DEBUG 0
 #endif
+
+/*
+ * Group interrupt vector userspace map info
+ */
+struct usd_grp_vect_map {
+    void            *va;
+    size_t          len;
+    uint32_t        vfid;
+};
+
+/*
+ * structure storing interrupt resource and its mapping to FD
+ */
+struct usd_cq_comp_intr {
+    struct vnic_intr                uci_vintr;
+    int                             uci_offset;
+    int                             uci_refcnt;
+    LIST_ENTRY(usd_cq_comp_intr)    uci_ctx_link;
+};
 
 /*
  * Instance of a usd context, corresponding to an
@@ -84,6 +103,9 @@ struct usd_context {
 
     uint32_t ucx_flags;
     int ucx_caps[USD_CAP_MAX];          /* device capablities */
+
+    pthread_mutex_t ucx_mutex;          /* protect intr_list */
+    LIST_HEAD(intr_head, usd_cq_comp_intr) ucx_intr_list;
 
     /* Remove these after moving ud_attrs here */
     int event_fd;
@@ -111,6 +133,8 @@ struct usd_device {
     TAILQ_HEAD(, usd_dest_req) ud_completed_reqs;
 
     TAILQ_ENTRY(usd_device) ud_link;
+
+    struct usd_grp_vect_map grp_vect_map;
 };
 
 /*
@@ -132,6 +156,7 @@ struct usd_vf {
     uint32_t vf_id;
     int vf_refcnt;
     struct vnic_dev_bar vf_bar0;
+    size_t vf_bar_map_len;
     struct vnic_dev *vf_vdev;
     struct vnic_dev_iomap_info iomaps[RES_TYPE_MAX];
 
@@ -148,6 +173,7 @@ struct usd_vf_info {
     uint32_t vi_vfid;
     dma_addr_t vi_bar_bus_addr;
     uint32_t vi_bar_len;
+    size_t vi_barhead_len;
     struct usnic_vnic_barres_info barres[RES_TYPE_MAX];
 };
 
@@ -201,7 +227,9 @@ struct usd_cq_impl {
 
     int comp_fd;
     int comp_vec;
-    uint32_t intr_offset;
+    int comp_req_notify;
+    int intr_offset;
+    struct usd_cq_comp_intr *ucq_intr;
 
     struct usd_rq **ucq_rq_map;
     struct usd_wq **ucq_wq_map;

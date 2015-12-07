@@ -49,6 +49,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 
 #include <infiniband/driver.h>
 
@@ -74,6 +75,18 @@ static void
 do_usd_init(void)
 {
     usd_init_error = usd_ib_get_devlist(&usd_ib_dev_list);
+}
+
+/*
+ * Unmap group vector when releasing usd_dev
+ */
+static void
+usd_unmap_grp_vect(struct usd_device *dev)
+{
+    if (dev->grp_vect_map.va != NULL) {
+        munmap(dev->grp_vect_map.va, dev->grp_vect_map.len);
+        dev->grp_vect_map.va = NULL;
+    }
 }
 
 /*
@@ -196,8 +209,8 @@ usd_dev_free(struct usd_device *dev)
  * Allocate a usd_device without allocating a PD
  */
 static int
-usd_dev_alloc_init(struct usd_context *context, const char *dev_name, int cmd_fd,
-                    int check_ready, struct usd_device **dev_o)
+usd_dev_alloc_init(const char *dev_name, struct usd_open_params *uop_param,
+                    struct usd_device **dev_o)
 {
     struct usd_device *dev = NULL;
     int ret;
@@ -209,14 +222,15 @@ usd_dev_alloc_init(struct usd_context *context, const char *dev_name, int cmd_fd
     }
 
     dev->ud_flags = 0;
-    if (context == NULL) {
-        ret = usd_open_context(dev_name, cmd_fd, &dev->ud_ctx);
+    if (uop_param->context == NULL) {
+        ret = usd_open_context(dev_name, uop_param->cmd_fd,
+                                &dev->ud_ctx);
         if (ret != 0) {
             goto out;
         }
         dev->ud_flags |= USD_DEVF_CLOSE_CTX;
     } else {
-        dev->ud_ctx = context;
+        dev->ud_ctx = uop_param->context;
     }
 
     dev->ud_arp_sockfd = -1;
@@ -224,17 +238,18 @@ usd_dev_alloc_init(struct usd_context *context, const char *dev_name, int cmd_fd
     TAILQ_INIT(&dev->ud_pending_reqs);
     TAILQ_INIT(&dev->ud_completed_reqs);
 
-    if (context == NULL)
+    if (uop_param->context == NULL)
         ret = usd_discover_device_attrs(dev, dev_name);
     else
-        ret = usd_discover_device_attrs(dev, context->ucx_ib_dev->id_usnic_name);
+        ret = usd_discover_device_attrs(dev,
+                uop_param->context->ucx_ib_dev->id_usnic_name);
     if (ret != 0)
         goto out;
 
     dev->ud_attrs.uda_event_fd = dev->ud_ctx->event_fd;
     dev->ud_attrs.uda_num_comp_vectors = dev->ud_ctx->num_comp_vectors;
 
-    if (check_ready) {
+    if (!(uop_param->flags & UOPF_SKIP_LINK_CHECK)) {
         ret = usd_device_ready(dev);
         if (ret != 0) {
             goto out;
@@ -253,6 +268,8 @@ out:
 int
 usd_close_context(struct usd_context *ctx)
 {
+    pthread_mutex_destroy(&ctx->ucx_mutex);
+
     /* XXX - verify all other resources closed out */
     if (ctx->ucx_flags & USD_CTXF_CLOSE_CMD_FD)
         close(ctx->ucx_ib_dev_fd);
@@ -340,6 +357,10 @@ usd_open_context(const char *dev_name, int cmd_fd,
         goto out;
     }
 
+    LIST_INIT(&ctx->ucx_intr_list);
+    if (pthread_mutex_init(&ctx->ucx_mutex, NULL) != 0)
+        goto out;
+
     *ctx_o = ctx;
     return 0;
 
@@ -356,6 +377,8 @@ int
 usd_close(
     struct usd_device *dev)
 {
+    usd_unmap_grp_vect(dev);
+
     TAILQ_REMOVE(&usd_device_list, dev, ud_link);
     usd_dev_free(dev);
 
@@ -370,73 +393,30 @@ usd_open(
     const char *dev_name,
     struct usd_device **dev_o)
 {
-    return usd_open_with_fd(dev_name, -1, 1, 1, dev_o);
-}
+    struct usd_open_params params;
 
-/*
- * Open a raw USNIC device
- */
-int
-usd_open_for_attrs(
-    const char *dev_name,
-    struct usd_device **dev_o)
-{
-    return usd_open_with_fd(dev_name, -1, 1, 0, dev_o);
-}
-
-/*
- * previous generic usd open function, used by libusnic_verbs_d
- */
-int
-usd_open_with_fd(
-    const char *dev_name,
-    int cmd_fd,
-    int check_ready,
-    int alloc_pd,
-    struct usd_device **dev_o)
-{
-    struct usd_device *dev = NULL;
-    int ret;
-
-    ret = usd_dev_alloc_init(NULL, dev_name, cmd_fd, check_ready, &dev);
-    if (ret != 0) {
-        goto out;
-    }
-
-    if (alloc_pd) {
-        ret = usd_ib_cmd_alloc_pd(dev, &dev->ud_pd_handle);
-        if (ret != 0) {
-            goto out;
-        }
-    }
-
-    TAILQ_INSERT_TAIL(&usd_device_list, dev, ud_link);
-    *dev_o = dev;
-    return 0;
-
-out:
-    if (dev != NULL)
-        usd_dev_free(dev);
-    return ret;
-
+    memset(&params, 0, sizeof(params));
+    params.cmd_fd = -1;
+    params.context = NULL;
+    return usd_open_with_params(dev_name, &params, dev_o);
 }
 
 /*
  * Most generic usd device open function
  */
-int
-usd_open_with_ctx(struct usd_context *context, int alloc_pd, int check_ready,
-                    struct usd_device **dev_o)
+int usd_open_with_params(const char *dev_name,
+                            struct usd_open_params* uop_param,
+                            struct usd_device **dev_o)
 {
     struct usd_device *dev = NULL;
     int ret;
 
-    ret = usd_dev_alloc_init(context, NULL, -1, check_ready, &dev);
+    ret = usd_dev_alloc_init(dev_name, uop_param, &dev);
     if (ret != 0) {
         goto out;
     }
 
-    if (alloc_pd) {
+    if (!(uop_param->flags & UOPF_SKIP_PD_ALLOC)) {
         ret = usd_ib_cmd_alloc_pd(dev, &dev->ud_pd_handle);
         if (ret != 0) {
             goto out;

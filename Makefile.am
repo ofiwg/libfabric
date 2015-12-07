@@ -221,6 +221,8 @@ libusnic_direct_sources = \
 	prov/usnic/src/usnic_direct/vnic_stats.h \
 	prov/usnic/src/usnic_direct/vnic_wq.c \
 	prov/usnic/src/usnic_direct/vnic_wq.h \
+	prov/usnic/src/usnic_direct/vnic_intr.c \
+	prov/usnic/src/usnic_direct/vnic_intr.h \
 	prov/usnic/src/usnic_direct/wq_enet_desc.h
 
 _usnic_files = \

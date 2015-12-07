@@ -41,61 +41,78 @@
  *
  */
 
-#ifndef _VNIC_STATS_H_
-#define _VNIC_STATS_H_
+#include <linux/kernel.h>
+#include <linux/errno.h>
+#include <linux/types.h>
+#include <linux/pci.h>
+#include <linux/delay.h>
 
-/* Tx statistics */
-struct vnic_tx_stats {
-	u64 tx_frames_ok;
-	u64 tx_unicast_frames_ok;
-	u64 tx_multicast_frames_ok;
-	u64 tx_broadcast_frames_ok;
-	u64 tx_bytes_ok;
-	u64 tx_unicast_bytes_ok;
-	u64 tx_multicast_bytes_ok;
-	u64 tx_broadcast_bytes_ok;
-	u64 tx_drops;
-	u64 tx_errors;
-	u64 tx_tso;
-	u64 rsvd[16];
-};
+#include "kcompat.h"
+#include "vnic_dev.h"
+#include "vnic_intr.h"
 
-/* Rx statistics */
-struct vnic_rx_stats {
-	u64 rx_frames_ok;
-	u64 rx_frames_total;
-	u64 rx_unicast_frames_ok;
-	u64 rx_multicast_frames_ok;
-	u64 rx_broadcast_frames_ok;
-	u64 rx_bytes_ok;
-	u64 rx_unicast_bytes_ok;
-	u64 rx_multicast_bytes_ok;
-	u64 rx_broadcast_bytes_ok;
-	u64 rx_drop;
-	u64 rx_no_bufs;
-	u64 rx_errors;
-	u64 rx_rss;
-	u64 rx_crc_errors;
-	u64 rx_frames_64;
-	u64 rx_frames_127;
-	u64 rx_frames_255;
-	u64 rx_frames_511;
-	u64 rx_frames_1023;
-	u64 rx_frames_1518;
-	u64 rx_frames_to_max;
-	u64 rsvd[16];
-};
+void vnic_intr_free(struct vnic_intr *intr)
+{
+	intr->ctrl = NULL;
+}
 
-#if (!defined __VMKLNX__) && (!defined ENIC_PMD)
-/* Generic statistics */
-struct vnic_gen_stats {
-	u64 dma_map_error;
-};
-#endif
+int vnic_intr_alloc(struct vnic_dev *vdev, struct vnic_intr *intr,
+	unsigned int index)
+{
+	intr->index = index;
+	intr->vdev = vdev;
 
-struct vnic_stats {
-	struct vnic_tx_stats tx;
-	struct vnic_rx_stats rx;
-};
+	intr->ctrl = vnic_dev_get_res(vdev, RES_TYPE_INTR_CTRL, index);
+	if (!intr->ctrl) {
+		pr_err("Failed to hook INTR[%d].ctrl resource\n", index);
+		return -EINVAL;
+	}
 
-#endif /* _VNIC_STATS_H_ */
+	return 0;
+}
+
+void vnic_intr_init(struct vnic_intr *intr, u32 coalescing_timer,
+	unsigned int coalescing_type, unsigned int mask_on_assertion)
+{
+	vnic_intr_coalescing_timer_set(intr, coalescing_timer);
+	iowrite32(coalescing_type, &intr->ctrl->coalescing_type);
+	iowrite32(mask_on_assertion, &intr->ctrl->mask_on_assertion);
+	iowrite32(0, &intr->ctrl->int_credits);
+}
+
+void vnic_intr_coalescing_timer_set(struct vnic_intr *intr,
+	u32 coalescing_timer)
+{
+	iowrite32(vnic_dev_intr_coal_timer_usec_to_hw(intr->vdev,
+		coalescing_timer), &intr->ctrl->coalescing_timer);
+}
+
+void vnic_intr_clean(struct vnic_intr *intr)
+{
+	iowrite32(0, &intr->ctrl->int_credits);
+}
+
+void vnic_intr_raise(struct vnic_intr *intr)
+{
+	vnic_dev_raise_intr(intr->vdev, (u16)intr->index);
+}
+
+void vnic_grpmbrintr_free(struct vnic_intr *intr)
+{
+	intr->ctrl = NULL;
+}
+
+int vnic_grpmbrintr_alloc(struct vnic_dev *vdev, struct vnic_intr *intr,
+	unsigned int index)
+{
+	intr->index = index;
+	intr->vdev = vdev;
+
+	intr->ctrl = vnic_dev_get_res(vdev, RES_TYPE_GRPMBR_INTR, index);
+	if (!intr->ctrl) {
+		pr_err("Failed to hook INTR[%d].ctrl resource\n", index);
+		return -EINVAL;
+	}
+
+	return 0;
+}

@@ -61,11 +61,26 @@
 	  (((uint64_t)res_type_bar_id & 0xffff) << 32) | \
 	  ((uint64_t)vfid & ((1ULL << 32) - 1))) * sysconf(_SC_PAGE_SIZE))
 
-#define USNIC_UDEVCMD_NARGS 		15   /* VNIC_DEVCMD_NARGS */
+/*
+ * The kernel module eventually issues proxy the devcmd through enic and the
+ * maximum number of devcmd arguments supported for a vnic is VNIC_DEVCMD_NARGS
+ * (= 15).  Among them, 2 arguments are consumed by proxy command for
+ * proxy_index and proxy devcmd. Hence, only a maximum of 13 arguments are
+ * supported on input in practice, even though the ABI between user space and
+ * the kernel has space for 15.
+ *
+ * Keep _NARGS as 15 for backwards compatibility (newer user space with older
+ * kernel), otherwise usnic_ucmd_devcmd() on the older kernel will fail with
+ * -EINVAL.
+ */
+#define USNIC_UDEVCMD_NARGS 		15
+#define USNIC_UDEVCMD_MAX_IN_ARGS	(USNIC_UDEVCMD_NARGS - 2)
 
 enum usnic_mmap_type {
 	USNIC_MMAP_BAR			= 0,
 	USNIC_MMAP_RES			= 1,
+	USNIC_MMAP_BARHEAD		= 2,
+	USNIC_MMAP_GRPVECT		= 3,
 };
 
 enum usnic_transport_type {
@@ -111,6 +126,24 @@ struct usnic_transport_spec {
 		struct {
 			uint32_t	sock_fd;
 		} udp;
+	};
+};
+
+#define USNIC_IB_ALLOC_PD_VERSION 1
+
+struct usnic_ib_alloc_pd_cmd {
+	u32	resp_version;		/* response version requested */
+	u32	pad_to_8byte;
+};
+
+struct usnic_ib_alloc_pd_resp {
+	u32	resp_version;
+	u32	pad_to_8byte;
+	union {
+		struct {
+			u32	vfid;
+			u32	grp_vect_buf_len;
+		} cur;  /* v1 */
 	};
 };
 
@@ -181,7 +214,7 @@ struct usnic_ib_create_qp_resp {
 			u32 rq_err_intr_offset;
 			u32 wcq_intr_offset;
 			u32 rcq_intr_offset;
-			u32 pad_to_8byte;
+			u32 barhead_len;
 		} cur; /* v2 */
 	} u;
 
@@ -222,6 +255,7 @@ enum usnic_capability {
 	USNIC_CAP_MAP_PER_RES,	/* Map individual RES */
 	USNIC_CAP_PIO,		/* PIO send */
 	USNIC_CAP_CQ_INTR,	/* CQ interrupts (via comp channels) */
+	USNIC_CAP_GRP_INTR,	/* Group interrupt */
 	USNIC_CAP_CNT
 };
 
@@ -236,21 +270,29 @@ struct usnic_ib_get_context_resp {
 	u32 cap_info[USNIC_CAP_CNT];
 };
 
-#define USNIC_IB_CREATE_CQ_VERSION 1
-
-enum usnic_cq_intr_arm_mode {
-	USNIC_CQ_INTR_ARM_MODE_CONTINUOUS,   /* continuously armed after
-						CQ(+QP) creation */
-	USNIC_CQ_INTR_ARM_MODE_CNT
-};
+#define USNIC_IB_CREATE_CQ_VERSION 2
 
 struct usnic_ib_create_cq_v0 {
-	u64 reserved;
+        u64 reserved;
 };
 
+#define USNIC_CQ_COMP_SIGNAL_VERBS	0x1	/* whether to signal cq
+						 * completion event via verbs
+						 */
+
 struct usnic_ib_create_cq {
-	u32 resp_version; /* response version requested */
-	u32 intr_arm_mode;
+	u32 resp_version;	/* response version requested */
+	union {
+		struct {
+			u32 intr_arm_mode;
+		} v1;
+		struct {
+			u32 flags;
+			__s64 comp_event_fd;	/* wait fd for cq completion */
+			u64 affinity_mask_ptr;	/* process affinity mask ptr*/
+			u64 affinity_mask_len;
+		} cur;	/* v2 */
+	};
 };
 
 struct usnic_ib_create_cq_resp_v0 {
@@ -258,7 +300,7 @@ struct usnic_ib_create_cq_resp_v0 {
 };
 
 struct usnic_ib_create_cq_resp {
-	u32 resp_version; /* response version returned */
+	u32 resp_version;	/* response version returned */
 	u32 pad_to_8byte;
 };
 

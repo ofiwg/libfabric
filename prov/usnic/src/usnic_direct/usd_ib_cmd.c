@@ -49,6 +49,8 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <inttypes.h>
+#include <sys/mman.h>
+#include <sched.h>
 
 #include <infiniband/driver.h>
 
@@ -130,6 +132,10 @@ usd_ib_cmd_get_context(struct usd_context *uctx)
         if (urp->num_caps > USNIC_CAP_CQ_INTR &&
             urp->cap_info[USNIC_CAP_CQ_INTR] > 0) {
             uctx->ucx_caps[USD_CAP_CQ_INTR] = 1;
+        }
+        if (urp->num_caps > USNIC_CAP_GRP_INTR &&
+            urp->cap_info[USNIC_CAP_GRP_INTR] > 0) {
+            uctx->ucx_caps[USD_CAP_GRP_INTR] = 1;
         }
     }
 
@@ -215,17 +221,49 @@ usd_ib_cmd_devcmd(
 }
 
 /*
- * Create a protection domain
+ * Issue IB DEALLOC_PD command to alloc a PD in kernel
  */
-int
-usd_ib_cmd_alloc_pd(
+static int
+_usd_ib_cmd_dealloc_pd(
     struct usd_device *dev,
-    uint32_t *handle_o)
+    uint32_t pd_handle)
+{
+    struct usnic_dealloc_pd cmd;
+    struct ibv_dealloc_pd *icp;
+    int n;
+
+    memset(&cmd, 0, sizeof(cmd));
+
+    icp = &cmd.ibv_cmd;
+    icp->command = IB_USER_VERBS_CMD_DEALLOC_PD;
+    icp->pd_handle = pd_handle;
+    icp->in_words = sizeof(cmd) / 4;
+    icp->out_words = 0;
+
+    n = write(dev->ud_ctx->ucx_ib_dev_fd, &cmd, sizeof(cmd));
+    if (n != sizeof(cmd)) {
+        return -errno;
+    }
+
+    return 0;
+}
+
+/*
+ * Issue IB ALLOC_PD command to alloc a PD in kernel
+ */
+static int
+_usd_ib_cmd_alloc_pd(
+    struct usd_device *dev,
+    uint32_t *handle_o,
+    uint32_t *vfid,
+    uint32_t *grp_vect_buf_len)
 {
     struct usnic_alloc_pd cmd;
     struct usnic_alloc_pd_resp resp;
     struct ibv_alloc_pd *icp;
+    struct usnic_ib_alloc_pd_cmd *ucp;
     struct ibv_alloc_pd_resp *irp;
+    struct usnic_ib_alloc_pd_resp *urp;
     int n;
 
     memset(&cmd, 0, sizeof(cmd));
@@ -238,6 +276,15 @@ usd_ib_cmd_alloc_pd(
     icp->out_words = sizeof(resp) / 4;
     icp->response = (uintptr_t) & resp;
 
+    /*
+     * Only need to get group vector size and vf information
+     * if group interrupt is enabled
+     */
+    if (dev->ud_ctx->ucx_caps[USD_CAP_GRP_INTR] > 0) {
+        ucp = &cmd.usnic_cmd;
+        ucp->resp_version = USNIC_IB_ALLOC_PD_VERSION;
+    }
+
     n = write(dev->ud_ctx->ucx_ib_dev_fd, &cmd, sizeof(cmd));
     if (n != sizeof(cmd)) {
         return -errno;
@@ -246,6 +293,57 @@ usd_ib_cmd_alloc_pd(
     /* process response */
     irp = &resp.ibv_resp;
     *handle_o = irp->pd_handle;
+    urp = &resp.usnic_resp;
+    if (urp->resp_version >= 1) {
+        *vfid = urp->cur.vfid;
+        *grp_vect_buf_len = urp->cur.grp_vect_buf_len;
+    }
+
+    return 0;
+}
+
+/*
+ * Create a protection domain
+ */
+int
+usd_ib_cmd_alloc_pd(
+    struct usd_device *dev,
+    uint32_t *handle_o)
+{
+    uint32_t vfid = 0;
+    uint32_t grp_vect_buf_len = 0;
+    int err;
+
+    /* Issue IB alloc_pd command, get assigned VF id and group vector size */
+    err = _usd_ib_cmd_alloc_pd(dev, handle_o, &vfid, &grp_vect_buf_len);
+    if (err) {
+        return err;
+    }
+
+    /* MAP group vector address to userspace
+     * Kernel module then maps group vector user address to IOMMU and
+     * program VIC HW register
+     */
+    if (dev->ud_ctx->ucx_caps[USD_CAP_GRP_INTR] > 0) {
+        void *va;
+        off64_t offset;
+
+        offset = USNIC_ENCODE_PGOFF(vfid, USNIC_MMAP_GRPVECT, 0);
+        va = mmap64(NULL, grp_vect_buf_len, PROT_READ + PROT_WRITE,
+                    MAP_SHARED, dev->ud_ctx->ucx_ib_dev_fd, offset);
+
+        if (va == MAP_FAILED) {
+            usd_err("Failed to map group vector for vf %u, grp_vect_size %u, "
+                    "error %d\n",
+                    vfid, grp_vect_buf_len, errno);
+            _usd_ib_cmd_dealloc_pd(dev, *handle_o);
+            return -errno;
+        }
+
+        dev->grp_vect_map.va = va;
+        dev->grp_vect_map.len = grp_vect_buf_len;
+        dev->grp_vect_map.vfid = vfid;
+    }
 
     return 0;
 }
@@ -335,6 +433,8 @@ usd_ib_cmd_create_cq(
     struct usnic_create_cq_resp resp;
     struct ibv_create_cq *icp;
     struct ibv_create_cq_resp *irp;
+    cpu_set_t *affinity_mask = NULL;
+    int flags = 0;
     int n;
 
     memset(&cmd, 0, sizeof(cmd));
@@ -346,17 +446,44 @@ usd_ib_cmd_create_cq(
     icp->out_words = sizeof(resp) / 4;
     icp->response = (uintptr_t) & resp;
 
-    if (ibv_cq == NULL)
+    if (ibv_cq == NULL) {
         icp->user_handle = (uintptr_t) cq;
-    else
+    } else {
         icp->user_handle = (uintptr_t) ibv_cq;  /* Pass real verbs cq pointer to kernel
                                                  * to make ibv_get_cq_event happy */
+        flags |= USNIC_CQ_COMP_SIGNAL_VERBS;
+    }
     icp->cqe = cq->ucq_num_entries;
     icp->comp_channel = comp_channel;
     icp->comp_vector = comp_vector;
 
-    cmd.usnic_cmd.resp_version = USNIC_IB_CREATE_CQ_VERSION;
-    cmd.usnic_cmd.intr_arm_mode = USNIC_CQ_INTR_ARM_MODE_CONTINUOUS;
+    if (comp_channel != -1) {
+        if (dev->ud_ctx->ucx_caps[USD_CAP_GRP_INTR] != 1) {
+            usd_err("usd_create_cq failed. No interrupt support\n");
+            return -ENOTSUP;
+        }
+        cmd.usnic_cmd.resp_version = USNIC_IB_CREATE_CQ_VERSION;
+        cmd.usnic_cmd.cur.flags = flags;
+        cmd.usnic_cmd.cur.comp_event_fd = comp_channel;
+        if ((affinity_mask = CPU_ALLOC(sysconf(_SC_NPROCESSORS_ONLN)))
+                != NULL &&
+            sched_getaffinity(getpid(), sizeof(affinity_mask),
+                                affinity_mask) == 0) {
+            cmd.usnic_cmd.cur.affinity_mask_ptr = (u64)affinity_mask;
+            cmd.usnic_cmd.cur.affinity_mask_len =
+                            CPU_ALLOC_SIZE(sysconf(_SC_NPROCESSORS_ONLN));
+        } else {
+            cmd.usnic_cmd.cur.affinity_mask_ptr = (u64)NULL;
+            cmd.usnic_cmd.cur.affinity_mask_len = 0;
+        }
+    } else {
+        /*
+         * If appliation does not request cq completion event support,
+         * send command with version 0 to allow compatibility with
+         * old kernel library
+         */
+        cmd.usnic_cmd.resp_version = 0;
+    }
 
     /* Issue command to IB driver */
     n = write(dev->ud_ctx->ucx_ib_dev_fd, &cmd, sizeof(cmd));
@@ -367,6 +494,9 @@ usd_ib_cmd_create_cq(
     /* process response */
     irp = &resp.ibv_resp;
     cq->ucq_handle = irp->cq_handle;
+
+    if (affinity_mask != NULL)
+        CPU_FREE(affinity_mask);
 
     return 0;
 }
@@ -456,11 +586,18 @@ usd_ib_cmd_create_qp(
 
     ucp = &cmd.usnic_cmd;
 
-    /* CQ interrupt support was added in v2 */
-    if (usd_get_cap(dev, USD_CAP_CQ_INTR)) {
+    if (qp->uq_wq.uwq_cq->comp_fd != -1 || qp->uq_rq.urq_cq->comp_fd != -1) {
+        if (dev->ud_ctx->ucx_caps[USD_CAP_GRP_INTR] != 1) {
+            usd_err("usd_create_qp failed, no interrupt support\n");
+            return -ENOTSUP;
+        }
         ucp->cmd_version = USNIC_IB_CREATE_QP_VERSION;
     } else {
-        ucp->cmd_version = 1;
+            /*
+             * Allow compatibility with old kernel module when
+             * application does not require cq completion notification
+             */
+            ucp->cmd_version = 1;
     }
 
     qfilt = &qp->uq_filter;
@@ -570,6 +707,7 @@ usd_ib_cmd_create_qp(
         if (qp->uq_rq.urq_cq != qp->uq_wq.uwq_cq) {
             qp->uq_wq.uwq_cq->intr_offset = urp->u.cur.wcq_intr_offset;
         }
+        vfip->vi_barhead_len = urp->u.cur.barhead_len;
     }
 
     free(resources);

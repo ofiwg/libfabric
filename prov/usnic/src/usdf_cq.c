@@ -1131,8 +1131,12 @@ usdf_cq_process_attr(struct fi_cq_attr *attr, struct usdf_domain *udp)
 int
 usdf_cq_create_cq(struct usdf_cq *cq)
 {
-	return usd_create_cq(cq->cq_domain->dom_dev, cq->cq_attr.size, -1,
-			&cq->c.hard.cq_cq);
+	struct usd_cq_init_attr attr;
+
+	memset(&attr, 0, sizeof(attr));
+	attr.num_entries = cq->cq_attr.size,
+	attr.comp_fd = -1;
+	return usd_create_cq(cq->cq_domain->dom_dev, &attr, &cq->c.hard.cq_cq);
 }
 
 int

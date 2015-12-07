@@ -57,6 +57,7 @@
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <linux/pci.h>
+#include <linux/numa.h>
 
 #ifndef PCI_VENDOR_ID_CISCO
 #define PCI_VENDOR_ID_CISCO	0x1137
@@ -177,6 +178,19 @@
 #define PORT_UUID_MAX  16
 #endif
 
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 34))
+#if !(RHEL_RELEASE_CODE && (RHEL_RELEASE_CODE > RHEL_RELEASE_VERSION(6, 3)))
+#define enic_set_affinity_hint(a) do { } while(0)
+#define enic_unset_affinity_hint(a) do { } while(0)
+#define enic_free_affinity_hint(a) do { } while(0)
+#define enic_init_affinity_hint(a) do { } while(0)
+#endif /* !(rhel > 6.3) */
+#endif /* kernel <= 2.6.34*/
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0))
+#define netif_set_xps_queue(a, b, c) do { } while(0)
+#endif /* kernel < 3.9 */
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0))
 #include <net/flow_keys.h>
 #else
@@ -218,6 +232,24 @@ static inline bool skb_flow_dissect(const struct sk_buff *skb, struct flow_keys 
 #endif /*CONFIG_RFS_ACCEL*/
 #endif /*LINUX >= 3.3.0*/
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0))
+#if (!RHEL_RELEASE_CODE || (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7, 2)))
+#define skb_vlan_tag_get(skb) vlan_tx_tag_get(skb)
+#define skb_vlan_tag_present(skb) vlan_tx_tag_present(skb)
+#endif /* rhel < 7.2 */
+#endif /* kernel < 4.0 */
+
+#if defined(__VMKLNX__)
+#define enic_driver_encode_asic_info(a, b) do { } while(0)
+#elif ((LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)) && \
+       (!SLES_RELEASE_CODE || (SLES_RELEASE_CODE < SLES_RELEASE_VERSION(12, 1))))
+#define enic_driver_encode_asic_info(a, b)	\
+	driver_encode_asic_info(a->reserved1, sizeof(a->reserved1),b->asic_type, b->asic_rev);
+#else
+#define enic_driver_encode_asic_info(a, b)	\
+	driver_encode_asic_info(a->reserved2, sizeof(a->reserved2),b->asic_type, b->asic_rev);
+#endif /* !__VMKLNX__ && kernel < 4.0 */
+
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0))
 #if (!RHEL_RELEASE_CODE || (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6, 6)))
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 0))
@@ -231,8 +263,10 @@ enum pkt_hash_types {
 #endif /* sles > sles11sp3 */
 #endif /*kernel < 3.13 */
 #endif /*  !rhel or rhel < 6.6 */
+#if (!RHEL_RELEASE_CODE || (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7, 2)))
 #define skb_get_hash_raw(skb) (skb)->rxhash
 #define skb_set_hash(skb, hash, type) skb->rxhash = (type == PKT_HASH_TYPE_L4) ? hash : 0;
+#endif /* rhel < 7.2 */
 #endif /* kernel < 3.14 */
 
 #if !defined(__VMKLNX__) && (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24))
@@ -280,7 +314,7 @@ enum pkt_hash_types {
 
 #ifndef __VMKLNX__
 #if ((LINUX_VERSION_CODE <= KERNEL_VERSION(3, 4, 0)) &&		\
-     (!RHEL_RELEASE_CODE || RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6, 0)) &&	\
+     (!RHEL_RELEASE_CODE || RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6, 4)) &&	\
      (!SLES_RELEASE_CODE || SLES_RELEASE_CODE < SLES_RELEASE_VERSION(11, 4)))
 #define net_warn_ratelimited(fmt, ...)			\
 	do {						\
@@ -389,7 +423,6 @@ static inline int skb_checksum_start_offset(const struct sk_buff *skb)
 #endif /* LINUX_VERSION_CODE < 2.6.22 */
 
 #if defined(__VMKLNX__)
-
 #define for_each_sg(start, var, count, index) \
 		for ((var) = (start), (index) = 0; (index) < (count); \
 			(var) = sg_next(var), (index)++)
@@ -398,7 +431,6 @@ static inline int skb_checksum_start_offset(const struct sk_buff *skb)
 #define local_bh_enable() do { } while (0)
 
 #else
-
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 23))
 #undef kmem_cache_create
 #define kmem_cache_create(name, size, align, flags, ctor) \
@@ -702,6 +734,10 @@ static inline const char *netdev_name(const struct net_device *dev)
 #define udelay usleep
 #define readl ioread32
 #define writel iowrite32
+
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#endif
 
 static inline uint32_t ioread32(const volatile void *addr)
 {
