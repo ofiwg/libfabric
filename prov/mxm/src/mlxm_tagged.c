@@ -238,6 +238,13 @@ static ssize_t mlxm_tagged_injectdata(struct fid_ep *ep, const void *buf, size_t
                                    0, data,1);
 }
 
+static ssize_t mlxm_tagged_inject(struct fid_ep *ep, const void *buf, size_t len,
+                                     fi_addr_t dest_addr, uint64_t tag) {
+        return _mlxm_tagged_sendto(ep, buf, len, NULL, dest_addr, tag, NULL,
+                                   0, 0,1);
+}
+
+
 static ssize_t mlxm_tagged_sendto(struct fid_ep *ep, const void *buf, size_t len,
                                   void *desc, fi_addr_t dest_addr,
                                   uint64_t tag, void *context)
@@ -281,7 +288,8 @@ struct fi_ops_tagged mlxm_tagged_ops = {
         .recvmsg = mlxm_tagged_recvmsg,
         .send = mlxm_tagged_sendto,
         .senddata = mlxm_tagged_senddatato,
-        .sendv = mlxm_tagged_sendv,
+        .sendv = mlxm_tagged_sendv, 
+        .inject = mlxm_tagged_inject,
         .sendmsg = mlxm_tagged_sendmsg,
         .injectdata = mlxm_tagged_injectdata,
 };
