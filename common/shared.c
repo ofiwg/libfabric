@@ -26,6 +26,7 @@
  * SOFTWARE.
  */
 
+#include <assert.h>
 #include <netdb.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -132,6 +133,25 @@ static int ft_check_opts(uint64_t flags)
 	return (opts.options & flags) == flags;
 }
 
+static void ft_cq_set_wait_attr(void)
+{
+	switch (opts.comp_method) {
+	case FT_COMP_SREAD:
+		cq_attr.wait_obj = FI_WAIT_UNSPEC;
+		cq_attr.wait_cond = FI_CQ_COND_NONE;
+		break;
+	case FT_COMP_WAITSET:
+		assert(waitset);
+		cq_attr.wait_obj = FI_WAIT_SET;
+		cq_attr.wait_cond = FI_CQ_COND_NONE;
+		cq_attr.wait_set = waitset;
+		break;
+	default:
+		cq_attr.wait_obj = FI_WAIT_NONE;
+		break;
+	}
+}
+
 /*
  * Include FI_MSG_PREFIX space in the allocated buffer, and ensure that the
  * buffer is large enough for a control message used to exchange addressing
@@ -213,6 +233,7 @@ int ft_alloc_active_res(struct fi_info *fi)
 	}
 
 	if (opts.options & FT_OPT_TX_CQ) {
+		ft_cq_set_wait_attr();
 		cq_attr.size = fi->tx_attr->size;
 		ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
 		if (ret) {
@@ -230,6 +251,7 @@ int ft_alloc_active_res(struct fi_info *fi)
 	}
 
 	if (opts.options & FT_OPT_RX_CQ) {
+		ft_cq_set_wait_attr();
 		cq_attr.size = fi->rx_attr->size;
 		ret = fi_cq_open(domain, &cq_attr, &rxcq, &rxcq);
 		if (ret) {
@@ -721,7 +743,8 @@ ssize_t ft_rx(size_t size)
 /*
  * fi_cq_err_entry can be cast to any CQ entry format.
  */
-static int ft_wait_for_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total, int timeout)
+static int ft_spin_for_comp(struct fid_cq *cq, uint64_t *cur,
+			    uint64_t total, int timeout)
 {
 	struct fi_cq_err_entry comp;
 	struct timespec a, b;
@@ -738,12 +761,6 @@ static int ft_wait_for_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total, in
 
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			if (ret == -FI_EAVAIL) {
-				ret = ft_cq_readerr(cq);
-				(*cur)++;
-			} else {
-				FT_PRINTERR("fi_cq_read", ret);
-			}
 			return ret;
 		} else if (timeout >= 0) {
 			clock_gettime(CLOCK_MONOTONIC, &b);
@@ -757,12 +774,57 @@ static int ft_wait_for_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total, in
 	return 0;
 }
 
+/*
+ * fi_cq_err_entry can be cast to any CQ entry format.
+ */
+static int ft_wait_for_comp(struct fid_cq *cq, uint64_t *cur,
+			    uint64_t total, int timeout)
+{
+	struct fi_cq_err_entry comp;
+	int ret;
+
+	while (total - *cur > 0) {
+		ret = fi_cq_sread(cq, &comp, 1, NULL, timeout);
+		if (ret > 0)
+			(*cur)++;
+		else if (ret < 0 && ret != -FI_EAGAIN)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
+			  uint64_t total, int timeout)
+{
+	int ret;
+
+	switch (opts.comp_method) {
+	case FT_COMP_SREAD:
+		ret = ft_wait_for_comp(cq, cur, total, timeout);
+		break;
+	default:
+		ret = ft_spin_for_comp(cq, cur, total, timeout);
+		break;
+	}
+
+	if (ret) {
+		if (ret == -FI_EAVAIL) {
+			ret = ft_cq_readerr(cq);
+			(*cur)++;
+		} else {
+			FT_PRINTERR("fi_cq_read", ret);
+		}
+	}
+	return ret;
+}
+
 int ft_get_rx_comp(uint64_t total)
 {
 	int ret;
 
 	if (rxcq) {
-		ret = ft_wait_for_comp(rxcq, &rx_cq_cntr, total, timeout);
+		ret = ft_get_cq_comp(rxcq, &rx_cq_cntr, total, timeout);
 	} else {
 		ret = fi_cntr_wait(rxcntr, total, timeout);
 		if (ret)
@@ -776,7 +838,7 @@ int ft_get_tx_comp(uint64_t total)
 	int ret;
 
 	if (txcq) {
-		ret = ft_wait_for_comp(txcq, &tx_cq_cntr, total, -1);
+		ret = ft_get_cq_comp(txcq, &tx_cq_cntr, total, -1);
 	} else {
 		ret = fi_cntr_wait(txcntr, total, -1);
 		if (ret)
@@ -993,6 +1055,7 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-I <number>", "number of iterations");
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
+	FT_PRINT_OPTS_USAGE("-c <method>", "completion method [spin, sread]");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
 	return;
@@ -1065,6 +1128,10 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 		break;
 	case 'm':
 		opts->machr = 1;
+		break;
+	case 'c':
+		if (!strncasecmp("sread", optarg, 5))
+			opts->comp_method = FT_COMP_SREAD;
 		break;
 	default:
 		/* let getopt handle unknown opts*/

@@ -55,10 +55,6 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	cq_attr.wait_obj = FI_WAIT_SET;
-	cq_attr.wait_cond = FI_CQ_COND_NONE;
-	cq_attr.wait_set = waitset;
-
 	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
@@ -168,6 +164,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
+	opts.comp_method = FT_COMP_WAITSET;
 
 	hints = fi_allocinfo();
 	if (!hints)
