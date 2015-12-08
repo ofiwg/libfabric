@@ -459,8 +459,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 
 	FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS(conn, ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA,
-		"posted %d bytes, remote sbuff released %d\n", sge.length,
-		seq_num);
+		"posted %d bytes, remote sbuff released\n", sge.length);
 	int ret = ibv_post_send(conn->qp, &wr, &bad_wr);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
