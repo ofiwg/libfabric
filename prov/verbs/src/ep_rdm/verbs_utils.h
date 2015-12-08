@@ -45,6 +45,16 @@
 #include <rdma/fi_log.h>
 #include "../fi_verbs.h"
 
+#if defined(__ICC) || defined(__INTEL_COMPILER) || \
+ defined(__GNUC__) || defined(__GNUG__)
+#include "xmmintrin.h"
+#define FI_IBV_PREFETCH_ADDR(_addr) {                    \
+        _mm_prefetch((const char *)(_addr), _MM_HINT_T0);\
+}
+#else /* ICC || GCC */
+#define FI_IBV_PREFETCH_ADDR(_addr)
+#endif /* ICC || GCC */
+
 /* TODO: Merge anything useful into verbs_rdm.h */
 
 struct fi_ibv_msg_ep;
@@ -56,7 +66,7 @@ struct fi_ibv_msg_ep;
 #define FI_IBV_RDM_CM_THREAD_TIMEOUT (100)
 #define FI_IBV_RDM_MEM_ALIGNMENT (4096)
 
-#define FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM (4)
+#define FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM (8)
 
 #define FI_IBV_RDM_TAGGED_DFLT_BUFFER_SIZE                              \
 	((8 * 1024 + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE) +        \

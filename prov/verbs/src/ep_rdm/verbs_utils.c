@@ -88,9 +88,9 @@ void fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
 				 struct fi_ibv_rdm_tagged_request,
 				 queue_entry);
 
-		int res = fi_ibv_rdm_tagged_prepare_send_resources(request,
-								   send_data->
-								   ep);
+		int res = fi_ibv_rdm_tagged_prepare_send_request(request,
+								 send_data->
+								 ep);
 		if (res) {
 			fi_ibv_rdm_tagged_req_hndl(request,
 						   FI_IBV_EVENT_SEND_READY,

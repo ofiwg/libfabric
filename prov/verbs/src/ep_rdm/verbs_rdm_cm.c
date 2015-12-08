@@ -541,7 +541,7 @@ static int fi_ibv_rdm_tagged_process_event(struct rdma_cm_event *event,
 	case RDMA_CM_EVENT_UNREACHABLE:
 
 	default:
-		ret = FI_EOTHER;
+		ret = -FI_EOTHER;
 		VERBS_INFO(FI_LOG_AV, "got unexpected rdmacm event, %s\n",
 			     rdma_event_str(event->event));
 		abort();
