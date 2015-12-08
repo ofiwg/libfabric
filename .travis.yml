@@ -10,10 +10,32 @@ addons:
     apt:
         packages:
             - rpm
+            - libnl-3-200
+            - libnl-3-dev
+            - libnl-route-3-200
+            - libnl-route-3-dev
+    ssh_known_hosts:
+        - www.openfabrics.org
+        - git.kernel.org
+
+env:
+    global:
+        - CPPFLAGS=-I$HOME/include
+        - LDFLAGS=-L$HOME/lib
+        - LD_LIBRARY_PATH=$HOME/lib
+        - LIBFABRIC_CONFIGURE_ARGS="--prefix=$HOME --enable-sockets"
+
+# install dependencies for the verbs and usnic providers
+before_install:
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then git clone https://git.kernel.org/pub/scm/libs/infiniband/libibverbs.git ; fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then cd libibverbs && ./autogen.sh && ./configure --prefix=$HOME && make && make install && cd .. ; fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then git clone git://www.openfabrics.org/~shefty/librdmacm.git ; fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then cd librdmacm && ./autogen.sh && ./configure --prefix=$HOME CC=gcc && make && make install && cd .. ; fi
+
 install:
     - ./autogen.sh
-    - if [[ "$TRAVIS_OS_NAME" == "linux" && "$CC" == "gcc" ]]; then ./configure --prefix=$HOME --enable-debug && make -j2; fi
-    - ./configure --prefix=$HOME
+    - if [[ "$TRAVIS_OS_NAME" == "linux" && "$CC" == "gcc" ]]; then ./configure $LIBFABRIC_CONFIGURE_ARGS --enable-debug --enable-verbs && make -j2; fi
+    - ./configure $LIBFABRIC_CONFIGURE_ARGS
     - make -j2
     - make install
     - make test
