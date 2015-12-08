@@ -300,8 +300,9 @@ static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
 			.imm = (uint32_t) data
 		};
 
-		request->state.eager = 0; /* Initial state */
-		request->state.rndv  = 0;
+		/* Initial state */
+		request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
+		request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
 
 		ret =
 		    fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_START,
@@ -670,6 +671,6 @@ fi_ibv_rdm_tagged_init_request_sbuf(struct fi_ibv_rdm_tagged_request *request,
 				    struct fi_ibv_rdm_ep *ep)
 {
 	assert(request->sbuf == NULL);
-	request->sbuf = fi_ibv_rdm_tagged_get_sbuf(request->conn, ep);
+	request->sbuf = fi_ibv_rdm_tagged_get_sbuf_head(request->conn, ep);
 	return !!request->sbuf;
 }

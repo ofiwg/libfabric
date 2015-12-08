@@ -327,6 +327,18 @@ fi_ibv_rdm_tagged_get_rbuf(struct fi_ibv_rdm_tagged_conn *conn,
 	return (struct fi_ibv_rdm_tagged_buf *) rbuf;
 }
 
+static inline void *
+fi_ibv_rdm_tagged_get_sbuf(struct fi_ibv_rdm_tagged_conn *conn,
+			   struct fi_ibv_rdm_ep *ep,
+			   int seq_num)
+{
+	char * sbuf = (conn->sbuf_mem_reg +
+		       FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE + 
+		       (seq_num * ep->buff_len));
+	VERBS_DBG(FI_LOG_EP_DATA, "send buf %d\n", seq_num);
+	return (struct fi_ibv_rdm_tagged_buf *) sbuf;
+}
+
 static inline void
 fi_ibv_rdm_tagged_buffer_lists_init(struct fi_ibv_rdm_tagged_conn *conn,
                                     struct fi_ibv_rdm_ep *ep)
@@ -369,8 +381,9 @@ int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
 int fi_ibv_rdm_tagged_prepare_send_request(
 	struct fi_ibv_rdm_tagged_request *request, struct fi_ibv_rdm_ep *ep);
 
-static inline void *fi_ibv_rdm_tagged_get_sbuf(struct fi_ibv_rdm_tagged_conn
-					       *conn, struct fi_ibv_rdm_ep *ep)
+static inline void *fi_ibv_rdm_tagged_get_sbuf_head(
+						struct fi_ibv_rdm_tagged_conn
+						*conn, struct fi_ibv_rdm_ep *ep)
 {
 	assert(conn);
 
@@ -404,8 +417,7 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf(struct fi_ibv_rdm_tagged_conn
 
 		/* We have made whole circle. Reset buffer states */
 		if (conn->sbuf_head ==
-		    (conn->sbuf_mem_reg +
-		     FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE)) {
+		    fi_ibv_rdm_tagged_get_sbuf(conn, ep, 0)) {
 			for (i = 1; i < ep->n_buffs; ++i) {
 				fi_ibv_rdm_tagged_set_buffer_status(
 				conn->sbuf_mem_reg +
@@ -472,7 +484,7 @@ fi_ibv_rdm_tagged_prepare_send_resources(struct fi_ibv_rdm_tagged_conn *conn,
 	}
 
 	return (!SEND_RESOURCES_IS_BUSY(conn, ep)) ?
-		fi_ibv_rdm_tagged_get_sbuf(conn, ep) : 0;
+		fi_ibv_rdm_tagged_get_sbuf_head(conn, ep) : 0;
 }
 
 #endif /* _VERBS_RDM_H */
