@@ -36,6 +36,15 @@ v1.2.0, TBD
 - Do not set prov_name in fabric_attr
 
 ## usNIC provider notes
+- The usNIC provider does not yet support asynchronous memory registration.
+  Return -FI_EOPNOTSUPP if an event queue is bound to a domain with FI_REG_MR.
+- Set fi_usnic_info::ui_version correctly in calls to
+  fi_usnic_ops_fabric::getinfo().
+- Improve fi_cq_sread performance.
+- Return -FI_EINVAL from av_open when given invalid paramters.
+- Fix bug in fi_av_remove that could lead to a seg fault.
+- Implement fi_av_insertsvc.
+- Report FI_PROTO_RUDP as protocol for EP_RDM.
 
 ## Verbs provider notes
 
