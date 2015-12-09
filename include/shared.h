@@ -67,6 +67,13 @@ enum precision {
 	MILLI = 1000000,
 };
 
+enum ft_comp_method {
+	FT_COMP_SPIN = 0,
+	FT_COMP_SREAD,
+	FT_COMP_WAITSET,
+	FT_COMP_WAIT_FD
+};
+
 enum {
 	FT_OPT_ACTIVE		= 1 << 0,
 	FT_OPT_ITER		= 1 << 1,
@@ -87,6 +94,7 @@ struct ft_opts {
 	char *dst_addr;
 	int size_option;
 	int options;
+	enum ft_comp_method comp_method;
 	int machr;
 	int argc;
 	char **argv;
@@ -108,6 +116,7 @@ extern struct fid_eq *eq;
 extern fi_addr_t remote_fi_addr;
 extern void *buf, *tx_buf, *rx_buf;
 extern size_t buf_size, tx_size, rx_size;
+extern int tx_fd, rx_fd;
 extern int timeout;
 
 extern struct fi_context tx_ctx, rx_ctx;
@@ -133,7 +142,7 @@ int ft_check_buf(void *buf, int size);
 uint64_t ft_init_cq_data(struct fi_info *info);
 #define ADDR_OPTS "b:p:s:"
 #define INFO_OPTS "n:f:"
-#define CS_OPTS ADDR_OPTS "I:S:m"
+#define CS_OPTS ADDR_OPTS "I:S:mc:"
 
 extern char default_port[8];
 
