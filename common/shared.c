@@ -28,6 +28,7 @@
 
 #include <assert.h>
 #include <netdb.h>
+#include <poll.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -61,6 +62,7 @@ uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
 void *buf, *tx_buf, *rx_buf;
 size_t buf_size, tx_size, rx_size;
+int rx_fd = -1, tx_fd = -1;
 char default_port[8] = "9228";
 
 char test_name[10] = "custom";
@@ -116,6 +118,26 @@ static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEF
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
 
 
+static int ft_poll_fd(int fd, int timeout)
+{
+	struct pollfd fds;
+	int ret;
+
+	fds.fd = fd;
+	fds.events = POLLIN;
+	ret = poll(&fds, 1, timeout);
+	if (ret == -1) {
+		FT_PRINTERR("poll", -errno);
+		ret = -errno;
+	} else if (!ret) {
+		FT_PRINTERR("poll", -FI_EAGAIN);
+		ret = -FI_EAGAIN;
+	} else {
+		ret = 0;
+	}
+	return ret;
+}
+
 size_t ft_tx_prefix_size()
 {
 	return (fi->tx_attr->mode & FI_MSG_PREFIX) ?
@@ -145,6 +167,10 @@ static void ft_cq_set_wait_attr(void)
 		cq_attr.wait_obj = FI_WAIT_SET;
 		cq_attr.wait_cond = FI_CQ_COND_NONE;
 		cq_attr.wait_set = waitset;
+		break;
+	case FT_COMP_WAIT_FD:
+		cq_attr.wait_obj = FI_WAIT_FD;
+		cq_attr.wait_cond = FI_CQ_COND_NONE;
 		break;
 	default:
 		cq_attr.wait_obj = FI_WAIT_NONE;
@@ -240,6 +266,14 @@ int ft_alloc_active_res(struct fi_info *fi)
 			FT_PRINTERR("fi_cq_open", ret);
 			return ret;
 		}
+
+		if (opts.comp_method == FT_COMP_WAIT_FD) {
+			ret = fi_control(&txcq->fid, FI_GETWAIT, (void *) &tx_fd);
+			if (ret) {
+				FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
+				return ret;
+			}
+		}
 	}
 
 	if (opts.options & FT_OPT_TX_CNTR) {
@@ -257,6 +291,14 @@ int ft_alloc_active_res(struct fi_info *fi)
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
 			return ret;
+		}
+
+		if (opts.comp_method == FT_COMP_WAIT_FD) {
+			ret = fi_control(&rxcq->fid, FI_GETWAIT, (void *) &rx_fd);
+			if (ret) {
+				FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
+				return ret;
+			}
 		}
 	}
 
@@ -794,6 +836,33 @@ static int ft_wait_for_comp(struct fid_cq *cq, uint64_t *cur,
 	return 0;
 }
 
+/*
+ * fi_cq_err_entry can be cast to any CQ entry format.
+ */
+static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
+			    uint64_t total, int timeout)
+{
+	struct fi_cq_err_entry comp;
+	int fd, ret;
+
+	fd = cq == txcq ? tx_fd : rx_fd;
+
+	while (total - *cur > 0) {
+		ret = fi_cq_sread(cq, &comp, 1, NULL, 0);
+		if (ret > 0) {
+			(*cur)++;
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
+			return ret;
+		} else {
+			ret = ft_poll_fd(fd, timeout);
+			if (ret)
+				return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
 			  uint64_t total, int timeout)
 {
@@ -802,6 +871,9 @@ static int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
 	switch (opts.comp_method) {
 	case FT_COMP_SREAD:
 		ret = ft_wait_for_comp(cq, cur, total, timeout);
+		break;
+	case FT_COMP_WAIT_FD:
+		ret = ft_fdwait_for_comp(cq, cur, total, timeout);
 		break;
 	default:
 		ret = ft_spin_for_comp(cq, cur, total, timeout);
@@ -813,7 +885,7 @@ static int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
 			ret = ft_cq_readerr(cq);
 			(*cur)++;
 		} else {
-			FT_PRINTERR("fi_cq_read", ret);
+			FT_PRINTERR("ft_get_cq_comp", ret);
 		}
 	}
 	return ret;
@@ -1055,7 +1127,7 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-I <number>", "number of iterations");
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
-	FT_PRINT_OPTS_USAGE("-c <method>", "completion method [spin, sread]");
+	FT_PRINT_OPTS_USAGE("-c <method>", "completion method [spin, sread, fd]");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
 	return;
@@ -1132,6 +1204,8 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 	case 'c':
 		if (!strncasecmp("sread", optarg, 5))
 			opts->comp_method = FT_COMP_SREAD;
+		else if (!strncasecmp("fd", optarg, 2))
+			opts->comp_method = FT_COMP_WAIT_FD;
 		break;
 	default:
 		/* let getopt handle unknown opts*/

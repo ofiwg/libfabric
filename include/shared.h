@@ -70,7 +70,8 @@ enum precision {
 enum ft_comp_method {
 	FT_COMP_SPIN = 0,
 	FT_COMP_SREAD,
-	FT_COMP_WAITSET
+	FT_COMP_WAITSET,
+	FT_COMP_WAIT_FD
 };
 
 enum {
@@ -115,6 +116,7 @@ extern struct fid_eq *eq;
 extern fi_addr_t remote_fi_addr;
 extern void *buf, *tx_buf, *rx_buf;
 extern size_t buf_size, tx_size, rx_size;
+extern int tx_fd, rx_fd;
 extern int timeout;
 
 extern struct fi_context tx_ctx, rx_ctx;
