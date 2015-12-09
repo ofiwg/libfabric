@@ -260,17 +260,22 @@ check_again:
 	assert(p->progress_fn);
 
 	ret = p->progress_fn(p->data, &complete);
-	if (ret != FI_SUCCESS)
+	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "dgram prog fn returned %s\n",
-				  fi_strerror(-ret));
+			  fi_strerror(-ret));
+	}
 
 	if (complete == 1) {
 		if (p->completer_fn) {
 			ret = p->completer_fn(p->completer_data);
 			free(p);
-			if (ret != FI_SUCCESS)
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "dgram completer fn returned %s\n",
+					  fi_strerror(-ret));
 				goto err;
+			}
 		}
 		goto check_again;
 	} else {

@@ -346,12 +346,13 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 	}
 
 	fastlock_acquire(&d->nic->lock);
-	if (d->pre_post_clbk_fn != NULL)
+	if (d->pre_post_clbk_fn != NULL) {
 		ret = d->pre_post_clbk_fn(d, &post);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				"pre_post_callback_fn: %d\n",
 				ret);
+	}
 
 	if (post) {
 		/*
@@ -368,12 +369,13 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 					   d->dgram_out_buf,
 					   GNI_DATAGRAM_MAXSIZE,
 					   (uint64_t)d);
-		if (d->post_post_clbk_fn != NULL)
+		if (d->post_post_clbk_fn != NULL) {
 			ret = d->post_post_clbk_fn(d, status);
 			if (ret != FI_SUCCESS)
 				GNIX_WARN(FI_LOG_EP_CTRL,
 				"post_post_callback_fn: %d\n",
 				ret);
+		}
 	}
 	fastlock_release(&d->nic->lock);
 
@@ -392,8 +394,9 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 			 * datagram is active now, connecting
 			 */
 			d->state = GNIX_DGRAM_STATE_CONNECTING;
-		} else
+		} else {
 			ret = -FI_EBUSY;
+		}
 	}
 
 err:

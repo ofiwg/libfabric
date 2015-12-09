@@ -1239,6 +1239,9 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_SEND) {
 			/* don't allow rebinding */
 			if (ep->send_cntr) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "cannot rebind send counter (%p)\n",
+					  cntr);
 				ret = -FI_EINVAL;
 				break;
 			}
@@ -1250,6 +1253,9 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_RECV) {
 			/* don't allow rebinding */
 			if (ep->recv_cntr) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "cannot rebind recv counter (%p)\n",
+					  cntr);
 				ret = -FI_EINVAL;
 				break;
 			}
@@ -1261,6 +1267,9 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_READ) {
 			/* don't allow rebinding */
 			if (ep->read_cntr) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "cannot rebind read counter (%p)\n",
+					  cntr);
 				ret = -FI_EINVAL;
 				break;
 			}
@@ -1272,6 +1281,9 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_WRITE) {
 			/* don't allow rebinding */
 			if (ep->write_cntr) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "cannot rebind write counter (%p)\n",
+					  cntr);
 				ret = -FI_EINVAL;
 				break;
 			}
@@ -1286,9 +1298,12 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		   option could be supported via Aries atomics
 		   or using SMSG cntrl messages */
 
-		if ((flags & FI_REMOTE_WRITE) ||
-			(flags & FI_REMOTE_READ))
+		if ((flags & FI_REMOTE_WRITE) || (flags & FI_REMOTE_READ)) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "unsupported counter flags (%p)\n",
+				  cntr);
 			ret = -FI_ENOSYS;
+		}
 		break;
 
 	case FI_CLASS_MR:/*TODO: got to figure this one out */
