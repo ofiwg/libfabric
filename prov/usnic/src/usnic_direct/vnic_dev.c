@@ -1749,6 +1749,7 @@ int vnic_dev_classifier(struct vnic_dev *vdev, u8 cmd, u16 *entry, struct filter
 		pci_free_consistent(vdev->pdev, tlv_size, tlv_va, tlv_pa);
 	} else if (cmd == CLSF_DEL) {
 		a0 = *entry;
+		a1 = 0;
 		ret = vnic_dev_cmd(vdev, CMD_DEL_FILTER, &a0, &a1, wait);
 	}
 

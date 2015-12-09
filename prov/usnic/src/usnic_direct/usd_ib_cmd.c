@@ -467,8 +467,9 @@ usd_ib_cmd_create_cq(
         cmd.usnic_cmd.cur.comp_event_fd = comp_channel;
         if ((affinity_mask = CPU_ALLOC(sysconf(_SC_NPROCESSORS_ONLN)))
                 != NULL &&
-            sched_getaffinity(getpid(), sizeof(affinity_mask),
-                                affinity_mask) == 0) {
+            sched_getaffinity(getpid(),
+                        CPU_ALLOC_SIZE(sysconf(_SC_NPROCESSORS_ONLN)),
+                        affinity_mask) == 0) {
             cmd.usnic_cmd.cur.affinity_mask_ptr = (u64)affinity_mask;
             cmd.usnic_cmd.cur.affinity_mask_len =
                             CPU_ALLOC_SIZE(sysconf(_SC_NPROCESSORS_ONLN));
