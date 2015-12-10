@@ -244,6 +244,7 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 	hints->ep_attr->type = FI_EP_RDM;
+	hints->caps = FI_MSG;
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &fi);
 	if (ret != 0) {

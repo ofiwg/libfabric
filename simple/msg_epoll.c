@@ -315,6 +315,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
+	opts.comp_method = FT_COMP_WAIT_FD;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -342,8 +343,6 @@ int main(int argc, char **argv)
 	hints->caps		= FI_MSG;
 	hints->mode		= FI_LOCAL_MR;
 	hints->addr_format	= FI_SOCKADDR;
-
-	cq_attr.wait_obj = FI_WAIT_FD;
 
 	ret = run();
 
