@@ -211,7 +211,7 @@ AC_DEFUN([USNIC_CHECK_LIBNL3],[
 	       AC_MSG_RESULT([not found])])
 
 	# Random note: netlink/version.h is only in libnl3 - it is not in libnl.
-	# Also, nl_recvmsgs_report is only in libnl3.
+	# Also, nl_socket_set_peer_groups is only in libnl3.
 	CPPFLAGS_save=$CPPFLAGS
 	usnic_tmp_CPPFLAGS="-I$1/include/libnl3"
 	CPPFLAGS="$usnic_tmp_CPPFLAGS $CPPFLAGS"
@@ -219,7 +219,7 @@ AC_DEFUN([USNIC_CHECK_LIBNL3],[
 	      [FI_CHECK_PACKAGE([$2],
 				[netlink/version.h],
 				[nl-3],
-				[nl_recvmsgs_report],
+				[nl_socket_set_peer_groups],
 				[],
 				[$1],
 				[],
