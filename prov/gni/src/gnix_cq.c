@@ -530,19 +530,6 @@ static ssize_t gnix_cq_read(struct fid_cq *cq, void *buf, size_t count)
 	return gnix_cq_readfrom(cq, buf, count, NULL);
 }
 
-static ssize_t gnix_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
-				 fi_addr_t *src_addr, const void *cond,
-				 int timeout)
-{
-	return -FI_ENOSYS;
-}
-
-static ssize_t gnix_cq_sread(struct fid_cq *cq, void *buf, size_t count,
-			     const void *cond, int timeout)
-{
-	return gnix_cq_sreadfrom(cq, buf, count, NULL, cond, timeout);
-}
-
 static ssize_t gnix_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			       uint64_t flags)
 {
@@ -721,7 +708,8 @@ static const struct fi_ops gnix_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = gnix_cq_close,
 	.bind = fi_no_bind,
-	.control = gnix_cq_control
+	.control = gnix_cq_control,
+	.ops_open = fi_no_ops_open
 };
 
 static const struct fi_ops_cq gnix_cq_ops = {
@@ -729,8 +717,8 @@ static const struct fi_ops_cq gnix_cq_ops = {
 	.read = gnix_cq_read,
 	.readfrom = gnix_cq_readfrom,
 	.readerr = gnix_cq_readerr,
-	.sread = gnix_cq_sread,
-	.sreadfrom = gnix_cq_sreadfrom,
+	.sread = fi_no_cq_sread,
+	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = gnix_cq_signal,
 	.strerror = gnix_cq_strerror
 };
