@@ -180,8 +180,7 @@ static struct fi_ops_av fi_ibv_rdm_av_ops = {
 	.remove = fi_ibv_rdm_av_remove,
 };
 
-int fi_ibv_rdm_set_av_ops(struct fi_ibv_av *av)
+struct fi_ops_av *fi_ibv_rdm_set_av_ops(void)
 {
-	av->av.ops = &fi_ibv_rdm_av_ops;
-	return 0;
+	return &fi_ibv_rdm_av_ops;
 }

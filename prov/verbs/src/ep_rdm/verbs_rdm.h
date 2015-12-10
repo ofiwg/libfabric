@@ -365,7 +365,6 @@ fi_ibv_rdm_tagged_buffer_lists_init(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 int fi_ibv_rdm_tagged_poll(struct fi_ibv_rdm_ep *ep);
-int fi_ibv_rdm_set_av_ops(struct fi_ibv_av *av);
 int fi_ibv_rdm_tagged_cm_progress(struct fi_ibv_rdm_ep *ep);
 int fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_ep *ep,
                                    struct fi_ibv_rdm_tagged_conn *conn);
