@@ -36,6 +36,8 @@
 
 static int fi_ibv_av_close(fid_t fid)
 {
+	struct fi_ibv_av *fid_av = container_of(fid, struct fi_ibv_av, av.fid);
+	free(fid_av);
 	return 0;
 }
 
