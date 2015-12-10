@@ -46,6 +46,7 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root,-)
 %{_libdir}/lib*.so.*
+%{_libdir}/pkgconfig/libfabric.pc
 %{_bindir}/fi_info
 %dir %{_libdir}/libfabric/
 %doc AUTHORS COPYING README
@@ -54,6 +55,7 @@ rm -rf %{buildroot}
 %defattr(-,root,root)
 %{_libdir}/libfabric*.so
 %{_libdir}/*.a
+%{_libdir}/pkgconfig/libfabric.pc
 %{_includedir}/*
 %{_mandir}/man3/*
 %{_mandir}/man7/*
