@@ -175,9 +175,12 @@ AC_DEFUN([USNIC_CHECK_LIBNL_SADNESS],[
 	AC_DEFINE_UNQUOTED([HAVE_LIBNL3], [$HAVE_LIBNL3],
 	      [Whether we have libl or libnl3])
 
-	AC_SUBST([usnic_nl_CPPFLAGS])
-	AC_SUBST([usnic_nl_LDFLAGS])
-	AC_SUBST([usnic_nl_LIBS])
+	usnic_CPPFLAGS=$usnic_nl_CPPFLAGS
+	usnic_LDFLAGS=$usnic_nl_LDFLAGS
+	usnic_LIBS=$usnic_nl_LIBS
+	AC_SUBST([usnic_CPPFLAGS])
+	AC_SUBST([usnic_LDFLAGS])
+	AC_SUBST([usnic_LIBS])
 
 	AS_IF([test "$usnic_nl_LIBS" = ""],
 	      [usnic_happy=0])
