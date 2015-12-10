@@ -1,4 +1,4 @@
-.TH fi_psm 7 "2015\-12\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_psm 7 "2015\-12\-10" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The PSM Fabric Provider
@@ -16,20 +16,8 @@ queue functions and the Active Message functions to support a variety of
 libfabric data transfer APIs, including tagged message queue, message
 queue, RMA, and atomic operations.
 .PP
-The \f[I]psm2\f[] provider runs over the PSM 2.x interface that is
-supported by the Intel Omni-Path Fabric.
-PSM 2.x has all the PSM 1.x features plus a set of new functions with
-enhanced capability.
-Since PSM 1.x and PSM 2.x are not ABI compatible the \f[I]psm2\f[]
-provider only works with PSM 2.x and doesn\[aq]t support Intel TrueScale
-Fabric.
-On the other hand, the \f[I]psm\f[] provider can work with the
-psm2-compat library, which exposes a PSM 1.x interface over the Intel
-Omni-Path Fabric.
-.PP
-Unless specifically indicated, the description of the \f[I]psm\f[]
-provider in the remaining part of this document also applies to the
-\f[I]psm2\f[] provider.
+The \f[I]psm\f[] provider can work with the psm2-compat library, which
+exposes a PSM 1.x interface over the Intel Omni-Path Fabric.
 .SH LIMITATIONS
 .PP
 The \f[I]psm\f[] provider doesn\[aq]t support all the features defined
@@ -46,21 +34,18 @@ These capabilities can be further refined by \f[I]FI_SEND\f[],
 \f[I]FI_RECV\f[], \f[I]FI_READ\f[], \f[I]FI_WRITE\f[],
 \f[I]FI_REMOTE_READ\f[], and \f[I]FI_REMOTE_WRITE\f[] to limit the
 direction of operations.
-For the \f[I]psm\f[] provider, no two endpoints can have overlapping
-receive or RMA target capabilities in any of the above categories.
+The limitation is that no two endpoints can have overlapping receive or
+RMA target capabilities in any of the above categories.
 For example it is fine to have two endpoints with \f[I]FI_TAGGED\f[] |
 \f[I]FI_SEND\f[], one endpoint with \f[I]FI_TAGGED\f[] |
 \f[I]FI_RECV\f[], one endpoint with \f[I]FI_MSG\f[], one endpoint with
 \f[I]FI_RMA\f[] | \f[I]FI_ATOMICS\f[].
 But it is not allowed to have two endpoints with \f[I]FI_TAGGED\f[], or
 two endpoints with \f[I]FI_RMA\f[].
-The \f[I]psm2\f[] provider doesn\[aq]t have such limitation.
 .PP
 \f[I]FI_MULTI_RECV\f[] is supported for non-tagged message queue only.
 .PP
 Other supported capabilities include \f[I]FI_TRIGGER\f[].
-The \f[I]psm2\f[] provider also supports \f[I]FI_REMOTE_CQ_DATA\f[] and
-\f[I]FI_SOURCE\f[].
 .PP
 Modes : \f[I]FI_CONTEXT\f[] is required for the \f[I]FI_TAGGED\f[] and
 \f[I]FI_MSG\f[] capabilities.
@@ -82,16 +67,13 @@ purely depends on the pprovide to make auto progress.
 Unsupported features : These features are unsupported: connection
 management, scalable endpoint, passive endpoint, shared receive context,
 send/inject with immediate data.
-The \f[I]psm2\f[] provider supports send/inject with immediate data over
-non-tagged message queue only.
 .SH RUNTIME PARAMETERS
 .PP
-The \f[I]psm\f[] provider checks for the following environment variables
-( different variable names are used for the \f[I]psm\f[] provider and
-the \f[I]psm2\f[] provider):
+The \f[I]psm\f[] provider checks for the following environment
+variables:
 .PP
-\f[I]FI_PSM_UUID\f[] / \f[I]FI_PSM2_UUID\f[] : PSM requires that each
-job has a unique ID (UUID).
+\f[I]FI_PSM_UUID\f[] : PSM requires that each job has a unique ID
+(UUID).
 All the processes in the same job need to use the same UUID in order to
 be able to talk to each other.
 The PSM reference manual advises to keep UUID unique to each job.
@@ -102,14 +84,11 @@ If running into "resource busy" or "connection failure" issues with
 unknown reason, it is advisable to manually set the UUID to a value
 different from the default.
 .PP
-The default UUID is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF for the
-\f[I]psm\f[] provider and 00FF00FF-0000-0000-0000-00FF0F0F00FF for the
-\f[I]psm2\f[] provider.
+The default UUID is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF.
 .PP
-\f[I]FI_PSM_NAME_SERVER\f[] / \f[I]FI_PSM2_NAME_SERVER\f[] : The
-\f[I]psm\f[] provider has a simple built-in name server that can be used
-to resolve an IP address or host name into a transport address needed by
-the \f[I]fi_av_insert\f[] call.
+\f[I]FI_PSM_NAME_SERVER\f[] : The \f[I]psm\f[] provider has a simple
+built-in name server that can be used to resolve an IP address or host
+name into a transport address needed by the \f[I]fi_av_insert\f[] call.
 The main purpose of this name server is to allow simple client-server
 type applications (such as those in \f[I]fabtest\f[]) to be written
 purely with libfabric, without using any out-of-band communication
@@ -135,8 +114,8 @@ created when the name server is on.
 The provider detects OpenMPI and MPICH runs and changes the default
 setting to off.
 .PP
-\f[I]FI_PSM_TAGGED_RMA\f[] / \f[I]FI_PSM2_TAGGED_RMA\f[] : The RMA
-functions are implemented on top of the PSM Active Message functions.
+\f[I]FI_PSM_TAGGED_RMA\f[] : The RMA functions are implemented on top of
+the PSM Active Message functions.
 The Active Message functions has limit on the size of data can be
 transferred in a single message.
 Large transfers can be divided into small chunks and be pipe-lined.
@@ -150,9 +129,8 @@ RMA traffic from the regular tagged message queue.
 The option is on by default.
 To turn it off set the variable to 0.
 .PP
-\f[I]FI_PSM_AM_MSG\f[] / \f[I]FI_PSM2_AM_MSG\f[] : The \f[I]psm\f[]
-provider implements the non-tagged message queue over the PSM
-tag-matching message queue.
+\f[I]FI_PSM_AM_MSG\f[] : The \f[I]psm\f[] provider implements the
+non-tagged message queue over the PSM tag-matching message queue.
 One tag bit is reserved for this purpose.
 Alternatively, the non-tagged message queue can be implemented over
 Active Message.
@@ -161,29 +139,28 @@ This experimental feature has slightly larger latency.
 This option is off by default.
 To turn it on set the variable to 1.
 .PP
-\f[I]FI_PSM_DELAY\f[] / \f[I]FI_PSM2_DELAY\f[] : Time (seconds) to sleep
-before closing PSM endpoints.
+\f[I]FI_PSM_DELAY\f[] : Time (seconds) to sleep before closing PSM
+endpoints.
 This is a workaround for a bug in some versions of PSM library.
 .PP
 The default setting is 1.
 .PP
-\f[I]FI_PSM_TIMEOUT\f[] / \f[I]FI_PSM2_TIMEOUT\f[] : Timeout (seconds)
-for gracefully closing PSM endpoints.
+\f[I]FI_PSM_TIMEOUT\f[] : Timeout (seconds) for gracefully closing PSM
+endpoints.
 A forced closing will be issued if timeout expires.
 .PP
 The default setting is 5.
 .PP
-\f[I]FI_PSM_PROG_INTERVAL\f[] / \f[I]FI_PSM2_PROG_INTERVAL\f[] : When
-auto progress is enabled (asked via the hints to \f[I]fi_getinfo\f[]), a
-progress thread is created to make progress calls from time to time.
+\f[I]FI_PSM_PROG_INTERVAL\f[] : When auto progress is enabled (asked via
+the hints to \f[I]fi_getinfo\f[]), a progress thread is created to make
+progress calls from time to time.
 This option set the tnterval (microseconds) between progress calls.
 .PP
 The default setting is 1 if affininty is set, or 1000 if not.
-See \f[I]FI_PSM_PROG_AFFINITY\f[]/\f[I]FI_PSM2_PROG_AFFINITY\f[].
+See \f[I]FI_PSM_PROG_AFFINITY\f[].
 .PP
-\f[I]FI_PSM_PROG_AFFINITY\f[] / \f[I]FI_PSM2_PROG_AFFINITY\f[] : When
-set, specify the set of CPU cores to set the progress thread affinity
-to.
+\f[I]FI_PSM_PROG_AFFINITY\f[] : When set, specify the set of CPU cores
+to set the progress thread affinity to.
 The format is
 \f[C]<start>[:<end>[:<stride>]][,<start>[:<end>[:<stride>]]]*\f[], where
 each triplet \f[C]<start>:<end>:<stride>\f[] defines a block of
@@ -194,6 +171,6 @@ Both \f[C]<start>\f[] and \f[C]<end>\f[] can be either the
 By default affinity is not set.
 .SH SEE ALSO
 .PP
-\f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
+\f[C]fabric\f[](7), \f[C]fi_provider\f[](7), \f[C]fi_psm2\f[](7),
 .SH AUTHORS
 OpenFabrics.
