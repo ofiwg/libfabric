@@ -261,20 +261,11 @@ _usnic_files = \
 
 if HAVE_VERBS
 _usnic_files += prov/usnic/src/usdf_fake_ibv.c
-
-# If the verbs or usnic providers are being built as a DL, then we
-# need to link libibverbs into the usnic provider
-if HAVE_VERBS_DL
-_usnic_libibverbs = -libverbs
-endif
-if HAVE_USNIC_DL
-_usnic_libibverbs = -libverbs
-endif
 endif
 
 _usnic_cppflags = \
         -D__LIBUSNIC__ -DWANT_DEBUG_MSGS=0 \
-        -DHAVE_LIBNL3=$(HAVE_LIBNL3) $(usnic_nl_CPPFLAGS) \
+        -DHAVE_LIBNL3=$(HAVE_LIBNL3) $(usnic_CPPFLAGS) \
         -I$(top_srcdir)/prov/usnic/src/usnic_direct
 
 rdmainclude_HEADERS += \
@@ -287,13 +278,13 @@ libusnic_fi_la_SOURCES = $(_usnic_files) $(common_srcs)
 libusnic_fi_la_LDFLAGS = \
         $(usnic_ln_LDFLAGS) \
         -module -avoid-version -shared -export-dynamic
-libusnic_fi_la_LIBADD = $(linkback) $(_usnic_libibverbs) $(usnic_nl_LIBS)
+libusnic_fi_la_LIBADD = $(linkback) $(_usnic_libibverbs) $(usnic_LIBS)
 libusnic_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_USNIC_DL
 src_libfabric_la_SOURCES += $(_usnic_files)
 src_libfabric_la_CPPFLAGS += $(_usnic_cppflags)
-src_libfabric_la_LDFLAGS += $(usnic_nl_LDFLAGS)
-src_libfabric_la_LIBADD += $(_usnic_libibverbs) $(usnic_nl_LIBS)
+src_libfabric_la_LDFLAGS += $(usnic_LDFLAGS)
+src_libfabric_la_LIBADD += $(_usnic_libibverbs) $(usnic_LIBS)
 endif !HAVE_USNIC_DL
 
 endif HAVE_USNIC
