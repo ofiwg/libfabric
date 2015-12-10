@@ -242,6 +242,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
+	opts.comp_method = FT_COMP_SREAD;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -271,7 +272,6 @@ int main(int argc, char **argv)
 	hints->addr_format = FI_SOCKADDR;
 
 	cq_attr.format = FI_CQ_FORMAT_DATA;
-	cq_attr.wait_obj = FI_WAIT_UNSPEC;
 
 	ret = run();
 
