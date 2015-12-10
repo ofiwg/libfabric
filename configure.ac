@@ -219,6 +219,8 @@ FI_PROVIDER_SETUP([usnic])
 FI_PROVIDER_SETUP([mxm])
 FI_PROVIDER_SETUP([gni])
 FI_PROVIDER_FINI
+dnl Configure the .pc file
+FI_PROVIDER_SETUP_PC
 
 # If the user requested to build in direct mode, but
 # we have more than one provider, error.
