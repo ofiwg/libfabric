@@ -1,0 +1,41 @@
+if HAVE_SOCKETS
+_sockets_files = \
+	prov/sockets/src/sock.h \
+	prov/sockets/src/sock_av.c \
+	prov/sockets/src/sock_dom.c \
+	prov/sockets/src/sock_eq.c \
+	prov/sockets/src/sock_cq.c \
+	prov/sockets/src/sock_cntr.c \
+	prov/sockets/src/sock_poll.c \
+	prov/sockets/src/sock_wait.c \
+	prov/sockets/src/sock_ep_rdm.c \
+	prov/sockets/src/sock_ep_dgram.c \
+	prov/sockets/src/sock_ep_msg.c \
+	prov/sockets/src/sock_fabric.c \
+	prov/sockets/src/sock_ep.c \
+	prov/sockets/src/sock_ctx.c \
+	prov/sockets/src/sock_rx_entry.c \
+	prov/sockets/src/sock_progress.c \
+	prov/sockets/src/sock_comm.c \
+	prov/sockets/src/sock_conn.c \
+	prov/sockets/src/sock_msg.c \
+	prov/sockets/src/sock_rma.c \
+	prov/sockets/src/sock_atomic.c \
+	prov/sockets/src/sock_trigger.c \
+	prov/sockets/src/sock_epoll.c \
+	prov/sockets/src/sock_util.h
+
+if HAVE_SOCKETS_DL
+pkglib_LTLIBRARIES += libsockets-fi.la
+libsockets_fi_la_SOURCES = $(_sockets_files) $(common_srcs)
+libsockets_fi_la_LIBADD = $(linkback) $(sockets_shm_LIBS)
+libsockets_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libsockets_fi_la_DEPENDENCIES = $(linkback)
+else !HAVE_SOCKETS_DL
+src_libfabric_la_SOURCES += $(_sockets_files)
+src_libfabric_la_LIBADD += $(sockets_shm_LIBS)
+endif !HAVE_SOCKETS_DL
+
+real_man_pages += man/man7/fi_sockets.7
+
+endif HAVE_SOCKETS

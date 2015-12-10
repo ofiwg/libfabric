@@ -1,0 +1,49 @@
+if HAVE_VERBS
+_verbs_files = \
+	prov/verbs/src/fi_verbs.h \
+	prov/verbs/src/fi_verbs.c \
+	prov/verbs/src/uthash.h \
+	prov/verbs/src/verbs_atomic.c \
+	prov/verbs/src/verbs_av.c \
+	prov/verbs/src/verbs_cm.c \
+	prov/verbs/src/verbs_cq.c \
+	prov/verbs/src/verbs_domain.c \
+	prov/verbs/src/verbs_eq.c \
+	prov/verbs/src/verbs_info.c \
+	prov/verbs/src/verbs_msg.c \
+	prov/verbs/src/verbs_msg_ep.c \
+	prov/verbs/src/verbs_rma.c \
+	prov/verbs/src/ep_rdm/verbs_av_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_cq_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_queuing.h \
+	prov/verbs/src/ep_rdm/verbs_rdm_cm.c \
+	prov/verbs/src/ep_rdm/verbs_rdm.h \
+	prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm_states.h \
+	prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm_states.c \
+	prov/verbs/src/ep_rdm/verbs_tagged_ep_rdm.c \
+	prov/verbs/src/ep_rdm/verbs_utils.c \
+	prov/verbs/src/ep_rdm/verbs_utils.h
+
+if HAVE_VERBS_DL
+pkglib_LTLIBRARIES += libverbs-fi.la
+libverbs_fi_la_SOURCES = $(_verbs_files) $(common_srcs)
+# Technically, verbs_ibverbs_CPPFLAGS and verbs_rdmacm_CPPFLAGS could
+# be different, but it is highly unlikely that they ever will be.  So
+# only list verbs_ibverbs_CPPFLAGS here.  Same with verbs_*_LDFLAGS,
+# below.
+libverbs_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(verbs_ibverbs_CPPFLAGS)
+libverbs_fi_la_LDFLAGS = \
+    -module -avoid-version -shared -export-dynamic $(verbs_ibverbs_LDFLAGS)
+libverbs_fi_la_LIBADD = $(linkback) $(verbs_rdmacm_LIBS) $(verbs_ibverbs_LIBS)
+libverbs_fi_la_DEPENDENCIES = $(linkback)
+else !HAVE_VERBS_DL
+src_libfabric_la_SOURCES += $(_verbs_files)
+src_libfabric_la_CPPFLAGS += $(verbs_ibverbs_CPPFLAGS)
+src_libfabric_la_LDFLAGS += $(verbs_ibverbs_LDFLAGS)
+src_libfabric_la_LIBADD += $(verbs_rdmacm_LIBS) $(verbs_ibverbs_LIBS)
+endif !HAVE_VERBS_DL
+
+real_man_pages += man/man7/fi_verbs.7
+
+endif HAVE_VERBS
