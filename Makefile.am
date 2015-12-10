@@ -261,15 +261,6 @@ _usnic_files = \
 
 if HAVE_VERBS
 _usnic_files += prov/usnic/src/usdf_fake_ibv.c
-
-# If the verbs or usnic providers are being built as a DL, then we
-# need to link libibverbs into the usnic provider
-if HAVE_VERBS_DL
-_usnic_libibverbs = -libverbs
-endif
-if HAVE_USNIC_DL
-_usnic_libibverbs = -libverbs
-endif
 endif
 
 _usnic_cppflags = \
