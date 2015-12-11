@@ -98,14 +98,27 @@ char *fi_ibv_rdm_tagged_req_event_to_str(
 
 // Send service data types
 
+enum ibv_rdm_send_type
+{
+	IBV_RDM_SEND_TYPE_UND = 0,
+	IBV_RDM_SEND_TYPE_GEN,
+	IBV_RDM_SEND_TYPE_INJ,
+	IBV_RDM_SEND_TYPE_VEC
+};
+
 struct fi_ibv_rdm_tagged_send_start_data {
-	const void *src_addr;
-	void *context;
+	struct fi_ibv_rdm_ep *ep_rdm;
 	struct fi_ibv_rdm_tagged_conn *conn;
+	void *context;
 	size_t tag;
 	size_t data_len;
-	size_t rndv_threshold;
+	union {
+		void *src_addr;
+		struct iovec* iovec_arr;
+	} buf;
+	int iov_count;
 	unsigned int imm;
+	enum ibv_rdm_send_type stype;
 };
 
 struct fi_ibv_rdm_tagged_send_ready_data {
@@ -171,16 +184,6 @@ do {                                                                	\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %d\n",    \
 		_connection,                                            \
 		(_connection)->sends_outgoing);                         \
-} while (0)
-
-#define FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS_REQ(_request, _ep, _send_flags)  \
-do {                                                                	\
-	(_request)->send_completions_wait++;                        	\
-	FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS((_request)->conn,       	\
-					    _ep, _send_flags);      	\
-								    	\
-	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, send_completions_wait %d\n",  	\
-		     (_request)->send_completions_wait);            	\
 } while (0)
 
 #define FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(_connection, _ep)		\

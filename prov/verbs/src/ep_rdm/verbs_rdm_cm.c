@@ -47,7 +47,7 @@ static inline struct ibv_mr *
 fi_ibv_rdm_tagged_malloc_and_register(struct fi_ibv_rdm_ep *ep, void **buf,
 				      size_t size)
 {
-	*buf = memalign(FI_IBV_RDM_MEM_ALIGNMENT, size);
+	*buf = memalign(FI_IBV_RDM_BUF_ALIGNMENT, size);
 	if (*buf) {
 		memset(*buf, 0, size);
 		return ibv_reg_mr(ep->domain->pd, *buf, size,
@@ -219,7 +219,7 @@ fi_ibv_rdm_tagged_process_connect_request(struct rdma_cm_event *event,
 		  conn);
 
 	if (!conn) {
-		conn = memalign(FI_IBV_RDM_ALIGNMENT, sizeof *conn);
+		conn = memalign(FI_IBV_RDM_MEM_ALIGNMENT, sizeof *conn);
 		if (!conn)
 			return -FI_ENOMEM;
 
