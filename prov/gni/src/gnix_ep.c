@@ -1684,6 +1684,7 @@ static struct fi_ops gnix_ep_fi_ops = {
 	.close = gnix_ep_close,
 	.bind = gnix_ep_bind,
 	.control = gnix_ep_control,
+	.ops_open = fi_no_ops_open
 };
 
 static struct fi_ops_ep gnix_ep_ops = {
