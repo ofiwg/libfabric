@@ -46,7 +46,7 @@ extern struct fi_ops_tagged fi_ibv_rdm_tagged_ops;
 extern struct fi_ops_cm fi_ibv_rdm_tagged_ep_cm_ops;
 extern struct dlist_entry fi_ibv_rdm_tagged_recv_posted_queue;
 extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_request_pool;
-extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_unexp_buffers_pool;
+extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_extra_buffers_pool;
 extern struct fi_provider fi_ibv_prov;
 
 struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash = NULL;
@@ -185,7 +185,6 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 
 		fi_ibv_rdm_tagged_remove_from_posted_queue(request, fid_ep);
 
-		assert(request->send_completions_wait == 0);
 		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request,
 					      FI_LOG_DEBUG);
 
@@ -338,7 +337,7 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 
 	fi_ibv_mem_pool_fini(&fi_ibv_rdm_tagged_request_pool);
 	fi_ibv_mem_pool_fini(&fi_ibv_rdm_tagged_postponed_pool);
-	fi_ibv_mem_pool_fini(&fi_ibv_rdm_tagged_unexp_buffers_pool);
+	fi_ibv_mem_pool_fini(&fi_ibv_rdm_tagged_extra_buffers_pool);
 
 	free(ep);
 
@@ -583,7 +582,7 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 			     100, 100,
 			     sizeof(struct fi_ibv_rdm_tagged_postponed_entry));
 
-	fi_ibv_mem_pool_init(&fi_ibv_rdm_tagged_unexp_buffers_pool,
+	fi_ibv_mem_pool_init(&fi_ibv_rdm_tagged_extra_buffers_pool,
 			     100, 100, _ep->buff_len);
 
 	_ep->max_inline_rc =

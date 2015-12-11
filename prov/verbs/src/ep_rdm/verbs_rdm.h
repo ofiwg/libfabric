@@ -90,46 +90,65 @@ struct fi_ibv_rdm_tagged_rndv_header {
 	uint32_t mem_key;
 };
 
-struct fi_ibv_rdm_tagged_unexp_rbuff {
+struct fi_ibv_rdm_tagged_extra_buff {
 	struct fi_ibv_mem_pool_entry mpe;
 	char payload[sizeof(void *)];
 };
 
 struct fi_ibv_rdm_tagged_request {
+
+	/* Accessors and match info */
+
 	struct fi_ibv_mem_pool_entry mpe;
+	/* Request can be an element of only one queue at the moment */
+	struct dlist_entry queue_entry;
+
+	struct {
+		enum fi_ibv_rdm_tagged_request_eager_state eager;
+		enum fi_ibv_rdm_tagged_request_rndv_state rndv;
+	} state;
+
+	struct fi_ibv_rdm_tagged_conn *conn;
 
 	uint64_t tag;
 	uint64_t tagmask;
 
-	struct {
+	/* User data: buffers, lens, imm, context */
+
+	union {
+		void *src_addr;
 		void *dest_buf;
-
-		union {
-			void *expected_recv_buf; // user level
-			struct fi_ibv_rdm_tagged_unexp_rbuff *unexp_rbuf;
-			void *sbuf;              // in terms of verbs
-		};
-		int send_completions_wait;
-
-		struct {
-			enum fi_ibv_rdm_tagged_request_eager_state eager;
-			enum fi_ibv_rdm_tagged_request_rndv_state rndv;
-		} state;
+		struct iovec *iovec_arr;
 	};
+
+	union {
+		/* user level */
+		void					*exp_rbuf;
+		struct fi_ibv_rdm_tagged_extra_buff	*unexp_rbuf;
+		/* verbs level */
+		void					*sbuf;
+	};
+
+	/*
+	 * iovec_arr is a mem pool entry if iov_count > 0
+	 * and must be freed properly
+	 */
+	size_t iov_count;
+	size_t len;
+	struct fi_context *context;
+	uint32_t imm;
+
+	/* RNDV info */
 
 	struct {
-		void *rndv_id;
-		struct ibv_mr *rndv_mr;
-		uint32_t rndv_remote_key;
-	};
-
-	const void *src_addr;
-	int len;
-	uint32_t imm;
-	struct fi_context *context;
-	struct fi_ibv_rdm_tagged_conn *conn;
-	/* Request can be an element of only one queue at the moment */
-	struct dlist_entry queue_entry;
+		/* pointer to request on sender side */
+		void *id;
+		/* registered buffer on sender side */
+		void* remote_addr;
+		/* registered mr of local src_addr */
+		struct ibv_mr *mr;
+		uint32_t rkey;
+	} rndv;
 };
 
 static inline void
@@ -182,8 +201,6 @@ struct fi_ibv_rdm_ep {
 	int is_closing;
 	int recv_preposted_threshold;
 };
-
-#define FI_IBV_RDM_ALIGNMENT 64
 
 enum {
 	FI_VERBS_CONN_ALLOCATED,
@@ -251,11 +268,11 @@ struct fi_ibv_rdm_tagged_buffer_service_data {
 
 #define FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE                          \
 	(sizeof(struct fi_ibv_rdm_tagged_buffer_service_data)		  \
-		< FI_IBV_RDM_ALIGNMENT ? FI_IBV_RDM_ALIGNMENT		  \
+		< FI_IBV_RDM_MEM_ALIGNMENT ? FI_IBV_RDM_MEM_ALIGNMENT	  \
 		: (sizeof(struct fi_ibv_rdm_tagged_buffer_service_data) + \
-		  (FI_IBV_RDM_ALIGNMENT -				  \
+		  (FI_IBV_RDM_MEM_ALIGNMENT -				  \
 		   sizeof(struct fi_ibv_rdm_tagged_buffer_service_data) % \
-		   FI_IBV_RDM_ALIGNMENT)))
+		   FI_IBV_RDM_MEM_ALIGNMENT)))
 
 static inline struct fi_ibv_rdm_tagged_buffer_service_data *
 fi_ibv_rdm_tagged_get_buff_service_data(char *buff)
