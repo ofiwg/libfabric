@@ -65,11 +65,7 @@ fi_ibv_rdm_tagged_init_request_sbuf(struct fi_ibv_rdm_tagged_request *request,
 int fi_ibv_rdm_tagged_prepare_send_request(
 	struct fi_ibv_rdm_tagged_request *request, struct fi_ibv_rdm_ep *ep)
 {
-#if !ENABLE_DEBUG
-	request->sbuf =
-		fi_ibv_rdm_tagged_prepare_send_resources(request->conn, ep);
-	return !!request->sbuf;
-#else // ENABLE_DEBUG
+#if ENABLE_DEBUG
 	int res =
 		FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(request->conn, ep);
 	if (res) {
@@ -85,14 +81,10 @@ int fi_ibv_rdm_tagged_prepare_send_request(
 		     FI_LOG_DEBUG);
 		return !res;
 	}
-	res = fi_ibv_rdm_tagged_init_request_sbuf(request, ep);
-	if (!res) {
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("failed because sbuf error",
-					      request, FI_LOG_DEBUG);
-		return res;
-	}
-	return res;
 #endif // ENABLE_DEBUG
+	request->sbuf =
+		fi_ibv_rdm_tagged_prepare_send_resources(request->conn, ep);
+	return !!request->sbuf;
 }
 
 static int fi_ibv_rdm_tagged_getname(fid_t fid, void *addr, size_t * addrlen)
