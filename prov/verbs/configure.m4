@@ -35,4 +35,16 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 
 	AS_IF([test $verbs_ibverbs_happy -eq 1 && \
 	       test $verbs_rdmacm_happy -eq 1], [$1], [$2])
+
+	# Technically, verbs_ibverbs_CPPFLAGS and
+	# verbs_rdmacm_CPPFLAGS could be different, but it is highly
+	# unlikely that they ever will be.  So only list
+	# verbs_ibverbs_CPPFLAGS here.  Same with verbs_*_LDFLAGS,
+	# below.
+	verbs_CPPFLAGS=$verbs_ibverbs_CPPFLAGS
+	verbs_LDFLAGS=$verbs_ibverbs_LDFLAGS
+	verbs_LIBS="$verbs_rdmacm_LIBS $verbs_ibverbs_LIBS"
+	AC_SUBST(verbs_CPPFLAGS)
+	AC_SUBST(verbs_LDFLAGS)
+	AC_SUBST(verbs_LIBS)
 ])
