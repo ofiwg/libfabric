@@ -23,7 +23,7 @@ AC_DEFUN([FI_SOCKETS_CONFIGURE],[
 
 	       # look for shm_open in librt if not already present
 	       AS_IF([test $sockets_shm_happy -eq 0],
-		     [FI_CHECK_PACKAGE([sockets_shm],
+		     [FI_CHECK_PACKAGE([sockets],
 				[sys/mman.h],
 				[rt],
 				[shm_open],
