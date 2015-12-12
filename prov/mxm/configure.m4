@@ -22,9 +22,5 @@ AC_DEFUN([FI_MXM_CONFIGURE],[
                     [mxm_happy=0])
          ])
     AS_IF([test $mxm_happy -eq 1], [$1], [$2])
-
-    CPPFLAGS="$CPPFLAGS $mxm_CPPFLAGS"
-    LDFLAGS="$LDFLAGS $mxm_LDFLAGS"
-    LIBS="$LIBS $mxm_LIBS"
 ])
 

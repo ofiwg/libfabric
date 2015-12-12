@@ -12,10 +12,18 @@ _mxm_files = prov/mxm/src/mlxm.h \
 
 if HAVE_MXM_DL
 pkglib_LTLIBRARIES += libmlxm-fi.la
+libmlxm_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(mxm_CPPFLAGS)
 libmlxm_fi_la_SOURCES = $(_mxm_files) $(common_srcs)
-libmlxm_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic $(linkback)
+libmlxm_fi_la_LDFLAGS = \
+	$(mxm_LDFLAGS) \
+	-module -avoid-version -shared -export-dynamic
+libmlxm_fi_la_LIBADD = $(linkback) $(mxm_LIBS)
+libmlxm_fi_la_DEPENDENCIES = $(linkback)
 else
 src_libfabric_la_SOURCES += $(_mxm_files)
+src_libfabric_la_CPPFLAGS += $(mxm_CPPFLAGS)
+src_libfabric_la_LDFLAGS += $(mxm_LDFLAGS)
+src_libfabric_la_LIBADD += $(mxm_LIBS)
 endif
 
 endif #HAVE_MXM
