@@ -54,7 +54,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	AC_MSG_NOTICE([*** Configuring $1 provider])
 	AC_ARG_ENABLE([$1],
 	      [AS_HELP_STRING([--enable-$1@<:@=yes|no|auto|dl|PATH@:>@],
-			      [Enable $1 provider @<:@default=auto@:>@ 
+			      [Enable $1 provider @<:@default=auto@:>@
 				(yes: enable $1 provider; no: disable $1 provider;
 				auto: enable $1 provider if possible;
 				dl: enable $1 provider and build as a loadable library;
