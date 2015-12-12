@@ -63,10 +63,12 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	      [],
 	      [enable_$1=auto])
 
-	# Save CPPFLAGS and LDFLAGS before they are modified by FI_CHECK_PREFIX_DIR
+	# Save CPPFLAGS and LDFLAGS before they are modified by FI_CHECK_PREFIX_DIR.
 	# Provider's local macros could use the value if needed.
+	# Also save LIBS, as a matter of principle.
 	$1_orig_CPPFLAGS=$CPPFLAGS
 	$1_orig_LDFLAGS=$LDFLAGS
+	$1_orig_LIBS=$LIBS
 
 	# Check the --enable-<$1> value
 	$1_dl=0
@@ -111,7 +113,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	AM_CONDITIONAL([HAVE_]m4_translit([$1], [a-z], [A-Z])[_DL],
 		[test $$1_dl -eq 1])
 
-	# If this provier was specifically requested but we can't
+	# If this provider was specifically requested but we can't
 	# build it, error.
 	AS_IF([test "$enable_$1 $$1_happy" = "yes 0"],
 	      [AC_MSG_WARN([$1 provider was requested, but cannot be compiled])
@@ -126,6 +128,14 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 			[AC_MSG_RESULT(no)
 			  AC_MSG_ERROR([$1 provider was requested as direct, but is missing fi_direct.h])]
 			)])
+
+	# Restore CPPFLAGS/LDFLAGS/LIBS
+	CPPFLAGS=$$1_orig_CPPFLAGS
+	unset $1_orig_CPPFLAGS
+	LDFLAGS=$$1_orig_LDFLAGS
+	unset $1_orig_LDFLAGS
+	LIBS=$$1_orig_LIBS
+	unset $1_orig_LIBS
 ])
 
 
