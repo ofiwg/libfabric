@@ -129,6 +129,10 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
 
+	if ((flags | SOCK_EP_CQ_FLAGS) != SOCK_EP_CQ_FLAGS) {
+		SOCK_LOG_ERROR("Invalid cq flag\n");
+		return -FI_EINVAL;
+	}
 	sock_cq = container_of(bfid, struct sock_cq, cq_fid.fid);
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
@@ -182,6 +186,11 @@ static int sock_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct sock_cntr *cntr;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
+
+	if ((flags | SOCK_EP_CNTR_FLAGS) != SOCK_EP_CNTR_FLAGS) {
+		SOCK_LOG_ERROR("Invalid cntr flag\n");
+		return -FI_EINVAL;
+	}
 
 	cntr = container_of(bfid, struct sock_cntr, cntr_fid.fid);
 	switch (fid->fclass) {
