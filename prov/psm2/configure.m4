@@ -23,11 +23,5 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 	      ])
 
 	AS_IF([test $psm2_happy -eq 1], [$1], [$2])
-
-	psm2_CPPFLAGS="$CPPFLAGS $psm2_CPPFLAGS"
-	psm2_LDFLAGS="$LDFLAGS $psm2_LDFLAGS"
-	psm2_LIBS="$LIBS $psm2_LIBS"
-	CPPFLAGS="$psm2_orig_CPPFLAGS"
-	LDFLAGS="$psm2_orig_LDFLAGS"
 ])
 
