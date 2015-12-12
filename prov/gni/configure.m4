@@ -9,29 +9,32 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
         # have to pull in pkg.m4 manually
 	ugni_lib_happy=0
 	gni_header_happy=0
+	gni_CPPFLAGS=
+	gni_LDFLAGS=
+	gni_LIBS=
 	AS_IF([test x"$enable_gni" != x"no"],
 	      [FI_PKG_CHECK_MODULES([CRAY_UGNI], [cray-ugni],
                                  [ugni_lib_happy=1
-                                  CPPFLAGS="$CRAY_UGNI_CFLAGS $CPPFLAGS"
-                                  LDFLAGS="$CRAY_UGNI_LIBS $LDFLAGS"
+                                  gni_CPPFLAGS=$CRAY_UGNI_CFLAGS
+                                  gni_LDFLAGS=$CRAY_UGNI_LIBS
                                  ],
                                  [ugni_lib_happy=0])
                FI_PKG_CHECK_MODULES([CRAY_GNI_HEADERS], [cray-gni-headers],
                                  [gni_header_happy=1
-                                  CPPFLAGS="$CRAY_GNI_HEADERS_CFLAGS $CPPFLAGS"
-                                  LDFLAGS="$CRAY_GNI_HEADER_LIBS $LDFLAGS"
+                                  gni_CPPFLAGS="$CRAY_GNI_HEADERS_CFLAGS $gni_CPPFLAGS"
+                                  gni_LDFLAGS="$CRAY_GNI_HEADER_LIBS $gni_LDFLAGS"
                                  ],
                                  [gni_header_happy=0])
                FI_PKG_CHECK_MODULES_STATIC([CRAY_ALPS_LLI], [cray-alpslli],
                                  [alps_lli_happy=1
-                                  CPPFLAGS="$CRAY_ALPS_LLI_CFLAGS $CPPFLAGS"
-                                  LDFLAGS="$CRAY_ALPS_LLI_LIBS $LDFLAGS"
+                                  gni_CPPFLAGS="$CRAY_ALPS_LLI_CFLAGS $gni_CPPFLAGS"
+                                  gni_LDFLAGS="$CRAY_ALPS_LLI_LIBS $gni_LDFLAGS"
                                  ],
                                  [alps_lli_happy=0])
                FI_PKG_CHECK_MODULES([CRAY_ALPS_UTIL], [cray-alpsutil],
                                  [alps_util_happy=1
-                                  CPPFLAGS="$CRAY_ALPS_UTIL_CFLAGS $CPPFLAGS"
-                                  LDFLAGS="$CRAY_ALPS_UTIL_LIBS $LDFLAGS"
+                                  gni_CPPFLAGS="$CRAY_ALPS_UTIL_CFLAGS $gni_CPPFLAGS"
+                                  gni_LDFLAGS="$CRAY_ALPS_UTIL_LIBS $gni_LDFLAGS"
                                  ],
                                  [alps_util_happy=0])
 	       ])
@@ -46,12 +49,12 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 		AC_MSG_CHECKING([criterion path])
 		if test -d "$with_criterion"; then
 			AC_MSG_RESULT([yes])
-			CPPFLAGS="-I$with_criterion/include $CPPFLAGS"
+			gni_CPPFLAGS="-I$with_criterion/include $gni_CPPFLAGS"
 			if test -d "$with_criterion/lib"; then
-				LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib $LDFLAGS"
+				gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib $gni_LDFLAGS"
 				have_criterion=true
 			elif test -d "$with_criterion/lib64"; then
-				LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib64 $LDFLAGS"
+				gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib64 $gni_LDFLAGS"
 				have_criterion=true
 			else
 				have_criterion=false
@@ -67,8 +70,10 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 
 	AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])
 
+	AC_SUBST(gni_CPPFLAGS)
+	AC_SUBST(gni_LDFLAGS)
+	AC_SUBST(gni_LIBS)
 
 	AS_IF([test $gni_header_happy -eq 1 -a $ugni_lib_happy -eq 1 \
                -a $alps_lli_happy -eq 1 -a $alps_util_happy -eq 1], [$1], [$2])
 ])
-
