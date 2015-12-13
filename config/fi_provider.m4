@@ -76,7 +76,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	[yes|no], [],
 	[dl],     [enable_$1=yes $1_dl=1],
 	[auto],   [],
-	[FI_CHECK_PREFIX_DIR([$enable_$1])
+	[FI_CHECK_PREFIX_DIR([$enable_$1], [$1])
 	 enable_$1=yes]
 	)
 
@@ -160,16 +160,16 @@ AC_DEFUN([FI_CHECK_PREFIX_DIR],[
 
 	# Check that base/include exists
 	 AS_IF([test -d "$1/include"],
-	       [CPPFLAGS="-I$1/include"],
+	       [$2_PREFIX="$1"],
 	       [AC_MSG_WARN([could not find "include" subdirectory in supplied "$1" directory"])
 	        AC_MSG_ERROR([Cannot continue])
 	       ])
 
 	# Check that base/lib or base/lib64 exists
 	 AS_IF([test -d "$1/lib"],
-	       [LDFLAGS="-L$1/lib"],
+	       [$2_LIBDIR="$1/lib"],
 	       [AS_IF([test -d "$1/lib64"],
-		      [LDFLAGS="-L$1/lib64"],
+		      [$2_LIBDIR="$1/lib64"],
 		      [AC_MSG_WARN([could not find "lib" or "lib64" subdirectories in supplied "$1" directory"])
 		       AC_MSG_ERROR([Cannot continue])
 		      ])
