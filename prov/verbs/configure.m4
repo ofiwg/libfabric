@@ -17,8 +17,8 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 				[ibverbs],
 				[ibv_open_device],
 				[],
-				[],
-				[],
+				[$verbs_PREFIX],
+				[$verbs_LIBDIR],
 				[verbs_ibverbs_happy=1],
 				[verbs_ibverbs_happy=0])
 
@@ -27,8 +27,8 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 				[rdmacm],
 				[riowrite],
 				[],
-				[],
-				[],
+				[$verbs_PREFIX],
+				[$verbs_LIBDIR],
 				[verbs_rdmacm_happy=1],
 				[verbs_rdmacm_happy=0])
 	      ])

@@ -16,8 +16,8 @@ AC_DEFUN([FI_MXM_CONFIGURE],[
                     [mxm],
                     [mxm_get_version],
                     [],
-                    [],
-                    [],
+                    [$mxm_PREFIX],
+                    [$mxm_LIBDIR],
                     [mxm_happy=1],
                     [mxm_happy=0])
          ])

@@ -16,8 +16,8 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 				[psm2],
 				[psm2_init],
 				[],
-				[],
-				[],
+				[$psm2_PREFIX],
+				[$psm2_LIBDIR],
 				[psm2_happy=1],
 				[psm2_happy=0])
 	      ])
