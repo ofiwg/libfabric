@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -60,39 +60,40 @@
 #if 1
 #define dbg_printf(...)
 #else
-#define dbg_printf(...)		\
-do {				\
-	printf(__VA_ARGS__);	\
-	fflush(stdout);		\
-} while (0)
+#define dbg_printf(...)				\
+	do {					\
+		printf(__VA_ARGS__);		\
+		fflush(stdout);			\
+	} while (0)
 #endif
 
 static struct fid_fabric *fab;
-static struct fid_domain *dom;
-struct fi_gni_ops_domain *gni_domain_ops;
+static struct fid_domain *dom[2];
+struct fi_gni_ops_domain *gni_domain_ops[2];
 static struct fid_ep *ep[2];
-static struct fid_av *av;
+static struct fid_av *av[2];
 static struct fi_info *hints;
 static struct fi_info *fi;
 void *ep_name[2];
 size_t gni_addr[2];
-static struct fid_cq *send_cq;
-static struct fid_cq *recv_cq;
-static struct fi_cq_attr cq_attr;
+static struct fid_cq *send_cq[2];
+static struct fid_cq *recv_cq[2];
+static struct fi_cq_attr cq_attr[2];
 
 #define BUF_SZ (64*1024)
 char *target;
 char *source;
 char *uc_source;
-struct fid_mr *rem_mr, *loc_mr;
-uint64_t mr_key;
+struct fid_mr *rem_mr[2], *loc_mr[2];
+uint64_t mr_key[2];
 
-static struct fid_cntr *write_cntr, *read_cntr;
+static struct fid_cntr *write_cntr[2], *read_cntr[2];
 static struct fi_cntr_attr cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
 	.flags = 0
 };
-static uint64_t writes, reads, write_errs, read_errs;
+static uint64_t writes[2] = {0}, reads[2] = {0}, write_errs[2] = {0},
+	read_errs[2] = {0};
 
 void rdm_rma_setup(void)
 {
@@ -114,33 +115,61 @@ void rdm_rma_setup(void)
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	cr_assert(!ret, "fi_fabric");
 
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_domain(fab, fi, dom, NULL);
 	cr_assert(!ret, "fi_domain");
 
-	ret = fi_open_ops(&dom->fid, FI_GNI_DOMAIN_OPS_1,
-			  0, (void **) &gni_domain_ops, NULL);
+	ret = fi_open_ops(&dom[0]->fid, FI_GNI_DOMAIN_OPS_1,
+			  0, (void **) gni_domain_ops, NULL);
 
 	attr.type = FI_AV_MAP;
-	attr.count = 16;
+	attr.count = 2;
 
-	ret = fi_av_open(dom, &attr, &av, NULL);
+	ret = fi_av_open(dom[0], &attr, av, NULL);
 	cr_assert(!ret, "fi_av_open");
 
-	ret = fi_endpoint(dom, fi, &ep[0], NULL);
+	ret = fi_endpoint(dom[0], fi, &ep[0], NULL);
 	cr_assert(!ret, "fi_endpoint");
 
-	cq_attr.format = FI_CQ_FORMAT_TAGGED;
-	cq_attr.size = 1024;
-	cq_attr.wait_obj = 0;
+	cq_attr[0].format = FI_CQ_FORMAT_TAGGED;
+	cq_attr[0].size = 1024;
+	cq_attr[0].wait_obj = 0;
 
-	ret = fi_cq_open(dom, &cq_attr, &send_cq, 0);
+	ret = fi_cq_open(dom[0], cq_attr, send_cq, 0);
+	cr_assert(!ret, "fi_cq_open");
+
+	ret = fi_cq_open(dom[0], cq_attr, recv_cq, 0);
+	cr_assert(!ret, "fi_cq_open");
+
+	ret = fi_domain(fab, fi, dom + 1, NULL);
+	cr_assert(!ret, "fi_domain");
+
+	ret = fi_open_ops(&dom[1]->fid, FI_GNI_DOMAIN_OPS_1,
+			  0, (void **) gni_domain_ops + 1, NULL);
+
+	ret = fi_av_open(dom[1], &attr, av + 1, NULL);
+	cr_assert(!ret, "fi_av_open");
+
+	ret = fi_endpoint(dom[1], fi, &ep[1], NULL);
+	cr_assert(!ret, "fi_endpoint");
+
+	cq_attr[1].format = FI_CQ_FORMAT_TAGGED;
+	cq_attr[1].size = 1024;
+	cq_attr[1].wait_obj = 0;
+
+	ret = fi_cq_open(dom[1], cq_attr + 1, send_cq + 1, 0);
+	cr_assert(!ret, "fi_cq_open");
+
+	ret = fi_cq_open(dom[1], cq_attr + 1, recv_cq + 1, 0);
 	cr_assert(!ret, "fi_cq_open");
 
 	/*
 	 * imitate shmem, etc. use FI_WRITE for bind
 	 * flag
 	 */
-	ret = fi_ep_bind(ep[0], &send_cq->fid, FI_TRANSMIT);
+	ret = fi_ep_bind(ep[0], &send_cq[0]->fid, FI_TRANSMIT);
+	cr_assert(!ret, "fi_ep_bind");
+
+	ret = fi_ep_bind(ep[0], &recv_cq[0]->fid, FI_RECV);
 	cr_assert(!ret, "fi_ep_bind");
 
 	ret = fi_getname(&ep[0]->fid, NULL, &addrlen);
@@ -149,37 +178,42 @@ void rdm_rma_setup(void)
 	ep_name[0] = malloc(addrlen);
 	cr_assert(ep_name[0] != NULL);
 
-	ep_name[1] = malloc(addrlen);
-	cr_assert(ep_name[1] != NULL);
-
 	ret = fi_getname(&ep[0]->fid, ep_name[0], &addrlen);
 	cr_assert(ret == FI_SUCCESS);
 
-	ret = fi_endpoint(dom, fi, &ep[1], NULL);
-	cr_assert(!ret, "fi_endpoint");
-
-	cq_attr.format = FI_CQ_FORMAT_TAGGED;
-	ret = fi_cq_open(dom, &cq_attr, &recv_cq, 0);
-	cr_assert(!ret, "fi_cq_open");
-
-	ret = fi_ep_bind(ep[1], &recv_cq->fid, FI_RECV);
+	ret = fi_ep_bind(ep[1], &send_cq[1]->fid, FI_TRANSMIT);
 	cr_assert(!ret, "fi_ep_bind");
+
+	ret = fi_ep_bind(ep[1], &recv_cq[1]->fid, FI_RECV);
+	cr_assert(!ret, "fi_ep_bind");
+
+	ret = fi_getname(&ep[1]->fid, NULL, &addrlen);
+	cr_assert(addrlen > 0);
+
+	ep_name[1] = malloc(addrlen);
+	cr_assert(ep_name[1] != NULL);
 
 	ret = fi_getname(&ep[1]->fid, ep_name[1], &addrlen);
 	cr_assert(ret == FI_SUCCESS);
 
-	ret = fi_av_insert(av, ep_name[0], 1, &gni_addr[0], 0,
-				NULL);
+	ret = fi_av_insert(av[0], ep_name[0], 1, &gni_addr[0], 0,
+			   NULL);
+	cr_assert(ret == 1);
+	ret = fi_av_insert(av[0], ep_name[1], 1, &gni_addr[1], 0,
+			   NULL);
 	cr_assert(ret == 1);
 
-	ret = fi_av_insert(av, ep_name[1], 1, &gni_addr[1], 0,
-				NULL);
+	ret = fi_av_insert(av[1], ep_name[0], 1, &gni_addr[0], 0,
+			   NULL);
+	cr_assert(ret == 1);
+	ret = fi_av_insert(av[1], ep_name[1], 1, &gni_addr[1], 0,
+			   NULL);
 	cr_assert(ret == 1);
 
-	ret = fi_ep_bind(ep[0], &av->fid, 0);
+	ret = fi_ep_bind(ep[0], &av[0]->fid, 0);
 	cr_assert(!ret, "fi_ep_bind");
 
-	ret = fi_ep_bind(ep[1], &av->fid, 0);
+	ret = fi_ep_bind(ep[1], &av[1]->fid, 0);
 	cr_assert(!ret, "fi_ep_bind");
 
 	ret = fi_enable(ep[0]);
@@ -190,75 +224,115 @@ void rdm_rma_setup(void)
 
 	target = malloc(BUF_SZ);
 	assert(target);
-
 	source = malloc(BUF_SZ);
 	assert(source);
 
-	ret = fi_mr_reg(dom, target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr, &target);
+	ret = fi_mr_reg(dom[0], target, BUF_SZ,
+			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr[0], &target);
+	cr_assert_eq(ret, 0);
+	ret = fi_mr_reg(dom[1], target, BUF_SZ,
+			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr[1], &target);
 	cr_assert_eq(ret, 0);
 
-	ret = fi_mr_reg(dom, source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
+	ret = fi_mr_reg(dom[0], source, BUF_SZ,
+			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr[0], &source);
+	cr_assert_eq(ret, 0);
+	ret = fi_mr_reg(dom[1], source, BUF_SZ,
+			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr[1], &source);
 	cr_assert_eq(ret, 0);
 
 	uc_source = malloc(BUF_SZ);
 	assert(uc_source);
 
-	mr_key = fi_mr_key(rem_mr);
+	mr_key[0] = fi_mr_key(rem_mr[0]);
+	mr_key[1] = fi_mr_key(rem_mr[1]);
 
-	ret = fi_cntr_open(dom, &cntr_attr, &write_cntr, 0);
+	ret = fi_cntr_open(dom[0], &cntr_attr, write_cntr, 0);
 	cr_assert(!ret, "fi_cntr_open");
 
-	ret = fi_ep_bind(ep[0], &write_cntr->fid, FI_WRITE);
+	ret = fi_ep_bind(ep[0], &write_cntr[0]->fid, FI_WRITE);
 	cr_assert(!ret, "fi_ep_bind");
 
-	ret = fi_cntr_open(dom, &cntr_attr, &read_cntr, 0);
+	ret = fi_cntr_open(dom[0], &cntr_attr, read_cntr, 0);
 	cr_assert(!ret, "fi_cntr_open");
 
-	ret = fi_ep_bind(ep[0], &read_cntr->fid, FI_READ);
+	ret = fi_ep_bind(ep[0], &read_cntr[0]->fid, FI_READ);
 	cr_assert(!ret, "fi_ep_bind");
 
-	writes = reads = write_errs = read_errs = 0;
+	ret = fi_cntr_open(dom[1], &cntr_attr, write_cntr + 1, 0);
+	cr_assert(!ret, "fi_cntr_open");
+
+	ret = fi_ep_bind(ep[1], &write_cntr[1]->fid, FI_WRITE);
+	cr_assert(!ret, "fi_ep_bind");
+
+	ret = fi_cntr_open(dom[1], &cntr_attr, read_cntr + 1, 0);
+	cr_assert(!ret, "fi_cntr_open");
+
+	ret = fi_ep_bind(ep[1], &read_cntr[1]->fid, FI_READ);
+	cr_assert(!ret, "fi_ep_bind");
 }
 
 void rdm_rma_teardown(void)
 {
 	int ret = 0;
 
-	ret = fi_close(&read_cntr->fid);
-	cr_assert(!ret, "failure in closing read counter.");
+	ret = fi_close(&read_cntr[0]->fid);
+	cr_assert(!ret, "failure in closing dom[0] read counter.");
 
-	ret = fi_close(&write_cntr->fid);
-	cr_assert(!ret, "failure in closing write counter.");
+	ret = fi_close(&read_cntr[1]->fid);
+	cr_assert(!ret, "failure in closing dom[1] read counter.");
+
+	ret = fi_close(&write_cntr[0]->fid);
+	cr_assert(!ret, "failure in closing dom[0] write counter.");
+
+	ret = fi_close(&write_cntr[1]->fid);
+	cr_assert(!ret, "failure in closing dom[1] write counter.");
 
 	free(uc_source);
 
-	ret = fi_close(&loc_mr->fid);
-	cr_assert(!ret, "failure in closing av.");
+	ret = fi_close(&loc_mr[0]->fid);
+	cr_assert(!ret, "failure in closing dom[0] local mr.");
 
-	ret = fi_close(&rem_mr->fid);
-	cr_assert(!ret, "failure in closing av.");
+	ret = fi_close(&loc_mr[1]->fid);
+	cr_assert(!ret, "failure in closing dom[1] local mr.");
+
+	ret = fi_close(&rem_mr[0]->fid);
+	cr_assert(!ret, "failure in closing dom[0] remote mr.");
+
+	ret = fi_close(&rem_mr[1]->fid);
+	cr_assert(!ret, "failure in closing dom[1] remote mr.");
 
 	free(target);
 	free(source);
 
 	ret = fi_close(&ep[0]->fid);
-	cr_assert(!ret, "failure in closing ep.");
+	cr_assert(!ret, "failure in closing ep[0].");
 
 	ret = fi_close(&ep[1]->fid);
-	cr_assert(!ret, "failure in closing ep.");
+	cr_assert(!ret, "failure in closing ep[1].");
 
-	ret = fi_close(&recv_cq->fid);
-	cr_assert(!ret, "failure in recv cq.");
+	ret = fi_close(&recv_cq[0]->fid);
+	cr_assert(!ret, "failure in dom[0] recv cq.");
 
-	ret = fi_close(&send_cq->fid);
-	cr_assert(!ret, "failure in send cq.");
+	ret = fi_close(&recv_cq[1]->fid);
+	cr_assert(!ret, "failure in dom[1] recv cq.");
 
-	ret = fi_close(&av->fid);
-	cr_assert(!ret, "failure in closing av.");
+	ret = fi_close(&send_cq[0]->fid);
+	cr_assert(!ret, "failure in dom[0] send cq.");
 
-	ret = fi_close(&dom->fid);
+	ret = fi_close(&send_cq[1]->fid);
+	cr_assert(!ret, "failure in dom[1] send cq.");
+
+	ret = fi_close(&av[0]->fid);
+	cr_assert(!ret, "failure in closing dom[0] av.");
+
+	ret = fi_close(&av[1]->fid);
+	cr_assert(!ret, "failure in closing dom[1] av.");
+
+	ret = fi_close(&dom[0]->fid);
+	cr_assert(!ret, "failure in closing domain.");
+
+	ret = fi_close(&dom[1]->fid);
 	cr_assert(!ret, "failure in closing domain.");
 
 	ret = fi_close(&fab->fid);
@@ -311,18 +385,31 @@ void rdm_rma_check_tcqe(struct fi_cq_tagged_entry *tcqe, void *ctx,
 	cr_assert(tcqe->tag == 0, "CQE tag invalid");
 }
 
-void rdm_rma_check_cntrs(uint64_t w, uint64_t r, uint64_t w_e, uint64_t r_e)
+void rdm_rma_check_cntrs(uint64_t w[2], uint64_t r[2], uint64_t w_e[2],
+			 uint64_t r_e[2])
 {
-	writes += w;
-	reads += r;
-	write_errs += w_e;
-	read_errs += r_e;
-
-	cr_assert(fi_cntr_read(write_cntr) == writes, "Bad write count");
-	cr_assert(fi_cntr_read(read_cntr) == reads, "Bad read count");
-	cr_assert(fi_cntr_readerr(write_cntr) == write_errs,
+	// Domain 0
+	writes[0] += w[0];
+	reads[0] += r[0];
+	write_errs[0] += w_e[0];
+	read_errs[0] += r_e[0];
+	cr_assert(fi_cntr_read(write_cntr[0]) == writes[0], "Bad write count");
+	cr_assert(fi_cntr_read(read_cntr[0]) == reads[0], "Bad read count");
+	cr_assert(fi_cntr_readerr(write_cntr[0]) == write_errs[0],
 		  "Bad write err count");
-	cr_assert(fi_cntr_readerr(read_cntr) == read_errs,
+	cr_assert(fi_cntr_readerr(read_cntr[0]) == read_errs[0],
+		  "Bad read err count");
+
+	// Domain 1
+	writes[1] += w[1];
+	reads[1] += r[1];
+	write_errs[1] += w_e[1];
+	read_errs[1] += r_e[1];
+	cr_assert(fi_cntr_read(write_cntr[1]) == writes[1], "Bad write count");
+	cr_assert(fi_cntr_read(read_cntr[1]) == reads[1], "Bad read count");
+	cr_assert(fi_cntr_readerr(write_cntr[1]) == write_errs[1],
+		  "Bad write err count");
+	cr_assert(fi_cntr_readerr(read_cntr[1]) == read_errs[1],
 		  "Bad read err count");
 }
 
@@ -339,8 +426,12 @@ void err_inject_enable(void)
 {
 	int ret, err_count_val = 1;
 
-	ret = gni_domain_ops->set_val(&dom->fid, GNI_ERR_INJECT_COUNT,
-				      &err_count_val);
+	ret = gni_domain_ops[0]->set_val(&dom[0]->fid, GNI_ERR_INJECT_COUNT,
+					 &err_count_val);
+	cr_assert(!ret, "setval(GNI_ERR_INJECT_COUNT)");
+
+	ret = gni_domain_ops[1]->set_val(&dom[1]->fid, GNI_ERR_INJECT_COUNT,
+					 &err_count_val);
 	cr_assert(!ret, "setval(GNI_ERR_INJECT_COUNT)");
 }
 
@@ -356,21 +447,25 @@ void do_write(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
+
 	sz = fi_write(ep[0], source, len,
-			 loc_mr, gni_addr[1], (uint64_t)target, mr_key,
-			 target);
+		      loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
+		      target);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
-	rdm_rma_check_cntrs(1, 0, 0, 0);
+
+	w[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -394,24 +489,28 @@ void do_writev(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	struct iovec iov;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
 
 	init_data(source, len, 0x25);
 	init_data(target, len, 0);
-	sz = fi_writev(ep[0], &iov, (void **)&loc_mr, 1,
-		       gni_addr[1], (uint64_t)target, mr_key,
+
+	sz = fi_writev(ep[0], &iov, (void **)loc_mr, 1,
+		       gni_addr[1], (uint64_t)target, mr_key[1],
 		       target);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
-	rdm_rma_check_cntrs(1, 0, 0, 0);
+
+	w[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -437,16 +536,17 @@ void do_writemsg(int len)
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
 
 	rma_iov.addr = (uint64_t)target;
 	rma_iov.len = len;
-	rma_iov.key = mr_key;
+	rma_iov.key = mr_key[1];
 
 	msg.msg_iov = &iov;
-	msg.desc = (void **)&loc_mr;
+	msg.desc = (void **)loc_mr;
 	msg.iov_count = 1;
 	msg.addr = gni_addr[1];
 	msg.rma_iov = &rma_iov;
@@ -459,13 +559,15 @@ void do_writemsg(int len)
 	sz = fi_writemsg(ep[0], &msg, 0);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
-	rdm_rma_check_cntrs(1, 0, 0, 0);
+
+	w[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -503,16 +605,17 @@ void do_write_fence(int len)
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
 
 	rma_iov.addr = (uint64_t)target;
 	rma_iov.len = sizeof(target);
-	rma_iov.key = mr_key;
+	rma_iov.key = mr_key[1];
 
 	msg.msg_iov = &iov;
-	msg.desc = (void **)&loc_mr;
+	msg.desc = (void **)loc_mr;
 	msg.iov_count = 1;
 	msg.addr = gni_addr[1];
 	msg.rma_iov = &rma_iov;
@@ -532,7 +635,7 @@ void do_write_fence(int len)
 	cr_assert_eq(sz, 0);
 
 	/* event A */
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
@@ -540,13 +643,15 @@ void do_write_fence(int len)
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
 
 	/* event B */
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
-	rdm_rma_check_cntrs(2, 0, 0, 0);
+
+	w[0] = 2;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -574,13 +679,14 @@ void do_inject_write(int len)
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
 	sz = fi_inject_write(ep[0], source, len,
-			     gni_addr[1], (uint64_t)target, mr_key);
+			     gni_addr[1], (uint64_t)target, mr_key[1]);
 	cr_assert_eq(sz, 0);
 
 	for (i = 0; i < len; i++) {
 		loops = 0;
 		while (source[i] != target[i]) {
-			ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
+			/* for progress */
+			ret = fi_cq_read(send_cq[0], &cqe, 1);
 			cr_assert(ret == -EAGAIN,
 				  "Received unexpected event\n");
 
@@ -606,28 +712,32 @@ void do_writedata(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe, dcqe;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
+
 
 #define WRITE_DATA 0x5123da1a145
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
-	sz = fi_writedata(ep[0], source, len, loc_mr, WRITE_DATA,
-			 gni_addr[1], (uint64_t)target, mr_key,
-			 target);
+	sz = fi_writedata(ep[0], source, len, loc_mr[0], WRITE_DATA,
+			  gni_addr[1], (uint64_t)target, mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
-	rdm_rma_check_cntrs(1, 0, 0, 0);
+
+	w[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
 	cr_assert(check_data(source, target, len), "Data mismatch");
 
-	while ((ret = fi_cq_read(recv_cq, &dcqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(recv_cq[1], &dcqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 	cr_assert(ret != FI_SUCCESS, "Missing remote data");
@@ -658,13 +768,14 @@ void do_inject_writedata(int len)
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
 	sz = fi_inject_writedata(ep[0], source, len, INJECTWRITE_DATA,
-				 gni_addr[1], (uint64_t)target, mr_key);
+				 gni_addr[1], (uint64_t)target, mr_key[1]);
 	cr_assert_eq(sz, 0);
 
 	for (i = 0; i < len; i++) {
 		loops = 0;
 		while (source[i] != target[i]) {
-			ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
+			/* for progress */
+			ret = fi_cq_read(send_cq[0], &cqe, 1);
 			cr_assert(ret == -EAGAIN,
 				  "Received unexpected event\n");
 
@@ -673,8 +784,8 @@ void do_inject_writedata(int len)
 		}
 	}
 
-	while ((ret = fi_cq_read(recv_cq, &dcqe, 1)) == -FI_EAGAIN) {
-		ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
+	while ((ret = fi_cq_read(recv_cq[1], &dcqe, 1)) == -FI_EAGAIN) {
+		ret = fi_cq_read(send_cq[0], &cqe, 1); /* for progress */
 		pthread_yield();
 	}
 	cr_assert(ret != FI_SUCCESS, "Missing remote data");
@@ -700,22 +811,27 @@ void do_read(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 #define READ_CTX 0x4e3dda1aULL
 	init_data(source, len, 0);
 	init_data(target, len, 0xad);
+
+	// domain 0 from domain 1
 	sz = fi_read(ep[0], source, len,
-			loc_mr, gni_addr[1], (uint64_t)target, mr_key,
-			(void *)READ_CTX);
+		     loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
+		     (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0);
-	rdm_rma_check_cntrs(0, 1, 0, 0);
+
+	r[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got read context event!\n");
 
@@ -739,24 +855,27 @@ void do_readv(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	struct iovec iov;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
 
 	init_data(target, len, 0x25);
 	init_data(source, len, 0);
-	sz = fi_readv(ep[0], &iov, (void **)&loc_mr, 1,
-		       gni_addr[1], (uint64_t)target, mr_key,
-		       target);
+	sz = fi_readv(ep[0], &iov, (void **)loc_mr, 1,
+		      gni_addr[1], (uint64_t)target, mr_key[1],
+		      target);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
-	rdm_rma_check_cntrs(0, 1, 0, 0);
+
+	r[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -782,16 +901,17 @@ void do_readmsg(int len)
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
 
 	rma_iov.addr = (uint64_t)target;
 	rma_iov.len = len;
-	rma_iov.key = mr_key;
+	rma_iov.key = mr_key[1];
 
 	msg.msg_iov = &iov;
-	msg.desc = (void **)&loc_mr;
+	msg.desc = (void **)loc_mr;
 	msg.iov_count = 1;
 	msg.addr = gni_addr[1];
 	msg.rma_iov = &rma_iov;
@@ -804,17 +924,35 @@ void do_readmsg(int len)
 	sz = fi_readmsg(ep[0], &msg, 0);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
-	rdm_rma_check_cntrs(0, 1, 0, 0);
+
+	r[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
 	cr_assert(check_data(source, target, len), "Data mismatch");
+
+	iov.iov_base = source;
+	iov.iov_len = len;
+
+	rma_iov.addr = (uint64_t)target;
+	rma_iov.len = len;
+	rma_iov.key = mr_key[0];
+
+	msg.msg_iov = &iov;
+	msg.desc = (void **)(loc_mr + 1);
+	msg.iov_count = 1;
+	msg.addr = gni_addr[0];
+	msg.rma_iov = &rma_iov;
+	msg.rma_iov_count = 1;
+	msg.context = target;
+	msg.data = (uint64_t)target;
 }
 
 Test(rdm_rma, readmsg)
@@ -837,16 +975,17 @@ void do_readmsgdata(int len)
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
 
 	rma_iov.addr = (uint64_t)target;
 	rma_iov.len = len;
-	rma_iov.key = mr_key;
+	rma_iov.key = mr_key[1];
 
 	msg.msg_iov = &iov;
-	msg.desc = (void **)&loc_mr;
+	msg.desc = (void **)loc_mr;
 	msg.iov_count = 1;
 	msg.addr = gni_addr[1];
 	msg.rma_iov = &rma_iov;
@@ -859,22 +998,25 @@ void do_readmsgdata(int len)
 	sz = fi_readmsg(ep[0], &msg, FI_REMOTE_CQ_DATA);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
-	rdm_rma_check_cntrs(0, 1, 0, 0);
+
+	r[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
 	cr_assert(check_data(source, target, len), "Data mismatch");
 
-	while ((ret = fi_cq_read(recv_cq, &dcqe, 1)) == -FI_EAGAIN) {
-		ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
+	while ((ret = fi_cq_read(recv_cq[1], &dcqe, 1)) == -FI_EAGAIN) {
+		ret = fi_cq_read(send_cq[0], &cqe, 1); /* for progress */
 		pthread_yield();
 	}
+
 	cr_assert(ret != FI_SUCCESS, "Missing remote data");
 
 	rdm_rma_check_tcqe(&dcqe, NULL,
@@ -901,16 +1043,17 @@ Test(rdm_rma, inject)
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = GNIX_INJECT_SIZE;
 
 	rma_iov.addr = (uint64_t)target;
 	rma_iov.len = GNIX_INJECT_SIZE;
-	rma_iov.key = mr_key;
+	rma_iov.key = mr_key[1];
 
 	msg.msg_iov = &iov;
-	msg.desc = (void **)&loc_mr;
+	msg.desc = (void **)loc_mr;
 	msg.iov_count = 1;
 	msg.addr = gni_addr[1];
 	msg.rma_iov = &rma_iov;
@@ -928,13 +1071,15 @@ Test(rdm_rma, inject)
 	sz = fi_writemsg(ep[0], &msg, FI_INJECT);
 	cr_assert_eq(sz, -FI_EINVAL);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
-	rdm_rma_check_cntrs(1, 0, 0, 0);
+
+	w[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -947,21 +1092,24 @@ void do_write_autoreg(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], source, len,
-			 NULL, gni_addr[1], (uint64_t)target, mr_key,
-			 target);
+		      NULL, gni_addr[1], (uint64_t)target, mr_key[1],
+		      target);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
-	rdm_rma_check_cntrs(1, 0, 0, 0);
+
+	w[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -978,21 +1126,24 @@ void do_write_autoreg_uncached(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(uc_source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], uc_source, len,
-			 NULL, gni_addr[1], (uint64_t)target, mr_key,
-			 target);
+		      NULL, gni_addr[1], (uint64_t)target, mr_key[1],
+		      target);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
-	rdm_rma_check_cntrs(1, 0, 0, 0);
+
+	w[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1010,21 +1161,22 @@ void do_write_error(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_cq_err_entry err_cqe;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], source, len,
-			 loc_mr, gni_addr[1], (uint64_t)target, mr_key,
-			 target);
+		      loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
+		      target);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, -FI_EAVAIL);
 
-	ret = fi_cq_readerr(send_cq, &err_cqe, 0);
+	ret = fi_cq_readerr(send_cq[0], &err_cqe, 0);
 	cr_assert_eq(ret, 1);
 
 	cr_assert((uint64_t)err_cqe.op_context == (uint64_t)target,
@@ -1040,15 +1192,20 @@ void do_write_error(int len)
 		  "Bad prov errno");
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
 
-	rdm_rma_check_cntrs(0, 0, 1, 0);
+	w_e[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 }
 
 Test(rdm_rma, write_error)
 {
 	int ret, max_retrans_val = 1;
 
-	ret = gni_domain_ops->set_val(&dom->fid, GNI_MAX_RETRANSMITS,
-				      &max_retrans_val);
+	ret = gni_domain_ops[0]->set_val(&dom[0]->fid, GNI_MAX_RETRANSMITS,
+					 &max_retrans_val);
+	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
+
+	ret = gni_domain_ops[1]->set_val(&dom[1]->fid, GNI_MAX_RETRANSMITS,
+					 &max_retrans_val);
 	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
 	err_inject_enable();
 
@@ -1061,21 +1218,22 @@ void do_read_error(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_cq_err_entry err_cqe;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(source, len, 0);
 	init_data(target, len, 0xad);
 	sz = fi_read(ep[0], source, len,
-			loc_mr, gni_addr[1], (uint64_t)target, mr_key,
-			(void *)READ_CTX);
+		     loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
+		     (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, -FI_EAVAIL);
 
-	ret = fi_cq_readerr(send_cq, &err_cqe, 0);
+	ret = fi_cq_readerr(send_cq[0], &err_cqe, 0);
 	cr_assert_eq(ret, 1);
 
 	cr_assert((uint64_t)err_cqe.op_context == (uint64_t)READ_CTX,
@@ -1091,15 +1249,20 @@ void do_read_error(int len)
 		  "Bad prov errno");
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
 
-	rdm_rma_check_cntrs(0, 0, 0, 1);
+	r_e[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 }
 
 Test(rdm_rma, read_error)
 {
 	int ret, max_retrans_val = 1;
 
-	ret = gni_domain_ops->set_val(&dom->fid, GNI_MAX_RETRANSMITS,
-				      &max_retrans_val);
+	ret = gni_domain_ops[0]->set_val(&dom[0]->fid, GNI_MAX_RETRANSMITS,
+					 &max_retrans_val);
+	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
+
+	ret = gni_domain_ops[1]->set_val(&dom[1]->fid, GNI_MAX_RETRANSMITS,
+					 &max_retrans_val);
 	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
 	err_inject_enable();
 
@@ -1111,21 +1274,24 @@ void do_read_buf(void *s, void *t, int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 #define READ_CTX 0x4e3dda1aULL
 	init_data(s, len, 0);
 	init_data(t, len, 0xad);
-	sz = fi_read(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key,
-			(void *)READ_CTX);
+	sz = fi_read(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key[1],
+		     (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0);
-	rdm_rma_check_cntrs(0, 1, 0, 0);
+
+	r[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got read context event!\n");
 
@@ -1163,20 +1329,23 @@ void do_write_buf(void *s, void *t, int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
+	uint64_t w[2] = {0}, r[2] = {0}, w_e[2] = {0}, r_e[2] = {0};
 
 	init_data(s, len, 0xab);
 	init_data(t, len, 0);
-	sz = fi_write(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key,
-			 t);
+	sz = fi_write(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key[1],
+		      t);
 	cr_assert_eq(sz, 0);
 
-	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_WRITE, 0);
-	rdm_rma_check_cntrs(1, 0, 0, 0);
+
+	w[0] = 1;
+	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 

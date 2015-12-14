@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -65,17 +65,19 @@
 #define dbg_printf(...) fprintf(stderr, __VA_ARGS__); fflush(stderr)
 #endif
 
+#define NUMEPS 2
+
 static struct fid_fabric *fab;
-static struct fid_domain *dom;
-struct fi_gni_ops_domain *gni_domain_ops;
-static struct fid_ep *ep[2];
-static struct fid_av *av;
-void *ep_name[2];
-fi_addr_t gni_addr[2];
-static struct fid_cq *msg_cq[2];
-static struct fi_info *fi[2];
+static struct fid_domain *dom[NUMEPS];
+struct fi_gni_ops_domain *gni_domain_ops[NUMEPS];
+static struct fid_ep *ep[NUMEPS];
+static struct fid_av *av[NUMEPS];
+void *ep_name[NUMEPS];
+fi_addr_t gni_addr[NUMEPS];
+static struct fid_cq *msg_cq[NUMEPS];
+static struct fi_info *fi[NUMEPS];
 static struct fi_cq_attr cq_attr;
-const char *cdm_id[2] = { "5000", "5001" };
+const char *cdm_id[NUMEPS] = { "5000", "5001" };
 struct fi_info *hints;
 static int using_bnd_ep = 0;
 
@@ -84,93 +86,29 @@ char *target;
 char *source;
 char *uc_target;
 char *uc_source;
-struct fid_mr *rem_mr, *loc_mr;
-uint64_t mr_key;
+struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
+uint64_t mr_key[NUMEPS];
 
-static struct fid_cntr *send_cntr, *recv_cntr;
+static struct fid_cntr *send_cntr[NUMEPS], *recv_cntr[NUMEPS];
 static struct fi_cntr_attr cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
 	.flags = 0
 };
-static uint64_t sends, recvs, send_errs, recv_errs;
+static uint64_t sends[NUMEPS] = {0}, recvs[NUMEPS] = {0},
+	send_errs[NUMEPS] = {0}, recv_errs[NUMEPS] = {0};
 
 void rdm_sr_setup_common_eps(void)
 {
-	int ret = 0;
+	int ret = 0, i = 0, j = 0;
 	struct fi_av_attr attr;
 	size_t addrlen = 0;
 
-	ret = fi_fabric(fi[0]->fabric_attr, &fab, NULL);
-	cr_assert(!ret, "fi_fabric");
-
-	ret = fi_domain(fab, fi[0], &dom, NULL);
-	cr_assert(!ret, "fi_domain");
-
-	ret = fi_open_ops(&dom->fid, FI_GNI_DOMAIN_OPS_1,
-			  0, (void **) &gni_domain_ops, NULL);
-
 	attr.type = FI_AV_MAP;
-	attr.count = 16;
-
-	ret = fi_av_open(dom, &attr, &av, NULL);
-	cr_assert(!ret, "fi_av_open");
-
-	ret = fi_endpoint(dom, fi[0], &ep[0], NULL);
-	cr_assert(!ret, "fi_endpoint");
+	attr.count = NUMEPS;
 
 	cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
-
-	ret = fi_cq_open(dom, &cq_attr, &msg_cq[0], 0);
-	cr_assert(!ret, "fi_cq_open");
-
-	ret = fi_endpoint(dom, fi[1], &ep[1], NULL);
-	cr_assert(!ret, "fi_endpoint");
-
-	ret = fi_cq_open(dom, &cq_attr, &msg_cq[1], 0);
-	cr_assert(!ret, "fi_cq_open");
-
-	ret = fi_ep_bind(ep[0], &msg_cq[0]->fid, FI_SEND | FI_RECV);
-	cr_assert(!ret, "fi_ep_bind");
-
-	ret = fi_getname(&ep[0]->fid, NULL, &addrlen);
-	cr_assert(addrlen > 0);
-
-	ep_name[0] = malloc(addrlen);
-	cr_assert(ep_name[0] != NULL);
-
-	ret = fi_getname(&ep[0]->fid, ep_name[0], &addrlen);
-	cr_assert(ret == FI_SUCCESS);
-
-	ret = fi_ep_bind(ep[1], &msg_cq[1]->fid, FI_SEND | FI_RECV);
-	cr_assert(!ret, "fi_ep_bind");
-
-	ep_name[1] = malloc(addrlen);
-	cr_assert(ep_name[1] != NULL);
-
-	ret = fi_getname(&ep[1]->fid, ep_name[1], &addrlen);
-	cr_assert(ret == FI_SUCCESS);
-
-	ret = fi_av_insert(av, ep_name[0], 1, &gni_addr[0], 0,
-				NULL);
-	cr_assert(ret == 1);
-
-	ret = fi_av_insert(av, ep_name[1], 1, &gni_addr[1], 0,
-				NULL);
-	cr_assert(ret == 1);
-
-	ret = fi_ep_bind(ep[0], &av->fid, 0);
-	cr_assert(!ret, "fi_ep_bind");
-
-	ret = fi_ep_bind(ep[1], &av->fid, 0);
-	cr_assert(!ret, "fi_ep_bind");
-
-	ret = fi_enable(ep[0]);
-	cr_assert(!ret, "fi_ep_enable");
-
-	ret = fi_enable(ep[1]);
-	cr_assert(!ret, "fi_ep_enable");
 
 	target = malloc(BUF_SZ);
 	assert(target);
@@ -184,152 +122,182 @@ void rdm_sr_setup_common_eps(void)
 	uc_source = malloc(BUF_SZ);
 	assert(uc_source);
 
-	ret = fi_cntr_open(dom, &cntr_attr, &send_cntr, 0);
-	cr_assert(!ret, "fi_cntr_open");
+	ret = fi_fabric(fi[0]->fabric_attr, &fab, NULL);
+	cr_assert(!ret, "fi_fabric");
 
-	ret = fi_ep_bind(ep[0], &send_cntr->fid, FI_SEND);
-	cr_assert(!ret, "fi_ep_bind");
+	for (; i < NUMEPS; i++) {
+		ret = fi_domain(fab, fi[i], dom + i, NULL);
+		cr_assert(!ret, "fi_domain");
 
-	ret = fi_cntr_open(dom, &cntr_attr, &recv_cntr, 0);
-	cr_assert(!ret, "fi_cntr_open");
+		ret = fi_open_ops(&dom[i]->fid, FI_GNI_DOMAIN_OPS_1,
+				  0, (void **) (gni_domain_ops + i), NULL);
 
-	ret = fi_ep_bind(ep[1], &recv_cntr->fid, FI_RECV);
-	cr_assert(!ret, "fi_ep_bind");
+		ret = fi_av_open(dom[i], &attr, av + i, NULL);
+		cr_assert(!ret, "fi_av_open");
 
-	sends = recvs = send_errs = recv_errs = 0;
+		ret = fi_endpoint(dom[i], fi[i], ep + i, NULL);
+		cr_assert(!ret, "fi_endpoint");
+
+		ret = fi_cq_open(dom[i], &cq_attr, msg_cq + i, 0);
+		cr_assert(!ret, "fi_cq_open");
+
+		ret = fi_ep_bind(ep[i], &msg_cq[i]->fid, FI_SEND | FI_RECV);
+		cr_assert(!ret, "fi_ep_bind");
+
+		ret = fi_getname(&ep[i]->fid, NULL, &addrlen);
+		cr_assert(addrlen > 0);
+
+		ep_name[i] = malloc(addrlen);
+		cr_assert(ep_name[i] != NULL);
+
+		ret = fi_getname(&ep[i]->fid, ep_name[i], &addrlen);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	for (i = 0; i < NUMEPS; i++) {
+		/* Insert all gni addresses into each av */
+		for (j = 0; j < NUMEPS; j++) {
+			ret = fi_av_insert(av[i], ep_name[j], 1, &gni_addr[j],
+					   0, NULL);
+			cr_assert(ret == 1);
+		}
+
+		ret = fi_ep_bind(ep[i], &av[i]->fid, 0);
+		cr_assert(!ret, "fi_ep_bind");
+
+		ret = fi_enable(ep[i]);
+		cr_assert(!ret, "fi_ep_enable");
+
+		ret = fi_cntr_open(dom[i], &cntr_attr, send_cntr + i, 0);
+		cr_assert(!ret, "fi_cntr_open");
+
+		ret = fi_ep_bind(ep[i], &send_cntr[i]->fid, FI_SEND);
+		cr_assert(!ret, "fi_ep_bind");
+
+		ret = fi_cntr_open(dom[i], &cntr_attr, recv_cntr + i, 0);
+		cr_assert(!ret, "fi_cntr_open");
+
+		ret = fi_ep_bind(ep[i], &recv_cntr[i]->fid, FI_RECV);
+		cr_assert(!ret, "fi_ep_bind");
+	}
 }
 
 void rdm_sr_setup_common(void)
 {
-	int ret = 0;
+	int ret = 0, i = 0;
 
 	rdm_sr_setup_common_eps();
 
-	ret = fi_mr_reg(dom, target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr, &target);
-	cr_assert_eq(ret, 0);
+	for (i = 0; i < NUMEPS; i++) {
+		ret = fi_mr_reg(dom[i], target, BUF_SZ,
+				FI_REMOTE_WRITE, 0, 0, 0, rem_mr + i, &target);
+		cr_assert_eq(ret, 0);
 
-	ret = fi_mr_reg(dom, source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
-	cr_assert_eq(ret, 0);
+		ret = fi_mr_reg(dom[i], source, BUF_SZ,
+				FI_REMOTE_WRITE, 0, 0, 0, loc_mr + i, &source);
+		cr_assert_eq(ret, 0);
 
-	mr_key = fi_mr_key(rem_mr);
+		mr_key[i] = fi_mr_key(rem_mr[i]);
+	}
 }
 
-void rdm_sr_setup(void)
+void rdm_sr_setup(bool is_noreg)
 {
-	int ret = 0;
+	int ret = 0, i = 0;
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
-	hints->domain_attr->cq_data_size = 4;
+	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->mode = ~0;
-	hints->caps = FI_SOURCE;
-
+	hints->caps = is_noreg ? hints->caps : FI_SOURCE;
 	hints->fabric_attr->name = strdup("gni");
 
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[0]);
-	cr_assert(!ret, "fi_getinfo");
-	fi[1] = fi[0];
+	/* Get info about fabric services with the provided hints */
+	for (; i < NUMEPS; i++) {
+		ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[i]);
+		cr_assert(!ret, "fi_getinfo");
+	}
 
-	rdm_sr_setup_common();
+	if (is_noreg)
+		rdm_sr_setup_common_eps();
+	else
+		rdm_sr_setup_common();
 }
 
-void rdm_sr_setup_noreg(void)
-{
-	int ret = 0;
+static void rdm_sr_setup_reg(void) {
+	rdm_sr_setup(false);
+}
 
-	hints = fi_allocinfo();
-	cr_assert(hints, "fi_allocinfo");
-
-	hints->domain_attr->cq_data_size = 4;
-	hints->mode = ~0;
-
-	hints->fabric_attr->name = strdup("gni");
-
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[0]);
-	cr_assert(!ret, "fi_getinfo");
-	fi[1] = fi[0];
-
-	rdm_sr_setup_common_eps();
+static void rdm_sr_setup_noreg(void) {
+	rdm_sr_setup(true);
 }
 
 void rdm_sr_bnd_ep_setup(void)
 {
-	int ret = 0;
+	int ret = 0, i = 0;
 	char my_hostname[HOST_NAME_MAX];
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 
-	hints->domain_attr->cq_data_size = 4;
+	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->mode = ~0;
-
 	hints->fabric_attr->name = strdup("gni");
 
 	ret = gethostname(my_hostname, sizeof(my_hostname));
 	cr_assert(!ret, "gethostname");
 
-	ret = fi_getinfo(FI_VERSION(1, 0), my_hostname,
-			 cdm_id[0], 0, hints, &fi[0]);
-	cr_assert(!ret, "fi_getinfo");
-
-	ret = fi_getinfo(FI_VERSION(1, 0), my_hostname,
-			 cdm_id[1], 0, hints, &fi[1]);
-	cr_assert(!ret, "fi_getinfo");
+	for (; i < NUMEPS; i++) {
+		ret = fi_getinfo(FI_VERSION(1, 0), my_hostname,
+				 cdm_id[i], 0, hints, fi + i);
+		cr_assert(!ret, "fi_getinfo");
+	}
 
 	using_bnd_ep = 1;
 
 	rdm_sr_setup_common();
-
 }
 
 static void rdm_sr_teardown_common(bool unreg)
 {
-	int ret = 0;
-
-	fi_close(&recv_cntr->fid);
-	fi_close(&send_cntr->fid);
+	int ret = 0, i = 0;
 
 	free(uc_source);
 	free(uc_target);
-
-	if (unreg) {
-		fi_close(&loc_mr->fid);
-		fi_close(&rem_mr->fid);
-	}
-
 	free(target);
 	free(source);
 
-	ret = fi_close(&ep[0]->fid);
-	cr_assert(!ret, "failure in closing ep.");
+	for (; i < NUMEPS; i++) {
+		fi_close(&recv_cntr[i]->fid);
+		fi_close(&send_cntr[i]->fid);
 
-	ret = fi_close(&ep[1]->fid);
-	cr_assert(!ret, "failure in closing ep.");
+		if (unreg) {
+			fi_close(&loc_mr[i]->fid);
+			fi_close(&rem_mr[i]->fid);
+		}
 
-	ret = fi_close(&msg_cq[0]->fid);
-	cr_assert(!ret, "failure in send cq.");
+		ret = fi_close(&ep[i]->fid);
+		cr_assert(!ret, "failure in closing ep.");
 
-	ret = fi_close(&msg_cq[1]->fid);
-	cr_assert(!ret, "failure in recv cq.");
+		ret = fi_close(&msg_cq[i]->fid);
+		cr_assert(!ret, "failure in send cq.");
 
-	ret = fi_close(&av->fid);
-	cr_assert(!ret, "failure in closing av.");
+		ret = fi_close(&av[i]->fid);
+		cr_assert(!ret, "failure in closing av.");
 
-	ret = fi_close(&dom->fid);
-	cr_assert(!ret, "failure in closing domain.");
+		ret = fi_close(&dom[i]->fid);
+		cr_assert(!ret, "failure in closing domain.");
+
+		fi_freeinfo(fi[i]);
+
+		free(ep_name[i]);
+	}
 
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
 
-	fi_freeinfo(fi[0]);
-	if (using_bnd_ep)
-		fi_freeinfo(fi[1]);
 	fi_freeinfo(hints);
-	free(ep_name[0]);
-	free(ep_name[1]);
 }
 
 static void rdm_sr_teardown(void)
@@ -358,8 +326,8 @@ int rdm_sr_check_data(char *buf1, char *buf2, int len)
 
 	for (i = 0; i < len; i++) {
 		if (buf1[i] != buf2[i]) {
-			printf("data mismatch, elem: %d, exp: %hhx, act: %hhx\n",
-			       i, buf1[i], buf2[i]);
+			printf("data mismatch, elem: %d, exp: %hhx, act: %hhx\n"
+			       , i, buf1[i], buf2[i]);
 			return 0;
 		}
 	}
@@ -377,8 +345,8 @@ void rdm_sr_xfer_for_each_size(void (*xfer)(int len), int slen, int elen)
 }
 
 void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
-		     uint64_t flags, void *addr, size_t len,
-		     uint64_t data)
+		      uint64_t flags, void *addr, size_t len,
+		      uint64_t data)
 {
 	cr_assert(cqe->op_context == ctx, "CQE Context mismatch");
 	cr_assert(cqe->flags == flags, "CQE flags mismatch");
@@ -398,49 +366,60 @@ void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 	cr_assert(cqe->tag == 0, "Invalid CQE tag");
 }
 
-void rdm_sr_check_cntrs(uint64_t s, uint64_t r, uint64_t s_e, uint64_t r_e)
+void rdm_sr_check_cntrs(uint64_t s[], uint64_t r[], uint64_t s_e[],
+			uint64_t r_e[])
 {
-	sends += s;
-	recvs += r;
-	send_errs += s_e;
-	recv_errs += r_e;
+	int i = 0;
+	for (; i < NUMEPS; i++) {
+		sends[i] += s[i];
+		recvs[i] += r[i];
+		send_errs[i] += s_e[i];
+		recv_errs[i] += r_e[i];
 
-	cr_assert(fi_cntr_read(send_cntr) == sends, "Bad send count");
-	cr_assert(fi_cntr_read(recv_cntr) == recvs, "Bad recv count");
-	cr_assert(fi_cntr_readerr(send_cntr) == send_errs,
-		  "Bad send err count");
-	cr_assert(fi_cntr_readerr(recv_cntr) == recv_errs,
-		  "Bad recv err count");
+		cr_assert(fi_cntr_read(send_cntr[i]) == sends[i],
+			  "Bad send count");
+		cr_assert(fi_cntr_read(recv_cntr[i]) == recvs[i],
+			  "Bad recv count");
+		cr_assert(fi_cntr_readerr(send_cntr[i]) == send_errs[i],
+			  "Bad send err count");
+		cr_assert(fi_cntr_readerr(recv_cntr[i]) == recv_errs[i],
+			  "Bad recv err count");
+	}
 }
 
 void rdm_sr_err_inject_enable(void)
 {
-	int ret, err_count_val = 1;
+	int ret, err_count_val = 1, i = 0;
 
-	ret = gni_domain_ops->set_val(&dom->fid, GNI_ERR_INJECT_COUNT,
-				      &err_count_val);
-	cr_assert(!ret, "setval(GNI_ERR_INJECT_COUNT)");
+	for (; i < NUMEPS; i++) {
+		ret = gni_domain_ops[i]->set_val(&dom[i]->fid,
+						 GNI_ERR_INJECT_COUNT,
+						 &err_count_val);
+		cr_assert(!ret, "setval(GNI_ERR_INJECT_COUNT)");
+	}
 }
 
 void rdm_sr_lazy_dereg_disable(void)
 {
-	int ret, lazy_dereg_val = 0;
+	int ret, lazy_dereg_val = 0, i = 0;
 
-	ret = gni_domain_ops->set_val(&dom->fid, GNI_MR_CACHE_LAZY_DEREG,
-				      &lazy_dereg_val);
-	cr_assert(!ret, "setval(GNI_MR_CACHE_LAZY_DEREG)");
+	for (; i < NUMEPS; i++) {
+		ret = gni_domain_ops[i]->set_val(&dom[i]->fid,
+						 GNI_MR_CACHE_LAZY_DEREG,
+						 &lazy_dereg_val);
+		cr_assert(!ret, "setval(GNI_MR_CACHE_LAZY_DEREG)");
+	}
 }
 
 /*******************************************************************************
  * Test MSG functions
  ******************************************************************************/
 
-TestSuite(rdm_sr, .init = rdm_sr_setup, .fini = rdm_sr_teardown,
+TestSuite(rdm_sr, .init = rdm_sr_setup_reg, .fini = rdm_sr_teardown,
 	  .disabled = false);
 
 TestSuite(rdm_sr_noreg, .init = rdm_sr_setup_noreg,
-	  .fini = rdm_sr_teardown_nounreg,
-	  .disabled = false);
+	  .fini = rdm_sr_teardown_nounreg, .disabled = false);
 
 TestSuite(rdm_sr_bnd_ep, .init = rdm_sr_bnd_ep_setup, .fini = rdm_sr_teardown,
 	  .disabled = false);
@@ -458,14 +437,16 @@ void do_send(int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
 
-	sz = fi_send(ep[0], source, len, loc_mr, gni_addr[1], target);
+	sz = fi_send(ep[0], source, len, loc_mr[0], gni_addr[1], target);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr[1], gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -482,7 +463,9 @@ void do_send(int len)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
@@ -501,9 +484,9 @@ Test(rdm_sr, send_retrans)
 }
 
 /*
-ssize_t fi_sendv(struct fid_ep *ep, const struct iovec *iov,
-		void **desc, size_t count, fi_addr_t dest_addr, void *context);
- */
+ssize_t fi_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+		 size_t count, fi_addr_t dest_addr, void *context);
+*/
 void do_sendv(int len)
 {
 	int ret;
@@ -511,6 +494,8 @@ void do_sendv(int len)
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
 	struct iovec iov;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
@@ -518,10 +503,10 @@ void do_sendv(int len)
 	rdm_sr_init_data(source, len, 0x25);
 	rdm_sr_init_data(target, len, 0);
 
-	sz = fi_sendv(ep[0], &iov, (void **)&loc_mr, 1, gni_addr[1], target);
+	sz = fi_sendv(ep[0], &iov, (void **)loc_mr, 1, gni_addr[1], target);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr[0], gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -538,7 +523,9 @@ void do_sendv(int len)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
@@ -558,7 +545,7 @@ Test(rdm_sr, sendv_retrans)
 
 /*
 ssize_t fi_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
-		uint64_t flags);
+		   uint64_t flags);
 */
 void do_sendmsg(int len)
 {
@@ -568,12 +555,14 @@ void do_sendmsg(int len)
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct fi_msg msg;
 	struct iovec iov;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
 
 	msg.msg_iov = &iov;
-	msg.desc = (void **)&loc_mr;
+	msg.desc = (void **)loc_mr;
 	msg.iov_count = 1;
 	msg.addr = gni_addr[1];
 	msg.context = target;
@@ -585,7 +574,7 @@ void do_sendmsg(int len)
 	sz = fi_sendmsg(ep[0], &msg, 0);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr[0], gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -602,7 +591,9 @@ void do_sendmsg(int len)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
@@ -622,8 +613,9 @@ Test(rdm_sr, sendmsg_retrans)
 
 /*
 ssize_t fi_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
-		uint64_t flags);
+		   uint64_t flags);
 */
+
 void do_sendmsgdata(int len)
 {
 	int ret;
@@ -632,12 +624,14 @@ void do_sendmsgdata(int len)
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct fi_msg msg;
 	struct iovec iov;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
 
 	msg.msg_iov = &iov;
-	msg.desc = (void **)&loc_mr;
+	msg.desc = (void **)loc_mr;
 	msg.iov_count = 1;
 	msg.addr = gni_addr[1];
 	msg.context = target;
@@ -649,7 +643,7 @@ void do_sendmsgdata(int len)
 	sz = fi_sendmsg(ep[0], &msg, FI_REMOTE_CQ_DATA);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr[0], gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -666,8 +660,10 @@ void do_sendmsgdata(int len)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-			  target, len, (uint64_t)source);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+			 target, len, (uint64_t)source);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
@@ -687,7 +683,7 @@ Test(rdm_sr, sendmsgdata_retrans)
 
 /*
 ssize_t fi_inject(struct fid_ep *ep, void *buf, size_t len,
-		fi_addr_t dest_addr);
+		  fi_addr_t dest_addr);
 */
 #define INJECT_SIZE 64
 void do_inject(int len)
@@ -695,6 +691,8 @@ void do_inject(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0x23);
 	rdm_sr_init_data(target, len, 0);
@@ -702,25 +700,27 @@ void do_inject(int len)
 	sz = fi_inject(ep[0], source, len, gni_addr[1]);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr[1], gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(msg_cq[1], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
+		/* Manually progress connection to domain 1 */
+		fi_cq_read(msg_cq[0], &cqe, 1);
 	}
 
 	cr_assert_eq(ret, 1);
 	rdm_sr_check_cqe(&cqe, source, (FI_MSG|FI_RECV),
-			  target, len, (uint64_t)source);
+			 target, len, (uint64_t)source);
 
 	dbg_printf("got recv context event!\n");
 
 	/* do progress until send counter is updated */
-	while (fi_cntr_read(send_cntr) < 1) {
+	while (fi_cntr_read(send_cntr[0]) < 1) {
 		pthread_yield();
 	}
-
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	/* make sure inject does not generate a send competion */
 	cr_assert_eq(fi_cq_read(msg_cq[0], &cqe, 1), -FI_EAGAIN);
@@ -740,8 +740,8 @@ Test(rdm_sr, inject_retrans)
 }
 
 /*
-ssize_t fi_senddata(struct fid_ep *ep, void *buf, size_t len,
-		void *desc, uint64_t data, fi_addr_t dest_addr, void *context);
+ssize_t fi_senddata(struct fid_ep *ep, void *buf, size_t len, void *desc,
+		    uint64_t data, fi_addr_t dest_addr, void *context);
 */
 void do_senddata(int len)
 {
@@ -749,15 +749,17 @@ void do_senddata(int len)
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
 
-	sz = fi_senddata(ep[0], source, len, loc_mr, (uint64_t)source,
+	sz = fi_senddata(ep[0], source, len, loc_mr[0], (uint64_t)source,
 			 gni_addr[1], target);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr[0], gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -774,8 +776,10 @@ void do_senddata(int len)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-			  target, len, (uint64_t)source);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+			 target, len, (uint64_t)source);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
@@ -795,13 +799,15 @@ Test(rdm_sr, senddata_retrans)
 
 /*
 ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-		uint64_t data, fi_addr_t dest_addr)
+		      uint64_t data, fi_addr_t dest_addr);
 */
 void do_injectdata(int len)
 {
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -809,25 +815,27 @@ void do_injectdata(int len)
 	sz = fi_injectdata(ep[0], source, len, (uint64_t)source, gni_addr[1]);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr[0], gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
-	/* TODO get REMOTE_CQ_DATA */
 	while ((ret = fi_cq_read(msg_cq[1], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
+		/* Manually progress connection to domain 1 */
+		fi_cq_read(msg_cq[0], &cqe, 1);
 	}
 
 	rdm_sr_check_cqe(&cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
-			  target, len, (uint64_t)source);
+			 target, len, (uint64_t)source);
 
 	dbg_printf("got recv context event!\n");
 
-	/* do progress until send counter is updated */
-	while (fi_cntr_read(send_cntr) < 1) {
+	/* don't progress until send counter is updated */
+	while (fi_cntr_read(send_cntr[0]) < 1) {
 		pthread_yield();
 	}
 
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	/* make sure inject does not generate a send competion */
 	cr_assert_eq(fi_cq_read(msg_cq[0], &cqe, 1), -FI_EAGAIN);
@@ -848,8 +856,8 @@ Test(rdm_sr, injectdata_retrans)
 
 /*
 ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t src_addr, void *context);
- */
+		 size_t count, fi_addr_t src_addr, void *context);
+*/
 void do_recvv(int len)
 {
 	int ret;
@@ -857,20 +865,22 @@ void do_recvv(int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct iovec iov;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
 
-	sz = fi_send(ep[0], source, len, loc_mr, gni_addr[1], target);
+	sz = fi_send(ep[0], source, len, loc_mr[0], gni_addr[1], target);
 	cr_assert_eq(sz, 0);
 
 	iov.iov_base = target;
 	iov.iov_len = len;
 
-	sz = fi_recvv(ep[1], &iov, (void **)&rem_mr, 1, gni_addr[0], source);
+	sz = fi_recvv(ep[1], &iov, (void **)rem_mr, 1, gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
-	/* need to progress both CQs simultaneously for rendezvous */
+	/*  need to progress both CQs simultaneously for rendezvous */
 	do {
 		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
 		if (ret == 1) {
@@ -884,7 +894,9 @@ void do_recvv(int len)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
@@ -904,28 +916,30 @@ Test(rdm_sr, recvv_retrans)
 
 /*
 ssize_t (*recvmsg)(struct fid_ep *ep, const struct fi_msg *msg,
-		uint64_t flags);
- */
+		   uint64_t flags);
+*/
 void do_recvmsg(int len)
 {
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
-	struct fi_msg msg;
 	struct iovec iov;
+	struct fi_msg msg;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
 
-	sz = fi_send(ep[0], source, len, loc_mr, gni_addr[1], target);
+	sz = fi_send(ep[0], source, len, loc_mr[0], gni_addr[1], target);
 	cr_assert_eq(sz, 0);
 
 	iov.iov_base = target;
 	iov.iov_len = len;
 
 	msg.msg_iov = &iov;
-	msg.desc = (void **)&rem_mr;
+	msg.desc = (void **)rem_mr;
 	msg.iov_count = 1;
 	msg.addr = gni_addr[0];
 	msg.context = source;
@@ -948,7 +962,9 @@ void do_recvmsg(int len)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
@@ -977,6 +993,8 @@ void do_send_autoreg(int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -1001,7 +1019,9 @@ void do_send_autoreg(int len)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
@@ -1025,6 +1045,8 @@ void do_send_autoreg_uncached(int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(uc_source, len, 0xab);
 	rdm_sr_init_data(uc_target, len, 0);
@@ -1050,7 +1072,9 @@ void do_send_autoreg_uncached(int len)
 	rdm_sr_check_cqe(&s_cqe, uc_target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, uc_source, (FI_MSG|FI_RECV),
 			 uc_target, len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
@@ -1075,11 +1099,13 @@ void do_send_err(int len)
 	struct fi_cq_tagged_entry s_cqe;
 	struct fi_cq_err_entry err_cqe;
 	ssize_t sz;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
 
-	sz = fi_send(ep[0], source, len, loc_mr, gni_addr[1], target);
+	sz = fi_send(ep[0], source, len, loc_mr[0], gni_addr[1], target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(msg_cq[0], &s_cqe, 1)) == -FI_EAGAIN) {
@@ -1104,16 +1130,20 @@ void do_send_err(int len)
 		  "Bad prov errno");
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
 
-	rdm_sr_check_cntrs(0, 0, 1, 0);
+	s_e[0] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 }
 
 Test(rdm_sr, send_err)
 {
-	int ret, max_retrans_val = 0; /* 0 to force SMSG failure */
+	int ret, max_retrans_val = 0, i = 0; /* 0 to force SMSG failure */
 
-	ret = gni_domain_ops->set_val(&dom->fid, GNI_MAX_RETRANSMITS,
-				      &max_retrans_val);
-	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
+	for (; i < NUMEPS; i++) {
+		ret = gni_domain_ops[i]->set_val(&dom[i]->fid,
+						 GNI_MAX_RETRANSMITS,
+						 &max_retrans_val);
+		cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
+	}
 	rdm_sr_err_inject_enable();
 
 	rdm_sr_xfer_for_each_size(do_send_err, 1, BUF_SZ);
@@ -1125,6 +1155,8 @@ void do_send_autoreg_uncached_nolazydereg(int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(uc_source, len, 0xab);
 	rdm_sr_init_data(uc_target, len, 0);
@@ -1150,7 +1182,9 @@ void do_send_autoreg_uncached_nolazydereg(int len)
 	rdm_sr_check_cqe(&s_cqe, uc_target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, uc_source, (FI_MSG|FI_RECV),
 			 uc_target, len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
@@ -1173,14 +1207,16 @@ Test(rdm_sr, send_readfrom)
 	ssize_t sz;
 	fi_addr_t src_addr;
 	int len = 64;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
 
-	sz = fi_send(ep[0], source, len, loc_mr, gni_addr[1], target);
+	sz = fi_send(ep[0], source, len, loc_mr[0], gni_addr[1], target);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr[0], gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -1197,7 +1233,10 @@ Test(rdm_sr, send_readfrom)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
+
 	cr_assert(src_addr == gni_addr[0], "src_addr mismatch");
 
 	dbg_printf("got context events!\n");
@@ -1205,20 +1244,22 @@ Test(rdm_sr, send_readfrom)
 	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
 }
 
-void do_send_buf(void *s, void *t, int len)
+void do_send_buf(void *p, void *t, int len)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
-	rdm_sr_init_data(s, len, 0xab);
+	rdm_sr_init_data(p, len, 0xab);
 	rdm_sr_init_data(t, len, 0);
 
-	sz = fi_send(ep[0], s, len, loc_mr, gni_addr[1], t);
+	sz = fi_send(ep[0], p, len, loc_mr[0], gni_addr[1], t);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], t, len, rem_mr, gni_addr[0], s);
+	sz = fi_recv(ep[1], t, len, rem_mr[0], gni_addr[0], p);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -1234,12 +1275,14 @@ void do_send_buf(void *s, void *t, int len)
 	} while (!(source_done && dest_done));
 
 	rdm_sr_check_cqe(&s_cqe, t, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, s, (FI_MSG|FI_RECV), t, len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+	rdm_sr_check_cqe(&d_cqe, p, (FI_MSG|FI_RECV), t, len, 0);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
-	cr_assert(rdm_sr_check_data(s, t, len), "Data mismatch");
+	cr_assert(rdm_sr_check_data(p, t, len), "Data mismatch");
 }
 
 void do_send_alignment(int len)
@@ -1268,21 +1311,23 @@ Test(rdm_sr, send_alignment_retrans)
 	rdm_sr_xfer_for_each_size(do_send_alignment, 1, (BUF_SZ-1));
 }
 
-void do_sendrecv_buf(void *s, void *t, int send_len, int recv_len)
+void do_sendrecv_buf(void *p, void *t, int send_len, int recv_len)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
 	int xfer_len;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
-	rdm_sr_init_data(s, send_len, 0xab);
+	rdm_sr_init_data(p, send_len, 0xab);
 	rdm_sr_init_data(t, recv_len, 0);
 
-	sz = fi_send(ep[0], s, send_len, loc_mr, gni_addr[1], t);
+	sz = fi_send(ep[0], p, send_len, loc_mr[0], gni_addr[1], t);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], t, recv_len, rem_mr, gni_addr[0], s);
+	sz = fi_recv(ep[1], t, recv_len, rem_mr[0], gni_addr[0], p);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -1299,12 +1344,14 @@ void do_sendrecv_buf(void *s, void *t, int send_len, int recv_len)
 
 	xfer_len = MIN(send_len, recv_len);
 	rdm_sr_check_cqe(&s_cqe, t, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, s, (FI_MSG|FI_RECV), t, xfer_len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+	rdm_sr_check_cqe(&d_cqe, p, (FI_MSG|FI_RECV), t, xfer_len, 0);
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
-	cr_assert(rdm_sr_check_data(s, t, xfer_len), "Data mismatch");
+	cr_assert(rdm_sr_check_data(p, t, xfer_len), "Data mismatch");
 }
 
 void do_sendrecv_alignment(int len)
