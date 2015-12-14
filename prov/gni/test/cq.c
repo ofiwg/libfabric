@@ -597,10 +597,10 @@ Test(cq_wait_ops, fd, .init = cq_wait_fd_setup)
 {
 	cr_expect_neq(cq_priv->cq_fid.ops->signal, fi_no_cq_signal,
 		      "signal implementation not available.");
-	cr_expect_neq(cq_priv->cq_fid.ops->sread, fi_no_cq_sread,
-		      "sread implementation not available.");
-	cr_expect_neq(cq_priv->cq_fid.ops->sreadfrom, fi_no_cq_sreadfrom,
-		      "sreadfrom implementation not available.");
+	cr_expect_eq(cq_priv->cq_fid.ops->sread, fi_no_cq_sread,
+		     "sread implementation available.");
+	cr_expect_eq(cq_priv->cq_fid.ops->sreadfrom, fi_no_cq_sreadfrom,
+		     "sreadfrom implementation available.");
 	cr_expect_neq(cq_priv->cq_fid.fid.ops->control, fi_no_control,
 		      "control implementation not available.");
 }
