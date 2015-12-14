@@ -25,7 +25,7 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	       FI_CHECK_PACKAGE([verbs_rdmacm],
 				[rdma/rsocket.h],
 				[rdmacm],
-				[rsocket],
+				[riowrite],
 				[],
 				[],
 				[],
