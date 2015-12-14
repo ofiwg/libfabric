@@ -1,0 +1,45 @@
+if HAVE_PSM2
+_psm2_files = \
+	prov/psm2/src/version.h \
+	prov/psm2/src/psmx2.h \
+	prov/psm2/src/psmx2_init.c \
+	prov/psm2/src/psmx2_fabric.c \
+	prov/psm2/src/psmx2_domain.c \
+	prov/psm2/src/psmx2_cq.c \
+	prov/psm2/src/psmx2_eq.c \
+	prov/psm2/src/psmx2_cntr.c \
+	prov/psm2/src/psmx2_av.c \
+	prov/psm2/src/psmx2_ep.c \
+	prov/psm2/src/psmx2_cm.c \
+	prov/psm2/src/psmx2_tagged.c \
+	prov/psm2/src/psmx2_msg.c \
+	prov/psm2/src/psmx2_msg2.c \
+	prov/psm2/src/psmx2_rma.c \
+	prov/psm2/src/psmx2_atomic.c \
+	prov/psm2/src/psmx2_am.c \
+	prov/psm2/src/psmx2_mr.c \
+	prov/psm2/src/psmx2_wait.c \
+	prov/psm2/src/psmx2_poll.c \
+	prov/psm2/src/psmx2_util.c
+
+if HAVE_PSM2_DL
+pkglib_LTLIBRARIES += libpsmx2-fi.la
+libpsmx2_fi_la_SOURCES = $(_psm2_files) $(common_srcs)
+libpsmx2_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(psm2_CPPFLAGS)
+libpsmx2_fi_la_LDFLAGS = \
+    -module -avoid-version -shared -export-dynamic $(psm2_LDFLAGS)
+libpsmx2_fi_la_LIBADD = $(linkback) $(psm2_LIBS)
+libpsmx2_fi_la_DEPENDENCIES = $(linkback)
+else !HAVE_PSM2_DL
+noinst_LTLIBRARIES += libpsmx2.la
+libpsmx2_la_SOURCES = $(_psm2_files)
+libpsmx2_la_CPPFLAGS = $(src_libfabric_la_CPPFLAGS) $(psm2_CPPFLAGS)
+libpsmx2_la_LDFLAGS = $(psm2_LDFLAGS)
+libpsmx2_la_LIBADD = $(psm2_LIBS)
+src_libfabric_la_LIBADD += libpsmx2.la
+src_libfabric_la_DEPENDENCIES += libpsmx2.la
+endif !HAVE_PSM2_DL
+
+real_man_pages += man/man7/fi_psm2.7
+
+endif HAVE_PSM2
