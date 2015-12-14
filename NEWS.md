@@ -48,6 +48,16 @@ v1.2.0, TBD
 
 ## Verbs provider notes
 
+- Add support for RDM EPs. Currently only FI_TAGGED capability is supported.
+  RDM and MSG EPs would be reported in seperate domains since they don't share
+  CQs.
+- Refactor the code into several files to enable adding RDM support.
+- Consolidate send code paths to improve maintainability.
+- Fix a bug in fi_getinfo where wild card address was not used when service
+  argument is given.
+- Fix fi_getinfo to always return -FI_ENODATA in case of failure.
+- Add support for fi_eq_write.
+- Other misc bug fixes.
 
 v1.1.1, TBD
 =======================
