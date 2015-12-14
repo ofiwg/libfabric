@@ -682,9 +682,7 @@ usdf_ep_msg_bind_cq(struct usdf_ep *ep, struct usdf_cq *cq, uint64_t flags)
 	return 0;
 
 fail:
-	if (hcq != NULL) {
-		free(hcq);
-	}
+	free(hcq);
 	return ret;
 }
 

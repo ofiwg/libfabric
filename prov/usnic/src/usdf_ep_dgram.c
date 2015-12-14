@@ -141,10 +141,9 @@ usdf_ep_dgram_enable(struct fid_ep *fep)
 	return 0;
 
 fail:
-	if (ep->e.dg.ep_hdr_ptr != NULL) {
-		free(ep->e.dg.ep_hdr_ptr);
-		ep->e.dg.ep_hdr_ptr = NULL;
-	}
+	free(ep->e.dg.ep_hdr_ptr);
+	ep->e.dg.ep_hdr_ptr = NULL;
+
 	if (ep->e.dg.ep_qp != NULL) {
 		usd_destroy_qp(ep->e.dg.ep_qp);
 		ep->e.dg.ep_qp = NULL;
@@ -271,6 +270,8 @@ usdf_ep_dgram_close(fid_t fid)
 	if (atomic_get(&ep->ep_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
+
+	free(ep->e.dg.ep_hdr_ptr);
 
 	if (ep->e.dg.ep_qp != NULL) {
 		usd_destroy_qp(ep->e.dg.ep_qp);

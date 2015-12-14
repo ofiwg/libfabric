@@ -491,6 +491,8 @@ usdf_eq_close(fid_t fid)
 		break;
 	}
 
+	free(eq->eq_ev_ring);
+	free(eq->eq_ev_buf);
 	free(eq);
 
 	return 0;
@@ -607,9 +609,8 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 fail:
 	if (eq != NULL) {
-		if (eq->eq_ev_ring != NULL) {
-			free(eq->eq_ev_ring);
-		}
+		free(eq->eq_ev_ring);
+		free(eq->eq_ev_buf);
 		free(eq);
 	}
 	return ret;
