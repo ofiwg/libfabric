@@ -10,7 +10,11 @@ v1.2.0, TBD
 
 ## General notes
 
+- Added GNI provider
 - Added PSM2 provider
+
+## GNI provider notes
+- Initial release
 
 ## PSM provider notes
 - General bug fixes
