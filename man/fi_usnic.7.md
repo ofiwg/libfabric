@@ -49,8 +49,8 @@ low latency and other offload capabilities on Ethernet networks.
       provider:
         * multicast operations are not supported on *FI_EP_DGRAM* and
           *FI_EP_RDM* endpoints.
-        * *FI_EP_MSG* endpoints only support connect, accept, getname, and
-          shutdown CM operations.
+        * *FI_EP_MSG* endpoints only support connect, accept, and getname
+          CM operations.
         * Passive endpoints only support listen, setname, and getname CM
           operations.
         * *FI_EP_DGRAM* endpoints support `fi_sendmsg()` and

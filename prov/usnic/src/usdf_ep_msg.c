@@ -853,7 +853,7 @@ static struct fi_ops_cm usdf_cm_msg_ops = {
 	.listen = fi_no_listen,
 	.accept = usdf_cm_msg_accept,
 	.reject = fi_no_reject,
-	.shutdown = usdf_cm_msg_shutdown,
+	.shutdown = fi_no_shutdown,
 };
 
 static struct fi_ops_msg usdf_msg_ops = {

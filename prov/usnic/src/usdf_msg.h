@@ -105,7 +105,6 @@ void usdf_msg_tx_progress(struct usdf_tx *tx);
 int usdf_cm_msg_connect(struct fid_ep *ep, const void *addr,
 	const void *param, size_t paramlen);
 int usdf_cm_msg_accept(struct fid_ep *fep, const void *param, size_t paramlen);
-int usdf_cm_msg_shutdown(struct fid_ep *ep, uint64_t flags);
 
 /* fi_ops_msg for RC */
 ssize_t usdf_msg_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
