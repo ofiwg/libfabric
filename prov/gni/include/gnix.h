@@ -128,6 +128,7 @@ extern "C" {
 #define GNIX_RMA_CHAINED		(1ULL << 63)	/* RMA only flag */
 
 #define GNIX_MSG_RENDEZVOUS		(1ULL << 61)	/* MSG only flag */
+#define GNIX_MSG_DOUBLE_GET		(1ULL << 62)	/* MSG only flag */
 
 /*
  * Cray gni provider supported flags for fi_getinfo argument for now, needs
@@ -429,8 +430,6 @@ struct gnix_fab_req_rma {
 	uint64_t                 rem_addr;
 	uint64_t                 rem_mr_key;
 	uint64_t                 imm;
-	void                     *align_buf;
-	struct gnix_fid_mem_desc *align_md;
 	atomic_t                 outstanding_txds;
 	gni_return_t             status;
 };
@@ -452,6 +451,8 @@ struct gnix_fab_req_msg {
 	uint64_t                     rma_id;
 	uint32_t                     rndzv_head;
 	uint32_t                     rndzv_tail;
+	atomic_t                     outstanding_txds;
+	gni_return_t                 status;
 };
 
 struct gnix_fab_req_amo {

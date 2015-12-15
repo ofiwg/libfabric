@@ -287,28 +287,32 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 
 static void __gnix_msg_copy_unaligned_get_data(struct gnix_fab_req *req)
 {
-	int head_off, head_len, tail_len;
+	int head_off, head_len, tail_len, send_len;
 	void *addr;
+
+	if (req->msg.send_len > req->msg.recv_len)
+		send_len = req->msg.recv_len;
+	else
+		send_len = req->msg.send_len;
 
 	head_off = req->msg.send_addr & GNI_READ_ALIGN_MASK;
 	head_len = head_off ? GNI_READ_ALIGN - head_off : 0;
-	tail_len = (req->msg.send_addr + req->msg.recv_len) &
-			GNI_READ_ALIGN_MASK;
+	tail_len = (req->msg.send_addr + send_len) & GNI_READ_ALIGN_MASK;
 
 	if (head_off) {
 		addr = (void *)&req->msg.rndzv_head + head_off;
 
-		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to head (%p, %x)\n",
-			  head_len, req->msg.recv_addr, req->msg.rndzv_head);
+		GNIX_INFO(FI_LOG_EP_DATA,
+			  "writing %d bytes to head (%p, 0x%x)\n",
+			  head_len, req->msg.recv_addr, *(uint32_t *)addr);
 		memcpy((void *)req->msg.recv_addr, addr, head_len);
 	}
 
 	if (tail_len) {
-		addr = (void *)req->msg.recv_addr +
-			       req->msg.recv_len -
-			       tail_len;
+		addr = (void *)(req->msg.recv_addr + send_len - tail_len);
 
-		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to tail (%p, %x)\n",
+		GNIX_INFO(FI_LOG_EP_DATA,
+			  "writing %d bytes to tail (%p, 0x%x)\n",
 			  tail_len, addr, req->msg.rndzv_tail);
 		memcpy((void *)addr, &req->msg.rndzv_tail, tail_len);
 	}
@@ -319,6 +323,31 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
 	struct gnix_fab_req *req = txd->req;
 	int ret;
+
+	if (req->msg.recv_flags & GNIX_MSG_DOUBLE_GET) {
+		/* There are two TXDs involved with this request, an RDMA
+		 * transfer to move the middle block and an FMA transfer to
+		 * move unaligned tail data.  If this is the FMA TXD, store the
+		 * unaligned bytes.  Bytes are copied from the request to the
+		 * user buffer once both TXDs arrive. */
+		if (txd->gni_desc.type == GNI_POST_FMA_GET)
+			req->msg.rndzv_tail = *(uint32_t *)txd->int_buf;
+
+		/* Remember any failure.  Retransmit both TXDs once both are
+		 * complete. */
+		req->msg.status |= tx_status;
+
+		atomic_dec(&req->msg.outstanding_txds);
+		if (atomic_get(&req->msg.outstanding_txds)) {
+			_gnix_nic_tx_free(req->gnix_ep->nic, txd);
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "Received first RDMA chain TXD, req: %p\n",
+				  req);
+			return FI_SUCCESS;
+		}
+
+		tx_status = req->msg.status;
+	}
 
 	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 
@@ -358,12 +387,14 @@ static int __gnix_rndzv_req(void *arg)
 	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
 	struct gnix_fid_ep *ep = req->gnix_ep;
 	struct gnix_nic *nic = ep->nic;
-	struct gnix_tx_descriptor *txd;
+	struct gnix_tx_descriptor *txd, *tail_txd = NULL;
 	gni_return_t status;
 	int rc;
 	struct fid_mr *auto_mr = NULL;
 	int inject_err = _gnix_req_inject_err(req);
 	int head_off, head_len, tail_len;
+	int send_len;
+	void *tail_data = NULL;
 
 	if (!req->msg.recv_md) {
 		rc = gnix_mr_reg(&ep->domain->domain_fid.fid,
@@ -385,7 +416,7 @@ static int __gnix_rndzv_req(void *arg)
 	rc = _gnix_nic_tx_alloc(nic, &txd);
 	if (rc) {
 		GNIX_INFO(FI_LOG_EP_DATA, "_gnix_nic_tx_alloc() failed: %d\n",
-			 rc);
+			  rc);
 		return -FI_ENOSPC;
 	}
 
@@ -400,14 +431,62 @@ static int __gnix_rndzv_req(void *arg)
 	txd->gni_desc.rdma_mode = 0;
 	txd->gni_desc.src_cq_hndl = nic->tx_cq;
 
+	if (req->msg.send_len > req->msg.recv_len) {
+		send_len = req->msg.recv_len;
+		/* The send buffer will be truncated.  If the receive buffer
+		 * has unaligned length, we need to pull the unaligned portion
+		 * into an intermediate buffer. */
+		if ((req->msg.send_addr + send_len) & GNI_READ_ALIGN_MASK) {
+			tail_data = (void *)((req->msg.send_addr + send_len) &
+					      ~GNI_READ_ALIGN_MASK);
+			req->msg.recv_flags |= GNIX_MSG_DOUBLE_GET;
+		}
+	} else {
+		/* If the entire send buffer fits in the receive buffer.  We
+		 * can take unaligned head and tail data out of the rndzv_start
+		 * request. */
+		send_len = req->msg.send_len;
+	}
+
 	head_off = req->msg.send_addr & GNI_READ_ALIGN_MASK;
 	head_len = head_off ? GNI_READ_ALIGN - head_off : 0;
-	tail_len = (req->msg.send_addr + req->msg.send_len) &
-			GNI_READ_ALIGN_MASK;
+	tail_len = (req->msg.send_addr + send_len) & GNI_READ_ALIGN_MASK;
 
 	txd->gni_desc.local_addr = (uint64_t)req->msg.recv_addr + head_len;
 	txd->gni_desc.remote_addr = (uint64_t)req->msg.send_addr + head_len;
-	txd->gni_desc.length = req->msg.recv_len - head_len - tail_len;
+	txd->gni_desc.length = send_len - head_len - tail_len;
+
+	if (req->msg.recv_flags & GNIX_MSG_DOUBLE_GET) {
+		/* The user ended up with a send matching a receive with a
+		 * buffer that is too short and unaligned... what a way to
+		 * behave.  We could not have forseen which unaligned data to
+		 * send across with the rndzv_start request, so we do an extra
+		 * TX here to pull the random unaligned bytes. */
+		rc = _gnix_nic_tx_alloc(nic, &tail_txd);
+		if (rc) {
+			_gnix_nic_tx_free(nic, txd);
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "_gnix_nic_tx_alloc() failed (tail): %d\n",
+				  rc);
+			return -FI_ENOSPC;
+		}
+
+		tail_txd->completer_fn = __gnix_rndzv_req_complete;
+		tail_txd->req = req;
+
+		tail_txd->gni_desc.type = GNI_POST_FMA_GET;
+		tail_txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
+		tail_txd->gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
+		tail_txd->gni_desc.local_mem_hndl = nic->int_bufs_mdh;
+		tail_txd->gni_desc.remote_mem_hndl = req->msg.rma_mdh;
+		tail_txd->gni_desc.rdma_mode = 0;
+		tail_txd->gni_desc.src_cq_hndl = nic->tx_cq;
+		tail_txd->gni_desc.local_addr = (uint64_t)tail_txd->int_buf;
+		tail_txd->gni_desc.remote_addr = (uint64_t)tail_data;
+		tail_txd->gni_desc.length = GNI_READ_ALIGN;
+
+		GNIX_INFO(FI_LOG_EP_DATA, "Using two GETs\n");
+	}
 
 	fastlock_acquire(&nic->lock);
 
@@ -416,11 +495,44 @@ static int __gnix_rndzv_req(void *arg)
 		status = GNI_RC_SUCCESS;
 	} else {
 		status = GNI_PostRdma(req->vc->gni_ep, &txd->gni_desc);
-		if (status != GNI_RC_SUCCESS) {
-			_gnix_nic_tx_free(nic, txd);
-			GNIX_INFO(FI_LOG_EP_DATA, "GNI_PostRdma failed: %s\n",
-				  gni_err_str[status]);
+	}
+
+	if (status != GNI_RC_SUCCESS) {
+		fastlock_release(&nic->lock);
+		if (tail_txd)
+			_gnix_nic_tx_free(nic, tail_txd);
+		_gnix_nic_tx_free(nic, txd);
+		GNIX_INFO(FI_LOG_EP_DATA, "GNI_PostRdma failed: %s\n",
+			  gni_err_str[status]);
+		return gnixu_to_fi_errno(status);
+	}
+
+	if (req->msg.recv_flags & GNIX_MSG_DOUBLE_GET) {
+		if (unlikely(inject_err)) {
+			_gnix_nic_txd_err_inject(nic, tail_txd);
+			status = GNI_RC_SUCCESS;
+		} else {
+			status = GNI_PostFma(req->vc->gni_ep,
+					     &tail_txd->gni_desc);
 		}
+
+		if (status != GNI_RC_SUCCESS) {
+			fastlock_release(&nic->lock);
+			_gnix_nic_tx_free(nic, tail_txd);
+
+			/* Wait for the first TX to complete, then retransmit
+			 * the entire thing. */
+			atomic_set(&req->msg.outstanding_txds, 1);
+			req->msg.status = GNI_RC_TRANSACTION_ERROR;
+
+			GNIX_INFO(FI_LOG_EP_DATA, "GNI_PostFma() failed: %s\n",
+				  gni_err_str[status]);
+			return FI_SUCCESS;
+		}
+
+		/* Wait for both TXs to complete, then process the request. */
+		atomic_set(&req->msg.outstanding_txds, 2);
+		req->msg.status = 0;
 	}
 
 	fastlock_release(&nic->lock);
@@ -549,6 +661,10 @@ static int __comp_rndzv_fin(void *data, gni_return_t tx_status)
 	} else {
 		GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV_FIN, req: %p\n",
 			  req);
+
+		/* Now that we're done with the transfer, set recv_len to the
+		 * actual transfer size to be put into the receive CQE. */
+		req->msg.recv_len = MIN(req->msg.send_len, req->msg.recv_len);
 
 		ret = __gnix_msg_recv_completion(req->gnix_ep, req);
 		if (ret != FI_SUCCESS)
@@ -1150,6 +1266,10 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 					  ret);
 				return ret;
 			}
+
+			/* We need to store the input buffer length to deal
+			 * with all rendezvous unaligned data cases. */
+			req->msg.recv_len = len;
 
 			/* Initiate pull of source data. */
 			req->work_fn = __gnix_rndzv_req;

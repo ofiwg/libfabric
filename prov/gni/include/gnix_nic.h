@@ -181,6 +181,8 @@ struct gnix_nic {
 	struct gnix_reference ref_cnt;
 	smsg_callback_fn_t const *smsg_callbacks;
 	struct slist err_txds;
+	void *int_bufs;
+	gni_mem_handle_t int_bufs_mdh;
 };
 
 
@@ -257,6 +259,8 @@ struct gnix_smsg_rma_data_hdr {
  * @var req              pointer to fab request associated with this descriptor
  * @var id               the id of this descriptor - the value returned
  *                       from GNI_CQ_MSG_ID
+ * @var err_list         Error TXD list entry
+ * @var int_buf          Intermediate buffer for landing unaligned data, etc.
  */
 struct gnix_tx_descriptor {
 	struct dlist_entry          list;
@@ -274,6 +278,7 @@ struct gnix_tx_descriptor {
 	int  (*completer_fn)(void *, gni_return_t);
 	int id;
 	struct slist_entry err_list;
+	void *int_buf;
 };
 
 /*
