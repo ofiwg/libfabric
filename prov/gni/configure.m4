@@ -40,32 +40,36 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 	       ])
 
 	have_criterion=false
+	criterion_tests_present=true
 
-	AC_ARG_WITH([criterion],
-		[AS_HELP_STRING([--with-criterion],
-			       [Location for criterion unit testing framework])])
+	AS_IF([test -d $srcdir/prov/gni/test],
+	      [AC_ARG_WITH([criterion], [AS_HELP_STRING([--with-criterion],
+		       [Location for criterion unit testing framework])])],
+		 	[criterion_tests_present=false])
 
 	if test "$with_criterion" != "" && test "$with_criterion" != "no"; then
-		AC_MSG_CHECKING([criterion path])
-		if test -d "$with_criterion"; then
-			AC_MSG_RESULT([yes])
-			gni_CPPFLAGS="-I$with_criterion/include $gni_CPPFLAGS"
-			if test -d "$with_criterion/lib"; then
-				gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib $gni_LDFLAGS"
-				have_criterion=true
-			elif test -d "$with_criterion/lib64"; then
-				gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib64 $gni_LDFLAGS"
-				have_criterion=true
+		AS_IF([test "$criterion_tests_present" = "true"],
+			[AC_MSG_CHECKING([criterion path])
+			 if test -d "$with_criterion"; then
+				AC_MSG_RESULT([yes])
+				CPPFLAGS="-I$with_criterion/include $CPPFLAGS"
+				if test -d "$with_criterion/lib"; then
+					LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib $LDFLAGS"
+					have_criterion=true
+				elif test -d "$with_criterion/lib64"; then
+					LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib64 $LDFLAGS"
+					have_criterion=true
+				else
+					have_criterion=false
+				fi
+				FI_PKG_CHECK_MODULES([CRAY_PMI], [cray-pmi],
+						   [],
+						   [have_criterion=false])
 			else
-				have_criterion=false
-			fi
-			FI_PKG_CHECK_MODULES([CRAY_PMI], [cray-pmi],
-					   [],
-					   [have_criterion=false])
-		else
-			AC_MSG_RESULT([no])
-			AC_MSG_ERROR([criterion requested but invalid path given])
-		fi
+				AC_MSG_RESULT([no])
+				AC_MSG_ERROR([criterion requested but invalid path given])
+			fi],
+			[AC_MSG_ERROR([criterion requested tests not available])])
 	fi
 
 	AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])
