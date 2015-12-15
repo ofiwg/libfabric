@@ -239,20 +239,11 @@ dummy_man_pages = \
         man/man3/fi_writemsg.3 \
         man/man3/fi_writev.3
 
-man_MANS = $(real_man_pages) $(dummy_man_pages)
-
 nroff:
 	@for file in $(real_man_pages); do \
 	    source=`echo $$file | sed -e 's@/man[0-9]@@'`; \
 	    config/md2nroff.pl --source=$$source.md; \
 	done
-
-EXTRA_DIST = \
-        NEWS.md \
-        libfabric.map \
-        libfabric.spec.in \
-        config/distscript.pl \
-        $(man_MANS)
 
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
@@ -264,6 +255,9 @@ test:
 rpm: dist
 	rpmbuild -ta libfabric-*.tar.bz2
 
+prov_install_man_pages=
+prov_dist_man_pages=
+
 include prov/sockets/Makefile.include
 include prov/verbs/Makefile.include
 include prov/usnic/Makefile.include
@@ -271,3 +265,12 @@ include prov/psm/Makefile.include
 include prov/psm2/Makefile.include
 include prov/mxm/Makefile.include
 include prov/gni/Makefile.include
+
+man_MANS = $(real_man_pages) $(prov_install_man_pages) $(dummy_man_pages)
+
+EXTRA_DIST = \
+        NEWS.md \
+        libfabric.map \
+        libfabric.spec.in \
+        config/distscript.pl \
+        $(real_man_pages) $(prov_dist_man_pages) $(dummy_man_pages)

@@ -97,25 +97,33 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/wait.c \
 	prov/gni/test/common.c
 
-prov_gni_test_gnitest_LDFLAGS = $(CRAY_PMI_LIBS) -static
-prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS)
+prov_gni_test_gnitest_LDFLAGS = $(gni_LDFLAGS) -static
+prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(gni_CPPFLAGS)
 prov_gni_test_gnitest_LDADD = -lcriterion \
-		$(linkback)
-endif
+		$(linkback) $(gni_LIBS)
+endif HAVE_CRITERION
 
 if HAVE_GNI_DL
 pkglib_LTLIBRARIES += libgnix-fi.la
+libgnix_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(gni_CPPFLAGS)
 libgnix_fi_la_SOURCES = $(_gni_files) $(_gni_headers) $(common_srcs)
-libgnix_fi_la_LIBADD = $(linkback)
-libgnix_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libgnix_fi_la_LDFLAGS = \
+	$(gni_LDFLAGS) \
+	-module -avoid-version -shared -export-dynamic
+libgnix_fi_la_LIBADD = $(linkback) $(gni_LIBS)
 libgnix_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_GNI_DL
 src_libfabric_la_SOURCES += $(_gni_files) $(_gni_headers)
+src_libfabric_la_CPPFLAGS += $(gni_CPPFLAGS)
+src_libfabric_la_LDFLAGS += $(gni_LDFLAGS)
+src_libfabric_la_LIBADD += $(gni_LIBS)
 endif !HAVE_GNI_DL
 
 rdmainclude_HEADERS += \
 	prov/gni/include/fi_ext_gni.h
 
-real_man_pages += man/man7/fi_gni.7
+prov_install_man_pages += man/man7/fi_gni.7
 
 endif HAVE_GNI
+
+prov_dist_man_pages += man/man7/fi_gni.7

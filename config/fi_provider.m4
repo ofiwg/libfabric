@@ -54,7 +54,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	AC_MSG_NOTICE([*** Configuring $1 provider])
 	AC_ARG_ENABLE([$1],
 	      [AS_HELP_STRING([--enable-$1@<:@=yes|no|auto|dl|PATH@:>@],
-			      [Enable $1 provider @<:@default=auto@:>@ 
+			      [Enable $1 provider @<:@default=auto@:>@
 				(yes: enable $1 provider; no: disable $1 provider;
 				auto: enable $1 provider if possible;
 				dl: enable $1 provider and build as a loadable library;
@@ -63,10 +63,12 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	      [],
 	      [enable_$1=auto])
 
-	# Save CPPFLAGS and LDFLAGS before they are modified by FI_CHECK_PREFIX_DIR
+	# Save CPPFLAGS and LDFLAGS before they are modified by FI_CHECK_PREFIX_DIR.
 	# Provider's local macros could use the value if needed.
+	# Also save LIBS, as a matter of principle.
 	$1_orig_CPPFLAGS=$CPPFLAGS
 	$1_orig_LDFLAGS=$LDFLAGS
+	$1_orig_LIBS=$LIBS
 
 	# Check the --enable-<$1> value
 	$1_dl=0
@@ -74,7 +76,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	[yes|no], [],
 	[dl],     [enable_$1=yes $1_dl=1],
 	[auto],   [],
-	[FI_CHECK_PREFIX_DIR([$enable_$1])
+	[FI_CHECK_PREFIX_DIR([$enable_$1], [$1])
 	 enable_$1=yes]
 	)
 
@@ -111,7 +113,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	AM_CONDITIONAL([HAVE_]m4_translit([$1], [a-z], [A-Z])[_DL],
 		[test $$1_dl -eq 1])
 
-	# If this provier was specifically requested but we can't
+	# If this provider was specifically requested but we can't
 	# build it, error.
 	AS_IF([test "$enable_$1 $$1_happy" = "yes 0"],
 	      [AC_MSG_WARN([$1 provider was requested, but cannot be compiled])
@@ -126,6 +128,14 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 			[AC_MSG_RESULT(no)
 			  AC_MSG_ERROR([$1 provider was requested as direct, but is missing fi_direct.h])]
 			)])
+
+	# Restore CPPFLAGS/LDFLAGS/LIBS
+	CPPFLAGS=$$1_orig_CPPFLAGS
+	unset $1_orig_CPPFLAGS
+	LDFLAGS=$$1_orig_LDFLAGS
+	unset $1_orig_LDFLAGS
+	LIBS=$$1_orig_LIBS
+	unset $1_orig_LIBS
 ])
 
 
@@ -150,16 +160,16 @@ AC_DEFUN([FI_CHECK_PREFIX_DIR],[
 
 	# Check that base/include exists
 	 AS_IF([test -d "$1/include"],
-	       [CPPFLAGS="-I$1/include"],
+	       [$2_PREFIX="$1"],
 	       [AC_MSG_WARN([could not find "include" subdirectory in supplied "$1" directory"])
 	        AC_MSG_ERROR([Cannot continue])
 	       ])
 
 	# Check that base/lib or base/lib64 exists
 	 AS_IF([test -d "$1/lib"],
-	       [LDFLAGS="-L$1/lib"],
+	       [$2_LIBDIR="$1/lib"],
 	       [AS_IF([test -d "$1/lib64"],
-		      [LDFLAGS="-L$1/lib64"],
+		      [$2_LIBDIR="$1/lib64"],
 		      [AC_MSG_WARN([could not find "lib" or "lib64" subdirectories in supplied "$1" directory"])
 		       AC_MSG_ERROR([Cannot continue])
 		      ])
