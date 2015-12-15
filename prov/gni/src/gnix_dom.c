@@ -234,6 +234,8 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 static int
 __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 {
+	gni_return_t grc = GNI_RC_SUCCESS;
+	struct gnix_nic *nic;
 	struct gnix_fid_domain *domain;
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
@@ -285,6 +287,21 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_MAX_RETRANSMITS:
 		domain->params.max_retransmits = *(uint32_t *)val;
+		dlist_for_each(&domain->nic_list, nic, dom_nic_list)
+		{
+			fastlock_acquire(&nic->lock);
+			grc = GNI_SmsgSetMaxRetrans(nic->gni_nic_hndl,
+						    *(uint16_t *)val);
+			fastlock_release(&nic->lock);
+			if (grc != GNI_RC_SUCCESS)
+				break;
+		}
+
+		if (unlikely(grc != GNI_RC_SUCCESS)) {
+			GNIX_WARN(FI_LOG_DOMAIN, "failed to set smsg max "
+				  "retrans, ret=%s\n", gni_err_str[grc]);
+			return gnixu_to_fi_errno(grc);
+		}
 		break;
 	case GNI_ERR_INJECT_COUNT:
 		domain->params.err_inject_count = *(int32_t *)val;
