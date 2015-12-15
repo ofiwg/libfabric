@@ -483,13 +483,6 @@ fail:
 	return ret;
 }
 
-int
-usdf_cm_msg_shutdown(struct fid_ep *ep, uint64_t flags)
-{
-	USDF_TRACE_SYS(EP_CTRL, "\n");
-	return -FI_ENOSYS;
-}
-
 /*
  * Return local address of an EP
  */
