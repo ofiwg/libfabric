@@ -26,4 +26,8 @@ src_libfabric_la_LDFLAGS += $(mxm_LDFLAGS)
 src_libfabric_la_LIBADD += $(mxm_LIBS)
 endif
 
+prov_install_man_pages += man/man7/fi_mxm.7
+
 endif #HAVE_MXM
+
+prov_dist_man_pages += man/man7/fi_mxm.7

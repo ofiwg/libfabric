@@ -41,6 +41,8 @@ src_libfabric_la_LIBADD += libpsmx.la
 src_libfabric_la_DEPENDENCIES += libpsmx.la
 endif !HAVE_PSM_DL
 
-real_man_pages += man/man7/fi_psm.7
+prov_install_man_pages += man/man7/fi_psm.7
 
 endif HAVE_PSM
+
+prov_dist_man_pages += man/man7/fi_psm.7
