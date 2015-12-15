@@ -34,6 +34,10 @@ v1.2.0, TBD
 - Fix an out of bound access when large multi-recv limit is specified by user
 - Reset tag field in CQ entry for send completion
 - Do not set prov_name in fabric_attr
+- Validate flags in CQ/Cntr bind operations
+- Scalability enhancements
+- Increase mr_key size to 64 bit
+- Use red-black tree for mr_key lookup
 
 ## usNIC provider notes
 - The usNIC provider does not yet support asynchronous memory registration.
