@@ -109,8 +109,8 @@ However, the bandwidth is sub-optimal by doing this way.
 .PP
 The \f[I]psm2\f[] provider use PSM tag-matching message queue functions
 to achieve higher bandwidth for large size RMA.
-For this purpose, a bit is reserved from the tag space to separate the
-RMA traffic from the regular tagged message queue.
+It takes avdantage of the extra tag bits available in PSM2 to separate
+the RMA traffic from the regular tagged message queue.
 .PP
 The option is on by default.
 To turn it off set the variable to 0.
