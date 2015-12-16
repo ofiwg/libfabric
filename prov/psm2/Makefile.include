@@ -13,7 +13,6 @@ _psm2_files = \
 	prov/psm2/src/psmx2_cm.c \
 	prov/psm2/src/psmx2_tagged.c \
 	prov/psm2/src/psmx2_msg.c \
-	prov/psm2/src/psmx2_msg2.c \
 	prov/psm2/src/psmx2_rma.c \
 	prov/psm2/src/psmx2_atomic.c \
 	prov/psm2/src/psmx2_am.c \

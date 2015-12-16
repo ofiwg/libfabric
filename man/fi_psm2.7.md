@@ -113,14 +113,6 @@ The *psm2* provider checks for the following environment variables:
    
   The option is on by default. To turn it off set the variable to 0.
 
-*FI_PSM2_AM_MSG*
-: The *psm2* provider implements the non-tagged message queue over the PSM
-  tag-matching message queue. One tag bit is reserved for this purpose.
-  Alternatively, the non-tagged message queue can be implemented over
-  Active Message. This experimental feature has slightly larger latency.
-
-  This option is off by default. To turn it on set the variable to 1.
-
 *FI_PSM2_DELAY*
 : Time (seconds) to sleep before closing PSM endpoints. This is a workaround
   for a bug in some versions of PSM library.
