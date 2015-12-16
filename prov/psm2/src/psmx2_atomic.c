@@ -872,7 +872,7 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 	args[3].u64 = key;
 	args[4].u32w0 = datatype;
 	args[4].u32w1 = op;
-	psm2_am_request_short((psm2_epaddr_t) dest_addr,
+	psm2_am_request_short(psm2_epaddr,
 			      PSMX2_AM_ATOMIC_HANDLER, args, 5,
 			      (void *)buf, len, am_flags, NULL, NULL);
 
@@ -1073,7 +1073,7 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 	args[3].u64 = key;
 	args[4].u32w0 = datatype;
 	args[4].u32w1 = op;
-	psm2_am_request_short((psm2_epaddr_t) dest_addr,
+	psm2_am_request_short(psm2_epaddr,
 			      PSMX2_AM_ATOMIC_HANDLER, args, 5,
 			      (void *)buf, (buf?len:0), am_flags, NULL, NULL);
 
@@ -1300,7 +1300,7 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 	args[3].u64 = key;
 	args[4].u32w0 = datatype;
 	args[4].u32w1 = op;
-	psm2_am_request_short((psm2_epaddr_t) dest_addr,
+	psm2_am_request_short(psm2_epaddr,
 			      PSMX2_AM_ATOMIC_HANDLER, args, 5,
 			      tmp_buf ? tmp_buf : (void *)buf,
 			      len * 2, am_flags,
