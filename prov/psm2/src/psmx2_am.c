@@ -34,12 +34,12 @@
 
 struct psm2_am_parameters psmx2_am_param;
 
-static psm2_am_handler_fn_t psmx2_am_handlers[3] = {
+static psm2_am_handler_fn_t psmx2_am_handlers[2] = {
 	psmx2_am_rma_handler,
 	psmx2_am_atomic_handler,
 };
 
-static int psmx2_am_handlers_idx[3];
+static int psmx2_am_handlers_idx[2];
 static int psmx2_am_handlers_initialized = 0;
 
 int psmx2_am_progress(struct psmx2_fid_domain *domain)
