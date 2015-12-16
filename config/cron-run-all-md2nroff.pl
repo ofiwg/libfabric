@@ -157,7 +157,7 @@ if (defined($pages_branch_arg)) {
             if ($file =~ /\.$h->{section}\.md$/) {
                 $file =~ m/^(.+)\.$h->{section}\.md$/;
                 my $base = $1;
-                print OUT "  * [$base($h->{section})]($base.$h->{section}.html]\n";
+                print OUT "  * [$base($h->{section})]($base.$h->{section}.html)\n";
             }
         }
     }
