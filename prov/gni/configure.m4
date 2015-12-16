@@ -52,12 +52,12 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 			[AC_MSG_CHECKING([criterion path])
 			 if test -d "$with_criterion"; then
 				AC_MSG_RESULT([yes])
-				CPPFLAGS="-I$with_criterion/include $CPPFLAGS"
+				gni_CPPFLAGS="-I$with_criterion/include $gni_CPPFLAGS"
 				if test -d "$with_criterion/lib"; then
-					LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib $LDFLAGS"
+					gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib $gni_LDFLAGS"
 					have_criterion=true
 				elif test -d "$with_criterion/lib64"; then
-					LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib64 $LDFLAGS"
+					gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib64 $gni_LDFLAGS"
 					have_criterion=true
 				else
 					have_criterion=false
