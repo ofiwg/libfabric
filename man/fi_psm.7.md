@@ -62,8 +62,8 @@ Progress
   expected to call *fi_cq_read* or *fi_cntr_read* function from time
   to time when no other libfabric function is called to ensure
   progress is made in a timely manner. The provider does support
-  auto progress mode. However, the performance is signinficantly
-  impacted if the application purely depends on the pprovide to
+  auto progress mode. However, the performance can be significantly
+  impacted if the application purely depends on the provider to
   make auto progress.
 
 Unsupported features
@@ -102,7 +102,7 @@ The *psm* provider checks for the following environment variables:
   The name server won't work properly if there are more than one processes
   from the same job (i.e. with the same UUID) running on the same node and
   acting as servers. For such scenario it is recommended to have each
-  process getting local transport address with *fi_cm_getname* and exchanging
+  process getting local transport address with *fi_getname* and exchanging
   the addresses with out-of-band mechanism.
 
   The name server is on by default. It can be turned off by setting the
@@ -114,7 +114,7 @@ The *psm* provider checks for the following environment variables:
 
 *FI_PSM_TAGGED_RMA*
 : The RMA functions are implemented on top of the PSM Active Message functions.
-  The Active Message functions has limit on the size of data can be transferred
+  The Active Message functions have limit on the size of data can be transferred
   in a single message. Large transfers can be divided into small chunks and
   be pipe-lined. However, the bandwidth is sub-optimal by doing this way.
 
@@ -147,7 +147,7 @@ The *psm* provider checks for the following environment variables:
 *FI_PSM_PROG_INTERVAL*
 : When auto progress is enabled (asked via the hints to *fi_getinfo*),
   a progress thread is created to make progress calls from time to time.
-  This option set the tnterval (microseconds) between progress calls.
+  This option set the interval (microseconds) between progress calls.
 
   The default setting is 1 if affininty is set, or 1000 if not. See
   *FI_PSM_PROG_AFFINITY*.
