@@ -865,7 +865,7 @@ static struct fi_ops_msg usdf_msg_ops = {
 	.sendv = usdf_msg_sendv,
 	.sendmsg = usdf_msg_sendmsg,
 	.inject = usdf_msg_inject,
-	.senddata = usdf_msg_senddata,
+	.senddata = fi_no_msg_senddata,
 	.injectdata = fi_no_msg_injectdata,
 };
 

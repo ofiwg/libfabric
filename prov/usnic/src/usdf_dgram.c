@@ -257,15 +257,6 @@ usdf_dgram_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 				flags, context);
 }
 
-ssize_t
-usdf_dgram_senddata(struct fid_ep *fep, const void *buf, size_t len,
-			void *desc, uint64_t data, fi_addr_t dest_addr,
-			void *context)
-{
-	USDF_TRACE_SYS(EP_DATA, "\n"); /* XXX delete once implemented */
-	return -FI_ENOSYS;
-}
-
 static ssize_t
 _usdf_dgram_send_iov_copy(struct usdf_ep *ep, struct usd_dest *dest,
 		const struct iovec *iov, size_t count, void *context,

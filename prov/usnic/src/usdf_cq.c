@@ -890,13 +890,6 @@ usdf_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 }
 
 static int
-usdf_cq_control(fid_t fid, int command, void *arg)
-{
-	USDF_TRACE_SYS(CQ, "\n");
-	return -FI_ENOSYS;
-}
-
-static int
 usdf_cq_close(fid_t fid)
 {
 	struct usdf_cq *cq;
@@ -1008,7 +1001,7 @@ static struct fi_ops usdf_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = usdf_cq_close,
 	.bind = fi_no_bind,
-	.control = usdf_cq_control,
+	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
 
