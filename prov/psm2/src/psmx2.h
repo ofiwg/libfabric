@@ -154,8 +154,7 @@ union psmx2_pi {
 #define PSMX2_CTXT_EP(fi_context)	((fi_context)->internal[3])
 
 #define PSMX2_AM_RMA_HANDLER	0
-#define PSMX2_AM_MSG_HANDLER	1
-#define PSMX2_AM_ATOMIC_HANDLER	2
+#define PSMX2_AM_ATOMIC_HANDLER	1
 
 #define PSMX2_AM_OP_MASK	0x000000FF
 #define PSMX2_AM_DST_MASK	0x0000FF00
@@ -181,8 +180,6 @@ enum {
 	PSMX2_AM_REQ_READ,
 	PSMX2_AM_REQ_READ_LONG,
 	PSMX2_AM_REP_READ,
-	PSMX2_AM_REQ_SEND,
-	PSMX2_AM_REP_SEND,
 	PSMX2_AM_REQ_ATOMIC_WRITE,
 	PSMX2_AM_REP_ATOMIC_WRITE,
 	PSMX2_AM_REQ_ATOMIC_READWRITE,
@@ -219,22 +216,6 @@ struct psmx2_am_request {
 		struct {
 			void	*buf;
 			size_t	len;
-			void	*context;
-			void	*peer_context;
-			volatile int peer_ready;
-			void	*dest_addr;
-			size_t	len_sent;
-		} send;
-		struct {
-			void	*buf;
-			size_t	len;
-			void	*context;
-			void	*src_addr;
-			size_t  len_received;
-		} recv;
-		struct {
-			void	*buf;
-			size_t	len;
 			uint64_t addr;
 			uint64_t key;
 			void	*context;
@@ -247,15 +228,6 @@ struct psmx2_am_request {
 	int no_event;
 	int error;
 	struct slist_entry list_entry;
-};
-
-struct psmx2_unexp {
-	psm2_epaddr_t		sender_addr;
-	uint64_t		sender_context;
-	uint32_t		len_received;
-	uint32_t		done;
-	struct slist_entry	list_entry;
-	char			buf[0];
 };
 
 struct psmx2_req_queue {
@@ -306,13 +278,6 @@ struct psmx2_fid_domain {
 
 	/* incoming req queue for AM based RMA request. */
 	struct psmx2_req_queue	rma_queue;
-
-	/* send queue for AM based messages. */
-	struct psmx2_req_queue	send_queue;
-
-	/* recv queue for AM based messages. */
-	struct psmx2_req_queue	recv_queue;
-	struct psmx2_req_queue	unexp_queue;
 
 	/* triggered operations that are ready to be processed */
 	struct psmx2_req_queue	trigger_queue;
@@ -611,7 +576,6 @@ struct psmx2_epaddr_context {
 
 struct psmx2_env {
 	int name_server;
-	int am_msg;
 	int tagged_rma;
 	char *uuid;
 	int delay;
@@ -712,8 +676,6 @@ int	psmx2_am_process_rma(struct psmx2_fid_domain *domain,
 				struct psmx2_am_request *req);
 int	psmx2_process_trigger(struct psmx2_fid_domain *domain,
 				struct psmx2_trigger *trigger);
-int	psmx2_am_msg_handler(psm2_am_token_t token,
-				psm2_amarg_t *args, int nargs, void *src, uint32_t len);
 int	psmx2_am_rma_handler(psm2_am_token_t token,
 				psm2_amarg_t *args, int nargs, void *src, uint32_t len);
 int	psmx2_am_atomic_handler(psm2_am_token_t token,
