@@ -1,0 +1,15 @@
+---
+layout: page
+title: Libfabric man pages
+tagline: Development
+---
+{% include JB/setup %}
+
+# Man pages
+
+These man pages are from the [current head of the `master` git
+development branch](https://github.com/ofiwg/libfabric/tree/master).
+They are *not* man pages from the stable release, and are therefore
+subject to change at any time.
+
+You have been warned.
