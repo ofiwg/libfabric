@@ -322,7 +322,7 @@ static struct fi_ops_msg usdf_dgram_ops = {
 	.sendv = usdf_dgram_sendv,
 	.sendmsg = usdf_dgram_sendmsg,
 	.inject = usdf_dgram_inject,
-	.senddata = usdf_dgram_senddata,
+	.senddata = fi_no_msg_senddata,
 	.injectdata = fi_no_msg_injectdata,
 };
 
@@ -335,7 +335,7 @@ static struct fi_ops_msg usdf_dgram_prefix_ops = {
 	.sendv = usdf_dgram_prefix_sendv,
 	.sendmsg = usdf_dgram_prefix_sendmsg,
 	.inject = usdf_dgram_prefix_inject,
-	.senddata = usdf_dgram_senddata,
+	.senddata = fi_no_msg_senddata,
 	.injectdata = fi_no_msg_injectdata,
 };
 

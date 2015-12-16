@@ -120,8 +120,6 @@ ssize_t usdf_msg_sendv(struct fid_ep *ep, const struct iovec *iov,
 	void **desc, size_t count, fi_addr_t src_addr, void *context);
 ssize_t usdf_msg_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	uint64_t flags);
-ssize_t usdf_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
-	void *desc, uint64_t data, fi_addr_t src_addr, void *context);
 
 ssize_t usdf_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 	fi_addr_t src_addr);

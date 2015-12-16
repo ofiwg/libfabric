@@ -338,13 +338,6 @@ usdf_msg_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 }
 
 ssize_t
-usdf_msg_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		uint64_t data, fi_addr_t dest_addr, void *context)
-{
-	return -FI_ENOSYS;
-}
-
-ssize_t
 usdf_msg_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
                  size_t count, fi_addr_t dest_addr, void *context)
 {

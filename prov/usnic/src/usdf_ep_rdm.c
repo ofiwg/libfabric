@@ -905,13 +905,13 @@ static struct fi_ops_cm usdf_cm_rdm_ops = {
 static struct fi_ops_msg usdf_rdm_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = usdf_rdm_recv,
-	.recvv = usdf_rdm_recvv,
-	.recvmsg = usdf_rdm_recvmsg,
+	.recvv = fi_no_msg_recvv,
+	.recvmsg = fi_no_msg_recvmsg,
 	.send = usdf_rdm_send,
 	.sendv = usdf_rdm_sendv,
 	.sendmsg = usdf_rdm_sendmsg,
 	.inject = usdf_rdm_inject,
-	.senddata = usdf_rdm_senddata,
+	.senddata = fi_no_msg_senddata,
 	.injectdata = fi_no_msg_injectdata,
 };
 
