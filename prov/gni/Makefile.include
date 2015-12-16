@@ -97,8 +97,8 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/wait.c \
 	prov/gni/test/common.c
 
-prov_gni_test_gnitest_LDFLAGS = $(gni_LDFLAGS) -static
-prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(gni_CPPFLAGS)
+prov_gni_test_gnitest_LDFLAGS = $(CRAY_PMI_LIBS) $(gni_LDFLAGS) -static
+prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS) $(gni_CPPFLAGS)
 prov_gni_test_gnitest_LDADD = -lcriterion \
 		$(linkback) $(gni_LIBS)
 endif HAVE_CRITERION
