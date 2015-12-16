@@ -24,7 +24,7 @@ This distribution of libfabric contains the following providers
 
 *GNI*
 : A provider for the Aries interconnect in Cray XC(TM) systems
-  utilizing the user-space `Generic Networking Interface`.  See
+  utilizing the user-space *Generic Networking Interface*.  See
   [`fi_gni`(7)](fi_gni.7.html) for more information.
 
 *PSM*
