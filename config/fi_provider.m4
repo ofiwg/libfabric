@@ -89,6 +89,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	AS_IF([test $$1_happy -eq 1],
 		[PROVIDERS_TO_BUILD="$PROVIDERS_TO_BUILD $1"
 		 PROVIDERS_COUNT=$((PROVIDERS_COUNT+1))
+		 _FI_PROVIDER_PC_ADD($1)
 		 AS_IF([test $$1_dl -eq 1],
 			[PROVIDERS_DL="prov/$1/lib$1.la $PROVIDERS_DL"
 			 AS_IF([test x"$enable_static" = x"yes" &&
@@ -201,4 +202,54 @@ AC_DEFUN([_FI_PROVIDER_INVOKE],[
 		[m4_fatal([$1 provider did not define FI_]m4_translit([$1], [a-z], [A-Z])[_$2 macro in prov/$1/configure.m4])],
 		[])]
 	    )
+])
+
+dnl
+dnl Internal; should not be called from provder .m4 scripts.
+dnl Helper macro that appends each providers build flags for pkg-config
+dnl
+dnl Arguments:
+dnl
+dnl $1: name of the provider
+dnl
+AC_DEFUN([_FI_PROVIDER_PC_ADD],[
+	 FI_PC_CFLAGS="$FI_PC_CFLAGS $$1_CFLAGS $$1_CPPFLAGS"
+	 FI_PC_PRIVATE_LIBS="$FI_PC_PRIVATE_LIBS $$1_LDFLAGS $$1_LIBS"
+])
+
+dnl
+dnl Substitute pkg-config variables after all providers have been initialized
+dnl If any package dependencies are ever needed, make use of
+dnl   FI_PC_REQUIRES_PKGS
+dnl   and
+dnl   FI_PC_PRIVATE_PKGS
+dnl
+AC_DEFUN([FI_PROVIDER_SETUP_PC],[
+	FI_PC_PRIVATE_LIBS="$FI_PC_PRIVATE_LIBS $LIBS"
+
+	dnl Try and avoid duplication of private library flags
+	dnl Inefficient but easier than tracking within each provider macro
+	seen=""
+	for arg in $FI_PC_PRIVATE_LIBS
+	do
+	  found=no
+	  for s in $seen
+	  do
+	    AS_IF([test "$s" = "$arg"], [found=yes])
+	  done
+	  AS_IF([test "$found" = "no"], [seen="$seen $arg"])
+	done
+	FI_PC_PRIVATE_LIBS=$seen
+
+	AS_IF([test "x$enable_shared" != xyes],
+	 [FI_PC_PUBLIC_LIBS="$FI_PC_PUBLIC_LIBS $FI_PC_PRIVATE_LIBS"
+	 FI_PC_REQUIRES_PKGS="$FI_PC_REQUIRES_PKGS $FI_PC_PRIVATE_PKGS"])
+
+	AC_SUBST(FI_PC_CFLAGS)
+	AC_SUBST(FI_PC_PUBLIC_LIBS)
+	AC_SUBST(FI_PC_PRIVATE_LIBS)
+	AC_SUBST(FI_PC_REQUIRES_PKGS)
+	AC_SUBST(FI_PC_PRIVATE_PKGS)
+
+	AC_CONFIG_FILES([libfabric.pc])
 ])
