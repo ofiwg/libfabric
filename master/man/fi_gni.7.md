@@ -88,7 +88,7 @@ All *FI_RMA* operations are supported.
 
 ## FI_TAGGED
 
-All *FI_MSG* operations are supported except `fi_tinjectdata`.
+All *FI_TAGGED* operations are supported except `fi_tinjectdata`.
 
 # GNI EXTENSIONS
 
