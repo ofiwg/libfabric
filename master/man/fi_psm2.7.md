@@ -108,8 +108,9 @@ The *psm2* provider checks for the following environment variables:
   be pipe-lined. However, the bandwidth is sub-optimal by doing this way.
 
   The *psm2* provider use PSM tag-matching message queue functions to achieve
-  higher bandwidth for large size RMA. For this purpose, a bit is reserved from
-  the tag space to separate the RMA traffic from the regular tagged message queue.
+  higher bandwidth for large size RMA. It takes avdantage of the extra tag bits
+  available in PSM2 to separate the RMA traffic from the regular tagged message
+  queue.
    
   The option is on by default. To turn it off set the variable to 0.
 
