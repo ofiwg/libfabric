@@ -86,7 +86,7 @@ typedef struct fid *fid_t;
 /*
  * Provider specific values are indicated by setting the high-order bit.
  */
-#define FI_PROV_SPECIFIC	(1 << 31)
+#define FI_PROV_SPECIFIC	(1U << 31)
 
 /*
  * Flags
