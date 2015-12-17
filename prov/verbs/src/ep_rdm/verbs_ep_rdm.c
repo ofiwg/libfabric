@@ -485,6 +485,7 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.fid.ops = &fi_ibv_rdm_tagged_ep_ops;
 	_ep->ep_fid.ops = &fi_ibv_rdm_tagged_ep_base_ops;
 	_ep->ep_fid.tagged = &fi_ibv_rdm_tagged_ops;
+	_ep->ep_fid.rma = fi_ibv_rdm_ep_ops_rma(_ep);
 	_ep->ep_fid.cm = &fi_ibv_rdm_tagged_ep_cm_ops;
 
 	if (fi_ibv_rdm_tagged_find_ipoib_addr

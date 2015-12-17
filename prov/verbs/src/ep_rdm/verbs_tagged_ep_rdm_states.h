@@ -50,6 +50,9 @@ enum fi_ibv_rdm_tagged_request_eager_state {
 	FI_IBV_STATE_EAGER_RECV_WAIT4RECV,
 	FI_IBV_STATE_EAGER_RECV_END,
 
+	FI_IBV_STATE_EAGER_RMA_WAIT4LC,
+	FI_IBV_STATE_EAGER_RMA_END,
+
 	FI_IBV_STATE_EAGER_READY_TO_FREE,
 
 	FI_IBV_STATE_EAGER_COUNT           // must be last
@@ -89,6 +92,8 @@ enum fi_ibv_rdm_tagged_request_event {
 	FI_IBV_EVENT_RECV_GOT_PKT_PREPROCESS,
 	FI_IBV_EVENT_RECV_GOT_PKT_PROCESS,
 	FI_IBV_EVENT_RECV_GOT_ACK,
+
+	FI_IBV_EVENT_RMA_START,
 
 	FI_IBV_EVENT_COUNT                 // must be last
 };
@@ -154,6 +159,20 @@ struct fi_ibv_recv_got_pkt_process_data {
 	struct fi_ibv_rdm_ep *ep;
 } ;
 
+
+struct fi_ibv_rdm_rma_start_data {
+	struct fi_ibv_rdm_ep *ep_rdm;
+	struct fi_ibv_rdm_tagged_conn *conn;
+	void *context;
+	size_t data_len;
+	uint64_t rbuf;
+	uintptr_t lbuf;
+	uint32_t rkey;
+	uint32_t lkey;
+	enum ibv_wr_opcode op_code;
+};
+
+
 // Return codes
 
 enum fi_rdm_tagged_req_hndl_ret {
@@ -171,41 +190,5 @@ enum fi_rdm_tagged_req_hndl_ret
 fi_ibv_rdm_tagged_req_hndl(struct fi_ibv_rdm_tagged_request *request,
 			   enum fi_ibv_rdm_tagged_request_event event,
 			   void *data);
-
-// Send/Recv counters control
-
-#define FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS(_connection, _ep, _send_flags) \
-do {                                                                	\
-	(_connection)->sends_outgoing++;                                \
-	(_ep)->pend_send++;                                             \
-	(_ep)->total_outgoing_send++;                                   \
-	(_send_flags) |= IBV_SEND_SIGNALED;                             \
-									\
-	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %d\n",    \
-		_connection,                                            \
-		(_connection)->sends_outgoing);                         \
-} while (0)
-
-#define FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(_connection, _ep)		\
-do {                                                                	\
-	(_connection)->sends_outgoing--;                                \
-	(_ep)->total_outgoing_send--;                                   \
-	(_ep)->pend_send--;                                             \
-									\
-	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER--, conn %p, sends_outgoing %d\n",    \
-			_connection, (_connection)->sends_outgoing);    \
-	assert((_ep)->pend_send >= 0);                                  \
-	assert((_connection)->sends_outgoing >= 0);                     \
-} while (0)
-
-#define FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep)  \
-	((_connection)->sends_outgoing > 0.5*(_ep)->sq_wr_depth)
-
-#define PEND_SEND_IS_LIMITED(_ep)                                       \
-	((_ep)->pend_send > 0.5 * (_ep)->scq_depth)
-
-#define SEND_RESOURCES_IS_BUSY(_connection, _ep)                        \
-	(FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep) ||  \
-	 PEND_SEND_IS_LIMITED(_ep))
 
 #endif /* _VERBS_TAGGED_EP_RDM_STATES_H */

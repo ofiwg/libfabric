@@ -88,6 +88,9 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_tagged_request *request,
 static enum fi_rdm_tagged_req_hndl_ret
 fi_ibv_rdm_tagged_rndv_recv_ack_lc(struct fi_ibv_rdm_tagged_request *request,
 		void *data);
+static enum fi_rdm_tagged_req_hndl_ret
+fi_ibv_rdm_tagged_init_rma_request(struct fi_ibv_rdm_tagged_request *request,
+		void *data);
 
 static fi_ep_rdm_request_handler_t
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_COUNT]
@@ -177,6 +180,14 @@ enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_init(void)
 	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RECV_END]
 	    [FI_IBV_STATE_RNDV_RECV_WAIT4LC][FI_IBV_EVENT_SEND_GOT_LC] =
 	    fi_ibv_rdm_tagged_rndv_recv_read_lc;
+
+	// RMA_WRITE stuff
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_BEGIN]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_RMA_START] =
+	    fi_ibv_rdm_tagged_init_rma_request;
+	fi_ibv_rdm_tagged_hndl_arr[FI_IBV_STATE_EAGER_RMA_WAIT4LC]
+	    [FI_IBV_STATE_RNDV_NOT_USED][FI_IBV_EVENT_SEND_GOT_LC] =
+	    fi_ibv_rdm_tagged_eager_send_lc;
 
 	return FI_EP_RDM_HNDL_SUCCESS;
 }
@@ -388,7 +399,8 @@ fi_ibv_rdm_tagged_eager_send_lc(struct fi_ibv_rdm_tagged_request *request,
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
 
 	assert(request->state.eager == FI_IBV_STATE_EAGER_SEND_WAIT4LC ||
-	       request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE);
+	       request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE ||
+	       request->state.eager == FI_IBV_STATE_EAGER_RMA_WAIT4LC);
 	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
 
 	VERBS_DBG(FI_LOG_EP_DATA, "conn %p, tag 0x%llx, len %d\n", request->conn,
@@ -404,6 +416,11 @@ fi_ibv_rdm_tagged_eager_send_lc(struct fi_ibv_rdm_tagged_request *request,
 
 		fi_ibv_mem_pool_return(&b->mpe,
 			&fi_ibv_rdm_tagged_extra_buffers_pool);
+	}
+
+	if (request->state.eager == FI_IBV_STATE_EAGER_RMA_WAIT4LC) {
+		fi_ibv_rdm_tagged_set_buffer_status(request->sbuf,
+			BUF_STATUS_FREE);
 	}
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
@@ -990,6 +1007,46 @@ fi_ibv_rdm_tagged_rndv_recv_ack_lc(struct fi_ibv_rdm_tagged_request *request,
 	return FI_EP_RDM_HNDL_SUCCESS;
 }
 
+static enum fi_rdm_tagged_req_hndl_ret
+fi_ibv_rdm_tagged_init_rma_request(struct fi_ibv_rdm_tagged_request *request,
+		void *data)
+{
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_IN();
+	assert(request->state.eager == FI_IBV_STATE_EAGER_BEGIN);
+	assert(request->state.rndv == FI_IBV_STATE_RNDV_NOT_USED);
+
+	struct fi_ibv_rdm_rma_start_data *p = 
+		(struct fi_ibv_rdm_rma_start_data *)data;
+
+	request->context = p->context;
+	request->conn = p->conn;
+	request->sbuf = (void*)p->lbuf;
+
+	struct ibv_sge sge = { 0 };
+	struct ibv_send_wr wr = { 0 };
+	struct ibv_send_wr *bad_wr = NULL;
+	wr.wr_id = FI_IBV_RDM_PACK_WR(request);
+	wr.sg_list = &sge;
+	wr.num_sge = 1;
+	wr.wr.rdma.remote_addr = p->rbuf;
+	wr.wr.rdma.rkey = p->rkey;
+	wr.send_flags = 0;
+	wr.opcode = p->op_code;
+	FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS(p->conn, p->ep_rdm, wr.send_flags);
+
+	sge.addr = p->lbuf;
+	sge.length = p->data_len;
+	sge.lkey = p->lkey;
+
+	int ret = ibv_post_send(p->conn->qp, &wr, &bad_wr);
+
+	request->state.eager = FI_IBV_STATE_EAGER_RMA_WAIT4LC;
+
+	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
+
+	return (ret == 0) ? FI_EP_RDM_HNDL_SUCCESS : FI_EP_RDM_HNDL_ERROR;
+}
+
 char *fi_ibv_rdm_tagged_req_eager_state_to_str(
 		enum fi_ibv_rdm_tagged_request_eager_state state)
 {
@@ -1012,6 +1069,12 @@ char *fi_ibv_rdm_tagged_req_eager_state_to_str(
 		return "STATE_EAGER_RECV_WAIT4RECV";
 	case FI_IBV_STATE_EAGER_RECV_END:
 		return "STATE_EAGER_RECV_END";
+
+	case FI_IBV_STATE_EAGER_RMA_WAIT4LC:
+		return "FI_IBV_STATE_EAGER_RMA_WAIT4LC";
+	case FI_IBV_STATE_EAGER_RMA_END:
+		return "FI_IBV_STATE_EAGER_RMA_END";
+
 	case FI_IBV_STATE_EAGER_READY_TO_FREE:
 		return "STATE_EAGER_READY_TO_FREE";
 
@@ -1077,6 +1140,9 @@ char *fi_ibv_rdm_tagged_req_event_to_str(
 		return "EVENT_RECV_GOT_PKT_PROCESS";
 	case FI_IBV_EVENT_RECV_GOT_ACK:
 		return "EVENT_RECV_GOT_ACK";
+
+	case FI_IBV_EVENT_RMA_START:
+		return "FI_IBV_EVENT_RMA_START";
 
 	case FI_IBV_EVENT_COUNT:
 		return "EVENT_COUNT";

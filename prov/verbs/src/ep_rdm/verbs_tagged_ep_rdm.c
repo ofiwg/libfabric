@@ -172,7 +172,6 @@ static ssize_t fi_ibv_rdm_tagged_recvv(struct fid_ep *ep, const struct iovec *io
 		void *context)
 {
 	void *buf = NULL;
-	char* ptr;
 	size_t total_len = 0;
 	size_t i;
 
@@ -291,13 +290,6 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 static ssize_t
 fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
 {
-#if defined(__ICC) || defined(__INTEL_COMPILER) || \
-    defined(__GNUC__) || defined(__GNUG__)
-	_mm_prefetch((const char *)
-		fi_ibv_rdm_tagged_get_buff_service_data(sdata->conn->sbuf_head),
-		_MM_HINT_T0);
-#endif /* ICC || GCC */
-
 	struct fi_ibv_rdm_tagged_request *request =
 	    (struct fi_ibv_rdm_tagged_request *)
 	    fi_verbs_mem_pool_get(&fi_ibv_rdm_tagged_request_pool);
