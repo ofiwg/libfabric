@@ -149,7 +149,7 @@ extern "C" {
  */
 #define GNIX_EP_RDM_CAPS                                                       \
 	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS |                            \
-	 FI_DIRECTED_RECV | FI_MULTI_RECV | FI_INJECT | FI_SOURCE | FI_READ |  \
+	 FI_DIRECTED_RECV | FI_INJECT | FI_SOURCE | FI_READ |                  \
 	 FI_WRITE | FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE |     \
 	 FI_TRANSMIT_COMPLETE | FI_FENCE)
 
