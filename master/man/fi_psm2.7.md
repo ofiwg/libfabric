@@ -13,7 +13,7 @@ The PSM2 Fabric Provider
 
 The *psm2* provider runs over the PSM 2.x interface that is supported
 by the Intel Omni-Path Fabric. PSM 2.x has all the PSM 1.x features
-plus a set of new functions with enhanced capability. Since PSM 1.x
+plus a set of new functions with enhanced capabilities. Since PSM 1.x
 and PSM 2.x are not ABI compatible the *psm2* provider only works with
 PSM 2.x and doesn't support Intel TrueScale Fabric.
 
@@ -51,8 +51,8 @@ Progress
   expected to call *fi_cq_read* or *fi_cntr_read* function from time
   to time when no other libfabric function is called to ensure
   progress is made in a timely manner. The provider does support
-  auto progress mode. However, the performance is signinficantly
-  impacted if the application purely depends on the pprovide to
+  auto progress mode. However, the performance can be significantly
+  impacted if the application purely depends on the provider to
   make auto progress.
 
 Unsupported features
@@ -75,7 +75,7 @@ The *psm2* provider checks for the following environment variables:
   issues with unknown reason, it is advisable to manually set the UUID
   to a value different from the default.
 
-  The default UUID 00FF00FF-0000-0000-0000-00FF0F0F00FF.
+  The default UUID is 00FF00FF-0000-0000-0000-00FF0F0F00FF.
 
 *FI_PSM2_NAME_SERVER*
 : The *psm2* provider has a simple built-in name server that can be used
@@ -91,7 +91,7 @@ The *psm2* provider checks for the following environment variables:
   The name server won't work properly if there are more than one processes
   from the same job (i.e. with the same UUID) running on the same node and
   acting as servers. For such scenario it is recommended to have each
-  process getting local transport address with *fi_cm_getname* and exchanging
+  process getting local transport address with *fi_getname* and exchanging
   the addresses with out-of-band mechanism.
 
   The name server is on by default. It can be turned off by setting the
@@ -103,7 +103,7 @@ The *psm2* provider checks for the following environment variables:
 
 *FI_PSM2_TAGGED_RMA*
 : The RMA functions are implemented on top of the PSM Active Message functions.
-  The Active Message functions has limit on the size of data can be transferred
+  The Active Message functions have limit on the size of data can be transferred
   in a single message. Large transfers can be divided into small chunks and
   be pipe-lined. However, the bandwidth is sub-optimal by doing this way.
 
@@ -129,7 +129,7 @@ The *psm2* provider checks for the following environment variables:
 *FI_PSM2_PROG_INTERVAL*
 : When auto progress is enabled (asked via the hints to *fi_getinfo*),
   a progress thread is created to make progress calls from time to time.
-  This option set the tnterval (microseconds) between progress calls.
+  This option set the interval (microseconds) between progress calls.
 
   The default setting is 1 if affininty is set, or 1000 if not. See
   *FI_PSM2_PROG_AFFINITY*.
