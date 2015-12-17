@@ -353,8 +353,8 @@ static const char *sock_cq_strerror(struct fid_cq *cq, int prov_errno,
 			      const void *err_data, char *buf, size_t len)
 {
 	if (buf && len)
-		return strncpy(buf, strerror(-prov_errno), len);
-	return strerror(-prov_errno);
+		return strncpy(buf, fi_strerror(-prov_errno), len);
+	return fi_strerror(-prov_errno);
 }
 
 static int sock_cq_close(struct fid *fid)
