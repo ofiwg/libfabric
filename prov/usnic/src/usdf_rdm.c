@@ -1112,15 +1112,16 @@ usdf_rdm_tx_progress(struct usdf_tx *tx)
 	}
 }
 
-static inline void
-usdf_rdm_recv_complete(struct usdf_rx *rx, struct usdf_rdm_connection *rdc,
-		struct usdf_rdm_qe *rqe)
+static inline void usdf_rdm_recv_complete(struct usdf_rx *rx,
+					  struct usdf_rdm_connection *rdc,
+					  struct usdf_rdm_qe *rqe, int status)
 {
 	struct usdf_cq_hard *hcq;
 
-	USDF_DBG_SYS(EP_DATA, "RECV complete ID=%u len=%lu\n", rdc->dc_rx_msg_id, rqe->rd_length);
+	USDF_DBG_SYS(EP_DATA, "RECV complete ID=%u len=%lu with status %d\n",
+		     rdc->dc_rx_msg_id, rqe->rd_length, status);
 	hcq = rx->r.rdm.rx_hcq;
-	hcq->cqh_post(hcq, rqe->rd_context, rqe->rd_length, FI_SUCCESS);
+	hcq->cqh_post(hcq, rqe->rd_context, rqe->rd_length, status);
 
 	usdf_rdm_put_rx_rqe(rx, rqe);
 
@@ -1544,10 +1545,11 @@ usdf_rdm_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 	rqe->rd_resid = rd_resid;
 
 	if (rxlen > 0) {
+		USDF_DBG_SYS(EP_DATA, "RQE truncated by %zu bytes\n", rxlen);
 		rqe->rd_length -= rxlen;
-/* printf("RQE truncated XXX\n"); */
+		usdf_rdm_recv_complete(rx, rdc, rqe, FI_ETRUNC);
 	} else if (opcode & RUDP_OP_LAST) {
-		usdf_rdm_recv_complete(rx, rdc, rqe);
+		usdf_rdm_recv_complete(rx, rdc, rqe, FI_SUCCESS);
 	}
 
 repost:

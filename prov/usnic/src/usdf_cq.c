@@ -96,7 +96,6 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 
 	entry->op_context = cq->cq_comp.uc_context;
 	entry->flags = 0;
-	entry->err = FI_EIO;
 	switch (cq->cq_comp.uc_status) {
 	case USD_COMPSTAT_SUCCESS:
 		entry->prov_errno = FI_SUCCESS;
@@ -111,9 +110,11 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 		entry->prov_errno = FI_ETIMEDOUT;
 		break;
 	case USD_COMPSTAT_ERROR_INTERNAL:
+	default:
 		entry->prov_errno = FI_EOTHER;
 		break;
 	}
+	entry->err = entry->prov_errno;
 
 	cq->cq_comp.uc_status = 0;
 
@@ -135,8 +136,8 @@ usdf_cq_readerr_soft(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 
 	entry->op_context = tail->cse_context;
 	entry->flags = 0;
-	entry->err = FI_EIO;
 	entry->prov_errno = tail->cse_prov_errno;
+	entry->err = entry->prov_errno;
 
 	tail++;
 	if (tail == cq->c.soft.cq_end) {
