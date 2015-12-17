@@ -239,6 +239,9 @@ dummy_man_pages = \
         man/man3/fi_writemsg.3 \
         man/man3/fi_writev.3
 
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = libfabric.pc
+
 nroff:
 	@for file in $(real_man_pages); do \
 	    source=`echo $$file | sed -e 's@/man[0-9]@@'`; \
