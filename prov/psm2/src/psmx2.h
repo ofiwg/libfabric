@@ -236,8 +236,9 @@ struct psmx2_req_queue {
 };
 
 struct psmx2_multi_recv {
-	uint64_t	tag;
-	uint64_t	tagsel;
+	psm2_epaddr_t	src_addr;
+	psm2_mq_tag_t	tag;
+	psm2_mq_tag_t	tagsel;
 	void		*buf;
 	size_t		len;
 	size_t		offset;
