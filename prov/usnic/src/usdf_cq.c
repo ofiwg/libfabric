@@ -96,7 +96,6 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 
 	entry->op_context = cq->cq_comp.uc_context;
 	entry->flags = 0;
-	entry->err = FI_EIO;
 	switch (cq->cq_comp.uc_status) {
 	case USD_COMPSTAT_SUCCESS:
 		entry->prov_errno = FI_SUCCESS;
@@ -111,9 +110,11 @@ usdf_cq_readerr(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 		entry->prov_errno = FI_ETIMEDOUT;
 		break;
 	case USD_COMPSTAT_ERROR_INTERNAL:
+	default:
 		entry->prov_errno = FI_EOTHER;
 		break;
 	}
+	entry->err = entry->prov_errno;
 
 	cq->cq_comp.uc_status = 0;
 
@@ -135,8 +136,8 @@ usdf_cq_readerr_soft(struct fid_cq *fcq, struct fi_cq_err_entry *entry,
 
 	entry->op_context = tail->cse_context;
 	entry->flags = 0;
-	entry->err = FI_EIO;
 	entry->prov_errno = tail->cse_prov_errno;
+	entry->err = entry->prov_errno;
 
 	tail++;
 	if (tail == cq->c.soft.cq_end) {
@@ -890,13 +891,6 @@ usdf_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 }
 
 static int
-usdf_cq_control(fid_t fid, int command, void *arg)
-{
-	USDF_TRACE_SYS(CQ, "\n");
-	return -FI_ENOSYS;
-}
-
-static int
 usdf_cq_close(fid_t fid)
 {
 	struct usdf_cq *cq;
@@ -1008,7 +1002,7 @@ static struct fi_ops usdf_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = usdf_cq_close,
 	.bind = fi_no_bind,
-	.control = usdf_cq_control,
+	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
 

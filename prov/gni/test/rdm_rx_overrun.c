@@ -57,7 +57,16 @@
 
 #include <criterion/criterion.h>
 
-#define NUM_EPS 2 /* 11 I want this to be larger eventually */
+#define NUM_EPS 61
+const int num_msgs = 10;
+
+/*
+ * Note that even tho we will use a min RX CQ size of 1, ugni seems to
+ * have an internal minimum that is around 511, so in order for this
+ * test to exercise the overrun code, it must send at least 511
+ * messages (i.e., NUM_EPS*num_msgs > 511)
+ */
+const int min_rx_cq_size = 1;
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom[NUM_EPS];
@@ -115,13 +124,7 @@ static void setup(void)
 				  (void **) &gni_domain_ops, NULL);
 		cr_assert(ret == FI_SUCCESS, "fi_open_ops");
 
-		/*
-		 * This test doesn't work even when the rx_cq_size is
-		 * left at the default.  Changed to reduce the size
-		 * when the bug is found.
-		 */
-
-		rx_cq_size = 16384 /* 1 */;
+		rx_cq_size = min_rx_cq_size;
 
 		ret = gni_domain_ops->set_val(&dom[i]->fid, GNI_RX_CQ_SIZE,
 					      &rx_cq_size);
@@ -207,7 +210,7 @@ TestSuite(rdm_rx_overrun, .init = setup, .fini = teardown, .disabled = false);
 
 Test(rdm_rx_overrun, all_to_one)
 {
-	int i;
+	int i, j;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_entry s_cqe, d_cqe;
 	ssize_t sz;
@@ -220,39 +223,49 @@ Test(rdm_rx_overrun, all_to_one)
 	}
 
 	for (i = 1; i < NUM_EPS; i++) {
-		sz = fi_send(ep[i], &source[i], sizeof(int), loc_mr,
-			     gni_addr[0], ctx+i);
-		cr_assert_eq(sz, 0);
+		for (j = 0; j < num_msgs; j++) {
+			sz = fi_send(ep[i], &source[i], sizeof(int), loc_mr,
+				     gni_addr[0], ctx+i);
+			cr_assert_eq(sz, 0);
+		}
 	}
 
 	do {
 		for (i = 1; i < NUM_EPS; i++) {
-			if (fi_cq_read(msg_cq[i], &s_cqe, 1) == 1) {
-				cr_assert_eq((uint64_t) s_cqe.op_context,
-					     (uint64_t) (ctx+i));
-				source_done += 1;
+			for (j = 0; j < num_msgs; j++) {
+				if (fi_cq_read(msg_cq[i], &s_cqe, 1) == 1) {
+					cr_assert_eq((uint64_t)
+						     s_cqe.op_context,
+						     (uint64_t) (ctx+i));
+					source_done += 1;
+				}
 			}
 		}
-	} while (source_done != NUM_EPS-1);
+	} while (source_done != num_msgs*(NUM_EPS-1));
 
 	for (i = 1; i < NUM_EPS; i++) {
-		sz = fi_recv(ep[0], &target[i], sizeof(int), rem_mr,
-			     gni_addr[i], ctx+i);
-		cr_assert_eq(sz, 0);
+		for (j = 0; j < num_msgs; j++) {
+			sz = fi_recv(ep[0], &target[i], sizeof(int), rem_mr,
+				     gni_addr[i], ctx+i);
+			cr_assert_eq(sz, 0);
+		}
 	}
 
 	do {
 		for (i = 1; i < NUM_EPS; i++) {
-			if (fi_cq_read(msg_cq[0], &d_cqe, 1) == 1) {
-				cr_assert_eq((uint64_t)d_cqe.op_context,
-					     (uint64_t)(ctx+i));
-				dest_done += 1;
+			for (j = 0; j < num_msgs; j++) {
+				if (fi_cq_read(msg_cq[0], &d_cqe, 1) == 1) {
+					cr_assert_eq((uint64_t)
+						     d_cqe.op_context,
+						     (uint64_t)(ctx+i));
+					dest_done += 1;
+				}
 			}
 		}
-	} while (dest_done != NUM_EPS-1);
+	} while (dest_done != num_msgs*(NUM_EPS-1));
 
 
-	/* error checking */
+	/* good enough error checking (only checks the last send) */
 	for (i = 1; i < NUM_EPS; i++) {
 		cr_assert(target[i] < NUM_EPS);
 		ctx[target[i]] = target[i];

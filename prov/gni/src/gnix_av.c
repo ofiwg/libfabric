@@ -761,6 +761,8 @@ err:
 static struct fi_ops_av gnix_av_ops = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = gnix_av_insert,
+	.insertsvc = fi_no_av_insertsvc,
+	.insertsym = fi_no_av_insertsym,
 	.remove = gnix_av_remove,
 	.lookup = gnix_av_lookup,
 	.straddr = gnix_av_straddr

@@ -129,6 +129,40 @@ if (defined($pages_branch_arg)) {
             if ($out =~ /^\?\?/);
     }
 
+    # Generate a new index.md with all the files that we just
+    # published.  First, read in the header stub.
+    if (!open(IN, "man/index-head.txt")) {
+        chdir("/");
+        die("failed to open index-head.txt");
+    }
+    my $str;
+    $str .= $_
+        while (<IN>);
+    close(IN);
+
+    # Write out the header stub into index.md itself
+    if (!open(OUT, ">man/index.md")) {
+        chdir("/");
+        die("failed to write to new index.md file");
+    }
+    print OUT $str;
+
+    # Now write out all the pages
+    my @headings;
+    push(@headings, { section=>7, title=>"General information" });
+    push(@headings, { section=>3, title=>"API documentation" });
+    foreach my $h (@headings) {
+        print OUT "\n* $h->{title}\n";
+        foreach my $file (@markdown_files) {
+            if ($file =~ /\.$h->{section}\.md$/) {
+                $file =~ m/^(.+)\.$h->{section}\.md$/;
+                my $base = $1;
+                print OUT "  * [$base($h->{section})]($base.$h->{section}.html)\n";
+            }
+        }
+    }
+    close(OUT);
+
     # Git commit those files in the pages repo and push them to the
     # upstream repo so that they go live.  If nothing changed, the commit
     # and push will be no-ops.

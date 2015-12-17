@@ -435,7 +435,9 @@ static struct fi_ops gnix_domain_fi_ops = {
 
 static struct fi_ops_mr gnix_domain_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
-	.reg = gnix_mr_reg
+	.reg = gnix_mr_reg,
+	.regv = fi_no_mr_regv,
+	.regattr = fi_no_mr_regattr
 };
 
 static struct fi_ops_domain gnix_domain_ops = {
@@ -443,6 +445,7 @@ static struct fi_ops_domain gnix_domain_ops = {
 	.av_open = gnix_av_open,
 	.cq_open = gnix_cq_open,
 	.endpoint = gnix_ep_open,
+	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = gnix_cntr_open,
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,

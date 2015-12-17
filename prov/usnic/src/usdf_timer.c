@@ -262,7 +262,5 @@ usdf_timer_init(struct usdf_fabric *fp)
 void
 usdf_timer_deinit(struct usdf_fabric *fp)
 {
-	if (fp->fab_timer_buckets != NULL) {
-		free(fp->fab_timer_buckets);
-	}
+	free(fp->fab_timer_buckets);
 }

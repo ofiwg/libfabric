@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.60])
-AC_INIT([libfabric], [1.2.0rc1], [ofiwg@lists.openfabrics.org])
+AC_INIT([libfabric], [1.2.0rc2], [ofiwg@lists.openfabrics.org])
 AC_CONFIG_SRCDIR([src/fabric.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
@@ -219,6 +219,8 @@ FI_PROVIDER_SETUP([usnic])
 FI_PROVIDER_SETUP([mxm])
 FI_PROVIDER_SETUP([gni])
 FI_PROVIDER_FINI
+dnl Configure the .pc file
+FI_PROVIDER_SETUP_PC
 
 # If the user requested to build in direct mode, but
 # we have more than one provider, error.

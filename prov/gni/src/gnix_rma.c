@@ -102,12 +102,14 @@ static int __gnix_rma_send_completion(struct gnix_fid_ep *ep,
 	}
 
 	if ((req->type == GNIX_FAB_RQ_RDMA_WRITE) &&
-	    ep->write_cntr)
+	    ep->write_cntr) {
 		cntr = ep->write_cntr;
+	}
 
 	if ((req->type == GNIX_FAB_RQ_RDMA_READ) &&
-	    ep->read_cntr)
+	    ep->read_cntr) {
 		cntr = ep->read_cntr;
+	}
 
 	if (cntr) {
 		rc = _gnix_cntr_inc(cntr);
@@ -119,17 +121,19 @@ static int __gnix_rma_send_completion(struct gnix_fid_ep *ep,
 	return FI_SUCCESS;
 }
 
-static void __gnix_rma_copy_indirect_get_data(struct gnix_fab_req *req)
+static void __gnix_rma_copy_indirect_get_data(struct gnix_tx_descriptor *txd)
 {
+	struct gnix_fab_req *req = txd->req;
 	int head_off = req->rma.rem_addr & GNI_READ_ALIGN_MASK;
 
 	memcpy((void *)req->rma.loc_addr,
-	       req->rma.align_buf + head_off,
+	       txd->int_buf + head_off,
 	       req->rma.len);
 }
 
-static void __gnix_rma_copy_chained_get_data(struct gnix_fab_req *req)
+static void __gnix_rma_copy_chained_get_data(struct gnix_tx_descriptor *txd)
 {
+	struct gnix_fab_req *req = txd->req;
 	int head_off, head_len, tail_len;
 	void *addr;
 
@@ -141,7 +145,7 @@ static void __gnix_rma_copy_chained_get_data(struct gnix_fab_req *req)
 		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to %p\n",
 			  head_len, req->rma.loc_addr);
 		memcpy((void *)req->rma.loc_addr,
-		       req->rma.align_buf + head_off,
+		       txd->int_buf + head_off,
 		       head_len);
 	}
 
@@ -153,7 +157,7 @@ static void __gnix_rma_copy_chained_get_data(struct gnix_fab_req *req)
 		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to %p\n",
 			  tail_len, addr);
 		memcpy((void *)addr,
-		       req->rma.align_buf + GNI_READ_ALIGN,
+		       txd->int_buf + GNI_READ_ALIGN,
 		       tail_len);
 	}
 }
@@ -293,6 +297,15 @@ static int __gnix_rma_txd_complete(void *arg, gni_return_t tx_status)
 
 	/* Wait for both TXDs before processing RDMA chained requests. */
 	if (req->flags & GNIX_RMA_CHAINED && req->flags & GNIX_RMA_RDMA) {
+		/* There are two TXDs involved with this request, an RDMA
+		 * transfer to move the middle block and an FMA transfer to
+		 * move unaligned head and/or tail.  If this is the FMA TXD,
+		 * copy the unaligned data to the user buffer. */
+		if (txd->gni_desc.type == GNI_POST_FMA_GET)
+			__gnix_rma_copy_chained_get_data(txd);
+
+		/* Remember any failure.  Retransmit both TXDs once both are
+		 * complete. */
 		req->rma.status |= tx_status;
 
 		atomic_dec(&req->rma.outstanding_txds);
@@ -319,19 +332,10 @@ static int __gnix_rma_txd_complete(void *arg, gni_return_t tx_status)
 		_gnix_vc_queue_work_req(req);
 	} else {
 		if (req->flags & GNIX_RMA_INDIRECT) {
-			__gnix_rma_copy_indirect_get_data(req);
-
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "freeing indirect align MR: %p addr: %p\n",
-				  req->rma.align_md, req->rma.align_buf);
-			fi_close(&req->rma.align_md->mr_fid.fid);
-		} else if (req->flags & GNIX_RMA_CHAINED) {
-			__gnix_rma_copy_chained_get_data(req);
-
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "freeing chained align MR: %p addr: %p\n",
-				  req->rma.align_md, req->rma.align_buf);
-			fi_close(&req->rma.align_md->mr_fid.fid);
+			__gnix_rma_copy_indirect_get_data(txd);
+		} else if (req->flags & GNIX_RMA_CHAINED &&
+			   !(req->flags & GNIX_RMA_RDMA)) {
+			__gnix_rma_copy_chained_get_data(txd);
 		}
 
 		/* complete request */
@@ -389,9 +393,9 @@ static void __gnix_rma_fill_pd_chained_get(struct gnix_fab_req *req,
 				req->rma.rem_addr & ~GNI_READ_ALIGN_MASK;
 		txd->gni_ct_descs[0].remote_mem_hndl = *rem_mdh;
 		txd->gni_ct_descs[0].local_addr =
-				(uint64_t)req->rma.align_buf;
+				(uint64_t)txd->int_buf;
 		txd->gni_ct_descs[0].local_mem_hndl =
-				req->rma.align_md->mem_hndl;
+				req->vc->ep->nic->int_bufs_mdh;
 
 		if (tail_len)
 			txd->gni_ct_descs[0].next_descr =
@@ -410,9 +414,9 @@ static void __gnix_rma_fill_pd_chained_get(struct gnix_fab_req *req,
 				 req->rma.len) & ~GNI_READ_ALIGN_MASK;
 		txd->gni_ct_descs[desc_idx].remote_mem_hndl = *rem_mdh;
 		txd->gni_ct_descs[desc_idx].local_addr =
-				(uint64_t)req->rma.align_buf + GNI_READ_ALIGN;
+				(uint64_t)txd->int_buf + GNI_READ_ALIGN;
 		txd->gni_ct_descs[desc_idx].local_mem_hndl =
-				req->rma.align_md->mem_hndl;
+				req->vc->ep->nic->int_bufs_mdh;
 		txd->gni_ct_descs[desc_idx].next_descr = NULL;
 	}
 
@@ -430,8 +434,8 @@ static void __gnix_rma_fill_pd_indirect_get(struct gnix_fab_req *req,
 	int head_off = req->rma.rem_addr & GNI_READ_ALIGN_MASK;
 
 	/* Copy all data through an intermediate buffer. */
-	txd->gni_desc.local_addr = (uint64_t)req->rma.align_buf;
-	txd->gni_desc.local_mem_hndl = req->rma.align_md->mem_hndl;
+	txd->gni_desc.local_addr = (uint64_t)txd->int_buf;
+	txd->gni_desc.local_mem_hndl = req->vc->ep->nic->int_bufs_mdh;
 	txd->gni_desc.length = CEILING(req->rma.len + head_off, GNI_READ_ALIGN);
 	txd->gni_desc.remote_addr =
 			(uint64_t)req->rma.rem_addr & ~GNI_READ_ALIGN_MASK;
@@ -501,15 +505,13 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	ct_txd->gni_desc.remote_mem_hndl = mdh;
 	ct_txd->gni_desc.rdma_mode = 0; /* check flags */
 	ct_txd->gni_desc.src_cq_hndl = nic->tx_cq; /* check flags */
-	ct_txd->gni_desc.local_mem_hndl = req->rma.align_md->mem_hndl;
-
+	ct_txd->gni_desc.local_mem_hndl = nic->int_bufs_mdh;
 	ct_txd->gni_desc.length = GNI_READ_ALIGN;
-	ct_txd->gni_desc.local_mem_hndl = req->rma.align_md->mem_hndl;
 
 	if (head_off) {
 		ct_txd->gni_desc.remote_addr =
 				req->rma.rem_addr & ~GNI_READ_ALIGN_MASK;
-		ct_txd->gni_desc.local_addr = (uint64_t)req->rma.align_buf;
+		ct_txd->gni_desc.local_addr = (uint64_t)ct_txd->int_buf;
 
 		if (tail_len) {
 			ct_txd->gni_desc.next_descr = &ct_txd->gni_ct_descs[0];
@@ -520,10 +522,10 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 					 req->rma.len) & ~GNI_READ_ALIGN_MASK;
 			ct_txd->gni_ct_descs[0].remote_mem_hndl = mdh;
 			ct_txd->gni_ct_descs[0].local_addr =
-					(uint64_t)req->rma.align_buf +
+					(uint64_t)ct_txd->int_buf +
 					GNI_READ_ALIGN;
 			ct_txd->gni_ct_descs[0].local_mem_hndl =
-					req->rma.align_md->mem_hndl;
+					nic->int_bufs_mdh;
 			ct_txd->gni_ct_descs[0].next_descr = NULL;
 			fma_chain = 1;
 		}
@@ -532,7 +534,7 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 				(req->rma.rem_addr +
 				 req->rma.len) & ~GNI_READ_ALIGN_MASK;
 		ct_txd->gni_desc.local_addr =
-				(uint64_t)req->rma.align_buf + GNI_READ_ALIGN;
+				(uint64_t)ct_txd->int_buf + GNI_READ_ALIGN;
 	}
 
 	fastlock_acquire(&nic->lock);
@@ -731,8 +733,7 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	struct gnix_fid_mem_desc *md = NULL;
 	int rc;
 	int rdma;
-	struct fid_mr *auto_mr = NULL, *align_mr = NULL;
-	void *align_buf = NULL;
+	struct fid_mr *auto_mr = NULL;
 
 	if (!ep) {
 		return -FI_EINVAL;
@@ -772,20 +773,6 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 
 	if (fr_type == GNIX_FAB_RQ_RDMA_READ &&
 	    (rem_addr & GNI_READ_ALIGN_MASK || len & GNI_READ_ALIGN_MASK)) {
-		/* TODO: Copy unaligned data through the inject buffer for now.
-		 * This path would benefit from an allocator which provides
-		 * small pre-registered buffers for this use. */
-		align_buf = req->inject_buf;
-		rc = gnix_mr_reg(&ep->domain->domain_fid.fid, align_buf,
-				GNIX_INJECT_SIZE, FI_READ, 0, 0, 0, &align_mr,
-				NULL);
-		if (rc != FI_SUCCESS) {
-			GNIX_INFO(FI_LOG_EP_DATA,
-				  "Failed to auto-register align buffer: %d\n",
-				  rc);
-			goto err_unalign_reg;
-		}
-
 		if (len >= GNIX_RMA_UREAD_CHAINED_THRESH) {
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Using CT for unaligned GET, req: %p\n",
@@ -800,8 +787,6 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 
 		if (rdma)
 			req->work_fn = _gnix_rma_post_rdma_chain_req;
-
-		GNIX_INFO(FI_LOG_EP_DATA, "align MR: %p\n", align_mr);
 	}
 
 	if (!(flags & GNIX_RMA_INDIRECT) && !mdesc &&
@@ -831,11 +816,6 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	req->rma.imm = data;
 	req->flags = flags;
 
-	req->rma.align_buf = align_buf;
-	if (align_mr)
-		md = container_of(align_mr, struct gnix_fid_mem_desc, mr_fid);
-	req->rma.align_md = md;
-
 	if (req->flags & FI_INJECT) {
 		memcpy(req->inject_buf, (void *)loc_addr, len);
 		req->rma.loc_addr = (uint64_t)req->inject_buf;
@@ -863,9 +843,6 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	return _gnix_vc_queue_tx_req(req);
 
 err_auto_reg:
-	if (align_mr)
-		fi_close(&align_mr->fid);
-err_unalign_reg:
 	_gnix_fr_free(req->vc->ep, req);
 	return rc;
 }

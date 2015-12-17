@@ -19,7 +19,7 @@ support for common atomic operations and optimized collectives.
 
 # REQUIREMENTS
 
-The GNI provider runs on Cray XC systems running CLE 5.2 UP02 or higher
+The GNI provider runs on Cray XC systems running CLE 5.2 UP03 or higher
 using gcc version 4.9 or higher.
 
 # SUPPORTED FEATURES
@@ -35,8 +35,10 @@ libfabric API:
   address vector types.
 
 *Data transfer operations*
+
 : The following data transfer interfaces are supported for a all
-  endpoint types: *fi_atomic*, *fi_msg*, *fi_rma*, *fi_tagged*.
+  endpoint types: *FI_ATOMIC*, *FI_MSG*, *FI_RMA*, *FI_TAGGED*.  See
+  DATA TRANSFER OPERATIONS below for more details.
 
 *Completion events*
 : The GNI provider supports *FI_CQ_FORMAT_CONTEXT*, *FI_CQ_FORMAT_MSG*,
@@ -47,19 +49,51 @@ libfabric API:
 : The GNI provider does not require any operation modes.
 
 *Progress*
-: The GNI provider supports both *FI_PROGRESS_AUTO* and
-  *FI_PROGRESS_MANUAL*, with a default set to auto.  When progress is
-  set to auto, a background thread runs to ensure that progress is
-  made for asynchronous requests.
+: For control progress, the GNI provider supports both
+  *FI_PROGRESS_AUTO* and *FI_PROGRESS_MANUAL*, with a default set to
+  auto.  For data progress, *FI_PROGRESS_MANUAL* is supported.  When
+  progress is set to auto, a background thread runs to ensure that
+  progress is made for asynchronous requests.
 
-# CAVEATS
+# DATA TRANSFER OPERATIONS
 
-*This is where we will put caveats or things that differ from the convention.*
+## FI_ATOMIC
+
+Currently, the GNI provider only supports atomic operations supported
+directly by the Aries NIC.  These include operations on 32- and
+64-bit, signed and unsigned integer and floating point values.
+Specifically,
+
+### Basic (fi_atomic, etc.)
+- *FI_MIN*, *FI_MAX* (no unsigned)
+- *FI_SUM* (no 64-bit floating point)
+- *FI_BOR*, *FI_BAND*, *FI_BXOR* (no floating point)
+- *FI_ATOMIC_WRITE*
+
+### Fetching (fi_fetch_atomic, etc.)
+- All of the basic operations as above
+- FI_ATOMIC_READ
+
+### Comparison (fi_compare_atomic, etc.)
+- FI_CSWAP
+- FI_MSWAP
+
+## FI_MSG
+
+All *FI_MSG* operations are supported.
+
+## FI_RMA
+
+All *FI_RMA* operations are supported.
+
+## FI_TAGGED
+
+All *FI_TAGGED* operations are supported except `fi_tinjectdata`.
 
 # GNI EXTENSIONS
 
 The GNI provider exposes low-level tuning parameters via a domain
-*fi_open_ops* interface named *FI_GNI_DOMAIN_PARAMS*.  The flags
+`fi_open_ops` interface named *FI_GNI_DOMAIN_OPS_1*.  The flags
 parameter is currently ignored.  The fi_open_ops function takes a
 `struct fi_gni_ops_domain` parameter and populates it with the
 following:
@@ -77,39 +111,59 @@ values are:
 
 *GNI_MSG_RENDEZVOUS_THRESHOLD*
 : Threshold message size at which a rendezvous protocol is used for
-  `fi_msg` data transfers.
+  *FI_MSG* data transfers.  The value is of type uint32_t.
 
 *GNI_RMA_RDMA_THRESHOLD*
-: Threshold message size at which RDMA is used for `fi_rma` data
-  transfers.
+: Threshold message size at which RDMA is used for *FI_RMA* data
+  transfers.  The value is of type uint32_t.
 
 *GNI_CONN_TABLE_INITIAL_SIZE*
 : Initial size of the internal table data structure used to manage
-  connections.
+  connections.  The value is of type uint32_t.
 
 *GNI_CONN_TABLE_MAX_SIZE*
 : Maximum size of the internal table data structure used to manage
-  connections.
+  connections.  The value is of type uint32_t.
 
 *GNI_CONN_TABLE_STEP_SIZE*
 : Step size for increasing the size of the internal table data
-  structure used to manage internal  GNI connections.
+  structure used to manage internal GNI connections.  The value is of
+  type uint32_t.
 
 *GNI_VC_ID_TABLE_CAPACITY*
 : Size of the virtual channel (VC) table used for managing remote
-  connections.
+  connections.  The value is of type uint32_t.
 
 *GNI_MBOX_PAGE_SIZE*
-: Page size for GNI SMSG mailbox allocations.
+: Page size for GNI SMSG mailbox allocations.  The value is of type
+  uint32_t.
 
 *GNI_MBOX_NUM_PER_SLAB*
-: Number of GNI SMSG mailboxes per allocation slab.
+: Number of GNI SMSG mailboxes per allocation slab.  The value is of
+  type uint32_t.
 
 *GNI_MBOX_MAX_CREDIT*
-: Maximum number of credits per GNI SMSG mailbox.
+: Maximum number of credits per GNI SMSG mailbox.  The value is of
+  type uint32_t.
 
 *GNI_MBOX_MSG_MAX_SIZE*
-:  Maximum size of GNI SMSG messages.
+: Maximum size of GNI SMSG messages.  The value is of type uint32_t.
+
+*GNI_RX_CQ_SIZE*
+: Recommended GNI receive CQ size.  The value is of type uint32_t.
+
+*GNI_TX_CQ_SIZE*
+: Recommended GNI transmit CQ size.  The value is of type uint32_t.
+
+*GNI_MAX_RETRANSMITS*
+: Maximum number of message retransmits before failure.  The value is
+  of type uint32_t.
+
+*GNI_MR_CACHE_LAZY_DEREG*
+: Enable or disable lazy deregistration of memory.  The value is of
+  type int32_t.
+
+
 
 # SEE ALSO
 

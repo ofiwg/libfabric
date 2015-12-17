@@ -141,10 +141,9 @@ usdf_ep_dgram_enable(struct fid_ep *fep)
 	return 0;
 
 fail:
-	if (ep->e.dg.ep_hdr_ptr != NULL) {
-		free(ep->e.dg.ep_hdr_ptr);
-		ep->e.dg.ep_hdr_ptr = NULL;
-	}
+	free(ep->e.dg.ep_hdr_ptr);
+	ep->e.dg.ep_hdr_ptr = NULL;
+
 	if (ep->e.dg.ep_qp != NULL) {
 		usd_destroy_qp(ep->e.dg.ep_qp);
 		ep->e.dg.ep_qp = NULL;
@@ -272,6 +271,8 @@ usdf_ep_dgram_close(fid_t fid)
 		return -FI_EBUSY;
 	}
 
+	free(ep->e.dg.ep_hdr_ptr);
+
 	if (ep->e.dg.ep_qp != NULL) {
 		usd_destroy_qp(ep->e.dg.ep_qp);
 	}
@@ -321,7 +322,7 @@ static struct fi_ops_msg usdf_dgram_ops = {
 	.sendv = usdf_dgram_sendv,
 	.sendmsg = usdf_dgram_sendmsg,
 	.inject = usdf_dgram_inject,
-	.senddata = usdf_dgram_senddata,
+	.senddata = fi_no_msg_senddata,
 	.injectdata = fi_no_msg_injectdata,
 };
 
@@ -334,7 +335,7 @@ static struct fi_ops_msg usdf_dgram_prefix_ops = {
 	.sendv = usdf_dgram_prefix_sendv,
 	.sendmsg = usdf_dgram_prefix_sendmsg,
 	.inject = usdf_dgram_prefix_inject,
-	.senddata = usdf_dgram_senddata,
+	.senddata = fi_no_msg_senddata,
 	.injectdata = fi_no_msg_injectdata,
 };
 

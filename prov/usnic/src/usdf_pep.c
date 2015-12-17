@@ -375,21 +375,6 @@ usdf_pep_listen(struct fid_pep *fpep)
 	return 0;
 }
 
-static ssize_t
-usdf_pep_cancel(fid_t fid, void *context)
-{
-	USDF_TRACE_SYS(EP_CTRL, "\n");
-	return -FI_EINVAL;
-}
-
-static int
-usdf_pep_reject(struct fid_pep *pep, fid_t handle,
-		const void *param, size_t paramlen)
-{
-	USDF_TRACE_SYS(EP_CTRL, "\n");
-	return -FI_ENOSYS;
-}
-
 static void
 usdf_pep_free_cr_lists(struct usdf_pep *pep)
 {
@@ -549,7 +534,7 @@ struct fi_ops usdf_pep_ops = {
 
 static struct fi_ops_ep usdf_pep_base_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = usdf_pep_cancel,
+	.cancel = fi_no_cancel,
 	.getopt = fi_no_getopt,
 	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
@@ -566,7 +551,7 @@ static struct fi_ops_cm usdf_pep_cm_ops = {
 	.connect = fi_no_connect,
 	.listen = usdf_pep_listen,
 	.accept = fi_no_accept,
-	.reject = usdf_pep_reject,
+	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
 };
 

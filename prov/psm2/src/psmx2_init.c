@@ -37,7 +37,6 @@ static int psmx2_init_count = 0;
 
 struct psmx2_env psmx2_env = {
 	.name_server	= 1,
-	.am_msg		= 0,
 	.tagged_rma	= 1,
 	.uuid		= PSMX2_DEFAULT_UUID,
 	.delay		= 1,
@@ -52,7 +51,6 @@ static void psmx2_init_env(void)
 		psmx2_env.name_server = 0;
 
 	fi_param_get_bool(&psmx2_prov, "name_server", &psmx2_env.name_server);
-	fi_param_get_bool(&psmx2_prov, "am_msg", &psmx2_env.am_msg);
 	fi_param_get_bool(&psmx2_prov, "tagged_rma", &psmx2_env.tagged_rma);
 	fi_param_get_str(&psmx2_prov, "uuid", &psmx2_env.uuid);
 	fi_param_get_int(&psmx2_prov, "delay", &psmx2_env.delay);
@@ -192,8 +190,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 			goto err_out;
 		}
 
-		if ((hints->caps & FI_TAGGED) ||
-		    ((hints->caps & FI_MSG) && !psmx2_env.am_msg)) {
+		if ((hints->caps & FI_TAGGED) || (hints->caps & FI_MSG)) {
 			if ((hints->mode & FI_CONTEXT) != FI_CONTEXT) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
 					"hints->mode=0x%llx, required=0x%llx\n",
@@ -502,10 +499,6 @@ PROVIDER_INI
 	fi_param_define(&psmx2_prov, "name_server", FI_PARAM_BOOL,
 			"Whether to turn on the name server or not "
 			"(default: yes)");
-
-	fi_param_define(&psmx2_prov, "am_msg", FI_PARAM_BOOL,
-			"Whether to use active message based messaging "
-			"or not (default: no)");
 
 	fi_param_define(&psmx2_prov, "tagged_rma", FI_PARAM_BOOL,
 			"Whether to use tagged messages for large size "

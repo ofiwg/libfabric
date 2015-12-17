@@ -449,8 +449,6 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 		ep_priv->ep.tagged = &psmx2_tagged_ops;
 	if (ep_cap & FI_MSG)
 		ep_priv->ep.msg = &psmx2_msg_ops;
-	if ((ep_cap & FI_MSG) && psmx2_env.am_msg)
-		ep_priv->ep.msg = &psmx2_msg2_ops;
 	if (ep_cap & FI_RMA)
 		ep_priv->ep.rma = &psmx2_rma_ops;
 	if (ep_cap & FI_ATOMICS)

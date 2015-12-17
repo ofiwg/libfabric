@@ -22,6 +22,11 @@ framework are referred to as fabric providers, or simply providers.
 This distribution of libfabric contains the following providers
 (although more may be available via run-time plug-ins):
 
+*GNI*
+: A provider for the Aries interconnect in Cray XC(TM) systems
+  utilizing the user-space *Generic Networking Interface*.  See
+  [`fi_gni`(7)](fi_gni.7.html) for more information.
+
 *PSM*
 : High-speed InfiniBand networking from Intel.  See
   [`fi_psm`(7)](fi_psm.7.html) for more information.
@@ -154,6 +159,7 @@ Logging is performed using the FI_ERR, FI_LOG, and FI_DEBUG macros.
 
 # SEE ALSO
 
+[`fi_gni`(7)](fi_gni.7.html),
 [`fi_psm`(7)](fi_psm.7.html),
 [`fi_sockets`(7)](fi_sockets.7.html),
 [`fi_usnic`(7)](fi_usnic.7.html),

@@ -144,7 +144,6 @@ static int fi_ibv_rdm_tagged_ep_bind(struct fid *fid, struct fid *bfid,
 
 		/* TODO: this is wrong, AV to EP is 1:n */
 		ep->av->ep = ep;
-		fi_ibv_rdm_set_av_ops(av);
 		break;
 	default:
 		return -EINVAL;

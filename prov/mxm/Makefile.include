@@ -1,0 +1,37 @@
+if HAVE_MXM
+_mxm_files = prov/mxm/src/mlxm.h \
+	prov/mxm/src/uthash.h \
+	prov/mxm/src/mpool.h \
+	prov/mxm/src/mlxm_mq_storage.h \
+	prov/mxm/src/mlxm_helpers.h \
+	prov/mxm/src/mlxm_init.c \
+	prov/mxm/src/mlxm_domain.c \
+	prov/mxm/src/mlxm_cq.c \
+	prov/mxm/src/mlxm_av.c \
+	prov/mxm/src/mlxm_ep.c \
+	prov/mxm/src/mlxm_cm.c \
+	prov/mxm/src/mlxm_tagged.c \
+	prov/mxm/src/mlxm_mr.c
+
+
+if HAVE_MXM_DL
+pkglib_LTLIBRARIES += libmlxm-fi.la
+libmlxm_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(mxm_CPPFLAGS)
+libmlxm_fi_la_SOURCES = $(_mxm_files) $(common_srcs)
+libmlxm_fi_la_LDFLAGS = \
+	$(mxm_LDFLAGS) \
+	-module -avoid-version -shared -export-dynamic
+libmlxm_fi_la_LIBADD = $(linkback) $(mxm_LIBS)
+libmlxm_fi_la_DEPENDENCIES = $(linkback)
+else
+src_libfabric_la_SOURCES += $(_mxm_files)
+src_libfabric_la_CPPFLAGS += $(mxm_CPPFLAGS)
+src_libfabric_la_LDFLAGS += $(mxm_LDFLAGS)
+src_libfabric_la_LIBADD += $(mxm_LIBS)
+endif
+
+prov_install_man_pages += man/man7/fi_mxm.7
+
+endif #HAVE_MXM
+
+prov_dist_man_pages += man/man7/fi_mxm.7

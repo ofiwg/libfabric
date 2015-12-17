@@ -54,7 +54,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	AC_MSG_NOTICE([*** Configuring $1 provider])
 	AC_ARG_ENABLE([$1],
 	      [AS_HELP_STRING([--enable-$1@<:@=yes|no|auto|dl|PATH@:>@],
-			      [Enable $1 provider @<:@default=auto@:>@ 
+			      [Enable $1 provider @<:@default=auto@:>@
 				(yes: enable $1 provider; no: disable $1 provider;
 				auto: enable $1 provider if possible;
 				dl: enable $1 provider and build as a loadable library;
@@ -63,10 +63,12 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	      [],
 	      [enable_$1=auto])
 
-	# Save CPPFLAGS and LDFLAGS before they are modified by FI_CHECK_PREFIX_DIR
+	# Save CPPFLAGS and LDFLAGS before they are modified by FI_CHECK_PREFIX_DIR.
 	# Provider's local macros could use the value if needed.
+	# Also save LIBS, as a matter of principle.
 	$1_orig_CPPFLAGS=$CPPFLAGS
 	$1_orig_LDFLAGS=$LDFLAGS
+	$1_orig_LIBS=$LIBS
 
 	# Check the --enable-<$1> value
 	$1_dl=0
@@ -74,7 +76,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	[yes|no], [],
 	[dl],     [enable_$1=yes $1_dl=1],
 	[auto],   [],
-	[FI_CHECK_PREFIX_DIR([$enable_$1])
+	[FI_CHECK_PREFIX_DIR([$enable_$1], [$1])
 	 enable_$1=yes]
 	)
 
@@ -87,6 +89,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	AS_IF([test $$1_happy -eq 1],
 		[PROVIDERS_TO_BUILD="$PROVIDERS_TO_BUILD $1"
 		 PROVIDERS_COUNT=$((PROVIDERS_COUNT+1))
+		 _FI_PROVIDER_PC_ADD($1)
 		 AS_IF([test $$1_dl -eq 1],
 			[PROVIDERS_DL="prov/$1/lib$1.la $PROVIDERS_DL"
 			 AS_IF([test x"$enable_static" = x"yes" &&
@@ -111,7 +114,7 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 	AM_CONDITIONAL([HAVE_]m4_translit([$1], [a-z], [A-Z])[_DL],
 		[test $$1_dl -eq 1])
 
-	# If this provier was specifically requested but we can't
+	# If this provider was specifically requested but we can't
 	# build it, error.
 	AS_IF([test "$enable_$1 $$1_happy" = "yes 0"],
 	      [AC_MSG_WARN([$1 provider was requested, but cannot be compiled])
@@ -126,6 +129,14 @@ AC_DEFUN([FI_PROVIDER_SETUP],[
 			[AC_MSG_RESULT(no)
 			  AC_MSG_ERROR([$1 provider was requested as direct, but is missing fi_direct.h])]
 			)])
+
+	# Restore CPPFLAGS/LDFLAGS/LIBS
+	CPPFLAGS=$$1_orig_CPPFLAGS
+	unset $1_orig_CPPFLAGS
+	LDFLAGS=$$1_orig_LDFLAGS
+	unset $1_orig_LDFLAGS
+	LIBS=$$1_orig_LIBS
+	unset $1_orig_LIBS
 ])
 
 
@@ -150,16 +161,16 @@ AC_DEFUN([FI_CHECK_PREFIX_DIR],[
 
 	# Check that base/include exists
 	 AS_IF([test -d "$1/include"],
-	       [CPPFLAGS="-I$1/include"],
+	       [$2_PREFIX="$1"],
 	       [AC_MSG_WARN([could not find "include" subdirectory in supplied "$1" directory"])
 	        AC_MSG_ERROR([Cannot continue])
 	       ])
 
 	# Check that base/lib or base/lib64 exists
 	 AS_IF([test -d "$1/lib"],
-	       [LDFLAGS="-L$1/lib"],
+	       [$2_LIBDIR="$1/lib"],
 	       [AS_IF([test -d "$1/lib64"],
-		      [LDFLAGS="-L$1/lib64"],
+		      [$2_LIBDIR="$1/lib64"],
 		      [AC_MSG_WARN([could not find "lib" or "lib64" subdirectories in supplied "$1" directory"])
 		       AC_MSG_ERROR([Cannot continue])
 		      ])
@@ -191,4 +202,46 @@ AC_DEFUN([_FI_PROVIDER_INVOKE],[
 		[m4_fatal([$1 provider did not define FI_]m4_translit([$1], [a-z], [A-Z])[_$2 macro in prov/$1/configure.m4])],
 		[])]
 	    )
+])
+
+dnl
+dnl Internal; should not be called from provder .m4 scripts.
+dnl Helper macro that appends each providers build flags for pkg-config
+dnl
+dnl Arguments:
+dnl
+dnl $1: name of the provider
+dnl
+AC_DEFUN([_FI_PROVIDER_PC_ADD],[
+	 FI_PC_CFLAGS="$FI_PC_CFLAGS $$1_CFLAGS $$1_CPPFLAGS"
+	 FI_PC_PRIVATE_LIBS="$FI_PC_PRIVATE_LIBS $$1_LDFLAGS $$1_LIBS"
+])
+
+dnl
+dnl Substitute pkg-config variables after all providers have been initialized
+dnl
+AC_DEFUN([FI_PROVIDER_SETUP_PC],[
+	FI_PC_PRIVATE_LIBS="$FI_PC_PRIVATE_LIBS $LIBS"
+
+	dnl Try and avoid duplication of private library flags
+	dnl Inefficient but easier than tracking within each provider macro
+	seen=""
+	for arg in $FI_PC_PRIVATE_LIBS
+	do
+	  found=no
+	  for s in $seen
+	  do
+	    AS_IF([test "$s" = "$arg"], [found=yes])
+	  done
+	  AS_IF([test "$found" = "no"], [seen="$seen $arg"])
+	done
+	FI_PC_PRIVATE_LIBS=$seen
+
+	AS_IF([test "x$enable_shared" != xyes],
+	 [FI_PC_PUBLIC_LIBS="$FI_PC_PUBLIC_LIBS $FI_PC_PRIVATE_LIBS"])
+	AC_SUBST(FI_PC_CFLAGS)
+	AC_SUBST(FI_PC_PUBLIC_LIBS)
+	AC_SUBST(FI_PC_PRIVATE_LIBS)
+
+	AC_CONFIG_FILES([libfabric.pc])
 ])

@@ -93,9 +93,13 @@ static const struct fi_rx_attr msg_dflt_rx_attr = {
 	.iov_limit = USDF_MSG_IOV_LIMIT
 };
 
+/* The protocol for MSG is still under development. Version 0 does not provide
+ * any interoperability.
+ */
 static const struct fi_ep_attr msg_dflt_ep_attr = {
 	.type = FI_EP_MSG,
 	.protocol = FI_PROTO_RUDP,
+	.protocol_version = 0,
 	.msg_prefix_size = 0,
 	.max_msg_size = USDF_MSG_MAX_MSG,
 	.max_order_raw_size = 0,
@@ -682,9 +686,7 @@ usdf_ep_msg_bind_cq(struct usdf_ep *ep, struct usdf_cq *cq, uint64_t flags)
 	return 0;
 
 fail:
-	if (hcq != NULL) {
-		free(hcq);
-	}
+	free(hcq);
 	return ret;
 }
 
@@ -851,7 +853,7 @@ static struct fi_ops_cm usdf_cm_msg_ops = {
 	.listen = fi_no_listen,
 	.accept = usdf_cm_msg_accept,
 	.reject = fi_no_reject,
-	.shutdown = usdf_cm_msg_shutdown,
+	.shutdown = fi_no_shutdown,
 };
 
 static struct fi_ops_msg usdf_msg_ops = {
@@ -863,7 +865,7 @@ static struct fi_ops_msg usdf_msg_ops = {
 	.sendv = usdf_msg_sendv,
 	.sendmsg = usdf_msg_sendmsg,
 	.inject = usdf_msg_inject,
-	.senddata = usdf_msg_senddata,
+	.senddata = fi_no_msg_senddata,
 	.injectdata = fi_no_msg_injectdata,
 };
 

@@ -94,9 +94,13 @@ static const struct fi_rx_attr rdm_dflt_rx_attr = {
 	.iov_limit = USDF_RDM_DFLT_SGE
 };
 
+/* The protocol for RDM is still under development. Version 0 does not provide
+ * any interoperability.
+ */
 static const struct fi_ep_attr rdm_dflt_ep_attr = {
 	.type = FI_EP_RDM,
-	.protocol = FI_PROTO_UDP,
+	.protocol = FI_PROTO_RUDP,
+	.protocol_version = 0,
 	.max_msg_size = USDF_RDM_MAX_MSG,
 	.msg_prefix_size = 0,
 	.max_order_raw_size = 0,
@@ -901,13 +905,13 @@ static struct fi_ops_cm usdf_cm_rdm_ops = {
 static struct fi_ops_msg usdf_rdm_ops = {
 	.size = sizeof(struct fi_ops_msg),
 	.recv = usdf_rdm_recv,
-	.recvv = usdf_rdm_recvv,
-	.recvmsg = usdf_rdm_recvmsg,
+	.recvv = fi_no_msg_recvv,
+	.recvmsg = fi_no_msg_recvmsg,
 	.send = usdf_rdm_send,
 	.sendv = usdf_rdm_sendv,
 	.sendmsg = usdf_rdm_sendmsg,
 	.inject = usdf_rdm_inject,
-	.senddata = usdf_rdm_senddata,
+	.senddata = fi_no_msg_senddata,
 	.injectdata = fi_no_msg_injectdata,
 };
 

@@ -1,4 +1,4 @@
-.TH fi_provider 7 "2015\-10\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_provider 7 "2015\-12\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 Fabric Interface Providers
@@ -15,6 +15,10 @@ referred to as fabric providers, or simply providers.
 .PP
 This distribution of libfabric contains the following providers
 (although more may be available via run-time plug-ins):
+.PP
+\f[I]GNI\f[] : A provider for the Aries interconnect in Cray XC(TM)
+systems utilizing the user-space \f[I]Generic Networking Interface\f[].
+See \f[C]fi_gni\f[](7) for more information.
 .PP
 \f[I]PSM\f[] : High-speed InfiniBand networking from Intel.
 See \f[C]fi_psm\f[](7) for more information.
@@ -167,7 +171,7 @@ subsystem parameters match the user supplied values.
 \f[I]FI_DEBUG\f[] : Logged if configured with the --enable-debug flag.
 .SH SEE ALSO
 .PP
-\f[C]fi_psm\f[](7), \f[C]fi_sockets\f[](7), \f[C]fi_usnic\f[](7),
-\f[C]fi_verbs\f[](7),
+\f[C]fi_gni\f[](7), \f[C]fi_psm\f[](7), \f[C]fi_sockets\f[](7),
+\f[C]fi_usnic\f[](7), \f[C]fi_verbs\f[](7),
 .SH AUTHORS
 OpenFabrics.

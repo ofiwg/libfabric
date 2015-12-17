@@ -10,7 +10,11 @@ v1.2.0, TBD
 
 ## General notes
 
+- Added GNI provider
 - Added PSM2 provider
+
+## GNI provider notes
+- Initial release
 
 ## PSM provider notes
 - General bug fixes
@@ -34,11 +38,34 @@ v1.2.0, TBD
 - Fix an out of bound access when large multi-recv limit is specified by user
 - Reset tag field in CQ entry for send completion
 - Do not set prov_name in fabric_attr
+- Validate flags in CQ/Cntr bind operations
+- Scalability enhancements
+- Increase mr_key size to 64 bit
+- Use red-black tree for mr_key lookup
 
 ## usNIC provider notes
+- The usNIC provider does not yet support asynchronous memory registration.
+  Return -FI_EOPNOTSUPP if an event queue is bound to a domain with FI_REG_MR.
+- Set fi_usnic_info::ui_version correctly in calls to
+  fi_usnic_ops_fabric::getinfo().
+- Improve fi_cq_sread performance.
+- Return -FI_EINVAL from av_open when given invalid paramters.
+- Fix bug in fi_av_remove that could lead to a seg fault.
+- Implement fi_av_insertsvc.
+- Report FI_PROTO_RUDP as protocol for EP_RDM.
 
 ## Verbs provider notes
 
+- Add support for RDM EPs. Currently only FI_TAGGED capability is supported.
+  RDM and MSG EPs would be reported in seperate domains since they don't share
+  CQs.
+- Refactor the code into several files to enable adding RDM support.
+- Consolidate send code paths to improve maintainability.
+- Fix a bug in fi_getinfo where wild card address was not used when service
+  argument is given.
+- Fix fi_getinfo to always return -FI_ENODATA in case of failure.
+- Add support for fi_eq_write.
+- Other misc bug fixes.
 
 v1.1.1, TBD
 =======================

@@ -132,7 +132,7 @@ struct fi_ibv_av {
 
 int fi_ibv_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		   struct fid_av **av, void *context);
-struct fi_ops_av *fi_ibv_rdm_set_av_ops();
+struct fi_ops_av *fi_ibv_rdm_set_av_ops(void);
 
 struct fi_ibv_pep {
 	struct fid_pep		pep_fid;

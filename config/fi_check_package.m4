@@ -159,24 +159,24 @@ dnl which get used to compile/link *everything*).
 dnl
 dnl Here's a breakdown of the parameters:
 dnl
-dnl * prefix: the macro sets $prefix_CPPFLAGS, $prefix_LDFLAGS, and
+dnl 1 prefix: the macro sets $prefix_CPPFLAGS, $prefix_LDFLAGS, and
 dnl   $prefix_LIBS (and AC_SUBSTs all of them).  For example, if a
 dnl   provider uses this macro to check for a header/library that it
 dnl   needs, it might well set prefix to be its provider name.
-dnl * header_filename: the foo.h file to check for
-dnl * library_name / function_name: check for function function_name in
+dnl 2 header_filename: the foo.h file to check for
+dnl 3 and 4 library_name / function_name: check for function function_name in
 dnl   -llibrary_name.  Specifically, for library_name, use the "foo" form,
 dnl   as opposed to "libfoo".
-dnl * extra_libraries: if the library_name you are checking for requires
+dnl 5 extra_libraries: if the library_name you are checking for requires
 dnl   additonal -l arguments to link successfully, list them here.
-dnl * dir_prefix: if the header/library is located in a non-standard
+dnl 6 dir_prefix: if the header/library is located in a non-standard
 dnl   location (e.g., /opt/foo as opposed to /usr), list it here
-dnl * libdir_prefix: if the library is not under $dir_prefix/lib or
+dnl 7 libdir_prefix: if the library is not under $dir_prefix/lib or
 dnl   $dir_prefix/lib64, list it here.
-dnl * action_if_found: if both the header and library are found and
+dnl 8 action_if_found: if both the header and library are found and
 dnl   usable, execute action_if_found
-dnl * action_if_not_found: otherwise, execute action_if_not_found
-dnl * extra_includes: if including header_filename requires additional
+dnl 9 action_if_not_found: otherwise, execute action_if_not_found
+dnl 10 extra_includes: if including header_filename requires additional
 dnl   headers to be included first, list them here
 dnl
 dnl The output _CPPFLAGS, _LDFLAGS, and _LIBS can be used to limit the

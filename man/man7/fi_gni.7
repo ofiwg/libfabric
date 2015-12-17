@@ -1,4 +1,4 @@
-.TH fi_gni 7 "2015\-11\-13" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_gni 7 "2015\-12\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -12,7 +12,7 @@ and also includes direct hardware support for common atomic operations
 and optimized collectives.
 .SH REQUIREMENTS
 .PP
-The GNI provider runs on Cray XC systems running CLE 5.2 UP02 or higher
+The GNI provider runs on Cray XC systems running CLE 5.2 UP03 or higher
 using gcc version 4.9 or higher.
 .SH SUPPORTED FEATURES
 .PP
@@ -25,9 +25,12 @@ endpoint type.
 \f[I]Address vectors\f[] : The provider implements both the
 \f[I]FI_AV_MAP\f[] and \f[I]FI_AV_TABLE\f[] address vector types.
 .PP
-\f[I]Data transfer operations\f[] : The following data transfer
-interfaces are supported for a all endpoint types: \f[I]fi_atomic\f[],
-\f[I]fi_msg\f[], \f[I]fi_rma\f[], \f[I]fi_tagged\f[].
+\f[I]Data transfer operations\f[]
+.PP
+: The following data transfer interfaces are supported for a all
+endpoint types: \f[I]FI_ATOMIC\f[], \f[I]FI_MSG\f[], \f[I]FI_RMA\f[],
+\f[I]FI_TAGGED\f[].
+See DATA TRANSFER OPERATIONS below for more details.
 .PP
 \f[I]Completion events\f[] : The GNI provider supports
 \f[I]FI_CQ_FORMAT_CONTEXT\f[], \f[I]FI_CQ_FORMAT_MSG\f[],
@@ -37,19 +40,53 @@ objects of type \f[I]FI_WAIT_NONE\f[], \f[I]FI_WAIT_FD\f[], and
 .PP
 \f[I]Modes\f[] : The GNI provider does not require any operation modes.
 .PP
-\f[I]Progress\f[] : The GNI provider supports both
+\f[I]Progress\f[] : For control progress, the GNI provider supports both
 \f[I]FI_PROGRESS_AUTO\f[] and \f[I]FI_PROGRESS_MANUAL\f[], with a
 default set to auto.
+For data progress, \f[I]FI_PROGRESS_MANUAL\f[] is supported.
 When progress is set to auto, a background thread runs to ensure that
 progress is made for asynchronous requests.
-.SH CAVEATS
+.SH DATA TRANSFER OPERATIONS
+.SS FI_ATOMIC
 .PP
-\f[I]This is where we will put caveats or things that differ from the
-convention.\f[]
+Currently, the GNI provider only supports atomic operations supported
+directly by the Aries NIC.
+These include operations on 32- and 64-bit, signed and unsigned integer
+and floating point values.
+Specifically,
+.SS Basic (fi_atomic, etc.)
+.IP \[bu] 2
+\f[I]FI_MIN\f[], \f[I]FI_MAX\f[] (no unsigned)
+.IP \[bu] 2
+\f[I]FI_SUM\f[] (no 64-bit floating point)
+.IP \[bu] 2
+\f[I]FI_BOR\f[], \f[I]FI_BAND\f[], \f[I]FI_BXOR\f[] (no floating point)
+.IP \[bu] 2
+\f[I]FI_ATOMIC_WRITE\f[]
+.SS Fetching (fi_fetch_atomic, etc.)
+.IP \[bu] 2
+All of the basic operations as above
+.IP \[bu] 2
+FI_ATOMIC_READ
+.SS Comparison (fi_compare_atomic, etc.)
+.IP \[bu] 2
+FI_CSWAP
+.IP \[bu] 2
+FI_MSWAP
+.SS FI_MSG
+.PP
+All \f[I]FI_MSG\f[] operations are supported.
+.SS FI_RMA
+.PP
+All \f[I]FI_RMA\f[] operations are supported.
+.SS FI_TAGGED
+.PP
+All \f[I]FI_TAGGED\f[] operations are supported except
+\f[C]fi_tinjectdata\f[].
 .SH GNI EXTENSIONS
 .PP
 The GNI provider exposes low-level tuning parameters via a domain
-\f[I]fi_open_ops\f[] interface named \f[I]FI_GNI_DOMAIN_PARAMS\f[].
+\f[C]fi_open_ops\f[] interface named \f[I]FI_GNI_DOMAIN_OPS_1\f[].
 The flags parameter is currently ignored.
 The fi_open_ops function takes a \f[C]struct\ fi_gni_ops_domain\f[]
 parameter and populates it with the following:
@@ -68,34 +105,58 @@ The \f[C]set_val\f[] function sets the value of a given parameter; the
 The currently supported values are:
 .PP
 \f[I]GNI_MSG_RENDEZVOUS_THRESHOLD\f[] : Threshold message size at which
-a rendezvous protocol is used for \f[C]fi_msg\f[] data transfers.
+a rendezvous protocol is used for \f[I]FI_MSG\f[] data transfers.
+The value is of type uint32_t.
 .PP
 \f[I]GNI_RMA_RDMA_THRESHOLD\f[] : Threshold message size at which RDMA
-is used for \f[C]fi_rma\f[] data transfers.
+is used for \f[I]FI_RMA\f[] data transfers.
+The value is of type uint32_t.
 .PP
 \f[I]GNI_CONN_TABLE_INITIAL_SIZE\f[] : Initial size of the internal
 table data structure used to manage connections.
+The value is of type uint32_t.
 .PP
 \f[I]GNI_CONN_TABLE_MAX_SIZE\f[] : Maximum size of the internal table
 data structure used to manage connections.
+The value is of type uint32_t.
 .PP
 \f[I]GNI_CONN_TABLE_STEP_SIZE\f[] : Step size for increasing the size of
 the internal table data structure used to manage internal GNI
 connections.
+The value is of type uint32_t.
 .PP
 \f[I]GNI_VC_ID_TABLE_CAPACITY\f[] : Size of the virtual channel (VC)
 table used for managing remote connections.
+The value is of type uint32_t.
 .PP
 \f[I]GNI_MBOX_PAGE_SIZE\f[] : Page size for GNI SMSG mailbox
 allocations.
+The value is of type uint32_t.
 .PP
 \f[I]GNI_MBOX_NUM_PER_SLAB\f[] : Number of GNI SMSG mailboxes per
 allocation slab.
+The value is of type uint32_t.
 .PP
 \f[I]GNI_MBOX_MAX_CREDIT\f[] : Maximum number of credits per GNI SMSG
 mailbox.
+The value is of type uint32_t.
 .PP
 \f[I]GNI_MBOX_MSG_MAX_SIZE\f[] : Maximum size of GNI SMSG messages.
+The value is of type uint32_t.
+.PP
+\f[I]GNI_RX_CQ_SIZE\f[] : Recommended GNI receive CQ size.
+The value is of type uint32_t.
+.PP
+\f[I]GNI_TX_CQ_SIZE\f[] : Recommended GNI transmit CQ size.
+The value is of type uint32_t.
+.PP
+\f[I]GNI_MAX_RETRANSMITS\f[] : Maximum number of message retransmits
+before failure.
+The value is of type uint32_t.
+.PP
+\f[I]GNI_MR_CACHE_LAZY_DEREG\f[] : Enable or disable lazy deregistration
+of memory.
+The value is of type int32_t.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_open_ops\f[](3), \f[C]fi_provider\f[](7),

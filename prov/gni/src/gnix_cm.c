@@ -108,6 +108,7 @@ err:
 
 struct fi_ops_cm gnix_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
+	.setname = fi_no_setname,
 	.getname = gnix_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
