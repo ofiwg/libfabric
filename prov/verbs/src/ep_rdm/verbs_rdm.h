@@ -75,6 +75,42 @@
 #define FI_IBV_RDM_UNPACK_SERVICE_WR(value)     \
         ((void*)(uintptr_t)(value & (~(FI_IBV_RDM_SERVICE_WR_MASK))))
 
+// Send/Recv counters control
+
+#define FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS(_connection, _ep, _send_flags) \
+do {                                                                	\
+	(_connection)->sends_outgoing++;                                \
+	(_ep)->pend_send++;                                             \
+	(_ep)->total_outgoing_send++;                                   \
+	(_send_flags) |= IBV_SEND_SIGNALED;                             \
+									\
+	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %d\n",    \
+		_connection,                                            \
+		(_connection)->sends_outgoing);                         \
+} while (0)
+
+#define FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(_connection, _ep)		\
+do {                                                                	\
+	(_connection)->sends_outgoing--;                                \
+	(_ep)->total_outgoing_send--;                                   \
+	(_ep)->pend_send--;                                             \
+									\
+	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER--, conn %p, sends_outgoing %d\n",    \
+			_connection, (_connection)->sends_outgoing);    \
+	assert((_ep)->pend_send >= 0);                                  \
+	assert((_connection)->sends_outgoing >= 0);                     \
+} while (0)
+
+#define FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep)  \
+	((_connection)->sends_outgoing > 0.5*(_ep)->sq_wr_depth)
+
+#define PEND_SEND_IS_LIMITED(_ep)                                       \
+	((_ep)->pend_send > 0.5 * (_ep)->scq_depth)
+
+#define SEND_RESOURCES_IS_BUSY(_connection, _ep)                        \
+	(FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep) ||  \
+	 PEND_SEND_IS_LIMITED(_ep))
+
 struct fi_ibv_rdm_tagged_header {
 	uint64_t imm_data;          // TODO: not implemented
 	uint64_t tag;

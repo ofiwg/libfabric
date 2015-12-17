@@ -30,10 +30,13 @@
  * SOFTWARE.
  */
 
+#include <rdma/fi_errno.h>
+
 #include "config.h"
 
 #include "fi_verbs.h"
-
+#include "ep_rdm/verbs_rdm.h"
+#include "ep_rdm/verbs_utils.h"
 
 #define VERBS_COMP_READ_FLAGS(ep, flags) \
 	((!VERBS_SELECTIVE_COMP(ep) || (flags & \
@@ -42,6 +45,7 @@
 #define VERBS_COMP_READ(ep) \
 	VERBS_COMP_READ_FLAGS(ep, ep->info->tx_attr->op_flags)
 
+extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_request_pool;
 
 static ssize_t
 fi_ibv_msg_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -237,4 +241,218 @@ static struct fi_ops_rma fi_ibv_msg_ep_rma_ops = {
 struct fi_ops_rma *fi_ibv_msg_ep_ops_rma(struct fi_ibv_msg_ep *ep)
 {
 	return &fi_ibv_msg_ep_rma_ops;
+}
+
+static ssize_t
+fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
+		    void *desc, fi_addr_t src_addr,
+		    uint64_t addr, uint64_t key, void *context)
+{
+	ssize_t ret = FI_SUCCESS;
+	struct fi_ibv_rdm_ep *ep = container_of(ep_fid, struct fi_ibv_rdm_ep,
+						ep_fid);
+
+	if (desc == NULL && len >= ep->rndv_threshold) {
+		goto out_errinput;
+	}
+
+	struct fi_ibv_rdm_tagged_conn *conn =
+		(struct fi_ibv_rdm_tagged_conn *) src_addr;
+
+	if (desc == NULL) {
+		int again = 1;
+
+		if (!conn->postponed_entry) {
+			void *raw_sbuf =
+				fi_ibv_rdm_tagged_prepare_send_resources(conn,
+									 ep);
+
+			if (raw_sbuf) {
+				memcpy (raw_sbuf, buf, len);
+				buf = raw_sbuf;
+				desc = (void*)(uintptr_t)conn->s_mr->lkey;
+				again = 0;
+			}
+		}
+
+		if (again) {
+			goto out_again;
+		}
+	}
+
+	struct fi_ibv_rdm_tagged_request *request =
+	    (struct fi_ibv_rdm_tagged_request *)
+	    fi_verbs_mem_pool_get(&fi_ibv_rdm_tagged_request_pool);
+	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
+
+	/* Initial state */
+	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
+	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
+
+	struct fi_ibv_rdm_rma_start_data data = {
+		.ep_rdm = container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid),
+		.conn = (struct fi_ibv_rdm_tagged_conn *) src_addr,
+		.context = context,
+		.data_len = (uint32_t)len,
+		.rbuf = addr,
+		.lbuf = (uintptr_t)buf,
+		.rkey = (uint32_t)key,
+		.lkey = (uint32_t)(uintptr_t)desc,
+		.op_code = IBV_WR_RDMA_READ
+	};
+
+	ret = fi_ibv_rdm_tagged_req_hndl(request,
+		FI_IBV_EVENT_RMA_START, &data);
+	ret = (ret == FI_EP_RDM_HNDL_SUCCESS) ? FI_SUCCESS : -FI_EOTHER;
+
+out:
+	return ret;
+
+out_again:
+	fi_ibv_rdm_tagged_poll(ep);
+	ret = -FI_EAGAIN;
+	goto out;
+
+out_errinput:
+	ret = -FI_EINVAL;
+	goto out;
+}
+
+static ssize_t
+fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
+		     void *desc, fi_addr_t dest_addr,
+		     uint64_t addr, uint64_t key, void *context)
+{
+	ssize_t ret = FI_SUCCESS;
+	struct fi_ibv_rdm_ep *ep = container_of(ep_fid, struct fi_ibv_rdm_ep,
+						ep_fid);
+
+	if (desc == NULL && len >= ep->rndv_threshold) {
+		goto out_errinput;
+	}
+
+	struct fi_ibv_rdm_tagged_conn *conn =
+		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
+
+	if (desc == NULL) {
+		int again = 1;
+
+		if (!conn->postponed_entry) {
+			void *raw_sbuf =
+				fi_ibv_rdm_tagged_prepare_send_resources(conn,
+									 ep);
+
+			if (raw_sbuf) {
+				memcpy (raw_sbuf, buf, len);
+				buf = raw_sbuf;
+				desc = (void*)(uintptr_t)conn->s_mr->lkey;
+				again = 0;
+			}
+		}
+
+		if (again) {
+			goto out_again;
+		}
+	}
+
+	struct fi_ibv_rdm_tagged_request *request =
+	    (struct fi_ibv_rdm_tagged_request *)
+	    fi_verbs_mem_pool_get(&fi_ibv_rdm_tagged_request_pool);
+	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
+
+	/* Initial state */
+	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
+	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
+
+	struct fi_ibv_rdm_rma_start_data data = {
+		.conn = conn,
+		.ep_rdm = ep,
+		.context = context,
+		.data_len = (uint32_t)len,
+		.rbuf = addr,
+		.lbuf = (uintptr_t)buf,
+		.rkey = (uint32_t)key,
+		.lkey = (uint32_t)(uintptr_t)desc,
+		.op_code = IBV_WR_RDMA_WRITE
+	};
+
+	ret = fi_ibv_rdm_tagged_req_hndl(request,
+		FI_IBV_EVENT_RMA_START, &data);
+	ret = (ret == FI_EP_RDM_HNDL_SUCCESS) ? FI_SUCCESS : -FI_EOTHER;
+out:
+	return ret;
+
+out_again:
+	fi_ibv_rdm_tagged_poll(ep);
+	ret = -FI_EAGAIN;
+	goto out;
+
+out_errinput:
+	ret = -FI_EINVAL;
+	goto out;
+}
+
+static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
+					      const void *buf, size_t len,
+					      fi_addr_t dest_addr,
+					      uint64_t addr, uint64_t key)
+{
+	struct fi_ibv_rdm_ep *ep_rdm = container_of(ep, struct fi_ibv_rdm_ep,
+						    ep_fid);
+
+	if (len >= ep_rdm->rndv_threshold) {
+		return -FI_EMSGSIZE;
+	}
+
+	struct fi_ibv_rdm_tagged_conn *conn =
+		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
+
+	if (!conn->postponed_entry) {
+		void *raw_sbuf =
+			fi_ibv_rdm_tagged_prepare_send_resources(conn, ep_rdm);
+
+		if (raw_sbuf) {
+			memcpy(raw_sbuf, buf, len);
+
+			struct ibv_sge sge = { 0 };
+			struct ibv_send_wr wr = { 0 };
+			struct ibv_send_wr *bad_wr = NULL;
+			wr.wr_id = FI_IBV_RDM_PACK_SERVICE_WR(conn);
+			wr.sg_list = &sge;
+			wr.num_sge = 1;
+			wr.wr.rdma.remote_addr = addr;
+			wr.wr.rdma.rkey = (uint32_t)key;
+			wr.send_flags = (len < ep_rdm->max_inline_rc)
+					? IBV_SEND_INLINE : 0;
+			wr.opcode = IBV_WR_RDMA_WRITE;
+			sge.addr = (uint64_t)raw_sbuf;
+			sge.length = len;
+			sge.lkey = conn->s_mr->lkey;
+
+			FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS(conn, ep_rdm,
+							    wr.send_flags);
+			int ret = ibv_post_send(conn->qp, &wr, &bad_wr);
+			return (ret == 0) ? -FI_SUCCESS : -errno;
+		}
+	}
+
+	return -FI_EAGAIN;
+}
+
+static struct fi_ops_rma fi_ibv_rdm_ep_rma_ops = {
+	.size		= sizeof(struct fi_ops_rma),
+	.read		= fi_ibv_rdm_ep_rma_read,
+	.readv		= fi_no_rma_readv,
+	.readmsg	= fi_no_rma_readmsg,
+	.write		= fi_ibv_rdm_ep_rma_write,
+	.writev		= fi_no_rma_writev,
+	.writemsg	= fi_no_rma_writemsg,
+	.inject		= fi_ibv_rdm_ep_rma_inject_write,
+	.writedata	= fi_no_rma_writedata,
+	.injectdata	= fi_no_rma_injectdata,
+};
+
+struct fi_ops_rma *fi_ibv_rdm_ep_ops_rma(struct fi_ibv_rdm_ep *ep)
+{
+	return &fi_ibv_rdm_ep_rma_ops;
 }
