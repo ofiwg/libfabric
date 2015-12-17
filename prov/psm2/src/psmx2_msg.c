@@ -97,6 +97,9 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 		tagsel32 = ~PSMX2_SRC_BITS;
 	}
 
+	PSMX2_SET_TAG(psm2_tag, 0ULL, tag32);
+	PSMX2_SET_TAG(psm2_tagsel, 0ULL, tagsel32);
+
 	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION)) {
 		fi_context = &ep_priv->nocomp_recv_context;
 	}
@@ -112,6 +115,9 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 			if (!req)
 				return -FI_ENOMEM;
 
+			req->src_addr = psm2_epaddr;
+			req->tag = psm2_tag;
+			req->tagsel = psm2_tagsel;
 			req->flag = recv_flag;
 			req->buf = buf;
 			req->len = len;
@@ -127,9 +133,6 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 		}
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 	}
-
-	PSMX2_SET_TAG(psm2_tag, 0ULL, tag32);
-	PSMX2_SET_TAG(psm2_tagsel, 0ULL, tagsel32);
 
 	err = psm2_mq_irecv2(ep_priv->domain->psm2_mq, psm2_epaddr,
 			     &psm2_tag, &psm2_tagsel, recv_flag, buf, len,

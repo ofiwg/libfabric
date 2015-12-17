@@ -495,8 +495,9 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				req = PSMX2_CTXT_USER(fi_context);
 				req->offset += psm2_status.nbytes;
 				if (req->offset + req->min_buf_size <= req->len) {
-					err = psm2_mq_irecv(tmp_ep->domain->psm2_mq,
-							    req->tag, req->tagsel, req->flag,
+					err = psm2_mq_irecv2(tmp_ep->domain->psm2_mq,
+							    req->src_addr, &req->tag,
+							    &req->tagsel, req->flag,
 							    req->buf + req->offset, 
 							    req->len - req->offset,
 							    (void *)fi_context, &psm2_req);
