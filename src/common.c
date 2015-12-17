@@ -44,11 +44,13 @@
 #include <unistd.h>
 #include <poll.h>
 #include <pthread.h>
+#include <sys/epoll.h>
 #include <sys/time.h>
 
 #include <fi_signal.h>
 #include <rdma/fi_errno.h>
 #include <fi.h>
+
 
 
 int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)

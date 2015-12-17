@@ -143,6 +143,8 @@ void fi_create_filter(struct fi_filter *filter, const char *env_name);
 void fi_free_filter(struct fi_filter *filter);
 int fi_apply_filter(struct fi_filter *filter, const char *name);
 
+void fi_util_init(void);
+void fi_util_fini(void);
 void fi_log_init(void);
 void fi_log_fini(void);
 void fi_param_init(void);
