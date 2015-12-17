@@ -1,5 +1,9 @@
 if HAVE_MXM
 _mxm_files = prov/mxm/src/mlxm.h \
+	prov/mxm/src/uthash.h \
+	prov/mxm/src/mpool.h \
+	prov/mxm/src/mlxm_mq_storage.h \
+	prov/mxm/src/mlxm_helpers.h \
 	prov/mxm/src/mlxm_init.c \
 	prov/mxm/src/mlxm_domain.c \
 	prov/mxm/src/mlxm_cq.c \
