@@ -761,11 +761,8 @@ usdf_rdm_inject(struct fid_ep *fep, const void *buf, size_t len,
 		return -FI_EAGAIN;
 	}
 
-	wqe = TAILQ_FIRST(&tx->t.rdm.tx_free_wqe);
-	TAILQ_REMOVE(&tx->t.rdm.tx_free_wqe, wqe, rd_link);
-
+	wqe = usdf_rdm_get_tx_wqe(tx);
 	wqe->rd_context = NULL;
-
 	msg_id = atomic_inc(&tx->t.rdm.tx_next_msg_id);
 	wqe->rd_msg_id_be = htonl(msg_id);
 
