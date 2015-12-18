@@ -42,6 +42,7 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "libnl_utils.h"
 #include "usnic_user_utils.h"
@@ -98,15 +99,32 @@ static int usnic_is_nlreply_err(struct nlmsghdr *nlm_hdr)
 static int usnic_nl_send_query(struct usnic_nl_sk *unlsk, struct nl_msg *msg,
 				int protocol, int flag)
 {
+	int ret, retry;
 	struct nlmsghdr *nlhdr;
 
 	nlhdr = nlmsg_hdr(msg);
-	nlhdr->nlmsg_pid = nl_socket_get_local_port(unlsk->nlh);
-	nlhdr->nlmsg_seq = ++unlsk->seq;
-	nlmsg_set_proto(msg, protocol);
-	nlhdr->nlmsg_flags = flag;
+	while (1) {
+		nlhdr->nlmsg_pid = nl_socket_get_local_port(unlsk->nlh);
+		nlhdr->nlmsg_seq = ++unlsk->seq;
+		nlmsg_set_proto(msg, protocol);
+		nlhdr->nlmsg_flags = flag;
 
-	return nl_send(unlsk->nlh, msg);
+		/* Sometimes nl_send() can fail simply because the
+		 * kernel is temporarily out of resources, and we
+		 * should just try again.  libnl1 and libnl3 handle
+		 * this case a little differently, so use the
+		 * USD_NL_SEND() macro to hide the differences.  If
+		 * retry comes back as true, then sleep a little and
+		 * try again. */
+		USD_NL_SEND(unlsk->nlh, msg, ret, retry);
+		if (retry) {
+			usleep(5);
+			continue;
+		}
+		break;
+	}
+
+	return ret;
 }
 
 static int usnic_nl_set_rcvsk_timer(NL_HANDLE *nlh)
