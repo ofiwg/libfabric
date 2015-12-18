@@ -55,17 +55,12 @@
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-ssize_t sock_conn_send_src_addr(struct sock_ep *sock_ep, struct sock_conn *conn)
+ssize_t sock_conn_send_src_addr(struct sock_ep *sock_ep, struct sock_tx_ctx *tx_ctx,
+				struct sock_conn *conn)
 {
 	int ret;
 	uint64_t total_len;
 	struct sock_op tx_op;
-	struct sock_tx_ctx *tx_ctx;
-
-	if (sock_ep->ep.fid.fclass == FI_CLASS_SEP)
-		tx_ctx = sock_ep->tx_array[0];
-	else
-		tx_ctx = sock_ep->tx_ctx;
 
 	memset(&tx_op, 0, sizeof(struct sock_op));
 	tx_op.op = SOCK_OP_CONN_MSG;

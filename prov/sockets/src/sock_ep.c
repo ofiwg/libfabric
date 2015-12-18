@@ -1594,8 +1594,8 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep, fi_addr_t index,
 	return conn;
 }
 
-int sock_ep_get_conn(struct sock_ep *ep, fi_addr_t index,
-			struct sock_conn **pconn)
+int sock_ep_get_conn(struct sock_ep *ep, struct sock_tx_ctx *tx_ctx,
+		     fi_addr_t index, struct sock_conn **pconn)
 {
 	struct sock_conn *conn;
 	uint64_t av_index = (ep->ep_type == FI_EP_MSG) ? 0 : index;
@@ -1621,7 +1621,7 @@ int sock_ep_get_conn(struct sock_ep *ep, fi_addr_t index,
 		return -errno;
 
 	*pconn = conn;
-	return conn->address_published ? 0 : sock_conn_send_src_addr(ep, conn);
+	return conn->address_published ? 0 : sock_conn_send_src_addr(ep, tx_ctx, conn);
 }
 
 int sock_ep_is_send_cq_low(struct sock_comp *comp, uint64_t flags)

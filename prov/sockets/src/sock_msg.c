@@ -209,7 +209,7 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (sock_drop_packet(sock_ep))
 		return 0;
 
-	ret = sock_ep_get_conn(sock_ep, msg->addr, &conn);
+	ret = sock_ep_get_conn(sock_ep, tx_ctx, msg->addr, &conn);
 	if (ret)
 		return ret;
 
@@ -550,7 +550,7 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	if (sock_drop_packet(sock_ep))
 		return 0;
 
-	ret = sock_ep_get_conn(sock_ep, msg->addr, &conn);
+	ret = sock_ep_get_conn(sock_ep, tx_ctx, msg->addr, &conn);
 	if (ret)
 		return ret;
 
