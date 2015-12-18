@@ -93,7 +93,7 @@ ssize_t sock_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	if (!tx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
-	ret = sock_ep_get_conn(sock_ep, msg->addr, &conn);
+	ret = sock_ep_get_conn(sock_ep, tx_ctx, msg->addr, &conn);
 	if (ret)
 		return ret;
 
@@ -257,7 +257,7 @@ ssize_t sock_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	if (!tx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
-	ret = sock_ep_get_conn(sock_ep, msg->addr, &conn);
+	ret = sock_ep_get_conn(sock_ep, tx_ctx, msg->addr, &conn);
 	if (ret)
 		return ret;
 
