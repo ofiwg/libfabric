@@ -64,14 +64,15 @@ struct fi_ibv_msg_ep;
      /*ep->cm_listener_port */              sizeof(uint16_t))
 
 #define FI_IBV_RDM_CM_THREAD_TIMEOUT (100)
-#define FI_IBV_RDM_MEM_ALIGNMENT (4096)
+#define FI_IBV_RDM_MEM_ALIGNMENT (64)
+#define FI_IBV_RDM_BUF_ALIGNMENT (4096)
 
 #define FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM (8)
 
 #define FI_IBV_RDM_TAGGED_DFLT_BUFFER_SIZE                              \
 	((8 * 1024 + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE) +        \
 	 (8 * 1024 + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE) %        \
-	  FI_IBV_RDM_MEM_ALIGNMENT)
+	  FI_IBV_RDM_BUF_ALIGNMENT)
 
 #define FI_IBV_RDM_TAGGED_DFLT_RQ_SIZE  (1000)
 
@@ -108,20 +109,22 @@ static inline void fi_ibv_mem_pool_init(struct fi_ibv_mem_pool *pool,
 {
 	int size = init_size < max_size ? init_size : max_size;
 	int i;
+	int entry_asize = entry_size % FI_IBV_RDM_MEM_ALIGNMENT;
+	entry_asize += entry_size;
 
-	pool->head = memalign(FI_IBV_RDM_MEM_ALIGNMENT, entry_size * size);
-	memset(pool->head, 0, entry_size * size);
+	pool->head = memalign(FI_IBV_RDM_BUF_ALIGNMENT, entry_asize * size);
+	memset(pool->head, 0, entry_asize * size);
 	pool->storage = (void *)pool->head;
 	struct fi_ibv_mem_pool_entry *tmp = pool->head;
 	for (i = 1; i < size; i++) {
 		tmp->next = (struct fi_ibv_mem_pool_entry *)
-				((char *)tmp + entry_size);
+				((char *)tmp + entry_asize);
 		tmp = tmp->next;
 	}
 	tmp->next = NULL;
 	pool->current_size = size;
 	pool->max_size = max_size;
-	pool->entry_size = entry_size;
+	pool->entry_size = entry_asize;
 }
 
 static inline struct fi_ibv_mem_pool_entry *
@@ -202,8 +205,7 @@ do {                                                                        \
     const size_t max_str_len = 1024;                                        \
     char str[max_str_len];                                                  \
     snprintf(str, max_str_len,                                              \
-            "%s request: %p, eager_state: %s, rndv_state: %s, "             \
-            "tag: 0x%" PRIx64 ", len: %d context: %p, connection: %p\n",    \
+            "%s request: %p, eager_state: %s, rndv_state: %s, tag: 0x%" PRIx64 ", len: %"PRIx64" context: %p, connection: %p\n",	\
             prefix,                                                         \
             request,                                                        \
             fi_ibv_rdm_tagged_req_eager_state_to_str(request->state.eager), \
