@@ -363,16 +363,13 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 		.stype = IBV_RDM_SEND_TYPE_UND
 	};
 
-	if (count > (sdata.ep_rdm->rndv_threshold / sizeof(struct iovec))) {
-		return -FI_EMSGSIZE;
-	}
-
 	size_t i;
 	for (i = 0; i < count; i++) {
 		sdata.data_len += iov[i].iov_len;
 	}
 
-	if (sdata.data_len > sdata.ep_rdm->rndv_threshold) {
+	if ((count > (sdata.ep_rdm->rndv_threshold / sizeof(struct iovec))) ||
+	    (count > 1 && (sdata.data_len > sdata.ep_rdm->rndv_threshold))) {
 		return -FI_EMSGSIZE;
 	}
 
