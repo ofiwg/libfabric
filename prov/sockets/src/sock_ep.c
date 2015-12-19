@@ -1598,7 +1598,7 @@ int sock_ep_get_conn(struct sock_ep *ep, struct sock_tx_ctx *tx_ctx,
 		     fi_addr_t index, struct sock_conn **pconn)
 {
 	struct sock_conn *conn;
-	uint64_t av_index = (ep->ep_type == FI_EP_MSG) ? 0 : index;
+	uint64_t av_index = (ep->ep_type == FI_EP_MSG) ? 0 : (index & ep->av->mask);
 	struct sockaddr_in *addr;
 
 	if (ep->ep_type == FI_EP_MSG)
