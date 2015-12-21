@@ -38,6 +38,11 @@
 
 #include <criterion/criterion.h>
 
+struct element {
+	int val;
+	struct dlist_entry entry;
+};
+
 static void setup(void)
 {
 	srand(time(NULL));
@@ -145,4 +150,71 @@ Test(dlist_utils, for_each_safe_empty)
 	dlist_for_each_safe(&dl, elem, next, le) {
 		cr_assert(false);
 	}
+}
+
+Test(dlist_utils, dlist_splice_head_test)
+{
+	struct dlist_entry list1, list2;
+	struct element values[4], *current;
+	int i;
+	int expected[4] = {2, 3, 0, 1};
+
+	for (i = 0; i < 4; i++) {
+		values[i].val = i;
+		dlist_init(&values[i].entry);
+	}
+
+	dlist_init(&list1);
+	dlist_init(&list2);
+	dlist_insert_tail(&values[0].entry, &list1);
+	dlist_insert_tail(&values[1].entry, &list1);
+
+	dlist_insert_tail(&values[2].entry, &list2);
+	dlist_insert_tail(&values[3].entry, &list2);
+
+	dlist_splice_head(&list1, &list2);
+
+	cr_assert(dlist_empty(&list2));
+
+	i = 0;
+	dlist_for_each(&list1, current, entry)
+	{
+		cr_assert(current->val == expected[i]);
+		i++;
+	}
+
+}
+
+Test(dlist_utils, dlist_splice_tail_test)
+{
+	struct dlist_entry list1, list2;
+	struct element values[4], *current;
+	int i;
+	int expected[4] = {0, 1, 2, 3};
+
+	for (i = 0; i < 4; i++) {
+		values[i].val = i;
+		dlist_init(&values[i].entry);
+	}
+
+	dlist_init(&list1);
+	dlist_init(&list2);
+	dlist_insert_tail(&values[0].entry, &list1);
+	dlist_insert_tail(&values[1].entry, &list1);
+
+	dlist_insert_tail(&values[2].entry, &list2);
+	dlist_insert_tail(&values[3].entry, &list2);
+
+	dlist_splice_tail(&list1, &list2);
+
+	cr_assert(dlist_empty(&list2));
+
+	i = 0;
+	dlist_for_each(&list1, current, entry)
+	{
+		cr_assert(current->val == expected[i]);
+		i++;
+	}
+
+
 }
