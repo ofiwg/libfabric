@@ -1,14 +1,15 @@
-.TH fi_poll 3 "2015\-10\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_poll 3 "2015\-12\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_poll - Polling and wait set operations
 .PP
 fi_poll_open / fi_close : Open/close a polling set
 .PP
-fi_poll_add / fi_poll_del : Add/remove an event queue or counter to/from
-a poll set.
+fi_poll_add / fi_poll_del : Add/remove a completion queue or counter
+to/from a poll set.
 .PP
-fi_poll : Poll for progress and events across multiple event queues.
+fi_poll : Poll for progress and events across multiple completion queues
+and counters.
 .PP
 fi_wait_open / fi_close : Open/close a wait set
 .PP
@@ -53,7 +54,7 @@ int\ fi_wait(struct\ fid_wait\ *waitset,\ int\ timeout);
 \f[I]attr\f[] : Poll or wait set attributes
 .PP
 \f[I]context\f[] : On success, an array of user context values
-associated with an event queue or counter.
+associated with completion queues or counters.
 .PP
 \f[I]count\f[] : Number of entries in context array.
 .PP
@@ -63,8 +64,8 @@ associated with an event queue or counter.
 .PP
 fi_poll_open creates a new polling set.
 A poll set enables an optimized method for progressing asynchronous
-operations across multiple event queues and counters and checking for
-their completions.
+operations across multiple completion queues and counters and checking
+for their completions.
 .PP
 A poll set is defined with the following attributes.
 .IP
@@ -85,26 +86,30 @@ The poll set must not be associated with any other resources prior to
 being closed, otherwise the call will return -FI_EBUSY.
 .SS fi_poll_add
 .PP
-Associates an event queue or counter with a poll set.
+Associates a completion queue or counter with a poll set.
 .SS fi_poll_del
 .PP
-Removes an event queue or counter from a poll set.
+Removes an completion queue or counter from a poll set.
 .SS fi_poll
 .PP
-Progresses all event queues and counters associated with a poll set and
-checks for events.
-If events have occurred, contexts associated with the event queues
+Progresses all completion queues and counters associated with a poll set
+and checks for events.
+If events have occurred, contexts associated with the completion queues
 and/or counters are returned.
+Completion queues will return their context if they are not empty.
+The context associated with a counter will be returned if the
+counter\[aq]s success value or error value have changed since the last
+time fi_poll was called.
 The number of contexts is limited to the size of the context array,
 indicated by the count parameter.
 .SS fi_wait_open
 .PP
 fi_wait_open allocates a new wait set.
 A wait set enables an optimized method of waiting for events across
-multiple event queues and counters.
+multiple completion queues and counters.
 Where possible, a wait set uses a single underlying wait object that is
-signaled when a specified condition occurs on an associated event queue
-or counter.
+signaled when a specified condition occurs on an associated completion
+queue or counter.
 .PP
 The properties and behavior of a wait set are defined by struct
 fi_wait_attr.
