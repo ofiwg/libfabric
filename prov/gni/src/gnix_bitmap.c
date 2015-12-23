@@ -10,7 +10,7 @@
 
 #include "gnix_bitmap.h"
 
-#if HAVE_ATOMICS
+#ifdef HAVE_ATOMICS
 
 #define __gnix_init_block(block) atomic_init(block, 0)
 #define __gnix_set_block(bitmap, index, value) \
@@ -265,4 +265,3 @@ int _gnix_free_bitmap(gnix_bitmap_t *bitmap)
 
 	return 0;
 }
-

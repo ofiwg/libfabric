@@ -26,7 +26,7 @@
 
 typedef uint64_t gnix_bitmap_value_t;
 
-#if HAVE_ATOMICS
+#ifdef HAVE_ATOMICS
 #include <stdatomic.h>
 
 typedef atomic_uint_fast64_t gnix_bitmap_block_t;
