@@ -585,7 +585,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	}
 	_av->rx_ctx_bits = attr->rx_ctx_bits;
 	_av->mask = attr->rx_ctx_bits ?
-		((uint64_t)1<<(64 - attr->rx_ctx_bits + 1))-1 : ~0;
+		((uint64_t)1 << (64 - attr->rx_ctx_bits)) - 1 : ~0;
 	*av = &_av->av_fid;
 	return 0;
 
