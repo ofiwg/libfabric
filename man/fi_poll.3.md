@@ -13,10 +13,11 @@ fi_poll_open / fi_close
 : Open/close a polling set
 
 fi_poll_add / fi_poll_del
-: Add/remove an event queue or counter to/from a poll set.
+: Add/remove a completion queue or counter to/from a poll set.
 
 fi_poll
-: Poll for progress and events across multiple event queues.
+: Poll for progress and events across multiple completion queues
+  and counters.
 
 fi_wait_open / fi_close
 : Open/close a wait set
@@ -68,8 +69,8 @@ int fi_wait(struct fid_wait *waitset, int timeout);
 : Poll or wait set attributes
 
 *context*
-: On success, an array of user context values associated with an event
-  queue or counter.
+: On success, an array of user context values associated with
+  completion queues or counters.
 
 *count*
 : Number of entries in context array.
@@ -84,7 +85,7 @@ int fi_wait(struct fid_wait *waitset, int timeout);
 
 fi_poll_open creates a new polling set.  A poll set enables an
 optimized method for progressing asynchronous operations across
-multiple event queues and counters and checking for their completions.
+multiple completion queues and counters and checking for their completions.
 
 A poll set is defined with the following attributes.
 
@@ -106,27 +107,30 @@ being closed, otherwise the call will return -FI_EBUSY.
 
 ## fi_poll_add
 
-Associates an event queue or counter with a poll set.
+Associates a completion queue or counter with a poll set.
 
 ## fi_poll_del
 
-Removes an event queue or counter from a poll set.
+Removes an completion queue or counter from a poll set.
 
 ## fi_poll
 
-Progresses all event queues and counters associated with a poll set
+Progresses all completion queues and counters associated with a poll set
 and checks for events.  If events have occurred, contexts associated
-with the event queues and/or counters are returned.  The number of
-contexts is limited to the size of the context array, indicated by the
-count parameter.
+with the completion queues and/or counters are returned.  Completion
+queues will return their context if they are not empty.  The context
+associated with a counter will be returned if the counter's success
+value or error value have changed since the last time fi_poll was
+called.  The number of contexts is limited to the size of the context
+array, indicated by the count parameter.
 
 ## fi_wait_open
 
 fi_wait_open allocates a new wait set.  A wait set enables an
-optimized method of waiting for events across multiple event queues
+optimized method of waiting for events across multiple completion queues
 and counters.  Where possible, a wait set uses a single underlying
 wait object that is signaled when a specified condition occurs on an
-associated event queue or counter.
+associated completion queue or counter.
 
 The properties and behavior of a wait set are defined by struct
 fi_wait_attr.

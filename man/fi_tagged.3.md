@@ -24,7 +24,7 @@ ssize_t fi_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context);
 
 ssize_t fi_trecvv(struct fid_ep *ep, const struct iovec *iov, void *desc,
-	size_t count, fi_addr_t src_addr, uint64_t tag, uint4_t ignore,
+	size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
 	void *context);
 
 ssize_t fi_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
