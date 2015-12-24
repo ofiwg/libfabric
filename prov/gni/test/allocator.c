@@ -238,7 +238,7 @@ Test(mbox_creation, alloc_mbox)
 	 * Write our test strings and make sure they're equal.
 	 */
 	memcpy(mail_box->base, test_string, sizeof(test_string));
-	cr_expect_strings_eq((char *) mail_box->base, test_string);
+	cr_expect_str_eq((char *) mail_box->base, test_string);
 
 	/*
 	 * Mailboxes haven't been returned so destroy will return -FI_EBUSY.

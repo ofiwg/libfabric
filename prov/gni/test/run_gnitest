@@ -60,4 +60,4 @@ else
 fi
 
 # pass all command line args to gnitest
-$launcher $args $gnitest_bin "$@"
+$launcher $args $gnitest_bin -j1 "$@"
