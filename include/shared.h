@@ -142,7 +142,7 @@ int ft_check_buf(void *buf, int size);
 uint64_t ft_init_cq_data(struct fi_info *info);
 #define ADDR_OPTS "b:p:s:"
 #define INFO_OPTS "n:f:"
-#define CS_OPTS ADDR_OPTS "I:S:mc:"
+#define CS_OPTS ADDR_OPTS "I:S:mc:t:"
 
 extern char default_port[8];
 

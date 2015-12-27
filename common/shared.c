@@ -80,7 +80,8 @@ struct fi_cq_attr cq_attr = {
 	.wait_obj = FI_WAIT_NONE
 };
 struct fi_cntr_attr cntr_attr = {
-	.events = FI_CNTR_EVENTS_COMP
+	.events = FI_CNTR_EVENTS_COMP,
+	.wait_obj = FI_WAIT_NONE
 };
 
 struct ft_opts opts;
@@ -174,6 +175,25 @@ static void ft_cq_set_wait_attr(void)
 		break;
 	default:
 		cq_attr.wait_obj = FI_WAIT_NONE;
+		break;
+	}
+}
+
+static void ft_cntr_set_wait_attr(void)
+{
+	switch (opts.comp_method) {
+	case FT_COMP_SREAD:
+		cntr_attr.wait_obj = FI_WAIT_UNSPEC;
+		break;
+	case FT_COMP_WAITSET:
+		assert(waitset);
+		cntr_attr.wait_obj = FI_WAIT_SET;
+		break;
+	case FT_COMP_WAIT_FD:
+		cntr_attr.wait_obj = FI_WAIT_FD;
+		break;
+	default:
+		cntr_attr.wait_obj = FI_WAIT_NONE;
 		break;
 	}
 }
@@ -277,6 +297,7 @@ int ft_alloc_active_res(struct fi_info *fi)
 	}
 
 	if (opts.options & FT_OPT_TX_CNTR) {
+		ft_cntr_set_wait_attr();
 		ret = fi_cntr_open(domain, &cntr_attr, &txcntr, &txcntr);
 		if (ret) {
 			FT_PRINTERR("fi_cntr_open", ret);
@@ -303,6 +324,7 @@ int ft_alloc_active_res(struct fi_info *fi)
 	}
 
 	if (opts.options & FT_OPT_RX_CNTR) {
+		ft_cntr_set_wait_attr();
 		ret = fi_cntr_open(domain, &cntr_attr, &rxcntr, &rxcntr);
 		if (ret) {
 			FT_PRINTERR("fi_cntr_open", ret);
@@ -1127,6 +1149,7 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-I <number>", "number of iterations");
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
+	FT_PRINT_OPTS_USAGE("-t <type>", "completion type [queue, counter]");
 	FT_PRINT_OPTS_USAGE("-c <method>", "completion method [spin, sread, fd]");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
@@ -1206,6 +1229,12 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 			opts->comp_method = FT_COMP_SREAD;
 		else if (!strncasecmp("fd", optarg, 2))
 			opts->comp_method = FT_COMP_WAIT_FD;
+		break;
+	case 't':
+		if (!strncasecmp("counter", optarg, 7)) {
+			opts->options |= FT_OPT_RX_CNTR | FT_OPT_TX_CNTR;
+			opts->options &= ~(FT_OPT_RX_CQ | FT_OPT_TX_CQ);
+		}
 		break;
 	default:
 		/* let getopt handle unknown opts*/
