@@ -12,6 +12,7 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 	gni_CPPFLAGS=
 	gni_LDFLAGS=
 	gni_LIBS=
+
 	AS_IF([test x"$enable_gni" != x"no"],
 	      [FI_PKG_CHECK_MODULES([CRAY_UGNI], [cray-ugni],
                                  [ugni_lib_happy=1
@@ -88,6 +89,13 @@ dnl looks like we need to get rid of some white space
 	AC_SUBST(gni_CPPFLAGS)
 	AC_SUBST(gni_LDFLAGS)
 	AC_SUBST(gni_LIBS)
+
+        AC_CHECK_DECL([HAVE_ATOMICS],
+                        [],
+                        [cc_version=`$CC --version | head -n1`
+                        AC_MSG_WARN(["$cc_version" doesn't support native atomics.  Disabling GNI provider.])
+                        ugni_lib_happy=0]
+			)
 
 	AS_IF([test $gni_header_happy -eq 1 -a $ugni_lib_happy -eq 1 \
                -a $alps_lli_happy -eq 1 -a $alps_util_happy -eq 1], [$1], [$2])
