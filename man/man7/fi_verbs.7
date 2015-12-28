@@ -1,4 +1,4 @@
-.TH fi_verbs 7 "2015\-09\-03" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_verbs 7 "2015\-12\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -14,15 +14,18 @@ control and data transfer operations.
 .PP
 The verbs provider supports a subset of OFI features.
 .PP
-\f[I]Endpoint types\f[] : Only FI_EP_MSG is supported.
+\f[I]Endpoint types\f[] : FI_EP_MSG, FI_EP_RDM (Experimental support for
+only FI_TAGGED interface).
 .PP
 \f[I]Endpoint capabilities\f[] : FI_MSG, FI_RMA, FI_ATOMIC.
 .PP
 \f[I]Modes\f[] : Verbs provider requires applications to support the
-following modes: FI_LOCAL_MR for all applications.
-FI_RX_CQ_DATA for applications that want to use RMA.
+following modes: * FI_LOCAL_MR for all applications.
+* FI_RX_CQ_DATA for applications that want to use RMA.
 Applications must take responsibility of posting receives for any
 incoming CQ data.
+* FI_CONTEXT for applications making uses of the experimental FI_EP_RDM
+capability.
 .PP
 \f[I]Progress\f[] : Verbs provider supports FI_PROGRESS_AUTO:
 Asynchronous operations make forward progress automatically.
@@ -39,8 +42,7 @@ Send after Send
 \f[I]Control Interfaces\f[] : Counters and address vectors are not
 supported.
 .PP
-\f[I]Data transfer interfaces\f[] : Tagged messaging and multi-receive
-are not supported.
+\f[I]Data transfer interfaces\f[] : Multi-receive is not supported.
 .PP
 \f[I]Endpoint features\f[] : Scalable endpoints and shared contexts are
 not supported.
@@ -58,8 +60,6 @@ No support for binding memory regions to a counter.
 .PP
 \f[I]Wait objects\f[] : Only FI_WAIT_FD wait object is supported.
 Wait sets are not supported.
-.PP
-\f[I]Others\f[] : No direct inject calls yet.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
