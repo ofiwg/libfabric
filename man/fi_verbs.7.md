@@ -22,16 +22,17 @@ and data transfer operations.
 The verbs provider supports a subset of OFI features.
 
 *Endpoint types*
-: Only FI_EP_MSG is supported.
+: FI_EP_MSG, FI_EP_RDM (Experimental support for only FI_TAGGED interface).
 
 *Endpoint capabilities*
 : FI_MSG, FI_RMA, FI_ATOMIC.
 
 *Modes*
 : Verbs provider requires applications to support the following modes:
-  FI_LOCAL_MR for all applications.  FI_RX_CQ_DATA for
-  applications that want to use RMA. Applications must take responsibility
-  of posting receives for any incoming CQ data.
+  * FI_LOCAL_MR for all applications.
+  * FI_RX_CQ_DATA for applications that want to use RMA. Applications must
+    take responsibility of posting receives for any incoming CQ data.
+  * FI_CONTEXT for applications making uses of the experimental FI_EP_RDM capability.
 
 *Progress*
 : Verbs provider supports FI_PROGRESS_AUTO: Asynchronous operations make forward
@@ -56,7 +57,7 @@ The verbs provider supports a subset of OFI features.
 : Counters and address vectors are not supported.
 
 *Data transfer interfaces*
-: Tagged messaging and multi-receive are not supported.
+: Multi-receive is not supported.
 
 *Endpoint features*
 : Scalable endpoints and shared contexts are not supported. fi_cancel,
@@ -76,9 +77,6 @@ The verbs provider supports a subset of OFI features.
 
 *Wait objects*
 : Only FI_WAIT_FD wait object is supported. Wait sets are not supported.
-
-*Others*
-: No direct inject calls yet.
 
 # SEE ALSO
 

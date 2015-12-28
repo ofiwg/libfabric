@@ -58,7 +58,8 @@ v1.2.0, TBD
 
 - Add support for RDM EPs. Currently only FI_TAGGED capability is supported.
   RDM and MSG EPs would be reported in seperate domains since they don't share
-  CQs.
+  CQs. The RDM enpoint feature is currently experimental and no guarantees are
+  given with regard to its functionality.
 - Refactor the code into several files to enable adding RDM support.
 - Consolidate send code paths to improve maintainability.
 - Fix a bug in fi_getinfo where wild card address was not used when service
