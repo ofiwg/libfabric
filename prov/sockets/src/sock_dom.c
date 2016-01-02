@@ -197,7 +197,7 @@ static int sock_mr_close(struct fid *fid)
 	mr_key = mr->key;
 
 	fastlock_acquire(&dom->lock);
-	it = rbtFind(dom->mr_heap, (void *)&mr_key);
+	it = rbtFind(dom->mr_heap, &mr_key);
 	if (!it || ((res = rbtErase(dom->mr_heap, it)) != RBT_STATUS_OK))
 		SOCK_LOG_ERROR("Invalid mr\n");
 
@@ -253,11 +253,11 @@ struct sock_mr *sock_mr_get_entry(struct sock_domain *domain, uint64_t key)
 	void *value;
 	void *mr_key = &key;
 
-	it = rbtFind(domain->mr_heap, (void *)mr_key);
+	it = rbtFind(domain->mr_heap, mr_key);
 	if (!it)
 		return NULL;
 
-	rbtKeyValue(domain->mr_heap, it, (void **)&mr_key, (void **)&value);
+	rbtKeyValue(domain->mr_heap, it, &mr_key, &value);
 	return (struct sock_mr *) value;
 }
 
@@ -335,7 +335,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		sock_get_mr_key(dom) : attr->requested_key;
 
 	_mr->key = key;
-	res = rbtInsert(dom->mr_heap, (void *)&_mr->key, _mr);
+	res = rbtInsert(dom->mr_heap, &_mr->key, _mr);
 	if (res != RBT_STATUS_OK)
 		goto err;
 

@@ -785,6 +785,7 @@ struct sock_pe_entry {
 	uint64_t total_len;
 	uint64_t data_len;
 	uint64_t rem;
+	void *comm_addr;
 	struct sock_ep *ep;
 	struct sock_conn *conn;
 	struct sock_comp *comp;

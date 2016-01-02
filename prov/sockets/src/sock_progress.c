@@ -1593,12 +1593,12 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 	struct sock_conn *conn;
 	uint64_t index;
 
-	if (!pe_entry->buf)
-		pe_entry->buf = (uint64_t) calloc(1, sizeof(struct sockaddr_in));
+	if (!pe_entry->comm_addr)
+		pe_entry->comm_addr = calloc(1, sizeof(struct sockaddr_in));
 
 	len = sizeof(struct sock_msg_hdr);
 	data_len = sizeof(struct sockaddr_in);
-	if (sock_pe_recv_field(pe_entry, (void *)pe_entry->buf, data_len, len)) {
+	if (sock_pe_recv_field(pe_entry, pe_entry->comm_addr, data_len, len)) {
 		return 0;
 	}
 
@@ -1606,12 +1606,12 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 		inet_ntoa(((struct sockaddr_in *)&pe_entry->conn->addr)->sin_addr),
 		ntohs(((struct sockaddr_in *)&pe_entry->conn->addr)->sin_port));
 	SOCK_LOG_DBG("on behalf of %s:%d\n",
-		inet_ntoa(((struct sockaddr_in *)pe_entry->buf)->sin_addr),
-		ntohs(((struct sockaddr_in *)pe_entry->buf)->sin_port));
+		inet_ntoa(((struct sockaddr_in *)pe_entry->comm_addr)->sin_addr),
+		ntohs(((struct sockaddr_in *)pe_entry->comm_addr)->sin_port));
 
 	ep = pe_entry->conn->ep;
 	map = &ep->cmap;
-	addr = (struct sockaddr_in *) pe_entry->buf;
+	addr = (struct sockaddr_in *) pe_entry->comm_addr;
 	pe_entry->conn->addr = *addr;
 
 	index = (ep->ep_type == FI_EP_MSG) ? 0 : sock_av_get_addr_index(ep->av, addr);
@@ -1627,7 +1627,8 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 
 	pe_entry->is_complete = 1;
 	pe_entry->pe.rx.pending_send = 0;
-	free((void *)pe_entry->buf);
+	free(pe_entry->comm_addr);
+	pe_entry->comm_addr = NULL;
 	return 0;
 }
 
