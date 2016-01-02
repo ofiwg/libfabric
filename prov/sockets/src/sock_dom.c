@@ -190,12 +190,14 @@ static int sock_mr_close(struct fid *fid)
 	struct sock_mr *mr;
 	RbtIterator it;
 	RbtStatus res;
+	uint64_t mr_key;
 
 	mr = container_of(fid, struct sock_mr, mr_fid.fid);
 	dom = mr->domain;
+	mr_key = mr->key;
 
 	fastlock_acquire(&dom->lock);
-	it = rbtFind(dom->mr_heap, (void *)mr->key);
+	it = rbtFind(dom->mr_heap, (void *)&mr_key);
 	if (!it || ((res = rbtErase(dom->mr_heap, it)) != RBT_STATUS_OK))
 		SOCK_LOG_ERROR("Invalid mr\n");
 
@@ -249,12 +251,13 @@ struct sock_mr *sock_mr_get_entry(struct sock_domain *domain, uint64_t key)
 {
 	RbtIterator it;
 	void *value;
+	void *mr_key = &key;
 
-	it = rbtFind(domain->mr_heap, (void *)key);
+	it = rbtFind(domain->mr_heap, (void *)mr_key);
 	if (!it)
 		return NULL;
 
-	rbtKeyValue(domain->mr_heap, it, (void **)&key, (void **)&value);
+	rbtKeyValue(domain->mr_heap, it, (void **)&mr_key, (void **)&value);
 	return (struct sock_mr *) value;
 }
 
@@ -331,11 +334,11 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	key = (dom->attr.mr_mode == FI_MR_BASIC) ?
 		sock_get_mr_key(dom) : attr->requested_key;
 
-	res = rbtInsert(dom->mr_heap, (void *)key, _mr);
+	_mr->key = key;
+	res = rbtInsert(dom->mr_heap, (void *)&_mr->key, _mr);
 	if (res != RBT_STATUS_OK)
 		goto err;
 
-	_mr->key = key;
 	_mr->mr_fid.key = key;
 	_mr->mr_fid.mem_desc = (void *) (uintptr_t) key;
 	fastlock_release(&dom->lock);
@@ -466,8 +469,9 @@ static struct fi_ops_mr sock_dom_mr_ops = {
 
 static int sock_compare_mr_keys(void *key1, void *key2)
 {
-	return ((uint64_t) key1 < (uint64_t) key2) ?  -1 :
-		((uint64_t) key1 > (uint64_t) key2);
+	uint64_t k1 = *((uint64_t *) key1);
+	uint64_t k2 = *((uint64_t *) key2);
+	return (k1 < k2) ?  -1 : (k1 > k2);
 }
 
 int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
