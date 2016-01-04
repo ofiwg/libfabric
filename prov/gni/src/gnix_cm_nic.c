@@ -294,6 +294,8 @@ static void  __cm_nic_destruct(void *obj)
 	gni_return_t status;
 	struct gnix_cm_nic *cm_nic = (struct gnix_cm_nic *)obj;
 
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
 	if (cm_nic->dgram_hndl != NULL) {
 		ret = _gnix_dgram_hndl_free(cm_nic->dgram_hndl);
 		if (ret != FI_SUCCESS)

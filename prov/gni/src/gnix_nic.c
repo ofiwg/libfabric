@@ -509,11 +509,14 @@ static void __gnix_nic_tx_freelist_destroy(struct gnix_nic *nic)
 {
 	gni_return_t status;
 
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
 	status = GNI_MemDeregister(nic->gni_nic_hndl, &nic->int_bufs_mdh);
 	if (status != GNI_RC_SUCCESS)
 		GNIX_WARN(FI_LOG_DOMAIN, "GNI_MemDeregister() failed: %s\n",
 			  gni_err_str[status]);
 	free(nic->int_bufs);
+
 	free(nic->tx_desc_base);
 	fastlock_destroy(&nic->tx_desc_lock);
 }
@@ -527,6 +530,8 @@ static void __nic_destruct(void *obj)
 	int ret = FI_SUCCESS;
 	gni_return_t status = GNI_RC_SUCCESS;
 	struct gnix_nic *nic = (struct gnix_nic *) obj;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	__gnix_nic_tx_freelist_destroy(nic);
 
