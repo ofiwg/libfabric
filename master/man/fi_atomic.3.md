@@ -81,13 +81,13 @@ ssize_t fi_compare_atomicmsg(struct fid_ep *ep,
 	uint64_t flags);
 
 int fi_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
-    enum fi_op op, size_t count);
+    enum fi_op op, size_t *count);
 
 int fi_fetch_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
-    enum fi_op op, size_t count);
+    enum fi_op op, size_t *count);
 
 int fi_compare_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
-    enum fi_op op, size_t count);
+    enum fi_op op, size_t *count);
 {% endhighlight %}
 
 # ARGUMENTS
@@ -509,6 +509,26 @@ errno is returned. Fabric errno values are defined in
 
 # NOTES
 
+Atomic operations operate on an array of values of a specific data type.
+Atomicity is only guaranteed for each data type operation, not across
+the entire array.  The following pseudo-code demonstrates this operation
+for 64-bit unsigned atomic write.  ATOMIC_WRITE_U64 is a platform
+dependent macro that atomically writes 8 bytes to an aligned memory location.
+
+{% highlight c %}
+fi_atomic(ep, buf, count, NULL, dest_addr, addr, key,
+	FI_UINT64, FI_ATOMIC_WRITE, context);
+{
+	for (i = 1; i < count; i ++)
+		ATOMIC_WRITE_U64(((uint64_t *) addr)[i],
+			((uint64_t *) buf)[i]);
+}
+{% endhighlight %}
+
+The number of array elements to operate on is specified through a count
+parameter.  This must be between 1 and the maximum returned through the
+relevant valid operation, inclusive.  The requested operation and data
+type must also be valid for the given provider.
 
 # SEE ALSO
 
