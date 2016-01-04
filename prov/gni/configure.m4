@@ -39,6 +39,17 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                                  [alps_util_happy=0])
 	       ])
 
+       gni_path_to_gni_pub=${CRAY_GNI_HEADERS_CFLAGS:2}
+dnl looks like we need to get rid of some white space
+       gni_path_to_gni_pub=${gni_path_to_gni_pub%?}/gni_pub.h
+
+       AC_CHECK_DECLS([GNI_VERSION_FMA_CHAIN_TRANSACTIONS],
+                       [],
+                       [AC_MSG_WARN([GNI provider requires CLE 5.2UP04 or higher. Disabling gni provider.])
+                       gni_header_happy=0
+                       ],
+                       [[#include "$gni_path_to_gni_pub"]])
+
 	have_criterion=false
 	criterion_tests_present=true
 
