@@ -80,4 +80,18 @@ struct usnic_rt_cb_arg {
 	struct usnic_nl_sk	*unlsk;
 };
 
+/* libnl1 and libnl3 return kernel resource exhaustion in different
+ * ways.  Use this macro to abstract the differences away.
+ *
+ * In libnl3, nl_send() will return -NLE_FAILURE and
+ * errno==ECONNREFUSED. */
+#define USD_NL_SEND(nlh, msg, ret, retry)				\
+	do {								\
+		retry = 0;						\
+		ret = nl_send((nlh), (msg));				\
+		if (ret == -NLE_FAILURE && errno == ECONNREFUSED) {	\
+			retry = 1;					\
+		}							\
+	} while(0);
+
 #endif /* LIBNL3_UTILS_H */
