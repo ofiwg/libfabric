@@ -161,6 +161,10 @@ int usdf_cm_rdm_shutdown(struct fid_ep *ep, uint64_t flags);
 /* fi_ops_rdm for RC */
 ssize_t usdf_rdm_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	fi_addr_t src_addr, void *context);
+ssize_t usdf_rdm_recvv(struct fid_ep *fep, const struct iovec *iov,
+		void **desc, size_t count, fi_addr_t src_addr, void *context);
+ssize_t usdf_rdm_recvmsg(struct fid_ep *fep, const struct fi_msg *msg,
+		uint64_t flags);
 
 ssize_t usdf_rdm_send(struct fid_ep *ep, const void *buf, size_t len,
 	void *desc, fi_addr_t src_addr, void *context);
@@ -168,7 +172,6 @@ ssize_t usdf_rdm_sendv(struct fid_ep *ep, const struct iovec *iov,
 	void **desc, size_t count, fi_addr_t src_addr, void *context);
 ssize_t usdf_rdm_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	uint64_t flags);
-
 ssize_t usdf_rdm_inject(struct fid_ep *ep, const void *buf, size_t len,
 	fi_addr_t src_addr);
 	

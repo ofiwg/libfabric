@@ -45,6 +45,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -489,6 +490,76 @@ usdf_rdm_recv(struct fid_ep *fep, void *buf, size_t len,
 	pthread_spin_unlock(&udp->dom_progress_lock);
 
 	return 0;
+}
+
+static inline ssize_t _usdf_rdm_recv_vector(struct fid_ep *fep,
+	const struct iovec *iov, void **desc, size_t count, fi_addr_t src_addr,
+	void *context, uint64_t flags)
+{
+	struct usdf_ep *ep;
+	struct usdf_rx *rx;
+	struct usdf_rdm_qe *rqe;
+	struct usdf_domain *udp;
+	size_t tot_len;
+	size_t i;
+
+	ep = ep_ftou(fep);
+	rx = ep->ep_rx;
+	udp = ep->ep_domain;
+
+	if (flags & ~USDF_RDM_SUPP_RECVMSG_FLAGS) {
+		USDF_DBG_SYS(EP_DATA,
+				"one or more flags in 0x%" PRIx64 " not supported\n",
+				flags);
+		return -FI_EOPNOTSUPP;
+	}
+
+	if (TAILQ_EMPTY(&rx->r.rdm.rx_free_rqe))
+		return -FI_EAGAIN;
+
+	pthread_spin_lock(&udp->dom_progress_lock);
+
+	rqe = usdf_rdm_get_rx_rqe(rx);
+
+	tot_len = 0;
+	for (i = 0; i < count; i++) {
+		rqe->rd_iov[i].iov_base = iov[i].iov_base;
+		rqe->rd_iov[i].iov_len = iov[i].iov_len;
+		tot_len += iov[i].iov_len;
+	}
+
+	rqe->rd_context = context;
+	rqe->rd_cur_iov = 0;
+	rqe->rd_iov_resid = iov[0].iov_len;
+	rqe->rd_last_iov = count - 1;
+	rqe->rd_cur_ptr = iov[0].iov_base;
+	rqe->rd_resid = tot_len;
+	rqe->rd_length = tot_len;
+
+	rqe->rd_signal_comp = ep->ep_rx_dflt_signal_comp ||
+		(flags & FI_COMPLETION) ? 1 : 0;
+
+	TAILQ_INSERT_TAIL(&rx->r.rdm.rx_posted_rqe, rqe, rd_link);
+
+	pthread_spin_unlock(&udp->dom_progress_lock);
+
+	return FI_SUCCESS;
+}
+
+ssize_t usdf_rdm_recvv(struct fid_ep *fep, const struct iovec *iov,
+		void **desc, size_t count, fi_addr_t src_addr, void *context)
+{
+	struct usdf_ep *ep = ep_ftou(fep);
+
+	return _usdf_rdm_recv_vector(fep, iov, desc, count, src_addr, context,
+		ep->ep_rx->rx_attr.op_flags);
+}
+
+ssize_t usdf_rdm_recvmsg(struct fid_ep *fep, const struct fi_msg *msg,
+		uint64_t flags)
+{
+	return _usdf_rdm_recv_vector(fep, msg->msg_iov, msg->desc,
+			msg->iov_count, msg->addr, msg->context, flags);
 }
 
 ssize_t
