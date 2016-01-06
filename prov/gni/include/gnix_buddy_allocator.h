@@ -40,6 +40,8 @@
 #include <math.h>
 #include <stdlib.h>
 
+#define MIN_BLOCK_SIZE 16
+
 /* evaluates to zero if X is not a power of two, otherwise evaluates to X - 1 */
 #define IS_NOT_POW_TWO(X) (((X) & (~(X) + 1)) ^ (X))
 
@@ -76,7 +78,6 @@
  *
  * @var base		The base address of the buffer being managed.
  * @var len		The length of the buffer the buddy allocator is managing.
- * @var min		The smallest chunk of memory that can be allocated.
  * @var max		The largest chunk of memory that can be allocated.
  *
  * @var nlists		The number of free lists.
@@ -85,18 +86,21 @@
  *
  * @var bitmap		Each bit is 1 if the block is allocated or split,
  * otherwise the bit is 0.
+ *
+ * @var lock		The buddy alloc handle lock.
  */
 typedef struct gnix_buddy_alloc_handle {
 	void *base;
 	size_t len;
-	size_t min;
 	size_t max;
 
 	size_t nlists;
 	struct dlist_entry *lists;
 
 	gnix_bitmap_t bitmap;
-} *handle_t;
+
+	fastlock_t lock;
+} handle_t;
 
 /**
  * Creates a buddy allocator
@@ -121,7 +125,7 @@ typedef struct gnix_buddy_alloc_handle {
  * buddy allocator.
  */
 int _gnix_buddy_allocator_create(void *base, size_t len, size_t max,
-				 handle_t *alloc_handle);
+				 handle_t **alloc_handle);
 
 /**
  * Releases all resources associated with a buddy allocator handle.
@@ -132,7 +136,7 @@ int _gnix_buddy_allocator_create(void *base, size_t len, size_t max,
  *
  * @return -FI_EINVAL 		Upon an invalid parameter.
  */
-int _gnix_buddy_allocator_destroy(handle_t alloc_handle);
+int _gnix_buddy_allocator_destroy(handle_t *alloc_handle);
 
 /**
  * Allocate a buffer from the buddy allocator
@@ -152,7 +156,7 @@ int _gnix_buddy_allocator_destroy(handle_t alloc_handle);
  *
  * @return -FI_EINVAL 		Upon an invalid parameters.
  */
-int _gnix_buddy_alloc(handle_t alloc_handle, void **ptr, size_t len);
+int _gnix_buddy_alloc(handle_t *alloc_handle, void **ptr, size_t len);
 
 /**
  * Free a previously allocated buffer
@@ -169,5 +173,5 @@ int _gnix_buddy_alloc(handle_t alloc_handle, void **ptr, size_t len);
  *
  * @return -FI_EINVAL 		Upon an invalid parameters.
  */
-int _gnix_buddy_free(handle_t alloc_handle, void *ptr, size_t len);
+int _gnix_buddy_free(handle_t *alloc_handle, void *ptr, size_t len);
 #endif /* _GNIX_BUDDY_ALLOCATOR_H_ */

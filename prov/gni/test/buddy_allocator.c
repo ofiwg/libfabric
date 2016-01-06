@@ -38,7 +38,7 @@
 #define MIN_LEN 16		/* buddy_handle->min */
 
 long *buf = NULL;		/* buddy_handle->base */
-handle_t buddy_handle = NULL;
+handle_t *buddy_handle = NULL;
 void **ptr = NULL;		/* ptrs alloc'd by _gnix_buddy_alloc */
 
 
@@ -142,7 +142,7 @@ Test(buddy_allocator, alloc_free)
 	int i = MIN_LEN;
 
 	/* Sequential alloc and frees */
-	for (; i <= MIN_LEN * 2; i *= 2) {
+	for (i = MIN_LEN; i <= MAX_LEN; i *= 2) {
 		do_alloc(i);
 		do_free(i);
 	}
@@ -168,6 +168,7 @@ Test(buddy_allocator, alloc_free_error)
 Test(buddy_allocator, parameter_error)
 {
 	int ret;
+
 	buddy_allocator_setup_error();
 	buddy_allocator_teardown_error();
 

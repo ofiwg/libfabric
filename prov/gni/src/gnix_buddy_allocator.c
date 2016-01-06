@@ -67,18 +67,19 @@
  * This improves the performance of coalescing blocks by being able to tell
  * whether a given block's buddy block is allocated or split in O(c).
  *
- * TODO: insert_sorted for fragmentation.
- * TODO: lock alloc_handle
+ * TODO: dlist_insert_sorted for fragmentation reduction.
+ * TODO: Lock in __gnix_buddy_split and allow __gnix_buddy_find_block to run
+ * concurrently.
  */
 
 #include "gnix_buddy_allocator.h"
 
-static inline int __gnix_buddy_create_lists(handle_t alloc_handle)
+static inline int __gnix_buddy_create_lists(handle_t *alloc_handle)
 {
 	size_t i, offset = 0;
 
 	alloc_handle->nlists = (size_t) log2(alloc_handle->max /
-					     (double) alloc_handle->min) + 1;
+					     (double) MIN_BLOCK_SIZE) + 1;
 	alloc_handle->lists = calloc(1, sizeof(struct dlist_entry) *
 				     alloc_handle->nlists);
 
@@ -106,26 +107,27 @@ static inline int __gnix_buddy_create_lists(handle_t alloc_handle)
 /**
  * Split a block in list "j" until list "i" is reached.
  */
-static inline void __gnix_buddy_split(handle_t alloc_handle, size_t j, size_t i)
+static inline void __gnix_buddy_split(handle_t *alloc_handle, size_t j, size_t i)
 {
 	void *tmp = NULL;
 
 	dlist_remove(tmp = alloc_handle->lists[j].next);
 
 	_gnix_set_bit(&alloc_handle->bitmap,
-		      BITMAP_INDEX(tmp, alloc_handle->base, alloc_handle->min,
-				   OFFSET(alloc_handle->min, j)));
+		      BITMAP_INDEX(tmp, alloc_handle->base, MIN_BLOCK_SIZE,
+				   OFFSET(MIN_BLOCK_SIZE, j)));
+
 
 	/* Split the block until we reach list "i" */
 	for (j--; j > i; j--) {
 		_gnix_set_bit(&alloc_handle->bitmap,
 			      BITMAP_INDEX(tmp +
-					   OFFSET(alloc_handle->min, j),
+					   OFFSET(MIN_BLOCK_SIZE, j),
 					   alloc_handle->base,
-					   alloc_handle->min,
-					   OFFSET(alloc_handle->min, j)));
+					   MIN_BLOCK_SIZE,
+					   OFFSET(MIN_BLOCK_SIZE, j)));
 
-		dlist_insert_tail(tmp + OFFSET(alloc_handle->min, j),
+		dlist_insert_tail(tmp + OFFSET(MIN_BLOCK_SIZE, j),
 				  alloc_handle->lists + j);
 	}
 
@@ -133,7 +135,7 @@ static inline void __gnix_buddy_split(handle_t alloc_handle, size_t j, size_t i)
 	dlist_insert_head(tmp, alloc_handle->lists + j);
 
 	/* Insert the buddy block of tmp into list "i" */
-	dlist_insert_tail(tmp + OFFSET(alloc_handle->min, j),
+	dlist_insert_tail(tmp + OFFSET(MIN_BLOCK_SIZE, j),
 			  alloc_handle->lists + j);
 }
 
@@ -144,7 +146,7 @@ static inline void __gnix_buddy_split(handle_t alloc_handle, size_t j, size_t i)
  *
  * @return 0 if the block is found.
  */
-static inline int __gnix_buddy_find_block(handle_t alloc_handle, size_t i)
+static inline int __gnix_buddy_find_block(handle_t *alloc_handle, size_t i)
 {
 	size_t j;
 
@@ -163,48 +165,53 @@ static inline int __gnix_buddy_find_block(handle_t alloc_handle, size_t i)
  * If the buddy block is on the free list then coalesce and insert into the next
  * list until we reach an allocated or split buddy block, or the max list size.
  */
-static inline void __gnix_buddy_coalesce(handle_t alloc_handle, void **ptr,
-					 size_t *bsize)
+static inline void __gnix_buddy_coalesce(handle_t *alloc_handle, void **ptr,
+					 size_t *block_size)
 {
-	while (*bsize < alloc_handle->max &&
+	while (*block_size < alloc_handle->max &&
 	       !_gnix_test_bit(&alloc_handle->bitmap,
-			       BITMAP_INDEX(BUDDY(*ptr, *bsize,
+			       BITMAP_INDEX(BUDDY(*ptr, *block_size,
 						  alloc_handle->base),
 					    alloc_handle->base,
-					    alloc_handle->min,
-					    *bsize))) {
+					    MIN_BLOCK_SIZE,
+					    *block_size))) {
 
-		dlist_remove(BUDDY(*ptr, *bsize, alloc_handle->base));
+		dlist_remove(BUDDY(*ptr, *block_size, alloc_handle->base));
 
 		/* Ensure ptr is the beginning of the new block */
-		if (*ptr > BUDDY(*ptr, *bsize, alloc_handle->base)) {
-			*ptr = BUDDY(*ptr, *bsize, alloc_handle->base);
+		if (*ptr > BUDDY(*ptr, *block_size, alloc_handle->base)) {
+			*ptr = BUDDY(*ptr, *block_size, alloc_handle->base);
 		}
 
-		*bsize *= 2;
+		*block_size *= 2;
 
 		_gnix_clear_bit(&alloc_handle->bitmap,
 				BITMAP_INDEX(*ptr, alloc_handle->base,
-					     alloc_handle->min, *bsize));
+					     MIN_BLOCK_SIZE, *block_size));
 	}
+
 }
 
 int _gnix_buddy_allocator_create(void *base, size_t len, size_t max,
-				 handle_t *alloc_handle)
+				 handle_t **alloc_handle)
 {
 	char err_buf[256] = {0}, *error = NULL;
+	int fi_errno;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	/* Ensure parameters are valid */
 	if (!base || !len || !max || max > len || !alloc_handle ||
-	    IS_NOT_POW_TWO(max) || (len % max)) {
+	    IS_NOT_POW_TWO(max) || (len % max) || !(len / MIN_BLOCK_SIZE * 2)) {
+
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Invalid parameter to buddy_allocator_create.\n");
+			  "Invalid parameter to _gnix_buddy_allocator_create."
+			  "\n");
 		return -FI_EINVAL;
 	}
 
-	*alloc_handle = calloc(1, sizeof(struct gnix_buddy_alloc_handle));
+	*alloc_handle = calloc(1, sizeof(handle_t));
+
 	if (!alloc_handle) {
 		error = strerror_r(errno, err_buf, sizeof(err_buf));
 		GNIX_WARN(FI_LOG_EP_CTRL,
@@ -213,62 +220,81 @@ int _gnix_buddy_allocator_create(void *base, size_t len, size_t max,
 		return -FI_ENOMEM;
 	}
 
+	fastlock_init(&alloc_handle[0]->lock);
+	fastlock_acquire(&alloc_handle[0]->lock);
+
 	alloc_handle[0]->base = base;
 	alloc_handle[0]->len = len;
-
-	alloc_handle[0]->min = 16;
 	alloc_handle[0]->max = max;
 
 	if (__gnix_buddy_create_lists(alloc_handle[0])) {
+		fastlock_release(&alloc_handle[0]->lock);
+		free(*alloc_handle);
 		return -FI_ENOMEM;
 	}
 
-	return _gnix_alloc_bitmap(&alloc_handle[0]->bitmap,
-				      len / alloc_handle[0]->min * 2);
+	if ((fi_errno = _gnix_alloc_bitmap(&alloc_handle[0]->bitmap,
+					   len / MIN_BLOCK_SIZE * 2))) {
+
+		free(&alloc_handle[0]->lists);
+		free(*alloc_handle);
+	}
+
+	fastlock_release(&alloc_handle[0]->lock);
+
+	return fi_errno;
 }
 
-int _gnix_buddy_allocator_destroy(handle_t alloc_handle)
+int _gnix_buddy_allocator_destroy(handle_t *alloc_handle)
 {
-	int fi_errno;
-
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (!alloc_handle) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Invalid parameter to buddy_allocator_destroy.\n");
+			  "Invalid parameter to _gnix_buddy_allocator_destroy."
+			  "\n");
 		return -FI_EINVAL;
 	}
 
+	fastlock_acquire(&alloc_handle->lock);
+
 	free(alloc_handle->lists);
 
-	if ((fi_errno = _gnix_free_bitmap(&alloc_handle->bitmap))) {
+	while (_gnix_free_bitmap(&alloc_handle->bitmap)) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Failed to free buddy_allocator_handle bitmap.");
-		return fi_errno;
+			  "Trying to free buddy allocator handle bitmap.");
+		sleep(1);
 	}
+
+	fastlock_release(&alloc_handle->lock);
+	fastlock_destroy(&alloc_handle->lock);
 
 	free(alloc_handle);
 
 	return FI_SUCCESS;
 }
 
-int _gnix_buddy_alloc(handle_t alloc_handle, void **ptr, size_t len)
+int _gnix_buddy_alloc(handle_t *alloc_handle, void **ptr, size_t len)
 {
-	size_t bsize, i = 0;
+	size_t block_size, i = 0;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (!alloc_handle || !ptr || !len || len > alloc_handle->max) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Invalid parameter to buddy_allocator_alloc.\n");
+			  "Invalid parameter to _gnix_buddy_alloc.\n");
 		return -FI_EINVAL;
 	}
 
-	bsize = BLOCK_SIZE(len, alloc_handle->min);
-	i = (size_t) LIST_INDEX(bsize, alloc_handle->min);
+	block_size = BLOCK_SIZE(len, MIN_BLOCK_SIZE);
+	i = (size_t) LIST_INDEX(block_size, MIN_BLOCK_SIZE);
+
+	fastlock_acquire(&alloc_handle->lock);
 
 	if (dlist_empty(alloc_handle->lists + i) &&
 	    __gnix_buddy_find_block(alloc_handle, i)) {
+
+		fastlock_release(&alloc_handle->lock);
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "Could not allocate buddy block.\n");
 		return -FI_ENOMEM;
@@ -284,16 +310,18 @@ int _gnix_buddy_alloc(handle_t alloc_handle, void **ptr, size_t len)
 		dlist_remove(*ptr = alloc_handle->lists[i].next);
 	}
 
+	fastlock_release(&alloc_handle->lock);
+
 	_gnix_set_bit(&alloc_handle->bitmap,
-		      BITMAP_INDEX(*ptr, alloc_handle->base, alloc_handle->min,
-				   bsize));
+		      BITMAP_INDEX(*ptr, alloc_handle->base, MIN_BLOCK_SIZE,
+				   block_size));
 
 	return FI_SUCCESS;
 }
 
-int _gnix_buddy_free(handle_t alloc_handle, void *ptr, size_t len)
+int _gnix_buddy_free(handle_t *alloc_handle, void *ptr, size_t len)
 {
-	size_t bsize;
+	size_t block_size;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -302,20 +330,24 @@ int _gnix_buddy_free(handle_t alloc_handle, void *ptr, size_t len)
 	    ptr < alloc_handle->base) {
 
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Invalid parameter to buddy_allocator_free.\n");
+			  "Invalid parameter to _gnix_buddy_free.\n");
 		return -FI_EINVAL;
 	}
 
-	bsize = BLOCK_SIZE(len, alloc_handle->min);
+	block_size = BLOCK_SIZE(len, MIN_BLOCK_SIZE);
 
-	_gnix_clear_bit(&alloc_handle->bitmap,
-			BITMAP_INDEX(ptr, alloc_handle->base, alloc_handle->min,
-				     bsize));
+	fastlock_acquire(&alloc_handle->lock);
 
-	__gnix_buddy_coalesce(alloc_handle, &ptr, &bsize);
+	__gnix_buddy_coalesce(alloc_handle, &ptr, &block_size);
 
 	dlist_insert_tail(ptr, alloc_handle->lists +
-			  LIST_INDEX(bsize, alloc_handle->min));
+			  LIST_INDEX(block_size, MIN_BLOCK_SIZE));
+
+	fastlock_release(&alloc_handle->lock);
+
+	_gnix_clear_bit(&alloc_handle->bitmap,
+			BITMAP_INDEX(ptr, alloc_handle->base, MIN_BLOCK_SIZE,
+				     block_size));
 
 	return FI_SUCCESS;
 }
