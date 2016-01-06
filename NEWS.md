@@ -29,6 +29,10 @@ v1.2.0, TBD
 ## Sockets provider notes
 
 - General bug fixes and code cleanup
+- Update memory registration to support 32-bit builds and fix build warnings
+- Initiate conn-msg on the same tx_ctx as the tx operation for scalable ep
+- Fix av mask calculation for scalable ep
+- Mask out context-id during connection lookup for scalable ep
 - Increase buffered receive limit
 - Ignore FI_INJECT flag for atomic read operation
 - Return -FI_EINVAL instead of -FI_ENODATA for fi_endpoint for invalid attributes
