@@ -5,7 +5,7 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.2.0, TBD
+v1.2.0, Thu Jan 7, 2016
 =======================
 
 ## General notes
@@ -72,7 +72,7 @@ v1.2.0, TBD
 - Add support for fi_eq_write.
 - Other misc bug fixes.
 
-v1.1.1, TBD
+v1.1.1, Fri Oct 2, 2015
 =======================
 
 ## General notes
