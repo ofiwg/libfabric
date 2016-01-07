@@ -1,4 +1,4 @@
-.TH fi_usnic 7 "2015\-12\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_usnic 7 "2016\-01\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The usNIC Fabric Provider
@@ -49,6 +49,8 @@ extensively tested as the underlying layer for Open MPI\[aq]s
 \f[I]FI_EP_MSG\f[] and \f[I]FI_EP_RDM\f[] endpoints are implemented, but
 are only lightly tested.
 It is likely that there are still some bugs in these endpoint types.
+In particular, there are known bugs in RDM support in the presence of
+congestion or packet loss (issue 1621).
 RMA is not yet supported.
 .IP \[bu] 2
 \f[C]fi_provider\f[](7) lists requirements for all providers.
