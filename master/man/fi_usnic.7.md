@@ -43,7 +43,9 @@ low latency and other offload capabilities on Ethernet networks.
       MPI's *usnic* BTL.
     - *FI_EP_MSG* and *FI_EP_RDM* endpoints are implemented, but are
       only lightly tested.  It is likely that there are still some bugs
-      in these endpoint types.  RMA is not yet supported.
+      in these endpoint types. In particular, there are known bugs in RDM
+      support in the presence of congestion or packet loss (issue 1621).
+      RMA is not yet supported.
     - [`fi_provider`(7)](fi_provider.7.html) lists requirements for all
       providers.  The following limitations exist in the *usnic*
       provider:
