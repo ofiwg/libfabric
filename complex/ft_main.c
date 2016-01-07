@@ -422,6 +422,10 @@ static int ft_fw_client(void)
 		fts_cur_info(series, &test_info);
 		ft_fw_convert_info(hints, &test_info);
 
+		ret = ft_getsrcaddr(opts.src_addr, opts.src_port, hints);
+		if (ret)
+			return ret;
+
 		printf("Starting test %d / %d\n", test_info.test_index, series->test_count);
 		ret = fi_getinfo(FT_FIVERSION, ft_strptr(test_info.node),
 				 ft_strptr(test_info.service), 0, hints, &info);
@@ -459,13 +463,18 @@ static void ft_fw_usage(char *program)
 {
 	fprintf(stderr, "usage: %s [server_node]\n", program);
 	fprintf(stderr, "\nOptions:\n");
-	FT_PRINT_OPTS_USAGE("-f <test_config_file>", "");
 	FT_PRINT_OPTS_USAGE("-q <service_port>", "Management port for test");
-	FT_PRINT_OPTS_USAGE("-p <dst_port>", "destination port number");
+	FT_PRINT_OPTS_USAGE("-h", "display this help output");
+	fprintf(stderr, "\nServer only options:\n");
 	FT_PRINT_OPTS_USAGE("-x", "exit after test run");
+	fprintf(stderr, "\nClient only options:\n");
+	FT_PRINT_OPTS_USAGE("-f <test_config_file>", "");
 	FT_PRINT_OPTS_USAGE("-y <start_test_index>", "");
 	FT_PRINT_OPTS_USAGE("-z <end_test_index>", "");
-	FT_PRINT_OPTS_USAGE("-h", "display this help output");
+	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
+	FT_PRINT_OPTS_USAGE("-b <src_port>", "non default source port number");
+	FT_PRINT_OPTS_USAGE("-p <dst_port>", "non default destination port number"
+		       " (config file service parameter will override this)");
 }
 
 int main(int argc, char **argv)
@@ -475,7 +484,7 @@ int main(int argc, char **argv)
 	opts = INIT_OPTS;
 	int ret, op;
 
-	while ((op = getopt(argc, argv, "f:q:p:xy:z:h")) != -1) {
+	while ((op = getopt(argc, argv, "f:q:xy:z:h" ADDR_OPTS)) != -1) {
 		switch (op) {
 		case 'f':
 			filename = optarg;
@@ -510,7 +519,8 @@ int main(int argc, char **argv)
 	opts.dst_addr = (optind == argc - 1) ? argv[optind] : NULL;
 
 	if (opts.dst_addr) {
-		opts.dst_port = default_port;
+		if (!opts.dst_port)
+			opts.dst_port = default_port;
 		series = fts_load(filename);
 		if (!series)
 			exit(1);
