@@ -64,7 +64,7 @@ static void __domain_destruct(void *obj)
 	if (domain->mr_cache) {
 		ret = _gnix_mr_cache_destroy(domain->mr_cache);
 		if (ret != FI_SUCCESS)
-			GNIX_ERR(FI_LOG_DOMAIN, "failed to destroy mr cache "
+			GNIX_WARN(FI_LOG_DOMAIN, "failed to destroy mr cache "
 					"during domain destruct, dom=%p",
 					domain);
 		assert(ret == FI_SUCCESS);
@@ -366,7 +366,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		ret =
 		    gnixu_get_rdma_credentials(info->dest_addr, &ptag, &cookie);
 		if (ret) {
-			GNIX_ERR(FI_LOG_DOMAIN,
+			GNIX_WARN(FI_LOG_DOMAIN,
 				   "gnixu_get_rdma_credentials returned ptag %u cookie 0x%x\n",
 				   ptag, cookie);
 			goto err;

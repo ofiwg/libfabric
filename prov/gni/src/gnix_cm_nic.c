@@ -525,7 +525,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 				       gnix_cdm_modes,
 				       &cm_nic->gni_cdm_hndl);
 		if (status != GNI_RC_SUCCESS) {
-			GNIX_ERR(FI_LOG_EP_CTRL, "GNI_CdmCreate returned %s\n",
+			GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmCreate returned %s\n",
 				       gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
 			goto err;
@@ -537,7 +537,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 		status = GNI_CdmAttach(cm_nic->gni_cdm_hndl, 0, &device_addr,
 				       &cm_nic->gni_nic_hndl);
 		if (status != GNI_RC_SUCCESS) {
-			GNIX_ERR(FI_LOG_EP_CTRL, "GNI_CdmAttach returned %s\n",
+			GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmAttach returned %s\n",
 			       gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
 			goto err;

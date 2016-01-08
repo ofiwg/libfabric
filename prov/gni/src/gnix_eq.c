@@ -135,14 +135,14 @@ static struct slist_entry *alloc_eq_entry(size_t size)
 	struct gnix_eq_entry *entry = calloc(1, sizeof(*entry));
 
 	if (!entry) {
-		GNIX_ERR(FI_LOG_EQ, "out of memory\n");
+		GNIX_WARN(FI_LOG_EQ, "out of memory\n");
 		goto err;
 	}
 
 	if (size) {
 		entry->the_entry = malloc(size);
 		if (!entry->the_entry) {
-			GNIX_ERR(FI_LOG_EQ, "out of memory\n");
+			GNIX_WARN(FI_LOG_EQ, "out of memory\n");
 			goto cleanup;
 		}
 	}
@@ -180,7 +180,7 @@ static ssize_t gnix_eq_write_error(struct fid_eq *eq, fid_t fid,
 
 	item = _gnix_queue_get_free(eq_priv->errors);
 	if (!item) {
-		GNIX_ERR(FI_LOG_EQ, "error creating error entry\n");
+		GNIX_WARN(FI_LOG_EQ, "error creating error entry\n");
 		ret = -FI_ENOMEM;
 		goto err;
 	}
@@ -445,7 +445,7 @@ static ssize_t gnix_eq_write(struct fid_eq *eq, uint32_t event,
 
 	item = _gnix_queue_get_free(eq_priv->events);
 	if (!item) {
-		GNIX_ERR(FI_LOG_EQ, "error creating eq_entry\n");
+		GNIX_WARN(FI_LOG_EQ, "error creating eq_entry\n");
 		ret = -FI_ENOMEM;
 		goto err;
 	}
@@ -454,7 +454,7 @@ static ssize_t gnix_eq_write(struct fid_eq *eq, uint32_t event,
 
 	entry->the_entry = calloc(1, len);
 	if (!entry->the_entry) {
-		GNIX_ERR(FI_LOG_EQ, "error allocating buffer\n");
+		GNIX_WARN(FI_LOG_EQ, "error allocating buffer\n");
 		ret = -FI_ENOMEM;
 		goto err;
 	}
