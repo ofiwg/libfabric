@@ -14,6 +14,8 @@ v1.1.1](https://www.openfabrics.org/downloads/ofi/libfabric-1.1.1.tar.bz2).
   * [fabric(7)](fabric.7.html)
   * [fi_direct(7)](fi_direct.7.html)
   * [fi_provider(7)](fi_provider.7.html)
+
+* Provider details
   * [fi_psm(7)](fi_psm.7.html)
   * [fi_sockets(7)](fi_sockets.7.html)
   * [fi_usnic(7)](fi_usnic.7.html)
