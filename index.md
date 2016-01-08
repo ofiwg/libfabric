@@ -37,7 +37,7 @@ The following document provides a short introduction to the libfabric architectu
 Developers coding to libfabric may find the following tutorial useful.  It walks through low-level interface details, followed by examples of application and middleware (MPI, SHEM) using the APIs.
 
 <div align="center">
-  <iframe src="https://www.slideshare.net/dgoodell/ofi-libfabric-tutorial" width="476" height="400" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" allowfullscreen></iframe>
+  <iframe src="https://www.slideshare.net/slideshow/embed_code/key/p0nI8BbOoDdSzj" width="476" height="400" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" allowfullscreen></iframe>
 </div>
 
 How do I get involved?
