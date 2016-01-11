@@ -154,7 +154,7 @@ if (defined($pages_branch_arg)) {
     push(@headings, { section=>3, title=>"API documentation" });
     foreach my $h (@headings) {
         print OUT "\n* $h->{title}\n";
-        foreach my $file (@markdown_files) {
+        foreach my $file (sort(@markdown_files)) {
             if ($file =~ /\.$h->{section}\.md$/) {
                 $file =~ m/^(.+)\.$h->{section}\.md$/;
                 my $base = $1;
