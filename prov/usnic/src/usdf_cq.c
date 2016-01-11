@@ -244,6 +244,10 @@ usdf_cq_sread_common(struct fid_cq *fcq, void *buf, size_t count, const void *co
 	sleep_time_us = SREAD_INIT_SLEEP_TIME_US;
 
 	cq = cq_ftou(fcq);
+
+	if (cq->cq_attr.wait_obj == FI_WAIT_NONE)
+		return -FI_EOPNOTSUPP;
+
 	if (cq->cq_comp.uc_status != 0)
 		return -FI_EAVAIL;
 
@@ -605,6 +609,10 @@ usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const voi
 	ssize_t ret;
 
 	cq = cq_ftou(fcq);
+
+	if (cq->cq_attr.wait_obj == FI_WAIT_NONE)
+		return -FI_EOPNOTSUPP;
+
 	sleep_time_us = SREAD_INIT_SLEEP_TIME_US;
 
 	switch (format) {
@@ -1101,8 +1109,15 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 static int
 usdf_cq_process_attr(struct fi_cq_attr *attr, struct usdf_domain *udp)
 {
-	/* no wait object yet */
-	if (attr->wait_obj != FI_WAIT_NONE) {
+	/*
+	 * no specific wait object yet, but still allow fi_cq_sread/_sreadfrom
+	 * to be called if the user doesn't want a particular wait object
+	 */
+	switch (attr->wait_obj) {
+	case FI_WAIT_NONE:
+	case FI_WAIT_UNSPEC:
+		break;
+	default:
 		return -FI_ENOSYS;
 	}
 
