@@ -398,17 +398,6 @@ struct gnix_fid_av {
 	struct gnix_reference ref_cnt;
 };
 
-/*
- *  enums, defines, for gni provider internal fab requests.
- */
-
-#define GNIX_FAB_RQ_M_IN_SEND_QUEUE           0x00000001
-#define GNIX_FAB_RQ_M_REPLAYABLE              0x00000002
-#define GNIX_FAB_RQ_M_UNEXPECTED              0x00000004
-#define GNIX_FAB_RQ_M_MATCHED                 0x00000008
-#define GNIX_FAB_RQ_M_COMPLETE                0x00000010
-#define GNIX_FAB_RQ_M_INJECT_DATA             0x00000020
-
 enum gnix_fab_req_type {
 	GNIX_FAB_RQ_SEND,
 	GNIX_FAB_RQ_TSEND,
@@ -481,7 +470,6 @@ struct gnix_fab_req {
 	void                      *user_context;
 	struct gnix_vc            *vc;
 	int                       (*work_fn)(void *);
-	int                       modes;
 	uint64_t                  flags;
 	void                      *txd;
 	uint32_t                  tx_failures;

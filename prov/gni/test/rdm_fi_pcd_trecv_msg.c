@@ -618,7 +618,12 @@ static void validate_cqe_contents(
 	cr_assert_eq(entry->data, 0);
 
 	if (flags & FI_RECV) {
-		cr_assert_eq(entry->len, len);
+		if (!(flags & FI_DISCARD))
+			cr_assert_eq(entry->len, len);
+		else {
+			cr_assert_eq(entry->len, 0);
+			cr_assert_eq(entry->buf, NULL);
+		}
 		cr_assert_eq(entry->tag, tag);
 		if (entry->buf != NULL)
 			cr_assert_eq(entry->buf, buf);
@@ -631,9 +636,10 @@ static void validate_cqe_contents(
 
 static void validate_cqe_with_message(
 		struct fi_cq_tagged_entry *entry,
-		struct fi_msg_tagged *msg)
+		struct fi_msg_tagged *msg,
+		uint64_t flags)
 {
-	validate_cqe_contents(entry, TRECV_FLAGS, msg->msg_iov[0].iov_base,
+	validate_cqe_contents(entry, flags, msg->msg_iov[0].iov_base,
 			msg->msg_iov[0].iov_len, msg->tag, msg->context);
 }
 
@@ -682,7 +688,7 @@ Test(rdm_fi_pdc, peek_no_event)
 			source, 128, 0);
 
 	ret = fi_trecvmsg(ep[1], &msg, FI_PEEK);
-	cr_assert_eq(ret, -FI_ENOMSG);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
 	cr_assert_eq(ret, 1);
@@ -772,19 +778,20 @@ static void pdc_peek_event_present_buffer_provided(int len)
 
 			COND_RECV_STATE_TRANSITION(ret, FI_SUCCESS,
 					R_STATE_PEEK_WAIT_CQ,
-					R_STATE_PEEK_WAIT_ERR_CQ);
+					R_STATE_PEEK);
 			break;
 		case R_STATE_PEEK_WAIT_CQ:
 			ret = fi_cq_read(msg_cq[1], &d_peek_cqe, 1);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_RECV_MSG_1,
-					R_STATE_PEEK_WAIT_CQ);
-			break;
-		case R_STATE_PEEK_WAIT_ERR_CQ:
-			ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_PEEK,
-					R_STATE_PEEK_WAIT_ERR_CQ);
+			if (ret == -FI_EAVAIL) {
+				ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_PEEK,
+						R_STATE_PEEK_WAIT_CQ);
+			} else {
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_RECV_MSG_1,
+						R_STATE_PEEK_WAIT_CQ);
+			}
 			break;
 		case R_STATE_RECV_MSG_1:
 			ret = fi_trecvmsg(ep[1], &msg, 0);
@@ -811,7 +818,8 @@ static void pdc_peek_event_present_buffer_provided(int len)
 
 	/* validate the expected results */
 	validate_cqe_contents(&s_cqe, TSEND_FLAGS, source, len, len, target);
-	validate_cqe_with_message(&d_peek_cqe, &peek_msg);
+	validate_cqe_with_message(&d_peek_cqe, &peek_msg,
+			TRECV_FLAGS | FI_PEEK);
 
 	/* if CQE provided a buffer back, the data was copied.
 	 * Check the data */
@@ -820,7 +828,7 @@ static void pdc_peek_event_present_buffer_provided(int len)
 				"Data mismatch");
 	}
 
-	validate_cqe_with_message(&d_cqe, &msg);
+	validate_cqe_with_message(&d_cqe, &msg, TRECV_FLAGS);
 	cr_assert(rdm_fi_pdc_check_data(source, target, len), "Data mismatch");
 }
 
@@ -899,19 +907,20 @@ static void pdc_peek_event_present_no_buff_provided(int len)
 			ret = fi_trecvmsg(ep[1], &peek_msg, FI_PEEK);
 			COND_RECV_STATE_TRANSITION(ret, FI_SUCCESS,
 					R_STATE_PEEK_WAIT_CQ,
-					R_STATE_PEEK_WAIT_ERR_CQ);
+					R_STATE_PEEK);
 			break;
 		case R_STATE_PEEK_WAIT_CQ:
 			ret = fi_cq_read(msg_cq[1], &d_peek_cqe, 1);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_RECV_MSG_1,
-					R_STATE_PEEK_WAIT_CQ);
-			break;
-		case R_STATE_PEEK_WAIT_ERR_CQ:
-			ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_PEEK,
-					R_STATE_PEEK_WAIT_ERR_CQ);
+			if (ret == -FI_EAVAIL) {
+				ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_PEEK,
+						R_STATE_PEEK_WAIT_CQ);
+			} else {
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_RECV_MSG_1,
+						R_STATE_PEEK_WAIT_CQ);
+			}
 			break;
 		case R_STATE_RECV_MSG_1:
 			ret = fi_trecvmsg(ep[1], &msg, 0);
@@ -938,11 +947,12 @@ static void pdc_peek_event_present_no_buff_provided(int len)
 
 	/* verify test execution correctness */
 	validate_cqe_contents(&s_cqe, TSEND_FLAGS, source, len, len, target);
-	validate_cqe_with_message(&d_cqe, &msg);
+	validate_cqe_with_message(&d_cqe, &msg, TRECV_FLAGS);
 
 	/* a pointer should never be returned */
 	cr_assert_eq(d_peek_cqe.buf, NULL);
-	validate_cqe_with_message(&d_peek_cqe, &peek_msg);
+	validate_cqe_with_message(&d_peek_cqe, &peek_msg,
+			TRECV_FLAGS | FI_PEEK);
 	cr_assert(rdm_fi_pdc_check_data(source, target, len),
 			"Data mismatch");
 }
@@ -1041,19 +1051,20 @@ static void pdc_peek_claim_same_tag(int len)
 			ret = fi_trecvmsg(ep[1], &peek_msg, FI_PEEK | FI_CLAIM);
 			COND_RECV_STATE_TRANSITION(ret, FI_SUCCESS,
 					R_STATE_PEEK_CLAIM_WAIT_CQ,
-					R_STATE_PEEK_CLAIM_WAIT_ERR_CQ);
+					R_STATE_PEEK_CLAIM);
 			break;
 		case R_STATE_PEEK_CLAIM_WAIT_CQ:
 			ret = fi_cq_read(msg_cq[1], &d_peek_cqe, 1);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_RECV_MSG_2,
-					R_STATE_PEEK_CLAIM_WAIT_CQ);
-			break;
-		case R_STATE_PEEK_CLAIM_WAIT_ERR_CQ:
-			ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_PEEK_CLAIM,
-					R_STATE_PEEK_CLAIM_WAIT_ERR_CQ);
+			if (ret == -FI_EAVAIL) {
+				ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_PEEK_CLAIM,
+						R_STATE_PEEK_CLAIM_WAIT_CQ);
+			} else {
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_RECV_MSG_2,
+						R_STATE_PEEK_CLAIM_WAIT_CQ);
+			}
 			break;
 		case R_STATE_RECV_MSG_2:
 			ret = fi_trecvmsg(ep[1], &msg[1], 0);
@@ -1099,9 +1110,10 @@ static void pdc_peek_claim_same_tag(int len)
 			src_buf[0], len, len, dst_buf[0]);
 	validate_cqe_contents(src_cqe[1], TSEND_FLAGS,
 			src_buf[1], len, len, dst_buf[1]);
-	validate_cqe_with_message(&d_peek_cqe, &peek_msg);
-	validate_cqe_with_message(&d_cqe[1], &msg[1]);
-	validate_cqe_with_message(&d_cqe[0], &msg[0]);
+	validate_cqe_with_message(&d_peek_cqe, &peek_msg,
+			TRECV_FLAGS | FI_PEEK | FI_CLAIM);
+	validate_cqe_with_message(&d_cqe[1], &msg[1], TRECV_FLAGS);
+	validate_cqe_with_message(&d_cqe[0], &msg[0], TRECV_FLAGS | FI_CLAIM);
 
 	/* if CQE provided a buffer back, the data was copied.
 	 * Check the data */
@@ -1212,19 +1224,20 @@ static void pdc_peek_claim_unique_tag(int len)
 			ret = fi_trecvmsg(ep[1], &peek_msg, FI_PEEK | FI_CLAIM);
 			COND_RECV_STATE_TRANSITION(ret, FI_SUCCESS,
 					R_STATE_PEEK_CLAIM_WAIT_CQ,
-					R_STATE_PEEK_CLAIM_WAIT_ERR_CQ);
+					R_STATE_PEEK_CLAIM);
 			break;
 		case R_STATE_PEEK_CLAIM_WAIT_CQ:
 			ret = fi_cq_read(msg_cq[1], &d_peek_cqe, 1);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_RECV_MSG_2,
-					R_STATE_PEEK_CLAIM_WAIT_CQ);
-			break;
-		case R_STATE_PEEK_CLAIM_WAIT_ERR_CQ:
-			ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_PEEK_CLAIM,
-					R_STATE_PEEK_CLAIM_WAIT_ERR_CQ);
+			if (ret == -FI_EAVAIL) {
+				ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_PEEK_CLAIM,
+						R_STATE_PEEK_WAIT_CQ);
+			} else {
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_RECV_MSG_2,
+						R_STATE_PEEK_CLAIM_WAIT_CQ);
+			}
 			break;
 		case R_STATE_RECV_MSG_2:
 			ret = fi_trecvmsg(ep[1], &msg[1], 0);
@@ -1271,9 +1284,10 @@ static void pdc_peek_claim_unique_tag(int len)
 		validate_cqe_contents(src_cqe[i], TSEND_FLAGS,
 				src_buf[i], len, len + i, dst_buf[i]);
 
-	validate_cqe_with_message(&d_peek_cqe, &peek_msg);
-	validate_cqe_with_message(&d_cqe[1], &msg[1]);
-	validate_cqe_with_message(&d_cqe[0], &msg[0]);
+	validate_cqe_with_message(&d_peek_cqe, &peek_msg,
+			TRECV_FLAGS | FI_PEEK | FI_CLAIM);
+	validate_cqe_with_message(&d_cqe[1], &msg[1], TRECV_FLAGS);
+	validate_cqe_with_message(&d_cqe[0], &msg[0], TRECV_FLAGS | FI_CLAIM);
 
 	/* if CQE provided a buffer back, the data was copied.
 	 * Check the data */
@@ -1357,23 +1371,24 @@ static void pdc_peek_discard(int len)
 			ret = fi_trecvmsg(ep[1], &peek_msg, FI_PEEK | FI_DISCARD);
 			COND_RECV_STATE_TRANSITION(ret, FI_SUCCESS,
 					R_STATE_PEEK_DISCARD_WAIT_CQ,
-					R_STATE_PEEK_DISCARD_WAIT_ERR_CQ);
-			break;
-		case R_STATE_PEEK_DISCARD_WAIT_ERR_CQ:
-			ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_PEEK_DISCARD,
-					R_STATE_PEEK_DISCARD_WAIT_ERR_CQ);
+					R_STATE_PEEK_DISCARD);
 			break;
 		case R_STATE_PEEK_DISCARD_WAIT_CQ:
 			ret = fi_cq_read(msg_cq[1], &d_peek_cqe, 1);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_PEEK,
-					R_STATE_PEEK_DISCARD_WAIT_CQ);
+			if (ret == -FI_EAVAIL) {
+				ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_PEEK_DISCARD,
+						R_STATE_PEEK_DISCARD_WAIT_CQ);
+			} else {
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_PEEK,
+						R_STATE_PEEK_DISCARD_WAIT_CQ);
+			}
 			break;
 		case R_STATE_PEEK:
 			ret = fi_trecvmsg(ep[1], &msg, FI_PEEK);
-			cr_assert_eq(ret, -FI_ENOMSG);
+			cr_assert_eq(ret, FI_SUCCESS);
 			RECV_STATE_TRANSITION(R_STATE_PEEK_WAIT_ERR_CQ);
 			break;
 		case R_STATE_PEEK_WAIT_ERR_CQ:
@@ -1396,7 +1411,8 @@ static void pdc_peek_discard(int len)
 
 	/* verify test execution correctness */
 	validate_cqe_contents(&s_cqe, TSEND_FLAGS, source, len, len, target);
-	validate_cqe_with_message(&d_peek_cqe, &peek_msg);
+	validate_cqe_with_message(&d_peek_cqe, &peek_msg,
+			TRECV_FLAGS | FI_PEEK | FI_DISCARD);
 
 	cr_assert(rdm_fi_pdc_check_data_pattern(target, 0, len),
 			"Data matched");
@@ -1495,19 +1511,20 @@ static void pdc_peek_discard_unique_tags(int len)
 			ret = fi_trecvmsg(ep[1], &peek_msg, FI_PEEK | FI_DISCARD);
 			COND_RECV_STATE_TRANSITION(ret, FI_SUCCESS,
 					R_STATE_PEEK_DISCARD_WAIT_CQ,
-					R_STATE_PEEK_DISCARD_WAIT_ERR_CQ);
-			break;
-		case R_STATE_PEEK_DISCARD_WAIT_ERR_CQ:
-			ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_PEEK_DISCARD,
-					R_STATE_PEEK_DISCARD_WAIT_ERR_CQ);
+					R_STATE_PEEK_DISCARD);
 			break;
 		case R_STATE_PEEK_DISCARD_WAIT_CQ:
 			ret = fi_cq_read(msg_cq[1], &d_peek_cqe, 1);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_RECV_MSG_2,
-					R_STATE_PEEK_DISCARD_WAIT_CQ);
+			if (ret == -FI_EAVAIL) {
+				ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_PEEK_DISCARD,
+						R_STATE_PEEK_DISCARD_WAIT_CQ);
+			} else {
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_RECV_MSG_2,
+						R_STATE_PEEK_DISCARD_WAIT_CQ);
+			}
 			break;
 		case R_STATE_RECV_MSG_2:
 			ret = fi_trecvmsg(ep[1], &msg[1], 0);
@@ -1523,7 +1540,7 @@ static void pdc_peek_discard_unique_tags(int len)
 			break;
 		case R_STATE_PEEK:
 			ret = fi_trecvmsg(ep[1], &msg[0], FI_PEEK);
-			cr_assert_eq(ret, -FI_ENOMSG);
+			cr_assert_eq(ret, FI_SUCCESS);
 			RECV_STATE_TRANSITION(R_STATE_PEEK_WAIT_ERR_CQ);
 			break;
 		case R_STATE_PEEK_WAIT_ERR_CQ:
@@ -1552,8 +1569,9 @@ static void pdc_peek_discard_unique_tags(int len)
 		validate_cqe_contents(src_cqe[i], TSEND_FLAGS,
 				src_buf[i], len, len + i, dst_buf[i]);
 
-	validate_cqe_with_message(&d_cqe[1], &msg[1]);
-	validate_cqe_with_message(&d_peek_cqe, &peek_msg);
+	validate_cqe_with_message(&d_cqe[1], &msg[1], TRECV_FLAGS);
+	validate_cqe_with_message(&d_peek_cqe, &peek_msg,
+			TRECV_FLAGS | FI_PEEK | FI_DISCARD);
 
 	cr_assert(rdm_fi_pdc_check_data_pattern(dst_buf[0], 0, len),
 			"Data mismatch");
@@ -1662,19 +1680,20 @@ static void pdc_peek_claim_then_claim_discard(int len)
 			ret = fi_trecvmsg(ep[1], &peek_msg, FI_PEEK | FI_CLAIM);
 			COND_RECV_STATE_TRANSITION(ret, FI_SUCCESS,
 					R_STATE_PEEK_CLAIM_WAIT_CQ,
-					R_STATE_PEEK_CLAIM_WAIT_ERR_CQ);
+					R_STATE_PEEK_CLAIM);
 			break;
 		case R_STATE_PEEK_CLAIM_WAIT_CQ:
 			ret = fi_cq_read(msg_cq[1], &d_peek_cqe, 1);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_RECV_MSG_2,
-					R_STATE_PEEK_CLAIM_WAIT_CQ);
-			break;
-		case R_STATE_PEEK_CLAIM_WAIT_ERR_CQ:
-			ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
-			COND_RECV_STATE_TRANSITION(ret, 1,
-					R_STATE_PEEK_CLAIM,
-					R_STATE_PEEK_CLAIM_WAIT_ERR_CQ);
+			if (ret == -FI_EAVAIL) {
+				ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_PEEK_CLAIM,
+						R_STATE_PEEK_CLAIM_WAIT_CQ);
+			} else {
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_RECV_MSG_2,
+						R_STATE_PEEK_CLAIM_WAIT_CQ);
+			}
 			break;
 		case R_STATE_RECV_MSG_2:
 			ret = fi_trecvmsg(ep[1], &msg[1], 0);
@@ -1720,7 +1739,8 @@ static void pdc_peek_claim_then_claim_discard(int len)
 		validate_cqe_contents(src_cqe[i], TSEND_FLAGS,
 				src_buf[i], len, len + i, dst_buf[i]);
 
-	validate_cqe_with_message(&d_peek_cqe, &peek_msg);
+	validate_cqe_with_message(&d_peek_cqe, &peek_msg,
+			TRECV_FLAGS | FI_PEEK | FI_CLAIM);
 
 	/* if CQE provided a buffer back, the data was copied.
 	 * Check the data */
@@ -1729,8 +1749,9 @@ static void pdc_peek_claim_then_claim_discard(int len)
 				"Data mismatch");
 	}
 
-	validate_cqe_with_message(&d_cqe[0], &msg[0]);
-	validate_cqe_with_message(&d_cqe[1], &msg[1]);
+	validate_cqe_with_message(&d_cqe[0], &msg[0],
+			TRECV_FLAGS | FI_CLAIM | FI_DISCARD);
+	validate_cqe_with_message(&d_cqe[1], &msg[1], TRECV_FLAGS);
 
 	cr_assert(rdm_fi_pdc_check_data_pattern(dst_buf[0], 0, len),
 			"Data mismatch");
@@ -1741,5 +1762,123 @@ static void pdc_peek_claim_then_claim_discard(int len)
 Test(rdm_fi_pdc, peek_claim_then_claim_discard)
 {
 	rdm_fi_pdc_xfer_for_each_size(pdc_peek_claim_then_claim_discard,
+			1, BUF_SZ);
+}
+
+static void pdc_peek_event_present_small_buffer_provided(int len)
+{
+	/* Like pdc_peek_event_present_buffer_provided except uses an
+	 * undersized receive buffer with the FI_PEEK request. */
+	int ret;
+	struct fi_msg_tagged msg;
+	struct iovec iov;
+	struct fi_cq_tagged_entry s_cqe;
+	struct fi_cq_tagged_entry d_cqe;
+
+	rdm_fi_pdc_init_data(source, len, 0xab);
+	rdm_fi_pdc_init_data(target, len, 0);
+
+	build_message(&msg, &iov, target, len, (void *) &rem_mr, gni_addr[0],
+			source, len, 0);
+
+	INIT_TEST_STATE(S_STATE_SEND_MSG_1, R_STATE_PEEK);
+
+	/* we need to set up a peek buffer to ensure the contents of the peek
+	 * are copied correctly. In the event of a discard, the data can be
+	 * fetched with a peek, but the target buffer should remain untouched
+	 */
+	build_peek_message(&peek_msg, &msg);
+	peek_iov.iov_len /= 2;
+
+	start_test_timer();
+	do {
+		PROGRESS_CQS(msg_cq);
+
+		switch (s_state) {
+		case S_STATE_SEND_MSG_1:
+			ret = fi_tsend(ep[0], source, len, loc_mr,
+					gni_addr[1], len, target);
+			cr_assert_eq(ret, FI_SUCCESS);
+			SEND_STATE_TRANSITION(S_STATE_SEND_MSG_1_WAIT_CQ);
+			break;
+		case S_STATE_SEND_MSG_1_WAIT_CQ:
+			ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+			COND_SEND_STATE_TRANSITION(ret, 1,
+					S_STATE_DONE,
+					S_STATE_SEND_MSG_1_WAIT_CQ);
+			break;
+		case S_STATE_DONE:
+			break;
+		default:
+			RAISE_UNREACHABLE_STATE;
+			break;
+		}
+
+		switch (r_state) {
+		case R_STATE_PEEK:
+			ret = fi_trecvmsg(ep[1], &peek_msg, FI_PEEK);
+
+			COND_RECV_STATE_TRANSITION(ret, FI_SUCCESS,
+					R_STATE_PEEK_WAIT_CQ,
+					R_STATE_PEEK);
+			break;
+		case R_STATE_PEEK_WAIT_CQ:
+			ret = fi_cq_read(msg_cq[1], &d_peek_cqe, 1);
+			if (ret == -FI_EAVAIL) {
+				ret = fi_cq_readerr(msg_cq[1], &cqe_error, 0);
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_PEEK,
+						R_STATE_PEEK_WAIT_CQ);
+			} else {
+				COND_RECV_STATE_TRANSITION(ret, 1,
+						R_STATE_RECV_MSG_1,
+						R_STATE_PEEK_WAIT_CQ);
+			}
+			break;
+		case R_STATE_RECV_MSG_1:
+			ret = fi_trecvmsg(ep[1], &msg, 0);
+			cr_assert_eq(ret, FI_SUCCESS);
+			RECV_STATE_TRANSITION(R_STATE_RECV_MSG_1_WAIT_CQ);
+			break;
+		case R_STATE_RECV_MSG_1_WAIT_CQ:
+			ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+			COND_RECV_STATE_TRANSITION(ret, 1,
+					R_STATE_DONE,
+					R_STATE_RECV_MSG_1_WAIT_CQ);
+			break;
+		case R_STATE_DONE:
+			break;
+		default:
+			RAISE_UNREACHABLE_STATE;
+			break;
+		}
+
+		update_test_timer();
+	} while (!TEST_TIME_LIMIT_EXPIRED && !SEND_RECV_DONE);
+
+	ASSERT_SEND_RECV_DONE;
+
+	/* validate the expected results */
+	validate_cqe_contents(&s_cqe, TSEND_FLAGS, source, len, len, target);
+	validate_cqe_contents(&d_peek_cqe, TRECV_FLAGS | FI_PEEK,
+			peek_msg.msg_iov[0].iov_base, len, peek_msg.tag,
+			peek_msg.context);
+
+	/* if CQE provided a buffer back, the data was copied.
+	 * Check the data */
+	if (d_peek_cqe.buf) {
+		cr_assert(rdm_fi_pdc_check_data_pattern(peek_buffer, 0xab,
+				peek_iov.iov_len),
+				"Data mismatch");
+	}
+
+	validate_cqe_with_message(&d_cqe, &msg, TRECV_FLAGS);
+	cr_assert(rdm_fi_pdc_check_data(source, target, len), "Data mismatch");
+}
+
+Test(rdm_fi_pdc, peek_event_present_small_buff_provided)
+{
+	rdm_fi_pdc_xfer_for_each_size(
+			pdc_peek_event_present_small_buffer_provided,
 			1, BUF_SZ);
 }
