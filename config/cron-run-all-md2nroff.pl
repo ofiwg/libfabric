@@ -93,11 +93,12 @@ if ($rc != 0 || ! -d $logfile_dir || ! -w $logfile_dir) {
     die "mkdir of $logfile_dir failed, or can't write to it";
 }
 
+my $tmpdir = File::Temp->newdir();
+verbose("*** Working in: $tmpdir\n");
+chdir($tmpdir);
+
 # First, git clone the source branch of the repo
 verbose("*** Cloning repo: $repo_arg / $source_branch_arg...\n");
-my $tmpdir = File::Temp->newdir();
-
-chdir($tmpdir);
 doit(0, "git clone --single-branch --branch $source_branch_arg $repo_arg source", "git-clone");
 
 # Next, git clone the pages branch of repo
@@ -153,7 +154,7 @@ if (defined($pages_branch_arg)) {
     push(@headings, { section=>3, title=>"API documentation" });
     foreach my $h (@headings) {
         print OUT "\n* $h->{title}\n";
-        foreach my $file (@markdown_files) {
+        foreach my $file (sort(@markdown_files)) {
             if ($file =~ /\.$h->{section}\.md$/) {
                 $file =~ m/^(.+)\.$h->{section}\.md$/;
                 my $base = $1;
