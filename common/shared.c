@@ -65,7 +65,7 @@ size_t buf_size, tx_size, rx_size;
 int rx_fd = -1, tx_fd = -1;
 char default_port[8] = "9228";
 
-char test_name[10] = "custom";
+char test_name[50] = "custom";
 int timeout = -1;
 struct timespec start, end;
 
@@ -703,7 +703,8 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 	char sstr[FT_STR_LEN];
 
 	size_str(sstr, opts->transfer_size);
-	snprintf(test_name, test_name_len, "%s_lat", sstr);
+	if (!strcmp(test_name, "custom"))
+		snprintf(test_name, test_name_len, "%s_lat", sstr);
 	if (!(opts->options & FT_OPT_ITER))
 		opts->iterations = size_to_count(opts->transfer_size);
 }
@@ -1043,12 +1044,12 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 	long long bytes = (long long) iters * tsize * xfers_per_iter;
 
 	if (header) {
-		printf("%-10s%-8s%-8s%-8s%8s %10s%13s\n",
+		printf("%-50s%-8s%-8s%-8s%8s %10s%13s\n",
 			"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
 		header = 0;
 	}
 
-	printf("%-10s", name);
+	printf("%-50s", name);
 
 	printf("%-8s", size_str(str, tsize));
 
