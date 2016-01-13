@@ -42,6 +42,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/epoll.h>
@@ -162,6 +163,8 @@ usdf_cm_msg_accept(struct fid_ep *fep, const void *param, size_t paramlen)
 	if (ret != 0) {
 		goto fail;
 	}
+
+	ep->e.msg.ep_dest->ds_dest.ds_udp.u_hdr.uh_ip.frag_off |= htons(IP_DF);
 
 	ret = usdf_ep_msg_get_queues(ep);
 	if (ret != 0) {
@@ -301,6 +304,9 @@ usdf_cm_msg_connect_cb_rd(void *v)
 			usdf_cm_msg_connreq_failed(crp, ret);
 			return 0;
 		}
+
+		ep->e.msg.ep_dest->ds_dest.ds_udp.u_hdr.uh_ip.frag_off |=
+			htons(IP_DF);
 
 		entry->fid = ep_utofid(ep);
 		entry->info = NULL;
