@@ -55,6 +55,22 @@
  * helper functions
  ******************************************************************************/
 
+static struct gnix_fab_req *__gnix_msg_dup_req(struct gnix_fab_req *req)
+{
+	struct gnix_fab_req *new_req;
+
+	new_req = _gnix_fr_alloc(req->gnix_ep);
+	if (new_req == NULL) {
+		GNIX_WARN(FI_LOG_EP_DATA, "Failed to allocate request\n");
+		return NULL;
+	}
+
+	/* TODO: selectively copy fields. */
+	memcpy((void *)new_req, (void *)req, sizeof(*req));
+
+	return new_req;
+}
+
 static void __gnix_msg_queues(struct gnix_fid_ep *ep,
 			      int tagged,
 			      fastlock_t **queue_lock,
@@ -164,10 +180,11 @@ static inline int __gnix_msg_recv_completion(struct gnix_fid_ep *ep,
 	uint64_t flags = FI_RECV | FI_MSG;
 
 	flags |= req->msg.send_flags & (FI_TAGGED | FI_REMOTE_CQ_DATA);
-	flags |= req->msg.recv_flags & (FI_PEEK | FI_CLAIM | FI_DISCARD);
+	flags |= req->msg.recv_flags & (FI_PEEK | FI_CLAIM | FI_DISCARD |
+					FI_MULTI_RECV);
 
 	return __recv_completion(ep, req, req->user_context, flags,
-				 req->msg.recv_len, (void *)req->msg.recv_addr,
+				 req->msg.send_len, (void *)req->msg.recv_addr,
 				 req->msg.imm, req->msg.tag,
 				 _gnix_vc_peer_fi_addr(req->vc));
 }
@@ -289,17 +306,13 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 
 static void __gnix_msg_copy_unaligned_get_data(struct gnix_fab_req *req)
 {
-	int head_off, head_len, tail_len, send_len;
+	int head_off, head_len, tail_len;
 	void *addr;
-
-	if (req->msg.send_len > req->msg.recv_len)
-		send_len = req->msg.recv_len;
-	else
-		send_len = req->msg.send_len;
 
 	head_off = req->msg.send_addr & GNI_READ_ALIGN_MASK;
 	head_len = head_off ? GNI_READ_ALIGN - head_off : 0;
-	tail_len = (req->msg.send_addr + send_len) & GNI_READ_ALIGN_MASK;
+	tail_len = (req->msg.send_addr + req->msg.send_len) &
+			GNI_READ_ALIGN_MASK;
 
 	if (head_off) {
 		addr = (void *)&req->msg.rndzv_head + head_off;
@@ -311,7 +324,9 @@ static void __gnix_msg_copy_unaligned_get_data(struct gnix_fab_req *req)
 	}
 
 	if (tail_len) {
-		addr = (void *)(req->msg.recv_addr + send_len - tail_len);
+		addr = (void *)(req->msg.recv_addr +
+				req->msg.send_len -
+				tail_len);
 
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "writing %d bytes to tail (%p, 0x%x)\n",
@@ -326,7 +341,7 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 	struct gnix_fab_req *req = txd->req;
 	int ret;
 
-	if (req->msg.recv_flags & GNIX_MSG_DOUBLE_GET) {
+	if (req->msg.recv_flags & GNIX_MSG_GET_TAIL) {
 		/* There are two TXDs involved with this request, an RDMA
 		 * transfer to move the middle block and an FMA transfer to
 		 * move unaligned tail data.  If this is the FMA TXD, store the
@@ -396,7 +411,6 @@ static int __gnix_rndzv_req(void *arg)
 	struct fid_mr *auto_mr = NULL;
 	int inject_err = _gnix_req_inject_err(req);
 	int head_off, head_len, tail_len;
-	int send_len;
 	void *tail_data = NULL;
 
 	if (!req->msg.recv_md) {
@@ -437,32 +451,16 @@ static int __gnix_rndzv_req(void *arg)
 	txd->gni_desc.src_cq_hndl = (use_tx_cq_blk) ?
 					nic->tx_cq_blk : nic->tx_cq;
 
-	if (req->msg.send_len > req->msg.recv_len) {
-		send_len = req->msg.recv_len;
-		/* The send buffer will be truncated.  If the receive buffer
-		 * has unaligned length, we need to pull the unaligned portion
-		 * into an intermediate buffer. */
-		if ((req->msg.send_addr + send_len) & GNI_READ_ALIGN_MASK) {
-			tail_data = (void *)((req->msg.send_addr + send_len) &
-					      ~GNI_READ_ALIGN_MASK);
-			req->msg.recv_flags |= GNIX_MSG_DOUBLE_GET;
-		}
-	} else {
-		/* If the entire send buffer fits in the receive buffer.  We
-		 * can take unaligned head and tail data out of the rndzv_start
-		 * request. */
-		send_len = req->msg.send_len;
-	}
-
 	head_off = req->msg.send_addr & GNI_READ_ALIGN_MASK;
 	head_len = head_off ? GNI_READ_ALIGN - head_off : 0;
-	tail_len = (req->msg.send_addr + send_len) & GNI_READ_ALIGN_MASK;
+	tail_len = (req->msg.send_addr + req->msg.send_len) &
+			GNI_READ_ALIGN_MASK;
 
 	txd->gni_desc.local_addr = (uint64_t)req->msg.recv_addr + head_len;
 	txd->gni_desc.remote_addr = (uint64_t)req->msg.send_addr + head_len;
-	txd->gni_desc.length = send_len - head_len - tail_len;
+	txd->gni_desc.length = req->msg.send_len - head_len - tail_len;
 
-	if (req->msg.recv_flags & GNIX_MSG_DOUBLE_GET) {
+	if (req->msg.recv_flags & GNIX_MSG_GET_TAIL) {
 		/* The user ended up with a send matching a receive with a
 		 * buffer that is too short and unaligned... what a way to
 		 * behave.  We could not have forseen which unaligned data to
@@ -479,6 +477,9 @@ static int __gnix_rndzv_req(void *arg)
 
 		tail_txd->completer_fn = __gnix_rndzv_req_complete;
 		tail_txd->req = req;
+
+		tail_data = (void *)((req->msg.send_addr + req->msg.send_len) &
+				      ~GNI_READ_ALIGN_MASK);
 
 		tail_txd->gni_desc.type = GNI_POST_FMA_GET;
 		tail_txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
@@ -513,7 +514,7 @@ static int __gnix_rndzv_req(void *arg)
 		return gnixu_to_fi_errno(status);
 	}
 
-	if (req->msg.recv_flags & GNIX_MSG_DOUBLE_GET) {
+	if (req->msg.recv_flags & GNIX_MSG_GET_TAIL) {
 		if (unlikely(inject_err)) {
 			_gnix_nic_txd_err_inject(nic, tail_txd);
 			status = GNI_RC_SUCCESS;
@@ -669,10 +670,6 @@ static int __comp_rndzv_fin(void *data, gni_return_t tx_status)
 		GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV_FIN, req: %p\n",
 			  req);
 
-		/* Now that we're done with the transfer, set recv_len to the
-		 * actual transfer size to be put into the receive CQE. */
-		req->msg.recv_len = MIN(req->msg.send_len, req->msg.recv_len);
-
 		ret = __gnix_msg_recv_completion(req->gnix_ep, req);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_DATA,
@@ -735,26 +732,43 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 
 	fastlock_acquire(queue_lock);
 
-	req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, 0, NULL,
+	/* Lookup a matching posted request. */
+	req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, FI_PEEK, NULL,
 			      &vc->peer_addr);
 	if (req) {
-		GNIX_INFO(FI_LOG_EP_DATA, "matched req: %p\n",
-			  req);
-
 		req->addr = vc->peer_addr;
 		req->gnix_ep = ep;
 		req->vc = vc;
 
-		req->msg.send_len = hdr->len;
+		req->msg.send_len = MIN(hdr->len, req->msg.recv_len);
 		req->msg.send_flags = hdr->flags;
 		req->msg.tag = hdr->msg_tag;
 		req->msg.imm = hdr->imm;
 
-		req->msg.recv_len = MIN(req->msg.send_len, req->msg.recv_len);
-		memcpy((void *)req->msg.recv_addr, data_ptr, req->msg.recv_len);
+		GNIX_INFO(FI_LOG_EP_DATA, "Matched req: %p (%p, %u)\n",
+			  req, req->msg.recv_addr, req->msg.send_len);
 
+		memcpy((void *)req->msg.recv_addr, data_ptr, req->msg.send_len);
 		__gnix_msg_recv_completion(ep, req);
-		_gnix_fr_free(ep, req);
+
+		/* Check if we're using FI_MULTI_RECV and there is space left
+		 * in the receive buffer. */
+		if ((req->msg.recv_flags & FI_MULTI_RECV) &&
+		    ((req->msg.recv_len - req->msg.send_len) >=
+		     ep->min_multi_recv)) {
+			GNIX_INFO(FI_LOG_EP_DATA, "Re-using req: %p\n", req);
+
+			/* Adjust receive buffer for the next match. */
+			req->msg.recv_addr += req->msg.send_len;
+			req->msg.recv_len -= req->msg.send_len;
+		} else {
+			GNIX_INFO(FI_LOG_EP_DATA, "Freeing req: %p\n", req);
+
+			/* Dequeue and free the request. */
+			req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, 0,
+					      NULL, &vc->peer_addr);
+			_gnix_fr_free(ep, req);
+		}
 	} else {
 		/* Add new unexpected receive request. */
 		req = _gnix_fr_alloc(ep);
@@ -770,9 +784,6 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 			return -FI_ENOMEM;
 		}
 
-		GNIX_INFO(FI_LOG_EP_DATA, "New req: %p\n",
-			  req);
-
 		req->type = GNIX_FAB_RQ_RECV;
 		req->addr = vc->peer_addr;
 		req->gnix_ep = ep;
@@ -787,6 +798,9 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		req->addr = vc->peer_addr;
 
 		_gnix_insert_tag(unexp_queue, req->msg.tag, req, ~0);
+
+		GNIX_INFO(FI_LOG_EP_DATA, "New req: %p (%u)\n",
+			  req, req->msg.send_len);
 	}
 
 	fastlock_release(queue_lock);
@@ -864,7 +878,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 	struct gnix_smsg_rndzv_start_hdr *hdr =
 			(struct gnix_smsg_rndzv_start_hdr *)msg;
 	struct gnix_fid_ep *ep;
-	struct gnix_fab_req *req = NULL;
+	struct gnix_fab_req *req = NULL, *dup_req;
 	struct gnix_tag_storage *unexp_queue;
 	struct gnix_tag_storage *posted_queue;
 	fastlock_t *queue_lock;
@@ -878,18 +892,22 @@ static int __smsg_rndzv_start(void *data, void *msg)
 
 	fastlock_acquire(queue_lock);
 
-	req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, 0, NULL,
+	req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, FI_PEEK, NULL,
 			      &vc->peer_addr);
 	if (req) {
-		GNIX_INFO(FI_LOG_EP_DATA, "matched req: %p\n", req);
-
 		req->addr = vc->peer_addr;
 		req->gnix_ep = ep;
 		req->vc = vc;
 		req->tx_failures = 0;
 
+		/* Check if a second GET for unaligned data is needed. */
+		if (hdr->len > req->msg.recv_len &&
+		    ((hdr->addr + req->msg.recv_len) & GNI_READ_ALIGN_MASK)) {
+			req->msg.recv_flags |= GNIX_MSG_GET_TAIL;
+		}
+
 		req->msg.send_addr = hdr->addr;
-		req->msg.send_len = hdr->len;
+		req->msg.send_len = MIN(hdr->len, req->msg.recv_len);
 		req->msg.send_flags = hdr->flags;
 		req->msg.tag = hdr->msg_tag;
 		req->msg.imm = hdr->imm;
@@ -897,6 +915,34 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.rma_id = hdr->req_addr;
 		req->msg.rndzv_head = hdr->head;
 		req->msg.rndzv_tail = hdr->tail;
+
+		GNIX_INFO(FI_LOG_EP_DATA, "Matched req: %p (%p, %u)\n",
+			  req, req->msg.recv_addr, req->msg.send_len);
+
+		/* Check if we're using FI_MULTI_RECV and there is space left
+		 * in the receive buffer. */
+		if ((req->msg.recv_flags & FI_MULTI_RECV) &&
+		    ((req->msg.recv_len - req->msg.send_len) >=
+		     ep->min_multi_recv)) {
+			/* Allocate new request for this transfer. */
+			dup_req = __gnix_msg_dup_req(req);
+			if (!dup_req) {
+				fastlock_release(queue_lock);
+				return -FI_ENOMEM;
+			}
+
+			/* Adjust receive buffer for the next match. */
+			req->msg.recv_addr += req->msg.send_len;
+			req->msg.recv_len -= req->msg.send_len;
+
+			/* 'req' remains queued for more matches while the
+			 * duplicated request is processed. */
+			req = dup_req;
+		} else {
+			/* Dequeue the request. */
+			req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, 0,
+					      NULL, &vc->peer_addr);
+		}
 
 		/* Queue request to initiate pull of source data. */
 		req->work_fn = __gnix_rndzv_req;
@@ -908,9 +954,6 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			fastlock_release(queue_lock);
 			return -FI_ENOMEM;
 		}
-
-		GNIX_INFO(FI_LOG_EP_DATA, "New req: %p\n",
-			  req);
 
 		req->type = GNIX_FAB_RQ_RECV;
 		req->addr = vc->peer_addr;
@@ -928,6 +971,9 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.rndzv_tail = hdr->tail;
 
 		_gnix_insert_tag(unexp_queue, req->msg.tag, req, ~0);
+
+		GNIX_INFO(FI_LOG_EP_DATA, "New req: %p (%u)\n",
+			  req, req->msg.send_len);
 	}
 
 	fastlock_release(queue_lock);
@@ -935,8 +981,8 @@ static int __smsg_rndzv_start(void *data, void *msg)
 	status = GNI_SmsgRelease(vc->gni_ep);
 	if (unlikely(status != GNI_RC_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA,
-				"GNI_SmsgRelease returned %s\n",
-				gni_err_str[status]);
+			  "GNI_SmsgRelease returned %s\n",
+			  gni_err_str[status]);
 		ret = gnixu_to_fi_errno(status);
 	}
 
@@ -1016,16 +1062,16 @@ static int __smsg_rma_data(void *data, void *msg)
 					 0, hdr->data, 0, FI_ADDR_NOTAVAIL);
 		if (ret != FI_SUCCESS)  {
 			GNIX_WARN(FI_LOG_EP_DATA,
-					"_gnix_cq_add_event returned %d\n",
-					ret);
+				  "_gnix_cq_add_event returned %d\n",
+				  ret);
 		}
 	}
 
 	status = GNI_SmsgRelease(vc->gni_ep);
 	if (unlikely(status != GNI_RC_SUCCESS)) {
 		GNIX_WARN(FI_LOG_EP_DATA,
-				"GNI_SmsgRelease returned %s\n",
-				gni_err_str[status]);
+			  "GNI_SmsgRelease returned %s\n",
+			  gni_err_str[status]);
 		ret = gnixu_to_fi_errno(status);
 	}
 
@@ -1074,9 +1120,6 @@ static int __gnix_peek_request(struct gnix_fab_req *req)
 		req->msg.recv_addr = 0;
 	}
 
-	/* The length field in our CQE should be the full send buffer size. */
-	req->msg.recv_len = req->msg.send_len;
-
 	ret = __gnix_msg_recv_completion(req->gnix_ep, req);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_DATA,
@@ -1093,7 +1136,7 @@ static int __gnix_discard_request(struct gnix_fab_req *req)
 
 	/* The CQE should not contain a valid buffer. */
 	req->msg.recv_addr = 0;
-	req->msg.recv_len = 0;
+	req->msg.send_len = 0;
 
 	GNIX_INFO(FI_LOG_EP_DATA, "discarding req=%p\n", req);
 	if (rendezvous) {
@@ -1185,6 +1228,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 
 	fastlock_acquire(queue_lock);
 
+retry_match:
 	/* Look for a matching unexpected receive request. */
 	req = _gnix_match_tag(unexp_queue, tag, ignore,
 			      match_flags, context, &gnix_addr);
@@ -1235,29 +1279,67 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 				return ret;
 			}
 
-			/* We need to store the input buffer length to deal
-			 * with all rendezvous unaligned data cases. */
-			req->msg.recv_len = len;
+			/* Check if second GET for unaligned data is needed. */
+			if (req->msg.send_len > req->msg.recv_len &&
+			    ((req->msg.send_addr + req->msg.recv_len) &
+			     GNI_READ_ALIGN_MASK)) {
+				req->msg.recv_flags |= GNIX_MSG_GET_TAIL;
+			}
+
+			/* Send length is truncated to receive buffer size. */
+			req->msg.send_len = MIN(req->msg.send_len,
+						req->msg.recv_len);
 
 			/* Initiate pull of source data. */
 			req->work_fn = __gnix_rndzv_req;
 			ret = _gnix_vc_queue_work_req(req);
+
+			/* If using FI_MULTI_RECV and there is space left in
+			 * the receive buffer, try to match another unexpected
+			 * request. */
+			if ((req->msg.recv_flags & FI_MULTI_RECV) &&
+			    ((len - req->msg.send_len) >= ep->min_multi_recv)) {
+				buf += req->msg.send_len;
+				len -= req->msg.send_len;
+
+				GNIX_INFO(FI_LOG_EP_DATA,
+					  "Attempting additional matches, "
+					  "req: %p (%p %u)\n",
+					  req, buf, len);
+				goto retry_match;
+			}
 		} else {
 			/* Matched eager request.  Copy data and generate
 			 * completions. */
 			GNIX_INFO(FI_LOG_EP_DATA, "Matched recv, req: %p\n",
 				  req);
 
-			/* Before completion, fixup receive length. */
-			req->msg.recv_len = MIN(req->msg.send_len,
+			/* Send length is truncated to receive buffer size. */
+			req->msg.send_len = MIN(req->msg.send_len,
 						req->msg.recv_len);
 
 			/* Copy data from unexpected eager receive buffer. */
 			memcpy((void *)buf, (void *)req->msg.send_addr,
-			       req->msg.recv_len);
+			       req->msg.send_len);
 			free((void *)req->msg.send_addr);
 
 			__gnix_msg_recv_completion(ep, req);
+
+			/* If using FI_MULTI_RECV and there is space left in
+			 * the receive buffer, try to match another unexpected
+			 * request. */
+			if ((req->msg.recv_flags & FI_MULTI_RECV) &&
+			    ((len - req->msg.send_len) >= ep->min_multi_recv)) {
+				buf += req->msg.send_len;
+				len -= req->msg.send_len;
+
+				GNIX_INFO(FI_LOG_EP_DATA,
+					  "Attempting additional matches, "
+					  "req: %p (%p %u)\n",
+					  req, buf, len);
+				goto retry_match;
+			}
+
 			_gnix_fr_free(ep, req);
 		}
 	} else {
@@ -1313,8 +1395,6 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 
 		_gnix_insert_tag(posted_queue, tag, req, ignore);
 	}
-
-	GNIX_INFO(FI_LOG_EP_DATA, "Posted (%p %d)\n", buf, len);
 
 pdc_exit:
 err:
