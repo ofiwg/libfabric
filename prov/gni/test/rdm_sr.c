@@ -209,6 +209,7 @@ void rdm_sr_setup(bool is_noreg)
 	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
+	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
 	hints->mode = ~0;
 	hints->caps = is_noreg ? hints->caps : FI_SOURCE;
 	hints->fabric_attr->name = strdup("gni");
