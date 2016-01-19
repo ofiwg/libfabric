@@ -7,7 +7,7 @@ if HAVE_GNI
 # source code, so just add prov/gni to the include path
 # rather than prov/gni/ccan
 #
-AM_CFLAGS += -I$(top_srcdir)/prov/gni/include -I$(top_srcdir)/prov/gni -lm
+AM_CFLAGS += -I$(top_srcdir)/prov/gni/include -I$(top_srcdir)/prov/gni
 
 _gni_files = \
 	prov/gni/src/gnix_atomic.c \

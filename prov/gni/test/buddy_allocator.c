@@ -38,7 +38,7 @@
 #define MIN_LEN 16		/* buddy_handle->min */
 
 long *buf = NULL;		/* buddy_handle->base */
-handle_t *buddy_handle = NULL;
+gnix_buddy_alloc_handle_t *buddy_handle;
 void **ptr = NULL;		/* ptrs alloc'd by _gnix_buddy_alloc */
 
 
