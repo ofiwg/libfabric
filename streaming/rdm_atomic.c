@@ -262,7 +262,7 @@ static int run_op(void)
 
 			len = snprintf(test_name, sizeof(test_name), "%s_",
 				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-			snprintf(test_name + len, sizeof(test_name), "%s_base_lat",
+			snprintf(test_name + len, sizeof(test_name) - len, "%s_base_lat",
 				fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
 			opts.transfer_size = datatype_to_size(datatype);
 			init_test(&opts, test_name, sizeof(test_name));
@@ -284,7 +284,7 @@ static int run_op(void)
 
 			len = snprintf(test_name, sizeof(test_name), "%s_",
 				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-			snprintf(test_name + len, sizeof(test_name), "%s_fetch_lat",
+			snprintf(test_name + len, sizeof(test_name) - len, "%s_fetch_lat",
 				fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
 			opts.transfer_size = datatype_to_size(datatype);
 			init_test(&opts, test_name, sizeof(test_name));
@@ -313,7 +313,7 @@ static int run_op(void)
 
 			len = snprintf(test_name, sizeof(test_name), "%s_",
 				fi_tostr(&datatype, FI_TYPE_ATOMIC_TYPE));
-			snprintf(test_name + len, sizeof(test_name), "%s_lat",
+			snprintf(test_name + len, sizeof(test_name) - len, "%s_lat",
 				fi_tostr(&op_type, FI_TYPE_ATOMIC_OP));
 			opts.transfer_size = datatype_to_size(datatype);
 			init_test(&opts, test_name, sizeof(test_name));
