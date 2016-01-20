@@ -225,7 +225,7 @@ struct fi_cq_tagged_entry {
 
 - *FI_WAIT_UNSPEC*
 : Specifies that the user will only wait on the CQ using fabric
-  interface calls, such as fi_cq_readcond or fi_cq_sreadfrom.  In this
+  interface calls, such as fi_cq_sread or fi_cq_sreadfrom.  In this
   case, the underlying provider may select the most appropriate or
   highest performing wait object available, including custom wait
   mechanisms.  Applications that select FI_WAIT_UNSPEC are not
