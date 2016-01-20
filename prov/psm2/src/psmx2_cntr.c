@@ -46,6 +46,16 @@ int psmx2_process_trigger(struct psmx2_fid_domain *domain,
 				   trigger->send.flags,
 				   trigger->send.data);
 		break;
+	case PSMX2_TRIGGERED_SENDV:
+		psmx2_sendv_generic(trigger->sendv.ep,
+				    trigger->sendv.iov,
+				    trigger->sendv.desc,
+				    trigger->sendv.count,
+				    trigger->sendv.dest_addr,
+				    trigger->sendv.context,
+				    trigger->sendv.flags,
+				    trigger->sendv.data);
+		break;
 	case PSMX2_TRIGGERED_RECV:
 		psmx2_recv_generic(trigger->recv.ep,
 				   trigger->recv.buf,

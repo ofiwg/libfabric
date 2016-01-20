@@ -90,14 +90,20 @@ extern struct fi_provider psmx2_prov;
 #define PSMX2_MSG_ORDER		FI_ORDER_SAS
 #define PSMX2_COMP_ORDER	FI_ORDER_NONE
 
-#define PSMX2_MSG_BIT	(0x1ULL << 31)
-#define PSMX2_RMA_BIT	(0x1ULL << 30)
+#define PSMX2_MSG_BIT	(0x80000000)
+#define PSMX2_RMA_BIT	(0x40000000)
+#define PSMX2_IOV_BIT	(0x20000000)
+#define PSMX2_SEQ_BITS	(0x0FFF0000)
 #define PSMX2_SRC_BITS	(0x0000FF00)
 #define PSMX2_DST_BITS	(0x000000FF)
 
 #define PSMX2_TAG32(base, src, dst)	((base) | ((src)<<8) | (dst))
 #define PSMX2_TAG32_GET_SRC(tag32)	(((tag32) & PSMX2_SRC_BITS) >> 8)
 #define PSMX2_TAG32_GET_DST(tag32)	((tag32) & PSMX2_DST_BITS)
+#define PSMX2_TAG32_GET_SEQ(tag32)	(((tag32) & PSMX2_SEQ_BITS) >> 16)
+#define PSMX2_TAG32_SET_SEQ(tag32,seq)	do { \
+						tag32 |= ((seq << 16) & PSMX2_SEQ_BITS); \
+					} while (0)
 
 #define PSMX2_SET_TAG(tag96,tag64,tag32) do { \
 						tag96.tag0 = (uint32_t)tag64; \
@@ -141,15 +147,19 @@ enum psmx2_context_type {
 	PSMX2_READ_CONTEXT,
 	PSMX2_REMOTE_WRITE_CONTEXT,
 	PSMX2_REMOTE_READ_CONTEXT,
+	PSMX2_SENDV_CONTEXT,
+	PSMX2_IOV_SEND_CONTEXT,
+	PSMX2_IOV_RECV_CONTEXT,
 };
 
 union psmx2_pi {
 	void	*p;
-	int	i;
+	uint32_t i[2];
 };
 
 #define PSMX2_CTXT_REQ(fi_context)	((fi_context)->internal[0])
-#define PSMX2_CTXT_TYPE(fi_context)	(((union psmx2_pi *)&(fi_context)->internal[1])->i)
+#define PSMX2_CTXT_TYPE(fi_context)	(((union psmx2_pi *)&(fi_context)->internal[1])->i[0])
+#define PSMX2_CTXT_SIZE(fi_context)	(((union psmx2_pi *)&(fi_context)->internal[1])->i[1])
 #define PSMX2_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX2_CTXT_EP(fi_context)	((fi_context)->internal[3])
 
@@ -228,6 +238,44 @@ struct psmx2_am_request {
 	int no_event;
 	int error;
 	struct slist_entry list_entry;
+};
+
+#define PSMX2_IOV_PROTO_PACK	0
+#define PSMX2_IOV_PROTO_MULTI	1
+#define PSMX2_IOV_MAX_SEQ_NUM	0x0FFF
+#define PSMX2_IOV_BUF_SIZE	PSMX2_INJECT_SIZE
+#define PSMX2_IOV_MAX_COUNT	(PSMX2_IOV_BUF_SIZE / sizeof(uint32_t) - 3)
+
+struct psmx2_iov_info {
+	uint32_t seq_num;
+	uint32_t total_len;
+	uint32_t count;
+	uint32_t len[PSMX2_IOV_MAX_COUNT];
+};
+
+struct psmx2_sendv_request {
+	struct fi_context fi_context;
+	struct fi_context fi_context_iov;
+	void *user_context;
+	int iov_protocol;
+	int no_completion;
+	uint32_t iov_done;
+	union {
+		struct psmx2_iov_info iov_info;
+		char buf[PSMX2_IOV_BUF_SIZE];
+	};
+};
+
+struct psmx2_sendv_reply {
+	struct fi_context fi_context;
+	int no_completion;
+	void *buf;
+	void *user_context;
+	size_t iov_done;
+	size_t bytes_received;
+	size_t msg_length;
+	int error_code;
+	struct psmx2_iov_info iov_info;
 };
 
 struct psmx2_req_queue {
@@ -374,6 +422,7 @@ struct psmx2_fid_eq {
 
 enum psmx2_triggered_op {
 	PSMX2_TRIGGERED_SEND,
+	PSMX2_TRIGGERED_SENDV,
 	PSMX2_TRIGGERED_RECV,
 	PSMX2_TRIGGERED_TSEND,
 	PSMX2_TRIGGERED_TRECV,
@@ -399,6 +448,16 @@ struct psmx2_trigger {
 			uint64_t	flags;
 			uint64_t	data;
 		} send;
+		struct {
+			struct fid_ep	*ep;
+			const struct iovec *iov;
+			size_t		count;
+			void		**desc;
+			fi_addr_t	dest_addr;
+			void		*context;
+			uint64_t	flags;
+			uint64_t	data;
+		} sendv;
 		struct {
 			struct fid_ep	*ep;
 			void		*buf;
@@ -552,6 +611,7 @@ struct psmx2_fid_ep {
 	struct fi_context	nocomp_send_context;
 	struct fi_context	nocomp_recv_context;
 	size_t			min_multi_recv;
+	uint32_t		iov_seq_num;
 };
 
 struct psmx2_fid_stx {
@@ -691,6 +751,8 @@ int	psmx2_mr_validate(struct psmx2_fid_mr *mr, uint64_t addr, size_t len, uint64
 void	psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr);
 void	psmx2_cntr_add_trigger(struct psmx2_fid_cntr *cntr, struct psmx2_trigger *trigger);
 
+int	psmx2_handle_sendv_req(struct psmx2_fid_ep *ep, psm2_mq_status2_t *psm2_status);
+
 static inline void psmx2_cntr_inc(struct psmx2_fid_cntr *cntr)
 {
 	cntr->counter++;
@@ -714,6 +776,13 @@ ssize_t psmx2_send_generic(
 			struct fid_ep *ep,
 			const void *buf, size_t len,
 			void *desc, fi_addr_t dest_addr,
+			void *context, uint64_t flags,
+			uint64_t data);
+
+ssize_t psmx2_sendv_generic(
+			struct fid_ep *ep,
+			const struct iovec *iov, void *desc,
+			size_t count, fi_addr_t dest_addr,
 			void *context, uint64_t flags,
 			uint64_t data);
 
