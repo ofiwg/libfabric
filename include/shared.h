@@ -92,6 +92,7 @@ struct ft_opts {
 	char *dst_port;
 	char *src_addr;
 	char *dst_addr;
+	char *av_name;
 	int size_option;
 	int options;
 	enum ft_comp_method comp_method;
@@ -140,7 +141,7 @@ void ft_csusage(char *name, char *desc);
 void ft_fill_buf(void *buf, int size);
 int ft_check_buf(void *buf, int size);
 uint64_t ft_init_cq_data(struct fi_info *info);
-#define ADDR_OPTS "b:p:s:"
+#define ADDR_OPTS "b:p:s:a:"
 #define INFO_OPTS "n:f:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:"
 
