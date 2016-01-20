@@ -46,10 +46,19 @@ dnl looks like we need to get rid of some white space
 
        AC_CHECK_DECLS([GNI_VERSION_FMA_CHAIN_TRANSACTIONS],
                        [],
-                       [AC_MSG_WARN([GNI provider requires CLE 5.2UP04 or higher. Disabling gni provider.])
+                       [AC_MSG_WARN([GNI provider requires CLE 5.2.UP04 or higher. Disabling gni provider.])
                        gni_header_happy=0
                        ],
                        [[#include "$gni_path_to_gni_pub"]])
+
+dnl unfortunately GNI_VERSION_FMA_CHAIN_TRANSACTIONS has an issue with CLE 5.2UP03
+        if test -f /etc/opt/cray/release/clerelease; then
+            cle_52up03_check=`grep 5.2.UP03 /etc/opt/cray/release/clerelease`
+            AS_IF([test "$cle_52up03_check" = "5.2.UP03"],
+                  [gni_header_happy=0
+                   AC_MSG_WARN([GNI provider requires CLE 5.2.UP04 or higher. Disabling gni provider.])
+                  ],[])
+        fi
 
 	have_criterion=false
 	criterion_tests_present=true
