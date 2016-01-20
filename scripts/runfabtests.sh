@@ -88,7 +88,7 @@ standard_tests=(
 	"msg_rma -o write"
 	"msg_rma -o read"
 	"msg_rma -o writedata"
-	"rdm_atomic -o all -I 10000"
+	"rdm_atomic -o all -I 1000"
 	"rdm_cntr_pingpong"
 	"rdm_inject_pingpong"
 	"rdm_multi_recv"
