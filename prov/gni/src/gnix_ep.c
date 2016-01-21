@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -1757,7 +1757,6 @@ struct fi_ops_tagged gnix_ep_tagged_ops = {
 	.sendv = gnix_ep_tsendv,
 	.sendmsg = gnix_ep_tsendmsg,
 	.inject = gnix_ep_tinject,
-	.senddata = fi_no_tagged_senddata,
 	.senddata = gnix_ep_tsenddata,
 	.injectdata = fi_no_tagged_injectdata,
 };

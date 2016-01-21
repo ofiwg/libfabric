@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -378,10 +378,7 @@ static void do_write(int len)
 
 
 	old_w_cnt = fi_cntr_read(write_cntr);
-	cr_assert(old_w_cnt >= 0);
-
 	old_r_cnt = fi_cntr_read(read_cntr);
-	cr_assert(old_r_cnt >= 0);
 
 	sz = fi_write(ep[0], source, len,
 			 loc_mr, gni_addr[1], (uint64_t)target, mr_key,
@@ -390,7 +387,6 @@ static void do_write(int len)
 
 	do {
 		new_w_cnt = fi_cntr_read(write_cntr);
-		cr_assert(new_w_cnt >= 0);
 		if (new_w_cnt == (old_w_cnt + 1))
 			break;
 		pthread_yield();
@@ -399,7 +395,6 @@ static void do_write(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 
 	new_r_cnt = fi_cntr_read(read_cntr);
-	cr_assert(new_r_cnt >= 0);
 
 	/*
 	 * no fi_read called so old and new read cnts should be equal
@@ -424,10 +419,7 @@ static void do_write_wait(int len)
 	init_data(target, len, 0);
 
 	old_w_cnt = fi_cntr_read(write_cntr);
-	cr_assert(old_w_cnt >= 0);
-
 	old_r_cnt = fi_cntr_read(read_cntr);
-	cr_assert(old_r_cnt >= 0);
 
 	for (i = 0; i < iters; i++) {
 		sz = fi_write(ep[0], source, len,
@@ -443,7 +435,6 @@ static void do_write_wait(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 
 	new_r_cnt = fi_cntr_read(read_cntr);
-	cr_assert(new_r_cnt >= 0);
 
 	/*
 	 * no fi_read called so old and new read cnts should be equal
@@ -467,10 +458,7 @@ static void do_read(int len)
 	init_data(target, len, 0xad);
 
 	old_w_cnt = fi_cntr_read(write_cntr);
-	cr_assert(old_w_cnt >= 0);
-
 	old_r_cnt = fi_cntr_read(read_cntr);
-	cr_assert(old_r_cnt >= 0);
 
 	sz = fi_read(ep[0], source, len,
 			loc_mr, gni_addr[1], (uint64_t)target, mr_key,
@@ -479,7 +467,6 @@ static void do_read(int len)
 
 	do {
 		new_r_cnt = fi_cntr_read(read_cntr);
-		cr_assert(new_r_cnt >= 0);
 		if (new_r_cnt == (old_r_cnt + 1))
 			break;
 		pthread_yield();
@@ -488,7 +475,6 @@ static void do_read(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 
 	new_w_cnt = fi_cntr_read(write_cntr);
-	cr_assert(new_w_cnt >= 0);
 
 	/*
 	 * no fi_read called so old and new read cnts should be equal
@@ -508,10 +494,7 @@ static void do_read_wait(int len)
 	init_data(target, len, 0xad);
 
 	old_w_cnt = fi_cntr_read(write_cntr);
-	cr_assert(old_w_cnt >= 0);
-
 	old_r_cnt = fi_cntr_read(read_cntr);
-	cr_assert(old_r_cnt >= 0);
 
 	for (i = 0; i < iters; i++) {
 		sz = fi_read(ep[0], source, len,
@@ -525,7 +508,6 @@ static void do_read_wait(int len)
 	cr_assert(check_data(source, target, len), "Data mismatch");
 
 	new_w_cnt = fi_cntr_read(write_cntr);
-	cr_assert(new_w_cnt >= 0);
 
 	/*
 	 * no fi_read called so old and new read cnts should be equal
@@ -554,10 +536,7 @@ Test(cntr, send_recv)
 	char s_buffer[128], r_buffer[128];
 
 	old_s_cnt = fi_cntr_read(write_cntr);
-	cr_assert(old_s_cnt >= 0);
-
 	old_r_cnt = fi_cntr_read(rcv_cntr);
-	cr_assert(old_r_cnt >= 0);
 
 	for (i = 0; i < 16; i++) {
 		sprintf(s_buffer, "Hello there iter=%d", i);
