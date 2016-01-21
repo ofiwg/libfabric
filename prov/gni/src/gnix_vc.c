@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -1216,7 +1216,7 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_nic *nic = NULL;
-	gni_return_t status;
+	gni_return_t status = GNI_RC_NOT_DONE;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
