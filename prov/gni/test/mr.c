@@ -870,3 +870,47 @@ Test(perf_memory_registration, random_analysis)
 	free(region);
 }
 
+/*
+ * This test exercises the ability of the cache to drop registrations that
+ * have been subsumed by other registrations
+ */
+Test(memory_registration_cache, regression_615)
+{
+	int ret;
+	struct fid_mr *f_mr;
+	void *buffer = calloc(1 << 19, sizeof(char));
+
+	cr_assert(buffer != NULL);
+
+	/* set up stale cache */
+	ret = fi_mr_reg(dom, (void *) buffer + 0x18000, 0x8000,
+			default_access, default_offset, default_req_key,
+			default_flags, &f_mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+	ret = fi_close(&f_mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_mr_reg(dom, (void *) buffer + 0x0, 0x80000,
+			default_access, default_offset, default_req_key,
+			default_flags, &f_mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+	ret = fi_close(&f_mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* set up inuse */
+	ret = fi_mr_reg(dom, (void *) buffer + 0x28000, 0x4000,
+			default_access, default_offset, default_req_key,
+			default_flags, &f_mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	cache = domain->mr_cache;
+
+	cr_assert(atomic_get(&cache->inuse.elements) == 1);
+	cr_assert(atomic_get(&cache->stale.elements) == 0);
+
+	ret = fi_close(&f_mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
+
+
+
