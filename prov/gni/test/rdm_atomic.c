@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1601,7 +1601,7 @@ Test(rdm_atomic, atomicinject)
 	loops = 0;
 	while (*((int64_t *)target) != min) {
 		ret = fi_cq_read(send_cq[0], &cqe, 1); /* for progress */
-		cr_assert(ret == -EAGAIN,
+		cr_assert(ret == -FI_EAGAIN,
 			  "Received unexpected event\n");
 
 		pthread_yield();
@@ -1622,7 +1622,7 @@ Test(rdm_atomic, atomicinject)
 	loops = 0;
 	while (*((int64_t *)target) != min) {
 		ret = fi_cq_read(send_cq[0], &cqe, 1); /* for progress */
-		cr_assert(ret == -EAGAIN,
+		cr_assert(ret == -FI_EAGAIN,
 			  "Received unexpected event\n");
 
 		pthread_yield();
@@ -1642,7 +1642,7 @@ Test(rdm_atomic, atomicinject)
 	loops = 0;
 	while (*((float *)target) != min_fp) {
 		ret = fi_cq_read(send_cq[0], &cqe, 1); /* for progress */
-		cr_assert(ret == -EAGAIN,
+		cr_assert(ret == -FI_EAGAIN,
 			  "Received unexpected event\n");
 
 		pthread_yield();
@@ -1662,7 +1662,7 @@ Test(rdm_atomic, atomicinject)
 	loops = 0;
 	while (*((double *)target) != min_dp) {
 		ret = fi_cq_read(send_cq[0], &cqe, 1); /* for progress */
-		cr_assert(ret == -EAGAIN,
+		cr_assert(ret == -FI_EAGAIN,
 			  "Received unexpected event\n");
 
 		pthread_yield();
