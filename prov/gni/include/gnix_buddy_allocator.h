@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -34,11 +34,11 @@
 #ifndef _GNIX_BUDDY_ALLOCATOR_H_
 #define _GNIX_BUDDY_ALLOCATOR_H_
 
+#include <stdlib.h>
 #include "fi_list.h"
 #include "gnix_bitmap.h"
 #include "gnix_util.h"
 #include "gnix.h"
-#include <stdlib.h>
 
 #define MIN_BLOCK_SIZE 16
 

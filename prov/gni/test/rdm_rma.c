@@ -330,10 +330,10 @@ void rdm_rma_teardown(void)
 	cr_assert(!ret, "failure in closing dom[1] av.");
 
 	ret = fi_close(&dom[0]->fid);
-	cr_assert(!ret, "failure in closing domain.");
+	cr_assert(!ret, "failure in closing domain dom[0].");
 
 	ret = fi_close(&dom[1]->fid);
-	cr_assert(!ret, "failure in closing domain.");
+	cr_assert(!ret, "failure in closing domain dom[1].");
 
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
