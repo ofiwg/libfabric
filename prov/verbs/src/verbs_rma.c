@@ -276,6 +276,9 @@ fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 		if (again) {
 			goto out_again;
 		}
+	} else if (SEND_RESOURCES_IS_BUSY(conn, ep)) {
+		/* TODO: to implement postponed queue flow for RMA */
+		goto out_again;
 	}
 
 	struct fi_ibv_rdm_tagged_request *request =
@@ -354,6 +357,9 @@ fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 		if (again) {
 			goto out_again;
 		}
+	} else if (SEND_RESOURCES_IS_BUSY(conn, ep)) {
+		/* TODO: to implement postponed queue flow for RMA */
+		goto out_again;
 	}
 
 	struct fi_ibv_rdm_tagged_request *request =
