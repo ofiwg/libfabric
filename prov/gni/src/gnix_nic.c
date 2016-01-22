@@ -34,6 +34,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/mman.h>
+#include <signal.h>
 
 #include "gnix.h"
 #include "gnix_nic.h"
@@ -63,6 +65,212 @@ static struct gnix_nic_attr default_attr = {
 /*******************************************************************************
  * Helper functions.
  ******************************************************************************/
+
+/*
+ * this function is intended to be invoked as an argument to pthread_create,
+ */
+static void *__gnix_nic_prog_thread_fn(void *the_arg)
+{
+	int ret = FI_SUCCESS, prev_state;
+	int retry = 0;
+	uint32_t which;
+	uint64_t vc_id;
+	struct gnix_nic *nic = (struct gnix_nic *)the_arg;
+	struct gnix_vc *vc;
+	sigset_t  sigmask;
+	gni_cq_handle_t cqv[2];
+	gni_return_t status;
+	gni_cq_entry_t cqe;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
+	/*
+	 * temporarily disable cancelability while we set up
+	 * some stuff
+	 */
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &prev_state);
+
+	/*
+	 * help out Cray core-spec, say we're not an app thread
+	 * and can be run on core-spec cpus.
+	 */
+
+	ret = _gnix_task_is_not_app();
+	if (ret)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			"_gnix_task_is_not_app call returned %d\n",
+			ret);
+
+	/*
+	 * block all signals, don't want this thread to catch
+	 * signals that may be for app threads
+	 */
+
+	memset(&sigmask, 0, sizeof(sigset_t));
+	ret = sigfillset(&sigmask);
+	if (ret) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+		"sigfillset call returned %d\n", ret);
+	} else {
+
+		ret = pthread_sigmask(SIG_SETMASK,
+					&sigmask, NULL);
+		if (ret)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			"pthread_sigmask call returned %d\n", ret);
+	}
+
+	/*
+	 * okay now we're ready to be cancelable.
+	 */
+
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &prev_state);
+
+	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+
+	cqv[0] = nic->tx_cq_blk;
+	cqv[1] = nic->rx_cq_blk;
+
+try_again:
+	status = GNI_CqVectorMonitor(cqv,
+				     2,
+				     -1,
+				     &which);
+
+	switch (status) {
+	case GNI_RC_SUCCESS:
+
+		/*
+		 * first dequeue RX CQEs
+		 */
+		if (which == 1) {
+			do {
+				status = GNI_CqGetEvent(nic->rx_cq_blk,
+							&cqe);
+				if (status == GNI_RC_SUCCESS) {
+					vc_id = GNI_CQ_GET_DATA(cqe);
+					vc = __gnix_nic_elem_by_rem_id(nic,
+									vc_id);
+					if (vc != NULL)
+						_gnix_vc_rx_schedule(vc);
+				}
+			} while (status == GNI_RC_SUCCESS);
+		}
+		_gnix_nic_progress(nic);
+		retry = 1;
+		break;
+	case GNI_RC_TIMEOUT:
+		retry = 1;
+		break;
+	case GNI_RC_NOT_DONE:
+		retry = 1;
+		break;
+	case GNI_RC_INVALID_PARAM:
+	case GNI_RC_ERROR_RESOURCE:
+	case GNI_RC_ERROR_NOMEM:
+		retry = 0;
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			"GNI_CqGetEvent returned %s\n", gni_err_str[status]);
+		break;
+	default:
+		retry = 0;
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			"GNI_CqGetEvent returned unexpected code %d\n", status);
+		break;
+	}
+
+	if (retry)
+		goto try_again;
+
+	return NULL;
+}
+
+/*
+ * setup memory registration for remote GNI_PostCqWrite's to target
+ */
+
+static int __nic_setup_irq_cq(struct gnix_nic *nic)
+{
+	int ret = FI_SUCCESS;
+	size_t len;
+	gni_return_t status;
+	int fd = -1;
+	void *mmap_addr;
+
+	len = (size_t)sysconf(_SC_PAGESIZE);
+
+	mmap_addr = mmap(NULL, len, PROT_READ | PROT_WRITE,
+			MAP_SHARED | MAP_ANON, fd, 0);
+	if (mmap_addr == MAP_FAILED) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "mmap failed - %s\n",
+			strerror(errno));
+		ret = -errno;
+		goto err;
+	}
+
+	nic->irq_mmap_addr = mmap_addr;
+	nic->irq_mmap_len = len;
+
+	status = GNI_MemRegister(nic->gni_nic_hndl,
+				(uint64_t) nic->irq_mmap_addr,
+				len,
+				nic->rx_cq_blk,
+				GNI_MEM_READWRITE,
+				-1,
+				 &nic->irq_mem_hndl);
+	if (status != GNI_RC_SUCCESS) {
+		ret = gnixu_to_fi_errno(status);
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "GNI_MemRegister returned %s\n",
+			  gni_err_str[status]);
+		goto err_w_mmap;
+	}
+
+#if 0
+	fprintf(stderr,"registered ireq memhndl 0x%016lx 0x%016lx\n",
+		nic->irq_mem_hndl.qword1,
+		nic->irq_mem_hndl.qword2);
+#endif
+
+
+	return ret;
+
+err_w_mmap:
+	munmap(mmap_addr, len);
+err:
+	return ret;
+}
+
+/*
+ * release resources previously set up for remote
+ * GNI_PostCqWrite's to target
+ */
+static int __nic_teardown_irq_cq(struct gnix_nic *nic)
+{
+	int ret = FI_SUCCESS;
+	gni_return_t status;
+
+	if (nic == NULL)
+		return ret;
+
+	if (nic->irq_mmap_addr == NULL)
+		return ret;
+
+	status = GNI_MemDeregister(nic->gni_nic_hndl,
+				  &nic->irq_mem_hndl);
+	if (status != GNI_RC_SUCCESS) {
+		ret = gnixu_to_fi_errno(status);
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "GNI_MemDeregister returned %s\n",
+			  gni_err_str[status]);
+	}
+
+	munmap(nic->irq_mmap_addr,
+		nic->irq_mmap_len);
+	return ret;
+}
+
 
 /*
  * place holder for better attributes checker
@@ -120,7 +328,7 @@ static int __nic_rx_overrun(struct gnix_nic *nic)
 	return FI_SUCCESS;
 }
 
-static int process_rx_cqe(struct gnix_nic *nic, gni_cq_entry_t cqe)
+static int __process_rx_cqe(struct gnix_nic *nic, gni_cq_entry_t cqe)
 {
 	int ret = FI_SUCCESS, vc_id = 0;
 	struct gnix_vc *vc;
@@ -175,7 +383,7 @@ static int __nic_rx_progress(struct gnix_nic *nic)
 
 		if (likely(status == GNI_RC_SUCCESS)) {
 			/* Find and schedule the associated VC. */
-			ret = process_rx_cqe(nic, cqe);
+			ret = __process_rx_cqe(nic, cqe);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_DATA,
 					  "process_rx_cqe() failed: %d\n",
@@ -226,6 +434,7 @@ static int __gnix_nic_txd_err_get(struct gnix_nic *nic,
 }
 
 static int __nic_get_completed_txd(struct gnix_nic *nic,
+				   gni_cq_handle_t hw_cq,
 				   struct gnix_tx_descriptor **txd,
 				   gni_return_t *tx_status)
 {
@@ -242,7 +451,7 @@ static int __nic_get_completed_txd(struct gnix_nic *nic,
 		return 1;
 	}
 
-	status = GNI_CqGetEvent(nic->tx_cq, &cqe);
+	status = GNI_CqGetEvent(hw_cq, &cqe);
 	if (status == GNI_RC_NOT_DONE) {
 		return 0;
 	}
@@ -264,7 +473,7 @@ static int __nic_get_completed_txd(struct gnix_nic *nic,
 	}
 
 	if (GNI_CQ_GET_TYPE(cqe) == GNI_CQ_EVENT_TYPE_POST) {
-		status = GNI_GetCompleted(nic->tx_cq, cqe, &gni_desc);
+		status = GNI_GetCompleted(hw_cq, cqe, &gni_desc);
 
 		assert(status == GNI_RC_SUCCESS ||
 		       status == GNI_RC_TRANSACTION_ERROR);
@@ -289,31 +498,29 @@ static int __nic_get_completed_txd(struct gnix_nic *nic,
 	return 1;
 }
 
-/*
- * function to process GNI CQ TX CQES to progress a gnix_nic
- */
-
-static int __nic_tx_progress(struct gnix_nic *nic)
+static int __nic_tx_progress(struct gnix_nic *nic, gni_cq_handle_t cq)
 {
 	int ret = FI_SUCCESS;
 	gni_return_t tx_status;
-	struct gnix_tx_descriptor *txd = NULL;
+	struct gnix_tx_descriptor *txd;
 
 	do {
+		txd = NULL;
+
 		fastlock_acquire(&nic->lock);
-		if (!__nic_get_completed_txd(nic, &txd, &tx_status)) {
-			fastlock_release(&nic->lock);
-			ret = FI_SUCCESS;
-			break;
-		}
+		__nic_get_completed_txd(nic, cq, &txd,
+						&tx_status);
 		fastlock_release(&nic->lock);
 
-		if (txd->completer_fn) {
+		if (txd && txd->completer_fn) {
 			ret = txd->completer_fn(txd, tx_status);
 			if (ret != FI_SUCCESS)
 				GNIX_WARN(FI_LOG_EP_DATA,
 					  "TXD completer failed: %d", ret);
 		}
+
+		if ((txd == NULL) || ret != FI_SUCCESS)
+			break;
 	} while (1);
 
 	return ret;
@@ -323,9 +530,15 @@ int _gnix_nic_progress(struct gnix_nic *nic)
 {
 	int ret = FI_SUCCESS;
 
-	ret =  __nic_tx_progress(nic);
+	ret =  __nic_tx_progress(nic, nic->tx_cq);
 	if (unlikely(ret != FI_SUCCESS))
 		return ret;
+
+	if (nic->tx_cq_blk) {
+		ret =  __nic_tx_progress(nic, nic->tx_cq_blk);
+		if (unlikely(ret != FI_SUCCESS))
+			return ret;
+	}
 
 	ret = __nic_rx_progress(nic);
 	if (unlikely(ret != FI_SUCCESS))
@@ -535,25 +748,60 @@ static void __nic_destruct(void *obj)
 
 	__gnix_nic_tx_freelist_destroy(nic);
 
+	/*
+	 *free irq cq related resources
+	 */
+
+	ret = __nic_teardown_irq_cq(nic);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "__nic_teardown_irq_cq returned %s\n",
+			  fi_strerror(-ret));
+
+	/*
+	 * kill off progress thread, if any
+	 */
+
+	if (nic->progress_thread) {
+
+		ret = pthread_cancel(nic->progress_thread);
+		if ((ret != 0) && (ret != ESRCH)) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			"pthread_cancel returned %d\n", ret);
+			goto err;
+		}
+
+		ret = pthread_join(nic->progress_thread,
+				   NULL);
+		if ((ret != 0) && (ret != ESRCH)) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			"pthread_join returned %d\n", ret);
+			goto err;
+		}
+
+		GNIX_INFO(FI_LOG_EP_CTRL, "pthread_join returned %d\n", ret);
+		nic->progress_thread = 0;
+	}
+
 	/* Must free mboxes first, because the MR has a pointer to the
 	 * nic handles below */
 	ret = _gnix_mbox_allocator_destroy(nic->mbox_hndl);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "_gnix_mbox_allocator_destroy returned %d\n",
-			  ret);
+			  "_gnix_mbox_allocator_destroy returned %s\n",
+			  fi_strerror(-ret));
 
 	ret = _gnix_mbox_allocator_destroy(nic->s_rdma_buf_hndl);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "_gnix_mbox_allocator_destroy returned %d\n",
-			  ret);
+			  "_gnix_mbox_allocator_destroy returned %s\n",
+			  fi_strerror(-ret));
 
 	ret = _gnix_mbox_allocator_destroy(nic->r_rdma_buf_hndl);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "_gnix_mbox_allocator_destroy returned %d\n",
-			  ret);
+			  "_gnix_mbox_allocator_destroy returned %s\n",
+			  fi_strerror(-ret));
 
 	if (!nic->gni_cdm_hndl) {
 		GNIX_ERR(FI_LOG_EP_CTRL, "No CDM attached to nic, nic=%p");
@@ -861,7 +1109,6 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		dlist_init(&nic->tx_vcs);
 
 		_gnix_ref_init(&nic->ref_cnt, 1, __nic_destruct);
-		atomic_initialize(&nic->outstanding_fab_reqs_nic, 0);
 		ret = _gnix_alloc_bitmap(&nic->vc_id_bitmap, 1000);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
@@ -896,7 +1143,8 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 					  &nic->mbox_hndl);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_mbox_alloc returned %d\n", ret);
+				  "_gnix_mbox_alloc returned %s\n",
+				  fi_strerror(-ret));
 			goto err1;
 		}
 
@@ -917,27 +1165,65 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		 */
 
 		ret = _gnix_mbox_allocator_create(nic,
-						  nic->rx_cq_blk,
+						  NULL,
 						  GNIX_PAGE_2MB,
 						  65536,
 						  512,
 						  &nic->s_rdma_buf_hndl);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_mbox_alloc returned %d\n", ret);
+				  "_gnix_mbox_alloc returned %s\n",
+				  fi_strerror(-ret));
 			goto err1;
 		}
 
 		ret = _gnix_mbox_allocator_create(nic,
-						  nic->rx_cq_blk,
+						  NULL,
 						  GNIX_PAGE_2MB,
 						  65536,
 						  512,
 						  &nic->r_rdma_buf_hndl);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_mbox_alloc returned %d\n", ret);
+				  "_gnix_mbox_alloc returned %s\n",
+				  fi_strerror(-ret));
 			goto err1;
+		}
+
+		ret =  __nic_setup_irq_cq(nic);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "__nic_setup_irq_cq returned %s\n",
+				  fi_strerror(-ret));
+			goto err1;
+		}
+
+		/*
+ 		 * if the domain is using PROGRESS_AUTO for data, set up
+ 		 * a progress thread.
+ 		 */
+
+		if (domain->data_progress == FI_PROGRESS_AUTO) {
+
+			/*
+			 * tell CLE job container that next thread should be
+			 * runnable anywhere in the cpuset, don't treat as
+			 * an error if one is returned, may have perf issues
+			 * though...
+			 */
+
+			ret = _gnix_job_disable_affinity_apply();
+			if (ret != 0)
+				GNIX_WARN(FI_LOG_EP_CTRL,
+				"_gnix_job_disable call returned %d\n", ret);
+
+			ret = pthread_create(&nic->progress_thread,
+					     NULL,
+					     __gnix_nic_prog_thread_fn,
+					     (void *)nic);
+			if (ret)
+				GNIX_WARN(FI_LOG_EP_CTRL,
+				"pthread_ceate  call returned %d\n", ret);
 		}
 
 		dlist_insert_tail(&nic->gnix_nic_list, &gnix_nic_list);
@@ -955,6 +1241,7 @@ err1:
 	atomic_dec(&gnix_id_counter);
 err:
 	if (nic != NULL) {
+		__nic_teardown_irq_cq(nic);
 		if (nic->r_rdma_buf_hndl != NULL)
 			_gnix_mbox_allocator_destroy(nic->r_rdma_buf_hndl);
 		if (nic->s_rdma_buf_hndl != NULL)

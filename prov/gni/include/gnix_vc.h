@@ -109,8 +109,12 @@ enum gnix_vc_conn_req_type {
  * @var vc_id                ID of this vc. Allows for rapid O(1) lookup
  *                           of the VC when using GNI_CQ_GET_INST_ID to get
  *                           the inst_id of a GNI CQE.
+ * @var peer_id              vc_id of peer.
  * @var modes                Used internally to track current state of
  *                           the VC not pertaining to the connection state.
+ * @var flags                Bitmap used to hold vc schedule state
+ * @var peer_irq_mem_hndl    peer GNI memhndl used for delivering
+ *                           GNI_PostCqWrite requests to remote peer
  */
 struct gnix_vc {
 	struct dlist_entry rx_list;	/* RX VC list entry */
@@ -135,9 +139,10 @@ struct gnix_vc {
 	enum gnix_vc_conn_state conn_state;
 	uint32_t post_state;
 	int vc_id;
+	int peer_id;
 	int modes;
-	struct dlist_entry pending_list;
 	gnix_bitmap_t flags; /* We're missing regular bit ops */
+	gni_mem_handle_t peer_irq_mem_hndl;
 };
 
 /*

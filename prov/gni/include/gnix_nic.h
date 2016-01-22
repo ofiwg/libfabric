@@ -105,14 +105,13 @@ struct gnix_nic_attr {
  * @var rx_cq_blk            GNI rx cq (blocking) bound to this nic
  * @var tx_cq                GNI tx cq (non-blocking) bound to this nic
  * @var tx_cq_blk            GNI tx cq (blocking) bound to this nic
+ * @var progress_thread      thread id of progress thread for this nic
  * @var tx_desc_active_list  linked list of active tx descriptors associated
  *                           with this nic
  * @var tx_desc_free_list    linked list of free tx descriptors associated
  *                           with this nic
  * @var tx_desc_base         base address for the block of memory from which
  *                           tx descriptors were allocated
- * @var outstanding_fab_reqs_nic number of outstanding (active) gnix_fab_reqs
- *                           associated with this nic
  * @var wq_lock              lock for serializing access to the nic's work queue
  * @var nic_wq               head of linked list of work queue elements
  *                           associated with this nic
@@ -141,6 +140,13 @@ struct gnix_nic_attr {
  * @var smsg_callbacks       pointer to table of GNI SMSG callback functions used
  *                           by this nic for processing incoming GNI SMS
  *                           messages
+ * @var err_txds             slist of error'd tx descriptors
+ * @var tx_cq_blk_post_cnt   count of outstanding tx desc's posted using tx_cq_blk
+ *                           GNI CQ.
+ * @var irq_mem_hndl         gni_mem_handle_t for mmap region registered with
+ *                           gni hw cq handle used for GNI_PostCqWrite
+ * @var irq_mmap_addr        base address of mmap associated with irq_dma_hndl
+ * @var irq_mmap_len         length of the mmap in bytes
  */
 struct gnix_nic {
 	struct dlist_entry gnix_nic_list; /* global NIC list */
@@ -153,11 +159,11 @@ struct gnix_nic {
 	gni_cq_handle_t rx_cq_blk;
 	gni_cq_handle_t tx_cq;
 	gni_cq_handle_t tx_cq_blk;
+	pthread_t progress_thread;
 	fastlock_t tx_desc_lock;
 	struct dlist_entry tx_desc_active_list;
 	struct dlist_entry tx_desc_free_list;
 	struct gnix_tx_descriptor *tx_desc_base;
-	atomic_t outstanding_fab_reqs_nic;
 	fastlock_t rx_vc_lock;
 	struct dlist_entry rx_vcs;
 	fastlock_t work_vc_lock;
@@ -183,6 +189,9 @@ struct gnix_nic {
 	struct slist err_txds;
 	void *int_bufs;
 	gni_mem_handle_t int_bufs_mdh;
+	gni_mem_handle_t irq_mem_hndl;
+	void *irq_mmap_addr;
+	size_t irq_mmap_len;
 };
 
 

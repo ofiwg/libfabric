@@ -39,5 +39,20 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 		  uint64_t dest_addr, uint64_t rem_addr, uint64_t mkey,
 		  void *context, uint64_t flags, uint64_t data);
 
+/**
+ * @brief try to deliver an IRQ to peer
+ *
+ * This routine can be used to deliver an IRQ to the remote peer
+ * via a GNI_PostCqWrite.
+ *
+ * @param[in] vc       pointer to previously allocated gnix_vc struct which
+ *                     is in connected state
+ * @return FI_SUCCESS  GNI_PostCqWrite successfully posted.
+ * @return -FI_INVALID vc in invalid state or incorrect memory handle used
+ * @return -FI_ENOSPC  no free tx descriptors
+ */
+int _gnix_rma_post_irq(struct gnix_vc *vc);
+
+
 #endif /* _GNIX_RMA_H_ */
 
