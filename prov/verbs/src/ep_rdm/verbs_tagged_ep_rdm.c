@@ -269,9 +269,8 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 				memcpy(payload, buf, len);
 			}
 
-			FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS(conn,
-							    ep,
-							    wr.send_flags);
+			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep,
+							 wr.send_flags);
 
 			VERBS_DBG(FI_LOG_EP_DATA,
 				"posted %d bytes, conn %p, tag 0x%llx\n",
@@ -534,7 +533,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 	wr.opcode = IBV_WR_RDMA_WRITE;	// w/o imm - do not put it into recv
 	// completion queue
 
-	FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS(conn, ep, wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA,
 		"posted %d bytes, remote sbuff released\n", sge.length);
 	int ret = ibv_post_send(conn->qp, &wr, &bad_wr);

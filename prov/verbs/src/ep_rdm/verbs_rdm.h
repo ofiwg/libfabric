@@ -77,7 +77,7 @@
 
 // Send/Recv counters control
 
-#define FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS(_connection, _ep, _send_flags) \
+#define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep, _send_flags)	\
 do {                                                                	\
 	(_connection)->sends_outgoing++;                                \
 	(_ep)->pend_send++;                                             \
@@ -174,17 +174,27 @@ struct fi_ibv_rdm_tagged_request {
 	struct fi_context *context;
 	uint32_t imm;
 
-	/* RNDV info */
-
-	struct {
-		/* pointer to request on sender side */
-		void *id;
-		/* registered buffer on sender side */
-		void* remote_addr;
-		/* registered mr of local src_addr */
-		struct ibv_mr *mr;
-		uint32_t rkey;
-	} rndv;
+	union {
+		/* RNDV info */
+		struct {
+			/* pointer to request on sender side */
+			void *id;
+			/* registered buffer on sender side */
+			void* remote_addr;
+			/* registered mr of local src_addr */
+			struct ibv_mr *mr;
+			uint32_t rkey;
+		} rndv;
+		
+		/* RMA info */
+		struct {
+			/* registered buffer on sender side */
+			uint64_t remote_addr;
+			uint32_t rkey;
+			uint32_t lkey;
+			enum ibv_wr_opcode opcode;
+		} rma;
+	};
 };
 
 static inline void
