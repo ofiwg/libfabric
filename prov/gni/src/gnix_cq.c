@@ -231,13 +231,13 @@ static struct slist_entry *alloc_cq_entry(size_t size)
 	struct gnix_cq_entry *entry = malloc(sizeof(*entry));
 
 	if (!entry) {
-		GNIX_ERR(FI_LOG_CQ, "out of memory\n");
+		GNIX_WARN(FI_LOG_CQ, "out of memory\n");
 		goto err;
 	}
 
 	entry->the_entry = malloc(size);
 	if (!entry->the_entry) {
-		GNIX_ERR(FI_LOG_CQ, "out of memory\n");
+		GNIX_WARN(FI_LOG_CQ, "out of memory\n");
 		goto cleanup;
 	}
 
@@ -295,7 +295,7 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, void *op_context,
 
 	item = _gnix_queue_get_free(cq->events);
 	if (!item) {
-		GNIX_ERR(FI_LOG_CQ, "error creating cq_entry\n");
+		GNIX_WARN(FI_LOG_CQ, "error creating cq_entry\n");
 		return -FI_ENOMEM;
 	}
 
@@ -336,7 +336,7 @@ ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 
 	item = _gnix_queue_get_free(cq->errors);
 	if (!item) {
-		GNIX_ERR(FI_LOG_CQ, "error creating error entry\n");
+		GNIX_WARN(FI_LOG_CQ, "error creating error entry\n");
 		ret = -FI_ENOMEM;
 		goto err;
 	}

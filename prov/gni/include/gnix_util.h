@@ -99,6 +99,8 @@ extern atomic_t gnix_debug_next_tid;
 #define GNIX_DEBUG(subsystem, ...)                                             \
 	GNIX_LOG_INTERNAL(FI_DBG, subsystem, __VA_ARGS__)
 #define GNIX_ERR(subsystem, ...)                                               \
+	GNIX_LOG_INTERNAL(GNIX_FI_PRINT, subsystem, __VA_ARGS__)
+#define GNIX_FATAL(subsystem, ...)                                             \
 	do { \
 		GNIX_LOG_INTERNAL(GNIX_FI_PRINT, subsystem, __VA_ARGS__); \
 		abort(); \

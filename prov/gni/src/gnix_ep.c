@@ -1401,7 +1401,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	ret = __fr_freelist_init(ep_priv);
 	if (ret != FI_SUCCESS) {
-		GNIX_ERR(FI_LOG_EP_CTRL,
+		GNIX_WARN(FI_LOG_EP_CTRL,
 			 "Error allocating gnix_fab_req freelist (%s)",
 			 fi_strerror(-ret));
 		goto err1;
@@ -1681,7 +1681,7 @@ ssize_t gnix_cancel(fid_t fid, void *context)
 		return -FI_ENOENT;
 
 	default:
-		GNIX_ERR(FI_LOG_EP_CTRL, "Invalid fid type\n");
+		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid fid type\n");
 		return -FI_EINVAL;
 	}
 

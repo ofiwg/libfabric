@@ -64,8 +64,8 @@ int _gnix_wait_set_add(struct fid_wait *wait, struct fid *wait_obj)
 
 	wait_entry = calloc(1, sizeof(*wait_entry));
 	if (!wait_entry) {
-		GNIX_ERR(WAIT_SUB,
-			 "failed to allocate memory for wait entry.\n");
+		GNIX_WARN(WAIT_SUB,
+			  "failed to allocate memory for wait entry.\n");
 		return -FI_ENOMEM;
 	}
 
@@ -129,8 +129,8 @@ int _gnix_get_wait_obj(struct fid_wait *wait, void *arg)
 		src = &mutex_cond;
 		break;
 	default:
-		GNIX_ERR(WAIT_SUB, "wait type: %d not supported.\n",
-			 wait_priv->type);
+		GNIX_WARN(WAIT_SUB, "wait type: %d not supported.\n",
+			  wait_priv->type);
 		return -FI_EINVAL;
 	}
 
@@ -150,13 +150,13 @@ void _gnix_signal_wait_obj(struct fid_wait *wait)
 	switch (wait_priv->type) {
 	case FI_WAIT_FD:
 		if (write(wait_priv->fd[WAIT_WRITE], &msg, len) != len)
-			GNIX_ERR(WAIT_SUB, "failed to signal wait object.\n");
+			GNIX_WARN(WAIT_SUB, "failed to signal wait object.\n");
 		break;
 	case FI_WAIT_MUTEX_COND:
 		pthread_cond_signal(&wait_priv->cond);
 		break;
 	default:
-		GNIX_ERR(WAIT_SUB,
+		GNIX_WARN(WAIT_SUB,
 			 "error signaling wait object: type: %d not supported.\n",
 			 wait_priv->type);
 		return;
@@ -210,7 +210,7 @@ static int gnix_init_wait_obj(struct gnix_fid_wait *wait, enum fi_wait_obj type)
 		pthread_cond_init(&wait->cond, NULL);
 		break;
 	default:
-		GNIX_ERR(WAIT_SUB, "Invalid wait type: %d\n",
+		GNIX_WARN(WAIT_SUB, "Invalid wait type: %d\n",
 			 type);
 		return -FI_EINVAL;
 	}
@@ -221,7 +221,7 @@ cleanup:
 	close(wait->fd[WAIT_READ]);
 	close(wait->fd[WAIT_WRITE]);
 err:
-	GNIX_ERR(WAIT_SUB, "%s\n", strerror(errno));
+	GNIX_WARN(WAIT_SUB, "%s\n", strerror(errno));
 	return -FI_EOTHER;
 }
 
@@ -292,7 +292,7 @@ int gnix_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 
 	wait_priv = calloc(1, sizeof(*wait_priv));
 	if (!wait_priv) {
-		GNIX_ERR(WAIT_SUB,
+		GNIX_WARN(WAIT_SUB,
 			 "failed to allocate memory for wait set.\n");
 		ret = -FI_ENOMEM;
 		goto err;

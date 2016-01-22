@@ -804,7 +804,7 @@ static void __nic_destruct(void *obj)
 			  fi_strerror(-ret));
 
 	if (!nic->gni_cdm_hndl) {
-		GNIX_ERR(FI_LOG_EP_CTRL, "No CDM attached to nic, nic=%p");
+		GNIX_WARN(FI_LOG_EP_CTRL, "No CDM attached to nic, nic=%p");
 	}
 
 	assert(nic->gni_cdm_hndl != NULL);
