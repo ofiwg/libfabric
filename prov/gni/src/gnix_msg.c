@@ -765,8 +765,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 			GNIX_INFO(FI_LOG_EP_DATA, "Freeing req: %p\n", req);
 
 			/* Dequeue and free the request. */
-			req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, 0,
-					      NULL, &vc->peer_addr);
+			_gnix_remove_tag(posted_queue, req);
 			_gnix_fr_free(ep, req);
 		}
 	} else {
@@ -940,8 +939,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 			req = dup_req;
 		} else {
 			/* Dequeue the request. */
-			req = _gnix_match_tag(posted_queue, hdr->msg_tag, 0, 0,
-					      NULL, &vc->peer_addr);
+			_gnix_remove_tag(posted_queue, req);
 		}
 
 		/* Queue request to initiate pull of source data. */

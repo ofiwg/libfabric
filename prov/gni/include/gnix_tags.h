@@ -120,6 +120,7 @@ struct gnix_tag_storage_ops {
 			uint64_t tag, uint64_t ignore,
 			uint64_t flags, void *context,
 			struct gnix_address *addr);
+	void (*remove_tag_by_req)(struct gnix_fab_req *req);
 	int (*init)(struct gnix_tag_storage *ts);
 	int (*fini)(struct gnix_tag_storage *ts);
 	struct gnix_fab_req *(*remove_req_by_context)(struct gnix_tag_storage *ts,
@@ -132,7 +133,7 @@ struct gnix_tag_storage_ops {
  */
 struct gnix_tag_list_element {
 	 /* entry to the next element in the list */
-	struct slist_entry free;
+	struct dlist_entry free;
     /* has element been claimed with FI_CLAIM? */
 	int claimed;
     /* associated fi_context with claimed element */
@@ -172,7 +173,7 @@ struct gnix_tag_format {
 };
 
 struct gnix_tag_list {
-	struct slist list;
+	struct dlist_entry list;
 };
 
 struct gnix_tag_hlist {
@@ -203,7 +204,7 @@ struct gnix_tag_storage {
 	atomic_t seq;
 	int state;
 	int gen;
-	int (*match_func)(struct slist_entry *entry, const void *arg);
+	int (*match_func)(struct dlist_entry *entry, const void *arg);
 	struct gnix_tag_storage_attr attr;
 	struct gnix_tag_storage_ops *ops;
 	struct gnix_tag_format tag_format;
@@ -241,20 +242,20 @@ int _gnix_req_matches_params(
 /**
  * @brief matching function for unexpected tag storages
  *
- * @param entry  slist entry pointing to the request to search
+ * @param entry  dlist entry pointing to the request to search
  * @param arg    search parameters as a gnix_tag_search_element
  * @return 1 if this request matches the parameters, 0 otherwise
  */
-int _gnix_match_unexpected_tag(struct slist_entry *entry, const void *arg);
+int _gnix_match_unexpected_tag(struct dlist_entry *entry, const void *arg);
 
 /**
  * @brief matching function for posted tag storages
  *
- * @param entry  slist entry pointing to the request to search
+ * @param entry  dlist entry pointing to the request to search
  * @param arg    search parameters as a gnix_tag_search_element
  * @return 1 if this request matches the parameters, 0 otherwise
  */
-int _gnix_match_posted_tag(struct slist_entry *entry, const void *arg);
+int _gnix_match_posted_tag(struct dlist_entry *entry, const void *arg);
 
 /**
  * @brief base initialization function for tag storages
@@ -271,7 +272,7 @@ int _gnix_match_posted_tag(struct slist_entry *entry, const void *arg);
 int _gnix_tag_storage_init(
 		struct gnix_tag_storage *ts,
 		struct gnix_tag_storage_attr *attr,
-		int (*match_func)(struct slist_entry *, const void *));
+		int (*match_func)(struct dlist_entry *, const void *));
 
 /**
  * @brief initialization function for posted tag storages
@@ -356,6 +357,8 @@ int _gnix_insert_tag(
  * @note addr_ignore parameter is not used for posted tag storages
  * @note if FI_CLAIM is not provided in flags, the call is an implicit removal
  *       of the tag
+ * @note When the FI_PEEK flag is not set, the request will be removed
+ *       from the tag storage
  */
 struct gnix_fab_req *_gnix_match_tag(
 		struct gnix_tag_storage *ts,
@@ -368,6 +371,21 @@ struct gnix_fab_req *_gnix_match_tag(
 struct gnix_fab_req *_gnix_remove_req_by_context(
 		struct gnix_tag_storage *ts,
 		void *context);
+
+/**
+ * @brief removes a gnix_fab_req from the tag storage list element
+ *
+ * @param ts           pointer to the tag storage
+ * @param req          gnix fabric request
+ * @param ignore       bits to ignore in tag (only applies to posted)
+ * @return             none
+ *
+ * @note This is similar to _gnix_match_tag with the FI_PEEK flag not set
+ *       but it does not need to search the list to remove the request
+ */
+void _gnix_remove_tag(
+		struct gnix_tag_storage *ts,
+		struct gnix_fab_req *req);
 
 /* external symbols */
 
