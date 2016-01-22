@@ -66,10 +66,10 @@ dnl looks like we need to get rid of some white space
 				AC_MSG_RESULT([yes])
 				gni_CPPFLAGS="-I$with_criterion/include $gni_CPPFLAGS"
 				if test -d "$with_criterion/lib"; then
-					gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib $gni_LDFLAGS"
+				        gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib -Wl,-rpath=$with_criterion/lib $gni_LDFLAGS"
 					have_criterion=true
 				elif test -d "$with_criterion/lib64"; then
-					gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib64 $gni_LDFLAGS"
+					gni_LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib64 -Wl,-rpath=$with_criterion/lib64 $gni_LDFLAGS"
 					have_criterion=true
 				else
 					have_criterion=false

@@ -38,7 +38,7 @@
 
 static int pmi_initialized;
 
-ReportHook(PRE_ALL)()
+ReportHook(PRE_ALL)(struct criterion_test_set *test)
 {
 	int rc, spawned;
 
@@ -50,7 +50,7 @@ ReportHook(PRE_ALL)()
 		pmi_initialized = 1;
 }
 
-ReportHook(POST_ALL)()
+ReportHook(POST_ALL)(struct criterion_global_stats *stats)
 {
 	if (pmi_initialized == 1)
 		PMI_Finalize();
