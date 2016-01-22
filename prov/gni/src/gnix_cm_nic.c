@@ -504,14 +504,8 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	GNIX_INFO(FI_LOG_EP_CTRL, "creating cm_nic for %u/0x%x/%u\n",
 		      domain->ptag, domain->cookie, cdm_id);
 
-#if 1
 	if ((name_type == GNIX_EPN_TYPE_BOUND) ||
 	    (domain->cm_nic == NULL)) {
-#endif
-#if 0
-	if ((name_type == GNIX_EPN_TYPE_BOUND) ||
-		(name_type == GNIX_EPN_TYPE_UNBOUND)) {
-#endif
 
 		cm_nic = (struct gnix_cm_nic *)calloc(1, sizeof(*cm_nic));
 		if (cm_nic == NULL) {
@@ -598,10 +592,8 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
  		 * field to point to this new cm_nic
  		 */
 
-#if 1
 		if (name_type == GNIX_EPN_TYPE_UNBOUND)
 			domain->cm_nic = cm_nic;
-#endif
 	} else  {
 		cm_nic = domain->cm_nic;
 		_gnix_ref_get(cm_nic);
