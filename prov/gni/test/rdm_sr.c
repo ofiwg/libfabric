@@ -354,7 +354,9 @@ void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 
 	if (flags & FI_RECV) {
 		cr_assert(cqe->len == len, "CQE length mismatch");
-		cr_assert(cqe->buf == addr, "CQE address mismatch");
+
+		if (!(flags & FI_MULTI_RECV))
+			cr_assert(cqe->buf == addr, "CQE address mismatch");
 
 		if (flags & FI_REMOTE_CQ_DATA)
 			cr_assert(cqe->data == data, "CQE data mismatch");
