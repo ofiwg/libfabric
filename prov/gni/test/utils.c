@@ -56,6 +56,11 @@
 #include "gnix_util.h"
 #include "gnix.h"
 
+struct gnix_reference_tester {
+	struct gnix_reference ref_cnt;
+	int destructed;
+};
+
 Test(utils, proc)
 {
 	int rc;
@@ -106,5 +111,44 @@ Test(utils, alps)
 	cr_expect(((fmas > cqs ? cqs : fmas) / npes) == npr);
 
 	_gnix_alps_cleanup();
+}
+
+static void test_destruct(void *obj)
+{
+	struct gnix_reference_tester *t = (struct gnix_reference_tester *) obj;
+
+	t->destructed = 1;
+}
+
+Test(utils, references)
+{
+	int refs;
+	struct gnix_reference_tester test;
+
+	/* initialize test structure */
+	_gnix_ref_init(&test.ref_cnt, 1, test_destruct);
+	test.destructed = 0;
+
+	/* check for validity */
+	cr_assert(atomic_get(&test.ref_cnt.references) == 1);
+	cr_assert(test.destructed == 0);
+
+	/* increment refs and check */
+	refs = _gnix_ref_get(&test);
+	cr_assert(refs == 2);
+	cr_assert(atomic_get(&test.ref_cnt.references) == 2);
+	cr_assert(test.destructed == 0);
+
+	/* decrement refs and check */
+	refs = _gnix_ref_put(&test);
+	cr_assert(refs == 1);
+	cr_assert(atomic_get(&test.ref_cnt.references) == 1);
+	cr_assert(test.destructed == 0);
+
+	/* decrement and destruct, check for validity */
+	refs = _gnix_ref_put(&test);
+	cr_assert(refs == 0);
+	cr_assert(atomic_get(&test.ref_cnt.references) == 0);
+	cr_assert(test.destructed == 1);
 }
 
