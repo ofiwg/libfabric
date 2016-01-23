@@ -92,6 +92,7 @@ struct usnic_rt_cb_arg {
 	int			oif;
 	int			found;
 	int			msg_cnt;
+	int			retry;
 	struct usnic_nl_sk	*unlsk;
 };
 

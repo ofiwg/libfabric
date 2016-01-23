@@ -80,14 +80,23 @@ static int usnic_is_nlreply_expected(struct usnic_nl_sk *unlsk,
 	return 1;
 }
 
-static int usnic_is_nlreply_err(struct nlmsghdr *nlm_hdr)
+static int usnic_is_nlreply_err(struct nlmsghdr *nlm_hdr,
+                                struct usnic_rt_cb_arg *arg)
 {
 	if (nlm_hdr->nlmsg_type == NLMSG_ERROR) {
 		struct nlmsgerr *e = (struct nlmsgerr *)nlmsg_data(nlm_hdr);
-		if (nlm_hdr->nlmsg_len >= (__u32)NLMSG_SIZE(sizeof(*e)))
+		if (nlm_hdr->nlmsg_len >= (__u32)NLMSG_SIZE(sizeof(*e))) {
 			usnic_strerror(e->error,
 					"Received a netlink error message");
-		else
+			/* Sometimes nl_send() succeeds, but the
+			 * request fails because the kernel is
+			 * temporarily out of resources.  In these
+			 * cases, we should tell the caller that they
+			 * should try again. */
+			if (e->error == -ECONNREFUSED) {
+				arg->retry = 1;
+			}
+		} else
 			usnic_err(
 				"Received a truncated netlink error message\n");
 		return 1;
@@ -213,7 +222,7 @@ static int usnic_rt_raw_parse_cb(struct nl_msg *msg, void *arg)
 		return NL_SKIP;
 	}
 
-	if (usnic_is_nlreply_err(nlm_hdr)) {
+	if (usnic_is_nlreply_err(nlm_hdr, lookup_arg)) {
 		usnic_nlmsg_dump(msg);
 		return NL_SKIP;
 	}
@@ -268,6 +277,7 @@ int usnic_nl_rt_lookup(uint32_t src_addr, uint32_t dst_addr, int oif,
 	struct usnic_rt_cb_arg	arg;
 	int			err;
 
+retry:
 	unlsk = NULL;
 	err = usnic_nl_sk_alloc(&unlsk, NETLINK_ROUTE);
 	if (err)
@@ -310,7 +320,24 @@ int usnic_nl_rt_lookup(uint32_t src_addr, uint32_t dst_addr, int oif,
 		goto out;
 	}
 
-	NL_RECVMSGS(unlsk->nlh, arg, EHOSTUNREACH, err, out);
+	/* Sometimes the recvmsg can fail because something is
+	 * temporarily out of resources.  In this case, delay a little
+	 * and try again. */
+	do {
+		err = 0;
+		NL_RECVMSGS(unlsk->nlh, arg, EAGAIN, err, out);
+		if (err == EAGAIN) {
+			usleep(5);
+		}
+	} while (err != EAGAIN);
+
+	/* If we got a reply back that indicated that the kernel was
+	 * too busy to handle this request, delay a little and try
+	 * again. */
+        if (arg.retry) {
+            usleep(5);
+            goto retry;
+        }
 
 	if (arg.found) {
 		*nh_addr = arg.nh_addr;
