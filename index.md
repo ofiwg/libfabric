@@ -44,7 +44,7 @@ Developers coding to libfabric may find the following tutorial useful.  It walks
 Finally, this document describes how to get started writing to the libfabric interfaces.
 
 <div align="center">
-<iframe src="//www.slideshare.net/slideshow/embed_code/key/tRnMHhyoS9HWy1" width="668" height="714" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" allowfullscreen></iframe>
+<iframe src="https://www.slideshare.net/slideshow/embed_code/key/tRnMHhyoS9HWy1" width="668" height="714" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" allowfullscreen></iframe>
 </div>
 
 
