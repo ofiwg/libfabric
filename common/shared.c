@@ -915,15 +915,17 @@ static int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
 
 int ft_get_rx_comp(uint64_t total)
 {
-	int ret = FI_SUCCESS;
+	int ret;
 
 	if (rxcq) {
 		ret = ft_get_cq_comp(rxcq, &rx_cq_cntr, total, timeout);
 	} else {
-		while(fi_cntr_read(rxcntr) < total && ret == FI_SUCCESS) {
+		while (fi_cntr_read(rxcntr) < total) {
 			ret = fi_cntr_wait(rxcntr, total, timeout);
 			if (ret)
 				FT_PRINTERR("fi_cntr_wait", ret);
+			else
+				break;
 		}
 	}
 	return ret;
