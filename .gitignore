@@ -16,7 +16,9 @@ config.log
 config.status
 configure
 libtool
+
 libfabric.spec
+libfabric.pc
 
 config/ar-lib
 config/compile
