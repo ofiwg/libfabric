@@ -915,7 +915,7 @@ static int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
 
 int ft_get_rx_comp(uint64_t total)
 {
-	int ret;
+	int ret = FI_SUCCESS;
 
 	if (rxcq) {
 		ret = ft_get_cq_comp(rxcq, &rx_cq_cntr, total, timeout);
