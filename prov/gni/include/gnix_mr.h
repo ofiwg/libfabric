@@ -34,7 +34,6 @@
 /**
  * @note The GNIX memory registration cache has the following properties:
  *         - Not thread safe
- *         - Uses two red black trees for internal storage and fast lookups
  *         - The hard registration limit includes the number of stale entries.
  *             Stale entries will be evicted to make room for new entries as
  *             the registration cache becomes full.
@@ -60,14 +59,56 @@
  *             time. Some stale entries may never be reused by an application.
  *             This value may also be changed by passing in a set of attributes
  *             during _gnix_mr_cache_init.
+ *
+ * The memory registration framework is based on the design of a two tree
+ * system for fast lookups. The first tree is a red-black tree for O(lg n)
+ * search times. The intent of the design is to minimize the
+ * number of occurrences where memory must be registered with the NIC.
+ *
+ * Registering a new region of memory with the NIC is computationally
+ * expensive. This can be avoided by caching registrations and reusing existing
+ * registrations. The caching portion is easy, since we can store the
+ * registrations in any form we choose, so long as there is a data structure
+ * that supports it. The minimization of registrations is actually difficult.
+ *
+ * The fastpath utilizes the red-black tree for O(lg n) search times where
+ * the user is attempting to register a memory region where there is already
+ * a pre-existing registration at the same base address. By searching for the
+ * base address, we can check the length of the registration to see if it can
+ * satisfy the address. If it can satisfy the request, we are done.
+ *
+ * The slowpath utilizes the same red-black tree for O(lg n) search times. The
+ * slowpath uses the result from the first search (fastpath) to decide whether
+ * a new registration must be made. If the entry couldn't subsume the
+ * registration request, then a new registration must be made. If a new
+ * registration has to be made, then it will be some portion of the found entry
+ * and potentially some other entries in the tree. Traverse the tree in a
+ * linear fashion until a non-overlapping entry is found, then remove all
+ * matching elements from the tree and mark them as retired. A new registration
+ * is made that covers the original request and all of the requests that were
+ * pruned from the tree. The result is a larger memory registration that covers
+ * the initial request and adjacent/overlapping registrations with the request.
+ *
+ * Pruning the elements from the tree allows us to maintain a smaller search
+ * space and fewer elements in the red-black tree, which in turn gives us fewer
+ * LRU evictions.
+ *
+ * A number of assumptions are being made:
+ *   - When a lookup is being performed, no one else can modify the cache.
+ *   - Since no one can modify the cache while a lookup is occurring, certain
+ *     search criteria can be bypassed since we know a subsumable entry could
+ *     not have existed if a later search method is called.
+ *   - Since earlier methods could have found a registration but did not, then
+ *     some insertion criteria can be assumed to decrease the amount of
+ *     instructions necessary to create a new registration.
  */
-
 #ifndef GNIX_MR_H_
 #define GNIX_MR_H_
 
 #include "rdma/fi_domain.h"
 #include "gnix_util.h"
 #include "rbtree.h"
+#include "gnix_freelist.h"
 
 #define GNIX_MR_PAGE_SHIFT 12
 #define GNIX_MR_PFN_BITS 37
@@ -176,23 +217,32 @@ typedef enum {
 } gnix_mrc_state_e;
 
 /**
+ * @brief  gnix memory registration cache entry storage
+ */
+struct gnix_mrce_storage {
+	atomic_t elements;
+	RbtHandle rb_tree;
+};
+
+/**
  * @brief  gnix memory registration cache object
  *
  * @var    state           state of the cache
  * @var    attr            cache attributes, @see gnix_mr_cache_attr_t
- * @var    inuse           red-black tree containing in-use memory registrations
- * @var    stale           reb-black tree containing stale memory registrations
- * @var    inuse_elements  count of in-use memory registrations
- * @var    stale_elements  count of stale memory registrations
+ * @var    lru_head        head of LRU eviction list
+ * @var    inuse           cache entry storage struct
+ * @var    stale           cache entry storage struct
+ * @var    hits            cache hits
+ * @var    misses          cache misses
  */
 typedef struct gnix_mr_cache {
 	gnix_mrc_state_e state;
 	gnix_mr_cache_attr_t attr;
-	RbtHandle inuse;
-	RbtHandle stale;
-	atomic_t inuse_elements;
-	atomic_t stale_elements;
 	struct dlist_entry lru_head;
+	struct gnix_mrce_storage inuse;
+	struct gnix_mrce_storage stale;
+	uint64_t hits;
+	uint64_t misses;
 } gnix_mr_cache_t;
 
 /**
