@@ -329,7 +329,7 @@ retry:
 		if (err == EAGAIN) {
 			usleep(5);
 		}
-	} while (err != EAGAIN);
+	} while (err == EAGAIN);
 
 	/* If we got a reply back that indicated that the kernel was
 	 * too busy to handle this request, delay a little and try
