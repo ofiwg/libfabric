@@ -526,7 +526,11 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		}
 
 		_av->table_hdr = mmap(NULL, table_sz, PROT_READ | PROT_WRITE,
-				      MAP_SHARED, _av->shared_fd, 0);
+					MAP_SHARED, _av->shared_fd, 0);
+		_av->attr.map_addr = _av->table_hdr + sizeof(_av->table_hdr);
+		attr->map_addr = _av->attr.map_addr;
+		SOCK_LOG_DBG("Updating map_addr: %p\n");
+
 		if (attr->flags & FI_READ) {
 			if (_av->table_hdr->size != _av->attr.count) {
 				ret = -FI_EINVAL;
