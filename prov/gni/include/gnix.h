@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -339,6 +340,7 @@ struct gnix_fid_ep {
 	struct gnix_fid_cntr *read_cntr;
 	struct gnix_fid_cntr *write_cntr;
 	struct gnix_fid_av *av;
+	struct gnix_fid_stx *stx_ctx;
 	struct gnix_ep_name my_name;
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_nic *nic;
@@ -373,6 +375,23 @@ struct gnix_fid_ep {
 	int min_multi_recv;
 	/* note this free list will be initialized for thread safe */
 	struct gnix_s_freelist fr_freelist;
+	struct gnix_reference ref_cnt;
+};
+
+/**
+ * gnix_fid_stx struct
+ * @note - this is essentially a dummy structure for the GNI
+ *         provider.  Added as a convenience for those consumers
+ *         who need to use the fid_stx construct for other
+ *         providers.
+ *
+ * @var stx_fid              embedded struct fid_stx field
+ * @var domain               pointer to domain used to create the stx instance
+ * @var ref_cnt              ref cnt on this object
+ */
+struct gnix_fid_stx {
+	struct fid_stx stx_fid;
+	struct gnix_fid_domain *domain;
 	struct gnix_reference ref_cnt;
 };
 

@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -48,6 +49,7 @@ gni_cq_mode_t gnix_def_gni_cq_modes = GNI_CQ_PHYS_PAGES;
  * Forward declaration for ops structures.
  ******************************************************************************/
 
+static struct fi_ops gnix_stx_ops;
 static struct fi_ops gnix_domain_fi_ops;
 static struct fi_ops_mr gnix_domain_mr_ops;
 static struct fi_ops_domain gnix_domain_ops;
@@ -57,6 +59,8 @@ static void __domain_destruct(void *obj)
 	int ret = FI_SUCCESS;
 	struct gnix_nic *p, *next;
 	struct gnix_fid_domain *domain = (struct gnix_fid_domain *) obj;
+
+	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
 
 	/* if the domain isn't being destructed by close, we need to check the
 	 * cache again. This isn't a likely case. Destroy must succeed since we
@@ -91,9 +95,95 @@ static void __domain_destruct(void *obj)
 
 }
 
+static void __stx_destruct(void *obj)
+{
+	struct gnix_fid_stx *stx = (struct gnix_fid_stx *) obj;
+
+	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
+
+	memset(stx, 0, sizeof(*stx));
+	free(stx);
+}
+
 /*******************************************************************************
  * API function implementations.
  ******************************************************************************/
+
+/**
+ * Creates a shared transmit context.
+ * @note This is basically a no-op for the GNI provider.
+ *
+ * @param[in]  val  value to be sign extended
+ * @param[in]  len  length to sign extend the value
+ * @return     FI_SUCCESS if shared tx context successfully created
+ * @return     -FI_EINVAL if invalid arg(s) supplied
+ * @return     -FI_ENOMEM insufficient memory
+ */
+static int gnix_stx_open(struct fid_domain *dom, struct fi_tx_attr *tx_attr,
+			struct fid_stx **stx, void *context)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_fid_domain *domain;
+	struct gnix_fid_stx *stx_priv;
+
+	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
+
+	domain = container_of(dom, struct gnix_fid_domain, domain_fid.fid);
+	if (domain->domain_fid.fid.fclass != FI_CLASS_DOMAIN) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	stx_priv = calloc(1, sizeof(*stx_priv));
+	if (!stx_priv) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	stx_priv->domain = domain;
+	_gnix_ref_init(&stx_priv->ref_cnt, 1, __stx_destruct);
+
+	_gnix_ref_get(stx_priv->domain);
+
+	stx_priv->stx_fid.fid.fclass = FI_CLASS_STX_CTX;
+	stx_priv->stx_fid.fid.context = context;
+	stx_priv->stx_fid.fid.ops = &gnix_stx_ops;
+	stx_priv->stx_fid.ops = NULL;
+
+	*stx = &stx_priv->stx_fid;
+
+err:
+	return ret;
+}
+
+/**
+ * Destroy a shared transmit context.
+ *
+ * @param[in]  fid  fid for previously allocated gnix_fid_stx
+ *                  structure
+ * @return     FI_SUCCESS if shared tx context successfully closed
+ * @return     -FI_EINVAL if invalid arg(s) supplied
+ *
+ * @note - the structure will actually not be freed till all
+ *         references to the structure have released their references
+ *         to the stx structure.
+ */
+static int gnix_stx_close(fid_t fid)
+{
+	struct gnix_fid_stx *stx;
+
+	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
+
+	stx = container_of(fid, struct gnix_fid_stx, stx_fid.fid);
+	if (stx->stx_fid.fid.fclass != FI_CLASS_STX_CTX)
+		return -FI_EINVAL;
+
+	_gnix_ref_put(stx->domain);
+	_gnix_ref_put(stx);
+
+	return FI_SUCCESS;
+}
+
 static int gnix_domain_close(fid_t fid)
 {
 	int ret = FI_SUCCESS, references_held;
@@ -442,6 +532,13 @@ err:
  * FI_OPS_* data structures.
  ******************************************************************************/
 
+static struct fi_ops gnix_stx_ops = {
+	.close = gnix_stx_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open
+};
+
 static struct fi_ops gnix_domain_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = gnix_domain_close,
@@ -465,6 +562,6 @@ static struct fi_ops_domain gnix_domain_ops = {
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = gnix_cntr_open,
 	.poll_open = fi_no_poll_open,
-	.stx_ctx = fi_no_stx_context,
+	.stx_ctx = gnix_stx_open,
 	.srx_ctx = fi_no_srx_context
 };

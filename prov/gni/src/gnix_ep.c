@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1119,6 +1120,9 @@ static void __ep_destruct(void *obj)
 		_gnix_ref_put(ep->write_cntr);
 	}
 
+	if (ep->stx_ctx)
+		_gnix_ref_put(ep->stx_ctx);
+
 	domain = ep->domain;
 	assert(domain != NULL);
 	_gnix_ref_put(domain);
@@ -1177,6 +1181,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	struct gnix_fid_ep  *ep;
 	struct gnix_fid_av  *av;
 	struct gnix_fid_cq  *cq;
+	struct gnix_fid_stx *stx;
 	struct gnix_fid_cntr *cntr;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -1312,6 +1317,16 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 				  cntr);
 			ret = -FI_ENOSYS;
 		}
+		break;
+
+	case FI_CLASS_STX_CTX:
+		stx = container_of(bfid, struct gnix_fid_stx, stx_fid.fid);
+		if (ep->domain != stx->domain) {
+			ret = -FI_EINVAL;
+			break;
+		}
+		ep->stx_ctx = stx;
+		_gnix_ref_get(ep->stx_ctx);
 		break;
 
 	case FI_CLASS_MR:/*TODO: got to figure this one out */
