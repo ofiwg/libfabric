@@ -76,7 +76,7 @@ struct usnic_rt_cb_arg {
 	uint32_t		nh_addr;
 	int			oif;
 	int			found;
-	int			replied;
+	int			retry;
 	struct usnic_nl_sk	*unlsk;
 };
 
