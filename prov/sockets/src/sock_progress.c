@@ -733,7 +733,6 @@ out:
 }
 
 #define SOCK_ATOMIC_UPDATE_INT(_cmp, _src, _dst, _tmp) do {		\
-	_cmp = cmp, _dst = dst, _src = src;			        \
 	switch (op) {							\
 	case FI_MIN:							\
 		*_cmp = *_dst;						\
@@ -852,7 +851,6 @@ out:
 } while (0)
 
 #define SOCK_ATOMIC_UPDATE_FLOAT(_cmp, _src, _dst) do {			\
-	_cmp = cmp, _dst = dst, _src = src;			        \
 	switch (op) {							\
 	case FI_MIN:							\
 		*_cmp = *_dst;						\
@@ -944,7 +942,6 @@ out:
 } while (0)
 
 #define SOCK_ATOMIC_UPDATE_COMPLEX(_cmp, _src, _dst) do {		\
-	_cmp = cmp, _dst = dst, _src = src;			        \
 	switch (op) {							\
 	case FI_SUM:							\
 		*_cmp = *_dst;						\
