@@ -49,7 +49,7 @@ extern struct fi_provider gnix_prov;
  */
 #ifdef NDEBUG
 
-#define GNIX_LOG_INTERNAL(FI_LOG_FN, subsystem, fmt, ...)	\
+#define GNIX_LOG_INTERNAL(FI_LOG_FN, LEVEL, subsystem, fmt, ...)	\
 	FI_LOG_FN(&gnix_prov, subsystem, fmt, ##__VA_ARGS__)
 
 #define GNIX_FI_PRINT(prov, subsystem, ...)
@@ -73,36 +73,38 @@ extern atomic_t gnix_debug_next_tid;
  * unique thread id.  Do not use them directly.  Rather use the normal
  * GNIX_* macros.
  */
-#define GNIX_LOG_INTERNAL(FI_LOG_FN, subsystem, fmt, ...)	\
-	do {							\
-		const int fmt_len = 256;			\
-		char new_fmt[fmt_len];				\
-		if (gnix_debug_tid  == ~(uint32_t) 0) {		\
-			gnix_debug_tid = atomic_inc(&gnix_debug_next_tid); \
-		}						\
-		if (gnix_debug_pid == ~(uint32_t) 0) {		\
-			gnix_debug_pid = getpid();		\
-		}						\
-		snprintf(new_fmt, fmt_len, "[%%d:%%d] %s", fmt);	\
-		FI_LOG_FN(&gnix_prov, subsystem, new_fmt,		\
-			  gnix_debug_pid, gnix_debug_tid, ##__VA_ARGS__); \
+#define GNIX_LOG_INTERNAL(FI_LOG_FN, LEVEL, subsystem, fmt, ...)	\
+	do {	\
+		if (fi_log_enabled(&gnix_prov, LEVEL, subsystem)) { \
+			const int fmt_len = 256;			\
+			char new_fmt[fmt_len];				\
+			if (gnix_debug_tid  == ~(uint32_t) 0) {		\
+				gnix_debug_tid = atomic_inc(&gnix_debug_next_tid); \
+			}						\
+			if (gnix_debug_pid == ~(uint32_t) 0) {		\
+				gnix_debug_pid = getpid();		\
+			}						\
+			snprintf(new_fmt, fmt_len, "[%%d:%%d] %s", fmt);	\
+			FI_LOG_FN(&gnix_prov, subsystem, new_fmt,		\
+				  gnix_debug_pid, gnix_debug_tid, ##__VA_ARGS__); \
+		} \
 	} while (0)
 
 #endif
 
 #define GNIX_WARN(subsystem, ...)                                              \
-	GNIX_LOG_INTERNAL(FI_WARN, subsystem, __VA_ARGS__)
+	GNIX_LOG_INTERNAL(FI_WARN, FI_LOG_WARN, subsystem, __VA_ARGS__)
 #define GNIX_TRACE(subsystem, ...)                                             \
-	GNIX_LOG_INTERNAL(FI_TRACE, subsystem, __VA_ARGS__)
+	GNIX_LOG_INTERNAL(FI_TRACE, FI_LOG_TRACE, subsystem, __VA_ARGS__)
 #define GNIX_INFO(subsystem, ...)                                              \
-	GNIX_LOG_INTERNAL(FI_INFO, subsystem, __VA_ARGS__)
+	GNIX_LOG_INTERNAL(FI_INFO, FI_LOG_INFO, subsystem, __VA_ARGS__)
 #define GNIX_DEBUG(subsystem, ...)                                             \
-	GNIX_LOG_INTERNAL(FI_DBG, subsystem, __VA_ARGS__)
+	GNIX_LOG_INTERNAL(FI_DBG, FI_LOG_DEBUG, subsystem, __VA_ARGS__)
 #define GNIX_ERR(subsystem, ...)                                               \
-	GNIX_LOG_INTERNAL(GNIX_FI_PRINT, subsystem, __VA_ARGS__)
+	GNIX_LOG_INTERNAL(GNIX_FI_PRINT, FI_LOG_WARN, subsystem, __VA_ARGS__)
 #define GNIX_FATAL(subsystem, ...)                                             \
 	do { \
-		GNIX_LOG_INTERNAL(GNIX_FI_PRINT, subsystem, __VA_ARGS__); \
+		GNIX_LOG_INTERNAL(GNIX_FI_PRINT, FI_LOG_WARN, subsystem, __VA_ARGS__); \
 		abort(); \
 	} while (0)
 
