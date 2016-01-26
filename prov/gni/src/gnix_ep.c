@@ -133,16 +133,25 @@ static inline ssize_t __ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 				   uint64_t ignore)
 {
 	struct gnix_fid_ep *ep_priv;
+	uint64_t recv_addr, recv_len;
 
-	if (!ep || !msg || !msg->msg_iov || msg->iov_count != 1) {
+	if (!ep || !msg) {
 		return -FI_EINVAL;
+	}
+
+	/* msg_iov can be undefined when using FI_PEEK, etc. */
+	if (msg->msg_iov) {
+		recv_addr = (uint64_t)msg->msg_iov[0].iov_base;
+		recv_len = (uint64_t)msg->msg_iov[0].iov_len;
+	} else {
+		recv_addr = 0;
+		recv_len = 0;
 	}
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert((ep_priv->type == FI_EP_RDM) || (ep_priv->type == FI_EP_MSG));
 
-	return _gnix_recv(ep_priv, (uint64_t)msg->msg_iov[0].iov_base,
-			  msg->msg_iov[0].iov_len,
+	return _gnix_recv(ep_priv, recv_addr, recv_len,
 			  msg->desc ? msg->desc[0] : NULL,
 			  msg->addr, msg->context, flags, tag, ignore);
 }

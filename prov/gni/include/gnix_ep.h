@@ -154,7 +154,6 @@ _gnix_fr_alloc(struct gnix_fid_ep *ep)
 	}
 
 	/* reset common fields */
-	fr->modes = 0;
 	fr->tx_failures = 0;
 	_gnix_ref_get(ep);
 
