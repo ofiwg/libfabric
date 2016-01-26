@@ -128,7 +128,7 @@ extern "C" {
 #define GNIX_RMA_CHAINED		(1ULL << 63)	/* RMA only flag */
 
 #define GNIX_MSG_RENDEZVOUS		(1ULL << 61)	/* MSG only flag */
-#define GNIX_MSG_DOUBLE_GET		(1ULL << 62)	/* MSG only flag */
+#define GNIX_MSG_GET_TAIL		(1ULL << 62)	/* MSG only flag */
 
 /*
  * Cray gni provider supported flags for fi_getinfo argument for now, needs
@@ -369,6 +369,7 @@ struct gnix_fid_ep {
 	int enabled;
 	int send_selective_completion;
 	int recv_selective_completion;
+	int min_multi_recv;
 	/* note this free list will be initialized for thread safe */
 	struct gnix_s_freelist fr_freelist;
 	struct gnix_reference ref_cnt;

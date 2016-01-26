@@ -37,6 +37,9 @@
 #include "gnix.h"
 #include "gnix_nic.h"
 
+/* Default minimum multi receive buffer size. */
+#define GNIX_OPT_MIN_MULTI_RECV_DEFAULT	64
+
 /*
  * enum of tags used for GNI_SmsgSendWTag
  * and callbacks at receive side to process

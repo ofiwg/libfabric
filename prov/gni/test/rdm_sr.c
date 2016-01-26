@@ -110,7 +110,7 @@ void rdm_sr_setup_common_eps(void)
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
 
-	target = malloc(BUF_SZ);
+	target = malloc(BUF_SZ * 3); /* 3x BUF_SZ for multi recv testing */
 	assert(target);
 
 	source = malloc(BUF_SZ);
@@ -189,7 +189,7 @@ void rdm_sr_setup_common(void)
 	rdm_sr_setup_common_eps();
 
 	for (i = 0; i < NUMEPS; i++) {
-		ret = fi_mr_reg(dom[i], target, BUF_SZ,
+		ret = fi_mr_reg(dom[i], target, 3 * BUF_SZ,
 				FI_REMOTE_WRITE, 0, 0, 0, rem_mr + i, &target);
 		cr_assert_eq(ret, 0);
 
@@ -1382,3 +1382,154 @@ Test(rdm_sr, sendrecv_alignment_retrans)
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_sendrecv_alignment, 8*1024, 32*1024);
 }
+
+void do_multirecv(int len)
+{
+	int i, ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct iovec iov;
+	struct fi_msg msg;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+	int nrecvs = 3;
+
+	rdm_sr_init_data(source, len, 0xab);
+	rdm_sr_init_data(target, len, 0);
+
+	/* Post receives first to force matching in SMSG callback. */
+	iov.iov_base = target;
+	iov.iov_len = len * nrecvs + 63;
+
+	msg.msg_iov = &iov;
+	msg.desc = (void **)rem_mr;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[0];
+	msg.context = source;
+	msg.data = (uint64_t)source;
+
+	sz = fi_recvmsg(ep[1], &msg, FI_MULTI_RECV);
+	cr_assert_eq(sz, 0);
+
+	for (i = 0; i < nrecvs; i++) {
+		sz = fi_send(ep[0], source, len, loc_mr[0], gni_addr[1],
+			     target);
+		cr_assert_eq(sz, 0);
+	}
+
+	/* need to progress both CQs simultaneously for rendezvous */
+	do {
+		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+		if (ret == 1) {
+			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
+					 0, 0, 0);
+			s[0]++;
+		}
+		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+		if (ret == 1) {
+			rdm_sr_check_cqe(&d_cqe, source,
+					 (FI_MSG|FI_RECV|FI_MULTI_RECV),
+					 target + (r[1] * len), len, 0);
+			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
+				  "Data mismatch");
+			r[1]++;
+		}
+	} while (s[0] < nrecvs || r[1] < nrecvs);
+
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
+
+	dbg_printf("got context events!\n");
+}
+
+Test(rdm_sr, multirecv)
+{
+	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
+}
+
+Test(rdm_sr, multirecv_retrans)
+{
+	rdm_sr_err_inject_enable();
+	rdm_sr_xfer_for_each_size(do_multirecv, 1, BUF_SZ);
+}
+
+void do_multirecv2(int len)
+{
+	int i, ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	struct iovec iov;
+	struct fi_msg msg;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+	int nrecvs = 3;
+
+	rdm_sr_init_data(source, len, 0xab);
+	rdm_sr_init_data(target, len, 0);
+
+	/* Post sends first to force matching in the _gnix_recv() path. */
+	for (i = 0; i < nrecvs; i++) {
+		sz = fi_send(ep[0], source, len, loc_mr[0], gni_addr[1],
+			     target);
+		cr_assert_eq(sz, 0);
+	}
+
+	/* Progress our sends. */
+	for (i = 0; i < 10000; i++) {
+		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+		if (ret == 1) {
+			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
+					 0, 0, 0);
+			s[0]++;
+		}
+		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+		cr_assert_eq(ret, -FI_EAGAIN);
+	}
+
+	iov.iov_base = target;
+	iov.iov_len = len * nrecvs + 63;
+
+	msg.msg_iov = &iov;
+	msg.desc = (void **)rem_mr;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[0];
+	msg.context = source;
+	msg.data = (uint64_t)source;
+
+	sz = fi_recvmsg(ep[1], &msg, FI_MULTI_RECV);
+	cr_assert_eq(sz, 0);
+
+	/* need to progress both CQs simultaneously for rendezvous */
+	do {
+		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+		if (ret == 1) {
+			rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND),
+					 0, 0, 0);
+			s[0]++;
+		}
+		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+		if (ret == 1) {
+			rdm_sr_check_cqe(&d_cqe, source,
+					 (FI_MSG|FI_RECV|FI_MULTI_RECV),
+					 target + (r[1] * len), len, 0);
+			cr_assert(rdm_sr_check_data(source, d_cqe.buf, len),
+				  "Data mismatch");
+			r[1]++;
+		}
+	} while (s[0] < nrecvs || r[1] < nrecvs);
+
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
+
+	dbg_printf("got context events!\n");
+}
+
+Test(rdm_sr, multirecv2)
+{
+	rdm_sr_xfer_for_each_size(do_multirecv2, 1, BUF_SZ);
+}
+
+Test(rdm_sr, multirecv2_retrans)
+{
+	rdm_sr_err_inject_enable();
+	rdm_sr_xfer_for_each_size(do_multirecv2, 1, BUF_SZ);
+}
+

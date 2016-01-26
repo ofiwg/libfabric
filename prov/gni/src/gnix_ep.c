@@ -1408,6 +1408,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		ep_priv->op_flags |= info->rx_attr->op_flags;
 	ep_priv->op_flags &= GNIX_EP_OP_FLAGS;
 
+	ep_priv->min_multi_recv = GNIX_OPT_MIN_MULTI_RECV_DEFAULT;
+
 	ret = __fr_freelist_init(ep_priv);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
