@@ -50,6 +50,11 @@
 #define SOCK_LOG_DBG(...) _SOCK_LOG_DBG(FI_LOG_AV, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_AV, __VA_ARGS__)
 
+#define SOCK_AV_TABLE_SZ(count, av_name) (sizeof(struct sock_av_table_hdr) + \
+				SOCK_IS_SHARED_AV(av_name) * count * sizeof(uint64_t) + \
+				count * sizeof(struct sock_av_addr))
+#define SOCK_IS_SHARED_AV(av_name) ((av_name) ? 1 : 0)
+
 int sock_compare_addr(struct sockaddr_in *addr1,
 			     struct sockaddr_in *addr2)
 {
@@ -123,6 +128,14 @@ static int sock_av_is_valid_address(struct sockaddr_in *addr)
 	return addr->sin_family == AF_INET ? 1 : 0;
 }
 
+static void sock_update_av_table(struct sock_av *_av, size_t count)
+{
+	_av->table = (struct sock_av_addr *)
+		((char *)_av->table_hdr +
+		SOCK_IS_SHARED_AV(_av->attr.name) * count * sizeof(uint64_t) +
+		sizeof(struct sock_av_table_hdr));
+}
+
 static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 			       fi_addr_t *fi_addr, int count, uint64_t flags,
 			       void *context, int index)
@@ -170,13 +183,10 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 				sock_av_report_error(_av, context, i, FI_ENOSPC);
 				SOCK_LOG_ERROR("Cannot insert to AV table\n");
 				continue;
-			} else{
+			} else {
 				new_count = _av->table_hdr->size * 2;
-				table_sz = sizeof(struct sock_av_table_hdr) +
-					new_count * sizeof(struct sock_av_addr);
-				old_sz = sizeof(struct sock_av_table_hdr) +
-						_av->table_hdr->size *
-						sizeof(struct sock_av_addr);
+				table_sz = SOCK_AV_TABLE_SZ(new_count, _av->attr.name);
+				old_sz = SOCK_AV_TABLE_SZ(_av->table_hdr->size, _av->attr.name);
 
 				if (_av->attr.name) {
 					new_addr = sock_mremap(_av->table_hdr,
@@ -188,6 +198,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 							context, i, FI_ENOMEM);
 						continue;
 					}
+					_av->idx_arr[_av->table_hdr->stored] = _av->table_hdr->stored;
 				} else {
 					new_addr = realloc(_av->table_hdr,
 								table_sz);
@@ -201,9 +212,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 				}
 				_av->table_hdr = new_addr;
 				_av->table_hdr->size = new_count;
-				_av->table = (struct sock_av_addr *)
-					((char *)_av->table_hdr +
-					sizeof(struct sock_av_table_hdr));
+				sock_update_av_table(_av, new_count);
 			}
 		}
 
@@ -491,9 +500,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	_av->attr = *attr;
 	_av->attr.count = (attr->count) ? attr->count : sock_av_def_sz;
-
-	table_sz = sizeof(struct sock_av_table_hdr) +
-		_av->attr.count * sizeof(struct sock_av_addr);
+	table_sz = SOCK_AV_TABLE_SZ(_av->attr.count, attr->name);
 
 	if (attr->name) {
 		_av->name = strdup(attr->name);
@@ -527,9 +534,10 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 		_av->table_hdr = mmap(NULL, table_sz, PROT_READ | PROT_WRITE,
 					MAP_SHARED, _av->shared_fd, 0);
-		_av->attr.map_addr = _av->table_hdr + sizeof(_av->table_hdr);
+		_av->idx_arr = (uint64_t *)(_av->table_hdr + 1);
+		_av->attr.map_addr = _av->idx_arr;
 		attr->map_addr = _av->attr.map_addr;
-		SOCK_LOG_DBG("Updating map_addr: %p\n");
+		SOCK_LOG_DBG("Updating map_addr: %p\n", _av->attr.map_addr);
 
 		if (attr->flags & FI_READ) {
 			if (_av->table_hdr->size != _av->attr.count) {
@@ -556,9 +564,8 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		_av->table_hdr->size = _av->attr.count;
 		_av->table_hdr->req_sz = attr->count;
 	}
+	sock_update_av_table(_av, _av->attr.count);
 
-	_av->table = (struct sock_av_addr *)((char *)_av->table_hdr +
-					    sizeof(struct sock_av_table_hdr));
 	_av->av_fid.fid.fclass = FI_CLASS_AV;
 	_av->av_fid.fid.context = context;
 	_av->av_fid.fid.ops = &sock_av_fi_ops;
