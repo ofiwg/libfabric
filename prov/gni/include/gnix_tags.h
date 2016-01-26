@@ -30,6 +30,95 @@
  * SOFTWARE.
  */
 
+/**
+ * Notes:
+ *
+ * This tag matching system currently implements a linked-list version of
+ * a tag matcher.
+ *
+ * A hash list implementation was planned but will be not pursued due to the
+ * constraints of the problem.
+ *
+ * As understood at the time of this writing, matching a tag involves matching
+ * the bits of the tag against the bits of the tag to find, less the ignored
+ * bits. When no bits are ignored, there is no subset of tags to match other
+ * than the exact match. When some bits are ignored, there is a subset of tags
+ * that are not exact matches, but are considered matches according to the
+ * ignored bits. This problem represents a search over a k-space, where k is
+ * the number of distinct ignore fields given by the tag format for the
+ * provider. Each ignore field in the tag format distinct separates tags into
+ * different 'bins' within the same field.
+ *
+ * A hash list implementation is not impossible, but can be computationally
+ * impractical. This is due to the way a search must occur if bits are ignored.
+ * The problem would be trivial if no bits were ignored, as the implementation
+ * could simply go to the bucket where the tag was hashed and search there.
+ * However, because ignored bits could hash to multiple, if not all, buckets,
+ * the tag matcher must search all buckets. It takes more time to compute all
+ * permutations of affected tags, than to just search each tag, so the default
+ * behavior is to search all buckets if a non-zero ignore field is provided.
+ *
+ * In the event that the ignore field is always zero, a hash list
+ * implementation is strictly better than a list implementation. However,
+ * once ignore bits are considered, the problem becomes more complex.
+ *
+ * Consider a hash list implementation where tags are split into K buckets,
+ * and tags are evenly distributed. If N tags are placed into the hash list in
+ * an evenly distributed manner, we can compute a best, average and worst
+ * case expectation for the hash list implementation.
+ *
+ * In the best case, the tag we are searching for is at the front of the list
+ * and only one tag in the system could match the search parameters, then
+ * we get the following best case analysis:
+ *
+ * When tags are evenly distributed, there should be ~(N/K) tags per bucket.
+ *
+ * Best(hash-list, middle list): ((N/K) * (K/ 2)) + 1 == (N/2) + 1
+ * Best(hash-list, first list): 1
+ *
+ *   We can assume that on average, we'll have to search half the buckets in
+ *   the best case, since the tags are evenly distributed. The very best case
+ *   is that the tag would be in the first bucket, giving us O(1) instead.
+ *   However, since tag location is determined on the hash, we have to assume
+ *   that we will have to search half the buckets first (N/K) * (K/2). Since
+ *   the element we are searching for is at the front of the list, it only
+ *   takes one search on that list.
+ *
+ * Average(hash-list): (N/K) * (K/2) + (N/(2K)) == (1/2) * (N + N/K)
+ *
+ *   Similar to the best case, we can assume we'll have to search through half
+ *   of the bucket when the ignore bits are set. Also, we can assume that the
+ *   entry we are searching for lies in the middle of one of the hash lists.
+ *   In this case, the average is not much worse than the best case.
+ *
+ * Worst(hash-list, last list): ((N/K) * K - 1) + (N/K) == N
+ *
+ *   The worst case is much more simple than the rest. It would be the last
+ *   element in the last list. This would be no worse than a linear search
+ *   through the list.
+ *
+ * All things considered, the hash list seems like it would be relatively
+ * reasonable with a more likely chance of finding entries faster than
+ * a standard linked list. However, a simple sanalysis shows that
+ * that the best case is likely to be more expensive than the estimate.
+ *
+ * There is a bias in the algorithm. Since we always prefer the oldest, and
+ * entries are ordered from oldest to newest, searching should
+ * complete in less than N/2 operations on average. However, with the
+ * hash-list, the bias has no influence due to the way that tags are
+ * distributed. This causes the hash-list to perform much more slowly than
+ * the list implementation.
+ *
+ * For the above listed reasons, a hash-list version of the tag matcher is
+ * available, but should only be used under certain expectations. If the
+ * frequency of searching with ignored bits is low, then a hash list may be
+ * faster. If the ignore bits are used frequently and should match with
+ * several requests, then that may also be preferred. However, in the event that
+ * the user searches with few ignored bits that would match against very
+ * few requests, then they would likely encounter average case behavior more
+ * frequently than expected and thus would spend more time in the tag matcher.
+ */
+
 /*
  * Examples:
  *
@@ -120,7 +209,8 @@ struct gnix_tag_storage_ops {
 			uint64_t tag, uint64_t ignore,
 			uint64_t flags, void *context,
 			struct gnix_address *addr);
-	void (*remove_tag_by_req)(struct gnix_fab_req *req);
+	void (*remove_tag_by_req)(struct gnix_tag_storage *ts,
+			struct gnix_fab_req *req);
 	int (*init)(struct gnix_tag_storage *ts);
 	int (*fini)(struct gnix_tag_storage *ts);
 	struct gnix_fab_req *(*remove_req_by_context)(struct gnix_tag_storage *ts,
@@ -176,9 +266,19 @@ struct gnix_tag_list {
 	struct dlist_entry list;
 };
 
+struct gnix_hlist_head {
+	struct dlist_entry head;
+	uint64_t oldest_tag_id;
+	uint64_t oldest_gen;
+};
+
+
 struct gnix_tag_hlist {
-	struct dlist_entry *array;
+	struct gnix_hlist_head *array;
 	int elements;
+	uint64_t last_inserted_id;
+	uint64_t oldest_tag_id;
+	uint64_t current_gen;
 };
 
 struct gnix_tag_kdtree {

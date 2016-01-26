@@ -1423,10 +1423,10 @@ Test(gnix_tags_bare, initialize_hlist)
 
 	ret = _gnix_tag_storage_init(test_tag_storage, &default_hlist_attr,
 			match_func);
-	cr_assert(ret == -FI_ENOSYS);
+	cr_assert(ret == FI_SUCCESS);
 
-	//ret = _gnix_tag_storage_destroy(test_tag_storage);
-	//cr_assert(ret == FI_SUCCESS);
+	ret = _gnix_tag_storage_destroy(test_tag_storage);
+	cr_assert(ret == FI_SUCCESS);
 }
 
 Test(gnix_tags_bare, initialize_kdtree)
@@ -1669,3 +1669,208 @@ Test(gnix_tags_basic_unexpected_list, src_addr_match_unspec)
 {
 	__test_src_addr_match_unspec(&default_list_attr);
 }
+
+/*
+ * hlist tests
+ */
+
+Test(gnix_tags_basic_posted_hlist, single_insert_remove)
+{
+	int i;
+	struct gnix_fr_element request = {
+		.req = {
+			.msg = {
+				.tag = 0xA5A5A5A5,
+				.ignore = 0xFFFFFFFF
+			},
+		},
+		.peek_flags = FI_PEEK,
+	};
+	struct gnix_tag_storage_attr attr;
+
+	memcpy(&attr, &default_hlist_attr, sizeof(struct gnix_tag_storage_attr));
+
+	for (i = 0; i < TEST_OVERLAY_MAX; i++) {
+
+		single_insert_peek_remove(test_tag_storage,
+				&test_masks[i], &request);
+
+		/* make necessary alterations to the structure
+		 * for the next test mask
+		 */
+		reset_test_tag_storage(test_tag_storage, &attr);
+	}
+}
+
+ParameterizedTestParameters(gnix_tags_basic_posted_hlist, multiple_ipr_tags)
+{
+	size_t nb_params = sizeof (ipr_params) / sizeof (struct ipr_test_params);
+	return cr_make_param_array(struct ipr_test_params, ipr_params, nb_params);
+}
+
+ParameterizedTest(struct ipr_test_params *params,
+		gnix_tags_basic_posted_hlist, multiple_ipr_tags)
+{
+	__test_multiple_type_ipr_reqs(params->elements, &default_hlist_attr,
+			params->make_requests);
+}
+
+
+Test(gnix_tags_basic_posted_hlist, multiple_8_duplicate_tags)
+{
+	__test_multiple_8_duplicate_tags(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_posted_hlist, not_found_non_empty)
+{
+	__test_not_found_non_empty();
+}
+
+Test(gnix_tags_basic_posted_hlist, not_found_empty)
+{
+	__test_not_found_empty();
+}
+
+Test(gnix_tags_basic_posted_hlist, ignore_mask_set)
+{
+	__test_ignore_mask_set(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_posted_hlist, fi_claim_pass)
+{
+	__test_claim_pass(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_posted_hlist, fi_claim_fail_no_claimed_tags)
+{
+	__test_fail_no_claimed_tags(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_posted_hlist, fi_claim_fail_all_claimed_tags)
+{
+	__test_fail_all_claimed_tags(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_posted_hlist, fi_claim_fail_peek_all_claimed)
+{
+	__test_fail_peek_all_claimed(&default_hlist_attr);
+}
+
+/* unexpected list src address matching tests */
+Test(gnix_tags_basic_posted_hlist, src_addr_match_success)
+{
+	__test_src_addr_match(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_posted_hlist, src_addr_no_match_wrong_addr)
+{
+	__test_src_addr_fail_wrong_src_addr(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_posted_hlist, src_addr_match_unspec)
+{
+	__test_src_addr_match_unspec(&default_hlist_attr);
+}
+
+
+/*
+ * unexpected hlist tests
+ */
+
+Test(gnix_tags_basic_unexpected_hlist, single_insert_remove)
+{
+	int i;
+	struct gnix_fr_element request = {
+		.req = {
+			.msg = {
+				.tag = 0xA5A5A5A5,
+				.ignore = 0xFFFFFFFF
+			},
+		},
+		.peek_flags = FI_PEEK,
+	};
+	struct gnix_tag_storage_attr attr;
+
+	memcpy(&attr, &default_hlist_attr, sizeof(struct gnix_tag_storage_attr));
+
+	for (i = 0; i < TEST_OVERLAY_MAX; i++) {
+
+		single_insert_peek_remove(test_tag_storage,
+				&test_masks[i], &request);
+
+		/* make necessary alterations to the structure
+		 * for the next test mask
+		 */
+		reset_test_tag_storage(test_tag_storage, &attr);
+	}
+}
+
+ParameterizedTestParameters(gnix_tags_basic_unexpected_hlist, multiple_ipr_tags)
+{
+	size_t nb_params = sizeof (ipr_params) / sizeof (struct ipr_test_params);
+	return cr_make_param_array(struct ipr_test_params, ipr_params, nb_params);
+}
+
+ParameterizedTest(struct ipr_test_params *params,
+		gnix_tags_basic_unexpected_hlist, multiple_ipr_tags)
+{
+	__test_multiple_type_ipr_reqs(params->elements, &default_hlist_attr,
+			params->make_requests);
+}
+
+Test(gnix_tags_basic_unexpected_hlist, multiple_8_duplicate_tags)
+{
+	__test_multiple_8_duplicate_tags(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_unexpected_hlist, not_found_non_empty)
+{
+	__test_not_found_non_empty();
+}
+
+Test(gnix_tags_basic_unexpected_hlist, not_found_empty)
+{
+	__test_not_found_empty();
+}
+
+Test(gnix_tags_basic_unexpected_hlist, ignore_mask_set)
+{
+	__test_ignore_mask_set(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_unexpected_hlist, fi_claim_pass)
+{
+	__test_claim_pass(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_unexpected_hlist, fi_claim_fail_no_claimed_tags)
+{
+	__test_fail_no_claimed_tags(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_unexpected_hlist, fi_claim_fail_all_claimed_tags)
+{
+	__test_fail_all_claimed_tags(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_unexpected_hlist, fi_claim_fail_peek_all_claimed)
+{
+	__test_fail_peek_all_claimed(&default_hlist_attr);
+}
+
+/* unexpected list src address matching tests */
+Test(gnix_tags_basic_unexpected_hlist, src_addr_match_success)
+{
+	__test_src_addr_match(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_unexpected_hlist, src_addr_no_match_wrong_addr)
+{
+	__test_src_addr_fail_wrong_src_addr(&default_hlist_attr);
+}
+
+Test(gnix_tags_basic_unexpected_hlist, src_addr_match_unspec)
+{
+	__test_src_addr_match_unspec(&default_hlist_attr);
+}
+

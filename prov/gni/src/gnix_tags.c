@@ -38,6 +38,10 @@
 #include "gnix.h"
 #include "gnix_util.h"
 
+#include <fasthash.h>
+
+#define NOT_FOUND(seq, gen) ((seq) == 0 && (gen) == 0)
+
 struct gnix_tag_storage_ops list_ops;
 struct gnix_tag_storage_ops hlist_ops;
 struct gnix_tag_storage_ops kdtree_ops;
@@ -50,6 +54,42 @@ struct gnix_tag_search_element {
 	int use_src_addr_matching;
 	struct gnix_address *addr;
 };
+
+static inline int get_bucket(struct gnix_tag_storage *ts, uint64_t tag) {
+	return fasthash64(&tag, sizeof(uint64_t),
+			0xDEADBEEF) % ts->hlist.elements;
+}
+
+static inline int __is_tag_older(
+		uint64_t oldest_seq,
+		uint64_t oldest_gen,
+		uint64_t current_seq,
+		uint64_t current_gen)
+{
+	return !((oldest_gen > current_gen) ||
+				(oldest_gen == current_gen && oldest_seq > current_seq));
+}
+
+static inline int is_tag_older(uint64_t oldest_gen,
+		uint64_t oldest_seq,
+		struct gnix_tag_list_element *current)
+{
+	return __is_tag_older(oldest_seq, oldest_gen,
+			current->seq, current->gen);
+}
+
+static inline void __update_hlist_head(struct gnix_hlist_head *h)
+{
+	struct gnix_tag_list_element *first;
+
+	if (!dlist_empty(&h->head)) {
+		first = dlist_first_entry(&h->head,
+				struct gnix_tag_list_element, free);
+
+		h->oldest_gen = first->gen;
+		h->oldest_tag_id = first->seq;
+	}
+}
 
 /**
  * @brief converts gnix_tag_list_element to gnix_fab_req
@@ -254,6 +294,145 @@ static inline struct gnix_tag_list_element *__tag_list_find_element(
 }
 
 /**
+ * @brief peeks into a tag list to find the first match using given parameters
+ *
+ * @param ts           pointer to gnix_tag_storage_object
+ * @param tag          tag to find
+ * @param ignore       bits to ignore in tags
+ * @param list         dlist to search
+ * @param flags        fi_tagged flags
+ * @param context      fi_context associated with tag
+ * @param addr         gnix_address to find
+ * @param addr_ignore  bits to ignore in address
+ * @return NULL, if no match is found,
+ *         a non-NULL value, if a match is found
+ */
+static inline struct gnix_tag_list_element *__tag_hlist_find_first_match(
+		struct gnix_tag_storage *ts,
+		uint64_t tag,
+		uint64_t ignore,
+		struct dlist_entry *list,
+		uint64_t flags,
+		void *context,
+		struct gnix_address *addr,
+		uint64_t oldest_seq,
+		uint64_t oldest_gen,
+		int (*match_func)(struct dlist_entry *entry, const void *arg))
+{
+	struct dlist_entry *current;
+	struct gnix_tag_list_element *tle;
+	struct gnix_tag_search_element s_elem = {
+			.tag = tag,
+			.ignore = ignore,
+			.flags = flags,
+			.context = context,
+			.use_src_addr_matching = ts->attr.use_src_addr_matching,
+			.addr = addr,
+	};
+
+	/* search the list for a matching element. stop at the first match */
+	dlist_foreach(list, current) {
+		tle = container_of(current, struct gnix_tag_list_element, free);
+		if (!NOT_FOUND(oldest_seq, oldest_gen) &&
+				is_tag_older(oldest_seq, oldest_gen, tle))
+			break;
+
+		if (match_func(current, &s_elem))
+			return (struct gnix_tag_list_element *) current;
+	}
+
+	return NULL;
+}
+
+static inline struct gnix_fab_req *__gnix_tag_hlist_search_tag(
+		struct gnix_tag_storage *ts,
+		uint64_t tag,
+		uint64_t ignore,
+		uint64_t flags,
+		void *context,
+		struct gnix_address *addr,
+		int (*match_func)(struct dlist_entry *entry, const void *arg))
+{
+	struct gnix_tag_list_element *tmp;
+	struct gnix_tag_list_element *oldest = NULL;
+	struct gnix_hlist_head *h;
+	uint64_t oldest_seq = 0;
+	uint64_t oldest_gen = 0;
+	int i, start, end;
+
+	GNIX_INFO(FI_LOG_EP_CTRL, "searching hlist, "
+			"tag=%.16llx ignore=%.16llx flags=%.4llx context=%p\n",
+			tag, ignore, flags, context);
+
+	if (ignore != 0) {
+		start = 0;
+		end = ts->hlist.elements;
+	} else {
+		start = get_bucket(ts, tag);
+		end = start + 1;
+	}
+
+	for (i = start; i < end; i++) {
+		h = &ts->hlist.array[i];
+		if (dlist_empty(&h->head)){
+			GNIX_INFO(FI_LOG_EP_CTRL, "skipping list head %d\n", i);
+			continue;
+		}
+
+		if (!NOT_FOUND(oldest_seq, oldest_gen) &&
+				__is_tag_older(oldest_seq, oldest_gen,
+						h->oldest_tag_id, h->oldest_gen)) {
+			GNIX_INFO(FI_LOG_EP_CTRL,
+					"skipping list head %d due to older found,"
+					"oldest=%llx:%llx head=%llx:%llx\n",
+					i, oldest_seq, oldest_gen,
+					h->oldest_tag_id, h->oldest_gen);
+			continue;
+		}
+
+		GNIX_INFO(FI_LOG_EP_CTRL, "searching hlist bucket %d\n", i);
+
+		tmp = __tag_hlist_find_first_match(ts, tag, ignore,
+				&h->head, flags, context, addr,
+				oldest_seq, oldest_gen, match_func);
+
+		if (tmp) {
+			GNIX_INFO(FI_LOG_EP_CTRL,
+					"found a match, seq-gen=%llx:%llx\n",
+					tmp->seq, tmp->gen);
+			assert(tmp->seq != 0);
+			oldest = tmp;
+			oldest_seq = tmp->seq;
+			oldest_gen = tmp->gen;
+		}
+	}
+
+	if (!oldest)
+		return NULL;
+
+	return __to_gnix_fab_req(oldest);
+}
+
+static inline void __remove_hlist_entry(struct gnix_tag_storage *ts,
+		struct gnix_fab_req *req)
+{
+	struct gnix_tag_list_element *tle;
+	struct dlist_entry *entry;
+	struct gnix_hlist_head *h;
+	int bucket = get_bucket(ts, req->msg.tag);
+
+	tle = &req->msg.tle;
+	entry = &tle->free;
+
+	// remove entry
+	dlist_remove(entry);
+
+	// update bucket
+	h = &ts->hlist.array[bucket];
+	__update_hlist_head(h);
+}
+
+/**
  * @brief checks attributes for invalid values
  *
  * @param attr  attributes to be checked
@@ -398,7 +577,9 @@ static struct gnix_fab_req *__gnix_tag_no_remove_req_by_context(
 	return NULL;
 }
 
-static void __gnix_tag_no_remove_tag_by_req(struct gnix_fab_req *req)
+static void __gnix_tag_no_remove_tag_by_req(
+		struct gnix_tag_storage *ts,
+		struct gnix_fab_req *req)
 {
 }
 
@@ -475,7 +656,9 @@ static struct gnix_fab_req *__gnix_tag_list_remove_tag(
 	return req;
 }
 
-static void __gnix_tag_list_remove_tag_by_req(struct gnix_fab_req *req)
+static void __gnix_tag_list_remove_tag_by_req(
+		struct gnix_tag_storage *ts,
+		struct gnix_fab_req *req)
 {
 	struct gnix_tag_list_element *element;
 	struct dlist_entry *item;
@@ -505,6 +688,141 @@ static struct gnix_fab_req *__gnix_tag_list_remove_req_by_context(
 
 	return req;
 }
+
+/* hlist operations */
+
+static int __gnix_tag_hlist_init(struct gnix_tag_storage *ts)
+{
+	struct gnix_hlist_head *h;
+	int i;
+
+	ts->hlist.elements = 128;
+	ts->hlist.last_inserted_id = 0;
+	ts->hlist.oldest_tag_id = 0;
+	ts->hlist.current_gen = 0;
+	ts->hlist.array = calloc(ts->hlist.elements,
+			sizeof(struct gnix_hlist_head));
+	if (!ts->hlist.array)
+		return -FI_ENOMEM;
+
+	for (i = 0; i < ts->hlist.elements; i++) {
+		h = &ts->hlist.array[i];
+
+		dlist_init(&h->head);
+		h->oldest_gen = 0;
+		h->oldest_tag_id = 0;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int __gnix_tag_hlist_fini(struct gnix_tag_storage *ts)
+{
+	int i;
+	struct gnix_hlist_head *h;
+
+	for (i = 0; i < ts->hlist.elements; i++) {
+		h = &ts->hlist.array[i];
+
+		if (!dlist_empty(&h->head))
+			return -FI_EAGAIN;
+	}
+
+	free(ts->hlist.array);
+
+	ts->hlist.elements = 0;
+	ts->hlist.array = NULL;
+
+	return FI_SUCCESS;
+}
+
+static int __gnix_tag_hlist_insert_tag(
+		struct gnix_tag_storage *ts,
+		uint64_t tag,
+		struct gnix_fab_req *req)
+{
+	struct gnix_tag_list_element *element;
+	struct gnix_hlist_head *h;
+	int bucket = get_bucket(ts, tag);
+
+	element = &req->msg.tle;
+	dlist_init(&element->free);
+	element->context = NULL;
+	element->seq = ++ts->hlist.last_inserted_id;
+	if (!element->seq) {
+		element->seq = ts->hlist.last_inserted_id = 1;
+		++ts->hlist.current_gen;
+	}
+	element->gen = ts->hlist.current_gen;
+
+	h = &ts->hlist.array[bucket];
+
+	if (dlist_empty(&h->head)) {
+		h->oldest_gen = element->gen;
+		h->oldest_tag_id = element->seq;
+	}
+	dlist_insert_tail(&element->free, &h->head);
+
+	GNIX_INFO(FI_LOG_EP_CTRL, "inserting new tag in hlist, "
+			"tag=%.16llx seq=%d gen=%d bucket=%d\n",
+			tag, element->seq, element->gen, bucket);
+
+	return FI_SUCCESS;
+}
+
+static struct gnix_fab_req *__gnix_tag_hlist_peek_tag(
+		struct gnix_tag_storage *ts,
+		uint64_t tag,
+		uint64_t ignore,
+		uint64_t flags,
+		void *context,
+		struct gnix_address *addr)
+{
+	return __gnix_tag_hlist_search_tag(ts, tag, ignore,
+			flags, context, addr, ts->match_func);
+}
+
+static struct gnix_fab_req *__gnix_tag_hlist_remove_tag(
+		struct gnix_tag_storage *ts,
+		uint64_t tag,
+		uint64_t ignore,
+		uint64_t flags,
+		void *context,
+		struct gnix_address *addr)
+{
+	struct gnix_fab_req *req;
+
+	req = __gnix_tag_hlist_search_tag(ts, tag, ignore,
+			flags, context, addr, ts->match_func);
+
+	if (req)
+		__remove_hlist_entry(ts, req);
+
+	return req;
+}
+
+static void __gnix_tag_hlist_remove_tag_by_req(
+		struct gnix_tag_storage *ts,
+		struct gnix_fab_req *req)
+{
+	__remove_hlist_entry(ts, req);
+}
+
+static struct gnix_fab_req *__gnix_tag_hlist_remove_req_by_context(
+		struct gnix_tag_storage *ts,
+		void *context)
+{
+	struct gnix_fab_req *req;
+
+	req =  __gnix_tag_hlist_search_tag(ts, 0, 0,
+			0, context, NULL, __req_matches_context);
+
+	if (req)
+		__remove_hlist_entry(ts, req);
+
+	return req;
+}
+
 
 /* ignore is only used on inserting into posted tag storages
  * addr_ignore is only used on inserting into post tag storages with
@@ -610,7 +928,7 @@ void _gnix_remove_tag(
 		struct gnix_tag_storage *ts,
 		struct gnix_fab_req *req)
 {
-	ts->ops->remove_tag_by_req(req);
+	ts->ops->remove_tag_by_req(ts, req);
 }
 
 struct gnix_tag_storage_ops list_ops = {
@@ -624,13 +942,13 @@ struct gnix_tag_storage_ops list_ops = {
 };
 
 struct gnix_tag_storage_ops hlist_ops = {
-		.init = __gnix_tag_no_init,
-		.fini = __gnix_tag_no_fini,
-		.insert_tag = __gnix_tag_no_insert_tag,
-		.peek_tag = __gnix_tag_no_peek_tag,
-		.remove_tag = __gnix_tag_no_remove_tag,
-		.remove_tag_by_req = __gnix_tag_no_remove_tag_by_req,
-		.remove_req_by_context = __gnix_tag_no_remove_req_by_context,
+		.init = __gnix_tag_hlist_init,
+		.fini = __gnix_tag_hlist_fini,
+		.insert_tag = __gnix_tag_hlist_insert_tag,
+		.peek_tag = __gnix_tag_hlist_peek_tag,
+		.remove_tag = __gnix_tag_hlist_remove_tag,
+		.remove_tag_by_req = __gnix_tag_hlist_remove_tag_by_req,
+		.remove_req_by_context = __gnix_tag_hlist_remove_req_by_context,
 };
 
 struct gnix_tag_storage_ops kdtree_ops = {
