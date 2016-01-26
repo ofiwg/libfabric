@@ -167,6 +167,7 @@ dummy_man_pages = \
         man/man3/fi_domain_query.3 \
         man/man3/fi_dupinfo.3 \
         man/man3/fi_enable.3 \
+        man/man3/fi_ep.3 \
         man/man3/fi_ep_bind.3 \
         man/man3/fi_eq_open.3 \
         man/man3/fi_eq_read.3 \
