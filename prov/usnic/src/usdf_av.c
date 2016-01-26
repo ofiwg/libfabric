@@ -40,6 +40,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -231,6 +232,7 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 	struct usdf_av_req *req;
 	struct usdf_av *av;
 	struct usdf_fabric *fp;
+	struct usd_dest *u_dest;
 	int ret;
 	size_t i;
 
@@ -303,8 +305,11 @@ usdf_am_insert_async(struct fid_av *fav, const void *addr, size_t count,
 				ret = -FI_ENOMEM;
 				goto fail;
 			}
-			usd_fill_udp_dest(&req->avr_dest->ds_dest, dap,
+			u_dest = &req->avr_dest->ds_dest;
+			usd_fill_udp_dest(u_dest, dap,
 					sin->sin_addr.s_addr, sin->sin_port);
+			u_dest->ds_dest.ds_udp.u_hdr.uh_ip.frag_off |=
+				htons(IP_DF);
 
 			TAILQ_INSERT_TAIL(&insert->avi_req_list, req, avr_link);
 		}
@@ -364,6 +369,8 @@ usdf_am_insert_sync(struct fid_av *fav, const void *addr, size_t count,
 				&u_dest);
 		}
 		if (ret == 0) {
+			u_dest->ds_dest.ds_udp.u_hdr.uh_ip.frag_off |=
+				htons(IP_DF);
 			dest->ds_dest = *u_dest;
 			fi_addr[i] = (fi_addr_t)dest;
 			++ret_count;
