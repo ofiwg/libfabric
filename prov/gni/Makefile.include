@@ -13,6 +13,7 @@ _gni_files = \
 	prov/gni/src/gnix_atomic.c \
 	prov/gni/src/gnix_av.c \
 	prov/gni/src/gnix_bitmap.c \
+	prov/gni/src/gnix_buddy_allocator.c \
 	prov/gni/src/gnix_cm.c \
 	prov/gni/src/gnix_cm_nic.c \
 	prov/gni/src/gnix_cntr.c \
@@ -42,6 +43,7 @@ _gni_headers = \
 	prov/gni/include/gnix_atomic.h \
 	prov/gni/include/gnix_av.h \
 	prov/gni/include/gnix_bitmap.h \
+	prov/gni/include/gnix_buddy_allocator.h \
 	prov/gni/include/gnix_cm_nic.h \
 	prov/gni/include/gnix_cntr.h \
 	prov/gni/include/gnix_cq.h \
@@ -71,6 +73,7 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/allocator.c \
 	prov/gni/test/av.c \
 	prov/gni/test/bitmap.c \
+	prov/gni/test/buddy_allocator.c \
 	prov/gni/test/cancel.c \
 	prov/gni/test/cntr.c \
 	prov/gni/test/cq.c \
