@@ -397,7 +397,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 			case PSMX2_RECV_CONTEXT:
 				if ((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
-				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status))
+				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0))
 					continue;
 				tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
@@ -409,6 +409,9 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 
 			case PSMX2_MULTI_RECV_CONTEXT:
+				if ((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
+				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 1))
+					continue;
 				multi_recv = 1;
 				tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
@@ -535,6 +538,8 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					psm2_status.nbytes = rep->bytes_received;
 					psm2_status.msg_length = rep->msg_length;
 					psm2_status.error_code = rep->error_code;
+
+					multi_recv = rep->multi_recv;
 				}
 				break;
 			}

@@ -529,11 +529,13 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 }
 
 int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
-			   psm2_mq_status2_t *psm2_status)
+			   psm2_mq_status2_t *psm2_status,
+			   int multi_recv)
 {
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag, psm2_tagsel;
 	struct psmx2_sendv_reply *rep;
+	struct psmx2_multi_recv *recv_req;
 	struct fi_context *fi_context;
 	struct fi_context *recv_context;
 	int i, err;
@@ -550,8 +552,17 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 	}
 
 	recv_context = psm2_status->context;
-	recv_buf = PSMX2_CTXT_USER(recv_context);
-	recv_len = PSMX2_CTXT_SIZE(recv_context);
+	if (multi_recv) {
+		recv_req = PSMX2_CTXT_USER(recv_context);
+		recv_buf = recv_req->buf + recv_req->offset;
+		recv_len = recv_req->len - recv_req->offset;
+		rep->multi_recv = 1;
+	}
+	else {
+		recv_buf = PSMX2_CTXT_USER(recv_context);
+		recv_len = PSMX2_CTXT_SIZE(recv_context);
+		rep->multi_recv = 0;
+	}
 
 	/* assert(psm2_status->nbytes <= PSMX2_IOV_BUF_SIZE */
 

@@ -269,6 +269,7 @@ struct psmx2_sendv_request {
 struct psmx2_sendv_reply {
 	struct fi_context fi_context;
 	int no_completion;
+	int multi_recv;
 	void *buf;
 	void *user_context;
 	size_t iov_done;
@@ -751,7 +752,8 @@ int	psmx2_mr_validate(struct psmx2_fid_mr *mr, uint64_t addr, size_t len, uint64
 void	psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr);
 void	psmx2_cntr_add_trigger(struct psmx2_fid_cntr *cntr, struct psmx2_trigger *trigger);
 
-int	psmx2_handle_sendv_req(struct psmx2_fid_ep *ep, psm2_mq_status2_t *psm2_status);
+int	psmx2_handle_sendv_req(struct psmx2_fid_ep *ep, psm2_mq_status2_t *psm2_status,
+			       int multi_recv);
 
 static inline void psmx2_cntr_inc(struct psmx2_fid_cntr *cntr)
 {
