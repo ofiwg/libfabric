@@ -530,6 +530,44 @@ static ssize_t gnix_cq_read(struct fid_cq *cq, void *buf, size_t count)
 	return gnix_cq_readfrom(cq, buf, count, NULL);
 }
 
+static ssize_t gnix_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
+				 fi_addr_t *src_addr, const void *cond,
+				 int timeout)
+{
+	double start_ms = 0.0, end_ms = 0.0;
+	int ret;
+
+	ret = gnix_cq_readfrom(cq, buf, count, NULL);
+	if (ret != -FI_EAGAIN)
+		return ret;
+
+	if (timeout > 0)
+		start_ms = fi_gettime_ms();
+
+	do {
+		usleep(1000);
+
+		ret = gnix_cq_readfrom(cq, buf, count, NULL);
+		if (ret != -FI_EAGAIN)
+			return ret;
+
+		if (timeout > 0) {
+			end_ms = fi_gettime_ms();
+			timeout -=  (end_ms - start_ms);
+			timeout = timeout < 0 ? 0 : timeout;
+			start_ms = end_ms;
+		}
+	} while (timeout);
+
+	return -FI_EAGAIN;
+}
+
+static ssize_t gnix_cq_sread(struct fid_cq *cq, void *buf, size_t count,
+			    const void *cond, int timeout)
+{
+	return gnix_cq_sreadfrom(cq, buf, count, NULL, cond, timeout);
+}
+
 static ssize_t gnix_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			       uint64_t flags)
 {
@@ -717,8 +755,8 @@ static const struct fi_ops_cq gnix_cq_ops = {
 	.read = gnix_cq_read,
 	.readfrom = gnix_cq_readfrom,
 	.readerr = gnix_cq_readerr,
-	.sread = fi_no_cq_sread,
-	.sreadfrom = fi_no_cq_sreadfrom,
+	.sread = gnix_cq_sread,
+	.sreadfrom = gnix_cq_sreadfrom,
 	.signal = gnix_cq_signal,
 	.strerror = gnix_cq_strerror
 };
