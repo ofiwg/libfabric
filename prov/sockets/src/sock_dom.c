@@ -47,6 +47,7 @@ const struct fi_domain_attr sock_domain_attr = {
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
 	.resource_mgmt = FI_RM_ENABLED,
+	.av_type = FI_AV_TABLE,
 	.mr_mode = FI_MR_SCALABLE,
 	.mr_key_size = sizeof(uint64_t),
 	.cq_data_size = sizeof(uint64_t),
