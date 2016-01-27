@@ -449,7 +449,7 @@ static inline void __resolve_stale_entry_collision(
 	RbtIterator iter = found;
 	int add_new_entry = 1, cmp;
 
-	GNIX_WARN(FI_LOG_MR, "resolving collisions\n");
+	GNIX_INFO(FI_LOG_MR, "resolving collisions\n");
 
 	while (iter) {
 		rbtKeyValue(cache->stale.rb_tree, iter, (void **) &c_key,
