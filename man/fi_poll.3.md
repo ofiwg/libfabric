@@ -25,6 +25,9 @@ fi_wait_open / fi_close
 fi_wait
 : Waits for one or more wait objects in a set to be signaled.
 
+fi_control
+: Control wait set operation or attributes.
+
 # SYNOPSIS
 
 {% highlight c %}
@@ -49,6 +52,8 @@ int fi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 int fi_close(struct fid *waitset);
 
 int fi_wait(struct fid_wait *waitset, int timeout);
+
+int fi_control(struct fid *waitset, int command, void *arg);
 {% endhighlight %}
 
 # ARGUMENTS
@@ -77,6 +82,12 @@ int fi_wait(struct fid_wait *waitset, int timeout);
 
 *timeout*
 : Time to wait for a signal, in milliseconds.
+
+*command*
+: Command of control operation to perform on the wait set.
+
+*arg*
+: Optional control argument.
 
 # DESCRIPTION
 
@@ -158,10 +169,12 @@ struct fi_wait_attr {
   retrieve the underlying wait object.
 
 - *FI_WAIT_FD*
-: Indicates that the wait set should use a file descriptor as its wait
-  mechanism.  A file descriptor wait object must be usable in select,
-  poll, and epoll routines.  However, a provider may signal an FD wait
-  object by marking it as readable, writable, or with an error.
+: Indicates that the wait set should use file descriptor(s) as its wait
+  mechanism. It may not always be possible for a wait set to be implemented
+  using a single underlying file descriptor, but all wait objects will be file
+  descriptors. File descriptor wait objects must be usable in select, poll,
+  and epoll routines. However, a provider may signal an FD wait object by
+  marking it as readable, writable, or with an error.
 
 - *FI_WAIT_MUTEX_COND*
 : Specifies that the wait set should use a pthread mutex and cond
@@ -181,6 +194,24 @@ being closed, otherwise the call will return -FI_EBUSY.
 
 Waits on a wait set until one or more of its underlying wait objects
 is signaled.
+
+## fi_control
+
+The fi_control call is used to access provider or implementation specific
+details of the wait set. Access to the wait set should be serialized across
+all calls when fi_control is invoked, as it may redirect the implementation
+of wait set operations. The following control commands are usable with a
+wait set.
+
+*FI_GETWAIT (void \*\*)*
+: This command allows the user to retrieve the low-level wait object
+  associated with the wait set. The format of the wait set is specified
+  during wait set creation, through the wait set attributes. The fi_control
+  arg parameter should be an address where a pointer to the returned wait
+  object will be written. This should be an 'int *' for FI_WAIT_FD,
+  or 'struct fi_mutex_cond' for FI_WAIT_MUTEX_COND. Support for FI_GETWAIT
+  is provider specific and may fail if not supported or if the wait set is
+  implemented using more than one wait object.
 
 # RETURN VALUES
 
