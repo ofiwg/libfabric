@@ -55,6 +55,7 @@ struct fid_mr *mr;
 struct fid_av *av;
 struct fid_eq *eq;
 
+struct fid_mr no_mr;
 struct fi_context tx_ctx, rx_ctx;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
@@ -208,11 +209,15 @@ int ft_alloc_msgs(void)
 	rx_buf = buf;
 	tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG);
 
-	ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND,
-			0, 0, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
+	if (fi->mode & FI_LOCAL_MR) {
+		ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND,
+				0, 0, 0, &mr, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_mr_reg", ret);
+			return ret;
+		}
+	} else {
+		mr = &no_mr;
 	}
 
 	return 0;
@@ -528,7 +533,8 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 
 static void ft_close_fids(void)
 {
-	FT_CLOSE_FID(mr);
+	if (mr != &no_mr)
+		FT_CLOSE_FID(mr);
 	FT_CLOSE_FID(ep);
 	FT_CLOSE_FID(pep);
 	FT_CLOSE_FID(rxcq);

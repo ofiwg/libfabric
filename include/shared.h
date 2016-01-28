@@ -109,7 +109,7 @@ extern struct fid_pep *pep;
 extern struct fid_ep *ep;
 extern struct fid_cq *txcq, *rxcq;
 extern struct fid_cntr *txcntr, *rxcntr;
-extern struct fid_mr *mr;
+extern struct fid_mr *mr, no_mr;
 extern struct fid_av *av;
 extern struct fid_eq *eq;
 

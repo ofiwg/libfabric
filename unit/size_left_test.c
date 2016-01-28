@@ -60,7 +60,8 @@ static char err_buf[512];
 
 static void teardown_ep_fixture(void)
 {
-	FT_CLOSE_FID(mr);
+	if (mr != &no_mr)
+		FT_CLOSE_FID(mr);
 	FT_CLOSE_FID(ep);
 	FT_CLOSE_FID(txcq);
 	FT_CLOSE_FID(rxcq);
