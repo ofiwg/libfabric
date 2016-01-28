@@ -222,14 +222,14 @@ struct gnix_reference {
  */
 #define __ref_get(ptr, var) \
 	({ \
-		struct gnix_reference *ref = &ptr->var; \
+		struct gnix_reference *ref = &(ptr)->var; \
 		int references_held = atomic_inc(&ref->references); \
 		assert(references_held > 0); \
 		references_held; })
 
 #define __ref_put(ptr, var) \
 	({ \
-		struct gnix_reference *ref = &ptr->var; \
+		struct gnix_reference *ref = &(ptr)->var; \
 		int references_held = atomic_dec(&ref->references); \
 		assert(references_held >= 0); \
 		if (references_held == 0) \
