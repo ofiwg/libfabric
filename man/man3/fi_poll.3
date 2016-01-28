@@ -1,4 +1,4 @@
-.TH fi_poll 3 "2015\-12\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_poll 3 "2016\-01\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_poll - Polling and wait set operations
@@ -14,6 +14,8 @@ and counters.
 fi_wait_open / fi_close : Open/close a wait set
 .PP
 fi_wait : Waits for one or more wait objects in a set to be signaled.
+.PP
+fi_control : Control wait set operation or attributes.
 .SH SYNOPSIS
 .IP
 .nf
@@ -39,6 +41,8 @@ int\ fi_wait_open(struct\ fid_fabric\ *fabric,\ struct\ fi_wait_attr\ *attr,
 int\ fi_close(struct\ fid\ *waitset);
 
 int\ fi_wait(struct\ fid_wait\ *waitset,\ int\ timeout);
+
+int\ fi_control(struct\ fid\ *waitset,\ int\ command,\ void\ *arg);
 \f[]
 .fi
 .SH ARGUMENTS
@@ -59,6 +63,11 @@ associated with completion queues or counters.
 \f[I]count\f[] : Number of entries in context array.
 .PP
 \f[I]timeout\f[] : Time to wait for a signal, in milliseconds.
+.PP
+\f[I]command\f[] : Command of control operation to perform on the wait
+set.
+.PP
+\f[I]arg\f[] : Optional control argument.
 .SH DESCRIPTION
 .SS fi_poll_open
 .PP
@@ -139,9 +148,12 @@ mechanisms.
 Applications that select FI_WAIT_UNSPEC are not guaranteed to retrieve
 the underlying wait object.
 .IP \[bu] 2
-\f[I]FI_WAIT_FD\f[] : Indicates that the wait set should use a file
-descriptor as its wait mechanism.
-A file descriptor wait object must be usable in select, poll, and epoll
+\f[I]FI_WAIT_FD\f[] : Indicates that the wait set should use file
+descriptor(s) as its wait mechanism.
+It may not always be possible for a wait set to be implemented using a
+single underlying file descriptor, but all wait objects will be file
+descriptors.
+File descriptor wait objects must be usable in select, poll, and epoll
 routines.
 However, a provider may signal an FD wait object by marking it as
 readable, writable, or with an error.
@@ -160,6 +172,26 @@ being closed, otherwise the call will return -FI_EBUSY.
 .PP
 Waits on a wait set until one or more of its underlying wait objects is
 signaled.
+.SS fi_control
+.PP
+The fi_control call is used to access provider or implementation
+specific details of the wait set.
+Access to the wait set should be serialized across all calls when
+fi_control is invoked, as it may redirect the implementation of wait set
+operations.
+The following control commands are usable with a wait set.
+.PP
+\f[I]FI_GETWAIT (void **)\f[] : This command allows the user to retrieve
+the low-level wait object associated with the wait set.
+The format of the wait set is specified during wait set creation,
+through the wait set attributes.
+The fi_control arg parameter should be an address where a pointer to the
+returned wait object will be written.
+This should be an \[aq]int *\[aq] for FI_WAIT_FD, or \[aq]struct
+fi_mutex_cond\[aq] for FI_WAIT_MUTEX_COND.
+Support for FI_GETWAIT is provider specific and may fail if not
+supported or if the wait set is implemented using more than one wait
+object.
 .SH RETURN VALUES
 .PP
 Returns 0 on success.
