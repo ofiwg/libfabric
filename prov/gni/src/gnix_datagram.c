@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015 Cray Inc.  All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-16 Los Alamos National Security, LLC.
+ *                       All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -427,6 +428,9 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 						   &datagram_id);
 		if ((status != GNI_RC_SUCCESS) &&
 			(status  != GNI_RC_TIMEOUT)) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				"GNI_PostdataProbeWaitById returned %s\n",
+					gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
 			goto err;
 		}
@@ -435,6 +439,9 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 						   &datagram_id);
 		if ((status != GNI_RC_SUCCESS) &&
 			(status  != GNI_RC_NO_MATCH)) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				"GNI_PostdataProbeById returned %s\n",
+					gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
 			goto err;
 		}
