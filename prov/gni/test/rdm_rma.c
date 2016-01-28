@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -687,7 +687,7 @@ void do_inject_write(int len)
 		while (source[i] != target[i]) {
 			/* for progress */
 			ret = fi_cq_read(send_cq[0], &cqe, 1);
-			cr_assert(ret == -EAGAIN,
+			cr_assert(ret == -FI_EAGAIN,
 				  "Received unexpected event\n");
 
 			pthread_yield();
@@ -776,7 +776,7 @@ void do_inject_writedata(int len)
 		while (source[i] != target[i]) {
 			/* for progress */
 			ret = fi_cq_read(send_cq[0], &cqe, 1);
-			cr_assert(ret == -EAGAIN,
+			cr_assert(ret == -FI_EAGAIN,
 				  "Received unexpected event\n");
 
 			pthread_yield();
