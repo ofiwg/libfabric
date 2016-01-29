@@ -109,18 +109,18 @@
  * is allocated, split, or both.
  *
  * TODO: dlist_insert_sorted for fragmentation reduction.
- * TODO: Lock in __gnix_buddy_split and allow __gnix_buddy_find_block to run
+ * TODO: Lock in buddy_split and allow buddy_find_block to run
  * concurrently.
  */
 
-#include "gnix_buddy_allocator.h"
+#include "buddy_allocator.h"
 
-static inline int __gnix_buddy_create_lists(gnix_buddy_alloc_handle_t
+static inline int buddy_create_lists(gnix_buddy_alloc_handle_t
 					    *alloc_handle)
 {
 	uint32_t i, offset = 0;
 
-	alloc_handle->nlists = (uint32_t) __gnix_buddy_log2(alloc_handle->max /
+	alloc_handle->nlists = (uint32_t) buddy_log2(alloc_handle->max /
 					       MIN_BLOCK_SIZE) + 1;
 	alloc_handle->lists = calloc(1, sizeof(struct dlist_entry) *
 				     alloc_handle->nlists);
@@ -149,7 +149,7 @@ static inline int __gnix_buddy_create_lists(gnix_buddy_alloc_handle_t
 /**
  * Split a block in list "j" until list "i" is reached.
  */
-static inline void __gnix_buddy_split(gnix_buddy_alloc_handle_t *alloc_handle,
+static inline void buddy_split(gnix_buddy_alloc_handle_t *alloc_handle,
 				      uint32_t j, uint32_t i)
 {
 	void *tmp = NULL;
@@ -189,14 +189,14 @@ static inline void __gnix_buddy_split(gnix_buddy_alloc_handle_t *alloc_handle,
  *
  * @return 0 if the block is found.
  */
-static inline int __gnix_buddy_find_block(gnix_buddy_alloc_handle_t
+static inline int buddy_find_block(gnix_buddy_alloc_handle_t
 					  *alloc_handle, uint32_t i)
 {
 	uint32_t j;
 
 	for (j = i + 1; j < alloc_handle->nlists; j++) {
 		if (!dlist_empty(alloc_handle->lists + j)) {
-			__gnix_buddy_split(alloc_handle, j, i);
+			buddy_split(alloc_handle, j, i);
 			return 0;
 		}
 	}
@@ -209,7 +209,7 @@ static inline int __gnix_buddy_find_block(gnix_buddy_alloc_handle_t
  * If the buddy block is on the free list then coalesce and insert into the next
  * list until we reach an allocated or split buddy block, or the max list size.
  */
-static inline void __gnix_buddy_coalesce(gnix_buddy_alloc_handle_t *alloc_handle
+static inline void buddy_coalesce(gnix_buddy_alloc_handle_t *alloc_handle
 					 , void **ptr, uint32_t *block_size)
 {
 	while (*block_size < alloc_handle->max &&
@@ -236,7 +236,7 @@ static inline void __gnix_buddy_coalesce(gnix_buddy_alloc_handle_t *alloc_handle
 
 }
 
-int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
+int buddy_allocator_create(void *base, uint32_t len, uint32_t max,
 				 gnix_buddy_alloc_handle_t **alloc_handle)
 {
 	char err_buf[256] = {0}, *error = NULL;
@@ -250,7 +250,7 @@ int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
 		     !(len / MIN_BLOCK_SIZE * 2))) {
 
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Invalid parameter to _gnix_buddy_allocator_create."
+			  "Invalid parameter to buddy_allocator_create."
 			  "\n");
 		return -FI_EINVAL;
 	}
@@ -270,7 +270,7 @@ int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
 	alloc_handle[0]->len = len;
 	alloc_handle[0]->max = max;
 
-	if (__gnix_buddy_create_lists(alloc_handle[0])) {
+	if (buddy_create_lists(alloc_handle[0])) {
 		free(*alloc_handle);
 		return -FI_ENOMEM;
 	}
@@ -289,13 +289,13 @@ int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
 	return fi_errno;
 }
 
-int _gnix_buddy_allocator_destroy(gnix_buddy_alloc_handle_t *alloc_handle)
+int buddy_allocator_destroy(gnix_buddy_alloc_handle_t *alloc_handle)
 {
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (unlikely(!alloc_handle)) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Invalid parameter to _gnix_buddy_allocator_destroy."
+			  "Invalid parameter to buddy_allocator_destroy."
 			  "\n");
 		return -FI_EINVAL;
 	}
@@ -318,7 +318,7 @@ int _gnix_buddy_allocator_destroy(gnix_buddy_alloc_handle_t *alloc_handle)
 	return FI_SUCCESS;
 }
 
-int _gnix_buddy_alloc(gnix_buddy_alloc_handle_t *alloc_handle, void **ptr,
+int buddy_alloc(gnix_buddy_alloc_handle_t *alloc_handle, void **ptr,
 		      uint32_t len)
 {
 	uint32_t block_size, i = 0;
@@ -329,7 +329,7 @@ int _gnix_buddy_alloc(gnix_buddy_alloc_handle_t *alloc_handle, void **ptr,
 		     len > alloc_handle->max)) {
 
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Invalid parameter to _gnix_buddy_alloc.\n");
+			  "Invalid parameter to buddy_alloc.\n");
 		return -FI_EINVAL;
 	}
 
@@ -339,7 +339,7 @@ int _gnix_buddy_alloc(gnix_buddy_alloc_handle_t *alloc_handle, void **ptr,
 	fastlock_acquire(&alloc_handle->lock);
 
 	if (dlist_empty(alloc_handle->lists + i) &&
-	    __gnix_buddy_find_block(alloc_handle, i)) {
+	    buddy_find_block(alloc_handle, i)) {
 
 		fastlock_release(&alloc_handle->lock);
 		GNIX_WARN(FI_LOG_EP_CTRL,
@@ -367,7 +367,7 @@ int _gnix_buddy_alloc(gnix_buddy_alloc_handle_t *alloc_handle, void **ptr,
 	return FI_SUCCESS;
 }
 
-int _gnix_buddy_free(gnix_buddy_alloc_handle_t *alloc_handle, void *ptr,
+int buddy_free(gnix_buddy_alloc_handle_t *alloc_handle, void *ptr,
 		     uint32_t len)
 {
 	uint32_t block_size;
@@ -379,7 +379,7 @@ int _gnix_buddy_free(gnix_buddy_alloc_handle_t *alloc_handle, void *ptr,
 		     ptr < alloc_handle->base)) {
 
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Invalid parameter to _gnix_buddy_free.\n");
+			  "Invalid parameter to buddy_free.\n");
 		return -FI_EINVAL;
 	}
 
@@ -387,7 +387,7 @@ int _gnix_buddy_free(gnix_buddy_alloc_handle_t *alloc_handle, void *ptr,
 
 	fastlock_acquire(&alloc_handle->lock);
 
-	__gnix_buddy_coalesce(alloc_handle, &ptr, &block_size);
+	buddy_coalesce(alloc_handle, &ptr, &block_size);
 
 	dlist_insert_tail(ptr, alloc_handle->lists +
 			  LIST_INDEX(block_size, MIN_BLOCK_SIZE));

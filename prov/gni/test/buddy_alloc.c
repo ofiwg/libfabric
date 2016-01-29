@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 
-#include "gnix_buddy_allocator.h"
+#include "buddy_allocator.h"
 #include <criterion/criterion.h>
 
 #define LEN 1024 * 1024 	/* buddy_handle->len */
@@ -39,7 +39,7 @@
 
 long *buf = NULL;		/* buddy_handle->base */
 gnix_buddy_alloc_handle_t *buddy_handle;
-void **ptr = NULL;		/* ptrs alloc'd by _gnix_buddy_alloc */
+void **ptr = NULL;		/* ptrs alloc'd by buddy_alloc */
 
 
 void buddy_allocator_setup(void)
@@ -52,16 +52,16 @@ void buddy_allocator_setup(void)
 	buf = calloc(LEN, sizeof(long));
 	cr_assert(buf, "buddy_allocator_setup");
 
-	ret = _gnix_buddy_allocator_create(buf, LEN, MAX_LEN, &buddy_handle);
-	cr_assert(!ret, "_gnix_buddy_allocator_create");
+	ret = buddy_allocator_create(buf, LEN, MAX_LEN, &buddy_handle);
+	cr_assert(!ret, "buddy_allocator_create");
 }
 
 void buddy_allocator_teardown(void)
 {
 	int ret;
 
-	ret = _gnix_buddy_allocator_destroy(buddy_handle);
-	cr_assert(!ret, "_gnix_buddy_allocator_destroy");
+	ret = buddy_allocator_destroy(buddy_handle);
+	cr_assert(!ret, "buddy_allocator_destroy");
 
 	free(ptr);
 	free(buf);
@@ -72,19 +72,19 @@ void buddy_allocator_setup_error(void)
 {
 	int ret;
 
-	ret = _gnix_buddy_allocator_create(NULL, LEN, MAX_LEN, &buddy_handle);
+	ret = buddy_allocator_create(NULL, LEN, MAX_LEN, &buddy_handle);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_allocator_create(buf, 0, MAX_LEN, &buddy_handle);
+	ret = buddy_allocator_create(buf, 0, MAX_LEN, &buddy_handle);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_allocator_create(buf, LEN, LEN + 1, &buddy_handle);
+	ret = buddy_allocator_create(buf, LEN, LEN + 1, &buddy_handle);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_allocator_create(buf, LEN, 0, &buddy_handle);
+	ret = buddy_allocator_create(buf, LEN, 0, &buddy_handle);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_allocator_create(buf, LEN, MAX_LEN, NULL);
+	ret = buddy_allocator_create(buf, LEN, MAX_LEN, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 }
 
@@ -93,7 +93,7 @@ void buddy_allocator_teardown_error(void)
 {
 	int ret;
 
-	ret = _gnix_buddy_allocator_destroy(NULL);
+	ret = buddy_allocator_destroy(NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 }
 
@@ -103,8 +103,8 @@ void do_alloc(int len)
 
 	/* Allocate all the memory and write to each block */
 	for (; i < LEN / len; i++) {
-		ret = _gnix_buddy_alloc(buddy_handle, ptr + i, len);
-		cr_assert(!ret, "_gnix_buddy_alloc");
+		ret = buddy_alloc(buddy_handle, ptr + i, len);
+		cr_assert(!ret, "buddy_alloc");
 		memset(ptr[i], 0xffffffff, len);
 	}
 
@@ -121,8 +121,8 @@ void do_free(int len)
 
 	/* Free all allocated blocks */
 	for (; i < LEN / len; i++) {
-		ret = _gnix_buddy_free(buddy_handle, ptr[i], len);
-		cr_assert(!ret, "_gnix_buddy_free");
+		ret = buddy_free(buddy_handle, ptr[i], len);
+		cr_assert(!ret, "buddy_free");
 	}
 
 	/* Ensure that every free list except the last is empty */
@@ -134,10 +134,10 @@ void do_free(int len)
 	cr_assert_eq(ret, 0);
 }
 
-TestSuite(buddy_allocator, .init = buddy_allocator_setup,
+TestSuite(buddy_alloc, .init = buddy_allocator_setup,
 	  .fini = buddy_allocator_teardown, .disabled = false);
 
-Test(buddy_allocator, alloc_free)
+Test(buddy_alloc, alloc_free)
 {
 	int i = MIN_LEN;
 
@@ -150,7 +150,7 @@ Test(buddy_allocator, alloc_free)
 	/* TODO: Random allocs and frees */
 }
 
-Test(buddy_allocator, alloc_free_error)
+Test(buddy_alloc, alloc_free_error)
 {
 	int ret;
 	void *tmp;
@@ -158,14 +158,14 @@ Test(buddy_allocator, alloc_free_error)
 	do_alloc(MIN_LEN);
 
 	/* Request one additional block */
-	ret = _gnix_buddy_alloc(buddy_handle, &tmp, MIN_LEN);
+	ret = buddy_alloc(buddy_handle, &tmp, MIN_LEN);
 	cr_assert_eq(ret, -FI_ENOMEM);
 
 	do_free(MIN_LEN);
 }
 
 /* Test invalid buddy alloc and free parameters */
-Test(buddy_allocator, parameter_error)
+Test(buddy_alloc, parameter_error)
 {
 	int ret;
 
@@ -173,36 +173,36 @@ Test(buddy_allocator, parameter_error)
 	buddy_allocator_teardown_error();
 
 	/* BEGIN: Alloc, invalid parameters */
-	ret = _gnix_buddy_alloc(NULL, ptr, MAX_LEN);
+	ret = buddy_alloc(NULL, ptr, MAX_LEN);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_alloc(buddy_handle, ptr, MAX_LEN + 1);
+	ret = buddy_alloc(buddy_handle, ptr, MAX_LEN + 1);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_alloc(buddy_handle, ptr, 0);
+	ret = buddy_alloc(buddy_handle, ptr, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_alloc(buddy_handle, NULL, MAX_LEN);
+	ret = buddy_alloc(buddy_handle, NULL, MAX_LEN);
 	cr_assert_eq(ret, -FI_EINVAL);
 	/* END: Alloc, invalid parameters */
 
 	/* BEGIN: Free, invalid parameters */
-	ret = _gnix_buddy_free(NULL, ptr, MAX_LEN);
+	ret = buddy_free(NULL, ptr, MAX_LEN);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_free(buddy_handle, NULL, MAX_LEN);
+	ret = buddy_free(buddy_handle, NULL, MAX_LEN);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_free(buddy_handle, buf - 1, MAX_LEN);
+	ret = buddy_free(buddy_handle, buf - 1, MAX_LEN);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_free(buddy_handle, buf + LEN, MAX_LEN);
+	ret = buddy_free(buddy_handle, buf + LEN, MAX_LEN);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_free(buddy_handle, buf, MAX_LEN + 1);
+	ret = buddy_free(buddy_handle, buf, MAX_LEN + 1);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	ret = _gnix_buddy_free(buddy_handle, buf - 1, 0);
+	ret = buddy_free(buddy_handle, buf - 1, 0);
 	cr_assert_eq(ret, -FI_EINVAL);
 	/* END: Free, invalid parameters */
 }

@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _GNIX_BUDDY_ALLOCATOR_H_
-#define _GNIX_BUDDY_ALLOCATOR_H_
+#ifndef _BUDDY_ALLOCATOR_H_
+#define _BUDDY_ALLOCATOR_H_
 
 #include "fi_list.h"
 #include "gnix_bitmap.h"
@@ -55,7 +55,7 @@ static const uint32_t MultiplyDeBruijnBitPosition[32] = {
  *
  * Note: this function always truncates the result.
  */
-static inline uint32_t __gnix_buddy_log2(uint32_t v)
+static inline uint32_t buddy_log2(uint32_t v)
 {
 	v |= v >> 1;
 	v |= v >> 2;
@@ -76,7 +76,7 @@ static inline uint32_t __gnix_buddy_log2(uint32_t v)
 
 /* Find the bitmap index for block X */
 #define BITMAP_INDEX(X, BASE, MIN_LEN, LEN) ((size_t) ((X) - (BASE)) /\
-					     (MIN_LEN) + 2 * __gnix_buddy_log2\
+					     (MIN_LEN) + 2 * buddy_log2\
 					     ((LEN) / (MIN_LEN)))
 
 /* Find the address of X's buddy block:
@@ -91,7 +91,7 @@ static inline uint32_t __gnix_buddy_log2(uint32_t v)
 #define OFFSET(MIN_LEN, MULT) ((MIN_LEN) * (1 << (MULT)))
 
 /* Find the index into the free list with block size LEN. */
-#define LIST_INDEX(LEN, MIN_LEN)  (__gnix_buddy_log2((LEN) / (MIN_LEN)))
+#define LIST_INDEX(LEN, MIN_LEN)  (buddy_log2((LEN) / (MIN_LEN)))
 
 /**
  * Structure representing a buddy allocator.
@@ -134,7 +134,7 @@ typedef struct gnix_buddy_alloc_handle {
  * (must be a multiple of max).
  *
  * @param[in] max		Maximum amount of memory that can be allocated
- * by a single call to _gnix_buddy_alloc (power 2).
+ * by a single call to buddy_alloc (power 2).
  *
  * @param[in/out] alloc_handle	Handle to be used for when allocating/freeing
  * memory managed by the buddy allocator.
@@ -146,7 +146,7 @@ typedef struct gnix_buddy_alloc_handle {
  * @return -FI_ENOMEM		Upon failure to allocate memory to create the
  * buddy allocator.
  */
-int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
+int buddy_allocator_create(void *base, uint32_t len, uint32_t max,
 				 gnix_buddy_alloc_handle_t **alloc_handle);
 
 /**
@@ -158,7 +158,7 @@ int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
  *
  * @return -FI_EINVAL 		Upon an invalid parameter.
  */
-int _gnix_buddy_allocator_destroy(gnix_buddy_alloc_handle_t *alloc_handle);
+int buddy_allocator_destroy(gnix_buddy_alloc_handle_t *alloc_handle);
 
 /**
  * Allocate a buffer from the buddy allocator
@@ -178,7 +178,7 @@ int _gnix_buddy_allocator_destroy(gnix_buddy_alloc_handle_t *alloc_handle);
  *
  * @return -FI_EINVAL		Upon an invalid parameter.
  */
-int _gnix_buddy_alloc(gnix_buddy_alloc_handle_t *alloc_handle, void **ptr,
+int buddy_alloc(gnix_buddy_alloc_handle_t *alloc_handle, void **ptr,
 		      uint32_t len);
 
 /**
@@ -195,6 +195,6 @@ int _gnix_buddy_alloc(gnix_buddy_alloc_handle_t *alloc_handle, void **ptr,
  *
  * @return -FI_EINVAL		Upon an invalid parameter.
  */
-int _gnix_buddy_free(gnix_buddy_alloc_handle_t *alloc_handle, void *ptr,
+int buddy_free(gnix_buddy_alloc_handle_t *alloc_handle, void *ptr,
 		     uint32_t len);
-#endif /* _GNIX_BUDDY_ALLOCATOR_H_ */
+#endif /* _BUDDY_ALLOCATOR_H_ */
