@@ -2410,7 +2410,7 @@ void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx)
 static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 					struct sock_rx_ctx *rx_ctx)
 {
-	int ret = 0, i, fd;
+	int ret = 0, i, fd, num_fds;
 	struct sock_conn *conn;
 	struct sock_conn_map *map;
 
@@ -2419,15 +2419,15 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
         if (!map->used)
                 return 0;
 
-        ret = sock_epoll_wait(&map->epoll_set, 0);
-        if (ret < 0 || ret == 0) {
-                if (ret < 0)
+        num_fds = sock_epoll_wait(&map->epoll_set, 0);
+        if (num_fds < 0 || num_fds == 0) {
+                if (num_fds < 0)
                         SOCK_LOG_ERROR("poll failed: %s\n", strerror(errno));
-                return ret;
+                return num_fds;
         }
 
 	fastlock_acquire(&map->lock);
-	for (i = 0; i < ret; i++) {
+	for (i = 0; i < num_fds; i++) {
 		fd = sock_epoll_get_fd_at_index(&map->epoll_set, i);
 		conn = idm_lookup(&ep->conn_idm, fd);
 		if (!conn)
