@@ -1284,8 +1284,6 @@ static void sock_set_domain_attr(const struct fi_domain_attr *hint_attr,
 		attr->control_progress = sock_domain_attr.control_progress;
 	if (attr->data_progress == FI_PROGRESS_UNSPEC)
 		attr->data_progress = sock_domain_attr.data_progress;
-	if (attr->av_type == FI_AV_UNSPEC)
-		attr->av_type = sock_domain_attr.av_type;
 	if (attr->mr_mode == FI_MR_UNSPEC)
 		attr->mr_mode = sock_domain_attr.mr_mode;
 
