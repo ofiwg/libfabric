@@ -325,6 +325,7 @@ struct sock_av {
 	struct sock_eq *eq;
 	struct sock_av_table_hdr *table_hdr;
 	struct sock_av_addr *table;
+	uint64_t *idx_arr;
 	char *name;
 	int shared_fd;
 };
