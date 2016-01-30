@@ -245,11 +245,9 @@ int fi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 	if (ret)
 		goto err2;
 
-	wait->epoll_fd = fi_epoll_create();
-	if (!wait->epoll_fd) {
-		ret = -FI_ENOMEM;
+	ret = fi_epoll_create(&wait->epoll_fd);
+	if (ret)
 		goto err3;
-	}
 
 	ret = fi_epoll_add(wait->epoll_fd, wait->signal.fd[FI_READ_FD],
 			   &wait->util_wait.wait_fid.fid);

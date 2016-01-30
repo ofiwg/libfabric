@@ -116,11 +116,10 @@ static inline int fd_signal_poll(struct fd_signal *signal, int timeout)
 
 typedef int fi_epoll_t;
 
-static inline int fi_epoll_create(void)
+static inline int fi_epoll_create(int *ep)
 {
-	int ret;
-	ret = epoll_create(4);
-	return ret < 0 ? 0 : ret;
+	*ep = epoll_create(4);
+	return *ep < 0 ? -errno : 0;
 }
 
 static inline int fi_epoll_add(int ep, int fd, void *context)
@@ -165,7 +164,7 @@ typedef struct fi_epoll {
 	void		**context;
 } *fi_epoll_t;
 
-struct fi_epoll *fi_epoll_create(void);
+int fi_epoll_create(struct fi_epoll **ep);
 int fi_epoll_add(struct fi_epoll *ep, int fd, void *context);
 int fi_epoll_del(struct fi_epoll *ep, int fd);
 void *fi_epoll_wait(struct fi_epoll *ep, int timeout);

@@ -220,9 +220,10 @@ int fi_fd_nonblock(int fd)
 
 #ifndef HAVE_EPOLL
 
-struct fi_epoll *fi_epoll_create(void)
+int fi_epoll_create(struct fi_epoll **ep)
 {
-	return calloc(1, sizeof(struct fi_epoll));
+	*ep = calloc(1, sizeof(struct fi_epoll));
+	return *ep ? 0 : -FI_ENOMEM;
 }
 
 int fi_epoll_add(struct fi_epoll *ep, int fd, void *context)
