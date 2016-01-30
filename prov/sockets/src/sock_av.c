@@ -462,6 +462,7 @@ static int sock_verify_av_attr(struct fi_av_attr *attr)
 	switch (attr->type) {
 	case FI_AV_MAP:
 	case FI_AV_TABLE:
+	case FI_AV_UNSPEC:
 		break;
 	default:
 		return -FI_EINVAL;
@@ -488,6 +489,9 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	if (!attr || sock_verify_av_attr(attr))
 		return -FI_EINVAL;
+
+	if (attr && attr->type == FI_AV_UNSPEC)
+		attr->type = FI_AV_TABLE;
 
 	dom = container_of(domain, struct sock_domain, dom_fid);
 	if (dom->attr.av_type != FI_AV_UNSPEC && attr &&
