@@ -160,6 +160,8 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 {
 	struct psmx2_cq_event *event;
 	struct psmx2_multi_recv *req;
+	struct psmx2_sendv_request *sendv_req;
+	struct psmx2_sendv_reply *sendv_rep;
 	struct fi_context *fi_context = psm2_status->context;
 	void *op_context, *buf;
 	int is_recv = 0;
@@ -170,6 +172,20 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 		op_context = fi_context;
 		buf = PSMX2_CTXT_USER(fi_context);
 		flags = FI_SEND | FI_MSG;
+		break;
+	case PSMX2_SENDV_CONTEXT:
+	case PSMX2_IOV_SEND_CONTEXT:
+		sendv_req = PSMX2_CTXT_USER(fi_context);
+		op_context = sendv_req->user_context;
+		buf = NULL;
+		flags = FI_SEND | FI_MSG;
+		break;
+	case PSMX2_IOV_RECV_CONTEXT:
+		sendv_rep = PSMX2_CTXT_USER(fi_context);
+		op_context = sendv_rep->user_context;
+		buf = sendv_rep->buf;
+		flags = FI_RECV | FI_MSG;
+		is_recv = 1;
 		break;
 	case PSMX2_RECV_CONTEXT:
 		op_context = fi_context;
@@ -365,6 +381,16 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
+			case PSMX2_NOCOMP_RECV_CONTEXT_ALLOC:
+				if ((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
+				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0)) {
+					psmx2_ep_put_op_context(tmp_ep, fi_context);
+					continue;
+				}
+				tmp_cntr = tmp_ep->recv_cntr;
+				psmx2_ep_put_op_context(tmp_ep, fi_context);
+				break;
+
 			case PSMX2_NOCOMP_WRITE_CONTEXT:
 				tmp_cntr = tmp_ep->write_cntr;
 				break;
@@ -380,12 +406,22 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 
 			case PSMX2_RECV_CONTEXT:
+				if ((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
+				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0))
+					continue;
+				tmp_cq = tmp_ep->recv_cq;
+				tmp_cntr = tmp_ep->recv_cntr;
+				break;
+
 			case PSMX2_TRECV_CONTEXT:
 				tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
 			case PSMX2_MULTI_RECV_CONTEXT:
+				if ((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
+				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 1))
+					continue;
 				multi_recv = 1;
 				tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
@@ -461,6 +497,61 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 
 				  continue;
 				}
+
+			case PSMX2_SENDV_CONTEXT:
+				{
+					struct psmx2_sendv_request *req;
+
+					req = PSMX2_CTXT_USER(fi_context);
+					if (req->iov_protocol == PSMX2_IOV_PROTO_MULTI && 
+					    req->iov_done < req->iov_info.count)	
+						continue;
+
+					tmp_cntr = tmp_ep->send_cntr;
+					if (!req->no_completion)
+						tmp_cq = tmp_ep->send_cq;
+				}
+				break;
+
+			case PSMX2_IOV_SEND_CONTEXT:
+				{
+					struct psmx2_sendv_request *req;
+
+					req = PSMX2_CTXT_USER(fi_context);
+					req->iov_done++;
+					if (req->iov_done < req->iov_info.count)	
+						continue;
+
+					tmp_cntr = tmp_ep->send_cntr;
+					if (!req->no_completion)
+						tmp_cq = tmp_ep->send_cq;
+				}
+				break;
+
+			case PSMX2_IOV_RECV_CONTEXT:
+				{
+					struct psmx2_sendv_reply *rep;
+
+					rep = PSMX2_CTXT_USER(fi_context);
+					rep->iov_done++;
+					rep->msg_length += psm2_status.msg_length;
+					rep->bytes_received += psm2_status.nbytes;
+					if (psm2_status.error_code != PSM2_OK)
+						rep->error_code = psm2_status.error_code;
+					if (rep->iov_done < rep->iov_info.count)	
+						continue;
+
+					tmp_cntr = tmp_ep->recv_cntr;
+					if (!rep->no_completion)
+						tmp_cq = tmp_ep->recv_cq;
+
+					psm2_status.nbytes = rep->bytes_received;
+					psm2_status.msg_length = rep->msg_length;
+					psm2_status.error_code = rep->error_code;
+
+					multi_recv = rep->multi_recv;
+				}
+				break;
 			}
 
 			if (tmp_cq) {

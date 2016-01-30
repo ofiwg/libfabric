@@ -238,12 +238,23 @@ static int psmx2_ep_setopt(fid_t fid, int level, int optname,
 static int psmx2_ep_close(fid_t fid)
 {
 	struct psmx2_fid_ep *ep;
+	struct slist_entry *entry;
+	struct psmx2_context *item;
 
 	ep = container_of(fid, struct psmx2_fid_ep, ep.fid);
 
 	ep->domain->eps[ep->vlane] = NULL;
 	psmx2_free_vlane(ep->domain, ep->vlane);
 	psmx2_domain_release(ep->domain);
+
+	while (!slist_empty(&ep->free_context_list)) {
+		entry = slist_remove_head(&ep->free_context_list);
+		item = container_of(entry, struct psmx2_context, list_entry);
+		free(item);
+	}
+
+	fastlock_destroy(&ep->context_lock);
+
 	free(ep);
 
 	return 0;
@@ -405,9 +416,11 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 {
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_fid_ep *ep_priv;
+	struct psmx2_context *item;
 	uint8_t vlane;
 	uint64_t ep_cap;
 	int err = -FI_EINVAL;
+	int i;
 
 	if (info)
 		ep_cap = info->caps;
@@ -472,6 +485,19 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	psmx2_ep_optimize_ops(ep_priv);
 
+	slist_init(&ep_priv->free_context_list);
+	fastlock_init(&ep_priv->context_lock);
+
+#define PSMX2_FREE_CONTEXT_LIST_SIZE	64
+	for (i=0; i<PSMX2_FREE_CONTEXT_LIST_SIZE; i++) {
+		item = calloc(1, sizeof(*item));
+		if (!item) {
+			FI_WARN(&psmx2_prov, FI_LOG_EP_CTRL, "out of memory.\n");
+			exit(-1);
+		}
+		slist_insert_tail(&item->list_entry, &ep_priv->free_context_list);
+	}
+
 	*ep = &ep_priv->ep;
 
 	return 0;
@@ -531,5 +557,42 @@ int psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 
 	*stx = &stx_priv->stx;
 	return 0;
+}
+
+/* Private op context pool management */
+
+struct fi_context *psmx2_ep_get_op_context(struct psmx2_fid_ep *ep)
+{
+	struct psmx2_context *context;
+
+	fastlock_acquire(&ep->context_lock);
+	if (!slist_empty(&ep->free_context_list)) {
+		context = container_of(slist_remove_head(&ep->free_context_list),
+				       struct psmx2_context, list_entry);
+		fastlock_release(&ep->context_lock);
+		return &context->fi_context;
+	}
+	fastlock_release(&ep->context_lock);
+
+	context = malloc(sizeof(*context));
+	if (!context)
+		FI_WARN(&psmx2_prov, FI_LOG_EP_DATA, "out of memory.\n");
+
+	return &context->fi_context;
+}
+
+void psmx2_ep_put_op_context(struct psmx2_fid_ep *ep,
+			     struct fi_context *fi_context)
+{
+	struct psmx2_context *context;
+
+	if (! (PSMX2_CTXT_TYPE(fi_context) & PSMX2_CTXT_ALLOC_FLAG))
+		return;
+
+	context = container_of(fi_context, struct psmx2_context, fi_context);
+	context->list_entry.next = NULL;
+	fastlock_acquire(&ep->context_lock);
+	slist_insert_tail(&context->list_entry, &ep->free_context_list);
+	fastlock_release(&ep->context_lock);
 }
 
