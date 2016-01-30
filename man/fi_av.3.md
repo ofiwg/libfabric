@@ -153,6 +153,10 @@ struct fi_av_attr {
   successive insertions will be given sequential indices.  Sequential
   indices will be assigned across insertion calls on the same AV.
 
+- *FI_AV_UNSPEC*
+: Provider will choose its preferred AV type. The AV type used will 
+  be returned through the type field in fi_av_attr.
+
 *Receive Context Bits (rx_ctx_bits)*
 : The receive context bits field is only for use with scalable
   endpoints.  It indicates the number of bits reserved in a returned
