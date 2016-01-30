@@ -381,6 +381,16 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
 
+			case PSMX2_NOCOMP_RECV_CONTEXT_ALLOC:
+				if ((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
+				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0)) {
+					psmx2_ep_put_op_context(tmp_ep, fi_context);
+					continue;
+				}
+				tmp_cntr = tmp_ep->recv_cntr;
+				psmx2_ep_put_op_context(tmp_ep, fi_context);
+				break;
+
 			case PSMX2_NOCOMP_WRITE_CONTEXT:
 				tmp_cntr = tmp_ep->write_cntr;
 				break;

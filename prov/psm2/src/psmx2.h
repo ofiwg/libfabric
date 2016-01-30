@@ -133,6 +133,7 @@ extern struct fi_provider psmx2_prov;
 /* Bits 60 .. 63 of the flag are provider specific */
 #define PSMX2_NO_COMPLETION	(1ULL << 60)
 
+#define PSMX2_CTXT_ALLOC_FLAG		0x80000000
 enum psmx2_context_type {
 	PSMX2_NOCOMP_SEND_CONTEXT = 1,
 	PSMX2_NOCOMP_RECV_CONTEXT,
@@ -150,6 +151,12 @@ enum psmx2_context_type {
 	PSMX2_SENDV_CONTEXT,
 	PSMX2_IOV_SEND_CONTEXT,
 	PSMX2_IOV_RECV_CONTEXT,
+	PSMX2_NOCOMP_RECV_CONTEXT_ALLOC = PSMX2_NOCOMP_RECV_CONTEXT | PSMX2_CTXT_ALLOC_FLAG,
+};
+
+struct psmx2_context {
+	struct fi_context fi_context;
+	struct slist_entry list_entry;
 };
 
 union psmx2_pi {
@@ -611,6 +618,8 @@ struct psmx2_fid_ep {
 	uint64_t		caps;
 	struct fi_context	nocomp_send_context;
 	struct fi_context	nocomp_recv_context;
+	struct slist		free_context_list;
+	fastlock_t		context_lock;
 	size_t			min_multi_recv;
 	uint32_t		iov_seq_num;
 };
@@ -711,6 +720,8 @@ int	psmx2_epid_to_epaddr(struct psmx2_fid_domain *domain,
 			    psm2_epid_t epid, psm2_epaddr_t *epaddr);
 void	psmx2_query_mpi(void);
 
+struct	fi_context *psmx2_ep_get_op_context(struct psmx2_fid_ep *ep);
+void	psmx2_ep_put_op_context(struct psmx2_fid_ep *ep, struct fi_context *fi_context);
 void	psmx2_eq_enqueue_event(struct psmx2_fid_eq *eq, struct psmx2_eq_event *event);
 struct	psmx2_eq_event *psmx2_eq_create_event(struct psmx2_fid_eq *eq,
 					uint32_t event_num,

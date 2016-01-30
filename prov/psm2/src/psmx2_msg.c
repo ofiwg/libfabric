@@ -101,7 +101,11 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 	PSMX2_SET_TAG(psm2_tagsel, 0ULL, tagsel32);
 
 	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION)) {
-		fi_context = &ep_priv->nocomp_recv_context;
+		fi_context = psmx2_ep_get_op_context(ep_priv);
+		PSMX2_CTXT_TYPE(fi_context) = PSMX2_NOCOMP_RECV_CONTEXT_ALLOC;
+		PSMX2_CTXT_EP(fi_context) = ep_priv;
+		PSMX2_CTXT_USER(fi_context) = buf;
+		PSMX2_CTXT_SIZE(fi_context) = len;
 	}
 	else {
 		if (!context)
