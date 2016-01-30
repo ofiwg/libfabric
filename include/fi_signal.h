@@ -111,5 +111,66 @@ static inline int fd_signal_poll(struct fd_signal *signal, int timeout)
 	return (ret == 0) ? -FI_ETIMEDOUT : 0;
 }
 
-#endif /* FI_SIGNAL_H */
+#if HAVE_EPOLL
+#include <sys/epoll.h>
 
+typedef int fi_epoll_t;
+
+static inline int fi_epoll_create(void)
+{
+	int ret;
+	ret = epoll_create(4);
+	return ret < 0 ? 0 : ret;
+}
+
+static inline int fi_epoll_add(int ep, int fd, void *context)
+{
+	struct epoll_event event;
+	int ret;
+
+	event.data.ptr = context;
+	event.events = EPOLLIN;
+	ret = epoll_ctl(ep, EPOLL_CTL_ADD, fd, &event);
+	if (ret == -1 && errno != EEXIST)
+		return -errno;
+	return 0;
+}
+
+static inline int fi_epoll_del(int ep, int fd)
+{
+	return epoll_ctl(ep, EPOLL_CTL_DEL, fd, NULL) ? -errno : 0;
+}
+
+static inline void *fi_epoll_wait(int ep, int timeout)
+{
+	struct epoll_event event;
+	int ret;
+
+	ret = epoll_wait(ep, &event, 1, timeout);
+	return ret == 1 ? event.data.ptr : NULL;
+}
+
+static inline void fi_epoll_close(int ep)
+{
+	close(ep);
+}
+
+#else
+#include <poll.h>
+
+typedef struct fi_epoll {
+	int		size;
+	int		nfds;
+	struct pollfd	*fds;
+	void		**context;
+} *fi_epoll_t;
+
+struct fi_epoll *fi_epoll_create(void);
+int fi_epoll_add(struct fi_epoll *ep, int fd, void *context);
+int fi_epoll_del(struct fi_epoll *ep, int fd);
+void *fi_epoll_wait(struct fi_epoll *ep, int timeout);
+void fi_epoll_close(struct fi_epoll *ep);
+
+#endif
+
+#endif /* FI_SIGNAL_H */
