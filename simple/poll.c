@@ -159,7 +159,7 @@ static int send_recv()
 				if (ret == -FI_EAVAIL) {
 					ret = ft_cq_readerr(cq);
 				} else {
-					FT_PRINTERR("fi_cq_sread", ret);
+					FT_PRINTERR("fi_cq_read", ret);
 				}
 				return ret;
 			}

@@ -96,7 +96,7 @@ static int tagged_peek(uint64_t tag)
 		if (ret == -FI_EAVAIL)
 			ret = ft_cq_readerr(rxcq);
 		else
-			FT_PRINTERR("fi_cq_read", ret);
+			FT_PRINTERR("fi_cq_sread", ret);
 	}
 	return ret;
 }
@@ -174,6 +174,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
+	opts.comp_method = FT_COMP_SREAD;
 
 	hints = fi_allocinfo();
 	if (!hints) {
