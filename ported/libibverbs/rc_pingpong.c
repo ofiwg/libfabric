@@ -136,7 +136,7 @@ static int pp_cq_create(struct pingpong_context *ctx)
 	if (ctx->use_event)
 		cq_attr.wait_obj = FI_WAIT_FD;				
 	else
-		cq_attr.wait_obj = FI_WAIT_NONE;
+		cq_attr.wait_obj = FI_WAIT_UNSPEC;
 	cq_attr.size 		= ctx->rx_depth + 1;
 
 	rc = fi_cq_open(ctx->dom, &cq_attr, &ctx->cq, NULL);
