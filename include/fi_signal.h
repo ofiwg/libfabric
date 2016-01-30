@@ -111,7 +111,7 @@ static inline int fd_signal_poll(struct fd_signal *signal, int timeout)
 	return (ret == 0) ? -FI_ETIMEDOUT : 0;
 }
 
-#if HAVE_EPOLL
+#ifdef HAVE_EPOLL
 #include <sys/epoll.h>
 
 typedef int fi_epoll_t;
