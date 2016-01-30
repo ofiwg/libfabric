@@ -46,8 +46,10 @@
 #include <pthread.h>
 #include <sys/time.h>
 
+#include <fi_signal.h>
 #include <rdma/fi_errno.h>
-#include "fi.h"
+#include <fi.h>
+
 
 int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
 {
@@ -215,3 +217,76 @@ int fi_fd_nonblock(int fd)
 
 	return 0;
 }
+
+#ifndef HAVE_EPOLL
+
+struct fi_epoll *fi_epoll_create(void)
+{
+	return calloc(1, sizeof(struct fi_epoll));
+}
+
+int fi_epoll_add(struct fi_epoll *ep, int fd, void *context)
+{
+	struct pollfd *fds;
+	void *contexts;
+
+	if (ep->nfds == ep->size) {
+		fds = calloc(ep->size + 64,
+			     sizeof(*ep->fds) + sizeof(*ep->context));
+		if (!fds)
+			return -FI_ENOMEM;
+
+		ep->size += 64;
+		contexts = fds + ep->size;
+
+		memcpy(fds, ep->fds, ep->nfds * sizeof(*ep->fds));
+		memcpy(contexts, ep->context, ep->nfds * sizeof(*ep->context));
+		free(ep->fds);
+		ep->fds = fds;
+		ep->context = contexts;
+	}
+
+	ep->fds[ep->nfds].fd = fd;
+	ep->fds[ep->nfds].events = POLLIN;
+	ep->context[ep->nfds++] = context;
+	return 0;
+}
+
+int fi_epoll_del(struct fi_epoll *ep, int fd)
+{
+	int i;
+
+	for (i = 0; i < ep->nfds; i++) {
+		if (ep->fds[i].fd == fd) {
+			ep->fds[i].fd = ep->fds[ep->nfds - 1].fd;
+			ep->context[i] = ep->context[--ep->nfds];
+      			return 0;
+		}
+  	}
+	return -FI_EINVAL;
+}
+
+void *fi_epoll_wait(struct fi_epoll *ep, int timeout)
+{
+	int i, ret;
+
+	ret = poll(ep->fds, ep->nfds, timeout);
+	if (ret <= 0)
+		return NULL;
+
+	for (i = 0; i < ep->nfds; i++) {
+		if (ep->fds[i].revents)
+			return ep->context[i];
+	}
+	return NULL;
+}
+
+void fi_epoll_close(struct fi_epoll *ep)
+{
+	if (ep) {
+		free(ep->fds);
+		free(ep);
+	}
+}
+
+#endif

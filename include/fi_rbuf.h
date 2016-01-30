@@ -45,6 +45,48 @@
 
 
 /*
+ * Circular queue/array template
+ */
+#define DECLARE_CIRQUE(entrytype, name)				\
+struct name {							\
+	size_t		size;					\
+	size_t		size_mask;				\
+	size_t		rcnt;					\
+	size_t		wcnt;					\
+	entrytype	*buf;					\
+};								\
+								\
+static inline int name ## _init(struct name *cq, size_t size)	\
+{								\
+	cq->size = roundup_power_of_two(size);			\
+	cq->size_mask = cq->size - 1;				\
+	cq->rcnt = 0;						\
+	cq->wcnt = 0;						\
+	cq->buf = calloc(1, cq->size);				\
+	return cq->buf ? 0 : -ENOMEM;				\
+}								\
+								\
+static inline void name ## _free(struct name *cq)		\
+{								\
+	free(cq->buf);						\
+}
+
+#define cirque_empty(cq)	((cq)->wcnt == (cq)->rcnt)
+#define cirque_used(cq)		((cq)->wcnt - (cq)->rcnt)
+#define cirque_avail(cq)	((cq)->size - cirque_used(cq))
+#define cirque_full(cq)		(cirque_avail(cq) <= 0)
+
+#define cirque_rindex(cq)	((cq)->rcnt & (cq)->size_mask)
+#define cirque_windex(cq)	((cq)->wcnt & (cq)->size_mask)
+#define cirque_head(cq)		(&(cq)->buf[cirque_rindex(cq)])
+#define cirque_tail(cq)		(&(cq)->buf[cirque_windex(cq)])
+#define cirque_insert(cq, x)	(cq)->buf[(cq)->wcnt++ & (cq)->size_mask] = x
+#define cirque_remove(cq)	(&(cq)->buf[(cq)->rcnt++ & (cq)->size_mask])
+#define cirque_discard(cq)	((cq)->rcnt++)
+#define cirque_commit(cq)	((cq)->wcnt++)
+
+
+/*
  * Simple ring buffer
  */
 struct ringbuf {
