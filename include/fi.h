@@ -143,21 +143,28 @@ void fi_create_filter(struct fi_filter *filter, const char *env_name);
 void fi_free_filter(struct fi_filter *filter);
 int fi_apply_filter(struct fi_filter *filter, const char *name);
 
+void fi_util_init(void);
+void fi_util_fini(void);
 void fi_log_init(void);
 void fi_log_fini(void);
 void fi_param_init(void);
 void fi_param_fini(void);
 void fi_param_undefine(const struct fi_provider *provider);
 
-/* flsll is defined on BSD systems, but is different. */
-static inline int fi_flsll(long long int i)
-{
-	return i ? 65 - ffsll(htonll(i)) : 0;
-}
 
 static inline uint64_t roundup_power_of_two(uint64_t n)
 {
-	return 1ULL << fi_flsll(n - 1);
+	if (!n || !(n & (n - 1)))
+		return n;
+	n--;
+	n |= n >> 1;
+	n |= n >> 2;
+	n |= n >> 4;
+	n |= n >> 8;
+	n |= n >> 16;
+	n |= n >> 32;
+	n++;
+	return n;
 }
 
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL

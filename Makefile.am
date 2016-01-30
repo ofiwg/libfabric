@@ -32,7 +32,16 @@ common_srcs = \
 	src/enosys.c \
 	src/rbtree.c \
 	src/fasthash.c \
-	src/indexer.c
+	src/indexer.c \
+	prov/util/src/util_attr.c   \
+	prov/util/src/util_av.c     \
+	prov/util/src/util_cq.c     \
+	prov/util/src/util_domain.c \
+	prov/util/src/util_eq.c     \
+	prov/util/src/util_fabric.c \
+	prov/util/src/util_main.c   \
+	prov/util/src/util_poll.c   \
+	prov/util/src/util_wait.c
 
 # ensure dl-built providers link back to libfabric
 linkback = $(top_builddir)/src/libfabric.la
@@ -51,10 +60,11 @@ src_libfabric_la_SOURCES = \
 	include/fi_enosys.h \
 	include/fi_indexer.h \
 	include/fi_list.h \
-	include/fi_signal.h \
 	include/fi_rbuf.h \
-	include/rbtree.h \
+	include/fi_signal.h \
+	include/fi_util.h \
 	include/fasthash.h \
+	include/rbtree.h \
 	include/prov.h \
 	src/fabric.c \
 	src/fi_tostr.c \
@@ -263,6 +273,7 @@ prov_install_man_pages=
 prov_dist_man_pages=
 
 include prov/sockets/Makefile.include
+include prov/udp/Makefile.include
 include prov/verbs/Makefile.include
 include prov/usnic/Makefile.include
 include prov/psm/Makefile.include

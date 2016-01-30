@@ -352,6 +352,7 @@ void fi_ini(void)
 
 	fi_param_init();
 	fi_log_init();
+	fi_util_init();
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,
 			"Only use specified provider (default: all available)");
@@ -394,8 +395,9 @@ libdl_done:
 	fi_register_provider(MXM_INIT, NULL);
 	fi_register_provider(VERBS_INIT, NULL);
 	fi_register_provider(GNI_INIT, NULL);
-        /* Initialize the sockets provider last.  This will result in
+        /* Initialize the socket(s) provider last.  This will result in
            it being the least preferred provider. */
+	fi_register_provider(UDP_INIT, NULL);
 	fi_register_provider(SOCKETS_INIT, NULL);
 
 	init = 1;
@@ -421,6 +423,7 @@ static void __attribute__((destructor)) fi_fini(void)
 	fi_free_filter(&prov_filter);
 	fi_log_fini();
 	fi_param_fini();
+	fi_util_fini();
 }
 
 static struct fi_prov *fi_getprov(const char *prov_name)
@@ -531,7 +534,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const cha
 			continue;
 
 		if (hints && hints->fabric_attr && hints->fabric_attr->prov_name &&
-		    strcmp(prov->provider->name, hints->fabric_attr->prov_name))
+		    strcasecmp(prov->provider->name, hints->fabric_attr->prov_name))
 			continue;
 
 		ret = prov->provider->getinfo(version, node, service, flags,
