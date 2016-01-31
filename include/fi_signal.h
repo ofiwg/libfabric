@@ -162,6 +162,7 @@ typedef struct fi_epoll {
 	int		nfds;
 	struct pollfd	*fds;
 	void		**context;
+	int		index;
 } *fi_epoll_t;
 
 int fi_epoll_create(struct fi_epoll **ep);

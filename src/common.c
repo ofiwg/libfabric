@@ -275,11 +275,18 @@ void *fi_epoll_wait(struct fi_epoll *ep, int timeout)
 	if (ret <= 0)
 		return NULL;
 
-	for (i = 0; i < ep->nfds; i++) {
+	for (i = ep->index; i < ep->nfds; i++) {
 		if (ep->fds[i].revents)
-			return ep->context[i];
+			goto found;
+	}
+	for (i = 0; i < ep->index; i++) {
+		if (ep->fds[i].revents)
+			goto found;
 	}
 	return NULL;
+found:
+	ep->index = i;
+	return ep->context[i];
 }
 
 void fi_epoll_close(struct fi_epoll *ep)
