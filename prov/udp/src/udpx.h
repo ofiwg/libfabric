@@ -34,10 +34,11 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <sys/types.h>
 #include <netdb.h>
 #include <pthread.h>
 #include <sys/socket.h>
-#include <sys/types.h>
+#include <netinet/in.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>

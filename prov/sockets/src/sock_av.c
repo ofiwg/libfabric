@@ -32,6 +32,7 @@
 
 #include "config.h"
 
+#include <sys/types.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -43,6 +44,7 @@
 #include <ctype.h>
 #include <sys/ipc.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 
 #include "sock.h"
 #include "sock_util.h"

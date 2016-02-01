@@ -48,6 +48,8 @@
 
 #ifdef __APPLE__
 #include <osx/osd.h>
+#elif defined __FreeBSD__
+#include <freebsd/osd.h>
 #else
 #include <linux/osd.h>
 #endif
