@@ -341,6 +341,9 @@ int ft_alloc_active_res(struct fi_info *fi)
 		if (fi->domain_attr->av_type != FI_AV_UNSPEC)
 			av_attr.type = fi->domain_attr->av_type;
 
+		if (opts.av_name) {
+			av_attr.name = opts.av_name;
+		}
 		ret = fi_av_open(domain, &av_attr, &av, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_av_open", ret);
@@ -1137,6 +1140,7 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-p <dst_port>", "non default destination port number");
 	FT_PRINT_OPTS_USAGE("-f <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
+	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
 	return;
@@ -1246,6 +1250,8 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 			opts->options |= FT_OPT_RX_CNTR | FT_OPT_TX_CNTR;
 			opts->options &= ~(FT_OPT_RX_CQ | FT_OPT_TX_CQ);
 		}
+	case 'a':
+		opts->av_name = optarg;
 		break;
 	default:
 		/* let getopt handle unknown opts*/

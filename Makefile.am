@@ -15,6 +15,7 @@ bin_PROGRAMS = \
 	simple/fi_scalable_ep \
 	simple/fi_rdm_shared_ctx \
 	simple/fi_msg_epoll \
+	simple/fi_rdm_shared_av \
 	streaming/fi_msg_rma \
 	streaming/fi_rdm_atomic \
 	streaming/fi_rdm_multi_recv \
@@ -65,6 +66,10 @@ simple_fi_msg_LDADD = libfabtests.la
 simple_fi_rdm_SOURCES = \
 	simple/rdm.c
 simple_fi_rdm_LDADD = libfabtests.la
+
+simple_fi_rdm_shared_av_SOURCES = \
+	simple/rdm_shared_av.c
+simple_fi_rdm_shared_av_LDADD = libfabtests.la
 
 simple_fi_rdm_rma_simple_SOURCES = \
 	simple/rdm_rma_simple.c
