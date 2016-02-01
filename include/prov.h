@@ -124,4 +124,15 @@ MXM_INI ;
 #  define MXM_INIT NULL
 #endif
 
+#if (HAVE_UDP) && (HAVE_UDP_DL)
+#  define UDP_INI FI_EXT_INI
+#  define UDP_INIT NULL
+#elif (HAVE_UDP)
+#  define UDP_INI INI_SIG(fi_udp_ini)
+#  define UDP_INIT fi_udp_ini()
+UDP_INI ;
+#else
+#  define UDP_INIT NULL
+#endif
+
 #endif /* _PROV_H_ */
