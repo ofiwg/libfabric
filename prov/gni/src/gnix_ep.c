@@ -1658,7 +1658,7 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			   struct fid_ep **ep, void *context)
 {
 	int ret = FI_SUCCESS;
-	uint32_t cdm_id, seed;
+	uint32_t cdm_id;
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_ep *ep_priv;
 	gnix_ht_key_t *key_ptr;
@@ -1777,17 +1777,7 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			ep_priv->my_name.cm_nic_cdm_id =
 				ep_priv->cm_nic->my_name.gnix_addr.cdm_id;
 
-			ret = _gnix_cm_nic_get_cdm_seed_set(domain_priv, 1,
-							    &seed);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					    "gnix_cdm_nic_get_cdm_seed_set returned %s\n",
-					     fi_strerror(-ret));
-				goto err;
-			}
-			ret = _gnix_cm_nic_create_cdm_id(domain_priv,
-							 seed,
-							 &cdm_id);
+			ret = _gnix_cm_nic_create_cdm_id(domain_priv, &cdm_id);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL,
 					    "gnix_cm_nic_create_cdm_id returned %s\n",

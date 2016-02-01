@@ -192,34 +192,33 @@ err:
  * Internal API functions
  ******************************************************************************/
 
-int _gnix_cm_nic_create_cdm_id(struct gnix_fid_domain *domain, uint32_t seed,
-			       uint32_t *id)
+int _gnix_cm_nic_create_cdm_id(struct gnix_fid_domain *domain, uint32_t *id)
 {
 	uint32_t cdm_id;
+	int v;
 
-	/*
-	 * the format of the cdm_id here is governed
-	 * by the fact that currently the cdm_id_seed
-	 * is the pid of the process/thread that created
-	 * the domain.  So the most likely bits to be
-	 * unique using this method is the 16 LSBs
-	 * hence these are included, upper 16 MSBs are
-	 * masked off and overwritten by the supplied
-	 * seed value.
-	 */
+/*
+ * generate a cdm_id, use the 16 LSB of base_id from domain
+ * with 16 MSBs being obtained from atomic increment of
+ * a local variable.
+ */
+	v = atomic_inc(&gnix_id_counter);
 	cdm_id = (domain->cdm_id_seed & 0x0000FFFF) |
-			((uint32_t)seed << 16);
+			((uint32_t)v << 16);
 	*id = cdm_id;
 	return FI_SUCCESS;
 }
 
-int _gnix_cm_nic_get_cdm_seed_set(struct gnix_fid_domain *domain, int nseeds,
-				  uint32_t *seed)
+int _gnix_get_new_cdm_id_set(struct gnix_fid_domain *domain, int nids,
+			     uint32_t *id)
 {
-	uint32_t seed_base;
+	uint32_t cdm_id;
+	int v;
 
-	seed_base = atomic_add(&gnix_id_counter, nseeds);
-	*seed = seed_base;
+	v = atomic_add(&gnix_id_counter, nids);
+	cdm_id = (domain->cdm_id_seed & 0x0000FFFF) |
+			((uint32_t)v << 16);
+	*id = cdm_id;
 	return FI_SUCCESS;
 }
 
@@ -481,7 +480,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 {
 	int ret = FI_SUCCESS;
 	struct gnix_cm_nic *cm_nic = NULL;
-	uint32_t cdm_id, seed;
+	uint32_t cdm_id;
 	gnix_hashtable_attr_t gnix_ht_attr = {0};
 	struct gnix_ep_name *name;
 	uint32_t name_type = GNIX_EPN_TYPE_UNBOUND;
@@ -510,16 +509,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	}
 
 	if (name_type == GNIX_EPN_TYPE_UNBOUND) {
-		ret = _gnix_cm_nic_get_cdm_seed_set(domain, 1,
-						    &seed);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				"gnix_cm_nic_get_cdm_seed_set returned %s\n",
-				  fi_strerror(-ret));
-			goto err;
-		}
-		ret = _gnix_cm_nic_create_cdm_id(domain, seed,
-						 &cdm_id);
+		ret = _gnix_cm_nic_create_cdm_id(domain, &cdm_id);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				"gnix_cm_nic_create_cdm_id returned %s\n",
