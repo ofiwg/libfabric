@@ -76,37 +76,23 @@ static int init_fabric(void)
 
 static int send_recv()
 {
-	struct fi_cq_entry comp;
 	int ret;
 
 	if (opts.dst_addr) {
 		fprintf(stdout, "Sending message...\n");
-		sprintf(buf, "Hello from Client!");
-		ret = fi_send(ep, buf, sizeof("Hello from Client!"),
-				fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
-		if (ret) {
-			FT_PRINTERR("fi_send", ret);
-			return ret;
-		}
+		snprintf(tx_buf, FT_MAX_CTRL_MSG, "Hello from Client!");
 
-		do {
-			ret = fi_cq_read(txcq, &comp, 1);
-			if (ret < 0 && ret != -FI_EAGAIN) {
-				FT_PRINTERR("fi_cq_read", ret);
-				return ret;
-			}
-		} while (ret == -FI_EAGAIN);
+		ret = ft_tx(strlen(tx_buf));
+		if (ret)
+			return ret;
 
 		fprintf(stdout, "Send completion received\n");
 	} else {
 		fprintf(stdout, "Waiting for message from client...\n");
-		do {
-			ret = fi_cq_read(rxcq, &comp, 1);
-			if (ret < 0 && ret != -FI_EAGAIN) {
-				FT_PRINTERR("fi_cq_read", ret);
-				return ret;
-			}
-		} while (ret == -FI_EAGAIN);
+
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
 
 		fprintf(stdout, "Received data from client: %s\n", (char *)buf);
 	}
