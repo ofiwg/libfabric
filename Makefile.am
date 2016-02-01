@@ -28,6 +28,7 @@ rdmainclude_HEADERS =
 
 # internal utility functions shared by in-tree providers:
 common_srcs = \
+	src/buddy_allocator.c \
 	src/common.c \
 	src/enosys.c \
 	src/rbtree.c \
@@ -47,6 +48,7 @@ util_fi_info_SOURCES = \
 util_fi_info_LDADD = $(linkback)
 
 src_libfabric_la_SOURCES = \
+	include/buddy_allocator.h \
 	include/fi.h \
 	include/fi_enosys.h \
 	include/fi_indexer.h \
