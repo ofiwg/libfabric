@@ -43,6 +43,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <inttypes.h>
+#include <netinet/in.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
