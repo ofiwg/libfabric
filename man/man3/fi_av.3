@@ -1,4 +1,4 @@
-.TH fi_av 3 "2015\-10\-15" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_av 3 "2016\-02\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_av - Address vector operations
@@ -138,6 +138,9 @@ The index of the first address inserted into an FI_AV_TABLE will be 0,
 and successive insertions will be given sequential indices.
 Sequential indices will be assigned across insertion calls on the same
 AV.
+.IP \[bu] 2
+\f[I]FI_AV_UNSPEC\f[] : Provider will choose its preferred AV type.
+The AV type used will be returned through the type field in fi_av_attr.
 .PP
 \f[I]Receive Context Bits (rx_ctx_bits)\f[] : The receive context bits
 field is only for use with scalable endpoints.
