@@ -49,10 +49,13 @@ int udpx_setname(fid_t fid, void *addr, size_t addrlen)
 int udpx_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct udpx_ep *ep;
+	socklen_t len;
 	int ret;
 
 	ep = container_of(fid, struct udpx_ep, ep_fid.fid);
-	ret = getsockname(ep->sock, addr, addrlen);
+	len = *addrlen;
+	ret = getsockname(ep->sock, addr, &len);
+	*addrlen = len;
 	return ret ? -errno : 0;
 }
 
