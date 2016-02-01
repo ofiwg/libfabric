@@ -44,7 +44,7 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 
-#include "gnix.h"
+#include "gnix_ep.h"
 
 #include <criterion/criterion.h>
 
@@ -116,4 +116,90 @@ Test(endpoint, open_close)
 		cr_assert(!ret, "fi_close endpoint");
 	}
 
+}
+
+Test(endpoint, getsetopt)
+{
+	int ret;
+	struct fid_ep *ep = NULL;
+	uint64_t val;
+	size_t len;
+
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	cr_assert(!ret, "fi_endpoint");
+
+	/* Test bad params. */
+	ret = fi_getopt(&ep->fid, !FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			(void *)&val, &len);
+	cr_assert(ret == -FI_ENOPROTOOPT, "fi_getopt");
+
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, !FI_OPT_MIN_MULTI_RECV,
+			(void *)&val, &len);
+	cr_assert(ret == -FI_ENOPROTOOPT, "fi_getopt");
+
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			NULL, &len);
+	cr_assert(ret == -FI_EINVAL, "fi_getopt");
+
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			(void *)&val, NULL);
+	cr_assert(ret == -FI_EINVAL, "fi_getopt");
+
+	ret = fi_setopt(&ep->fid, !FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			(void *)&val, sizeof(size_t));
+	cr_assert(ret == -FI_ENOPROTOOPT, "fi_setopt");
+
+	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, !FI_OPT_MIN_MULTI_RECV,
+			(void *)&val, sizeof(size_t));
+	cr_assert(ret == -FI_ENOPROTOOPT, "fi_setopt");
+
+	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			NULL, sizeof(size_t));
+	cr_assert(ret == -FI_EINVAL, "fi_setopt");
+
+	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			(void *)&val, sizeof(size_t) - 1);
+	cr_assert(ret == -FI_EINVAL, "fi_setopt");
+
+	/* Test update. */
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			(void *)&val, &len);
+	fprintf(stderr, "ret is %d\n", ret);
+	cr_assert(!ret, "fi_getopt");
+	cr_assert(val == GNIX_OPT_MIN_MULTI_RECV_DEFAULT, "fi_getopt");
+	cr_assert(len == sizeof(size_t), "fi_getopt");
+
+	val = 128;
+	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			(void *)&val, sizeof(size_t));
+	cr_assert(!ret, "fi_setopt");
+
+	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			(void *)&val, &len);
+	cr_assert(!ret, "fi_getopt");
+	cr_assert(val == 128, "fi_getopt");
+	cr_assert(len == sizeof(size_t), "fi_getopt");
+
+	ret = fi_close(&ep->fid);
+	cr_assert(!ret, "fi_close endpoint");
+}
+
+Test(endpoint, sizeleft)
+{
+	int ret;
+	size_t sz;
+	struct fid_ep *ep = NULL;
+
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	cr_assert(!ret, "fi_endpoint");
+
+	/* Test default values. */
+	sz = fi_rx_size_left(ep);
+	cr_assert(sz == 64, "fi_rx_size_left");
+
+	sz = fi_tx_size_left(ep);
+	cr_assert(sz == 64, "fi_tx_size_left");
+
+	ret = fi_close(&ep->fid);
+	cr_assert(!ret, "fi_close endpoint");
 }
