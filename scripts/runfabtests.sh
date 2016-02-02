@@ -13,6 +13,7 @@ declare CLIENT="127.0.0.1"
 declare EXCLUDE
 declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
+declare COMPLEX_CFG=quick
 
 # base ssh,  "short" and "long" timeout variants:
 declare bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
@@ -114,6 +115,10 @@ unit_tests=(
 	"size_left_test"
 )
 
+complex_tests=(
+	"ubertest"
+)
+
 function errcho {
 	>&2 echo $*
 }
@@ -138,13 +143,13 @@ function print_results {
 		# rationale.
 		emit_stdout=0
 		case $test_result in
-			Pass)
+			Pass*)
 				[ $VERBOSE -ge 3 ] && emit_stdout=1
 				;;
 			Notrun)
 				[ $VERBOSE -ge 2 ] && emit_stdout=1
 				;;
-			Fail)
+			Fail*)
 				[ $VERBOSE -ge 1 ] && emit_stdout=1
 				;;
 		esac
@@ -284,11 +289,61 @@ function cs_test {
 	fi
 }
 
+function complex_test {
+	local test=$1
+	local config=$2
+	local test_exe="fi_${test}"
+	local ret=0
+	local start_time
+	local end_time
+	local test_time
+
+	start_time=$(date '+%s')
+
+	${SERVER_CMD} "${BIN_PATH}${test_exe} -s $S_INTERFACE -x" &> $s_outp &
+	p1=$!
+	sleep 1s
+
+	${CLIENT_CMD} "${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE -f ${PROV} -t $config" &> $c_outp &
+	p2=$!
+
+	wait $p2
+	ret=$?
+
+	end_time=$(date '+%s')
+	test_time=$(compute_duration "$start_time" "$end_time")
+	if [ $ret -ne 0 ]; then
+		print_results "$test_exe" "Notrun" "0" "" ""
+		cleanup
+		skip_count+=1
+		return
+	else
+
+		local f_cnt=$(cat $c_outp | awk -F': ' '/ENOSYS|ERROR/ {total += $2} END {print total}')
+		local s_cnt=$(cat $c_outp | awk -F': ' '/Success/ {total += $2} END {print total}')
+		local total=$(cat $c_outp | awk -F': ' '/Success|ENODATA|ENOSYS|ERROR/ {total += $2} END {print total}')
+		if [ $f_cnt -eq 0 ]; then
+			print_results "$test_exe" "Pass [$s_cnt/$total]" "$test_time" "$s_outp" "$c_outp"
+			pass_count+=1
+		else
+			print_results "$test_exe" "Fail [$f_cnt/$total]" "$test_time" "$s_outp" "$c_outp"
+			cleanup
+			fail_count+=1
+		fi
+	fi
+}
+
 function main {
 	if [[ $1 == "quick" ]]; then
-		local -r tests="unit simple short"
+		local -r tests="unit simple short complex"
+		local complex_cfg=$1
 	else
-		local -r tests=$(echo $1 | sed 's/all/unit,simple,standard/g' | tr ',' ' ')
+		local -r tests=$(echo $1 | sed 's/all/unit,simple,standard,complex/g' | tr ',' ' ')
+		if [[ $1 == "all" ]]; then
+			local complex_cfg=$1
+		else
+			local complex_cfg=$COMPLEX_CFG
+		fi
 	fi
 
 	if [ $VERBOSE -eq 0 ] ; then
@@ -316,6 +371,12 @@ function main {
 		standard)
 			for test in "${standard_tests[@]}"; do
 				cs_test "$test"
+			done
+		;;
+		complex)
+			for test in "${complex_tests[@]}"; do
+				complex_test $test $complex_cfg
+
 			done
 		;;
 		*)
@@ -355,15 +416,16 @@ function usage {
 	errcho -e " -v\tprint output of failing"
 	errcho -e " -vv\tprint output of failing/notrun"
 	errcho -e " -vvv\tprint output of failing/notrun/passing"
-	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short (default quick)"
+	errcho -e " -t\ttest set(s): all,quick,unit,simple,standard,short,complex (default quick)"
 	errcho -e " -e\texclude tests: cq_data,dgram_dgram_waitset,..."
 	errcho -e " -p\tpath to test bins (default PATH)"
 	errcho -e " -c\tclient interface"
 	errcho -e " -s\tserver/host interface"
+	errcho -e " -u\tconfigure option for complex tests"
 	exit 1
 }
 
-while getopts ":vt:p:g:e:c:s:" opt; do
+while getopts ":vt:p:g:e:c:s:u:" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -378,6 +440,8 @@ case ${opt} in
 	c) C_INTERFACE=${OPTARG}
 	;;
 	s) S_INTERFACE=${OPTARG}
+	;;
+	u) COMPLEX_CFG=${OPTARG}
 	;;
 	:|\?) usage
 	;;
