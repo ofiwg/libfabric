@@ -462,7 +462,7 @@ static int udpx_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
 	struct udpx_ep *ep;
 	struct util_av *av;
-	int ret;
+	int ret = 0;
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
 	switch (bfid->fclass) {
@@ -475,7 +475,6 @@ static int udpx_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		av = container_of(bfid, struct util_av, av_fid.fid);
 		atomic_inc(&av->ref);
 		ep->av = av;
-		ret = 0;
 		break;
 	case FI_CLASS_CQ:
 		ret = udpx_ep_bind_cq(ep, container_of(bfid, struct udpx_cq,
