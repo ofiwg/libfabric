@@ -481,6 +481,8 @@ static int udpx_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = udpx_ep_bind_cq(ep, container_of(bfid, struct udpx_cq,
 						util_cq.cq_fid.fid), flags);
 		break;
+	case FI_CLASS_EQ:
+		break;
 	default:
 		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL,
 			"invalid fid class\n");
