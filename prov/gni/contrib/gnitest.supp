@@ -1,5 +1,52 @@
 #
-# We should try to get rid of these 2 benign leaks at some point
+# These are from Criterion and should be fixed in a subsequent version
+#
+
+{
+   calloc_criterion_run_all_tests
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:_dl_allocate_tls
+   fun:pthread_create@@GLIBC_2.2.5
+   fun:init_proc_compat
+   fun:criterion_run_all_tests_impl
+   fun:criterion_run_all_tests
+   fun:main
+}
+
+{
+   malloc_criterion_runn_all_tests
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:alloc_entry
+   fun:smalloc_impl
+   fun:smalloc
+   fun:test_stats_init
+   fun:run_next_test
+   fun:run_tests_async
+   fun:criterion_run_all_tests_impl
+   fun:criterion_run_all_tests
+   fun:main
+}
+
+#
+# This is an actual memory leak in uGNI.  A bug has been submitted
+#
+{
+   cq_vector_wait_event_leak
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:cq_vector_wait_event
+   ...
+}
+
+#
+# These are from specifying an additional .init function for a test
+# (there's no way to specify a replacement .init function with
+# Criterion).
 #
 {
    dg_allocation::dgram_wc_post_exchg_manual-1
@@ -10,14 +57,7 @@
    fun:fi_dupinfo@@FABRIC_1.0
    fun:fi_allocinfo
    fun:dg_setup
-   fun:run_test_child
-   fun:run_worker
-   fun:spawn_test_worker
-   fun:run_test
-   fun:map_tests
-   fun:criterion_run_all_tests_impl
-   fun:criterion_run_all_tests
-   fun:main
+   ...
 }
 
 {
@@ -31,14 +71,58 @@
    fun:gnix_getinfo
    fun:fi_getinfo@@FABRIC_1.0
    fun:dg_setup
-   fun:run_test_child
-   fun:run_worker
-   fun:spawn_test_worker
-   fun:run_test
-   fun:map_tests
-   fun:criterion_run_all_tests_impl
-   fun:criterion_run_all_tests
-   fun:main
+   ...
+}
+
+{
+   cq_msg::multi_sread_setup-1
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:gnix_fabric_open
+   fun:setup
+   fun:cq_wait_none_setup
+   ...
+}
+
+{
+   cq_msg::multi_sread_setup-2
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:fi_allocinfo_internal
+   fun:fi_dupinfo@@FABRIC_1.0
+   fun:fi_allocinfo
+   fun:setup
+   fun:cq_wait_none_setup
+   ...
+}
+
+{
+   cq_msg::multi_sread_setup-3
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:fi_allocinfo_internal
+   fun:fi_dupinfo@@FABRIC_1.0
+   fun:fi_allocinfo
+   fun:gnix_getinfo
+   fun:fi_getinfo@@FABRIC_1.0
+   fun:setup
+   fun:cq_wait_none_setup
+   ...
+}
+
+{
+   cq_msg::multi_sread_setup-4
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:gnix_cq_open
+   fun:fi_cq_open
+   fun:cq_create
+   fun:criterion_internal_test_setup
+   ...
 }
 
 #
@@ -46,41 +130,36 @@
 # compiler reading a whole word in the generated code.
 #
 {
-   check_data_rdm_rma_read_alignment_impl
+   rdm_rma_check_data
    Memcheck:Cond
    fun:check_data
    fun:do_read_buf
    fun:do_read_alignment
    fun:xfer_for_each_size
-   fun:rdm_rma_read_alignment_impl
-   fun:run_test_child
-   fun:run_worker
-   fun:spawn_test_worker
-   fun:run_test
-   fun:map_tests
-   fun:criterion_run_all_tests_impl
-   fun:criterion_run_all_tests
-   fun:main
+   ...
 }
 
 {
-   check_data_rdm_rma_read_alignment_retrans_impl
+   rdm_src_check_data_multirecv
    Memcheck:Cond
-   fun:check_data
-   fun:do_read_buf
-   fun:do_read_alignment
-   fun:xfer_for_each_size
-   fun:rdm_rma_read_alignment_retrans_impl
-   fun:run_test_child
-   fun:run_worker
-   fun:spawn_test_worker
-   fun:run_test
-   fun:map_tests
-   fun:criterion_run_all_tests_impl
-   fun:criterion_run_all_tests
-   fun:main
+   fun:rdm_sr_check_data
+   fun:do_multirecv
+   fun:rdm_sr_xfer_for_each_size
+   ...
 }
 
+{
+   rdm_src_check_data_multirecv2
+   Memcheck:Cond
+   fun:rdm_sr_check_data
+   fun:do_multirecv2
+   fun:rdm_sr_xfer_for_each_size
+   ...
+}
+
+#
+# These are from uGNI itself
+#
 {
    ioctl_cq_create
    Memcheck:Param
@@ -319,5 +398,50 @@
    GNI_CqTestEvent
    Memcheck:Addr8
    fun:GNI_CqTestEvent
+   ...
+}
+
+{
+   cq_vector_wait_event
+   Memcheck:Addr4
+   fun:cq_vector_wait_event
+   ...
+}
+
+{
+   cq_vector_wait_event
+   Memcheck:Addr8
+   fun:cq_vector_wait_event
+   ...
+}
+
+{
+   ioctl_cq_vector_wait_event
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   ...
+}
+
+{
+   GNII_CqPeek
+   Memcheck:Addr8
+   fun:GNII_CqPeek
+   ...
+}
+
+{
+   GNII_PostCqWrite
+   Memcheck:Addr8
+   fun:GNII_PostCqWrite
+   fun:GNI_PostCqWrite
+   ...
+}
+
+{
+   GNII_PostCqWrite
+   Memcheck:Addr4
+   fun:GNII_PostCqWrite
+   fun:GNI_PostCqWrite
    ...
 }
