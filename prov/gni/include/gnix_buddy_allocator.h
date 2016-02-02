@@ -74,10 +74,14 @@ static inline uint32_t __gnix_buddy_log2(uint32_t v)
 			      (IS_NOT_POW_TWO(LEN)) ? (((LEN) << 1) & ~(LEN)) :\
 			      (LEN))
 
-/* Find the bitmap index for block X */
-#define BITMAP_INDEX(X, BASE, MIN_LEN, LEN) ((size_t) ((X) - (BASE)) /\
-					     (MIN_LEN) + 2 * __gnix_buddy_log2\
-					     ((LEN) / (MIN_LEN)))
+/* Find the bitmap index for block X of size X_LEN */
+#define BITMAP_INDEX(X,\
+		     X_LEN,\
+		     BASE,\
+		     BASE_LEN,\
+		     MIN_LEN) (((size_t) ((X) - (BASE)) / (size_t) (X_LEN)) + \
+			       (BASE_LEN) / ((MIN_LEN) / 2) - (BASE_LEN) / \
+			       ((X_LEN) / 2))
 
 /* Find the address of X's buddy block:
  * If the "index" of block X is even then the buddy must be to the right of X,
