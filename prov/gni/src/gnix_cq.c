@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -151,7 +151,7 @@ static int verify_cq_attr(struct fi_cq_attr *attr, struct fi_ops_cq *ops,
 	case FI_CQ_FORMAT_TAGGED:
 		break;
 	default:
-		GNIX_WARN(FI_LOG_CQ, "format: %d unsupported\n.",
+		GNIX_WARN(FI_LOG_CQ, "format: %d unsupported.\n",
 			  attr->format);
 		return -FI_EINVAL;
 	}
@@ -444,7 +444,7 @@ static void __cq_destruct(void *obj)
 		gnix_wait_close(&cq->wait->fid);
 		break;
 	default:
-		GNIX_WARN(FI_LOG_CQ, "format: %d unsupported\n.",
+		GNIX_WARN(FI_LOG_CQ, "format: %d unsupported.\n",
 			  cq->attr.wait_obj);
 		break;
 	}

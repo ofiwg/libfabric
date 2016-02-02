@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -279,7 +279,7 @@ static void __cntr_destruct(void *obj)
 		gnix_wait_close(&cntr->wait->fid);
 		break;
 	default:
-		GNIX_WARN(FI_LOG_CQ, "format: %d unsupported\n.",
+		GNIX_WARN(FI_LOG_CQ, "format: %d unsupported.\n",
 			  cntr->attr.wait_obj);
 		break;
 	}
