@@ -261,6 +261,8 @@ static void ft_fw_convert_info(struct fi_info *info, struct ft_info *test_info)
 	info->caps = test_info->caps;
 	info->mode = test_info->mode;
 
+	info->domain_attr->av_type = test_info->av_type;
+
 	info->ep_attr->type = test_info->ep_type;
 	info->ep_attr->protocol = test_info->protocol;
 	info->ep_attr->protocol_version = test_info->protocol_version;
