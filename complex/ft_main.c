@@ -42,7 +42,6 @@
 
 #include "fabtest.h"
 
-
 int listen_sock = -1;
 int sock = -1;
 static int persistent = 1;
@@ -463,14 +462,18 @@ static void ft_fw_show_results(void)
 
 static void ft_fw_usage(char *program)
 {
-	fprintf(stderr, "usage: %s [server_node]\n", program);
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "  %s [OPTIONS] \t\t\tstart server\n", program);
+	fprintf(stderr, "  %s [OPTIONS] <server_node> \tconnect to server\n", program);
 	fprintf(stderr, "\nOptions:\n");
 	FT_PRINT_OPTS_USAGE("-q <service_port>", "Management port for test");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 	fprintf(stderr, "\nServer only options:\n");
 	FT_PRINT_OPTS_USAGE("-x", "exit after test run");
 	fprintf(stderr, "\nClient only options:\n");
-	FT_PRINT_OPTS_USAGE("-f <test_config_file>", "");
+	FT_PRINT_OPTS_USAGE("-u <test_config_file>", "config file path (Either config file path or both provider and test config name are required)");
+	FT_PRINT_OPTS_USAGE("-f <provider_name>", " provider name");
+	FT_PRINT_OPTS_USAGE("-t <test_config_name>", "test config name");
 	FT_PRINT_OPTS_USAGE("-y <start_test_index>", "");
 	FT_PRINT_OPTS_USAGE("-z <end_test_index>", "");
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
@@ -483,13 +486,21 @@ int main(int argc, char **argv)
 {
 	char *service = "2710";
 	char *filename = NULL;
+	char *provname = NULL;
+	char *testname = NULL;
 	opts = INIT_OPTS;
 	int ret, op;
 
-	while ((op = getopt(argc, argv, "f:q:xy:z:h" ADDR_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "f:u:t:q:xy:z:h" ADDR_OPTS)) != -1) {
 		switch (op) {
-		case 'f':
+		case 'u':
 			filename = optarg;
+			break;
+		case 'f':
+			provname = optarg;
+			break;
+		case 't':
+			testname = optarg;
 			break;
 		case 'q':
 			service = optarg;
@@ -523,6 +534,22 @@ int main(int argc, char **argv)
 	if (opts.dst_addr) {
 		if (!opts.dst_port)
 			opts.dst_port = default_port;
+		if (!filename) {
+			if (!testname || !provname) {
+				ft_fw_usage(argv[0]);
+				exit(1);
+			} else {
+				ret = asprintf(&filename, "%s/test_configs/%s/%s.test",
+					CONFIG_PATH, provname, testname);
+				if (ret == -1) {
+					fprintf(stderr, "asprintf failed!\n");
+					exit(1);
+				}
+			}
+		} else {
+			testname = NULL;
+			provname = NULL;
+		}
 		series = fts_load(filename);
 		if (!series)
 			exit(1);
@@ -561,5 +588,7 @@ int main(int argc, char **argv)
 out:
 	if (opts.dst_addr)
 		fts_close(series);
+	if (filename && !testname && !provname)
+		free(filename);
 	return ret;
 }
