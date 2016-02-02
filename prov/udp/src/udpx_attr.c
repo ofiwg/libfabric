@@ -81,7 +81,7 @@ struct fi_fabric_attr udpx_fabric_attr = {
 
 struct fi_info udpx_info = {
 	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE, /* | FI_MULTI_RECV, */
-	.addr_format = FI_SOCKADDR,
+	.addr_format = FI_SOCKADDR_IN,
 	.tx_attr = &udpx_tx_attr,
 	.rx_attr = &udpx_rx_attr,
 	.ep_attr = &udpx_ep_attr,

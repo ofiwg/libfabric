@@ -570,7 +570,7 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (!info || !info->ep_attr || !info->rx_attr || !info->tx_attr)
 		return -FI_EINVAL;
 
-	ret = fi_check_info(&udpx_prov, &udpx_info, info);
+	ret = udpx_check_info(info);
 	if (ret)
 		return ret;
 
