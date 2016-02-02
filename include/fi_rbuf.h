@@ -63,7 +63,7 @@ static inline int name ## _init(struct name *cq, size_t size)	\
 	cq->size_mask = cq->size - 1;				\
 	cq->rcnt = 0;						\
 	cq->wcnt = 0;						\
-	cq->buf = calloc(1, cq->size);				\
+	cq->buf = calloc(cq->size, sizeof(*cq->buf));		\
 	return cq->buf ? 0 : -ENOMEM;				\
 }								\
 								\
