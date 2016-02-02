@@ -33,6 +33,8 @@
 #ifndef _FI_EQ_H_
 #define _FI_EQ_H_
 
+#include <pthread.h>
+
 #include <rdma/fabric.h>
 
 

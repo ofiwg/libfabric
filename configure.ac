@@ -13,6 +13,7 @@ AC_CANONICAL_HOST
 
 macos=0
 linux=0
+freebsd=0
 
 case $host_os in
 *darwin*)
@@ -21,13 +22,17 @@ case $host_os in
 *linux*)
 	linux=1
 	;;
+*freebsd*)
+	freebsd=1
+	;;
 *)
-	AC_MSG_ERROR([libfabric only builds on Linux & OS X])
+	AC_MSG_ERROR([libfabric only builds on Linux, OS X, and FreeBSD])
 	;;
 esac
 
 AM_CONDITIONAL([MACOS], [test "x$macos" = "x1"])
 AM_CONDITIONAL([LINUX], [test "x$linux" = "x1"])
+AM_CONDITIONAL([FREEBSD], [test "x$freebsd" = "x1"])
 
 AC_ARG_ENABLE([debug],
 	      [AS_HELP_STRING([--enable-debug],

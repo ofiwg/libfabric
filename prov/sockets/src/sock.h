@@ -46,6 +46,7 @@
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
 #include <netdb.h>
+#include <netinet/in.h>
 
 #include <fi.h>
 #include <fi_enosys.h>
