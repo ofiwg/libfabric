@@ -105,7 +105,8 @@ static ssize_t udpx_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 				i = -FI_EAVAIL;
 			break;
 		}
-		cq->util_cq.read_entry(&buf, cirque_remove(&cq->cirq));
+		cq->util_cq.read_entry(&buf, entry);
+		cirque_discard(&cq->cirq);
 	}
 out:
 	fastlock_release(&cq->util_cq.cq_lock);
@@ -149,7 +150,8 @@ static ssize_t udpx_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 			break;
 		}
 		src_addr[i] = cq->src[cirque_rindex(&cq->cirq)];
-		cq->util_cq.read_entry(&buf, cirque_remove(&cq->cirq));
+		cq->util_cq.read_entry(&buf, entry);
+		cirque_discard(&cq->cirq);
 	}
 out:
 	fastlock_release(&cq->util_cq.cq_lock);

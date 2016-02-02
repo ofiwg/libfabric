@@ -209,7 +209,7 @@ ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		uint64_t flags)
 {
 	struct udpx_ep *ep;
-	struct udpx_ep_entry entry;
+	struct udpx_ep_entry *entry;
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
@@ -219,14 +219,15 @@ ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		goto out;
 	}
 
-	entry.context = msg->context;
-	for (entry.iov_count = 0; entry.iov_count < msg->iov_count;
-	     entry.iov_count++) {
-		entry.iov[entry.iov_count] = msg->msg_iov[entry.iov_count];
+	entry = cirque_tail(&ep->rxq);
+	entry->context = msg->context;
+	for (entry->iov_count = 0; entry->iov_count < msg->iov_count;
+	     entry->iov_count++) {
+		entry->iov[entry->iov_count] = msg->msg_iov[entry->iov_count];
 	}
-	entry.flags = 0;
+	entry->flags = 0;
 
-	cirque_insert(&ep->rxq, entry);
+	cirque_commit(&ep->rxq);
 	ret = 0;
 out:
 	fastlock_release(&ep->rx_cq->util_cq.cq_lock);
@@ -248,7 +249,7 @@ ssize_t udpx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 		fi_addr_t src_addr, void *context)
 {
 	struct udpx_ep *ep;
-	struct udpx_ep_entry entry;
+	struct udpx_ep_entry *entry;
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
@@ -258,13 +259,14 @@ ssize_t udpx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 		goto out;
 	}
 
-	entry.context = context;
-	entry.iov_count = 1;
-	entry.iov[0].iov_base = buf;
-	entry.iov[0].iov_len = len;
-	entry.flags = 0;
+	entry = cirque_tail(&ep->rxq);
+	entry->context = context;
+	entry->iov_count = 1;
+	entry->iov[0].iov_base = buf;
+	entry->iov[0].iov_len = len;
+	entry->flags = 0;
 
-	cirque_insert(&ep->rxq, entry);
+	cirque_commit(&ep->rxq);
 	ret = 0;
 out:
 	fastlock_release(&ep->rx_cq->util_cq.cq_lock);
