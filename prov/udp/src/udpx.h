@@ -71,6 +71,8 @@
 extern struct fi_provider udpx_prov;
 extern struct fi_info udpx_info;
 
+
+int udpx_check_info(struct fi_info *info);
 int udpx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		void *context);
 int udpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,

@@ -64,7 +64,7 @@ struct fi_domain_attr udpx_domain_attr = {
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
 	.resource_mgmt = FI_RM_ENABLED,
-	.av_type = FI_AV_MAP,
+	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_SCALABLE,
 	.cq_cnt = (1 << 16),
 	.ep_cnt = (1 << 15),
@@ -81,7 +81,7 @@ struct fi_fabric_attr udpx_fabric_attr = {
 
 struct fi_info udpx_info = {
 	.caps = FI_MSG | FI_SEND | FI_RECV | FI_SOURCE, /* | FI_MULTI_RECV, */
-	.addr_format = FI_SOCKADDR,
+	.addr_format = FI_SOCKADDR_IN,
 	.tx_attr = &udpx_tx_attr,
 	.rx_attr = &udpx_rx_attr,
 	.ep_attr = &udpx_ep_attr,
