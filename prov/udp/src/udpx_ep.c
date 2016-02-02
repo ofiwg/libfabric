@@ -191,7 +191,7 @@ void udpx_ep_progress(struct udpx_ep *ep)
 	hdr.msg_controllen = 0;
 	hdr.msg_flags = 0;
 
-	if (cirque_empty(&ep->rxq))
+	if (cirque_isempty(&ep->rxq))
 		return;
 
 	entry = cirque_head(&ep->rxq);
@@ -214,7 +214,7 @@ ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
 	fastlock_acquire(&ep->rx_cq->util_cq.cq_lock);
-	if (cirque_full(&ep->rxq)) {
+	if (cirque_isfull(&ep->rxq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -254,7 +254,7 @@ ssize_t udpx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
 	fastlock_acquire(&ep->rx_cq->util_cq.cq_lock);
-	if (cirque_full(&ep->rxq)) {
+	if (cirque_isfull(&ep->rxq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -281,7 +281,7 @@ ssize_t udpx_send(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
 	fastlock_acquire(&ep->tx_cq->util_cq.cq_lock);
-	if (cirque_full(&ep->tx_cq->cirq)) {
+	if (cirque_isfull(&ep->tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -316,7 +316,7 @@ ssize_t udpx_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	hdr.msg_flags = 0;
 
 	fastlock_acquire(&ep->tx_cq->util_cq.cq_lock);
-	if (cirque_full(&ep->tx_cq->cirq)) {
+	if (cirque_isfull(&ep->tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}

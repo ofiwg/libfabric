@@ -72,10 +72,10 @@ static inline void name ## _free(struct name *cq)		\
 	free(cq->buf);						\
 }
 
-#define cirque_empty(cq)	((cq)->wcnt == (cq)->rcnt)
-#define cirque_used(cq)		((cq)->wcnt - (cq)->rcnt)
-#define cirque_avail(cq)	((cq)->size - cirque_used(cq))
-#define cirque_full(cq)		(cirque_avail(cq) <= 0)
+#define cirque_isempty(cq)	((cq)->wcnt == (cq)->rcnt)
+#define cirque_usedcnt(cq)	((cq)->wcnt - (cq)->rcnt)
+#define cirque_freecnt(cq)	((cq)->size - cirque_usedcnt(cq))
+#define cirque_isfull(cq)	(cirque_freecnt(cq) <= 0)
 
 #define cirque_rindex(cq)	((cq)->rcnt & (cq)->size_mask)
 #define cirque_windex(cq)	((cq)->wcnt & (cq)->size_mask)
