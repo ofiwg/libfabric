@@ -54,7 +54,7 @@ struct gnix_tag_search_element {
 /**
  * @brief converts gnix_tag_list_element to gnix_fab_req
  *
- * @param elem  slist element embedded in a gnix_fab_req
+ * @param elem  dlist element embedded in a gnix_fab_req
  * @return pointer to gnix_fab_req
  */
 static inline struct gnix_fab_req *__to_gnix_fab_req(
@@ -124,7 +124,7 @@ int _gnix_req_matches_params(
 	return valid_request && ((req->msg.tag & ~ignore) == (tag & ~ignore));
 }
 
-static int __req_matches_context(struct slist_entry *entry, const void *arg)
+static int __req_matches_context(struct dlist_entry *entry, const void *arg)
 {
 	struct gnix_tag_list_element *tle;
 	struct gnix_fab_req *req;
@@ -136,7 +136,7 @@ static int __req_matches_context(struct slist_entry *entry, const void *arg)
 }
 
 /* used to match elements in the posted lists */
-int _gnix_match_posted_tag(struct slist_entry *entry, const void *arg)
+int _gnix_match_posted_tag(struct dlist_entry *entry, const void *arg)
 {
 	const struct gnix_tag_search_element *s_elem = arg;
 	struct gnix_tag_list_element *tle;
@@ -152,7 +152,7 @@ int _gnix_match_posted_tag(struct slist_entry *entry, const void *arg)
 }
 
 /* used to match elements in the unexpected lists */
-int _gnix_match_unexpected_tag(struct slist_entry *entry, const void *arg)
+int _gnix_match_unexpected_tag(struct dlist_entry *entry, const void *arg)
 {
 	const struct gnix_tag_search_element *s_elem = arg;
 	struct gnix_tag_list_element *tle;
@@ -179,7 +179,7 @@ static struct gnix_tag_storage_attr default_attr = {
  * @param ts           pointer to gnix_tag_storage_object
  * @param tag          tag to find
  * @param ignore       bits to ignore in tags
- * @param list         slist to search
+ * @param list         dlist to search
  * @param flags        fi_tagged flags
  * @param context      fi_context associated with tag
  * @param addr         gnix_address to find
@@ -191,12 +191,12 @@ static inline struct gnix_tag_list_element *__tag_list_peek_first_match(
 		struct gnix_tag_storage *ts,
 		uint64_t tag,
 		uint64_t ignore,
-		struct slist *list,
+		struct dlist_entry *list,
 		uint64_t flags,
 		void *context,
 		struct gnix_address *addr)
 {
-	struct slist_entry *current;
+	struct dlist_entry *current;
 	struct gnix_tag_search_element s_elem = {
 			.tag = tag,
 			.ignore = ignore,
@@ -207,7 +207,7 @@ static inline struct gnix_tag_list_element *__tag_list_peek_first_match(
 	};
 
 	/* search the list for a matching element. stop at the first match */
-	for (current = list->head; current != NULL; current = current->next) {
+	dlist_foreach(list, current) {
 		if (ts->match_func(current, &s_elem))
 			return (struct gnix_tag_list_element *) current;
 	}
@@ -221,7 +221,7 @@ static inline struct gnix_tag_list_element *__tag_list_peek_first_match(
  * @param ts           pointer to gnix_tag_storage_object
  * @param tag          tag to find
  * @param ignore       bits to ignore in tags
- * @param list         slist to search
+ * @param list         dlist to search
  * @param flags        fi_tagged flags
  * @param context      fi_context associated with tag
  * @param addr         gnix_address to find
@@ -233,7 +233,7 @@ static inline struct gnix_tag_list_element *__tag_list_find_element(
 		struct gnix_tag_storage *ts,
 		uint64_t tag,
 		uint64_t ignore,
-		struct slist *list,
+		struct dlist_entry *list,
 		uint64_t flags,
 		void *context,
 		struct gnix_address *addr)
@@ -249,7 +249,7 @@ static inline struct gnix_tag_list_element *__tag_list_find_element(
 
 	/* search the list for a matching element. stop at the first match */
 	return (struct gnix_tag_list_element *)
-			slist_remove_first_match(list,
+			dlist_remove_first_match(list,
 					ts->match_func, &s_elem);
 }
 
@@ -272,7 +272,7 @@ static inline int __check_for_invalid_attributes(
 int _gnix_tag_storage_init(
 		struct gnix_tag_storage *ts,
 		struct gnix_tag_storage_attr *attr,
-		int (*match_func)(struct slist_entry *, const void *))
+		int (*match_func)(struct dlist_entry *, const void *))
 {
 	int ret;
 	struct gnix_tag_storage_attr *attributes = &default_attr;
@@ -398,18 +398,22 @@ static struct gnix_fab_req *__gnix_tag_no_remove_req_by_context(
 	return NULL;
 }
 
+static void __gnix_tag_no_remove_tag_by_req(struct gnix_fab_req *req)
+{
+}
+
 /* list operations */
 
 static int __gnix_tag_list_init(struct gnix_tag_storage *ts)
 {
-	slist_init(&ts->list.list);
+	dlist_init(&ts->list.list);
 
 	return FI_SUCCESS;
 }
 
 static int __gnix_tag_list_fini(struct gnix_tag_storage *ts)
 {
-	if (!slist_empty(&ts->list.list))
+	if (!dlist_empty(&ts->list.list))
 		return -FI_EAGAIN;
 
 	return FI_SUCCESS;
@@ -425,7 +429,7 @@ static int __gnix_tag_list_insert_tag(
 	element = &req->msg.tle;
 	element->free.next = NULL;
 	element->context = NULL;
-	slist_insert_tail(&element->free, &ts->list.list);
+	dlist_insert_tail(&element->free, &ts->list.list);
 
 	return FI_SUCCESS;
 }
@@ -471,6 +475,17 @@ static struct gnix_fab_req *__gnix_tag_list_remove_tag(
 	return req;
 }
 
+static void __gnix_tag_list_remove_tag_by_req(struct gnix_fab_req *req)
+{
+	struct gnix_tag_list_element *element;
+	struct dlist_entry *item;
+
+	element = &req->msg.tle;
+	item = (struct dlist_entry *) element;
+	dlist_remove(item);
+	element->free.next = NULL;
+}
+
 static struct gnix_fab_req *__gnix_tag_list_remove_req_by_context(
 		struct gnix_tag_storage *ts,
 		void *context)
@@ -479,7 +494,7 @@ static struct gnix_fab_req *__gnix_tag_list_remove_req_by_context(
 	struct gnix_fab_req *req;
 
 	element = (struct gnix_tag_list_element *)
-			slist_remove_first_match(&ts->list.list,
+			dlist_remove_first_match(&ts->list.list,
 			__req_matches_context, context);
 
 	if (!element)
@@ -591,12 +606,20 @@ struct gnix_fab_req *_gnix_remove_req_by_context(
 	return ts->ops->remove_req_by_context(ts, context);
 }
 
+void _gnix_remove_tag(
+		struct gnix_tag_storage *ts,
+		struct gnix_fab_req *req)
+{
+	ts->ops->remove_tag_by_req(req);
+}
+
 struct gnix_tag_storage_ops list_ops = {
 		.init = __gnix_tag_list_init,
 		.fini = __gnix_tag_list_fini,
 		.insert_tag = __gnix_tag_list_insert_tag,
 		.peek_tag = __gnix_tag_list_peek_tag,
 		.remove_tag = __gnix_tag_list_remove_tag,
+		.remove_tag_by_req = __gnix_tag_list_remove_tag_by_req,
 		.remove_req_by_context = __gnix_tag_list_remove_req_by_context,
 };
 
@@ -604,8 +627,9 @@ struct gnix_tag_storage_ops hlist_ops = {
 		.init = __gnix_tag_no_init,
 		.fini = __gnix_tag_no_fini,
 		.insert_tag = __gnix_tag_no_insert_tag,
-		.remove_tag = __gnix_tag_no_remove_tag,
 		.peek_tag = __gnix_tag_no_peek_tag,
+		.remove_tag = __gnix_tag_no_remove_tag,
+		.remove_tag_by_req = __gnix_tag_no_remove_tag_by_req,
 		.remove_req_by_context = __gnix_tag_no_remove_req_by_context,
 };
 
@@ -613,7 +637,8 @@ struct gnix_tag_storage_ops kdtree_ops = {
 		.init = __gnix_tag_no_init,
 		.fini = __gnix_tag_no_fini,
 		.insert_tag = __gnix_tag_no_insert_tag,
-		.remove_tag = __gnix_tag_no_remove_tag,
 		.peek_tag = __gnix_tag_no_peek_tag,
+		.remove_tag = __gnix_tag_no_remove_tag,
+		.remove_tag_by_req = __gnix_tag_no_remove_tag_by_req,
 		.remove_req_by_context = __gnix_tag_no_remove_req_by_context,
 };

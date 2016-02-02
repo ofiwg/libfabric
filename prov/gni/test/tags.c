@@ -267,7 +267,7 @@ static struct gnix_fr_element default_reqs[8] = {
 static struct gnix_tag_storage *test_tag_storage;
 static int call_destruct;
 static int (*match_func)(
-		struct slist_entry *entry,
+		struct dlist_entry *entry,
 		const void *arg) = _gnix_match_posted_tag;
 
 
