@@ -296,6 +296,11 @@ static int ft_parse_key_val(char *config, jsmntok_t *token, char *test_set)
 	struct key_t *key = NULL;
 	int size = 0;
 
+	if (!strncmp(config + key_token->start, "#", 1)) {
+		parsed += 2;
+		return parsed;
+	}
+
 	for (i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
 		if (!strncmp(config + key_token->start, keys[i].str, strlen(keys[i].str))) {
 			key = &keys[i];
@@ -309,13 +314,17 @@ static int ft_parse_key_val(char *config, jsmntok_t *token, char *test_set)
 		return -1;
 	}
 
-	if (val_token->type == JSMN_STRING) {
+	switch(val_token->type) {
+	case JSMN_PRIMITIVE:
+	case JSMN_STRING:
 		size = 1;
-	} else if (val_token->type == JSMN_ARRAY) {
+		break;
+	case JSMN_ARRAY:
 		size = val_token->size;
 		val_token++;
 		parsed++;
-	} else {
+		break;
+	default:
 		FT_ERR("[jsmn] Unknown token type\n");
 		return -1;
 	}
@@ -414,6 +423,7 @@ static int ft_parse_config(char *config, int size,
 			ts_index++;
 			i++;
 			break;
+		case JSMN_PRIMITIVE:
 		case JSMN_STRING:
 			num_tokens_parsed = ft_parse_key_val(config, &tokens[i],
 					(char *)(test_sets + ts_index));
