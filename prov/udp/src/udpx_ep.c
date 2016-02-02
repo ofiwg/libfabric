@@ -177,6 +177,7 @@ static void udpx_rx_src_comp_signal(struct udpx_ep *ep, void *context,
 
 }
 
+/* Called with Rx CQ lock held */
 void udpx_ep_progress(struct udpx_ep *ep)
 {
 	struct udpx_ep_entry *entry;
@@ -190,9 +191,8 @@ void udpx_ep_progress(struct udpx_ep *ep)
 	hdr.msg_controllen = 0;
 	hdr.msg_flags = 0;
 
-	fastlock_acquire(&ep->rx_cq->util_cq.cq_lock);
 	if (cirque_empty(&ep->rxq))
-		goto out;
+		return;
 
 	entry = cirque_head(&ep->rxq);
 	hdr.msg_iov = entry->iov;
@@ -203,8 +203,6 @@ void udpx_ep_progress(struct udpx_ep *ep)
 		ep->rx_comp(ep, entry->context, 0, ret, NULL, &addr);
 		cirque_discard(&ep->rxq);
 	}
-out:
-	fastlock_release(&ep->rx_cq->util_cq.cq_lock);
 }
 
 ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
