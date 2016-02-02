@@ -26,7 +26,7 @@ fi_mr_bind
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_domain.h>
 
 int fi_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
@@ -47,7 +47,7 @@ void * fi_mr_desc(struct fid_mr *mr);
 uint64_t fi_mr_key(struct fid_mr *mr);
 
 int fi_mr_bind(struct fid_mr *mr, struct fid *bfid, uint64_t flags);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -243,7 +243,7 @@ The fi_mr_regattr call is a more generic, extensible registration call
 that allows the user to specify the registration request using a
 struct fi_mr_attr.
 
-{% highlight c %}
+```c
 struct fi_mr_attr {
 	const struct iovec *mr_iov;       /* scatter-gather array */
 	size_t             iov_count;     /* # elements in mr_iov */
@@ -251,7 +251,7 @@ struct fi_mr_attr {
 	uint64_t           requested_key; /* requested remote key */
 	void               *context;      /* user-defined context */
 };
-{% endhighlight %}
+```
 
 ## fi_close
 

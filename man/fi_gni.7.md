@@ -98,12 +98,12 @@ parameter is currently ignored.  The fi_open_ops function takes a
 `struct fi_gni_ops_domain` parameter and populates it with the
 following:
 
-{% highlight c %}
+```c
 struct fi_gni_ops_domain {
 	int (*set_val)(struct fid *fid, dom_ops_val_t t, void *val);
 	int (*get_val)(struct fid *fid, dom_ops_val_t t, void *val);
 };
-{% endhighlight %}
+```
 
 The `set_val` function sets the value of a given parameter; the
 `get_val` function returns the current value.  The currently supported

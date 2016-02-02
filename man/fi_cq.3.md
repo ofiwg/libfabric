@@ -27,7 +27,7 @@ fi_cq_strerror
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_domain.h>
 
 int fi_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -55,7 +55,7 @@ int fi_cq_signal(struct fid_cq *cq);
 
 const char * fi_cq_strerror(struct fid_cq *cq, int prov_errno,
       const void *err_data, char *buf, size_t len);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -125,7 +125,7 @@ offloaded entirely in provider hardware.
 The properties and behavior of a completion queue are defined by
 `struct fi_cq_attr`.
 
-{% highlight c %}
+```c
 struct fi_cq_attr {
 	size_t               size;      /* # entries for CQ */
 	uint64_t             flags;     /* operation flags */
@@ -135,7 +135,7 @@ struct fi_cq_attr {
 	enum fi_cq_wait_cond wait_cond; /* wait condition format */
 	struct fid_wait     *wait_set;  /* optional wait set */
 };
-{% endhighlight %}
+```
 
 *size*
 : Specifies the minimum size of a completion queue. A value of 0 indicates that
@@ -161,29 +161,29 @@ struct fi_cq_attr {
 : Provides only user specified context that was associated with the
   completion.
 
-{% highlight c %}
+```c
 struct fi_cq_entry {
 	void     *op_context; /* operation context */
 };
-{% endhighlight %}
+```
 
 - *FI_CQ_FORMAT_MSG*
 : Provides minimal data for processing completions, with expanded
   support for reporting information about received messages.
 
-{% highlight c %}
+```c
 struct fi_cq_msg_entry {
 	void     *op_context; /* operation context */
 	uint64_t flags;       /* completion flags */
 	size_t   len;         /* size of received data */
 };
-{% endhighlight %}
+```
 
 - *FI_CQ_FORMAT_DATA*
 : Provides data associated with a completion.  Includes support for
   received message length, remote EQ data, and multi-receive buffers.
 
-{% highlight c %}
+```c
 struct fi_cq_data_entry {
 	void     *op_context; /* operation context */
 	uint64_t flags;       /* completion flags */
@@ -191,13 +191,13 @@ struct fi_cq_data_entry {
 	void     *buf;        /* receive data buffer */
 	uint64_t data;        /* completion data */
 };
-{% endhighlight %}
+```
 
 - *FI_CQ_FORMAT_TAGGED*
 : Expands completion data to include support for the tagged message
   interfaces.
 
-{% highlight c %}
+```c
 struct fi_cq_tagged_entry {
 	void     *op_context; /* operation context */
 	uint64_t flags;       /* completion flags */
@@ -206,7 +206,7 @@ struct fi_cq_tagged_entry {
 	uint64_t data;        /* completion data */
 	uint64_t tag;         /* received tag */
 };
-{% endhighlight %}
+```
 
 *wait_obj*
 : CQ's may be associated with a specific wait object.  Wait objects
@@ -353,7 +353,7 @@ immediately whether an error completion was found or not.
 Error information is reported to the user through `struct
 fi_cq_err_entry`.  The format of this structure is defined below.
 
-{% highlight c %}
+```c
 struct fi_cq_err_entry {
 	void     *op_context; /* operation context */
 	uint64_t flags;       /* completion flags */
@@ -366,7 +366,7 @@ struct fi_cq_err_entry {
 	int      prov_errno;  /* provider error code */
 	void    *err_data;    /*  error data */
 };
-{% endhighlight %}
+```
 
 The general reason for the error is provided through the err field.
 Provider specific error information may also be available through the

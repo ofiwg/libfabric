@@ -17,7 +17,7 @@ fi_setname / fi_getname / fi_getpeer
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_cm.h>
 
 int fi_connect(struct fid_ep *ep, const void *addr,
@@ -37,7 +37,7 @@ int fi_setname(fid_t fid, void *addr, size_t addrlen);
 int fi_getname(fid_t fid, void *addr, size_t *addrlen);
 
 int fi_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 

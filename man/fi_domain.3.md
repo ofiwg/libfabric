@@ -11,7 +11,7 @@ fi_domain \- Open a fabric access domain
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fabric.h>
 
 #include <rdma/fi_domain.h>
@@ -26,7 +26,7 @@ int fi_domain_bind(struct fid_domain *domain, struct fid *eq,
 
 int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
     void **ops, void *context);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -106,7 +106,7 @@ prior to calling fi_close, otherwise the call will return -FI_EBUSY.
 The `fi_domain_attr` structure defines the set of attributes associated
 with a domain.
 
-{% highlight c %}
+```c
 struct fi_domain_attr {
 	struct fid_domain     *domain;
 	char                  *name;
@@ -127,7 +127,7 @@ struct fi_domain_attr {
 	size_t                max_ep_stx_ctx;
 	size_t                max_ep_srx_ctx;
 };
-{% endhighlight %}
+```
 
 ## domain
 

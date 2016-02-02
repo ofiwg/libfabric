@@ -11,11 +11,11 @@ Direct fabric provider access
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 -DFABRIC_DIRECT
 
 #define FABRIC_DIRECT
-{% endhighlight %}
+```
 
 Fabric direct provides a mechanism for applications to compile against
 a specific fabric providers without going through the libfabric

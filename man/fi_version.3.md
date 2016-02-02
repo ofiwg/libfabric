@@ -11,7 +11,7 @@ fi_version \- Version of the library interfaces
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fabric.h>
 
 uint32_t fi_version();
@@ -19,7 +19,7 @@ uint32_t fi_version();
 FI_MAJOR(version)
 
 FI_MINOR(version)
-{% endhighlight %}
+```
 
 # DESCRIPTION
 
