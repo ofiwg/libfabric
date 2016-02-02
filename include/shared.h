@@ -168,12 +168,23 @@ char *cnt_str(char str[FT_STR_LEN], long long cnt);
 int size_to_count(int size);
 
 
-#define FT_CLOSE_FID(fd)			\
-	do {					\
-		if ((fd)) {			\
-			fi_close(&(fd)->fid);	\
-			fd = NULL;		\
-		}				\
+#define FT_PRINTERR(call, retv) \
+	do { fprintf(stderr, call "(): %s:%d, ret=%d (%s)\n", __FILE__, __LINE__, (int) retv, fi_strerror((int) -retv)); } while (0)
+
+#define FT_ERR(fmt, ...) \
+	do { fprintf(stderr, "%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__); } while (0)
+
+
+#define FT_CLOSE_FID(fd)					\
+	do {							\
+		int ret;					\
+		if ((fd)) {					\
+			ret = fi_close(&(fd)->fid);		\
+			if (ret)				\
+				FT_ERR("fi_close (%d) fid %d\n",	\
+					ret, (int) (fd)->fid.fclass);	\
+			fd = NULL;				\
+		}						\
 	} while (0)
 
 #define FT_CLOSEV_FID(fd, cnt)			\
@@ -231,12 +242,6 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter);
 void show_perf_mr(int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter, int argc, char *argv[]);
-
-#define FT_PRINTERR(call, retv) \
-	do { fprintf(stderr, call "(): %s:%d, ret=%d (%s)\n", __FILE__, __LINE__, (int) retv, fi_strerror((int) -retv)); } while (0)
-
-#define FT_ERR(fmt, ...) \
-	do { fprintf(stderr, "%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__); } while (0)
 
 #define FT_PROCESS_QUEUE_ERR(readerr, rd, queue, fn, str)	\
 	do {							\
