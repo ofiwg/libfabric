@@ -177,6 +177,7 @@ static void udpx_rx_src_comp_signal(struct udpx_ep *ep, void *context,
 
 }
 
+/* Called with Rx CQ lock held */
 void udpx_ep_progress(struct udpx_ep *ep)
 {
 	struct udpx_ep_entry *entry;
@@ -190,9 +191,8 @@ void udpx_ep_progress(struct udpx_ep *ep)
 	hdr.msg_controllen = 0;
 	hdr.msg_flags = 0;
 
-	fastlock_acquire(&ep->rx_cq->util_cq.cq_lock);
-	if (cirque_empty(&ep->rxq))
-		goto out;
+	if (cirque_isempty(&ep->rxq))
+		return;
 
 	entry = cirque_head(&ep->rxq);
 	hdr.msg_iov = entry->iov;
@@ -203,32 +203,31 @@ void udpx_ep_progress(struct udpx_ep *ep)
 		ep->rx_comp(ep, entry->context, 0, ret, NULL, &addr);
 		cirque_discard(&ep->rxq);
 	}
-out:
-	fastlock_release(&ep->rx_cq->util_cq.cq_lock);
 }
 
 ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		uint64_t flags)
 {
 	struct udpx_ep *ep;
-	struct udpx_ep_entry entry;
+	struct udpx_ep_entry *entry;
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
 	fastlock_acquire(&ep->rx_cq->util_cq.cq_lock);
-	if (cirque_full(&ep->rxq)) {
+	if (cirque_isfull(&ep->rxq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	entry.context = msg->context;
-	for (entry.iov_count = 0; entry.iov_count < msg->iov_count;
-	     entry.iov_count++) {
-		entry.iov[entry.iov_count] = msg->msg_iov[entry.iov_count];
+	entry = cirque_tail(&ep->rxq);
+	entry->context = msg->context;
+	for (entry->iov_count = 0; entry->iov_count < msg->iov_count;
+	     entry->iov_count++) {
+		entry->iov[entry->iov_count] = msg->msg_iov[entry->iov_count];
 	}
-	entry.flags = 0;
+	entry->flags = 0;
 
-	cirque_insert(&ep->rxq, entry);
+	cirque_commit(&ep->rxq);
 	ret = 0;
 out:
 	fastlock_release(&ep->rx_cq->util_cq.cq_lock);
@@ -250,23 +249,24 @@ ssize_t udpx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 		fi_addr_t src_addr, void *context)
 {
 	struct udpx_ep *ep;
-	struct udpx_ep_entry entry;
+	struct udpx_ep_entry *entry;
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
 	fastlock_acquire(&ep->rx_cq->util_cq.cq_lock);
-	if (cirque_full(&ep->rxq)) {
+	if (cirque_isfull(&ep->rxq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	entry.context = context;
-	entry.iov_count = 1;
-	entry.iov[0].iov_base = buf;
-	entry.iov[0].iov_len = len;
-	entry.flags = 0;
+	entry = cirque_tail(&ep->rxq);
+	entry->context = context;
+	entry->iov_count = 1;
+	entry->iov[0].iov_base = buf;
+	entry->iov[0].iov_len = len;
+	entry->flags = 0;
 
-	cirque_insert(&ep->rxq, entry);
+	cirque_commit(&ep->rxq);
 	ret = 0;
 out:
 	fastlock_release(&ep->rx_cq->util_cq.cq_lock);
@@ -281,7 +281,7 @@ ssize_t udpx_send(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
 	fastlock_acquire(&ep->tx_cq->util_cq.cq_lock);
-	if (cirque_full(&ep->tx_cq->cirq)) {
+	if (cirque_isfull(&ep->tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -316,7 +316,7 @@ ssize_t udpx_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	hdr.msg_flags = 0;
 
 	fastlock_acquire(&ep->tx_cq->util_cq.cq_lock);
-	if (cirque_full(&ep->tx_cq->cirq)) {
+	if (cirque_isfull(&ep->tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -481,6 +481,8 @@ static int udpx_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = udpx_ep_bind_cq(ep, container_of(bfid, struct udpx_cq,
 						util_cq.cq_fid.fid), flags);
 		break;
+	case FI_CLASS_EQ:
+		break;
 	default:
 		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL,
 			"invalid fid class\n");
@@ -570,7 +572,7 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (!info || !info->ep_attr || !info->rx_attr || !info->tx_attr)
 		return -FI_EINVAL;
 
-	ret = fi_check_info(&udpx_prov, &udpx_info, info);
+	ret = udpx_check_info(info);
 	if (ret)
 		return ret;
 

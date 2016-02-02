@@ -947,6 +947,9 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	util_attr.overhead = attr->count >> 2;
 	util_attr.flags = domain->caps & FI_SOURCE ? FI_SOURCE : 0;
 
+	if (attr->type == FI_AV_UNSPEC)
+		attr->type = FI_AV_MAP;
+
 	ret = fi_av_create(domain, attr, &util_attr, av, context);
 	if (ret)
 		return ret;

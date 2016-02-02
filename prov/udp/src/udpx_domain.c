@@ -53,7 +53,7 @@ int udpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 {
 	int ret;
 
-	ret = fi_check_info(&udpx_prov, &udpx_info, info);
+	ret = udpx_check_info(info);
 	if (ret)
 		return ret;
 
