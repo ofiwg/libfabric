@@ -13,7 +13,7 @@ fi_allocinfo / fi_dupinfo \- Allocate / duplicate an fi_info structure
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fabric.h>
 
 int fi_getinfo(int version, const char *node, const char *service,
@@ -24,7 +24,7 @@ void fi_freeinfo(struct fi_info *info);
 struct fi_info *fi_allocinfo(void);
 
 struct fi_info *fi_dupinfo(const struct fi_info *info);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -111,7 +111,7 @@ a single fi_info structure and all the substructures within it.
 
 # FI_INFO
 
-{% highlight c %}
+```c
 struct fi_info {
 	struct fi_info        *next;
 	uint64_t              caps;
@@ -128,7 +128,7 @@ struct fi_info {
 	struct fi_domain_attr *domain_attr;
 	struct fi_fabric_attr *fabric_attr;
 };
-{% endhighlight %}
+```
 
 *next*
 : Pointer to the next fi_info structure in the list.  Will be NULL

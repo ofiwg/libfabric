@@ -29,7 +29,7 @@ fi_cntr_wait
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_domain.h>
 
 int fi_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
@@ -47,7 +47,7 @@ int fi_cntr_set(struct fid_cntr *cntr, uint64_t value);
 
 int fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
     int timeout);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -93,14 +93,14 @@ value.
 fi_cntr_open allocates a new fabric counter.  The properties and
 behavior of the counter are defined by `struct fi_cntr_attr`.
 
-{% highlight c %}
+```c
 struct fi_cntr_attr {
 	enum fi_cntr_events  events;    /* type of events to count */
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
 	struct fid_wait     *wait_set;  /* optional wait set */
 	uint64_t             flags;     /* operation flags */
 };
-{% endhighlight %}
+```
 
 *events*
 : A counter captures different types of events.  The specific type

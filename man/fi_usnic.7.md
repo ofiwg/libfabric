@@ -81,7 +81,7 @@ extension, which returns IP and SR-IOV information about a usNIC
 interface obtained from the [`fi_getinfo`(3)](fi_getinfo.3.html)
 function.
 
-{% highlight c %}
+```c
 #include <stdio.h>
 #include <rdma/fabric.h>
 
@@ -145,7 +145,7 @@ int main(int argc, char *argv[]) {
     fi_freeinfo(info_list);
     return 0;
 }
-{% endhighlight %}
+```
 
 Note that other usnic extensions are defined for other fabric objects.
 The second argument to [`fi_open_ops`(3)](fi_open_ops.3.html) is used

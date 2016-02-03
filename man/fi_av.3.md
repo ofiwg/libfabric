@@ -26,7 +26,7 @@ fi_av_straddr
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_domain.h>
 
 int fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -58,7 +58,7 @@ fi_addr_t fi_rx_addr(fi_addr_t fi_addr, int rx_index,
 
 const char * fi_av_straddr(struct fid_av *av, const void *addr,
       void *buf, size_t *len);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -111,7 +111,7 @@ must first bind an event queue to the AV before inserting addresses.
 fi_av_open allocates or opens an address vector.  The properties and
 behavior of the address vector are defined by `struct fi_av_attr`.
 
-{% highlight c %}
+```c
 struct fi_av_attr {
 	enum fi_av_type  type;        /* type of AV */
 	int              rx_ctx_bits; /* address bits to identify rx ctx */
@@ -121,7 +121,7 @@ struct fi_av_attr {
 	void             *map_addr;   /* base mmap address */
 	uint64_t         flags;       /* operation flags */
 };
-{% endhighlight %}
+```
 
 *type*
 : An AV type corresponds to a conceptual implementation of an address

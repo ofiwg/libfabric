@@ -18,7 +18,7 @@ fi_inject_write / fi_writedata
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_rma.h>
 
 ssize_t fi_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
@@ -51,7 +51,7 @@ ssize_t fi_writedata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -155,7 +155,7 @@ unconnected endpoints, with the ability to control the write operation
 per call through the use of flags.  The fi_writemsg function takes a
 struct fi_msg_rma as input.
 
-{% highlight c %}
+```c
 struct fi_msg_rma {
 	const struct iovec *msg_iov;     /* local scatter-gather array */
 	void               **desc;       /* operation descriptor */
@@ -172,7 +172,7 @@ struct fi_rma_iov {
 	size_t             len;          /* size of target buffer */
 	uint64_t           key;          /* access key */
 };
-{% endhighlight %}
+```
 
 ## fi_inject_write
 

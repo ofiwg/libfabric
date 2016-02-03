@@ -30,7 +30,7 @@ fi_control
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_domain.h>
 
 int fi_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
@@ -54,7 +54,7 @@ int fi_close(struct fid *waitset);
 int fi_wait(struct fid_wait *waitset, int timeout);
 
 int fi_control(struct fid *waitset, int command, void *arg);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -100,11 +100,11 @@ multiple completion queues and counters and checking for their completions.
 
 A poll set is defined with the following attributes.
 
-{% highlight c %}
+```c
 struct fi_poll_attr {
 	uint64_t             flags;     /* operation flags */
 };
-{% endhighlight %}
+```
 
 *flags*
 : Flags that set the default operation of the poll set.  The use of
@@ -146,12 +146,12 @@ associated completion queue or counter.
 The properties and behavior of a wait set are defined by struct
 fi_wait_attr.
 
-{% highlight c %}
+```c
 struct fi_wait_attr {
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
 	uint64_t             flags;     /* operation flags */
 };
-{% endhighlight %}
+```
 
 *wait_obj*
 : Wait sets are associated with specific wait object(s).  Wait objects

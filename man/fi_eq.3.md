@@ -29,7 +29,7 @@ fi_eq_strerror
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_domain.h>
 
 int fi_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
@@ -53,7 +53,7 @@ ssize_t fi_eq_sread(struct fid_eq *eq, uint32_t *event,
 
 const char * fi_eq_strerror(struct fid_eq *eq, int prov_errno,
       const void *err_data, char *buf, size_t len);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -114,7 +114,7 @@ fi_eq_open allocates a new event queue.
 The properties and behavior of an event queue are defined by `struct
 fi_eq_attr`.
 
-{% highlight c %}
+```c
 struct fi_eq_attr {
 	size_t               size;      /* # entries for EQ */
 	uint64_t             flags;     /* operation flags */
@@ -122,7 +122,7 @@ struct fi_eq_attr {
 	int                  signaling_vector; /* interrupt affinity */
 	struct fid_wait     *wait_set;  /* optional wait set */
 };
-{% endhighlight %}
+```
 
 *size*
 : Specifies the minimum size of an event queue.
@@ -209,12 +209,12 @@ commands are usable with an EQ.
   object will be written.  This should be an 'int *' for FI_WAIT_FD,
   or 'struct fi_mutex_cond' for FI_WAIT_MUTEX_COND.
   
-{% highlight c %}
+```c
 struct fi_mutex_cond {
 	pthread_mutex_t     *mutex;
 	pthread_cond_t      *cond;
 };
-{% endhighlight %}
+```
 
 ## fi_eq_read
 
@@ -240,13 +240,13 @@ information regarding the format associated with each event.
   Control requests report their completion by inserting a `struct
   fi_eq_entry` into the EQ.  The format of this structure is:
 
-{% highlight c %}
+```c
 struct fi_eq_entry {
 	fid_t            fid;        /* fid associated with request */
 	void            *context;    /* operation context */
 	uint64_t         data;       /* completion-specific data */
 };
-{% endhighlight %}
+```
 
   For the completion of basic asynchronous control operations, the
   returned event will indicate the operation that has completed, and
@@ -268,13 +268,13 @@ struct fi_eq_entry {
   FI_SHUTDOWN.  Connection notifications are reported using `struct
   fi_eq_cm_entry`:
 
-{% highlight c %}
+```c
 struct fi_eq_cm_entry {
 	fid_t            fid;        /* fid associated with request */
 	struct fi_info  *info;       /* endpoint information */
 	uint8_t         data[];     /* app connection data */
 };
-{% endhighlight %}
+```
 
   A connection request (FI_CONNREQ) event indicates that
   a remote endpoint wishes to establish a new connection to a listening,
@@ -364,7 +364,7 @@ call fi_eq_readerr.
 Error information is reported to the user through struct
 fi_eq_err_entry.  The format of this structure is defined below.
 
-{% highlight c %}
+```c
 struct fi_eq_err_entry {
 	fid_t            fid;        /* fid associated with error */
 	void            *context;    /* operation context */
@@ -374,7 +374,7 @@ struct fi_eq_err_entry {
 	void            *err_data;   /* additional error data */
 	size_t           err_data_size; /* size of err_data */
 };
-{% endhighlight %}
+```
 
 The fid will reference the fabric descriptor associated with the
 event.  For memory registration, this will be the fid_mr, address

@@ -52,32 +52,7 @@ tagline: Libfabric Programmer's Manual
    The whole block is needed, and it must be the first input in the
    file.
 
-2. In Github-flavored Markdown, you may be used to using "fenced
-   blocks" for multi-line code blocks, like this:
-
-```c
-void my_c_code(void) {
-  int i;
-  /* Hello, world */
-}
-```
-
-   Such fenced blocks will not work in Jekyll.  Instead, you must
-   delineate your code blocks with Jekyll delimiters:
-
-{% highlight c %}
-void my_c_code(void) {
-  int i;
-  /* Hello, world */
-}
-{% endhighlight %}
-
-   This will result in a pretty code box in the rendered HTML output,
-   and it will be syntax highlighted for the C language.  Leave the
-   "c" out of the first directive if your multi-line block is not C
-   code, and then it won't do C syntax highlighting.
-
-3. The libfabric man pages are full of 2-level lists of things.  E.g.,
+2. The libfabric man pages are full of 2-level lists of things.  E.g.,
    lists of functions, and then in some of the functions, there is a
    sub-list of flags that can be used with that function.  
 
@@ -107,7 +82,7 @@ void my_c_code(void) {
   FI_WRITE flag is not set, then the application may not invoke
   fi_cq_write of fi_cq_writeerr.
 
-4. There's a small number of places in the libfabric man pages where
+3. There's a small number of places in the libfabric man pages where
    there are unnumbered lists with deliberate line breaks.  For
    example:
 
@@ -127,7 +102,7 @@ fi_atomic / fi_atomicv__
 fi_atomicto / fi_atomicmsg
 : Initiates an atomic operation to remote memory
 
-5. The "SEE ALSO" items at the end of each man page are linked to
+4. The "SEE ALSO" items at the end of each man page are linked to
    their corresponding man pages.  Note that the links are made to
    ".html" files -- *not* ".md" files.  If you care, the reason is
    because the Github web servers statically generate .html files from
