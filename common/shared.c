@@ -1250,6 +1250,7 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 			opts->options |= FT_OPT_RX_CNTR | FT_OPT_TX_CNTR;
 			opts->options &= ~(FT_OPT_RX_CQ | FT_OPT_TX_CQ);
 		}
+		break;
 	case 'a':
 		opts->av_name = optarg;
 		break;
