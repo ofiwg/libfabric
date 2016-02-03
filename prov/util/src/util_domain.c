@@ -50,6 +50,7 @@ static int util_domain_close(fid_t fid)
 	fastlock_release(&domain->fabric->lock);
 
 	fastlock_destroy(&domain->lock);
+	atomic_dec(&domain->fabric->ref);
 	free(domain);
 	return 0;
 }
