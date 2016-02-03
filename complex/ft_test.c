@@ -392,10 +392,10 @@ static int ft_run_bandwidth(void)
 
 static void ft_cleanup(void)
 {
-	ft_free_res();
 	ft_cleanup_xcontrol(&ft_rx_ctrl);
 	ft_cleanup_xcontrol(&ft_tx_ctrl);
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
+	ft_free_res();
 }
 
 int ft_run_test()
