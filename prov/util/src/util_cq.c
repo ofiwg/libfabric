@@ -63,7 +63,6 @@ int fi_check_cq_attr(const struct fi_provider *prov,
 		/* fall through */
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
-		break;
 		switch (attr->wait_cond) {
 		case FI_CQ_COND_NONE:
 		case FI_CQ_COND_THRESHOLD:
