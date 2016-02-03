@@ -120,14 +120,13 @@ void util_buf_release(struct util_buf_pool *pool, void *buf)
 	slist_insert_head(&util_buf->entry, &pool->buf_list);
 }
 
-int util_buf_pool_destroy(struct util_buf_pool *pool)
+void util_buf_pool_destroy(struct util_buf_pool *pool)
 {
 	struct slist_entry *entry;
 	struct util_buf_region *buf_region;
 
 #if ENABLE_DEBUG
-	if (pool->num_used)
-		return -FI_EBUSY;
+	assert(pool->num_used == 0);
 #endif
 	while (!slist_empty(&pool->region_list)) {
 		entry = slist_remove_head(&pool->region_list);
@@ -136,5 +135,4 @@ int util_buf_pool_destroy(struct util_buf_pool *pool)
 		free(buf_region);
 	}
 	free(pool);
-	return 0;
 }

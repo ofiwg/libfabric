@@ -176,7 +176,6 @@ static inline size_t fi_get_aligned_sz(size_t size, size_t alignment)
 		size : ((size / alignment) + 1) * alignment;
 }
 
-
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
 
 

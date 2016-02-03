@@ -64,6 +64,7 @@ src_libfabric_la_SOURCES = \
 	include/fi_rbuf.h \
 	include/fi_signal.h \
 	include/fi_util.h \
+	include/fi_mem.h \
 	include/fasthash.h \
 	include/rbtree.h \
 	include/prov.h \

@@ -175,6 +175,9 @@ static inline struct slist_entry *slist_remove_head(struct slist *list)
 		slist_init(list);
 	else
 		list->head = item->next;
+#if ENABLE_DEBUG
+	item->next = NULL;
+#endif
 	return item;
 }
 

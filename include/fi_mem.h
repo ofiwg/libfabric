@@ -34,26 +34,11 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <rdma/fabric.h>
-#include <rdma/fi_atomic.h>
-#include <rdma/fi_cm.h>
-#include <rdma/fi_domain.h>
-#include <rdma/fi_endpoint.h>
-#include <rdma/fi_eq.h>
-#include <rdma/fi_errno.h>
-#include <rdma/fi_prov.h>
-#include <rdma/fi_rma.h>
-#include <rdma/fi_tagged.h>
-#include <rdma/fi_trigger.h>
-
 #include <fi.h>
 #include <fi_list.h>
-#include <fi_signal.h>
-#include <fi_enosys.h>
 
 #ifndef _FI_MEM_H_
 #define _FI_MEM_H_
-
 
 /*
  * Buffer Pool
@@ -83,8 +68,8 @@ union util_buf {
 };
 
 struct util_buf_pool *util_buf_pool_create(size_t size, size_t alignment,
-					   size_t max_num, size_t chunk_num);
-int util_buf_pool_destroy(struct util_buf_pool *pool);
+					   size_t max_cnt, size_t chunk_cnt);
+void util_buf_pool_destroy(struct util_buf_pool *pool);
 
 void *util_buf_get(struct util_buf_pool *pool);
 void util_buf_release(struct util_buf_pool *pool, void *buf);
