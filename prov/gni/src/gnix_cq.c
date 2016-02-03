@@ -500,8 +500,6 @@ static ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	if (_gnix_queue_peek(cq_priv->errors))
 		return -FI_EAVAIL;
 
-	assert(buf);
-
 	fastlock_acquire(&cq_priv->lock);
 
 	while (_gnix_queue_peek(cq_priv->events) && count--) {
