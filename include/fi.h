@@ -41,6 +41,8 @@
 #include <string.h>
 #include <sys/param.h>
 
+#include <fi_lock.h>
+
 #include <rdma/fabric.h>
 #include <rdma/fi_prov.h>
 #include <rdma/fi_atomic.h>
@@ -171,88 +173,6 @@ static inline size_t fi_get_aligned_sz(size_t size, size_t alignment)
 }
 
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
-
-
-#if PT_LOCK_SPIN == 1
-
-#define fastlock_t_ pthread_spinlock_t
-#define fastlock_init_(lock) pthread_spin_init(lock, PTHREAD_PROCESS_PRIVATE)
-#define fastlock_destroy_(lock) pthread_spin_destroy(lock)
-#define fastlock_acquire_(lock) pthread_spin_lock(lock)
-#define fastlock_tryacquire_(lock) pthread_spin_trylock(lock)
-#define fastlock_release_(lock) pthread_spin_unlock(lock)
-
-#else
-
-#define fastlock_t_ pthread_mutex_t
-#define fastlock_init_(lock) pthread_mutex_init(lock, NULL)
-#define fastlock_destroy_(lock) pthread_mutex_destroy(lock)
-#define fastlock_acquire_(lock) pthread_mutex_lock(lock)
-#define fastlock_tryacquire_(lock) pthread_mutex_trylock(lock)
-#define fastlock_release_(lock) pthread_mutex_unlock(lock)
-
-#endif /* PT_LOCK_SPIN */
-
-#if ENABLE_DEBUG
-
-typedef struct {
-	fastlock_t_ impl;
-	int is_initialized;
-} fastlock_t;
-
-static inline int fastlock_init(fastlock_t *lock)
-{
-	int ret;
-
-	ret = fastlock_init_(&lock->impl);
-	lock->is_initialized = !ret;
-	return ret;
-}
-
-static inline void fastlock_destroy(fastlock_t *lock)
-{
-	int ret;
-
-	assert(lock->is_initialized);
-	lock->is_initialized = 0;
-	ret = fastlock_destroy_(&lock->impl);
-	assert(!ret);
-}
-
-static inline void fastlock_acquire(fastlock_t *lock)
-{
-	int ret;
-
-	assert(lock->is_initialized);
-	ret = fastlock_acquire_(&lock->impl);
-	assert(!ret);
-}
-
-static inline int fastlock_tryacquire(fastlock_t *lock)
-{
-	assert(lock->is_initialized);
-	return fastlock_tryacquire_(&lock->impl);
-}
-
-static inline void fastlock_release(fastlock_t *lock)
-{
-	int ret;
-
-	assert(lock->is_initialized);
-	ret = fastlock_release_(&lock->impl);
-	assert(!ret);
-}
-
-#else /* !ENABLE_DEBUG */
-
-#  define fastlock_t fastlock_t_
-#  define fastlock_init(lock) fastlock_init_(lock)
-#  define fastlock_destroy(lock) fastlock_destroy_(lock)
-#  define fastlock_acquire(lock) fastlock_acquire_(lock)
-#  define fastlock_tryacquire(lock) fastlock_tryacquire_(lock)
-#  define fastlock_release(lock) fastlock_release_(lock)
-
-#endif
 
 
 #if ENABLE_DEBUG
@@ -403,7 +323,6 @@ static inline int atomic_sub(atomic_t *atomic, int val)
 /* non exported symbols */
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
 int fi_poll_fd(int fd, int timeout);
-int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout);
 
 size_t fi_datatype_size(enum fi_datatype datatype);
 uint64_t fi_tag_bits(uint64_t mem_tag_format);

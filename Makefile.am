@@ -61,6 +61,7 @@ src_libfabric_la_SOURCES = \
 	include/fi_enosys.h \
 	include/fi_indexer.h \
 	include/fi_list.h \
+	include/fi_lock.h \
 	include/fi_mem.h \
 	include/fi_osd.h \
 	include/fi_rbuf.h \
