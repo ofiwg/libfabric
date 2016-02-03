@@ -1617,8 +1617,13 @@ int sock_ep_get_conn(struct sock_ep *ep, struct sock_tx_ctx *tx_ctx,
 	if (conn == SOCK_CM_CONN_IN_PROGRESS)
 		conn = sock_ep_connect(ep, av_index);
 
-	if (!conn)
-		return -errno;
+	if (!conn) {
+		SOCK_LOG_ERROR("Error in connecting: %s\n", strerror(errno));
+		if (errno == EINPROGRESS)
+			return -FI_EAGAIN;
+		else
+			return -errno;
+	}
 
 	*pconn = conn;
 	return conn->address_published ? 0 : sock_conn_send_src_addr(ep, tx_ctx, conn);
