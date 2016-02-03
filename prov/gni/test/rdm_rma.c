@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -79,6 +80,7 @@ size_t gni_addr[2];
 static struct fid_cq *send_cq[2];
 static struct fid_cq *recv_cq[2];
 static struct fi_cq_attr cq_attr[2];
+static struct fid_stx *stx_ctx[2];
 
 #define BUF_SZ (64*1024)
 char *target;
@@ -140,6 +142,9 @@ void rdm_rma_setup(void)
 	ret = fi_cq_open(dom[0], cq_attr, recv_cq, 0);
 	cr_assert(!ret, "fi_cq_open");
 
+	ret = fi_stx_context(dom[0], NULL, &stx_ctx[0], 0);
+	cr_assert(!ret, "fi_stx_context");
+
 	ret = fi_domain(fab, fi, dom + 1, NULL);
 	cr_assert(!ret, "fi_domain");
 
@@ -151,6 +156,9 @@ void rdm_rma_setup(void)
 
 	ret = fi_endpoint(dom[1], fi, &ep[1], NULL);
 	cr_assert(!ret, "fi_endpoint");
+
+	ret = fi_stx_context(dom[1], NULL, &stx_ctx[1], 0);
+	cr_assert(!ret, "fi_stx_context");
 
 	cq_attr[1].format = FI_CQ_FORMAT_TAGGED;
 	cq_attr[1].size = 1024;
@@ -172,6 +180,16 @@ void rdm_rma_setup(void)
 	ret = fi_ep_bind(ep[0], &recv_cq[0]->fid, FI_RECV);
 	cr_assert(!ret, "fi_ep_bind");
 
+	ret = fi_ep_bind(ep[0], &stx_ctx[0]->fid, 0);
+	cr_assert(!ret, "fi_ep_bind stx");
+
+	/*
+	 * this shouldn't work, wrond domain
+	 */
+
+	ret = fi_ep_bind(ep[0], &stx_ctx[1]->fid, 0);
+	cr_assert_eq(ret, -FI_EINVAL);
+
 	ret = fi_getname(&ep[0]->fid, NULL, &addrlen);
 	cr_assert(addrlen > 0);
 
@@ -186,6 +204,9 @@ void rdm_rma_setup(void)
 
 	ret = fi_ep_bind(ep[1], &recv_cq[1]->fid, FI_RECV);
 	cr_assert(!ret, "fi_ep_bind");
+
+	ret = fi_ep_bind(ep[1], &stx_ctx[1]->fid, 0);
+	cr_assert(!ret, "fi_ep_bind stx");
 
 	ret = fi_getname(&ep[1]->fid, NULL, &addrlen);
 	cr_assert(addrlen > 0);
@@ -301,6 +322,12 @@ void rdm_rma_teardown(void)
 
 	ret = fi_close(&rem_mr[1]->fid);
 	cr_assert(!ret, "failure in closing dom[1] remote mr.");
+
+	ret = fi_close(&stx_ctx[0]->fid);
+	cr_assert(!ret, "failure in closing dom[0] stx_ctx.");
+
+	ret = fi_close(&stx_ctx[1]->fid);
+	cr_assert(!ret, "failure in closing dom[1] stx_ctx.");
 
 	free(target);
 	free(source);
