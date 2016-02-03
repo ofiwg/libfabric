@@ -17,7 +17,7 @@ fi_tsend / fi_tsendv / fi_tsendmsg / fi_tinject / fi_tsenddata
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_tagged.h>
 
 ssize_t fi_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
@@ -49,7 +49,7 @@ ssize_t fi_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr, uint64_t tag);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -107,9 +107,9 @@ the incoming message with a corresponding receive buffer.  Message
 tags match when the receive buffer tag is the same as the send buffer
 tag with the ignored bits masked out.  This can be stated as:
 
-{% highlight c %}
+```c
 send_tag & ~ignore == recv_tag & ~ignore
-{% endhighlight %}
+```
 
 In general, message tags are checked against receive buffers in the
 order in which messages have been posted to the endpoint.  See the
@@ -160,7 +160,7 @@ unconnected endpoints, with the ability to control the send operation
 per call through the use of flags.  The fi_tsendmsg function takes a
 struct fi_msg_tagged as input.
 
-{% highlight c %}
+```c
 struct fi_msg_tagged {
 	const struct iovec *msg_iov; /* scatter-gather array */
 	void               *desc;    /* data descriptor */
@@ -171,7 +171,7 @@ struct fi_msg_tagged {
 	void               *context; /* user-defined context */
 	uint64_t           data;     /* optional immediate data */
 };
-{% endhighlight %}
+```
 
 ## fi_tinject
 

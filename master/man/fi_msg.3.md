@@ -18,7 +18,7 @@ fi_inject / fi_senddata
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_endpoint.h>
 
 ssize_t fi_recv(struct fid_ep *ep, void * buf, size_t len,
@@ -47,7 +47,7 @@ ssize_t fi_senddata(struct fid_ep *ep, void *buf, size_t len,
 
 ssize_t fi_injectdata(struct fid_ep *ep, void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -139,7 +139,7 @@ unconnected endpoints, with the ability to control the send operation
 per call through the use of flags.  The fi_sendmsg function takes a
 `struct fi_msg` as input.
 
-{% highlight c %}
+```c
 struct fi_msg {
 	const struct iovec *msg_iov; /* scatter-gather array */
 	void               **desc;   /* local request descriptors */
@@ -148,7 +148,7 @@ struct fi_msg {
 	void               *context; /* user-defined context */
 	uint64_t           data;     /* optional message data */
 };
-{% endhighlight %}
+```
 
 ## fi_inject
 

@@ -25,7 +25,7 @@ fi_atomic_valid / fi_fetch_atomic_valid / fi_compare_atomic_valid
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_atomic.h>
 
 ssize_t fi_atomic(struct fid_ep *ep, const void *buf,
@@ -88,7 +88,7 @@ int fi_fetch_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
 
 int fi_compare_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
     enum fi_op op, size_t *count);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -218,125 +218,125 @@ operations.  A conceptual description of each operation is provided.
 
 *FI_MIN*
 : Minimum
-{% highlight c %}
+```c
 if (buf[i] < addr[i])
     addr[i] = buf[i]
-{% endhighlight %}
+```
 
 *FI_MAX*
 : Maximum
-{% highlight c %}
+```c
 if (buf[i] > addr[i])
     addr[i] = buf[i]
-{% endhighlight %}
+```
 
 *FI_SUM*
 : Sum
-{% highlight c %}
+```c
 addr[i] = addr[i] + buf[i]
-{% endhighlight %}
+```
 
 *FI_PROD*
 : Product
-{% highlight c %}
+```c
 addr[i] = addr[i] * buf[i]
-{% endhighlight %}
+```
 
 *FI_LOR*
 : Logical OR
-{% highlight c %}
+```c
 addr[i] = (addr[i] || buf[i])
-{% endhighlight %}
+```
 
 *FI_LAND*
 : Logical AND
-{% highlight c %}
+```c
 addr[i] = (addr[i] && buf[i])
-{% endhighlight %}
+```
 
 *FI_BOR*
 : Bitwise OR
-{% highlight c %}
+```c
 addr[i] = addr[i] | buf[i]
-{% endhighlight %}
+```
 
 *FI_BAND*
 : Bitwise AND
-{% highlight c %}
+```c
 addr[i] = addr[i] & buf[i]
-{% endhighlight %}
+```
 
 *FI_LXOR*
 : Logical exclusive-OR (XOR)
-{% highlight c %}
+```c
 addr[i] = ((addr[i] && !buf[i]) || (!addr[i] && buf[i]))
-{% endhighlight %}
+```
 
 *FI_BXOR*
 : Bitwise exclusive-OR (XOR)
-{% highlight c %}
+```c
 addr[i] = addr[i] ^ buf[i]
-{% endhighlight %}
+```
 
 *FI_ATOMIC_READ*
 : Read data atomically
-{% highlight c %}
+```c
 buf[i] = addr[i]
-{% endhighlight %}
+```
 
 *FI_ATOMIC_WRITE*
 : Write data atomically
-{% highlight c %}
+```c
 addr[i] = buf[i]
-{% endhighlight %}
+```
 
 *FI_CSWAP*
 : Compare values and if equal swap with data
-{% highlight c %}
+```c
 if (compare[i] == addr[i])
     addr[i] = buf[i]
-{% endhighlight %}
+```
 
 *FI_CSWAP_NE*
 : Compare values and if not equal swap with data
-{% highlight c %}
+```c
 if (compare[i] != addr[i])
     addr[i] = buf[i]
-{% endhighlight %}
+```
 
 *FI_CSWAP_LE*
 : Compare values and if less than or equal swap with data
-{% highlight c %}
+```c
 if (compare[i] <= addr[i])
     addr[i] = buf[i]
-{% endhighlight %}
+```
 
 *FI_CSWAP_LT*
 : Compare values and if less than swap with data
-{% highlight c %}
+```c
 if (compare[i] < addr[i])
     addr[i] = buf[i]
-{% endhighlight %}
+```
 
 *FI_CSWAP_GE*
 : Compare values and if greater than or equal swap with data
-{% highlight c %}
+```c
 if (compare[i] >= addr[i])
     addr[i] = buf[i]
-{% endhighlight %}
+```
 
 *FI_CSWAP_GT*
 : Compare values and if greater than swap with data
-{% highlight c %}
+```c
 if (compare[i] > addr[i])
     addr[i] = buf[i]
-{% endhighlight %}
+```
 
 *FI_MSWAP*
 : Swap masked bits with data
-{% highlight c %}
+```c
 addr[i] = (buf[i] & compare[i]) | (addr[i] & ~compare[i])
-{% endhighlight %}
+```
 
 ## Base Atomic Functions
 
@@ -375,7 +375,7 @@ and unconnected endpoints, with the ability to control the atomic
 operation per call through the use of flags.  The fi_atomicmsg
 function takes a struct fi_msg_atomic as input.
 
-{% highlight c %}
+```c
 struct fi_msg_atomic {
 	const struct fi_ioc *msg_iov; /* local scatter-gather array */
 	void                **desc;   /* local access descriptors */
@@ -394,7 +394,7 @@ struct fi_rma_ioc {
     size_t             count;        /* # target operands */
     uint64_t           key;          /* access key */
 };
-{% endhighlight %}
+```
 
 The following list of atomic operations are usable with base
 atomic operations: FI_MIN, FI_MAX, FI_SUM, FI_PROD,
@@ -515,7 +515,7 @@ the entire array.  The following pseudo-code demonstrates this operation
 for 64-bit unsigned atomic write.  ATOMIC_WRITE_U64 is a platform
 dependent macro that atomically writes 8 bytes to an aligned memory location.
 
-{% highlight c %}
+```c
 fi_atomic(ep, buf, count, NULL, dest_addr, addr, key,
 	FI_UINT64, FI_ATOMIC_WRITE, context);
 {
@@ -523,7 +523,7 @@ fi_atomic(ep, buf, count, NULL, dest_addr, addr, key,
 		ATOMIC_WRITE_U64(((uint64_t *) addr)[i],
 			((uint64_t *) buf)[i]);
 }
-{% endhighlight %}
+```
 
 The number of array elements to operate on is specified through a count
 parameter.  This must be between 1 and the maximum returned through the

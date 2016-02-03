@@ -17,7 +17,7 @@ fi_tostr
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fabric.h>
 
 int fi_fabric(struct fi_fabric_attr *attr,
@@ -26,7 +26,7 @@ int fi_fabric(struct fi_fabric_attr *attr,
 int fi_close(struct fid *fabric);
 
 char * fi_tostr(const void *data, enum fi_type datatype);
-{% endhighlight %}
+```
 
 # ARGUMENTS
 
@@ -132,14 +132,14 @@ domains, passive endpoints, and CM event queues.
 The fi_fabric_attr structure defines the set of attributes associated
 with a fabric and a fabric provider.
 
-{% highlight c %}
+```c
 struct fi_fabric_attr {
 	struct fid_fabric *fabric;
 	char              *name;
 	char              *prov_name;
 	uint32_t          prov_version;
 };
-{% endhighlight %}
+```
 
 ## fabric
 

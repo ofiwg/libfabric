@@ -13,11 +13,11 @@ fi_strerror \- Convert fabric error into a printable string
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_errno.h>
 
 const char *fi_strerror(int errno);
-{% endhighlight %}
+```
 
 
 # ERRORS

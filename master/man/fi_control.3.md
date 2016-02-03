@@ -11,11 +11,11 @@ fi_control \- Perform an operation on a fabric resource.
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fabric.h>
 
 int fi_control(struct fid *fid, int command, void *arg);
-{% endhighlight %}
+```
 
 
 # ARGUMENTS

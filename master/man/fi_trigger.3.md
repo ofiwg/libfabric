@@ -11,9 +11,9 @@ fi_trigger - Triggered operations
 
 # SYNOPSIS
 
-{% highlight c %}
+```c
 #include <rdma/fi_trigger.h>
-{% endhighlight %}
+```
 
 # DESCRIPTION
 
@@ -48,7 +48,7 @@ condition is met when the request is made, then the data transfer may
 be initiated immediately.  The format of struct fi_triggered_context
 is described below.
 
-{% highlight c %}
+```c
 struct fi_triggered_context {
 	enum fi_trigger_event   event_type;   /* trigger type */
 	union {
@@ -56,7 +56,7 @@ struct fi_triggered_context {
 		void                *internal[3]; /* reserved */
 	} trigger;
 };
-{% endhighlight %}
+```
 
 The triggered context indicates the type of event assigned to the
 trigger, along with a union of trigger details that is based on the
@@ -72,12 +72,12 @@ The following trigger events are defined.
   value.  The threshold is specified using struct
   fi_trigger_threshold:
 
-{% highlight c %}
+```c
 struct fi_trigger_threshold {
 	struct fid_cntr *cntr; /* event counter to check */
 	size_t threshold;      /* threshold value */
 };
-{% endhighlight %}
+```
 
 Threshold operations are triggered in the order of the threshold
 values.  This is true even if the counter increments by a value

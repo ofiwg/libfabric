@@ -125,13 +125,13 @@ Logging is performed using the FI_ERR, FI_LOG, and FI_DEBUG macros.
 
 ## DEFINITIONS
 
-{% highlight c %}
+```c
 #define FI_ERR(prov_name, subsystem, ...)
 
 #define FI_LOG(prov_name, prov, level, subsystem, ...)
 
 #define FI_DEBUG(prov_name, subsystem, ...)
-{% endhighlight %}
+```
 
 ## ARGUMENTS
 *prov_name*
