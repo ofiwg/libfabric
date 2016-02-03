@@ -21,12 +21,12 @@ bin_PROGRAMS = \
 	streaming/fi_rdm_atomic \
 	streaming/fi_rdm_multi_recv \
 	streaming/fi_rdm_rma \
-	pingpong/fi_msg_pingpong \
-	pingpong/fi_rdm_inject_pingpong \
-	pingpong/fi_rdm_cntr_pingpong \
-	pingpong/fi_ud_pingpong \
-	pingpong/fi_rdm_pingpong \
-	pingpong/fi_rdm_tagged_pingpong \
+	benchmarks/fi_msg_pingpong \
+	benchmarks/fi_rdm_inject_pingpong \
+	benchmarks/fi_rdm_cntr_pingpong \
+	benchmarks/fi_ud_pingpong \
+	benchmarks/fi_rdm_pingpong \
+	benchmarks/fi_rdm_tagged_pingpong \
 	unit/fi_eq_test \
 	unit/fi_av_test \
 	unit/fi_size_left_test \
@@ -136,41 +136,41 @@ streaming_fi_rdm_rma_SOURCES = \
 	streaming/rdm_rma.c
 streaming_fi_rdm_rma_LDADD = libfabtests.la
 
-pingpong_fi_msg_pingpong_SOURCES = \
-	pingpong/msg_pingpong.c \
-	pingpong/pingpong_shared.h \
-	pingpong/pingpong_shared.c
-pingpong_fi_msg_pingpong_LDADD = libfabtests.la
+benchmarks_fi_msg_pingpong_SOURCES = \
+	benchmarks/msg_pingpong.c \
+	benchmarks/pingpong_shared.h \
+	benchmarks/pingpong_shared.c
+benchmarks_fi_msg_pingpong_LDADD = libfabtests.la
 
-pingpong_fi_ud_pingpong_SOURCES = \
-	pingpong/ud_pingpong.c \
-	pingpong/pingpong_shared.h \
-	pingpong/pingpong_shared.c
-pingpong_fi_ud_pingpong_LDADD = libfabtests.la
+benchmarks_fi_ud_pingpong_SOURCES = \
+	benchmarks/ud_pingpong.c \
+	benchmarks/pingpong_shared.h \
+	benchmarks/pingpong_shared.c
+benchmarks_fi_ud_pingpong_LDADD = libfabtests.la
 
-pingpong_fi_rdm_cntr_pingpong_SOURCES = \
-	pingpong/rdm_cntr_pingpong.c \
-	pingpong/pingpong_shared.h \
-	pingpong/pingpong_shared.c
-pingpong_fi_rdm_cntr_pingpong_LDADD = libfabtests.la
+benchmarks_fi_rdm_cntr_pingpong_SOURCES = \
+	benchmarks/rdm_cntr_pingpong.c \
+	benchmarks/pingpong_shared.h \
+	benchmarks/pingpong_shared.c
+benchmarks_fi_rdm_cntr_pingpong_LDADD = libfabtests.la
 
-pingpong_fi_rdm_pingpong_SOURCES = \
-	pingpong/rdm_pingpong.c \
-	pingpong/pingpong_shared.h \
-	pingpong/pingpong_shared.c
-pingpong_fi_rdm_pingpong_LDADD = libfabtests.la
+benchmarks_fi_rdm_pingpong_SOURCES = \
+	benchmarks/rdm_pingpong.c \
+	benchmarks/pingpong_shared.h \
+	benchmarks/pingpong_shared.c
+benchmarks_fi_rdm_pingpong_LDADD = libfabtests.la
 
-pingpong_fi_rdm_tagged_pingpong_SOURCES = \
-	pingpong/rdm_tagged_pingpong.c \
-	pingpong/pingpong_shared.h \
-	pingpong/pingpong_shared.c
-pingpong_fi_rdm_tagged_pingpong_LDADD = libfabtests.la
+benchmarks_fi_rdm_tagged_pingpong_SOURCES = \
+	benchmarks/rdm_tagged_pingpong.c \
+	benchmarks/pingpong_shared.h \
+	benchmarks/pingpong_shared.c
+benchmarks_fi_rdm_tagged_pingpong_LDADD = libfabtests.la
 
-pingpong_fi_rdm_inject_pingpong_SOURCES = \
-	pingpong/rdm_inject_pingpong.c \
-	pingpong/pingpong_shared.h \
-	pingpong/pingpong_shared.c
-pingpong_fi_rdm_inject_pingpong_LDADD = libfabtests.la
+benchmarks_fi_rdm_inject_pingpong_SOURCES = \
+	benchmarks/rdm_inject_pingpong.c \
+	benchmarks/pingpong_shared.h \
+	benchmarks/pingpong_shared.c
+benchmarks_fi_rdm_inject_pingpong_LDADD = libfabtests.la
 
 
 unit_fi_eq_test_SOURCES = \
