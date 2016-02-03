@@ -42,6 +42,7 @@
 #include <sys/param.h>
 
 #include <fi_lock.h>
+#include <fi_atom.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_prov.h>
@@ -50,9 +51,6 @@
 
 #include <fi_osd.h>
 
-#ifdef HAVE_ATOMICS
-#  include <stdatomic.h>
-#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -175,152 +173,6 @@ static inline size_t fi_get_aligned_sz(size_t size, size_t alignment)
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
 
 
-#if ENABLE_DEBUG
-#define ATOMIC_IS_INITIALIZED(atomic) assert(atomic->is_initialized)
-#else
-#define ATOMIC_IS_INITIALIZED(atomic)
-#endif
-
-#ifdef HAVE_ATOMICS
-typedef struct {
-    atomic_int val;
-#if ENABLE_DEBUG
-    int is_initialized;
-#endif
-} atomic_t;
-
-static inline int atomic_inc(atomic_t *atomic)
-{
-	ATOMIC_IS_INITIALIZED(atomic);
-	return atomic_fetch_add_explicit(&atomic->val, 1, memory_order_acq_rel) + 1;
-}
-
-static inline int atomic_dec(atomic_t *atomic)
-{
-	ATOMIC_IS_INITIALIZED(atomic);
-	return atomic_fetch_sub_explicit(&atomic->val, 1, memory_order_acq_rel) - 1;
-}
-
-static inline int atomic_set(atomic_t *atomic, int value)
-{
-	ATOMIC_IS_INITIALIZED(atomic);
-	atomic_store(&atomic->val, value);
-	return value;
-}
-
-static inline int atomic_get(atomic_t *atomic)
-{
-	ATOMIC_IS_INITIALIZED(atomic);
-	return atomic_load(&atomic->val);
-}
-
-/* avoid using "atomic_init" so we don't conflict with symbol/macro from stdatomic.h */
-static inline void atomic_initialize(atomic_t *atomic, int value)
-{
-	atomic_init(&atomic->val, value);
-#if ENABLE_DEBUG
-	atomic->is_initialized = 1;
-#endif
-}
-
-static inline int atomic_add(atomic_t *atomic, int val)
-{
-	ATOMIC_IS_INITIALIZED(atomic);
-	return atomic_fetch_add_explicit(&atomic->val,
-			val, memory_order_acq_rel) + 1;
-}
-
-static inline int atomic_sub(atomic_t *atomic, int val)
-{
-	ATOMIC_IS_INITIALIZED(atomic);
-	return atomic_fetch_sub_explicit(&atomic->val,
-			val, memory_order_acq_rel) - 1;
-}
-
-#else
-
-typedef struct {
-	fastlock_t lock;
-	int val;
-#if ENABLE_DEBUG
-	int is_initialized;
-#endif
-} atomic_t;
-
-static inline int atomic_inc(atomic_t *atomic)
-{
-	int v;
-
-	ATOMIC_IS_INITIALIZED(atomic);
-	fastlock_acquire(&atomic->lock);
-	v = ++(atomic->val);
-	fastlock_release(&atomic->lock);
-	return v;
-}
-
-static inline int atomic_dec(atomic_t *atomic)
-{
-	int v;
-
-	ATOMIC_IS_INITIALIZED(atomic);
-	fastlock_acquire(&atomic->lock);
-	v = --(atomic->val);
-	fastlock_release(&atomic->lock);
-	return v;
-}
-
-static inline int atomic_set(atomic_t *atomic, int value)
-{
-	ATOMIC_IS_INITIALIZED(atomic);
-	fastlock_acquire(&atomic->lock);
-	atomic->val = value;
-	fastlock_release(&atomic->lock);
-	return value;
-}
-
-/* avoid using "atomic_init" so we don't conflict with symbol/macro from stdatomic.h */
-static inline void atomic_initialize(atomic_t *atomic, int value)
-{
-	fastlock_init(&atomic->lock);
-	atomic->val = value;
-#if ENABLE_DEBUG
-	atomic->is_initialized = 1;
-#endif
-}
-
-static inline int atomic_get(atomic_t *atomic)
-{
-	ATOMIC_IS_INITIALIZED(atomic);
-	return atomic->val;
-}
-
-static inline int atomic_add(atomic_t *atomic, int val)
-{
-	int v;
-
-	ATOMIC_IS_INITIALIZED(atomic);
-	fastlock_acquire(&atomic->lock);
-	atomic->val += val;
-	v = atomic->val;
-	fastlock_release(&atomic->lock);
-	return v;
-}
-
-static inline int atomic_sub(atomic_t *atomic, int val)
-{
-	int v;
-
-	ATOMIC_IS_INITIALIZED(atomic);
-	fastlock_acquire(&atomic->lock);
-	atomic->val -= val;
-	v = atomic->val;
-	fastlock_release(&atomic->lock);
-	return v;
-}
-
-#endif // HAVE_ATOMICS
-
-/* non exported symbols */
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
 int fi_poll_fd(int fd, int timeout);
 
