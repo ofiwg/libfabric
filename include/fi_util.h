@@ -295,7 +295,6 @@ struct util_event {
 int fi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq_fid, void *context);
 
-
 /*
  * Attributes and capabilities
  */
