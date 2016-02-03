@@ -41,6 +41,7 @@
 #include "gnix.h"
 #include "gnix_datagram.h"
 #include "gnix_cm_nic.h"
+#include "gnix_nic.h"
 #include "gnix_hashtable.h"
 
 
@@ -291,10 +292,12 @@ err:
 static void  __cm_nic_destruct(void *obj)
 {
 	int ret;
-	gni_return_t status;
 	struct gnix_cm_nic *cm_nic = (struct gnix_cm_nic *)obj;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
+	if (cm_nic->nic != NULL)
+		_gnix_ref_put(cm_nic->nic);
 
 	if (cm_nic->dgram_hndl != NULL) {
 		ret = _gnix_dgram_hndl_free(cm_nic->dgram_hndl);
@@ -311,15 +314,7 @@ static void  __cm_nic_destruct(void *obj)
 				  "gnix_ht_destroy returned %d\n",
 				  ret);
 		free(cm_nic->addr_to_ep_ht);
-	}
-
-	if (cm_nic->gni_cdm_hndl != NULL) {
-		status = GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "cdm destroy failed - %s\n",
-				  gni_err_str[status]);
-		}
+		cm_nic->addr_to_ep_ht = NULL;
 	}
 
 	free(cm_nic);
@@ -467,11 +462,11 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 {
 	int ret = FI_SUCCESS;
 	struct gnix_cm_nic *cm_nic = NULL;
-	uint32_t device_addr, cdm_id;
-	gni_return_t status;
+	uint32_t cdm_id;
 	gnix_hashtable_attr_t gnix_ht_attr = {0};
 	struct gnix_ep_name *name;
 	uint32_t name_type = GNIX_EPN_TYPE_UNBOUND;
+	struct gnix_nic_attr nic_attr = {0};
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -504,100 +499,74 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	GNIX_INFO(FI_LOG_EP_CTRL, "creating cm_nic for %u/0x%x/%u\n",
 		      domain->ptag, domain->cookie, cdm_id);
 
-	if ((name_type == GNIX_EPN_TYPE_BOUND) ||
-	    (domain->cm_nic == NULL)) {
-
-		cm_nic = (struct gnix_cm_nic *)calloc(1, sizeof(*cm_nic));
-		if (cm_nic == NULL) {
-			ret = -FI_ENOMEM;
-			goto err;
-		}
-
-		status = GNI_CdmCreate(cdm_id,
-				       domain->ptag,
-				       domain->cookie,
-				       gnix_cdm_modes,
-				       &cm_nic->gni_cdm_hndl);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmCreate returned %s\n",
-				       gni_err_str[status]);
-			ret = gnixu_to_fi_errno(status);
-			goto err;
-		}
-
-		/*
-		 * Okay, now go for the attach
-		 */
-		status = GNI_CdmAttach(cm_nic->gni_cdm_hndl, 0, &device_addr,
-				       &cm_nic->gni_nic_hndl);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmAttach returned %s\n",
-			       gni_err_str[status]);
-			ret = gnixu_to_fi_errno(status);
-			goto err;
-		}
-
-		cm_nic->my_name.gnix_addr.cdm_id = cdm_id;
-		cm_nic->ptag = domain->ptag;
-		cm_nic->my_name.cookie = domain->cookie;
-		cm_nic->my_name.gnix_addr.device_addr = device_addr;
-		cm_nic->domain = domain;
-		cm_nic->ctrl_progress = domain->control_progress;
-		cm_nic->my_name.name_type = name_type;
-		fastlock_init(&cm_nic->lock);
-		fastlock_init(&cm_nic->wq_lock);
-		dlist_init(&cm_nic->cm_nic_wq);
-
-		/*
-		 * prep the cm nic's dgram component
-		 */
-		ret = _gnix_dgram_hndl_alloc(domain->fabric,
-					     cm_nic,
-					     domain->control_progress,
-					     &cm_nic->dgram_hndl);
-		if (ret != FI_SUCCESS)
-			goto err;
-
-		/*
-		 * allocate hash table for translating ep addresses
-		 * to ep's.
-		 * This table will not be large - how many FI_EP_RDM ep's
-		 * will an app create using one domain?, nor in the critical path
-		 * so just use defaults.
-		 */
-		cm_nic->addr_to_ep_ht = calloc(1, sizeof(struct gnix_hashtable));
-		if (cm_nic->addr_to_ep_ht == NULL)
-			goto err;
-
-		gnix_ht_attr.ht_initial_size = 64;
-		gnix_ht_attr.ht_maximum_size = 1024;
-		gnix_ht_attr.ht_increase_step = 2;
-		gnix_ht_attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
-		gnix_ht_attr.ht_collision_thresh = 500;
-		gnix_ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
-		gnix_ht_attr.ht_internal_locking = 1;
-		gnix_ht_attr.destructor = NULL;
-
-		ret = _gnix_ht_init(cm_nic->addr_to_ep_ht, &gnix_ht_attr);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "gnix_ht_init returned %s\n",
-				  fi_strerror(-ret));
-			goto err;
-		}
-
-		_gnix_ref_init(&cm_nic->ref_cnt, 1, __cm_nic_destruct);
-		/*
- 		 * if this is not a bound endpoint, set the domain's cm_nic
- 		 * field to point to this new cm_nic
- 		 */
-
-		if (name_type == GNIX_EPN_TYPE_UNBOUND)
-			domain->cm_nic = cm_nic;
-	} else  {
-		cm_nic = domain->cm_nic;
-		_gnix_ref_get(cm_nic);
+	cm_nic = (struct gnix_cm_nic *)calloc(1, sizeof(*cm_nic));
+	if (cm_nic == NULL) {
+		ret = -FI_ENOMEM;
+		goto err;
 	}
+
+	nic_attr.use_cdm_id = true;
+	nic_attr.cdm_id = cdm_id;
+
+	ret = gnix_nic_alloc(domain, &nic_attr, &cm_nic->nic);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "gnix_nic_alloc returned %s\n",
+			  fi_strerror(-ret));
+		goto err;
+	}
+
+	cm_nic->my_name.gnix_addr.cdm_id = cdm_id;
+	cm_nic->ptag = domain->ptag;
+	cm_nic->my_name.cookie = domain->cookie;
+	cm_nic->my_name.gnix_addr.device_addr =
+	cm_nic->nic->device_addr;
+	cm_nic->domain = domain;
+	cm_nic->ctrl_progress = domain->control_progress;
+	cm_nic->my_name.name_type = name_type;
+	fastlock_init(&cm_nic->lock);
+	fastlock_init(&cm_nic->wq_lock);
+	dlist_init(&cm_nic->cm_nic_wq);
+
+	/*
+	 * prep the cm nic's dgram component
+	 */
+	ret = _gnix_dgram_hndl_alloc(domain->fabric,
+				     cm_nic,
+				     domain->control_progress,
+				     &cm_nic->dgram_hndl);
+	if (ret != FI_SUCCESS)
+		goto err;
+
+	/*
+	 * allocate hash table for translating ep addresses
+	 * to ep's.
+	 * This table will not be large - how many FI_EP_RDM ep's
+	 * will an app create using one domain?, nor in the critical path
+	 * so just use defaults.
+	 */
+	cm_nic->addr_to_ep_ht = calloc(1, sizeof(struct gnix_hashtable));
+	if (cm_nic->addr_to_ep_ht == NULL)
+		goto err;
+
+	gnix_ht_attr.ht_initial_size = 64;
+	gnix_ht_attr.ht_maximum_size = 1024;
+	gnix_ht_attr.ht_increase_step = 2;
+	gnix_ht_attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
+	gnix_ht_attr.ht_collision_thresh = 500;
+	gnix_ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
+	gnix_ht_attr.ht_internal_locking = 1;
+	gnix_ht_attr.destructor = NULL;
+
+	ret = _gnix_ht_init(cm_nic->addr_to_ep_ht, &gnix_ht_attr);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "gnix_ht_init returned %s\n",
+			  fi_strerror(-ret));
+		goto err;
+	}
+
+	_gnix_ref_init(&cm_nic->ref_cnt, 1, __cm_nic_destruct);
 
 	*cm_nic_ptr = cm_nic;
 	return ret;
@@ -606,8 +575,8 @@ err:
 	if (cm_nic->dgram_hndl)
 		_gnix_dgram_hndl_free(cm_nic->dgram_hndl);
 
-	if (cm_nic->gni_cdm_hndl)
-		GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
+	if (cm_nic->nic)
+		_gnix_nic_free(cm_nic->nic);
 
 	if (cm_nic->addr_to_ep_ht) {
 		_gnix_ht_destroy(cm_nic->addr_to_ep_ht);

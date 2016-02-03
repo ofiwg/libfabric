@@ -88,6 +88,8 @@ typedef int (*smsg_completer_fn_t)(void  *desc, gni_return_t);
 struct gnix_nic_attr {
 	gni_cdm_handle_t gni_cdm_hndl;
 	gni_nic_handle_t gni_nic_hndl;
+	bool use_cdm_id;
+	uint32_t cdm_id;
 };
 
 /**

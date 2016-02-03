@@ -58,6 +58,7 @@
 #include "gnix_datagram.h"
 #include "gnix_util.h"
 #include "gnix_cm_nic.h"
+#include "gnix_nic.h"
 
 
 /*******************************************************************************
@@ -415,15 +416,18 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 	struct gnix_datagram *dg_ptr;
 	uint64_t datagram_id = 0UL;
 	struct gnix_cm_nic *cm_nic = NULL;
+	struct gnix_nic *nic = NULL;
 	struct gnix_address responding_addr;
 
 	cm_nic = hndl->cm_nic;
 	assert(cm_nic != NULL);
+	nic = cm_nic->nic;
+	assert(nic != NULL);
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (type == GNIX_DGRAM_BLOCK) {
-		status = GNI_PostdataProbeWaitById(cm_nic->gni_nic_hndl,
+		status = GNI_PostdataProbeWaitById(nic->gni_nic_hndl,
 						   -1,
 						   &datagram_id);
 		if ((status != GNI_RC_SUCCESS) &&
@@ -435,7 +439,7 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 			goto err;
 		}
 	} else {
-		status = GNI_PostDataProbeById(cm_nic->gni_nic_hndl,
+		status = GNI_PostDataProbeById(nic->gni_nic_hndl,
 						   &datagram_id);
 		if ((status != GNI_RC_SUCCESS) &&
 			(status  != GNI_RC_NO_MATCH)) {
@@ -458,7 +462,7 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 		/*
 		 * do need to take lock here
 		 */
-		fastlock_acquire(&cm_nic->lock);
+		fastlock_acquire(&nic->lock);
 
 		if (dg_ptr->pre_test_clbk_fn != NULL) {
 			ret = dg_ptr->pre_test_clbk_fn(dg_ptr);
@@ -479,7 +483,7 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 				"GNI_EpPostDataTestById:  %s\n",
 					gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
-			fastlock_release(&cm_nic->lock);
+			fastlock_release(&nic->lock);
 			goto err;
 		}
 
@@ -497,7 +501,7 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 					ret);
 			}
 		}
-		fastlock_release(&cm_nic->lock);
+		fastlock_release(&nic->lock);
 
 		/*
 		 * pass COMPLETED and error post state cases to
@@ -547,9 +551,12 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 	int n_dgrams_tot;
 	struct gnix_datagram *dgram_base = NULL, *dg_ptr;
 	struct gnix_dgram_hndl *the_hndl = NULL;
+	struct gnix_nic *nic;
 	gni_return_t status;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
+	nic = cm_nic->nic;
 
 	the_hndl = calloc(1, sizeof(struct gnix_dgram_hndl));
 	if (the_hndl == NULL) {
@@ -596,7 +603,7 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 	for (i = 0; i < fabric->n_bnd_dgrams; i++, dg_ptr++) {
 		dg_ptr->d_hndl = the_hndl;
 		dg_ptr->nic = cm_nic;
-		status = GNI_EpCreate(cm_nic->gni_nic_hndl,
+		status = GNI_EpCreate(nic->gni_nic_hndl,
 					NULL,
 					&dg_ptr->gni_ep);
 		if (status != GNI_RC_SUCCESS) {
@@ -616,7 +623,7 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 	for (i = 0; i < fabric->n_wc_dgrams; i++, dg_ptr++) {
 		dg_ptr->d_hndl = the_hndl;
 		dg_ptr->nic = cm_nic;
-		status = GNI_EpCreate(cm_nic->gni_nic_hndl,
+		status = GNI_EpCreate(nic->gni_nic_hndl,
 					NULL,
 					&dg_ptr->gni_ep);
 		if (status != GNI_RC_SUCCESS) {

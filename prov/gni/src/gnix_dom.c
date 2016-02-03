@@ -517,6 +517,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	domain->control_progress = info->domain_attr->control_progress;
 	domain->data_progress = info->domain_attr->data_progress;
+	fastlock_init(&domain->cm_nic_lock);
 
 	*dom = &domain->domain_fid;
 	return FI_SUCCESS;

@@ -298,6 +298,7 @@ struct gnix_fid_domain {
 	struct dlist_entry nic_list;
 	struct gnix_fid_fabric *fabric;
 	struct gnix_cm_nic *cm_nic;
+	fastlock_t cm_nic_lock;
 	uint8_t ptag;
 	uint32_t cookie;
 	uint32_t cdm_id_seed;
