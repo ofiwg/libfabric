@@ -66,6 +66,7 @@
 #include "libnl_utils.h"
 
 #include "usdf.h"
+#include "usdf_wait.h"
 #include "fi_ext_usnic.h"
 #include "usdf_progress.h"
 #include "usdf_timer.h"
@@ -752,7 +753,7 @@ static struct fi_ops_fabric usdf_ops_fabric = {
 	.domain = usdf_domain_open,
 	.passive_ep = usdf_pep_open,
 	.eq_open = usdf_eq_open,
-	.wait_open = fi_no_wait_open,
+	.wait_open = usdf_wait_open,
 	.trywait = fi_no_trywait
 };
 
