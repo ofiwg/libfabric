@@ -186,7 +186,8 @@ void psmx_domain_release(struct psmx_fid_domain *domain)
 	if (domain->progress_thread_enabled)
 		psmx_domain_stop_progress(domain);
 
-	psmx_am_fini(domain);
+	if (domain->am_initialized)
+		psmx_am_fini(domain);
 
 	fastlock_destroy(&domain->poll_lock);
 	rbtDelete(domain->mr_map);

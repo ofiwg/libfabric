@@ -35,7 +35,7 @@
 #define BIT(i)		(1ULL << i)
 #define BITMAP_SIZE	(PSMX2_MAX_VL + 1)
 
-static void inline bitmap_set(uint64_t *map, unsigned id)
+static inline void bitmap_set(uint64_t *map, unsigned id)
 {
 	int i, j;
 
@@ -45,7 +45,7 @@ static void inline bitmap_set(uint64_t *map, unsigned id)
 	map[i] |= BIT(j);
 }
 
-static void inline bitmap_clear(uint64_t *map, unsigned id)
+static inline void bitmap_clear(uint64_t *map, unsigned id)
 {
 	int i, j;
 
@@ -55,7 +55,7 @@ static void inline bitmap_clear(uint64_t *map, unsigned id)
 	map[i] &= ~BIT(j);
 }
 
-static int inline bitmap_test(uint64_t *map, unsigned id)
+static inline int bitmap_test(uint64_t *map, unsigned id)
 {
 	int i, j;
 

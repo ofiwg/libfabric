@@ -187,7 +187,8 @@ void psmx2_domain_release(struct psmx2_fid_domain *domain)
 	if (domain->progress_thread_enabled)
 		psmx2_domain_stop_progress(domain);
 
-	psmx2_am_fini(domain);
+	if (domain->am_initialized)
+		psmx2_am_fini(domain);
 
 	fastlock_destroy(&domain->poll_lock);
 	fastlock_destroy(&domain->vl_lock);
