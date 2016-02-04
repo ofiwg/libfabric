@@ -542,14 +542,6 @@ static int udpx_ep_init(struct udpx_ep *ep, struct fi_info *info)
 		}
 	}
 
-	if (info->dest_addr) {
-		ret = connect(ep->sock, info->dest_addr, info->dest_addrlen);
-		if (ret) {
-			ret = -errno;
-			goto err1;
-		}
-	}
-
 	ret = fi_fd_nonblock(ep->sock);
 	if (ret)
 		goto err2;
