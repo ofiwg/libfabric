@@ -189,8 +189,8 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 	}
 
 	if ((fabric_info->mode & FI_LOCAL_MR) && !ctrl->mr) {
-		ret = fi_mr_reg(domain, ctrl->buf, size,
-				0, 0, 0, 0, &ctrl->mr, NULL);
+		ret = fi_mr_reg(domain, ctrl->buf, size, FI_RECV | FI_SEND,
+				0, 0, 0, &ctrl->mr, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_mr_reg", ret);
 			return ret;

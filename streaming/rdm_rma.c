@@ -118,10 +118,14 @@ static int alloc_ep_res(struct fi_info *fi)
 	switch (op_type) {
 	case FT_RMA_READ:
 		access_mode = FI_REMOTE_READ;
+		if (fi->mode & FI_LOCAL_MR)
+			access_mode |= FI_READ;
 		break;
 	case FT_RMA_WRITE:
 	case FT_RMA_WRITEDATA:
 		access_mode = FI_REMOTE_WRITE;
+		if (fi->mode & FI_LOCAL_MR)
+			access_mode |= FI_WRITE;
 		break;
 	default:
 		/* Impossible to reach here */
