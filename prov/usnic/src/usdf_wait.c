@@ -45,6 +45,7 @@
 /* Necessary to support top-of-file struct declarations. */
 static int usdf_wait_wait(struct fid_wait *wait_fid, int timeout);
 static int usdf_wait_close(struct fid *waitset);
+static int usdf_wait_control(struct fid *fid, int command, void *arg);
 
 static struct fi_ops_wait usdf_wait_ops = {
 	.size = sizeof(struct fi_ops_wait),
@@ -55,6 +56,7 @@ static struct fi_ops usdf_wait_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = usdf_wait_close,
 	.bind = fi_no_bind,
+	.control = usdf_wait_control,
 	.ops_open = fi_no_ops_open
 };
 
@@ -277,4 +279,45 @@ static int usdf_wait_wait(struct fid_wait *fwait, int timeout)
 out:
 	free(events);
 	return ret;
+}
+
+static int usdf_wait_get_wait(struct usdf_wait *wait_priv, void *arg)
+{
+	USDF_TRACE_SYS(FABRIC, "\n");
+
+	if (!arg || !wait_priv) {
+		USDF_WARN_SYS(FABRIC, "invalid input\n");
+		return -FI_EINVAL;
+	}
+
+	switch (wait_priv->wait_obj) {
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_FD:
+		*(int *) arg = wait_priv->object.epfd;
+		break;
+	default:
+		USDF_DBG_SYS(FABRIC, "unsupported wait type\n");
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int usdf_wait_control(struct fid *fid, int command, void *arg)
+{
+	struct usdf_wait *wait_priv;
+
+	USDF_TRACE_SYS(FABRIC, "\n");
+
+	wait_priv = container_of(fid, struct usdf_wait, wait_fid.fid);
+
+	switch (command) {
+	case FI_GETWAIT:
+		break;
+	default:
+		USDF_DBG_SYS(FABRIC, "unsupported control command\n");
+		return -FI_EINVAL;
+	}
+
+	return usdf_wait_get_wait(wait_priv, arg);
 }
