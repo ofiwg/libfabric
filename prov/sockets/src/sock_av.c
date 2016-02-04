@@ -412,6 +412,7 @@ static int sock_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 static int sock_av_close(struct fid *fid)
 {
 	struct sock_av *av;
+	int ret = 0;
 	av = container_of(fid, struct sock_av, av_fid.fid);
 	if (atomic_get(&av->ref))
 		return -FI_EBUSY;
@@ -421,8 +422,9 @@ static int sock_av_close(struct fid *fid)
 	else {
 		shm_unlink(av->name);
 		free(av->name);
-		munmap(av->table_hdr, sizeof(struct sock_av_table_hdr) +
-		       av->attr.count * sizeof(struct sock_av_addr));
+		ret = munmap(av->table_hdr, SOCK_AV_TABLE_SZ(av->attr.count, av->name));
+		if (ret)
+			SOCK_LOG_ERROR("munmap failed: %s\n", strerror(errno));
 		close(av->shared_fd);
 	}
 
