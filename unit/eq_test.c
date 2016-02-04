@@ -98,7 +98,7 @@ eq_open_close()
 
 fail:
 	eq = NULL;
-	return testret;
+	return TEST_RET_VAL(ret, testret);
 }
 
 /*
@@ -179,7 +179,7 @@ eq_write_read_self()
 
 fail:
 	FT_CLOSE_FID(eq);
-	return testret;
+	return TEST_RET_VAL(ret, testret);
 }
 
 /*
@@ -223,7 +223,7 @@ eq_write_overflow()
 
 fail:
 	FT_CLOSE_FID(eq);
-	return testret;
+	return TEST_RET_VAL(ret, testret);
 }
 
 /*
@@ -293,7 +293,7 @@ eq_wait_fd_poll()
 	testret = PASS;
 fail:
 	FT_CLOSE_FID(eq);
-	return testret;
+	return TEST_RET_VAL(ret, testret);
 }
 
 /*
@@ -382,7 +382,7 @@ eq_wait_fd_sread()
 	testret = PASS;
 fail:
 	FT_CLOSE_FID(eq);
-	return testret;
+	return TEST_RET_VAL(ret, testret);
 }
 
 struct test_entry test_array[] = {
