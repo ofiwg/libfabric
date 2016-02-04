@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,70 +30,30 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_MEM_H_
-#define _FI_MEM_H_
+#ifndef _FI_FILE_H_
+#define _FI_FILE_H_
 
-#include <config.h>
+#include "config.h"
 
 #include <assert.h>
 #include <stdlib.h>
-#include <fi_list.h>
 
 
-#ifdef INCLUDE_VALGRIND
-#   include <valgrind/memcheck.h>
-#   ifndef VALGRIND_MAKE_MEM_DEFINED
-#      warning "Valgrind requested, but VALGRIND_MAKE_MEM_DEFINED undefined"
-#   endif
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#ifndef VALGRIND_MAKE_MEM_DEFINED
-#   define VALGRIND_MAKE_MEM_DEFINED(addr, len)
-#endif
 
-/* We implement memdup to avoid external library dependency */
-static inline void *mem_dup(const void *src, size_t size)
-{
-	void *dest;
+int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
+int fi_poll_fd(int fd, int timeout);
+int fi_fd_nonblock(int fd);
 
-	if ((dest = malloc(size)))
-		memcpy(dest, src, size);
-	return dest;
+#define RDMA_CONF_DIR  SYSCONFDIR "/" RDMADIR
+#define FI_CONF_DIR RDMA_CONF_DIR "/fabric"
+
+
+#ifdef __cplusplus
 }
-
-
-/*
- * Buffer Pool
- */
-struct util_buf_pool {
-	size_t entry_sz;
-	size_t max_cnt;
-	size_t chunk_cnt;
-	size_t alignment;
-	size_t num_allocated;
-#if ENABLE_DEBUG
-	size_t num_used;
 #endif
-	struct slist buf_list;
-	struct slist region_list;
-};
 
-struct util_buf_region {
-	struct slist_entry entry;
-	char *mem_region;
-};
-
-union util_buf {
-	struct slist_entry entry;
-	uint8_t data[0];
-};
-
-struct util_buf_pool *util_buf_pool_create(size_t size, size_t alignment,
-					   size_t max_cnt, size_t chunk_cnt);
-void util_buf_pool_destroy(struct util_buf_pool *pool);
-
-void *util_buf_get(struct util_buf_pool *pool);
-void util_buf_release(struct util_buf_pool *pool, void *buf);
-
-
-#endif /* _FI_MEM_H_ */
+#endif /* _FI_FILE_H_ */

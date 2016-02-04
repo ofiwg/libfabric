@@ -58,13 +58,18 @@ util_fi_info_LDADD = $(linkback)
 
 src_libfabric_la_SOURCES = \
 	include/fi.h \
+	include/fi_abi.h \
+	include/fi_atom.h \
 	include/fi_enosys.h \
+	include/fi_file.h \
 	include/fi_indexer.h \
 	include/fi_list.h \
+	include/fi_lock.h \
+	include/fi_mem.h \
+	include/fi_osd.h \
 	include/fi_rbuf.h \
 	include/fi_signal.h \
 	include/fi_util.h \
-	include/fi_mem.h \
 	include/fasthash.h \
 	include/rbtree.h \
 	include/prov.h \
