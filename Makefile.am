@@ -1,5 +1,4 @@
-configdir = $(datarootdir)/${PACKAGE_NAME}
-AM_CFLAGS = -g -Wall -D_GNU_SOURCE -D 'CONFIG_PATH="${configdir}"' -I$(srcdir)/include
+AM_CFLAGS = -g -Wall -D_GNU_SOURCE -I$(srcdir)/include
 ACLOCAL_AMFLAGS = -I config
 
 bin_PROGRAMS = \
@@ -41,12 +40,6 @@ dist_bin_SCRIPTS = \
 
 dist_noinst_SCRIPTS = \
 	scripts/parseyaml.py
-
-nobase_dist_config_DATA = \
-	test_configs/*.json \
-	test_configs/sockets/*.json \
-	test_configs/udp/*.json \
-	test_configs/verbs/*.json
 
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = \
