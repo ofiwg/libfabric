@@ -31,8 +31,8 @@
  *
  */
 
-#if !defined(FI_SIGNAL_H)
-#define FI_SIGNAL_H
+#ifndef _FI_SIGNAL_H_
+#define _FI_SIGNAL_H_
 
 #include "config.h"
 
@@ -42,9 +42,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include <fi_file.h>
 #include <rdma/fi_errno.h>
-
-#include "fi.h"
 
 
 enum {
@@ -173,7 +172,6 @@ int fi_epoll_del(struct fi_epoll *ep, int fd);
 void *fi_epoll_wait(struct fi_epoll *ep, int timeout);
 void fi_epoll_close(struct fi_epoll *ep);
 
-#endif
+#endif /* HAVE_EPOLL */
 
-#endif /* FI_SIGNAL_H */
-
+#endif /* _FI_SIGNAL_H_ */
