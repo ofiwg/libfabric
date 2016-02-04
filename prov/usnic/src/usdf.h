@@ -376,6 +376,11 @@ struct usdf_cq {
 	struct fi_cq_attr cq_attr;
 
 	union {
+		int fd;
+		struct fi_mutex_cond mutex_cond;
+	} object;
+
+	union {
 		struct {
 			struct usd_cq *cq_cq;
 		} hard;
