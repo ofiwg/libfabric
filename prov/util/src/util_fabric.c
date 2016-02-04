@@ -36,28 +36,15 @@
 #include <fi_enosys.h>
 #include <fi_util.h>
 
-
-static int util_fabric_close(fid_t fid)
+int util_fabric_close(struct util_fabric *fabric)
 {
-	struct util_fabric *fabric;
-
-	fabric = container_of(fid, struct util_fabric, fabric_fid.fid);
 	if (atomic_get(&fabric->ref))
 		return -FI_EBUSY;
 
 	fi_fabric_remove(fabric);
 	fastlock_destroy(&fabric->lock);
-	free(fabric);
 	return 0;
 }
-
-static struct fi_ops util_fabric_fi_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = util_fabric_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
-};
 
 static void util_fabric_init(struct util_fabric *fabric, const char *name)
 {
@@ -67,21 +54,16 @@ static void util_fabric_init(struct util_fabric *fabric, const char *name)
 	fabric->name = name;
 }
 
-int fi_fabric_create(const struct fi_provider *prov,
-		     struct fi_fabric_attr *prov_attr,
-		     struct fi_fabric_attr *user_attr,
-		     struct fid_fabric **fabric_fid, void *context)
+int fi_fabric_init(const struct fi_provider *prov,
+		   struct fi_fabric_attr *prov_attr,
+		   struct fi_fabric_attr *user_attr,
+		   struct util_fabric *fabric, void *context)
 {
-	struct util_fabric *fabric;
 	int ret;
 
 	ret = fi_check_fabric_attr(prov, prov_attr, user_attr);
 	if (ret)
 		return ret;
-
-	fabric = calloc(1, sizeof(*fabric));
-	if (!fabric)
-		return -FI_ENOMEM;
 
 	fabric->prov = prov;
 	util_fabric_init(fabric, prov_attr->name);
@@ -91,9 +73,6 @@ int fi_fabric_create(const struct fi_provider *prov,
 	/*
 	 * fabric ops set by provider
 	 */
-	fabric->fabric_fid.fid.ops = &util_fabric_fi_ops;
 	fi_fabric_insert(fabric);
-
-	*fabric_fid = &fabric->fabric_fid;
 	return 0;
 }

@@ -87,11 +87,11 @@ struct util_fabric {
 	struct dlist_entry	domain_list;
 };
 
-int fi_fabric_create(const struct fi_provider *prov,
-		     struct fi_fabric_attr *prov_attr,
-		     struct fi_fabric_attr *user_attr,
-		     struct fid_fabric **fabric, void *context);
-
+int fi_fabric_init(const struct fi_provider *prov,
+		   struct fi_fabric_attr *prov_attr,
+		   struct fi_fabric_attr *user_attr,
+		   struct util_fabric *fabric, void *context);
+int util_fabric_close(struct util_fabric *fabric);
 
 /*
  * Domain
@@ -111,8 +111,9 @@ struct util_domain {
 	enum fi_av_type		av_type;
 };
 
-int fi_domain_create(struct fid_fabric *fabric_fid, const struct fi_info *info,
-		     struct fid_domain **domain_fid, void *context);
+int fi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
+		     struct util_domain *domain, void *context);
+int util_domain_close(struct util_domain *domain);
 
 
 /*
