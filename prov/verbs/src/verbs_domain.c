@@ -61,7 +61,7 @@ fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	   uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct fi_ibv_mem_desc *md;
-	int fi_ibv_access;
+	int fi_ibv_access = 0;
 	struct fid_domain *domain;
 
 	if (flags)
@@ -84,7 +84,7 @@ fi_ibv_mr_reg(struct fid *fid, const void *buf, size_t len,
 	/* Local read access to an MR is enabled by default in verbs */
 
 	if (access & FI_RECV)
-		fi_ibv_access = IBV_ACCESS_LOCAL_WRITE;
+		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
 
 	/* iWARP spec requires Remote Write access for an MR that is used
 	 * as a data sink for a Remote Read */
