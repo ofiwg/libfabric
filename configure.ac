@@ -91,10 +91,12 @@ AC_ARG_WITH([dlopen],
 		       [dl-loadable provider support @<:@default=yes@:>@]),
 	)
 
+if test "$freebsd" == "0"; then
 AS_IF([test x"$with_dlopen" != x"no"], [
 AC_CHECK_LIB(dl, dlopen, [],
     AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.]))
 ])
+fi
 
 dnl Checks for libraries
 AC_CHECK_LIB(pthread, pthread_mutex_init, [],
