@@ -116,7 +116,7 @@ rx_size_left(void)
 	testret = PASS;
 fail:
 	teardown_ep_fixture();
-	return testret;
+	return TEST_RET_VAL(ret, testret);
 }
 
 static int
@@ -147,7 +147,7 @@ rx_size_left_err(void)
 	testret = PASS;
 fail:
 	FT_CLOSE_FID(ep);
-	return testret;
+	return TEST_RET_VAL(ret, testret);
 }
 
 static int
@@ -178,7 +178,7 @@ tx_size_left(void)
 	testret = PASS;
 fail:
 	teardown_ep_fixture();
-	return testret;
+	return TEST_RET_VAL(ret, testret);
 }
 
 struct test_entry test_rx_size_left[] = {
