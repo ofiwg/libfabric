@@ -41,7 +41,8 @@ common_srcs = \
 	prov/util/src/util_fabric.c \
 	prov/util/src/util_main.c   \
 	prov/util/src/util_poll.c   \
-	prov/util/src/util_wait.c
+	prov/util/src/util_wait.c   \
+	prov/util/src/util_buf.c
 
 # ensure dl-built providers link back to libfabric
 linkback = $(top_builddir)/src/libfabric.la
@@ -63,6 +64,7 @@ src_libfabric_la_SOURCES = \
 	include/fi_rbuf.h \
 	include/fi_signal.h \
 	include/fi_util.h \
+	include/fi_mem.h \
 	include/fasthash.h \
 	include/rbtree.h \
 	include/prov.h \

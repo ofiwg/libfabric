@@ -170,6 +170,12 @@ static inline uint64_t roundup_power_of_two(uint64_t n)
 	return n;
 }
 
+static inline size_t fi_get_aligned_sz(size_t size, size_t alignment)
+{
+	return ((size % alignment) == 0) ?
+		size : ((size / alignment) + 1) * alignment;
+}
+
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
 
 
