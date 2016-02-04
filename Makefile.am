@@ -58,6 +58,7 @@ util_fi_info_LDADD = $(linkback)
 
 src_libfabric_la_SOURCES = \
 	include/fi.h \
+	include/fi_abi.h \
 	include/fi_atom.h \
 	include/fi_enosys.h \
 	include/fi_indexer.h \

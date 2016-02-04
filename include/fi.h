@@ -41,6 +41,7 @@
 #include <string.h>
 #include <sys/param.h>
 
+#include <fi_abi.h>
 #include <fi_lock.h>
 #include <fi_atom.h>
 
@@ -191,31 +192,6 @@ int fi_fd_nonblock(int fd);
 #define RDMA_CONF_DIR  SYSCONFDIR "/" RDMADIR
 #define FI_CONF_DIR RDMA_CONF_DIR "/fabric"
 
-#define DEFAULT_ABI "FABRIC_1.0"
-
-#if  HAVE_ALIAS_ATTRIBUTE == 1
-#define DEFAULT_SYMVER_PRE(a) a##_
-#else
-#define DEFAULT_SYMVER_PRE(a) a
-#endif
-
-/* symbol -> external symbol mappings */
-#if HAVE_SYMVER_SUPPORT
-
-#  define SYMVER(name, api, ver) \
-        asm(".symver " #name "," #api "@" #ver)
-#  define DEFAULT_SYMVER(name, api) \
-        asm(".symver " #name "," #api "@@" DEFAULT_ABI)
-#else
-#  define SYMVER(Name, api, ver)
-#if  HAVE_ALIAS_ATTRIBUTE == 1
-#  define DEFAULT_SYMVER(name, api) \
-        extern typeof (name) api __attribute__((alias(#name)));
-#else
-#  define DEFAULT_SYMVER(name, api)
-#endif  /* HAVE_ALIAS_ATTRIBUTE == 1*/
-
-#endif /* HAVE_SYMVER_SUPPORT */
 
 #ifdef __cplusplus
 }
