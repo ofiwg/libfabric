@@ -46,13 +46,7 @@
 #include <rdma/fi_atomic.h>
 #include <rdma/fi_log.h>
 
-#ifdef __APPLE__
-#include <osx/osd.h>
-#elif defined __FreeBSD__
-#include <freebsd/osd.h>
-#else
-#include <linux/osd.h>
-#endif
+#include <fi_osd.h>
 
 #ifdef HAVE_ATOMICS
 #  include <stdatomic.h>
