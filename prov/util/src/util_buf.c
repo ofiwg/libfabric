@@ -35,6 +35,8 @@
 #include <unistd.h>
 #include <fi_enosys.h>
 #include <fi_mem.h>
+#include <fi.h>
+
 
 static int util_buf_region_add(struct util_buf_pool *pool)
 {
