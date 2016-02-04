@@ -45,6 +45,7 @@
 #include <fi_file.h>
 #include <fi_lock.h>
 #include <fi_atom.h>
+#include <fi_mem.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_prov.h>
@@ -57,26 +58,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifdef INCLUDE_VALGRIND
-#   include <valgrind/memcheck.h>
-#   ifndef VALGRIND_MAKE_MEM_DEFINED
-#      warning "Valgrind requested, but VALGRIND_MAKE_MEM_DEFINED undefined"
-#   endif
-#endif
-
-#ifndef VALGRIND_MAKE_MEM_DEFINED
-#   define VALGRIND_MAKE_MEM_DEFINED(addr, len)
-#endif
-
-static inline void *mem_dup(const void *src, size_t size)
-{
-	void *dest;
-
-	if ((dest = malloc(size)))
-		memcpy(dest, src, size);
-	return dest;
-}
 
 /*
  * OS X doesn't have __BYTE_ORDER, Linux usually has BYTE_ORDER but not under
