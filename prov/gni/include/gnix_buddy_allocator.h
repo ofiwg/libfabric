@@ -67,6 +67,24 @@ static inline uint32_t __gnix_buddy_log2(uint32_t v)
 	return MultiplyDeBruijnBitPosition[(uint32_t)(v * 0x07C4ACDDU) >> 27];
 }
 
+/* Find the bitmap index for block X of size X_LEN */
+static inline size_t __gnix_buddy_bitmap_index(void *x, size_t x_len, void *base,
+					       size_t base_len, size_t min_len)
+{
+	return (size_t) ((x - base) / (size_t) x_len) + base_len / (min_len / 2)
+		- base_len / (x_len / 2);
+}
+
+/* Find the address of X's buddy block:
+ * If the "index" of block X is even then the buddy must be to the right of X,
+ * otherwise the buddy is to the left of X.
+ */
+static inline void *__gnix_buddy_address(void *x, size_t len, void *base)
+{
+	return (void *) (((((size_t) base - (size_t) x) / len) % 2) ?
+			 (size_t) x - len : (size_t) x + len);
+}
+
 /* evaluates to zero if X is not a power of two, otherwise evaluates to X - 1 */
 #define IS_NOT_POW_TWO(X) (((X) & (~(X) + 1)) ^ (X))
 
@@ -74,20 +92,6 @@ static inline uint32_t __gnix_buddy_log2(uint32_t v)
 #define BLOCK_SIZE(LEN, MIN_LEN) ((LEN) <= (MIN_LEN) ? (MIN_LEN) :\
 			      (IS_NOT_POW_TWO(LEN)) ? (((LEN) << 1) & ~(LEN)) :\
 			      (LEN))
-
-/* Find the bitmap index for block X of size X_LEN */
-#define BITMAP_INDEX(X, X_LEN, BASE, BASE_LEN, MIN_LEN) (((size_t) ((X) - (BASE)) / \
-							  (size_t) (X_LEN)) + (BASE_LEN) / \
-							 ((MIN_LEN) / 2) - (BASE_LEN) / \
-							 ((X_LEN) / 2))
-
-/* Find the address of X's buddy block:
- * If the "index" of block X is even then the buddy must be to the right of X,
- * otherwise the buddy is to the left of X.
- */
-#define BUDDY(X, LEN, BASE) (void *) ((((size_t) (BASE) - (size_t) (X)) /\
-				       (LEN)) % 2 ? (size_t) (X) - (LEN) :\
-				      (size_t) (X) + (LEN))
 
 /* Calculate the offset of a free block, OFFSET = MIN_LEN * 2^MULT. */
 #define OFFSET(MIN_LEN, MULT) ((MIN_LEN) * (1 << (MULT)))
