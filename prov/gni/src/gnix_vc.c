@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -433,6 +434,7 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 			goto exit_w_lock;
 		}
 		vc->conn_state = GNIX_VC_CONNECTED;
+		vc->peer_id = vc->vc_id;
 		GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
 			   vc);
 		goto exit_w_lock;
@@ -515,9 +517,11 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 	}
 
 	vc->conn_state = GNIX_VC_CONNECTED;
+	vc->peer_id = vc_peer->vc_id;
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
 		   vc);
 	vc_peer->conn_state = GNIX_VC_CONNECTED;
+	vc_peer->peer_id = vc->vc_id;
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
 		   vc_peer);
 
@@ -599,6 +603,7 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	 */
 
 	vc->conn_state = GNIX_VC_CONNECTED;
+	vc->peer_id = peer_id;
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
 		   " moving vc %p to state connected\n",vc);
 
@@ -712,9 +717,9 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 			if (likely(ret == FI_SUCCESS)) {
 				vc = vc_try;
 				vc->modes |= GNIX_VC_MODE_IN_HT;
-			} else if (ret == -FI_ENOSPC) {
-				_gnix_vc_destroy(vc_try);
 			} else {
+				if (ret == -FI_ENOSPC)
+					_gnix_vc_destroy(vc_try);
 				GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_ht_insert returned %s\n",
 				   fi_strerror(-ret));
@@ -798,6 +803,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 		}
 
 		vc->conn_state = GNIX_VC_CONNECTED;
+		vc->peer_id = src_vc_id;
 		GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
 			vc);
 
@@ -892,10 +898,14 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 	fastlock_acquire(&ep->vc_ht_lock);
 
 	/*
-	 * we may have already been moved to connecting or
-	 * connected, if so early exit.
+	 * we may have already been moved to connected or
+	 * the datagram from an earlier conn request for this
+	 * vc was posted to GNI datagram state machine.  The
+	 * connection will be completed in the __gnix_vc_hndl_conn_resp
+	 * datagram callback in the latter case.
 	 */
-	if(vc->conn_state == GNIX_VC_CONNECTED) {
+	if ((vc->conn_state == GNIX_VC_CONNECTED) ||
+		(vc->modes & GNIX_VC_MODE_DG_POSTED)) {
 		complete = 1;
 		goto exit;
 	}
@@ -961,8 +971,10 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 		}
 		complete = 1;
 		vc->conn_state = GNIX_VC_CONNECTED;
+		vc->peer_id = work_req_data->src_vc_id;
 		GNIX_DEBUG(FI_LOG_EP_CTRL,
 			   "moving vc %p to connected\n",vc);
+		vc->modes |= GNIX_VC_MODE_DG_POSTED;
 	} else if (ret == -FI_EAGAIN) {
 		ret = _gnix_vc_schedule(vc);
 		ret = FI_SUCCESS;
@@ -1015,6 +1027,8 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 	 */
 
 	if (!(vc->modes & GNIX_VC_MODE_IN_HT)) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "vc not in hashtable\n");
+		assert(vc->modes & GNIX_VC_MODE_IN_HT);
 		ret = -FI_EINVAL;
 		goto err;
 	}
@@ -1081,6 +1095,7 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 		vc->conn_state = GNIX_VC_CONNECTING;
 		GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connecting\n",
 			vc);
+		vc->modes |= GNIX_VC_MODE_DG_POSTED;
 	} else if (ret == -FI_EAGAIN) {
 		ret = FI_SUCCESS;
 	}
@@ -1474,6 +1489,9 @@ int _gnix_vc_dequeue_smsg(struct gnix_vc *vc)
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
 	assert(vc->gni_ep != NULL);
+	if (vc->conn_state != GNIX_VC_CONNECTED)
+		GNIX_WARN(FI_LOG_EP_CTRL, "something amiss with vc %p\n",
+			  vc);
 	assert(vc->conn_state == GNIX_VC_CONNECTED);
 
 	nic = vc->ep->nic;
