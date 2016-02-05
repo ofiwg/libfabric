@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -46,6 +46,7 @@
 #include <gnix.h>
 
 #include <criterion/criterion.h>
+#include <criterion/parameterized.h>
 
 static struct fi_info *hints;
 static struct fi_info *fi;
@@ -263,6 +264,47 @@ static struct gnix_fr_element default_reqs[8] = {
 		},
 };
 
+static struct gnix_fr_element *make_evenly_distributed_tags(
+		int requests,
+		struct __test_mask *mask);
+
+static struct gnix_fr_element *make_random_tags(
+		int requests,
+		struct __test_mask *mask);
+
+struct ipr_test_params {
+	int elements;
+	struct gnix_fr_element *(*make_requests)(
+					int,
+					struct __test_mask *);
+};
+
+static struct ipr_test_params ipr_params[6] = {
+		{
+			.elements = 16,
+			.make_requests = make_random_tags,
+		},
+		{
+			.elements = 128,
+			.make_requests = make_random_tags,
+		},
+		{
+			.elements = 1024,
+			.make_requests = make_random_tags,
+		},
+		{
+			.elements = 16,
+			.make_requests = make_evenly_distributed_tags,
+		},
+		{
+			.elements = 128,
+			.make_requests = make_evenly_distributed_tags,
+		},
+		{
+			.elements = 1024,
+			.make_requests = make_evenly_distributed_tags,
+		},
+};
 
 static struct gnix_tag_storage *test_tag_storage;
 static int call_destruct;
@@ -1333,11 +1375,13 @@ TestSuite(gnix_tags_basic_posted_list,
 
 TestSuite(gnix_tags_basic_posted_hlist,
 		.init = __gnix_tags_basic_posted_hlist_test_setup,
-		.fini = __gnix_tags_basic_test_teardown);
+		.fini = __gnix_tags_basic_test_teardown,
+		.disabled = true);
 
 TestSuite(gnix_tags_basic_posted_kdtree,
 		.init = __gnix_tags_basic_posted_kdtree_test_setup,
-		.fini = __gnix_tags_basic_test_teardown);
+		.fini = __gnix_tags_basic_test_teardown,
+		.disabled = true);
 
 TestSuite(gnix_tags_basic_unexpected_list,
 		.init = __gnix_tags_basic_unexpected_list_test_setup,
@@ -1345,11 +1389,13 @@ TestSuite(gnix_tags_basic_unexpected_list,
 
 TestSuite(gnix_tags_basic_unexpected_hlist,
 		.init = __gnix_tags_basic_unexpected_hlist_test_setup,
-		.fini = __gnix_tags_basic_test_teardown);
+		.fini = __gnix_tags_basic_test_teardown,
+		.disabled = true);
 
 TestSuite(gnix_tags_basic_unexpected_kdtree,
 		.init = __gnix_tags_basic_unexpected_kdtree_test_setup,
-		.fini = __gnix_tags_basic_test_teardown);
+		.fini = __gnix_tags_basic_test_teardown,
+		.disabled = true);
 
 Test(gnix_tags_bare, uninitialized)
 {
@@ -1452,55 +1498,19 @@ Test(gnix_tags_basic_posted_list, single_insert_remove)
 	}
 }
 
-Test(gnix_tags_basic_posted_list, multiple_16_ipr_random_tag)
+ParameterizedTestParameters(gnix_tags_basic_posted_list, multiple_ipr_tags)
 {
-	__test_multiple_type_ipr_reqs(16, &default_list_attr,
-			make_random_tags);
+	size_t nb_params = sizeof (ipr_params) / sizeof (struct ipr_test_params);
+	return cr_make_param_array(struct ipr_test_params, ipr_params, nb_params);
 }
 
-Test(gnix_tags_basic_posted_list, multiple_128_ipr_random_tag)
+ParameterizedTest(struct ipr_test_params *params,
+		gnix_tags_basic_posted_list, multiple_ipr_tags)
 {
-	__test_multiple_type_ipr_reqs(128, &default_list_attr,
-			make_random_tags);
+	__test_multiple_type_ipr_reqs(params->elements, &default_list_attr,
+			params->make_requests);
 }
 
-Test(gnix_tags_basic_posted_list, multiple_1024_ipr_random_tag)
-{
-	__test_multiple_type_ipr_reqs(1024, &default_list_attr,
-			make_random_tags);
-}
-
-Test(gnix_tags_basic_posted_list, multiple_8192_ipr_random_tag,
-		.disabled = true)
-{
-	__test_multiple_type_ipr_reqs(8192, &default_list_attr,
-			make_random_tags);
-}
-
-Test(gnix_tags_basic_posted_list, multiple_16_ipr_sequential_tag)
-{
-	__test_multiple_type_ipr_reqs(16, &default_list_attr,
-			make_evenly_distributed_tags);
-}
-
-Test(gnix_tags_basic_posted_list, multiple_128_ipr_sequential_tag)
-{
-	__test_multiple_type_ipr_reqs(128, &default_list_attr,
-			make_evenly_distributed_tags);
-}
-
-Test(gnix_tags_basic_posted_list, multiple_1024_ipr_sequential_tag)
-{
-	__test_multiple_type_ipr_reqs(1024, &default_list_attr,
-			make_evenly_distributed_tags);
-}
-
-Test(gnix_tags_basic_posted_list, multiple_8192_ipr_sequential_tag,
-		.disabled = true)
-{
-	__test_multiple_type_ipr_reqs(8192, &default_list_attr,
-			make_evenly_distributed_tags);
-}
 
 Test(gnix_tags_basic_posted_list, multiple_8_duplicate_tags)
 {
@@ -1591,54 +1601,17 @@ Test(gnix_tags_basic_unexpected_list, single_insert_remove)
 	}
 }
 
-Test(gnix_tags_basic_unexpected_list, multiple_16_ipr_random_tag)
+ParameterizedTestParameters(gnix_tags_basic_unexpected_list, multiple_ipr_tags)
 {
-	__test_multiple_type_ipr_reqs(16, &default_list_attr,
-			make_random_tags);
+	size_t nb_params = sizeof (ipr_params) / sizeof (struct ipr_test_params);
+	return cr_make_param_array(struct ipr_test_params, ipr_params, nb_params);
 }
 
-Test(gnix_tags_basic_unexpected_list, multiple_128_ipr_random_tag)
+ParameterizedTest(struct ipr_test_params *params,
+		gnix_tags_basic_unexpected_list, multiple_ipr_tags)
 {
-	__test_multiple_type_ipr_reqs(128, &default_list_attr,
-			make_random_tags);
-}
-
-Test(gnix_tags_basic_unexpected_list, multiple_1024_ipr_random_tag)
-{
-	__test_multiple_type_ipr_reqs(1024, &default_list_attr,
-			make_random_tags);
-}
-
-Test(gnix_tags_basic_unexpected_list, multiple_8192_ipr_random_tag,
-		.disabled = true)
-{
-	__test_multiple_type_ipr_reqs(8192, &default_list_attr,
-			make_random_tags);
-}
-
-Test(gnix_tags_basic_unexpected_list, multiple_16_ipr_sequential_tag)
-{
-	__test_multiple_type_ipr_reqs(16, &default_list_attr,
-			make_evenly_distributed_tags);
-}
-
-Test(gnix_tags_basic_unexpected_list, multiple_128_ipr_sequential_tag)
-{
-	__test_multiple_type_ipr_reqs(128, &default_list_attr,
-			make_evenly_distributed_tags);
-}
-
-Test(gnix_tags_basic_unexpected_list, multiple_1024_ipr_sequential_tag)
-{
-	__test_multiple_type_ipr_reqs(1024, &default_list_attr,
-			make_evenly_distributed_tags);
-}
-
-Test(gnix_tags_basic_unexpected_list, multiple_8192_ipr_sequential_tag,
-		.disabled = true)
-{
-	__test_multiple_type_ipr_reqs(8192, &default_list_attr,
-			make_evenly_distributed_tags);
+	__test_multiple_type_ipr_reqs(params->elements, &default_list_attr,
+			params->make_requests);
 }
 
 Test(gnix_tags_basic_unexpected_list, multiple_8_duplicate_tags)
