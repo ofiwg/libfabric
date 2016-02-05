@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
@@ -207,6 +208,7 @@ static void ft_cntr_set_wait_attr(void)
 int ft_alloc_msgs(void)
 {
 	int ret;
+	long page_size;
 
 	/* TODO: support multi-recv tests */
 	if (fi->rx_attr->op_flags == FI_MULTI_RECV)
@@ -220,14 +222,32 @@ int ft_alloc_msgs(void)
 	tx_size += ft_tx_prefix_size();
 	buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) + MAX(rx_size, FT_MAX_CTRL_MSG);
 
-	buf = malloc(buf_size);
-	if (!buf) {
-		perror("malloc");
-		return -FI_ENOMEM;
+	page_size = sysconf(_SC_PAGESIZE);
+	if (opts.options & FT_OPT_ALIGN) {
+		buf_size += page_size;
+	}
+
+	if (opts.options & FT_OPT_ALIGN) {
+		ret = posix_memalign(&buf, page_size, buf_size);
+		if (ret) {
+			FT_PRINTERR("posix_memalign", ret);
+			return ret;
+		}
+	} else {
+		buf = malloc(buf_size);
+		if (!buf) {
+			perror("malloc");
+			return -FI_ENOMEM;
+		}
 	}
 
 	rx_buf = buf;
+
 	tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG);
+	if (opts.options & FT_OPT_ALIGN) {
+		tx_buf = (void *) (((uint64_t)tx_buf +
+					page_size - 1) & ~(page_size - 1));
+	}
 
 	if (fi->mode & FI_LOCAL_MR) {
 		ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND,
@@ -1206,6 +1226,7 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
 	FT_PRINT_OPTS_USAGE("-I <number>", "number of iterations");
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
+	FT_PRINT_OPTS_USAGE("-l", "align transmit and receive buffers to page size");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
 	FT_PRINT_OPTS_USAGE("-t <type>", "completion type [queue, counter]");
 	FT_PRINT_OPTS_USAGE("-c <method>", "completion method [spin, sread, fd]");
@@ -1299,6 +1320,9 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 		break;
 	case 'w':
 		opts->warmup_iterations = atoi(optarg);
+		break;
+	case 'l':
+		opts->options |= FT_OPT_ALIGN;
 		break;
 	default:
 		/* let getopt handle unknown opts*/
