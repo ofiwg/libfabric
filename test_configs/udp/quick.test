@@ -37,4 +37,5 @@
 	caps: [
 		FT_CAP_MSG,
 	],
+	test_flags: FT_FLAG_QUICKTEST
 },
