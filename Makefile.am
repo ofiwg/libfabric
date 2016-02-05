@@ -226,3 +226,4 @@ dist-hook: fabtests.spec
 
 test:
 	./scripts/runfabtests.sh -vvv
+	./scripts/runfabtests.sh -vvv udp

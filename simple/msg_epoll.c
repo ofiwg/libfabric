@@ -31,6 +31,8 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <shared.h>
+
 #if HAVE_EPOLL == 1
 
 #include <stdio.h>
@@ -46,7 +48,6 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
-#include <shared.h>
 
 static int epfd;
 

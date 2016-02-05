@@ -12,6 +12,7 @@ AC_CANONICAL_HOST
 
 macos=0
 linux=0
+freebsd=0
 
 case $host_os in
 *darwin*)
@@ -20,6 +21,9 @@ case $host_os in
 *linux*)
 	linux=1
 	;;
+*freebsd*)
+	freebsd=1
+	;;
 *)
 	AC_MSG_ERROR([libfabric only builds on Linux & OS X])
 	;;
@@ -27,6 +31,7 @@ esac
 
 AM_CONDITIONAL([MACOS], [test $macos -eq 1])
 AM_CONDITIONAL([LINUX], [test $linux -eq 1])
+AM_CONDITIONAL([FREEBSD], [test $freebsd -eq 1])
 
 dnl Fix autoconf's habit of adding -g -O2 by default
 AS_IF([test -z "$CFLAGS"],

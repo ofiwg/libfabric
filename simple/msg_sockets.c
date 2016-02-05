@@ -34,6 +34,7 @@
 #include <getopt.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <netinet/in.h>
 
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>

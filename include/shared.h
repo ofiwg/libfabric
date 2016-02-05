@@ -54,6 +54,8 @@ extern "C" {
 
 #ifdef __APPLE__
 #include "osx/osd.h"
+#elif defined __FreeBSD__
+#include "freebsd/osd.h"
 #endif
 
 struct test_size_param {
