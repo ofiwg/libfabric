@@ -1579,13 +1579,22 @@ static struct gnix_vc *__gnix_nic_next_pending_rx_vc(struct gnix_nic *nic)
  * inability to progress other VCs (due to low memory). */
 static int __gnix_nic_vc_rx_progress(struct gnix_nic *nic)
 {
-	struct gnix_vc *vc;
 	int ret;
+	struct gnix_vc *first_vc = NULL, *vc;
 
 	while ((vc = __gnix_nic_next_pending_rx_vc(nic))) {
 		ret = __gnix_vc_rx_progress(vc);
 		if (ret != FI_SUCCESS)
 			break;
+
+		if (!first_vc) {
+			/* Record first VC processed. */
+			first_vc = vc;
+		} else if (vc == first_vc) {
+			/* VCs can self reschedule or be rescheduled in other
+			 * threads.  Exit if we loop back to the first VC. */
+			break;
+		}
 	}
 
 	return FI_SUCCESS;
