@@ -497,6 +497,30 @@ Test(cq_msg, multi_read)
 		cr_assert_eq(entry[j].flags, (uint64_t) j);
 }
 
+Test(cq_msg, multi_sread, .init = cq_wait_unspec_setup)
+{
+	int ret = 0;
+	size_t count = 3;
+	struct fi_cq_msg_entry entry[count];
+
+	cr_assert(cq_priv->events->free_list.head);
+	cr_assert(!cq_priv->events->item_list.head);
+
+	ret = fi_cq_sread(rcq, &entry, count, NULL, 100);
+	cr_assert_eq(ret, -FI_EAGAIN);
+
+	for (size_t i = 0; i < count; i++)
+		_gnix_cq_add_event(cq_priv, 0, (uint64_t) i, 0, 0, 0, 0, 0);
+
+	cr_assert(cq_priv->events->item_list.head);
+
+	ret = fi_cq_sread(rcq, &entry, count, NULL, -1);
+	cr_assert_eq(ret, count);
+
+	for (size_t j = 0; j < count; j++)
+		cr_assert_eq(entry[j].flags, (uint64_t) j);
+}
+
 TestSuite(cq_wait_obj, .fini = cq_teardown);
 TestSuite(cq_wait_control, .fini = cq_teardown);
 TestSuite(cq_wait_ops, .fini = cq_teardown);
@@ -597,10 +621,6 @@ Test(cq_wait_ops, fd, .init = cq_wait_fd_setup)
 {
 	cr_expect_neq(cq_priv->cq_fid.ops->signal, fi_no_cq_signal,
 		      "signal implementation not available.");
-	cr_expect_eq(cq_priv->cq_fid.ops->sread, fi_no_cq_sread,
-		     "sread implementation available.");
-	cr_expect_eq(cq_priv->cq_fid.ops->sreadfrom, fi_no_cq_sreadfrom,
-		     "sreadfrom implementation available.");
 	cr_expect_neq(cq_priv->cq_fid.fid.ops->control, fi_no_control,
 		      "control implementation not available.");
 }
