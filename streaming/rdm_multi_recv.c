@@ -341,7 +341,7 @@ int main(int argc, char **argv)
 
 	ret = run();
 
-	ft_free_res();
 	free_res();
+	ft_free_res();
 	return -ret;
 }
