@@ -89,7 +89,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
-
+	/* Closes non-scalable endpoint that was allocated in the common code */
 	FT_CLOSE_FID(ep);
 
 	txcq_array = calloc(ctx_cnt, sizeof *txcq_array);
@@ -380,6 +380,8 @@ int main(int argc, char **argv)
 	ret = run();
 
 	free_res();
+	/* Closes the scalable ep that was allocated in the test */
+	FT_CLOSE_FID(sep);
 	ft_free_res();
 	return -ret;
 }
