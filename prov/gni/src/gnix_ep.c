@@ -1714,6 +1714,94 @@ ssize_t gnix_cancel(fid_t fid, void *context)
 	return ret;
 }
 
+static int gnix_ep_getopt(fid_t fid, int level, int optname,
+			  void *optval, size_t *optlen)
+{
+	struct gnix_fid_ep *gnix_ep;
+
+	if (!fid || !optval || !optlen)
+		return -FI_EINVAL;
+	else if (level != FI_OPT_ENDPOINT)
+		return -FI_ENOPROTOOPT;
+
+	gnix_ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
+
+	switch (optname) {
+	case FI_OPT_MIN_MULTI_RECV:
+		*(size_t *)optval = gnix_ep->min_multi_recv;
+		*optlen = sizeof(size_t);
+		break;
+	default:
+		return -FI_ENOPROTOOPT;
+	}
+
+	return 0;
+}
+
+static int gnix_ep_setopt(fid_t fid, int level, int optname,
+			  const void *optval, size_t optlen)
+{
+	struct gnix_fid_ep *gnix_ep;
+
+	if (!fid || !optval)
+		return -FI_EINVAL;
+	else if (level != FI_OPT_ENDPOINT)
+		return -FI_ENOPROTOOPT;
+
+	gnix_ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
+
+	switch (optname) {
+	case FI_OPT_MIN_MULTI_RECV:
+		if (optlen != sizeof(size_t))
+			return -FI_EINVAL;
+		gnix_ep->min_multi_recv = *(size_t *)optval;
+		break;
+	default:
+		return -FI_ENOPROTOOPT;
+	}
+
+	return 0;
+}
+
+static ssize_t gnix_ep_rx_size_left(struct fid_ep *ep)
+{
+	if (!ep)
+		return -FI_EINVAL;
+
+	switch (ep->fid.fclass) {
+	case FI_CLASS_EP:
+		break;
+	case FI_CLASS_RX_CTX:
+	case FI_CLASS_SRX_CTX:
+		break;
+	default:
+		GNIX_INFO(FI_LOG_EP_CTRL, "Invalid EP type\n");
+		return -FI_EINVAL;
+	}
+
+	/* We can queue RXs indefinitely, return an arbitrary low water mark. */
+	return 64;
+}
+
+static ssize_t gnix_ep_tx_size_left(struct fid_ep *ep)
+{
+	if (!ep)
+		return -FI_EINVAL;
+
+	switch (ep->fid.fclass) {
+	case FI_CLASS_EP:
+		break;
+	case FI_CLASS_TX_CTX:
+		break;
+	default:
+		GNIX_INFO(FI_LOG_EP_CTRL, "Invalid EP type\n");
+		return -FI_EINVAL;
+	}
+
+	/* We can queue TXs indefinitely, return an arbitrary low water mark. */
+	return 64;
+}
+
 /*******************************************************************************
  * FI_OPS_* data structures.
  ******************************************************************************/
@@ -1729,12 +1817,12 @@ static struct fi_ops gnix_ep_fi_ops = {
 static struct fi_ops_ep gnix_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = gnix_cancel,
-	.getopt = fi_no_getopt,
-	.setopt = fi_no_setopt,
+	.getopt = gnix_ep_getopt,
+	.setopt = gnix_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
-	.rx_size_left = fi_no_rx_size_left,
-	.tx_size_left = fi_no_tx_size_left,
+	.rx_size_left = gnix_ep_rx_size_left,
+	.tx_size_left = gnix_ep_tx_size_left,
 };
 
 static struct fi_ops_msg gnix_ep_msg_ops = {
