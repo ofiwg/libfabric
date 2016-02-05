@@ -1,6 +1,7 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC. All
+ * rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -121,7 +122,7 @@ static inline int __gnix_buddy_create_lists(gnix_buddy_alloc_handle_t
 	uint32_t i, offset = 0;
 
 	alloc_handle->nlists = (uint32_t) __gnix_buddy_log2(alloc_handle->max /
-					       MIN_BLOCK_SIZE) + 1;
+							    MIN_BLOCK_SIZE) + 1;
 	alloc_handle->lists = calloc(1, sizeof(struct dlist_entry) *
 				     alloc_handle->nlists);
 
@@ -152,34 +153,24 @@ static inline int __gnix_buddy_create_lists(gnix_buddy_alloc_handle_t
 static inline void __gnix_buddy_split(gnix_buddy_alloc_handle_t *alloc_handle,
 				      uint32_t j, uint32_t i)
 {
-	void *tmp = NULL;
+	void *tmp = alloc_handle->lists[j].next;
 
-	dlist_remove(tmp = alloc_handle->lists[j].next);
-
-	_gnix_set_bit(&alloc_handle->bitmap,
-		      BITMAP_INDEX(tmp, alloc_handle->base, MIN_BLOCK_SIZE,
-				   OFFSET(MIN_BLOCK_SIZE, j)));
-
+	dlist_remove(tmp);
 
 	/* Split the block until we reach list "i" */
-	for (j--; j > i; j--) {
+	for (; j > i; j--) {
 		_gnix_set_bit(&alloc_handle->bitmap,
-			      BITMAP_INDEX(tmp +
+			      BITMAP_INDEX(tmp,
 					   OFFSET(MIN_BLOCK_SIZE, j),
 					   alloc_handle->base,
-					   MIN_BLOCK_SIZE,
-					   OFFSET(MIN_BLOCK_SIZE, j)));
+					   alloc_handle->len, MIN_BLOCK_SIZE));
 
-		dlist_insert_tail(tmp + OFFSET(MIN_BLOCK_SIZE, j),
-				  alloc_handle->lists + j);
+		dlist_insert_tail(tmp + OFFSET(MIN_BLOCK_SIZE, j - 1),
+				  alloc_handle->lists + j - 1);
 	}
 
 	/* Insert last block into list "i" */
 	dlist_insert_head(tmp, alloc_handle->lists + j);
-
-	/* Insert the buddy block of tmp into list "i" */
-	dlist_insert_tail(tmp + OFFSET(MIN_BLOCK_SIZE, j),
-			  alloc_handle->lists + j);
 }
 
 /**
@@ -216,9 +207,10 @@ static inline void __gnix_buddy_coalesce(gnix_buddy_alloc_handle_t *alloc_handle
 	       !_gnix_test_bit(&alloc_handle->bitmap,
 			       BITMAP_INDEX(BUDDY(*ptr, *block_size,
 						  alloc_handle->base),
+					    *block_size,
 					    alloc_handle->base,
-					    MIN_BLOCK_SIZE,
-					    *block_size))) {
+					    alloc_handle->len,
+					    MIN_BLOCK_SIZE))) {
 
 		dlist_remove(BUDDY(*ptr, *block_size, alloc_handle->base));
 
@@ -230,10 +222,11 @@ static inline void __gnix_buddy_coalesce(gnix_buddy_alloc_handle_t *alloc_handle
 		*block_size *= 2;
 
 		_gnix_clear_bit(&alloc_handle->bitmap,
-				BITMAP_INDEX(*ptr, alloc_handle->base,
-					     MIN_BLOCK_SIZE, *block_size));
+				BITMAP_INDEX(*ptr, *block_size,
+					     alloc_handle->base,
+					     alloc_handle->len,
+					     MIN_BLOCK_SIZE));
 	}
-
 }
 
 int _gnix_buddy_allocator_create(void *base, uint32_t len, uint32_t max,
@@ -361,8 +354,8 @@ int _gnix_buddy_alloc(gnix_buddy_alloc_handle_t *alloc_handle, void **ptr,
 	fastlock_release(&alloc_handle->lock);
 
 	_gnix_set_bit(&alloc_handle->bitmap,
-		      BITMAP_INDEX(*ptr, alloc_handle->base, MIN_BLOCK_SIZE,
-				   block_size));
+		      BITMAP_INDEX(*ptr, block_size, alloc_handle->base,
+				   alloc_handle->len, MIN_BLOCK_SIZE));
 
 	return FI_SUCCESS;
 }
@@ -385,6 +378,10 @@ int _gnix_buddy_free(gnix_buddy_alloc_handle_t *alloc_handle, void *ptr,
 
 	block_size = BLOCK_SIZE(len, MIN_BLOCK_SIZE);
 
+	_gnix_clear_bit(&alloc_handle->bitmap,
+			BITMAP_INDEX(ptr, block_size, alloc_handle->base,
+				     alloc_handle->len, MIN_BLOCK_SIZE));
+
 	fastlock_acquire(&alloc_handle->lock);
 
 	__gnix_buddy_coalesce(alloc_handle, &ptr, &block_size);
@@ -393,10 +390,6 @@ int _gnix_buddy_free(gnix_buddy_alloc_handle_t *alloc_handle, void *ptr,
 			  LIST_INDEX(block_size, MIN_BLOCK_SIZE));
 
 	fastlock_release(&alloc_handle->lock);
-
-	_gnix_clear_bit(&alloc_handle->bitmap,
-			BITMAP_INDEX(ptr, alloc_handle->base, MIN_BLOCK_SIZE,
-				     block_size));
 
 	return FI_SUCCESS;
 }
