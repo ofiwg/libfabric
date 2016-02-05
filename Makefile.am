@@ -43,10 +43,16 @@ dist_noinst_SCRIPTS = \
 	scripts/parseyaml.py
 
 nobase_dist_config_DATA = \
-	test_configs/*.test \
-	test_configs/sockets/*.test \
-	test_configs/udp/*.test \
-	test_configs/verbs/*.test
+        test_configs/eq_cq.test \
+        test_configs/lat_bw.test \
+        test_configs/sockets/all.test \
+        test_configs/sockets/quick.test \
+        test_configs/udp/all.test \
+        test_configs/udp/lat_bw.test \
+        test_configs/udp/quick.test \
+        test_configs/udp/simple.test \
+        test_configs/verbs/all.test \
+        test_configs/verbs/quick.test
 
 noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = \
