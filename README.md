@@ -17,38 +17,39 @@ Fabtests relies on being able to find an installed version of Libfabric. In
 some cases, Libfabric may be in default compiler / linker search paths, and you
 don't need to tell Fabtests where to find it. In other cases, you may need to
 tell Fabtests where to find the installed Libfabric's header and library files
-using the `--with-libfabric=PATH` option, described below.
+using the `--with-libfabric=<directory>` option, described below.
 
 ### Configure options
 
-Configure ships with many built in options (see `./configure --help`). Some
-useful options are:
+The `configure` script has many built in options (see `./configure
+--help`). Some useful options are:
 
 ```
 --prefix=<directory>
 ```
 
-By default `make install` will place the files into a system wide location.
-The prefix option specifies that the fabtests files should be installed into
-the directory named `<directory>`. The executables will be located at
-`<directory>/bin`.
+By default `make install` will place the files in the `/usr` tree.
+The `--prefix` option specifies that the Fabtests files should be
+installed into the tree specified by named `<directory>`. The
+executables will be located at `<directory>/bin`.
 
 ```
 --with-libfabric=<directory>
 ```
 
-Specify the directory where the libfabric library and header files are
-located. This is necessary if libfabric was installed in a non-standard
-location and the files are not present in the compiler/linker search paths.
-The libraries will be searched for in `<directory>/lib`, and headers will be
-searched for in `<directory>/include`.
+Specify the directory where the Libfabric library and header files are
+located.  This is necessary if Libfabric was installed in a location
+where the compiler and linker will not search by default.  The
+Libfabric library will be searched for in `<directory>/lib`, and
+headers will be searched for in `<directory>/include`.
 
 ```
 --with-valgrind=<directory>
 ```
 
-Directory where valgrind is installed.If valgrind is found, then valgrind
-annotations are enabled. This may incur a performance penalty.
+Directory where valgrind is installed.  If valgrind is found, then
+valgrind annotations are enabled. This may incur a performance
+penalty.
 
 ### Examples
 
