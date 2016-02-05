@@ -203,11 +203,9 @@ int main(int argc, char **argv)
 	ret = run();
 
 	if (opts.dst_addr) {
-		ret = close(pair[0]);
-		if (ret)
+		if (close(pair[0]))
 			FT_PRINTERR("close", errno);
-		ret = close(pair[1]);
-		if (ret)
+		if (close(pair[1]))
 			FT_PRINTERR("close", errno);
 		if (parent) {
 			if (waitpid(child_pid, NULL, WCONTINUED) < 0) {
