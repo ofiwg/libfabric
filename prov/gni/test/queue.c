@@ -32,6 +32,7 @@
  */
 
 #include <stdlib.h>
+#include <rdma/fabric.h> /* for container_of definition */
 
 #include "gnix_queue.h"
 

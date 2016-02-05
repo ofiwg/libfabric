@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,6 +39,7 @@
 #define _GNIX_UTIL_H_
 
 #include <stdio.h>
+#include <fi.h>
 #include "rdma/fi_log.h"
 
 extern struct fi_provider gnix_prov;
@@ -57,7 +58,6 @@ extern struct fi_provider gnix_prov;
 #else
 
 /* defined in gnix_init.c */
-#include <fi.h> /* for atomic_t */
 extern __thread pid_t gnix_debug_pid;
 extern __thread uint32_t gnix_debug_tid;
 extern atomic_t gnix_debug_next_tid;
