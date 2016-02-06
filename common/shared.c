@@ -1078,13 +1078,21 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 	int64_t elapsed = get_elapsed(start, end, MICRO);
 	long long bytes = (long long) iters * tsize * xfers_per_iter;
 
-	if (header) {
-		printf("%-50s%-8s%-8s%-8s%8s %10s%13s\n",
-			"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
-		header = 0;
-	}
+	if (name) {
+		if (header) {
+			printf("%-50s%-8s%-8s%-8s%8s %10s%13s\n",
+					"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
+			header = 0;
+		}
 
-	printf("%-50s", name);
+		printf("%-50s", name);
+	} else {
+		if (header) {
+			printf("%-8s%-8s%-8s%8s %10s%13s\n",
+					"bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
+			header = 0;
+		}
+	}
 
 	printf("%-8s", size_str(str, tsize));
 

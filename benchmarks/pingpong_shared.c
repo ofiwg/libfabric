@@ -101,7 +101,7 @@ int pingpong(void)
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
 	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
+		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
 
 	return 0;
 }
