@@ -58,10 +58,25 @@ extern "C" {
 #include "freebsd/osd.h"
 #endif
 
+
 struct test_size_param {
 	int size;
-	int option;
+	int enable_flags;
 };
+
+extern struct test_size_param test_size[];
+const unsigned int test_cnt;
+#define TEST_CNT test_cnt
+
+#define FT_ENABLE_ALL		(~0)
+#define FT_DEFAULT_SIZE		(1 << 0)
+
+static inline int ft_use_size(int index, int enable_flags)
+{
+	return (enable_flags == FT_ENABLE_ALL) ||
+		(enable_flags & test_size[index].enable_flags);
+}
+
 
 enum precision {
 	NANO = 1,
@@ -96,7 +111,7 @@ struct ft_opts {
 	char *src_addr;
 	char *dst_addr;
 	char *av_name;
-	int size_option;
+	int sizes_enabled;
 	int options;
 	enum ft_comp_method comp_method;
 	int machr;
@@ -155,12 +170,10 @@ extern char default_port[8];
 		.iterations = 1000, \
 		.warmup_iterations = 10, \
 		.transfer_size = 1024, \
+		.sizes_enabled = FT_DEFAULT_SIZE, \
 		.argc = argc, .argv = argv \
 	}
 
-extern struct test_size_param test_size[];
-const unsigned int test_cnt;
-#define TEST_CNT test_cnt
 #define FT_STR_LEN 32
 #define FT_MAX_CTRL_MSG 64
 #define FT_MR_KEY 0xC0DE
