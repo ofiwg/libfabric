@@ -51,6 +51,8 @@ Finally, this document describes how to get started writing to the libfabric int
 How do I get involved?
 ======================
 
+## Read the documentation
+
 First, take a look at the above documentation and tutorial.  Then read the documentation:
 
 * [Man pages for v1.2.0](v1.2.0/man/)
@@ -61,6 +63,8 @@ First, take a look at the above documentation and tutorial.  Then read the docum
 
 A set of Linux man pages have been carefully written to specify the libfabric API.  Read through these man pages to get a sense of the libfabric API.  A [set of example applications](https://github.com/ofiwg/fabtests) have been developed to highlight how an application might use various aspects of libfabric.
 
+## Get the software
+
 Next, download the latest releases:
 
 * The libfabric library itself (including documentation): [libfabric-1.2.0.tar.bz2](http://downloads.openfabrics.org/downloads/ofi/libfabric-1.2.0.tar.bz2) (or [see all prior releases](http://downloads.openfabrics.org/downloads/ofi/))
@@ -68,7 +72,12 @@ Next, download the latest releases:
 
 The libfabric code base is being developed in [the main OFIWG libfabric GitHub repository](https://github.com/ofiwg/libfabric).
 
-Finally, [become part of the conversation](http://lists.openfabrics.org/mailman/listinfo/ofiwg)
+## Join the conversation
 
-[Join the ofiwg mailing list](http://lists.openfabrics.org/mailman/listinfo/ofiwg).  Notices of the every-other-Tuesday OFIWG Webexes are sent on this list; anyone can join the calls to listen and participate in the design of libfabric.
+There are two mailing lists for OFIWG discussions:
+
+* [The Libfabric users mailing list](http://lists.openfabrics.org/mailman/listinfo/libfabric-users).  This list is intended for general user questions about the Libfabric library, to include questions from developers trying to use Libfabric in their applications.
+* [The OFI working group mailing list](http://lists.openfabrics.org/mailman/listinfo/ofiwg).  This list is used for the discussion and development of the OFI APIs themselves (and by extension, the continued development of the Libfabric library).
+
+Notices of the every-other-Tuesday OFIWG Webexes are sent to the OFIWG mailing list.  Anyone can join the calls to listen and participate in the design of Libfabric.
 
