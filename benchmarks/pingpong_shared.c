@@ -71,8 +71,9 @@ int pingpong(void)
 	if (ret)
 		return ret;
 
-	ft_start();
-	for (i = 0; i < opts.iterations; i++) {
+	for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+		if (i == opts.warmup_iterations)
+			ft_start();
 		ret = opts.dst_addr ?
 			ft_tx(opts.transfer_size) : ft_rx(opts.transfer_size);
 		if (ret)

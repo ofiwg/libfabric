@@ -89,6 +89,7 @@ enum {
 
 struct ft_opts {
 	int iterations;
+	int warmup_iterations;
 	int transfer_size;
 	char *src_port;
 	char *dst_port;
@@ -145,13 +146,14 @@ int ft_check_buf(void *buf, int size);
 uint64_t ft_init_cq_data(struct fi_info *info);
 #define ADDR_OPTS "b:p:s:a:"
 #define INFO_OPTS "n:f:"
-#define CS_OPTS ADDR_OPTS "I:S:mc:t:"
+#define CS_OPTS ADDR_OPTS "I:S:mc:t:w:"
 
 extern char default_port[8];
 
 #define INIT_OPTS (struct ft_opts) \
 	{	.options = FT_OPT_RX_CQ | FT_OPT_TX_CQ, \
 		.iterations = 1000, \
+		.warmup_iterations = 10, \
 		.transfer_size = 1024, \
 		.argc = argc, .argv = argv \
 	}

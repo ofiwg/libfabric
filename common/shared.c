@@ -1254,6 +1254,9 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 	case 'a':
 		opts->av_name = optarg;
 		break;
+	case 'w':
+		opts->warmup_iterations = atoi(optarg);
+		break;
 	default:
 		/* let getopt handle unknown opts*/
 		break;
