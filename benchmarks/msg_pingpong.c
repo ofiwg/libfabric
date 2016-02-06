@@ -213,7 +213,7 @@ int main(int argc, char **argv)
 			-1) {
 		switch (op) {
 		default:
-			ft_parsepongopts(op);
+			ft_parsepongopts(op, optarg);
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;

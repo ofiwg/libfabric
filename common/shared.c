@@ -775,6 +775,41 @@ ssize_t ft_tx(size_t size)
 	return ret;
 }
 
+ssize_t ft_post_inject(size_t size)
+{
+	ssize_t ret;
+
+	if (hints->caps & FI_TAGGED) {
+		ret = fi_tinject(ep, tx_buf, size + ft_tx_prefix_size(),
+				remote_fi_addr, tx_seq);
+	} else {
+		ret = fi_inject(ep, tx_buf, size + ft_tx_prefix_size(),
+				remote_fi_addr);
+	}
+	if (ret) {
+		FT_PRINTERR("transmit", ret);
+		return ret;
+	}
+
+	tx_seq++;
+	tx_cq_cntr++;
+	return 0;
+}
+
+ssize_t ft_inject(size_t size)
+{
+	ssize_t ret;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
+		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+
+	ret = ft_post_inject(size);
+	if (ret)
+		return ret;
+
+	return ret;
+}
+
 ssize_t ft_post_rx(size_t size)
 {
 	ssize_t ret;

@@ -42,8 +42,7 @@
 #include "shared.h"
 #include "pingpong_shared.h"
 
-
-void ft_parsepongopts(int op)
+void ft_parsepongopts(int op, char *optarg)
 {
 	switch (op) {
 	case 'v':
@@ -51,6 +50,9 @@ void ft_parsepongopts(int op)
 		break;
 	case 'P':
 		hints->mode |= FI_MSG_PREFIX;
+		break;
+	case 'j':
+		hints->tx_attr->inject_size = atoi(optarg);
 		break;
 	default:
 		break;
@@ -61,6 +63,7 @@ void ft_pongusage(void)
 {
 	FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
 	FT_PRINT_OPTS_USAGE("-P", "enable prefix mode");
+	FT_PRINT_OPTS_USAGE("-j", "maximum inject message size");
 }
 
 int pingpong(void)
@@ -76,9 +79,13 @@ int pingpong(void)
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			ret = ft_tx(opts.transfer_size);
+			if (opts.transfer_size < fi->tx_attr->inject_size)
+				ret = ft_inject(opts.transfer_size);
+			else
+				ret = ft_tx(opts.transfer_size);
 			if (ret)
 				return ret;
+
 			ret = ft_rx(opts.transfer_size);
 			if (ret)
 				return ret;
@@ -91,7 +98,11 @@ int pingpong(void)
 			ret = ft_rx(opts.transfer_size);
 			if (ret)
 				return ret;
-			ret = ft_tx(opts.transfer_size);
+
+			if (opts.transfer_size < fi->tx_attr->inject_size)
+				ret = ft_inject(opts.transfer_size);
+			else
+				ret = ft_tx(opts.transfer_size);
 			if (ret)
 				return ret;
 		}

@@ -129,6 +129,7 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Ping pong client and server using counters.");
+			ft_pongusage();
 			return EXIT_FAILURE;
 		}
 	}

@@ -120,15 +120,17 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS PONG_OPTS)) != -1) {
 		switch (op) {
 		default:
+			ft_parsepongopts(op, optarg);
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Ping pong client and server using tagged messages.");
+			ft_pongusage();
 			return EXIT_FAILURE;
 		}
 	}

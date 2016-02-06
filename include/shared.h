@@ -233,6 +233,7 @@ ssize_t ft_post_rx(size_t size);
 ssize_t ft_post_tx(size_t size);
 ssize_t ft_rx(size_t size);
 ssize_t ft_tx(size_t size);
+ssize_t ft_inject(size_t size);
 
 int ft_cq_readerr(struct fid_cq *cq);
 int ft_get_rx_comp(uint64_t total);
