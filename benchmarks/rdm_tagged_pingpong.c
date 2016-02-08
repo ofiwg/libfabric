@@ -39,42 +39,11 @@
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
+#include <rdma/fi_tagged.h>
 
-#include "shared.h"
+#include <shared.h>
+#include "pingpong_shared.h"
 
-
-static int run_test(void)
-{
-	int ret, i;
-
-	ret = ft_sync();
-	if (ret)
-		goto out;
-
-	ft_start();
-	for (i = 0; i < opts.iterations; i++) {
-		ret = opts.dst_addr ? fi_inject(ep, tx_buf, opts.transfer_size, remote_fi_addr) :
-				 ft_rx(opts.transfer_size);
-		if (ret)
-			goto out;
-
-		ret = opts.dst_addr ? ft_rx(opts.transfer_size) :
-				fi_inject(ep, tx_buf, opts.transfer_size, remote_fi_addr);
-		if (ret)
-			goto out;
-	}
-	ft_stop();
-
-	if (opts.machr)
-		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
-	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
-
-	ret = 0;
-
-out:
-	return ret;
-}
 
 static int init_fabric(void)
 {
@@ -92,25 +61,19 @@ static int init_fabric(void)
 		return ret;
 	}
 
-	if (opts.transfer_size > fi->tx_attr->inject_size) {
-		fprintf(stderr, "Msg size greater than max inject size\n");
-		return -FI_EINVAL;
-	}
-
 	ret = ft_open_fabric_res();
 	if (ret)
 		return ret;
 
-	/* TODO:
-	 * Memory registration not required for send_buf since we use fi_inject.
-	 * fi_inject copies the buffer of data that needs to be sent.
-	 * Fix-up when separating send/receive buffer registration.
-	 */
 	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
 	ret = ft_init_ep();
+	if (ret)
+		return ret;
+
+	ret = ft_init_av();
 	if (ret)
 		return ret;
 
@@ -125,27 +88,19 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	ret = ft_init_av();
-	if (ret)
-		goto out;
-
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
-			if (test_size[i].option > opts.size_option)
+			if (!ft_use_size(i, opts.sizes_enabled))
 				continue;
-
 			opts.transfer_size = test_size[i].size;
-			if (opts.transfer_size > fi->tx_attr->inject_size)
-				break;
-
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = run_test();
+			ret = pingpong();
 			if (ret)
 				goto out;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = run_test();
+		ret = pingpong();
 		if (ret)
 			goto out;
 	}
@@ -160,23 +115,22 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.transfer_size = 64;
 
 	hints = fi_allocinfo();
-	if (!hints) {
-		FT_PRINTERR("fi_allocinfo", -FI_ENOMEM);
+	if (!hints)
 		return EXIT_FAILURE;
-	}
 
-	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS PONG_OPTS)) != -1) {
 		switch (op) {
 		default:
+			ft_parsepongopts(op, optarg);
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Ping pong client and server using inject.");
+			ft_csusage(argv[0], "Ping pong client and server using tagged messages.");
+			ft_pongusage();
 			return EXIT_FAILURE;
 		}
 	}
@@ -185,9 +139,8 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
-	hints->tx_attr->inject_size = opts.transfer_size;
+	hints->caps = FI_TAGGED;
+	hints->mode = FI_LOCAL_MR;
 
 	ret = run();
 

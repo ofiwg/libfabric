@@ -42,8 +42,7 @@
 #include "shared.h"
 #include "pingpong_shared.h"
 
-
-void ft_parsepongopts(int op)
+void ft_parsepongopts(int op, char *optarg)
 {
 	switch (op) {
 	case 'v':
@@ -51,6 +50,9 @@ void ft_parsepongopts(int op)
 		break;
 	case 'P':
 		hints->mode |= FI_MSG_PREFIX;
+		break;
+	case 'j':
+		hints->tx_attr->inject_size = atoi(optarg);
 		break;
 	default:
 		break;
@@ -61,6 +63,7 @@ void ft_pongusage(void)
 {
 	FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
 	FT_PRINT_OPTS_USAGE("-P", "enable prefix mode");
+	FT_PRINT_OPTS_USAGE("-j", "maximum inject message size");
 }
 
 int pingpong(void)
@@ -71,24 +74,45 @@ int pingpong(void)
 	if (ret)
 		return ret;
 
-	ft_start();
-	for (i = 0; i < opts.iterations; i++) {
-		ret = opts.dst_addr ?
-			ft_tx(opts.transfer_size) : ft_rx(opts.transfer_size);
-		if (ret)
-			return ret;
+	if (opts.dst_addr) {
+		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+			if (i == opts.warmup_iterations)
+				ft_start();
 
-		ret = opts.dst_addr ?
-			ft_rx(opts.transfer_size) : ft_tx(opts.transfer_size);
-		if (ret)
-			return ret;
+			if (opts.transfer_size < fi->tx_attr->inject_size)
+				ret = ft_inject(opts.transfer_size);
+			else
+				ret = ft_tx(opts.transfer_size);
+			if (ret)
+				return ret;
+
+			ret = ft_rx(opts.transfer_size);
+			if (ret)
+				return ret;
+		}
+	} else {
+		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+			if (i == opts.warmup_iterations)
+				ft_start();
+
+			ret = ft_rx(opts.transfer_size);
+			if (ret)
+				return ret;
+
+			if (opts.transfer_size < fi->tx_attr->inject_size)
+				ret = ft_inject(opts.transfer_size);
+			else
+				ret = ft_tx(opts.transfer_size);
+			if (ret)
+				return ret;
+		}
 	}
 	ft_stop();
 
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
 	else
-		show_perf(test_name, opts.transfer_size, opts.iterations, &start, &end, 2);
+		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
 
 	return 0;
 }

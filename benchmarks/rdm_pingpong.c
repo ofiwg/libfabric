@@ -40,7 +40,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
 
-#include <shared.h>
+#include "shared.h"
 #include "pingpong_shared.h"
 
 
@@ -89,7 +89,7 @@ static int run(void)
 
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
-			if (test_size[i].option > opts.size_option)
+			if (!ft_use_size(i, opts.sizes_enabled))
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
@@ -114,21 +114,23 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.options = FT_OPT_RX_CNTR | FT_OPT_TX_CNTR;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS PONG_OPTS)) !=
+			-1) {
 		switch (op) {
 		default:
+			ft_parsepongopts(op, optarg);
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Ping pong client and server using counters.");
+			ft_csusage(argv[0], "Ping pong client and server using RDM.");
+			ft_pongusage();
 			return EXIT_FAILURE;
 		}
 	}
@@ -138,7 +140,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG;
-	hints->mode = FI_LOCAL_MR;
+	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
 
 	ret = run();
 

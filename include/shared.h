@@ -58,10 +58,25 @@ extern "C" {
 #include "freebsd/osd.h"
 #endif
 
+
 struct test_size_param {
 	int size;
-	int option;
+	int enable_flags;
 };
+
+extern struct test_size_param test_size[];
+const unsigned int test_cnt;
+#define TEST_CNT test_cnt
+
+#define FT_ENABLE_ALL		(~0)
+#define FT_DEFAULT_SIZE		(1 << 0)
+
+static inline int ft_use_size(int index, int enable_flags)
+{
+	return (enable_flags == FT_ENABLE_ALL) ||
+		(enable_flags & test_size[index].enable_flags);
+}
+
 
 enum precision {
 	NANO = 1,
@@ -89,13 +104,14 @@ enum {
 
 struct ft_opts {
 	int iterations;
+	int warmup_iterations;
 	int transfer_size;
 	char *src_port;
 	char *dst_port;
 	char *src_addr;
 	char *dst_addr;
 	char *av_name;
-	int size_option;
+	int sizes_enabled;
 	int options;
 	enum ft_comp_method comp_method;
 	int machr;
@@ -145,20 +161,19 @@ int ft_check_buf(void *buf, int size);
 uint64_t ft_init_cq_data(struct fi_info *info);
 #define ADDR_OPTS "b:p:s:a:"
 #define INFO_OPTS "n:f:"
-#define CS_OPTS ADDR_OPTS "I:S:mc:t:"
+#define CS_OPTS ADDR_OPTS "I:S:mc:t:w:"
 
 extern char default_port[8];
 
 #define INIT_OPTS (struct ft_opts) \
 	{	.options = FT_OPT_RX_CQ | FT_OPT_TX_CQ, \
 		.iterations = 1000, \
+		.warmup_iterations = 10, \
 		.transfer_size = 1024, \
+		.sizes_enabled = FT_DEFAULT_SIZE, \
 		.argc = argc, .argv = argv \
 	}
 
-extern struct test_size_param test_size[];
-const unsigned int test_cnt;
-#define TEST_CNT test_cnt
 #define FT_STR_LEN 32
 #define FT_MAX_CTRL_MSG 64
 #define FT_MR_KEY 0xC0DE
@@ -231,6 +246,7 @@ ssize_t ft_post_rx(size_t size);
 ssize_t ft_post_tx(size_t size);
 ssize_t ft_rx(size_t size);
 ssize_t ft_tx(size_t size);
+ssize_t ft_inject(size_t size);
 
 int ft_cq_readerr(struct fid_cq *cq);
 int ft_get_rx_comp(uint64_t total);

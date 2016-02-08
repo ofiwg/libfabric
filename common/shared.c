@@ -88,29 +88,29 @@ struct fi_cntr_attr cntr_attr = {
 struct ft_opts opts;
 
 struct test_size_param test_size[] = {
-	{ 1 <<  1, 1 }, { (1 <<  1) + (1 <<  0), 2},
-	{ 1 <<  2, 2 }, { (1 <<  2) + (1 <<  1), 2},
-	{ 1 <<  3, 1 }, { (1 <<  3) + (1 <<  2), 2},
-	{ 1 <<  4, 2 }, { (1 <<  4) + (1 <<  3), 2},
-	{ 1 <<  5, 1 }, { (1 <<  5) + (1 <<  4), 2},
-	{ 1 <<  6, 0 }, { (1 <<  6) + (1 <<  5), 0},
-	{ 1 <<  7, 1 }, { (1 <<  7) + (1 <<  6), 0},
-	{ 1 <<  8, 1 }, { (1 <<  8) + (1 <<  7), 1},
-	{ 1 <<  9, 1 }, { (1 <<  9) + (1 <<  8), 1},
-	{ 1 << 10, 1 }, { (1 << 10) + (1 <<  9), 1},
-	{ 1 << 11, 1 }, { (1 << 11) + (1 << 10), 1},
-	{ 1 << 12, 0 }, { (1 << 12) + (1 << 11), 1},
-	{ 1 << 13, 1 }, { (1 << 13) + (1 << 12), 1},
-	{ 1 << 14, 1 }, { (1 << 14) + (1 << 13), 1},
-	{ 1 << 15, 1 }, { (1 << 15) + (1 << 14), 1},
-	{ 1 << 16, 0 }, { (1 << 16) + (1 << 15), 1},
-	{ 1 << 17, 1 }, { (1 << 17) + (1 << 16), 1},
-	{ 1 << 18, 1 }, { (1 << 18) + (1 << 17), 1},
-	{ 1 << 19, 1 }, { (1 << 19) + (1 << 18), 1},
-	{ 1 << 20, 0 }, { (1 << 20) + (1 << 19), 1},
-	{ 1 << 21, 1 }, { (1 << 21) + (1 << 20), 1},
-	{ 1 << 22, 1 }, { (1 << 22) + (1 << 21), 1},
-	{ 1 << 23, 1 },
+	{ 1 <<  1, 0 }, { (1 <<  1) + (1 <<  0), 0 },
+	{ 1 <<  2, 0 }, { (1 <<  2) + (1 <<  1), 0 },
+	{ 1 <<  3, 0 }, { (1 <<  3) + (1 <<  2), 0 },
+	{ 1 <<  4, 0 }, { (1 <<  4) + (1 <<  3), 0 },
+	{ 1 <<  5, 0 }, { (1 <<  5) + (1 <<  4), 0 },
+	{ 1 <<  6, FT_DEFAULT_SIZE }, { (1 <<  6) + (1 <<  5), 0 },
+	{ 1 <<  7, 0 }, { (1 <<  7) + (1 <<  6), 0 },
+	{ 1 <<  8, FT_DEFAULT_SIZE }, { (1 <<  8) + (1 <<  7), 0 },
+	{ 1 <<  9, 0 }, { (1 <<  9) + (1 <<  8), 0 },
+	{ 1 << 10, FT_DEFAULT_SIZE }, { (1 << 10) + (1 <<  9), 0 },
+	{ 1 << 11, 0 }, { (1 << 11) + (1 << 10), 0 },
+	{ 1 << 12, FT_DEFAULT_SIZE }, { (1 << 12) + (1 << 11), 0 },
+	{ 1 << 13, 0 }, { (1 << 13) + (1 << 12), 0 },
+	{ 1 << 14, 0 }, { (1 << 14) + (1 << 13), 0 },
+	{ 1 << 15, 0 }, { (1 << 15) + (1 << 14), 0 },
+	{ 1 << 16, FT_DEFAULT_SIZE }, { (1 << 16) + (1 << 15), 0 },
+	{ 1 << 17, 0 }, { (1 << 17) + (1 << 16), 0 },
+	{ 1 << 18, 0 }, { (1 << 18) + (1 << 17), 0 },
+	{ 1 << 19, 0 }, { (1 << 19) + (1 << 18), 0 },
+	{ 1 << 20, FT_DEFAULT_SIZE }, { (1 << 20) + (1 << 19), 0 },
+	{ 1 << 21, 0 }, { (1 << 21) + (1 << 20), 0 },
+	{ 1 << 22, 0 }, { (1 << 22) + (1 << 21), 0 },
+	{ 1 << 23, 0 },
 };
 
 const unsigned int test_cnt = (sizeof test_size / sizeof test_size[0]);
@@ -775,6 +775,41 @@ ssize_t ft_tx(size_t size)
 	return ret;
 }
 
+ssize_t ft_post_inject(size_t size)
+{
+	ssize_t ret;
+
+	if (hints->caps & FI_TAGGED) {
+		ret = fi_tinject(ep, tx_buf, size + ft_tx_prefix_size(),
+				remote_fi_addr, tx_seq);
+	} else {
+		ret = fi_inject(ep, tx_buf, size + ft_tx_prefix_size(),
+				remote_fi_addr);
+	}
+	if (ret) {
+		FT_PRINTERR("transmit", ret);
+		return ret;
+	}
+
+	tx_seq++;
+	tx_cq_cntr++;
+	return 0;
+}
+
+ssize_t ft_inject(size_t size)
+{
+	ssize_t ret;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
+		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+
+	ret = ft_post_inject(size);
+	if (ret)
+		return ret;
+
+	return ret;
+}
+
 ssize_t ft_post_rx(size_t size)
 {
 	ssize_t ret;
@@ -1078,13 +1113,21 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 	int64_t elapsed = get_elapsed(start, end, MICRO);
 	long long bytes = (long long) iters * tsize * xfers_per_iter;
 
-	if (header) {
-		printf("%-50s%-8s%-8s%-8s%8s %10s%13s\n",
-			"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
-		header = 0;
-	}
+	if (name) {
+		if (header) {
+			printf("%-50s%-8s%-8s%-8s%8s %10s%13s\n",
+					"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
+			header = 0;
+		}
 
-	printf("%-50s", name);
+		printf("%-50s", name);
+	} else {
+		if (header) {
+			printf("%-8s%-8s%-8s%8s %10s%13s\n",
+					"bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
+			header = 0;
+		}
+	}
 
 	printf("%-8s", size_str(str, tsize));
 
@@ -1230,7 +1273,7 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 		break;
 	case 'S':
 		if (!strncasecmp("all", optarg, 3)) {
-			opts->size_option = 1;
+			opts->sizes_enabled = FT_ENABLE_ALL;
 		} else {
 			opts->options |= FT_OPT_SIZE;
 			opts->transfer_size = atoi(optarg);
@@ -1253,6 +1296,9 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 		break;
 	case 'a':
 		opts->av_name = optarg;
+		break;
+	case 'w':
+		opts->warmup_iterations = atoi(optarg);
 		break;
 	default:
 		/* let getopt handle unknown opts*/
