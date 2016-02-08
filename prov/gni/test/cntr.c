@@ -412,7 +412,7 @@ static void do_write_wait(int len)
 	uint64_t old_w_cnt, new_w_cnt;
 	uint64_t old_r_cnt, new_r_cnt;
 	ssize_t sz;
-	const int iters = 1;
+	const int iters = 100;
 	int i;
 
 	init_data(source, len, 0xab);
@@ -484,7 +484,7 @@ static void do_read(int len)
 
 static void do_read_wait(int len)
 {
-	int i, iters = 10;
+	int i, iters = 100;
 	ssize_t sz;
 	uint64_t old_w_cnt, new_w_cnt;
 	uint64_t old_r_cnt;
@@ -720,6 +720,11 @@ Test(cntr_mt, read_wait)
 
 	for (i = 1; i < NUM_EPS; i++) {
 		pthread_join(threads[i], NULL);
+	}
+
+	/* Must wait until all threads are done, since we don't know
+	 * which thread got which id */
+	for (i = 1; i < NUM_EPS; i++) {
 		for (j = 0; j < msg_size; j++) {
 			cr_assert(source[i*msg_size+j] == get_mark(i));
 		}
@@ -760,7 +765,7 @@ Test(cntr_mt, write_wait)
 	int i, j;
 	pthread_t threads[NUM_EPS];
 	const int msg_size = 128;
-	struct tinfo info = { msg_size, 100 /* iters */};
+	struct tinfo info = { msg_size, 500 /* iters */};
 
 	cr_assert(NUM_EPS*msg_size <= BUF_SZ);
 
@@ -778,6 +783,11 @@ Test(cntr_mt, write_wait)
 
 	for (i = 1; i < NUM_EPS; i++) {
 		pthread_join(threads[i], NULL);
+	}
+
+	/* Must wait until all threads are done, since we don't know
+	 * which thread got which id */
+	for (i = 1; i < NUM_EPS; i++) {
 		for (j = 0; j < msg_size; j++) {
 			cr_assert(target[i*msg_size+j] == get_mark(i));
 		}
