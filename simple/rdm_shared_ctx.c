@@ -277,6 +277,13 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
+	/* Post recv */
+	ret = fi_recv(srx_ctx, buf, rx_size, fi_mr_desc(mr), 0, &rx_ctx);
+	if (ret) {
+		FT_PRINTERR("fi_recv", ret);
+		return ret;
+	}
+
 	return 0;
 }
 
