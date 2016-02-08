@@ -100,6 +100,7 @@ enum {
 	FT_OPT_RX_CNTR		= 1 << 5,
 	FT_OPT_TX_CNTR		= 1 << 6,
 	FT_OPT_VERIFY_DATA	= 1 << 7,
+	FT_OPT_ALIGN		= 1 << 8,
 };
 
 struct ft_opts {
@@ -161,7 +162,7 @@ int ft_check_buf(void *buf, int size);
 uint64_t ft_init_cq_data(struct fi_info *info);
 #define ADDR_OPTS "b:p:s:a:"
 #define INFO_OPTS "n:f:"
-#define CS_OPTS ADDR_OPTS "I:S:mc:t:w:"
+#define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
 
 extern char default_port[8];
 
