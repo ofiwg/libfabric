@@ -85,7 +85,7 @@ static int run(void)
 
 	ret = ft_init_av();
 	if (ret)
-		goto out;
+		return ret;
 
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
@@ -95,18 +95,16 @@ static int run(void)
 			init_test(&opts, test_name, sizeof(test_name));
 			ret = pingpong();
 			if (ret)
-				goto out;
+				return ret;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
 		ret = pingpong();
 		if (ret)
-			goto out;
+			return ret;
 	}
 
-	ft_finalize();
-out:
-	return ret;
+	return ft_finalize();
 }
 
 int main(int argc, char **argv)

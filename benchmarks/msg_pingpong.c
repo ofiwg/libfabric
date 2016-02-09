@@ -193,7 +193,7 @@ static int run(void)
 			goto out;
 	}
 
-	ft_finalize();
+	ret = ft_finalize();
 out:
 	fi_shutdown(ep, 0);
 	return ret;
