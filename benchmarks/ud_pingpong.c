@@ -92,6 +92,12 @@ static int run(void)
 	if (ret)
 		return ret;
 
+	/* Post an extra receive to avoid lacking a posted receive in the
+	 * finalize.
+	 */
+	ret = fi_recv(ep, rx_buf, rx_size + ft_rx_prefix_size(), fi_mr_desc(mr),
+			0, &rx_ctx);
+
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (!ft_use_size(i, opts.sizes_enabled))
