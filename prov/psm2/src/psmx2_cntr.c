@@ -76,6 +76,17 @@ int psmx2_process_trigger(struct psmx2_fid_domain *domain,
 					  trigger->tsend.flags,
 					  trigger->tsend.data);
 		break;
+	case PSMX2_TRIGGERED_TSENDV:
+		psmx2_tagged_sendv_generic(trigger->tsendv.ep,
+					   trigger->tsendv.iov,
+					   trigger->tsendv.desc,
+					   trigger->tsendv.count,
+					   trigger->tsendv.dest_addr,
+					   trigger->tsendv.tag,
+					   trigger->tsendv.context,
+					   trigger->tsendv.flags,
+					   trigger->tsendv.data);
+		break;
 	case PSMX2_TRIGGERED_TRECV:
 		psmx2_tagged_recv_generic(trigger->trecv.ep,
 					  trigger->trecv.buf,

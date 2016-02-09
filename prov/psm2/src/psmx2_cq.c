@@ -178,13 +178,13 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 		sendv_req = PSMX2_CTXT_USER(fi_context);
 		op_context = sendv_req->user_context;
 		buf = NULL;
-		flags = FI_SEND | FI_MSG;
+		flags = FI_SEND | sendv_req->comp_flag;
 		break;
 	case PSMX2_IOV_RECV_CONTEXT:
 		sendv_rep = PSMX2_CTXT_USER(fi_context);
 		op_context = sendv_rep->user_context;
 		buf = sendv_rep->buf;
-		flags = FI_RECV | FI_MSG;
+		flags = FI_RECV | sendv_rep->comp_flag;
 		is_recv = 1;
 		break;
 	case PSMX2_RECV_CONTEXT:
@@ -404,14 +404,10 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				break;
 
 			case PSMX2_RECV_CONTEXT:
+			case PSMX2_TRECV_CONTEXT:
 				if ((psm2_status.msg_tag.tag2 & PSMX2_IOV_BIT) &&
 				    !psmx2_handle_sendv_req(tmp_ep, &psm2_status, 0))
 					continue;
-				tmp_cq = tmp_ep->recv_cq;
-				tmp_cntr = tmp_ep->recv_cntr;
-				break;
-
-			case PSMX2_TRECV_CONTEXT:
 				tmp_cq = tmp_ep->recv_cq;
 				tmp_cntr = tmp_ep->recv_cntr;
 				break;
