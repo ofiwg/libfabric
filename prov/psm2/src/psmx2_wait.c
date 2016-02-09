@@ -215,8 +215,7 @@ static int psmx2_wait_close(fid_t fid)
 	if (wait->type == FI_WAIT_FD) {
 		close(wait->fd[0]);
 		close(wait->fd[1]);
-	}
-	else if (wait->type == FI_WAIT_MUTEX_COND) {
+	} else if (wait->type == FI_WAIT_MUTEX_COND) {
 		pthread_mutex_destroy(&wait->mutex);
 		pthread_cond_destroy(&wait->cond);
 	}

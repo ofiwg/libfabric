@@ -173,8 +173,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 		req = calloc(1, sizeof(*req));
 		if (!req) {
 			err = -FI_ENOMEM;
-		}
-		else {
+		} else {
 			req->ep = ep;
 			req->op = args[0].u32w0;
 			req->write.addr = (uint64_t)rma_addr;
@@ -204,8 +203,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			-FI_EINVAL;
 		if (!op_error) {
 			rma_addr += mr->offset;
-		}
-		else {
+		} else {
 			rma_addr = NULL;
 			rma_len = 0;
 		}
@@ -249,8 +247,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 		req = calloc(1, sizeof(*req));
 		if (!req) {
 			err = -FI_ENOMEM;
-		}
-		else {
+		} else {
 			req->ep = ep;
 			req->op = args[0].u32w0;
 			req->read.addr = (uint64_t)rma_addr;
@@ -384,8 +381,7 @@ static ssize_t psmx2_rma_self(int am_cmd,
 				cq = dst_ep->recv_cq;
 			if (mr->cntr != cntr)
 				mr_cntr = mr->cntr;
-		}
-		else {
+		} else {
 			dst = buf;
 			src = (void *)addr;
 			cntr = dst_ep->remote_read_cntr;
@@ -486,8 +482,7 @@ int psmx2_am_process_rma(struct psmx2_fid_domain *domain,
 				     &psm2_tag, &psm2_tagsel, 0,
 				     (void *)req->write.addr, req->write.len,
 				     (void *)&req->fi_context, &psm2_req);
-	}
-	else {
+	} else {
 		tag32 = PSMX2_TAG32(PSMX2_RMA_BIT, req->read.vl, req->read.peer_vl);
 		PSMX2_SET_TAG(psm2_tag, (uint64_t)req->read.context, tag32);
 		err = psm2_mq_isend2(domain->psm2_mq,
@@ -558,8 +553,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
-	}
-	else {
+	} else {
 		if (!src_addr)
 			return -FI_EINVAL;
 
@@ -744,8 +738,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
-	}
-	else {
+	} else {
 		if (!dest_addr)
 			return -FI_EINVAL;
 
@@ -774,8 +767,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req + sizeof(*req), (void *)buf, len);
 		buf = (void *)req + sizeof(*req);
-	}
-	else {
+	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
 			return -FI_ENOMEM;
@@ -821,8 +813,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 		if (flags & FI_DELIVERY_COMPLETE) {
 			args[0].u32w0 |= PSMX2_AM_FORCE_ACK;
 			psm2_context = NULL;
-		}
-		else {
+		} else {
 			psm2_context = (void *)&req->fi_context;
 		}
 
@@ -858,8 +849,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 		PSMX2_AM_SET_FLAG(args[0].u32w0, PSMX2_AM_DATA | PSMX2_AM_EOM);
 		args[4].u64 = data;
 		nargs++;
-	}
-	else {
+	} else {
 		PSMX2_AM_SET_FLAG(args[0].u32w0, PSMX2_AM_EOM);
 	}
 	psm2_am_request_short(psm2_epaddr, PSMX2_AM_RMA_HANDLER, args, nargs,

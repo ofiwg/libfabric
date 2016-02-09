@@ -102,32 +102,28 @@ static void psmx2_ep_optimize_ops(struct psmx2_fid_ep *ep)
 			ep->ep.tagged = &psmx2_tagged_ops;
 			FI_INFO(&psmx2_prov, FI_LOG_EP_DATA,
 				"generic tagged ops.\n");
-		}
-		else if (ep->send_selective_completion && ep->recv_selective_completion) {
+		} else if (ep->send_selective_completion && ep->recv_selective_completion) {
 			if (ep->av && ep->av->type == FI_AV_TABLE)
 				ep->ep.tagged = &psmx2_tagged_ops_no_event_av_table;
 			else
 				ep->ep.tagged = &psmx2_tagged_ops_no_event_av_map;
 			FI_INFO(&psmx2_prov, FI_LOG_EP_DATA,
 				"tagged ops optimized for op_flags=0 and event suppression\n");
-		}
-		else if (ep->send_selective_completion) {
+		} else if (ep->send_selective_completion) {
 			if (ep->av && ep->av->type == FI_AV_TABLE)
 				ep->ep.tagged = &psmx2_tagged_ops_no_send_event_av_table;
 			else
 				ep->ep.tagged = &psmx2_tagged_ops_no_send_event_av_map;
 			FI_INFO(&psmx2_prov, FI_LOG_EP_DATA,
 				"tagged ops optimized for op_flags=0 and send event suppression\n");
-		}
-		else if (ep->recv_selective_completion) {
+		} else if (ep->recv_selective_completion) {
 			if (ep->av && ep->av->type == FI_AV_TABLE)
 				ep->ep.tagged = &psmx2_tagged_ops_no_recv_event_av_table;
 			else
 				ep->ep.tagged = &psmx2_tagged_ops_no_recv_event_av_map;
 			FI_INFO(&psmx2_prov, FI_LOG_EP_DATA,
 				"tagged ops optimized for op_flags=0 and recv event suppression\n");
-		}
-		else {
+		} else {
 			if (ep->av && ep->av->type == FI_AV_TABLE)
 				ep->ep.tagged = &psmx2_tagged_ops_no_flag_av_table;
 			else

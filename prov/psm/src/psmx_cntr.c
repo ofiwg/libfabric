@@ -200,8 +200,7 @@ void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
 			fastlock_acquire(&domain->trigger_queue.lock);
 			slist_insert_tail(&trigger->list_entry, &domain->trigger_queue.list);
 			fastlock_release(&domain->trigger_queue.lock);
-		}
-		else {
+		} else {
 			psmx_process_trigger(domain, trigger);
 		}
 
@@ -310,8 +309,7 @@ static int psmx_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout
 					     timeout - msec_passed);
 			if (ret == -FI_ETIMEDOUT)
 				break;
-		}
-		else {
+		} else {
 			psmx_progress(cntr_priv->domain);
 		}
 

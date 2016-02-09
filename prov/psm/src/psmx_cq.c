@@ -238,8 +238,7 @@ static struct psmx_cq_event *psmx_cq_create_event_from_status(
 	 */
 	if (event_in && count && !psm_status->error_code) {
 		event = event_in;
-	}
-	else {
+	} else {
 		event = psmx_cq_alloc_event(cq);
 		if (!event)
 			return NULL;
@@ -326,8 +325,7 @@ out:
 					*src_addr = FI_ADDR_NOTAVAIL;
 #endif
 			}
-		}
-		else {
+		} else {
 #if (PSM_VERNO_MAJOR >= 2)
 			event->source = (uint64_t) psm_status->msg_peer;
 #else
@@ -493,8 +491,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						event_buffer = count ? event_buffer + cq->entry_size : NULL;
 						if (src_addr)
 							src_addr = count ? src_addr + 1 : NULL;
-					}
-					else {
+					} else {
 						psmx_cq_enqueue_event(mr->domain->rma_ep->recv_cq, event);
 						if (mr->domain->rma_ep->recv_cq == cq)
 							read_more = 0;
@@ -538,8 +535,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 					event_buffer = count ? event_buffer + cq->entry_size : NULL;
 					if (src_addr)
 						src_addr = count ? src_addr + 1 : NULL;
-				}
-				else {
+				} else {
 					psmx_cq_enqueue_event(tmp_cq, event);
 					if (tmp_cq == cq)
 						read_more = 0;
@@ -565,8 +561,7 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 						return psmx_errno(err);
 
 					PSMX_CTXT_REQ(fi_context) = psm_req;
-				}
-				else {
+				} else {
 					free(req);
 				}
 			}
@@ -575,12 +570,10 @@ int psmx_cq_poll_mq(struct psmx_fid_cq *cq, struct psmx_fid_domain *domain,
 				continue;
 
 			return read_count;
-		}
-		else if (err == PSM_MQ_NO_COMPLETIONS) {
+		} else if (err == PSM_MQ_NO_COMPLETIONS) {
 			fastlock_release(&domain->poll_lock);
 			return read_count;
-		}
-		else {
+		} else {
 			fastlock_release(&domain->poll_lock);
 			return psmx_errno(err);
 		}
@@ -629,15 +622,13 @@ static ssize_t psmx_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 				if (src_addr)
 					src_addr++;
 				continue;
-			}
-			else {
+			} else {
 				cq_priv->pending_error = event;
 				if (!read_count)
 					read_count = -FI_EAVAIL;
 				break;
 			}
-		}
-		else {
+		} else {
 			break;
 		}
 	}
@@ -687,8 +678,7 @@ static ssize_t psmx_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	if (event_count < threshold) {
 		if (cq_priv->wait) {
 			psmx_wait_wait((struct fid_wait *)cq_priv->wait, timeout);
-		}
-		else {
+		} else {
 			clock_gettime(CLOCK_REALTIME, &ts0);
 			while (1) {
 				if (psmx_cq_poll_mq(cq_priv, cq_priv->domain, NULL, 0, NULL))

@@ -155,8 +155,7 @@ static int psmx2_av_connet_eps(struct psmx2_fid_av *av, size_t count,
 				epaddrs[i] = epconn.addr;
 			else
 				mask[i] = 1;
-		}
-		else {
+		} else {
 			mask[i] = 1;
 		}
 	}
@@ -171,8 +170,7 @@ static int psmx2_av_connet_eps(struct psmx2_fid_av *av, size_t count,
 		if (errors[i] == PSM2_OK ||
 		    errors[i] == PSM2_EPID_ALREADY_CONNECTED) {
 			psmx2_set_epaddr_context(av->domain, epids[i], epaddrs[i]);
-		}
-		else {
+		} else {
 			/* If duplicated addrs are passed to psm2_ep_connect(),
 			 * all but one will fail with error "Endpoint could not
 			 * be reached". This should be treated the same as
@@ -324,8 +322,7 @@ static int psmx2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 		name.epid = av_priv->epids[idx];
 		name.vlane = av_priv->vlanes[idx];
-	}
-	else {
+	} else {
 		context = psm2_epaddr_getctxt((void *)fi_addr);
 		name.epid = context->epid;
 		name.vlane = PSMX2_ADDR_TO_VL(fi_addr);

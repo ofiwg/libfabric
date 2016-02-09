@@ -467,8 +467,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			target_ep = mr->domain->atomics_ep;
 			if (op == FI_ATOMIC_READ) {
 				cntr = target_ep->remote_read_cntr;
-			}
-			else {
+			} else {
 				cntr = target_ep->remote_write_cntr;
 				mr_cntr = mr->cntr;
 			}
@@ -478,8 +477,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 			if (mr_cntr && mr_cntr != cntr)
 				psmx_cntr_inc(mr_cntr);
-		}
-		else {
+		} else {
 			tmp_buf = NULL;
 		}
 
@@ -523,8 +521,7 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 			if (mr_cntr && mr_cntr != cntr)
 				psmx_cntr_inc(mr_cntr);
-		}
-		else {
+		} else {
 			tmp_buf = NULL;
 		}
 
@@ -651,8 +648,7 @@ static int psmx_atomic_self(int am_cmd,
 			err = psmx_atomic_do_readwrite((void *)addr, (void *)buf,
 						       (void *)result, (int)datatype,
 						       (int)op, (int)count);
-		}
-		else {
+		} else {
 			tmp_buf = malloc(len);
 			if (tmp_buf) {
 				memcpy(tmp_buf, result, len);
@@ -661,8 +657,7 @@ static int psmx_atomic_self(int am_cmd,
 							       (int)op, (int)count);
 				memcpy(result, tmp_buf, len);
 				free(tmp_buf);
-			}
-			else {
+			} else {
 				err = -FI_ENOMEM;
 			}
 		}
@@ -677,8 +672,7 @@ static int psmx_atomic_self(int am_cmd,
 			err = psmx_atomic_do_compwrite((void *)addr, (void *)buf,
 						       (void *)compare, (void *)result,
 						       (int)datatype, (int)op, (int)count);
-		}
-		else {
+		} else {
 			tmp_buf = malloc(len);
 			if (tmp_buf) {
 				memcpy(tmp_buf, result, len);
@@ -687,8 +681,7 @@ static int psmx_atomic_self(int am_cmd,
 							       (int)datatype, (int)op, (int)count);
 				memcpy(result, tmp_buf, len);
 				free(tmp_buf);
-			}
-			else {
+			} else {
 				err = -FI_ENOMEM;
 			}
 		}
@@ -699,8 +692,7 @@ static int psmx_atomic_self(int am_cmd,
 	target_ep = mr->domain->atomics_ep;
 	if (op == FI_ATOMIC_READ) {
 		cntr = target_ep->remote_read_cntr;
-	}
-	else {
+	} else {
 		cntr = target_ep->remote_write_cntr;
 		mr_cntr = mr->cntr;
 	}
@@ -810,8 +802,7 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 			return -FI_EINVAL;
 
 		dest_addr = (fi_addr_t) av->psm_epaddrs[idx];
-	}
-	else if (!dest_addr) {
+	} else if (!dest_addr) {
 		return -FI_EINVAL;
 	}
 
@@ -835,8 +826,7 @@ ssize_t _psmx_atomic_write(struct fid_ep *ep,
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req+sizeof(*req), (void *)buf, len);
 		buf = (void *)req + sizeof(*req);
-	}
-	else {
+	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
 			return -FI_ENOMEM;
@@ -999,8 +989,7 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 			return -FI_EINVAL;
 
 		dest_addr = (fi_addr_t) av->psm_epaddrs[idx];
-	}
-	else if (!dest_addr) {
+	} else if (!dest_addr) {
 		return -FI_EINVAL;
 	}
 
@@ -1024,8 +1013,7 @@ ssize_t _psmx_atomic_readwrite(struct fid_ep *ep,
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req+sizeof(*req), (void *)buf, len);
 		buf = (void *)req + sizeof(*req);
-	}
-	else {
+	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
 			return -FI_ENOMEM;
@@ -1098,8 +1086,7 @@ static ssize_t psmx_atomic_readwritemsg(struct fid_ep *ep,
 
 		buf = NULL;
 		count = resultv[0].count;
-	}
-	else {
+	} else {
 		if (msg->iov_count != 1 || !msg->msg_iov)
 			return -FI_EINVAL;
 
@@ -1207,8 +1194,7 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 			return -FI_EINVAL;
 
 		dest_addr = (fi_addr_t) av->psm_epaddrs[idx];
-	}
-	else if (!dest_addr) {
+	} else if (!dest_addr) {
 		return -FI_EINVAL;
 	}
 
@@ -1235,8 +1221,7 @@ ssize_t _psmx_atomic_compwrite(struct fid_ep *ep,
 		memcpy((void *)req + sizeof(*req) + len, (void *)compare, len);
 		buf = (void *)req + sizeof(*req);
 		compare = buf + len;
-	}
-	else {
+	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
 			return -FI_ENOMEM;
