@@ -47,8 +47,6 @@ void ft_parsepongopts(int op, char *optarg);
 void ft_pongusage(void);
 int pingpong();
 
-extern int max_inject_size;
-
 #ifdef __cplusplus
 }
 #endif
