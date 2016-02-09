@@ -371,15 +371,9 @@ static void psmx_am_atomic_completion(void *buf)
 		free(buf);
 }
 
-#if (PSM_VERNO_MAJOR >= 2)
-int psmx_am_atomic_handler(psm_am_token_t token,
-			   psm_amarg_t *args, int nargs, void *src,
-			   uint32_t len)
-#else
 int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			   psm_amarg_t *args, int nargs, void *src,
 			   uint32_t len)
-#endif
 {
 	psm_amarg_t rep_args[8];
 	int count;
@@ -395,11 +389,6 @@ int psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	struct psmx_fid_cntr *cntr = NULL;
 	struct psmx_fid_cntr *mr_cntr = NULL;
 	void *tmp_buf;
-#if (PSM_VERNO_MAJOR >= 2)
-	psm_epaddr_t epaddr;
-
-	psm_am_get_source(token, &epaddr);
-#endif
 
 	switch (args[0].u32w0 & PSMX_AM_OP_MASK) {
 	case PSMX_AM_REQ_ATOMIC_WRITE:

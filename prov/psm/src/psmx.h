@@ -71,33 +71,19 @@ extern "C" {
 
 extern struct fi_provider psmx_prov;
 
-#if (PSM_VERNO_MAJOR == 1)
 extern int psmx_am_compat_mode;
-#endif
 
 #define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
 			 FI_TRIGGER | FI_INJECT_COMPLETE | \
 			 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)
 
-#if (PSM_VERNO_MAJOR >= 2)
-#define PSMX_CAP_EXT	(FI_REMOTE_CQ_DATA | FI_SOURCE)
-#else
-#define PSMX_CAP_EXT	(0)
-#endif
-
 #define PSMX_CAPS	(FI_TAGGED | FI_MSG | FI_ATOMICS | \
 			 FI_RMA | FI_MULTI_RECV | \
                          FI_READ | FI_WRITE | FI_SEND | FI_RECV | \
                          FI_REMOTE_READ | FI_REMOTE_WRITE | \
-			 FI_TRIGGER | \
-			 FI_RMA_EVENT | \
-			 PSMX_CAP_EXT)
+			 FI_TRIGGER | FI_RMA_EVENT)
 
-#if (PSM_VERNO_MAJOR >= 2)
-#define PSMX_CAPS2	(PSMX_CAPS | FI_DIRECTED_RECV)
-#else
 #define PSMX_CAPS2	((PSMX_CAPS | FI_DIRECTED_RECV) & ~FI_TAGGED)
-#endif
 
 #define PSMX_SUB_CAPS	(FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
 			 FI_SEND | FI_RECV)
@@ -138,14 +124,6 @@ union psmx_pi {
 #define PSMX_CTXT_TYPE(fi_context)	(((union psmx_pi *)&(fi_context)->internal[1])->i)
 #define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX_CTXT_EP(fi_context)	((fi_context)->internal[3])
-
-#if (PSM_VERNO_MAJOR >= 2)
-#define PSMX_SET_TAG(tag96,tag64,tag32)	do { \
-						tag96.tag0 = (uint32_t)tag64; \
-						tag96.tag1 = (uint32_t)(tag64>>32); \
-						tag96.tag2 = tag32; \
-					} while (0)
-#endif
 
 #define PSMX_AM_RMA_HANDLER	0
 #define PSMX_AM_MSG_HANDLER	1
@@ -414,9 +392,6 @@ struct psmx_trigger {
 			fi_addr_t	dest_addr;
 			void		*context;
 			uint64_t	flags;
-#if (PSM_VERNO_MAJOR >= 2)
-			uint32_t	data;
-#endif
 		} send;
 		struct {
 			struct fid_ep	*ep;
@@ -436,9 +411,6 @@ struct psmx_trigger {
 			uint64_t	tag;
 			void		*context;
 			uint64_t	flags;
-#if (PSM_VERNO_MAJOR >= 2)
-			uint32_t	data;
-#endif
 		} tsend;
 		struct {
 			struct fid_ep	*ep;
@@ -699,21 +671,12 @@ int	psmx_am_process_rma(struct psmx_fid_domain *domain,
 				struct psmx_am_request *req);
 int	psmx_process_trigger(struct psmx_fid_domain *domain,
 				struct psmx_trigger *trigger);
-#if (PSM_VERNO_MAJOR >= 2)
-int	psmx_am_msg_handler(psm_am_token_t token,
-				psm_amarg_t *args, int nargs, void *src, uint32_t len);
-int	psmx_am_rma_handler(psm_am_token_t token,
-				psm_amarg_t *args, int nargs, void *src, uint32_t len);
-int	psmx_am_atomic_handler(psm_am_token_t token,
-				psm_amarg_t *args, int nargs, void *src, uint32_t len);
-#else
 int	psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
 int	psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
 int	psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
-#endif
 void	psmx_atomic_init(void);
 void	psmx_atomic_fini(void);
 
@@ -741,27 +704,15 @@ static inline void psmx_progress(struct psmx_fid_domain *domain)
 	}
 }
 
-#if (PSM_VERNO_MAJOR >= 2)
-ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
-		   void *desc, fi_addr_t dest_addr, void *context,
-		   uint64_t flags, uint32_t data);
-#else
 ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 		   void *desc, fi_addr_t dest_addr, void *context,
 		   uint64_t flags);
-#endif
 ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 		   void *desc, fi_addr_t src_addr, void *context,
 		   uint64_t flags);
-#if (PSM_VERNO_MAJOR >= 2)
-ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
-			  void *desc, fi_addr_t dest_addr, uint64_t tag,
-			  void *context, uint64_t flags, uint32_t data);
-#else
 ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 			  void *desc, fi_addr_t dest_addr, uint64_t tag,
 			  void *context, uint64_t flags);
-#endif
 ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 			  void *desc, fi_addr_t src_addr, uint64_t tag,
 			  uint64_t ignore, void *context, uint64_t flags);

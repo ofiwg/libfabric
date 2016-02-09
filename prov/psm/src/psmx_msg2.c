@@ -129,13 +129,8 @@ static struct psmx_unexp *psmx_am_search_and_dequeue_unexp(
  *	args[2].u64	recv_req
  */
 
-#if (PSM_VERNO_MAJOR >= 2)
-int psmx_am_msg_handler(psm_am_token_t token,
-			psm_amarg_t *args, int nargs, void *src, uint32_t len)
-#else
 int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			psm_amarg_t *args, int nargs, void *src, uint32_t len)
-#endif
 {
         psm_amarg_t rep_args[8];
         struct psmx_am_request *req;
@@ -148,11 +143,6 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	int err = 0;
 	int op_error = 0;
 	struct psmx_unexp *unexp;
-#if (PSM_VERNO_MAJOR >= 2)
-	psm_epaddr_t epaddr;
-
-	psm_am_get_source(token, &epaddr);
-#endif
 
 	epaddr_context = psm_epaddr_getctxt(epaddr);
 	if (!epaddr_context) {
