@@ -110,18 +110,16 @@ static int run(void)
 			init_test(&opts, test_name, sizeof(test_name));
 			ret = pingpong();
 			if (ret)
-				goto out;
+				return ret;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
 		ret = pingpong();
 		if (ret)
-			goto out;
+			return ret;
 	}
 
-	ft_finalize();
-out:
-	return ret;
+	return ft_finalize();
 }
 
 int main(int argc, char **argv)
