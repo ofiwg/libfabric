@@ -208,7 +208,7 @@ static void ft_cntr_set_wait_attr(void)
 int ft_alloc_msgs(void)
 {
 	int ret;
-	long page_size;
+	long alignment = 1;
 
 	/* TODO: support multi-recv tests */
 	if (fi->rx_attr->op_flags == FI_MULTI_RECV)
@@ -222,18 +222,17 @@ int ft_alloc_msgs(void)
 	tx_size += ft_tx_prefix_size();
 	buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) + MAX(rx_size, FT_MAX_CTRL_MSG);
 
-	page_size = sysconf(_SC_PAGESIZE);
 	if (opts.options & FT_OPT_ALIGN) {
-		buf_size += page_size;
-	}
+		alignment = sysconf(_SC_PAGESIZE);
+		if (alignment < 0)
+			return -errno;
+		buf_size += alignment;
 
-	if (opts.options & FT_OPT_ALIGN) {
-		ret = posix_memalign(&buf, page_size, buf_size);
+		ret = posix_memalign(&buf, (size_t) alignment, buf_size);
 		if (ret) {
 			FT_PRINTERR("posix_memalign", ret);
 			return ret;
 		}
-		memset(buf, 0, buf_size);
 	} else {
 		buf = malloc(buf_size);
 		if (!buf) {
@@ -241,14 +240,11 @@ int ft_alloc_msgs(void)
 			return -FI_ENOMEM;
 		}
 	}
-
+	memset(buf, 0, buf_size);
 	rx_buf = buf;
-
 	tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG);
-	if (opts.options & FT_OPT_ALIGN) {
-		tx_buf = (void *) (((uint64_t)tx_buf +
-					page_size - 1) & ~(page_size - 1));
-	}
+	tx_buf = (void *) (((uintptr_t) tx_buf + alignment - 1) &
+			   ~(alignment - 1));
 
 	if (fi->mode & FI_LOCAL_MR) {
 		ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND,
