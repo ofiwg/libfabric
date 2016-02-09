@@ -41,9 +41,6 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 	struct psmx_epaddr_context *epaddr_context;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag, psm_tagsel;
-#if (PSM_VERNO_MAJOR >= 2)
-	psm_mq_tag_t psm_tag2, psm_tagsel2;
-#endif
 	struct fi_context *fi_context;
 	int err;
 	int recv_flag = 0;
@@ -124,19 +121,9 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 		PSMX_CTXT_EP(fi_context) = ep_priv;
 	}
 
-#if (PSM_VERNO_MAJOR >= 2)
-	PSMX_SET_TAG(psm_tag2, psm_tag, 0);
-	PSMX_SET_TAG(psm_tagsel2, psm_tagsel, 0);
-
-	err = psm_mq_irecv2(ep_priv->domain->psm_mq,
-			    (psm_epaddr_t)src_addr,
-			    &psm_tag2, &psm_tagsel2, recv_flag,
-			    buf, len, (void *)fi_context, &psm_req);
-#else
 	err = psm_mq_irecv(ep_priv->domain->psm_mq,
 			   psm_tag, psm_tagsel, recv_flag,
 			   buf, len, (void *)fi_context, &psm_req);
-#endif
 	if (err != PSM_OK)
 		return psmx_errno(err);
 
@@ -201,15 +188,9 @@ static ssize_t psmx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 	return psmx_recv(ep, buf, len, desc ? desc[0] : NULL, src_addr, context);
 }
 
-#if (PSM_VERNO_MAJOR >= 2)
-ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
-		   void *desc, fi_addr_t dest_addr, void *context,
-		   uint64_t flags, uint32_t data)
-#else
 ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 		   void *desc, fi_addr_t dest_addr, void *context,
 		   uint64_t flags)
-#endif
 {
 	struct psmx_fid_ep *ep_priv;
 	struct psmx_fid_av *av;
@@ -217,9 +198,6 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 	psm_epaddr_t psm_epaddr;
 	psm_mq_req_t psm_req;
 	uint64_t psm_tag;
-#if (PSM_VERNO_MAJOR >= 2)
-	psm_mq_tag_t psm_tag2;
-#endif
 	struct fi_context * fi_context;
 	int err;
 	size_t idx;
@@ -247,9 +225,6 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 		trigger->send.dest_addr = dest_addr;
 		trigger->send.context = context;
 		trigger->send.flags = flags & ~FI_TRIGGER;
-#if (PSM_VERNO_MAJOR >= 2)
-		trigger->send.data = data;
-#endif
 
 		psmx_cntr_add_trigger(trigger->cntr, trigger);
 		return 0;
@@ -268,10 +243,6 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	psm_tag = ep_priv->domain->psm_epid | PSMX_MSG_BIT;
 
-#if (PSM_VERNO_MAJOR >= 2)
-	PSMX_SET_TAG(psm_tag2, psm_tag, data);
-#endif
-
 	if ((flags & PSMX_NO_COMPLETION) ||
 	    (ep_priv->send_selective_completion && !(flags & FI_COMPLETION)))
 		no_completion = 1;
@@ -280,13 +251,8 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 		if (len > PSMX_INJECT_SIZE)
 			return -FI_EMSGSIZE;
 
-#if (PSM_VERNO_MAJOR >= 2)
-		err = psm_mq_send2(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
-				   &psm_tag2, buf, len);
-#else
 		err = psm_mq_send(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
 				  psm_tag, buf, len);
-#endif
 
 		if (err != PSM_OK)
 			return psmx_errno(err);
@@ -298,11 +264,7 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 			event = psmx_cq_create_event(
 					ep_priv->send_cq,
 					context, (void *)buf, flags, len,
-#if (PSM_VERNO_MAJOR >= 2)
-					(uint64_t) data, psm_tag,
-#else
 					0 /* data */, psm_tag,
-#endif
 					0 /* olen */,
 					0 /* err */);
 
@@ -327,13 +289,8 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 		PSMX_CTXT_EP(fi_context) = ep_priv;
 	}
 
-#if (PSM_VERNO_MAJOR >= 2)
-	err = psm_mq_isend2(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
-				&psm_tag2, buf, len, (void *)fi_context, &psm_req);
-#else
 	err = psm_mq_isend(ep_priv->domain->psm_mq, psm_epaddr, send_flag,
 				psm_tag, buf, len, (void *)fi_context, &psm_req);
-#endif
 
 	if (err != PSM_OK)
 		return psmx_errno(err);
@@ -351,11 +308,7 @@ static ssize_t psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-#if (PSM_VERNO_MAJOR >= 2)
-	return _psmx_send(ep, buf, len, desc, dest_addr, context, ep_priv->flags, 0);
-#else
 	return _psmx_send(ep, buf, len, desc, dest_addr, context, ep_priv->flags);
-#endif
 }
 
 static ssize_t psmx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
@@ -376,15 +329,9 @@ static ssize_t psmx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_
 		len = 0;
 	}
 
-#if (PSM_VERNO_MAJOR >= 2)
-	return _psmx_send(ep, buf, len,
-			  msg->desc ? msg->desc[0] : NULL, msg->addr,
-			  msg->context, flags, (uint32_t) msg->data);
-#else
 	return _psmx_send(ep, buf, len,
 			  msg->desc ? msg->desc[0] : NULL, msg->addr,
 			  msg->context, flags);
-#endif
 }
 
 static ssize_t psmx_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
@@ -416,40 +363,9 @@ static ssize_t psmx_inject(struct fid_ep *ep, const void *buf, size_t len,
 
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-#if (PSM_VERNO_MAJOR >= 2)
-	return _psmx_send(ep, buf, len, NULL, dest_addr, NULL,
-			  ep_priv->flags | FI_INJECT | PSMX_NO_COMPLETION, 0);
-#else
 	return _psmx_send(ep, buf, len, NULL, dest_addr, NULL,
 			  ep_priv->flags | FI_INJECT | PSMX_NO_COMPLETION);
-#endif
 }
-
-#if (PSM_VERNO_MAJOR >= 2)
-static ssize_t psmx_senddata(struct fid_ep *ep, const void *buf, size_t len,
-			     void *desc, uint64_t data, fi_addr_t dest_addr,
-			     void *context)
-{
-	struct psmx_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-
-	return _psmx_send(ep, buf, len, desc, dest_addr, context,
-			  ep_priv->flags, (uint32_t)data);
-}
-
-static ssize_t psmx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-			       uint64_t data, fi_addr_t dest_addr)
-{
-	struct psmx_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
-
-	return _psmx_send(ep, buf, len, NULL, dest_addr, NULL,
-			  ep_priv->flags | FI_INJECT | PSMX_NO_COMPLETION,
-			  (uint32_t)data);
-}
-#endif
 
 struct fi_ops_msg psmx_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
@@ -460,12 +376,7 @@ struct fi_ops_msg psmx_msg_ops = {
 	.sendv = psmx_sendv,
 	.sendmsg = psmx_sendmsg,
 	.inject = psmx_inject,
-#if (PSM_VERNO_MAJOR >= 2)
-	.senddata = psmx_senddata,
-	.injectdata = psmx_injectdata,
-#else
 	.senddata = fi_no_msg_senddata,
 	.injectdata = fi_no_msg_injectdata,
-#endif
 };
 
