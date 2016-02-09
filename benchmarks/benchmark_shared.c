@@ -40,9 +40,9 @@
 #include <rdma/fi_cm.h>
 
 #include "shared.h"
-#include "pingpong_shared.h"
+#include "benchmark_shared.h"
 
-void ft_parsepongopts(int op, char *optarg)
+void ft_parse_benchmark_opts(int op, char *optarg)
 {
 	switch (op) {
 	case 'v':
@@ -54,16 +54,20 @@ void ft_parsepongopts(int op, char *optarg)
 	case 'j':
 		hints->tx_attr->inject_size = atoi(optarg);
 		break;
+	case 'W':
+		opts.window_size = atoi(optarg);
+		break;
 	default:
 		break;
 	}
 }
 
-void ft_pongusage(void)
+void ft_benchmark_usage(void)
 {
 	FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
 	FT_PRINT_OPTS_USAGE("-P", "enable prefix mode");
 	FT_PRINT_OPTS_USAGE("-j", "maximum inject message size");
+	FT_PRINT_OPTS_USAGE("-W", "window size (for bandwidth tests)");
 }
 
 int pingpong(void)
@@ -113,6 +117,71 @@ int pingpong(void)
 		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end, 2, opts.argc, opts.argv);
 	else
 		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
+
+	return 0;
+}
+
+int bandwidth(void)
+{
+	int ret, i, j;
+
+	ret = ft_sync();
+	if (ret)
+		return ret;
+
+	/* The loop structured allows for the possibility that the sender
+	 * immediately overruns the receiving side on the first transfer (or
+	 * the entire window). This could result in exercising parts of the
+	 * provider's implementation of FI_RM_ENABLED. For better or worse,
+	 * some MPI-level benchmarks tend to use this type of loop for measuring
+	 * bandwidth.  */
+
+	if (opts.dst_addr) {
+		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+			if (i == opts.warmup_iterations)
+				ft_start();
+
+			for(j = 0; j < opts.window_size; j++) {
+				if (opts.transfer_size < fi->tx_attr->inject_size)
+					ret = ft_inject(opts.transfer_size);
+				else
+					ret = ft_post_tx(opts.transfer_size);
+				if (ret)
+					return ret;
+			}
+			ret = ft_get_tx_comp(tx_seq);
+			if (ret)
+				return ret;
+			ret = ft_rx(4);
+			if (ret)
+				return ret;
+		}
+	} else {
+		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+			if (i == opts.warmup_iterations)
+				ft_start();
+
+			for(j = 0; j < opts.window_size; j++) {
+				ret = ft_post_rx(opts.transfer_size);
+				if (ret)
+					return ret;
+			}
+			ret = ft_get_rx_comp(rx_seq-1); /* rx_seq is always one ahead */
+			if (ret)
+				return ret;
+			ret = ft_tx(4);
+			if (ret)
+				return ret;
+		}
+	}
+	ft_stop();
+
+	if (opts.machr)
+		show_perf_mr(opts.transfer_size, opts.iterations, &start, &end,
+				opts.window_size, opts.argc, opts.argv);
+	else
+		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end,
+				opts.window_size);
 
 	return 0;
 }

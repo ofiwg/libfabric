@@ -1127,19 +1127,24 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 	char str[FT_STR_LEN];
 	int64_t elapsed = get_elapsed(start, end, MICRO);
 	long long bytes = (long long) iters * tsize * xfers_per_iter;
+	float usec_per_xfer;
 
 	if (name) {
 		if (header) {
-			printf("%-50s%-8s%-8s%-8s%8s %10s%13s\n",
-					"name", "bytes", "iters", "total", "time", "MB/sec", "usec/xfer");
+			printf("%-50s%-8s%-8s%-8s%8s %10s%13s%13s\n",
+					"name", "bytes", "iters",
+					"total", "time", "MB/sec",
+					"usec/xfer", "Mxfers/sec");
 			header = 0;
 		}
 
 		printf("%-50s", name);
 	} else {
 		if (header) {
-			printf("%-8s%-8s%-8s%8s %10s%13s\n",
-					"bytes", "iters", "total", "time", "MB/sec", "usec/xfer");
+			printf("%-8s%-8s%-8s%8s %10s%13s%13s\n",
+					"bytes", "iters", "total",
+					"time", "MB/sec", "usec/xfer",
+					"Mxfers/sec");
 			header = 0;
 		}
 	}
@@ -1150,9 +1155,10 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 
 	printf("%-8s", size_str(str, bytes));
 
-	printf("%8.2fs%10.2f%11.2f\n",
+	usec_per_xfer = ((float)elapsed / iters / xfers_per_iter);
+	printf("%8.2fs%10.2f%11.2f%11.2f\n",
 		elapsed / 1000000.0, bytes / (1.0 * elapsed),
-		((float)elapsed / iters / xfers_per_iter));
+		usec_per_xfer, 1.0/usec_per_xfer);
 }
 
 void show_perf_mr(int tsize, int iters, struct timespec *start,
@@ -1162,6 +1168,7 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 	int64_t elapsed = get_elapsed(start, end, MICRO);
 	long long total = (long long) iters * tsize * xfers_per_iter;
 	int i;
+	float usec_per_xfer;
 
 	if (header) {
 		printf("---\n");
@@ -1173,13 +1180,16 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 		header = 0;
 	}
 
+	usec_per_xfer = ((float)elapsed / iters / xfers_per_iter);
+
 	printf("- { ");
 	printf("xfer_size: %d, ", tsize);
 	printf("iterations: %d, ", iters);
 	printf("total: %lld, ", total);
 	printf("time: %f, ", elapsed / 1000000.0);
 	printf("MB/sec: %f, ", (total) / (1.0 * elapsed));
-	printf("usec/xfer: %f", ((float)elapsed / iters / xfers_per_iter));
+	printf("usec/xfer: %f", usec_per_xfer);
+	printf("Mxfers/sec: %f", 1.0/usec_per_xfer);
 	printf(" }\n");
 }
 

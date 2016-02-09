@@ -107,6 +107,7 @@ struct ft_opts {
 	int iterations;
 	int warmup_iterations;
 	int transfer_size;
+	int window_size;
 	char *src_port;
 	char *dst_port;
 	char *src_addr;
@@ -171,6 +172,7 @@ extern char default_port[8];
 		.iterations = 1000, \
 		.warmup_iterations = 10, \
 		.transfer_size = 1024, \
+		.window_size = 64, \
 		.sizes_enabled = FT_DEFAULT_SIZE, \
 		.argc = argc, .argv = argv \
 	}
