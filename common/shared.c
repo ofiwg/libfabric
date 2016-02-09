@@ -233,6 +233,7 @@ int ft_alloc_msgs(void)
 			FT_PRINTERR("posix_memalign", ret);
 			return ret;
 		}
+		memset(buf, 0, buf_size);
 	} else {
 		buf = malloc(buf_size);
 		if (!buf) {
