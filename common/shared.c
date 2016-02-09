@@ -1073,9 +1073,9 @@ int ft_finalize(void)
 	struct iovec iov;
 	int ret;
 
-	strcpy(tx_buf, "fin");
+	strcpy(tx_buf + ft_tx_prefix_size(), "fin");
 	iov.iov_base = tx_buf;
-	iov.iov_len = 4;
+	iov.iov_len = 4 + ft_tx_prefix_size();
 
 	if (hints->caps & FI_TAGGED) {
 		struct fi_msg_tagged tmsg;
