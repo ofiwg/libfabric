@@ -1225,6 +1225,7 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-f <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-s <address>", "source address");
 	FT_PRINT_OPTS_USAGE("-I <number>", "number of iterations");
+	FT_PRINT_OPTS_USAGE("-w <number>", "number of warmup iterations");
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
 	FT_PRINT_OPTS_USAGE("-l", "align transmit and receive buffers to page size");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
