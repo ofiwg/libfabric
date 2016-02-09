@@ -247,8 +247,7 @@ static ssize_t psmx2_eq_sread(struct fid_eq *eq, uint32_t *event,
 	if (eq_priv->wait) {
 		psmx2_wait_wait((struct fid_wait *)eq_priv->wait, timeout);
 		ret = psmx2_eq_read(eq, event, buf, len, flags);
-	}
-	else {
+	} else {
 		clock_gettime(CLOCK_REALTIME, &ts0);
 		while (1) {
 			ret = psmx2_eq_read(eq, event, buf, len, flags);

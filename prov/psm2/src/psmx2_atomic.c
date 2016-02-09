@@ -467,8 +467,7 @@ int psmx2_am_atomic_handler(psm2_am_token_t token,
 
 			if (op == FI_ATOMIC_READ) {
 				cntr = target_ep->remote_read_cntr;
-			}
-			else {
+			} else {
 				cntr = target_ep->remote_write_cntr;
 				mr_cntr = mr->cntr;
 			}
@@ -478,8 +477,7 @@ int psmx2_am_atomic_handler(psm2_am_token_t token,
 
 			if (mr_cntr && mr_cntr != cntr)
 				psmx2_cntr_inc(mr_cntr);
-		}
-		else {
+		} else {
 			tmp_buf = NULL;
 		}
 
@@ -524,8 +522,7 @@ int psmx2_am_atomic_handler(psm2_am_token_t token,
 
 			if (mr_cntr && mr_cntr != cntr)
 				psmx2_cntr_inc(mr_cntr);
-		}
-		else {
+		} else {
 			tmp_buf = NULL;
 		}
 
@@ -654,8 +651,7 @@ static int psmx2_atomic_self(int am_cmd,
 			err = psmx2_atomic_do_readwrite((void *)addr, (void *)buf,
 							(void *)result, (int)datatype,
 							(int)op, (int)count);
-		}
-		else {
+		} else {
 			tmp_buf = malloc(len);
 			if (tmp_buf) {
 				memcpy(tmp_buf, result, len);
@@ -664,8 +660,7 @@ static int psmx2_atomic_self(int am_cmd,
 								(int)op, (int)count);
 				memcpy(result, tmp_buf, len);
 				free(tmp_buf);
-			}
-			else {
+			} else {
 				err = -FI_ENOMEM;
 			}
 			
@@ -681,8 +676,7 @@ static int psmx2_atomic_self(int am_cmd,
 			err = psmx2_atomic_do_compwrite((void *)addr, (void *)buf,
 							(void *)compare, (void *)result,
 							(int)datatype, (int)op, (int)count);
-		}
-		else {
+		} else {
 			tmp_buf = malloc(len);
 			if (tmp_buf) {
 				memcpy(tmp_buf, result, len);
@@ -691,8 +685,7 @@ static int psmx2_atomic_self(int am_cmd,
 								(int)datatype, (int)op, (int)count);
 				memcpy(result, tmp_buf, len);
 				free(tmp_buf);
-			}
-			else {
+			} else {
 				err = -FI_ENOMEM;
 			}
 		}
@@ -702,8 +695,7 @@ static int psmx2_atomic_self(int am_cmd,
 
 	if (op == FI_ATOMIC_READ) {
 		cntr = target_ep->remote_read_cntr;
-	}
-	else {
+	} else {
 		cntr = target_ep->remote_write_cntr;
 		mr_cntr = mr->cntr;
 	}
@@ -816,8 +808,7 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
-	}
-	else {
+	} else {
 		 if (!dest_addr)
 			return -FI_EINVAL;
 
@@ -845,8 +836,7 @@ ssize_t psmx2_atomic_write_generic(struct fid_ep *ep,
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req+sizeof(*req), (void *)buf, len);
 		buf = (void *)req + sizeof(*req);
-	}
-	else {
+	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
 			return -FI_ENOMEM;
@@ -1013,8 +1003,7 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
-	}
-	else {
+	} else {
 		if (!dest_addr)
 			return -FI_EINVAL;
 
@@ -1042,8 +1031,7 @@ ssize_t psmx2_atomic_readwrite_generic(struct fid_ep *ep,
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req+sizeof(*req), (void *)buf, len);
 		buf = (void *)req + sizeof(*req);
-	}
-	else {
+	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
 			return -FI_ENOMEM;
@@ -1117,8 +1105,7 @@ static ssize_t psmx2_atomic_readwritemsg(struct fid_ep *ep,
 
 		buf = NULL;
 		count = resultv[0].count;
-	}
-	else {
+	} else {
 		if (msg->iov_count != 1 || !msg->msg_iov)
 			return -FI_EINVAL;
 
@@ -1229,8 +1216,7 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
-	}
-	else {
+	} else {
 		if (!dest_addr)
 			return -FI_EINVAL;
 
@@ -1261,8 +1247,7 @@ ssize_t psmx2_atomic_compwrite_generic(struct fid_ep *ep,
 		memcpy((void *)req + sizeof(*req) + len, (void *)compare, len);
 		buf = (void *)req + sizeof(*req);
 		compare = buf + len;
-	}
-	else {
+	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
 			return -FI_ENOMEM;

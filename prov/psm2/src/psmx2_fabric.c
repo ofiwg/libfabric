@@ -55,8 +55,7 @@ void psmx2_fabric_release(struct psmx2_fid_fabric *fabric)
 		if (ret) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"pthread_join returns %d\n", ret);
-		}
-		else {
+		} else {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"name server thread exited with code %ld (%s)\n",
 				(uintptr_t)exit_code,

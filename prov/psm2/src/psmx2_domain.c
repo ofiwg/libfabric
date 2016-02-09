@@ -164,8 +164,7 @@ static void psmx2_domain_stop_progress(struct psmx2_fid_domain *domain)
 		if (err) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"pthread_join returns %d\n", err);
-		}
-		else {
+		} else {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE,
 				"progress thread exited with code %ld (%s)\n",
 				(uintptr_t)exit_code,

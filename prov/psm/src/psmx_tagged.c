@@ -73,12 +73,10 @@ ssize_t _psmx_tagged_peek(struct fid_ep *ep, void *buf, size_t len,
 				return -FI_EINVAL;
 
 			psm_src_addr = av->psm_epaddrs[idx];
-		}
-		else {
+		} else {
 			psm_src_addr = (psm_epaddr_t)src_addr;
 		}
-	}
-	else {
+	} else {
 		psm_src_addr = NULL;
 	}
 
@@ -245,8 +243,7 @@ ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 
 	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION)) {
 		fi_context = &ep_priv->nocomp_recv_context;
-	}
-	else {
+	} else {
 		if (!context)
 			return -FI_EINVAL;
 
@@ -266,8 +263,7 @@ ssize_t _psmx_tagged_recv(struct fid_ep *ep, void *buf, size_t len,
 
 			src_addr = (fi_addr_t)av->psm_epaddrs[idx];
 		}
-	}
-	else {
+	} else {
 		src_addr = 0;
 	}
 
@@ -377,8 +373,7 @@ ssize_t psmx_tagged_recv_no_flag_av_table(struct fid_ep *ep, void *buf,
 			return -FI_EINVAL;
 
 		psm_epaddr = av->psm_epaddrs[idx];
-	}
-	else {
+	} else {
 		psm_epaddr = NULL;
 	}
 
@@ -476,8 +471,7 @@ ssize_t psmx_tagged_recv_no_event_av_table(struct fid_ep *ep, void *buf,
 			return -FI_EINVAL;
 
 		psm_epaddr = av->psm_epaddrs[idx];
-	}
-	else {
+	} else {
 		psm_epaddr = NULL;
 	}
 
@@ -520,12 +514,10 @@ static ssize_t psmx_tagged_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged
 
 	if (msg->iov_count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (msg->iov_count) {
+	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -568,12 +560,10 @@ static ssize_t psmx_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, voi
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -594,12 +584,10 @@ static ssize_t psmx_tagged_recvv_no_flag(struct fid_ep *ep, const struct iovec *
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -621,12 +609,10 @@ static ssize_t psmx_tagged_recvv_no_event(struct fid_ep *ep, const struct iovec 
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -704,8 +690,7 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 			return -FI_EINVAL;
 
 		psm_epaddr = av->psm_epaddrs[idx];
-	}
-	else  {
+	} else {
 		psm_epaddr = (psm_epaddr_t) dest_addr;
 	}
 
@@ -759,8 +744,7 @@ ssize_t _psmx_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	if (no_completion && !context) {
 		fi_context = &ep_priv->nocomp_send_context;
-	}
-	else {
+	} else {
 		if (!context)
 			return -FI_EINVAL;
 
@@ -1074,12 +1058,10 @@ static ssize_t psmx_tagged_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged
 
 	if (msg->iov_count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (msg->iov_count) {
+	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -1106,12 +1088,10 @@ static ssize_t psmx_tagged_sendv(struct fid_ep *ep, const struct iovec *iov, voi
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -1133,12 +1113,10 @@ static ssize_t psmx_tagged_sendv_no_flag_av_map(struct fid_ep *ep, const struct 
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -1161,12 +1139,10 @@ static ssize_t psmx_tagged_sendv_no_flag_av_table(struct fid_ep *ep, const struc
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -1189,12 +1165,10 @@ static ssize_t psmx_tagged_sendv_no_event_av_map(struct fid_ep *ep, const struct
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -1217,12 +1191,10 @@ static ssize_t psmx_tagged_sendv_no_event_av_table(struct fid_ep *ep, const stru
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}

@@ -245,8 +245,7 @@ psmx2_cq_create_event_from_status(struct psmx2_fid_cq *cq,
 	 */
 	if (event_in && count && !psm2_status->error_code) {
 		event = event_in;
-	}
-	else {
+	} else {
 		event = psmx2_cq_alloc_event(cq);
 		if (!event)
 			return NULL;
@@ -318,8 +317,7 @@ out:
 		if (event == event_in) {
 			if (src_addr)
 				*src_addr = source;
-		}
-		else {
+		} else {
 			event->source = source;
 		}
 	}
@@ -466,8 +464,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 						event_buffer = count ? event_buffer + cq->entry_size : NULL;
 						if (src_addr)
 							src_addr = count ? src_addr + 1 : NULL;
-					}
-					else {
+					} else {
 						psmx2_cq_enqueue_event(req->ep->recv_cq, event);
 						if (req->ep->recv_cq == cq)
 							read_more = 0;
@@ -568,8 +565,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					event_buffer = count ? event_buffer + cq->entry_size : NULL;
 					if (src_addr)
 						src_addr = count ? src_addr + 1 : NULL;
-				}
-				else {
+				} else {
 					psmx2_cq_enqueue_event(tmp_cq, event);
 					if (tmp_cq == cq)
 						read_more = 0;
@@ -596,8 +592,7 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 						return psmx2_errno(err);
 
 					PSMX2_CTXT_REQ(fi_context) = psm2_req;
-				}
-				else {
+				} else {
 					free(req);
 				}
 			}
@@ -606,12 +601,10 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 				continue;
 
 			return read_count;
-		}
-		else if (err == PSM2_MQ_NO_COMPLETIONS) {
+		} else if (err == PSM2_MQ_NO_COMPLETIONS) {
 			fastlock_release(&domain->poll_lock);
 			return read_count;
-		}
-		else {
+		} else {
 			fastlock_release(&domain->poll_lock);
 			return psmx2_errno(err);
 		}
@@ -660,15 +653,13 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 				if (src_addr)
 					src_addr++;
 				continue;
-			}
-			else {
+			} else {
 				cq_priv->pending_error = event;
 				if (!read_count)
 					read_count = -FI_EAVAIL;
 				break;
 			}
-		}
-		else {
+		} else {
 			break;
 		}
 	}
@@ -718,8 +709,7 @@ static ssize_t psmx2_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	if (event_count < threshold) {
 		if (cq_priv->wait) {
 			psmx2_wait_wait((struct fid_wait *)cq_priv->wait, timeout);
-		}
-		else {
+		} else {
 			clock_gettime(CLOCK_REALTIME, &ts0);
 			while (1) {
 				if (psmx2_cq_poll_mq(cq_priv, cq_priv->domain, NULL, 0, NULL))

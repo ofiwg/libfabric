@@ -83,15 +83,13 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 
 			psm2_epaddr = av->epaddrs[idx];
 			vlane = av->vlanes[idx];
-		}
-		else {
+		} else {
 			psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 			vlane = PSMX2_ADDR_TO_VL(src_addr);
 		}
 		tag32 = PSMX2_TAG32(PSMX2_MSG_BIT, vlane, ep_priv->vlane);
 		tagsel32 = ~PSMX2_IOV_BIT;
-	}
-	else {
+	} else {
 		psm2_epaddr = 0;
 		tag32 = PSMX2_TAG32(PSMX2_MSG_BIT, 0, ep_priv->vlane);
 		tagsel32 = ~(PSMX2_IOV_BIT | PSMX2_SRC_BITS);
@@ -106,8 +104,7 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 		PSMX2_CTXT_EP(fi_context) = ep_priv;
 		PSMX2_CTXT_USER(fi_context) = buf;
 		PSMX2_CTXT_SIZE(fi_context) = len;
-	}
-	else {
+	} else {
 		if (!context)
 			return -FI_EINVAL;
 
@@ -130,8 +127,7 @@ ssize_t psmx2_recv_generic(struct fid_ep *ep, void *buf, size_t len,
 			req->context = fi_context; 
 			PSMX2_CTXT_TYPE(fi_context) = PSMX2_MULTI_RECV_CONTEXT;
 			PSMX2_CTXT_USER(fi_context) = req;
-		}
-		else {
+		} else {
 			PSMX2_CTXT_TYPE(fi_context) = PSMX2_RECV_CONTEXT;
 			PSMX2_CTXT_USER(fi_context) = buf;
 		}
@@ -173,12 +169,10 @@ static ssize_t psmx2_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	if (msg->iov_count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (msg->iov_count) {
+	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -200,12 +194,10 @@ static ssize_t psmx2_recvv(struct fid_ep *ep, const struct iovec *iov,
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -267,8 +259,7 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
-	}
-	else  {
+	} else  {
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 		vlane = PSMX2_ADDR_TO_VL(dest_addr);
 	}
@@ -313,8 +304,7 @@ ssize_t psmx2_send_generic(struct fid_ep *ep, const void *buf, size_t len,
 
 	if (no_completion && !context) {
 		fi_context = &ep_priv->nocomp_send_context;
-	}
-	else {
+	} else {
 		if (!context)
 			return -FI_EINVAL;
 
@@ -413,8 +403,7 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 		tag32_base = PSMX2_MSG_BIT;
 		len = total_len;
-	}
-	else {
+	} else {
 		req->iov_protocol = PSMX2_IOV_PROTO_MULTI;
 		req->iov_done = 0;
 		req->iov_info.seq_num = (++ep_priv->iov_seq_num) %
@@ -442,8 +431,7 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
-	}
-	else  {
+	} else  {
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 		vlane = PSMX2_ADDR_TO_VL(dest_addr);
 	}
@@ -561,8 +549,7 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 		recv_buf = recv_req->buf + recv_req->offset;
 		recv_len = recv_req->len - recv_req->offset;
 		rep->multi_recv = 1;
-	}
-	else {
+	} else {
 		recv_buf = PSMX2_CTXT_USER(recv_context);
 		recv_len = PSMX2_CTXT_SIZE(recv_context);
 		rep->multi_recv = 0;
@@ -607,8 +594,7 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 			}
 			recv_buf += len;
 			recv_len -= len;
-		}
-		else {
+		} else {
 			/* recv buffer full, pust empty recvs */
 			err = psm2_mq_irecv2(ep->domain->psm2_mq,
 					     psm2_status->msg_peer,
@@ -650,12 +636,10 @@ static ssize_t psmx2_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 					   msg->iov_count, msg->addr,
 					   msg->context, flags,
 					   msg->data);
-	}
-	else if (msg->iov_count) {
+	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -678,19 +662,16 @@ static ssize_t psmx2_sendv(struct fid_ep *ep, const struct iovec *iov,
 
 	if (count > PSMX2_IOV_MAX_COUNT) {
 		return -FI_EINVAL;
-	}
-	else if (count > 1) {
+	} else if (count > 1) {
 		struct psmx2_fid_ep *ep_priv;
 		ep_priv = container_of(ep, struct psmx2_fid_ep, ep);
 
 		return psmx2_sendv_generic(ep, iov, desc, count, dest_addr,
 					   context, ep_priv->flags, 0);
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}

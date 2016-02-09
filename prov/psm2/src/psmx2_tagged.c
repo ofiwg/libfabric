@@ -61,15 +61,13 @@ static ssize_t psmx2_tagged_peek_generic(struct fid_ep *ep,
 
 			psm2_epaddr = av->epaddrs[idx];
 			vlane = av->vlanes[idx];
-		}
-		else {
+		} else {
 			psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 			vlane = PSMX2_ADDR_TO_VL(src_addr);
 		}
 		tag32 = PSMX2_TAG32(0, vlane, ep_priv->vlane);
 		tagsel32 = -1;
-	}
-	else {
+	} else {
 		psm2_epaddr = 0;
 		tag32 = PSMX2_TAG32(0, 0, ep_priv->vlane);
 		tagsel32 = ~PSMX2_SRC_BITS;
@@ -213,8 +211,7 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 
 	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION)) {
 		fi_context = &ep_priv->nocomp_recv_context;
-	}
-	else {
+	} else {
 		if (!context)
 			return -FI_EINVAL;
 
@@ -233,15 +230,13 @@ ssize_t psmx2_tagged_recv_generic(struct fid_ep *ep, void *buf,
 
 			psm2_epaddr = av->epaddrs[idx];
 			vlane = av->vlanes[idx];
-		}
-		else {
+		} else {
 			psm2_epaddr = PSMX2_ADDR_TO_EP(src_addr);
 			vlane = PSMX2_ADDR_TO_VL(src_addr);
 		}
 		tag32 = PSMX2_TAG32(0, vlane, ep_priv->vlane);
 		tagsel32 = -1;
-	}
-	else {
+	} else {
 		psm2_epaddr = 0;
 		tag32 = PSMX2_TAG32(0, 0, ep_priv->vlane);
 		tagsel32 = ~PSMX2_SRC_BITS;
@@ -292,8 +287,7 @@ psmx2_tagged_recv_no_flag_av_map(struct fid_ep *ep, void *buf, size_t len,
 		vlane = PSMX2_ADDR_TO_VL(src_addr);
 		tag32 = PSMX2_TAG32(0, vlane, ep_priv->vlane);
 		tagsel32 = -1;
-	}
-	else {
+	} else {
 		psm2_epaddr = 0;
 		tag32 = PSMX2_TAG32(0, 0, ep_priv->vlane);
 		tagsel32 = ~PSMX2_SRC_BITS;
@@ -347,8 +341,7 @@ psmx2_tagged_recv_no_flag_av_table(struct fid_ep *ep, void *buf, size_t len,
 		vlane = av->vlanes[idx];
 		tag32 = PSMX2_TAG32(0, vlane, ep_priv->vlane);
 		tagsel32 = -1;
-	}
-	else {
+	} else {
 		psm2_epaddr = 0;
 		tag32 = PSMX2_TAG32(0, 0, ep_priv->vlane);
 		tagsel32 = ~PSMX2_SRC_BITS;
@@ -392,8 +385,7 @@ psmx2_tagged_recv_no_event_av_map(struct fid_ep *ep, void *buf, size_t len,
 		vlane = PSMX2_ADDR_TO_VL(src_addr);
 		tag32 = PSMX2_TAG32(0, vlane, ep_priv->vlane);
 		tagsel32 = -1;
-	}
-	else {
+	} else {
 		psm2_epaddr = 0;
 		tag32 = PSMX2_TAG32(0, 0, ep_priv->vlane);
 		tagsel32 = ~PSMX2_SRC_BITS;
@@ -441,8 +433,7 @@ psmx2_tagged_recv_no_event_av_table(struct fid_ep *ep, void *buf, size_t len,
 		vlane = av->vlanes[idx];
 		tag32 = PSMX2_TAG32(0, vlane, ep_priv->vlane);
 		tagsel32 = -1;
-	}
-	else {
+	} else {
 		psm2_epaddr = 0;
 		tag32 = PSMX2_TAG32(0, 0, ep_priv->vlane);
 		tagsel32 = ~PSMX2_SRC_BITS;
@@ -482,12 +473,10 @@ static ssize_t psmx2_tagged_recvmsg(struct fid_ep *ep,
 
 	if (msg->iov_count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (msg->iov_count) {
+	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -584,8 +573,7 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 
 		psm2_epaddr = av->epaddrs[idx];
 		vlane = av->vlanes[idx];
-	}
-	else  {
+	} else {
 		psm2_epaddr = PSMX2_ADDR_TO_EP(dest_addr);
 		vlane = PSMX2_ADDR_TO_VL(dest_addr);
 	}
@@ -629,8 +617,7 @@ ssize_t psmx2_tagged_send_generic(struct fid_ep *ep,
 
 	if (no_completion && !context) {
 		fi_context = &ep_priv->nocomp_send_context;
-	}
-	else {
+	} else {
 		if (!context)
 			return -FI_EINVAL;
 
@@ -917,12 +904,10 @@ static ssize_t psmx2_tagged_sendmsg(struct fid_ep *ep,
 
 	if (msg->iov_count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (msg->iov_count) {
+	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}

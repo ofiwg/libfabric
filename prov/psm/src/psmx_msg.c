@@ -87,8 +87,7 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 		epaddr_context = psm_epaddr_getctxt((void *)src_addr);
 		psm_tag = epaddr_context->epid | PSMX_MSG_BIT;
 		psm_tagsel = -1ULL;
-	}
-	else {
+	} else {
 		psm_tag = PSMX_MSG_BIT;
 		psm_tagsel = PSMX_MSG_BIT;
 		src_addr = 0;
@@ -96,8 +95,7 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 
 	if (ep_priv->recv_selective_completion && !(flags & FI_COMPLETION)) {
 		fi_context = &ep_priv->nocomp_recv_context;
-	}
-	else {
+	} else {
 		if (!context)
 			return -FI_EINVAL;
 
@@ -119,8 +117,7 @@ ssize_t _psmx_recv(struct fid_ep *ep, void *buf, size_t len,
 			req->context = fi_context; 
 			PSMX_CTXT_TYPE(fi_context) = PSMX_MULTI_RECV_CONTEXT;
 			PSMX_CTXT_USER(fi_context) = req;
-		}
-		else {
+		} else {
 			PSMX_CTXT_TYPE(fi_context) = PSMX_RECV_CONTEXT;
 			PSMX_CTXT_USER(fi_context) = buf;
 		}
@@ -169,12 +166,10 @@ static ssize_t psmx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_
 
 	if (msg->iov_count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (msg->iov_count) {
+	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -195,12 +190,10 @@ static ssize_t psmx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -269,8 +262,7 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 			return -FI_EINVAL;
 
 		psm_epaddr = av->psm_epaddrs[idx];
-	}
-	else  {
+	} else {
 		psm_epaddr = (psm_epaddr_t) dest_addr;
 	}
 
@@ -325,8 +317,7 @@ ssize_t _psmx_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	if (no_completion && !context) {
 		fi_context = &ep_priv->nocomp_send_context;
-	}
-	else {
+	} else {
 		if (!context)
 			return -FI_EINVAL;
 
@@ -377,12 +368,10 @@ static ssize_t psmx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_
 
 	if (msg->iov_count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (msg->iov_count) {
+	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -409,12 +398,10 @@ static ssize_t psmx_sendv(struct fid_ep *ep, const struct iovec *iov, void **des
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}

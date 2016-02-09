@@ -166,8 +166,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 				((psm_epaddr_t *) fi_addr)[i] = epconn.addr;
 			else
 				mask[i] = 1;
-		}
-		else {
+		} else {
 			mask[i] = 1;
 		}
 	}
@@ -184,8 +183,7 @@ static int psmx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			psmx_set_epaddr_context(av_priv->domain,
 						((psm_epid_t *) addr)[i],
 						((psm_epaddr_t *) fi_addr)[i]);
-		}
-		else {
+		} else {
 			psm_epconn_t epconn;
 
 			/* If duplicated addresses are passed to psm_ep_connect(), all but one will fail
@@ -295,8 +293,7 @@ static int psmx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			return -FI_EINVAL;
 
 		epid = av_priv->psm_epids[idx];
-	}
-	else {
+	} else {
 		context = psm_epaddr_getctxt((void *)fi_addr);
 		epid = context->epid;
 	}

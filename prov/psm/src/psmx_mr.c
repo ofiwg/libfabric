@@ -71,8 +71,7 @@ static int psmx_mr_reserve_key(struct psmx_fid_domain *domain,
 	if (domain->mr_mode == FI_MR_SCALABLE) {
 		key = requested_key;
 		try_count = 1;
-	}
-	else {
+	} else {
 		key = domain->mr_reserved_key;
 		try_count = 10000; /* large enough */
 	}
@@ -203,8 +202,7 @@ static void psmx_mr_normalize_iov(struct iovec *iov, size_t *count)
 				if (new_len > iov[i].iov_len)
 					iov[i].iov_len = new_len;
 				iov[j].iov_len = 0;
-			}
-			else {
+			} else {
 				break;
 			}
 		}

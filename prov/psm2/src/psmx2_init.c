@@ -197,8 +197,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 					hints->mode, FI_CONTEXT);
 				goto err_out;
 			}
-		}
-		else {
+		} else {
 			mode = 0;
 		}
 

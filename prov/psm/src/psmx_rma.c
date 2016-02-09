@@ -172,8 +172,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		req = calloc(1, sizeof(*req));
 		if (!req) {
 			err = -FI_ENOMEM;
-		}
-		else {
+		} else {
 			req->op = args[0].u32w0;
 			req->write.addr = (uint64_t)rma_addr;
 			req->write.len = rma_len;
@@ -200,8 +199,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			-FI_EINVAL;
 		if (!op_error) {
 			rma_addr += mr->offset;
-		}
-		else {
+		} else {
 			rma_addr = NULL;
 			rma_len = 0;
 		}
@@ -244,8 +242,7 @@ int psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		req = calloc(1, sizeof(*req));
 		if (!req) {
 			err = -FI_ENOMEM;
-		}
-		else {
+		} else {
 			req->op = args[0].u32w0;
 			req->read.addr = (uint64_t)rma_addr;
 			req->read.len = rma_len;
@@ -375,8 +372,7 @@ static ssize_t psmx_rma_self(int am_cmd,
 				cq = mr->domain->rma_ep->recv_cq;
 			if (mr->cntr != cntr)
 				mr_cntr = mr->cntr;
-		}
-		else {
+		} else {
 			dst = buf;
 			src = (void *)addr;
 			cntr = mr->domain->rma_ep->remote_read_cntr;
@@ -469,8 +465,7 @@ int psmx_am_process_rma(struct psmx_fid_domain *domain, struct psmx_am_request *
 		err = psm_mq_irecv(domain->psm_mq, (uint64_t)req->write.context, -1ULL,
 				0, (void *)req->write.addr, req->write.len,
 				(void *)&req->fi_context, &psm_req);
-	}
-	else {
+	} else {
 		err = psm_mq_isend(domain->psm_mq, (psm_epaddr_t)req->read.peer_addr,
 				0, (uint64_t)req->read.context,
 				(void *)req->read.addr, req->read.len,
@@ -533,8 +528,7 @@ ssize_t _psmx_read(struct fid_ep *ep, void *buf, size_t len,
 			return -FI_EINVAL;
 
 		src_addr = (fi_addr_t) av->psm_epaddrs[idx];
-	}
-	else if (!src_addr) {
+	} else if (!src_addr) {
 		return -FI_EINVAL;
 	}
 
@@ -705,8 +699,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 			return -FI_EINVAL;
 
 		dest_addr = (fi_addr_t) av->psm_epaddrs[idx];
-	}
-	else if (!dest_addr) {
+	} else if (!dest_addr) {
 		return -FI_EINVAL;
 	}
 
@@ -730,8 +723,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 		memset((void *)req, 0, sizeof(*req));
 		memcpy((void *)req + sizeof(*req), (void *)buf, len);
 		buf = (void *)req + sizeof(*req);
-	}
-	else {
+	} else {
 		req = calloc(1, sizeof(*req));
 		if (!req)
 			return -FI_ENOMEM;
@@ -777,8 +769,7 @@ ssize_t _psmx_write(struct fid_ep *ep, const void *buf, size_t len,
 		if (flags & FI_DELIVERY_COMPLETE) {
 			args[0].u32w0 |= PSMX_AM_FORCE_ACK;
 			psm_context = NULL;
-		}
-		else {
+		} else {
 			psm_context = (void *)&req->fi_context;
 		}
 

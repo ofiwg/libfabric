@@ -74,8 +74,7 @@ static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 	if ((ret_caps & FI_MSG) && !psmx_env.am_msg) {
 		if (*max_tag_value < PSMX_MSG_BIT) {
 			reserved_bits |= PSMX_MSG_BIT;
-		}
-		else if (ask_caps) {
+		} else if (ask_caps) {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
 				"unable to reserve tag bit for FI_MSG support.\n"
 				"ADVICE: please reduce the asked max_tag_value, "
@@ -83,8 +82,7 @@ static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 				"or set FI_PSM_AM_MSG=1 to use an alternative (but "
 				"less optimized) message queue implementation.\n");
 			return -1;
-		}
-		else {
+		} else {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
 				"unable to reserve tag bit for FI_MSG support. "
 				"FI_MSG is removed from the capabilities.\n"
@@ -98,16 +96,14 @@ static int psmx_reserve_tag_bits(int *caps, uint64_t *max_tag_value)
 	if ((ret_caps & FI_RMA) && psmx_env.tagged_rma) {
 		if (*max_tag_value < PSMX_RMA_BIT) {
 			reserved_bits |= PSMX_RMA_BIT;
-		}
-		else if (ask_caps) {
+		} else if (ask_caps) {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
 				"unable to reserve tag bit for tagged RMA acceleration.\n"
 				"ADVICE: please reduce the asked max_tag_value, or "
 				"remove FI_RMA from the asked capabilities, or set "
 				"FI_PSM_TAGGED_RMA=0 to disable RMA acceleration.\n");
 			return -1;
-		}
-		else {
+		} else {
 			FI_INFO(&psmx_prov, FI_LOG_CORE,
 				"unable to reserve tag bit for tagged RMA acceleration. "
 				"FI_RMA is removed from the capabilities.\n"
@@ -254,8 +250,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 					hints->mode, FI_CONTEXT);
 				goto err_out;
 			}
-		}
-		else {
+		} else {
 			mode = 0;
 		}
 
