@@ -267,6 +267,7 @@ struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key,
 	int i;
 	struct sock_mr *mr;
 
+	fastlock_acquire(&domain->lock);
 	mr = sock_mr_get_entry(domain, key);
 	if (!mr)
 		return NULL;
@@ -279,11 +280,14 @@ struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key,
 		    ((uintptr_t)buf + len <= (uintptr_t) mr->mr_iov[i].iov_base +
 		     mr->mr_iov[i].iov_len)) {
 			if ((access & mr->access) == access)
-				return mr;
+				goto out;
 		}
 	}
 	SOCK_LOG_ERROR("MR check failed\n");
-	return NULL;
+	mr = NULL;
+out:
+	fastlock_release(&domain->lock);
+	return mr;
 }
 
 struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc,
@@ -302,6 +306,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	uint64_t key;
 	struct fid_domain *domain;
 	RbtStatus res;
+	int ret = 0;
 
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0) {
 		return -FI_EINVAL;
@@ -310,14 +315,17 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	domain = container_of(fid, struct fid_domain, fid);
 	dom = container_of(domain, struct sock_domain, dom_fid);
 
-	if (dom->attr.mr_mode == FI_MR_SCALABLE &&
-	    sock_mr_get_entry(dom, attr->requested_key) != NULL)
-		return -FI_ENOKEY;
-
 	_mr = calloc(1, sizeof(*_mr) +
 		     sizeof(_mr->mr_iov) * (attr->iov_count - 1));
 	if (!_mr)
 		return -FI_ENOMEM;
+
+	fastlock_acquire(&dom->lock);
+	if (dom->attr.mr_mode == FI_MR_SCALABLE &&
+	    sock_mr_get_entry(dom, attr->requested_key) != NULL) {
+		ret = -FI_ENOKEY;
+		goto err;
+	}
 
 	_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	_mr->mr_fid.fid.context = attr->context;
@@ -330,14 +338,15 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		(uintptr_t) attr->mr_iov[0].iov_base + attr->offset :
 		(uintptr_t) attr->mr_iov[0].iov_base;
 
-	fastlock_acquire(&dom->lock);
 	key = (dom->attr.mr_mode == FI_MR_BASIC) ?
 		sock_get_mr_key(dom) : attr->requested_key;
 
 	_mr->key = key;
 	res = rbtInsert(dom->mr_heap, &_mr->key, _mr);
-	if (res != RBT_STATUS_OK)
+	if (res != RBT_STATUS_OK) {
+		ret = -FI_ENOMEM;
 		goto err;
+	}
 
 	_mr->mr_fid.key = key;
 	_mr->mr_fid.mem_desc = (void *) (uintptr_t) key;
@@ -361,7 +370,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 err:
 	fastlock_release(&dom->lock);
 	free(_mr);
-	return -errno;
+	return ret;
 }
 
 static int sock_regv(struct fid *fid, const struct iovec *iov,
