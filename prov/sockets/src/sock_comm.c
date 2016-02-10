@@ -95,7 +95,7 @@ ssize_t sock_comm_send(struct sock_pe_entry *pe_entry,
 {
 	ssize_t ret, used;
 
-	if (len > SOCK_PE_COMM_BUFF_SZ) {
+	if (len > pe_entry->cache_sz) {
 		used = rbused(&pe_entry->comm_buf);
 		if (used == sock_comm_flush(pe_entry)) {
 			return sock_comm_send_socket(pe_entry->conn, buf, len);
@@ -167,7 +167,7 @@ ssize_t sock_comm_recv(struct sock_pe_entry *pe_entry, void *buf, size_t len)
 {
 	ssize_t read_len;
 	if (rbempty(&pe_entry->comm_buf)) {
-		if (len <= SOCK_PE_COMM_BUFF_SZ) {
+		if (len <= pe_entry->cache_sz) {
 			sock_comm_recv_buffer(pe_entry);
 		} else {
 			return sock_comm_recv_socket(pe_entry->conn, buf, len);
