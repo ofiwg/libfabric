@@ -72,8 +72,6 @@
 #define SOCK_EP_MAX_IOV_LIMIT (8)
 #define SOCK_EP_TX_SZ (256)
 #define SOCK_EP_RX_SZ (256)
-#define SOCK_EP_TX_ENTRY_SZ (256)
-#define SOCK_EP_RX_ENTRY_SZ (256)
 #define SOCK_EP_MIN_MULTI_RECV (64)
 #define SOCK_EP_MAX_ATOMIC_SZ (256)
 #define SOCK_EP_MAX_CTX_BITS (16)
@@ -908,6 +906,42 @@ struct sock_conn_req_handle {
 	struct sock_conn_req *req;
 };
 
+union sock_tx_op {
+	struct sock_msg {
+		struct sock_op_send op;
+		uint64_t cq_data;
+		union {
+			char inject[SOCK_EP_MAX_INJECT_SZ];
+			union sock_iov msg[SOCK_EP_MAX_IOV_LIMIT];
+		} data;
+	} msg;
+
+	struct sock_rma_write {
+		struct sock_op_send op;
+		union {
+			char inject[SOCK_EP_MAX_INJECT_SZ];
+			union sock_iov msg[SOCK_EP_MAX_IOV_LIMIT];
+		} data;
+		union sock_iov rma[SOCK_EP_MAX_IOV_LIMIT];
+	} rma_write;
+
+	struct sock_rma_read {
+		struct sock_op_send op;
+		union sock_iov msg[SOCK_EP_MAX_IOV_LIMIT];
+		union sock_iov rma[SOCK_EP_MAX_IOV_LIMIT];
+	} rma_read;
+
+	struct sock_atomic {
+		struct sock_op_send op;
+		union {
+			char inject[SOCK_EP_MAX_INJECT_SZ];
+			union sock_iov msg[SOCK_EP_MAX_IOV_LIMIT];
+		} data;
+		union sock_iov rma[SOCK_EP_MAX_IOV_LIMIT];
+		union sock_iov res[SOCK_EP_MAX_IOV_LIMIT];
+	} atomic;
+};
+#define SOCK_EP_TX_ENTRY_SZ (sizeof(union sock_tx_op))
 
 int sock_verify_info(struct fi_info *hints);
 int sock_verify_fabric_attr(struct fi_fabric_attr *attr);
@@ -972,8 +1006,6 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
 int sock_ep_enable(struct fid_ep *ep);
 int sock_ep_disable(struct fid_ep *ep);
-int sock_ep_is_send_cq_low(struct sock_comp *comp, uint64_t flags);
-int sock_ep_is_recv_cq_low(struct sock_comp *comp, uint64_t flags);
 
 int sock_stx_ctx(struct fid_domain *domain,
 		 struct fi_tx_attr *attr, struct fid_stx **stx, void *context);
@@ -986,7 +1018,6 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
 			 size_t olen, int err, int prov_errno, void *err_data);
 int sock_cq_progress(struct sock_cq *cq);
-int sock_cq_check_size_ok(struct sock_cq *cq);
 
 
 int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
