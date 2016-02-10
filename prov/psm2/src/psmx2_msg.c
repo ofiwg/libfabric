@@ -480,6 +480,7 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 
 	req->no_completion = no_completion;
 	req->user_context = context;
+	req->comp_flag = FI_MSG;
 
 	fi_context = &req->fi_context;
 	PSMX2_CTXT_TYPE(fi_context) = PSMX2_SENDV_CONTEXT;
@@ -576,6 +577,8 @@ int psmx2_handle_sendv_req(struct psmx2_fid_ep *ep,
 	psm2_tag = psm2_status->msg_tag;
 	psm2_tag.tag2 &= ~PSMX2_IOV_BIT;
 	PSMX2_TAG32_SET_SEQ(psm2_tag.tag2, rep->iov_info.seq_num);
+
+	rep->comp_flag = (psm2_tag.tag2 & PSMX2_MSG_BIT) ? FI_MSG : FI_TAGGED;
 
 	/* match every bit of the tag */
 	PSMX2_SET_TAG(psm2_tagsel, -1UL, -1);

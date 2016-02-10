@@ -266,6 +266,7 @@ struct psmx2_sendv_request {
 	void *user_context;
 	int iov_protocol;
 	int no_completion;
+	int comp_flag;
 	uint32_t iov_done;
 	union {
 		struct psmx2_iov_info iov_info;
@@ -283,6 +284,7 @@ struct psmx2_sendv_reply {
 	size_t bytes_received;
 	size_t msg_length;
 	int error_code;
+	int comp_flag;
 	struct psmx2_iov_info iov_info;
 };
 
@@ -433,6 +435,7 @@ enum psmx2_triggered_op {
 	PSMX2_TRIGGERED_SENDV,
 	PSMX2_TRIGGERED_RECV,
 	PSMX2_TRIGGERED_TSEND,
+	PSMX2_TRIGGERED_TSENDV,
 	PSMX2_TRIGGERED_TRECV,
 	PSMX2_TRIGGERED_WRITE,
 	PSMX2_TRIGGERED_READ,
@@ -486,6 +489,17 @@ struct psmx2_trigger {
 			uint64_t	flags;
 			uint64_t	data;
 		} tsend;
+		struct {
+			struct fid_ep	*ep;
+			const struct iovec *iov;
+			size_t		count;
+			void		**desc;
+			fi_addr_t	dest_addr;
+			uint64_t	tag;
+			void		*context;
+			uint64_t	flags;
+			uint64_t	data;
+		} tsendv;
 		struct {
 			struct fid_ep	*ep;
 			void		*buf;
@@ -809,6 +823,13 @@ ssize_t psmx2_tagged_send_generic(
 			struct fid_ep *ep,
 			const void *buf, size_t len,
 			void *desc, fi_addr_t dest_addr,
+			uint64_t tag, void *context,
+			uint64_t flags, uint64_t data);
+
+ssize_t psmx2_tagged_sendv_generic(
+			struct fid_ep *ep,
+			const struct iovec *iov, void *desc,
+			size_t count, fi_addr_t dest_addr,
 			uint64_t tag, void *context,
 			uint64_t flags, uint64_t data);
 
