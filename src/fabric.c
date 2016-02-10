@@ -472,7 +472,7 @@ void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 		free(info);
 	}
 }
-DEFAULT_SYMVER(fi_freeinfo_, fi_freeinfo);
+CURRENT_SYMVER(fi_freeinfo_, fi_freeinfo);
 
 /* Make a dummy info object for each provider, and copy in the
  * provider name and version */
@@ -517,8 +517,9 @@ err:
 }
 
 __attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const char *service,
-	       uint64_t flags, struct fi_info *hints, struct fi_info **info)
+int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
+		const char *service, uint64_t flags,
+		struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_prov *prov;
 	struct fi_info *tail, *cur;
@@ -584,7 +585,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node, const cha
 
 	return *info ? 0 : -FI_ENODATA;
 }
-DEFAULT_SYMVER(fi_getinfo_, fi_getinfo);
+CURRENT_SYMVER(fi_getinfo_, fi_getinfo);
 
 static struct fi_info *fi_allocinfo_internal(void)
 {
@@ -689,10 +690,11 @@ fail:
 	fi_freeinfo(dup);
 	return NULL;
 }
-DEFAULT_SYMVER(fi_dupinfo_, fi_dupinfo);
+CURRENT_SYMVER(fi_dupinfo_, fi_dupinfo);
 
 __attribute__((visibility ("default")))
-int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context)
+int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
+		struct fid_fabric **fabric, void *context)
 {
 	struct fi_prov *prov;
 
@@ -708,14 +710,14 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr, struct fid_fabric
 
 	return prov->provider->fabric(attr, fabric, context);
 }
-DEFAULT_SYMVER(fi_fabric_, fi_fabric);
+DEFAULT_SYMVER(fi_fabric_, fi_fabric, FABRIC_1.0);
 
 __attribute__((visibility ("default")))
 uint32_t DEFAULT_SYMVER_PRE(fi_version)(void)
 {
 	return FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION);
 }
-DEFAULT_SYMVER(fi_version_, fi_version);
+DEFAULT_SYMVER(fi_version_, fi_version, FABRIC_1.0);
 
 static const char *const errstr[] = {
 	[FI_EOTHER - FI_ERRNO_OFFSET] = "Unspecified error",
@@ -742,4 +744,4 @@ const char *DEFAULT_SYMVER_PRE(fi_strerror)(int errnum)
 	else
 		return errstr[FI_EOTHER - FI_ERRNO_OFFSET];
 }
-DEFAULT_SYMVER(fi_strerror_, fi_strerror);
+DEFAULT_SYMVER(fi_strerror_, fi_strerror, FABRIC_1.0);

@@ -696,7 +696,7 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 	}
 	return buf;
 }
-DEFAULT_SYMVER(fi_tostr_, fi_tostr);
+DEFAULT_SYMVER(fi_tostr_, fi_tostr, FABRIC_1.0);
 
 #undef CASEENUMSTR
 #undef IFFLAGSTR
