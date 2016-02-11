@@ -335,11 +335,12 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 					PSMX2_INJECT_SIZE);
 				goto err_out;
 			}
-			if (hints->tx_attr->iov_limit > 1) {
+			if (hints->tx_attr->iov_limit > PSMX2_IOV_MAX_COUNT) {
 				FI_INFO(&psmx2_prov, FI_LOG_CORE,
 					"hints->tx_attr->iov_limit=%ld,"
-					"supported=1.\n",
-					hints->tx_attr->iov_limit);
+					"supported=%d.\n",
+					hints->tx_attr->iov_limit,
+					PSMX2_IOV_MAX_COUNT);
 				goto err_out;
 			}
 			if (hints->tx_attr->rma_iov_limit > 1) {
@@ -436,7 +437,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->tx_attr->comp_order = PSMX2_COMP_ORDER;
 	psmx2_info->tx_attr->inject_size = PSMX2_INJECT_SIZE;
 	psmx2_info->tx_attr->size = UINT64_MAX;
-	psmx2_info->tx_attr->iov_limit = 1;
+	psmx2_info->tx_attr->iov_limit = PSMX2_IOV_MAX_COUNT;
 	psmx2_info->tx_attr->rma_iov_limit = 1;
 
 	psmx2_info->rx_attr->caps = psmx2_info->caps;
