@@ -111,6 +111,19 @@ int psmx2_process_trigger(struct psmx2_fid_domain *domain,
 				    trigger->write.data);
 		break;
 
+	case PSMX2_TRIGGERED_WRITEV:
+		psmx2_writev_generic(trigger->writev.ep,
+				     trigger->writev.iov,
+				     trigger->writev.desc,
+				     trigger->writev.count,
+				     trigger->writev.dest_addr,
+				     trigger->writev.addr,
+				     trigger->writev.key,
+				     trigger->writev.context,
+				     trigger->writev.flags,
+				     trigger->writev.data);
+		break;
+
 	case PSMX2_TRIGGERED_READ:
 		psmx2_read_generic(trigger->read.ep,
 				   trigger->read.buf,
