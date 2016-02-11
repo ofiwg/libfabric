@@ -203,6 +203,7 @@ enum {
 	PSMX2_AM_REP_ATOMIC_READWRITE,
 	PSMX2_AM_REQ_ATOMIC_COMPWRITE,
 	PSMX2_AM_REP_ATOMIC_COMPWRITE,
+	PSMX2_AM_REQ_WRITEV,
 };
 
 struct psmx2_am_request {
@@ -438,6 +439,7 @@ enum psmx2_triggered_op {
 	PSMX2_TRIGGERED_TSENDV,
 	PSMX2_TRIGGERED_TRECV,
 	PSMX2_TRIGGERED_WRITE,
+	PSMX2_TRIGGERED_WRITEV,
 	PSMX2_TRIGGERED_READ,
 	PSMX2_TRIGGERED_ATOMIC_WRITE,
 	PSMX2_TRIGGERED_ATOMIC_READWRITE,
@@ -523,6 +525,18 @@ struct psmx2_trigger {
 			uint64_t	flags;
 			uint64_t	data;
 		} write;
+		struct {
+			struct fid_ep	*ep;
+			const struct iovec *iov;
+			size_t		count;
+			void		*desc;
+			fi_addr_t	dest_addr;
+			uint64_t	addr;
+			uint64_t	key;
+			void		*context;
+			uint64_t	flags;
+			uint64_t	data;
+		} writev;
 		struct {
 			struct fid_ep	*ep;
 			void		*buf;
@@ -844,6 +858,14 @@ ssize_t psmx2_write_generic(
 			struct fid_ep *ep,
 			const void *buf, size_t len,
 			void *desc, fi_addr_t dest_addr,
+			uint64_t addr, uint64_t key,
+			void *context, uint64_t flags,
+			uint64_t data);
+
+ssize_t psmx2_writev_generic(
+			struct fid_ep *ep,
+			const struct iovec *iov, void **desc,
+			size_t count, fi_addr_t dest_addr,
 			uint64_t addr, uint64_t key,
 			void *context, uint64_t flags,
 			uint64_t data);
