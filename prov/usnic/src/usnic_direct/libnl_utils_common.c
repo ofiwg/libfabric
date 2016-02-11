@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * LICENSE_BEGIN
  *
@@ -52,6 +52,34 @@
 #else
 #define usnic_nlmsg_dump(msg)
 #endif
+
+/*
+ * Querying the routing tables via netlink is expensive, especially
+ * when many processes are doing so at the same time on a single
+ * server (e.g., in an MPI job).  As such, we cache netlink responses
+ * to alleviate pressure on the netlink kernel interface.
+ */
+ struct usd_nl_cache_entry {
+	time_t timestamp;
+
+	uint32_t src_ipaddr_be;
+	uint32_t dest_ipaddr_be;
+	uint32_t ifindex;
+	uint32_t nh_addr;
+	int reachable;
+
+	/* For now, this cache is a simple linked list.  Eventually,
+	 * this cache should be a better data structure, such as a
+	 * hash table. */
+	struct usd_nl_cache_entry *prev;
+	struct usd_nl_cache_entry *next;
+};
+
+/* Semi-arbitrarily set cache TTL to 2 minutes */
+static time_t usd_nl_cache_timeout = 120;
+
+static struct usd_nl_cache_entry *cache = NULL;
+
 
 static struct nla_policy route_policy[RTA_MAX+1] = {
 	[RTA_IIF]	= { .type = NLA_STRING,
@@ -268,6 +296,74 @@ static int usnic_rt_raw_parse_cb(struct nl_msg *msg, void *arg)
 	return NL_STOP;
 }
 
+
+static struct usd_nl_cache_entry *
+usd_nl_cache_lookup(uint32_t src_ipaddr_be, uint32_t dest_ipaddr_be, int ifindex)
+{
+	time_t now;
+	struct usd_nl_cache_entry *nlce;
+	struct usd_nl_cache_entry *stale;
+
+	now = time(NULL);
+	for (nlce = cache; NULL != nlce; ) {
+		/* While we're traversing the cache, we might as well
+		 * remove stale entries */
+		if (now > nlce->timestamp + usd_nl_cache_timeout) {
+			stale = nlce;
+			nlce = nlce->next;
+
+			if (stale->prev) {
+				stale->prev->next = stale->next;
+			}
+			if (stale->next) {
+				stale->next->prev = stale->prev;
+			}
+			if (cache == stale) {
+				cache = nlce;
+			}
+			free(stale);
+
+			continue;
+		}
+
+		if (nlce->src_ipaddr_be == src_ipaddr_be &&
+			nlce->dest_ipaddr_be == dest_ipaddr_be &&
+			nlce->ifindex == ifindex) {
+			return nlce;
+		}
+
+		nlce = nlce->next;
+	}
+
+	return NULL;
+}
+
+static void
+usd_nl_cache_save(int32_t src_ipaddr_be, uint32_t dest_ipaddr_be, int ifindex,
+		uint32_t nh_addr, int reachable)
+{
+	struct usd_nl_cache_entry *nlce;
+
+	nlce = calloc(1, sizeof(*nlce));
+	if (NULL == nlce) {
+		return;
+	}
+
+	nlce->timestamp = time(NULL);
+	nlce->src_ipaddr_be = src_ipaddr_be;
+	nlce->dest_ipaddr_be = dest_ipaddr_be;
+	nlce->ifindex = ifindex;
+	nlce->nh_addr = nh_addr;
+	nlce->reachable = reachable;
+
+	nlce->next = cache;
+	if (cache) {
+		cache->prev = nlce;
+	}
+	cache = nlce;
+}
+
+
 int usnic_nl_rt_lookup(uint32_t src_addr, uint32_t dst_addr, int oif,
 			uint32_t *nh_addr)
 {
@@ -276,6 +372,18 @@ int usnic_nl_rt_lookup(uint32_t src_addr, uint32_t dst_addr, int oif,
 	struct rtmsg		rmsg;
 	struct usnic_rt_cb_arg	arg;
 	int			err;
+
+	/* See if we have this NL result cached */
+	struct usd_nl_cache_entry *nlce;
+	nlce = usd_nl_cache_lookup(src_addr, dst_addr, oif);
+	if (nlce) {
+		if (nlce->reachable) {
+			*nh_addr = nlce->nh_addr;
+			return 0;
+		} else {
+			return EHOSTUNREACH;
+		}
+	}
 
 retry:
 	unlsk = NULL;
@@ -345,6 +453,10 @@ retry:
 	} else {
 		err = EHOSTUNREACH;
 	}
+
+	/* Save this result in the cache */
+	usd_nl_cache_save(src_addr, dst_addr, oif,
+			arg.nh_addr, arg.found);
 
 out:
 	usnic_nl_sk_free(unlsk);
