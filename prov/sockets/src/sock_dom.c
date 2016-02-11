@@ -269,8 +269,10 @@ struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key,
 
 	fastlock_acquire(&domain->lock);
 	mr = sock_mr_get_entry(domain, key);
-	if (!mr)
+	if (!mr) {
+		fastlock_release(&domain->lock);
 		return NULL;
+	}
 
 	if (domain->attr.mr_mode == FI_MR_SCALABLE)
 		buf = (char *)buf + mr->offset;

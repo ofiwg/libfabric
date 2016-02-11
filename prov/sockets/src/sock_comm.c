@@ -156,7 +156,8 @@ static void sock_comm_recv_buffer(struct sock_pe_entry *pe_entry)
 		pe_entry->comm_buf.wcnt = 
 		pe_entry->comm_buf.wpos = 0;
 
-	max_read = pe_entry->total_len - pe_entry->done_len;
+	max_read = pe_entry->rem ? pe_entry->rem :
+		pe_entry->total_len - pe_entry->done_len;
 	ret = sock_comm_recv_socket(pe_entry->conn, (char *) pe_entry->comm_buf.buf,
 				    MIN(max_read, avail));
 	pe_entry->comm_buf.wpos += ret;

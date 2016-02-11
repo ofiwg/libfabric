@@ -132,6 +132,9 @@ static inline void sock_pe_discard_field(struct sock_pe_entry *pe_entry)
 	SOCK_LOG_DBG("Discarded %ld\n", ret);
 
 	pe_entry->rem -= ret;
+	if (pe_entry->rem == 0)
+		pe_entry->conn->rx_pe_entry = NULL;
+
 	if (pe_entry->done_len == pe_entry->total_len && !pe_entry->rem) {
 		SOCK_LOG_DBG("Discard complete for %p\n", pe_entry);
 		pe_entry->is_complete = 1;
@@ -268,7 +271,9 @@ static void sock_pe_report_mr_completion(struct sock_domain *domain,
 	struct sock_mr *mr;
 
 	for (i = 0; i < pe_entry->msg_hdr.dest_iov_len; i++) {
+		fastlock_acquire(&domain->lock);
 		mr = sock_mr_get_entry(domain, pe_entry->pe.rx.rx_iov[i].iov.key);
+		fastlock_release(&domain->lock);
 		if (!mr || (!mr->cq && !mr->cntr))
 			continue;
 
@@ -363,7 +368,7 @@ static void sock_pe_progress_pending_ack(struct sock_pe *pe,
 	int len, data_len, i;
 	struct sock_conn *conn = pe_entry->conn;
 
-	if (!conn)
+	if (!conn || pe_entry->rem)
 		return;
 
 	if (conn->tx_pe_entry != NULL && conn->tx_pe_entry != pe_entry) {
@@ -440,7 +445,8 @@ static void sock_pe_send_response(struct sock_pe *pe,
 	pe->pe_atomic = NULL;
 	pe_entry->done_len = 0;
 	pe_entry->pe.rx.pending_send = 1;
-	pe_entry->conn->rx_pe_entry = NULL;
+	if (pe_entry->rem == 0)
+		pe_entry->conn->rx_pe_entry = NULL;
 	pe_entry->total_len = sizeof(*response) + data_len;
 
 	sock_pe_progress_pending_ack(pe, pe_entry);
