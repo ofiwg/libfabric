@@ -81,7 +81,6 @@
 
 #define SOCK_PE_POLL_TIMEOUT (100000)
 #define SOCK_PE_MAX_ENTRIES (128)
-#define SOCK_PE_MIN_ENTRIES (1)
 #define SOCK_PE_WAITTIME (10)
 
 #define SOCK_EQ_DEF_SZ (1<<8)
@@ -150,6 +149,7 @@
 #define SOCK_NO_COMPLETION (1ULL << 60)
 #define SOCK_USE_OP_FLAGS (1ULL << 61)
 #define SOCK_PE_COMM_BUFF_SZ (1024)
+#define SOCK_PE_OVERFLOW_COMM_BUFF_SZ (128)
 
 enum {
 	SOCK_SIGNAL_RD_FD = 0,
@@ -781,7 +781,8 @@ struct sock_pe_entry {
 	uint8_t is_complete;
 	uint8_t is_error;
 	uint8_t mr_checked;
-	uint8_t reserved[4];
+	uint8_t is_pool_entry;
+	uint8_t reserved[3];
 
 	uint64_t done_len;
 	uint64_t total_len;
@@ -795,6 +796,7 @@ struct sock_pe_entry {
 	struct dlist_entry entry;
 	struct dlist_entry ctx_entry;
 	struct ringbuf comm_buf;
+	size_t cache_sz;
 };
 
 struct sock_pe {
@@ -808,6 +810,7 @@ struct sock_pe {
 	int signal_fds[2];
 	uint64_t waittime;
 
+	struct util_buf_pool *pe_rx_pool;
 	struct dlist_entry free_list;
 	struct dlist_entry busy_list;
 
