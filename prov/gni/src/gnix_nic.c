@@ -916,6 +916,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	uint32_t fake_cdm_id;
 	gni_smsg_attr_t smsg_mbox_attr;
 	struct gnix_nic_attr *nic_attr = &default_attr;
+	bool must_alloc_nic = false;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -926,6 +927,8 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		if (ret != FI_SUCCESS)
 			return ret;
 		nic_attr = attr;
+		if (nic_attr->use_cdm_id == true)
+			must_alloc_nic = true;
 	}
 
 	/*
@@ -946,7 +949,13 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 
 	pthread_mutex_lock(&gnix_nic_list_lock);
 
-	if (gnix_nics_per_ptag[domain->ptag] >= gnix_max_nics_per_ptag) {
+	/*
+	 * we can reuse previously allocated nics as long as a
+	 * cdm_id is not specified in the nic_attr arg.
+	 */
+
+	if ((must_alloc_nic == false) && (gnix_nics_per_ptag[domain->ptag] >=
+					 gnix_max_nics_per_ptag)) {
 		assert(!dlist_empty(&domain->nic_list));
 
 		nic = dlist_first_entry(&domain->nic_list, struct gnix_nic,
@@ -970,9 +979,12 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			goto err;
 		}
 
-		ret = _gnix_get_new_cdm_id(domain, &fake_cdm_id);
-		if (ret != FI_SUCCESS)
-			goto err;
+		if (nic_attr->use_cdm_id == false) {
+			ret = _gnix_get_new_cdm_id(domain, &fake_cdm_id);
+			if (ret != FI_SUCCESS)
+				goto err;
+		} else
+			fake_cdm_id = nic_attr->cdm_id;
 
 		if (nic_attr->gni_cdm_hndl == NULL) {
 			status = GNI_CdmCreate(fake_cdm_id,

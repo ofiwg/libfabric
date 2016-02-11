@@ -45,10 +45,8 @@ typedef int gnix_cm_nic_rcv_cb_func(struct gnix_cm_nic *cm_nic,
 /**
  * @brief GNI provider connection management (cm) nic structure
  *
- * @var lock           spin lock for protecting calls in to GNI using
- *                     gni_nic_hndl
- * @var gni_cdm_hndl   underlying gni cdm handle associated with this nic
- * @var gni_nic_hndl   underlying gni nic handle associated with this nic
+ * @var lock           spin lock for protecting tx/rx ctx alloc calls
+ * @var nic            pointer to gnix_nic associated with this cm nic
  * @var dgram_hndl     handle to dgram allocator associated with this nic
  * @var domain         GNI provider domain associated with this nic
  * @var addr_to_ep_ht  Hash table for looking up ep bound to this
@@ -65,8 +63,7 @@ typedef int gnix_cm_nic_rcv_cb_func(struct gnix_cm_nic *cm_nic,
  */
 struct gnix_cm_nic {
 	fastlock_t lock;
-	gni_cdm_handle_t gni_cdm_hndl;
-	gni_nic_handle_t gni_nic_hndl;
+	struct gnix_nic *nic;
 	struct gnix_dgram_hndl *dgram_hndl;
 	struct gnix_fid_domain *domain;
 	struct gnix_hashtable *addr_to_ep_ht;
