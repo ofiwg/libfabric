@@ -114,20 +114,23 @@ fi_ibv_rdm_tagged_move_to_postponed_queue(
 {
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("move_to_postponed_queue: ", request,
 				      FI_LOG_DEBUG);
-	assert(request->conn);
+	assert(request && request->conn);
 
-	if (dlist_empty(&request->conn->postponed_requests_head)) {
+	struct fi_ibv_rdm_tagged_conn *conn = request->conn;
+
+	if (dlist_empty(&conn->postponed_requests_head)) {
 		struct fi_ibv_rdm_tagged_postponed_entry *entry =
 			(struct fi_ibv_rdm_tagged_postponed_entry *)
-			fi_verbs_mem_pool_get(&fi_ibv_rdm_tagged_postponed_pool);
+			fi_ibv_mem_pool_get(&fi_ibv_rdm_tagged_postponed_pool);
 
-		entry->conn = request->conn;
-		entry->conn->postponed_entry = entry;
+		entry->conn = conn;	
+		conn->postponed_entry = entry;
+
 		dlist_insert_tail(&entry->queue_entry,
 				  &fi_ibv_rdm_tagged_send_postponed_queue);
 	}
 	dlist_insert_tail(&request->queue_entry,
-			  &request->conn->postponed_requests_head);
+			  &conn->postponed_requests_head);
 }
 
 static inline void
@@ -137,15 +140,30 @@ fi_ibv_rdm_tagged_remove_from_postponed_queue(
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("remove_from_postponed_queue: ", request,
 				      FI_LOG_DEBUG);
 
-	assert(!dlist_empty(&request->conn->postponed_requests_head));
+	struct fi_ibv_rdm_tagged_conn *conn = request->conn;
+	assert(conn);
+	assert(!dlist_empty(&conn->postponed_requests_head));
+
+	/* 
+	 * remove from conn->postponed_requests_head at first
+	 * then if conn->postponed_requests_head is empty
+	 * clean fi_ibv_rdm_tagged_send_postponed_queue
+	 */
+
 
 	dlist_remove(&request->queue_entry);
-	if (dlist_empty(&request->conn->postponed_requests_head)) {
-		dlist_remove(&request->conn->postponed_entry->queue_entry);
-		request->conn->postponed_entry->conn = NULL;
-		fi_ibv_mem_pool_return(&request->conn->postponed_entry->mpe,
-					&fi_ibv_rdm_tagged_postponed_pool);
-		request->conn->postponed_entry = NULL;
+	request->queue_entry.next = request->queue_entry.prev = NULL;
+
+	if (dlist_empty(&conn->postponed_requests_head))
+	{
+		dlist_remove(&conn->postponed_entry->queue_entry);
+		conn->postponed_entry->queue_entry.next = 
+		conn->postponed_entry->queue_entry.prev = NULL;
+		conn->postponed_entry->conn = NULL;
+
+		fi_ibv_mem_pool_return(&conn->postponed_entry->mpe,
+				       &fi_ibv_rdm_tagged_postponed_pool);
+		conn->postponed_entry = NULL;
 	}
 }
 

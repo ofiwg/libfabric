@@ -102,54 +102,36 @@ struct fi_ibv_mem_pool {
 	void *storage;
 };
 
-/* TODO: Remove overuse of static inlines */
-static inline void fi_ibv_mem_pool_init(struct fi_ibv_mem_pool *pool,
-                                        int init_size, int max_size,
-                                        int entry_size)
-{
-	int size = init_size < max_size ? init_size : max_size;
-	int i;
-	int entry_asize = entry_size % FI_IBV_RDM_MEM_ALIGNMENT;
-	entry_asize += entry_size;
-
-	pool->head = memalign(FI_IBV_RDM_BUF_ALIGNMENT, entry_asize * size);
-	memset(pool->head, 0, entry_asize * size);
-	pool->storage = (void *)pool->head;
-	struct fi_ibv_mem_pool_entry *tmp = pool->head;
-	for (i = 1; i < size; i++) {
-		tmp->next = (struct fi_ibv_mem_pool_entry *)
-				((char *)tmp + entry_asize);
-		tmp = tmp->next;
-	}
-	tmp->next = NULL;
-	pool->current_size = size;
-	pool->max_size = max_size;
-	pool->entry_size = entry_asize;
-}
+void fi_ibv_mem_pool_init(struct fi_ibv_mem_pool *pool, int init_size,
+			  int max_size, int entry_size);
 
 static inline struct fi_ibv_mem_pool_entry *
-fi_verbs_mem_pool_get(struct fi_ibv_mem_pool *pool)
+fi_ibv_mem_pool_get(struct fi_ibv_mem_pool *pool)
 {
-	struct fi_ibv_mem_pool_entry *rst;
+	struct fi_ibv_mem_pool_entry *entry;
+
 	if (pool->head != NULL) {
-		rst = pool->head;
-		pool->head = rst->next;
+		entry = pool->head;
+		pool->head = entry->next;
+		entry->is_malloced = 0;
 	} else {
-		rst = (struct fi_ibv_mem_pool_entry *)calloc(1, pool->entry_size);
-		rst->is_malloced = 1;
-		pool->current_size++;
-		VERBS_DBG(FI_LOG_FABRIC, "MALLOCED: %p, %d\n", rst, pool->current_size);
+		entry = (struct fi_ibv_mem_pool_entry *)calloc(1, pool->entry_size);
+		entry->is_malloced = 1;
 	}
-	return rst;
+
+	pool->current_size++;
+	VERBS_DBG(FI_LOG_FABRIC, "MEM_POOL: %p, %d, head: %p\n", entry, pool->current_size, pool->head);
+
+	return entry;
 }
 
 static inline void
 fi_ibv_mem_pool_return(struct fi_ibv_mem_pool_entry *entry,
 		       struct fi_ibv_mem_pool *pool)
 {
+	pool->current_size--;
+	VERBS_DBG(FI_LOG_FABRIC, "MEM_POOL: %p, %d, head: %p\n", entry, pool->current_size, pool->head);
 	if (entry->is_malloced) {
-		pool->current_size--;
-		VERBS_DBG(FI_LOG_FABRIC, "FREED: %p, %d\n", entry, pool->current_size);
 		free(entry);
 	} else {
 		entry->next = pool->head;
@@ -205,7 +187,7 @@ do {                                                                        \
     const size_t max_str_len = 1024;                                        \
     char str[max_str_len];                                                  \
     snprintf(str, max_str_len,                                              \
-            "%s request: %p, eager_state: %s, rndv_state: %s, tag: 0x%" PRIx64 ", len: %"PRIx64" context: %p, connection: %p\n",	\
+            "%s request: %p, eager_state: %s, rndv_state: %s, tag: 0x%lx, len: %lu, context: %p, connection: %p\n", \
             prefix,                                                         \
             request,                                                        \
             fi_ibv_rdm_tagged_req_eager_state_to_str(request->state.eager), \
@@ -246,7 +228,7 @@ int fi_ibv_rdm_tagged_req_match_by_info(struct dlist_entry *item,
                                         const void *info);
 int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
                                          const void *info);
-void fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
+int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
                                               const void *arg);
 
 #endif /* _VERBS_UTILS_H */
