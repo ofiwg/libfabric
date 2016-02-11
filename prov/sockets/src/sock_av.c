@@ -490,6 +490,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	struct sock_av *_av;
 	size_t table_sz, i;
 	uint64_t flags = O_RDWR;
+	struct stat mapstat;
 
 	if (!attr || sock_verify_av_attr(attr))
 		return -FI_EINVAL;
@@ -533,11 +534,19 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			goto err2;
 		}
 
-		if (ftruncate(_av->shared_fd, table_sz) == -1) {
-			SOCK_LOG_ERROR("ftruncate failed\n");
-			shm_unlink(_av->name);
-			ret = -FI_EINVAL;
-			goto err2;
+		if (fstat(_av->shared_fd, &mapstat)) {
+			SOCK_LOG_ERROR("failed to do fstat: %s\n", strerror(errno));
+			goto err_shm;
+		}
+
+		if (mapstat.st_size == 0) {
+			if (ftruncate(_av->shared_fd, table_sz)) {
+				SOCK_LOG_ERROR("ftruncate failed: %s\n", strerror(errno));
+				goto err_shm;
+			}
+		} else if (mapstat.st_size < table_sz) {
+			SOCK_LOG_ERROR("shm file too small\n");
+			goto err_shm;
 		}
 
 		_av->table_hdr = mmap(NULL, table_sz, PROT_READ | PROT_WRITE,
@@ -608,6 +617,10 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	*av = &_av->av_fid;
 	return 0;
 
+err_shm:
+	shm_unlink(_av->name);
+	ret = -FI_EINVAL;
+	goto err2;
 err3:
 	free(_av->table_hdr);
 err2:
