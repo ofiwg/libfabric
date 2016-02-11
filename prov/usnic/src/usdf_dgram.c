@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -241,6 +241,8 @@ usdf_dgram_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 	dest = (struct usdf_dest *)(uintptr_t) dest_addr;
 	flags = (ep->ep_tx_completion) ? USD_SF_SIGNAL : 0;
 
+	assert(len <= ep->max_msg_size);
+
 	if (len + sizeof(struct usd_udp_hdr) <= USD_SEND_MAX_COPY) {
 		return usd_post_send_one_copy(ep->e.dg.ep_qp, &dest->ds_dest,
 						buf, len, flags,
@@ -282,6 +284,8 @@ _usdf_dgram_send_iov_copy(struct usdf_ep *ep, struct usd_dest *dest,
 		len += iov[i].iov_len;
 	}
 
+	assert(len <= ep->max_msg_size);
+
 	_usdf_adjust_hdr(hdr, qp, len);
 
 	last_post = _usd_post_send_one(wq, hdr, len + sizeof(*hdr), cq_entry);
@@ -310,6 +314,8 @@ static ssize_t _usdf_dgram_send_iov(struct usdf_ep *ep, struct usd_dest *dest,
 	memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
 	_usdf_adjust_hdr(hdr, qp, len);
 
+	assert(len <= ep->max_msg_size);
+
 	send_iov[0].iov_base = hdr;
 	send_iov[0].iov_len = sizeof(*hdr);
 	memcpy(&send_iov[1], iov, sizeof(struct iovec) * count);
@@ -334,6 +340,7 @@ usdf_dgram_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 	dest = (struct usd_dest *)(uintptr_t) dest_addr;
 
 	len += _usdf_iov_len(iov, count);
+	assert(len <= ep->max_msg_size);
 
 	if (len <= USD_SEND_MAX_COPY) {
 		return _usdf_dgram_send_iov_copy(ep, dest, iov, count, context,
@@ -368,6 +375,7 @@ usdf_dgram_sendmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 	completion = ep->ep_tx_dflt_signal_comp || (flags & FI_COMPLETION);
 
 	len += _usdf_iov_len(msg->msg_iov, msg->iov_count);
+	assert(len <= ep->max_msg_size);
 
 	if (len <= USD_SEND_MAX_COPY) {
 		return _usdf_dgram_send_iov_copy(ep, dest, msg->msg_iov,
@@ -595,6 +603,8 @@ usdf_dgram_prefix_send(struct fid_ep *fep, const void *buf, size_t len,
 	padding = USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
 	flags = (ep->ep_tx_completion) ? USD_SF_SIGNAL : 0;
 
+	assert(len <= ep->max_msg_size);
+
 	if (ep->e.dg.tx_op_flags & FI_INJECT) {
 		if ((len - padding) > USD_SEND_MAX_COPY) {
 			USDF_DBG_SYS(EP_DATA,
@@ -644,6 +654,8 @@ _usdf_dgram_send_iov_prefix(struct usdf_ep *ep,
 	len = _usdf_iov_len(iov, count);
 	padding = USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
 
+	assert(len <= ep->max_msg_size);
+
 	hdr = (struct usd_udp_hdr *) ((char *) iov[0].iov_base +
 			padding);
 	memcpy(hdr, &dest->ds_dest.ds_udp.u_hdr, sizeof(*hdr));
@@ -674,6 +686,8 @@ usdf_dgram_prefix_sendv(struct fid_ep *fep, const struct iovec *iov,
 	dest = (struct usd_dest *)(uintptr_t) dest_addr;
 	len = _usdf_iov_len(iov, count);
 	padding = USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
+
+	assert(len <= ep->max_msg_size);
 
 	if (count > ep->e.dg.tx_iov_limit) {
 		USDF_DBG_SYS(EP_DATA, "max iov count exceeded: %zu\n", count);
@@ -719,6 +733,8 @@ usdf_dgram_prefix_sendmsg(struct fid_ep *fep, const struct fi_msg *msg,
 	len = _usdf_iov_len(msg->msg_iov, msg->iov_count);
 	completion = ep->ep_tx_dflt_signal_comp || (flags & FI_COMPLETION);
 	padding = USDF_HDR_BUF_ENTRY - sizeof(struct usd_udp_hdr);
+
+	assert(len <= ep->max_msg_size);
 
 	if (msg->iov_count > ep->e.dg.tx_iov_limit) {
 		USDF_DBG_SYS(EP_DATA, "max iov count exceeded: %zu\n",
