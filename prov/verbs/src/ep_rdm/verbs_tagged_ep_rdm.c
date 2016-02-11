@@ -582,8 +582,8 @@ fi_ibv_rdm_tagged_got_recv_completion(struct fi_ibv_rdm_ep *ep,
 	fi_ibv_rdm_tagged_process_recv(ep, conn, arrived_len, imm_data, rbuf);
 
 	conn->recv_completions++;
-	conn->recv_completions %= ep->n_buffs;
-	if (conn->recv_completions == 0) {
+	if (conn->recv_completions & ep->n_buffs) {
+		conn->recv_completions = 0;
 		fi_ibv_rdm_tagged_release_remote_sbuff(conn, ep);
 	}
 }
