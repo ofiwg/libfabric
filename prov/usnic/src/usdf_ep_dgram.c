@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -405,13 +405,20 @@ int usdf_dgram_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
 
 	defaults = dgram_dflt_ep_attr;
 
-	defaults.max_msg_size = dap->uda_mtu - sizeof(struct usd_udp_hdr);
+	/* The ethernet header does not count against the MTU. */
+	defaults.max_msg_size = dap->uda_mtu -
+		(sizeof(struct usd_udp_hdr) - sizeof(struct ether_header));
 
 	if (!hints || !hints->ep_attr)
 		goto out;
 
-	if (hints->mode & FI_MSG_PREFIX)
+	/* In prefix mode the max message size is the same as in non-prefix mode
+	 * with the advertised header size added on top.
+	 */
+	if (hints->mode & FI_MSG_PREFIX) {
 		defaults.msg_prefix_size = USDF_HDR_BUF_ENTRY;
+		defaults.max_msg_size += defaults.msg_prefix_size;
+	}
 
 	if (hints->ep_attr->max_msg_size > defaults.max_msg_size)
 		return -FI_ENODATA;
@@ -791,6 +798,8 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 		if (info->rx_attr->size)
 			rx_size = info->rx_attr->size;
 	}
+
+	ep->max_msg_size = info->ep_attr->max_msg_size;
 
 	if (ep->ep_mode & FI_MSG_PREFIX) {
 		ep->ep_wqe = tx_size * ep->e.dg.tx_iov_limit;
