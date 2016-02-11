@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -283,6 +283,8 @@ struct usdf_ep {
 
 	struct usdf_tx *ep_tx;
 	struct usdf_rx *ep_rx;
+
+	size_t max_msg_size;
 
 	union {
 		struct {
