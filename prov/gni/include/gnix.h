@@ -70,6 +70,7 @@ extern "C" {
 #include "gnix_cq.h"
 #include "fi_ext_gni.h"
 #include "gnix_tags.h"
+#include "gnix_mr_cache.h"
 
 #define GNI_MAJOR_VERSION 1
 #define GNI_MINOR_VERSION 0

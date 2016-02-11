@@ -28,6 +28,7 @@ _gni_files = \
 	prov/gni/src/gnix_init.c \
 	prov/gni/src/gnix_mbox_allocator.c \
 	prov/gni/src/gnix_mr.c \
+	prov/gni/src/gnix_mr_cache.c \
 	prov/gni/src/gnix_msg.c \
 	prov/gni/src/gnix_nameserver.c \
 	prov/gni/src/gnix_nic.c \
@@ -55,6 +56,7 @@ _gni_headers = \
 	prov/gni/include/gnix_hashtable.h \
 	prov/gni/include/gnix_mbox_allocator.h \
 	prov/gni/include/gnix_mr.h \
+	prov/gni/include/gnix_mr_cache.h \
 	prov/gni/include/gnix_msg.h \
 	prov/gni/include/gnix_nameserver.h \
 	prov/gni/include/gnix_nic.h \
