@@ -13,7 +13,7 @@ declare CLIENT="127.0.0.1"
 declare EXCLUDE
 declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
-declare COMPLEX_CFG=quick
+declare COMPLEX_CFG="quick"
 
 # base ssh,  "short" and "long" timeout variants:
 declare bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
@@ -60,6 +60,7 @@ simple_tests=(
 	"rdm_tagged_peek"
 	"scalable_ep"
 	"cmatose"
+	"rdm_shared_av"
 )
 
 short_tests=(
@@ -260,7 +261,11 @@ function cs_test {
 	p1=$!
 	sleep 1s
 
-	${CLIENT_CMD} "${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE" &> $c_outp &
+	if [[ $test == "rdm_shared_av" ]]; then
+		${CLIENT_CMD} "${BIN_PATH}${test_exe} -s $C_INTERFACE -a foo $S_INTERFACE" &> $c_outp &
+	else
+		${CLIENT_CMD} "${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE" &> $c_outp &
+	fi
 	p2=$!
 
 	wait $p1
