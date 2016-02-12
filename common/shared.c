@@ -740,10 +740,8 @@ int size_to_count(int size)
 		return 100;
 	else if (size >= (1 << 16))
 		return 1000;
-	else if (size >= (1 << 10))
-		return 10000;
 	else
-		return 100000;
+		return 10000;
 }
 
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
