@@ -32,6 +32,7 @@ rm -rf %{buildroot}
 %defattr(-,root,root,-)
 %{_bindir}/*
 %{_mandir}/man7/*
+%{_datadir}/%{name}/test_configs/*
 %doc AUTHORS COPYING README
 
 %changelog
