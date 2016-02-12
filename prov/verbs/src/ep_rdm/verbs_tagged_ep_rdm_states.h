@@ -50,7 +50,10 @@ enum fi_ibv_rdm_tagged_request_eager_state {
 	FI_IBV_STATE_EAGER_RECV_WAIT4RECV,
 	FI_IBV_STATE_EAGER_RECV_END,
 
+	FI_IBV_STATE_EAGER_RMA_INJECT,
+	FI_IBV_STATE_EAGER_RMA_INITIALIZED,
 	FI_IBV_STATE_EAGER_RMA_WAIT4LC,
+	FI_IBV_STATE_EAGER_RMA_INJECT_WAIT4LC,
 	FI_IBV_STATE_EAGER_RMA_END,
 
 	FI_IBV_STATE_EAGER_READY_TO_FREE,
@@ -74,6 +77,9 @@ enum fi_ibv_rdm_tagged_request_rndv_state {
 	FI_IBV_STATE_RNDV_RECV_WAIT4RECV,
 	FI_IBV_STATE_RNDV_RECV_WAIT4LC,
 	FI_IBV_STATE_RNDV_RECV_END,
+
+	FI_IBV_STATE_ZEROCOPY_RMA_WAIT4LC,
+	FI_IBV_STATE_ZEROCOPY_RMA_END,
 
 	FI_IBV_STATE_RNDV_COUNT            // must be last
 };
@@ -159,6 +165,7 @@ struct fi_ibv_recv_got_pkt_process_data {
 	struct fi_ibv_rdm_ep *ep;
 } ;
 
+// rma service data types
 
 struct fi_ibv_rdm_rma_start_data {
 	struct fi_ibv_rdm_ep *ep_rdm;
@@ -172,13 +179,18 @@ struct fi_ibv_rdm_rma_start_data {
 	enum ibv_wr_opcode op_code;
 };
 
+struct fi_ibv_rma_post_ready_data {
+	struct fi_ibv_rdm_ep *ep_rdm;
+};
 
 // Return codes
+/* TODO: to replace with native OFI codes */
 
 enum fi_rdm_tagged_req_hndl_ret {
     FI_EP_RDM_HNDL_SUCCESS = 0,
     FI_EP_RDM_HNDL_DELETED_REQUEST = 1,
     FI_EP_RDM_HNDL_ERROR = 2,
+    FI_EP_RDM_HNDL_AGAIN = 3,
     FI_EP_RDM_HNDL_NOT_INIT = (int)-1
 };
 

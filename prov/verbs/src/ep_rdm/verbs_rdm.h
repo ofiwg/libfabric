@@ -77,7 +77,7 @@
 
 // Send/Recv counters control
 
-#define FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS(_connection, _ep, _send_flags) \
+#define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep, _send_flags)	\
 do {                                                                	\
 	(_connection)->sends_outgoing++;                                \
 	(_ep)->pend_send++;                                             \
@@ -115,7 +115,10 @@ struct fi_ibv_rdm_tagged_header {
 	uint64_t imm_data;          // TODO: not implemented
 	uint64_t tag;
 	uint32_t service_tag;
-	uint32_t padding;
+	union {
+		uint32_t padding;
+		uint32_t seq_num;
+	};
 };
 
 struct fi_ibv_rdm_tagged_rndv_header {
@@ -174,17 +177,27 @@ struct fi_ibv_rdm_tagged_request {
 	struct fi_context *context;
 	uint32_t imm;
 
-	/* RNDV info */
-
-	struct {
-		/* pointer to request on sender side */
-		void *id;
-		/* registered buffer on sender side */
-		void* remote_addr;
-		/* registered mr of local src_addr */
-		struct ibv_mr *mr;
-		uint32_t rkey;
-	} rndv;
+	union {
+		/* RNDV info */
+		struct {
+			/* pointer to request on sender side */
+			void *id;
+			/* registered buffer on sender side */
+			void* remote_addr;
+			/* registered mr of local src_addr */
+			struct ibv_mr *mr;
+			uint32_t rkey;
+		} rndv;
+		
+		/* RMA info */
+		struct {
+			/* registered buffer on sender side */
+			uint64_t remote_addr;
+			uint32_t rkey;
+			uint32_t lkey;
+			enum ibv_wr_opcode opcode;
+		} rma;
+	};
 };
 
 static inline void
@@ -278,6 +291,7 @@ struct fi_ibv_rdm_tagged_conn {
 
 	int sends_outgoing;
 	int recv_preposted;
+	int recv_completions; /* counter for eager buffer releasing */
 	UT_hash_handle hh;
 #if ENABLE_DEBUG
 	size_t unexp_counter;
@@ -287,9 +301,9 @@ struct fi_ibv_rdm_tagged_conn {
 
 struct fi_ibv_rdm_tagged_postponed_entry {
 	struct fi_ibv_mem_pool_entry mpe;
-	struct fi_ibv_rdm_tagged_conn *conn;
-
 	struct dlist_entry queue_entry;
+
+	struct fi_ibv_rdm_tagged_conn *conn;
 };
 
 enum fi_ibv_rdm_tagged_buffer_status {
@@ -467,7 +481,7 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf_head(
 	if (fi_ibv_rdm_tagged_get_buffer_status(conn->sbuf_head) ==
 	    BUF_STATUS_FREE) {
 
-		/* We have made whole circle. Reset buffer states */
+		/* We have made whole circle. Reset buffer states */ 
 		if (conn->sbuf_head ==
 		    fi_ibv_rdm_tagged_get_sbuf(conn, ep, 0)) {
 			for (i = 1; i < ep->n_buffs; ++i) {
@@ -476,7 +490,7 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf_head(
 				FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
 				i * ep->buff_len, BUF_STATUS_FREE);
 			}
-		}
+		} 
 
 		fi_ibv_rdm_tagged_set_buffer_status(conn->sbuf_head,
 						    BUF_STATUS_BUSY);
@@ -507,6 +521,15 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf_head(
 		}
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"conn %p sbufs status after:  %s\n", conn, s);
+	}
+
+	static int seq_number = 0;
+	if (sbuf) {
+		struct fi_ibv_rdm_tagged_buf *stbuf =
+			(struct fi_ibv_rdm_tagged_buf *)sbuf;
+		seq_number++;
+		stbuf->header.seq_num = seq_number;
+		VERBS_DBG(FI_LOG_EP_DATA, "sending pkt # %d\n", stbuf->header.seq_num);
 	}
 #endif // ENABLE_DEBUG
 

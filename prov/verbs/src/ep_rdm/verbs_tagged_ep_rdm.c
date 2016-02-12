@@ -112,7 +112,7 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 
 	struct fi_ibv_rdm_tagged_request *request =
 	    (struct fi_ibv_rdm_tagged_request *)
-	    fi_verbs_mem_pool_get(&fi_ibv_rdm_tagged_request_pool);
+	    fi_ibv_mem_pool_get(&fi_ibv_rdm_tagged_request_pool);
 	fi_ibv_rdm_tagged_zero_request(request);
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
@@ -134,17 +134,18 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 
 		ret = fi_ibv_rdm_tagged_req_hndl(request,
 				FI_IBV_EVENT_RECV_START, &req_data);
+
+		VERBS_DBG(FI_LOG_EP_DATA,
+		    "fi_recvfrom: conn %p, tag 0x%llx, len %d, rbuf %p, fi_ctx %p, "
+		     "pend_recv %d\n",
+		     conn, (long long unsigned int)tag, (int)len, buf, context,
+		     ep->pend_recv);
+
 		if (ret || request->state.eager ==
 		    FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
 			goto out;
 		}
 	}
-
-	VERBS_DBG(FI_LOG_EP_DATA,
-	    "fi_recvfrom: conn %p, tag 0x%llx, len %d, rbuf %p, fi_ctx %p, "
-	     "pend_recv %d\n",
-	     conn, (long long unsigned int)tag, (int)len, buf, context,
-	     ep->pend_recv);
 
 	struct fi_ibv_recv_got_pkt_process_data data = {
 		.ep = ep
@@ -269,14 +270,13 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 				memcpy(payload, buf, len);
 			}
 
-			FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS(conn,
-							    ep,
-							    wr.send_flags);
+			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep,
+							 wr.send_flags);
 
-			VERBS_DBG(FI_LOG_EP_DATA,
-				"posted %d bytes, conn %p, tag 0x%llx\n",
-				sge.length, conn, tag);
 			if (!ibv_post_send(conn->qp, &wr, &bad_wr)) {
+				VERBS_DBG(FI_LOG_EP_DATA,
+					"posted %d bytes, conn %p, len %d, tag 0x%llx\n",
+					sge.length, conn, len, tag);
 				return FI_SUCCESS;
 			}
 		}
@@ -292,7 +292,7 @@ fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
 {
 	struct fi_ibv_rdm_tagged_request *request =
 	    (struct fi_ibv_rdm_tagged_request *)
-	    fi_verbs_mem_pool_get(&fi_ibv_rdm_tagged_request_pool);
+	    fi_ibv_mem_pool_get(&fi_ibv_rdm_tagged_request_pool);
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
@@ -386,7 +386,7 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 		 * to send immediately
 		 */
 		iovec_arr = (struct fi_ibv_rdm_tagged_extra_buff *)
-			fi_verbs_mem_pool_get
+			fi_ibv_mem_pool_get
 			(&fi_ibv_rdm_tagged_extra_buffers_pool);
 		sdata.buf.iovec_arr = (struct iovec*)iovec_arr->payload;
 		for (i = 0; i < count; i++) {
@@ -434,6 +434,10 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 			       struct fi_ibv_rdm_tagged_buf *rbuf)
 {
 	struct fi_ibv_rdm_tagged_request *request = NULL;
+	
+#if ENABLE_DEBUG
+	VERBS_DBG(FI_LOG_EP_DATA, "processing pkt # %d, imm %d \n", rbuf->header.seq_num, imm_data);
+#endif /* ENABLE_DEBUG */
 
 	int pkt_type = FI_IBV_RDM_GET_PKTTYPE(rbuf->header.service_tag);
 
@@ -480,7 +484,7 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 			request = found_request;
 		} else {
 			request = (struct fi_ibv_rdm_tagged_request *)
-			    fi_verbs_mem_pool_get
+			    fi_ibv_mem_pool_get
 			    (&fi_ibv_rdm_tagged_request_pool);
 			fi_ibv_rdm_tagged_zero_request(request);
 
@@ -534,7 +538,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 	wr.opcode = IBV_WR_RDMA_WRITE;	// w/o imm - do not put it into recv
 	// completion queue
 
-	FI_IBV_RDM_TAGGED_INC_SEND_COUNTERS(conn, ep, wr.send_flags);
+	FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA,
 		"posted %d bytes, remote sbuff released\n", sge.length);
 	int ret = ibv_post_send(conn->qp, &wr, &bad_wr);
@@ -577,9 +581,10 @@ fi_ibv_rdm_tagged_got_recv_completion(struct fi_ibv_rdm_ep *ep,
 	    fi_ibv_rdm_tagged_get_rbuf(conn, ep, imm_data);
 	fi_ibv_rdm_tagged_process_recv(ep, conn, arrived_len, imm_data, rbuf);
 
-	if (rbuf == fi_ibv_rdm_tagged_get_rbuf(conn, ep, 0))
-	{
-	    fi_ibv_rdm_tagged_release_remote_sbuff(conn, ep);
+	conn->recv_completions++;
+	if (conn->recv_completions & ep->n_buffs) {
+		conn->recv_completions = 0;
+		fi_ibv_rdm_tagged_release_remote_sbuff(conn, ep);
 	}
 }
 
@@ -697,8 +702,14 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 
 	struct fi_ibv_rdm_tagged_send_ready_data data = {.ep = ep };
 	struct dlist_entry *item;
-	dlist_foreach((&fi_ibv_rdm_tagged_send_postponed_queue), item)
-		fi_ibv_rdm_tagged_send_postponed_process(item, &data);
+	dlist_foreach((&fi_ibv_rdm_tagged_send_postponed_queue), item) {
+		if (fi_ibv_rdm_tagged_send_postponed_process(item, &data)) {
+			/* we can't process all postponed items till foreach */
+			/* implementation is not safety for removing during  */
+			/* iterating                                         */
+			break;
+		}
+	}
 
 	if (ret >= 0)		// Success
 	{
