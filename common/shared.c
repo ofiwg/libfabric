@@ -1131,7 +1131,7 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 	if (name) {
 		if (header) {
 			printf("%-50s%-8s%-8s%-8s%8s %10s%13s\n",
-					"name", "bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
+					"name", "bytes", "iters", "total", "time", "MB/sec", "usec/xfer");
 			header = 0;
 		}
 
@@ -1139,7 +1139,7 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 	} else {
 		if (header) {
 			printf("%-8s%-8s%-8s%8s %10s%13s\n",
-					"bytes", "iters", "total", "time", "Gb/sec", "usec/xfer");
+					"bytes", "iters", "total", "time", "MB/sec", "usec/xfer");
 			header = 0;
 		}
 	}
@@ -1151,7 +1151,7 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 	printf("%-8s", size_str(str, bytes));
 
 	printf("%8.2fs%10.2f%11.2f\n",
-		elapsed / 1000000.0, (bytes * 8) / (1000.0 * elapsed),
+		elapsed / 1000000.0, bytes / (1.0 * elapsed),
 		((float)elapsed / iters / xfers_per_iter));
 }
 
@@ -1178,7 +1178,7 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 	printf("iterations: %d, ", iters);
 	printf("total: %lld, ", total);
 	printf("time: %f, ", elapsed / 1000000.0);
-	printf("Gb/sec: %f, ", (total * 8) / (1000.0 * elapsed));
+	printf("MB/sec: %f, ", (total) / (1.0 * elapsed));
 	printf("usec/xfer: %f", ((float)elapsed / iters / xfers_per_iter));
 	printf(" }\n");
 }
