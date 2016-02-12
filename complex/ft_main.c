@@ -494,7 +494,7 @@ int main(int argc, char **argv)
 	while ((op = getopt(argc, argv, "f:u:t:q:xy:z:h" ADDR_OPTS)) != -1) {
 		switch (op) {
 		case 'u':
-			filename = optarg;
+			filename = strdup(optarg);
 			break;
 		case 'f':
 			provname = optarg;
