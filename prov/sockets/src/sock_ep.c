@@ -1628,19 +1628,3 @@ int sock_ep_get_conn(struct sock_ep *ep, struct sock_tx_ctx *tx_ctx,
 	*pconn = conn;
 	return conn->address_published ? 0 : sock_conn_send_src_addr(ep, tx_ctx, conn);
 }
-
-int sock_ep_is_send_cq_low(struct sock_comp *comp, uint64_t flags)
-{
-	return (comp && comp->send_cq && !(flags & SOCK_NO_COMPLETION) &&
-	    (!comp->send_cq_event ||
-	     (comp->send_cq_event &&  (flags & FI_COMPLETION)))) &&
-		!sock_cq_check_size_ok(comp->send_cq);
-}
-
-int sock_ep_is_recv_cq_low(struct sock_comp *comp, uint64_t flags)
-{
-	return (comp && comp->recv_cq && !(flags & SOCK_NO_COMPLETION) &&
-	    (!comp->recv_cq_event ||
-	     (comp->recv_cq_event && (flags & FI_COMPLETION)))) &&
-		!sock_cq_check_size_ok(comp->recv_cq);
-}

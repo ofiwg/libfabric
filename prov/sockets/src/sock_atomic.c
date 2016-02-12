@@ -105,11 +105,6 @@ ssize_t sock_ep_tx_atomic(struct fid_ep *ep,
 		flags &= ~FI_INJECT;
 	}
 
-	if (sock_ep_is_send_cq_low(&tx_ctx->comp, flags)) {
-		SOCK_LOG_ERROR("CQ size low\n");
-		return -FI_EAGAIN;
-	}
-
 	if (flags & FI_TRIGGER) {
 		ret = sock_queue_atomic_op(ep, msg, comparev, compare_count,
 					resultv, result_count, flags,
