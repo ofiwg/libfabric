@@ -61,26 +61,39 @@ static inline void *mem_dup(const void *src, size_t size)
 	return dest;
 }
 
+struct util_buf_pool;
+typedef int (*util_buf_region_alloc_hndlr) (struct util_buf_pool *pool,
+					    void *addr, size_t len,
+					    void **context);
+typedef void (*util_buf_region_free_hndlr) (void *context);
 
 /*
  * Buffer Pool
  */
 struct util_buf_pool {
+	size_t data_sz;
 	size_t entry_sz;
 	size_t max_cnt;
 	size_t chunk_cnt;
 	size_t alignment;
 	size_t num_allocated;
-#if ENABLE_DEBUG
-	size_t num_used;
-#endif
 	struct slist buf_list;
 	struct slist region_list;
+	util_buf_region_alloc_hndlr alloc_hndlr;
+	util_buf_region_free_hndlr free_hndlr;
 };
 
 struct util_buf_region {
 	struct slist_entry entry;
 	char *mem_region;
+	void *context;
+#if ENABLE_DEBUG
+	size_t num_used;
+#endif
+};
+
+struct util_buf_footer {
+	struct util_buf_region *region;
 };
 
 union util_buf {
@@ -88,12 +101,82 @@ union util_buf {
 	uint8_t data[0];
 };
 
-struct util_buf_pool *util_buf_pool_create(size_t size, size_t alignment,
-					   size_t max_cnt, size_t chunk_cnt);
-void util_buf_pool_destroy(struct util_buf_pool *pool);
+/* create buffer pool with alloc/free handlers */
+struct util_buf_pool *util_buf_pool_create_ex(size_t size, size_t alignment,
+					      size_t max_cnt, size_t chunk_cnt,
+					      util_buf_region_alloc_hndlr alloc_hndlr,
+					      util_buf_region_free_hndlr free_hndlr);
+
+/* create buffer pool */
+static inline struct util_buf_pool *util_buf_pool_create(size_t size,
+							 size_t alignment,
+							 size_t max_cnt,
+							 size_t chunk_cnt)
+{
+	return util_buf_pool_create_ex(size, alignment, max_cnt, chunk_cnt, NULL, NULL);
+}
+
+static inline int util_buf_avail(struct util_buf_pool *pool)
+{
+	return !slist_empty(&pool->buf_list);
+}
+
+int util_buf_grow(struct util_buf_pool *pool);
+
+#if ENABLE_DEBUG
 
 void *util_buf_get(struct util_buf_pool *pool);
 void util_buf_release(struct util_buf_pool *pool, void *buf);
 
+#else
+
+static inline void *util_buf_get(struct util_buf_pool *pool)
+{
+	struct slist_entry *entry;
+	entry = slist_remove_head(&pool->buf_list);
+	return entry;
+}
+
+static inline void util_buf_release(struct util_buf_pool *pool, void *buf)
+{
+	union util_buf *util_buf = buf;
+	slist_insert_head(&util_buf->entry, &pool->buf_list);
+}
+#endif
+
+static inline void *util_buf_get_ex(struct util_buf_pool *pool, void **context)
+{
+	union util_buf *buf;
+	struct util_buf_footer *buf_ftr;
+
+	buf = util_buf_get(pool);
+	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->data_sz);
+	assert(context);
+	*context = buf_ftr->region->context;
+	return buf;
+}
+
+static inline void *util_buf_alloc(struct util_buf_pool *pool)
+{
+	if (!util_buf_avail(pool)) {
+		if (util_buf_grow(pool))
+			return NULL;
+	}
+	return util_buf_get(pool);
+}
+
+static inline void *util_buf_alloc_ex(struct util_buf_pool *pool, void **context)
+{
+	union util_buf *buf;
+	struct util_buf_footer *buf_ftr;
+
+	buf = util_buf_alloc(pool);
+	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->data_sz);
+	assert(context);
+	*context = buf_ftr->region->context;
+	return buf;
+}
+
+void util_buf_pool_destroy(struct util_buf_pool *pool);
 
 #endif /* _FI_MEM_H_ */
