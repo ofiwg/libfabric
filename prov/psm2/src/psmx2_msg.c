@@ -407,7 +407,7 @@ ssize_t psmx2_sendv_generic(struct fid_ep *ep, const struct iovec *iov,
 		req->iov_protocol = PSMX2_IOV_PROTO_MULTI;
 		req->iov_done = 0;
 		req->iov_info.seq_num = (++ep_priv->iov_seq_num) %
-					(PSMX2_IOV_MAX_SEQ_NUM + 1);
+					PSMX2_IOV_MAX_SEQ_NUM + 1;
 		req->iov_info.count = (uint32_t)real_count;
 		req->iov_info.total_len = (uint32_t)total_len;
 
