@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -645,6 +645,9 @@ usdf_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if ((attr->flags & ~(FI_EVENT | FI_READ)) != 0) {
 		return -FI_ENOSYS;
 	}
+
+	if (attr->name)
+		return -FI_ENOSYS;
 
 	udp = dom_ftou(domain);
 
