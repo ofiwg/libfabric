@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2015\-11\-05" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2016\-02\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -108,7 +108,7 @@ int\ fi_alias(struct\ fid_ep\ *ep,\ fid_t\ *alias_ep,\ uint64_t\ flags);
 
 int\ fi_control(struct\ fid\ *ep,\ int\ command,\ void\ *arg);
 
-int\ fi_getopt(struct\ fid_\ *ep,\ int\ level,\ int\ optname,
+int\ fi_getopt(struct\ fid\ *ep,\ int\ level,\ int\ optname,
 \ \ \ \ void\ *optval,\ size_t\ *optlen);
 
 int\ fi_setopt(struct\ fid\ *ep,\ int\ level,\ int\ optname,
@@ -407,7 +407,7 @@ assigned to it.
 Calling connect or accept on an endpoint will implicitly enable an
 endpoint if it has not already been enabled.
 .PP
-Fi_enable may also be used to re-enable an endpoint that has been
+fi_enable may also be used to re-enable an endpoint that has been
 disabled as a result of experiencing a critical error.
 Applications should check the return value from fi_enable to see if a
 disabled endpoint has successfully be re-enabled.
@@ -771,7 +771,7 @@ struct\ fi_tx_attr\ {
 The requested capabilities of the context.
 The capabilities must be a subset of those requested of the associated
 endpoint.
-See the CAPABILITIES section if fi_getinfo(3) for capability details.
+See the CAPABILITIES section of fi_getinfo(3) for capability details.
 If the caps field is 0 on input to fi_getinfo(3), the caps value from
 the fi_info structure will be used.
 .SS mode
@@ -1099,16 +1099,16 @@ through the attr parameter, if provided.
 .PP
 Shared contexts are transmit and receive contexts explicitly shared
 among one or more endpoints.
-A sharable context allows an application to use a single dedicated
+A shareable context allows an application to use a single dedicated
 provider resource among multiple transport addressable endpoints.
 This can greatly reduce the resources needed to manage communication
 over multiple endpoints by multiplexing transmit and/or receive
 processing, with the potential cost of serializing access across
 multiple endpoints.
-Support for sharable contexts is domain specific.
+Support for shareable contexts is domain specific.
 .PP
-Conceptually, sharable transmit contexts are transmit queues that may be
-accessed by many endpoints.
+Conceptually, shareable transmit contexts are transmit queues that may
+be accessed by many endpoints.
 The use of a shared transmit context is mostly opaque to an application.
 Applications must allocate and bind shared transmit contexts to
 endpoints, but operations are posted directly to the endpoint.
@@ -1139,7 +1139,7 @@ Furthermore, an endpoint may use a shared context of one type, but a
 scalable set of contexts of the alternate type.
 .SS fi_stx_context
 .PP
-This call is used to open a sharable transmit context.
+This call is used to open a shareable transmit context.
 See fi_tx_context call under the SCALABLE ENDPOINTS section for details
 on the transit context attributes.
 The exception is that endpoints attached to a shared transmit context
@@ -1147,7 +1147,7 @@ must use a subset of the transmit context attributes.
 This is opposite of the requirement for scalable endpoints.
 .SS fi_srx_context
 .PP
-This allocates a sharable receive context.
+This allocates a shareable receive context.
 See fi_rx_context call under SCALABLE ENDPOINTS section for details on
 the receive context attributes.
 The exception is that endpoints attached to a shared receive context
@@ -1245,11 +1245,11 @@ Operations that complete in error that are not associated with valid
 operational context will use the endpoint context in any error reporting
 structures.
 .PP
-Although applications typically association individual completions with
+Although applications typically associate individual completions with
 either completion queues or counters, an endpoint can be attached to
 both a counter and completion queue.
 When combined with using selective completions, this allows an
-appliction to use counters to track successful completions, with a CQ
+application to use counters to track successful completions, with a CQ
 used to report errors.
 Operations that complete with an error increment the error counter and
 generate a completion event.
