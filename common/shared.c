@@ -979,7 +979,7 @@ int ft_get_rx_comp(uint64_t total)
 
 	if (rxcq) {
 		ret = ft_get_cq_comp(rxcq, &rx_cq_cntr, total, timeout);
-	} else {
+	} else if (rxcntr) {
 		while (fi_cntr_read(rxcntr) < total) {
 			ret = fi_cntr_wait(rxcntr, total, timeout);
 			if (ret)
@@ -987,6 +987,9 @@ int ft_get_rx_comp(uint64_t total)
 			else
 				break;
 		}
+	} else {
+		FT_ERR("Trying to get a RX completion when no RX CQ or counter were opened");
+		ret = -FI_EOTHER;
 	}
 	return ret;
 }
@@ -997,10 +1000,13 @@ int ft_get_tx_comp(uint64_t total)
 
 	if (txcq) {
 		ret = ft_get_cq_comp(txcq, &tx_cq_cntr, total, -1);
-	} else {
+	} else if (txcntr) {
 		ret = fi_cntr_wait(txcntr, total, -1);
 		if (ret)
 			FT_PRINTERR("fi_cntr_wait", ret);
+	} else {
+		FT_ERR("Trying to get a TX completion when no TX CQ or counter were opened");
+		ret = -FI_EOTHER;
 	}
 	return ret;
 }
