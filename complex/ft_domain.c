@@ -114,10 +114,10 @@ ssize_t ft_get_event(uint32_t *event, void *buf, size_t len,
 		}
 		break;
 	case FI_WAIT_SET:
-		FT_ERR("fi_ubertest: Unsupported eq wait object\n");
+		FT_ERR("fi_ubertest: Unsupported eq wait object");
 		return -1;
 	default:
-		FT_ERR("Unknown eq wait object\n");
+		FT_ERR("Unknown eq wait object");
 		return -1;
 	}
 

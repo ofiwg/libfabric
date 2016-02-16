@@ -55,7 +55,7 @@ static int server_connect(void)
 
 	info = entry.info;
 	if (event != FI_CONNREQ) {
-		FT_ERR("Unexpected CM event %d\n", event);
+		FT_ERR("Unexpected CM event %d", event);
 		ret = -FI_EOTHER;
 		goto err;
 	}
@@ -90,7 +90,7 @@ static int server_connect(void)
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		FT_ERR("Unexpected CM event %d fid %p (ep %p)\n", event, entry.fid, ep);
+		FT_ERR("Unexpected CM event %d fid %p (ep %p)", event, entry.fid, ep);
 		ret = -FI_EOTHER;
 		goto err;
 	}
@@ -145,7 +145,7 @@ static int client_connect(void)
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		FT_ERR("Unexpected CM event %d fid %p (ep %p)\n", event, entry.fid, ep);
+		FT_ERR("Unexpected CM event %d fid %p (ep %p)", event, entry.fid, ep);
 		return -FI_EOTHER;
 	}
 

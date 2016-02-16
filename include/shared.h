@@ -191,7 +191,7 @@ int size_to_count(int size);
 	do { fprintf(stderr, call "(): %s:%d, ret=%d (%s)\n", __FILE__, __LINE__, (int) retv, fi_strerror((int) -retv)); } while (0)
 
 #define FT_ERR(fmt, ...) \
-	do { fprintf(stderr, "%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__); } while (0)
+	do { fprintf(stderr, "%s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__); } while (0)
 
 
 #define FT_CLOSE_FID(fd)					\
@@ -200,7 +200,7 @@ int size_to_count(int size);
 		if ((fd)) {					\
 			ret = fi_close(&(fd)->fid);		\
 			if (ret)				\
-				FT_ERR("fi_close (%d) fid %d\n",	\
+				FT_ERR("fi_close (%d) fid %d",	\
 					ret, (int) (fd)->fid.fclass);	\
 			fd = NULL;				\
 		}						\

@@ -614,7 +614,7 @@ static int dupaddr(void **dst_addr, size_t *dst_addrlen,
 {
 	*dst_addr = malloc(src_addrlen);
 	if (!*dst_addr) {
-		FT_ERR("address allocation failed\n");
+		FT_ERR("address allocation failed");
 		return EAI_MEMORY;
 	}
 	*dst_addrlen = src_addrlen;

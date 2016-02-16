@@ -128,17 +128,17 @@ static int check_address(struct fid *fid, const char *message)
 	if (sockaddrcmp(&tmp, tmplen, &bound_addr, bound_addr_len)) {
 		ep_addr = sockaddrstr(&tmp, tmplen, buf1, BUFSIZ);
 		if (!ep_addr) {
-			FT_ERR("Unable to get ep_addr as string!\n");
+			FT_ERR("Unable to get ep_addr as string!");
 			return -FI_EINVAL;
 		}
 
 		addr_expected = sockaddrstr(&bound_addr, bound_addr_len, buf2, BUFSIZ);
 		if (!addr_expected) {
-			FT_ERR("Unable to get addr_expected as string!\n");
+			FT_ERR("Unable to get addr_expected as string!");
 			return -FI_EINVAL;
 		}
 
-		FT_ERR("address changed after %s: got %s expected %s\n",
+		FT_ERR("address changed after %s: got %s expected %s",
 			message, ep_addr, addr_expected);
 		return -FI_EINVAL;
 	}
@@ -182,7 +182,7 @@ static int server_connect(void)
 
 	info = entry.info;
 	if (event != FI_CONNREQ) {
-		FT_ERR("Unexpected CM event %d\n", event);
+		FT_ERR("Unexpected CM event %d", event);
 		ret = -FI_EOTHER;
 		goto err;
 	}
@@ -216,7 +216,7 @@ static int server_connect(void)
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		FT_ERR("Unexpected CM event %d fid %p (ep %p)\n", event, entry.fid, ep);
+		FT_ERR("Unexpected CM event %d fid %p (ep %p)", event, entry.fid, ep);
 		ret = -FI_EOTHER;
 		goto err;
 	}
@@ -290,7 +290,7 @@ static int client_connect(void)
 	}
 
 	if (event != FI_CONNECTED || entry.fid != &ep->fid) {
-		FT_ERR("Unexpected CM event %d fid %p (ep %p)\n", event, entry.fid, ep);
+		FT_ERR("Unexpected CM event %d fid %p (ep %p)", event, entry.fid, ep);
 		return -FI_EOTHER;
 	}
 
@@ -338,11 +338,11 @@ static int setup_handle(void)
 	aihints.ai_flags = AI_PASSIVE;
 	ret = getaddrinfo(opts.src_addr, opts.src_port, &aihints, &ai);
 	if (ret == EAI_SYSTEM) {
-		FT_ERR("getaddrinfo for %s:%s: %s\n",
+		FT_ERR("getaddrinfo for %s:%s: %s",
 			opts.src_addr, opts.src_port, strerror(errno));
 		return -ret;
 	} else if (ret) {
-		FT_ERR("getaddrinfo: %s\n", gai_strerror(ret));
+		FT_ERR("getaddrinfo: %s", gai_strerror(ret));
 		return -FI_ENODATA;
 	}
 
@@ -400,14 +400,14 @@ static int setup_handle(void)
 	switch (ai->ai_family) {
 	case AF_INET:
 		if (bound_addr.sin.sin_port == 0) {
-			FT_ERR("port number is 0 after fi_setname()\n");
+			FT_ERR("port number is 0 after fi_setname()");
 			ret = -FI_EINVAL;
 			goto out;
 		}
 		break;
 	case AF_INET6:
 		if (bound_addr.sin6.sin6_port == 0) {
-			FT_ERR("port number is 0 after fi_setname()\n");
+			FT_ERR("port number is 0 after fi_setname()");
 			ret = -FI_EINVAL;
 			goto out;
 		}
@@ -416,7 +416,7 @@ static int setup_handle(void)
 
 	bound_addr_str = sockaddrstr(&bound_addr, bound_addr_len, buf, BUFSIZ);
 	if (!bound_addr_str) {
-		FT_ERR("Unable to get bound_addr as string!\n");
+		FT_ERR("Unable to get bound_addr as string!");
 		ret = -FI_EINVAL;
 		goto out;
 	}
