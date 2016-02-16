@@ -200,6 +200,9 @@ int main(int argc, char **argv)
 			FT_PRINTERR("fork", child_pid);
 		if (child_pid)
 			parent = 1;
+
+		if (!opts.av_name)
+			opts.av_name = "foo";
 	}
 
 	hints->ep_attr->type	= FI_EP_RDM;
