@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -1212,6 +1212,14 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 	struct gnix_fid_mem_desc *md = NULL;
 	int tagged = !!(flags & FI_TAGGED);
 
+	if (!tagged) {
+		if (!ep->ep_ops.msg_recv_allowed)
+			return -FI_EOPNOTSUPP;
+	} else {
+		if (!ep->ep_ops.tagged_recv_allowed)
+			return -FI_EOPNOTSUPP;
+	}
+
 	match_flags = flags & (FI_CLAIM | FI_DISCARD | FI_PEEK);
 
 	ret = __gnix_msg_addr_lookup(ep, src_addr, &gnix_addr);
@@ -1548,6 +1556,14 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 			  "Send length %d exceeds inject max size: %d\n",
 			  len, GNIX_INJECT_SIZE);
 		return -FI_EINVAL;
+	}
+
+	if (!(flags & FI_TAGGED)) {
+		if (!ep->ep_ops.msg_send_allowed)
+			return -FI_EOPNOTSUPP;
+	} else {
+		if (!ep->ep_ops.tagged_send_allowed)
+			return -FI_EOPNOTSUPP;
 	}
 
 	rendezvous = len >= ep->domain->params.msg_rendezvous_thresh;

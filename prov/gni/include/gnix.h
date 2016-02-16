@@ -321,6 +321,17 @@ struct gnix_fid_domain {
 
 #define GNIX_CQS_PER_EP		8
 
+struct gnix_fid_ep_ops_en {
+	uint32_t msg_recv_allowed: 1;
+	uint32_t msg_send_allowed: 1;
+	uint32_t rma_read_allowed: 1;
+	uint32_t rma_write_allowed: 1;
+	uint32_t tagged_recv_allowed: 1;
+	uint32_t tagged_send_allowed: 1;
+	uint32_t atomic_read_allowed: 1;
+	uint32_t atomic_write_allowed: 1;
+};
+
 /*
  *   gnix endpoint structure
  *
@@ -377,6 +388,7 @@ struct gnix_fid_ep {
 	/* note this free list will be initialized for thread safe */
 	struct gnix_s_freelist fr_freelist;
 	struct gnix_reference ref_cnt;
+	struct gnix_fid_ep_ops_en ep_ops;
 };
 
 /**
@@ -477,6 +489,196 @@ struct gnix_fab_req_amo {
 	uint64_t                 second_operand;
 	void                     *read_buf;
 };
+
+/*
+ * Check for remote peer capabilities.
+ * inputs:
+ *   pc        - peer capabilities
+ *   ops_flags - current operation flags (FI_RMA, FI_READ, etc.)
+ *
+ * See capabilities section in fi_getinfo.3.
+ */
+static inline int gnix_rma_read_target_allowed(uint64_t pc,
+					       uint64_t ops_flags)
+{
+	if (ops_flags & FI_RMA) {
+		if (ops_flags & FI_READ) {
+			if (pc & FI_RMA) {
+				if (pc & FI_REMOTE_READ)
+					return 1;
+				if (pc & (FI_READ | FI_WRITE | FI_REMOTE_WRITE))
+					return 0;
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+static inline int gnix_rma_write_target_allowed(uint64_t pc,
+						uint64_t ops_flags)
+{
+	if (ops_flags & FI_RMA) {
+		if (ops_flags & FI_WRITE) {
+			if (pc & FI_RMA) {
+				if (pc & FI_REMOTE_WRITE)
+					return 1;
+				if (pc & (FI_READ | FI_WRITE | FI_REMOTE_READ))
+					return 0;
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+static inline int gnix_atomic_read_target_allowed(uint64_t pc,
+						  uint64_t ops_flags)
+{
+	if (ops_flags & FI_ATOMICS) {
+		if (ops_flags & FI_READ) {
+			if (pc & FI_ATOMICS) {
+				if (pc & FI_REMOTE_READ)
+					return 1;
+				if (pc & (FI_READ | FI_WRITE | FI_REMOTE_WRITE))
+					return 0;
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+static inline int gnix_atomic_write_target_allowed(uint64_t pc,
+						   uint64_t ops_flags)
+{
+	if (ops_flags & FI_ATOMICS) {
+		if (ops_flags & FI_WRITE) {
+			if (pc & FI_ATOMICS) {
+				if (pc & FI_REMOTE_WRITE)
+					return 1;
+				if (pc & (FI_READ | FI_WRITE | FI_REMOTE_READ))
+					return 0;
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+/*
+ * Test if this operation is permitted based on the type of transfer
+ * (encoded in the flags parameter), the endpoint capabilities and the
+ * remote endpoint (peer) capabilities. Set a flag to speed up future checks.
+ */
+
+static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
+				   uint64_t peer_caps,
+				   uint64_t flags)
+{
+	uint64_t caps = ep->caps;
+
+	GNIX_DEBUG(FI_LOG_EP_DATA, "flags:0x%llx, %s\n", flags,
+		   fi_tostr(&flags, FI_TYPE_OP_FLAGS));
+	GNIX_DEBUG(FI_LOG_EP_DATA, "peer_caps:0x%llx, %s\n", peer_caps,
+		   fi_tostr(&peer_caps, FI_TYPE_OP_FLAGS));
+	GNIX_DEBUG(FI_LOG_EP_DATA, "caps:0x%llx, %s\n",
+		   ep->caps, fi_tostr(&ep->caps, FI_TYPE_CAPS));
+
+	if ((flags & FI_RMA) && (flags & FI_READ)) {
+		if (unlikely(!ep->ep_ops.rma_read_allowed)) {
+			/* check if read initiate capabilities are allowed */
+			if (caps & FI_RMA) {
+				if (caps & FI_READ) {
+					;
+				} else if (caps & (FI_WRITE |
+						   FI_REMOTE_WRITE |
+						   FI_REMOTE_READ)) {
+					return 0;
+				}
+			} else {
+				return 0;
+			}
+			/* check if read remote capabilities are allowed */
+			if (gnix_rma_read_target_allowed(peer_caps, flags)) {
+				ep->ep_ops.rma_read_allowed = 1;
+				return 1;
+			}
+			return 0;
+		}
+		return 1;
+	} else if ((flags & FI_RMA) && (flags & FI_WRITE)) {
+		if (unlikely(!ep->ep_ops.rma_write_allowed)) {
+			/* check if write initiate capabilities are allowed */
+			if (caps & FI_RMA) {
+				if (caps & FI_WRITE) {
+					;
+				} else if (caps & (FI_READ |
+						   FI_REMOTE_WRITE |
+						   FI_REMOTE_READ)) {
+					return 0;
+				}
+			} else {
+				return 0;
+			}
+			/* check if write remote capabilities are allowed */
+			if (gnix_rma_write_target_allowed(peer_caps, flags)) {
+				ep->ep_ops.rma_write_allowed = 1;
+				return 1;
+			}
+			return 0;
+		}
+		return 1;
+	} else if ((flags & FI_ATOMICS) && (flags & FI_READ)) {
+		if (unlikely(!ep->ep_ops.atomic_read_allowed)) {
+			/* check if read initiate capabilities are allowed */
+			if (caps & FI_ATOMICS) {
+				if (caps & FI_READ) {
+					;
+				} else if (caps & (FI_WRITE |
+						   FI_REMOTE_WRITE |
+						   FI_REMOTE_READ)) {
+					return 0;
+				}
+			} else {
+				return 0;
+			}
+			/* check if read remote capabilities are allowed */
+			if (gnix_atomic_read_target_allowed(peer_caps, flags)) {
+				ep->ep_ops.atomic_read_allowed = 1;
+				return 1;
+			}
+			return 0;
+		}
+		return 1;
+	} else if ((flags & FI_ATOMICS) && (flags & FI_WRITE)) {
+		if (unlikely(!ep->ep_ops.atomic_write_allowed)) {
+			/* check if write initiate capabilities are allowed */
+			if (caps & FI_ATOMICS) {
+				if (caps & FI_WRITE) {
+					;
+				} else if (caps & (FI_READ |
+						   FI_REMOTE_WRITE |
+						   FI_REMOTE_READ)) {
+					return 0;
+				}
+			} else {
+				return 0;
+			}
+			/* check if write remote capabilities are allowed */
+			if (gnix_atomic_write_target_allowed(peer_caps,
+							     flags)) {
+				ep->ep_ops.atomic_write_allowed = 1;
+				return 1;
+			}
+			return 0;
+		}
+		return 1;
+	}
+
+	GNIX_ERR(FI_LOG_EP_DATA, "flags do not make sense %llx\n", flags);
+
+	return 0;
+}
 
 /*
  * Fabric request layout, there is a one to one

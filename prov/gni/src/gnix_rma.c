@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -51,7 +51,8 @@
 #define GNIX_RMA_UREAD_CHAINED_THRESH		60
 
 static int __gnix_rma_send_err(struct gnix_fid_ep *ep,
-			       struct gnix_fab_req *req)
+			       struct gnix_fab_req *req,
+			       int error)
 {
 	struct gnix_fid_cntr *cntr = NULL;
 	int rc = FI_SUCCESS;
@@ -59,7 +60,7 @@ static int __gnix_rma_send_err(struct gnix_fid_ep *ep,
 
 	if (ep->send_cq) {
 		rc = _gnix_cq_add_error(ep->send_cq, req->user_context,
-					flags, 0, 0, 0, 0, 0, FI_ECANCELED,
+					flags, 0, 0, 0, 0, 0, error,
 					GNI_RC_TRANSACTION_ERROR, NULL);
 		if (rc) {
 			GNIX_WARN(FI_LOG_EP_DATA,
@@ -180,7 +181,7 @@ static void __gnix_rma_fr_complete(struct gnix_fab_req *req,
 	_gnix_fr_free(req->vc->ep, req);
 }
 
-static int __gnix_rma_post_err(struct gnix_tx_descriptor *txd)
+static int __gnix_rma_post_err(struct gnix_tx_descriptor *txd, int error)
 {
 	struct gnix_fab_req *req = txd->req;
 	int rc;
@@ -196,7 +197,7 @@ static int __gnix_rma_post_err(struct gnix_tx_descriptor *txd)
 
 	GNIX_INFO(FI_LOG_EP_DATA, "Failed %d transmits: %p\n",
 		  req->tx_failures, req);
-	rc = __gnix_rma_send_err(req->vc->ep, req);
+	rc = __gnix_rma_send_err(req->vc->ep, req, error);
 	if (rc != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "__gnix_rma_send_err() failed: %d\n",
@@ -230,7 +231,7 @@ static int __gnix_rma_txd_data_complete(void *arg, gni_return_t tx_status)
 	int rc;
 
 	if (tx_status != GNI_RC_SUCCESS) {
-		return __gnix_rma_post_err(txd);
+		return __gnix_rma_post_err(txd, FI_ECANCELED);
 	}
 
 	/* Successful data delivery.  Generate local completion. */
@@ -336,7 +337,7 @@ static int __gnix_rma_txd_complete(void *arg, gni_return_t tx_status)
 	}
 
 	if (tx_status != GNI_RC_SUCCESS) {
-		return __gnix_rma_post_err(txd);
+		return __gnix_rma_post_err(txd, FI_ECANCELED);
 	}
 
 	/* Successful delivery.  Progress request. */
@@ -516,6 +517,14 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	int head_off, head_len, tail_len;
 	int fma_chain = 0;
 
+	if (!gnix_ops_allowed(ep, req->vc->peer_caps, req->flags)) {
+		rc = __gnix_rma_send_err(req->vc->ep, req, FI_EOPNOTSUPP);
+		if (rc != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "__gnix_rma_send_err() failed: %d\n", rc);
+		return FI_SUCCESS;
+	}
+
 	rc = _gnix_nic_tx_alloc(nic, &bte_txd);
 	if (rc) {
 		GNIX_INFO(FI_LOG_EP_DATA,
@@ -682,6 +691,10 @@ int _gnix_rma_post_req(void *data)
 
 	txd->completer_fn = __gnix_rma_txd_complete;
 	txd->req = fab_req;
+
+	if (!gnix_ops_allowed(ep, fab_req->vc->peer_caps, fab_req->flags)) {
+		return __gnix_rma_post_err(txd, FI_EOPNOTSUPP);
+	}
 
 	if (rdma) {
 		_gnix_convert_key_to_mhdl(

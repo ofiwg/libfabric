@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -143,6 +143,7 @@ struct gnix_vc {
 	int modes;
 	gnix_bitmap_t flags; /* We're missing regular bit ops */
 	gni_mem_handle_t peer_irq_mem_hndl;
+	uint64_t peer_caps;
 };
 
 /*

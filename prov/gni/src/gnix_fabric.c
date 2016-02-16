@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -240,6 +240,10 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 		if ((hints->caps & GNIX_EP_RDM_CAPS) != hints->caps) {
 			goto err;
+		}
+
+		if (!hints->caps) {
+			hints->caps = GNIX_EP_RDM_CAPS;
 		}
 
 		if (hints->ep_attr) {

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -211,7 +211,7 @@ void rdm_sr_setup(bool is_noreg)
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
 	hints->mode = ~0;
-	hints->caps = is_noreg ? hints->caps : FI_SOURCE;
+	hints->caps = is_noreg ? hints->caps : FI_SOURCE | FI_MSG;
 	hints->fabric_attr->name = strdup("gni");
 
 	/* Get info about fabric services with the provided hints */
