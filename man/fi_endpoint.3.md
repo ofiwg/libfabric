@@ -92,7 +92,7 @@ int fi_alias(struct fid_ep *ep, fid_t *alias_ep, uint64_t flags);
 
 int fi_control(struct fid *ep, int command, void *arg);
 
-int fi_getopt(struct fid_ *ep, int level, int optname,
+int fi_getopt(struct fid *ep, int level, int optname,
     void *optval, size_t *optlen);
 
 int fi_setopt(struct fid *ep, int level, int optname,
@@ -108,7 +108,8 @@ ssize_t fi_tx_size_left(struct fid_ep *ep);
 *fid*
 : On creation, specifies a fabric or access domain.  On bind,
   identifies the event queue, completion queue or address vector to
-  bind to the endpoint. In other cases, it's a fabric identifier of an associated resource.
+  bind to the endpoint. In other cases, it's a fabric identifier of an
+  associated resource.
 
 *info*
 : Details about the fabric interface endpoint to be opened, obtained
@@ -157,9 +158,9 @@ ssize_t fi_tx_size_left(struct fid_ep *ep);
 
 Endpoints are transport level communication portals.  There are two
 types of endpoints: active and passive.  Passive endpoints belong to a
-fabric domain and are most often used to listen for incoming connection requests.
-However, a passive endpoint may be used to reserve a fabric address that
-can be granted to an active endpoint.  Active endpoints belong to access
+fabric domain and are most often used to listen for incoming connection
+requests.  However, a passive endpoint may be used to reserve a fabric address
+that can be granted to an active endpoint.  Active endpoints belong to access
 domains and can perform data transfers.
 
 Active endpoints may be connection-oriented or connectionless, and may
@@ -380,7 +381,7 @@ assigned to it.
 Calling connect or accept on an endpoint will implicitly enable an
 endpoint if it has not already been enabled.
 
-Fi_enable may also be used to re-enable an endpoint that has been
+fi_enable may also be used to re-enable an endpoint that has been
 disabled as a result of experiencing a critical error.  Applications
 should check the return value from fi_enable to see if a disabled
 endpoint has successfully be re-enabled.
@@ -722,7 +723,7 @@ struct fi_tx_attr {
 
 The requested capabilities of the context.  The capabilities must be
 a subset of those requested of the associated endpoint.  See the
-CAPABILITIES section if fi_getinfo(3) for capability details.  If
+CAPABILITIES section of fi_getinfo(3) for capability details.  If
 the caps field is 0 on input to fi_getinfo(3), the caps value from the
 fi_info structure will be used.
 
@@ -1040,15 +1041,15 @@ to the context through the attr parameter, if provided.
 # SHARED CONTEXTS
 
 Shared contexts are transmit and receive contexts explicitly shared
-among one or more endpoints.  A sharable context allows an application
+among one or more endpoints.  A shareable context allows an application
 to use a single dedicated provider resource among multiple transport
 addressable endpoints.  This can greatly reduce the resources needed
 to manage communication over multiple endpoints by multiplexing
 transmit and/or receive processing, with the potential cost of
-serializing access across multiple endpoints.  Support for sharable
+serializing access across multiple endpoints.  Support for shareable
 contexts is domain specific.
 
-Conceptually, sharable transmit contexts are transmit queues that may be
+Conceptually, shareable transmit contexts are transmit queues that may be
 accessed by many endpoints.  The use of a shared transmit context is
 mostly opaque to an application.  Applications must allocate and bind
 shared transmit contexts to endpoints, but operations are posted
@@ -1077,7 +1078,7 @@ alternate type.
 
 ## fi_stx_context
 
-This call is used to open a sharable transmit context.  See
+This call is used to open a shareable transmit context.  See
 fi_tx_context call under the SCALABLE ENDPOINTS section for details on
 the transit context attributes.  The exception is that endpoints
 attached to a shared transmit context must use a subset of the
@@ -1086,7 +1087,7 @@ scalable endpoints.
 
 ## fi_srx_context
 
-This allocates a sharable receive context.  See fi_rx_context call
+This allocates a shareable receive context.  See fi_rx_context call
 under SCALABLE ENDPOINTS section for details on the receive context
 attributes.  The exception is that endpoints attached to a shared
 receive context must use a subset of the receive context attributes.
@@ -1182,10 +1183,10 @@ Operations that complete in error that are not associated with valid
 operational context will use the endpoint context in any error
 reporting structures.
 
-Although applications typically association individual completions with
+Although applications typically associate individual completions with
 either completion queues or counters, an endpoint can be attached to
 both a counter and completion queue.  When combined with using
-selective completions, this allows an appliction to use counters to
+selective completions, this allows an application to use counters to
 track successful completions, with a CQ used to report errors.
 Operations that complete with an error increment the error counter
 and generate a completion event.  The generation of entries going to

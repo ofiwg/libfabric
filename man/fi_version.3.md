@@ -14,7 +14,7 @@ fi_version \- Version of the library interfaces
 ```c
 #include <rdma/fabric.h>
 
-uint32_t fi_version();
+uint32_t fi_version(void);
 
 FI_MAJOR(version)
 
@@ -24,7 +24,7 @@ FI_MINOR(version)
 # DESCRIPTION
 
 This call returns the current version of the library interfaces.  The
-version includes major and a minor numbers.  These may be extracted
+version includes major and minor numbers.  These may be extracted
 from the returned value using the FI_MAJOR() and FI_MINOR() macros.
 
 # NOTES
