@@ -28,6 +28,7 @@ rdmainclude_HEADERS =
 
 # internal utility functions shared by in-tree providers:
 common_srcs = \
+	src/abi_1_0.c \
 	src/common.c \
 	src/enosys.c \
 	src/rbtree.c \

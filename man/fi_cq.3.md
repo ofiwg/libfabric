@@ -308,17 +308,30 @@ commands are usable with an CQ.
   object will be written.  See fi_eq.3 for addition details using
   fi_control with FI_GETWAIT.
 
-## fi_cq_read / fi_cq_readfrom
+## fi_cq_read
 
-The fi_cq_read and fi_cq_readfrom operations perform a non-blocking
+The fi_cq_read operation performs a non-blocking
 read of completion data from the CQ.  The format of the completion
 event is determined using the fi_cq_format option that was specified
 when the CQ was opened.  Multiple completions may be retrieved from a
 CQ in a single call.  The maximum number of entries to return is
 limited to the specified count parameter, with the number of entries
-successfully read from the CQ returned by the call.
+successfully read from the CQ returned by the call.  (See return
+values section below.)
 
-The fi_cq_readfrom call allows the CQ to return source address
+CQs are optimized to report operations which have completed
+successfully.  Operations which fail are reported 'out of band'.  Such
+operations are retrieved using the fi_cq_readerr function.  When an
+operation that has completed with an unexpected error is encountered,
+it is placed into a temporary error queue.  Attempting to read
+from a CQ while an item is in the error queue results in fi_cq_read
+failing with a return code of -FI_EAVAIL.  Applications may use this
+return code to determine when to call fi_cq_readerr.
+
+## fi_cq_readfrom
+
+The fi_cq_readfrom call behaves identical to fi_cq_read, with the
+exception that it allows the CQ to return source address
 information to the user for any received data.  Source address data is
 only available for those endpoints configured with FI_SOURCE
 capability.  If fi_cq_readfrom is called on an endpoint for which
@@ -326,14 +339,16 @@ source addressing data is not available, the source address will be
 set to FI_ADDR_NOTAVAIL.  The number of input src_addr entries must
 the the same as the count parameter.
 
-CQs are optimized to report operations which have completed
-successfully.  Operations which fail are reported 'out of band'.  Such
-operations are retrieved using the fi_cq_readerr function.  When an
-operation that completes with an unexpected error is inserted into an
-CQ, it is placed into a temporary error queue.  Attempting to read
-from an CQ while an item is in the error queue results in an FI_EAVAIL
-failure.  Applications may use this return code to determine when to
-call fi_cq_readerr.
+Returned source addressing data is converted from the native address
+used by the underlying fabric into an fi_addr_t, which may be used in
+transmit operations.  Returning fi_addr_t requires that the source
+address be inserted into the address vector associated with the
+receiving endpoint.  For applications using API version 1.4 and later
+(specified through the fi_getinfo call), if the source address has not
+been inserted into the address vector, fi_cq_readfrom will return
+-FI_EAVAIL.  The completion will then be reported through
+fi_cq_readerr with error code -FI_EADDRNOTAVAIL.  See fi_cq_readerr
+for details.
 
 ## fi_cq_sread / fi_cq_sreadfrom
 
@@ -375,6 +390,20 @@ reference an internal buffer owned by the provider.  The contents of
 the buffer will remain valid until a subsequent read call against the
 CQ.  Users may call fi_cq_strerror to convert provider specific error
 information into a printable string for debugging purposes.
+
+Notable completion error codes are given below.
+
+*FI_EADDRNOTAVAIL*
+: This error code is used by CQs configured with FI_SOURCE to report
+  completions for which a matching fi_addr_t source address could not
+  be found.  An error code of FI_EADDRNOTAVAIL indicates that the data
+  transfer was successfully received and processed, with the
+  fi_cq_err_entry fields containing information about the completion.
+  The err_data field will be set to the source address data.  The
+  source address will be in the same format as specified through
+  the fi_info addr_format field for the opened domain. This may be
+  pass directly into an fi_av_insert call to add the source address
+  to the address vector.
 
 ## fi_cq_signal
 
