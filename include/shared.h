@@ -198,6 +198,14 @@ int size_to_count(int size);
 #define FT_ERR(fmt, ...) FT_LOG("error", fmt, ##__VA_ARGS__)
 #define FT_WARN(fmt, ...) FT_LOG("warn", fmt, ##__VA_ARGS__)
 
+#define FT_EQ_ERR(eq, entry, buf, len) \
+	FT_ERR("eq_readerr: %s", fi_eq_strerror(eq, entry.prov_errno, \
+				entry.err_data, buf, len))
+
+#define FT_CQ_ERR(cq, entry, buf, len) \
+	FT_ERR("cq_readerr: %s", fi_cq_strerror(cq, entry.prov_errno, \
+				entry.err_data, buf, len))
+
 #define FT_CLOSE_FID(fd)					\
 	do {							\
 		int ret;					\

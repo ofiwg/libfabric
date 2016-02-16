@@ -1014,17 +1014,13 @@ int ft_get_tx_comp(uint64_t total)
 int ft_cq_readerr(struct fid_cq *cq)
 {
 	struct fi_cq_err_entry cq_err;
-	const char *err_str;
 	int ret;
 
 	ret = fi_cq_readerr(cq, &cq_err, 0);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cq_readerr", ret);
 	} else {
-		err_str = fi_cq_strerror(cq, cq_err.prov_errno, cq_err.err_data,
-					NULL, 0);
-		fprintf(stderr, "Completion error: %d(%s) - %s\n", cq_err.err,
-			fi_strerror(cq_err.err), err_str);
+		FT_CQ_ERR(cq, cq_err, NULL, 0);
 		ret = -cq_err.err;
 	}
 	return ret;
@@ -1033,18 +1029,13 @@ int ft_cq_readerr(struct fid_cq *cq)
 void eq_readerr(struct fid_eq *eq, const char *eq_str)
 {
 	struct fi_eq_err_entry eq_err;
-	const char *err_str;
 	int rd;
 
 	rd = fi_eq_readerr(eq, &eq_err, 0);
 	if (rd != sizeof(eq_err)) {
 		FT_PRINTERR("fi_eq_readerr", rd);
 	} else {
-		err_str = fi_eq_strerror(eq, eq_err.prov_errno, eq_err.err_data, NULL, 0);
-		fprintf(stderr, "%s: %d %s\n", eq_str, eq_err.err,
-				fi_strerror(eq_err.err));
-		fprintf(stderr, "%s: prov_err: %s (%d)\n", eq_str, err_str,
-				eq_err.prov_errno);
+		FT_EQ_ERR(eq, eq_err, NULL, 0);
 	}
 }
 
