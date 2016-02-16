@@ -39,7 +39,10 @@
 
 #define VERBS_MSG_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
 			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
-#define VERBS_RDM_CAPS (FI_SEND | FI_RECV | FI_TAGGED)
+
+#define VERBS_RDM_CAPS (FI_SEND | FI_RECV | FI_TAGGED | FI_RMA | FI_READ |  \
+			FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)
+
 #define VERBS_MODE (FI_LOCAL_MR)
 #define VERBS_RDM_MODE (FI_CONTEXT)
 
@@ -314,8 +317,10 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 	}
 
 	compare_mode = attr->mode ? attr->mode : hints->mode;
-    check_mode = (hints->caps & FI_RMA) ? info->rx_attr->mode :
-        info->ep_attr->type == FI_EP_RDM ? VERBS_RDM_MODE : VERBS_MODE;
+	
+	check_mode = (info->ep_attr->type == FI_EP_RDM) ? VERBS_RDM_MODE :
+		(hints->caps & FI_RMA) ? info->rx_attr->mode : VERBS_MODE;
+
 	if ((compare_mode & check_mode) != check_mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given rx_attr->mode not supported\n");
