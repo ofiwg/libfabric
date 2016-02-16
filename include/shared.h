@@ -188,11 +188,15 @@ int size_to_count(int size);
 
 
 #define FT_PRINTERR(call, retv) \
-	do { fprintf(stderr, call "(): %s:%d, ret=%d (%s)\n", __FILE__, __LINE__, (int) retv, fi_strerror((int) -retv)); } while (0)
+	do { fprintf(stderr, call "(): %s:%d, ret=%d (%s)\n", __FILE__, __LINE__, \
+			(int) retv, fi_strerror((int) -retv)); } while (0)
 
-#define FT_ERR(fmt, ...) \
-	do { fprintf(stderr, "%s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__); } while (0)
+#define FT_LOG(level, fmt, ...) \
+	do { fprintf(stderr, "[%s] fabtests:%s:%d: " fmt "\n", level, __FILE__, \
+			__LINE__, ##__VA_ARGS__); } while (0)
 
+#define FT_ERR(fmt, ...) FT_LOG("error", fmt, ##__VA_ARGS__)
+#define FT_WARN(fmt, ...) FT_LOG("warn", fmt, ##__VA_ARGS__)
 
 #define FT_CLOSE_FID(fd)					\
 	do {							\
