@@ -40,6 +40,11 @@
 #include <unistd.h>
 #include <limits.h>
 
+#if HAVE_GETIFADDRS
+#include <net/if.h>
+#include <ifaddrs.h>
+#endif
+
 #include "prov.h"
 
 #include "sock.h"
@@ -509,6 +514,38 @@ static int sock_ep_getinfo(const char *node, const char *service, uint64_t flags
 	return ret;
 }
 
+static void getnodename(char *buf, int buflen)
+{
+	int ret;
+	struct addrinfo ai, *rai = NULL;
+	struct ifaddrs *ifaddrs, *ifa;
+
+	gethostname(buf, buflen);
+	ret = getaddrinfo(buf, NULL, &ai, &rai);
+	if (!ret) {
+		freeaddrinfo(rai);
+		return;
+	}
+
+#if HAVE_GETIFADDRS
+	ret = getifaddrs(&ifaddrs);
+	for(ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL || (ifa->ifa_flags & IFF_LOOPBACK) || (ifa->ifa_addr->sa_family != AF_INET))
+			continue;
+
+		ret = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), buf, buflen, NULL, 0, NI_NUMERICHOST);
+		if (ret == 0) {
+			freeifaddrs(ifaddrs);
+			return;
+		}
+	}
+	freeifaddrs(ifaddrs);
+#endif
+
+	// no reasonable address found, try loopback
+	strncpy(buf, "127.0.0.1", buflen);
+}
+
 static int sock_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
@@ -532,12 +569,12 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 
 	if (!node && !service && !hints) {
 		flags |= FI_SOURCE;
-		gethostname(hostname, sizeof(hostname));
+		getnodename(hostname, sizeof(hostname));
 		node = hostname;
 	}
 
 	if (!node && !service && !(flags & FI_SOURCE) && !hints->dest_addr) {
-		gethostname(hostname, sizeof(hostname));
+		getnodename(hostname, sizeof(hostname));
 		node = hostname;
 	}
 
