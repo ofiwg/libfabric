@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,6 +47,7 @@
 #include <string.h>
 #include <sys/queue.h>
 #include <sys/eventfd.h>
+#include <inttypes.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -75,7 +76,7 @@ usdf_eq_error(struct usdf_eq *eq)
 }
 
 /*
- * read and event from the ring.  Caller must hold eq lock, and caller 
+ * read an event from the ring.  Caller must hold eq lock, and caller
  * needs to have checked for empty and error
  */
 static inline ssize_t
@@ -365,57 +366,21 @@ done:
 	return ret;
 }
 
-static ssize_t
-usdf_eq_write_fd(struct fid_eq *feq, uint32_t event, const void *buf,
-		size_t len, uint64_t flags)
+ssize_t usdf_eq_write_internal(struct usdf_eq *eq, uint32_t event,
+		const void *buf, size_t len, uint64_t flags)
 {
-	struct usdf_eq *eq;
-	uint64_t val;
+	uint64_t val = 1;
 	int ret;
 	int n;
 
-	USDF_DBG_SYS(EQ, "\n");
-
-	eq = eq_ftou(feq);
-
-	pthread_spin_lock(&eq->eq_lock);
-
-	/* EQ full? */
-	if (atomic_get(&eq->eq_num_events) == eq->eq_ev_ring_size) {
-		ret = -FI_EAGAIN;
-		goto done;
-	}
-
-	ret = usdf_eq_write_event(eq, event, buf, len, flags);
-
-	/* If successful, post to eventfd */
-	if (ret >= 0) {
-		val = 1;
-		n = write(eq->eq_fd, &val, sizeof(val));
-		if (n != sizeof(val)) {
-			ret = -FI_EIO;
-		}
-		/* XXX unpost event? */
-	}
-
-done:
-	pthread_spin_unlock(&eq->eq_lock);
-	return ret;
-}
-
-ssize_t
-usdf_eq_write_internal(struct usdf_eq *eq, uint32_t event, const void *buf,
-		size_t len, uint64_t flags)
-{
-	uint64_t val;
-	int ret;
-	int n;
-
-	USDF_DBG_SYS(EQ, "event=0x%x flags=0x%llx\n", event, flags);
+	USDF_DBG_SYS(EQ, "event=%#" PRIx32 " flags=%#" PRIx64 "\n", event,
+			flags);
 
 	pthread_spin_lock(&eq->eq_lock);
 
-	/* EQ full? */
+	/* Return -FI_EAGAIN if the EQ is full.
+	 * TODO: Disable the EQ.
+	 */
 	if (atomic_get(&eq->eq_num_events) == eq->eq_ev_ring_size) {
 		ret = -FI_EAGAIN;
 		goto done;
@@ -425,16 +390,34 @@ usdf_eq_write_internal(struct usdf_eq *eq, uint32_t event, const void *buf,
 
 	/* If successful, post to eventfd */
 	if (ret >= 0 && eq->eq_wait_obj == FI_WAIT_FD) {
-		val = 1;
 		n = write(eq->eq_fd, &val, sizeof(val));
-		if (n != sizeof(val)) {
+
+		/* TODO: If the write call fails, then roll back the EQ entry.
+		 */
+		if (n != sizeof(val))
 			ret = -FI_EIO;
-		}
 	}
 
 done:
 	pthread_spin_unlock(&eq->eq_lock);
 	return ret;
+}
+
+static ssize_t usdf_eq_write_fd(struct fid_eq *feq, uint32_t event,
+		const void *buf, size_t len, uint64_t flags)
+{
+	struct usdf_eq *eq;
+
+	USDF_DBG_SYS(EQ, "\n");
+
+	if (!feq) {
+		USDF_DBG_SYS(EQ, "invalid input\n");
+		return -FI_EINVAL;
+	}
+
+	eq = eq_ftou(feq);
+
+	return usdf_eq_write_internal(eq, event, buf, len, flags);
 }
 
 static const char *
