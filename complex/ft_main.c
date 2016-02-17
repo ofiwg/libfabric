@@ -66,6 +66,9 @@ enum {
 };
 
 static int results[FT_MAX_RESULT];
+static char *filename = NULL;
+static char *provname = NULL;
+static char *testname = NULL;
 
 
 static int ft_nullstr(char *str)
@@ -247,6 +250,7 @@ int ft_fw_recv(int fd, void *msg, size_t len)
 	} else if (ret == 0) {
 		return -FI_ENOTCONN;
 	} else if (ret < 0) {
+		FT_PRINTERR("ft_fw_recv", ret);
 		perror("recv");
 		return -errno;
 	} else {
@@ -317,9 +321,6 @@ static int ft_fw_server(void)
 	struct fi_info *hints, *info;
 	int ret;
 
-	hints = fi_allocinfo();
-	if (!hints)
-		return -FI_ENOMEM;
 
 	do {
 		ret = ft_fw_recv(sock, &test_info, sizeof test_info);
@@ -333,6 +334,10 @@ static int ft_fw_server(void)
 		test_info.service[sizeof(test_info.service) - 1] = '\0';
 		test_info.prov_name[sizeof(test_info.prov_name) - 1] = '\0';
 		test_info.fabric_name[sizeof(test_info.fabric_name) - 1] = '\0';
+
+		hints = fi_allocinfo();
+		if (!hints)
+			return -FI_ENOMEM;
 
 		ft_fw_convert_info(hints, &test_info);
 		printf("Starting test %d-%d: ", test_info.test_index,
@@ -355,23 +360,27 @@ static int ft_fw_server(void)
 
 				if (fabric_info != info)
 					fi_freeinfo(fabric_info);
+				fabric_info = NULL;
 			}
 			fi_freeinfo(info);
 		}
 
 		if (ret) {
+			FT_PRINTERR("ft_fw_server", ret);
 			printf("Node: %s\nService: %s\n",
 				test_info.node, test_info.service);
 			printf("%s\n", fi_tostr(hints, FI_TYPE_INFO));
 		}
+		fi_freeinfo(hints);
 
 		printf("Ending test %d-%d, result: %s\n", test_info.test_index,
 			test_info.test_subindex, fi_strerror(-ret));
 		results[ft_fw_result_index(-ret)]++;
 		ret = ft_fw_send(sock, &ret, sizeof ret);
+		if (ret)
+			FT_PRINTERR("ft_fw_send", ret);
 	} while (!ret);
 
-	fi_freeinfo(hints);
 	return ret;
 }
 
@@ -390,16 +399,22 @@ static int ft_fw_process_list(struct fi_info *hints, struct fi_info *info)
 
 		ft_fw_update_info(&test_info, fabric_info, subindex);
 		ret = ft_fw_send(sock, &test_info, sizeof test_info);
-		if (ret)
+		if (ret) {
+			FT_PRINTERR("ft_fw_send", ret);
 			return ret;
+		}
 
 		result = ft_run_test();
 
 		ret = ft_fw_recv(sock, &sresult, sizeof sresult);
-		if (result)
+		if (result) {
+			FT_PRINTERR("ft_run_test", result);
 			return result;
-		else if (ret)
+		}
+		else if (ret) {
+			FT_PRINTERR("ft_fw_recv", ret);
 			return ret;
+		}
 		else if (sresult)
 			return sresult;
 	}
@@ -438,7 +453,8 @@ static int ft_fw_client(void)
 		}
 
 		if (ret) {
-			fprintf(stderr, "Node: %s\nService: %s\n",
+			FT_PRINTERR("ft_fw_process_list", ret);
+			fprintf(stderr, "Node: %s\nService: %s \n",
 				test_info.node, test_info.service);
 			fprintf(stderr, "%s\n", fi_tostr(hints, FI_TYPE_INFO));
 		}
@@ -482,12 +498,19 @@ static void ft_fw_usage(char *program)
 		       " (config file service parameter will override this)");
 }
 
+void ft_free()
+{
+	if (filename)
+		free(filename);
+	if (testname)
+		free(testname);
+	if (provname)
+		free(provname);
+}
+
 int main(int argc, char **argv)
 {
 	char *service = "2710";
-	char *filename = NULL;
-	char *provname = NULL;
-	char *testname = NULL;
 	opts = INIT_OPTS;
 	int ret, op;
 
@@ -497,10 +520,10 @@ int main(int argc, char **argv)
 			filename = strdup(optarg);
 			break;
 		case 'f':
-			provname = optarg;
+			provname = strdup(optarg);
 			break;
 		case 't':
-			testname = optarg;
+			testname = strdup(optarg);
 			break;
 		case 'q':
 			service = optarg;
@@ -520,12 +543,14 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_fw_usage(argv[0]);
+			ft_free();
 			exit(1);
 		}
 	}
 
 	if (optind < argc - 1) {
 		ft_fw_usage(argv[0]);
+		ft_free();
 		exit(1);
 	}
 
@@ -537,12 +562,14 @@ int main(int argc, char **argv)
 		if (!filename) {
 			if (!testname || !provname) {
 				ft_fw_usage(argv[0]);
+				ft_free();
 				exit(1);
 			} else {
 				ret = asprintf(&filename, "%s/test_configs/%s/%s.test",
 					CONFIG_PATH, provname, testname);
 				if (ret == -1) {
 					fprintf(stderr, "asprintf failed!\n");
+					ft_free();
 					exit(1);
 				}
 			}
@@ -551,14 +578,18 @@ int main(int argc, char **argv)
 			provname = NULL;
 		}
 		series = fts_load(filename);
-		if (!series)
+		if (!series) {
+			ft_free();
 			exit(1);
+		}
 
 		ret = ft_fw_connect(opts.dst_addr, service);
 		if (ret)
 			goto out;
 
 		ret = ft_fw_client();
+		if (ret)
+			FT_PRINTERR("ft_fw_client", ret);
 		ft_fw_shutdown(sock);
 	} else {
 		ret = ft_fw_listen(service);
@@ -580,6 +611,8 @@ int main(int argc, char **argv)
 				perror("setsockopt");
 
 			ret = ft_fw_server();
+			if (ret)
+				FT_PRINTERR("ft_fw_server", ret);
 			ft_fw_shutdown(sock);
 		} while (persistent);
 	}
@@ -588,7 +621,6 @@ int main(int argc, char **argv)
 out:
 	if (opts.dst_addr)
 		fts_close(series);
-	if (filename && !testname && !provname)
-		free(filename);
+	ft_free();
 	return ret;
 }

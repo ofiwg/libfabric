@@ -43,10 +43,6 @@ int ft_open_passive(void)
 	if (pep)
 		return 0;
 
-	ret = ft_open_control();
-	if (ret)
-		return ret;
-
 	ret = fi_passive_ep(fabric, fabric_info, &pep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_passive_ep", ret);
@@ -139,9 +135,8 @@ int ft_reset_ep(void)
 
 	memset(ft_tx_ctrl.buf, 0, ft_tx_ctrl.msg_size);
 	memset(ft_rx_ctrl.buf, 0, ft_rx_ctrl.msg_size);
-	ret = ft_post_recv_bufs();
-	if (ret)
-		return ret;
+	ft_tx_ctrl.seqno = 0;
+	ft_rx_ctrl.seqno = 0;
 
 	return 0;
 }

@@ -359,12 +359,18 @@ static int ft_run_latency(void)
 		if (ret)
 			return ret;
 
+		ret = ft_post_recv_bufs();
+		if (ret)
+			return ret;
+
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		ret = (test_info.ep_type == FI_EP_DGRAM) ?
 			ft_pingpong_dgram() : ft_pingpong();
 		clock_gettime(CLOCK_MONOTONIC, &end);
-		if (ret)
+		if (ret) {
+			FT_PRINTERR("latency test failed!", ret);
 			return ret;
+		}
 
 		show_perf("lat", ft_tx_ctrl.msg_size, ft_ctrl.xfer_iter, &start, &end, 2);
 	}
@@ -478,12 +484,18 @@ static int ft_run_bandwidth(void)
 		if (ret)
 			return ret;
 
+		ret = ft_post_recv_bufs();
+		if (ret)
+			return ret;
+
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		ret = (test_info.ep_type == FI_EP_DGRAM) ?
 			ft_bw_dgram(&recv_cnt) : ft_bw();
 		clock_gettime(CLOCK_MONOTONIC, &end);
-		if (ret)
+		if (ret) {
+			FT_PRINTERR("bw test failed!", ret);
 			return ret;
+		}
 
 		show_perf("bw", ft_tx_ctrl.msg_size, recv_cnt, &start, &end, 1);
 	}
@@ -493,10 +505,10 @@ static int ft_run_bandwidth(void)
 
 static void ft_cleanup(void)
 {
+	ft_free_res();
 	ft_cleanup_xcontrol(&ft_rx_ctrl);
 	ft_cleanup_xcontrol(&ft_tx_ctrl);
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
-	ft_free_res();
 }
 
 int ft_run_test()
@@ -504,32 +516,49 @@ int ft_run_test()
 	int ret;
 
 	ret = ft_init_control();
-	if (ret)
+	if (ret) {
+		FT_PRINTERR("ft_init_control", ret);
 		goto cleanup;
+	}
 
 	ret = ft_open_control();
-	if (ret)
+	if (ret) {
+		FT_PRINTERR("ft_open_control", ret);
 		goto cleanup;
-
-	if (test_info.ep_type == FI_EP_MSG && listen_sock >= 0)
+	}
+	if (test_info.ep_type == FI_EP_MSG && listen_sock >= 0) {
 		ret = ft_open_passive();
-	else
+		if (ret) {
+			FT_PRINTERR("ft_open_passive", ret);
+			goto cleanup;
+		}
+	}
+	else {
 		ret = ft_open_active();
-	if (ret)
-		goto cleanup;
+		if (ret) {
+			FT_PRINTERR("ft_open_active", ret);
+			goto cleanup;
+		}
+	}
 
 	ft_fw_sync(0);
 
 	ret = ft_enable_comm();
-	if (ret)
+	if (ret) {
+		FT_PRINTERR("ft_enable_comm", ret);
 		goto cleanup;
+	}
 
 	switch (test_info.test_type) {
 	case FT_TEST_LATENCY:
 		ret = ft_run_latency();
+		if (ret)
+			FT_PRINTERR("ft_run_latency", ret);
 		break;
 	case FT_TEST_BANDWIDTH:
 		ret = ft_run_bandwidth();
+		if (ret)
+			FT_PRINTERR("ft_run_bandwidth", ret);
 		break;
 	default:
 		ret = -FI_ENOSYS;

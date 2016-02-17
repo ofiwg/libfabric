@@ -186,6 +186,8 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 		ctrl->buf = calloc(1, size);
 		if (!ctrl->buf)
 			return -FI_ENOMEM;
+	} else {
+		memset(ctrl->buf, 0, size);
 	}
 
 	if ((fabric_info->mode & FI_LOCAL_MR) && !ctrl->mr) {

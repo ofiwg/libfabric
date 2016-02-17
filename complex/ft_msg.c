@@ -343,7 +343,7 @@ int ft_recv_dgram_flood(size_t *recv_cnt)
 		ret = ft_comp_rx(0);
 		cnt += ft_rx_ctrl.credits;
 
-	} while (!ret && (*(uint8_t *) ft_rx_ctrl.buf != (uint8_t) ~0));
+	} while (!ret && ((*(uint8_t *) ft_rx_ctrl.buf != (uint8_t) ~0) || !cnt));
 
 	*recv_cnt = cnt;
 	return ret;

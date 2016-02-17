@@ -201,10 +201,10 @@ function print_results {
 		if [ $emit_stdout -eq 1 -a "$server_out_file" != "" ] ; then
 			printf -- "  server_stdout: |\n"
 			sed -e 's/^/    /' < $server_out_file
-			if [ -n "$client_out_file" ] ; then
-				printf -- "  client_stdout: |\n"
-				sed -e 's/^/    /' < $client_out_file
-			fi
+		fi
+		if [ $emit_stdout -eq 1 -a "$client_out_file" != "" ] ; then
+			printf -- "  client_stdout: |\n"
+			sed -e 's/^/    /' < $client_out_file
 		fi
 	fi
 }
@@ -334,32 +334,43 @@ function complex_test {
 	local test=$1
 	local config=$2
 	local test_exe="fi_${test}"
-	local ret=0
+	local ret1=0
+	local ret2=0
 	local start_time
 	local end_time
 	local test_time
 
 	start_time=$(date '+%s')
 
-	${SERVER_CMD} "${BIN_PATH}${test_exe} -s $S_INTERFACE -x" &> $s_outp &
+	FI_LOG_LEVEL=error ${SERVER_CMD} "${BIN_PATH}${test_exe} -s $S_INTERFACE -x" &> $s_outp &
 	p1=$!
 	sleep 1
 
-	${CLIENT_CMD} "${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE -f ${PROV} -t $config" &> $c_outp &
+	FI_LOG_LEVEL=error ${CLIENT_CMD} "${BIN_PATH}${test_exe} -s $C_INTERFACE -f ${PROV} -t $config $S_INTERFACE" &> $c_outp &
 	p2=$!
 
 	wait $p2
-	ret=$?
+	ret2=$?
+
+	wait $p1
+	ret1=$?
 
 	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
-	if [ $ret -ne 0 ]; then
-		print_results "$test_exe" "Notrun" "0" "" ""
+
+	# case: config file doesn't exist or invalid option provided
+	if [ $ret1 -eq 1 -o $ret2 -eq 1 ]; then
+		print_results "$test_exe" "Notrun" "0" "$s_outp" "$c_outp"
 		cleanup
 		skip_count+=1
 		return
+	# case: test didn't run becasue some error occured
+	elif [ $ret1 -ne 0 -o $ret2 -ne 0 ]; then
+		printf "%-50s%s\n" "$test_exe:" "Server returns $ret1, client returns $ret2"
+		print_results "$test_exe" "Fail [$f_cnt/$total]" "$test_time" "$s_outp" "$c_outp"
+                cleanup
+                fail_count+=1
 	else
-
 		local f_cnt=$(cat $c_outp | awk -F': ' '/ENOSYS|ERROR/ {total += $2} END {print total}')
 		local s_cnt=$(cat $c_outp | awk -F': ' '/Success/ {total += $2} END {print total}')
 		local total=$(cat $c_outp | awk -F': ' '/Success|ENODATA|ENOSYS|ERROR/ {total += $2} END {print total}')
