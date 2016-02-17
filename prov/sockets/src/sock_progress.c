@@ -2270,6 +2270,8 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 			}
 		}
 		msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.dest_iov_len;
+		if (pe_entry->flags & SOCK_NO_COMPLETION)
+			pe_entry->flags |= FI_INJECT_COMPLETE;
 		break;
 	case SOCK_OP_WRITE:
 		if (pe_entry->flags & FI_INJECT) {
