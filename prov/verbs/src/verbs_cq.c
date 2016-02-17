@@ -182,95 +182,56 @@ static uint64_t fi_ibv_comp_flags(struct ibv_wc *wc)
 	return flags;
 }
 
-static ssize_t fi_ibv_cq_read_context(struct fid_cq *cq, void *buf, size_t count)
+static void fi_ibv_cq_read_context_entry(struct fi_ibv_cq *cq, int i, void *buf)
 {
-	struct fi_ibv_cq *_cq;
 	struct fi_cq_entry *entry = buf;
-	ssize_t ret = 0, i;
 
-	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
-	if (_cq->wc.status)
-		return -FI_EAVAIL;
-
-	for (i = 0; i < count; i++) {
-		ret = ibv_poll_cq(_cq->cq, 1, &_cq->wc);
-		if (ret <= 0)
-			break;
-
-		if (_cq->wc.status) {
-			ret = -FI_EAVAIL;
-			break;
-		}
-
-		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
-		entry += 1;
-	}
-
-	return i ? i : (ret ? ret : -FI_EAGAIN);
+	entry[i].op_context = (void *) (uintptr_t) cq->wc.wr_id;
 }
 
-static ssize_t fi_ibv_cq_read_msg(struct fid_cq *cq, void *buf, size_t count)
+static void fi_ibv_cq_read_msg_entry(struct fi_ibv_cq *cq, int i, void *buf)
 {
-	struct fi_ibv_cq *_cq;
 	struct fi_cq_msg_entry *entry = buf;
-	ssize_t ret = 0, i;
 
-	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
-	if (_cq->wc.status)
-		return -FI_EAVAIL;
-
-	for (i = 0; i < count; i++) {
-		ret = ibv_poll_cq(_cq->cq, 1, &_cq->wc);
-		if (ret <= 0)
-			break;
-
-		if (_cq->wc.status) {
-			ret = -FI_EAVAIL;
-			break;
-		}
-
-		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
-		entry->flags = fi_ibv_comp_flags(&_cq->wc);
-		entry->len = (uint64_t) _cq->wc.byte_len;
-		entry += 1;
-	}
-
-	return i ? i : (ret ? ret : -FI_EAGAIN);
+	entry[i].op_context = (void *) (uintptr_t) cq->wc.wr_id;
+	entry[i].flags = fi_ibv_comp_flags(&cq->wc);
+	entry[i].len = (uint64_t) cq->wc.byte_len;
 }
 
-static ssize_t fi_ibv_cq_read_data(struct fid_cq *cq, void *buf, size_t count)
+static void fi_ibv_cq_read_data_entry(struct fi_ibv_cq *cq, int i, void *buf)
 {
-	struct fi_ibv_cq *_cq;
 	struct fi_cq_data_entry *entry = buf;
+
+	entry[i].op_context = (void *) (uintptr_t) cq->wc.wr_id;
+	entry[i].flags = fi_ibv_comp_flags(&cq->wc);
+
+	entry[i].data = (cq->wc.wc_flags & IBV_WC_WITH_IMM) ?
+		ntohl(cq->wc.imm_data) : 0;
+
+	entry->len = (cq->wc.opcode & (IBV_WC_RECV | IBV_WC_RECV_RDMA_WITH_IMM)) ?
+		cq->wc.byte_len : 0;
+}
+
+static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
+{
+	struct fi_ibv_cq *cq;
 	ssize_t ret = 0, i;
 
-	_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
-	if (_cq->wc.status)
+	cq = container_of(cq_fid, struct fi_ibv_cq, cq_fid);
+	if (cq->wc.status)
 		return -FI_EAVAIL;
 
 	for (i = 0; i < count; i++) {
-		ret = ibv_poll_cq(_cq->cq, 1, &_cq->wc);
+		ret = ibv_poll_cq(cq->cq, 1, &cq->wc);
 		if (ret <= 0)
 			break;
 
-		if (_cq->wc.status) {
+		if (cq->wc.status) {
 			ret = -FI_EAVAIL;
 			break;
 		}
 
-		entry->op_context = (void *) (uintptr_t) _cq->wc.wr_id;
-		entry->flags = fi_ibv_comp_flags(&_cq->wc);
-		if (_cq->wc.wc_flags & IBV_WC_WITH_IMM) {
-			entry->data = ntohl(_cq->wc.imm_data);
-		} else {
-			entry->data = 0;
-		}
-		if (_cq->wc.opcode & (IBV_WC_RECV | IBV_WC_RECV_RDMA_WITH_IMM))
-			entry->len = _cq->wc.byte_len;
-		else
-			entry->len = 0;
-
-		entry += 1;
+		cq->read_entry(cq, i, buf);
 	}
 
 	return i ? i : (ret ? ret : -FI_EAGAIN);
@@ -301,31 +262,9 @@ fi_ibv_cq_signal(struct fid_cq *cq)
 	return 0;
 }
 
-static struct fi_ops_cq fi_ibv_cq_context_ops = {
+static struct fi_ops_cq fi_ibv_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
-	.read = fi_ibv_cq_read_context,
-	.readfrom = fi_no_cq_readfrom,
-	.readerr = fi_ibv_cq_readerr,
-	.sread = fi_ibv_cq_sread,
-	.sreadfrom = fi_no_cq_sreadfrom,
-	.signal = fi_ibv_cq_signal,
-	.strerror = fi_ibv_cq_strerror
-};
-
-static struct fi_ops_cq fi_ibv_cq_msg_ops = {
-	.size = sizeof(struct fi_ops_cq),
-	.read = fi_ibv_cq_read_msg,
-	.readfrom = fi_no_cq_readfrom,
-	.readerr = fi_ibv_cq_readerr,
-	.sread = fi_ibv_cq_sread,
-	.sreadfrom = fi_no_cq_sreadfrom,
-	.signal = fi_ibv_cq_signal,
-	.strerror = fi_ibv_cq_strerror
-};
-
-static struct fi_ops_cq fi_ibv_cq_data_ops = {
-	.size = sizeof(struct fi_ops_cq),
-	.read = fi_ibv_cq_read_data,
+	.read = fi_ibv_cq_read,
 	.readfrom = fi_no_cq_readfrom,
 	.readerr = fi_ibv_cq_readerr,
 	.sread = fi_ibv_cq_sread,
@@ -459,21 +398,22 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	_cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	_cq->cq_fid.fid.context = context;
 	_cq->cq_fid.fid.ops = &fi_ibv_cq_fi_ops;
+	_cq->cq_fid.ops = &fi_ibv_cq_ops;
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_CONTEXT:
 		assert(!_cq->domain->rdm);
-		_cq->cq_fid.ops = &fi_ibv_cq_context_ops;
+		_cq->read_entry = fi_ibv_cq_read_context_entry;
 		_cq->entry_size = sizeof(struct fi_cq_entry);
 		break;
 	case FI_CQ_FORMAT_MSG:
 		assert(!_cq->domain->rdm);
-		_cq->cq_fid.ops = &fi_ibv_cq_msg_ops;
+		_cq->read_entry = fi_ibv_cq_read_msg_entry;
 		_cq->entry_size = sizeof(struct fi_cq_msg_entry);
 		break;
 	case FI_CQ_FORMAT_DATA:
 		assert(!_cq->domain->rdm);
-		_cq->cq_fid.ops = &fi_ibv_cq_data_ops;
+		_cq->read_entry = fi_ibv_cq_read_data_entry;
 		_cq->entry_size = sizeof(struct fi_cq_data_entry);
 		break;
 	case FI_CQ_FORMAT_TAGGED:

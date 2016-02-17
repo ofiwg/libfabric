@@ -152,6 +152,9 @@ struct fi_ibv_domain {
 	int			rdm;
 };
 
+struct fi_ibv_cq;
+typedef void (*fi_ibv_cq_read_entry)(struct fi_ibv_cq *cq, int index, void *buf);
+
 struct fi_ibv_cq {
 	struct fid_cq		cq_fid;
 	struct fi_ibv_domain	*domain;
@@ -162,6 +165,7 @@ struct fi_ibv_cq {
 	enum fi_cq_wait_cond	wait_cond;
 	struct ibv_wc		wc;
 	int			signal_fd[2];
+	fi_ibv_cq_read_entry	read_entry;
 	/* RDM EP fields - TODO: check usage */
 	struct fi_ibv_rdm_ep	*ep;
 	int			format;
