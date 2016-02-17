@@ -214,79 +214,13 @@ done:
 	return ret;
 }
 
-static ssize_t
-usdf_eq_read(struct fid_eq *feq, uint32_t *event, void *buf, size_t len,
-		uint64_t flags)
-{
-	struct usdf_eq *eq;
-	int ret;
 
-	USDF_DBG_SYS(EQ, "\n");
-
-	eq = eq_ftou(feq);
-
-	ret = -FI_EAGAIN;
-
-	if (!usdf_eq_empty(eq)) {
-		pthread_spin_lock(&eq->eq_lock);
-		if (!usdf_eq_empty(eq)) {
-			if (usdf_eq_error(eq)) {
-				ret = -FI_EAVAIL;
-			} else {
-				ret = usdf_eq_read_event(eq, event, buf, len,
-						flags);
-			}
-		}
-		pthread_spin_unlock(&eq->eq_lock);
-	}
-	return ret;
-}
-
-static ssize_t
-usdf_eq_write(struct fid_eq *feq, uint32_t event, const void *buf,
+static ssize_t _usdf_eq_read(struct usdf_eq *eq, uint32_t *event, void *buf,
 		size_t len, uint64_t flags)
 {
-	struct usdf_eq *eq;
-	int ret;
-
-	USDF_DBG_SYS(EQ, "\n");
-
-	eq = eq_ftou(feq);
-
-	pthread_spin_lock(&eq->eq_lock);
-
-	/* EQ full? */
-	if (atomic_get(&eq->eq_num_events) == eq->eq_ev_ring_size) {
-		ret = -FI_EAGAIN;
-		goto done;
-	}
-
-	ret = usdf_eq_write_event(eq, event, buf, len, flags);
-done:
-	pthread_spin_unlock(&eq->eq_lock);
-	return ret;
-}
-
-/*
- * routines for FI_WAIT_FD
- */
-
-static ssize_t
-usdf_eq_read_fd(struct fid_eq *feq, uint32_t *event, void *buf, size_t len,
-		uint64_t flags)
-{
-	struct usdf_eq *eq;
 	uint64_t val;
-	int ret;
-
-	USDF_DBG_SYS(EQ, "\n");
-
-	eq = eq_ftou(feq);
-
-	/* no lock if empty */
-	if (usdf_eq_empty(eq)) {
-		return -FI_EAGAIN;
-	}
+	ssize_t nbytes;
+	ssize_t ret;
 
 	pthread_spin_lock(&eq->eq_lock);
 
@@ -300,27 +234,41 @@ usdf_eq_read_fd(struct fid_eq *feq, uint32_t *event, void *buf, size_t len,
 		goto done;
 	}
 
-	if ((flags & FI_PEEK) != 0) {
+	ret = usdf_eq_read_event(eq, event, buf, len, flags);
+
+	if (eq->eq_wait_obj == FI_WAIT_FD && !(flags & FI_PEEK)) {
 		/* consume the event in eventfd */
-		ret = read(eq->eq_fd, &val, sizeof(val));
-		if (ret != sizeof(val)) {
-			ret = -FI_EIO;
-			goto done;
-		}
+		nbytes = read(eq->eq_fd, &val, sizeof(val));
+		if (nbytes != sizeof(val))
+			ret = -errno;
 	}
 
-	ret =  usdf_eq_read_event(eq, event, buf, len, flags);
 done:
 	pthread_spin_unlock(&eq->eq_lock);
 	return ret;
 }
 
-static ssize_t
-usdf_eq_sread_fd(struct fid_eq *feq, uint32_t *event, void *buf, size_t len,
-		int timeout, uint64_t flags)
+static ssize_t usdf_eq_read(struct fid_eq *feq, uint32_t *event, void *buf,
+		size_t len, uint64_t flags)
 {
 	struct usdf_eq *eq;
-	uint64_t val;
+
+	USDF_DBG_SYS(EQ, "\n");
+
+	eq = eq_ftou(feq);
+
+	/* Don't bother acquiring the lock if there is nothing to read. */
+	if (usdf_eq_empty(eq))
+		return -FI_EAGAIN;
+
+	return _usdf_eq_read(eq, event, buf, len, flags);
+}
+
+/* TODO: The timeout handling seems off on this one. */
+static ssize_t usdf_eq_sread_fd(struct fid_eq *feq, uint32_t *event, void *buf,
+		size_t len, int timeout, uint64_t flags)
+{
+	struct usdf_eq *eq;
 	struct pollfd pfd;
 	int ret;
 
@@ -328,41 +276,21 @@ usdf_eq_sread_fd(struct fid_eq *feq, uint32_t *event, void *buf, size_t len,
 
 	eq = eq_ftou(feq);
 
-	/* block awaiting event */
+	/* Setup poll context to block until the FD becomes readable. */
 	pfd.fd = eq->eq_fd;
 	pfd.events = POLLIN;
+
 retry:
 	ret = poll(&pfd, 1, timeout);
-	if (ret < 0) {
+	if (ret < 0)
 		return -errno;
-	} else if (ret == 0) {
+	else if (ret == 0)
 		return -FI_EAGAIN;
-	}
 
-	pthread_spin_lock(&eq->eq_lock);
-
-	/* did someone steal our event? */
-	if (usdf_eq_empty(eq)) {
-		pthread_spin_unlock(&eq->eq_lock);
+	ret = _usdf_eq_read(eq, event, buf, len, flags);
+	if (ret == -FI_EAGAIN)
 		goto retry;
-	}
 
-	if (usdf_eq_error(eq)) {
-		ret = -FI_EAVAIL;
-		goto done;
-	}
-
-	/* consume the event in eventfd */
-	ret = read(eq->eq_fd, &val, sizeof(val));
-	if (ret != sizeof(val)) {
-		ret = -FI_EIO;
-		goto done;
-	}
-
-	ret = usdf_eq_read_event(eq, event, buf, len, flags);
-
-done:
-	pthread_spin_unlock(&eq->eq_lock);
 	return ret;
 }
 
@@ -403,7 +331,7 @@ done:
 	return ret;
 }
 
-static ssize_t usdf_eq_write_fd(struct fid_eq *feq, uint32_t event,
+static ssize_t usdf_eq_write(struct fid_eq *feq, uint32_t event,
 		const void *buf, size_t len, uint64_t flags)
 {
 	struct usdf_eq *eq;
@@ -485,7 +413,7 @@ static struct fi_ops_eq usdf_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = usdf_eq_read,
 	.readerr = usdf_eq_readerr,
-	.write = fi_no_eq_write,
+	.write = usdf_eq_write,
 	.sread = fi_no_eq_sread,
 	.strerror = usdf_eq_strerror,
 };
@@ -537,18 +465,14 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	/* fill in sread based on wait type */
 	switch (eq->eq_wait_obj) {
 	case FI_WAIT_NONE:
-		eq->eq_ops_data.read = usdf_eq_read;
-		eq->eq_ops_data.sread = fi_no_eq_sread;
-		eq->eq_ops_data.write = usdf_eq_write;
 		break;
-	case FI_WAIT_UNSPEC:	/* default to FD */
+	case FI_WAIT_UNSPEC:
+		/* default to FD */
 		eq->eq_wait_obj = FI_WAIT_FD;
 		attr->wait_obj = FI_WAIT_FD;
 		/* FALLSTHROUGH */
 	case FI_WAIT_FD:
-		eq->eq_ops_data.read = usdf_eq_read_fd;
 		eq->eq_ops_data.sread = usdf_eq_sread_fd;
-		eq->eq_ops_data.write = usdf_eq_write_fd;
 		eq->eq_fd = eventfd(0, EFD_NONBLOCK | EFD_SEMAPHORE);
 		if (eq->eq_fd == -1) {
 			ret = -errno;
