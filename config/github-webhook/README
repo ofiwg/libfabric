@@ -6,6 +6,31 @@ The bot runs as a Ruby Sinatra server on flatbed.openfabrics.org.  It
 was initially heavily inspired by
 http://git-scm.com/book/en/v2/GitHub-Scripting-GitHub.
 
+===================
+
+Sadly, I did not take good notes about how to get Sinatra installed on
+Flatbed.  Looking on flatbed on 17 Feb 2016, I see the following RPMs
+installed:
+
+- rubygems
+- rubygem-sinatra
+
+These seem to be the key RPMs to install.  Hopefully, they're in the
+CentOS yum repo -- I do not have any notes on where I got them from.
+The following RPMs seem to be dependencies of Sinatra; hopefully yum
+just pull them in:
+
+- rubygem-crack
+- rubygem-daemons
+- rubygem-rack-test
+- rubygem-httparty
+- rubygem-eventmachine
+- rubygem-thin
+- rubygem-rack
+- rubygem-json
+
+===================
+
 There are 3 important files in this directory:
 
 1. github-webhook-ofiwg-init.d
