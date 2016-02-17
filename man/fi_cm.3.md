@@ -44,6 +44,9 @@ int fi_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen);
 *ep / pep*
 : Fabric endpoint on which to change connection state.
 
+*fid*
+Active or passive endpoint to get/set address.
+
 *addr*
 : Buffer to address.  On a set call, the endpoint will be assigned the
   specified address.  On a get, the local address will be copied into the
