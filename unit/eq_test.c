@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
- * Copyright (c) 2014 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2014-2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -296,6 +296,162 @@ fail:
 	return TEST_RET_VAL(ret, testret);
 }
 
+static int insert_events(size_t count)
+{
+	struct fi_eq_entry entry;
+	size_t i;
+	int ret;
+
+	for (i = 0; i < count; i++) {
+		ret = fi_eq_write(eq, FI_NOTIFY, &entry, sizeof(entry), 0);
+		if (ret != sizeof(entry)) {
+			sprintf(err_buf, "fi_eq_write ret=%d, %s", ret,
+					fi_strerror(-ret));
+			return ret;
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+static int read_events(size_t count, uint64_t flags)
+{
+	struct fi_eq_entry entry;
+	uint32_t event;
+	size_t i;
+	int ret;
+
+	for (i = 0; i < count; i++) {
+		memset(&entry, 0, sizeof(entry));
+		event = 0;
+
+		ret = fi_eq_read(eq, &event, &entry, sizeof(entry), flags);
+		if (ret != sizeof(entry)) {
+			sprintf(err_buf, "fi_eq_read ret=%d, %s", ret,
+					fi_strerror(-ret));
+			return ret;
+		}
+
+		if (event != FI_NOTIFY) {
+			sprintf(err_buf, "iter %zu: event = %d, should be %d\n",
+					i, event, FI_NOTIFY);
+			return -FI_EOTHER;
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+static int sread_event(int timeout, uint64_t flags)
+{
+	struct fi_eq_entry entry;
+	uint64_t elapsed;
+	uint32_t event;
+	int ret;
+
+	ft_start();
+
+	ret = fi_eq_sread(eq, &event, &entry, sizeof(entry), timeout, flags);
+	if (ret != sizeof(entry)) {
+		sprintf(err_buf, "fi_eq_read returned %d, %s", ret,
+				fi_strerror(-ret));
+		return ret;
+	}
+
+	/* check timeout accuracy */
+	ft_stop();
+
+	elapsed = get_elapsed(&start, &end, MILLI);
+	if (elapsed > (int) (timeout * 1.25)) {
+		sprintf(err_buf, "fi_eq_sread slept %d ms, expected %d",
+				(int) elapsed, timeout);
+		return -FI_EOTHER;
+	}
+
+	return FI_SUCCESS;
+}
+
+/* Make sure the peeking works fine on normal read. */
+static int eq_wait_read_peek(void)
+{
+	int testret;
+	int ret;
+
+	testret = FAIL;
+
+	ret = create_eq(32, FI_WRITE, FI_WAIT_NONE);
+	if (ret) {
+		sprintf(err_buf, "fi_eq_open ret=%d, %s", ret,
+				fi_strerror(-ret));
+		goto fail;
+	}
+
+	ret = insert_events(5);
+	if (ret)
+		goto fail;
+
+	ret = read_events(5, FI_PEEK);
+	if (ret)
+		goto fail;
+
+	ret = read_events(5, 0);
+	if (ret)
+		goto fail;
+
+	testret = PASS;
+fail:
+	FT_CLOSE_FID(eq);
+	return TEST_RET_VAL(ret, testret);
+}
+
+/* Check that the peeking doesn't affect the waiting. If the peek invalidly
+ * clears the FD, then this will fail.
+ */
+static int eq_wait_sread_peek(void)
+{
+	int testret;
+	int ret;
+
+	testret = FAIL;
+
+	ret = create_eq(32, FI_WRITE, FI_WAIT_FD);
+	if (ret) {
+		sprintf(err_buf, "fi_eq_open ret=%d, %s", ret,
+				fi_strerror(-ret));
+		goto fail;
+	}
+
+	/* Write an event */
+	ret = insert_events(1);
+	if (ret)
+		goto fail;
+
+	/* Make sure we can read the event */
+	ret = sread_event(2000, 0);
+	if (ret)
+		goto fail;
+
+	/* Write another event */
+	ret = insert_events(1);
+	if (ret)
+		goto fail;
+
+	/* Peek at the event */
+	ret = sread_event(2000, FI_PEEK);
+	if (ret)
+		goto fail;
+
+	/* Make sure the event is still available for reading */
+	ret = sread_event(2000, 0);
+	if (ret)
+		goto fail;
+
+	testret = PASS;
+fail:
+	FT_CLOSE_FID(eq);
+	return TEST_RET_VAL(ret, testret);
+}
+
 /*
  * Tests:
  * - sread with event pending
@@ -391,6 +547,8 @@ struct test_entry test_array[] = {
 	TEST_ENTRY(eq_write_overflow),
 	TEST_ENTRY(eq_wait_fd_poll),
 	TEST_ENTRY(eq_wait_fd_sread),
+	TEST_ENTRY(eq_wait_read_peek),
+	TEST_ENTRY(eq_wait_sread_peek),
 	{ NULL, "" }
 };
 
