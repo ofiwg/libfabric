@@ -91,7 +91,9 @@ usdf_eq_read_event(struct usdf_eq *eq, uint32_t *event, void *buf, size_t len,
 	copylen = MIN(ev->ue_len, len);
 
 	/* copy out the event */
-	*event = ev->ue_event;
+	if (event)
+		*event = ev->ue_event;
+
 	memcpy(buf, ev->ue_buf, copylen);
 
 	if ((flags & FI_PEEK) == 0) {
@@ -154,18 +156,23 @@ usdf_eq_write_event(struct usdf_eq *eq, uint32_t event,
 	return len;
 }
 
-static ssize_t
-usdf_eq_readerr(struct fid_eq *feq, struct fi_eq_err_entry *entry,
-		uint64_t flags)
+static ssize_t usdf_eq_readerr(struct fid_eq *feq,
+		struct fi_eq_err_entry *entry, uint64_t flags)
 {
 	struct usdf_eq *eq;
-	struct usdf_event *ev;
+	ssize_t nbytes;
 	uint64_t val;
-	int ret;
+	ssize_t ret;
 
 	USDF_TRACE_SYS(EQ, "\n");
 
+	if (!feq) {
+		USDF_DBG_SYS(EQ, "invalid input\n");
+		return -FI_EINVAL;
+	}
+
 	eq = eq_ftou(feq);
+
 	pthread_spin_lock(&eq->eq_lock);
 
 	/* make sure there is an error on top */
@@ -174,40 +181,14 @@ usdf_eq_readerr(struct fid_eq *feq, struct fi_eq_err_entry *entry,
 		goto done;
 	}
 
-	switch (eq->eq_wait_obj) {
-	case FI_WAIT_FD:
-		/* consume entry from eventfd */
-		ret = read(eq->eq_fd, &val, sizeof(val));
-		if (ret != sizeof(val)) {
-			if (ret == 0) {
-				errno = FI_EIO;
-			}
+	ret = usdf_eq_read_event(eq, NULL, entry, sizeof(*entry), flags);
+
+	if (eq->eq_wait_obj == FI_WAIT_FD && !(flags & FI_PEEK)) {
+		/* consume the event in eventfd */
+		nbytes = read(eq->eq_fd, &val, sizeof(val));
+		if (nbytes != sizeof(val))
 			ret = -errno;
-			goto done;
-		}
-		break;
-	default:
-		break;
 	}
-
-	ev = eq->eq_ev_tail;
-	memcpy(entry, ev->ue_buf, sizeof(*entry));
-
-	/* update count */
-	atomic_dec(&eq->eq_num_events);
-
-	/* Free the event buf if needed */
-	if (ev->ue_flags & USDF_EVENT_FLAG_FREE_BUF) {
-		free(ev->ue_buf);
-	}
-
-	/* new tail */
-	eq->eq_ev_tail++;
-	if (eq->eq_ev_tail >= eq->eq_ev_end) {
-		eq->eq_ev_tail = eq->eq_ev_ring;
-	}
-
-	ret = sizeof(*entry);
 
 done:
 	pthread_spin_unlock(&eq->eq_lock);
