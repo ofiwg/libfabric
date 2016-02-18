@@ -224,6 +224,9 @@ fi_cntr_wait.
 If the call returns due to timeout, -FI_ETIMEDOUT will be returned.
 The error value associated with the counter remains unchanged.
 
+It is invalid for applications to call this function if the counter
+has been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
+
 # RETURN VALUES
 
 Returns 0 on success.  On error, a negative value corresponding to

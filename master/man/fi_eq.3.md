@@ -167,7 +167,7 @@ struct fi_eq_attr {
 : Indicates that the EQ should use a file descriptor as its wait
   mechanism.  A file descriptor wait object must be usable in select,
   poll, and epoll routines.  However, a provider may signal an FD wait
-  object by marking it as readable, writable, or with an error.
+  object by marking it as readable or with an error.
 
 - *FI_WAIT_MUTEX_COND*
 : Specifies that the EQ should use a pthread mutex and cond variable
@@ -344,6 +344,9 @@ fi_eq_read.  It behaves is similar to the non-blocking call, with the
 exception that the calls will not return until either an event has
 been read from the EQ or an error or timeout occurs.  Specifying a
 negative timeout means an infinite timeout.
+
+It is invalid for applications to call this function if the EQ
+has been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
 
 ## fi_eq_readerr
 
