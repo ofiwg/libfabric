@@ -1,4 +1,4 @@
-.TH fi_endpoint 3 "2016\-02\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_endpoint 3 "2016\-02\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint - Fabric endpoint operations
@@ -122,8 +122,8 @@ ssize_t\ fi_tx_size_left(struct\ fid_ep\ *ep);
 .SH ARGUMENTS
 .PP
 \f[I]fid\f[] : On creation, specifies a fabric or access domain.
-On bind, identifies the event queue, completion queue or address vector
-to bind to the endpoint.
+On bind, identifies the event queue, completion queue, counter, or
+address vector to bind to the endpoint.
 In other cases, it\[aq]s a fabric identifier of an associated resource.
 .PP
 \f[I]info\f[] : Details about the fabric interface endpoint to be

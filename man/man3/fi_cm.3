@@ -1,4 +1,4 @@
-.TH fi_cm 3 "2015\-05\-10" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_cm 3 "2016\-02\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cm - Connection management operations
@@ -36,6 +36,8 @@ int\ fi_getpeer(struct\ fid_ep\ *ep,\ void\ *addr,\ size_t\ *addrlen);
 .SH ARGUMENTS
 .PP
 \f[I]ep / pep\f[] : Fabric endpoint on which to change connection state.
+.PP
+\f[I]fid\f[] Active or passive endpoint to get/set address.
 .PP
 \f[I]addr\f[] : Buffer to address.
 On a set call, the endpoint will be assigned the specified address.
