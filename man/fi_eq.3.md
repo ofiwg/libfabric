@@ -345,6 +345,9 @@ exception that the calls will not return until either an event has
 been read from the EQ or an error or timeout occurs.  Specifying a
 negative timeout means an infinite timeout.
 
+It is invalid for applications to call this function if the EQ
+has been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
+
 ## fi_eq_readerr
 
 The read error function, fi_eq_readerr, retrieves information

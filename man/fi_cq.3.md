@@ -343,6 +343,9 @@ similar to the non-blocking calls, with the exception that the calls
 will not return until either a completion has been read from the CQ or
 an error or timeout occurs.
 
+It is invalid for applications to call these functions if the CQ
+has been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
+
 ## fi_cq_readerr
 
 The read error function, fi_cq_readerr, retrieves information
