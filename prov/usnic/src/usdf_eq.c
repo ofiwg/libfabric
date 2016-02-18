@@ -79,12 +79,13 @@ usdf_eq_error(struct usdf_eq *eq)
  * read an event from the ring.  Caller must hold eq lock, and caller
  * needs to have checked for empty and error
  */
-static inline ssize_t
-usdf_eq_read_event(struct usdf_eq *eq, uint32_t *event, void *buf, size_t len,
-		uint64_t flags)
+static inline ssize_t usdf_eq_read_event(struct usdf_eq *eq, uint32_t *event,
+		void *buf, size_t len, uint64_t flags)
 {
 	struct usdf_event *ev;
 	size_t copylen;
+	ssize_t nbytes;
+	uint64_t val;
 
 	ev = eq->eq_ev_tail;
 
@@ -96,22 +97,27 @@ usdf_eq_read_event(struct usdf_eq *eq, uint32_t *event, void *buf, size_t len,
 
 	memcpy(buf, ev->ue_buf, copylen);
 
-	if ((flags & FI_PEEK) == 0) {
-
+	if (!(flags & FI_PEEK)) {
 		/* update count */
 		atomic_dec(&eq->eq_num_events);
 
 		/* Free the event buf if needed */
-		if (ev->ue_flags & USDF_EVENT_FLAG_FREE_BUF) {
+		if (ev->ue_flags & USDF_EVENT_FLAG_FREE_BUF)
 			free(ev->ue_buf);
-		}
 
 		/* new tail */
 		eq->eq_ev_tail++;
-		if (eq->eq_ev_tail >= eq->eq_ev_end) {
+		if (eq->eq_ev_tail >= eq->eq_ev_end)
 			eq->eq_ev_tail = eq->eq_ev_ring;
+
+		/* consume the event in eventfd */
+		if (eq->eq_wait_obj == FI_WAIT_FD) {
+			nbytes = read(eq->eq_fd, &val, sizeof(val));
+			if (nbytes != sizeof(val))
+				return -errno;
 		}
 	}
+
 	return copylen;
 }
 
@@ -160,8 +166,6 @@ static ssize_t usdf_eq_readerr(struct fid_eq *feq,
 		struct fi_eq_err_entry *entry, uint64_t flags)
 {
 	struct usdf_eq *eq;
-	ssize_t nbytes;
-	uint64_t val;
 	ssize_t ret;
 
 	USDF_TRACE_SYS(EQ, "\n");
@@ -183,13 +187,6 @@ static ssize_t usdf_eq_readerr(struct fid_eq *feq,
 
 	ret = usdf_eq_read_event(eq, NULL, entry, sizeof(*entry), flags);
 
-	if (eq->eq_wait_obj == FI_WAIT_FD && !(flags & FI_PEEK)) {
-		/* consume the event in eventfd */
-		nbytes = read(eq->eq_fd, &val, sizeof(val));
-		if (nbytes != sizeof(val))
-			ret = -errno;
-	}
-
 done:
 	pthread_spin_unlock(&eq->eq_lock);
 	return ret;
@@ -199,8 +196,6 @@ done:
 static ssize_t _usdf_eq_read(struct usdf_eq *eq, uint32_t *event, void *buf,
 		size_t len, uint64_t flags)
 {
-	uint64_t val;
-	ssize_t nbytes;
 	ssize_t ret;
 
 	pthread_spin_lock(&eq->eq_lock);
@@ -216,13 +211,6 @@ static ssize_t _usdf_eq_read(struct usdf_eq *eq, uint32_t *event, void *buf,
 	}
 
 	ret = usdf_eq_read_event(eq, event, buf, len, flags);
-
-	if (eq->eq_wait_obj == FI_WAIT_FD && !(flags & FI_PEEK)) {
-		/* consume the event in eventfd */
-		nbytes = read(eq->eq_fd, &val, sizeof(val));
-		if (nbytes != sizeof(val))
-			ret = -errno;
-	}
 
 done:
 	pthread_spin_unlock(&eq->eq_lock);
