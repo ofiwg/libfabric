@@ -1,3 +1,4 @@
+#include "config.h"
 FABRIC_1.0 {
 	global:
 		fi_getinfo;
@@ -13,5 +14,8 @@ FABRIC_1.0 {
 		fi_param_get;
 		fi_getparams;
 		fi_freeparams;
+#ifdef FABRIC_DIRECT_ENABLED
+#include FI_DIRECT_PROVIDER_API_10
+#endif
 	local: *;
 };
