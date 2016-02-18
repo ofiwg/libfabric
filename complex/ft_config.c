@@ -246,7 +246,7 @@ static int ft_parse_num(char *str, struct key_t *key, void *buf)
 	if (!strncmp(key->str, "test_type", strlen("test_type"))) {
 		TEST_ENUM_SET_N_RETURN(str, FT_TEST_LATENCY, enum ft_test_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, FT_TEST_BANDWIDTH, enum ft_test_type, buf);
-		FT_ERR("Unknown test_type\n");
+		FT_ERR("Unknown test_type");
 	} else if (!strncmp(key->str, "class_function", strlen("class_function"))) {
 		/* This should be in descending order of enum string length to
 		 * prevent incorrect matching with substrings */
@@ -255,34 +255,34 @@ static int ft_parse_num(char *str, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, FT_FUNC_SEND, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, FT_FUNC_INJECTDATA, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, FT_FUNC_INJECT, enum ft_class_function, buf);
-		FT_ERR("Unknown class_function\n");
+		FT_ERR("Unknown class_function");
 	} else if (!strncmp(key->str, "ep_type", strlen("ep_type"))) {
 		TEST_ENUM_SET_N_RETURN(str, FI_EP_MSG, enum fi_ep_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_EP_DGRAM, enum fi_ep_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_EP_RDM, enum fi_ep_type, buf);
-		FT_ERR("Unknown ep_type\n");
+		FT_ERR("Unknown ep_type");
 	} else if (!strncmp(key->str, "av_type", strlen("av_type"))) {
 		TEST_ENUM_SET_N_RETURN(str, FI_AV_MAP, enum fi_av_type, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_AV_TABLE, enum fi_av_type, buf);
-		FT_ERR("Unknown av_type\n");
+		FT_ERR("Unknown av_type");
 	} else if (!strncmp(key->str, "caps", strlen("caps"))) {
 		TEST_SET_N_RETURN(str, "FT_CAP_MSG", FT_CAP_MSG, uint64_t, buf);
 		TEST_SET_N_RETURN(str, "FT_CAP_TAGGED", FT_CAP_TAGGED, uint64_t, buf);
 		TEST_SET_N_RETURN(str, "FT_CAP_RMA", FT_CAP_RMA, uint64_t, buf);
 		TEST_SET_N_RETURN(str, "FT_CAP_ATOMIC", FT_CAP_ATOMIC, uint64_t, buf);
-		FT_ERR("Unknown caps\n");
+		FT_ERR("Unknown caps");
 	} else if (!strncmp(key->str, "eq_wait_obj", strlen("eq_wait_obj")) ||
 		!strncmp(key->str, "cq_wait_obj", strlen("cq_wait_obj"))) {
 		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_NONE, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_UNSPEC, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_FD, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, FI_WAIT_MUTEX_COND, enum fi_wait_obj, buf);
-		FT_ERR("Unknown (eq/cq)_wait_obj\n");
+		FT_ERR("Unknown (eq/cq)_wait_obj");
 	} else {
 		TEST_ENUM_SET_N_RETURN(str, FT_COMP_QUEUE, enum ft_comp_type, buf);
 		TEST_SET_N_RETURN(str, "FT_MODE_ALL", FT_MODE_ALL, uint64_t, buf);
 		TEST_SET_N_RETURN(str, "FT_FLAG_QUICKTEST", FT_FLAG_QUICKTEST, uint64_t, buf);
-		FT_ERR("Unknown comp_type/mode/test_flags\n");
+		FT_ERR("Unknown comp_type/mode/test_flags");
 	}
 
 	return -1;
@@ -310,7 +310,7 @@ static int ft_parse_key_val(char *config, jsmntok_t *token, char *test_set)
 	}
 
 	if (!key) {
-		FT_ERR("Unknown key\n");
+		FT_ERR("Unknown key");
 		return -1;
 	}
 
@@ -325,7 +325,7 @@ static int ft_parse_key_val(char *config, jsmntok_t *token, char *test_set)
 		parsed++;
 		break;
 	default:
-		FT_ERR("[jsmn] Unknown token type\n");
+		FT_ERR("[jsmn] Unknown token type");
 		return -1;
 	}
 
@@ -342,7 +342,7 @@ static int ft_parse_key_val(char *config, jsmntok_t *token, char *test_set)
 				return -1;
 			break;
 		default:
-			FT_ERR("Invalid key->val_type\n");
+			FT_ERR("Invalid key->val_type");
 			return -1;
 		}
 		parsed++;
@@ -390,23 +390,23 @@ static int ft_parse_config(char *config, int size,
 	if (ret < 0) {
 		switch (ret) {
 		case JSMN_ERROR_INVAL:
-			FT_ERR("[jsmn] bad token, JSON string is corrupted!\n");
+			FT_ERR("[jsmn] bad token, JSON string is corrupted!");
 			break;
 		case JSMN_ERROR_NOMEM:
-			FT_ERR("[jsmn] not enough tokens, JSON string is too large!\n");
+			FT_ERR("[jsmn] not enough tokens, JSON string is too large!");
 			break;
 		case JSMN_ERROR_PART:
-			FT_ERR("[jsmn] JSON string is too short, expecting more JSON data!\n");
+			FT_ERR("[jsmn] JSON string is too short, expecting more JSON data!");
 			break;
 		default:
-			FT_ERR("[jsmn] Unknown error!\n");
+			FT_ERR("[jsmn] Unknown error!");
 			break;
 		}
 		goto err1;
 	}
 
 	if (ret != num_tokens) {
-		FT_ERR("[jsmn] Expected # of tokens: %d, Got: %d\n", num_tokens, ret);
+		FT_ERR("[jsmn] Expected # of tokens: %d, Got: %d", num_tokens, ret);
 		goto err1;
 	}
 
@@ -428,13 +428,13 @@ static int ft_parse_config(char *config, int size,
 			num_tokens_parsed = ft_parse_key_val(config, &tokens[i],
 					(char *)(test_sets + ts_index));
 		        if (num_tokens_parsed <= 0)	{
-				FT_ERR("Error parsing config!\n");
+				FT_ERR("Error parsing config!");
 				goto err2;
 			}
 			i += num_tokens_parsed;
 			break;
 		default:
-			FT_ERR("[jsmn] Unknown token!\n");
+			FT_ERR("[jsmn] Unknown token!");
 			goto err2;
 		}
 	}
@@ -463,7 +463,7 @@ struct ft_series *fts_load(char *filename)
 
 		fp = fopen(filename, "rb");
 		if (!fp) {
-			FT_ERR("Unable to open file\n");
+			FT_ERR("Unable to open file");
 			return NULL;
 		}
 
@@ -477,19 +477,19 @@ struct ft_series *fts_load(char *filename)
 
 		config = malloc(size + 1);
 		if (!config) {
-			FT_ERR("Unable to allocate memory\n");
+			FT_ERR("Unable to allocate memory");
 			goto err1;
 		}
 
 		if (fread(config, size, 1, fp) != 1) {
-			FT_ERR("Error reading config file\n");
+			FT_ERR("Error reading config file");
 			goto err2;
 		}
 
 		config[size] = 0;
 
 		if (ft_parse_config(config, size, &test_sets, &nsets)) {
-			FT_ERR("Unable to parse file\n");
+			FT_ERR("Unable to parse file");
 			goto err2;
 		}
 

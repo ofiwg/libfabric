@@ -90,24 +90,6 @@ static int rma_write_trigger(void *src, size_t size,
 	return rma_write(src, size, &triggered_ctx, FI_TRIGGER);
 }
 
-static int alloc_ep_res(struct fi_info *fi)
-{
-	int ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	ret = fi_mr_reg(domain, buf, buf_size, FI_WRITE | FI_REMOTE_WRITE, 0,
-			FT_MR_KEY, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
 static int init_fabric(void)
 {
 	char *node, *service;
@@ -128,7 +110,7 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 

@@ -165,10 +165,10 @@ static int ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 			ft_x->credits, x_str, ret, NULL, timeout);
 		break;
 	case FI_WAIT_SET:
-		FT_ERR("fi_ubertest: Unsupported cq wait object\n");
+		FT_ERR("fi_ubertest: Unsupported cq wait object");
 		return -1;
 	default:
-		FT_ERR("Unknown cq wait object\n");
+		FT_ERR("Unknown cq wait object");
 		return -1;
 	}
 

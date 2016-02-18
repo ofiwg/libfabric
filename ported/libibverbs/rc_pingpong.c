@@ -244,7 +244,7 @@ static int pp_accept_ctx(struct pingpong_context *ctx)
 
 	ctx->routs = pp_post_recv(ctx, ctx->rx_depth);
 	if (ctx->routs < ctx->rx_depth) {
-		FT_ERR("Couldn't post receive (%d)\n", ctx->routs);
+		FT_ERR("Couldn't post receive (%d)", ctx->routs);
 		return 1;
 	}
 
@@ -329,7 +329,7 @@ static int pp_connect_ctx(struct pingpong_context *ctx)
 
 	ctx->routs = pp_post_recv(ctx, ctx->rx_depth);
 	if (ctx->routs < ctx->rx_depth) {
-		FT_ERR("Couldn't post receive (%d)\n", ctx->routs);
+		FT_ERR("Couldn't post receive (%d)", ctx->routs);
 		return 1;
 	}
 

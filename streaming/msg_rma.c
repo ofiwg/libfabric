@@ -100,37 +100,23 @@ static int run_test(void)
 
 static int alloc_ep_res(struct fi_info *fi)
 {
-	uint64_t access_mode;
-	int ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
 	switch (op_type) {
 	case FT_RMA_READ:
-		access_mode = FI_REMOTE_READ;
+		fi->caps |= FI_REMOTE_READ;
 		if (fi->mode & FI_LOCAL_MR)
-			access_mode |= FI_READ;
+			fi->caps |= FI_READ;
 		break;
 	case FT_RMA_WRITE:
 	case FT_RMA_WRITEDATA:
-		access_mode = FI_REMOTE_WRITE;
+		fi->caps |= FI_REMOTE_WRITE;
 		if (fi->mode & FI_LOCAL_MR)
-			access_mode |= FI_WRITE;
+			fi->caps |= FI_WRITE;
 		break;
 	default:
 		assert(0);
-		return -FI_EINVAL;
-	}
-	ret = fi_mr_reg(domain, buf, buf_size,
-			access_mode, 0, FT_MR_KEY, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
 	}
 
-	return 0;
+	return ft_alloc_active_res(fi);
 }
 
 static int server_connect(void)

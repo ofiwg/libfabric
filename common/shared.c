@@ -60,6 +60,7 @@ struct fid_mr no_mr;
 struct fi_context tx_ctx, rx_ctx;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
+int ft_skip_mr = 0;
 
 fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
 void *buf, *tx_buf, *rx_buf;
@@ -200,6 +201,27 @@ static void ft_cntr_set_wait_attr(void)
 	}
 }
 
+static uint64_t ft_caps_to_mr_access(uint64_t caps)
+{
+	uint64_t mr_access = 0;
+
+	if (caps & FI_MSG) {
+		if (caps & FT_MSG_MR_ACCESS)
+			mr_access |= caps & FT_MSG_MR_ACCESS;
+		else
+			mr_access |= FT_MSG_MR_ACCESS;
+	}
+
+	if ((caps & FI_RMA) || (caps & FI_ATOMIC)) {
+		if (caps & FT_RMA_MR_ACCESS)
+			mr_access |= caps & FT_RMA_MR_ACCESS;
+		else
+			mr_access |= FT_RMA_MR_ACCESS;
+	}
+
+	return mr_access;
+}
+
 /*
  * Include FI_MSG_PREFIX space in the allocated buffer, and ensure that the
  * buffer is large enough for a control message used to exchange addressing
@@ -246,9 +268,10 @@ int ft_alloc_msgs(void)
 	tx_buf = (void *) (((uintptr_t) tx_buf + alignment - 1) &
 			   ~(alignment - 1));
 
-	if (fi->mode & FI_LOCAL_MR) {
-		ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND,
-				0, 0, 0, &mr, NULL);
+	if (!ft_skip_mr && ((fi->mode & FI_LOCAL_MR) ||
+				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
+		ret = fi_mr_reg(domain, buf, buf_size, ft_caps_to_mr_access(fi->caps),
+				0, FT_MR_KEY, 0, &mr, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_mr_reg", ret);
 			return ret;
@@ -614,7 +637,7 @@ static int dupaddr(void **dst_addr, size_t *dst_addrlen,
 {
 	*dst_addr = malloc(src_addrlen);
 	if (!*dst_addr) {
-		FT_ERR("address allocation failed\n");
+		FT_ERR("address allocation failed");
 		return EAI_MEMORY;
 	}
 	*dst_addrlen = src_addrlen;
@@ -979,7 +1002,7 @@ int ft_get_rx_comp(uint64_t total)
 
 	if (rxcq) {
 		ret = ft_get_cq_comp(rxcq, &rx_cq_cntr, total, timeout);
-	} else {
+	} else if (rxcntr) {
 		while (fi_cntr_read(rxcntr) < total) {
 			ret = fi_cntr_wait(rxcntr, total, timeout);
 			if (ret)
@@ -987,6 +1010,9 @@ int ft_get_rx_comp(uint64_t total)
 			else
 				break;
 		}
+	} else {
+		FT_ERR("Trying to get a RX completion when no RX CQ or counter were opened");
+		ret = -FI_EOTHER;
 	}
 	return ret;
 }
@@ -997,10 +1023,13 @@ int ft_get_tx_comp(uint64_t total)
 
 	if (txcq) {
 		ret = ft_get_cq_comp(txcq, &tx_cq_cntr, total, -1);
-	} else {
+	} else if (txcntr) {
 		ret = fi_cntr_wait(txcntr, total, -1);
 		if (ret)
 			FT_PRINTERR("fi_cntr_wait", ret);
+	} else {
+		FT_ERR("Trying to get a TX completion when no TX CQ or counter were opened");
+		ret = -FI_EOTHER;
 	}
 	return ret;
 }
@@ -1008,17 +1037,13 @@ int ft_get_tx_comp(uint64_t total)
 int ft_cq_readerr(struct fid_cq *cq)
 {
 	struct fi_cq_err_entry cq_err;
-	const char *err_str;
 	int ret;
 
 	ret = fi_cq_readerr(cq, &cq_err, 0);
 	if (ret < 0) {
 		FT_PRINTERR("fi_cq_readerr", ret);
 	} else {
-		err_str = fi_cq_strerror(cq, cq_err.prov_errno, cq_err.err_data,
-					NULL, 0);
-		fprintf(stderr, "Completion error: %d(%s) - %s\n", cq_err.err,
-			fi_strerror(cq_err.err), err_str);
+		FT_CQ_ERR(cq, cq_err, NULL, 0);
 		ret = -cq_err.err;
 	}
 	return ret;
@@ -1027,18 +1052,13 @@ int ft_cq_readerr(struct fid_cq *cq)
 void eq_readerr(struct fid_eq *eq, const char *eq_str)
 {
 	struct fi_eq_err_entry eq_err;
-	const char *err_str;
 	int rd;
 
 	rd = fi_eq_readerr(eq, &eq_err, 0);
 	if (rd != sizeof(eq_err)) {
 		FT_PRINTERR("fi_eq_readerr", rd);
 	} else {
-		err_str = fi_eq_strerror(eq, eq_err.prov_errno, eq_err.err_data, NULL, 0);
-		fprintf(stderr, "%s: %d %s\n", eq_str, eq_err.err,
-				fi_strerror(eq_err.err));
-		fprintf(stderr, "%s: prov_err: %s (%d)\n", eq_str, err_str,
-				eq_err.prov_errno);
+		FT_EQ_ERR(eq, eq_err, NULL, 0);
 	}
 }
 
