@@ -247,7 +247,17 @@ static int gnix_wait_control(struct fid *wait, int command, void *arg)
 	}
 }
 
-int gnix_wait_wait(struct fid_wait *wait, int timeout)
+/**
+ * Waits on a wait set until one or more of it's underlying objects is signaled.
+ *
+ * @param[in] wait	the wait object set
+ * @param[in] timeout	time to wait for a signal, in milliseconds
+ *
+ * @return FI_SUCCESS	upon successfully waiting
+ * @return -FI_ERRNO	upon failure
+ * @return -FI_ENOSYS	if this operation is not supported
+ */
+DIRECT_FN int gnix_wait_wait(struct fid_wait *wait, int timeout)
 {
 	return -FI_ENOSYS;
 }
@@ -278,8 +288,9 @@ int gnix_wait_close(struct fid *wait)
 	return FI_SUCCESS;
 }
 
-int gnix_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
-		   struct fid_wait **waitset)
+DIRECT_FN int gnix_wait_open(struct fid_fabric *fabric,
+			     struct fi_wait_attr *attr,
+			     struct fid_wait **waitset)
 {
 	struct gnix_fid_fabric *fab_priv;
 	struct gnix_fid_wait *wait_priv;

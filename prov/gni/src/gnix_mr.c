@@ -159,9 +159,10 @@ static inline uint64_t __calculate_length(
 	return pages * pagesize;
 }
 
-int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
-		uint64_t access, uint64_t offset, uint64_t requested_key,
-		uint64_t flags, struct fid_mr **mr_o, void *context)
+DIRECT_FN int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
+			  uint64_t access, uint64_t offset,
+			  uint64_t requested_key, uint64_t flags,
+			  struct fid_mr **mr_o, void *context)
 {
 	struct gnix_fid_mem_desc *mr = NULL;
 	struct gnix_fid_domain *domain;
@@ -321,8 +322,8 @@ static void *__gnix_register_region(
 	{
 		fastlock_acquire(&nic->lock);
 		grc = GNI_MemRegister(nic->gni_nic_hndl, (uint64_t) address,
-				length,	dst_cq_hndl, flags,
-				vmdh_index, &md->mem_hndl);
+				      length,	dst_cq_hndl, flags,
+				      vmdh_index, &md->mem_hndl);
 		fastlock_release(&nic->lock);
 		if (grc == GNI_RC_SUCCESS)
 			break;
@@ -330,7 +331,7 @@ static void *__gnix_register_region(
 
 	if (unlikely(grc != GNI_RC_SUCCESS)) {
 		GNIX_WARN(FI_LOG_MR, "failed to register memory with uGNI, "
-				"ret=%s\n", gni_err_str[grc]);
+			  "ret=%s\n", gni_err_str[grc]);
 		return NULL;
 	}
 
@@ -372,6 +373,24 @@ static int __gnix_deregister_region(
 	}
 
 	return ret;
+}
+
+/**
+ * Associates a registered memory region with a completion counter.
+ *
+ * @param[in] fid		the memory region
+ * @param[in] bfid		the fabric identifier for the memory region
+ * @param[in] flags		flags to apply to the registration
+ *
+ * @return FI_SUCCESS		Upon successfully registering the memory region
+ * @return -FI_ENOSYS		If binding of the memory region is not supported
+ * @return -FI_EBADFLAGS	If the flags are not supported
+ * @return -FI_EKEYREJECTED	If the key is not available
+ * @return -FI_ENOKEY		If the key is already in use
+ */
+DIRECT_FN int gnix_mr_bind(fid_t fid, struct fid *bfid, uint64_t flags)
+{
+	return -FI_ENOSYS;
 }
 
 static int __gnix_destruct_registration(void *context)

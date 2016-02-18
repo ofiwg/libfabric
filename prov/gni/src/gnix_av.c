@@ -443,8 +443,8 @@ err:
  * typically be used in the critical path for messaging/rma/amo
  * requests
  */
-static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
-			  size_t *addrlen)
+DIRECT_FN STATIC int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr,
+				    void *addr, size_t *addrlen)
 {
 	struct gnix_fid_av *gnix_av;
 	struct gnix_ep_name ep_name = { {0} };
@@ -489,8 +489,9 @@ static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	return FI_SUCCESS;
 }
 
-static int gnix_av_insert(struct fid_av *av, const void *addr, size_t count,
-			  fi_addr_t *fi_addr, uint64_t flags, void *context)
+DIRECT_FN STATIC int gnix_av_insert(struct fid_av *av, const void *addr,
+				    size_t count, fi_addr_t *fi_addr,
+				    uint64_t flags, void *context)
 {
 	struct gnix_fid_av *int_av = NULL;
 	int ret = FI_SUCCESS;
@@ -526,8 +527,23 @@ err:
 	return ret;
 }
 
-static int gnix_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
-			  uint64_t flags)
+DIRECT_FN STATIC int gnix_av_insertsvc(struct fid_av *av, const char *node,
+				       const char *service, fi_addr_t *fi_addr,
+				       uint64_t flags, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+DIRECT_FN STATIC int gnix_av_insertsym(struct fid_av *av, const char *node,
+				       size_t nodecnt, const char *service,
+				       size_t svccnt, fi_addr_t *fi_addr,
+				       uint64_t flags, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+DIRECT_FN STATIC int gnix_av_remove(struct fid_av *av, fi_addr_t *fi_addr,
+				    size_t count, uint64_t flags)
 {
 	struct gnix_fid_av *int_av = NULL;
 	int ret = FI_SUCCESS;
@@ -567,8 +583,9 @@ err:
  * device_addr:cdm_id
  * where device_addr and cdm_id are represented in hexadecimal.
  */
-static const char *gnix_av_straddr(struct fid_av *av, const void *addr,
-				   char *buf, size_t *len)
+DIRECT_FN STATIC const char *gnix_av_straddr(struct fid_av *av,
+					     const void *addr, char *buf,
+					     size_t *len)
 {
 	char int_buf[64];
 	int size;
@@ -648,12 +665,16 @@ err:
 	return ret;
 }
 
+DIRECT_FN int gnix_av_bind(struct fid_av *av, struct fid *fid, uint64_t flags)
+{
+	return -FI_ENOSYS;
+}
 
 /*
  * TODO: Support shared named AVs.
  */
-int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-		 struct fid_av **av, void *context)
+DIRECT_FN int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+			   struct fid_av **av, void *context)
 {
 	struct gnix_fid_domain *int_dom = NULL;
 	struct gnix_fid_av *int_av = NULL;
@@ -737,7 +758,7 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 		ret = _gnix_ht_init(int_av->map_ht,
 				    &ht_attr);
-		 slist_init(&int_av->block_list);
+		slist_init(&int_av->block_list);
 	}
 	_gnix_ref_init(&int_av->ref_cnt, 1, __av_destruct);
 
@@ -761,8 +782,8 @@ err:
 static struct fi_ops_av gnix_av_ops = {
 	.size = sizeof(struct fi_ops_av),
 	.insert = gnix_av_insert,
-	.insertsvc = fi_no_av_insertsvc,
-	.insertsym = fi_no_av_insertsym,
+	.insertsvc = gnix_av_insertsvc,
+	.insertsym = gnix_av_insertsym,
 	.remove = gnix_av_remove,
 	.lookup = gnix_av_lookup,
 	.straddr = gnix_av_straddr

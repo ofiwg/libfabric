@@ -207,8 +207,8 @@ int _gnix_cntr_poll_nic_rem(struct gnix_fid_cntr *cntr, struct gnix_nic *nic)
  * API functions.
  ******************************************************************************/
 
-static int gnix_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
-			int timeout)
+DIRECT_FN STATIC int gnix_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
+				    int timeout)
 {
 	struct gnix_fid_cntr *cntr_priv;
 	struct timespec ts0, ts;
@@ -300,14 +300,14 @@ static int gnix_cntr_close(fid_t fid)
 	references_held = _gnix_ref_put(cntr);
 	if (references_held) {
 		GNIX_INFO(FI_LOG_CQ, "failed to fully close cntr due to lingering "
-						"references. references=%i cntr=%p\n",
-						references_held, cntr);
+			  "references. references=%i cntr=%p\n",
+			  references_held, cntr);
 	}
 
 	return FI_SUCCESS;
 }
 
-static uint64_t gnix_cntr_readerr(struct fid_cntr *cntr)
+DIRECT_FN STATIC uint64_t gnix_cntr_readerr(struct fid_cntr *cntr)
 {
 	int v, ret;
 	struct gnix_fid_cntr *cntr_priv;
@@ -326,7 +326,7 @@ static uint64_t gnix_cntr_readerr(struct fid_cntr *cntr)
 	return (uint64_t)v;
 }
 
-static uint64_t gnix_cntr_read(struct fid_cntr *cntr)
+DIRECT_FN STATIC uint64_t gnix_cntr_read(struct fid_cntr *cntr)
 {
 	int v, ret;
 	struct gnix_fid_cntr *cntr_priv;
@@ -345,7 +345,7 @@ static uint64_t gnix_cntr_read(struct fid_cntr *cntr)
 	return (uint64_t)v;
 }
 
-static int gnix_cntr_add(struct fid_cntr *cntr, uint64_t value)
+DIRECT_FN STATIC int gnix_cntr_add(struct fid_cntr *cntr, uint64_t value)
 {
 	struct gnix_fid_cntr *cntr_priv;
 
@@ -361,7 +361,7 @@ static int gnix_cntr_add(struct fid_cntr *cntr, uint64_t value)
 	return FI_SUCCESS;
 }
 
-static int gnix_cntr_set(struct fid_cntr *cntr, uint64_t value)
+DIRECT_FN STATIC int gnix_cntr_set(struct fid_cntr *cntr, uint64_t value)
 {
 	struct gnix_fid_cntr *cntr_priv;
 
@@ -407,8 +407,9 @@ static int gnix_cntr_control(struct fid *cntr, int command, void *arg)
 }
 
 
-int gnix_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
-		 struct fid_cntr **cntr, void *context)
+DIRECT_FN int gnix_cntr_open(struct fid_domain *domain,
+			     struct fi_cntr_attr *attr,
+			     struct fid_cntr **cntr, void *context)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_domain *domain_priv;

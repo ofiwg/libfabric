@@ -81,13 +81,19 @@ const struct fi_fabric_attr gnix_fabric_attr = {
 	.prov_version = FI_VERSION(GNI_MAJOR_VERSION, GNI_MINOR_VERSION),
 };
 
+
+DIRECT_FN int gnix_fabric_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+{
+	return -FI_ENOSYS;
+}
+
 static struct fi_ops_fabric gnix_fab_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = gnix_domain_open,
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = gnix_eq_open,
 	.wait_open = gnix_wait_open,
-	.trywait = fi_no_trywait
+	.trywait = gnix_fabric_trywait
 };
 
 static void __fabric_destruct(void *obj)
