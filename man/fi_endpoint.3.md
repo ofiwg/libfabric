@@ -107,7 +107,7 @@ ssize_t fi_tx_size_left(struct fid_ep *ep);
 
 *fid*
 : On creation, specifies a fabric or access domain.  On bind,
-  identifies the event queue, completion queue or address vector to
+  identifies the event queue, completion queue, counter, or address vector to
   bind to the endpoint. In other cases, it's a fabric identifier of an
   associated resource.
 
