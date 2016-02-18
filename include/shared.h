@@ -151,7 +151,6 @@ extern char test_name[50];
 extern struct timespec start, end;
 extern struct ft_opts opts;
 
-
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints);
 void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts);
 void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts);
@@ -160,6 +159,7 @@ void ft_csusage(char *name, char *desc);
 void ft_fill_buf(void *buf, int size);
 int ft_check_buf(void *buf, int size);
 uint64_t ft_init_cq_data(struct fi_info *info);
+extern int ft_skip_mr;
 #define ADDR_OPTS "b:p:s:a:"
 #define INFO_OPTS "n:f:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
@@ -178,6 +178,8 @@ extern char default_port[8];
 #define FT_STR_LEN 32
 #define FT_MAX_CTRL_MSG 64
 #define FT_MR_KEY 0xC0DE
+#define FT_MSG_MR_ACCESS (FI_SEND | FI_RECV)
+#define FT_RMA_MR_ACCESS (FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
 int ft_getsrcaddr(char *node, char *service, struct fi_info *hints);
 int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,

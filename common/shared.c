@@ -60,6 +60,7 @@ struct fid_mr no_mr;
 struct fi_context tx_ctx, rx_ctx;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
+int ft_skip_mr = 0;
 
 fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
 void *buf, *tx_buf, *rx_buf;
@@ -200,6 +201,27 @@ static void ft_cntr_set_wait_attr(void)
 	}
 }
 
+static uint64_t ft_caps_to_mr_access(uint64_t caps)
+{
+	uint64_t mr_access = 0;
+
+	if (caps & FI_MSG) {
+		if (caps & FT_MSG_MR_ACCESS)
+			mr_access |= caps & FT_MSG_MR_ACCESS;
+		else
+			mr_access |= FT_MSG_MR_ACCESS;
+	}
+
+	if ((caps & FI_RMA) || (caps & FI_ATOMIC)) {
+		if (caps & FT_RMA_MR_ACCESS)
+			mr_access |= caps & FT_RMA_MR_ACCESS;
+		else
+			mr_access |= FT_RMA_MR_ACCESS;
+	}
+
+	return mr_access;
+}
+
 /*
  * Include FI_MSG_PREFIX space in the allocated buffer, and ensure that the
  * buffer is large enough for a control message used to exchange addressing
@@ -246,9 +268,10 @@ int ft_alloc_msgs(void)
 	tx_buf = (void *) (((uintptr_t) tx_buf + alignment - 1) &
 			   ~(alignment - 1));
 
-	if (fi->mode & FI_LOCAL_MR) {
-		ret = fi_mr_reg(domain, buf, buf_size, FI_RECV | FI_SEND,
-				0, 0, 0, &mr, NULL);
+	if (!ft_skip_mr && ((fi->mode & FI_LOCAL_MR) ||
+				(fi->caps & (FI_RMA | FI_ATOMIC)))) {
+		ret = fi_mr_reg(domain, buf, buf_size, ft_caps_to_mr_access(fi->caps),
+				0, FT_MR_KEY, 0, &mr, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_mr_reg", ret);
 			return ret;

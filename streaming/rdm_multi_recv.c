@@ -206,6 +206,9 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
+	/* Prevent memory registration by ft_alloc_active_res() -> ft_alloc_msgs() */
+	ft_skip_mr = 1;
+
 	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;

@@ -50,25 +50,6 @@ struct fi_context fi_ctx_read;
 
 static char * welcome_text = "Hello from Client!";
 
-
-static int alloc_ep_res(struct fi_info *fi)
-{
-	int ret;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
-
-	ret = fi_mr_reg(domain, buf, buf_size, FI_WRITE | FI_REMOTE_WRITE, 0,
-			FT_MR_KEY, 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
 static int init_fabric(void)
 {
 	char *node, *service;
@@ -89,7 +70,7 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
