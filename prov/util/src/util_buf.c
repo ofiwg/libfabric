@@ -37,13 +37,39 @@
 #include <fi_mem.h>
 #include <fi.h>
 
+#if ENABLE_DEBUG
+static inline int util_buf_use_ftr(struct util_buf_pool *pool)
+{
+	return 1;
+}
+#else
+static inline int util_buf_use_ftr(struct util_buf_pool *pool)
+{
+	return (pool->alloc_hndlr || pool->free_hndlr) ? 1 : 0;
+}
+#endif
 
-static int util_buf_region_add(struct util_buf_pool *pool)
+static inline void util_buf_set_region(union util_buf *buf,
+				       struct util_buf_region *region,
+				       struct util_buf_pool *pool)
+{
+	struct util_buf_footer *buf_ftr;
+	if (util_buf_use_ftr(pool)) {
+		buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->data_sz);
+		buf_ftr->region = region;
+	}
+}
+
+int util_buf_grow(struct util_buf_pool *pool)
 {
 	int ret;
 	size_t i;
 	union util_buf *util_buf;
 	struct util_buf_region *buf_region;
+
+	if (pool->max_cnt && pool->num_allocated >= pool->max_cnt) {
+		return -1;
+	}
 
 	buf_region = calloc(1, sizeof(*buf_region));
 	if (!buf_region)
@@ -51,88 +77,101 @@ static int util_buf_region_add(struct util_buf_pool *pool)
 
 	ret = posix_memalign((void **)&buf_region->mem_region, pool->alignment,
 			     pool->chunk_cnt * pool->entry_sz);
-	if (ret) {
-		free(buf_region);
-		return -1;
+	if (ret)
+		goto err;
+
+	if (pool->alloc_hndlr) {
+		ret = pool->alloc_hndlr(pool, buf_region->mem_region,
+					pool->chunk_cnt * pool->entry_sz,
+					&buf_region->context);
+		if (ret)
+			goto err;
 	}
 
 	for (i = 0; i < pool->chunk_cnt; i++) {
 		util_buf = (union util_buf *)
 			(buf_region->mem_region + i * pool->entry_sz);
+		util_buf_set_region(util_buf, buf_region, pool);
 		slist_insert_tail(&util_buf->entry, &pool->buf_list);
 	}
+
 	slist_insert_tail(&buf_region->entry, &pool->region_list);
 	pool->num_allocated += pool->chunk_cnt;
 	return 0;
+err:
+	free(buf_region);
+	return -1;
 }
 
-struct util_buf_pool *util_buf_pool_create(size_t size, size_t alignment,
-					   size_t max_cnt, size_t chunk_cnt)
+struct util_buf_pool *util_buf_pool_create_ex(size_t size, size_t alignment,
+					       size_t max_cnt, size_t chunk_cnt,
+					       util_buf_region_alloc_hndlr alloc_hndlr,
+					       util_buf_region_free_hndlr free_hndlr)
 {
+	size_t entry_sz;
 	struct util_buf_pool *buf_pool;
+
 	buf_pool = calloc(1, sizeof(*buf_pool));
 	if (!buf_pool)
 		return NULL;
 
-	buf_pool->entry_sz = MAX(sizeof(union util_buf),
-				 fi_get_aligned_sz(size, alignment));
+	buf_pool->alloc_hndlr = alloc_hndlr;
+	buf_pool->free_hndlr = free_hndlr;
+	buf_pool->data_sz = size;
 	buf_pool->alignment = alignment;
 	buf_pool->max_cnt = max_cnt;
 	buf_pool->chunk_cnt = chunk_cnt;
 
+	entry_sz = util_buf_use_ftr(buf_pool) ?
+		(size + sizeof(struct util_buf_footer)) : size;
+	buf_pool->entry_sz = fi_get_aligned_sz(entry_sz, alignment);
+
 	slist_init(&buf_pool->buf_list);
 	slist_init(&buf_pool->region_list);
 
-	if (util_buf_region_add(buf_pool)) {
+	if (util_buf_grow(buf_pool)) {
 		free(buf_pool);
 		return NULL;
 	}
 	return buf_pool;
 }
 
+#if ENABLE_DEBUG
 void *util_buf_get(struct util_buf_pool *pool)
 {
 	struct slist_entry *entry;
-	union util_buf *buf;
-
-	if (slist_empty(&pool->buf_list)) {
-		if (pool->max_cnt == 0 || pool->max_cnt < pool->num_allocated) {
-			if (util_buf_region_add(pool))
-				return NULL;
-		} else {
-			return NULL;
-		}
-	}
+	struct util_buf_footer *buf_ftr;
 
 	entry = slist_remove_head(&pool->buf_list);
-	buf = container_of(entry, union util_buf, entry);
-
-#if ENABLE_DEBUG
-	pool->num_used++;
-#endif
-	return buf;
+	buf_ftr = (struct util_buf_footer *) ((char *) entry + pool->data_sz);
+	buf_ftr->region->num_used++;
+	return entry;
 }
 
 void util_buf_release(struct util_buf_pool *pool, void *buf)
 {
 	union util_buf *util_buf = buf;
-#if ENABLE_DEBUG
-	pool->num_used--;
-#endif
+	struct util_buf_footer *buf_ftr;
+
+	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->data_sz);
+	buf_ftr->region->num_used++;
 	slist_insert_head(&util_buf->entry, &pool->buf_list);
 }
+#endif
 
 void util_buf_pool_destroy(struct util_buf_pool *pool)
 {
 	struct slist_entry *entry;
 	struct util_buf_region *buf_region;
 
-#if ENABLE_DEBUG
-	assert(pool->num_used == 0);
-#endif
 	while (!slist_empty(&pool->region_list)) {
 		entry = slist_remove_head(&pool->region_list);
 		buf_region = container_of(entry, struct util_buf_region, entry);
+#if ENABLE_DEBUG
+		assert(buf_region->num_used == 0);
+#endif
+		if (pool->free_hndlr)
+			pool->free_hndlr(buf_region->context);
 		free(buf_region->mem_region);
 		free(buf_region);
 	}

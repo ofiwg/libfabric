@@ -187,7 +187,7 @@ static struct sock_pe_entry *sock_pe_acquire_entry(struct sock_pe *pe)
 	struct sock_pe_entry *pe_entry;
 
 	if (dlist_empty(&pe->free_list)) {
-		pe_entry = util_buf_get(pe->pe_rx_pool);
+		pe_entry = util_buf_alloc(pe->pe_rx_pool);
 		SOCK_LOG_DBG("Getting rx pool entry\n");
 		if (pe_entry) {
 			memset(pe_entry, 0, sizeof(*pe_entry));
