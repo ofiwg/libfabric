@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _PINGPONG_SHARED_H_
-#define _PINGPONG_SHARED_H_
+#ifndef _BENCHMARK_SHARED_H_
+#define _BENCHMARK_SHARED_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,15 +40,16 @@ extern "C" {
 
 #include <stdbool.h>
 
-#define PONG_OPTS "vPj:"
-#define FT_PINGPONG_MAX_MSG_SIZE (test_size[TEST_CNT - 1].size)
+#define BENCHMARK_OPTS "vPj:W:"
+#define FT_BENCHMARK_MAX_MSG_SIZE (test_size[TEST_CNT - 1].size)
 
-void ft_parsepongopts(int op, char *optarg);
-void ft_pongusage(void);
+void ft_parse_benchmark_opts(int op, char *optarg);
+void ft_benchmark_usage(void);
 int pingpong();
+int bandwidth();
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _PINGPONG_SHARED_H_ */
+#endif /* _BENCHMARK_SHARED_H_ */

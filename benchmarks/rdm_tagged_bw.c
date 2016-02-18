@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013-2016 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -40,9 +40,8 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
 
-#include "shared.h"
+#include <shared.h>
 #include "benchmark_shared.h"
-
 
 static int init_fabric(void)
 {
@@ -85,7 +84,7 @@ static int run(void)
 
 	ret = ft_init_av();
 	if (ret)
-		return ret;
+		goto out;
 
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
@@ -93,18 +92,20 @@ static int run(void)
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = pingpong();
+			ret = bandwidth();
 			if (ret)
-				return ret;
+				goto out;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = pingpong();
+		ret = bandwidth();
 		if (ret)
-			return ret;
+			goto out;
 	}
 
-	return ft_finalize();
+	ft_finalize();
+out:
+	return ret;
 }
 
 int main(int argc, char **argv)
@@ -117,8 +118,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS BENCHMARK_OPTS)) !=
-			-1) {
+	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS BENCHMARK_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parse_benchmark_opts(op, optarg);
@@ -127,7 +127,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "Ping pong client and server using RDM.");
+			ft_csusage(argv[0], "Ping pong client and server using tagged messages.");
 			ft_benchmark_usage();
 			return EXIT_FAILURE;
 		}
@@ -137,8 +137,9 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_MSG;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR;
+	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
+	hints->caps = FI_TAGGED;
+	hints->mode = FI_LOCAL_MR;
 
 	ret = run();
 

@@ -46,7 +46,7 @@
 #include <rdma/fi_cm.h>
 
 #include "shared.h"
-#include "pingpong_shared.h"
+#include "benchmark_shared.h"
 
 
 static int common_setup(void)
@@ -134,21 +134,21 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "ht:" CS_OPTS INFO_OPTS PONG_OPTS)) !=
+	while ((op = getopt(argc, argv, "ht:" CS_OPTS INFO_OPTS BENCHMARK_OPTS)) !=
 			-1) {
 		switch (op) {
 		case 't':
 			timeout = atoi(optarg);
 			break;
 		default:
-			ft_parsepongopts(op, optarg);
+			ft_parse_benchmark_opts(op, optarg);
 			ft_parseinfo(op, optarg, hints);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Ping pong client and server using UD.");
-			ft_pongusage();
+			ft_benchmark_usage();
 			FT_PRINT_OPTS_USAGE("-t <timeout>",
 					"seconds before timeout on receive");
 			return EXIT_FAILURE;
