@@ -1,4 +1,4 @@
-.TH fi_cntr 3 "2016\-01\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_cntr 3 "2016\-02\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cntr - Completion and event counter operations
@@ -198,6 +198,9 @@ fi_cntr_wait.
 .PP
 If the call returns due to timeout, -FI_ETIMEDOUT will be returned.
 The error value associated with the counter remains unchanged.
+.PP
+It is invalid for applications to call this function if the counter has
+been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
 .SH RETURN VALUES
 .PP
 Returns 0 on success.

@@ -1,4 +1,4 @@
-.TH fi_cq 3 "2016\-01\-19" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_cq 3 "2016\-02\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cq - Completion queue operations
@@ -330,6 +330,9 @@ operations to fi_cq_read and fi_cq_readfrom.
 Their behavior is similar to the non-blocking calls, with the exception
 that the calls will not return until either a completion has been read
 from the CQ or an error or timeout occurs.
+.PP
+It is invalid for applications to call these functions if the CQ has
+been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
 .SS fi_cq_readerr
 .PP
 The read error function, fi_cq_readerr, retrieves information regarding
