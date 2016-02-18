@@ -353,7 +353,7 @@ static int sread_event(int timeout, uint64_t flags)
 
 	ret = fi_eq_sread(eq, &event, &entry, sizeof(entry), timeout, flags);
 	if (ret != sizeof(entry)) {
-		sprintf(err_buf, "fi_eq_read returned %d, %s", ret,
+		sprintf(err_buf, "fi_eq_sread returned %d, %s", ret,
 				fi_strerror(-ret));
 		return ret;
 	}
