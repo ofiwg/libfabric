@@ -555,10 +555,8 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		FI_IBV_RDM_ADDR_STR(_ep->my_rdm_addr));
 
 	_ep->n_buffs = FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM;
-	const int header_size = sizeof(struct fi_ibv_rdm_tagged_header);
 	_ep->buff_len = FI_IBV_RDM_TAGGED_DFLT_BUFFER_SIZE;
-	_ep->rndv_threshold = _ep->buff_len -
-	    FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE - header_size;
+	_ep->rndv_threshold = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
 
 	_ep->rq_wr_depth = FI_IBV_RDM_TAGGED_DFLT_RQ_SIZE;
 

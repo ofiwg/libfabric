@@ -919,23 +919,29 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_tagged_request *request,
 	wr.send_flags = 0;
 	wr.opcode = request->rma.opcode;
 
+	if (request->rma.opcode == IBV_WR_RDMA_WRITE &&
+	    request->len < p->ep_rdm->max_inline_rc) {
+		wr.send_flags |= IBV_SEND_INLINE;
+	}
+
 	/* buffered operation */
-	if (request->len <= p->ep_rdm->rndv_threshold) {
-		if (request->rma.opcode == IBV_WR_RDMA_WRITE &&
-		    request->len < p->ep_rdm->max_inline_rc) {
-			wr.send_flags |= IBV_SEND_INLINE;
-		}
+	if (request->sbuf) {
 		sge.addr = (uint64_t) (request->sbuf);
+		sge.lkey = request->conn->s_mr->lkey;
 		request->state.eager = FI_IBV_STATE_EAGER_RMA_WAIT4LC;
 	} else {
 		/* src_addr or dest_buf from an union
 		 *  for write or read properly */
 		sge.addr = (uint64_t) (request->src_addr);
-		request->state.rndv = FI_IBV_STATE_ZEROCOPY_RMA_WAIT4LC;
+		sge.lkey = request->rma.lkey;
+		if (request->len < p->ep_rdm->max_inline_rc) {
+			request->state.eager = FI_IBV_STATE_EAGER_RMA_WAIT4LC;
+		} else {
+			request->state.rndv = FI_IBV_STATE_ZEROCOPY_RMA_WAIT4LC;
+		}
 	}
 
 	sge.length = request->len;
-	sge.lkey = request->rma.lkey;
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep_rdm, wr.send_flags);
 	int ret = ibv_post_send(request->conn->qp, &wr, &bad_wr);
@@ -986,21 +992,20 @@ fi_ibv_rdm_rma_buffered_lc(struct fi_ibv_rdm_tagged_request *request,
 	FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(request->conn, p->ep);
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_RMA_WAIT4LC) {
-		if (request->rma.opcode == IBV_WR_RDMA_READ) {
-			memcpy(request->dest_buf, request->sbuf, request->len);
+		if (request->sbuf) {
+			if (request->rma.opcode == IBV_WR_RDMA_READ) {
+				memcpy(request->dest_buf, request->sbuf, request->len);
+			}
+			fi_ibv_rdm_tagged_set_buffer_status(request->sbuf,
+				BUF_STATUS_FREE);
 		}
-		fi_ibv_rdm_tagged_set_buffer_status(request->sbuf,
-			BUF_STATUS_FREE);
-	}
-
-	if (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
+		fi_ibv_rdm_tagged_move_to_ready_queue(request);
+		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
+	} else { /* FI_IBV_STATE_EAGER_READY_TO_FREE */
 		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request,
 					      FI_LOG_DEBUG);
 		fi_ibv_mem_pool_return(&request->mpe,
 				       &fi_ibv_rdm_tagged_request_pool);
-	} else {
-		fi_ibv_rdm_tagged_move_to_ready_queue(request);
-		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();

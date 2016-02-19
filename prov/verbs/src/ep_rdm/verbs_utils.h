@@ -74,6 +74,11 @@ struct fi_ibv_msg_ep;
 	 (8 * 1024 + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE) %        \
 	  FI_IBV_RDM_BUF_ALIGNMENT)
 
+#define FI_IBV_RDM_DFLT_BUFFERED_SSIZE					\
+	(FI_IBV_RDM_TAGGED_DFLT_BUFFER_SIZE -				\
+	 FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE -			\
+	 sizeof(struct fi_ibv_rdm_tagged_header))
+
 #define FI_IBV_RDM_TAGGED_DFLT_RQ_SIZE  (1000)
 
 /* TODO: CQs depths increased from 100 to 1000 to prevent

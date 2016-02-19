@@ -31,6 +31,7 @@
  */
 
 #include "fi_verbs.h"
+#include "ep_rdm/verbs_rdm.h"
 
 
 #define VERBS_IB_PREFIX "IB-0x"
@@ -717,6 +718,10 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	ret = fi_ibv_get_device_attrs(ctx, fi);
 	if (ret)
 		goto err;
+
+	if (ep_dom->type == FI_EP_RDM) {
+		fi->tx_attr->inject_size = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
+	}
 
 	switch (ctx->device->transport_type) {
 	case IBV_TRANSPORT_IB:

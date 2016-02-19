@@ -229,7 +229,7 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 
 	const size_t size = len + sizeof(struct fi_ibv_rdm_tagged_header);
 
-	if (size > ep->max_inline_rc) {
+	if (size > ep->rndv_threshold) {
 		return -FI_EMSGSIZE;
 	}
 
@@ -248,7 +248,8 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 			wr.wr.rdma.remote_addr =
 			    fi_ibv_rdm_tagged_get_remote_addr(conn, raw_sbuf);
 			wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
-			wr.send_flags = IBV_SEND_INLINE;
+			wr.send_flags = (size < ep->max_inline_rc)
+				? IBV_SEND_INLINE : 0;
 			wr.imm_data =
 			    fi_ibv_rdm_tagged_get_buff_service_data(raw_sbuf)->
 			    seq_number;
@@ -273,7 +274,10 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep,
 							 wr.send_flags);
 
-			if (!ibv_post_send(conn->qp, &wr, &bad_wr)) {
+			if (ibv_post_send(conn->qp, &wr, &bad_wr)) {
+				assert(0);
+				return -errno;
+			} else {
 				VERBS_DBG(FI_LOG_EP_DATA,
 					"posted %d bytes, conn %p, len %d, tag 0x%llx\n",
 					sge.length, conn, len, tag);
