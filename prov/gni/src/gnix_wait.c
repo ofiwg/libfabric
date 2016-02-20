@@ -238,7 +238,8 @@ static int gnix_wait_control(struct fid *wait, int command, void *arg)
 
 	switch (command) {
 	case FI_GETWAIT:
-		return _gnix_get_wait_obj(wait_fid_priv, arg);
+		/* return _gnix_get_wait_obj(wait_fid_priv, arg); */
+		return -FI_ENOSYS;
 	default:
 		return -FI_EINVAL;
 	}
