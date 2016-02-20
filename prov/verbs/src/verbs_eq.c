@@ -306,6 +306,7 @@ static struct fi_ops_eq fi_ibv_eq_ops = {
 
 static int fi_ibv_eq_control(fid_t fid, int command, void *arg)
 {
+	/*
 	struct fi_ibv_eq *eq;
 	int ret = 0;
 
@@ -324,6 +325,8 @@ static int fi_ibv_eq_control(fid_t fid, int command, void *arg)
 	}
 
 	return ret;
+	*/
+	return -FI_ENOSYS;
 }
 
 static int fi_ibv_eq_close(fid_t fid)

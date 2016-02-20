@@ -396,7 +396,8 @@ static int gnix_cntr_control(struct fid *cntr, int command, void *arg)
 		*(uint64_t *)arg = cntr_priv->attr.flags;
 		break;
 	case FI_GETWAIT:
-		return _gnix_get_wait_obj(cntr_priv->wait, arg);
+		/* return _gnix_get_wait_obj(cntr_priv->wait, arg); */
+		return -FI_ENOSYS;
 	default:
 		return -FI_EINVAL;
 	}

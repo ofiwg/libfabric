@@ -336,6 +336,7 @@ static struct fi_ops_cq fi_ibv_cq_data_ops = {
 
 static int fi_ibv_cq_control(fid_t fid, int command, void *arg)
 {
+	/*
 	struct fi_ibv_cq *cq;
 	int ret = 0;
 
@@ -354,6 +355,8 @@ static int fi_ibv_cq_control(fid_t fid, int command, void *arg)
 	}
 
 	return ret;
+	*/
+	return -FI_ENOSYS;
 }
 
 static int fi_ibv_cq_close(fid_t fid)

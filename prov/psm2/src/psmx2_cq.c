@@ -782,6 +782,7 @@ static int psmx2_cq_close(fid_t fid)
 
 static int psmx2_cq_control(struct fid *fid, int command, void *arg)
 {
+	/*
 	struct psmx2_fid_cq *cq;
 	int ret = 0;
 
@@ -797,6 +798,8 @@ static int psmx2_cq_control(struct fid *fid, int command, void *arg)
 	}
 
 	return ret;
+	*/
+	return -FI_ENOSYS;
 }
 
 static struct fi_ops psmx2_fi_ops = {
