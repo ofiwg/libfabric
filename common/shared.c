@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
@@ -61,6 +62,9 @@ struct fi_context tx_ctx, rx_ctx;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 int ft_skip_mr = 0;
+int ft_parent_proc = 0;
+pid_t ft_child_pid = 0;
+int ft_socket_pair[2];
 
 fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
 void *buf, *tx_buf, *rx_buf;
@@ -1081,6 +1085,88 @@ int ft_sync()
 	}
 
 	return ret;
+}
+
+int ft_sync_pair(int status)
+{
+	int ret;
+	int pair_status;
+
+	if (ft_parent_proc) {
+		ret = write(ft_socket_pair[1], &status, sizeof(int));
+		if (ret < 0) {
+			FT_PRINTERR("write", errno);
+			return ret;
+		}
+		ret = read(ft_socket_pair[1], &pair_status, sizeof(int));
+		if (ret < 0) {
+			FT_PRINTERR("read", errno);
+			return ret;
+		}
+	} else {
+		ret = read(ft_socket_pair[0], &pair_status, sizeof(int));
+		if (ret < 0) {
+			FT_PRINTERR("read", errno);
+			return ret;
+		}
+		ret = write(ft_socket_pair[0], &status, sizeof(int));
+		if (ret < 0) {
+			FT_PRINTERR("write", errno);
+			return ret;
+		}
+	}
+
+	/* check status reported the other guy */
+	if (pair_status != FI_SUCCESS)
+		return pair_status;
+
+	return 0;
+}
+
+int ft_fork_and_pair()
+{
+	int ret;
+
+	ret = socketpair(AF_LOCAL, SOCK_STREAM, 0, ft_socket_pair);
+	if (ret) {
+		FT_PRINTERR("socketpair", errno);
+		return -errno;
+	}
+
+	ft_child_pid = fork();
+	if (ft_child_pid < 0) {
+		FT_PRINTERR("fork", ft_child_pid);
+		return -errno;
+	}
+	if (ft_child_pid)
+		ft_parent_proc = 1;
+
+	return 0;
+}
+
+int ft_wait_child()
+{
+	int ret;
+
+	ret = close(ft_socket_pair[0]);
+	if (ret) {
+		FT_PRINTERR("close", errno);
+		return ret;
+	}
+	ret = close(ft_socket_pair[1]);
+	if (ret) {
+		FT_PRINTERR("close", errno);
+		return ret;
+	}
+	if (ft_parent_proc) {
+		ret = waitpid(ft_child_pid, NULL, WCONTINUED);
+		if (ret < 0) {
+			FT_PRINTERR("waitpid", errno);
+			return ret;
+		}
+	}
+
+	return 0;
 }
 
 int ft_finalize(void)

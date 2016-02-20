@@ -161,6 +161,8 @@ void ft_fill_buf(void *buf, int size);
 int ft_check_buf(void *buf, int size);
 uint64_t ft_init_cq_data(struct fi_info *info);
 extern int ft_skip_mr;
+extern int ft_parent_proc;
+extern int ft_socket_pair[2];
 #define ADDR_OPTS "b:p:s:a:"
 #define INFO_OPTS "n:f:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
@@ -255,6 +257,9 @@ static inline void ft_stop(void)
 	opts.options &= ~FT_OPT_ACTIVE;
 }
 int ft_sync();
+int ft_sync_pair(int status);
+int ft_fork_and_pair();
+int ft_wait_child();
 int ft_finalize();
 
 size_t ft_rx_prefix_size();
