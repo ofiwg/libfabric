@@ -42,6 +42,7 @@ static struct fi_ops_fabric udpx_fabric_ops = {
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = fi_eq_create,
 	.wait_open = fi_wait_fd_open,
+	.trywait = fi_no_trywait
 };
 
 static int udpx_fabric_close(fid_t fid)

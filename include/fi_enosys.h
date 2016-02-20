@@ -67,6 +67,7 @@ static struct fi_ops_fabric X = {
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = fi_no_eq_open,
 	.wait_open = fi_no_wait_open,
+	.trywait = fi_no_trywait,
 };
 */
 int fi_no_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
@@ -77,6 +78,7 @@ int fi_no_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		struct fid_eq **eq, void *context);
 int fi_no_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		struct fid_wait **waitset);
+int fi_no_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
 /*
 static struct fi_ops_atomic X = {

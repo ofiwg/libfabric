@@ -74,6 +74,10 @@ int fi_no_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 {
 	return -FI_ENOSYS;
 }
+int fi_no_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+{
+	return -FI_ENOSYS;
+}
 
 /*
  * struct fi_ops_atomic

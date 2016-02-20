@@ -382,6 +382,8 @@ struct fi_ops_fabric {
 			struct fid_eq **eq, void *context);
 	int	(*wait_open)(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 			struct fid_wait **waitset);
+	int	(*trywait)(struct fid_fabric *fabric, struct fid **fids,
+			int count);
 };
 
 struct fid_fabric {
