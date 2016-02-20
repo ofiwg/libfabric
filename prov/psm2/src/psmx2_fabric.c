@@ -95,6 +95,7 @@ static struct fi_ops_fabric psmx2_fabric_ops = {
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = psmx2_eq_open,
 	.wait_open = psmx2_wait_open,
+	.trywait = fi_no_trywait
 };
 
 int psmx2_fabric(struct fi_fabric_attr *attr,

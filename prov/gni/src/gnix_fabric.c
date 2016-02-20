@@ -86,7 +86,8 @@ static struct fi_ops_fabric gnix_fab_ops = {
 	.domain = gnix_domain_open,
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = gnix_eq_open,
-	.wait_open = gnix_wait_open
+	.wait_open = gnix_wait_open,
+	.trywait = fi_no_trywait
 };
 
 static void __fabric_destruct(void *obj)

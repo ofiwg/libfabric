@@ -296,6 +296,12 @@ struct fid_cntr {
 #ifndef FABRIC_DIRECT
 
 static inline int
+fi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+{
+	return fabric->ops->trywait(fabric, fids, count);
+}
+
+static inline int
 fi_wait(struct fid_wait *waitset, int timeout)
 {
 	return waitset->ops->wait(waitset, timeout);
