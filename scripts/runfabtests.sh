@@ -297,7 +297,7 @@ function cs_test {
 
 	${SERVER_CMD} "${BIN_PATH}${test_exe} -s $S_INTERFACE" &> $s_outp &
 	p1=$!
-	sleep 1s
+	sleep 1
 
 	${CLIENT_CMD} "${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE" &> $c_outp &
 	p2=$!
@@ -339,7 +339,7 @@ function complex_test {
 
 	${SERVER_CMD} "${BIN_PATH}${test_exe} -s $S_INTERFACE -x" &> $s_outp &
 	p1=$!
-	sleep 1s
+	sleep 1
 
 	${CLIENT_CMD} "${BIN_PATH}${test_exe} -s $C_INTERFACE $S_INTERFACE -f ${PROV} -t $config" &> $c_outp &
 	p2=$!
