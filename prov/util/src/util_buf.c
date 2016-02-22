@@ -154,7 +154,7 @@ void util_buf_release(struct util_buf_pool *pool, void *buf)
 	struct util_buf_footer *buf_ftr;
 
 	buf_ftr = (struct util_buf_footer *) ((char *) buf + pool->data_sz);
-	buf_ftr->region->num_used++;
+	buf_ftr->region->num_used--;
 	slist_insert_head(&util_buf->entry, &pool->buf_list);
 }
 #endif
