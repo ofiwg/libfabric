@@ -41,7 +41,7 @@
 #include "gnix_util.h"
 #include "gnix.h"
 
-#define MIN_BLOCK_SIZE 16
+#define MIN_BLOCK_SIZE 256
 
 /* The following table was taken from:
  * http://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn

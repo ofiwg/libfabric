@@ -36,7 +36,7 @@
 #include <criterion/criterion.h>
 #include <time.h>
 
-#define LEN (32 * 1024 * 1024)	/* buddy_handle->len */
+#define LEN (1024 * 1024)	/* buddy_handle->len */
 #define MAX_LEN (LEN / 2)	/* buddy_handle->max */
 #define MIN_LEN MIN_BLOCK_SIZE
 
