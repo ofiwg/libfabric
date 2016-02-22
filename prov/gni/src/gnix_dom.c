@@ -468,13 +468,17 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	GNIX_INFO(FI_LOG_DOMAIN,
 		  "gnix rdma credentials returned ptag %u cookie 0x%x\n",
 		  ptag, cookie);
+
 	domain = calloc(1, sizeof *domain);
 	if (domain == NULL) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
-	domain->mr_cache_attr = __default_mr_cache_attr;
+	domain->mr_cache_attr = _gnix_default_mr_cache_attr;
+	domain->mr_cache_attr.reg_context = (void *) domain;
+	domain->mr_cache_attr.dereg_context = NULL;
+	domain->mr_cache_attr.destruct_context = NULL;
 	domain->mr_cache = NULL;
 	fastlock_init(&domain->mr_cache_lock);
 
