@@ -46,14 +46,14 @@ DEFINE_LIST(fi_ibv_rdm_tagged_recv_posted_queue);
 DEFINE_LIST(fi_ibv_rdm_tagged_recv_unexp_queue);
 DEFINE_LIST(fi_ibv_rdm_tagged_send_postponed_queue);
 
-struct fi_ibv_mem_pool fi_ibv_rdm_tagged_request_pool;
-struct fi_ibv_mem_pool fi_ibv_rdm_tagged_postponed_pool;
+struct util_buf_pool *fi_ibv_rdm_tagged_request_pool;
+struct util_buf_pool *fi_ibv_rdm_tagged_postponed_pool;
 
 /*
  * extra buffer size equal eager buffer size, it is used for any intermediate
  * needs like unexpected recv, pack/unpack noncontig messages, etc
  */
-struct fi_ibv_mem_pool fi_ibv_rdm_tagged_extra_buffers_pool;
+struct util_buf_pool *fi_ibv_rdm_tagged_extra_buffers_pool;
 
 static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep);
 static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep);
@@ -110,9 +110,8 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 {
 	int ret = 0;
 
-	struct fi_ibv_rdm_tagged_request *request =
-	    (struct fi_ibv_rdm_tagged_request *)
-	    fi_ibv_mem_pool_get(&fi_ibv_rdm_tagged_request_pool);
+	struct fi_ibv_rdm_tagged_request *request = 
+		util_buf_get(fi_ibv_rdm_tagged_request_pool);
 	fi_ibv_rdm_tagged_zero_request(request);
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
@@ -294,9 +293,8 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 static ssize_t
 fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
 {
-	struct fi_ibv_rdm_tagged_request *request =
-	    (struct fi_ibv_rdm_tagged_request *)
-	    fi_ibv_mem_pool_get(&fi_ibv_rdm_tagged_request_pool);
+	struct fi_ibv_rdm_tagged_request *request = 
+		util_buf_get(fi_ibv_rdm_tagged_request_pool);
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
@@ -354,7 +352,6 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 	const struct iovec *iov, void **desc, size_t count, fi_addr_t dest_addr,
 	uint64_t tag, void *context)
 {
-	struct fi_ibv_rdm_tagged_extra_buff *iovec_arr;
 	struct fi_ibv_rdm_tagged_send_start_data sdata = {
 		.ep_rdm = container_of(ep, struct fi_ibv_rdm_ep, ep_fid),
 		.conn = (struct fi_ibv_rdm_tagged_conn *) dest_addr,
@@ -389,10 +386,7 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 		 * extra allocation & memcpy can be optimized if it's possible
 		 * to send immediately
 		 */
-		iovec_arr = (struct fi_ibv_rdm_tagged_extra_buff *)
-			fi_ibv_mem_pool_get
-			(&fi_ibv_rdm_tagged_extra_buffers_pool);
-		sdata.buf.iovec_arr = (struct iovec*)iovec_arr->payload;
+		sdata.buf.iovec_arr = util_buf_get(fi_ibv_rdm_tagged_extra_buffers_pool);
 		for (i = 0; i < count; i++) {
 			sdata.buf.iovec_arr[i].iov_base = iov[i].iov_base;
 			sdata.buf.iovec_arr[i].iov_len = iov[i].iov_len;
@@ -487,9 +481,7 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 			    (found_request, ep);
 			request = found_request;
 		} else {
-			request = (struct fi_ibv_rdm_tagged_request *)
-			    fi_ibv_mem_pool_get
-			    (&fi_ibv_rdm_tagged_request_pool);
+			request = util_buf_get(fi_ibv_rdm_tagged_request_pool);
 			fi_ibv_rdm_tagged_zero_request(request);
 
 			FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ",

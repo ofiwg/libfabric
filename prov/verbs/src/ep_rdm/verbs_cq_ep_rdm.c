@@ -38,8 +38,7 @@
 #include "verbs_queuing.h"
 
 
-extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_request_pool;
-
+extern struct util_buf_pool* fi_ibv_rdm_tagged_request_pool;
 
 static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
                                              size_t count, fi_addr_t * src_addr)
@@ -73,8 +72,7 @@ static ssize_t fi_ibv_rdm_tagged_cq_readfrom(struct fid_cq *cq, void *buf,
 		if (completed_req->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) {
 			FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", completed_req,
 						      FI_LOG_DEBUG);
-			fi_ibv_mem_pool_return(&completed_req->mpe,
-						&fi_ibv_rdm_tagged_request_pool);
+			util_buf_release(fi_ibv_rdm_tagged_request_pool, completed_req);
 		} else {
 			completed_req->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 		}
