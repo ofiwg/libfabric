@@ -310,10 +310,10 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 
 	VERBS_DBG(FI_LOG_EP_DATA,
 	     "fi_senddatato: RNDV conn %p, tag 0x%llx, len %d, src_addr %p,"
-	     "rkey 0x%lx, fi_ctx %p, imm %d, pend_send %d\n", conn,
+	     "rkey 0x%lx, fi_ctx %p, imm %d, post_send %d\n", conn,
 	     (long long unsigned int)request->tag, (int)request->len,
 	     request->src_addr, (long unsigned int)mr->rkey, request->context,
-	     (int)wr.imm_data, p->ep->pend_send);
+	     (int)wr.imm_data, p->ep->posted_sends);
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%llx\n",
@@ -353,6 +353,11 @@ fi_ibv_rdm_tagged_rndv_rts_lc(struct fi_ibv_rdm_tagged_request *request,
 
 	if (request->state.eager == FI_IBV_STATE_EAGER_SEND_WAIT4LC) {
 		request->state.eager = FI_IBV_STATE_EAGER_SEND_END;
+	} else { /* (request->state.eager == FI_IBV_STATE_EAGER_READY_TO_FREE) */
+		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request,
+					      FI_LOG_DEBUG);
+		fi_ibv_mem_pool_return(&request->mpe,
+				       &fi_ibv_rdm_tagged_request_pool);
 	}
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
@@ -381,6 +386,10 @@ fi_ibv_rdm_tagged_rndv_end(struct fi_ibv_rdm_tagged_request *request,
 	int ret = ibv_dereg_mr(request->rndv.mr);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_dereg_mr", errno);
+	}
+
+	if (request->state.eager == FI_IBV_STATE_EAGER_SEND_END) {
+		request->state.eager = FI_IBV_STATE_EAGER_READY_TO_FREE;
 	}
 
 	request->state.rndv = FI_IBV_STATE_RNDV_SEND_END;
@@ -772,8 +781,8 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_tagged_request *request,
 		ibv_dereg_mr(request->rndv.mr);
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"SENDING RNDV ACK: conn %p, sends_outgoing = %d, "
-			"pend_send = %d\n", conn, conn->sends_outgoing,
-			p->ep->pend_send);
+			"post_send = %d\n", conn, conn->sends_outgoing,
+			p->ep->posted_sends);
 	} else {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);

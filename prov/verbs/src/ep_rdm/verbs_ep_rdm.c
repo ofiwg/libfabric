@@ -192,7 +192,7 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 				       &fi_ibv_rdm_tagged_request_pool);
 
 		VERBS_DBG(FI_LOG_EP_DATA,
-			  "\t\t-> SUCCESS, pend recv %d\n", fid_ep->pend_recv);
+			  "\t\t-> SUCCESS, post recv %d\n", fid_ep->posted_recvs);
 
 		err = 0;
 	}
@@ -283,13 +283,18 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 	ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
 
 	ep->is_closing = 1;
-	// assert(ep->pend_send == 0);
-	// assert(ep->pend_recv == 0); //TODO
 	_fi_ibv_rdm_tagged_cm_progress_running = 0;
 	pthread_join(ep->cm_progress_thread, &status);
 	pthread_mutex_destroy(&ep->cm_lock);
 
-	struct fi_ibv_rdm_tagged_conn *conn, *tmp;
+	/* All posted sends are waiting local completions */
+	while (ep->posted_sends > 0) {
+		fi_ibv_rdm_tagged_poll(ep);
+	}
+
+	assert(ep->posted_recvs == 0);
+
+	struct fi_ibv_rdm_tagged_conn *conn = NULL, *tmp = NULL;
 
 	HASH_ITER(hh, fi_ibv_rdm_tagged_conn_hash, conn, tmp) {
 		HASH_DEL(fi_ibv_rdm_tagged_conn_hash, conn);
@@ -566,9 +571,8 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	 */
 	_ep->sq_wr_depth = 2 * (_ep->n_buffs + 1);
 
-	_ep->total_outgoing_send = 0;
-	_ep->pend_send = 0;
-	_ep->pend_recv = 0;
+	_ep->posted_sends = 0;
+	_ep->posted_recvs = 0;
 	_ep->recv_preposted_threshold = MAX(0.2 * _ep->rq_wr_depth, 5);
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);

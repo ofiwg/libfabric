@@ -139,7 +139,7 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 		    "fi_recvfrom: conn %p, tag 0x%llx, len %d, rbuf %p, fi_ctx %p, "
 		     "pend_recv %d\n",
 		     conn, (long long unsigned int)tag, (int)len, buf, context,
-		     ep->pend_recv);
+		     ep->posted_recvs);
 
 		if (ret || request->state.eager ==
 		    FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
@@ -659,7 +659,7 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 	int i = 0;
 	int ret = 0;
 
-	if (ep->total_outgoing_send > 0) {
+	if (ep->posted_sends > 0) {
 		do {
 			ret = ibv_poll_cq(ep->scq, wc_count, wc);
 			for (i = 0; i < ret; ++i) {
@@ -740,7 +740,7 @@ wc_error:
 				"got ibv_wc.status = %d:%s, pend_send: %d, connection: %p\n",
 				wc[i].status,
 				ibv_wc_status_str(wc[i].status),
-				ep->pend_send, conn);
+				ep->posted_sends, conn);
 			assert(0);
 		}
 	}
