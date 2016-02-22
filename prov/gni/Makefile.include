@@ -97,6 +97,7 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/rdm_sr.c \
 	prov/gni/test/rdm_tagged_sr.c \
 	prov/gni/test/tags.c \
+	prov/gni/test/api.c \
 	prov/gni/test/utils.c \
 	prov/gni/test/vc.c \
 	prov/gni/test/wait.c \

@@ -1380,6 +1380,22 @@ static int __gnix_ep_bound_prep(struct gnix_fid_domain *domain,
 	return ret;
 }
 
+static void gnix_ep_caps(struct gnix_fid_ep *ep_priv, uint64_t caps)
+{
+	if (fi_recv_allowed(caps & ~FI_TAGGED))
+		ep_priv->ep_ops.msg_recv_allowed = 1;
+
+	if (fi_send_allowed(caps & ~FI_TAGGED))
+		ep_priv->ep_ops.msg_send_allowed = 1;
+
+	if (fi_recv_allowed(caps & ~FI_MSG))
+		ep_priv->ep_ops.tagged_recv_allowed = 1;
+
+	if (fi_send_allowed(caps & ~FI_MSG))
+		ep_priv->ep_ops.tagged_send_allowed = 1;
+
+}
+
 int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
@@ -1474,6 +1490,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep_fid.rma = &gnix_ep_rma_ops;
 	ep_priv->ep_fid.tagged = &gnix_ep_tagged_ops;
 	ep_priv->ep_fid.atomic = &gnix_ep_atomic_ops;
+	gnix_ep_caps(ep_priv, ep_priv->caps);
 
 	ep_priv->ep_fid.cm = &gnix_cm_ops;
 

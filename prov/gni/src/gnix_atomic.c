@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -43,7 +43,8 @@
 #include "gnix_cntr.h"
 
 static int __gnix_amo_send_err(struct gnix_fid_ep *ep,
-			       struct gnix_fab_req *req)
+			       struct gnix_fab_req *req,
+			       int error)
 {
 	struct gnix_fid_cntr *cntr = NULL;
 	int rc = FI_SUCCESS;
@@ -51,7 +52,7 @@ static int __gnix_amo_send_err(struct gnix_fid_ep *ep,
 
 	if (ep->send_cq) {
 		rc = _gnix_cq_add_error(ep->send_cq, req->user_context,
-					flags, 0, 0, 0, 0, 0, FI_ECANCELED,
+					flags, 0, 0, 0, 0, 0, error,
 					GNI_RC_TRANSACTION_ERROR, NULL);
 		if (rc) {
 			GNIX_WARN(FI_LOG_EP_DATA,
@@ -131,12 +132,12 @@ static void __gnix_amo_fr_complete(struct gnix_fab_req *req,
 	_gnix_fr_free(req->vc->ep, req);
 }
 
-static int __gnix_amo_post_err(struct gnix_tx_descriptor *txd)
+static int __gnix_amo_post_err(struct gnix_tx_descriptor *txd, int error)
 {
 	struct gnix_fab_req *req = txd->req;
 	int rc;
 
-	rc = __gnix_amo_send_err(req->vc->ep, req);
+	rc = __gnix_amo_send_err(req->vc->ep, req, error);
 	if (rc != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "__gnix_amo_send_err() failed: %d\n",
@@ -155,7 +156,7 @@ static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
 	uint64_t read_data64;
 
 	if (tx_status != GNI_RC_SUCCESS) {
-		return __gnix_amo_post_err(txd);
+		return __gnix_amo_post_err(txd, FI_ECANCELED);
 	}
 
 	/* FI_ATOMIC_READ data is delivered to operand buffer in addition to
@@ -285,6 +286,17 @@ int _gnix_amo_post_req(void *data)
 
 	txd->completer_fn = __gnix_amo_txd_complete;
 	txd->req = fab_req;
+
+	if (!gnix_ops_allowed(ep, fab_req->vc->peer_caps, fab_req->flags)) {
+		GNIX_DEBUG(FI_LOG_EP_DATA, "flags:0x%llx, %s\n", fab_req->flags,
+			   fi_tostr(&fab_req->flags, FI_TYPE_OP_FLAGS));
+		GNIX_DEBUG(FI_LOG_EP_DATA, "caps:0x%llx, %s\n",
+			   ep->caps, fi_tostr(&ep->caps, FI_TYPE_CAPS));
+		GNIX_DEBUG(FI_LOG_EP_DATA, "peer_caps:0x%llx, %s\n",
+			   fab_req->vc->peer_caps,
+			   fi_tostr(&fab_req->vc->peer_caps, FI_TYPE_OP_FLAGS));
+		return __gnix_amo_post_err(txd, FI_EOPNOTSUPP);
+	}
 
 	/* Mem handle CRC is not validated during FMA operations.  Skip this
 	 * costly calculation. */

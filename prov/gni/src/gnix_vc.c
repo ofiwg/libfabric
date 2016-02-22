@@ -92,7 +92,8 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 				    int src_vc_id,
 				    uint64_t src_vc_vaddr,
 				    gni_smsg_attr_t *src_smsg_attr,
-				    gni_mem_handle_t *src_irq_cq_mhdl)
+				    gni_mem_handle_t *src_irq_cq_mhdl,
+				    uint64_t caps)
 {
 	size_t __attribute__((unused)) len;
 	char *cptr = sbuf;
@@ -104,8 +105,12 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 
 	assert(sbuf != NULL);
 
-	len = sizeof(uint8_t) + sizeof(struct gnix_address) * 2 + sizeof(int)
-		+ sizeof(gni_smsg_attr_t) + sizeof(gni_mem_handle_t);
+	len = sizeof(rtype) +
+	      sizeof(struct gnix_address) * 2 +
+	      sizeof(int) +
+	      sizeof(uint64_t) * 2 +
+	      sizeof(gni_smsg_attr_t) +
+	      sizeof(gni_mem_handle_t);
 	assert(len <= GNIX_CM_NIC_MAX_MSG_SIZE);
 
 	memcpy(cptr, &rtype, sizeof(rtype));
@@ -121,7 +126,8 @@ static void __gnix_vc_pack_conn_req(char *sbuf,
 	memcpy(cptr, src_smsg_attr, sizeof(gni_smsg_attr_t));
 	cptr += sizeof(gni_smsg_attr_t);
 	memcpy(cptr, src_irq_cq_mhdl, sizeof(gni_mem_handle_t));
-
+	cptr += sizeof(gni_mem_handle_t);
+	memcpy(cptr, &caps, sizeof(uint64_t));
 }
 
 /*
@@ -133,10 +139,10 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
 				      int *src_vc_id,
 				      uint64_t *src_vc_vaddr,
 				      gni_smsg_attr_t *src_smsg_attr,
-				      gni_mem_handle_t *src_irq_cq_mhndl)
+				      gni_mem_handle_t *src_irq_cq_mhndl,
+				      uint64_t *caps)
 {
 	size_t __attribute__((unused)) len;
-	uint8_t rtype;
 	char *cptr = rbuf;
 
 	/*
@@ -144,10 +150,6 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
 	 */
 
 	assert(rbuf);
-
-	len = sizeof(rtype) + sizeof(struct gnix_address) * 2 + sizeof(int)
-		+ sizeof(gni_smsg_attr_t) + sizeof(gni_mem_handle_t);
-	assert(len <= GNIX_CM_NIC_MAX_MSG_SIZE);
 
 	cptr += sizeof(uint8_t);
 	memcpy(target_addr, cptr, sizeof(struct gnix_address));
@@ -161,6 +163,8 @@ static void __gnix_vc_unpack_conn_req(char *rbuf,
 	memcpy(src_smsg_attr, cptr, sizeof(gni_smsg_attr_t));
 	cptr += sizeof(gni_smsg_attr_t);
 	memcpy(src_irq_cq_mhndl, cptr, sizeof(gni_mem_handle_t));
+	cptr += sizeof(gni_mem_handle_t);
+	memcpy(caps, cptr, sizeof(uint64_t));
 }
 
 /*
@@ -179,8 +183,10 @@ static void __gnix_vc_pack_conn_resp(char *sbuf,
 				     uint64_t resp_vc_vaddr,
 				     int resp_vc_id,
 				     gni_smsg_attr_t *resp_smsg_attr,
-				     gni_mem_handle_t *resp_irq_cq_mhndl)
+				     gni_mem_handle_t *resp_irq_cq_mhndl,
+				     uint64_t caps)
 {
+	size_t __attribute__((unused)) len;
 	char *cptr = sbuf;
 	uint8_t rtype = GNIX_VC_CONN_RESP;
 
@@ -189,6 +195,13 @@ static void __gnix_vc_pack_conn_resp(char *sbuf,
 	 */
 
 	assert(sbuf != NULL);
+
+	len = sizeof(rtype) +
+	      sizeof(uint64_t) * 3 +
+	      sizeof(int) +
+	      sizeof(gni_smsg_attr_t) +
+	      sizeof(gni_mem_handle_t);
+	assert(len <= GNIX_CM_NIC_MAX_MSG_SIZE);
 
 	memcpy(cptr, &rtype, sizeof(rtype));
 	cptr += sizeof(rtype);
@@ -201,6 +214,8 @@ static void __gnix_vc_pack_conn_resp(char *sbuf,
 	memcpy(cptr, resp_smsg_attr, sizeof(gni_smsg_attr_t));
 	cptr += sizeof(gni_smsg_attr_t);
 	memcpy(cptr, resp_irq_cq_mhndl, sizeof(gni_mem_handle_t));
+	cptr += sizeof(gni_mem_handle_t);
+	memcpy(cptr, &caps, sizeof(uint64_t));
 }
 
 /*
@@ -211,7 +226,8 @@ static void __gnix_vc_unpack_resp(char *rbuf,
 				  uint64_t *resp_vc_vaddr,
 				  int *resp_vc_id,
 				  gni_smsg_attr_t *resp_smsg_attr,
-				  gni_mem_handle_t *resp_irq_cq_mhndl)
+				  gni_mem_handle_t *resp_irq_cq_mhndl,
+				  uint64_t *caps)
 {
 	char *cptr = rbuf;
 
@@ -226,6 +242,8 @@ static void __gnix_vc_unpack_resp(char *rbuf,
 	memcpy(resp_smsg_attr, cptr, sizeof(gni_smsg_attr_t));
 	cptr += sizeof(gni_smsg_attr_t);
 	memcpy(resp_irq_cq_mhndl, cptr, sizeof(gni_mem_handle_t));
+	cptr += sizeof(gni_mem_handle_t);
+	memcpy(caps, cptr, sizeof(uint64_t));
 }
 
 static void __gnix_vc_get_msg_type(char *rbuf,
@@ -435,6 +453,7 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 		}
 		vc->conn_state = GNIX_VC_CONNECTED;
 		vc->peer_id = vc->vc_id;
+		vc->peer_caps = ep->caps;
 		GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
 			   vc);
 		goto exit_w_lock;
@@ -518,6 +537,7 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 
 	vc->conn_state = GNIX_VC_CONNECTED;
 	vc->peer_id = vc_peer->vc_id;
+	vc->peer_caps = ep->caps;
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
 		   vc);
 	vc_peer->conn_state = GNIX_VC_CONNECTED;
@@ -546,6 +566,7 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	struct gnix_fid_ep *ep;
 	gni_smsg_attr_t peer_smsg_attr;
 	gni_mem_handle_t tmp_mem_hndl;
+	uint64_t peer_caps;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -558,7 +579,8 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 			      &peer_vc_addr,
 			      &peer_id,
 			      &peer_smsg_attr,
-			      &tmp_mem_hndl);
+			      &tmp_mem_hndl,
+			      &peer_caps);
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
 		"resp rx: (From Aries 0x%x Id %d src vc %p peer vc addr 0x%lx)\n",
@@ -607,6 +629,7 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
 		   " moving vc %p to state connected\n",vc);
 
+	vc->peer_caps = peer_caps;
 	fastlock_release(&ep->vc_ht_lock);
 
 	ret = _gnix_vc_schedule(vc);
@@ -634,6 +657,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 	int src_vc_id;
 	gni_smsg_attr_t src_smsg_attr;
 	uint64_t src_vc_ptr;
+	uint64_t peer_caps;
 	struct wq_hndl_conn_req *data = NULL;
 	gni_mem_handle_t tmp_mem_hndl;
 
@@ -651,7 +675,8 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 				  &src_vc_id,
 				  &src_vc_ptr,
 				  &src_smsg_attr,
-				  &tmp_mem_hndl);
+				  &tmp_mem_hndl,
+				  &peer_caps);
 
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL,
@@ -816,6 +841,8 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 				"_gnix_cm_nic_progress returned %s\n",
 				fi_strerror(-ret));
 	}
+
+	vc->peer_caps = peer_caps;
 err:
 	return ret;
 }
@@ -946,7 +973,8 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 				 (uint64_t)vc,
 				 vc->vc_id,
 				 &smsg_mbox_attr,
-				 &ep->nic->irq_mem_hndl);
+				 &ep->nic->irq_mem_hndl,
+				 ep->caps);
 
 	/*
 	 * try to send the message, if it succeeds,
@@ -1079,7 +1107,8 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 				vc->vc_id,
 				(uint64_t)vc,
 				&smsg_mbox_attr,
-				&ep->nic->irq_mem_hndl);
+				&ep->nic->irq_mem_hndl,
+				ep->caps);
 
 	/*
 	 * try to send the message, if -FI_EAGAIN is returned, okay,
