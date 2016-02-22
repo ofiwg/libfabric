@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -664,7 +664,7 @@ static void __gnix_tag_list_remove_tag_by_req(
 	struct dlist_entry *item;
 
 	element = &req->msg.tle;
-	item = (struct dlist_entry *) element;
+	item = (struct dlist_entry *) &element->free;
 	dlist_remove(item);
 	element->free.next = NULL;
 }
