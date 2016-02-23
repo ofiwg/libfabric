@@ -67,31 +67,24 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
-	ret = fi_control(&rxcq->fid, FI_GETWAIT, (void *) &fd);
-	if (ret) {
-		FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
-		return ret;
-	}
-
 	memset((void *) &event, 0, sizeof event);
-	event.events = EPOLLIN;
-	event.data.ptr = (void *) &rxcq->fid;
-	ret = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &event);
-	if (ret) {
-		ret = -errno;
-		FT_PRINTERR("epoll_ctl", ret);
-		return ret;
+	if (opts.dst_addr) {
+		ret = fi_control(&txcq->fid, FI_GETWAIT, (void *) &fd);
+		if (ret) {
+			FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
+			return ret;
+		}
+		event.data.ptr = (void *) &txcq->fid;
+	} else {
+		ret = fi_control(&rxcq->fid, FI_GETWAIT, (void *) &fd);
+		if (ret) {
+			FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
+			return ret;
+		}
+		event.data.ptr = (void *) &rxcq->fid;
 	}
 
-	ret = fi_control(&txcq->fid, FI_GETWAIT, (void *) &fd);
-	if (ret) {
-		FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
-		return ret;
-	}
-
-	memset((void *)&event, 0, sizeof event);
 	event.events = EPOLLIN;
-	event.data.ptr = (void *) &txcq->fid;
 	ret = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &event);
 	if (ret) {
 		ret = -errno;
@@ -224,6 +217,7 @@ static int send_recv()
 {
 	struct fi_cq_entry comp;
 	struct epoll_event event;
+	struct fid *fids[1];
 	int ret;
 
 	if (opts.dst_addr) {
@@ -233,20 +227,24 @@ static int send_recv()
 		if (ret)
 			return ret;
 
-		memset((void *)&event, 0, sizeof event);
-		ret = TEMP_FAILURE_RETRY(epoll_wait(epfd, &event, 1, -1));
-		if (ret < 0) {
-			ret = -errno;
-			FT_PRINTERR("epoll_wait", ret);
-			return ret;
-		}
+		memset(&event, 0, sizeof event);
+		fids[0] = &txcq->fid;
+		do {
+			if (fi_trywait(fabric, fids, 1) == FI_SUCCESS) {
+				ret = TEMP_FAILURE_RETRY(epoll_wait(epfd, &event, 1, -1));
+				if (ret < 0) {
+					ret = -errno;
+					FT_PRINTERR("epoll_wait", ret);
+					return ret;
+				}
 
-		if (event.data.ptr != &txcq->fid) {
-			fprintf(stdout, "unexpected event!\n");
-		}
+				if (event.data.ptr != &txcq->fid)
+					fprintf(stdout, "unexpected event!\n");
+			}
 
-		/* Read send queue */
-		ret = fi_cq_sread(txcq, &comp, 1, NULL, 0);
+			ret = fi_cq_read(txcq, &comp, 1);
+		} while (ret == -FI_EAGAIN);
+
 		if (ret < 0) {
 			if (ret == -FI_EAVAIL)
 				ret = ft_cq_readerr(txcq);
@@ -257,20 +255,25 @@ static int send_recv()
 	} else {
 		fprintf(stdout, "Waiting for client...\n");
 
-		memset((void *)&event, 0, sizeof event);
-		ret = TEMP_FAILURE_RETRY(epoll_wait(epfd, &event, 1, -1));
-		if (ret < 0) {
-			ret = -errno;
-			FT_PRINTERR("epoll_wait", ret);
-			return ret;
-		}
+		memset(&event, 0, sizeof event);
+		fids[0] = &rxcq->fid;
+		do {
+			if (fi_trywait(fabric, fids, 1) == FI_SUCCESS) {
+				ret = TEMP_FAILURE_RETRY(epoll_wait(epfd, &event, 1, -1));
+				if (ret < 0) {
+					ret = -errno;
+					FT_PRINTERR("epoll_wait", ret);
+					return ret;
+				}
 
-		if (event.data.ptr != &rxcq->fid) {
-			fprintf(stdout, "unexpected event!\n");
-		}
+				if (event.data.ptr != &rxcq->fid) {
+					fprintf(stdout, "unexpected event!\n");
+				}
+			}
 
-		/* Read recv queue */
-		ret = fi_cq_sread(rxcq, &comp, 1, NULL, 0);
+			ret = fi_cq_read(rxcq, &comp, 1);
+		} while (ret == -FI_EAGAIN);
+
 		if (ret < 0) {
 			if (ret == -FI_EAVAIL)
 				ret = ft_cq_readerr(rxcq);

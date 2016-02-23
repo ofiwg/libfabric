@@ -238,6 +238,7 @@ eq_wait_fd_poll()
 	int fd;
 	struct fi_eq_entry entry;
 	struct pollfd pfd;
+	struct fid *fids[1];
 	int testret;
 	int ret;
 
@@ -255,7 +256,12 @@ eq_wait_fd_poll()
 		goto fail;
 	}
 
-	/* poll on empty EQ */
+	fids[0] = &eq->fid;
+	if (fi_trywait(fabric, fids, 1) != FI_SUCCESS) {
+		sprintf(err_buf, "fi_trywait ret=%d, %s", ret, fi_strerror(-ret));
+		goto fail;
+	}
+
 	pfd.fd = fd;
 	pfd.events = POLLIN;
 	ret = poll(&pfd, 1, 0);
@@ -277,7 +283,6 @@ eq_wait_fd_poll()
 		goto fail;
 	}
 
-	/* poll on EQ with event */
 	pfd.fd = fd;
 	pfd.events = POLLIN;
 	ret = poll(&pfd, 1, 0);

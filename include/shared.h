@@ -47,9 +47,8 @@
 extern "C" {
 #endif
 
-/* all tests should work with 1.0 API or newer */
 #ifndef FT_FIVERSION
-#define FT_FIVERSION FI_VERSION(1,1)
+#define FT_FIVERSION FI_VERSION(1,3)
 #endif
 
 #ifdef __APPLE__
