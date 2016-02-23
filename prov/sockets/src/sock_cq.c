@@ -401,7 +401,6 @@ static struct fi_ops_cq sock_cq_ops = {
 
 static int sock_cq_control(struct fid *fid, int command, void *arg)
 {
-	/*
 	struct sock_cq *cq;
 	int ret = 0;
 
@@ -432,8 +431,6 @@ static int sock_cq_control(struct fid *fid, int command, void *arg)
 	}
 
 	return ret;
-	*/
-	return -FI_ENOSYS;
 }
 
 static struct fi_ops sock_cq_fi_ops = {

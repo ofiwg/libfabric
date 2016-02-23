@@ -211,7 +211,6 @@ static struct fi_ops_wait sock_wait_ops = {
 
 static int sock_wait_control(struct fid *fid, int command, void *arg)
 {
-	/*
 	struct sock_wait *wait;
 	int ret = 0;
 
@@ -225,8 +224,6 @@ static int sock_wait_control(struct fid *fid, int command, void *arg)
 		break;
 	}
 	return ret;
-	*/
-	return -FI_ENOSYS;
 }
 
 int sock_wait_close(fid_t fid)

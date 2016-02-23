@@ -281,7 +281,6 @@ static int sock_cntr_control(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_GETWAIT:
-		/*
 		switch (cntr->attr.wait_obj) {
 		case FI_WAIT_NONE:
 		case FI_WAIT_UNSPEC:
@@ -301,8 +300,6 @@ static int sock_cntr_control(struct fid *fid, int command, void *arg)
 			break;
 		}
 		break;
-		*/
-		return -FI_ENOSYS;
 
 	case FI_GETOPSFLAG:
 		memcpy(arg, &cntr->attr.flags, sizeof(uint64_t));

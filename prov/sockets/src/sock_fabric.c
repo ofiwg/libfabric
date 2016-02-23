@@ -282,13 +282,19 @@ int sock_verify_info(struct fi_info *hints)
 	return 0;
 }
 
+static int sock_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+{
+	/* we're always ready to wait! */
+	return 0;
+}
+
 static struct fi_ops_fabric sock_fab_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = sock_domain,
 	.passive_ep = sock_msg_passive_ep,
 	.eq_open = sock_eq_open,
 	.wait_open = sock_wait_open,
-	.trywait = fi_no_trywait
+	.trywait = sock_trywait
 };
 
 static int sock_fabric_close(fid_t fid)
