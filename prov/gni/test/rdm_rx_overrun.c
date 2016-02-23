@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -234,9 +234,11 @@ Test(rdm_rx_overrun, all_to_one)
 		for (i = 1; i < NUM_EPS; i++) {
 			for (j = 0; j < num_msgs; j++) {
 				if (fi_cq_read(msg_cq[i], &s_cqe, 1) == 1) {
-					cr_assert_eq((uint64_t)
-						     s_cqe.op_context,
-						     (uint64_t) (ctx+i));
+					cr_assert(((uint64_t) s_cqe.op_context
+						   >= (uint64_t) ctx) &&
+						  ((uint64_t) s_cqe.op_context
+						   <=
+						   (uint64_t) (ctx+NUM_EPS-1)));
 					source_done += 1;
 				}
 			}
@@ -255,9 +257,11 @@ Test(rdm_rx_overrun, all_to_one)
 		for (i = 1; i < NUM_EPS; i++) {
 			for (j = 0; j < num_msgs; j++) {
 				if (fi_cq_read(msg_cq[0], &d_cqe, 1) == 1) {
-					cr_assert_eq((uint64_t)
-						     d_cqe.op_context,
-						     (uint64_t)(ctx+i));
+					cr_assert(((uint64_t) d_cqe.op_context
+						   >= (uint64_t) ctx) &&
+						  ((uint64_t) d_cqe.op_context
+						   <=
+						   (uint64_t) (ctx+NUM_EPS-1)));
 					dest_done += 1;
 				}
 			}
