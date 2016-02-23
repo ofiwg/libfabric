@@ -332,9 +332,10 @@ static int psmx_eq_control(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_GETWAIT:
+		/*
 		ret = psmx_wait_get_obj(eq->wait, arg);
 		break;
-
+		*/
 	default:
 		return -FI_ENOSYS;
 	}

@@ -244,6 +244,7 @@ int fi_poll_create(struct fid_domain *domain, struct fi_poll_attr *attr,
  */
 struct util_wait;
 typedef void (*fi_wait_signal_func)(struct util_wait *wait);
+typedef int (*fi_wait_try_func)(struct util_wait *wait);
 
 struct util_wait {
 	struct fid_wait		wait_fid;
@@ -254,6 +255,7 @@ struct util_wait {
 
 	enum fi_wait_obj	wait_obj;
 	fi_wait_signal_func	signal;
+	fi_wait_try_func	try;
 };
 
 int fi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,

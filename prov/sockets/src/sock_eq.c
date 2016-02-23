@@ -284,6 +284,7 @@ static int sock_eq_fi_close(struct fid *fid)
 
 static int sock_eq_control(struct fid *fid, int command, void *arg)
 {
+	/*
 	int ret = 0;
 	struct sock_eq *eq;
 
@@ -310,6 +311,8 @@ static int sock_eq_control(struct fid *fid, int command, void *arg)
 		break;
 	}
 	return ret;
+	*/
+	return -FI_ENOSYS;
 }
 
 static struct fi_ops sock_eq_fi_ops = {
