@@ -309,7 +309,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			if (hints->domain_attr->data_progress !=
 				FI_PROGRESS_UNSPEC)
 				data_progress =
-					hints->domain_attr->control_progress;
+					hints->domain_attr->data_progress;
 
 			switch (hints->domain_attr->mr_mode) {
 			case FI_MR_UNSPEC:
