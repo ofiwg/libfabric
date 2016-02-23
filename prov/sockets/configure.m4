@@ -34,6 +34,8 @@ AC_DEFUN([FI_SOCKETS_CONFIGURE],[
 				[sockets_shm_happy=0])])
 	      ])
 
+	      AC_CHECK_FUNCS([getifaddrs])
+
 	AS_IF([test $sockets_h_happy -eq 1 && \
 	       test $sockets_shm_happy -eq 1], [$1], [$2])
 ])
