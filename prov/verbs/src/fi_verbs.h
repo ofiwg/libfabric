@@ -150,6 +150,7 @@ struct fi_ibv_domain {
 	struct ibv_context	*verbs;
 	struct ibv_pd		*pd;
 	int			rdm;
+	struct fi_info		*info;
 };
 
 struct fi_ibv_cq;

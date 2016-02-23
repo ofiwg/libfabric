@@ -132,6 +132,7 @@ static int fi_ibv_close(fid_t fid)
 		domain->pd = NULL;
 	}
 
+	fi_freeinfo(domain->info);
 	free(domain);
 	return 0;
 }
@@ -223,15 +224,19 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!_domain)
 		return -FI_ENOMEM;
 
+	_domain->info = fi_dupinfo(info);
+	if (!_domain->info)
+		goto err1;
+
 	_domain->rdm = (info->ep_attr->type == FI_EP_RDM);
 	ret = fi_ibv_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)
-		goto err;
+		goto err2;
 
 	_domain->pd = ibv_alloc_pd(_domain->verbs);
 	if (!_domain->pd) {
 		ret = -errno;
-		goto err;
+		goto err2;
 	}
 
 	_domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
@@ -243,7 +248,9 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	*domain = &_domain->domain_fid;
 	return 0;
-err:
+err2:
+	fi_freeinfo(_domain->info);
+err1:
 	free(_domain);
 	return ret;
 }
