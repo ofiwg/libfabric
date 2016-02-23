@@ -1370,10 +1370,7 @@ int sock_get_src_addr_from_hostname(struct sockaddr_in *src_addr,
 	ai.ai_family = AF_INET;
 	ai.ai_socktype = SOCK_STREAM;
 
-	if (gethostname(hostname, sizeof(hostname)) != 0) {
-		SOCK_LOG_DBG("gethostname failed!\n");
-		return -FI_EINVAL;
-	}
+	sock_getnodename(hostname, sizeof(hostname));
 	ret = getaddrinfo(hostname, service, &ai, &rai);
 	if (ret) {
 		SOCK_LOG_DBG("getaddrinfo failed!\n");
