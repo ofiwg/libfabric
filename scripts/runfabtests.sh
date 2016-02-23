@@ -73,7 +73,11 @@ declare -i fail_count=0
 # OS X defines NODATA differently than Linux, this
 # is a hack to work around that.
 function no_data_num {
-	if [[ "$(uname)" != "Linux" ]]; then
+	if [[ "$(uname)" == "Linux" ]]; then
+		echo 61
+	elif [[ "$(uname)" == "FreeBSD" ]]; then
+		echo 83
+	elif [[ "$(uname)" == "Darwin" ]]; then
 		echo 96
 	else
 		echo 61
