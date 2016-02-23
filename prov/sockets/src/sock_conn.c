@@ -281,6 +281,7 @@ int sock_conn_listen(struct sock_ep *ep)
 	struct sock_conn_listener *listener = &ep->listener;
 	struct sock_domain *domain = ep->domain;
 	char service[NI_MAXSERV] = {0};
+	char *port;
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
@@ -297,10 +298,12 @@ int sock_conn_listen(struct sock_ep *ep)
 	if (!sock_fabric_check_service(domain->fab, atoi(listener->service))) {
 		memset(listener->service, 0, NI_MAXSERV);
 		((struct sockaddr_in *)ep->src_addr)->sin_port = 0;
-	}
+		port = NULL;
+	} else
+		port = listener->service;
 
 	ret = getaddrinfo(inet_ntoa(((struct sockaddr_in *)ep->src_addr)->sin_addr),
-			  listener->service, &hints, &s_res);
+			  port, &hints, &s_res);
 	if (ret) {
 		SOCK_LOG_ERROR("no available AF_INET address, service %s, %s\n",
 			       listener->service, gai_strerror(ret));
