@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -544,7 +544,7 @@ int _gnix_nic_progress(struct gnix_nic *nic)
 	if (unlikely(ret != FI_SUCCESS))
 		return ret;
 
-	ret = _gnix_nic_vc_progress(nic);
+	ret = _gnix_vc_nic_progress(nic);
 	if (unlikely(ret != FI_SUCCESS))
 		return ret;
 

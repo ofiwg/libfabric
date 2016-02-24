@@ -272,7 +272,7 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req);
  * There are three facets of VC progress: RX, deferred work and TX.  The NIC
  * maintains one queue of VCs for each type of progress.  When a VC requires
  * progress, the associated _gnix_vc_<prog_type>_schedule() function is used to
- * schedule processing within _gnix_nic_vc_progress().  The queues are
+ * schedule processing within _gnix_vc_nic_progress().  The queues are
  * independent to prevent a stall in TX processing from delaying RX processing,
  * and so forth.
  *
@@ -295,7 +295,7 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req);
  *
  * @param[in] nic The GNIX NIC to progress.
  */
-int _gnix_nic_vc_progress(struct gnix_nic *nic);
+int _gnix_vc_nic_progress(struct gnix_nic *nic);
 
 /**
  * @brief  return vc associated with a given ep/dest address, or the ep in the

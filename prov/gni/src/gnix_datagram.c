@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  * Copyright (c) 2015-16 Los Alamos National Security, LLC.
  *                       All rights reserved.
  *
@@ -285,9 +285,12 @@ int _gnix_dgram_free(struct gnix_datagram *d)
 
 	if (d->type == GNIX_DGRAM_BND) {
 		status = GNI_EpUnbind(d->gni_ep);
-		if (status != GNI_RC_SUCCESS)
-			assert(0);
+		if (status != GNI_RC_SUCCESS) {
 			/* TODO: have to handle this */
+			GNIX_FATAL(FI_LOG_EP_CTRL,
+				   "GNI_EpUnbind returned %s (ep=%p)\n",
+				   gni_err_str[status], d->gni_ep);
+		}
 	}
 
 	fastlock_acquire(&d->d_hndl->lock);
