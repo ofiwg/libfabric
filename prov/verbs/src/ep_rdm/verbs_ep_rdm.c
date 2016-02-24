@@ -576,16 +576,16 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);
 
-	fi_ibv_rdm_tagged_request_pool = util_buf_pool_create(100,
-		FI_IBV_RDM_MEM_ALIGNMENT, 0, 
-		sizeof(struct fi_ibv_rdm_tagged_request));
+	fi_ibv_rdm_tagged_request_pool = util_buf_pool_create(
+		sizeof(struct fi_ibv_rdm_tagged_request),
+		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	fi_ibv_rdm_tagged_postponed_pool = util_buf_pool_create(100,
-		FI_IBV_RDM_MEM_ALIGNMENT, 0, 
-		sizeof(struct fi_ibv_rdm_tagged_postponed_entry));
+	fi_ibv_rdm_tagged_postponed_pool = util_buf_pool_create(
+		sizeof(struct fi_ibv_rdm_tagged_postponed_entry),
+		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	fi_ibv_rdm_tagged_extra_buffers_pool = util_buf_pool_create(100,
-		FI_IBV_RDM_MEM_ALIGNMENT, 0, _ep->buff_len);
+	fi_ibv_rdm_tagged_extra_buffers_pool = util_buf_pool_create(
+		_ep->buff_len, FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
 	_ep->max_inline_rc =
 	    fi_ibv_rdm_tagged_find_max_inline_size(_ep->domain->pd,
