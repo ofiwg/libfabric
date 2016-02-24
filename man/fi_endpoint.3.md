@@ -264,10 +264,14 @@ together when binding an endpoint to a completion domain CQ.
 : Directs the completion of outbound data transfer requests to the
   specified completion queue.  This includes send message, RMA, and
   atomic operations.  The FI_SEND flag may be used interchangeably.
+  This binding automatically includes FI_READ and FI_WRITE, if
+  applicable to the endpoint.
 
 *FI_RECV*
 : Directs the notification of inbound data transfers to the specified
-  completion queue.  This includes received messages.
+  completion queue.  This includes received messages.  This binding
+  automatically includes FI_REMOTE_WRITE, if applicable to the
+  endpoint.
 
 *FI_SELECTIVE_COMPLETION*
 : By default, data transfer operations generate completion entries
