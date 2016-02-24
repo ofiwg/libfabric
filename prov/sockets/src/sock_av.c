@@ -489,7 +489,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	struct sock_domain *dom;
 	struct sock_av *_av;
 	size_t table_sz, i;
-	uint64_t flags = O_RDWR;
+	int flags = O_RDWR;
 	struct stat mapstat;
 
 	if (!attr || sock_verify_av_attr(attr))
@@ -512,11 +512,12 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	table_sz = SOCK_AV_TABLE_SZ(_av->attr.count, attr->name);
 
 	if (attr->name) {
-		_av->name = strdup(attr->name);
+		_av->name = calloc(1, strlen(attr->name) + 1);
 		if (!_av->name) {
 			ret = -FI_ENOMEM;
 			goto err1;
 		}
+		sprintf(_av->name, "/%s", attr->name);
 		if (!(attr->flags & FI_READ))
 			flags |= O_CREAT;
 
