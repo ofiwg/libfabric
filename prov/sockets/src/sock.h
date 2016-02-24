@@ -982,6 +982,7 @@ void sock_dom_add_to_list(struct sock_domain *domain);
 int sock_dom_check_list(struct sock_domain *domain);
 void sock_dom_remove_from_list(struct sock_domain *domain);
 struct sock_domain *sock_dom_list_head(void);
+int sock_dom_check_manual_progress(struct sock_fabric *fabric);
 
 void sock_fab_add_to_list(struct sock_fabric *fabric);
 int sock_fab_check_list(struct sock_fabric *fabric);
