@@ -137,6 +137,7 @@ ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len
 	struct ibv_send_wr *bad_wr;
 	int ret;
 
+	assert(ep->scq);
 	wr->num_sge = count;
 	wr->wr_id = (uintptr_t) context;
 
