@@ -31,6 +31,7 @@
  */
 
 #include "fi_verbs.h"
+#include "ep_rdm/verbs_rdm.h"
 
 
 #define VERBS_IB_PREFIX "IB-0x"
@@ -39,7 +40,10 @@
 
 #define VERBS_MSG_CAPS (FI_MSG | FI_RMA | FI_ATOMICS | FI_READ | FI_WRITE | \
 			FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
-#define VERBS_RDM_CAPS (FI_SEND | FI_RECV | FI_TAGGED)
+
+#define VERBS_RDM_CAPS (FI_SEND | FI_RECV | FI_TAGGED | FI_RMA | FI_READ |  \
+			FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)
+
 #define VERBS_MODE (FI_LOCAL_MR)
 #define VERBS_RDM_MODE (FI_CONTEXT)
 
@@ -314,8 +318,10 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 	}
 
 	compare_mode = attr->mode ? attr->mode : hints->mode;
-    check_mode = (hints->caps & FI_RMA) ? info->rx_attr->mode :
-        info->ep_attr->type == FI_EP_RDM ? VERBS_RDM_MODE : VERBS_MODE;
+	
+	check_mode = (info->ep_attr->type == FI_EP_RDM) ? VERBS_RDM_MODE :
+		(hints->caps & FI_RMA) ? info->rx_attr->mode : VERBS_MODE;
+
 	if ((compare_mode & check_mode) != check_mode) {
 		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
 			"Given rx_attr->mode not supported\n");
@@ -712,6 +718,10 @@ static int fi_ibv_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 	ret = fi_ibv_get_device_attrs(ctx, fi);
 	if (ret)
 		goto err;
+
+	if (ep_dom->type == FI_EP_RDM) {
+		fi->tx_attr->inject_size = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
+	}
 
 	switch (ctx->device->transport_type) {
 	case IBV_TRANSPORT_IB:

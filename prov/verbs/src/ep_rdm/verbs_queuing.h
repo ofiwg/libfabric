@@ -42,6 +42,7 @@
 
 extern struct dlist_entry fi_ibv_rdm_tagged_request_ready_queue;
 extern struct dlist_entry fi_ibv_rdm_tagged_recv_unexp_queue;
+/* TODO: implement posted recv queue per connection */
 extern struct dlist_entry fi_ibv_rdm_tagged_recv_posted_queue;
 extern struct dlist_entry fi_ibv_rdm_tagged_send_postponed_queue;
 
@@ -94,7 +95,7 @@ fi_ibv_rdm_tagged_move_to_posted_queue(
 				      FI_LOG_DEBUG);
 	dlist_insert_tail(&request->queue_entry,
 			  &fi_ibv_rdm_tagged_recv_posted_queue);
-	ep->pend_recv++;
+	ep->posted_recvs++;
 }
 
 static inline void
@@ -105,7 +106,7 @@ fi_ibv_rdm_tagged_remove_from_posted_queue(
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("remove_from_posted_queue: ", request,
 				      FI_LOG_DEBUG);
 	dlist_remove(&request->queue_entry);
-	ep->pend_recv--;
+	ep->posted_recvs--;
 }
 
 static inline void

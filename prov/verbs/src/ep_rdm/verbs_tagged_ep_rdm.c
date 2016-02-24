@@ -139,7 +139,7 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 		    "fi_recvfrom: conn %p, tag 0x%llx, len %d, rbuf %p, fi_ctx %p, "
 		     "pend_recv %d\n",
 		     conn, (long long unsigned int)tag, (int)len, buf, context,
-		     ep->pend_recv);
+		     ep->posted_recvs);
 
 		if (ret || request->state.eager ==
 		    FI_IBV_STATE_EAGER_RECV_WAIT4PKT) {
@@ -229,7 +229,7 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 
 	const size_t size = len + sizeof(struct fi_ibv_rdm_tagged_header);
 
-	if (size > ep->max_inline_rc) {
+	if (size > ep->rndv_threshold) {
 		return -FI_EMSGSIZE;
 	}
 
@@ -248,7 +248,8 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 			wr.wr.rdma.remote_addr =
 			    fi_ibv_rdm_tagged_get_remote_addr(conn, raw_sbuf);
 			wr.wr.rdma.rkey = conn->remote_rbuf_rkey;
-			wr.send_flags = IBV_SEND_INLINE;
+			wr.send_flags = (size < ep->max_inline_rc)
+				? IBV_SEND_INLINE : 0;
 			wr.imm_data =
 			    fi_ibv_rdm_tagged_get_buff_service_data(raw_sbuf)->
 			    seq_number;
@@ -273,7 +274,10 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep,
 							 wr.send_flags);
 
-			if (!ibv_post_send(conn->qp, &wr, &bad_wr)) {
+			if (ibv_post_send(conn->qp, &wr, &bad_wr)) {
+				assert(0);
+				return -errno;
+			} else {
 				VERBS_DBG(FI_LOG_EP_DATA,
 					"posted %d bytes, conn %p, len %d, tag 0x%llx\n",
 					sge.length, conn, len, tag);
@@ -655,7 +659,7 @@ static inline int fi_ibv_rdm_tagged_poll_send(struct fi_ibv_rdm_ep *ep)
 	int i = 0;
 	int ret = 0;
 
-	if (ep->total_outgoing_send > 0) {
+	if (ep->posted_sends > 0) {
 		do {
 			ret = ibv_poll_cq(ep->scq, wc_count, wc);
 			for (i = 0; i < ret; ++i) {
@@ -736,7 +740,7 @@ wc_error:
 				"got ibv_wc.status = %d:%s, pend_send: %d, connection: %p\n",
 				wc[i].status,
 				ibv_wc_status_str(wc[i].status),
-				ep->pend_send, conn);
+				ep->posted_sends, conn);
 			assert(0);
 		}
 	}

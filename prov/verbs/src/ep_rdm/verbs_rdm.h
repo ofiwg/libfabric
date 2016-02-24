@@ -80,8 +80,7 @@
 #define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep, _send_flags)	\
 do {                                                                	\
 	(_connection)->sends_outgoing++;                                \
-	(_ep)->pend_send++;                                             \
-	(_ep)->total_outgoing_send++;                                   \
+	(_ep)->posted_sends++;                                          \
 	(_send_flags) |= IBV_SEND_SIGNALED;                             \
 									\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %d\n",    \
@@ -92,12 +91,11 @@ do {                                                                	\
 #define FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(_connection, _ep)		\
 do {                                                                	\
 	(_connection)->sends_outgoing--;                                \
-	(_ep)->total_outgoing_send--;                                   \
-	(_ep)->pend_send--;                                             \
+	(_ep)->posted_sends--;                                          \
 									\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER--, conn %p, sends_outgoing %d\n",    \
 			_connection, (_connection)->sends_outgoing);    \
-	assert((_ep)->pend_send >= 0);                                  \
+	assert((_ep)->posted_sends >= 0);                               \
 	assert((_connection)->sends_outgoing >= 0);                     \
 } while (0)
 
@@ -105,7 +103,7 @@ do {                                                                	\
 	((_connection)->sends_outgoing > 0.5*(_ep)->sq_wr_depth)
 
 #define PEND_SEND_IS_LIMITED(_ep)                                       \
-	((_ep)->pend_send > 0.5 * (_ep)->scq_depth)
+	((_ep)->posted_sends > 0.5 * (_ep)->scq_depth)
 
 #define SEND_RESOURCES_IS_BUSY(_connection, _ep)                        \
 	(FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep) ||  \
@@ -235,9 +233,8 @@ struct fi_ibv_rdm_ep {
 	int n_buffs;
 	int rq_wr_depth;    // RQ depth
 	int sq_wr_depth;    // SQ depth
-	int total_outgoing_send;
-	int pend_send;
-	int pend_recv;
+	int posted_sends;
+	int posted_recvs;
 	int num_active_conns;
 	int max_inline_rc;
 	int rndv_threshold;
