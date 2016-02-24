@@ -73,7 +73,7 @@
 #define SOCK_EP_TX_SZ (256)
 #define SOCK_EP_RX_SZ (256)
 #define SOCK_EP_MIN_MULTI_RECV (64)
-#define SOCK_EP_MAX_ATOMIC_SZ (256)
+#define SOCK_EP_MAX_ATOMIC_SZ (4096)
 #define SOCK_EP_MAX_CTX_BITS (16)
 #define SOCK_EP_MSG_PREFIX_SZ (0)
 
@@ -749,8 +749,8 @@ struct sock_rx_pe_entry {
 	uint8_t reserved[6];
 	struct sock_rx_entry *rx_entry;
 	union sock_iov rx_iov[SOCK_EP_MAX_IOV_LIMIT];
-	char atomic_cmp[SOCK_EP_MAX_ATOMIC_SZ];
-	char atomic_src[SOCK_EP_MAX_ATOMIC_SZ];
+	char *atomic_cmp;
+	char *atomic_src;
 };
 
 /* PE entry type */
@@ -809,6 +809,7 @@ struct sock_pe {
 	uint64_t waittime;
 
 	struct util_buf_pool *pe_rx_pool;
+	struct util_buf_pool *atomic_rx_pool;
 	struct dlist_entry free_list;
 	struct dlist_entry busy_list;
 
