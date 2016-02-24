@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -209,14 +210,14 @@ static uint64_t ft_caps_to_mr_access(uint64_t caps)
 {
 	uint64_t mr_access = 0;
 
-	if (caps & FI_MSG) {
+	if (caps & (FI_MSG | FI_TAGGED)) {
 		if (caps & FT_MSG_MR_ACCESS)
 			mr_access |= caps & FT_MSG_MR_ACCESS;
 		else
 			mr_access |= FT_MSG_MR_ACCESS;
 	}
 
-	if ((caps & FI_RMA) || (caps & FI_ATOMIC)) {
+	if (caps & (FI_RMA | FI_ATOMIC)) {
 		if (caps & FT_RMA_MR_ACCESS)
 			mr_access |= caps & FT_RMA_MR_ACCESS;
 		else
