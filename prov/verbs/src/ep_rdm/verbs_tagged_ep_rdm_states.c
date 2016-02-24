@@ -525,8 +525,8 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(
 		request->len = p->arrived_len -
 		    sizeof(struct fi_ibv_rdm_tagged_header);
 		if (request->len > 0) {
-			request->unexp_rbuf = 
-				util_buf_get(fi_ibv_rdm_tagged_extra_buffers_pool);
+			request->unexp_rbuf = util_buf_alloc(
+				fi_ibv_rdm_tagged_extra_buffers_pool);
 			memcpy(request->unexp_rbuf, rbuf->payload, request->len);
 		} else {
 			request->unexp_rbuf = NULL;

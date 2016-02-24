@@ -282,7 +282,7 @@ fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 	}
 
 	struct fi_ibv_rdm_tagged_request *request = 
-		util_buf_get(fi_ibv_rdm_tagged_request_pool);
+		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
@@ -362,7 +362,7 @@ fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 	}
 
 	struct fi_ibv_rdm_tagged_request *request = 
-		util_buf_get(fi_ibv_rdm_tagged_request_pool);
+		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
@@ -419,7 +419,7 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
 
 	if (!conn->postponed_entry) {
-		request = util_buf_get(fi_ibv_rdm_tagged_request_pool);
+		request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 
 		FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ",
 			request, FI_LOG_DEBUG);

@@ -111,7 +111,7 @@ static ssize_t fi_ibv_rdm_tagged_recvfrom(struct fid_ep *ep_fid, void *buf,
 	int ret = 0;
 
 	struct fi_ibv_rdm_tagged_request *request = 
-		util_buf_get(fi_ibv_rdm_tagged_request_pool);
+		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 	fi_ibv_rdm_tagged_zero_request(request);
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
@@ -294,7 +294,7 @@ static ssize_t
 fi_ibv_rdm_tagged_send_common(struct fi_ibv_rdm_tagged_send_start_data* sdata)
 {
 	struct fi_ibv_rdm_tagged_request *request = 
-		util_buf_get(fi_ibv_rdm_tagged_request_pool);
+		util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ", request, FI_LOG_DEBUG);
 
 	/* Initial state */
@@ -386,7 +386,8 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 		 * extra allocation & memcpy can be optimized if it's possible
 		 * to send immediately
 		 */
-		sdata.buf.iovec_arr = util_buf_get(fi_ibv_rdm_tagged_extra_buffers_pool);
+		sdata.buf.iovec_arr = 
+			util_buf_alloc(fi_ibv_rdm_tagged_extra_buffers_pool);
 		for (i = 0; i < count; i++) {
 			sdata.buf.iovec_arr[i].iov_base = iov[i].iov_base;
 			sdata.buf.iovec_arr[i].iov_len = iov[i].iov_len;
@@ -481,7 +482,7 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 			    (found_request, ep);
 			request = found_request;
 		} else {
-			request = util_buf_get(fi_ibv_rdm_tagged_request_pool);
+			request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 			fi_ibv_rdm_tagged_zero_request(request);
 
 			FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ",

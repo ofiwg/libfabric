@@ -121,7 +121,7 @@ fi_ibv_rdm_tagged_move_to_postponed_queue(
 
 	if (dlist_empty(&conn->postponed_requests_head)) {
 		struct fi_ibv_rdm_tagged_postponed_entry *entry =
-			util_buf_get(fi_ibv_rdm_tagged_postponed_pool);
+			util_buf_alloc(fi_ibv_rdm_tagged_postponed_pool);
 
 		entry->conn = conn;	
 		conn->postponed_entry = entry;
