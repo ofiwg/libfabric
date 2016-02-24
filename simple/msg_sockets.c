@@ -169,7 +169,6 @@ static int server_connect(void)
 {
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
-	struct fi_info *info = NULL;
 	ssize_t rd;
 	int ret;
 
@@ -180,20 +179,20 @@ static int server_connect(void)
 		return (int) rd;
 	}
 
-	info = entry.info;
+	fi = entry.info;
 	if (event != FI_CONNREQ) {
 		FT_ERR("Unexpected CM event %d", event);
 		ret = -FI_EOTHER;
 		goto err;
 	}
 
-	ret = fi_domain(fabric, info, &domain, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err;
 	}
 
-	ret = ft_alloc_active_res(info);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		 goto err;
 
@@ -226,12 +225,10 @@ static int server_connect(void)
 		goto err;
 	}
 
-	fi_freeinfo(info);
 	return 0;
 
 err:
-	fi_reject(pep, info->handle, NULL, 0);
-	fi_freeinfo(info);
+	fi_reject(pep, fi->handle, NULL, 0);
 	return ret;
 }
 
@@ -356,16 +353,16 @@ static int setup_handle(void)
 	}
 
 	/* Get fabric info */
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, NULL, FI_SOURCE, hints, &fi);
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, NULL, FI_SOURCE, hints, &fi_pep);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		goto out;
 	}
-	free(fi->src_addr);
-	fi->src_addr = NULL;
-	fi->src_addrlen = 0;
+	free(fi_pep->src_addr);
+	fi_pep->src_addr = NULL;
+	fi_pep->src_addrlen = 0;
 
-	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
+	ret = fi_fabric(fi_pep->fabric_attr, &fabric, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_fabric", ret);
 		goto out;
@@ -378,7 +375,7 @@ static int setup_handle(void)
 	}
 
 	/* Open a passive endpoint */
-	ret = fi_passive_ep(fabric, fi, &pep, NULL);
+	ret = fi_passive_ep(fabric, fi_pep, &pep, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_passive_ep", ret);
 		goto out;

@@ -121,7 +121,7 @@ struct ft_opts {
 	char **argv;
 };
 
-extern struct fi_info *fi, *hints;
+extern struct fi_info *fi_pep, *fi, *hints;
 extern struct fid_fabric *fabric;
 extern struct fid_wait *waitset;
 extern struct fid_domain *domain;

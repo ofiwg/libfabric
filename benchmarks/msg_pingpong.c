@@ -47,7 +47,6 @@ static int server_connect(void)
 {
 	struct fi_eq_cm_entry entry;
 	uint32_t event;
-	struct fi_info *info = NULL;
 	ssize_t rd;
 	int ret;
 
@@ -57,20 +56,20 @@ static int server_connect(void)
 		return (int) rd;
 	}
 
-	info = entry.info;
+	fi = entry.info;
 	if (event != FI_CONNREQ) {
 		fprintf(stderr, "Unexpected CM event %d\n", event);
 		ret = -FI_EOTHER;
 		goto err;
 	}
 
-	ret = fi_domain(fabric, info, &domain, NULL);
+	ret = fi_domain(fabric, fi, &domain, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		goto err;
 	}
 
-	ret = ft_alloc_active_res(info);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		 goto err;
 
@@ -98,12 +97,10 @@ static int server_connect(void)
 		goto err;
 	}
 
-	fi_freeinfo(info);
 	return 0;
 
 err:
-	fi_reject(pep, info->handle, NULL, 0);
-	fi_freeinfo(info);
+	fi_reject(pep, fi->handle, NULL, 0);
 	return ret;
 }
 
