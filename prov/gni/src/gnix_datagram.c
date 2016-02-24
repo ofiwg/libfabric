@@ -308,7 +308,7 @@ int _gnix_dgram_wc_post(struct gnix_datagram *d)
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	fastlock_acquire(&d->nic->lock);
+	fastlock_acquire(&d->cm_nic->lock);
 	status = GNI_EpPostDataWId(d->gni_ep,
 				   d->dgram_in_buf,
 				   GNI_DATAGRAM_MAXSIZE,
@@ -323,7 +323,7 @@ int _gnix_dgram_wc_post(struct gnix_datagram *d)
 		 */
 		d->state = GNIX_DGRAM_STATE_LISTENING;
 	}
-	fastlock_release(&d->nic->lock);
+	fastlock_release(&d->cm_nic->lock);
 
 	return ret;
 }
@@ -350,7 +350,7 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 		goto err;
 	}
 
-	fastlock_acquire(&d->nic->lock);
+	fastlock_acquire(&d->cm_nic->lock);
 	if (d->pre_post_clbk_fn != NULL) {
 		ret = d->pre_post_clbk_fn(d, &post);
 		if (ret != FI_SUCCESS)
@@ -382,7 +382,7 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 				ret);
 		}
 	}
-	fastlock_release(&d->nic->lock);
+	fastlock_release(&d->cm_nic->lock);
 
 	if (post) {
 		if ((status != GNI_RC_SUCCESS) &&
@@ -605,7 +605,7 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 
 	for (i = 0; i < fabric->n_bnd_dgrams; i++, dg_ptr++) {
 		dg_ptr->d_hndl = the_hndl;
-		dg_ptr->nic = cm_nic;
+		dg_ptr->cm_nic = cm_nic;
 		status = GNI_EpCreate(nic->gni_nic_hndl,
 					NULL,
 					&dg_ptr->gni_ep);
@@ -625,7 +625,7 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 
 	for (i = 0; i < fabric->n_wc_dgrams; i++, dg_ptr++) {
 		dg_ptr->d_hndl = the_hndl;
-		dg_ptr->nic = cm_nic;
+		dg_ptr->cm_nic = cm_nic;
 		status = GNI_EpCreate(nic->gni_nic_hndl,
 					NULL,
 					&dg_ptr->gni_ep);
@@ -633,7 +633,7 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 			ret = gnixu_to_fi_errno(status);
 			goto err;
 		}
-		dlist_init(&dg_ptr->list);
+		dlist_node_init(&dg_ptr->list);
 		dlist_insert_head(&dg_ptr->list, &the_hndl->wc_dgram_free_list);
 		dg_ptr->free_list_head = &the_hndl->wc_dgram_free_list;
 	}
