@@ -958,20 +958,25 @@ static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
 			    uint64_t total, int timeout)
 {
 	struct fi_cq_err_entry comp;
+	struct fid *fids[1];
 	int fd, ret;
 
 	fd = cq == txcq ? tx_fd : rx_fd;
+	fids[0] = &cq->fid;
 
 	while (total - *cur > 0) {
-		ret = fi_cq_sread(cq, &comp, 1, NULL, 0);
+		ret = fi_trywait(fabric, fids, 1);
+		if (ret == FI_SUCCESS) {
+			ret = ft_poll_fd(fd, timeout);
+			if (ret)
+				return ret;
+		}
+
+		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			return ret;
-		} else {
-			ret = ft_poll_fd(fd, timeout);
-			if (ret)
-				return ret;
 		}
 	}
 
