@@ -1,17 +1,31 @@
-fabtests
-========
+Introduction
+============
+Fabtests provides a set of examples that uses libfabric - a high-performance
+fabric software library.
 
-Fabtests provides a set of examples that uses libfabric - a high-performance fabric software library.
+Support
+=======
+Fabtests will run on any operating system supported by Libfabric.
+
+Bugs or issues may be submitted directly to the Github issues list:
+
+https://github.com/ofiwg/fabtests/issues
+
+Additionally, users may post questions, comments, bugs, etc. to the Libfabric
+users mailing list.
+
+libfabric-users@lists.openfabrics.org
 
 Building
---------
+========
 
-To make this directory, run:
+To install from a fabtests source package run the following commands:
 
-    ./autogen.sh && ./configure && make && make install
+./configure && make && make install
 
-Typically the autogen and configure steps only need be done the first
-time, unless configure.ac changes.
+If building directly from the libfabric git tree, run './autogen.sh' before the
+configure step.
 
-Running
-Reporting issues
+For more detailed build information see the projects home page on Github:
+
+https://github.com/ofiwg/fabtests
