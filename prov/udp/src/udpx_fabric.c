@@ -36,12 +36,46 @@
 #include "udpx.h"
 
 
+static int udpx_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+{
+	struct util_cq *cq;
+	struct util_eq *eq;
+	struct util_wait *wait;
+	int i, ret;
+
+	for (i = 0; i < count; i++) {
+		switch (fids[i]->fclass) {
+		case FI_CLASS_CQ:
+			cq = container_of(fids[i], struct util_cq, cq_fid.fid);
+			wait = cq->wait;
+			break;
+		case FI_CLASS_EQ:
+			eq = container_of(fids[i], struct util_eq, eq_fid.fid);
+			wait = eq->wait;
+			break;
+		case FI_CLASS_CNTR:
+			return -FI_ENOSYS;
+		case FI_CLASS_WAIT:
+			wait = container_of(fids[i], struct util_wait, wait_fid.fid);
+			break;
+		default:
+			return -FI_EINVAL;
+		}
+
+		ret = wait->try(wait);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 static struct fi_ops_fabric udpx_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = udpx_domain_open,
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = fi_eq_create,
 	.wait_open = fi_wait_fd_open,
+	.trywait = udpx_trywait
 };
 
 static int udpx_fabric_close(fid_t fid)

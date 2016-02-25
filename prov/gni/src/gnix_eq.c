@@ -389,7 +389,8 @@ static int gnix_eq_control(struct fid *eq, int command, void *arg)
 
 	switch (command) {
 	case FI_GETWAIT:
-		return _gnix_get_wait_obj(eq_priv->wait, arg);
+		/* return _gnix_get_wait_obj(eq_priv->wait, arg); */
+		return -FI_ENOSYS;
 	default:
 		return -FI_EINVAL;
 	}

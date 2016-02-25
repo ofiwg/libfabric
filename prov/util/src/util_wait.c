@@ -116,24 +116,31 @@ static void util_wait_fd_signal(struct util_wait *util_wait)
 	fd_signal_set(&wait->signal);
 }
 
+static int util_wait_fd_try(struct util_wait *wait)
+{
+	struct util_wait_fd *wait_fd;
+	void *context;
+	int ret;
+
+	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
+	fd_signal_reset(&wait_fd->signal);
+	ret = fi_poll(&wait->pollset->poll_fid, &context, 1);
+	return (ret > 0) ? -FI_EAGAIN : ret;
+}
+
 static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 {
 	struct util_wait_fd *wait;
 	uint64_t start;
-	void *context;
 	int ret;
 
 	wait = container_of(wait_fid, struct util_wait_fd, util_wait.wait_fid);
 	start = (timeout >= 0) ? fi_gettime_ms() : 0;
 
 	while (1) {
-		fd_signal_reset(&wait->signal);
-
-		ret = fi_poll(&wait->util_wait.pollset->poll_fid, &context, 1);
-		if (ret > 0)
-			return 0;
-		else if (ret < 0)
-			return ret;
+		ret = wait->util_wait.try(&wait->util_wait);
+		if (ret)
+			return ret == -FI_EAGAIN ? 0 : ret;
 
 		if (timeout >= 0) {
 			timeout -= (int) (fi_gettime_ms() - start);
@@ -141,7 +148,7 @@ static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 				return -FI_ETIMEDOUT;
 		}
 
-		context = fi_epoll_wait(wait->epoll_fd, timeout);
+		fi_epoll_wait(wait->epoll_fd, timeout);
 	}
 }
 
@@ -241,6 +248,7 @@ int fi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 		goto err1;
 
 	wait->util_wait.signal = util_wait_fd_signal;
+	wait->util_wait.try = util_wait_fd_try;
 	ret = fd_signal_init(&wait->signal);
 	if (ret)
 		goto err2;

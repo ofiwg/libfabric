@@ -387,9 +387,10 @@ static int psmx2_cntr_control(fid_t fid, int command, void *arg)
 		break;
 
 	case FI_GETWAIT:
+		/*
 		ret = psmx2_wait_get_obj(cntr->wait, arg);
 		break;
-
+		*/
 	default:
 		return -FI_ENOSYS;
 	}

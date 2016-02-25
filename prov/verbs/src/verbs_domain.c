@@ -268,6 +268,7 @@ static struct fi_ops_fabric fi_ibv_ops_fabric = {
 	.passive_ep = fi_ibv_passive_ep,
 	.eq_open = fi_ibv_eq_open,
 	.wait_open = fi_no_wait_open,
+	.trywait = fi_no_trywait
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,

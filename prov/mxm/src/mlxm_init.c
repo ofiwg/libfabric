@@ -235,6 +235,7 @@ static struct fi_ops_fabric mlxm_fabric_ops = {
         .passive_ep = fi_no_passive_ep            ,
         .eq_open    = fi_no_eq_open               ,
         .wait_open  = fi_no_wait_open             ,
+	.trywait = fi_no_trywait
 };
 
 static int mlxm_fabric(struct fi_fabric_attr *attr,

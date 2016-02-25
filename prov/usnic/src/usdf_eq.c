@@ -327,6 +327,7 @@ usdf_eq_strerror(struct fid_eq *feq, int prov_errno, const void *err_data,
 static int
 usdf_eq_control(fid_t fid, int command, void *arg)
 {
+	/*
 	struct usdf_eq *eq;
 
 	USDF_TRACE_SYS(EQ, "\n");
@@ -346,6 +347,8 @@ usdf_eq_control(fid_t fid, int command, void *arg)
 	}
 
 	return 0;
+	*/
+	return -FI_ENOSYS;
 }
 
 static int

@@ -718,9 +718,10 @@ static int psmx_cq_control(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_GETWAIT:
+		/*
 		ret = psmx_wait_get_obj(cq->wait, arg);
 		break;
-
+		*/
 	default:
 		return -FI_ENOSYS;
 	}

@@ -249,6 +249,7 @@ dummy_man_pages = \
         man/man3/fi_trecv.3 \
         man/man3/fi_trecvmsg.3 \
         man/man3/fi_trecvv.3 \
+        man/man3/fi_trywait.3 \
         man/man3/fi_tsend.3 \
         man/man3/fi_tsenddata.3 \
         man/man3/fi_tsendmsg.3 \
