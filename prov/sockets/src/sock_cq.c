@@ -407,6 +407,9 @@ static int sock_cq_control(struct fid *fid, int command, void *arg)
 	cq = container_of(fid, struct sock_cq, cq_fid);
 	switch (command) {
 	case FI_GETWAIT:
+		if (cq->domain->progress_mode == FI_PROGRESS_MANUAL)
+			return -FI_ENOSYS;
+
 		switch (cq->attr.wait_obj) {
 		case FI_WAIT_NONE:
 		case FI_WAIT_FD:

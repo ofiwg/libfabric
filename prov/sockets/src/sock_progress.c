@@ -151,6 +151,11 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 	if (pe_entry->conn->rx_pe_entry == pe_entry)
 		pe_entry->conn->rx_pe_entry = NULL;
 
+	if (pe_entry->type == SOCK_PE_RX && pe_entry->pe.rx.atomic_cmp) {
+		util_buf_release(pe->atomic_rx_pool, pe_entry->pe.rx.atomic_cmp);
+		util_buf_release(pe->atomic_rx_pool, pe_entry->pe.rx.atomic_src);
+	}
+
 	if (pe_entry->is_pool_entry) {
 		rbfree(&pe_entry->comm_buf);
 		util_buf_release(pe->pe_rx_pool, pe_entry);
@@ -403,7 +408,7 @@ static void sock_pe_progress_pending_ack(struct sock_pe *pe,
 		data_len = pe_entry->total_len - len;
 		if (data_len) {
 			if (sock_pe_send_field(pe_entry,
-					       &pe_entry->pe.rx.atomic_cmp[0],
+					       pe_entry->pe.rx.atomic_cmp,
 					       data_len, len))
 				return;
 			len += data_len;
@@ -1148,6 +1153,12 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe,
 	struct sock_mr *mr;
 	uint64_t offset, len, entry_len;
 
+	if (!pe_entry->pe.rx.atomic_cmp) {
+		pe_entry->pe.rx.atomic_cmp = util_buf_alloc(pe->atomic_rx_pool);
+		pe_entry->pe.rx.atomic_src = util_buf_alloc(pe->atomic_rx_pool);
+		if (!pe_entry->pe.rx.atomic_cmp || !pe_entry->pe.rx.atomic_src)
+			return -FI_ENOMEM;
+	}
 
 	len = sizeof(struct sock_msg_hdr);
 	if (sock_pe_recv_field(pe_entry, &pe_entry->pe.rx.rx_op,
@@ -1178,7 +1189,7 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe,
 
 	/* cmp data */
 	if (pe_entry->pe.rx.rx_op.atomic.cmp_iov_len) {
-		if (sock_pe_recv_field(pe_entry, &pe_entry->pe.rx.atomic_cmp[0],
+		if (sock_pe_recv_field(pe_entry, pe_entry->pe.rx.atomic_cmp,
 				       entry_len, len))
 			return 0;
 		len += entry_len;
@@ -1208,7 +1219,7 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe,
 
 	/* src data */
 	if (pe_entry->pe.rx.rx_op.atomic.op != FI_ATOMIC_READ && pe_entry->pe.rx.rx_op.src_iov_len) {
-		if (sock_pe_recv_field(pe_entry, &pe_entry->pe.rx.atomic_src[0],
+		if (sock_pe_recv_field(pe_entry, pe_entry->pe.rx.atomic_src,
 				       entry_len, len))
 			return 0;
 		len += entry_len;
@@ -1224,9 +1235,9 @@ static int sock_pe_process_rx_atomic(struct sock_pe *pe,
 	offset = 0;
 	for (i = 0; i < pe_entry->pe.rx.rx_op.dest_iov_len; i++) {
 		for (j = 0; j < pe_entry->pe.rx.rx_iov[i].ioc.count; j++) {
-			sock_pe_update_atomic((char *) &pe_entry->pe.rx.atomic_cmp[0] + offset,
+			sock_pe_update_atomic(pe_entry->pe.rx.atomic_cmp + offset,
 					      (char *) (uintptr_t) pe_entry->pe.rx.rx_iov[i].ioc.addr + j * datatype_sz,
-					      (char *) &pe_entry->pe.rx.atomic_src[0] + offset,
+					      pe_entry->pe.rx.atomic_src + offset,
 					      pe_entry->pe.rx.rx_op.atomic.datatype,
 					      pe_entry->pe.rx.rx_op.atomic.op);
 			offset += datatype_sz;
@@ -2786,14 +2797,21 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 		goto err1;
 	}
 
+	pe->atomic_rx_pool = util_buf_pool_create(SOCK_EP_MAX_ATOMIC_SZ,
+						  16, 0, 32);
+	if (!pe->atomic_rx_pool) {
+		SOCK_LOG_ERROR("failed to create atomic rx buffer pool\n");
+		goto err2;
+	}
+
 	if (sock_epoll_create(&pe->epoll_set, sock_cm_def_map_sz) < 0) {
                 SOCK_LOG_ERROR("failed to create epoll set\n");
-                goto err2;
+                goto err3;
         }
 
 	if (domain->progress_mode == FI_PROGRESS_AUTO) {
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, pe->signal_fds) < 0)
-			goto err3;
+			goto err4;
 
 		fd_set_nonblock(pe->signal_fds[SOCK_SIGNAL_RD_FD]);
 		sock_epoll_add(&pe->epoll_set, pe->signal_fds[SOCK_SIGNAL_RD_FD]);
@@ -2802,17 +2820,19 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 		if (pthread_create(&pe->progress_thread, NULL,
 				   sock_pe_progress_thread, (void *)pe)) {
 			SOCK_LOG_ERROR("Couldn't create progress thread\n");
-			goto err4;
+			goto err5;
 		}
 	}
 	SOCK_LOG_DBG("PE init: OK\n");
 	return pe;
 
-err4:
+err5:
 	close(pe->signal_fds[0]);
 	close(pe->signal_fds[1]);
-err3:
+err4:
 	sock_epoll_close(&pe->epoll_set);
+err3:
+	util_buf_pool_destroy(pe->atomic_rx_pool);
 err2:
 	util_buf_pool_destroy(pe->pe_rx_pool);
 err1:
@@ -2837,6 +2857,7 @@ void sock_pe_finalize(struct sock_pe *pe)
 	}
 
 	util_buf_pool_destroy(pe->pe_rx_pool);
+	util_buf_pool_destroy(pe->atomic_rx_pool);
 	fastlock_destroy(&pe->lock);
 	fastlock_destroy(&pe->signal_lock);
 	pthread_mutex_destroy(&pe->list_lock);

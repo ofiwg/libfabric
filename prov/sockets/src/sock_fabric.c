@@ -132,6 +132,21 @@ struct sock_domain *sock_dom_list_head(void)
 	return domain;
 }
 
+int sock_dom_check_manual_progress(struct sock_fabric *fabric)
+{
+	struct dlist_entry *entry;
+	struct sock_domain *dom_entry;
+	for (entry = sock_dom_list.next; entry != &sock_dom_list;
+	     entry = entry->next) {
+		dom_entry = container_of(entry, struct sock_domain,
+					 dom_list_entry);
+		if (dom_entry->fab == fabric &&
+		    dom_entry->progress_mode == FI_PROGRESS_MANUAL)
+			return 1;
+	}
+	return 0;
+}
+
 void sock_fab_add_to_list(struct sock_fabric *fabric)
 {
 	fastlock_acquire(&sock_list_lock);

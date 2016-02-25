@@ -53,6 +53,8 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 	struct sock_wait *wait;
 
 	wait = container_of(fid, struct sock_wait, wait_fid.fid);
+	if (sock_dom_check_manual_progress(wait->fab))
+		return -FI_ENOSYS;
 
 	switch (wait->type) {
 	case FI_WAIT_FD:

@@ -1580,9 +1580,10 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep, fi_addr_t index,
 
 	idx = (ep->ep_type == FI_EP_MSG) ? index : index & ep->av->mask;
 	conn = idm_lookup(&ep->av_idm, idx);
-	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS &&
-		sock_compare_addr(&conn->addr, addr))
+	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS) {
+		assert(sock_compare_addr(&conn->addr, addr));
 		return conn;
+	}
 
 	for (i = 0; i < ep->cmap.used; i++) {
 		if (sock_compare_addr(&ep->cmap.table[i].addr, addr))
@@ -1605,7 +1606,7 @@ int sock_ep_get_conn(struct sock_ep *ep, struct sock_tx_ctx *tx_ctx,
 
 	fastlock_acquire(&ep->cmap.lock);
 	conn = sock_ep_lookup_conn(ep, av_index, addr);
-	if (!conn && conn != SOCK_CM_CONN_IN_PROGRESS) {
+	if (!conn) {
 		conn = SOCK_CM_CONN_IN_PROGRESS;
 		idm_set(&ep->av_idm, av_index, conn);
 	}
