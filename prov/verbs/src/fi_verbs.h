@@ -154,7 +154,12 @@ struct fi_ibv_domain {
 };
 
 struct fi_ibv_cq;
-typedef void (*fi_ibv_cq_read_entry)(struct fi_ibv_cq *cq, int index, void *buf);
+typedef void (*fi_ibv_cq_read_entry)(struct ibv_wc *wc, int index, void *buf);
+
+struct fi_ibv_wce {
+	struct slist_entry	entry;
+	struct ibv_wc		wc;
+};
 
 struct fi_ibv_cq {
 	struct fid_cq		cq_fid;
@@ -167,6 +172,9 @@ struct fi_ibv_cq {
 	struct ibv_wc		wc;
 	int			signal_fd[2];
 	fi_ibv_cq_read_entry	read_entry;
+	struct util_buf_pool	*wce_pool;
+	struct slist		wcq;
+	fastlock_t		lock;
 	/* RDM EP fields - TODO: check usage */
 	struct fi_ibv_rdm_ep	*ep;
 	int			format;
