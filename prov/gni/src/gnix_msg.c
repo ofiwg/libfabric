@@ -91,13 +91,16 @@ static void __gnix_msg_queues(struct gnix_fid_ep *ep,
 static void __gnix_msg_send_fr_complete(struct gnix_fab_req *req,
 					struct gnix_tx_descriptor *txd)
 {
-	atomic_dec(&req->vc->outstanding_tx_reqs);
+	struct gnix_vc *vc = req->vc;
+
+	atomic_dec(&vc->outstanding_tx_reqs);
 	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 
-	/* Schedule VC TX queue in case the VC is 'fenced'. */
-	_gnix_vc_tx_schedule(req->vc);
-
 	_gnix_fr_free(req->gnix_ep, req);
+
+	/* Schedule VC TX queue in case the VC is 'fenced'. */
+	_gnix_vc_tx_schedule(vc);
+
 }
 
 static int __recv_err(struct gnix_fid_ep *ep, void *context, uint64_t flags,
@@ -1510,13 +1513,11 @@ static int _gnix_send_req(void *arg)
 	}
 
 	/*
- 	 * if this is a rendezvous message, or GNI_RC_NOT_DONE
- 	 * returned, we might want to generate IRQ at remote
- 	 * peer.
- 	 */
-	if (((status == GNI_RC_SUCCESS) &&
-		(tag == GNIX_SMSG_T_RNDZV_START)) ||
-	    (status == GNI_RC_NOT_DONE))
+	 * if this is a rendezvous message, we want to generate
+	 * IRQ at remote peer.
+	 */
+	if ((status == GNI_RC_SUCCESS) &&
+		(tag == GNIX_SMSG_T_RNDZV_START))
 		_gnix_rma_post_irq(req->vc);
 
 	fastlock_release(&nic->lock);

@@ -266,8 +266,16 @@ struct gnix_smsg_rma_data_hdr {
  *
  * @var list             list element
  * @var gni_desc         embedded GNI post descriptor
- * @var gnix_smsg_desc   embedded gnix SMSG descriptor
+ * @var gnix_ct_descs    embedded GNI post descriptors for concatenated gets
+ *                       used for unaligned gets
+ * @var gnix_smsg_eager_hdr embedded header for SMSG eager protocol
+ * @var gnix_smsg_rndzv_start_hdr embedded header for rendezvous protocol
+ * @var gnix_smsg_rndzv_fin_hdr embedded header for rendezvous protocol
+ * @var gnix_smsg_rndzv_rma_data_hdr embedded header for remote notification for
+ *                       rma operations
  * @var req              pointer to fab request associated with this descriptor
+ * @var completer_fn     call back to invoke when associated GNI CQE's are
+ *                       returned.
  * @var id               the id of this descriptor - the value returned
  *                       from GNI_CQ_MSG_ID
  * @var err_list         Error TXD list entry

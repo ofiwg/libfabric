@@ -202,7 +202,8 @@ void _gnix_sfe_free(struct slist_entry *e, struct gnix_s_freelist *fl)
 	assert(e);
 	assert(fl);
 
-	/* */
+	e->next = NULL;  /* keep slist implementation happy */
+
 	if (fl->ts)
 		fastlock_acquire(&fl->lock);
 	slist_insert_tail(e, &fl->freelist);

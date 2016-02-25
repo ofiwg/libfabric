@@ -167,16 +167,19 @@ try_again:
 		retry = 1;
 		break;
 	case GNI_RC_INVALID_PARAM:
+	case GNI_RC_INVALID_STATE:
 	case GNI_RC_ERROR_RESOURCE:
 	case GNI_RC_ERROR_NOMEM:
 		retry = 0;
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			"GNI_CqGetEvent returned %s\n", gni_err_str[status]);
+			  "GNI_CqGetEvent returned %s\n",
+			  gni_err_str[status]);
 		break;
 	default:
 		retry = 0;
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			"GNI_CqGetEvent returned unexpected code %d\n", status);
+			  "GNI_CqGetEvent returned unexpected code %s\n",
+			  gni_err_str[status]);
 		break;
 	}
 
@@ -433,7 +436,7 @@ static int __gnix_nic_txd_err_get(struct gnix_nic *nic,
 	return 0;
 }
 
-static int __nic_get_completed_txd(struct gnix_nic *nic,
+static void __nic_get_completed_txd(struct gnix_nic *nic,
 				   gni_cq_handle_t hw_cq,
 				   struct gnix_tx_descriptor **txd,
 				   gni_return_t *tx_status)
@@ -448,12 +451,14 @@ static int __nic_get_completed_txd(struct gnix_nic *nic,
 	if (__gnix_nic_txd_err_get(nic, &txd_p)) {
 		*txd = txd_p;
 		*tx_status = GNI_RC_TRANSACTION_ERROR;
-		return 1;
+		return;
 	}
 
 	status = GNI_CqGetEvent(hw_cq, &cqe);
 	if (status == GNI_RC_NOT_DONE) {
-		return 0;
+		*txd = NULL;
+		*tx_status = GNI_RC_NOT_DONE;
+		return;
 	}
 
 	assert(status == GNI_RC_SUCCESS ||
@@ -495,7 +500,6 @@ static int __nic_get_completed_txd(struct gnix_nic *nic,
 	*tx_status = status;
 	*txd = txd_p;
 
-	return 1;
 }
 
 static int __nic_tx_progress(struct gnix_nic *nic, gni_cq_handle_t cq)
@@ -509,14 +513,18 @@ static int __nic_tx_progress(struct gnix_nic *nic, gni_cq_handle_t cq)
 
 		fastlock_acquire(&nic->lock);
 		__nic_get_completed_txd(nic, cq, &txd,
-						&tx_status);
+					&tx_status);
 		fastlock_release(&nic->lock);
 
 		if (txd && txd->completer_fn) {
 			ret = txd->completer_fn(txd, tx_status);
-			if (ret != FI_SUCCESS)
+			if (ret != FI_SUCCESS) {
+				/*
+				 * TODO: need to post error to CQ
+				 */
 				GNIX_WARN(FI_LOG_EP_DATA,
 					  "TXD completer failed: %d", ret);
+			}
 		}
 
 		if ((txd == NULL) || ret != FI_SUCCESS)
