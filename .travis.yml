@@ -6,7 +6,7 @@ compiler:
 os:
     - osx
     - linux
-before_install:
+install:
     - git clone https://github.com/ofiwg/libfabric.git
     - cd libfabric
     - ./autogen.sh
@@ -16,7 +16,7 @@ before_install:
     - cd ..
     - export LDFLAGS="-L$HOME/lib"
     - export CPPFLAGS="-I$HOME/include"
-install:
+script:
     - ./autogen.sh
     - ./configure --prefix=$HOME
     - make
