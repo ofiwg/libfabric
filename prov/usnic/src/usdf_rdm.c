@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -861,8 +861,8 @@ usdf_rdm_send_segment(struct usdf_tx *tx, struct usdf_rdm_connection *rdc)
 		sent = resid;
 		while (resid > 0) {
 			memcpy(ptr, cur_ptr, cur_resid);
-			ptr += wqe->rd_iov_resid;
-			resid -= wqe->rd_iov_resid;
+			ptr += cur_resid;
+			resid -= cur_resid;
 			++cur_iov;
 			cur_ptr = wqe->rd_iov[cur_iov].iov_base;
 			cur_resid = wqe->rd_iov[cur_iov].iov_len;
@@ -915,7 +915,7 @@ usdf_rdm_send_segment(struct usdf_tx *tx, struct usdf_rdm_connection *rdc)
 				cur_ptr += sge_len;
 			} else {
 				sge_len = cur_resid;
-				if (num_sge == USDF_RDM_MAX_SGE - 1 ||
+				if (num_sge == USDF_RDM_MAX_SGE ||
 				    cur_resid == resid) {
 					eop = 1;
 				}
