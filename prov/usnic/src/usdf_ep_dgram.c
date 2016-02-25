@@ -799,7 +799,8 @@ usdf_ep_dgram_open(struct fid_domain *domain, struct fi_info *info,
 			rx_size = info->rx_attr->size;
 	}
 
-	ep->max_msg_size = info->ep_attr->max_msg_size;
+	if (info->ep_attr)
+		ep->max_msg_size = info->ep_attr->max_msg_size;
 
 	if (ep->ep_mode & FI_MSG_PREFIX) {
 		ep->ep_wqe = tx_size * ep->e.dg.tx_iov_limit;
