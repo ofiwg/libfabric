@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -181,7 +181,7 @@ struct gnix_datagram {
 	struct dlist_entry      list;
 	struct dlist_entry       *free_list_head;
 	gni_ep_handle_t         gni_ep;
-	struct gnix_cm_nic      *nic;
+	struct gnix_cm_nic      *cm_nic;
 	struct gnix_address     target_addr;
 	enum gnix_dgram_state   state;
 	enum gnix_dgram_type    type;
