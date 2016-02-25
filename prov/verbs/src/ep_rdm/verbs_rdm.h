@@ -127,16 +127,10 @@ struct fi_ibv_rdm_tagged_rndv_header {
 	uint32_t mem_key;
 };
 
-struct fi_ibv_rdm_tagged_extra_buff {
-	struct fi_ibv_mem_pool_entry mpe;
-	char payload[sizeof(void *)];
-};
-
 struct fi_ibv_rdm_tagged_request {
 
 	/* Accessors and match info */
 
-	struct fi_ibv_mem_pool_entry mpe;
 	/* Request can be an element of only one queue at the moment */
 	struct dlist_entry queue_entry;
 
@@ -159,11 +153,9 @@ struct fi_ibv_rdm_tagged_request {
 	};
 
 	union {
-		/* user level */
-		void					*exp_rbuf;
-		struct fi_ibv_rdm_tagged_extra_buff	*unexp_rbuf;
-		/* verbs level */
-		void					*sbuf;
+		void *exp_rbuf;
+		void *unexp_rbuf;
+		void *sbuf;
 	};
 
 	/*
@@ -201,9 +193,7 @@ struct fi_ibv_rdm_tagged_request {
 static inline void
 fi_ibv_rdm_tagged_zero_request(struct fi_ibv_rdm_tagged_request *request)
 {
-	char *p = (char *)request;
-	memset(p + sizeof(request->mpe), 0, sizeof(*request) -
-					    sizeof(request->mpe));
+	memset(request, 0, sizeof (struct fi_ibv_rdm_tagged_request));
 }
 
 void fi_ibv_rdm_tagged_print_request(char *buf,
@@ -297,7 +287,6 @@ struct fi_ibv_rdm_tagged_conn {
 };
 
 struct fi_ibv_rdm_tagged_postponed_entry {
-	struct fi_ibv_mem_pool_entry mpe;
 	struct dlist_entry queue_entry;
 
 	struct fi_ibv_rdm_tagged_conn *conn;

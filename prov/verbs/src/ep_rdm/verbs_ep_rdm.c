@@ -45,8 +45,8 @@
 extern struct fi_ops_tagged fi_ibv_rdm_tagged_ops;
 extern struct fi_ops_cm fi_ibv_rdm_tagged_ep_cm_ops;
 extern struct dlist_entry fi_ibv_rdm_tagged_recv_posted_queue;
-extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_request_pool;
-extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_extra_buffers_pool;
+extern struct util_buf_pool* fi_ibv_rdm_tagged_request_pool;
+extern struct util_buf_pool* fi_ibv_rdm_tagged_extra_buffers_pool;
 extern struct fi_provider fi_ibv_prov;
 
 struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash = NULL;
@@ -188,8 +188,7 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request,
 					      FI_LOG_DEBUG);
 
-		fi_ibv_mem_pool_return(&request->mpe,
-				       &fi_ibv_rdm_tagged_request_pool);
+		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
 
 		VERBS_DBG(FI_LOG_EP_DATA,
 			  "\t\t-> SUCCESS, post recv %d\n", fid_ep->posted_recvs);
@@ -340,9 +339,9 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 	ibv_destroy_cq(ep->scq);
 	ibv_destroy_cq(ep->rcq);
 
-	fi_ibv_mem_pool_fini(&fi_ibv_rdm_tagged_request_pool);
-	fi_ibv_mem_pool_fini(&fi_ibv_rdm_tagged_postponed_pool);
-	fi_ibv_mem_pool_fini(&fi_ibv_rdm_tagged_extra_buffers_pool);
+	util_buf_pool_destroy(fi_ibv_rdm_tagged_request_pool);
+	util_buf_pool_destroy(fi_ibv_rdm_tagged_postponed_pool);
+	util_buf_pool_destroy(fi_ibv_rdm_tagged_extra_buffers_pool);
 
 	free(ep);
 
@@ -577,16 +576,16 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);
 
-	fi_ibv_mem_pool_init(&fi_ibv_rdm_tagged_request_pool,
-			     100, 100,
-			     sizeof(struct fi_ibv_rdm_tagged_request));
+	fi_ibv_rdm_tagged_request_pool = util_buf_pool_create(
+		sizeof(struct fi_ibv_rdm_tagged_request),
+		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	fi_ibv_mem_pool_init(&fi_ibv_rdm_tagged_postponed_pool,
-			     100, 100,
-			     sizeof(struct fi_ibv_rdm_tagged_postponed_entry));
+	fi_ibv_rdm_tagged_postponed_pool = util_buf_pool_create(
+		sizeof(struct fi_ibv_rdm_tagged_postponed_entry),
+		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	fi_ibv_mem_pool_init(&fi_ibv_rdm_tagged_extra_buffers_pool,
-			     100, 100, _ep->buff_len);
+	fi_ibv_rdm_tagged_extra_buffers_pool = util_buf_pool_create(
+		_ep->buff_len, FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
 	_ep->max_inline_rc =
 	    fi_ibv_rdm_tagged_find_max_inline_size(_ep->domain->pd,

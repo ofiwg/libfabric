@@ -35,30 +35,6 @@
 #include "verbs_utils.h"
 #include "verbs_rdm.h"
 
-void fi_ibv_mem_pool_init(struct fi_ibv_mem_pool *pool, int init_size,
-			  int max_size, int entry_size)
-{
-	int size = init_size < max_size ? init_size : max_size;
-	int i;
-	int entry_asize = entry_size % FI_IBV_RDM_MEM_ALIGNMENT;
-	entry_asize += entry_size;
-
-	pool->head = memalign(FI_IBV_RDM_BUF_ALIGNMENT, entry_asize * size);
-	memset(pool->head, 0, entry_asize * size);
-	pool->storage = (void *)pool->head;
-	struct fi_ibv_mem_pool_entry *tmp = pool->head;
-	for (i = 1; i < size; i++) {
-		tmp->next = (struct fi_ibv_mem_pool_entry *)
-				((char *)tmp + entry_asize);
-		tmp = tmp->next;
-	}
-	tmp->next = NULL;
-
-	pool->current_size = 0;
-	pool->max_size = max_size;
-	pool->entry_size = entry_asize;
-}
-
 int fi_ibv_rdm_tagged_req_match(struct dlist_entry *item, const void *other)
 {
 	const struct fi_ibv_rdm_tagged_request *req = other;
