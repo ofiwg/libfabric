@@ -45,7 +45,6 @@ typedef int gnix_cm_nic_rcv_cb_func(struct gnix_cm_nic *cm_nic,
 /**
  * @brief GNI provider connection management (cm) nic structure
  *
- * @var lock           spin lock for protecting tx/rx ctx alloc calls
  * @var nic            pointer to gnix_nic associated with this cm nic
  * @var dgram_hndl     handle to dgram allocator associated with this nic
  * @var domain         GNI provider domain associated with this nic
@@ -62,7 +61,6 @@ typedef int gnix_cm_nic_rcv_cb_func(struct gnix_cm_nic *cm_nic,
  * @var device_id      local Aries device id associated with this nic.
  */
 struct gnix_cm_nic {
-	fastlock_t lock;
 	struct gnix_nic *nic;
 	struct gnix_dgram_hndl *dgram_hndl;
 	struct gnix_fid_domain *domain;

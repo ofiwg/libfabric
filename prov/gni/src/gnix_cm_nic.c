@@ -524,7 +524,6 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	cm_nic->domain = domain;
 	cm_nic->ctrl_progress = domain->control_progress;
 	cm_nic->my_name.name_type = name_type;
-	fastlock_init(&cm_nic->lock);
 	fastlock_init(&cm_nic->wq_lock);
 	dlist_init(&cm_nic->cm_nic_wq);
 
