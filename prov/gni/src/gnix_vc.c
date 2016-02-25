@@ -454,6 +454,12 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 		vc->conn_state = GNIX_VC_CONNECTED;
 		vc->peer_id = vc->vc_id;
 		vc->peer_caps = ep->caps;
+		ret = _gnix_vc_schedule(vc);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_vc_schedule returned %s\n",
+				  fi_strerror(-ret));
+
 		GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
 			   vc);
 		goto exit_w_lock;
@@ -542,6 +548,12 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 		   vc);
 	vc_peer->conn_state = GNIX_VC_CONNECTED;
 	vc_peer->peer_id = vc->vc_id;
+	ret = _gnix_vc_schedule(vc_peer);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "_gnix_vc_schedule returned %s\n",
+			  fi_strerror(-ret));
+
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
 		   vc_peer);
 
@@ -633,6 +645,10 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	fastlock_release(&ep->vc_ht_lock);
 
 	ret = _gnix_vc_schedule(vc);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "_gnix_vc_schedule returned %s\n",
+			  fi_strerror(-ret));
 
 	return ret;
 err:
@@ -794,7 +810,12 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 
 		fastlock_release(&ep->vc_ht_lock);
 
-		_gnix_vc_schedule(vc);
+		ret = _gnix_vc_schedule(vc);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_vc_schedule returned %s\n",
+				  fi_strerror(-ret));
+
 		ret = _gnix_cm_nic_progress(cm_nic);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
@@ -835,6 +856,11 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 		fastlock_release(&ep->vc_ht_lock);
 
 		ret = _gnix_vc_schedule(vc);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_vc_schedule returned %s\n",
+				  fi_strerror(-ret));
+
 		ret = _gnix_cm_nic_progress(cm_nic);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
@@ -1003,8 +1029,18 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 		GNIX_DEBUG(FI_LOG_EP_CTRL,
 			   "moving vc %p to connected\n",vc);
 		vc->modes |= GNIX_VC_MODE_DG_POSTED;
+		ret = _gnix_vc_schedule(vc);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_vc_schedule returned %s\n",
+				  fi_strerror(-ret));
+
 	} else if (ret == -FI_EAGAIN) {
 		ret = _gnix_vc_schedule(vc);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_vc_schedule returned %s\n",
+				  fi_strerror(-ret));
 		ret = FI_SUCCESS;
 	} else {
 		GNIX_FATAL(FI_LOG_EP_CTRL, "_gnix_cm_nic_send returned %s\n",
@@ -1134,6 +1170,10 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 			   fi_strerror(-ret));
 	}
 	ret = _gnix_vc_schedule(vc);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "_gnix_vc_schedule returned %s\n",
+			  fi_strerror(-ret));
 
 err:
 	fastlock_release(&ep->vc_ht_lock);
@@ -1452,6 +1492,10 @@ int _gnix_vc_connect(struct gnix_vc *vc)
 	fastlock_release(&cm_nic->wq_lock);
 
 	ret = _gnix_vc_schedule(vc);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "_gnix_vc_schedule returned %s\n",
+			  fi_strerror(-ret));
 
 	return ret;
 }
