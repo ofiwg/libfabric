@@ -51,7 +51,7 @@ OpenFabrics Enterprise Distribution (OFED) software releases. With
 the exception of the sockets provider, which is provided for development
 purposes, distro support for a specific provider is vendor specific.
 
-Libfabric will also run on OS-X, but OS X support is provided as a convenience
+Libfabric will also run on OS X, but OS X support is provided as a convenience
 for developers.
 
 Bugs, issues, or requests for feature enhancements may be made directly to
@@ -59,10 +59,10 @@ the github issues list:
 
 https://github.com/ofiwg/libfabric/issues
 
-Additionally, users may post questions, comments, bugs, etc. to the OFIWG
-mailing list.  (Don't be bashful.  We don't bite.)
+Additionally, users may post questions, comments, bugs, etc. to the Libfabric
+users mailing list.  (Don't be bashful.  We don't bite.)
 
-ofiwg@lists.openfabrics.org
+libfabric-users@lists.openfabrics.org
 
 Patches may be submitted using github (preferred) or posted to the OFIWG
 mail list.
