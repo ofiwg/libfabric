@@ -85,28 +85,28 @@ static ssize_t udpx_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 
 	cq = container_of(cq_fid, struct udpx_cq, util_cq.cq_fid);
 	fastlock_acquire(&cq->util_cq.cq_lock);
-	if (cirque_isempty(&cq->cirq)) {
+	if (cirque_isempty(cq->cirq)) {
 		fastlock_release(&cq->util_cq.cq_lock);
 		udpx_cq_progress(cq);
 		fastlock_acquire(&cq->util_cq.cq_lock);
-		if (cirque_isempty(&cq->cirq)) {
+		if (cirque_isempty(cq->cirq)) {
 			i = -FI_EAGAIN;
 			goto out;
 		}
 	}
 
-	if (count > cirque_usedcnt(&cq->cirq))
-		count = cirque_usedcnt(&cq->cirq);
+	if (count > cirque_usedcnt(cq->cirq))
+		count = cirque_usedcnt(cq->cirq);
 
 	for (i = 0; i < count; i++) {
-		entry = cirque_head(&cq->cirq);
+		entry = cirque_head(cq->cirq);
 		if (entry->flags & UTIL_FLAG_ERROR) {
 			if (!i)
 				i = -FI_EAVAIL;
 			break;
 		}
 		cq->util_cq.read_entry(&buf, entry);
-		cirque_discard(&cq->cirq);
+		cirque_discard(cq->cirq);
 	}
 out:
 	fastlock_release(&cq->util_cq.cq_lock);
@@ -129,29 +129,29 @@ static ssize_t udpx_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 	}
 
 	fastlock_acquire(&cq->util_cq.cq_lock);
-	if (cirque_isempty(&cq->cirq)) {
+	if (cirque_isempty(cq->cirq)) {
 		fastlock_release(&cq->util_cq.cq_lock);
 		udpx_cq_progress(cq);
 		fastlock_acquire(&cq->util_cq.cq_lock);
-		if (cirque_isempty(&cq->cirq)) {
+		if (cirque_isempty(cq->cirq)) {
 			i = -FI_EAGAIN;
 			goto out;
 		}
 	}
 
-	if (count > cirque_usedcnt(&cq->cirq))
-		count = cirque_usedcnt(&cq->cirq);
+	if (count > cirque_usedcnt(cq->cirq))
+		count = cirque_usedcnt(cq->cirq);
 
 	for (i = 0; i < count; i++) {
-		entry = cirque_head(&cq->cirq);
+		entry = cirque_head(cq->cirq);
 		if (entry->flags & UTIL_FLAG_ERROR) {
 			if (!i)
 				i = -FI_EAVAIL;
 			break;
 		}
-		src_addr[i] = cq->src[cirque_rindex(&cq->cirq)];
+		src_addr[i] = cq->src[cirque_rindex(cq->cirq)];
 		cq->util_cq.read_entry(&buf, entry);
-		cirque_discard(&cq->cirq);
+		cirque_discard(cq->cirq);
 	}
 out:
 	fastlock_release(&cq->util_cq.cq_lock);
@@ -168,9 +168,9 @@ static ssize_t udpx_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *bu
 
 	cq = container_of(cq_fid, struct udpx_cq, util_cq.cq_fid);
 	fastlock_acquire(&cq->util_cq.cq_lock);
-	if (!cirque_isempty(&cq->cirq) &&
-	    (cirque_head(&cq->cirq)->flags & UTIL_FLAG_ERROR)) {
-		cirque_discard(&cq->cirq);
+	if (!cirque_isempty(cq->cirq) &&
+	    (cirque_head(cq->cirq)->flags & UTIL_FLAG_ERROR)) {
+		cirque_discard(cq->cirq);
 		entry = slist_remove_head(&cq->util_cq.err_list);
 		err = container_of(entry, struct util_cq_err_entry, list_entry);
 		*buf = err->err_entry;
@@ -243,7 +243,7 @@ static int udpx_cq_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	udpx_comp_cirq_free(&cq->cirq);
+	udpx_comp_cirq_free(cq->cirq);
 	free(cq->src);
 	free(cq);
 	return 0;
@@ -286,12 +286,14 @@ static int udpx_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		return ret;
 
-	ret = udpx_comp_cirq_init(&cq->cirq, attr->size);
-	if (ret)
+	cq->cirq = udpx_comp_cirq_create(attr->size);
+	if (!cq->cirq) {
+		ret = -FI_ENOMEM;
 		goto err1;
+	}
 
 	if (cq->util_cq.domain->caps & FI_SOURCE) {
-		cq->src = calloc(cq->cirq.size, sizeof *cq->src);
+		cq->src = calloc(cq->cirq->size, sizeof *cq->src);
 		if (!cq->src) {
 			ret = -FI_ENOMEM;
 			goto err2;
@@ -300,7 +302,7 @@ static int udpx_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	return 0;
 
 err2:
-	udpx_comp_cirq_free(&cq->cirq);
+	udpx_comp_cirq_free(cq->cirq);
 err1:
 	fi_cq_cleanup(&cq->util_cq);
 	return ret;
