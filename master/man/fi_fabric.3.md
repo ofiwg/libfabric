@@ -173,7 +173,7 @@ Version information for the fabric provider.
 
 # RETURN VALUE
 
-Returns 0 on success. On error, a negative value corresponding to
+Returns FI_SUCCESS on success. On error, a negative value corresponding to
 fabric errno is returned. Fabric errno values are defined in
 `rdma/fi_errno.h`.
 

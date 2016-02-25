@@ -25,6 +25,9 @@ fi_wait_open / fi_close
 fi_wait
 : Waits for one or more wait objects in a set to be signaled.
 
+fi_trywait
+: Indicate when it is safe to block on wait objects using native OS calls.
+
 fi_control
 : Control wait set operation or attributes.
 
@@ -53,6 +56,8 @@ int fi_close(struct fid *waitset);
 
 int fi_wait(struct fid_wait *waitset, int timeout);
 
+int fi_trywait(struct fid_fabric *fabric, struct fid **fids, size_t count);
+
 int fi_control(struct fid *waitset, int command, void *arg);
 ```
 
@@ -77,8 +82,12 @@ int fi_control(struct fid *waitset, int command, void *arg);
 : On success, an array of user context values associated with
   completion queues or counters.
 
+*fids*
+: An array of fabric descriptors, each one associated with a native
+  wait object.
+
 *count*
-: Number of entries in context array.
+: Number of entries in context or fids array.
 
 *timeout*
 : Time to wait for a signal, in milliseconds.
@@ -195,6 +204,63 @@ being closed, otherwise the call will return -FI_EBUSY.
 Waits on a wait set until one or more of its underlying wait objects
 is signaled.
 
+## fi_trywait
+
+The fi_trywait call was introduced in libfabric version 1.3.  The behavior
+of using native wait objects without the use of fi_trywait is provider
+specific and should be considered non-deterministic.
+
+The fi_trywait() call is used in conjunction with native operating
+system calls to block on wait objects, such as file descriptors.  The
+application must call fi_trywait and obtain a return value of
+FI_SUCCESS prior to blocking on a native wait object.  Failure to
+do so may result in the wait object not being signaled, and the
+application not observing the desired events.  The following
+psuedo-code demonstrates the use of fi_trywait in conjunction with
+the OS select(2) call.
+
+```c
+fi_control(&cq->fid, FI_GETWAIT, (void *) &fd);
+FD_ZERO(&fds);
+FD_SET(fd, &fds);
+
+while (1) {
+	if (fi_trywait(&cq, 1) == 0)
+		select(fd + 1, &fds, NULL, &fds, &timeout);
+
+	do {
+		ret = fi_cq_read(cq, &comp, 1);
+	} while (ret > 0);
+}
+```
+
+Fi_trywait() will return FI_SUCCESS if it is safe to block on the wait object(s)
+corresponding to the fabric descriptor(s), or -FI_EAGAIN if there are
+events queued on the fabric descriptor or if blocking could hang the
+application.
+
+The call takes an array of fabric descriptors.  For each wait object
+that will be passed to the native wait routine, the corresponding
+fabric descriptor should first be passed to fi_trywait.  All fabric
+descriptors passed into a single fi_trywait call must make use of the
+same underlying wait object type.
+
+The following types of fabric descriptors may be passed into fi_trywait:
+event queues, completion queues, counters, and wait sets.  Applications
+that wish to use native wait calls should select specific wait objects
+when allocating such resources.  For example, by setting the item's
+creation attribute wait_obj value to FI_WAIT_FD.
+
+In the case the wait object to check belongs to a wait set, only
+the wait set itself needs to be passed into fi_trywait.  The fabric
+resources associated with the wait set do not.
+
+On receiving a return value of -FI_EAGAIN from fi_trywait, an application
+should read all queued completions and events, and call fi_trywait again
+before attempting to block.  Applications can make use of a fabric
+poll set to identify completion queues and counters that may require
+processing.
+
 ## fi_control
 
 The fi_control call is used to access provider or implementation specific
@@ -215,7 +281,7 @@ wait set.
 
 # RETURN VALUES
 
-Returns 0 on success.  On error, a negative value corresponding to
+Returns FI_SUCCESS on success.  On error, a negative value corresponding to
 fabric errno is returned.
 
 Fabric errno values are defined in
