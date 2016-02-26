@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -129,7 +129,8 @@ Test(wait_creation, mutex_cond, .init = mutex_cond_setup, .fini = wait_teardown)
 	cr_expect_eq(wait_priv->cond_type, FI_CQ_COND_NONE);
 }
 
-Test(wait_control, unspec, .init = unspec_setup, .fini = wait_teardown)
+Test(wait_control, unspec, .init = unspec_setup, .fini = wait_teardown,
+     .disabled = true)
 {
 	int fd;
 	int ret;
@@ -140,7 +141,8 @@ Test(wait_control, unspec, .init = unspec_setup, .fini = wait_teardown)
 	cr_expect_eq(wait_priv->fd[WAIT_READ], fd);
 }
 
-Test(wait_control, fd, .init = fd_setup, .fini = wait_teardown)
+Test(wait_control, fd, .init = fd_setup, .fini = wait_teardown,
+     .disabled = true)
 {
 	int fd;
 	int ret;
@@ -151,7 +153,8 @@ Test(wait_control, fd, .init = fd_setup, .fini = wait_teardown)
 	cr_expect_eq(wait_priv->fd[WAIT_READ], fd);
 }
 
-Test(wait_control, mutex_cond, .init = mutex_cond_setup, .fini = wait_teardown)
+Test(wait_control, mutex_cond, .init = mutex_cond_setup, .fini = wait_teardown,
+     .disabled = true)
 {
 	int ret;
 	struct fi_mutex_cond mutex_cond;

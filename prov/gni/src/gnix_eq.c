@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -383,9 +383,11 @@ err:
 
 static int gnix_eq_control(struct fid *eq, int command, void *arg)
 {
+	/* disabled until new trywait interface is implemented
 	struct gnix_fid_eq *eq_priv;
 
 	eq_priv = container_of(eq, struct gnix_fid_eq, eq_fid);
+	*/
 
 	switch (command) {
 	case FI_GETWAIT:

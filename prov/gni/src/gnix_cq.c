@@ -623,9 +623,11 @@ static int gnix_cq_signal(struct fid_cq *cq)
 
 static int gnix_cq_control(struct fid *cq, int command, void *arg)
 {
+	/* disabled until new trywait interface is implemented
 	struct gnix_fid_cq *cq_priv;
 
 	cq_priv = container_of(cq, struct gnix_fid_cq, cq_fid);
+	*/
 
 	switch (command) {
 	case FI_GETWAIT:
