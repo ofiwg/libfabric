@@ -170,28 +170,62 @@ static int fi_ibv_msg_ep_enable(struct fid_ep *ep)
 {
 	struct ibv_qp_init_attr attr;
 	struct fi_ibv_msg_ep *_ep;
+	struct ibv_pd *pd;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	if (!_ep->eq)
+	if (!_ep->eq) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL, "Endpoint is not bound to an event queue\n");
 		return -FI_ENOEQ;
-	if (!_ep->scq || !_ep->rcq)
+	}
+
+	if (!_ep->scq && !_ep->rcq) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL, "Endpoint is not bound to "
+				"a send or receive completion queue\n");
 		return -FI_ENOCQ;
+	}
+
+	if (!_ep->scq && (fi_send_allowed(_ep->info->caps) ||
+				fi_rma_initiate_allowed(_ep->info->caps))) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL, "Endpoint is not bound to "
+				"a send completion queue when it has transmit "
+				"capabilities enabled (FI_SEND | FI_RMA).\n");
+		return -FI_ENOCQ;
+	}
+
+	if (!_ep->rcq && fi_recv_allowed(_ep->info->caps)) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_EP_CTRL, "Endpoint is not bound to "
+				"a receive completion queue when it has receive "
+				"capabilities enabled. (FI_RECV)\n");
+		return -FI_ENOCQ;
+	}
 
 	memset(&attr, 0, sizeof attr);
-	attr.cap.max_send_wr = _ep->info->tx_attr->size;
-	attr.cap.max_recv_wr = _ep->info->rx_attr->size;
-	attr.cap.max_send_sge = _ep->info->tx_attr->iov_limit;
-	attr.cap.max_recv_sge = _ep->info->rx_attr->iov_limit;
+	if (_ep->scq) {
+		attr.cap.max_send_wr = _ep->info->tx_attr->size;
+		attr.cap.max_send_sge = _ep->info->tx_attr->iov_limit;
+		attr.send_cq = _ep->scq->cq;
+		pd = _ep->scq->domain->pd;
+	} else {
+		attr.send_cq = _ep->rcq->cq;
+		pd = _ep->rcq->domain->pd;
+	}
+
+	if (_ep->rcq) {
+		attr.cap.max_recv_wr = _ep->info->rx_attr->size;
+		attr.cap.max_recv_sge = _ep->info->rx_attr->iov_limit;
+		attr.recv_cq = _ep->rcq->cq;
+	} else {
+		attr.recv_cq = _ep->scq->cq;
+	}
+
 	attr.cap.max_inline_data = _ep->info->tx_attr->inject_size;
 
 	attr.srq = NULL;
 	attr.qp_type = IBV_QPT_RC;
 	attr.sq_sig_all = 0;
 	attr.qp_context = _ep;
-	attr.send_cq = _ep->scq->cq;
-	attr.recv_cq = _ep->rcq->cq;
 
-	return rdma_create_qp(_ep->id, _ep->rcq->domain->pd, &attr) ?
+	return rdma_create_qp(_ep->id, pd, &attr) ?
 		-errno : 0;
 }
 

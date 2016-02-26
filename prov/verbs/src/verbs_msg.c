@@ -45,6 +45,8 @@ fi_ibv_msg_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 	size_t i;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
+	assert(_ep->rcq);
+
 	wr.wr_id = (uintptr_t) msg->context;
 	wr.next = NULL;
 	if (msg->iov_count) {
