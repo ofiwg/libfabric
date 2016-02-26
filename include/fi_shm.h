@@ -39,6 +39,7 @@
 #include <stddef.h>
 
 #include <fi_atom.h>
+#include <fi_proto.h>
 #include <fi_mem.h>
 #include <fi_rbuf.h>
 
@@ -58,6 +59,9 @@ extern "C" {
 
 #define SMR_FLAG_DEBUG	(1 << 1)
 
+enum {
+	SMR_INJECT_SIZE = 4096
+};
 
 struct shm_region {
 	uint8_t		version;
@@ -74,6 +78,26 @@ struct shm_region {
 
 	struct shm_region *peer[];
 };
+
+struct smr_req {
+	void		*context;
+	void		*buffer;
+	uint64_t	flags;
+};
+
+struct smr_resp {
+	uint32_t	req_id;
+	uint32_t	status;
+};
+
+struct smr_inject_buf {
+	uint8_t		data[SMX_INJECT_SIZE];
+};
+
+DECLARE_CIRQUE(struct smr_cmd, smr_rx_cmdq);
+DECLARE_CIRQUE(struct smr_resp, smr_rx_ctrlq);
+DECLARE_FREESTACK(struct smr_req, smr_tx_ctx);
+DECLARE_FREESTACK(struct smr_inject_buf, smr_buf_pool);
 
 
 #ifdef __cplusplus
