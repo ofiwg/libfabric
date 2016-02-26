@@ -99,6 +99,23 @@ DECLARE_CIRQUE(struct smr_resp, smr_rx_ctrlq);
 DECLARE_FREESTACK(struct smr_req, smr_tx_ctx);
 DECLARE_FREESTACK(struct smr_inject_buf, smr_buf_pool);
 
+struct smr_attr {
+	char		*name;
+	size_t		cmd_size;
+	size_t		cmd_count;
+	size_t		ctrl_size;
+	size_t		ctrl_count;
+	size_t		tx_size;
+	size_t		tx_count;
+	size_t		inject_size;
+	size_t		inject_count;
+	size_t		peer_count;
+};
+
+int smr_create(const struct smr_attr *attr, struct shm_region **smr);
+int smr_connect(struct shm_region *smr, const char *name, int *id);
+void smr_free(struct shm_region *smr);
+
 
 #ifdef __cplusplus
 }
