@@ -60,16 +60,19 @@ if ($help_arg || !$ok) {
 }
 
 # Sanity checks
-die "Must specify --libfabric-source-dir, --fabtests-source-dir, and --download-dir"
+die "Must specify --libfabric-source-dir, --fabtests-source-dir, --download-dir, and --logfile-dir"
     if (!defined($libfabric_dir_arg) || $libfabric_dir_arg eq "" ||
         !defined($fabtests_dir_arg) || $fabtests_dir_arg eq "" ||
-        !defined($download_dir_arg) || $download_dir_arg eq "");
+        !defined($download_dir_arg) || $download_dir_arg eq "" ||
+        !defined($logfile_dir_arg) || $logfile_dir_arg eq "");
 die "$libfabric_dir_arg is not a valid directory"
     if (! -d $libfabric_dir_arg);
 die "$libfabric_dir_arg is not libfabric git clone"
     if (! -d "$libfabric_dir_arg/.git" || ! -f "$libfabric_dir_arg/src/fi_tostr.c");
 die "$download_dir_arg is not a valid directory"
     if (! -d $download_dir_arg);
+die "$logfile_dir_arg is not a valid directory"
+    if (! -d $logfile_dir_arg);
 
 $verbose_arg = 1
     if ($debug_arg);
