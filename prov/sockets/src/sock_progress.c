@@ -2560,14 +2560,6 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 
 	fastlock_acquire(&pe->lock);
 
-	fastlock_acquire(&tx_ctx->rlock);
-	if (!rbempty(&tx_ctx->rb) && !dlist_empty(&pe->free_list)) {
-		ret = sock_pe_new_tx_entry(pe, tx_ctx);
-	}
-	fastlock_release(&tx_ctx->rlock);
-	if (ret < 0)
-		goto out;
-
 	/* progress tx_ctx in PE table */
 	for (entry = tx_ctx->pe_entry_list.next;
 	     entry != &tx_ctx->pe_entry_list;) {
@@ -2585,6 +2577,15 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 			SOCK_LOG_DBG("[%p] TX done\n", pe_entry);
 		}
 	}
+
+	fastlock_acquire(&tx_ctx->rlock);
+	if (!rbempty(&tx_ctx->rb) && !dlist_empty(&pe->free_list)) {
+		ret = sock_pe_new_tx_entry(pe, tx_ctx);
+	}
+	fastlock_release(&tx_ctx->rlock);
+	if (ret < 0)
+		goto out;
+
 	sock_pe_progress_rx_ctrl_ctx(pe, tx_ctx->rx_ctrl_ctx, tx_ctx);
 out:
 	if (ret < 0)
