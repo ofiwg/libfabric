@@ -56,7 +56,7 @@ my $ok = Getopt::Long::GetOptions("libfabric-source-dir=s" => \$libfabric_dir_ar
 
 if ($help_arg || !$ok) {
     print "$0 --libfabric-source-dir libfabric_git_tree --fabtests-source-dir fabtests_git_tree --download-dir download_tree\n";
-    exit(0);
+    exit($ok);
 }
 
 # Sanity checks
