@@ -75,7 +75,7 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 static inline int
 fi_ibv_poll_events(struct fi_ibv_cq *_cq, int timeout)
 {
-	int ret;
+	int ret, rc;
 	void *context;
 	struct pollfd fds[2];
 	char data;
@@ -85,29 +85,33 @@ fi_ibv_poll_events(struct fi_ibv_cq *_cq, int timeout)
 
 	fds[0].events = fds[1].events = POLLIN;
 
-	ret = poll(fds, 2, timeout);
-	if (ret == 0)
+	rc = poll(fds, 2, timeout);
+	if (rc == 0)
 		return -FI_EAGAIN;
-	else if (ret < 0)
+	else if (rc < 0)
 		return -errno;
 
-	if (fds[1].revents & POLLIN) {
-		do {
-			ret = read(fds[1].fd, &data, 1);
-		} while (ret > 0);
-		return -FI_EAGAIN;
-	} else if (fds[0].revents & POLLIN) {
+	if (fds[0].revents & POLLIN) {
 		ret = ibv_get_cq_event(_cq->channel, &_cq->cq, &context);
 		if (ret)
 			return ret;
 
 		ibv_ack_cq_events(_cq->cq, 1);
-	} else {
+		rc--;
+	}
+	if (fds[1].revents & POLLIN) {
+		do {
+			ret = read(fds[1].fd, &data, 1);
+		} while (ret > 0);
+		ret = -FI_EAGAIN;
+		rc--;
+	}
+	if (rc) {
 		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Unknown poll error: check revents\n");
 		return -FI_EOTHER;
 	}
 
-	return 0;
+	return ret;
 }
 
 static ssize_t
@@ -228,6 +232,50 @@ static void fi_ibv_cq_read_data_entry(struct ibv_wc *wc, int i, void *buf)
 		wc->byte_len : 0;
 }
 
+static int fi_ibv_match_ep_id(struct slist_entry *entry, const void *ep_id)
+{
+	struct fi_ibv_msg_epe *epe = container_of(entry, struct fi_ibv_msg_epe, entry);
+
+	if (epe->ep->ep_id == (uint64_t) ep_id)
+		return 1;
+
+	return 0;
+}
+
+ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc)
+{
+	struct fi_ibv_msg_epe *epe;
+	struct slist_entry *entry;
+	ssize_t ret;
+
+	while (1) {
+		ret = ibv_poll_cq(cq->cq, 1, wc);
+		if (ret <= 0)
+			return ret;
+
+		if (wc->opcode == IBV_WC_RECV || wc->opcode == IBV_WC_RECV_RDMA_WITH_IMM)
+			return ret;
+
+		if ((wc->wr_id & cq->wr_id_mask) != cq->send_signal_wr_id)
+			return ret;
+
+		fastlock_acquire(&cq->ep_list_lock);
+		entry = slist_remove_first_match(&cq->ep_list, fi_ibv_match_ep_id, (void *)wc->wr_id);
+		if (!entry) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "No matching EP for :"
+					"given signaled send completion\n");
+			fastlock_release(&cq->ep_list_lock);
+			return -FI_EOTHER;
+		}
+		epe = container_of(entry, struct fi_ibv_msg_epe, entry);
+		atomic_sub(&epe->ep->unsignaled_send_cnt,
+				VERBS_SEND_SIGNAL_THRESH(epe->ep));
+		atomic_dec(&epe->ep->comp_pending);
+		fastlock_release(&cq->ep_list_lock);
+		util_buf_release(cq->epe_pool, epe);
+	}
+}
+
 static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
 	struct fi_ibv_cq *cq;
@@ -255,7 +303,7 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 			continue;
 		}
 
-		ret = ibv_poll_cq(cq->cq, 1, &wc);
+		ret = fi_ibv_poll_cq(cq, &wc);
 		if (ret <= 0)
 			break;
 
@@ -284,8 +332,7 @@ fi_ibv_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 	return ibv_wc_status_str(prov_errno);
 }
 
-static int
-fi_ibv_cq_signal(struct fid_cq *cq)
+int fi_ibv_cq_signal(struct fid_cq *cq)
 {
 	struct fi_ibv_cq *_cq;
 	char data = '0';
@@ -339,6 +386,7 @@ static int fi_ibv_cq_control(fid_t fid, int command, void *arg)
 static int fi_ibv_cq_close(fid_t fid)
 {
 	struct fi_ibv_cq *cq;
+	struct fi_ibv_msg_epe *epe;
 	struct fi_ibv_wce *wce;
 	struct slist_entry *entry;
 	int ret;
@@ -353,8 +401,19 @@ static int fi_ibv_cq_close(fid_t fid)
 	}
 	fastlock_release(&cq->lock);
 
+	fastlock_acquire(&cq->ep_list_lock);
+	while (!slist_empty(&cq->ep_list)) {
+		entry = slist_remove_head(&cq->ep_list);
+		epe = container_of(entry, struct fi_ibv_msg_epe, entry);
+		util_buf_release(cq->epe_pool, epe);
+	}
+	fastlock_release(&cq->ep_list_lock);
+
 	fastlock_destroy(&cq->lock);
+	fastlock_destroy(&cq->ep_list_lock);
+
 	util_buf_pool_destroy(cq->wce_pool);
+	util_buf_pool_destroy(cq->epe_pool);
 
 	if (cq->cq) {
 		ret = ibv_destroy_cq(cq->cq);
@@ -388,6 +447,7 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		   struct fid_cq **cq, void *context)
 {
 	struct fi_ibv_cq *_cq;
+	int ep_cnt_bits = 0;
 	int ret;
 
 	_cq = calloc(1, sizeof *_cq);
@@ -484,8 +544,23 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err4;
 	}
 
+	_cq->epe_pool = util_buf_pool_create(sizeof(struct fi_ibv_msg_epe), 16, 0,
+			_cq->domain->info->domain_attr->ep_cnt);
+	if (!_cq->epe_pool) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "Failed to create epe_pool\n");
+		goto err4;
+	}
+
 	fastlock_init(&_cq->lock);
+	fastlock_init(&_cq->ep_list_lock);
+
 	slist_init(&_cq->wcq);
+	slist_init(&_cq->ep_list);
+
+	while (_cq->domain->info->domain_attr->ep_cnt >> ++ep_cnt_bits);
+
+	_cq->send_signal_wr_id = 0xffffffffffffc0de << ep_cnt_bits;
+	_cq->wr_id_mask = (~_cq->wr_id_mask) << ep_cnt_bits;
 
 	*cq = &_cq->cq_fid;
 	return 0;
