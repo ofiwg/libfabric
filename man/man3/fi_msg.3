@@ -1,7 +1,7 @@
-.TH "fi_msg" "3" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_msg 3 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_msg \- Message data transfer operations
+fi_msg - Message data transfer operations
 .TP
 .B fi_recv / fi_recvv / fi_recvmsg
 Post a buffer to receive an incoming message
@@ -84,8 +84,8 @@ operation.
 operation.
 .SH DESCRIPTION
 .PP
-The send functions \-\- fi_send, fi_sendv, fi_sendmsg, fi_inject, and
-fi_senddata \-\- are used to transmit a message from one endpoint to
+The send functions -- fi_send, fi_sendv, fi_sendmsg, fi_inject, and
+fi_senddata -- are used to transmit a message from one endpoint to
 another endpoint.
 The main difference between send functions are the number and type of
 parameters that they accept as input.
@@ -93,8 +93,8 @@ Otherwise, they perform the same general function.
 Messages sent using fi_msg operations are received by a remote endpoint
 into a buffer posted to receive such messages.
 .PP
-The receive functions \-\- fi_recv, fi_recvv, fi_recvmsg \-\- post a
-data buffer to an endpoint to receive inbound messages.
+The receive functions -- fi_recv, fi_recvv, fi_recvmsg -- post a data
+buffer to an endpoint to receive inbound messages.
 Similar to the send operations, receive operations operate
 asynchronously.
 Users should not touch the posted data buffer(s) until the receive
@@ -107,9 +107,8 @@ returned to the user as part of the event completion.
 See fi_cq for completion event details.
 .SS fi_send
 .PP
-The call fi_send transfers the data contained in the user\-specified
-data buffer to a remote endpoint, with message boundaries being
-maintained.
+The call fi_send transfers the data contained in the user-specified data
+buffer to a remote endpoint, with message boundaries being maintained.
 The local endpoint must be connected to a remote endpoint or destination
 before fi_send is called.
 Unless the endpoint has been configured differently, the data buffer
@@ -117,7 +116,7 @@ passed into fi_send must not be touched by the application until the
 fi_send call completes asynchronously.
 .SS fi_sendv
 .PP
-The fi_sendv call adds support for a scatter\-gather list to fi_send.
+The fi_sendv call adds support for a scatter-gather list to fi_send.
 The fi_sendv transfers the set of data buffers referenced by the iov
 parameter to a remote endpoint as a single message.
 .SS fi_sendmsg
@@ -130,11 +129,11 @@ The fi_sendmsg function takes a \f[C]struct\ fi_msg\f[] as input.
 .nf
 \f[C]
 struct\ fi_msg\ {
-\ \ \ \ const\ struct\ iovec\ *msg_iov;\ /*\ scatter\-gather\ array\ */
+\ \ \ \ const\ struct\ iovec\ *msg_iov;\ /*\ scatter-gather\ array\ */
 \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ **desc;\ \ \ /*\ local\ request\ descriptors\ */
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ iov_count;/*\ #\ elements\ in\ iov\ */
 \ \ \ \ fi_addr_t\ \ \ \ \ \ \ \ \ \ addr;\ \ \ \ \ /*\ optional\ endpoint\ address\ */
-\ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *context;\ /*\ user\-defined\ context\ */
+\ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *context;\ /*\ user-defined\ context\ */
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ data;\ \ \ \ \ /*\ optional\ message\ data\ */
 };
 \f[]
@@ -173,7 +172,7 @@ indicate that a buffer should be posted to receive incoming data from a
 specific remote endpoint.
 .SS fi_recvv
 .PP
-The fi_recvv call adds support for a scatter\-gather list to fi_recv.
+The fi_recvv call adds support for a scatter-gather list to fi_recv.
 The fi_recvv posts the set of data buffers referenced by the iov
 parameter to a receive incoming data.
 .SS fi_recvmsg
@@ -262,7 +261,7 @@ On error, a negative value corresponding to fabric errno is returned.
 Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 .SH ERRORS
 .PP
-\f[I]\-FI_EAGAIN\f[] : Indicates that the underlying provider currently
+\f[I]-FI_EAGAIN\f[] : Indicates that the underlying provider currently
 lacks the resources needed to initiate the requested operation.
 This may be the result of insufficient internal buffering, in the case
 of FI_INJECT, or processing queues are full.
