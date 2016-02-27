@@ -1,7 +1,7 @@
-.TH "fi_trigger" "3" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_trigger 3 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_trigger \- Triggered operations
+fi_trigger - Triggered operations
 .SH SYNOPSIS
 .IP
 .nf
@@ -19,13 +19,13 @@ A triggered operation may be requested by specifying the FI_TRIGGER flag
 as part of the operation.
 Alternatively, an endpoint alias may be created and configured with the
 FI_TRIGGER flag.
-Such an endpoint is referred to as a trigger\-able endpoint.
-All data transfer operations on a trigger\-able endpoint are deferred.
+Such an endpoint is referred to as a trigger-able endpoint.
+All data transfer operations on a trigger-able endpoint are deferred.
 .PP
-Any data transfer operation is potentially trigger\-able, subject to
+Any data transfer operation is potentially trigger-able, subject to
 provider constraints.
-Trigger\-able endpoints are initialized such that only those interfaces
-supported by the provider which are trigger\-able are available.
+Trigger-able endpoints are initialized such that only those interfaces
+supported by the provider which are trigger-able are available.
 .PP
 Triggered operations require that applications use struct
 fi_triggered_context as their per operation context parameter.
