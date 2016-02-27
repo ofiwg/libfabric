@@ -1,9 +1,9 @@
-.TH fi_getinfo 3 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_getinfo" "3" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_getinfo / fi_freeinfo - Obtain / free fabric interface information
+fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
 .PP
-fi_allocinfo / fi_dupinfo - Allocate / duplicate an fi_info structure
+fi_allocinfo / fi_dupinfo \- Allocate / duplicate an fi_info structure
 .SH SYNOPSIS
 .IP
 .nf
@@ -43,7 +43,7 @@ Callers may specify NULL for node, service, and hints in order to
 retrieve information about what providers are available and their
 optimal usage models.
 If no matching fabric information is available, info will be set to NULL
-and the call will return -FI_ENODATA.
+and the call will return \-FI_ENODATA.
 .PP
 Based on the input hints, node, and service parameters, a list of fabric
 domains and endpoints will be returned.
@@ -65,7 +65,7 @@ version of the interfaces.
 The version determines the format of all data structures used by any of
 the fabric interfaces.
 Applications should use the FI_VERSION(major, minor) macro to indicate
-the version, with hard-coded integer values for the major and minor
+the version, with hard\-coded integer values for the major and minor
 values.
 The FI_MAJOR_VERSION and FI_MINOR_VERSION enum values defined in
 fabric.h specify the latest version of the installed library.
@@ -85,9 +85,9 @@ addressing information based on the provided hints.
 .PP
 The hints parameter, if provided, may be used to limit the resulting
 output as indicated below.
-As a general rule, specifying a non-zero value for input hints indicates
-that a provider must support the requested value or fail the operation
-with -FI_ENODATA.
+As a general rule, specifying a non\-zero value for input hints
+indicates that a provider must support the requested value or fail the
+operation with \-FI_ENODATA.
 With the exception of mode bits, hints that are set to zero are treated
 as a wildcard.
 A zeroed hint value results in providers either returning a default
@@ -128,7 +128,7 @@ struct\ fi_info\ {
 \f[I]next\f[] : Pointer to the next fi_info structure in the list.
 Will be NULL if no more structures exist.
 .PP
-\f[I]caps - fabric interface capabilities\f[] : If specified, indicates
+\f[I]caps \- fabric interface capabilities\f[] : If specified, indicates
 the desired capabilities of the fabric interfaces.
 Supported capabilities are listed in the \f[I]Capabilities\f[] section
 below.
@@ -136,51 +136,51 @@ below.
 \f[I]mode\f[] : Operational modes supported by the application.
 See the \f[I]Mode\f[] section below.
 .PP
-\f[I]addr_format - address format\f[] : If specified, indicates the
+\f[I]addr_format \- address format\f[] : If specified, indicates the
 format of addresses referenced by the fabric interfaces and data
 structures.
 Supported formats are listed in the \f[I]Addressing formats\f[] section
 below.
 .PP
-\f[I]src_addrlen - source address length\f[] : Indicates the length of
+\f[I]src_addrlen \- source address length\f[] : Indicates the length of
 the source address.
-This value must be > 0 if \f[I]src_addr\f[] is non-NULL.
+This value must be > 0 if \f[I]src_addr\f[] is non\-NULL.
 This field will be ignored in hints if FI_SOURCE is specified, or
 \f[I]src_addr\f[] is NULL.
 .PP
-\f[I]dest_addrlen - destination address length\f[] : Indicates the
+\f[I]dest_addrlen \- destination address length\f[] : Indicates the
 length of the destination address.
-This value must be > 0 if \f[I]dest_addr\f[] is non-NULL.
+This value must be > 0 if \f[I]dest_addr\f[] is non\-NULL.
 This field will be ignored in hints unless the node and service
 parameters are NULL or FI_SOURCE is specified, or if \f[I]dst_addr\f[]
 is NULL.
 .PP
-\f[I]src_addr - source address\f[] : If specified, indicates the source
+\f[I]src_addr \- source address\f[] : If specified, indicates the source
 address.
 This field will be ignored in hints if FI_SOURCE is specified.
 On output a provider shall return an address that corresponds to the
 indicated fabric or domain, with the format indicated by the returned
 \f[I]addr_format\f[] field.
 .PP
-\f[I]dest_addr - destination address\f[] : If specified, indicates the
+\f[I]dest_addr \- destination address\f[] : If specified, indicates the
 destination address.
 This field will be ignored in hints unless the node and service
 parameters are NULL or FI_SOURCE is specified.
 .PP
-\f[I]handle - provider context handle\f[] : References a provider
+\f[I]handle \- provider context handle\f[] : References a provider
 specific handle.
 The use of this field is operation specific.
 Unless its use is described for a given operation, the handle field must
 be NULL.
-It is commonly used by applications that make use of connection-oriented
-endpoints.
+It is commonly used by applications that make use of
+connection\-oriented endpoints.
 For other applications, the field should usually be NULL.
 .PP
 This field is used when processing connection requests and responses.
 It is also used to inherit endpoint\[aq]s attributes.
 See fi_eq(3), fi_reject(3), and fi_endpoint(3) .
 .PP
-\f[I]tx_attr - transmit context attributes\f[] : Optionally supplied
+\f[I]tx_attr \- transmit context attributes\f[] : Optionally supplied
 transmit context attributes.
 Transmit context attributes may be specified and returned as part of
 fi_getinfo.
@@ -191,7 +191,7 @@ will be returned.
 Output values will be greater than or equal to the requested input
 values.
 .PP
-\f[I]rx_attr - receive context attributes\f[] : Optionally supplied
+\f[I]rx_attr \- receive context attributes\f[] : Optionally supplied
 receive context attributes.
 Receive context attributes may be specified and returned as part of
 fi_getinfo.
@@ -202,7 +202,7 @@ will be returned.
 Output values will be greater than or or equal to the requested input
 values.
 .PP
-\f[I]ep_attr - endpoint attributes\f[] : Optionally supplied endpoint
+\f[I]ep_attr \- endpoint attributes\f[] : Optionally supplied endpoint
 attributes.
 Endpoint attributes may be specified and returned as part of fi_getinfo.
 When provided as hints, requested values of struct fi_ep_attr should be
@@ -212,7 +212,7 @@ returned.
 Output values will be greater than or equal to requested input values.
 See fi_endpoint(3) for details.
 .PP
-\f[I]domain_attr - domain attributes\f[] : Optionally supplied domain
+\f[I]domain_attr \- domain attributes\f[] : Optionally supplied domain
 attributes.
 Domain attributes may be specified and returned as part of fi_getinfo.
 When provided as hints, requested values of struct fi_domain_attr should
@@ -222,7 +222,7 @@ returned.
 Output values will be greater than or equal to requested input values.
 See fi_domain(3) for details.
 .PP
-\f[I]fabric_attr - fabric attributes\f[] : Optionally supplied fabric
+\f[I]fabric_attr \- fabric attributes\f[] : Optionally supplied fabric
 attributes.
 Fabric attributes may be specified and returned as part of fi_getinfo.
 When provided as hints, requested values of struct fi_fabric_attr should
@@ -232,7 +232,7 @@ returned.
 See fi_fabric(3) for details.
 .SH CAPABILITIES
 .PP
-Interface capabilities are obtained by OR-ing the following flags
+Interface capabilities are obtained by OR\-ing the following flags
 together.
 If capabilities in the hint parameter are set to 0, the underlying
 provider will return the set of capabilities which are supported.
@@ -257,7 +257,7 @@ operations that are supported.
 In the absence of any relevant flags, FI_MSG implies the ability to send
 and receive messages.
 Applications can use the FI_SEND and FI_RECV flags to optimize an
-endpoint as send-only or receive-only.
+endpoint as send\-only or receive\-only.
 .PP
 \f[I]FI_RMA\f[] : Specifies that the endpoint should support RMA read
 and write operations.
@@ -271,14 +271,14 @@ by an endpoint.
 .PP
 \f[I]FI_TAGGED\f[] : Specifies that the endpoint should handle tagged
 message transfers.
-Tagged message transfers associate a user-specified key or tag with each
-message that is used for matching purposes at the remote side.
+Tagged message transfers associate a user\-specified key or tag with
+each message that is used for matching purposes at the remote side.
 Endpoints supporting this capability support operations defined by
 struct fi_ops_tagged.
 In the absence of any relevant flags, FI_TAGGED implies the ability to
 send and receive tagged messages.
 Applications can use the FI_SEND and FI_RECV flags to optimize an
-endpoint as send-only or receive-only.
+endpoint as send\-only or receive\-only.
 .PP
 \f[I]FI_ATOMIC\f[] : Specifies that the endpoint supports some set of
 atomic operations.
@@ -307,7 +307,7 @@ FI_MULTI_RECV flag when posting receive buffers.
 data as part of its completion data.
 This capability only applies to connectionless endpoints.
 Note that returning source address information may require that the
-provider perform address translation and/or look-up based on data
+provider perform address translation and/or look\-up based on data
 available in the underlying protocol in order to provide the requested
 data, which may adversely affect performance.
 .PP
@@ -365,7 +365,7 @@ were selected.
 Secondary capabilities may optionally be requested by an application.
 If requested, a provider must support the capability or fail the
 fi_getinfo request (FI_ENODATA).
-A provider may optionally report non-selected secondary capabilities if
+A provider may optionally report non\-selected secondary capabilities if
 doing so would not compromise performance or security.
 .PP
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC,
@@ -387,7 +387,7 @@ provider preferred modes.
 On input to fi_getinfo, applications set the mode bits that they
 support.
 On output, providers will clear mode bits that are not necessary to
-achieve high-performance.
+achieve high\-performance.
 Mode bits that remain set indicate application requirements for using
 the fabric interfaces created using the returned fi_info.
 The set of modes are listed below.
@@ -451,7 +451,7 @@ or smaller than msg_prefix_size.
 The buffer pointer given to all send and receive operations must point
 to the start of the prefix region of the buffer (as opposed to the
 payload).
-For scatter-gather send/recv operations, the prefix buffer must be a
+For scatter\-gather send/recv operations, the prefix buffer must be a
 contiguous region, though it may or may not be directly adjacent to the
 payload portion of the buffer.
 .PP
@@ -525,7 +525,8 @@ Use of this flag will suppress any lengthy name resolution protocol.
 .PP
 \f[I]FI_SOURCE\f[] : Indicates that the node and service parameters
 specify the local source address to associate with an endpoint.
-If specified, either the node and/or service parameter must be non-NULL.
+If specified, either the node and/or service parameter must be
+non\-NULL.
 This flag is often used with passive endpoints.
 .PP
 \f[I]FI_PROV_ATTR_ONLY\f[] : Indicates that the caller is only querying
@@ -564,7 +565,7 @@ support the requested fabric information.
 .PP
 If hints are provided, the operation will be controlled by the values
 that are supplied in the various fields (see section on
-\f[I]fi_info\f[]).
+\f[I]fi\f[]info_).
 Applications that require specific communication interfaces, domains,
 capabilities or other requirements, can specify them using fields in
 \f[I]hints\f[].
