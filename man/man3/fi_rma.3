@@ -1,7 +1,7 @@
-.TH "fi_rma" "3" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_rma 3 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_rma \- Remote memory access operations
+fi_rma - Remote memory access operations
 .TP
 .B fi_read / fi_readv / fi_readmsg
 Initiates a read from remote memory
@@ -96,15 +96,15 @@ between a local data buffer and a remote data buffer.
 RMA transfers occur on a byte level granularity, and no message
 boundaries are maintained.
 .PP
-The write functions \-\- fi_write, fi_writev, fi_writemsg,
-fi_inject_write, and fi_writedata \-\- are used to transmit data into a
+The write functions -- fi_write, fi_writev, fi_writemsg,
+fi_inject_write, and fi_writedata -- are used to transmit data into a
 remote memory buffer.
 The main difference between write functions are the number and type of
 parameters that they accept as input.
 Otherwise, they perform the same general function.
 .PP
-The read functions \-\- fi_read, fi_readv, and fi_readmsg \-\- are used
-to transfer data from a remote memory region into local data buffer(s).
+The read functions -- fi_read, fi_readv, and fi_readmsg -- are used to
+transfer data from a remote memory region into local data buffer(s).
 Similar to the write operations, read operations operate asynchronously.
 Users should not touch the posted data buffer(s) until the read
 operation has completed.
@@ -123,7 +123,7 @@ RMA writes with immediate data will generate a completion entry at the
 remote endpoint, so that the immediate data may be delivered.
 .SS fi_write
 .PP
-The call fi_write transfers the data contained in the user\-specified
+The call fi_write transfers the data contained in the user-specified
 data buffer to a remote memory region.
 The local endpoint must be connected to a remote endpoint or destination
 before fi_write is called.
@@ -132,7 +132,7 @@ passed into fi_write must not be touched by the application until the
 fi_write call completes asynchronously.
 .SS fi_writev
 .PP
-The fi_writev call adds support for a scatter\-gather list to fi_write.
+The fi_writev call adds support for a scatter-gather list to fi_write.
 The fi_writev transfers the set of data buffers referenced by the iov
 parameter to the remote memory region.
 .SS fi_writemsg
@@ -145,13 +145,13 @@ The fi_writemsg function takes a struct fi_msg_rma as input.
 .nf
 \f[C]
 struct\ fi_msg_rma\ {
-\ \ \ \ const\ struct\ iovec\ *msg_iov;\ \ \ \ \ /*\ local\ scatter\-gather\ array\ */
+\ \ \ \ const\ struct\ iovec\ *msg_iov;\ \ \ \ \ /*\ local\ scatter-gather\ array\ */
 \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ **desc;\ \ \ \ \ \ \ /*\ operation\ descriptor\ */
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ iov_count;\ \ \ \ /*\ #\ elements\ in\ msg_iov\ */
 \ \ \ \ fi_addr_t\ \ \ \ \ \ \ \ \ \ addr;\ \ \ \ \ \ \ \ /*\ optional\ endpoint\ address\ */
 \ \ \ \ const\ struct\ fi_rma_iov\ *rma_iov;/*\ remote\ SGL\ */
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ rma_iov_count;/*\ #\ elements\ in\ rma_iov\ */
-\ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *context;\ \ \ \ \ /*\ user\-defined\ context\ */
+\ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *context;\ \ \ \ \ /*\ user-defined\ context\ */
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ data;\ \ \ \ \ \ \ \ \ /*\ optional\ immediate\ data\ */
 };
 
@@ -190,7 +190,7 @@ The local endpoint must be connected to a remote endpoint or destination
 before fi_read is called.
 .SS fi_readv
 .PP
-The fi_readv call adds support for a scatter\-gather list to fi_read.
+The fi_readv call adds support for a scatter-gather list to fi_read.
 The fi_readv transfers data from the remote memory region into the set
 of data buffers referenced by the iov parameter.
 .SS fi_readmsg
@@ -255,7 +255,7 @@ On error, a negative value corresponding to fabric errno is returned.
 Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 .SH ERRORS
 .PP
-\f[I]\-FI_EAGAIN\f[] : Indicates that the underlying provider currently
+\f[I]-FI_EAGAIN\f[] : Indicates that the underlying provider currently
 lacks the resources needed to initiate the requested operation.
 This may be the result of insufficient internal buffering, in the case
 of FI_INJECT, or processing queues are full.
