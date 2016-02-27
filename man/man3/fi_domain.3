@@ -1,7 +1,8 @@
-.TH fi_domain 3 "2015\-04\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.\"t
+.TH "fi_domain" "3" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_domain - Open a fabric access domain
+fi_domain \- Open a fabric access domain
 .SH SYNOPSIS
 .IP
 .nf
@@ -45,7 +46,7 @@ domain.
 .PP
 An access domain typically refers to a physical or virtual NIC or
 hardware port; however, a domain may span across multiple hardware
-components for fail-over or data striping purposes.
+components for fail\-over or data striping purposes.
 A domain defines the boundary for associating different resources
 together.
 Fabric resources belonging to the same domain may share resources.
@@ -58,7 +59,7 @@ parameter.
 .SS fi_open_ops
 .PP
 fi_open_ops is used to open provider specific interfaces.
-Provider interfaces may be used to access low-level resources and
+Provider interfaces may be used to access low\-level resources and
 operations that are specific to the opened resource domain.
 The details of domain interfaces are outside the scope of this
 documentation.
@@ -86,7 +87,7 @@ See \f[C]fi_av_bind\f[](3), \f[C]fi_ep_bind\f[](3),
 The fi_close call is used to release all resources associated with a
 domain or interface.
 All objects associated with the opened domain must be released prior to
-calling fi_close, otherwise the call will return -FI_EBUSY.
+calling fi_close, otherwise the call will return \-FI_EBUSY.
 .SH DOMAIN ATTRIBUTES
 .PP
 The \f[C]fi_domain_attr\f[] structure defines the set of attributes
@@ -127,7 +128,7 @@ If no instance has been opened, this field will be NULL.
 .SS Name
 .PP
 The name of the access domain.
-.SS Multi-threading Support (threading)
+.SS Multi\-threading Support (threading)
 .PP
 The threading model specifies the level of serialization required of an
 application when using the libfabric data transfer interfaces.
@@ -135,7 +136,7 @@ Control interfaces are always considered thread safe, and may be
 accessed by multiple threads.
 Applications which can guarantee serialization in their access of
 provider allocated resources and interfaces enables a provider to
-eliminate lower-level locks.
+eliminate lower\-level locks.
 .PP
 \f[I]FI_THREAD_UNSPEC\f[] : This value indicates that no threading model
 has been defined.
@@ -144,8 +145,8 @@ When specified, providers will return a threading model that allows for
 the greatest level of parallelism.
 .PP
 \f[I]FI_THREAD_SAFE\f[] : A thread safe serialization model allows a
-multi-threaded application to access any allocated resources through any
-interface without restriction.
+multi\-threaded application to access any allocated resources through
+any interface without restriction.
 All providers are required to support FI_THREAD_SAFE.
 .PP
 \f[I]FI_THREAD_FID\f[] : A fabric descriptor (FID) serialization model
@@ -296,17 +297,110 @@ whether the endpoint is reliable or unreliable, as well as provider and
 protocol specific implementation details, as shown in the following
 tables.
 .PP
-| Resource | Unrel EP-RM Disabled| Unrel EP-RM Enabled | Rel EP-RM
-Disabled | Rel EP-RM Enabled |
-|:--------:|:-------------------:|:-------------------:|:------------------:|:-----------------:|
-| Tx | error | EAGAIN | error | EAGAIN | | Rx | error | EAGAIN | error |
-EAGAIN | | Tx CQ | error | EAGAIN | error | EAGAIN | | Rx CQ | error |
-EAGAIN or drop | error | EAGAIN or retry | | Unmatched Recv | buffered
-or drop | buffered or drop | buffered or error | buffered or retry | |
-Recv Overrun | truncate or drop | truncate or drop | truncate or error |
-truncate or error | | Unmatched RMA | not applicable | not applicable |
-error | error | | RMA Overrun | not applicable | not applicable | error
-| error |
+.TS
+tab(@);
+c c c c c.
+T{
+Resource
+T}@T{
+Unrel EP\-RM Disabled
+T}@T{
+Unrel EP\-RM Enabled
+T}@T{
+Rel EP\-RM Disabled
+T}@T{
+Rel EP\-RM Enabled
+T}
+_
+T{
+Tx
+T}@T{
+error
+T}@T{
+EAGAIN
+T}@T{
+error
+T}@T{
+EAGAIN
+T}
+T{
+Rx
+T}@T{
+error
+T}@T{
+EAGAIN
+T}@T{
+error
+T}@T{
+EAGAIN
+T}
+T{
+Tx CQ
+T}@T{
+error
+T}@T{
+EAGAIN
+T}@T{
+error
+T}@T{
+EAGAIN
+T}
+T{
+Rx CQ
+T}@T{
+error
+T}@T{
+EAGAIN or drop
+T}@T{
+error
+T}@T{
+EAGAIN or retry
+T}
+T{
+Unmatched Recv
+T}@T{
+buffered or drop
+T}@T{
+buffered or drop
+T}@T{
+buffered or error
+T}@T{
+buffered or retry
+T}
+T{
+Recv Overrun
+T}@T{
+truncate or drop
+T}@T{
+truncate or drop
+T}@T{
+truncate or error
+T}@T{
+truncate or error
+T}
+T{
+Unmatched RMA
+T}@T{
+not applicable
+T}@T{
+not applicable
+T}@T{
+error
+T}@T{
+error
+T}
+T{
+RMA Overrun
+T}@T{
+not applicable
+T}@T{
+not applicable
+T}@T{
+error
+T}@T{
+error
+T}
+.TE
 .PP
 The resource column indicates the resource being accessed by a data
 transfer operation.
@@ -314,7 +408,7 @@ Tx refers to the transmit context when a data transfer operation posted.
 Rx refers to the receive context when receive data buffers are posted.
 When RM is enabled, the provider will ensure that space is available to
 accept the operation.
-If space is not available, the operation will fail with -FI_EAGAIN.
+If space is not available, the operation will fail with \-FI_EAGAIN.
 If resource management is disabled, the application is responsible for
 ensuring that there is space available before attempting to queue an
 operation.
@@ -328,7 +422,7 @@ the posting of a data transfer operation unless CQ space is available to
 store its completion.
 When RM is enabled, providers may use different mechanisms to prevent CQ
 overruns.
-This includes failing (returning -FI_EAGAIN) the posting of operations
+This includes failing (returning \-FI_EAGAIN) the posting of operations
 that could result in CQ overruns, dropping received messages, or forcing
 requests to be retried.
 .PP
@@ -364,10 +458,10 @@ When a resource management error occurs on an endpoint, the endpoint is
 transitioned into a disabled state.
 Any operations which have not already completed will fail and be
 discarded.
-For unconnected endpoints, the endpoint must be re-enabled before it
+For unconnected endpoints, the endpoint must be re\-enabled before it
 will accept new data transfer operations.
 For connected endpoints, the connection is torn down and must be
-re-established.
+re\-established.
 .SS AV Type (av_type)
 .PP
 Specifies the type of address vectors that are usable with this domain.
@@ -431,8 +525,8 @@ This is referred to as remote CQ data (sometimes referred to as
 immediate data).
 This field indicates the number of bytes that the provider supports for
 remote CQ data.
-If supported (non-zero value is returned), the minimum size of remote CQ
-data must be at least 4-bytes.
+If supported (non\-zero value is returned), the minimum size of remote
+CQ data must be at least 4\-bytes.
 .SS Completion Queue Count (cq_cnt)
 .PP
 The optimal number of completion queues supported by the domain,
@@ -455,7 +549,7 @@ the provider.
 .PP
 The number of outbound command queues optimally supported by the
 provider.
-For a low-level provider, this represents the number of command queues
+For a low\-level provider, this represents the number of command queues
 to the hardware and/or the number of parallel transmit engines
 effectively supported by the hardware and caches.
 Applications which allocate more transmit contexts than this value will
@@ -467,7 +561,7 @@ with multiple transmit contexts.
 .PP
 The number of inbound processing queues optimally supported by the
 provider.
-For a low-level provider, this represents the number hardware queues
+For a low\-level provider, this represents the number hardware queues
 that can be effectively utilized for processing incoming packets.
 Applications which allocate more receive contexts than this value will
 end up sharing underlying resources.

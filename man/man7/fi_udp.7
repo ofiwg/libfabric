@@ -1,4 +1,4 @@
-.TH fi_udp 7 "2016\-02\-01" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_udp" "7" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The UDP Fabric Provider
@@ -31,13 +31,13 @@ However, receive side data buffers are not modified outside of
 completion processing routines.
 .SH LIMITATIONS
 .PP
-The UDP provider has hard-coded maximums for supported queue sizes and
+The UDP provider has hard\-coded maximums for supported queue sizes and
 data transfers.
 These values are reflected in the related fabric attribute structures
 .PP
 EPs must be bound to both RX and TX CQs.
 .PP
-No support for selective completions or multi-recv.
+No support for selective completions or multi\-recv.
 .PP
 No support for counters.
 .SH RUNTIME PARAMETERS

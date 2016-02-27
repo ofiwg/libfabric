@@ -1,7 +1,7 @@
-.TH fi_tagged 3 "2015\-12\-23" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_tagged" "3" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_tagged - Tagged data transfer operations
+fi_tagged \- Tagged data transfer operations
 .TP
 .B fi_trecv / fi_trecvv / fi_trecvmsg
 Post a buffer to receive an incoming message
@@ -107,15 +107,15 @@ In general, message tags are checked against receive buffers in the
 order in which messages have been posted to the endpoint.
 See the ordering discussion below for more details.
 .PP
-The send functions -- fi_tsend, fi_tsendv, fi_tsendmsg, fi_tinject, and
-fi_tsenddata -- are used to transmit a tagged message from one endpoint
-to another endpoint.
+The send functions \-\- fi_tsend, fi_tsendv, fi_tsendmsg, fi_tinject,
+and fi_tsenddata \-\- are used to transmit a tagged message from one
+endpoint to another endpoint.
 The main difference between send functions are the number and type of
 parameters that they accept as input.
 Otherwise, they perform the same general function.
 .PP
-The receive functions -- fi_trecv, fi_trecvv, fi_recvmsg -- post a data
-buffer to an endpoint to receive inbound tagged messages.
+The receive functions \-\- fi_trecv, fi_trecvv, fi_recvmsg \-\- post a
+data buffer to an endpoint to receive inbound tagged messages.
 Similar to the send operations, receive operations operate
 asynchronously.
 Users should not touch the posted data buffer(s) until the receive
@@ -130,7 +130,7 @@ returned to the user as part of the event completion.
 See fi_cq for completion event details.
 .SS fi_tsend
 .PP
-The call fi_tsend transfers the data contained in the user-specified
+The call fi_tsend transfers the data contained in the user\-specified
 data buffer to a remote endpoint, with message boundaries being
 maintained.
 The local endpoint must be connected to a remote endpoint or destination
@@ -140,7 +140,7 @@ passed into fi_tsend must not be touched by the application until the
 fi_tsend call completes asynchronously.
 .SS fi_tsendv
 .PP
-The fi_tsendv call adds support for a scatter-gather list to fi_tsend.
+The fi_tsendv call adds support for a scatter\-gather list to fi_tsend.
 The fi_sendv transfers the set of data buffers referenced by the iov
 parameter to a remote endpoint as a single message.
 .SS fi_tsendmsg
@@ -153,13 +153,13 @@ The fi_tsendmsg function takes a struct fi_msg_tagged as input.
 .nf
 \f[C]
 struct\ fi_msg_tagged\ {
-\ \ \ \ const\ struct\ iovec\ *msg_iov;\ /*\ scatter-gather\ array\ */
+\ \ \ \ const\ struct\ iovec\ *msg_iov;\ /*\ scatter\-gather\ array\ */
 \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *desc;\ \ \ \ /*\ data\ descriptor\ */
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ iov_count;/*\ #\ elements\ in\ msg_iov\ *
 \ \ \ \ const\ void\ \ \ \ \ \ \ \ \ *addr;\ \ \ \ /*\ optional\ endpoint\ address\ */
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ tag;\ \ \ \ \ \ /*\ tag\ associated\ with\ message\ */
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ ignore;\ \ \ /*\ mask\ applied\ to\ tag\ for\ receives\ */
-\ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *context;\ /*\ user-defined\ context\ */
+\ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *context;\ /*\ user\-defined\ context\ */
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ data;\ \ \ \ \ /*\ optional\ immediate\ data\ */
 };
 \f[]
@@ -196,7 +196,7 @@ The order in which the receives complete is dependent on the endpoint
 type and protocol.
 .SS fi_trecvv
 .PP
-The fi_trecvv call adds support for a scatter-gather list to fi_trecv.
+The fi_trecvv call adds support for a scatter\-gather list to fi_trecv.
 The fi_trecvv posts the set of data buffers referenced by the iov
 parameter to a receive incoming data.
 .SS fi_trecvmsg
@@ -270,9 +270,9 @@ be available.
 .PP
 If a peek request locates a matching message, the operation will
 complete successfully.
-The returned completion data will indicate the meta-data associated with
-the message, such as the message length, completion flags, available CQ
-data, tag, and source address.
+The returned completion data will indicate the meta\-data associated
+with the message, such as the message length, completion flags,
+available CQ data, tag, and source address.
 The data available is subject to the completion entry format (e.g.
 struct fi_cq_tagged_entry).
 .PP
@@ -293,8 +293,9 @@ Note that the CQ entry len field will reference the size of the message,
 not necessarily the size of the returned data.
 .PP
 \f[I]FI_CLAIM\f[] : If this flag is used in conjunction with FI_PEEK, it
-indicates if the peek request completes successfully -- indicating that
-a matching message was located -- the message is claimed by caller.
+indicates if the peek request completes successfully \-\- indicating
+that a matching message was located \-\- the message is claimed by
+caller.
 Claimed messages can only be retrieved using a subsequent, paired
 receive operation with the FI_CLAIM flag set.
 A receive operation with the FI_CLAIM flag set, but FI_PEEK not set is
@@ -308,9 +309,9 @@ must be used by the paired FI_CLAIM request.
 \f[I]FI_DISCARD\f[] : This flag must be used in conjunction with either
 FI_PEEK or FI_CLAIM.
 If this flag is used in conjunction with FI_PEEK, it indicates if the
-peek request completes successfully -- indicating that a matching
-message was located -- the message is discarded by the provider, as the
-data is not needed by the application.
+peek request completes successfully \-\- indicating that a matching
+message was located \-\- the message is discarded by the provider, as
+the data is not needed by the application.
 This flag may also be used in conjunction with FI_CLAIM in order to
 retrieve and discard a message previously claimed using an FI_PEEK +
 FI_CLAIM request.
@@ -319,11 +320,12 @@ If this flag is set, the input buffer(s) and length parameters.
 .SH RETURN VALUE
 .PP
 The tagged send and receive calls return 0 on success.
-On error, a negative value corresponding to fabric _errno _ is returned.
+On error, a negative value corresponding to fabric \f[I]errno \f[] is
+returned.
 Fabric errno values are defined in \f[C]fi_errno.h\f[].
 .SH ERRORS
 .PP
-\f[I]-FI_EAGAIN\f[] : Indicates that the underlying provider currently
+\f[I]\-FI_EAGAIN\f[] : Indicates that the underlying provider currently
 lacks the resources needed to initiate the requested operation.
 This may be the result of insufficient internal buffering, in the case
 of FI_INJECT, or processing queues are full.
@@ -331,10 +333,10 @@ The operation may be retried after additional provider resources become
 available, usually through the completion of currently outstanding
 operations.
 .PP
-\f[I]-FI_EINVAL\f[] : Indicates that an invalid argument was supplied by
-the user.
+\f[I]\-FI_EINVAL\f[] : Indicates that an invalid argument was supplied
+by the user.
 .PP
-\f[I]-FI_EOTHER\f[] : Indicates that an unspecified error occurred.
+\f[I]\-FI_EOTHER\f[] : Indicates that an unspecified error occurred.
 .SH SEE ALSO
 .PP
 \f[C]fi_getinfo\f[](3), \f[C]fi_endpoint\f[](3), \f[C]fi_domain\f[](3),

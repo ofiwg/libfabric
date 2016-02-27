@@ -1,7 +1,7 @@
-.TH fi_eq 3 "2016\-02\-18" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_eq" "3" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_eq - Event queue operations
+fi_eq \- Event queue operations
 .PP
 fi_eq_open / fi_close : Open/close an event queue
 .PP
@@ -167,7 +167,7 @@ The fi_close call releases all resources associated with an event queue.
 Any events which remain on the EQ when it is closed are lost.
 .PP
 The EQ must not be bound to any other objects prior to being closed,
-otherwise the call will return -FI_EBUSY.
+otherwise the call will return \-FI_EBUSY.
 .SS fi_control
 .PP
 The fi_control call is used to access provider or implementation
@@ -177,8 +177,8 @@ is invoked, as it may redirect the implementation of EQ operations.
 The following control commands are usable with an EQ.
 .PP
 \f[I]FI_GETWAIT (void **)\f[] : This command allows the user to retrieve
-the low-level wait object associated with the EQ.
-The format of the wait-object is specified during EQ creation, through
+the low\-level wait object associated with the EQ.
+The format of the wait\-object is specified during EQ creation, through
 the EQ attributes.
 The fi_control arg parameter should be an address where a pointer to the
 returned wait object will be written.
@@ -195,7 +195,7 @@ struct\ fi_mutex_cond\ {
 .fi
 .SS fi_eq_read
 .PP
-The fi_eq_read operations performs a non-blocking read of event data
+The fi_eq_read operations performs a non\-blocking read of event data
 from the EQ.
 The format of the event data is based on the type of event retrieved
 from the EQ, with all events starting with a struct fi_eq_entry header.
@@ -225,7 +225,7 @@ The format of this structure is:
 struct\ fi_eq_entry\ {
 \ \ \ \ fid_t\ \ \ \ \ \ \ \ \ \ \ \ fid;\ \ \ \ \ \ \ \ /*\ fid\ associated\ with\ request\ */
 \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ *context;\ \ \ \ /*\ operation\ context\ */
-\ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ data;\ \ \ \ \ \ \ /*\ completion-specific\ data\ */
+\ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ data;\ \ \ \ \ \ \ /*\ completion\-specific\ data\ */
 };
 \f[]
 .fi
@@ -294,8 +294,8 @@ the connecting peer.
 .PP
 If a connection request has been accepted, an FI_CONNECTED event will be
 generated on both sides of the connection.
-The active side -- one that called fi_connect() -- may receive user data
-as part of the FI_CONNECTED event.
+The active side \-\- one that called fi_connect() \-\- may receive user
+data as part of the FI_CONNECTED event.
 The user data is passed to the connection manager on the passive side
 through the fi_accept call.
 User data is not provided with an FI_CONNECTED event on the listening
@@ -312,7 +312,7 @@ to report problems with fabric resources.
 Reported errors may be fatal or transient, based on the error, and
 result in the resource becoming disabled.
 Disabled resources will fail operations submitted against them until
-they are explicitly re-enabled by the application.
+they are explicitly re\-enabled by the application.
 .PP
 Asynchronous errors may be reported for completion queues and endpoints
 of all types.
@@ -322,7 +322,7 @@ Endpoint errors may be result of numerous actions, but are often
 associated with a failed operation.
 Operations may fail because of buffer overruns, invalid permissions,
 incorrect memory access keys, network routing failures, network
-reach-ability issues, etc.
+reach\-ability issues, etc.
 .PP
 Asynchronous errors are reported using struct fi_eq_err_entry, as
 defined below.
@@ -333,7 +333,7 @@ An error code is also available to determine the cause of the error.
 .PP
 The fi_eq_sread call is the blocking (or synchronous) equivalent to
 fi_eq_read.
-It behaves is similar to the non-blocking call, with the exception that
+It behaves is similar to the non\-blocking call, with the exception that
 the calls will not return until either an event has been read from the
 EQ or an error or timeout occurs.
 Specifying a negative timeout means an infinite timeout.
@@ -344,7 +344,7 @@ configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
 .PP
 The read error function, fi_eq_readerr, retrieves information regarding
 any asynchronous operation which has completed with an unexpected error.
-fi_eq_readerr is a non-blocking call, returning immediately whether an
+fi_eq_readerr is a non\-blocking call, returning immediately whether an
 error completion was found or not.
 .PP
 EQs are optimized to report operations which have completed
@@ -367,7 +367,7 @@ The format of this structure is defined below.
 struct\ fi_eq_err_entry\ {
 \ \ \ \ fid_t\ \ \ \ \ \ \ \ \ \ \ \ fid;\ \ \ \ \ \ \ \ /*\ fid\ associated\ with\ error\ */
 \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ *context;\ \ \ \ /*\ operation\ context\ */
-\ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ data;\ \ \ \ \ \ \ /*\ completion-specific\ data\ */
+\ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ data;\ \ \ \ \ \ \ /*\ completion\-specific\ data\ */
 \ \ \ \ int\ \ \ \ \ \ \ \ \ \ \ \ \ \ err;\ \ \ \ \ \ \ \ /*\ positive\ error\ code\ */
 \ \ \ \ int\ \ \ \ \ \ \ \ \ \ \ \ \ \ prov_errno;\ /*\ provider\ error\ code\ */
 \ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ *err_data;\ \ \ /*\ additional\ error\ data\ */
@@ -393,7 +393,7 @@ Users may call fi_eq_strerror to convert provider specific error
 information into a printable string for debugging purposes.
 .PP
 If err_data_size is > 0, then the buffer referenced by err_data is
-directly user-accessible.
+directly user\-accessible.
 Applications which read the err_data buffer must ensure that they do not
 read past the end of the referenced buffer.
 .SH RETURN VALUES
@@ -404,7 +404,7 @@ On error, a negative value corresponding to fabric errno is returned.
 fi_eq_read / fi_eq_readerr / fi_eq_sread : On success, returns the
 number of bytes read from the event queue.
 On error, a negative value corresponding to fabric errno is returned.
-If no data is available to be read from the event queue, -FI_EAGAIN is
+If no data is available to be read from the event queue, \-FI_EAGAIN is
 returned.
 .PP
 fi_eq_write : On success, returns the number of bytes written to the

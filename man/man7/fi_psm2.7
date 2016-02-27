@@ -1,11 +1,11 @@
-.TH fi_psm2 7 "2015\-12\-16" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_psm2" "7" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The PSM2 Fabric Provider
 .SH OVERVIEW
 .PP
 The \f[I]psm2\f[] provider runs over the PSM 2.x interface that is
-supported by the Intel Omni-Path Fabric.
+supported by the Intel Omni\-Path Fabric.
 PSM 2.x has all the PSM 1.x features plus a set of new functions with
 enhanced capabilities.
 Since PSM 1.x and PSM 2.x are not ABI compatible the \f[I]psm2\f[]
@@ -17,7 +17,7 @@ The \f[I]psm2\f[] provider doesn\[aq]t support all the features defined
 in the libfabric API.
 Here are some of the limitations:
 .PP
-Endpoint types : Only support non-connection based types
+Endpoint types : Only support non\-connection based types
 \f[I]FI_DGRAM\f[] and \f[I]FI_RDM\f[]
 .PP
 Endpoint capabilities : Endpoints can support any combination of data
@@ -28,7 +28,7 @@ These capabilities can be further refined by \f[I]FI_SEND\f[],
 \f[I]FI_REMOTE_READ\f[], and \f[I]FI_REMOTE_WRITE\f[] to limit the
 direction of operations.
 .PP
-\f[I]FI_MULTI_RECV\f[] is supported for non-tagged message queue only.
+\f[I]FI_MULTI_RECV\f[] is supported for non\-tagged message queue only.
 .PP
 Other supported capabilities include \f[I]FI_TRIGGER\f[],
 \f[I]FI_REMOTE_CQ_DATA\f[], and \f[I]FI_SOURCE\f[].
@@ -70,14 +70,14 @@ If running into "resource busy" or "connection failure" issues with
 unknown reason, it is advisable to manually set the UUID to a value
 different from the default.
 .PP
-The default UUID is 00FF00FF-0000-0000-0000-00FF0F0F00FF.
+The default UUID is 00FF00FF\-0000\-0000\-0000\-00FF0F0F00FF.
 .PP
 \f[I]FI_PSM2_NAME_SERVER\f[] : The \f[I]psm2\f[] provider has a simple
-built-in name server that can be used to resolve an IP address or host
+built\-in name server that can be used to resolve an IP address or host
 name into a transport address needed by the \f[I]fi_av_insert\f[] call.
-The main purpose of this name server is to allow simple client-server
+The main purpose of this name server is to allow simple client\-server
 type applications (such as those in \f[I]fabtest\f[]) to be written
-purely with libfabric, without using any out-of-band communication
+purely with libfabric, without using any out\-of\-band communication
 mechanism.
 For such applications, the server would run first, and the client would
 call \f[I]fi_getinfo\f[] with the \f[I]node\f[] parameter set to the IP
@@ -90,7 +90,7 @@ processes from the same job (i.e.
 with the same UUID) running on the same node and acting as servers.
 For such scenario it is recommended to have each process getting local
 transport address with \f[I]fi_getname\f[] and exchanging the addresses
-with out-of-band mechanism.
+with out\-of\-band mechanism.
 .PP
 The name server is on by default.
 It can be turned off by setting the variable to 0.
@@ -104,10 +104,10 @@ setting to off.
 of the PSM Active Message functions.
 The Active Message functions have limit on the size of data can be
 transferred in a single message.
-Large transfers can be divided into small chunks and be pipe-lined.
-However, the bandwidth is sub-optimal by doing this way.
+Large transfers can be divided into small chunks and be pipe\-lined.
+However, the bandwidth is sub\-optimal by doing this way.
 .PP
-The \f[I]psm2\f[] provider use PSM tag-matching message queue functions
+The \f[I]psm2\f[] provider use PSM tag\-matching message queue functions
 to achieve higher bandwidth for large size RMA.
 It takes avdantage of the extra tag bits available in PSM2 to separate
 the RMA traffic from the regular tagged message queue.
@@ -142,7 +142,8 @@ The format is
 each triplet \f[C]<start>:<end>:<stride>\f[] defines a block of
 core_ids.
 Both \f[C]<start>\f[] and \f[C]<end>\f[] can be either the
-\f[C]core_id\f[] (when >=0) or \f[C]core_id\ -\ num_cores\f[] (when <0).
+\f[C]core_id\f[] (when >=0) or \f[C]core_id\ \-\ num_cores\f[] (when
+<0).
 .PP
 By default affinity is not set.
 .SH SEE ALSO

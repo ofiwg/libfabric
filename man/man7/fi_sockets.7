@@ -1,4 +1,4 @@
-.TH fi_sockets 7 "2015\-09\-08" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_sockets" "7" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Sockets Fabric Provider
@@ -9,7 +9,7 @@ any system that supports TCP sockets.
 The provider is not intended to provide performance improvements over
 regular TCP sockets, but rather to allow developers to write, test, and
 debug application code even on platforms that do not have
-high-performance fabric hardware.
+high\-performance fabric hardware.
 The sockets provider supports all libfabric provider requirements and
 interfaces.
 .SH SUPPORTED FEATURES
@@ -42,11 +42,11 @@ defined options.
 In order to support development on a wide range of systems, it is
 implemented over TCP sockets.
 As a result, the performance numbers are lower compared to other
-providers implemented over high-speed fabric, and lower than what an
+providers implemented over high\-speed fabric, and lower than what an
 application might see implementing to sockets directly.
 .SH RUNTIME PARAMETERS
 .PP
-The sockets provider checks for the following environment variables -
+The sockets provider checks for the following environment variables \-
 .PP
 \f[I]FI_SOCKETS_PE_WAITTIME\f[] : An integer value that specifies how
 many milliseconds to spin while waiting for progress in
@@ -74,7 +74,7 @@ This is for debugging purpose only.
 \f[I]FI_SOCKETS_PE_AFFINITY\f[] : If specified, progress thread is bound
 to the indicated range(s) of Linux virtual processor ID(s).
 This option is currently not supported on OS X.
-The usage is - id_start[-id_end[:stride]][,].
+The usage is \- id_start[\-id_end[:stride]][,].
 .SH LARGE SCALE JOBS
 .PP
 For large scale runs one can use these environment variables to set the
