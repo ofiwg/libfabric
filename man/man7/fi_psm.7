@@ -1,4 +1,4 @@
-.TH "fi_psm" "7" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_psm 7 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The PSM Fabric Provider
@@ -6,25 +6,25 @@ The PSM Fabric Provider
 .PP
 The \f[I]psm\f[] provider runs over the PSM 1.x interface that is
 currently supported by the Intel TrueScale Fabric.
-PSM provides tag\-matching message queue functions that are optimized
-for MPI implementations.
+PSM provides tag-matching message queue functions that are optimized for
+MPI implementations.
 PSM also has limited Active Message support, which is not officially
 published but is quite stable and well documented in the source code
 (part of the OFED release).
-The \f[I]psm\f[] provider makes use of both the tag\-matching message
+The \f[I]psm\f[] provider makes use of both the tag-matching message
 queue functions and the Active Message functions to support a variety of
 libfabric data transfer APIs, including tagged message queue, message
 queue, RMA, and atomic operations.
 .PP
-The \f[I]psm\f[] provider can work with the psm2\-compat library, which
-exposes a PSM 1.x interface over the Intel Omni\-Path Fabric.
+The \f[I]psm\f[] provider can work with the psm2-compat library, which
+exposes a PSM 1.x interface over the Intel Omni-Path Fabric.
 .SH LIMITATIONS
 .PP
 The \f[I]psm\f[] provider doesn\[aq]t support all the features defined
 in the libfabric API.
 Here are some of the limitations:
 .PP
-Endpoint types : Only support non\-connection based types
+Endpoint types : Only support non-connection based types
 \f[I]FI_DGRAM\f[] and \f[I]FI_RDM\f[]
 .PP
 Endpoint capabilities : Endpoints can support any combination of data
@@ -43,7 +43,7 @@ For example it is fine to have two endpoints with \f[I]FI_TAGGED\f[] |
 But it is not allowed to have two endpoints with \f[I]FI_TAGGED\f[], or
 two endpoints with \f[I]FI_RMA\f[].
 .PP
-\f[I]FI_MULTI_RECV\f[] is supported for non\-tagged message queue only.
+\f[I]FI_MULTI_RECV\f[] is supported for non-tagged message queue only.
 .PP
 Other supported capabilities include \f[I]FI_TRIGGER\f[].
 .PP
@@ -84,14 +84,14 @@ If running into "resource busy" or "connection failure" issues with
 unknown reason, it is advisable to manually set the UUID to a value
 different from the default.
 .PP
-The default UUID is 0FFF0FFF\-0000\-0000\-0000\-0FFF0FFF0FFF.
+The default UUID is 0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF.
 .PP
 \f[I]FI_PSM_NAME_SERVER\f[] : The \f[I]psm\f[] provider has a simple
-built\-in name server that can be used to resolve an IP address or host
+built-in name server that can be used to resolve an IP address or host
 name into a transport address needed by the \f[I]fi_av_insert\f[] call.
-The main purpose of this name server is to allow simple client\-server
+The main purpose of this name server is to allow simple client-server
 type applications (such as those in \f[I]fabtest\f[]) to be written
-purely with libfabric, without using any out\-of\-band communication
+purely with libfabric, without using any out-of-band communication
 mechanism.
 For such applications, the server would run first, and the client would
 call \f[I]fi_getinfo\f[] with the \f[I]node\f[] parameter set to the IP
@@ -104,7 +104,7 @@ processes from the same job (i.e.
 with the same UUID) running on the same node and acting as servers.
 For such scenario it is recommended to have each process getting local
 transport address with \f[I]fi_getname\f[] and exchanging the addresses
-with out\-of\-band mechanism.
+with out-of-band mechanism.
 .PP
 The name server is on by default.
 It can be turned off by setting the variable to 0.
@@ -118,10 +118,10 @@ setting to off.
 the PSM Active Message functions.
 The Active Message functions have limit on the size of data can be
 transferred in a single message.
-Large transfers can be divided into small chunks and be pipe\-lined.
-However, the bandwidth is sub\-optimal by doing this way.
+Large transfers can be divided into small chunks and be pipe-lined.
+However, the bandwidth is sub-optimal by doing this way.
 .PP
-The \f[I]psm\f[] provider use PSM tag\-matching message queue functions
+The \f[I]psm\f[] provider use PSM tag-matching message queue functions
 to achieve higher bandwidth for large size RMA.
 For this purpose, a bit is reserved from the tag space to separate the
 RMA traffic from the regular tagged message queue.
@@ -130,9 +130,9 @@ The option is on by default.
 To turn it off set the variable to 0.
 .PP
 \f[I]FI_PSM_AM_MSG\f[] : The \f[I]psm\f[] provider implements the
-non\-tagged message queue over the PSM tag\-matching message queue.
+non-tagged message queue over the PSM tag-matching message queue.
 One tag bit is reserved for this purpose.
-Alternatively, the non\-tagged message queue can be implemented over
+Alternatively, the non-tagged message queue can be implemented over
 Active Message.
 This experimental feature has slightly larger latency.
 .PP
@@ -166,8 +166,7 @@ The format is
 each triplet \f[C]<start>:<end>:<stride>\f[] defines a block of
 core_ids.
 Both \f[C]<start>\f[] and \f[C]<end>\f[] can be either the
-\f[C]core_id\f[] (when >=0) or \f[C]core_id\ \-\ num_cores\f[] (when
-<0).
+\f[C]core_id\f[] (when >=0) or \f[C]core_id\ -\ num_cores\f[] (when <0).
 .PP
 By default affinity is not set.
 .SH SEE ALSO
