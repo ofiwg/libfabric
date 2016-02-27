@@ -1,13 +1,13 @@
-.TH "fi_gni" "7" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_gni 7 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
 .SH OVERVIEW
 .PP
-The GNI provider runs on Cray XC (TM) systems utilizing the user\-space
-Generic Network Interface (uGNI) which provides low\-level access to the
+The GNI provider runs on Cray XC (TM) systems utilizing the user-space
+Generic Network Interface (uGNI) which provides low-level access to the
 Aries interconnect.
-The Aries interconnect is designed for low\-latency one\-sided messaging
+The Aries interconnect is designed for low-latency one-sided messaging
 and also includes direct hardware support for common atomic operations
 and optimized collectives.
 .SH REQUIREMENTS
@@ -51,14 +51,14 @@ progress is made for asynchronous requests.
 .PP
 Currently, the GNI provider only supports atomic operations supported
 directly by the Aries NIC.
-These include operations on 32\- and 64\-bit, signed and unsigned
-integer and floating point values.
+These include operations on 32- and 64-bit, signed and unsigned integer
+and floating point values.
 Specifically,
 .SS Basic (fi_atomic, etc.)
 .IP \[bu] 2
 \f[I]FI_MIN\f[], \f[I]FI_MAX\f[] (no unsigned)
 .IP \[bu] 2
-\f[I]FI_SUM\f[] (no 64\-bit floating point)
+\f[I]FI_SUM\f[] (no 64-bit floating point)
 .IP \[bu] 2
 \f[I]FI_BOR\f[], \f[I]FI_BAND\f[], \f[I]FI_BXOR\f[] (no floating point)
 .IP \[bu] 2
@@ -85,7 +85,7 @@ All \f[I]FI_TAGGED\f[] operations are supported except
 \f[C]fi_tinjectdata\f[].
 .SH GNI EXTENSIONS
 .PP
-The GNI provider exposes low\-level tuning parameters via a domain
+The GNI provider exposes low-level tuning parameters via a domain
 \f[C]fi_open_ops\f[] interface named \f[I]FI_GNI_DOMAIN_OPS_1\f[].
 The flags parameter is currently ignored.
 The fi_open_ops function takes a \f[C]struct\ fi_gni_ops_domain\f[]
@@ -163,7 +163,8 @@ The value is of type int32_t.
 \f[C]fi_getinfo\f[](3)
 .PP
 For more information on uGNI, see \f[I]Using the GNI and DMAPP APIs\f[]
-(S\-2446\-3103, Cray Inc.).
+(S-2446-3103, Cray Inc.)
+\&.
 For more information on the GNI provider, see \f[I]An Implementation of
 OFI libfabric in Support of Multithreaded PGAS Solutions\f[] (PGAS
 \[aq]15).
