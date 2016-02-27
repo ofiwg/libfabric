@@ -1,7 +1,7 @@
-.TH "fi_cntr" "3" "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH fi_cntr 3 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_cntr \- Completion and event counter operations
+fi_cntr - Completion and event counter operations
 .PP
 fi_cntr_open / fi_close : Allocate/free a counter
 .PP
@@ -58,7 +58,7 @@ A negative value indicates infinite timeout.
 .SH DESCRIPTION
 .PP
 Counters record the number of requested operations that have completed.
-Counters can provide a light\-weight completion mechanism by suppressing
+Counters can provide a light-weight completion mechanism by suppressing
 the generation of a full completion event.
 They are useful for applications that only need to know the number of
 requests that have completed, and not details about each request.
@@ -91,9 +91,9 @@ The specific type which is to counted are one of the following:
 .IP \[bu] 2
 \f[I]FI_CNTR_EVENTS_COMP\f[] : The counter increments for every
 successful completion that occurs on an associated bound endpoint.
-The type of completions \-\- sends and/or receives \-\- which are
-counted may be restricted using control flags when binding the counter
-an the endpoint.
+The type of completions -- sends and/or receives -- which are counted
+may be restricted using control flags when binding the counter an the
+endpoint.
 Counters increment on all successful completions, separately from
 whether the operation generates an entry in an event queue.
 .PP
@@ -150,7 +150,7 @@ When closing the counter, there must be no opened endpoints, transmit
 contexts, receive contexts or memory regions associated with the
 counter.
 If resources are still associated with the counter when attempting to
-close, the call will return \-FI_EBUSY.
+close, the call will return -FI_EBUSY.
 .SS fi_cntr_control
 .PP
 The fi_cntr_control call is used to access provider or implementation
@@ -167,8 +167,8 @@ operational flags associated with the counter.
 operational flags associated with the counter.
 .PP
 \f[I]FI_GETWAIT (void **)\f[] : This command allows the user to retrieve
-the low\-level wait object associated with the counter.
-The format of the wait\-object is specified during counter creation,
+the low-level wait object associated with the counter.
+The format of the wait-object is specified during counter creation,
 through the counter attributes.
 See fi_eq.3 for addition details using control with FI_GETWAIT.
 .SS fi_cntr_read
@@ -180,7 +180,7 @@ The read error call returns the number of operations that completed in
 error and were unable to update the counter.
 .SS fi_cntr_add
 .PP
-This adds the user\-specified value to the counter.
+This adds the user-specified value to the counter.
 .SS fi_cntr_set
 .PP
 This sets the counter to the specified value.
@@ -196,7 +196,7 @@ increment the error value associated with the counter.
 Any change in a counter\[aq]s error value will unblock any thread inside
 fi_cntr_wait.
 .PP
-If the call returns due to timeout, \-FI_ETIMEDOUT will be returned.
+If the call returns due to timeout, -FI_ETIMEDOUT will be returned.
 The error value associated with the counter remains unchanged.
 .PP
 It is invalid for applications to call this function if the counter has
