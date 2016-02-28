@@ -6,7 +6,14 @@ The bot runs as a Ruby Sinatra server on flatbed.openfabrics.org.  It
 was initially heavily inspired by
 http://git-scm.com/book/en/v2/GitHub-Scripting-GitHub.
 
+The original flatbed server was running RHEL (CentOS, actually, but
+close enough).  As of Feb 2016, it is now Ubuntu.  So this README
+shows info about both Ubunutu and RHEL (mainly for hysterical
+raisins).
+
 ===================
+
+RHEL background:
 
 Sadly, I did not take good notes about how to get Sinatra installed on
 Flatbed.  Looking on flatbed on 17 Feb 2016, I see the following RPMs
@@ -29,9 +36,15 @@ just pull them in:
 - rubygem-rack
 - rubygem-json
 
+Ubuntu backgruond:
+
+On Ubuntu, it was straightforward to install the Sinatra server:
+
+# apt-get install ruby-sinatra ruby-htttparty
+
 ===================
 
-There are 4 important files in this directory:
+There are several important files in this directory:
 
 1. github-webhook-ofiwg-init.d-rhel and
    github-webhook-ofiwg-init.d-ubuntu
@@ -62,26 +75,42 @@ significantly longer).
 Note that the Ruby Sinatra server listens on localhost port 5000; it
 is not directly accessible to the outside world.
 
-On flatbed.openfabrics.org, the file is located in
-/var/www/github-webhooks/ofiwg/verify-signed-off.rb.
+On flatbed.openfabrics.org, the file is located in:
+
+RHEL: /var/www/github-webhooks/ofiwg/verify-signed-off.rb
+Ubuntu: /var/www/html/github-webhooks/ofiwg/verify-signed-off.rb
 
 3. apache-config.txt
 
-This is a snipit from
-flatbed.openfabrics.org:/etc/httpd/conf.d/20-ssl.conf inserted in the
-SSL version of www.openfabrics.org config to enable the reverse proxy
-(i.e., incoming web requests to
+This is a snipit from flatbed.openfabrics.org:
+
+RHEL: /etc/httpd/conf.d/20-ssl.conf
+Ubuntu: etc/apache2/mods-enabled/proxy.conf
+
+This snipit is inserted in the SSL version of www.openfabrics.org
+config to enable the reverse proxy (i.e., incoming web requests to
 https://www.openfabrics.org/github-webhooks/ofiwg get routed
 internally to http://localhost:5000/ -- i.e., the Ruby Sinatra
 server).
 
+On Ubuntu, I had to load the mod_proxy Apache module by:
+
+# a2enmod proxy
+# a2enmod proxy_http
+# cd /etc/apache2/mods-enabled
+# ln -s ../mods-available/proxy.conf
+        ^^ This is the file to add the apache proxy config
+
 ===================
 
 There is one additional file needed on flatbed.openfabrics.org:
-/etc/sysconfig/github-webhook-ofiwg on RHEL, or
-/etc/default/github-webhook-ofiwg on Ubuntu.  The init.d script will
-source this file; it needs to set an environment variable that
-verify-signed-off.rb will look for: $GITHUB_AUTH_TOKEN.
+
+RHEL: /etc/sysconfig/github-webhook-ofiwg
+Ubuntu: /etc/default/github-webhook-ofiwg
+
+The init.d script will source this file; it needs to set an
+environment variable that verify-signed-off.rb will look for:
+$GITHUB_AUTH_TOKEN.
 
 Specifically, this file should contain a line like this:
 
