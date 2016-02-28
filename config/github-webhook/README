@@ -31,13 +31,14 @@ just pull them in:
 
 ===================
 
-There are 3 important files in this directory:
+There are 4 important files in this directory:
 
-1. github-webhook-ofiwg-init.d
+1. github-webhook-ofiwg-init.d-rhel and
+   github-webhook-ofiwg-init.d-ubuntu
 
-The /etc/init.d/github-webhook-ofiwg script that starts and stops the
-Ruby Sinatra server script that actually listens for the incoming
-Github webhook pings.
+The /etc/init.d/github-webhook-ofiwg (one for RHEL and one for Ubuntu)
+script that starts and stops the Ruby Sinatra server script that
+actually listens for the incoming Github webhook pings.
 
 2. verify-signed-off.rb
 
@@ -77,16 +78,17 @@ server).
 ===================
 
 There is one additional file needed on flatbed.openfabrics.org:
-/etc/sysconfig/github-webhook-ofiwg.  The init.d script will source
-this file; it needs to set an environment variable that
+/etc/sysconfig/github-webhook-ofiwg on RHEL, or
+/etc/default/github-webhook-ofiwg on Ubuntu.  The init.d script will
+source this file; it needs to set an environment variable that
 verify-signed-off.rb will look for: $GITHUB_AUTH_TOKEN.
 
 Specifically, this file should contain a line like this:
 
 export GITHUB_AUTH_TOKEN="...the token..."
 
-(this /etc/sysconfig file is not here in the git repo, of course --
-because then everyone could see our auth token!)
+(this file is not here in the git repo, of course -- because then
+everyone could see our auth token!)
 
 A Github auth token can be obtained from
 https://github.com/settings/tokens of a user who has commit access to
