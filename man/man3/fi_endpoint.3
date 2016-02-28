@@ -1,7 +1,7 @@
-.TH fi_endpoint 3 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_endpoint - Fabric endpoint operations
+fi_endpoint \- Fabric endpoint operations
 .TP
 .B fi_endpoint / fi_scalable_ep / fi_passive_ep / fi_close
 Allocate or close an endpoint.
@@ -56,7 +56,7 @@ Open a transmit or receive context.
 .TP
 .B fi_rx_size_left / fi_tx_size_left
 Query the lower bound on how many RX/TX operations may be posted without
-an operation returning -FI_EAGAIN.
+an operation returning \-FI_EAGAIN.
 .RS
 .RE
 .SH SYNOPSIS
@@ -166,10 +166,10 @@ can be granted to an active endpoint.
 Active endpoints belong to access domains and can perform data
 transfers.
 .PP
-Active endpoints may be connection-oriented or connectionless, and may
+Active endpoints may be connection\-oriented or connectionless, and may
 provide data reliability.
-The data transfer interfaces -- messages (fi_msg), tagged messages
-(fi_tagged), RMA (fi_rma), and atomics (fi_atomic) -- are associated
+The data transfer interfaces \-\- messages (fi_msg), tagged messages
+(fi_tagged), RMA (fi_rma), and atomics (fi_atomic) \-\- are associated
 with active endpoints.
 In basic configurations, an active endpoint has transmit and receive
 queues.
@@ -210,7 +210,7 @@ If an endpoint experiences a critical error, it will transition back
 into a disabled state.
 Critical errors are reported through the event queue associated with the
 EP.
-In certain cases, a disabled endpoint may be re-enabled.
+In certain cases, a disabled endpoint may be re\-enabled.
 The ability to transition back into an enabled state is provider
 specific and depends on the type of error that the endpoint experienced.
 When an endpoint is disabled as a result of a critical error, all
@@ -251,7 +251,7 @@ Closes an endpoint and release all resources associated with it.
 When closing a scalable endpoint, there must be no opened transmit
 contexts, or receive contexts associated with the scalable endpoint.
 If resources are still associated with the scalable endpoint when
-attempting to close, the call will return -FI_EBUSY.
+attempting to close, the call will return \-FI_EBUSY.
 .PP
 Outstanding operations posted to the endpoint when fi_close is called
 will be discarded.
@@ -310,7 +310,7 @@ using the following general approach:
 .IP
 .nf
 \f[C]
-\ \ fi_tx_attr::op_flags\ =\ 0;\ //\ default\ -\ no\ completion
+\ \ fi_tx_attr::op_flags\ =\ 0;\ //\ default\ \-\ no\ completion
 \ \ fi_ep_bind(ep,\ cq,\ FI_SEND\ |\ FI_SELECTIVE_COMPLETION);
 \ \ fi_send(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ no\ completion
 \ \ fi_sendv(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ no\ completion
@@ -324,7 +324,7 @@ modifying the operational flags:
 .IP
 .nf
 \f[C]
-\ \ fi_tx_attr::op_flags\ =\ FI_COMPLETION;\ //\ default\ -\ completion
+\ \ fi_tx_attr::op_flags\ =\ FI_COMPLETION;\ //\ default\ \-\ completion
 \ \ fi_ep_bind(ep,\ cq,\ FI_SEND\ |\ FI_SELECTIVE_COMPLETION);
 \ \ fi_send(ep,\ ...);\ \ \ \ \ \ \ //\ completion
 \ \ fi_sendv(ep,\ ...);\ \ \ \ \ \ //\ completion
@@ -334,12 +334,12 @@ modifying the operational flags:
 .fi
 .PP
 Example: Omitting FI_SELECTIVE_COMPLETION when binding will generate
-completions for all non-fi_inject calls:
+completions for all non\-fi_inject calls:
 .IP
 .nf
 \f[C]
 \ \ fi_tx_attr::op_flags\ =\ 0;
-\ \ fi_ep_bind(ep,\ cq,\ FI_SEND);\ \ //\ default\ -\ completion
+\ \ fi_ep_bind(ep,\ cq,\ FI_SEND);\ \ //\ default\ \-\ completion
 \ \ fi_send(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ completion
 \ \ fi_sendv(ep,\ ...);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ //\ completion
 \ \ fi_sendmsg(ep,\ ...,\ 0);\ \ \ \ \ \ \ \ \ \ \ \ \ //\ completion!
@@ -392,7 +392,7 @@ address vector.
 See section on SCALABLE ENDPOINTS.
 A scalable endpoint has a single transport level address and can support
 multiple transmit and receive contexts.
-The transmit and receive contexts share the transport-level address.
+The transmit and receive contexts share the transport\-level address.
 Address vectors that are bound to scalable endpoints are implicitly
 bound to any transmit or receive contexts created using the scalable
 endpoint.
@@ -407,10 +407,10 @@ assigned to it.
 Calling connect or accept on an endpoint will implicitly enable an
 endpoint if it has not already been enabled.
 .PP
-fi_enable may also be used to re-enable an endpoint that has been
+fi_enable may also be used to re\-enable an endpoint that has been
 disabled as a result of experiencing a critical error.
 Applications should check the return value from fi_enable to see if a
-disabled endpoint has successfully be re-enabled.
+disabled endpoint has successfully be re\-enabled.
 .SS fi_cancel
 .PP
 fi_cancel attempts to cancel an outstanding asynchronous operation.
@@ -449,18 +449,18 @@ struct fi_info.
 The following control commands and arguments may be assigned to an
 endpoint.
 .PP
-**FI_GETOPSFLAG -- uint64_t \f[I]flags\f[]* : Used to retrieve the
-current value of flags associated with data transfer operations
-initiated on the endpoint.
+**FI_GETOPSFLAG \-\- uint64_t *flags** : Used to retrieve the current
+value of flags associated with data transfer operations initiated on the
+endpoint.
 See below for a list of control flags.
 .PP
-**FI_SETOPSFLAG -- uint64_t \f[I]flags\f[]* : Used to change the data
+**FI_SETOPSFLAG \-\- uint64_t *flags** : Used to change the data
 transfer operation flags associated with an endpoint.
 The FI_READ, FI_WRITE, FI_SEND, FI_RECV flags indicate the type of data
 transfer that the flags should apply to, with other flags OR\[aq]ed in.
 Valid control flags are defined below.
 .PP
-**FI_BACKLOG - int \f[I]value\f[]* : This option only applies to passive
+**FI_BACKLOG \- int *value** : This option only applies to passive
 endpoints.
 It is used to set the connection request backlog for listening
 endpoints.
@@ -470,14 +470,14 @@ Endpoint protocol operations may be retrieved using fi_getopt or set
 using fi_setopt.
 Applications specify the level that a desired option exists, identify
 the option, and provide input/output buffers to get or set the option.
-fi_setopt provides an application a way to adjust low-level protocol and
-implementation specific details of an endpoint.
+fi_setopt provides an application a way to adjust low\-level protocol
+and implementation specific details of an endpoint.
 .PP
 The following option levels and option names and parameters are defined.
 .PP
 \f[I]FI_OPT_ENDPOINT\f[]
 .IP \[bu] 2
-\f[I]FI_OPT_MIN_MULTI_RECV - size_t\f[] : Defines the minimum receive
+\f[I]FI_OPT_MIN_MULTI_RECV \- size_t\f[] : Defines the minimum receive
 buffer space available when the receive buffer is automatically freed
 (see FI_MULTI_RECV).
 Modifying this value is only guaranteed to set the minimum buffer space
@@ -486,8 +486,8 @@ It is recommended that applications that want to override the default
 MIN_MULTI_RECV value set this option before enabling the corresponding
 endpoint.
 .IP \[bu] 2
-\f[I]FI_OPT_CM_DATA_SIZE - size_t\f[] : Defines the size of available
-space in CM messages for user-defined data.
+\f[I]FI_OPT_CM_DATA_SIZE \- size_t\f[] : Defines the size of available
+space in CM messages for user\-defined data.
 This value limits the amount of data that applications can exchange
 between peer endpoints using the fi_connect, fi_accept, and fi_reject
 operations.
@@ -496,22 +496,20 @@ This option is read only.
 .PP
 The fi_rx_size_left call returns a lower bound on the number of receive
 operations that may be posted to the given endpoint without that
-operation returning -FI_EAGAIN.
+operation returning \-FI_EAGAIN.
 Depending on the specific details of the subsequently posted receive
 operations (e.g., number of iov entries, which receive function is
-called, etc.)
-, it may be possible to post more receive operations than originally
-indicated by fi_rx_size_left.
+called, etc.), it may be possible to post more receive operations than
+originally indicated by fi_rx_size_left.
 .SS fi_tx_size_left
 .PP
 The fi_tx_size_left call returns a lower bound on the number of transmit
 operations that may be posted to the given endpoint without that
-operation returning -FI_EAGAIN.
+operation returning \-FI_EAGAIN.
 Depending on the specific details of the subsequently posted transmit
 operations (e.g., number of iov entries, which transmit function is
-called, etc.)
-, it may be possible to post more transmit operations than originally
-indicated by fi_tx_size_left.
+called, etc.), it may be possible to post more transmit operations than
+originally indicated by fi_tx_size_left.
 .SH ENDPOINT ATTRIBUTES
 .PP
 The fi_ep_attr structure defines the set of attributes associated with
@@ -536,7 +534,7 @@ struct\ fi_ep_attr\ {
 };
 \f[]
 .fi
-.SS type - Endpoint Type
+.SS type \- Endpoint Type
 .PP
 If specified, indicates the type of fabric interface communication
 desired.
@@ -546,7 +544,7 @@ Supported types are:
 This is usually provided as input, with other attributes of the endpoint
 or the provider selecting the type.
 .PP
-\f[I]FI_EP_MSG\f[] : Provides a reliable, connection-oriented data
+\f[I]FI_EP_MSG\f[] : Provides a reliable, connection\-oriented data
 transfer service with flow control that maintains message boundaries.
 .PP
 \f[I]FI_EP_DGRAM\f[] : Supports a connectionless, unreliable datagram
@@ -560,7 +558,7 @@ Provides a reliable, unconnected data transfer service with flow control
 that maintains message boundaries.
 .SS Protocol
 .PP
-Specifies the low-level end to end protocol employed by the provider.
+Specifies the low\-level end to end protocol employed by the provider.
 A matching protocol must be used by communicating endpoints to ensure
 interoperability.
 The following protocol values are defined.
@@ -573,7 +571,7 @@ This is usually provided as input, with other attributes of the socket
 or the provider selecting the actual protocol.
 .PP
 \f[I]FI_PROTO_RDMA_CM_IB_RC\f[] : The protocol runs over Infiniband
-reliable-connected queue pairs, using the RDMA CM protocol for
+reliable\-connected queue pairs, using the RDMA CM protocol for
 connection establishment.
 .PP
 \f[I]FI_PROTO_IWARP\f[] : The protocol runs over the Internet wide area
@@ -593,25 +591,25 @@ communicate with a remote peer that is using Berkeley
 \f[I]SOCK_DGRAM\f[] sockets using \f[I]IPPROTO_UDP\f[].
 .PP
 \f[I]FI_PROTO_SOCK_TCP\f[] : The protocol is layered over TCP packets.
-.SS protocol_version - Protocol Version
+.SS protocol_version \- Protocol Version
 .PP
 Identifies which version of the protocol is employed by the provider.
 The protocol version allows providers to extend an existing protocol, by
 adding support for additional features or functionality for example, in
 a backward compatible manner.
 Providers that support different versions of the same protocol should
-inter-operate, but only when using the capabilities defined for the
+inter\-operate, but only when using the capabilities defined for the
 lesser version.
-.SS max_msg_size - Max Message Size
+.SS max_msg_size \- Max Message Size
 .PP
 Defines the maximum size for an application data transfer as a single
 operation.
-.SS msg_prefix_size - Message Prefix Size
+.SS msg_prefix_size \- Message Prefix Size
 .PP
 Specifies the size of any required message prefix buffer space.
 This field will be 0 unless the FI_MSG_PREFIX mode is enabled.
 If msg_prefix_size is > 0 the specified value will be a multiple of
-8-bytes.
+8\-bytes.
 .SS Max RMA Ordered Size
 .PP
 The maximum ordered size specifies the delivery order of transport data
@@ -627,7 +625,7 @@ registered memory location, data ordering indicates whether the second
 operation reads or writes the target memory after the first operation
 has completed.
 Because RMA ordering applies between two operations, and not within a
-single data transfer, ordering is defined per byte-addressable memory
+single data transfer, ordering is defined per byte\-addressable memory
 location.
 I.e.
 ordering specifies whether location X is accessed by the second
@@ -666,8 +664,8 @@ The target memory region will reflect the results of the second RMA or
 atomic write.
 .PP
 An order size value of 0 indicates that ordering is not guaranteed.
-A value of -1 guarantees ordering for any data size.
-.SS mem_tag_format - Memory Tag Format
+A value of \-1 guarantees ordering for any data size.
+.SS mem_tag_format \- Memory Tag Format
 .PP
 The memory tag format is a bit array used to convey the number of tagged
 bits supported by a provider.
@@ -684,8 +682,8 @@ will either be set to 1 or 0, collectively.
 .PP
 For example, a mem_tag_format of 0x30FF indicates support for 14 tagged
 bits, separated into 3 fields.
-The first field consists of 2-bits, the second field 4-bits, and the
-final field 8-bits.
+The first field consists of 2\-bits, the second field 4\-bits, and the
+final field 8\-bits.
 Valid masks for such a tagged field would be a bitwise OR\[aq]ing of
 zero or more of the following values: 0x3000, 0x0F00, and 0x00FF.
 .PP
@@ -706,7 +704,7 @@ unsupported tag bits.
 It is recommended that field sizes be ordered from smallest to largest.
 A generic, unstructured tag and mask can be achieved by requesting a bit
 array consisting of alternating 1\[aq]s and 0\[aq]s.
-.SS tx_ctx_cnt - Transmit Context Count
+.SS tx_ctx_cnt \- Transmit Context Count
 .PP
 Number of transmit contexts to associate with the endpoint.
 If not specified (0), 1 context will be assigned if the endpoint
@@ -726,7 +724,7 @@ request.
 .PP
 See the scalable endpoint and shared contexts sections for additional
 details.
-.SS rx_ctx_cnt - Receive Context Count
+.SS rx_ctx_cnt \- Receive Context Count
 .PP
 Number of receive contexts to associate with the endpoint.
 If not specified, 1 context will be assigned if the endpoint supports
@@ -766,7 +764,7 @@ struct\ fi_tx_attr\ {
 };
 \f[]
 .fi
-.SS caps - Capabilities
+.SS caps \- Capabilities
 .PP
 The requested capabilities of the context.
 The capabilities must be a subset of those requested of the associated
@@ -783,12 +781,12 @@ A mode value of 0 will be ignored on input to fi_getinfo(3), with the
 mode value of the fi_info structure used instead.
 On return from fi_getinfo(3), the mode will be set only to those
 constraints specific to transmit operations.
-.SS op_flags - Default transmit operation flags
+.SS op_flags \- Default transmit operation flags
 .PP
 Flags that control the operation of operations submitted against the
 context.
 Applicable flags are listed in the Operation Flags section.
-.SS msg_order - Message Ordering
+.SS msg_order \- Message Ordering
 .PP
 Message ordering refers to the order in which transport layer headers
 (as viewed by the application) are processed.
@@ -868,7 +866,7 @@ If set, message send operations, including tagged sends, are transmitted
 in the order submitted relative to other message send.
 If not set, message sends may be transmitted out of order from their
 submission.
-.SS comp_order - Completion Ordering
+.SS comp_order \- Completion Ordering
 .PP
 Completion ordering refers to the order in which completed requests are
 written into the completion queue.
@@ -876,7 +874,7 @@ Completion ordering is similar to message order.
 Relaxed completion order may enable faster reporting of completed
 transfers, allow acknowledgments to be sent over different fabric paths,
 and support more sophisticated retry mechanisms.
-This can result in lower-latency completions, particularly when using
+This can result in lower\-latency completions, particularly when using
 unconnected endpoints.
 Strict completion ordering may require that providers queue completed
 operations or limit available optimizations.
@@ -915,14 +913,14 @@ data transfer flag.
 The size of the context.
 The size is specified as the minimum number of transmit operations that
 may be posted to the endpoint without the operation returning
--FI_EAGAIN.
+\-FI_EAGAIN.
 .SS iov_limit
 .PP
-This is the maximum number of IO vectors (scatter-gather elements) that
+This is the maximum number of IO vectors (scatter\-gather elements) that
 a single posted operation may reference.
 .SS rma_iov_limit
 .PP
-This is the maximum number of RMA IO vectors (scatter-gather elements)
+This is the maximum number of RMA IO vectors (scatter\-gather elements)
 that an RMA or atomic operation may reference.
 The rma_iov_limit corresponds to the rma_iov_count values in RMA and
 atomic operations.
@@ -951,7 +949,7 @@ struct\ fi_rx_attr\ {
 };
 \f[]
 .fi
-.SS caps - Capabilities
+.SS caps \- Capabilities
 .PP
 The requested capabilities of the context.
 The capabilities must be a subset of those requested of the associated
@@ -968,12 +966,12 @@ A mode value of 0 will be ignored on input to fi_getinfo(3), with the
 mode value of the fi_info structure used instead.
 On return from fi_getinfo(3), the mode will be set only to those
 constraints specific to receive operations.
-.SS op_flags - Default receive operation flags
+.SS op_flags \- Default receive operation flags
 .PP
 Flags that control the operation of operations submitted against the
 context.
 Applicable flags are listed in the Operation Flags section.
-.SS msg_order - Message Ordering
+.SS msg_order \- Message Ordering
 .PP
 For a description of message ordering, see the msg_order field in the
 \f[I]Transmit Context Attribute\f[] section.
@@ -984,7 +982,7 @@ The following ordering flags, as defined for transmit ordering, also
 apply to the processing of received operations: FI_ORDER_NONE,
 FI_ORDER_RAR, FI_ORDER_RAW, FI_ORDER_RAS, FI_ORDER_WAR, FI_ORDER_WAW,
 FI_ORDER_WAS, FI_ORDER_SAR, FI_ORDER_SAW, and FI_ORDER_SAS.
-.SS comp_order - Completion Ordering
+.SS comp_order \- Completion Ordering
 .PP
 For a description of completion ordering, see the comp_order field in
 the \f[I]Transmit Context Attribute\f[] section.
@@ -1016,19 +1014,19 @@ provided may exceed the value specified in total_buffered_recv.
 The size of the context.
 The size is specified as the minimum number of receive operations that
 may be posted to the endpoint without the operation returning
--FI_EAGAIN.
+\-FI_EAGAIN.
 .SS iov_limit
 .PP
-This is the maximum number of IO vectors (scatter-gather elements) that
+This is the maximum number of IO vectors (scatter\-gather elements) that
 a single posted operating may reference.
 .SH SCALABLE ENDPOINTS
 .PP
 A scalable endpoint is a communication portal that supports multiple
 transmit and receive contexts.
 Scalable endpoints are loosely modeled after the networking concept of
-transmit/receive side scaling, also known as multi-queue.
+transmit/receive side scaling, also known as multi\-queue.
 Support for scalable endpoints is domain specific.
-Scalable endpoints may improve the performance of multi-threaded and
+Scalable endpoints may improve the performance of multi\-threaded and
 parallel applications, by allowing threads to access independent
 transmit and receive queues.
 A scalable endpoint has a single transport level address, which can
@@ -1041,7 +1039,8 @@ contexts as described below.
 .PP
 Transmit contexts are independent transmit queues.
 Ordering and synchronization between contexts are not defined.
-Conceptually a transmit context behaves similar to a send-only endpoint.
+Conceptually a transmit context behaves similar to a send\-only
+endpoint.
 A transmit context may be configured with relaxed capabilities, and has
 its own completion queue.
 The number of transmit contexts associated with an endpoint is specified
@@ -1065,7 +1064,7 @@ through the attr parameter, if provided.
 Receive contexts are independent receive queues for receiving incoming
 data.
 Ordering and synchronization between contexts are not guaranteed.
-Conceptually a receive context behaves similar to a receive-only
+Conceptually a receive context behaves similar to a receive\-only
 endpoint.
 A receive context may be configured with relaxed endpoint capabilities,
 and has its own completion queue.
@@ -1131,7 +1130,7 @@ all connectionless endpoints associated with a shared receive context
 must also share the same address vector.
 .PP
 Endpoints associated with a shared transmit context may use dedicated
-receive contexts, and vice-versa.
+receive contexts, and vice\-versa.
 Or an endpoint may use shared transmit and receive contexts.
 And there is no requirement that the same group of endpoints sharing a
 context of one type also share the context of an alternate type.
@@ -1155,7 +1154,7 @@ must use a subset of the receive context attributes.
 This is opposite of the requirement for scalable endpoints.
 .SH OPERATION FLAGS
 .PP
-Operation flags are obtained by OR-ing the following flags together.
+Operation flags are obtained by OR\-ing the following flags together.
 Operation flags define the default flags applied to an endpoint\[aq]s
 data transfer operations, where a flags parameter is not available.
 Data transfer operations that take flags as input override the op_flags
@@ -1224,7 +1223,7 @@ A completion guarantees that the result of the operation is available.
 .PP
 This completion mode applies only to reliable endpoints.
 For operations that return data to the initiator, such as RMA read or
-atomic-fetch, the source endpoint is also considered a destination
+atomic\-fetch, the source endpoint is also considered a destination
 endpoint.
 This is the default completion mode for such operations.
 .SH NOTES
@@ -1234,10 +1233,9 @@ fabric endpoint.
 .PP
 Endpoints allocated with the FI_CONTEXT mode set must typically provide
 struct fi_context as their per operation context parameter.
-(See fi_getinfo.3 for details.)
- However, when FI_SELECTIVE_COMPLETION is enabled to suppress completion
-entries, and an operation is initiated without FI_COMPLETION flag set,
-then the context parameter is ignored.
+(See fi_getinfo.3 for details.) However, when FI_SELECTIVE_COMPLETION is
+enabled to suppress completion entries, and an operation is initiated
+without FI_COMPLETION flag set, then the context parameter is ignored.
 An application does not need to pass in a valid struct fi_context into
 such data transfers.
 .PP
@@ -1265,13 +1263,13 @@ submitted for processing.
 Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 .SH ERRORS
 .PP
-\f[I]-FI_EDOMAIN\f[] : A resource domain was not bound to the endpoint
+\f[I]\-FI_EDOMAIN\f[] : A resource domain was not bound to the endpoint
 or an attempt was made to bind multiple domains.
 .PP
-\f[I]-FI_ENOCQ\f[] : The endpoint has not been configured with necessary
-event queue.
+\f[I]\-FI_ENOCQ\f[] : The endpoint has not been configured with
+necessary event queue.
 .PP
-\f[I]-FI_EOPBADSTATE\f[] : The endpoint\[aq]s state does not permit the
+\f[I]\-FI_EOPBADSTATE\f[] : The endpoint\[aq]s state does not permit the
 requested operation.
 .SH SEE ALSO
 .PP

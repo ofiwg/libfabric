@@ -1,7 +1,7 @@
-.TH fi_cm 3 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cm" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_cm - Connection management operations
+fi_cm \- Connection management operations
 .PP
 fi_connect / fi_listen / fi_accept / fi_reject / fi_shutdown : Manage
 endpoint connection state.
@@ -50,8 +50,8 @@ addr_format when the endpoint was created.
 \f[I]addrlen\f[] : On input, specifies size of addr buffer.
 On output, stores number of bytes written to addr buffer.
 .PP
-\f[I]param\f[] : User-specified data exchanged as part of the connection
-exchange.
+\f[I]param\f[] : User\-specified data exchanged as part of the
+connection exchange.
 .PP
 \f[I]paramlen\f[] : Size of param buffer.
 .PP
@@ -63,7 +63,7 @@ exchange.
 .SH DESCRIPTION
 .PP
 Connection management functions are used to connect an
-connection-oriented endpoint to a peer endpoint.
+connection\-oriented endpoint to a peer endpoint.
 .SS fi_listen
 .PP
 The fi_listen call indicates that the specified endpoint should be
@@ -79,7 +79,7 @@ but may be adjusted through the fi_control call.
 .SS fi_connect
 .PP
 The fi_connect call initiates a connection request on a
-connection-oriented endpoint to the destination address.
+connection\-oriented endpoint to the destination address.
 .SS fi_accept / fi_reject
 .PP
 The fi_accept and fi_reject calls are used on the passive (listening)
@@ -107,7 +107,7 @@ An FI_CONNECTED event will also be generated on the passive side for the
 accepting endpoint once the connection has been properly established.
 The fid of the FI_CONNECTED event will be that of the endpoint passed to
 fi_accept as opposed to the listening passive endpoint.
-Outbound data transfers cannot be initiated on a connection-oriented
+Outbound data transfers cannot be initiated on a connection\-oriented
 endpoint until an FI_CONNECTED event has been generated.
 However, receive buffers may be associated with an endpoint anytime.
 .SS fi_shutdown
@@ -168,7 +168,7 @@ peer endpoint address, respectively.
 On input, the addrlen parameter should indicate the size of the addr
 buffer.
 If the actual address is larger than what can fit into the buffer, it
-will be truncated and -FI_ETOOSMALL will be returned.
+will be truncated and \-FI_ETOOSMALL will be returned.
 On output, addrlen is set to the size of the buffer needed to store the
 address, which may be larger than the input value.
 .PP
@@ -179,8 +179,8 @@ An endpoint may be enabled explicitly through fi_enable, or implicitly,
 such as through fi_connect or fi_listen.
 An address may be assigned using fi_setname.
 fi_getpeer is not guaranteed to return a valid peer address until an
-endpoint has been completely connected -- an FI_CONNECTED event has been
-generated.
+endpoint has been completely connected \-\- an FI_CONNECTED event has
+been generated.
 .SH FLAGS
 .PP
 Flag values are reserved and must be 0.
@@ -192,7 +192,7 @@ Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 .SH ERRORS
 .SH NOTES
 .PP
-For connection-oriented endpoints, the buffer referenced by param will
+For connection\-oriented endpoints, the buffer referenced by param will
 be sent as part of the connection request or response, subject to the
 constraints of the underlying connection protocol.
 Applications may use fi_getopt with the FI_OPT_CM_DATA_SIZE endpoint

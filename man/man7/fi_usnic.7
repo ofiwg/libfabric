@@ -1,4 +1,4 @@
-.TH fi_usnic 7 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_usnic" "7" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The usNIC Fabric Provider
@@ -21,12 +21,12 @@ usnic provider can use either version.
 If you are building libfabric/the usnic provider from source, you will
 need to have the libnl header files available (e.g., if you are
 installing libnl from RPM or other packaging system, install the
-"-devel" versions of the package).
+"\-devel" versions of the package).
 .IP \[bu] 2
-If you have libnl (either v1 or v3) installed in a non-standard location
-(e.g., not in /usr/lib or /usr/lib64), you may need to tell
+If you have libnl (either v1 or v3) installed in a non\-standard
+location (e.g., not in /usr/lib or /usr/lib64), you may need to tell
 libfabric\[aq]s configure where to find libnl via the
-\f[C]--with-libnl=DIR\f[] command line option (where DIR is the
+\f[C]\-\-with\-libnl=DIR\f[] command line option (where DIR is the
 installation prefix of the libnl package).
 .RE
 .IP \[bu] 2
@@ -34,8 +34,8 @@ The most common way to use the libfabric usnic provider is via an MPI
 implementation that uses libfabric (and the usnic provider) as a lower
 layer transport.
 MPI applications do not need to know anything about libfabric or usnic
-in this use case -- the MPI implementation hides all these details from
-the application.
+in this use case \-\- the MPI implementation hides all these details
+from the application.
 .IP \[bu] 2
 If you are writing applications directly to the libfabric API:
 .RS 2
@@ -95,7 +95,7 @@ interface.
 These extensions are available via the "fi_ext_usnic.h" header file.
 .PP
 The following is an example of how to utilize the usnic "fabric getinfo"
-extension, which returns IP and SR-IOV information about a usNIC
+extension, which returns IP and SR\-IOV information about a usNIC
 interface obtained from the \f[C]fi_getinfo\f[](3) function.
 .IP
 .nf
@@ -126,30 +126,30 @@ int\ main(int\ argc,\ char\ *argv[])\ {
 \ \ \ \ /*\ Find\ all\ usnic\ providers\ */
 \ \ \ \ fi_getinfo(FI_VERSION(1,\ 0),\ NULL,\ 0,\ 0,\ &hints,\ &info_list);
 
-\ \ \ \ for\ (info\ =\ info_list;\ NULL\ !=\ info;\ info\ =\ info->next)\ {
+\ \ \ \ for\ (info\ =\ info_list;\ NULL\ !=\ info;\ info\ =\ info\->next)\ {
 \ \ \ \ \ \ \ \ /*\ Open\ the\ fabric\ on\ the\ interface\ */
 \ \ \ \ \ \ \ \ struct\ fid_fabric\ *fabric;
-\ \ \ \ \ \ \ \ fi_fabric(info->fabric_attr,\ &fabric,\ NULL);
+\ \ \ \ \ \ \ \ fi_fabric(info\->fabric_attr,\ &fabric,\ NULL);
 
 \ \ \ \ \ \ \ \ /*\ Pass\ FI_USNIC_FABRIC_OPS_1\ to\ get\ usnic\ ops
 \ \ \ \ \ \ \ \ \ \ \ on\ the\ fabric\ */
 \ \ \ \ \ \ \ \ struct\ fi_usnic_ops_fabric\ *usnic_fabric_ops;
-\ \ \ \ \ \ \ \ fi_open_ops(&fabric->fid,\ FI_USNIC_FABRIC_OPS_1,\ 0,
+\ \ \ \ \ \ \ \ fi_open_ops(&fabric\->fid,\ FI_USNIC_FABRIC_OPS_1,\ 0,
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ (void\ **)\ &usnic_fabric_ops,\ NULL);
 
 \ \ \ \ \ \ \ \ /*\ Now\ use\ the\ returned\ usnic\ ops\ structure\ to\ call
 \ \ \ \ \ \ \ \ \ \ \ usnic\ extensions.\ \ The\ following\ extension\ queries
-\ \ \ \ \ \ \ \ \ \ \ some\ IP\ and\ SR-IOV\ characteristics\ about\ the
+\ \ \ \ \ \ \ \ \ \ \ some\ IP\ and\ SR\-IOV\ characteristics\ about\ the
 \ \ \ \ \ \ \ \ \ \ \ usNIC\ device.\ */
 \ \ \ \ \ \ \ \ struct\ fi_usnic_info\ usnic_info;
-\ \ \ \ \ \ \ \ usnic_fabric_ops->getinfo(FI_EXT_USNIC_INFO_VERSION,
+\ \ \ \ \ \ \ \ usnic_fabric_ops\->getinfo(FI_EXT_USNIC_INFO_VERSION,
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ fabric,\ &usnic_info);
 
 \ \ \ \ \ \ \ \ printf("Fabric\ interface\ %s\ is\ %s:\\n"
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ "\\tNetmask:\ \ 0x%08x\\n\\tLink\ speed:\ %d\\n"
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ "\\tSR-IOV\ VFs:\ %d\\n\\tQPs\ per\ SR-IOV\ VF:\ %d\\n"
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ "\\tCQs\ per\ SR-IOV\ VF:\ %d\\n",
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ info->fabric_attr->name,
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ "\\tSR\-IOV\ VFs:\ %d\\n\\tQPs\ per\ SR\-IOV\ VF:\ %d\\n"
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ "\\tCQs\ per\ SR\-IOV\ VF:\ %d\\n",
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ info\->fabric_attr\->name,
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ usnic_info.ui.v1.ui_ifname,
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ usnic_info.ui.v1.ui_netmask_be,
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ usnic_info.ui.v1.ui_link_speed,
@@ -157,7 +157,7 @@ int\ main(int\ argc,\ char\ *argv[])\ {
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ usnic_info.ui.v1.ui_qp_per_vf,
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ usnic_info.ui.v1.ui_cq_per_vf);
 
-\ \ \ \ \ \ \ \ fi_close(&fabric->fid);
+\ \ \ \ \ \ \ \ fi_close(&fabric\->fid);
 \ \ \ \ }
 
 \ \ \ \ fi_freeinfo(info_list);

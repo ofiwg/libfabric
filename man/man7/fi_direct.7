@@ -1,4 +1,4 @@
-.TH fi_direct 7 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_direct" "7" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 Direct fabric provider access
@@ -6,7 +6,7 @@ Direct fabric provider access
 .IP
 .nf
 \f[C]
--DFABRIC_DIRECT
+\-DFABRIC_DIRECT
 
 #define\ FABRIC_DIRECT
 \f[]
@@ -21,11 +21,11 @@ provider.
 .SH DESCRIPTION
 .PP
 The use of fabric direct is intended only for applications that require
-the absolute minimum software latency, and are willing to re-compile for
-specific fabric hardware.
+the absolute minimum software latency, and are willing to re\-compile
+for specific fabric hardware.
 Providers that support fabric direct implement their own versions of the
 static inline calls which are define in the libfabric header files,
-define selected enum values, and provide defines for compile-time
+define selected enum values, and provide defines for compile\-time
 optimizations.
 Applications can then code against the standard libfabric calls, but
 link directly against the provider calls by defining FABRIC_DIRECT as
@@ -48,7 +48,7 @@ In addition to provider direct function calls to provider code, a fabric
 direct provider may define zero of more of the following capability
 definitions.
 Applications can check for these capabilities in order to optimize code
-paths at compile time, versus relying on run-time checks.
+paths at compile time, versus relying on run\-time checks.
 .SH CAPABILITY DEFINITIONS
 .PP
 In order that application code may be optimized during compile time,

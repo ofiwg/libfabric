@@ -1,7 +1,7 @@
-.TH fi_av 3 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_av" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_av - Address vector operations
+fi_av \- Address vector operations
 .PP
 fi_av_open / fi_close : Open or close an address vector
 .PP
@@ -170,7 +170,7 @@ Address vectors may be shared across multiple processes which access the
 same named domain on the same node.
 The name field allows the underlying provider to identify a shared AV.
 .PP
-If the name field is non-NULL and the AV is not opened for read-only
+If the name field is non\-NULL and the AV is not opened for read\-only
 access, a named AV will be created, if it does not already exist.
 .PP
 \f[I]map_addr\f[] : The map_addr determines the base fi_addr_t address
@@ -188,7 +188,7 @@ opens an AV of the same name at the same map_addr value.
 The relationship between the map_addr and any returned fi_addr_t is not
 defined.
 .PP
-If name is non-NULL and map_addr is 0, then the map_addr used by the
+If name is non\-NULL and map_addr is 0, then the map_addr used by the
 provider will be returned through the attribute structure.
 The map_addr field is ignored if name is NULL.
 .PP
@@ -197,9 +197,9 @@ The map_addr field is ignored if name is NULL.
 \f[I]FI_EVENT\f[] : When the flag FI_EVENT is specified, all insert
 operations on this AV will occur asynchronously.
 There will be one EQ error entry generated for each failed address
-insertion, followed by one non-error event indicating that the insertion
-operation has completed.
-There will always be one non-error completion event for each insert
+insertion, followed by one non\-error event indicating that the
+insertion operation has completed.
+There will always be one non\-error completion event for each insert
 operation, even if all addresses fail.
 The context field in all completions will be the context specified to
 the insert call, and the data field in the final completion entry will
@@ -214,7 +214,7 @@ There will be one error completion returned for each address that fails
 to insert into the AV.
 .PP
 If an AV is opened with FI_EVENT, any insertions attempted before an EQ
-is bound to the AV will fail with -FI_ENOEQ.
+is bound to the AV will fail with \-FI_ENOEQ.
 .PP
 Error completions for failed insertions will contain the index of the
 failed address in the index field of the error completion entry.
@@ -222,17 +222,17 @@ failed address in the index field of the error completion entry.
 Note that the order of delivery of insert completions may not match the
 order in which the calls to fi_av_insert were made.
 The only guarantee is that all error completions for a given call to
-fi_av_insert will precede the single associated non-error completion.
+fi_av_insert will precede the single associated non\-error completion.
 .IP \[bu] 2
-\f[I]FI_READ\f[] : Opens an AV for read-only access.
-An AV opened for read-only access must be named (name attribute
+\f[I]FI_READ\f[] : Opens an AV for read\-only access.
+An AV opened for read\-only access must be named (name attribute
 specified), and the AV must exist.
 .IP \[bu] 2
 \f[I]FI_SYMMETRIC\f[] : Indicates that each node will be associated with
 the same number of endpoints, the same transport addresses will be
 allocated on each node, and the transport addresses will be sequential.
 This feature targets distributed applications on large fabrics and
-allows for highly-optimized storage of remote endpoint addressing.
+allows for highly\-optimized storage of remote endpoint addressing.
 .SS fi_close
 .PP
 The fi_close call is used to release all resources associated with an
@@ -245,14 +245,14 @@ AV before closing it.
 When closing the address vector, there must be no opened endpoints
 associated with the AV.
 If resources are still associated with the AV when attempting to close,
-the call will return -FI_EBUSY.
+the call will return \-FI_EBUSY.
 .SS fi_av_bind
 .PP
 Associates an event queue with the AV.
 If an AV has been opened with \f[C]FI_EVENT\f[], then an event queue
 must be bound to the AV before any insertion calls are attempted.
 Any calls to insert addresses before an event queue has been bound will
-fail with \f[C]-FI_ENOEQ\f[].
+fail with \f[C]\-FI_ENOEQ\f[].
 .SS fi_av_insert
 .PP
 The fi_av_insert call inserts zero or more addresses into an AV.
@@ -270,7 +270,7 @@ completed and an event has been generated to an associated event queue.
 The value of the returned fi_addr should be considered opaque by the
 application for AVs of type FI_AV_MAP.
 The returned value may point to an internal structure or a provider
-specific encoding of low-level addressing data, for example.
+specific encoding of low\-level addressing data, for example.
 In the latter case, use of FI_AV_MAP may be able to avoid memory
 references during data transfer operations.
 .PP
@@ -286,10 +286,10 @@ where the address was inserted.
 Index values accumulate across successive insert calls in the order the
 calls are made, not necessarily in the order the insertions complete.
 .PP
-Because insertions occur at a pre-determined index, the fi_addr
+Because insertions occur at a pre\-determined index, the fi_addr
 parameter may be NULL.
-If fi_addr is non-NULL, it must reference an array of fi_addr_t, and the
-buffer must remain valid until the insertion operation completes.
+If fi_addr is non\-NULL, it must reference an array of fi_addr_t, and
+the buffer must remain valid until the insertion operation completes.
 Note that if fi_addr is NULL and synchronous operation is requested,
 individual insertion failures cannot be reported and the application
 must use other calls, such as \f[C]fi_av_lookup\f[] to learn which
@@ -320,16 +320,16 @@ The svccnt parameter indicates the number of transport (endpoint)
 addresses to insert into the AV for each node address, with the service
 parameter specifying the starting transport address.
 Inserted transport addresses will be of the range {service, service +
-svccnt - 1}, inclusive.
+svccnt \- 1}, inclusive.
 All service addresses for a node will be inserted before the next node
 is inserted.
 .PP
 The nodecnt parameter indicates the number of node (network) addresses
 to insert into the AV, with the node parameter specifying the starting
 node address.
-Inserted node addresses will be of the range {node, node + nodecnt - 1},
-inclusive.
-If node is a non-numeric string, such as a hostname, it must contain a
+Inserted node addresses will be of the range {node, node + nodecnt \-
+1}, inclusive.
+If node is a non\-numeric string, such as a hostname, it must contain a
 numeric suffix if nodecnt > 1.
 .PP
 As an example, if node = "10.1.1.1", nodecnt = 2, service = "5000", and

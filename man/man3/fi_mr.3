@@ -1,7 +1,7 @@
-.TH fi_mr 3 "2016\-02\-27" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_mr" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
-fi_mr - Memory region operations
+fi_mr \- Memory region operations
 .PP
 fi_mr_reg / fi_mr_regv / fi_mr_regattr : Register local memory buffers
 for direct fabric access
@@ -139,9 +139,9 @@ That is, an application can register any range of addresses in their
 virtual address space, whether or not those addresses are backed by
 physical pages or have been allocated.
 .PP
-The registrations functions -- fi_mr_reg, fi_mr_regv, and fi_mr_regattr
--- are used to register one or more memory regions with fabric
-resources.
+The registrations functions \-\- fi_mr_reg, fi_mr_regv, and
+fi_mr_regattr \-\- are used to register one or more memory regions with
+fabric resources.
 The main difference between registration functions are the number and
 type of parameters that they accept as input.
 Otherwise, they perform the same general function.
@@ -162,7 +162,7 @@ An asynchronous event will not be generated unless the registration call
 returns success (0).
 .SS fi_mr_reg
 .PP
-The fi_mr_reg call registers the user-specified memory buffer with the
+The fi_mr_reg call registers the user\-specified memory buffer with the
 resource domain.
 The buffer is enabled for access by the fabric hardware based on the
 provided access permissions.
@@ -223,7 +223,8 @@ The context specified with the registration request is returned with the
 completion event.
 .SS fi_mr_regv
 .PP
-The fi_mr_regv call adds support for a scatter-gather list to fi_mr_reg.
+The fi_mr_regv call adds support for a scatter\-gather list to
+fi_mr_reg.
 Multiple memory buffers are registered as a single memory region.
 Otherwise, the operation is the same.
 .SS fi_mr_regattr
@@ -235,11 +236,11 @@ fi_mr_attr.
 .nf
 \f[C]
 struct\ fi_mr_attr\ {
-\ \ \ \ const\ struct\ iovec\ *mr_iov;\ \ \ \ \ \ \ /*\ scatter-gather\ array\ */
+\ \ \ \ const\ struct\ iovec\ *mr_iov;\ \ \ \ \ \ \ /*\ scatter\-gather\ array\ */
 \ \ \ \ size_t\ \ \ \ \ \ \ \ \ \ \ \ \ iov_count;\ \ \ \ \ /*\ #\ elements\ in\ mr_iov\ */
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ access;\ \ \ \ \ \ \ \ /*\ access\ permission\ flags\ */
 \ \ \ \ uint64_t\ \ \ \ \ \ \ \ \ \ \ requested_key;\ /*\ requested\ remote\ key\ */
-\ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *context;\ \ \ \ \ \ /*\ user-defined\ context\ */
+\ \ \ \ void\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ *context;\ \ \ \ \ \ /*\ user\-defined\ context\ */
 };
 \f[]
 .fi
@@ -253,7 +254,7 @@ guaranteed.
 When closing the MR, there must be no opened endpoints or counters
 associated with the MR.
 If resources are still associated with the MR when attempting to close,
-the call will return -FI_EBUSY.
+the call will return \-FI_EBUSY.
 .SS fi_mr_desc / fi_mr_key
 .PP
 The local memory descriptor and remote protection key associated with a
@@ -281,16 +282,16 @@ On error, a negative value corresponding to fabric errno is returned.
 Fabric errno values are defined in \f[C]rdma/fi_errno.h\f[].
 .SH ERRORS
 .PP
-\f[I]-FI_ENOKEY\f[] : The requested_key is already in use.
+\f[I]\-FI_ENOKEY\f[] : The requested_key is already in use.
 .PP
-\f[I]-FI_EKEYREJECTED\f[] : The requested_key is not available.
+\f[I]\-FI_EKEYREJECTED\f[] : The requested_key is not available.
 They key may be out of the range supported by the provider, or the
-provider may not support user-requested memory registration keys.
+provider may not support user\-requested memory registration keys.
 .PP
-\f[I]-FI_ENOSYS\f[] : Returned by fi_mr_bind if the provider does not
+\f[I]\-FI_ENOSYS\f[] : Returned by fi_mr_bind if the provider does not
 support reporting events based on access to registered memory regions.
 .PP
-\f[I]-FI_EBADFLAGS\f[] : Returned if the specified flags are not
+\f[I]\-FI_EBADFLAGS\f[] : Returned if the specified flags are not
 supported by the provider.
 .SH SEE ALSO
 .PP
