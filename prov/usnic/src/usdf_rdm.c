@@ -45,6 +45,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -491,6 +492,76 @@ usdf_rdm_recv(struct fid_ep *fep, void *buf, size_t len,
 	return 0;
 }
 
+static inline ssize_t _usdf_rdm_recv_vector(struct fid_ep *fep,
+	const struct iovec *iov, void **desc, size_t count, fi_addr_t src_addr,
+	void *context, uint64_t flags)
+{
+	struct usdf_ep *ep;
+	struct usdf_rx *rx;
+	struct usdf_rdm_qe *rqe;
+	struct usdf_domain *udp;
+	size_t tot_len;
+	size_t i;
+
+	ep = ep_ftou(fep);
+	rx = ep->ep_rx;
+	udp = ep->ep_domain;
+
+	if (flags & ~USDF_RDM_SUPP_RECVMSG_FLAGS) {
+		USDF_DBG_SYS(EP_DATA,
+				"one or more flags in 0x%" PRIx64 " not supported\n",
+				flags);
+		return -FI_EOPNOTSUPP;
+	}
+
+	if (TAILQ_EMPTY(&rx->r.rdm.rx_free_rqe))
+		return -FI_EAGAIN;
+
+	pthread_spin_lock(&udp->dom_progress_lock);
+
+	rqe = usdf_rdm_get_rx_rqe(rx);
+
+	tot_len = 0;
+	for (i = 0; i < count; i++) {
+		rqe->rd_iov[i].iov_base = iov[i].iov_base;
+		rqe->rd_iov[i].iov_len = iov[i].iov_len;
+		tot_len += iov[i].iov_len;
+	}
+
+	rqe->rd_context = context;
+	rqe->rd_cur_iov = 0;
+	rqe->rd_iov_resid = iov[0].iov_len;
+	rqe->rd_last_iov = count - 1;
+	rqe->rd_cur_ptr = iov[0].iov_base;
+	rqe->rd_resid = tot_len;
+	rqe->rd_length = tot_len;
+
+	rqe->rd_signal_comp = ep->ep_rx_dflt_signal_comp ||
+		(flags & FI_COMPLETION) ? 1 : 0;
+
+	TAILQ_INSERT_TAIL(&rx->r.rdm.rx_posted_rqe, rqe, rd_link);
+
+	pthread_spin_unlock(&udp->dom_progress_lock);
+
+	return FI_SUCCESS;
+}
+
+ssize_t usdf_rdm_recvv(struct fid_ep *fep, const struct iovec *iov,
+		void **desc, size_t count, fi_addr_t src_addr, void *context)
+{
+	struct usdf_ep *ep = ep_ftou(fep);
+
+	return _usdf_rdm_recv_vector(fep, iov, desc, count, src_addr, context,
+		ep->ep_rx->rx_attr.op_flags);
+}
+
+ssize_t usdf_rdm_recvmsg(struct fid_ep *fep, const struct fi_msg *msg,
+		uint64_t flags)
+{
+	return _usdf_rdm_recv_vector(fep, msg->msg_iov, msg->desc,
+			msg->iov_count, msg->addr, msg->context, flags);
+}
+
 ssize_t
 usdf_rdm_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, void *context)
@@ -554,117 +625,53 @@ usdf_rdm_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 	return 0;
 }
 
-ssize_t
-usdf_rdm_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
-                 size_t count, fi_addr_t dest_addr, void *context)
+static inline size_t _usdf_iov_len(const struct iovec *iov, size_t count)
 {
+	size_t len;
 	size_t i;
-	struct usdf_ep *ep;
-	struct usdf_tx *tx;
-	struct usdf_rdm_qe *wqe;
-	struct usdf_domain *udp;
-	struct usdf_dest *dest;
-	struct usdf_rdm_connection *rdc;
-	uint32_t msg_id;
-	size_t tot_len;
-	uint64_t op_flags;
 
-	ep = ep_ftou(fep);
-	tx = ep->ep_tx;
-	udp = ep->ep_domain;
-	dest = (struct usdf_dest *)dest_addr;
+	for (i = 0, len = 0; i < count; i++)
+		len += iov[i].iov_len;
 
-	if (TAILQ_EMPTY(&tx->t.rdm.tx_free_wqe)) {
-		return -FI_EAGAIN;
-	}
-
-	pthread_spin_lock(&udp->dom_progress_lock);
-
-	rdc = usdf_rdm_rdc_tx_get(dest, ep);
-	if (rdc == NULL) {
-		pthread_spin_unlock(&udp->dom_progress_lock);
-		return -FI_EAGAIN;
-	}
-
-	wqe = TAILQ_FIRST(&tx->t.rdm.tx_free_wqe);
-	TAILQ_REMOVE(&tx->t.rdm.tx_free_wqe, wqe, rd_link);
-
-	wqe->rd_context = context;
-
-	msg_id = atomic_inc(&tx->t.rdm.tx_next_msg_id);
-	wqe->rd_msg_id_be = htonl(msg_id);
-
-	tot_len = 0;
-	for (i = 0; i < count; ++i) {
-		wqe->rd_iov[i].iov_base = (void *)iov[i].iov_base;
-		wqe->rd_iov[i].iov_len = iov[i].iov_len;
-		tot_len += iov[i].iov_len;
-	}
-	wqe->rd_last_iov = count - 1;
-
-	wqe->rd_cur_iov = 0;
-	wqe->rd_cur_ptr = iov[0].iov_base;
-	wqe->rd_iov_resid = iov[0].iov_len;
-	wqe->rd_resid = tot_len;
-	wqe->rd_length = tot_len;
-
-	op_flags = ep->ep_tx->tx_attr.op_flags;
-	wqe->rd_signal_comp = ep->ep_tx_dflt_signal_comp ||
-		(op_flags & FI_COMPLETION);
-
-	/* add send to TX list */
-	TAILQ_INSERT_TAIL(&rdc->dc_wqe_posted, wqe, rd_link);
-	usdf_rdm_rdc_ready(rdc, tx);
-
-	pthread_spin_unlock(&udp->dom_progress_lock);
-	USDF_DBG_SYS(EP_DATA, "SENDV posted len=%lu, ID=%d\n", tot_len, msg_id);
-
-	usdf_domain_progress(udp);
-
-	return 0;
+	return len;
 }
 
-ssize_t
-usdf_rdm_sendmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
+static inline ssize_t _usdf_rdm_send_vector(struct fid_ep *fep,
+	const struct iovec *iov, void **desc, size_t count, fi_addr_t dest_addr,
+	void *context, uint64_t flags)
 {
-	size_t i;
-	struct usdf_ep *ep;
-	struct usdf_tx *tx;
+	struct usdf_rdm_connection *rdc;
 	struct usdf_rdm_qe *wqe;
 	struct usdf_domain *udp;
 	struct usdf_dest *dest;
-	struct usdf_rdm_connection *rdc;
+	struct usdf_ep *ep;
+	struct usdf_tx *tx;
 	uint32_t msg_id;
 	size_t tot_len;
-	const struct iovec *iov;
+	size_t i;
 
 	ep = ep_ftou(fep);
 	tx = ep->ep_tx;
 	udp = ep->ep_domain;
-	dest = (struct usdf_dest *)msg->addr;
+	dest = (struct usdf_dest *) dest_addr;
 
 	if (flags & ~USDF_RDM_SUPP_SENDMSG_FLAGS) {
 		USDF_DBG("one or more flags in 0x%llx not supported\n", flags);
 		return -FI_EOPNOTSUPP;
 	}
 
+	if (TAILQ_EMPTY(&tx->t.rdm.tx_free_wqe))
+		return -FI_EAGAIN;
+
 	/* check for inject overrun before acquiring lock and allocating msg id,
 	 * easier to unwind this way */
 	if (flags & FI_INJECT) {
-		iov = msg->msg_iov;
-		tot_len = 0;
-		for (i = 0; i < msg->iov_count; ++i) {
-			tot_len += iov[i].iov_len;
-			if (tot_len > USDF_RDM_MAX_INJECT_SIZE) {
-				USDF_DBG_SYS(EP_DATA, "max inject len exceeded (%zu)\n",
-						tot_len);
-				return -FI_EINVAL;
-			}
+		tot_len = _usdf_iov_len(iov, count);
+		if (tot_len > USDF_RDM_MAX_INJECT_SIZE) {
+			USDF_DBG_SYS(EP_DATA, "max inject len exceeded (%zu)\n",
+				     tot_len);
+			return -FI_EINVAL;
 		}
-	}
-
-	if (TAILQ_EMPTY(&tx->t.rdm.tx_free_wqe)) {
-		return -FI_EAGAIN;
 	}
 
 	pthread_spin_lock(&udp->dom_progress_lock);
@@ -675,56 +682,71 @@ usdf_rdm_sendmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 		return -FI_EAGAIN;
 	}
 
-	wqe = TAILQ_FIRST(&tx->t.rdm.tx_free_wqe);
-	TAILQ_REMOVE(&tx->t.rdm.tx_free_wqe, wqe, rd_link);
+	wqe = usdf_rdm_get_tx_wqe(tx);
 
-	wqe->rd_context = msg->context;
-
-	msg_id = atomic_inc(&tx->t.rdm.tx_next_msg_id);
-	wqe->rd_msg_id_be = htonl(msg_id);
-
-	iov = msg->msg_iov;
 	tot_len = 0;
 	if (flags & FI_INJECT) {
 		/* copy to the the wqe's tiny injection buffer */
-		for (i = 0; i < msg->iov_count; ++i) {
-			assert(tot_len + iov[i].iov_len <= USDF_RDM_MAX_INJECT_SIZE);
+		for (i = 0; i < count; ++i) {
+			assert(tot_len + iov[i].iov_len <=
+			       USDF_RDM_MAX_INJECT_SIZE);
 			memcpy(&wqe->rd_inject_buf[tot_len], iov[i].iov_base,
 				iov[i].iov_len);
 			tot_len += iov[i].iov_len;
 		}
+
 		wqe->rd_iov[0].iov_base = wqe->rd_inject_buf;
 		wqe->rd_iov[0].iov_len = tot_len;
 		wqe->rd_last_iov = 0;
 	} else {
-		for (i = 0; i < msg->iov_count; ++i) {
-			wqe->rd_iov[i].iov_base = (void *)iov[i].iov_base;
+		for (i = 0; i < count; ++i) {
+			wqe->rd_iov[i].iov_base = iov[i].iov_base;
 			wqe->rd_iov[i].iov_len = iov[i].iov_len;
 			tot_len += iov[i].iov_len;
 		}
-		wqe->rd_last_iov = msg->iov_count - 1;
+		wqe->rd_last_iov = count - 1;
 	}
 
+	msg_id = atomic_inc(&tx->t.rdm.tx_next_msg_id);
+
+	wqe->rd_msg_id_be = htonl(msg_id);
+	wqe->rd_context = context;
 	wqe->rd_cur_iov = 0;
 	wqe->rd_cur_ptr = iov[0].iov_base;
 	wqe->rd_iov_resid = iov[0].iov_len;
 	wqe->rd_resid = tot_len;
 	wqe->rd_length = tot_len;
 
-	wqe->rd_signal_comp = ep->ep_tx_dflt_signal_comp ||
-		(flags & FI_COMPLETION);
+	wqe->rd_signal_comp =
+	    ep->ep_tx_dflt_signal_comp || (flags & FI_COMPLETION);
 
 	/* add send to TX list */
 	TAILQ_INSERT_TAIL(&rdc->dc_wqe_posted, wqe, rd_link);
 	usdf_rdm_rdc_ready(rdc, tx);
 
 	pthread_spin_unlock(&udp->dom_progress_lock);
-	USDF_DBG_SYS(EP_DATA, "SENDMSG posted len=%lu, ID=%d\n",
-			tot_len, msg_id);
+	USDF_DBG_SYS(EP_DATA, "posted len=%lu, ID=%d\n", tot_len,
+		     msg_id);
 
 	usdf_domain_progress(udp);
 
-	return 0;
+	return FI_SUCCESS;
+}
+
+ssize_t usdf_rdm_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
+		       size_t count, fi_addr_t dest_addr, void *context)
+{
+	struct usdf_ep *ep = ep_ftou(fep);
+
+	return _usdf_rdm_send_vector(fep, iov, desc, count, dest_addr, context,
+		ep->ep_tx->tx_attr.op_flags);
+}
+
+ssize_t usdf_rdm_sendmsg(struct fid_ep *fep, const struct fi_msg *msg,
+			 uint64_t flags)
+{
+	return _usdf_rdm_send_vector(fep, msg->msg_iov, msg->desc,
+		msg->iov_count, msg->addr, msg->context, flags);
 }
 
 ssize_t
