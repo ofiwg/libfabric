@@ -248,12 +248,23 @@ enum {
 	FI_VERBS_CONN_CLOSED
 };
 
-struct fi_ibv_rdm_tagged_conn {
-	struct ibv_qp *qp;
-	char addr[FI_IBV_RDM_DFLT_ADDRLEN];
+enum fi_rdm_cm_role {
+	FI_VERBS_CM_ACTIVE,
+	FI_VERBS_CM_PASSIVE,
+	FI_VERBS_CM_SELF,
+};
 
-	struct rdma_cm_id *id;
-	int is_active;
+struct fi_ibv_rdm_tagged_conn {
+
+	/* 
+	 * In normal case only qp[0] and id[0] are used.
+	 * qp[1] and id[1] are used for establishing connection to self
+	 * like passive side
+	 */
+	struct ibv_qp *qp[2];
+	struct rdma_cm_id *id[2];
+	char addr[FI_IBV_RDM_DFLT_ADDRLEN];
+	enum fi_rdm_cm_role cm_role;
 	int state;
 
 	char *sbuf_mem_reg;
