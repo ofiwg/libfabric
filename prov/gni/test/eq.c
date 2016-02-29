@@ -160,7 +160,7 @@ Test(eq_wait_obj, mutex_cond, .init = eq_wait_mutex_cond_setup)
 	cr_expect_eq(wait_priv->cond_type, FI_CQ_COND_NONE);
 }
 
-TestSuite(eq_wait_control, .fini = eq_teardown);
+TestSuite(eq_wait_control, .fini = eq_teardown, .disabled = true);
 
 /*
 Test(eq_wait_control, none, .init = eq_wait_none_setup)
@@ -212,7 +212,7 @@ Test(eq_wait_control, mutex_cond, .init = eq_wait_mutex_cond_setup)
 	cr_expect_eq(0, ret, "cond compare failed.");
 }
 
-Test(eq_wait_set, fd, .init = _setup, .fini = _teardown)
+Test(eq_wait_set, fd, .init = _setup, .fini = _teardown, .disabled = true)
 {
 	int ret;
 	int fd;

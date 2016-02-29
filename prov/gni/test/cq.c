@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -522,7 +522,7 @@ Test(cq_msg, multi_sread, .init = cq_wait_unspec_setup)
 }
 
 TestSuite(cq_wait_obj, .fini = cq_teardown);
-TestSuite(cq_wait_control, .fini = cq_teardown);
+TestSuite(cq_wait_control, .fini = cq_teardown, .disabled = true);
 TestSuite(cq_wait_ops, .fini = cq_teardown);
 
 Test(cq_wait_obj, none, .init = cq_wait_none_setup)
@@ -625,7 +625,7 @@ Test(cq_wait_ops, fd, .init = cq_wait_fd_setup)
 		      "control implementation not available.");
 }
 
-Test(cq_wait_set, fd, .init = setup)
+Test(cq_wait_set, fd, .init = setup, .disabled = true)
 {
 	int ret;
 	int fd;

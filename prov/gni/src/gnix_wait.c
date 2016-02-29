@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -230,11 +230,13 @@ err:
  ******************************************************************************/
 static int gnix_wait_control(struct fid *wait, int command, void *arg)
 {
+	/* disabled until new trywait interface is implemented
 	struct fid_wait *wait_fid_priv;
 
 	GNIX_TRACE(WAIT_SUB, "\n");
 
 	wait_fid_priv = container_of(wait, struct fid_wait, fid);
+	*/
 
 	switch (command) {
 	case FI_GETWAIT:
