@@ -1468,9 +1468,8 @@ int _gnix_vc_connect(struct gnix_vc *vc)
 	}
 
 	/*
-	 * allocate a work request and try to
-	 * run the progress function once.  If it
-	 * doesn't succeed, put it on the cm_nic work queue.
+	 * allocate a work request and put it
+	 * on the cm_nic work queue.
 	 */
 
 	work_req = calloc(1, sizeof(*work_req));
@@ -2050,14 +2049,14 @@ static int __gnix_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_vc_alloc returned %s\n",
 				  fi_strerror(-ret));
-			goto err;
+			goto err_w_lock;
 		}
 		ret = _gnix_ht_insert(ep->vc_ht, key,
 					vc_tmp);
-		fastlock_release(&ep->vc_ht_lock);
 		if (likely(ret == FI_SUCCESS)) {
 			vc = vc_tmp;
 			vc->modes |= GNIX_VC_MODE_IN_HT;
+			fastlock_release(&ep->vc_ht_lock);
 			ret = _gnix_vc_connect(vc);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_DATA,
@@ -2067,7 +2066,6 @@ static int __gnix_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 			}
 		} else if (ret == -FI_ENOSPC) {
 			_gnix_vc_destroy(vc_tmp);
-			fastlock_acquire(&ep->vc_ht_lock);
 			vc = _gnix_ht_lookup(ep->vc_ht, key);
 			fastlock_release(&ep->vc_ht_lock);
 			assert(vc != NULL);
@@ -2077,12 +2075,17 @@ static int __gnix_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_ht_insert returned %s\n",
 				   fi_strerror(-ret));
-			goto err;
+			goto err_w_lock;
 		}
+	} else  {
+		fastlock_release(&ep->vc_ht_lock);
 	}
+
 	*vc_ptr = vc;
-	fastlock_release(&ep->vc_ht_lock);
 	return ret;
+
+err_w_lock:
+	fastlock_release(&ep->vc_ht_lock);
 err:
 	if (vc != NULL)
 		_gnix_vc_destroy(vc);
