@@ -193,7 +193,7 @@ struct fi_ibv_rdm_tagged_request {
 static inline void
 fi_ibv_rdm_tagged_zero_request(struct fi_ibv_rdm_tagged_request *request)
 {
-	memset(request, 0, sizeof (struct fi_ibv_rdm_tagged_request));
+	memset(request, 0, sizeof(*request));
 }
 
 void fi_ibv_rdm_tagged_print_request(char *buf,
