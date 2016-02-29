@@ -99,3 +99,18 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
 	}
 	return ret;
 }
+
+void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
+				  struct fi_ibv_rdm_ep *ep)
+{
+	const int addr_cmp = memcmp(conn->addr, ep->my_rdm_addr,
+				    FI_IBV_RDM_DFLT_ADDRLEN);
+
+	if (addr_cmp < 0) {
+		conn->cm_role = FI_VERBS_CM_ACTIVE;
+	} else if (addr_cmp > 0) {
+		conn->cm_role = FI_VERBS_CM_PASSIVE;
+	} else {
+		conn->cm_role = FI_VERBS_CM_SELF;
+	}
+}

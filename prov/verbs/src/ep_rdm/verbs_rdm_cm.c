@@ -165,6 +165,81 @@ fi_ibv_rdm_tagged_init_qp_attributes(struct ibv_qp_init_attr *qp_attr,
 
 }
 
+static inline void
+fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
+			  struct fi_ibv_rdm_tagged_conn *conn,
+			  struct fi_ibv_rdm_ep *ep)
+{
+	/* Packing is not actual for connection to self */
+	assert(conn->cm_role != FI_VERBS_CM_SELF);
+
+	memset(cm_params, 0, sizeof(struct rdma_conn_param));
+	cm_params->responder_resources = 2;
+	cm_params->initiator_depth = 2;
+
+	cm_params->private_data_len = FI_IBV_RDM_DFLT_ADDRLEN;
+	cm_params->private_data_len += sizeof(conn->r_mr->rkey);
+	cm_params->private_data_len += sizeof(conn->remote_rbuf_mem_reg);
+	cm_params->private_data_len += sizeof(conn->s_mr->rkey);
+	cm_params->private_data_len += sizeof(conn->remote_sbuf_mem_reg);
+
+	cm_params->private_data = malloc(cm_params->private_data_len);
+
+	char *p = (char *) cm_params->private_data;
+	memcpy(p, ep->my_rdm_addr, FI_IBV_RDM_DFLT_ADDRLEN);
+	p += FI_IBV_RDM_DFLT_ADDRLEN;
+	memcpy(p, &conn->r_mr->rkey, sizeof(conn->r_mr->rkey));
+	p += sizeof(conn->r_mr->rkey);
+	memcpy(p, &conn->rbuf_mem_reg, sizeof(conn->rbuf_mem_reg));
+	p += sizeof(conn->rbuf_mem_reg);
+
+	memcpy(p, &conn->s_mr->rkey, sizeof(conn->s_mr->rkey));
+	p += sizeof(conn->s_mr->rkey);
+	memcpy(p, &conn->sbuf_mem_reg, sizeof(conn->sbuf_mem_reg));
+	p += sizeof(conn->sbuf_mem_reg);
+}
+
+
+static inline void
+fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
+			  struct fi_ibv_rdm_tagged_conn *conn,
+			  struct fi_ibv_rdm_ep *ep)
+{
+	char *p = (char *)cm_param->private_data;
+
+	if (conn->cm_role == FI_VERBS_CM_SELF) {
+		if (conn->r_mr && conn->s_mr) {
+			memcpy(conn->addr, ep->my_rdm_addr, FI_IBV_RDM_DFLT_ADDRLEN);
+			conn->remote_rbuf_rkey = conn->r_mr->rkey;
+			conn->remote_rbuf_mem_reg = conn->r_mr->addr;
+
+			conn->remote_sbuf_rkey = conn->s_mr->rkey;
+			conn->remote_sbuf_mem_reg = conn->s_mr->addr;
+
+			conn->remote_sbuf_head = conn->remote_sbuf_mem_reg +
+				FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE;
+		}
+	} else {
+		if (conn->state == FI_VERBS_CONN_ALLOCATED) {
+			memcpy(conn->addr, p, FI_IBV_RDM_DFLT_ADDRLEN);
+		}
+		p += FI_IBV_RDM_DFLT_ADDRLEN;
+
+		conn->remote_rbuf_rkey = *(uint32_t *) (p);
+		p += sizeof(conn->r_mr->rkey);
+		conn->remote_rbuf_mem_reg = *(char **)(p);
+		p += sizeof(conn->remote_rbuf_mem_reg);
+
+		conn->remote_sbuf_rkey = *(uint32_t *) (p);
+		p += sizeof(conn->s_mr->rkey);
+		conn->remote_sbuf_mem_reg = *(char **)(p);
+		p += sizeof(conn->remote_sbuf_mem_reg);
+
+		conn->remote_sbuf_head = conn->remote_sbuf_mem_reg +
+			FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE;
+	}
+}
+
 static inline int
 fi_ibv_rdm_tagged_process_addr_resolved(struct rdma_cm_id *id,
 					struct fi_ibv_rdm_ep *ep)
@@ -238,7 +313,6 @@ fi_ibv_rdm_tagged_process_connect_request(struct rdma_cm_event *event,
 			return -FI_ENOMEM;
 
 		memset(conn, 0, sizeof(struct fi_ibv_rdm_tagged_conn));
-		memcpy(&conn->addr[0], p, FI_IBV_RDM_DFLT_ADDRLEN);
 
 		conn->state = FI_VERBS_CONN_ALLOCATED;
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV,
@@ -246,16 +320,9 @@ fi_ibv_rdm_tagged_process_connect_request(struct rdma_cm_event *event,
 			FI_IBV_RDM_ADDR_STR_FORMAT ", HASH ADD\n", conn,
 			conn->cm_role, FI_IBV_RDM_ADDR_STR(conn->addr));
 
-		const int addr_cmp = memcmp(conn->addr, ep->my_rdm_addr,
-					 FI_IBV_RDM_DFLT_ADDRLEN);
-		if (addr_cmp < 0) {
-			conn->cm_role = FI_VERBS_CM_ACTIVE;
-		} else if (addr_cmp > 0) {
-			conn->cm_role = FI_VERBS_CM_PASSIVE;
-		} else {
-			conn->cm_role = FI_VERBS_CM_SELF;
-			assert(0);
-		}
+		fi_ibv_rdm_conn_init_cm_role(conn, ep);
+
+		assert(conn->cm_role != FI_VERBS_CM_SELF);
 		HASH_ADD(hh, fi_ibv_rdm_tagged_conn_hash, addr,
 			 FI_IBV_RDM_DFLT_ADDRLEN, conn);
 	} else {
@@ -264,7 +331,6 @@ fi_ibv_rdm_tagged_process_connect_request(struct rdma_cm_event *event,
 			FI_IBV_RDM_ADDR_STR_FORMAT "\n", conn, conn->cm_role,
 			FI_IBV_RDM_ADDR_STR(conn->addr));
 	}
-	p += FI_IBV_RDM_DFLT_ADDRLEN;
 
 	if (conn->cm_role == FI_VERBS_CM_ACTIVE) {
 		int rej_message = 0xdeadbeef;
@@ -281,24 +347,17 @@ fi_ibv_rdm_tagged_process_connect_request(struct rdma_cm_event *event,
 
 		const size_t idx = 
 			(conn->cm_role == FI_VERBS_CM_PASSIVE) ? 0 : 1;
+
 		conn->state = FI_VERBS_CONN_STARTED;
 
 		assert (conn->id[idx] == NULL);
 		conn->id[idx] = id;
-		// Do it before rdma_create_qp since that call would modify
-		// event->param.conn.private_data buffer
-		conn->remote_rbuf_rkey = *(uint32_t *) (p);
-		p += sizeof(conn->r_mr->rkey);
-		conn->remote_rbuf_mem_reg = *(char **) (p);
-		p += sizeof(conn->remote_rbuf_mem_reg);
 
-		conn->remote_sbuf_rkey = *(uint32_t *) (p);
-		p += sizeof(conn->s_mr->rkey);
-		conn->remote_sbuf_mem_reg = *(char **) (p);
-		p += sizeof(conn->remote_sbuf_mem_reg);
-
-		conn->remote_sbuf_head = conn->remote_sbuf_mem_reg +
-		    FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE;
+		/*
+		 * Do it before rdma_create_qp since that call would modify
+		 * event->param.conn.private_data buffer
+		 */
+		fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn, ep);
 
 		fi_ibv_rdm_tagged_prepare_conn_memory(ep, conn);
 		fi_ibv_rdm_tagged_init_qp_attributes(&qp_attr, ep);
@@ -306,36 +365,16 @@ fi_ibv_rdm_tagged_process_connect_request(struct rdma_cm_event *event,
 		conn->qp[idx] = id->qp;
 		if (ep->rq_wr_depth !=
 		    fi_ibv_rdm_tagged_repost_receives(conn, ep,
-						      ep->rq_wr_depth)) {
-			fprintf(stderr, "repost receives failed\n");
-			abort();
+						      ep->rq_wr_depth))
+		{
+			VERBS_INFO(FI_LOG_AV, "repost receives failed\n");
+			return -FI_ENOMEM;
 		}
 		id->context = conn;
 
-		memset(&cm_params, 0, sizeof(struct rdma_conn_param));
-		cm_params.private_data_len = FI_IBV_RDM_DFLT_ADDRLEN;
-		cm_params.responder_resources = 2;
-		cm_params.initiator_depth = 2;
-
-		cm_params.private_data_len += sizeof(conn->r_mr->rkey) +
-		    sizeof(conn->remote_rbuf_mem_reg);
-		cm_params.private_data_len += sizeof(conn->s_mr->rkey) +
-		    sizeof(conn->remote_sbuf_mem_reg);
-
-		cm_params.private_data = malloc(cm_params.private_data_len);
-
-		char *p = (char *) cm_params.private_data;
-		memcpy(p, ep->my_rdm_addr, FI_IBV_RDM_DFLT_ADDRLEN);
-		p += FI_IBV_RDM_DFLT_ADDRLEN;
-		memcpy(p, &conn->r_mr->rkey, sizeof(conn->r_mr->rkey));
-		p += sizeof(conn->r_mr->rkey);
-		memcpy(p, &conn->rbuf_mem_reg, sizeof(conn->rbuf_mem_reg));
-		p += sizeof(conn->rbuf_mem_reg);
-
-		memcpy(p, &conn->s_mr->rkey, sizeof(conn->s_mr->rkey));
-		p += sizeof(conn->s_mr->rkey);
-		memcpy(p, &conn->sbuf_mem_reg, sizeof(conn->sbuf_mem_reg));
-		p += sizeof(conn->sbuf_mem_reg);
+		if (conn->cm_role == FI_VERBS_CM_PASSIVE) {
+			fi_ibv_rdm_pack_cm_params(&cm_params, conn, ep);
+		}
 
 		ret = rdma_accept(id, &cm_params);
 		assert(ret == 0);
@@ -353,31 +392,8 @@ fi_ibv_rdm_tagged_process_route_resolved(struct rdma_cm_event *event,
 
 	if (conn->cm_role == FI_VERBS_CM_ACTIVE) {
 		struct rdma_conn_param cm_params;
-		memset(&cm_params, 0, sizeof(struct rdma_conn_param));
-		cm_params.private_data_len = FI_IBV_RDM_DFLT_ADDRLEN;
+		fi_ibv_rdm_pack_cm_params(&cm_params, conn, ep);
 
-		cm_params.private_data_len += sizeof(conn->r_mr->rkey) +
-		    sizeof(conn->remote_rbuf_mem_reg);
-		cm_params.private_data_len += sizeof(conn->s_mr->rkey) +
-		    sizeof(conn->remote_sbuf_mem_reg);
-
-		cm_params.private_data = malloc(cm_params.private_data_len);
-
-		char *p = (char *)cm_params.private_data;
-		memcpy(p, ep->my_rdm_addr, FI_IBV_RDM_DFLT_ADDRLEN);
-		p += FI_IBV_RDM_DFLT_ADDRLEN;
-		memcpy(p, &conn->r_mr->rkey, sizeof(conn->r_mr->rkey));
-		p += sizeof(conn->r_mr->rkey);
-		memcpy(p, &conn->rbuf_mem_reg, sizeof(conn->rbuf_mem_reg));
-		p += sizeof(conn->rbuf_mem_reg);
-
-		memcpy(p, &conn->s_mr->rkey, sizeof(conn->s_mr->rkey));
-		p += sizeof(conn->s_mr->rkey);
-		memcpy(p, &conn->sbuf_mem_reg, sizeof(conn->sbuf_mem_reg));
-		p += sizeof(conn->sbuf_mem_reg);
-
-		cm_params.responder_resources = 2;
-		cm_params.initiator_depth = 2;
 		VERBS_INFO(FI_LOG_AV,
 			"ROUTE RESOLVED, conn %p, addr "
 			FI_IBV_RDM_ADDR_STR_FORMAT "\n", conn,
@@ -422,38 +438,10 @@ fi_ibv_rdm_tagged_process_event_established(struct rdma_cm_event *event,
 	}
 #endif
 
-	switch (conn->cm_role) {
-	case FI_VERBS_CM_ACTIVE:
+	if (conn->cm_role == FI_VERBS_CM_ACTIVE ||
+	    conn->cm_role == FI_VERBS_CM_SELF)
 	{
-		char *p = (char *)event->param.conn.private_data +
-		    FI_IBV_RDM_DFLT_ADDRLEN;
-
-		conn->remote_rbuf_rkey = *(uint32_t *) (p);
-		p += sizeof(conn->r_mr->rkey);
-		conn->remote_rbuf_mem_reg = *(char **)(p);
-		p += sizeof(conn->remote_rbuf_mem_reg);
-
-		conn->remote_sbuf_rkey = *(uint32_t *) (p);
-		p += sizeof(conn->s_mr->rkey);
-		conn->remote_sbuf_mem_reg = *(char **)(p);
-		p += sizeof(conn->remote_sbuf_mem_reg);
-
-		conn->remote_sbuf_head = conn->remote_sbuf_mem_reg +
-			FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE;
-		break;
-	}
-	case FI_VERBS_CM_SELF:
-	{
-		conn->remote_rbuf_rkey		= conn->r_mr->rkey;
-		conn->remote_rbuf_mem_reg	= conn->r_mr->addr;
-		conn->remote_sbuf_rkey		= conn->s_mr->rkey;
-		conn->remote_sbuf_mem_reg	= conn->s_mr->addr;
-		conn->remote_sbuf_head		= conn->remote_sbuf_mem_reg +
-			FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE;
-		break;
-	}
-	default:
-		break;
+		fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn, ep);
 	}
 
 	FI_INFO(&fi_ibv_prov, FI_LOG_AV, "CONN ESTABLISHED,  conn %p, addr "

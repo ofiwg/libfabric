@@ -152,5 +152,7 @@ int fi_ibv_rdm_tagged_req_match_by_info2(struct dlist_entry *item,
                                          const void *info);
 int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
                                               const void *arg);
+void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
+				  struct fi_ibv_rdm_ep *ep);
 
 #endif /* _VERBS_UTILS_H */

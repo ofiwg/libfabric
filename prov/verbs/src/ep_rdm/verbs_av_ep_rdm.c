@@ -133,16 +133,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 			FI_IBV_RDM_DFLT_ADDRLEN, conn);
 		}
 
-		const int addr_cmp = memcmp(addr_i, ep->my_rdm_addr,
-			FI_IBV_RDM_DFLT_ADDRLEN);
-
-		if (addr_cmp < 0) {
-			conn->cm_role = FI_VERBS_CM_ACTIVE;
-		} else if (addr_cmp > 0) {
-			conn->cm_role = FI_VERBS_CM_PASSIVE;
-		} else {
-			conn->cm_role = FI_VERBS_CM_SELF;
-		}
+		fi_ibv_rdm_conn_init_cm_role(conn, ep);
 
 		fi_addr[i] = (uintptr_t) (void *) conn;
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "fi_av_insert: addr "
