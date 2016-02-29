@@ -544,6 +544,8 @@ void sock_getnodename(char *buf, int buflen)
 
 	ret = gethostname(buf, buflen);
 	if (ret == 0) {
+		memset(&ai, 0, sizeof(ai));
+		ai.ai_family = AF_INET;
 		ret = getaddrinfo(buf, NULL, &ai, &rai);
 		if (!ret) {
 			freeaddrinfo(rai);
