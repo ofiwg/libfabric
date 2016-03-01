@@ -91,12 +91,16 @@
 
 #define VERBS_SEND_SIGNAL_THRESH(ep) ((ep->info->tx_attr->size * 4) / 5)
 #define VERBS_SEND_COMP_THRESH(ep) ((ep->info->tx_attr->size * 9) / 10)
+#define VERBS_WCE_CNT 1024
+#define VERBS_EPE_CNT 1024
 
 extern struct fi_provider fi_ibv_prov;
 
 
 struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
+	struct util_buf_pool	*wce_pool;
+	struct util_buf_pool	*epe_pool;
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
@@ -153,6 +157,7 @@ struct fi_ibv_domain {
 	struct ibv_pd		*pd;
 	int			rdm;
 	struct fi_info		*info;
+	struct fi_ibv_fabric	*fab;
 };
 
 struct fi_ibv_cq;
@@ -174,12 +179,9 @@ struct fi_ibv_cq {
 	struct ibv_wc		wc;
 	int			signal_fd[2];
 	fi_ibv_cq_read_entry	read_entry;
-	struct util_buf_pool	*wce_pool;
 	struct slist		wcq;
 	fastlock_t		lock;
-	struct util_buf_pool	*epe_pool;
 	struct slist		ep_list;
-	fastlock_t		ep_list_lock;
 	uint64_t		ep_cnt;
 	uint64_t		send_signal_wr_id;
 	uint64_t		wr_id_mask;

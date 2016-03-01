@@ -119,7 +119,7 @@ err:
 	return -errno;
 }
 
-static int fi_ibv_close(fid_t fid)
+static int fi_ibv_domain_close(fid_t fid)
 {
 	struct fi_ibv_domain *domain;
 	int ret;
@@ -167,7 +167,7 @@ static int fi_ibv_open_device_by_name(struct fi_ibv_domain *domain, const char *
 
 static struct fi_ops fi_ibv_fid_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = fi_ibv_close,
+	.close = fi_ibv_domain_close,
 	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
@@ -245,6 +245,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	_domain->domain_fid.ops = _domain->rdm ? &fi_ibv_rdm_domain_ops :
 						 &fi_ibv_domain_ops;
 	_domain->domain_fid.mr = &fi_ibv_domain_mr_ops;
+	_domain->fab = container_of(fabric, struct fi_ibv_fabric, fabric_fid);
 
 	*domain = &_domain->domain_fid;
 	return 0;
@@ -257,6 +258,11 @@ err1:
 
 static int fi_ibv_fabric_close(fid_t fid)
 {
+	struct fi_ibv_fabric *fab;
+
+	fab = container_of(fid, struct fi_ibv_fabric, fabric_fid.fid);
+	util_buf_pool_destroy(fab->wce_pool);
+	util_buf_pool_destroy(fab->epe_pool);
 	free(fid);
 	return 0;
 }
@@ -300,6 +306,23 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	fab->fabric_fid.fid.context = context;
 	fab->fabric_fid.fid.ops = &fi_ibv_fi_ops;
 	fab->fabric_fid.ops = &fi_ibv_ops_fabric;
+
+	fab->wce_pool = util_buf_pool_create(sizeof(struct fi_ibv_wce), 16, 0, VERBS_WCE_CNT);
+	if (!fab->wce_pool) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "Failed to create wce_pool\n");
+		return -FI_ENOMEM;
+	}
+
+	fab->epe_pool = util_buf_pool_create(sizeof(struct fi_ibv_msg_epe), 16, 0, VERBS_EPE_CNT);
+	if (!fab->epe_pool) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "Failed to create epe_pool\n");
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
 	*fabric = &fab->fabric_fid;
 	return 0;
+err:
+	util_buf_pool_destroy(fab->wce_pool);
+	return ret;
 }
