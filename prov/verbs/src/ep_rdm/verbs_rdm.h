@@ -49,9 +49,10 @@
         *((unsigned char*) addr + 4),*((unsigned char*) addr + 5)
 
 #define FI_IBV_RDM_ST_PKTTYPE_MASK  ((uint32_t) 0xFF)
-#define FI_IBV_RDM_EAGER_PKT            0
-#define FI_IBV_RDM_RNDV_RTS_PKT         1
-#define FI_IBV_RDM_RNDV_ACK_PKT         2
+#define FI_IBV_RDM_EAGER_PKT		0
+#define FI_IBV_RDM_RNDV_RTS_PKT		1
+#define FI_IBV_RDM_RNDV_ACK_PKT		2
+#define FI_IBV_RDM_RMA_PKT		3
 #define FI_IBV_RDM_SET_PKTTYPE(dest, type) (dest |= type)
 #define FI_IBV_RDM_GET_PKTTYPE(value) (value & FI_IBV_RDM_ST_PKTTYPE_MASK)
 
@@ -109,18 +110,19 @@ do {                                                                	\
 	(FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep) ||  \
 	 PEND_SEND_IS_LIMITED(_ep))
 
-struct fi_ibv_rdm_tagged_header {
+#define RMA_RESOURCES_IS_BUSY(_connection, _ep)				\
+	(FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep) || \
+	 PEND_SEND_IS_LIMITED(_ep))
+
+struct fi_ibv_rdm_header {
 	uint64_t imm_data;          // TODO: not implemented
 	uint64_t tag;
 	uint32_t service_tag;
-	union {
-		uint32_t padding;
-		uint32_t seq_num;
-	};
+	uint32_t seq_num;
 };
 
 struct fi_ibv_rdm_tagged_rndv_header {
-	struct fi_ibv_rdm_tagged_header base;
+	struct fi_ibv_rdm_header base;
 	uint64_t src_addr;
 	void *id;
 	int len;
@@ -156,6 +158,7 @@ struct fi_ibv_rdm_tagged_request {
 		void *exp_rbuf;
 		void *unexp_rbuf;
 		void *sbuf;
+		void *rmabuf;
 	};
 
 	/*
@@ -199,8 +202,8 @@ fi_ibv_rdm_tagged_zero_request(struct fi_ibv_rdm_tagged_request *request)
 void fi_ibv_rdm_tagged_print_request(char *buf,
 				     struct fi_ibv_rdm_tagged_request *request);
 
-struct fi_ibv_rdm_tagged_buf {
-	struct fi_ibv_rdm_tagged_header header;
+struct fi_ibv_rdm_buf {
+	struct fi_ibv_rdm_header header;
 	char payload[sizeof(void *)];
 };
 
@@ -274,11 +277,15 @@ struct fi_ibv_rdm_tagged_conn {
 	char *rbuf_mem_reg;
 	char *rbuf_head;
 
+	char *rmabuf_mem_reg;
+	char *rmabuf_head;
+
 	struct dlist_entry postponed_requests_head;
 	struct fi_ibv_rdm_tagged_postponed_entry *postponed_entry;
 
 	struct ibv_mr *s_mr;
 	struct ibv_mr *r_mr;
+	struct ibv_mr *rma_mr;
 
 	uint32_t remote_sbuf_rkey;
 	uint32_t remote_rbuf_rkey;
@@ -313,7 +320,7 @@ struct fi_ibv_rdm_tagged_buffer_service_data {
 	int seq_number;
 };
 
-#define FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE                          \
+#define FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE				  \
 	(sizeof(struct fi_ibv_rdm_tagged_buffer_service_data)		  \
 		< FI_IBV_RDM_MEM_ALIGNMENT ? FI_IBV_RDM_MEM_ALIGNMENT	  \
 		: (sizeof(struct fi_ibv_rdm_tagged_buffer_service_data) + \
@@ -325,7 +332,7 @@ static inline struct fi_ibv_rdm_tagged_buffer_service_data *
 fi_ibv_rdm_tagged_get_buff_service_data(char *buff)
 {
 	return (struct fi_ibv_rdm_tagged_buffer_service_data *)
-		(buff - FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE);
+		(buff - FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE);
 }
 
 static inline void
@@ -350,8 +357,8 @@ fi_ibv_rdm_tagged_get_remote_addr(struct fi_ibv_rdm_tagged_conn *conn,
 }
 
 static inline void
-fi_ibv_rdm_tagged_push_buff_pointer(char *area_start, size_t area_size,
-                                    char **buff, size_t offset)
+fi_ibv_rdm_push_buff_pointer(char *area_start, size_t area_size, char **buff,
+			     size_t offset)
 {
 	char *buff_tmp = (*buff) + offset;
 
@@ -359,12 +366,12 @@ fi_ibv_rdm_tagged_push_buff_pointer(char *area_start, size_t area_size,
 		  fi_ibv_rdm_tagged_get_buff_service_data(*buff)->seq_number);
 
 	(*buff) = buff_tmp < (area_start + area_size) ?
-		  buff_tmp : area_start + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE;
+		  buff_tmp : area_start + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 
 	VERBS_DBG(FI_LOG_EP_DATA, "new_pointer: %p, sn = %d\n", *buff,
 		  fi_ibv_rdm_tagged_get_buff_service_data(*buff)->seq_number);
 	assert(fi_ibv_rdm_tagged_get_buff_service_data(*buff)->seq_number ==
-		(((*buff) - (area_start + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE)) /
+		(((*buff) - (area_start + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE)) /
 		  offset));
 }
 
@@ -372,23 +379,32 @@ static inline void
 fi_ibv_rdm_tagged_push_sbuff_head(struct fi_ibv_rdm_tagged_conn *conn,
                                   struct fi_ibv_rdm_ep *ep)
 {
-	fi_ibv_rdm_tagged_push_buff_pointer(conn->sbuf_mem_reg,
-					    ep->buff_len * ep->n_buffs,
-					    &conn->sbuf_head, ep->buff_len);
+	fi_ibv_rdm_push_buff_pointer(conn->sbuf_mem_reg,
+				     ep->buff_len * ep->n_buffs,
+				     &conn->sbuf_head, ep->buff_len);
 }
 
-static inline struct fi_ibv_rdm_tagged_buf *
+static inline void
+fi_ibv_rdm_push_rmabuff_head(struct fi_ibv_rdm_tagged_conn *conn,
+			     struct fi_ibv_rdm_ep *ep)
+{
+	fi_ibv_rdm_push_buff_pointer(conn->rmabuf_mem_reg,
+				     ep->buff_len * ep->n_buffs,
+				     &conn->rmabuf_head, ep->buff_len);
+}
+
+static inline struct fi_ibv_rdm_buf *
 fi_ibv_rdm_tagged_get_rbuf(struct fi_ibv_rdm_tagged_conn *conn,
                            struct fi_ibv_rdm_ep *ep,
                            int seq_num)
 {
 	char *rbuf = (conn->rbuf_mem_reg +
-		      FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+		      FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE +
 		      (seq_num * ep->buff_len));
 	VERBS_DBG(FI_LOG_EP_DATA, "recv buf %d\n", seq_num);
 	assert(fi_ibv_rdm_tagged_get_buff_service_data(rbuf)->seq_number ==
 		seq_num);
-	return (struct fi_ibv_rdm_tagged_buf *) rbuf;
+	return (struct fi_ibv_rdm_buf *) rbuf;
 }
 
 static inline void *
@@ -397,10 +413,10 @@ fi_ibv_rdm_tagged_get_sbuf(struct fi_ibv_rdm_tagged_conn *conn,
 			   int seq_num)
 {
 	char * sbuf = (conn->sbuf_mem_reg +
-		       FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE + 
+		       FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE + 
 		       (seq_num * ep->buff_len));
 	VERBS_DBG(FI_LOG_EP_DATA, "send buf %d\n", seq_num);
-	return (struct fi_ibv_rdm_tagged_buf *) sbuf;
+	return (struct fi_ibv_rdm_buf *) sbuf;
 }
 
 static inline void
@@ -410,10 +426,13 @@ fi_ibv_rdm_tagged_buffer_lists_init(struct fi_ibv_rdm_tagged_conn *conn,
 	int i;
 
 	conn->sbuf_head = conn->sbuf_mem_reg +
-			  FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE;
+			  FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 	conn->rbuf_head = conn->rbuf_mem_reg +
-			  FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE;
+			  FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 	conn->sbuf_ack_head = conn->rbuf_head;      // used only service data
+
+	conn->rmabuf_head = conn->rmabuf_mem_reg +
+			  FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 
 	for (i = 0; i < ep->n_buffs; ++i) {
 		fi_ibv_rdm_tagged_set_buffer_status(conn->sbuf_head +
@@ -424,6 +443,9 @@ fi_ibv_rdm_tagged_buffer_lists_init(struct fi_ibv_rdm_tagged_conn *conn,
 		fi_ibv_rdm_tagged_get_buff_service_data(conn->sbuf_head +
 			i * ep->buff_len)->seq_number = i;
 		fi_ibv_rdm_tagged_get_buff_service_data(conn->sbuf_ack_head +
+			i * ep->buff_len)->seq_number = i;
+
+		fi_ibv_rdm_tagged_get_buff_service_data(conn->rmabuf_head +
 			i * ep->buff_len)->seq_number = i;
 	}
 }
@@ -443,6 +465,8 @@ int fi_ibv_rdm_tagged_open_ep(struct fid_domain *domain, struct fi_info *info,
                               struct fid_ep **ep, void *context);
 int fi_ibv_rdm_tagged_prepare_send_request(
 	struct fi_ibv_rdm_tagged_request *request, struct fi_ibv_rdm_ep *ep);
+int fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_tagged_request *request,
+				   struct fi_ibv_rdm_ep *ep);
 
 static inline void *fi_ibv_rdm_tagged_get_sbuf_head(
 						struct fi_ibv_rdm_tagged_conn
@@ -461,11 +485,11 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf_head(
 			sprintf(p, "%1d:%1d ",
 				fi_ibv_rdm_tagged_get_buff_service_data(
 					conn->sbuf_mem_reg +
-					FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+					FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE +
 					i * ep->buff_len)->seq_number,
 				fi_ibv_rdm_tagged_get_buffer_status(
 					conn->sbuf_mem_reg +
-					FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+					FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE +
 					i * ep->buff_len));
 		}
 		VERBS_DBG(FI_LOG_EP_DATA,
@@ -484,7 +508,7 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf_head(
 			for (i = 1; i < ep->n_buffs; ++i) {
 				fi_ibv_rdm_tagged_set_buffer_status(
 				conn->sbuf_mem_reg +
-				FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+				FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE +
 				i * ep->buff_len, BUF_STATUS_FREE);
 			}
 		} 
@@ -509,11 +533,11 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf_head(
 			sprintf(p, "%1d:%1d ",
 				fi_ibv_rdm_tagged_get_buff_service_data(
 					conn->sbuf_mem_reg +
-					FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+					FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE +
 					i * ep->buff_len)->seq_number,
 				fi_ibv_rdm_tagged_get_buffer_status(
 					conn->sbuf_mem_reg +
-					FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE +
+					FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE +
 					i * ep->buff_len));
 		}
 		VERBS_DBG(FI_LOG_EP_DATA,
@@ -522,8 +546,7 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf_head(
 
 	static int seq_number = 0;
 	if (sbuf) {
-		struct fi_ibv_rdm_tagged_buf *stbuf =
-			(struct fi_ibv_rdm_tagged_buf *)sbuf;
+		struct fi_ibv_rdm_buf *stbuf = (struct fi_ibv_rdm_buf *)sbuf;
 		seq_number++;
 		stbuf->header.seq_num = seq_number;
 		VERBS_DBG(FI_LOG_EP_DATA, "sending pkt # %d\n", stbuf->header.seq_num);
@@ -542,21 +565,61 @@ static inline void *fi_ibv_rdm_tagged_get_sbuf_head(
 }
 
 static inline void *
-fi_ibv_rdm_tagged_prepare_send_resources(struct fi_ibv_rdm_tagged_conn *conn,
-					 struct fi_ibv_rdm_ep *ep)
+fi_ibv_rdm_rma_get_buf_head(struct fi_ibv_rdm_tagged_conn *conn,
+			    struct fi_ibv_rdm_ep *ep)
 {
-	if (conn->state != FI_VERBS_CONN_ESTABLISHED) {
+	assert(conn);
+	void *buf = NULL;
+
+	if (fi_ibv_rdm_tagged_get_buffer_status(conn->rmabuf_head) ==
+	    BUF_STATUS_FREE) {
+
+		fi_ibv_rdm_tagged_set_buffer_status(conn->rmabuf_head,
+						    BUF_STATUS_BUSY);
+
+		buf = conn->rmabuf_head;
+		fi_ibv_rdm_push_rmabuff_head(conn, ep);
+	}
+	return buf;
+}
+
+static inline int
+fi_ibv_rdm_check_connection(struct fi_ibv_rdm_tagged_conn *conn,
+			    struct fi_ibv_rdm_ep *ep)
+{
+	const int status = (conn->state == FI_VERBS_CONN_ESTABLISHED);
+	if (!status) {
 		pthread_mutex_lock(&ep->cm_lock);
 		if (conn->state == FI_VERBS_CONN_ALLOCATED) {
 			fi_ibv_rdm_start_connection(ep, conn);
 		}
 		pthread_mutex_unlock(&ep->cm_lock);
 		usleep(1000);
-		return NULL;
 	}
 
-	return (!SEND_RESOURCES_IS_BUSY(conn, ep)) ?
-		fi_ibv_rdm_tagged_get_sbuf_head(conn, ep) : 0;
+	return status;
+}
+
+static inline void *
+fi_ibv_rdm_tagged_prepare_send_resources(struct fi_ibv_rdm_tagged_conn *conn,
+					 struct fi_ibv_rdm_ep *ep)
+{
+	if (fi_ibv_rdm_check_connection(conn, ep)) {
+		return (!SEND_RESOURCES_IS_BUSY(conn, ep)) ?
+			fi_ibv_rdm_tagged_get_sbuf_head(conn, ep) : NULL;
+	}
+	return NULL;
+}
+
+static inline void *
+fi_ibv_rdm_rma_prepare_resources(struct fi_ibv_rdm_tagged_conn *conn,
+				 struct fi_ibv_rdm_ep *ep)
+{
+	if (fi_ibv_rdm_check_connection(conn, ep)) {
+		return (!RMA_RESOURCES_IS_BUSY(conn, ep)) ?
+			fi_ibv_rdm_rma_get_buf_head(conn, ep) : NULL;
+	}
+	return NULL;
 }
 
 #endif /* _VERBS_RDM_H */

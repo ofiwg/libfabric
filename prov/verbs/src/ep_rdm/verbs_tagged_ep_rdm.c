@@ -87,6 +87,15 @@ int fi_ibv_rdm_tagged_prepare_send_request(
 	return !!request->sbuf;
 }
 
+int fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_tagged_request *request,
+				   struct fi_ibv_rdm_ep *ep)
+{
+	request->rmabuf =
+		fi_ibv_rdm_rma_prepare_resources(request->conn, ep);
+	return !!request->rmabuf;
+}
+
+
 static int fi_ibv_rdm_tagged_getname(fid_t fid, void *addr, size_t * addrlen)
 {
 	struct fi_ibv_rdm_ep *ep =
@@ -226,7 +235,7 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 	struct fi_ibv_rdm_ep *ep =
 	    container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
 
-	const size_t size = len + sizeof(struct fi_ibv_rdm_tagged_header);
+	const size_t size = len + sizeof(struct fi_ibv_rdm_header);
 
 	if (size > ep->rndv_threshold) {
 		return -FI_EMSGSIZE;
@@ -258,8 +267,8 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 			sge.length = size;
 			sge.lkey = conn->s_mr->lkey;
 
-			struct fi_ibv_rdm_tagged_buf *sbuf =
-			    (struct fi_ibv_rdm_tagged_buf *)raw_sbuf;
+			struct fi_ibv_rdm_buf *sbuf =
+				(struct fi_ibv_rdm_buf *)raw_sbuf;
 			void *payload = (void *)&(sbuf->payload[0]);
 
 			sbuf->header.tag = tag;
@@ -425,84 +434,6 @@ struct fi_ops_cm fi_ibv_rdm_tagged_ep_cm_ops = {
 };
 
 static inline void
-fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
-			       struct fi_ibv_rdm_tagged_conn *conn,
-			       int arrived_len,
-			       uint32_t imm_data,
-			       struct fi_ibv_rdm_tagged_buf *rbuf)
-{
-	struct fi_ibv_rdm_tagged_request *request = NULL;
-	
-#if ENABLE_DEBUG
-	VERBS_DBG(FI_LOG_EP_DATA, "processing pkt # %d, imm %d \n", rbuf->header.seq_num, imm_data);
-#endif /* ENABLE_DEBUG */
-
-	int pkt_type = FI_IBV_RDM_GET_PKTTYPE(rbuf->header.service_tag);
-
-	if (pkt_type == FI_IBV_RDM_RNDV_ACK_PKT) {
-		memcpy(&request, rbuf->payload,
-		      sizeof(struct fi_ibv_rdm_tagged_request *));
-		assert(request);
-		VERBS_DBG(FI_LOG_EP_DATA,
-			"GOT RNDV ACK from conn %p, id %d\n", conn, request);
-	} else {
-		struct fi_verbs_rdm_tagged_request_minfo minfo = {
-			.conn = conn,
-			.tag = rbuf->header.tag,
-			.tagmask = 0
-		};
-
-		struct dlist_entry *found_entry =
-		    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
-					   fi_ibv_rdm_tagged_req_match_by_info,
-					   &minfo);
-
-		if (found_entry) {
-			struct fi_ibv_rdm_tagged_request *found_request =
-			    container_of(found_entry,
-					 struct fi_ibv_rdm_tagged_request,
-					 queue_entry);
-
-			const int data_len = arrived_len -
-				sizeof(struct fi_ibv_rdm_tagged_header);
-
-			if (found_request->len < data_len) {
-				VERBS_INFO(FI_LOG_EP_DATA,
-					"%s: %d RECV TRUNCATE, data_len=%d, posted_len=%d, "
-					"conn %p, tag 0x%llx, tagmask %llx\n",
-					__FUNCTION__, __LINE__, data_len,
-					found_request->len, found_request->conn,
-					found_request->tag,
-					found_request->tagmask);
-				assert(0);
-			}
-
-			fi_ibv_rdm_tagged_remove_from_posted_queue
-			    (found_request, ep);
-			request = found_request;
-		} else {
-			request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
-			fi_ibv_rdm_tagged_zero_request(request);
-
-			FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ",
-						      request, FI_LOG_DEBUG);
-		}
-	}
-
-	struct fi_ibv_recv_got_pkt_preprocess_data p = {
-		.conn = conn,
-		.ep = ep,
-		.rbuf = rbuf,
-		.arrived_len = arrived_len,
-		.pkt_type = pkt_type,
-		.imm_data = imm_data
-	};
-
-	fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_RECV_GOT_PKT_PROCESS,
-				   &p);
-}
-
-static inline void
 fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 				       struct fi_ibv_rdm_ep *ep)
 {
@@ -512,7 +443,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 #if ENABLE_DEBUG
 	char *rbuf = (char *)fi_ibv_rdm_tagged_get_rbuf(conn, ep, 0);
 	memset(rbuf, 0,
-	      ep->buff_len - FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE);
+	      ep->buff_len - FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE);
 #endif // ENABLE_DEBUG
 	struct ibv_sge sge;
 	sge.addr =
@@ -548,6 +479,93 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 	}
 }
 
+static inline void
+fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
+			       struct fi_ibv_rdm_tagged_conn *conn,
+			       int arrived_len,
+			       uint32_t imm_data,
+			       struct fi_ibv_rdm_buf *rbuf)
+{
+	struct fi_ibv_rdm_tagged_request *request = NULL;
+	
+#if ENABLE_DEBUG
+	VERBS_DBG(FI_LOG_EP_DATA, "processing pkt # %d, imm %d \n", rbuf->header.seq_num, imm_data);
+#endif /* ENABLE_DEBUG */
+
+	int pkt_type = FI_IBV_RDM_GET_PKTTYPE(rbuf->header.service_tag);
+
+	if (pkt_type == FI_IBV_RDM_RNDV_ACK_PKT) {
+		memcpy(&request, rbuf->payload,
+		      sizeof(struct fi_ibv_rdm_tagged_request *));
+		assert(request);
+		VERBS_DBG(FI_LOG_EP_DATA,
+			"GOT RNDV ACK from conn %p, id %d\n", conn, request);
+	} else if (pkt_type != FI_IBV_RDM_RMA_PKT) {
+		struct fi_verbs_rdm_tagged_request_minfo minfo = {
+			.conn = conn,
+			.tag = rbuf->header.tag,
+			.tagmask = 0
+		};
+
+		struct dlist_entry *found_entry =
+		    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
+					   fi_ibv_rdm_tagged_req_match_by_info,
+					   &minfo);
+
+		if (found_entry) {
+			struct fi_ibv_rdm_tagged_request *found_request =
+			    container_of(found_entry,
+					 struct fi_ibv_rdm_tagged_request,
+					 queue_entry);
+
+			const int data_len = arrived_len -
+				sizeof(struct fi_ibv_rdm_header);
+
+			if (found_request->len < data_len) {
+				VERBS_INFO(FI_LOG_EP_DATA,
+					"%s: %d RECV TRUNCATE, data_len=%d, posted_len=%d, "
+					"conn %p, tag 0x%llx, tagmask %llx\n",
+					__FUNCTION__, __LINE__, data_len,
+					found_request->len, found_request->conn,
+					found_request->tag,
+					found_request->tagmask);
+				assert(0);
+			}
+
+			fi_ibv_rdm_tagged_remove_from_posted_queue
+			    (found_request, ep);
+			request = found_request;
+		} else {
+			request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
+			fi_ibv_rdm_tagged_zero_request(request);
+
+			FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ",
+						      request, FI_LOG_DEBUG);
+		}
+	}
+
+	struct fi_ibv_recv_got_pkt_preprocess_data p = {
+		.conn = conn,
+		.ep = ep,
+		.rbuf = rbuf,
+		.arrived_len = arrived_len,
+		.pkt_type = pkt_type,
+		.imm_data = imm_data
+	};
+
+	fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_RECV_GOT_PKT_PROCESS,
+				   &p);
+
+	if (pkt_type != FI_IBV_RDM_RMA_PKT)
+	{
+		conn->recv_completions++;
+		if (conn->recv_completions & ep->n_buffs) {
+			conn->recv_completions = 0;
+			fi_ibv_rdm_tagged_release_remote_sbuff(conn, ep);
+		}
+	}
+}
+
 static inline
 void check_and_repost_receives(struct fi_ibv_rdm_ep *ep,
 				struct fi_ibv_rdm_tagged_conn *conn)
@@ -573,15 +591,9 @@ fi_ibv_rdm_tagged_got_recv_completion(struct fi_ibv_rdm_ep *ep,
 	assert(arrived_len > 0);
 	conn->recv_preposted--;
 	check_and_repost_receives(ep, conn);
-	struct fi_ibv_rdm_tagged_buf *rbuf =
-	    fi_ibv_rdm_tagged_get_rbuf(conn, ep, imm_data);
+	struct fi_ibv_rdm_buf *rbuf = 
+		fi_ibv_rdm_tagged_get_rbuf(conn, ep, imm_data);
 	fi_ibv_rdm_tagged_process_recv(ep, conn, arrived_len, imm_data, rbuf);
-
-	conn->recv_completions++;
-	if (conn->recv_completions & ep->n_buffs) {
-		conn->recv_completions = 0;
-		fi_ibv_rdm_tagged_release_remote_sbuff(conn, ep);
-	}
 }
 
 static inline int fi_ibv_rdm_tagged_poll_recv(struct fi_ibv_rdm_ep *ep)

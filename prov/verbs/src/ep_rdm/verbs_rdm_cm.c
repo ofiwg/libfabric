@@ -43,20 +43,21 @@ extern struct fi_provider fi_ibv_prov;
 extern struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash;
 
 
-static inline struct ibv_mr *
-fi_ibv_rdm_tagged_malloc_and_register(struct fi_ibv_rdm_ep *ep, void **buf,
-				      size_t size)
+static struct ibv_mr *
+fi_ibv_rdm_alloc_and_reg(struct fi_ibv_rdm_ep *ep, void **buf, size_t size)
 {
 	*buf = memalign(FI_IBV_RDM_BUF_ALIGNMENT, size);
 	if (*buf) {
 		memset(*buf, 0, size);
 		return ibv_reg_mr(ep->domain->pd, *buf, size,
-				  IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
+				  IBV_ACCESS_LOCAL_WRITE |
+				  IBV_ACCESS_REMOTE_WRITE);
 	}
 	return NULL;
 }
 
-int fi_ibv_rdm_tagged_deregister_and_free(struct ibv_mr **mr, char **buff)
+static int
+fi_ibv_rdm_dereg_and_free(struct ibv_mr **mr, char **buff)
 {
 	int ret = ibv_dereg_mr(*mr);
 
@@ -136,13 +137,17 @@ fi_ibv_rdm_tagged_prepare_conn_memory(struct fi_ibv_rdm_ep *ep,
 	assert(conn->r_mr == NULL);
 
 	const size_t size = ep->buff_len * ep->n_buffs;
-	conn->s_mr = fi_ibv_rdm_tagged_malloc_and_register(ep,
+	conn->s_mr = fi_ibv_rdm_alloc_and_reg(ep,
 				(void **) &conn->sbuf_mem_reg, size);
 	assert(conn->s_mr);
 
-	conn->r_mr = fi_ibv_rdm_tagged_malloc_and_register(ep,
+	conn->r_mr = fi_ibv_rdm_alloc_and_reg(ep,
 				(void **) &conn->rbuf_mem_reg, size);
 	assert(conn->r_mr);
+
+	conn->rma_mr = fi_ibv_rdm_alloc_and_reg(ep,
+				(void **) &conn->rmabuf_mem_reg, size);
+	assert(conn->rma_mr);
 
 	fi_ibv_rdm_tagged_buffer_lists_init(conn, ep);
 	return 0;
@@ -220,7 +225,7 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 			conn->remote_sbuf_mem_reg = conn->s_mr->addr;
 
 			conn->remote_sbuf_head = conn->remote_sbuf_mem_reg +
-				FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE;
+				FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 		}
 	} else {
 		if (conn->state == FI_VERBS_CONN_ALLOCATED) {
@@ -240,7 +245,7 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 		p += sizeof(conn->remote_sbuf_mem_reg);
 
 		conn->remote_sbuf_head = conn->remote_sbuf_mem_reg +
-			FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE;
+			FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE;
 	}
 }
 
@@ -464,8 +469,9 @@ int fi_ibv_rdm_tagged_conn_cleanup(struct fi_ibv_rdm_ep *ep,
 		}
 	}
 
-	fi_ibv_rdm_tagged_deregister_and_free(&conn->s_mr, &conn->sbuf_mem_reg);
-	fi_ibv_rdm_tagged_deregister_and_free(&conn->r_mr, &conn->rbuf_mem_reg);
+	fi_ibv_rdm_dereg_and_free(&conn->s_mr, &conn->sbuf_mem_reg);
+	fi_ibv_rdm_dereg_and_free(&conn->r_mr, &conn->rbuf_mem_reg);
+	fi_ibv_rdm_dereg_and_free(&conn->rma_mr, &conn->rmabuf_mem_reg);
 
 	memset(conn, 0, sizeof(*conn));
 	free(conn);
