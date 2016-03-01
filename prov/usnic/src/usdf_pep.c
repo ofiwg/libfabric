@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -447,16 +447,17 @@ static int usdf_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
 
-	ret = 0;
+	ret = FI_SUCCESS;
 	pep = pep_fidtou(fid);
 
 	copylen = sizeof(pep->pep_src_addr);
-	memcpy(addr, &pep->pep_src_addr, copylen);
+	memcpy(addr, &pep->pep_src_addr, MIN(copylen, *addrlen));
 
 	if (*addrlen < copylen) {
 		USDF_WARN_SYS(EP_CTRL, "*addrlen is too short\n");
 		ret = -FI_ETOOSMALL;
 	}
+
 	*addrlen = copylen;
 	return ret;
 }
