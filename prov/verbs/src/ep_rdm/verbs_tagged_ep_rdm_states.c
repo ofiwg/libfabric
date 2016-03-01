@@ -116,7 +116,7 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_tagged_request *request,
 	if (request->state.rndv == FI_IBV_STATE_RNDV_SEND_BEGIN) {
 		request->state.rndv = FI_IBV_STATE_RNDV_SEND_WAIT4SEND;
 	}
-
+		
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 	return FI_EP_RDM_HNDL_SUCCESS;
 }
@@ -675,6 +675,9 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 	struct ibv_sge sge;
 	int ret;
 
+	assert((request->conn->cm_role != FI_VERBS_CM_SELF) || 
+	       (request->rndv.remote_addr != request->dest_buf));
+
 	wr.wr_id = (uintptr_t) request;
 	assert(FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr.wr_id) == 0);
 	wr.opcode = IBV_WR_RDMA_READ;
@@ -686,7 +689,7 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 
 	request->rndv.mr = ibv_reg_mr(p->ep->domain->pd,
 				      request->dest_buf,
-				      request->len, IBV_ACCESS_LOCAL_WRITE);
+			      request->len, IBV_ACCESS_LOCAL_WRITE);
 	assert(request->rndv.mr);
 
 	sge.addr = (uintptr_t) request->dest_buf;

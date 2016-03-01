@@ -170,33 +170,36 @@ fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
 			  struct fi_ibv_rdm_tagged_conn *conn,
 			  struct fi_ibv_rdm_ep *ep)
 {
-	/* Packing is not actual for connection to self */
-	assert(conn->cm_role != FI_VERBS_CM_SELF);
-
 	memset(cm_params, 0, sizeof(struct rdma_conn_param));
 	cm_params->responder_resources = 2;
 	cm_params->initiator_depth = 2;
 
 	cm_params->private_data_len = FI_IBV_RDM_DFLT_ADDRLEN;
-	cm_params->private_data_len += sizeof(conn->r_mr->rkey);
-	cm_params->private_data_len += sizeof(conn->remote_rbuf_mem_reg);
-	cm_params->private_data_len += sizeof(conn->s_mr->rkey);
-	cm_params->private_data_len += sizeof(conn->remote_sbuf_mem_reg);
+
+	if ((conn->cm_role != FI_VERBS_CM_SELF) && (conn->r_mr && conn->s_mr)) {
+		cm_params->private_data_len += sizeof(conn->r_mr->rkey);
+		cm_params->private_data_len += sizeof(conn->remote_rbuf_mem_reg);
+		cm_params->private_data_len += sizeof(conn->s_mr->rkey);
+		cm_params->private_data_len += sizeof(conn->remote_sbuf_mem_reg);
+	}
 
 	cm_params->private_data = malloc(cm_params->private_data_len);
 
 	char *p = (char *) cm_params->private_data;
 	memcpy(p, ep->my_rdm_addr, FI_IBV_RDM_DFLT_ADDRLEN);
 	p += FI_IBV_RDM_DFLT_ADDRLEN;
-	memcpy(p, &conn->r_mr->rkey, sizeof(conn->r_mr->rkey));
-	p += sizeof(conn->r_mr->rkey);
-	memcpy(p, &conn->rbuf_mem_reg, sizeof(conn->rbuf_mem_reg));
-	p += sizeof(conn->rbuf_mem_reg);
 
-	memcpy(p, &conn->s_mr->rkey, sizeof(conn->s_mr->rkey));
-	p += sizeof(conn->s_mr->rkey);
-	memcpy(p, &conn->sbuf_mem_reg, sizeof(conn->sbuf_mem_reg));
-	p += sizeof(conn->sbuf_mem_reg);
+	if ((conn->cm_role != FI_VERBS_CM_SELF) && (conn->r_mr && conn->s_mr)) {
+		memcpy(p, &conn->r_mr->rkey, sizeof(conn->r_mr->rkey));
+		p += sizeof(conn->r_mr->rkey);
+		memcpy(p, &conn->rbuf_mem_reg, sizeof(conn->rbuf_mem_reg));
+		p += sizeof(conn->rbuf_mem_reg);
+
+		memcpy(p, &conn->s_mr->rkey, sizeof(conn->s_mr->rkey));
+		p += sizeof(conn->s_mr->rkey);
+		memcpy(p, &conn->sbuf_mem_reg, sizeof(conn->sbuf_mem_reg));
+		p += sizeof(conn->sbuf_mem_reg);
+	}
 }
 
 
@@ -222,6 +225,7 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 	} else {
 		if (conn->state == FI_VERBS_CONN_ALLOCATED) {
 			memcpy(conn->addr, p, FI_IBV_RDM_DFLT_ADDRLEN);
+			return;
 		}
 		p += FI_IBV_RDM_DFLT_ADDRLEN;
 
@@ -370,56 +374,38 @@ fi_ibv_rdm_tagged_process_connect_request(struct rdma_cm_event *event,
 			VERBS_INFO(FI_LOG_AV, "repost receives failed\n");
 			return -FI_ENOMEM;
 		}
+
 		id->context = conn;
 
-		if (conn->cm_role == FI_VERBS_CM_PASSIVE) {
-			fi_ibv_rdm_pack_cm_params(&cm_params, conn, ep);
-		}
+		fi_ibv_rdm_pack_cm_params(&cm_params, conn, ep);
 
 		ret = rdma_accept(id, &cm_params);
 		assert(ret == 0);
-		free((void *) cm_params.private_data);
+		if (cm_params.private_data) {
+			free((void *) cm_params.private_data);
+		}
 	} 
 	return ret;
 }
 
-/* TODO: extract out duplicated code from this function and one above */
 static inline int
 fi_ibv_rdm_tagged_process_route_resolved(struct rdma_cm_event *event,
 					 struct fi_ibv_rdm_ep *ep)
 {
 	struct fi_ibv_rdm_tagged_conn *conn = event->id->context;
 
-	if (conn->cm_role == FI_VERBS_CM_ACTIVE) {
-		struct rdma_conn_param cm_params;
-		fi_ibv_rdm_pack_cm_params(&cm_params, conn, ep);
+	struct rdma_conn_param cm_params;
+	fi_ibv_rdm_pack_cm_params(&cm_params, conn, ep);
 
-		VERBS_INFO(FI_LOG_AV,
-			"ROUTE RESOLVED, conn %p, addr "
-			FI_IBV_RDM_ADDR_STR_FORMAT "\n", conn,
-			FI_IBV_RDM_ADDR_STR(conn->addr));
+	VERBS_INFO(FI_LOG_AV,
+		"ROUTE RESOLVED, conn %p, addr "
+		FI_IBV_RDM_ADDR_STR_FORMAT "\n", conn,
+		FI_IBV_RDM_ADDR_STR(conn->addr));
 
-		rdma_connect(event->id, &cm_params);
+	rdma_connect(event->id, &cm_params);
 
-		free((void *)cm_params.private_data);
-	} else {
-		struct rdma_conn_param cm_params;
-		memset(&cm_params, 0, sizeof(struct rdma_conn_param));
-		cm_params.private_data_len = FI_IBV_RDM_DFLT_ADDRLEN;
-		cm_params.private_data = malloc(cm_params.private_data_len);
-		memcpy((void *)cm_params.private_data,
-			      ep->my_rdm_addr, FI_IBV_RDM_DFLT_ADDRLEN);
-		cm_params.responder_resources = 2;
-		cm_params.initiator_depth = 2;
-		VERBS_INFO(FI_LOG_AV,
-			"ROUTE RESOLVED, conn %p, addr "
-			FI_IBV_RDM_ADDR_STR_FORMAT "\n", conn,
-			FI_IBV_RDM_ADDR_STR(conn->addr));
+	free((void *)cm_params.private_data);
 
-		rdma_connect(event->id, &cm_params);
-
-		free((void *)cm_params.private_data);
-	}
 	return 0;
 }
 
