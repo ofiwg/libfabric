@@ -567,7 +567,7 @@ If neither node, service or hints are provided, then fi_getinfo simply
 returns the list all available communication interfaces.
 
 Multiple threads may call
-`fi_getinfo` "simultaneously, without any requirement for serialization."
+`fi_getinfo` simultaneously, without any requirement for serialization.
 
 # SEE ALSO
 
