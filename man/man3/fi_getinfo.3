@@ -1,4 +1,4 @@
-.TH "fi_getinfo" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_getinfo" "3" "2016\-02\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_getinfo / fi_freeinfo \- Obtain / free fabric interface information
@@ -584,8 +584,8 @@ by fi_getinfo.
 If neither node, service or hints are provided, then fi_getinfo simply
 returns the list all available communication interfaces.
 .PP
-Multiple threads may call \f[C]fi_getinfo\f[] "simultaneously, without
-any requirement for serialization."
+Multiple threads may call \f[C]fi_getinfo\f[] simultaneously, without
+any requirement for serialization.
 .SH SEE ALSO
 .PP
 \f[C]fi_open\f[](3), \f[C]fi_endpoint\f[](3), \f[C]fi_domain\f[](3)
