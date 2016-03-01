@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016 Cray Inc.  All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -1504,4 +1505,54 @@ uint64_t ft_init_cq_data(struct fi_info *info)
 		return 0x0123456789abcdef &
 			((0x1ULL << (info->domain_attr->cq_data_size * 8)) - 1);
 	}
+}
+
+int send_recv_greeting(void)
+{
+	int ret;
+	const char *message = "Hello from Client!";
+	/* strlen doesn't include null terminated byte. snprintf size includes
+	 * null terminated byte.
+	 */
+	size_t message_len = strlen(message) + 1;
+	size_t recv_len;
+
+	if (opts.dst_addr) {
+		fprintf(stdout, "Sending message...\n");
+		if (snprintf(tx_buf, message_len, message) >= message_len) {
+			fprintf(stderr, "Transmit buffer too small.\n");
+			return -FI_ETOOSMALL;
+		}
+
+		ret = ft_tx(message_len);
+		if (ret)
+			return ret;
+
+		fprintf(stdout, "Send completion received\n");
+	} else {
+		fprintf(stdout, "Waiting for message from client...\n");
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
+
+		/* Account for null terminated byte. */
+		recv_len = strlen(rx_buf) + 1;
+
+		if (recv_len != message_len) {
+			fprintf(stderr,
+					"Received length does not match expected length.\n");
+			return -1;
+		}
+
+		if (strncmp(rx_buf, message, MIN(recv_len, message_len))) {
+			fprintf(stderr,
+					"Received message does not match expected message.\n");
+			return -1;
+		}
+
+		fprintf(stdout, "Received data from client: %s\n",
+				(char *) rx_buf);
+	}
+
+	return 0;
 }
