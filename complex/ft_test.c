@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -29,6 +30,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <stdlib.h>
 
 #include "fabtest.h"
 
@@ -125,7 +127,8 @@ static void ft_cleanup_xcontrol(struct ft_xcontrol *ctrl)
 	memset(ctrl, 0, sizeof *ctrl);
 }
 
-void ft_format_iov(struct iovec *iov, size_t cnt, char *buf, size_t len)
+static void ft_format_iov_distributed(struct iovec *iov, size_t cnt, char *buf,
+		size_t len)
 {
 	size_t offset;
 	int i;
@@ -138,6 +141,104 @@ void ft_format_iov(struct iovec *iov, size_t cnt, char *buf, size_t len)
 	iov[i].iov_base = buf + offset;
 	iov[i].iov_len = len - offset;
 }
+
+/* One class of bugs is issues involving IOV length handling. The regular
+ * ft_format_iov does not catch this class because it evenly partitions the
+ * entries. Instead partition them proportional to their position in the iovec.
+ */
+static void _ft_format_iov_weighted(struct iovec *iov, size_t cnt, char *buf,
+		size_t len, int reversed)
+{
+	double total_parts;
+	double portion;
+	size_t offset;
+	size_t weight;
+	size_t size;
+	size_t i;
+
+	/* Get the sum of the element positions in the list and calculate the
+	 * base weight.
+	 */
+	total_parts = ((cnt + 1.0) * cnt) / 2.0;
+	portion = len / total_parts;
+
+	for (offset = 0, i = 0; i < cnt; i++) {
+		if (reversed)
+			weight = cnt - i;
+		else
+			weight = i + 1;
+
+		/* Get the weight for this iovec entry and round it to the
+		 * nearest integer.
+		 */
+		size = (portion * weight) + .5;
+
+		iov[i].iov_base = buf + offset;
+		iov[i].iov_len = size;
+
+		offset += size;
+	}
+}
+
+static void ft_format_iov_weighted(struct iovec *iov, size_t cnt, char *buf,
+		size_t len)
+{
+	_ft_format_iov_weighted(iov, cnt, buf, len, 0);
+}
+
+static void ft_format_iov_reversed(struct iovec *iov, size_t cnt, char *buf,
+		size_t len)
+{
+	_ft_format_iov_weighted(iov, cnt, buf, len, 1);
+}
+
+static void ft_format_iov_random(struct iovec *iov, size_t cnt, char *buf,
+		size_t len)
+{
+	size_t offset;
+	size_t weight;
+	size_t i;
+
+	offset = 0;
+	for (i = 0; i < cnt; i++) {
+		/* If last IOV then use remaining data. */
+		if (i == (cnt - 1)) {
+			weight = len;
+		} else {
+			/* Get a weight between 1 and the remaining length minus
+			 * the remaining IOV count. This is so we can reserve at
+			 * least a length of 1 for every IOV.
+			 */
+			weight = (rand() % (len - (cnt - i))) + 1;
+		}
+
+		len -= weight;
+
+		iov[i].iov_base = buf + offset;
+		iov[i].iov_len = weight;
+
+		offset += weight;
+	}
+}
+
+void ft_format_iov(struct iovec *iov, size_t cnt, char *buf, size_t len)
+{
+	typedef void (*iov_formatter)(struct iovec *iov, size_t cnt, char *buf,
+			size_t len);
+	size_t choice;
+
+	static iov_formatter options[] = {
+		ft_format_iov_distributed,
+		ft_format_iov_weighted,
+		ft_format_iov_reversed,
+		ft_format_iov_random
+	};
+
+	choice = rand() % ARRAY_SIZE(options);
+
+	options[choice](iov, cnt, buf, len);
+}
+
 
 void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt)
 {
