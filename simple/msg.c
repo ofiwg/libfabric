@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -30,6 +31,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
+#include <string.h>
 
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
@@ -149,30 +151,6 @@ static int client_connect(void)
 	return 0;
 }
 
-static int send_recv()
-{
-	int ret;
-
-	if (opts.dst_addr) {
-		fprintf(stdout, "Sending message...\n");
-		sprintf(buf, "Hello from Client!");
-		ret = ft_tx(sizeof("Hello from Client!"));
-		if (ret)
-			return ret;
-
-		fprintf(stdout, "Send completion received\n");
-	} else {
-		fprintf(stdout, "Waiting for message from client...\n");
-		ret = ft_get_rx_comp(rx_seq);
-		if (ret)
-			return ret;
-
-		fprintf(stdout, "Received data from client: %s\n", (char *) rx_buf);
-	}
-
-	return 0;
-}
-
 static int run(void)
 {
 	char *node, *service;
@@ -194,7 +172,7 @@ static int run(void)
 		return ret;
 	}
 
-	ret = send_recv();
+	ret = send_recv_greeting();
 
 	fi_shutdown(ep, 0);
 	return ret;

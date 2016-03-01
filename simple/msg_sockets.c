@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -299,31 +300,6 @@ static int client_connect(void)
 	return 0;
 }
 
-static int send_recv()
-{
-	int ret;
-
-	if (opts.dst_addr) {
-		/* Client */
-		fprintf(stdout, "Sending message to server...\n");
-		sprintf(tx_buf, "Hello World!");
-		ret = ft_tx(sizeof("Hello World!"));
-		if (ret)
-			return ret;
-
-		fprintf(stdout, "Send completed\n");
-	} else {
-		fprintf(stdout, "Waiting for client...\n");
-		ret = ft_get_rx_comp(rx_seq);
-		if (ret)
-			return ret;
-
-		fprintf(stdout, "Received data from client: %s\n", (char *) rx_buf);
-	}
-
-	return 0;
-}
-
 static int setup_handle(void)
 {
 	static char buf[BUFSIZ];
@@ -458,7 +434,7 @@ static int run(void)
 		return ret;
 	}
 
-	ret = send_recv();
+	ret = send_recv_greeting();
 
 	fi_shutdown(ep, 0);
 	return ret;
