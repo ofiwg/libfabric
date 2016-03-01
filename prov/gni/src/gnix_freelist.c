@@ -69,7 +69,7 @@ static int __gnix_sfl_refill(struct gnix_s_freelist *fl, int n)
 	 * freeing.  Use an entire element, in case size was padded
 	 * for alignment
 	 */
-	elems = malloc((n+1)*fl->elem_size);
+	elems = calloc((n+1), fl->elem_size);
 	if (elems == NULL) {
 		ret = -FI_ENOMEM;
 		goto err;

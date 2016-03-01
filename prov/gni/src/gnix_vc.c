@@ -1699,6 +1699,8 @@ int _gnix_vc_queue_work_req(struct gnix_fab_req *req)
 {
 	struct gnix_vc *vc = req->vc;
 
+	req->slist.next = NULL;  /* keep slist happy */
+
 	fastlock_acquire(&vc->work_queue_lock);
 	slist_insert_tail(&req->slist, &vc->work_queue);
 	__gnix_vc_work_schedule(vc);
@@ -2138,10 +2140,14 @@ int _gnix_vc_cm_init(struct gnix_cm_nic *cm_nic)
 {
 	int ret = FI_SUCCESS;
 	gnix_cm_nic_rcv_cb_func *ofunc = NULL;
+	struct gnix_nic *nic = NULL;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	fastlock_acquire(&cm_nic->lock);
+	nic = cm_nic->nic;
+	assert(nic != NULL);
+
+	fastlock_acquire(&nic->lock);
 	ret = _gnix_cm_nic_reg_recv_fn(cm_nic,
 					__gnix_vc_recv_fn,
 					&ofunc);
@@ -2151,7 +2157,7 @@ int _gnix_vc_cm_init(struct gnix_cm_nic *cm_nic)
 			  fi_strerror(-ret));
 	}
 
-	fastlock_release(&cm_nic->lock);
+	fastlock_release(&nic->lock);
 
 	return ret;
 }
