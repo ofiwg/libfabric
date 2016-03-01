@@ -305,10 +305,11 @@ int _gnix_dgram_wc_post(struct gnix_datagram *d)
 {
 	int ret = FI_SUCCESS;
 	gni_return_t status;
+	struct gnix_nic *nic = d->cm_nic->nic;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	fastlock_acquire(&d->cm_nic->lock);
+	fastlock_acquire(&nic->lock);
 	status = GNI_EpPostDataWId(d->gni_ep,
 				   d->dgram_in_buf,
 				   GNI_DATAGRAM_MAXSIZE,
@@ -323,7 +324,7 @@ int _gnix_dgram_wc_post(struct gnix_datagram *d)
 		 */
 		d->state = GNIX_DGRAM_STATE_LISTENING;
 	}
-	fastlock_release(&d->cm_nic->lock);
+	fastlock_release(&nic->lock);
 
 	return ret;
 }
@@ -332,6 +333,7 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 {
 	gni_return_t status = GNI_RC_SUCCESS;
 	int ret = FI_SUCCESS;
+	struct gnix_nic *nic = d->cm_nic->nic;
 	int post = 1;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -350,7 +352,7 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 		goto err;
 	}
 
-	fastlock_acquire(&d->cm_nic->lock);
+	fastlock_acquire(&nic->lock);
 	if (d->pre_post_clbk_fn != NULL) {
 		ret = d->pre_post_clbk_fn(d, &post);
 		if (ret != FI_SUCCESS)
@@ -382,7 +384,8 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 				ret);
 		}
 	}
-	fastlock_release(&d->cm_nic->lock);
+
+	fastlock_release(&nic->lock);
 
 	if (post) {
 		if ((status != GNI_RC_SUCCESS) &&
