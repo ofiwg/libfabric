@@ -1231,11 +1231,11 @@ int ft_finalize(void)
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
 		    enum precision p)
 {
-    int64_t elapsed;
+	int64_t elapsed;
 
-    elapsed = (a->tv_sec - b->tv_sec) * 1000 * 1000 * 1000;
-    elapsed += a->tv_nsec - b->tv_nsec;
-    return elapsed / p;
+	elapsed = difftime(a->tv_sec, b->tv_sec) * 1000 * 1000 * 1000;
+	elapsed += a->tv_nsec - b->tv_nsec;
+	return elapsed / p;
 }
 
 void show_perf(char *name, int tsize, int iters, struct timespec *start,
