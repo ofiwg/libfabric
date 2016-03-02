@@ -51,7 +51,8 @@ enum {
 	ofi_op_tagged,
 	ofi_op_rma,
 	ofi_op_atomic,
-	ofi_op_ctrl
+	ofi_op_ctrl,
+	ofi_op_sar
 };
 
 enum {
@@ -59,6 +60,14 @@ enum {
 	ofi_ctrl_inject,
 	ofi_ctrl_iov,
 	ofi_ctrl_ack
+};
+
+/* Segmentation and reassembly */
+struct ofi_sar_hdr {
+	uint8_t			version;
+	uint8_t			op_ctrl;
+	uint16_t		seg_size;
+	uint32_t		seg_no;
 };
 
 /* Keep data items and size aligned */
