@@ -436,10 +436,10 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	}
 
 	/* find VC for target */
-	rc = _gnix_ep_get_vc(ep, msg->addr, &vc);
+	rc = _gnix_vc_ep_get_vc(ep, msg->addr, &vc);
 	if (rc) {
 		GNIX_INFO(FI_LOG_EP_DATA,
-			  "_gnix_ep_get_vc() failed, addr: %lx, rc:\n",
+			  "_gnix_vc_ep_get_vc() failed, addr: %lx, rc:\n",
 			  msg->addr, rc);
 		goto err_get_vc;
 	}

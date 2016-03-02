@@ -311,7 +311,7 @@ int _gnix_vc_nic_progress(struct gnix_nic *nic);
  *                      memory to allocate vc, -FI_EINVAL if an invalid
  *                      argument was supplied
  */
-int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
+int _gnix_vc_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 		    struct gnix_vc **vc_ptr);
 
 /**

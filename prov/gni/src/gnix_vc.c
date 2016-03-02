@@ -876,7 +876,7 @@ err:
 /*
  * callback function to process incoming messages
  */
-int __gnix_vc_recv_fn(struct gnix_cm_nic *cm_nic,
+static int __gnix_vc_recv_fn(struct gnix_cm_nic *cm_nic,
 		      char *msg_buffer,
 		      struct gnix_address src_cm_nic_addr)
 {
@@ -2011,7 +2011,7 @@ int _gnix_vc_schedule(struct gnix_vc *vc)
 	return FI_SUCCESS;
 }
 
-static int __gnix_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
+static int __gnix_vc_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 			    struct gnix_vc **vc_ptr)
 {
 	int ret = FI_SUCCESS;
@@ -2092,7 +2092,7 @@ err:
 	return ret;
 }
 
-int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
+int _gnix_vc_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 			struct gnix_vc **vc_ptr)
 {
 	int ret;
@@ -2100,10 +2100,10 @@ int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (ep->type == FI_EP_RDM) {
-		ret = __gnix_ep_rdm_get_vc(ep, dest_addr, vc_ptr);
+		ret = __gnix_vc_ep_rdm_get_vc(ep, dest_addr, vc_ptr);
 		if (unlikely(ret != FI_SUCCESS)) {
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "__gnix_ep_get_vc returned %s\n",
+				  "__gnix_vc_ep_get_vc returned %s\n",
 				   fi_strerror(-ret));
 			return ret;
 		}

@@ -1281,10 +1281,10 @@ retry_match:
 				  req);
 
 			/* TODO: prevent re-lookup of src_addr */
-			ret = _gnix_ep_get_vc(ep, src_addr, &req->vc);
+			ret = _gnix_vc_ep_get_vc(ep, src_addr, &req->vc);
 			if (ret) {
 				GNIX_INFO(FI_LOG_EP_DATA,
-					  "_gnix_ep_get_vc failed: %dn",
+					  "_gnix_vc_ep_get_vc failed: %dn",
 					  ret);
 				return ret;
 			}
@@ -1585,7 +1585,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		GNIX_INFO(FI_LOG_EP_DATA, "auto-reg MR: %p\n", auto_mr);
 	}
 
-	ret = _gnix_ep_get_vc(ep, dest_addr, &vc);
+	ret = _gnix_vc_ep_get_vc(ep, dest_addr, &vc);
 	if (ret) {
 		goto err_get_vc;
 	}
