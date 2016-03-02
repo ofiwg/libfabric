@@ -36,6 +36,7 @@
 
 #include "config.h"
 
+#include <assert.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -54,22 +55,31 @@ struct name {							\
 	size_t		size_mask;				\
 	size_t		rcnt;					\
 	size_t		wcnt;					\
-	entrytype	*buf;					\
+	entrytype	buf[];					\
 };								\
 								\
-static inline int name ## _init(struct name *cq, size_t size)	\
+static inline void name ## _init(struct name *cq, size_t size)	\
 {								\
-	cq->size = roundup_power_of_two(size);			\
+	assert(size == roundup_power_of_two(size));		\
+	cq->size = size;					\
 	cq->size_mask = cq->size - 1;				\
 	cq->rcnt = 0;						\
 	cq->wcnt = 0;						\
-	cq->buf = calloc(cq->size, sizeof(*cq->buf));		\
-	return cq->buf ? 0 : -ENOMEM;				\
+}								\
+								\
+static inline struct name * name ## _create(size_t size)	\
+{								\
+	struct name *cq;					\
+	cq = calloc(1, sizeof(*cq) + sizeof(entrytype) *	\
+			(roundup_power_of_two(size) - 1));	\
+	if (cq)							\
+		name ##_init(cq, roundup_power_of_two(size));	\
+	return cq;						\
 }								\
 								\
 static inline void name ## _free(struct name *cq)		\
 {								\
-	free(cq->buf);						\
+	free(cq);						\
 }
 
 #define cirque_isempty(cq)	((cq)->wcnt == (cq)->rcnt)

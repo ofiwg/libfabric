@@ -125,13 +125,13 @@ static void udpx_tx_comp(struct udpx_ep *ep, void *context)
 {
 	struct fi_cq_data_entry *comp;
 
-	comp = cirque_tail(&ep->tx_cq->cirq);
+	comp = cirque_tail(ep->tx_cq->cirq);
 	comp->op_context = context;
 	comp->flags = FI_SEND;
 	comp->len = 0;
 	comp->buf = NULL;
 	comp->data = 0;
-	cirque_commit(&ep->tx_cq->cirq);
+	cirque_commit(ep->tx_cq->cirq);
 }
 
 static void udpx_tx_comp_signal(struct udpx_ep *ep, void *context)
@@ -145,19 +145,19 @@ static void udpx_rx_comp(struct udpx_ep *ep, void *context, uint64_t flags,
 {
 	struct fi_cq_data_entry *comp;
 
-	comp = cirque_tail(&ep->rx_cq->cirq);
+	comp = cirque_tail(ep->rx_cq->cirq);
 	comp->op_context = context;
 	comp->flags = FI_RECV | flags;
 	comp->len = len;
 	comp->buf = buf;
 	comp->data = 0;
-	cirque_commit(&ep->rx_cq->cirq);
+	cirque_commit(ep->rx_cq->cirq);
 }
 
 static void udpx_rx_src_comp(struct udpx_ep *ep, void *context, uint64_t flags,
 			     size_t len, void *buf, void *addr)
 {
-	ep->rx_cq->src[cirque_windex(&ep->rx_cq->cirq)] =
+	ep->rx_cq->src[cirque_windex(ep->rx_cq->cirq)] =
 			ip_av_get_index(ep->av, addr);
 	udpx_rx_comp(ep, context, flags, len, buf, addr);
 }
@@ -191,17 +191,17 @@ void udpx_ep_progress(struct udpx_ep *ep)
 	hdr.msg_controllen = 0;
 	hdr.msg_flags = 0;
 
-	if (cirque_isempty(&ep->rxq))
+	if (cirque_isempty(ep->rxq))
 		return;
 
-	entry = cirque_head(&ep->rxq);
+	entry = cirque_head(ep->rxq);
 	hdr.msg_iov = entry->iov;
 	hdr.msg_iovlen = entry->iov_count;
 
 	ret = recvmsg(ep->sock, &hdr, 0);
 	if (ret >= 0) {
 		ep->rx_comp(ep, entry->context, 0, ret, NULL, &addr);
-		cirque_discard(&ep->rxq);
+		cirque_discard(ep->rxq);
 	}
 }
 
@@ -214,12 +214,12 @@ ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
 	fastlock_acquire(&ep->rx_cq->util_cq.cq_lock);
-	if (cirque_isfull(&ep->rxq)) {
+	if (cirque_isfull(ep->rxq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	entry = cirque_tail(&ep->rxq);
+	entry = cirque_tail(ep->rxq);
 	entry->context = msg->context;
 	for (entry->iov_count = 0; entry->iov_count < msg->iov_count;
 	     entry->iov_count++) {
@@ -227,7 +227,7 @@ ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	}
 	entry->flags = 0;
 
-	cirque_commit(&ep->rxq);
+	cirque_commit(ep->rxq);
 	ret = 0;
 out:
 	fastlock_release(&ep->rx_cq->util_cq.cq_lock);
@@ -254,19 +254,19 @@ ssize_t udpx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
 	fastlock_acquire(&ep->rx_cq->util_cq.cq_lock);
-	if (cirque_isfull(&ep->rxq)) {
+	if (cirque_isfull(ep->rxq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	entry = cirque_tail(&ep->rxq);
+	entry = cirque_tail(ep->rxq);
 	entry->context = context;
 	entry->iov_count = 1;
 	entry->iov[0].iov_base = buf;
 	entry->iov[0].iov_len = len;
 	entry->flags = 0;
 
-	cirque_commit(&ep->rxq);
+	cirque_commit(ep->rxq);
 	ret = 0;
 out:
 	fastlock_release(&ep->rx_cq->util_cq.cq_lock);
@@ -281,7 +281,7 @@ ssize_t udpx_send(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc
 
 	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
 	fastlock_acquire(&ep->tx_cq->util_cq.cq_lock);
-	if (cirque_isfull(&ep->tx_cq->cirq)) {
+	if (cirque_isfull(ep->tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -316,7 +316,7 @@ ssize_t udpx_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	hdr.msg_flags = 0;
 
 	fastlock_acquire(&ep->tx_cq->util_cq.cq_lock);
-	if (cirque_isfull(&ep->tx_cq->cirq)) {
+	if (cirque_isfull(ep->tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -396,7 +396,7 @@ static int udpx_ep_close(struct fid *fid)
 	if (ep->tx_cq)
 		atomic_dec(&ep->tx_cq->util_cq.ref);
 
-	udpx_rx_cirq_free(&ep->rxq);
+	udpx_rx_cirq_free(ep->rxq);
 	close(ep->sock);
 	atomic_dec(&ep->domain->ref);
 	free(ep);
@@ -522,9 +522,11 @@ static int udpx_ep_init(struct udpx_ep *ep, struct fi_info *info)
 	int family;
 	int ret;
 
-	ret = udpx_rx_cirq_init(&ep->rxq, info->rx_attr->size);
-	if (ret)
+	ep->rxq = udpx_rx_cirq_create(info->rx_attr->size);
+	if (!ep->rxq) {
+		ret = -FI_ENOMEM;
 		return ret;
+	}
 
 	family = info->src_addr ?
 		 ((struct sockaddr *) info->src_addr)->sa_family : AF_INET;
@@ -550,7 +552,7 @@ static int udpx_ep_init(struct udpx_ep *ep, struct fi_info *info)
 err2:
 	close(ep->sock);
 err1:
-	udpx_rx_cirq_free(&ep->rxq);
+	udpx_rx_cirq_free(ep->rxq);
 	return ret;
 }
 
