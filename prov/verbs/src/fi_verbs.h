@@ -89,12 +89,18 @@
 		IBV_SEND_SIGNALED : 0)
 #define VERBS_COMP(ep) VERBS_COMP_FLAGS(ep, ep->info->tx_attr->op_flags)
 
+#define VERBS_SEND_SIGNAL_THRESH(ep) ((ep->info->tx_attr->size * 4) / 5)
+#define VERBS_SEND_COMP_THRESH(ep) ((ep->info->tx_attr->size * 9) / 10)
+#define VERBS_WCE_CNT 1024
+#define VERBS_EPE_CNT 1024
 
 extern struct fi_provider fi_ibv_prov;
 
 
 struct fi_ibv_fabric {
 	struct fid_fabric	fabric_fid;
+	struct util_buf_pool	*wce_pool;
+	struct util_buf_pool	*epe_pool;
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
@@ -150,6 +156,16 @@ struct fi_ibv_domain {
 	struct ibv_context	*verbs;
 	struct ibv_pd		*pd;
 	int			rdm;
+	struct fi_info		*info;
+	struct fi_ibv_fabric	*fab;
+};
+
+struct fi_ibv_cq;
+typedef void (*fi_ibv_cq_read_entry)(struct ibv_wc *wc, int index, void *buf);
+
+struct fi_ibv_wce {
+	struct slist_entry	entry;
+	struct ibv_wc		wc;
 };
 
 struct fi_ibv_cq {
@@ -162,6 +178,13 @@ struct fi_ibv_cq {
 	enum fi_cq_wait_cond	wait_cond;
 	struct ibv_wc		wc;
 	int			signal_fd[2];
+	fi_ibv_cq_read_entry	read_entry;
+	struct slist		wcq;
+	fastlock_t		lock;
+	struct slist		ep_list;
+	uint64_t		ep_cnt;
+	uint64_t		send_signal_wr_id;
+	uint64_t		wr_id_mask;
 	/* RDM EP fields - TODO: check usage */
 	struct fi_ibv_rdm_ep	*ep;
 	int			format;
@@ -186,6 +209,14 @@ struct fi_ibv_msg_ep {
 	struct fi_ibv_cq	*scq;
 	uint64_t		ep_flags;
 	struct fi_info		*info;
+	atomic_t		unsignaled_send_cnt;
+	atomic_t		comp_pending;
+	uint64_t		ep_id;
+};
+
+struct fi_ibv_msg_epe {
+	struct slist_entry	entry;
+	struct fi_ibv_msg_ep 	*ep;
 };
 
 int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
@@ -251,6 +282,8 @@ ssize_t fi_ibv_send_buf_inline(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 ssize_t fi_ibv_send_iov_flags(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr,
 			      const struct iovec *iov, void **desc, int count,
 			      void *context, uint64_t flags);
+ssize_t fi_ibv_poll_cq(struct fi_ibv_cq *cq, struct ibv_wc *wc);
+int fi_ibv_cq_signal(struct fid_cq *cq);
 
 #define fi_ibv_set_sge(sge, buf, len, desc)				\
 	do {								\

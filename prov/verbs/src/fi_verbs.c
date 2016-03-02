@@ -32,6 +32,8 @@
 
 #include "config.h"
 
+#include <fi_mem.h>
+
 #include "fi_verbs.h"
 
 
@@ -131,6 +133,69 @@ out:
 	return ret;
 }
 
+#define VERBS_SIGNAL_SEND(ep) \
+	(atomic_get(&ep->unsignaled_send_cnt) >= VERBS_SEND_SIGNAL_THRESH(ep) && \
+	 !atomic_get(&ep->comp_pending))
+
+static int fi_ibv_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr)
+{
+	struct fi_ibv_msg_epe *epe;
+
+	fastlock_acquire(&ep->scq->lock);
+	if (VERBS_SIGNAL_SEND(ep)) {
+		epe = util_buf_alloc(ep->scq->domain->fab->epe_pool);
+		if (!epe) {
+			fastlock_release(&ep->scq->lock);
+			return -FI_ENOMEM;
+		}
+		wr->send_flags |= IBV_SEND_SIGNALED;
+		wr->wr_id = ep->ep_id;
+		epe->ep = ep;
+		slist_insert_tail(&epe->entry, &ep->scq->ep_list);
+		atomic_inc(&ep->comp_pending);
+	}
+	fastlock_release(&ep->scq->lock);
+	return 0;
+}
+
+static int fi_ibv_reap_comp(struct fi_ibv_msg_ep *ep)
+{
+	struct fi_ibv_wce *wce = NULL;
+	int got_wc = 0;
+	int ret = 0;
+
+	fastlock_acquire(&ep->scq->lock);
+	while (atomic_get(&ep->comp_pending) > 0) {
+		if (!wce) {
+			wce = util_buf_alloc(ep->scq->domain->fab->wce_pool);
+			if (!wce) {
+				fastlock_release(&ep->scq->lock);
+				return -FI_ENOMEM;
+			}
+		}
+		ret = fi_ibv_poll_cq(ep->scq, &wce->wc);
+		if (ret < 0) {
+			FI_WARN(&fi_ibv_prov, FI_LOG_EP_DATA,
+				"Failed to read completion for signaled send\n");
+			util_buf_release(ep->scq->domain->fab->wce_pool, wce);
+			fastlock_release(&ep->scq->lock);
+			return ret;
+		} else if (ret > 0) {
+			slist_insert_tail(&wce->entry, &ep->scq->wcq);
+			got_wc = 1;
+			wce = NULL;
+		}
+	}
+	if (wce)
+		util_buf_release(ep->scq->domain->fab->wce_pool, wce);
+
+	if (got_wc && ep->scq->channel)
+		ret = fi_ibv_cq_signal(&ep->scq->cq_fid);
+
+	fastlock_release(&ep->scq->lock);
+	return ret;
+}
+
 ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len,
 		    int count, void *context)
 {
@@ -140,6 +205,26 @@ ssize_t fi_ibv_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr, size_t len
 	assert(ep->scq);
 	wr->num_sge = count;
 	wr->wr_id = (uintptr_t) context;
+
+	if (wr->send_flags & IBV_SEND_SIGNALED) {
+		assert((wr->wr_id & ep->scq->wr_id_mask) != ep->scq->send_signal_wr_id);
+		atomic_set(&ep->unsignaled_send_cnt, 0);
+	} else {
+		if (VERBS_SIGNAL_SEND(ep)) {
+			ret = fi_ibv_signal_send(ep, wr);
+			if (ret)
+				return ret;
+		} else {
+			atomic_inc(&ep->unsignaled_send_cnt);
+
+			if (atomic_get(&ep->unsignaled_send_cnt) >=
+					VERBS_SEND_COMP_THRESH(ep)) {
+				ret = fi_ibv_reap_comp(ep);
+				if (ret)
+					return ret;
+			}
+		}
+	}
 
 	ret = ibv_post_send(ep->id->qp, wr, &bad_wr);
 	switch (ret) {

@@ -151,6 +151,7 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				ep->ep_flags |= FI_SELECTIVE_COMPLETION;
 			else
 				ep->info->tx_attr->op_flags |= FI_COMPLETION;
+			ep->ep_id = ep->scq->send_signal_wr_id | ep->scq->ep_cnt++;
 		}
 		break;
 	case FI_CLASS_EQ:
@@ -340,6 +341,9 @@ int fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.cm = fi_ibv_msg_ep_ops_cm(_ep);
 	_ep->ep_fid.rma = fi_ibv_msg_ep_ops_rma(_ep);
 	_ep->ep_fid.atomic = fi_ibv_msg_ep_ops_atomic(_ep);
+
+	atomic_initialize(&_ep->unsignaled_send_cnt, 0);
+	atomic_initialize(&_ep->comp_pending, 0);
 
 	*ep = &_ep->ep_fid;
 
