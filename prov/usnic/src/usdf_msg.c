@@ -45,6 +45,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -408,7 +409,9 @@ usdf_msg_sendmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 	iov = msg->msg_iov;
 
 	if (flags & ~USDF_MSG_SUPP_SENDMSG_FLAGS) {
-		USDF_DBG("one or more flags in 0x%llx not supported\n", flags);
+		USDF_DBG_SYS(EP_DATA,
+				"one or more flags in %#" PRIx64 " not supported\n",
+				flags);
 		return -FI_EOPNOTSUPP;
 	}
 
@@ -488,7 +491,8 @@ usdf_msg_inject(struct fid_ep *fep, const void *buf, size_t len,
 	struct usdf_domain *udp;
 
 	if (len > USDF_MSG_MAX_INJECT_SIZE) {
-		USDF_WARN("cannot inject more than inject_size bytes\n");
+		USDF_WARN_SYS(EP_DATA,
+				"cannot inject more than inject_size bytes\n");
 		return -EINVAL;
 	}
 
@@ -551,7 +555,9 @@ usdf_msg_recvmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 	}
 
 	if (flags & ~USDF_MSG_SUPP_RECVMSG_FLAGS) {
-		USDF_DBG("one or more flags in 0x%llx not supported\n", flags);
+		USDF_DBG_SYS(EP_DATA,
+				"one or more flags in %#" PRIx64 " not supported\n",
+				flags);
 		return -FI_EOPNOTSUPP;
 	}
 
