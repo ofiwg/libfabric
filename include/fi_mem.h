@@ -62,15 +62,69 @@ static inline void *mem_dup(const void *src, size_t size)
 	return dest;
 }
 
+
+/*
+ * Buffer pool (free stack) template
+ */
+#define FREESTACK_EMPTY	-1
+
+#define freestack_isempty(fs)	((fs)->next == FREESTACK_EMPTY)
+#define freestack_push(fs, x)					\
+{								\
+	*(int *) &(fs)->buf[x] = (fs)->next;			\
+	(fs)->next = x;						\
+}
+#define freestack_pop(fs)					\
+{								\
+	int i = (fs)->next;					\
+	assert(!freestack_isempty(fs));				\
+	(fs)->next = (int) (fs)->buf[i];			\
+	return i;						\
+}
+
+#define DECLARE_FREESTACK(entrytype, name)			\
+struct name {							\
+	size_t		size;					\
+	size_t		next;					\
+	entrytype	buf[];					\
+};								\
+								\
+static inline void name ## _init(struct name *fs, size_t size)	\
+{								\
+	int i;							\
+	assert(size == roundup_power_of_two(size));		\
+	assert(sizeof(fs->buf[0]) >= sizeof(int));		\
+	fs->size = size;					\
+	fs->next = FREESTACK_EMPTY;				\
+	for (i = size - 1; i >= 0; i--)				\
+		freestack_push(fs, i);				\
+}								\
+								\
+static inline struct name * name ## _create(size_t size)	\
+{								\
+	struct name *fs;					\
+	fs = calloc(1, sizeof(*fs) + sizeof(entrytype) *	\
+			(roundup_power_of_two(size) - 1));	\
+	if (fs)							\
+		name ##_init(fs, roundup_power_of_two(size));	\
+	return fs;						\
+}								\
+								\
+static inline void name ## _free(struct name *fs)		\
+{								\
+	free(fs);						\
+}
+
+
+/*
+ * Buffer Pool
+ */
 struct util_buf_pool;
 typedef int (*util_buf_region_alloc_hndlr) (struct util_buf_pool *pool,
 					    void *addr, size_t len,
 					    void **context);
 typedef void (*util_buf_region_free_hndlr) (void *context);
 
-/*
- * Buffer Pool
- */
 struct util_buf_pool {
 	size_t data_sz;
 	size_t entry_sz;
