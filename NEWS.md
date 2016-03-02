@@ -5,6 +5,43 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.3.0, TBD
+=======================
+
+## General notes
+
+## GNI provider notes
+
+## MXM provider notes
+
+## PSM provider notes
+
+## PSM2 provider notes
+
+## Sockets provider notes
+
+## UDP provider notes
+
+## usNIC provider notes
+
+- Implement fi_recvv and fi_recvmsg for FI_EP_RDM. [PR #1594]
+- Add support for FI_INJECT flag in the FI_EP_RDM implementation of fi_sendv.
+  [PR #1594]
+- Fix crashes that occur in the FI_EP_RDM and the FI_EP_MSG implementations
+  when messages are posted with the maximum IOV count.  [PR #1784]
+- Fix crashes that occur in the FI_EP_RDM and the FI_EP_MSG implementations
+  when posting messages with IOVs of varying lengths.  [PR #1784]
+- Handle FI_PEEK flag in fi_eq_sread. [PR #1758]
+- Return -FI_ENOSYS if a named AV is requested. [PR #1749]
+- The ethernet header does not count against the MTU. Update reported
+  max_msg_size when using FI_EP_DGRAM to reflect this. [PR #1738]
+- Set the DF (do not fragment) bit in the IP header. [PR #1665]
+- Fix crashes that may occur from improper handling of receive state tracking
+  [PR #1809]
+- Fortify the receive side of libnl communication [PR #1655]
+
+## Verbs provider notes
+
 v1.2.0, Thu Jan 7, 2016
 =======================
 
