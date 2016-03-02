@@ -272,8 +272,7 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 
 			FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep,
 							 wr.send_flags);
-
-			if (ibv_post_send(conn->qp, &wr, &bad_wr)) {
+			if (ibv_post_send(conn->qp[0], &wr, &bad_wr)) {
 				assert(0);
 				return -errno;
 			} else {
@@ -538,7 +537,7 @@ fi_ibv_rdm_tagged_release_remote_sbuff(struct fi_ibv_rdm_tagged_conn *conn,
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(conn, ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA,
 		"posted %d bytes, remote sbuff released\n", sge.length);
-	int ret = ibv_post_send(conn->qp, &wr, &bad_wr);
+	int ret = ibv_post_send(conn->qp[0], &wr, &bad_wr);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);

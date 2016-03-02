@@ -116,7 +116,7 @@ fi_ibv_rdm_tagged_init_send_request(struct fi_ibv_rdm_tagged_request *request,
 	if (request->state.rndv == FI_IBV_STATE_RNDV_SEND_BEGIN) {
 		request->state.rndv = FI_IBV_STATE_RNDV_SEND_WAIT4SEND;
 	}
-
+		
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 	return FI_EP_RDM_HNDL_SUCCESS;
 }
@@ -189,7 +189,7 @@ fi_ibv_rdm_tagged_eager_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%llx\n",
 		  sge.length, request->conn, request->tag);
 
-	ret = ibv_post_send(conn->qp, &wr, &bad_wr);
+	ret = ibv_post_send(conn->qp[0], &wr, &bad_wr);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 
@@ -313,7 +313,7 @@ fi_ibv_rdm_tagged_rndv_rts_send_ready(struct fi_ibv_rdm_tagged_request *request,
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%llx\n",
 		sge.length, request->conn, request->tag);
-	int ret = ibv_post_send(conn->qp, &wr, &bad_wr);
+	int ret = ibv_post_send(conn->qp[0], &wr, &bad_wr);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
@@ -675,6 +675,9 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 	struct ibv_sge sge;
 	int ret;
 
+	assert((request->conn->cm_role != FI_VERBS_CM_SELF) || 
+	       (request->rndv.remote_addr != request->dest_buf));
+
 	wr.wr_id = (uintptr_t) request;
 	assert(FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wr.wr_id) == 0);
 	wr.opcode = IBV_WR_RDMA_READ;
@@ -686,7 +689,7 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 
 	request->rndv.mr = ibv_reg_mr(p->ep->domain->pd,
 				      request->dest_buf,
-				      request->len, IBV_ACCESS_LOCAL_WRITE);
+			      request->len, IBV_ACCESS_LOCAL_WRITE);
 	assert(request->rndv.mr);
 
 	sge.addr = (uintptr_t) request->dest_buf;
@@ -696,7 +699,7 @@ fi_ibv_rdm_tagged_rndv_recv_post_read(struct fi_ibv_rdm_tagged_request *request,
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep, wr.send_flags);
 	VERBS_DBG(FI_LOG_EP_DATA, "posted %d bytes, conn %p, tag 0x%llx\n",
 		  sge.length, request->conn, request->tag);
-	ret = ibv_post_send(request->conn->qp, &wr, &bad_wr);
+	ret = ibv_post_send(request->conn->qp[0], &wr, &bad_wr);
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_DATA, "ibv_post_send", errno);
 		assert(0);
@@ -763,7 +766,7 @@ fi_ibv_rdm_tagged_rndv_recv_read_lc(struct fi_ibv_rdm_tagged_request *request,
 	VERBS_DBG(FI_LOG_EP_DATA,
 		"posted %d bytes, conn %p, tag 0x%llx, request %p\n",
 		sge.length, request->conn, request->tag, request);
-	ret = ibv_post_send(conn->qp, &wr, &bad_wr);
+	ret = ibv_post_send(conn->qp[0], &wr, &bad_wr);
 	if (ret == 0) {
 		assert(request->rndv.mr);
 		ibv_dereg_mr(request->rndv.mr);
@@ -886,7 +889,7 @@ fi_ibv_rdm_rma_inject_request(struct fi_ibv_rdm_tagged_request *request,
 	}
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep_rdm, wr.send_flags);
-	ret = ibv_post_send(request->conn->qp, &wr, &bad_wr);
+	ret = ibv_post_send(request->conn->qp[0], &wr, &bad_wr);
 	request->state.eager = FI_IBV_STATE_EAGER_RMA_INJECT_WAIT4LC;
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 
@@ -940,7 +943,7 @@ fi_ibv_rdm_rma_post_ready(struct fi_ibv_rdm_tagged_request *request,
 	sge.length = request->len;
 
 	FI_IBV_RDM_INC_SIG_POST_COUNTERS(request->conn, p->ep_rdm, wr.send_flags);
-	int ret = ibv_post_send(request->conn->qp, &wr, &bad_wr);
+	int ret = ibv_post_send(request->conn->qp[0], &wr, &bad_wr);
 
 	FI_IBV_RDM_TAGGED_HANDLER_LOG_OUT();
 
