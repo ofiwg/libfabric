@@ -883,8 +883,7 @@ usdf_msg_tx_progress(struct usdf_tx *tx)
 }
 
 static inline void
-usdf_msg_recv_complete_err(struct usdf_ep *ep, struct usdf_msg_qe *rqe,
-			int status)
+usdf_msg_recv_complete(struct usdf_ep *ep, struct usdf_msg_qe *rqe, int status)
 {
 	struct usdf_cq_hard *hcq;
 	struct usdf_rx *rx;
@@ -893,19 +892,6 @@ usdf_msg_recv_complete_err(struct usdf_ep *ep, struct usdf_msg_qe *rqe,
 	hcq = rx->r.msg.rx_hcq;
 
 	hcq->cqh_post(hcq, rqe->ms_context, rqe->ms_length, status);
-	usdf_msg_put_rx_rqe(rx, rqe);
-}
-
-static inline void
-usdf_msg_recv_complete(struct usdf_ep *ep, struct usdf_msg_qe *rqe)
-{
-	struct usdf_cq_hard *hcq;
-	struct usdf_rx *rx;
-
-	rx = ep->ep_rx;
-	hcq = rx->r.msg.rx_hcq;
-
-	hcq->cqh_post(hcq, rqe->ms_context, rqe->ms_length, FI_SUCCESS);
 	usdf_msg_put_rx_rqe(rx, rqe);
 }
 
@@ -1190,9 +1176,9 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 			USDF_DBG_SYS(EP_DATA, "message truncated by %zu bytes",
 					rxlen);
 			rqe->ms_length -= rxlen;
-			usdf_msg_recv_complete_err(ep, rqe, FI_ETRUNC);
+			usdf_msg_recv_complete(ep, rqe, FI_ETRUNC);
 		} else {
-			usdf_msg_recv_complete(ep, rqe);
+			usdf_msg_recv_complete(ep, rqe, FI_SUCCESS);
 		}
 
 		ep->e.msg.ep_cur_recv = NULL;
