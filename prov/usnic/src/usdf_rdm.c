@@ -656,7 +656,9 @@ static inline ssize_t _usdf_rdm_send_vector(struct fid_ep *fep,
 	dest = (struct usdf_dest *) dest_addr;
 
 	if (flags & ~USDF_RDM_SUPP_SENDMSG_FLAGS) {
-		USDF_DBG("one or more flags in 0x%llx not supported\n", flags);
+		USDF_DBG_SYS(EP_DATA,
+				"one or more flags in %#" PRIx64 " not supported\n",
+				flags);
 		return -FI_EOPNOTSUPP;
 	}
 
@@ -1246,7 +1248,7 @@ usdf_rdm_check_seq_id(struct usdf_rdm_connection *rdc, struct usdf_rx *rx,
 		} else if (seq != 0) {
 			usdf_set_nak(rdc, msg_id, -1);
 		} else if (TAILQ_EMPTY(&rx->r.rdm.rx_posted_rqe)) {
-			USDF_WARN("RX overrun?????\n"); /* XXX */
+			USDF_WARN_SYS(EP_DATA, "RX overrun?????\n"); /* XXX */
 			usdf_set_nak(rdc, msg_id, -1);
 		} else {
 			rqe = TAILQ_FIRST(&rx->r.rdm.rx_posted_rqe);
