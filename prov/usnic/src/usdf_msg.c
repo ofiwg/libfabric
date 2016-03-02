@@ -1124,100 +1124,62 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 	switch (opcode) {
 	case RUDP_OP_ACK:
 		usdf_msg_rx_ack(ep, pkt);
-		break;
-
+		goto dropit;
 	case RUDP_OP_NAK:
 		usdf_msg_rx_nak(ep, pkt);
-		break;
-
+		goto dropit;
 	case RUDP_OP_FIRST:
-		ret = usdf_msg_check_seq(ep, pkt);
-		if (ret == -1) {
-			goto dropit;
-		}
-
-		rqe = ep->e.msg.ep_cur_recv;
-		if (rqe == NULL) {
-			if (TAILQ_EMPTY(&rx->r.msg.rx_posted_rqe)) {
-				goto dropit;
-			}
-			rqe = TAILQ_FIRST(&rx->r.msg.rx_posted_rqe);
-			TAILQ_REMOVE(&rx->r.msg.rx_posted_rqe, rqe, ms_link);
-			ep->e.msg.ep_cur_recv = rqe;
-		}
-
-		rx_ptr = (uint8_t *)(pkt + 1);
-		rxlen = ntohs(pkt->msg.m.rc_data.length);
-		rqe->ms_length += rxlen;
-		rqe_ptr = (uint8_t *)rqe->ms_cur_ptr;
-		iov_resid = rqe->ms_iov_resid;
-		cur_iov = rqe->ms_cur_iov;
-		ms_resid = rqe->ms_resid;
-		while (rxlen > 0) {
-			copylen = MIN(rxlen, iov_resid);
-			memcpy(rqe_ptr, rx_ptr, copylen);
-			rx_ptr += copylen;
-			rxlen -= copylen;
-			iov_resid -= copylen;
-			ms_resid -= copylen;
-			if (iov_resid == 0) {
-				if (cur_iov == rqe->ms_last_iov) {
-					break;
-				}
-				++cur_iov;
-				rqe_ptr = rqe->ms_iov[cur_iov].iov_base;
-				iov_resid = rqe->ms_iov[cur_iov].iov_len;
-			} else {
-				rqe_ptr += copylen;
-			}
-		}
-		rqe->ms_cur_ptr = rqe_ptr;
-		rqe->ms_iov_resid = iov_resid;
-		rqe->ms_cur_iov = cur_iov;
-		rqe->ms_resid = ms_resid;
-		break;
-
 	case RUDP_OP_LAST:
-		ret = usdf_msg_check_seq(ep, pkt);
-		if (ret == -1) {
+		break;
+	default:
+		USDF_DBG_SYS(EP_DATA,
+				"encountered unexpected opcode %" PRIu32 "\n",
+				opcode);
+		goto dropit;
+	}
+
+	ret = usdf_msg_check_seq(ep, pkt);
+	if (ret == -1) {
+		goto dropit;
+	}
+
+	rqe = ep->e.msg.ep_cur_recv;
+	if (rqe == NULL) {
+		if (TAILQ_EMPTY(&rx->r.msg.rx_posted_rqe)) {
 			goto dropit;
 		}
+		rqe = TAILQ_FIRST(&rx->r.msg.rx_posted_rqe);
+		TAILQ_REMOVE(&rx->r.msg.rx_posted_rqe, rqe, ms_link);
+		ep->e.msg.ep_cur_recv = rqe;
+	}
 
-		rqe = ep->e.msg.ep_cur_recv;
-		if (rqe == NULL) {
-			rqe = TAILQ_FIRST(&rx->r.msg.rx_posted_rqe);
-			if (rqe == NULL) {
-				goto dropit;
+	rx_ptr = (uint8_t *)(pkt + 1);
+	rxlen = ntohs(pkt->msg.m.rc_data.length);
+	rqe->ms_length += rxlen;
+	rqe_ptr = (uint8_t *)rqe->ms_cur_ptr;
+	iov_resid = rqe->ms_iov_resid;
+	cur_iov = rqe->ms_cur_iov;
+	ms_resid = rqe->ms_resid;
+	while (rxlen > 0) {
+		copylen = MIN(rxlen, iov_resid);
+		memcpy(rqe_ptr, rx_ptr, copylen);
+		rx_ptr += copylen;
+		rxlen -= copylen;
+		iov_resid -= copylen;
+		ms_resid -= copylen;
+		if (iov_resid == 0) {
+			if (cur_iov == rqe->ms_last_iov) {
+				break;
 			}
-			TAILQ_REMOVE(&rx->r.msg.rx_posted_rqe, rqe, ms_link);
-			ep->e.msg.ep_cur_recv = rqe;
+			++cur_iov;
+			rqe_ptr = rqe->ms_iov[cur_iov].iov_base;
+			iov_resid = rqe->ms_iov[cur_iov].iov_len;
+		} else {
+			rqe_ptr += copylen;
 		}
+	}
 
-		rx_ptr = (uint8_t *)(pkt + 1);
-		rxlen = ntohs(pkt->msg.m.rc_data.length);
-		rqe->ms_length += rxlen;
-		rqe_ptr = (uint8_t *)rqe->ms_cur_ptr;
-		iov_resid = rqe->ms_iov_resid;
-		cur_iov = rqe->ms_cur_iov;
-		ms_resid = rqe->ms_resid;
-		while (rxlen > 0) {
-			copylen = MIN(rxlen, iov_resid);
-			memcpy(rqe_ptr, rx_ptr, copylen);
-			rx_ptr += copylen;
-			rxlen -= copylen;
-			iov_resid -= copylen;
-			ms_resid -= copylen;
-			if (iov_resid == 0) {
-				if (cur_iov == rqe->ms_last_iov) {
-					break;
-				}
-				++cur_iov;
-				rqe_ptr = rqe->ms_iov[cur_iov].iov_base;
-				iov_resid = rqe->ms_iov[cur_iov].iov_len;
-			} else {
-				rqe_ptr += copylen;
-			}
-		}
+	if (opcode & RUDP_OP_LAST) {
 		/*
 		* Normally we need to store back the updated values of
 		* ms_resid, ms_cur_iov, ms_cur_ptr and ms_iov_resid. But
@@ -1225,17 +1187,20 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 		* values are not necessary
 		*/
 		if (rxlen > 0) {
+			USDF_DBG_SYS(EP_DATA, "message truncated by %zu bytes",
+					rxlen);
 			rqe->ms_length -= rxlen;
 			usdf_msg_recv_complete_err(ep, rqe, FI_ETRUNC);
-/* printf("RQE truncated XXX\n"); */
 		} else {
 			usdf_msg_recv_complete(ep, rqe);
 		}
 
 		ep->e.msg.ep_cur_recv = NULL;
-		break;
-	default:
-		break;
+	} else {
+		rqe->ms_cur_ptr = rqe_ptr;
+		rqe->ms_iov_resid = iov_resid;
+		rqe->ms_cur_iov = cur_iov;
+		rqe->ms_resid = ms_resid;
 	}
 
 dropit:
