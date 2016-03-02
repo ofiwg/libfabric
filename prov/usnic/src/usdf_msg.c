@@ -1231,6 +1231,8 @@ usdf_msg_handle_recv(struct usdf_domain *udp, struct usd_completion *comp)
 		} else {
 			usdf_msg_recv_complete(ep, rqe);
 		}
+
+		ep->e.msg.ep_cur_recv = NULL;
 		break;
 	default:
 		break;
