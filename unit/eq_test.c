@@ -350,7 +350,7 @@ static int read_events(size_t count, uint64_t flags)
 static int sread_event(int timeout, uint64_t flags)
 {
 	struct fi_eq_entry entry;
-	uint64_t elapsed;
+	int64_t elapsed;
 	uint32_t event;
 	int ret;
 
@@ -467,7 +467,7 @@ eq_wait_fd_sread()
 {
 	struct fi_eq_entry entry;
 	uint32_t event;
-	uint64_t elapsed;
+	int64_t elapsed;
 	int testret;
 	int ret;
 
