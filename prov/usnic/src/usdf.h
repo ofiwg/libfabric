@@ -173,6 +173,7 @@ struct usdf_pep {
 	struct sockaddr_in pep_src_addr;
 	enum usdf_pep_state pep_state;
 	struct usdf_poll_item pep_pollitem;
+	struct fi_info *pep_info;
 
 	pthread_spinlock_t pep_cr_lock;
 	size_t pep_cr_max_data;

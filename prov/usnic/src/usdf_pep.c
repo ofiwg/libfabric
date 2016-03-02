@@ -84,7 +84,7 @@ usdf_pep_bind(fid_t fid, fid_t bfid, uint64_t flags)
 		pep->pep_eq = eq_fidtou(bfid);
 		atomic_inc(&pep->pep_eq->eq_refcnt);
 		break;
-		
+
 	default:
 		return -FI_EINVAL;
 	}
@@ -98,55 +98,15 @@ usdf_pep_conn_info(struct usdf_connreq *crp)
 	struct fi_info *ip;
 	struct usdf_pep *pep;
 	struct sockaddr_in *sin;
-	struct usdf_fabric *fp;
-	struct usdf_domain *udp;
-	struct usd_device_attrs *dap;
 	struct usdf_connreq_msg *reqp;
 
 	pep = crp->cr_pep;
-	fp = pep->pep_fabric;
-	udp = LIST_FIRST(&fp->fab_domain_list);
-	dap = fp->fab_dev_attrs;
 	reqp = (struct usdf_connreq_msg *)crp->cr_data;
 
-	/* If there is a domain, just copy info from there */
-	if (udp != NULL) {
-		ip = fi_dupinfo(udp->dom_info);
-		if (ip == NULL) {
-			return NULL;
-		}
-
-	/* no domains yet, make an info suitable for creating one */
-	} else {
-		ip = fi_allocinfo();
-		if (ip == NULL) {
-			return NULL;
-		}
-
-		ip->caps = USDF_MSG_CAPS;
-		ip->mode = USDF_MSG_SUPP_MODE;
-		ip->ep_attr->type = FI_EP_MSG;
-
-		ip->addr_format = FI_SOCKADDR_IN;
-		ip->src_addrlen = sizeof(struct sockaddr_in);
-		sin = calloc(1, ip->src_addrlen);
-		if (sin == NULL) {
-			goto fail;
-		}
-		sin->sin_family = AF_INET;
-		sin->sin_addr.s_addr = dap->uda_ipaddr_be;
-		ip->src_addr = sin;
-		
-		ip->ep_attr->protocol = FI_PROTO_RUDP;
-
-		ip->fabric_attr->fabric = fab_utof(fp);
-		ip->fabric_attr->name = strdup(fp->fab_attr.name);
-		ip->fabric_attr->prov_name = strdup(fp->fab_attr.prov_name);
-		ip->fabric_attr->prov_version = fp->fab_attr.prov_version;
-		if (ip->fabric_attr->name == NULL ||
-				ip->fabric_attr->prov_name == NULL) {
-			goto fail;
-		}
+	ip = fi_dupinfo(pep->pep_info);
+	if (!ip) {
+		USDF_WARN_SYS(EP_CTRL, "failed to duplicate pep info\n");
+		return NULL;
 	}
 
 	/* fill in dest addr */
@@ -171,7 +131,7 @@ fail:
  * Remove connection request from epoll list if not done already.
  * crp->cr_pollitem.pi_rtn is non-NULL when epoll() is active
  */
-static int 
+static int
 usdf_pep_creq_epoll_del(struct usdf_connreq *crp)
 {
 	int ret;
@@ -562,10 +522,16 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 {
 	struct usdf_pep *pep;
 	struct usdf_fabric *fp;
+	struct sockaddr_in *sin;
 	int ret;
 	int optval;
 
 	USDF_TRACE_SYS(EP_CTRL, "\n");
+
+	if (!info) {
+		USDF_DBG_SYS(EP_CTRL, "null fi_info struct is invalid\n");
+		return -FI_EINVAL;
+	}
 
 	if (info->ep_attr->type != FI_EP_MSG) {
 		return -FI_ENODEV;
@@ -636,11 +602,31 @@ usdf_pep_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto fail;
 	}
 
-	/* info->src_addrlen can only be 0 or sizeof(struct sockaddr_in) which
-	 * is the same as sizeof(pep->pep_src_addr).
-	 */
-	memcpy(&pep->pep_src_addr, (struct sockaddr_in *)info->src_addr,
-		info->src_addrlen);
+	pep->pep_info = fi_dupinfo(info);
+	if (!pep->pep_info) {
+		ret = -FI_ENOMEM;
+		goto fail;
+	}
+
+	if (info->src_addrlen == 0) {
+		/* Copy the source address information from the device
+		 * attributes.
+		 */
+		pep->pep_info->src_addrlen = sizeof(struct sockaddr_in);
+		sin = calloc(1, pep->pep_info->src_addrlen);
+		if (!sin) {
+			USDF_WARN_SYS(EP_CTRL,
+					"calloc for src address failed\n");
+			goto fail;
+		}
+
+		sin->sin_family = AF_INET;
+		sin->sin_addr.s_addr = fp->fab_dev_attrs->uda_ipaddr_be;
+		pep->pep_info->src_addr = sin;
+	}
+
+	memcpy(&pep->pep_src_addr, pep->pep_info->src_addr,
+			pep->pep_info->src_addrlen);
 
 	/* initialize connreq freelist */
 	ret = pthread_spin_init(&pep->pep_cr_lock, PTHREAD_PROCESS_PRIVATE);
@@ -668,6 +654,7 @@ fail:
 		if (pep->pep_sock != -1) {
 			close(pep->pep_sock);
 		}
+		fi_freeinfo(pep->pep_info);
 		free(pep);
 	}
 	return ret;
