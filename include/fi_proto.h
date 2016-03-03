@@ -1,0 +1,214 @@
+/*
+ * Copyright (c) 2016 Intel Corporation. All rights reserved.
+ *
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * BSD license below:
+ *
+ *     Redistribution and use in source and binary forms, with or
+ *     without modification, are permitted provided that the following
+ *     conditions are met:
+ *
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
+ *
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+#ifndef _FI_PROTO_H_
+#define _FI_PROTO_H_
+
+#include "config.h"
+
+#include <stdint.h>
+#include <stddef.h>
+
+#include <rdma/fi_rma.h>
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+#define OFI_CTRL_VERSION	2
+
+/* ofi_ctrl_hdr::type */
+enum {
+	ofi_ctrl_connect,
+	ofi_ctrl_data,
+	ofi_ctrl_large_data,
+	ofi_ctrl_ack
+};
+
+/*
+ * Control message header.  For segmentation and reassembly, reliability,
+ * rendezvous protocol, acks, and communication setup.
+ *
+ * version: OFI_CTRL_VERSION
+ * type
+ * seg_size:
+ *     Data packets - size of current message, in bytes.
+ *     Large data packets - size of current messsage, 2 ^ seg_size, in bytes
+ *     Ctrl packets - number of segments in window allowed past seg_no.
+ * seg_no:
+ *     Data packets - position 0..(n-1) of segment in current message.
+ *     Ctrl packets - last segment ack'ed.
+ * conn_id: Communication identifier.  Conn_id values are exchanged between
+ *     peer endpoints as part of communication setup.  This field is valid
+ *     as part of the first message in any data transfer.
+ * msg_id: Unique number identifying all segments of a message
+ *     Message id can be formed using an equation similar to:
+ *     (seq_no++ << tx size) | tx_key
+ * conn_data: Connection specific data.  This may be set to the index
+ *     of the transmit endpoint's address in its local AV, which may
+ *     be used as a hint at the Rx side to locate the Tx EP address in
+ *     its AV.
+ * rx_key: Key returned by the Rx side, that the Tx side includes in
+ *     subsequent packets.  This field is used for rendezvous and
+ *     segmentation and reassembly protocols.
+ *     The rx_key may be formed similar to message_id.
+ */
+struct ofi_ctrl_hdr {
+	uint8_t			version;
+	uint8_t			type;
+	uint16_t		seg_size;
+	uint32_t		seg_no;
+	union {
+		uint64_t	conn_id;
+		uint64_t	msg_id;
+	}
+	union {
+		uint64_t	conn_data;
+		uint64_t	rx_key;
+	};
+};
+
+
+#define OFI_OP_VERSION	2
+
+/*
+ * Basic command opcode. ofi_op_hdr::op
+ * Intent is that RX can use opcode + control as indices into a function
+ * pointer array for message processing (after validating values).
+ */
+enum {
+	ofi_op_msg,
+	ofi_op_tagged,
+	ofi_op_read,
+	ofi_op_write,
+	ofi_op_atomic,
+};
+
+#define OFI_REMOTE_CQ_DATA	(1 << 0)
+#define OFI_TRANSMIT_COMPLETE	(1 << 1)
+#define OFI_DELIVERY_COMPLETE	(1 << 2)
+
+/*
+ * Common command header
+ *
+ * version: OFI_OP_VERSION
+ * rxid: RX index for scalable endpoints
+ * op:
+ * op_data: implementation specific
+ * tx_key: Tx request identifier for command
+ * flags: Command flags
+ * size: Size of data transfer
+ * data: Remote CQ data, if available
+ * tag: Message tag, used for tagged operations only
+ * iov_len: Length of destination iov, used for RMA operations
+ * atomic: Control fields for atomic operations
+ * resv: Reserved, used for msg operations
+ */
+struct ofi_op_hdr {
+	uint8_t			version;
+	uint8_t			rx_index;
+	uint8_t			op;
+	uint8_t			op_data;
+	uint32_t		flags;
+
+	uint64_t		size;
+	uint64_t		data;
+	union {
+		uint64_t	tag;
+		uint8_t		iov_len;
+		struct {
+			uint8_t	datatype;
+			uint8_t	op;
+			uint8_t ioc_len;
+		} atomic;
+		uint64_t	resv;
+	};
+};
+
+struct ofi_iov {
+	uint64_t		addr;
+	uint64_t		len;
+};
+
+struct ofi_rma_iov {
+	uint64_t		addr;
+	uint64_t		len;
+	uint64_t		key;
+};
+
+struct ofi_rma_ioc {
+	uint64_t		addr;
+	uint64_t		count;
+	uint64_t		key;
+};
+
+#define OFI_CMD_SIZE		64	/* to align with 64-byte cache line */
+#define OFI_CMD_DATA_LEN	(OFI_CMD_SIZE - sizeof(struct ofi_cmd_hdr))
+
+/*
+ * Additional control information based on the operation being
+ * performed.
+ */
+enum {
+	shm_ctrl_inline,
+	shm_ctrl_inject,
+	shm_ctrl_iov,
+};
+
+struct shm_cmd {
+	struct ofi_cmd_hdr	hdr;
+	uint32_t		cmd_id;
+	uint32_t		conn_id;
+	uint64_t		resv;
+	union {
+		uint8_t		data[OFI_CMD_DATA_LEN];
+		uint64_t	buf;
+		struct iovec	iov[OFI_CMD_DATA_LEN / sizeof(struct iovec)];
+	};
+};
+
+/* Align with sizeof struct shm_cmd */
+union shm_cmd_data {
+	uint8_t			msg[OFI_CMD_SIZE];
+	struct iovec		iov[OFI_CMD_SIZE / sizeof(struct iovec)];
+	struct ofi_rma_iov	rma_iov[OFI_CMD_SIZE / sizeof(struct ofi_rma_iov)];
+	struct ofi_rma_ioc	rma_ioc[OFI_CMD_SIZE / sizeof(struct ofi_rma_ioc)];
+};
+
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _FI_PROTO_H_ */
