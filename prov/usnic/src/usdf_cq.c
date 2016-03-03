@@ -54,6 +54,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
+#include <rdma/fi_eq.h>
 #include "fi.h"
 #include "fi_enosys.h"
 
@@ -600,10 +601,6 @@ usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const voi
 		int timeout_ms, enum fi_cq_format format)
 {
 	struct usdf_cq *cq;
-	uint8_t *entry;
-	uint8_t *last;
-	struct usdf_cq_soft_entry *tail;
-	size_t entry_len;
 	size_t sleep_time_us;
 	size_t time_spent_us = 0;
 	ssize_t ret;
@@ -615,76 +612,23 @@ usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const voi
 
 	sleep_time_us = SREAD_INIT_SLEEP_TIME_US;
 
-	switch (format) {
-	case FI_CQ_FORMAT_CONTEXT:
-		entry_len = sizeof(struct fi_cq_entry);
-		break;
-	case FI_CQ_FORMAT_MSG:
-		entry_len = sizeof(struct fi_cq_msg_entry);
-		break;
-	case FI_CQ_FORMAT_DATA:
-		entry_len = sizeof(struct fi_cq_data_entry);
-		break;
-	default:
-		USDF_WARN("unexpected CQ format, internal error\n");
-		return -FI_EOPNOTSUPP;
-	}
-
-	entry = buf;
-	last = entry + (entry_len * count);
-
 	while (1) {
-		/* progress... */
-		usdf_domain_progress(cq->cq_domain);
+		ret = fi_cq_read(fcq, buf, count);
+		if (ret != -FI_EAGAIN)
+			return ret;
 
-		tail = cq->c.soft.cq_tail;
-
-		while (entry < last) {
-			/* If the head and tail are equal and the last
-			 * operation was a read then that means we have an
-			 * empty queue.
-			 */
-			if ((tail == cq->c.soft.cq_head) &&
-					(cq->c.soft.cq_last_op ==
-					 USDF_SOFT_CQ_READ))
+		if (timeout_ms >= 0) {
+			if (time_spent_us >= (1000 * timeout_ms))
 				break;
-
-			if (tail->cse_prov_errno > 0) {
-				if (entry > (uint8_t *)buf)
-					break;
-				else
-					return -FI_EAVAIL;
-			}
-
-			ret = usdf_cq_copy_soft_entry(entry, tail, format);
-			if (ret < 0)
-				return ret;
-
-			entry += entry_len;
-			tail++;
-			if (tail == cq->c.soft.cq_end)
-				tail = cq->c.soft.cq_comps;
-
-			cq->c.soft.cq_last_op = USDF_SOFT_CQ_READ;
 		}
 
-		if (entry > (uint8_t *)buf) {
-			cq->c.soft.cq_tail = tail;
-			return (entry - (uint8_t *)buf) / entry_len;
-		} else {
-			if (timeout_ms >= 0 &&
-				(time_spent_us >= 1000 * timeout_ms))
-				break;
+		usleep(sleep_time_us);
+		time_spent_us += sleep_time_us;
 
-			usleep(sleep_time_us);
-			time_spent_us += sleep_time_us;
-
-			/* exponentially back off up to a limit */
-			if (sleep_time_us < SREAD_MAX_SLEEP_TIME_US)
-				sleep_time_us *= SREAD_EXP_BASE;
-			sleep_time_us = MIN(sleep_time_us,
-						SREAD_MAX_SLEEP_TIME_US);
-		}
+		/* exponentially back off up to a limit */
+		if (sleep_time_us < SREAD_MAX_SLEEP_TIME_US)
+			sleep_time_us *= SREAD_EXP_BASE;
+		sleep_time_us = MIN(sleep_time_us, SREAD_MAX_SLEEP_TIME_US);
 	}
 
 	return -FI_EAGAIN;
