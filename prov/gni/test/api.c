@@ -41,21 +41,20 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <limits.h>
+#include <assert.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
+#include <rdma/fi_atomic.h>
+#include <rdma/fi_tagged.h>
+#include "fi_ext_gni.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
-
-#include "gnix_vc.h"
-#include "gnix_cm_nic.h"
-#include "gnix_hashtable.h"
-#include "gnix_rma.h"
 
 #include <criterion/criterion.h>
 
