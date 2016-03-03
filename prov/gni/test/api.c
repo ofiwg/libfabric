@@ -41,21 +41,20 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <limits.h>
+#include <assert.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_cm.h>
+#include <rdma/fi_atomic.h>
+#include <rdma/fi_tagged.h>
+#include "fi_ext_gni.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
-
-#include "gnix_vc.h"
-#include "gnix_cm_nic.h"
-#include "gnix_hashtable.h"
-#include "gnix_rma.h"
 
 #include <criterion/criterion.h>
 
@@ -510,7 +509,7 @@ Test(rdm_api, tsend_only)
 	hints[0]->caps = FI_TAGGED | FI_SEND;
 	hints[1]->caps = FI_TAGGED | FI_SEND;
 	rdm_api_setup_ep();
-	api_send_recv(BUF_SZ);
+	api_tagged_send_recv(BUF_SZ);
 }
 
 Test(rdm_api, trecv_only)
@@ -518,7 +517,7 @@ Test(rdm_api, trecv_only)
 	hints[0]->caps = FI_TAGGED | FI_RECV;
 	hints[1]->caps = FI_TAGGED | FI_RECV;
 	rdm_api_setup_ep();
-	api_send_recv(BUF_SZ);
+	api_tagged_send_recv(BUF_SZ);
 }
 
 Test(rdm_api, tsend_rcv_w_msg)
@@ -526,7 +525,7 @@ Test(rdm_api, tsend_rcv_w_msg)
 	hints[0]->caps = FI_MSG;
 	hints[1]->caps = FI_MSG;
 	rdm_api_setup_ep();
-	api_send_recv(BUF_SZ);
+	api_tagged_send_recv(BUF_SZ);
 }
 
 #define READ_CTX 0x4e3dda1aULL
@@ -643,14 +642,6 @@ void api_do_read_buf(void)
 
 	rdm_api_init_data(source, BUF_SZ, 0);
 	rdm_api_init_data(target, BUF_SZ, 0xad);
-	/* prime the pump till the chained transactions are fixed */
-	sz = fi_read(ep[0], source, len,
-		     loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-		     (void *)READ_CTX);
-	cr_assert_eq(sz, 0);
-
-	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN)
-		pthread_yield();
 
 	/* cause a chained transaction */
 	sz = fi_read(ep[0], source+6, len,
