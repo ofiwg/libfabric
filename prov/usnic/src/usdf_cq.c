@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -726,73 +726,76 @@ usdf_cq_read_common_soft(struct fid_cq *fcq, void *buf, size_t count,
 		enum fi_cq_format format)
 {
 	struct usdf_cq *cq;
-	uint8_t *entry;
-	uint8_t *last;
+	uint8_t *dest;
 	struct usdf_cq_soft_entry *tail;
-	size_t entry_len;
+	size_t copylen;
+	size_t copied;
 	ssize_t ret;
 
 	cq = cq_ftou(fcq);
-	if (cq->cq_comp.uc_status != 0) {
+
+	if (cq->cq_comp.uc_status != USD_COMPSTAT_SUCCESS)
 		return -FI_EAVAIL;
-	}
 
 	/* progress... */
 	usdf_domain_progress(cq->cq_domain);
 
 	switch (format) {
 	case FI_CQ_FORMAT_CONTEXT:
-		entry_len = sizeof(struct fi_cq_entry);
+		copylen = sizeof(struct fi_cq_entry);
 		break;
 	case FI_CQ_FORMAT_MSG:
-		entry_len = sizeof(struct fi_cq_msg_entry);
+		copylen = sizeof(struct fi_cq_msg_entry);
 		break;
 	case FI_CQ_FORMAT_DATA:
-		entry_len = sizeof(struct fi_cq_data_entry);
+		copylen = sizeof(struct fi_cq_data_entry);
 		break;
 	default:
-		USDF_WARN("unexpected CQ format, internal error\n");
+		USDF_WARN_SYS(CQ, "unexpected CQ format, internal error\n");
 		return -FI_EOPNOTSUPP;
 	}
 
-	entry = buf;
-	last = entry + (entry_len * count);
+	dest = buf;
 	tail = cq->c.soft.cq_tail;
 
-	while (entry < last) {
-		/* If the head and tail are equal and the last
-		 * operation was a read then that means we have an
-		 * empty queue.
-		 */
-		if ((tail == cq->c.soft.cq_head) &&
-				(cq->c.soft.cq_last_op == USDF_SOFT_CQ_READ))
-			break;
-
-		if (tail->cse_prov_errno > 0) {
-			if (entry > (uint8_t *) buf)
+	for (copied = 0; copied < count; copied++) {
+		if (tail == cq->c.soft.cq_head) {
+			/* If the tail and head match and the last operation was
+			 * a read then we have an empty queue.
+			 */
+			if (cq->c.soft.cq_last_op == USDF_SOFT_CQ_READ)
 				break;
-			else
+		}
+
+		if (tail->cse_prov_errno != FI_SUCCESS) {
+			/* If this is the first read, then just return EAVAIL.
+			 * Although we already checked above, this last read may
+			 * have contained an error. If this isn't the first read
+			 * then break and return the count read. The next read
+			 * will yield an error.
+			 */
+			if (copied == 0)
 				return -FI_EAVAIL;
+
+			break;
 		}
-		ret = usdf_cq_copy_soft_entry(entry, tail, format);
-		if (ret < 0) {
+
+		ret = usdf_cq_copy_soft_entry(dest, tail, format);
+		if (ret < 0)
 			return ret;
-		}
-		entry += entry_len;
+
+		dest += copylen;
+
 		tail++;
-		if (tail == cq->c.soft.cq_end) {
+		if (tail == cq->c.soft.cq_end)
 			tail = cq->c.soft.cq_comps;
-		}
 
 		cq->c.soft.cq_last_op = USDF_SOFT_CQ_READ;
 	}
+
 	cq->c.soft.cq_tail = tail;
 
-	if (entry > (uint8_t *)buf) {
-		return (entry - (uint8_t *)buf) / entry_len;
-	} else {
-		return -FI_EAGAIN;
-	}
+	return copied > 0 ? copied : -FI_EAGAIN;
 }
 
 static ssize_t
