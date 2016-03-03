@@ -344,51 +344,53 @@ usdf_cq_read_common(struct fid_cq *fcq, void *buf, size_t count,
 		enum fi_cq_format format)
 {
 	struct usdf_cq *cq;
-	uint8_t *entry;
-	uint8_t *last;
-	size_t entry_len;
+	size_t copylen;
+	size_t copied;
+	uint8_t *dest;
 	ssize_t ret;
 
 	cq = cq_ftou(fcq);
-	if (cq->cq_comp.uc_status != 0)
+
+	if (cq->cq_comp.uc_status != USD_COMPSTAT_SUCCESS)
 		return -FI_EAVAIL;
 
 	switch (format) {
 	case FI_CQ_FORMAT_CONTEXT:
-		entry_len = sizeof(struct fi_cq_entry);
+		copylen = sizeof(struct fi_cq_entry);
 		break;
 	case FI_CQ_FORMAT_MSG:
-		entry_len = sizeof(struct fi_cq_msg_entry);
+		copylen = sizeof(struct fi_cq_msg_entry);
 		break;
 	case FI_CQ_FORMAT_DATA:
-		entry_len = sizeof(struct fi_cq_data_entry);
+		copylen = sizeof(struct fi_cq_data_entry);
 		break;
 	default:
-		return 0;
+		USDF_WARN_SYS(CQ, "unexpected CQ format, internal error\n");
+		return -FI_EOPNOTSUPP;
 	}
 
-	ret = 0;
-	entry = buf;
-	last = entry + (entry_len * count);
+	dest = buf;
 
-	while (entry < last) {
+	for (copied = 0; copied < count; copied++) {
 		ret = usd_poll_cq(cq->c.hard.cq_cq, &cq->cq_comp);
 		if (ret == -EAGAIN)
 			break;
-		if (cq->cq_comp.uc_status != 0) {
-			ret = -FI_EAVAIL;
+
+		if (cq->cq_comp.uc_status != USD_COMPSTAT_SUCCESS) {
+			if (copied == 0)
+				return -FI_EAVAIL;
+
 			break;
 		}
-		ret = usdf_cq_copy_cq_entry(entry, &cq->cq_comp, format);
+
+		ret = usdf_cq_copy_cq_entry(dest, &cq->cq_comp, format);
 		if (ret < 0)
 			return ret;
-		entry += entry_len;
+
+		dest += copylen;
 	}
 
-	if (entry > (uint8_t *)buf)
-		return (entry - (uint8_t *)buf) / entry_len;
-	else
-		return ret;
+	return copied > 0 ? copied : -FI_EAGAIN;
 }
 
 static ssize_t
