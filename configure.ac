@@ -76,6 +76,7 @@ AC_ARG_ENABLE([direct],
 dnl Checks for programs
 AC_PROG_CC_C99
 AM_PROG_CC_C_O
+AC_PROG_CPP
 
 dnl Checks for header files.
 AC_HEADER_STDC
@@ -233,10 +234,15 @@ FI_PROVIDER_SETUP_PC
 # If the user requested to build in direct mode, but
 # we have more than one provider, error.
 AS_IF([test x"$enable_direct" != x"no"],
-      [AS_IF([test "$PROVIDERS_COUNT" -eq "1"],
-	     [AC_SUBST(PROVIDER_DIRECT, "$enable_direct")],
-	     [AC_MSG_NOTICE([Only one provider can be chosen when using --enable-direct])
-	     AC_MSG_ERROR(Cannot continue)])])
+	[AS_IF([test "$PROVIDERS_COUNT" -eq "1"],
+		[AC_SUBST(PROVIDER_DIRECT, "$enable_direct")]
+		[AC_DEFINE_UNQUOTED([FI_DIRECT_PROVIDER_API_10],
+				    ["prov/$enable_direct/provider_FABRIC_1.0.map"],
+				    [Define location of provider symbol script])]
+		AC_DEFINE([FABRIC_DIRECT_ENABLED], 1,
+		  [Define to 1 if building for fi_direct support]),
+		[AC_MSG_NOTICE([Only one provider can be chosen when using --enable-direct])
+		AC_MSG_ERROR(Cannot continue)])])
 
 AM_CONDITIONAL([HAVE_DIRECT], [test x"$enable_direct" != x"no"])
 
