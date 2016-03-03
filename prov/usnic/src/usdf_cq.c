@@ -230,109 +230,6 @@ usdf_cq_copy_cq_entry(void *dst, struct usd_completion *src,
 	return FI_SUCCESS;
 }
 
-static inline ssize_t
-usdf_cq_sread_common(struct fid_cq *fcq, void *buf, size_t count, const void *cond,
-			int timeout_ms, enum fi_cq_format format)
-{
-	struct usdf_cq *cq;
-	uint8_t *entry;
-	uint8_t *last;
-	size_t entry_len;
-	ssize_t ret;
-	size_t sleep_time_us;
-	size_t time_spent_us = 0;
-
-	sleep_time_us = SREAD_INIT_SLEEP_TIME_US;
-
-	cq = cq_ftou(fcq);
-
-	if (cq->cq_attr.wait_obj == FI_WAIT_NONE)
-		return -FI_EOPNOTSUPP;
-
-	if (cq->cq_comp.uc_status != 0)
-		return -FI_EAVAIL;
-
-	switch (format) {
-	case FI_CQ_FORMAT_CONTEXT:
-		entry_len = sizeof(struct fi_cq_entry);
-		break;
-	case FI_CQ_FORMAT_MSG:
-		entry_len = sizeof(struct fi_cq_msg_entry);
-		break;
-	case FI_CQ_FORMAT_DATA:
-		entry_len = sizeof(struct fi_cq_data_entry);
-		break;
-	default:
-		return 0;
-	}
-
-	ret = 0;
-	entry = buf;
-	last = entry + (entry_len * count);
-
-	while (entry < last) {
-		ret = usd_poll_cq(cq->c.hard.cq_cq, &cq->cq_comp);
-		if (ret == -EAGAIN) {
-			if (entry > (uint8_t *)buf)
-				break;
-			if (timeout_ms >= 0 &&
-				(time_spent_us >= 1000 * timeout_ms))
-				break;
-
-			usleep(sleep_time_us);
-			time_spent_us += sleep_time_us;
-
-			/* exponentially back off up to a limit */
-			if (sleep_time_us < SREAD_MAX_SLEEP_TIME_US)
-				sleep_time_us *= SREAD_EXP_BASE;
-			sleep_time_us = MIN(sleep_time_us,
-						SREAD_MAX_SLEEP_TIME_US);
-
-			continue;
-		}
-		if (cq->cq_comp.uc_status != 0) {
-			if (entry > (uint8_t *) buf)
-				break;
-			else
-				return -FI_EAVAIL;
-		}
-
-		ret = usdf_cq_copy_cq_entry(entry, &cq->cq_comp, format);
-		if (ret < 0)
-			return ret;
-
-		entry += entry_len;
-	}
-
-	if (entry > (uint8_t *)buf)
-		return (entry - (uint8_t *)buf) / entry_len;
-	return -FI_EAGAIN;
-}
-
-static ssize_t
-usdf_cq_sread_context(struct fid_cq *fcq, void *buf, size_t count,
-			const void *cond, int timeout)
-{
-	return usdf_cq_sread_common(fcq, buf, count, cond, timeout, 
-					FI_CQ_FORMAT_CONTEXT);
-}
-
-static ssize_t
-usdf_cq_sread_msg(struct fid_cq *fcq, void *buf, size_t count,
-			const void *cond, int timeout)
-{
-	return usdf_cq_sread_common(fcq, buf, count, cond, timeout,
-					FI_CQ_FORMAT_MSG);
-}
-
-static ssize_t
-usdf_cq_sread_data(struct fid_cq *fcq, void *buf, size_t count,
-			const void *cond, int timeout)
-{
-	return usdf_cq_sread_common(fcq, buf, count, cond, timeout,
-					FI_CQ_FORMAT_DATA);
-}
-
 /*
  * poll a hard CQ
  * Since this routine is an inline and is always called with format as
@@ -598,9 +495,8 @@ usdf_cq_copy_soft_entry(void *dst, const struct usdf_cq_soft_entry *src,
 	return FI_SUCCESS;
 }
 
-static ssize_t
-usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const void *cond,
-		int timeout_ms, enum fi_cq_format format)
+static ssize_t usdf_cq_sread(struct fid_cq *fcq, void *buf, size_t count,
+		const void *cond, int timeout_ms)
 {
 	struct usdf_cq *cq;
 	size_t sleep_time_us;
@@ -634,30 +530,6 @@ usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const voi
 	}
 
 	return -FI_EAGAIN;
-}
-
-static ssize_t
-usdf_cq_sread_context_soft(struct fid_cq *fcq, void *buf, size_t count,
-		const void *cond, int timeout)
-{
-	return usdf_cq_sread_common_soft(fcq, buf, count, cond, timeout,
-					FI_CQ_FORMAT_CONTEXT);
-}
-
-static ssize_t
-usdf_cq_sread_msg_soft(struct fid_cq *fcq, void *buf, size_t count,
-		const void *cond, int timeout)
-{
-	return usdf_cq_sread_common_soft(fcq, buf, count, cond, timeout,
-					FI_CQ_FORMAT_MSG);
-}
-
-static ssize_t
-usdf_cq_sread_data_soft(struct fid_cq *fcq, void *buf, size_t count,
-		const void *cond, int timeout)
-{
-	return usdf_cq_sread_common_soft(fcq, buf, count, cond, timeout,
-					FI_CQ_FORMAT_DATA);
 }
 
 /*
@@ -894,7 +766,7 @@ static struct fi_ops_cq usdf_cq_context_ops = {
 	.read = usdf_cq_read_context,
 	.readfrom = usdf_cq_readfrom_context,
 	.readerr = usdf_cq_readerr,
-	.sread = usdf_cq_sread_context,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -905,7 +777,7 @@ static struct fi_ops_cq usdf_cq_context_soft_ops = {
 	.read = usdf_cq_read_context_soft,
 	.readfrom = usdf_cq_readfrom_context_soft,
 	.readerr = usdf_cq_readerr_soft,
-	.sread = usdf_cq_sread_context_soft,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -916,7 +788,7 @@ static struct fi_ops_cq usdf_cq_msg_ops = {
 	.read = usdf_cq_read_msg,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr,
-	.sread = usdf_cq_sread_msg,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -927,7 +799,7 @@ static struct fi_ops_cq usdf_cq_msg_soft_ops = {
 	.read = usdf_cq_read_msg_soft,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr_soft,
-	.sread = usdf_cq_sread_msg_soft,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -938,7 +810,7 @@ static struct fi_ops_cq usdf_cq_data_ops = {
 	.read = usdf_cq_read_data,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr,
-	.sread = usdf_cq_sread_data,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -949,7 +821,7 @@ static struct fi_ops_cq usdf_cq_data_soft_ops = {
 	.read = usdf_cq_read_data_soft,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr_soft,
-	.sread = usdf_cq_sread_data_soft,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
