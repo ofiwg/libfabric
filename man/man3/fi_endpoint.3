@@ -1,4 +1,4 @@
-.TH "fi_endpoint" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2016\-03\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint \- Fabric endpoint operations
@@ -283,10 +283,14 @@ binding an endpoint to a completion domain CQ.
 requests to the specified completion queue.
 This includes send message, RMA, and atomic operations.
 The FI_SEND flag may be used interchangeably.
+This binding automatically includes FI_READ and FI_WRITE, if applicable
+to the endpoint.
 .PP
 \f[I]FI_RECV\f[] : Directs the notification of inbound data transfers to
 the specified completion queue.
 This includes received messages.
+This binding automatically includes FI_REMOTE_WRITE, if applicable to
+the endpoint.
 .PP
 \f[I]FI_SELECTIVE_COMPLETION\f[] : By default, data transfer operations
 generate completion entries into a completion queue after they have
