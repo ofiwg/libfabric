@@ -634,75 +634,6 @@ usdf_cq_read_data_soft(struct fid_cq *fcq, void *buf, size_t count)
 	return usdf_cq_read_common_soft(fcq, buf, count, FI_CQ_FORMAT_DATA);
 }
 
-static ssize_t
-usdf_cq_readfrom_context_soft(struct fid_cq *fcq, void *buf, size_t count,
-			fi_addr_t *src_addr)
-{
-	struct usdf_cq *cq;
-	struct usd_cq_impl *ucq;
-	struct fi_cq_entry *entry;
-	struct fi_cq_entry *last;
-	ssize_t ret;
-	struct cq_desc *cq_desc;
-	struct usdf_ep *ep;
-	struct sockaddr_in sin;
-	struct usd_udp_hdr *hdr;
-	uint16_t index;
-
-	cq = cq_ftou(fcq);
-	if (cq->cq_comp.uc_status != 0) {
-		return -FI_EAVAIL;
-	}
-	ucq = to_cqi(cq->c.hard.cq_cq);
-
-	ret = 0;
-	entry = buf;
-	last = entry + count;
-	while (entry < last) {
-		cq_desc = (struct cq_desc *)((uint8_t *)ucq->ucq_desc_ring +
-				(ucq->ucq_next_desc << 4));
-
-		ret = usd_poll_cq(cq->c.hard.cq_cq, &cq->cq_comp);
-		if (ret == -EAGAIN) {
-			ret = 0;
-			break;
-		}
-		if (cq->cq_comp.uc_status != 0) {
-			ret = -FI_EAVAIL;
-			break;
-		}
-
-		if (cq->cq_comp.uc_type == USD_COMPTYPE_RECV) {
-			index = le16_to_cpu(cq_desc->completed_index) &
-				CQ_DESC_COMP_NDX_MASK;
-			ep = cq->cq_comp.uc_qp->uq_context;
-			hdr = ep->e.dg.ep_hdr_ptr[index];
-			memset(&sin, 0, sizeof(sin));
-
-			sin.sin_addr.s_addr = hdr->uh_ip.saddr;
-			sin.sin_port = hdr->uh_udp.source;
-
-			ret = fi_av_insert(av_utof(ep->e.dg.ep_av), &sin, 1,
-					src_addr, 0, NULL);
-			if (ret != 1) {
-				*src_addr = FI_ADDR_NOTAVAIL;
-			}
-			++src_addr;
-		}
-			
-
-		entry->op_context = cq->cq_comp.uc_context;
-
-		entry++;
-	}
-
-	if (entry > (struct fi_cq_entry *)buf) {
-		return entry - (struct fi_cq_entry *)buf;
-	} else {
-		return ret;
-	}
-}
-
 /*****************************************************************
  * common CQ support
  *****************************************************************/
@@ -775,7 +706,7 @@ static struct fi_ops_cq usdf_cq_context_ops = {
 static struct fi_ops_cq usdf_cq_context_soft_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = usdf_cq_read_context_soft,
-	.readfrom = usdf_cq_readfrom_context_soft,
+	.readfrom = fi_no_cq_readfrom,
 	.readerr = usdf_cq_readerr_soft,
 	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
