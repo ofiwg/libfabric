@@ -120,10 +120,9 @@ static inline void name ## _free(struct name *fs)		\
  * Buffer Pool
  */
 struct util_buf_pool;
-typedef int (*util_buf_region_alloc_hndlr) (struct util_buf_pool *pool,
-					    void *addr, size_t len,
+typedef int (*util_buf_region_alloc_hndlr) (void *pool_ctx, void *addr, size_t len,
 					    void **context);
-typedef void (*util_buf_region_free_hndlr) (void *context);
+typedef void (*util_buf_region_free_hndlr) (void *pool_ctx, void *context);
 
 struct util_buf_pool {
 	size_t data_sz;
@@ -136,6 +135,7 @@ struct util_buf_pool {
 	struct slist region_list;
 	util_buf_region_alloc_hndlr alloc_hndlr;
 	util_buf_region_free_hndlr free_hndlr;
+	void *ctx;
 };
 
 struct util_buf_region {
@@ -160,7 +160,8 @@ union util_buf {
 struct util_buf_pool *util_buf_pool_create_ex(size_t size, size_t alignment,
 					      size_t max_cnt, size_t chunk_cnt,
 					      util_buf_region_alloc_hndlr alloc_hndlr,
-					      util_buf_region_free_hndlr free_hndlr);
+					      util_buf_region_free_hndlr free_hndlr,
+					      void *pool_ctx);
 
 /* create buffer pool */
 static inline struct util_buf_pool *util_buf_pool_create(size_t size,
@@ -168,7 +169,8 @@ static inline struct util_buf_pool *util_buf_pool_create(size_t size,
 							 size_t max_cnt,
 							 size_t chunk_cnt)
 {
-	return util_buf_pool_create_ex(size, alignment, max_cnt, chunk_cnt, NULL, NULL);
+	return util_buf_pool_create_ex(size, alignment, max_cnt, chunk_cnt,
+				       NULL, NULL, NULL);
 }
 
 static inline int util_buf_avail(struct util_buf_pool *pool)
