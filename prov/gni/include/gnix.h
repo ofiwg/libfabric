@@ -804,7 +804,7 @@ int gnix_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
  * when using fabric direct.  If the API function is static use the STATIC
  * macro to bind symbols globally when compiling with fabric direct.
  */
-#if FABRIC_DIRECT_ENABLED
+#ifdef FABRIC_DIRECT_ENABLED
 #define DIRECT_FN __attribute__((visibility ("default")))
 #define STATIC
 #else
