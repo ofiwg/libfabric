@@ -31,7 +31,6 @@
 
 #include "fabtest.h"
 
-
 static int ft_accept(void)
 {
 	struct fi_eq_cm_entry entry;
@@ -90,6 +89,7 @@ static int ft_load_av(void)
 	size_t len;
 	int ret;
 
+	memset(&msg, 0, sizeof(struct ft_msg));
 	len = sizeof(msg.data);
 	ret = fi_getname(&ep->fid, msg.data, &len);
 	if (ret) {

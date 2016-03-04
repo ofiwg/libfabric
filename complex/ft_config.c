@@ -500,7 +500,7 @@ struct ft_series *fts_load(char *filename)
 	} else {
 		printf("No config file given. Using default tests.\n");
 		test_series.sets = test_sets_default;
-		test_series.nsets = sizeof(test_sets_default) / sizeof(test_sets_default[0]);;
+		test_series.nsets = sizeof(test_sets_default) / sizeof(test_sets_default[0]);
 	}
 
 	for (fts_start(&test_series, 0); !fts_end(&test_series, 0);
