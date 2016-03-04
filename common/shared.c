@@ -1519,7 +1519,7 @@ int send_recv_greeting(void)
 
 	if (opts.dst_addr) {
 		fprintf(stdout, "Sending message...\n");
-		if (snprintf(tx_buf, message_len, message) >= message_len) {
+		if (snprintf(tx_buf, message_len, "%s", message) >= message_len) {
 			fprintf(stderr, "Transmit buffer too small.\n");
 			return -FI_ETOOSMALL;
 		}
