@@ -387,7 +387,7 @@ function complex_test {
 
 function main {
 	if [[ $1 == "quick" ]]; then
-		local -r tests="unit simple short complex"
+		local -r tests="unit simple short"
 		local complex_cfg=$1
 	else
 		local -r tests=$(echo $1 | sed 's/all/unit,simple,standard,complex/g' | tr ',' ' ')
