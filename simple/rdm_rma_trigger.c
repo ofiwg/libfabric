@@ -161,15 +161,10 @@ static int run_test(void)
 			goto out;
 		}
 
+		ret = check_recv_msg(welcome_text2);
+		if (ret)
+			return ret;
 		fprintf(stdout, "Received data from Client: %s\n", (char *) rx_buf);
-		if (strncmp(rx_buf, welcome_text2, strlen(welcome_text2))) {
-			fprintf(stderr, "*** Data corruption\n");
-			ret = -1;
-			goto out;
-		} else {
-			fprintf(stderr, "Data check OK\n");
-			ret = 0;
-		}
 	}
 
 out:

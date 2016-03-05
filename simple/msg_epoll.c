@@ -216,11 +216,16 @@ static int send_recv()
 	struct epoll_event event;
 	struct fid *fids[1];
 	int ret;
+	const char *message = "Hello from Client!";
+	size_t message_len = strlen(message) + 1;
 
 	if (opts.dst_addr) {
 		fprintf(stdout, "Posting a send...\n");
-		sprintf(buf, "Hello World!");
-		ret = ft_post_tx(sizeof("Hello World!"));
+		if (snprintf(tx_buf, tx_size, "%s", message) >= tx_size) {
+			fprintf(stderr, "Transmit buffer too small.\n");
+			return -FI_ETOOSMALL;
+		}
+		ret = ft_post_tx(message_len);
 		if (ret)
 			return ret;
 
@@ -277,7 +282,11 @@ static int send_recv()
 			return ret;
 		}
 
-		fprintf(stdout, "Received data from client: %s\n", (char *)buf);
+		ret = check_recv_msg(message);
+		if (ret)
+			return ret;
+
+		fprintf(stdout, "Received data from client: %s\n", (char *) rx_buf);
 	}
 
 	return 0;

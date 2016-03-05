@@ -89,12 +89,17 @@ static int init_fabric(void)
 static int send_recv()
 {
 	int ret;
+	const char *message = "Hello from Child Client!";
+	size_t message_len = strlen(message) + 1;
 
 	if (opts.dst_addr) {
 		fprintf(stdout, "Sending message...\n");
-		snprintf(tx_buf, FT_MAX_CTRL_MSG, "Hello from Child Client!");
+		if (snprintf(tx_buf, tx_size, "%s", message) >= tx_size) {
+			fprintf(stderr, "Transmit buffer too small.\n");
+			return -FI_ETOOSMALL;
+		}
 
-		ret = ft_tx(strlen(tx_buf));
+		ret = ft_tx(message_len);
 		if (ret)
 			return ret;
 
@@ -106,7 +111,11 @@ static int send_recv()
 		if (ret)
 			return ret;
 
-		fprintf(stdout, "Received data from client: %s\n", (char *)buf);
+		ret = check_recv_msg(message);
+		if (ret)
+			return ret;
+
+		fprintf(stdout, "Received data from client: %s\n", (char *) rx_buf);
 	}
 
 	return 0;

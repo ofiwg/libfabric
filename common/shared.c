@@ -1507,15 +1507,31 @@ uint64_t ft_init_cq_data(struct fi_info *info)
 	}
 }
 
+int check_recv_msg(const char *message)
+{
+	size_t recv_len;
+	size_t message_len = strlen(message) + 1;
+	/* Account for null terminated byte. */
+	recv_len = strlen(rx_buf) + 1;
+
+	if (recv_len != message_len) {
+		fprintf(stderr, "Received length does not match expected length.\n");
+		return -1;
+	}
+
+	if (strncmp(rx_buf, message, message_len)) {
+		fprintf(stderr, "Received message does not match expected message.\n");
+		return -1;
+	}
+	fprintf(stdout, "Data check OK\n");
+	return 0;
+}
+
 int send_recv_greeting(void)
 {
 	int ret;
 	const char *message = "Hello from Client!";
-	/* strlen doesn't include null terminated byte. snprintf size includes
-	 * null terminated byte.
-	 */
 	size_t message_len = strlen(message) + 1;
-	size_t recv_len;
 
 	if (opts.dst_addr) {
 		fprintf(stdout, "Sending message...\n");
@@ -1535,20 +1551,9 @@ int send_recv_greeting(void)
 		if (ret)
 			return ret;
 
-		/* Account for null terminated byte. */
-		recv_len = strlen(rx_buf) + 1;
-
-		if (recv_len != message_len) {
-			fprintf(stderr,
-					"Received length does not match expected length.\n");
-			return -1;
-		}
-
-		if (strncmp(rx_buf, message, MIN(recv_len, message_len))) {
-			fprintf(stderr,
-					"Received message does not match expected message.\n");
-			return -1;
-		}
+		ret = check_recv_msg(message);
+		if (ret)
+			return ret;
 
 		fprintf(stdout, "Received data from client: %s\n",
 				(char *) rx_buf);
