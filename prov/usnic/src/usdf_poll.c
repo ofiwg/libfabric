@@ -46,16 +46,78 @@ static int usdf_poll_poll(struct fid_poll *pollset, void **context, int count)
 	return -FI_ENOSYS;
 }
 
-static int usdf_poll_add(struct fid_poll *pollset, struct fid *event_fid,
+static int usdf_poll_add(struct fid_poll *fps, struct fid *event_fid,
 		uint64_t flags)
 {
-	return -FI_ENOSYS;
+	struct usdf_poll *ps;
+	struct usdf_cq *cq;
+	int ret;
+
+	USDF_TRACE_SYS(DOMAIN, "\n");
+
+	if (!fps || !event_fid) {
+		USDF_WARN_SYS(DOMAIN, "pollset and event_fid can't be NULL.\n");
+		return -FI_EINVAL;
+	}
+
+	ps = poll_ftou(fps);
+
+	switch (event_fid->fclass) {
+	case FI_CLASS_CQ:
+		break;
+	default:
+		USDF_WARN_SYS(DOMAIN, "invalid fid class.\n");
+		return -FI_EINVAL;
+	}
+
+	ret = fid_list_insert(&ps->list, &ps->lock, event_fid);
+	if (ret)
+		return ret;
+
+	cq = cq_fidtou(event_fid);
+	ret = atomic_inc(&cq->cq_refcnt);
+	assert(ret > 0);
+	USDF_DBG_SYS(DOMAIN, "associated with CQ: [%p] with new refcnt: [%d]\n",
+			cq, ret);
+
+	return FI_SUCCESS;
 }
 
-static int usdf_poll_del(struct fid_poll *pollset, struct fid *event_fid,
+static int usdf_poll_del(struct fid_poll *fps, struct fid *event_fid,
 		uint64_t flags)
 {
-	return -FI_ENOSYS;
+	struct usdf_poll *ps;
+	struct usdf_cq *cq;
+	int ret;
+
+	if (!fps || !event_fid) {
+		USDF_WARN_SYS(DOMAIN, "pollset and event_fid can't be NULL.\n");
+		return -FI_EINVAL;
+	}
+
+	USDF_TRACE_SYS(DOMAIN, "\n");
+
+	ps = poll_ftou(fps);
+
+	switch (event_fid->fclass) {
+	case FI_CLASS_CQ:
+		break;
+	default:
+		USDF_WARN_SYS(DOMAIN, "invalid fid class.\n");
+		return -FI_EINVAL;
+	}
+
+	fid_list_remove(&ps->list, &ps->lock, event_fid);
+
+	cq = cq_fidtou(event_fid);
+	ret = atomic_dec(&cq->cq_refcnt);
+	assert(ret >= 0);
+
+	USDF_DBG_SYS(DOMAIN,
+			"disassociating from CQ: [%p] with new refcnt: [%d]\n",
+			cq, ret);
+
+	return FI_SUCCESS;
 }
 
 static int usdf_poll_close(struct fid *fps)
