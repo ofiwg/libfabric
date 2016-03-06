@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -44,6 +44,8 @@
 int usdf_cq_is_soft(struct usdf_cq *cq);
 int usdf_cq_make_soft(struct usdf_cq *cq);
 int usdf_cq_create_cq(struct usdf_cq *cq);
+int usdf_check_empty_hard_cq(struct usdf_cq *cq);
+int usdf_check_empty_soft_cq(struct usdf_cq *cq);
 
 void usdf_progress_hard_cq(struct usdf_cq_hard *hcq);
 
