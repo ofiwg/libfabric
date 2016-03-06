@@ -1,4 +1,4 @@
-.TH "fi_endpoint" "3" "2016\-03\-02" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_endpoint" "3" "2016\-03\-05" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_endpoint \- Fabric endpoint operations
@@ -649,22 +649,22 @@ be.
 If set, an RMA or atomic read operation issued after an RMA or atomic
 write operation, both of which are smaller than the size, will be
 ordered.
-The RMA or atomic read operation will see the results of the previous
-RMA or atomic write.
+Where the target memory locations overlap, the RMA or atomic read
+operation will see the results of the previous RMA or atomic write.
 .PP
 \f[I]max_order_war_size\f[] : Write after read size.
 If set, an RMA or atomic write operation issued after an RMA or atomic
 read operation, both of which are smaller than the size, will be
 ordered.
 The RMA or atomic read operation will see the initial value of the
-target memory region before a subsequent RMA or atomic write updates the
-value.
+target memory location before a subsequent RMA or atomic write updates
+the value.
 .PP
 \f[I]max_order_waw_size\f[] : Write after write size.
 If set, an RMA or atomic write operation issued after an RMA or atomic
 write operation, both of which are smaller than the size, will be
 ordered.
-The target memory region will reflect the results of the second RMA or
+The target memory location will reflect the results of the second RMA or
 atomic write.
 .PP
 An order size value of 0 indicates that ordering is not guaranteed.
