@@ -770,7 +770,8 @@ static int ip_av_insert_nodesym(struct util_av *av,
 
 	for (n = 0, fi = 0; n < nodecnt; n++) {
 		if (nodecnt == 1) {
-			strncpy(name, node, sizeof(name));
+			strncpy(name, node, sizeof(name) - 1);
+			name[FI_NAME_MAX - 1] = '\0';
 		} else {
 			snprintf(name + name_len, sizeof(name) - name_len - 1,
 				 "%d", name_index + n);
@@ -778,7 +779,8 @@ static int ip_av_insert_nodesym(struct util_av *av,
 
 		for (s = 0; s < svccnt; s++, fi++) {
 			if (svccnt == 1) {
-				strncpy(svc, service, sizeof(svc));
+				strncpy(svc, service, sizeof(svc) - 1);
+				svc[FI_NAME_MAX - 1] = '\0';
 			} else {
 				snprintf(svc, sizeof(svc) - 1,
 					 "%d", svc_index + s);

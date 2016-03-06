@@ -123,8 +123,10 @@ static ssize_t udpx_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 	cq = container_of(cq_fid, struct udpx_cq, util_cq.cq_fid);
 	if (!cq->src) {
 		i = udpx_cq_read(cq_fid, buf, count);
-		for (count = 0; count < i; count++)
-			src_addr[i] = FI_ADDR_NOTAVAIL;
+		if (i > 0) {
+			for (count = 0; count < i; count++)
+				src_addr[i] = FI_ADDR_NOTAVAIL;
+		}
 		return i;
 	}
 
