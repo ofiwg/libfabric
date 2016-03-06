@@ -615,20 +615,21 @@ if data ordering is not maintained, message ordering may be.
 *max_order_raw_size*
 : Read after write size.  If set, an RMA or atomic read operation
   issued after an RMA or atomic write operation, both of which are
-  smaller than the size, will be ordered.  The RMA or atomic read
-  operation will see the results of the previous RMA or atomic write.
+  smaller than the size, will be ordered. Where the target memory
+  locations overlap, the RMA or atomic read operation will see the
+  results of the previous RMA or atomic write.
 
 *max_order_war_size*
 : Write after read size.  If set, an RMA or atomic write operation
   issued after an RMA or atomic read operation, both of which are
   smaller than the size, will be ordered.  The RMA or atomic read
-  operation will see the initial value of the target memory region
+  operation will see the initial value of the target memory location
   before a subsequent RMA or atomic write updates the value.
 
 *max_order_waw_size*
 : Write after write size.  If set, an RMA or atomic write operation
   issued after an RMA or atomic write operation, both of which are
-  smaller than the size, will be ordered.  The target memory region
+  smaller than the size, will be ordered.  The target memory location
   will reflect the results of the second RMA or atomic write.
 
 An order size value of 0 indicates that ordering is not guaranteed.
