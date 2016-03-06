@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -57,6 +57,7 @@
 #include "usdf.h"
 #include "usdf_rdm.h"
 #include "usdf_timer.h"
+#include "usdf_poll.h"
 
 static int
 usdf_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
@@ -217,7 +218,7 @@ static struct fi_ops_domain usdf_domain_ops = {
 	.endpoint = usdf_endpoint_open,
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = fi_no_cntr_open,
-	.poll_open = fi_no_poll_open,
+	.poll_open = usdf_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
 };
