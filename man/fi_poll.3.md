@@ -216,7 +216,7 @@ application must call fi_trywait and obtain a return value of
 FI_SUCCESS prior to blocking on a native wait object.  Failure to
 do so may result in the wait object not being signaled, and the
 application not observing the desired events.  The following
-psuedo-code demonstrates the use of fi_trywait in conjunction with
+pseudo-code demonstrates the use of fi_trywait in conjunction with
 the OS select(2) call.
 
 ```c
