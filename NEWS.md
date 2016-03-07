@@ -16,7 +16,11 @@ v1.3.0, TBD
 
 ## PSM provider notes
 
+- Remove PSM2 related code.
+
 ## PSM2 provider notes
+
+- Add support for multi-iov send, tagged send, and RMA write.
 
 ## Sockets provider notes
 
