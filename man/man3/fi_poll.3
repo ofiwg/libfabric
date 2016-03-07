@@ -1,4 +1,4 @@
-.TH "fi_poll" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_poll" "3" "2016\-03\-07" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_poll \- Polling and wait set operations
@@ -192,7 +192,7 @@ The application must call fi_trywait and obtain a return value of
 FI_SUCCESS prior to blocking on a native wait object.
 Failure to do so may result in the wait object not being signaled, and
 the application not observing the desired events.
-The following psuedo\-code demonstrates the use of fi_trywait in
+The following pseudo\-code demonstrates the use of fi_trywait in
 conjunction with the OS select(2) call.
 .IP
 .nf
