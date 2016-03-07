@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -54,6 +54,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
+#include <rdma/fi_eq.h>
 #include "fi.h"
 #include "fi_enosys.h"
 
@@ -229,109 +230,6 @@ usdf_cq_copy_cq_entry(void *dst, struct usd_completion *src,
 	return FI_SUCCESS;
 }
 
-static inline ssize_t
-usdf_cq_sread_common(struct fid_cq *fcq, void *buf, size_t count, const void *cond,
-			int timeout_ms, enum fi_cq_format format)
-{
-	struct usdf_cq *cq;
-	uint8_t *entry;
-	uint8_t *last;
-	size_t entry_len;
-	ssize_t ret;
-	size_t sleep_time_us;
-	size_t time_spent_us = 0;
-
-	sleep_time_us = SREAD_INIT_SLEEP_TIME_US;
-
-	cq = cq_ftou(fcq);
-
-	if (cq->cq_attr.wait_obj == FI_WAIT_NONE)
-		return -FI_EOPNOTSUPP;
-
-	if (cq->cq_comp.uc_status != 0)
-		return -FI_EAVAIL;
-
-	switch (format) {
-	case FI_CQ_FORMAT_CONTEXT:
-		entry_len = sizeof(struct fi_cq_entry);
-		break;
-	case FI_CQ_FORMAT_MSG:
-		entry_len = sizeof(struct fi_cq_msg_entry);
-		break;
-	case FI_CQ_FORMAT_DATA:
-		entry_len = sizeof(struct fi_cq_data_entry);
-		break;
-	default:
-		return 0;
-	}
-
-	ret = 0;
-	entry = buf;
-	last = entry + (entry_len * count);
-
-	while (entry < last) {
-		ret = usd_poll_cq(cq->c.hard.cq_cq, &cq->cq_comp);
-		if (ret == -EAGAIN) {
-			if (entry > (uint8_t *)buf)
-				break;
-			if (timeout_ms >= 0 &&
-				(time_spent_us >= 1000 * timeout_ms))
-				break;
-
-			usleep(sleep_time_us);
-			time_spent_us += sleep_time_us;
-
-			/* exponentially back off up to a limit */
-			if (sleep_time_us < SREAD_MAX_SLEEP_TIME_US)
-				sleep_time_us *= SREAD_EXP_BASE;
-			sleep_time_us = MIN(sleep_time_us,
-						SREAD_MAX_SLEEP_TIME_US);
-
-			continue;
-		}
-		if (cq->cq_comp.uc_status != 0) {
-			if (entry > (uint8_t *) buf)
-				break;
-			else
-				return -FI_EAVAIL;
-		}
-
-		ret = usdf_cq_copy_cq_entry(entry, &cq->cq_comp, format);
-		if (ret < 0)
-			return ret;
-
-		entry += entry_len;
-	}
-
-	if (entry > (uint8_t *)buf)
-		return (entry - (uint8_t *)buf) / entry_len;
-	return -FI_EAGAIN;
-}
-
-static ssize_t
-usdf_cq_sread_context(struct fid_cq *fcq, void *buf, size_t count,
-			const void *cond, int timeout)
-{
-	return usdf_cq_sread_common(fcq, buf, count, cond, timeout, 
-					FI_CQ_FORMAT_CONTEXT);
-}
-
-static ssize_t
-usdf_cq_sread_msg(struct fid_cq *fcq, void *buf, size_t count,
-			const void *cond, int timeout)
-{
-	return usdf_cq_sread_common(fcq, buf, count, cond, timeout,
-					FI_CQ_FORMAT_MSG);
-}
-
-static ssize_t
-usdf_cq_sread_data(struct fid_cq *fcq, void *buf, size_t count,
-			const void *cond, int timeout)
-{
-	return usdf_cq_sread_common(fcq, buf, count, cond, timeout,
-					FI_CQ_FORMAT_DATA);
-}
-
 /*
  * poll a hard CQ
  * Since this routine is an inline and is always called with format as
@@ -343,51 +241,53 @@ usdf_cq_read_common(struct fid_cq *fcq, void *buf, size_t count,
 		enum fi_cq_format format)
 {
 	struct usdf_cq *cq;
-	uint8_t *entry;
-	uint8_t *last;
-	size_t entry_len;
+	size_t copylen;
+	size_t copied;
+	uint8_t *dest;
 	ssize_t ret;
 
 	cq = cq_ftou(fcq);
-	if (cq->cq_comp.uc_status != 0)
+
+	if (cq->cq_comp.uc_status != USD_COMPSTAT_SUCCESS)
 		return -FI_EAVAIL;
 
 	switch (format) {
 	case FI_CQ_FORMAT_CONTEXT:
-		entry_len = sizeof(struct fi_cq_entry);
+		copylen = sizeof(struct fi_cq_entry);
 		break;
 	case FI_CQ_FORMAT_MSG:
-		entry_len = sizeof(struct fi_cq_msg_entry);
+		copylen = sizeof(struct fi_cq_msg_entry);
 		break;
 	case FI_CQ_FORMAT_DATA:
-		entry_len = sizeof(struct fi_cq_data_entry);
+		copylen = sizeof(struct fi_cq_data_entry);
 		break;
 	default:
-		return 0;
+		USDF_WARN_SYS(CQ, "unexpected CQ format, internal error\n");
+		return -FI_EOPNOTSUPP;
 	}
 
-	ret = 0;
-	entry = buf;
-	last = entry + (entry_len * count);
+	dest = buf;
 
-	while (entry < last) {
+	for (copied = 0; copied < count; copied++) {
 		ret = usd_poll_cq(cq->c.hard.cq_cq, &cq->cq_comp);
 		if (ret == -EAGAIN)
 			break;
-		if (cq->cq_comp.uc_status != 0) {
-			ret = -FI_EAVAIL;
+
+		if (cq->cq_comp.uc_status != USD_COMPSTAT_SUCCESS) {
+			if (copied == 0)
+				return -FI_EAVAIL;
+
 			break;
 		}
-		ret = usdf_cq_copy_cq_entry(entry, &cq->cq_comp, format);
+
+		ret = usdf_cq_copy_cq_entry(dest, &cq->cq_comp, format);
 		if (ret < 0)
 			return ret;
-		entry += entry_len;
+
+		dest += copylen;
 	}
 
-	if (entry > (uint8_t *)buf)
-		return (entry - (uint8_t *)buf) / entry_len;
-	else
-		return ret;
+	return copied > 0 ? copied : -FI_EAGAIN;
 }
 
 static ssize_t
@@ -595,15 +495,10 @@ usdf_cq_copy_soft_entry(void *dst, const struct usdf_cq_soft_entry *src,
 	return FI_SUCCESS;
 }
 
-static ssize_t
-usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const void *cond,
-		int timeout_ms, enum fi_cq_format format)
+static ssize_t usdf_cq_sread(struct fid_cq *fcq, void *buf, size_t count,
+		const void *cond, int timeout_ms)
 {
 	struct usdf_cq *cq;
-	uint8_t *entry;
-	uint8_t *last;
-	struct usdf_cq_soft_entry *tail;
-	size_t entry_len;
 	size_t sleep_time_us;
 	size_t time_spent_us = 0;
 	ssize_t ret;
@@ -615,103 +510,26 @@ usdf_cq_sread_common_soft(struct fid_cq *fcq, void *buf, size_t count, const voi
 
 	sleep_time_us = SREAD_INIT_SLEEP_TIME_US;
 
-	switch (format) {
-	case FI_CQ_FORMAT_CONTEXT:
-		entry_len = sizeof(struct fi_cq_entry);
-		break;
-	case FI_CQ_FORMAT_MSG:
-		entry_len = sizeof(struct fi_cq_msg_entry);
-		break;
-	case FI_CQ_FORMAT_DATA:
-		entry_len = sizeof(struct fi_cq_data_entry);
-		break;
-	default:
-		USDF_WARN("unexpected CQ format, internal error\n");
-		return -FI_EOPNOTSUPP;
-	}
-
-	entry = buf;
-	last = entry + (entry_len * count);
-
 	while (1) {
-		/* progress... */
-		usdf_domain_progress(cq->cq_domain);
+		ret = fi_cq_read(fcq, buf, count);
+		if (ret != -FI_EAGAIN)
+			return ret;
 
-		tail = cq->c.soft.cq_tail;
-
-		while (entry < last) {
-			/* If the head and tail are equal and the last
-			 * operation was a read then that means we have an
-			 * empty queue.
-			 */
-			if ((tail == cq->c.soft.cq_head) &&
-					(cq->c.soft.cq_last_op ==
-					 USDF_SOFT_CQ_READ))
+		if (timeout_ms >= 0) {
+			if (time_spent_us >= (1000 * timeout_ms))
 				break;
-
-			if (tail->cse_prov_errno > 0) {
-				if (entry > (uint8_t *)buf)
-					break;
-				else
-					return -FI_EAVAIL;
-			}
-
-			ret = usdf_cq_copy_soft_entry(entry, tail, format);
-			if (ret < 0)
-				return ret;
-
-			entry += entry_len;
-			tail++;
-			if (tail == cq->c.soft.cq_end)
-				tail = cq->c.soft.cq_comps;
-
-			cq->c.soft.cq_last_op = USDF_SOFT_CQ_READ;
 		}
 
-		if (entry > (uint8_t *)buf) {
-			cq->c.soft.cq_tail = tail;
-			return (entry - (uint8_t *)buf) / entry_len;
-		} else {
-			if (timeout_ms >= 0 &&
-				(time_spent_us >= 1000 * timeout_ms))
-				break;
+		usleep(sleep_time_us);
+		time_spent_us += sleep_time_us;
 
-			usleep(sleep_time_us);
-			time_spent_us += sleep_time_us;
-
-			/* exponentially back off up to a limit */
-			if (sleep_time_us < SREAD_MAX_SLEEP_TIME_US)
-				sleep_time_us *= SREAD_EXP_BASE;
-			sleep_time_us = MIN(sleep_time_us,
-						SREAD_MAX_SLEEP_TIME_US);
-		}
+		/* exponentially back off up to a limit */
+		if (sleep_time_us < SREAD_MAX_SLEEP_TIME_US)
+			sleep_time_us *= SREAD_EXP_BASE;
+		sleep_time_us = MIN(sleep_time_us, SREAD_MAX_SLEEP_TIME_US);
 	}
 
 	return -FI_EAGAIN;
-}
-
-static ssize_t
-usdf_cq_sread_context_soft(struct fid_cq *fcq, void *buf, size_t count,
-		const void *cond, int timeout)
-{
-	return usdf_cq_sread_common_soft(fcq, buf, count, cond, timeout,
-					FI_CQ_FORMAT_CONTEXT);
-}
-
-static ssize_t
-usdf_cq_sread_msg_soft(struct fid_cq *fcq, void *buf, size_t count,
-		const void *cond, int timeout)
-{
-	return usdf_cq_sread_common_soft(fcq, buf, count, cond, timeout,
-					FI_CQ_FORMAT_MSG);
-}
-
-static ssize_t
-usdf_cq_sread_data_soft(struct fid_cq *fcq, void *buf, size_t count,
-		const void *cond, int timeout)
-{
-	return usdf_cq_sread_common_soft(fcq, buf, count, cond, timeout,
-					FI_CQ_FORMAT_DATA);
 }
 
 /*
@@ -726,73 +544,76 @@ usdf_cq_read_common_soft(struct fid_cq *fcq, void *buf, size_t count,
 		enum fi_cq_format format)
 {
 	struct usdf_cq *cq;
-	uint8_t *entry;
-	uint8_t *last;
+	uint8_t *dest;
 	struct usdf_cq_soft_entry *tail;
-	size_t entry_len;
+	size_t copylen;
+	size_t copied;
 	ssize_t ret;
 
 	cq = cq_ftou(fcq);
-	if (cq->cq_comp.uc_status != 0) {
+
+	if (cq->cq_comp.uc_status != USD_COMPSTAT_SUCCESS)
 		return -FI_EAVAIL;
-	}
 
 	/* progress... */
 	usdf_domain_progress(cq->cq_domain);
 
 	switch (format) {
 	case FI_CQ_FORMAT_CONTEXT:
-		entry_len = sizeof(struct fi_cq_entry);
+		copylen = sizeof(struct fi_cq_entry);
 		break;
 	case FI_CQ_FORMAT_MSG:
-		entry_len = sizeof(struct fi_cq_msg_entry);
+		copylen = sizeof(struct fi_cq_msg_entry);
 		break;
 	case FI_CQ_FORMAT_DATA:
-		entry_len = sizeof(struct fi_cq_data_entry);
+		copylen = sizeof(struct fi_cq_data_entry);
 		break;
 	default:
-		USDF_WARN("unexpected CQ format, internal error\n");
+		USDF_WARN_SYS(CQ, "unexpected CQ format, internal error\n");
 		return -FI_EOPNOTSUPP;
 	}
 
-	entry = buf;
-	last = entry + (entry_len * count);
+	dest = buf;
 	tail = cq->c.soft.cq_tail;
 
-	while (entry < last) {
-		/* If the head and tail are equal and the last
-		 * operation was a read then that means we have an
-		 * empty queue.
-		 */
-		if ((tail == cq->c.soft.cq_head) &&
-				(cq->c.soft.cq_last_op == USDF_SOFT_CQ_READ))
-			break;
-
-		if (tail->cse_prov_errno > 0) {
-			if (entry > (uint8_t *) buf)
+	for (copied = 0; copied < count; copied++) {
+		if (tail == cq->c.soft.cq_head) {
+			/* If the tail and head match and the last operation was
+			 * a read then we have an empty queue.
+			 */
+			if (cq->c.soft.cq_last_op == USDF_SOFT_CQ_READ)
 				break;
-			else
+		}
+
+		if (tail->cse_prov_errno != FI_SUCCESS) {
+			/* If this is the first read, then just return EAVAIL.
+			 * Although we already checked above, this last read may
+			 * have contained an error. If this isn't the first read
+			 * then break and return the count read. The next read
+			 * will yield an error.
+			 */
+			if (copied == 0)
 				return -FI_EAVAIL;
+
+			break;
 		}
-		ret = usdf_cq_copy_soft_entry(entry, tail, format);
-		if (ret < 0) {
+
+		ret = usdf_cq_copy_soft_entry(dest, tail, format);
+		if (ret < 0)
 			return ret;
-		}
-		entry += entry_len;
+
+		dest += copylen;
+
 		tail++;
-		if (tail == cq->c.soft.cq_end) {
+		if (tail == cq->c.soft.cq_end)
 			tail = cq->c.soft.cq_comps;
-		}
 
 		cq->c.soft.cq_last_op = USDF_SOFT_CQ_READ;
 	}
+
 	cq->c.soft.cq_tail = tail;
 
-	if (entry > (uint8_t *)buf) {
-		return (entry - (uint8_t *)buf) / entry_len;
-	} else {
-		return -FI_EAGAIN;
-	}
+	return copied > 0 ? copied : -FI_EAGAIN;
 }
 
 static ssize_t
@@ -811,75 +632,6 @@ static ssize_t
 usdf_cq_read_data_soft(struct fid_cq *fcq, void *buf, size_t count)
 {
 	return usdf_cq_read_common_soft(fcq, buf, count, FI_CQ_FORMAT_DATA);
-}
-
-static ssize_t
-usdf_cq_readfrom_context_soft(struct fid_cq *fcq, void *buf, size_t count,
-			fi_addr_t *src_addr)
-{
-	struct usdf_cq *cq;
-	struct usd_cq_impl *ucq;
-	struct fi_cq_entry *entry;
-	struct fi_cq_entry *last;
-	ssize_t ret;
-	struct cq_desc *cq_desc;
-	struct usdf_ep *ep;
-	struct sockaddr_in sin;
-	struct usd_udp_hdr *hdr;
-	uint16_t index;
-
-	cq = cq_ftou(fcq);
-	if (cq->cq_comp.uc_status != 0) {
-		return -FI_EAVAIL;
-	}
-	ucq = to_cqi(cq->c.hard.cq_cq);
-
-	ret = 0;
-	entry = buf;
-	last = entry + count;
-	while (entry < last) {
-		cq_desc = (struct cq_desc *)((uint8_t *)ucq->ucq_desc_ring +
-				(ucq->ucq_next_desc << 4));
-
-		ret = usd_poll_cq(cq->c.hard.cq_cq, &cq->cq_comp);
-		if (ret == -EAGAIN) {
-			ret = 0;
-			break;
-		}
-		if (cq->cq_comp.uc_status != 0) {
-			ret = -FI_EAVAIL;
-			break;
-		}
-
-		if (cq->cq_comp.uc_type == USD_COMPTYPE_RECV) {
-			index = le16_to_cpu(cq_desc->completed_index) &
-				CQ_DESC_COMP_NDX_MASK;
-			ep = cq->cq_comp.uc_qp->uq_context;
-			hdr = ep->e.dg.ep_hdr_ptr[index];
-			memset(&sin, 0, sizeof(sin));
-
-			sin.sin_addr.s_addr = hdr->uh_ip.saddr;
-			sin.sin_port = hdr->uh_udp.source;
-
-			ret = fi_av_insert(av_utof(ep->e.dg.ep_av), &sin, 1,
-					src_addr, 0, NULL);
-			if (ret != 1) {
-				*src_addr = FI_ADDR_NOTAVAIL;
-			}
-			++src_addr;
-		}
-			
-
-		entry->op_context = cq->cq_comp.uc_context;
-
-		entry++;
-	}
-
-	if (entry > (struct fi_cq_entry *)buf) {
-		return entry - (struct fi_cq_entry *)buf;
-	} else {
-		return ret;
-	}
 }
 
 /*****************************************************************
@@ -945,7 +697,7 @@ static struct fi_ops_cq usdf_cq_context_ops = {
 	.read = usdf_cq_read_context,
 	.readfrom = usdf_cq_readfrom_context,
 	.readerr = usdf_cq_readerr,
-	.sread = usdf_cq_sread_context,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -954,9 +706,9 @@ static struct fi_ops_cq usdf_cq_context_ops = {
 static struct fi_ops_cq usdf_cq_context_soft_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = usdf_cq_read_context_soft,
-	.readfrom = usdf_cq_readfrom_context_soft,
+	.readfrom = fi_no_cq_readfrom,
 	.readerr = usdf_cq_readerr_soft,
-	.sread = usdf_cq_sread_context_soft,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -967,7 +719,7 @@ static struct fi_ops_cq usdf_cq_msg_ops = {
 	.read = usdf_cq_read_msg,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr,
-	.sread = usdf_cq_sread_msg,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -978,7 +730,7 @@ static struct fi_ops_cq usdf_cq_msg_soft_ops = {
 	.read = usdf_cq_read_msg_soft,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr_soft,
-	.sread = usdf_cq_sread_msg_soft,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -989,7 +741,7 @@ static struct fi_ops_cq usdf_cq_data_ops = {
 	.read = usdf_cq_read_data,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr,
-	.sread = usdf_cq_sread_data,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
@@ -1000,7 +752,7 @@ static struct fi_ops_cq usdf_cq_data_soft_ops = {
 	.read = usdf_cq_read_data_soft,
 	.readfrom = fi_no_cq_readfrom,  /* XXX */
 	.readerr = usdf_cq_readerr_soft,
-	.sread = usdf_cq_sread_data_soft,
+	.sread = usdf_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
 	.strerror = usdf_cq_strerror,
