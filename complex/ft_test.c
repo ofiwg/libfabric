@@ -120,7 +120,6 @@ static int ft_init_control(void)
 
 static void ft_cleanup_xcontrol(struct ft_xcontrol *ctrl)
 {
-	FT_CLOSE_FID(ctrl->mr);
 	free(ctrl->buf);
 	free(ctrl->iov);
 	free(ctrl->iov_desc);
@@ -505,6 +504,8 @@ static int ft_run_bandwidth(void)
 
 static void ft_cleanup(void)
 {
+	FT_CLOSE_FID(ft_rx_ctrl.mr);
+	FT_CLOSE_FID(ft_tx_ctrl.mr);
 	ft_free_res();
 	ft_cleanup_xcontrol(&ft_rx_ctrl);
 	ft_cleanup_xcontrol(&ft_tx_ctrl);
