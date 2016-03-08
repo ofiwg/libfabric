@@ -39,11 +39,56 @@
 #include <fi_util.h>
 
 #include "usdf.h"
+#include "usdf_cq.h"
 #include "usdf_poll.h"
 
-static int usdf_poll_poll(struct fid_poll *pollset, void **context, int count)
+static int usdf_poll_poll(struct fid_poll *fps, void **context, int count)
 {
-	return -FI_ENOSYS;
+	struct usdf_cq *cq;
+	struct usdf_poll *ps;
+	struct dlist_entry *item;
+	struct fid_list_entry *entry;
+	int progressed = 0;
+	int copied = 0;
+	int pending;
+
+	if (!fps || !context) {
+		USDF_WARN_SYS(DOMAIN, "pollset and context can't be NULL.\n");
+		return -FI_EINVAL;
+	}
+
+	ps = poll_ftou(fps);
+
+	fastlock_acquire(&ps->lock);
+
+	dlist_foreach(&ps->list, item) {
+		entry = container_of(item, struct fid_list_entry, entry);
+		assert(entry->fid->fclass == FI_CLASS_CQ);
+
+		cq = cq_fidtou(entry->fid);
+
+		if (usdf_cq_is_soft(cq)) {
+			if (!progressed) {
+				usdf_domain_progress(ps->poll_domain);
+				progressed = 1;
+			}
+
+			pending = !usdf_check_empty_soft_cq(cq);
+		} else {
+			pending = !usdf_check_empty_hard_cq(cq);
+		}
+
+		if (pending) {
+			context[copied++] = entry->fid->context;
+
+			if (copied >= count)
+				break;
+		}
+	}
+
+	fastlock_release(&ps->lock);
+
+	return copied;
 }
 
 static int usdf_poll_add(struct fid_poll *fps, struct fid *event_fid,
