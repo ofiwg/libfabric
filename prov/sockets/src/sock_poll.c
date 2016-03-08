@@ -46,6 +46,8 @@ static int sock_poll_add(struct fid_poll *pollset, struct fid *event_fid,
 {
 	struct sock_poll *poll;
 	struct sock_fid_list *list_item;
+	struct sock_cq *cq;
+	struct sock_cntr *cntr;
 
 	poll = container_of(pollset, struct sock_poll, poll_fid.fid);
 	list_item = calloc(1, sizeof(*list_item));
@@ -55,6 +57,20 @@ static int sock_poll_add(struct fid_poll *pollset, struct fid *event_fid,
 	list_item->fid = event_fid;
 	dlist_init(&list_item->entry);
 	dlist_insert_after(&list_item->entry, &poll->fid_list);
+
+	switch (list_item->fid->fclass) {
+	case FI_CLASS_CQ:
+		cq = container_of(list_item->fid, struct sock_cq, cq_fid);
+		atomic_inc(&cq->ref);
+		break;
+	case FI_CLASS_CNTR:
+		cntr = container_of(list_item->fid, struct sock_cntr, cntr_fid);
+		atomic_inc(&cntr->ref);
+		break;
+	default:
+		SOCK_LOG_ERROR("Invalid fid class\n");
+		return -FI_EINVAL;
+	}
 	return 0;
 }
 
@@ -64,6 +80,8 @@ static int sock_poll_del(struct fid_poll *pollset, struct fid *event_fid,
 	struct sock_poll *poll;
 	struct sock_fid_list *list_item;
 	struct dlist_entry *p, *head;
+	struct sock_cq *cq;
+	struct sock_cntr *cntr;
 
 	poll = container_of(pollset, struct sock_poll, poll_fid.fid);
 	head = &poll->fid_list;
@@ -71,6 +89,19 @@ static int sock_poll_del(struct fid_poll *pollset, struct fid *event_fid,
 		list_item = container_of(p, struct sock_fid_list, entry);
 		if (list_item->fid == event_fid) {
 			dlist_remove(p);
+			switch (list_item->fid->fclass) {
+			case FI_CLASS_CQ:
+				cq = container_of(list_item->fid, struct sock_cq, cq_fid);
+				atomic_dec(&cq->ref);
+				break;
+			case FI_CLASS_CNTR:
+				cntr = container_of(list_item->fid, struct sock_cntr, cntr_fid);
+				atomic_dec(&cntr->ref);
+				break;
+			default:
+				SOCK_LOG_ERROR("Invalid fid class\n");
+				break;
+			}
 			free(list_item);
 			break;
 		}
@@ -150,8 +181,7 @@ static int sock_poll_close(fid_t fid)
 	while (!dlist_empty(head)) {
 		p = head->next;
 		list_item = container_of(p, struct sock_fid_list, entry);
-		dlist_remove(p);
-		free(list_item);
+		sock_poll_del(&poll->poll_fid, list_item->fid, 0);
 	}
 
 	atomic_dec(&poll->domain->ref);
