@@ -24,6 +24,22 @@ v1.3.0, TBD
 
 ## Sockets provider notes
 
+- General code cleanup
+- Enable sockets-provider to run on FreeBSD
+- Add support for fi_try_wait
+- Add support for map_addr in shared-av creation
+- Add shared-av support on OSX
+- Allow FI_AV_UNSPEC type during av_open
+- Use loop-back address as source address if gethostname fails
+- Disable control-msg ack for inject operations that do not expect completions
+- Increase max_atomic_msg_size to 4096 bytes
+- Remove check for cq_size availability while calculating tx/rx_size_left
+- Use util-buffer pool for overflow entries in progress engine.
+- Synchronize accesses to memory-registration operations
+- Fix an issue that caused out-of-order arrival of messages
+- Fix a bug in processing RMA access error
+- Fix a bug that caused starvation in processing receive operations
+
 ## UDP provider notes
 
 ## usNIC provider notes
