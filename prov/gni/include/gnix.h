@@ -394,6 +394,17 @@ struct gnix_fid_ep {
 	struct gnix_fid_ep_ops_en ep_ops;
 };
 
+#define GNIX_EP_RDM(type)         (type == FI_EP_RDM)
+
+#define GNIX_EP_DGM(type)         (type == FI_EP_DGRAM)
+
+#define GNIX_EP_RDM_DGM(type)     ((type == FI_EP_RDM) || \
+				   (type == FI_EP_DGRAM))
+
+#define GNIX_EP_RDM_DGM_MSG(type) ((type == FI_EP_RDM)   || \
+				   (type == FI_EP_DGRAM) || \
+				   (type == FI_EP_MSG))
+
 /**
  * gnix_fid_stx struct
  * @note - this is essentially a dummy structure for the GNI

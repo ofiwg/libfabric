@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -97,7 +97,7 @@ DIRECT_FN STATIC int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	 * Retrieve the cdm_id & device_addr from the gnix_cm_nic structure.
 	 */
 
-	if (ep->type == FI_EP_RDM) {
+	if (GNIX_EP_RDM_DGM(ep->type)) {
 		name = ep->my_name;
 	} else {
 		return -FI_ENOSYS;  /*TODO: need to implement FI_EP_MSG */

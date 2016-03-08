@@ -187,7 +187,8 @@ static int __gnix_rma_post_err(struct gnix_tx_descriptor *txd, int error)
 	int rc;
 
 	req->tx_failures++;
-	if (req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
+	if (GNIX_EP_RDM(req->gnix_ep->type) &&
+	    req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
 		_gnix_nic_tx_free(req->gnix_ep->nic, txd);
 
 		GNIX_INFO(FI_LOG_EP_DATA,
@@ -195,8 +196,8 @@ static int __gnix_rma_post_err(struct gnix_tx_descriptor *txd, int error)
 		return _gnix_vc_queue_work_req(req);
 	}
 
-	GNIX_INFO(FI_LOG_EP_DATA, "Failed %d transmits: %p\n",
-		  req->tx_failures, req);
+	GNIX_INFO(FI_LOG_EP_DATA, "Failed %d transmits: %p error: %d\n",
+		  req->tx_failures, req, error);
 	rc = __gnix_rma_send_err(req->vc->ep, req, error);
 	if (rc != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_DATA,
@@ -337,6 +338,7 @@ static int __gnix_rma_txd_complete(void *arg, gni_return_t tx_status)
 	}
 
 	if (tx_status != GNI_RC_SUCCESS) {
+		GNIX_INFO(FI_LOG_EP_DATA, "calling __gnix_rma_post_err\n");
 		return __gnix_rma_post_err(txd, FI_ECANCELED);
 	}
 

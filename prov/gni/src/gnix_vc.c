@@ -1453,7 +1453,7 @@ int _gnix_vc_connect(struct gnix_vc *vc)
 	 * only endpoints of type FI_EP_RDM use this
 	 * connection method
 	 */
-	if (ep->type != FI_EP_RDM)
+	if (!GNIX_EP_RDM_DGM(ep->type))
 		return -FI_EINVAL;
 
 	/*
@@ -2099,7 +2099,7 @@ int _gnix_vc_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if (ep->type == FI_EP_RDM) {
+	if (GNIX_EP_RDM_DGM(ep->type)) {
 		ret = __gnix_vc_ep_rdm_get_vc(ep, dest_addr, vc_ptr);
 		if (unlikely(ret != FI_SUCCESS)) {
 			GNIX_WARN(FI_LOG_EP_DATA,

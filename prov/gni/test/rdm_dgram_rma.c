@@ -96,15 +96,16 @@ static struct fi_cntr_attr cntr_attr = {
 };
 static uint64_t writes[2] = {0}, reads[2] = {0}, write_errs[2] = {0},
 	read_errs[2] = {0};
+#define MLOOPS 1000
+static int dgm_fail;
 
-void rdm_rma_setup(void)
+void common_setup(void)
 {
 	int ret = 0;
 	struct fi_av_attr attr;
 	size_t addrlen = 0;
 
-	hints = fi_allocinfo();
-	cr_assert(hints, "fi_allocinfo");
+	dgm_fail = 0;
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
@@ -293,6 +294,22 @@ void rdm_rma_setup(void)
 	cr_assert(!ret, "fi_ep_bind");
 }
 
+void rdm_rma_setup(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_RDM;
+	common_setup();
+}
+
+void dgram_setup(void)
+{
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->ep_attr->type = FI_EP_DGRAM;
+	common_setup();
+}
+
 void rdm_rma_teardown(void)
 {
 	int ret = 0;
@@ -367,6 +384,8 @@ void rdm_rma_teardown(void)
 
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
+	hints = NULL;
+	dgm_fail = 0;
 	free(ep_name[0]);
 	free(ep_name[1]);
 }
@@ -415,11 +434,12 @@ void rdm_rma_check_tcqe(struct fi_cq_tagged_entry *tcqe, void *ctx,
 void rdm_rma_check_cntrs(uint64_t w[2], uint64_t r[2], uint64_t w_e[2],
 			 uint64_t r_e[2])
 {
-	// Domain 0
+	/* Domain 0 */
 	writes[0] += w[0];
 	reads[0] += r[0];
 	write_errs[0] += w_e[0];
 	read_errs[0] += r_e[0];
+	/*dbg_printf("%ld, %ld\n", fi_cntr_read(write_cntr[0]), writes[0]);*/
 	cr_assert(fi_cntr_read(write_cntr[0]) == writes[0], "Bad write count");
 	cr_assert(fi_cntr_read(read_cntr[0]) == reads[0], "Bad read count");
 	cr_assert(fi_cntr_readerr(write_cntr[0]) == write_errs[0],
@@ -427,7 +447,7 @@ void rdm_rma_check_cntrs(uint64_t w[2], uint64_t r[2], uint64_t w_e[2],
 	cr_assert(fi_cntr_readerr(read_cntr[0]) == read_errs[0],
 		  "Bad read err count");
 
-	// Domain 1
+	/* Domain 1 */
 	writes[1] += w[1];
 	reads[1] += r[1];
 	write_errs[1] += w_e[1];
@@ -466,6 +486,9 @@ void err_inject_enable(void)
  * Test RMA functions
  ******************************************************************************/
 
+TestSuite(dgram_rma, .init = dgram_setup, .fini = rdm_rma_teardown,
+	  .disabled = false);
+
 TestSuite(rdm_rma, .init = rdm_rma_setup, .fini = rdm_rma_teardown,
 	  .disabled = false);
 
@@ -488,6 +511,10 @@ void do_write(int len)
 		pthread_yield();
 	}
 
+	if (dgm_fail) {
+		cr_assert_eq(ret, -FI_EAVAIL);
+		return;
+	}
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
 
@@ -506,6 +533,18 @@ Test(rdm_rma, write)
 
 Test(rdm_rma, write_retrans)
 {
+	err_inject_enable();
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(dgram_rma, write)
+{
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
+Test(dgram_rma, write_retrans)
+{
+	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
@@ -533,6 +572,11 @@ void do_writev(int len)
 		pthread_yield();
 	}
 
+	if (dgm_fail) {
+		cr_assert_eq(ret, -FI_EAVAIL);
+		return;
+	}
+
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
 
@@ -551,6 +595,18 @@ Test(rdm_rma, writev)
 
 Test(rdm_rma, writev_retrans)
 {
+	err_inject_enable();
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(dgram_rma, writev)
+{
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(dgram_rma, writev_retrans)
+{
+	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
@@ -590,6 +646,10 @@ void do_writemsg(int len)
 		pthread_yield();
 	}
 
+	if (dgm_fail) {
+		cr_assert_eq(ret, -FI_EAVAIL);
+		return;
+	}
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
 
@@ -608,6 +668,18 @@ Test(rdm_rma, writemsg)
 
 Test(rdm_rma, writemsg_retrans)
 {
+	err_inject_enable();
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma, writemsg)
+{
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(dgram_rma, writemsg_retrans)
+{
+	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
@@ -666,6 +738,11 @@ void do_write_fence(int len)
 		pthread_yield();
 	}
 
+	if (dgm_fail) {
+		cr_assert_eq(ret, -FI_EAVAIL);
+		return;
+	}
+
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
 
@@ -696,6 +773,18 @@ Test(rdm_rma, write_fence_retrans)
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
+Test(dgram_rma, write_fence)
+{
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
+Test(dgram_rma, write_fence_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
 #define INJECT_SIZE 64
 void do_inject_write(int len)
 {
@@ -714,13 +803,17 @@ void do_inject_write(int len)
 		while (source[i] != target[i]) {
 			/* for progress */
 			ret = fi_cq_read(send_cq[0], &cqe, 1);
-			cr_assert(ret == -FI_EAGAIN,
+			cr_assert(ret == -FI_EAGAIN || ret == -FI_EAVAIL,
 				  "Received unexpected event\n");
 
 			pthread_yield();
-			cr_assert(++loops < 10000, "Data mismatch");
+			cr_assert(++loops < MLOOPS || dgm_fail,
+				  "Data mismatch");
+			if (dgm_fail && loops > MLOOPS)
+				break;
 		}
 	}
+	cr_assert(!dgm_fail || (dgm_fail && loops >= MLOOPS), "Should fail");
 }
 
 Test(rdm_rma, inject_write)
@@ -730,6 +823,18 @@ Test(rdm_rma, inject_write)
 
 Test(rdm_rma, inject_write_retrans)
 {
+	err_inject_enable();
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma, inject_write)
+{
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma, inject_write_retrans)
+{
+	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
@@ -752,6 +857,11 @@ void do_writedata(int len)
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
+	}
+
+	if (dgm_fail) {
+		cr_assert_eq(ret, -FI_EAVAIL);
+		return;
 	}
 
 	cr_assert_eq(ret, 1);
@@ -785,6 +895,18 @@ Test(rdm_rma, writedata_retrans)
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
+Test(dgram_rma, writedata)
+{
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
+Test(dgram_rma, writedata_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
 #define INJECTWRITE_DATA 0xdededadadeadbeaf
 void do_inject_writedata(int len)
 {
@@ -803,13 +925,19 @@ void do_inject_writedata(int len)
 		while (source[i] != target[i]) {
 			/* for progress */
 			ret = fi_cq_read(send_cq[0], &cqe, 1);
-			cr_assert(ret == -FI_EAGAIN,
+			cr_assert(ret == -FI_EAGAIN || ret == -FI_EAVAIL,
 				  "Received unexpected event\n");
 
 			pthread_yield();
-			cr_assert(++loops < 10000, "Data mismatch");
+			cr_assert(++loops < MLOOPS || dgm_fail,
+				  "Data mismatch");
+			if (dgm_fail && loops > MLOOPS)
+				break;
 		}
 	}
+	cr_assert(!dgm_fail || (dgm_fail && loops >= MLOOPS), "Should fail");
+	if (dgm_fail && loops >= MLOOPS)
+		return;
 
 	while ((ret = fi_cq_read(recv_cq[1], &dcqe, 1)) == -FI_EAGAIN) {
 		ret = fi_cq_read(send_cq[0], &cqe, 1); /* for progress */
@@ -833,6 +961,18 @@ Test(rdm_rma, inject_writedata_retrans)
 	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
+Test(dgram_rma, inject_writedata)
+{
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(dgram_rma, inject_writedata_retrans)
+{
+	dgm_fail = 1;
+	err_inject_enable();
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
 void do_read(int len)
 {
 	int ret;
@@ -844,7 +984,7 @@ void do_read(int len)
 	init_data(source, len, 0);
 	init_data(target, len, 0xad);
 
-	// domain 0 from domain 1
+	/* domain 0 from domain 1 */
 	sz = fi_read(ep[0], source, len,
 		     loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
 		     (void *)READ_CTX);
@@ -873,6 +1013,11 @@ Test(rdm_rma, read)
 Test(rdm_rma, read_retrans)
 {
 	err_inject_enable();
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+Test(dgram_rma, read)
+{
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
 
@@ -917,6 +1062,11 @@ Test(rdm_rma, readv)
 Test(rdm_rma, readv_retrans)
 {
 	err_inject_enable();
+	xfer_for_each_size(do_readv, 8, BUF_SZ);
+}
+
+Test(dgram_rma, readv)
+{
 	xfer_for_each_size(do_readv, 8, BUF_SZ);
 }
 
@@ -993,6 +1143,11 @@ Test(rdm_rma, readmsg_retrans)
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
 }
 
+Test(dgram_rma, readmsg)
+{
+	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
+}
+
 #define READ_DATA 0xdededadadeaddeef
 void do_readmsgdata(int len)
 {
@@ -1062,7 +1217,12 @@ Test(rdm_rma, readmsgdata_retrans)
 	xfer_for_each_size(do_readmsgdata, 8, BUF_SZ);
 }
 
-Test(rdm_rma, inject)
+Test(dgram_rma, readmsgdata)
+{
+	xfer_for_each_size(do_readmsgdata, 8, BUF_SZ);
+}
+
+void inject_common(void)
 {
 	int ret;
 	ssize_t sz;
@@ -1114,6 +1274,16 @@ Test(rdm_rma, inject)
 		  "Data mismatch");
 }
 
+Test(rdm_rma, inject)
+{
+	inject_common();
+}
+
+Test(dgram_rma, inject)
+{
+	inject_common();
+}
+
 void do_write_autoreg(int len)
 {
 	int ret;
@@ -1148,6 +1318,11 @@ Test(rdm_rma, write_autoreg)
 	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
 }
 
+Test(dgram_rma, write_autoreg)
+{
+	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
+}
+
 void do_write_autoreg_uncached(int len)
 {
 	int ret;
@@ -1178,6 +1353,11 @@ void do_write_autoreg_uncached(int len)
 }
 
 Test(rdm_rma, write_autoreg_uncached)
+{
+	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
+}
+
+Test(dgram_rma, write_autoreg_uncached)
 {
 	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
 }
@@ -1224,6 +1404,22 @@ void do_write_error(int len)
 }
 
 Test(rdm_rma, write_error)
+{
+	int ret, max_retrans_val = 1;
+
+	ret = gni_domain_ops[0]->set_val(&dom[0]->fid, GNI_MAX_RETRANSMITS,
+					 &max_retrans_val);
+	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
+
+	ret = gni_domain_ops[1]->set_val(&dom[1]->fid, GNI_MAX_RETRANSMITS,
+					 &max_retrans_val);
+	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
+	err_inject_enable();
+
+	xfer_for_each_size(do_write_error, 8, BUF_SZ);
+}
+
+Test(dgram_rma, write_error)
 {
 	int ret, max_retrans_val = 1;
 
@@ -1351,6 +1547,11 @@ Test(rdm_rma, read_alignment_retrans)
 	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
 }
 
+Test(dgram_rma, read_alignment)
+{
+	xfer_for_each_size(do_read_alignment, 1, (BUF_SZ - 1));
+}
+
 void do_write_buf(void *s, void *t, int len)
 {
 	int ret;
@@ -1366,6 +1567,11 @@ void do_write_buf(void *s, void *t, int len)
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
+	}
+
+	if (dgm_fail) {
+		cr_assert_eq(ret, -FI_EAVAIL);
+		return;
 	}
 
 	cr_assert_eq(ret, 1);
@@ -1401,6 +1607,18 @@ Test(rdm_rma, write_alignment)
 
 Test(rdm_rma, write_alignment_retrans)
 {
+	err_inject_enable();
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma, write_alignment)
+{
+	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
+}
+
+Test(dgram_rma, write_alignment_retrans)
+{
+	dgm_fail = 1;
 	err_inject_enable();
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
