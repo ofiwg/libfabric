@@ -48,7 +48,7 @@ extern "C" {
 /* Refill growth factor */
 #define GNIX_SFL_GROWTH_FACTOR 2
 
-/** Free list based on singly linked slist
+/** Free list based on singly linked dlist
  *
  * @var freelist           The free list itself
  * @var chunks             Memory chunks (must be saved for freeing)
@@ -56,10 +56,10 @@ extern "C" {
  * @var growth_factor      Factor for increasing refill size
  * @var max_refill_size;   Max refill size
  * @var elem_size          Size of element (in bytes)
- * @var offset             Offset of slist_entry field (in bytes)
+ * @var offset             Offset of dlist_entry field (in bytes)
  */
 struct gnix_s_freelist {
-	struct slist freelist;
+	struct dlist_entry freelist;
 	struct slist chunks;
 	int refill_size;
 	int growth_factor;
@@ -73,7 +73,7 @@ struct gnix_s_freelist {
 /** Initializes a gnix_s_freelist
  *
  * @param elem_size         Size of element
- * @param offset            Offset of slist_entry field
+ * @param offset            Offset of dlist_entry field
  * @param init_size         Initial freelist size
  * @param refill_size       Number of elements for next refill
  * @param growth_factor     Factor for increasing refill size
@@ -88,7 +88,7 @@ int _gnix_sfl_init(int elem_size, int offset, int init_size,
 /** Initializes a thread safe gnix_s_freelist
  *
  * @param elem_size         Size of element
- * @param offset            Offset of slist_entry field
+ * @param offset            Offset of dlist_entry field
  * @param init_size         Initial freelist size
  * @param refill_size       Number of elements for next refill
  * @param growth_factor     Factor for increasing refill size
@@ -112,14 +112,14 @@ void _gnix_sfl_destroy(struct gnix_s_freelist *fl);
  * @param fl    gnix_s_freelist
  * @return      FI_SUCCESS on success, -FI_ENOMEM or -FI_EAGAIN on failure
  */
-int _gnix_sfe_alloc(struct slist_entry **e, struct gnix_s_freelist *fl);
+int _gnix_sfe_alloc(struct dlist_entry **e, struct gnix_s_freelist *fl);
 
 /** Return an item to the free list
  *
  * @param e     item
  * @param fl    gnix_s_freelist
  */
-void _gnix_sfe_free(struct slist_entry *e, struct gnix_s_freelist *fl);
+void _gnix_sfe_free(struct dlist_entry *e, struct gnix_s_freelist *fl);
 
 /** Is freelist empty (primarily used for testing
  *
@@ -128,7 +128,7 @@ void _gnix_sfe_free(struct slist_entry *e, struct gnix_s_freelist *fl);
  */
 static inline int _gnix_sfl_empty(struct gnix_s_freelist *fl)
 {
-	return slist_empty(&fl->freelist);
+	return dlist_empty(&fl->freelist);
 }
 
 #ifdef __cplusplus

@@ -172,7 +172,7 @@ extern "C" {
  */
 #define GNIX_SENDMSG_FLAGS	(FI_REMOTE_CQ_DATA | FI_COMPLETION | \
 				 FI_MORE | FI_INJECT | FI_INJECT_COMPLETE | \
-				 FI_TRANSMIT_COMPLETE | FI_FENCE)
+				 FI_TRANSMIT_COMPLETE | FI_FENCE | FI_TRIGGER)
 #define GNIX_RECVMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_MULTI_RECV)
 #define GNIX_TRECVMSG_FLAGS \
 	(GNIX_RECVMSG_FLAGS | FI_CLAIM | FI_PEEK | FI_DISCARD)
@@ -182,12 +182,15 @@ extern "C" {
  */
 #define GNIX_WRITEMSG_FLAGS	(FI_REMOTE_CQ_DATA | FI_COMPLETION | \
 				 FI_MORE | FI_INJECT | FI_INJECT_COMPLETE | \
-				 FI_TRANSMIT_COMPLETE | FI_FENCE)
+				 FI_TRANSMIT_COMPLETE | FI_FENCE | FI_TRIGGER)
 #define GNIX_READMSG_FLAGS	(FI_REMOTE_CQ_DATA | FI_COMPLETION | FI_MORE | \
-				 FI_FENCE)
-#define GNIX_ATOMICMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_INJECT | FI_FENCE)
-#define GNIX_FATOMICMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_FENCE)
-#define GNIX_CATOMICMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_FENCE)
+				 FI_FENCE | FI_TRIGGER)
+#define GNIX_ATOMICMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_INJECT | \
+				 FI_FENCE | FI_TRIGGER)
+#define GNIX_FATOMICMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_FENCE | \
+				 FI_TRIGGER)
+#define GNIX_CATOMICMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_FENCE | \
+				 FI_TRIGGER)
 
 /*
  * Valid completion event flags.  See fi_cq.3.
@@ -721,7 +724,7 @@ static inline int gnix_ops_allowed(struct gnix_fid_ep *ep,
  */
 
 struct gnix_fab_req {
-	struct slist_entry        slist;
+	struct dlist_entry        dlist;
 	struct gnix_address       addr;
 	enum gnix_fab_req_type    type;
 	struct gnix_fid_ep        *gnix_ep;

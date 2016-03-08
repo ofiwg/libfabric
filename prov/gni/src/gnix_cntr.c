@@ -41,6 +41,7 @@
 #include "gnix.h"
 #include "gnix_cntr.h"
 #include "gnix_nic.h"
+#include "gnix_trigger.h"
 
 /*******************************************************************************
  * Forward declarations for filling functions.
@@ -125,6 +126,8 @@ int _gnix_cntr_inc(struct gnix_fid_cntr *cntr)
 
 	if (cntr->wait)
 		_gnix_signal_wait_obj(cntr->wait);
+
+	_gnix_trigger_check_cntr(cntr);
 
 	return FI_SUCCESS;
 }
@@ -358,6 +361,8 @@ DIRECT_FN STATIC int gnix_cntr_add(struct fid_cntr *cntr, uint64_t value)
 	if (cntr_priv->wait)
 		_gnix_signal_wait_obj(cntr_priv->wait);
 
+	_gnix_trigger_check_cntr(cntr_priv);
+
 	return FI_SUCCESS;
 }
 
@@ -373,6 +378,8 @@ DIRECT_FN STATIC int gnix_cntr_set(struct fid_cntr *cntr, uint64_t value)
 
 	if (cntr_priv->wait)
 		_gnix_signal_wait_obj(cntr_priv->wait);
+
+	_gnix_trigger_check_cntr(cntr_priv);
 
 	return FI_SUCCESS;
 }
@@ -445,6 +452,8 @@ DIRECT_FN int gnix_cntr_open(struct fid_domain *domain,
 	_gnix_ref_get(cntr_priv->domain);
 	dlist_init(&cntr_priv->poll_nics);
 	rwlock_init(&cntr_priv->nic_lock);
+	dlist_init(&cntr_priv->trigger_list);
+	fastlock_init(&cntr_priv->trigger_lock);
 
 	cntr_priv->cntr_fid.fid.fclass = FI_CLASS_CNTR;
 	cntr_priv->cntr_fid.fid.context = context;

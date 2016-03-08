@@ -1555,6 +1555,15 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		return -FI_EINVAL;
 	}
 
+	if (flags & FI_TRIGGER) {
+		struct fi_triggered_context *trigger_context =
+				(struct fi_triggered_context *)context;
+		if ((trigger_context->event_type != FI_TRIGGER_THRESHOLD) ||
+		    (flags & FI_INJECT)) {
+			return -FI_EINVAL;
+		}
+	}
+
 	if (!ep->send_cq) {
 		return -FI_ENOCQ;
 	}

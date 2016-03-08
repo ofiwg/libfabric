@@ -143,17 +143,17 @@ typedef ssize_t (*trecvmsg_func_t)(struct fid_ep *ep,
 static inline struct gnix_fab_req *
 _gnix_fr_alloc(struct gnix_fid_ep *ep)
 {
-	struct slist_entry *se;
+	struct dlist_entry *de;
 	struct gnix_fab_req *fr = NULL;
-	int ret = _gnix_sfe_alloc(&se, &ep->fr_freelist);
+	int ret = _gnix_sfe_alloc(&de, &ep->fr_freelist);
 
 	while (ret == -FI_EAGAIN)
-		ret = _gnix_sfe_alloc(&se, &ep->fr_freelist);
+		ret = _gnix_sfe_alloc(&de, &ep->fr_freelist);
 
 	if (ret == FI_SUCCESS) {
-		fr = container_of(se, struct gnix_fab_req, slist);
+		fr = container_of(de, struct gnix_fab_req, dlist);
 		fr->gnix_ep = ep;
-		fr->slist.next = NULL;  /* slist stuff isn't too smart */
+		dlist_init(&fr->dlist);  /* dlist stuff isn't too smart */
 	}
 
 	/* reset common fields */
@@ -167,17 +167,17 @@ static inline void
 _gnix_fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
 {
 	assert(fr->gnix_ep == ep);
-	_gnix_sfe_free(&fr->slist, &ep->fr_freelist);
+	_gnix_sfe_free(&fr->dlist, &ep->fr_freelist);
 	_gnix_ref_put(ep);
 }
 
 static inline int
-__msg_match_fab_req(struct slist_entry *item, const void *arg)
+__msg_match_fab_req(struct dlist_entry *item, const void *arg)
 {
 	struct gnix_fab_req *req;
 	const struct gnix_address *addr_ptr = arg;
 
-	req = container_of(item, struct gnix_fab_req, slist);
+	req = container_of(item, struct gnix_fab_req, dlist);
 
 	return ((GNIX_ADDR_UNSPEC(*addr_ptr)) ||
 				(GNIX_ADDR_EQUAL(req->addr, *addr_ptr)));

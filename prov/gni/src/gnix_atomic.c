@@ -114,8 +114,7 @@ static int __gnix_amo_send_completion(struct gnix_fid_ep *ep,
 	return FI_SUCCESS;
 }
 
-static void __gnix_amo_fr_complete(struct gnix_fab_req *req,
-				   struct gnix_tx_descriptor *txd)
+static void __gnix_amo_fr_complete(struct gnix_fab_req *req)
 {
 	if (req->flags & FI_LOCAL_MR) {
 		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
@@ -124,7 +123,6 @@ static void __gnix_amo_fr_complete(struct gnix_fab_req *req,
 	}
 
 	atomic_dec(&req->vc->outstanding_tx_reqs);
-	_gnix_nic_tx_free(req->vc->ep->nic, txd);
 
 	/* Schedule VC TX queue in case the VC is 'fenced'. */
 	_gnix_vc_tx_schedule(req->vc);
@@ -132,9 +130,8 @@ static void __gnix_amo_fr_complete(struct gnix_fab_req *req,
 	_gnix_fr_free(req->vc->ep, req);
 }
 
-static int __gnix_amo_post_err(struct gnix_tx_descriptor *txd, int error)
+static int __gnix_amo_post_err(struct gnix_fab_req *req, int error)
 {
-	struct gnix_fab_req *req = txd->req;
 	int rc;
 
 	rc = __gnix_amo_send_err(req->vc->ep, req, error);
@@ -143,7 +140,7 @@ static int __gnix_amo_post_err(struct gnix_tx_descriptor *txd, int error)
 			  "__gnix_amo_send_err() failed: %d\n",
 			  rc);
 
-	__gnix_amo_fr_complete(req, txd);
+	__gnix_amo_fr_complete(req);
 	return FI_SUCCESS;
 }
 
@@ -155,8 +152,10 @@ static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
 	uint32_t read_data32;
 	uint64_t read_data64;
 
+	_gnix_nic_tx_free(req->vc->ep->nic, txd);
+
 	if (tx_status != GNI_RC_SUCCESS) {
-		return __gnix_amo_post_err(txd, FI_ECANCELED);
+		return __gnix_amo_post_err(req, FI_ECANCELED);
 	}
 
 	/* FI_ATOMIC_READ data is delivered to operand buffer in addition to
@@ -185,7 +184,7 @@ static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
 			  "__gnix_amo_send_completion() failed: %d\n",
 			  rc);
 
-	__gnix_amo_fr_complete(req, txd);
+	__gnix_amo_fr_complete(req);
 
 	return FI_SUCCESS;
 }
@@ -276,6 +275,22 @@ int _gnix_amo_post_req(void *data)
 	int rc;
 	int inject_err = _gnix_req_inject_err(fab_req);
 
+	if (!gnix_ops_allowed(ep, fab_req->vc->peer_caps, fab_req->flags)) {
+		GNIX_DEBUG(FI_LOG_EP_DATA, "flags:0x%llx, %s\n", fab_req->flags,
+			   fi_tostr(&fab_req->flags, FI_TYPE_OP_FLAGS));
+		GNIX_DEBUG(FI_LOG_EP_DATA, "caps:0x%llx, %s\n",
+			   ep->caps, fi_tostr(&ep->caps, FI_TYPE_CAPS));
+		GNIX_DEBUG(FI_LOG_EP_DATA, "peer_caps:0x%llx, %s\n",
+			   fab_req->vc->peer_caps,
+			   fi_tostr(&fab_req->vc->peer_caps, FI_TYPE_OP_FLAGS));
+
+		rc = __gnix_amo_post_err(fab_req, FI_EOPNOTSUPP);
+		if (rc != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "__gnix_amo_post_err() failed: %d\n", rc);
+		return -FI_ECANCELED;
+	}
+
 	rc = _gnix_nic_tx_alloc(nic, &txd);
 	if (rc) {
 		GNIX_INFO(FI_LOG_EP_DATA, "_gnix_nic_tx_alloc() failed: %d\n",
@@ -285,17 +300,6 @@ int _gnix_amo_post_req(void *data)
 
 	txd->completer_fn = __gnix_amo_txd_complete;
 	txd->req = fab_req;
-
-	if (!gnix_ops_allowed(ep, fab_req->vc->peer_caps, fab_req->flags)) {
-		GNIX_DEBUG(FI_LOG_EP_DATA, "flags:0x%llx, %s\n", fab_req->flags,
-			   fi_tostr(&fab_req->flags, FI_TYPE_OP_FLAGS));
-		GNIX_DEBUG(FI_LOG_EP_DATA, "caps:0x%llx, %s\n",
-			   ep->caps, fi_tostr(&ep->caps, FI_TYPE_CAPS));
-		GNIX_DEBUG(FI_LOG_EP_DATA, "peer_caps:0x%llx, %s\n",
-			   fab_req->vc->peer_caps,
-			   fi_tostr(&fab_req->vc->peer_caps, FI_TYPE_OP_FLAGS));
-		return __gnix_amo_post_err(txd, FI_EOPNOTSUPP);
-	}
 
 	/* Mem handle CRC is not validated during FMA operations.  Skip this
 	 * costly calculation. */
@@ -372,6 +376,15 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	    msg->iov_count != 1 ||
 	    !msg->rma_iov || !msg->rma_iov[0].addr)
 		return -FI_EINVAL;
+
+	if (flags & FI_TRIGGER) {
+		struct fi_triggered_context *trigger_context =
+				(struct fi_triggered_context *)msg->context;
+		if ((trigger_context->event_type != FI_TRIGGER_THRESHOLD) ||
+		    (flags & FI_INJECT)) {
+			return -FI_EINVAL;
+		}
+	}
 
 	if (!ep->send_cq && !(flags & FI_INJECT)) {
 		return -FI_ENOCQ;

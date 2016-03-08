@@ -275,7 +275,7 @@ Test(gnix_cancel, cancel_ep_send)
 
 	/* make a dummy request */
 	fastlock_acquire(&vc->tx_queue_lock);
-	slist_insert_head(&req->slist, &vc->tx_queue);
+	dlist_insert_head(&req->dlist, &vc->tx_queue);
 	fastlock_release(&vc->tx_queue_lock);
 
 	/* cancel simulated request */

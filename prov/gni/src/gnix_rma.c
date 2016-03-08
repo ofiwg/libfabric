@@ -163,8 +163,7 @@ static void __gnix_rma_copy_chained_get_data(struct gnix_tx_descriptor *txd)
 	}
 }
 
-static void __gnix_rma_fr_complete(struct gnix_fab_req *req,
-				   struct gnix_tx_descriptor *txd)
+static void __gnix_rma_fr_complete(struct gnix_fab_req *req)
 {
 	if (req->flags & FI_LOCAL_MR) {
 		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
@@ -173,7 +172,6 @@ static void __gnix_rma_fr_complete(struct gnix_fab_req *req,
 	}
 
 	atomic_dec(&req->vc->outstanding_tx_reqs);
-	_gnix_nic_tx_free(req->vc->ep->nic, txd);
 
 	/* Schedule VC TX queue in case the VC is 'fenced'. */
 	_gnix_vc_tx_schedule(req->vc);
@@ -181,16 +179,25 @@ static void __gnix_rma_fr_complete(struct gnix_fab_req *req,
 	_gnix_fr_free(req->vc->ep, req);
 }
 
-static int __gnix_rma_post_err(struct gnix_tx_descriptor *txd, int error)
+static int __gnix_rma_post_err_no_retrans(struct gnix_fab_req *req, int error)
 {
-	struct gnix_fab_req *req = txd->req;
 	int rc;
 
+	rc = __gnix_rma_send_err(req->vc->ep, req, error);
+	if (rc != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "__gnix_rma_send_err() failed: %d\n",
+			  rc);
+
+	__gnix_rma_fr_complete(req);
+	return FI_SUCCESS;
+}
+
+static int __gnix_rma_post_err(struct gnix_fab_req *req, int error)
+{
 	req->tx_failures++;
 	if (GNIX_EP_RDM(req->gnix_ep->type) &&
 	    req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
-		_gnix_nic_tx_free(req->gnix_ep->nic, txd);
-
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "Requeueing failed request: %p\n", req);
 		return _gnix_vc_queue_work_req(req);
@@ -198,13 +205,9 @@ static int __gnix_rma_post_err(struct gnix_tx_descriptor *txd, int error)
 
 	GNIX_INFO(FI_LOG_EP_DATA, "Failed %d transmits: %p error: %d\n",
 		  req->tx_failures, req, error);
-	rc = __gnix_rma_send_err(req->vc->ep, req, error);
-	if (rc != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "__gnix_rma_send_err() failed: %d\n",
-			  rc);
 
-	__gnix_rma_fr_complete(req, txd);
+	__gnix_rma_post_err_no_retrans(req, error);
+
 	return FI_SUCCESS;
 }
 
@@ -231,9 +234,10 @@ static int __gnix_rma_txd_data_complete(void *arg, gni_return_t tx_status)
 	struct gnix_fab_req *req = txd->req;
 	int rc;
 
-	if (tx_status != GNI_RC_SUCCESS) {
-		return __gnix_rma_post_err(txd, FI_ECANCELED);
-	}
+	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
+
+	if (tx_status != GNI_RC_SUCCESS)
+		return __gnix_rma_post_err(req, FI_ECANCELED);
 
 	/* Successful data delivery.  Generate local completion. */
 	rc = __gnix_rma_send_completion(req->gnix_ep, req);
@@ -242,7 +246,7 @@ static int __gnix_rma_txd_data_complete(void *arg, gni_return_t tx_status)
 			  "__gnix_rma_send_completion() failed: %d\n",
 			  rc);
 
-	__gnix_rma_fr_complete(req, txd);
+	__gnix_rma_fr_complete(req);
 
 	return FI_SUCCESS;
 }
@@ -338,24 +342,26 @@ static int __gnix_rma_txd_complete(void *arg, gni_return_t tx_status)
 	}
 
 	if (tx_status != GNI_RC_SUCCESS) {
-		GNIX_INFO(FI_LOG_EP_DATA, "calling __gnix_rma_post_err\n");
-		return __gnix_rma_post_err(txd, FI_ECANCELED);
+		_gnix_nic_tx_free(req->gnix_ep->nic, txd);
+		return __gnix_rma_post_err(req, FI_ECANCELED);
 	}
 
 	/* Successful delivery.  Progress request. */
+	if (req->flags & GNIX_RMA_INDIRECT) {
+		__gnix_rma_copy_indirect_get_data(txd);
+	} else if (req->flags & GNIX_RMA_CHAINED &&
+		   !(req->flags & GNIX_RMA_RDMA)) {
+		__gnix_rma_copy_chained_get_data(txd);
+	}
+
+	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
+
 	if (req->flags & FI_REMOTE_CQ_DATA) {
 		/* initiate immediate data transfer */
 		req->tx_failures = 0;
 		req->work_fn = __gnix_rma_send_data_req;
 		_gnix_vc_queue_work_req(req);
 	} else {
-		if (req->flags & GNIX_RMA_INDIRECT) {
-			__gnix_rma_copy_indirect_get_data(txd);
-		} else if (req->flags & GNIX_RMA_CHAINED &&
-			   !(req->flags & GNIX_RMA_RDMA)) {
-			__gnix_rma_copy_chained_get_data(txd);
-		}
-
 		/* complete request */
 		rc = __gnix_rma_send_completion(req->vc->ep, req);
 		if (rc != FI_SUCCESS)
@@ -363,7 +369,7 @@ static int __gnix_rma_txd_complete(void *arg, gni_return_t tx_status)
 				  "__gnix_rma_send_completion() failed: %d\n",
 				  rc);
 
-		__gnix_rma_fr_complete(req, txd);
+		__gnix_rma_fr_complete(req);
 	}
 
 	return FI_SUCCESS;
@@ -519,11 +525,12 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	int fma_chain = 0;
 
 	if (!gnix_ops_allowed(ep, req->vc->peer_caps, req->flags)) {
-		rc = __gnix_rma_send_err(req->vc->ep, req, FI_EOPNOTSUPP);
+		rc = __gnix_rma_post_err_no_retrans(req, FI_EOPNOTSUPP);
 		if (rc != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "__gnix_rma_send_err() failed: %d\n", rc);
-		return FI_SUCCESS;
+				  "__gnix_rma_post_err_no_retrans() failed: %d\n",
+				  rc);
+		return -FI_ECANCELED;
 	}
 
 	rc = _gnix_nic_tx_alloc(nic, &bte_txd);
@@ -686,6 +693,15 @@ int _gnix_rma_post_req(void *data)
 	int chained = !!(fab_req->flags & GNIX_RMA_CHAINED);
 	int inject_err = _gnix_req_inject_err(fab_req);
 
+	if (!gnix_ops_allowed(ep, fab_req->vc->peer_caps, fab_req->flags)) {
+		rc = __gnix_rma_post_err_no_retrans(fab_req, FI_EOPNOTSUPP);
+		if (rc != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "__gnix_rma_post_err_no_retrans() failed: %d\n",
+				  rc);
+		return -FI_ECANCELED;
+	}
+
 	rc = _gnix_nic_tx_alloc(nic, &txd);
 	if (rc) {
 		GNIX_INFO(FI_LOG_EP_DATA,
@@ -696,10 +712,6 @@ int _gnix_rma_post_req(void *data)
 
 	txd->completer_fn = __gnix_rma_txd_complete;
 	txd->req = fab_req;
-
-	if (!gnix_ops_allowed(ep, fab_req->vc->peer_caps, fab_req->flags)) {
-		return __gnix_rma_post_err(txd, FI_EOPNOTSUPP);
-	}
 
 	if (rdma) {
 		_gnix_convert_key_to_mhdl(
@@ -810,6 +822,15 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 
 	if (!ep) {
 		return -FI_EINVAL;
+	}
+
+	if (flags & FI_TRIGGER) {
+		struct fi_triggered_context *trigger_context =
+				(struct fi_triggered_context *)context;
+		if ((trigger_context->event_type != FI_TRIGGER_THRESHOLD) ||
+		    (flags & FI_INJECT)) {
+			return -FI_EINVAL;
+		}
 	}
 
 	if (!ep->send_cq && !(flags & FI_INJECT)) {

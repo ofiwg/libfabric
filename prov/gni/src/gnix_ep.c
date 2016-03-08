@@ -66,7 +66,7 @@ static int __fr_freelist_init(struct gnix_fid_ep *ep)
 {
 	assert(ep);
 	return _gnix_sfl_init_ts(sizeof(struct gnix_fab_req),
-				offsetof(struct gnix_fab_req, slist),
+				offsetof(struct gnix_fab_req, dlist),
 				GNIX_FAB_REQ_FL_MIN_SIZE,
 				GNIX_FAB_REQ_FL_REFILL_SIZE,
 				0, 0, &ep->fr_freelist);
@@ -1751,11 +1751,11 @@ DIRECT_FN int gnix_passive_ep_open(struct fid_fabric *fabric,
 	return -FI_ENOSYS;
 }
 
-static int __match_context(struct slist_entry *item, const void *arg)
+static int __match_context(struct dlist_entry *item, const void *arg)
 {
 	struct gnix_fab_req *req;
 
-	req = container_of(item, struct gnix_fab_req, slist);
+	req = container_of(item, struct gnix_fab_req, dlist);
 
 	return req->user_context == arg;
 }
@@ -1765,7 +1765,7 @@ static inline struct gnix_fab_req *__find_tx_req(
 		void *context)
 {
 	struct gnix_fab_req *req = NULL;
-	struct slist_entry *entry;
+	struct dlist_entry *entry;
 	struct gnix_vc *vc;
 	GNIX_HASHTABLE_ITERATOR(ep->vc_ht, iter);
 
@@ -1775,11 +1775,12 @@ static inline struct gnix_fab_req *__find_tx_req(
 	fastlock_acquire(&ep->vc_ht_lock);
 	while ((vc = _gnix_ht_iterator_next(&iter))) {
 		fastlock_acquire(&vc->tx_queue_lock);
-		entry = slist_remove_first_match(&vc->tx_queue,
-				__match_context, context);
+		entry = dlist_remove_first_match(&vc->tx_queue,
+						 __match_context,
+						 context);
 		fastlock_release(&vc->tx_queue_lock);
 		if (entry) {
-			req = container_of(entry, struct gnix_fab_req, slist);
+			req = container_of(entry, struct gnix_fab_req, dlist);
 			break;
 		}
 	}

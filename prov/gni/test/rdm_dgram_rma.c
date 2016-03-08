@@ -1622,3 +1622,69 @@ Test(dgram_rma, write_alignment_retrans)
 	err_inject_enable();
 	xfer_for_each_size(do_write_alignment, 1, (BUF_SZ - 1));
 }
+
+void do_trigger(int len)
+{
+	int ret, i;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_rma msg[4];
+	struct iovec iov;
+	struct fi_rma_iov rma_iov;
+	struct fi_triggered_context t_ctx[4];
+	void *ctxs[4];
+
+	iov.iov_base = source;
+	iov.iov_len = len;
+
+	rma_iov.addr = (uint64_t)target;
+	rma_iov.len = len;
+	rma_iov.key = mr_key[1];
+
+	msg[0].msg_iov = &iov;
+	msg[0].desc = (void **)loc_mr;
+	msg[0].iov_count = 1;
+	msg[0].addr = gni_addr[1];
+	msg[0].rma_iov = &rma_iov;
+	msg[0].rma_iov_count = 1;
+	msg[0].data = (uint64_t)target;
+	msg[1] = msg[2] = msg[3] = msg[0];
+
+	/* XXX: Req 0 is guaranteed to be sent before req 2, but req 2 will
+	 * race req 1 through the network.  Fix race if needed. */
+	t_ctx[0].trigger.threshold.threshold = 1;
+	t_ctx[1].trigger.threshold.threshold = 2;
+	t_ctx[2].trigger.threshold.threshold = 1;
+	t_ctx[3].trigger.threshold.threshold = 0;
+	ctxs[0] = &t_ctx[3];
+	ctxs[1] = &t_ctx[0];
+	ctxs[2] = &t_ctx[2];
+	ctxs[3] = &t_ctx[1];
+
+	for (i = 0; i < 4; i++) {
+		t_ctx[i].event_type = FI_TRIGGER_THRESHOLD;
+		t_ctx[i].trigger.threshold.cntr = write_cntr[0];
+		msg[i].context = &t_ctx[i];
+
+		sz = fi_writemsg(ep[0], &msg[i], FI_TRIGGER);
+		cr_assert_eq(sz, 0);
+	}
+
+	for (i = 0; i < 4; i++) {
+		while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+			pthread_yield();
+		}
+
+		cr_assert_eq(ret, 1);
+
+		rdm_rma_check_tcqe(&cqe, ctxs[i], FI_RMA | FI_WRITE, 0);
+	}
+
+	sz = fi_cntr_set(write_cntr[0], 0);
+	cr_assert_eq(sz, 0);
+}
+
+Test(rdm_rma, trigger)
+{
+	xfer_for_each_size(do_trigger, 8, BUF_SZ);
+}

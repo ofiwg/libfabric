@@ -82,7 +82,8 @@ static int __gnix_sfl_refill(struct gnix_s_freelist *fl, int n)
 	elems += fl->elem_size + fl->offset;
 
 	for (i = 0; i < n; i++) {
-		slist_insert_tail((struct slist_entry *) elems, &fl->freelist);
+		dlist_init((struct dlist_entry *) elems);
+		dlist_insert_tail((struct dlist_entry *) elems, &fl->freelist);
 		elems += fl->elem_size;
 	}
 err:
@@ -114,8 +115,7 @@ int _gnix_sfl_init(int elem_size, int offset, int init_size,
 	fl->elem_size = elem_size;
 	fl->offset = offset;
 
-	assert(slist_empty(&fl->freelist)); /* maybe should be a warning? */
-	slist_init(&fl->freelist);
+	dlist_init(&fl->freelist);
 	assert(slist_empty(&fl->chunks)); /* maybe should be a warning? */
 	slist_init(&fl->chunks);
 
@@ -160,18 +160,17 @@ void _gnix_sfl_destroy(struct gnix_s_freelist *fl)
 		fastlock_destroy(&fl->lock);
 }
 
-int _gnix_sfe_alloc(struct slist_entry **e, struct gnix_s_freelist *fl)
+int _gnix_sfe_alloc(struct dlist_entry **e, struct gnix_s_freelist *fl)
 {
 	int ret = FI_SUCCESS;
+	struct dlist_entry *de;
 
 	assert(fl);
 
 	if (fl->ts)
 		fastlock_acquire(&fl->lock);
 
-	struct slist_entry *se = slist_remove_head(&fl->freelist);
-
-	if (!se) {
+	if (dlist_empty(&fl->freelist)) {
 		ret = __gnix_sfl_refill(fl, fl->refill_size);
 		if (ret != FI_SUCCESS)
 			goto err;
@@ -182,22 +181,25 @@ int _gnix_sfe_alloc(struct slist_entry **e, struct gnix_s_freelist *fl)
 					   fl->max_refill_size :
 					   ns);
 		}
-		se = slist_remove_head(&fl->freelist);
-		if (!se) {
+
+		if (dlist_empty(&fl->freelist)) {
 			/* Can't happen unless multithreaded */
 			ret = -FI_EAGAIN;
 			goto err;
 		}
 	}
 
-	*e = se;
+	de = fl->freelist.next;
+	dlist_remove_init(de);
+
+	*e = de;
 err:
 	if (fl->ts)
 		fastlock_release(&fl->lock);
 	return ret;
 }
 
-void _gnix_sfe_free(struct slist_entry *e, struct gnix_s_freelist *fl)
+void _gnix_sfe_free(struct dlist_entry *e, struct gnix_s_freelist *fl)
 {
 	assert(e);
 	assert(fl);
@@ -206,7 +208,8 @@ void _gnix_sfe_free(struct slist_entry *e, struct gnix_s_freelist *fl)
 
 	if (fl->ts)
 		fastlock_acquire(&fl->lock);
-	slist_insert_tail(e, &fl->freelist);
+	dlist_init(e);
+	dlist_insert_tail(e, &fl->freelist);
 	if (fl->ts)
 		fastlock_release(&fl->lock);
 }
