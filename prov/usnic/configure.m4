@@ -1,5 +1,5 @@
 dnl
-dnl Copyright (c) 2015, Cisco Systems, Inc. All rights reserved.
+dnl Copyright (c) 2015-2016, Cisco Systems, Inc. All rights reserved.
 dnl
 dnl This software is available to you under a choice of one of two
 dnl licenses.  You may choose to be licensed under the terms of the GNU
@@ -294,7 +294,10 @@ AC_DEFUN([USNIC_CHECK_LIBNL3],[
 	# If we found everything
 	AS_IF([test $usnic_libnl3_happy -eq 1],
 	      [$2_LIBS="-lnl-3 -lnl-route-3"
-	       HAVE_LIBNL3=1])
+	       HAVE_LIBNL3=1],
+	      [$2_CPPFLAGS=
+	       $2_LDFLAGS=
+	       $2_LIBS=])
 ])
 
 dnl
