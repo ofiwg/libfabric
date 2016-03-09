@@ -48,15 +48,14 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	cq = container_of(cq_fid, struct fi_ibv_cq, cq_fid);
 
 	fastlock_acquire(&cq->lock);
-	if (!slist_empty(&cq->wcq)) {
-		wce = container_of(cq->wcq.head, struct fi_ibv_wce, entry);
-		if (!wce->wc.status) {
-			fastlock_release(&cq->lock);
-			return -FI_EAGAIN;
-		}
+	if (slist_empty(&cq->wcq))
+		goto err;
 
-		slist_entry = slist_remove_head(&cq->wcq);
-	}
+	wce = container_of(cq->wcq.head, struct fi_ibv_wce, entry);
+	if (!wce->wc.status)
+		goto err;
+
+	slist_entry = slist_remove_head(&cq->wcq);
 	fastlock_release(&cq->lock);
 
 	wce = container_of(slist_entry, struct fi_ibv_wce, entry);
@@ -70,6 +69,9 @@ fi_ibv_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 
 	util_buf_release(cq->domain->fab->wce_pool, wce);
 	return sizeof(*entry);
+err:
+	fastlock_release(&cq->lock);
+	return -FI_EAGAIN;
 }
 
 static inline int
