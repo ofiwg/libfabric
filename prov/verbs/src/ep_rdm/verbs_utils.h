@@ -69,15 +69,15 @@ struct fi_ibv_msg_ep;
 
 #define FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM (8)
 
-#define FI_IBV_RDM_TAGGED_DFLT_BUFFER_SIZE                              \
-	((8 * 1024 + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE) +        \
-	 (8 * 1024 + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE) %        \
+#define FI_IBV_RDM_DFLT_BUFFER_SIZE					\
+	((8 * 1024 + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE) +		\
+	 (8 * 1024 + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE) %		\
 	  FI_IBV_RDM_BUF_ALIGNMENT)
 
 #define FI_IBV_RDM_DFLT_BUFFERED_SSIZE					\
-	(FI_IBV_RDM_TAGGED_DFLT_BUFFER_SIZE -				\
-	 FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE -			\
-	 sizeof(struct fi_ibv_rdm_tagged_header))
+	(FI_IBV_RDM_DFLT_BUFFER_SIZE -					\
+	 FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE -				\
+	 sizeof(struct fi_ibv_rdm_header))
 
 #define FI_IBV_RDM_TAGGED_DFLT_RQ_SIZE  (1000)
 

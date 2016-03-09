@@ -258,17 +258,16 @@ fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 
 	struct fi_ibv_rdm_tagged_conn *conn =
 		(struct fi_ibv_rdm_tagged_conn *) src_addr;
-	void *raw_sbuf = NULL;
+	void *raw_buf = NULL;
 
 	if (desc == NULL) {
 		int again = 1;
 
 		if (!conn->postponed_entry) {
-			raw_sbuf = fi_ibv_rdm_tagged_prepare_send_resources
-					(conn, ep);
+			raw_buf = fi_ibv_rdm_rma_prepare_resources(conn, ep);
 
-			if (raw_sbuf) {
-				desc = (void*)(uintptr_t)conn->s_mr->lkey;
+			if (raw_buf) {
+				desc = (void*)(uintptr_t)conn->rma_mr->lkey;
 				again = 0;
 			}
 		}
@@ -276,7 +275,7 @@ fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 		if (again) {
 			goto out_again;
 		}
-	} else if (SEND_RESOURCES_IS_BUSY(conn, ep)) {
+	} else if (RMA_RESOURCES_IS_BUSY(conn, ep)) {
 		/* TODO: to implement postponed queue flow for RMA */
 		goto out_again;
 	}
@@ -288,7 +287,7 @@ fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
-	request->sbuf = raw_sbuf;
+	request->rmabuf = raw_buf;
 
 	struct fi_ibv_rdm_rma_start_data start_data = {
 		.ep_rdm = container_of(ep_fid, struct fi_ibv_rdm_ep, ep_fid),
@@ -337,18 +336,17 @@ fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	struct fi_ibv_rdm_tagged_conn *conn =
 		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
-	void *raw_sbuf = NULL;
+	void *raw_buf = NULL;
 
 	if (desc == NULL) {
 		int again = 1;
 
 		if (!conn->postponed_entry) {
-			raw_sbuf = fi_ibv_rdm_tagged_prepare_send_resources
-				(conn, ep);
+			raw_buf = fi_ibv_rdm_rma_prepare_resources(conn, ep);
 
-			if (raw_sbuf) {
-				memcpy (raw_sbuf, buf, len);
-				desc = (void*)(uintptr_t)conn->s_mr->lkey;
+			if (raw_buf) {
+				memcpy (raw_buf, buf, len);
+				desc = (void*)(uintptr_t)conn->rma_mr->lkey;
 				again = 0;
 			}
 		}
@@ -368,7 +366,7 @@ fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 	/* Initial state */
 	request->state.eager = FI_IBV_STATE_EAGER_BEGIN;
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
-	request->sbuf = raw_sbuf;
+	request->rmabuf = raw_buf;
 
 	struct fi_ibv_rdm_rma_start_data start_data = {
 		.conn = conn,
