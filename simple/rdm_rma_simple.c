@@ -48,8 +48,6 @@ struct fi_rma_iov local, remote;
 struct fi_context fi_ctx_write;
 struct fi_context fi_ctx_read;
 
-static char * welcome_text = "Hello from Client!";
-
 static int init_fabric(void)
 {
 	char *node, *service;
@@ -84,6 +82,8 @@ static int init_fabric(void)
 static int run_test(void)
 {
 	int ret = 0;
+	const char *message = "Hello from Client!";
+	size_t message_len = strlen(message) + 1;
 
 	ret = init_fabric();
 	if (ret)
@@ -92,11 +92,13 @@ static int run_test(void)
 	ret = ft_init_av();
 	if (ret)
 		return ret;
-
 	if (opts.dst_addr) {
 		fprintf(stdout, "RMA write to server\n");
-		sprintf(buf, "%s", welcome_text);
-		ret = fi_write(ep, buf, sizeof(char *) * strlen(buf), fi_mr_desc(mr),
+		if (snprintf(tx_buf, tx_size, "%s", message) >= tx_size) {
+                        fprintf(stderr, "Transmit buffer too small.\n");
+                        return -FI_ETOOSMALL;
+                }
+		ret = fi_write(ep, tx_buf, message_len, fi_mr_desc(mr),
 				remote_fi_addr, 0, FT_MR_KEY, &fi_ctx_write);
 		if (ret)
 			return ret;
@@ -108,6 +110,10 @@ static int run_test(void)
 		fprintf(stdout, "Received a completion event for RMA write\n");
 	} else {
 		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			return ret;
+
+		ret = check_recv_msg(message);
 		if (ret)
 			return ret;
 

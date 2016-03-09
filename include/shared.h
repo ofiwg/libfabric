@@ -276,7 +276,6 @@ int ft_get_tx_comp(uint64_t total);
 
 void eq_readerr(struct fid_eq *eq, const char *eq_str);
 
-
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
 		enum precision p);
 void show_perf(char *name, int tsize, int iters, struct timespec *start,
@@ -284,6 +283,7 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 void show_perf_mr(int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter, int argc, char *argv[]);
 int send_recv_greeting(void);
+int check_recv_msg(const char *message);
 
 #define FT_PROCESS_QUEUE_ERR(readerr, rd, queue, fn, str)	\
 	do {							\
