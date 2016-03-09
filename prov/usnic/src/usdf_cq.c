@@ -858,6 +858,33 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 	return 0;
 }
 
+int usdf_check_empty_soft_cq(struct usdf_cq *cq)
+{
+	if (cq->c.soft.cq_tail == cq->c.soft.cq_head)
+		return cq->c.soft.cq_last_op == USDF_SOFT_CQ_READ;
+
+	return 0;
+}
+
+int usdf_check_empty_hard_cq(struct usdf_cq *cq)
+{
+	struct usd_cq_impl *cqi;
+	struct cq_desc *cq_desc;
+	struct cq_desc *base;
+	uint8_t last_color;
+	uint8_t current_color;
+
+	cqi = to_cqi(cq->c.hard.cq_cq);
+
+	base = cqi->ucq_desc_ring;
+	cq_desc = &base[cqi->ucq_next_desc];
+
+	last_color = cqi->ucq_last_color;
+	current_color = cq_desc->type_color >> CQ_DESC_COLOR_SHIFT;
+
+	return current_color == last_color;
+}
+
 static int
 usdf_cq_process_attr(struct fi_cq_attr *attr, struct usdf_domain *udp)
 {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,23 +33,24 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef _USDF_CQ_H_
-#define _USDF_CQ_H_
 
-/* exponential backoff settings for fi_cq_sread */
-#define SREAD_EXP_BASE 2
-#define SREAD_INIT_SLEEP_TIME_US 1
-#define SREAD_MAX_SLEEP_TIME_US 5000
+#ifndef _USDF_POLL_H_
+#define _USDF_POLL_H_
 
-int usdf_cq_is_soft(struct usdf_cq *cq);
-int usdf_cq_make_soft(struct usdf_cq *cq);
-int usdf_cq_create_cq(struct usdf_cq *cq);
-int usdf_check_empty_hard_cq(struct usdf_cq *cq);
-int usdf_check_empty_soft_cq(struct usdf_cq *cq);
+#include "fi_list.h"
 
-void usdf_progress_hard_cq(struct usdf_cq_hard *hcq);
+struct usdf_poll {
+	struct fid_poll		poll_fid;
+	struct usdf_domain	*poll_domain;
 
-void usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context,
-		size_t len, int prov_errno);
+	atomic_t		poll_refcnt;
+	fastlock_t		lock;
+	struct dlist_entry	list;
+};
 
-#endif /* _USDF_CQ_H_ */
+#define poll_ftou(fpl) container_of((fpl), struct usdf_poll, poll_fid)
+
+int usdf_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
+		struct fid_poll **pollset);
+
+#endif

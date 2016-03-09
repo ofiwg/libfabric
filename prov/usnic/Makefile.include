@@ -91,7 +91,9 @@ _usnic_files = \
 	prov/usnic/src/usdf_rdm.h \
 	prov/usnic/src/usdf_rudp.h \
 	prov/usnic/src/usdf_timer.c \
-	prov/usnic/src/usdf_timer.h
+	prov/usnic/src/usdf_timer.h \
+	prov/usnic/src/usdf_poll.c \
+	prov/usnic/src/usdf_poll.h
 
 if HAVE_VERBS
 _usnic_files += prov/usnic/src/usdf_fake_ibv.c
