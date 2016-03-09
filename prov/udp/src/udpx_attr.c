@@ -42,7 +42,7 @@ struct fi_tx_attr udpx_tx_attr = {
 };
 
 struct fi_rx_attr udpx_rx_attr = {
-	.caps = FI_MSG | FI_RECV | FI_SOURCE | FI_MULTI_RECV,
+	.caps = FI_MSG | FI_RECV | FI_SOURCE,
 	.comp_order = FI_ORDER_STRICT,
 	.total_buffered_recv = (1 << 16),
 	.size = 1024,
