@@ -22,6 +22,9 @@ fi_cq_sread / fi_cq_sreadfrom
 : A synchronous (blocking) read that waits until a specified condition
   has been met before reading a completion from a completion queue.
 
+fi_cq_signal
+: Unblock any thread waiting in fi_cq_sread or fi_cq_sreadfrom.
+
 fi_cq_strerror
 : Converts provider specific error information into a printable string
 
