@@ -51,6 +51,7 @@ extern "C" {
 /* ofi_ctrl_hdr::type */
 enum {
 	ofi_ctrl_connect,
+	ofi_ctrl_start_data,
 	ofi_ctrl_data,
 	ofi_ctrl_large_data,
 	ofi_ctrl_ack
