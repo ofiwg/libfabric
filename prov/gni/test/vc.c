@@ -64,6 +64,8 @@ static struct fid_ep *ep[2];
 static struct fid_av *av;
 static struct fi_info *hints;
 static struct fi_info *fi;
+static struct fid_cq *cq;
+static struct fi_cq_attr cq_attr;
 void *ep_name[2];
 fi_addr_t gni_addr[2];
 struct gnix_av_addr_entry * gnix_addr[2];
@@ -160,8 +162,32 @@ static void vc_setup_common(void)
 	ret = fi_ep_bind(ep[0], &av->fid, 0);
 	cr_assert(!ret, "fi_ep_bind");
 
+	/*
+	 * this shouldn't work because we've not bound a CQ yet
+	 */
+
 	ret = fi_enable(ep[0]);
-	cr_assert(!ret, "fi_ep_enable");
+	cr_assert(ret = -FI_ENOCQ);
+
+	cq_attr.format = FI_CQ_FORMAT_TAGGED;
+	cq_attr.size = 1024;
+	cq_attr.wait_obj = 0;
+
+	ret = fi_cq_open(dom, &cq_attr, &cq, 0);
+	cr_assert(!ret, "fi_cq_open");
+
+	ret = fi_ep_bind(ep[0], &cq->fid, FI_SEND | FI_RECV);
+	cr_assert(!ret, "fi_ep_bind");
+
+	/*
+	 * now enable should work
+	 */
+
+	ret = fi_enable(ep[0]);
+	cr_assert(!ret, "fi_enable");
+
+	ret = fi_ep_bind(ep[1], &cq->fid, FI_SEND | FI_RECV);
+	cr_assert(!ret, "fi_ep_bind");
 
 	ret = fi_ep_bind(ep[1], &av->fid, 0);
 	cr_assert(!ret, "fi_ep_bind");
@@ -179,6 +205,9 @@ void vc_teardown(void)
 
 	ret = fi_close(&ep[1]->fid);
 	cr_assert(!ret, "failure in closing ep.");
+
+	ret = fi_close(&cq->fid);
+	cr_assert(!ret, "failure in closing cq.");
 
 	ret = fi_close(&av->fid);
 	cr_assert(!ret, "failure in closing av.");

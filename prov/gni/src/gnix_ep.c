@@ -1070,6 +1070,12 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 	 */
 	case FI_ENABLE:
 		if (ep->type == FI_EP_RDM) {
+
+			if ((ep->send_cq == NULL) ||
+			    (ep->recv_cq == NULL)) {
+				return -FI_ENOCQ;
+			}
+
 			ret = _gnix_vc_cm_init(ep->cm_nic);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL,
@@ -1084,7 +1090,10 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 					ret);
 				goto err;
 			}
-			ep->enabled = 1;
+			if (ep->send_cq)
+				ep->tx_enabled = true;
+			if (ep->recv_cq)
+				ep->rx_enabled = true;
 		}
 		break;
 
@@ -1652,6 +1661,8 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	ep_priv->progress_fn = NULL;
 	ep_priv->rx_progress_fn = NULL;
+	ep_priv->tx_enabled = false;
+	ep_priv->rx_enabled = false;
 
 	if (ep_priv->nic == NULL) {
 		ret = gnix_nic_alloc(domain_priv, NULL, &ep_priv->nic);
