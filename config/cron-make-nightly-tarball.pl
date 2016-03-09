@@ -100,11 +100,14 @@ sub doit {
         # state, and b) change out of the temp tree so that it can be
         # removed upon exit.
         chdir($libfabric_dir_arg);
-        system("git clean -dfx");
-        system("git reset --hard HEAD");
+        system("git clean -dfx 2>&1 > /dev/null");
+        system("git reset --hard HEAD 2>&1 > /dev/null");
         chdir("/");
 
-        die "Command $cmd failed: exit status $rc";
+        print "Command $cmd failed: exit status $rc.  Stdout:\n";
+        system("cat $stdout_file")
+            if (defined($stdout_file) && -f $stdout_file);
+        die "Cannot continue";
     }
     system("cat $stdout_file")
         if ($debug_arg && defined($stdout_file) && -f $stdout_file);
