@@ -119,8 +119,9 @@ static void __stx_destruct(void *obj)
  * @return     -FI_EINVAL if invalid arg(s) supplied
  * @return     -FI_ENOMEM insufficient memory
  */
-static int gnix_stx_open(struct fid_domain *dom, struct fi_tx_attr *tx_attr,
-			struct fid_stx **stx, void *context)
+DIRECT_FN STATIC int gnix_stx_open(struct fid_domain *dom,
+				   struct fi_tx_attr *tx_attr,
+				   struct fid_stx **stx, void *context)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_domain *domain;
@@ -413,9 +414,15 @@ static struct fi_gni_ops_domain gnix_ops_domain = {
 	.get_val = __gnix_dom_ops_get_val
 };
 
+DIRECT_FN int gnix_domain_bind(struct fid_domain *domain, struct fid *fid,
+			       uint64_t flags)
+{
+	return -FI_ENOSYS;
+}
+
 static int
 gnix_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
-			void **ops, void *context)
+		     void **ops, void *context)
 {
 	int ret = FI_SUCCESS;
 
@@ -427,8 +434,8 @@ gnix_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 	return ret;
 }
 
-int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-		     struct fid_domain **dom, void *context)
+DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+			       struct fid_domain **dom, void *context)
 {
 	struct gnix_fid_domain *domain = NULL;
 	int ret = FI_SUCCESS;
@@ -531,6 +538,25 @@ err:
 		free(domain);
 	}
 	return ret;
+}
+
+DIRECT_FN int gnix_srx_context(struct fid_domain *domain,
+			       struct fi_rx_attr *attr,
+			       struct fid_ep **rx_ep, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+DIRECT_FN int gnix_scalable_ep_open(struct fid_domain *domain,
+				    struct fi_info *info,
+				    struct fid_ep **sep, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+DIRECT_FN int gnix_scalable_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
+{
+	return -FI_ENOSYS;
 }
 
 /*******************************************************************************

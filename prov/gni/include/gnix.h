@@ -779,20 +779,38 @@ static inline void gnix_slist_insert_tail(struct slist_entry *item,
  */
 int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		     struct fid_domain **domain, void *context);
+
 int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context);
+
 int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
+
 int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
+
 int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
 
 int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		uint64_t access, uint64_t offset, uint64_t requested_key,
 		uint64_t flags, struct fid_mr **mr_o, void *context);
+
 int gnix_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		 struct fid_cntr **cntr, void *context);
+
+
+/* Prepend DIRECT_FN to provider specific API functions for global visibility
+ * when using fabric direct.  If the API function is static use the STATIC
+ * macro to bind symbols globally when compiling with fabric direct.
+ */
+#ifdef FABRIC_DIRECT_ENABLED
+#define DIRECT_FN __attribute__((visibility ("default")))
+#define STATIC
+#else
+#define DIRECT_FN
+#define STATIC static
+#endif
 
 #ifdef __cplusplus
 } /* extern "C" */

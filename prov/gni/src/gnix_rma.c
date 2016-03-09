@@ -767,7 +767,7 @@ int _gnix_rma_post_req(void *data)
 	return gnixu_to_fi_errno(status);
 }
 
-/*
+/**
  * @brief Create an RMA request.
  *
  * Creates a new RMA request.  Reads and writes are supported.  GNI supports
@@ -801,7 +801,6 @@ int _gnix_rma_post_req(void *data)
  * @return FI_SUCCESS on success.  FI_EINVAL for invalid parameter.  -FI_ENOSPC
  *         for low memory.
  */
-
 ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 		  uint64_t loc_addr, size_t len, void *mdesc,
 		  uint64_t dest_addr, uint64_t rem_addr, uint64_t mkey,

@@ -244,8 +244,8 @@ static void __eq_destruct(void *obj)
  * - Handle FI_WRITE flag. When not included, replace write function with
  *   fi_no_eq_write.
  */
-int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-		 struct fid_eq **eq, void *context)
+DIRECT_FN int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+			   struct fid_eq **eq, void *context)
 {
 	struct gnix_fid_eq *eq_priv;
 
@@ -307,7 +307,7 @@ err:
 	return ret;
 }
 
-static int gnix_eq_close(struct fid *fid)
+DIRECT_FN STATIC int gnix_eq_close(struct fid *fid)
 {
 	struct gnix_fid_eq *eq;
 	int references_held;
@@ -329,14 +329,15 @@ static int gnix_eq_close(struct fid *fid)
 	return FI_SUCCESS;
 }
 
-static ssize_t gnix_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf,
-			     size_t len, int timeout, uint64_t flags)
+DIRECT_FN STATIC ssize_t gnix_eq_sread(struct fid_eq *eq, uint32_t *event,
+				       void *buf, size_t len, int timeout,
+				       uint64_t flags)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,
-			    size_t len, uint64_t flags)
+DIRECT_FN STATIC ssize_t gnix_eq_read(struct fid_eq *eq, uint32_t *event,
+				      void *buf, size_t len, uint64_t flags)
 {
 	struct gnix_fid_eq *eq_priv;
 	struct gnix_eq_entry *entry;
@@ -381,7 +382,7 @@ err:
 	return read_size;
 }
 
-static int gnix_eq_control(struct fid *eq, int command, void *arg)
+DIRECT_FN STATIC int gnix_eq_control(struct fid *eq, int command, void *arg)
 {
 	/* disabled until new trywait interface is implemented
 	struct gnix_fid_eq *eq_priv;
@@ -398,8 +399,9 @@ static int gnix_eq_control(struct fid *eq, int command, void *arg)
 	}
 }
 
-static ssize_t gnix_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
-			       uint64_t flags)
+DIRECT_FN STATIC ssize_t gnix_eq_readerr(struct fid_eq *eq,
+					 struct fi_eq_err_entry *buf,
+					 uint64_t flags)
 {
 	struct gnix_fid_eq *eq_priv;
 	struct gnix_eq_entry *entry;
@@ -433,8 +435,9 @@ err:
 	return read_size;
 }
 
-static ssize_t gnix_eq_write(struct fid_eq *eq, uint32_t event,
-			     const void *buf, size_t len, uint64_t flags)
+DIRECT_FN STATIC ssize_t gnix_eq_write(struct fid_eq *eq, uint32_t event,
+				       const void *buf, size_t len,
+				       uint64_t flags)
 {
 	struct gnix_fid_eq *eq_priv;
 	struct slist_entry *item;
@@ -479,8 +482,20 @@ err:
 	return ret;
 }
 
-static const char *gnix_eq_strerror(struct fid_eq *eq, int prov_errno,
-				    const void *err_data, char *buf, size_t len)
+/**
+ * Converts provider specific error information into a printable string.
+ *
+ * @param[in] eq		the event queue
+ * @param[in] prov_errno	the provider specific error number
+ * @param[in/out] buf		optional buffer to print error information
+ * @param[in] len		the length of buf
+ *
+ * @return the printable string
+ * @return NULL upon error or if the operation is not supported yet
+ */
+DIRECT_FN STATIC const char *gnix_eq_strerror(struct fid_eq *eq, int prov_errno,
+					      const void *err_data, char *buf,
+					      size_t len)
 {
 	return NULL;
 }

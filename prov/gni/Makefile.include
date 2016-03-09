@@ -32,6 +32,7 @@ _gni_files = \
 	prov/gni/src/gnix_msg.c \
 	prov/gni/src/gnix_nameserver.c \
 	prov/gni/src/gnix_nic.c \
+	prov/gni/src/gnix_poll.c \
 	prov/gni/src/gnix_queue.c \
 	prov/gni/src/gnix_rma.c \
 	prov/gni/src/gnix_tags.c \
@@ -60,6 +61,7 @@ _gni_headers = \
 	prov/gni/include/gnix_msg.h \
 	prov/gni/include/gnix_nameserver.h \
 	prov/gni/include/gnix_nic.h \
+	prov/gni/include/gnix_poll.h \
 	prov/gni/include/gnix_priv.h \
 	prov/gni/include/gnix_queue.h \
 	prov/gni/include/gnix_rma.h \

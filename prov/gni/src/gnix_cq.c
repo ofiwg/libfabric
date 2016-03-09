@@ -481,8 +481,8 @@ static int gnix_cq_close(fid_t fid)
 	return FI_SUCCESS;
 }
 
-static ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
-				fi_addr_t *src_addr)
+DIRECT_FN STATIC ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf,
+					  size_t count, fi_addr_t *src_addr)
 {
 	struct gnix_fid_cq *cq_priv;
 	struct gnix_cq_entry *event;
@@ -523,14 +523,14 @@ static ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	return read_count ?: -FI_EAGAIN;
 }
 
-static ssize_t gnix_cq_read(struct fid_cq *cq, void *buf, size_t count)
+DIRECT_FN STATIC ssize_t gnix_cq_read(struct fid_cq *cq, void *buf, size_t count)
 {
 	return gnix_cq_readfrom(cq, buf, count, NULL);
 }
 
-static ssize_t gnix_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
-				 fi_addr_t *src_addr, const void *cond,
-				 int timeout)
+DIRECT_FN STATIC ssize_t gnix_cq_sreadfrom(struct fid_cq *cq, void *buf,
+					   size_t count, fi_addr_t *src_addr,
+					   const void *cond, int timeout)
 {
 	double start_ms = 0.0, end_ms = 0.0;
 	int ret;
@@ -560,14 +560,16 @@ static ssize_t gnix_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	return -FI_EAGAIN;
 }
 
-static ssize_t gnix_cq_sread(struct fid_cq *cq, void *buf, size_t count,
-			    const void *cond, int timeout)
+DIRECT_FN STATIC ssize_t gnix_cq_sread(struct fid_cq *cq, void *buf,
+				       size_t count, const void *cond,
+				       int timeout)
 {
 	return gnix_cq_sreadfrom(cq, buf, count, NULL, cond, timeout);
 }
 
-static ssize_t gnix_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
-			       uint64_t flags)
+DIRECT_FN STATIC ssize_t gnix_cq_readerr(struct fid_cq *cq,
+					 struct fi_cq_err_entry *buf,
+					 uint64_t flags)
 {
 	struct gnix_fid_cq *cq_priv;
 	struct gnix_cq_entry *event;
@@ -602,14 +604,14 @@ err:
 	return read_count;
 }
 
-static const char *gnix_cq_strerror(struct fid_cq *cq, int prov_errno,
-				    const void *prov_data, char *buf,
-				    size_t len)
+DIRECT_FN STATIC const char *gnix_cq_strerror(struct fid_cq *cq, int prov_errno,
+					      const void *prov_data, char *buf,
+					      size_t len)
 {
 	return NULL;
 }
 
-static int gnix_cq_signal(struct fid_cq *cq)
+DIRECT_FN STATIC int gnix_cq_signal(struct fid_cq *cq)
 {
 	struct gnix_fid_cq *cq_priv;
 
@@ -639,8 +641,8 @@ static int gnix_cq_control(struct fid *cq, int command, void *arg)
 }
 
 
-int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		 struct fid_cq **cq, void *context)
+DIRECT_FN int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+			   struct fid_cq **cq, void *context)
 {
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_cq *cq_priv;
