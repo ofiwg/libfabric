@@ -75,12 +75,12 @@ static inline void *mem_dup(const void *src, size_t size)
 	(fs)->next = x;						\
 }
 #define freestack_pop(fs)					\
-{								\
-	int i = (fs)->next;					\
-	assert(!freestack_isempty(fs));				\
-	(fs)->next = (int) (fs)->buf[i];			\
-	return i;						\
-}
+	({							\
+		int i = (fs)->next;				\
+		assert(!freestack_isempty(fs));			\
+		(fs)->next = *((int*) &(fs)->buf[i]);		\
+		i;						\
+	})
 
 #define DECLARE_FREESTACK(entrytype, name)			\
 struct name {							\
