@@ -1,4 +1,4 @@
-.TH "fi_cq" "3" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_cq" "3" "2016\-03\-09" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 fi_cq \- Completion queue operations
@@ -13,6 +13,9 @@ completion queue
 fi_cq_sread / fi_cq_sreadfrom : A synchronous (blocking) read that waits
 until a specified condition has been met before reading a completion
 from a completion queue.
+.PP
+fi_cq_signal : Unblock any thread waiting in fi_cq_sread or
+fi_cq_sreadfrom.
 .PP
 fi_cq_strerror : Converts provider specific error information into a
 printable string
