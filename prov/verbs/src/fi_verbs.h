@@ -69,6 +69,13 @@
 #include "fi_list.h"
 #include "fi_signal.h"
 
+#ifndef AF_IB
+#define AF_IB 27
+#endif
+
+#ifndef RAI_FAMILY
+#define RAI_FAMILY              0x00000008
+#endif
 
 #define VERBS_PROV_NAME "verbs"
 #define VERBS_PROV_VERS FI_VERSION(1,0)
