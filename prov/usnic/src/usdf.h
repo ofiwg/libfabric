@@ -374,6 +374,7 @@ struct usdf_cq {
 	atomic_t cq_refcnt;
 	struct usdf_domain *cq_domain;
 	struct fi_cq_attr cq_attr;
+	uint8_t is_soft;
 
 	union {
 		int fd;
@@ -395,6 +396,7 @@ struct usdf_cq {
 		} soft;
 	} c;
 	struct usd_completion cq_comp;
+	struct fi_ops_cq cq_ops;
 };
 
 enum {

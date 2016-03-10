@@ -711,7 +711,7 @@ usdf_cq_close(fid_t fid)
 			return ret;
 	}
 
-	if (usdf_cq_is_soft(cq)) {
+	if (cq->is_soft) {
 		while (!TAILQ_EMPTY(&cq->c.soft.cq_list)) {
 			hcq = TAILQ_FIRST(&cq->c.soft.cq_list);
 			if (atomic_get(&hcq->cqh_refcnt) > 0) {
@@ -813,31 +813,6 @@ static struct fi_ops usdf_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-/*
- * Return true is this CQ is in "soft" (emulated) mode
- */
-int
-usdf_cq_is_soft(struct usdf_cq *cq)
-{
-	struct fi_ops_cq *soft_ops;
-
-        switch (cq->cq_attr.format) {
-        case FI_CQ_FORMAT_CONTEXT:
-                soft_ops = &usdf_cq_context_soft_ops;
-                break;
-        case FI_CQ_FORMAT_MSG:
-                soft_ops = &usdf_cq_msg_soft_ops;
-                break;
-        case FI_CQ_FORMAT_DATA:
-                soft_ops = &usdf_cq_data_soft_ops;
-                break;
-	default:
-		return 0;
-        }
-
-	return cq->cq_fid.ops == soft_ops;
-}
-
 int
 usdf_cq_make_soft(struct usdf_cq *cq)
 {
@@ -866,7 +841,7 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 
 	rtn = usdf_progress_hard_cq;
 
-        if (cq->cq_fid.ops == hard_ops) {
+	if (!cq->is_soft) {
 
 		/* save the CQ before we trash the union */
 		ucq = cq->c.hard.cq_cq;
@@ -900,7 +875,8 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 			TAILQ_INSERT_HEAD(&cq->c.soft.cq_list, hcq, cqh_link);
 		}
 
-                cq->cq_fid.ops = soft_ops;
+		cq->is_soft = 1;
+		cq->cq_ops = *soft_ops;
         }
 	return 0;
 }
@@ -1080,6 +1056,7 @@ usdf_cq_create_cq(struct usdf_cq *cq)
 			return ret;
 
 		if (cq->cq_attr.wait_obj == FI_WAIT_SET) {
+			cq->cq_ops.sread = fi_no_cq_sread;
 			ret = usdf_cq_bind_wait(cq);
 			if (ret)
 				return ret;
@@ -1137,18 +1114,20 @@ usdf_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_CONTEXT:
-		cq->cq_fid.ops = &usdf_cq_context_ops;
+		cq->cq_ops = usdf_cq_context_ops;
 		break;
 	case FI_CQ_FORMAT_MSG:
-		cq->cq_fid.ops = &usdf_cq_msg_ops;
+		cq->cq_ops = usdf_cq_msg_ops;
 		break;
 	case FI_CQ_FORMAT_DATA:
-		cq->cq_fid.ops = &usdf_cq_data_ops;
+		cq->cq_ops = usdf_cq_data_ops;
 		break;
 	default:
 		ret = -FI_ENOSYS;
 		goto fail;
 	}
+
+	cq->cq_fid.ops = &cq->cq_ops;
 
 	cq->cq_attr = *attr;
 	*cq_o = &cq->cq_fid;
