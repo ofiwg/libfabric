@@ -236,70 +236,33 @@ static int usdf_wait_close(struct fid *waitset)
 
 static int usdf_wait_wait(struct fid_wait *fwait, int timeout)
 {
-	struct usdf_cq *cq;
-	struct usdf_wait *wait_priv;
-	struct epoll_event *events;
-	const int max_events = 64;
-	uint64_t ev;
-	ssize_t ret;
-	int nrevents;
-	int i;
+	struct usdf_wait *wait;
+	struct epoll_event event;
+	struct fid *fids[1];
+	int ret = FI_SUCCESS;
+	int nevents;
 
 	USDF_TRACE_SYS(FABRIC, "\n");
-	wait_priv = wait_ftou(fwait);
+	wait = wait_ftou(fwait);
 
-	switch (wait_priv->wait_obj) {
-	case FI_WAIT_FD:
-	case FI_WAIT_UNSPEC:
-		break;
-	default:
-		USDF_WARN_SYS(FABRIC,
-				"unsupported wait object\n");
-		return -FI_EINVAL;
+	fids[0] = &fwait->fid;
+
+	ret = usdf_trywait(&wait->wait_fabric->fab_fid, fids, 1);
+	if (ret) {
+		if (ret == -FI_EAGAIN)
+			return FI_SUCCESS;
+
+		return ret;
 	}
 
-	/* TODO: Change this to something real instead of maximum of 64 events.
-	 * This is just for testing purposes. Could also possibly statically
-	 * allocate this...
-	 */
-	events = calloc(max_events, sizeof(*events));
-	if (!events) {
-		USDF_DBG_SYS(FABRIC, "calloc for events failed\n");
-		return -FI_ENOMEM;
-	}
-
-	nrevents = epoll_wait(wait_priv->object.epfd, events, max_events,
-			timeout);
-	if (nrevents == 0) {
+	nevents = epoll_wait(wait->object.epfd, &event, 1, timeout);
+	if (nevents == 0) {
 		ret = -FI_ETIMEDOUT;
-		goto out;
-	} else if (nrevents < 0) {
+	} else if (nevents < 0) {
 		USDF_DBG_SYS(FABRIC, "epoll wait failed\n");
 		ret = -errno;
-		goto out;
 	}
 
-	for (i = 0; i < nrevents; i++) {
-		cq = events[i].data.ptr;
-		for (;;) {
-			ret = read(cq->object.fd, &ev, sizeof(ev));
-			if (ret < 0 && errno != EAGAIN) {
-				USDF_WARN_SYS(FABRIC,
-						"failed with errno: %d\n",
-						errno);
-				ret = -errno;
-				goto out;
-			} else if (errno == EAGAIN) {
-				break;
-			}
-		}
-		usd_poll_req_notify(cq->c.hard.cq_cq);
-	}
-
-	ret = FI_SUCCESS;
-
-out:
-	free(events);
 	return ret;
 }
 
