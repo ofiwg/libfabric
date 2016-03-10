@@ -123,7 +123,7 @@ static int fi_register_provider(struct fi_provider *provider, void *dlhandle)
 	       FI_MAJOR(provider->version), FI_MINOR(provider->version));
 
 	if (FI_MAJOR(provider->fi_version) != FI_MAJOR_VERSION ||
-	    FI_MINOR(provider->fi_version) > FI_MINOR_VERSION) {
+	    FI_MINOR(provider->fi_version) != FI_MINOR_VERSION) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
 		       "provider has unsupported FI version (provider %d.%d != libfabric %d.%d); ignoring\n",
 		       FI_MAJOR(provider->fi_version),

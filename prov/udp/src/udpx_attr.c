@@ -42,7 +42,7 @@ struct fi_tx_attr udpx_tx_attr = {
 };
 
 struct fi_rx_attr udpx_rx_attr = {
-	.caps = FI_MSG | FI_RECV | FI_SOURCE | FI_MULTI_RECV,
+	.caps = FI_MSG | FI_RECV | FI_SOURCE,
 	.comp_order = FI_ORDER_STRICT,
 	.total_buffered_recv = (1 << 16),
 	.size = 1024,
@@ -52,7 +52,7 @@ struct fi_rx_attr udpx_rx_attr = {
 struct fi_ep_attr udpx_ep_attr = {
 	.type = FI_EP_DGRAM,
 	.protocol = FI_PROTO_UDP,
-	.protocol_version = 4,
+	.protocol_version = 0,
 	.max_msg_size = 1472,
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1
