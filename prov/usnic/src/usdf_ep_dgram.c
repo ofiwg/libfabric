@@ -177,7 +177,7 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		/* actually, could look through CQ list for a hard
 		 * CQ with function usd_poll_cq() and use that... XXX
 		 */
-		if (usdf_cq_is_soft(cq)) {
+		if (cq->is_soft) {
 			return -FI_EINVAL;
 		}
 		if (cq->c.hard.cq_cq == NULL) {
@@ -248,7 +248,7 @@ usdf_ep_dgram_deref_cq(struct usdf_cq *cq)
 
 	rtn = usdf_progress_hard_cq;
 
-	if (usdf_cq_is_soft(cq)) {
+	if (cq->is_soft) {
 		TAILQ_FOREACH(hcq, &cq->c.soft.cq_list, cqh_link) {
 			if (hcq->cqh_progress == rtn) {
 				atomic_dec(&hcq->cqh_refcnt);

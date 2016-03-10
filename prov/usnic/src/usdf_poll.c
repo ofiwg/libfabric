@@ -67,7 +67,7 @@ static int usdf_poll_poll(struct fid_poll *fps, void **context, int count)
 
 		cq = cq_fidtou(entry->fid);
 
-		if (usdf_cq_is_soft(cq)) {
+		if (cq->is_soft) {
 			if (!progressed) {
 				usdf_domain_progress(ps->poll_domain);
 				progressed = 1;
