@@ -92,6 +92,7 @@ int fi_fabric_init(const struct fi_provider *prov,
 		   struct fi_fabric_attr *user_attr,
 		   struct util_fabric *fabric, void *context);
 int util_fabric_close(struct util_fabric *fabric);
+int util_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
 /*
  * Domain

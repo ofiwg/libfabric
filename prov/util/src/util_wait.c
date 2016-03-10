@@ -38,6 +38,39 @@
 #include <fi_util.h>
 
 
+int util_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+{
+	struct util_cq *cq;
+	struct util_eq *eq;
+	struct util_wait *wait;
+	int i, ret;
+
+	for (i = 0; i < count; i++) {
+		switch (fids[i]->fclass) {
+		case FI_CLASS_CQ:
+			cq = container_of(fids[i], struct util_cq, cq_fid.fid);
+			wait = cq->wait;
+			break;
+		case FI_CLASS_EQ:
+			eq = container_of(fids[i], struct util_eq, eq_fid.fid);
+			wait = eq->wait;
+			break;
+		case FI_CLASS_CNTR:
+			return -FI_ENOSYS;
+		case FI_CLASS_WAIT:
+			wait = container_of(fids[i], struct util_wait, wait_fid.fid);
+			break;
+		default:
+			return -FI_EINVAL;
+		}
+
+		ret = wait->try(wait);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 int fi_check_wait_attr(const struct fi_provider *prov,
 		       const struct fi_wait_attr *attr)
 {
