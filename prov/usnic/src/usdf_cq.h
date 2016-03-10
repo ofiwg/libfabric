@@ -45,6 +45,7 @@ int usdf_cq_make_soft(struct usdf_cq *cq);
 int usdf_cq_create_cq(struct usdf_cq *cq);
 int usdf_check_empty_hard_cq(struct usdf_cq *cq);
 int usdf_check_empty_soft_cq(struct usdf_cq *cq);
+int usdf_cq_trywait(struct fid *fcq);
 
 void usdf_progress_hard_cq(struct usdf_cq_hard *hcq);
 
