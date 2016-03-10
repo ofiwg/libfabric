@@ -983,6 +983,56 @@ static int usdf_cq_create_fd(struct usdf_cq *cq)
 	return usdf_cq_fd_set_nonblock(cq->object.fd);
 }
 
+int usdf_cq_trywait(struct fid *fcq)
+{
+	struct usdf_cq *cq;
+	uint64_t ev;
+	int empty;
+	int ret;
+
+	cq = cq_fidtou(fcq);
+
+	switch (cq->cq_attr.wait_obj) {
+	case FI_WAIT_UNSPEC:
+		return FI_SUCCESS;
+	case FI_WAIT_FD:
+	case FI_WAIT_SET:
+		break;
+	default:
+		USDF_WARN_SYS(CQ, "unsupported wait object type\n");
+		return -FI_EINVAL;
+	}
+
+	while (1) {
+		ret = read(cq->object.fd, &ev, sizeof(ev));
+		if (ret == 0) {
+			USDF_WARN_SYS(CQ,
+					"FD read returned 0, is it closed?\n");
+			return -FI_EINVAL;
+		}
+
+		if (ret < 0) {
+			if (errno == EAGAIN)
+				break;
+			else
+				return -errno;
+		}
+	}
+
+	if (cq->is_soft) {
+		empty = usdf_check_empty_soft_cq(cq);
+	} else {
+		usd_poll_req_notify(cq->c.hard.cq_cq);
+		empty = usdf_check_empty_hard_cq(cq);
+	}
+
+	if (empty)
+		return FI_SUCCESS;
+
+	return -FI_EAGAIN;
+}
+
+
 static int usdf_cq_bind_wait(struct usdf_cq *cq)
 {
 	int ret;
