@@ -119,6 +119,17 @@ int fi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 int util_domain_close(struct util_domain *domain);
 
 
+struct util_ep {
+	struct fid_ep		ep_fid;
+	struct util_domain	*domain;
+	struct util_av		*av;
+	struct util_cq		*rx_cq;
+	struct util_cq		*tx_cq;
+	uint64_t		caps;
+	uint64_t		flags;
+};
+
+
 /*
  * Completion queue
  *

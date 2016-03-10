@@ -100,16 +100,10 @@ typedef void (*udpx_rx_comp_func)(struct udpx_ep *ep, void *context,
 typedef void (*udpx_tx_comp_func)(struct udpx_ep *ep, void *context);
 
 struct udpx_ep {
-	struct fid_ep		ep_fid;
-	struct util_domain	*domain;
-	struct util_av		*av;
-	struct util_cq		*rx_cq;
-	struct util_cq		*tx_cq;
+	struct util_ep		util_ep;
 	udpx_rx_comp_func	rx_comp;
 	udpx_tx_comp_func	tx_comp;
-	struct udpx_rx_cirq	*rxq; /* protected by rx_cq lock */
-	uint64_t		caps;
-	uint64_t		flags;
+	struct udpx_rx_cirq	*rxq;    /* protected by rx_cq lock */
 	int			sock;
 };
 
