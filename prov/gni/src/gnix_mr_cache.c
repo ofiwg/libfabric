@@ -405,7 +405,7 @@ static inline void __resolve_stale_entry_collision(
 		RbtIterator found,
 		gnix_mr_cache_entry_t *entry)
 {
-	RbtStatus rc;
+	RbtStatus __attribute__((unused)) rc;
 	gnix_mr_cache_entry_t *c_entry, *tmp;
 	gnix_mr_cache_key_t *c_key;
 	int ret;
