@@ -1109,6 +1109,29 @@ err:
 }
 
 
+static int __destruct_tag_storages(struct gnix_fid_ep *ep)
+{
+	int ret;
+
+	GNIX_INFO(FI_LOG_EP_CTRL, "destroying tag storage\n");
+
+	ret = _gnix_tag_storage_destroy(&ep->unexp_recv_queue);
+	if (ret)
+		return ret;
+
+	ret = _gnix_tag_storage_destroy(&ep->posted_recv_queue);
+	if (ret)
+		return ret;
+
+	ret = _gnix_tag_storage_destroy(&ep->tagged_unexp_recv_queue);
+	if (ret)
+		return ret;
+
+	ret = _gnix_tag_storage_destroy(&ep->tagged_posted_recv_queue);
+
+	return ret;
+}
+
 static void __ep_destruct(void *obj)
 {
 	int __attribute__((unused)) ret;
@@ -1203,6 +1226,8 @@ static void __ep_destruct(void *obj)
 	/* This currently always returns FI_SUCCESS */
 	ret = _gnix_cm_nic_free(cm_nic);
 	assert(ret == FI_SUCCESS);
+
+	__destruct_tag_storages(ep);
 
 	/*
 	 * Free fab_reqs
@@ -1457,20 +1482,53 @@ static void gnix_ep_caps(struct gnix_fid_ep *ep_priv, uint64_t caps)
 
 }
 
+
+static int __init_tag_storages(struct gnix_fid_ep *ep, int tag_type)
+{
+	int tsret;
+	struct gnix_tag_storage_attr untagged_attr = {
+			.type = tag_type,
+			.use_src_addr_matching = 1,
+	};
+	struct gnix_tag_storage_attr tagged_attr = {
+			.type = tag_type,
+	};
+
+	GNIX_INFO(FI_LOG_EP_CTRL, "initializing tag storage, tag_type=%d\n",
+			tag_type);
+
+	/* init untagged storages */
+	tsret = _gnix_posted_tag_storage_init(
+			&ep->posted_recv_queue, &untagged_attr);
+	if (tsret)
+		return tsret;
+
+	tsret = _gnix_unexpected_tag_storage_init(
+			&ep->unexp_recv_queue, &untagged_attr);
+	if (tsret)
+		return tsret;
+
+	/* init tagged storages */
+	tsret = _gnix_posted_tag_storage_init(
+			&ep->tagged_posted_recv_queue, &tagged_attr);
+	if (tsret)
+		return tsret;
+
+	tsret = _gnix_unexpected_tag_storage_init(
+			&ep->tagged_unexp_recv_queue, &tagged_attr);
+
+	return tsret;
+}
+
 DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			   struct fid_ep **ep, void *context)
 {
 	int ret = FI_SUCCESS;
-	int tsret = FI_SUCCESS;
 	uint32_t cdm_id, seed;
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_ep *ep_priv;
 	gnix_hashtable_attr_t gnix_ht_attr;
 	gnix_ht_key_t *key_ptr;
-	struct gnix_tag_storage_attr untagged_attr = {
-			.type = GNIX_TAG_LIST,
-			.use_src_addr_matching = 1,
-	};
 	bool free_list_inited = false;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -1491,27 +1549,10 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (!ep_priv)
 		return -FI_ENOMEM;
 
-	/* init untagged storages */
-	tsret = _gnix_posted_tag_storage_init(
-			&ep_priv->posted_recv_queue, &untagged_attr);
-	if (tsret)
-		return tsret;
-
-	tsret = _gnix_unexpected_tag_storage_init(
-			&ep_priv->unexp_recv_queue, &untagged_attr);
-	if (tsret)
-		return tsret;
-
-	/* init tagged storages */
-	tsret = _gnix_posted_tag_storage_init(
-			&ep_priv->tagged_posted_recv_queue, NULL);
-	if (tsret)
-		return tsret;
-
-	tsret = _gnix_unexpected_tag_storage_init(
-			&ep_priv->tagged_unexp_recv_queue, NULL);
-	if (tsret)
-		return tsret;
+	ret = __init_tag_storages(ep_priv, GNIX_TAG_LIST);
+	if (ret) {
+		goto err;
+	}
 
 	ep_priv->ep_fid.fid.fclass = FI_CLASS_EP;
 	ep_priv->ep_fid.fid.context = context;
@@ -1686,6 +1727,8 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	return ret;
 
 err:
+	__destruct_tag_storages(ep_priv);
+
 	if (free_list_inited == true)
 		__fr_freelist_destroy(ep_priv);
 
@@ -1874,6 +1917,106 @@ ssize_t gnix_cancel(fid_t fid, void *context)
 	return ret;
 }
 
+static int
+__gnix_ep_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
+{
+	struct gnix_fid_ep *ep;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
+	assert(val);
+
+	if (fid->fclass != FI_CLASS_EP) {
+		GNIX_WARN(FI_LOG_DOMAIN, "Invalid ep\n");
+		return -FI_EINVAL;
+	}
+
+	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
+
+	switch (t) {
+	case GNI_HASH_TAG_IMPL:
+		*(uint32_t *)val = (ep->use_tag_hlist) ? 1 : 0;
+		break;
+
+	default:
+		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int
+__gnix_ep_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
+{
+	struct gnix_fid_ep *ep;
+	int v;
+	int ret;
+	int tag_type;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
+	assert(val);
+
+	if (fid->fclass != FI_CLASS_EP) {
+		GNIX_WARN(FI_LOG_DOMAIN, "Invalid ep\n");
+		return -FI_EINVAL;
+	}
+
+	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
+	switch (t) {
+	case GNI_HASH_TAG_IMPL:
+		if (ep->tx_enabled || ep->rx_enabled) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+					"EP enabled, cannot modify tag matcher\n");
+			return -FI_EINVAL;
+		}
+
+		v = *(uint32_t *) val;
+		if ((v && !(ep->use_tag_hlist)) ||
+				(!v && (ep->use_tag_hlist))) {
+			ret = __destruct_tag_storages(ep);
+			if (ret) {
+				GNIX_FATAL(FI_LOG_EP_CTRL,
+						"failed to destroy existing tag storage\n");
+			}
+
+			tag_type = (v) ? GNIX_TAG_HLIST : GNIX_TAG_LIST;
+
+			ret = __init_tag_storages(ep, tag_type);
+			if (ret)
+				return ret;
+
+			ep->use_tag_hlist = v;
+		}
+		break;
+	default:
+		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static struct fi_gni_ops_domain gnix_ops_ep = {
+	.set_val = __gnix_ep_ops_set_val,
+	.get_val = __gnix_ep_ops_get_val
+};
+
+static int
+gnix_ep_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
+		     void **ops, void *context)
+{
+	int ret = FI_SUCCESS;
+
+	if (strcmp(ops_name, FI_GNI_EP_OPS_1) == 0)
+		*ops = &gnix_ops_ep;
+	else
+		ret = -FI_EINVAL;
+
+	return ret;
+}
+
 DIRECT_FN STATIC int gnix_ep_getopt(fid_t fid, int level, int optname,
 				    void *optval, size_t *optlen)
 {
@@ -1987,7 +2130,7 @@ static struct fi_ops gnix_ep_fi_ops = {
 	.close = gnix_ep_close,
 	.bind = gnix_ep_bind,
 	.control = gnix_ep_control,
-	.ops_open = fi_no_ops_open
+	.ops_open = gnix_ep_ops_open,
 };
 
 static struct fi_ops_ep gnix_ep_ops = {
