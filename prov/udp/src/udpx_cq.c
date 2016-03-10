@@ -36,20 +36,20 @@
 #include "udpx.h"
 
 
-static void udpx_cq_progress(struct udpx_cq *cq)
+static void udpx_cq_progress(struct util_cq *cq)
 {
 	struct udpx_ep *ep;
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
 
-	fastlock_acquire(&cq->util_cq.list_lock);
-	dlist_foreach(&cq->util_cq.list, item) {
+	fastlock_acquire(&cq->list_lock);
+	dlist_foreach(&cq->list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		ep = container_of(fid_entry->fid, struct udpx_ep, ep_fid.fid);
 		udpx_ep_progress(ep);
 
 	}
-	fastlock_release(&cq->util_cq.list_lock);
+	fastlock_release(&cq->list_lock);
 }
 
 static void udpx_cq_read_ctx(void **dst, void *src)
@@ -79,16 +79,16 @@ static void udpx_cq_read_tagged(void **dst, void *src)
 
 static ssize_t udpx_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
-	struct udpx_cq *cq;
+	struct util_cq *cq;
 	struct fi_cq_data_entry *entry;
 	ssize_t i;
 
-	cq = container_of(cq_fid, struct udpx_cq, util_cq.cq_fid);
-	fastlock_acquire(&cq->util_cq.cq_lock);
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
+	fastlock_acquire(&cq->cq_lock);
 	if (cirque_isempty(cq->cirq)) {
-		fastlock_release(&cq->util_cq.cq_lock);
+		fastlock_release(&cq->cq_lock);
 		udpx_cq_progress(cq);
-		fastlock_acquire(&cq->util_cq.cq_lock);
+		fastlock_acquire(&cq->cq_lock);
 		if (cirque_isempty(cq->cirq)) {
 			i = -FI_EAGAIN;
 			goto out;
@@ -105,22 +105,22 @@ static ssize_t udpx_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 				i = -FI_EAVAIL;
 			break;
 		}
-		cq->util_cq.read_entry(&buf, entry);
+		cq->read_entry(&buf, entry);
 		cirque_discard(cq->cirq);
 	}
 out:
-	fastlock_release(&cq->util_cq.cq_lock);
+	fastlock_release(&cq->cq_lock);
 	return i;
 }
 
 static ssize_t udpx_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 				size_t count, fi_addr_t *src_addr)
 {
-	struct udpx_cq *cq;
+	struct util_cq *cq;
 	struct fi_cq_data_entry *entry;
 	ssize_t i;
 
-	cq = container_of(cq_fid, struct udpx_cq, util_cq.cq_fid);
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	if (!cq->src) {
 		i = udpx_cq_read(cq_fid, buf, count);
 		if (i > 0) {
@@ -130,11 +130,11 @@ static ssize_t udpx_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 		return i;
 	}
 
-	fastlock_acquire(&cq->util_cq.cq_lock);
+	fastlock_acquire(&cq->cq_lock);
 	if (cirque_isempty(cq->cirq)) {
-		fastlock_release(&cq->util_cq.cq_lock);
+		fastlock_release(&cq->cq_lock);
 		udpx_cq_progress(cq);
-		fastlock_acquire(&cq->util_cq.cq_lock);
+		fastlock_acquire(&cq->cq_lock);
 		if (cirque_isempty(cq->cirq)) {
 			i = -FI_EAGAIN;
 			goto out;
@@ -152,28 +152,28 @@ static ssize_t udpx_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 			break;
 		}
 		src_addr[i] = cq->src[cirque_rindex(cq->cirq)];
-		cq->util_cq.read_entry(&buf, entry);
+		cq->read_entry(&buf, entry);
 		cirque_discard(cq->cirq);
 	}
 out:
-	fastlock_release(&cq->util_cq.cq_lock);
+	fastlock_release(&cq->cq_lock);
 	return i;
 }
 
 static ssize_t udpx_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 			       uint64_t flags)
 {
-	struct udpx_cq *cq;
+	struct util_cq *cq;
 	struct util_cq_err_entry *err;
 	struct slist_entry *entry;
 	ssize_t ret;
 
-	cq = container_of(cq_fid, struct udpx_cq, util_cq.cq_fid);
-	fastlock_acquire(&cq->util_cq.cq_lock);
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
+	fastlock_acquire(&cq->cq_lock);
 	if (!cirque_isempty(cq->cirq) &&
 	    (cirque_head(cq->cirq)->flags & UTIL_FLAG_ERROR)) {
 		cirque_discard(cq->cirq);
-		entry = slist_remove_head(&cq->util_cq.err_list);
+		entry = slist_remove_head(&cq->err_list);
 		err = container_of(entry, struct util_cq_err_entry, list_entry);
 		*buf = err->err_entry;
 		free(err);
@@ -181,18 +181,18 @@ static ssize_t udpx_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *bu
 	} else {
 		ret = -FI_EAGAIN;
 	}
-	fastlock_release(&cq->util_cq.cq_lock);
+	fastlock_release(&cq->cq_lock);
 	return ret;
 }
 
 static ssize_t udpx_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 			     const void *cond, int timeout)
 {
-	struct udpx_cq *cq;
+	struct util_cq *cq;
 
-	cq = container_of(cq_fid, struct udpx_cq, util_cq.cq_fid);
-	assert(cq->util_cq.wait && cq->util_cq.internal_wait);
-	fi_wait(&cq->util_cq.wait->wait_fid, timeout);
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
+	assert(cq->wait && cq->internal_wait);
+	fi_wait(&cq->wait->wait_fid, timeout);
 	return udpx_cq_read(cq_fid, buf, count);
 }
 
@@ -200,21 +200,21 @@ static ssize_t udpx_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 				 fi_addr_t *src_addr, const void *cond,
 				 int timeout)
 {
-	struct udpx_cq *cq;
+	struct util_cq *cq;
 
-	cq = container_of(cq_fid, struct udpx_cq, util_cq.cq_fid);
-	assert(cq->util_cq.wait && cq->util_cq.internal_wait);
-	fi_wait(&cq->util_cq.wait->wait_fid, timeout);
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
+	assert(cq->wait && cq->internal_wait);
+	fi_wait(&cq->wait->wait_fid, timeout);
 	return udpx_cq_readfrom(cq_fid, buf, count, src_addr);
 }
 
 static int udpx_cq_signal(struct fid_cq *cq_fid)
 {
-	struct udpx_cq *cq;
+	struct util_cq *cq;
 
-	cq = container_of(cq_fid, struct udpx_cq, util_cq.cq_fid);
-	assert(cq->util_cq.wait);
-	cq->util_cq.wait->signal(cq->util_cq.wait);
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
+	assert(cq->wait);
+	cq->wait->signal(cq->wait);
 	return 0;
 }
 
@@ -237,15 +237,15 @@ static struct fi_ops_cq udpx_cq_ops = {
 
 static int udpx_cq_close(struct fid *fid)
 {
-	struct udpx_cq *cq;
+	struct util_cq *cq;
 	int ret;
 
-	cq = container_of(fid, struct udpx_cq, util_cq.cq_fid.fid);
-	ret = fi_cq_cleanup(&cq->util_cq);
+	cq = container_of(fid, struct util_cq, cq_fid.fid);
+	ret = fi_cq_cleanup(cq);
 	if (ret)
 		return ret;
 
-	udpx_comp_cirq_free(cq->cirq);
+	util_comp_cirq_free(cq->cirq);
 	free(cq->src);
 	free(cq);
 	return 0;
@@ -260,7 +260,7 @@ static struct fi_ops udpx_cq_fi_ops = {
 };
 
 static int udpx_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
-			struct udpx_cq *cq, void *context)
+			struct util_cq *cq, void *context)
 {
 	fi_cq_read_func read_func;
 	int ret;
@@ -284,17 +284,17 @@ static int udpx_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_EINVAL;
 	}
 
-	ret = fi_cq_init(domain, attr, read_func, &cq->util_cq, context);
+	ret = fi_cq_init(domain, attr, read_func, cq, context);
 	if (ret)
 		return ret;
 
-	cq->cirq = udpx_comp_cirq_create(attr->size);
+	cq->cirq = util_comp_cirq_create(attr->size);
 	if (!cq->cirq) {
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
 
-	if (cq->util_cq.domain->caps & FI_SOURCE) {
+	if (cq->domain->caps & FI_SOURCE) {
 		cq->src = calloc(cq->cirq->size, sizeof *cq->src);
 		if (!cq->src) {
 			ret = -FI_ENOMEM;
@@ -304,16 +304,16 @@ static int udpx_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	return 0;
 
 err2:
-	udpx_comp_cirq_free(cq->cirq);
+	util_comp_cirq_free(cq->cirq);
 err1:
-	fi_cq_cleanup(&cq->util_cq);
+	fi_cq_cleanup(cq);
 	return ret;
 }
 
 int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
-	struct udpx_cq *cq;
+	struct util_cq *cq;
 	int ret;
 
 	ret = fi_check_cq_attr(&udpx_prov, attr);
@@ -330,15 +330,15 @@ int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return ret;
 	}
 
-	cq->util_cq.cq_fid.fid.ops = &udpx_cq_fi_ops;
-	cq->util_cq.cq_fid.ops = &udpx_cq_ops;
+	cq->cq_fid.fid.ops = &udpx_cq_fi_ops;
+	cq->cq_fid.ops = &udpx_cq_ops;
 
-	ret = fi_cq_ready(&cq->util_cq);
+	ret = fi_cq_ready(cq);
 	if (ret) {
-		udpx_cq_close(&cq->util_cq.cq_fid.fid);
+		udpx_cq_close(&cq->cq_fid.fid);
 		return ret;
 	}
 
-	*cq_fid = &cq->util_cq.cq_fid;
+	*cq_fid = &cq->cq_fid;
 	return 0;
 }

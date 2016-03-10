@@ -50,6 +50,8 @@
 
 #include <fi.h>
 #include <fi_list.h>
+#include <fi_mem.h>
+#include <fi_rbuf.h>
 #include <fi_signal.h>
 #include <fi_enosys.h>
 
@@ -135,6 +137,8 @@ struct util_cq_err_entry {
 	struct slist_entry	list_entry;
 };
 
+DECLARE_CIRQUE(struct fi_cq_data_entry, util_comp_cirq);
+
 struct util_cq {
 	struct fid_cq		cq_fid;
 	struct util_domain	*domain;
@@ -143,6 +147,9 @@ struct util_cq {
 	struct dlist_entry	list;
 	fastlock_t		list_lock;
 	fastlock_t		cq_lock;
+
+	struct util_comp_cirq	*cirq;
+	fi_addr_t		*src;
 
 	struct slist		err_list;
 	fi_cq_read_func		read_entry;

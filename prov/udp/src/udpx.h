@@ -103,8 +103,8 @@ struct udpx_ep {
 	struct fid_ep		ep_fid;
 	struct util_domain	*domain;
 	struct util_av		*av;
-	struct udpx_cq		*rx_cq;
-	struct udpx_cq		*tx_cq;
+	struct util_cq		*rx_cq;
+	struct util_cq		*tx_cq;
 	udpx_rx_comp_func	rx_comp;
 	udpx_tx_comp_func	tx_comp;
 	struct udpx_rx_cirq	*rxq; /* protected by rx_cq lock */
@@ -118,15 +118,6 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
 void udpx_ep_progress(struct udpx_ep *ep);
 
-
-DECLARE_CIRQUE(struct fi_cq_data_entry, udpx_comp_cirq);
-
-struct udpx_cq {
-	struct util_cq		util_cq;
-	struct udpx_comp_cirq	*cirq;
-	fi_addr_t		*src;
-
-};
 
 int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
