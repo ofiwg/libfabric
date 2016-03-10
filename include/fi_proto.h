@@ -93,7 +93,7 @@ struct ofi_ctrl_hdr {
 	union {
 		uint64_t	conn_id;
 		uint64_t	msg_id;
-	}
+	};
 	union {
 		uint64_t	conn_data;
 		uint64_t	rx_key;
@@ -175,7 +175,7 @@ struct ofi_rma_ioc {
 };
 
 #define OFI_CMD_SIZE		64	/* to align with 64-byte cache line */
-#define OFI_CMD_DATA_LEN	(OFI_CMD_SIZE - sizeof(struct ofi_cmd_hdr))
+#define OFI_CMD_DATA_LEN	(OFI_CMD_SIZE - sizeof(struct ofi_ctrl_hdr))
 
 /*
  * Additional control information based on the operation being
@@ -188,7 +188,7 @@ enum {
 };
 
 struct shm_cmd {
-	struct ofi_cmd_hdr	hdr;
+	struct ofi_ctrl_hdr	hdr;
 	uint32_t		cmd_id;
 	uint32_t		conn_id;
 	uint64_t		resv;
