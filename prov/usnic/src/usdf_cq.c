@@ -763,6 +763,46 @@ usdf_cq_close(fid_t fid)
 	return 0;
 }
 
+static int usdf_cq_get_wait(struct usdf_cq *cq, void *arg)
+{
+	USDF_TRACE_SYS(CQ, "\n");
+
+	switch (cq->cq_attr.wait_obj) {
+	case FI_WAIT_FD:
+		*(int *) arg = cq->object.fd;
+		break;
+	default:
+		USDF_WARN_SYS(CQ, "unsupported wait type\n");
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int usdf_wait_control(struct fid *fcq, int command, void *arg)
+{
+	struct usdf_cq *cq;
+
+	USDF_TRACE_SYS(CQ, "\n");
+
+	if (!fcq || !arg) {
+		USDF_WARN_SYS(CQ, "CQ fid and arg can't be NULL\n");
+		return -FI_EINVAL;
+	}
+
+	cq = cq_fidtou(fcq);
+
+	switch (command) {
+	case FI_GETWAIT:
+		break;
+	default:
+		USDF_WARN_SYS(CQ, "unsupported control command\n");
+		return -FI_EINVAL;
+	}
+
+	return usdf_cq_get_wait(cq, arg);
+}
+
 static struct fi_ops_cq usdf_cq_context_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = usdf_cq_read_context,
@@ -833,7 +873,7 @@ static struct fi_ops usdf_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = usdf_cq_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = usdf_wait_control,
 	.ops_open = fi_no_ops_open,
 };
 
