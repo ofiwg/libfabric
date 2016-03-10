@@ -536,6 +536,30 @@ static ssize_t usdf_cq_sread(struct fid_cq *fcq, void *buf, size_t count,
 	return -FI_EAGAIN;
 }
 
+static ssize_t usdf_cq_sread_fd(struct fid_cq *fcq, void *buf, size_t count,
+		const void *cond, int timeout_ms)
+{
+	struct usdf_cq *cq;
+	int ret;
+
+	cq = cq_ftou(fcq);
+
+	ret = usdf_cq_trywait(&fcq->fid);
+	if (ret == FI_SUCCESS) {
+		ret = fi_poll_fd(cq->object.fd, timeout_ms);
+		if (ret == 0) {
+			return -FI_EAGAIN;
+		} else if (ret < 0) {
+			USDF_DBG_SYS(CQ, "poll failed: %s\n", strerror(-ret));
+			return ret;
+		}
+	} else if ((ret < 0) && (ret != -FI_EAGAIN)) {
+		return ret;
+	}
+
+	return fi_cq_read(fcq, buf, count);
+}
+
 /*
  * poll a soft CQ
  * This will loop over all the hard CQs within, collecting results.
@@ -1101,6 +1125,7 @@ usdf_cq_create_cq(struct usdf_cq *cq)
 	 */
 	if (cq->cq_attr.wait_obj == FI_WAIT_FD ||
 			cq->cq_attr.wait_obj == FI_WAIT_SET) {
+		cq->cq_ops.sread = usdf_cq_sread_fd;
 		ret = usdf_cq_create_fd(cq);
 		if (ret)
 			return ret;
