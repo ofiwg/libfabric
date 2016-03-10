@@ -110,7 +110,6 @@ struct udpx_ep {
 	struct udpx_rx_cirq	*rxq; /* protected by rx_cq lock */
 	uint64_t		caps;
 	uint64_t		flags;
-	size_t			min_multi_recv;
 	int			sock;
 };
 

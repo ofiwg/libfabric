@@ -74,40 +74,13 @@ static struct fi_ops_cm udpx_cm_ops = {
 int udpx_getopt(fid_t fid, int level, int optname,
 		void *optval, size_t *optlen)
 {
-	struct udpx_ep *ep;
-
-	ep = container_of(fid, struct udpx_ep, ep_fid.fid);
-	if (level != FI_OPT_ENDPOINT)
-		return -FI_ENOPROTOOPT;
-
-	switch (optname) {
-	case FI_OPT_MIN_MULTI_RECV:
-		*(size_t *) optval = ep->min_multi_recv;
-		*optlen = sizeof(size_t);
-		break;
-	default:
-		return -FI_ENOPROTOOPT;
-	}
-	return 0;
+	return -FI_ENOPROTOOPT;
 }
 
 int udpx_setopt(fid_t fid, int level, int optname,
 		const void *optval, size_t optlen)
 {
-	struct udpx_ep *ep;
-
-	ep = container_of(fid, struct udpx_ep, ep_fid.fid);
-	if (level != FI_OPT_ENDPOINT)
-		return -FI_ENOPROTOOPT;
-
-	switch (optname) {
-	case FI_OPT_MIN_MULTI_RECV:
-		ep->min_multi_recv = *(size_t *) optval;
-		break;
-	default:
-		return -FI_ENOPROTOOPT;
-	}
-	return 0;
+	return -FI_ENOPROTOOPT;
 }
 
 static struct fi_ops_ep udpx_ep_ops = {
