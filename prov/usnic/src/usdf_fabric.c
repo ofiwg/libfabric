@@ -754,7 +754,7 @@ static struct fi_ops_fabric usdf_ops_fabric = {
 	.passive_ep = usdf_pep_open,
 	.eq_open = usdf_eq_open,
 	.wait_open = usdf_wait_open,
-	.trywait = fi_no_trywait
+	.trywait = usdf_trywait
 };
 
 static int

@@ -39,6 +39,7 @@
 #include "fi_enosys.h"
 
 #include "usdf.h"
+#include "usdf_cq.h"
 #include "usdf_wait.h"
 
 
@@ -59,6 +60,27 @@ static struct fi_ops usdf_wait_fi_ops = {
 	.control = usdf_wait_control,
 	.ops_open = fi_no_ops_open
 };
+
+int usdf_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+{
+	size_t i;
+	int ret;
+
+	for (i = 0; i < count; i++) {
+		switch (fids[i]->fclass) {
+		case FI_CLASS_EQ:
+			continue;
+		case FI_CLASS_CQ:
+			ret = usdf_cq_trywait(fids[i]);
+			break;
+		default:
+			USDF_DBG_SYS(FABRIC, "invalid fid\n");
+			return -FI_EINVAL;
+		}
+	}
+
+	return FI_SUCCESS;
+}
 
 /* Since a domain hasn't been opened at the time of wait object creation, open a
  * device temporarily to check for the group interrupt capability.
