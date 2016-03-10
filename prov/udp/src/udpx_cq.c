@@ -36,7 +36,7 @@
 #include "udpx.h"
 
 
-static void udpx_cq_progress(struct util_cq *cq)
+static void util_cq_progress(struct util_cq *cq)
 {
 	struct udpx_ep *ep;
 	struct fid_list_entry *fid_entry;
@@ -52,32 +52,32 @@ static void udpx_cq_progress(struct util_cq *cq)
 	fastlock_release(&cq->list_lock);
 }
 
-static void udpx_cq_read_ctx(void **dst, void *src)
+static void util_cq_read_ctx(void **dst, void *src)
 {
 	*(struct fi_cq_entry *) *dst = *(struct fi_cq_entry *) src;
 	*dst += sizeof(struct fi_cq_entry);
 }
 
-static void udpx_cq_read_msg(void **dst, void *src)
+static void util_cq_read_msg(void **dst, void *src)
 {
 	*(struct fi_cq_msg_entry *) *dst = *(struct fi_cq_msg_entry *) src;
 	*dst += sizeof(struct fi_cq_msg_entry);
 }
 
-static void udpx_cq_read_data(void **dst, void *src)
+static void util_cq_read_data(void **dst, void *src)
 {
 	*(struct fi_cq_data_entry *) *dst = *(struct fi_cq_data_entry *) src;
 	*dst += sizeof(struct fi_cq_data_entry);
 }
 
-static void udpx_cq_read_tagged(void **dst, void *src)
+static void util_cq_read_tagged(void **dst, void *src)
 {
-	udpx_cq_read_data(dst, src);
+	util_cq_read_data(dst, src);
 	((struct fi_cq_tagged_entry *) *dst)->tag = 0;
 	*dst += sizeof(struct fi_cq_tagged_entry);
 }
 
-static ssize_t udpx_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
+static ssize_t util_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
 	struct util_cq *cq;
 	struct fi_cq_data_entry *entry;
@@ -87,7 +87,7 @@ static ssize_t udpx_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 	fastlock_acquire(&cq->cq_lock);
 	if (cirque_isempty(cq->cirq)) {
 		fastlock_release(&cq->cq_lock);
-		udpx_cq_progress(cq);
+		util_cq_progress(cq);
 		fastlock_acquire(&cq->cq_lock);
 		if (cirque_isempty(cq->cirq)) {
 			i = -FI_EAGAIN;
@@ -113,7 +113,7 @@ out:
 	return i;
 }
 
-static ssize_t udpx_cq_readfrom(struct fid_cq *cq_fid, void *buf,
+static ssize_t util_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 				size_t count, fi_addr_t *src_addr)
 {
 	struct util_cq *cq;
@@ -122,7 +122,7 @@ static ssize_t udpx_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	if (!cq->src) {
-		i = udpx_cq_read(cq_fid, buf, count);
+		i = util_cq_read(cq_fid, buf, count);
 		if (i > 0) {
 			for (count = 0; count < i; count++)
 				src_addr[i] = FI_ADDR_NOTAVAIL;
@@ -133,7 +133,7 @@ static ssize_t udpx_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 	fastlock_acquire(&cq->cq_lock);
 	if (cirque_isempty(cq->cirq)) {
 		fastlock_release(&cq->cq_lock);
-		udpx_cq_progress(cq);
+		util_cq_progress(cq);
 		fastlock_acquire(&cq->cq_lock);
 		if (cirque_isempty(cq->cirq)) {
 			i = -FI_EAGAIN;
@@ -160,7 +160,7 @@ out:
 	return i;
 }
 
-static ssize_t udpx_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
+static ssize_t util_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 			       uint64_t flags)
 {
 	struct util_cq *cq;
@@ -185,7 +185,7 @@ static ssize_t udpx_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *bu
 	return ret;
 }
 
-static ssize_t udpx_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
+static ssize_t util_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 			     const void *cond, int timeout)
 {
 	struct util_cq *cq;
@@ -193,10 +193,10 @@ static ssize_t udpx_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	assert(cq->wait && cq->internal_wait);
 	fi_wait(&cq->wait->wait_fid, timeout);
-	return udpx_cq_read(cq_fid, buf, count);
+	return util_cq_read(cq_fid, buf, count);
 }
 
-static ssize_t udpx_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+static ssize_t util_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 				 fi_addr_t *src_addr, const void *cond,
 				 int timeout)
 {
@@ -205,10 +205,10 @@ static ssize_t udpx_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	assert(cq->wait && cq->internal_wait);
 	fi_wait(&cq->wait->wait_fid, timeout);
-	return udpx_cq_readfrom(cq_fid, buf, count, src_addr);
+	return util_cq_readfrom(cq_fid, buf, count, src_addr);
 }
 
-static int udpx_cq_signal(struct fid_cq *cq_fid)
+static int util_cq_signal(struct fid_cq *cq_fid)
 {
 	struct util_cq *cq;
 
@@ -218,24 +218,24 @@ static int udpx_cq_signal(struct fid_cq *cq_fid)
 	return 0;
 }
 
-static const char *udpx_cq_strerror(struct fid_cq *cq, int prov_errno,
+static const char *util_cq_strerror(struct fid_cq *cq, int prov_errno,
 				    const void *err_data, char *buf, size_t len)
 {
 	return fi_strerror(prov_errno);
 }
 
-static struct fi_ops_cq udpx_cq_ops = {
+static struct fi_ops_cq util_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
-	.read = udpx_cq_read,
-	.readfrom = udpx_cq_readfrom,
-	.readerr = udpx_cq_readerr,
-	.sread = udpx_cq_sread,
-	.sreadfrom = udpx_cq_sreadfrom,
-	.signal = udpx_cq_signal,
-	.strerror = udpx_cq_strerror,
+	.read = util_cq_read,
+	.readfrom = util_cq_readfrom,
+	.readerr = util_cq_readerr,
+	.sread = util_cq_sread,
+	.sreadfrom = util_cq_sreadfrom,
+	.signal = util_cq_signal,
+	.strerror = util_cq_strerror,
 };
 
-static int udpx_cq_close(struct fid *fid)
+static int util_cq_close(struct fid *fid)
 {
 	struct util_cq *cq;
 	int ret;
@@ -251,15 +251,15 @@ static int udpx_cq_close(struct fid *fid)
 	return 0;
 }
 
-static struct fi_ops udpx_cq_fi_ops = {
+static struct fi_ops util_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = udpx_cq_close,
+	.close = util_cq_close,
 	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
 
-static int udpx_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
+static int util_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 			struct util_cq *cq, void *context)
 {
 	fi_cq_read_func read_func;
@@ -268,16 +268,16 @@ static int udpx_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:
 	case FI_CQ_FORMAT_CONTEXT:
-		read_func = udpx_cq_read_ctx;
+		read_func = util_cq_read_ctx;
 		break;
 	case FI_CQ_FORMAT_MSG:
-		read_func = udpx_cq_read_msg;
+		read_func = util_cq_read_msg;
 		break;
 	case FI_CQ_FORMAT_DATA:
-		read_func = udpx_cq_read_data;
+		read_func = util_cq_read_data;
 		break;
 	case FI_CQ_FORMAT_TAGGED:
-		read_func = udpx_cq_read_tagged;
+		read_func = util_cq_read_tagged;
 		break;
 	default:
 		assert(0);
@@ -310,7 +310,7 @@ err1:
 	return ret;
 }
 
-int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+int util_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
 	struct util_cq *cq;
@@ -324,18 +324,18 @@ int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!cq)
 		return -FI_ENOMEM;
 
-	ret = udpx_cq_init(domain, attr, cq, context);
+	ret = util_cq_init(domain, attr, cq, context);
 	if (ret) {
 		free(cq);
 		return ret;
 	}
 
-	cq->cq_fid.fid.ops = &udpx_cq_fi_ops;
-	cq->cq_fid.ops = &udpx_cq_ops;
+	cq->cq_fid.fid.ops = &util_cq_fi_ops;
+	cq->cq_fid.ops = &util_cq_ops;
 
 	ret = fi_cq_ready(cq);
 	if (ret) {
-		udpx_cq_close(&cq->cq_fid.fid);
+		util_cq_close(&cq->cq_fid.fid);
 		return ret;
 	}
 
