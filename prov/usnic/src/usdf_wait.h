@@ -60,5 +60,6 @@ struct usdf_wait {
 
 int usdf_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		struct fid_wait **waitset);
+int usdf_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
 #endif
