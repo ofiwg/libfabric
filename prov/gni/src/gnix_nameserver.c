@@ -64,6 +64,44 @@
 
 #define BUF_SIZE 256
 
+static int __gnix_ipaddr_from_iface(const char *iface, struct sockaddr_in *sin)
+{
+	int ret = FI_SUCCESS;
+	struct ifreq ifr = { { { 0 } } };
+	int sock = -1;
+
+	sock = socket(AF_INET, SOCK_DGRAM, 0);
+	if (sock == -1) {
+		GNIX_WARN(FI_LOG_FABRIC, "Socket creation failed: %s\n",
+			  strerror(errno));
+		return -FI_EIO;
+	}
+
+	ifr.ifr_addr.sa_family = AF_INET;
+	snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", iface);
+
+	ret = ioctl(sock, SIOCGIFADDR, &ifr);
+	if (ret == -1) {
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "Failed to get address for ipogif0: %s\n",
+			  strerror(errno));
+		goto exit_w_sock;
+		ret = -FI_EIO;
+	}
+
+	*sin = *(struct sockaddr_in *) &ifr.ifr_addr;
+
+exit_w_sock:
+
+	if (close(sock) == -1) {
+		GNIX_WARN(FI_LOG_FABRIC, "Unable to close socket: %s\n",
+			  strerror(errno));
+	}
+
+	return ret;
+
+}
+
 /*
  * get gni nic addr from AF_INET  ip addr, also return local device id on same
  *subnet
@@ -153,16 +191,13 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 		      IN uint64_t flags, INOUT struct gnix_ep_name
 		      *resolved_addr)
 {
-	int sock = -1;
 	uint32_t pe = -1;
 	uint32_t cpu_id = -1;
 	struct addrinfo *result = NULL;
 	struct addrinfo *rp = NULL;
 
-	struct ifreq ifr = {{{0}}};
-
 	struct sockaddr_in *sa = NULL;
-	struct sockaddr_in *sin = NULL;
+	struct sockaddr_in sin;
 
 	int ret = FI_SUCCESS;
 	gni_return_t status = GNI_RC_SUCCESS;
@@ -186,29 +221,19 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 		goto err;
 	}
 
-	sock = socket(AF_INET, SOCK_DGRAM, 0);
+	/*
+	 * Get the address for the ipogif0 interface
+	 * On nodes with KNC accelerators, the iface is br0
+	 */
 
-	if (sock == -1) {
-		GNIX_WARN(FI_LOG_FABRIC, "Socket creation failed: %s\n",
-			  strerror(errno));
-		ret = -FI_EIO;
-		goto err;
-	}
-
-	/* Get the address for the ipogif0 interface */
-	ifr.ifr_addr.sa_family = AF_INET;
-	snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", "ipogif0");
-
-	ret = ioctl(sock, SIOCGIFADDR, &ifr);
-	if (ret == -1) {
-		GNIX_WARN(FI_LOG_FABRIC,
-			  "Failed to get address for ipogif0: %s\n",
-			  strerror(errno));
-		ret = -FI_EIO;
-		goto sock_cleanup;
-	}
-
-	sin = (struct sockaddr_in *) &ifr.ifr_addr;
+	ret =  __gnix_ipaddr_from_iface("ipogif0", &sin);
+	if (ret != FI_SUCCESS)
+		ret =  __gnix_ipaddr_from_iface("br0", &sin);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_FABRIC,
+				  "Unable to obtain local iface addr\n");
+			goto err;
+		}
 
 	ret = getaddrinfo(node, service, &hints, &result);
 	if (ret != 0) {
@@ -216,7 +241,7 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 			  "Failed to get address for node provided: %s\n",
 			  strerror(errno));
 		ret = -FI_EINVAL;
-		goto sock_cleanup;
+		goto err;
 	}
 
 	for (rp = result; rp != NULL; rp = rp->ai_next) {
@@ -227,7 +252,7 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 		 * If we are trying to resolve localhost then use
 		 * CdmGetNicAddress.
 		 */
-		if (sa->sin_addr.s_addr == sin->sin_addr.s_addr) {
+		if (sa->sin_addr.s_addr == sin.sin_addr.s_addr) {
 			status = GNI_CdmGetNicAddress(0, &pe, &cpu_id);
 			if(status == GNI_RC_SUCCESS) {
 				break;
@@ -235,7 +260,7 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 				GNIX_WARN(FI_LOG_FABRIC,
 					  "Unable to get NIC address.");
 				ret = gnixu_to_fi_errno(status);
-				goto sock_cleanup;
+				goto err;
 			}
 		} else {
 			ret =
@@ -254,7 +279,7 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 			  "Unable to acquire valid address for node %s\n",
 			  node);
 		ret = -FI_EADDRNOTAVAIL;
-		goto sock_cleanup;
+		goto err;
 	}
 
 	/*
@@ -275,11 +300,6 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 	}
 	GNIX_INFO(FI_LOG_FABRIC, "Resolved: %s:%s to gnix_addr: 0x%lx\n",
 		  node ?: "", service ?: "", resolved_addr->gnix_addr);
-sock_cleanup:
-	if(close(sock) == -1) {
-		GNIX_WARN(FI_LOG_FABRIC, "Unable to close socket: %s\n",
-			  strerror(errno));
-	}
 err:
 	if (result != NULL) {
 		freeaddrinfo(result);
