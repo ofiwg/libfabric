@@ -50,6 +50,8 @@
 
 #include <fi.h>
 #include <fi_list.h>
+#include <fi_mem.h>
+#include <fi_rbuf.h>
 #include <fi_signal.h>
 #include <fi_enosys.h>
 
@@ -92,6 +94,7 @@ int fi_fabric_init(const struct fi_provider *prov,
 		   struct fi_fabric_attr *user_attr,
 		   struct util_fabric *fabric, void *context);
 int util_fabric_close(struct util_fabric *fabric);
+int util_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
 /*
  * Domain
@@ -116,6 +119,21 @@ int fi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 int util_domain_close(struct util_domain *domain);
 
 
+struct util_ep;
+typedef void (*fi_ep_progress_func)(struct util_ep *util_ep);
+
+struct util_ep {
+	struct fid_ep		ep_fid;
+	struct util_domain	*domain;
+	struct util_av		*av;
+	struct util_cq		*rx_cq;
+	struct util_cq		*tx_cq;
+	uint64_t		caps;
+	uint64_t		flags;
+	fi_ep_progress_func	progress;
+};
+
+
 /*
  * Completion queue
  *
@@ -134,6 +152,8 @@ struct util_cq_err_entry {
 	struct slist_entry	list_entry;
 };
 
+DECLARE_CIRQUE(struct fi_cq_data_entry, util_comp_cirq);
+
 struct util_cq {
 	struct fid_cq		cq_fid;
 	struct util_domain	*domain;
@@ -143,16 +163,17 @@ struct util_cq {
 	fastlock_t		list_lock;
 	fastlock_t		cq_lock;
 
+	struct util_comp_cirq	*cirq;
+	fi_addr_t		*src;
+
 	struct slist		err_list;
 	fi_cq_read_func		read_entry;
 	int			internal_wait;
 };
 
-/* util_cq must be memset to 0 */
-int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
-		fi_cq_read_func read_entry, struct util_cq *cq, void *context);
-int fi_cq_ready(struct util_cq *cq);
-int fi_cq_cleanup(struct util_cq *cq);
+int util_cq_open(const struct fi_provider *prov,
+		 struct fid_domain *domain, struct fi_cq_attr *attr,
+		 struct fid_cq **cq_fid, void *context);
 
 
 /*

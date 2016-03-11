@@ -41,7 +41,7 @@ int udpx_setname(fid_t fid, void *addr, size_t addrlen)
 	struct udpx_ep *ep;
 	int ret;
 
-	ep = container_of(fid, struct udpx_ep, ep_fid.fid);
+	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
 	ret = bind(ep->sock, addr, addrlen);
 	return ret ? -errno : 0;
 }
@@ -52,7 +52,7 @@ int udpx_getname(fid_t fid, void *addr, size_t *addrlen)
 	socklen_t len;
 	int ret;
 
-	ep = container_of(fid, struct udpx_ep, ep_fid.fid);
+	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
 	len = *addrlen;
 	ret = getsockname(ep->sock, addr, &len);
 	*addrlen = len;
@@ -74,40 +74,13 @@ static struct fi_ops_cm udpx_cm_ops = {
 int udpx_getopt(fid_t fid, int level, int optname,
 		void *optval, size_t *optlen)
 {
-	struct udpx_ep *ep;
-
-	ep = container_of(fid, struct udpx_ep, ep_fid.fid);
-	if (level != FI_OPT_ENDPOINT)
-		return -FI_ENOPROTOOPT;
-
-	switch (optname) {
-	case FI_OPT_MIN_MULTI_RECV:
-		*(size_t *) optval = ep->min_multi_recv;
-		*optlen = sizeof(size_t);
-		break;
-	default:
-		return -FI_ENOPROTOOPT;
-	}
-	return 0;
+	return -FI_ENOPROTOOPT;
 }
 
 int udpx_setopt(fid_t fid, int level, int optname,
 		const void *optval, size_t optlen)
 {
-	struct udpx_ep *ep;
-
-	ep = container_of(fid, struct udpx_ep, ep_fid.fid);
-	if (level != FI_OPT_ENDPOINT)
-		return -FI_ENOPROTOOPT;
-
-	switch (optname) {
-	case FI_OPT_MIN_MULTI_RECV:
-		ep->min_multi_recv = *(size_t *) optval;
-		break;
-	default:
-		return -FI_ENOPROTOOPT;
-	}
-	return 0;
+	return -FI_ENOPROTOOPT;
 }
 
 static struct fi_ops_ep udpx_ep_ops = {
@@ -125,19 +98,19 @@ static void udpx_tx_comp(struct udpx_ep *ep, void *context)
 {
 	struct fi_cq_data_entry *comp;
 
-	comp = cirque_tail(ep->tx_cq->cirq);
+	comp = cirque_tail(ep->util_ep.tx_cq->cirq);
 	comp->op_context = context;
 	comp->flags = FI_SEND;
 	comp->len = 0;
 	comp->buf = NULL;
 	comp->data = 0;
-	cirque_commit(ep->tx_cq->cirq);
+	cirque_commit(ep->util_ep.tx_cq->cirq);
 }
 
 static void udpx_tx_comp_signal(struct udpx_ep *ep, void *context)
 {
 	udpx_tx_comp(ep, context);
-	ep->tx_cq->util_cq.wait->signal(ep->tx_cq->util_cq.wait);
+	ep->util_ep.tx_cq->wait->signal(ep->util_ep.tx_cq->wait);
 }
 
 static void udpx_rx_comp(struct udpx_ep *ep, void *context, uint64_t flags,
@@ -145,20 +118,20 @@ static void udpx_rx_comp(struct udpx_ep *ep, void *context, uint64_t flags,
 {
 	struct fi_cq_data_entry *comp;
 
-	comp = cirque_tail(ep->rx_cq->cirq);
+	comp = cirque_tail(ep->util_ep.rx_cq->cirq);
 	comp->op_context = context;
 	comp->flags = FI_RECV | flags;
 	comp->len = len;
 	comp->buf = buf;
 	comp->data = 0;
-	cirque_commit(ep->rx_cq->cirq);
+	cirque_commit(ep->util_ep.rx_cq->cirq);
 }
 
 static void udpx_rx_src_comp(struct udpx_ep *ep, void *context, uint64_t flags,
 			     size_t len, void *buf, void *addr)
 {
-	ep->rx_cq->src[cirque_windex(ep->rx_cq->cirq)] =
-			ip_av_get_index(ep->av, addr);
+	ep->util_ep.rx_cq->src[cirque_windex(ep->util_ep.rx_cq->cirq)] =
+			ip_av_get_index(ep->util_ep.av, addr);
 	udpx_rx_comp(ep, context, flags, len, buf, addr);
 }
 
@@ -166,33 +139,34 @@ static void udpx_rx_comp_signal(struct udpx_ep *ep, void *context,
 			uint64_t flags, size_t len, void *buf, void *addr)
 {
 	udpx_rx_comp(ep, context, flags, len, buf, addr);
-	ep->rx_cq->util_cq.wait->signal(ep->rx_cq->util_cq.wait);
+	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
 }
 
 static void udpx_rx_src_comp_signal(struct udpx_ep *ep, void *context,
 			uint64_t flags, size_t len, void *buf, void *addr)
 {
 	udpx_rx_src_comp(ep, context, flags, len, buf, addr);
-	ep->rx_cq->util_cq.wait->signal(ep->rx_cq->util_cq.wait);
-
+	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
 }
 
-/* Called with Rx CQ lock held */
-void udpx_ep_progress(struct udpx_ep *ep)
+void udpx_ep_progress(struct util_ep *util_ep)
 {
+	struct udpx_ep *ep;
 	struct udpx_ep_entry *entry;
 	struct msghdr hdr;
 	struct sockaddr_in6 addr;
 	int ret;
 
+	ep = container_of(util_ep, struct udpx_ep, util_ep);
 	hdr.msg_name = &addr;
 	hdr.msg_namelen = sizeof(addr);
 	hdr.msg_control = NULL;
 	hdr.msg_controllen = 0;
 	hdr.msg_flags = 0;
 
+	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 	if (cirque_isempty(ep->rxq))
-		return;
+		goto out;
 
 	entry = cirque_head(ep->rxq);
 	hdr.msg_iov = entry->iov;
@@ -203,6 +177,8 @@ void udpx_ep_progress(struct udpx_ep *ep)
 		ep->rx_comp(ep, entry->context, 0, ret, NULL, &addr);
 		cirque_discard(ep->rxq);
 	}
+out:
+	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 }
 
 ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
@@ -212,8 +188,8 @@ ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	struct udpx_ep_entry *entry;
 	ssize_t ret;
 
-	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
-	fastlock_acquire(&ep->rx_cq->util_cq.cq_lock);
+	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
+	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 	if (cirque_isfull(ep->rxq)) {
 		ret = -FI_EAGAIN;
 		goto out;
@@ -230,7 +206,7 @@ ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	cirque_commit(ep->rxq);
 	ret = 0;
 out:
-	fastlock_release(&ep->rx_cq->util_cq.cq_lock);
+	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 	return ret;
 }
 
@@ -252,8 +228,8 @@ ssize_t udpx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	struct udpx_ep_entry *entry;
 	ssize_t ret;
 
-	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
-	fastlock_acquire(&ep->rx_cq->util_cq.cq_lock);
+	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
+	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 	if (cirque_isfull(ep->rxq)) {
 		ret = -FI_EAGAIN;
 		goto out;
@@ -269,7 +245,7 @@ ssize_t udpx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	cirque_commit(ep->rxq);
 	ret = 0;
 out:
-	fastlock_release(&ep->rx_cq->util_cq.cq_lock);
+	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
 	return ret;
 }
 
@@ -279,15 +255,16 @@ ssize_t udpx_send(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc
 	struct udpx_ep *ep;
 	ssize_t ret;
 
-	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
-	fastlock_acquire(&ep->tx_cq->util_cq.cq_lock);
-	if (cirque_isfull(ep->tx_cq->cirq)) {
+	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
+	fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
+	if (cirque_isfull(ep->util_ep.tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
 
-	ret = sendto(ep->sock, buf, len, 0, ip_av_get_addr(ep->av, dest_addr),
-		     ep->av->addrlen);
+	ret = sendto(ep->sock, buf, len, 0,
+		     ip_av_get_addr(ep->util_ep.av, dest_addr),
+		     ep->util_ep.av->addrlen);
 	if (ret == len) {
 		ep->tx_comp(ep, context);
 		ret = 0;
@@ -295,7 +272,7 @@ ssize_t udpx_send(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc
 		ret = -errno;
 	}
 out:
-	fastlock_release(&ep->tx_cq->util_cq.cq_lock);
+	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
 	return ret;
 }
 
@@ -306,17 +283,17 @@ ssize_t udpx_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	struct msghdr hdr;
 	ssize_t ret;
 
-	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
-	hdr.msg_name = ip_av_get_addr(ep->av, msg->addr);
-	hdr.msg_namelen = ep->av->addrlen;
+	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
+	hdr.msg_name = ip_av_get_addr(ep->util_ep.av, msg->addr);
+	hdr.msg_namelen = ep->util_ep.av->addrlen;
 	hdr.msg_iov = (struct iovec *) msg->msg_iov;
 	hdr.msg_iovlen = msg->iov_count;
 	hdr.msg_control = NULL;
 	hdr.msg_controllen = 0;
 	hdr.msg_flags = 0;
 
-	fastlock_acquire(&ep->tx_cq->util_cq.cq_lock);
-	if (cirque_isfull(ep->tx_cq->cirq)) {
+	fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
+	if (cirque_isfull(ep->util_ep.tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto out;
 	}
@@ -329,7 +306,7 @@ ssize_t udpx_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		ret = -errno;
 	}
 out:
-	fastlock_release(&ep->tx_cq->util_cq.cq_lock);
+	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
 	return ret;
 }
 
@@ -352,9 +329,10 @@ ssize_t udpx_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct udpx_ep *ep;
 	ssize_t ret;
 
-	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
-	ret = sendto(ep->sock, buf, len, 0, ip_av_get_addr(ep->av, dest_addr),
-		     ep->av->addrlen);
+	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
+	ret = sendto(ep->sock, buf, len, 0,
+		     ip_av_get_addr(ep->util_ep.av, dest_addr),
+		     ep->util_ep.av->addrlen);
 	return ret == len ? 0 : -errno;
 }
 
@@ -376,34 +354,34 @@ static int udpx_ep_close(struct fid *fid)
 	struct udpx_ep *ep;
 	struct util_wait_fd *wait;
 
-	ep = container_of(fid, struct udpx_ep, ep_fid.fid);
+	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
 
-	if (ep->av)
-		atomic_dec(&ep->av->ref);
+	if (ep->util_ep.av)
+		atomic_dec(&ep->util_ep.av->ref);
 
-	if (ep->rx_cq) {
-		if (ep->rx_cq->util_cq.wait) {
-			wait = container_of(ep->rx_cq->util_cq.wait,
+	if (ep->util_ep.rx_cq) {
+		if (ep->util_ep.rx_cq->wait) {
+			wait = container_of(ep->util_ep.rx_cq->wait,
 					    struct util_wait_fd, util_wait);
 			fi_epoll_del(wait->epoll_fd, ep->sock);
 		}
-		fid_list_remove(&ep->rx_cq->util_cq.list,
-				&ep->rx_cq->util_cq.list_lock,
-				&ep->ep_fid.fid);
-		atomic_dec(&ep->rx_cq->util_cq.ref);
+		fid_list_remove(&ep->util_ep.rx_cq->list,
+				&ep->util_ep.rx_cq->list_lock,
+				&ep->util_ep.ep_fid.fid);
+		atomic_dec(&ep->util_ep.rx_cq->ref);
 	}
 
-	if (ep->tx_cq)
-		atomic_dec(&ep->tx_cq->util_cq.ref);
+	if (ep->util_ep.tx_cq)
+		atomic_dec(&ep->util_ep.tx_cq->ref);
 
 	udpx_rx_cirq_free(ep->rxq);
 	close(ep->sock);
-	atomic_dec(&ep->domain->ref);
+	atomic_dec(&ep->util_ep.domain->ref);
 	free(ep);
 	return 0;
 }
 
-static int udpx_ep_bind_cq(struct udpx_ep *ep, struct udpx_cq *cq, uint64_t flags)
+static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq, uint64_t flags)
 {
 	struct util_wait_fd *wait;
 	int ret;
@@ -414,43 +392,42 @@ static int udpx_ep_bind_cq(struct udpx_ep *ep, struct udpx_cq *cq, uint64_t flag
 		return -FI_EBADFLAGS;
 	}
 
-	if (((flags & FI_TRANSMIT) && ep->tx_cq) ||
-	    ((flags & FI_RECV) && ep->rx_cq)) {
+	if (((flags & FI_TRANSMIT) && ep->util_ep.tx_cq) ||
+	    ((flags & FI_RECV) && ep->util_ep.rx_cq)) {
 		FI_WARN(&udpx_prov, FI_LOG_EP_CTRL,
 			"duplicate CQ binding\n");
 		return -FI_EINVAL;
 	}
 
 	if (flags & FI_TRANSMIT) {
-		ep->tx_cq = cq;
-		atomic_inc(&cq->util_cq.ref);
-		ep->tx_comp = cq->util_cq.wait ?
-			      udpx_tx_comp_signal : udpx_tx_comp;
+		ep->util_ep.tx_cq = cq;
+		atomic_inc(&cq->ref);
+		ep->tx_comp = cq->wait ? udpx_tx_comp_signal : udpx_tx_comp;
 	}
 
 	if (flags & FI_RECV) {
-		ep->rx_cq = cq;
-		atomic_inc(&cq->util_cq.ref);
+		ep->util_ep.rx_cq = cq;
+		atomic_inc(&cq->ref);
 
-		if (cq->util_cq.wait) {
-			ep->rx_comp = (cq->util_cq.domain->caps & FI_SOURCE) ?
+		if (cq->wait) {
+			ep->rx_comp = (cq->domain->caps & FI_SOURCE) ?
 				      udpx_rx_src_comp_signal :
 				      udpx_rx_comp_signal;
 
-			wait = container_of(cq->util_cq.wait,
+			wait = container_of(cq->wait,
 					    struct util_wait_fd, util_wait);
 			ret = fi_epoll_add(wait->epoll_fd, ep->sock,
-					   &ep->ep_fid.fid);
+					   &ep->util_ep.ep_fid.fid);
 			if (ret)
 				return ret;
 		} else {
-			ep->rx_comp = (cq->util_cq.domain->caps & FI_SOURCE) ?
+			ep->rx_comp = (cq->domain->caps & FI_SOURCE) ?
 				      udpx_rx_src_comp : udpx_rx_comp;
 		}
 
-		ret = fid_list_insert(&cq->util_cq.list,
-				      &cq->util_cq.list_lock,
-				      &ep->ep_fid.fid);
+		ret = fid_list_insert(&cq->list,
+				      &cq->list_lock,
+				      &ep->util_ep.ep_fid.fid);
 		if (ret)
 			return ret;
 	}
@@ -464,21 +441,21 @@ static int udpx_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	struct util_av *av;
 	int ret = 0;
 
-	ep = container_of(ep_fid, struct udpx_ep, ep_fid.fid);
+	ep = container_of(ep_fid, struct udpx_ep, util_ep.ep_fid.fid);
 	switch (bfid->fclass) {
 	case FI_CLASS_AV:
-		if (ep->av) {
+		if (ep->util_ep.av) {
 			FI_WARN(&udpx_prov, FI_LOG_EP_CTRL,
 				"duplicate AV binding\n");
 			return -FI_EINVAL;
 		}
 		av = container_of(bfid, struct util_av, av_fid.fid);
 		atomic_inc(&av->ref);
-		ep->av = av;
+		ep->util_ep.av = av;
 		break;
 	case FI_CLASS_CQ:
-		ret = udpx_ep_bind_cq(ep, container_of(bfid, struct udpx_cq,
-						util_cq.cq_fid.fid), flags);
+		ret = udpx_ep_bind_cq(ep, container_of(bfid, struct util_cq,
+							cq_fid.fid), flags);
 		break;
 	case FI_CLASS_EQ:
 		break;
@@ -495,12 +472,12 @@ static int udpx_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	struct udpx_ep *ep;
 
-	ep = container_of(fid, struct udpx_ep, ep_fid.fid);
+	ep = container_of(fid, struct udpx_ep, util_ep.ep_fid.fid);
 	switch (command) {
 	case FI_ENABLE:
-		if (!ep->rx_cq || !ep->tx_cq)
+		if (!ep->util_ep.rx_cq || !ep->util_ep.tx_cq)
 			return -FI_ENOCQ;
-		if (!ep->av)
+		if (!ep->util_ep.av)
 			return -FI_EOPBADSTATE; /* TODO: Add FI_ENOAV */
 		break;
 	default:
@@ -579,16 +556,17 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return ret;
 	}
 
-	ep->ep_fid.fid.fclass = FI_CLASS_EP;
-	ep->ep_fid.fid.context = context;
-	ep->ep_fid.fid.ops = &udpx_ep_fi_ops;
-	ep->ep_fid.ops = &udpx_ep_ops;
-	ep->ep_fid.cm = &udpx_cm_ops;
-	ep->ep_fid.msg = &udpx_msg_ops;
+	ep->util_ep.ep_fid.fid.fclass = FI_CLASS_EP;
+	ep->util_ep.ep_fid.fid.context = context;
+	ep->util_ep.ep_fid.fid.ops = &udpx_ep_fi_ops;
+	ep->util_ep.ep_fid.ops = &udpx_ep_ops;
+	ep->util_ep.ep_fid.cm = &udpx_cm_ops;
+	ep->util_ep.ep_fid.msg = &udpx_msg_ops;
+	ep->util_ep.progress = udpx_ep_progress;
 
-	ep->domain = container_of(domain, struct util_domain, domain_fid);
-	atomic_inc(&ep->domain->ref);
+	ep->util_ep.domain = container_of(domain, struct util_domain, domain_fid);
+	atomic_inc(&ep->util_ep.domain->ref);
 
-	*ep_fid = &ep->ep_fid;
+	*ep_fid = &ep->util_ep.ep_fid;
 	return 0;
 }
