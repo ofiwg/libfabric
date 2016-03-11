@@ -1215,6 +1215,10 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 	struct gnix_fid_mem_desc *md = NULL;
 	int tagged = !!(flags & FI_TAGGED);
 
+	if (!ep->recv_cq) {
+		return -FI_ENOCQ;
+	}
+
 	if (!tagged) {
 		if (!ep->ep_ops.msg_recv_allowed)
 			return -FI_EOPNOTSUPP;
@@ -1550,6 +1554,10 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 
 	if (!ep) {
 		return -FI_EINVAL;
+	}
+
+	if (!ep->send_cq) {
+		return -FI_ENOCQ;
 	}
 
 	if ((flags & FI_INJECT) && (len > GNIX_INJECT_SIZE)) {
