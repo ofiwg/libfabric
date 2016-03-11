@@ -256,6 +256,34 @@ err1:
 	return ret;
 }
 
+static int fi_ibv_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+{
+	struct fi_ibv_cq *cq;
+	int ret, i;
+
+	for (i = 0; i < count; i++) {
+		switch (fids[i]->fclass) {
+		case FI_CLASS_CQ:
+			cq = container_of(fids[i], struct fi_ibv_cq, cq_fid.fid);
+			ret = cq->trywait(fids[i]);
+			if (ret)
+				return ret;
+			break;
+		case FI_CLASS_EQ:
+			/* We are always ready to wait on an EQ since
+			 * rdmacm EQ is based on an fd */
+			continue;
+		case FI_CLASS_CNTR:
+		case FI_CLASS_WAIT:
+			return -FI_ENOSYS;
+		default:
+			return -FI_EINVAL;
+		}
+
+	}
+	return FI_SUCCESS;
+}
+
 static int fi_ibv_fabric_close(fid_t fid)
 {
 	struct fi_ibv_fabric *fab;
@@ -281,7 +309,7 @@ static struct fi_ops_fabric fi_ibv_ops_fabric = {
 	.passive_ep = fi_ibv_passive_ep,
 	.eq_open = fi_ibv_eq_open,
 	.wait_open = fi_no_wait_open,
-	.trywait = fi_no_trywait
+	.trywait = fi_ibv_trywait
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,

@@ -98,7 +98,7 @@ fi_ibv_poll_events(struct fi_ibv_cq *_cq, int timeout)
 		if (ret)
 			return ret;
 
-		ibv_ack_cq_events(_cq->cq, 1);
+		atomic_inc(&_cq->nevents);
 		rc--;
 	}
 	if (fds[1].revents & POLLIN) {
@@ -133,6 +133,12 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 		MIN((ssize_t) cond, count) : 1;
 
 	for (cur = 0; cur < threshold; ) {
+		if (_cq->trywait(&cq->fid) == FI_SUCCESS) {
+			ret = fi_ibv_poll_events(_cq, timeout);
+			if (ret)
+				break;
+		}
+
 		ret = _cq->cq_fid.ops->read(&_cq->cq_fid, buf, count - cur);
 		if (ret > 0) {
 			buf += ret * _cq->entry_size;
@@ -142,28 +148,6 @@ fi_ibv_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 		} else if (ret != -FI_EAGAIN) {
 			break;
 		}
-
-		ret = ibv_req_notify_cq(_cq->cq, 0);
-		if (ret) {
-			FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "ibv_req_notify_cq error: %d\n", ret);
-			break;
-		}
-
-		/* Read again to fetch any completions that we might have missed
-		 * while rearming */
-		ret = _cq->cq_fid.ops->read(&_cq->cq_fid, buf, count - cur);
-		if (ret > 0) {
-			buf += ret * _cq->entry_size;
-			cur += ret;
-			if (cur >= threshold)
-				break;
-		} else if (ret != -FI_EAGAIN) {
-			break;
-		}
-
-		ret = fi_ibv_poll_events(_cq, timeout);
-		if (ret)
-			break;
 	}
 
 	return cur ? cur : ret;
@@ -347,6 +331,62 @@ int fi_ibv_cq_signal(struct fid_cq *cq)
 	return 0;
 }
 
+static int fi_ibv_cq_trywait(struct fid *fid)
+{
+	struct fi_ibv_cq *cq;
+	struct fi_ibv_wce *wce;
+	void *context;
+	int ret = -FI_EAGAIN, rc;
+
+	cq = container_of(fid, struct fi_ibv_cq, cq_fid.fid);
+
+	if (!cq->channel) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "No wait object object associated with CQ\n");
+		return -FI_EINVAL;
+	}
+
+	fastlock_acquire(&cq->lock);
+	if (!slist_empty(&cq->wcq))
+		goto out;
+
+	wce = util_buf_alloc(cq->domain->fab->wce_pool);
+
+	rc = fi_ibv_poll_cq(cq, &wce->wc);
+	if (rc > 0) {
+		slist_insert_tail(&wce->entry, &cq->wcq);
+		goto out;
+	} else if (rc < 0) {
+		goto err;
+	}
+
+	while (!ibv_get_cq_event(cq->channel, &cq->cq, &context))
+		atomic_inc(&cq->nevents);
+
+	rc = ibv_req_notify_cq(cq->cq, 0);
+	if (rc) {
+		FI_WARN(&fi_ibv_prov, FI_LOG_CQ, "ibv_req_notify_cq error: %d\n", ret);
+		ret = -errno;
+		goto err;
+	}
+
+	/* Read again to fetch any completions that we might have missed
+	 * while rearming */
+	rc = fi_ibv_poll_cq(cq, &wce->wc);
+	if (rc > 0) {
+		slist_insert_tail(&wce->entry, &cq->wcq);
+		goto out;
+	} else if (rc < 0) {
+		goto err;
+	}
+
+	ret = FI_SUCCESS;
+err:
+	util_buf_release(cq->domain->fab->wce_pool, wce);
+out:
+	fastlock_release(&cq->lock);
+	return ret;
+}
+
 static struct fi_ops_cq fi_ibv_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = fi_ibv_cq_read,
@@ -360,7 +400,6 @@ static struct fi_ops_cq fi_ibv_cq_ops = {
 
 static int fi_ibv_cq_control(fid_t fid, int command, void *arg)
 {
-	/*
 	struct fi_ibv_cq *cq;
 	int ret = 0;
 
@@ -379,8 +418,6 @@ static int fi_ibv_cq_control(fid_t fid, int command, void *arg)
 	}
 
 	return ret;
-	*/
-	return -FI_ENOSYS;
 }
 
 static int fi_ibv_cq_close(fid_t fid)
@@ -392,6 +429,9 @@ static int fi_ibv_cq_close(fid_t fid)
 	int ret;
 
 	cq = container_of(fid, struct fi_ibv_cq, cq_fid.fid);
+
+	if (atomic_get(&cq->nevents))
+		ibv_ack_cq_events(cq->cq, atomic_get(&cq->nevents));
 
 	fastlock_acquire(&cq->lock);
 	while (!slist_empty(&cq->wcq)) {
@@ -541,6 +581,9 @@ int fi_ibv_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	_cq->send_signal_wr_id = 0xffffffffffffc0de << ep_cnt_bits;
 	_cq->wr_id_mask = (~_cq->wr_id_mask) << ep_cnt_bits;
+
+	_cq->trywait = fi_ibv_cq_trywait;
+	atomic_initialize(&_cq->nevents, 0);
 
 	*cq = &_cq->cq_fid;
 	return 0;

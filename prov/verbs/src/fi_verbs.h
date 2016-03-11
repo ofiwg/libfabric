@@ -114,6 +114,8 @@ struct fi_ibv_eq_entry {
 	char 			eq_entry[0];
 };
 
+typedef int (*fi_ibv_trywait_func)(struct fid *fid);
+
 struct fi_ibv_eq {
 	struct fid_eq		eq_fid;
 	struct fi_ibv_fabric	*fab;
@@ -185,6 +187,8 @@ struct fi_ibv_cq {
 	uint64_t		ep_cnt;
 	uint64_t		send_signal_wr_id;
 	uint64_t		wr_id_mask;
+	fi_ibv_trywait_func	trywait;
+	atomic_t		nevents;
 	/* RDM EP fields - TODO: check usage */
 	struct fi_ibv_rdm_ep	*ep;
 	int			format;
