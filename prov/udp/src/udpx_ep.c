@@ -149,13 +149,15 @@ static void udpx_rx_src_comp_signal(struct udpx_ep *ep, void *context,
 	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
 }
 
-void udpx_ep_progress(struct udpx_ep *ep)
+void udpx_ep_progress(struct util_ep *util_ep)
 {
+	struct udpx_ep *ep;
 	struct udpx_ep_entry *entry;
 	struct msghdr hdr;
 	struct sockaddr_in6 addr;
 	int ret;
 
+	ep = container_of(util_ep, struct udpx_ep, util_ep);
 	hdr.msg_name = &addr;
 	hdr.msg_namelen = sizeof(addr);
 	hdr.msg_control = NULL;
@@ -560,6 +562,7 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->util_ep.ep_fid.ops = &udpx_ep_ops;
 	ep->util_ep.ep_fid.cm = &udpx_cm_ops;
 	ep->util_ep.ep_fid.msg = &udpx_msg_ops;
+	ep->util_ep.progress = udpx_ep_progress;
 
 	ep->util_ep.domain = container_of(domain, struct util_domain, domain_fid);
 	atomic_inc(&ep->util_ep.domain->ref);

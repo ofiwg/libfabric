@@ -109,7 +109,6 @@ struct udpx_ep {
 
 int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
-void udpx_ep_progress(struct udpx_ep *ep);
 
 
 int util_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,

@@ -38,15 +38,15 @@
 
 static void util_cq_progress(struct util_cq *cq)
 {
-	struct udpx_ep *ep;
+	struct util_ep *ep;
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
 
 	fastlock_acquire(&cq->list_lock);
 	dlist_foreach(&cq->list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
-		ep = container_of(fid_entry->fid, struct udpx_ep, util_ep.ep_fid.fid);
-		udpx_ep_progress(ep);
+		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
+		ep->progress(ep);
 
 	}
 	fastlock_release(&cq->list_lock);
