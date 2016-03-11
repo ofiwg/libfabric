@@ -171,11 +171,9 @@ struct util_cq {
 	int			internal_wait;
 };
 
-/* util_cq must be memset to 0 */
-int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
-		fi_cq_read_func read_entry, struct util_cq *cq, void *context);
-int fi_cq_ready(struct util_cq *cq);
-int fi_cq_cleanup(struct util_cq *cq);
+int util_cq_open(const struct fi_provider *prov,
+		 struct fid_domain *domain, struct fi_cq_attr *attr,
+		 struct fid_cq **cq_fid, void *context);
 
 
 /*

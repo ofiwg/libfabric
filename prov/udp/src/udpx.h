@@ -111,7 +111,7 @@ int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
 
 
-int util_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 
 
