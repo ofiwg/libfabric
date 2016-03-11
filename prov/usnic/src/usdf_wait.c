@@ -37,6 +37,7 @@
 /* This needs to be included for usdf.h */
 #include "fi.h"
 #include "fi_enosys.h"
+#include "fi_util.h"
 
 #include "usdf.h"
 #include "usdf_cq.h"
@@ -61,22 +62,59 @@ static struct fi_ops usdf_wait_fi_ops = {
 	.ops_open = fi_no_ops_open
 };
 
+static int usdf_wait_trywait(struct fid *fwait)
+{
+	struct usdf_wait *wait;
+	struct dlist_entry *item;
+	struct fid_list_entry *entry;
+	int ret = FI_SUCCESS;
+
+	wait = wait_fidtou(fwait);
+
+	dlist_foreach(&wait->list, item) {
+		entry = container_of(item, struct fid_list_entry, entry);
+
+		switch (entry->fid->fclass) {
+		case FI_CLASS_EQ:
+			continue;
+		case FI_CLASS_CQ:
+			ret = usdf_cq_trywait(entry->fid);
+			if (ret)
+				return ret;
+			break;
+		default:
+			USDF_DBG_SYS(FABRIC, "invalid fid %p\n", entry->fid);
+			return -FI_EINVAL;
+		}
+	}
+
+	return ret;
+}
+
 int usdf_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 {
 	size_t i;
 	int ret;
 
 	for (i = 0; i < count; i++) {
+		assert(fids[i]);
+
 		switch (fids[i]->fclass) {
 		case FI_CLASS_EQ:
 			continue;
 		case FI_CLASS_CQ:
 			ret = usdf_cq_trywait(fids[i]);
 			break;
+		case FI_CLASS_WAIT:
+			ret = usdf_wait_trywait(fids[i]);
+			break;
 		default:
 			USDF_DBG_SYS(FABRIC, "invalid fid\n");
 			return -FI_EINVAL;
 		}
+
+		if (ret)
+			return ret;
 	}
 
 	return FI_SUCCESS;
@@ -238,16 +276,13 @@ static int usdf_wait_wait(struct fid_wait *fwait, int timeout)
 {
 	struct usdf_wait *wait;
 	struct epoll_event event;
-	struct fid *fids[1];
 	int ret = FI_SUCCESS;
 	int nevents;
 
 	USDF_TRACE_SYS(FABRIC, "\n");
 	wait = wait_ftou(fwait);
 
-	fids[0] = &fwait->fid;
-
-	ret = usdf_trywait(&wait->wait_fabric->fab_fid, fids, 1);
+	ret = usdf_wait_trywait(&fwait->fid);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			return FI_SUCCESS;
