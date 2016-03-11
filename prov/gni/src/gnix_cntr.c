@@ -98,7 +98,7 @@ static int __gnix_cntr_progress(struct gnix_fid_cntr *cntr)
 	struct gnix_cq_poll_nic *pnic, *tmp;
 	int rc = FI_SUCCESS;
 
-	rwlock_rdlock(&cntr->nic_lock);
+	COND_READ_ACQUIRE(cntr->requires_lock, &cntr->nic_lock);
 
 	dlist_for_each_safe(&cntr->poll_nics, pnic, tmp, list) {
 		rc = _gnix_nic_progress(pnic->nic);
@@ -108,7 +108,7 @@ static int __gnix_cntr_progress(struct gnix_fid_cntr *cntr)
 		}
 	}
 
-	rwlock_unlock(&cntr->nic_lock);
+	COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
 
 	return rc;
 }
@@ -149,12 +149,12 @@ int _gnix_cntr_poll_nic_add(struct gnix_fid_cntr *cntr, struct gnix_nic *nic)
 {
 	struct gnix_cntr_poll_nic *pnic, *tmp;
 
-	rwlock_wrlock(&cntr->nic_lock);
+	COND_WRITE_ACQUIRE(cntr->requires_lock, &cntr->nic_lock);
 
 	dlist_for_each_safe(&cntr->poll_nics, pnic, tmp, list) {
 		if (pnic->nic == nic) {
 			pnic->ref_cnt++;
-			rwlock_unlock(&cntr->nic_lock);
+			COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
 			return FI_SUCCESS;
 		}
 	}
@@ -162,7 +162,7 @@ int _gnix_cntr_poll_nic_add(struct gnix_fid_cntr *cntr, struct gnix_nic *nic)
 	pnic = malloc(sizeof(struct gnix_cntr_poll_nic));
 	if (!pnic) {
 		GNIX_WARN(FI_LOG_CQ, "Failed to add NIC to CNTR poll list.\n");
-		rwlock_unlock(&cntr->nic_lock);
+		COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
 		return -FI_ENOMEM;
 	}
 
@@ -172,7 +172,7 @@ int _gnix_cntr_poll_nic_add(struct gnix_fid_cntr *cntr, struct gnix_nic *nic)
 	dlist_init(&pnic->list);
 	dlist_insert_tail(&pnic->list, &cntr->poll_nics);
 
-	rwlock_unlock(&cntr->nic_lock);
+	COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
 
 	GNIX_INFO(FI_LOG_CQ, "Added NIC(%p) to CNTR(%p) poll list\n",
 		  nic, cntr);
@@ -184,7 +184,7 @@ int _gnix_cntr_poll_nic_rem(struct gnix_fid_cntr *cntr, struct gnix_nic *nic)
 {
 	struct gnix_cntr_poll_nic *pnic, *tmp;
 
-	rwlock_wrlock(&cntr->nic_lock);
+	COND_WRITE_ACQUIRE(cntr->requires_lock, &cntr->nic_lock);
 
 	dlist_for_each_safe(&cntr->poll_nics, pnic, tmp, list) {
 		if (pnic->nic == nic) {
@@ -195,12 +195,12 @@ int _gnix_cntr_poll_nic_rem(struct gnix_fid_cntr *cntr, struct gnix_nic *nic)
 					  "Removed NIC(%p) from CNTR(%p) poll list\n",
 					  nic, cntr);
 			}
-			rwlock_unlock(&cntr->nic_lock);
+			COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
 			return FI_SUCCESS;
 		}
 	}
 
-	rwlock_unlock(&cntr->nic_lock);
+	COND_RW_RELEASE(cntr->requires_lock, &cntr->nic_lock);
 
 	GNIX_WARN(FI_LOG_CQ, "NIC not found on CNTR poll list.\n");
 	return -FI_EINVAL;
@@ -439,6 +439,9 @@ DIRECT_FN int gnix_cntr_open(struct fid_domain *domain,
 		ret = -FI_ENOMEM;
 		goto err;
 	}
+
+	cntr_priv->requires_lock = (domain_priv->thread_model !=
+			FI_THREAD_COMPLETION);
 
 	cntr_priv->domain = domain_priv;
 	cntr_priv->attr = *attr;

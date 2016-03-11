@@ -256,7 +256,7 @@ static int __gnix_cq_progress(struct gnix_fid_cq *cq)
 	struct gnix_cq_poll_nic *pnic, *tmp;
 	int rc;
 
-	rwlock_rdlock(&cq->nic_lock);
+	COND_READ_ACQUIRE(cq->requires_lock, &cq->nic_lock);
 
 	dlist_for_each_safe(&cq->poll_nics, pnic, tmp, list) {
 		rc = _gnix_nic_progress(pnic->nic);
@@ -266,7 +266,7 @@ static int __gnix_cq_progress(struct gnix_fid_cq *cq)
 		}
 	}
 
-	rwlock_unlock(&cq->nic_lock);
+	COND_RW_RELEASE(cq->requires_lock, &cq->nic_lock);
 
 	if (unlikely(cq->domain->control_progress != FI_PROGRESS_AUTO)) {
 		if (cq->domain->cm_nic != NULL) {
@@ -291,7 +291,7 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, void *op_context,
 	struct gnix_cq_entry *event;
 	struct slist_entry *item;
 
-	fastlock_acquire(&cq->lock);
+	COND_ACQUIRE(cq->requires_lock, &cq->lock);
 
 	item = _gnix_queue_get_free(cq->events);
 	if (!item) {
@@ -313,7 +313,7 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, void *op_context,
 	if (cq->wait)
 		_gnix_signal_wait_obj(cq->wait);
 
-	fastlock_release(&cq->lock);
+	COND_RELEASE(cq->requires_lock, &cq->lock);
 
 	return FI_SUCCESS;
 }
@@ -332,7 +332,7 @@ ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 	GNIX_INFO(FI_LOG_CQ, "creating error event entry\n");
 
 
-	fastlock_acquire(&cq->lock);
+	COND_ACQUIRE(cq->requires_lock, &cq->lock);
 
 	item = _gnix_queue_get_free(cq->errors);
 	if (!item) {
@@ -359,7 +359,7 @@ ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 	_gnix_queue_enqueue(cq->errors, &event->item);
 
 err:
-	fastlock_release(&cq->lock);
+	COND_RELEASE(cq->requires_lock, &cq->lock);
 
 	return ret;
 }
@@ -368,7 +368,7 @@ int _gnix_cq_poll_nic_add(struct gnix_fid_cq *cq, struct gnix_nic *nic)
 {
 	struct gnix_cq_poll_nic *pnic, *tmp;
 
-	rwlock_wrlock(&cq->nic_lock);
+	COND_WRITE_ACQUIRE(cq->requires_lock, &cq->nic_lock);
 
 	dlist_for_each_safe(&cq->poll_nics, pnic, tmp, list) {
 		if (pnic->nic == nic) {
@@ -381,7 +381,7 @@ int _gnix_cq_poll_nic_add(struct gnix_fid_cq *cq, struct gnix_nic *nic)
 	pnic = malloc(sizeof(struct gnix_cq_poll_nic));
 	if (!pnic) {
 		GNIX_WARN(FI_LOG_CQ, "Failed to add NIC to CQ poll list.\n");
-		rwlock_unlock(&cq->nic_lock);
+		COND_RW_RELEASE(cq->requires_lock, &cq->nic_lock);
 		return -FI_ENOMEM;
 	}
 
@@ -391,7 +391,7 @@ int _gnix_cq_poll_nic_add(struct gnix_fid_cq *cq, struct gnix_nic *nic)
 	dlist_init(&pnic->list);
 	dlist_insert_tail(&pnic->list, &cq->poll_nics);
 
-	rwlock_unlock(&cq->nic_lock);
+	COND_RW_RELEASE(cq->requires_lock, &cq->nic_lock);
 
 	GNIX_INFO(FI_LOG_CQ, "Added NIC(%p) to CQ(%p) poll list\n",
 		  nic, cq);
@@ -403,7 +403,7 @@ int _gnix_cq_poll_nic_rem(struct gnix_fid_cq *cq, struct gnix_nic *nic)
 {
 	struct gnix_cq_poll_nic *pnic, *tmp;
 
-	rwlock_wrlock(&cq->nic_lock);
+	COND_WRITE_ACQUIRE(cq->requires_lock, &cq->nic_lock);
 
 	dlist_for_each_safe(&cq->poll_nics, pnic, tmp, list) {
 		if (pnic->nic == nic) {
@@ -419,7 +419,7 @@ int _gnix_cq_poll_nic_rem(struct gnix_fid_cq *cq, struct gnix_nic *nic)
 		}
 	}
 
-	rwlock_unlock(&cq->nic_lock);
+	COND_RW_RELEASE(cq->requires_lock, &cq->nic_lock);
 
 	GNIX_WARN(FI_LOG_CQ, "NIC not found on CQ poll list.\n");
 	return -FI_EINVAL;
@@ -500,7 +500,7 @@ DIRECT_FN STATIC ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf,
 	if (_gnix_queue_peek(cq_priv->errors))
 		return -FI_EAVAIL;
 
-	fastlock_acquire(&cq_priv->lock);
+	COND_ACQUIRE(cq_priv->requires_lock, &cq_priv->lock);
 
 	while (_gnix_queue_peek(cq_priv->events) && count--) {
 		temp = _gnix_queue_dequeue(cq_priv->events);
@@ -518,7 +518,7 @@ DIRECT_FN STATIC ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf,
 		read_count++;
 	}
 
-	fastlock_release(&cq_priv->lock);
+	COND_RELEASE(cq_priv->requires_lock, &cq_priv->lock);
 
 	return read_count ?: -FI_EAGAIN;
 }
@@ -582,7 +582,7 @@ DIRECT_FN STATIC ssize_t gnix_cq_readerr(struct fid_cq *cq,
 
 	cq_priv = container_of(cq, struct gnix_fid_cq, cq_fid);
 
-	fastlock_acquire(&cq_priv->lock);
+	COND_ACQUIRE(cq_priv->requires_lock, &cq_priv->lock);
 
 	entry = _gnix_queue_dequeue(cq_priv->errors);
 	if (!entry) {
@@ -599,7 +599,7 @@ DIRECT_FN STATIC ssize_t gnix_cq_readerr(struct fid_cq *cq,
 	read_count++;
 
 err:
-	fastlock_release(&cq_priv->lock);
+	COND_RELEASE(cq_priv->requires_lock, &cq_priv->lock);
 
 	return read_count;
 }
@@ -683,6 +683,9 @@ DIRECT_FN int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		ret = -FI_ENOMEM;
 		goto err2;
 	}
+
+	cq_priv->requires_lock = (domain_priv->thread_model !=
+			FI_THREAD_COMPLETION);
 
 	cq_priv->domain = domain_priv;
 	cq_priv->attr = *attr;

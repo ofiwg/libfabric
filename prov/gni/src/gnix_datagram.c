@@ -309,7 +309,7 @@ int _gnix_dgram_wc_post(struct gnix_datagram *d)
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	fastlock_acquire(&nic->lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 	status = GNI_EpPostDataWId(d->gni_ep,
 				   d->dgram_in_buf,
 				   GNI_DATAGRAM_MAXSIZE,
@@ -324,7 +324,7 @@ int _gnix_dgram_wc_post(struct gnix_datagram *d)
 		 */
 		d->state = GNIX_DGRAM_STATE_LISTENING;
 	}
-	fastlock_release(&nic->lock);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	return ret;
 }
@@ -352,7 +352,7 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 		goto err;
 	}
 
-	fastlock_acquire(&nic->lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 	if (d->pre_post_clbk_fn != NULL) {
 		ret = d->pre_post_clbk_fn(d, &post);
 		if (ret != FI_SUCCESS)
@@ -385,7 +385,7 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 		}
 	}
 
-	fastlock_release(&nic->lock);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 
 	if (post) {
 		if ((status != GNI_RC_SUCCESS) &&
@@ -468,7 +468,7 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 		/*
 		 * do need to take lock here
 		 */
-		fastlock_acquire(&nic->lock);
+		COND_ACQUIRE(nic->requires_lock, &nic->lock);
 
 		if (dg_ptr->pre_test_clbk_fn != NULL) {
 			ret = dg_ptr->pre_test_clbk_fn(dg_ptr);
@@ -489,7 +489,7 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 				"GNI_EpPostDataTestById:  %s\n",
 					gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
-			fastlock_release(&nic->lock);
+			COND_RELEASE(nic->requires_lock, &nic->lock);
 			goto err;
 		}
 
@@ -507,7 +507,7 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 					ret);
 			}
 		}
-		fastlock_release(&nic->lock);
+		COND_RELEASE(nic->requires_lock, &nic->lock);
 
 		/*
 		 * pass COMPLETED and error post state cases to

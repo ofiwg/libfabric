@@ -380,7 +380,7 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 		domain->params.max_retransmits = *(uint32_t *)val;
 		dlist_for_each(&domain->nic_list, nic, dom_nic_list)
 		{
-			fastlock_acquire(&nic->lock);
+			COND_ACQUIRE(nic->requires_lock, &nic->lock);
 			grc = GNI_SmsgSetMaxRetrans(nic->gni_nic_hndl,
 						    *(uint16_t *)val);
 			fastlock_release(&nic->lock);
@@ -528,6 +528,7 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	domain->control_progress = info->domain_attr->control_progress;
 	domain->data_progress = info->domain_attr->data_progress;
+	domain->thread_model = info->domain_attr->threading;
 	fastlock_init(&domain->cm_nic_lock);
 
 	*dom = &domain->domain_fid;

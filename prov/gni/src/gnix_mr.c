@@ -320,7 +320,7 @@ static void *__gnix_register_region(
 
 	dlist_for_each(&domain->nic_list, nic, dom_nic_list)
 	{
-		fastlock_acquire(&nic->lock);
+		COND_ACQUIRE(nic->requires_lock, &nic->lock);
 		grc = GNI_MemRegister(nic->gni_nic_hndl, (uint64_t) address,
 				      length,	dst_cq_hndl, flags,
 				      vmdh_index, &md->mem_hndl);
@@ -358,9 +358,9 @@ static int __gnix_deregister_region(
 	domain = mr->domain;
 	nic = mr->nic;
 
-	fastlock_acquire(&nic->lock);
+	COND_ACQUIRE(nic->requires_lock, &nic->lock);
 	ret = GNI_MemDeregister(nic->gni_nic_hndl, &mr->mem_hndl);
-	fastlock_release(&nic->lock);
+	COND_RELEASE(nic->requires_lock, &nic->lock);
 	if (ret == GNI_RC_SUCCESS) {
 		/* release reference to domain */
 		_gnix_ref_put(domain);

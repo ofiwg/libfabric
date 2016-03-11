@@ -272,6 +272,26 @@ static inline void _gnix_ref_init(
 	ref->destruct = destruct;
 }
 
+#define __STRINGIFY(expr) #expr
+#define STRINGIFY(expr) __STRINGIFY(expr)
 
+#define __COND_FUNC(cond, lock, func) \
+	do { \
+		if ((cond)) { \
+			func(lock); \
+		} \
+	} while (0)
+
+#define COND_ACQUIRE(cond, lock) \
+	__COND_FUNC((cond), (lock), fastlock_acquire)
+#define COND_READ_ACQUIRE(cond, lock) \
+	__COND_FUNC((cond), (lock), rwlock_rdlock)
+#define COND_WRITE_ACQUIRE(cond, lock) \
+	__COND_FUNC((cond), (lock), rwlock_wrlock)
+
+#define COND_RELEASE(cond, lock) \
+	__COND_FUNC((cond), (lock), fastlock_release)
+#define COND_RW_RELEASE(cond, lock) \
+	__COND_FUNC((cond), (lock), rwlock_unlock)
 
 #endif

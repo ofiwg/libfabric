@@ -194,6 +194,7 @@ struct gnix_nic {
 	gni_mem_handle_t irq_mem_hndl;
 	void *irq_mmap_addr;
 	size_t irq_mmap_len;
+	int requires_lock;
 };
 
 

@@ -63,6 +63,7 @@ struct gnix_fid_cntr {
 	struct gnix_reference ref_cnt;
 	struct dlist_entry trigger_list;
 	fastlock_t trigger_lock;
+	bool requires_lock;
 };
 
 /**
