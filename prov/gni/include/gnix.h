@@ -382,7 +382,8 @@ struct gnix_fid_ep {
 	int (*progress_fn)(struct gnix_fid_ep *, enum gnix_progress_type);
 	/* RX specific progress fn */
 	int (*rx_progress_fn)(struct gnix_fid_ep *, gni_return_t *rc);
-	int enabled;
+	bool tx_enabled;
+	bool rx_enabled;
 	int send_selective_completion;
 	int recv_selective_completion;
 	int min_multi_recv;
