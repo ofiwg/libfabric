@@ -81,48 +81,65 @@ static char *ft_strptr(char *str)
 	return ft_nullstr(str) ? NULL : str;
 }
 
+static char *ft_test_type_str(enum ft_test_type enum_str)
+{
+	switch (enum_str) {
+	case FT_TEST_LATENCY:
+		return "latency";
+	case FT_TEST_BANDWIDTH:
+		return "bandwidth";
+	default:
+		return "test_unspec";
+	}
+}
+
+static char *ft_class_func_str(enum ft_class_function enum_str)
+{
+	switch (enum_str) {
+	case FT_FUNC_SEND:
+		return "send";
+	case FT_FUNC_SENDV:
+		return "sendv";
+	case FT_FUNC_SENDMSG:
+		return "sendmsg";
+	case FT_FUNC_INJECT:
+		return "inject";
+	case FT_FUNC_INJECTDATA:
+		return "injectdata";
+	default:
+		return "func_unspec";
+	}
+}
+
+static char *ft_wait_obj_str(enum fi_wait_obj enum_str)
+{
+	switch (enum_str) {
+	case FI_WAIT_NONE:
+		return "wait_none";
+	case FI_WAIT_UNSPEC:
+		return "wait_unspec";
+	case FI_WAIT_SET:
+		return "wait_set";
+	case FI_WAIT_FD:
+		return "wait_fd";
+	case FI_WAIT_MUTEX_COND:
+		return "wait_mutex_cond";
+	default:
+		return "";
+	}
+}
+
 static void ft_show_test_info(void)
 {
-	printf("[%s] ", test_info.prov_name);
-
-	switch (test_info.test_type) {
-	case FT_TEST_LATENCY:
-		printf("latency");
-		break;
-	case FT_TEST_BANDWIDTH:
-		printf("bandwidth");
-		break;
-	default:
-		break;
-	}
-
-	printf( " %s", fi_tostr(&test_info.ep_type, FI_TYPE_EP_TYPE));
-	printf( " [%s]", fi_tostr(&test_info.caps, FI_TYPE_CAPS));
-
-	switch (test_info.class_function) {
-	case FT_FUNC_SEND:
-		printf(" send");
-		break;
-	case FT_FUNC_SENDV:
-		printf(" sendv");
-		break;
-	case FT_FUNC_SENDMSG:
-		printf(" sendmsg");
-		break;
-	case FT_FUNC_INJECT:
-		printf(" inject");
-		if (fabric_info && fabric_info->tx_attr)
-			printf(" [inject_size: %zd]", fabric_info->tx_attr->inject_size);
-		break;
-	case FT_FUNC_INJECTDATA:
-		printf(" injectdata");
-		if (fabric_info && fabric_info->tx_attr)
-			printf(" [inject_size: %zd]", fabric_info->tx_attr->inject_size);
-		break;
-	default:
-		break;
-	}
-	printf("\n");
+	printf("[%s,", test_info.prov_name);
+	printf(" %s,", ft_test_type_str(test_info.test_type));
+	printf(" %s,", ft_class_func_str(test_info.class_function));
+	printf(" %s,", fi_tostr(&test_info.ep_type, FI_TYPE_EP_TYPE));
+	printf(" %s,", fi_tostr(&test_info.av_type, FI_TYPE_AV_TYPE));
+	printf(" eq_%s,", ft_wait_obj_str(test_info.eq_wait_obj));
+	printf(" cq_%s,", ft_wait_obj_str(test_info.eq_wait_obj));
+	printf(" [%s],", fi_tostr(&test_info.mode, FI_TYPE_MODE));
+	printf(" [%s]]\n", fi_tostr(&test_info.caps, FI_TYPE_CAPS));
 }
 
 static int ft_check_info(struct fi_info *hints, struct fi_info *info)
