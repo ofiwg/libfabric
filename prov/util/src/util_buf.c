@@ -81,7 +81,7 @@ int util_buf_grow(struct util_buf_pool *pool)
 		goto err;
 
 	if (pool->alloc_hndlr) {
-		ret = pool->alloc_hndlr(pool, buf_region->mem_region,
+		ret = pool->alloc_hndlr(pool->ctx, buf_region->mem_region,
 					pool->chunk_cnt * pool->entry_sz,
 					&buf_region->context);
 		if (ret)
@@ -104,9 +104,10 @@ err:
 }
 
 struct util_buf_pool *util_buf_pool_create_ex(size_t size, size_t alignment,
-					       size_t max_cnt, size_t chunk_cnt,
-					       util_buf_region_alloc_hndlr alloc_hndlr,
-					       util_buf_region_free_hndlr free_hndlr)
+					      size_t max_cnt, size_t chunk_cnt,
+					      util_buf_region_alloc_hndlr alloc_hndlr,
+					      util_buf_region_free_hndlr free_hndlr,
+					      void *pool_ctx)
 {
 	size_t entry_sz;
 	struct util_buf_pool *buf_pool;
@@ -121,6 +122,7 @@ struct util_buf_pool *util_buf_pool_create_ex(size_t size, size_t alignment,
 	buf_pool->alignment = alignment;
 	buf_pool->max_cnt = max_cnt;
 	buf_pool->chunk_cnt = chunk_cnt;
+	buf_pool->ctx = pool_ctx;
 
 	entry_sz = util_buf_use_ftr(buf_pool) ?
 		(size + sizeof(struct util_buf_footer)) : size;
@@ -171,7 +173,7 @@ void util_buf_pool_destroy(struct util_buf_pool *pool)
 		assert(buf_region->num_used == 0);
 #endif
 		if (pool->free_hndlr)
-			pool->free_hndlr(buf_region->context);
+			pool->free_hndlr(pool->ctx, buf_region->context);
 		free(buf_region->mem_region);
 		free(buf_region);
 	}
