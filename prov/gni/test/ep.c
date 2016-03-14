@@ -203,3 +203,44 @@ Test(endpoint, sizeleft)
 	ret = fi_close(&ep->fid);
 	cr_assert(!ret, "fi_close endpoint");
 }
+
+Test(endpoint, getsetopt_gni_ep)
+{
+	int ret;
+	int val;
+	struct fid_ep *ep = NULL;
+	struct fi_gni_ops_ep *ep_ops;
+	struct gnix_fid_ep *ep_priv = NULL;
+
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	cr_assert(!ret, "fi_endpoint");
+
+	ep_priv = (struct gnix_fid_ep *) ep;
+
+	ret = fi_open_ops(&ep->fid, "ep ops 1", 0, (void **) &ep_ops, NULL);
+	cr_assert(!ret, "fi_open_ops endpoint");
+
+	ret = ep_ops->get_val(&ep->fid, GNI_HASH_TAG_IMPL, &val);
+	cr_assert(!ret, "ep_ops get_val");
+	cr_assert_eq(val, 0);
+	cr_assert_eq(ep_priv->use_tag_hlist, 0);
+
+	val = 1; // set the hash implementation
+	ret = ep_ops->set_val(&ep->fid, GNI_HASH_TAG_IMPL, &val);
+	cr_assert(!ret, "ep_ops set_val");
+	cr_assert_eq(ep_priv->use_tag_hlist, 1);
+	cr_assert_eq(ep_priv->unexp_recv_queue.attr.type, GNIX_TAG_HLIST);
+	cr_assert_eq(ep_priv->posted_recv_queue.attr.type, GNIX_TAG_HLIST);
+	cr_assert_eq(ep_priv->tagged_unexp_recv_queue.attr.type, GNIX_TAG_HLIST);
+	cr_assert_eq(ep_priv->tagged_posted_recv_queue.attr.type, GNIX_TAG_HLIST);
+
+
+	val = 0; // reset the value
+	ret = ep_ops->get_val(&ep->fid, GNI_HASH_TAG_IMPL, &val);
+	cr_assert(!ret, "ep_ops get_val");
+	cr_assert_eq(val, 1);
+	cr_assert_eq(ep_priv->use_tag_hlist, 1);
+
+	ret = fi_close(&ep->fid);
+	cr_assert(!ret, "fi_close endpoint");
+}

@@ -346,6 +346,7 @@ struct gnix_fid_ep {
 	struct gnix_fid_domain *domain;
 	uint64_t op_flags;
 	uint64_t caps;
+	uint32_t use_tag_hlist;
 	struct gnix_fid_cq *send_cq;
 	struct gnix_fid_cq *recv_cq;
 	struct gnix_fid_cntr *send_cntr;

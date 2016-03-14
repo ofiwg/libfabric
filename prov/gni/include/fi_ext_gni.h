@@ -60,10 +60,21 @@ typedef enum dom_ops_val { GNI_MSG_RENDEZVOUS_THRESHOLD,
 			   GNI_NUM_DOM_OPS
 } dom_ops_val_t;
 
+#define FI_GNI_EP_OPS_1 "ep ops 1"
+typedef enum ep_ops_val {
+	GNI_HASH_TAG_IMPL = 0,
+	GNI_NUM_EP_OPS,
+} ep_ops_val_t;
+
 /* per domain gni provider specific ops */
 struct fi_gni_ops_domain {
 	int (*set_val)(struct fid *fid, dom_ops_val_t t, void *val);
 	int (*get_val)(struct fid *fid, dom_ops_val_t t, void *val);
+};
+
+struct fi_gni_ops_ep {
+	int (*set_val)(struct fid *fid, ep_ops_val_t t, void *val);
+	int (*get_val)(struct fid *fid, ep_ops_val_t t, void *val);
 };
 
 /* per domain parameters */
