@@ -181,8 +181,9 @@ struct fi_wait_attr {
 : Indicates that the wait set should use file descriptor(s) as its wait
   mechanism. It may not always be possible for a wait set to be implemented
   using a single underlying file descriptor, but all wait objects will be file
-  descriptors. File descriptor wait objects must be usable in select, poll,
-  and epoll routines. However, a provider may signal an FD wait object by
+  descriptors. File descriptor wait objects must be usable in the
+  POSIX select(2), poll(2), and epoll(7) routines (if
+  available). However, a provider may signal an FD wait object by
   marking it as readable, writable, or with an error.
 
 - *FI_WAIT_MUTEX_COND*
@@ -225,7 +226,7 @@ FD_ZERO(&fds);
 FD_SET(fd, &fds);
 
 while (1) {
-	if (fi_trywait(&cq, 1) == 0)
+	if (fi_trywait(&cq, 1) == FI_SUCCESS)
 		select(fd + 1, &fds, NULL, &fds, &timeout);
 
 	do {
@@ -234,7 +235,7 @@ while (1) {
 }
 ```
 
-Fi_trywait() will return FI_SUCCESS if it is safe to block on the wait object(s)
+fi_trywait() will return FI_SUCCESS if it is safe to block on the wait object(s)
 corresponding to the fabric descriptor(s), or -FI_EAGAIN if there are
 events queued on the fabric descriptor or if blocking could hang the
 application.
