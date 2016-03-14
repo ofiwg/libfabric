@@ -324,6 +324,7 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 		if (getsockname(pep->cm.sock, (struct sockaddr *)&addr, &addr_size))
 			return -FI_EINVAL;
 		pep->src_addr.sin_port = addr.sin_port;
+		sprintf(sa_port, "%d", ntohs(pep->src_addr.sin_port));
 	}
 
 	if (pep->src_addr.sin_addr.s_addr == 0) {
