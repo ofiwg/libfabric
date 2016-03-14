@@ -156,13 +156,17 @@ static int usdf_poll_del(struct fid_poll *fps, struct fid *event_fid,
 
 	cq = cq_fidtou(event_fid);
 	ret = atomic_dec(&cq->cq_refcnt);
-	assert(ret >= 0);
 
 	USDF_DBG_SYS(DOMAIN,
 			"disassociating from CQ: [%p] with new refcnt: [%d]\n",
 			cq, ret);
+	assert(ret >= 0);
 
-	return FI_SUCCESS;
+	if (ret >= 0)
+		ret = FI_SUCCESS;
+	else
+		ret = -FI_EINVAL;
+	return ret;
 }
 
 static int usdf_poll_close(struct fid *fps)
@@ -172,7 +176,7 @@ static int usdf_poll_close(struct fid *fps)
 	struct dlist_entry *head;
 	struct fid_list_entry *entry;
 	struct usdf_cq *cq;
-	int ret;
+	int val, ret = FI_SUCCESS;
 
 	USDF_TRACE_SYS(DOMAIN, "\n");
 
@@ -197,11 +201,14 @@ static int usdf_poll_close(struct fid *fps)
 		switch (entry->fid->fclass) {
 		case FI_CLASS_CQ:
 			cq = cq_fidtou(entry->fid);
-			ret = atomic_dec(&cq->cq_refcnt);
+			val = atomic_dec(&cq->cq_refcnt);
 
 			USDF_DBG_SYS(DOMAIN,
 					"disassociating from CQ: [%p] with new refcnt: [%d]\n",
-					cq, ret);
+					cq, val);
+			assert(val >= 0);
+			if (val < 0)
+				ret = -FI_EINVAL;
 			break;
 		default:
 			USDF_WARN_SYS(DOMAIN, "invalid object\n");
@@ -216,7 +223,7 @@ static int usdf_poll_close(struct fid *fps)
 	fastlock_destroy(&ps->lock);
 	free(ps);
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 struct fi_ops_poll usdf_poll_ops = {
