@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
- * Copyright (c) 2015-2016 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,61 +30,56 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_EXT_USNIC_H_
-#define _FI_EXT_USNIC_H_
+#include "fi.h"
 
-/*
- * See the fi_usnic.7 man page for information about the usnic provider
- * extensions provided in this header.
- */
+#include "usdf.h"
+#include "fi_ext_usnic.h"
 
-#include <stdint.h>
-#include <net/if.h>
+static int
+usdf_usnic_getinfo(uint32_t version, struct fid_fabric *fabric,
+			struct fi_usnic_info *uip)
+{
+	struct usdf_fabric *fp;
+	struct usd_device_attrs *dap;
 
-#define FI_PROTO_RUDP (100U | FI_PROV_SPECIFIC)
+	USDF_TRACE("\n");
 
-#define FI_EXT_USNIC_INFO_VERSION 1
+	fp = fab_ftou(fabric);
+	dap = fp->fab_dev_attrs;
 
-/*
- * usNIC specific info
- */
-struct fi_usnic_info_v1 {
-	uint32_t ui_link_speed;
-	uint32_t ui_netmask_be;
-	char ui_ifname[IFNAMSIZ];
+	if (version > FI_EXT_USNIC_INFO_VERSION) {
+		return -FI_EINVAL;
+	}
 
-	uint32_t ui_num_vf;
-	uint32_t ui_qp_per_vf;
-	uint32_t ui_cq_per_vf;
+	/* this assignment was missing in libfabric v1.1.1 and earlier */
+	uip->ui_version = FI_EXT_USNIC_INFO_VERSION;
+
+	uip->ui.v1.ui_link_speed = dap->uda_bandwidth;
+	uip->ui.v1.ui_netmask_be = dap->uda_netmask_be;
+	strcpy(uip->ui.v1.ui_ifname, dap->uda_ifname);
+	uip->ui.v1.ui_num_vf = dap->uda_num_vf;
+	uip->ui.v1.ui_qp_per_vf = dap->uda_qp_per_vf;
+	uip->ui.v1.ui_cq_per_vf = dap->uda_cq_per_vf;
+
+	return 0;
+}
+
+static struct fi_usnic_ops_fabric usdf_usnic_ops_fabric = {
+	.size = sizeof(struct fi_usnic_ops_fabric),
+	.getinfo = usdf_usnic_getinfo
 };
 
-struct fi_usnic_info {
-	uint32_t ui_version;
-	union {
-		struct fi_usnic_info_v1 v1;
-	} ui;
-};
+int
+usdf_fabric_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
+		void **ops, void *context)
+{
+	USDF_TRACE("\n");
 
-/*
- * usNIC-specific fabric ops
- */
-#define FI_USNIC_FABRIC_OPS_1 "fabric_ops 1"
-struct fi_usnic_ops_fabric {
-	size_t size;
-	int (*getinfo)(uint32_t version, struct fid_fabric *fabric,
-				struct fi_usnic_info *info);
-};
+	if (strcmp(ops_name, FI_USNIC_FABRIC_OPS_1) == 0) {
+		*ops = &usdf_usnic_ops_fabric;
+	} else {
+		return -FI_EINVAL;
+	}
 
-/*
- * usNIC-specific AV ops
- */
-#define FI_USNIC_AV_OPS_1 "av_ops 1"
-struct fi_usnic_ops_av {
-	size_t size;
-	int (*get_distance)(struct fid_av *av, void *addr, int *metric);
-};
-
-int usdf_fabric_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
-		void **ops, void *context);
-
-#endif /* _FI_EXT_USNIC_H_ */
+	return 0;
+}
