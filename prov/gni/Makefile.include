@@ -94,7 +94,7 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/queue.c \
 	prov/gni/test/rdm_atomic.c \
 	prov/gni/test/rdm_fi_pcd_trecv_msg.c \
-	prov/gni/test/rdm_rma.c \
+	prov/gni/test/rdm_dgram_rma.c \
 	prov/gni/test/rdm_rx_overrun.c \
 	prov/gni/test/rdm_sr.c \
 	prov/gni/test/rdm_tagged_sr.c \

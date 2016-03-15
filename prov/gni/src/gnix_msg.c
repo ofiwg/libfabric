@@ -1173,7 +1173,7 @@ static int __gnix_msg_addr_lookup(struct gnix_fid_ep *ep, uint64_t src_addr,
 	struct gnix_av_addr_entry *av_entry;
 
 	/* Translate source address. */
-	if (ep->type == FI_EP_RDM) {
+	if (GNIX_EP_RDM_DGM(ep->type)) {
 		if ((ep->caps & FI_DIRECTED_RECV) &&
 		    (src_addr != FI_ADDR_UNSPEC)) {
 			av = ep->av;

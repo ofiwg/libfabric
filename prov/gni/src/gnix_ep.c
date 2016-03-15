@@ -104,7 +104,7 @@ static inline ssize_t __ep_recv(struct fid_ep *ep, void *buf, size_t len,
 	}
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((ep_priv->type == FI_EP_RDM) || (ep_priv->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(ep_priv->type));
 
 	return _gnix_recv(ep_priv, (uint64_t)buf, len, desc, src_addr, context,
 			  ep_priv->op_flags | flags, tag, ignore);
@@ -122,7 +122,7 @@ static inline ssize_t __ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 	}
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((ep_priv->type == FI_EP_RDM) || (ep_priv->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(ep_priv->type));
 
 	return _gnix_recv(ep_priv, (uint64_t)iov[0].iov_base, iov[0].iov_len,
 			  desc ? desc[0] : NULL, src_addr, context,
@@ -150,7 +150,7 @@ static inline ssize_t __ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((ep_priv->type == FI_EP_RDM) || (ep_priv->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(ep_priv->type));
 
 	return _gnix_recv(ep_priv, recv_addr, recv_len,
 			  msg->desc ? msg->desc[0] : NULL,
@@ -168,7 +168,7 @@ static inline ssize_t __ep_send(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	return _gnix_send(gnix_ep, (uint64_t)buf, len, desc, dest_addr, context,
 			  gnix_ep->op_flags | flags, 0, tag);
@@ -185,7 +185,7 @@ static inline ssize_t __ep_sendv(struct fid_ep *ep, const struct iovec *iov,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	return _gnix_send(gnix_ep, (uint64_t)iov[0].iov_base, iov[0].iov_len,
 			  desc ? desc[0] : NULL, dest_addr, context,
@@ -202,7 +202,7 @@ static inline ssize_t __ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	return _gnix_send(gnix_ep, (uint64_t)msg->msg_iov[0].iov_base,
 			  msg->msg_iov[0].iov_len,
@@ -222,7 +222,7 @@ static inline ssize_t __ep_inject(struct fid_ep *ep, const void *buf,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	inject_flags = (gnix_ep->op_flags | FI_INJECT |
 			GNIX_SUPPRESS_COMPLETION | flags);
@@ -244,7 +244,7 @@ static inline ssize_t __ep_senddata(struct fid_ep *ep, const void *buf,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	sd_flags = gnix_ep->op_flags | FI_REMOTE_CQ_DATA | flags;
 
@@ -328,7 +328,7 @@ gnix_ep_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = gnix_ep->op_flags | FI_INJECT | FI_REMOTE_CQ_DATA |
 		GNIX_SUPPRESS_COMPLETION;
@@ -357,7 +357,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_read(struct fid_ep *ep, void *buf, size_t len,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = gnix_ep->op_flags | GNIX_RMA_READ_FLAGS_DEF;
 
@@ -380,7 +380,7 @@ gnix_ep_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = gnix_ep->op_flags | GNIX_RMA_READ_FLAGS_DEF;
 
@@ -402,7 +402,7 @@ gnix_ep_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = (flags & GNIX_READMSG_FLAGS) | GNIX_RMA_READ_FLAGS_DEF;
 
@@ -425,7 +425,7 @@ gnix_ep_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = gnix_ep->op_flags | GNIX_RMA_WRITE_FLAGS_DEF;
 
@@ -447,7 +447,7 @@ gnix_ep_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = gnix_ep->op_flags | GNIX_RMA_WRITE_FLAGS_DEF;
 
@@ -468,7 +468,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_writemsg(struct fid_ep *ep, const struct fi_msg
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = (flags & GNIX_WRITEMSG_FLAGS) | GNIX_RMA_WRITE_FLAGS_DEF;
 
@@ -491,7 +491,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_rma_inject(struct fid_ep *ep, const void *buf,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = gnix_ep->op_flags | FI_INJECT | GNIX_SUPPRESS_COMPLETION |
 			GNIX_RMA_WRITE_FLAGS_DEF;
@@ -515,7 +515,7 @@ gnix_ep_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = gnix_ep->op_flags | FI_REMOTE_CQ_DATA |
 			GNIX_RMA_WRITE_FLAGS_DEF;
@@ -539,7 +539,7 @@ gnix_ep_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = gnix_ep->op_flags | FI_INJECT | FI_REMOTE_CQ_DATA |
 			GNIX_SUPPRESS_COMPLETION | GNIX_RMA_WRITE_FLAGS_DEF;
@@ -752,7 +752,7 @@ gnix_ep_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
 		return -FI_EINVAL;
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	msg_iov.addr = (void *)buf;
 	msg_iov.count = count;
@@ -803,7 +803,7 @@ gnix_ep_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 		return -FI_EINVAL;
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = (flags & GNIX_ATOMICMSG_FLAGS) | GNIX_ATOMIC_WRITE_FLAGS_DEF;
 
@@ -829,7 +829,7 @@ gnix_ep_atomic_inject(struct fid_ep *ep, const void *buf, size_t count,
 		return -FI_EINVAL;
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	msg_iov.addr = (void *)buf;
 	msg_iov.count = count;
@@ -872,7 +872,7 @@ gnix_ep_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
 		return -FI_EINVAL;
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	msg_iov.addr = (void *)buf;
 	msg_iov.count = count;
@@ -931,7 +931,7 @@ gnix_ep_atomic_readwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 		return -FI_EINVAL;
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = (flags & GNIX_FATOMICMSG_FLAGS) | GNIX_ATOMIC_READ_FLAGS_DEF;
 
@@ -963,7 +963,7 @@ gnix_ep_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
 		return -FI_EINVAL;
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	msg_iov.addr = (void *)buf;
 	msg_iov.count = count;
@@ -1039,7 +1039,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_atomic_compwritemsg(struct fid_ep *ep,
 		return -FI_EINVAL;
 
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+	assert(GNIX_EP_RDM_DGM_MSG(gnix_ep->type));
 
 	flags = (flags & GNIX_CATOMICMSG_FLAGS) | GNIX_ATOMIC_READ_FLAGS_DEF;
 
@@ -1065,11 +1065,11 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 
 	switch (command) {
 	/*
-	 * for FI_EP_RDM, enable the cm_nic associated
+	 * for FI_EP_RDM/DGRAM, enable the cm_nic associated
 	 * with this ep.
 	 */
 	case FI_ENABLE:
-		if (ep->type == FI_EP_RDM) {
+		if (GNIX_EP_RDM_DGM(ep->type)) {
 
 			if ((ep->send_cq == NULL) ||
 			    (ep->recv_cq == NULL)) {
@@ -1152,7 +1152,7 @@ static void __ep_destruct(void *obj)
 	 * destroying the VC entries in the ht.
 	 */
 
-	if (ep->type == FI_EP_RDM) {
+	if (GNIX_EP_RDM_DGM(ep->type)) {
 
 		key_ptr = (gnix_ht_key_t *)&ep->my_name.gnix_addr;
 		ret =  _gnix_ht_remove(ep->cm_nic->addr_to_ep_ht,
@@ -1540,7 +1540,7 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	/*
 	 * TODO: need to implement other endpoint types
 	 */
-	if (info->ep_attr->type != FI_EP_RDM)
+	if (!GNIX_EP_RDM_DGM(info->ep_attr->type))
 		return -FI_ENOSYS;
 
 	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
@@ -1596,7 +1596,7 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	ep_priv->ep_fid.cm = &gnix_cm_ops;
 
-	if (ep_priv->type == FI_EP_RDM) {
+	if (GNIX_EP_RDM_DGM(ep_priv->type)) {
 		if (info->src_addr != NULL) {
 			ret = __gnix_ep_bound_prep(domain_priv,
 						   info,
