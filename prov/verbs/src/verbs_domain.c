@@ -338,19 +338,22 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	fab->wce_pool = util_buf_pool_create(sizeof(struct fi_ibv_wce), 16, 0, VERBS_WCE_CNT);
 	if (!fab->wce_pool) {
 		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "Failed to create wce_pool\n");
-		return -FI_ENOMEM;
+		ret = -FI_ENOMEM;
+		goto err1;
 	}
 
 	fab->epe_pool = util_buf_pool_create(sizeof(struct fi_ibv_msg_epe), 16, 0, VERBS_EPE_CNT);
 	if (!fab->epe_pool) {
 		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "Failed to create epe_pool\n");
 		ret = -FI_ENOMEM;
-		goto err;
+		goto err2;
 	}
 
 	*fabric = &fab->fabric_fid;
 	return 0;
-err:
+err2:
 	util_buf_pool_destroy(fab->wce_pool);
+err1:
+	free(fab);
 	return ret;
 }
