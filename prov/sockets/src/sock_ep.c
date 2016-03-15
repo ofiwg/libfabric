@@ -1318,6 +1318,9 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 		return NULL;
 
 	info->src_addr = calloc(1, sizeof(struct sockaddr_in));
+	if (!info->src_addr)
+		goto err;
+
 	info->mode = SOCK_MODE;
 	info->addr_format = FI_SOCKADDR_IN;
 
@@ -1328,6 +1331,8 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 
 	if (dest_addr) {
 		info->dest_addr = calloc(1, sizeof(struct sockaddr_in));
+		if (!info->dest_addr)
+			goto err;
 		info->dest_addrlen = sizeof(struct sockaddr_in);
 		memcpy(info->dest_addr, dest_addr, sizeof(struct sockaddr_in));
 	}
@@ -1357,6 +1362,11 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 
 	info->ep_attr->type = ep_type;
 	return info;
+err:
+	free(info->src_addr);
+	free(info->dest_addr);
+	free(info);
+	return NULL;
 }
 
 int sock_get_src_addr_from_hostname(struct sockaddr_in *src_addr,
@@ -1412,7 +1422,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	sock_dom = container_of(domain, struct sock_domain, dom_fid);
-	sock_ep = (struct sock_ep *)calloc(1, sizeof(*sock_ep));
+	sock_ep = (struct sock_ep *) calloc(1, sizeof(*sock_ep));
 	if (!sock_ep)
 		return -FI_ENOMEM;
 
@@ -1440,6 +1450,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		break;
 
 	default:
+		ret = -FI_EINVAL;
 		goto err;
 	}
 
@@ -1458,12 +1469,20 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 		if (info->src_addr) {
 			sock_ep->src_addr = calloc(1, sizeof(struct sockaddr_in));
+			if (!sock_ep->src_addr) {
+				ret = -FI_ENOMEM;
+				goto err;
+			}
 			memcpy(sock_ep->src_addr, info->src_addr,
 			       sizeof(struct sockaddr_in));
 		}
 
 		if (info->dest_addr) {
 			sock_ep->dest_addr = calloc(1, sizeof(struct sockaddr_in));
+			if (!sock_ep->dest_addr) {
+				ret = -FI_ENOMEM;
+				goto err;
+			}
 			memcpy(sock_ep->dest_addr, info->dest_addr,
 			       sizeof(struct sockaddr_in));
 		}
@@ -1486,6 +1505,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	if (!sock_ep->src_addr && sock_ep_assign_src_addr(sock_ep, info)) {
 		SOCK_LOG_ERROR("failed to get src_address\n");
+		ret = -FI_EINVAL;
 		goto err;
 	}
 
@@ -1507,14 +1527,26 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	sock_ep->tx_array = calloc(sock_ep->ep_attr.tx_ctx_cnt,
 				   sizeof(struct sock_tx_ctx *));
+	if (!sock_ep->tx_array) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
 
 	sock_ep->rx_array = calloc(sock_ep->ep_attr.rx_ctx_cnt,
 				   sizeof(struct sock_rx_ctx *));
+	if (!sock_ep->rx_array) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
 
 	if (sock_ep->fclass != FI_CLASS_SEP &&
 	    sock_ep->ep_attr.tx_ctx_cnt != FI_SHARED_CONTEXT) {
 		/* default tx ctx */
 		tx_ctx = sock_tx_ctx_alloc(&sock_ep->tx_attr, context);
+		if (!tx_ctx) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
 		tx_ctx->ep = sock_ep;
 		tx_ctx->domain = sock_dom;
 		tx_ctx->tx_id = 0;
@@ -1527,6 +1559,10 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	    sock_ep->ep_attr.rx_ctx_cnt != FI_SHARED_CONTEXT) {
 		/* default rx_ctx */
 		rx_ctx = sock_rx_ctx_alloc(&sock_ep->rx_attr, context);
+		if (!rx_ctx) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
 		rx_ctx->ep = sock_ep;
 		rx_ctx->domain = sock_dom;
 		rx_ctx->rx_id = 0;
@@ -1546,8 +1582,10 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (sock_ep->ep_type == FI_EP_MSG) {
 		dlist_init(&sock_ep->cm.msg_list);
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0,
-			       sock_ep->cm.signal_fds) < 0)
+			       sock_ep->cm.signal_fds) < 0) {
+			ret = -FI_EINVAL;
 			goto err;
+		}
 
 		flags = fcntl(sock_ep->cm.signal_fds[1], F_GETFL, 0);
 		if (fcntl(sock_ep->cm.signal_fds[1], F_SETFL, flags | O_NONBLOCK))
@@ -1556,6 +1594,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	if (sock_conn_map_init(sock_ep, sock_cm_def_map_sz)) {
 		SOCK_LOG_ERROR("failed to init connection map: %s\n", strerror(errno));
+		ret = -FI_EINVAL;
 		goto err;
 	}
 
@@ -1568,7 +1607,7 @@ err:
 	if (sock_ep->dest_addr)
 		free(sock_ep->dest_addr);
 	free(sock_ep);
-	return -FI_EINVAL;
+	return ret;
 }
 
 struct sock_conn *sock_ep_lookup_conn(struct sock_ep *ep, fi_addr_t index,

@@ -519,7 +519,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	sock_domain->dom_fid.ops = &sock_dom_ops;
 	sock_domain->dom_fid.mr = &sock_dom_mr_ops;
 
-	if (!info || !info->domain_attr ||
+	if (!info->domain_attr ||
 	    info->domain_attr->data_progress == FI_PROGRESS_UNSPEC)
 		sock_domain->progress_mode = FI_PROGRESS_AUTO;
 	else

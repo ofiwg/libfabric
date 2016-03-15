@@ -56,6 +56,9 @@ struct sock_rx_entry *sock_rx_new_entry(struct sock_rx_ctx *rx_ctx)
 	if (rx_ctx->rx_entry_pool == NULL) {
 		rx_ctx->rx_entry_pool = calloc(rx_ctx->attr.size,
 						sizeof(*rx_entry));
+		if (!rx_ctx->rx_entry_pool)
+			return NULL;
+
 		slist_init(&rx_ctx->pool_list);
 
 		for (i = 0; i < rx_ctx->attr.size; i++) {

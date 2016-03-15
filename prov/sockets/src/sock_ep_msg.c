@@ -1111,6 +1111,8 @@ static void *sock_pep_listener_thread(void *data)
 
 			cm_entry->fid = &pep->pep.fid;
 			cm_entry->info = sock_ep_msg_process_info(conn_req);
+			if (!cm_entry->info)
+				goto out;
 			cm_entry->info->handle = &handle->handle;
 
 			memcpy(&cm_entry->data, &conn_req->user_data,
