@@ -184,7 +184,7 @@ struct fi_wait_attr {
   descriptors. File descriptor wait objects must be usable in the
   POSIX select(2), poll(2), and epoll(7) routines (if
   available). However, a provider may signal an FD wait object by
-  marking it as readable, writable, or with an error.
+  marking it as readable or with an error.
 
 - *FI_WAIT_MUTEX_COND*
 : Specifies that the wait set should use a pthread mutex and cond
