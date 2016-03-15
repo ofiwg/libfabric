@@ -66,26 +66,26 @@ static inline void *mem_dup(const void *src, size_t size)
 /*
  * Buffer pool (free stack) template
  */
-#define FREESTACK_EMPTY	-1
+#define FREESTACK_EMPTY	NULL
 
 #define freestack_isempty(fs)	((fs)->next == FREESTACK_EMPTY)
-#define freestack_push(fs, x)					\
+#define freestack_push(fs, p)					\
 {								\
-	*(int *) &(fs)->buf[x] = (fs)->next;			\
-	(fs)->next = x;						\
+	*(void **) p = (fs)->next;				\
+	(fs)->next = p;						\
 }
 #define freestack_pop(fs)					\
 	({							\
-		int i = (fs)->next;				\
+		void *p = (fs)->next;				\
 		assert(!freestack_isempty(fs));			\
-		(fs)->next = *((int*) &(fs)->buf[i]);		\
-		i;						\
+		(fs)->next = *((void **) p);			\
+		p;						\
 	})
 
 #define DECLARE_FREESTACK(entrytype, name)			\
 struct name {							\
 	size_t		size;					\
-	size_t		next;					\
+	void		*next;					\
 	entrytype	buf[];					\
 };								\
 								\
@@ -93,11 +93,11 @@ static inline void name ## _init(struct name *fs, size_t size)	\
 {								\
 	int i;							\
 	assert(size == roundup_power_of_two(size));		\
-	assert(sizeof(fs->buf[0]) >= sizeof(int));		\
+	assert(sizeof(fs->buf[0]) >= sizeof(void *));		\
 	fs->size = size;					\
 	fs->next = FREESTACK_EMPTY;				\
 	for (i = size - 1; i >= 0; i--)				\
-		freestack_push(fs, i);				\
+		freestack_push(fs, &fs->buf[i]);		\
 }								\
 								\
 static inline struct name * name ## _create(size_t size)	\
