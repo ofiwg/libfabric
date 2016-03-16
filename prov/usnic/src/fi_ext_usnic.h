@@ -44,11 +44,18 @@
 
 #define FI_PROTO_RUDP (100U | FI_PROV_SPECIFIC)
 
-#define FI_EXT_USNIC_INFO_VERSION 1
+#define FI_EXT_USNIC_INFO_VERSION 2
+
+#define FI_EXT_USNIC_MAX_DEVNAME 16
 
 /*
  * usNIC specific info
  */
+struct fi_usnic_cap {
+	const char *uc_capability;
+	int uc_present;
+};
+
 struct fi_usnic_info_v1 {
 	uint32_t ui_link_speed;
 	uint32_t ui_netmask_be;
@@ -59,10 +66,45 @@ struct fi_usnic_info_v1 {
 	uint32_t ui_cq_per_vf;
 };
 
+struct fi_usnic_info_v2 {
+	char			ui_devname[FI_EXT_USNIC_MAX_DEVNAME];
+	char			ui_ifname[IFNAMSIZ];
+	uint8_t			ui_mac_addr[6];
+
+	uint32_t		ui_ipaddr_be;
+	uint32_t		ui_netmask_be;
+	uint32_t		ui_prefixlen;
+	uint32_t		ui_mtu;
+	uint8_t			ui_link_up;
+
+	uint32_t		ui_vendor_id;
+	uint32_t		ui_vendor_part_id;
+	uint32_t		ui_device_id;
+	char			ui_firmware[64];
+
+	unsigned		ui_num_vf;
+	unsigned		ui_cq_per_vf;
+	unsigned		ui_qp_per_vf;
+	unsigned		ui_intr_per_vf;
+	unsigned		ui_max_cq;
+	unsigned		ui_max_qp;
+
+	uint32_t		ui_link_speed;
+	unsigned		ui_max_cqe;
+	unsigned		ui_max_send_credits;
+	unsigned		ui_max_recv_credits;
+
+	const char		*ui_nicname;
+	const char		*ui_pid;
+
+	struct fi_usnic_cap	**ui_caps;
+};
+
 struct fi_usnic_info {
 	uint32_t ui_version;
 	union {
 		struct fi_usnic_info_v1 v1;
+		struct fi_usnic_info_v2 v2;
 	} ui;
 };
 

@@ -19,6 +19,7 @@ libusnic_direct_sources = \
 	prov/usnic/src/usnic_direct/usd_device.c \
 	prov/usnic/src/usnic_direct/usd_device.h \
 	prov/usnic/src/usnic_direct/usd_event.c \
+	prov/usnic/src/usnic_direct/usd_enum.c \
 	prov/usnic/src/usnic_direct/usd.h \
 	prov/usnic/src/usnic_direct/usd_ib_cmd.c \
 	prov/usnic/src/usnic_direct/usd_ib_cmd.h \
