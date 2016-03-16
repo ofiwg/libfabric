@@ -67,12 +67,20 @@ struct fi_usnic_info_v1 {
 };
 
 struct fi_usnic_info_v2 {
-	char			ui_devname[FI_EXT_USNIC_MAX_DEVNAME];
+	/* Put all of the v1 fields at the start to provide some backward
+	 * compatibility.
+	 */
+	uint32_t		ui_link_speed;
+	uint32_t		ui_netmask_be;
 	char			ui_ifname[IFNAMSIZ];
+	unsigned		ui_num_vf;
+	unsigned		ui_qp_per_vf;
+	unsigned		ui_cq_per_vf;
+
+	char			ui_devname[FI_EXT_USNIC_MAX_DEVNAME];
 	uint8_t			ui_mac_addr[6];
 
 	uint32_t		ui_ipaddr_be;
-	uint32_t		ui_netmask_be;
 	uint32_t		ui_prefixlen;
 	uint32_t		ui_mtu;
 	uint8_t			ui_link_up;
@@ -82,14 +90,10 @@ struct fi_usnic_info_v2 {
 	uint32_t		ui_device_id;
 	char			ui_firmware[64];
 
-	unsigned		ui_num_vf;
-	unsigned		ui_cq_per_vf;
-	unsigned		ui_qp_per_vf;
 	unsigned		ui_intr_per_vf;
 	unsigned		ui_max_cq;
 	unsigned		ui_max_qp;
 
-	uint32_t		ui_link_speed;
 	unsigned		ui_max_cqe;
 	unsigned		ui_max_send_credits;
 	unsigned		ui_max_recv_credits;
