@@ -26,7 +26,7 @@ v1.3.0, TBD
 
 - General code cleanup
 - Enable sockets-provider to run on FreeBSD
-- Add support for fi_try_wait
+- Add support for fi_trywait
 - Add support for map_addr in shared-av creation
 - Add shared-av support on OSX
 - Allow FI_AV_UNSPEC type during av_open
@@ -61,6 +61,16 @@ v1.3.0, TBD
 - Fortify the receive side of libnl communication [PR #1655]
 
 ## Verbs provider notes
+
+- Add support for fi_trywait
+- Support building on OSes which have older versions of librdmacm (v1.0.16 or
+  lesser). The functionality of the provider when the user passes AF_IB
+  addresses is not guaranteed though.
+- Added a workaround to support posting more than 'verbs send work queue length'
+  number of fi_inject calls at a time.
+- Make CQ reads thread safe.
+- Support the case where the user creates only a send or recv queue for the endpoint.
+- Fix an issue where RMA reads were not working on iWARP cards.
 
 v1.2.0, Thu Jan 7, 2016
 =======================
