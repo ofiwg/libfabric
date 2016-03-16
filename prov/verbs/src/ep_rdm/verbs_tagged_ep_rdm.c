@@ -544,20 +544,21 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 		}
 	}
 
-	struct fi_ibv_recv_got_pkt_preprocess_data p = {
-		.conn = conn,
-		.ep = ep,
-		.rbuf = rbuf,
-		.arrived_len = arrived_len,
-		.pkt_type = pkt_type,
-		.imm_data = imm_data
-	};
+	/* RMA packets are not handled yet (without IMM) */
+	if (pkt_type != FI_IBV_RDM_RMA_PKT) {
 
-	fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_RECV_GOT_PKT_PROCESS,
-				   &p);
+		struct fi_ibv_recv_got_pkt_preprocess_data p = {
+			.conn = conn,
+			.ep = ep,
+			.rbuf = rbuf,
+			.arrived_len = arrived_len,
+			.pkt_type = pkt_type,
+			.imm_data = imm_data
+		};
 
-	if (pkt_type != FI_IBV_RDM_RMA_PKT)
-	{
+		fi_ibv_rdm_tagged_req_hndl(request,
+			FI_IBV_EVENT_RECV_GOT_PKT_PROCESS, &p);
+
 		conn->recv_completions++;
 		if (conn->recv_completions & ep->n_buffs) {
 			conn->recv_completions = 0;
