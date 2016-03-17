@@ -34,15 +34,22 @@
 
 struct psmx2_fid_fabric *psmx2_active_fabric = NULL;
 
-void psmx2_fabric_release(struct psmx2_fid_fabric *fabric)
+static int psmx2_fabric_close(fid_t fid)
 {
+	struct psmx2_fid_fabric *fabric;
 	void *exit_code;
 	int ret;
 
-	FI_INFO(&psmx2_prov, FI_LOG_CORE, "refcnt=%d\n", fabric->refcnt);
+	fabric = container_of(fid, struct psmx2_fid_fabric,
+			      util_fabric.fabric_fid.fid);
 
-	if (--fabric->refcnt)
-		return;
+	FI_INFO(&psmx2_prov, FI_LOG_CORE, "refcnt=%d\n",
+		atomic_get(&fabric->util_fabric.ref));
+
+	psmx2_fabric_release(fabric);
+
+	if (util_fabric_close(&fabric->util_fabric))
+		return 0;
 
 	if (psmx2_env.name_server &&
 	    !pthread_equal(fabric->name_server_thread, pthread_self())) {
@@ -64,22 +71,11 @@ void psmx2_fabric_release(struct psmx2_fid_fabric *fabric)
 	}
 	if (fabric->active_domain) {
 		FI_WARN(&psmx2_prov, FI_LOG_CORE, "forced closing of active_domain\n");
-		fi_close(&fabric->active_domain->domain.fid);
+		fi_close(&fabric->active_domain->util_domain.domain_fid.fid);
 	}
 	assert(fabric == psmx2_active_fabric);
 	psmx2_active_fabric = NULL;
 	free(fabric);
-}
-
-static int psmx2_fabric_close(fid_t fid)
-{
-	struct psmx2_fid_fabric *fabric;
-
-	FI_INFO(&psmx2_prov, FI_LOG_CORE, "\n");
-
-	fabric = container_of(fid, struct psmx2_fid_fabric, fabric.fid);
-
-	psmx2_fabric_release(fabric);
 
 	return 0;
 }
@@ -93,9 +89,14 @@ static struct fi_ops_fabric psmx2_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = psmx2_domain_open,
 	.passive_ep = fi_no_passive_ep,
-	.eq_open = psmx2_eq_open,
+	.eq_open = fi_eq_create,
 	.wait_open = psmx2_wait_open,
-	.trywait = fi_no_trywait
+	.trywait = util_trywait
+};
+
+static struct fi_fabric_attr psmx2_fabric_attr = {
+	.name = PSMX2_FABRIC_NAME,
+	.prov_version = PSMX2_VERSION,
 };
 
 int psmx2_fabric(struct fi_fabric_attr *attr,
@@ -111,7 +112,7 @@ int psmx2_fabric(struct fi_fabric_attr *attr,
 
 	if (psmx2_active_fabric) {
 		psmx2_fabric_acquire(psmx2_active_fabric);
-		*fabric = &psmx2_active_fabric->fabric;
+		*fabric = &psmx2_active_fabric->util_fabric.fabric_fid;
 		return 0;
 	}
 
@@ -119,10 +120,17 @@ int psmx2_fabric(struct fi_fabric_attr *attr,
 	if (!fabric_priv)
 		return -FI_ENOMEM;
 
-	fabric_priv->fabric.fid.fclass = FI_CLASS_FABRIC;
-	fabric_priv->fabric.fid.context = context;
-	fabric_priv->fabric.fid.ops = &psmx2_fabric_fi_ops;
-	fabric_priv->fabric.ops = &psmx2_fabric_ops;
+	ret = fi_fabric_init(&psmx2_prov, &psmx2_fabric_attr, attr,
+			     &fabric_priv->util_fabric, context);
+	if (ret) {
+		FI_INFO(&psmx2_prov, FI_LOG_CORE, "fi_fabric_init returns %d\n", ret);
+		free(fabric_priv);
+		return ret;
+	}
+
+	/* fclass & context initialized in fi_fabric_init */
+	fabric_priv->util_fabric.fabric_fid.fid.ops = &psmx2_fabric_fi_ops;
+	fabric_priv->util_fabric.fabric_fid.ops = &psmx2_fabric_ops;
 
 	psmx2_get_uuid(fabric_priv->uuid);
 
@@ -138,8 +146,10 @@ int psmx2_fabric(struct fi_fabric_attr *attr,
 
 	psmx2_query_mpi();
 
-	fabric_priv->refcnt = 1;
-	*fabric = &fabric_priv->fabric;
+	/* take the reference to count for multiple fabric open calls */
+	psmx2_fabric_acquire(fabric_priv);
+
+	*fabric = &fabric_priv->util_fabric.fabric_fid;
 	psmx2_active_fabric = fabric_priv;
 
 	return 0;

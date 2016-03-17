@@ -41,7 +41,7 @@ void psmx2_cq_enqueue_event(struct psmx2_fid_cq *cq,
 	fastlock_release(&cq->lock);
 
 	if (cq->wait)
-		psmx2_wait_signal((struct fid_wait *)cq->wait);
+		cq->wait->signal(cq->wait);
 }
 
 static struct psmx2_cq_event *psmx2_cq_dequeue_event(struct psmx2_fid_cq *cq)
@@ -660,7 +660,10 @@ static ssize_t psmx2_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 		}
 	}
 
-	return read_count ? read_count : -FI_EAGAIN;
+	if (!read_count && slist_empty(&cq_priv->event_queue))
+		read_count = -FI_EAGAIN;
+
+	return read_count;
 }
 
 static ssize_t psmx2_cq_read(struct fid_cq *cq, void *buf, size_t count)
@@ -704,7 +707,7 @@ static ssize_t psmx2_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	event_count = cq_priv->event_count;
 	if (event_count < threshold) {
 		if (cq_priv->wait) {
-			psmx2_wait_wait((struct fid_wait *)cq_priv->wait, timeout);
+			fi_wait((struct fid_wait *)cq_priv->wait, timeout);
 		} else {
 			clock_gettime(CLOCK_REALTIME, &ts0);
 			while (1) {
@@ -743,7 +746,7 @@ static int psmx2_cq_signal(struct fid_cq *cq)
 	cq_priv = container_of(cq, struct psmx2_fid_cq, cq);
 
 	if (cq_priv->wait)
-		psmx2_wait_signal((struct fid_wait *)cq_priv->wait);
+		cq_priv->wait->signal(cq_priv->wait);
 
 	return 0;
 }
@@ -762,8 +765,6 @@ static int psmx2_cq_close(fid_t fid)
 
 	cq = container_of(fid, struct psmx2_fid_cq, cq.fid);
 
-	psmx2_domain_release(cq->domain);
-
 	while (!slist_empty(&cq->free_list)) {
 		entry = slist_remove_head(&cq->free_list);
 		item = container_of(entry, struct psmx2_cq_event, list_entry);
@@ -772,9 +773,13 @@ static int psmx2_cq_close(fid_t fid)
 
 	fastlock_destroy(&cq->lock);
 
-	if (cq->wait && cq->wait_is_local)
-		fi_close((fid_t)cq->wait);
+	if (cq->wait) {
+		fi_poll_del(&cq->wait->pollset->poll_fid, &cq->cq.fid, 0);
+		if (cq->wait_is_local)
+			fi_close(&cq->wait->wait_fid.fid);
+	}
 
+	psmx2_domain_release(cq->domain);
 	free(cq);
 
 	return 0;
@@ -782,7 +787,6 @@ static int psmx2_cq_close(fid_t fid)
 
 static int psmx2_cq_control(struct fid *fid, int command, void *arg)
 {
-	/*
 	struct psmx2_fid_cq *cq;
 	int ret = 0;
 
@@ -790,7 +794,7 @@ static int psmx2_cq_control(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_GETWAIT:
-		ret = psmx2_wait_get_obj(cq->wait, arg);
+		ret = fi_control(&cq->wait->wait_fid.fid, FI_GETWAIT, arg);
 		break;
 
 	default:
@@ -798,7 +802,6 @@ static int psmx2_cq_control(struct fid *fid, int command, void *arg)
 	}
 
 	return ret;
-	*/
 	return -FI_ENOSYS;
 }
 
@@ -826,7 +829,7 @@ int psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 {
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_fid_cq *cq_priv;
-	struct psmx2_fid_wait *wait = NULL;
+	struct fid_wait *wait = NULL;
 	struct psmx2_cq_event *event;
 	struct fi_wait_attr wait_attr;
 	int wait_is_local = 0;
@@ -834,7 +837,8 @@ int psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	int err;
 	int i;
 
-	domain_priv = container_of(domain, struct psmx2_fid_domain, domain);
+	domain_priv = container_of(domain, struct psmx2_fid_domain,
+				   util_domain.domain_fid);
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:
 		attr->format = FI_CQ_FORMAT_TAGGED;
@@ -866,7 +870,6 @@ int psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
-	case FI_WAIT_UNSPEC:
 		break;
 
 	case FI_WAIT_SET:
@@ -875,15 +878,16 @@ int psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 				"FI_WAIT_SET is specified but attr->wait_set is NULL\n");
 			return -FI_EINVAL;
 		}
-		wait = (struct psmx2_fid_wait *)attr->wait_set;
+		wait = attr->wait_set;
 		break;
 
+	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUTEX_COND:
 		wait_attr.wait_obj = attr->wait_obj;
 		wait_attr.flags = 0;
-		err = psmx2_wait_open(&domain_priv->fabric->fabric,
-				      &wait_attr, (struct fid_wait **)&wait);
+		err = fi_wait_open(&domain_priv->fabric->util_fabric.fabric_fid,
+				   &wait_attr, (struct fid_wait **)&wait);
 		if (err)
 			return err;
 		wait_is_local = 1;
@@ -922,9 +926,10 @@ int psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cq_priv->domain = domain_priv;
 	cq_priv->format = attr->format;
 	cq_priv->entry_size = entry_size;
-	cq_priv->wait = wait;
-	if (wait)
+	if (wait) {
+		cq_priv->wait = container_of(wait, struct util_wait, wait_fid);
 		cq_priv->wait_cond = attr->wait_cond;
+	}
 	cq_priv->wait_is_local = wait_is_local;
 
 	cq_priv->cq.fid.fclass = FI_CLASS_CQ;
@@ -945,6 +950,9 @@ int psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		}
 		slist_insert_tail(&event->list_entry, &cq_priv->free_list);
 	}
+
+	if (wait)
+		fi_poll_add(&cq_priv->wait->pollset->poll_fid, &cq_priv->cq.fid, 0);
 
 	*cq = &cq_priv->cq;
 	return 0;

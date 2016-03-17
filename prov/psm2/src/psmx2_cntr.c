@@ -291,7 +291,7 @@ static int psmx2_cntr_add(struct fid_cntr *cntr, uint64_t value)
 	psmx2_cntr_check_trigger(cntr_priv);
 
 	if (cntr_priv->wait)
-		psmx2_wait_signal((struct fid_wait *)cntr_priv->wait);
+		cntr_priv->wait->signal(cntr_priv->wait);
 
 	return 0;
 }
@@ -306,7 +306,7 @@ static int psmx2_cntr_set(struct fid_cntr *cntr, uint64_t value)
 	psmx2_cntr_check_trigger(cntr_priv);
 
 	if (cntr_priv->wait)
-		psmx2_wait_signal((struct fid_wait *)cntr_priv->wait);
+		cntr_priv->wait->signal(cntr_priv->wait);
 
 	return 0;
 }
@@ -324,8 +324,8 @@ static int psmx2_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeou
 
 	while (cntr_priv->counter < threshold) {
 		if (cntr_priv->wait) {
-			ret = psmx2_wait_wait((struct fid_wait *)cntr_priv->wait,
-					      timeout - msec_passed);
+			ret = fi_wait((struct fid_wait *)cntr_priv->wait,
+				      timeout - msec_passed);
 			if (ret == -FI_ETIMEDOUT)
 				break;
 		} else {
@@ -357,12 +357,14 @@ static int psmx2_cntr_close(fid_t fid)
 
 	cntr = container_of(fid, struct psmx2_fid_cntr, cntr.fid);
 
-	psmx2_domain_release(cntr->domain);
-
-	if (cntr->wait && cntr->wait_is_local)
-		fi_close((fid_t)cntr->wait);
+	if (cntr->wait) {
+		fi_poll_del(&cntr->wait->pollset->poll_fid, &cntr->cntr.fid, 0);
+		if (cntr->wait_is_local)
+			fi_close((fid_t)cntr->wait);
+	}
 
 	pthread_mutex_destroy(&cntr->trigger_lock);
+	psmx2_domain_release(cntr->domain);
 	free(cntr);
 
 	return 0;
@@ -387,10 +389,8 @@ static int psmx2_cntr_control(fid_t fid, int command, void *arg)
 		break;
 
 	case FI_GETWAIT:
-		/*
-		ret = psmx2_wait_get_obj(cntr->wait, arg);
+		ret = fi_control(&cntr->wait->wait_fid.fid, FI_GETWAIT, arg);
 		break;
-		*/
 	default:
 		return -FI_ENOSYS;
 	}
@@ -420,7 +420,7 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 {
 	struct psmx2_fid_domain *domain_priv;
 	struct psmx2_fid_cntr *cntr_priv;
-	struct psmx2_fid_wait *wait = NULL;
+	struct fid_wait *wait = NULL;
 	struct fi_wait_attr wait_attr;
 	int wait_is_local = 0;
 	int events;
@@ -429,7 +429,8 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	events = FI_CNTR_EVENTS_COMP;
 	flags = 0;
-	domain_priv = container_of(domain, struct psmx2_fid_domain, domain);
+	domain_priv = container_of(domain, struct psmx2_fid_domain,
+				   util_domain.domain_fid);
 
 	switch (attr->events) {
 	case FI_CNTR_EVENTS_COMP:
@@ -445,7 +446,6 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
-	case FI_WAIT_UNSPEC:
 		break;
 
 	case FI_WAIT_SET:
@@ -454,14 +454,15 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 				"FI_WAIT_SET is specified but attr->wait_set is NULL\n");
 			return -FI_EINVAL;
 		}
-		wait = (struct psmx2_fid_wait *)attr->wait_set;
+		wait = attr->wait_set;
 		break;
 
+	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUTEX_COND:
 		wait_attr.wait_obj = attr->wait_obj;
 		wait_attr.flags = 0;
-		err = psmx2_wait_open(&domain_priv->fabric->fabric,
+		err = fi_wait_open(&domain_priv->fabric->util_fabric.fabric_fid,
 				      &wait_attr, (struct fid_wait **)&wait);
 		if (err)
 			return err;
@@ -481,11 +482,11 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		goto fail;
 	}
 
-	psmx2_domain_acquire(domain_priv);
 
 	cntr_priv->domain = domain_priv;
 	cntr_priv->events = events;
-	cntr_priv->wait = wait;
+	if (wait)
+		cntr_priv->wait = container_of(wait, struct util_wait, wait_fid);
 	cntr_priv->wait_is_local = wait_is_local;
 	cntr_priv->flags = flags;
 	cntr_priv->cntr.fid.fclass = FI_CLASS_CNTR;
@@ -495,11 +496,16 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	pthread_mutex_init(&cntr_priv->trigger_lock, NULL);
 
+	if (wait)
+		fi_poll_add(&cntr_priv->wait->pollset->poll_fid,
+			    &cntr_priv->cntr.fid, 0);
+
+	psmx2_domain_acquire(domain_priv);
 	*cntr = &cntr_priv->cntr;
 	return 0;
 fail:
 	if (wait && wait_is_local)
-		fi_close(&wait->wait.fid);
+		fi_close(&wait->fid);
 	return err;
 }
 

@@ -428,6 +428,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->dest_addr = dest_addr;
 	psmx2_info->fabric_attr->name = strdup(PSMX2_FABRIC_NAME);
 	psmx2_info->fabric_attr->prov_name = NULL;
+	psmx2_info->fabric_attr->prov_version = PSMX2_VERSION;
 
 	psmx2_info->tx_attr->caps = psmx2_info->caps;
 	psmx2_info->tx_attr->mode = psmx2_info->mode;
