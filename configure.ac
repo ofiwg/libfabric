@@ -241,7 +241,7 @@ AS_IF([test x"$enable_direct" != x"no"],
 	      AC_MSG_ERROR(Cannot continue)])
 
        PROVIDER_DIRECT=$enable_direct
-       FI_DIRECT_PROVIDER_API_10="prov/$enable_direct/provider_FABRIC_1.0.map"
+       FI_DIRECT_PROVIDER_API_10="$srcdir/prov/$enable_direct/provider_FABRIC_1.0.map"
        AS_IF([test ! -r "$FI_DIRECT_PROVIDER_API_10"],
 	     [AC_MSG_WARN([--enable-direct=$enable_direct specified, but $FI_DIRECT_PROVIDER_API_10 does not exist])
 	      AC_MSG_ERROR([Cannot continue])])])
