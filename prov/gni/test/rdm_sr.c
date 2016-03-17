@@ -201,7 +201,7 @@ void rdm_sr_setup_common(void)
 	}
 }
 
-void rdm_sr_setup(bool is_noreg)
+void rdm_sr_setup(bool is_noreg, enum fi_progress pm)
 {
 	int ret = 0, i = 0;
 
@@ -209,7 +209,8 @@ void rdm_sr_setup(bool is_noreg)
 	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
-	hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
+	hints->domain_attr->control_progress = pm;
+	hints->domain_attr->data_progress = pm;
 	hints->mode = ~0;
 	hints->caps = is_noreg ? hints->caps : FI_SOURCE | FI_MSG;
 	hints->fabric_attr->name = strdup("gni");
@@ -227,11 +228,11 @@ void rdm_sr_setup(bool is_noreg)
 }
 
 static void rdm_sr_setup_reg(void) {
-	rdm_sr_setup(false);
+	rdm_sr_setup(false, FI_PROGRESS_AUTO);
 }
 
 static void rdm_sr_setup_noreg(void) {
-	rdm_sr_setup(true);
+	rdm_sr_setup(true, FI_PROGRESS_AUTO);
 }
 
 void rdm_sr_bnd_ep_setup(void)
@@ -734,6 +735,54 @@ void do_inject(int len)
 Test(rdm_sr, inject)
 {
 	rdm_sr_xfer_for_each_size(do_inject, 1, INJECT_SIZE);
+}
+
+/*
+ * this test attempts to demonstrate issue ofi-cray/libfabric-cray#559.
+ * For domains with control_progress AUTO, this test should not hang.
+ */
+Test(rdm_sr, inject_progress)
+{
+	int ret, len = 64;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
+
+	rdm_sr_init_data(source, len, 0x23);
+	rdm_sr_init_data(target, len, 0);
+
+	sz = fi_inject(ep[0], source, len, gni_addr[1]);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_recv(ep[1], target, len, rem_mr[1], gni_addr[0], source);
+	cr_assert_eq(sz, 0);
+
+	/*
+	 * do progress until send counter is updated.
+	 * This works because we have FI_PROGRESS_AUTO for control progress
+	 */
+	while (fi_cntr_read(send_cntr[0]) < 1) {
+		pthread_yield();
+	}
+
+	while ((ret = fi_cq_read(msg_cq[1], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	rdm_sr_check_cqe(&cqe, source, (FI_MSG|FI_RECV),
+			 target, len, (uint64_t)source);
+
+	dbg_printf("got recv context event!\n");
+
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
+
+	/* make sure inject does not generate a send competion */
+	cr_assert_eq(fi_cq_read(msg_cq[0], &cqe, 1), -FI_EAGAIN);
+
+	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
 }
 
 Test(rdm_sr, inject_retrans)

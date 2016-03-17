@@ -65,6 +65,7 @@ struct wq_hndl_conn_req {
 
 static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr);
 static int __gnix_vc_conn_ack_comp_fn(void *data);
+static int __gnix_vc_push_tx_reqs(struct gnix_vc *vc);
 
 /*******************************************************************************
  * Helper functions
@@ -1821,11 +1822,13 @@ int _gnix_vc_tx_schedule(struct gnix_vc *vc)
  * resources or a FI_FENCE request), schedule the request to be sent later. */
 int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 {
-	int rc, queue_tx = 0;
+	int rc = FI_SUCCESS, queue_tx = 0;
 	struct gnix_vc *vc = req->vc;
-	int connected;
+	int connected, injecting;
 
 	connected = !__gnix_vc_connected(vc); /* 0 on success */
+
+	injecting = (req->flags & FI_INJECT) ? 1 : 0;
 
 	fastlock_acquire(&vc->tx_queue_lock);
 
@@ -1858,6 +1861,29 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 			  req);
 	}
 
+	/*
+	 * if this is an inject request and the vc is
+	 * not connected, and the domain being used has control_progress
+	 * auto enabled,  we will block here till connection is set up.
+	 * We keep the tx_queue_lock for this vc to make sure messages
+	 * stay in correct order.
+	 */
+
+	if (unlikely(!connected)) {
+		if (injecting &&
+		    (vc->ep->domain->control_progress == FI_PROGRESS_AUTO)) {
+			while ((vc->conn_state != GNIX_VC_CONNECTED)) {
+				rc = _gnix_cm_nic_progress(vc->ep->cm_nic);
+				if (rc != FI_SUCCESS) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+						"_gnix_cm_nic_progress returned %s\n",
+						fi_strerror(-rc));
+					break;
+				}
+			}
+		}
+	}
+
 	if (unlikely(queue_tx)) {
 		/*
 		 * TODO: for auto progress do something here
@@ -1868,7 +1894,27 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 
 	fastlock_release(&vc->tx_queue_lock);
 
-	return FI_SUCCESS;
+	/*
+	 * if injecting and queuing, push the tx queue for this vc
+	 * once before returning
+	 */
+	if (unlikely(queue_tx) && injecting) {
+		rc = __gnix_vc_push_tx_reqs(vc);
+		if ((rc != FI_SUCCESS) && (rc != -FI_EAGAIN)) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				"__gnix_vc_push_tx_reqs returned %s\n",
+					fi_strerror(-rc));
+		}
+	}
+
+	/*
+	 * don't treat -FI_EAGAIN as an error
+	 */
+
+	if (rc == -FI_EAGAIN)
+		rc = FI_SUCCESS;
+
+	return rc;
 }
 
 /* Push TX requests queued on the VC. */
@@ -1879,7 +1925,7 @@ static int __gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 	struct slist_entry *item;
 	struct gnix_fab_req *req;
 
-	ret = __gnix_vc_connected(vc);
+	ret = __gnix_vc_connected(vc); /* 0 on success */
 	if (ret) {
 		/* The CM will schedule the VC when the connection is
 		 * complete.*/
