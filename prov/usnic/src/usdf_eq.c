@@ -62,6 +62,8 @@
 #include "usnic_direct.h"
 #include "usd.h"
 #include "usdf.h"
+#include "usdf_wait.h"
+#include "fi_util.h"
 
 static inline int
 usdf_eq_empty(struct usdf_eq *eq)
@@ -359,10 +361,84 @@ usdf_eq_control(fid_t fid, int command, void *arg)
 	return usdf_eq_get_wait(eq, arg);
 }
 
+static int usdf_eq_bind_wait(struct usdf_eq *eq)
+{
+	int ret;
+	struct epoll_event event = {0};
+	struct usdf_wait *wait_priv;
+
+	if (!eq->eq_attr.wait_set) {
+		USDF_DBG_SYS(EQ, "can't bind to non-existent wait set\n");
+		return -FI_EINVAL;
+	}
+
+	wait_priv = wait_ftou(eq->eq_attr.wait_set);
+
+	event.data.ptr = eq;
+	event.events = EPOLLIN;
+
+	ret = fid_list_insert(&wait_priv->list, &wait_priv->lock,
+			&eq->eq_fid.fid);
+	if (ret) {
+		USDF_WARN_SYS(EQ,
+				"failed to associate eq with wait fid list\n");
+		return ret;
+	}
+
+	ret = epoll_ctl(wait_priv->object.epfd, EPOLL_CTL_ADD, eq->eq_fd,
+			&event);
+	if (ret) {
+		USDF_WARN_SYS(EQ, "failed to associate FD with wait set\n");
+		goto err;
+	}
+
+	USDF_DBG_SYS(EQ, "associated EQ FD %d with epoll FD %d using fid %p\n",
+			eq->eq_fd, wait_priv->object.epfd, &eq->eq_fid.fid);
+
+	return ret;
+
+err:
+	fid_list_remove(&wait_priv->list, &wait_priv->lock, &eq->eq_fid.fid);
+	return ret;
+}
+
+static int usdf_eq_unbind_wait(struct usdf_eq *eq)
+{
+	int ret;
+	struct usdf_wait *wait_priv;
+	struct epoll_event event = {0};
+
+	if (!eq->eq_attr.wait_set) {
+		USDF_DBG_SYS(EQ, "can't unbind from non-existent wait set\n");
+		return -FI_EINVAL;
+	}
+
+	wait_priv = wait_ftou(eq->eq_attr.wait_set);
+
+	ret = epoll_ctl(wait_priv->object.epfd, EPOLL_CTL_DEL,
+			eq->eq_fd, &event);
+	if (ret) {
+		USDF_WARN_SYS(EQ,
+				"failed to remove FD from wait set\n");
+		return -errno;
+	}
+
+	fid_list_remove(&wait_priv->list, &wait_priv->lock, &eq->eq_fid.fid);
+
+	atomic_dec(&wait_priv->wait_refcnt);
+
+	USDF_DBG_SYS(EQ,
+			"dissasociated EQ FD %d from epoll FD %d using FID: %p\n",
+			eq->eq_fd, wait_priv->object.epfd, &eq->eq_fid.fid);
+
+	return FI_SUCCESS;
+}
+
 static int
 usdf_eq_close(fid_t fid)
 {
 	struct usdf_eq *eq;
+	int ret = FI_SUCCESS;
 
 	USDF_TRACE_SYS(EQ, "\n");
 
@@ -374,7 +450,10 @@ usdf_eq_close(fid_t fid)
 	atomic_dec(&eq->eq_fabric->fab_refcnt);
 
 	/* release wait obj */
-	switch (eq->eq_wait_obj) {
+	switch (eq->eq_attr.wait_obj) {
+	case FI_WAIT_SET:
+		ret = usdf_eq_unbind_wait(eq);
+		/* FALLTHROUGH. Need to close the FD used for wait set. */
 	case FI_WAIT_FD:
 		close(eq->eq_fd);
 		break;
@@ -386,7 +465,7 @@ usdf_eq_close(fid_t fid)
 	free(eq->eq_ev_buf);
 	free(eq);
 
-	return 0;
+	return ret;
 }
 
 static struct fi_ops_eq usdf_eq_ops = {
@@ -451,10 +530,18 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		/* FALLSTHROUGH */
 	case FI_WAIT_FD:
 		eq->eq_ops_data.sread = usdf_eq_sread_fd;
+		/* FALLTHROUGH. Don't set sread for wait set. */
+	case FI_WAIT_SET:
 		eq->eq_fd = eventfd(0, EFD_NONBLOCK | EFD_SEMAPHORE);
 		if (eq->eq_fd == -1) {
 			ret = -errno;
 			goto fail;
+		}
+
+		if (attr->wait_obj == FI_WAIT_SET) {
+			ret = usdf_eq_bind_wait(eq);
+			if (ret)
+				goto fail;
 		}
 		break;
 	default:
