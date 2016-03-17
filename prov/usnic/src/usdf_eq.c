@@ -324,10 +324,25 @@ usdf_eq_strerror(struct fid_eq *feq, int prov_errno, const void *err_data,
 	return NULL;
 }
 
+static int usdf_eq_get_wait(struct usdf_eq *eq, void *arg)
+{
+	USDF_TRACE_SYS(EQ, "\n");
+
+	switch (eq->eq_wait_obj) {
+	case FI_WAIT_FD:
+		*(int *) arg = eq->eq_fd;
+		break;
+	default:
+		USDF_WARN_SYS(EQ, "unsupported wait type\n");
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
 static int
 usdf_eq_control(fid_t fid, int command, void *arg)
 {
-	/*
 	struct usdf_eq *eq;
 
 	USDF_TRACE_SYS(EQ, "\n");
@@ -336,19 +351,12 @@ usdf_eq_control(fid_t fid, int command, void *arg)
 
 	switch (command) {
 	case FI_GETWAIT:
-		if (eq->eq_wait_obj == FI_WAIT_FD) {
-			*(int *)arg = eq->eq_fd;
-		} else {
-			return -FI_ENODATA;
-		}
 		break;
 	default:
 		return -FI_EINVAL;
 	}
 
-	return 0;
-	*/
-	return -FI_ENOSYS;
+	return usdf_eq_get_wait(eq, arg);
 }
 
 static int
