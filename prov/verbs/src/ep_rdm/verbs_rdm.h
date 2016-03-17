@@ -38,15 +38,15 @@
 #include "../uthash.h"
 #include "verbs_tagged_ep_rdm_states.h"
 
-
-#define FI_IBV_RDM_CONN_SELF ((struct fi_ibv_rdm_tagged_conn *) 0x1)
-
 #define FI_IBV_RDM_ADDR_STR_FORMAT "[%02x:%02x:%02x:%02x:%02x:%02x]"
 
-#define FI_IBV_RDM_ADDR_STR(addr)				   \
-        *((unsigned char*) addr), *((unsigned char*) addr + 1),	   \
-        *((unsigned char*) addr + 2),*((unsigned char*) addr + 3), \
-        *((unsigned char*) addr + 4),*((unsigned char*) addr + 5)
+#define FI_IBV_RDM_ADDR_STR(addr)				\
+        *((unsigned char*) addr + sizeof(sa_family_t) + 0),	\
+	*((unsigned char*) addr + sizeof(sa_family_t) + 1),	\
+	*((unsigned char*) addr + sizeof(sa_family_t) + 2),	\
+	*((unsigned char*) addr + sizeof(sa_family_t) + 3),	\
+	*((unsigned char*) addr + sizeof(sa_family_t) + 4),	\
+	*((unsigned char*) addr + sizeof(sa_family_t) + 5)
 
 #define FI_IBV_RDM_ST_PKTTYPE_MASK  ((uint32_t) 0xFF)
 #define FI_IBV_RDM_EAGER_PKT		0
@@ -220,7 +220,7 @@ struct fi_ibv_rdm_ep {
 	uint16_t cm_listener_port;
 	struct fi_ibv_av *av;
 	int fi_ibv_rdm_addrlen;
-	char my_rdm_addr[FI_IBV_RDM_DFLT_ADDRLEN];
+	struct sockaddr_in my_rdm_addr;
 
 	int buff_len;
 	int n_buffs;
@@ -266,7 +266,7 @@ struct fi_ibv_rdm_tagged_conn {
 	 */
 	struct ibv_qp *qp[2];
 	struct rdma_cm_id *id[2];
-	char addr[FI_IBV_RDM_DFLT_ADDRLEN];
+	struct sockaddr_in addr;
 	enum fi_rdm_cm_role cm_role;
 	int state;
 

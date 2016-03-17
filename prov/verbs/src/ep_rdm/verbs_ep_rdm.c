@@ -547,16 +547,15 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->cm_listener_port = ntohs(rdma_get_src_port(_ep->cm_listener));
 	VERBS_INFO(FI_LOG_EP_CTRL, "listener port: %d\n", _ep->cm_listener_port);
 
-	size_t s1 = sizeof(_ep->my_ipoib_addr.sin_addr.s_addr);
-	size_t s2 = sizeof(_ep->cm_listener_port);
-	assert(FI_IBV_RDM_DFLT_ADDRLEN == s1 + s2);
-
-	memcpy(_ep->my_rdm_addr, &_ep->my_ipoib_addr.sin_addr.s_addr, s1);
-	memcpy(_ep->my_rdm_addr + s1, &_ep->cm_listener_port, s2);
+	memset(&_ep->my_rdm_addr, 0, sizeof (_ep->my_rdm_addr));
+	_ep->my_rdm_addr.sin_family = AF_INET;
+	_ep->my_rdm_addr.sin_port = htons(_ep->cm_listener_port);
+	_ep->my_rdm_addr.sin_addr.s_addr = _ep->my_ipoib_addr.sin_addr.s_addr;
 
 	VERBS_INFO(FI_LOG_EP_CTRL,
-		"My ep_addr: " FI_IBV_RDM_ADDR_STR_FORMAT "\n",
-		FI_IBV_RDM_ADDR_STR(_ep->my_rdm_addr));
+		"My ep_addr: " FI_IBV_RDM_ADDR_STR_FORMAT ", port: %d\n",
+		FI_IBV_RDM_ADDR_STR(&_ep->my_rdm_addr),
+		ntohs(_ep->my_rdm_addr.sin_port));
 
 	_ep->n_buffs = FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM;
 	_ep->buff_len = FI_IBV_RDM_DFLT_BUFFER_SIZE;

@@ -44,7 +44,6 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
                                 struct fi_ibv_rdm_tagged_conn *conn)
 {
 	struct rdma_cm_id *id;
-	struct sockaddr_in sock_addr;
 
 	if (conn->state != FI_VERBS_CONN_ALLOCATED)
 		return 0;
@@ -52,17 +51,11 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 	if (ep->is_closing) {
 		VERBS_INFO(FI_LOG_AV, "Attempt to start connection with addr "
 		FI_IBV_RDM_ADDR_STR_FORMAT" when ep is closing\n",
-		FI_IBV_RDM_ADDR_STR(conn->addr));
+		FI_IBV_RDM_ADDR_STR(&conn->addr));
 		return -1;
 	}
 
 	conn->state = FI_VERBS_CONN_STARTED;
-	memcpy(&sock_addr.sin_addr.s_addr, conn->addr,
-		sizeof(sock_addr.sin_addr.s_addr));
-	memcpy(&sock_addr.sin_port, (char *) conn->addr +
-		sizeof(sock_addr.sin_addr.s_addr), sizeof(sock_addr.sin_port));
-	sock_addr.sin_port = htons(sock_addr.sin_port);
-	sock_addr.sin_family = AF_INET;
 
 	if (rdma_create_id(ep->cm_listener_ec, &id, conn, RDMA_PS_TCP))
 		return -1;
@@ -73,7 +66,7 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 		conn->id[0] = id;
 	}
 
-	return rdma_resolve_addr(id, NULL, (struct sockaddr *)&sock_addr, 30000);
+	return rdma_resolve_addr(id, NULL, (struct sockaddr *)&conn->addr, 30000);
 }
 
 int fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_ep *ep,
@@ -128,7 +121,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 			memset(conn, 0, sizeof *conn);
 			dlist_init(&conn->postponed_requests_head);
 			conn->state = FI_VERBS_CONN_ALLOCATED;
-			memcpy(conn->addr, addr_i, FI_IBV_RDM_DFLT_ADDRLEN);
+			memcpy(&conn->addr, addr_i, FI_IBV_RDM_DFLT_ADDRLEN);
 			HASH_ADD(hh, fi_ibv_rdm_tagged_conn_hash, addr,
 			FI_IBV_RDM_DFLT_ADDRLEN, conn);
 		}
@@ -138,7 +131,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 		fi_addr[i] = (uintptr_t) (void *) conn;
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "fi_av_insert: addr "
 			FI_IBV_RDM_ADDR_STR_FORMAT " conn %p %d\n",
-			FI_IBV_RDM_ADDR_STR(conn->addr), conn, conn->cm_role);
+			FI_IBV_RDM_ADDR_STR(&conn->addr), conn, conn->cm_role);
 
 		ret++;
 	}
@@ -158,7 +151,7 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av, fi_addr_t * fi_addr,
 		conn = (struct fi_ibv_rdm_tagged_conn *) fi_addr[i];
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV,
 			"av_remove conn %p, addr " FI_IBV_RDM_ADDR_STR_FORMAT "\n",
-			conn, FI_IBV_RDM_ADDR_STR(conn->addr));
+			conn, FI_IBV_RDM_ADDR_STR(&conn->addr));
 		rdma_disconnect(conn->id[0]);
 	}
 

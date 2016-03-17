@@ -60,9 +60,7 @@
 
 struct fi_ibv_msg_ep;
 
-#define FI_IBV_RDM_DFLT_ADDRLEN                                         \
-    (/*ep->my_ipoib_addr.sin_addr.s_addr)*/ sizeof(in_addr_t) +         \
-     /*ep->cm_listener_port */              sizeof(uint16_t))
+#define FI_IBV_RDM_DFLT_ADDRLEN	(sizeof (struct sockaddr_in))
 
 #define FI_IBV_RDM_CM_THREAD_TIMEOUT (100)
 #define FI_IBV_RDM_MEM_ALIGNMENT (64)

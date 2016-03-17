@@ -106,7 +106,7 @@ static int fi_ibv_rdm_tagged_getname(fid_t fid, void *addr, size_t * addrlen)
 		return -FI_ETOOSMALL;
 	}
 	memset(addr, 0, *addrlen);
-	memcpy(addr, ep->my_rdm_addr, FI_IBV_RDM_DFLT_ADDRLEN);
+	memcpy(addr, &ep->my_rdm_addr, FI_IBV_RDM_DFLT_ADDRLEN);
 	ep->fi_ibv_rdm_addrlen = *addrlen;
 
 	return 0;
