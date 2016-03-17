@@ -380,8 +380,7 @@ static gni_post_type_t __gnix_fr_post_type(int fr_type, int rdma)
 		break;
 	}
 
-	GNIX_WARN(FI_LOG_EP_DATA, "Unsupported post type: %d", fr_type);
-	assert(0);
+	GNIX_FATAL(FI_LOG_EP_DATA, "Unsupported post type: %d", fr_type);
 	return -FI_ENOSYS;
 }
 
