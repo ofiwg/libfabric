@@ -431,7 +431,7 @@ struct usdf_eq {
 	atomic_t eq_num_events;
 
 	/* various ways to wait */
-	enum fi_wait_obj eq_wait_obj;
+	struct fi_eq_attr eq_attr;
 	union {
 		int eq_fd;
 	};

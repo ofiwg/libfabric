@@ -111,7 +111,7 @@ static inline ssize_t usdf_eq_read_event(struct usdf_eq *eq, uint32_t *event,
 			eq->eq_ev_tail = eq->eq_ev_ring;
 
 		/* consume the event in eventfd */
-		if (eq->eq_wait_obj == FI_WAIT_FD) {
+		if (eq->eq_attr.wait_obj == FI_WAIT_FD) {
 			nbytes = read(eq->eq_fd, &val, sizeof(val));
 			if (nbytes != sizeof(val))
 				return -errno;
@@ -286,7 +286,7 @@ ssize_t usdf_eq_write_internal(struct usdf_eq *eq, uint32_t event,
 	ret = usdf_eq_write_event(eq, event, buf, len, flags);
 
 	/* If successful, post to eventfd */
-	if (ret >= 0 && eq->eq_wait_obj == FI_WAIT_FD) {
+	if (ret >= 0 && eq->eq_attr.wait_obj == FI_WAIT_FD) {
 		n = write(eq->eq_fd, &val, sizeof(val));
 
 		/* TODO: If the write call fails, then roll back the EQ entry.
@@ -328,7 +328,7 @@ static int usdf_eq_get_wait(struct usdf_eq *eq, void *arg)
 {
 	USDF_TRACE_SYS(EQ, "\n");
 
-	switch (eq->eq_wait_obj) {
+	switch (eq->eq_attr.wait_obj) {
 	case FI_WAIT_FD:
 		*(int *) arg = eq->eq_fd;
 		break;
@@ -429,7 +429,6 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	eq->eq_fid.fid.context = context;
 	eq->eq_fid.fid.ops = &usdf_eq_fi_ops;
 	eq->eq_fid.ops = &eq->eq_ops_data;
-	eq->eq_wait_obj = attr->wait_obj;
 
 	eq->eq_fabric = fab;
 	atomic_initialize(&eq->eq_refcnt, 0);
@@ -443,12 +442,11 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	eq->eq_ops_data = usdf_eq_ops;
 
 	/* fill in sread based on wait type */
-	switch (eq->eq_wait_obj) {
+	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
 		break;
 	case FI_WAIT_UNSPEC:
 		/* default to FD */
-		eq->eq_wait_obj = FI_WAIT_FD;
 		attr->wait_obj = FI_WAIT_FD;
 		/* FALLSTHROUGH */
 	case FI_WAIT_FD:
@@ -490,6 +488,8 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	atomic_initialize(&eq->eq_num_events, 0);
 
 	atomic_inc(&eq->eq_fabric->fab_refcnt);
+
+	eq->eq_attr = *attr;
 	*feq = eq_utof(eq);
 
 	return 0;
