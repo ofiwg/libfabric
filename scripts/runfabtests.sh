@@ -340,6 +340,13 @@ function complex_test {
 	local end_time
 	local test_time
 
+	local e=$(is_excluded $(echo "fi_${test}" | cut -d " " -f 1))
+	if [ $e -eq 1 ]; then
+		print_results "$test_exe" "Notrun" "0" "" ""
+		skip_count+=1
+		return
+	fi
+
 	start_time=$(date '+%s')
 
 	FI_LOG_LEVEL=error ${SERVER_CMD} "${BIN_PATH}${test_exe} -s $S_INTERFACE -x" &> $s_outp &
