@@ -423,7 +423,8 @@ int psmx2_ep_open(struct fid_domain *domain, struct fi_info *info,
 	else
 		ep_cap = FI_TAGGED;
 
-	domain_priv = container_of(domain, struct psmx2_fid_domain, domain.fid);
+	domain_priv = container_of(domain, struct psmx2_fid_domain,	
+				   util_domain.domain_fid.fid);
 	if (!domain_priv)
 		goto errout;
 
@@ -538,7 +539,8 @@ int psmx2_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 
 	FI_INFO(&psmx2_prov, FI_LOG_EP_DATA, "\n");
 
-	domain_priv = container_of(domain, struct psmx2_fid_domain, domain.fid);
+	domain_priv = container_of(domain, struct psmx2_fid_domain,
+				   util_domain.domain_fid.fid);
 
 	stx_priv = (struct psmx2_fid_stx *) calloc(1, sizeof *stx_priv);
 	if (!stx_priv)

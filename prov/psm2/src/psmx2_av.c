@@ -135,6 +135,29 @@ static int psmx2_av_check_table_size(struct psmx2_fid_av *av, size_t count)
 	return 0;
 }
 
+static void psmx2_av_post_completion(struct psmx2_fid_av *av, void *context,
+				     uint64_t data, int prov_errno)
+{
+	if (prov_errno) {
+		struct fi_eq_err_entry entry;
+		entry.fid = &av->av.fid;
+		entry.context = context;
+		entry.data = data;
+		entry.err = -psmx2_errno(prov_errno);
+		entry.prov_errno = prov_errno;
+		entry.err_data = NULL;
+		entry.err_data_size = 0;
+		fi_eq_write(av->eq, FI_AV_COMPLETE, &entry, sizeof(entry),
+			    UTIL_FLAG_ERROR);
+	} else {
+		struct fi_eq_entry entry;
+		entry.fid = &av->av.fid;
+		entry.context = context;
+		entry.data = data;
+		fi_eq_write(av->eq, FI_AV_COMPLETE, &entry, sizeof(entry), 0);
+	}
+}
+
 static int psmx2_av_connet_eps(struct psmx2_fid_av *av, size_t count,
 			       psm2_epid_t *epids, int *mask,
 			       psm2_error_t *errors,
@@ -144,7 +167,6 @@ static int psmx2_av_connet_eps(struct psmx2_fid_av *av, size_t count,
 	int i;
 	psm2_epconn_t epconn;
 	struct psmx2_epaddr_context *epaddr_context;
-	struct psmx2_eq_event *event;
 	int error_count = 0;
 
 	/* set up mask to prevent connecting to an already connected ep */
@@ -197,21 +219,8 @@ static int psmx2_av_connet_eps(struct psmx2_fid_av *av, size_t count,
 			epaddrs[i] = (void *)FI_ADDR_NOTAVAIL;
 			error_count++;
 
-			if (av->flags & FI_EVENT) {
-				event = psmx2_eq_create_event(
-						av->eq,
-						FI_AV_COMPLETE,		/* event */
-						context,		/* context */
-						i,			/* data: failed index */
-						psmx2_errno(errors[i]),	/* err */
-						errors[i],		/* prov_errno */
-						NULL,			/* err_data */
-						0);			/* err_data_size */
-				if (!event)
-					return -FI_ENOMEM;
-
-				psmx2_eq_enqueue_event(av->eq, event);
-			}
+			if (av->flags & FI_EVENT)
+				psmx2_av_post_completion(av, context, i, errors[i]);
 		}
 	}
 
@@ -228,7 +237,6 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	psm2_epaddr_t *epaddrs;
 	psm2_error_t *errors;
 	int *mask;
-	struct psmx2_eq_event *event;
 	const struct psmx2_ep_name *names = addr;
 	int error_count;
 	int i;
@@ -281,18 +289,8 @@ static int psmx2_av_insert(struct fid_av *av, const void *addr,
 	if (!(av_priv->flags & FI_EVENT))
 		return count - error_count;
 
-	event = psmx2_eq_create_event(av_priv->eq,
-				      FI_AV_COMPLETE,		/* event */
-				      context,			/* context */
-				      count - error_count,	/* data: succ count */
-				      0,			/* err */
-				      0,			/* prov_errno */
-				      NULL,			/* err_data */
-				      0);			/* err_data_size */
-	if (!event)
-		return -FI_ENOMEM;
+	psmx2_av_post_completion(av_priv, context, count - error_count, 0);
 
-	psmx2_eq_enqueue_event(av_priv->eq, event);
 	return 0;
 }
 
@@ -369,7 +367,6 @@ static int psmx2_av_close(fid_t fid)
 static int psmx2_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct psmx2_fid_av *av;
-	struct psmx2_fid_eq *eq;
 
 	av = container_of(fid, struct psmx2_fid_av, av.fid);
 
@@ -378,8 +375,7 @@ static int psmx2_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
-		eq = container_of(bfid, struct psmx2_fid_eq, eq.fid);
-		av->eq = eq;
+		av->eq = (struct fid_eq *)bfid;
 		break;
 
 	default:
@@ -416,7 +412,8 @@ int psmx2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	size_t count = 64;
 	uint64_t flags = 0;
 
-	domain_priv = container_of(domain, struct psmx2_fid_domain, domain);
+	domain_priv = container_of(domain, struct psmx2_fid_domain,
+				   util_domain.domain_fid);
 
 	if (attr) {
 		switch (attr->type) {

@@ -243,7 +243,8 @@ static int psmx2_mr_reg(struct fid *fid, const void *buf, size_t len,
 		return -FI_EINVAL;
 	}
 	domain = container_of(fid, struct fid_domain, fid);
-	domain_priv = container_of(domain, struct psmx2_fid_domain, domain);
+	domain_priv = container_of(domain, struct psmx2_fid_domain,
+				   util_domain.domain_fid);
 
 	mr_priv = (struct psmx2_fid_mr *) calloc(1, sizeof(*mr_priv) + sizeof(struct iovec));
 	if (!mr_priv)
@@ -296,7 +297,8 @@ static int psmx2_mr_regv(struct fid *fid,
 		return -FI_EINVAL;
 	}
 	domain = container_of(fid, struct fid_domain, fid);
-	domain_priv = container_of(domain, struct psmx2_fid_domain, domain);
+	domain_priv = container_of(domain, struct psmx2_fid_domain,
+				   util_domain.domain_fid);
 
 	if (count == 0 || iov == NULL)
 		return -FI_EINVAL;
@@ -348,7 +350,8 @@ static int psmx2_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_EINVAL;
 	}
 	domain = container_of(fid, struct fid_domain, fid);
-	domain_priv = container_of(domain, struct psmx2_fid_domain, domain);
+	domain_priv = container_of(domain, struct psmx2_fid_domain,
+				   util_domain.domain_fid);
 
 	if (!attr)
 		return -FI_EINVAL;

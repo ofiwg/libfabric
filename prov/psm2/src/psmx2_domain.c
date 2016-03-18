@@ -174,14 +174,21 @@ static void psmx2_domain_stop_progress(struct psmx2_fid_domain *domain)
 	}
 }
 
-void psmx2_domain_release(struct psmx2_fid_domain *domain)
+static int psmx2_domain_close(fid_t fid)
 {
+	struct psmx2_fid_domain *domain;
 	int err;
 
-	FI_INFO(&psmx2_prov, FI_LOG_DOMAIN, "refcnt=%d\n", domain->refcnt);
+	domain = container_of(fid, struct psmx2_fid_domain,
+			      util_domain.domain_fid.fid);
 
-	if (--domain->refcnt > 0)
-		return;
+	FI_INFO(&psmx2_prov, FI_LOG_DOMAIN, "refcnt=%d\n",
+		atomic_get(&domain->util_domain.ref));
+
+	psmx2_domain_release(domain);
+
+	if (util_domain_close(&domain->util_domain))
+		return 0;
 
 	if (domain->progress_thread_enabled)
 		psmx2_domain_stop_progress(domain);
@@ -218,21 +225,7 @@ void psmx2_domain_release(struct psmx2_fid_domain *domain)
 
 	domain->fabric->active_domain = NULL;
 
-	psmx2_fabric_release(domain->fabric);
-
 	free(domain);
-}
-
-static int psmx2_domain_close(fid_t fid)
-{
-	struct psmx2_fid_domain *domain;
-
-	FI_INFO(&psmx2_prov, FI_LOG_DOMAIN, "\n");
-
-	domain = container_of(fid, struct psmx2_fid_domain, domain.fid);
-
-	psmx2_domain_release(domain);
-
 	return 0;
 }
 
@@ -251,7 +244,7 @@ static struct fi_ops_domain psmx2_domain_ops = {
 	.endpoint = psmx2_ep_open,
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = psmx2_cntr_open,
-	.poll_open = psmx2_poll_open,
+	.poll_open = fi_poll_create,
 	.stx_ctx = psmx2_stx_ctx,
 	.srx_ctx = fi_no_srx_context,
 };
@@ -261,22 +254,126 @@ static int psmx2_key_compare(void *key1, void *key2)
 	return (key1 < key2) ?  -1 : (key1 > key2);
 }
 
+static int psmx2_domain_init(struct psmx2_fid_domain *domain)
+{
+	struct psmx2_fid_fabric *fabric = domain->fabric;
+	struct psm2_ep_open_opts opts;
+	int err;
+
+	psm2_ep_open_opts_get_defaults(&opts);
+
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"uuid: %s\n", psmx2_uuid_to_string(fabric->uuid));
+
+	err = psm2_ep_open(fabric->uuid, &opts,
+			   &domain->psm2_ep, &domain->psm2_epid);
+	if (err != PSM2_OK) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"psm2_ep_open returns %d, errno=%d\n", err, errno);
+		err = psmx2_errno(err);
+		goto err_out;
+	}
+
+	FI_INFO(&psmx2_prov, FI_LOG_CORE,
+		"epid: 0x%016lx\n", domain->psm2_epid);
+
+	err = psm2_mq_init(domain->psm2_ep, PSM2_MQ_ORDERMASK_ALL,
+			   NULL, 0, &domain->psm2_mq);
+	if (err != PSM2_OK) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"psm2_mq_init returns %d, errno=%d\n", err, errno);
+		err = psmx2_errno(err);
+		goto err_out_close_ep;
+	}
+
+	err = fastlock_init(&domain->mr_lock);
+	if (err) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"fastlock_init(mr_lock) returns %d\n", err);
+		goto err_out_finalize_mq;
+	}
+
+	domain->mr_map = rbtNew(&psmx2_key_compare);
+	if (!domain->mr_map) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"rbtNew failed\n");
+		goto err_out_destroy_mr_lock;
+	}
+
+	domain->mr_reserved_key = 1;
+	
+	err = fastlock_init(&domain->vl_lock);
+	if (err) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"fastlock_init(vl_lock) returns %d\n", err);
+		goto err_out_delete_mr_map;
+	}
+	memset(domain->vl_map, 0, sizeof(domain->vl_map));
+	domain->vl_alloc = 0;
+
+	err = fastlock_init(&domain->poll_lock);
+	if (err) {
+		FI_WARN(&psmx2_prov, FI_LOG_CORE,
+			"fastlock_init(poll_lock) returns %d\n", err);
+		goto err_out_destroy_vl_lock;
+	}
+
+	/* Set active domain before psmx2_domain_enable_ep() installs the
+	 * AM handlers to ensure that psmx2_active_fabric->active_domain
+	 * is always non-NULL inside the handlers. Notice that the vlaue
+	 * active_domain becomes NULL again only when the domain is closed.
+	 * At that time the AM handlers are gone with the PSM endpoint.
+	 */
+	fabric->active_domain = domain;
+
+	if (psmx2_domain_enable_ep(domain, NULL) < 0)
+		goto err_out_reset_active_domain;
+
+	if (domain->progress_thread_enabled)
+		psmx2_domain_start_progress(domain);
+
+	return 0;
+
+err_out_reset_active_domain:
+	fabric->active_domain = NULL;
+	fastlock_destroy(&domain->poll_lock);
+
+err_out_destroy_vl_lock:
+	fastlock_destroy(&domain->vl_lock);
+
+err_out_delete_mr_map:
+	rbtDelete(domain->mr_map);
+
+err_out_destroy_mr_lock:
+	fastlock_destroy(&domain->mr_lock);
+
+err_out_finalize_mq:
+	psm2_mq_finalize(domain->psm2_mq);
+
+err_out_close_ep:
+	if (psm2_ep_close(domain->psm2_ep, PSM2_EP_CLOSE_GRACEFUL,
+			  (int64_t) psmx2_env.timeout * 1000000000LL) != PSM2_OK)
+		psm2_ep_close(domain->psm2_ep, PSM2_EP_CLOSE_FORCE, 0);
+
+err_out:
+	return err;
+}
+
 int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_domain **domain, void *context)
 {
 	struct psmx2_fid_fabric *fabric_priv;
 	struct psmx2_fid_domain *domain_priv;
-	struct psm2_ep_open_opts opts;
 	int err;
 
 	FI_INFO(&psmx2_prov, FI_LOG_DOMAIN, "\n");
 
-	fabric_priv = container_of(fabric, struct psmx2_fid_fabric, fabric);
-	psmx2_fabric_acquire(fabric_priv);
+	fabric_priv = container_of(fabric, struct psmx2_fid_fabric,
+				   util_fabric.fabric_fid);
 
 	if (fabric_priv->active_domain) {
 		psmx2_domain_acquire(fabric_priv->active_domain);
-		*domain = &fabric_priv->active_domain->domain;
+		*domain = &fabric_priv->active_domain->util_domain.domain_fid;
 		return 0;
 	}
 
@@ -292,11 +389,14 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err_out;
 	}
 
-	domain_priv->domain.fid.fclass = FI_CLASS_DOMAIN;
-	domain_priv->domain.fid.context = context;
-	domain_priv->domain.fid.ops = &psmx2_fi_ops;
-	domain_priv->domain.ops = &psmx2_domain_ops;
-	domain_priv->domain.mr = &psmx2_mr_ops;
+	err = fi_domain_init(fabric, info, &domain_priv->util_domain, context);
+	if (err)
+		goto err_out_free_domain;
+		
+	/* fclass & context are set in fi_domain_init */
+	domain_priv->util_domain.domain_fid.fid.ops = &psmx2_fi_ops;
+	domain_priv->util_domain.domain_fid.ops = &psmx2_domain_ops;
+	domain_priv->util_domain.domain_fid.mr = &psmx2_mr_ops;
 	domain_priv->mr_mode = info->domain_attr->mr_mode;
 	domain_priv->mode = info->mode;
 	domain_priv->caps = info->caps;
@@ -304,108 +404,23 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->progress_thread_enabled =
 		(info->domain_attr->data_progress == FI_PROGRESS_AUTO);
 
-	psm2_ep_open_opts_get_defaults(&opts);
+	err = psmx2_domain_init(domain_priv);
+	if (err)
+		goto err_out_close_domain;
 
-	FI_INFO(&psmx2_prov, FI_LOG_CORE,
-		"uuid: %s\n", psmx2_uuid_to_string(fabric_priv->uuid));
+	/* take the reference to count for multiple domain open calls */
+	psmx2_domain_acquire(fabric_priv->active_domain);
 
-	err = psm2_ep_open(fabric_priv->uuid, &opts,
-			   &domain_priv->psm2_ep, &domain_priv->psm2_epid);
-	if (err != PSM2_OK) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"psm2_ep_open returns %d, errno=%d\n", err, errno);
-		err = psmx2_errno(err);
-		goto err_out_free_domain;
-	}
-
-	FI_INFO(&psmx2_prov, FI_LOG_CORE,
-		"epid: 0x%016lx\n", domain_priv->psm2_epid);
-
-	err = psm2_mq_init(domain_priv->psm2_ep, PSM2_MQ_ORDERMASK_ALL,
-			   NULL, 0, &domain_priv->psm2_mq);
-	if (err != PSM2_OK) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"psm2_mq_init returns %d, errno=%d\n", err, errno);
-		err = psmx2_errno(err);
-		goto err_out_close_ep;
-	}
-
-	err = fastlock_init(&domain_priv->mr_lock);
-	if (err) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"fastlock_init(mr_lock) returns %d\n", err);
-		goto err_out_finalize_mq;
-	}
-
-	domain_priv->mr_map = rbtNew(&psmx2_key_compare);
-	if (!domain_priv->mr_map) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"rbtNew failed\n");
-		goto err_out_destroy_mr_lock;
-	}
-
-	domain_priv->mr_reserved_key = 1;
-	
-	err = fastlock_init(&domain_priv->vl_lock);
-	if (err) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"fastlock_init(vl_lock) returns %d\n", err);
-		goto err_out_delete_mr_map;
-	}
-	memset(domain_priv->vl_map, 0, sizeof(domain_priv->vl_map));
-	domain_priv->vl_alloc = 0;
-
-	err = fastlock_init(&domain_priv->poll_lock);
-	if (err) {
-		FI_WARN(&psmx2_prov, FI_LOG_CORE,
-			"fastlock_init(poll_lock) returns %d\n", err);
-		goto err_out_destroy_vl_lock;
-	}
-
-	/* Set active domain before psmx2_domain_enable_ep() installs the
-	 * AM handlers to ensure that psmx2_active_fabric->active_domain
-	 * is always non-NULL inside the handlers. Notice that the vlaue
-	 * active_domain becomes NULL again only when the domain is closed.
-	 * At that time the AM handlers are gone with the PSM endpoint.
-	 */
-	fabric_priv->active_domain = domain_priv;
-
-	if (psmx2_domain_enable_ep(domain_priv, NULL) < 0)
-		goto err_out_reset_active_domain;
-
-	if (domain_priv->progress_thread_enabled)
-		psmx2_domain_start_progress(domain_priv);
-
-	domain_priv->refcnt = 1;
-	*domain = &domain_priv->domain;
+	*domain = &domain_priv->util_domain.domain_fid;
 	return 0;
 
-err_out_reset_active_domain:
-	fabric_priv->active_domain = NULL;
-	fastlock_destroy(&domain_priv->poll_lock);
-
-err_out_destroy_vl_lock:
-	fastlock_destroy(&domain_priv->vl_lock);
-
-err_out_delete_mr_map:
-	rbtDelete(domain_priv->mr_map);
-
-err_out_destroy_mr_lock:
-	fastlock_destroy(&domain_priv->mr_lock);
-
-err_out_finalize_mq:
-	psm2_mq_finalize(domain_priv->psm2_mq);
-
-err_out_close_ep:
-	if (psm2_ep_close(domain_priv->psm2_ep, PSM2_EP_CLOSE_GRACEFUL,
-			  (int64_t) psmx2_env.timeout * 1000000000LL) != PSM2_OK)
-		psm2_ep_close(domain_priv->psm2_ep, PSM2_EP_CLOSE_FORCE, 0);
+err_out_close_domain:
+	util_domain_close(&domain_priv->util_domain);
 
 err_out_free_domain:
 	free(domain_priv);
 
 err_out:
-	psmx2_fabric_release(fabric_priv);
 	return err;
 }
 
