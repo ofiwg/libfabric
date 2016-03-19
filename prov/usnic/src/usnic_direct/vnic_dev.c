@@ -490,7 +490,8 @@ static int _vnic_dev_cmd2(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
 	return 0;
 #else
 	struct devcmd2_controller *dc2c = vdev->devcmd2;
-	struct devcmd2_result *result = dc2c->result + dc2c->next_result;
+	struct devcmd2_result *result;
+	u8 color;
 	unsigned int i;
 	int delay;
 	int err;
@@ -539,14 +540,18 @@ static int _vnic_dev_cmd2(struct vnic_dev *vdev, enum vnic_devcmd_cmd cmd,
 	if (dc2c->cmd_ring[posted].flags & DEVCMD2_FNORESULT)
 		return 0;
 
+	result = dc2c->result + dc2c->next_result;
+	color = dc2c->color;
+
+	dc2c->next_result++;
+	if (dc2c->next_result == dc2c->result_size) {
+		dc2c->next_result = 0;
+		dc2c->color = dc2c->color ? 0 : 1;
+	}
+
 	for (delay = 0; delay < wait; delay++) {
 		udelay(100);
-		if (result->color == dc2c->color) {
-			dc2c->next_result++;
-			if (dc2c->next_result == dc2c->result_size) {
-				dc2c->next_result = 0;
-				dc2c->color = dc2c->color ? 0 : 1;
-			}
+		if (result->color == color) {
 			if (result->error) {
 				err = -(int) result->error;
 				if (err != ERR_ECMDUNKNOWN || cmd != CMD_CAPABILITY)

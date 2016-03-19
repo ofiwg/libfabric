@@ -64,7 +64,7 @@
 
 	uint32_t src_ipaddr_be;
 	uint32_t dest_ipaddr_be;
-	uint32_t ifindex;
+	int ifindex;
 	uint32_t nh_addr;
 	int reachable;
 

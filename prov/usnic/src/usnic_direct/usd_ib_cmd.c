@@ -587,11 +587,7 @@ usd_ib_cmd_create_qp(
 
     ucp = &cmd.usnic_cmd;
 
-    if (qp->uq_wq.uwq_cq->comp_fd != -1 || qp->uq_rq.urq_cq->comp_fd != -1) {
-        if (dev->ud_ctx->ucx_caps[USD_CAP_GRP_INTR] != 1) {
-            usd_err("usd_create_qp failed, no interrupt support\n");
-            return -ENOTSUP;
-        }
+    if (dev->ud_ctx->ucx_caps[USD_CAP_GRP_INTR]) {
         ucp->cmd_version = USNIC_IB_CREATE_QP_VERSION;
     } else {
             /*

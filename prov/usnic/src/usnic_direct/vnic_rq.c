@@ -204,7 +204,7 @@ void vnic_rq_error_out(struct vnic_rq *rq, unsigned int error)
 
 unsigned int vnic_rq_error_status(struct vnic_rq *rq)
 {
-        return vnic_rq_ctrl_error_status(rq->ctrl);
+	return vnic_rq_ctrl_error_status(rq->ctrl);
 }
 
 unsigned int vnic_rq_ctrl_error_status(struct vnic_rq_ctrl *ctrl)
@@ -220,19 +220,28 @@ void vnic_rq_enable(struct vnic_rq *rq)
 int vnic_rq_disable(struct vnic_rq *rq)
 {
 	unsigned int wait;
+	int i;
 
-	iowrite32(0, &rq->ctrl->enable);
+	/*
+	 * Due to a race condition with clearing RQ "mini-cache", we need to
+	 * disable the RQ twice to guarantee that stale descriptors are not
+	 * used when this RQ is re-enabled.
+	 */
+	for (i = 0; i < 2; ++i) {
+		iowrite32(0, &rq->ctrl->enable);
 
-	/* Wait for HW to ACK disable request */
-	for (wait = 0; wait < 1000; wait++) {
-		if (!(ioread32(&rq->ctrl->running)))
-			return 0;
-		udelay(10);
+		/* Wait for HW to ACK disable request */
+		for (wait = 20000; wait > 0; wait--) {
+			if (ioread32(&rq->ctrl->running) == 0)
+				break;
+		}
+
+		if (wait == 0) {
+			pr_err("Failed to disable RQ[%d]\n", rq->index);
+			return -ETIMEDOUT;
+		}
 	}
-
-	pr_err("Failed to disable RQ[%d]\n", rq->index);
-
-	return -ETIMEDOUT;
+	return 0;
 }
 
 void vnic_rq_clean(struct vnic_rq *rq,
@@ -262,6 +271,12 @@ void vnic_rq_clean(struct vnic_rq *rq,
 		&rq->bufs[fetch_index / VNIC_RQ_BUF_BLK_ENTRIES(count)]
 			[fetch_index % VNIC_RQ_BUF_BLK_ENTRIES(count)];
 	iowrite32(fetch_index, &rq->ctrl->posted_index);
+
+	/*
+	 * Anytime we write fetch_index, we need to re-write 0 to RQ.enable
+	 * to re-sync internal VIC state on Sereno.
+	 */
+	iowrite32(0, &rq->ctrl->enable);
 
 	vnic_dev_clear_desc_ring(&rq->ring);
 }
