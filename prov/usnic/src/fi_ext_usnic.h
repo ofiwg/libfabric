@@ -133,5 +133,7 @@ struct fi_usnic_ops_av {
 
 int usdf_fabric_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 		void **ops, void *context);
+int usdf_av_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
+		void **ops, void *context);
 
 #endif /* _FI_EXT_USNIC_H_ */

@@ -35,7 +35,11 @@
 #include "usdf.h"
 #include "usnic_direct.h"
 #include "fi_ext_usnic.h"
+#include "usdf_av.h"
 
+/*******************************************************************************
+ * Fabric extensions
+ ******************************************************************************/
 static int
 usdf_usnic_getinfo_v1(uint32_t version, struct fid_fabric *fabric,
 			struct fi_usnic_info *uip)
@@ -194,6 +198,47 @@ usdf_fabric_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 
 	if (strcmp(ops_name, FI_USNIC_FABRIC_OPS_1) == 0) {
 		*ops = &usdf_usnic_ops_fabric;
+	} else {
+		return -FI_EINVAL;
+	}
+
+	return 0;
+}
+
+/*******************************************************************************
+ * Address vector extensions
+ ******************************************************************************/
+static int
+usdf_am_get_distance(struct fid_av *fav, void *addr, int *metric_o)
+{
+	struct usdf_av *av;
+	struct usdf_domain *udp;
+	struct sockaddr_in *sin;
+	int ret;
+
+	USDF_TRACE_SYS(DOMAIN, "\n");
+
+	av = av_ftou(fav);
+	udp = av->av_domain;
+	sin = addr;
+
+	ret = usd_get_dest_distance(udp->dom_dev,
+			sin->sin_addr.s_addr, metric_o);
+	return ret;
+}
+
+static struct fi_usnic_ops_av usdf_usnic_ops_av = {
+	.size = sizeof(struct fi_usnic_ops_av),
+	.get_distance = usdf_am_get_distance,
+};
+
+int usdf_av_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
+		void **ops, void *context)
+{
+	USDF_TRACE_SYS(AV, "\n");
+
+	if (strcmp(ops_name, FI_USNIC_AV_OPS_1) == 0) {
+		*ops = &usdf_usnic_ops_av;
 	} else {
 		return -FI_EINVAL;
 	}
