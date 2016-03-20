@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * LICENSE_BEGIN
  *
@@ -142,6 +142,152 @@ usd_open_ibctx(struct usd_context *uctx)
 
     ret = usd_ib_cmd_get_context(uctx);
     return ret;
+}
+
+const char *
+usd_devid_to_pid(uint32_t vendor_id, uint32_t device_id)
+{
+    const char *pid;
+
+    if (vendor_id != 0x1137)
+        return "Unknown";
+
+    switch (device_id) {
+    case 0x4f:
+        // Vasona
+        pid = "UCSC-VIC-M82-8P";
+        break;
+    case 0x84:
+        // Cotati
+        pid = "UCSB-MLOM-40G-01";
+        break;
+    case 0x85:
+        // Lexington
+        pid = "UCSC-PCIE-CSC-02";
+        break;
+    case 0xcd:
+        // Icehouse
+        pid = "UCSC-PCIE-C40Q-02";
+        break;
+    case 0xce:
+        // Kirkwood Lake
+        pid = "UCSC-PCIE-C10T-02";
+        break;
+    case 0x12c:
+        // Calistoga MLOM
+        pid = "UCSB-MLOM-40G-03";
+        break;
+    case 0x12e:
+        // Susanville MLOM
+        pid = "UCSC-MLOM-CSC-02";
+        break;
+    case 0x137:
+        // Mountain View (Cruz mezz)
+        pid = "UCSB-VIC-M83-8P";
+        break;
+    case 0x138:
+        // Walnut Creek
+        pid = "UCSB-B3116S-LOM";
+        break;
+    case 0x139:
+        // Torrance MLOM
+        pid = "UCSC-MLOM-C10T-02";
+        break;
+    case 0x14b:
+        // Mount Tian
+        pid = "UCSC-C3260-SIOC";
+        break;
+    case 0x14d:
+        // Clearlake
+        pid = "UCSC-PCIE-C40Q-03";
+        break;
+    case 0x157:
+        // Mount Tian2
+        pid = "UCSC-C3260-SIOC";
+        break;
+    case 0x15d:
+        // Claremont MLOM
+        pid = "UCSC-MLOM-C40Q-03";
+        break;
+    default:
+        pid = "Unknown Cisco Device";
+        break;
+    }
+
+    return pid;
+}
+
+const char *
+usd_devid_to_nicname(uint32_t vendor_id, uint32_t device_id)
+{
+    const char *nicname;
+
+    if (vendor_id != 0x1137)
+        return "Unknown";
+
+    switch (device_id) {
+    case 0x4f:
+        // Vasona
+        nicname = "VIC 1280";
+        break;
+    case 0x84:
+        // Cotati
+        nicname = "VIC 1240";
+        break;
+    case 0x85:
+        // Lexington
+        nicname = "VIC 1225";
+        break;
+    case 0xcd:
+        // Icehouse
+        nicname = "VIC 1285";
+        break;
+    case 0xce:
+        // Kirkwood Lake
+        nicname = "VIC 1225T";
+        break;
+    case 0x12c:
+        // Calistoga MLOM
+        nicname = "VIC 1340";
+        break;
+    case 0x12e:
+        // Susanville MLOM
+        nicname = "VIC 1227";
+        break;
+    case 0x137:
+        // Mountain View (Cruz mezz)
+        nicname = "VIC 1380";
+        break;
+    case 0x138:
+        // Walnut Creek
+        nicname = "UCSB-B3116S";
+        break;
+    case 0x139:
+        // Torrance MLOM
+        nicname = "VIC 1227T";
+        break;
+    case 0x14b:
+        // Mount Tian
+        nicname = "";
+        break;
+    case 0x14d:
+        // Clearlake
+        nicname = "VIC 1385";
+        break;
+    case 0x157:
+        // Mount Tian2
+        nicname = "";
+        break;
+    case 0x15d:
+        // Claremont MLOM
+        nicname = "VIC 1387";
+        break;
+    default:
+        nicname = "Unknown Cisco Device";
+        break;
+    }
+
+    return nicname;
 }
 
 /*

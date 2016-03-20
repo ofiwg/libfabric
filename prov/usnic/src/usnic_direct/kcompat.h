@@ -161,21 +161,39 @@
 #define SLES_VERSION READ_SLE_VERSION
 #define SLES_PATCHLEVEL READ_SLE_PATCHLEVEL
 
+#define UBUNTU_VERSION READ_UBUNTU_VERSION
+#define UBUNTU_SUBVERSION READ_UBUNTU_SUBVERSION
+#define UBUNTU_PATCHLEVEL READ_UBUNTU_PATCHLEVEL
+
 #if RHEL_RELEASE_CODE || defined(__VMKLNX__)
 #undef SLES_VERSION
 #undef SLES_PATCHLEVEL
+#undef UBUNTU_VERSION
+#undef UBUNTU_SUBVERSION
+#undef UBUNTU_PATCHLEVEL
 #define SLES_VERSION 0
 #define SLES_PATCHLEVEL 0
+#define UBUNTU_VERSION 0
+#define UBUNTU_SUBVERSION 0
+#define UBUNTU_PATCHLEVEL 0
 #endif
-
 
 #define SLES_RELEASE_VERSION(a,b) (((a) << 8) + (b))
 #define SLES_RELEASE_CODE SLES_RELEASE_VERSION(SLES_VERSION, SLES_PATCHLEVEL)
+
+#define UBUNTU_RELEASE_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))
+#define UBUNTU_RELEASE_CODE UBUNTU_RELEASE_VERSION(UBUNTU_VERSION, UBUNTU_SUBVERSION, UBUNTU_PATCHLEVEL)
 
 /* Non-kernel version-specific definitions */
 #ifndef IFLA_VF_PORT_MAX
 #define PORT_PROFILE_MAX 40
 #define PORT_UUID_MAX  16
+#endif
+
+#if (RHEL_RELEASE_CODE && (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7, 0)))
+#if IS_ENABLED(CONFIG_VXLAN)
+#define ENIC_VXLAN
+#endif
 #endif
 
 #if (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 34))
@@ -191,7 +209,9 @@
 #define netif_set_xps_queue(a, b, c) do { } while(0)
 #endif /* kernel < 3.9 */
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0))
+#include <net/flow_dissector.h>
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0))
 #include <net/flow_keys.h>
 #else
 #include <net/ip.h>

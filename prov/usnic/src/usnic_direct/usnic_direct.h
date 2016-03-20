@@ -695,6 +695,10 @@ const char *usd_send_flag_sift_str(enum usd_send_flag_shift sfs);
 
 const char *usd_capability(enum usd_capability cap);
 
+const char *usd_devid_to_nicname(uint32_t vendor_id, uint32_t device_id);
+
+const char *usd_devid_to_pid(uint32_t vendor_id, uint32_t device_id);
+
 /****************************************************************
  * special API holes punched for implementing verbs
  ****************************************************************/
