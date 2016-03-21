@@ -134,10 +134,10 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "ht:" CS_OPTS INFO_OPTS BENCHMARK_OPTS)) !=
+	while ((op = getopt(argc, argv, "hT:" CS_OPTS INFO_OPTS BENCHMARK_OPTS)) !=
 			-1) {
 		switch (op) {
-		case 't':
+		case 'T':
 			timeout = atoi(optarg);
 			break;
 		default:
@@ -149,7 +149,7 @@ int main(int argc, char **argv)
 		case 'h':
 			ft_csusage(argv[0], "Ping pong client and server using UD.");
 			ft_benchmark_usage();
-			FT_PRINT_OPTS_USAGE("-t <timeout>",
+			FT_PRINT_OPTS_USAGE("-T <timeout>",
 					"seconds before timeout on receive");
 			return EXIT_FAILURE;
 		}
