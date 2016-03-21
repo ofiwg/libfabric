@@ -44,6 +44,7 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include <fi_util.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
@@ -172,8 +173,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 {
 	int ret = 0;
 	uint64_t mode = GNIX_FAB_MODES;
-	enum fi_progress control_progress = FI_PROGRESS_AUTO;
-	enum fi_progress data_progress = FI_PROGRESS_AUTO;
+	uint64_t caps = GNIX_EP_RDM_CAPS;
 	struct fi_info *gnix_info = NULL;
 	struct gnix_ep_name *dest_addr = NULL;
 	struct gnix_ep_name *src_addr = NULL;
@@ -187,7 +187,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	if (node) {
 		addr = malloc(sizeof(*addr));
 		if (!addr) {
-			ret = -FI_ENOMEM;
 			goto err;
 		}
 
@@ -224,16 +223,50 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	 */
 	gnix_info = fi_allocinfo();
 	if (gnix_info == NULL) {
-		ret = -FI_ENOMEM;
 		goto err;
 	}
 
 	/*
-	 * Set some default values
+	 * Set the default values
 	 */
 	gnix_info->tx_attr->op_flags = 0;
 	gnix_info->rx_attr->op_flags = 0;
 	gnix_info->ep_attr->type = FI_EP_RDM;
+	gnix_info->ep_attr->protocol = FI_PROTO_GNI;
+	gnix_info->ep_attr->max_msg_size = GNIX_MAX_MSG_SIZE;
+	/* TODO: need to work on this */
+	gnix_info->ep_attr->mem_tag_format = 0x0;
+	gnix_info->ep_attr->tx_ctx_cnt = 1;
+	gnix_info->ep_attr->rx_ctx_cnt = 1;
+
+	gnix_info->domain_attr->threading = FI_THREAD_SAFE;
+	gnix_info->domain_attr->control_progress = FI_PROGRESS_AUTO;
+	gnix_info->domain_attr->data_progress = FI_PROGRESS_AUTO;
+	gnix_info->domain_attr->av_type = FI_AV_UNSPEC;
+	gnix_info->domain_attr->tx_ctx_cnt = gnix_max_nics_per_ptag;
+	/* only one aries per node */
+	gnix_info->domain_attr->name = strdup(gnix_dom_name);
+	gnix_info->domain_attr->cq_data_size = sizeof(uint64_t);
+
+	gnix_info->next = NULL;
+	gnix_info->addr_format = FI_ADDR_GNI;
+	gnix_info->src_addrlen = sizeof(struct gnix_ep_name);
+	gnix_info->dest_addrlen = sizeof(struct gnix_ep_name);
+	gnix_info->src_addr = src_addr;
+	gnix_info->dest_addr = dest_addr;
+	/* prov_name gets filled in by fi_getinfo from the gnix_prov struct */
+	/* let's consider gni copyrighted :) */
+
+	gnix_info->tx_attr->msg_order = FI_ORDER_SAS;
+	gnix_info->tx_attr->comp_order = FI_ORDER_NONE;
+	gnix_info->tx_attr->size = GNIX_TX_SIZE_DEFAULT;
+	gnix_info->tx_attr->iov_limit = 1;
+	gnix_info->tx_attr->inject_size = GNIX_INJECT_SIZE;
+	gnix_info->tx_attr->rma_iov_limit = 1;
+	gnix_info->rx_attr->msg_order = FI_ORDER_SAS;
+	gnix_info->rx_attr->comp_order = FI_ORDER_NONE;
+	gnix_info->rx_attr->size = GNIX_RX_SIZE_DEFAULT;
+	gnix_info->rx_attr->iov_limit = 1;
 
 	if (hints) {
 		/*
@@ -246,7 +279,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			case FI_EP_DGRAM:
 				break;
 			default:
-				ret = -FI_ENODATA;
 				goto err;
 			}
 		}
@@ -256,7 +288,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		 */
 		if (hints->mode) {
 			if ((hints->mode & GNIX_FAB_MODES) != GNIX_FAB_MODES) {
-				ret = -FI_ENODATA;
 				goto err;
 			}
 			mode = hints->mode & ~GNIX_FAB_MODES_CLEAR;
@@ -266,8 +297,8 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			goto err;
 		}
 
-		if (!hints->caps) {
-			hints->caps = GNIX_EP_RDM_CAPS;
+		if (hints->caps) {
+			caps = hints->caps & GNIX_EP_RDM_CAPS;
 		}
 
 		if (hints->ep_attr) {
@@ -276,17 +307,14 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			case FI_PROTO_GNI:
 				break;
 			default:
-				ret = -FI_ENODATA;
 				goto err;
 			}
 
 			if (hints->ep_attr->tx_ctx_cnt > 1) {
-				ret = -FI_ENODATA;
 				goto err;
 			}
 
 			if (hints->ep_attr->rx_ctx_cnt > 1) {
-				ret = -FI_ENODATA;
 				goto err;
 			}
 		}
@@ -294,11 +322,9 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		if (hints->tx_attr) {
 			if ((hints->tx_attr->op_flags & GNIX_EP_OP_FLAGS) !=
 				hints->tx_attr->op_flags) {
-				ret = -FI_ENODATA;
 				goto err;
 			}
 			if (hints->tx_attr->inject_size > GNIX_INJECT_SIZE) {
-				ret = -FI_ENODATA;
 				goto err;
 			}
 
@@ -309,7 +335,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		if (hints->rx_attr) {
 			if ((hints->rx_attr->op_flags & GNIX_EP_OP_FLAGS) !=
 					hints->rx_attr->op_flags) {
-				ret = -FI_ENODATA;
 				goto err;
 			}
 
@@ -320,7 +345,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		if (hints->fabric_attr && hints->fabric_attr->name &&
 		    strncmp(hints->fabric_attr->name, gnix_fab_name,
 			    strlen(gnix_fab_name))) {
-			ret = -FI_ENODATA;
 			goto err;
 		}
 
@@ -328,18 +352,17 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			if (hints->domain_attr->name &&
 			    strncmp(hints->domain_attr->name, gnix_dom_name,
 				    strlen(gnix_dom_name))) {
-				ret = -FI_ENODATA;
 				goto err;
 			}
 
 			if (hints->domain_attr->control_progress !=
 				FI_PROGRESS_UNSPEC)
-				control_progress =
+				gnix_info->domain_attr->control_progress =
 					hints->domain_attr->control_progress;
 
 			if (hints->domain_attr->data_progress !=
 				FI_PROGRESS_UNSPEC)
-				data_progress =
+				gnix_info->domain_attr->data_progress =
 					hints->domain_attr->data_progress;
 
 			switch (hints->domain_attr->mr_mode) {
@@ -347,14 +370,18 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			case FI_MR_BASIC:
 				break;
 			case FI_MR_SCALABLE:
-				ret = -FI_ENODATA;
 				goto err;
 			}
+
+			ret = fi_check_domain_attr(&gnix_prov,
+						   gnix_info->domain_attr,
+						   hints->domain_attr);
+			if (ret)
+				goto err;
 		}
 
 		if (hints->ep_attr) {
 			if (hints->ep_attr->max_msg_size > GNIX_MAX_MSG_SIZE) {
-				ret = -FI_ENODATA;
 				goto err;
 			}
 
@@ -368,48 +395,16 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		}
 	}
 
-	gnix_info->ep_attr->protocol = FI_PROTO_GNI;
-	gnix_info->ep_attr->max_msg_size = GNIX_MAX_MSG_SIZE;
-	/* TODO: need to work on this */
-	gnix_info->ep_attr->mem_tag_format = 0x0;
-	gnix_info->ep_attr->tx_ctx_cnt = 1;
-	gnix_info->ep_attr->rx_ctx_cnt = 1;
-
-	gnix_info->domain_attr->threading = FI_THREAD_SAFE;
-	gnix_info->domain_attr->control_progress = control_progress;
-	gnix_info->domain_attr->data_progress = data_progress;
-	gnix_info->domain_attr->av_type = FI_AV_UNSPEC;
-	gnix_info->domain_attr->tx_ctx_cnt = gnix_max_nics_per_ptag;
-	/* only one aries per node */
-	gnix_info->domain_attr->name = strdup(gnix_dom_name);
-
-	gnix_info->next = NULL;
-	gnix_info->caps = hints ? hints->caps & GNIX_EP_RDM_CAPS :
-		GNIX_EP_RDM_CAPS;
+	/*
+	 * Set the values based on hints
+	 */
+	gnix_info->caps = caps;
 	gnix_info->mode = mode;
-	gnix_info->addr_format = FI_ADDR_GNI;
-	gnix_info->src_addrlen = sizeof(struct gnix_ep_name);
-	gnix_info->dest_addrlen = sizeof(struct gnix_ep_name);
-	gnix_info->src_addr = src_addr;
-	gnix_info->dest_addr = dest_addr;
 	gnix_info->fabric_attr->name = strdup(gnix_fab_name);
-	/* prov_name gets filled in by fi_getinfo from the gnix_prov struct */
-	/* let's consider gni copyrighted :) */
-
 	gnix_info->tx_attr->caps = gnix_info->caps;
 	gnix_info->tx_attr->mode = gnix_info->mode;
-	gnix_info->tx_attr->msg_order = FI_ORDER_SAS;
-	gnix_info->tx_attr->comp_order = FI_ORDER_NONE;
-	gnix_info->tx_attr->size = GNIX_TX_SIZE_DEFAULT;
-	gnix_info->tx_attr->iov_limit = 1;
-	gnix_info->tx_attr->inject_size = GNIX_INJECT_SIZE;
-	gnix_info->tx_attr->rma_iov_limit = 1;
 	gnix_info->rx_attr->caps = gnix_info->caps;
 	gnix_info->rx_attr->mode = gnix_info->mode;
-	gnix_info->rx_attr->msg_order = FI_ORDER_SAS;
-	gnix_info->rx_attr->comp_order = FI_ORDER_NONE;
-	gnix_info->rx_attr->size = GNIX_RX_SIZE_DEFAULT;
-	gnix_info->rx_attr->iov_limit = 1;
 
 	*info = gnix_info;
 	return 0;
