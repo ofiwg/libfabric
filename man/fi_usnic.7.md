@@ -76,10 +76,115 @@ libfabric interface.
 
 These extensions are available via the "fi_ext_usnic.h" header file.
 
-The following is an example of how to utilize the usnic "fabric getinfo"
-extension, which returns IP and SR-IOV information about a usNIC
-interface obtained from the [`fi_getinfo`(3)](fi_getinfo.3.html)
-function.
+## Fabric Extension: getinfo
+
+Version 2 of the "fabric getinfo" extension was introduced in Libfabric release
+v1.3.0 and can be used to retrieve IP and SR-IOV information about a usNIC
+device obtained from the [`fi_getinfo`(3)](fi_getinfo.3.html) function.
+
+The "fabric getinfo" extension is obtained by calling `fi_open_ops` and
+requesting `FI_USNIC_FABRIC_OPS_1` to get the usNIC fabric extension
+operations.  The `getinfo` function accepts a version parameter that can be
+used to select different versions of the extension. The information returned by
+the "fabric getinfo" extension is accessible through a `fi_usnic_info` struct
+that uses a version tagged union. The accessed union member must correspond
+with the requested version. It is recommended that applications explicitly
+request a version rather than using the header provided
+`FI_EXT_USNIC_INFO_VERSION`. Although there is a version 1 of the extension,
+its use is discouraged, and it may not be available in future releases.
+
+
+```c
+#include <rdma/fi_ext_usnic.h>
+
+struct fi_usnic_info {
+    uint32_t ui_version;
+    union {
+        struct fi_usnic_info_v1 v1;
+        struct fi_usnic_info_v2 v2;
+    } ui;
+};
+
+int getinfo(uint32_t version, struct fid_fabric *fabric,
+        struct fi_usnic_info *info);
+```
+
+*version*
+: Version of getinfo to be used
+
+*fabric*
+: Fabric descriptor
+
+*info*
+: Upon successful return, this parameter will contain information about the
+fabric.
+
+- Version 2
+
+```c
+struct fi_usnic_cap {
+    const char *uc_capability;
+    int uc_present;
+};
+
+struct fi_usnic_info_v2 {
+    uint32_t        ui_link_speed;
+    uint32_t        ui_netmask_be;
+    char            ui_ifname[IFNAMSIZ];
+    unsigned        ui_num_vf;
+    unsigned        ui_qp_per_vf;
+    unsigned        ui_cq_per_vf;
+
+    char            ui_devname[FI_EXT_USNIC_MAX_DEVNAME];
+    uint8_t         ui_mac_addr[6];
+
+    uint32_t        ui_ipaddr_be;
+    uint32_t        ui_prefixlen;
+    uint32_t        ui_mtu;
+    uint8_t         ui_link_up;
+
+    uint32_t        ui_vendor_id;
+    uint32_t        ui_vendor_part_id;
+    uint32_t        ui_device_id;
+    char            ui_firmware[64];
+
+    unsigned        ui_intr_per_vf;
+    unsigned        ui_max_cq;
+    unsigned        ui_max_qp;
+
+    unsigned        ui_max_cqe;
+    unsigned        ui_max_send_credits;
+    unsigned        ui_max_recv_credits;
+
+    const char      *ui_nicname;
+    const char      *ui_pid;
+
+    struct fi_usnic_cap **ui_caps;
+};
+```
+
+- Version 1
+
+```c
+struct fi_usnic_info_v1 {
+    uint32_t ui_link_speed;
+    uint32_t ui_netmask_be;
+    char ui_ifname[IFNAMSIZ];
+
+    uint32_t ui_num_vf;
+    uint32_t ui_qp_per_vf;
+    uint32_t ui_cq_per_vf;
+};
+```
+
+Version 1 of the "fabric getinfo" extension can be used by explicitly
+requesting it in the call to `getinfo` and accessing the `v1` portion of the
+`fi_usnic_info.ui` union. Use of version 1 is not recommended and it may be
+removed from future releases.
+
+
+The following is an example of how to utilize version 2 of the usnic "fabric
+getinfo" extension.
 
 ```c
 #include <stdio.h>
@@ -124,20 +229,21 @@ int main(int argc, char *argv[]) {
            some IP and SR-IOV characteristics about the
            usNIC device. */
         struct fi_usnic_info usnic_info;
-        usnic_fabric_ops->getinfo(FI_EXT_USNIC_INFO_VERSION,
-                                  fabric, &usnic_info);
+
+        /* Explicitly request version 2. */
+        usnic_fabric_ops->getinfo(2, fabric, &usnic_info);
 
         printf("Fabric interface %s is %s:\n"
                "\tNetmask:  0x%08x\n\tLink speed: %d\n"
                "\tSR-IOV VFs: %d\n\tQPs per SR-IOV VF: %d\n"
                "\tCQs per SR-IOV VF: %d\n",
                info->fabric_attr->name,
-               usnic_info.ui.v1.ui_ifname,
-               usnic_info.ui.v1.ui_netmask_be,
-               usnic_info.ui.v1.ui_link_speed,
-               usnic_info.ui.v1.ui_num_vf,
-               usnic_info.ui.v1.ui_qp_per_vf,
-               usnic_info.ui.v1.ui_cq_per_vf);
+               usnic_info.ui.v2.ui_ifname,
+               usnic_info.ui.v2.ui_netmask_be,
+               usnic_info.ui.v2.ui_link_speed,
+               usnic_info.ui.v2.ui_num_vf,
+               usnic_info.ui.v2.ui_qp_per_vf,
+               usnic_info.ui.v2.ui_cq_per_vf);
 
         fi_close(&fabric->fid);
     }
@@ -147,11 +253,28 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-Note that other usnic extensions are defined for other fabric objects.
-The second argument to [`fi_open_ops`(3)](fi_open_ops.3.html) is used
-to identify both the fid type and the extension family.  For example,
-*FI_USNIC_AV_OPS_1* can be used in conjunction with an `fi_av` fid
-to obtain usnic extensions for address vectors.
+## Adress Vector Extension: get_distance
+
+The "address vector get_distance" extension was introduced in Libfabric release
+v1.0.0 and can be used to retrieve the network distance of an address.
+
+The "get_distance" extension is obtained by calling `fi_open_ops` and
+requesting `FI_USNIC_AV_OPS_1` to get the usNIC address vector extension
+operations.
+
+```c
+int get_distance(struct fid_av *av, void *addr, int *metric);
+```
+
+*av*
+: Address vector
+
+*addr*
+: Destination address
+
+*metric*
+: On output this will contain `-1` if the destination host is unreachable, `0`
+is the destination host is locally connected, and `1` otherwise.
 
 See fi_ext_usnic.h for more details.
 

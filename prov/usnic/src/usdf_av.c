@@ -563,45 +563,6 @@ usdf_av_close(struct fid *fid)
 	return 0;
 }
 
-static int
-usdf_am_get_distance(struct fid_av *fav, void *addr, int *metric_o)
-{
-	struct usdf_av *av;
-	struct usdf_domain *udp;
-	struct sockaddr_in *sin;
-	int ret;
-
-	USDF_TRACE_SYS(DOMAIN, "\n");
-
-	av = av_ftou(fav);
-	udp = av->av_domain;
-	sin = addr;
-
-	ret = usd_get_dest_distance(udp->dom_dev,
-			sin->sin_addr.s_addr, metric_o);
-	return ret;
-}
-
-static struct fi_usnic_ops_av usdf_usnic_ops_av = {
-	.size = sizeof(struct fi_usnic_ops_av),
-	.get_distance = usdf_am_get_distance,
-};
-
-static int
-usdf_av_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
-		void **ops, void *context)
-{
-	USDF_TRACE_SYS(AV, "\n");
-
-	if (strcmp(ops_name, FI_USNIC_AV_OPS_1) == 0) {
-		*ops = &usdf_usnic_ops_av;
-	} else {
-		return -FI_EINVAL;
-	}
-
-	return 0;
-}
-
 static struct fi_ops usdf_av_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = usdf_av_close,
