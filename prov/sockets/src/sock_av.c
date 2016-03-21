@@ -417,6 +417,7 @@ static int sock_av_close(struct fid *fid)
 	if (atomic_get(&av->ref))
 		return -FI_EBUSY;
 
+#ifndef _WIN32 /* shared memory is not supported for now on windows */
 	if (!av->name)
 		free(av->table_hdr);
 	else {
@@ -427,6 +428,9 @@ static int sock_av_close(struct fid *fid)
 			SOCK_LOG_ERROR("munmap failed: %s\n", strerror(errno));
 		close(av->shared_fd);
 	}
+#else
+	free(av->table_hdr);
+#endif
 
 	atomic_dec(&av->domain->ref);
 	free(av);
@@ -490,7 +494,9 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	struct sock_av *_av;
 	size_t table_sz, i;
 	int flags = O_RDWR;
+#ifndef _WIN32
 	struct stat mapstat;
+#endif /* _WIN32 */
 
 	if (!attr || sock_verify_av_attr(attr))
 		return -FI_EINVAL;
@@ -511,6 +517,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	_av->attr.count = (attr->count) ? attr->count : sock_av_def_sz;
 	table_sz = SOCK_AV_TABLE_SZ(_av->attr.count, attr->name);
 
+#ifndef _WIN32 /* shared memory is not supported on windows for now */
 	if (attr->name) {
 		_av->name = calloc(1, strlen(attr->name) + 1);
 		if (!_av->name) {
@@ -574,6 +581,7 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 			goto err2;
 		}
 	} else {
+#endif /* _WIN32 */
 		_av->table_hdr = calloc(1, table_sz);
 		if (!_av->table_hdr) {
 			ret = -FI_ENOMEM;
@@ -581,7 +589,9 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		}
 		_av->table_hdr->size = _av->attr.count;
 		_av->table_hdr->req_sz = attr->count;
+#ifndef _WIN32
 	}
+#endif /* _WIN32 */
 	sock_update_av_table(_av, _av->attr.count);
 
 	_av->av_fid.fid.fclass = FI_CLASS_AV;
@@ -618,10 +628,12 @@ int sock_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	*av = &_av->av_fid;
 	return 0;
 
+#ifndef _WIN32
 err_shm:
 	shm_unlink(_av->name);
 	ret = -FI_EINVAL;
 	goto err2;
+#endif /* _WIN32 */
 err3:
 	free(_av->table_hdr);
 err2:

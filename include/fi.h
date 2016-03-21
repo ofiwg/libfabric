@@ -60,6 +60,15 @@ extern "C" {
 #endif
 
 /*
+ * Windows doesn't have __BYTE_ORDER, add it manually
+ */
+#ifdef _WIN32
+#define LITTLE_ENDIAN 5678
+#define BIG_ENDIAN 8765
+#define BYTE_ORDER LITTLE_ENDIAN
+#endif
+
+/*
  * OS X doesn't have __BYTE_ORDER, Linux usually has BYTE_ORDER but not under
  * all features.h flags
  */
@@ -75,6 +84,7 @@ extern "C" {
 #  endif
 #endif
 
+#ifndef _WIN32
 #if BYTE_ORDER == LITTLE_ENDIAN
 #ifndef htonll
 static inline uint64_t htonll(uint64_t x) { return bswap_64(x); }
@@ -90,9 +100,11 @@ static inline uint64_t htonll(uint64_t x) { return x; }
 static inline uint64_t ntohll(uint64_t x) { return x; }
 #endif
 #endif
+#endif /* _WIN32 */
 
 #define sizeof_field(type, field) sizeof(((type *)0)->field)
 
+#ifndef _WIN32 /* windows compiler doesn't allow such constructions */
 #ifndef MIN
 #define MIN(a, b) \
 	({ typeof (a) _a = (a); \
@@ -106,6 +118,10 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 		typeof (b) _b = (b); \
 		_a > _b ? _a : _b; })
 #endif
+#else
+#define MIN min
+#define MAX max
+#endif /* _WIN32 */
 
 /* Restrict to size of struct fi_context */
 struct fi_prov_context {
@@ -156,6 +172,11 @@ static inline size_t fi_get_aligned_sz(size_t size, size_t alignment)
 #define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
 
 
+/* non exported symbols */
+int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
+int fi_poll_fd(int fd, int timeout);
+int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout);
+
 size_t fi_datatype_size(enum fi_datatype datatype);
 uint64_t fi_tag_bits(uint64_t mem_tag_format);
 uint64_t fi_tag_format(uint64_t tag_bits);
@@ -166,6 +187,7 @@ int fi_rma_initiate_allowed(uint64_t caps);
 int fi_rma_target_allowed(uint64_t caps);
 
 uint64_t fi_gettime_ms(void);
+int fi_fd_nonblock(int fd);
 
 
 #ifdef __cplusplus

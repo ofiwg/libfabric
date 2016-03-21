@@ -56,6 +56,17 @@ enum {
 	FI_VERSION_MAX		= 64
 };
 
+#ifdef _WIN32
+#ifndef _SSIZE_T_DEFINED
+#define _SSIZE_T_DEFINED
+#ifdef  _WIN64
+typedef __int64 ssize_t;
+#else
+typedef int ssize_t;
+#endif /* _WIN64           */
+#endif /* _SSIZE_T_DEFINED */
+#endif /* _WIN32           */
+
 #define FI_VERSION(major, minor) ((major << 16) | (minor))
 #define FI_MAJOR(version)	(version >> 16)
 #define FI_MINOR(version)	(version & 0xFFFF)

@@ -407,7 +407,7 @@ int sock_get_src_addr(struct sockaddr_in *dest_addr,
 		ret = -errno;
 	}
 out:
-	close(sock);
+	fi_close_fd(sock);
 	return ret;
 }
 
@@ -597,6 +597,9 @@ err_no_free:
 static void fi_sockets_fini(void)
 {
 	fastlock_destroy(&sock_list_lock);
+#ifdef _WIN32
+	WSACleanup();
+#endif
 }
 
 struct fi_provider sock_prov = {
@@ -635,6 +638,18 @@ SOCKETS_INI
 	fastlock_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
 	dlist_init(&sock_dom_list);
+
+#ifdef _WIN32
+	WORD wVersionRequested = MAKEWORD(2, 2);
+	WSADATA data;
+
+	int err = WSAStartup(wVersionRequested, &data);
+	if(err)
+	{
+		return 0;
+	}
+#endif
+
 #if ENABLE_DEBUG
 	fi_param_define(&sock_prov, "dgram_drop_rate", FI_PARAM_INT,
 			"Drop every Nth dgram frame (debug only)");

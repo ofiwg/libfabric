@@ -305,7 +305,7 @@ static int sock_pep_create_listener(struct sock_pep *pep)
 
 			if (!bind(pep->cm.sock, s_res->ai_addr, s_res->ai_addrlen))
 				break;
-			close(pep->cm.sock);
+			fi_close_fd(pep->cm.sock);
 			pep->cm.sock = -1;
 		}
 	}
@@ -416,7 +416,7 @@ static int sock_ep_cm_enqueue_msg(struct sock_cm_entry *cm,
 	dlist_insert_tail(&list_entry->entry, &cm->msg_list);
 	fastlock_release(&cm->lock);
 
-	ret = write(cm->signal_fds[0], &c, 1);
+	ret = fi_write_fd(cm->signal_fds[0], &c, 1);
 	if (ret != 1) {
 		SOCK_LOG_DBG("failed to signal\n");
 		ret = -FI_EIO;
@@ -616,7 +616,7 @@ static void *sock_msg_ep_listener_thread(void *data)
 		ret = poll(poll_fds, 2, timeout);
 		if (ret > 0) {
 			if (poll_fds[1].revents & POLLIN) {
-				ret = read(ep->attr->cm.signal_fds[1], &tmp, 1);
+				ret = fi_read_fd(ep->attr->cm.signal_fds[1], &tmp, 1);
 				if (ret != 1) {
 					SOCK_LOG_DBG("Invalid signal\n");
 					break;
@@ -719,7 +719,7 @@ static void *sock_msg_ep_listener_thread(void *data)
 out:
 	free(conn_response);
 	free(cm_entry);
-	close(ep->attr->cm.sock);
+	fi_close_fd(ep->attr->cm.sock);
 	return NULL;
 }
 
@@ -965,7 +965,7 @@ static int sock_pep_fi_close(fid_t fid)
 
 	pep = container_of(fid, struct sock_pep, pep.fid);
 	pep->cm.do_listen = 0;
-	ret = write(pep->cm.signal_fds[0], &c, 1);
+	ret = fi_write_fd(pep->cm.signal_fds[0], &c, 1);
 	if (ret != 1)
 		SOCK_LOG_DBG("Failed to signal\n");
 
@@ -974,8 +974,8 @@ static int sock_pep_fi_close(fid_t fid)
 		SOCK_LOG_DBG("pthread join failed\n");
 	}
 
-	close(pep->cm.signal_fds[0]);
-	close(pep->cm.signal_fds[1]);
+	fi_close_fd(pep->cm.signal_fds[0]);
+	fi_close_fd(pep->cm.signal_fds[1]);
 	fastlock_destroy(&pep->cm.lock);
 
 	free(pep);
@@ -1040,7 +1040,7 @@ static void *sock_pep_listener_thread(void *data)
 					SOCK_CM_COMM_TIMEOUT;
 		if (poll(poll_fds, 2, timeout) > 0) {
 			if (poll_fds[1].revents & POLLIN) {
-				ret = read(pep->cm.signal_fds[1], &tmp, 1);
+				ret = fi_read_fd(pep->cm.signal_fds[1], &tmp, 1);
 				if (ret != 1)
 					SOCK_LOG_DBG("Invalid signal\n");
 				sock_ep_cm_flush_msg(&pep->cm);
@@ -1129,7 +1129,7 @@ out:
 	if (handle)
 		free(handle);
 	free(cm_entry);
-	close(pep->cm.sock);
+	fi_close_fd(pep->cm.sock);
 	return NULL;
 }
 

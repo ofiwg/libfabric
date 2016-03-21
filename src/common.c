@@ -53,6 +53,7 @@
 
 int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
 {
+#ifndef _WIN32
 	struct timespec ts;
 
 	if (timeout < 0)
@@ -62,10 +63,14 @@ int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
 	ts.tv_sec += timeout / 1000;
 	ts.tv_nsec += (timeout % 1000) * 1000000;
 	return pthread_cond_timedwait(cond, mut, &ts);
+#else /* _WIN32 */
+	return !SleepConditionVariableCS(cond, mut, (DWORD)timeout);
+#endif /* _WIN32 */
 }
 
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 {
+#ifndef _WIN32
 	char *path;
 	int fd, len;
 
@@ -86,6 +91,28 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 		buf[--len] = '\0';
 
 	return len;
+#else /* _WIN32 */
+	char *path;
+	DWORD len;
+
+	if (asprintf(&path, "%s/%s", dir, file) < 0)
+		return -1;
+
+	HANDLE fd = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+	free(path);
+	if (fd == INVALID_HANDLE_VALUE) {
+		return -1;
+	}
+
+	BOOL res = ReadFile(fd, buf, (DWORD)size, &len, 0);
+	CloseHandle(fd);
+
+	if (!res) {
+		return -1;
+	}
+
+	return (int)len;
+#endif /* _WIN32 */
 }
 
 int fi_poll_fd(int fd, int timeout)
@@ -203,6 +230,7 @@ uint64_t fi_gettime_ms(void)
 	return now.tv_sec * 1000 + now.tv_usec / 1000;
 }
 
+#ifndef _WIN32
 int fi_fd_nonblock(int fd)
 {
 	long flags = 0;
@@ -217,6 +245,7 @@ int fi_fd_nonblock(int fd)
 
 	return 0;
 }
+#endif /* _WIN32 */
 
 #ifndef HAVE_EPOLL
 

@@ -129,7 +129,7 @@ void sock_conn_map_destroy(struct sock_conn_map *cmap)
 	int i;
 
 	for (i = 0; i < cmap->used; i++) {
-		close(cmap->table[i].sock_fd);
+		fi_close_fd(cmap->table[i].sock_fd);
 	}
 	free(cmap->table);
 	cmap->table = NULL;
@@ -175,6 +175,7 @@ static struct sock_conn *sock_conn_map_insert(struct sock_ep_attr *ep_attr,
 
 int fd_set_nonblock(int fd)
 {
+#ifndef _WIN32
 	int flags, ret;
 
 	flags = fcntl(fd, F_GETFL, 0);
@@ -185,6 +186,10 @@ int fd_set_nonblock(int fd)
 	}
 
 	return ret;
+#else /* _WIN32 */
+	u_long argp = 1;
+	return ioctlsocket(fd, FIONBIO, &argp) ? -WSAGetLastError() : 0;
+#endif /* _WIN32 */
 }
 
 static void sock_set_sockopt_reuseaddr(int sock)
@@ -236,7 +241,7 @@ static void *_sock_conn_listen(void *arg)
 	while (listener->do_listen) {
 		if (poll(poll_fds, 2, -1) > 0) {
 			if (poll_fds[1].revents & POLLIN) {
-				ret = read(listener->signal_fds[1], &tmp, 1);
+				ret = fi_read_fd(listener->signal_fds[1], &tmp, 1);
 				if (ret != 1) {
 					SOCK_LOG_ERROR("Invalid signal\n");
 					goto err;
@@ -266,7 +271,7 @@ static void *_sock_conn_listen(void *arg)
 	}
 
 err:
-	close(listener->sock);
+	fi_close_fd(listener->sock);
 	SOCK_LOG_DBG("Listener thread exited\n");
 	return NULL;
 }
@@ -317,7 +322,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 
 			if (!bind(listen_fd, s_res->ai_addr, s_res->ai_addrlen))
 				break;
-			close(listen_fd);
+			fi_close_fd(listen_fd);
 			listen_fd = -1;
 		}
 	}
@@ -370,7 +375,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	return 0;
 err:
 	if (listen_fd >= 0)
-		close(listen_fd);
+		fi_close_fd(listen_fd);
 	return -FI_EINVAL;
 }
 
@@ -412,7 +417,7 @@ do_connect:
 	if (ret) {
 		SOCK_LOG_ERROR("failed to set conn_fd nonblocking, errno: %d\n", errno);
 		errno = FI_EOTHER;
-		close(conn_fd);
+		fi_close_fd(conn_fd);
                 return NULL;
 	}
 
@@ -423,7 +428,12 @@ do_connect:
 
 	ret = connect(conn_fd, (struct sockaddr *) addr, sizeof *addr);
 	if (ret < 0) {
+#ifndef _WIN32
 		if (errno == EINPROGRESS) {
+#else
+		int wsaerror = WSAGetLastError();
+		if(wsaerror == WSAEINPROGRESS || wsaerror == WSAEWOULDBLOCK) {
+#endif
 			poll_fd.fd = conn_fd;
 			poll_fd.events = POLLOUT;
 
@@ -467,8 +477,10 @@ retry:
 	if (!do_retry)
 		goto err;
 
-	close(conn_fd);
-	conn_fd = -1;
+	if (conn_fd != -1) {
+		fi_close_fd(conn_fd);
+		conn_fd = -1;
+	}
 
 	SOCK_LOG_ERROR("Connect error, retrying - %s - %d\n", strerror(errno), conn_fd);
 	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
@@ -494,7 +506,7 @@ out:
 	return conn;
 
 err:
-	close(conn_fd);
+	fi_close_fd(conn_fd);
 	return NULL;
 }
 

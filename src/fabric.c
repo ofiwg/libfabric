@@ -59,7 +59,12 @@ static struct fi_prov *fi_getprov(const char *prov_name);
 
 static struct fi_prov *prov_head, *prov_tail;
 int init = 0;
+#ifndef _WIN32
 static pthread_mutex_t ini_lock = PTHREAD_MUTEX_INITIALIZER;
+#else /* _WIN32 */
+static INIT_ONCE init_once = INIT_ONCE_STATIC_INIT;
+static CRITICAL_SECTION ini_lock;
+#endif /* _WIN32 */
 
 static struct fi_filter prov_filter;
 
@@ -341,9 +346,21 @@ libdl_done:
 }
 #endif
 
+#ifdef _WIN32
+static BOOL CALLBACK init_once_cb(PINIT_ONCE once, void* data, void** ctx)
+{
+	InitializeCriticalSection((CRITICAL_SECTION*)data);
+	return TRUE;
+}
+#endif /* _WIN32 */
+
 void fi_ini(void)
 {
 	char *param_val = NULL;
+
+#ifdef _WIN32
+	InitOnceExecuteOnce(&init_once, init_once_cb, &ini_lock, 0);
+#endif /* _WIN32 */
 
 	pthread_mutex_lock(&ini_lock);
 

@@ -60,6 +60,20 @@ static inline void util_buf_set_region(union util_buf *buf,
 	}
 }
 
+#ifdef _WIN32
+static inline int posix_memalign(void **memptr, size_t alignment, size_t size)
+{
+	*memptr = _aligned_malloc(size, alignment);
+	return *memptr == 0;
+}
+#endif /* _WIN32 */
+
+#ifndef _WIN32
+#define freealign(ptr) free(ptr)
+#else /* _WIN32 */
+#define freealign(ptr) _aligned_free(ptr)
+#endif /* _WIN32 */
+
 int util_buf_grow(struct util_buf_pool *pool)
 {
 	int ret;
@@ -174,7 +188,7 @@ void util_buf_pool_destroy(struct util_buf_pool *pool)
 #endif
 		if (pool->free_hndlr)
 			pool->free_hndlr(pool->ctx, buf_region->context);
-		free(buf_region->mem_region);
+		freealign(buf_region->mem_region);
 		free(buf_region);
 	}
 	free(pool);
