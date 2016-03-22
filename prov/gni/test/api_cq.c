@@ -323,6 +323,9 @@ void api_cq_send_recv(int len)
 	struct fi_msg_rma rma_msg;
 	struct fi_rma_iov rma_iov;
 
+	iov.iov_base = NULL;
+	iov.iov_len = 0;
+
 	api_cq_init_data(source, len, 0xab);
 	api_cq_init_data(target, len, 0);
 
