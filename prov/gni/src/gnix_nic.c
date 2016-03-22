@@ -74,9 +74,7 @@ static void *__gnix_nic_prog_thread_fn(void *the_arg)
 	int ret = FI_SUCCESS, prev_state;
 	int retry = 0;
 	uint32_t which;
-	uint64_t vc_id;
 	struct gnix_nic *nic = (struct gnix_nic *)the_arg;
-	struct gnix_vc *vc;
 	sigset_t  sigmask;
 	gni_cq_handle_t cqv[2];
 	gni_return_t status;
@@ -148,13 +146,6 @@ try_again:
 			do {
 				status = GNI_CqGetEvent(nic->rx_cq_blk,
 							&cqe);
-				if (status == GNI_RC_SUCCESS) {
-					vc_id = GNI_CQ_GET_DATA(cqe);
-					vc = __gnix_nic_elem_by_rem_id(nic,
-									vc_id);
-					if (vc != NULL)
-						_gnix_vc_rx_schedule(vc);
-				}
 			} while (status == GNI_RC_SUCCESS);
 		}
 		_gnix_nic_progress(nic);
