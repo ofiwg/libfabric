@@ -256,6 +256,21 @@ struct gnix_ep_name {
 	uint64_t reserved[4];
 };
 
+/* AV address string revision. */
+#define GNIX_AV_STR_ADDR_VERSION  1
+
+/*
+ * 49 is the number of characters printed out in gnix_av_straddr.
+ *  1 is for the null terminator
+ */
+#define GNIX_AV_MAX_STR_ADDR_LEN  (49 + 1)
+
+/*
+ * 15 is the number of characters for the device addr.
+ *  1 is for the null terminator
+ */
+#define GNIX_AV_MIN_STR_ADDR_LEN  (15 + 1)
+
 /*
  * enum for blocking/non-blocking progress
  */

@@ -40,6 +40,7 @@
 #include "rdma/fi_prov.h"
 
 #include "gnix.h"
+#include "gnix_av.h"
 
 #include <criterion/criterion.h>
 
@@ -83,9 +84,24 @@ static struct gnix_ep_name simple_ep_names[SIMPLE_ADDR_COUNT] = {
 		SIMPLE_EP_ENTRY(16),
 };
 
+typedef char ep_name_string[GNIX_AV_MAX_STR_ADDR_LEN];
+static ep_name_string simple_ep_names_strs[SIMPLE_ADDR_COUNT];
+
 static void av_setup(void)
 {
 	int ret = 0;
+	int i;
+	size_t len;
+
+	memset(&simple_ep_names_strs, 0,
+	       (GNIX_AV_MAX_STR_ADDR_LEN * SIMPLE_ADDR_COUNT));
+
+	for (i = 0; i < SIMPLE_ADDR_COUNT; i++) {
+		len = GNIX_AV_MAX_STR_ADDR_LEN;
+		gnix_av_straddr(NULL,
+			 (void *) &simple_ep_names[i],
+			 simple_ep_names_strs[i], &len);
+	}
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
@@ -211,8 +227,8 @@ static void remove_addr_test(void)
 	fi_addr_t *compare;
 
 	/* insert addresses */
-	ret = fi_av_insert(av, (void *) simple_ep_names, SIMPLE_ADDR_COUNT, addresses,
-			0, NULL);
+	ret = fi_av_insert(av, (void *) simple_ep_names_strs, SIMPLE_ADDR_COUNT,
+			   addresses, 0, NULL);
 	cr_assert_eq(ret, SIMPLE_ADDR_COUNT);
 
 	/* check address contents */
@@ -243,8 +259,8 @@ Test(av_full_table, remove_addr)
 static void lookup_invalid_test(void)
 {
 	int ret;
-	fi_addr_t addresses[SIMPLE_ADDR_COUNT];
-	size_t addrlen = sizeof(struct gnix_ep_name);
+	ep_name_string addresses[SIMPLE_ADDR_COUNT];
+	size_t addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
 
 	/* test null addrlen */
 	ret = fi_av_lookup(av, 0xdeadbeef, (void *) 0xdeadbeef, NULL);
@@ -284,11 +300,11 @@ static void lookup_test(void)
 	int i;
 	fi_addr_t addresses[SIMPLE_ADDR_COUNT];
 	fi_addr_t *compare;
-	fi_addr_t found;
-	size_t addrlen = sizeof(struct gnix_ep_name);
+	ep_name_string found;
+	size_t addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
 
 	/* insert addresses */
-	ret = fi_av_insert(av, (void *) simple_ep_names, SIMPLE_ADDR_COUNT,
+	ret = fi_av_insert(av, (void *) simple_ep_names_strs, SIMPLE_ADDR_COUNT,
 			addresses, 0, NULL);
 	cr_assert_eq(ret, SIMPLE_ADDR_COUNT);
 
@@ -321,13 +337,15 @@ static void straddr_test(void)
 	int ret;
 	int i;
 	const char *buf;
-	char address[128];
+	char address[GNIX_AV_MAX_STR_ADDR_LEN];
 	fi_addr_t addresses[SIMPLE_ADDR_COUNT];
 	fi_addr_t *compare;
-	size_t addrlen = sizeof(struct gnix_ep_name);
+	size_t addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
+	char *pend;
+	long int value;
 
 	/* insert addresses */
-	ret = fi_av_insert(av, (void *) simple_ep_names, SIMPLE_ADDR_COUNT,
+	ret = fi_av_insert(av, (void *) simple_ep_names_strs, SIMPLE_ADDR_COUNT,
 			addresses, 0, NULL);
 	cr_assert_eq(ret, SIMPLE_ADDR_COUNT);
 
@@ -342,7 +360,70 @@ static void straddr_test(void)
 	}
 
 	buf = fi_av_straddr(av, &simple_ep_names[0], address, &addrlen);
-	cr_assert_eq(buf, address);
+
+	/* verify that a full address has been returned. */
+	cr_assert_eq(addrlen, GNIX_AV_MAX_STR_ADDR_LEN);
+
+	/* extract the first component */
+	buf = strtok(address, ":");
+	cr_assert_not_null(buf, "version not found");
+
+	value = strtol(buf, &pend, 16);
+
+	/* verify the version has been returned. */
+	cr_assert_eq(GNIX_AV_STR_ADDR_VERSION, value, "Invalid version");
+
+	/* extract the second component */
+	buf = strtok(NULL, ":");
+	cr_assert_not_null(buf, "device_addr not found");
+
+	value = strtol(buf, &pend, 16);
+
+	/* verify the device address has been returned. */
+	cr_assert_eq(simple_ep_names[0].gnix_addr.device_addr, value,
+		    "Invalid device_addr");
+
+	/* extract the third component */
+	buf = strtok(NULL, ":");
+	cr_assert_not_null(buf, "cdm_id not found");
+
+	value = strtol(buf, &pend, 16);
+
+	/* verify the cdm_id has been returned. */
+	cr_assert_eq(simple_ep_names[0].gnix_addr.cdm_id, value,
+		     "Invalid cdm_id");
+
+	/* extract the fourth component */
+	buf = strtok(NULL, ":");
+	cr_assert_not_null(buf, "name_type not found");
+
+	value = strtol(buf, &pend, 10);
+
+	/* verify the name_type has been returned. */
+	cr_assert_eq(simple_ep_names[0].name_type, value, "Invalid name_type");
+
+	/* extract the fifth component */
+	buf = strtok(NULL, ":");
+	cr_assert_not_null(buf, "cm_nic_cdm_id not found");
+
+	value = strtol(buf, &pend, 16);
+
+	/* verify the cm_nic_cdm_id has been returned. */
+	cr_assert_eq(simple_ep_names[0].cm_nic_cdm_id, value,
+		     "Invalid cm_nic_cdm_id");
+
+	/* extract the sixth component */
+	buf = strtok(NULL, ":");
+	cr_assert_not_null(buf, "cookie not found");
+
+	value = strtol(buf, &pend, 16);
+
+	/* verify the cookie has been returned. */
+	cr_assert_eq(simple_ep_names[0].cookie, value, "Invalid cookie");
+
+	/* check to see if additional component are specified */
+	buf = strtok(NULL, ":");
+	cr_assert_null(buf, "extra values specified");
 }
 
 Test(av_full_map, straddr)
