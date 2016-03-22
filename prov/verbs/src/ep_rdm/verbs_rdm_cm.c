@@ -191,7 +191,7 @@ fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
 	cm_params->private_data = malloc(cm_params->private_data_len);
 
 	char *p = (char *) cm_params->private_data;
-	memcpy(p, &ep->my_rdm_addr, FI_IBV_RDM_DFLT_ADDRLEN);
+	memcpy(p, &ep->cm.my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
 	p += FI_IBV_RDM_DFLT_ADDRLEN;
 
 	if ((conn->cm_role != FI_VERBS_CM_SELF) && (conn->r_mr && conn->s_mr)) {
@@ -217,7 +217,7 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 
 	if (conn->cm_role == FI_VERBS_CM_SELF) {
 		if (conn->r_mr && conn->s_mr) {
-			memcpy(&conn->addr, &ep->my_rdm_addr,
+			memcpy(&conn->addr, &ep->cm.my_addr,
 				FI_IBV_RDM_DFLT_ADDRLEN);
 			conn->remote_rbuf_rkey = conn->r_mr->rkey;
 			conn->remote_rbuf_mem_reg = conn->r_mr->addr;
@@ -587,7 +587,7 @@ int fi_ibv_rdm_tagged_cm_progress(struct fi_ibv_rdm_ep *ep)
 	struct rdma_cm_event *event = NULL;
 	int ret = 0;
 
-	rdma_get_cm_event(ep->cm_listener_ec, &event);
+	rdma_get_cm_event(ep->cm.ec, &event);
 
 	while (event) {
 		pthread_mutex_lock(&ep->cm_lock);
@@ -608,7 +608,7 @@ int fi_ibv_rdm_tagged_cm_progress(struct fi_ibv_rdm_ep *ep)
 		free(data);
 		event = NULL;
 		pthread_mutex_unlock(&ep->cm_lock);
-		rdma_get_cm_event(ep->cm_listener_ec, &event);
+		rdma_get_cm_event(ep->cm.ec, &event);
 	}
 	return ret;
 }

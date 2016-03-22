@@ -478,6 +478,7 @@ int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 
 	switch(fi->addr_format) {
 	case FI_SOCKADDR_IN:
+	case FI_FORMAT_UNSPEC:
 		rai->ai_family = AF_INET;
 		rai->ai_flags |= RAI_FAMILY;
 		break;
@@ -497,8 +498,6 @@ int fi_ibv_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 			rai->ai_family = ((struct sockaddr *)fi->dest_addr)->sa_family;
 			rai->ai_flags |= RAI_FAMILY;
 		}
-		break;
-	case FI_FORMAT_UNSPEC:
 		break;
 	default:
 		VERBS_INFO(FI_LOG_FABRIC, "Unknown fi->addr_format\n");
@@ -932,15 +931,24 @@ err1:
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
-	struct rdma_cm_id *id;
+	struct rdma_cm_id *id = NULL;
 	struct rdma_addrinfo *rai;
+	struct fi_ibv_rdm_cm rdm_cm;
 	int ret;
 
 	ret = fi_ibv_init_info();
 	if (ret)
 		goto out;
 
-	ret = fi_ibv_create_ep(node, service, flags, hints, &rai, &id);
+	if (hints->ep_attr->type == FI_EP_RDM) {
+		memset(&rdm_cm, 0, sizeof(struct fi_ibv_rdm_cm));
+		ret = fi_ibv_create_ep(node, service, flags, hints, &rai,
+				       &(rdm_cm.listener));
+		id = rdm_cm.listener;
+	} else {
+		ret = fi_ibv_create_ep(node, service, flags, hints, &rai, &id);
+	}
+
 	if (ret)
 		goto out;
 
@@ -951,8 +959,9 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		ret = fi_ibv_get_matching_info(NULL, hints, rai, info);
 	}
 
-	rdma_destroy_ep(id);
-	rdma_freeaddrinfo(rai);
+	fi_ibv_destroy_ep(hints->ep_attr->type, rai, 
+		hints->ep_attr->type == FI_EP_RDM ? &(rdm_cm.listener) : &id);
+
 out:
 	if (!ret || ret == -FI_ENOMEM)
 		return ret;

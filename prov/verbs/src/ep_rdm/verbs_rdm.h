@@ -33,9 +33,11 @@
 #ifndef _VERBS_RDM_H
 #define _VERBS_RDM_H
 
+#include <rdma/rdma_cma.h>
+#include "../uthash.h"
+
 #include "../fi_verbs.h"
 #include "verbs_utils.h"
-#include "../uthash.h"
 #include "verbs_tagged_ep_rdm_states.h"
 
 #define FI_IBV_RDM_ADDR_STR_FORMAT "[%02x:%02x:%02x:%02x:%02x:%02x]"
@@ -207,20 +209,23 @@ struct fi_ibv_rdm_buf {
 	char payload[sizeof(void *)];
 };
 
+struct fi_ibv_rdm_cm {
+	struct rdma_cm_id *listener;
+	struct rdma_event_channel *ec;
+	struct sockaddr_in my_addr;
+	struct rdma_addrinfo *rai;
+};
+
 struct fi_ibv_rdm_ep {
 	struct fid_ep ep_fid;
 	struct fi_ibv_domain *domain;
 	struct fi_ibv_cq *fi_scq;
 	struct fi_ibv_cq *fi_rcq;
 
-	struct sockaddr_in my_ipoib_addr;
-	char my_ipoib_addr_str[INET6_ADDRSTRLEN];
-	struct rdma_cm_id *cm_listener;
-	struct rdma_event_channel *cm_listener_ec;
-	uint16_t cm_listener_port;
+	struct fi_ibv_rdm_cm cm;
+	size_t addrlen;
+
 	struct fi_ibv_av *av;
-	int fi_ibv_rdm_addrlen;
-	struct sockaddr_in my_rdm_addr;
 
 	int buff_len;
 	int n_buffs;

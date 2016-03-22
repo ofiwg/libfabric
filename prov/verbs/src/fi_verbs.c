@@ -35,7 +35,7 @@
 #include <fi_mem.h>
 
 #include "fi_verbs.h"
-
+#include "ep_rdm/verbs_rdm.h"
 
 static void fi_ibv_fini(void);
 
@@ -67,6 +67,71 @@ int fi_ibv_sockaddr_len(struct sockaddr *addr)
 	}
 }
 
+static int fi_ibv_rdm_cm_init(struct fi_ibv_rdm_cm* cm,
+			      const struct rdma_addrinfo* rai)
+{
+	cm->ec = rdma_create_event_channel();
+
+	if (!cm->ec) {
+		VERBS_INFO(FI_LOG_EP_CTRL,
+			"Failed to create listener event channel: %s\n",
+			strerror(errno));
+		return -FI_EOTHER;
+	}
+
+	int fd = cm->ec->fd;
+	int flags = fcntl(fd, F_GETFL, 0);
+	int ret = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+	if (ret == -1) {
+		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL, "fcntl", errno);
+		return -FI_EOTHER;
+	}
+
+	if (rdma_create_id(cm->ec, &cm->listener, NULL, RDMA_PS_TCP)) {
+		VERBS_INFO(FI_LOG_EP_CTRL, "Failed to create cm listener: %s\n",
+			     strerror(errno));
+		return -FI_EOTHER;
+	}
+
+	if (fi_ibv_rdm_tagged_find_ipoib_addr((struct sockaddr_in*)rai->ai_src_addr,
+					      cm->listener->verbs, cm))
+	{
+		ret = -FI_ENODEV;
+		VERBS_INFO(FI_LOG_EP_CTRL,
+			   "Failed to find correct IPoIB address\n");
+		return -FI_EOTHER;
+	}
+
+	cm->my_addr.sin_port = ((struct sockaddr_in*)(rai->ai_src_addr))->sin_port;
+
+	char my_ipoib_addr_str[INET6_ADDRSTRLEN];
+	inet_ntop(cm->my_addr.sin_family,
+		  &cm->my_addr.sin_addr.s_addr,
+		  my_ipoib_addr_str, INET_ADDRSTRLEN);
+
+	VERBS_INFO(FI_LOG_EP_CTRL, "My IPoIB: %s\n", my_ipoib_addr_str);
+
+	if (rdma_bind_addr(cm->listener,
+			   (struct sockaddr *)&cm->my_addr)) {
+		VERBS_INFO(FI_LOG_EP_CTRL,
+			"Failed to bind cm listener to my IPoIB addr %s: %s\n",
+			my_ipoib_addr_str, strerror(errno));
+		ret = -FI_EOTHER;
+	}
+
+	if (!cm->my_addr.sin_port) {
+		cm->my_addr.sin_port = rdma_get_src_port(cm->listener);
+	}
+	assert(cm->my_addr.sin_family == AF_INET);
+
+	VERBS_INFO(FI_LOG_EP_CTRL,
+		"My ep_addr: " FI_IBV_RDM_ADDR_STR_FORMAT ", port: %d\n",
+		FI_IBV_RDM_ADDR_STR(&cm->my_addr),
+		ntohs(cm->my_addr.sin_port));
+
+	return FI_SUCCESS;
+}
+
 int fi_ibv_create_ep(const char *node, const char *service,
 		     uint64_t flags, const struct fi_info *hints,
 		     struct rdma_addrinfo **rai, struct rdma_cm_id **id)
@@ -80,7 +145,7 @@ int fi_ibv_create_ep(const char *node, const char *service,
 		goto out;
 
 	if (!node && !rai_hints.ai_dst_addr) {
-		if (!rai_hints.ai_src_addr && !service) {
+		if (!rai_hints.ai_src_addr) {
 			node = local_node;
 		}
 		rai_hints.ai_flags |= RAI_PASSIVE;
@@ -112,11 +177,17 @@ int fi_ibv_create_ep(const char *node, const char *service,
 		}
 	}
 
-	ret = rdma_create_ep(id, _rai, NULL, NULL);
-	if (ret) {
-		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_create_ep", errno);
-		ret = -errno;
-		goto err;
+	if (hints->ep_attr->type == FI_EP_RDM) {
+		struct fi_ibv_rdm_cm* cm = 
+			container_of(id, struct fi_ibv_rdm_cm, listener);
+		fi_ibv_rdm_cm_init(cm, _rai);
+	} else {
+		ret = rdma_create_ep(id, _rai, NULL, NULL);
+		if (ret) {
+			VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_create_ep", errno);
+			ret = -errno;
+			goto err;
+		}
 	}
 
 	if (rai) {
@@ -131,6 +202,21 @@ out:
 	if (rai_hints.ai_dst_addr)
 		free(rai_hints.ai_dst_addr);
 	return ret;
+}
+
+void fi_ibv_destroy_ep(enum fi_ep_type ep_type,
+		       struct rdma_addrinfo *rai,
+		       struct rdma_cm_id **id)
+{
+	rdma_freeaddrinfo(rai);
+	if (ep_type == FI_EP_RDM) {
+		struct fi_ibv_rdm_cm* cm = 
+			container_of(id, struct fi_ibv_rdm_cm, listener);
+		rdma_destroy_id(cm->listener);
+		rdma_destroy_event_channel(cm->ec);
+	} else {
+		rdma_destroy_ep(*id);
+	}
 }
 
 #define VERBS_SIGNAL_SEND(ep) \

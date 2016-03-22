@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-#include <ifaddrs.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
 #include <rdma/rdma_cma.h>
@@ -335,9 +334,10 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 	       NULL == fi_ibv_rdm_tagged_conn_hash);
 
 	VERBS_INFO(FI_LOG_AV, "DISCONNECT complete\n");
-	rdma_destroy_id(ep->cm_listener);
 	ibv_destroy_cq(ep->scq);
 	ibv_destroy_cq(ep->rcq);
+
+	fi_ibv_destroy_ep(FI_EP_RDM, ep->cm.rai, &(ep->cm.listener));
 
 	util_buf_pool_destroy(fi_ibv_rdm_tagged_request_pool);
 	util_buf_pool_destroy(fi_ibv_rdm_tagged_postponed_pool);
@@ -388,90 +388,13 @@ struct fi_ops fi_ibv_rdm_tagged_ep_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static inline int fi_ibv_rdm_tagged_test_addr(const char *devname,
-					      struct sockaddr_in *addr)
-{
-	struct rdma_cm_id *test_id;
-	int test = 0;
-	if (rdma_create_id(NULL, &test_id, NULL, RDMA_PS_TCP)) {
-		VERBS_INFO(FI_LOG_AV, "Failed to create test rdma cm id: %s\n",
-			     strerror(errno));
-		return -1;
-	}
-
-	if (rdma_bind_addr(test_id, (struct sockaddr *)addr)) {
-		VERBS_INFO(FI_LOG_AV,
-			"Failed to bind cm listener to  addr : %s\n",
-			strerror(errno));
-		rdma_destroy_id(test_id);
-		return 0;
-	}
-
-	VERBS_INFO(FI_LOG_AV, "device name: %s %s\n",
-		test_id->verbs->device->name, devname);
-
-	if (!strcmp(test_id->verbs->device->name, devname)) {
-		test = 1;
-	}
-
-	rdma_destroy_id(test_id);
-	return test;
-}
-
-/* find the IPoIB address of the device opened in the fi_domain call. The name
- * of this device is _domain->verbs->device->name. The logic of the function is:
- * iterate through all the available network interfaces, find those having "ib"
- * in the name, then try to test the IB device that correspond to each address.
- * If the name is the desired one then we're done.
- */
-static inline int fi_ibv_rdm_tagged_find_ipoib_addr(struct fi_ibv_rdm_ep *ep,
-						    const char *devname)
-{
-	struct ifaddrs *addrs, *tmp;
-	getifaddrs(&addrs);
-	tmp = addrs;
-	int found = 0;
-
-	while (tmp) {
-		if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_INET) {
-			struct sockaddr_in *paddr =
-			    (struct sockaddr_in *) tmp->ifa_addr;
-			if (!strncmp(tmp->ifa_name, "ib", 2)) {
-				int ret;
-				ret = fi_ibv_rdm_tagged_test_addr(devname, paddr);
-				if (ret == 1) {
-					memcpy(&ep->my_ipoib_addr, paddr,
-						sizeof(struct sockaddr_in));
-					found = 1;
-					break;
-				} else if (ret < 0) {
-					return -1;
-				}
-			}
-		}
-
-		tmp = tmp->ifa_next;
-	}
-
-	if (found) {
-		if (ep->my_ipoib_addr.sin_family == AF_INET) {
-			inet_ntop(ep->my_ipoib_addr.sin_family,
-				  &ep->my_ipoib_addr.sin_addr.s_addr,
-				  ep->my_ipoib_addr_str, INET_ADDRSTRLEN);
-		} else {
-			assert(0);
-		}
-	}
-	return !found;
-}
-
 int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context)
 {
-	struct fi_ibv_domain *_domain;
+	struct fi_ibv_domain *_domain = 
+		container_of(domain, struct fi_ibv_domain, domain_fid);
 	int ret = 0;
 
-	_domain = container_of(domain, struct fi_ibv_domain, domain_fid);
 	if (strncmp(_domain->verbs->device->name, info->domain_attr->name,
                 strlen(_domain->verbs->device->name))) {
 		return -FI_EINVAL;
@@ -492,70 +415,14 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	_ep->ep_fid.rma = fi_ibv_rdm_ep_ops_rma(_ep);
 	_ep->ep_fid.cm = &fi_ibv_rdm_tagged_ep_cm_ops;
 
-	if (fi_ibv_rdm_tagged_find_ipoib_addr
-	    (_ep, _domain->verbs->device->name)) {
-		ret = -FI_ENODEV;
-		VERBS_INFO(FI_LOG_EP_CTRL,
-			   "Failed to find correct IPoIB address\n");
-		goto err;
-	}
+	ret = fi_ibv_create_ep(NULL, NULL, 0, info, &_ep->cm.rai, &_ep->cm.listener);
 
-	VERBS_INFO(FI_LOG_EP_CTRL, "My IPoIB: %s\n",
-		_ep->my_ipoib_addr_str);
-	_ep->cm_listener_ec = rdma_create_event_channel();
-	if (!_ep->cm_listener_ec) {
-		VERBS_INFO(FI_LOG_EP_CTRL,
-			"Failed to create listener event channel: %s\n",
-			strerror(errno));
-		ret = -FI_EOTHER;
-		goto err;
-	}
-
-	int fd = _ep->cm_listener_ec->fd;
-	int flags = fcntl(fd, F_GETFL, 0);
-	ret = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-	if (ret == -1) {
-		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL, "fcntl", errno);
-		ret = -FI_EOTHER;
-		goto err;
-	}
-
-	if (rdma_create_id(_ep->cm_listener_ec,
-			   &_ep->cm_listener, NULL, RDMA_PS_TCP)) {
-		VERBS_INFO(FI_LOG_EP_CTRL, "Failed to create cm listener: %s\n",
-			     strerror(errno));
-		ret = -FI_EOTHER;
-		goto err;
-	}
-
-	if (rdma_bind_addr(_ep->cm_listener,
-			   (struct sockaddr *)&_ep->my_ipoib_addr)) {
-		VERBS_INFO(FI_LOG_EP_CTRL,
-			"Failed to bind cm listener to my IPoIB addr %s: %s\n",
-			_ep->my_ipoib_addr_str, strerror(errno));
-		ret = -FI_EOTHER;
-		goto err;
-
-	}
-	if (rdma_listen(_ep->cm_listener, 1024)) {
+	if (rdma_listen(_ep->cm.listener, 1024)) {
 		VERBS_INFO(FI_LOG_EP_CTRL, "rdma_listen failed: %s\n",
 			strerror(errno));
 		ret = -FI_EOTHER;
 		goto err;
 	}
-
-	_ep->cm_listener_port = ntohs(rdma_get_src_port(_ep->cm_listener));
-	VERBS_INFO(FI_LOG_EP_CTRL, "listener port: %d\n", _ep->cm_listener_port);
-
-	memset(&_ep->my_rdm_addr, 0, sizeof (_ep->my_rdm_addr));
-	_ep->my_rdm_addr.sin_family = AF_INET;
-	_ep->my_rdm_addr.sin_port = htons(_ep->cm_listener_port);
-	_ep->my_rdm_addr.sin_addr.s_addr = _ep->my_ipoib_addr.sin_addr.s_addr;
-
-	VERBS_INFO(FI_LOG_EP_CTRL,
-		"My ep_addr: " FI_IBV_RDM_ADDR_STR_FORMAT ", port: %d\n",
-		FI_IBV_RDM_ADDR_STR(&_ep->my_rdm_addr),
-		ntohs(_ep->my_rdm_addr.sin_port));
 
 	_ep->n_buffs = FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM;
 	_ep->buff_len = FI_IBV_RDM_DFLT_BUFFER_SIZE;

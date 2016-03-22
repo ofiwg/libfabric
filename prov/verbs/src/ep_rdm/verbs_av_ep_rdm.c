@@ -31,7 +31,6 @@
  */
 
 #include <arpa/inet.h>
-#include <rdma/rdma_cma.h>
 
 #include "verbs_rdm.h"
 
@@ -43,7 +42,8 @@ extern struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash;
 int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
                                 struct fi_ibv_rdm_tagged_conn *conn)
 {
-	struct rdma_cm_id *id;
+	struct rdma_cm_id *id = NULL;
+	assert(ep->cm.listener);
 
 	if (conn->state != FI_VERBS_CONN_ALLOCATED)
 		return 0;
@@ -57,7 +57,7 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 
 	conn->state = FI_VERBS_CONN_STARTED;
 
-	if (rdma_create_id(ep->cm_listener_ec, &id, conn, RDMA_PS_TCP))
+	if (rdma_create_id(ep->cm.ec, &id, conn, RDMA_PS_TCP))
 		return -1;
 
 	if (conn->cm_role == FI_VERBS_CM_ACTIVE || 
@@ -102,7 +102,7 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 	pthread_mutex_lock(&ep->cm_lock);
 	for (i = 0; i < count; i++) {
 		struct fi_ibv_rdm_tagged_conn *conn = NULL;
-		void *addr_i = (char *) addr + i * ep->fi_ibv_rdm_addrlen;
+		void *addr_i = (char *) addr + i * ep->addrlen;
 
 		HASH_FIND(hh, fi_ibv_rdm_tagged_conn_hash, addr_i,
 			FI_IBV_RDM_DFLT_ADDRLEN, conn);
