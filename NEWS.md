@@ -21,6 +21,7 @@ v1.3.0, TBD
 ## PSM2 provider notes
 
 - Add support for multi-iov send, tagged send, and RMA write.
+- Use utility provider for EQ, wait object, and poll set.
 
 ## Sockets provider notes
 
