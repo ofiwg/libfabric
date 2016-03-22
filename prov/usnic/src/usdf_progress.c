@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -91,6 +91,7 @@ usdf_fabric_progression_thread(void *v)
 	struct usdf_fabric *fp;
 	struct epoll_event ev;
 	struct usdf_poll_item *pip;
+	struct usdf_domain *dom;
 	int sleep_time;
 	int epfd;
 	int ret;
@@ -124,6 +125,10 @@ usdf_fabric_progression_thread(void *v)
 
 		/* call timer progress each wakeup */
 		usdf_timer_progress(fp);
+
+		LIST_FOREACH(dom, &fp->fab_domain_list, dom_link) {
+			usdf_domain_progress(dom);
+		}
 	}
 }
 

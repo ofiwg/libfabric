@@ -746,6 +746,8 @@ usdf_cq_close(fid_t fid)
 				return -FI_EBUSY;
 			}
 			TAILQ_REMOVE(&cq->c.soft.cq_list, hcq, cqh_link);
+			TAILQ_REMOVE(&cq->cq_domain->dom_hcq_list, hcq,
+					cqh_dom_link);
 			if (hcq->cqh_ucq != NULL) {
 				ret = usd_destroy_cq(hcq->cqh_ucq);
 				if (ret != 0) {
