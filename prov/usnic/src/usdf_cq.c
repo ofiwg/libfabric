@@ -435,6 +435,7 @@ usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 {
 	struct usdf_cq_soft_entry *entry;
 	struct usdf_cq *cq;
+	uint64_t val = 1;
 
 	cq = hcq->cqh_cq;
 
@@ -462,6 +463,9 @@ usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 	}
 
 	cq->c.soft.cq_last_op = USDF_SOFT_CQ_WRITE;
+
+	/* TODO: How do I report this if it fails?!?!? */
+	write(cq->object.fd, &val, sizeof(val));
 }
 
 static inline ssize_t
@@ -1144,31 +1148,51 @@ err:
 	return ret;
 }
 
-int
-usdf_cq_create_cq(struct usdf_cq *cq)
+/* If cq->cq_attr.wait_obj == (FI_WAIT_FD | FI_WAIT_SET), then use an FD with
+ * the CQ. If create_fd evaluates to true, then it will create a hardware
+ * completion channel.
+ *
+ * If create_fd does not evaluate to true, then it is assumed that a valid file
+ * descriptor is available in cq->object.fd.
+ */
+int usdf_cq_create_cq(struct usdf_cq *cq, struct usd_cq **ucq, int create_fd)
 {
 	int ret;
 	struct usd_cq_init_attr attr = {0};
 
 	if (!cq || !cq->cq_domain || !cq->cq_domain->dom_dev) {
-		USDF_WARN_SYS(CQ, "Invalid input.\n");
+		USDF_DBG_SYS(CQ, "Invalid input.\n");
 		return -FI_EINVAL;
 	}
 
 	attr.num_entries = cq->cq_attr.size;
 	attr.comp_fd = -1;
 
-	/* If the CQ was opened with FD as the wait object, then we will need
-	 * the FD to perform synchronous reads. If it is a wait set, then we
-	 * will need the FD to add to the epoll structure used internally by
-	 * the waitset.
+	/* For hard queues we will need to create an FD for CQs configured to
+	 * use both wait sets and FDs. For a wait set this FD will get added to
+	 * the epoll structure used by the waitset.
+	 *
+	 * For soft queues (emulated endpoints) we will not be creating an FD,
+	 * but will need to set the appropriate functions and bind to the wait
+	 * object, if any.
 	 */
-	if (cq->cq_attr.wait_obj == FI_WAIT_FD ||
-			cq->cq_attr.wait_obj == FI_WAIT_SET) {
+	if ((cq->cq_attr.wait_obj == FI_WAIT_FD) ||
+			(cq->cq_attr.wait_obj == FI_WAIT_SET)) {
 		cq->cq_ops.sread = usdf_cq_sread_fd;
-		ret = usdf_cq_create_fd(cq);
-		if (ret)
-			return ret;
+
+		if (create_fd) {
+			ret = usdf_cq_create_fd(cq);
+			if (ret)
+				return ret;
+
+			attr.comp_fd = cq->object.fd;
+
+			/* usd_create_cq will only set
+			 * USNIC_CQ_COMP_SIGNAL_VERBS if an ibv_cq is present,
+			 * but we don't have one. Just shove the cq in.
+			 */
+			attr.ibv_cq = &ucq;
+		}
 
 		if (cq->cq_attr.wait_obj == FI_WAIT_SET) {
 			cq->cq_ops.sread = fi_no_cq_sread;
@@ -1176,17 +1200,9 @@ usdf_cq_create_cq(struct usdf_cq *cq)
 			if (ret)
 				return ret;
 		}
-
-		attr.comp_fd = cq->object.fd;
-
-		/* usd_create_cq will only set USNIC_CQ_COMP_SIGNAL_VERBS if
-		 * an ibv_cq is present, but we don't have one. Just shove the
-		 * cq in.
-		 */
-		attr.ibv_cq = &cq->c.hard.cq_cq;
 	}
 
-	return usd_create_cq(cq->cq_domain->dom_dev, &attr, &cq->c.hard.cq_cq);
+	return usd_create_cq(cq->cq_domain->dom_dev, &attr, ucq);
 }
 
 int
