@@ -45,6 +45,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -181,7 +182,7 @@ usdf_ep_dgram_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 		}
 		if (cq->c.hard.cq_cq == NULL) {
-			ret = usdf_cq_create_cq(cq);
+			ret = usdf_cq_create_cq(cq, &cq->c.hard.cq_cq, true);
 			if (ret != 0) {
 				return ret;
 			}

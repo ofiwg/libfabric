@@ -42,7 +42,7 @@
 #define SREAD_MAX_SLEEP_TIME_US 5000
 
 int usdf_cq_make_soft(struct usdf_cq *cq);
-int usdf_cq_create_cq(struct usdf_cq *cq);
+int usdf_cq_create_cq(struct usdf_cq *cq, struct usd_cq **ucq, int create_fd);
 int usdf_check_empty_hard_cq(struct usdf_cq *cq);
 int usdf_check_empty_soft_cq(struct usdf_cq *cq);
 int usdf_cq_trywait(struct fid *fcq);
