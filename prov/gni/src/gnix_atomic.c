@@ -172,9 +172,8 @@ static int __gnix_amo_txd_complete(void *arg, gni_return_t tx_status)
 			*(uint64_t *)req->amo.read_buf = read_data64;
 			break;
 		default:
-			GNIX_WARN(FI_LOG_EP_DATA, "Invalid datatype: %d\n",
-				  req->amo.datatype);
-			assert(0);
+			GNIX_FATAL(FI_LOG_EP_DATA, "Invalid datatype: %d\n",
+				   req->amo.datatype);
 			break;
 		}
 	}

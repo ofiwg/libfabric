@@ -539,7 +539,8 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 		case GNI_POST_REMOTE_DATA:
 			break;
 		default:
-			assert(0); /* TODO: need something better */
+			GNIX_FATAL(FI_LOG_EP_CTRL, "Invalid post_state: %d\n",
+				   post_state);
 			break;
 		}
 	}

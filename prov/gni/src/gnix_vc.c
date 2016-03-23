@@ -901,9 +901,8 @@ static int __gnix_vc_recv_fn(struct gnix_cm_nic *cm_nic,
 					       src_cm_nic_addr);
 		break;
 	default:
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			"unknown cm_nic message type %d\n", mtype);
-		assert(0);
+		GNIX_FATAL(FI_LOG_EP_CTRL, "Invalid message type: %d\n",
+			   mtype);
 	}
 
 	return ret;

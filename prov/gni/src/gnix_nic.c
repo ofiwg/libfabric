@@ -469,11 +469,8 @@ static void __nic_get_completed_txd(struct gnix_nic *nic,
 		if (status != GNI_RC_SUCCESS || !recov) {
 			char ebuf[512];
 			GNI_CqErrorStr(cqe, ebuf, sizeof(ebuf));
-			GNIX_WARN(FI_LOG_EP_DATA,
-					"CQ error status - %s\n",
-					ebuf);
-			/* fatal */
-			assert(0);
+			GNIX_FATAL(FI_LOG_EP_DATA, "CQ error status: %s\n",
+				   ebuf);
 		}
 	}
 
@@ -492,9 +489,7 @@ static void __nic_get_completed_txd(struct gnix_nic *nic,
 	}
 
 	if (!txd_p) {
-		GNIX_WARN(FI_LOG_EP_DATA, "Unexpected CQE: 0x%lx", cqe);
-		/* fatal */
-		assert(0);
+		GNIX_FATAL(FI_LOG_EP_DATA, "Unexpected CQE: 0x%lx", cqe);
 	}
 
 	*tx_status = status;

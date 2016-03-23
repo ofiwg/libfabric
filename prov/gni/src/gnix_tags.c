@@ -489,8 +489,8 @@ int _gnix_tag_storage_init(
 		ts->ops = &kdtree_ops;
 		break;
 	default:
-		GNIX_WARN(FI_LOG_EP_CTRL, "failed to find valid tag type\n");
-		assert(0);
+		GNIX_FATAL(FI_LOG_EP_CTRL, "Invalid tag type: %d\n",
+				ts->attr.type);
 	}
 
 	ret = ts->ops->init(ts);
