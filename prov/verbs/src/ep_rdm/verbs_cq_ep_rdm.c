@@ -98,6 +98,57 @@ static ssize_t fi_ibv_rdm_tagged_cq_read(struct fid_cq *cq, void *buf,
 	return fi_ibv_rdm_tagged_cq_readfrom(cq, buf, MIN(_count, count), addr);
 }
 
+ssize_t	fi_ibv_rdm_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
+				fi_addr_t *src_addr, const void *cond,
+				int timeout)
+{
+	size_t threshold = count;
+	uint64_t time_limit = fi_gettime_ms() + timeout;
+	size_t counter = 0;
+
+	struct fi_ibv_cq *_cq = container_of(cq, struct fi_ibv_cq, cq_fid);
+	switch (_cq->wait_cond) {
+	case FI_CQ_COND_THRESHOLD:
+		threshold = MIN((uintptr_t) cond, threshold);
+	case FI_CQ_COND_NONE:
+		break;
+	default:
+		assert(0);
+		return -FI_EOTHER;
+	}
+
+	do {
+		counter += fi_ibv_rdm_tagged_cq_readfrom(cq, buf, threshold,
+							 src_addr);
+	} while (counter < threshold ||
+		(timeout >= 0 && fi_gettime_ms() < time_limit));
+
+	return (counter != 0) ? counter : -FI_EAGAIN;
+}
+
+ssize_t	fi_ibv_rdm_cq_sread(struct fid_cq *cq, void *buf, size_t count,
+			    const void *cond, int timeout)
+{
+	struct fi_ibv_cq *_cq	= container_of(cq, struct fi_ibv_cq, cq_fid);
+	size_t chunk		= MIN(_cq->ep->n_buffs, count);
+	uint64_t time_limit	= fi_gettime_ms() + timeout;
+	size_t rest		= count;
+	fi_addr_t addr[chunk];
+	ssize_t	ret;
+
+	do {
+		ret = fi_ibv_rdm_cq_sreadfrom(cq, buf, chunk, addr, cond,
+					      timeout);
+		if (ret > 0) {
+			rest -= ret;
+			chunk = MIN(chunk, rest);
+		}
+	} while (((ret >=0) && (rest != 0)) ||
+		 (timeout >= 0 && fi_gettime_ms() < time_limit));
+
+	return (count != rest) ? (count - rest) : ret;
+}
+
 #if 0
 static const char *fi_ibv_cq_strerror(struct fid_cq *eq, int prov_errno,
                                       const void *err_data, char *buf,
@@ -126,7 +177,8 @@ static struct fi_ops_cq fi_ibv_rdm_tagged_cq_ops = {
 	.read = fi_ibv_rdm_tagged_cq_read,
 	.readfrom = fi_ibv_rdm_tagged_cq_readfrom,
 	.readerr = fi_ibv_rdm_tagged_cq_readerr,
-	.sread = fi_no_cq_sread,
+	.sread = fi_ibv_rdm_cq_sread,
+	.sreadfrom = fi_ibv_rdm_cq_sreadfrom,
 	.strerror = fi_cq_strerror
 };
 
