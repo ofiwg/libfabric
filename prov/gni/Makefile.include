@@ -38,6 +38,7 @@ _gni_files = \
 	prov/gni/src/gnix_tags.c \
 	prov/gni/src/gnix_util.c \
 	prov/gni/src/gnix_vc.c \
+	prov/gni/src/gnix_vector.c \
 	prov/gni/src/gnix_wait.c
 
 _gni_headers = \
@@ -68,6 +69,7 @@ _gni_headers = \
 	prov/gni/include/gnix_tags.h \
 	prov/gni/include/gnix_util.h \
 	prov/gni/include/gnix_vc.h \
+	prov/gni/include/gnix_vector.h \
 	prov/gni/include/gnix_wait.h
 
 if HAVE_CRITERION
@@ -102,6 +104,7 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/api.c \
 	prov/gni/test/utils.c \
 	prov/gni/test/vc.c \
+	prov/gni/test/vector.c \
 	prov/gni/test/wait.c \
 	prov/gni/test/common.c
 
