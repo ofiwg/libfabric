@@ -56,6 +56,7 @@ static int init_fabric(void)
 		return ret;
 
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
+
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -140,7 +141,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_TAGGED;
-	hints->mode = FI_LOCAL_MR;
+	hints->mode = FI_LOCAL_MR | FI_CONTEXT;
 
 	ret = run();
 
