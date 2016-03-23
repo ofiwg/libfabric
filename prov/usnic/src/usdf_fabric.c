@@ -844,14 +844,6 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 		goto fail;
 	}
 
-	ret = pthread_create(&fp->fab_thread, NULL,
-			usdf_fabric_progression_thread, fp);
-	if (ret != 0) {
-		ret = -ret;
-		USDF_INFO("unable to create progress thread\n");
-		goto fail;
-	}
-
 	/* create and bind socket for ARP resolution */
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
@@ -868,6 +860,16 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 	}
 
 	atomic_initialize(&fp->fab_refcnt, 0);
+	atomic_initialize(&fp->num_blocked_waiting, 0);
+
+	ret = pthread_create(&fp->fab_thread, NULL,
+			usdf_fabric_progression_thread, fp);
+	if (ret != 0) {
+		ret = -ret;
+		USDF_INFO("unable to create progress thread\n");
+		goto fail;
+	}
+
 	fattrp->fabric = fab_utof(fp);
 	fattrp->prov_version = USDF_PROV_VERSION;
 	*fabric = fab_utof(fp);

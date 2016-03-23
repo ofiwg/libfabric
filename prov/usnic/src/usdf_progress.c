@@ -92,6 +92,7 @@ usdf_fabric_progression_thread(void *v)
 	struct epoll_event ev;
 	struct usdf_poll_item *pip;
 	struct usdf_domain *dom;
+	int num_blocked_waiting;
 	int sleep_time;
 	int epfd;
 	int ret;
@@ -101,9 +102,11 @@ usdf_fabric_progression_thread(void *v)
 	epfd = fp->fab_epollfd;
 
 	while (1) {
+		num_blocked_waiting = atomic_get(&fp->num_blocked_waiting);
 
 		/* sleep inifinitely if nothing to do */
-		if (fp->fab_active_timer_count > 0) {
+		if ((fp->fab_active_timer_count > 0) ||
+				(num_blocked_waiting > 0)) {
 			sleep_time = 1;
 		} else {
 			sleep_time = -1;
