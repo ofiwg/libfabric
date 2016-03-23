@@ -107,6 +107,7 @@ struct usdf_fabric {
 	struct usd_device_attrs *fab_dev_attrs;
 	int fab_arp_sockfd;
 	atomic_t fab_refcnt;
+	atomic_t num_blocked_waiting;
 	LIST_HEAD(,usdf_domain) fab_domain_list;
 
 	/* progression */

@@ -274,6 +274,7 @@ static int usdf_wait_close(struct fid *waitset)
 
 static int usdf_wait_wait(struct fid_wait *fwait, int timeout)
 {
+	struct usdf_fabric *fabric;
 	struct usdf_wait *wait;
 	struct epoll_event event;
 	int ret = FI_SUCCESS;
@@ -281,6 +282,7 @@ static int usdf_wait_wait(struct fid_wait *fwait, int timeout)
 
 	USDF_TRACE_SYS(FABRIC, "\n");
 	wait = wait_ftou(fwait);
+	fabric = wait->wait_fabric;
 
 	ret = usdf_wait_trywait(&fwait->fid);
 	if (ret) {
@@ -288,6 +290,13 @@ static int usdf_wait_wait(struct fid_wait *fwait, int timeout)
 			return FI_SUCCESS;
 
 		return ret;
+	}
+
+	atomic_inc(&fabric->num_blocked_waiting);
+	ret = usdf_fabric_wake_thread(fabric);
+	if (ret) {
+		USDF_DBG_SYS(FABRIC, "error while waking progress thread\n");
+		goto out;
 	}
 
 	nevents = epoll_wait(wait->object.epfd, &event, 1, timeout);
@@ -298,6 +307,8 @@ static int usdf_wait_wait(struct fid_wait *fwait, int timeout)
 		ret = -errno;
 	}
 
+out:
+	atomic_dec(&fabric->num_blocked_waiting);
 	return ret;
 }
 

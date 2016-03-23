@@ -465,7 +465,9 @@ usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 	cq->c.soft.cq_last_op = USDF_SOFT_CQ_WRITE;
 
 	/* TODO: How do I report this if it fails?!?!? */
-	write(cq->object.fd, &val, sizeof(val));
+	if (cq->cq_attr.wait_obj == FI_WAIT_SET ||
+			cq->cq_attr.wait_obj == FI_WAIT_FD)
+		write(cq->object.fd, &val, sizeof(val));
 }
 
 static inline ssize_t
@@ -544,24 +546,42 @@ static ssize_t usdf_cq_sread_fd(struct fid_cq *fcq, void *buf, size_t count,
 		const void *cond, int timeout_ms)
 {
 	struct usdf_cq *cq;
+	struct usdf_fabric *fabric;
 	int ret;
 
 	cq = cq_ftou(fcq);
+	fabric = cq->cq_domain->dom_fabric;
 
 	ret = usdf_cq_trywait(&fcq->fid);
 	if (ret == FI_SUCCESS) {
+		atomic_inc(&fabric->num_blocked_waiting);
+
+		ret = usdf_fabric_wake_thread(fabric);
+		if (ret) {
+			USDF_DBG_SYS(CQ,
+					"error while waking progress thread\n");
+			goto err;
+		}
+
 		ret = fi_poll_fd(cq->object.fd, timeout_ms);
 		if (ret == 0) {
-			return -FI_EAGAIN;
+			ret = -FI_EAGAIN;
+			goto err;
 		} else if (ret < 0) {
 			USDF_DBG_SYS(CQ, "poll failed: %s\n", strerror(-ret));
-			return ret;
+			goto err;
 		}
+
+		atomic_dec(&fabric->num_blocked_waiting);
 	} else if ((ret < 0) && (ret != -FI_EAGAIN)) {
 		return ret;
 	}
 
 	return fi_cq_read(fcq, buf, count);
+
+err:
+	atomic_dec(&fabric->num_blocked_waiting);
+	return ret;
 }
 
 /*
