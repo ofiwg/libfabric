@@ -405,7 +405,7 @@ TestSuite(rdm_api, .init = rdm_api_setup, .fini = rdm_api_teardown,
 void api_send_recv(int len)
 {
 	ssize_t sz;
-	uint64_t caps = hints[0]->caps;
+	uint64_t caps = fi[0]->caps;
 
 	rdm_api_init_data(source, len, 0xab);
 	rdm_api_init_data(target, len, 0);
@@ -472,7 +472,7 @@ Test(rdm_api, msg_send_rcv_w_tagged)
 void api_tagged_send_recv(int len)
 {
 	ssize_t sz;
-	uint64_t caps = hints[0]->caps;
+	uint64_t caps = fi[0]->caps;
 
 	rdm_api_init_data(source, len, 0xab);
 	rdm_api_init_data(target, len, 0);
@@ -550,14 +550,14 @@ void api_write_read(int len)
 		dbg_printf("fi_cq_readerr err:%d\n", err_cqe.err);
 	}
 
-	if (write_allowed(FI_RMA, hints[0]->caps, hints[1]->caps)) {
+	if (write_allowed(FI_RMA, fi[0]->caps, fi[1]->caps)) {
 		cr_assert(ret == 1,
 			  "fi_write failed caps:0x%lx ret:%d",
-			  hints[0]->caps, ret);
+			  fi[0]->caps, ret);
 	} else {
 		cr_assert(err_cqe.err == FI_EOPNOTSUPP,
 			  "fi_write should fail caps:0x%lx err:%d",
-			  hints[0]->caps, err_cqe.err);
+			  fi[0]->caps, err_cqe.err);
 	}
 
 	fi_read(ep[0], source, len,
@@ -572,14 +572,14 @@ void api_write_read(int len)
 		dbg_printf("fi_cq_readerr err:%d\n", err_cqe.err);
 	}
 
-	if (read_allowed(FI_RMA, hints[0]->caps, hints[1]->caps)) {
+	if (read_allowed(FI_RMA, fi[0]->caps, fi[1]->caps)) {
 		cr_assert(ret == 1,
-			  "fi_read failed caps:0x%lx ret:%d",
-			  hints[0]->caps, ret);
+			  "fi_read failed caps:0x%lx rcaps:0x%lx",
+			  fi[0]->caps, fi[1]->caps);
 	} else {
 		cr_assert(err_cqe.err == FI_EOPNOTSUPP,
-			  "fi_read should fail caps:0x%lx err:%d",
-			  hints[0]->caps, err_cqe.err);
+			  "fi_read should fail caps:0x%lx rcaps:0x%lx",
+			  fi[0]->caps, fi[1]->caps);
 	}
 }
 
@@ -657,14 +657,14 @@ void api_do_read_buf(void)
 		dbg_printf("fi_cq_readerr err:%d\n", err_cqe.err);
 	}
 
-	if (read_allowed(FI_RMA, hints[0]->caps, hints[1]->caps)) {
+	if (read_allowed(FI_RMA, fi[0]->caps, fi[1]->caps)) {
 		cr_assert(ret == 1,
-			  "fi_read failed caps:0x%lx ret:%d",
-			  hints[0]->caps, ret);
+			  "fi_read failed caps:0x%lx rcaps:0x%lx",
+			  fi[0]->caps, fi[1]->caps);
 	} else {
 		cr_assert(err_cqe.err == FI_EOPNOTSUPP,
-			  "fi_read should fail caps:0x%lx err:%d",
-			  hints[0]->caps, err_cqe.err);
+			  "fi_read should fail caps:0x%lx rcaps:0x%lx",
+			  fi[0]->caps, fi[1]->caps);
 	}
 }
 
@@ -728,14 +728,14 @@ void do_atomic_write_fetch(void)
 		dbg_printf("fi_cq_readerr err:%d\n", err_cqe.err);
 	}
 
-	if (write_allowed(FI_ATOMIC, hints[0]->caps, hints[1]->caps)) {
+	if (write_allowed(FI_ATOMIC, fi[0]->caps, fi[1]->caps)) {
 		cr_assert(ret == 1,
-			  "fi_atomic (write) failed caps:0x%lx ret:%d",
-			  hints[0]->caps, ret);
+			  "fi_atomic failed caps:0x%lx rcaps:0x%lx",
+			  fi[0]->caps, fi[1]->caps);
 	} else {
 		cr_assert(err_cqe.err == FI_EOPNOTSUPP,
-			  "fi_atomic (write) should fail caps:0x%lx err:%d",
-			  hints[0]->caps, err_cqe.err);
+			  "fi_atomic should fail caps:0x%lx rcaps:0x%lx",
+			  fi[0]->caps, fi[1]->caps);
 	}
 
 	/* u64 */
@@ -755,14 +755,14 @@ void do_atomic_write_fetch(void)
 		dbg_printf("fi_cq_readerr err:%d\n", err_cqe.err);
 		}
 
-	if (read_allowed(FI_ATOMIC, hints[0]->caps, hints[1]->caps)) {
+	if (read_allowed(FI_ATOMIC, fi[0]->caps, fi[1]->caps)) {
 		cr_assert(ret == 1,
-			  "fi_fetch_atomic failed caps:0x%lx ret:%d",
-			  hints[0]->caps, ret);
+			  "fi_fetch_atomic failed caps:0x%lx rcaps:0x%lx",
+			  fi[0]->caps, fi[1]->caps);
 	} else {
 		cr_assert(err_cqe.err == FI_EOPNOTSUPP,
-			  "fi_fetch_atomic should fail caps:0x%lx err:%d",
-			  hints[0]->caps, err_cqe.err);
+			  "fi_fetch_atomic should fail caps:0x%lx rcaps:0x%lx",
+			  fi[0]->caps, fi[1]->caps);
 	}
 }
 
