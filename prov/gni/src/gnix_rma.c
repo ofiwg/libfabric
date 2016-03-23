@@ -819,6 +819,10 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 		return -FI_EINVAL;
 	}
 
+	if (!ep->send_cq && !(flags & FI_INJECT)) {
+		return -FI_ENOCQ;
+	}
+
 	if ((flags & FI_INJECT) && (len > GNIX_INJECT_SIZE)) {
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "RMA length %d exceeds inject max size: %d\n",

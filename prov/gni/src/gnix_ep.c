@@ -1070,12 +1070,6 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 	 */
 	case FI_ENABLE:
 		if (GNIX_EP_RDM_DGM(ep->type)) {
-
-			if ((ep->send_cq == NULL) ||
-			    (ep->recv_cq == NULL)) {
-				return -FI_ENOCQ;
-			}
-
 			ret = _gnix_vc_cm_init(ep->cm_nic);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL,

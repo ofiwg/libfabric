@@ -384,6 +384,10 @@ ssize_t _gnix_atomic(struct gnix_fid_ep *ep,
 	    !msg->rma_iov || !msg->rma_iov[0].addr)
 		return -FI_EINVAL;
 
+	if (!ep->send_cq && !(flags & FI_INJECT)) {
+		return -FI_ENOCQ;
+	}
+
 	if (fr_type == GNIX_FAB_RQ_CAMO) {
 		if (!comparev || !comparev[0].addr || compare_count != 1)
 			return -FI_EINVAL;

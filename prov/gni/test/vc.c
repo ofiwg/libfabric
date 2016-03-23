@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -162,13 +162,6 @@ static void vc_setup_common(void)
 	ret = fi_ep_bind(ep[0], &av->fid, 0);
 	cr_assert(!ret, "fi_ep_bind");
 
-	/*
-	 * this shouldn't work because we've not bound a CQ yet
-	 */
-
-	ret = fi_enable(ep[0]);
-	cr_assert(ret = -FI_ENOCQ);
-
 	cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
@@ -178,10 +171,6 @@ static void vc_setup_common(void)
 
 	ret = fi_ep_bind(ep[0], &cq->fid, FI_SEND | FI_RECV);
 	cr_assert(!ret, "fi_ep_bind");
-
-	/*
-	 * now enable should work
-	 */
 
 	ret = fi_enable(ep[0]);
 	cr_assert(!ret, "fi_enable");
