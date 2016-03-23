@@ -35,6 +35,8 @@
 #ifndef _FI_DIRECT_ENDPOINT_H_
 #define _FI_DIRECT_ENDPOINT_H_
 
+#define FABRIC_DIRECT_ENDPOINT 1
+
 /*******************************************************************************
  * GNI API Functions
  ******************************************************************************/

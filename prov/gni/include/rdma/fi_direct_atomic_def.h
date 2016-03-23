@@ -35,6 +35,8 @@
 #ifndef _FI_DIRECT_ATOMIC_DEF_H_
 #define _FI_DIRECT_ATOMIC_DEF_H_
 
+#define FABRIC_DIRECT_ATOMIC_DEF 1
+
 enum fi_datatype {
 	FI_INT8,
 	FI_UINT8,
