@@ -241,6 +241,7 @@ AS_IF([test x"$enable_direct" != x"no"],
 	      AC_MSG_ERROR(Cannot continue)])
 
        PROVIDER_DIRECT=$enable_direct
+       AC_DEFINE_UNQUOTED([FABRIC_DIRECT_ENABLED], [1], [define when building with FABRIC_DIRECT support])
        FI_DIRECT_PROVIDER_API_10="$srcdir/prov/$enable_direct/provider_FABRIC_1.0.map"
        AS_IF([test ! -r "$FI_DIRECT_PROVIDER_API_10"],
 	     [AC_MSG_WARN([--enable-direct=$enable_direct specified, but $FI_DIRECT_PROVIDER_API_10 does not exist])
