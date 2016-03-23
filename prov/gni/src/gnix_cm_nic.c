@@ -402,7 +402,7 @@ int _gnix_cm_nic_reg_recv_fn(struct gnix_cm_nic *cm_nic,
 int _gnix_cm_nic_enable(struct gnix_cm_nic *cm_nic)
 {
 	int i, ret = FI_SUCCESS;
-	struct gnix_fid_domain *domain;
+	struct gnix_fid_fabric *fabric;
 	struct gnix_datagram *dg_ptr;
 	uint8_t tag = GNIX_CM_NIC_WC_TAG;
 
@@ -411,12 +411,12 @@ int _gnix_cm_nic_enable(struct gnix_cm_nic *cm_nic)
 	if (cm_nic == NULL)
 		return -FI_EINVAL;
 
-	domain = cm_nic->domain;
-	assert(domain != NULL);
+	fabric = cm_nic->fabric;
+	assert(fabric != NULL);
 
 	assert(cm_nic->dgram_hndl != NULL);
 
-	for (i = 0; i < domain->fabric->n_wc_dgrams; i++) {
+	for (i = 0; i < fabric->n_wc_dgrams; i++) {
 		ret = _gnix_dgram_alloc(cm_nic->dgram_hndl, GNIX_DGRAM_WC,
 					&dg_ptr);
 
@@ -548,7 +548,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	cm_nic->my_name.cookie = domain->cookie;
 	cm_nic->my_name.gnix_addr.device_addr =
 	cm_nic->nic->device_addr;
-	cm_nic->domain = domain;
+	cm_nic->fabric = domain->fabric;
 	cm_nic->ctrl_progress = domain->control_progress;
 	cm_nic->my_name.name_type = name_type;
 	fastlock_init(&cm_nic->wq_lock);

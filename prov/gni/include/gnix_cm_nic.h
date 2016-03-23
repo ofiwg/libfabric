@@ -47,7 +47,7 @@ typedef int gnix_cm_nic_rcv_cb_func(struct gnix_cm_nic *cm_nic,
  *
  * @var nic            pointer to gnix_nic associated with this cm nic
  * @var dgram_hndl     handle to dgram allocator associated with this nic
- * @var domain         GNI provider domain associated with this nic
+ * @var fabric         GNI provider fabric associated with this nic
  * @var addr_to_ep_ht  Hash table for looking up ep bound to this
  *                     cm nic, key is ep's gnix_address
  * @var wq_lock        spin lock for cm nic's work queue
@@ -63,7 +63,7 @@ typedef int gnix_cm_nic_rcv_cb_func(struct gnix_cm_nic *cm_nic,
 struct gnix_cm_nic {
 	struct gnix_nic *nic;
 	struct gnix_dgram_hndl *dgram_hndl;
-	struct gnix_fid_domain *domain;
+	struct gnix_fid_fabric *fabric;
 	struct gnix_hashtable *addr_to_ep_ht;
 	fastlock_t wq_lock;
 	struct dlist_entry cm_nic_wq;
