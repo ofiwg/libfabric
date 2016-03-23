@@ -30,46 +30,10 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_TRIGGER_H_
-#define _FI_TRIGGER_H_
+#ifndef _FI_DIRECT_H_
+#define _FI_DIRECT_H_
 
-#include <stdint.h>
-#include <stddef.h>
-#include <rdma/fabric.h>
+/* Do not remove this file. All the include/rdma/fi_direct*.h files are created
+ * build the provider with FABRIC_DIRECT option. For details see man/fi_direct.7.md
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-enum fi_trigger_event {
-	FI_TRIGGER_THRESHOLD,
-};
-
-struct fi_trigger_threshold {
-	struct fid_cntr		*cntr;
-	size_t			threshold;
-};
-
-#ifdef FABRIC_DIRECT
-#include <rdma/fi_direct_trigger.h>
-#endif
-
-#ifndef FABRIC_DIRECT_TRIGGER
-
-/* Size must match struct fi_context */
-struct fi_triggered_context {
-	enum fi_trigger_event	event_type;
-	union {
-		struct fi_trigger_threshold	threshold;
-		void				*internal[3];
-	} trigger;
-};
-
-#endif
-
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* _FI_TRIGGER_H_ */
+#endif /* _FI_DIRECT_H_ */

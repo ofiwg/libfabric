@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,46 +30,4 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_TRIGGER_H_
-#define _FI_TRIGGER_H_
-
-#include <stdint.h>
-#include <stddef.h>
-#include <rdma/fabric.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-enum fi_trigger_event {
-	FI_TRIGGER_THRESHOLD,
-};
-
-struct fi_trigger_threshold {
-	struct fid_cntr		*cntr;
-	size_t			threshold;
-};
-
-#ifdef FABRIC_DIRECT
-#include <rdma/fi_direct_trigger.h>
-#endif
-
-#ifndef FABRIC_DIRECT_TRIGGER
-
-/* Size must match struct fi_context */
-struct fi_triggered_context {
-	enum fi_trigger_event	event_type;
-	union {
-		struct fi_trigger_threshold	threshold;
-		void				*internal[3];
-	} trigger;
-};
-
-#endif
-
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* _FI_TRIGGER_H_ */
+/* Do not remove this file. See fi_direct.h */

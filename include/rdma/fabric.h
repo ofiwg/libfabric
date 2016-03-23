@@ -481,14 +481,14 @@ int fi_getparams(struct fi_param **params, int *count);
 void fi_freeparams(struct fi_param *params);
 
 
-#ifndef FABRIC_DIRECT
+#ifdef FABRIC_DIRECT
+#include <rdma/fi_direct.h>
+#endif	/* FABRIC_DIRECT */
 
+#ifndef FABRIC_DIRECT_
 struct fi_context {
 	void			*internal[4];
 };
-
-#else // FABRIC_DIRECT
-#include <rdma/fi_direct.h>
 #endif
 
 #ifdef __cplusplus
