@@ -23,6 +23,14 @@ ported/libibverbs/fi_*
 ported/librdmacm/fi_*
 
 complex/fabtest
+complex/fi_ubertest
+
+benchmarks/fi_dgram_pingpong
+benchmarks/fi_msg_pingpong
+benchmarks/fi_rdm_cntr_pingpong
+benchmarks/fi_rdm_pingpong
+benchmarks/fi_rdm_tagged_bw
+benchmarks/fi_rdm_tagged_pingpong
 
 simple/fi_*
 unit/fi_*

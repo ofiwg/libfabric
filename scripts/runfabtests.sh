@@ -117,7 +117,7 @@ short_tests=(
 	"rdm_rma -o writedata -I 5"
 	"rdm_tagged_pingpong -I 5"
 	"rdm_tagged_bw -I 5"
-	"ud_pingpong -I 5"
+	"dgram_pingpong -I 5"
 	"rc_pingpong -n 5"
 	"rc_pingpong -n 5 -e"
 )
@@ -142,10 +142,10 @@ standard_tests=(
 	"rdm_rma -o writedata"
 	"rdm_tagged_pingpong"
 	"rdm_tagged_bw"
-	"ud_pingpong"
-	"ud_pingpong -v"
-	"ud_pingpong -P"
-	"ud_pingpong -P -v"
+	"dgram_pingpong"
+	"dgram_pingpong -v"
+	"dgram_pingpong -P"
+	"dgram_pingpong -P -v"
 	"rc_pingpong"
 )
 

@@ -23,7 +23,7 @@ bin_PROGRAMS = \
 	streaming/fi_rdm_rma \
 	benchmarks/fi_msg_pingpong \
 	benchmarks/fi_rdm_cntr_pingpong \
-	benchmarks/fi_ud_pingpong \
+	benchmarks/fi_dgram_pingpong \
 	benchmarks/fi_rdm_pingpong \
 	benchmarks/fi_rdm_tagged_pingpong \
 	benchmarks/fi_rdm_tagged_bw \
@@ -144,11 +144,11 @@ benchmarks_fi_msg_pingpong_SOURCES = \
 	benchmarks/benchmark_shared.c
 benchmarks_fi_msg_pingpong_LDADD = libfabtests.la
 
-benchmarks_fi_ud_pingpong_SOURCES = \
-	benchmarks/ud_pingpong.c \
+benchmarks_fi_dgram_pingpong_SOURCES = \
+	benchmarks/dgram_pingpong.c \
 	benchmarks/benchmark_shared.h \
 	benchmarks/benchmark_shared.c
-benchmarks_fi_ud_pingpong_LDADD = libfabtests.la
+benchmarks_fi_dgram_pingpong_LDADD = libfabtests.la
 
 benchmarks_fi_rdm_cntr_pingpong_SOURCES = \
 	benchmarks/rdm_cntr_pingpong.c \
