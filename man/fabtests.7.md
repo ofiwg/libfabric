@@ -47,7 +47,7 @@ The client and the server exchange messages in a ping-pong manner for various me
 	fi_rdm_cntr_pingpong: An RDM ping pong client-server using counters
 	fi_rdm_pingpong: An RDM ping-pong client-server example using inject
 	fi_rdm_tagged_pingpong: A ping-pong client-server example using tagged messages
-	fi_ud_pingpong: A ping-pong client-server example using DGRAM endpoints
+	fi_dgram_pingpong: A ping-pong client-server example using DGRAM endpoints
 
 ## Streaming
 
