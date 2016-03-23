@@ -142,9 +142,11 @@ int bandwidth(void)
 				ft_start();
 
 			for(j = 0; j < opts.window_size; j++) {
-				if (opts.transfer_size < fi->tx_attr->inject_size)
+				if (opts.transfer_size < fi->tx_attr->inject_size) {
 					ret = ft_inject(opts.transfer_size);
-				else
+					if (ret == -FI_EAGAIN)
+						ret = ft_post_tx(opts.transfer_size);
+				} else
 					ret = ft_post_tx(opts.transfer_size);
 				if (ret)
 					return ret;
