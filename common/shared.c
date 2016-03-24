@@ -494,7 +494,7 @@ int ft_init_ep(void)
 
 	if (fi->rx_attr->op_flags != FI_MULTI_RECV) {
 		/* Initial receive will get remote address for unconnected EPs */
-		ret = ft_post_rx(MAX(rx_size, FT_MAX_CTRL_MSG));
+		ret = ft_post_rx(MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 		if (ret)
 			return ret;
 	}
@@ -580,7 +580,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 
 		rma_iov = rx_buf + ft_rx_prefix_size();
 		*peer_iov = *rma_iov;
-		ret = ft_post_rx(rx_size);
+		ret = ft_post_rx(rx_size, &rx_ctx);
 	} else {
 		ret = ft_get_rx_comp(rx_seq);
 		if (ret)
@@ -588,7 +588,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 
 		rma_iov = rx_buf + ft_rx_prefix_size();
 		*peer_iov = *rma_iov;
-		ret = ft_post_rx(rx_size);
+		ret = ft_post_rx(rx_size, &rx_ctx);
 		if (ret)
 			return ret;
 
@@ -789,16 +789,16 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 		opts->iterations = size_to_count(opts->transfer_size);
 }
 
-ssize_t ft_post_tx(size_t size)
+ssize_t ft_post_tx(size_t size, struct fi_context* ctx)
 {
 	ssize_t ret;
 
 	if (hints->caps & FI_TAGGED) {
 		ret = fi_tsend(ep, tx_buf, size + ft_tx_prefix_size(),
-				fi_mr_desc(mr), remote_fi_addr, tx_seq, &tx_ctx);
+				fi_mr_desc(mr), remote_fi_addr, tx_seq, ctx);
 	} else {
 		ret = fi_send(ep, tx_buf, size + ft_tx_prefix_size(),
-				fi_mr_desc(mr), remote_fi_addr, &tx_ctx);
+				fi_mr_desc(mr), remote_fi_addr, ctx);
 	}
 	if (ret) {
 		FT_PRINTERR("transmit", ret);
@@ -816,7 +816,7 @@ ssize_t ft_tx(size_t size)
 	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
 		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
 
-	ret = ft_post_tx(size);
+	ret = ft_post_tx(size, &tx_ctx);
 	if (ret)
 		return ret;
 
@@ -859,16 +859,16 @@ ssize_t ft_inject(size_t size)
 	return ret;
 }
 
-ssize_t ft_post_rx(size_t size)
+ssize_t ft_post_rx(size_t size, struct fi_context* ctx)
 {
 	ssize_t ret;
 
 	if (hints->caps & FI_TAGGED) {
 		ret = fi_trecv(ep, rx_buf, size + ft_rx_prefix_size(), fi_mr_desc(mr),
-				0, rx_seq, 0, &rx_ctx);
+				0, rx_seq, 0, ctx);
 	} else {
 		ret = fi_recv(ep, rx_buf, size + ft_rx_prefix_size(), fi_mr_desc(mr),
-				0, &rx_ctx);
+				0, ctx);
 	}
 	if (ret) {
 		FT_PRINTERR("receive", ret);
@@ -894,7 +894,7 @@ ssize_t ft_rx(size_t size)
 	}
 	/* TODO: verify CQ data, if available */
 
-	ret = ft_post_rx(rx_size);
+	ret = ft_post_rx(rx_size, &rx_ctx);
 	return ret;
 }
 

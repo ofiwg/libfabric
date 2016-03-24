@@ -129,6 +129,11 @@ int bandwidth(void)
 	if (ret)
 		return ret;
 
+	struct fi_context *ctx_tx = 
+		calloc(opts.window_size, sizeof(struct fi_context));
+	struct fi_context *ctx_rx = 
+		calloc(opts.window_size, sizeof(struct fi_context));
+
 	/* The loop structured allows for the possibility that the sender
 	 * immediately overruns the receiving side on the first transfer (or
 	 * the entire window). This could result in exercising parts of the
@@ -145,18 +150,21 @@ int bandwidth(void)
 				if (opts.transfer_size < fi->tx_attr->inject_size) {
 					ret = ft_inject(opts.transfer_size);
 					if (ret == -FI_EAGAIN)
-						ret = ft_post_tx(opts.transfer_size);
+						ret = ft_post_tx(
+							opts.transfer_size,
+							&ctx_tx[j]);
 				} else
-					ret = ft_post_tx(opts.transfer_size);
+					ret = ft_post_tx(opts.transfer_size,
+							 &ctx_tx[j]);
 				if (ret)
-					return ret;
+					goto out;
 			}
 			ret = ft_get_tx_comp(tx_seq);
 			if (ret)
-				return ret;
+				goto out;
 			ret = ft_rx(4);
 			if (ret)
-				return ret;
+				goto out;
 		}
 	} else {
 		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
@@ -164,16 +172,16 @@ int bandwidth(void)
 				ft_start();
 
 			for(j = 0; j < opts.window_size; j++) {
-				ret = ft_post_rx(opts.transfer_size);
+				ret = ft_post_rx(opts.transfer_size, &ctx_rx[j]);
 				if (ret)
-					return ret;
+					goto out;
 			}
 			ret = ft_get_rx_comp(rx_seq-1); /* rx_seq is always one ahead */
 			if (ret)
-				return ret;
+				goto out;
 			ret = ft_tx(4);
 			if (ret)
-				return ret;
+				goto out;
 		}
 	}
 	ft_stop();
@@ -184,6 +192,10 @@ int bandwidth(void)
 	else
 		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end,
 				opts.window_size);
+
+out:
+	free(ctx_tx);
+	free(ctx_rx);
 
 	return 0;
 }
