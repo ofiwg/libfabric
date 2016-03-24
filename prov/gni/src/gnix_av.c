@@ -85,6 +85,133 @@ static int gnix_verify_av_attr(struct fi_av_attr *attr)
 }
 
 /*
+ * Given a string that contains the string representation of gnix_ep_name.
+ * Parse this string and return the values in a gnix_ep_name structure.
+ */
+int gnix_av_straddr_to_ep_name(char *buf,
+			       struct gnix_ep_name *gnix_ep)
+{
+	uint32_t cdm_id;
+	uint32_t cm_nic_cdm_id;
+	uint32_t cookie;
+	uint32_t device_addr;
+	char *int_buf;
+	uint32_t name_type;
+	int ret = FI_SUCCESS;
+	char *save_ptr = NULL;
+	char temp_buf[GNIX_AV_MAX_STR_ADDR_LEN];
+	uint32_t version;
+
+	if ((buf == NULL) || (gnix_ep == NULL)) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	memset(temp_buf, 0, GNIX_AV_MAX_STR_ADDR_LEN);
+	strncpy(temp_buf, buf, (GNIX_AV_MAX_STR_ADDR_LEN - 1));
+
+	errno = 0;
+	gnix_ep->gnix_addr.device_addr = 0;
+	gnix_ep->gnix_addr.cdm_id = 0;
+	gnix_ep->name_type = 0;
+	gnix_ep->cm_nic_cdm_id = 0;
+	gnix_ep->cookie = 0;
+
+	/* extract the version component */
+	int_buf = strtok_r(temp_buf, ":", &save_ptr);
+	if (int_buf == NULL) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	version = (uint32_t) strtol(int_buf, NULL, 10);
+	if (errno != 0) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	if ((version == 0) || (version > GNIX_AV_STR_ADDR_VERSION)) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	/* extract the device_addr component */
+	int_buf = strtok_r(NULL, ":", &save_ptr);
+	if (int_buf == NULL) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	device_addr = (uint32_t) strtol(int_buf, NULL, 16);
+	if (errno != 0) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	/* extract the cdm_id component */
+	int_buf = strtok_r(NULL, ":", &save_ptr);
+	if (int_buf == NULL) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	cdm_id = (uint32_t) strtol(int_buf, NULL, 16);
+	if (errno != 0) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	/* extract the name_type component */
+	int_buf = strtok_r(NULL, ":", &save_ptr);
+	if (int_buf == NULL) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	name_type = (uint32_t) strtol(int_buf, NULL, 10);
+	if (errno != 0) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	/* extract the cm_nic_cdm_id component */
+	int_buf = strtok_r(NULL, ":", &save_ptr);
+	if (int_buf == NULL) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	cm_nic_cdm_id = (uint32_t) strtol(int_buf, NULL, 16);
+	if (errno != 0) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	/* extract the cookie component */
+	int_buf = strtok_r(NULL, ":", &save_ptr);
+	if (int_buf == NULL) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	cookie = (uint32_t) strtol(int_buf, NULL, 16);
+	if (errno != 0) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	/* check to see if additional component are specified */
+	gnix_ep->gnix_addr.device_addr = device_addr;
+	gnix_ep->gnix_addr.cdm_id = cdm_id;
+	gnix_ep->name_type = name_type;
+	gnix_ep->cm_nic_cdm_id = cm_nic_cdm_id;
+	gnix_ep->cookie = cookie;
+
+err:
+	return ret;
+}
+
+/*
  * Check the capacity of the internal table used to represent FI_AV_TABLE type
  * address vectors. Initially the table starts with a capacity and count of 0
  * and the capacity increases by roughly double each time a resize is necessary.
@@ -148,8 +275,10 @@ static int table_insert(struct gnix_fid_av *int_av, const void *addr,
 			size_t count, fi_addr_t *fi_addr, uint64_t flags,
 			void *context)
 {
-	struct gnix_ep_name *temp = NULL;
+	struct gnix_ep_name temp;
+	char *temp_addr = (char *) addr;
 	int ret = count;
+	int rc;
 	size_t index;
 	size_t i;
 
@@ -160,15 +289,30 @@ static int table_insert(struct gnix_fid_av *int_av, const void *addr,
 
 	assert(int_av->table);
 	for (index = int_av->count, i = 0; i < count; index++, i++) {
-		temp = &((struct gnix_ep_name *)addr)[i];
-		int_av->table[index].gnix_addr = temp->gnix_addr;
+		temp.gnix_addr.device_addr = 0;
+		temp.gnix_addr.cdm_id = 0;
+		temp.name_type = 0;
+		temp.cm_nic_cdm_id = 0;
+		temp.cookie = 0;
+
+		rc = gnix_av_straddr_to_ep_name(temp_addr, &temp);
+		if (rc != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_AV,
+				  "table_insert: gnix_av_straddr_to_ep_name failed %d\n",
+				  ret);
+			return ret;
+		}
+
+		int_av->table[index].gnix_addr = temp.gnix_addr;
 		int_av->valid_entry_vec[index] = 1;
-		int_av->table[index].name_type = temp->name_type;
-		int_av->table[index].cookie = temp->cookie;
+		int_av->table[index].name_type = temp.name_type;
+		int_av->table[index].cookie = temp.cookie;
 		int_av->table[index].cm_nic_cdm_id =
-				temp->cm_nic_cdm_id;
+				temp.cm_nic_cdm_id;
 		if (fi_addr)
 			fi_addr[i] = index;
+
+		temp_addr += GNIX_AV_MAX_STR_ADDR_LEN;
 	}
 
 	int_av->count += count;
@@ -261,7 +405,8 @@ static int map_insert(struct gnix_fid_av *int_av, const void *addr,
 		      void *context)
 {
 	int ret;
-	struct gnix_ep_name *temp = NULL;
+	struct gnix_ep_name temp;
+	char *temp_addr = (char *) addr;
 	struct gnix_av_addr_entry *the_entry;
 	gnix_ht_key_t key;
 	size_t i;
@@ -285,15 +430,28 @@ static int map_insert(struct gnix_fid_av *int_av, const void *addr,
 	slist_insert_tail(&blk->slist, &int_av->block_list);
 
 	for (i = 0; i < count; i++) {
-		temp = &((struct gnix_ep_name *)addr)[i];
-		((struct gnix_address *)fi_addr)[i] = temp->gnix_addr;
+		temp.gnix_addr.device_addr = 0;
+		temp.gnix_addr.cdm_id = 0;
+		temp.name_type = 0;
+		temp.cm_nic_cdm_id = 0;
+		temp.cookie = 0;
+
+		ret = gnix_av_straddr_to_ep_name(temp_addr, &temp);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_AV,
+				  "map_insert: gnix_av_straddr_to_ep_name failed %d\n",
+				  ret);
+			return ret;
+		}
+
+		((struct gnix_address *)fi_addr)[i] = temp.gnix_addr;
 		the_entry =  &blk->base[i];
-		memcpy(&the_entry->gnix_addr, &temp->gnix_addr,
+		memcpy(&the_entry->gnix_addr, &temp.gnix_addr,
 		       sizeof(struct gnix_address));
-		the_entry->name_type = temp->name_type;
-		the_entry->cm_nic_cdm_id = temp->cm_nic_cdm_id;
-		the_entry->cookie = temp->cookie;
-		memcpy(&key, &temp->gnix_addr, sizeof(gnix_ht_key_t));
+		the_entry->name_type = temp.name_type;
+		the_entry->cm_nic_cdm_id = temp.cm_nic_cdm_id;
+		the_entry->cookie = temp.cookie;
+		memcpy(&key, &temp.gnix_addr, sizeof(gnix_ht_key_t));
 		ret = _gnix_ht_insert(int_av->map_ht,
 				      key,
 				      the_entry);
@@ -303,11 +461,12 @@ static int map_insert(struct gnix_fid_av *int_av, const void *addr,
 		 */
 		if ((ret != FI_SUCCESS) && (ret != -FI_ENOSPC)) {
 			GNIX_WARN(FI_LOG_AV,
-				  "_gnix_ht_insert failed %d\n",
+				  "map_insert: _gnix_ht_insert failed %d\n",
 				  ret);
 			return ret;
 		}
 
+		temp_addr += GNIX_AV_MAX_STR_ADDR_LEN;
 	}
 
 	return count;
@@ -456,8 +615,8 @@ DIRECT_FN STATIC int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr,
 	if (!av || !addrlen)
 		return -FI_EINVAL;
 
-	if (*addrlen < sizeof(ep_name)) {
-		*addrlen = sizeof(ep_name);
+	if (*addrlen < GNIX_AV_MAX_STR_ADDR_LEN) {
+		*addrlen = GNIX_AV_MAX_STR_ADDR_LEN;
 		return -FI_ETOOSMALL;
 	}
 
@@ -483,8 +642,7 @@ DIRECT_FN STATIC int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr,
 	ep_name.cm_nic_cdm_id = entry->cm_nic_cdm_id;
 	ep_name.cookie = entry->cookie;
 
-	memcpy(addr, (void *)&ep_name, MIN(*addrlen, sizeof(ep_name)));
-	*addrlen = sizeof(ep_name);
+	gnix_av_straddr(NULL, (void *) &ep_name, (char *) addr, addrlen);
 
 	return FI_SUCCESS;
 }
@@ -580,24 +738,52 @@ err:
 
 /*
  * Given an address pointed to by addr, stuff a string into buf representing:
- * device_addr:cdm_id
- * where device_addr and cdm_id are represented in hexadecimal.
+ * device_addr:cdm_id:name_type:cm_nic_cdm_id:cookie
+ * where device_addr, cdm_id, cm_nic_cdm_id and cookie are represented in
+ * hexadecimal. And name_type is represented as an integer.
  */
-DIRECT_FN STATIC const char *gnix_av_straddr(struct fid_av *av,
-					     const void *addr, char *buf,
-					     size_t *len)
+DIRECT_FN const char *gnix_av_straddr(struct fid_av *av,
+				      const void *addr, char *buf,
+				      size_t *len)
 {
-	char int_buf[64];
+	char int_buf[GNIX_AV_MAX_STR_ADDR_LEN];
 	int size;
 
-	const struct gnix_address *gnix_addr = addr;
+	const struct gnix_ep_name *gnix_ep = addr;
 
+	/*
+	 * if additional information is added to this string, then
+	 * you will need to update in gnix.h:
+	 *   GNIX_AV_STR_ADDR_VERSION, increment this value
+	 *   GNIX_AV_MAX_STR_ADDR_LEN, to be the number of characters printed
+	 */
 	size =
-	    snprintf(int_buf, sizeof(int_buf), "0x%08" PRIx32 ":0x%08" PRIx32,
-		     gnix_addr->device_addr, gnix_addr->cdm_id);
+	    snprintf(int_buf, sizeof(int_buf), "%04i:0x%08" PRIx32 ":0x%08"
+		     PRIx32 ":%02i:0x%06" PRIx32 ":0x%08" PRIx32,
+		     GNIX_AV_STR_ADDR_VERSION,
+		     gnix_ep->gnix_addr.device_addr,
+		     gnix_ep->gnix_addr.cdm_id,
+		     gnix_ep->name_type,
+		     gnix_ep->cm_nic_cdm_id,
+		     gnix_ep->cookie);
 
-	snprintf(buf, *len, "%s", int_buf);
-	*len = size + 1;
+	/*
+	 * snprintf returns the number of character written
+	 * without the terminating character.
+	 */
+	if ((size + 1) < *len) {
+		/*
+		 * size needs to be all the characters plus the terminating
+		 * character.  Otherwise, we could lose information.
+		 */
+		size = size + 1;
+	} else {
+		/* Do not overwrite the buffer. */
+		size = *len;
+	}
+
+	snprintf(buf, size, "%s", int_buf);
+	*len = size;
 
 	return buf;
 }

@@ -93,4 +93,28 @@ int _gnix_av_reverse_lookup(struct gnix_fid_av *gnix_av,
 			    struct gnix_address gnix_addr,
 			    fi_addr_t *fi_addr);
 
+/**
+ * @brief Return the string representation of the FI address.
+ *
+ * @param[in]   buf         The buffer that contains the address string.
+ * @param(out)  gnix_ep     The gnix_ep_name structure that contains the
+ * @return      FI_SUCCESS on success or -FI_EINVAL on error.
+ */
+int gnix_av_straddr_to_ep_name(char *buf,
+			       struct gnix_ep_name *gnix_ep);
+
+/**
+ * @brief Return the string representation of the FI address.
+ *
+ * @param[in]      av      The AV to use.
+ * @param[in]      addr    The GNIX address to translate.
+ * @param[in/out]  buf     The buffer that contains the address string.
+ * @param[in/out]  len     The length of the address string.
+ * @return         char    The buffer that contains the address string.
+ */
+const char *gnix_av_straddr(struct fid_av *av,
+			    const void *addr,
+			    char *buf,
+			    size_t *len);
+
 #endif /* _GNIX_AV_H_ */
