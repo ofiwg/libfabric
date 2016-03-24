@@ -243,6 +243,36 @@ err:
 	return ret;
 }
 
+typedef struct ccm_alps_info {
+	uint32_t version;
+	uint8_t ptag;
+	uint32_t cookie;
+} ccm_alps_info_t;
+
+int get_ccm_ptag_cookie(char *filename)
+{
+	int rc, fd;
+	ccm_alps_info_t info;
+	GNIX_INFO(FI_LOG_FABRIC, "Reading job info file %s", filename);
+
+	fd = open(filename, O_RDONLY);
+	if (fd < 0)
+		return -FI_EIO;
+
+	rc = read(fd, &info, sizeof(ccm_alps_info_t));
+	if (rc != sizeof(ccm_alps_info_t))
+		return -FI_EIO;
+
+	gnix_app_ptag = info.ptag;
+	gnix_app_cookie = info.cookie;
+
+	close(fd);
+	GNIX_INFO(FI_LOG_FABRIC, "Ptag=0x%x, cookie=0x%x",
+		  gnix_app_ptag, gnix_app_cookie);
+
+	return FI_SUCCESS;
+}
+
 int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
 {
 	int ret = FI_SUCCESS;
@@ -250,13 +280,15 @@ int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
 	if ((ptag == NULL) || (cookie == NULL)) {
 		return -FI_EINVAL;
 	}
-
-	ret = gnix_alps_init();
+	ret = get_ccm_ptag_cookie("/tmp/ccm_alps_info");
 	if (ret) {
-		GNIX_WARN(FI_LOG_FABRIC,
-			  "gnix_alps_init() failed, ret=%d(%s)\n",
-			  ret, strerror(errno));
-		return ret;
+		ret = gnix_alps_init();
+		if (ret) {
+			GNIX_WARN(FI_LOG_FABRIC,
+				  "gnix_alps_init() failed, ret=%d(%s)\n",
+				  ret, strerror(errno));
+			return ret;
+		}
 	}
 
 	/*
