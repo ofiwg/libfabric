@@ -1629,6 +1629,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	if (flags & FI_INJECT) {
 		memcpy(req->inject_buf, (void *)loc_addr, len);
 		req->msg.send_addr = (uint64_t)req->inject_buf;
+		req->flags |= FI_INJECT;
 	} else {
 		req->msg.send_addr = loc_addr;
 	}

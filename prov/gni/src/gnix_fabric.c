@@ -83,7 +83,6 @@ const struct fi_fabric_attr gnix_fabric_attr = {
 	.prov_version = FI_VERSION(GNI_MAJOR_VERSION, GNI_MINOR_VERSION),
 };
 
-
 DIRECT_FN int gnix_fabric_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 {
 	return -FI_ENOSYS;
