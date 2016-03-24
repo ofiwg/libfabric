@@ -247,6 +247,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	/* only one aries per node */
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
 	gnix_info->domain_attr->cq_data_size = sizeof(uint64_t);
+	gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
 
 	gnix_info->next = NULL;
 	gnix_info->addr_format = FI_ADDR_GNI;
@@ -368,6 +369,8 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			switch (hints->domain_attr->mr_mode) {
 			case FI_MR_UNSPEC:
 			case FI_MR_BASIC:
+				gnix_info->domain_attr->mr_mode =
+					hints->domain_attr->mr_mode;
 				break;
 			case FI_MR_SCALABLE:
 				goto err;
