@@ -433,6 +433,7 @@ void
 usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 		int prov_errno)
 {
+	int ret;
 	struct usdf_cq_soft_entry *entry;
 	struct usdf_cq *cq;
 	uint64_t val = 1;
@@ -464,10 +465,24 @@ usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 
 	cq->c.soft.cq_last_op = USDF_SOFT_CQ_WRITE;
 
-	/* TODO: How do I report this if it fails?!?!? */
 	if (cq->cq_attr.wait_obj == FI_WAIT_SET ||
 			cq->cq_attr.wait_obj == FI_WAIT_FD)
-		write(cq->object.fd, &val, sizeof(val));
+		while (1) {
+			ret = write(cq->object.fd, &val, sizeof(val));
+			assert(ret == sizeof(val) ||
+				(ret == -1 && errno == EINTR));
+			if (ret == sizeof(val))
+				return;
+			else if (ret == -1 && errno == EINTR)
+				continue;
+
+			/* If the write() fails, there will be no user
+			 * notification.  Best we can do is emit a
+			 * debug notice...
+			 */
+			USDF_WARN_SYS(CQ, "error while writing to wake CQ\n");
+			return;
+		}
 }
 
 static inline ssize_t
@@ -1217,7 +1232,10 @@ int usdf_cq_create_cq(struct usdf_cq *cq, struct usd_cq **ucq, int create_fd)
 		}
 	}
 
-	return usd_create_cq(cq->cq_domain->dom_dev, &attr, ucq);
+	ret = usd_create_cq(cq->cq_domain->dom_dev, &attr, ucq);
+	if (ret && cq->cq_attr.wait_obj == FI_WAIT_SET)
+		usdf_cq_unbind_wait(cq);
+	return ret;
 }
 
 int
