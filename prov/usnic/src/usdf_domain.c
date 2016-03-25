@@ -109,7 +109,7 @@ usdf_dom_rdc_free_data(struct usdf_domain *udp)
 		pthread_spin_unlock(&udp->dom_progress_lock);
 
 		/* XXX probably want a timeout here... */
-		while (atomic_get(&udp->dom_rdc_free_cnt) < 
+		while (atomic_get(&udp->dom_rdc_free_cnt) <
 		       (int)udp->dom_rdc_total) {
 			pthread_yield();
 		}

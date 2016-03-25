@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -45,6 +45,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include <sys/eventfd.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -637,23 +639,31 @@ usdf_ep_rdm_bind_cq(struct usdf_ep *ep, struct usdf_cq *cq, uint64_t flags)
 		return ret;
 	}
 
+	if ((cq->cq_attr.wait_obj == FI_WAIT_FD) ||
+			(cq->cq_attr.wait_obj == FI_WAIT_SET)) {
+		cq->object.fd = eventfd(0, EFD_NONBLOCK);
+		if (cq->object.fd == -1) {
+			USDF_DBG_SYS(CQ, "creating eventfd failed: %s\n",
+					strerror(errno));
+			return -errno;
+		}
+
+		USDF_DBG_SYS(CQ, "successfully created eventfd: %d\n",
+				cq->object.fd);
+	}
+
 	/* Use existing rdm CQ if present */
 	hcq = usdf_ep_rdm_find_cqh(cq);
 	if (hcq == NULL) {
-		struct usd_cq_init_attr attr;
 		hcq = malloc(sizeof(*hcq));
 		if (hcq == NULL) {
 			return -errno;
 		}
 
-		memset(&attr, 0, sizeof(attr));
-		attr.num_entries = 8195, /* XXX */
-		attr.comp_fd = -1;
-		ret = usd_create_cq(cq->cq_domain->dom_dev, &attr,
-					&hcq->cqh_ucq);
-		if (ret != 0) {
+		ret = usdf_cq_create_cq(cq, &hcq->cqh_ucq, false);
+		if (ret)
 			goto fail;
-		}
+
 		hcq->cqh_cq = cq;
 		atomic_initialize(&hcq->cqh_refcnt, 0);
 		hcq->cqh_progress = usdf_rdm_hcq_progress;

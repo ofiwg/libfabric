@@ -66,6 +66,7 @@
 #include "libnl_utils.h"
 
 #include "usdf.h"
+#include "usdf_wait.h"
 #include "fi_ext_usnic.h"
 #include "usdf_progress.h"
 #include "usdf_timer.h"
@@ -752,8 +753,8 @@ static struct fi_ops_fabric usdf_ops_fabric = {
 	.domain = usdf_domain_open,
 	.passive_ep = usdf_pep_open,
 	.eq_open = usdf_eq_open,
-	.wait_open = fi_no_wait_open,
-	.trywait = fi_no_trywait
+	.wait_open = usdf_wait_open,
+	.trywait = usdf_trywait
 };
 
 static int
@@ -819,7 +820,7 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 		goto fail;
 	}
 
-	fp->fab_eventfd = eventfd(0, EFD_NONBLOCK | EFD_SEMAPHORE);
+	fp->fab_eventfd = eventfd(0, EFD_NONBLOCK);
 	if (fp->fab_eventfd == -1) {
 		ret = -errno;
 		USDF_INFO("unable to allocate event fd\n");
@@ -843,14 +844,6 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 		goto fail;
 	}
 
-	ret = pthread_create(&fp->fab_thread, NULL,
-			usdf_fabric_progression_thread, fp);
-	if (ret != 0) {
-		ret = -ret;
-		USDF_INFO("unable to create progress thread\n");
-		goto fail;
-	}
-
 	/* create and bind socket for ARP resolution */
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
@@ -867,6 +860,16 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 	}
 
 	atomic_initialize(&fp->fab_refcnt, 0);
+	atomic_initialize(&fp->num_blocked_waiting, 0);
+
+	ret = pthread_create(&fp->fab_thread, NULL,
+			usdf_fabric_progression_thread, fp);
+	if (ret != 0) {
+		ret = -ret;
+		USDF_INFO("unable to create progress thread\n");
+		goto fail;
+	}
+
 	fattrp->fabric = fab_utof(fp);
 	fattrp->prov_version = USDF_PROV_VERSION;
 	*fabric = fab_utof(fp);
