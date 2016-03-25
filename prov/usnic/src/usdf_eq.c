@@ -532,7 +532,7 @@ usdf_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		eq->eq_ops_data.sread = usdf_eq_sread_fd;
 		/* FALLTHROUGH. Don't set sread for wait set. */
 	case FI_WAIT_SET:
-		eq->eq_fd = eventfd(0, EFD_NONBLOCK | EFD_SEMAPHORE);
+		eq->eq_fd = eventfd(0, EFD_NONBLOCK);
 		if (eq->eq_fd == -1) {
 			ret = -errno;
 			goto fail;

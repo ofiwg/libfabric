@@ -641,7 +641,7 @@ usdf_ep_rdm_bind_cq(struct usdf_ep *ep, struct usdf_cq *cq, uint64_t flags)
 
 	if ((cq->cq_attr.wait_obj == FI_WAIT_FD) ||
 			(cq->cq_attr.wait_obj == FI_WAIT_SET)) {
-		cq->object.fd = eventfd(0, EFD_NONBLOCK | EFD_SEMAPHORE);
+		cq->object.fd = eventfd(0, EFD_NONBLOCK);
 		if (cq->object.fd == -1) {
 			USDF_DBG_SYS(CQ, "creating eventfd failed: %s\n",
 					strerror(errno));
