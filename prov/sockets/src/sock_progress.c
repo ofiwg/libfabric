@@ -215,27 +215,26 @@ static struct sock_pe_entry *sock_pe_acquire_entry(struct sock_pe *pe)
 
 static void sock_pe_report_tx_completion(struct sock_pe_entry *pe_entry)
 {
-	int ret1 = 0, ret2 = 0;
+	int ret = 0;
 	if (!(pe_entry->flags & SOCK_NO_COMPLETION)) {
 		if (pe_entry->comp->send_cq &&
 		    (!pe_entry->comp->send_cq_event ||
-		     (pe_entry->comp->send_cq_event &&
-		      (pe_entry->msg_hdr.flags & FI_COMPLETION))))
-			ret1 = pe_entry->comp->send_cq->report_completion(
+		     (pe_entry->msg_hdr.flags & FI_COMPLETION)))
+			ret = pe_entry->comp->send_cq->report_completion(
 				pe_entry->comp->send_cq, pe_entry->addr, pe_entry);
 	}
 
 	if (pe_entry->comp->send_cntr)
-		ret2 = sock_cntr_inc(pe_entry->comp->send_cntr);
+		sock_cntr_inc(pe_entry->comp->send_cntr);
 
-	if (ret1 < 0 || ret2 < 0) {
+	if (ret < 0) {
 		SOCK_LOG_ERROR("Failed to report completion %p\n",
 			       pe_entry);
 		if (pe_entry->comp->eq) {
 			sock_eq_report_error(
 				pe_entry->comp->eq,
-				&pe_entry->comp->send_cntr->cntr_fid.fid,
-				pe_entry->comp->send_cntr->cntr_fid.fid.context,
+				&pe_entry->comp->send_cq->cq_fid.fid,
+				pe_entry->comp->send_cq->cq_fid.fid.context,
 				0, FI_ENOSPC, -FI_ENOSPC, NULL, 0);
 		}
 	}
@@ -243,21 +242,20 @@ static void sock_pe_report_tx_completion(struct sock_pe_entry *pe_entry)
 
 static void sock_pe_report_rx_completion(struct sock_pe_entry *pe_entry)
 {
-	int ret1 = 0, ret2 = 0;
+	int ret = 0;
 
 	if (pe_entry->comp->recv_cq &&
 	    (!pe_entry->comp->recv_cq_event ||
-	     (pe_entry->comp->recv_cq_event &&
-	      (pe_entry->flags & FI_COMPLETION))))
-		ret1 = pe_entry->comp->recv_cq->report_completion(
+	     (pe_entry->flags & FI_COMPLETION)))
+		ret = pe_entry->comp->recv_cq->report_completion(
 			pe_entry->comp->recv_cq, pe_entry->addr,
 			pe_entry);
 
 	if (pe_entry->comp->recv_cntr)
-		ret2 = sock_cntr_inc(pe_entry->comp->recv_cntr);
+		sock_cntr_inc(pe_entry->comp->recv_cntr);
 
 
-	if (ret1 < 0 || ret2 < 0) {
+	if (ret < 0) {
 		SOCK_LOG_ERROR("Failed to report completion %p\n", pe_entry);
 		if (pe_entry->comp->eq) {
 			sock_eq_report_error(
@@ -1623,8 +1621,11 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 	struct sock_conn *conn;
 	uint64_t index;
 
-	if (!pe_entry->comm_addr)
+	if (!pe_entry->comm_addr) {
 		pe_entry->comm_addr = calloc(1, sizeof(struct sockaddr_in));
+		if (!pe_entry->comm_addr)
+			return -FI_ENOMEM;
+	}
 
 	len = sizeof(struct sock_msg_hdr);
 	data_len = sizeof(struct sockaddr_in);
@@ -2174,17 +2175,12 @@ out:
 	return 0;
 }
 
-static int sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
+static void sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 				struct sock_ep *ep, struct sock_conn *conn)
 {
 	struct sock_pe_entry *pe_entry;
 
 	pe_entry = sock_pe_acquire_entry(pe);
-	if (!pe_entry) {
-		SOCK_LOG_DBG("Cannot get PE entry\n");
-		return 0;
-	}
-
 	memset(&pe_entry->pe.rx, 0, sizeof(pe_entry->pe.rx));
 
 	pe_entry->conn = conn;
@@ -2210,7 +2206,6 @@ static int sock_pe_new_rx_entry(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 		      pe_entry, pe_entry->conn);
 
 	dlist_insert_tail(&pe_entry->ctx_entry, &rx_ctx->pe_entry_list);
-	return 0;
 }
 
 static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
@@ -2221,11 +2216,6 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	struct sock_ep *ep;
 
 	pe_entry = sock_pe_acquire_entry(pe);
-	if (!pe_entry) {
-		SOCK_LOG_DBG("Cannot get free PE entry \n");
-		return 0;
-	}
-
 	memset(&pe_entry->pe.tx, 0, sizeof(pe_entry->pe.tx));
 	memset(&pe_entry->msg_hdr, 0, sizeof(pe_entry->msg_hdr));
 
@@ -2471,12 +2461,9 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe, struct sock_ep *ep,
 		if (!conn || conn->rx_pe_entry)
 			continue;
 
-		ret = sock_pe_new_rx_entry(pe, rx_ctx, ep, conn);
-		if (ret < 0)
-			goto out;
+		sock_pe_new_rx_entry(pe, rx_ctx, ep, conn);
 	}
 
-out:
 	fastlock_release(&map->lock);
 	return ret;
 }
@@ -2668,11 +2655,13 @@ static void sock_thread_set_affinity(char *s)
 		first = last = -1;
 		stride = 1;
 		b = strtok_r(a, "-", &saveptrb);
+		assert(b);
 		first = atoi(b);
 		/* Check for range delimiter */
 		b = strtok_r(NULL, "-", &saveptrb);
 		if (b) {
 			c = strtok_r(b, ":", &saveptrc);
+			assert(c);
 			last = atoi(c);
 			/* Check for stride */
 			c = strtok_r(NULL, ":", &saveptrc);

@@ -61,10 +61,16 @@
 #ifdef HAVE_EPOLL
 int sock_epoll_create(struct sock_epoll_set *set, int size)
 {
+	int ret;
 	set->size = size;
 	set->used = 0;
 	set->events = calloc(size, sizeof(struct epoll_event));
-	return set->fd = epoll_create(size);
+	if (!set->events)
+		return -FI_ENOMEM;
+	ret = set->fd = epoll_create(size);
+	if (ret < 0)
+		free(set->events);
+	return ret;
 }
 
 int sock_epoll_add(struct sock_epoll_set *set, int fd)

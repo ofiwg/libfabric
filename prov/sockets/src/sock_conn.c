@@ -147,7 +147,7 @@ static struct sock_conn *sock_conn_map_insert(struct sock_ep *ep,
 
 	if (map->size == map->used) {
 		if (sock_conn_map_increase(map, map->size * 2))
-			return 0;
+			return NULL;
 	}
 
 	index = map->used;
@@ -340,7 +340,7 @@ int sock_conn_listen(struct sock_ep *ep)
 	}
 
 	if (ep->src_addr->sin_addr.s_addr == 0) {
-		sprintf(service, "%s", listener->service);
+		snprintf(service, sizeof service, "%s", listener->service);
 		ret = sock_get_src_addr_from_hostname(ep->src_addr, service);
 		if (ret)
 			goto err;
@@ -466,10 +466,8 @@ retry:
 	if (!do_retry)
 		goto err;
 
-	if (conn_fd != -1) {
-		close(conn_fd);
-		conn_fd = -1;
-	}
+	close(conn_fd);
+	conn_fd = -1;
 
 	SOCK_LOG_ERROR("Connect error, retrying - %s - %d\n", strerror(errno), conn_fd);
 	SOCK_LOG_DBG("Connecting to: %s:%d\n", inet_ntoa(addr->sin_addr),
@@ -481,6 +479,10 @@ retry:
 out:
 	fastlock_acquire(&ep->cmap.lock);
 	new_conn = sock_conn_map_insert(ep, addr, conn_fd, 0);
+	if (!new_conn) {
+		fastlock_release(&ep->cmap.lock);
+		goto err;
+	}
 	new_conn->av_index = (ep->ep_type == FI_EP_MSG) ? FI_ADDR_NOTAVAIL : (fi_addr_t) idx;
 	conn = idm_lookup(&ep->av_idm, index);
 	if (conn == SOCK_CM_CONN_IN_PROGRESS) {

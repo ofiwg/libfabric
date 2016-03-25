@@ -57,7 +57,8 @@ static ssize_t sock_comm_send_socket(struct sock_conn *conn,
 			SOCK_LOG_DBG("write %s\n", strerror(errno));
 		}
 	}
-	SOCK_LOG_DBG("wrote to network: %lu\n", ret);
+	if (ret > 0)
+		SOCK_LOG_DBG("wrote to network: %lu\n", ret);
 	return ret;
 }
 

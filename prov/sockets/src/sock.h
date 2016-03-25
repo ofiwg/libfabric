@@ -1034,8 +1034,8 @@ int sock_eq_openwait(struct sock_eq *eq, const char *service);
 
 int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr, void *context);
-int sock_cntr_inc(struct sock_cntr *cntr);
-int sock_cntr_err_inc(struct sock_cntr *cntr);
+void sock_cntr_inc(struct sock_cntr *cntr);
+void sock_cntr_err_inc(struct sock_cntr *cntr);
 int sock_cntr_progress(struct sock_cntr *cntr);
 
 

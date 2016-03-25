@@ -164,7 +164,7 @@ static uint64_t sock_cntr_read(struct fid_cntr *cntr)
 	return atomic_get(&_cntr->value);
 }
 
-int sock_cntr_inc(struct sock_cntr *cntr)
+void sock_cntr_inc(struct sock_cntr *cntr)
 {
 	pthread_mutex_lock(&cntr->mut);
 	atomic_inc(&cntr->value);
@@ -172,10 +172,9 @@ int sock_cntr_inc(struct sock_cntr *cntr)
 		pthread_cond_signal(&cntr->cond);
 	pthread_mutex_unlock(&cntr->mut);
 	sock_cntr_check_trigger_list(cntr);
-	return 0;
 }
 
-int sock_cntr_err_inc(struct sock_cntr *cntr)
+void sock_cntr_err_inc(struct sock_cntr *cntr)
 {
 	pthread_mutex_lock(&cntr->mut);
 	atomic_inc(&cntr->err_cnt);
@@ -183,7 +182,6 @@ int sock_cntr_err_inc(struct sock_cntr *cntr)
 		cntr->err_flag = 1;
 	pthread_cond_signal(&cntr->cond);
 	pthread_mutex_unlock(&cntr->mut);
-	return 0;
 }
 
 static int sock_cntr_add(struct fid_cntr *cntr, uint64_t value)
@@ -449,6 +447,10 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		_cntr->signal = 1;
 		wait = container_of(attr->wait_set, struct sock_wait, wait_fid);
 		list_entry = calloc(1, sizeof(*list_entry));
+		if (!list_entry) {
+			ret = FI_ENOMEM;
+			goto err;
+		}
 		dlist_init(&list_entry->entry);
 		list_entry->fid = &_cntr->cntr_fid.fid;
 		dlist_insert_after(&list_entry->entry, &wait->fid_list);

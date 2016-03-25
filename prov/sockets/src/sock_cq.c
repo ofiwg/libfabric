@@ -572,6 +572,10 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		sock_cq->signal = 1;
 		wait = container_of(attr->wait_set, struct sock_wait, wait_fid);
 		list_entry = calloc(1, sizeof(*list_entry));
+		if (!list_entry) {
+                        ret = -FI_ENOMEM;
+                        goto err4;
+                }
 		dlist_init(&list_entry->entry);
 		list_entry->fid = &sock_cq->cq_fid.fid;
 		dlist_insert_after(&list_entry->entry, &wait->fid_list);
