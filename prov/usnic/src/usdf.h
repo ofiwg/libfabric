@@ -107,6 +107,7 @@ struct usdf_fabric {
 	struct usd_device_attrs *fab_dev_attrs;
 	int fab_arp_sockfd;
 	atomic_t fab_refcnt;
+	atomic_t num_blocked_waiting;
 	LIST_HEAD(,usdf_domain) fab_domain_list;
 
 	/* progression */
@@ -374,6 +375,12 @@ struct usdf_cq {
 	atomic_t cq_refcnt;
 	struct usdf_domain *cq_domain;
 	struct fi_cq_attr cq_attr;
+	uint8_t is_soft;
+
+	union {
+		int fd;
+		struct fi_mutex_cond mutex_cond;
+	} object;
 
 	union {
 		struct {
@@ -390,6 +397,7 @@ struct usdf_cq {
 		} soft;
 	} c;
 	struct usd_completion cq_comp;
+	struct fi_ops_cq cq_ops;
 };
 
 enum {
@@ -424,7 +432,7 @@ struct usdf_eq {
 	atomic_t eq_num_events;
 
 	/* various ways to wait */
-	enum fi_wait_obj eq_wait_obj;
+	struct fi_eq_attr eq_attr;
 	union {
 		int eq_fd;
 	};

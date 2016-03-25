@@ -46,6 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/queue.h>
+#include <sys/epoll.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -55,6 +56,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_errno.h>
 #include <rdma/fi_eq.h>
+#include <fi_util.h>
 #include "fi.h"
 #include "fi_enosys.h"
 
@@ -64,6 +66,8 @@
 #include "usdf_av.h"
 #include "usdf_progress.h"
 #include "usdf_cq.h"
+#include "usd_ib_cmd.h"
+#include "usdf_wait.h"
 
 static inline int usdf_cqe_to_flags(struct usd_completion *comp)
 {
@@ -431,6 +435,7 @@ usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 {
 	struct usdf_cq_soft_entry *entry;
 	struct usdf_cq *cq;
+	uint64_t val = 1;
 
 	cq = hcq->cqh_cq;
 
@@ -458,6 +463,11 @@ usdf_cq_post_soft(struct usdf_cq_hard *hcq, void *context, size_t len,
 	}
 
 	cq->c.soft.cq_last_op = USDF_SOFT_CQ_WRITE;
+
+	/* TODO: How do I report this if it fails?!?!? */
+	if (cq->cq_attr.wait_obj == FI_WAIT_SET ||
+			cq->cq_attr.wait_obj == FI_WAIT_FD)
+		write(cq->object.fd, &val, sizeof(val));
 }
 
 static inline ssize_t
@@ -530,6 +540,48 @@ static ssize_t usdf_cq_sread(struct fid_cq *fcq, void *buf, size_t count,
 	}
 
 	return -FI_EAGAIN;
+}
+
+static ssize_t usdf_cq_sread_fd(struct fid_cq *fcq, void *buf, size_t count,
+		const void *cond, int timeout_ms)
+{
+	struct usdf_cq *cq;
+	struct usdf_fabric *fabric;
+	int ret;
+
+	cq = cq_ftou(fcq);
+	fabric = cq->cq_domain->dom_fabric;
+
+	ret = usdf_cq_trywait(&fcq->fid);
+	if (ret == FI_SUCCESS) {
+		atomic_inc(&fabric->num_blocked_waiting);
+
+		ret = usdf_fabric_wake_thread(fabric);
+		if (ret) {
+			USDF_DBG_SYS(CQ,
+					"error while waking progress thread\n");
+			goto err;
+		}
+
+		ret = fi_poll_fd(cq->object.fd, timeout_ms);
+		if (ret == 0) {
+			ret = -FI_EAGAIN;
+			goto err;
+		} else if (ret < 0) {
+			USDF_DBG_SYS(CQ, "poll failed: %s\n", strerror(-ret));
+			goto err;
+		}
+
+		atomic_dec(&fabric->num_blocked_waiting);
+	} else if ((ret < 0) && (ret != -FI_EAGAIN)) {
+		return ret;
+	}
+
+	return fi_cq_read(fcq, buf, count);
+
+err:
+	atomic_dec(&fabric->num_blocked_waiting);
+	return ret;
 }
 
 /*
@@ -650,12 +702,49 @@ usdf_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 	return fi_strerror(prov_errno);
 }
 
+/* Handle the associated wait object when closing a CQ.
+ * - Remove the FD from the wait set epoll context
+ * - Decrement the ref count on the wait set
+ * - Remove the CQ from the CQ list attached to the wait set
+ */
+static int usdf_cq_unbind_wait(struct usdf_cq *cq)
+{
+	int ret;
+	struct usdf_wait *wait_priv;
+	struct epoll_event event = {0};
+
+	if (!cq->cq_attr.wait_set) {
+		USDF_DBG_SYS(CQ, "can't unbind from non-existent wait set\n");
+		return -FI_EINVAL;
+	}
+
+	wait_priv = wait_ftou(cq->cq_attr.wait_set);
+
+	ret = epoll_ctl(wait_priv->object.epfd, EPOLL_CTL_DEL,
+			cq->object.fd, &event);
+	if (ret) {
+		USDF_WARN_SYS(CQ,
+				"failed to remove FD from wait set\n");
+		return -errno;
+	}
+
+	fid_list_remove(&wait_priv->list, &wait_priv->lock, &cq->cq_fid.fid);
+
+	atomic_dec(&wait_priv->wait_refcnt);
+
+	USDF_DBG_SYS(CQ,
+			"dissasociated CQ FD %d from epoll FD %d using FID: %p\n",
+			cq->object.fd, wait_priv->object.epfd, &cq->cq_fid.fid);
+
+	return FI_SUCCESS;
+}
+
 static int
 usdf_cq_close(fid_t fid)
 {
+	int ret;
 	struct usdf_cq *cq;
 	struct usdf_cq_hard *hcq;
-	int ret;
 
 	USDF_TRACE_SYS(CQ, "\n");
 
@@ -664,13 +753,21 @@ usdf_cq_close(fid_t fid)
 		return -FI_EBUSY;
 	}
 
-	if (usdf_cq_is_soft(cq)) {
+	if (cq->cq_attr.wait_obj == FI_WAIT_SET) {
+		ret = usdf_cq_unbind_wait(cq);
+		if (ret)
+			return ret;
+	}
+
+	if (cq->is_soft) {
 		while (!TAILQ_EMPTY(&cq->c.soft.cq_list)) {
 			hcq = TAILQ_FIRST(&cq->c.soft.cq_list);
 			if (atomic_get(&hcq->cqh_refcnt) > 0) {
 				return -FI_EBUSY;
 			}
 			TAILQ_REMOVE(&cq->c.soft.cq_list, hcq, cqh_link);
+			TAILQ_REMOVE(&cq->cq_domain->dom_hcq_list, hcq,
+					cqh_dom_link);
 			if (hcq->cqh_ucq != NULL) {
 				ret = usd_destroy_cq(hcq->cqh_ucq);
 				if (ret != 0) {
@@ -690,6 +787,46 @@ usdf_cq_close(fid_t fid)
 
 	free(cq);
 	return 0;
+}
+
+static int usdf_cq_get_wait(struct usdf_cq *cq, void *arg)
+{
+	USDF_TRACE_SYS(CQ, "\n");
+
+	switch (cq->cq_attr.wait_obj) {
+	case FI_WAIT_FD:
+		*(int *) arg = cq->object.fd;
+		break;
+	default:
+		USDF_WARN_SYS(CQ, "unsupported wait type\n");
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int usdf_wait_control(struct fid *fcq, int command, void *arg)
+{
+	struct usdf_cq *cq;
+
+	USDF_TRACE_SYS(CQ, "\n");
+
+	if (!fcq || !arg) {
+		USDF_WARN_SYS(CQ, "CQ fid and arg can't be NULL\n");
+		return -FI_EINVAL;
+	}
+
+	cq = cq_fidtou(fcq);
+
+	switch (command) {
+	case FI_GETWAIT:
+		break;
+	default:
+		USDF_WARN_SYS(CQ, "unsupported control command\n");
+		return -FI_EINVAL;
+	}
+
+	return usdf_cq_get_wait(cq, arg);
 }
 
 static struct fi_ops_cq usdf_cq_context_ops = {
@@ -762,34 +899,9 @@ static struct fi_ops usdf_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = usdf_cq_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = usdf_wait_control,
 	.ops_open = fi_no_ops_open,
 };
-
-/*
- * Return true is this CQ is in "soft" (emulated) mode
- */
-int
-usdf_cq_is_soft(struct usdf_cq *cq)
-{
-	struct fi_ops_cq *soft_ops;
-
-        switch (cq->cq_attr.format) {
-        case FI_CQ_FORMAT_CONTEXT:
-                soft_ops = &usdf_cq_context_soft_ops;
-                break;
-        case FI_CQ_FORMAT_MSG:
-                soft_ops = &usdf_cq_msg_soft_ops;
-                break;
-        case FI_CQ_FORMAT_DATA:
-                soft_ops = &usdf_cq_data_soft_ops;
-                break;
-	default:
-		return 0;
-        }
-
-	return cq->cq_fid.ops == soft_ops;
-}
 
 int
 usdf_cq_make_soft(struct usdf_cq *cq)
@@ -819,7 +931,7 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 
 	rtn = usdf_progress_hard_cq;
 
-        if (cq->cq_fid.ops == hard_ops) {
+	if (!cq->is_soft) {
 
 		/* save the CQ before we trash the union */
 		ucq = cq->c.hard.cq_cq;
@@ -853,7 +965,8 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 			TAILQ_INSERT_HEAD(&cq->c.soft.cq_list, hcq, cqh_link);
 		}
 
-                cq->cq_fid.ops = soft_ops;
+		cq->is_soft = 1;
+		cq->cq_ops = *soft_ops;
         }
 	return 0;
 }
@@ -888,13 +1001,20 @@ int usdf_check_empty_hard_cq(struct usdf_cq *cq)
 static int
 usdf_cq_process_attr(struct fi_cq_attr *attr, struct usdf_domain *udp)
 {
-	/*
-	 * no specific wait object yet, but still allow fi_cq_sread/_sreadfrom
-	 * to be called if the user doesn't want a particular wait object
-	 */
+	if (!attr || !udp)
+		return -FI_EINVAL;
+
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
 	case FI_WAIT_UNSPEC:
+		break;
+	case FI_WAIT_FD:
+	case FI_WAIT_SET:
+		if (!usd_get_cap(udp->dom_dev, USD_CAP_GRP_INTR)) {
+			USDF_WARN_SYS(CQ, "FD request invalid.\n");
+			USDF_WARN_SYS(CQ, "group interrupts not supported.\n");
+			return -FI_EINVAL;
+		}
 		break;
 	default:
 		return -FI_ENOSYS;
@@ -916,15 +1036,195 @@ usdf_cq_process_attr(struct fi_cq_attr *attr, struct usdf_domain *udp)
 	return 0;
 }
 
-int
-usdf_cq_create_cq(struct usdf_cq *cq)
+static int usdf_cq_fd_set_nonblock(int fd)
 {
-	struct usd_cq_init_attr attr;
+	int flags;
 
-	memset(&attr, 0, sizeof(attr));
-	attr.num_entries = cq->cq_attr.size,
+	flags = fcntl(fd, F_GETFL, 0);
+	if (flags == -1) {
+		USDF_WARN_SYS(CQ, "fcntl getfl failed[%d]\n", errno);
+		return -errno;
+	}
+
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+		USDF_WARN_SYS(CQ, "fcntl setfl failed[%d]\n", errno);
+		return -errno;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int usdf_cq_create_fd(struct usdf_cq *cq)
+{
+	int ret;
+
+	ret = usd_ib_cmd_create_comp_channel(cq->cq_domain->dom_dev,
+			&cq->object.fd);
+	if (ret) {
+		USDF_WARN_SYS(CQ, "failed to create comp channel\n");
+		return -FI_EINVAL;
+	}
+
+	USDF_DBG_SYS(CQ, "successfully created comp channel with fd %d\n",
+			cq->object.fd);
+
+	/* Going to need this assuming edge-triggered semantics.
+	 */
+	return usdf_cq_fd_set_nonblock(cq->object.fd);
+}
+
+int usdf_cq_trywait(struct fid *fcq)
+{
+	struct usdf_cq *cq;
+	uint64_t ev;
+	int empty;
+	int ret;
+
+	cq = cq_fidtou(fcq);
+
+	switch (cq->cq_attr.wait_obj) {
+	case FI_WAIT_UNSPEC:
+		return FI_SUCCESS;
+	case FI_WAIT_FD:
+	case FI_WAIT_SET:
+		break;
+	default:
+		USDF_WARN_SYS(CQ, "unsupported wait object type\n");
+		return -FI_EINVAL;
+	}
+
+	while (1) {
+		ret = read(cq->object.fd, &ev, sizeof(ev));
+		if (ret == 0) {
+			USDF_WARN_SYS(CQ,
+					"FD read returned 0, is it closed?\n");
+			return -FI_EINVAL;
+		}
+
+		if (ret < 0) {
+			if (errno == EAGAIN)
+				break;
+			else
+				return -errno;
+		}
+	}
+
+	if (cq->is_soft) {
+		empty = usdf_check_empty_soft_cq(cq);
+	} else {
+		usd_poll_req_notify(cq->c.hard.cq_cq);
+		empty = usdf_check_empty_hard_cq(cq);
+	}
+
+	if (empty)
+		return FI_SUCCESS;
+
+	return -FI_EAGAIN;
+}
+
+
+static int usdf_cq_bind_wait(struct usdf_cq *cq)
+{
+	int ret;
+	struct usdf_wait *wait_priv;
+	struct epoll_event event = {0};
+
+	if (!cq->cq_attr.wait_set) {
+		USDF_DBG_SYS(CQ, "can't bind to non-existent wait set\n");
+		return -FI_EINVAL;
+	}
+
+	/* Wait set ref count doesn't need to be incremented here since it was
+	 * already incremented during CQ open. It's incremented in CQ open
+	 * because the CQ isn't actually created until bind time, and we want
+	 * to make sure that the wait object is not closed in between open and
+	 * bind.
+	 */
+	wait_priv = wait_ftou(cq->cq_attr.wait_set);
+
+	event.data.ptr = cq;
+	event.events = EPOLLIN;
+
+	ret = fid_list_insert(&wait_priv->list, &wait_priv->lock,
+			&cq->cq_fid.fid);
+	if (ret) {
+		USDF_WARN_SYS(CQ,
+				"failed to associate cq with wait fid list\n");
+		return ret;
+	}
+
+	ret = epoll_ctl(wait_priv->object.epfd, EPOLL_CTL_ADD, cq->object.fd,
+			&event);
+	if (ret) {
+		USDF_WARN_SYS(CQ, "failed to associate FD with wait set\n");
+		goto err;
+	}
+
+	USDF_DBG_SYS(CQ, "associated CQ FD %d with epoll FD %d using fid %p\n",
+			cq->object.fd, wait_priv->object.epfd, &cq->cq_fid.fid);
+
+	return ret;
+
+err:
+	fid_list_remove(&wait_priv->list, &wait_priv->lock, &cq->cq_fid.fid);
+	return ret;
+}
+
+/* If cq->cq_attr.wait_obj == (FI_WAIT_FD | FI_WAIT_SET), then use an FD with
+ * the CQ. If create_fd evaluates to true, then it will create a hardware
+ * completion channel.
+ *
+ * If create_fd does not evaluate to true, then it is assumed that a valid file
+ * descriptor is available in cq->object.fd.
+ */
+int usdf_cq_create_cq(struct usdf_cq *cq, struct usd_cq **ucq, int create_fd)
+{
+	int ret;
+	struct usd_cq_init_attr attr = {0};
+
+	if (!cq || !cq->cq_domain || !cq->cq_domain->dom_dev) {
+		USDF_DBG_SYS(CQ, "Invalid input.\n");
+		return -FI_EINVAL;
+	}
+
+	attr.num_entries = cq->cq_attr.size;
 	attr.comp_fd = -1;
-	return usd_create_cq(cq->cq_domain->dom_dev, &attr, &cq->c.hard.cq_cq);
+
+	/* For hard queues we will need to create an FD for CQs configured to
+	 * use both wait sets and FDs. For a wait set this FD will get added to
+	 * the epoll structure used by the waitset.
+	 *
+	 * For soft queues (emulated endpoints) we will not be creating an FD,
+	 * but will need to set the appropriate functions and bind to the wait
+	 * object, if any.
+	 */
+	if ((cq->cq_attr.wait_obj == FI_WAIT_FD) ||
+			(cq->cq_attr.wait_obj == FI_WAIT_SET)) {
+		cq->cq_ops.sread = usdf_cq_sread_fd;
+
+		if (create_fd) {
+			ret = usdf_cq_create_fd(cq);
+			if (ret)
+				return ret;
+
+			attr.comp_fd = cq->object.fd;
+
+			/* usd_create_cq will only set
+			 * USNIC_CQ_COMP_SIGNAL_VERBS if an ibv_cq is present,
+			 * but we don't have one. Just shove the cq in.
+			 */
+			attr.ibv_cq = &ucq;
+		}
+
+		if (cq->cq_attr.wait_obj == FI_WAIT_SET) {
+			cq->cq_ops.sread = fi_no_cq_sread;
+			ret = usdf_cq_bind_wait(cq);
+			if (ret)
+				return ret;
+		}
+	}
+
+	return usd_create_cq(cq->cq_domain->dom_dev, &attr, ucq);
 }
 
 int
@@ -933,6 +1233,7 @@ usdf_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 {
 	struct usdf_cq *cq;
 	struct usdf_domain *udp;
+	struct usdf_wait *wait_priv;
 	int ret;
 
 	USDF_TRACE_SYS(CQ, "\n");
@@ -948,6 +1249,16 @@ usdf_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_ENOMEM;
 	}
 
+	/* Do this here because we don't actually create the CQ until bind
+	 * time. At open time the CQ should be associated with the wait set
+	 * using the ref count so the app can't delete the wait set out from
+	 * under the CQ.
+	 */
+	if (attr->wait_obj == FI_WAIT_SET) {
+		wait_priv = wait_ftou(attr->wait_set);
+		atomic_inc(&wait_priv->wait_refcnt);
+	}
+
 	cq->cq_domain = udp;
 	cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	cq->cq_fid.fid.context = context;
@@ -956,18 +1267,20 @@ usdf_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_CONTEXT:
-		cq->cq_fid.ops = &usdf_cq_context_ops;
+		cq->cq_ops = usdf_cq_context_ops;
 		break;
 	case FI_CQ_FORMAT_MSG:
-		cq->cq_fid.ops = &usdf_cq_msg_ops;
+		cq->cq_ops = usdf_cq_msg_ops;
 		break;
 	case FI_CQ_FORMAT_DATA:
-		cq->cq_fid.ops = &usdf_cq_data_ops;
+		cq->cq_ops = usdf_cq_data_ops;
 		break;
 	default:
 		ret = -FI_ENOSYS;
 		goto fail;
 	}
+
+	cq->cq_fid.ops = &cq->cq_ops;
 
 	cq->cq_attr = *attr;
 	*cq_o = &cq->cq_fid;
