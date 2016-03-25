@@ -906,30 +906,23 @@ static struct fi_ops usdf_cq_fi_ops = {
 int
 usdf_cq_make_soft(struct usdf_cq *cq)
 {
-        struct fi_ops_cq *hard_ops;
         struct fi_ops_cq *soft_ops;
 	struct usdf_cq_hard *hcq;
 	struct usd_cq *ucq;
-	void (*rtn)(struct usdf_cq_hard *hcq);
 
         switch (cq->cq_attr.format) {
         case FI_CQ_FORMAT_CONTEXT:
-                hard_ops = &usdf_cq_context_ops;
                 soft_ops = &usdf_cq_context_soft_ops;
                 break;
         case FI_CQ_FORMAT_MSG:
-                hard_ops = &usdf_cq_msg_ops;
                 soft_ops = &usdf_cq_msg_soft_ops;
                 break;
         case FI_CQ_FORMAT_DATA:
-                hard_ops = &usdf_cq_data_ops;
                 soft_ops = &usdf_cq_data_soft_ops;
                 break;
 	default:
 		return 0;
         }
-
-	rtn = usdf_progress_hard_cq;
 
 	if (!cq->is_soft) {
 
@@ -958,7 +951,7 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 
 			hcq->cqh_cq = cq;
 			hcq->cqh_ucq = ucq;
-			hcq->cqh_progress = rtn;
+			hcq->cqh_progress = usdf_progress_hard_cq;
 
 			atomic_initialize(&hcq->cqh_refcnt,
 					atomic_get(&cq->cq_refcnt));
