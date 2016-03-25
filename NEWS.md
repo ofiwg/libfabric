@@ -60,6 +60,15 @@ v1.3.0, TBD
 - Fix crashes that may occur from improper handling of receive state tracking
   [PR #1809]
 - Fortify the receive side of libnl communication [PR #1655]
+- Fix handling of fi_info with passive endpoints. Connections opened on a
+  passive endpoint now inherit the properties of the fi_info struct used to
+  open the passive endpoint. [PR #1806]
+- Implement pollsets. [PR #1835]
+- Add version 2 of the usnic getinfo extension [PR #1866]
+- Implement waitsets [PR #1851]
+- Implement fi_trywait [PR #1851]
+- Fix progress thread deadlock [PR #1851]
+- Implement FD based CQ sread [PR #1851]
 
 ## Verbs provider notes
 
