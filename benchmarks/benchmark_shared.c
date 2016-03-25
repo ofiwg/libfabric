@@ -129,9 +129,7 @@ int bandwidth(void)
 	if (ret)
 		return ret;
 
-	struct fi_context *ctx_tx = 
-		calloc(opts.window_size, sizeof(struct fi_context));
-	struct fi_context *ctx_rx = 
+	struct fi_context *ctx_arr = 
 		calloc(opts.window_size, sizeof(struct fi_context));
 
 	/* The loop structured allows for the possibility that the sender
@@ -152,10 +150,10 @@ int bandwidth(void)
 					if (ret == -FI_EAGAIN)
 						ret = ft_post_tx(
 							opts.transfer_size,
-							&ctx_tx[j]);
+							&ctx_arr[j]);
 				} else
 					ret = ft_post_tx(opts.transfer_size,
-							 &ctx_tx[j]);
+							 &ctx_arr[j]);
 				if (ret)
 					goto out;
 			}
@@ -172,7 +170,7 @@ int bandwidth(void)
 				ft_start();
 
 			for(j = 0; j < opts.window_size; j++) {
-				ret = ft_post_rx(opts.transfer_size, &ctx_rx[j]);
+				ret = ft_post_rx(opts.transfer_size, &ctx_arr[j]);
 				if (ret)
 					goto out;
 			}
@@ -194,8 +192,7 @@ int bandwidth(void)
 				opts.window_size);
 
 out:
-	free(ctx_tx);
-	free(ctx_rx);
+	free(ctx_arr);
 
 	return 0;
 }
