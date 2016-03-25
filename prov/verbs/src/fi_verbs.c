@@ -70,6 +70,7 @@ int fi_ibv_sockaddr_len(struct sockaddr *addr)
 static int fi_ibv_rdm_cm_init(struct fi_ibv_rdm_cm* cm,
 			      const struct rdma_addrinfo* rai)
 {
+	struct sockaddr_in* src_addr = (struct sockaddr_in*)rai->ai_src_addr;
 	cm->ec = rdma_create_event_channel();
 
 	if (!cm->ec) {
@@ -79,10 +80,7 @@ static int fi_ibv_rdm_cm_init(struct fi_ibv_rdm_cm* cm,
 		return -FI_EOTHER;
 	}
 
-	int fd = cm->ec->fd;
-	int flags = fcntl(fd, F_GETFL, 0);
-	int ret = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-	if (ret == -1) {
+	if (fi_fd_nonblock(cm->ec->fd) != 0) {
 		VERBS_INFO_ERRNO(FI_LOG_EP_CTRL, "fcntl", errno);
 		return -FI_EOTHER;
 	}
@@ -93,16 +91,13 @@ static int fi_ibv_rdm_cm_init(struct fi_ibv_rdm_cm* cm,
 		return -FI_EOTHER;
 	}
 
-	if (fi_ibv_rdm_tagged_find_ipoib_addr((struct sockaddr_in*)rai->ai_src_addr,
-					      cm->listener->verbs, cm))
-	{
-		ret = -FI_ENODEV;
-		VERBS_INFO(FI_LOG_EP_CTRL,
+	if (fi_ibv_rdm_tagged_find_ipoib_addr(src_addr, cm)) {
+		VERBS_INFO(FI_LOG_EP_CTRL, 
 			   "Failed to find correct IPoIB address\n");
-		return -FI_EOTHER;
+		return -FI_ENODEV;
 	}
 
-	cm->my_addr.sin_port = ((struct sockaddr_in*)(rai->ai_src_addr))->sin_port;
+	cm->my_addr.sin_port = src_addr->sin_port;
 
 	char my_ipoib_addr_str[INET6_ADDRSTRLEN];
 	inet_ntop(cm->my_addr.sin_family,
@@ -111,12 +106,11 @@ static int fi_ibv_rdm_cm_init(struct fi_ibv_rdm_cm* cm,
 
 	VERBS_INFO(FI_LOG_EP_CTRL, "My IPoIB: %s\n", my_ipoib_addr_str);
 
-	if (rdma_bind_addr(cm->listener,
-			   (struct sockaddr *)&cm->my_addr)) {
+	if (rdma_bind_addr(cm->listener, (struct sockaddr *)&cm->my_addr)) {
 		VERBS_INFO(FI_LOG_EP_CTRL,
 			"Failed to bind cm listener to my IPoIB addr %s: %s\n",
 			my_ipoib_addr_str, strerror(errno));
-		ret = -FI_EOTHER;
+		return -FI_EOTHER;
 	}
 
 	if (!cm->my_addr.sin_port) {
@@ -145,7 +139,10 @@ int fi_ibv_create_ep(const char *node, const char *service,
 		goto out;
 
 	if (!node && !rai_hints.ai_dst_addr) {
-		if (!rai_hints.ai_src_addr) {
+		if ((!rai_hints.ai_src_addr && !service) ||
+		    (!rai_hints.ai_src_addr &&
+		     (hints->ep_attr->type == FI_EP_RDM)))
+		{
 			node = local_node;
 		}
 		rai_hints.ai_flags |= RAI_PASSIVE;

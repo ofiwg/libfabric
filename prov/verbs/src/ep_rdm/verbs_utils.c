@@ -123,7 +123,6 @@ void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
  * If the name is the desired one then we're done.
  */
 int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
-				      struct ibv_context *ctx,
 				      struct fi_ibv_rdm_cm* cm)
 {
 	struct ifaddrs *addrs, *tmp;

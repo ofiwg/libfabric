@@ -156,7 +156,6 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *item,
 void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
 				  struct fi_ibv_rdm_ep *ep);
 int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
-				      struct ibv_context *ctx,
 				      struct fi_ibv_rdm_cm* cm);
 
 #endif /* _VERBS_UTILS_H */
