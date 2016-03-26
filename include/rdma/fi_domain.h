@@ -154,7 +154,11 @@ struct fid_domain {
 };
 
 
-#ifndef FABRIC_DIRECT
+#ifdef FABRIC_DIRECT
+#include <rdma/fi_direct_domain.h>
+#endif	/* FABRIC_DIRECT */
+
+#ifndef FABRIC_DIRECT_DOMAIN
 
 static inline int
 fi_domain(struct fid_fabric *fabric, struct fi_info *info,
@@ -281,9 +285,6 @@ fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
 	return (fi_addr_t) (((uint64_t) rx_index << (64 - rx_ctx_bits)) | fi_addr);
 }
 
-
-#else // FABRIC_DIRECT
-#include <rdma/fi_direct_domain.h>
 #endif
 
 #ifdef __cplusplus

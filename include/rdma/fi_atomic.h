@@ -42,7 +42,11 @@
 extern "C" {
 #endif
 
-#ifndef FABRIC_DIRECT
+#ifdef FABRIC_DIRECT
+#include <rdma/fi_direct_atomic_def.h>
+#endif /* FABRIC_DIRECT */
+
+#ifndef FABRIC_DIRECT_ATOMIC_DEF
 
 enum fi_datatype {
 	FI_INT8,
@@ -85,9 +89,7 @@ enum fi_op {
 	FI_ATOMIC_OP_LAST
 };
 
-#else
-#include <rdma/fi_direct_atomic_def.h>
-#endif /* FABRIC_DIRECT */
+#endif
 
 struct fi_msg_atomic {
 	const struct fi_ioc	*msg_iov;
@@ -165,7 +167,11 @@ struct fi_ops_atomic {
 			enum fi_datatype datatype, enum fi_op op, size_t *count);
 };
 
-#ifndef FABRIC_DIRECT
+#ifdef FABRIC_DIRECT
+#include <rdma/fi_direct_atomic.h>
+#endif	/* FABRIC_DIRECT */
+
+#ifndef FABRIC_DIRECT_ATOMIC
 
 static inline ssize_t
 fi_atomic(struct fid_ep *ep,
@@ -302,8 +308,6 @@ fi_compare_atomicvalid(struct fid_ep *ep,
 	return ep->atomic->compwritevalid(ep, datatype, op, count);
 }
 
-#else // FABRIC_DIRECT
-#include <rdma/fi_direct_atomic.h>
 #endif
 
 #ifdef __cplusplus

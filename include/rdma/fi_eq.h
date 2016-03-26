@@ -72,7 +72,7 @@ struct fid_wait {
 	struct fid		fid;
 	struct fi_ops_wait	*ops;
 };
-	
+
 struct fi_mutex_cond {
 	pthread_mutex_t		*mutex;
 	pthread_cond_t		*cond;
@@ -90,9 +90,9 @@ struct fi_poll_attr {
 struct fi_ops_poll {
 	size_t	size;
 	int	(*poll)(struct fid_poll *pollset, void **context, int count);
-	int	(*poll_add)(struct fid_poll *pollset, struct fid *event_fid, 
+	int	(*poll_add)(struct fid_poll *pollset, struct fid *event_fid,
 			uint64_t flags);
-	int	(*poll_del)(struct fid_poll *pollset, struct fid *event_fid, 
+	int	(*poll_del)(struct fid_poll *pollset, struct fid *event_fid,
 			uint64_t flags);
 };
 
@@ -100,7 +100,6 @@ struct fid_poll {
 	struct fid		fid;
 	struct fi_ops_poll	*ops;
 };
-
 
 /*
  * EQ = Event Queue
@@ -293,7 +292,11 @@ struct fid_cntr {
 };
 
 
-#ifndef FABRIC_DIRECT
+#ifdef FABRIC_DIRECT
+#include <rdma/fi_direct_eq.h>
+#endif	/* FABRIC_DIRECT */
+
+#ifndef FABRIC_DIRECT_EQ
 
 static inline int
 fi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
@@ -436,9 +439,6 @@ fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 	return cntr->ops->wait(cntr, threshold, timeout);
 }
 
-
-#else // FABRIC_DIRECT
-#include <rdma/fi_direct_eq.h>
 #endif
 
 #ifdef __cplusplus

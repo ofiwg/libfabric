@@ -56,7 +56,11 @@ struct fi_ops_cm {
 };
 
 
-#ifndef FABRIC_DIRECT
+#ifdef FABRIC_DIRECT
+#include <rdma/fi_direct_cm.h>
+#endif	/* FABRIC_DIRECT */
+
+#ifndef FABRIC_DIRECT_CM
 
 static inline int fi_setname(fid_t fid, void *addr, size_t addrlen)
 {
@@ -105,8 +109,6 @@ static inline int fi_shutdown(struct fid_ep *ep, uint64_t flags)
 	return ep->cm->shutdown(ep, flags);
 }
 
-#else // FABRIC_DIRECT
-#include <rdma/fi_direct_cm.h>
 #endif
 
 #ifdef __cplusplus

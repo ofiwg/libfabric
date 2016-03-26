@@ -36,6 +36,8 @@
 #ifndef _FI_DIRECT_H_
 #define _FI_DIRECT_H_
 
+#define FABRIC_DIRECT_ 1
+
 struct fi_context {
 	void *internal[4];
 };

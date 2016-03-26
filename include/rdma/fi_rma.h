@@ -36,11 +36,9 @@
 #include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 
 struct fi_rma_iov {
 	uint64_t		addr;
@@ -90,8 +88,11 @@ struct fi_ops_rma {
 			uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key);
 };
 
+#ifdef FABRIC_DIRECT
+#include <rdma/fi_direct_rma.h>
+#endif	/* FABRIC_DIRECT */
 
-#ifndef FABRIC_DIRECT
+#ifndef FABRIC_DIRECT_RMA
 
 static inline ssize_t
 fi_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
@@ -158,8 +159,6 @@ fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	return ep->rma->injectdata(ep, buf, len, data, dest_addr, addr, key);
 }
 
-#else // FABRIC_DIRECT
-#include <rdma/fi_direct_rma.h>
 #endif
 
 #ifdef __cplusplus

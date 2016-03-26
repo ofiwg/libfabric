@@ -80,7 +80,11 @@ struct fi_ops_tagged {
 };
 
 
-#ifndef FABRIC_DIRECT
+#ifdef FABRIC_DIRECT
+#include <rdma/fi_direct_tagged.h>
+#endif	/* FABRIC_DIRECT */
+
+#ifndef FABRIC_DIRECT_TAGGED
 
 static inline ssize_t
 fi_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
@@ -147,9 +151,6 @@ fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	return ep->tagged->injectdata(ep, buf, len, data, dest_addr, tag);
 }
 
-
-#else // FABRIC_DIRECT
-#include <rdma/fi_direct_tagged.h>
 #endif
 
 #ifdef __cplusplus

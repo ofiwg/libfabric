@@ -35,6 +35,8 @@
 #ifndef _FI_DIRECT_TRIGGER_H_
 #define _FI_DIRECT_TRIGGER_H_
 
+#define FABRIC_DIRECT_TRIGGER 1
+
 /* Size must match struct fi_context */
 struct fi_triggered_context {
 	enum fi_trigger_event event_type;

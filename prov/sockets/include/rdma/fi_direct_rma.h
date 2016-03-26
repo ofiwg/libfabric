@@ -1,7 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc.  All rights reserved.
- * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
- *                         All rights reserved.
+ * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,50 +30,4 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_DIRECT_ATOMIC_DEF_H_
-#define _FI_DIRECT_ATOMIC_DEF_H_
-
-#define FABRIC_DIRECT_ATOMIC_DEF 1
-
-enum fi_datatype {
-	FI_INT8,
-	FI_UINT8,
-	FI_INT16,
-	FI_UINT16,
-	FI_INT32,
-	FI_UINT32,
-	FI_INT64,
-	FI_UINT64,
-	FI_FLOAT,
-	FI_DOUBLE,
-	FI_FLOAT_COMPLEX,
-	FI_DOUBLE_COMPLEX,
-	FI_LONG_DOUBLE,
-	FI_LONG_DOUBLE_COMPLEX,
-	FI_DATATYPE_LAST
-};
-
-enum fi_op {
-	FI_MIN,
-	FI_MAX,
-	FI_SUM,
-	FI_PROD,
-	FI_LOR,
-	FI_LAND,
-	FI_BOR,
-	FI_BAND,
-	FI_LXOR,
-	FI_BXOR,
-	FI_ATOMIC_READ,
-	FI_ATOMIC_WRITE,
-	FI_CSWAP,
-	FI_CSWAP_NE,
-	FI_CSWAP_LE,
-	FI_CSWAP_LT,
-	FI_CSWAP_GE,
-	FI_CSWAP_GT,
-	FI_MSWAP,
-	FI_ATOMIC_OP_LAST
-};
-
-#endif /* _FI_DIRECT_ATOMIC_DEF_H_ */
+/* Do not remove this file. See fi_direct.h */

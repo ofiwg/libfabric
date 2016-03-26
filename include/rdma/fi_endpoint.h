@@ -139,7 +139,11 @@ struct fid_stx {
 	struct fi_ops_ep	*ops;
 };
 
-#ifndef FABRIC_DIRECT
+#ifdef FABRIC_DIRECT
+#include <rdma/fi_direct_endpoint.h>
+#endif /* FABRIC_DIRECT */
+
+#ifndef FABRIC_DIRECT_ENDPOINT
 
 static inline int
 fi_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
@@ -304,8 +308,6 @@ fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	return ep->msg->injectdata(ep, buf, len, data, dest_addr);
 }
 
-#else // FABRIC_DIRECT
-#include <rdma/fi_direct_endpoint.h>
 #endif
 
 #ifdef __cplusplus
