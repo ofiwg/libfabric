@@ -820,7 +820,7 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 		goto fail;
 	}
 
-	fp->fab_eventfd = eventfd(0, EFD_NONBLOCK);
+	fp->fab_eventfd = eventfd(0, EFD_NONBLOCK | EFD_SEMAPHORE);
 	if (fp->fab_eventfd == -1) {
 		ret = -errno;
 		USDF_INFO("unable to allocate event fd\n");
