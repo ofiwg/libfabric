@@ -49,7 +49,7 @@ declare CLIENT="127.0.0.1"
 declare EXCLUDE
 declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
-declare COMPLEX_CFG="quick"
+declare COMPLEX_CFG
 
 # base ssh,  "short" and "long" timeout variants:
 declare bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
@@ -393,16 +393,19 @@ function complex_test {
 }
 
 function main {
+	local complex_cfg="quick"
+
 	if [[ $1 == "quick" ]]; then
 		local -r tests="unit simple short"
-		local complex_cfg=$1
 	else
 		local -r tests=$(echo $1 | sed 's/all/unit,simple,standard,complex/g' | tr ',' ' ')
 		if [[ $1 == "all" ]]; then
-			local complex_cfg=$1
-		else
-			local complex_cfg=$COMPLEX_CFG
+			complex_cfg=$1
 		fi
+	fi
+
+	if [[ -n "$COMPLEX_CFG" ]]; then
+		complex_cfg="$COMPLEX_CFG"
 	fi
 
 	if [ $VERBOSE -eq 0 ] ; then
