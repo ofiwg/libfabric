@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <ifaddrs.h>
 #include <rdma/fi_errno.h>
 #include "../fi_verbs.h"
 #include "verbs_utils.h"
@@ -103,7 +104,7 @@ int fi_ibv_rdm_tagged_send_postponed_process(struct dlist_entry *postponed_item,
 void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
 				  struct fi_ibv_rdm_ep *ep)
 {
-	const int addr_cmp = memcmp(conn->addr, ep->my_rdm_addr,
+	const int addr_cmp = memcmp(&conn->addr, &ep->cm.my_addr,
 				    FI_IBV_RDM_DFLT_ADDRLEN);
 
 	if (addr_cmp < 0) {
@@ -113,4 +114,60 @@ void fi_ibv_rdm_conn_init_cm_role(struct fi_ibv_rdm_tagged_conn *conn,
 	} else {
 		conn->cm_role = FI_VERBS_CM_SELF;
 	}
+}
+
+/* find the IPoIB address of the device opened in the fi_domain call. The name
+ * of this device is _domain->verbs->device->name. The logic of the function is:
+ * iterate through all the available network interfaces, find those having "ib"
+ * in the name, then try to test the IB device that correspond to each address.
+ * If the name is the desired one then we're done.
+ */
+int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
+				      struct fi_ibv_rdm_cm* cm)
+{
+	struct ifaddrs *addrs, *tmp;
+	struct sockaddr_in lh;
+	int found = 0;
+
+	inet_pton(AF_INET, "127.0.0.1", &lh.sin_addr);
+
+	getifaddrs(&addrs);
+	tmp = addrs;
+	while (tmp) {
+		if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_INET) {
+			struct sockaddr_in *paddr =
+			    (struct sockaddr_in *) tmp->ifa_addr;
+			if (!strncmp(tmp->ifa_name, "ib", 2)) {
+				int ret;
+
+				if (addr && addr->sin_addr.s_addr) {
+					ret = !memcmp(&addr->sin_addr,
+						      &paddr->sin_addr,
+						      sizeof(addr->sin_addr)) ||
+					      !memcmp(&addr->sin_addr,
+						      &lh.sin_addr,
+						      sizeof(addr->sin_addr))
+					      ? 1 : 0;
+				}
+
+				if (ret == 1) {
+					memcpy(&(cm->my_addr), paddr,
+					       sizeof(cm->my_addr));
+					found = 1;
+					break;
+				} else if (ret < 0) {
+					return -1;
+				}
+			}
+		}
+
+		tmp = tmp->ifa_next;
+	}
+
+	freeifaddrs(addrs);
+
+	if (found) {
+		assert(cm->my_addr.sin_family == AF_INET);
+	}
+	return !found;
 }

@@ -191,7 +191,7 @@ fi_ibv_rdm_pack_cm_params(struct rdma_conn_param *cm_params,
 	cm_params->private_data = malloc(cm_params->private_data_len);
 
 	char *p = (char *) cm_params->private_data;
-	memcpy(p, ep->my_rdm_addr, FI_IBV_RDM_DFLT_ADDRLEN);
+	memcpy(p, &ep->cm.my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
 	p += FI_IBV_RDM_DFLT_ADDRLEN;
 
 	if ((conn->cm_role != FI_VERBS_CM_SELF) && (conn->r_mr && conn->s_mr)) {
@@ -217,7 +217,8 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 
 	if (conn->cm_role == FI_VERBS_CM_SELF) {
 		if (conn->r_mr && conn->s_mr) {
-			memcpy(conn->addr, ep->my_rdm_addr, FI_IBV_RDM_DFLT_ADDRLEN);
+			memcpy(&conn->addr, &ep->cm.my_addr,
+				FI_IBV_RDM_DFLT_ADDRLEN);
 			conn->remote_rbuf_rkey = conn->r_mr->rkey;
 			conn->remote_rbuf_mem_reg = conn->r_mr->addr;
 
@@ -229,8 +230,7 @@ fi_ibv_rdm_unpack_cm_params(struct rdma_conn_param *cm_param,
 		}
 	} else {
 		if (conn->state == FI_VERBS_CONN_ALLOCATED) {
-			memcpy(conn->addr, p, FI_IBV_RDM_DFLT_ADDRLEN);
-			return;
+			memcpy(&conn->addr, p, FI_IBV_RDM_DFLT_ADDRLEN);
 		}
 		p += FI_IBV_RDM_DFLT_ADDRLEN;
 
@@ -256,9 +256,9 @@ fi_ibv_rdm_tagged_process_addr_resolved(struct rdma_cm_id *id,
 	struct ibv_qp_init_attr qp_attr;
 	struct fi_ibv_rdm_tagged_conn *conn = id->context;
 
-	VERBS_INFO(FI_LOG_AV, "ADDR_RESOLVED conn %p, addr "
-		   FI_IBV_RDM_ADDR_STR_FORMAT "\n",
-		   conn, FI_IBV_RDM_ADDR_STR(conn->addr));
+	VERBS_INFO(FI_LOG_AV, "ADDR_RESOLVED conn %p, addr %s:%u\n",
+		   conn, inet_ntoa(conn->addr.sin_addr),
+		   ntohs(conn->addr.sin_port));
 
 	assert(id->verbs == ep->domain->verbs);
 
@@ -324,21 +324,31 @@ fi_ibv_rdm_tagged_process_connect_request(struct rdma_cm_event *event,
 		memset(conn, 0, sizeof(struct fi_ibv_rdm_tagged_conn));
 
 		conn->state = FI_VERBS_CONN_ALLOCATED;
-		FI_INFO(&fi_ibv_prov, FI_LOG_AV,
-			"CONN REQUEST, NOT found in hash, new conn %p %d, addr "
-			FI_IBV_RDM_ADDR_STR_FORMAT ", HASH ADD\n", conn,
-			conn->cm_role, FI_IBV_RDM_ADDR_STR(conn->addr));
-
+		dlist_init(&conn->postponed_requests_head);
+		fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn, ep);
 		fi_ibv_rdm_conn_init_cm_role(conn, ep);
 
-		assert(conn->cm_role != FI_VERBS_CM_SELF);
-		HASH_ADD(hh, fi_ibv_rdm_tagged_conn_hash, addr,
-			 FI_IBV_RDM_DFLT_ADDRLEN, conn);
-	} else {
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV,
-			"CONN REQUEST,  FOUND in hash, conn %p %d, addr "
-			FI_IBV_RDM_ADDR_STR_FORMAT "\n", conn, conn->cm_role,
-			FI_IBV_RDM_ADDR_STR(conn->addr));
+			"CONN REQUEST, NOT found in hash, new conn %p %d, addr %s:%u, HASH ADD\n",
+			conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
+			ntohs(conn->addr.sin_port));
+
+		HASH_ADD(hh, fi_ibv_rdm_tagged_conn_hash, addr,
+			FI_IBV_RDM_DFLT_ADDRLEN, conn);
+	} else {
+		if (conn->cm_role != FI_VERBS_CM_ACTIVE) {
+			/*
+			 * Do it before rdma_create_qp since that call would
+			 * modify event->param.conn.private_data buffer
+			 */
+			fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn,
+						    ep);
+		}
+
+		FI_INFO(&fi_ibv_prov, FI_LOG_AV,
+			"CONN REQUEST,  FOUND in hash, conn %p %d, addr %s:%u\n",
+			conn, conn->cm_role, inet_ntoa(conn->addr.sin_addr),
+			ntohs(conn->addr.sin_port));
 	}
 
 	if (conn->cm_role == FI_VERBS_CM_ACTIVE) {
@@ -361,12 +371,6 @@ fi_ibv_rdm_tagged_process_connect_request(struct rdma_cm_event *event,
 
 		assert (conn->id[idx] == NULL);
 		conn->id[idx] = id;
-
-		/*
-		 * Do it before rdma_create_qp since that call would modify
-		 * event->param.conn.private_data buffer
-		 */
-		fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn, ep);
 
 		fi_ibv_rdm_tagged_prepare_conn_memory(ep, conn);
 		fi_ibv_rdm_tagged_init_qp_attributes(&qp_attr, ep);
@@ -398,20 +402,21 @@ fi_ibv_rdm_tagged_process_route_resolved(struct rdma_cm_event *event,
 					 struct fi_ibv_rdm_ep *ep)
 {
 	struct fi_ibv_rdm_tagged_conn *conn = event->id->context;
+	int ret = 0;
 
 	struct rdma_conn_param cm_params;
 	fi_ibv_rdm_pack_cm_params(&cm_params, conn, ep);
 
 	VERBS_INFO(FI_LOG_AV,
-		"ROUTE RESOLVED, conn %p, addr "
-		FI_IBV_RDM_ADDR_STR_FORMAT "\n", conn,
-		FI_IBV_RDM_ADDR_STR(conn->addr));
+		"ROUTE RESOLVED, conn %p, addr %s:%u\n", conn,
+		inet_ntoa(conn->addr.sin_addr), ntohs(conn->addr.sin_port));
 
-	rdma_connect(event->id, &cm_params);
+	ret = rdma_connect(event->id, &cm_params);
+	assert(ret == 0);
 
 	free((void *)cm_params.private_data);
 
-	return 0;
+	return ret;
 }
 
 static inline int
@@ -435,9 +440,9 @@ fi_ibv_rdm_tagged_process_event_established(struct rdma_cm_event *event,
 		fi_ibv_rdm_unpack_cm_params(&event->param.conn, conn, ep);
 	}
 
-	FI_INFO(&fi_ibv_prov, FI_LOG_AV, "CONN ESTABLISHED,  conn %p, addr "
-	FI_IBV_RDM_ADDR_STR_FORMAT "\n",
-	conn, FI_IBV_RDM_ADDR_STR(conn->addr));
+	FI_INFO(&fi_ibv_prov, FI_LOG_AV, "CONN ESTABLISHED, conn %p, addr %s:%u\n",
+		conn, inet_ntoa(conn->addr.sin_addr),
+		ntohs(conn->addr.sin_port));
 	
 	/* Do not count self twice */
 	if (conn->state != FI_VERBS_CONN_ESTABLISHED) {
@@ -493,8 +498,9 @@ fi_ibv_rdm_tagged_process_event_disconnected(struct fi_ibv_rdm_ep *ep,
 		conn->state = FI_VERBS_CONN_CLOSED;
 	}
 	VERBS_INFO(FI_LOG_AV,
-		   "Disconnected from conn %p, addr " FI_IBV_RDM_ADDR_STR_FORMAT
-		   "\n", conn, FI_IBV_RDM_ADDR_STR(conn->addr));
+		   "Disconnected from conn %p, addr %s:%u\n",
+		   conn, inet_ntoa(conn->addr.sin_addr),
+		   ntohs(conn->addr.sin_port));
 	if (conn->state == FI_VERBS_CONN_CLOSED) {
 		fi_ibv_rdm_tagged_conn_cleanup(ep, conn);
 	}
@@ -515,18 +521,17 @@ fi_ibv_rdm_tagged_process_event_rejected(struct fi_ibv_rdm_ep *ep,
 		rdma_destroy_qp(event->id);
 		ret = rdma_destroy_id(event->id);
 		VERBS_INFO(FI_LOG_AV,
-			"Rejected from conn %p, addr "
-			FI_IBV_RDM_ADDR_STR_FORMAT " is_active %d, status %d\n",
-			conn, FI_IBV_RDM_ADDR_STR(conn->addr),
-			conn->cm_role == FI_VERBS_CM_ACTIVE,
+			"Rejected from conn %p, addr %s:%u, cm_role %d, status %d\n",
+			conn, inet_ntoa(conn->addr.sin_addr),
+			ntohs(conn->addr.sin_port),
+			conn->cm_role,
 			event->status);
 	} else {
 		VERBS_INFO(FI_LOG_AV,
-			"Unexpected REJECT from conn %p, addr "
-			FI_IBV_RDM_ADDR_STR_FORMAT
-			" is_active %d, msg len %d, msg %x, status %d\n",
-			conn, FI_IBV_RDM_ADDR_STR(conn->addr),
-			conn->cm_role == FI_VERBS_CM_ACTIVE,
+			"Unexpected REJECT from conn %p, addr %s:%u, cm_role %d, msg len %d, msg %x, status %d\n",
+			conn, inet_ntoa(conn->addr.sin_addr),
+			ntohs(conn->addr.sin_port),
+			conn->cm_role,
 			event->param.conn.private_data_len,
 			event->param.conn.private_data ?
 			*(int *)event->param.conn.private_data : 0,
@@ -581,7 +586,7 @@ int fi_ibv_rdm_tagged_cm_progress(struct fi_ibv_rdm_ep *ep)
 	struct rdma_cm_event *event = NULL;
 	int ret = 0;
 
-	rdma_get_cm_event(ep->cm_listener_ec, &event);
+	rdma_get_cm_event(ep->cm.ec, &event);
 
 	while (event) {
 		pthread_mutex_lock(&ep->cm_lock);
@@ -602,7 +607,7 @@ int fi_ibv_rdm_tagged_cm_progress(struct fi_ibv_rdm_ep *ep)
 		free(data);
 		event = NULL;
 		pthread_mutex_unlock(&ep->cm_lock);
-		rdma_get_cm_event(ep->cm_listener_ec, &event);
+		rdma_get_cm_event(ep->cm.ec, &event);
 	}
 	return ret;
 }
