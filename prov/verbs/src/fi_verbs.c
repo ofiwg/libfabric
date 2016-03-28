@@ -118,10 +118,8 @@ static int fi_ibv_rdm_cm_init(struct fi_ibv_rdm_cm* cm,
 	}
 	assert(cm->my_addr.sin_family == AF_INET);
 
-	VERBS_INFO(FI_LOG_EP_CTRL,
-		"My ep_addr: " FI_IBV_RDM_ADDR_STR_FORMAT ", port: %d\n",
-		FI_IBV_RDM_ADDR_STR(&cm->my_addr),
-		ntohs(cm->my_addr.sin_port));
+	VERBS_INFO(FI_LOG_EP_CTRL, "My ep_addr: %s:%u\n",
+		inet_ntoa(cm->my_addr.sin_addr), ntohs(cm->my_addr.sin_port));
 
 	return FI_SUCCESS;
 }

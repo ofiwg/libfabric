@@ -40,16 +40,6 @@
 #include "verbs_utils.h"
 #include "verbs_tagged_ep_rdm_states.h"
 
-#define FI_IBV_RDM_ADDR_STR_FORMAT "[%02x:%02x:%02x:%02x:%02x:%02x]"
-
-#define FI_IBV_RDM_ADDR_STR(addr)				\
-        *((unsigned char*) addr + sizeof(sa_family_t) + 0),	\
-	*((unsigned char*) addr + sizeof(sa_family_t) + 1),	\
-	*((unsigned char*) addr + sizeof(sa_family_t) + 2),	\
-	*((unsigned char*) addr + sizeof(sa_family_t) + 3),	\
-	*((unsigned char*) addr + sizeof(sa_family_t) + 4),	\
-	*((unsigned char*) addr + sizeof(sa_family_t) + 5)
-
 #define FI_IBV_RDM_ST_PKTTYPE_MASK  ((uint32_t) 0xFF)
 #define FI_IBV_RDM_EAGER_PKT		0
 #define FI_IBV_RDM_RNDV_RTS_PKT		1

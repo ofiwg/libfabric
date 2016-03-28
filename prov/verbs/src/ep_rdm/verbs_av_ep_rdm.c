@@ -49,9 +49,9 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 		return 0;
 
 	if (ep->is_closing) {
-		VERBS_INFO(FI_LOG_AV, "Attempt to start connection with addr "
-		FI_IBV_RDM_ADDR_STR_FORMAT" when ep is closing\n",
-		FI_IBV_RDM_ADDR_STR(&conn->addr));
+		VERBS_INFO(FI_LOG_AV, "Attempt to start connection with addr %s:%u when ep is closing\n",
+			inet_ntoa(conn->addr.sin_addr),
+			ntohs(conn->addr.sin_port));
 		return -1;
 	}
 
@@ -129,9 +129,9 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 		fi_ibv_rdm_conn_init_cm_role(conn, ep);
 
 		fi_addr[i] = (uintptr_t) (void *) conn;
-		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "fi_av_insert: addr "
-			FI_IBV_RDM_ADDR_STR_FORMAT " conn %p %d\n",
-			FI_IBV_RDM_ADDR_STR(&conn->addr), conn, conn->cm_role);
+		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "fi_av_insert: addr %s:%u conn %p %d\n",
+			inet_ntoa(conn->addr.sin_addr),
+			ntohs(conn->addr.sin_port), conn, conn->cm_role);
 
 		ret++;
 	}
@@ -149,9 +149,9 @@ static int fi_ibv_rdm_av_remove(struct fid_av *av, fi_addr_t * fi_addr,
 
 	for (i = 0; i < count; i++) {
 		conn = (struct fi_ibv_rdm_tagged_conn *) fi_addr[i];
-		FI_INFO(&fi_ibv_prov, FI_LOG_AV,
-			"av_remove conn %p, addr " FI_IBV_RDM_ADDR_STR_FORMAT "\n",
-			conn, FI_IBV_RDM_ADDR_STR(&conn->addr));
+		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "av_remove conn %p, addr %s:%u\n",
+			conn, inet_ntoa(conn->addr.sin_addr),
+			ntohs(conn->addr.sin_port));
 		rdma_disconnect(conn->id[0]);
 	}
 
