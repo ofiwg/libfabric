@@ -98,7 +98,7 @@ static ssize_t fi_ibv_rdm_tagged_cq_read(struct fid_cq *cq, void *buf,
 	return fi_ibv_rdm_tagged_cq_readfrom(cq, buf, MIN(_count, count), addr);
 }
 
-ssize_t	fi_ibv_rdm_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
+ssize_t fi_ibv_rdm_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 				fi_addr_t *src_addr, const void *cond,
 				int timeout)
 {
@@ -126,7 +126,7 @@ ssize_t	fi_ibv_rdm_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	return (counter != 0) ? counter : -FI_EAGAIN;
 }
 
-ssize_t	fi_ibv_rdm_cq_sread(struct fid_cq *cq, void *buf, size_t count,
+ssize_t fi_ibv_rdm_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 			    const void *cond, int timeout)
 {
 	struct fi_ibv_cq *_cq	= container_of(cq, struct fi_ibv_cq, cq_fid);
