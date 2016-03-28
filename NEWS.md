@@ -12,6 +12,30 @@ v1.3.0, Fri Apr 1, 2016
 
 ## GNI provider notes
 
+- CLE 5.2UP04 required for building GNI provider
+- General bug fixes, plugged memory leaks, etc.
+- Improved error handling, warning messages, etc.
+- Added support for the following APIs:
+  - fi_endpoint: fi_getopt, fi_setopt, fi_rx_size_left, fi_tx_size_left, fi_stx_context
+  - fi_cq: fi_sread, fi_sreadfrom
+  - fi_msg: FI_MULTI_RECV (flag)
+  - fi_domain: FI_PROGRESS_AUTO (flag)
+  - fi_direct: FI_DIRECT
+- Added support for FI_EP_DGRAM (datagram endpoint):
+  - fi_msg, fi_tagged, fi_rma
+- Memory registration improvements:
+  - Improved performance
+  - Additional domain open_ops
+- Initial support for Cray Cluster Compatibility Mode (CCM)
+- Implemented strict API checking
+- Added hash list implementation for tag matching (available by domain open_ops)
+
+Note: The current version of fabtests does not work with the GNI
+provider due to the job launch mechanism on Cray XC systems.  Please
+see the [GNI provider
+wiki](https://github.com/ofi-cray/libfabric-cray/wiki) for
+alternatives to validating your installation.
+
 ## MXM provider notes
 
 ## PSM provider notes
