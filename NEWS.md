@@ -26,6 +26,7 @@ v1.3.0, TBD
 ## Sockets provider notes
 
 - General code cleanup
+- Enable FABRIC_DIRECT
 - Enable sockets-provider to run on FreeBSD
 - Add support for fi_trywait
 - Add support for map_addr in shared-av creation
@@ -40,6 +41,8 @@ v1.3.0, TBD
 - Fix an issue that caused out-of-order arrival of messages
 - Fix a bug in processing RMA access error
 - Fix a bug that caused starvation in processing receive operations
+- Add reference counting for pollset
+- Fix a bug in connection port assignment
 
 ## UDP provider notes
 
