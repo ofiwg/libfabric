@@ -511,16 +511,19 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 {
 	struct fi_ibv_rdm_ep *ep_rdm = container_of(ep, struct fi_ibv_rdm_ep,
 						    ep_fid);
+	struct fi_ibv_rdm_tagged_conn *conn =
+		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
+	struct fi_ibv_rdm_tagged_request *request = NULL;
+	int ret = FI_EP_RDM_HNDL_AGAIN;
+
 	if (len >= ep_rdm->rndv_threshold) {
 		return -FI_EMSGSIZE;
 	}
 
-	int ret = FI_EP_RDM_HNDL_AGAIN;
-	struct fi_ibv_rdm_tagged_request *request = NULL;
-	struct fi_ibv_rdm_tagged_conn *conn =
-		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
-
-	if (!conn->postponed_entry) {
+	if (fi_ibv_rdm_check_connection(conn, ep_rdm) &&
+	    !RMA_RESOURCES_IS_BUSY(conn, ep_rdm) &&
+	    !conn->postponed_entry)
+	{
 		request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 
 		FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ",
