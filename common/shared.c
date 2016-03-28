@@ -61,6 +61,7 @@ struct fid_eq *eq;
 
 struct fid_mr no_mr;
 struct fi_context tx_ctx, rx_ctx;
+struct fi_context *ctx_arr = NULL;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 int ft_skip_mr = 0;
@@ -787,6 +788,9 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 		snprintf(test_name, test_name_len, "%s_lat", sstr);
 	if (!(opts->options & FT_OPT_ITER))
 		opts->iterations = size_to_count(opts->transfer_size);
+	if (opts->window_size > 0) {
+		ctx_arr = calloc(opts->window_size, sizeof(struct fi_context));
+	}
 }
 
 ssize_t ft_post_tx(size_t size, struct fi_context* ctx)
@@ -1225,6 +1229,10 @@ int ft_finalize(void)
 	if (ret)
 		return ret;
 
+	if (ctx_arr) {
+		free(ctx_arr);
+		ctx_arr = NULL;
+	}
 	return 0;
 }
 

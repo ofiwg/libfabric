@@ -42,6 +42,8 @@
 #include "shared.h"
 #include "benchmark_shared.h"
 
+extern struct fi_context *ctx_arr;
+
 void ft_parse_benchmark_opts(int op, char *optarg)
 {
 	switch (op) {
@@ -125,12 +127,13 @@ int bandwidth(void)
 {
 	int ret, i, j;
 
+	if (!ctx_arr) {
+		return -FI_ENOMEM;
+	}
+
 	ret = ft_sync();
 	if (ret)
 		return ret;
-
-	struct fi_context *ctx_arr = 
-		calloc(opts.window_size, sizeof(struct fi_context));
 
 	/* The loop structured allows for the possibility that the sender
 	 * immediately overruns the receiving side on the first transfer (or
@@ -145,24 +148,20 @@ int bandwidth(void)
 				ft_start();
 
 			for(j = 0; j < opts.window_size; j++) {
-				if (opts.transfer_size < fi->tx_attr->inject_size) {
+				if (opts.transfer_size < fi->tx_attr->inject_size)
 					ret = ft_inject(opts.transfer_size);
-					if (ret == -FI_EAGAIN)
-						ret = ft_post_tx(
-							opts.transfer_size,
-							&ctx_arr[j]);
-				} else
+				else
 					ret = ft_post_tx(opts.transfer_size,
 							 &ctx_arr[j]);
 				if (ret)
-					goto out;
+					return ret;
 			}
 			ret = ft_get_tx_comp(tx_seq);
 			if (ret)
-				goto out;
+				return ret;
 			ret = ft_rx(4);
 			if (ret)
-				goto out;
+				return ret;
 		}
 	} else {
 		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
@@ -172,14 +171,14 @@ int bandwidth(void)
 			for(j = 0; j < opts.window_size; j++) {
 				ret = ft_post_rx(opts.transfer_size, &ctx_arr[j]);
 				if (ret)
-					goto out;
+					return ret;
 			}
 			ret = ft_get_rx_comp(rx_seq-1); /* rx_seq is always one ahead */
 			if (ret)
-				goto out;
+				return ret;
 			ret = ft_tx(4);
 			if (ret)
-				goto out;
+				return ret;
 		}
 	}
 	ft_stop();
@@ -190,9 +189,6 @@ int bandwidth(void)
 	else
 		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end,
 				opts.window_size);
-
-out:
-	free(ctx_arr);
 
 	return 0;
 }
