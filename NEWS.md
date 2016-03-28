@@ -82,7 +82,8 @@ v1.3.0, TBD
 - Added a workaround to support posting more than 'verbs send work queue length'
   number of fi_inject calls at a time.
 - Make CQ reads thread safe.
-- Support the case where the user creates only a send or recv queue for the endpoint.
+- Support the case where the user creates only a send or recv queue for the
+  endpoint.
 - Fix an issue where RMA reads were not working on iWARP cards.
 
 v1.2.0, Thu Jan 7, 2016
