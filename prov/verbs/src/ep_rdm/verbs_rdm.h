@@ -151,6 +151,7 @@ struct fi_ibv_rdm_tagged_request {
 		void *unexp_rbuf;
 		void *sbuf;
 		void *rmabuf;
+		struct iovec *rmaiovec_arr;
 	};
 
 	/*

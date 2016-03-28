@@ -275,8 +275,11 @@ fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 		if (again) {
 			goto out_again;
 		}
-	} else if (RMA_RESOURCES_IS_BUSY(conn, ep)) {
-		/* TODO: to implement postponed queue flow for RMA */
+	} else if (!fi_ibv_rdm_check_connection(conn, ep) ||
+		   RMA_RESOURCES_IS_BUSY(conn, ep)) {
+		/*
+		 * TODO: Should be postponed queue flow for RMA be implemented?
+		 */
 		goto out_again;
 	}
 
@@ -322,6 +325,55 @@ out_errinput:
 }
 
 static ssize_t
+fi_ibv_rdm_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
+		uint64_t flags)
+{
+	if(msg->iov_count == 1 && msg->rma_iov_count == 1) {
+		return fi_ibv_rdm_ep_rma_read(ep,
+					      msg->msg_iov[0].iov_base,
+					      msg->msg_iov[0].iov_len,
+					      msg->desc[0],
+					      msg->addr,
+					      msg->rma_iov[0].addr,
+					      msg->rma_iov[0].key,
+					      msg->context);
+	}
+
+	assert(0);
+	return -FI_EMSGSIZE;
+}
+
+static ssize_t
+fi_ibv_rdm_ep_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+		size_t count, fi_addr_t src_addr, uint64_t addr, uint64_t key,
+		void *context)
+{
+	struct fi_rma_iov rma_iov = {
+		.addr = src_addr,
+		.len = 0,
+		.key = key
+	};
+
+	size_t i;
+	for (i = 0; i < count; i++) {
+		rma_iov.len += iov[i].iov_len;
+	}
+
+	struct fi_msg_rma msg = {
+		.msg_iov = iov,
+		.desc = desc,
+		.iov_count = count,
+		.addr = addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = context,
+		.data = 0
+	};
+
+	return fi_ibv_rdm_ep_rma_readmsg(ep, &msg, 0);
+}
+
+static ssize_t
 fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 		     void *desc, fi_addr_t dest_addr,
 		     uint64_t addr, uint64_t key, void *context)
@@ -354,8 +406,11 @@ fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 		if (again) {
 			goto out_again;
 		}
-	} else if (SEND_RESOURCES_IS_BUSY(conn, ep)) {
-		/* TODO: to implement postponed queue flow for RMA */
+	} else if (!fi_ibv_rdm_check_connection(conn, ep) ||
+		   SEND_RESOURCES_IS_BUSY(conn, ep)) {
+		/*
+		 * TODO: Should be postponed queue flow for RMA be implemented?
+		 */
 		goto out_again;
 	}
 
@@ -400,6 +455,55 @@ out_errinput:
 	goto out;
 }
 
+static ssize_t
+fi_ibv_rdm_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
+		uint64_t flags)
+{
+	if(msg->iov_count == 1 && msg->rma_iov_count == 1) {
+		return fi_ibv_rdm_ep_rma_write(ep,
+					       msg->msg_iov[0].iov_base,
+					       msg->msg_iov[0].iov_len,
+					       msg->desc[0],
+					       msg->addr,
+					       msg->rma_iov[0].addr,
+					       msg->rma_iov[0].key,
+					       msg->context);
+	}
+
+	assert(0);
+	return -FI_EMSGSIZE;
+}
+
+static ssize_t
+fi_ibv_rdm_ep_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
+		size_t count, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+		void *context)
+{
+	struct fi_rma_iov rma_iov = {
+		.addr = dest_addr,
+		.len = 0,
+		.key = key
+	};
+
+	size_t i;
+	for (i = 0; i < count; i++) {
+		rma_iov.len += iov[i].iov_len;
+	}
+
+	struct fi_msg_rma msg = {
+		.msg_iov = iov,
+		.desc = desc,
+		.iov_count = count,
+		.addr = addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = context,
+		.data = 0
+	};
+
+	return fi_ibv_rdm_ep_rma_writemsg(ep, &msg, 0);
+}
+
 static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 					      const void *buf, size_t len,
 					      fi_addr_t dest_addr,
@@ -407,16 +511,19 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 {
 	struct fi_ibv_rdm_ep *ep_rdm = container_of(ep, struct fi_ibv_rdm_ep,
 						    ep_fid);
+	struct fi_ibv_rdm_tagged_conn *conn =
+		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
+	struct fi_ibv_rdm_tagged_request *request = NULL;
+	int ret = FI_EP_RDM_HNDL_AGAIN;
+
 	if (len >= ep_rdm->rndv_threshold) {
 		return -FI_EMSGSIZE;
 	}
 
-	int ret = FI_EP_RDM_HNDL_AGAIN;
-	struct fi_ibv_rdm_tagged_request *request = NULL;
-	struct fi_ibv_rdm_tagged_conn *conn =
-		(struct fi_ibv_rdm_tagged_conn *) dest_addr;
-
-	if (!conn->postponed_entry) {
+	if (fi_ibv_rdm_check_connection(conn, ep_rdm) &&
+	    !RMA_RESOURCES_IS_BUSY(conn, ep_rdm) &&
+	    !conn->postponed_entry)
+	{
 		request = util_buf_alloc(fi_ibv_rdm_tagged_request_pool);
 
 		FI_IBV_RDM_TAGGED_DBG_REQUEST("get_from_pool: ",
@@ -468,11 +575,11 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 static struct fi_ops_rma fi_ibv_rdm_ep_rma_ops = {
 	.size		= sizeof(struct fi_ops_rma),
 	.read		= fi_ibv_rdm_ep_rma_read,
-	.readv		= fi_no_rma_readv,
-	.readmsg	= fi_no_rma_readmsg,
+	.readv		= fi_ibv_rdm_ep_rma_readv,
+	.readmsg	= fi_ibv_rdm_ep_rma_readmsg,
 	.write		= fi_ibv_rdm_ep_rma_write,
-	.writev		= fi_no_rma_writev,
-	.writemsg	= fi_no_rma_writemsg,
+	.writev		= fi_ibv_rdm_ep_rma_writev,
+	.writemsg	= fi_ibv_rdm_ep_rma_writemsg,
 	.inject		= fi_ibv_rdm_ep_rma_inject_write,
 	.writedata	= fi_no_rma_writedata,
 	.injectdata	= fi_no_rma_injectdata,
