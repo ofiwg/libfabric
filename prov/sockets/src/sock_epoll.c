@@ -76,6 +76,7 @@ int sock_epoll_create(struct sock_epoll_set *set, int size)
 int sock_epoll_add(struct sock_epoll_set *set, int fd)
 {
 	struct epoll_event event;
+	memset(&event, 0, sizeof(struct epoll_event));
 	event.data.fd = fd;
 	event.events = EPOLLIN;
 
