@@ -98,7 +98,7 @@ src_libfabric_la_LDFLAGS =
 src_libfabric_la_LIBADD =
 src_libfabric_la_DEPENDENCIES = libfabric.map
 
-src_libfabric_la_LDFLAGS += -version-info 2:1:1 -export-dynamic \
+src_libfabric_la_LDFLAGS += -version-info 3:0:2 -export-dynamic \
 			   $(libfabric_version_script)
 rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fabric.h \
