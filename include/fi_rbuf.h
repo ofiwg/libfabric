@@ -71,7 +71,7 @@ static inline struct name * name ## _create(size_t size)	\
 {								\
 	struct name *cq;					\
 	cq = calloc(1, sizeof(*cq) + sizeof(entrytype) *	\
-			(roundup_power_of_two(size) - 1));	\
+		    (roundup_power_of_two(size)));		\
 	if (cq)							\
 		name ##_init(cq, roundup_power_of_two(size));	\
 	return cq;						\
