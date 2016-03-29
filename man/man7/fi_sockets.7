@@ -1,4 +1,4 @@
-.TH "fi_sockets" "7" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_sockets" "7" "2016\-03\-29" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Sockets Fabric Provider
@@ -27,8 +27,8 @@ Additionally, these interfaces are supported for reliable endpoints
 (\f[I]FI_EP_MSG\f[] and \f[I]FI_EP_RDM\f[]): \f[I]fi_tagged\f[],
 \f[I]fi_atomic\f[], and \f[I]fi_rma\f[].
 .PP
-\f[I]Modes\f[] : The provider does not require any special operational
- modes. But it supports \f[I]FI_CONTEXT\f[] and \f[I]FI_LOCAL_MR\f[].
+\f[I]Modes\f[] : The sockets provider supports all operational modes
+including \f[I]FI_CONTEXT\f[] and \f[I]FI_MSG_PREFIX\f[].
 .PP
 \f[I]Progress\f[] : Sockets provider supports both
 \f[I]FI_PROGRESS_AUTO\f[] and \f[I]FI_PROGRESS_MANUAL\f[], with a
