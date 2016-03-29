@@ -40,6 +40,9 @@
 /*******************************************************************************
  * GNI API Functions
  ******************************************************************************/
+extern int gnix_fabric_trywait(struct fid_fabric *fabric, struct fid **fids,
+                               int count);
+
 extern int gnix_wait_wait(struct fid_wait *wait, int timeout);
 
 extern int gnix_poll_poll(struct fid_poll *pollset, void **context, int count);
