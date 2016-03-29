@@ -10,6 +10,9 @@ v1.3.0, Fri Apr 1, 2016
 
 ## General notes
 
+* [See a list of provider features for this
+  release](https://github.com/ofiwg/libfabric/wiki/Provider-Feature-Matrix-v1.3.0)
+
 ## GNI provider notes
 
 - CLE 5.2UP04 required for building GNI provider
