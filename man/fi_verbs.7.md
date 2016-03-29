@@ -34,6 +34,10 @@ The verbs provider supports a subset of OFI features.
     take responsibility of posting receives for any incoming CQ data.
   * FI_CONTEXT for applications making uses of the experimental FI_EP_RDM capability.
 
+*Addressing Formats*
+: Supported addresing formats include FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6,
+  FI_SOCKADDR_IB
+
 *Progress*
 : Verbs provider supports FI_PROGRESS_AUTO: Asynchronous operations make forward
   progress automatically.
@@ -51,32 +55,22 @@ The verbs provider supports a subset of OFI features.
   * Send after Write
   * Send after Send
 
-# UNSUPPORTED FEATURES
-
-*Control Interfaces*
-: Counters and address vectors are not supported.
-
-*Data transfer interfaces*
-: Multi-receive is not supported.
-
-*Endpoint features*
-: Scalable endpoints and shared contexts are not supported. fi_cancel,
-  fi_tx/rx_size_left and fi_alias operations are not supported.
-
-*Others*
-: Other unsupported features include resource management, polling.
-
 # LIMITATIONS
 
 *CQ*
 : cq_readfrom operations are not supported.
 
 *Memory Regions*
-: Adding regions via s/g list is not supported. Generic fi_mr_regattr is not
-  supported. No support for binding memory regions to a counter.
+: Only FI_MR_BASIC mode is supported. Adding regions via s/g list is not supported.
+  Generic fi_mr_regattr is not supported. No support for binding memory regions to
+  a counter.
 
 *Wait objects*
 : Only FI_WAIT_FD wait object is supported. Wait sets are not supported.
+
+*Resource Management*
+: Application has to make sure CQs are not overrun as this cannot be detected
+  by the provider.
 
 # SEE ALSO
 
