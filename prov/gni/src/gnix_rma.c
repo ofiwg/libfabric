@@ -567,6 +567,8 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	bte_txd->gni_desc.src_cq_hndl = nic->tx_cq; /* check flags */
 	bte_txd->gni_desc.local_mem_hndl = req->rma.loc_md->mem_hndl;
 
+	GNIX_LOG_DUMP_TXD(bte_txd);
+
 	/* FMA TXD */
 	ct_txd->completer_fn = __gnix_rma_txd_complete;
 	ct_txd->req = req;
@@ -608,6 +610,8 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 		ct_txd->gni_desc.local_addr =
 				(uint64_t)ct_txd->int_buf + GNI_READ_ALIGN;
 	}
+
+	GNIX_LOG_DUMP_TXD(ct_txd);
 
 	fastlock_acquire(&nic->lock);
 
@@ -732,17 +736,7 @@ int _gnix_rma_post_req(void *data)
 	txd->gni_desc.rdma_mode = 0; /* check flags */
 	txd->gni_desc.src_cq_hndl = nic->tx_cq; /* check flags */
 
-	{
-		gni_mem_handle_t *tl_mdh = &txd->gni_desc.local_mem_hndl;
-		gni_mem_handle_t *tr_mdh = &txd->gni_desc.remote_mem_hndl;
-		GNIX_INFO(FI_LOG_EP_DATA, "la: %llx ra: %llx len: %d\n",
-			  txd->gni_desc.local_addr, txd->gni_desc.remote_addr,
-			  txd->gni_desc.length);
-		GNIX_INFO(FI_LOG_EP_DATA, "lmdh: %llx:%llx rmdh: %llx:%llx key: %llx\n",
-			  *(uint64_t *)tl_mdh, *(((uint64_t *)tl_mdh) + 1),
-			  *(uint64_t *)tr_mdh, *(((uint64_t *)tr_mdh) + 1),
-			  fab_req->rma.rem_mr_key);
-	}
+	GNIX_LOG_DUMP_TXD(txd);
 
 	fastlock_acquire(&nic->lock);
 

@@ -323,17 +323,7 @@ int _gnix_amo_post_req(void *data)
 	txd->gni_desc.first_operand = fab_req->amo.first_operand;
 	txd->gni_desc.second_operand = fab_req->amo.second_operand;
 
-	{
-		gni_mem_handle_t *tl_mdh = &txd->gni_desc.local_mem_hndl;
-		gni_mem_handle_t *tr_mdh = &txd->gni_desc.remote_mem_hndl;
-		GNIX_INFO(FI_LOG_EP_DATA, "la: %llx ra: %llx len: %d\n",
-			  txd->gni_desc.local_addr, txd->gni_desc.remote_addr,
-			  txd->gni_desc.length);
-		GNIX_INFO(FI_LOG_EP_DATA, "lmdh: %llx:%llx rmdh: %llx:%llx key: %llx\n",
-			  *(uint64_t *)tl_mdh, *(((uint64_t *)tl_mdh) + 1),
-			  *(uint64_t *)tr_mdh, *(((uint64_t *)tr_mdh) + 1),
-			  fab_req->amo.rem_mr_key);
-	}
+	GNIX_LOG_DUMP_TXD(txd);
 
 	fastlock_acquire(&nic->lock);
 

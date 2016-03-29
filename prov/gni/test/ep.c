@@ -164,7 +164,6 @@ Test(endpoint, getsetopt)
 	/* Test update. */
 	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
 			(void *)&val, &len);
-	fprintf(stderr, "ret is %d\n", ret);
 	cr_assert(!ret, "fi_getopt");
 	cr_assert(val == GNIX_OPT_MIN_MULTI_RECV_DEFAULT, "fi_getopt");
 	cr_assert(len == sizeof(size_t), "fi_getopt");
