@@ -150,11 +150,15 @@ extern "C" {
 /*
  * See capabilities section in fi_getinfo.3.
  */
-#define GNIX_EP_RDM_CAPS                                                       \
+#define GNIX_EP_RDM_PRIMARY_CAPS                                               \
 	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS |                            \
-	 FI_DIRECTED_RECV | FI_INJECT | FI_SOURCE | FI_READ |                  \
-	 FI_WRITE | FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE |     \
-	 FI_TRANSMIT_COMPLETE | FI_FENCE)
+	 FI_DIRECTED_RECV | FI_READ |                                          \
+	 FI_WRITE | FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
+
+#define GNIX_EP_RDM_SEC_CAPS                                             \
+	(FI_MULTI_RECV | FI_SOURCE | FI_TRIGGER | FI_FENCE)
+
+#define GNIX_EP_RDM_CAPS (GNIX_EP_RDM_PRIMARY_CAPS | GNIX_EP_RDM_SEC_CAPS)
 
 /*
  * see Operations flags in fi_endpoint.3
@@ -201,6 +205,7 @@ extern "C" {
  * if this has to be changed, check gnix_getinfo, etc.
  */
 #define GNIX_EP_MSG_CAPS GNIX_EP_RDM_CAPS
+#define GNIX_EP_MSG_SEC_CAPS GNIX_EP_RDM_SEC_CAPS
 
 #define GNIX_MAX_MSG_SIZE ((0x1ULL << 32) - 1)
 #define GNIX_CACHELINE_SIZE (64)
