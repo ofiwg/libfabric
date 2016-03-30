@@ -138,7 +138,7 @@ int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
 			struct sockaddr_in *paddr =
 			    (struct sockaddr_in *) tmp->ifa_addr;
 			if (!strncmp(tmp->ifa_name, "ib", 2)) {
-				int ret;
+				int ret = 0;
 
 				if (addr && addr->sin_addr.s_addr) {
 					ret = !memcmp(&addr->sin_addr,
