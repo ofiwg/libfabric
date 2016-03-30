@@ -145,15 +145,15 @@ _gnix_fr_alloc(struct gnix_fid_ep *ep)
 {
 	struct dlist_entry *de;
 	struct gnix_fab_req *fr = NULL;
-	int ret = _gnix_sfe_alloc(&de, &ep->fr_freelist);
+	int ret = _gnix_fl_alloc(&de, &ep->fr_freelist);
 
 	while (ret == -FI_EAGAIN)
-		ret = _gnix_sfe_alloc(&de, &ep->fr_freelist);
+		ret = _gnix_fl_alloc(&de, &ep->fr_freelist);
 
 	if (ret == FI_SUCCESS) {
 		fr = container_of(de, struct gnix_fab_req, dlist);
 		fr->gnix_ep = ep;
-		dlist_init(&fr->dlist);  /* dlist stuff isn't too smart */
+		dlist_init(&fr->dlist);
 	}
 
 	/* reset common fields */
@@ -167,7 +167,7 @@ static inline void
 _gnix_fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
 {
 	assert(fr->gnix_ep == ep);
-	_gnix_sfe_free(&fr->dlist, &ep->fr_freelist);
+	_gnix_fl_free(&fr->dlist, &ep->fr_freelist);
 	_gnix_ref_put(ep);
 }
 

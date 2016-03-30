@@ -43,7 +43,7 @@
 
 /*
  * NOTES:
- * - thread safe if initialized with _nix_sfl_init_ts
+ * - thread safe if initialized with _nix_fl_init_ts
  * - Does not shrink
  * - Cannot be used for data structures with alignment requirements
  * - Refill size increases by growth_factor each time growth is needed
@@ -57,7 +57,7 @@
  * it just has to be at least as big as an slist_entry.
  */
 
-static int __gnix_sfl_refill(struct gnix_s_freelist *fl, int n)
+static int __gnix_fl_refill(struct gnix_freelist *fl, int n)
 {	int i, ret = FI_SUCCESS;
 	unsigned char *elems;
 
@@ -90,9 +90,9 @@ err:
 	return ret;
 }
 
-int _gnix_sfl_init(int elem_size, int offset, int init_size,
+int _gnix_fl_init(int elem_size, int offset, int init_size,
 		   int refill_size, int growth_factor,
-		   int max_refill_size, struct gnix_s_freelist *fl)
+		   int max_refill_size, struct gnix_freelist *fl)
 {
 	assert(elem_size > 0);
 	assert(offset >= 0);
@@ -101,14 +101,14 @@ int _gnix_sfl_init(int elem_size, int offset, int init_size,
 	assert(growth_factor >= 0);
 	assert(max_refill_size >= 0);
 
-	int fill_size = init_size != 0 ? init_size : GNIX_SFL_INIT_SIZE;
+	int fill_size = init_size != 0 ? init_size : GNIX_FL_INIT_SIZE;
 
 	fl->refill_size = (refill_size != 0 ?
 			   refill_size :
-			   GNIX_SFL_INIT_REFILL_SIZE);
+			   GNIX_FL_INIT_REFILL_SIZE);
 	fl->growth_factor = (growth_factor != 0 ?
 			     growth_factor :
-			     GNIX_SFL_GROWTH_FACTOR);
+			     GNIX_FL_GROWTH_FACTOR);
 	fl->max_refill_size = (max_refill_size != 0 ?
 			       max_refill_size :
 			       fill_size);
@@ -119,16 +119,16 @@ int _gnix_sfl_init(int elem_size, int offset, int init_size,
 	assert(slist_empty(&fl->chunks)); /* maybe should be a warning? */
 	slist_init(&fl->chunks);
 
-	return __gnix_sfl_refill(fl, fill_size);
+	return __gnix_fl_refill(fl, fill_size);
 }
 
-int _gnix_sfl_init_ts(int elem_size, int offset, int init_size,
+int _gnix_fl_init_ts(int elem_size, int offset, int init_size,
 		      int refill_size, int growth_factor,
-		      int max_refill_size, struct gnix_s_freelist *fl)
+		      int max_refill_size, struct gnix_freelist *fl)
 {
 	int ret;
 
-	ret = _gnix_sfl_init(elem_size,
+	ret = _gnix_fl_init(elem_size,
 			     offset,
 			     init_size,
 			     refill_size,
@@ -144,7 +144,7 @@ int _gnix_sfl_init_ts(int elem_size, int offset, int init_size,
 
 }
 
-void _gnix_sfl_destroy(struct gnix_s_freelist *fl)
+void _gnix_fl_destroy(struct gnix_freelist *fl)
 {
 	assert(fl);
 
@@ -160,7 +160,7 @@ void _gnix_sfl_destroy(struct gnix_s_freelist *fl)
 		fastlock_destroy(&fl->lock);
 }
 
-int _gnix_sfe_alloc(struct dlist_entry **e, struct gnix_s_freelist *fl)
+int _gnix_fl_alloc(struct dlist_entry **e, struct gnix_freelist *fl)
 {
 	int ret = FI_SUCCESS;
 	struct dlist_entry *de;
@@ -171,7 +171,7 @@ int _gnix_sfe_alloc(struct dlist_entry **e, struct gnix_s_freelist *fl)
 		fastlock_acquire(&fl->lock);
 
 	if (dlist_empty(&fl->freelist)) {
-		ret = __gnix_sfl_refill(fl, fl->refill_size);
+		ret = __gnix_fl_refill(fl, fl->refill_size);
 		if (ret != FI_SUCCESS)
 			goto err;
 		if (fl->refill_size < fl->max_refill_size) {
@@ -199,7 +199,7 @@ err:
 	return ret;
 }
 
-void _gnix_sfe_free(struct dlist_entry *e, struct gnix_s_freelist *fl)
+void _gnix_fl_free(struct dlist_entry *e, struct gnix_freelist *fl)
 {
 	assert(e);
 	assert(fl);

@@ -55,7 +55,7 @@
 /*******************************************************************************
  * gnix_fab_req freelist functions
  *
- * These are wrappers around the gnix_s_freelist
+ * These are wrappers around the gnix_freelist
  *
  ******************************************************************************/
 
@@ -65,7 +65,7 @@
 static int __fr_freelist_init(struct gnix_fid_ep *ep)
 {
 	assert(ep);
-	return _gnix_sfl_init_ts(sizeof(struct gnix_fab_req),
+	return _gnix_fl_init_ts(sizeof(struct gnix_fab_req),
 				offsetof(struct gnix_fab_req, dlist),
 				GNIX_FAB_REQ_FL_MIN_SIZE,
 				GNIX_FAB_REQ_FL_REFILL_SIZE,
@@ -75,7 +75,7 @@ static int __fr_freelist_init(struct gnix_fid_ep *ep)
 static void __fr_freelist_destroy(struct gnix_fid_ep *ep)
 {
 	assert(ep);
-	_gnix_sfl_destroy(&ep->fr_freelist);
+	_gnix_fl_destroy(&ep->fr_freelist);
 }
 
 /*******************************************************************************

@@ -412,7 +412,7 @@ struct gnix_fid_ep {
 	int recv_selective_completion;
 	int min_multi_recv;
 	/* note this free list will be initialized for thread safe */
-	struct gnix_s_freelist fr_freelist;
+	struct gnix_freelist fr_freelist;
 	struct gnix_reference ref_cnt;
 	struct gnix_fid_ep_ops_en ep_ops;
 };

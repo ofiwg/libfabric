@@ -1651,7 +1651,7 @@ void do_trigger(int len)
 	msg[1] = msg[2] = msg[3] = msg[0];
 
 	/* XXX: Req 0 is guaranteed to be sent before req 2, but req 2 will
-	 * race req 1 through the network.  Fix race if needed. */
+	 * race req 0 through the network.  Fix race if needed. */
 	t_ctx[0].trigger.threshold.threshold = 1;
 	t_ctx[1].trigger.threshold.threshold = 2;
 	t_ctx[2].trigger.threshold.threshold = 1;

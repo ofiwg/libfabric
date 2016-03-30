@@ -140,7 +140,7 @@ Test(endpoint, open_close)
 
 		/* Check fields (fill in as implemented) */
 		cr_assert(ep->nic, "NIC not allocated");
-		cr_assert(!_gnix_sfl_empty(&ep->fr_freelist),
+		cr_assert(!_gnix_fl_empty(&ep->fr_freelist),
 			  "gnix_fab_req freelist empty");
 	}
 
