@@ -50,18 +50,7 @@ declare EXCLUDE
 declare GOOD_ADDR="192.168.10.1"
 declare -i VERBOSE=0
 declare COMPLEX_CFG
-
-# base ssh,  "short" and "long" timeout variants:
-declare bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
-if [ -z "$(which timeout 2> /dev/null)" ]; then
-	# forego timeout
-	declare SERVER_CMD="eval"
-	declare CLIENT_CMD="eval"
-else
-	declare SERVER_CMD="eval timeout 90s"
-	declare CLIENT_CMD="eval timeout 90s"
-	bssh="timeout 90s ${bssh}"
-fi
+declare TIMEOUT_VAL="90"
 
 declare -r c_outp=$(mktemp fabtests.c_outp.XXXXXX)
 declare -r s_outp=$(mktemp fabtests.s_outp.XXXXXX)
@@ -484,10 +473,11 @@ function usage {
 	errcho -e " -c\tclient interface"
 	errcho -e " -s\tserver/host interface"
 	errcho -e " -u\tconfigure option for complex tests"
+	errcho -e " -T\ttimeout value in seconds"
 	exit 1
 }
 
-while getopts ":vt:p:g:e:c:s:u:" opt; do
+while getopts ":vt:p:g:e:c:s:u:T:" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -505,11 +495,25 @@ case ${opt} in
 	;;
 	u) COMPLEX_CFG=${OPTARG}
 	;;
+	T) TIMEOUT_VAL=${OPTARG}
+	;;
 	:|\?) usage
 	;;
 esac
 
 done
+
+# base ssh command
+declare bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
+if [ -z "$(which timeout 2> /dev/null)" ]; then
+	# forego timeout
+	declare SERVER_CMD="eval"
+	declare CLIENT_CMD="eval"
+else
+	declare SERVER_CMD="eval timeout ${TIMEOUT_VAL}"
+	declare CLIENT_CMD="eval timeout ${TIMEOUT_VAL}"
+	bssh="timeout ${TIMEOUT_VAL} ${bssh}"
+fi
 
 # shift past options
 shift $((OPTIND-1))
