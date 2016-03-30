@@ -810,6 +810,12 @@ static int usdf_cq_get_wait(struct usdf_cq *cq, void *arg)
 
 	switch (cq->cq_attr.wait_obj) {
 	case FI_WAIT_FD:
+		if (cq->object.fd == -1) {
+			USDF_WARN_SYS(CQ,
+					"CQ must be bound before FD can be retrieved\n");
+			return -FI_EOPBADSTATE;
+		}
+
 		*(int *) arg = cq->object.fd;
 		break;
 	default:
@@ -1270,6 +1276,7 @@ usdf_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		atomic_inc(&wait_priv->wait_refcnt);
 	}
 
+	cq->object.fd = -1;
 	cq->cq_domain = udp;
 	cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	cq->cq_fid.fid.context = context;

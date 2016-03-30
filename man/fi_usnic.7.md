@@ -64,6 +64,9 @@ low latency and other offload capabilities on Ethernet networks.
         * The tag matching interface is not supported.
         * *FI_MSG_PREFIX* is only supported on *FI_EP_DGRAM* and usage
           is limited to releases 1.1 and beyond.
+        * fi_control with FI_GETWAIT may only be used on CQs that have been
+          bound to an endpoint. If fi_control is used on an unbound CQ, it will
+          return -FI_EOPBADSTATE.
     - The usnic libfabric provider supports extensions that provide
       information and functionality beyond the standard libfabric
       interface.  See the "USNIC EXTENSIONS" section, below.
