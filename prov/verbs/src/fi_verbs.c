@@ -138,7 +138,7 @@ int fi_ibv_create_ep(const char *node, const char *service,
 
 	if (!node && !rai_hints.ai_dst_addr) {
 		if ((!rai_hints.ai_src_addr && !service) ||
-		    (!rai_hints.ai_src_addr &&
+		    (!rai_hints.ai_src_addr && hints &&
 		     (hints->ep_attr->type == FI_EP_RDM)))
 		{
 			node = local_node;
@@ -172,7 +172,7 @@ int fi_ibv_create_ep(const char *node, const char *service,
 		}
 	}
 
-	if (hints->ep_attr->type == FI_EP_RDM) {
+	if (hints && (hints->ep_attr->type == FI_EP_RDM)) {
 		struct fi_ibv_rdm_cm* cm = 
 			container_of(id, struct fi_ibv_rdm_cm, listener);
 		fi_ibv_rdm_cm_init(cm, _rai);
