@@ -237,7 +237,7 @@ static inline ssize_t fi_ibv_rdm_tagged_inject(struct fid_ep *fid,
 
 	const size_t size = len + sizeof(struct fi_ibv_rdm_header);
 
-	if (size > ep->rndv_threshold) {
+	if (len > ep->rndv_threshold) {
 		return -FI_EMSGSIZE;
 	}
 
