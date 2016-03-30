@@ -140,7 +140,6 @@ static int ft_poll_fd(int fd, int timeout)
 		FT_PRINTERR("poll", -errno);
 		ret = -errno;
 	} else if (!ret) {
-		FT_PRINTERR("poll", -FI_EAGAIN);
 		ret = -FI_EAGAIN;
 	} else {
 		ret = 0;
@@ -974,7 +973,7 @@ static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
 		ret = fi_trywait(fabric, fids, 1);
 		if (ret == FI_SUCCESS) {
 			ret = ft_poll_fd(fd, timeout);
-			if (ret)
+			if (ret && ret != -FI_EAGAIN)
 				return ret;
 		}
 
