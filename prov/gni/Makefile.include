@@ -29,6 +29,7 @@ _gni_files = \
 	prov/gni/src/gnix_mbox_allocator.c \
 	prov/gni/src/gnix_mr.c \
 	prov/gni/src/gnix_mr_cache.c \
+	prov/gni/src/gnix_mr_notifier.c \
 	prov/gni/src/gnix_msg.c \
 	prov/gni/src/gnix_nameserver.c \
 	prov/gni/src/gnix_nic.c \
@@ -60,6 +61,7 @@ _gni_headers = \
 	prov/gni/include/gnix_mbox_allocator.h \
 	prov/gni/include/gnix_mr.h \
 	prov/gni/include/gnix_mr_cache.h \
+	prov/gni/include/gnix_mr_notifier.h \
 	prov/gni/include/gnix_msg.h \
 	prov/gni/include/gnix_nameserver.h \
 	prov/gni/include/gnix_nic.h \
@@ -93,6 +95,7 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/freelist.c \
 	prov/gni/test/hashtable.c \
 	prov/gni/test/mr.c \
+	prov/gni/test/mr_notifier.c \
 	prov/gni/test/nic.c \
 	prov/gni/test/pmi_utils.c \
 	prov/gni/test/queue.c \

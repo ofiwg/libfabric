@@ -486,6 +486,7 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->mr_cache_attr.reg_context = (void *) domain;
 	domain->mr_cache_attr.dereg_context = NULL;
 	domain->mr_cache_attr.destruct_context = NULL;
+	domain->mr_cache_attr.notifier = &fabric_priv->mr_notifier;
 	domain->mr_cache = NULL;
 	fastlock_init(&domain->mr_cache_lock);
 

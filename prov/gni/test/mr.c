@@ -48,7 +48,6 @@
 #include <stdlib.h>
 #include <inttypes.h>
 
-#include "gnix_cq.h"
 #include "gnix.h"
 #include "common.h"
 
@@ -57,11 +56,9 @@
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
-static struct fid_ep *ep;
 static struct fid_mr *mr;
 static struct fi_info *hints;
 static struct fi_info *fi;
-static struct fi_cq_attr cq_attr;
 
 #define __BUF_LEN 4096
 static unsigned char *buf;
@@ -70,12 +67,12 @@ static struct gnix_fid_domain *domain;
 static gnix_mr_cache_t *cache;
 static int regions;
 
-uint64_t default_access = (FI_REMOTE_READ | FI_REMOTE_WRITE
-		| FI_READ | FI_WRITE);
+static uint64_t default_access = (FI_REMOTE_READ | FI_REMOTE_WRITE
+				  | FI_READ | FI_WRITE);
 
-uint64_t default_flags = 0;
-uint64_t default_req_key = 0;
-uint64_t default_offset = 0;
+static uint64_t default_flags;
+static uint64_t default_req_key;
+static uint64_t default_offset;
 
 struct timeval s1, s2;
 
@@ -85,9 +82,6 @@ static void mr_setup(void)
 
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
-
-	hints->domain_attr->cq_data_size = 4;
-	hints->mode = ~0;
 
 	hints->fabric_attr->name = strdup("gni");
 
@@ -100,11 +94,6 @@ static void mr_setup(void)
 	ret = fi_domain(fab, fi, &dom, NULL);
 	cr_assert(!ret, "fi_domain");
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
-	cr_assert(!ret, "fi_endpoint");
-
-	cq_attr.wait_obj = FI_WAIT_NONE;
-
 	buf = calloc(__BUF_LEN, sizeof(unsigned char));
 	cr_assert(buf, "buffer allocation");
 
@@ -116,8 +105,6 @@ static void mr_teardown(void)
 {
 	int ret = 0;
 
-	ret = fi_close(&ep->fid);
-	cr_assert(!ret, "failure in closing ep.");
 	ret = fi_close(&dom->fid);
 	cr_assert(!ret, "failure in closing domain.");
 	ret = fi_close(&fab->fid);
