@@ -337,14 +337,6 @@ int ft_alloc_active_res(struct fi_info *fi)
 			FT_PRINTERR("fi_cq_open", ret);
 			return ret;
 		}
-
-		if (opts.comp_method == FT_COMP_WAIT_FD) {
-			ret = fi_control(&txcq->fid, FI_GETWAIT, (void *) &tx_fd);
-			if (ret) {
-				FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
-				return ret;
-			}
-		}
 	}
 
 	if (opts.options & FT_OPT_TX_CNTR) {
@@ -363,14 +355,6 @@ int ft_alloc_active_res(struct fi_info *fi)
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
 			return ret;
-		}
-
-		if (opts.comp_method == FT_COMP_WAIT_FD) {
-			ret = fi_control(&rxcq->fid, FI_GETWAIT, (void *) &rx_fd);
-			if (ret) {
-				FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
-				return ret;
-			}
 		}
 	}
 
@@ -462,6 +446,19 @@ int ft_start_server(void)
 		}							\
 	} while (0)
 
+int ft_get_cq_fd(struct fid_cq *cq, int *fd)
+{
+	int ret = FI_SUCCESS;
+
+	if (cq && opts.comp_method == FT_COMP_WAIT_FD) {
+		ret = fi_control(&cq->fid, FI_GETWAIT, fd);
+		if (ret)
+			FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
+	}
+
+	return ret;
+}
+
 int ft_init_ep(void)
 {
 	int flags, ret;
@@ -471,6 +468,14 @@ int ft_init_ep(void)
 	FT_EP_BIND(ep, av, 0);
 	FT_EP_BIND(ep, txcq, FI_TRANSMIT);
 	FT_EP_BIND(ep, rxcq, FI_RECV);
+
+	ret = ft_get_cq_fd(txcq, &tx_fd);
+	if (ret)
+		return ret;
+
+	ret = ft_get_cq_fd(rxcq, &rx_fd);
+	if (ret)
+		return ret;
 
 	/* TODO: use control structure to select counter bindings explicitly */
 	flags = !txcq ? FI_SEND : 0;

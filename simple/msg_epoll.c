@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under the BSD license
  * below:
@@ -51,14 +52,10 @@
 
 static int epfd;
 
-static int alloc_ep_res(struct fi_info *fi)
+static int alloc_epoll_res(void)
 {
 	struct epoll_event event;
 	int ret, fd;
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
 
 	epfd = epoll_create1(0);
 	if (epfd < 0) {
@@ -69,18 +66,10 @@ static int alloc_ep_res(struct fi_info *fi)
 
 	memset((void *) &event, 0, sizeof event);
 	if (opts.dst_addr) {
-		ret = fi_control(&txcq->fid, FI_GETWAIT, (void *) &fd);
-		if (ret) {
-			FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
-			return ret;
-		}
+		fd = tx_fd;
 		event.data.ptr = (void *) &txcq->fid;
 	} else {
-		ret = fi_control(&rxcq->fid, FI_GETWAIT, (void *) &fd);
-		if (ret) {
-			FT_PRINTERR("fi_control(FI_GETWAIT)", ret);
-			return ret;
-		}
+		fd = rx_fd;
 		event.data.ptr = (void *) &rxcq->fid;
 	}
 
@@ -122,11 +111,15 @@ static int server_connect(void)
 		goto err;
 	}
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
-		 goto err;
+		goto err;
 
 	ret = ft_init_ep();
+	if (ret)
+		goto err;
+
+	ret = alloc_epoll_res();
 	if (ret)
 		goto err;
 
@@ -177,11 +170,15 @@ static int client_connect(void)
 	if (ret)
 		return ret;
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_active_res(fi);
 	if (ret)
 		return ret;
 
 	ret = ft_init_ep();
+	if (ret)
+		return ret;
+
+	ret = alloc_epoll_res();
 	if (ret)
 		return ret;
 
