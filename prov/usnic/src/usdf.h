@@ -376,6 +376,7 @@ struct usdf_cq {
 	struct usdf_domain *cq_domain;
 	struct fi_cq_attr cq_attr;
 	uint8_t is_soft;
+	uint8_t cq_waiting;
 
 	union {
 		int fd;
