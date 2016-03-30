@@ -1311,7 +1311,7 @@ void show_perf_mr(int tsize, int iters, struct timespec *start,
 	printf("total: %lld, ", total);
 	printf("time: %f, ", elapsed / 1000000.0);
 	printf("MB/sec: %f, ", (total) / (1.0 * elapsed));
-	printf("usec/xfer: %f", usec_per_xfer);
+	printf("usec/xfer: %f, ", usec_per_xfer);
 	printf("Mxfers/sec: %f", 1.0/usec_per_xfer);
 	printf(" }\n");
 }
