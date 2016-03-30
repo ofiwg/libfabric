@@ -44,6 +44,22 @@
 }
 
 #
+# These are benign
+#
+{
+   dgram_handle_alloc
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:_dl_allocate_tls
+   fun:pthread_create@@GLIBC_2.2.5
+   fun:_gnix_dgram_hndl_alloc
+   fun:_gnix_cm_nic_alloc
+   fun:gnix_ep_open
+   fun:fi_endpoint
+}
+
+#
 # These are from specifying an additional .init function for a test
 # (there's no way to specify a replacement .init function with
 # Criterion).
