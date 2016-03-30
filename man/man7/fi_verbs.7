@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2016\-03\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -27,6 +27,9 @@ incoming CQ data.
 * FI_CONTEXT for applications making uses of the experimental FI_EP_RDM
 capability.
 .PP
+\f[I]Addressing Formats\f[] : Supported addresing formats include
+FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6, FI_SOCKADDR_IB
+.PP
 \f[I]Progress\f[] : Verbs provider supports FI_PROGRESS_AUTO:
 Asynchronous operations make forward progress automatically.
 .PP
@@ -37,29 +40,20 @@ FI_COMPLETION, FI_REMOTE_CQ_DATA.
 ordering on the TX side: * Read after Read * Read after Write * Read
 after Send * Write after Write * Write after Send * Send after Write *
 Send after Send
-.SH UNSUPPORTED FEATURES
-.PP
-\f[I]Control Interfaces\f[] : Counters and address vectors are not
-supported.
-.PP
-\f[I]Data transfer interfaces\f[] : Multi\-receive is not supported.
-.PP
-\f[I]Endpoint features\f[] : Scalable endpoints and shared contexts are
-not supported.
-fi_cancel, fi_tx/rx_size_left and fi_alias operations are not supported.
-.PP
-\f[I]Others\f[] : Other unsupported features include resource
-management, polling.
 .SH LIMITATIONS
 .PP
 \f[I]CQ\f[] : cq_readfrom operations are not supported.
 .PP
-\f[I]Memory Regions\f[] : Adding regions via s/g list is not supported.
+\f[I]Memory Regions\f[] : Only FI_MR_BASIC mode is supported.
+Adding regions via s/g list is not supported.
 Generic fi_mr_regattr is not supported.
 No support for binding memory regions to a counter.
 .PP
 \f[I]Wait objects\f[] : Only FI_WAIT_FD wait object is supported.
 Wait sets are not supported.
+.PP
+\f[I]Resource Management\f[] : Application has to make sure CQs are not
+overrun as this cannot be detected by the provider.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
