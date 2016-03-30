@@ -1,4 +1,4 @@
-.TH "fi_gni" "7" "2016\-02\-28" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_gni" "7" "2016\-03\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The GNI Fabric Provider
@@ -12,7 +12,7 @@ and also includes direct hardware support for common atomic operations
 and optimized collectives.
 .SH REQUIREMENTS
 .PP
-The GNI provider runs on Cray XC systems running CLE 5.2 UP03 or higher
+The GNI provider runs on Cray XC systems running CLE 5.2 UP04 or higher
 using gcc version 4.9 or higher.
 .SH SUPPORTED FEATURES
 .PP
@@ -20,15 +20,18 @@ The GNI provider supports the following features defined for the
 libfabric API:
 .PP
 \f[I]Endpoint types\f[] : The provider supports the \f[I]FI_EP_RDM\f[]
-endpoint type.
+and \f[I]FI_EP_DGRAM\f[] endpoint types.
 .PP
 \f[I]Address vectors\f[] : The provider implements both the
 \f[I]FI_AV_MAP\f[] and \f[I]FI_AV_TABLE\f[] address vector types.
 .PP
+\f[I]Memory registration modes\f[] : The provider implements the
+\f[I]FI_MR_BASIC\f[] memory registration mode.
+.PP
 \f[I]Data transfer operations\f[]
 .PP
-: The following data transfer interfaces are supported for a all
-endpoint types: \f[I]FI_ATOMIC\f[], \f[I]FI_MSG\f[], \f[I]FI_RMA\f[],
+: The following data transfer interfaces are supported for all endpoint
+types: \f[I]FI_ATOMIC\f[], \f[I]FI_MSG\f[], \f[I]FI_RMA\f[],
 \f[I]FI_TAGGED\f[].
 See DATA TRANSFER OPERATIONS below for more details.
 .PP
@@ -40,12 +43,16 @@ objects of type \f[I]FI_WAIT_NONE\f[], \f[I]FI_WAIT_FD\f[], and
 .PP
 \f[I]Modes\f[] : The GNI provider does not require any operation modes.
 .PP
-\f[I]Progress\f[] : For control progress, the GNI provider supports both
+\f[I]Progress\f[]
+.PP
+: For both control and data progress, the GNI provider supports both
 \f[I]FI_PROGRESS_AUTO\f[] and \f[I]FI_PROGRESS_MANUAL\f[], with a
-default set to auto.
-For data progress, \f[I]FI_PROGRESS_MANUAL\f[] is supported.
-When progress is set to auto, a background thread runs to ensure that
-progress is made for asynchronous requests.
+default set to \f[I]FI_PROGRESS_AUTO\f[].
+.PP
+\f[I]Additional Features\f[] : The GNI provider also supports the
+following capabilities and features: \- \f[I]FI_MULTI_RECV\f[] \-
+\f[I]FI_SOURCE\f[] \- \f[I]FI_FENCE\f[] \- \f[I]FI_RM_ENABLED\f[] \-
+\f[I]FABRIC_DIRECT\f[] compilation mode
 .SH DATA TRANSFER OPERATIONS
 .SS FI_ATOMIC
 .PP
@@ -85,10 +92,12 @@ All \f[I]FI_TAGGED\f[] operations are supported except
 \f[C]fi_tinjectdata\f[].
 .SH GNI EXTENSIONS
 .PP
-The GNI provider exposes low\-level tuning parameters via a domain
-\f[C]fi_open_ops\f[] interface named \f[I]FI_GNI_DOMAIN_OPS_1\f[].
+The GNI provider exposes low\-level tuning parameters via a domain and
+endpoint \f[C]fi_open_ops\f[] interface named
+\f[I]FI_GNI_DOMAIN_OPS_1\f[] and \f[I]FI_GNI_EP_OPS_1\f[].
 The flags parameter is currently ignored.
-The fi_open_ops function takes a \f[C]struct\ fi_gni_ops_domain\f[]
+The fi_open_ops function takes either a
+\f[C]struct\ fi_gni_ops_domain\f[] or a \f[C]struct\ fi_gni_ops_ep\f[]
 parameter and populates it with the following:
 .IP
 .nf
@@ -97,12 +106,17 @@ struct\ fi_gni_ops_domain\ {
 \ \ \ \ int\ (*set_val)(struct\ fid\ *fid,\ dom_ops_val_t\ t,\ void\ *val);
 \ \ \ \ int\ (*get_val)(struct\ fid\ *fid,\ dom_ops_val_t\ t,\ void\ *val);
 };
+
+struct\ fi_gni_ops_ep\ {
+\ \ \ \ int\ (*set_val)(struct\ fid\ *fid,\ dom_ops_val_t\ t,\ void\ *val);
+\ \ \ \ int\ (*get_val)(struct\ fid\ *fid,\ dom_ops_val_t\ t,\ void\ *val);
+};
 \f[]
 .fi
 .PP
 The \f[C]set_val\f[] function sets the value of a given parameter; the
 \f[C]get_val\f[] function returns the current value.
-The currently supported values are:
+For \f[I]FI_GNI_DOMAIN_OPS_1\f[], the currently supported values are:
 .PP
 \f[I]GNI_MSG_RENDEZVOUS_THRESHOLD\f[] : Threshold message size at which
 a rendezvous protocol is used for \f[I]FI_MSG\f[] data transfers.
@@ -157,6 +171,11 @@ The value is of type uint32_t.
 \f[I]GNI_MR_CACHE_LAZY_DEREG\f[] : Enable or disable lazy deregistration
 of memory.
 The value is of type int32_t.
+.PP
+For \f[I]FI_GNI_EP_OPS_1\f[], the currently supported values are:
+\f[I]GNI_HASH_TAG_IMPL\f[] : Use a hashlist for the tag list
+implementation.
+The value is of type uint32_t.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_open_ops\f[](3), \f[C]fi_provider\f[](7),
