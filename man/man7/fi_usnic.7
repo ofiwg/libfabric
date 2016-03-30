@@ -1,4 +1,4 @@
-.TH "fi_usnic" "7" "2016\-03\-21" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_usnic" "7" "2016\-03\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The usNIC Fabric Provider
@@ -80,6 +80,10 @@ The tag matching interface is not supported.
 .IP \[bu] 2
 \f[I]FI_MSG_PREFIX\f[] is only supported on \f[I]FI_EP_DGRAM\f[] and
 usage is limited to releases 1.1 and beyond.
+.IP \[bu] 2
+fi_control with FI_GETWAIT may only be used on CQs that have been bound
+to an endpoint.
+If fi_control is used on an unbound CQ, it will return \-FI_EOPBADSTATE.
 .RE
 .IP \[bu] 2
 The usnic libfabric provider supports extensions that provide
