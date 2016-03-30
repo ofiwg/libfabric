@@ -19,7 +19,7 @@ support for common atomic operations and optimized collectives.
 
 # REQUIREMENTS
 
-The GNI provider runs on Cray XC systems running CLE 5.2 UP03 or higher
+The GNI provider runs on Cray XC systems running CLE 5.2 UP04 or higher
 using gcc version 4.9 or higher.
 
 # SUPPORTED FEATURES
@@ -28,15 +28,18 @@ The GNI provider supports the following features defined for the
 libfabric API:
 
 *Endpoint types*
-: The provider supports the *FI_EP_RDM* endpoint type.
+: The provider supports the *FI_EP_RDM* and *FI_EP_DGRAM* endpoint types.
 
 *Address vectors*
 : The provider implements both the *FI_AV_MAP* and *FI_AV_TABLE*
   address vector types.
 
+*Memory registration modes*
+: The provider implements the *FI_MR_BASIC* memory registration mode.
+
 *Data transfer operations*
 
-: The following data transfer interfaces are supported for a all
+: The following data transfer interfaces are supported for all
   endpoint types: *FI_ATOMIC*, *FI_MSG*, *FI_RMA*, *FI_TAGGED*.  See
   DATA TRANSFER OPERATIONS below for more details.
 
@@ -49,11 +52,18 @@ libfabric API:
 : The GNI provider does not require any operation modes.
 
 *Progress*
-: For control progress, the GNI provider supports both
+
+: For both control and data progress, the GNI provider supports both
   *FI_PROGRESS_AUTO* and *FI_PROGRESS_MANUAL*, with a default set to
-  auto.  For data progress, *FI_PROGRESS_MANUAL* is supported.  When
-  progress is set to auto, a background thread runs to ensure that
-  progress is made for asynchronous requests.
+  *FI_PROGRESS_AUTO*.
+
+*Additional Features*
+: The GNI provider also supports the following capabilities and features:
+- *FI_MULTI_RECV*
+- *FI_SOURCE*
+- *FI_FENCE*
+- *FI_RM_ENABLED*
+- *FABRIC_DIRECT* compilation mode
 
 # DATA TRANSFER OPERATIONS
 
@@ -92,22 +102,27 @@ All *FI_TAGGED* operations are supported except `fi_tinjectdata`.
 
 # GNI EXTENSIONS
 
-The GNI provider exposes low-level tuning parameters via a domain
-`fi_open_ops` interface named *FI_GNI_DOMAIN_OPS_1*.  The flags
-parameter is currently ignored.  The fi_open_ops function takes a
-`struct fi_gni_ops_domain` parameter and populates it with the
-following:
+The GNI provider exposes low-level tuning parameters via a domain and
+endpoint `fi_open_ops` interface named *FI_GNI_DOMAIN_OPS_1* and
+*FI_GNI_EP_OPS_1*.  The flags parameter is currently ignored.  The
+fi_open_ops function takes either a `struct fi_gni_ops_domain` or a
+`struct fi_gni_ops_ep` parameter and populates it with the following:
 
 ```c
 struct fi_gni_ops_domain {
 	int (*set_val)(struct fid *fid, dom_ops_val_t t, void *val);
 	int (*get_val)(struct fid *fid, dom_ops_val_t t, void *val);
 };
+
+struct fi_gni_ops_ep {
+	int (*set_val)(struct fid *fid, dom_ops_val_t t, void *val);
+	int (*get_val)(struct fid *fid, dom_ops_val_t t, void *val);
+};
 ```
 
 The `set_val` function sets the value of a given parameter; the
-`get_val` function returns the current value.  The currently supported
-values are:
+`get_val` function returns the current value.  For
+*FI_GNI_DOMAIN_OPS_1*, the currently supported values are:
 
 *GNI_MSG_RENDEZVOUS_THRESHOLD*
 : Threshold message size at which a rendezvous protocol is used for
@@ -163,6 +178,9 @@ values are:
 : Enable or disable lazy deregistration of memory.  The value is of
   type int32_t.
 
+For *FI_GNI_EP_OPS_1*, the currently supported values are:
+*GNI_HASH_TAG_IMPL*
+: Use a hashlist for the tag list implementation.  The value is of type uint32_t.
 
 
 # SEE ALSO
