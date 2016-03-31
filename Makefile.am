@@ -1,3 +1,6 @@
+#
+# Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
+#
 # Makefile.am for libfabric
 
 AM_CPPFLAGS = \
@@ -275,6 +278,8 @@ nroff:
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
 	"$(top_srcdir)/config/distscript.pl" "$(distdir)" "$(PACKAGE_VERSION)"
+
+TESTS = util/fi_info
 
 test:
 	./util/fi_info
