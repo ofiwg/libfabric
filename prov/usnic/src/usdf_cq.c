@@ -374,7 +374,7 @@ usdf_cq_readfrom_context(struct fid_cq *fcq, void *buf, size_t count,
 			}
 			++src_addr;
 		}
-			
+
 
 		entry->op_context = cq->cq_comp.uc_context;
 
@@ -784,7 +784,7 @@ usdf_cq_close(fid_t fid)
 			return ret;
 	}
 
-	if (cq->is_soft) {
+	if (cq->cq_is_soft) {
 		while (!TAILQ_EMPTY(&cq->c.soft.cq_list)) {
 			hcq = TAILQ_FIRST(&cq->c.soft.cq_list);
 			if (atomic_get(&hcq->cqh_refcnt) > 0) {
@@ -958,7 +958,7 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 		return 0;
         }
 
-	if (!cq->is_soft) {
+	if (!cq->cq_is_soft) {
 
 		/* save the CQ before we trash the union */
 		ucq = cq->c.hard.cq_cq;
@@ -992,7 +992,7 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 			TAILQ_INSERT_HEAD(&cq->c.soft.cq_list, hcq, cqh_link);
 		}
 
-		cq->is_soft = 1;
+		cq->cq_is_soft = 1;
 		cq->cq_ops = *soft_ops;
         }
 	return 0;
@@ -1146,7 +1146,7 @@ int usdf_cq_trywait(struct fid *fcq)
 		atomic_dec(&fab->num_blocked_waiting);
 	}
 
-	if (cq->is_soft) {
+	if (cq->cq_is_soft) {
 		empty = usdf_check_empty_soft_cq(cq);
 	} else {
 		usd_poll_req_notify(cq->c.hard.cq_cq);
