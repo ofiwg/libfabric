@@ -419,7 +419,21 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	/*
 	 * Set the values based on hints
 	 */
-	gnix_info->caps = caps;
+
+	switch (gnix_info->ep_attr->type) {
+	case FI_EP_RDM:
+	case FI_EP_DGRAM:
+		gnix_info->caps = caps | GNIX_EP_RDM_SEC_CAPS;
+		break;
+	case FI_EP_MSG:
+		gnix_info->caps = caps | GNIX_EP_MSG_SEC_CAPS;
+		break;
+	default:
+		GNIX_ERR(FI_LOG_FABRIC, "unknown ep type %d",
+			 gnix_info->ep_attr->type);
+		break;
+	}
+
 	gnix_info->mode = mode;
 	gnix_info->fabric_attr->name = strdup(gnix_fab_name);
 	gnix_info->tx_attr->caps = gnix_info->caps;
