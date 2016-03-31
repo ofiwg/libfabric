@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -88,6 +88,39 @@ static void teardown(void)
 }
 
 TestSuite(endpoint, .init = setup, .fini = teardown);
+
+Test(endpoint_info, info)
+{
+	int ret;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+	hints->fabric_attr->name = strdup("gni");
+
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+	cr_assert(!ret, "fi_getinfo");
+	cr_assert_eq(fi->ep_attr->type, FI_EP_RDM);
+	cr_assert_eq(fi->next->ep_attr->type, FI_EP_DGRAM);
+
+	fi_freeinfo(fi);
+
+	hints->ep_attr->type = FI_EP_RDM;
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+	cr_assert(!ret, "fi_getinfo");
+	cr_assert_eq(fi->ep_attr->type, FI_EP_RDM);
+	cr_assert_eq(fi->next, NULL);
+
+	fi_freeinfo(fi);
+
+	hints->ep_attr->type = FI_EP_DGRAM;
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+	cr_assert(!ret, "fi_getinfo");
+	cr_assert_eq(fi->ep_attr->type, FI_EP_DGRAM);
+	cr_assert_eq(fi->next, NULL);
+
+	fi_freeinfo(fi);
+	fi_freeinfo(hints);
+}
 
 Test(endpoint, open_close)
 {

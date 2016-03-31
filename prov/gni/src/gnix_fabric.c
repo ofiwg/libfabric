@@ -172,6 +172,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			struct fi_info **info)
 {
 	int ret = 0;
+	int ep_type_unspec = 1;
 	uint64_t mode = GNIX_FAB_MODES;
 	uint64_t caps = GNIX_EP_RDM_CAPS;
 	struct fi_info *gnix_info = NULL;
@@ -293,16 +294,42 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->rx_attr->iov_limit = 1;
 
 	if (hints) {
-		/*
-		 * check for endpoint type, only support FI_EP_RDM for now
-		 */
 		if (hints->ep_attr) {
+			/*
+			 * support FI_EP_RDM, FI_EP_DGRAM endpoint types
+			 */
 			switch (hints->ep_attr->type) {
 			case FI_EP_UNSPEC:
+				break;
 			case FI_EP_RDM:
 			case FI_EP_DGRAM:
+				gnix_info->ep_attr->type = hints->ep_attr->type;
+				ep_type_unspec = 0;
 				break;
 			default:
+				goto err;
+			}
+
+			/*
+			 * only support FI_PROTO_GNI protocol
+			 */
+			switch (hints->ep_attr->protocol) {
+			case FI_PROTO_UNSPEC:
+			case FI_PROTO_GNI:
+				break;
+			default:
+				goto err;
+			}
+
+			if (hints->ep_attr->tx_ctx_cnt > 1) {
+				goto err;
+			}
+
+			if (hints->ep_attr->rx_ctx_cnt > 1) {
+				goto err;
+			}
+
+			if (hints->ep_attr->max_msg_size > GNIX_MAX_MSG_SIZE) {
 				goto err;
 			}
 		}
@@ -323,24 +350,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 		if (hints->caps) {
 			caps = hints->caps & GNIX_EP_RDM_CAPS;
-		}
-
-		if (hints->ep_attr) {
-			switch (hints->ep_attr->protocol) {
-			case FI_PROTO_UNSPEC:
-			case FI_PROTO_GNI:
-				break;
-			default:
-				goto err;
-			}
-
-			if (hints->ep_attr->tx_ctx_cnt > 1) {
-				goto err;
-			}
-
-			if (hints->ep_attr->rx_ctx_cnt > 1) {
-				goto err;
-			}
 		}
 
 		if (hints->tx_attr) {
@@ -405,20 +414,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			if (ret)
 				goto err;
 		}
-
-		if (hints->ep_attr) {
-			if (hints->ep_attr->max_msg_size > GNIX_MAX_MSG_SIZE) {
-				goto err;
-			}
-
-			if (hints->ep_attr->type)
-				gnix_info->ep_attr->type = hints->ep_attr->type;
-			/*
-			 * TODO: tag matching
-			 * max_tag_value =
-			 * fi_tag_bits(hints->ep_attr->mem_tag_format);
-			 */
-		}
 	}
 
 	/*
@@ -432,7 +427,20 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->rx_attr->caps = gnix_info->caps;
 	gnix_info->rx_attr->mode = gnix_info->mode;
 
+	if (ep_type_unspec) {
+		struct fi_info *dg_info = fi_dupinfo(gnix_info);
+
+		if (!dg_info) {
+			GNIX_WARN(FI_LOG_FABRIC, "cannot copy info\n");
+			goto err;
+		}
+
+		dg_info->ep_attr->type = FI_EP_DGRAM;
+		gnix_info->next = dg_info;
+	}
+
 	*info = gnix_info;
+
 	return 0;
 err:
 	if (gnix_info) {
