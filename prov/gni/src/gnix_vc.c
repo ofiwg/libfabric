@@ -2073,8 +2073,8 @@ static int __gnix_vc_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 	ret = _gnix_av_lookup(av, dest_addr, &av_entry);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_DATA,
-			  "_gnix_av_lookup returned %s\n",
-			  fi_strerror(-ret));
+			  "_gnix_av_lookup for addr 0x%llx returned %s \n",
+			  dest_addr, fi_strerror(-ret));
 		goto err;
 	}
 
