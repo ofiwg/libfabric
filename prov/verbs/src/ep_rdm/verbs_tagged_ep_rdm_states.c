@@ -582,6 +582,7 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 
 	switch (p->pkt_type) {
 	case FI_IBV_RDM_EAGER_PKT:
+		assert(p->arrived_len - sizeof(rbuf->header) <= request->len);
 		request->tag = rbuf->header.tag;
 		request->conn = p->conn;
 		request->len = p->arrived_len - sizeof(rbuf->header);
@@ -589,7 +590,6 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 		request->imm = p->imm_data;
 
 		assert(request->len <= p->ep->rndv_threshold);
-		assert(request->len <= request->len);
 
 		if (request->dest_buf) {
 			assert(request->exp_rbuf);
