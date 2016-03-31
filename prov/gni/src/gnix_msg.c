@@ -1284,13 +1284,12 @@ retry_match:
 			GNIX_INFO(FI_LOG_EP_DATA, "matched RNDZV, req: %p\n",
 				  req);
 
-			/* TODO: prevent re-lookup of src_addr */
-			ret = _gnix_vc_ep_get_vc(ep, src_addr, &req->vc);
-			if (ret) {
-				GNIX_INFO(FI_LOG_EP_DATA,
-					  "_gnix_vc_ep_get_vc failed: %dn",
-					  ret);
-				return ret;
+			/*
+			 * this shouldn't happen
+			 */
+			if (unlikely(req->vc == NULL)) {
+				GNIX_ERR(FI_LOG_EP_DATA,
+					 "fab req vc field NULL");
 			}
 
 			/* Check if second GET for unaligned data is needed. */
