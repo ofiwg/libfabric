@@ -229,6 +229,7 @@ static int fi_ibv_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr)
 			fastlock_release(&ep->scq->lock);
 			return -FI_ENOMEM;
 		}
+		memset(epe, 0, sizeof(*epe));
 		wr->send_flags |= IBV_SEND_SIGNALED;
 		wr->wr_id = ep->ep_id;
 		epe->ep = ep;
@@ -253,6 +254,7 @@ static int fi_ibv_reap_comp(struct fi_ibv_msg_ep *ep)
 				fastlock_release(&ep->scq->lock);
 				return -FI_ENOMEM;
 			}
+			memset(wce, 0, sizeof(*wce));
 		}
 		ret = fi_ibv_poll_cq(ep->scq, &wce->wc);
 		if (ret < 0) {

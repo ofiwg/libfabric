@@ -294,6 +294,11 @@ static ssize_t fi_ibv_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 		/* Insert error entry into wcq */
 		if (wc.status) {
 			wce = util_buf_alloc(cq->domain->fab->wce_pool);
+			if (!wce) {
+				fastlock_release(&cq->lock);
+				return -FI_ENOMEM;
+			}
+			memset(wce, 0, sizeof(*wce));
 			memcpy(&wce->wc, &wc, sizeof wc);
 			slist_insert_tail(&wce->entry, &cq->wcq);
 			ret = -FI_EAVAIL;
@@ -350,6 +355,11 @@ static int fi_ibv_cq_trywait(struct fid *fid)
 		goto out;
 
 	wce = util_buf_alloc(cq->domain->fab->wce_pool);
+	if (!wce) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+	memset(wce, 0, sizeof(*wce));
 
 	rc = fi_ibv_poll_cq(cq, &wce->wc);
 	if (rc > 0) {
