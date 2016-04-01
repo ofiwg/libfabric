@@ -452,21 +452,23 @@ fi_ibv_rdm_tagged_process_event_established(struct rdma_cm_event *event,
 	return 0;
 }
 
-int fi_ibv_rdm_tagged_conn_cleanup(struct fi_ibv_rdm_ep *ep,
-				   struct fi_ibv_rdm_tagged_conn *conn)
+int fi_ibv_rdm_tagged_conn_cleanup(struct fi_ibv_rdm_tagged_conn *conn)
 {
-	int ret;
+	int ret = 0;
 
 	VERBS_DBG(FI_LOG_AV, "conn %p, exp = %lld unexp = %lld\n", conn,
 		     conn->exp_counter, conn->unexp_counter);
 
-	rdma_destroy_qp(conn->id[0]);
-	if ((ret = rdma_destroy_id(conn->id[0]))) {
-		VERBS_INFO(FI_LOG_AV, 
-			"rdma_destroy_id failed, ret = %d\n", ret);
+	if (conn->id[0]) {
+		rdma_destroy_qp(conn->id[0]);
+		if ((ret = rdma_destroy_id(conn->id[0]))) {
+			VERBS_INFO(FI_LOG_AV, 
+				"rdma_destroy_id failed, ret = %d\n", ret);
+		}
 	}
 
-	if (conn->cm_role == FI_VERBS_CM_SELF) {
+	if (conn->id[1]) {
+		assert(conn->cm_role == FI_VERBS_CM_SELF);
 		rdma_destroy_qp(conn->id[1]);
 		if ((ret = rdma_destroy_id(conn->id[1]))) {
 			VERBS_INFO(FI_LOG_AV, 
@@ -474,9 +476,12 @@ int fi_ibv_rdm_tagged_conn_cleanup(struct fi_ibv_rdm_ep *ep,
 		}
 	}
 
-	fi_ibv_rdm_dereg_and_free(&conn->s_mr, &conn->sbuf_mem_reg);
-	fi_ibv_rdm_dereg_and_free(&conn->r_mr, &conn->rbuf_mem_reg);
-	fi_ibv_rdm_dereg_and_free(&conn->rma_mr, &conn->rmabuf_mem_reg);
+	if (conn->s_mr)
+		fi_ibv_rdm_dereg_and_free(&conn->s_mr, &conn->sbuf_mem_reg);
+	if (conn->r_mr)
+		fi_ibv_rdm_dereg_and_free(&conn->r_mr, &conn->rbuf_mem_reg);
+	if (conn->rma_mr)
+		fi_ibv_rdm_dereg_and_free(&conn->rma_mr, &conn->rmabuf_mem_reg);
 
 	memset(conn, 0, sizeof(*conn));
 	free(conn);
@@ -502,7 +507,7 @@ fi_ibv_rdm_tagged_process_event_disconnected(struct fi_ibv_rdm_ep *ep,
 		   conn, inet_ntoa(conn->addr.sin_addr),
 		   ntohs(conn->addr.sin_port));
 	if (conn->state == FI_VERBS_CONN_CLOSED) {
-		fi_ibv_rdm_tagged_conn_cleanup(ep, conn);
+		fi_ibv_rdm_tagged_conn_cleanup(conn);
 	}
 
 	return 0;

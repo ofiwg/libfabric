@@ -33,7 +33,7 @@
 #include "config.h"
 
 #include "fi_verbs.h"
-
+#include "ep_rdm/verbs_rdm.h"
 
 static int fi_ibv_mr_close(fid_t fid)
 {
@@ -228,7 +228,7 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!_domain->info)
 		goto err1;
 
-	_domain->rdm = (info->ep_attr->type == FI_EP_RDM);
+	_domain->rdm = FI_IBV_EP_TYPE_IS_RDM(info);
 	ret = fi_ibv_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)
 		goto err2;
