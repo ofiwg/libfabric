@@ -1,5 +1,7 @@
 /*
  * Copyright (c) 2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,4 +34,4 @@
 
 /* Do not remove this file. All the include/rdma/fi_direct*.h files are created
  * build the provider with FABRIC_DIRECT option. For details see man/fi_direct.7.md
-
+ */
