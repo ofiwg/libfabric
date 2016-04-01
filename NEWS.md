@@ -38,6 +38,8 @@ alternatives to validating your installation.
 
 ## MXM provider notes
 
+- Initial release
+
 ## PSM provider notes
 
 - Remove PSM2 related code.
@@ -69,6 +71,8 @@ alternatives to validating your installation.
 - Fix a bug in connection port assignment
 
 ## UDP provider notes
+
+- Initial release
 
 ## usNIC provider notes
 
