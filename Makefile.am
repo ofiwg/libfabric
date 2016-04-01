@@ -285,7 +285,7 @@ test:
 	./util/fi_info
 
 rpm: dist
-	rpmbuild -ta libfabric-*.tar.bz2
+	LDFLAGS=-Wl,--build-id rpmbuild -ta libfabric-$(PACKAGE_VERSION).tar.bz2
 
 prov_install_man_pages=
 prov_dist_man_pages=
