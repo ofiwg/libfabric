@@ -172,7 +172,7 @@ int fi_ibv_create_ep(const char *node, const char *service,
 		}
 	}
 
-	if (hints->ep_attr->type == FI_EP_RDM) {
+	if (hints && hints->ep_attr && (hints->ep_attr->type == FI_EP_RDM)) {
 		struct fi_ibv_rdm_cm* cm = 
 			container_of(id, struct fi_ibv_rdm_cm, listener);
 		fi_ibv_rdm_cm_init(cm, _rai);

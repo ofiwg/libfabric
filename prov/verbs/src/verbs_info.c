@@ -942,7 +942,8 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		goto out;
 
-	if (hints->ep_attr->type == FI_EP_RDM) {
+	if (hints && hints->ep_attr &&
+		(hints->ep_attr->type == FI_EP_RDM)) {
 		memset(&rdm_cm, 0, sizeof(struct fi_ibv_rdm_cm));
 		ret = fi_ibv_create_ep(node, service, flags, hints, &rai,
 				       &(rdm_cm.listener));
@@ -961,8 +962,9 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		ret = fi_ibv_get_matching_info(NULL, hints, rai, info);
 	}
 
-	fi_ibv_destroy_ep(hints->ep_attr->type, rai, 
-		hints->ep_attr->type == FI_EP_RDM ? &(rdm_cm.listener) : &id);
+	if (hints && hints->ep_attr)
+		fi_ibv_destroy_ep(hints->ep_attr->type, rai,
+			hints->ep_attr->type == FI_EP_RDM ? &(rdm_cm.listener) : &id);
 
 out:
 	if (!ret || ret == -FI_ENOMEM)
