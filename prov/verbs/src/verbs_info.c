@@ -319,7 +319,7 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 
 	compare_mode = attr->mode ? attr->mode : hints->mode;
 	
-	check_mode = (info->ep_attr->type == FI_EP_RDM) ? VERBS_RDM_MODE :
+	check_mode = FI_IBV_EP_TYPE_IS_RDM(info) ? VERBS_RDM_MODE :
 		(hints->caps & FI_RMA) ? info->rx_attr->mode : VERBS_MODE;
 
 	if ((compare_mode & check_mode) != check_mode) {
@@ -942,7 +942,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		goto out;
 
-	if (hints->ep_attr->type == FI_EP_RDM) {
+	if (FI_IBV_EP_TYPE_IS_RDM(hints)) {
 		memset(&rdm_cm, 0, sizeof(struct fi_ibv_rdm_cm));
 		ret = fi_ibv_create_ep(node, service, flags, hints, &rai,
 				       &(rdm_cm.listener));
@@ -962,7 +962,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	fi_ibv_destroy_ep(hints->ep_attr->type, rai, 
-		hints->ep_attr->type == FI_EP_RDM ? &(rdm_cm.listener) : &id);
+		FI_IBV_EP_TYPE_IS_RDM(hints) ? &(rdm_cm.listener) : &id);
 
 out:
 	if (!ret || ret == -FI_ENOMEM)

@@ -298,11 +298,9 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 		HASH_DEL(fi_ibv_rdm_tagged_conn_hash, conn);
 		switch (conn->state) {
 		case FI_VERBS_CONN_ALLOCATED:
-			free(conn);
-			break;
 		case FI_VERBS_CONN_REMOTE_DISCONNECT:
-			fi_ibv_rdm_start_disconnection(ep, conn);
-			fi_ibv_rdm_tagged_conn_cleanup(ep, conn);
+		case FI_VERBS_CONN_ESTABLISHED:
+			fi_ibv_rdm_start_disconnection(conn);
 			break;
 		case FI_VERBS_CONN_STARTED:
 			while (conn->state != FI_VERBS_CONN_ESTABLISHED &&
@@ -314,9 +312,6 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 					return ret;
 				}
 			}
-			break;
-		case FI_VERBS_CONN_ESTABLISHED:
-			fi_ibv_rdm_start_disconnection(ep, conn);
 			break;
 		default:
 			break;

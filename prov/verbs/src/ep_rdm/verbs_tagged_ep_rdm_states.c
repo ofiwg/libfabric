@@ -517,12 +517,14 @@ fi_ibv_rdm_tagged_init_unexp_recv_request(
 	switch (p->pkt_type) {
 	case FI_IBV_RDM_EAGER_PKT:
 		FI_IBV_RDM_TAGGED_HANDLER_LOG();
-		assert(p->arrived_len <= p->ep->rndv_threshold);
 
 		request->tag = rbuf->header.tag;
 		request->conn = p->conn;
 		request->len = 
 			p->arrived_len - sizeof(struct fi_ibv_rdm_header);
+		
+		assert(request->len <= p->ep->rndv_threshold);
+
 		if (request->len > 0) {
 			request->unexp_rbuf = util_buf_alloc(
 				fi_ibv_rdm_tagged_extra_buffers_pool);
@@ -580,15 +582,14 @@ fi_ibv_rdm_tagged_eager_recv_got_pkt(struct fi_ibv_rdm_tagged_request *request,
 
 	switch (p->pkt_type) {
 	case FI_IBV_RDM_EAGER_PKT:
-		assert(p->pkt_type == FI_IBV_RDM_EAGER_PKT);
-		assert(p->arrived_len <= p->ep->rndv_threshold);
 		assert(p->arrived_len - sizeof(rbuf->header) <= request->len);
-
 		request->tag = rbuf->header.tag;
 		request->conn = p->conn;
 		request->len = p->arrived_len - sizeof(rbuf->header);
 		request->exp_rbuf = rbuf->payload;
 		request->imm = p->imm_data;
+
+		assert(request->len <= p->ep->rndv_threshold);
 
 		if (request->dest_buf) {
 			assert(request->exp_rbuf);
