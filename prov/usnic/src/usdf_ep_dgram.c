@@ -399,16 +399,18 @@ static const struct fi_domain_attr dgram_dflt_domain_attr = {
 /*******************************************************************************
  * Fill functions for attributes
  ******************************************************************************/
-int usdf_dgram_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
-		struct usd_device_attrs *dap)
+int usdf_dgram_fill_ep_attr(uint32_t version, struct fi_info *hints, struct
+		fi_info *fi, struct usd_device_attrs *dap)
 {
 	struct fi_ep_attr defaults;
 
 	defaults = dgram_dflt_ep_attr;
 
 	/* The ethernet header does not count against the MTU. */
-	defaults.max_msg_size = dap->uda_mtu -
-		(sizeof(struct usd_udp_hdr) - sizeof(struct ether_header));
+	defaults.max_msg_size = dap->uda_mtu - sizeof(struct usd_udp_hdr);
+
+	if (FI_VERSION_GE(version, FI_VERSION(1, 3)))
+		defaults.max_msg_size += sizeof(struct ether_header);
 
 	if (!hints || !hints->ep_attr)
 		goto out;
@@ -416,9 +418,12 @@ int usdf_dgram_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
 	/* In prefix mode the max message size is the same as in non-prefix mode
 	 * with the advertised header size added on top.
 	 */
+
 	if (hints->mode & FI_MSG_PREFIX) {
 		defaults.msg_prefix_size = USDF_HDR_BUF_ENTRY;
-		defaults.max_msg_size += defaults.msg_prefix_size;
+
+		if (FI_VERSION_GE(version, FI_VERSION(1, 3)))
+			defaults.max_msg_size += defaults.msg_prefix_size;
 	}
 
 	if (hints->ep_attr->max_msg_size > defaults.max_msg_size)
