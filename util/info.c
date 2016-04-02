@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2014 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -256,7 +257,8 @@ static int run(struct fi_info *hints, char *node, char *port)
 	uint64_t flags;
 
 	flags = list_providers ? FI_PROV_ATTR_ONLY : 0;
-	ret = fi_getinfo(FI_VERSION(1, 1), node, port, flags, hints, &info);
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			node, port, flags, hints, &info);
 	if (ret) {
 		fprintf(stderr, "fi_getinfo: %d\n", ret);
 		return ret;
