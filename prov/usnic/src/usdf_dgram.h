@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2014-2016, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -58,8 +58,8 @@ int usdf_dgram_fill_rx_attr(struct fi_info *hints,
 int usdf_dgram_fill_tx_attr(struct fi_info *hints, struct fi_info *fi,
 		struct usd_device_attrs *dap);
 int usdf_dgram_fill_dom_attr(struct fi_info *hints, struct fi_info *fi);
-int usdf_dgram_fill_ep_attr(struct fi_info *hints, struct fi_info *fi,
-		struct usd_device_attrs *dap);
+int usdf_dgram_fill_ep_attr(uint32_t version, struct fi_info *hints,
+		struct fi_info *fi, struct usd_device_attrs *dap);
 
 /* fi_ops_msg for DGRAM */
 ssize_t usdf_dgram_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,

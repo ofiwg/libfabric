@@ -256,7 +256,7 @@ usdf_fill_info_dgram(
 			fi->mode &= ~FI_MSG_PREFIX;
 	}
 
-	ret = usdf_dgram_fill_ep_attr(hints, fi, dap);
+	ret = usdf_dgram_fill_ep_attr(version, hints, fi, dap);
 	if (ret)
 		goto fail;
 
