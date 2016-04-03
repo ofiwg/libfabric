@@ -570,6 +570,9 @@ static int fi_ibv_rdm_tagged_process_event(struct rdma_cm_event *event,
 	case RDMA_CM_EVENT_REJECTED:
 		ret = fi_ibv_rdm_tagged_process_event_rejected(ep, event);
 		break;
+	case RDMA_CM_EVENT_TIMEWAIT_EXIT:
+		ret = FI_SUCCESS;
+		break;
 	case RDMA_CM_EVENT_ADDR_ERROR:
 	case RDMA_CM_EVENT_ROUTE_ERROR:
 	case RDMA_CM_EVENT_CONNECT_ERROR:

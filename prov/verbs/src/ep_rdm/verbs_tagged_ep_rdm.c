@@ -641,6 +641,14 @@ wc_error:
 	VERBS_INFO(FI_LOG_EP_DATA, "ibv_poll_cq returned %d\n", ret);
 
 	if (wc[i].status != IBV_WC_SUCCESS) {
+		struct fi_ibv_rdm_tagged_conn *conn =
+		    (struct fi_ibv_rdm_tagged_conn *)(uintptr_t)wc[i].wr_id;
+		if (wc[i].status == IBV_WC_WR_FLUSH_ERR &&
+			conn && conn->state !=  FI_VERBS_CONN_ESTABLISHED)
+		{
+			return FI_SUCCESS;
+		}
+
 		VERBS_INFO(FI_LOG_EP_DATA, "got ibv_wc.status = %d:%s\n",
 			wc[i].status, ibv_wc_status_str(wc[i].status));
 		assert(0);

@@ -515,11 +515,9 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 		break;
 	}
 
-	if (request) {
-		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request,
-					      FI_LOG_DEBUG);
-		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
-	}
+	FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request,
+				      FI_LOG_DEBUG);
+	util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
 
 	fi_ibv_rdm_tagged_poll(ep_rdm);
 

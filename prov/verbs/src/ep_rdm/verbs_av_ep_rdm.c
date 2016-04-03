@@ -71,29 +71,30 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 
 int fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn)
 {
-	int ret;
+	int ret = 0;
 
 	FI_INFO(&fi_ibv_prov, FI_LOG_AV,
 		"Closing connection %p, state %d\n", conn, conn->state);
 
+	if (conn->id[0]) {
+		ret = rdma_disconnect(conn->id[0]);
+		assert(ret == 0);
+	}
+
 	switch (conn->state) {
 	case FI_VERBS_CONN_ALLOCATED:
+	case FI_VERBS_CONN_REMOTE_DISCONNECT:
 		fi_ibv_rdm_tagged_conn_cleanup(conn);
-		return 0;
+		break;
 	case FI_VERBS_CONN_ESTABLISHED:
 		conn->state = FI_VERBS_CONN_LOCAL_DISCONNECT;
 		break;
-	case FI_VERBS_CONN_REMOTE_DISCONNECT:
-		fi_ibv_rdm_tagged_conn_cleanup(conn);
 	case FI_VERBS_CONN_REJECTED:
 		conn->state = FI_VERBS_CONN_CLOSED;
 		break;
 	default:
-		assert(0);
-		return -1;
+		ret = -1;
 	}
-
-	ret = rdma_disconnect(conn->id[0]);
 
 	assert(ret == 0);
 	return ret;
