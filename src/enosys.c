@@ -54,7 +54,7 @@ int fi_no_ops_open(struct fid *fid, const char *name,
 /*
  * struct fi_ops_fabric
  */
-int fi_no_domain(struct fid_fabric *fabric, struct fi_domain_attr *attr,
+int fi_no_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context)
 {
 	return -FI_ENOSYS;

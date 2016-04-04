@@ -99,7 +99,7 @@ int ofi_fabric_init(const struct fi_provider *prov,
 		   struct util_fabric *fabric, void *context,
 		   enum fi_match_type type);
 int ofi_fabric_close(struct util_fabric *fabric);
-int util_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
+int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
 /*
  * Domain
@@ -303,7 +303,7 @@ struct util_wait_fd {
 	fi_epoll_t		epoll_fd;
 };
 
-int fi_wait_fd_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+int ofi_wait_fd_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		struct fid_wait **waitset);
 
 
@@ -330,7 +330,7 @@ struct util_event {
 	uint8_t			data[0];
 };
 
-int fi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq_fid, void *context);
 
 
@@ -399,14 +399,13 @@ void fi_fabric_remove(struct util_fabric *fabric);
  * Layered Providers
  */
 
-typedef struct fi_info* (*ofi_alter_base_info_t)(struct fi_info *base_info);
-typedef struct fi_info* (*ofi_alter_layer_info_t)(struct fi_info *layer_info);
+typedef int (*ofi_alter_info_t)(struct fi_info *src_info, struct fi_info **dest_info);
 
 int ofi_layered_prov_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_provider *prov,
 			const struct fi_info *prov_info, struct fi_info *hints,
-			ofi_alter_layer_info_t alter_layer_info,
-			ofi_alter_base_info_t alter_base_info,
+			ofi_alter_info_t alter_layer_info,
+			ofi_alter_info_t alter_base_info,
 			int get_base_info, struct fi_info **info);
 char *ofi_strdup_less_prefix(char *name, char *prefix);
 char *ofi_strdup_add_prefix(char *name, char *prefix);

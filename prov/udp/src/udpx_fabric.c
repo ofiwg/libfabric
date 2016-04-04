@@ -40,9 +40,9 @@ static struct fi_ops_fabric udpx_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = udpx_domain_open,
 	.passive_ep = fi_no_passive_ep,
-	.eq_open = fi_eq_create,
-	.wait_open = fi_wait_fd_open,
-	.trywait = util_trywait
+	.eq_open = ofi_eq_create,
+	.wait_open = ofi_wait_fd_open,
+	.trywait = ofi_trywait
 };
 
 static int udpx_fabric_close(fid_t fid)

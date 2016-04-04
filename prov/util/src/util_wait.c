@@ -38,7 +38,7 @@
 #include <fi_util.h>
 
 
-int util_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 {
 	struct util_cq *cq;
 	struct util_eq *eq;
@@ -260,7 +260,7 @@ static int util_verify_wait_fd_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int fi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
+int ofi_wait_fd_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr,
 		    struct fid_wait **waitset)
 {
 	struct util_fabric *fabric;

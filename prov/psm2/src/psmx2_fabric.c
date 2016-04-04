@@ -89,9 +89,9 @@ static struct fi_ops_fabric psmx2_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = psmx2_domain_open,
 	.passive_ep = fi_no_passive_ep,
-	.eq_open = fi_eq_create,
+	.eq_open = ofi_eq_create,
 	.wait_open = psmx2_wait_open,
-	.trywait = util_trywait
+	.trywait = ofi_trywait
 };
 
 static struct fi_fabric_attr psmx2_fabric_attr = {
