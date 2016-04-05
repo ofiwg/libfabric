@@ -41,11 +41,11 @@
 #include <stdint.h>
 #include <sys/time.h>
 
-#include <rdma/fi_errno.h>
 #include <gnix_bitmap.h>
 #include "common.h"
 
 #include <criterion/criterion.h>
+#include "gnix_rdma_headers.h"
 
 gnix_bitmap_t *test_bitmap = NULL;
 int call_free_bitmap = 0;

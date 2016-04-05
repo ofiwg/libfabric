@@ -39,11 +39,6 @@
 #include <time.h>
 #include <string.h>
 
-#include <rdma/fabric.h>
-#include <rdma/fi_domain.h>
-#include <rdma/fi_errno.h>
-#include <rdma/fi_endpoint.h>
-#include <rdma/fi_cm.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,6 +48,7 @@
 #include "gnix.h"
 
 #include <criterion/criterion.h>
+#include "gnix_rdma_headers.h"
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;

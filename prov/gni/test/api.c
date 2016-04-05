@@ -43,20 +43,13 @@
 #include <limits.h>
 #include <assert.h>
 
-#include <rdma/fabric.h>
-#include <rdma/fi_domain.h>
-#include <rdma/fi_errno.h>
-#include <rdma/fi_endpoint.h>
-#include <rdma/fi_cm.h>
-#include <rdma/fi_atomic.h>
-#include <rdma/fi_tagged.h>
-#include "fi_ext_gni.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
 
 #include <criterion/criterion.h>
+#include "gnix_rdma_headers.h"
+#include "fi_ext_gni.h"
 
 #if 1
 #define dbg_printf(...)
@@ -814,4 +807,3 @@ Test(rdm_api, amo_write_read_w_msg)
 	rdm_api_setup_ep();
 	api_write_read(BUF_SZ);
 }
-

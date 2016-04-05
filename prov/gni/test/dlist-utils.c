@@ -39,6 +39,7 @@
 #include "gnix_util.h"
 
 #include <criterion/criterion.h>
+#include "gnix_rdma_headers.h"
 
 struct element {
 	int val;

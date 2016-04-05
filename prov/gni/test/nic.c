@@ -38,14 +38,12 @@
 #include <time.h>
 #include <string.h>
 
-#include <rdma/fabric.h>
-#include <rdma/fi_domain.h>
-#include <rdma/fi_errno.h>
 
 #include "gnix.h"
 #include "gnix_nic.h"
 
 #include <criterion/criterion.h>
+#include "gnix_rdma_headers.h"
 
 static struct fi_info *hints;
 static struct fi_info *fi;

@@ -32,11 +32,11 @@
  */
 
 #include <stdlib.h>
-#include <rdma/fabric.h> /* for container_of definition */
 
 #include "gnix_queue.h"
 
 #include <criterion/criterion.h>
+#include "gnix_rdma_headers.h"
 
 struct gnix_queue *queue;
 
