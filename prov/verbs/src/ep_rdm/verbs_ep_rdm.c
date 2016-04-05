@@ -292,7 +292,7 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 	pthread_mutex_destroy(&ep->cm_lock);
 
 	/* All posted sends are waiting local completions */
-	while (ep->posted_sends > 0) {
+	while (ep->posted_sends > 0 && ep->num_active_conns > 0) {
 		fi_ibv_rdm_tagged_poll(ep);
 	}
 

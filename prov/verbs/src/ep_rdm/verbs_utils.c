@@ -155,8 +155,6 @@ int fi_ibv_rdm_tagged_find_ipoib_addr(const struct sockaddr_in *addr,
 					       sizeof(cm->my_addr));
 					found = 1;
 					break;
-				} else if (ret < 0) {
-					return -1;
 				}
 			}
 		}
