@@ -61,6 +61,10 @@
 
 #define UTIL_FLAG_ERROR	(1ULL << 60)
 
+enum fi_match_type {
+	FI_MATCH_EXACT,
+	FI_MATCH_PREFIX,
+};
 
 /*
  * Provider details
@@ -92,7 +96,8 @@ struct util_fabric {
 int fi_fabric_init(const struct fi_provider *prov,
 		   struct fi_fabric_attr *prov_attr,
 		   struct fi_fabric_attr *user_attr,
-		   struct util_fabric *fabric, void *context);
+		   struct util_fabric *fabric, void *context,
+		   enum fi_match_type type);
 int util_fabric_close(struct util_fabric *fabric);
 int util_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
@@ -333,12 +338,14 @@ int fi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 int fi_check_fabric_attr(const struct fi_provider *prov,
 			 const struct fi_fabric_attr *prov_attr,
-			 const struct fi_fabric_attr *user_attr);
+			 const struct fi_fabric_attr *user_attr,
+			 enum fi_match_type type);
 int fi_check_wait_attr(const struct fi_provider *prov,
 		       const struct fi_wait_attr *attr);
 int fi_check_domain_attr(const struct fi_provider *prov,
 			 const struct fi_domain_attr *prov_attr,
-			 const struct fi_domain_attr *user_attr);
+			 const struct fi_domain_attr *user_attr,
+			 enum fi_match_type type);
 int fi_check_ep_attr(const struct fi_provider *prov,
 		     const struct fi_ep_attr *prov_attr,
 		     const struct fi_ep_attr *user_attr);
@@ -352,7 +359,8 @@ int fi_check_tx_attr(const struct fi_provider *prov,
 		     const struct fi_tx_attr *user_attr);
 int fi_check_info(const struct fi_provider *prov,
 		  const struct fi_info *prov_info,
-		  const struct fi_info *user_info);
+		  const struct fi_info *user_info,
+		  enum fi_match_type type);
 void fi_alter_info(struct fi_info *info,
 		   const struct fi_info *hints);
 
@@ -378,5 +386,19 @@ void fi_fabric_insert(struct util_fabric *fabric);
 struct util_fabric *fi_fabric_find(const char *name);
 void fi_fabric_remove(struct util_fabric *fabric);
 
+/*
+ * Layered Providers
+ */
 
+typedef struct fi_info* (*ofi_alter_base_info_t)(struct fi_info *base_info);
+typedef struct fi_info* (*ofi_alter_layer_info_t)(struct fi_info *layer_info);
+
+int ofi_layered_prov_getinfo(uint32_t version, const char *node, const char *service,
+			uint64_t flags, const struct fi_provider *prov,
+			const struct fi_info *prov_info, struct fi_info *hints,
+			ofi_alter_layer_info_t alter_layer_info,
+			ofi_alter_base_info_t alter_base_info,
+			int get_base_info, struct fi_info **info);
+char *ofi_strdup_less_prefix(char *name, char *prefix);
+char *ofi_strdup_add_prefix(char *name, char *prefix);
 #endif

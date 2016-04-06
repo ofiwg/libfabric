@@ -410,7 +410,8 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 			ret = fi_check_domain_attr(&gnix_prov,
 						   gnix_info->domain_attr,
-						   hints->domain_attr);
+						   hints->domain_attr,
+						   FI_MATCH_EXACT);
 			if (ret)
 				goto err;
 		}
