@@ -113,6 +113,12 @@ alternatives to validating your installation.
 - Support the case where the user creates only a send or recv queue for the
   endpoint.
 - Fix an issue where RMA reads were not working on iWARP cards.
+- verbs/RDM
+  - Add support for RMA operations.
+  - Add support for fi_cq_sread and fi_cq_sreadfrom
+  - Rework connection management to make it work with fabtests and also allow
+    connection to self.
+  - Other bug fixes and performance improvements.
 
 v1.2.0, Thu Jan 7, 2016
 =======================
