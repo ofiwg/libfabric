@@ -1,4 +1,6 @@
-[![Build Status](https://travis-ci.org/ofiwg/libfabric.svg?branch=master)](https://travis-ci.org/ofiwg/libfabric)
+[![Build Status](https://travis-ci.org/ofiwg/fabtests.svg?branch=master)](https://travis-ci.org/ofiwg/fabtests)
+[![fabtests Coverity scan suild status](https://scan.coverity.com/projects/ofiwg-fabtests/badge.svg)](https://scan.coverity.com/projects/ofiwg-fabtests)
+[![fabtests release version](https://img.shields.io/github/release/ofiwg/fabtests.svg)](https://github.com/ofiwg/fabtests/releases/latest)
 
 # fabtests
 
@@ -7,11 +9,14 @@ Fabtests provides a set of examples that uses [libfabric](http://libfabric.org)
 
 ## Building fabtests
 
+Distribution tarballs are available from the Github
+[releases](https://github.com/ofiwg/fabtests/releases) tab.
+
 If you are building Fabtests from a developer Git clone, you must first run the
 `autogen.sh` script. This will invoke the GNU Autotools to bootstrap Fabtests'
 configuration and build mechanisms. If you are building Fabtests from an
-official distribution tarball from libfabric.org, there is no need to run
-`autogen.sh`; Fabtests distribution tarballs are already bootstrapped for you.
+official distribution tarball, there is no need to run `autogen.sh`; Fabtests
+distribution tarballs are already bootstrapped for you.
 
 Fabtests relies on being able to find an installed version of Libfabric. In
 some cases, Libfabric may be in default compiler / linker search paths, and you
