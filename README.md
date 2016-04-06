@@ -230,3 +230,23 @@ provider will not be built. If `<directory>` is specified, then check in the
 directory and check for `libnl` version 3. If version 3 is not found, then
 check for version 1. If no `<directory>` argument is specified, then this
 option is redundant with `--with-usnic`.
+
+### verbs
+
+***
+
+The verbs provider enables applications using OFI to be run over any verbs
+hardware (Infiniband, iWarp, etc). It uses the Linux Verbs API for network
+transport and provides a translation of OFI calls to appropriate verbs API calls.
+It uses librdmacm for communication management and libibverbs for other control
+and data transfer operations.
+
+See the `fi_verbs(7)` man page for more details.
+
+#### Dependencies
+
+- The verbs provider requires libibverbs (v1.1.8 or newer) and librdmacm (v1.0.16
+  or newer). If you are compiling Libfabric from source and want to enable verbs
+  support, you will also need the matching header files for the above two libraries.
+  If the libraries and header files are not in default paths, specify them in CFLAGS,
+  LDFLAGS and LD_LIBRARY_PATH environment variables.
