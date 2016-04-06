@@ -1,4 +1,4 @@
-.TH "fi_verbs" "7" "2016\-03\-30" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
+.TH "fi_verbs" "7" "2016\-04\-06" "Libfabric Programmer\[aq]s Manual" "\@VERSION\@"
 .SH NAME
 .PP
 The Verbs Fabric Provider
@@ -14,8 +14,8 @@ control and data transfer operations.
 .PP
 The verbs provider supports a subset of OFI features.
 .PP
-\f[I]Endpoint types\f[] : FI_EP_MSG, FI_EP_RDM (Experimental support for
-only FI_TAGGED interface).
+\f[I]Endpoint types\f[] : FI_EP_MSG, FI_EP_RDM (Experimental support
+FI_TAGGED and FI_RMA interfaces).
 .PP
 \f[I]Endpoint capabilities\f[] : FI_MSG, FI_RMA, FI_ATOMIC.
 .PP
@@ -54,6 +54,12 @@ Wait sets are not supported.
 .PP
 \f[I]Resource Management\f[] : Application has to make sure CQs are not
 overrun as this cannot be detected by the provider.
+.PP
+\f[I]RDM\f[] : The RDM support for verbs have the following limitations:
+* iWARP is not supported yet.
+* Supports iovs of only size 1.
+* Max data transfer size is 1 GB * Not thread safe.
+* Data and flags arguments are ignored
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[](7), \f[C]fi_provider\f[](7),
