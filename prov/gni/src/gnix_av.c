@@ -539,6 +539,33 @@ static int map_reverse_lookup(struct gnix_fid_av *int_av,
 /*******************************************************************************
  * FI_AV API implementations.
  ******************************************************************************/
+int _gnix_table_lookup(struct gnix_fid_av *int_av,
+		       fi_addr_t fi_addr,
+		       struct gnix_av_addr_entry **entry_ptr)
+{
+	return table_lookup(int_av, fi_addr, entry_ptr);
+}
+
+int _gnix_table_reverse_lookup(struct gnix_fid_av *int_av,
+			       struct gnix_address gnix_addr,
+			       fi_addr_t *fi_addr)
+{
+	return table_reverse_lookup(int_av, gnix_addr, fi_addr);
+}
+
+int _gnix_map_lookup(struct gnix_fid_av *int_av,
+		     fi_addr_t fi_addr,
+		     struct gnix_av_addr_entry **entry_ptr)
+{
+	return map_lookup(int_av, fi_addr, entry_ptr);
+}
+
+int _gnix_map_reverse_lookup(struct gnix_fid_av *int_av,
+			     struct gnix_address gnix_addr,
+			     fi_addr_t *fi_addr)
+{
+	return map_reverse_lookup(int_av, gnix_addr, fi_addr);
+}
 
 int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
 		    struct gnix_av_addr_entry **entry_ptr)

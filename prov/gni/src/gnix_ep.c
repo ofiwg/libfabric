@@ -46,6 +46,7 @@
 #include "gnix_ep.h"
 #include "gnix_hashtable.h"
 #include "gnix_vc.h"
+#include "gnix_vector.h"
 #include "gnix_msg.h"
 #include "gnix_rma.h"
 #include "gnix_atomic.h"
@@ -250,6 +251,96 @@ static inline ssize_t __ep_senddata(struct fid_ep *ep, const void *buf,
 
 	return _gnix_send(gnix_ep, (uint64_t)buf, len, desc, dest_addr,
 			  context, sd_flags, data, tag);
+}
+
+static void __gnix_vc_destroy_ht_entry(void *val)
+{
+	struct gnix_vc *vc = (struct gnix_vc *) val;
+
+	_gnix_vc_destroy(vc);
+}
+
+/*******************************************************************************
+ * EP vc initialization helper
+ ******************************************************************************/
+static inline int __gnix_ep_init_vc(struct gnix_fid_ep *ep_priv)
+{
+	int ret;
+	enum fi_av_type type;
+	gnix_hashtable_attr_t gnix_ht_attr;
+	gnix_vec_attr_t gnix_vec_attr;
+
+	type = ep_priv->av->type;
+
+	/*
+	 *Initialize VC hashtable - this is always used
+	 * regardless of AV type associated with the EP
+	 */
+
+	ep_priv->vc_ht = calloc(1, sizeof(struct gnix_hashtable));
+	if (ep_priv->vc_ht == NULL)
+		goto err;
+
+	gnix_ht_attr.ht_initial_size = ep_priv->domain->params.ct_init_size;
+	gnix_ht_attr.ht_maximum_size = ep_priv->domain->params.ct_max_size;
+	gnix_ht_attr.ht_increase_step = ep_priv->domain->params.ct_step;
+	gnix_ht_attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
+	gnix_ht_attr.ht_collision_thresh = 500;
+	gnix_ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
+	gnix_ht_attr.ht_internal_locking = 0;
+	gnix_ht_attr.destructor = __gnix_vc_destroy_ht_entry;
+
+	ret = _gnix_ht_init(ep_priv->vc_ht, &gnix_ht_attr);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_ht_init returned %s\n",
+			  fi_strerror(-ret));
+
+		goto err;
+	}
+
+	if (type == FI_AV_TABLE) {
+		/* Initialize VC vector for FI_AV_TABLE */
+		ep_priv->vc_table = calloc(1, sizeof(struct gnix_vector));
+		if(ep_priv->vc_table == NULL)
+			goto err;
+
+		gnix_vec_attr.vec_initial_size = ep_priv->domain->params.ct_init_size;
+		gnix_vec_attr.vec_maximum_size = ep_priv->domain->params.ct_max_size;
+		gnix_vec_attr.vec_increase_step = ep_priv->domain->params.ct_step;
+		gnix_vec_attr.vec_increase_type = GNIX_VEC_INCREASE_MULT;
+		gnix_vec_attr.vec_internal_locking = GNIX_VEC_UNLOCKED;
+
+		ret = _gnix_vec_init(ep_priv->vc_table, &gnix_vec_attr);
+                GNIX_DEBUG(
+			FI_LOG_EP_CTRL,
+			"ep_priv->vc_table = %p, ep_priv->vc_table->vector = %p\n",
+			ep_priv->vc_table, ep_priv->vc_table->vector);
+                if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL, "_gnix_vec_init returned %s\n",
+				  fi_strerror(ret));
+			goto err;
+		}
+	}
+
+	return FI_SUCCESS;
+
+err:
+	if (ep_priv->vc_table != NULL) {
+		_gnix_vec_close(ep_priv->vc_table);
+
+		free(ep_priv->vc_table);
+		ep_priv->vc_table = NULL;
+	}
+
+	if (ep_priv->vc_ht != NULL) {
+		_gnix_ht_destroy(ep_priv->vc_ht); /* may not be initialized but
+						     okay */
+		free(ep_priv->vc_ht);
+		ep_priv->vc_ht = NULL;
+	}
+
+	return ret;
 }
 
 /*******************************************************************************
@@ -1162,6 +1253,18 @@ static void __ep_destruct(void *obj)
 					  fi_strerror(-ret));
 			}
 		}
+
+		if (ep->vc_table != NULL) {
+			ret = _gnix_vec_close(ep->vc_table);
+			if (ret == FI_SUCCESS) {
+				free(ep->vc_table);
+				ep->vc_table = NULL;
+			} else {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "_gnix_vec_close returned %s\n",
+					  fi_strerror(-ret));
+			}
+		}
 	}
 
 	if (ep->send_cq) {
@@ -1316,6 +1419,7 @@ DIRECT_FN STATIC int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			break;
 		}
 		ep->av = av;
+		__gnix_ep_init_vc(ep);
 		_gnix_ref_get(ep->av);
 		break;
 	case FI_CLASS_CNTR:
@@ -1420,13 +1524,6 @@ DIRECT_FN int gnix_pep_bind(fid_t fid, fid_t *bfid, uint64_t flags)
 	return -FI_ENOSYS;
 }
 
-static void __gnix_vc_destroy_ht_entry(void *val)
-{
-	struct gnix_vc *vc = (struct gnix_vc *) val;
-
-	_gnix_vc_destroy(vc);
-}
-
 /*
  * helper function for initializing an ep of type
  * GNIX_EPN_TYPE_BOUND
@@ -1521,7 +1618,6 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	uint32_t cdm_id, seed;
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_ep *ep_priv;
-	gnix_hashtable_attr_t gnix_ht_attr;
 	gnix_ht_key_t *key_ptr;
 	bool free_list_inited = false;
 
@@ -1667,32 +1763,11 @@ DIRECT_FN int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 				  ret);
 			goto err;
 		}
-
-		gnix_ht_attr.ht_initial_size = domain_priv->params.ct_init_size;
-		gnix_ht_attr.ht_maximum_size = domain_priv->params.ct_max_size;
-		gnix_ht_attr.ht_increase_step = domain_priv->params.ct_step;
-		gnix_ht_attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
-		gnix_ht_attr.ht_collision_thresh = 500;
-		gnix_ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
-		gnix_ht_attr.ht_internal_locking = 0;
-		gnix_ht_attr.destructor = __gnix_vc_destroy_ht_entry;
-
-		ep_priv->vc_ht = calloc(1, sizeof(struct gnix_hashtable));
-		if (ep_priv->vc_ht == NULL)
-			goto err;
-		ret = _gnix_ht_init(ep_priv->vc_ht, &gnix_ht_attr);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				    "gnix_ht_init call returned %d\n",
-				     ret);
-			goto err;
-		}
-		fastlock_init(&ep_priv->vc_ht_lock);
-
 	} else {
 		ep_priv->cm_nic = NULL;
 		ep_priv->vc = NULL;
 	}
+	fastlock_init(&ep_priv->vc_lock);
 
 	ep_priv->progress_fn = NULL;
 	ep_priv->rx_progress_fn = NULL;
@@ -1725,13 +1800,6 @@ err:
 
 	if (free_list_inited == true)
 		__fr_freelist_destroy(ep_priv);
-
-	if (ep_priv->vc_ht != NULL) {
-		_gnix_ht_destroy(ep_priv->vc_ht); /* may not be initialized but
-						     okay */
-		free(ep_priv->vc_ht);
-		ep_priv->vc_ht = NULL;
-	}
 
 	if (ep_priv->cm_nic != NULL)
 		ret = _gnix_cm_nic_free(ep_priv->cm_nic);
@@ -1772,7 +1840,7 @@ static inline struct gnix_fab_req *__find_tx_req(
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "searching VCs for the correct context to"
 		   " cancel, context=%p", context);
 
-	fastlock_acquire(&ep->vc_ht_lock);
+	fastlock_acquire(&ep->vc_lock);
 	while ((vc = _gnix_ht_iterator_next(&iter))) {
 		fastlock_acquire(&vc->tx_queue_lock);
 		entry = dlist_remove_first_match(&vc->tx_queue,
@@ -1784,7 +1852,7 @@ static inline struct gnix_fab_req *__find_tx_req(
 			break;
 		}
 	}
-	fastlock_release(&ep->vc_ht_lock);
+	fastlock_release(&ep->vc_lock);
 
 	return req;
 }

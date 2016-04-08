@@ -93,6 +93,69 @@ int _gnix_av_reverse_lookup(struct gnix_fid_av *gnix_av,
 			    struct gnix_address gnix_addr,
 			    fi_addr_t *fi_addr);
 
+/*******************************************************************************
+ * If the caller already knows the av type they can call the lookups directly
+ * using the following functions.
+ ******************************************************************************/
+
+/**
+ * @brief (FI_AV_TABLE) Return the gnix address using its corresponding
+ * fi_addr.
+ *
+ * @param[in] int_av		The AV to use for the lookup.
+ * @param[in] fi_addr		The corresponding fi_addr_t.
+ * @param[in/out] entry_ptr	The pointer to an address in the entry table.
+ *
+ * @return FI_SUCCESS on successfully looking up the entry in the entry table.
+ * @return -FI_EINVAL upon passing an invalid parameter.
+ */
+int _gnix_table_lookup(struct gnix_fid_av *int_av,
+		       fi_addr_t fi_addr,
+		       struct gnix_av_addr_entry **entry_ptr);
+
+/**
+ * @brief (FI_AV_MAP) Return the gnix address using its corresponding
+ * fi_addr.
+ *
+ * @param[in] int_av		The AV to use for the lookup.
+ * @param[in] fi_addr		The corresponding fi_addr_t.
+ * @param[in/out] entry_ptr	The pointer to an address in the entry table.
+ *
+ * @return FI_SUCCESS on successfully looking up the entry in the entry table.
+ * @return -FI_EINVAL upon passing an invalid parameter.
+ */
+int _gnix_map_lookup(struct gnix_fid_av *int_av,
+		     fi_addr_t fi_addr,
+		     struct gnix_av_addr_entry **entry_ptr);
+
+/**
+ * @brief (FI_AV_TABLE) Return fi_addr using its corresponding gnix address.
+ *
+ * @param[in] int_av		The AV to use for the lookup.
+ * @param[in] gnix_addr		The gnix address
+ * @param[in/out] fi_addr	The pointer to the corresponding fi_addr.
+ *
+ * @return FI_SUCCESS on successfully looking up the entry in the entry table.
+ * @return -FI_EINVAL upon passing an invalid parameter.
+ */
+int _gnix_table_reverse_lookup(struct gnix_fid_av *int_av,
+			       struct gnix_address gnix_addr,
+			       fi_addr_t *fi_addr);
+
+/**
+ * @brief (FI_AV_MAP) Return fi_addr using its corresponding gnix address.
+ *
+ * @param[in] int_av		The AV to use for the lookup.
+ * @param[in] gnix_addr		The gnix address
+ * @param[in/out] fi_addr	The pointer to the corresponding fi_addr.
+ *
+ * @return FI_SUCCESS on successfully looking up the entry in the entry table.
+ * @return -FI_EINVAL upon passing an invalid parameter.
+ */
+int _gnix_map_reverse_lookup(struct gnix_fid_av *int_av,
+			     struct gnix_address gnix_addr,
+			     fi_addr_t *fi_addr);
+
 /**
  * @brief Return the string representation of the FI address.
  *
