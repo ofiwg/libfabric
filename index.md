@@ -55,7 +55,8 @@ How do I get involved?
 
 First, take a look at the above documentation and tutorial.  Then read the documentation:
 
-* [Man pages for v1.2.0](v1.2.0/man/)
+* [Man pages for v1.3.0](v1.3.0/man/)
+  * Older: [Man pages for v1.2.0](v1.2.0/man/)
   * Older: [Man pages for v1.1.1](v1.1.1/man/)
   * Older: [Man pages for v1.1.0](v1.1.0/man/)
   * Older: [Man pages for v1.0.0](v1.0.0/man/)
@@ -67,8 +68,8 @@ A set of Linux man pages have been carefully written to specify the libfabric AP
 
 Next, download the latest releases:
 
-* The libfabric library itself (including documentation): [libfabric-1.2.0.tar.bz2](http://downloads.openfabrics.org/downloads/ofi/libfabric-1.2.0.tar.bz2) (or [see all prior releases](http://downloads.openfabrics.org/downloads/ofi/))
-* Examples and unit tests: [fabtests-1.2.0.tar.bz2](http://downloads.openfabrics.org/downloads/ofi/fabtests-1.2.0.tar.bz2) (or [see all prior releases](http://downloads.openfabrics.org/downloads/ofi/))
+* The libfabric library itself (including documentation): [libfabric v1.3.0](https://github.com/ofiwg/libfabric/releases/tag/v1.3.0) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
+* Examples and unit tests: [fabtests v1.3.0](https://github.com/ofiwg/fabtests/releases/tag/v1.3.0) (or [see all prior releases](https://github.com/ofiwg/fabtests/releases/)).
 
 The libfabric code base is being developed in [the main OFIWG libfabric GitHub repository](https://github.com/ofiwg/libfabric).
 
