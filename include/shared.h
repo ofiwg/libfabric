@@ -264,8 +264,8 @@ int ft_finalize();
 
 size_t ft_rx_prefix_size();
 size_t ft_tx_prefix_size();
-ssize_t ft_post_rx(size_t size);
-ssize_t ft_post_tx(size_t size);
+ssize_t ft_post_rx(size_t size, struct fi_context* ctx);
+ssize_t ft_post_tx(size_t size, struct fi_context* ctx);
 ssize_t ft_rx(size_t size);
 ssize_t ft_tx(size_t size);
 ssize_t ft_inject(size_t size);

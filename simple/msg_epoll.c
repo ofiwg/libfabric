@@ -222,7 +222,7 @@ static int send_recv()
 			fprintf(stderr, "Transmit buffer too small.\n");
 			return -FI_ETOOSMALL;
 		}
-		ret = ft_post_tx(message_len);
+		ret = ft_post_tx(message_len, &tx_ctx);
 		if (ret)
 			return ret;
 

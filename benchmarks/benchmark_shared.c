@@ -42,6 +42,8 @@
 #include "shared.h"
 #include "benchmark_shared.h"
 
+extern struct fi_context *ctx_arr;
+
 void ft_parse_benchmark_opts(int op, char *optarg)
 {
 	switch (op) {
@@ -125,6 +127,10 @@ int bandwidth(void)
 {
 	int ret, i, j;
 
+	if (!ctx_arr) {
+		return -FI_ENOMEM;
+	}
+
 	ret = ft_sync();
 	if (ret)
 		return ret;
@@ -145,7 +151,8 @@ int bandwidth(void)
 				if (opts.transfer_size < fi->tx_attr->inject_size)
 					ret = ft_inject(opts.transfer_size);
 				else
-					ret = ft_post_tx(opts.transfer_size);
+					ret = ft_post_tx(opts.transfer_size,
+							 &ctx_arr[j]);
 				if (ret)
 					return ret;
 			}
@@ -162,7 +169,7 @@ int bandwidth(void)
 				ft_start();
 
 			for(j = 0; j < opts.window_size; j++) {
-				ret = ft_post_rx(opts.transfer_size);
+				ret = ft_post_rx(opts.transfer_size, &ctx_arr[j]);
 				if (ret)
 					return ret;
 			}

@@ -99,7 +99,7 @@ static int send_recv()
 	int ret;
 
 	fprintf(stdout, "Posting a send...\n");
-	ret = ft_post_tx(tx_size);
+	ret = ft_post_tx(tx_size, &tx_ctx);
 	if (ret)
 		return ret;
 
