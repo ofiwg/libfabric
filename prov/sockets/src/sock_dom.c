@@ -65,11 +65,6 @@ int sock_verify_domain_attr(struct fi_domain_attr *attr)
 	if (!attr)
 		return 0;
 
-	if (attr->name) {
-		if (strcmp(attr->name, sock_dom_name))
-			return -FI_ENODATA;
-	}
-
 	switch (attr->threading) {
 	case FI_THREAD_UNSPEC:
 	case FI_THREAD_SAFE:

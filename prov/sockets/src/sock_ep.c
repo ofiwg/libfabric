@@ -32,12 +32,18 @@
 
 #include "config.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+
+#if HAVE_GETIFADDRS
+#include <net/if.h>
+#include <ifaddrs.h>
+#endif
 
 #include "sock.h"
 #include "sock_util.h"
@@ -1216,7 +1222,85 @@ int sock_srx_ctx(struct fid_domain *domain,
 	return 0;
 }
 
-static void sock_set_fabric_attr(const struct fi_fabric_attr *hint_attr,
+int sock_get_prefix_len(uint32_t net_addr)
+{
+	int count = 0;
+	while (net_addr > 0) {
+		net_addr = net_addr >> 1;
+		count++;
+	}
+	return count;
+}
+
+#if HAVE_GETIFADDRS
+char *sock_get_fabric_name(struct sockaddr_in *src_addr)
+{
+	int ret;
+        struct ifaddrs *ifaddrs, *ifa;
+	char *fabric_name = NULL;
+	struct in_addr net_in_addr;
+	struct sockaddr_in *host_addr, *net_addr;
+	char netbuf[SOCK_MAX_NETWORK_ADDR_SZ];
+	int prefix_len;
+	ret = getifaddrs(&ifaddrs);
+	if (!ret) {
+		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
+			     (ifa->ifa_addr->sa_family != AF_INET))
+				continue;
+			if (sock_compare_addr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
+				host_addr = (struct sockaddr_in *)ifa->ifa_addr;
+				net_addr = (struct sockaddr_in *)ifa->ifa_netmask;
+				// set fabric name to the network_adress in the format of a.b.c.d/e
+				net_in_addr.s_addr = (uint32_t)((uint32_t) host_addr->sin_addr.s_addr
+							& (uint32_t) net_addr->sin_addr.s_addr);
+				inet_ntop(host_addr->sin_family, (void *)&(net_in_addr), netbuf,
+					   sizeof(netbuf));
+				prefix_len = sock_get_prefix_len(net_addr->sin_addr.s_addr);
+				snprintf(netbuf + strlen(netbuf), sizeof(netbuf) - strlen(netbuf),
+					  "%s%d", "/", prefix_len);
+				fabric_name = strdup(netbuf);
+				return fabric_name;
+			}
+                }
+                freeifaddrs(ifaddrs);
+        }
+	return fabric_name;
+}
+
+char *sock_get_domain_name(struct sockaddr_in *src_addr)
+{
+	int ret;
+        struct ifaddrs *ifaddrs, *ifa;
+	char *domain_name = NULL;
+	ret = getifaddrs(&ifaddrs);
+	if (!ret) {
+		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+			if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
+			     (ifa->ifa_addr->sa_family != AF_INET))
+				continue;
+			if (sock_compare_addr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
+				domain_name = strdup(ifa->ifa_name);
+				return domain_name;
+			}
+                }
+                freeifaddrs(ifaddrs);
+        }
+	return domain_name;
+}
+#else
+char *sock_get_fabric_name(struct sockaddr_in *src_addr)
+{
+	return NULL;
+}
+
+char *sock_get_domain_name(struct sockaddr_in *src_addr)
+{
+	return NULL;
+}
+#endif
+
+static void sock_set_fabric_attr(void *src_addr, const struct fi_fabric_attr *hint_attr,
 				 struct fi_fabric_attr *attr)
 {
 	struct sock_fabric *fabric;
@@ -1228,11 +1312,16 @@ static void sock_set_fabric_attr(const struct fi_fabric_attr *hint_attr,
 		fabric = sock_fab_list_head();
 		attr->fabric = fabric ? &fabric->fab_fid : NULL;
 	}
-	attr->name = strdup(sock_fab_name);
+
+	/* reverse lookup network address from node and assign it as fabric name */
+	attr->name = sock_get_fabric_name(src_addr);
+	if (!attr->name)
+		attr->name = strdup(sock_fab_name);
+
 	attr->prov_name = NULL;
 }
 
-static void sock_set_domain_attr(const struct fi_domain_attr *hint_attr,
+static void sock_set_domain_attr(void *src_addr, const struct fi_domain_attr *hint_attr,
 				 struct fi_domain_attr *attr)
 {
 	struct sock_domain *domain;
@@ -1279,7 +1368,10 @@ static void sock_set_domain_attr(const struct fi_domain_attr *hint_attr,
 	attr->cq_data_size = sock_domain_attr.cq_data_size;
 	attr->resource_mgmt = sock_domain_attr.resource_mgmt;
 out:
-	attr->name = strdup(sock_dom_name);
+	/* reverse lookup interface from node and assign it as domain name */
+	attr->name = sock_get_domain_name(src_addr);
+	if (!attr->name)
+		attr->name = strdup(sock_fab_name);
 }
 
 
@@ -1328,11 +1420,11 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 		if (hints->handle)
 			info->handle = hints->handle;
 
-		sock_set_domain_attr(hints->domain_attr, info->domain_attr);
-		sock_set_fabric_attr(hints->fabric_attr, info->fabric_attr);
+		sock_set_domain_attr(src_addr, hints->domain_attr, info->domain_attr);
+		sock_set_fabric_attr(src_addr, hints->fabric_attr, info->fabric_attr);
 	} else {
-		sock_set_domain_attr(NULL, info->domain_attr);
-		sock_set_fabric_attr(NULL, info->fabric_attr);
+		sock_set_domain_attr(src_addr, NULL, info->domain_attr);
+		sock_set_fabric_attr(src_addr, NULL, info->fabric_attr);
 	}
 
 	info->ep_attr->type = ep_type;

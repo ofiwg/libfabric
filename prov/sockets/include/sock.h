@@ -89,6 +89,7 @@
 
 #define SOCK_CQ_DATA_SIZE (sizeof(uint64_t))
 #define SOCK_TAG_SIZE (sizeof(uint64_t))
+#define SOCK_MAX_NETWORK_ADDR_SZ (35)
 
 #define SOCK_PEP_LISTENER_TIMEOUT (10000)
 #define SOCK_CM_COMM_TIMEOUT (2000)
@@ -911,6 +912,11 @@ enum {
 struct sock_conn_req_handle {
 	struct fid handle;
 	struct sock_conn_req *req;
+};
+
+struct sock_host_list_entry {
+	char hostname[HOST_NAME_MAX];
+	struct slist_entry entry;
 };
 
 union sock_tx_op {
