@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_CM_H_
-#define _FI_CM_H_
+#ifndef FI_CM_H
+#define FI_CM_H
 
 #include <rdma/fi_endpoint.h>
 

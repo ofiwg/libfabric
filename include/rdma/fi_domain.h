@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_DOMAIN_H_
-#define _FI_DOMAIN_H_
+#ifndef FI_DOMAIN_H
+#define FI_DOMAIN_H
 
 #include <rdma/fabric.h>
 #include <rdma/fi_eq.h>

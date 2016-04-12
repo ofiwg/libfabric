@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_ATOMIC_H_
-#define _FI_ATOMIC_H_
+#ifndef FI_ATOMIC_H
+#define FI_ATOMIC_H
 
 #include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>

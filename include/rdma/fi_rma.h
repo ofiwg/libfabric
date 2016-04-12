@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_RMA_H_
-#define _FI_RMA_H_
+#ifndef FI_RMA_H
+#define FI_RMA_H
 
 #include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>

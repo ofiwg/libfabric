@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FABRIC_H_
-#define _FABRIC_H_
+#ifndef FABRIC_H
+#define FABRIC_H
 
 #include <stdint.h>
 #include <stddef.h>
