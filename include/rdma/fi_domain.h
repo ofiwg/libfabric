@@ -290,4 +290,4 @@ fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
 }
 #endif
 
-#endif /* _FI_DOMAIN_H_ */
+#endif /* FI_DOMAIN_H */

@@ -156,4 +156,4 @@ fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 }
 #endif
 
-#endif /* _FI_TAGGED_H_ */
+#endif /* FI_TAGGED_H */

@@ -445,4 +445,4 @@ fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 }
 #endif
 
-#endif /* _FI_EQ_H_ */
+#endif /* FI_EQ_H */

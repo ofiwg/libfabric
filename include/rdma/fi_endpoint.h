@@ -312,4 +312,4 @@ fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 }
 #endif
 
-#endif /* _FI_ENDPOINT_H_ */
+#endif /* FI_ENDPOINT_H */
