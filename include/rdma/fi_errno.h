@@ -200,4 +200,4 @@ const char *fi_strerror(int errnum);
 }
 #endif
 
-#endif /* _FI_ERRNO_H_ */
+#endif /* FI_ERRNO_H */

@@ -72,4 +72,4 @@ struct fi_triggered_context {
 }
 #endif
 
-#endif /* _FI_TRIGGER_H_ */
+#endif /* FI_TRIGGER_H */

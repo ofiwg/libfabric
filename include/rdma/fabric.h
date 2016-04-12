@@ -495,4 +495,4 @@ struct fi_context {
 }
 #endif
 
-#endif /* _FABRIC_H_ */
+#endif /* FABRIC_H */

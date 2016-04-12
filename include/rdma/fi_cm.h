@@ -115,4 +115,4 @@ static inline int fi_shutdown(struct fid_ep *ep, uint64_t flags)
 }
 #endif
 
-#endif /* _FI_CM_H_ */
+#endif /* FI_CM_H */

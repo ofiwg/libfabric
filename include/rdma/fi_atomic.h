@@ -314,4 +314,4 @@ fi_compare_atomicvalid(struct fid_ep *ep,
 }
 #endif
 
-#endif /* _FI_ATOMIC_H_ */
+#endif /* FI_ATOMIC_H */

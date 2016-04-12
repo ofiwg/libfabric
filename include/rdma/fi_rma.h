@@ -165,4 +165,4 @@ fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 }
 #endif
 
-#endif /* _FI_RMA_H_ */
+#endif /* FI_RMA_H */
