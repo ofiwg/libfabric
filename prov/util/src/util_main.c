@@ -155,7 +155,7 @@ int util_getinfo(const struct fi_provider *prov, uint32_t version,
 		return -FI_EINVAL;
 	}
 
-	ret = fi_check_info(prov, prov_info, hints);
+	ret = fi_check_info(prov, prov_info, hints, FI_MATCH_EXACT);
 	if (ret)
 		return ret;
 

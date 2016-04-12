@@ -38,7 +38,7 @@
 
 int udpx_check_info(struct fi_info *info)
 {
-	return fi_check_info(&udpx_prov, &udpx_info, info);
+	return fi_check_info(&udpx_prov, &udpx_info, info, FI_MATCH_EXACT);
 }
 
 static int udpx_getinfo(uint32_t version, const char *node, const char *service,

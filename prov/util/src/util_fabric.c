@@ -57,11 +57,12 @@ static void util_fabric_init(struct util_fabric *fabric, const char *name)
 int fi_fabric_init(const struct fi_provider *prov,
 		   struct fi_fabric_attr *prov_attr,
 		   struct fi_fabric_attr *user_attr,
-		   struct util_fabric *fabric, void *context)
+		   struct util_fabric *fabric, void *context,
+		   enum fi_match_type type)
 {
 	int ret;
 
-	ret = fi_check_fabric_attr(prov, prov_attr, user_attr);
+	ret = fi_check_fabric_attr(prov, prov_attr, user_attr, type);
 	if (ret)
 		return ret;
 
