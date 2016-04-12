@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_ENDPOINT_H_
-#define _FI_ENDPOINT_H_
+#ifndef FI_ENDPOINT_H
+#define FI_ENDPOINT_H
 
 #include <sys/socket.h>
 #include <rdma/fabric.h>

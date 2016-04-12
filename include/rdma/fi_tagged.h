@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_TAGGED_H_
-#define _FI_TAGGED_H_
+#ifndef FI_TAGGED_H
+#define FI_TAGGED_H
 
 #include <rdma/fabric.h>
 #include <rdma/fi_endpoint.h>

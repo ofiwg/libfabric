@@ -33,8 +33,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_PROV_H_
-#define _FI_PROV_H_
+#ifndef FI_PROV_H
+#define FI_PROV_H
 
 #include <rdma/fabric.h>
 

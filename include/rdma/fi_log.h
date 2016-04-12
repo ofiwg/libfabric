@@ -32,8 +32,8 @@
  *
  */
 
-#ifndef _FI_LOG_H_
-#define _FI_LOG_H_
+#ifndef FI_LOG_H
+#define FI_LOG_H
 
 #include "config.h"
 

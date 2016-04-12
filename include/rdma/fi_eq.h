@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_EQ_H_
-#define _FI_EQ_H_
+#ifndef FI_EQ_H
+#define FI_EQ_H
 
 #include <pthread.h>
 
