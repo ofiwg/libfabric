@@ -353,12 +353,13 @@ int sock_conn_listen(struct sock_ep *ep)
 
 	((struct sockaddr_in *) (ep->src_addr))->sin_port =
 		htons(atoi(listener->service));
-	listener->do_listen = 1;
 	listener->sock = listen_fd;
 
 	sock_fabric_add_service(domain->fab, atoi(listener->service));
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, listener->signal_fds) < 0)
 		goto err;
+
+	listener->do_listen = 1;
 
 	fd_set_nonblock(listener->signal_fds[1]);
 	if (pthread_create(&listener->listener_thread, 0,

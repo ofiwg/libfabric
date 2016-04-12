@@ -618,17 +618,20 @@ static int sock_ep_close(struct fid *fid)
 	}
 	pthread_mutex_unlock(&sock_ep->domain->pe->list_lock);
 
-	sock_ep->listener.do_listen = 0;
-	if (write(sock_ep->listener.signal_fds[0], &c, 1) != 1)
-		SOCK_LOG_DBG("Failed to signal\n");
+	if (sock_ep->listener.do_listen) {
+		sock_ep->listener.do_listen = 0;
+		if (write(sock_ep->listener.signal_fds[0], &c, 1) != 1)
+			SOCK_LOG_DBG("Failed to signal\n");
 
-	if (sock_ep->listener.listener_thread &&
-	    pthread_join(sock_ep->listener.listener_thread, NULL)) {
-		SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
+		if (sock_ep->listener.listener_thread &&
+		     pthread_join(sock_ep->listener.listener_thread, NULL)) {
+			SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
+		}
+
+		close(sock_ep->listener.signal_fds[0]);
+		close(sock_ep->listener.signal_fds[1]);
 	}
 
-	close(sock_ep->listener.signal_fds[0]);
-	close(sock_ep->listener.signal_fds[1]);
 	fastlock_destroy(&sock_ep->cm.lock);
 
 	if (sock_ep->fclass != FI_CLASS_SEP && !sock_ep->tx_shared) {
