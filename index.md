@@ -12,6 +12,17 @@ data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_orange_
 
 ![OpenFabrics Interface Overview](images/openfabric-interfaces-overview.png)
 
+
+Latest releases
+===============
+
+* The libfabric library itself (including documentation): [libfabric v1.3.0](https://github.com/ofiwg/libfabric/releases/tag/v1.3.0) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
+* Examples and unit tests: [fabtests v1.3.0](https://github.com/ofiwg/fabtests/releases/tag/v1.3.0) (or [see all prior releases](https://github.com/ofiwg/fabtests/releases/)).
+
+
+Overview
+========
+
 OpenFabrics Interfaces (OFI) is a framework focused on exporting fabric communication services to applications.  OFI is best described as a collection of libraries and applications used to export fabric services.  The key components of OFI are: application interfaces, provider libraries, kernel services, daemons, and test applications. 
 
 <img align="left" src="images/ofa-logo.png">Libfabric is a core component of OFI.  It is the library that defines and exports the user-space API of OFI, and is typically the only software that applications deal with directly.  It works in conjunction with provider libraries, which are often integrated directly into libfabric.
@@ -24,36 +35,11 @@ Libfabric is designed to minimize the impedance mismatch between applications, i
 
 Libfabric targets support for the Linux operating system, with developer support for OS X.  A reasonable effort is made to support all major, modern Linux distributions; however, validation is limited to the most recent 2-3 releases of Red Hat Enterprise Linux (RHEL)and SUSE Linux Enterprise Server (SLES).  Libfabric aligns its supported distributions with the most current OpenFabrics Enterprise Distribution (OFED) software releases.  With the exception of the sockets provider, which is provided for development purposes, distro support for a specific provider is vendor specific.
 
-Overview of libfabric
-=====================
 
-The following document provides a short introduction to the libfabric architecture and concepts.  It is recommended for anyone new to libfabric.
+Developer Resources
+===================
 
-<div align="center">
-<iframe src="https://www.slideshare.net/slideshow/embed_code/key/arAPmHHuShNbde" width="668" height="714" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" allowfullscreen></iframe>
-</div>
-
-
-Developers coding to libfabric may find the following tutorial useful.  It walks through low-level interface details, followed by examples of application and middleware (MPI, SHEM) using the APIs.
-
-<div align="center">
-  <iframe src="https://www.slideshare.net/slideshow/embed_code/key/p0nI8BbOoDdSzj" width="476" height="400" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" allowfullscreen></iframe>
-</div>
-
-
-Finally, this document describes how to get started writing to the libfabric interfaces.
-
-<div align="center">
-<iframe src="https://www.slideshare.net/slideshow/embed_code/key/tRnMHhyoS9HWy1" width="668" height="714" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" allowfullscreen></iframe>
-</div>
-
-
-How do I get involved?
-======================
-
-## Read the documentation
-
-First, take a look at the above documentation and tutorial.  Then read the documentation:
+A set of man pages have been carefully written to specify the libfabric API.
 
 * [Man pages for v1.3.0](v1.3.0/man/)
   * Older: [Man pages for v1.2.0](v1.2.0/man/)
@@ -62,23 +48,22 @@ First, take a look at the above documentation and tutorial.  Then read the docum
   * Older: [Man pages for v1.0.0](v1.0.0/man/)
 * [Man pages for current head of development](master/man/)
 
-A set of Linux man pages have been carefully written to specify the libfabric API.  Read through these man pages to get a sense of the libfabric API.  A [set of example applications](https://github.com/ofiwg/fabtests) have been developed to highlight how an application might use various aspects of libfabric.
+[Set of example applications](https://github.com/ofiwg/fabtests) - highlight how an application might use various aspects of libfabric.
 
-## Get the software
+Additionally, developers may find the documents listed below useful in understanding the libfabric architecture and objectives in more detail.
 
-Next, download the latest releases:
+* [A Short Introduction to the libfabric Architecture](https://www.slideshare.net/slideshow/embed_code/key/arAPmHHuShNbde) - recommended for anyone new to libfabric.
+* [Developer Tutorial](https://www.slideshare.net/slideshow/embed_code/key/p0nI8BbOoDdSzj) - walks through low-level interface details, followed by examples of application and middleware (MPI, SHMEM) using the APIs.
+* [Starting Guide for Writing to libfabric](https://www.slideshare.net/slideshow/embed_code/key/tRnMHhyoS9HWy1)
 
-* The libfabric library itself (including documentation): [libfabric v1.3.0](https://github.com/ofiwg/libfabric/releases/tag/v1.3.0) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
-* Examples and unit tests: [fabtests v1.3.0](https://github.com/ofiwg/fabtests/releases/tag/v1.3.0) (or [see all prior releases](https://github.com/ofiwg/fabtests/releases/)).
 
-The libfabric code base is being developed in [the main OFIWG libfabric GitHub repository](https://github.com/ofiwg/libfabric).
+Open Collaboration
+==================
 
-## Join the conversation
+The libfabric code base is being developed in [the main OFIWG libfabric GitHub repository](https://github.com/ofiwg/libfabric).  There are two mailing lists for OFIWG discussions:
 
-There are two mailing lists for OFIWG discussions:
-
-* [The Libfabric users mailing list](http://lists.openfabrics.org/mailman/listinfo/libfabric-users).  This list is intended for general user questions about the Libfabric library, to include questions from developers trying to use Libfabric in their applications.
-* [The OFI working group mailing list](http://lists.openfabrics.org/mailman/listinfo/ofiwg).  This list is used for the discussion and development of the OFI APIs themselves (and by extension, the continued development of the Libfabric library).
+* [The Libfabric users mailing list](http://lists.openfabrics.org/mailman/listinfo/libfabric-users) - intended for general user questions about the Libfabric library, to include questions from developers trying to use Libfabric in their applications.
+* [The OFI working group mailing list](http://lists.openfabrics.org/mailman/listinfo/ofiwg) - used for the discussion and development of the OFI APIs themselves, and by extension, the continued development of the Libfabric library.
 
 Notices of the every-other-Tuesday OFIWG Webexes are sent to the OFIWG mailing list.  Anyone can join the calls to listen and participate in the design of Libfabric.
 
