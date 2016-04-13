@@ -208,6 +208,17 @@ fi_getopt(fid_t fid, int level, int optname,
 	return ep->ops->getopt(fid, level, optname, optval, optlen);
 }
 
+static inline int fi_ep_alias(struct fid_ep *ep, struct fid_ep **alias_ep,
+			      uint64_t flags)
+{
+	int ret;
+	struct fid *fid;
+	ret = fi_alias(&ep->fid, &fid, flags);
+	if (!ret)
+		*alias_ep = container_of(fid, struct fid_ep, fid);
+	return ret;
+}
+
 static inline int
 fi_tx_context(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	      struct fid_ep **tx_ep, void *context)
