@@ -1208,8 +1208,7 @@ int ft_finalize(void)
 		tmsg.addr = remote_fi_addr;
 		tmsg.tag = tx_seq;
 		tmsg.ignore = 0;
-		if (hints->mode & FI_CONTEXT)
-			tmsg.context = &ctx;
+		tmsg.context = &ctx;
 
 		ret = fi_tsendmsg(ep, &tmsg, FI_INJECT | FI_TRANSMIT_COMPLETE);
 	} else {
@@ -1219,8 +1218,7 @@ int ft_finalize(void)
 		msg.msg_iov = &iov;
 		msg.iov_count = 1;
 		msg.addr = remote_fi_addr;
-		if (hints->mode & FI_CONTEXT)
-			msg.context = &ctx;
+		msg.context = &ctx;
 
 		ret = fi_sendmsg(ep, &msg, FI_INJECT | FI_TRANSMIT_COMPLETE);
 	}
