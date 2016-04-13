@@ -160,7 +160,10 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 			fi_ibv_rdm_conn_init_cm_role(conn, ep);
 		}
 
-		fi_addr[i] = (uintptr_t) (void *) conn;
+		if (fi_addr) {
+			fi_addr[i] = (uintptr_t) (void *) conn;
+		}
+
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "fi_av_insert: addr %s:%u conn %p %d\n",
 			inet_ntoa(conn->addr.sin_addr),
 			ntohs(conn->addr.sin_port), conn, conn->cm_role);
