@@ -199,14 +199,16 @@ sub make_tarball {
     verbose("*** Placing tarballs in download directory...\n");
     doit(0, "mv $base_name-$version.tar.gz $base_name-$version.tar.bz2 $download_dir_arg");
 
-    # Make sym links to these newest tarballs
-    chdir($download_dir_arg);
-    unlink("$base_name-latest.tar.gz");
-    unlink("$base_name-latest.tar.bz2");
-    doit(0, "ln -s $base_name-$version.tar.gz $base_name-latest.tar.gz");
-    doit(0, "ln -s $base_name-$version.tar.bz2 $base_name-latest.tar.bz2");
-
     return 1;
+}
+
+sub write_file {
+    my $filename = shift;
+    my $str = shift;
+
+    open(OUT, ">$filename") || die "Can't write to $filename";
+    print OUT $str;
+    close(OUT);
 }
 
 sub submit_to_coverity {
@@ -256,7 +258,7 @@ chdir($fabtests_dir_arg);
 git_cleanup();
 my $fabtests_version = get_git_version();
 my $rebuilt_fabtests = make_tarball("fabtests", $fabtests_dir_arg,
-    $fabtests_version, $installdir);
+                                    $fabtests_version, $installdir);
 
 if ($rebuilt_libfabric || $rebuilt_fabtests) {
     # Re-generate hashes
@@ -264,15 +266,20 @@ if ($rebuilt_libfabric || $rebuilt_fabtests) {
     chdir($download_dir_arg);
     doit(0, "md5sum libfabric*tar* fabtests*tar* > md5sums.txt");
     doit(0, "sha1sum libfabric*tar* fabtests*tar* > sha1sums.txt");
-}
 
-if ($rebuilt_libfabric) {
-    # Re-write latest.txt
-    verbose("*** Re-creating latest.txt...\n");
-    unlink("latest.txt");
-    open(OUT, ">latest.txt") || die "Can't write to latest.txt";
-    print OUT "libfabric-$libfabric_version\n";
-    close(OUT);
+    # Write latest-snapshot.txt files
+    verbose("** Re-writing latest-snapshot.txt file...\n");
+    my $str = "libfabric-$libfabric_version\n" .
+        "fabtests-$fabtests_version\n";
+    write_file("$download_dir_arg/latest-snapshot.txt", $str);
+    print "******** WRITING TO $download_dir_arg/latest-snapshot.txt\n";
+
+    verbose("** Re-writing latest-snapshot.txt file...\n");
+    my $dirname = basename($download_dir_arg);
+    $str = "$dirname/libfabric-$libfabric_version\n" .
+        "$dirname/fabtests-$fabtests_version\n";
+    write_file("$download_dir_arg/../latest-snapshot.txt", $str);
+    print "********** WRITING TO $download_dir_arg/../latest-snapshot.txt\n";
 }
 
 # Run the coverity script if requested
