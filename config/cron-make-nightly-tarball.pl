@@ -1,5 +1,6 @@
 #!/usr/bin/env perl
-
+#
+# Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 #
 # Script to automate the steps to make pristine nightly tarballs and
 # place them in a specified output directory (presumeably where the
@@ -272,14 +273,12 @@ if ($rebuilt_libfabric || $rebuilt_fabtests) {
     my $str = "libfabric-$libfabric_version\n" .
         "fabtests-$fabtests_version\n";
     write_file("$download_dir_arg/latest-snapshot.txt", $str);
-    print "******** WRITING TO $download_dir_arg/latest-snapshot.txt\n";
 
     verbose("** Re-writing latest-snapshot.txt file...\n");
     my $dirname = basename($download_dir_arg);
     $str = "$dirname/libfabric-$libfabric_version\n" .
         "$dirname/fabtests-$fabtests_version\n";
     write_file("$download_dir_arg/../latest-snapshot.txt", $str);
-    print "********** WRITING TO $download_dir_arg/../latest-snapshot.txt\n";
 }
 
 # Run the coverity script if requested
