@@ -157,8 +157,9 @@ struct util_cq_err_entry {
 	struct slist_entry	list_entry;
 };
 
-DECLARE_CIRQUE(struct fi_cq_data_entry, util_comp_cirq);
+DECLARE_CIRQUE(struct fi_cq_tagged_entry, util_comp_cirq);
 
+typedef void (*fi_cq_progress_func)(struct util_cq *cq);
 struct util_cq {
 	struct fid_cq		cq_fid;
 	struct util_domain	*domain;
@@ -174,12 +175,14 @@ struct util_cq {
 	struct slist		err_list;
 	fi_cq_read_func		read_entry;
 	int			internal_wait;
+	fi_cq_progress_func	progress;
 };
 
-int util_cq_open(const struct fi_provider *prov,
-		 struct fid_domain *domain, struct fi_cq_attr *attr,
-		 struct fid_cq **cq_fid, void *context);
-
+int util_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
+		 struct fi_cq_attr *attr, struct util_cq *cq,
+		 fi_cq_progress_func progress, void *context);
+void ofi_cq_progress(struct util_cq *cq);
+int ofi_cq_cleanup(struct util_cq *cq);
 
 /*
  * Counter
