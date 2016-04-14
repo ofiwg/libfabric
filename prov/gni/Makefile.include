@@ -111,10 +111,9 @@ nodist_prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/wait.c \
 	prov/gni/test/common.c
 
-prov_gni_test_gnitest_LDFLAGS = $(CRAY_PMI_LIBS) $(gni_LDFLAGS) -static
-prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS) $(gni_CPPFLAGS)
-prov_gni_test_gnitest_LDADD = -lcriterion \
-		$(linkback) $(gni_LIBS)
+prov_gni_test_gnitest_LDFLAGS = $(CRAY_PMI_LIBS) $(gnitest_LDFLAGS) -static
+prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS) $(gnitest_CPPFLAGS)
+prov_gni_test_gnitest_LDADD =  $(gnitest_LIBS) $(linkback)
 endif HAVE_CRITERION
 
 if HAVE_GNI_DL
