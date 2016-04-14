@@ -121,7 +121,8 @@ int psmx2_fabric(struct fi_fabric_attr *attr,
 		return -FI_ENOMEM;
 
 	ret = fi_fabric_init(&psmx2_prov, &psmx2_fabric_attr, attr,
-			     &fabric_priv->util_fabric, context);
+			     &fabric_priv->util_fabric, context,
+			     FI_MATCH_EXACT);
 	if (ret) {
 		FI_INFO(&psmx2_prov, FI_LOG_CORE, "fi_fabric_init returns %d\n", ret);
 		free(fabric_priv);
