@@ -232,22 +232,28 @@ struct util_av_attr {
 	uint64_t		flags;
 };
 
-int fi_av_create(struct util_domain *domain,
-		 const struct fi_av_attr *attr, const struct util_av_attr *util_attr,
-		 struct fid_av **av, void *context);
+int ofi_av_init(struct util_domain *domain,
+	       const struct fi_av_attr *attr, const struct util_av_attr *util_attr,
+	       struct util_av *av, void *context);
+int ofi_av_close(struct util_av *av);
+
+int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *index);
+int ofi_av_lookup_index(struct util_av *av, const void *addr, int slot);
+int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags);
+
 int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context);
 
-void *fi_av_get_addr(struct util_av *av, int index);
-#define ip_av_get_addr fi_av_get_addr
+void *ofi_av_get_addr(struct util_av *av, int index);
+#define ip_av_get_addr ofi_av_get_addr
 int ip_av_get_index(struct util_av *av, const void *addr);
 
-int fi_get_addr(uint32_t addr_format, uint64_t flags,
-		const char *node, const char *service,
-		void **addr, size_t *addrlen);
-int fi_get_src_addr(uint32_t addr_format,
-		    const void *dest_addr, size_t dest_addrlen,
-		    void **src_addr, size_t *src_addrlen);
+int ofi_get_addr(uint32_t addr_format, uint64_t flags,
+		 const char *node, const char *service,
+		 void **addr, size_t *addrlen);
+int ofi_get_src_addr(uint32_t addr_format,
+		     const void *dest_addr, size_t dest_addrlen,
+		     void **src_addr, size_t *src_addrlen);
 
 
 /*

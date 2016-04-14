@@ -94,7 +94,7 @@ out:
 
 }
 
-int fi_get_src_addr(uint32_t addr_format,
+int ofi_get_src_addr(uint32_t addr_format,
 		    const void *dest_addr, size_t dest_addrlen,
 		    void **src_addr, size_t *src_addrlen)
 {
@@ -139,7 +139,7 @@ out:
 	return ret;
 }
 
-int fi_get_addr(uint32_t addr_format, uint64_t flags,
+int ofi_get_addr(uint32_t addr_format, uint64_t flags,
 		const char *node, const char *service,
 		void **addr, size_t *addrlen)
 {
@@ -163,7 +163,7 @@ static void *util_av_get_data(struct util_av *av, int index)
 	return (char *) av->data + (index * av->addrlen);
 }
 
-void *fi_av_get_addr(struct util_av *av, int index)
+void *ofi_av_get_addr(struct util_av *av, int index)
 {
 	return util_av_get_data(av, index);
 }
@@ -219,8 +219,7 @@ static int util_av_hash_insert(struct util_av_hash *hash, int slot, int index)
 	return 0;
 }
 
-static int fi_av_insert_addr(struct util_av *av, const void *addr, int slot,
-			     int *index)
+int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *index)
 {
 	int ret = 0;
 
@@ -307,7 +306,7 @@ static int fi_av_remove_addr(struct util_av *av, int slot, int index)
 	return 0;
 }
 
-static int fi_av_lookup_index(struct util_av *av, const void *addr, int slot)
+int ofi_av_lookup_index(struct util_av *av, const void *addr, int slot)
 {
 	int i, ret = -FI_ENODATA;
 
@@ -323,7 +322,7 @@ static int fi_av_lookup_index(struct util_av *av, const void *addr, int slot)
 	}
 
 	for (i = slot; i != UTIL_NO_ENTRY; i = av->hash.table[i].next) {
-		if (!memcmp(fi_av_get_addr(av, av->hash.table[i].index), addr,
+		if (!memcmp(ofi_av_get_addr(av, av->hash.table[i].index), addr,
 			    av->addrlen)) {
 			ret = av->hash.table[i].index;
 			FI_DBG(av->prov, FI_LOG_AV, "entry at index (%d)\n", ret);
@@ -336,7 +335,7 @@ out:
 	return ret;
 }
 
-static int util_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags)
+int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags)
 {
 	struct util_av *av;
 	struct util_eq *eq;
@@ -358,11 +357,8 @@ static int util_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags)
 	return 0;
 }
 
-static int fi_av_free(struct fid *av_fid)
+int ofi_av_close(struct util_av *av)
 {
-	struct util_av *av;
-
-	av = container_of(av_fid, struct util_av, av_fid.fid);
 	if (atomic_get(&av->ref)) {
 		FI_WARN(av->prov, FI_LOG_AV, "AV is busy\n");
 		return -FI_EBUSY;
@@ -375,7 +371,6 @@ static int fi_av_free(struct fid *av_fid)
 	fastlock_destroy(&av->lock);
 	/* TODO: unmap data? */
 	free(av->data);
-	free(av);
 	return 0;
 }
 
@@ -476,27 +471,20 @@ static int util_verify_av_attr(struct util_domain *domain,
 	return 0;
 }
 
-int fi_av_create(struct util_domain *domain, const struct fi_av_attr *attr,
-		 const struct util_av_attr *util_attr,
-		 struct fid_av **av_fid, void *context)
+int ofi_av_init(struct util_domain *domain, const struct fi_av_attr *attr,
+	       const struct util_av_attr *util_attr,
+	       struct util_av *av, void *context)
 {
-	struct util_av *av;
 	int ret;
 
 	ret = util_verify_av_attr(domain, attr, util_attr);
 	if (ret)
 		return ret;
 
-	av = calloc(1, sizeof(*av));
-	if (!av)
-		return -FI_ENOMEM;
-
 	av->prov = domain->prov;
 	ret = util_av_init(av, attr, util_attr);
-	if (ret) {
-		free(av);
+	if (ret)
 		return ret;
-	}
 
 	av->av_fid.fid.fclass = FI_CLASS_AV;
 	/*
@@ -505,11 +493,8 @@ int fi_av_create(struct util_domain *domain, const struct fi_av_attr *attr,
 	 * av->av_fid.ops = &prov_av_ops;
 	 */
 	av->context = context;
-
 	av->domain = domain;
 	atomic_inc(&domain->ref);
-
-	*av_fid = &av->av_fid;
 	return 0;
 }
 
@@ -552,7 +537,7 @@ static int ip_av_slot(struct util_av *av, const struct sockaddr *sa)
 
 int ip_av_get_index(struct util_av *av, const void *addr)
 {
-	return fi_av_lookup_index(av, addr, ip_av_slot(av, addr));
+	return ofi_av_lookup_index(av, addr, ip_av_slot(av, addr));
 }
 
 static void ip_av_write_event(struct util_av *av, uint64_t data,
@@ -606,7 +591,7 @@ static int ip_av_insert_addr(struct util_av *av, const void *addr,
 	int ret, index = -1;
 
 	if (ip_av_valid_addr(av, addr)) {
-		ret = fi_av_insert_addr(av, addr, ip_av_slot(av, addr), &index);
+		ret = ofi_av_insert_addr(av, addr, ip_av_slot(av, addr), &index);
 	} else {
 		ret = -FI_EADDRNOTAVAIL;
 		FI_WARN(av->prov, FI_LOG_AV, "invalid address\n");
@@ -925,10 +910,22 @@ static struct fi_ops_av ip_av_ops = {
 	.straddr = ip_av_straddr,
 };
 
+static int ip_av_close(struct fid *av_fid)
+{
+	int ret;
+	struct util_av *av;
+	av = container_of(av_fid, struct util_av, av_fid.fid);
+	ret = ofi_av_close(av);
+	if (ret)
+		return ret;
+	free(av);
+	return 0;
+}
+
 static struct fi_ops ip_av_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = fi_av_free,
-	.bind = util_av_bind,
+	.close = ip_av_close,
+	.bind = ofi_av_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
@@ -938,6 +935,7 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 {
 	struct util_domain *domain;
 	struct util_av_attr util_attr;
+	struct util_av *util_av;
 	int ret;
 
 	domain = container_of(domain_fid, struct util_domain, domain_fid);
@@ -952,10 +950,15 @@ int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (attr->type == FI_AV_UNSPEC)
 		attr->type = FI_AV_MAP;
 
-	ret = fi_av_create(domain, attr, &util_attr, av, context);
+	util_av = calloc(1, sizeof(*util_av));
+	if (!util_av)
+		return -FI_ENOMEM;
+
+	ret = ofi_av_init(domain, attr, &util_attr, util_av, context);
 	if (ret)
 		return ret;
 
+	*av = &util_av->av_fid;
 	(*av)->fid.ops = &ip_av_fi_ops;
 	(*av)->ops = &ip_av_ops;
 	return 0;
