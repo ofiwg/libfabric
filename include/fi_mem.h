@@ -104,7 +104,7 @@ static inline struct name * name ## _create(size_t size)	\
 {								\
 	struct name *fs;					\
 	fs = calloc(1, sizeof(*fs) + sizeof(entrytype) *	\
-			(roundup_power_of_two(size) - 1));	\
+		    (roundup_power_of_two(size)));		\
 	if (fs)							\
 		name ##_init(fs, roundup_power_of_two(size));	\
 	return fs;						\
