@@ -93,12 +93,12 @@ struct util_fabric {
 	struct dlist_entry	domain_list;
 };
 
-int fi_fabric_init(const struct fi_provider *prov,
+int ofi_fabric_init(const struct fi_provider *prov,
 		   struct fi_fabric_attr *prov_attr,
 		   struct fi_fabric_attr *user_attr,
 		   struct util_fabric *fabric, void *context,
 		   enum fi_match_type type);
-int util_fabric_close(struct util_fabric *fabric);
+int ofi_fabric_close(struct util_fabric *fabric);
 int util_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
 /*
@@ -119,9 +119,9 @@ struct util_domain {
 	enum fi_av_type		av_type;
 };
 
-int fi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
+int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 		     struct util_domain *domain, void *context);
-int util_domain_close(struct util_domain *domain);
+int ofi_domain_close(struct util_domain *domain);
 
 
 struct util_ep;
@@ -178,7 +178,7 @@ struct util_cq {
 	fi_cq_progress_func	progress;
 };
 
-int util_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
+int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		 struct fi_cq_attr *attr, struct util_cq *cq,
 		 fi_cq_progress_func progress, void *context);
 void ofi_cq_progress(struct util_cq *cq);

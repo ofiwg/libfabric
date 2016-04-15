@@ -50,7 +50,7 @@ static int udpx_fabric_close(fid_t fid)
 	int ret;
 	struct util_fabric *fabric;
 	fabric = container_of(fid, struct util_fabric, fabric_fid.fid);
-	ret = util_fabric_close(fabric);
+	ret = ofi_fabric_close(fabric);
 	if (ret)
 		return ret;
 	free(fabric);
@@ -75,7 +75,7 @@ int udpx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	if (!util_fabric)
 		return -FI_ENOMEM;
 
-	ret = fi_fabric_init(&udpx_prov, udpx_info.fabric_attr, attr,
+	ret = ofi_fabric_init(&udpx_prov, udpx_info.fabric_attr, attr,
 			     util_fabric, context, FI_MATCH_EXACT);
 	if (ret)
 		return ret;

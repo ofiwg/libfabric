@@ -273,7 +273,7 @@ static struct fi_ops_cq util_cq_ops = {
 	.strerror = util_cq_strerror,
 };
 
-int util_cq_cleanup(struct util_cq *cq)
+int ofi_cq_cleanup(struct util_cq *cq)
 {
 	struct util_cq_err_entry *err;
 	struct slist_entry *entry;
@@ -309,7 +309,7 @@ static int util_cq_close(struct fid *fid)
 	int ret;
 
 	cq = container_of(fid, struct util_cq, cq_fid.fid);
-	ret = util_cq_cleanup(cq);
+	ret = ofi_cq_cleanup(cq);
 	if (ret)
 		return ret;
 	return 0;
@@ -432,7 +432,7 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		ret = fi_poll_add(&cq->wait->pollset->poll_fid,
 				  &cq->cq_fid.fid, 0);
 		if (ret) {
-			util_cq_cleanup(cq);
+			ofi_cq_cleanup(cq);
 			return ret;
 		}
 	}
@@ -455,6 +455,6 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 err2:
 	util_comp_cirq_free(cq->cirq);
 err1:
-	util_cq_cleanup(cq);
+	ofi_cq_cleanup(cq);
 	return ret;
 }
