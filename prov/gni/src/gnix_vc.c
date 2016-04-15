@@ -1921,14 +1921,7 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 		}
 	}
 
-	/*
-	 * don't treat -FI_EAGAIN as an error
-	 */
-
-	if (rc == -FI_EAGAIN)
-		rc = FI_SUCCESS;
-
-	return rc;
+	return FI_SUCCESS;
 }
 
 /* Push TX requests queued on the VC. */
