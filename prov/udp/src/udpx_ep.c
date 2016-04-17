@@ -510,7 +510,8 @@ static int udpx_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (!ep->util_ep.rx_cq || !ep->util_ep.tx_cq)
 			return -FI_ENOCQ;
 		if (!ep->util_ep.av)
-			return -FI_EOPBADSTATE; /* TODO: Add FI_ENOAV */
+			return -FI_ENOAV;
+
 		if (!ep->is_bound)
 			udpx_bind_src_addr(ep);
 		break;

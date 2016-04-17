@@ -717,6 +717,7 @@ static const char *const errstr[] = {
 	[FI_ECRC - FI_ERRNO_OFFSET] = "CRC error",
 	[FI_ETRUNC - FI_ERRNO_OFFSET] = "Truncation error",
 	[FI_ENOKEY - FI_ERRNO_OFFSET] = "Required key not available",
+	[FI_ENOAV - FI_ERRNO_OFFSET] = "Missing or unavailable address vector",
 };
 
 __attribute__((visibility ("default")))
