@@ -36,7 +36,7 @@
 #include <fi_enosys.h>
 #include <fi_util.h>
 
-int util_fabric_close(struct util_fabric *fabric)
+int ofi_fabric_close(struct util_fabric *fabric)
 {
 	if (atomic_get(&fabric->ref))
 		return -FI_EBUSY;
@@ -54,7 +54,7 @@ static void util_fabric_init(struct util_fabric *fabric, const char *name)
 	fabric->name = name;
 }
 
-int fi_fabric_init(const struct fi_provider *prov,
+int ofi_fabric_init(const struct fi_provider *prov,
 		   struct fi_fabric_attr *prov_attr,
 		   struct fi_fabric_attr *user_attr,
 		   struct util_fabric *fabric, void *context,

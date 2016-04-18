@@ -93,12 +93,12 @@ struct util_fabric {
 	struct dlist_entry	domain_list;
 };
 
-int fi_fabric_init(const struct fi_provider *prov,
+int ofi_fabric_init(const struct fi_provider *prov,
 		   struct fi_fabric_attr *prov_attr,
 		   struct fi_fabric_attr *user_attr,
 		   struct util_fabric *fabric, void *context,
 		   enum fi_match_type type);
-int util_fabric_close(struct util_fabric *fabric);
+int ofi_fabric_close(struct util_fabric *fabric);
 int util_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
 /*
@@ -119,9 +119,9 @@ struct util_domain {
 	enum fi_av_type		av_type;
 };
 
-int fi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
+int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 		     struct util_domain *domain, void *context);
-int util_domain_close(struct util_domain *domain);
+int ofi_domain_close(struct util_domain *domain);
 
 
 struct util_ep;
@@ -157,8 +157,9 @@ struct util_cq_err_entry {
 	struct slist_entry	list_entry;
 };
 
-DECLARE_CIRQUE(struct fi_cq_data_entry, util_comp_cirq);
+DECLARE_CIRQUE(struct fi_cq_tagged_entry, util_comp_cirq);
 
+typedef void (*fi_cq_progress_func)(struct util_cq *cq);
 struct util_cq {
 	struct fid_cq		cq_fid;
 	struct util_domain	*domain;
@@ -174,12 +175,14 @@ struct util_cq {
 	struct slist		err_list;
 	fi_cq_read_func		read_entry;
 	int			internal_wait;
+	fi_cq_progress_func	progress;
 };
 
-int util_cq_open(const struct fi_provider *prov,
-		 struct fid_domain *domain, struct fi_cq_attr *attr,
-		 struct fid_cq **cq_fid, void *context);
-
+int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
+		 struct fi_cq_attr *attr, struct util_cq *cq,
+		 fi_cq_progress_func progress, void *context);
+void ofi_cq_progress(struct util_cq *cq);
+int ofi_cq_cleanup(struct util_cq *cq);
 
 /*
  * Counter
@@ -229,22 +232,28 @@ struct util_av_attr {
 	uint64_t		flags;
 };
 
-int fi_av_create(struct util_domain *domain,
-		 const struct fi_av_attr *attr, const struct util_av_attr *util_attr,
-		 struct fid_av **av, void *context);
+int ofi_av_init(struct util_domain *domain,
+	       const struct fi_av_attr *attr, const struct util_av_attr *util_attr,
+	       struct util_av *av, void *context);
+int ofi_av_close(struct util_av *av);
+
+int ofi_av_insert_addr(struct util_av *av, const void *addr, int slot, int *index);
+int ofi_av_lookup_index(struct util_av *av, const void *addr, int slot);
+int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags);
+
 int ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context);
 
-void *fi_av_get_addr(struct util_av *av, int index);
-#define ip_av_get_addr fi_av_get_addr
+void *ofi_av_get_addr(struct util_av *av, int index);
+#define ip_av_get_addr ofi_av_get_addr
 int ip_av_get_index(struct util_av *av, const void *addr);
 
-int fi_get_addr(uint32_t addr_format, uint64_t flags,
-		const char *node, const char *service,
-		void **addr, size_t *addrlen);
-int fi_get_src_addr(uint32_t addr_format,
-		    const void *dest_addr, size_t dest_addrlen,
-		    void **src_addr, size_t *src_addrlen);
+int ofi_get_addr(uint32_t addr_format, uint64_t flags,
+		 const char *node, const char *service,
+		 void **addr, size_t *addrlen);
+int ofi_get_src_addr(uint32_t addr_format,
+		     const void *dest_addr, size_t dest_addrlen,
+		     void **src_addr, size_t *src_addrlen);
 
 
 /*

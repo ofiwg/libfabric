@@ -35,9 +35,23 @@
 
 #include "udpx.h"
 
-
 int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
-	return util_cq_open(&udpx_prov, domain, attr, cq_fid, context);
+	int ret;
+	struct util_cq *cq;
+
+	cq = calloc(1, sizeof(*cq));
+	if (!cq)
+		return -FI_ENOMEM;
+
+	ret = ofi_cq_init(&udpx_prov, domain, attr, cq,
+			   &ofi_cq_progress, context);
+	if (ret) {
+		free(cq);
+		return ret;
+	}
+
+	*cq_fid = &cq->cq_fid;
+	return 0;
 }

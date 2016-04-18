@@ -53,7 +53,7 @@ static int udpx_domain_close(fid_t fid)
 	int ret;
 	struct util_domain *domain;
 	domain = container_of(fid, struct util_domain, domain_fid.fid);
-	ret = util_domain_close(domain);
+	ret = ofi_domain_close(domain);
 	if (ret)
 		return ret;
 	free(domain);
@@ -82,7 +82,7 @@ int udpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (!util_domain)
 		return -FI_ENOMEM;
 
-	ret = fi_domain_init(fabric, info, util_domain, context);
+	ret = ofi_domain_init(fabric, info, util_domain, context);
 	if (ret)
 		return ret;
 

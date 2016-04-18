@@ -90,22 +90,6 @@ int fi_check_cq_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-static void util_cq_progress(struct util_cq *cq)
-{
-	struct util_ep *ep;
-	struct fid_list_entry *fid_entry;
-	struct dlist_entry *item;
-
-	fastlock_acquire(&cq->list_lock);
-	dlist_foreach(&cq->list, item) {
-		fid_entry = container_of(item, struct fid_list_entry, entry);
-		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
-		ep->progress(ep);
-
-	}
-	fastlock_release(&cq->list_lock);
-}
-
 static void util_cq_read_ctx(void **dst, void *src)
 {
 	*(struct fi_cq_entry *) *dst = *(struct fi_cq_entry *) src;
@@ -134,14 +118,14 @@ static void util_cq_read_tagged(void **dst, void *src)
 static ssize_t util_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
 	struct util_cq *cq;
-	struct fi_cq_data_entry *entry;
+	struct fi_cq_tagged_entry *entry;
 	ssize_t i;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	fastlock_acquire(&cq->cq_lock);
 	if (cirque_isempty(cq->cirq)) {
 		fastlock_release(&cq->cq_lock);
-		util_cq_progress(cq);
+		cq->progress(cq);
 		fastlock_acquire(&cq->cq_lock);
 		if (cirque_isempty(cq->cirq)) {
 			i = -FI_EAGAIN;
@@ -171,7 +155,7 @@ static ssize_t util_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 				size_t count, fi_addr_t *src_addr)
 {
 	struct util_cq *cq;
-	struct fi_cq_data_entry *entry;
+	struct fi_cq_tagged_entry *entry;
 	ssize_t i;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
@@ -187,7 +171,7 @@ static ssize_t util_cq_readfrom(struct fid_cq *cq_fid, void *buf,
 	fastlock_acquire(&cq->cq_lock);
 	if (cirque_isempty(cq->cirq)) {
 		fastlock_release(&cq->cq_lock);
-		util_cq_progress(cq);
+		cq->progress(cq);
 		fastlock_acquire(&cq->cq_lock);
 		if (cirque_isempty(cq->cirq)) {
 			i = -FI_EAGAIN;
@@ -289,7 +273,7 @@ static struct fi_ops_cq util_cq_ops = {
 	.strerror = util_cq_strerror,
 };
 
-static int fi_cq_cleanup(struct util_cq *cq)
+int ofi_cq_cleanup(struct util_cq *cq)
 {
 	struct util_cq_err_entry *err;
 	struct slist_entry *entry;
@@ -314,6 +298,8 @@ static int fi_cq_cleanup(struct util_cq *cq)
 	}
 
 	atomic_dec(&cq->domain->ref);
+	util_comp_cirq_free(cq->cirq);
+	free(cq->src);
 	return 0;
 }
 
@@ -323,13 +309,9 @@ static int util_cq_close(struct fid *fid)
 	int ret;
 
 	cq = container_of(fid, struct util_cq, cq_fid.fid);
-	ret = fi_cq_cleanup(cq);
+	ret = ofi_cq_cleanup(cq);
 	if (ret)
 		return ret;
-
-	util_comp_cirq_free(cq->cirq);
-	free(cq->src);
-	free(cq);
 	return 0;
 }
 
@@ -390,11 +372,37 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	return 0;
 }
 
-static int util_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
-			struct util_cq *cq, void *context)
+void ofi_cq_progress(struct util_cq *cq)
+{
+	struct util_ep *ep;
+	struct fid_list_entry *fid_entry;
+	struct dlist_entry *item;
+
+	fastlock_acquire(&cq->list_lock);
+	dlist_foreach(&cq->list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
+		ep->progress(ep);
+
+	}
+	fastlock_release(&cq->list_lock);
+}
+
+int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
+		 struct fi_cq_attr *attr, struct util_cq *cq,
+		 fi_cq_progress_func progress, void *context)
 {
 	fi_cq_read_func read_func;
 	int ret;
+
+	assert(progress);
+	ret = fi_check_cq_attr(prov, attr);
+	if (ret)
+		return ret;
+
+	cq->cq_fid.fid.ops = &util_cq_fi_ops;
+	cq->cq_fid.ops = &util_cq_ops;
+	cq->progress = progress;
 
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:
@@ -419,6 +427,16 @@ static int util_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		return ret;
 
+	/* CQ must be fully operational before adding to wait set */
+	if (cq->wait) {
+		ret = fi_poll_add(&cq->wait->pollset->poll_fid,
+				  &cq->cq_fid.fid, 0);
+		if (ret) {
+			ofi_cq_cleanup(cq);
+			return ret;
+		}
+	}
+
 	cq->cirq = util_comp_cirq_create(attr->size);
 	if (!cq->cirq) {
 		ret = -FI_ENOMEM;
@@ -437,44 +455,6 @@ static int util_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 err2:
 	util_comp_cirq_free(cq->cirq);
 err1:
-	fi_cq_cleanup(cq);
+	ofi_cq_cleanup(cq);
 	return ret;
-}
-
-int util_cq_open(const struct fi_provider *prov,
-		 struct fid_domain *domain, struct fi_cq_attr *attr,
-		 struct fid_cq **cq_fid, void *context)
-{
-	struct util_cq *cq;
-	int ret;
-
-	ret = fi_check_cq_attr(prov, attr);
-	if (ret)
-		return ret;
-
-	cq = calloc(1, sizeof(*cq));
-	if (!cq)
-		return -FI_ENOMEM;
-
-	ret = util_cq_init(domain, attr, cq, context);
-	if (ret) {
-		free(cq);
-		return ret;
-	}
-
-	cq->cq_fid.fid.ops = &util_cq_fi_ops;
-	cq->cq_fid.ops = &util_cq_ops;
-
-	/* CQ must be fully operational before adding to wait set */
-	if (cq->wait) {
-		ret = fi_poll_add(&cq->wait->pollset->poll_fid,
-				  &cq->cq_fid.fid, 0);
-		if (ret) {
-			util_cq_close(&cq->cq_fid.fid);
-			return ret;
-		}
-	}
-
-	*cq_fid = &cq->cq_fid;
-	return 0;
 }

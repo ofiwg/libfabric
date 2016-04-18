@@ -37,7 +37,7 @@
 #include <fi_util.h>
 
 
-int util_domain_close(struct util_domain *domain)
+int ofi_domain_close(struct util_domain *domain)
 {
 	if (atomic_get(&domain->ref))
 		return -FI_EBUSY;
@@ -71,7 +71,7 @@ static int util_domain_init(struct util_domain *domain,
 	return domain->name ? 0 : -FI_ENOMEM;
 }
 
-int fi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
+int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 		   struct util_domain *domain, void *context)
 {
 	struct util_fabric *fabric;

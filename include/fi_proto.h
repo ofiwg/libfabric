@@ -50,11 +50,12 @@ extern "C" {
 
 /* ofi_ctrl_hdr::type */
 enum {
-	ofi_ctrl_connect,
+	ofi_ctrl_connreq,
+	ofi_ctrl_connresp,
 	ofi_ctrl_start_data,
 	ofi_ctrl_data,
 	ofi_ctrl_large_data,
-	ofi_ctrl_ack
+	ofi_ctrl_ack,
 };
 
 /*
@@ -90,10 +91,8 @@ struct ofi_ctrl_hdr {
 	uint8_t			type;
 	uint16_t		seg_size;
 	uint32_t		seg_no;
-	union {
-		uint64_t	conn_id;
-		uint64_t	msg_id;
-	};
+	uint64_t		conn_id;
+	uint64_t		msg_id;
 	union {
 		uint64_t	conn_data;
 		uint64_t	rx_key;
