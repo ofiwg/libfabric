@@ -99,7 +99,7 @@ static int send_recv()
 			return -FI_ETOOSMALL;
 		}
 
-		ret = ft_tx(message_len);
+		ret = ft_tx(ep, message_len);
 		if (ret)
 			return ret;
 

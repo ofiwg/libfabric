@@ -238,10 +238,10 @@ int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_start_server();
 int ft_alloc_active_res(struct fi_info *fi);
-int ft_init_ep();
+int ft_init_ep(void);
 int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
 		uint64_t flags, void *context);
-int ft_init_av();
+int ft_init_av(void);
 int ft_exchange_keys(struct fi_rma_iov *peer_iov);
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);
@@ -260,15 +260,15 @@ int ft_sync();
 int ft_sync_pair(int status);
 int ft_fork_and_pair();
 int ft_wait_child();
-int ft_finalize();
+int ft_finalize(void);
 
 size_t ft_rx_prefix_size();
 size_t ft_tx_prefix_size();
-ssize_t ft_post_rx(size_t size, struct fi_context* ctx);
-ssize_t ft_post_tx(size_t size, struct fi_context* ctx);
-ssize_t ft_rx(size_t size);
-ssize_t ft_tx(size_t size);
-ssize_t ft_inject(size_t size);
+ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx);
+ssize_t ft_post_tx(struct fid_ep *ep, size_t size, struct fi_context* ctx);
+ssize_t ft_rx(struct fid_ep *ep, size_t size);
+ssize_t ft_tx(struct fid_ep *ep, size_t size);
+ssize_t ft_inject(struct fid_ep *ep, size_t size);
 
 int ft_cq_readerr(struct fid_cq *cq);
 int ft_get_rx_comp(uint64_t total);
@@ -282,7 +282,7 @@ void show_perf(char *name, int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter);
 void show_perf_mr(int tsize, int iters, struct timespec *start,
 		struct timespec *end, int xfers_per_iter, int argc, char *argv[]);
-int send_recv_greeting(void);
+int send_recv_greeting(struct fid_ep *ep);
 int check_recv_msg(const char *message);
 
 #define FT_PROCESS_QUEUE_ERR(readerr, rd, queue, fn, str)	\

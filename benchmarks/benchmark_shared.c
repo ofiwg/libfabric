@@ -86,13 +86,13 @@ int pingpong(void)
 				ft_start();
 
 			if (opts.transfer_size < fi->tx_attr->inject_size)
-				ret = ft_inject(opts.transfer_size);
+				ret = ft_inject(ep, opts.transfer_size);
 			else
-				ret = ft_tx(opts.transfer_size);
+				ret = ft_tx(ep, opts.transfer_size);
 			if (ret)
 				return ret;
 
-			ret = ft_rx(opts.transfer_size);
+			ret = ft_rx(ep, opts.transfer_size);
 			if (ret)
 				return ret;
 		}
@@ -101,14 +101,14 @@ int pingpong(void)
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			ret = ft_rx(opts.transfer_size);
+			ret = ft_rx(ep, opts.transfer_size);
 			if (ret)
 				return ret;
 
 			if (opts.transfer_size < fi->tx_attr->inject_size)
-				ret = ft_inject(opts.transfer_size);
+				ret = ft_inject(ep, opts.transfer_size);
 			else
-				ret = ft_tx(opts.transfer_size);
+				ret = ft_tx(ep, opts.transfer_size);
 			if (ret)
 				return ret;
 		}
@@ -149,9 +149,9 @@ int bandwidth(void)
 
 			for(j = 0; j < opts.window_size; j++) {
 				if (opts.transfer_size < fi->tx_attr->inject_size)
-					ret = ft_inject(opts.transfer_size);
+					ret = ft_inject(ep, opts.transfer_size);
 				else
-					ret = ft_post_tx(opts.transfer_size,
+					ret = ft_post_tx(ep, opts.transfer_size,
 							 &ctx_arr[j]);
 				if (ret)
 					return ret;
@@ -159,7 +159,7 @@ int bandwidth(void)
 			ret = ft_get_tx_comp(tx_seq);
 			if (ret)
 				return ret;
-			ret = ft_rx(4);
+			ret = ft_rx(ep, 4);
 			if (ret)
 				return ret;
 		}
@@ -169,14 +169,14 @@ int bandwidth(void)
 				ft_start();
 
 			for(j = 0; j < opts.window_size; j++) {
-				ret = ft_post_rx(opts.transfer_size, &ctx_arr[j]);
+				ret = ft_post_rx(ep, opts.transfer_size, &ctx_arr[j]);
 				if (ret)
 					return ret;
 			}
 			ret = ft_get_rx_comp(rx_seq-1); /* rx_seq is always one ahead */
 			if (ret)
 				return ret;
-			ret = ft_tx(4);
+			ret = ft_tx(ep, 4);
 			if (ret)
 				return ret;
 		}

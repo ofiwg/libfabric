@@ -87,7 +87,7 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	return send_recv_greeting();
+	return send_recv_greeting(ep);
 }
 
 int main(int argc, char **argv)

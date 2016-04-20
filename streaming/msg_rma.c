@@ -70,7 +70,7 @@ static int run_test(void)
 			if (ret)
 				FT_PRINTERR("fi_writedata", ret);
 
-			ret = ft_rx(0);
+			ret = ft_rx(ep, 0);
 			break;
 		case FT_RMA_READ:
 			ret = fi_read(ep, buf, opts.transfer_size, fi_mr_desc(mr),
