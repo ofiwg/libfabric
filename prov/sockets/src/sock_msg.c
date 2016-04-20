@@ -68,7 +68,7 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
-		rx_ctx = sock_ep->rx_ctx;
+		rx_ctx = sock_ep->attr->rx_ctx;
 		break;
 	case FI_CLASS_RX_CTX:
 	case FI_CLASS_SRX_CTX:
@@ -172,21 +172,25 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags)
 {
 	int ret, i;
-	uint64_t total_len;
+	uint64_t total_len, op_flags;
 	struct sock_op tx_op;
 	union sock_iov tx_iov;
 	struct sock_conn *conn;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_ep *sock_ep;
+	struct sock_ep_attr *ep_attr;
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
-		tx_ctx = sock_ep->tx_ctx;
+		ep_attr = sock_ep->attr;
+		tx_ctx = sock_ep->attr->tx_ctx;
+		op_flags = sock_ep->tx_attr.op_flags;
 		break;
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(ep, struct sock_tx_ctx, fid.ctx);
-		sock_ep = tx_ctx->ep;
+		ep_attr = tx_ctx->ep_attr;
+		op_flags = tx_ctx->attr.op_flags;
 		break;
 	default:
 		SOCK_LOG_ERROR("Invalid EP type\n");
@@ -201,10 +205,10 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!tx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
-	if (sock_drop_packet(sock_ep))
+	if (sock_drop_packet(ep_attr))
 		return 0;
 
-	ret = sock_ep_get_conn(sock_ep, tx_ctx, msg->addr, &conn);
+	ret = sock_ep_get_conn(ep_attr, tx_ctx, msg->addr, &conn);
 	if (ret)
 		return ret;
 
@@ -213,7 +217,7 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	SOCK_EP_SET_TX_OP_FLAGS(flags);
 	if (flags & SOCK_USE_OP_FLAGS)
-		flags |= tx_ctx->attr.op_flags;
+		flags |= op_flags;
 
 	if (flags & FI_TRIGGER) {
 		ret = sock_queue_msg_op(ep, msg, flags, SOCK_OP_SEND);
@@ -252,7 +256,7 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	sock_tx_ctx_write_op_send(tx_ctx, &tx_op, flags, (uintptr_t) msg->context,
 			msg->addr, (uintptr_t) msg->msg_iov[0].iov_base,
-			sock_ep, conn);
+			ep_attr, conn);
 
 	if (flags & FI_REMOTE_CQ_DATA)
 		sock_tx_ctx_write(tx_ctx, &msg->data, sizeof(msg->data));
@@ -389,7 +393,7 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
-		rx_ctx = sock_ep->rx_ctx;
+		rx_ctx = sock_ep->attr->rx_ctx;
 		break;
 	case FI_CLASS_RX_CTX:
 	case FI_CLASS_SRX_CTX:
@@ -503,21 +507,25 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 			 const struct fi_msg_tagged *msg, uint64_t flags)
 {
 	int ret, i;
-	uint64_t total_len;
+	uint64_t total_len, op_flags;
 	struct sock_op tx_op;
 	union sock_iov tx_iov;
 	struct sock_conn *conn;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_ep *sock_ep;
+	struct sock_ep_attr *ep_attr;
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
-		tx_ctx = sock_ep->tx_ctx;
+		tx_ctx = sock_ep->attr->tx_ctx;
+		ep_attr = sock_ep->attr;
+		op_flags = sock_ep->tx_attr.op_flags;
 		break;
 	case FI_CLASS_TX_CTX:
 		tx_ctx = container_of(ep, struct sock_tx_ctx, fid.ctx);
-		sock_ep = tx_ctx->ep;
+		ep_attr = tx_ctx->ep_attr;
+		op_flags = tx_ctx->attr.op_flags;
 		break;
 	default:
 		SOCK_LOG_ERROR("Invalid EP type\n");
@@ -532,16 +540,16 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	if (!tx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
-	if (sock_drop_packet(sock_ep))
+	if (sock_drop_packet(ep_attr))
 		return 0;
 
-	ret = sock_ep_get_conn(sock_ep, tx_ctx, msg->addr, &conn);
+	ret = sock_ep_get_conn(ep_attr, tx_ctx, msg->addr, &conn);
 	if (ret)
 		return ret;
 
 	SOCK_EP_SET_TX_OP_FLAGS(flags);
 	if (flags & SOCK_USE_OP_FLAGS)
-		flags |= tx_ctx->attr.op_flags;
+		flags |= op_flags;
 
 	if (flags & FI_TRIGGER) {
 		ret = sock_queue_tmsg_op(ep, msg, flags, SOCK_OP_TSEND);
@@ -580,7 +588,7 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	sock_tx_ctx_write_op_tsend(tx_ctx, &tx_op, flags,
 			(uintptr_t) msg->context, msg->addr,
 			(uintptr_t) msg->msg_iov[0].iov_base,
-			sock_ep, conn, msg->tag);
+			ep_attr, conn, msg->tag);
 
 	if (flags & FI_REMOTE_CQ_DATA)
 		sock_tx_ctx_write(tx_ctx, &msg->data, sizeof(msg->data));
