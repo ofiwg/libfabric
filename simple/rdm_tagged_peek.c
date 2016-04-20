@@ -205,6 +205,12 @@ int main(int argc, char **argv)
 
 	ret = run();
 
+	if (ret == -ENODATA) {
+		hints->caps = FI_TAGGED;
+
+		ret = run();
+	}
+
 	ft_free_res();
 	return -ret;
 }
