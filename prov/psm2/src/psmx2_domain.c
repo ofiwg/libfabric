@@ -187,7 +187,7 @@ static int psmx2_domain_close(fid_t fid)
 
 	psmx2_domain_release(domain);
 
-	if (util_domain_close(&domain->util_domain))
+	if (ofi_domain_close(&domain->util_domain))
 		return 0;
 
 	if (domain->progress_thread_enabled)
@@ -389,11 +389,11 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err_out;
 	}
 
-	err = fi_domain_init(fabric, info, &domain_priv->util_domain, context);
+	err = ofi_domain_init(fabric, info, &domain_priv->util_domain, context);
 	if (err)
 		goto err_out_free_domain;
 		
-	/* fclass & context are set in fi_domain_init */
+	/* fclass & context are set in ofi_domain_init */
 	domain_priv->util_domain.domain_fid.fid.ops = &psmx2_fi_ops;
 	domain_priv->util_domain.domain_fid.ops = &psmx2_domain_ops;
 	domain_priv->util_domain.domain_fid.mr = &psmx2_mr_ops;
@@ -415,7 +415,7 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	return 0;
 
 err_out_close_domain:
-	util_domain_close(&domain_priv->util_domain);
+	ofi_domain_close(&domain_priv->util_domain);
 
 err_out_free_domain:
 	free(domain_priv);
