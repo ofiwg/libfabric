@@ -489,7 +489,7 @@ static int run(void)
 		goto out;
 
 	ft_sync();
-	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
+	ft_finalize();
 out:
 	return ret;
 }

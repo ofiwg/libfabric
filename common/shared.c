@@ -499,7 +499,7 @@ int ft_init_ep(void)
 
 	if (fi->rx_attr->op_flags != FI_MULTI_RECV) {
 		/* Initial receive will get remote address for unconnected EPs */
-		ret = ft_post_rx(MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
+		ret = ft_post_rx(ep, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 		if (ret)
 			return ret;
 	}
@@ -544,13 +544,13 @@ int ft_init_av(void)
 			return ret;
 		}
 
-		ret = (int) ft_tx(addrlen);
+		ret = (int) ft_tx(ep, addrlen);
 		if (ret)
 			return ret;
 
-		ret = ft_rx(1);
+		ret = ft_rx(ep, 1);
 	} else {
-		ret = (int) ft_rx(FT_MAX_CTRL_MSG);
+		ret = (int) ft_rx(ep, FT_MAX_CTRL_MSG);
 		if (ret)
 			return ret;
 
@@ -559,7 +559,7 @@ int ft_init_av(void)
 		if (ret)
 			return ret;
 
-		ret = (int) ft_tx(1);
+		ret = (int) ft_tx(ep, 1);
 	}
 
 	return ret;
@@ -575,7 +575,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) rx_buf + ft_rx_prefix_size();
 		rma_iov->key = fi_mr_key(mr);
-		ret = ft_tx(sizeof *rma_iov);
+		ret = ft_tx(ep, sizeof *rma_iov);
 		if (ret)
 			return ret;
 
@@ -585,7 +585,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 
 		rma_iov = rx_buf + ft_rx_prefix_size();
 		*peer_iov = *rma_iov;
-		ret = ft_post_rx(rx_size, &rx_ctx);
+		ret = ft_post_rx(ep, rx_size, &rx_ctx);
 	} else {
 		ret = ft_get_rx_comp(rx_seq);
 		if (ret)
@@ -593,7 +593,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 
 		rma_iov = rx_buf + ft_rx_prefix_size();
 		*peer_iov = *rma_iov;
-		ret = ft_post_rx(rx_size, &rx_ctx);
+		ret = ft_post_rx(ep, rx_size, &rx_ctx);
 		if (ret)
 			return ret;
 
@@ -601,7 +601,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 		rma_iov->addr = fi->domain_attr->mr_mode == FI_MR_SCALABLE ?
 				0 : (uintptr_t) rx_buf + ft_rx_prefix_size();
 		rma_iov->key = fi_mr_key(mr);
-		ret = ft_tx(sizeof *rma_iov);
+		ret = ft_tx(ep, sizeof *rma_iov);
 	}
 
 	return ret;
@@ -797,7 +797,7 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 	}
 }
 
-ssize_t ft_post_tx(size_t size, struct fi_context* ctx)
+ssize_t ft_post_tx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
 {
 	ssize_t ret;
 
@@ -817,14 +817,14 @@ ssize_t ft_post_tx(size_t size, struct fi_context* ctx)
 	return 0;
 }
 
-ssize_t ft_tx(size_t size)
+ssize_t ft_tx(struct fid_ep *ep, size_t size)
 {
 	ssize_t ret;
 
 	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
 		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
 
-	ret = ft_post_tx(size, &tx_ctx);
+	ret = ft_post_tx(ep, size, &tx_ctx);
 	if (ret)
 		return ret;
 
@@ -832,7 +832,7 @@ ssize_t ft_tx(size_t size)
 	return ret;
 }
 
-ssize_t ft_post_inject(size_t size)
+ssize_t ft_post_inject(struct fid_ep *ep, size_t size)
 {
 	ssize_t ret;
 
@@ -853,21 +853,21 @@ ssize_t ft_post_inject(size_t size)
 	return 0;
 }
 
-ssize_t ft_inject(size_t size)
+ssize_t ft_inject(struct fid_ep *ep, size_t size)
 {
 	ssize_t ret;
 
 	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
 		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
 
-	ret = ft_post_inject(size);
+	ret = ft_post_inject(ep, size);
 	if (ret)
 		return ret;
 
 	return ret;
 }
 
-ssize_t ft_post_rx(size_t size, struct fi_context* ctx)
+ssize_t ft_post_rx(struct fid_ep *ep, size_t size, struct fi_context* ctx)
 {
 	ssize_t ret;
 
@@ -887,7 +887,7 @@ ssize_t ft_post_rx(size_t size, struct fi_context* ctx)
 	return 0;
 }
 
-ssize_t ft_rx(size_t size)
+ssize_t ft_rx(struct fid_ep *ep, size_t size)
 {
 	ssize_t ret;
 
@@ -902,7 +902,7 @@ ssize_t ft_rx(size_t size)
 	}
 	/* TODO: verify CQ data, if available */
 
-	ret = ft_post_rx(rx_size, &rx_ctx);
+	ret = ft_post_rx(ep, rx_size, &rx_ctx);
 	return ret;
 }
 
@@ -1091,17 +1091,17 @@ int ft_sync()
 	int ret;
 
 	if (opts.dst_addr) {
-		ret = ft_tx(1);
+		ret = ft_tx(ep, 1);
 		if (ret)
 			return ret;
 
-		ret = ft_rx(1);
+		ret = ft_rx(ep, 1);
 	} else {
-		ret = ft_rx(1);
+		ret = ft_rx(ep, 1);
 		if (ret)
 			return ret;
 
-		ret = ft_tx(1);
+		ret = ft_tx(ep, 1);
 	}
 
 	return ret;
@@ -1542,7 +1542,7 @@ int check_recv_msg(const char *message)
 	return 0;
 }
 
-int send_recv_greeting(void)
+int send_recv_greeting(struct fid_ep *ep)
 {
 	int ret;
 	const char *message = "Hello from Client!";
@@ -1555,7 +1555,7 @@ int send_recv_greeting(void)
 			return -FI_ETOOSMALL;
 		}
 
-		ret = ft_tx(message_len);
+		ret = ft_tx(ep, message_len);
 		if (ret)
 			return ret;
 

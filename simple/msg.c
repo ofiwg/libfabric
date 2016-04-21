@@ -172,7 +172,7 @@ static int run(void)
 		return ret;
 	}
 
-	ret = send_recv_greeting();
+	ret = send_recv_greeting(ep);
 
 	fi_shutdown(ep, 0);
 	return ret;

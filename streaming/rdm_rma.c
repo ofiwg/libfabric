@@ -78,7 +78,7 @@ static int run_test(void)
 				return ret;
 			}
 
-			ret = ft_rx(0);
+			ret = ft_rx(ep, 0);
 			break;
 		case FT_RMA_READ:
 			ret = fi_read(ep, buf, opts.transfer_size, fi_mr_desc(mr),
@@ -192,7 +192,7 @@ static int run(void)
 	}
 
 	ft_sync();
-	ft_finalize(fi, ep, txcq, rxcq, remote_fi_addr);
+	ft_finalize();
 out:
 	return ret;
 }
