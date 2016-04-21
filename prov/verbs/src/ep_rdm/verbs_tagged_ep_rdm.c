@@ -67,7 +67,7 @@ int fi_ibv_rdm_tagged_prepare_send_request(
 {
 #if ENABLE_DEBUG
 	int res =
-		FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(request->conn, ep);
+		FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(request->minfo.conn, ep);
 	if (res) {
 		FI_IBV_RDM_TAGGED_DBG_REQUEST
 		    ("failed because SENDS_OUTGOING_ARE_LIMITED", request,
@@ -82,8 +82,8 @@ int fi_ibv_rdm_tagged_prepare_send_request(
 		return !res;
 	}
 #endif // ENABLE_DEBUG
-	request->sbuf =
-		fi_ibv_rdm_tagged_prepare_send_resources(request->conn, ep);
+	request->sbuf = 
+		fi_ibv_rdm_tagged_prepare_send_resources(request->minfo.conn, ep);
 	return !!request->sbuf;
 }
 
@@ -91,7 +91,7 @@ int fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_tagged_request *request,
 				   struct fi_ibv_rdm_ep *ep)
 {
 	request->rmabuf =
-		fi_ibv_rdm_rma_prepare_resources(request->conn, ep);
+		fi_ibv_rdm_rma_prepare_resources(request->minfo.conn, ep);
 	return !!request->rmabuf;
 }
 
@@ -585,7 +585,7 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 		VERBS_DBG(FI_LOG_EP_DATA,
 			"GOT RNDV ACK from conn %p, id %d\n", conn, request);
 	} else if (pkt_type != FI_IBV_RDM_RMA_PKT) {
-		struct fi_verbs_rdm_tagged_request_minfo minfo = {
+		struct fi_verbs_rdm_tagged_minfo minfo = {
 			.conn = conn,
 			.tag = rbuf->header.tag,
 			.tagmask = 0
@@ -610,10 +610,11 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 					"%s: %d RECV TRUNCATE, data_len=%d, posted_len=%d, "
 					"conn %p, tag 0x%llx, tagmask %llx\n",
 					__FUNCTION__, __LINE__, data_len,
-					found_request->len, found_request->conn,
-					found_request->tag,
-					found_request->tagmask);
-				assert(0);
+					found_request->len,
+					found_request->minfo.conn,
+					found_request->minfo.tag,
+					found_request->minfo.tagmask);
+				assert(0); /* TODO: return correct err code */
 			}
 
 			fi_ibv_rdm_tagged_remove_from_posted_queue
@@ -826,12 +827,14 @@ wc_error:
 		}
 
 		if (wc[i].status != IBV_WC_SUCCESS && ret != 0) {
-			struct fi_ibv_rdm_tagged_conn *conn =
-			    (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc[i].wr_id))
-			    ? (struct fi_ibv_rdm_tagged_conn *)
-			    FI_IBV_RDM_UNPACK_SERVICE_WR(wc[i].wr_id)
-			    : ((struct fi_ibv_rdm_tagged_request *)wc[i].
-			       wr_id)->conn;
+			struct fi_ibv_rdm_tagged_conn *conn;
+			if (FI_IBV_RDM_CHECK_SERVICE_WR_FLAG(wc[i].wr_id)) {
+				conn = FI_IBV_RDM_UNPACK_SERVICE_WR(wc[i].wr_id);
+			} else {
+				struct fi_ibv_rdm_tagged_request *req = 
+					(void *)wc[i].wr_id;
+				conn = req->minfo.conn;
+			}
 
 			VERBS_INFO(FI_LOG_EP_DATA,
 				"got ibv_wc.status = %d:%s, pend_send: %d, connection: %p\n",
@@ -859,6 +862,6 @@ fi_ibv_rdm_tagged_init_request_sbuf(struct fi_ibv_rdm_tagged_request *request,
 				    struct fi_ibv_rdm_ep *ep)
 {
 	assert(request->sbuf == NULL);
-	request->sbuf = fi_ibv_rdm_tagged_get_sbuf_head(request->conn, ep);
+	request->sbuf = fi_ibv_rdm_tagged_get_sbuf_head(request->minfo.conn, ep);
 	return !!request->sbuf;
 }

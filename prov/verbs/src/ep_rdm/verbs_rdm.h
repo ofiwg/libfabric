@@ -136,10 +136,7 @@ struct fi_ibv_rdm_tagged_request {
 		enum fi_ibv_rdm_tagged_request_rndv_state rndv;
 	} state;
 
-	struct fi_ibv_rdm_tagged_conn *conn;
-
-	uint64_t tag;
-	uint64_t tagmask;
+	struct fi_verbs_rdm_tagged_minfo minfo;
 
 	/* User data: buffers, lens, imm, context */
 

@@ -113,10 +113,10 @@ do {                                                                        \
             request,                                                        \
             fi_ibv_rdm_tagged_req_eager_state_to_str(request->state.eager), \
             fi_ibv_rdm_tagged_req_rndv_state_to_str(request->state.rndv),   \
-            request->tag,                                                   \
+            request->minfo.tag,                                                   \
             request->len,                                                   \
             request->context,                                               \
-            request->conn);                                                 \
+            request->minfo.conn);                                                 \
                                                                             \
     switch (level)                                                          \
     {                                                                       \
@@ -138,14 +138,14 @@ do {                                                                        \
 
 #endif                          // ENABLE_DEBUG
 
-struct fi_verbs_rdm_tagged_request_minfo {
+struct fi_verbs_rdm_tagged_minfo {
 	struct fi_ibv_rdm_tagged_conn	*conn;
 	uint64_t			tag;
 	uint64_t			tagmask;
 };
 
 struct fi_ibv_rdm_tagged_peek_data {
-	struct fi_verbs_rdm_tagged_request_minfo minfo;
+	struct fi_verbs_rdm_tagged_minfo minfo;
 	void *context;
 	uint64_t flags;
 };

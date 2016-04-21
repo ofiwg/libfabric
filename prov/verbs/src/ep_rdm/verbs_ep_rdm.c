@@ -177,8 +177,7 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 
 	VERBS_DBG(FI_LOG_EP_DATA,
 		  "ep_cancel, match %p, tag 0x%llx, len %d, ctx %p\n",
-		  request, (long long unsigned)request->tag,
-		  request->len, request->context);
+		  request, request->minfo.tag, request->len, request->context);
 
 	struct dlist_entry *found =
 	    dlist_find_first_match(&fi_ibv_rdm_tagged_recv_posted_queue,
