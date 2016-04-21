@@ -186,24 +186,12 @@ struct fi_ibv_rma_post_ready_data {
 	struct fi_ibv_rdm_ep *ep_rdm;
 };
 
-// Return codes
-/* TODO: to replace with native OFI codes */
-
-enum fi_rdm_tagged_req_hndl_ret {
-    FI_EP_RDM_HNDL_SUCCESS = 0,
-    FI_EP_RDM_HNDL_DELETED_REQUEST = 1,
-    FI_EP_RDM_HNDL_ERROR = 2,
-    FI_EP_RDM_HNDL_AGAIN = 3,
-    FI_EP_RDM_HNDL_NOT_INIT = (int)-1
-};
-
 // Interfaces
 
-enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_init();
-enum fi_rdm_tagged_req_hndl_ret fi_ibv_rdm_tagged_req_hndls_clean();
-enum fi_rdm_tagged_req_hndl_ret
-fi_ibv_rdm_tagged_req_hndl(struct fi_ibv_rdm_tagged_request *request,
-			   enum fi_ibv_rdm_tagged_request_event event,
-			   void *data);
+ssize_t fi_ibv_rdm_tagged_req_hndls_init();
+ssize_t fi_ibv_rdm_tagged_req_hndls_clean();
+ssize_t fi_ibv_rdm_tagged_req_hndl(struct fi_ibv_rdm_tagged_request *request,
+				   enum fi_ibv_rdm_tagged_request_event event,
+				   void *data);
 
 #endif /* _VERBS_TAGGED_EP_RDM_STATES_H */

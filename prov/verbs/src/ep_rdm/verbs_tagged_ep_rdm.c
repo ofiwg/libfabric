@@ -614,7 +614,8 @@ fi_ibv_rdm_tagged_process_recv(struct fi_ibv_rdm_ep *ep,
 					found_request->minfo.conn,
 					found_request->minfo.tag,
 					found_request->minfo.tagmask);
-				assert(0); /* TODO: return correct err code */
+				assert(0);
+				return -FI_ETRUNC;
 			}
 
 			fi_ibv_rdm_tagged_remove_from_posted_queue

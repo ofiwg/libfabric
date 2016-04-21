@@ -316,9 +316,8 @@ fi_ibv_rdm_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 
 	struct fi_ibv_rma_post_ready_data post_ready_data = { .ep_rdm = ep };
 
-	ret = fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_READY,
+	return fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_READY,
 					 &post_ready_data);
-	return (ret == FI_EP_RDM_HNDL_SUCCESS) ? FI_SUCCESS : -FI_EOTHER;
 }
 
 static ssize_t
@@ -411,9 +410,8 @@ fi_ibv_rdm_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	struct fi_ibv_rma_post_ready_data post_ready_data = { .ep_rdm = ep };
 
-	ret = fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_READY,
+	return fi_ibv_rdm_tagged_req_hndl(request, FI_IBV_EVENT_SEND_READY,
 					 &post_ready_data);
-	return (ret == FI_EP_RDM_HNDL_SUCCESS) ? FI_SUCCESS : -FI_EOTHER;
 }
 
 static ssize_t
@@ -505,10 +503,9 @@ static ssize_t fi_ibv_rdm_ep_rma_inject_write(struct fid_ep *ep,
 
 	switch (ret)
 	{
-	case FI_EP_RDM_HNDL_SUCCESS:
+	case FI_SUCCESS:
 		return ret;
-	case FI_EP_RDM_HNDL_AGAIN:
-		ret = -FI_EAGAIN;
+	case -FI_EAGAIN:
 		break;
 	default:
 		ret = -errno;
